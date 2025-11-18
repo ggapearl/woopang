@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "326869418613",
+    "project_id": "woopang-da4c9",
+    "storage_bucket": "woopang-da4c9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:326869418613:android:ce9310eec098a3ec8c6e3c",
+        "android_client_info": {
+          "package_name": "com.que.woopang"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZbJhj4F3UAnndhPLB5AtAClzc3Vl33bk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
