@@ -20,7 +20,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: 0000_Cube_T5EdgeLines
+  m_Name: 0000_Cube
   m_Shader: {fileID: 4800000, guid: f6789012345678901abcdef06789abcd, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -32,7 +32,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties:
+  m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -46,14 +46,14 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _EdgeWidth: 0.02
-    - _EdgeIntensity: 10.0
-    - _EdgeSharpness: 2.0
-    - _GlowPulseSpeed: 1.0
-    - _MinGlow: 0.8
-    - _TubeGlow: 0.1
+    - _EdgeIntensity: 4.4
+    - _EdgeSharpness: 4.4
+    - _EdgeWidth: 0.044
+    - _GlowPulseSpeed: 1
     - _InnerGlow: 1.5
+    - _MinGlow: 0.8
+    - _TubeGlow: 0.044
     m_Colors:
-    - _BaseColor: {r: 0.1, g: 0.1, b: 0.1, a: 1}
+    - _BaseColor: {r: 0.8679245, g: 0.8679245, b: 0.8679245, a: 1}
     - _EdgeColor: {r: 1, g: 0.95, b: 0.8, a: 1}
   m_BuildTextureStacks: []

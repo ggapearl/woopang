@@ -170,7 +170,6 @@ Shader "Universal Render Pipeline/T5EdgeGlowMobile"
             #pragma fragment ShadowPassFragment
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             struct Attributes
             {
