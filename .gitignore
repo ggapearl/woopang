@@ -68,8 +68,13 @@ Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.bundle
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.so
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.dll
 
-# Server (전체 폴더 제외 - Assets만 커밋)
+# Server (전체 폴더 제외 - Unity 프로젝트만 커밋)
 /server/
+
+# 불필요한 폴더들
+/.claude/
+/docs/
+/scripts_old/
 
 # Mac
 .DS_Store
