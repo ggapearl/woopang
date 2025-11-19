@@ -90,6 +90,11 @@ Thumbs.db
 /server/*.pyo
 /server/*.pyd
 /server/.pytest_cache/
+server/**/*.log
+server/**/__pycache__/
+server/**/logs/
+server/monitor.log
+server/apple/orders/
 
 # Windows Reserved Names
 **/nul
