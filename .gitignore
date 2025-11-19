@@ -62,6 +62,13 @@ sysinfo.txt
 *.apk
 *.unitypackage
 
+# Firebase SDK (large files - reinstall via Unity Package Manager)
+Assets/firebase_unity_sdk/
+Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.bundle
+Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.so
+Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.dll
+server/plugins/*.jar
+
 # Mac
 .DS_Store
 .DS_Store?
