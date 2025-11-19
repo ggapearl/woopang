@@ -95,6 +95,10 @@ server/**/__pycache__/
 server/**/logs/
 server/monitor.log
 server/apple/orders/
+server/vrompt_1018.egg
+server/metabase.jar
+server/*.egg
+server/*.jar
 
 # Windows Reserved Names
 **/nul
