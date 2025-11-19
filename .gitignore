@@ -67,7 +67,9 @@ Assets/firebase_unity_sdk/
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.bundle
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.so
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.dll
-server/plugins/*.jar
+
+# Server (전체 폴더 제외 - Assets만 커밋)
+/server/
 
 # Mac
 .DS_Store
@@ -78,34 +80,6 @@ server/plugins/*.jar
 Icon?
 ehthumbs.db
 Thumbs.db
-
-# Server (Node.js)
-/server/node_modules/
-/server/npm-debug.log
-/server/pids/
-/server/logs/
-/server/results/
-/server/coverage/
-/server/server.log
-/server/output.log
-/server/serviceAccountKey.json
-/server/AuthKey_*.p8
-
-# Server (Python)
-/server/__pycache__/
-/server/*.pyc
-/server/*.pyo
-/server/*.pyd
-/server/.pytest_cache/
-server/**/*.log
-server/**/__pycache__/
-server/**/logs/
-server/monitor.log
-server/apple/orders/
-server/vrompt_1018.egg
-server/metabase.jar
-server/*.egg
-server/*.jar
 
 # Windows Reserved Names
 **/nul
