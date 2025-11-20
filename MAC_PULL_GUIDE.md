@@ -1,17 +1,50 @@
 # Mac에서 woopang 프로젝트 pull 및 복구 가이드
 
+## ⚠️ 중요: Git 저장소 위치
+
+**이전**: `~/woopang-assets` (잘못된 구조)
+**현재**: `~/woopang` (올바른 Git 저장소 루트)
+
+Git 명령어는 반드시 **`~/woopang`** 디렉토리에서 실행하세요!
+
+## 0. Git 저장소 확인 (처음 한 번만)
+
+```bash
+# Git 저장소 루트 확인
+cd ~/woopang
+git rev-parse --show-toplevel
+
+# 결과가 /Users/yourname/woopang 이어야 합니다
+# 만약 다른 경로가 나온다면 올바른 위치가 아닙니다
+```
+
+### 기존 woopang-assets에서 마이그레이션하기
+
+만약 기존에 `~/woopang-assets`를 사용하고 있었다면:
+
+```bash
+# 1. 백업 (선택사항)
+mv ~/woopang-assets ~/woopang-assets-backup
+
+# 2. 새로 클론
+cd ~
+git clone https://github.com/coreaguy/woopang.git
+
+# 3. Unity에서 새 경로(~/woopang)로 프로젝트 열기
+```
+
 ## 1. Git Pull 수행
 
 ### 방법 1: 기존 작업 유지하면서 pull
 ```bash
-cd ~/woopang  # 프로젝트 경로로 이동
+cd ~/woopang  # ⚠️ woopang-assets가 아닙니다!
 git stash     # 현재 변경사항 임시 저장
 git pull origin main --rebase
 ```
 
 ### 방법 2: 깨끗한 상태로 pull (권장)
 ```bash
-cd ~/woopang
+cd ~/woopang  # ⚠️ woopang-assets가 아닙니다!
 git fetch origin
 git reset --hard origin/main  # 로컬 변경사항 삭제하고 완전히 동기화
 ```
@@ -26,8 +59,13 @@ rm -rf Library/
 
 ### Step 2: Unity에서 프로젝트 재생성
 1. Unity Hub를 실행합니다
-2. woopang 프로젝트를 **Unity Hub에서 완전히 제거**합니다
-3. Unity Hub에서 "Add" 버튼을 눌러 woopang 폴더를 다시 추가합니다
+2. 기존 프로젝트를 **Unity Hub에서 완전히 제거**합니다
+   - woopang-assets (옛날 경로)
+   - woopang (새 경로, 있다면)
+3. Unity Hub에서 "Add" 버튼을 눌러 **~/woopang 폴더**를 추가합니다
+   - ⚠️ ~/woopang-assets가 아닙니다!
+   - ⚠️ ~/woopang/Assets도 아닙니다!
+   - ✅ ~/woopang (Git 저장소 루트)
 4. 프로젝트를 엽니다 (Library 폴더가 자동으로 재생성됩니다)
 
 ### Step 3: URP 설정 확인
