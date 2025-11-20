@@ -1,27 +1,31 @@
 using UnityEngine;
-using UnityEngine.UI; // Image ÄÄÆ÷³ÍÆ® »ç¿ëÀ» À§ÇØ ÇÊ¿ä
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 using System.Collections;
 
 public class SplashScreen : MonoBehaviour
 {
-    [SerializeField] // Inspector¿¡¼­ º¸ÀÌµµ·Ï ¼³Á¤
-    private Image splashImage; // Image ÄÄÆ÷³ÍÆ® ÂüÁ¶
+    [SerializeField]
+    private Image splashImage;
 
-    [SerializeField] // Inspector¿¡¼­ Á¶Àı °¡´ÉÇÏµµ·Ï ¼³Á¤
-    private float waitTime = 5f; // ±âº»°ª 5ÃÊ, Inspector¿¡¼­ º¯°æ °¡´É
+    [SerializeField]
+    private float waitTime = 5f; // ìŠ¤í”Œë˜ì‹œ í‘œì‹œ ì‹œê°„ (ì´ˆ)
 
-    [SerializeField] // Inspector¿¡¼­ Á¶Àı °¡´ÉÇÏµµ·Ï ¼³Á¤
-    private float fadeDuration = 1f; // ÆäÀÌµå¾Æ¿ô ½Ã°£, ±âº»°ª 1ÃÊ
+    [SerializeField]
+    private float fadeDuration = 1f; // í˜ì´ë“œì•„ì›ƒ ì‹œê°„ (ì´ˆ)
+
+    [SerializeField]
+    private string nextSceneName = "MainScene"; // ë‹¤ìŒ ì”¬ ì´ë¦„
 
     void Start()
     {
         if (splashImage == null)
         {
-            Debug.LogError("SplashImage°¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù. Inspector¿¡¼­ È®ÀÎÇØÁÖ¼¼¿ä.");
+            Debug.LogError("SplashImageê°€ í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤. Inspectorì—ì„œ í™•ì¸í•´ì£¼ì„¸ìš”.");
             return;
         }
 
-        // Ã³À½¿¡ ¿ÏÀüÈ÷ º¸ÀÌµµ·Ï ¼³Á¤
+        // ì²˜ìŒì— ì´ë¯¸ì§€ë¥¼ ë¶ˆíˆ¬ëª…í•˜ê²Œ ì„¤ì •
         Color color = splashImage.color;
         color.a = 1f;
         splashImage.color = color;
@@ -31,10 +35,10 @@ public class SplashScreen : MonoBehaviour
 
     IEnumerator ShowSplashScreen()
     {
-        // Inspector¿¡¼­ ¼³Á¤ÇÑ ½Ã°£¸¸Å­ ÀÌ¹ÌÁö À¯Áö
+        // ì§€ì •ëœ ì‹œê°„ë§Œí¼ ì´ë¯¸ì§€ í‘œì‹œ
         yield return new WaitForSeconds(waitTime);
 
-        // ÆäÀÌµå¾Æ¿ô ½ÃÀÛ
+        // í˜ì´ë“œì•„ì›ƒ íš¨ê³¼
         float timer = 0f;
         Color color = splashImage.color;
 
@@ -46,7 +50,10 @@ public class SplashScreen : MonoBehaviour
             yield return null;
         }
 
-        // ¿ÏÀüÈ÷ »ç¶óÁø ÈÄ ¿ÀºêÁ§Æ® ºñÈ°¼ºÈ­
+        // í˜ì´ë“œ ì™„ë£Œ í›„ ì˜¤ë¸Œì íŠ¸ ë¹„í™œì„±í™”
         splashImage.gameObject.SetActive(false);
+
+        // ë‹¤ìŒ ì”¬ìœ¼ë¡œ ì´ë™
+        SceneManager.LoadScene(nextSceneName);
     }
 }
