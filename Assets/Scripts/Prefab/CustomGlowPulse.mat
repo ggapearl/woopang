@@ -9,7 +9,7 @@ Material:
   m_PrefabAsset: {fileID: 0}
   m_Name: CustomGlowPulse
   m_Shader: {fileID: 4800000, guid: c505f794d397e5449999a19c03e3ba10, type: 3}
-  m_Parent: {fileID: 2100000, guid: 47e88d2d74c4e124bb61b2891531cea4, type: 2}
+  m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
   m_InvalidKeywords: []
