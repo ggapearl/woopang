@@ -68,11 +68,6 @@ Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.bundle
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.so
 Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.dll
 
-# Unity Scenes (개인 작업용 씬 제외)
-Assets/Scenes/*
-!Assets/Scenes/SplashScene.unity
-!Assets/Scenes/SplashScene.unity.meta
-
 # Server (전체 폴더 제외 - Unity 프로젝트만 커밋)
 /server/
 
