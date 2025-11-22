@@ -68,13 +68,21 @@ public class DoubleTap3D : MonoBehaviour
 
     void Start()
     {
-        if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null || 
+        if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null ||
             infoImage1 == null || infoImage2 == null || instagramButton == null ||
             previousButton == null || nextButton == null || closeButton == null || nameText == null)
         {
             Debug.LogError("[DoubleTap3D] 필수 UI 요소가 할당되지 않았습니다!");
             enabled = false;
             return;
+        }
+
+        // 풀스크린 이미지에 둥근 모서리 적용
+        RoundedImage roundedImage = fullscreenImage.GetComponent<RoundedImage>();
+        if (roundedImage == null)
+        {
+            roundedImage = fullscreenImage.gameObject.AddComponent<RoundedImage>();
+            roundedImage.cornerRadius = 30f; // 모서리 둥글기 조정 (0~100)
         }
 
         imageDisplayController = GetComponentInParent<ImageDisplayController>();
