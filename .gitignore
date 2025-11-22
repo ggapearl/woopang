@@ -124,7 +124,4 @@ user.keystore
 # ARFoundation Remote
 Packages/com.kyrylokuzyk.arfoundationremote
 ARFoundationRemoteCompanionApp/
-ARFoundationRemoteInstaller
-"Assets/Firebase/" 
-"Assets/Editor Default Resources/Firebase/" 
-"Assets/ExternalDependencyManager/" 
+ARFoundationRemoteInstaller 
