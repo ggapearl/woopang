@@ -802,13 +802,28 @@ public class ModelUploadManager : MonoBehaviour
     {
         if (Input.location.status == LocationServiceStatus.Running)
         {
-            gpsData = new Vector3(
-                Input.location.lastData.latitude,
-                Input.location.lastData.longitude,
-                Input.location.lastData.altitude
-            );
+            float latitude = Input.location.lastData.latitude;
+            float longitude = Input.location.lastData.longitude;
+            float rawAltitude = Input.location.lastData.altitude;
+
+            // 플랫폼별 고도 좌표계 통일 (WGS84 타원체 기준)
+            // - iOS CoreLocation: 지오이드(해수면) 기준 → WGS84로 변환 필요
+            // - Android GPS: WGS84 타원체 기준 (변환 불필요)
+            #if UNITY_IOS
+            float wgs84Altitude = GeoidHeightCalculator.GeoidToWGS84(rawAltitude, latitude, longitude);
+            float geoidHeight = GeoidHeightCalculator.GetGeoidHeight(latitude, longitude);
+            #else
+            float wgs84Altitude = rawAltitude; // 이미 WGS84 기준
+            #endif
+
+            gpsData = new Vector3(latitude, longitude, wgs84Altitude);
             locationText = $"Lat:{gpsData.x:F6},Lon:{gpsData.y:F6},Alt:{gpsData.z:F2}";
-            Debug.Log($"위치 데이터 갱신 성공: {locationText}");
+
+            #if UNITY_IOS
+            Debug.Log($"[GPS] Lat:{latitude:F6} Lon:{longitude:F6} | 지오이드:{rawAltitude:F2}m → WGS84:{wgs84Altitude:F2}m (보정:{geoidHeight:F1}m)");
+            #else
+            Debug.Log($"[GPS] Lat:{latitude:F6} Lon:{longitude:F6} Alt(WGS84):{wgs84Altitude:F2}m");
+            #endif
         }
         else
         {
