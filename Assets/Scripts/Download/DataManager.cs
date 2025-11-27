@@ -620,22 +620,20 @@ public class DataManager : MonoBehaviour
             if (placeDataMap.ContainsKey(placeId))
             {
                 PlaceData place = placeDataMap[placeId];
-                bool shouldShow = true;
+                bool shouldShow = showWoopangData; // 기본값: 우팡 데이터 필터 상태
 
-                // 우팡 데이터 필터가 꺼져있으면 모든 우팡 데이터 숨기기
-                if (!showWoopangData)
+                if (shouldShow)
                 {
-                    shouldShow = false;
-                }
-                // 애견동반 필터: 애견동반 장소이고 필터가 꺼져있으면 숨김
-                else if (place.pet_friendly && !showPetFriendly)
-                {
-                    shouldShow = false;
-                }
-                // 주류 판매 필터: 주류 판매 장소이고 필터가 꺼져있으면 숨김
-                else if (place.alcohol_available && !showAlcohol)
-                {
-                    shouldShow = false;
+                    // 애견동반 필터 체크
+                    if (place.pet_friendly && !showPetFriendly)
+                    {
+                        shouldShow = false;
+                    }
+                    // 주류 판매 필터 체크
+                    else if (place.alcohol_available && !showAlcohol)
+                    {
+                        shouldShow = false;
+                    }
                 }
 
                 obj.SetActive(shouldShow);

@@ -14,15 +14,27 @@
    - `Tour API Manager` → **DownloadCube_TourAPI_Petfriendly** GameObject 드래그
 
 **필터링 작동 방식:**
-- 토글 OFF → 해당 데이터 숨김 (UI 리스트 + AR 큐브 동시 적용)
+- 토글 OFF → 해당 데이터 숨김 (UI 리스트 + AR 큐브 동시 적용) ✅
+- 토글 ON → 데이터 다시 표시 (SetActive(true) 처리) ✅ **[2025-11-27 수정완료]**
 - 단일 선택 모드: Inspector에서 `Single Select Mode` 체크 시 하나만 선택 가능
 - 설정 저장: 앱 재시작 시 필터 상태 유지 (PlayerPrefs)
 
 ---
 
-### 2️⃣ ARObjectZoomController (AR 오브젝트 줌) - 구현 완료 ✅
+### 2️⃣ ARObjectZoomController (AR 오브젝트 줌) - ⚠️ 디바이스에서 작동 안함
 
-**Unity Editor에서:**
+**현재 상태:**
+- ❌ **디바이스에서 두 손가락 핀치 제스처 반응 없음**
+- ✅ Unity Editor에서 마우스 스크롤은 정상 작동
+- 🔍 **원인 조사 필요** (터치 입력 감지 안됨 추정)
+
+**대안 검토 중:**
+- 디지털 줌 방식 (RenderTexture 사용)
+- AR Camera → RenderTexture → Secondary Camera로 확대
+- Canvas UI는 줌 영향 받지 않도록 설정
+- 품질 저하 허용 가능
+
+**Unity Editor 설정 (참고용):**
 1. Hierarchy: 빈 GameObject 생성 (이름: `ARZoomController`)
 2. Inspector: `Add Component` > `ARObjectZoomController` 추가
 3. Inspector 설정:
@@ -34,11 +46,6 @@
    - **Tour API Manager**: `DownloadCube_TourAPI_Petfriendly` 드래그 (또는 자동 검색)
    - **Zoom Indicator Object**: `ZoomIndicator` 드래그 (선택사항)
 
-**작동 방식:**
-- AR 카메라 FOV 대신 AR 오브젝트들의 `localScale`을 조절
-- 핀치 제스처로 모든 AR 큐브들이 동시에 확대/축소됨
-- 실제 카메라 줌은 아니지만 비슷한 효과
-
 ---
 
 ## 📝 체크리스트
@@ -47,12 +54,14 @@
 - [x] FilterButtonPanel 프리팹
 - [x] FilterManager (단일/다중 선택, 설정 저장)
 - [x] PlaceListManager 필터링 (UI 리스트)
-- [x] DataManager.ApplyFilters (우팡 AR 큐브)
+- [x] DataManager.ApplyFilters (우팡 AR 큐브) - **[2025-11-27 토글 ON 버그 수정]**
 - [x] TourAPIManager.ApplyFilters (공공데이터 AR 큐브)
-- [x] ARObjectZoomController (오브젝트 스케일 기반 줌)
+
+### 작동 안하는 기능 (수정 필요):
+- [ ] ARObjectZoomController - **디바이스에서 터치 입력 감지 안됨 (대안 필요)**
 
 ### 제거된 기능:
-- [x] ~~PinchZoomController~~ → **ARObjectZoomController로 대체됨**
+- [x] ~~PinchZoomController~~ → **ARObjectZoomController로 대체 시도했으나 작동 안함**
 
 ---
 
@@ -103,11 +112,10 @@ Assets/Scripts/
 - ❌ AR Foundation이 매 프레임 FOV 덮어씀
 - ❌ AR 환경에서 작동 안 함
 
-### ARObjectZoomController (신규):
-- ✅ AR 오브젝트들의 스케일 조절
-- ✅ 핀치 제스처로 모든 큐브 동시 확대/축소
-- ✅ 실제 줌 효과와 유사한 UX
-- ✅ AR Foundation과 충돌 없음
+### ARObjectZoomController (신규 - 작동 안함):
+- ❌ Unity Editor에서는 작동하나 디바이스에서 터치 입력 감지 안됨
+- ❓ 원인: 터치 이벤트 처리 문제 또는 설정 누락 추정
+- 🔄 대안 필요: 디지털 줌 방식 (RenderTexture) 검토 중
 
 ---
 
