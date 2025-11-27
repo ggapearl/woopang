@@ -698,6 +698,29 @@ public class TourAPIManager : MonoBehaviour
         return isDataLoaded;
     }
 
+    /// <summary>
+    /// 필터 적용 - 스폰된 AR 오브젝트의 표시/숨김 제어
+    /// TourAPI 데이터는 모두 애견동반이므로 publicData 필터에 따라 전체 표시/숨김
+    /// </summary>
+    public void ApplyFilters(Dictionary<string, bool> filters)
+    {
+        if (filters == null) return;
+
+        bool showPublicData = filters.ContainsKey("publicData") && filters["publicData"];
+        bool showPetFriendly = filters.ContainsKey("petFriendly") && filters["petFriendly"];
+
+        // TourAPI 데이터는 모두 애견동반이므로 두 필터 모두 체크
+        bool shouldShow = showPublicData && showPetFriendly;
+
+        foreach (var kvp in spawnedObjects)
+        {
+            GameObject obj = kvp.Value;
+            obj.SetActive(shouldShow);
+        }
+
+        LogDebug($"[TourAPIManager] 필터 적용: publicData={showPublicData}, petFriendly={showPetFriendly}, 오브젝트 표시={shouldShow}");
+    }
+
     void OnApplicationFocus(bool hasFocus)
     {
         if (hasFocus && isDataLoaded)

@@ -322,6 +322,20 @@ public class DataManager : MonoBehaviour
         if (display != null && !string.IsNullOrEmpty(place.main_photo))
         {
             display.SetBaseMap(place.main_photo);
+
+            // 서브 사진 설정 (더블터치 시 표시)
+            if (place.sub_photos != null && place.sub_photos.Count > 0)
+            {
+                List<string> subPhotoUrls = new List<string>();
+                foreach (var photoGroup in place.sub_photos)
+                {
+                    if (photoGroup != null && photoGroup.Count > 0)
+                    {
+                        subPhotoUrls.Add(photoGroup[0]); // 각 그룹의 첫 번째 사진만 추가
+                    }
+                }
+                display.SetSubPhotos(subPhotoUrls);
+            }
         }
 
         // DoubleTap3D 설정
@@ -587,6 +601,48 @@ public class DataManager : MonoBehaviour
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
 
+    /// <summary>
+    /// 필터 적용 - 스폰된 AR 오브젝트의 표시/숨김 제어
+    /// </summary>
+    public void ApplyFilters(Dictionary<string, bool> filters)
+    {
+        if (filters == null) return;
+
+        bool showPetFriendly = filters.ContainsKey("petFriendly") && filters["petFriendly"];
+        bool showAlcohol = filters.ContainsKey("alcohol") && filters["alcohol"];
+        bool showWoopangData = filters.ContainsKey("woopangData") && filters["woopangData"];
+
+        foreach (var kvp in spawnedObjects)
+        {
+            int placeId = kvp.Key;
+            GameObject obj = kvp.Value;
+
+            if (placeDataMap.ContainsKey(placeId))
+            {
+                PlaceData place = placeDataMap[placeId];
+                bool shouldShow = true;
+
+                // 우팡 데이터 필터가 꺼져있으면 모든 우팡 데이터 숨기기
+                if (!showWoopangData)
+                {
+                    shouldShow = false;
+                }
+                // 애견동반 필터: 애견동반 장소이고 필터가 꺼져있으면 숨김
+                else if (place.pet_friendly && !showPetFriendly)
+                {
+                    shouldShow = false;
+                }
+                // 주류 판매 필터: 주류 판매 장소이고 필터가 꺼져있으면 숨김
+                else if (place.alcohol_available && !showAlcohol)
+                {
+                    shouldShow = false;
+                }
+
+                obj.SetActive(shouldShow);
+            }
+        }
+    }
+
     void OnApplicationFocus(bool hasFocus)
     {
         if (hasFocus && Input.location.isEnabledByUser)
@@ -638,6 +694,34 @@ public class DataManager : MonoBehaviour
     {
         Input.location.Stop();
     }
+
+    /// <summary>
+    /// 미리보기 모드: 모든 오브젝트 숨기기
+    /// </summary>
+    public void HideAllObjects()
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value != null)
+            {
+                kvp.Value.SetActive(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 미리보기 종료: 모든 오브젝트 다시 표시
+    /// </summary>
+    public void ShowAllObjects()
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value != null)
+            {
+                kvp.Value.SetActive(true);
+            }
+        }
+    }
 }
 
 [System.Serializable]
@@ -649,6 +733,7 @@ public class PlaceData
     public List<List<string>> sub_photos { get; set; }
     public bool pet_friendly { get; set; }
     public bool separate_restroom { get; set; }
+    public bool alcohol_available { get; set; }  // 주류 판매 여부
     public string instagram_id { get; set; }
     public float latitude { get; set; }
     public float longitude { get; set; }
