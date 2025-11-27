@@ -124,4 +124,25 @@ user.keystore
 # ARFoundation Remote
 Packages/com.kyrylokuzyk.arfoundationremote
 ARFoundationRemoteCompanionApp/
-ARFoundationRemoteInstaller 
+ARFoundationRemoteInstaller
+
+# Assets 폴더 제한 (특정 폴더만 포함)
+# 먼저 Assets의 모든 것을 제외
+Assets/*
+# 그 다음 필요한 폴더만 포함
+!Assets/sou/
+!Assets/sound/
+!Assets/Scripts/
+!Assets/Scenes/
+!Assets/Prefab/
+!Assets/Prefabs/
+!Assets/Menu/
+# .meta 파일도 포함 (Unity 필수)
+!Assets/*.meta
+!Assets/sou/**/*.meta
+!Assets/sound/**/*.meta
+!Assets/Scripts/**/*.meta
+!Assets/Scenes/**/*.meta
+!Assets/Prefab/**/*.meta
+!Assets/Prefabs/**/*.meta
+!Assets/Menu/**/*.meta
