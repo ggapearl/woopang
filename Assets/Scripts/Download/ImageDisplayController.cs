@@ -51,14 +51,23 @@ public class ImageDisplayController : MonoBehaviour
                     }
                     baseMapTexture = newTexture;
 
-                    if (cubeRenderer != null && cubeRenderer.material.HasProperty("_MainTex"))
+                    // T5EdgeLine 셰이더는 _BaseMap 사용, 기본 셰이더는 _MainTex 사용
+                    if (cubeRenderer != null)
                     {
-                        cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
-                    }
-                    else
-                    {
-                        Debug.LogError("[ImageDisplayController] _MainTex 속성이 없습니다. 기본 텍스처 적용");
-                        cubeRenderer.material.SetTexture("_MainTex", Texture2D.blackTexture);
+                        if (cubeRenderer.material.HasProperty("_BaseMap"))
+                        {
+                            cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
+                            Debug.Log($"[ImageDisplayController] _BaseMap 텍스처 설정 완료: {imageUrl}");
+                        }
+                        else if (cubeRenderer.material.HasProperty("_MainTex"))
+                        {
+                            cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+                            Debug.Log($"[ImageDisplayController] _MainTex 텍스처 설정 완료: {imageUrl}");
+                        }
+                        else
+                        {
+                            Debug.LogError("[ImageDisplayController] _BaseMap/_MainTex 속성이 없습니다!");
+                        }
                     }
                 }
                 else
@@ -69,9 +78,16 @@ public class ImageDisplayController : MonoBehaviour
             else
             {
                 Debug.LogError($"[ImageDisplayController] 메인 사진 로딩 실패: {fullUrl}, 오류: {request.error}");
-                if (cubeRenderer != null && cubeRenderer.material.HasProperty("_MainTex"))
+                if (cubeRenderer != null)
                 {
-                    cubeRenderer.material.SetTexture("_MainTex", Texture2D.blackTexture);
+                    if (cubeRenderer.material.HasProperty("_BaseMap"))
+                    {
+                        cubeRenderer.material.SetTexture("_BaseMap", Texture2D.blackTexture);
+                    }
+                    else if (cubeRenderer.material.HasProperty("_MainTex"))
+                    {
+                        cubeRenderer.material.SetTexture("_MainTex", Texture2D.blackTexture);
+                    }
                 }
             }
         }
@@ -184,9 +200,16 @@ public class ImageDisplayController : MonoBehaviour
     // 모든 텍스처 해제
     public void ClearImages()
     {
-        if (cubeRenderer != null && cubeRenderer.material.HasProperty("_MainTex"))
+        if (cubeRenderer != null)
         {
-            cubeRenderer.material.SetTexture("_MainTex", null);
+            if (cubeRenderer.material.HasProperty("_BaseMap"))
+            {
+                cubeRenderer.material.SetTexture("_BaseMap", null);
+            }
+            else if (cubeRenderer.material.HasProperty("_MainTex"))
+            {
+                cubeRenderer.material.SetTexture("_MainTex", null);
+            }
         }
 
         if (baseMapTexture != null && baseMapTexture != Texture2D.blackTexture)

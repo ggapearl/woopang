@@ -606,16 +606,31 @@ public class DataManager : MonoBehaviour
     /// </summary>
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
-        if (filters == null) return;
+        if (filters == null)
+        {
+            Debug.LogWarning("[DataManager] ApplyFilters 호출되었으나 filters가 null입니다.");
+            return;
+        }
 
         bool showPetFriendly = filters.ContainsKey("petFriendly") && filters["petFriendly"];
         bool showAlcohol = filters.ContainsKey("alcohol") && filters["alcohol"];
         bool showWoopangData = filters.ContainsKey("woopangData") && filters["woopangData"];
 
+        Debug.Log($"[DataManager] ApplyFilters - woopangData={showWoopangData}, petFriendly={showPetFriendly}, alcohol={showAlcohol}, spawnedObjects 개수={spawnedObjects.Count}");
+
+        int shownCount = 0;
+        int hiddenCount = 0;
+
         foreach (var kvp in spawnedObjects)
         {
             int placeId = kvp.Key;
             GameObject obj = kvp.Value;
+
+            if (obj == null)
+            {
+                Debug.LogWarning($"[DataManager] placeId={placeId}의 GameObject가 null입니다.");
+                continue;
+            }
 
             if (placeDataMap.ContainsKey(placeId))
             {
@@ -636,9 +651,37 @@ public class DataManager : MonoBehaviour
                     }
                 }
 
+                bool wasActive = obj.activeSelf;
                 obj.SetActive(shouldShow);
+
+                if (shouldShow) shownCount++;
+                else hiddenCount++;
+
+                // 상태 변경 로그
+                if (wasActive != shouldShow)
+                {
+                    // 🔍 추가 디버깅: 부모 상태, 실제 visibility 확인
+                    bool actuallyVisible = obj.activeInHierarchy;
+                    Transform parent = obj.transform.parent;
+                    bool parentActive = (parent != null) ? parent.gameObject.activeInHierarchy : true;
+
+                    Debug.Log($"[DataManager] placeId={placeId} '{place.name}' - {(wasActive ? "활성" : "비활성")} → {(shouldShow ? "활성" : "비활성")}" +
+                             $" | activeSelf={obj.activeSelf}, activeInHierarchy={actuallyVisible}, 부모활성={parentActive}");
+
+                    // 🔍 재활성화했는데 실제로 안 보이는 경우 경고
+                    if (shouldShow && !actuallyVisible)
+                    {
+                        Debug.LogWarning($"[DataManager] ⚠️ placeId={placeId} '{place.name}' SetActive(true) 했으나 activeInHierarchy=false! 부모가 비활성화되어 있을 수 있음. 부모: {(parent != null ? parent.name : "없음")}");
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[DataManager] placeId={placeId}가 placeDataMap에 없습니다.");
             }
         }
+
+        Debug.Log($"[DataManager] 필터 적용 완료 - 표시: {shownCount}개, 숨김: {hiddenCount}개");
     }
 
     void OnApplicationFocus(bool hasFocus)

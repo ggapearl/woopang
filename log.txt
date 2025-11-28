@@ -1,0 +1,12 @@
+pdnom@gim-yeonghun-ui-MacBookPro woopang % rm -rf library/
+rm: library/: Directory not empty
+pdnom@gim-yeonghun-ui-MacBookPro woopang % git reflog > log.txt 2>&1
+pdnom@gim-yeonghun-ui-MacBookPro woopang % git reflog
+6b9ead8 (HEAD -> main) HEAD@{0}: reset: moving to HEAD
+6b9ead8 (HEAD -> main) HEAD@{1}: commit: Remove PINk files on Mac
+80571ea HEAD@{2}: reset: moving to HEAD
+80571ea HEAD@{3}: reset: moving to HEAD~1
+3848ef6 HEAD@{4}: commit: Remove PINk files on Mac
+80571ea HEAD@{5}: pull origin master: Fast-forward
+169c206 HEAD@{6}: initial pull
+pdnom@gim-yeonghun-ui-MacBookPro woopang % 

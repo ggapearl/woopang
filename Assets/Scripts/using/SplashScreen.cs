@@ -3,25 +3,28 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using System.Collections;
 
+/// <summary>
+/// 앱 시작 시 전체화면 스플래시를 표시하는 컴포넌트
+/// SplashScene에서 3.5초 표시 후 페이드아웃하며 다음 씬으로 전환
+/// </summary>
 public class SplashScreen : MonoBehaviour
 {
     [SerializeField]
     private Image splashImage;
 
     [SerializeField]
-    private float waitTime = 5f; // 스플래시 표시 시간 (초)
+    private float waitTime = 3.5f; // 스플래시 표시 시간 (초)
 
     [SerializeField]
-    private float fadeDuration = 1f; // 페이드아웃 시간 (초)
-
-    [SerializeField]
-    private string nextSceneName = "MainScene"; // 다음 씬 이름
+    private float fadeDuration = 0.5f; // 페이드아웃 시간 (초)
 
     void Start()
     {
         if (splashImage == null)
         {
             Debug.LogError("SplashImage가 할당되지 않았습니다. Inspector에서 확인해주세요.");
+            // 스플래시 없이 다음 씬으로 이동
+            LoadNextScene();
             return;
         }
 
@@ -50,10 +53,21 @@ public class SplashScreen : MonoBehaviour
             yield return null;
         }
 
-        // 페이드 완료 후 오브젝트 비활성화
-        splashImage.gameObject.SetActive(false);
+        // 페이드 완료 후 다음 씬으로 이동
+        LoadNextScene();
+    }
 
-        // 다음 씬으로 이동
-        SceneManager.LoadScene(nextSceneName);
+    void LoadNextScene()
+    {
+        // Build Settings의 다음 씬으로 이동
+        int nextSceneIndex = SceneManager.GetActiveScene().buildIndex + 1;
+        if (nextSceneIndex < SceneManager.sceneCountInBuildSettings)
+        {
+            SceneManager.LoadScene(nextSceneIndex);
+        }
+        else
+        {
+            Debug.LogError("다음 씬이 Build Settings에 없습니다!");
+        }
     }
 }

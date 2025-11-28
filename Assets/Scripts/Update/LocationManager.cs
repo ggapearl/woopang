@@ -135,44 +135,64 @@ public class LocationManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(urlBuilder.ToString()))
         {
-            request.SetRequestHeader("User-Agent", "MyARApp/1.0 (myemail@example.com)");
+            request.SetRequestHeader("User-Agent", "WoopangARApp/1.0");
+            request.timeout = 10; // 10초 타임아웃
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                string jsonResponse = request.downloadHandler.text;
-                Debug.Log($"API 응답: {jsonResponse}");
-                JSONNode data = JSON.Parse(jsonResponse);
-
-                textBuilder.Clear();
-                textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
-                textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
-                textBuilder.Append("\n");
-
-                string displayName = data["display_name"].Value;
-                string[] addressParts = displayName.Split(',');
-                if (addressParts.Length >= 3)
+                try
                 {
-                    textBuilder.Append(addressParts[0].Trim()).Append(", ");
-                    textBuilder.Append(addressParts[1].Trim()).Append(", ");
-                    textBuilder.Append(addressParts[2].Trim());
-                }
-                else if (string.IsNullOrEmpty(displayName))
-                {
-                    Debug.LogWarning("display_name 데이터가 없음");
-                    textBuilder.Append("주소 정보 없음");
-                }
-                else
-                {
-                    textBuilder.Append(displayName);
-                }
+                    string jsonResponse = request.downloadHandler.text;
+                    Debug.Log($"[LocationManager] API 응답: {jsonResponse}");
+                    JSONNode data = JSON.Parse(jsonResponse);
 
-                infoText.text = textBuilder.ToString();
+                    textBuilder.Clear();
+                    textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
+                    textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
+                    textBuilder.Append("\n");
+
+                    string displayName = data["display_name"].Value;
+                    if (!string.IsNullOrEmpty(displayName))
+                    {
+                        string[] addressParts = displayName.Split(',');
+                        if (addressParts.Length >= 3)
+                        {
+                            textBuilder.Append(addressParts[0].Trim()).Append(", ");
+                            textBuilder.Append(addressParts[1].Trim()).Append(", ");
+                            textBuilder.Append(addressParts[2].Trim());
+                        }
+                        else
+                        {
+                            textBuilder.Append(displayName);
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[LocationManager] display_name 데이터가 없음");
+                        textBuilder.Append(currentLanguage == "ko" ? "주소 정보 없음" : "No address");
+                    }
+
+                    infoText.text = textBuilder.ToString();
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[LocationManager] JSON 파싱 에러: {e.Message}");
+                    textBuilder.Clear();
+                    textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
+                    textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
+                    infoText.text = textBuilder.ToString();
+                }
             }
             else
             {
-                Debug.LogError($"API 요청 실패: {request.error}");
-                infoText.text = "Failed to retrieve address.";
+                Debug.LogError($"[LocationManager] API 요청 실패: {request.error}, Status Code: {request.responseCode}");
+
+                // 좌표만이라도 표시
+                textBuilder.Clear();
+                textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
+                textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
+                infoText.text = textBuilder.ToString();
             }
         }
     }

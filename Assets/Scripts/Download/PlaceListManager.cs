@@ -14,6 +14,16 @@ public class PlaceListManager : MonoBehaviour
     private int woopangCount;
     private int tourAPICount;
 
+    // 필터 설정
+    private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
+    {
+        { "petFriendly", true },
+        { "publicData", true },
+        { "subway", true },
+        { "bus", true },
+        { "alcohol", true }
+    };
+
     // 언어별 텍스트 템플릿
     private Dictionary<string, Dictionary<string, string>> languageTexts = new Dictionary<string, Dictionary<string, string>>
     {
@@ -139,26 +149,57 @@ public class PlaceListManager : MonoBehaviour
         }
 
         combinedPlaces.Clear();
-        foreach (var place in woopangPlaces)
+
+        // 🔧 우팡데이터 필터 체크 추가
+        bool showWoopangData = activeFilters.ContainsKey("woopangData") && activeFilters["woopangData"];
+        bool showPetFriendly = activeFilters.ContainsKey("petFriendly") && activeFilters["petFriendly"];
+        bool showAlcohol = activeFilters.ContainsKey("alcohol") && activeFilters["alcohol"];
+
+        if (showWoopangData)
         {
-            float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
-            string distanceText = $"{Mathf.FloorToInt(distance)}m";
-            string displayText = place.pet_friendly
-                ? $"{place.name} - {distanceText} {GetLocalizedText("petFriendly")}"
-                : $"{place.name} - {distanceText}";
-            string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-            combinedPlaces.Add((place, distance, place.id.ToString(), displayText, colorHex));
+            foreach (var place in woopangPlaces)
+            {
+                // 애견동반 필터 체크
+                if (place.pet_friendly && !showPetFriendly)
+                {
+                    continue; // 애견동반 필터가 꺼져있고 장소가 애견동반이면 건너뛰기
+                }
+
+                // 주류 판매 필터 체크
+                if (place.alcohol_available && !showAlcohol)
+                {
+                    continue; // 주류 필터가 꺼져있고 장소가 주류 판매하면 건너뛰기
+                }
+
+                float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
+                string distanceText = $"{Mathf.FloorToInt(distance)}m";
+                string displayText = place.pet_friendly
+                    ? $"{place.name} - {distanceText} {GetLocalizedText("petFriendly")}"
+                    : $"{place.name} - {distanceText}";
+                string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
+                combinedPlaces.Add((place, distance, place.id.ToString(), displayText, colorHex));
+            }
         }
 
-        foreach (var place in tourPlaces)
+        // 공공데이터(TourAPI) 필터 체크
+        if (activeFilters["publicData"])
         {
-            float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
-            string distanceText = $"{Mathf.FloorToInt(distance)}m";
-            string displayText = string.IsNullOrEmpty(place.firstimage)
-                ? $"{place.title} - {distanceText} {GetLocalizedText("noImage")} {GetLocalizedText("petFriendly")}"
-                : $"{place.title} - {distanceText} {GetLocalizedText("petFriendly")}";
-            string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-            combinedPlaces.Add((place, distance, place.contentid, displayText, colorHex));
+            foreach (var place in tourPlaces)
+            {
+                // 애견동반 필터 체크 (TourAPI는 모두 애견동반)
+                if (!activeFilters["petFriendly"])
+                {
+                    continue;
+                }
+
+                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
+                string distanceText = $"{Mathf.FloorToInt(distance)}m";
+                string displayText = string.IsNullOrEmpty(place.firstimage)
+                    ? $"{place.title} - {distanceText} {GetLocalizedText("noImage")} {GetLocalizedText("petFriendly")}"
+                    : $"{place.title} - {distanceText} {GetLocalizedText("petFriendly")}";
+                string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
+                combinedPlaces.Add((place, distance, place.contentid, displayText, colorHex));
+            }
         }
 
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
@@ -219,5 +260,12 @@ public class PlaceListManager : MonoBehaviour
                   Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
         float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
         return R * c;
+    }
+
+    // FilterManager에서 호출하는 메서드
+    public void ApplyFilters(Dictionary<string, bool> filters)
+    {
+        activeFilters = filters;
+        UpdateUI(); // UI 즉시 업데이트
     }
 }
