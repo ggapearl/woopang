@@ -19,6 +19,7 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Toggle busToggle;          // 버스
     [SerializeField] private Toggle alcoholToggle;      // 주류 판매
     [SerializeField] private Toggle woopangDataToggle;  // 우팡데이터
+    [SerializeField] private Toggle object3DToggle;     // 3D 오브젝트 (GLB, OBJ 등)
 
     [Header("Control Buttons")]
     [SerializeField] private Button selectAllButton;    // 전체 선택 버튼
@@ -39,6 +40,7 @@ public class FilterManager : MonoBehaviour
     private bool filterBus = true;
     private bool filterAlcohol = true;
     private bool filterWoopangData = true;
+    private bool filterObject3D = true;
 
     // 프로그래매틱 변경 중 플래그 (이벤트 무한 루프 방지)
     private bool isUpdatingToggles = false;
@@ -53,6 +55,7 @@ public class FilterManager : MonoBehaviour
     private const string PREF_BUS = "Filter_Bus";
     private const string PREF_ALCOHOL = "Filter_Alcohol";
     private const string PREF_WOOPANG_DATA = "Filter_WoopangData";
+    private const string PREF_OBJECT3D = "Filter_Object3D";
 
     void Start()
     {
@@ -66,6 +69,7 @@ public class FilterManager : MonoBehaviour
         SetupToggle(busToggle, filterBus, OnBusToggleChanged, "bus");
         SetupToggle(alcoholToggle, filterAlcohol, OnAlcoholToggleChanged, "alcohol");
         SetupToggle(woopangDataToggle, filterWoopangData, OnWoopangDataToggleChanged, "woopangData");
+        SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
 
         // 버튼 이벤트 리스너 등록
         if (selectAllButton != null)
@@ -112,6 +116,7 @@ public class FilterManager : MonoBehaviour
         filterBus = (filterName == "bus");
         filterAlcohol = (filterName == "alcohol");
         filterWoopangData = (filterName == "woopangData");
+        filterObject3D = (filterName == "object3D");
 
         UpdateAllToggleUI();
         SaveFilterSettings();
@@ -131,8 +136,9 @@ public class FilterManager : MonoBehaviour
         filterBus = PlayerPrefs.GetInt(PREF_BUS, 1) == 1;
         filterAlcohol = PlayerPrefs.GetInt(PREF_ALCOHOL, 1) == 1;
         filterWoopangData = PlayerPrefs.GetInt(PREF_WOOPANG_DATA, 1) == 1;
+        filterObject3D = PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
 
-        Debug.Log($"[FilterManager] 설정 불러오기 완료 - PetFriendly: {filterPetFriendly}, PublicData: {filterPublicData}, Alcohol: {filterAlcohol}, WoopangData: {filterWoopangData}");
+        Debug.Log($"[FilterManager] 설정 불러오기 완료 - PetFriendly: {filterPetFriendly}, PublicData: {filterPublicData}, Alcohol: {filterAlcohol}, WoopangData: {filterWoopangData}, Object3D: {filterObject3D}");
     }
 
     /// <summary>
@@ -146,6 +152,7 @@ public class FilterManager : MonoBehaviour
         PlayerPrefs.SetInt(PREF_BUS, filterBus ? 1 : 0);
         PlayerPrefs.SetInt(PREF_ALCOHOL, filterAlcohol ? 1 : 0);
         PlayerPrefs.SetInt(PREF_WOOPANG_DATA, filterWoopangData ? 1 : 0);
+        PlayerPrefs.SetInt(PREF_OBJECT3D, filterObject3D ? 1 : 0);
         PlayerPrefs.Save();
 
         Debug.Log("[FilterManager] 설정 저장 완료");
@@ -164,6 +171,7 @@ public class FilterManager : MonoBehaviour
         filterBus = true;
         filterAlcohol = true;
         filterWoopangData = true;
+        filterObject3D = true;
 
         UpdateAllToggleUI();
         SaveFilterSettings();
@@ -187,6 +195,7 @@ public class FilterManager : MonoBehaviour
         filterBus = false;
         filterAlcohol = false;
         filterWoopangData = false;
+        filterObject3D = false;
 
         UpdateAllToggleUI();
         SaveFilterSettings();
@@ -208,6 +217,7 @@ public class FilterManager : MonoBehaviour
         if (busToggle != null) busToggle.isOn = filterBus;
         if (alcoholToggle != null) alcoholToggle.isOn = filterAlcohol;
         if (woopangDataToggle != null) woopangDataToggle.isOn = filterWoopangData;
+        if (object3DToggle != null) object3DToggle.isOn = filterObject3D;
     }
 
     private void OnPetFriendlyToggleChanged(bool isOn)
@@ -254,6 +264,14 @@ public class FilterManager : MonoBehaviour
     {
         if (isUpdatingToggles) return;
         filterWoopangData = isOn;
+        SaveFilterSettings();
+        ApplyAllFilters();
+    }
+
+    private void OnObject3DToggleChanged(bool isOn)
+    {
+        if (isUpdatingToggles) return;
+        filterObject3D = isOn;
         SaveFilterSettings();
         ApplyAllFilters();
     }

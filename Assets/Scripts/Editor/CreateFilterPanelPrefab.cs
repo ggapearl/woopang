@@ -43,13 +43,14 @@ public class CreateFilterPanelPrefab
         // 5. FilterManager 컴포넌트 추가
         FilterManager filterManager = panel.AddComponent<FilterManager>();
 
-        // 6. 토글 6개 생성
+        // 6. 토글 7개 생성
         Toggle petToggle = CreateToggle(panel.transform, "PetFriendlyToggle", "애견동반");
         Toggle publicToggle = CreateToggle(panel.transform, "PublicDataToggle", "공공데이터");
         Toggle subwayToggle = CreateToggle(panel.transform, "SubwayToggle", "지하철");
         Toggle busToggle = CreateToggle(panel.transform, "BusToggle", "버스");
         Toggle alcoholToggle = CreateToggle(panel.transform, "AlcoholToggle", "주류판매");
         Toggle woopangToggle = CreateToggle(panel.transform, "WoopangDataToggle", "우팡데이터");
+        Toggle object3DToggle = CreateToggle(panel.transform, "Object3DToggle", "3D 오브젝트");
 
         // 7. 버튼 2개 생성
         Button selectAllBtn = CreateButton(panel.transform, "SelectAllButton", "전체 선택", new Color(0.2f, 0.6f, 1f, 0.8f));
@@ -63,6 +64,7 @@ public class CreateFilterPanelPrefab
         serializedManager.FindProperty("busToggle").objectReferenceValue = busToggle;
         serializedManager.FindProperty("alcoholToggle").objectReferenceValue = alcoholToggle;
         serializedManager.FindProperty("woopangDataToggle").objectReferenceValue = woopangToggle;
+        serializedManager.FindProperty("object3DToggle").objectReferenceValue = object3DToggle;
         serializedManager.FindProperty("selectAllButton").objectReferenceValue = selectAllBtn;
         serializedManager.FindProperty("deselectAllButton").objectReferenceValue = deselectAllBtn;
         serializedManager.ApplyModifiedProperties();

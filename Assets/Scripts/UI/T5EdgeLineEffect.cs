@@ -50,17 +50,35 @@ public class T5EdgeLineEffect : MonoBehaviour
         if (cachedShader == null)
         {
             cachedShader = Shader.Find("UI/T5EdgeLine");
+            if (cachedShader == null)
+            {
+                Debug.LogError("[T5EdgeLineEffect] ❌ UI/T5EdgeLine shader를 찾을 수 없습니다! 셰이더가 프로젝트에 포함되어 있는지 확인하세요.");
+                Debug.LogError("[T5EdgeLineEffect] Graphics Settings > Always Included Shaders에 'UI/T5EdgeLine' 추가 필요");
+                return;
+            }
         }
 
-        if (cachedShader != null)
+        // 기존 Material 제거
+        if (material != null)
         {
-            material = new Material(cachedShader);
-            image.material = material;
+            Destroy(material);
+            material = null;
+        }
+
+        // 새 Material 생성 및 할당
+        material = new Material(cachedShader);
+        material.name = "T5EdgeLine_Material (Instance)";
+        image.material = material;
+
+        // Material이 제대로 할당되었는지 확인
+        if (image.material != null && image.material.shader.name == "UI/T5EdgeLine")
+        {
+            Debug.Log($"[T5EdgeLineEffect] ✅ 셰이더 적용 성공: {gameObject.name}");
             UpdateMaterialProperties();
         }
         else
         {
-            Debug.LogWarning("[T5EdgeLineEffect] UI/T5EdgeLine shader를 찾을 수 없습니다.");
+            Debug.LogError($"[T5EdgeLineEffect] ❌ 셰이더 적용 실패: {gameObject.name}");
         }
     }
 
@@ -97,7 +115,16 @@ public class T5EdgeLineEffect : MonoBehaviour
         glowPulseSpeed = pulseSpeed;
         minGlow = minGlowValue;
         cornerRadius = radius;
-        UpdateMaterialProperties();
+
+        // Material이 없으면 먼저 적용
+        if (material == null)
+        {
+            ApplyEffect();
+        }
+        else
+        {
+            UpdateMaterialProperties();
+        }
     }
 
     /// <summary>

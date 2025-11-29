@@ -13,7 +13,7 @@ public class SplashScreen : MonoBehaviour
     private Image splashImage;
 
     [SerializeField]
-    private float waitTime = 3.5f; // 스플래시 표시 시간 (초)
+    private float waitTime = 2.5f; // 스플래시 표시 시간 (초) - 1초 감소
 
     [SerializeField]
     private float fadeDuration = 0.5f; // 페이드아웃 시간 (초)

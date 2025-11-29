@@ -969,7 +969,7 @@ public class ModelUploadManager : MonoBehaviour
         formData.AddField("longitude", gpsData.y.ToString("F6"));
         formData.AddField("altitude", gpsData.z.ToString("F2"));
         formData.AddField("model_type", "custom");
-        formData.AddField("status", "pending");
+        formData.AddField("status", "approved");
         formData.AddField("pet_friendly", petFriendlyToggle?.isOn ?? false ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroomToggle?.isOn ?? false ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");

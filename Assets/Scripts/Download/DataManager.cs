@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -21,6 +22,10 @@ public class DataManager : MonoBehaviour
     [SerializeField] private int maxConcurrentGLBLoads = 3;
     [SerializeField] private float glbLoadTimeout = 30f;
     [SerializeField] private bool fallbackToCube = true;
+
+    [Header("Loading Indicator")]
+    [Tooltip("로딩 중 표시할 3D 구형 인디케이터")]
+    [SerializeField] private GameObject loadingIndicator;
     
     private Dictionary<int, GameObject> spawnedObjects = new Dictionary<int, GameObject>();
     private Dictionary<int, PlaceData> placeDataMap = new Dictionary<int, PlaceData>();
@@ -30,7 +35,21 @@ public class DataManager : MonoBehaviour
     
     [SerializeField] public int poolSize = 20;
     [SerializeField] private float updateInterval = 600f;
-    public float loadRadius = 1000f;
+
+    [Header("Progressive Loading Settings")]
+    [Tooltip("거리별 로딩 단계 (미터): 25m → 50m → 75m → 100m → 150m → 200m")]
+    public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f };
+
+    [Tooltip("각 거리 단계 사이의 딜레이 (초)")]
+    public float tierDelay = 1.0f;
+
+    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초)")]
+    public float objectSpawnDelay = 0.5f;
+
+    [Header("Distance Filter")]
+    [Tooltip("PlaceListManager 참조 (거리 필터 동기화)")]
+    [SerializeField] private PlaceListManager placeListManager;
+
     [SerializeField] private float updateDistanceThreshold = 50f;
     private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
@@ -109,12 +128,11 @@ public class DataManager : MonoBehaviour
         if (args.state == ARSessionState.SessionTracking && !isDataLoaded)
         {
             LocationInfo currentLocation = Input.location.lastData;
-            string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
             if (fetchCoroutine != null)
             {
                 StopCoroutine(fetchCoroutine);
             }
-            fetchCoroutine = StartCoroutine(FetchDataImmediately(serverUrl, currentLocation));
+            fetchCoroutine = StartCoroutine(FetchDataProgressively(currentLocation));
         }
     }
 
@@ -124,8 +142,7 @@ public class DataManager : MonoBehaviour
         {
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
             LocationInfo currentLocation = Input.location.lastData;
-            string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
-            yield return StartCoroutine(FetchDataFromServer(serverUrl, currentLocation));
+            yield return StartCoroutine(FetchDataProgressively(currentLocation));
             isDataLoaded = true;
             yield return new WaitForSeconds(updateInterval);
         }
@@ -138,14 +155,135 @@ public class DataManager : MonoBehaviour
             LocationInfo currentLocation = Input.location.lastData;
             Vector2 currentPos = new Vector2(currentLocation.latitude, currentLocation.longitude);
             float distanceMoved = CalculateDistance(lastPosition.x, lastPosition.y, currentPos.x, currentPos.y);
-            
+
             if (distanceMoved > updateDistanceThreshold)
             {
-                string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
-                yield return StartCoroutine(FetchDataFromServer(serverUrl, currentLocation));
+                yield return StartCoroutine(FetchDataProgressively(currentLocation));
                 lastPosition = currentPos;
             }
             yield return new WaitForSeconds(1f);
+        }
+    }
+
+    /// <summary>
+    /// 점진적 데이터 로딩 - 거리별 단계로 나누어 로딩하여 앱 끊김 방지
+    /// 25m → 50m → 75m → 100m → 150m → 200m 순으로 로딩
+    /// </summary>
+    private IEnumerator FetchDataProgressively(LocationInfo currentLocation)
+    {
+        Debug.Log("[DataManager] ===== 점진적 로딩 시작 =====");
+
+        // 로딩 인디케이터 표시
+        ShowLoadingIndicator(true);
+
+        // 이미 로드된 오브젝트 ID 추적 (중복 방지)
+        HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+
+        // 각 거리 단계별로 데이터 로딩
+        for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
+        {
+            float radius = loadRadii[tierIndex];
+            Debug.Log($"[DataManager] 단계 {tierIndex + 1}/{loadRadii.Length}: {radius}m 이내 오브젝트 로딩 중...");
+
+            // 서버에서 현재 반경 내 데이터 가져오기
+            string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={radius}";
+
+            List<PlaceData> newPlaces = new List<PlaceData>();
+            yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, currentLocation, loadedIds, newPlaces));
+
+            // 새로운 오브젝트를 하나씩 0.5초 간격으로 스폰
+            foreach (PlaceData place in newPlaces)
+            {
+                CreateObjectFromData(place);
+                loadedIds.Add(place.id);
+
+                // 오브젝트 사이 딜레이
+                if (objectSpawnDelay > 0)
+                {
+                    yield return new WaitForSeconds(objectSpawnDelay);
+                }
+            }
+
+            Debug.Log($"[DataManager] 단계 {tierIndex + 1} 완료 - {newPlaces.Count}개 오브젝트 추가됨 (총 {loadedIds.Count}개)");
+
+            // 다음 단계로 넘어가기 전 딜레이 (마지막 단계는 제외)
+            if (tierIndex < loadRadii.Length - 1 && tierDelay > 0)
+            {
+                yield return new WaitForSeconds(tierDelay);
+            }
+        }
+
+        Debug.Log($"[DataManager] ===== 점진적 로딩 완료 - 총 {loadedIds.Count}개 오브젝트 =====");
+
+        // 로딩 인디케이터 숨김
+        ShowLoadingIndicator(false);
+    }
+
+    /// <summary>
+    /// 특정 거리 단계의 데이터를 서버에서 가져옴
+    /// </summary>
+    private IEnumerator FetchDataFromServerForTier(string url, LocationInfo currentLocation, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)
+    {
+        int retryCount = 3;
+        for (int i = 0; i < retryCount; i++)
+        {
+            using (UnityWebRequest request = UnityWebRequest.Get(url))
+            {
+                yield return request.SendWebRequest();
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    string json = request.downloadHandler.text;
+
+                    // JSON 파싱
+                    try
+                    {
+                        List<PlaceData> places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
+                        if (places == null) places = new List<PlaceData>();
+
+                        // 거리순 정렬
+                        places.Sort((a, b) =>
+                        {
+                            float distA = CalculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude);
+                            float distB = CalculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude);
+                            return distA.CompareTo(distB);
+                        });
+
+                        // 이미 로드된 오브젝트는 제외하고 새로운 것만 추가
+                        foreach (PlaceData place in places)
+                        {
+                            if (!loadedIds.Contains(place.id))
+                            {
+                                outNewPlaces.Add(place);
+                            }
+                        }
+
+                        // poolSize 제한 적용 (총 오브젝트 수 제한)
+                        int maxNewObjects = (poolSize * 2) - loadedIds.Count;
+                        if (outNewPlaces.Count > maxNewObjects && maxNewObjects > 0)
+                        {
+                            outNewPlaces.RemoveRange(maxNewObjects, outNewPlaces.Count - maxNewObjects);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[DataManager] JSON 파싱 실패: {e.Message}");
+                    }
+
+                    break;
+                }
+                else
+                {
+                    if (i < retryCount - 1)
+                    {
+                        Debug.LogWarning($"[DataManager] 데이터 로딩 실패 (재시도 {i + 1}/{retryCount})");
+                        yield return new WaitForSeconds(2f);
+                    }
+                    else
+                    {
+                        Debug.LogError("[DataManager] 서버에서 데이터를 받아오지 못했습니다.");
+                    }
+                }
+            }
         }
     }
 
@@ -246,6 +384,22 @@ public class DataManager : MonoBehaviour
 
     private void CreateObjectFromData(PlaceData place)
     {
+        // AR 오브젝트 생성 거리 필터 체크 (PlaceListManager의 AR 최대 거리 참조)
+        if (placeListManager != null)
+        {
+            float maxDistance = placeListManager.GetMaxDisplayDistance();
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                LocationInfo currentLocation = Input.location.lastData;
+                float distance = CalculateDistance(currentLocation.latitude, currentLocation.longitude, place.latitude, place.longitude);
+                if (distance > maxDistance)
+                {
+                    Debug.Log($"[DataManager] AR 거리 필터: {place.name} ({distance:F0}m) > {maxDistance:F0}m - 생성 스킵");
+                    return; // AR 최대 거리를 초과하면 생성하지 않음
+                }
+            }
+        }
+
         // GLB 동시 로딩 제한
         if (place.model_type == "custom" && currentlyLoadingGLB.Count >= maxConcurrentGLBLoads)
         {
@@ -602,6 +756,14 @@ public class DataManager : MonoBehaviour
     public bool IsDataLoaded() => isDataLoaded;
 
     /// <summary>
+    /// 특정 ID의 스폰된 오브젝트 가져오기
+    /// </summary>
+    public GameObject GetSpawnedObject(int placeId)
+    {
+        return spawnedObjects.ContainsKey(placeId) ? spawnedObjects[placeId] : null;
+    }
+
+    /// <summary>
     /// 필터 적용 - 스폰된 AR 오브젝트의 표시/숨김 제어
     /// </summary>
     public void ApplyFilters(Dictionary<string, bool> filters)
@@ -706,8 +868,7 @@ public class DataManager : MonoBehaviour
             StopCoroutine(fetchCoroutine);
         }
         LocationInfo currentLocation = Input.location.lastData;
-        string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
-        fetchCoroutine = StartCoroutine(FetchDataImmediately(serverUrl, currentLocation));
+        fetchCoroutine = StartCoroutine(FetchDataProgressively(currentLocation));
     }
 
     private IEnumerator FetchDataImmediately(string url, LocationInfo currentLocation)
@@ -719,6 +880,20 @@ public class DataManager : MonoBehaviour
         yield return StartCoroutine(FetchDataFromServer(url, currentLocation));
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
     }
+
+    /// <summary>
+    /// 로딩 인디케이터 표시/숨김 제어
+    /// </summary>
+    private void ShowLoadingIndicator(bool show)
+    {
+        if (loadingIndicator != null)
+        {
+            loadingIndicator.SetActive(show);
+            Debug.Log($"[DataManager] 로딩 인디케이터: {(show ? "표시" : "숨김")}");
+        }
+    }
+
+    // Update() 메서드 제거 - LoadingIndicator3D 컴포넌트가 자체적으로 애니메이션 처리
 
     private void ShowErrorMessage(string message)
     {

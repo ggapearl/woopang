@@ -9,7 +9,23 @@ public class PlaceListManager : MonoBehaviour
     public DataManager dataManager;
     public TourAPIManager tourAPIManager;
     public Text listText;
-    [SerializeField] private float updateInterval = 60f;
+
+    [Header("UI Update Settings")]
+    [Tooltip("ListPanel 게임오브젝트 참조 (활성화 상태 체크용)")]
+    [SerializeField] private GameObject listPanel;
+
+    [SerializeField] private float updateInterval = 10f; // 10초로 변경
+
+    [Header("AR Object Distance Filter")]
+    [Tooltip("AR 오브젝트 생성 거리 조정 슬라이더 (UI)")]
+    [SerializeField] private Slider distanceSlider;
+
+    [Tooltip("AR 오브젝트 최대 생성 거리 (미터, 50~200m)")]
+    [SerializeField] private float maxDisplayDistance = 200f;
+
+    [Tooltip("슬라이더 값을 표시할 텍스트 (선택사항)")]
+    [SerializeField] private Text distanceValueText;
+
     private List<(object place, float distance, string id, string displayText, string colorHex)> combinedPlaces = new List<(object, float, string, string, string)>();
     private int woopangCount;
     private int tourAPICount;
@@ -65,7 +81,29 @@ public class PlaceListManager : MonoBehaviour
         {
             return;
         }
+
+        // AR 오브젝트 거리 슬라이더 초기화
+        if (distanceSlider != null)
+        {
+            distanceSlider.minValue = 50f;
+            distanceSlider.maxValue = 200f;
+            distanceSlider.value = maxDisplayDistance;
+            distanceSlider.onValueChanged.AddListener(OnDistanceSliderChanged);
+            UpdateDistanceValueText();
+        }
+
         StartCoroutine(InitializeAndUpdateUI());
+    }
+
+    void OnEnable()
+    {
+        // ListPanel이 활성화될 때마다 즉시 UI 업데이트
+        if (dataManager != null && dataManager.IsDataLoaded() &&
+            tourAPIManager != null && tourAPIManager.IsDataLoaded())
+        {
+            UpdateUI();
+            Debug.Log("[PlaceListManager] ListPanel 활성화 - 즉시 UI 업데이트");
+        }
     }
 
     private string GetLanguageCode()
@@ -113,8 +151,14 @@ public class PlaceListManager : MonoBehaviour
     {
         while (true)
         {
-            UpdateUI();
             yield return new WaitForSeconds(updateInterval);
+
+            // ListPanel이 활성화되어 있을 때만 업데이트
+            if (listPanel != null && listPanel.activeInHierarchy)
+            {
+                UpdateUI();
+                Debug.Log("[PlaceListManager] ListPanel 활성화 - UI 업데이트 실행");
+            }
         }
     }
 
@@ -267,5 +311,109 @@ public class PlaceListManager : MonoBehaviour
     {
         activeFilters = filters;
         UpdateUI(); // UI 즉시 업데이트
+    }
+
+    /// <summary>
+    /// 거리 슬라이더 값 변경 시 호출되는 메서드
+    /// </summary>
+    private void OnDistanceSliderChanged(float value)
+    {
+        maxDisplayDistance = value;
+        UpdateDistanceValueText();
+        UpdateUI(); // UI 즉시 업데이트
+
+        // AR 오브젝트 거리 필터링 적용
+        ApplyDistanceFilterToARObjects();
+    }
+
+    /// <summary>
+    /// 기존 AR 오브젝트들에 거리 필터 적용
+    /// </summary>
+    private void ApplyDistanceFilterToARObjects()
+    {
+        if (Input.location.status != LocationServiceStatus.Running)
+            return;
+
+        LocationInfo currentLocation = Input.location.lastData;
+        float currentLat = currentLocation.latitude;
+        float currentLon = currentLocation.longitude;
+
+        // DataManager 오브젝트 필터링
+        if (dataManager != null)
+        {
+            var woopangPlaces = dataManager.GetPlaceDataMap();
+            foreach (var kvp in woopangPlaces)
+            {
+                var place = kvp.Value;
+                float distance = CalculateDistance(currentLat, currentLon, place.latitude, place.longitude);
+
+                // 오브젝트 활성화/비활성화
+                GameObject obj = dataManager.GetSpawnedObject(kvp.Key);
+                if (obj != null)
+                {
+                    obj.SetActive(distance <= maxDisplayDistance);
+                }
+            }
+        }
+
+        // TourAPIManager 오브젝트 필터링
+        if (tourAPIManager != null)
+        {
+            var tourPlaces = tourAPIManager.GetPlaceDataMap();
+            foreach (var kvp in tourPlaces)
+            {
+                var place = kvp.Value;
+                float distance = CalculateDistance(currentLat, currentLon, place.mapy, place.mapx);
+
+                // 오브젝트 활성화/비활성화
+                GameObject obj = tourAPIManager.GetSpawnedObject(kvp.Key);
+                if (obj != null)
+                {
+                    obj.SetActive(distance <= maxDisplayDistance);
+                }
+            }
+        }
+
+        Debug.Log($"[PlaceListManager] 거리 필터 적용 완료: {maxDisplayDistance}m");
+    }
+
+    /// <summary>
+    /// 거리 값 텍스트 업데이트
+    /// </summary>
+    private void UpdateDistanceValueText()
+    {
+        if (distanceValueText != null)
+        {
+            if (maxDisplayDistance >= 1000)
+            {
+                distanceValueText.text = $"{(maxDisplayDistance / 1000f):F1}km";
+            }
+            else
+            {
+                distanceValueText.text = $"{Mathf.RoundToInt(maxDisplayDistance)}m";
+            }
+        }
+    }
+
+    /// <summary>
+    /// 외부에서 최대 표시 거리를 설정하는 메서드
+    /// </summary>
+    public void SetMaxDisplayDistance(float distance)
+    {
+        maxDisplayDistance = distance;
+        if (distanceSlider != null)
+        {
+            distanceSlider.value = distance;
+        }
+        UpdateDistanceValueText();
+        UpdateUI();
+    }
+
+    /// <summary>
+    /// 현재 최대 표시 거리를 반환
+    /// </summary>
+    public float GetMaxDisplayDistance()
+    {
+        return maxDisplayDistance;
     }
 }
