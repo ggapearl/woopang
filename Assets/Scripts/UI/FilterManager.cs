@@ -324,7 +324,7 @@ public class FilterManager : MonoBehaviour
 /// 길게 누르기(Long Press)를 감지하는 컴포넌트
 /// EventTrigger를 사용하여 PointerDown/PointerUp 이벤트 처리
 /// </summary>
-public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
+public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler
 {
     public float longPressDuration = 0.8f;
     public System.Action onLongPress;
@@ -332,6 +332,12 @@ public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHa
     private bool isPressed = false;
     private float pressedTime = 0f;
     private bool longPressTriggered = false;
+    private Toggle cachedToggle;
+
+    void Awake()
+    {
+        cachedToggle = GetComponent<Toggle>();
+    }
 
     void Update()
     {
@@ -357,18 +363,40 @@ public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHa
 
     public void OnPointerUp(PointerEventData eventData)
     {
+        isPressed = false;
+
         if (longPressTriggered)
         {
-            // Long Press 발생했으면 Toggle의 일반 클릭 이벤트 무시
-            Debug.Log("[LongPressHandler] Long Press 완료, 일반 클릭 무시");
+            Debug.Log("[LongPressHandler] Long Press 완료");
         }
         else
         {
             Debug.Log($"[LongPressHandler] 일반 클릭 ({pressedTime:F2}초)");
         }
 
-        isPressed = false;
         pressedTime = 0f;
-        longPressTriggered = false;
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        // Long Press가 발생했으면 일반 클릭 무시
+        if (longPressTriggered)
+        {
+            Debug.Log("[LongPressHandler] Long Press로 인해 클릭 무시");
+
+            // Toggle 상태를 이전 상태로 되돌림
+            if (cachedToggle != null)
+            {
+                cachedToggle.isOn = !cachedToggle.isOn;
+            }
+
+            longPressTriggered = false;
+            eventData.Use(); // 이벤트 소비
+        }
+        else
+        {
+            // 일반 클릭은 Toggle이 정상 처리
+            longPressTriggered = false;
+        }
     }
 }
