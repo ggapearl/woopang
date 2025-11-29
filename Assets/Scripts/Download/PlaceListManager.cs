@@ -21,7 +21,7 @@ public class PlaceListManager : MonoBehaviour
     [SerializeField] private Slider distanceSlider;
 
     [Tooltip("AR 오브젝트 최대 생성 거리 (미터, 50~200m)")]
-    [SerializeField] private float maxDisplayDistance = 200f;
+    [SerializeField] private float maxDisplayDistance = 144f;
 
     [Tooltip("슬라이더 값을 표시할 텍스트 (선택사항)")]
     [SerializeField] private Text distanceValueText;
@@ -30,14 +30,15 @@ public class PlaceListManager : MonoBehaviour
     private int woopangCount;
     private int tourAPICount;
 
-    // 필터 설정
+    // 필터 설정 - 기본값: 전체 선택
     private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
     {
-        { "petFriendly", true },
-        { "publicData", true },
-        { "subway", true },
-        { "bus", true },
-        { "alcohol", true }
+        { "woopangData", true },  // 우팡 데이터
+        { "petFriendly", true },  // 애견동반
+        { "publicData", true },   // 공공데이터
+        { "subway", true },       // 지하철
+        { "bus", true },          // 버스
+        { "alcohol", true }       // 주류
     };
 
     // 언어별 텍스트 템플릿
