@@ -15467,12 +15467,12 @@ MonoBehaviour:
   cubePrefab: {fileID: 2389623711366131577}
   glbPrefab: {fileID: 8908901386216368541}
   maxConcurrentGLBLoads: 14
-  glbLoadTimeout: 44
+  glbLoadTimeout: 60
   fallbackToCube: 1
   loadingIndicator: {fileID: 6363636363636363636, guid: 07f48d4e1722d3848928b08f3f09bfa6,
     type: 3}
-  poolSize: 44
-  updateInterval: 444
+  poolSize: 100
+  updateInterval: 10
   loadRadii:
   - 25
   - 50
@@ -15483,7 +15483,7 @@ MonoBehaviour:
   tierDelay: 1
   objectSpawnDelay: 0.5
   placeListManager: {fileID: 718168638}
-  updateDistanceThreshold: 44
+  updateDistanceThreshold: 50
 --- !u!1 &1501152821
 GameObject:
   m_ObjectHideFlags: 0

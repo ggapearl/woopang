@@ -21,7 +21,7 @@ public class PlaceListManager : MonoBehaviour
     [SerializeField] private Slider distanceSlider;
 
     [Tooltip("AR 오브젝트 최대 생성 거리 (미터, 50~200m)")]
-    [SerializeField] private float maxDisplayDistance = 200f;
+    [SerializeField] private float maxDisplayDistance = 144f;
 
     [Tooltip("슬라이더 값을 표시할 텍스트 (선택사항)")]
     [SerializeField] private Text distanceValueText;
@@ -241,20 +241,26 @@ public class PlaceListManager : MonoBehaviour
         bool showWoopangData = activeFilters.ContainsKey("woopangData") && activeFilters["woopangData"];
         bool showPetFriendly = activeFilters.ContainsKey("petFriendly") && activeFilters["petFriendly"];
         bool showAlcohol = activeFilters.ContainsKey("alcohol") && activeFilters["alcohol"];
+        bool showPublicData = activeFilters.ContainsKey("publicData") && activeFilters["publicData"];
+
+        Debug.Log($"[PlaceListManager] 필터 상태 - woopangData={showWoopangData}, petFriendly={showPetFriendly}, alcohol={showAlcohol}, publicData={showPublicData}");
 
         if (showWoopangData)
         {
+            int filteredCount = 0;
             foreach (var place in woopangPlaces)
             {
                 // 애견동반 필터 체크
                 if (place.pet_friendly && !showPetFriendly)
                 {
+                    filteredCount++;
                     continue; // 애견동반 필터가 꺼져있고 장소가 애견동반이면 건너뛰기
                 }
 
                 // 주류 판매 필터 체크
                 if (place.alcohol_available && !showAlcohol)
                 {
+                    filteredCount++;
                     continue; // 주류 필터가 꺼져있고 장소가 주류 판매하면 건너뛰기
                 }
 
@@ -266,16 +272,23 @@ public class PlaceListManager : MonoBehaviour
                 string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
                 combinedPlaces.Add((place, distance, place.id.ToString(), displayText, colorHex));
             }
+            Debug.Log($"[PlaceListManager] 우팡데이터 처리 - 전체: {woopangPlaces.Count}, 필터링됨: {filteredCount}, 추가됨: {woopangPlaces.Count - filteredCount}");
+        }
+        else
+        {
+            Debug.Log("[PlaceListManager] 우팡데이터 필터가 꺼져있어 표시하지 않음");
         }
 
         // 공공데이터(TourAPI) 필터 체크
-        if (activeFilters["publicData"])
+        if (showPublicData)
         {
+            int tourFilteredCount = 0;
             foreach (var place in tourPlaces)
             {
                 // 애견동반 필터 체크 (TourAPI는 모두 애견동반)
-                if (!activeFilters["petFriendly"])
+                if (!showPetFriendly)
                 {
+                    tourFilteredCount++;
                     continue;
                 }
 
@@ -287,6 +300,11 @@ public class PlaceListManager : MonoBehaviour
                 string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
                 combinedPlaces.Add((place, distance, place.contentid, displayText, colorHex));
             }
+            Debug.Log($"[PlaceListManager] TourAPI데이터 처리 - 전체: {tourPlaces.Count}, 필터링됨: {tourFilteredCount}, 추가됨: {tourPlaces.Count - tourFilteredCount}");
+        }
+        else
+        {
+            Debug.Log("[PlaceListManager] 공공데이터 필터가 꺼져있어 표시하지 않음");
         }
 
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
