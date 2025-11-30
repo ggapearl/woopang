@@ -444,14 +444,21 @@ public class PlaceListManager : MonoBehaviour
     {
         if (distanceValueText != null)
         {
+            string newText;
             if (maxDisplayDistance >= 1000)
             {
-                distanceValueText.text = $"{(maxDisplayDistance / 1000f):F1}km";
+                newText = $"{(maxDisplayDistance / 1000f):F1}km";
             }
             else
             {
-                distanceValueText.text = $"{Mathf.RoundToInt(maxDisplayDistance)}m";
+                newText = $"{Mathf.RoundToInt(maxDisplayDistance)}m";
             }
+            distanceValueText.text = newText;
+            Debug.Log($"[PlaceListManager] 거리 텍스트 업데이트: {newText} (maxDisplayDistance={maxDisplayDistance})");
+        }
+        else
+        {
+            Debug.LogWarning("[PlaceListManager] distanceValueText가 null입니다!");
         }
     }
 
