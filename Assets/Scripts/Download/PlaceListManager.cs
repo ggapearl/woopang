@@ -204,6 +204,14 @@ public class PlaceListManager : MonoBehaviour
         {
             foreach (var place in woopangPlaces)
             {
+                float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
+
+                // 거리 필터링 - maxDisplayDistance 이내만 표시
+                if (distance > maxDisplayDistance)
+                {
+                    continue;
+                }
+
                 // 애견동반 필터 체크
                 if (place.pet_friendly && !showPetFriendly)
                 {
@@ -216,7 +224,6 @@ public class PlaceListManager : MonoBehaviour
                     continue; // 주류 필터가 꺼져있고 장소가 주류 판매하면 건너뛰기
                 }
 
-                float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
                 string distanceText = $"{Mathf.FloorToInt(distance)}m";
                 string displayText = place.pet_friendly
                     ? $"{place.name} - {distanceText} {GetLocalizedText("petFriendly")}"
@@ -231,13 +238,20 @@ public class PlaceListManager : MonoBehaviour
         {
             foreach (var place in tourPlaces)
             {
+                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
+
+                // 거리 필터링 - maxDisplayDistance 이내만 표시
+                if (distance > maxDisplayDistance)
+                {
+                    continue;
+                }
+
                 // 애견동반 필터 체크 (TourAPI는 모두 애견동반)
                 if (!activeFilters["petFriendly"])
                 {
                     continue;
                 }
 
-                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
                 string distanceText = $"{Mathf.FloorToInt(distance)}m";
                 string displayText = string.IsNullOrEmpty(place.firstimage)
                     ? $"{place.title} - {distanceText} {GetLocalizedText("noImage")} {GetLocalizedText("petFriendly")}"
@@ -248,6 +262,9 @@ public class PlaceListManager : MonoBehaviour
         }
 
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
+
+        Debug.Log($"[PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡={woopangPlaces.Count}, TourAPI={tourPlaces.Count}, 필터링 후 표시={combinedPlaces.Count}, 거리제한={maxDisplayDistance}m");
+
         foreach (var (place, distance, id, displayText, colorHex) in combinedPlaces)
         {
             string coloredText = $"<color=#{colorHex}>{displayText}</color>";
