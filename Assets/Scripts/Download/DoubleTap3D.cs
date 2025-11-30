@@ -351,23 +351,6 @@ public class DoubleTap3D : MonoBehaviour
         imageRect.anchoredPosition = new Vector2(slotWidth * currentSlot, 0);  // 중앙 기준 위치
         photoImages.Add(fullscreenImage);
 
-        // fullscreenImage에 T5EdgeLineEffect 추가 (없으면)
-        T5EdgeLineEffect edgeEffect = fullscreenImage.GetComponent<T5EdgeLineEffect>();
-        if (edgeEffect == null)
-        {
-            edgeEffect = fullscreenImage.gameObject.AddComponent<T5EdgeLineEffect>();
-            // 얇은 외곽선 설정
-            edgeEffect.SetSettings(
-                new Color(1f, 0.95f, 0.8f, 1f), // 따뜻한 색상
-                0.008f,  // 매우 얇은 라인
-                2.0f,    // 낮은 강도
-                2.0f,    // 선명도
-                1.0f,    // 펄스 속도
-                0.8f,    // 최소 발광
-                0.05f    // 모서리 반경
-            );
-        }
-
         currentSlot++;
 
         // 추가 사진들을 위한 Image 생성
