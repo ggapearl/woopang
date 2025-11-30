@@ -21,7 +21,7 @@ public class PlaceListManager : MonoBehaviour
     [SerializeField] private Slider distanceSlider;
 
     [Tooltip("AR 오브젝트 최대 생성 거리 (미터, 50~200m)")]
-    [SerializeField] private float maxDisplayDistance = 144f;
+    [SerializeField] private float maxDisplayDistance = 200f;
 
     [Tooltip("슬라이더 값을 표시할 텍스트 (선택사항)")]
     [SerializeField] private Text distanceValueText;
@@ -246,14 +246,6 @@ public class PlaceListManager : MonoBehaviour
         {
             foreach (var place in woopangPlaces)
             {
-                float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
-
-                // 거리 필터링 - maxDisplayDistance 이내만 표시
-                if (distance > maxDisplayDistance)
-                {
-                    continue;
-                }
-
                 // 애견동반 필터 체크
                 if (place.pet_friendly && !showPetFriendly)
                 {
@@ -266,6 +258,7 @@ public class PlaceListManager : MonoBehaviour
                     continue; // 주류 필터가 꺼져있고 장소가 주류 판매하면 건너뛰기
                 }
 
+                float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
                 string distanceText = $"{Mathf.FloorToInt(distance)}m";
                 string displayText = place.pet_friendly
                     ? $"{place.name} - {distanceText} {GetLocalizedText("petFriendly")}"
@@ -280,20 +273,13 @@ public class PlaceListManager : MonoBehaviour
         {
             foreach (var place in tourPlaces)
             {
-                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
-
-                // 거리 필터링 - maxDisplayDistance 이내만 표시
-                if (distance > maxDisplayDistance)
-                {
-                    continue;
-                }
-
                 // 애견동반 필터 체크 (TourAPI는 모두 애견동반)
                 if (!activeFilters["petFriendly"])
                 {
                     continue;
                 }
 
+                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
                 string distanceText = $"{Mathf.FloorToInt(distance)}m";
                 string displayText = string.IsNullOrEmpty(place.firstimage)
                     ? $"{place.title} - {distanceText} {GetLocalizedText("noImage")} {GetLocalizedText("petFriendly")}"

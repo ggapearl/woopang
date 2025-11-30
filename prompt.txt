@@ -1,0 +1,2 @@
+Assets\Scripts\Download\DoubleTap3D.cs(1037,18): error CS0111: Type 'DoubleTap3D' already defines a member called 'ShowComments' with the same parameter types
+
