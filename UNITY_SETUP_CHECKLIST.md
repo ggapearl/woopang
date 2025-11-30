@@ -219,10 +219,18 @@ References:
 ## 📊 현재 상태
 
 ### 코드 상태 ✅
-- PlaceListManager.cs: 거리 필터링 + 디버깅 완료
+- PlaceListManager.cs: 144m 기본값 설정 완료 + 상세 디버깅 추가
 - FilterManager.cs: Long Press + 토글 수정 완료
-- DistanceSliderUI.prefab: 144m 기본값 설정됨
+- DistanceSliderUI.prefab: 144m 기본값 설정 완료
 - WP_1129.unity: 씬 파일 144m 오버라이드 확인됨
+- DATA_LOADING_EXPLANATION.md: 전체 데이터 흐름 분석 문서 작성됨
+
+### 추가된 디버그 로그 ✅
+```
+[PlaceListManager] 필터 상태 - woopangData=true, petFriendly=true, alcohol=true, publicData=true
+[PlaceListManager] 우팡데이터 처리 - 전체: 25, 필터링됨: 3, 추가됨: 22
+[PlaceListManager] TourAPI데이터 처리 - 전체: 10, 필터링됨: 0, 추가됨: 10
+```
 
 ### Unity Inspector 설정 필요 ⚠️
 - PlaceListManager의 참조 연결
@@ -239,4 +247,15 @@ Inspector 설정 완료 후:
 ---
 
 **작성일:** 2025-12-01
-**커밋:** 483f899 - Add debug logging to UpdateDistanceValueText
+**최종 커밋:** 320a1d0 - Fix default distance to 144m and add comprehensive debugging
+
+## 🔍 리스트가 표시되지 않는 문제 해결
+
+자세한 데이터 로딩 및 표시 로직은 [DATA_LOADING_EXPLANATION.md](DATA_LOADING_EXPLANATION.md) 참고.
+
+**디버그 체크리스트:**
+1. Console에서 `[PlaceListManager] Start() 호출` 로그 확인
+2. `listText=True, dataManager=True, tourAPIManager=True` 확인
+3. `[DataManager] 서버에서 X개 위치 데이터 수신` 로그 확인 (X > 0)
+4. `[PlaceListManager] 필터 상태` 로그에서 woopangData=true 확인
+5. `필터링 후 표시=X` 에서 X > 0 확인
