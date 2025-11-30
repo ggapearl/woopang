@@ -78,8 +78,24 @@ public class PlaceListManager : MonoBehaviour
 
     void Start()
     {
+        Debug.Log($"[PlaceListManager] Start() 호출 - listText={listText != null}, dataManager={dataManager != null}, tourAPIManager={tourAPIManager != null}");
+
+        if (listText == null)
+        {
+            Debug.LogError("[PlaceListManager] listText가 null입니다!");
+        }
+        if (dataManager == null)
+        {
+            Debug.LogError("[PlaceListManager] dataManager가 null입니다!");
+        }
+        if (tourAPIManager == null)
+        {
+            Debug.LogError("[PlaceListManager] tourAPIManager가 null입니다!");
+        }
+
         if (listText == null || dataManager == null || tourAPIManager == null)
         {
+            Debug.LogError("[PlaceListManager] 필수 컴포넌트가 null이어서 초기화를 건너뜁니다.");
             return;
         }
 
@@ -91,6 +107,11 @@ public class PlaceListManager : MonoBehaviour
             distanceSlider.value = maxDisplayDistance;
             distanceSlider.onValueChanged.AddListener(OnDistanceSliderChanged);
             UpdateDistanceValueText();
+            Debug.Log($"[PlaceListManager] 슬라이더 초기화 완료: value={maxDisplayDistance}m");
+        }
+        else
+        {
+            Debug.LogWarning("[PlaceListManager] distanceSlider가 null입니다. 거리 조절 기능이 비활성화됩니다.");
         }
 
         StartCoroutine(InitializeAndUpdateUI());
@@ -139,11 +160,25 @@ public class PlaceListManager : MonoBehaviour
 
     private IEnumerator InitializeAndUpdateUI()
     {
-        while (dataManager != null && !dataManager.IsDataLoaded() ||
-               tourAPIManager != null && !tourAPIManager.IsDataLoaded())
+        Debug.Log("[PlaceListManager] 데이터 로딩 대기 시작...");
+        float waitTime = 0f;
+
+        while ((dataManager != null && !dataManager.IsDataLoaded()) ||
+               (tourAPIManager != null && !tourAPIManager.IsDataLoaded()))
         {
+            waitTime += 1f;
+            Debug.Log($"[PlaceListManager] 데이터 대기 중... {waitTime}초 - DataManager={dataManager?.IsDataLoaded()}, TourAPI={tourAPIManager?.IsDataLoaded()}");
             yield return new WaitForSeconds(1f);
+
+            // 30초 타임아웃
+            if (waitTime >= 30f)
+            {
+                Debug.LogWarning("[PlaceListManager] 데이터 로딩 타임아웃 (30초) - 강제로 UI 업데이트 시도");
+                break;
+            }
         }
+
+        Debug.Log("[PlaceListManager] 데이터 로딩 완료! 첫 UI 업데이트 시작");
         UpdateUI();
         StartCoroutine(UpdateUIPeriodically());
     }
@@ -165,17 +200,21 @@ public class PlaceListManager : MonoBehaviour
 
     private void UpdateUI()
     {
+        Debug.Log("[PlaceListManager] UpdateUI() 호출됨");
+
         float latitude, longitude;
         if (Input.location.status == LocationServiceStatus.Running)
         {
             LocationInfo currentLocation = Input.location.lastData;
             latitude = currentLocation.latitude;
             longitude = currentLocation.longitude;
+            Debug.Log($"[PlaceListManager] GPS 위치: {latitude}, {longitude}");
         }
         else
         {
             latitude = 37.5665f;
             longitude = 126.9780f;
+            Debug.LogWarning($"[PlaceListManager] GPS 비활성화 - 기본 위치 사용: {latitude}, {longitude}");
         }
 
         var woopangPlaces = dataManager != null ? dataManager.GetPlaceDataMap().Values.ToList() : new List<PlaceData>();
@@ -184,12 +223,15 @@ public class PlaceListManager : MonoBehaviour
         woopangCount = woopangPlaces.Count;
         tourAPICount = tourPlaces.Count;
 
+        Debug.Log($"[PlaceListManager] 데이터 개수 - 우팡: {woopangCount}, TourAPI: {tourAPICount}");
+
         if (listText != null)
         {
             listText.text = "";
         }
         else
         {
+            Debug.LogError("[PlaceListManager] listText가 null입니다!");
             return;
         }
 
