@@ -25,22 +25,18 @@ public class TourAPIManager : MonoBehaviour
     [Tooltip("로딩 중 표시할 3D 구형 인디케이터")]
     [SerializeField] private GameObject loadingIndicator;
 
-    [Header("Distance Filter")]
-    [Tooltip("PlaceListManager 참조 (거리 필터 동기화)")]
-    [SerializeField] private PlaceListManager placeListManager;
-
     private Text debugText;
     private StringBuilder debugMessages = new StringBuilder(10000);
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(100);
     private Dictionary<string, TourPlaceData> placeDataMap = new Dictionary<string, TourPlaceData>(100);
     private Dictionary<string, TourPlaceData> cachedPlaceDetails = new Dictionary<string, TourPlaceData>(50);
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
-    [SerializeField] public int poolSize = 20;
+    [SerializeField] public int poolSize = 50;
     [SerializeField] private float updateInterval = 600f;
 
     [Header("Progressive Loading Settings")]
-    [Tooltip("거리별 로딩 단계 (미터): 25m → 50m → 75m → 100m → 150m → 200m")]
-    public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f };
+    [Tooltip("거리별 로딩 단계 (미터): 25m → 50m → ... → 10000m")]
+    public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
 
     [SerializeField] private float updateDistanceThreshold = 50f;
     private bool isDataLoaded = false;
@@ -354,22 +350,6 @@ public class TourAPIManager : MonoBehaviour
 
     private GameObject CreateObjectFromData(TourPlaceData place)
     {
-        // 거리 필터 체크 (PlaceListManager의 maxDisplayDistance 참조)
-        if (placeListManager != null)
-        {
-            float maxDistance = placeListManager.GetMaxDisplayDistance();
-            if (Input.location.status == LocationServiceStatus.Running)
-            {
-                LocationInfo currentLocation = Input.location.lastData;
-                float distance = CalculateDistance(currentLocation.latitude, currentLocation.longitude, place.mapy, place.mapx);
-                if (distance > maxDistance)
-                {
-                    LogDebug($"[TourAPIManager] 거리 필터: {place.title} ({distance:F0}m) > {maxDistance:F0}m - 스킵");
-                    return null; // 최대 표시 거리를 초과하면 생성하지 않음
-                }
-            }
-        }
-
         if (samplePrefab == null)
         {
             LogDebug("[TourAPIManager] samplePrefab이 설정되지 않음! 오브젝트 생성 실패");
@@ -734,6 +714,11 @@ public class TourAPIManager : MonoBehaviour
         return spawnedObjects.Count;
     }
 
+    public Dictionary<string, GameObject> GetSpawnedObjects()
+    {
+        return spawnedObjects;
+    }
+
     public bool IsDataLoaded()
     {
         LogDebug($"[TourAPIManager] IsDataLoaded 호출, 데이터 로드 상태: {isDataLoaded}");
@@ -769,6 +754,36 @@ public class TourAPIManager : MonoBehaviour
         }
 
         LogDebug($"[TourAPIManager] 필터 적용: publicData={showPublicData}, petFriendly={showPetFriendly}, 오브젝트 표시={shouldShow}");
+    }
+
+    /// <summary>
+    /// DataManager에서 호출하는 거리 필터 업데이트 메서드
+    /// </summary>
+    public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            string id = kvp.Key;
+            GameObject obj = kvp.Value;
+            if (obj == null) continue;
+
+            if (placeDataMap.ContainsKey(id))
+            {
+                TourPlaceData place = placeDataMap[id];
+                float dist = CalculateDistance(currentLat, currentLon, place.mapy, place.mapx);
+                
+                bool inRange = dist <= maxDistance;
+                if (!inRange)
+                {
+                    if (obj.activeSelf) obj.SetActive(false);
+                }
+                else
+                {
+                    // 범위 내로 들어오면 활성화 (필터 매니저와 충돌 주의)
+                    if (!obj.activeSelf) obj.SetActive(true);
+                }
+            }
+        }
     }
 
     void OnApplicationFocus(bool hasFocus)

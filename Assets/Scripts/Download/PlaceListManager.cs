@@ -16,15 +16,10 @@ public class PlaceListManager : MonoBehaviour
 
     [SerializeField] private float updateInterval = 10f; // 10초로 변경
 
-    [Header("AR Object Distance Filter")]
-    [Tooltip("AR 오브젝트 생성 거리 조정 슬라이더 (UI)")]
+    [Header("Distance Control")]
     [SerializeField] private Slider distanceSlider;
-
-    [Tooltip("AR 오브젝트 최대 생성 거리 (미터, 50~200m)")]
-    [SerializeField] private float maxDisplayDistance = 144f;
-
-    [Tooltip("슬라이더 값을 표시할 텍스트 (선택사항)")]
     [SerializeField] private Text distanceValueText;
+    private float maxDisplayDistance;
 
     private List<(object place, float distance, string id, string displayText, string colorHex)> combinedPlaces = new List<(object, float, string, string, string)>();
     private int woopangCount;
@@ -99,19 +94,25 @@ public class PlaceListManager : MonoBehaviour
             return;
         }
 
-        // AR 오브젝트 거리 슬라이더 초기화
+        // 슬라이더 초기화
         if (distanceSlider != null)
         {
-            distanceSlider.minValue = 50f;
-            distanceSlider.maxValue = 200f;
-            distanceSlider.value = maxDisplayDistance;
+            distanceSlider.minValue = 100f;
+            distanceSlider.maxValue = 10000f; // 최대 10km
+            
+            // 저장된 값 불러오기 (기본값 5000)
+            float savedDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+            maxDisplayDistance = savedDistance;
+            distanceSlider.value = savedDistance;
+            
             distanceSlider.onValueChanged.AddListener(OnDistanceSliderChanged);
             UpdateDistanceValueText();
-            Debug.Log($"[PlaceListManager] 슬라이더 초기화 완료: value={maxDisplayDistance}m");
-        }
-        else
-        {
-            Debug.LogWarning("[PlaceListManager] distanceSlider가 null입니다. 거리 조절 기능이 비활성화됩니다.");
+            
+            // 초기값으로 필터 즉시 적용
+            if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, 0, 0); // 위치는 나중에 업데이트됨
+            if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, 0, 0);
+            
+            Debug.Log($"[PlaceListManager] 슬라이더 초기화: value={maxDisplayDistance}m (Saved)");
         }
 
         StartCoroutine(InitializeAndUpdateUI());
@@ -160,6 +161,7 @@ public class PlaceListManager : MonoBehaviour
 
     private IEnumerator InitializeAndUpdateUI()
     {
+        // ... (기존 코드 유지)
         Debug.Log("[PlaceListManager] 데이터 로딩 대기 시작...");
         float waitTime = 0f;
 
@@ -170,7 +172,6 @@ public class PlaceListManager : MonoBehaviour
             Debug.Log($"[PlaceListManager] 데이터 대기 중... {waitTime}초 - DataManager={dataManager?.IsDataLoaded()}, TourAPI={tourAPIManager?.IsDataLoaded()}");
             yield return new WaitForSeconds(1f);
 
-            // 30초 타임아웃
             if (waitTime >= 30f)
             {
                 Debug.LogWarning("[PlaceListManager] 데이터 로딩 타임아웃 (30초) - 강제로 UI 업데이트 시도");
@@ -185,22 +186,27 @@ public class PlaceListManager : MonoBehaviour
 
     private IEnumerator UpdateUIPeriodically()
     {
+        float startTime = Time.time;
+        
         while (true)
         {
-            yield return new WaitForSeconds(updateInterval);
+            // 처음 1분(60초) 동안은 1초 간격, 그 이후는 설정된 간격(10초)
+            float currentInterval = (Time.time - startTime < 60f) ? 1f : updateInterval;
+            
+            yield return new WaitForSeconds(currentInterval);
 
             // ListPanel이 활성화되어 있을 때만 업데이트
             if (listPanel != null && listPanel.activeInHierarchy)
             {
                 UpdateUI();
-                Debug.Log("[PlaceListManager] ListPanel 활성화 - UI 업데이트 실행");
+                Debug.Log($"[PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: {currentInterval}s)");
             }
         }
     }
 
     private void UpdateUI()
     {
-        Debug.Log("[PlaceListManager] UpdateUI() 호출됨");
+        Debug.Log("[DEBUG_TRACE] PlaceListManager: UpdateUI() Called");
 
         float latitude, longitude;
         if (Input.location.status == LocationServiceStatus.Running)
@@ -208,13 +214,11 @@ public class PlaceListManager : MonoBehaviour
             LocationInfo currentLocation = Input.location.lastData;
             latitude = currentLocation.latitude;
             longitude = currentLocation.longitude;
-            Debug.Log($"[PlaceListManager] GPS 위치: {latitude}, {longitude}");
         }
         else
         {
             latitude = 37.5665f;
             longitude = 126.9780f;
-            Debug.LogWarning($"[PlaceListManager] GPS 비활성화 - 기본 위치 사용: {latitude}, {longitude}");
         }
 
         var woopangPlaces = dataManager != null ? dataManager.GetPlaceDataMap().Values.ToList() : new List<PlaceData>();
@@ -223,7 +227,7 @@ public class PlaceListManager : MonoBehaviour
         woopangCount = woopangPlaces.Count;
         tourAPICount = tourPlaces.Count;
 
-        Debug.Log($"[PlaceListManager] 데이터 개수 - 우팡: {woopangCount}, TourAPI: {tourAPICount}");
+        Debug.Log($"[DEBUG_TRACE] PlaceListManager: Fetched Data - Woopang={woopangCount}, TourAPI={tourAPICount}");
 
         if (listText != null)
         {
@@ -231,7 +235,7 @@ public class PlaceListManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[PlaceListManager] listText가 null입니다!");
+            Debug.LogError("[DEBUG_TRACE] PlaceListManager: listText is null!");
             return;
         }
 
@@ -243,7 +247,7 @@ public class PlaceListManager : MonoBehaviour
         bool showAlcohol = activeFilters.ContainsKey("alcohol") && activeFilters["alcohol"];
         bool showPublicData = activeFilters.ContainsKey("publicData") && activeFilters["publicData"];
 
-        Debug.Log($"[PlaceListManager] 필터 상태 - woopangData={showWoopangData}, petFriendly={showPetFriendly}, alcohol={showAlcohol}, publicData={showPublicData}");
+        Debug.Log($"[DEBUG_TRACE] PlaceListManager: Filter Status - WoopangData={showWoopangData}, PetFriendly={showPetFriendly}");
 
         if (showWoopangData)
         {
@@ -265,6 +269,10 @@ public class PlaceListManager : MonoBehaviour
                 }
 
                 float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
+                
+                // 거리 필터 적용
+                if (distance > maxDisplayDistance) continue;
+
                 string distanceText = $"{Mathf.FloorToInt(distance)}m";
                 string displayText = place.pet_friendly
                     ? $"{place.name} - {distanceText} {GetLocalizedText("petFriendly")}"
@@ -272,11 +280,11 @@ public class PlaceListManager : MonoBehaviour
                 string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
                 combinedPlaces.Add((place, distance, place.id.ToString(), displayText, colorHex));
             }
-            Debug.Log($"[PlaceListManager] 우팡데이터 처리 - 전체: {woopangPlaces.Count}, 필터링됨: {filteredCount}, 추가됨: {woopangPlaces.Count - filteredCount}");
+            Debug.Log($"[DEBUG_TRACE] PlaceListManager: Woopang Filter Result - Added={woopangPlaces.Count - filteredCount}, Filtered={filteredCount}");
         }
         else
         {
-            Debug.Log("[PlaceListManager] 우팡데이터 필터가 꺼져있어 표시하지 않음");
+            Debug.Log("[DEBUG_TRACE] PlaceListManager: WoopangData filter is OFF");
         }
 
         // 공공데이터(TourAPI) 필터 체크
@@ -293,6 +301,10 @@ public class PlaceListManager : MonoBehaviour
                 }
 
                 float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
+                
+                // 거리 필터 적용
+                if (distance > maxDisplayDistance) continue;
+
                 string distanceText = $"{Mathf.FloorToInt(distance)}m";
                 string displayText = string.IsNullOrEmpty(place.firstimage)
                     ? $"{place.title} - {distanceText} {GetLocalizedText("noImage")} {GetLocalizedText("petFriendly")}"
@@ -309,7 +321,7 @@ public class PlaceListManager : MonoBehaviour
 
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
 
-        Debug.Log($"[PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡={woopangPlaces.Count}, TourAPI={tourPlaces.Count}, 필터링 후 표시={combinedPlaces.Count}, 거리제한={maxDisplayDistance}m");
+        Debug.Log($"[PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡={woopangPlaces.Count}, TourAPI={tourPlaces.Count}, 필터링 후 표시={combinedPlaces.Count}");
 
         foreach (var (place, distance, id, displayText, colorHex) in combinedPlaces)
         {
@@ -377,114 +389,28 @@ public class PlaceListManager : MonoBehaviour
         UpdateUI(); // UI 즉시 업데이트
     }
 
-    /// <summary>
-    /// 거리 슬라이더 값 변경 시 호출되는 메서드
-    /// </summary>
     private void OnDistanceSliderChanged(float value)
     {
         maxDisplayDistance = value;
+        PlayerPrefs.SetFloat("MaxDisplayDistance", value); // 값 저장
+        PlayerPrefs.Save();
+        
         UpdateDistanceValueText();
-        UpdateUI(); // UI 즉시 업데이트
-
-        // AR 오브젝트 거리 필터링 적용
-        ApplyDistanceFilterToARObjects();
+        UpdateUI(); // 리스트 갱신 및 AR 오브젝트 제어
+        
+        // AR 오브젝트에도 거리 필터 적용
+        if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, Input.location.lastData.latitude, Input.location.lastData.longitude);
+        if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, Input.location.lastData.latitude, Input.location.lastData.longitude);
     }
 
-    /// <summary>
-    /// 기존 AR 오브젝트들에 거리 필터 적용
-    /// </summary>
-    private void ApplyDistanceFilterToARObjects()
-    {
-        if (Input.location.status != LocationServiceStatus.Running)
-            return;
-
-        LocationInfo currentLocation = Input.location.lastData;
-        float currentLat = currentLocation.latitude;
-        float currentLon = currentLocation.longitude;
-
-        // DataManager 오브젝트 필터링
-        if (dataManager != null)
-        {
-            var woopangPlaces = dataManager.GetPlaceDataMap();
-            foreach (var kvp in woopangPlaces)
-            {
-                var place = kvp.Value;
-                float distance = CalculateDistance(currentLat, currentLon, place.latitude, place.longitude);
-
-                // 오브젝트 활성화/비활성화
-                GameObject obj = dataManager.GetSpawnedObject(kvp.Key);
-                if (obj != null)
-                {
-                    obj.SetActive(distance <= maxDisplayDistance);
-                }
-            }
-        }
-
-        // TourAPIManager 오브젝트 필터링
-        if (tourAPIManager != null)
-        {
-            var tourPlaces = tourAPIManager.GetPlaceDataMap();
-            foreach (var kvp in tourPlaces)
-            {
-                var place = kvp.Value;
-                float distance = CalculateDistance(currentLat, currentLon, place.mapy, place.mapx);
-
-                // 오브젝트 활성화/비활성화
-                GameObject obj = tourAPIManager.GetSpawnedObject(kvp.Key);
-                if (obj != null)
-                {
-                    obj.SetActive(distance <= maxDisplayDistance);
-                }
-            }
-        }
-
-        Debug.Log($"[PlaceListManager] 거리 필터 적용 완료: {maxDisplayDistance}m");
-    }
-
-    /// <summary>
-    /// 거리 값 텍스트 업데이트
-    /// </summary>
     private void UpdateDistanceValueText()
     {
         if (distanceValueText != null)
         {
-            string newText;
-            if (maxDisplayDistance >= 1000)
-            {
-                newText = $"{(maxDisplayDistance / 1000f):F1}km";
-            }
+            if (maxDisplayDistance >= 1000f)
+                distanceValueText.text = $"{(maxDisplayDistance / 1000f):F1}km";
             else
-            {
-                newText = $"{Mathf.RoundToInt(maxDisplayDistance)}m";
-            }
-            distanceValueText.text = newText;
-            Debug.Log($"[PlaceListManager] 거리 텍스트 업데이트: {newText} (maxDisplayDistance={maxDisplayDistance})");
+                distanceValueText.text = $"{Mathf.RoundToInt(maxDisplayDistance)}m";
         }
-        else
-        {
-            Debug.LogWarning("[PlaceListManager] distanceValueText가 null입니다!");
-        }
-    }
-
-    /// <summary>
-    /// 외부에서 최대 표시 거리를 설정하는 메서드
-    /// </summary>
-    public void SetMaxDisplayDistance(float distance)
-    {
-        maxDisplayDistance = distance;
-        if (distanceSlider != null)
-        {
-            distanceSlider.value = distance;
-        }
-        UpdateDistanceValueText();
-        UpdateUI();
-    }
-
-    /// <summary>
-    /// 현재 최대 표시 거리를 반환
-    /// </summary>
-    public float GetMaxDisplayDistance()
-    {
-        return maxDisplayDistance;
     }
 }

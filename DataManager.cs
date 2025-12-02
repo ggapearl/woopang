@@ -295,20 +295,9 @@ public class DataManager : MonoBehaviour
 
         // 서브사진 설정
         ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>();
-        if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
+        if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0 && place.sub_photos[0] != null && place.sub_photos[0].Count > 0)
         {
-            List<string> allSubPhotos = new List<string>();
-            foreach (var photoGroup in place.sub_photos)
-            {
-                if (photoGroup != null)
-                {
-                    foreach (var photo in photoGroup)
-                    {
-                        if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
-                    }
-                }
-            }
-            displayCtrl.SetSubPhotos(allSubPhotos);
+            displayCtrl.SetSubPhotos(place.sub_photos[0]);
         }
 
         // model_type에 따른 분기 처리
@@ -598,72 +587,6 @@ public class DataManager : MonoBehaviour
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
 
-    public GameObject GetSpawnedObject(int placeId)
-    {
-        return spawnedObjects.ContainsKey(placeId) ? spawnedObjects[placeId] : null;
-    }
-
-    public void ApplyFilters(Dictionary<string, bool> filters)
-    {
-        if (filters == null) return;
-
-        bool showPetFriendly = filters.ContainsKey("petFriendly") && filters["petFriendly"];
-        bool showAlcohol = filters.ContainsKey("alcohol") && filters["alcohol"];
-        bool showWoopangData = filters.ContainsKey("woopangData") && filters["woopangData"];
-        bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
-
-        foreach (var kvp in spawnedObjects)
-        {
-            int placeId = kvp.Key;
-            GameObject obj = kvp.Value;
-            if (obj == null) continue;
-
-            if (!showObject3D)
-            {
-                obj.SetActive(false);
-                continue;
-            }
-
-            if (placeDataMap.ContainsKey(placeId))
-            {
-                PlaceData place = placeDataMap[placeId];
-                bool shouldShow = showWoopangData;
-
-                if (shouldShow)
-                {
-                    if (place.pet_friendly && !showPetFriendly) shouldShow = false;
-                    else if (place.alcohol_available && !showAlcohol) shouldShow = false;
-                }
-                obj.SetActive(shouldShow);
-            }
-        }
-    }
-
-    public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
-    {
-        foreach (var kvp in spawnedObjects)
-        {
-            int id = kvp.Key;
-            GameObject obj = kvp.Value;
-            if (obj == null) continue;
-
-            if (placeDataMap.ContainsKey(id))
-            {
-                PlaceData place = placeDataMap[id];
-                float dist = CalculateDistance(currentLat, currentLon, place.latitude, place.longitude);
-                bool inRange = dist <= maxDistance;
-                if (!inRange) 
-                {
-                    if (obj.activeSelf) obj.SetActive(false);
-                }
-                else
-                {
-                    if (!obj.activeSelf) obj.SetActive(true);
-                }
-            }
-        }
-    }
-
     void OnApplicationFocus(bool hasFocus)
     {
         if (hasFocus && Input.location.isEnabledByUser)
@@ -726,7 +649,6 @@ public class PlaceData
     public List<List<string>> sub_photos { get; set; }
     public bool pet_friendly { get; set; }
     public bool separate_restroom { get; set; }
-    public bool alcohol_available { get; set; } // 주류 판매 여부
     public string instagram_id { get; set; }
     public float latitude { get; set; }
     public float longitude { get; set; }

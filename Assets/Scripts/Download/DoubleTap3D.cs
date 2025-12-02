@@ -20,20 +20,11 @@ public class DoubleTap3D : MonoBehaviour
     public Text nameText;
     public Text descriptionTextUI;
     public GameObject placeInfoTextPanel;
+    public Text debugText;
     private Text placeInfoText;
     public float tapSpeed = 0.5f;
     public float swipeThreshold = 50f;
     public float fadeDuration = 0.5f;
-
-    [Header("Photo Layout Settings")]
-    [Tooltip("사진 너비 (픽셀)")]
-    [SerializeField] private float photoWidth = 1080f;
-    [Tooltip("사진 높이 (픽셀) - 0이면 화면 높이에 맞춤")]
-    [SerializeField] private float photoHeight = 0f;
-    [Tooltip("사진 좌우 여백 (픽셀)")]
-    [SerializeField] private float photoMarginHorizontal = 0f;
-    [Tooltip("사진 상하 여백 (픽셀)")]
-    [SerializeField] private float photoMarginVertical = 0f;
 
     private float lastTapTime = 0f;
     private bool isFullscreen = false;
@@ -43,22 +34,6 @@ public class DoubleTap3D : MonoBehaviour
     private bool isFading = false;
     private Vector2 touchStartPos;
     private bool isSwiping;
-
-    // SwipePanelController-style photo navigation
-    private RectTransform photoContainer;
-    private List<Image> photoImages = new List<Image>();
-    private Vector2 containerBasePos;
-    private Vector2 containerTargetPos;
-    private bool isDragging = false;
-    private Vector2 dragStartPos;
-    private float slideSpeed = 12f;
-
-    [Tooltip("사진 간 간격 (픽셀)")]
-    [SerializeField] private float photoSpacing = 40f;
-
-    // 댓글 시스템
-    private GameObject commentPanel;
-    private bool isCommentVisible = false;
 
     private Sprite infoSprite1;
     private Sprite infoSprite2;
@@ -93,21 +68,13 @@ public class DoubleTap3D : MonoBehaviour
 
     void Start()
     {
-        if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null ||
+        if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null || 
             infoImage1 == null || infoImage2 == null || instagramButton == null ||
             previousButton == null || nextButton == null || closeButton == null || nameText == null)
         {
             Debug.LogError("[DoubleTap3D] 필수 UI 요소가 할당되지 않았습니다!");
             enabled = false;
             return;
-        }
-
-        // 풀스크린 이미지에 둥근 모서리 적용
-        RoundedImage roundedImage = fullscreenImage.GetComponent<RoundedImage>();
-        if (roundedImage == null)
-        {
-            roundedImage = fullscreenImage.gameObject.AddComponent<RoundedImage>();
-            roundedImage.cornerRadius = 30f; // 모서리 둥글기 조정 (0~100)
         }
 
         imageDisplayController = GetComponentInParent<ImageDisplayController>();
@@ -146,9 +113,6 @@ public class DoubleTap3D : MonoBehaviour
 
         fullscreenImage.preserveAspect = true;
         fullscreenImage.type = Image.Type.Simple;
-
-        // Initialize photo container for swipe navigation
-        InitializePhotoContainer();
 
         instagramButton.onClick.AddListener(OnInstagramButtonClick);
         nextButton.onClick.AddListener(ShowNextImage);
@@ -266,161 +230,6 @@ public class DoubleTap3D : MonoBehaviour
         Debug.Log("[DoubleTap3D] 이미지 캐시 메모리 해제");
     }
 
-    /// <summary>
-    /// SwipePanelController 스타일의 사진 컨테이너 초기화
-    /// </summary>
-    private void InitializePhotoContainer()
-    {
-        // 기존 fullscreenImage의 부모를 컨테이너로 사용
-        if (fullscreenImage != null && fullscreenImage.transform.parent != null)
-        {
-            Transform parent = fullscreenImage.transform.parent;
-
-            // 컨테이너 GameObject 생성
-            GameObject containerObj = new GameObject("PhotoContainer");
-            containerObj.transform.SetParent(parent, false);
-
-            photoContainer = containerObj.AddComponent<RectTransform>();
-            photoContainer.anchorMin = new Vector2(0, 0);
-            photoContainer.anchorMax = new Vector2(1, 1);
-            photoContainer.sizeDelta = Vector2.zero;
-            photoContainer.anchoredPosition = Vector2.zero;
-
-            // 기존 fullscreenImage를 컨테이너 아래로 이동
-            fullscreenImage.transform.SetParent(photoContainer, false);
-
-            containerBasePos = Vector2.zero;
-            containerTargetPos = Vector2.zero;
-
-            Debug.Log("[DoubleTap3D] 사진 컨테이너 초기화 완료");
-        }
-        else
-        {
-            Debug.LogError("[DoubleTap3D] fullscreenImage 또는 부모가 없어 컨테이너 초기화 실패");
-        }
-    }
-
-    /// <summary>
-    /// 사진들을 수평으로 배치 (SwipePanelController 패턴)
-    /// </summary>
-    private void ArrangePhotos()
-    {
-        if (photoContainer == null || fullscreenImage == null) return;
-
-        // 기존 추가 이미지들 제거
-        foreach (var img in photoImages)
-        {
-            if (img != null && img != fullscreenImage)
-            {
-                Destroy(img.gameObject);
-            }
-        }
-        photoImages.Clear();
-
-        // 사진 크기 계산
-        float screenWidth = Screen.width;
-        float screenHeight = Screen.height;
-        float actualPhotoWidth = (photoWidth > 0) ? photoWidth : screenWidth;
-        float actualPhotoHeight = (photoHeight > 0) ? photoHeight : screenHeight;
-        float slotWidth = actualPhotoWidth + photoSpacing; // 사진 너비 + 간격
-        int currentSlot = 0;
-
-        // placeInfoTextPanel이 있으면 첫 번째 슬롯에 배치
-        if (placeInfoTextPanel != null)
-        {
-            RectTransform panelRect = placeInfoTextPanel.GetComponent<RectTransform>();
-            if (panelRect != null)
-            {
-                placeInfoTextPanel.transform.SetParent(photoContainer, false);
-                panelRect.anchorMin = new Vector2(0.5f, 0.5f);  // 중앙 앵커
-                panelRect.anchorMax = new Vector2(0.5f, 0.5f);  // 중앙 앵커
-                panelRect.pivot = new Vector2(0.5f, 0.5f);
-                panelRect.sizeDelta = new Vector2(actualPhotoWidth - photoMarginHorizontal * 2, actualPhotoHeight - photoMarginVertical * 2);
-                panelRect.anchoredPosition = new Vector2(slotWidth * currentSlot, 0);  // 중앙 기준 위치
-                placeInfoTextPanel.SetActive(true);
-                currentSlot++;
-            }
-        }
-
-        // fullscreenImage를 다음 슬롯으로 사용
-        RectTransform imageRect = fullscreenImage.GetComponent<RectTransform>();
-        imageRect.anchorMin = new Vector2(0.5f, 0.5f);  // 중앙 앵커
-        imageRect.anchorMax = new Vector2(0.5f, 0.5f);  // 중앙 앵커
-        imageRect.pivot = new Vector2(0.5f, 0.5f);
-        imageRect.sizeDelta = new Vector2(actualPhotoWidth - photoMarginHorizontal * 2, actualPhotoHeight - photoMarginVertical * 2);
-        imageRect.anchoredPosition = new Vector2(slotWidth * currentSlot, 0);  // 중앙 기준 위치
-        photoImages.Add(fullscreenImage);
-
-        currentSlot++;
-
-        // 추가 사진들을 위한 Image 생성
-        for (int i = 1; i < imageSprites.Count; i++)
-        {
-            GameObject photoObj = new GameObject($"Photo_{i}");
-            photoObj.transform.SetParent(photoContainer, false);
-
-            Image img = photoObj.AddComponent<Image>();
-            img.preserveAspect = true;
-            img.type = Image.Type.Simple;
-
-            // RoundedImage 적용
-            RoundedImage rounded = photoObj.AddComponent<RoundedImage>();
-            rounded.cornerRadius = 30f;
-
-            // T5EdgeLineEffect 적용 (얇은 외곽선)
-            T5EdgeLineEffect effect = photoObj.AddComponent<T5EdgeLineEffect>();
-            effect.SetSettings(
-                new Color(1f, 0.95f, 0.8f, 1f),
-                0.008f,
-                2.0f,
-                2.0f,
-                1.0f,
-                0.8f,
-                0.05f
-            );
-
-            RectTransform rect = photoObj.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);  // 중앙 앵커
-            rect.anchorMax = new Vector2(0.5f, 0.5f);  // 중앙 앵커
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(actualPhotoWidth - photoMarginHorizontal * 2, actualPhotoHeight - photoMarginVertical * 2);
-            rect.anchoredPosition = new Vector2(slotWidth * currentSlot, 0);  // 중앙 기준 위치
-
-            photoImages.Add(img);
-            currentSlot++;
-        }
-
-        UpdatePhotoSprites();
-        Debug.Log($"[DoubleTap3D] {currentSlot}개 슬롯 배치 완료 (간격={photoSpacing}px, 사진크기={actualPhotoWidth}x{actualPhotoHeight}, 여백={photoMarginHorizontal}x{photoMarginVertical}, placeInfoPanel={placeInfoTextPanel != null}, photos={imageSprites.Count})");
-    }
-
-    /// <summary>
-    /// 현재 인덱스에 맞춰 사진 스프라이트 업데이트
-    /// </summary>
-    private void UpdatePhotoSprites()
-    {
-        if (photoImages.Count == 0 || imageSprites.Count == 0) return;
-
-        // photoImages는 실제 사진 Image들만 포함 (placeInfoPanel 제외)
-        for (int i = 0; i < photoImages.Count && i < imageSprites.Count; i++)
-        {
-            Image img = photoImages[i];
-            if (img == null) continue;
-
-            img.gameObject.SetActive(true);
-            if (imageSprites[i] != null)
-            {
-                img.sprite = imageSprites[i];
-                img.color = Color.white;
-            }
-            else
-            {
-                Debug.LogWarning($"[DoubleTap3D] Sprite at index {i} is null!");
-                img.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-            }
-        }
-    }
-
 #if UNITY_IOS
     void OnApplicationPause(bool pauseStatus)
     {
@@ -485,16 +294,6 @@ public class DoubleTap3D : MonoBehaviour
 
     void Update()
     {
-        // SwipePanelController 스타일 Lerp 보간 (드래그 중이 아닐 때)
-        if (!isDragging && photoContainer != null && isFullscreen)
-        {
-            photoContainer.anchoredPosition = Vector2.Lerp(
-                photoContainer.anchoredPosition,
-                containerTargetPos,
-                Time.deltaTime * slideSpeed
-            );
-        }
-
         if (Input.touchCount == 1 && Time.timeSinceLevelLoad > 2f)
         {
             Touch touch = Input.GetTouch(0);
@@ -502,7 +301,6 @@ public class DoubleTap3D : MonoBehaviour
             if (touch.phase == TouchPhase.Began)
             {
                 touchStartPos = touch.position;
-                dragStartPos = touch.position;
                 isSwiping = true;
 
                 Ray ray = Camera.main.ScreenPointToRay(touch.position);
@@ -526,83 +324,26 @@ public class DoubleTap3D : MonoBehaviour
                     Debug.Log($"[DoubleTap3D] 레이캐스트 히트 실패 - 터치 위치: {touch.position}");
                 }
             }
-            else if (touch.phase == TouchPhase.Moved && isSwiping)
+            else if (touch.phase == TouchPhase.Moved && isSwiping && isFullscreen)
             {
-                if (isFullscreen && photoContainer != null)
-                {
-                    Vector2 currentPos = touch.position;
-                    Vector2 swipeDelta = currentPos - dragStartPos;
+                Vector2 swipeDelta = touch.position - touchStartPos;
 
-                    // 가로/세로 중 더 큰 방향으로 제스처 결정
-                    if (Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))
-                    {
-                        // 가로 스와이프: 실시간 드래그
-                        isDragging = true;
-                        float deltaX = swipeDelta.x;
-                        photoContainer.anchoredPosition = containerTargetPos + new Vector2(deltaX, 0);
-                    }
-                    // 세로 스와이프는 TouchPhase.Ended에서 처리
+                if (Mathf.Abs(swipeDelta.x) > swipeThreshold)
+                {
+                    if (swipeDelta.x > 0)
+                        ShowPreviousImage();
+                    else
+                        ShowNextImage();
+                    isSwiping = false;
                 }
-                else
+                else if (Mathf.Abs(swipeDelta.y) > swipeThreshold && swipeDelta.y < 0)
                 {
-                    // 풀스크린이 아닐 때는 기존 로직
-                    Vector2 swipeDelta = touch.position - touchStartPos;
-
-                    if (Mathf.Abs(swipeDelta.y) > swipeThreshold && swipeDelta.y < 0)
-                    {
-                        CloseFullscreen();
-                        isSwiping = false;
-                    }
+                    CloseFullscreen();
+                    isSwiping = false;
                 }
             }
-            else if (touch.phase == TouchPhase.Ended && isSwiping)
+            else if (touch.phase == TouchPhase.Ended)
             {
-                if (isFullscreen && photoContainer != null)
-                {
-                    Vector2 endPos = touch.position;
-                    Vector2 swipeDelta = endPos - dragStartPos;
-                    float swipeDistanceX = swipeDelta.x;
-                    float swipeDistanceY = swipeDelta.y;
-
-                    // 가로/세로 중 더 큰 방향으로 제스처 처리
-                    if (Mathf.Abs(swipeDistanceX) > Mathf.Abs(swipeDistanceY))
-                    {
-                        // 가로 스와이프: 사진 전환
-                        if (isDragging)
-                        {
-                            if (Mathf.Abs(swipeDistanceX) > swipeThreshold)
-                            {
-                                if (swipeDistanceX > 0)
-                                    ShowPreviousImage();
-                                else
-                                    ShowNextImage();
-                            }
-                            else
-                            {
-                                // 스와이프 거리가 충분하지 않으면 원래 위치로 복원
-                                photoContainer.anchoredPosition = containerTargetPos;
-                            }
-                            isDragging = false;
-                        }
-                    }
-                    else
-                    {
-                        // 세로 스와이프: 페이드 닫기 또는 댓글
-                        if (Mathf.Abs(swipeDistanceY) > swipeThreshold)
-                        {
-                            if (swipeDistanceY < 0)
-                            {
-                                // 아래로 스와이프: 풀스크린 닫기
-                                CloseFullscreen();
-                            }
-                            else
-                            {
-                                // 위로 스와이프: 댓글 열기
-                                ShowComments();
-                            }
-                        }
-                    }
-                }
                 isSwiping = false;
             }
         }
@@ -622,14 +363,10 @@ public class DoubleTap3D : MonoBehaviour
 #if UNITY_IOS
             CacheImagesForFullscreen();
 #endif
-
+            
             currentIndex = 0;
             isPlaceInfoPage = placeInfoTextPanel != null;
             imageIndex = placeInfoTextPanel != null ? -1 : 0;
-
-            // SwipePanelController 스타일: 사진 배치
-            ArrangePhotos();
-
             ShowImage(currentIndex);
             UpdateInfoImages();
             fullscreenCanvasGroup.gameObject.SetActive(true);
@@ -643,14 +380,12 @@ public class DoubleTap3D : MonoBehaviour
             previousButton.onClick.RemoveAllListeners();
             previousButton.onClick.AddListener(ShowPreviousImage);
 
-            // 컨테이너 위치 초기화
-            if (photoContainer != null)
-            {
-                containerTargetPos = Vector2.zero;
-                photoContainer.anchoredPosition = Vector2.zero;
-            }
-
             StartCoroutine(FadeInCanvas(fadeDuration));
+
+            if (debugText != null)
+            {
+                debugText.text = $"DoubleTap: ID = {id}, InstagramId = {instagramId ?? "null"}";
+            }
         }
         else
         {
@@ -660,7 +395,7 @@ public class DoubleTap3D : MonoBehaviour
 
     public void ShowNextImage()
     {
-        if (imageSprites.Count == 0) return;
+        if (imageSprites.Count == 0 || isFading) return;
 
         if (placeInfoTextPanel != null && isPlaceInfoPage)
         {
@@ -677,14 +412,12 @@ public class DoubleTap3D : MonoBehaviour
         }
 
         currentIndex++;
-
-        // SwipePanelController 스타일: 컨테이너 목표 위치 업데이트
-        UpdateContainerTargetPosition();
+        StartCoroutine(CrossFadeImage(fadeDuration));
     }
 
     public void ShowPreviousImage()
     {
-        if (imageSprites.Count == 0) return;
+        if (imageSprites.Count == 0 || isFading) return;
 
         if (placeInfoTextPanel != null && !isPlaceInfoPage && imageIndex == 0)
         {
@@ -702,27 +435,7 @@ public class DoubleTap3D : MonoBehaviour
 
         currentIndex--;
         if (currentIndex < 0) currentIndex = 0;
-
-        // SwipePanelController 스타일: 컨테이너 목표 위치 업데이트
-        UpdateContainerTargetPosition();
-    }
-
-    /// <summary>
-    /// 현재 인덱스에 맞춰 컨테이너 목표 위치 업데이트
-    /// </summary>
-    private void UpdateContainerTargetPosition()
-    {
-        if (photoContainer == null) return;
-
-        // placeInfoTextPanel이 있으면 첫 번째가 info, 사진은 그 다음부터
-        int totalIndex = isPlaceInfoPage ? 0 : (placeInfoTextPanel != null ? imageIndex + 1 : imageIndex);
-
-        // photoWidth 값 사용 (0이면 화면 너비)
-        float actualPhotoWidth = (photoWidth > 0) ? photoWidth : Screen.width;
-        float slotWidth = actualPhotoWidth + photoSpacing;
-        containerTargetPos = new Vector2(-slotWidth * totalIndex, 0);
-
-        Debug.Log($"[DoubleTap3D] 컨테이너 목표 위치 업데이트: {containerTargetPos}, imageIndex={imageIndex}, isPlaceInfoPage={isPlaceInfoPage}, slotWidth={slotWidth}");
+        StartCoroutine(CrossFadeImage(fadeDuration));
     }
 
     private void ShowImage(int index)
@@ -785,6 +498,11 @@ public class DoubleTap3D : MonoBehaviour
         }
 
         Debug.Log($"[DoubleTap3D] SetInfoImages 호출 - ID: {id}, Description: {description}, Name: {name}, GameObject: {gameObject.name}");
+
+        if (debugText != null)
+        {
+            debugText.text = $"SetInfoImages: ID = {id}, InstagramId = {instagramId ?? "null"}";
+        }
     }
 
     private void UpdateInfoImages()
@@ -837,6 +555,11 @@ public class DoubleTap3D : MonoBehaviour
         {
             string url = $"https://www.instagram.com/{instagramId}/";
             Application.OpenURL(url);
+            
+            if (debugText != null)
+            {
+                debugText.text = $"InstagramButton: ID = {id}, InstagramId = {instagramId}, URL = {url}";
+            }
         }
     }
 
@@ -857,42 +580,12 @@ public class DoubleTap3D : MonoBehaviour
         imageUrls = urls;
     }
 
-    /// <summary>
-    /// 댓글 패널 열기
-    /// </summary>
-    private void ShowComments()
-    {
-        CommentSystem commentSystem = GetComponentInChildren<CommentSystem>();
-        if (commentSystem == null)
-        {
-            commentSystem = fullscreenCanvasGroup.GetComponentInChildren<CommentSystem>();
-        }
-
-        if (commentSystem != null)
-        {
-            if (commentSystem.IsPanelOpen)
-            {
-                commentSystem.CloseFullCommentPanel();
-            }
-            else
-            {
-                commentSystem.LoadComments(id);
-                commentSystem.OpenFullCommentPanel();
-            }
-            Debug.Log($"[DoubleTap3D] 댓글 패널 토글: {id}");
-        }
-        else
-        {
-            Debug.LogWarning("[DoubleTap3D] CommentSystem을 찾을 수 없습니다.");
-        }
-    }
-
     private void CloseFullscreen()
     {
         // 풀스크린 닫을 때 캐시 메모리 해제
 #if UNITY_IOS
         ClearImageCache();
-
+        
         if (savedObjectId == this.id)
         {
             savedFullscreenState = false;

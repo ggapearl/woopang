@@ -48,14 +48,14 @@ public class FilterManager : MonoBehaviour
     // Long Press 추적
     private Dictionary<Toggle, LongPressHandler> longPressHandlers = new Dictionary<Toggle, LongPressHandler>();
 
-    // PlayerPrefs 키
-    private const string PREF_PET_FRIENDLY = "Filter_PetFriendly";
-    private const string PREF_PUBLIC_DATA = "Filter_PublicData";
-    private const string PREF_SUBWAY = "Filter_Subway";
-    private const string PREF_BUS = "Filter_Bus";
-    private const string PREF_ALCOHOL = "Filter_Alcohol";
-    private const string PREF_WOOPANG_DATA = "Filter_WoopangData";
-    private const string PREF_OBJECT3D = "Filter_Object3D";
+    // PlayerPrefs 키 (초기화를 위해 키 변경 V2)
+    private const string PREF_PET_FRIENDLY = "Filter_PetFriendly_V2";
+    private const string PREF_PUBLIC_DATA = "Filter_PublicData_V2";
+    private const string PREF_SUBWAY = "Filter_Subway_V2";
+    private const string PREF_BUS = "Filter_Bus_V2";
+    private const string PREF_ALCOHOL = "Filter_Alcohol_V2";
+    private const string PREF_WOOPANG_DATA = "Filter_WoopangData_V2";
+    private const string PREF_OBJECT3D = "Filter_Object3D_V2";
 
     void Start()
     {
