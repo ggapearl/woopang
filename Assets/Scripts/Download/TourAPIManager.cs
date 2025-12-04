@@ -31,8 +31,8 @@ public class TourAPIManager : MonoBehaviour
     [SerializeField] private float updateInterval = 600f;
 
     [Header("Progressive Loading Settings")]
-    [Tooltip("거리별 로딩 단계 (미터): 25m → 50m → ... → 10000m")]
-    public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
+    [Tooltip("거리별 로딩 단계 (미터): 1km → 5km (TourAPI 429 에러 방지)")]
+    public float[] loadRadii = new float[] { 1000f, 5000f };  // 11개 → 2개로 축소 (API 호출 82% 감소)
     public float tierDelay = 0.5f;
     public float objectSpawnDelay = 0.1f;
 
