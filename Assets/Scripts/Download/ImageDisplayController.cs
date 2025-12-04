@@ -7,8 +7,6 @@ public class ImageDisplayController : MonoBehaviour
 {
     public Renderer cubeRenderer;
     public DoubleTap3D doubleTap3DScript;
-    public GameObject loadingSpinnerPrefab;
-    public float spinnerDuration = 10f;
     
     [Header("Debug")]
     public bool testLoadOnStart = false;
@@ -16,7 +14,6 @@ public class ImageDisplayController : MonoBehaviour
     
     private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
-    private GameObject currentSpinner;
     private Vector3 originalScale; // 원래 크기 저장
     
     private Coroutine currentBaseMapCoroutine;
@@ -39,11 +36,6 @@ public class ImageDisplayController : MonoBehaviour
             Debug.LogError("[ImageDisplayController] doubleTap3DScript가 할당되지 않았습니다 - Sample_Prefab에 DoubleTap3D 추가 필요!");
         }
 
-        if (loadingSpinnerPrefab == null)
-        {
-            Debug.LogWarning("[ImageDisplayController] loadingSpinnerPrefab이 할당되지 않았습니다!");
-        }
-
         if (testLoadOnStart)
         {
             Debug.Log("[ImageDisplayController] 테스트 로딩 시작");
@@ -56,13 +48,17 @@ public class ImageDisplayController : MonoBehaviour
     {
         if (!enabled) return;
 
-        ShowSpinner(true);
+        // 큐브 숨기기 (로딩 중)
+        if (cubeRenderer != null)
+        {
+            cubeRenderer.enabled = false;
+        }
+
         StartCoroutine(LoadBaseMapTexture(imageUrl));
     }
 
     private IEnumerator LoadBaseMapTexture(string imageUrl)
     {
-        float startTime = Time.time;
         string fullUrl = imageUrl.StartsWith("http") ? imageUrl : "https://woopang.com/" + imageUrl.Replace("\\", "/");
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
@@ -72,9 +68,6 @@ public class ImageDisplayController : MonoBehaviour
             try
             {
                 yield return request.SendWebRequest();
-
-                float elapsed = Time.time - startTime;
-                if (elapsed < spinnerDuration) yield return new WaitForSeconds(spinnerDuration - elapsed);
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
@@ -88,82 +81,33 @@ public class ImageDisplayController : MonoBehaviour
                         {
                             if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
                             else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+
+                            // 큐브 표시
+                            cubeRenderer.enabled = true;
                         }
+
+                        // 팝업 애니메이션 시작
+                        StartCoroutine(PopUpAnimation());
                     }
                 }
                 else
                 {
                     Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
+
+                    // 로딩 실패 시에도 큐브 표시
+                    if (cubeRenderer != null)
+                    {
+                        cubeRenderer.enabled = true;
+                    }
                 }
             }
             finally
             {
-                ShowSpinner(false);
                 currentBaseMapCoroutine = null;
             }
         }
     }
 
-    private void ShowSpinner(bool show)
-    {
-        Debug.Log($"[SPINNER] ShowSpinner({show}) - prefab={loadingSpinnerPrefab != null}, cubeRenderer={cubeRenderer != null}");
-
-        // 스피너 생성
-        if (show && currentSpinner == null && loadingSpinnerPrefab != null)
-        {
-            currentSpinner = Instantiate(loadingSpinnerPrefab, transform);
-            currentSpinner.transform.localPosition = Vector3.zero;
-            Debug.Log($"[SPINNER] 스피너 생성 완료: {currentSpinner.name}");
-        }
-        else if (show && loadingSpinnerPrefab == null)
-        {
-            Debug.LogWarning($"[SPINNER] loadingSpinnerPrefab이 null입니다!");
-        }
-
-        // cubeRenderer만 제어
-        if (cubeRenderer != null)
-        {
-            cubeRenderer.enabled = !show;
-            Debug.Log($"[SPINNER] cubeRenderer.enabled = {cubeRenderer.enabled} (GameObject active={cubeRenderer.gameObject.activeSelf})");
-        }
-        else
-        {
-            Debug.LogWarning($"[SPINNER] cubeRenderer가 null입니다. Cube 자식을 찾습니다.");
-            // fallback: Cube 자식 찾기
-            Transform cubeChild = transform.Find("Cube");
-            if (cubeChild != null)
-            {
-                MeshRenderer meshRenderer = cubeChild.GetComponent<MeshRenderer>();
-                if (meshRenderer != null)
-                {
-                    meshRenderer.enabled = !show;
-                    Debug.Log($"[SPINNER] Cube MeshRenderer.enabled = {meshRenderer.enabled}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[SPINNER] Cube에 MeshRenderer가 없습니다!");
-                }
-            }
-            else
-            {
-                Debug.LogWarning($"[SPINNER] Cube 자식을 찾을 수 없습니다!");
-            }
-        }
-
-        // 스피너 켜기/끄기
-        if (currentSpinner != null)
-        {
-            currentSpinner.SetActive(show);
-            Debug.Log($"[SPINNER] 스피너 활성화 = {show}");
-        }
-
-        // 로딩 완료 시 등장 애니메이션
-        if (!show)
-        {
-            Debug.Log($"[SPINNER] 팝업 애니메이션 시작");
-            StartCoroutine(PopUpAnimation());
-        }
-    }
 
     private IEnumerator PopUpAnimation()
     {
@@ -314,7 +258,6 @@ public class ImageDisplayController : MonoBehaviour
     public void ClearImages()
     {
         StopAllCoroutines();
-        ShowSpinner(false);
 
         if (cubeRenderer != null && cubeRenderer.material.HasProperty("_MainTex"))
         {

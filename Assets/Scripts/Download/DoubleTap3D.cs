@@ -24,7 +24,7 @@ public class DoubleTap3D : MonoBehaviour
     private Text placeInfoText;
     public float tapSpeed = 0.5f;
     public float swipeThreshold = 50f;
-    public float fadeDuration = 0.5f;
+    public float fadeDuration = 1.0f;  // 0.5초 → 1.0초 (2배 느리게)
 
     private float lastTapTime = 0f;
     private bool isFullscreen = false;
@@ -328,17 +328,19 @@ public class DoubleTap3D : MonoBehaviour
             {
                 Vector2 swipeDelta = touch.position - touchStartPos;
 
-                if (Mathf.Abs(swipeDelta.x) > swipeThreshold)
+                // 좌우 스와이프: 이미지 넘기기
+                if (Mathf.Abs(swipeDelta.x) > swipeThreshold && Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))
                 {
                     if (swipeDelta.x > 0)
-                        ShowPreviousImage();
+                        ShowPreviousImage();  // 오른쪽 스와이프 → 이전 이미지
                     else
-                        ShowNextImage();
+                        ShowNextImage();      // 왼쪽 스와이프 → 다음 이미지
                     isSwiping = false;
                 }
-                else if (Mathf.Abs(swipeDelta.y) > swipeThreshold && swipeDelta.y < 0)
+                // 위→아래 스와이프: 패널 닫기
+                else if (Mathf.Abs(swipeDelta.y) > swipeThreshold && Mathf.Abs(swipeDelta.y) > Mathf.Abs(swipeDelta.x) && swipeDelta.y < 0)
                 {
-                    CloseFullscreen();
+                    CloseFullscreen();  // 페이드아웃으로 닫힘
                     isSwiping = false;
                 }
             }
