@@ -28,9 +28,19 @@ public class DataManager : MonoBehaviour
     private Queue<GameObject> glbObjectPool = new Queue<GameObject>();
     private HashSet<int> currentlyLoadingGLB = new HashSet<int>();
     
-    [SerializeField] public int poolSize = 20;
+    [SerializeField] public int poolSize = 50;
     [SerializeField] private float updateInterval = 600f;
-    public float loadRadius = 1000f;
+    
+    [Header("Progressive Loading Settings")]
+    [Tooltip("거리별 로딩 단계 (미터)")]
+    public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
+
+    [Tooltip("각 거리 단계 사이의 딜레이 (초)")]
+    public float tierDelay = 0.5f;
+
+    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초)")]
+    public float objectSpawnDelay = 0.1f;
+
     [SerializeField] private float updateDistanceThreshold = 50f;
     private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
@@ -95,11 +105,36 @@ public class DataManager : MonoBehaviour
         
         if (Input.location.status == LocationServiceStatus.Failed)
         {
-            ShowErrorMessage("위치 서비스를 시작할 수 없습니다.");
-            yield break;
+            ShowErrorMessage("위치 서비스를 시작할 수 없습니다. 기본 위치로 시작합니다.");
+            // 실패해도 계속 진행 (기본값 사용)
         }
         
-        lastPosition = new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
+        // 위치 데이터가 없으면 기본값 사용
+        float lat = 37.5665f;
+        float lon = 126.9780f;
+        
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+        
+        lastPosition = new Vector2(lat, lon);
+        
+        // 바로 로딩 시작
+        LocationInfo fakeLocation = new LocationInfo();
+        // LocationInfo는 struct라 프로퍼티 설정 불가하므로 별도 변수 사용하거나
+        // FetchDataProgressively가 LocationInfo 대신 lat, lon을 받도록 수정해야 함.
+        // 하지만 구조 변경을 최소화하기 위해, FetchDataProgressively 호출 전에
+        // Input.location.lastData를 쓰지 않고 직접 값을 넘기거나 해야 함.
+        
+        // 가장 쉬운 방법: FetchDataProgressively는 LocationInfo를 받지만, 
+        // 내부에서 lat/lon을 쓸 때 Input.location.status를 체크해서 쓰도록 수정되어 있음?
+        // 아니요, currentLocation.latitude를 씁니다.
+        
+        // 따라서 LocationInfo를 가짜로 만들어서 넘겨야 함. (하지만 readonly라 불가능)
+        // 해결책: FetchDataProgressively의 파라미터를 (float lat, float lon)으로 변경.
+        
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
     }
@@ -108,13 +143,19 @@ public class DataManager : MonoBehaviour
     {
         if (args.state == ARSessionState.SessionTracking && !isDataLoaded)
         {
-            LocationInfo currentLocation = Input.location.lastData;
-            string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
+            float lat = 37.5665f;
+            float lon = 126.9780f;
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                lat = Input.location.lastData.latitude;
+                lon = Input.location.lastData.longitude;
+            }
+
             if (fetchCoroutine != null)
             {
                 StopCoroutine(fetchCoroutine);
             }
-            fetchCoroutine = StartCoroutine(FetchDataImmediately(serverUrl, currentLocation));
+            fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
         }
     }
 
@@ -123,9 +164,16 @@ public class DataManager : MonoBehaviour
         while (true)
         {
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
-            LocationInfo currentLocation = Input.location.lastData;
-            string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
-            yield return StartCoroutine(FetchDataFromServer(serverUrl, currentLocation));
+            
+            float lat = 37.5665f;
+            float lon = 126.9780f;
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                lat = Input.location.lastData.latitude;
+                lon = Input.location.lastData.longitude;
+            }
+
+            yield return StartCoroutine(FetchDataProgressively(lat, lon));
             isDataLoaded = true;
             yield return new WaitForSeconds(updateInterval);
         }
@@ -135,17 +183,103 @@ public class DataManager : MonoBehaviour
     {
         while (true)
         {
-            LocationInfo currentLocation = Input.location.lastData;
-            Vector2 currentPos = new Vector2(currentLocation.latitude, currentLocation.longitude);
+            float lat = 37.5665f;
+            float lon = 126.9780f;
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                lat = Input.location.lastData.latitude;
+                lon = Input.location.lastData.longitude;
+            }
+            
+            Vector2 currentPos = new Vector2(lat, lon);
             float distanceMoved = CalculateDistance(lastPosition.x, lastPosition.y, currentPos.x, currentPos.y);
             
             if (distanceMoved > updateDistanceThreshold)
             {
-                string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
-                yield return StartCoroutine(FetchDataFromServer(serverUrl, currentLocation));
+                yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
             }
             yield return new WaitForSeconds(1f);
+        }
+    }
+
+    private IEnumerator FetchDataProgressively(float lat, float lon)
+    {
+        Debug.Log($"[DataManager] ===== 점진적 로딩 시작 ({lat}, {lon}) =====");
+        
+        HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+
+        for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
+        {
+            float radius = loadRadii[tierIndex];
+            string serverUrl = $"{baseServerUrl}&lat={lat}&lon={lon}&radius={radius}";
+
+            List<PlaceData> newPlaces = new List<PlaceData>();
+            yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, newPlaces));
+
+            // 새로운 오브젝트를 하나씩 스폰
+            Debug.Log($"[DEBUG_DATA] Tier {tierIndex}: 생성할 오브젝트 {newPlaces.Count}개");
+            foreach (PlaceData place in newPlaces)
+            {
+                CreateObjectFromData(place);
+                loadedIds.Add(place.id);
+
+                if (objectSpawnDelay > 0)
+                {
+                    yield return new WaitForSeconds(objectSpawnDelay);
+                }
+            }
+
+            if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
+        }
+
+        Debug.Log("[DataManager] ===== 점진적 로딩 완료 =====");
+        isDataLoaded = true;
+    }
+
+    private IEnumerator FetchDataFromServerForTier(string url, float lat, float lon, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)
+    {
+        Debug.Log($"[DEBUG_DATA] 요청 URL: {url}");
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string json = request.downloadHandler.text;
+                Debug.Log($"[DEBUG_DATA] 응답 수신: {json.Length} bytes");
+                // Debug.Log($"[DEBUG_DATA] JSON: {json}"); // 필요 시 주석 해제
+
+                try
+                {
+                    List<PlaceData> places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
+                    if (places != null)
+                    {
+                        Debug.Log($"[DEBUG_DATA] 파싱 성공: {places.Count}개 항목");
+                        // ... 정렬 및 필터링 ...
+                        // 거리순 정렬
+                        places.Sort((a, b) =>
+                        {
+                            float distA = CalculateDistance(lat, lon, a.latitude, a.longitude);
+                            float distB = CalculateDistance(lat, lon, b.latitude, b.longitude);
+                            return distA.CompareTo(distB);
+                        });
+
+                        foreach (var place in places)
+                        {
+                            if (!loadedIds.Contains(place.id)) outNewPlaces.Add(place);
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[DEBUG_DATA] 파싱 결과가 null입니다.");
+                    }
+                }
+                catch (System.Exception e) { Debug.LogError($"[DEBUG_DATA] JSON 파싱 실패: {e.Message}"); }
+            }
+            else
+            {
+                Debug.LogError($"[DEBUG_DATA] 요청 실패: {request.error} ({url})");
+            }
         }
     }
 
@@ -246,6 +380,7 @@ public class DataManager : MonoBehaviour
 
     private void CreateObjectFromData(PlaceData place)
     {
+        Debug.Log($"[DEBUG_DATA] CreateObjectFromData 호출: ID={place.id}, Name={place.name}");
         // GLB 동시 로딩 제한
         if (place.model_type == "custom" && currentlyLoadingGLB.Count >= maxConcurrentGLBLoads)
         {
@@ -262,15 +397,19 @@ public class DataManager : MonoBehaviour
         GameObject newObj = GetFromPool(place.model_type);
         if (newObj == null)
         {
+            Debug.LogWarning($"[DEBUG_DATA] 풀에서 오브젝트를 가져오지 못함: {place.model_type}");
             return;
         }
         
+        Debug.Log($"[DEBUG_DATA] 오브젝트 활성화: {newObj.name}");
         newObj.SetActive(true);
         newObj.name = $"Place_{place.id}_{place.model_type}";
         
         if (SetupObjectComponents(newObj, place))
         {
             spawnedObjects[place.id] = newObj;
+            placeDataMap[place.id] = place; // ⭐ PlaceListManager가 사용하는 데이터 맵에 추가
+            Debug.Log($"[DEBUG_DATA] placeDataMap에 추가 완료 - ID: {place.id}, 현재 맵 크기: {placeDataMap.Count}");
         }
         else
         {
@@ -281,6 +420,7 @@ public class DataManager : MonoBehaviour
     private void UpdateExistingObject(PlaceData place, GameObject existingObj)
     {
         SetupObjectComponents(existingObj, place);
+        placeDataMap[place.id] = place; // ⭐ 업데이트된 데이터도 맵에 반영
     }
 
     private bool SetupObjectComponents(GameObject obj, PlaceData place)
@@ -332,6 +472,7 @@ public class DataManager : MonoBehaviour
         ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>();
         if (display != null && !string.IsNullOrEmpty(place.main_photo))
         {
+            Debug.Log($"[DEBUG_TRACE] SetBaseMap 호출 시도: {place.main_photo}");
             display.SetBaseMap(place.main_photo);
         }
 
@@ -685,9 +826,16 @@ public class DataManager : MonoBehaviour
         {
             StopCoroutine(fetchCoroutine);
         }
-        LocationInfo currentLocation = Input.location.lastData;
-        string serverUrl = $"{baseServerUrl}&lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
-        fetchCoroutine = StartCoroutine(FetchDataImmediately(serverUrl, currentLocation));
+        
+        float lat = 37.5665f;
+        float lon = 126.9780f;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+        
+        fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
     }
 
     private IEnumerator FetchDataImmediately(string url, LocationInfo currentLocation)

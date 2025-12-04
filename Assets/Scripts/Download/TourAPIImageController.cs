@@ -8,7 +8,11 @@ using System.Text;
 public class TourAPIImageController : MonoBehaviour
 {
     [SerializeField] private DoubleTap3D doubleTap3DScript;
-    [SerializeField] private Text debugText;
+    
+    public GameObject loadingSpinnerPrefab;
+    public float spinnerDuration = 10f;
+    private GameObject currentSpinner;
+    
     private readonly List<Sprite> loadedSprites = new List<Sprite>(100); // 리스트 재사용
     private readonly List<Sprite> spriteList = new List<Sprite>(10); // 리스트 재사용
     private readonly Dictionary<string, Sprite> spriteCache = new Dictionary<string, Sprite>(100); // 스프라이트 캐싱
@@ -22,10 +26,6 @@ public class TourAPIImageController : MonoBehaviour
             LogDebug("[TourAPIImageController] DoubleTap3DScript가 설정되지 않음!");
             enabled = false;
             return;
-        }
-        if (debugText == null)
-        {
-            LogDebug("[TourAPIImageController] 디버그 텍스트 필드가 설정되지 않음!");
         }
     }
 
@@ -123,12 +123,7 @@ public class TourAPIImageController : MonoBehaviour
         if (!enableDebug) return;
         Debug.Log(message);
         debugMessages.AppendLine(message);
-        if (debugText != null)
-        {
-            debugText.text = debugMessages.ToString();
-            if (debugMessages.Length > 10000)
-                debugMessages.Remove(0, debugMessages.Length - 5000);
-            Canvas.ForceUpdateCanvases();
-        }
+        if (debugMessages.Length > 10000)
+            debugMessages.Remove(0, debugMessages.Length - 5000);
     }
 }

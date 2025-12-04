@@ -21,10 +21,6 @@ public class TourAPIManager : MonoBehaviour
 
     public GameObject samplePrefab;
 
-    [Header("Loading Indicator")]
-    [Tooltip("로딩 중 표시할 3D 구형 인디케이터")]
-    [SerializeField] private GameObject loadingIndicator;
-
     private Text debugText;
     private StringBuilder debugMessages = new StringBuilder(10000);
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(100);
@@ -37,6 +33,8 @@ public class TourAPIManager : MonoBehaviour
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터): 25m → 50m → ... → 10000m")]
     public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
+    public float tierDelay = 0.5f;
+    public float objectSpawnDelay = 0.1f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
     private bool isDataLoaded = false;
@@ -150,14 +148,17 @@ public class TourAPIManager : MonoBehaviour
     private IEnumerator FetchDataProgressively(LocationInfo currentLocation)
     {
         LogDebug("[TourAPIManager] Progressive Loading 시작");
+        
         foreach (float radius in loadRadii)
         {
             LogDebug($"[TourAPIManager] {radius}m 반경 데이터 로딩 중...");
             string tourApiUrl = string.Format(tourApiUrlTemplate, BASE_URL, SERVICE_KEY, currentLocation.longitude, currentLocation.latitude, radius);
             yield return StartCoroutine(FetchDataFromTourAPI(tourApiUrl, currentLocation));
-            yield return new WaitForSeconds(0.5f); // 서버 부하 방지
+            if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
+
         LogDebug("[TourAPIManager] Progressive Loading 완료");
+        isDataLoaded = true;
     }
 
     private IEnumerator CheckPositionAndFetchData()
@@ -300,6 +301,7 @@ public class TourAPIManager : MonoBehaviour
                     {
                         LogDebug($"[TourAPIManager] ImageDisplayController 없음 또는 firstimage 비어 있음: ID={place.contentid}");
                     }
+                    if (objectSpawnDelay > 0) yield return new WaitForSeconds(objectSpawnDelay);
                 }
                 else
                 {

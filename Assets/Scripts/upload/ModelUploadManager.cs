@@ -807,8 +807,9 @@ public class ModelUploadManager : MonoBehaviour
                 Input.location.lastData.longitude,
                 Input.location.lastData.altitude
             );
-            locationText = $"Lat:{gpsData.x:F6},Lon:{gpsData.y:F6},Alt:{gpsData.z:F2}";
-            Debug.Log($"위치 데이터 갱신 성공: {locationText}");
+            // UI 표시용은 F4
+            locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
+            Debug.Log($"GPS updated: {locationText}");
         }
         else
         {

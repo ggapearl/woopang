@@ -7,19 +7,39 @@ public class ImageDisplayController : MonoBehaviour
 {
     public Renderer cubeRenderer;
     public DoubleTap3D doubleTap3DScript;
-    public GameObject loadingSpinnerPrefab; // 로딩 스피너 프리팹
+    public GameObject loadingSpinnerPrefab;
+    public float spinnerDuration = 10f;
+    
+    [Header("Debug")]
+    public bool testLoadOnStart = false;
+    public string testImageUrl = "uploads/20250220_115747_집/main.jpg";
     
     private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
     private GameObject currentSpinner;
+    private Vector3 originalScale; // 원래 크기 저장
+    
+    private Coroutine currentBaseMapCoroutine;
+    private Coroutine currentSubPhotoCoroutine;
 
     void Start()
     {
+        // GLB 모델 등 동적으로 렌더러가 생성되는 경우를 위해 에러 처리 완화
         if (cubeRenderer == null)
         {
-            // ...
+            // Debug.LogWarning("[ImageDisplayController] cubeRenderer가 할당되지 않았습니다!");
         }
-        // ...
+        
+        if (doubleTap3DScript == null)
+        {
+            Debug.LogError("[ImageDisplayController] doubleTap3DScript가 할당되지 않았습니다 - Sample_Prefab에 DoubleTap3D 추가 필요!");
+        }
+        
+        if (testLoadOnStart)
+        {
+            Debug.Log("[ImageDisplayController] 테스트 로딩 시작");
+            SetBaseMap(testImageUrl);
+        }
     }
 
     // 메인 사진 설정
@@ -28,72 +48,123 @@ public class ImageDisplayController : MonoBehaviour
         if (!enabled) return;
         
         // 로딩 시작: 스피너 표시, 큐브 숨김
-        ShowSpinner(true);
-        
+        ShowSpinner(true); // ⭐ 스피너 활성화
+
         StartCoroutine(LoadBaseMapTexture(imageUrl));
     }
 
     private IEnumerator LoadBaseMapTexture(string imageUrl)
     {
         float startTime = Time.time;
-        string fullUrl = "https://woopang.com/" + imageUrl.Replace("\\", "/");
+        string fullUrl = imageUrl.StartsWith("http") ? imageUrl : "https://woopang.com/" + imageUrl.Replace("\\", "/");
+        // Debug.Log($"[DEBUG_IMAGE] Loading BaseMap: {fullUrl}");
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
-            yield return request.SendWebRequest();
-
-            // 최소 1초 대기 (로딩이 빨라도 1초간 스피너 보여줌)
-            float elapsed = Time.time - startTime;
-            if (elapsed < 1.0f) yield return new WaitForSeconds(1.0f - elapsed);
-
-            if (request.result == UnityWebRequest.Result.Success)
+            request.timeout = 20; // 20초 타임아웃
+            
+            try
             {
-                Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
-                if (newTexture != null)
-                {
-                    if (baseMapTexture != null) Destroy(baseMapTexture);
-                    baseMapTexture = newTexture;
+                yield return request.SendWebRequest();
 
-                    if (cubeRenderer != null)
+                float elapsed = Time.time - startTime;
+                Debug.Log($"[DEBUG_SPINNER] 로딩 완료. 경과: {elapsed:F2}s, 목표: {spinnerDuration}s, 추가 대기: {Mathf.Max(0, spinnerDuration - elapsed):F2}s");
+                
+                if (elapsed < spinnerDuration) yield return new WaitForSeconds(spinnerDuration - elapsed);
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
+                    if (newTexture != null)
                     {
-                        if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
-                        else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+                        if (baseMapTexture != null) Destroy(baseMapTexture);
+                        baseMapTexture = newTexture;
+
+                        if (cubeRenderer != null)
+                        {
+                            if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
+                            else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+                        }
                     }
                 }
-            }
-            else
-            {
-                Debug.LogError($"[ImageDisplayController] 로딩 실패: {fullUrl}");
-                // 실패 시에도 일단 검은색(또는 기본값)으로 보여줌
-                if (cubeRenderer != null)
+                else
                 {
-                     if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", Texture2D.blackTexture);
-                     else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", Texture2D.blackTexture);
+                    Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
                 }
             }
+            finally
+            {
+                // 코루틴이 어떻게 끝나든 (성공, 실패, 중단) 스피너는 꺼야 함
+                Debug.Log("[DEBUG_SPINNER] 로딩 코루틴 종료 -> 스피너 끔 (finally)");
+                ShowSpinner(false); // ⭐ 스피너 비활성화
+                currentBaseMapCoroutine = null;
+            }
         }
-        
-        // 로딩 완료: 스피너 숨김, 큐브 표시
-        ShowSpinner(false);
     }
 
     private void ShowSpinner(bool show)
     {
-        if (show)
+        Debug.Log($"[DEBUG_SPINNER] ShowSpinner({show})");
+
+        // 스피너 생성 (없으면)
+        if (show && currentSpinner == null && loadingSpinnerPrefab != null)
         {
-            if (currentSpinner == null && loadingSpinnerPrefab != null)
+            currentSpinner = Instantiate(loadingSpinnerPrefab, transform);
+            currentSpinner.transform.localPosition = Vector3.zero;
+        }
+
+        // 모든 렌더러 끄기/켜기 (스피너 제외)
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+        foreach (var r in renderers)
+        {
+            // 스피너의 렌더러는 건너뜀
+            if (currentSpinner != null && r.transform.IsChildOf(currentSpinner.transform)) continue;
+            
+            Debug.Log($"[DEBUG_SPINNER] Renderer {r.name} 상태 변경: {!show}");
+            
+            // 최상위 오브젝트(나 자신)라면 Renderer만 끄고, 자식이면 오브젝트를 끔
+            if (r.gameObject == this.gameObject)
             {
-                currentSpinner = Instantiate(loadingSpinnerPrefab, transform);
-                currentSpinner.transform.localPosition = Vector3.zero;
+                r.enabled = !show;
             }
-            if (currentSpinner != null) currentSpinner.SetActive(true);
-            if (cubeRenderer != null) cubeRenderer.enabled = false;
+            else
+            {
+                r.gameObject.SetActive(!show);
+            }
         }
-        else
+
+        // 스피너 켜기/끄기
+        if (currentSpinner != null) currentSpinner.SetActive(show);
+        
+        // 로딩 완료 시(show == false) 등장 애니메이션
+        if (!show)
         {
-            if (currentSpinner != null) currentSpinner.SetActive(false);
-            if (cubeRenderer != null) cubeRenderer.enabled = true;
+            StartCoroutine(PopUpAnimation());
         }
+    }
+
+    private IEnumerator PopUpAnimation()
+    {
+        float duration = 0.4f;
+        float elapsed = 0f;
+        
+        // 시작: 크기 0
+        transform.localScale = Vector3.zero;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            // BackOut Easing (살짝 튀어나오는 효과)
+            float s = 1.70158f;
+            float scale = ((t - 1) * t * ((s + 1) * (t - 1) + s) + 1);
+            
+            if (scale < 0) scale = 0; // 초반에 음수 방지
+            
+            transform.localScale = originalScale * scale;
+            yield return null;
+        }
+        transform.localScale = originalScale;
     }
 
     // 서브 사진 설정
@@ -125,7 +196,7 @@ public class ImageDisplayController : MonoBehaviour
 
         foreach (string photoUrl in subPhotoUrls)
         {
-            string fullUrl = "https://woopang.com/" + photoUrl;
+            string fullUrl = photoUrl.StartsWith("http") ? photoUrl : "https://woopang.com/" + photoUrl.Replace("\\", "/");
 
             using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
             {
@@ -203,6 +274,13 @@ public class ImageDisplayController : MonoBehaviour
     // 모든 텍스처 해제
     public void ClearImages()
     {
+        StopAllCoroutines(); // 중요: 진행 중인 로딩 중지
+        
+        // 코루틴이 중단되면 ShowSpinner(false)가 호출되지 않아 큐브가 꺼진 채로 남을 수 있음.
+        // 따라서 여기서 강제로 초기화해줘야 함.
+        ShowSpinner(false); // ⭐ 스피너 강제 비활성화
+
+        if (cubeRenderer != null)
         if (cubeRenderer != null && cubeRenderer.material.HasProperty("_MainTex"))
         {
             cubeRenderer.material.SetTexture("_MainTex", null);

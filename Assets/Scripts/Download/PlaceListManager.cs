@@ -49,7 +49,7 @@ public class PlaceListManager : MonoBehaviour
             { "petFriendly", "[애견동반]" },
             { "noImage", "[이미지없음]" },
             { "woopangData", "우팡 데이터" },
-            { "tourApiData", "관광공사API 데이터" }
+            { "tourApiData", "관광공사 데이터" }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "[ペット同伴]" },
@@ -165,8 +165,8 @@ public class PlaceListManager : MonoBehaviour
         Debug.Log("[PlaceListManager] 데이터 로딩 대기 시작...");
         float waitTime = 0f;
 
-        while ((dataManager != null && !dataManager.IsDataLoaded()) ||
-               (tourAPIManager != null && !tourAPIManager.IsDataLoaded()))
+        while ((dataManager != null && !dataManager.IsDataLoaded() && dataManager.GetPlaceDataMap().Count == 0) ||
+               (tourAPIManager != null && !tourAPIManager.IsDataLoaded() && tourAPIManager.GetPlaceDataMap().Count == 0))
         {
             waitTime += 1f;
             Debug.Log($"[PlaceListManager] 데이터 대기 중... {waitTime}초 - DataManager={dataManager?.IsDataLoaded()}, TourAPI={tourAPIManager?.IsDataLoaded()}");

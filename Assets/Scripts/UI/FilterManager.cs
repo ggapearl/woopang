@@ -4,34 +4,24 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
-/// <summary>
-/// 장소 리스트 필터링을 관리하는 컴포넌트
-/// - 일반 클릭: 토글 ON/OFF
-/// - 길게 누르기 (Long Press): 해당 토글만 활성화, 나머지 비활성화
-/// - 설정은 PlayerPrefs로 영속성 유지
-/// </summary>
 public class FilterManager : MonoBehaviour
 {
     [Header("Filter Toggles")]
-    [SerializeField] private Toggle petFriendlyToggle;  // 애견동반
-    [SerializeField] private Toggle publicDataToggle;   // 공공데이터 (TourAPI)
-    [SerializeField] private Toggle subwayToggle;       // 지하철
-    [SerializeField] private Toggle busToggle;          // 버스
-    [SerializeField] private Toggle alcoholToggle;      // 주류 판매
-    [SerializeField] private Toggle woopangDataToggle;  // 우팡데이터
-    [SerializeField] private Toggle object3DToggle;     // 3D 오브젝트 (GLB, OBJ 등)
-
-    [Header("Control Buttons")]
-    [SerializeField] private Button selectAllButton;    // 전체 선택 버튼
-    [SerializeField] private Button deselectAllButton;  // 전체 해제 버튼
+    [SerializeField] private Toggle petFriendlyToggle;
+    [SerializeField] private Toggle publicDataToggle;
+    [SerializeField] private Toggle subwayToggle;
+    [SerializeField] private Toggle busToggle;
+    [SerializeField] private Toggle alcoholToggle;
+    [SerializeField] private Toggle woopangDataToggle;
+    [SerializeField] private Toggle object3DToggle;
 
     [Header("References")]
     [SerializeField] private PlaceListManager placeListManager;
-    [SerializeField] private DataManager dataManager;         // 우팡 서버 데이터 (AR 큐브)
-    [SerializeField] private TourAPIManager tourAPIManager;   // 공공데이터 (AR 큐브)
+    [SerializeField] private DataManager dataManager;
+    [SerializeField] private TourAPIManager tourAPIManager;
 
     [Header("Long Press Settings")]
-    [SerializeField] private float longPressDuration = 0.8f;  // 길게 누르기 판정 시간 (초)
+    [SerializeField] private float longPressDuration = 0.8f;
 
     // 필터 상태
     private bool filterPetFriendly = true;
@@ -42,13 +32,9 @@ public class FilterManager : MonoBehaviour
     private bool filterWoopangData = true;
     private bool filterObject3D = true;
 
-    // 프로그래매틱 변경 중 플래그 (이벤트 무한 루프 방지)
     private bool isUpdatingToggles = false;
 
-    // Long Press 추적
-    private Dictionary<Toggle, LongPressHandler> longPressHandlers = new Dictionary<Toggle, LongPressHandler>();
-
-    // PlayerPrefs 키 (초기화를 위해 키 변경 V2)
+    // PlayerPrefs 키 (V2)
     private const string PREF_PET_FRIENDLY = "Filter_PetFriendly_V2";
     private const string PREF_PUBLIC_DATA = "Filter_PublicData_V2";
     private const string PREF_SUBWAY = "Filter_Subway_V2";
@@ -57,12 +43,61 @@ public class FilterManager : MonoBehaviour
     private const string PREF_WOOPANG_DATA = "Filter_WoopangData_V2";
     private const string PREF_OBJECT3D = "Filter_Object3D_V2";
 
+    // 다국어 데이터
+    private Dictionary<string, Dictionary<string, string>> localizedFilterNames = new Dictionary<string, Dictionary<string, string>>
+    {
+        { "en", new Dictionary<string, string> {
+            { "petFriendly", "Pet Friendly" },
+            { "publicData", "Public Data" },
+            { "subway", "Subway" },
+            { "bus", "Bus" },
+            { "alcohol", "Alcohol" },
+            { "woopangData", "Woopang Data" },
+            { "object3D", "3D Objects" }
+        }},
+        { "ko", new Dictionary<string, string> {
+            { "petFriendly", "애견동반" },
+            { "publicData", "공공데이터" },
+            { "subway", "지하철" },
+            { "bus", "버스" },
+            { "alcohol", "주류판매" },
+            { "woopangData", "우팡데이터" },
+            { "object3D", "3D 오브젝트" }
+        }},
+        { "ja", new Dictionary<string, string> {
+            { "petFriendly", "ペット同伴" },
+            { "publicData", "公共データ" },
+            { "subway", "地下鉄" },
+            { "bus", "バス" },
+            { "alcohol", "アルコール" },
+            { "woopangData", "Woopangデータ" },
+            { "object3D", "3Dオブジェクト" }
+        }},
+        { "zh", new Dictionary<string, string> {
+            { "petFriendly", "宠物友好" },
+            { "publicData", "公共数据" },
+            { "subway", "地铁" },
+            { "bus", "公交车" },
+            { "alcohol", "酒类销售" },
+            { "woopangData", "Woopang数据" },
+            { "object3D", "3D对象" }
+        }},
+        { "es", new Dictionary<string, string> {
+            { "petFriendly", "Admite Mascotas" },
+            { "publicData", "Datos Públicos" },
+            { "subway", "Metro" },
+            { "bus", "Autobús" },
+            { "alcohol", "Alcohol" },
+            { "woopangData", "Datos Woopang" },
+            { "object3D", "Objetos 3D" }
+        }}
+    };
+
     void Start()
     {
-        // 저장된 설정 불러오기
         LoadFilterSettings();
+        UpdateLanguage();
 
-        // 토글 이벤트 리스너 등록 + Long Press Handler 추가
         SetupToggle(petFriendlyToggle, filterPetFriendly, OnPetFriendlyToggleChanged, "petFriendly");
         SetupToggle(publicDataToggle, filterPublicData, OnPublicDataToggleChanged, "publicData");
         SetupToggle(subwayToggle, filterSubway, OnSubwayToggleChanged, "subway");
@@ -71,18 +106,41 @@ public class FilterManager : MonoBehaviour
         SetupToggle(woopangDataToggle, filterWoopangData, OnWoopangDataToggleChanged, "woopangData");
         SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
 
-        // 버튼 이벤트 리스너 등록
-        if (selectAllButton != null)
+        ApplyAllFilters();
+    }
+
+    private void UpdateLanguage()
+    {
+        string langCode = "en";
+        switch (Application.systemLanguage)
         {
-            selectAllButton.onClick.AddListener(SelectAll);
-        }
-        if (deselectAllButton != null)
-        {
-            deselectAllButton.onClick.AddListener(DeselectAll);
+            case SystemLanguage.Korean: langCode = "ko"; break;
+            case SystemLanguage.Japanese: langCode = "ja"; break;
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional: langCode = "zh"; break;
+            case SystemLanguage.Spanish: langCode = "es"; break;
         }
 
-        // 초기 필터 적용
-        ApplyAllFilters();
+        if (!localizedFilterNames.ContainsKey(langCode)) langCode = "en";
+        var texts = localizedFilterNames[langCode];
+
+        SetToggleLabel(petFriendlyToggle, texts["petFriendly"]);
+        SetToggleLabel(publicDataToggle, texts["publicData"]);
+        SetToggleLabel(subwayToggle, texts["subway"]);
+        SetToggleLabel(busToggle, texts["bus"]);
+        SetToggleLabel(alcoholToggle, texts["alcohol"]);
+        SetToggleLabel(woopangDataToggle, texts["woopangData"]);
+        SetToggleLabel(object3DToggle, texts["object3D"]);
+    }
+
+    private void SetToggleLabel(Toggle toggle, string text)
+    {
+        if (toggle != null)
+        {
+            Text label = toggle.GetComponentInChildren<Text>();
+            if (label != null) label.text = text;
+        }
     }
 
     private void SetupToggle(Toggle toggle, bool initialValue, UnityEngine.Events.UnityAction<bool> callback, string filterName)
@@ -92,24 +150,16 @@ public class FilterManager : MonoBehaviour
             toggle.isOn = initialValue;
             toggle.onValueChanged.AddListener(callback);
 
-            // Long Press Handler 추가
             LongPressHandler handler = toggle.gameObject.AddComponent<LongPressHandler>();
             handler.longPressDuration = longPressDuration;
             handler.onLongPress = () => OnLongPress(filterName);
-            longPressHandlers[toggle] = handler;
         }
     }
 
-    /// <summary>
-    /// 길게 누르기 이벤트 핸들러
-    /// </summary>
     private void OnLongPress(string filterName)
     {
-        Debug.Log($"[FilterManager] Long Press 감지: {filterName}");
-
         isUpdatingToggles = true;
 
-        // 선택된 필터만 켜고 나머지는 끄기
         filterPetFriendly = (filterName == "petFriendly");
         filterPublicData = (filterName == "publicData");
         filterSubway = (filterName == "subway");
@@ -125,9 +175,6 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
-    /// <summary>
-    /// 저장된 필터 설정 불러오기
-    /// </summary>
     private void LoadFilterSettings()
     {
         filterPetFriendly = PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 1) == 1;
@@ -137,13 +184,8 @@ public class FilterManager : MonoBehaviour
         filterAlcohol = PlayerPrefs.GetInt(PREF_ALCOHOL, 1) == 1;
         filterWoopangData = PlayerPrefs.GetInt(PREF_WOOPANG_DATA, 1) == 1;
         filterObject3D = PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
-
-        Debug.Log($"[FilterManager] 설정 불러오기 완료 - PetFriendly: {filterPetFriendly}, PublicData: {filterPublicData}, Alcohol: {filterAlcohol}, WoopangData: {filterWoopangData}, Object3D: {filterObject3D}");
     }
 
-    /// <summary>
-    /// 현재 필터 설정 저장하기
-    /// </summary>
     private void SaveFilterSettings()
     {
         PlayerPrefs.SetInt(PREF_PET_FRIENDLY, filterPetFriendly ? 1 : 0);
@@ -154,61 +196,8 @@ public class FilterManager : MonoBehaviour
         PlayerPrefs.SetInt(PREF_WOOPANG_DATA, filterWoopangData ? 1 : 0);
         PlayerPrefs.SetInt(PREF_OBJECT3D, filterObject3D ? 1 : 0);
         PlayerPrefs.Save();
-
-        Debug.Log("[FilterManager] 설정 저장 완료");
     }
 
-    /// <summary>
-    /// 전체 선택
-    /// </summary>
-    public void SelectAll()
-    {
-        isUpdatingToggles = true;
-
-        filterPetFriendly = true;
-        filterPublicData = true;
-        filterSubway = true;
-        filterBus = true;
-        filterAlcohol = true;
-        filterWoopangData = true;
-        filterObject3D = true;
-
-        UpdateAllToggleUI();
-        SaveFilterSettings();
-
-        isUpdatingToggles = false;
-        ApplyAllFilters();
-
-        Debug.Log("[FilterManager] 전체 선택");
-    }
-
-    /// <summary>
-    /// 전체 해제
-    /// </summary>
-    public void DeselectAll()
-    {
-        isUpdatingToggles = true;
-
-        filterPetFriendly = false;
-        filterPublicData = false;
-        filterSubway = false;
-        filterBus = false;
-        filterAlcohol = false;
-        filterWoopangData = false;
-        filterObject3D = false;
-
-        UpdateAllToggleUI();
-        SaveFilterSettings();
-
-        isUpdatingToggles = false;
-        ApplyAllFilters();
-
-        Debug.Log("[FilterManager] 전체 해제");
-    }
-
-    /// <summary>
-    /// 모든 토글 UI 업데이트
-    /// </summary>
     private void UpdateAllToggleUI()
     {
         if (petFriendlyToggle != null) petFriendlyToggle.isOn = filterPetFriendly;
@@ -276,34 +265,13 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
-    /// <summary>
-    /// 모든 필터를 적용 (PlaceListManager, DataManager, TourAPIManager)
-    /// </summary>
     private void ApplyAllFilters()
     {
         Dictionary<string, bool> filters = GetActiveFilters();
 
-        // UI 리스트 필터링
-        if (placeListManager != null)
-        {
-            placeListManager.ApplyFilters(filters);
-        }
-
-        // AR 오브젝트 필터링 (우팡 데이터)
-        if (dataManager != null)
-        {
-            dataManager.ApplyFilters(filters);
-            Debug.Log($"[FilterManager] DataManager.ApplyFilters 호출 - woopangData={filterWoopangData}");
-        }
-
-        // AR 오브젝트 필터링 (공공데이터)
-        if (tourAPIManager != null)
-        {
-            tourAPIManager.ApplyFilters(filters);
-            Debug.Log($"[FilterManager] TourAPIManager.ApplyFilters 호출 - publicData={filterPublicData}");
-        }
-
-        Debug.Log($"[FilterManager] 필터 적용 - PetFriendly: {filterPetFriendly}, PublicData: {filterPublicData}, Alcohol: {filterAlcohol}, WoopangData: {filterWoopangData}");
+        if (placeListManager != null) placeListManager.ApplyFilters(filters);
+        if (dataManager != null) dataManager.ApplyFilters(filters);
+        if (tourAPIManager != null) tourAPIManager.ApplyFilters(filters);
     }
 
     public Dictionary<string, bool> GetActiveFilters()
@@ -315,15 +283,12 @@ public class FilterManager : MonoBehaviour
             { "subway", filterSubway },
             { "bus", filterBus },
             { "alcohol", filterAlcohol },
-            { "woopangData", filterWoopangData }
+            { "woopangData", filterWoopangData },
+            { "object3D", filterObject3D }
         };
     }
 }
 
-/// <summary>
-/// 길게 누르기(Long Press)를 감지하는 컴포넌트
-/// EventTrigger를 사용하여 PointerDown/PointerUp 이벤트 처리
-/// </summary>
 public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler
 {
     public float longPressDuration = 0.8f;
@@ -348,7 +313,6 @@ public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHa
             {
                 longPressTriggered = true;
                 onLongPress?.Invoke();
-                Debug.Log($"[LongPressHandler] Long Press 발생! ({pressedTime:F2}초)");
             }
         }
     }
@@ -358,44 +322,24 @@ public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         isPressed = true;
         pressedTime = 0f;
         longPressTriggered = false;
-        Debug.Log("[LongPressHandler] Press 시작");
     }
 
     public void OnPointerUp(PointerEventData eventData)
     {
         isPressed = false;
-
-        if (longPressTriggered)
-        {
-            Debug.Log("[LongPressHandler] Long Press 완료");
-        }
-        else
-        {
-            Debug.Log($"[LongPressHandler] 일반 클릭 ({pressedTime:F2}초)");
-        }
-
         pressedTime = 0f;
     }
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        // Long Press가 발생했으면 일반 클릭 무시
         if (longPressTriggered)
         {
-            Debug.Log("[LongPressHandler] Long Press로 인해 클릭 무시");
-
-            // Toggle 상태를 이전 상태로 되돌림
-            if (cachedToggle != null)
-            {
-                cachedToggle.isOn = !cachedToggle.isOn;
-            }
-
+            if (cachedToggle != null) cachedToggle.isOn = !cachedToggle.isOn;
             longPressTriggered = false;
-            eventData.Use(); // 이벤트 소비
+            eventData.Use();
         }
         else
         {
-            // 일반 클릭은 Toggle이 정상 처리
             longPressTriggered = false;
         }
     }
