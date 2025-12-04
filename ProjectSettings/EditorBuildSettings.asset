@@ -8,10 +8,10 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/WP_1119.unity
     guid: 6ab4d9f386b89c24781ef15605bf8ff9
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/WP_1129.unity
     guid: f4a8b9c3d2e1f0a5b6c7d8e9f0a1b2c3
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/WP_1201.unity
     guid: da1dd099225a928498dac259894227e9
   m_configObjects:
