@@ -162,6 +162,8 @@ public class OffScreenIndicator : MonoBehaviour
 
     private Indicator GetIndicator(ref Indicator indicator, IndicatorType type)
     {
+        bool isNewlyActivated = false;
+
         if (indicator != null)
         {
             if (indicator.Type != type)
@@ -169,13 +171,23 @@ public class OffScreenIndicator : MonoBehaviour
                 indicator.Activate(false);
                 indicator = type == IndicatorType.BOX ? BoxObjectPool.current.GetPooledObject() : ArrowObjectPool.current.GetPooledObject();
                 indicator.Activate(true);
+                isNewlyActivated = true;
             }
         }
         else
         {
             indicator = type == IndicatorType.BOX ? BoxObjectPool.current.GetPooledObject() : ArrowObjectPool.current.GetPooledObject();
             indicator.Activate(true);
+            isNewlyActivated = true;
         }
+
+        // 화살표 인디케이터가 새로 활성화되면 Sparkle 효과 재생
+        if (isNewlyActivated && type == IndicatorType.ARROW)
+        {
+            Vector3 screenPos = indicator.transform.position;
+            IndicatorSparkleHelper.PlaySparkleForIndicator(screenPos, type);
+        }
+
         return indicator;
     }
 
