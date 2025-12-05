@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 [RequireComponent(typeof(Image))]
 public class Indicator : MonoBehaviour
@@ -7,6 +8,14 @@ public class Indicator : MonoBehaviour
     [SerializeField] private IndicatorType indicatorType;
     private Image indicatorImage;
     private Text distanceText;
+
+    [Header("Fade In Settings")]
+    [Tooltip("페이드인 시간 (초)")]
+    public float fadeInDuration = 0.5f;
+
+    private CanvasGroup canvasGroup;
+    private Coroutine fadeCoroutine;
+    private bool isFirstActivation = true;
 
     public bool Active
     {
@@ -28,6 +37,13 @@ public class Indicator : MonoBehaviour
     {
         indicatorImage = transform.GetComponent<Image>();
         distanceText = transform.GetComponentInChildren<Text>();
+
+        // CanvasGroup 추가 (페이드인용)
+        canvasGroup = GetComponent<CanvasGroup>();
+        if (canvasGroup == null)
+        {
+            canvasGroup = gameObject.AddComponent<CanvasGroup>();
+        }
     }
 
     public void SetImageColor(Color color)
@@ -86,6 +102,67 @@ public class Indicator : MonoBehaviour
     public void Activate(bool value)
     {
         transform.gameObject.SetActive(value);
+
+        if (value && isFirstActivation)
+        {
+            // 처음 활성화될 때만 페이드인
+            isFirstActivation = false;
+            StartFadeIn();
+        }
+        else if (!value)
+        {
+            // 비활성화될 때는 다음 활성화를 위해 플래그 리셋
+            isFirstActivation = true;
+
+            // 페이드인 중이었다면 중단
+            if (fadeCoroutine != null)
+            {
+                StopCoroutine(fadeCoroutine);
+                fadeCoroutine = null;
+            }
+
+            // 알파값 리셋
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 0f;
+            }
+        }
+    }
+
+    private void StartFadeIn()
+    {
+        if (canvasGroup == null) return;
+
+        // 기존 페이드인 중단
+        if (fadeCoroutine != null)
+        {
+            StopCoroutine(fadeCoroutine);
+        }
+
+        // 페이드인 시작
+        fadeCoroutine = StartCoroutine(FadeInCoroutine());
+    }
+
+    private IEnumerator FadeInCoroutine()
+    {
+        // 시작 알파값 0
+        canvasGroup.alpha = 0f;
+
+        float elapsed = 0f;
+        while (elapsed < fadeInDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / fadeInDuration;
+
+            // 페이드인
+            canvasGroup.alpha = Mathf.Lerp(0f, 1f, t);
+
+            yield return null;
+        }
+
+        // 최종 알파값 1
+        canvasGroup.alpha = 1f;
+        fadeCoroutine = null;
     }
 
     public void SetScale(Vector3 scale)
