@@ -23,7 +23,7 @@ public class DoubleTap3D : MonoBehaviour
     public Text debugText;
     private Text placeInfoText;
     public float tapSpeed = 0.5f;
-    public float swipeThreshold = 50f;
+    public float swipeThreshold = 30f;  // 50f → 30f (더 민감하게)
     public float fadeDuration = 1.0f;  // 0.5초 → 1.0초 (2배 느리게)
 
     private float lastTapTime = 0f;
@@ -34,6 +34,9 @@ public class DoubleTap3D : MonoBehaviour
     private bool isFading = false;
     private Vector2 touchStartPos;
     private bool isSwiping;
+
+    // FullScreenGuide 패널 페이드용 CanvasGroup
+    private CanvasGroup guidePanelCanvasGroup;
 
     private Sprite infoSprite1;
     private Sprite infoSprite2;
@@ -105,6 +108,17 @@ public class DoubleTap3D : MonoBehaviour
         fullscreenCanvasGroup.gameObject.SetActive(false);
         guidePanel.SetActive(false);
         fullscreenCanvasGroup.alpha = 0f;
+
+        // FullScreenGuide 패널에 CanvasGroup 추가 (없으면 자동 생성)
+        if (guidePanel != null)
+        {
+            guidePanelCanvasGroup = guidePanel.GetComponent<CanvasGroup>();
+            if (guidePanelCanvasGroup == null)
+            {
+                guidePanelCanvasGroup = guidePanel.AddComponent<CanvasGroup>();
+            }
+            guidePanelCanvasGroup.alpha = 0f;
+        }
 
         if (descriptionTextUI != null)
         {
@@ -343,6 +357,27 @@ public class DoubleTap3D : MonoBehaviour
                     CloseFullscreen();  // 페이드아웃으로 닫힘
                     isSwiping = false;
                 }
+            }
+            else if (touch.phase == TouchPhase.Ended && isSwiping && isFullscreen)
+            {
+                // 터치 종료 시점에서도 스와이프 거리 체크 (빠른 스와이프 감지)
+                Vector2 swipeDelta = touch.position - touchStartPos;
+
+                // 좌우 스와이프: 이미지 넘기기
+                if (Mathf.Abs(swipeDelta.x) > swipeThreshold && Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))
+                {
+                    if (swipeDelta.x > 0)
+                        ShowPreviousImage();  // 오른쪽 스와이프 → 이전 이미지
+                    else
+                        ShowNextImage();      // 왼쪽 스와이프 → 다음 이미지
+                }
+                // 아래로 스와이프: 패널 닫기
+                else if (Mathf.Abs(swipeDelta.y) > swipeThreshold && Mathf.Abs(swipeDelta.y) > Mathf.Abs(swipeDelta.x) && swipeDelta.y < 0)
+                {
+                    CloseFullscreen();  // 페이드아웃으로 닫힘
+                }
+
+                isSwiping = false;
             }
             else if (touch.phase == TouchPhase.Ended)
             {
@@ -631,15 +666,28 @@ public class DoubleTap3D : MonoBehaviour
     {
         float elapsed = 0f;
         fullscreenCanvasGroup.alpha = 0f;
+        if (guidePanelCanvasGroup != null)
+        {
+            guidePanelCanvasGroup.alpha = 0f;
+        }
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            fullscreenCanvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsed / duration);
+            float alpha = Mathf.Lerp(0f, 1f, elapsed / duration);
+            fullscreenCanvasGroup.alpha = alpha;
+            if (guidePanelCanvasGroup != null)
+            {
+                guidePanelCanvasGroup.alpha = alpha;
+            }
             yield return null;
         }
 
         fullscreenCanvasGroup.alpha = 1f;
+        if (guidePanelCanvasGroup != null)
+        {
+            guidePanelCanvasGroup.alpha = 1f;
+        }
     }
 
     IEnumerator FadeOutCanvas(float duration)
@@ -650,11 +698,20 @@ public class DoubleTap3D : MonoBehaviour
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            fullscreenCanvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsed / duration);
+            float alpha = Mathf.Lerp(1f, 0f, elapsed / duration);
+            fullscreenCanvasGroup.alpha = alpha;
+            if (guidePanelCanvasGroup != null)
+            {
+                guidePanelCanvasGroup.alpha = alpha;
+            }
             yield return null;
         }
 
         fullscreenCanvasGroup.alpha = 0f;
+        if (guidePanelCanvasGroup != null)
+        {
+            guidePanelCanvasGroup.alpha = 0f;
+        }
         fullscreenCanvasGroup.gameObject.SetActive(false);
         guidePanel.SetActive(false);
         if (descriptionTextUI != null)
