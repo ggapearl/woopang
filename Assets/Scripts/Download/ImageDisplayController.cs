@@ -7,11 +7,7 @@ public class ImageDisplayController : MonoBehaviour
 {
     public Renderer cubeRenderer;
     public DoubleTap3D doubleTap3DScript;
-    
-    [Header("Debug")]
-    public bool testLoadOnStart = false;
-    public string testImageUrl = "uploads/20250220_115747_집/main.jpg";
-    
+
     private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
     private Vector3 originalScale; // 원래 크기 저장
@@ -34,12 +30,6 @@ public class ImageDisplayController : MonoBehaviour
         if (doubleTap3DScript == null)
         {
             Debug.LogError("[ImageDisplayController] doubleTap3DScript가 할당되지 않았습니다 - Sample_Prefab에 DoubleTap3D 추가 필요!");
-        }
-
-        if (testLoadOnStart)
-        {
-            Debug.Log("[ImageDisplayController] 테스트 로딩 시작");
-            SetBaseMap(testImageUrl);
         }
     }
 
