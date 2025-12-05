@@ -14,6 +14,10 @@ public class PlaceListManager : MonoBehaviour
     [Tooltip("ListPanel 게임오브젝트 참조 (활성화 상태 체크용)")]
     [SerializeField] private GameObject listPanel;
 
+    [Header("Skeleton Loader")]
+    [Tooltip("스켈레톤 로더 컴포넌트 (Optional - 자동 감지)")]
+    [SerializeField] private PlaceListSkeletonLoader skeletonLoader;
+
     [SerializeField] private float updateInterval = 10f; // 10초로 변경
 
     [Header("Distance Control")]
@@ -94,6 +98,12 @@ public class PlaceListManager : MonoBehaviour
             return;
         }
 
+        // 스켈레톤 로더 자동 감지
+        if (skeletonLoader == null)
+        {
+            skeletonLoader = GetComponent<PlaceListSkeletonLoader>();
+        }
+
         // 슬라이더 초기화
         if (distanceSlider != null)
         {
@@ -161,7 +171,13 @@ public class PlaceListManager : MonoBehaviour
 
     private IEnumerator InitializeAndUpdateUI()
     {
-        // ... (기존 코드 유지)
+        // 스켈레톤 로더 표시
+        if (skeletonLoader != null)
+        {
+            skeletonLoader.ShowSkeletonLoader();
+            Debug.Log("[PlaceListManager] 스켈레톤 로더 시작");
+        }
+
         Debug.Log("[PlaceListManager] 데이터 로딩 대기 시작...");
         float waitTime = 0f;
 
@@ -181,25 +197,29 @@ public class PlaceListManager : MonoBehaviour
 
         Debug.Log("[PlaceListManager] 데이터 로딩 완료! 첫 UI 업데이트 시작");
         UpdateUI();
+
+        // 스켈레톤 숨기고 텍스트 페이드인
+        if (skeletonLoader != null)
+        {
+            skeletonLoader.HideSkeletonAndShowText();
+            Debug.Log("[PlaceListManager] 스켈레톤 로더 종료 및 텍스트 페이드인 시작");
+        }
+
         StartCoroutine(UpdateUIPeriodically());
     }
 
     private IEnumerator UpdateUIPeriodically()
     {
-        float startTime = Time.time;
-        
         while (true)
         {
-            // 처음 1분(60초) 동안은 1초 간격, 그 이후는 설정된 간격(10초)
-            float currentInterval = (Time.time - startTime < 60f) ? 1f : updateInterval;
-            
-            yield return new WaitForSeconds(currentInterval);
+            // 항상 10초 간격으로 업데이트 (1초 간격 제거 - 스와이프 방해 방지)
+            yield return new WaitForSeconds(updateInterval);
 
             // ListPanel이 활성화되어 있을 때만 업데이트
             if (listPanel != null && listPanel.activeInHierarchy)
             {
                 UpdateUI();
-                Debug.Log($"[PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: {currentInterval}s)");
+                Debug.Log($"[PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: {updateInterval}s)");
             }
         }
     }

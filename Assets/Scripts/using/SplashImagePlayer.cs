@@ -41,20 +41,9 @@ public class SplashImagePlayer : MonoBehaviour
             }
         }
 
-        // 다른 UI는 Awake에서 미리 숨김
-        if (hideOtherUI)
-        {
-            Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
-            foreach (Canvas canvas in allCanvases)
-            {
-                if (canvas != splashCanvas && canvas.gameObject.activeInHierarchy)
-                {
-                    canvas.enabled = false;
-                    hiddenCanvases.Add(canvas);
-                }
-            }
-            Debug.Log($"[SplashImagePlayer] Awake에서 {hiddenCanvases.Count}개의 Canvas를 숨겼습니다.");
-        }
+        // ✅ 다른 UI 숨김 로직 제거 (검은색 플래시 원인)
+        // Sort Order가 충분히 높으면 다른 Canvas를 숨길 필요 없음
+        Debug.Log($"[SplashImagePlayer] Sort Order 우선순위로 스플래시 표시 (Canvas 숨김 생략)");
 
         // 텍스처와 AspectRatioFitter 설정 (한 번만 실행)
         if (splashRawImage != null && splashTexture != null)

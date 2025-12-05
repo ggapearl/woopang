@@ -69,14 +69,12 @@ public class OffScreenIndicator : MonoBehaviour
             if (target.NeedBoxIndicator && isTargetVisible)
             {
                 screenPosition.z = 0;
-                indicator = GetIndicator(ref target.indicator, IndicatorType.BOX, target);
+                indicator = GetIndicator(ref target.indicator, IndicatorType.BOX, target, screenPosition);
             }
             else if (target.NeedArrowIndicator && !isTargetVisible)
             {
                 float angle = float.MinValue;
                 OffScreenIndicatorCore.GetArrowIndicatorPositionAndAngle(ref screenPosition, ref angle, screenCentre, screenBoundsX);
-                indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target);
-                indicator.transform.rotation = Quaternion.Euler(0, 0, angle * Mathf.Rad2Deg);
 
                 // 수정: 추가 경계 값을 반영한 클램프
                 float limitX = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetLeft; // 좌측 경계
@@ -86,6 +84,10 @@ public class OffScreenIndicator : MonoBehaviour
 
                 screenPosition.x = Mathf.Clamp(screenPosition.x, screenCentre.x - limitX, screenCentre.x + limitXRight);
                 screenPosition.y = Mathf.Clamp(screenPosition.y, screenCentre.y - limitY, screenCentre.y + limitYTop);
+
+                // ✅ 최종 위치 계산 후 GetIndicator() 호출 (Sparkle 정확한 위치에 생성)
+                indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target, screenPosition);
+                indicator.transform.rotation = Quaternion.Euler(0, 0, angle * Mathf.Rad2Deg);
             }
 
             if (indicator)
@@ -160,7 +162,7 @@ public class OffScreenIndicator : MonoBehaviour
         }
     }
 
-    private Indicator GetIndicator(ref Indicator indicator, IndicatorType type, Target target)
+    private Indicator GetIndicator(ref Indicator indicator, IndicatorType type, Target target, Vector3 finalScreenPosition)
     {
         bool isNewlyActivated = false;
 
@@ -182,10 +184,10 @@ public class OffScreenIndicator : MonoBehaviour
         }
 
         // 화살표 인디케이터가 새로 활성화되고, Target이 아직 Sparkle을 재생하지 않았으면 재생
+        // ✅ 수정: indicator.transform.position 대신 finalScreenPosition (최종 계산된 위치) 사용
         if (isNewlyActivated && type == IndicatorType.ARROW && !target.hasPlayedSparkle)
         {
-            Vector3 screenPos = indicator.transform.position;
-            IndicatorSparkleHelper.PlaySparkleForIndicator(screenPos, type);
+            IndicatorSparkleHelper.PlaySparkleForIndicator(finalScreenPosition, type);
             target.hasPlayedSparkle = true; // Sparkle 재생 완료 표시
         }
 

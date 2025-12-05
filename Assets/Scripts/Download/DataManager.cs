@@ -28,18 +28,22 @@ public class DataManager : MonoBehaviour
     private Queue<GameObject> glbObjectPool = new Queue<GameObject>();
     private HashSet<int> currentlyLoadingGLB = new HashSet<int>();
     
-    [SerializeField] public int poolSize = 50;
+    [SerializeField] public int poolSize = 30;  // 50 → 30 (메모리 및 초기화 최적화)
     [SerializeField] private float updateInterval = 600f;
-    
+
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터)")]
     public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
 
-    [Tooltip("각 거리 단계 사이의 딜레이 (초)")]
-    public float tierDelay = 0.5f;
+    [Tooltip("각 거리 단계 사이의 딜레이 (초) - 깜빡임 방지")]
+    public float tierDelay = 2f;  // 0.5 → 2초 (안정성 향상)
 
-    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초)")]
-    public float objectSpawnDelay = 0.1f;
+    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초) - 안정적 생성")]
+    public float objectSpawnDelay = 0.3f;  // 0.1 → 0.3초 (깜빡임 방지)
+
+    [Header("Pool Initialization Settings")]
+    [Tooltip("Pool 초기화 시 프레임당 생성할 오브젝트 수")]
+    [SerializeField] private int objectsPerFrame = 2;  // 프레임당 2개씩 생성 (부드러운 초기화)
 
     [SerializeField] private float updateDistanceThreshold = 50f;
     private bool isDataLoaded = false;
@@ -58,37 +62,57 @@ public class DataManager : MonoBehaviour
 
     void Start()
     {
-        InitializeObjectPools();
+        // ✅ 분산 초기화로 변경 (프레임 끊김 방지)
+        StartCoroutine(InitializeObjectPoolsAsync());
         StartCoroutine(StartLocationServiceAndFetchData());
     }
 
-    private void InitializeObjectPools()
+    /// <summary>
+    /// Object Pool을 여러 프레임에 걸쳐 초기화 (부드러운 앱 시작)
+    /// </summary>
+    private IEnumerator InitializeObjectPoolsAsync()
     {
         if (cubePrefab == null || glbPrefab == null)
         {
             Debug.LogError("[DataManager] Prefab이 설정되지 않음!");
-            return;
+            yield break;
         }
 
-        Debug.Log($"[DEBUG_POOL] 풀 초기화 시작 - cubePrefab: {cubePrefab.name}, glbPrefab: {glbPrefab.name}");
+        Debug.Log($"[DEBUG_POOL] 풀 초기화 시작 (비동기) - cubePrefab: {cubePrefab.name}, glbPrefab: {glbPrefab.name}");
+        float startTime = Time.realtimeSinceStartup;
 
-        // Cube 오브젝트 풀 초기화
+        // Cube 오브젝트 풀 초기화 (프레임당 objectsPerFrame개씩)
         for (int i = 0; i < poolSize; i++)
         {
             GameObject cubeObj = Instantiate(cubePrefab, Vector3.zero, Quaternion.identity);
             cubeObj.SetActive(false);
             cubeObjectPool.Enqueue(cubeObj);
+
+            // 프레임당 objectsPerFrame개씩 생성 후 다음 프레임으로
+            if ((i + 1) % objectsPerFrame == 0)
+            {
+                yield return null;
+            }
         }
         Debug.Log($"[DEBUG_POOL] Cube 풀 초기화 완료: {cubeObjectPool.Count}개");
 
-        // GLB 오브젝트 풀 초기화
+        // GLB 오브젝트 풀 초기화 (프레임당 objectsPerFrame개씩)
         for (int i = 0; i < poolSize; i++)
         {
             GameObject glbObj = Instantiate(glbPrefab, Vector3.zero, Quaternion.identity);
             glbObj.SetActive(false);
             glbObjectPool.Enqueue(glbObj);
+
+            // 프레임당 objectsPerFrame개씩 생성 후 다음 프레임으로
+            if ((i + 1) % objectsPerFrame == 0)
+            {
+                yield return null;
+            }
         }
+
+        float elapsedTime = Time.realtimeSinceStartup - startTime;
         Debug.Log($"[DEBUG_POOL] GLB 풀 초기화 완료: {glbObjectPool.Count}개");
+        Debug.Log($"[DEBUG_POOL] 전체 풀 초기화 완료 - 총 {poolSize * 2}개, 소요 시간: {elapsedTime:F2}초");
     }
 
     private IEnumerator StartLocationServiceAndFetchData()
