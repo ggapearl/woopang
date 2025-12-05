@@ -65,13 +65,11 @@ public class SparkleEffect : MonoBehaviour
 
     /// <summary>
     /// 반짝임 효과 재생 (UI 인디케이터용 - 스크린 좌표)
+    /// 현재 사용하지 않음 (IndicatorSparkleHelper에서 직접 처리)
     /// </summary>
     public void PlaySparkleUI(Vector3 screenPosition)
     {
-        if (isPlaying) return;
-        if (effectCanvas == null) return;
-
-        StartCoroutine(SparkleAnimationUI(screenPosition));
+        // 사용하지 않음
     }
 
     /// <summary>
@@ -163,75 +161,6 @@ public class SparkleEffect : MonoBehaviour
         Cleanup();
     }
 
-    /// <summary>
-    /// UI 인디케이터용 반짝임 애니메이션
-    /// </summary>
-    private IEnumerator SparkleAnimationUI(Vector3 screenPosition)
-    {
-        isPlaying = true;
-
-        // 딜레이
-        yield return new WaitForSeconds(spawnDelay);
-
-        // Sparkle 오브젝트 생성
-        CreateSparkleObject();
-
-        // Canvas 좌표로 변환
-        Camera mainCamera = Camera.main;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            effectCanvas.GetComponent<RectTransform>(),
-            screenPosition,
-            effectCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : mainCamera,
-            out Vector2 canvasPos
-        );
-
-        sparkleRect.anchoredPosition = canvasPos;
-
-        // 시작 스케일 설정 (인디케이터 크기 기준)
-        Vector3 baseScale = Vector3.one; // UI는 기본 1
-        sparkleRect.localScale = baseScale * startScaleMultiplier;
-
-        // 페이드인 + 스케일 업
-        float elapsed = 0f;
-        Color startColor = sparkleColor;
-        startColor.a = 0f;
-        sparkleImage.color = startColor;
-
-        while (elapsed < fadeInDuration)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / fadeInDuration;
-
-            // 페이드인
-            Color color = sparkleColor;
-            color.a = Mathf.Lerp(0f, sparkleColor.a, t);
-            sparkleImage.color = color;
-
-            // 스케일 업
-            float scale = Mathf.Lerp(startScaleMultiplier, maxScaleMultiplier, t);
-            sparkleRect.localScale = baseScale * scale;
-
-            yield return null;
-        }
-
-        // 페이드아웃 (스케일 유지)
-        elapsed = 0f;
-        while (elapsed < fadeOutDuration)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / fadeOutDuration;
-
-            // 페이드아웃
-            Color color = sparkleColor;
-            color.a = Mathf.Lerp(sparkleColor.a, 0f, t);
-            sparkleImage.color = color;
-
-            yield return null;
-        }
-
-        // 정리
-        Cleanup();
-    }
 
     private void CreateSparkleObject(IndicatorSparkleHelper.SparkleSettings settings)
     {

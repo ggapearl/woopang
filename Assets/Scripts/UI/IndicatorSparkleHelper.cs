@@ -9,37 +9,59 @@ public class IndicatorSparkleHelper : MonoBehaviour
 {
     private static IndicatorSparkleHelper instance;
 
-    [Header("Sparkle Settings")]
-    [Tooltip("Sparkle 효과 활성화")]
+    [Header("General Settings")]
+    [Tooltip("Sparkle 효과 전체 활성화")]
     public bool enableSparkle = true;
 
     [Tooltip("circle.png 스프라이트")]
     public Sprite sparkleSprite;
 
-    [Tooltip("Sparkle 크기 (픽셀)")]
-    public Vector2 sparkleSize = new Vector2(80f, 80f);
-
-    [Tooltip("생성 후 딜레이 (초)")]
-    public float spawnDelay = 0.5f;
-
-    [Tooltip("페이드인 시간 (초)")]
-    public float fadeInDuration = 0.3f;
-
-    [Tooltip("페이드아웃 시간 (초)")]
-    public float fadeOutDuration = 1.7f;
-
-    [Tooltip("시작 스케일 배율")]
-    public float startScale = 0.5f;
-
-    [Tooltip("최종 스케일 배율")]
-    public float maxScale = 2.0f;
-
-    [Tooltip("반짝임 색상")]
-    public Color sparkleColor = new Color(1f, 1f, 1f, 0.8f);
-
-    [Header("Filter Settings")]
-    [Tooltip("화살표 인디케이터에만 적용")]
+    [Header("UI Sparkle Settings (Offscreen Indicator Arrow)")]
+    [Tooltip("화살표 인디케이터에만 적용 (박스 제외)")]
     public bool arrowOnly = true;
+
+    [Tooltip("UI Sparkle 크기 (픽셀)")]
+    public Vector2 uiSparkleSize = new Vector2(80f, 80f);
+
+    [Tooltip("UI 생성 후 딜레이 (초)")]
+    public float uiSpawnDelay = 0.5f;
+
+    [Tooltip("UI 페이드인 시간 (초)")]
+    public float uiFadeInDuration = 0.3f;
+
+    [Tooltip("UI 페이드아웃 시간 (초)")]
+    public float uiFadeOutDuration = 1.7f;
+
+    [Tooltip("UI 시작 스케일 배율")]
+    public float uiStartScale = 0.5f;
+
+    [Tooltip("UI 최종 스케일 배율")]
+    public float uiMaxScale = 2.0f;
+
+    [Tooltip("UI 반짝임 색상")]
+    public Color uiSparkleColor = new Color(1f, 1f, 1f, 0.8f);
+
+    [Header("3D Object Sparkle Settings (Sample_Prefab, GLB_Prefab)")]
+    [Tooltip("3D 오브젝트 Sparkle 크기 (픽셀)")]
+    public Vector2 objectSparkleSize = new Vector2(120f, 120f);
+
+    [Tooltip("3D 오브젝트 생성 후 딜레이 (초)")]
+    public float objectSpawnDelay = 0.3f;
+
+    [Tooltip("3D 오브젝트 페이드인 시간 (초)")]
+    public float objectFadeInDuration = 0.4f;
+
+    [Tooltip("3D 오브젝트 페이드아웃 시간 (초)")]
+    public float objectFadeOutDuration = 1.5f;
+
+    [Tooltip("3D 오브젝트 시작 스케일 배율")]
+    public float objectStartScale = 0.3f;
+
+    [Tooltip("3D 오브젝트 최종 스케일 배율")]
+    public float objectMaxScale = 2.5f;
+
+    [Tooltip("3D 오브젝트 반짝임 색상")]
+    public Color objectSparkleColor = new Color(1f, 1f, 0.8f, 1f);
 
     void Awake()
     {
@@ -82,7 +104,7 @@ public class IndicatorSparkleHelper : MonoBehaviour
     }
 
     /// <summary>
-    /// 현재 설정값을 반환 (3D 오브젝트 Sparkle용)
+    /// 3D 오브젝트용 설정값 반환
     /// </summary>
     public static SparkleSettings GetSettings()
     {
@@ -90,13 +112,13 @@ public class IndicatorSparkleHelper : MonoBehaviour
 
         return new SparkleSettings
         {
-            sparkleSize = instance.sparkleSize,
-            spawnDelay = instance.spawnDelay,
-            fadeInDuration = instance.fadeInDuration,
-            fadeOutDuration = instance.fadeOutDuration,
-            startScale = instance.startScale,
-            maxScale = instance.maxScale,
-            sparkleColor = instance.sparkleColor
+            sparkleSize = instance.objectSparkleSize,
+            spawnDelay = instance.objectSpawnDelay,
+            fadeInDuration = instance.objectFadeInDuration,
+            fadeOutDuration = instance.objectFadeOutDuration,
+            startScale = instance.objectStartScale,
+            maxScale = instance.objectMaxScale,
+            sparkleColor = instance.objectSparkleColor
         };
     }
 
@@ -151,7 +173,7 @@ public class IndicatorSparkleHelper : MonoBehaviour
         sparkleImage.color = new Color(1f, 1f, 1f, 0f);
 
         RectTransform sparkleRect = sparkleObj.GetComponent<RectTransform>();
-        sparkleRect.sizeDelta = instance.sparkleSize; // 인스펙터에서 설정한 크기
+        sparkleRect.sizeDelta = instance.uiSparkleSize; // UI 설정 사용
 
         // Canvas 좌표로 변환
         Camera mainCamera = Camera.main;
@@ -164,17 +186,17 @@ public class IndicatorSparkleHelper : MonoBehaviour
 
         sparkleRect.anchoredPosition = canvasPos;
 
-        // 애니메이션 시작 (인스펙터 설정값 전달)
+        // 애니메이션 시작 (UI 설정값 전달)
         SparkleAnimator animator = sparkleObj.AddComponent<SparkleAnimator>();
         animator.StartAnimation(
             sparkleImage,
             sparkleRect,
-            instance.spawnDelay,
-            instance.fadeInDuration,
-            instance.fadeOutDuration,
-            instance.startScale,
-            instance.maxScale,
-            instance.sparkleColor
+            instance.uiSpawnDelay,
+            instance.uiFadeInDuration,
+            instance.uiFadeOutDuration,
+            instance.uiStartScale,
+            instance.uiMaxScale,
+            instance.uiSparkleColor
         );
     }
 
