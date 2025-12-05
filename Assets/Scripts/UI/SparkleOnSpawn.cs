@@ -6,13 +6,11 @@ using UnityEngine;
 /// </summary>
 public class SparkleOnSpawn : MonoBehaviour
 {
-    [Header("Sparkle Effect Reference")]
-    [Tooltip("SparkleEffect 컴포넌트 (없으면 자동 추가)")]
-    public SparkleEffect sparkleEffect;
-
     [Header("Auto Play Settings")]
     [Tooltip("생성 시 자동 재생")]
     public bool playOnEnable = true;
+
+    private SparkleEffect sparkleEffect;
 
     void OnEnable()
     {
