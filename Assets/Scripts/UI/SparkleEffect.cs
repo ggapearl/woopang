@@ -4,30 +4,13 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 오브젝트/인디케이터 생성 시 circle.png를 사용한 반짝임 효과
+/// IndicatorSparkleHelper의 설정값을 사용 (통합 관리)
 /// </summary>
 public class SparkleEffect : MonoBehaviour
 {
     [Header("Sparkle Settings")]
-    [Tooltip("반짝임 이미지 (circle.png)")]
+    [Tooltip("반짝임 이미지 (circle.png) - 비워두면 자동 로드")]
     public Sprite sparkleSprite;
-
-    [Tooltip("생성 후 딜레이 (초)")]
-    public float spawnDelay = 0.5f;
-
-    [Tooltip("페이드인 시간 (초)")]
-    public float fadeInDuration = 0.3f;
-
-    [Tooltip("페이드아웃 시간 (초)")]
-    public float fadeOutDuration = 1.7f;
-
-    [Tooltip("최종 스케일 배율")]
-    public float maxScaleMultiplier = 2.0f;
-
-    [Tooltip("시작 스케일 배율")]
-    public float startScaleMultiplier = 0.5f;
-
-    [Tooltip("반짝임 색상")]
-    public Color sparkleColor = new Color(1f, 1f, 1f, 1f);
 
     [Tooltip("Canvas를 자동으로 찾을지 여부 (3D 오브젝트용)")]
     public bool autoFindCanvas = true;
@@ -57,6 +40,16 @@ public class SparkleEffect : MonoBehaviour
         {
             effectCanvas = targetCanvas;
         }
+
+        // Sprite 자동 로드
+        if (sparkleSprite == null)
+        {
+            sparkleSprite = Resources.Load<Sprite>("UI/circle");
+            if (sparkleSprite == null)
+            {
+                sparkleSprite = Resources.Load<Sprite>("sou/UI/circle");
+            }
+        }
     }
 
     /// <summary>
@@ -83,16 +76,25 @@ public class SparkleEffect : MonoBehaviour
 
     /// <summary>
     /// 3D 오브젝트용 반짝임 애니메이션
+    /// IndicatorSparkleHelper의 설정값을 사용
     /// </summary>
     private IEnumerator SparkleAnimation3D()
     {
         isPlaying = true;
 
+        // IndicatorSparkleHelper 설정 가져오기
+        var settings = IndicatorSparkleHelper.GetSettings();
+        if (settings == null)
+        {
+            Debug.LogWarning("[SparkleEffect] IndicatorSparkleHelper가 없습니다. 기본값 사용.");
+            settings = new IndicatorSparkleHelper.SparkleSettings();
+        }
+
         // 딜레이
-        yield return new WaitForSeconds(spawnDelay);
+        yield return new WaitForSeconds(settings.spawnDelay);
 
         // Sparkle 오브젝트 생성
-        CreateSparkleObject();
+        CreateSparkleObject(settings);
 
         // 3D 오브젝트의 월드 좌표를 스크린 좌표로 변환
         Camera mainCamera = Camera.main;
@@ -117,26 +119,26 @@ public class SparkleEffect : MonoBehaviour
 
         // 시작 스케일 설정
         Vector3 baseScale = transform.localScale;
-        sparkleRect.localScale = baseScale * startScaleMultiplier;
+        sparkleRect.localScale = baseScale * settings.startScale;
 
         // 페이드인 + 스케일 업
         float elapsed = 0f;
-        Color startColor = sparkleColor;
+        Color startColor = settings.sparkleColor;
         startColor.a = 0f;
         sparkleImage.color = startColor;
 
-        while (elapsed < fadeInDuration)
+        while (elapsed < settings.fadeInDuration)
         {
             elapsed += Time.deltaTime;
-            float t = elapsed / fadeInDuration;
+            float t = elapsed / settings.fadeInDuration;
 
             // 페이드인
-            Color color = sparkleColor;
-            color.a = Mathf.Lerp(0f, sparkleColor.a, t);
+            Color color = settings.sparkleColor;
+            color.a = Mathf.Lerp(0f, settings.sparkleColor.a, t);
             sparkleImage.color = color;
 
             // 스케일 업
-            float scale = Mathf.Lerp(startScaleMultiplier, maxScaleMultiplier, t);
+            float scale = Mathf.Lerp(settings.startScale, settings.maxScale, t);
             sparkleRect.localScale = baseScale * scale;
 
             yield return null;
@@ -144,14 +146,14 @@ public class SparkleEffect : MonoBehaviour
 
         // 페이드아웃 (스케일 유지)
         elapsed = 0f;
-        while (elapsed < fadeOutDuration)
+        while (elapsed < settings.fadeOutDuration)
         {
             elapsed += Time.deltaTime;
-            float t = elapsed / fadeOutDuration;
+            float t = elapsed / settings.fadeOutDuration;
 
             // 페이드아웃
-            Color color = sparkleColor;
-            color.a = Mathf.Lerp(sparkleColor.a, 0f, t);
+            Color color = settings.sparkleColor;
+            color.a = Mathf.Lerp(settings.sparkleColor.a, 0f, t);
             sparkleImage.color = color;
 
             yield return null;
@@ -231,7 +233,7 @@ public class SparkleEffect : MonoBehaviour
         Cleanup();
     }
 
-    private void CreateSparkleObject()
+    private void CreateSparkleObject(IndicatorSparkleHelper.SparkleSettings settings)
     {
         // Sparkle GameObject 생성
         sparkleObject = new GameObject("Sparkle_Effect");
@@ -240,11 +242,11 @@ public class SparkleEffect : MonoBehaviour
         // Image 컴포넌트 추가
         sparkleImage = sparkleObject.AddComponent<Image>();
         sparkleImage.sprite = sparkleSprite;
-        sparkleImage.color = sparkleColor;
+        sparkleImage.color = settings.sparkleColor;
 
-        // RectTransform 설정
+        // RectTransform 설정 (IndicatorSparkleHelper 크기 사용)
         sparkleRect = sparkleObject.GetComponent<RectTransform>();
-        sparkleRect.sizeDelta = new Vector2(100f, 100f); // 기본 크기 100x100
+        sparkleRect.sizeDelta = settings.sparkleSize;
     }
 
     private void Cleanup()

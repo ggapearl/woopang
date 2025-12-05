@@ -55,6 +55,52 @@ public class IndicatorSparkleHelper : MonoBehaviour
     }
 
     /// <summary>
+    /// Sparkle 설정을 담는 클래스
+    /// SparkleEffect에서 사용
+    /// </summary>
+    public class SparkleSettings
+    {
+        public Vector2 sparkleSize;
+        public float spawnDelay;
+        public float fadeInDuration;
+        public float fadeOutDuration;
+        public float startScale;
+        public float maxScale;
+        public Color sparkleColor;
+
+        // 기본값 생성자
+        public SparkleSettings()
+        {
+            sparkleSize = new Vector2(80f, 80f);
+            spawnDelay = 0.5f;
+            fadeInDuration = 0.3f;
+            fadeOutDuration = 1.7f;
+            startScale = 0.5f;
+            maxScale = 2.0f;
+            sparkleColor = new Color(1f, 1f, 1f, 0.8f);
+        }
+    }
+
+    /// <summary>
+    /// 현재 설정값을 반환 (3D 오브젝트 Sparkle용)
+    /// </summary>
+    public static SparkleSettings GetSettings()
+    {
+        if (instance == null) return null;
+
+        return new SparkleSettings
+        {
+            sparkleSize = instance.sparkleSize,
+            spawnDelay = instance.spawnDelay,
+            fadeInDuration = instance.fadeInDuration,
+            fadeOutDuration = instance.fadeOutDuration,
+            startScale = instance.startScale,
+            maxScale = instance.maxScale,
+            sparkleColor = instance.sparkleColor
+        };
+    }
+
+    /// <summary>
     /// Indicator가 활성화될 때 반짝임 효과 재생
     /// </summary>
     public static void PlaySparkleForIndicator(Vector3 screenPosition, IndicatorType type, Sprite sprite = null)
