@@ -41,7 +41,19 @@ public class SparkleEffect : MonoBehaviour
             effectCanvas = targetCanvas;
         }
 
-        // Sprite 자동 로드
+        // Sprite 설정 (우선순위: 1. IndicatorSparkleHelper, 2. 로컬 할당, 3. Resources 로드)
+        var helper = IndicatorSparkleHelper.GetSettings();
+        if (helper != null)
+        {
+            // IndicatorSparkleHelper가 있으면 그쪽 스프라이트 참조
+            var helperInstance = FindObjectOfType<IndicatorSparkleHelper>();
+            if (helperInstance != null && helperInstance.sparkleSprite != null)
+            {
+                sparkleSprite = helperInstance.sparkleSprite;
+            }
+        }
+
+        // 아직 없으면 자동 로드
         if (sparkleSprite == null)
         {
             sparkleSprite = Resources.Load<Sprite>("UI/circle");

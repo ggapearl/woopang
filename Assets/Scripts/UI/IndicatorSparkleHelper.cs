@@ -154,8 +154,12 @@ public class IndicatorSparkleHelper : MonoBehaviour
 
         Image sparkleImage = sparkleObj.AddComponent<Image>();
 
-        // Sprite 설정
-        if (sprite != null)
+        // Sprite 설정 (우선순위: 1. instance.sparkleSprite, 2. 매개변수 sprite, 3. Resources 로드)
+        if (instance.sparkleSprite != null)
+        {
+            sparkleImage.sprite = instance.sparkleSprite;
+        }
+        else if (sprite != null)
         {
             sparkleImage.sprite = sprite;
         }

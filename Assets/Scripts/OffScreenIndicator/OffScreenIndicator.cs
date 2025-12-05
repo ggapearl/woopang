@@ -69,13 +69,13 @@ public class OffScreenIndicator : MonoBehaviour
             if (target.NeedBoxIndicator && isTargetVisible)
             {
                 screenPosition.z = 0;
-                indicator = GetIndicator(ref target.indicator, IndicatorType.BOX);
+                indicator = GetIndicator(ref target.indicator, IndicatorType.BOX, target);
             }
             else if (target.NeedArrowIndicator && !isTargetVisible)
             {
                 float angle = float.MinValue;
                 OffScreenIndicatorCore.GetArrowIndicatorPositionAndAngle(ref screenPosition, ref angle, screenCentre, screenBoundsX);
-                indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW);
+                indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target);
                 indicator.transform.rotation = Quaternion.Euler(0, 0, angle * Mathf.Rad2Deg);
 
                 // 수정: 추가 경계 값을 반영한 클램프
@@ -160,7 +160,7 @@ public class OffScreenIndicator : MonoBehaviour
         }
     }
 
-    private Indicator GetIndicator(ref Indicator indicator, IndicatorType type)
+    private Indicator GetIndicator(ref Indicator indicator, IndicatorType type, Target target)
     {
         bool isNewlyActivated = false;
 
@@ -181,11 +181,12 @@ public class OffScreenIndicator : MonoBehaviour
             isNewlyActivated = true;
         }
 
-        // 화살표 인디케이터가 새로 활성화되면 Sparkle 효과 재생
-        if (isNewlyActivated && type == IndicatorType.ARROW)
+        // 화살표 인디케이터가 새로 활성화되고, Target이 아직 Sparkle을 재생하지 않았으면 재생
+        if (isNewlyActivated && type == IndicatorType.ARROW && !target.hasPlayedSparkle)
         {
             Vector3 screenPos = indicator.transform.position;
             IndicatorSparkleHelper.PlaySparkleForIndicator(screenPos, type);
+            target.hasPlayedSparkle = true; // Sparkle 재생 완료 표시
         }
 
         return indicator;
