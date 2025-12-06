@@ -28,7 +28,13 @@ public class DataManager : MonoBehaviour
     private Queue<GameObject> glbObjectPool = new Queue<GameObject>();
     private HashSet<int> currentlyLoadingGLB = new HashSet<int>();
     
-    [SerializeField] public int poolSize = 30;  // 50 → 30 (메모리 및 초기화 최적화)
+    [Header("Object Pool Settings")]
+    [Tooltip("큐브 프리팹 풀 사이즈")]
+    [SerializeField] public int cubePoolSize = 30;
+
+    [Tooltip("GLB 프리팹 풀 사이즈 (큐브보다 덜 필요)")]
+    [SerializeField] public int glbPoolSize = 15;
+
     [SerializeField] private float updateInterval = 600f;
 
     [Header("Progressive Loading Settings")]
@@ -36,10 +42,10 @@ public class DataManager : MonoBehaviour
     public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
 
     [Tooltip("각 거리 단계 사이의 딜레이 (초) - 깜빡임 방지")]
-    public float tierDelay = 2f;  // 0.5 → 2초 (안정성 향상)
+    public float tierDelay = 0.1f;  // 가까운 거리는 즉시 로드
 
     [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초) - 안정적 생성")]
-    public float objectSpawnDelay = 0.3f;  // 0.1 → 0.3초 (깜빡임 방지)
+    public float objectSpawnDelay = 0.05f;  // 빠른 생성
 
     [Header("Pool Initialization Settings")]
     [Tooltip("Pool 초기화 시 프레임당 생성할 오브젝트 수")]
@@ -47,6 +53,7 @@ public class DataManager : MonoBehaviour
 
     [SerializeField] private float updateDistanceThreshold = 50f;
     private bool isDataLoaded = false;
+    private bool isDataLoading = false; // 중복 로딩 방지 플래그
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
 
@@ -78,11 +85,10 @@ public class DataManager : MonoBehaviour
             yield break;
         }
 
-        Debug.Log($"[DEBUG_POOL] 풀 초기화 시작 (비동기) - cubePrefab: {cubePrefab.name}, glbPrefab: {glbPrefab.name}");
         float startTime = Time.realtimeSinceStartup;
 
         // Cube 오브젝트 풀 초기화 (프레임당 objectsPerFrame개씩)
-        for (int i = 0; i < poolSize; i++)
+        for (int i = 0; i < cubePoolSize; i++)
         {
             GameObject cubeObj = Instantiate(cubePrefab, Vector3.zero, Quaternion.identity);
             cubeObj.SetActive(false);
@@ -94,10 +100,8 @@ public class DataManager : MonoBehaviour
                 yield return null;
             }
         }
-        Debug.Log($"[DEBUG_POOL] Cube 풀 초기화 완료: {cubeObjectPool.Count}개");
-
         // GLB 오브젝트 풀 초기화 (프레임당 objectsPerFrame개씩)
-        for (int i = 0; i < poolSize; i++)
+        for (int i = 0; i < glbPoolSize; i++)
         {
             GameObject glbObj = Instantiate(glbPrefab, Vector3.zero, Quaternion.identity);
             glbObj.SetActive(false);
@@ -111,8 +115,7 @@ public class DataManager : MonoBehaviour
         }
 
         float elapsedTime = Time.realtimeSinceStartup - startTime;
-        Debug.Log($"[DEBUG_POOL] GLB 풀 초기화 완료: {glbObjectPool.Count}개");
-        Debug.Log($"[DEBUG_POOL] 전체 풀 초기화 완료 - 총 {poolSize * 2}개, 소요 시간: {elapsedTime:F2}초");
+        Debug.Log($"[DataManager] 풀 초기화 완료 - 총 {cubePoolSize + glbPoolSize}개");
     }
 
     private IEnumerator StartLocationServiceAndFetchData()
@@ -120,27 +123,30 @@ public class DataManager : MonoBehaviour
         if (!Input.location.isEnabledByUser)
         {
             ShowErrorMessage("위치 서비스를 활성화해 주세요.");
+            Debug.LogError("[DataManager] GPS 권한 없음!");
             yield break;
         }
-        
+
         Input.location.Start();
+
         int maxWait = 20;
+
         while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
         {
             yield return new WaitForSeconds(1);
             maxWait--;
         }
-        
+
         if (Input.location.status == LocationServiceStatus.Failed)
         {
             ShowErrorMessage("위치 서비스를 시작할 수 없습니다. 기본 위치로 시작합니다.");
-            // 실패해도 계속 진행 (기본값 사용)
+            Debug.LogWarning("[DataManager] GPS 실패 - 기본 위치 사용");
         }
-        
+
         // 위치 데이터가 없으면 기본값 사용
         float lat = 37.5665f;
         float lon = 126.9780f;
-        
+
         if (Input.location.status == LocationServiceStatus.Running)
         {
             lat = Input.location.lastData.latitude;
@@ -233,20 +239,60 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator FetchDataProgressively(float lat, float lon)
     {
-        Debug.Log($"[DataManager] ===== 점진적 로딩 시작 ({lat}, {lon}) =====");
-        
+        Debug.Log($"[DataManager] FetchDataProgressively 시작 - isDataLoading={isDataLoading}");
+
+        // 이미 로딩 중이면 중복 실행 방지
+        if (isDataLoading)
+        {
+            Debug.LogWarning("[DataManager] 이미 데이터 로딩 중입니다. 중복 실행 방지.");
+            yield break;
+        }
+
+        isDataLoading = true;
+
+        // 로딩 표시 시작
+        if (LoadingIndicator.Instance != null)
+        {
+            LoadingIndicator.Instance.Show("주변 장소를 불러오는 중...");
+        }
+
+        // 발견 알림 시작
+        if (PlaceDiscoveryNotification.Instance != null)
+        {
+            Debug.Log("[DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출");
+            PlaceDiscoveryNotification.Instance.StartDiscovery();
+        }
+        else
+        {
+            Debug.LogWarning("[DataManager] PlaceDiscoveryNotification.Instance가 null입니다!");
+        }
+
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+
+        // DistanceSliderUI에서 설정한 최대 거리 가져오기
+        float maxDistance = GetUserMaxDistance();
 
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
             float radius = loadRadii[tierIndex];
+
+            // 사용자 설정 범위를 초과하면 중단
+            if (radius > maxDistance)
+            {
+                break;
+            }
+
             string serverUrl = $"{baseServerUrl}&lat={lat}&lon={lon}&radius={radius}";
 
             List<PlaceData> newPlaces = new List<PlaceData>();
             yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, newPlaces));
 
-            // 새로운 오브젝트를 하나씩 스폰
-            Debug.Log($"[DEBUG_DATA] Tier {tierIndex}: 생성할 오브젝트 {newPlaces.Count}개");
+            // 새로 발견한 장소 개수 알림 업데이트
+            if (newPlaces.Count > 0 && PlaceDiscoveryNotification.Instance != null)
+            {
+                PlaceDiscoveryNotification.Instance.UpdateDiscoveredCount(newPlaces.Count);
+            }
+
             foreach (PlaceData place in newPlaces)
             {
                 CreateObjectFromData(place);
@@ -261,29 +307,87 @@ public class DataManager : MonoBehaviour
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
 
-        Debug.Log("[DataManager] ===== 점진적 로딩 완료 =====");
+        Debug.Log($"[DataManager] 로딩 완료 - 총 {spawnedObjects.Count}개 오브젝트");
+
+        // 발견 알림 완료
+        if (PlaceDiscoveryNotification.Instance != null)
+        {
+            Debug.Log("[DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출");
+            PlaceDiscoveryNotification.Instance.CompleteDiscovery();
+        }
+
+        // 로딩 표시 종료
+        if (LoadingIndicator.Instance != null)
+        {
+            LoadingIndicator.Instance.Hide();
+        }
+
         isDataLoaded = true;
+        isDataLoading = false; // 로딩 완료
+
+        Debug.Log("[DataManager] FetchDataProgressively 완료");
+    }
+
+    /// <summary>
+    /// PlaceListManager에서 설정한 최대 거리 가져오기
+    /// </summary>
+    private float GetUserMaxDistance()
+    {
+        PlaceListManager placeListManager = FindObjectOfType<PlaceListManager>();
+        if (placeListManager != null)
+        {
+            return placeListManager.GetMaxDisplayDistance();
+        }
+        // 기본값: 모든 tier 처리 (10000m)
+        return 10000f;
+    }
+
+    /// <summary>
+    /// 백그라운드에서 포그라운드로 전환 시 데이터 재로딩
+    /// </summary>
+    public void ReloadDataOnForeground()
+    {
+        Debug.Log("[DataManager] ReloadDataOnForeground 호출 - 데이터 재로딩 시작");
+
+        // 현재 위치 다시 가져오기
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            float lat = Input.location.lastData.latitude;
+            float lon = Input.location.lastData.longitude;
+
+            // 기존 로딩 중단
+            if (fetchCoroutine != null)
+            {
+                StopCoroutine(fetchCoroutine);
+            }
+
+            // 재로딩 시작
+            isDataLoaded = false;
+            isDataLoading = false;
+            fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
+
+            Debug.Log($"[DataManager] 재로딩 시작 - 위치: {lat}, {lon}");
+        }
+        else
+        {
+            Debug.LogWarning("[DataManager] 위치 서비스가 실행 중이 아닙니다.");
+        }
     }
 
     private IEnumerator FetchDataFromServerForTier(string url, float lat, float lon, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)
     {
-        Debug.Log($"[DEBUG_DATA] 요청 URL: {url}");
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             yield return request.SendWebRequest();
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string json = request.downloadHandler.text;
-                Debug.Log($"[DEBUG_DATA] 응답 수신: {json.Length} bytes");
-                // Debug.Log($"[DEBUG_DATA] JSON: {json}"); // 필요 시 주석 해제
 
                 try
                 {
                     List<PlaceData> places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
                     if (places != null)
                     {
-                        Debug.Log($"[DEBUG_DATA] 파싱 성공: {places.Count}개 항목");
-                        // ... 정렬 및 필터링 ...
                         // 거리순 정렬
                         places.Sort((a, b) =>
                         {
@@ -297,16 +401,15 @@ public class DataManager : MonoBehaviour
                             if (!loadedIds.Contains(place.id)) outNewPlaces.Add(place);
                         }
                     }
-                    else
-                    {
-                        Debug.LogWarning("[DEBUG_DATA] 파싱 결과가 null입니다.");
-                    }
                 }
-                catch (System.Exception e) { Debug.LogError($"[DEBUG_DATA] JSON 파싱 실패: {e.Message}"); }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[DataManager] JSON 파싱 실패: {e.Message}");
+                }
             }
             else
             {
-                Debug.LogError($"[DEBUG_DATA] 요청 실패: {request.error} ({url})");
+                Debug.LogError($"[DataManager] 서버 요청 실패: {request.error}");
             }
         }
     }
@@ -338,12 +441,10 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator ProcessData(string json, LocationInfo currentLocation)
     {
-        Debug.Log("[DataManager] ProcessData 호출됨");
         List<PlaceData> places = null;
         try
         {
             places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
-            Debug.Log($"[DataManager] 파싱된 장소 수: {places?.Count ?? 0}");
         }
         catch (JsonException ex)
         {
@@ -354,7 +455,7 @@ public class DataManager : MonoBehaviour
 
         if (places == null || places.Count == 0)
         {
-            Debug.LogError("[DataManager] 파싱된 장소 데이터가 없거나 비어 있습니다!");
+            Debug.LogWarning("[DataManager] 파싱된 장소 데이터 없음");
             ShowErrorMessage("서버에서 데이터를 받아오지 못했습니다.");
             yield break;
         }
@@ -362,7 +463,7 @@ public class DataManager : MonoBehaviour
         // 거리 순으로 정렬하고 개수 제한
         places.Sort((a, b) => CalculateDistance(currentLocation.latitude, currentLocation.longitude, a.latitude, a.longitude)
             .CompareTo(CalculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude)));
-        places = places.Take(poolSize * 2).ToList();
+        places = places.Take(cubePoolSize + glbPoolSize).ToList();
 
         // 청크 단위로 처리
         const int CHUNK_SIZE = 5; // 청크 크기 줄임
@@ -371,15 +472,12 @@ public class DataManager : MonoBehaviour
             var chunk = places.Skip(i).Take(CHUNK_SIZE).ToList();
             foreach (PlaceData place in chunk)
             {
-                // 서버 데이터 상세 로그 제거 (lat, lon, distance, type 등)
-                
                 if (!spawnedObjects.ContainsKey(place.id))
                 {
                     CreateObjectFromData(place);
                     if (spawnedObjects.ContainsKey(place.id))
                     {
                         placeDataMap[place.id] = place;
-                        Debug.Log($"[DataManager] 새 오브젝트 생성 - ID: {place.id}, Type: {place.model_type}");
                     }
                 }
                 else
@@ -408,47 +506,39 @@ public class DataManager : MonoBehaviour
 
     private void CreateObjectFromData(PlaceData place)
     {
-        Debug.Log($"[DEBUG_DATA] CreateObjectFromData 호출: ID={place.id}, Name={place.name}, model_type={place.model_type}");
-
         // GLB 동시 로딩 제한
         if (place.model_type == "custom" && currentlyLoadingGLB.Count >= maxConcurrentGLBLoads)
         {
             if (fallbackToCube)
             {
-                Debug.Log($"[DEBUG_DATA] GLB 로딩 제한 - cube로 fallback: ID={place.id}");
-                place.model_type = "cube"; // 큐브로 fallback
+                place.model_type = "cube";
             }
             else
             {
-                Debug.Log($"[DEBUG_DATA] GLB 로딩 제한 - 건너뛰기: ID={place.id}");
-                return; // 로딩 제한으로 건너뛰기
+                return;
             }
         }
 
         GameObject newObj = GetFromPool(place.model_type);
         if (newObj == null)
         {
-            Debug.LogWarning($"[DEBUG_DATA] 풀에서 오브젝트를 가져오지 못함: model_type={place.model_type}, ID={place.id}");
+            Debug.LogWarning($"[DataManager] 풀 부족 - ID={place.id}");
             return;
         }
 
-        Debug.Log($"[DEBUG_DATA] 오브젝트 활성화 전: name={newObj.name}, active={newObj.activeSelf}");
         newObj.SetActive(true);
         newObj.name = $"Place_{place.id}_{place.model_type}";
-        Debug.Log($"[DEBUG_DATA] 오브젝트 활성화 후: name={newObj.name}, active={newObj.activeSelf}");
 
         bool setupSuccess = SetupObjectComponents(newObj, place);
-        Debug.Log($"[DEBUG_DATA] SetupObjectComponents 결과: success={setupSuccess}, ID={place.id}");
 
         if (setupSuccess)
         {
             spawnedObjects[place.id] = newObj;
-            placeDataMap[place.id] = place; // ⭐ PlaceListManager가 사용하는 데이터 맵에 추가
-            Debug.Log($"[DEBUG_DATA] ✅ 오브젝트 생성 성공 - ID: {place.id}, model_type: {place.model_type}, spawnedObjects: {spawnedObjects.Count}, placeDataMap: {placeDataMap.Count}");
+            placeDataMap[place.id] = place;
         }
         else
         {
-            Debug.LogWarning($"[DEBUG_DATA] ❌ SetupObjectComponents 실패 - 풀로 반환: ID={place.id}");
+            Debug.LogWarning($"[DataManager] 오브젝트 설정 실패 - ID={place.id}");
             ReturnToPool(newObj, place.model_type);
         }
     }
@@ -461,20 +551,17 @@ public class DataManager : MonoBehaviour
 
     private bool SetupObjectComponents(GameObject obj, PlaceData place)
     {
-        Debug.Log($"[DEBUG_SETUP] SetupObjectComponents 시작: ID={place.id}, model_type={place.model_type}");
-
         // GPS 앵커 설정
-        CustomARGeospatialCreatorAnchor anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true); // includeInactive=true
+        CustomARGeospatialCreatorAnchor anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
         if (anchor == null)
         {
-            Debug.LogError($"[DEBUG_SETUP] ❌ CustomARGeospatialCreatorAnchor 없음: ID={place.id}");
+            Debug.LogError($"[DataManager] CustomARGeospatialCreatorAnchor 없음: ID={place.id}");
             return false;
         }
         anchor.SetCoordinatesAndCreateAnchor(place.latitude, place.longitude, place.altitude);
-        Debug.Log($"[DEBUG_SETUP] ✅ GPS 앵커 설정 완료: ID={place.id}, Lat={place.latitude}, Lon={place.longitude}");
 
         // 서브사진 설정
-        ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true); // includeInactive=true
+        ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
         if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
         {
             List<string> allSubPhotos = new List<string>();
@@ -489,68 +576,53 @@ public class DataManager : MonoBehaviour
                 }
             }
             displayCtrl.SetSubPhotos(allSubPhotos);
-            Debug.Log($"[DEBUG_SETUP] 서브사진 설정 완료: ID={place.id}, 개수={allSubPhotos.Count}");
         }
 
         // model_type에 따른 분기 처리
         bool result;
         if (place.model_type == "cube")
         {
-            Debug.Log($"[DEBUG_SETUP] SetupCubeObject 호출: ID={place.id}");
             result = SetupCubeObject(obj, place);
         }
         else if (place.model_type == "custom")
         {
-            Debug.Log($"[DEBUG_SETUP] SetupGLBObject 호출: ID={place.id}");
             result = SetupGLBObject(obj, place);
         }
         else
         {
-            Debug.Log($"[DEBUG_SETUP] 알 수 없는 model_type, SetupCubeObject 호출: ID={place.id}, model_type={place.model_type}");
             result = SetupCubeObject(obj, place); // 기본값으로 cube 처리
         }
 
-        Debug.Log($"[DEBUG_SETUP] SetupObjectComponents 완료: ID={place.id}, result={result}");
         return result;
     }
 
     private bool SetupCubeObject(GameObject obj, PlaceData place)
     {
-        Debug.Log($"[DEBUG_CUBE] SetupCubeObject 시작: ID={place.id}, obj.name={obj.name}");
-
         // 큐브 텍스처 설정
-        ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true); // includeInactive=true
+        ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
         if (display != null && !string.IsNullOrEmpty(place.main_photo))
         {
-            Debug.Log($"[DEBUG_CUBE] SetBaseMap 호출 시도: ID={place.id}, URL={place.main_photo}");
             display.SetBaseMap(place.main_photo);
-        }
-        else
-        {
-            Debug.LogWarning($"[DEBUG_CUBE] ImageDisplayController 없음 또는 main_photo 없음: ID={place.id}, display={display != null}, main_photo={!string.IsNullOrEmpty(place.main_photo)}");
         }
 
         // DoubleTap3D 설정
-        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true); // includeInactive=true
+        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
         if (doubleTap == null)
         {
-            Debug.LogError($"[DEBUG_CUBE] ❌ DoubleTap3D 컴포넌트 없음: ID={place.id}");
+            Debug.LogError($"[DataManager] DoubleTap3D 컴포넌트 없음: ID={place.id}");
             return false;
         }
         SetupDoubleTapInfo(doubleTap, place);
-        Debug.Log($"[DEBUG_CUBE] ✅ DoubleTap3D 설정 완료: ID={place.id}");
 
         // Target 설정
-        Target target = obj.GetComponentInChildren<Target>(true); // includeInactive=true
+        Target target = obj.GetComponentInChildren<Target>(true);
         if (target == null)
         {
-            Debug.LogError($"[DEBUG_CUBE] ❌ Target 컴포넌트 없음: ID={place.id}");
+            Debug.LogError($"[DataManager] Target 컴포넌트 없음: ID={place.id}");
             return false;
         }
         SetupTargetInfo(target, place);
-        Debug.Log($"[DEBUG_CUBE] ✅ Target 설정 완료: ID={place.id}");
 
-        Debug.Log($"[DEBUG_CUBE] ✅ SetupCubeObject 성공: ID={place.id}");
         return true;
     }
 
@@ -612,96 +684,79 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator LoadGLBAsync(GLBModelLoader loader, string url, float scale, int placeId, GameObject glbObj, PlaceData place)
     {
-        Debug.Log($"[DataManager] GLB 로딩 시작 - ID: {placeId}, URL: {url}");
-        
         bool loadCompleted = false;
         bool loadSuccess = false;
-        
+
         // 타임아웃 처리
         float startTime = Time.time;
-        
+
         // GLB 로딩을 여러번 시도
         int maxAttempts = 3;
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            Debug.Log($"[DataManager] GLB 로딩 시도 {attempt}/{maxAttempts} - ID: {placeId}");
-            
             loadCompleted = false;
             loadSuccess = false;
-            
+
             StartCoroutine(LoadGLBCoroutine(loader, url, scale, (success) => {
                 loadSuccess = success;
                 loadCompleted = true;
             }));
-            
+
             // 로딩 완료 또는 타임아웃까지 대기
             while (!loadCompleted && (Time.time - startTime) < glbLoadTimeout)
             {
                 yield return null;
             }
-            
+
             if (loadCompleted && loadSuccess)
             {
-                Debug.Log($"[DataManager] GLB 로딩 성공 (시도 {attempt}) - ID: {placeId}");
                 break;
             }
             else
             {
-                Debug.LogWarning($"[DataManager] GLB 로딩 실패 (시도 {attempt}) - ID: {placeId}");
-                
                 // 마지막 시도가 아니면 잠시 대기 후 재시도
                 if (attempt < maxAttempts)
                 {
-                    Debug.Log($"[DataManager] {attempt + 1}초 대기 후 재시도 - ID: {placeId}");
                     yield return new WaitForSeconds(attempt + 1);
-                    
-                    // GLBModelLoader 리셋
                     loader.ClearModel();
                 }
             }
         }
-        
+
         // 로딩 상태에서 제거
         currentlyLoadingGLB.Remove(placeId);
-        
+
         if (loadCompleted && loadSuccess)
         {
-            Debug.Log($"[DataManager] GLB 로딩 최종 성공 - ID: {placeId}");
-            
             // GLB 로딩 성공 시 UI 컴포넌트 설정
             DoubleTap3D doubleTap = glbObj.GetComponentInChildren<DoubleTap3D>();
             if (doubleTap != null)
             {
                 SetupDoubleTapInfo(doubleTap, place);
-                Debug.Log($"[DataManager] GLB DoubleTap3D 설정 완료 - ID: {placeId}");
             }
 
             Target target = glbObj.GetComponentInChildren<Target>();
             if (target != null)
             {
                 SetupTargetInfo(target, place);
-                Debug.Log($"[DataManager] GLB Target 설정 완료 - ID: {placeId}");
             }
         }
         else
         {
-            Debug.LogError($"[DataManager] GLB 로딩 최종 실패 (모든 시도 실패) - ID: {placeId}");
-            
+            Debug.LogWarning($"[DataManager] GLB 로딩 실패 - ID: {placeId}");
+
             // GLB 로딩 실패 시 처리
             if (fallbackToCube && spawnedObjects.ContainsKey(placeId))
             {
-                Debug.Log($"[DataManager] GLB에서 Cube로 fallback - ID: {placeId}");
-                
                 // 큐브로 대체
                 ReturnToPool(glbObj, "custom");
                 spawnedObjects.Remove(placeId);
-                
+
                 place.model_type = "cube";
                 CreateObjectFromData(place);
             }
             else
             {
-                Debug.Log($"[DataManager] GLB 전용 프리팹이므로 실패 시 비활성화 - ID: {placeId}");
                 glbObj.SetActive(false);
             }
         }
@@ -729,30 +784,25 @@ public class DataManager : MonoBehaviour
         Queue<GameObject> targetPool = modelType == "cube" ? cubeObjectPool : glbObjectPool;
         string poolName = modelType == "cube" ? "Cube" : "GLB";
 
-        Debug.Log($"[DEBUG_POOL] GetFromPool 호출: modelType={modelType}, poolName={poolName}, 풀 크기: {targetPool.Count}");
-
         if (targetPool.Count > 0)
         {
             GameObject obj = targetPool.Dequeue();
-            Debug.Log($"[DEBUG_POOL] 풀에서 오브젝트 가져옴 (Dequeue 전): name={obj.name}, active={obj.activeSelf}");
             ResetObjectState(obj, modelType);
             obj.SetActive(true);
             obj.name = $"Place_ID_{modelType}";
-            Debug.Log($"[DEBUG_POOL] 풀에서 오브젝트 가져옴 (활성화 후): name={obj.name}, active={obj.activeSelf}");
             return obj;
         }
-        else if (spawnedObjects.Count < poolSize * 4)
+        else if (spawnedObjects.Count < (cubePoolSize + glbPoolSize) * 2)
         {
-            Debug.LogWarning($"[DEBUG_POOL] {poolName} 풀에 오브젝트 없음, 새 오브젝트 생성");
+            Debug.LogWarning($"[DataManager] {poolName} 풀 부족 - 동적 생성");
             GameObject prefab = modelType == "cube" ? cubePrefab : glbPrefab;
             GameObject obj = Instantiate(prefab, Vector3.zero, Quaternion.identity);
             ResetObjectState(obj, modelType);
             obj.name = $"Place_ID_{modelType}";
-            Debug.Log($"[DEBUG_POOL] 새 오브젝트 생성 완료: name={obj.name}, active={obj.activeSelf}");
             return obj;
         }
 
-        Debug.LogError($"[DEBUG_POOL] {poolName} 오브젝트 풀 한계 초과");
+        Debug.LogError($"[DataManager] {poolName} 풀 한계 초과");
         ShowErrorMessage("너무 많은 장소가 로드되었습니다.");
         return null;
     }
