@@ -390,6 +390,14 @@ public class PlaceListManager : MonoBehaviour
         return tourAPIManager != null ? tourAPIManager.GetSpawnedObjectsCount() : 0;
     }
 
+    /// <summary>
+    /// 현재 설정된 최대 표시 거리 (미터)
+    /// </summary>
+    public float GetMaxDisplayDistance()
+    {
+        return maxDisplayDistance;
+    }
+
     private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
     {
         const float R = 6371000;
