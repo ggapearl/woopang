@@ -1,18 +1,219 @@
-2025-12-04 11:22:43.730 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:22:43.730 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:22:43.731 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:22:53.762 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:22:53.762 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:22:53.764 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:03.759 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:03.760 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:03.761 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:13.790 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:13.791 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:13.792 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:23.785 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:23.786 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:23.788 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:33.783 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:33.784 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:33.786 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
+2025-12-07 21:18:55.190 3834 3888 Info Unity [WoopangDebug] [DataManager] FetchDataProgressively 시작 - isDataLoading=False
+2025-12-07 21:18:55.192 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출
+2025-12-07 21:18:55.486 3834 3888 Warn Unity [WoopangDebug] [DataManager] 너무 잦은 호출로 인해 로딩 무시됨. (경과: 0.3초)
+2025-12-07 21:18:55.487 3834 3888 Warn Unity [WoopangDebug] [DataManager] 너무 잦은 호출로 인해 로딩 무시됨. (경과: 0.3초)
+2025-12-07 21:18:58.976 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 9 (5000m) - 19개 발견
+2025-12-07 21:19:00.649 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 10 (10000m) - 27개 발견
+2025-12-07 21:19:02.508 3834 3888 Info Unity [WoopangDebug] [DataManager] 로딩 완료 - 총 0개 오브젝트 생성됨
+2025-12-07 21:19:02.509 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출
+2025-12-07 21:19:02.511 3834 3888 Info Unity [WoopangDebug] [DataManager] FetchDataProgressively 완료 - lastPosition 갱신됨
+2025-12-07 21:19:04.549 3834 3888 Info Unity [WoopangDebug] [DataManager] FetchDataProgressively 시작 - isDataLoading=False
+2025-12-07 21:19:04.549 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출
+2025-12-07 21:19:04.906 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 0 (25m) - 6개 발견
+2025-12-07 21:19:06.818 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 3 (100m) - 1개 발견
+2025-12-07 21:19:07.615 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 5 (200m) - 2개 발견
+2025-12-07 21:19:08.078 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 6 (500m) - 1개 발견
+2025-12-07 21:19:08.925 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 7 (1000m) - 1개 발견
+2025-12-07 21:19:09.357 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 8 (2000m) - 2개 발견
+2025-12-07 21:19:09.855 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 9 (5000m) - 3개 발견
+2025-12-07 21:19:10.423 3834 3888 Info Unity [WoopangDebug] [DataManager] Tier 10 (10000m) - 4개 발견
+2025-12-07 21:19:10.709 3834 3888 Info Unity [WoopangDebug] [DataManager] 로딩 완료 - 총 9개 오브젝트 생성됨
+2025-12-07 21:19:10.710 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출
+2025-12-07 21:19:10.711 3834 3888 Info Unity [WoopangDebug] [DataManager] FetchDataProgressively 완료 - lastPosition 갱신됨
+
+
+
+2025-12-07 21:18:52.881 3834 3888 Info Unity [PlaceListManager] Start() 호출 - listText=True, dataManager=True, tourAPIManager=True
+2025-12-07 21:18:52.881 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.882 3834 3888 Info Unity [PlaceListManager] 슬라이더 초기화: value=9104m (Saved)
+2025-12-07 21:18:52.882 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.882 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.882 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.883 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.883 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListSkeletonLoader:CreateRoundedRectangle(Single, Single)
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListSkeletonLoader:CreateSkeletonLines()
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListSkeletonLoader:CreateRoundedRectangle(Single, Single)
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListSkeletonLoader:CreateSkeletonLines()
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.884 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListSkeletonLoader:CreateRoundedRectangle(Single, Single)
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListSkeletonLoader:CreateSkeletonLines()
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListSkeletonLoader:CreateRoundedRectangle(Single, Single)
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListSkeletonLoader:CreateSkeletonLines()
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.885 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListSkeletonLoader:CreateRoundedRectangle(Single, Single)
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListSkeletonLoader:CreateSkeletonLines()
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.886 3834 3888 Info Unity [PlaceListSkeletonLoader] 5개의 스켈레톤 라인 생성 완료
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListSkeletonLoader:CreateSkeletonLines()
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.886 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.887 3834 3888 Info Unity PlaceListSkeletonLoader:ShowSkeletonLoader()
+2025-12-07 21:18:52.887 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.887 3834 3888 Info Unity [PlaceListManager] 스켈레톤 로더 시작
+2025-12-07 21:18:52.887 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.887 3834 3888 Info Unity [PlaceListManager] 데이터 로딩 대기 시작...
+2025-12-07 21:18:52.887 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.887 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:52.888 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 1초 - DataManager=False, TourAPI=False
+2025-12-07 21:18:52.888 3834 3888 Info Unity PlaceListManager:Start()
+2025-12-07 21:18:54.224 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 2초 - DataManager=False, TourAPI=False
+2025-12-07 21:18:55.187 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 3초 - DataManager=False, TourAPI=False
+2025-12-07 21:18:56.198 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 4초 - DataManager=False, TourAPI=False
+2025-12-07 21:18:57.244 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 5초 - DataManager=False, TourAPI=False
+2025-12-07 21:18:58.252 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 6초 - DataManager=False, TourAPI=False
+2025-12-07 21:18:59.262 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 7초 - DataManager=False, TourAPI=False
+2025-12-07 21:19:00.270 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 8초 - DataManager=False, TourAPI=False
+2025-12-07 21:19:01.275 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 9초 - DataManager=False, TourAPI=False
+2025-12-07 21:19:02.310 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 10초 - DataManager=False, TourAPI=False
+2025-12-07 21:19:03.346 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 11초 - DataManager=True, TourAPI=False
+2025-12-07 21:19:04.352 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 12초 - DataManager=True, TourAPI=False
+2025-12-07 21:19:05.357 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 13초 - DataManager=True, TourAPI=False
+2025-12-07 21:19:06.693 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 14초 - DataManager=True, TourAPI=False
+2025-12-07 21:19:07.731 3834 3888 Info Unity [PlaceListManager] 데이터 대기 중... 15초 - DataManager=True, TourAPI=False
+2025-12-07 21:19:08.836 3834 3888 Info Unity [PlaceListManager] 데이터 로딩 완료! 첫 UI 업데이트 시작
+2025-12-07 21:19:08.837 3834 3888 Info Unity [DEBUG_TRACE] PlaceListManager: UpdateUI() Called
+2025-12-07 21:19:08.837 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.838 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.839 3834 3888 Info Unity [DEBUG_TRACE] PlaceListManager: Fetched Data - Woopang=56, TourAPI=1
+2025-12-07 21:19:08.839 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.841 3834 3888 Info Unity [DEBUG_TRACE] PlaceListManager: Filter Status - WoopangData=True, PetFriendly=True
+2025-12-07 21:19:08.841 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.842 3834 3888 Info Unity [DEBUG_TRACE] PlaceListManager: Woopang Filter Result - Added=56, Filtered=0
+2025-12-07 21:19:08.842 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.843 3834 3888 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
+2025-12-07 21:19:08.843 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.864 3834 3888 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=56, TourAPI=1, 필터링 후 표시=11
+2025-12-07 21:19:08.864 3834 3888 Info Unity PlaceListManager:UpdateUI()
+2025-12-07 21:19:08.865 3834 3888 Info Unity PlaceListSkeletonLoader:HideSkeletonAndShowText()
+2025-12-07 21:19:08.865 3834 3888 Info Unity [PlaceListManager] 스켈레톤 로더 종료 및 텍스트 페이드인 시작
+2025-12-07 21:19:09.574 3834 3888 Info Unity [PlaceListSkeletonLoader] 스켈레톤 페이드아웃 및 텍스트 페이드인 완료
+
+
+
+
+
+2025-12-07 21:18:52.588 3834 3888 Info Unity [PlaceDiscovery] Awake 호출됨
+2025-12-07 21:18:52.588 3834 3888 Info Unity PlaceDiscoveryNotification:Awake()
+2025-12-07 21:18:52.588 3834 3888 Info Unity [PlaceDiscovery] Instance 설정 완료
+2025-12-07 21:18:52.588 3834 3888 Info Unity PlaceDiscoveryNotification:Awake()
+2025-12-07 21:18:52.589 3834 3888 Info Unity [PlaceDiscovery] notificationPanel 초기화 완료 (비활성 상태)
+2025-12-07 21:18:52.589 3834 3888 Info Unity PlaceDiscoveryNotification:Awake()
+2025-12-07 21:18:55.192 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출
+2025-12-07 21:18:55.193 3834 3888 Info Unity [PlaceDiscovery] StartDiscovery 호출됨 - notificationPanel=True, notificationText=True
+2025-12-07 21:18:55.193 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:18:55.194 3834 3888 Info Unity [PlaceDiscovery] OnEnable 호출됨
+2025-12-07 21:18:55.194 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:18:55.194 3834 3888 Info Unity [PlaceDiscovery] notificationPanel 활성화됨
+2025-12-07 21:18:55.194 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:18:55.195 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 0개의 공간을 발견하였습니다.
+2025-12-07 21:18:55.195 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:18:55.195 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:18:55.196 3834 3888 Info Unity [PlaceDiscovery] FadeIn 시작
+2025-12-07 21:18:55.196 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:18:55.196 3834 3888 Info Unity [PlaceDiscovery] StartDiscovery 완료
+2025-12-07 21:18:55.196 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:18:55.521 3834 3888 Info Unity [PlaceDiscovery] FadeIn 완료
+2025-12-07 21:18:58.976 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=19, isShowing=True, currentCount=0
+2025-12-07 21:18:58.976 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:18:58.977 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 19개의 공간을 발견하였습니다.
+2025-12-07 21:18:58.977 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:18:58.977 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:18:58.978 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 19개
+2025-12-07 21:18:58.978 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:00.650 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=27, isShowing=True, currentCount=19
+2025-12-07 21:19:00.650 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:00.650 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 46개의 공간을 발견하였습니다.
+2025-12-07 21:19:00.650 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:00.650 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:00.651 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 46개
+2025-12-07 21:19:00.651 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:02.509 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출
+2025-12-07 21:19:02.510 3834 3888 Info Unity [PlaceDiscovery] CompleteDiscovery 호출 - isShowing=True, currentCount=46
+2025-12-07 21:19:02.510 3834 3888 Info Unity PlaceDiscoveryNotification:CompleteDiscovery()
+2025-12-07 21:19:02.510 3834 3888 Info Unity [PlaceDiscovery] 2초 후 페이드아웃 예정
+2025-12-07 21:19:02.510 3834 3888 Info Unity PlaceDiscoveryNotification:CompleteDiscovery()
+2025-12-07 21:19:04.516 3834 3888 Info Unity [PlaceDiscovery] FadeOut 시작
+2025-12-07 21:19:04.549 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출
+2025-12-07 21:19:04.550 3834 3888 Info Unity [PlaceDiscovery] StartDiscovery 호출됨 - notificationPanel=True, notificationText=True
+2025-12-07 21:19:04.550 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:19:04.550 3834 3888 Info Unity [PlaceDiscovery] notificationPanel 활성화됨
+2025-12-07 21:19:04.550 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:19:04.551 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 0개의 공간을 발견하였습니다.
+2025-12-07 21:19:04.551 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:04.551 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:19:04.551 3834 3888 Info Unity [PlaceDiscovery] FadeIn 시작
+2025-12-07 21:19:04.551 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:19:04.552 3834 3888 Info Unity [PlaceDiscovery] StartDiscovery 완료
+2025-12-07 21:19:04.552 3834 3888 Info Unity PlaceDiscoveryNotification:StartDiscovery()
+2025-12-07 21:19:04.884 3834 3888 Info Unity [PlaceDiscovery] FadeIn 완료
+2025-12-07 21:19:04.907 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=6, isShowing=True, currentCount=0
+2025-12-07 21:19:04.907 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:04.908 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 6개의 공간을 발견하였습니다.
+2025-12-07 21:19:04.908 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:04.908 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:04.908 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 6개
+2025-12-07 21:19:04.908 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:06.819 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=1, isShowing=True, currentCount=6
+2025-12-07 21:19:06.819 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:06.820 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 7개의 공간을 발견하였습니다.
+2025-12-07 21:19:06.820 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:06.820 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:06.821 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 7개
+2025-12-07 21:19:06.821 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:07.616 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=2, isShowing=True, currentCount=7
+2025-12-07 21:19:07.616 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:07.617 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 9개의 공간을 발견하였습니다.
+2025-12-07 21:19:07.617 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:07.617 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:07.618 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 9개
+2025-12-07 21:19:07.618 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:08.079 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=1, isShowing=True, currentCount=9
+2025-12-07 21:19:08.079 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:08.080 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 10개의 공간을 발견하였습니다.
+2025-12-07 21:19:08.080 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:08.080 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:08.080 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 10개
+2025-12-07 21:19:08.080 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:08.926 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=1, isShowing=True, currentCount=10
+2025-12-07 21:19:08.926 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:08.926 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 11개의 공간을 발견하였습니다.
+2025-12-07 21:19:08.926 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:08.926 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:08.927 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 11개
+2025-12-07 21:19:08.927 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:09.357 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=2, isShowing=True, currentCount=11
+2025-12-07 21:19:09.357 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:09.358 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 13개의 공간을 발견하였습니다.
+2025-12-07 21:19:09.358 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:09.358 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:09.359 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 13개
+2025-12-07 21:19:09.359 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:09.855 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=3, isShowing=True, currentCount=13
+2025-12-07 21:19:09.855 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:09.856 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 16개의 공간을 발견하였습니다.
+2025-12-07 21:19:09.856 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:09.856 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:09.856 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 16개
+2025-12-07 21:19:09.856 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:10.424 3834 3888 Info Unity [PlaceDiscovery] UpdateDiscoveredCount 호출 - newCount=4, isShowing=True, currentCount=16
+2025-12-07 21:19:10.424 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:10.425 3834 3888 Info Unity [PlaceDiscovery] 텍스트 업데이트: 근처에 20개의 공간을 발견하였습니다.
+2025-12-07 21:19:10.425 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateText(Int32)
+2025-12-07 21:19:10.425 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:10.426 3834 3888 Info Unity [PlaceDiscovery] 개수 업데이트 완료 - 총 20개
+2025-12-07 21:19:10.426 3834 3888 Info Unity PlaceDiscoveryNotification:UpdateDiscoveredCount(Int32)
+2025-12-07 21:19:10.710 3834 3888 Info Unity [WoopangDebug] [DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출
+2025-12-07 21:19:10.710 3834 3888 Info Unity [PlaceDiscovery] CompleteDiscovery 호출 - isShowing=True, currentCount=20
+2025-12-07 21:19:10.710 3834 3888 Info Unity PlaceDiscoveryNotification:CompleteDiscovery()
+2025-12-07 21:19:10.711 3834 3888 Info Unity [PlaceDiscovery] 2초 후 페이드아웃 예정
+2025-12-07 21:19:10.711 3834 3888 Info Unity PlaceDiscoveryNotification:CompleteDiscovery()
+2025-12-07 21:19:12.716 3834 3888 Info Unity [PlaceDiscovery] FadeOut 시작
+2025-12-07 21:19:13.255 3834 3888 Info Unity [PlaceDiscovery] FadeOut 완료 - 패널 비활성화됨

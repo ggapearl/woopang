@@ -349,8 +349,12 @@ public class PlaceListManager : MonoBehaviour
             listText.text += coloredText + "\n";
         }
 
-        listText.text += $"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n";
-        listText.text += $"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}";
+        // ✅ 실제 표시된 개수만 카운트 (필터링 후)
+        int displayedWoopangCount = combinedPlaces.Count(x => x.place is PlaceData);
+        int displayedTourAPICount = combinedPlaces.Count(x => x.place is TourPlaceData);
+
+        listText.text += $"\n{GetLocalizedText("woopangData")}: {displayedWoopangCount}\n";
+        listText.text += $"{GetLocalizedText("tourApiData")}: {displayedTourAPICount}";
 
         Canvas.ForceUpdateCanvases();
         if (listText != null)

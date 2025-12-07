@@ -56,6 +56,36 @@ public class DataManager : MonoBehaviour
     private bool isDataLoading = false; // 중복 로딩 방지 플래그
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
+    private float lastFetchTime = -999f;
+
+    void Awake()
+    {
+        // PlaceDiscoveryNotification 강제 활성화
+        var discoveryPanel = Resources.FindObjectsOfTypeAll<PlaceDiscoveryNotification>();
+        if (discoveryPanel != null && discoveryPanel.Length > 0)
+        {
+            foreach (var panel in discoveryPanel)
+            {
+                if (!panel.gameObject.activeInHierarchy)
+                {
+                    panel.gameObject.SetActive(true);
+                }
+            }
+        }
+
+        // SystemUIManager 강제 활성화
+        var systemUI = Resources.FindObjectsOfTypeAll<SystemUIManager>();
+        if (systemUI != null && systemUI.Length > 0)
+        {
+            foreach (var ui in systemUI)
+            {
+                if (!ui.gameObject.activeInHierarchy)
+                {
+                    ui.gameObject.SetActive(true);
+                }
+            }
+        }
+    }
 
     void OnEnable()
     {
@@ -177,6 +207,8 @@ public class DataManager : MonoBehaviour
     {
         if (args.state == ARSessionState.SessionTracking && !isDataLoaded)
         {
+            // 중복 로딩 방지를 위해 주석 처리
+            /*
             float lat = 37.5665f;
             float lon = 126.9780f;
             if (Input.location.status == LocationServiceStatus.Running)
@@ -190,6 +222,7 @@ public class DataManager : MonoBehaviour
                 StopCoroutine(fetchCoroutine);
             }
             fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
+            */
         }
     }
 
@@ -197,6 +230,9 @@ public class DataManager : MonoBehaviour
     {
         while (true)
         {
+            // 첫 실행 대기
+            yield return new WaitForSeconds(updateInterval);
+
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
             
             float lat = 37.5665f;
@@ -209,7 +245,6 @@ public class DataManager : MonoBehaviour
 
             yield return StartCoroutine(FetchDataProgressively(lat, lon));
             isDataLoaded = true;
-            yield return new WaitForSeconds(updateInterval);
         }
     }
 
@@ -239,12 +274,20 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator FetchDataProgressively(float lat, float lon)
     {
-        Debug.Log($"[DataManager] FetchDataProgressively 시작 - isDataLoading={isDataLoading}");
+        // 5초 쿨타임 체크
+        if (Time.time - lastFetchTime < 5f)
+        {
+            Debug.LogWarning($"[WoopangDebug] [DataManager] 너무 잦은 호출로 인해 로딩 무시됨. (경과: {Time.time - lastFetchTime:F1}초)");
+            yield break;
+        }
+        lastFetchTime = Time.time;
+
+        Debug.Log($"[WoopangDebug] [DataManager] FetchDataProgressively 시작 - isDataLoading={isDataLoading}");
 
         // 이미 로딩 중이면 중복 실행 방지
         if (isDataLoading)
         {
-            Debug.LogWarning("[DataManager] 이미 데이터 로딩 중입니다. 중복 실행 방지.");
+            Debug.LogWarning("[WoopangDebug] [DataManager] 이미 데이터 로딩 중입니다. 중복 실행 방지.");
             yield break;
         }
 
@@ -259,12 +302,12 @@ public class DataManager : MonoBehaviour
         // 발견 알림 시작
         if (PlaceDiscoveryNotification.Instance != null)
         {
-            Debug.Log("[DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출");
+            Debug.Log("[WoopangDebug] [DataManager] PlaceDiscoveryNotification.StartDiscovery() 호출");
             PlaceDiscoveryNotification.Instance.StartDiscovery();
         }
         else
         {
-            Debug.LogWarning("[DataManager] PlaceDiscoveryNotification.Instance가 null입니다!");
+            Debug.LogWarning("[WoopangDebug] [DataManager] PlaceDiscoveryNotification.Instance가 null입니다!");
         }
 
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
@@ -276,11 +319,8 @@ public class DataManager : MonoBehaviour
         {
             float radius = loadRadii[tierIndex];
 
-            // 사용자 설정 범위를 초과하면 중단
-            if (radius > maxDistance)
-            {
-                break;
-            }
+            // 사용자 설정 범위(maxDistance)와 상관없이 모든 데이터 로딩 (리스트 표시용)
+            // if (radius > maxDistance) break; // 삭제됨
 
             string serverUrl = $"{baseServerUrl}&lat={lat}&lon={lon}&radius={radius}";
 
@@ -290,12 +330,30 @@ public class DataManager : MonoBehaviour
             // 새로 발견한 장소 개수 알림 업데이트
             if (newPlaces.Count > 0 && PlaceDiscoveryNotification.Instance != null)
             {
+                Debug.Log($"[WoopangDebug] [DataManager] Tier {tierIndex} ({radius}m) - {newPlaces.Count}개 발견");
                 PlaceDiscoveryNotification.Instance.UpdateDiscoveredCount(newPlaces.Count);
             }
 
             foreach (PlaceData place in newPlaces)
             {
-                CreateObjectFromData(place);
+                // 리스트 표시를 위해 데이터는 무조건 저장
+                if (!placeDataMap.ContainsKey(place.id))
+                {
+                    placeDataMap[place.id] = place;
+                }
+                else
+                {
+                    // 이미 있으면 업데이트
+                    placeDataMap[place.id] = place;
+                }
+
+                // 3D 오브젝트 생성은 300m 이내만 수행 (메모리 최적화)
+                float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
+                if (dist <= 300f)
+                {
+                    CreateObjectFromData(place);
+                }
+                
                 loadedIds.Add(place.id);
 
                 if (objectSpawnDelay > 0)
@@ -307,12 +365,22 @@ public class DataManager : MonoBehaviour
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
 
-        Debug.Log($"[DataManager] 로딩 완료 - 총 {spawnedObjects.Count}개 오브젝트");
+        Debug.Log($"[WoopangDebug] [DataManager] 로딩 완료 - 총 {spawnedObjects.Count}개 오브젝트 생성됨");
 
         // 발견 알림 완료
         if (PlaceDiscoveryNotification.Instance != null)
         {
-            Debug.Log("[DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출");
+            if (placeDataMap.Count == 0)
+            {
+                // 데이터가 없으면 실패 메시지 표시 (UI 텍스트 직접 수정 필요할 수 있음)
+                // PlaceDiscoveryNotification에 실패 메서드가 없으므로, 텍스트 변경이나 별도 처리 필요
+                // 여기서는 일단 CompleteDiscovery 호출하되, Notification 측에서 0개일 때 처리를 하도록 유도하거나
+                // Notification에 ShowNoDataMessage() 같은 걸 추가하는 게 좋음.
+                // 현재는 CompleteDiscovery 호출
+                Debug.Log("[WoopangDebug] [DataManager] 데이터 없음 - 알림 완료 처리");
+            }
+            
+            Debug.Log("[WoopangDebug] [DataManager] PlaceDiscoveryNotification.CompleteDiscovery() 호출");
             PlaceDiscoveryNotification.Instance.CompleteDiscovery();
         }
 
@@ -324,8 +392,11 @@ public class DataManager : MonoBehaviour
 
         isDataLoaded = true;
         isDataLoading = false; // 로딩 완료
+        
+        // 로딩 완료 시점의 위치를 기준점으로 갱신 (불필요한 재로딩 방지)
+        lastPosition = new Vector2(lat, lon);
 
-        Debug.Log("[DataManager] FetchDataProgressively 완료");
+        Debug.Log("[WoopangDebug] [DataManager] FetchDataProgressively 완료 - lastPosition 갱신됨");
     }
 
     /// <summary>
