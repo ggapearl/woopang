@@ -926,7 +926,7 @@ public class CubeUploadManager : MonoBehaviour
         formData.AddField("pet_friendly", petFriendly ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroom ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
-        formData.AddField("status", "pending");
+        formData.AddField("status", "approved");
         
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
