@@ -1,4 +1,2 @@
-Assets\Plugins\ImageCropper\Scripts\FontSizeSynchronizer.cs(7,10): error CS1040: Preprocessor directives must appear as the first non-whitespace character on a line
-
-Library\PackageCache\com.google.ar.core.arfoundation.extensions@60e479f4d190\Runtime\GeospatialCreatorRuntime\Scripts\ARGeospatialCreatorOrigin.cs(87,10): error CS0592: Attribute 'SerializeField' is not valid on this declaration type. It is only valid on 'field' declarations.
+Packages\com.google.ar.core.arfoundation.extensions\Runtime\GeospatialCreatorRuntime\Scripts\ARGeospatialCreatorOrigin.cs(87,10): error CS0592: Attribute 'SerializeField' is not valid on this declaration type. It is only valid on 'field' declarations.
 

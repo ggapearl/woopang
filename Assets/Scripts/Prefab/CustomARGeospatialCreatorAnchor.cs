@@ -1,44 +1,42 @@
-using Google.XR.ARCoreExtensions.GeospatialCreator;
 using UnityEngine;
+using Google.XR.ARCoreExtensions;
+using UnityEngine.XR.ARFoundation;
 
-public class CustomARGeospatialCreatorAnchor : ARGeospatialCreatorAnchor
+public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 {
-    // ÁÂÇ¥ ¼³Á¤ ¹× ¾ŞÄ¿ »ı¼º ¸Ş¼­µå Ãß°¡
+    private ARAnchorManager anchorManager;
+
+    // ì¢Œí‘œ ì„¤ì • ë° ì•µì»¤ ìƒì„± ë©”ì„œë“œ
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
-        // ºñº¸È£µÈ ³»ºÎ ÇÊµå¿¡ Á¢±ÙÇÏ±â À§ÇØ ¸®ÇÃ·º¼Ç »ç¿ë
-        typeof(ARGeospatialCreatorAnchor)
-            .GetField("_latitude", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            .SetValue(this, latitude);
-        typeof(ARGeospatialCreatorAnchor)
-            .GetField("_longitude", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            .SetValue(this, longitude);
-        typeof(ARGeospatialCreatorAnchor)
-            .GetField("_altitude", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            .SetValue(this, altitude);
+        if (anchorManager == null) anchorManager = FindObjectOfType<ARAnchorManager>();
 
-        if (Application.isPlaying)
+        if (anchorManager != null)
         {
-            // ºñº¸È£µÈ ³»ºÎ ÇÊµå¿¡ Á¢±ÙÇÏ±â À§ÇØ ¸®ÇÃ·º¼Ç »ç¿ë
-            var anchorResolutionField = typeof(ARGeospatialCreatorAnchor)
-                .GetField("_anchorResolution", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var anchorResolution = (AnchorResolutionState)anchorResolutionField.GetValue(this);
+            // íšŒì „ê°’ (ê¸°ë³¸ê°’)
+            Quaternion rotation = Quaternion.identity;
 
-            if (anchorResolution == AnchorResolutionState.NotStarted)
+            // ARGeospatialAnchor ìƒì„± (Runtime API ì‚¬ìš©)
+            // ì£¼ì˜: ARAnchorManager.AddAnchorëŠ” Geospatial ê¸°ëŠ¥ì´ í™œì„±í™”ëœ ìƒíƒœì—ì„œë§Œ ë™ì‘í•¨
+            ARGeospatialAnchor anchor = anchorManager.AddAnchor(latitude, longitude, altitude, rotation);
+
+            if (anchor != null)
             {
-                // ºñº¸È£µÈ ¸Ş¼­µå È£Ãâ
-                typeof(ARGeospatialCreatorAnchor)
-                    .GetMethod("AddGeoAnchorAtRuntime", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    .Invoke(this, null);
+                // ìƒì„±ëœ ì•µì»¤ì˜ ìì‹ìœ¼ë¡œ ì„¤ì •í•˜ì—¬ ìœ„ì¹˜ ê³ ì •
+                transform.SetParent(anchor.transform, false);
+                transform.localPosition = Vector3.zero;
+                transform.localRotation = Quaternion.identity;
+                
+                Debug.Log($"[CustomAnchor] ì•µì»¤ ìƒì„± ì„±ê³µ: {latitude}, {longitude}");
+            }
+            else
+            {
+                Debug.LogError($"[CustomAnchor] ì•µì»¤ ìƒì„± ì‹¤íŒ¨: {latitude}, {longitude}");
             }
         }
-    }
-
-    // AnchorResolutionState ¿­°ÅÇü Á¤ÀÇ (¿øº» Å¬·¡½º¿¡¼­ ºñ°ø°³·Î Á¤ÀÇµÇ¾î ÀÖÀ¸¹Ç·Î ÀçÁ¤ÀÇ)
-    private enum AnchorResolutionState
-    {
-        NotStarted,
-        InProgress,
-        Complete
+        else
+        {
+            Debug.LogError("[CustomAnchor] ARAnchorManagerë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
+        }
     }
 }

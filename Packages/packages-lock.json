@@ -8,27 +8,26 @@
         "com.unity.modules.jsonserialize": "1.0.0",
         "com.unity.modules.unitywebrequest": "1.0.0",
         "com.unity.mathematics": "1.2.6",
-        "com.unity.burst": "1.8.4",
+        "com.unity.burst": "1.8.24",
         "com.unity.collections": "1.2.4"
       },
-      "hash": "b5db919fe5d84158e742524f1f7f2e32020b0141"
+      "hash": "e35dbd7f157d8fdfac3ea33189f4682101b6e613"
     },
     "com.cesium.unity": {
-      "version": "1.15.4",
+      "version": "file:com.cesium.unity",
       "depth": 0,
-      "source": "registry",
+      "source": "embedded",
       "dependencies": {
         "com.unity.mathematics": "1.2.0",
         "com.unity.test-framework": "1.1.31",
         "com.unity.shadergraph": "12.1.6",
         "com.unity.inputsystem": "1.4.2"
-      },
-      "url": "https://unity.pkg.cesium.com"
+      }
     },
     "com.google.ar.core.arfoundation.extensions": {
-      "version": "file:C:/tools/arcore-unity-extensions-1.48.0-arf5.tgz",
+      "version": "file:com.google.ar.core.arfoundation.extensions",
       "depth": 0,
-      "source": "local-tarball",
+      "source": "embedded",
       "dependencies": {
         "com.unity.xr.arfoundation": "4.1.5",
         "com.unity.xr.arcore": "4.1.5",
