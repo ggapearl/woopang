@@ -43,7 +43,7 @@ public class DoubleTap3D : MonoBehaviour
     private bool petFriendly;
     private bool separateRestroom;
     private string descriptionText;
-    private string name;
+    private string placeName;
     private string instagramId;
     private int id = -1;
     private string username;
@@ -520,7 +520,7 @@ public class DoubleTap3D : MonoBehaviour
         this.petFriendly = petFriendly;
         this.separateRestroom = separateRestroom;
         this.descriptionText = description;
-        this.name = name;
+        this.placeName = name;
         this.id = id;
         this.username = username;
         this.instagramId = instagramId;
@@ -534,7 +534,7 @@ public class DoubleTap3D : MonoBehaviour
             UpdateInfoImages();
         }
 
-        Debug.Log($"[DoubleTap3D] SetInfoImages 호출 - ID: {id}, Description: {description}, Name: {name}, GameObject: {gameObject.name}");
+        Debug.Log($"[DoubleTap3D] SetInfoImages 호출 - ID: {id}, Description: {description}, Name: {placeName}, GameObject: {gameObject.name}");
 
         if (debugText != null)
         {
@@ -552,8 +552,8 @@ public class DoubleTap3D : MonoBehaviour
 
         instagramButton.gameObject.SetActive(!string.IsNullOrEmpty(instagramId));
 
-        nameText.gameObject.SetActive(!string.IsNullOrEmpty(name) && isFullscreen);
-        if (!string.IsNullOrEmpty(name)) nameText.text = name;
+        nameText.gameObject.SetActive(!string.IsNullOrEmpty(placeName) && isFullscreen);
+        if (!string.IsNullOrEmpty(placeName)) nameText.text = placeName;
 
         if (descriptionTextUI != null)
         {
@@ -732,7 +732,7 @@ public class DoubleTap3D : MonoBehaviour
         return id;
     }
     public string GetUsername() => username;
-    public string GetName() => name;
+    public string GetName() => placeName;
     public bool IsPetFriendly() => petFriendly;
     public bool IsSeparateRestroom() => separateRestroom;
     public string GetInstagramId() => instagramId;
@@ -744,7 +744,7 @@ public class DoubleTap3D : MonoBehaviour
         petFriendly = false;
         separateRestroom = false;
         descriptionText = null;
-        name = null;
+        placeName = null;
         id = -1;
         username = null;
         instagramId = null;
