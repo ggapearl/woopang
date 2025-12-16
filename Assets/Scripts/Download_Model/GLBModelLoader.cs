@@ -55,7 +55,7 @@ public class GLBModelLoader : MonoBehaviour
         Debug.Log($"[GLBModelLoader] 시스템 메모리: {SystemInfo.systemMemorySize}MB");
         Debug.Log($"[GLBModelLoader] 그래픽 메모리: {SystemInfo.graphicsMemorySize}MB");
         Debug.Log($"[GLBModelLoader] 그래픽 API: {SystemInfo.graphicsDeviceType}");
-        Debug.Log($"[GLBModelLoader] 렌더 파이프라인: {UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset?.GetType().Name ?? "Built-in"}");
+        Debug.Log($"[GLBModelLoader] 렌더 파이프라인: {UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline?.GetType().Name ?? "Built-in"}");
         Debug.Log($"[GLBModelLoader] 셰이더 레벨: {SystemInfo.graphicsShaderLevel}");
         Debug.Log($"[GLBModelLoader] 텍스처 압축 지원: {SystemInfo.SupportsTextureFormat(TextureFormat.DXT1)} (DXT1), {SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)} (ETC2)");
         
@@ -750,8 +750,8 @@ public class GLBModelLoader : MonoBehaviour
                             
                             // 렌더 파이프라인에 따른 셰이더 선택
                             Shader targetShader = null;
-                            bool isURP = UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset != null && 
-                                        UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset.GetType().Name.Contains("Universal");
+                            bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null && 
+                                        UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
                             
                             if (isURP)
                             {
@@ -894,8 +894,8 @@ public class GLBModelLoader : MonoBehaviour
                             Debug.Log($"[GLBModelLoader] Built-in 셰이더 감지, URP로 교체 필요: {material.shader.name}");
                             
                             // 렌더 파이프라인 확인
-                            bool isURP = UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset != null && 
-                                        UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset.GetType().Name.Contains("Universal");
+                            bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null && 
+                                        UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
                             
                             if (isURP)
                             {
@@ -1213,8 +1213,8 @@ public class GLBModelLoader : MonoBehaviour
                             Debug.Log($"[GLBModelLoader] Built-in 셰이더 감지, URP로 교체: {material.shader.name}");
                             
                             // 렌더 파이프라인 확인
-                            bool isURP = UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset != null && 
-                                        UnityEngine.Rendering.GraphicsSettings.renderPipelineAsset.GetType().Name.Contains("Universal");
+                            bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null && 
+                                        UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
                             
                             if (isURP)
                             {

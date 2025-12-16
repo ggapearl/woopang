@@ -1,5 +1,9 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 public class Object3DTouchHaptic : MonoBehaviour
 {
@@ -12,6 +16,16 @@ public class Object3DTouchHaptic : MonoBehaviour
     private AudioSource audioSource;
     private bool isProcessingTouch = false;
     private Collider objectCollider;
+
+    void OnEnable()
+    {
+        EnhancedTouchSupport.Enable();
+    }
+
+    void OnDisable()
+    {
+        EnhancedTouchSupport.Disable();
+    }
 
     void Start()
     {
@@ -33,34 +47,34 @@ public class Object3DTouchHaptic : MonoBehaviour
     void Update()
     {
         bool inputDetected = false;
-        Vector3 inputPosition = Vector3.zero;
+        Vector2 inputPosition = Vector2.zero;
         
-        // 터치 입력
-        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began && !isProcessingTouch)
+        // Touch Input
+        if (Touch.activeTouches.Count > 0 && Touch.activeTouches[0].phase == TouchPhase.Began && !isProcessingTouch)
         {
             inputDetected = true;
-            inputPosition = Input.GetTouch(0).position;
+            inputPosition = Touch.activeTouches[0].screenPosition;
             
-            // UI 터치 확인 (인디케이터 포함)
-            if (IsOverUIOrIndicator())
+            // Check UI
+            if (IsOverUIOrIndicator(inputPosition))
             {
                 return;
             }
         }
-        // 마우스 입력 (에디터용)
-        else if (Input.GetMouseButtonDown(0) && !isProcessingTouch)
+        // Mouse Input
+        else if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && !isProcessingTouch)
         {
             inputDetected = true;
-            inputPosition = Input.mousePosition;
+            inputPosition = Mouse.current.position.ReadValue();
             
-            // UI 마우스 클릭 확인 (인디케이터 포함)
-            if (IsOverUIOrIndicator())
+            // Check UI
+            if (IsOverUIOrIndicator(inputPosition))
             {
                 return;
             }
         }
         
-        // 입력 처리
+        // Processing
         if (inputDetected)
         {
             isProcessingTouch = true;
@@ -73,24 +87,23 @@ public class Object3DTouchHaptic : MonoBehaviour
             }
         }
         
-        // 처리 상태 리셋
-        if (Input.touchCount == 0 && !Input.GetMouseButton(0))
+        // Reset Processing
+        bool isTouching = Touch.activeTouches.Count > 0;
+        bool isClicking = Mouse.current != null && Mouse.current.leftButton.isPressed;
+        
+        if (!isTouching && !isClicking)
         {
             isProcessingTouch = false;
         }
     }
 
-    private bool IsOverUIOrIndicator()
+    private bool IsOverUIOrIndicator(Vector2 screenPosition)
     {
         if (UnityEngine.EventSystems.EventSystem.current == null)
             return false;
 
         UnityEngine.EventSystems.PointerEventData pointerData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
-        pointerData.position = Input.mousePosition;
-        if (Input.touchCount > 0)
-        {
-            pointerData.position = Input.GetTouch(0).position;
-        }
+        pointerData.position = screenPosition;
 
         var results = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
         UnityEngine.EventSystems.EventSystem.current.RaycastAll(pointerData, results);
@@ -122,15 +135,15 @@ public class Object3DTouchHaptic : MonoBehaviour
         {
             string name = current.name;
             
-            // 더 상세한 디버그 로그 추가
+            // Log for debugging
             Debug.Log($"Checking object: {name}, Parent: {(current.parent ? current.parent.name : "null")}");
             
-            // 인디케이터 관련 오브젝트만 무시 (더 정확한 조건)
+            // Check for indicator related objects
             if ((name.Contains("Indicator") && !name.Contains("Button")) || 
                 (name.Contains("Arrow") && !name.Contains("Button")) || 
                 (name.Contains("Box") && !name.Contains("Button")) ||
                 name.Contains("OffScreen") ||
-                (name == "Text" && (current.parent?.name.Contains("Indicator") == true)) || // Text는 부모가 Indicator일 때만
+                (name == "Text" && (current.parent?.name.Contains("Indicator") == true)) ||
                 current.GetComponent<Indicator>() != null)
             {
                 Debug.Log($"Found indicator related object: {name}");
@@ -146,7 +159,7 @@ public class Object3DTouchHaptic : MonoBehaviour
 
     void OnMouseDown()
     {
-        // Update()에서 처리하므로 무시
+        // Update handles logic
         return;
     }
 
@@ -169,7 +182,6 @@ public class Object3DTouchHaptic : MonoBehaviour
 #if UNITY_IOS
         try
         {
-            // 0-1 범위를 iOS 햅틱 타입으로 변환
             if (hapticIntensity <= 0.33f)
             {
                 UnityEngine.iOS.Device.GenerateHapticFeedback(UnityEngine.iOS.HapticFeedbackType.ImpactFeedback_Light);
@@ -202,7 +214,6 @@ public class Object3DTouchHaptic : MonoBehaviour
                     AndroidJavaClass vibrationEffectClass = new AndroidJavaClass("android.os.VibrationEffect");
                     int effectType;
                     
-                    // 0-1 범위를 Android 햅틱 타입으로 변환
                     if (hapticIntensity <= 0.33f)
                     {
                         effectType = vibrationEffectClass.GetStatic<int>("EFFECT_TICK");
@@ -221,7 +232,6 @@ public class Object3DTouchHaptic : MonoBehaviour
                 }
                 else
                 {
-                    // 구형 안드로이드 - 지속시간으로 강도 조절 (30-100ms)
                     long duration = (long)(30 + (hapticIntensity * 70));
                     vibrator.Call("vibrate", duration);
                 }
@@ -237,7 +247,6 @@ public class Object3DTouchHaptic : MonoBehaviour
             Handheld.Vibrate();
         }
 #else
-        // 기타 플랫폼 - 강도에 따라 진동 여부 결정
         if (hapticIntensity > 0.1f)
         {
             Handheld.Vibrate();
@@ -245,7 +254,6 @@ public class Object3DTouchHaptic : MonoBehaviour
 #endif
     }
 
-    // Android API 버전 확인 헬퍼 메서드
     private int AndroidVersion()
     {
         try
@@ -255,7 +263,7 @@ public class Object3DTouchHaptic : MonoBehaviour
         }
         catch
         {
-            return 1; // 기본값
+            return 1;
         }
     }
 }

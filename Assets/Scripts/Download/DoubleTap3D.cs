@@ -4,6 +4,10 @@ using UnityEngine;
 using UnityEngine.UI;
 using System;
 using UnityEngine.Networking;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 public class DoubleTap3D : MonoBehaviour
 {
@@ -292,18 +296,28 @@ public class DoubleTap3D : MonoBehaviour
     }
 #endif
 
+    void OnEnable()
+    {
+        EnhancedTouchSupport.Enable();
+    }
+
+    void OnDisable()
+    {
+        EnhancedTouchSupport.Disable();
+    }
+
     void Update()
     {
-        if (Input.touchCount == 1 && Time.timeSinceLevelLoad > 2f)
+        if (Touch.activeTouches.Count == 1 && Time.timeSinceLevelLoad > 2f)
         {
-            Touch touch = Input.GetTouch(0);
+            var touch = Touch.activeTouches[0];
 
             if (touch.phase == TouchPhase.Began)
             {
-                touchStartPos = touch.position;
+                touchStartPos = touch.screenPosition;
                 isSwiping = true;
 
-                Ray ray = Camera.main.ScreenPointToRay(touch.position);
+                Ray ray = Camera.main.ScreenPointToRay(touch.screenPosition);
                 RaycastHit hit;
 
                 if (Physics.Raycast(ray, out hit))
@@ -312,21 +326,31 @@ public class DoubleTap3D : MonoBehaviour
                     if (hit.collider.gameObject == gameObject)
                     {
                         float timeSinceLastTap = Time.time - lastTapTime;
+                        Debug.Log($"[DoubleTap3D] 탭 간격: {timeSinceLastTap}s (TapSpeed: {tapSpeed}s)");
+
                         if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
                         {
                             OnDoubleTapCube();
                         }
+                        else
+                        {
+                            Debug.Log($"[DoubleTap3D] 더블 탭 실패 - 시간 범위 밖 ({timeSinceLastTap}s)");
+                        }
                         lastTapTime = Time.time;
+                    }
+                    else
+                    {
+                        Debug.Log($"[DoubleTap3D] 다른 오브젝트 터치됨: {hit.collider.gameObject.name}");
                     }
                 }
                 else
                 {
-                    Debug.Log($"[DoubleTap3D] 레이캐스트 히트 실패 - 터치 위치: {touch.position}");
+                    Debug.Log($"[DoubleTap3D] 레이캐스트 히트 실패 - 터치 위치: {touch.screenPosition}");
                 }
             }
             else if (touch.phase == TouchPhase.Moved && isSwiping && isFullscreen)
             {
-                Vector2 swipeDelta = touch.position - touchStartPos;
+                Vector2 swipeDelta = touch.screenPosition - touchStartPos;
 
                 // 좌우 스와이프: 이미지 넘기기
                 if (Mathf.Abs(swipeDelta.x) > swipeThreshold && Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))

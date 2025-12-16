@@ -96,6 +96,7 @@ public class PlaceListManager : MonoBehaviour
 
         // 슬라이더 초기화
         if (distanceSlider != null)
+        if (distanceSlider != null)
         {
             distanceSlider.minValue = 100f;
             distanceSlider.maxValue = 10000f; // 최대 10km

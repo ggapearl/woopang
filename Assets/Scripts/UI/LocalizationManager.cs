@@ -432,6 +432,24 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "相机似乎被遮挡了。\n请移开手指或物体。",
                 ["ja"] = "カメラが覆われているようです。\n指や物体をカメラから取り除いてください。",
                 ["es"] = "La cámara parece estar cubierta.\nPor favor, retira los dedos u objetos de la cámara."
+            },
+            
+            // ActiveList UI
+            ["active_list_label"] = new Dictionary<string, string>()
+            {
+                ["en"] = "ACTIVE LIST",
+                ["ko"] = "주변 리스트",
+                ["zh"] = "活动列表",
+                ["ja"] = "アクティブリスト",
+                ["es"] = "LISTA ACTIVA"
+            },
+            ["messages_label"] = new Dictionary<string, string>()
+            {
+                ["en"] = "MESSAGES",
+                ["ko"] = "메세지",
+                ["zh"] = "消息",
+                ["ja"] = "メッセージ",
+                ["es"] = "MENSAJES"
             }
         };
     }
