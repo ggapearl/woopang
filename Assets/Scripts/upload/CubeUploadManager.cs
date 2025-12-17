@@ -125,11 +125,10 @@ public class CubeUploadManager : MonoBehaviour
                     SetMainPhotoUIState(false);
                     isLoading = false;
                 }
-            }, "image/*");
+            }, LocalizationManager.Instance.GetText("select_main_photo"), "image/*");
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"[CubeUploadManager] NativeGallery 호출 오류: {e}");
             ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
             SetMainPhotoUIState(false);
             isLoading = false;
@@ -287,11 +286,10 @@ public class CubeUploadManager : MonoBehaviour
                     ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
                     isLoading = false;
                 }
-            }, "image/*");
+            }, LocalizationManager.Instance.GetText("select_sub_photos"), "image/*");
         }
         catch (System.Exception e)
         {
-            Debug.LogError($"[CubeUploadManager] NativeGallery 다중 선택 오류: {e}");
             ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
             isLoading = false;
         }

@@ -678,6 +678,7 @@ RectTransform:
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 1437101867}
+  - {fileID: 670928478}
   m_Father: {fileID: 51447640}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -1117,7 +1118,6 @@ RectTransform:
   - {fileID: 455338156}
   - {fileID: 29711851}
   - {fileID: 1945157755}
-  - {fileID: 670928478}
   - {fileID: 1881171328}
   - {fileID: 389524705}
   - {fileID: 4538516961435259353}
@@ -8174,7 +8174,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &670928478
 RectTransform:
   m_ObjectHideFlags: 0
@@ -8194,12 +8194,12 @@ RectTransform:
   - {fileID: 2093423124}
   - {fileID: 395514285}
   - {fileID: 123546208}
-  m_Father: {fileID: 51447640}
+  m_Father: {fileID: 29711851}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -24.999512}
-  m_SizeDelta: {x: 0, y: -50}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &670928479
 MonoBehaviour:
@@ -15271,7 +15271,7 @@ MonoBehaviour:
   maxConcurrentGLBLoads: 20
   glbLoadTimeout: 20
   fallbackToCube: 1
-  poolSize: 50
+  poolSize: 100
   updateInterval: 600
   loadRadii:
   - 25
@@ -15285,7 +15285,7 @@ MonoBehaviour:
   - 2000
   - 5000
   - 10000
-  tierDelay: 0.5
+  tierDelay: 0.1
   objectSpawnDelay: 0.1
   updateDistanceThreshold: 50
 --- !u!1 &1501152821
@@ -23401,7 +23401,7 @@ PrefabInstance:
     - target: {fileID: 1279877576191648393, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 157
+      value: 175
       objectReference: {fileID: 0}
     - target: {fileID: 1794623478198708475, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
@@ -25130,6 +25130,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Session: {fileID: 4819297566240405040}
+  SessionOrigin: {fileID: 0}
   Origin: {fileID: 5545336365362097208}
   CameraManager: {fileID: 4119736910379195922}
   ARCoreExtensionsConfig: {fileID: 11400000, guid: 1a2f724c6be323a4c91bcd41fdb1f26e,
@@ -26666,6 +26667,16 @@ PrefabInstance:
       objectReference: {fileID: 1699813282}
     - target: {fileID: 146804131848832087, guid: 1ec92f9a442d76a49b260fa6c284fc24,
         type: 3}
+      propertyPath: fadeDuration
+      value: 0.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 146804131848832087, guid: 1ec92f9a442d76a49b260fa6c284fc24,
+        type: 3}
+      propertyPath: imageContainer
+      value: 
+      objectReference: {fileID: 1437101867}
+    - target: {fileID: 146804131848832087, guid: 1ec92f9a442d76a49b260fa6c284fc24,
+        type: 3}
       propertyPath: previousButton
       value: 
       objectReference: {fileID: 1564748245}
@@ -26747,7 +26758,7 @@ PrefabInstance:
     - target: {fileID: 6055906692734445132, guid: 1ec92f9a442d76a49b260fa6c284fc24,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 289
+      value: 319
       objectReference: {fileID: 0}
     - target: {fileID: 6107862786002580477, guid: 1ec92f9a442d76a49b260fa6c284fc24,
         type: 3}

@@ -95,8 +95,7 @@ namespace Google.XR.ARCoreExtensions
         /// <returns>True if the timestamp is available, false otherwise.</returns>
         public static bool TryGetFrameTimestamp(this XRCameraFrame frame, out long frameTimestamp)
         {
-            frameTimestamp = frame.timestampNs;
-            return frameTimestamp != 0;
+            return frame.TryGetTimestamp(out frameTimestamp);
         }
     }
 }

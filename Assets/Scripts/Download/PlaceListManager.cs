@@ -73,24 +73,19 @@ public class PlaceListManager : MonoBehaviour
 
     void Start()
     {
-        Debug.Log($"[PlaceListManager] Start() 호출 - listText={listText != null}, dataManager={dataManager != null}, tourAPIManager={tourAPIManager != null}");
 
         if (listText == null)
         {
-            Debug.LogError("[PlaceListManager] listText가 null입니다!");
         }
         if (dataManager == null)
         {
-            Debug.LogError("[PlaceListManager] dataManager가 null입니다!");
         }
         if (tourAPIManager == null)
         {
-            Debug.LogError("[PlaceListManager] tourAPIManager가 null입니다!");
         }
 
         if (listText == null || dataManager == null || tourAPIManager == null)
         {
-            Debug.LogError("[PlaceListManager] 필수 컴포넌트가 null이어서 초기화를 건너뜁니다.");
             return;
         }
 
@@ -113,7 +108,6 @@ public class PlaceListManager : MonoBehaviour
             if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, 0, 0); // 위치는 나중에 업데이트됨
             if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, 0, 0);
             
-            Debug.Log($"[PlaceListManager] 슬라이더 초기화: value={maxDisplayDistance}m (Saved)");
         }
 
         StartCoroutine(InitializeAndUpdateUI());
@@ -126,7 +120,6 @@ public class PlaceListManager : MonoBehaviour
             tourAPIManager != null && tourAPIManager.IsDataLoaded())
         {
             UpdateUI();
-            Debug.Log("[PlaceListManager] ListPanel 활성화 - 즉시 UI 업데이트");
         }
     }
 
@@ -163,24 +156,20 @@ public class PlaceListManager : MonoBehaviour
     private IEnumerator InitializeAndUpdateUI()
     {
         // ... (기존 코드 유지)
-        Debug.Log("[PlaceListManager] 데이터 로딩 대기 시작...");
         float waitTime = 0f;
 
         while ((dataManager != null && !dataManager.IsDataLoaded() && dataManager.GetPlaceDataMap().Count == 0) ||
                (tourAPIManager != null && !tourAPIManager.IsDataLoaded() && tourAPIManager.GetPlaceDataMap().Count == 0))
         {
             waitTime += 1f;
-            Debug.Log($"[PlaceListManager] 데이터 대기 중... {waitTime}초 - DataManager={dataManager?.IsDataLoaded()}, TourAPI={tourAPIManager?.IsDataLoaded()}");
             yield return new WaitForSeconds(1f);
 
             if (waitTime >= 30f)
             {
-                Debug.LogWarning("[PlaceListManager] 데이터 로딩 타임아웃 (30초) - 강제로 UI 업데이트 시도");
                 break;
             }
         }
 
-        Debug.Log("[PlaceListManager] 데이터 로딩 완료! 첫 UI 업데이트 시작");
         UpdateUI();
         StartCoroutine(UpdateUIPeriodically());
     }
@@ -200,14 +189,12 @@ public class PlaceListManager : MonoBehaviour
             if (listPanel != null && listPanel.activeInHierarchy)
             {
                 UpdateUI();
-                Debug.Log($"[PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: {currentInterval}s)");
             }
         }
     }
 
     private void UpdateUI()
     {
-        Debug.Log("[DEBUG_TRACE] PlaceListManager: UpdateUI() Called");
 
         float latitude, longitude;
         if (Input.location.status == LocationServiceStatus.Running)
@@ -228,7 +215,6 @@ public class PlaceListManager : MonoBehaviour
         woopangCount = woopangPlaces.Count;
         tourAPICount = tourPlaces.Count;
 
-        Debug.Log($"[DEBUG_TRACE] PlaceListManager: Fetched Data - Woopang={woopangCount}, TourAPI={tourAPICount}");
 
         if (listText != null)
         {
@@ -236,7 +222,6 @@ public class PlaceListManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[DEBUG_TRACE] PlaceListManager: listText is null!");
             return;
         }
 
@@ -248,7 +233,6 @@ public class PlaceListManager : MonoBehaviour
         bool showAlcohol = activeFilters.ContainsKey("alcohol") && activeFilters["alcohol"];
         bool showPublicData = activeFilters.ContainsKey("publicData") && activeFilters["publicData"];
 
-        Debug.Log($"[DEBUG_TRACE] PlaceListManager: Filter Status - WoopangData={showWoopangData}, PetFriendly={showPetFriendly}");
 
         if (showWoopangData)
         {
@@ -281,11 +265,9 @@ public class PlaceListManager : MonoBehaviour
                 string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
                 combinedPlaces.Add((place, distance, place.id.ToString(), displayText, colorHex));
             }
-            Debug.Log($"[DEBUG_TRACE] PlaceListManager: Woopang Filter Result - Added={woopangPlaces.Count - filteredCount}, Filtered={filteredCount}");
         }
         else
         {
-            Debug.Log("[DEBUG_TRACE] PlaceListManager: WoopangData filter is OFF");
         }
 
         // 공공데이터(TourAPI) 필터 체크
@@ -313,16 +295,13 @@ public class PlaceListManager : MonoBehaviour
                 string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
                 combinedPlaces.Add((place, distance, place.contentid, displayText, colorHex));
             }
-            Debug.Log($"[PlaceListManager] TourAPI데이터 처리 - 전체: {tourPlaces.Count}, 필터링됨: {tourFilteredCount}, 추가됨: {tourPlaces.Count - tourFilteredCount}");
         }
         else
         {
-            Debug.Log("[PlaceListManager] 공공데이터 필터가 꺼져있어 표시하지 않음");
         }
 
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
 
-        Debug.Log($"[PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡={woopangPlaces.Count}, TourAPI={tourPlaces.Count}, 필터링 후 표시={combinedPlaces.Count}");
 
         foreach (var (place, distance, id, displayText, colorHex) in combinedPlaces)
         {

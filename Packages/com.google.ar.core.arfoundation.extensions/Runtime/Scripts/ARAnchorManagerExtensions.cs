@@ -22,6 +22,7 @@ namespace Google.XR.ARCoreExtensions
 {
     using System;
     using Google.XR.ARCoreExtensions.Internal;
+    using Unity.XR.CoreUtils;
     using UnityEngine;
 
     using UnityEngine.XR.ARFoundation;
@@ -162,7 +163,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Cloud Anchor to the session origin.
             cloudAnchor.transform.SetParent(
-                ARCoreExtensions._instance.TrackablesParent, false);
+                ARCoreExtensions._instance.Origin.TrackablesParent, false);
 
             return cloudAnchor;
         }
@@ -222,7 +223,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Cloud Anchor to the session origin.
             cloudAnchor.transform.SetParent(
-                ARCoreExtensions._instance.TrackablesParent, false);
+                ARCoreExtensions._instance.Origin.TrackablesParent, false);
 
             return cloudAnchor;
         }
@@ -377,7 +378,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Cloud Anchor to the session origin.
             cloudAnchor.transform.SetParent(
-                ARCoreExtensions._instance.TrackablesParent, false);
+                ARCoreExtensions._instance.Origin.TrackablesParent, false);
 
             return cloudAnchor;
         }
@@ -531,7 +532,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Geospatial Anchor to the session origin.
             anchor.transform.SetParent(
-                ARCoreExtensions._instance.TrackablesParent, false);
+                ARCoreExtensions._instance.Origin.TrackablesParent, false);
             return anchor;
         }
 
@@ -647,7 +648,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Geospatial Terrain anchor to the session origin.
             anchor.transform.SetParent(
-                ARCoreExtensions._instance.TrackablesParent, false);
+                ARCoreExtensions._instance.Origin.TrackablesParent, false);
             return anchor;
         }
 

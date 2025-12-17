@@ -73,7 +73,6 @@ public class TourAPIManager : MonoBehaviour
 
     private void LogDebug(string message)
     {
-        Debug.Log(message);
         debugMessages.AppendLine(message);
         if (debugText != null)
         {

@@ -22,6 +22,7 @@ namespace Google.XR.ARCoreExtensions
 {
     using System;
     using Google.XR.ARCoreExtensions.Internal;
+    using Unity.XR.CoreUtils;
     using UnityEngine;
     using UnityEngine.XR.ARSubsystems;
 
@@ -111,7 +112,7 @@ namespace Google.XR.ARCoreExtensions
 
                         // Parent the new cloud anchor to the session origin.
                         anchor.transform.SetParent(
-                            ARCoreExtensions._instance.TrackablesParent,
+                            ARCoreExtensions._instance.Origin.TrackablesParent,
                             false);
                         anchor.Update();
                     }

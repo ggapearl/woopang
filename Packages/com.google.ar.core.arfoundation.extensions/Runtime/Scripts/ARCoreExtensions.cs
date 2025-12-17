@@ -34,8 +34,8 @@ namespace Google.XR.ARCoreExtensions
     using System.Linq;
     using Google.XR.ARCoreExtensions.Internal;
     using Unity.Collections;
-    using UnityEngine;
     using Unity.XR.CoreUtils;
+    using UnityEngine;
 
 #if UNITY_ANDROID
     using UnityEngine.XR.ARCore;
@@ -56,19 +56,12 @@ namespace Google.XR.ARCoreExtensions
         public ARSession Session;
 
         /// <summary>
-        /// AR Foundation <c><see cref="ARSessionOrigin"/></c> used by the scene (deprecated in Unity 6+).
-        /// Use <c><see cref="Origin"/></c> instead for Unity 6+.
-        /// </summary>
-        public ARSessionOrigin SessionOrigin;
-
-        /// <summary>
-        /// AR Foundation <c><see cref="XROrigin"/></c> used by the scene (Unity 6+).
-        /// For older Unity versions, use <c><see cref="SessionOrigin"/></c> instead.
+        /// AR Foundation <c><see cref="XROrigin"/></c> used by the scene.
         /// </summary>
         public XROrigin Origin;
 
         /// <summary>
-        /// AR Foundation <c><see cref="ARCameraManager"/></c> used in the ARSessionOrigin or XROrigin.
+        /// AR Foundation <c><see cref="ARCameraManager"/></c> used in the XROrigin.
         /// </summary>
         public ARCameraManager CameraManager;
 
@@ -142,26 +135,6 @@ namespace Google.XR.ARCoreExtensions
 
 #endif
         internal static ARCoreExtensions _instance { get; private set; }
-
-        /// <summary>
-        /// Gets the trackables parent Transform from either Origin (XROrigin) or SessionOrigin (ARSessionOrigin).
-        /// Supports both Unity 6+ (XROrigin) and older versions (ARSessionOrigin).
-        /// </summary>
-        internal Transform TrackablesParent
-        {
-            get
-            {
-                if (Origin != null)
-                {
-                    return Origin.TrackablesParent;
-                }
-                else if (SessionOrigin != null)
-                {
-                    return SessionOrigin.trackablesParent;
-                }
-                return null;
-            }
-        }
 
         internal IntPtr currentARCoreSessionHandle
         {

@@ -28,7 +28,6 @@ public class GLBModelLoader : MonoBehaviour
 
     void Start()
     {
-        Debug.Log("[GLBModelLoader] Start() 호출됨");
         
         if (glbContainer == null)
         {
@@ -36,7 +35,6 @@ public class GLBModelLoader : MonoBehaviour
             if (container != null)
             {
                 glbContainer = container;
-                Debug.Log("[GLBModelLoader] GLBContainer 자동 할당됨");
             }
             else
             {
@@ -46,31 +44,19 @@ public class GLBModelLoader : MonoBehaviour
                 containerObj.transform.localRotation = Quaternion.identity;
                 containerObj.transform.localScale = Vector3.one;
                 glbContainer = containerObj.transform;
-                Debug.Log("[GLBModelLoader] GLBContainer 자동 생성됨");
             }
         }
         
         // 디바이스 정보 로깅
-        Debug.Log($"[GLBModelLoader] 디바이스 정보 - Platform: {Application.platform}");
-        Debug.Log($"[GLBModelLoader] 시스템 메모리: {SystemInfo.systemMemorySize}MB");
-        Debug.Log($"[GLBModelLoader] 그래픽 메모리: {SystemInfo.graphicsMemorySize}MB");
-        Debug.Log($"[GLBModelLoader] 그래픽 API: {SystemInfo.graphicsDeviceType}");
-        Debug.Log($"[GLBModelLoader] 렌더 파이프라인: {UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline?.GetType().Name ?? "Built-in"}");
-        Debug.Log($"[GLBModelLoader] 셰이더 레벨: {SystemInfo.graphicsShaderLevel}");
-        Debug.Log($"[GLBModelLoader] 텍스처 압축 지원: {SystemInfo.SupportsTextureFormat(TextureFormat.DXT1)} (DXT1), {SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)} (ETC2)");
         
         if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES3)
         {
-            Debug.Log("[GLBModelLoader] Graphics API: OpenGLES3");
-            Debug.Log("[GLBModelLoader] OpenGL ES 3.0 PBR 셰이더 지원 확인 필요");
         }
         else if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Metal)
         {
-            Debug.Log("[GLBModelLoader] Graphics API: Metal");
         }
         else if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan)
         {
-            Debug.Log("[GLBModelLoader] Graphics API: Vulkan");
         }
     }
 
@@ -138,23 +124,17 @@ public class GLBModelLoader : MonoBehaviour
 
     private IEnumerator LoadGLTFAsync(GltfImport gltf, string url, float scale, System.Action<bool> onComplete)
     {
-        Debug.Log($"[GLBModelLoader] 다운로드 시작: {url}");
-        Debug.Log($"[GLBModelLoader] 요청 URL 상세 분석: {url}");
         
         currentGLBUrl = url;
         
         // URL 구조 분석
         System.Uri uri = new System.Uri(url);
-        Debug.Log($"[GLBModelLoader] URL 호스트: {uri.Host}");
-        Debug.Log($"[GLBModelLoader] URL 경로: {uri.AbsolutePath}");
-        Debug.Log($"[GLBModelLoader] URL 파일명: {System.IO.Path.GetFileName(uri.AbsolutePath)}");
         
         // 캐시에서 먼저 확인
         byte[] glbData = null;
         if (enableFileCache && downloadedFiles.ContainsKey(url))
         {
             glbData = downloadedFiles[url];
-            Debug.Log($"[GLBModelLoader] 캐시에서 GLB 파일 로드: {glbData.Length} bytes");
         }
         else
         {
@@ -193,20 +173,16 @@ public class GLBModelLoader : MonoBehaviour
             }
             
             glbData = request.downloadHandler.data;
-            Debug.Log($"[GLBModelLoader] GLB 파일 다운로드 성공: {glbData.Length} bytes");
             
             // 응답 헤더 확인
             var responseHeaders = request.GetResponseHeaders();
             if (responseHeaders != null)
             {
-                Debug.Log("[GLBModelLoader] 응답 헤더 분석:");
                 foreach (var header in responseHeaders)
                 {
-                    Debug.Log($"[GLBModelLoader] {header.Key}: {header.Value}");
                     
                     if (header.Key.ToLower() == "content-type")
                     {
-                        Debug.Log($"[GLBModelLoader] Content-Type: {header.Value}");
                         if (!header.Value.Contains("application/octet-stream") && 
                             !header.Value.Contains("model/gltf-binary") &&
                             !header.Value.Contains("application/gltf"))
@@ -219,7 +195,6 @@ public class GLBModelLoader : MonoBehaviour
             
             // 요청 리소스 즉시 해제
             request.Dispose();
-            Debug.Log("[GLBModelLoader] UnityWebRequest 리소스 해제 완료");
             
             // 선택적 캐시 저장
             if (enableFileCache)
@@ -250,7 +225,6 @@ public class GLBModelLoader : MonoBehaviour
         if (glbData.Length >= 4)
         {
             string magic = System.Text.Encoding.ASCII.GetString(glbData, 0, 4);
-            Debug.Log($"[GLBModelLoader] GLB 파일 매직 넘버: {magic}");
             
             if (magic != "glTF")
             {
@@ -296,7 +270,6 @@ public class GLBModelLoader : MonoBehaviour
             }
             else
             {
-                Debug.Log("[GLBModelLoader] GLB 매직 넘버 확인 완료");
             }
         }
         
@@ -309,11 +282,9 @@ public class GLBModelLoader : MonoBehaviour
             yield break;
         }
         
-        Debug.Log("[GLBModelLoader] GLTFast 파싱 시작");
         
         // GLB 원본 색상 정보 추출
         Color originalColor = ExtractColorFromGLB(glbData);
-        Debug.Log($"[GLBModelLoader] GLB 원본 색상 추출: {originalColor}");
         
         // GLTFast 파싱
         var loadTask = gltf.LoadGltfBinary(glbData);
@@ -339,7 +310,6 @@ public class GLBModelLoader : MonoBehaviour
             yield break;
         }
         
-        Debug.Log($"[GLBModelLoader] GLTFast 파싱 결과: {parseSuccess}");
         
         if (!parseSuccess)
         {
@@ -352,7 +322,6 @@ public class GLBModelLoader : MonoBehaviour
         }
         
         // 씬 인스턴스화
-        Debug.Log("[GLBModelLoader] GLB 씬 인스턴스화 시작");
         
         var instantiateTask = gltf.InstantiateMainSceneAsync(glbContainer);
         
@@ -374,31 +343,23 @@ public class GLBModelLoader : MonoBehaviour
             yield break;
         }
         
-        Debug.Log($"[GLBModelLoader] 인스턴스화 결과: {instantiateSuccess}");
         
         if (instantiateSuccess && glbContainer.childCount > 0)
         {
-            Debug.Log($"[GLBModelLoader] GLBContainer 자식 개수: {glbContainer.childCount}");
             
             loadedModel = glbContainer.GetChild(0).gameObject;
             
-            Debug.Log($"[GLBModelLoader] 로드된 모델: {loadedModel.name}");
-            Debug.Log($"[GLBModelLoader] 모델 위치: {loadedModel.transform.position}");
-            Debug.Log($"[GLBModelLoader] 모델 회전: {loadedModel.transform.rotation}");
-            Debug.Log($"[GLBModelLoader] 모델 스케일 변경 전: {loadedModel.transform.localScale}");
             
             // 모델 변환 설정
             loadedModel.transform.localScale = Vector3.one * scale;
             loadedModel.transform.localPosition = Vector3.zero;
             loadedModel.transform.localRotation = Quaternion.identity;
             
-            Debug.Log($"[GLBModelLoader] 모델 스케일 변경 후: {loadedModel.transform.localScale}");
             
             isModelLoaded = true;
             
             // 렌더러 정보 로깅
             MeshRenderer[] renderers = loadedModel.GetComponentsInChildren<MeshRenderer>();
-            Debug.Log($"[GLBModelLoader] 발견된 MeshRenderer 개수: {renderers.Length}");
             
             // 즉시 셰이더 분석 실행
             AnalyzeGLBMaterials(renderers);
@@ -408,7 +369,6 @@ public class GLBModelLoader : MonoBehaviour
             
             // 메시 데이터 분석
             MeshFilter[] meshFilters = loadedModel.GetComponentsInChildren<MeshFilter>();
-            Debug.Log($"[GLBModelLoader] 메시 데이터 처리: {meshFilters.Length}개 메시");
             
             // 콜라이더 설정 (백그라운드에서)
             StartCoroutine(SetupModelCollidersAsync());
@@ -419,7 +379,6 @@ public class GLBModelLoader : MonoBehaviour
             // 로딩 후 메모리 정리
             MemoryOptimizationAfterLoading();
             
-            Debug.Log($"[GLBModelLoader] GLB 모델 로딩 및 배치 완료: {loadedModel.name}");
             onComplete?.Invoke(true);
         }
         else
@@ -440,24 +399,16 @@ public class GLBModelLoader : MonoBehaviour
 
     private void AnalyzeGLBMaterials(MeshRenderer[] renderers)
     {
-        Debug.Log($"[GLBModelLoader] === GLB 머티리얼 분석 시작 ===");
-        Debug.Log($"[GLBModelLoader] 분석할 렌더러 개수: {renderers.Length}");
         
         foreach (var renderer in renderers)
         {
             if (renderer.materials != null)
             {
-                Debug.Log($"[GLBModelLoader] 오브젝트: {renderer.name} - 머티리얼 개수: {renderer.materials.Length}");
                 for (int i = 0; i < renderer.materials.Length; i++)
                 {
                     Material material = renderer.materials[i];
                     if (material != null)
                     {
-                        Debug.Log($"[GLBModelLoader] === 머티리얼 {i + 1} 분석 ===");
-                        Debug.Log($"[GLBModelLoader] GLTFast 할당 머티리얼명: {material.name}");
-                        Debug.Log($"[GLBModelLoader] GLTFast 할당 셰이더: {material.shader.name}");
-                        Debug.Log($"[GLBModelLoader] 셰이더 지원 여부: {material.shader.isSupported}");
-                        Debug.Log($"[GLBModelLoader] 셰이더 키워드: {string.Join(", ", material.shaderKeywords)}");
                         
                         // GLTFast가 어떤 셰이더를 사용했는지 상세 분석
                         AnalyzeShaderType(material);
@@ -477,7 +428,6 @@ public class GLBModelLoader : MonoBehaviour
                         // 색상 분석
                         AnalyzeMaterialColors(material);
                         
-                        Debug.Log($"[GLBModelLoader] === 머티리얼 {i + 1} 분석 완료 ===");
                     }
                     else
                     {
@@ -490,38 +440,30 @@ public class GLBModelLoader : MonoBehaviour
                 LogError($"[GLBModelLoader] GLTFast 머티리얼 배열 생성 실패: {renderer.name}");
             }
         }
-        Debug.Log($"[GLBModelLoader] === GLB 머티리얼 분석 완료 ===");
     }
 
     private void AnalyzeShaderType(Material material)
     {
         if (material.shader.name.Contains("glTF"))
         {
-            Debug.Log($"[GLBModelLoader] GLTFast 전용 셰이더 감지: {material.shader.name}");
             if (material.shader.name.Contains("pbrMetallicRoughness"))
             {
-                Debug.Log("[GLBModelLoader] PBR 메탈릭-러프니스 셰이더 사용");
             }
             else if (material.shader.name.Contains("pbrSpecularGlossiness"))
             {
-                Debug.Log("[GLBModelLoader] PBR 스페큘러-글로시니스 셰이더 사용");
             }
             else if (material.shader.name.Contains("Unlit"))
             {
-                Debug.Log("[GLBModelLoader] Unlit 셰이더 사용");
             }
         }
         else if (material.shader.name.Contains("Universal Render Pipeline"))
         {
-            Debug.Log($"[GLBModelLoader] URP 표준 셰이더 사용: {material.shader.name}");
         }
         else if (material.shader.name.Contains("Standard"))
         {
-            Debug.Log($"[GLBModelLoader] Built-in 표준 셰이더 사용: {material.shader.name}");
         }
         else
         {
-            Debug.Log($"[GLBModelLoader] 기타 셰이더 사용: {material.shader.name}");
         }
     }
 
@@ -530,9 +472,6 @@ public class GLBModelLoader : MonoBehaviour
         // 메인 텍스처 확인
         if (material.mainTexture != null)
         {
-            Debug.Log($"[GLBModelLoader] GLTFast 할당 메인텍스처: {material.mainTexture.name}");
-            Debug.Log($"[GLBModelLoader] 텍스처 크기: {material.mainTexture.width}x{material.mainTexture.height}");
-            Debug.Log($"[GLBModelLoader] 텍스처 형식: {material.mainTexture.GetType()}");
         }
         else
         {
@@ -561,7 +500,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 var tex = material.GetTexture(prop);
-                Debug.Log($"[GLBModelLoader] {prop} 텍스처: {(tex != null ? tex.name : "없음")}");
                 break;
             }
         }
@@ -571,7 +509,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 var tex = material.GetTexture(prop);
-                Debug.Log($"[GLBModelLoader] {prop} 텍스처: {(tex != null ? tex.name : "없음")}");
                 break;
             }
         }
@@ -581,7 +518,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 var tex = material.GetTexture(prop);
-                Debug.Log($"[GLBModelLoader] {prop} 텍스처: {(tex != null ? tex.name : "없음")}");
                 break;
             }
         }
@@ -591,7 +527,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 var tex = material.GetTexture(prop);
-                Debug.Log($"[GLBModelLoader] {prop} 텍스처: {(tex != null ? tex.name : "없음")}");
                 break;
             }
         }
@@ -607,7 +542,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 Color color = material.GetColor(prop);
-                Debug.Log($"[GLBModelLoader] {prop}: {color}");
                 
                 // 핑크색 체크 (Missing Shader 기본 색상)
                 if (Mathf.Approximately(color.r, 1f) && 
@@ -629,7 +563,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 float value = material.GetFloat(prop);
-                Debug.Log($"[GLBModelLoader] {prop} 값: {value}");
                 break;
             }
         }
@@ -639,7 +572,6 @@ public class GLBModelLoader : MonoBehaviour
             if (material.HasProperty(prop))
             {
                 float value = material.GetFloat(prop);
-                Debug.Log($"[GLBModelLoader] {prop} 값: {value}");
                 break;
             }
         }
@@ -649,7 +581,6 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (loadedModel == null) yield break;
         
-        Debug.Log("[GLBModelLoader] 콜라이더 설정 시작");
         
         MeshRenderer[] renderers = loadedModel.GetComponentsInChildren<MeshRenderer>();
         int processedCount = 0;
@@ -661,8 +592,6 @@ public class GLBModelLoader : MonoBehaviour
             {
                 collider = renderer.gameObject.AddComponent<MeshCollider>();
                 collider.convex = true;
-                Debug.Log($"[GLBModelLoader] MeshCollider 추가됨: {renderer.name}");
-                Debug.Log($"[GLBModelLoader] Convex Collider 설정: {renderer.name}");
             }
             
             processedCount++;
@@ -679,10 +608,8 @@ public class GLBModelLoader : MonoBehaviour
         if (boxCollider == null)
         {
             boxCollider = loadedModel.AddComponent<BoxCollider>();
-            Debug.Log("[GLBModelLoader] 전체 모델에 BoxCollider 추가됨");
         }
         
-        Debug.Log($"[GLBModelLoader] 콜라이더 최적화 완료: {processedCount}개 MeshCollider 처리됨");
         
         // DoubleTap3D 연동 확인
         DoubleTap3D doubleTap = glbContainer.GetComponent<DoubleTap3D>();
@@ -693,7 +620,6 @@ public class GLBModelLoader : MonoBehaviour
         
         if (doubleTap != null)
         {
-            Debug.Log("[GLBModelLoader] DoubleTap3D와 GLB 모델 연동 확인됨");
         }
         else
         {
@@ -708,7 +634,6 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (loadedModel == null) return;
         
-        Debug.Log("[GLBModelLoader] GLB 모델에 터치 컴포넌트 설정");
         
         // 로드된 모델의 모든 MeshRenderer에 개별 콜라이더 확인
         MeshRenderer[] renderers = loadedModel.GetComponentsInChildren<MeshRenderer>();
@@ -718,18 +643,15 @@ public class GLBModelLoader : MonoBehaviour
             MeshCollider meshCollider = renderer.GetComponent<MeshCollider>();
             if (meshCollider != null)
             {
-                Debug.Log($"[GLBModelLoader] {renderer.name}에 MeshCollider 확인됨");
             }
         }
         
-        Debug.Log($"[GLBModelLoader] {renderers.Length}개 렌더러에 터치 컴포넌트 설정 완료");
     }
 
     private IEnumerator OptimizeMaterialsForMobile()
     {
         if (loadedModel == null) yield break;
         
-        Debug.Log("[GLBModelLoader] 모바일용 머티리얼 최적화 시작");
         
         MeshRenderer[] renderers = loadedModel.GetComponentsInChildren<MeshRenderer>();
         int optimizedCount = 0;
@@ -746,7 +668,6 @@ public class GLBModelLoader : MonoBehaviour
                         // 지원되지 않는 셰이더 체크
                         if (!material.shader.isSupported)
                         {
-                            Debug.Log($"[GLBModelLoader] 지원되지 않는 셰이더 감지: {material.shader.name}");
                             
                             // 렌더 파이프라인에 따른 셰이더 선택
                             Shader targetShader = null;
@@ -755,7 +676,6 @@ public class GLBModelLoader : MonoBehaviour
                             
                             if (isURP)
                             {
-                                Debug.Log("[GLBModelLoader] URP 환경 감지 - URP 셰이더 사용");
                                 
                                 // GLTFast 6.13.0 + URP 호환성 문제 해결
                                 // 1순위: GLTFast 자체 URP 셰이더
@@ -785,7 +705,6 @@ public class GLBModelLoader : MonoBehaviour
                             }
                             else
                             {
-                                Debug.Log("[GLBModelLoader] Built-in 파이프라인 - Standard 셰이더 사용");
                                 targetShader = Shader.Find("Standard");
                                 if (targetShader == null)
                                 {
@@ -801,7 +720,6 @@ public class GLBModelLoader : MonoBehaviour
                                 Color materialColor = material.HasProperty("_Color") ? material.GetColor("_Color") : Color.white;
                                 Color baseColor = material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : Color.white;
                                 
-                                Debug.Log($"[GLBModelLoader] 셰이더 교체 시도: {material.shader.name} -> {targetShader.name}");
                                 
                                 // 셰이더 교체
                                 material.shader = targetShader;
@@ -817,7 +735,6 @@ public class GLBModelLoader : MonoBehaviour
                                     {
                                         material.SetTexture("_BaseMap", mainTex);
                                     }
-                                    Debug.Log($"[GLBModelLoader] 메인 텍스처 복원: {mainTex.name}");
                                 }
                                 
                                 // 색상 설정
@@ -832,10 +749,8 @@ public class GLBModelLoader : MonoBehaviour
                                     {
                                         material.SetColor("_BaseColor", finalColor);
                                     }
-                                    Debug.Log($"[GLBModelLoader] 머티리얼 색상 복원: {finalColor}");
                                 }
                                 
-                                Debug.Log($"[GLBModelLoader] 셰이더 교체 성공: {targetShader.name}");
                                 optimizedCount++;
                             }
                             else
@@ -852,7 +767,6 @@ public class GLBModelLoader : MonoBehaviour
                                 Mathf.Approximately(color.g, 0f) && 
                                 Mathf.Approximately(color.b, 1f))
                             {
-                                Debug.Log($"[GLBModelLoader] 핑크색 머티리얼 수정: {material.name}");
                                 material.color = Color.white; // 흰색으로 변경
                                 optimizedCount++;
                             }
@@ -868,12 +782,10 @@ public class GLBModelLoader : MonoBehaviour
             }
         }
         
-        Debug.Log($"[GLBModelLoader] 머티리얼 최적화 완료: {optimizedCount}개 머티리얼 수정됨");
     }
 
     private void OptimizeMaterialsImmediate(MeshRenderer[] renderers)
     {
-        Debug.Log("[GLBModelLoader] 즉시 머티리얼 최적화 시작");
         
         int optimizedCount = 0;
         
@@ -886,12 +798,10 @@ public class GLBModelLoader : MonoBehaviour
                     Material material = renderer.materials[i];
                     if (material != null)
                     {
-                        Debug.Log($"[GLBModelLoader] 머티리얼 최적화 체크: {material.name}, 셰이더: {material.shader.name}");
                         
                         // Built-in Standard 셰이더를 URP 셰이더로 강제 교체
                         if (material.shader.name.Contains("Standard") || !material.shader.isSupported)
                         {
-                            Debug.Log($"[GLBModelLoader] Built-in 셰이더 감지, URP로 교체 필요: {material.shader.name}");
                             
                             // 렌더 파이프라인 확인
                             bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null && 
@@ -899,7 +809,6 @@ public class GLBModelLoader : MonoBehaviour
                             
                             if (isURP)
                             {
-                                Debug.Log("[GLBModelLoader] URP 환경에서 Built-in 셰이더 교체");
                                 
                                 // 기존 정보 백업 (더 광범위하게)
                                 Texture mainTex = material.mainTexture;
@@ -909,12 +818,10 @@ public class GLBModelLoader : MonoBehaviour
                                 if (material.HasProperty("_Color"))
                                 {
                                     materialColor = material.GetColor("_Color");
-                                    Debug.Log($"[GLBModelLoader] 원본 _Color 백업: {materialColor}");
                                 }
                                 else if (material.HasProperty("_BaseColor"))
                                 {
                                     materialColor = material.GetColor("_BaseColor");
-                                    Debug.Log($"[GLBModelLoader] 원본 _BaseColor 백업: {materialColor}");
                                 }
                                 
                                 // GLB 파일의 실제 색상이 흰색인지 확인
@@ -923,24 +830,20 @@ public class GLBModelLoader : MonoBehaviour
                                      Mathf.Approximately(materialColor.g, 1f) && 
                                      Mathf.Approximately(materialColor.b, 1f)))
                                 {
-                                    Debug.LogWarning("[GLBModelLoader] GLB 파일에서 흰색 감지, 기본 색상 적용");
                                     
                                     // GLB 모델별 기본 색상 설정 (모델명에 따라)
                                     if (material.name.ToLower().Contains("lion"))
                                     {
                                         materialColor = new Color(0.8f, 0.6f, 0.2f, 1f); // 갈색 (사자)
-                                        Debug.Log("[GLBModelLoader] Lion 모델 기본 색상 적용: 갈색");
                                     }
                                     else if (material.name.ToLower().Contains("love") || material.name.ToLower().Contains("heart"))
                                     {
                                         materialColor = new Color(1f, 0.2f, 0.4f, 1f); // 핑크/빨강 (하트)
-                                        Debug.Log("[GLBModelLoader] Love/Heart 모델 기본 색상 적용: 빨강");
                                     }
                                     else
                                     {
                                         // 일반적인 기본 색상
                                         materialColor = new Color(0.7f, 0.7f, 0.7f, 1f); // 연한 회색
-                                        Debug.Log("[GLBModelLoader] 일반 모델 기본 색상 적용: 연한 회색");
                                     }
                                 }
                                 
@@ -954,35 +857,28 @@ public class GLBModelLoader : MonoBehaviour
                                 float metallicValue = material.HasProperty("_Metallic") ? material.GetFloat("_Metallic") : 0f;
                                 float smoothnessValue = material.HasProperty("_Glossiness") ? material.GetFloat("_Glossiness") : 0.5f;
                                 
-                                Debug.Log($"[GLBModelLoader] PBR 값 백업 - Metallic: {metallicValue}, Smoothness: {smoothnessValue}");
-                                Debug.Log($"[GLBModelLoader] 최종 적용할 색상: {materialColor}");
                                 
                                 // URP Lit 셰이더로 교체
                                 Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
                                 if (urpShader != null && urpShader.isSupported)
                                 {
-                                    Debug.Log($"[GLBModelLoader] URP Lit 셰이더로 교체: {material.name}");
                                     material.shader = urpShader;
                                     
                                     // === 색상 우선 설정 (가장 중요) ===
                                     material.SetColor("_BaseColor", materialColor);
-                                    Debug.Log($"[GLBModelLoader] BaseColor 설정 완료: {materialColor}");
                                     
                                     // === 텍스처 복원 ===
                                     if (mainTex != null)
                                     {
                                         material.SetTexture("_BaseMap", mainTex);
-                                        Debug.Log($"[GLBModelLoader] BaseMap 텍스처 복원 성공: {mainTex.name}");
                                         
                                         // 텍스처가 있으면 색상을 약간 조정 (텍스처와 색상 조합)
                                         Color tintedColor = materialColor * 0.8f; // 약간 어둡게
                                         tintedColor.a = materialColor.a; // 알파는 유지
                                         material.SetColor("_BaseColor", tintedColor);
-                                        Debug.Log($"[GLBModelLoader] 텍스처와 색상 조합: {tintedColor}");
                                     }
                                     else
                                     {
-                                        Debug.LogWarning("[GLBModelLoader] 메인 텍스처 없음, 순수 색상으로 표시");
                                         // 텍스처가 없으면 색상을 더 진하게
                                         Color pureColor = materialColor * 1.2f;
                                         pureColor.a = materialColor.a;
@@ -991,53 +887,44 @@ public class GLBModelLoader : MonoBehaviour
                                         pureColor.g = Mathf.Clamp01(pureColor.g);
                                         pureColor.b = Mathf.Clamp01(pureColor.b);
                                         material.SetColor("_BaseColor", pureColor);
-                                        Debug.Log($"[GLBModelLoader] 순수 색상 설정: {pureColor}");
                                     }
                                     
                                     // 추가 텍스처들 복원
                                     if (metallicTex != null)
                                     {
                                         material.SetTexture("_MetallicGlossMap", metallicTex);
-                                        Debug.Log($"[GLBModelLoader] Metallic 텍스처 복원: {metallicTex.name}");
                                     }
                                     
                                     if (normalTex != null)
                                     {
                                         material.SetTexture("_BumpMap", normalTex);
-                                        Debug.Log($"[GLBModelLoader] Normal 텍스처 복원: {normalTex.name}");
                                     }
                                     
                                     if (occlusionTex != null)
                                     {
                                         material.SetTexture("_OcclusionMap", occlusionTex);
-                                        Debug.Log($"[GLBModelLoader] Occlusion 텍스처 복원: {occlusionTex.name}");
                                     }
                                     
                                     if (emissionTex != null)
                                     {
                                         material.SetTexture("_EmissionMap", emissionTex);
-                                        Debug.Log($"[GLBModelLoader] Emission 텍스처 복원: {emissionTex.name}");
                                     }
                                     
                                     // === 색상 복원 ===
                                     material.SetColor("_BaseColor", materialColor);
-                                    Debug.Log($"[GLBModelLoader] BaseColor 복원 완료: {materialColor}");
                                     
                                     // PBR 값들 복원
                                     material.SetFloat("_Metallic", metallicValue);
                                     material.SetFloat("_Smoothness", smoothnessValue);
-                                    Debug.Log($"[GLBModelLoader] PBR 값 복원 완료 - Metallic: {metallicValue}, Smoothness: {smoothnessValue}");
                                     
                                     // 알파 블렌딩 설정 (투명도 지원)
                                     if (materialColor.a < 1.0f)
                                     {
-                                        Debug.Log($"[GLBModelLoader] 투명도 감지: {materialColor.a}, 알파 블렌딩 활성화");
                                         material.SetFloat("_Surface", 1); // Transparent
                                         material.SetFloat("_Blend", 0); // Alpha
                                     }
                                     
                                     optimizedCount++;
-                                    Debug.Log($"[GLBModelLoader] 셰이더 교체 및 속성 복원 완료: Standard → URP Lit");
                                 }
                                 else
                                 {
@@ -1048,7 +935,6 @@ public class GLBModelLoader : MonoBehaviour
                                     if (unlitShader != null)
                                     {
                                         material.shader = unlitShader;
-                                        Debug.Log("[GLBModelLoader] URP Unlit 셰이더로 fallback");
                                         optimizedCount++;
                                     }
                                 }
@@ -1063,7 +949,6 @@ public class GLBModelLoader : MonoBehaviour
                                 Mathf.Approximately(color.g, 0f) && 
                                 Mathf.Approximately(color.b, 1f))
                             {
-                                Debug.Log($"[GLBModelLoader] 핑크색 머티리얼 수정: {material.name}");
                                 material.color = Color.white;
                                 optimizedCount++;
                             }
@@ -1075,7 +960,6 @@ public class GLBModelLoader : MonoBehaviour
                                 Mathf.Approximately(color.g, 0f) && 
                                 Mathf.Approximately(color.b, 1f))
                             {
-                                Debug.Log($"[GLBModelLoader] 핑크색 BaseColor 수정: {material.name}");
                                 material.SetColor("_BaseColor", Color.white);
                                 optimizedCount++;
                             }
@@ -1085,14 +969,12 @@ public class GLBModelLoader : MonoBehaviour
             }
         }
         
-        Debug.Log($"[GLBModelLoader] 즉시 머티리얼 최적화 완료: {optimizedCount}개 머티리얼 수정됨");
     }
 
     private Color ExtractColorFromGLB(byte[] glbData)
     {
         try
         {
-            Debug.Log("[GLBModelLoader] GLB 원본 색상 추출 시작");
             
             // GLB 파일에서 JSON 부분 찾기
             string jsonContent = "";
@@ -1102,7 +984,6 @@ public class GLBModelLoader : MonoBehaviour
             {
                 // JSON chunk 길이 읽기 (4바이트, 오프셋 12)
                 int jsonLength = System.BitConverter.ToInt32(glbData, 12);
-                Debug.Log($"[GLBModelLoader] JSON 청크 길이: {jsonLength}");
                 
                 // 안전성 검사
                 if (jsonLength > 0 && jsonLength < glbData.Length && glbData.Length > (20 + jsonLength))
@@ -1110,7 +991,6 @@ public class GLBModelLoader : MonoBehaviour
                     try
                     {
                         jsonContent = System.Text.Encoding.UTF8.GetString(glbData, 20, jsonLength);
-                        Debug.Log($"[GLBModelLoader] JSON 추출 성공: {jsonContent.Length} 문자");
                     }
                     catch (System.Exception ex)
                     {
@@ -1145,7 +1025,6 @@ public class GLBModelLoader : MonoBehaviour
                         if (endIndex != -1)
                         {
                             string colorArray = jsonContent.Substring(startIndex, endIndex - startIndex);
-                            Debug.Log($"[GLBModelLoader] baseColorFactor 발견: [{colorArray}]");
                             
                             // 색상 값 파싱
                             try
@@ -1159,7 +1038,6 @@ public class GLBModelLoader : MonoBehaviour
                                     float a = values.Length > 3 ? float.Parse(values[3].Trim()) : 1.0f;
                                     
                                     Color extractedColor = new Color(r, g, b, a);
-                                    Debug.Log($"[GLBModelLoader] GLB 원본 색상 추출 성공: {extractedColor}");
                                     return extractedColor;
                                 }
                             }
@@ -1172,7 +1050,6 @@ public class GLBModelLoader : MonoBehaviour
                     }
                 }
                 
-                Debug.LogWarning("[GLBModelLoader] baseColorFactor를 JSON에서 찾을 수 없음");
             }
             else
             {
@@ -1186,13 +1063,11 @@ public class GLBModelLoader : MonoBehaviour
         
         // 기본값 반환 (Heart.glb의 실제 색상)
         Color defaultHeartColor = new Color(0.427f, 0.023f, 0.023f, 1f);
-        Debug.Log($"[GLBModelLoader] 기본 하트 색상 적용: {defaultHeartColor}");
         return defaultHeartColor;
     }
 
     private void OptimizeMaterialsWithOriginalColor(MeshRenderer[] renderers, Color originalColor)
     {
-        Debug.Log($"[GLBModelLoader] 원본 색상으로 머티리얼 최적화 시작: {originalColor}");
         
         int optimizedCount = 0;
         
@@ -1205,12 +1080,10 @@ public class GLBModelLoader : MonoBehaviour
                     Material material = renderer.materials[i];
                     if (material != null)
                     {
-                        Debug.Log($"[GLBModelLoader] 머티리얼 처리: {material.name}, 셰이더: {material.shader.name}");
                         
                         // Built-in Standard 셰이더를 URP 셰이더로 강제 교체
                         if (material.shader.name.Contains("Standard") || !material.shader.isSupported)
                         {
-                            Debug.Log($"[GLBModelLoader] Built-in 셰이더 감지, URP로 교체: {material.shader.name}");
                             
                             // 렌더 파이프라인 확인
                             bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null && 
@@ -1218,7 +1091,6 @@ public class GLBModelLoader : MonoBehaviour
                             
                             if (isURP)
                             {
-                                Debug.Log("[GLBModelLoader] URP 환경에서 Built-in 셰이더를 URP Lit로 교체");
                                 
                                 // 기존 텍스처 백업
                                 Texture mainTex = material.mainTexture;
@@ -1227,30 +1099,25 @@ public class GLBModelLoader : MonoBehaviour
                                 Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
                                 if (urpShader != null && urpShader.isSupported)
                                 {
-                                    Debug.Log($"[GLBModelLoader] URP Lit 셰이더로 교체: {material.name}");
                                     material.shader = urpShader;
                                     
                                     // === 원본 색상 적용 (최우선) ===
                                     material.SetColor("_BaseColor", originalColor);
-                                    Debug.Log($"[GLBModelLoader] GLB 원본 색상 적용 완료: {originalColor}");
                                     
                                     // 텍스처 복원
                                     if (mainTex != null)
                                     {
                                         material.SetTexture("_BaseMap", mainTex);
-                                        Debug.Log($"[GLBModelLoader] BaseMap 텍스처 복원: {mainTex.name}");
                                     }
                                     
                                     // PBR 설정
                                     material.SetFloat("_Metallic", 0f); // Heart.glb는 metallic 0
                                     material.SetFloat("_Smoothness", 0.45f); // roughness 0.55 → smoothness 0.45
-                                    Debug.Log("[GLBModelLoader] PBR 값 설정: Metallic=0, Smoothness=0.45");
                                     
                                     // 표면 타입 설정 (불투명)
                                     material.SetFloat("_Surface", 0); // Opaque
                                     
                                     optimizedCount++;
-                                    Debug.Log($"[GLBModelLoader] 셰이더 교체 및 원본 색상 적용 성공: {material.name}");
                                 }
                                 else
                                 {
@@ -1264,13 +1131,11 @@ public class GLBModelLoader : MonoBehaviour
                             if (material.HasProperty("_BaseColor"))
                             {
                                 material.SetColor("_BaseColor", originalColor);
-                                Debug.Log($"[GLBModelLoader] 기존 머티리얼에 원본 색상 적용: {originalColor}");
                                 optimizedCount++;
                             }
                             else if (material.HasProperty("_Color"))
                             {
                                 material.SetColor("_Color", originalColor);
-                                Debug.Log($"[GLBModelLoader] 기존 머티리얼에 원본 색상 적용 (_Color): {originalColor}");
                                 optimizedCount++;
                             }
                         }
@@ -1279,21 +1144,18 @@ public class GLBModelLoader : MonoBehaviour
             }
         }
         
-        Debug.Log($"[GLBModelLoader] 원본 색상 머티리얼 최적화 완료: {optimizedCount}개 머티리얼 수정됨");
     }
 
     public void ClearModel()
     {
         if (loadedModel != null)
         {
-            Debug.Log($"[GLBModelLoader] 기존 GLB 모델 정리 시작: {loadedModel.name}");
             
             // 메모리 집약적 정리
             CleanupModelResources(loadedModel);
             
             DestroyImmediate(loadedModel);
             loadedModel = null;
-            Debug.Log("[GLBModelLoader] GLB 모델 DestroyImmediate 완료");
         }
         
         // 다운로드된 파일 데이터 해제
@@ -1304,20 +1166,17 @@ public class GLBModelLoader : MonoBehaviour
         // 강제 가비지 컬렉션 (GLB 로딩 후)
         ForceGarbageCollection();
         
-        Debug.Log("[GLBModelLoader] GLB 모델 클리어 및 메모리 정리 완료");
     }
 
     private void ClearCurrentGLBData()
     {
         if (currentGLBData != null)
         {
-            Debug.Log($"[GLBModelLoader] 현재 GLB 파일 데이터 해제: {currentGLBData.Length} bytes");
             currentGLBData = null;
         }
         
         if (!string.IsNullOrEmpty(currentGLBUrl))
         {
-            Debug.Log($"[GLBModelLoader] 현재 GLB URL 정리: {currentGLBUrl}");
             currentGLBUrl = "";
         }
     }
@@ -1326,7 +1185,6 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (data == null || data.Length == 0) return;
         
-        Debug.Log($"[GLBModelLoader] GLB 파일 캐시 저장: {url} ({data.Length} bytes)");
         
         // 캐시 크기 제한
         while (downloadedFiles.Count >= maxCachedFiles && downloadOrder.Count > 0)
@@ -1336,7 +1194,6 @@ public class GLBModelLoader : MonoBehaviour
             {
                 byte[] oldData = downloadedFiles[oldestUrl];
                 downloadedFiles.Remove(oldestUrl);
-                Debug.Log($"[GLBModelLoader] 오래된 캐시 파일 제거: {oldestUrl} ({oldData.Length} bytes)");
                 oldData = null; // 명시적 해제
             }
         }
@@ -1345,12 +1202,10 @@ public class GLBModelLoader : MonoBehaviour
         downloadedFiles[url] = data;
         downloadOrder.Enqueue(url);
         
-        Debug.Log($"[GLBModelLoader] 현재 캐시된 파일 수: {downloadedFiles.Count}");
     }
 
     public static void ClearAllCache()
     {
-        Debug.Log($"[GLBModelLoader] 모든 GLB 캐시 정리 시작: {downloadedFiles.Count}개 파일");
         
         int totalSize = 0;
         foreach (var data in downloadedFiles.Values)
@@ -1364,7 +1219,6 @@ public class GLBModelLoader : MonoBehaviour
         downloadedFiles.Clear();
         downloadOrder.Clear();
         
-        Debug.Log($"[GLBModelLoader] 모든 GLB 캐시 정리 완료: {totalSize} bytes 해제");
         
         // 강제 GC
         System.GC.Collect();
@@ -1376,7 +1230,6 @@ public class GLBModelLoader : MonoBehaviour
         {
             byte[] data = downloadedFiles[url];
             downloadedFiles.Remove(url);
-            Debug.Log($"[GLBModelLoader] 특정 URL 캐시 제거: {url} ({data?.Length ?? 0} bytes)");
             data = null;
         }
     }
@@ -1403,7 +1256,6 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (model == null) return;
         
-        Debug.Log("[GLBModelLoader] GLB 리소스 정리 시작");
         
         // 모든 MeshRenderer의 머티리얼 정리
         MeshRenderer[] renderers = model.GetComponentsInChildren<MeshRenderer>();
@@ -1418,7 +1270,6 @@ public class GLBModelLoader : MonoBehaviour
                         // 텍스처 해제
                         if (material.mainTexture != null)
                         {
-                            Debug.Log($"[GLBModelLoader] 텍스처 해제: {material.mainTexture.name}");
                         }
                         
                         // 머티리얼 파괴 (인스턴스만)
@@ -1437,7 +1288,6 @@ public class GLBModelLoader : MonoBehaviour
         {
             if (meshFilter.mesh != null)
             {
-                Debug.Log($"[GLBModelLoader] 메시 해제: {meshFilter.mesh.name}");
                 // 메시 메모리 해제
                 meshFilter.mesh.Clear();
             }
@@ -1449,16 +1299,13 @@ public class GLBModelLoader : MonoBehaviour
         {
             if (collider.sharedMesh != null)
             {
-                Debug.Log($"[GLBModelLoader] 콜라이더 메시 해제: {collider.sharedMesh.name}");
             }
         }
         
-        Debug.Log($"[GLBModelLoader] GLB 리소스 정리 완료 - Renderers: {renderers.Length}, Meshes: {meshFilters.Length}, Colliders: {meshColliders.Length}");
     }
 
     private void ForceGarbageCollection()
     {
-        Debug.Log("[GLBModelLoader] 가비지 컬렉션 시작");
         
         // 사용하지 않는 에셋 해제
         Resources.UnloadUnusedAssets();
@@ -1468,12 +1315,10 @@ public class GLBModelLoader : MonoBehaviour
         System.GC.WaitForPendingFinalizers();
         System.GC.Collect();
         
-        Debug.Log("[GLBModelLoader] 가비지 컬렉션 완료");
     }
 
     private void MemoryOptimizationAfterLoading()
     {
-        Debug.Log("[GLBModelLoader] 로딩 후 메모리 최적화 시작");
         
         // GLB 메시를 읽기 불가능으로 만들어 메모리 절약
         if (loadedModel != null)
@@ -1485,22 +1330,18 @@ public class GLBModelLoader : MonoBehaviour
                 {
                     // 메시를 읽기 불가능으로 설정 (GPU 메모리로 이동)
                     meshFilter.mesh.UploadMeshData(true);
-                    Debug.Log($"[GLBModelLoader] 메시 GPU 업로드: {meshFilter.mesh.name}");
                 }
             }
             
-            Debug.Log($"[GLBModelLoader] {meshFilters.Length}개 메시 GPU 업로드 완료");
         }
         
         // 사용하지 않는 리소스 해제
         Resources.UnloadUnusedAssets();
         
-        Debug.Log("[GLBModelLoader] 로딩 후 메모리 최적화 완료");
     }
 
     private void SetupDoubleTap3DIntegration()
     {
-        Debug.Log("[GLBModelLoader] DoubleTap3D 통합 설정 시작");
         
         if (loadedModel == null)
         {
@@ -1516,7 +1357,6 @@ public class GLBModelLoader : MonoBehaviour
             return;
         }
         
-        Debug.Log("[GLBModelLoader] DoubleTap3D 컴포넌트 발견");
         
         // GLBContainer의 BoxCollider 크기를 로드된 모델에 맞게 조정
         BoxCollider containerCollider = glbContainer.GetComponent<BoxCollider>();
@@ -1540,7 +1380,6 @@ public class GLBModelLoader : MonoBehaviour
                 containerCollider.center = localCenter;
                 containerCollider.size = localSize * 1.2f; // 20% 여유
                 
-                Debug.Log($"[GLBModelLoader] BoxCollider 설정 완료: Center={localCenter}, Size={localSize}");
                 
                 // BoxCollider를 우선순위로 설정 (isTrigger는 false 유지)
                 containerCollider.enabled = true;
@@ -1551,7 +1390,6 @@ public class GLBModelLoader : MonoBehaviour
                 {
                     // 물리 충돌은 유지하되, 레이캐스트 우선순위를 BoxCollider에게 양보
                     // MeshCollider는 그대로 두고 BoxCollider가 먼저 감지되도록 함
-                    Debug.Log($"[GLBModelLoader] MeshCollider 유지: {collider.gameObject.name}");
                 }
             }
         }
@@ -1578,28 +1416,23 @@ public class GLBModelLoader : MonoBehaviour
                 containerCollider.center = localCenter;
                 containerCollider.size = localSize * 1.2f;
                 
-                Debug.Log($"[GLBModelLoader] 새 BoxCollider 생성 및 설정 완료: Center={localCenter}, Size={localSize}");
             }
         }
         
         // DoubleTap3D가 제대로 설정되었는지 확인
         if (doubleTap3D.enabled)
         {
-            Debug.Log("[GLBModelLoader] DoubleTap3D가 활성화되어 터치 준비 완료");
         }
         else
         {
-            Debug.LogWarning("[GLBModelLoader] DoubleTap3D가 비활성화 상태");
         }
         
         // 터치 감지 테스트
         Collider testCollider = glbContainer.GetComponent<Collider>();
         if (testCollider != null)
         {
-            Debug.Log($"[GLBModelLoader] 터치 감지용 Collider 확인: {testCollider.GetType().Name}, Enabled: {testCollider.enabled}");
         }
         
-        Debug.Log("[GLBModelLoader] DoubleTap3D 통합 설정 완료");
     }
 
     public bool HasLoadedModel()
@@ -1616,18 +1449,15 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (enableDetailedLogging)
         {
-            Debug.Log(message);
         }
     }
 
     private void LogError(string message)
     {
-        Debug.LogError(message);
     }
 
     void OnDestroy()
     {
-        Debug.Log("[GLBModelLoader] OnDestroy 호출됨");
         ClearModel();
     }
 }

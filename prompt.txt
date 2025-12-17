@@ -1,18 +1,31 @@
-2025-12-04 11:22:43.730 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:22:43.730 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:22:43.731 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:22:53.762 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:22:53.762 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:22:53.764 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:03.759 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:03.760 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:03.761 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:13.790 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:13.791 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:13.792 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:23.785 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:23.786 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:23.788 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
-2025-12-04 11:23:33.783 29490 29518 Info Unity [PlaceListManager] TourAPI데이터 처리 - 전체: 1, 필터링됨: 0, 추가됨: 1
-2025-12-04 11:23:33.784 29490 29518 Info Unity [PlaceListManager] 리스트 업데이트 - 전체 데이터: 우팡=2, TourAPI=1, 필터링 후 표시=3
-2025-12-04 11:23:33.786 29490 29518 Info Unity [PlaceListManager] ListPanel 활성화 - UI 업데이트 실행 (간격: 10s)
+No valid ARGeospatialCreatorOrigin found in scene.
+UnityEngine.Debug:LogError (object)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorOrigin:FindDefaultOrigin () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorOrigin.cs:176)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:Awake () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:365)
+UnityEditor.EditorApplication:Internal_CallDelayFunctions ()
+
+Error building Player: 2 errors
+
+Cannot update the location for 0000_Cube: The Origin field is unassigned.
+UnityEngine.Debug:LogError (object)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:FindOriginPoint () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:623)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:UpdateGeospatialCoordinates () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:555)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:Update () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:487)
+UnityEditor.EditorApplication:Internal_CallDelayFunctions ()
+
+No valid ARGeospatialCreatorOrigin found in scene.
+UnityEngine.Debug:LogError (object)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorOrigin:FindDefaultOrigin () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorOrigin.cs:176)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:Awake () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:365)
+UnityEditor.EditorApplication:Internal_CallDelayFunctions ()
+
+Build completed with a result of 'Failed' in 23 seconds (23062 ms) [2025-12-17 오후 7:52:32 -> 2025-12-17 오후 7:52:55, 23s]
+4 errors
+UnityEditor.EditorApplication:Internal_CallDelayFunctions ()
+
+Cannot update the location for 0000_Cube: The Origin field is unassigned.
+UnityEngine.Debug:LogError (object)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:FindOriginPoint () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:623)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:UpdateGeospatialCoordinates () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:555)
+Google.XR.ARCoreExtensions.GeospatialCreator.ARGeospatialCreatorAnchor:Update () (at ./Packages/com.google.ar.core.arfoundation.extensions/Runtime/GeospatialCreatorRuntime/Scripts/ARGeospatialCreatorAnchor.cs:487)
+
