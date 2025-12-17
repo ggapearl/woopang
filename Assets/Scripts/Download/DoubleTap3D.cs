@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -24,11 +24,11 @@ public class DoubleTap3D : MonoBehaviour
     public Text nameText;
     public Text descriptionTextUI;
     public GameObject placeInfoTextPanel;
-    public Text debugText;
     private Text placeInfoText;
     public float tapSpeed = 0.5f;
     public float swipeThreshold = 50f;
-    public float fadeDuration = 1.0f;  // 0.5초 → 1.0초 (2배 느리게)
+    public float fadeDuration = 0.3f;
+    public float swipeSpeed = 15f;
 
     private float lastTapTime = 0f;
     private bool isFullscreen = false;
@@ -38,6 +38,9 @@ public class DoubleTap3D : MonoBehaviour
     private bool isFading = false;
     private Vector2 touchStartPos;
     private bool isSwiping;
+    private RectTransform currentImageRect;
+    private Vector2 imageTargetPos;
+    private bool isDragging = false;
 
     private Sprite infoSprite1;
     private Sprite infoSprite2;
@@ -72,14 +75,19 @@ public class DoubleTap3D : MonoBehaviour
 
     void Start()
     {
-        if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null || 
+        if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null ||
             infoImage1 == null || infoImage2 == null || instagramButton == null ||
             previousButton == null || nextButton == null || closeButton == null || nameText == null)
         {
-            Debug.LogError("[DoubleTap3D] 필수 UI 요소가 할당되지 않았습니다!");
             enabled = false;
             return;
         }
+
+        currentImageRect = fullscreenImage.GetComponent<RectTransform>();
+
+        // 이미지 비율 유지 설정
+        fullscreenImage.preserveAspect = true;
+        fullscreenImage.type = Image.Type.Simple;
 
         imageDisplayController = GetComponentInParent<ImageDisplayController>();
         if (imageDisplayController == null)
@@ -87,23 +95,10 @@ public class DoubleTap3D : MonoBehaviour
             imageDisplayController = GetComponentInChildren<ImageDisplayController>();
         }
 
-        if (descriptionTextUI == null)
-        {
-            Debug.LogWarning("[DoubleTap3D] descriptionTextUI가 할당되지 않았습니다!");
-        }
-
         if (placeInfoTextPanel != null)
         {
             placeInfoText = placeInfoTextPanel.GetComponentInChildren<Text>();
-            if (placeInfoText == null)
-            {
-                Debug.LogWarning("[DoubleTap3D] placeInfoTextPanel 하위에 Text 컴포넌트가 없음!");
-            }
             placeInfoTextPanel.SetActive(false);
-        }
-        else
-        {
-            Debug.LogWarning("[DoubleTap3D] placeInfoTextPanel이 할당되지 않았습니다!");
         }
 
         fullscreenCanvasGroup.gameObject.SetActive(false);
@@ -115,18 +110,10 @@ public class DoubleTap3D : MonoBehaviour
             descriptionTextUI.gameObject.SetActive(false);
         }
 
-        fullscreenImage.preserveAspect = true;
-        fullscreenImage.type = Image.Type.Simple;
-
         instagramButton.onClick.AddListener(OnInstagramButtonClick);
         nextButton.onClick.AddListener(ShowNextImage);
         previousButton.onClick.AddListener(ShowPreviousImage);
         closeButton.onClick.AddListener(CloseFullscreen);
-
-        if (GetComponent<Collider>() == null)
-        {
-            Debug.LogError("[DoubleTap3D] Collider가 없습니다!");
-        }
 
 #if UNITY_IOS
         if (fullscreenCanvasGroup != null)
@@ -160,7 +147,6 @@ public class DoubleTap3D : MonoBehaviour
     {
         if (imagesAreCached) return;
 
-        Debug.Log("[DoubleTap3D] 이미지 캐싱 시작");
         cachedImageData.Clear();
 
         for (int i = 0; i < imageSprites.Count; i++)
@@ -169,20 +155,16 @@ public class DoubleTap3D : MonoBehaviour
             {
                 try
                 {
-                    // 텍스처를 PNG 바이트 배열로 변환
                     byte[] imageData = imageSprites[i].texture.EncodeToPNG();
                     cachedImageData[i] = imageData;
-                    Debug.Log($"[DoubleTap3D] 이미지 {i} 캐싱 완료 - 크기: {imageData.Length} bytes");
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"[DoubleTap3D] 이미지 {i} 캐싱 실패: {e.Message}");
                 }
             }
         }
 
         imagesAreCached = true;
-        Debug.Log($"[DoubleTap3D] 총 {cachedImageData.Count}개 이미지 캐싱 완료");
     }
 
     // 캐시에서 이미지 복원
@@ -190,40 +172,32 @@ public class DoubleTap3D : MonoBehaviour
     {
         if (cachedImageData.Count == 0)
         {
-            Debug.LogWarning("[DoubleTap3D] 캐시된 이미지가 없음");
             return;
         }
 
-        Debug.Log("[DoubleTap3D] 캐시에서 이미지 복원 시작");
         List<Sprite> restoredSprites = new List<Sprite>();
 
         foreach (var kvp in cachedImageData)
         {
             try
             {
-                // byte[]에서 텍스처 재생성
                 Texture2D restoredTexture = new Texture2D(2, 2);
                 restoredTexture.LoadImage(kvp.Value);
-                
-                // 스프라이트 재생성
+
                 Sprite restoredSprite = Sprite.Create(
-                    restoredTexture, 
-                    new Rect(0, 0, restoredTexture.width, restoredTexture.height), 
+                    restoredTexture,
+                    new Rect(0, 0, restoredTexture.width, restoredTexture.height),
                     new Vector2(0.5f, 0.5f)
                 );
-                
+
                 restoredSprites.Add(restoredSprite);
-                Debug.Log($"[DoubleTap3D] 이미지 {kvp.Key} 복원 완료");
             }
             catch (Exception e)
             {
-                Debug.LogError($"[DoubleTap3D] 이미지 {kvp.Key} 복원 실패: {e.Message}");
             }
         }
 
-        // 복원된 스프라이트로 교체
         imageSprites = restoredSprites;
-        Debug.Log($"[DoubleTap3D] 총 {restoredSprites.Count}개 이미지 복원 완료");
     }
 
     // 캐시 메모리 해제
@@ -231,7 +205,6 @@ public class DoubleTap3D : MonoBehaviour
     {
         cachedImageData.Clear();
         imagesAreCached = false;
-        Debug.Log("[DoubleTap3D] 이미지 캐시 메모리 해제");
     }
 
 #if UNITY_IOS
@@ -243,7 +216,6 @@ public class DoubleTap3D : MonoBehaviour
             savedObjectId = this.id;
             savedImageIndex = imageIndex;
             savedIsPlaceInfoPage = isPlaceInfoPage;
-            Debug.Log($"[iOS] 풀스크린 상태 저장: ID={id}, ImageIndex={imageIndex}, IsPlaceInfoPage={isPlaceInfoPage}");
         }
         else if (!pauseStatus && savedFullscreenState && savedObjectId == this.id)
         {
@@ -253,31 +225,25 @@ public class DoubleTap3D : MonoBehaviour
 
     private IEnumerator RestoreFullscreenForiOS()
     {
-        Debug.Log($"[iOS] 풀스크린 복원 시작: ID={id}");
-        
         yield return new WaitForSeconds(0.5f);
-        
-        // 캐시에서 이미지 복원
+
         if (imagesAreCached && cachedImageData.Count > 0)
         {
             RestoreImagesFromCache();
         }
-        
-        // 풀스크린 UI 복원
+
         isFullscreen = true;
         imageIndex = savedImageIndex;
         isPlaceInfoPage = savedIsPlaceInfoPage;
         currentIndex = imageIndex >= 0 ? imageIndex : 0;
-        
+
         fullscreenCanvasGroup.gameObject.SetActive(true);
         guidePanel.SetActive(true);
         fullscreenCanvasGroup.alpha = 1f;
-        
-        // 이미지 표시 (복원된 스프라이트 사용)
-        ShowImage(currentIndex);
+
+        ShowImage(savedImageIndex);
         UpdateInfoImages();
-        
-        // 버튼 리스너 재설정
+
         instagramButton.onClick.RemoveAllListeners();
         instagramButton.onClick.AddListener(OnInstagramButtonClick);
         nextButton.onClick.RemoveAllListeners();
@@ -286,13 +252,11 @@ public class DoubleTap3D : MonoBehaviour
         previousButton.onClick.AddListener(ShowPreviousImage);
         closeButton.onClick.RemoveAllListeners();
         closeButton.onClick.AddListener(CloseFullscreen);
-        
+
         savedFullscreenState = false;
         savedObjectId = -1;
         savedImageIndex = -1;
         savedIsPlaceInfoPage = true;
-        
-        Debug.Log($"[iOS] 풀스크린 복원 완료: ID={id}, 이미지 개수={imageSprites.Count}");
     }
 #endif
 
@@ -322,63 +286,95 @@ public class DoubleTap3D : MonoBehaviour
 
                 if (Physics.Raycast(ray, out hit))
                 {
-                    Debug.Log($"[DoubleTap3D] 레이캐스트 히트 - 오브젝트: {hit.collider.gameObject.name}, 이 오브젝트: {gameObject.name}");
                     if (hit.collider.gameObject == gameObject)
                     {
                         float timeSinceLastTap = Time.time - lastTapTime;
-                        Debug.Log($"[DoubleTap3D] 탭 간격: {timeSinceLastTap}s (TapSpeed: {tapSpeed}s)");
 
                         if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
                         {
                             OnDoubleTapCube();
                         }
-                        else
-                        {
-                            Debug.Log($"[DoubleTap3D] 더블 탭 실패 - 시간 범위 밖 ({timeSinceLastTap}s)");
-                        }
                         lastTapTime = Time.time;
                     }
-                    else
-                    {
-                        Debug.Log($"[DoubleTap3D] 다른 오브젝트 터치됨: {hit.collider.gameObject.name}");
-                    }
-                }
-                else
-                {
-                    Debug.Log($"[DoubleTap3D] 레이캐스트 히트 실패 - 터치 위치: {touch.screenPosition}");
                 }
             }
             else if (touch.phase == TouchPhase.Moved && isSwiping && isFullscreen)
             {
                 Vector2 swipeDelta = touch.screenPosition - touchStartPos;
 
-                // 좌우 스와이프: 이미지 넘기기
-                if (Mathf.Abs(swipeDelta.x) > swipeThreshold && Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))
+                // 드래그 중: 이미지를 실시간으로 이동
+                if (Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))
                 {
-                    if (swipeDelta.x > 0)
-                        ShowPreviousImage();  // 오른쪽 스와이프 → 이전 이미지
-                    else
-                        ShowNextImage();      // 왼쪽 스와이프 → 다음 이미지
-                    isSwiping = false;
+                    // 좌우 스와이프 - 이미지 드래그
+                    isDragging = true;
+                    if (currentImageRect != null)
+                    {
+                        // 경계 체크 (엘라스틱 효과)
+                        float dragX = swipeDelta.x;
+
+                        // 첫 이미지에서 오른쪽 드래그 제한
+                        bool isAtStart = (placeInfoTextPanel == null || !isPlaceInfoPage) && imageIndex == 0;
+                        if (isAtStart && dragX > 0)
+                        {
+                            dragX *= 0.3f; // 엘라스틱 저항
+                        }
+
+                        // 마지막 이미지에서 왼쪽 드래그 제한
+                        bool isAtEnd = imageIndex == imageSprites.Count - 1 && !isPlaceInfoPage;
+                        if (isAtEnd && dragX < 0)
+                        {
+                            dragX *= 0.3f; // 엘라스틱 저항
+                        }
+
+                        currentImageRect.anchoredPosition = imageTargetPos + new Vector2(dragX, 0);
+                    }
                 }
-                // 위→아래 스와이프: 패널 닫기
-                else if (Mathf.Abs(swipeDelta.y) > swipeThreshold && Mathf.Abs(swipeDelta.y) > Mathf.Abs(swipeDelta.x) && swipeDelta.y < 0)
+                else if (swipeDelta.y < -swipeThreshold)
                 {
-                    CloseFullscreen();  // 페이드아웃으로 닫힘
+                    // 아래로 스와이프 - 패널 닫기
+                    CloseFullscreen();
                     isSwiping = false;
+                    isDragging = false;
                 }
             }
-            else if (touch.phase == TouchPhase.Ended)
+            else if (touch.phase == TouchPhase.Ended && isFullscreen)
             {
+                if (isDragging)
+                {
+                    Vector2 swipeDelta = touch.screenPosition - touchStartPos;
+
+                    // 스와이프 거리가 threshold를 넘었는지 확인
+                    if (Mathf.Abs(swipeDelta.x) > swipeThreshold)
+                    {
+                        if (swipeDelta.x > 0)
+                            ShowPreviousImage();
+                        else
+                            ShowNextImage();
+                    }
+                    else
+                    {
+                        // threshold 미달 - 원래 위치로 복귀
+                        ResetImagePosition();
+                    }
+                    isDragging = false;
+                }
                 isSwiping = false;
             }
+        }
+
+        // 이미지가 타겟 위치로 부드럽게 이동
+        if (!isDragging && isFullscreen && currentImageRect != null)
+        {
+            currentImageRect.anchoredPosition = Vector2.Lerp(
+                currentImageRect.anchoredPosition,
+                imageTargetPos,
+                Time.deltaTime * swipeSpeed
+            );
         }
     }
 
     private void OnDoubleTapCube()
     {
-        Debug.Log($"[DoubleTap3D] 더블 터치 발생 - ID: {id}, GameObject: {gameObject.name}");
-
         OnDoubleTapEvent?.Invoke(this);
 
         isFullscreen = !isFullscreen;
@@ -389,11 +385,12 @@ public class DoubleTap3D : MonoBehaviour
 #if UNITY_IOS
             CacheImagesForFullscreen();
 #endif
-            
+
             currentIndex = 0;
             isPlaceInfoPage = placeInfoTextPanel != null;
             imageIndex = placeInfoTextPanel != null ? -1 : 0;
-            ShowImage(currentIndex);
+
+            ShowImage(imageIndex);
             UpdateInfoImages();
             fullscreenCanvasGroup.gameObject.SetActive(true);
             guidePanel.SetActive(true);
@@ -407,11 +404,6 @@ public class DoubleTap3D : MonoBehaviour
             previousButton.onClick.AddListener(ShowPreviousImage);
 
             StartCoroutine(FadeInCanvas(fadeDuration));
-
-            if (debugText != null)
-            {
-                debugText.text = $"DoubleTap: ID = {id}, InstagramId = {instagramId ?? "null"}";
-            }
         }
         else
         {
@@ -421,84 +413,113 @@ public class DoubleTap3D : MonoBehaviour
 
     public void ShowNextImage()
     {
-        if (imageSprites.Count == 0 || isFading) return;
+        if (imageSprites.Count == 0) return;
 
+        // PlaceInfo 페이지에서 첫 이미지로 이동
         if (placeInfoTextPanel != null && isPlaceInfoPage)
         {
             isPlaceInfoPage = false;
             imageIndex = 0;
+            currentIndex++;
+            StartCoroutine(CrossFadeImage(imageIndex));
+            UpdatePlaceInfoVisibility();
         }
+        // 마지막 이미지가 아니면 다음 이미지로
         else if (imageIndex < imageSprites.Count - 1)
         {
             imageIndex++;
+            currentIndex++;
+            StartCoroutine(CrossFadeImage(imageIndex));
         }
-        else
-        {
-            imageIndex = 0;
-        }
-
-        currentIndex++;
-        StartCoroutine(CrossFadeImage(fadeDuration));
+        // 마지막 이미지에서는 더 이상 진행하지 않음 (경계)
     }
 
     public void ShowPreviousImage()
     {
-        if (imageSprites.Count == 0 || isFading) return;
+        if (imageSprites.Count == 0) return;
 
+        // 첫 이미지에서 PlaceInfo 페이지로 이동
         if (placeInfoTextPanel != null && !isPlaceInfoPage && imageIndex == 0)
         {
             isPlaceInfoPage = true;
             imageIndex = -1;
+            currentIndex--;
+            if (currentIndex < 0) currentIndex = 0;
+            ShowImage(-1);
+            UpdatePlaceInfoVisibility();
         }
+        // 첫 이미지가 아니면 이전 이미지로
         else if (imageIndex > 0)
         {
             imageIndex--;
+            currentIndex--;
+            if (currentIndex < 0) currentIndex = 0;
+            StartCoroutine(CrossFadeImage(imageIndex));
         }
-        else
-        {
-            imageIndex = imageSprites.Count - 1;
-        }
+        // PlaceInfo 페이지이거나 첫 이미지에서는 더 이상 뒤로 가지 않음 (경계)
+    }
 
-        currentIndex--;
-        if (currentIndex < 0) currentIndex = 0;
-        StartCoroutine(CrossFadeImage(fadeDuration));
+    private void UpdatePlaceInfoVisibility()
+    {
+        if (placeInfoTextPanel != null)
+        {
+            placeInfoTextPanel.SetActive(isPlaceInfoPage && isFullscreen);
+        }
     }
 
     private void ShowImage(int index)
     {
-        if (placeInfoTextPanel != null && isPlaceInfoPage)
+        if (index == -1)
         {
-            fullscreenImage.gameObject.SetActive(false);
-            if (placeInfoTextPanel != null)
-            {
-                placeInfoTextPanel.SetActive(isFullscreen);
-            }
+            fullscreenImage.enabled = false;
         }
-        else if (imageSprites.Count > 0 && imageIndex >= 0 && imageIndex < imageSprites.Count)
+        else if (index >= 0 && index < imageSprites.Count)
         {
-            fullscreenImage.gameObject.SetActive(true);
-            if (imageSprites[imageIndex] != null)
-            {
-                fullscreenImage.sprite = imageSprites[imageIndex];
-                fullscreenImage.color = Color.white;
-            }
-            else
-            {
-                Debug.LogWarning($"[DoubleTap3D] Sprite at index {imageIndex} is null!");
-                fullscreenImage.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-            }
-            if (placeInfoTextPanel != null)
-            {
-                placeInfoTextPanel.SetActive(false);
-            }
+            fullscreenImage.enabled = true;
+            fullscreenImage.sprite = imageSprites[index];
         }
-        else
+        ResetImagePosition();
+    }
+
+    private IEnumerator CrossFadeImage(int index)
+    {
+        if (index < 0 || index >= imageSprites.Count) yield break;
+
+        float elapsed = 0f;
+        Color startColor = fullscreenImage.color;
+
+        // Fade out
+        while (elapsed < fadeDuration / 2)
         {
-            fullscreenImage.gameObject.SetActive(false);
-            if (placeInfoTextPanel != null)
-            {
-                placeInfoTextPanel.SetActive(false);
-            }
+            elapsed += Time.deltaTime;
+            float alpha = Mathf.Lerp(1f, 0f, elapsed / (fadeDuration / 2));
+            fullscreenImage.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
+            yield return null;
+        }
+
+        // 이미지 변경
+        fullscreenImage.sprite = imageSprites[index];
+        ResetImagePosition();
+
+        // Fade in
+        elapsed = 0f;
+        while (elapsed < fadeDuration / 2)
+        {
+            elapsed += Time.deltaTime;
+            float alpha = Mathf.Lerp(0f, 1f, elapsed / (fadeDuration / 2));
+            fullscreenImage.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
+            yield return null;
+        }
+
+        fullscreenImage.color = startColor;
+    }
+
+    private void ResetImagePosition()
+    {
+        imageTargetPos = Vector2.zero;
+        if (currentImageRect != null)
+        {
+            currentImageRect.anchoredPosition = Vector2.zero;
         }
     }
 
@@ -521,13 +542,6 @@ public class DoubleTap3D : MonoBehaviour
         if (isFullscreen)
         {
             UpdateInfoImages();
-        }
-
-        Debug.Log($"[DoubleTap3D] SetInfoImages 호출 - ID: {id}, Description: {description}, Name: {name}, GameObject: {gameObject.name}");
-
-        if (debugText != null)
-        {
-            debugText.text = $"SetInfoImages: ID = {id}, InstagramId = {instagramId ?? "null"}";
         }
     }
 
@@ -581,24 +595,21 @@ public class DoubleTap3D : MonoBehaviour
         {
             string url = $"https://www.instagram.com/{instagramId}/";
             Application.OpenURL(url);
-            
-            if (debugText != null)
-            {
-                debugText.text = $"InstagramButton: ID = {id}, InstagramId = {instagramId}, URL = {url}";
-            }
         }
     }
 
     public void SetImageSprites(List<Sprite> sprites)
     {
         imageSprites = sprites;
-        // 풀스크린이 이미 열려있다면 즉시 캐싱
-#if UNITY_IOS
+
+        // 이미 풀스크린이 열려있다면 이미지 재생성
         if (isFullscreen)
         {
+            ShowImage(imageIndex);
+#if UNITY_IOS
             CacheImagesForFullscreen();
-        }
 #endif
+        }
     }
 
     public void SetImageUrls(List<string> urls)
@@ -611,7 +622,7 @@ public class DoubleTap3D : MonoBehaviour
         // 풀스크린 닫을 때 캐시 메모리 해제
 #if UNITY_IOS
         ClearImageCache();
-        
+
         if (savedObjectId == this.id)
         {
             savedFullscreenState = false;
@@ -621,34 +632,6 @@ public class DoubleTap3D : MonoBehaviour
         }
 #endif
         StartCoroutine(FadeOutCanvas(fadeDuration));
-    }
-
-    IEnumerator CrossFadeImage(float duration)
-    {
-        isFading = true;
-        float elapsed = 0f;
-        Color startColor = fullscreenImage.color;
-
-        while (elapsed < duration / 2)
-        {
-            elapsed += Time.deltaTime;
-            float alpha = Mathf.Lerp(1f, 0f, elapsed / (duration / 2));
-            fullscreenImage.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
-            yield return null;
-        }
-
-        ShowImage(currentIndex);
-        elapsed = 0f;
-        while (elapsed < duration / 2)
-        {
-            elapsed += Time.deltaTime;
-            float alpha = Mathf.Lerp(0f, 1f, elapsed / (duration / 2));
-            fullscreenImage.color = new Color(1f, 1f, 1f, alpha);
-            yield return null;
-        }
-
-        fullscreenImage.color = Color.white;
-        isFading = false;
     }
 
     IEnumerator FadeInCanvas(float duration)
@@ -695,7 +678,6 @@ public class DoubleTap3D : MonoBehaviour
 
     public int GetId()
     {
-        Debug.Log($"[DoubleTap3D] GetId 호출 - ID: {id}, GameObject: {gameObject.name}");
         return id;
     }
     public string GetUsername() => username;
