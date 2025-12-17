@@ -143,6 +143,26 @@ namespace Google.XR.ARCoreExtensions
 #endif
         internal static ARCoreExtensions _instance { get; private set; }
 
+        /// <summary>
+        /// Gets the trackables parent Transform from either Origin (XROrigin) or SessionOrigin (ARSessionOrigin).
+        /// Supports both Unity 6+ (XROrigin) and older versions (ARSessionOrigin).
+        /// </summary>
+        internal Transform TrackablesParent
+        {
+            get
+            {
+                if (Origin != null)
+                {
+                    return Origin.TrackablesParent;
+                }
+                else if (SessionOrigin != null)
+                {
+                    return SessionOrigin.trackablesParent;
+                }
+                return null;
+            }
+        }
+
         internal IntPtr currentARCoreSessionHandle
         {
             get
