@@ -24,5 +24,12 @@
       "path": "Samples~/Geospatial"
     }
   ],
+<<<<<<< HEAD
   "_fingerprint": "6890d617e4425e846233fc0a262fca19b6a71fc7"
+=======
+  "publishConfig": {
+    "registry": "https://package.openupm.com"
+  },
+  "_fingerprint": "1948889dab68555ef919d123d32c2238b686cc4f"
+>>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
 }

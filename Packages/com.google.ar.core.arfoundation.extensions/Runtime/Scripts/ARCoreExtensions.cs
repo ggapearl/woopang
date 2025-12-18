@@ -34,7 +34,10 @@ namespace Google.XR.ARCoreExtensions
     using System.Linq;
     using Google.XR.ARCoreExtensions.Internal;
     using Unity.Collections;
+<<<<<<< HEAD
     using Unity.XR.CoreUtils;
+=======
+>>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
     using UnityEngine;
 
 #if UNITY_ANDROID
@@ -56,12 +59,21 @@ namespace Google.XR.ARCoreExtensions
         public ARSession Session;
 
         /// <summary>
+<<<<<<< HEAD
         /// AR Foundation <c><see cref="XROrigin"/></c> used by the scene.
         /// </summary>
         public XROrigin Origin;
 
         /// <summary>
         /// AR Foundation <c><see cref="ARCameraManager"/></c> used in the XROrigin.
+=======
+        /// AR Foundation <c><see cref="ARSessionOrigin"/></c> used by the scene.
+        /// </summary>
+        public ARSessionOrigin SessionOrigin;
+
+        /// <summary>
+        /// AR Foundation <c><see cref="ARCameraManager"/></c> used in the ARSessionOrigin.
+>>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
         /// </summary>
         public ARCameraManager CameraManager;
 

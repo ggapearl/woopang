@@ -2,7 +2,11 @@ fileFormatVersion: 2
 guid: 6fb8c079acb6347ec8d7d3c463528211
 PluginImporter:
   externalObjects: {}
+<<<<<<< HEAD
   serializedVersion: 3
+=======
+  serializedVersion: 2
+>>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
   iconMap: {}
   executionOrder: {}
   defineConstraints: []
@@ -11,6 +15,7 @@ PluginImporter:
   isExplicitlyReferenced: 0
   validateReferences: 1
   platformData:
+<<<<<<< HEAD
     Android:
       enabled: 1
       settings:
@@ -19,11 +24,28 @@ PluginImporter:
       enabled: 0
       settings: {}
     Editor:
+=======
+  - first:
+      Android: Android
+    second:
+      enabled: 1
+      settings:
+        CPU: ARMv7
+  - first:
+      Any: 
+    second:
+      enabled: 0
+      settings: {}
+  - first:
+      Editor: Editor
+    second:
+>>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
       enabled: 0
       settings:
         CPU: AnyCPU
         DefaultValueInitialized: true
         OS: AnyOS
+<<<<<<< HEAD
     Linux64:
       enabled: 0
       settings:
@@ -41,6 +63,35 @@ PluginImporter:
       settings:
         CPU: x86_64
     iOS:
+=======
+  - first:
+      Standalone: Linux64
+    second:
+      enabled: 0
+      settings:
+        CPU: AnyCPU
+  - first:
+      Standalone: OSXUniversal
+    second:
+      enabled: 0
+      settings:
+        CPU: x86_64
+  - first:
+      Standalone: Win
+    second:
+      enabled: 0
+      settings:
+        CPU: x86
+  - first:
+      Standalone: Win64
+    second:
+      enabled: 0
+      settings:
+        CPU: x86_64
+  - first:
+      iPhone: iOS
+    second:
+>>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
       enabled: 0
       settings:
         AddToEmbeddedBinaries: false

@@ -41,6 +41,9 @@ public class Target : MonoBehaviour
 
     [HideInInspector] public Indicator indicator;
 
+    // Sparkle 효과를 한 번만 재생하기 위한 플래그
+    [HideInInspector] public bool hasPlayedSparkle = false;
+
     public Color TargetColor
     {
         get => targetColor;
@@ -91,6 +94,10 @@ public class Target : MonoBehaviour
         {
             OffScreenIndicator.TargetStateChanged.Invoke(this, false);
         }
+
+        // Target이 완전히 비활성화되면 Sparkle 플래그 리셋
+        // (다시 활성화될 때 Sparkle 재생)
+        hasPlayedSparkle = false;
     }
 
     public float GetDistanceFromCamera(Vector3 cameraPosition)
