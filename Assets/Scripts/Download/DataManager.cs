@@ -62,32 +62,35 @@ public class DataManager : MonoBehaviour
 
     void Start()
     {
-        InitializeObjectPools();
+        StartCoroutine(InitializeObjectPoolsAsync());
         StartCoroutine(StartLocationServiceAndFetchData());
     }
 
-    private void InitializeObjectPools()
+    private IEnumerator InitializeObjectPoolsAsync()
     {
         if (cubePrefab == null || glbPrefab == null)
         {
-            return;
+            yield break;
         }
 
-
-        // Cube 오브젝트 풀 초기화
+        // Cube 오브젝트 풀 초기화 (5개씩 생성하고 프레임 양보)
         for (int i = 0; i < poolSize; i++)
         {
             GameObject cubeObj = Instantiate(cubePrefab, Vector3.zero, Quaternion.identity);
             cubeObj.SetActive(false);
             cubeObjectPool.Enqueue(cubeObj);
+
+            if (i % 5 == 4) yield return null; // 5개마다 프레임 양보
         }
 
-        // GLB 오브젝트 풀 초기화
+        // GLB 오브젝트 풀 초기화 (5개씩 생성하고 프레임 양보)
         for (int i = 0; i < poolSize; i++)
         {
             GameObject glbObj = Instantiate(glbPrefab, Vector3.zero, Quaternion.identity);
             glbObj.SetActive(false);
             glbObjectPool.Enqueue(glbObj);
+
+            if (i % 5 == 4) yield return null; // 5개마다 프레임 양보
         }
     }
 

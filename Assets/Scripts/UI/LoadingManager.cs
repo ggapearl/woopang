@@ -1,4 +1,7 @@
-﻿using UnityEngine;
+﻿// 디버그 로그를 Unity 에디터에서만 활성화 (릴리즈 빌드 성능 향상)
+#define LOADING_DEBUG_LOGS_ENABLED
+
+using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
@@ -81,6 +84,13 @@ public class LoadingManager : MonoBehaviour
     void Awake()
     {
         InitializeMessages();
+    }
+
+    // 디버그 로그 헬퍼 메서드 (릴리즈 빌드에서 제거)
+    [System.Diagnostics.Conditional("LOADING_DEBUG_LOGS_ENABLED")]
+    private void DebugLog(string message)
+    {
+        Debug.Log($"[LoadingManager] {message}");
     }
     
     void Start()

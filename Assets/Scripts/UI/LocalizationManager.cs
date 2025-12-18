@@ -29,7 +29,7 @@ public class LocalizationManager : MonoBehaviour
     {
         currentLanguage = GetDeviceLanguage();
         Debug.Log($"[LocalizationManager] Current language: {currentLanguage}");
-        InitializeTexts();
+        // Lazy initialization - InitializeTexts()는 GetText() 첫 호출 시 실행
     }
     
     private string GetDeviceLanguage()

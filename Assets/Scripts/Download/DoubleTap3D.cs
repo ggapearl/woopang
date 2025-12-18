@@ -268,6 +268,16 @@ public class DoubleTap3D : MonoBehaviour
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
+
+        // 버튼 리스너 개별 제거 (다른 컴포넌트의 리스너 보호)
+        if (instagramButton != null)
+            instagramButton.onClick.RemoveListener(OnInstagramButtonClick);
+        if (nextButton != null)
+            nextButton.onClick.RemoveListener(ShowNextImage);
+        if (previousButton != null)
+            previousButton.onClick.RemoveListener(ShowPreviousImage);
+        if (closeButton != null)
+            closeButton.onClick.RemoveListener(CloseFullscreen);
     }
 
     void Update()

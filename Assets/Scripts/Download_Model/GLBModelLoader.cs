@@ -11,7 +11,7 @@ public class GLBModelLoader : MonoBehaviour
     private bool isModelLoaded = false;
     
     [Header("Settings")]
-    [SerializeField] private bool enableDetailedLogging = true;
+    [SerializeField] private bool enableDetailedLogging = false; // 릴리즈 빌드에서 성능 향상을 위해 기본 비활성화
     [SerializeField] private int maxRetryAttempts = 2;
     [SerializeField] private float retryDelay = 2f;
     [SerializeField] private long maxFileSizeBytes = 10 * 1024 * 1024; // 10MB 제한
