@@ -13,10 +13,14 @@ public class DataManager : MonoBehaviour
 {
     private string baseServerUrl = "https://woopang.com/locations?status=approved";
     
+    [Header("UI")]
+    [Tooltip("오브젝트 개수 표시 UI")]
+    public ObjectCountUI objectCountUI;
+
     [Header("Prefabs")]
     public GameObject cubePrefab;
     public GameObject glbPrefab;
-    
+
     [Header("GLB Settings")]
     [SerializeField] private int maxConcurrentGLBLoads = 3;
     [SerializeField] private float glbLoadTimeout = 30f;
@@ -205,8 +209,14 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator FetchDataProgressively(float lat, float lon)
     {
-        
+
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+
+        // UI 리셋 (새로운 로드 시작)
+        if (objectCountUI != null)
+        {
+            objectCountUI.ResetUI();
+        }
 
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
@@ -222,10 +232,23 @@ public class DataManager : MonoBehaviour
                 CreateObjectFromData(place);
                 loadedIds.Add(place.id);
 
+                // UI 업데이트 (개수만 증가)
+                if (objectCountUI != null)
+                {
+                    bool isFinal = (tierIndex == loadRadii.Length - 1) && (place == newPlaces[newPlaces.Count - 1]);
+                    objectCountUI.UpdateObjectCount(spawnedObjects.Count, false);
+                }
+
                 if (objectSpawnDelay > 0)
                 {
                     yield return new WaitForSeconds(objectSpawnDelay);
                 }
+            }
+
+            // 마지막 Tier 완료 시 최종 업데이트
+            if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
+            {
+                objectCountUI.UpdateObjectCount(spawnedObjects.Count, true);
             }
 
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);

@@ -154,7 +154,11 @@ public class OffScreenIndicator : MonoBehaviour
         }
         else
         {
-            target.indicator?.Activate(false);
+            if (target.indicator != null)
+            {
+                target.indicator.ResetForPool(); // Pool 반환 전 완전히 리셋
+                target.indicator.Activate(false);
+            }
             target.indicator = null;
             targets.Remove(target);
         }
@@ -168,6 +172,7 @@ public class OffScreenIndicator : MonoBehaviour
         {
             if (indicator.Type != type)
             {
+                indicator.ResetForPool(); // Pool 반환 전 완전히 리셋
                 indicator.Activate(false);
                 indicator = type == IndicatorType.BOX ? BoxObjectPool.current.GetPooledObject() : ArrowObjectPool.current.GetPooledObject();
                 indicator.Activate(true);

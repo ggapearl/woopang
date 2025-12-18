@@ -10,17 +10,12 @@ public class ImageDisplayController : MonoBehaviour
 
     private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
-    private Vector3 originalScale; // 원래 크기 저장
-    
+
     private Coroutine currentBaseMapCoroutine;
     private Coroutine currentSubPhotoCoroutine;
 
     void Start()
     {
-        // ⭐ originalScale 초기화 (PopUpAnimation용)
-        originalScale = transform.localScale;
-        Debug.Log($"[SPINNER] Start() - originalScale 초기화: {originalScale}");
-
         // GLB 모델 등 동적으로 렌더러가 생성되는 경우를 위해 에러 처리 완화
         if (cubeRenderer == null)
         {
@@ -75,9 +70,6 @@ public class ImageDisplayController : MonoBehaviour
                             // 큐브 표시
                             cubeRenderer.enabled = true;
                         }
-
-                        // 팝업 애니메이션 시작
-                        StartCoroutine(PopUpAnimation());
                     }
                 }
                 else
@@ -96,48 +88,6 @@ public class ImageDisplayController : MonoBehaviour
                 currentBaseMapCoroutine = null;
             }
         }
-    }
-
-
-    private IEnumerator PopUpAnimation()
-    {
-        float duration = 0.6f; // 0.4 → 0.6초로 증가 (더 눈에 띄게)
-        float elapsed = 0f;
-
-        // 시작: 아주 작은 크기에서 시작 (0.1 배)
-        transform.localScale = originalScale * 0.1f;
-        Debug.Log($"[SPINNER] 애니메이션 시작 - 초기 스케일: {transform.localScale}");
-
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / duration;
-
-            // Elastic Back Out Easing (통통 튀는 효과)
-            float s = 1.70158f * 1.525f; // 더 강한 오버슈트
-            float scale;
-
-            if (t < 0.5f)
-            {
-                // 전반부: 빠르게 커짐
-                float t2 = t * 2f;
-                scale = 0.1f + (t2 * t2 * 0.9f);
-            }
-            else
-            {
-                // 후반부: 살짝 튀어나왔다가 원래 크기로
-                float t2 = (t - 0.5f) * 2f;
-                scale = 1.0f + ((t2 - 1) * t2 * ((s + 1) * (t2 - 1) + s));
-            }
-
-            if (scale < 0.1f) scale = 0.1f; // 최소 크기 보장
-
-            transform.localScale = originalScale * scale;
-            yield return null;
-        }
-
-        transform.localScale = originalScale;
-        Debug.Log($"[SPINNER] 애니메이션 완료 - 최종 스케일: {transform.localScale}");
     }
 
     // 서브 사진 설정

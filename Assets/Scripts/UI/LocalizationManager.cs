@@ -450,6 +450,24 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "消息",
                 ["ja"] = "メッセージ",
                 ["es"] = "MENSAJES"
+            },
+
+            // Object Count UI
+            ["searching_objects"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Searching for nearby objects...",
+                ["ko"] = "주변의 오브젝트를 찾고 있습니다",
+                ["zh"] = "正在搜索附近的物体...",
+                ["ja"] = "近くのオブジェクトを検索中...",
+                ["es"] = "Buscando objetos cercanos..."
+            },
+            ["found_objects"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Found {0} objects nearby",
+                ["ko"] = "주변에서 {0}개의 오브젝트를 발견하였습니다",
+                ["zh"] = "找到了{0}个附近的物体",
+                ["ja"] = "近くの{0}個のオブジェクトを見つけました",
+                ["es"] = "Se encontraron {0} objetos cercanos"
             }
         };
     }

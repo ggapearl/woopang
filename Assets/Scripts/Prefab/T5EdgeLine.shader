@@ -18,6 +18,9 @@ Shader "Universal Render Pipeline/T5EdgeLine"
         [Header(T5 Tube Effect)]
         _TubeGlow ("Tube Glow Radius", Range(0, 0.5)) = 0.1
         _InnerGlow ("Inner Brightness", Range(0, 2)) = 1.5
+
+        [Header(Rounded Corners)]
+        _Roundness ("Corner Roundness", Range(0, 0.5)) = 0.1
     }
 
     SubShader
@@ -83,6 +86,7 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half _MinGlow;
                 half _TubeGlow;
                 half _InnerGlow;
+                half _Roundness;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -103,6 +107,13 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 output.fogFactor = ComputeFogFactor(vertexInput.positionCS.z);
 
                 return output;
+            }
+
+            // Signed Distance Field for rounded box
+            float sdRoundBox(float3 p, float3 b, float r)
+            {
+                float3 q = abs(p) - b;
+                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
             }
 
             // 큐브의 12개 모서리까지의 거리 계산
@@ -132,6 +143,14 @@ Shader "Universal Render Pipeline/T5EdgeLine"
             half4 frag(Varyings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+
+                // Rounded corners clipping
+                float3 boxSize = float3(0.5, 0.5, 0.5); // Half extents of unit cube
+                float dist = sdRoundBox(input.positionOS, boxSize - _Roundness, _Roundness);
+
+                // Discard pixels outside the rounded cube
+                if (dist > 0.01)
+                    discard;
 
                 // Base color
                 half4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
@@ -205,7 +224,17 @@ Shader "Universal Render Pipeline/T5EdgeLine"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float3 positionOS : TEXCOORD0;
             };
+
+            half _Roundness;
+
+            // Signed Distance Field for rounded box
+            float sdRoundBox(float3 p, float3 b, float r)
+            {
+                float3 q = abs(p) - b;
+                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+            }
 
             Varyings ShadowPassVertex(Attributes input)
             {
@@ -225,11 +254,19 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 #endif
 
                 output.positionCS = positionCS;
+                output.positionOS = input.positionOS.xyz;
                 return output;
             }
 
             half4 ShadowPassFragment(Varyings input) : SV_Target
             {
+                // Rounded corners clipping for shadows
+                float3 boxSize = float3(0.5, 0.5, 0.5);
+                float dist = sdRoundBox(input.positionOS, boxSize - _Roundness, _Roundness);
+
+                if (dist > 0.01)
+                    discard;
+
                 return 0;
             }
             ENDHLSL
@@ -262,17 +299,35 @@ Shader "Universal Render Pipeline/T5EdgeLine"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float3 positionOS : TEXCOORD0;
             };
+
+            half _Roundness;
+
+            // Signed Distance Field for rounded box
+            float sdRoundBox(float3 p, float3 b, float r)
+            {
+                float3 q = abs(p) - b;
+                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+            }
 
             Varyings DepthOnlyVertex(Attributes input)
             {
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.positionOS = input.positionOS.xyz;
                 return output;
             }
 
             half4 DepthOnlyFragment(Varyings input) : SV_Target
             {
+                // Rounded corners clipping for depth
+                float3 boxSize = float3(0.5, 0.5, 0.5);
+                float dist = sdRoundBox(input.positionOS, boxSize - _Roundness, _Roundness);
+
+                if (dist > 0.01)
+                    discard;
+
                 return 0;
             }
             ENDHLSL

@@ -90,6 +90,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   indicatorType: 1
+  spriteFadeDuration: 0.3
+  arrowFadeDuration: 0.3
+  arrowDelay: 0.2
+  spriteImage: {fileID: 0}
+  sprite: {fileID: 21300000, guid: 75e5cd7ac5d77d44f8cc26a913bf5c41, type: 3}
 --- !u!1 &1086876969492358
 GameObject:
   m_ObjectHideFlags: 0

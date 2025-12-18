@@ -89,13 +89,6 @@ public class DoubleTap3D : MonoBehaviour
         fullscreenImage.preserveAspect = true;
         fullscreenImage.type = Image.Type.Simple;
 
-        // 둥근 모서리 적용
-        RoundedImageHelper roundedHelper = fullscreenImage.GetComponent<RoundedImageHelper>();
-        if (roundedHelper == null)
-        {
-            roundedHelper = fullscreenImage.gameObject.AddComponent<RoundedImageHelper>();
-        }
-
         imageDisplayController = GetComponentInParent<ImageDisplayController>();
         if (imageDisplayController == null)
         {
