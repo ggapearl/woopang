@@ -14,6 +14,9 @@ public class PlaceListManager : MonoBehaviour
     [Tooltip("ListPanel 게임오브젝트 참조 (활성화 상태 체크용)")]
     [SerializeField] private GameObject listPanel;
 
+    [Tooltip("PlaceList 스켈레톤 로더 (옵션)")]
+    [SerializeField] private PlaceListSkeletonLoader skeletonLoader;
+
     [SerializeField] private float updateInterval = 10f; // 10초로 변경
 
     [Header("Distance Control")]
@@ -155,7 +158,13 @@ public class PlaceListManager : MonoBehaviour
 
     private IEnumerator InitializeAndUpdateUI()
     {
-        // ... (기존 코드 유지)
+        // 스켈레톤 로더 시작
+        if (skeletonLoader != null)
+        {
+            skeletonLoader.ShowSkeletonLoader();
+            Debug.Log("[WoopangDebug][PlaceListManager] 스켈레톤 로더 시작");
+        }
+
         float waitTime = 0f;
 
         while ((dataManager != null && !dataManager.IsDataLoaded() && dataManager.GetPlaceDataMap().Count == 0) ||
@@ -168,6 +177,13 @@ public class PlaceListManager : MonoBehaviour
             {
                 break;
             }
+        }
+
+        // 스켈레톤 로더 종료 및 텍스트 표시
+        if (skeletonLoader != null)
+        {
+            skeletonLoader.HideSkeletonAndShowText();
+            Debug.Log("[WoopangDebug][PlaceListManager] 스켈레톤 로더 종료");
         }
 
         UpdateUI();
@@ -193,8 +209,40 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
+    private Coroutine updateUICoroutine;
+    private List<PlaceData> pendingWoopangPlaces = new List<PlaceData>();
+    private float currentMaxRadius = 0f;
+
+    /// <summary>
+    /// DataManager에서 Tier별로 호출하는 메서드
+    /// </summary>
+    public void UpdateUIForTier(int tierIndex, float radius)
+    {
+        Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIForTier 호출 - Tier {tierIndex}, 반경 {radius}m");
+
+        currentMaxRadius = radius;
+
+        // 기존 코루틴 중단하지 않고 계속 누적
+        if (updateUICoroutine == null)
+        {
+            updateUICoroutine = StartCoroutine(UpdateUIWithFadeIn());
+        }
+    }
+
     private void UpdateUI()
     {
+        // 기존 업데이트 코루틴 중단
+        if (updateUICoroutine != null)
+        {
+            StopCoroutine(updateUICoroutine);
+        }
+
+        updateUICoroutine = StartCoroutine(UpdateUIWithFadeIn());
+    }
+
+    private IEnumerator UpdateUIWithFadeIn()
+    {
+        Debug.Log("[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 시작");
 
         float latitude, longitude;
         if (Input.location.status == LocationServiceStatus.Running)
@@ -215,14 +263,13 @@ public class PlaceListManager : MonoBehaviour
         woopangCount = woopangPlaces.Count;
         tourAPICount = tourPlaces.Count;
 
-
         if (listText != null)
         {
             listText.text = "";
         }
         else
         {
-            return;
+            yield break;
         }
 
         combinedPlaces.Clear();
@@ -300,17 +347,57 @@ public class PlaceListManager : MonoBehaviour
         {
         }
 
+        // 거리순 정렬 (가까운 순)
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
 
+        Debug.Log($"[WoopangDebug][PlaceListManager] 정렬 완료 - 총 {combinedPlaces.Count}개 항목");
 
-        foreach (var (place, distance, id, displayText, colorHex) in combinedPlaces)
+        // 이미 표시된 항목 개수 추적
+        int previouslyDisplayedCount = 0;
+        string[] existingLines = listText.text.Split('\n');
+
+        // 기존 표시된 항목 수 계산 (마지막 2줄 제외 - 통계 정보)
+        foreach (string line in existingLines)
         {
+            if (!string.IsNullOrEmpty(line) &&
+                !line.Contains("우팡 데이터") &&
+                !line.Contains("관광공사 데이터") &&
+                !line.Contains("WOOPANG") &&
+                !line.Contains("TourAPI"))
+            {
+                previouslyDisplayedCount++;
+            }
+        }
+
+        Debug.Log($"[WoopangDebug][PlaceListManager] 이전 표시 항목: {previouslyDisplayedCount}개, 새 항목: {combinedPlaces.Count - previouslyDisplayedCount}개");
+
+        // 새로운 항목만 0.1초 간격으로 추가
+        for (int i = previouslyDisplayedCount; i < combinedPlaces.Count; i++)
+        {
+            var (place, distance, id, displayText, colorHex) = combinedPlaces[i];
+
             string coloredText = $"<color=#{colorHex}>{displayText}</color>";
+
+            // 기존 통계 정보 제거 후 새 항목 추가
+            listText.text = listText.text.Replace($"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n", "")
+                                         .Replace($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}", "");
+
             listText.text += coloredText + "\n";
+
+            // 10개마다 디버그 로그
+            if ((i + 1) % 10 == 0)
+            {
+                Debug.Log($"[WoopangDebug][PlaceListManager] {i + 1}/{combinedPlaces.Count}개 항목 표시됨");
+            }
+
+            // 0.1초 대기
+            yield return new WaitForSeconds(0.1f);
         }
 
         listText.text += $"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n";
         listText.text += $"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}";
+
+        Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 완료 - 총 {combinedPlaces.Count}개");
 
         Canvas.ForceUpdateCanvases();
         if (listText != null)

@@ -84,10 +84,7 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
         // IMPORTANT: This setter is private because it sets the field directly without updating
         // any subcomponents. To update this field and any coupled subcomponent, use the
         // SetOriginPoint() method.
-<<<<<<< HEAD
         [field: SerializeField]
-=======
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
         internal GeoCoordinate _originPoint
         {
             get;
@@ -176,11 +173,7 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
 
             if (origins.Length == 0)
             {
-<<<<<<< HEAD
                 Debug.LogWarning(_noOriginsMessage);
-=======
-                Debug.LogError(_noOriginsMessage);
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
                 return null;
             }
 

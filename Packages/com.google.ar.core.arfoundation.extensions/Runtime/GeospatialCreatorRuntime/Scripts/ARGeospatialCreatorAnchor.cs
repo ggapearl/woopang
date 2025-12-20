@@ -134,11 +134,7 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
         /// <c>Awake()</c> message execution, as follows:
         /// <list type="bullet">
         /// <item>
-<<<<<<< HEAD
         /// If the <c><see cref="XROrigin"/></c> has an <c><see cref="AnchorManager"/></c>
-=======
-        /// If the <c><see cref="ARSessionOrigin"/></c> has an <c><see cref="AnchorManager"/></c>
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
         /// subcomponent, that <c><see cref="ARAnchorManager"/></c> will be used;
         /// </item>
         /// <item>
@@ -316,11 +312,7 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
         {
             // Use the AnchorManager assigned to the AR Session Origin, if it exists.
             ARAnchorManager sessionAnchorManager =
-<<<<<<< HEAD
                 ARCoreExtensions._instance?.Origin?.GetComponent<ARAnchorManager>();
-=======
-                ARCoreExtensions._instance?.SessionOrigin?.GetComponent<ARAnchorManager>();
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
             if (sessionAnchorManager != null)
             {
                 return sessionAnchorManager;
@@ -628,20 +620,12 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
         {
             if (Origin == null)
             {
-<<<<<<< HEAD
                 Debug.LogWarning("Cannot update the location for " + gameObject.name + ": The " +
-=======
-                Debug.LogError("Cannot update the location for " + gameObject.name + ": The " +
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
                     "Origin field is unassigned.");
             }
             else if(Origin._originPoint == null)
             {
-<<<<<<< HEAD
                 Debug.LogWarning("Cannot update the location for " + gameObject.name + ": The " +
-=======
-                Debug.LogError("Cannot update the location for " + gameObject.name + ": The " +
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
                     "Origin " + Origin.gameObject.name + " has no Georeference.");
             }
 
@@ -775,11 +759,7 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
             yield break;
         }
 
-<<<<<<< HEAD
         // Initiates asynchronous resolution of this anchor at (Latitude, Longitude) on the surface
-=======
-       // Initiates asynchronous resolution of this anchor at (Latitude, Longitude) on the surface
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
         // of the local skyline. Assumes _anchorManager is not null and configured properly for
         // creating geospatial anchors.
         private IEnumerator ResolveRooftopAnchor()

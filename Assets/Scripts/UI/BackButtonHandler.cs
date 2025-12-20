@@ -1,41 +1,47 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem;
 
 public class BackButtonHandler : MonoBehaviour
 {
+    private Keyboard keyboard;
+
+    void Start()
+    {
+        keyboard = Keyboard.current;
+    }
+
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
         {
             Debug.Log("Back button pressed.");
 
-            // ÇöÀç ¾ÀÀÌ Ã¹ È­¸éÀÌ¸é È¨ È­¸éÀ¸·Î ÀÌµ¿
             if (SceneManager.GetActiveScene().buildIndex == 0)
             {
                 MoveToBackground();
             }
             else
             {
-                // ÀÌÀü ¾ÀÀ¸·Î ÀÌµ¿
                 Debug.Log("Loading previous scene: " + (SceneManager.GetActiveScene().buildIndex - 1));
                 SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex - 1);
             }
         }
     }
 
-    // ¾ÛÀ» ¹é±×¶ó¿îµå·Î ÀÌµ¿ (È¨ È­¸é Ç¥½Ã)
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½×¶ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ (È¨ È­ï¿½ï¿½ Ç¥ï¿½ï¿½)
     private void MoveToBackground()
     {
         Debug.Log("Attempting to move to home screen.");
         #if UNITY_ANDROID
         try
         {
-            // UnityPlayerActivityÀÇ currentActivity °¡Á®¿À±â
+            // UnityPlayerActivityï¿½ï¿½ currentActivity ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             AndroidJavaObject activity = new AndroidJavaClass("com.unity3d.player.UnityPlayer")
                 .GetStatic<AndroidJavaObject>("currentActivity");
             if (activity != null)
             {
-                // È¨ È­¸é ÀÎÅÙÆ® »ý¼º
+                // È¨ È­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
                 AndroidJavaObject intent = new AndroidJavaObject("android.content.Intent", "android.intent.action.MAIN");
                 intent.Call<AndroidJavaObject>("addCategory", "android.intent.category.HOME");
                 intent.Call<AndroidJavaObject>("setFlags", 0x10000000); // FLAG_ACTIVITY_NEW_TASK

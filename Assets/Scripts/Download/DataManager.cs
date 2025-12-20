@@ -17,6 +17,9 @@ public class DataManager : MonoBehaviour
     [Tooltip("오브젝트 개수 표시 UI")]
     public ObjectCountUI objectCountUI;
 
+    [Tooltip("PlaceList 매니저 (Tier별 업데이트용)")]
+    public PlaceListManager placeListManager;
+
     [Header("Prefabs")]
     public GameObject cubePrefab;
     public GameObject glbPrefab;
@@ -212,7 +215,6 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator FetchDataProgressively(float lat, float lon)
     {
-
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
 
         // UI 리셋 (새로운 로드 시작)
@@ -220,6 +222,8 @@ public class DataManager : MonoBehaviour
         {
             objectCountUI.ResetUI();
         }
+
+        int currentTierCount = 0; // 현재 Tier까지의 누적 개수
 
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
@@ -229,17 +233,20 @@ public class DataManager : MonoBehaviour
             List<PlaceData> newPlaces = new List<PlaceData>();
             yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, newPlaces));
 
+            Debug.Log($"[WoopangDebug][DataManager] Tier {tierIndex} (반경 {radius}m): 서버에서 {newPlaces.Count}개 데이터 받음");
+
             // 새로운 오브젝트를 하나씩 스폰
             foreach (PlaceData place in newPlaces)
             {
                 CreateObjectFromData(place);
                 loadedIds.Add(place.id);
+                currentTierCount++; // 현재 Tier 카운트 증가
 
-                // UI 업데이트 (개수만 증가)
+                // UI 업데이트 (현재 Tier까지의 개수만 표시)
                 if (objectCountUI != null)
                 {
-                    bool isFinal = (tierIndex == loadRadii.Length - 1) && (place == newPlaces[newPlaces.Count - 1]);
-                    objectCountUI.UpdateObjectCount(spawnedObjects.Count, false);
+                    objectCountUI.UpdateObjectCount(currentTierCount, false);
+                    Debug.Log($"[WoopangDebug][DataManager] ObjectCountUI 업데이트: {currentTierCount}개 (전체 spawnedObjects: {spawnedObjects.Count})");
                 }
 
                 if (objectSpawnDelay > 0)
@@ -248,10 +255,18 @@ public class DataManager : MonoBehaviour
                 }
             }
 
+            // Tier 완료 시마다 PlaceListManager 업데이트
+            if (placeListManager != null && newPlaces.Count > 0)
+            {
+                placeListManager.UpdateUIForTier(tierIndex, radius);
+                Debug.Log($"[WoopangDebug][DataManager] PlaceListManager Tier {tierIndex} 업데이트 호출");
+            }
+
             // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
             {
-                objectCountUI.UpdateObjectCount(spawnedObjects.Count, true);
+                objectCountUI.UpdateObjectCount(currentTierCount, true);
+                Debug.Log($"[WoopangDebug][DataManager] 최종 완료 - 총 {currentTierCount}개 표시 (전체 spawnedObjects: {spawnedObjects.Count})");
             }
 
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);

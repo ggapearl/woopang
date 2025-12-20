@@ -37,9 +37,10 @@ public class ObjectCountUI : MonoBehaviour
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
         }
 
-        // 초기 상태: "주변의 오브젝트를 찾고 있습니다"
-        UpdateText(0, false);
-        canvasGroup.alpha = 1f;
+        // 초기 상태: 숨김 (DataManager가 FetchDataProgressively 시작 시 활성화)
+        canvasGroup.alpha = 0f;
+        gameObject.SetActive(false);
+        Debug.Log("[WoopangDebug][ObjectCountUI] Awake - 초기 상태: 비활성화");
     }
 
     /// <summary>
@@ -140,6 +141,8 @@ public class ObjectCountUI : MonoBehaviour
     /// </summary>
     public void ResetUI()
     {
+        Debug.Log("[WoopangDebug][ObjectCountUI] ResetUI 호출 - 활성화 시작");
+
         // 페이드아웃 중단
         if (fadeOutCoroutine != null)
         {
@@ -151,7 +154,11 @@ public class ObjectCountUI : MonoBehaviour
         currentCount = 0;
         isFinalCount = false;
         UpdateText(0, false);
-        canvasGroup.alpha = 1f;
+
+        // UI 활성화 및 페이드인
         gameObject.SetActive(true);
+        canvasGroup.alpha = 1f;
+
+        Debug.Log("[WoopangDebug][ObjectCountUI] ResetUI 완료 - 활성화됨");
     }
 }

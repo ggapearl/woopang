@@ -22,10 +22,7 @@ namespace Google.XR.ARCoreExtensions
 {
     using System;
     using Google.XR.ARCoreExtensions.Internal;
-<<<<<<< HEAD
     using Unity.XR.CoreUtils;
-=======
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
     using UnityEngine;
 
     using UnityEngine.XR.ARFoundation;
@@ -166,11 +163,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Cloud Anchor to the session origin.
             cloudAnchor.transform.SetParent(
-<<<<<<< HEAD
                 ARCoreExtensions._instance.Origin.TrackablesParent, false);
-=======
-                ARCoreExtensions._instance.SessionOrigin.trackablesParent, false);
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
 
             return cloudAnchor;
         }
@@ -230,11 +223,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Cloud Anchor to the session origin.
             cloudAnchor.transform.SetParent(
-<<<<<<< HEAD
                 ARCoreExtensions._instance.Origin.TrackablesParent, false);
-=======
-                ARCoreExtensions._instance.SessionOrigin.trackablesParent, false);
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
 
             return cloudAnchor;
         }
@@ -389,11 +378,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Cloud Anchor to the session origin.
             cloudAnchor.transform.SetParent(
-<<<<<<< HEAD
                 ARCoreExtensions._instance.Origin.TrackablesParent, false);
-=======
-                ARCoreExtensions._instance.SessionOrigin.trackablesParent, false);
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
 
             return cloudAnchor;
         }
@@ -547,11 +532,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Geospatial Anchor to the session origin.
             anchor.transform.SetParent(
-<<<<<<< HEAD
                 ARCoreExtensions._instance.Origin.TrackablesParent, false);
-=======
-                ARCoreExtensions._instance.SessionOrigin.trackablesParent, false);
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
             return anchor;
         }
 
@@ -667,11 +648,7 @@ namespace Google.XR.ARCoreExtensions
 
             // Parent the new Geospatial Terrain anchor to the session origin.
             anchor.transform.SetParent(
-<<<<<<< HEAD
                 ARCoreExtensions._instance.Origin.TrackablesParent, false);
-=======
-                ARCoreExtensions._instance.SessionOrigin.trackablesParent, false);
->>>>>>> 12ffd4cda500fc0a2e705d12b73ddfddd30e35c5
             return anchor;
         }
 

@@ -1,76 +1,86 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 public class SwipePanelController : MonoBehaviour
 {
-    public RectTransform panel1; // Ã¹ ¹øÂ° ÆÐ³Î
-    public RectTransform panel2; // µÎ ¹øÂ° ÆÐ³Î
-    private Vector2 startPos;    // µå·¡±× ½ÃÀÛ À§Ä¡
-    private Vector2 targetPos;   // ¸ñÇ¥ À§Ä¡
+    public RectTransform panel1;
+    public RectTransform panel2;
+    private Vector2 startPos;
+    private Vector2 targetPos;
     private bool isDragging = false;
-    private float swipeThreshold = 100f; // ½º¿ÍÀÌÇÁ·Î ¼º°øÀ¸·Î °£ÁÖÇÒ ÃÖ¼Ò °Å¸®
-    private float moveSpeed = 15f;       // ÆÐ³Î ÀÌµ¿ ¼Óµµ
+    private float swipeThreshold = 100f;
+    private float moveSpeed = 15f;
 
-    private int currentPanel = 0; // 0: panel1, 1: panel2
-    private Vector2 panel1Pos;    // panel1ÀÇ ÃÊ±â À§Ä¡
-    private Vector2 panel2Pos;    // panel2ÀÇ ÃÊ±â À§Ä¡
+    private int currentPanel = 0;
+    private Vector2 panel1Pos;
+    private Vector2 panel2Pos;
+
+    void OnEnable()
+    {
+        EnhancedTouchSupport.Enable();
+    }
+
+    void OnDisable()
+    {
+        EnhancedTouchSupport.Disable();
+    }
 
     void Start()
     {
-        // ÃÊ±â À§Ä¡ ¼³Á¤
-        panel1Pos = Vector2.zero; // panel1Àº È­¸é Áß¾Ó¿¡ (0, 0)
-        panel2Pos = new Vector2(Screen.width, 0); // panel2´Â ¿À¸¥ÂÊ¿¡ ¼û±â
+        panel1Pos = Vector2.zero;
+        panel2Pos = new Vector2(Screen.width, 0);
 
-        panel1.anchoredPosition = panel1Pos; // panel1À» È­¸é¿¡ Ç¥½Ã
-        panel2.anchoredPosition = panel2Pos; // panel2¸¦ ¿À¸¥ÂÊ¿¡ ¼û±â
+        panel1.anchoredPosition = panel1Pos;
+        panel2.anchoredPosition = panel2Pos;
 
-        // ¸ñÇ¥ À§Ä¡ ÃÊ±âÈ­
         targetPos = panel1Pos;
     }
 
     void Update()
     {
-        // ÅÍÄ¡ ¶Ç´Â ¸¶¿ì½º ÀÔ·Â Ã³¸®
-        if (Input.GetMouseButtonDown(0))
+        if (Touch.activeTouches.Count == 0) return;
+
+        Touch touch = Touch.activeTouches[0];
+
+        if (touch.phase == UnityEngine.InputSystem.TouchPhase.Began)
         {
-            startPos = Input.mousePosition;
+            startPos = touch.screenPosition;
             isDragging = true;
         }
-        else if (Input.GetMouseButton(0) && isDragging)
+        else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Moved && isDragging)
         {
-            Vector2 currentPos = Input.mousePosition;
+            Vector2 currentPos = touch.screenPosition;
             float deltaX = currentPos.x - startPos.x;
 
-            // ÆÐ³ÎÀ» µå·¡±×¿¡ µû¶ó ÀÌµ¿
             panel1.anchoredPosition = panel1Pos + new Vector2(deltaX, 0);
             panel2.anchoredPosition = panel2Pos + new Vector2(deltaX, 0);
         }
-        else if (Input.GetMouseButtonUp(0) && isDragging)
+        else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Ended && isDragging)
         {
             isDragging = false;
-            Vector2 endPos = Input.mousePosition;
+            Vector2 endPos = touch.screenPosition;
             float swipeDistance = endPos.x - startPos.x;
 
-            // ½º¿ÍÀÌÇÁ ¹æÇâ ¹× °Å¸®¿¡ µû¶ó ÆÐ³Î ÀüÈ¯
             if (Mathf.Abs(swipeDistance) > swipeThreshold)
             {
-                if (swipeDistance < 0 && currentPanel == 0) // ¿ÞÂÊÀ¸·Î ½º¿ÍÀÌÇÁ
+                if (swipeDistance < 0 && currentPanel == 0)
                 {
                     SwitchToPanel(1);
                 }
-                else if (swipeDistance > 0 && currentPanel == 1) // ¿À¸¥ÂÊÀ¸·Î ½º¿ÍÀÌÇÁ
+                else if (swipeDistance > 0 && currentPanel == 1)
                 {
                     SwitchToPanel(0);
                 }
             }
             else
             {
-                // ½º¿ÍÀÌÇÁ °Å¸®°¡ ÃæºÐÇÏÁö ¾ÊÀ¸¸é ¿ø·¡ À§Ä¡·Î º¹±Í
                 RestoreCurrentPanelPosition();
             }
         }
 
-        // ºÎµå·´°Ô ÆÐ³Î ÀÌµ¿
         if (!isDragging)
         {
             panel1.anchoredPosition = Vector2.Lerp(panel1.anchoredPosition, panel1Pos, Time.deltaTime * moveSpeed);
@@ -79,7 +89,7 @@ public class SwipePanelController : MonoBehaviour
     }
 
     /// <summary>
-    /// ÁöÁ¤µÈ ÆÐ³Î·Î ÀüÈ¯
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ð³Î·ï¿½ ï¿½ï¿½È¯
     /// </summary>
     /// <param name="panelIndex">0: panel1, 1: panel2</param>
     public void SwitchToPanel(int panelIndex)
@@ -88,22 +98,22 @@ public class SwipePanelController : MonoBehaviour
         
         if (currentPanel == 0)
         {
-            // Panel1 Ç¥½Ã
+            // Panel1 Ç¥ï¿½ï¿½
             panel1Pos = Vector2.zero;
             panel2Pos = new Vector2(Screen.width, 0);
         }
         else if (currentPanel == 1)
         {
-            // Panel2 Ç¥½Ã
+            // Panel2 Ç¥ï¿½ï¿½
             panel1Pos = new Vector2(-Screen.width, 0);
             panel2Pos = Vector2.zero;
         }
         
-        Debug.Log($"[SwipePanelController] ÆÐ³Î ÀüÈ¯: {currentPanel}");
+        Debug.Log($"[SwipePanelController] ï¿½Ð³ï¿½ ï¿½ï¿½È¯: {currentPanel}");
     }
 
     /// <summary>
-    /// ÇöÀç ÆÐ³Î À§Ä¡ º¹¿ø
+    /// ï¿½ï¿½ï¿½ï¿½ ï¿½Ð³ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     private void RestoreCurrentPanelPosition()
     {
@@ -120,7 +130,7 @@ public class SwipePanelController : MonoBehaviour
     }
 
     /// <summary>
-    /// ÇöÀç È°¼º ÆÐ³Î ÀÎµ¦½º ¹ÝÈ¯
+    /// ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½ ï¿½Ð³ï¿½ ï¿½Îµï¿½ï¿½ï¿½ ï¿½ï¿½È¯
     /// </summary>
     /// <returns>0: panel1, 1: panel2</returns>
     public int GetCurrentPanel()
@@ -129,7 +139,7 @@ public class SwipePanelController : MonoBehaviour
     }
 
     /// <summary>
-    /// ÇöÀç ÆÐ³Î ¼³Á¤ (¿ÜºÎ¿¡¼­ È£Ãâ °¡´É)
+    /// ï¿½ï¿½ï¿½ï¿½ ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ÜºÎ¿ï¿½ï¿½ï¿½ È£ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     /// </summary>
     /// <param name="panelIndex">0: panel1, 1: panel2</param>
     public void SetCurrentPanel(int panelIndex)
@@ -137,7 +147,7 @@ public class SwipePanelController : MonoBehaviour
         if (panelIndex >= 0 && panelIndex <= 1)
         {
             SwitchToPanel(panelIndex);
-            Debug.Log($"[SwipePanelController] ¿ÜºÎ¿¡¼­ ÆÐ³Î ¼³Á¤: {panelIndex}");
+            Debug.Log($"[SwipePanelController] ï¿½ÜºÎ¿ï¿½ï¿½ï¿½ ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½: {panelIndex}");
         }
     }
 }
