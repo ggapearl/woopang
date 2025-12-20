@@ -213,7 +213,8 @@ public class SplashImagePlayer_V2 : MonoBehaviour
 
     private void DelayDataLoading()
     {
-        DataManager dataManager = FindObjectOfType<DataManager>();
+        // ⭐ Singleton 패턴 사용으로 최적화
+        DataManager dataManager = DataManager.Instance;
         if (dataManager != null)
         {
             Debug.Log($"[SplashV2] DataManager 발견 - {dataLoadDelay}초 지연 후 로딩");

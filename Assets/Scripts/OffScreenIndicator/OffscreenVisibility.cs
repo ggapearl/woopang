@@ -3,36 +3,44 @@ using UnityEngine;
 public class OffscreenVisibility : MonoBehaviour
 {
     private Target targetScript;
-    public float distanceThreshold = 400f; // »ç¿ëÀÚ ¼³Á¤ °Å¸®·Î º¯°æ (¿¹: 400m)
+    public float distanceThreshold = 400f; // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Å¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½: 400m)
 
-    // ·Î±× »ùÇÃ¸µ °ü·Ã º¯¼ö
+    // â­ UpdateThrottleë¡œ ì„±ëŠ¥ ìµœì í™” (0.5ì´ˆë§ˆë‹¤ ì²´í¬)
+    private UpdateThrottle updateThrottle;
+
+    // ï¿½Î±ï¿½ ï¿½ï¿½ï¿½Ã¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     private float lastLogTime = 0f;
-    private float logInterval = 1f; // ·Î±× Ãâ·Â °£°İ (1ÃÊ)
+    private float logInterval = 1f; // ï¿½Î±ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (1ï¿½ï¿½)
 
-    // ·Î±× ±×·ìÈ­ °ü·Ã º¯¼ö
+    // ï¿½Î±ï¿½ ï¿½×·ï¿½È­ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     private System.Collections.Generic.List<string> logMessages = new System.Collections.Generic.List<string>();
     private float lastGroupLogTime = 0f;
-    private float groupLogInterval = 1f; // ±×·ì ·Î±× Ãâ·Â °£°İ (1ÃÊ)
+    private float groupLogInterval = 1f; // ï¿½×·ï¿½ ï¿½Î±ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (1ï¿½ï¿½)
 
     void Start()
     {
         targetScript = GetComponent<Target>();
+        updateThrottle = new UpdateThrottle(0.5f); // 0.5ì´ˆë§ˆë‹¤ë§Œ ê±°ë¦¬ ì²´í¬
     }
 
     void Update()
     {
+        // â­ UpdateThrottle ì‚¬ìš©: 0.5ì´ˆë§ˆë‹¤ë§Œ ì‹¤í–‰
+        if (!updateThrottle.ShouldUpdate())
+            return;
+
         float distanceToCamera = Vector3.Distance(transform.position, Camera.main.transform.position);
 
-        // ·Î±× ¸Ş½ÃÁö Ãß°¡ (¸Å ÇÁ·¹ÀÓ ±â·Ï)
+        // ï¿½Î±ï¿½ ï¿½Ş½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½ (ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½)
         logMessages.Add($"[OffscreenVisibility] Distance to Camera: {distanceToCamera:F2}m, Threshold: {distanceThreshold}m, GameObject: {gameObject.name}");
 
-        // ÀÏÁ¤ °£°İÀ¸·Î ·Î±× Ãâ·Â (»ùÇÃ¸µ)
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½Ã¸ï¿½)
         if (Time.time - lastLogTime >= logInterval)
         {
             lastLogTime = Time.time;
         }
 
-        // ÀÏÁ¤ °£°İÀ¸·Î ±×·ìÈ­µÈ ·Î±× Ãâ·Â
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½×·ï¿½È­ï¿½ï¿½ ï¿½Î±ï¿½ ï¿½ï¿½ï¿½
         if (Time.time - lastGroupLogTime >= groupLogInterval)
         {
             if (logMessages.Count > 0)
@@ -42,7 +50,7 @@ public class OffscreenVisibility : MonoBehaviour
             lastGroupLogTime = Time.time;
         }
 
-        // Target ½ºÅ©¸³Æ® È°¼ºÈ­/ºñÈ°¼ºÈ­ ·ÎÁ÷
+        // Target ï¿½ï¿½Å©ï¿½ï¿½Æ® È°ï¿½ï¿½È­/ï¿½ï¿½È°ï¿½ï¿½È­ ï¿½ï¿½ï¿½ï¿½
         if (distanceToCamera <= distanceThreshold)
         {
             if (targetScript != null && !targetScript.enabled)

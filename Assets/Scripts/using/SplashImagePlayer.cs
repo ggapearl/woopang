@@ -112,8 +112,8 @@ public class SplashImagePlayer : MonoBehaviour
 
     private void DelayDataLoading()
     {
-        // DataManager 찾아서 로딩 지연 적용
-        DataManager dataManager = FindObjectOfType<DataManager>();
+        // ⭐ Singleton 패턴 사용으로 최적화
+        DataManager dataManager = DataManager.Instance;
         if (dataManager != null)
         {
             StartCoroutine(DelayedDataLoad(dataManager));

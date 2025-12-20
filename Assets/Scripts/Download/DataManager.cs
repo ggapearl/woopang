@@ -11,6 +11,36 @@ using UnityEngine.XR.ARFoundation;
 
 public class DataManager : MonoBehaviour
 {
+    // Singleton pattern
+    private static DataManager instance;
+    public static DataManager Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                instance = FindObjectOfType<DataManager>();
+                if (instance == null)
+                {
+                    Debug.LogError("[DataManager] Instance not found in scene!");
+                }
+            }
+            return instance;
+        }
+    }
+
+    private void Awake()
+    {
+        // Singleton 체크
+        if (instance != null && instance != this)
+        {
+            Debug.LogWarning("[DataManager] Duplicate instance detected. Destroying duplicate.");
+            Destroy(gameObject);
+            return;
+        }
+        instance = this;
+    }
+
     private string baseServerUrl = "https://woopang.com/locations?status=approved";
     
     [Header("UI")]

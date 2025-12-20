@@ -12,6 +12,36 @@ using UnityEngine.XR.ARFoundation;
 
 public class TourAPIManager : MonoBehaviour
 {
+    // Singleton pattern
+    private static TourAPIManager instance;
+    public static TourAPIManager Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                instance = FindObjectOfType<TourAPIManager>();
+                if (instance == null)
+                {
+                    Debug.LogError("[TourAPIManager] Instance not found in scene!");
+                }
+            }
+            return instance;
+        }
+    }
+
+    private void Awake()
+    {
+        // Singleton 체크
+        if (instance != null && instance != this)
+        {
+            Debug.LogWarning("[TourAPIManager] Duplicate instance detected. Destroying duplicate.");
+            Destroy(gameObject);
+            return;
+        }
+        instance = this;
+    }
+
     private const string BASE_URL = "https://woopang.com/proxy";
     private const string SERVICE_KEY = "teLNDctkJ9YFlMFaPWTqqwgtgxvewuaqm53dhSOiNpfOV1Q4z8NxyhhvpW4ifx3eKhI8RgodlQ05pxVHAeh1sA==";
     private readonly string tourApiUrlTemplate = "{0}/locationBasedList?serviceKey={1}&pageNo=1&numOfRows=100&mapX={2}&mapY={3}&radius={4}&listYN=Y&arrange=A&MobileOS=ETC&MobileApp=AppTest&_type=json";

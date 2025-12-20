@@ -665,13 +665,19 @@ public class LoadingManager : MonoBehaviour
         }
         else
         {
-            while (dataManager == null)
+            // ⭐ Singleton 패턴 사용으로 최적화 (FindObjectOfType 제거)
+            dataManager = DataManager.Instance;
+
+            // Instance가 아직 없으면 잠시 대기
+            int maxWait = 10;
+            while (dataManager == null && maxWait > 0)
             {
-                dataManager = FindObjectOfType<DataManager>();
                 yield return new WaitForSeconds(0.5f);
+                dataManager = DataManager.Instance;
+                maxWait--;
             }
         }
-        
+
         if (dataManager != null)
         {
             lastObjectCount = dataManager.GetSpawnedObjectsCount();

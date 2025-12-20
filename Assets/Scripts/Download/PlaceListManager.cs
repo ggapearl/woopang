@@ -371,18 +371,25 @@ public class PlaceListManager : MonoBehaviour
 
         Debug.Log($"[WoopangDebug][PlaceListManager] 이전 표시 항목: {previouslyDisplayedCount}개, 새 항목: {combinedPlaces.Count - previouslyDisplayedCount}개");
 
+        // ⭐ StringBuilder를 사용하여 성능 최적화 (String concatenation 제거)
+        System.Text.StringBuilder textBuilder = new System.Text.StringBuilder();
+
+        // 기존 텍스트에서 통계 정보 제거
+        string currentText = listText.text;
+        currentText = currentText.Replace($"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n", "")
+                                 .Replace($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}", "");
+        textBuilder.Append(currentText);
+
         // 새로운 항목만 0.1초 간격으로 추가
         for (int i = previouslyDisplayedCount; i < combinedPlaces.Count; i++)
         {
             var (place, distance, id, displayText, colorHex) = combinedPlaces[i];
 
-            string coloredText = $"<color=#{colorHex}>{displayText}</color>";
+            string coloredText = $"<color=#{colorHex}>{displayText}</color>\n";
+            textBuilder.Append(coloredText);
 
-            // 기존 통계 정보 제거 후 새 항목 추가
-            listText.text = listText.text.Replace($"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n", "")
-                                         .Replace($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}", "");
-
-            listText.text += coloredText + "\n";
+            // UI에 즉시 반영 (페이드인 효과를 위해)
+            listText.text = textBuilder.ToString();
 
             // 10개마다 디버그 로그
             if ((i + 1) % 10 == 0)
@@ -394,8 +401,10 @@ public class PlaceListManager : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
         }
 
-        listText.text += $"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n";
-        listText.text += $"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}";
+        // 통계 정보 추가
+        textBuilder.Append($"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n");
+        textBuilder.Append($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}");
+        listText.text = textBuilder.ToString();
 
         Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 완료 - 총 {combinedPlaces.Count}개");
 

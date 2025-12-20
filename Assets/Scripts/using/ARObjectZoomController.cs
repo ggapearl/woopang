@@ -27,20 +27,20 @@ public class ARObjectZoomController : MonoBehaviour
 
     void Start()
     {
-        // DataManager 자동 찾기
+        // DataManager Singleton 사용
         if (dataManager == null)
         {
-            dataManager = FindObjectOfType<DataManager>();
+            dataManager = DataManager.Instance;
             if (dataManager == null)
             {
                 Debug.LogWarning("[ARObjectZoomController] DataManager를 찾을 수 없습니다.");
             }
         }
 
-        // TourAPIManager 자동 찾기
+        // TourAPIManager Singleton 사용
         if (tourAPIManager == null)
         {
-            tourAPIManager = FindObjectOfType<TourAPIManager>();
+            tourAPIManager = TourAPIManager.Instance;
             if (tourAPIManager == null)
             {
                 Debug.LogWarning("[ARObjectZoomController] TourAPIManager를 찾을 수 없습니다.");
@@ -179,15 +179,13 @@ public class ARObjectZoomController : MonoBehaviour
         // 공공데이터 오브젝트들 스케일 조절
         if (tourAPIManager != null)
         {
-            // TourAPIManager에는 GetSpawnedObjects가 Dictionary<string, GameObject>로 되어 있음
-            var placeDataMap = tourAPIManager.GetPlaceDataMap();
-            if (placeDataMap != null)
+            // ⭐ GetSpawnedObjects() 사용으로 최적화 (GameObject.Find 제거)
+            var tourSpawnedObjects = tourAPIManager.GetSpawnedObjects();
+            if (tourSpawnedObjects != null)
             {
-                foreach (var kvp in placeDataMap)
+                foreach (var kvp in tourSpawnedObjects)
                 {
-                    string contentId = kvp.Key;
-                    // TourAPI는 contentId로 오브젝트를 찾아야 함
-                    GameObject obj = GameObject.Find($"TourPlace_{contentId}");
+                    GameObject obj = kvp.Value;
                     if (obj != null && obj.activeSelf)
                     {
                         obj.transform.localScale = Vector3.one * currentZoom;
