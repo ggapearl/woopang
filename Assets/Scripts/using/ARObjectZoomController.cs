@@ -24,6 +24,7 @@ public class ARObjectZoomController : MonoBehaviour
     private float currentZoom = 1f;
     private float previousTouchDistance = 0f;
     private bool isPinching = false;
+    private int lastTouchCount = 0; // 디버깅용 마지막 터치 개수
 
     void Start()
     {
@@ -47,22 +48,14 @@ public class ARObjectZoomController : MonoBehaviour
             }
         }
 
-        // ZoomIndicator GameObject에서 컴포넌트 가져오기
+        // ZoomIndicator GameObject에서 컴포넌트 가져오기 (옵션)
         if (zoomIndicatorObject != null)
         {
             zoomIndicator = zoomIndicatorObject.GetComponent<ZoomIndicator>();
-            if (zoomIndicator == null)
-            {
-                Debug.LogWarning("[ARObjectZoomController] ZoomIndicator 컴포넌트가 없습니다!");
-            }
         }
         else
         {
             zoomIndicator = FindObjectOfType<ZoomIndicator>();
-            if (zoomIndicator == null)
-            {
-                Debug.LogWarning("[ARObjectZoomController] ZoomIndicator를 찾을 수 없습니다. 줌 표시 기능이 비활성화됩니다.");
-            }
         }
 
         // 기본 줌 설정
@@ -73,6 +66,18 @@ public class ARObjectZoomController : MonoBehaviour
 
     void Update()
     {
+        // ⭐ 디버깅: 터치 개수 로그 (매 프레임이 아닌 변화 시에만)
+        if (Input.touchCount > 0 && Input.touchCount != lastTouchCount)
+        {
+            Debug.Log($"[ARObjectZoomController] 터치 감지됨 - touchCount: {Input.touchCount}");
+            lastTouchCount = Input.touchCount;
+        }
+        else if (Input.touchCount == 0 && lastTouchCount > 0)
+        {
+            Debug.Log($"[ARObjectZoomController] 터치 종료");
+            lastTouchCount = 0;
+        }
+
         // 터치 입력이 2개일 때 (핀치 제스처)
         if (Input.touchCount == 2)
         {
@@ -87,6 +92,7 @@ public class ARObjectZoomController : MonoBehaviour
             {
                 previousTouchDistance = currentTouchDistance;
                 isPinching = true;
+                Debug.Log($"[ARObjectZoomController] 핀치 시작! 거리: {currentTouchDistance:F2}px");
             }
             // 핀치 진행 중
             else if (touch0.phase == TouchPhase.Moved || touch1.phase == TouchPhase.Moved)
@@ -111,7 +117,7 @@ public class ARObjectZoomController : MonoBehaviour
                         zoomIndicator.UpdateZoom(currentZoom);
                     }
 
-                    Debug.Log($"[ARObjectZoomController] Zoom: {currentZoom:F2}x");
+                    Debug.Log($"[ARObjectZoomController] 핀치 줌! delta: {distanceDelta:F2}, Zoom: {currentZoom:F2}x");
                 }
             }
         }
@@ -122,6 +128,7 @@ public class ARObjectZoomController : MonoBehaviour
             {
                 isPinching = false;
                 previousTouchDistance = 0f;
+                Debug.Log($"[ARObjectZoomController] 핀치 종료! 최종 Zoom: {currentZoom:F2}x");
 
                 // 줌 인디케이터 숨김 (2초 딜레이)
                 if (zoomIndicator != null)
@@ -131,26 +138,6 @@ public class ARObjectZoomController : MonoBehaviour
             }
         }
 
-        // 에디터에서 테스트용 (마우스 스크롤)
-#if UNITY_EDITOR
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (scroll != 0f)
-        {
-            currentZoom += scroll * 0.5f;
-            currentZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
-
-            // AR 오브젝트들의 스케일 조절
-            ApplyZoomToARObjects();
-
-            if (zoomIndicator != null)
-            {
-                zoomIndicator.UpdateZoom(currentZoom);
-                zoomIndicator.HideAfterDelay(2f);
-            }
-
-            Debug.Log($"[ARObjectZoomController] Editor Zoom: {currentZoom:F2}x");
-        }
-#endif
     }
 
     /// <summary>

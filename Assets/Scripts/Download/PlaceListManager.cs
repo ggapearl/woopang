@@ -212,6 +212,7 @@ public class PlaceListManager : MonoBehaviour
     private Coroutine updateUICoroutine;
     private List<PlaceData> pendingWoopangPlaces = new List<PlaceData>();
     private float currentMaxRadius = 0f;
+    private int lastDisplayedCount = 0; // 마지막으로 표시된 항목 수 추적
 
     /// <summary>
     /// DataManager에서 Tier별로 호출하는 메서드
@@ -352,21 +353,15 @@ public class PlaceListManager : MonoBehaviour
 
         Debug.Log($"[WoopangDebug][PlaceListManager] 정렬 완료 - 총 {combinedPlaces.Count}개 항목");
 
-        // 이미 표시된 항목 개수 추적
-        int previouslyDisplayedCount = 0;
-        string[] existingLines = listText.text.Split('\n');
+        // ⭐ 이미 표시된 항목 개수 추적 (변수 사용으로 최적화)
+        int previouslyDisplayedCount = lastDisplayedCount;
 
-        // 기존 표시된 항목 수 계산 (마지막 2줄 제외 - 통계 정보)
-        foreach (string line in existingLines)
+        // ⭐ 항목이 줄어들었으면 전체 리셋 (필터 변경 등)
+        if (combinedPlaces.Count < previouslyDisplayedCount)
         {
-            if (!string.IsNullOrEmpty(line) &&
-                !line.Contains("우팡 데이터") &&
-                !line.Contains("관광공사 데이터") &&
-                !line.Contains("WOOPANG") &&
-                !line.Contains("TourAPI"))
-            {
-                previouslyDisplayedCount++;
-            }
+            previouslyDisplayedCount = 0;
+            lastDisplayedCount = 0;
+            Debug.Log($"[WoopangDebug][PlaceListManager] 항목 감소 감지 - UI 리셋");
         }
 
         Debug.Log($"[WoopangDebug][PlaceListManager] 이전 표시 항목: {previouslyDisplayedCount}개, 새 항목: {combinedPlaces.Count - previouslyDisplayedCount}개");
@@ -374,11 +369,20 @@ public class PlaceListManager : MonoBehaviour
         // ⭐ StringBuilder를 사용하여 성능 최적화 (String concatenation 제거)
         System.Text.StringBuilder textBuilder = new System.Text.StringBuilder();
 
-        // 기존 텍스트에서 통계 정보 제거
-        string currentText = listText.text;
-        currentText = currentText.Replace($"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n", "")
-                                 .Replace($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}", "");
-        textBuilder.Append(currentText);
+        // ⭐ 새로운 항목만 추가하는 경우: 기존 텍스트 유지
+        if (previouslyDisplayedCount > 0 && previouslyDisplayedCount <= combinedPlaces.Count)
+        {
+            // 기존 텍스트에서 통계 정보만 제거
+            string currentText = listText.text;
+            currentText = currentText.Replace($"\n{GetLocalizedText("woopangData")}: {woopangPlaces.Count}\n", "")
+                                     .Replace($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}", "");
+            textBuilder.Append(currentText);
+        }
+        // ⭐ 리셋된 경우나 처음: 빈 문자열에서 시작
+        else
+        {
+            listText.text = "";
+        }
 
         // 새로운 항목만 0.1초 간격으로 추가
         for (int i = previouslyDisplayedCount; i < combinedPlaces.Count; i++)
@@ -406,7 +410,10 @@ public class PlaceListManager : MonoBehaviour
         textBuilder.Append($"{GetLocalizedText("tourApiData")}: {tourPlaces.Count}");
         listText.text = textBuilder.ToString();
 
-        Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 완료 - 총 {combinedPlaces.Count}개");
+        // ⭐ 표시된 항목 수 업데이트
+        lastDisplayedCount = combinedPlaces.Count;
+
+        Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 완료 - 총 {combinedPlaces.Count}개 (lastDisplayedCount: {lastDisplayedCount})");
 
         Canvas.ForceUpdateCanvases();
         if (listText != null)
@@ -462,6 +469,7 @@ public class PlaceListManager : MonoBehaviour
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
         activeFilters = filters;
+        lastDisplayedCount = 0; // ⭐ 필터 변경 시 리셋
         UpdateUI(); // UI 즉시 업데이트
     }
 
@@ -470,8 +478,9 @@ public class PlaceListManager : MonoBehaviour
         maxDisplayDistance = value;
         PlayerPrefs.SetFloat("MaxDisplayDistance", value); // 값 저장
         PlayerPrefs.Save();
-        
+
         UpdateDistanceValueText();
+        lastDisplayedCount = 0; // ⭐ 거리 필터 변경 시 리셋
         UpdateUI(); // 리스트 갱신 및 AR 오브젝트 제어
         
         // AR 오브젝트에도 거리 필터 적용
