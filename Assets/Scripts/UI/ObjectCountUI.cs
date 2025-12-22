@@ -22,10 +22,14 @@ public class ObjectCountUI : MonoBehaviour
     [Tooltip("텍스트 변경 시 최소 표시 시간 (초)")]
     public float minDisplayTime = 3f;
 
+    [Tooltip("데이터 없음 타임아웃 시간 (초)")]
+    public float noDataTimeout = 10f;
+
     private CanvasGroup canvasGroup;
     private int currentCount = 0;
     private bool isFinalCount = false;
     private Coroutine fadeOutCoroutine;
+    private Coroutine timeoutCoroutine; // 타임아웃 코루틴 추가
     private float lastUpdateTime = 0f;
 
     void Awake()
@@ -77,9 +81,16 @@ public class ObjectCountUI : MonoBehaviour
         isFinalCount = isFinal;
         lastUpdateTime = Time.time;
 
+        // 데이터가 1개라도 들어오면 타임아웃 중단
+        if (count > 0 && timeoutCoroutine != null)
+        {
+            StopCoroutine(timeoutCoroutine);
+            timeoutCoroutine = null;
+        }
+
         UpdateText(count, isFinal);
 
-        // 최종 완료 시 페이드아웃 시작
+        // 최종 완료 시 페이드아웃 시작 (데이터가 있는 경우)
         if (isFinal && count > 0)
         {
             // 기존 페이드아웃 중단
@@ -90,6 +101,13 @@ public class ObjectCountUI : MonoBehaviour
 
             // displayDuration 후 페이드아웃
             fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay());
+        }
+        // 최종 완료인데 데이터가 0개인 경우 (타임아웃 전에 로딩이 끝남)
+        else if (isFinal && count == 0)
+        {
+             // 즉시 "데이터 없음" 처리 (타임아웃 코루틴이 돌고 있다면 중복 방지 위해 정지 후 즉시 실행)
+             if (timeoutCoroutine != null) StopCoroutine(timeoutCoroutine);
+             timeoutCoroutine = StartCoroutine(HandleNoData());
         }
     }
 
@@ -110,10 +128,57 @@ public class ObjectCountUI : MonoBehaviour
         }
     }
 
-    private IEnumerator FadeOutAfterDelay()
+    private IEnumerator CheckForNoDataTimeout()
     {
-        // displayDuration 동안 대기
-        yield return new WaitForSeconds(displayDuration);
+        yield return new WaitForSeconds(noDataTimeout);
+
+        // 타임아웃 후에도 여전히 0개라면
+        if (currentCount == 0)
+        {
+            yield return StartCoroutine(HandleNoData());
+        }
+    }
+
+    private IEnumerator HandleNoData()
+    {
+        // 텍스트 변경: "주변에 AR데이터가 없습니다"
+        // LocalizationManager에 키가 없다면 기본 텍스트 사용, 있다면 사용
+        // 여기서는 직접 할당하거나 키를 추가해야 함. 일단 하드코딩 + Localization 시도
+        
+        string noDataText = "주변에 AR데이터가 없습니다";
+        // 만약 LocalizationManager에 해당 키가 있다면 사용 (예시)
+        // noDataText = LocalizationManager.Instance.GetText("no_ar_data_found"); 
+        
+        // 다국어 지원을 위해 간단히 분기 (LocalizationManager에 키 추가 권장)
+        if (Application.systemLanguage != SystemLanguage.Korean)
+        {
+            noDataText = "No AR data found nearby";
+        }
+
+        if (countText != null)
+        {
+            countText.text = noDataText;
+        }
+
+        Debug.Log("[WoopangDebug][ObjectCountUI] 데이터 없음 - 타임아웃 메시지 표시");
+
+        // 3초 대기 (기존 displayDuration과 동일하게 처리하거나 별도 대기)
+        yield return new WaitForSeconds(3f);
+
+        // 페이드아웃 시작
+        if (fadeOutCoroutine != null) StopCoroutine(fadeOutCoroutine);
+        fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay(0f)); // 0초 딜레이로 즉시 페이드아웃 시작
+    }
+
+    private IEnumerator FadeOutAfterDelay(float delay = -1f)
+    {
+        // delay가 -1이면 기본 displayDuration 사용
+        float waitTime = (delay < 0) ? displayDuration : delay;
+        
+        if (waitTime > 0)
+        {
+            yield return new WaitForSeconds(waitTime);
+        }
 
         // 페이드아웃
         float elapsed = 0f;
@@ -131,6 +196,7 @@ public class ObjectCountUI : MonoBehaviour
 
         canvasGroup.alpha = 0f;
         fadeOutCoroutine = null;
+        timeoutCoroutine = null; // 타임아웃 코루틴 참조 해제
 
         // UI 비활성화
         gameObject.SetActive(false);
@@ -143,12 +209,10 @@ public class ObjectCountUI : MonoBehaviour
     {
         Debug.Log("[WoopangDebug][ObjectCountUI] ResetUI 호출 - 활성화 시작");
 
-        // 페이드아웃 중단
-        if (fadeOutCoroutine != null)
-        {
-            StopCoroutine(fadeOutCoroutine);
-            fadeOutCoroutine = null;
-        }
+        // 진행 중인 코루틴 모두 중단
+        StopAllCoroutines();
+        fadeOutCoroutine = null;
+        timeoutCoroutine = null;
 
         // 초기 상태로 리셋
         currentCount = 0;
@@ -158,6 +222,9 @@ public class ObjectCountUI : MonoBehaviour
         // UI 활성화 및 페이드인
         gameObject.SetActive(true);
         canvasGroup.alpha = 1f;
+
+        // 타임아웃 체크 시작
+        timeoutCoroutine = StartCoroutine(CheckForNoDataTimeout());
 
         Debug.Log("[WoopangDebug][ObjectCountUI] ResetUI 완료 - 활성화됨");
     }

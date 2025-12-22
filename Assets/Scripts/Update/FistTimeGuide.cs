@@ -2,7 +2,6 @@
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 
 public class FirstTimeGuide : MonoBehaviour
 {
@@ -12,12 +11,10 @@ public class FirstTimeGuide : MonoBehaviour
     [SerializeField] private Button nextButton;          // 다음 버튼
     [SerializeField] private Button previousButton;      // 이전 버튼
     [SerializeField] private Button confirmButton;       // 확인 버튼
-    [SerializeField] private Text debugText;            // 디버깅용 텍스트 필드
 
     private const string FIRST_TIME_KEY = "IsFirstTime"; // PlayerPrefs 키
     private int currentPage = 0;                         // 현재 페이지 인덱스
     private float delayBeforeGuide = 6f;                // 시작 후 6초 대기
-    private StringBuilder debugLog = new StringBuilder(); // 디버깅 로그 누적
 
     // 언어별 안내 템플릿 (6단계 배열, 영어 기본)
     private Dictionary<string, string[]> guideTemplates = new Dictionary<string, string[]>
@@ -61,31 +58,15 @@ public class FirstTimeGuide : MonoBehaviour
 
     void Awake()
     {
-        LogDebug("FirstTimeGuide: Awake 호출");
     }
 
     void Start()
     {
-        LogDebug("FirstTimeGuide: Start 호출");
-        LogDebug($"PlayerPrefs IsFirstTime 값: {PlayerPrefs.GetInt(FIRST_TIME_KEY, 0)}");
-        LogDebug($"GameObject 활성화 상태: {gameObject.activeInHierarchy}");
-
-        // UI 요소 검증
-        if (guidePanel == null) LogDebug("guidePanel is null", true);
-        if (guidePages == null) LogDebug("guidePages is null", true);
-        if (guidePages != null) LogDebug($"guidePages 길이: {guidePages.Length}");
-        if (guideText == null) LogDebug("guideText is null", true);
-        if (nextButton == null) LogDebug("nextButton is null", true);
-        if (previousButton == null) LogDebug("previousButton is null", true);
-        if (confirmButton == null) LogDebug("confirmButton is null", true);
-        if (debugText != null) LogDebug("debugText 연결됨");
-        else LogDebug("debugText 연결되지 않음");
-
         if (guidePanel == null || guidePages == null || guidePages.Length != 6 || 
             guideText == null || nextButton == null || previousButton == null || 
             confirmButton == null)
         {
-            LogDebug("FirstTimeGuide: UI 요소가 연결되지 않았습니다!", true);
+            Debug.LogError("FirstTimeGuide: UI 요소가 연결되지 않았습니다!");
             return;
         }
 
@@ -94,25 +75,20 @@ public class FirstTimeGuide : MonoBehaviour
         previousButton.onClick.AddListener(OnPreviousButtonClicked);
         confirmButton.onClick.AddListener(OnConfirmButtonClicked);
 
-        LogDebug("FirstTimeGuide: 버튼 리스너 추가 완료");
         StartCoroutine(StartGuideSequence());
     }
 
     private IEnumerator StartGuideSequence()
     {
-        LogDebug("StartGuideSequence: 시작");
         yield return new WaitForSeconds(delayBeforeGuide);
-        LogDebug("StartGuideSequence: 6초 대기 완료");
 
         if (IsFirstTime())
         {
-            LogDebug("StartGuideSequence: 최초 실행 감지");
             ShowGuide();
             SetFirstTimeFlag();
         }
         else
         {
-            LogDebug("StartGuideSequence: 최초 실행 아님 - 가이드 스킵");
             guidePanel.SetActive(false);
         }
     }
@@ -120,7 +96,6 @@ public class FirstTimeGuide : MonoBehaviour
     private bool IsFirstTime()
     {
         bool isFirst = PlayerPrefs.GetInt(FIRST_TIME_KEY, 0) == 0;
-        LogDebug($"IsFirstTime: {isFirst}");
         return isFirst;
     }
 
@@ -128,25 +103,20 @@ public class FirstTimeGuide : MonoBehaviour
     {
         PlayerPrefs.SetInt(FIRST_TIME_KEY, 1);
         PlayerPrefs.Save();
-        LogDebug("SetFirstTimeFlag: PlayerPrefs 저장 완료");
     }
 
     private void ShowGuide()
     {
-        LogDebug("ShowGuide: 가이드 표시 시작");
         guidePanel.SetActive(true);
         string languageCode = GetLanguageCode();
-        LogDebug($"ShowGuide: 언어 코드 - {languageCode}");
 
         guideText.text = guideTemplates[languageCode][currentPage];
         for (int i = 0; i < 6; i++)
         {
             guidePages[i].SetActive(i == currentPage);
-            LogDebug($"ShowGuide: guidePages[{i}] 활성화 상태 - {guidePages[i].activeSelf}");
         }
 
         UpdateButtons();
-        LogDebug($"ShowGuide: 가이드 표시 완료 - 페이지: {currentPage}");
     }
 
     private void UpdateButtons()
@@ -154,9 +124,6 @@ public class FirstTimeGuide : MonoBehaviour
         previousButton.gameObject.SetActive(currentPage > 0);
         nextButton.gameObject.SetActive(currentPage < 5);
         confirmButton.gameObject.SetActive(currentPage == 5);
-        LogDebug($"UpdateButtons: 이전 버튼 - {previousButton.gameObject.activeSelf}, " +
-                 $"다음 버튼 - {nextButton.gameObject.activeSelf}, " +
-                 $"확인 버튼 - {confirmButton.gameObject.activeSelf}");
     }
 
     private string GetLanguageCode()
@@ -183,7 +150,6 @@ public class FirstTimeGuide : MonoBehaviour
                 code = "en";
                 break;
         }
-        LogDebug($"GetLanguageCode: {code}");
         return code;
     }
 
@@ -196,7 +162,6 @@ public class FirstTimeGuide : MonoBehaviour
             guidePages[currentPage].SetActive(true);
             guideText.text = guideTemplates[GetLanguageCode()][currentPage];
             UpdateButtons();
-            LogDebug($"OnNextButtonClicked: 다음 페이지 - {currentPage}");
         }
     }
 
@@ -209,44 +174,19 @@ public class FirstTimeGuide : MonoBehaviour
             guidePages[currentPage].SetActive(true);
             guideText.text = guideTemplates[GetLanguageCode()][currentPage];
             UpdateButtons();
-            LogDebug($"OnPreviousButtonClicked: 이전 페이지 - {currentPage}");
         }
     }
 
     private void OnConfirmButtonClicked()
     {
-        LogDebug("OnConfirmButtonClicked: 안내 확인 완료");
         guidePanel.SetActive(false);
     }
 
     // 가이드 강제 표시 (디버깅용)
     public void ForceShowGuide()
     {
-        LogDebug("ForceShowGuide: 가이드 강제 표시");
         PlayerPrefs.DeleteKey(FIRST_TIME_KEY);
         PlayerPrefs.Save();
         ShowGuide();
-    }
-
-    // 디버깅 로그 출력 (콘솔과 debugText에 동시 출력)
-    private void LogDebug(string message, bool isError = false)
-    {
-        if (isError)
-            Debug.LogError(message);
-        else
-            Debug.Log(message);
-
-        if (debugText != null)
-        {
-            debugLog.AppendLine($"[{System.DateTime.Now:HH:mm:ss}] {message}");
-            // 최대 10줄만 유지
-            string[] lines = debugLog.ToString().Split('\n');
-            if (lines.Length > 10)
-            {
-                debugLog.Clear();
-                debugLog.Append(string.Join("\n", lines, lines.Length - 10, 10));
-            }
-            debugText.text = debugLog.ToString();
-        }
     }
 }

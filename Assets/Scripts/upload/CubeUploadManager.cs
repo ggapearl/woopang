@@ -61,18 +61,13 @@ public class CubeUploadManager : MonoBehaviour
         }
     }
 
-    private void Start()
+    void Start()
     {
-        InitializeComponents();
-        ResetToInitialState();
+        // ... (이전 초기화 코드들)
+
+#if !UNITY_EDITOR
         StartCoroutine(InitializeLocationService());
-        
-        // SwipePanelController 찾기
-        swipePanelController = FindObjectOfType<SwipePanelController>();
-        if (swipePanelController == null)
-        {
-            Debug.LogWarning("[CubeUploadManager] SwipePanelController를 찾을 수 없습니다.");
-        }
+#endif
     }
 
     private void InitializeComponents()

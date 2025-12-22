@@ -25,6 +25,10 @@ public class OffscreenVisibility : MonoBehaviour
 
     void Update()
     {
+        // ⭐ Null 체크 추가
+        if (updateThrottle == null) return;
+        if (Camera.main == null) return;
+
         // ⭐ UpdateThrottle 사용: 0.5초마다만 실행
         if (!updateThrottle.ShouldUpdate())
             return;

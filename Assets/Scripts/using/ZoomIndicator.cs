@@ -19,8 +19,8 @@ public class ZoomIndicator : MonoBehaviour
     [SerializeField] private Sprite zoomResetIcon; // 기본 아이콘 (1.0x)
 
     [Header("Animation")]
-    [SerializeField] private float fadeInDuration = 0.2f;
-    [SerializeField] private float fadeOutDuration = 0.3f;
+    [SerializeField] private float fadeInDuration = 0.2f; // 사용 안 함 (즉시 표시)
+    [SerializeField] private float fadeOutDuration = 0.5f;
 
     private Coroutine hideCoroutine;
     private float lastZoomLevel = 1.0f;
@@ -53,17 +53,15 @@ public class ZoomIndicator : MonoBehaviour
             gameObject.SetActive(true);
         }
 
-        // 페이드인 (이미 표시 중이면 취소)
+        // 페이드아웃 중단
         if (hideCoroutine != null)
         {
             StopCoroutine(hideCoroutine);
             hideCoroutine = null;
         }
 
-        if (canvasGroup.alpha < 1f)
-        {
-            StartCoroutine(FadeIn());
-        }
+        // 즉시 표시 (페이드인 없이)
+        canvasGroup.alpha = 1f;
 
         // 텍스트 업데이트
         if (zoomText != null)
@@ -115,30 +113,17 @@ public class ZoomIndicator : MonoBehaviour
         hideCoroutine = StartCoroutine(HideCoroutine(delay));
     }
 
-    private IEnumerator FadeIn()
-    {
-        float elapsed = 0f;
-        float startAlpha = canvasGroup.alpha;
-
-        while (elapsed < fadeInDuration)
-        {
-            elapsed += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(startAlpha, 1f, elapsed / fadeInDuration);
-            yield return null;
-        }
-
-        canvasGroup.alpha = 1f;
-    }
-
     private IEnumerator HideCoroutine(float delay)
     {
         yield return new WaitForSeconds(delay);
 
         float elapsed = 0f;
+        float startAlpha = canvasGroup.alpha;
+
         while (elapsed < fadeOutDuration)
         {
             elapsed += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsed / fadeOutDuration);
+            canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, elapsed / fadeOutDuration);
             yield return null;
         }
 

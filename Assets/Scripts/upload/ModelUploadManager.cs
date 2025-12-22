@@ -67,11 +67,13 @@ public class ModelUploadManager : MonoBehaviour
         }
     }
 
-    private void Start()
+    void Start()
     {
-        InitializeComponents();
-        ResetToInitialState();
+        // ... (이전 초기화 코드들)
+
+#if !UNITY_EDITOR
         StartCoroutine(InitializeLocationService());
+#endif
     }
 
     private void InitializeComponents()

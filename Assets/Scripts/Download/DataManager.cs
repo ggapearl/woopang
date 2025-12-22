@@ -47,8 +47,8 @@ public class DataManager : MonoBehaviour
     [Tooltip("오브젝트 개수 표시 UI")]
     public ObjectCountUI objectCountUI;
 
-    [Tooltip("PlaceList 매니저 (Tier별 업데이트용)")]
-    public PlaceListManager placeListManager;
+    // [Tooltip("PlaceList 매니저 (Tier별 업데이트용)")]
+    // public PlaceListManager placeListManager; // 삭제
 
     [Header("Prefabs")]
     public GameObject cubePrefab;
@@ -129,6 +129,22 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator StartLocationServiceAndFetchData()
     {
+#if UNITY_EDITOR
+        Debug.Log("[DataManager] 에디터 환경 감지: 위치 서비스 및 AR 세션 체크를 건너뛰고 시뮬레이션 좌표를 사용합니다. (Lat: 36.6361, Lon: 126.8280, Alt: 80)");
+        float lat = 36.6361f;
+        float lon = 126.8280f;
+        // 고도 시뮬레이션은 API 호출 파라미터나 로직에 직접 반영해야 하지만, 
+        // 현재 DataManager 구조상 lat/lon을 주로 사용하므로 로그에만 명시하고 
+        // 필요한 경우 해당 변수를 참조하는 로직에서 80을 사용하도록 해야 합니다.
+        // 현재 구조에서는 lat/lon 위주로 처리되고 있음.
+        
+        lastPosition = new Vector2(lat, lon);
+        
+        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
+        StartCoroutine(CheckPositionAndFetchData());
+        yield break;
+#endif
+
         if (!Input.location.isEnabledByUser)
         {
             ShowErrorMessage("위치 서비스를 활성화해 주세요.");
@@ -150,30 +166,16 @@ public class DataManager : MonoBehaviour
         }
         
         // 위치 데이터가 없으면 기본값 사용
-        float lat = 37.5665f;
-        float lon = 126.9780f;
+        float latitude = 37.5665f;
+        float longitude = 126.9780f;
         
         if (Input.location.status == LocationServiceStatus.Running)
         {
-            lat = Input.location.lastData.latitude;
-            lon = Input.location.lastData.longitude;
+            latitude = Input.location.lastData.latitude;
+            longitude = Input.location.lastData.longitude;
         }
         
-        lastPosition = new Vector2(lat, lon);
-        
-        // 바로 로딩 시작
-        LocationInfo fakeLocation = new LocationInfo();
-        // LocationInfo는 struct라 프로퍼티 설정 불가하므로 별도 변수 사용하거나
-        // FetchDataProgressively가 LocationInfo 대신 lat, lon을 받도록 수정해야 함.
-        // 하지만 구조 변경을 최소화하기 위해, FetchDataProgressively 호출 전에
-        // Input.location.lastData를 쓰지 않고 직접 값을 넘기거나 해야 함.
-        
-        // 가장 쉬운 방법: FetchDataProgressively는 LocationInfo를 받지만, 
-        // 내부에서 lat/lon을 쓸 때 Input.location.status를 체크해서 쓰도록 수정되어 있음?
-        // 아니요, currentLocation.latitude를 씁니다.
-        
-        // 따라서 LocationInfo를 가짜로 만들어서 넘겨야 함. (하지만 readonly라 불가능)
-        // 해결책: FetchDataProgressively의 파라미터를 (float lat, float lon)으로 변경.
+        lastPosition = new Vector2(latitude, longitude);
         
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
@@ -181,6 +183,10 @@ public class DataManager : MonoBehaviour
 
     private void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
     {
+#if UNITY_EDITOR
+        // 에디터에서는 AR 세션 상태 변화 무시 (이미 Start에서 시작함)
+        return;
+#endif
         if (args.state == ARSessionState.SessionTracking && !isDataLoaded)
         {
             float lat = 37.5665f;
@@ -203,6 +209,11 @@ public class DataManager : MonoBehaviour
     {
         while (true)
         {
+#if UNITY_EDITOR
+            // 에디터에서는 AR 세션 추적 대기 생략
+            float lat = 36.6361f;
+            float lon = 126.8280f;
+#else
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
             
             float lat = 37.5665f;
@@ -212,6 +223,7 @@ public class DataManager : MonoBehaviour
                 lat = Input.location.lastData.latitude;
                 lon = Input.location.lastData.longitude;
             }
+#endif
 
             yield return StartCoroutine(FetchDataProgressively(lat, lon));
             isDataLoaded = true;
@@ -223,6 +235,10 @@ public class DataManager : MonoBehaviour
     {
         while (true)
         {
+#if UNITY_EDITOR
+            float lat = 36.6361f;
+            float lon = 126.8280f;
+#else
             float lat = 37.5665f;
             float lon = 126.9780f;
             if (Input.location.status == LocationServiceStatus.Running)
@@ -230,6 +246,7 @@ public class DataManager : MonoBehaviour
                 lat = Input.location.lastData.latitude;
                 lon = Input.location.lastData.longitude;
             }
+#endif
             
             Vector2 currentPos = new Vector2(lat, lon);
             float distanceMoved = CalculateDistance(lastPosition.x, lastPosition.y, currentPos.x, currentPos.y);
@@ -263,8 +280,6 @@ public class DataManager : MonoBehaviour
             List<PlaceData> newPlaces = new List<PlaceData>();
             yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, newPlaces));
 
-            Debug.Log($"[WoopangDebug][DataManager] Tier {tierIndex} (반경 {radius}m): 서버에서 {newPlaces.Count}개 데이터 받음");
-
             // 새로운 오브젝트를 하나씩 스폰
             foreach (PlaceData place in newPlaces)
             {
@@ -276,7 +291,6 @@ public class DataManager : MonoBehaviour
                 if (objectCountUI != null)
                 {
                     objectCountUI.UpdateObjectCount(currentTierCount, false);
-                    Debug.Log($"[WoopangDebug][DataManager] ObjectCountUI 업데이트: {currentTierCount}개 (전체 spawnedObjects: {spawnedObjects.Count})");
                 }
 
                 if (objectSpawnDelay > 0)
@@ -285,18 +299,10 @@ public class DataManager : MonoBehaviour
                 }
             }
 
-            // Tier 완료 시마다 PlaceListManager 업데이트
-            if (placeListManager != null && newPlaces.Count > 0)
-            {
-                placeListManager.UpdateUIForTier(tierIndex, radius);
-                Debug.Log($"[WoopangDebug][DataManager] PlaceListManager Tier {tierIndex} 업데이트 호출");
-            }
-
             // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
             {
                 objectCountUI.UpdateObjectCount(currentTierCount, true);
-                Debug.Log($"[WoopangDebug][DataManager] 최종 완료 - 총 {currentTierCount}개 표시 (전체 spawnedObjects: {spawnedObjects.Count})");
             }
 
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
@@ -405,6 +411,7 @@ public class DataManager : MonoBehaviour
             foreach (PlaceData place in chunk)
             {
                 // 서버 데이터 상세 로그 제거 (lat, lon, distance, type 등)
+                // Debug.Log($"[DataManager] 데이터 처리: ID={place.id}, 이름={place.name}"); // 디버깅용
                 
                 if (!spawnedObjects.ContainsKey(place.id))
                 {
@@ -412,12 +419,14 @@ public class DataManager : MonoBehaviour
                     if (spawnedObjects.ContainsKey(place.id))
                     {
                         placeDataMap[place.id] = place;
+                        // Debug.Log($"[DataManager] 맵에 추가됨: ID={place.id}");
                     }
                 }
                 else
                 {
                     UpdateExistingObject(place, spawnedObjects[place.id]);
                     placeDataMap[place.id] = place;
+                    // Debug.Log($"[DataManager] 맵 업데이트됨: ID={place.id}");
                 }
             }
             yield return null; // 프레임 양보

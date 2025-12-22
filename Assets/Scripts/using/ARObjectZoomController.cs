@@ -1,9 +1,12 @@
 using UnityEngine;
+using UnityEngine.InputSystem.EnhancedTouch; // New Input System 추가
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch; // New Input System Touch 클래스 사용
 using System.Collections.Generic;
 
 /// <summary>
 /// AR 환경에서 작동하는 줌 컨트롤러
 /// 카메라 FOV 대신 AR 오브젝트들의 스케일을 조절하여 줌 효과 구현
+/// New Input System (EnhancedTouch) 적용됨
 /// </summary>
 public class ARObjectZoomController : MonoBehaviour
 {
@@ -25,6 +28,16 @@ public class ARObjectZoomController : MonoBehaviour
     private float previousTouchDistance = 0f;
     private bool isPinching = false;
     private int lastTouchCount = 0; // 디버깅용 마지막 터치 개수
+
+    void OnEnable()
+    {
+        EnhancedTouchSupport.Enable(); // EnhancedTouch 활성화
+    }
+
+    void OnDisable()
+    {
+        EnhancedTouchSupport.Disable(); // EnhancedTouch 비활성화
+    }
 
     void Start()
     {
@@ -48,54 +61,87 @@ public class ARObjectZoomController : MonoBehaviour
             }
         }
 
-        // ZoomIndicator GameObject에서 컴포넌트 가져오기 (옵션)
+        // ZoomIndicator 연결 로직 개선
         if (zoomIndicatorObject != null)
         {
             zoomIndicator = zoomIndicatorObject.GetComponent<ZoomIndicator>();
         }
-        else
+        
+        // Inspector에 할당되지 않았거나 컴포넌트를 못 찾은 경우 씬에서 탐색
+        if (zoomIndicator == null)
         {
-            zoomIndicator = FindObjectOfType<ZoomIndicator>();
+            zoomIndicator = FindObjectOfType<ZoomIndicator>(true);
+            if (zoomIndicator != null)
+            {
+                zoomIndicatorObject = zoomIndicator.gameObject;
+            }
         }
 
         // 기본 줌 설정
         currentZoom = defaultZoom;
-
-        Debug.Log($"[ARObjectZoomController] 초기화 완료 - 기본 Zoom: {defaultZoom}");
     }
 
     void Update()
     {
-        // ⭐ 디버깅: 터치 개수 로그 (매 프레임이 아닌 변화 시에만)
-        if (Input.touchCount > 0 && Input.touchCount != lastTouchCount)
+#if UNITY_EDITOR
+        // 에디터에서 마우스 스크롤 및 키보드로 줌 테스트 (New Input System 대응)
+        float scroll = 0f;
+        
+        // 1. 마우스 스크롤 시도
+        if (UnityEngine.InputSystem.Mouse.current != null)
         {
-            Debug.Log($"[ARObjectZoomController] 터치 감지됨 - touchCount: {Input.touchCount}");
-            lastTouchCount = Input.touchCount;
+            Vector2 scrollVal = UnityEngine.InputSystem.Mouse.current.scroll.ReadValue();
+            scroll = scrollVal.y;
         }
-        else if (Input.touchCount == 0 && lastTouchCount > 0)
+
+        // 2. 키보드 화살표 시도 (Fallback)
+        if (UnityEngine.InputSystem.Keyboard.current != null)
         {
-            Debug.Log($"[ARObjectZoomController] 터치 종료");
-            lastTouchCount = 0;
+            if (UnityEngine.InputSystem.Keyboard.current.upArrowKey.isPressed)
+            {
+                scroll = 1f; // 확대
+            }
+            else if (UnityEngine.InputSystem.Keyboard.current.downArrowKey.isPressed)
+            {
+                scroll = -1f; // 축소
+            }
         }
+
+        if (Mathf.Abs(scroll) > 0.001f)
+        {
+            // 스크롤 방향에 따라 줌 조절
+            // 에디터에서는 zoomSpeed를 조금 더 크게 적용
+            currentZoom += scroll * zoomSpeed * 0.5f; // 민감도 조정
+            currentZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
+
+            ApplyZoomToARObjects();
+
+            if (zoomIndicator != null)
+            {
+                zoomIndicator.UpdateZoom(currentZoom);
+                zoomIndicator.HideAfterDelay(5f);
+            }
+        }
+#endif
 
         // 터치 입력이 2개일 때 (핀치 제스처)
-        if (Input.touchCount == 2)
+        if (Touch.activeTouches.Count == 2)
         {
-            Touch touch0 = Input.GetTouch(0);
-            Touch touch1 = Input.GetTouch(1);
+            Touch touch0 = Touch.activeTouches[0];
+            Touch touch1 = Touch.activeTouches[1];
 
             // 두 터치 사이의 거리 계산
-            float currentTouchDistance = Vector2.Distance(touch0.position, touch1.position);
+            float currentTouchDistance = Vector2.Distance(touch0.screenPosition, touch1.screenPosition);
 
             // 핀치 시작
-            if (touch0.phase == TouchPhase.Began || touch1.phase == TouchPhase.Began)
+            if (touch0.phase == UnityEngine.InputSystem.TouchPhase.Began || touch1.phase == UnityEngine.InputSystem.TouchPhase.Began)
             {
                 previousTouchDistance = currentTouchDistance;
                 isPinching = true;
                 Debug.Log($"[ARObjectZoomController] 핀치 시작! 거리: {currentTouchDistance:F2}px");
             }
             // 핀치 진행 중
-            else if (touch0.phase == TouchPhase.Moved || touch1.phase == TouchPhase.Moved)
+            else if (touch0.phase == UnityEngine.InputSystem.TouchPhase.Moved || touch1.phase == UnityEngine.InputSystem.TouchPhase.Moved)
             {
                 if (isPinching && previousTouchDistance > 0)
                 {
@@ -103,6 +149,8 @@ public class ARObjectZoomController : MonoBehaviour
                     float distanceDelta = currentTouchDistance - previousTouchDistance;
 
                     // 줌 레벨 조정 (거리가 멀어지면 확대, 가까워지면 축소)
+                    // 화면 해상도에 따른 속도 보정을 위해 Screen.height로 나눌 수도 있음 (선택사항)
+                    // 여기서는 기존 zoomSpeed를 그대로 사용
                     currentZoom += distanceDelta * zoomSpeed;
                     currentZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
 
@@ -117,7 +165,8 @@ public class ARObjectZoomController : MonoBehaviour
                         zoomIndicator.UpdateZoom(currentZoom);
                     }
 
-                    Debug.Log($"[ARObjectZoomController] 핀치 줌! delta: {distanceDelta:F2}, Zoom: {currentZoom:F2}x");
+                    // 너무 잦은 로그는 성능 저하 유발 가능 -> 주석 처리 또는 조건부 로그
+                    // Debug.Log($"[ARObjectZoomController] 핀치 줌! delta: {distanceDelta:F2}, Zoom: {currentZoom:F2}x");
                 }
             }
         }
@@ -130,10 +179,10 @@ public class ARObjectZoomController : MonoBehaviour
                 previousTouchDistance = 0f;
                 Debug.Log($"[ARObjectZoomController] 핀치 종료! 최종 Zoom: {currentZoom:F2}x");
 
-                // 줌 인디케이터 숨김 (2초 딜레이)
+                // 줌 인디케이터 숨김 (5초 딜레이)
                 if (zoomIndicator != null)
                 {
-                    zoomIndicator.HideAfterDelay(2f);
+                    zoomIndicator.HideAfterDelay(5f);
                 }
             }
         }

@@ -71,6 +71,10 @@ public class PinchZoomController : MonoBehaviour
 
     void Update()
     {
+        /*
+        // New Input System 사용 시 ARObjectZoomController를 사용하세요.
+        // 이 코드는 Legacy Input System 전용이므로 주석 처리합니다.
+
         // 터치 입력이 2개일 때 (핀치 제스처)
         if (Input.touchCount == 2)
         {
@@ -165,6 +169,7 @@ public class PinchZoomController : MonoBehaviour
             Debug.Log($"[PinchZoomController] Editor Zoom: {currentZoom:F2}x");
         }
 #endif
+        */
     }
 
     /// <summary>

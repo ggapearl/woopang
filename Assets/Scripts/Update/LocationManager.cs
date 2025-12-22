@@ -59,6 +59,19 @@ public class LocationManager : MonoBehaviour
 
     IEnumerator CheckLocationService()
     {
+#if UNITY_EDITOR
+        Debug.Log("[LocationManager] 에디터 환경 감지: 사용자 지정 좌표(36.6361, 126.8280)로 시뮬레이션합니다.");
+        float lat = 36.6361f;
+        float lon = 126.8280f;
+        StartCoroutine(GetAddressFromCoordinates(lat, lon));
+        if (!isRefreshing)
+        {
+            isRefreshing = true;
+            StartCoroutine(RefreshLocationPeriodically());
+        }
+        yield break;
+#endif
+
         if (!Input.location.isEnabledByUser)
         {
             Debug.Log("위치 서비스가 사용자에 의해 비활성화됨");
@@ -202,6 +215,12 @@ public class LocationManager : MonoBehaviour
         while (isRefreshing)
         {
             yield return waitRefreshInterval;
+#if UNITY_EDITOR
+            float latitude = 36.6361f;
+            float longitude = 126.8280f;
+            Debug.Log($"[LocationManager] 에디터 주기적 갱신 - Lat: {latitude}, Lon: {longitude}");
+            StartCoroutine(GetAddressFromCoordinates(latitude, longitude));
+#else
             if (Input.location.status == LocationServiceStatus.Running)
             {
                 float latitude = Input.location.lastData.latitude;
@@ -214,6 +233,7 @@ public class LocationManager : MonoBehaviour
                 Debug.Log("위치 서비스가 실행 중이 아님 - 갱신 중지");
                 isRefreshing = false;
             }
+#endif
         }
     }
 
