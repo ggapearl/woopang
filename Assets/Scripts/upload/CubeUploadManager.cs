@@ -679,15 +679,25 @@ public class CubeUploadManager : MonoBehaviour
     {
         if (Input.location.status == LocationServiceStatus.Running)
         {
+            float rawAltitude = Input.location.lastData.altitude;
+            float normalizedAltitude = rawAltitude;
+
+#if UNITY_IOS && !UNITY_EDITOR
+            // iOS는 Android보다 약 20m 낮게 측정되므로 +20m 보정하여 Android 기준으로 통일
+            normalizedAltitude = rawAltitude + 20f;
+            Debug.Log($"[GPS] iOS 고도 보정: {rawAltitude:F2}m → {normalizedAltitude:F2}m (+20m)");
+#endif
+
             gpsData = new Vector3(
                 Input.location.lastData.latitude,
                 Input.location.lastData.longitude,
-                Input.location.lastData.altitude
+                normalizedAltitude  // Android 기준으로 통일된 고도
             );
+
             // UI 표시용은 F4 (고도는 F2 유지)
             locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
-            
-            Debug.Log($"GPS updated: {locationText}");
+
+            Debug.Log($"[GPS] Updated: {locationText}");
         }
         else
         {
@@ -915,12 +925,12 @@ public class CubeUploadManager : MonoBehaviour
         formData.AddField("name", userName);
         formData.AddField("latitude", gpsData.x.ToString("F6"));
         formData.AddField("longitude", gpsData.y.ToString("F6"));
-        formData.AddField("altitude", gpsData.z.ToString("F2"));
+        formData.AddField("altitude", gpsData.z.ToString("F2"));  // iOS는 이미 +20m 보정됨 (Android 기준 통일)
         formData.AddField("pet_friendly", petFriendly ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroom ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
         formData.AddField("status", "approved");
-        
+
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
         
