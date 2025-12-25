@@ -33,7 +33,7 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private Image loadingSpinner;
 
     [Header("ARCore Geospatial")]
-    [SerializeField] private ARCoreExtensions arCoreExtensions;
+    [SerializeField] private AREarthManager earthManager; // AREarthManager 컴포넌트 참조
     [SerializeField] private bool useGeospatialAPI = true; // Inspector에서 ON/OFF 가능
 
     [SerializeField] private string serverUrl = "https://woopang.com:5000/upload/";
@@ -685,10 +685,9 @@ public class CubeUploadManager : MonoBehaviour
         bool locationObtained = false;
 
         // ARCore Geospatial API 우선 사용
-        if (useGeospatialAPI && arCoreExtensions != null)
+        if (useGeospatialAPI && earthManager != null)
         {
-            var earthManager = arCoreExtensions.EarthManager;
-            if (earthManager != null && earthManager.EarthState == EarthState.Enabled)
+            if (earthManager.EarthTrackingState == TrackingState.Tracking)
             {
                 var pose = earthManager.CameraGeospatialPose;
 
@@ -707,7 +706,7 @@ public class CubeUploadManager : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning($"[GPS] ARCore Geospatial 사용 불가 - EarthState: {earthManager?.EarthState}");
+                Debug.LogWarning($"[GPS] ARCore Geospatial 사용 불가 - EarthState: {earthManager.EarthState}, TrackingState: {earthManager.EarthTrackingState}");
             }
         }
 
@@ -718,9 +717,13 @@ public class CubeUploadManager : MonoBehaviour
             float normalizedAltitude = rawAltitude;
 
 #if UNITY_IOS && !UNITY_EDITOR
-            // iOS는 Android보다 약 20m 낮게 측정되므로 +20m 보정하여 Android 기준으로 통일
-            normalizedAltitude = rawAltitude + 20f;
-            Debug.Log($"[GPS] Fallback - iOS 고도 보정: {rawAltitude:F2}m → {normalizedAltitude:F2}m (+20m)");
+            // iOS WGS84 → MSL 보정 (지역별 Geoid 높이)
+            float latitude = Input.location.lastData.latitude;
+            float longitude = Input.location.lastData.longitude;
+            float geoidOffset = GetGeoidOffset(latitude, longitude);
+
+            normalizedAltitude = rawAltitude + geoidOffset;
+            Debug.Log($"[GPS] Fallback - iOS 고도 보정 ({latitude:F1}°, {longitude:F1}°): {rawAltitude:F2}m → {normalizedAltitude:F2}m (+{geoidOffset}m)");
 #endif
 
             gpsData = new Vector3(
@@ -744,6 +747,73 @@ public class CubeUploadManager : MonoBehaviour
         }
 
         if (locationInput != null) locationInput.text = locationText;
+    }
+
+    /// <summary>
+    /// 위도/경도 기반 Geoid 높이 오프셋 반환 (iOS WGS84 → MSL 변환용)
+    /// 전세계 주요 지역별 평균 Geoid 높이 적용
+    /// </summary>
+    private float GetGeoidOffset(float lat, float lon)
+    {
+        // 동아시아
+        if (lat >= 30f && lat <= 45f && lon >= 120f && lon <= 145f)
+        {
+            // 한국, 일본, 중국 동부
+            if (lat >= 33f && lat <= 43f && lon >= 126f && lon <= 142f)
+                return 30f; // 일본: ~35-40m, 한국: ~20-25m, 평균 30m
+            else
+                return 25f; // 중국 동부
+        }
+        // 동남아시아
+        else if (lat >= -10f && lat <= 25f && lon >= 95f && lon <= 140f)
+        {
+            return 15f; // 태국, 베트남, 필리핀, 인도네시아
+        }
+        // 남아시아 (인도)
+        else if (lat >= 8f && lat <= 35f && lon >= 68f && lon <= 97f)
+        {
+            return 20f; // 인도
+        }
+        // 북미 서부
+        else if (lat >= 30f && lat <= 60f && lon >= -130f && lon <= -110f)
+        {
+            return -25f; // 미국 서부, 캐나다 서부 (음수: 해수면보다 낮음)
+        }
+        // 북미 동부
+        else if (lat >= 25f && lat <= 50f && lon >= -100f && lon <= -65f)
+        {
+            return -30f; // 미국 동부, 캐나다 동부
+        }
+        // 유럽
+        else if (lat >= 35f && lat <= 70f && lon >= -10f && lon <= 40f)
+        {
+            return 45f; // 서유럽/동유럽 평균
+        }
+        // 호주
+        else if (lat >= -45f && lat <= -10f && lon >= 110f && lon <= 155f)
+        {
+            return 10f; // 호주
+        }
+        // 남미
+        else if (lat >= -55f && lat <= 13f && lon >= -82f && lon <= -34f)
+        {
+            return 5f; // 브라질, 아르헨티나 등
+        }
+        // 아프리카
+        else if (lat >= -35f && lat <= 37f && lon >= -20f && lon <= 52f)
+        {
+            return 15f; // 아프리카 대륙
+        }
+        // 중동
+        else if (lat >= 12f && lat <= 42f && lon >= 35f && lon <= 65f)
+        {
+            return 25f; // 중동 지역
+        }
+        // 기본값 (기타 지역)
+        else
+        {
+            return 20f; // 전세계 평균 약 20m
+        }
     }
 
     #endregion
