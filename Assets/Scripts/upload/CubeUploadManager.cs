@@ -6,6 +6,7 @@ using System.IO;
 using UnityEngine.Networking;
 using System;
 using System.Text.RegularExpressions;
+using Google.XR.ARCoreExtensions;
 
 public class CubeUploadManager : MonoBehaviour
 {
@@ -25,11 +26,15 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private GameObject warningObj;
     [SerializeField] private GameObject uploadPage;
     [SerializeField] private GameObject disableObject;
-    
+
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private Text loadingText;
     [SerializeField] private Image loadingSpinner;
+
+    [Header("ARCore Geospatial")]
+    [SerializeField] private ARCoreExtensions arCoreExtensions;
+    [SerializeField] private bool useGeospatialAPI = true; // Inspector에서 ON/OFF 가능
 
     [SerializeField] private string serverUrl = "https://woopang.com:5000/upload/";
 
@@ -44,7 +49,7 @@ public class CubeUploadManager : MonoBehaviour
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
     private float elapsedTime = 0f;
-    
+
     // 스와이프 패널 상태 저장용
     private SwipePanelController swipePanelController;
     private int savedCurrentPanel = -1;
@@ -677,7 +682,37 @@ public class CubeUploadManager : MonoBehaviour
 
     private void UpdateLocationDisplay()
     {
-        if (Input.location.status == LocationServiceStatus.Running)
+        bool locationObtained = false;
+
+        // ARCore Geospatial API 우선 사용
+        if (useGeospatialAPI && arCoreExtensions != null)
+        {
+            var earthManager = arCoreExtensions.EarthManager;
+            if (earthManager != null && earthManager.EarthState == EarthState.Enabled)
+            {
+                var pose = earthManager.CameraGeospatialPose;
+
+                // Geospatial API는 자동으로 MSL 고도 제공 (iOS/Android 통일)
+                gpsData = new Vector3(
+                    (float)pose.Latitude,
+                    (float)pose.Longitude,
+                    (float)pose.Altitude  // 이미 MSL 기준, Geoid 보정 완료
+                );
+
+                locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
+                locationObtained = true;
+
+                Debug.Log($"[GPS] ARCore Geospatial: {locationText}");
+                Debug.Log($"[GPS] 정확도 - 수평:±{pose.HorizontalAccuracy:F1}m, 수직:±{pose.VerticalAccuracy:F1}m");
+            }
+            else
+            {
+                Debug.LogWarning($"[GPS] ARCore Geospatial 사용 불가 - EarthState: {earthManager?.EarthState}");
+            }
+        }
+
+        // Fallback: 기본 GPS 사용 (ARCore 사용 안 함 또는 실패 시)
+        if (!locationObtained && Input.location.status == LocationServiceStatus.Running)
         {
             float rawAltitude = Input.location.lastData.altitude;
             float normalizedAltitude = rawAltitude;
@@ -685,7 +720,7 @@ public class CubeUploadManager : MonoBehaviour
 #if UNITY_IOS && !UNITY_EDITOR
             // iOS는 Android보다 약 20m 낮게 측정되므로 +20m 보정하여 Android 기준으로 통일
             normalizedAltitude = rawAltitude + 20f;
-            Debug.Log($"[GPS] iOS 고도 보정: {rawAltitude:F2}m → {normalizedAltitude:F2}m (+20m)");
+            Debug.Log($"[GPS] Fallback - iOS 고도 보정: {rawAltitude:F2}m → {normalizedAltitude:F2}m (+20m)");
 #endif
 
             gpsData = new Vector3(
@@ -694,17 +729,20 @@ public class CubeUploadManager : MonoBehaviour
                 normalizedAltitude  // Android 기준으로 통일된 고도
             );
 
-            // UI 표시용은 F4 (고도는 F2 유지)
             locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
+            locationObtained = true;
 
-            Debug.Log($"[GPS] Updated: {locationText}");
+            Debug.Log($"[GPS] Fallback - Updated: {locationText}");
         }
-        else
+
+        // 위치 정보를 얻지 못한 경우
+        if (!locationObtained)
         {
             gpsData = Vector3.zero;
             locationText = LocalizationManager.Instance.GetText("no_location_data");
-            Debug.LogWarning($"위치 서비스가 실행 중이 아님 - 상태: {Input.location.status}, isEnabledByUser: {Input.location.isEnabledByUser}");
+            Debug.LogWarning($"[GPS] 위치 서비스 사용 불가 - Input.location 상태: {Input.location.status}");
         }
+
         if (locationInput != null) locationInput.text = locationText;
     }
 
