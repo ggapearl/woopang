@@ -16,8 +16,9 @@ public class UIFeedbackManager : MonoBehaviour
     [SerializeField] private bool enableHaptics = true;
 
     private AudioSource audioSource;
+    private AudioClip cachedButtonSound; // ë ˆí¼ëŸ°ìŠ¤ ì†ì‹¤ ë°©ì§€ìš© ìºì‹œ
 
-    // ÇİÆ½ °­µµ ¿­°ÅÇü
+    // ï¿½ï¿½Æ½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     public enum HapticIntensity
     {
         Light = 0,
@@ -31,50 +32,67 @@ public class UIFeedbackManager : MonoBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
+            // AudioSource ì´ˆê¸°í™”
+            audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.playOnAwake = false;
+            audioSource.volume = soundVolume;
+
+            // AudioClipì„ Resourcesì—ì„œ ë¡œë“œí•˜ì—¬ ì”¬ê³¼ ë…ë¦½ì ìœ¼ë¡œ ê´€ë¦¬
+            if (defaultButtonSound != null)
+            {
+                cachedButtonSound = defaultButtonSound;
+            }
+            else
+            {
+                cachedButtonSound = Resources.Load<AudioClip>("Audio/Touch");
+            }
         }
         else
         {
             Destroy(gameObject);
-            return;
         }
-
-        audioSource = gameObject.AddComponent<AudioSource>();
-        audioSource.playOnAwake = false;
-        audioSource.volume = soundVolume;
-        Debug.Log("UIFeedbackManager Initialized");
     }
 
-    // ±âº» ÅÍÄ¡ ÇÇµå¹é (±âÁ¸ °­µµ »ç¿ë)
+    // ï¿½âº» ï¿½ï¿½Ä¡ ï¿½Çµï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½)
     public void HandleTouchFeedback(AudioClip customSound = null)
     {
         if (IsValidUIEvent())
         {
-            Debug.Log($"Button Clicked: {EventSystem.current.currentSelectedGameObject.name}, Custom Sound: {(customSound != null ? customSound.name : "None")}");
+            AudioClip fallbackSound = defaultButtonSound ?? cachedButtonSound;
             TriggerHaptic(hapticIntensity);
-            PlaySound(customSound ?? defaultButtonSound);
-        }
-        else
-        {
-            Debug.Log("Invalid UI Event Ignored");
+            PlaySound(customSound ?? fallbackSound);
         }
     }
 
-    // Æ¯Á¤ °­µµ·Î ÅÍÄ¡ ÇÇµå¹é
+    // UITouchForwarderì—ì„œ ì§ì ‘ í˜¸ì¶œ (IsValidUIEvent ì²´í¬ ìƒëµ)
+    public void HandleTouchFeedbackDirect(AudioClip customSound = null)
+    {
+        AudioClip clipToPlay = customSound ?? cachedButtonSound;
+
+        // ë§Œì•½ cachedButtonSoundë„ ì†ì‹¤ë˜ì—ˆë‹¤ë©´ ì¬ë¡œë“œ
+        if (clipToPlay == null || !clipToPlay)
+        {
+            cachedButtonSound = Resources.Load<AudioClip>("Audio/Touch");
+            clipToPlay = cachedButtonSound;
+        }
+
+        TriggerHaptic(hapticIntensity);
+        PlaySound(clipToPlay);
+    }
+
+    // Æ¯ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½Çµï¿½ï¿½
     public void HandleTouchFeedback(float intensity, AudioClip customSound = null)
     {
         if (IsValidUIEvent())
         {
-            Debug.Log($"Button Clicked: {EventSystem.current.currentSelectedGameObject.name}, Intensity: {intensity}, Custom Sound: {(customSound != null ? customSound.name : "None")}");
+            AudioClip fallbackSound = defaultButtonSound ?? cachedButtonSound;
             TriggerHaptic(intensity);
-            PlaySound(customSound ?? defaultButtonSound);
-        }
-        else
-        {
-            Debug.Log("Invalid UI Event Ignored");
+            PlaySound(customSound ?? fallbackSound);
         }
     }
 
-    // ¿­°ÅÇüÀ» ÀÌ¿ëÇÑ ÅÍÄ¡ ÇÇµå¹é
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¿ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½Çµï¿½ï¿½
     public void HandleTouchFeedback(HapticIntensity intensityType, AudioClip customSound = null)
     {
         float intensity = GetIntensityFromType(intensityType);
@@ -85,24 +103,20 @@ public class UIFeedbackManager : MonoBehaviour
     {
         if (!string.IsNullOrEmpty(newText))
         {
-            Debug.Log("Key Input Detected");
-            TriggerHaptic(hapticIntensity * 0.7f); // Å° ÀÔ·ÂÀº Á¶±İ ´õ ¾àÇÏ°Ô
-            PlaySound(defaultButtonSound);
+            AudioClip fallbackSound = defaultButtonSound ?? cachedButtonSound;
+            TriggerHaptic(hapticIntensity * 0.7f);
+            PlaySound(fallbackSound);
         }
     }
 
-    // ÇİÆ½ °­µµ¸¦ µ¿ÀûÀ¸·Î ¼³Á¤
     public void SetHapticIntensity(float intensity)
     {
         hapticIntensity = Mathf.Clamp01(intensity);
-        Debug.Log($"Haptic intensity set to: {hapticIntensity}");
     }
 
-    // ÇİÆ½ È°¼ºÈ­/ºñÈ°¼ºÈ­
     public void SetHapticsEnabled(bool enabled)
     {
         enableHaptics = enabled;
-        Debug.Log($"Haptics {(enabled ? "enabled" : "disabled")}");
     }
 
     private void TriggerHaptic(float intensity = 0.5f)
@@ -110,22 +124,21 @@ public class UIFeedbackManager : MonoBehaviour
         if (!enableHaptics) return;
 
         intensity = Mathf.Clamp01(intensity);
-        Debug.Log($"Haptic Triggered with intensity: {intensity}");
 
 #if UNITY_IOS
         try
         {
-            // iOS¿ë Medium Haptic¸¸ »ç¿ë (°­µµ Á¶Àı ¾øÀÌ)
-            if (intensity > 0.1f) // 0.1 ÀÌ»óÀÌ¸é Medium Haptic
+            // iOSï¿½ï¿½ Medium Hapticï¿½ï¿½ ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
+            if (intensity > 0.1f) // 0.1 ï¿½Ì»ï¿½ï¿½Ì¸ï¿½ Medium Haptic
             {
-                // iOS Medium Haptic ±¸Çö (³×ÀÌÆ¼ºê ¹æ½Ä)
+                // iOS Medium Haptic ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ ï¿½ï¿½ï¿½)
                 TriggerIOSMediumHaptic();
             }
         }
         catch (System.Exception e)
         {
             Debug.LogWarning($"iOS Medium Haptic Failed: {e.Message}");
-            // FallbackÀº ÇÏÁö ¾ÊÀ½ (Medium HapticÀÌ ¸ñÀûÀÌ¹Ç·Î)
+            // Fallbackï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (Medium Hapticï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì¹Ç·ï¿½)
         }
 #elif UNITY_ANDROID
         try
@@ -141,7 +154,7 @@ public class UIFeedbackManager : MonoBehaviour
                 {
                     AndroidJavaClass vibrationEffectClass = new AndroidJavaClass("android.os.VibrationEffect");
                     
-                    // °­µµ¿¡ µû¸¥ Áøµ¿ ÆĞÅÏ ¼±ÅÃ
+                    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
                     int effectType;
                     if (intensity <= 0.33f)
                     {
@@ -161,7 +174,7 @@ public class UIFeedbackManager : MonoBehaviour
                 }
                 else
                 {
-                    // Android API 25 ÀÌÇÏ - ½Ã°£ ±â¹İ Áøµ¿
+                    // Android API 25 ï¿½ï¿½ï¿½ï¿½ - ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
                     long duration = (long)(50 + (intensity * 100)); // 50-150ms
                     vibrator.Call("vibrate", duration);
                 }
@@ -177,7 +190,7 @@ public class UIFeedbackManager : MonoBehaviour
             Handheld.Vibrate();
         }
 #else
-        // ±âÅ¸ ÇÃ·§ÆûÀº ±âº» Áøµ¿
+        // ï¿½ï¿½Å¸ ï¿½Ã·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½âº» ï¿½ï¿½ï¿½ï¿½
         if (intensity > 0.1f)
         {
             Handheld.Vibrate();
@@ -185,34 +198,29 @@ public class UIFeedbackManager : MonoBehaviour
 #endif
     }
 
-    // iOS Medium Haptic ±¸Çö
+    // iOS Medium Haptic ï¿½ï¿½ï¿½ï¿½
     private void TriggerIOSMediumHaptic()
     {
 #if UNITY_IOS && !UNITY_EDITOR
-        // ³×ÀÌÆ¼ºê iOS Medium Haptic È£Ãâ
+        // ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ iOS Medium Haptic È£ï¿½ï¿½
         _TriggerMediumHaptic();
 #else
-        // ¿¡µğÅÍ³ª ´Ù¸¥ È¯°æ¿¡¼­´Â ±âº» Áøµ¿
+        // ï¿½ï¿½ï¿½ï¿½ï¿½Í³ï¿½ ï¿½Ù¸ï¿½ È¯ï¿½æ¿¡ï¿½ï¿½ï¿½ï¿½ ï¿½âº» ï¿½ï¿½ï¿½ï¿½
         Handheld.Vibrate();
 #endif
     }
 
 #if UNITY_IOS && !UNITY_EDITOR
-    // iOS ³×ÀÌÆ¼ºê Medium Haptic ÇÔ¼ö ¼±¾ğ
+    // iOS ï¿½ï¿½ï¿½ï¿½Æ¼ï¿½ï¿½ Medium Haptic ï¿½Ô¼ï¿½ ï¿½ï¿½ï¿½ï¿½
     [System.Runtime.InteropServices.DllImport("__Internal")]
     private static extern void _TriggerMediumHaptic();
 #endif
 
     private void PlaySound(AudioClip clip)
     {
-        if (clip != null)
+        if (clip != null && audioSource != null)
         {
             audioSource.PlayOneShot(clip, soundVolume);
-            Debug.Log($"Playing Sound: {clip.name}");
-        }
-        else
-        {
-            Debug.LogWarning("No sound clip assigned!");
         }
     }
 
@@ -246,11 +254,11 @@ public class UIFeedbackManager : MonoBehaviour
         }
         catch
         {
-            return 1; // ±âº»°ª
+            return 1; // ï¿½âº»ï¿½ï¿½
         }
     }
 
-    // °ø°³ ¸Ş¼­µåµé - ¿ÜºÎ¿¡¼­ È£Ãâ °¡´É
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Ş¼ï¿½ï¿½ï¿½ï¿½ - ï¿½ÜºÎ¿ï¿½ï¿½ï¿½ È£ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     public void TriggerLightHaptic()
     {
         TriggerHaptic(0.25f);
@@ -266,7 +274,7 @@ public class UIFeedbackManager : MonoBehaviour
         TriggerHaptic(1.0f);
     }
 
-    // ÇöÀç ¼³Á¤ È®ÀÎ¿ë
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½Î¿ï¿½
     public float GetCurrentHapticIntensity()
     {
         return hapticIntensity;

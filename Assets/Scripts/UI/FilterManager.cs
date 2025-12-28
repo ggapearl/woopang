@@ -10,9 +10,9 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Toggle petFriendlyToggle;
     [SerializeField] private Toggle publicDataToggle;
     [SerializeField] private Toggle subwayToggle;
-    [SerializeField] private Toggle busToggle;
     [SerializeField] private Toggle alcoholToggle;
-    [SerializeField] private Toggle woopangDataToggle;
+    [SerializeField] private Toggle trainToggle;
+    [SerializeField] private Toggle terminalToggle;
     [SerializeField] private Toggle object3DToggle;
 
     [Header("References")]
@@ -24,23 +24,30 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private float longPressDuration = 0.8f;
 
     // 필터 상태
-    private bool filterPetFriendly = true;
+    public enum PetFriendlyFilterState
+    {
+        All = 0,                 // 모두 표시 (흰색)
+        OnlyPetFriendly = 1,     // 애견동반 되는 곳만 (노란색)
+        NoPetFriendly = 2        // 애견동반 안되는 곳만 (체크해제)
+    }
+
+    private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;
     private bool filterPublicData = true;
     private bool filterSubway = true;
-    private bool filterBus = true;
     private bool filterAlcohol = true;
-    private bool filterWoopangData = true;
+    private bool filterTrain = true;
+    private bool filterTerminal = true;
     private bool filterObject3D = true;
 
     private bool isUpdatingToggles = false;
 
     // PlayerPrefs 키 (V2)
-    private const string PREF_PET_FRIENDLY = "Filter_PetFriendly_V2";
+    private const string PREF_PET_FRIENDLY = "Filter_PetFriendly_V3";
     private const string PREF_PUBLIC_DATA = "Filter_PublicData_V2";
     private const string PREF_SUBWAY = "Filter_Subway_V2";
-    private const string PREF_BUS = "Filter_Bus_V2";
     private const string PREF_ALCOHOL = "Filter_Alcohol_V2";
-    private const string PREF_WOOPANG_DATA = "Filter_WoopangData_V2";
+    private const string PREF_TRAIN = "Filter_Train_V2";
+    private const string PREF_TERMINAL = "Filter_Terminal_V2";
     private const string PREF_OBJECT3D = "Filter_Object3D_V2";
 
     // 다국어 데이터
@@ -49,46 +56,46 @@ public class FilterManager : MonoBehaviour
         { "en", new Dictionary<string, string> {
             { "petFriendly", "Pet Friendly" },
             { "publicData", "Public Data" },
-            { "subway", "Subway" },
-            { "bus", "Bus" },
+            { "subway", "Metro" },
             { "alcohol", "Alcohol" },
-            { "woopangData", "Woopang Data" },
+            { "train", "Train" },
+            { "terminal", "Terminal/Airport" },
             { "object3D", "3D Objects" }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "애견동반" },
             { "publicData", "공공데이터" },
             { "subway", "지하철" },
-            { "bus", "버스" },
             { "alcohol", "주류판매" },
-            { "woopangData", "우팡데이터" },
+            { "train", "기차역" },
+            { "terminal", "터미널" },
             { "object3D", "3D 오브젝트" }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "ペット同伴" },
             { "publicData", "公共データ" },
             { "subway", "地下鉄" },
-            { "bus", "バス" },
             { "alcohol", "アルコール" },
-            { "woopangData", "Woopangデータ" },
+            { "train", "鉄道駅" },
+            { "terminal", "ターミナル" },
             { "object3D", "3Dオブジェクト" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendly", "宠物友好" },
             { "publicData", "公共数据" },
             { "subway", "地铁" },
-            { "bus", "公交车" },
             { "alcohol", "酒类销售" },
-            { "woopangData", "Woopang数据" },
+            { "train", "火车站" },
+            { "terminal", "航站楼" },
             { "object3D", "3D对象" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendly", "Admite Mascotas" },
             { "publicData", "Datos Públicos" },
             { "subway", "Metro" },
-            { "bus", "Autobús" },
             { "alcohol", "Alcohol" },
-            { "woopangData", "Datos Woopang" },
+            { "train", "Estación de Tren" },
+            { "terminal", "Terminal" },
             { "object3D", "Objetos 3D" }
         }}
     };
@@ -98,12 +105,19 @@ public class FilterManager : MonoBehaviour
         LoadFilterSettings();
         UpdateLanguage();
 
-        SetupToggle(petFriendlyToggle, filterPetFriendly, OnPetFriendlyToggleChanged, "petFriendly");
+        // PetFriendly는 별도 처리 (3-state) - IPointerClickHandler 방식으로 처리
+        if (petFriendlyToggle != null)
+        {
+            // Toggle의 onValueChanged를 사용하여 클릭 감지
+            petFriendlyToggle.onValueChanged.AddListener(OnPetFriendlyToggleChanged);
+            UpdatePetFriendlyToggleUI();
+        }
+
         SetupToggle(publicDataToggle, filterPublicData, OnPublicDataToggleChanged, "publicData");
         SetupToggle(subwayToggle, filterSubway, OnSubwayToggleChanged, "subway");
-        SetupToggle(busToggle, filterBus, OnBusToggleChanged, "bus");
         SetupToggle(alcoholToggle, filterAlcohol, OnAlcoholToggleChanged, "alcohol");
-        SetupToggle(woopangDataToggle, filterWoopangData, OnWoopangDataToggleChanged, "woopangData");
+        SetupToggle(trainToggle, filterTrain, OnTrainToggleChanged, "train");
+        SetupToggle(terminalToggle, filterTerminal, OnTerminalToggleChanged, "terminal");
         SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
 
         ApplyAllFilters();
@@ -128,9 +142,9 @@ public class FilterManager : MonoBehaviour
         SetToggleLabel(petFriendlyToggle, texts["petFriendly"]);
         SetToggleLabel(publicDataToggle, texts["publicData"]);
         SetToggleLabel(subwayToggle, texts["subway"]);
-        SetToggleLabel(busToggle, texts["bus"]);
         SetToggleLabel(alcoholToggle, texts["alcohol"]);
-        SetToggleLabel(woopangDataToggle, texts["woopangData"]);
+        SetToggleLabel(trainToggle, texts["train"]);
+        SetToggleLabel(terminalToggle, texts["terminal"]);
         SetToggleLabel(object3DToggle, texts["object3D"]);
     }
 
@@ -140,6 +154,73 @@ public class FilterManager : MonoBehaviour
         {
             Text label = toggle.GetComponentInChildren<Text>();
             if (label != null) label.text = text;
+        }
+    }
+
+    private void UpdatePetFriendlyToggleUI()
+    {
+        if (petFriendlyToggle == null) return;
+
+        isUpdatingToggles = true;
+
+        // 노란색 파싱
+        Color yellowColor;
+        if (!ColorUtility.TryParseHtmlString("#fbc15d", out yellowColor))
+        {
+            yellowColor = Color.yellow; // fallback
+        }
+
+        // 상태에 따라 UI 업데이트
+        switch (petFriendlyState)
+        {
+            case PetFriendlyFilterState.All:
+                petFriendlyToggle.isOn = true;
+                // 체크박스 흰색 배경, 글자만 노란색 - 모두 표시
+                SetToggleBackground(petFriendlyToggle, Color.white);
+                SetToggleLabelColor(petFriendlyToggle, yellowColor);
+                break;
+            case PetFriendlyFilterState.OnlyPetFriendly:
+                petFriendlyToggle.isOn = true;
+                // 체크박스 노란색(#fbc15d) 배경, 노란색 글자 - 애견동반만
+                SetToggleBackground(petFriendlyToggle, yellowColor);
+                SetToggleLabelColor(petFriendlyToggle, yellowColor);
+                break;
+            case PetFriendlyFilterState.NoPetFriendly:
+                petFriendlyToggle.isOn = false;
+                // 체크박스 회색 배경, 회색 글자 - 애견동반 아닌곳만
+                SetToggleBackground(petFriendlyToggle, Color.gray);
+                SetToggleLabelColor(petFriendlyToggle, Color.gray);
+                break;
+        }
+
+        isUpdatingToggles = false;
+    }
+
+    private void SetToggleBackground(Toggle toggle, Color color)
+    {
+        if (toggle == null) return;
+
+        // Toggle의 "Background" 자식 오브젝트에서 Image 찾기
+        Transform bgTransform = toggle.transform.Find("Background");
+        if (bgTransform != null)
+        {
+            Image bgImage = bgTransform.GetComponent<Image>();
+            if (bgImage != null)
+            {
+                bgImage.color = color;
+            }
+        }
+    }
+
+    private void SetToggleLabelColor(Toggle toggle, Color color)
+    {
+        if (toggle == null) return;
+
+        // Toggle의 Label Text 찾기
+        Text label = toggle.GetComponentInChildren<Text>();
+        if (label != null)
+        {
+            label.color = color;
         }
     }
 
@@ -160,12 +241,13 @@ public class FilterManager : MonoBehaviour
     {
         isUpdatingToggles = true;
 
-        filterPetFriendly = (filterName == "petFriendly");
+        // PetFriendly는 All 상태로 설정
+        petFriendlyState = (filterName == "petFriendly") ? PetFriendlyFilterState.All : PetFriendlyFilterState.NoPetFriendly;
         filterPublicData = (filterName == "publicData");
         filterSubway = (filterName == "subway");
-        filterBus = (filterName == "bus");
         filterAlcohol = (filterName == "alcohol");
-        filterWoopangData = (filterName == "woopangData");
+        filterTrain = (filterName == "train");
+        filterTerminal = (filterName == "terminal");
         filterObject3D = (filterName == "object3D");
 
         UpdateAllToggleUI();
@@ -177,42 +259,57 @@ public class FilterManager : MonoBehaviour
 
     private void LoadFilterSettings()
     {
-        filterPetFriendly = PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 1) == 1;
+        petFriendlyState = (PetFriendlyFilterState)PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 0); // 기본값 All (0)
         filterPublicData = PlayerPrefs.GetInt(PREF_PUBLIC_DATA, 1) == 1;
         filterSubway = PlayerPrefs.GetInt(PREF_SUBWAY, 1) == 1;
-        filterBus = PlayerPrefs.GetInt(PREF_BUS, 1) == 1;
         filterAlcohol = PlayerPrefs.GetInt(PREF_ALCOHOL, 1) == 1;
-        filterWoopangData = PlayerPrefs.GetInt(PREF_WOOPANG_DATA, 1) == 1;
+        filterTrain = PlayerPrefs.GetInt(PREF_TRAIN, 1) == 1;
+        filterTerminal = PlayerPrefs.GetInt(PREF_TERMINAL, 1) == 1;
         filterObject3D = PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
     }
 
     private void SaveFilterSettings()
     {
-        PlayerPrefs.SetInt(PREF_PET_FRIENDLY, filterPetFriendly ? 1 : 0);
+        PlayerPrefs.SetInt(PREF_PET_FRIENDLY, (int)petFriendlyState);
         PlayerPrefs.SetInt(PREF_PUBLIC_DATA, filterPublicData ? 1 : 0);
         PlayerPrefs.SetInt(PREF_SUBWAY, filterSubway ? 1 : 0);
-        PlayerPrefs.SetInt(PREF_BUS, filterBus ? 1 : 0);
         PlayerPrefs.SetInt(PREF_ALCOHOL, filterAlcohol ? 1 : 0);
-        PlayerPrefs.SetInt(PREF_WOOPANG_DATA, filterWoopangData ? 1 : 0);
+        PlayerPrefs.SetInt(PREF_TRAIN, filterTrain ? 1 : 0);
+        PlayerPrefs.SetInt(PREF_TERMINAL, filterTerminal ? 1 : 0);
         PlayerPrefs.SetInt(PREF_OBJECT3D, filterObject3D ? 1 : 0);
         PlayerPrefs.Save();
     }
 
     private void UpdateAllToggleUI()
     {
-        if (petFriendlyToggle != null) petFriendlyToggle.isOn = filterPetFriendly;
+        UpdatePetFriendlyToggleUI();
         if (publicDataToggle != null) publicDataToggle.isOn = filterPublicData;
         if (subwayToggle != null) subwayToggle.isOn = filterSubway;
-        if (busToggle != null) busToggle.isOn = filterBus;
         if (alcoholToggle != null) alcoholToggle.isOn = filterAlcohol;
-        if (woopangDataToggle != null) woopangDataToggle.isOn = filterWoopangData;
+        if (trainToggle != null) trainToggle.isOn = filterTrain;
+        if (terminalToggle != null) terminalToggle.isOn = filterTerminal;
         if (object3DToggle != null) object3DToggle.isOn = filterObject3D;
     }
 
     private void OnPetFriendlyToggleChanged(bool isOn)
     {
         if (isUpdatingToggles) return;
-        filterPetFriendly = isOn;
+
+        // 3단계 순환: All(체크, 흰색) -> OnlyPetFriendly(체크, 노란색) -> NoPetFriendly(체크해제)
+        switch (petFriendlyState)
+        {
+            case PetFriendlyFilterState.All:
+                petFriendlyState = PetFriendlyFilterState.OnlyPetFriendly;
+                break;
+            case PetFriendlyFilterState.OnlyPetFriendly:
+                petFriendlyState = PetFriendlyFilterState.NoPetFriendly;
+                break;
+            case PetFriendlyFilterState.NoPetFriendly:
+                petFriendlyState = PetFriendlyFilterState.All;
+                break;
+        }
+
+        UpdatePetFriendlyToggleUI();
         SaveFilterSettings();
         ApplyAllFilters();
     }
@@ -233,14 +330,6 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
-    private void OnBusToggleChanged(bool isOn)
-    {
-        if (isUpdatingToggles) return;
-        filterBus = isOn;
-        SaveFilterSettings();
-        ApplyAllFilters();
-    }
-
     private void OnAlcoholToggleChanged(bool isOn)
     {
         if (isUpdatingToggles) return;
@@ -249,10 +338,18 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
-    private void OnWoopangDataToggleChanged(bool isOn)
+    private void OnTrainToggleChanged(bool isOn)
     {
         if (isUpdatingToggles) return;
-        filterWoopangData = isOn;
+        filterTrain = isOn;
+        SaveFilterSettings();
+        ApplyAllFilters();
+    }
+
+    private void OnTerminalToggleChanged(bool isOn)
+    {
+        if (isUpdatingToggles) return;
+        filterTerminal = isOn;
         SaveFilterSettings();
         ApplyAllFilters();
     }
@@ -278,12 +375,14 @@ public class FilterManager : MonoBehaviour
     {
         return new Dictionary<string, bool>
         {
-            { "petFriendly", filterPetFriendly },
+            { "petFriendlyOnly", petFriendlyState == PetFriendlyFilterState.OnlyPetFriendly },
+            { "petFriendlyAll", petFriendlyState == PetFriendlyFilterState.All },
+            { "noPetFriendly", petFriendlyState == PetFriendlyFilterState.NoPetFriendly },
             { "publicData", filterPublicData },
             { "subway", filterSubway },
-            { "bus", filterBus },
             { "alcohol", filterAlcohol },
-            { "woopangData", filterWoopangData },
+            { "train", filterTrain },
+            { "terminal", filterTerminal },
             { "object3D", filterObject3D }
         };
     }

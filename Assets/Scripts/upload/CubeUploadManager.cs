@@ -7,6 +7,7 @@ using UnityEngine.Networking;
 using System;
 using System.Text.RegularExpressions;
 using Google.XR.ARCoreExtensions;
+using UnityEngine.XR.ARSubsystems;
 
 public class CubeUploadManager : MonoBehaviour
 {
@@ -36,6 +37,14 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private AREarthManager earthManager; // AREarthManager 컴포넌트 참조
     [SerializeField] private bool useGeospatialAPI = true; // Inspector에서 ON/OFF 가능
 
+    [Header("Photo Dialogs")]
+    [SerializeField] private PhotoSourceDialog photoSourceDialog; // 사진 선택 다이얼로그
+    [SerializeField] private ContinueCaptureDialog continueCaptureDialog; // 연속 촬영 다이얼로그
+
+    [Header("AR Preview")]
+    [SerializeField] private ARPreviewController arPreviewController; // AR 미리보기 컨트롤러
+    [SerializeField] private GameObject cubePrefab; // 0000_Cube.prefab
+
     [SerializeField] private string serverUrl = "https://woopang.com:5000/upload/";
 
     private Texture2D mainPhoto;
@@ -53,6 +62,10 @@ public class CubeUploadManager : MonoBehaviour
     // 스와이프 패널 상태 저장용
     private SwipePanelController swipePanelController;
     private int savedCurrentPanel = -1;
+
+    // 연속 촬영 모드용
+    private List<string> continuousCapturedPaths = new List<string>();
+    private bool isContinuousCaptureMode = false;
 
     private void Awake()
     {
@@ -102,8 +115,78 @@ public class CubeUploadManager : MonoBehaviour
 
     /// <summary>
     /// 메인 사진 선택 및 처리 (2단계 HEIC 처리 포함)
+    /// 카메라 촬영 또는 갤러리 선택 다이얼로그 표시
     /// </summary>
     private IEnumerator SelectAndCropMainPhoto()
+    {
+        if (isProcessing) yield break;
+
+        // PhotoSourceDialog 표시
+        if (photoSourceDialog != null)
+        {
+            photoSourceDialog.Show(
+                LocalizationManager.Instance.GetText("select_main_photo"),
+                onCamera: () => StartCoroutine(CaptureMainPhotoFromCamera()),
+                onGallery: () => StartCoroutine(SelectMainPhotoFromGallery())
+            );
+        }
+        else
+        {
+            // Fallback: 다이얼로그 없으면 갤러리만 사용
+            Debug.LogWarning("[CubeUploadManager] PhotoSourceDialog가 할당되지 않았습니다. 갤러리만 사용합니다.");
+            yield return StartCoroutine(SelectMainPhotoFromGallery());
+        }
+
+        yield break;
+    }
+
+    /// <summary>
+    /// 카메라로 메인 사진 촬영
+    /// </summary>
+    private IEnumerator CaptureMainPhotoFromCamera()
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+
+        ShowSpinner(LocalizationManager.Instance.GetText("loading_main_photo"));
+        bool isLoading = true;
+        string capturedPath = null;
+
+        // NativeCamera로 사진 촬영
+        NativeCamera.Permission permission = NativeCamera.TakePicture((path) =>
+        {
+            capturedPath = path;
+            isLoading = false;
+        }, maxSize: 2048);
+
+        if (permission != NativeCamera.Permission.Granted)
+        {
+            ShowWarning("카메라 권한이 필요합니다.");
+            HideSpinner();
+            isProcessing = false;
+            yield break;
+        }
+
+        yield return new WaitUntil(() => !isLoading);
+
+        if (!string.IsNullOrEmpty(capturedPath))
+        {
+            yield return StartCoroutine(ProcessMainPhotoWithFallback(capturedPath, () => { }));
+        }
+        else
+        {
+            ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
+            SetMainPhotoUIState(false);
+        }
+
+        HideSpinner();
+        isProcessing = false;
+    }
+
+    /// <summary>
+    /// 갤러리에서 메인 사진 선택
+    /// </summary>
+    private IEnumerator SelectMainPhotoFromGallery()
     {
         if (isProcessing) yield break;
         isProcessing = true;
@@ -216,7 +299,7 @@ public class CubeUploadManager : MonoBehaviour
     {
         // 크롭 시작 전에 현재 패널 상태 저장
         SaveCurrentPanelState();
-        
+
         ImageCropper.Instance.Show(texture, (success, original, cropped) =>
         {
             try
@@ -228,13 +311,16 @@ public class CubeUploadManager : MonoBehaviour
                     if (mainPhotoDisplay != null) mainPhotoDisplay.sprite = GetOrCreateSprite(mainPhoto);
                     SetMainPhotoUIState(true);
                     Debug.Log("[HEIC] 메인 사진 크롭 완료");
+
+                    // ✨ AR Preview 모드 시작
+                    StartARPreview(croppedTexture);
                 }
                 else
                 {
                     ShowWarning(LocalizationManager.Instance.GetText("main_photo_crop_failed"));
                     SetMainPhotoUIState(false);
                 }
-                
+
                 // 원본 텍스처 정리 (크롭된 버전만 유지)
                 if (texture != cropped && texture != null) Destroy(texture);
             }
@@ -242,7 +328,7 @@ public class CubeUploadManager : MonoBehaviour
             {
                 // 크롭 완료 후 패널 상태 복원
                 RestoreCurrentPanelState();
-                
+
                 // 반드시 콜백 호출하여 로딩 상태 해제
                 onComplete?.Invoke();
             }
@@ -255,9 +341,180 @@ public class CubeUploadManager : MonoBehaviour
     }
 
     /// <summary>
+    /// AR Preview 모드 시작
+    /// </summary>
+    private void StartARPreview(Texture2D mainPhotoTexture)
+    {
+        if (arPreviewController == null)
+        {
+            Debug.LogWarning("[CubeUploadManager] ARPreviewController가 할당되지 않았습니다. AR Preview를 건너뜁니다.");
+            return;
+        }
+
+        if (cubePrefab == null)
+        {
+            Debug.LogWarning("[CubeUploadManager] Cube Prefab이 할당되지 않았습니다. AR Preview를 건너뜁니다.");
+            return;
+        }
+
+        // UploadPage 비활성화
+        if (uploadPage != null)
+            uploadPage.SetActive(false);
+
+        // ARPreviewController의 cubePrefab 설정 (Inspector에서 설정하지 않은 경우)
+        var type = typeof(ARPreviewController);
+        var cubePrefabField = type.GetField("cubePrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (cubePrefabField != null)
+        {
+            cubePrefabField.SetValue(arPreviewController, cubePrefab);
+        }
+
+        // AR Preview 시작
+        arPreviewController.StartPreview(mainPhotoTexture, onConfirmCallback: () =>
+        {
+            // 확인 버튼 클릭 시 → UploadPage 복귀
+            if (uploadPage != null)
+                uploadPage.SetActive(true);
+
+            Debug.Log("[CubeUploadManager] AR Preview 종료, UploadPage로 복귀");
+        });
+
+        Debug.Log("[CubeUploadManager] AR Preview 모드 시작");
+    }
+
+    /// <summary>
     /// 서브 사진 선택 및 처리
+    /// 카메라 연속 촬영 또는 갤러리 다중 선택 다이얼로그 표시
     /// </summary>
     private IEnumerator SelectSubPhotos()
+    {
+        if (isProcessing) yield break;
+
+        // PhotoSourceDialog 표시
+        if (photoSourceDialog != null)
+        {
+            photoSourceDialog.Show(
+                LocalizationManager.Instance.GetText("select_sub_photos"),
+                onCamera: () => StartCoroutine(StartContinuousCaptureMode()),
+                onGallery: () => StartCoroutine(SelectSubPhotosFromGallery())
+            );
+        }
+        else
+        {
+            // Fallback: 다이얼로그 없으면 갤러리만 사용
+            Debug.LogWarning("[CubeUploadManager] PhotoSourceDialog가 할당되지 않았습니다. 갤러리만 사용합니다.");
+            yield return StartCoroutine(SelectSubPhotosFromGallery());
+        }
+
+        yield break;
+    }
+
+    /// <summary>
+    /// 연속 촬영 모드 시작 (Sub 사진들을 여러 장 연속 촬영)
+    /// </summary>
+    private IEnumerator StartContinuousCaptureMode()
+    {
+        continuousCapturedPaths.Clear();
+        isContinuousCaptureMode = true;
+
+        yield return StartCoroutine(CaptureNextSubPhoto());
+    }
+
+    /// <summary>
+    /// 다음 Sub 사진 촬영 (연속 촬영 모드)
+    /// </summary>
+    private IEnumerator CaptureNextSubPhoto()
+    {
+        int remainingSlots = MAX_SUB_PHOTOS - subPhotos.Count - continuousCapturedPaths.Count;
+
+        if (remainingSlots <= 0)
+        {
+            // 최대 개수 도달 → 촬영 종료, 모든 사진 로드
+            ShowWarning($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.");
+            yield return StartCoroutine(LoadContinuousCapturedPhotos());
+            yield break;
+        }
+
+        bool captureDone = false;
+        string capturedPath = null;
+
+        // NativeCamera로 사진 촬영
+        NativeCamera.Permission permission = NativeCamera.TakePicture((path) =>
+        {
+            capturedPath = path;
+            captureDone = true;
+        }, maxSize: 2048);
+
+        if (permission != NativeCamera.Permission.Granted)
+        {
+            ShowWarning("카메라 권한이 필요합니다.");
+            yield return StartCoroutine(LoadContinuousCapturedPhotos());
+            yield break;
+        }
+
+        // 촬영 완료 대기
+        yield return new WaitUntil(() => captureDone);
+
+        if (!string.IsNullOrEmpty(capturedPath))
+        {
+            // 촬영 성공 → 리스트에 추가
+            continuousCapturedPaths.Add(capturedPath);
+
+            // "계속 촬영하시겠습니까?" 다이얼로그 표시
+            int currentCount = subPhotos.Count + continuousCapturedPaths.Count;
+            string message = $"현재 {currentCount}/{MAX_SUB_PHOTOS}장\n계속 촬영하시겠습니까?";
+
+            if (continueCaptureDialog != null)
+            {
+                continueCaptureDialog.Show(
+                    message,
+                    onYes: () => StartCoroutine(CaptureNextSubPhoto()), // 다시 촬영
+                    onNo: () => StartCoroutine(LoadContinuousCapturedPhotos()) // 종료
+                );
+            }
+            else
+            {
+                // Fallback: 다이얼로그 없으면 자동 종료
+                Debug.LogWarning("[CubeUploadManager] ContinueCaptureDialog가 할당되지 않았습니다. 촬영을 종료합니다.");
+                yield return StartCoroutine(LoadContinuousCapturedPhotos());
+            }
+        }
+        else
+        {
+            // 촬영 취소 → 지금까지 찍은 사진들 로드
+            yield return StartCoroutine(LoadContinuousCapturedPhotos());
+        }
+    }
+
+    /// <summary>
+    /// 연속 촬영한 모든 사진을 Sub Photos에 추가
+    /// </summary>
+    private IEnumerator LoadContinuousCapturedPhotos()
+    {
+        if (continuousCapturedPaths.Count == 0)
+        {
+            isContinuousCaptureMode = false;
+            yield break;
+        }
+
+        isProcessing = true;
+        ShowSpinner($"사진 {continuousCapturedPaths.Count}장 로딩 중...");
+
+        // 연속 촬영한 모든 사진을 Sub Photos에 추가
+        yield return StartCoroutine(LoadMultipleImagesWithFallback(continuousCapturedPaths.ToArray(), () => { }));
+
+        HideSpinner();
+        ShowWarning($"Sub 사진 {continuousCapturedPaths.Count}장 추가 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
+
+        continuousCapturedPaths.Clear();
+        isContinuousCaptureMode = false;
+        isProcessing = false;
+    }
+
+    /// <summary>
+    /// 갤러리에서 Sub 사진들 선택 (여러 장 동시 선택)
+    /// </summary>
+    private IEnumerator SelectSubPhotosFromGallery()
     {
         if (isProcessing) yield break;
         isProcessing = true;

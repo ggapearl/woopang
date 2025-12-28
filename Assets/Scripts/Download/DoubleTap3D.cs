@@ -47,7 +47,7 @@ public class DoubleTap3D : MonoBehaviour
     private bool petFriendly;
     private bool separateRestroom;
     private string descriptionText;
-    private string name;
+    private string placeName;
     private string instagramId;
     private int id = -1;
     private string username;
@@ -63,6 +63,25 @@ public class DoubleTap3D : MonoBehaviour
     // iOS 캐싱 시스템
     private Dictionary<int, byte[]> cachedImageData = new Dictionary<int, byte[]>();
     private bool imagesAreCached = false;
+    private bool isCooldown = false; // 더블탭 쿨다운
+    private bool canClose = true; // 닫기 방지 쿨다운
+
+    [Header("Comment Preview")]
+    public GameObject commentPreviewPanel;
+    public Text previewText;
+    public Text previewLikeCount;
+    public Image previewLikeIcon; // 좋아요 아이콘 이미지
+    public Sprite likedSprite;    // 좋아요 있을 때 (채워진 하트)
+    public Sprite unlikedSprite;  // 좋아요 없을 때 (빈 하트 등)
+
+    private Dictionary<string, string> noCommentTranslations = new Dictionary<string, string>
+    {
+        { "en", "No comments yet. Be the first to comment!" },
+        { "ko", "아직 댓글이 없습니다. 첫 댓글을 남겨보세요!" },
+        { "ja", "コメントはまだありません。最初のコメントを残してください！" },
+        { "zh", "暂无评论。快来抢沙发吧！" },
+        { "es", "Aún no hay comentarios. ¡Sé el primero en comentar!" }
+    };
 
     public static event Action<DoubleTap3D> OnDoubleTapEvent;
 
@@ -81,6 +100,20 @@ public class DoubleTap3D : MonoBehaviour
         {
             enabled = false;
             return;
+        }
+
+        // 코멘트 프리뷰 UI 자동 생성 (없을 경우)
+        if (commentPreviewPanel == null && fullscreenCanvasGroup != null)
+        {
+            CreateCommentPreviewUI();
+        }
+        // UI는 있는데 텍스트 참조가 빠진 경우 자동 연결
+        else if (commentPreviewPanel != null)
+        {
+            if (previewText == null) 
+                previewText = commentPreviewPanel.transform.Find("PreviewText")?.GetComponent<Text>();
+            if (previewLikeCount == null) 
+                previewLikeCount = commentPreviewPanel.transform.Find("PreviewLike")?.GetComponent<Text>();
         }
 
         currentImageRect = fullscreenImage.GetComponent<RectTransform>();
@@ -282,6 +315,9 @@ public class DoubleTap3D : MonoBehaviour
 
     void Update()
     {
+        // 댓글창이 열려있으면 DoubleTap3D 스와이프 동작 중지
+        if (CommentManager.Instance != null && CommentManager.Instance.IsPanelOpen) return;
+
         if (Touch.activeTouches.Count == 1 && Time.timeSinceLevelLoad > 2f)
         {
             var touch = Touch.activeTouches[0];
@@ -339,12 +375,25 @@ public class DoubleTap3D : MonoBehaviour
                         currentImageRect.anchoredPosition = imageTargetPos + new Vector2(dragX, 0);
                     }
                 }
-                else if (swipeDelta.y < -swipeThreshold)
+                else
                 {
-                    // 아래로 스와이프 - 패널 닫기
-                    CloseFullscreen();
-                    isSwiping = false;
-                    isDragging = false;
+                    // 수직 스와이프 감지
+                    if (swipeDelta.y > swipeThreshold)
+                    {
+                        // 위로 스와이프 -> 댓글창 열기
+                        if (CommentManager.Instance != null)
+                        {
+                            CommentManager.Instance.OpenCommentPanel(this.id, this.placeName);
+                            isSwiping = false; // 스와이프 종료 처리
+                        }
+                    }
+                    else if (swipeDelta.y < -swipeThreshold)
+                    {
+                        // 아래로 스와이프 -> 패널 닫기 (기존 로직)
+                        CloseFullscreen();
+                        isSwiping = false;
+                        isDragging = false;
+                    }
                 }
             }
             else if (touch.phase == TouchPhase.Ended && isFullscreen)
@@ -383,14 +432,81 @@ public class DoubleTap3D : MonoBehaviour
         }
     }
 
+    private void CreateCommentPreviewUI()
+    {
+        // Panel
+        GameObject panelObj = new GameObject("CommentPreviewPanel");
+        panelObj.transform.SetParent(fullscreenCanvasGroup.transform, false);
+        commentPreviewPanel = panelObj;
+        
+        RectTransform panelRect = panelObj.AddComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0, 0); // Bottom stretch
+        panelRect.anchorMax = new Vector2(1, 0);
+        panelRect.pivot = new Vector2(0.5f, 0);
+        panelRect.sizeDelta = new Vector2(0, 80);
+        panelRect.anchoredPosition = new Vector2(0, 100); // Slightly above bottom (above close button)
+
+        Image panelImg = panelObj.AddComponent<Image>();
+        panelImg.color = new Color(0, 0, 0, 0.5f); // Semi-transparent black
+
+        // Button for click interaction
+        Button panelBtn = panelObj.AddComponent<Button>();
+        panelBtn.onClick.AddListener(() => {
+            if (CommentManager.Instance != null)
+            {
+                CommentManager.Instance.OpenCommentPanel(this.id);
+            }
+        });
+
+        // Text
+        GameObject textObj = new GameObject("PreviewText");
+        textObj.transform.SetParent(panelObj.transform, false);
+        previewText = textObj.AddComponent<Text>();
+        previewText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        previewText.fontSize = 24; // Larger text
+        previewText.color = Color.white;
+        previewText.alignment = TextAnchor.MiddleLeft;
+        previewText.resizeTextForBestFit = true;
+        
+        RectTransform textRect = textObj.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(20, 0);
+        textRect.offsetMax = new Vector2(-80, 0); // Space for likes
+
+        // Like Count
+        GameObject likeObj = new GameObject("PreviewLike");
+        likeObj.transform.SetParent(panelObj.transform, false);
+        previewLikeCount = likeObj.AddComponent<Text>();
+        previewLikeCount.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        previewLikeCount.fontSize = 20;
+        previewLikeCount.color = Color.red; // Heart color hint
+        previewLikeCount.alignment = TextAnchor.MiddleRight;
+        
+        RectTransform likeRect = likeObj.GetComponent<RectTransform>();
+        likeRect.anchorMin = new Vector2(1, 0);
+        likeRect.anchorMax = new Vector2(1, 1);
+        likeRect.offsetMin = new Vector2(-80, 0);
+        likeRect.offsetMax = new Vector2(-20, 0);
+    }
+
     private void OnDoubleTapCube()
     {
+        if (isCooldown) return; // 쿨다운 중이면 무시
+
+        isCooldown = true;
+        StartCoroutine(ResetCooldown());
+
         OnDoubleTapEvent?.Invoke(this);
 
         isFullscreen = !isFullscreen;
 
         if (isFullscreen)
         {
+            // 열릴 때 닫기 방지 쿨다운 시작
+            canClose = false;
+            StartCoroutine(EnableCloseAfterDelay());
+
             // 풀스크린 열 때 이미지 캐싱 (iOS 대비)
 #if UNITY_IOS
             CacheImagesForFullscreen();
@@ -414,11 +530,67 @@ public class DoubleTap3D : MonoBehaviour
             previousButton.onClick.AddListener(ShowPreviousImage);
 
             StartCoroutine(FadeInCanvas(fadeDuration));
+
+            // ⭐ 코멘트 프리뷰 업데이트
+            if (CommentManager.Instance != null)
+            {
+                if (commentPreviewPanel != null) commentPreviewPanel.SetActive(true);
+                
+                CommentManager.Instance.GetBestComment(this.id, (data) => 
+                {
+                    if (previewText != null)
+                    {
+                        if (data != null)
+                        {
+                            string content = data.content;
+                            if (content.Length > 40)
+                            {
+                                content = content.Substring(0, 40) + "... 더보기";
+                            }
+                            // 콜론 제거, 띄어쓰기 추가
+                            previewText.text = $"<b>{data.username}</b>  {content}";
+                            
+                            // 좋아요 아이콘/숫자 처리
+                            if (previewLikeCount != null) previewLikeCount.text = data.like_count.ToString();
+                            
+                            if (previewLikeIcon != null)
+                            {
+                                previewLikeIcon.sprite = (data.like_count > 0) ? likedSprite : unlikedSprite;
+                                previewLikeIcon.gameObject.SetActive(true);
+                            }
+                        }
+                        else
+                        {
+                            previewText.text = "아직 댓글이 없습니다. 첫 댓글을 남겨보세요!";
+                            if (previewLikeCount != null) previewLikeCount.text = "";
+                            if (previewLikeIcon != null) previewLikeIcon.gameObject.SetActive(false); // 댓글 없으면 아이콘 숨김
+                        }
+                    }
+                });
+            }
         }
         else
         {
+            // 닫기 시도: 쿨다운 중이면 닫지 않음
+            if (!canClose)
+            {
+                isFullscreen = true; // 상태 복구
+                return;
+            }
             CloseFullscreen();
         }
+    }
+
+    IEnumerator ResetCooldown()
+    {
+        yield return new WaitForSeconds(0.5f); // 입력 쿨다운은 조금 짧게
+        isCooldown = false;
+    }
+
+    IEnumerator EnableCloseAfterDelay()
+    {
+        yield return new WaitForSeconds(1f); // 1초 동안 닫기 방지
+        canClose = true;
     }
 
     public void ShowNextImage()
@@ -540,7 +712,7 @@ public class DoubleTap3D : MonoBehaviour
         this.petFriendly = petFriendly;
         this.separateRestroom = separateRestroom;
         this.descriptionText = description;
-        this.name = name;
+        this.placeName = name;
         this.id = id;
         this.username = username;
         this.instagramId = instagramId;
@@ -565,8 +737,8 @@ public class DoubleTap3D : MonoBehaviour
 
         instagramButton.gameObject.SetActive(!string.IsNullOrEmpty(instagramId));
 
-        nameText.gameObject.SetActive(!string.IsNullOrEmpty(name) && isFullscreen);
-        if (!string.IsNullOrEmpty(name)) nameText.text = name;
+        nameText.gameObject.SetActive(!string.IsNullOrEmpty(placeName) && isFullscreen);
+        if (!string.IsNullOrEmpty(placeName)) nameText.text = placeName;
 
         if (descriptionTextUI != null)
         {
@@ -691,10 +863,7 @@ public class DoubleTap3D : MonoBehaviour
         return id;
     }
     public string GetUsername() => username;
-    public string GetName() => name;
-    public bool IsPetFriendly() => petFriendly;
-    public bool IsSeparateRestroom() => separateRestroom;
-    public string GetInstagramId() => instagramId;
+    public string GetName() => placeName;
 
     public void ResetData()
     {
@@ -703,7 +872,7 @@ public class DoubleTap3D : MonoBehaviour
         petFriendly = false;
         separateRestroom = false;
         descriptionText = null;
-        name = null;
+        placeName = null;
         id = -1;
         username = null;
         instagramId = null;

@@ -1,4 +1,5 @@
-﻿using System.Collections;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,16 +9,19 @@ public class PlaceListManager : MonoBehaviour
 {
     public DataManager dataManager;
     public TourAPIManager tourAPIManager;
+    
+    [Header("New Public Data Managers")]
+    public BusStationManager busManager;
+    public TerminalManager terminalManager;
+    public TrainStationManager trainManager;
+    public SubwayManager subwayManager;
+
     public Text listText;
 
     [Header("UI Update Settings")]
-    [Tooltip("ListPanel 게임오브젝트 참조 (활성화 상태 체크용)")]
     [SerializeField] private GameObject listPanel;
-
-    [Tooltip("PlaceList 스켈레톤 로더 (옵션)")]
     [SerializeField] private PlaceListSkeletonLoader skeletonLoader;
-
-    [SerializeField] private float updateInterval = 10f; // 10초로 변경
+    [SerializeField] private float updateInterval = 10f;
 
     [Header("Distance Control")]
     [SerializeField] private Slider distanceSlider;
@@ -25,430 +29,193 @@ public class PlaceListManager : MonoBehaviour
     private float maxDisplayDistance;
 
     private List<(object place, float distance, string id, string displayText, string colorHex)> combinedPlaces = new List<(object, float, string, string, string)>();
+    
+    // Stats
     private int woopangCount;
     private int tourAPICount;
+    private int publicTransportCount;
 
-    // 필터 설정 - 기본값: 전체 선택
     private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
     {
-        { "woopangData", true },  // 우팡 데이터
-        { "petFriendly", true },  // 애견동반
-        { "publicData", true },   // 공공데이터
-        { "subway", true },       // 지하철
-        { "bus", true },          // 버스
-        { "alcohol", true }       // 주류
+        { "woopangData", true },
+        { "petFriendly", true },
+        { "publicData", true },
+        { "subway", true },
+        { "bus", true },
+        { "alcohol", true }
     };
 
-    // 언어별 텍스트 템플릿
     private Dictionary<string, Dictionary<string, string>> languageTexts = new Dictionary<string, Dictionary<string, string>>
     {
         { "en", new Dictionary<string, string> {
-            { "petFriendly", "[PetFriendly]" },
-            { "noImage", "[No Image]" },
-            { "woopangData", "WOOPANG DATA" },
-            { "tourApiData", "TourAPI DATA" }
+            { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
+            { "woopangData", "WOOPANG DATA" }, { "tourApiData", "TourAPI DATA" },
+            { "transportData", "TRANSPORT DATA" }
         }},
         { "ko", new Dictionary<string, string> {
-            { "petFriendly", "[애견동반]" },
-            { "noImage", "[이미지없음]" },
-            { "woopangData", "우팡 데이터" },
-            { "tourApiData", "관광공사 데이터" }
-        }},
-        { "ja", new Dictionary<string, string> {
-            { "petFriendly", "[ペット同伴]" },
-            { "noImage", "[画像なし]" },
-            { "woopangData", "WOOPANGデータ" },
-            { "tourApiData", "観光APIデータ" }
-        }},
-        { "zh", new Dictionary<string, string> {
-            { "petFriendly", "[宠物友好]" },
-            { "noImage", "[无图片]" },
-            { "woopangData", "WOOPANG数据" },
-            { "tourApiData", "旅游API数据" }
-        }},
-        { "es", new Dictionary<string, string> {
-            { "petFriendly", "[AdmiteMascotas]" },
-            { "noImage", "[SinImagen]" },
-            { "woopangData", "DATOS WOOPANG" },
-            { "tourApiData", "DATOS TourAPI" }
+            { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
+            { "woopangData", "우팡 데이터" }, { "tourApiData", "관광공사 데이터" },
+            { "transportData", "대중교통 데이터" }
         }}
     };
 
     void Start()
     {
-
-        if (listText == null)
-        {
-        }
-        if (dataManager == null)
-        {
-        }
-        if (tourAPIManager == null)
-        {
-        }
-
-        if (listText == null || dataManager == null || tourAPIManager == null)
-        {
-            return;
-        }
-
-        // 슬라이더 초기화
-        if (distanceSlider != null)
         if (distanceSlider != null)
         {
             distanceSlider.minValue = 100f;
-            distanceSlider.maxValue = 10000f; // 최대 10km
-            
-            // 저장된 값 불러오기 (기본값 5000)
+            distanceSlider.maxValue = 10000f;
             float savedDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
             maxDisplayDistance = savedDistance;
             distanceSlider.value = savedDistance;
-            
             distanceSlider.onValueChanged.AddListener(OnDistanceSliderChanged);
             UpdateDistanceValueText();
-            
-            // 초기값으로 필터 즉시 적용
-            if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, 0, 0); // 위치는 나중에 업데이트됨
-            if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, 0, 0);
-            
         }
 
         StartCoroutine(InitializeAndUpdateUI());
     }
 
-    void OnEnable()
-    {
-        // ListPanel이 활성화될 때마다 즉시 UI 업데이트
-        if (dataManager != null && dataManager.IsDataLoaded() &&
-            tourAPIManager != null && tourAPIManager.IsDataLoaded())
-        {
-            UpdateUI();
-        }
-    }
-
-    private string GetLanguageCode()
-    {
-        switch (Application.systemLanguage)
-        {
-            case SystemLanguage.Korean:
-                return "ko";
-            case SystemLanguage.Japanese:
-                return "ja";
-            case SystemLanguage.Chinese:
-            case SystemLanguage.ChineseSimplified:
-            case SystemLanguage.ChineseTraditional:
-                return "zh";
-            case SystemLanguage.Spanish:
-                return "es";
-            case SystemLanguage.English:
-            default:
-                return "en";
-        }
-    }
-
     private string GetLocalizedText(string key)
     {
-        string languageCode = GetLanguageCode();
-        if (languageTexts.ContainsKey(languageCode) && languageTexts[languageCode].ContainsKey(key))
-        {
-            return languageTexts[languageCode][key];
-        }
-        return languageTexts["en"][key]; // 기본값으로 영어 반환
+        string lang = Application.systemLanguage == SystemLanguage.Korean ? "ko" : "en";
+        return languageTexts[lang].ContainsKey(key) ? languageTexts[lang][key] : key;
     }
 
     private IEnumerator InitializeAndUpdateUI()
     {
-        // 스켈레톤 로더 시작
-        if (skeletonLoader != null)
-        {
-            skeletonLoader.ShowSkeletonLoader();
-            Debug.Log("[WoopangDebug][PlaceListManager] 스켈레톤 로더 시작");
-        }
+        if (skeletonLoader != null) skeletonLoader.ShowSkeletonLoader();
+        
+        // Wait for data (Simplified check)
+        yield return new WaitForSeconds(2f);
 
-        float waitTime = 0f;
-
-        while ((dataManager != null && !dataManager.IsDataLoaded() && dataManager.GetPlaceDataMap().Count == 0) ||
-               (tourAPIManager != null && !tourAPIManager.IsDataLoaded() && tourAPIManager.GetPlaceDataMap().Count == 0))
-        {
-            waitTime += 1f;
-            yield return new WaitForSeconds(1f);
-
-            if (waitTime >= 30f)
-            {
-                break;
-            }
-        }
-
-        // 스켈레톤 로더 종료 및 텍스트 표시
-        if (skeletonLoader != null)
-        {
-            skeletonLoader.HideSkeletonAndShowText();
-            Debug.Log("[WoopangDebug][PlaceListManager] 스켈레톤 로더 종료");
-        }
-
+        if (skeletonLoader != null) skeletonLoader.HideSkeletonAndShowText();
         UpdateUI();
         StartCoroutine(UpdateUIPeriodically());
     }
 
     private IEnumerator UpdateUIPeriodically()
     {
-        float startTime = Time.time;
-        
         while (true)
         {
-            // 처음 1분(60초) 동안은 1초 간격, 그 이후는 설정된 간격(10초)
-            float currentInterval = (Time.time - startTime < 60f) ? 1f : updateInterval;
-            
-            yield return new WaitForSeconds(currentInterval);
-
-            // ListPanel이 활성화되어 있을 때만 업데이트
-            if (listPanel != null && listPanel.activeInHierarchy)
-            {
-                UpdateUI();
-            }
+            yield return new WaitForSeconds(updateInterval);
+            if (listPanel != null && listPanel.activeInHierarchy) UpdateUI();
         }
     }
 
     private Coroutine updateUICoroutine;
-    private List<PlaceData> pendingWoopangPlaces = new List<PlaceData>();
-    private float currentMaxRadius = 0f;
-    private int lastDisplayedCount = 0; // 마지막으로 표시된 항목 수 추적
-
-    /// <summary>
-    /// DataManager에서 Tier별로 호출하는 메서드
-    /// </summary>
-    public void UpdateUIForTier(int tierIndex, float radius)
-    {
-        Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIForTier 호출 - Tier {tierIndex}, 반경 {radius}m");
-
-        currentMaxRadius = radius;
-
-        // 기존 코루틴 중단하지 않고 계속 누적
-        if (updateUICoroutine == null)
-        {
-            updateUICoroutine = StartCoroutine(UpdateUIWithFadeIn());
-        }
-    }
 
     private void UpdateUI()
     {
-        // 기존 업데이트 코루틴 중단
-        if (updateUICoroutine != null)
-        {
-            StopCoroutine(updateUICoroutine);
-        }
-
+        if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
         updateUICoroutine = StartCoroutine(UpdateUIWithFadeIn());
     }
 
     private IEnumerator UpdateUIWithFadeIn()
     {
-        Debug.Log("[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 시작");
-
-        float latitude, longitude;
-
+        float lat = 36.6361f; float lon = 126.8280f; // Default fallback
 #if UNITY_EDITOR
-        // 에디터 시뮬레이션 좌표
-        latitude = 36.6361f;
-        longitude = 126.8280f;
-#else
-        if (Input.location.status == LocationServiceStatus.Running)
-        {
-            LocationInfo currentLocation = Input.location.lastData;
-            latitude = currentLocation.latitude;
-            longitude = currentLocation.longitude;
+        // 에디터에서는 VirtualLocation 사용
+        if (VirtualLocation.Instance != null) {
+            lat = VirtualLocation.Instance.Latitude;
+            lon = VirtualLocation.Instance.Longitude;
         }
-        else
-        {
-            latitude = 37.5665f;
-            longitude = 126.9780f;
+#else
+        if (Input.location.status == LocationServiceStatus.Running) {
+            lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude;
         }
 #endif
 
-        var woopangPlaces = dataManager != null ? dataManager.GetPlaceDataMap().Values.ToList() : new List<PlaceData>();
-        var tourPlaces = tourAPIManager != null ? tourAPIManager.GetPlaceDataMap().Values.ToList() : new List<TourPlaceData>();
-
-        // 디버깅: 원본 데이터 확인 (삭제)
-        // Debug.Log($"[PlaceListManager] 원본 데이터 개수 - 우팡: {woopangPlaces.Count}, 투어: {tourPlaces.Count}");
-        
-        woopangCount = 0; // 필터링된 개수 초기화
-        tourAPICount = 0; // 필터링된 개수 초기화
-
-        // 리스트 텍스트 초기화 (UI상에서는 나중에 반영)
-        // if (listText != null) listText.text = ""; // 깜빡임 방지를 위해 바로 비우지 않음
-
         combinedPlaces.Clear();
+        woopangCount = 0; tourAPICount = 0; publicTransportCount = 0;
 
-        // 🔧 우팡데이터 필터 체크 추가
-        bool showWoopangData = activeFilters.ContainsKey("woopangData") && activeFilters["woopangData"];
-        bool showPetFriendly = activeFilters.ContainsKey("petFriendly") && activeFilters["petFriendly"];
-        bool showAlcohol = activeFilters.ContainsKey("alcohol") && activeFilters["alcohol"];
-        bool showPublicData = activeFilters.ContainsKey("publicData") && activeFilters["publicData"];
+        bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
+        bool petFriendlyAll = activeFilters.GetValueOrDefault("petFriendlyAll", true);
+        bool noPetFriendly = activeFilters.GetValueOrDefault("noPetFriendly", false);
+        bool showPublic = activeFilters.GetValueOrDefault("publicData", true);
+        bool showSubway = activeFilters.GetValueOrDefault("subway", true);
+        bool showTrain = activeFilters.GetValueOrDefault("train", true);
+        bool showTerminal = activeFilters.GetValueOrDefault("terminal", true);
 
+        // 1. Woopang Data
+        if (dataManager != null) {
+            foreach(var p in dataManager.GetPlaceDataMap().Values) {
+                // 애견동반 필터 적용
+                if (petFriendlyOnly && !p.pet_friendly) continue; // 애견동반만 (노란색)
+                if (noPetFriendly && p.pet_friendly) continue;     // 애견동반 아닌곳만 (체크해제)
+                // petFriendlyAll일 경우 모두 표시 (흰색)
 
-        // 디버깅: 원본 데이터 확인 (삭제)
-        // string allNames = string.Join(", ", woopangPlaces.Select(p => p != null ? p.name : "null"));
-        // Debug.Log($"[PlaceListManager] 전체 데이터 목록: {allNames}");
-
-        if (showWoopangData)
-        {
-            for (int i = 0; i < woopangPlaces.Count; i++)
-            {
-                var place = woopangPlaces[i];
-                try
-                {
-                    if (place == null) continue;
-
-                    // 애견동반 필터 체크
-                    if (place.pet_friendly && !showPetFriendly) continue;
-
-                    // 주류 판매 필터 체크
-                    if (place.alcohol_available && !showAlcohol) continue;
-
-                    float distance = CalculateDistance(latitude, longitude, place.latitude, place.longitude);
-                    
-                    // 거리 필터 적용
-                    if (distance > maxDisplayDistance) continue;
-
-                    woopangCount++; // 필터 통과한 개수 증가
-
-                    string distanceText = $"{Mathf.FloorToInt(distance)}m";
-                    string displayText = place.pet_friendly
-                        ? $"{place.name} - {distanceText} {GetLocalizedText("petFriendly")}"
-                        : $"{place.name} - {distanceText}";
-                    string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-                    
-                    // 디버깅: 리스트 추가 전 확인 (삭제)
-                    // Debug.Log($"[PlaceListManager] 리스트 추가: {place.name} (ID: {place.id}), 현재 개수: {combinedPlaces.Count + 1}");
-                    
-                    combinedPlaces.Add((place, distance, place.id.ToString(), displayText, colorHex));
-                }
-                catch (System.Exception)
-                {
-                    // 예외 무시 (프로덕션 환경)
+                float d = CalculateDistance(lat, lon, p.latitude, p.longitude);
+                if (d <= maxDisplayDistance) {
+                    woopangCount++;
+                    combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", p.color));
                 }
             }
         }
-        else
-        {
-        }
 
-        // 공공데이터(TourAPI) 필터 체크
-        if (showPublicData)
-        {
-            foreach (var place in tourPlaces)
-            {
-                // 애견동반 필터 체크 (TourAPI는 모두 애견동반)
-                if (!showPetFriendly)
-                {
-                    continue;
+        // 2. TourAPI
+        if (showPublic && tourAPIManager != null) {
+            foreach(var p in tourAPIManager.GetPlaceDataMap().Values) {
+                float d = CalculateDistance(lat, lon, p.mapy, p.mapx);
+                if (d <= maxDisplayDistance) {
+                    tourAPICount++;
+                    combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
                 }
-
-                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
-                
-                // 거리 필터 적용
-                if (distance > maxDisplayDistance) continue;
-
-                tourAPICount++; // 필터 통과한 개수 증가
-
-                string distanceText = $"{Mathf.FloorToInt(distance)}m";
-                string displayText = string.IsNullOrEmpty(place.firstimage)
-                    ? $"{place.title} - {distanceText} {GetLocalizedText("noImage")} {GetLocalizedText("petFriendly")}"
-                    : $"{place.title} - {distanceText} {GetLocalizedText("petFriendly")}";
-                string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-                combinedPlaces.Add((place, distance, place.contentid, displayText, colorHex));
             }
         }
-        else
-        {
-        }
 
-        // 거리순 정렬 (가까운 순)
+        // 3. New Public Transport Managers
+        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon);
+        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon);
+        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon);
+
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
 
-        Debug.Log($"[WoopangDebug][PlaceListManager] 정렬 완료 - 총 {combinedPlaces.Count}개 항목");
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        foreach (var item in combinedPlaces) {
+            string color = string.IsNullOrEmpty(item.colorHex) ? "FFFFFF" : item.colorHex;
+            sb.Append($"<color=#{color}>{item.displayText}</color>\n");
+        }
 
-        // ⭐ 리스트 재구성 (증분 업데이트 로직 제거하고 전체 다시 그리기)
-        System.Text.StringBuilder textBuilder = new System.Text.StringBuilder();
+        sb.Append($"\n{GetLocalizedText("woopangData")}: {woopangCount}");
+        sb.Append($"\n{GetLocalizedText("tourApiData")}: {tourAPICount}");
+        sb.Append($"\n{GetLocalizedText("transportData")}: {publicTransportCount}");
 
-        for (int i = 0; i < combinedPlaces.Count; i++)
-        {
-            var (place, distance, id, displayText, colorHex) = combinedPlaces[i];
+        if (listText != null) listText.text = sb.ToString();
+        yield return null;
+    }
 
-            string coloredText = $"<color=#{colorHex}>{displayText}</color>\n";
-            textBuilder.Append(coloredText);
+    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon) where T : MonoBehaviour
+    {
+        if (!filter || manager == null) return;
 
-            // 디버깅: 추가되는 항목 확인
-            // Debug.Log($"[WoopangDebug][PlaceListManager] 항목 추가: {displayText} (거리: {distance}m)");
+        // Use reflection to get data map generically as they use different data types
+        var method = manager.GetType().GetMethod("GetPlaceDataMap");
+        if (method == null) return;
 
-            // UI에 즉시 반영 (페이드인 효과 시뮬레이션)
-            if (listText != null)
-            {
-                listText.text = textBuilder.ToString();
+        var dataMap = method.Invoke(manager, null) as IDictionary;
+        if (dataMap == null) return;
+
+        foreach (var val in dataMap.Values) {
+            // FacilityData uses different property names
+            var latProp = val.GetType().GetProperty("latitude");
+            var lonProp = val.GetType().GetProperty("longitude");
+            var nameProp = val.GetType().GetProperty("name");
+            var typeProp = val.GetType().GetProperty("type");
+
+            if (latProp == null || lonProp == null || nameProp == null) continue;
+
+            float pLat = Convert.ToSingle(latProp.GetValue(val));
+            float pLon = Convert.ToSingle(lonProp.GetValue(val));
+            string pName = (string)nameProp.GetValue(val);
+            string pType = typeProp != null ? (string)typeProp.GetValue(val) : "unknown";
+            string pId = $"{pType}_{pName}";
+
+            float d = CalculateDistance(lat, lon, pLat, pLon);
+            if (d <= maxDisplayDistance) {
+                count++;
+                combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", "00FF00")); // Green
             }
-
-            // 너무 느려지지 않게 0.05초로 단축 -> 제거 (코루틴 중단 방지)
-            // yield return new WaitForSeconds(0.05f);
         }
-
-        // 통계 정보 추가 (항상 마지막에)
-        string statsText = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}";
-        
-        if (listText != null)
-        {
-            listText.text = textBuilder.ToString() + statsText;
-        }
-
-        // ⭐ 표시된 항목 수 업데이트
-        lastDisplayedCount = combinedPlaces.Count;
-
-        /*
-        if (listText != null)
-        {
-            Debug.Log($"[WoopangDebug][PlaceListManager] UI 텍스트 업데이트 완료. 텍스트 길이: {listText.text.Length}, 내용(일부): {listText.text.Substring(0, Mathf.Min(listText.text.Length, 50))}...");
-        }
-
-        Debug.Log($"[WoopangDebug][PlaceListManager] UpdateUIWithFadeIn 완료 - 총 {combinedPlaces.Count}개 (lastDisplayedCount: {lastDisplayedCount})");
-        */
-
-        Canvas.ForceUpdateCanvases();
-        if (listText != null)
-        {
-            RectTransform contentRect = listText.GetComponentInParent<RectTransform>();
-            ScrollRect scrollRect = listText.GetComponentInParent<ScrollRect>();
-        }
-        
-        yield return null; // 코루틴 반환값 보장
-    }
-
-    public List<(object place, float distance, string id, string displayText, string colorHex)> GetCombinedPlaces()
-    {
-        return combinedPlaces;
-    }
-
-    public int GetWoopangCount()
-    {
-        return woopangCount;
-    }
-
-    public int GetTourAPICount()
-    {
-        return tourAPICount;
-    }
-
-    public int GetTotalCount()
-    {
-        return combinedPlaces.Count;
-    }
-
-    public int GetWoopangObjectCount()
-    {
-        return dataManager != null ? dataManager.GetSpawnedObjectsCount() : 0;
-    }
-
-    public int GetTourAPIObjectCount()
-    {
-        return tourAPIManager != null ? tourAPIManager.GetSpawnedObjectsCount() : 0;
     }
 
     private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
@@ -459,41 +226,41 @@ public class PlaceListManager : MonoBehaviour
         float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) +
                   Mathf.Cos(Mathf.Deg2Rad * (lat1)) * Mathf.Cos(Mathf.Deg2Rad * (lat2)) *
                   Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
-        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
-        return R * c;
+        return R * 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
     }
 
-    // FilterManager에서 호출하는 메서드
-    public void ApplyFilters(Dictionary<string, bool> filters)
-    {
+    public void ApplyFilters(Dictionary<string, bool> filters) {
         activeFilters = filters;
-        lastDisplayedCount = 0; // ⭐ 필터 변경 시 리셋
-        UpdateUI(); // UI 즉시 업데이트
+        UpdateUI();
     }
 
-    private void OnDistanceSliderChanged(float value)
-    {
+    private void OnDistanceSliderChanged(float value) {
         maxDisplayDistance = value;
-        PlayerPrefs.SetFloat("MaxDisplayDistance", value); // 값 저장
-        PlayerPrefs.Save();
-
+        PlayerPrefs.SetFloat("MaxDisplayDistance", value);
         UpdateDistanceValueText();
-        lastDisplayedCount = 0; // ⭐ 거리 필터 변경 시 리셋
-        UpdateUI(); // 리스트 갱신 및 AR 오브젝트 제어
-        
-        // AR 오브젝트에도 거리 필터 적용
-        if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, Input.location.lastData.latitude, Input.location.lastData.longitude);
-        if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, Input.location.lastData.latitude, Input.location.lastData.longitude);
+        UpdateUI();
+
+        // Propagate distance filter to all managers
+        float lat = 36.6361f; float lon = 126.8280f;
+#if UNITY_EDITOR
+        // 에디터에서는 VirtualLocation 사용
+        if (VirtualLocation.Instance != null) {
+            lat = VirtualLocation.Instance.Latitude;
+            lon = VirtualLocation.Instance.Longitude;
+        }
+#else
+        lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude;
+#endif
+        if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (busManager != null) busManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (terminalManager != null) terminalManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (trainManager != null) trainManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (subwayManager != null) subwayManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
     }
 
-    private void UpdateDistanceValueText()
-    {
+    private void UpdateDistanceValueText() {
         if (distanceValueText != null)
-        {
-            if (maxDisplayDistance >= 1000f)
-                distanceValueText.text = $"{(maxDisplayDistance / 1000f):F1}km";
-            else
-                distanceValueText.text = $"{Mathf.RoundToInt(maxDisplayDistance)}m";
-        }
+            distanceValueText.text = maxDisplayDistance >= 1000f ? $"{(maxDisplayDistance / 1000f):F1}km" : $"{Mathf.RoundToInt(maxDisplayDistance)}m";
     }
 }

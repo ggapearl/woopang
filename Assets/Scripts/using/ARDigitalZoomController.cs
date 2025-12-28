@@ -75,8 +75,6 @@ public class ARDigitalZoomController : MonoBehaviour
         // 기본 줌 설정
         currentZoom = defaultZoom;
         targetZoom = defaultZoom;
-
-        Debug.Log($"[ARDigitalZoomController] 초기화 완료 - 기본 Zoom: {defaultZoom}");
     }
 
     void Update()
@@ -86,7 +84,6 @@ public class ARDigitalZoomController : MonoBehaviour
         {
             baseFOV = arCamera.fieldOfView;
             isInitialized = true;
-            Debug.Log($"[ARDigitalZoomController] 기본 FOV 저장: {baseFOV}");
         }
 
         HandleTouchInput();
@@ -123,7 +120,6 @@ public class ARDigitalZoomController : MonoBehaviour
             {
                 previousTouchDistance = currentTouchDistance;
                 isPinching = true;
-                Debug.Log($"[ARDigitalZoomController] 핀치 시작 - 초기 거리: {currentTouchDistance:F0}px");
             }
             // 핀치 진행 중
             else if (previousTouchDistance > 0)
@@ -142,8 +138,6 @@ public class ARDigitalZoomController : MonoBehaviour
                 {
                     zoomIndicator.UpdateZoom(targetZoom);
                 }
-
-                Debug.Log($"[ARDigitalZoomController] Zoom: {targetZoom:F2}x (터치 거리: {currentTouchDistance:F0}px, 델타: {distanceDelta:F1}px)");
             }
         }
         // 핀치 종료
@@ -159,8 +153,6 @@ public class ARDigitalZoomController : MonoBehaviour
                 {
                     zoomIndicator.HideAfterDelay(2f);
                 }
-
-                Debug.Log("[ARDigitalZoomController] 핀치 종료");
             }
         }
 
@@ -177,8 +169,6 @@ public class ARDigitalZoomController : MonoBehaviour
                 zoomIndicator.UpdateZoom(targetZoom);
                 zoomIndicator.HideAfterDelay(2f);
             }
-
-            Debug.Log($"[ARDigitalZoomController] Editor Zoom: {targetZoom:F2}x");
         }
 #endif
     }
@@ -217,7 +207,5 @@ public class ARDigitalZoomController : MonoBehaviour
             zoomIndicator.UpdateZoom(1.0f);
             zoomIndicator.HideAfterDelay(1f);
         }
-
-        Debug.Log("[ARDigitalZoomController] 줌 초기화");
     }
 }

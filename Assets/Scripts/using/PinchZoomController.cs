@@ -43,10 +43,6 @@ public class PinchZoomController : MonoBehaviour
             {
                 Debug.LogWarning("[PinchZoomController] ZoomIndicator GameObject에 ZoomIndicator 컴포넌트가 없습니다!");
             }
-            else
-            {
-                Debug.Log("[PinchZoomController] ZoomIndicator 컴포넌트를 찾았습니다.");
-            }
         }
         // GameObject가 할당되지 않았으면 자동으로 찾기
         else
@@ -56,17 +52,11 @@ public class PinchZoomController : MonoBehaviour
             {
                 Debug.LogWarning("[PinchZoomController] ZoomIndicator를 찾을 수 없습니다. 줌 표시 기능이 비활성화됩니다.");
             }
-            else
-            {
-                Debug.Log("[PinchZoomController] ZoomIndicator를 자동으로 찾았습니다.");
-            }
         }
 
         // 기본 줌 설정
         currentZoom = defaultZoom;
         initialScale = transform.localScale;
-
-        Debug.Log($"[PinchZoomController] 초기화 완료 - 기본 Zoom: {defaultZoom}");
     }
 
     void Update()
@@ -203,7 +193,5 @@ public class PinchZoomController : MonoBehaviour
             zoomIndicator.UpdateZoom(1.0f);
             zoomIndicator.HideAfterDelay(1f);
         }
-
-        Debug.Log("[PinchZoomController] 줌 초기화");
     }
 }

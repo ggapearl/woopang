@@ -16,7 +16,7 @@ public class ScrollMechanic : MonoBehaviour, IDropHandler, IDragHandler, IBeginD
     public GameObject templateValues;
 
     [Header("Required objects")]
-    public Camera camera; //Main camera
+    public Camera mainCamera; //Main mainCamera
     public RectTransform targetCanvas; //Target canvas
 
     public RectTransform contentTarget; //Target content
@@ -266,32 +266,32 @@ public class ScrollMechanic : MonoBehaviour, IDropHandler, IDragHandler, IBeginD
                         if (contentTarget.anchoredPosition.y < 0) {
                             inertia = 0;
                             contentTarget.anchoredPosition = new Vector2(0,
-                                startPosContent + (-startPosMouse + (Input.mousePosition.y / camera.pixelHeight)
+                                startPosContent + (-startPosMouse + (Input.mousePosition.y / mainCamera.pixelHeight)
                                 * targetCanvas.sizeDelta.y) * Mathf.Clamp(1 - Mathf.Abs(contentTarget.anchoredPosition.y) /
                                    maxElastic, 0, 1));
                         } else if (contentTarget.anchoredPosition.y > contentTarget.sizeDelta.y - middle * 2) {
                             inertia = 0;
                             contentTarget.anchoredPosition = new Vector2(0,
-                                startPosContent + (-startPosMouse + (Input.mousePosition.y / camera.pixelHeight)
+                                startPosContent + (-startPosMouse + (Input.mousePosition.y / mainCamera.pixelHeight)
                                 * targetCanvas.sizeDelta.y) * Mathf.Clamp(1 - Mathf.Abs((contentTarget.sizeDelta.y - middle * 2) -
                                 contentTarget.anchoredPosition.y) /
                                    maxElastic, 0, 1));
                         } else {
-                            inertia = startPosContent + (-startPosMouse + (Input.mousePosition.y / camera.pixelHeight) * targetCanvas.sizeDelta.y) -
+                            inertia = startPosContent + (-startPosMouse + (Input.mousePosition.y / mainCamera.pixelHeight) * targetCanvas.sizeDelta.y) -
                             contentTarget.anchoredPosition.y;
                             contentTarget.anchoredPosition = new Vector2(0,
                                 startPosContent + (-startPosMouse + (Input.mousePosition.y /
-                                camera.pixelHeight) * targetCanvas.sizeDelta.y));
+                                mainCamera.pixelHeight) * targetCanvas.sizeDelta.y));
                         }
 
-                        startPosMouse = (Input.mousePosition.y / camera.pixelHeight) * targetCanvas.sizeDelta.y;
+                        startPosMouse = (Input.mousePosition.y / mainCamera.pixelHeight) * targetCanvas.sizeDelta.y;
                         startPosContent = contentTarget.anchoredPosition.y;
                     } else {
-                        inertia = startPosContent + (-startPosMouse + (Input.mousePosition.y / camera.pixelHeight) * targetCanvas.sizeDelta.y) -
+                        inertia = startPosContent + (-startPosMouse + (Input.mousePosition.y / mainCamera.pixelHeight) * targetCanvas.sizeDelta.y) -
                             contentTarget.anchoredPosition.y;
                         contentTarget.anchoredPosition = new Vector2(0, Mathf.Clamp(
                             startPosContent + (-startPosMouse + (Input.mousePosition.y /
-                            camera.pixelHeight) * targetCanvas.sizeDelta.y), 0, contentTarget.sizeDelta.y - middle * 2));
+                            mainCamera.pixelHeight) * targetCanvas.sizeDelta.y), 0, contentTarget.sizeDelta.y - middle * 2));
                     }
                 }
             }
@@ -303,7 +303,7 @@ public class ScrollMechanic : MonoBehaviour, IDropHandler, IDragHandler, IBeginD
                     for (int i = 0; i < (padCount + (countTotal - padCount)); i++) {
                         contentTarget.GetChild(i).GetChild(0).GetComponent<TextMeshProUGUI>().fontSize = 0;
                     }
-                    startPosMouse = (Input.mousePosition.y / camera.pixelHeight) * targetCanvas.sizeDelta.y;
+                    startPosMouse = (Input.mousePosition.y / mainCamera.pixelHeight) * targetCanvas.sizeDelta.y;
                     startPosContent = contentTarget.anchoredPosition.y;
                 } else if (contentTarget.anchoredPosition.y > contentTarget.sizeDelta.y - middle * 3) {
                     contentTarget.anchoredPosition = new Vector2(0, contentTarget.anchoredPosition.y -
@@ -314,7 +314,7 @@ public class ScrollMechanic : MonoBehaviour, IDropHandler, IDragHandler, IBeginD
                         (padCount + (countTotal - padCount)); i--) {
                         contentTarget.GetChild(i).GetChild(0).GetComponent<TextMeshProUGUI>().fontSize = 0;
                     }
-                    startPosMouse = (Input.mousePosition.y / camera.pixelHeight) * targetCanvas.sizeDelta.y;
+                    startPosMouse = (Input.mousePosition.y / mainCamera.pixelHeight) * targetCanvas.sizeDelta.y;
                     startPosContent = contentTarget.anchoredPosition.y;
                 }
             }
@@ -367,7 +367,7 @@ public class ScrollMechanic : MonoBehaviour, IDropHandler, IDragHandler, IBeginD
 
     public void OnBeginDrag(PointerEventData eventData) {
         isDragging = true;
-        startPosMouse = (Input.mousePosition.y / camera.pixelHeight) * targetCanvas.sizeDelta.y;
+        startPosMouse = (Input.mousePosition.y / mainCamera.pixelHeight) * targetCanvas.sizeDelta.y;
         startPosContent = contentTarget.anchoredPosition.y;
     }
 

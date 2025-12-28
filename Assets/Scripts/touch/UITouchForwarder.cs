@@ -18,11 +18,7 @@ public class UITouchForwarder : MonoBehaviour, IPointerClickHandler
     {
         if (UIFeedbackManager.Instance != null)
         {
-            UIFeedbackManager.Instance.HandleTouchFeedback(customSound);
-        }
-        else
-        {
-            Debug.LogError("UIFeedbackManager Instance is null!");
+            UIFeedbackManager.Instance.HandleTouchFeedbackDirect(customSound);
         }
     }
 }

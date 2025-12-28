@@ -60,9 +60,10 @@ public class LocationManager : MonoBehaviour
     IEnumerator CheckLocationService()
     {
 #if UNITY_EDITOR
-        Debug.Log("[LocationManager] 에디터 환경 감지: 사용자 지정 좌표(36.6361, 126.8280)로 시뮬레이션합니다.");
-        float lat = 36.6361f;
-        float lon = 126.8280f;
+        // VirtualLocation이 있으면 그 좌표를, 없으면 기본 청주 좌표 사용
+        float lat = VirtualLocation.Instance != null ? VirtualLocation.Instance.Latitude : 36.6361f;
+        float lon = VirtualLocation.Instance != null ? VirtualLocation.Instance.Longitude : 126.8280f;
+        Debug.Log($"[LocationManager] 에디터 환경 감지: VirtualLocation 좌표({lat}, {lon})로 시뮬레이션합니다.");
         StartCoroutine(GetAddressFromCoordinates(lat, lon));
         if (!isRefreshing)
         {
@@ -216,9 +217,10 @@ public class LocationManager : MonoBehaviour
         {
             yield return waitRefreshInterval;
 #if UNITY_EDITOR
-            float latitude = 36.6361f;
-            float longitude = 126.8280f;
-            Debug.Log($"[LocationManager] 에디터 주기적 갱신 - Lat: {latitude}, Lon: {longitude}");
+            // VirtualLocation이 있으면 그 좌표를, 없으면 기본 청주 좌표 사용
+            float latitude = VirtualLocation.Instance != null ? VirtualLocation.Instance.Latitude : 36.6361f;
+            float longitude = VirtualLocation.Instance != null ? VirtualLocation.Instance.Longitude : 126.8280f;
+            Debug.Log($"[LocationManager] 에디터 주기적 갱신 - VirtualLocation 좌표: Lat: {latitude}, Lon: {longitude}");
             StartCoroutine(GetAddressFromCoordinates(latitude, longitude));
 #else
             if (Input.location.status == LocationServiceStatus.Running)

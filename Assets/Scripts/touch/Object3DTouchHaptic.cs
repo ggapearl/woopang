@@ -114,13 +114,13 @@ public class Object3DTouchHaptic : MonoBehaviour
             
             if (IsIndicatorRelated(hitObject))
             {
-                Debug.Log($"Indicator related object ignored: {hitObject.name}");
+                // Debug.Log($"Indicator related object ignored: {hitObject.name}");
                 continue;
             }
 
             if (hitObject.layer == 5)
             {
-                Debug.Log($"Real UI detected: {hitObject.name} - blocking touch");
+                // Debug.Log($"Real UI detected: {hitObject.name} - blocking touch");
                 return true;
             }
         }
@@ -136,7 +136,7 @@ public class Object3DTouchHaptic : MonoBehaviour
             string name = current.name;
             
             // Log for debugging
-            Debug.Log($"Checking object: {name}, Parent: {(current.parent ? current.parent.name : "null")}");
+            // Debug.Log($"Checking object: {name}, Parent: {(current.parent ? current.parent.name : "null")}");
             
             // Check for indicator related objects
             if ((name.Contains("Indicator") && !name.Contains("Button")) || 
@@ -146,14 +146,14 @@ public class Object3DTouchHaptic : MonoBehaviour
                 (name == "Text" && (current.parent?.name.Contains("Indicator") == true)) ||
                 current.GetComponent<Indicator>() != null)
             {
-                Debug.Log($"Found indicator related object: {name}");
+                // Debug.Log($"Found indicator related object: {name}");
                 return true;
             }
             
             current = current.parent;
         }
         
-        Debug.Log($"Object {obj.name} is NOT indicator related");
+        // Debug.Log($"Object {obj.name} is NOT indicator related");
         return false;
     }
 

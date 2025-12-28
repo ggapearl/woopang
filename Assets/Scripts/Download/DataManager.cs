@@ -19,7 +19,7 @@ public class DataManager : MonoBehaviour
         {
             if (instance == null)
             {
-                instance = FindObjectOfType<DataManager>();
+                instance = FindFirstObjectByType<DataManager>();
                 if (instance == null)
                 {
                     Debug.LogError("[DataManager] Instance not found in scene!");
@@ -79,6 +79,7 @@ public class DataManager : MonoBehaviour
     public float objectSpawnDelay = 0.1f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
+
     private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
@@ -130,9 +131,9 @@ public class DataManager : MonoBehaviour
     private IEnumerator StartLocationServiceAndFetchData()
     {
 #if UNITY_EDITOR
-        Debug.Log("[DataManager] 에디터 환경 감지: 위치 서비스 및 AR 세션 체크를 건너뛰고 시뮬레이션 좌표를 사용합니다. (Lat: 36.6361, Lon: 126.8280, Alt: 80)");
-        float lat = 36.6361f;
-        float lon = 126.8280f;
+        float lat = VirtualLocation.Instance.Latitude;
+        float lon = VirtualLocation.Instance.Longitude;
+        Debug.Log($"[DataManager] 에디터 환경 감지: VirtualLocation 사용 (Lat: {lat}, Lon: {lon}, Alt: 80)");
         // 고도 시뮬레이션은 API 호출 파라미터나 로직에 직접 반영해야 하지만, 
         // 현재 DataManager 구조상 lat/lon을 주로 사용하므로 로그에만 명시하고 
         // 필요한 경우 해당 변수를 참조하는 로직에서 80을 사용하도록 해야 합니다.
@@ -211,8 +212,8 @@ public class DataManager : MonoBehaviour
         {
 #if UNITY_EDITOR
             // 에디터에서는 AR 세션 추적 대기 생략
-            float lat = 36.6361f;
-            float lon = 126.8280f;
+            float lat = VirtualLocation.Instance.Latitude;
+            float lon = VirtualLocation.Instance.Longitude;
 #else
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
             
@@ -236,8 +237,8 @@ public class DataManager : MonoBehaviour
         while (true)
         {
 #if UNITY_EDITOR
-            float lat = 36.6361f;
-            float lon = 126.8280f;
+            float lat = VirtualLocation.Instance.Latitude;
+            float lon = VirtualLocation.Instance.Longitude;
 #else
             float lat = 37.5665f;
             float lon = 126.9780f;

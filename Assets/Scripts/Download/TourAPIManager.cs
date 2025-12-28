@@ -20,7 +20,7 @@ public class TourAPIManager : MonoBehaviour
         {
             if (instance == null)
             {
-                instance = FindObjectOfType<TourAPIManager>();
+                instance = FindFirstObjectByType<TourAPIManager>();
                 if (instance == null)
                 {
                     Debug.LogError("[TourAPIManager] Instance not found in scene!");
@@ -67,7 +67,7 @@ public class TourAPIManager : MonoBehaviour
     public float objectSpawnDelay = 0.1f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
-    private bool isDataLoaded = false;
+private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
 
@@ -135,6 +135,14 @@ public class TourAPIManager : MonoBehaviour
 
     private IEnumerator StartLocationServiceAndFetchData()
     {
+#if UNITY_EDITOR
+        LogDebug("[Manager] 에디터 모드: 위치 서비스 모의 (Mock)");
+        lastPosition = new Vector2(VirtualLocation.Instance.Latitude, VirtualLocation.Instance.Longitude); 
+        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
+        StartCoroutine(CheckPositionAndFetchData());
+        yield break;
+#endif
+
         LogDebug("[TourAPIManager] 위치 서비스 시작 시도");
         if (!Input.location.isEnabledByUser)
         {
@@ -165,24 +173,32 @@ public class TourAPIManager : MonoBehaviour
     {
         while (true)
         {
+            
+#if UNITY_EDITOR
+            float lat = VirtualLocation.Instance.Latitude;
+            float lon = VirtualLocation.Instance.Longitude;
+#else
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
-            LocationInfo currentLocation = Input.location.lastData;
-            yield return StartCoroutine(FetchDataProgressively(currentLocation));
+            float lat = Input.location.lastData.latitude;
+            float lon = Input.location.lastData.longitude;
+#endif
+
+            yield return StartCoroutine(FetchDataProgressively(lat, lon));
             isDataLoaded = true;
             LogDebug($"[TourAPIManager] 데이터 로드 완료, placeDataMap 크기: {placeDataMap.Count}, spawnedObjects 크기: {spawnedObjects.Count}");
             yield return waitUpdateInterval;
         }
     }
 
-    private IEnumerator FetchDataProgressively(LocationInfo currentLocation)
+    private IEnumerator FetchDataProgressively(float latitude, float longitude)
     {
         LogDebug("[TourAPIManager] Progressive Loading 시작");
         
         foreach (float radius in loadRadii)
         {
             LogDebug($"[TourAPIManager] {radius}m 반경 데이터 로딩 중...");
-            string tourApiUrl = string.Format(tourApiUrlTemplate, BASE_URL, SERVICE_KEY, currentLocation.longitude, currentLocation.latitude, radius);
-            yield return StartCoroutine(FetchDataFromTourAPI(tourApiUrl, currentLocation));
+            string tourApiUrl = string.Format(tourApiUrlTemplate, BASE_URL, SERVICE_KEY, longitude, latitude, radius);
+            yield return StartCoroutine(FetchDataFromTourAPI(tourApiUrl, latitude, longitude));
             if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
 
@@ -194,13 +210,23 @@ public class TourAPIManager : MonoBehaviour
     {
         while (true)
         {
+            
+#if UNITY_EDITOR
+            // Mock movement (static for now)
+            float lat = VirtualLocation.Instance.Latitude;
+            float lon = VirtualLocation.Instance.Longitude;
+#else
             LocationInfo currentLocation = Input.location.lastData;
-            Vector2 currentPos = new Vector2(currentLocation.latitude, currentLocation.longitude);
+            float lat = currentLocation.latitude;
+            float lon = currentLocation.longitude;
+#endif
+
+            Vector2 currentPos = new Vector2(lat, lon);
             float distanceMoved = CalculateDistance(lastPosition.x, lastPosition.y, currentPos.x, currentPos.y);
             if (distanceMoved > updateDistanceThreshold)
             {
                 LogDebug($"[TourAPIManager] {distanceMoved:F2}m 이동 감지, 데이터 갱신 시작");
-                yield return StartCoroutine(FetchDataProgressively(currentLocation));
+                yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
                 LogDebug("[TourAPIManager] 마지막 위치 갱신 완료");
             }
@@ -208,7 +234,7 @@ public class TourAPIManager : MonoBehaviour
         }
     }
 
-    private IEnumerator FetchDataFromTourAPI(string url, LocationInfo currentLocation)
+    private IEnumerator FetchDataFromTourAPI(string url, float latitude, float longitude)
     {
         LogDebug($"[TourAPIManager] 요청: {url}");
         int retryCount = 3;
@@ -224,7 +250,7 @@ public class TourAPIManager : MonoBehaviour
                 {
                     string json = request.downloadHandler.text;
                     LogDebug($"[TourAPIManager] 응답 수신 성공: {json.Length} 바이트, 상태 코드: {request.responseCode}, 응답 본문: {json.Substring(0, Mathf.Min(json.Length, 500))}...");
-                    yield return StartCoroutine(ProcessTourData(json, currentLocation));
+                    yield return StartCoroutine(ProcessTourData(json, latitude, longitude));
                     break;
                 }
                 else
@@ -240,7 +266,7 @@ public class TourAPIManager : MonoBehaviour
         }
     }
 
-    private IEnumerator ProcessTourData(string json, LocationInfo currentLocation)
+    private IEnumerator ProcessTourData(string json, float latitude, float longitude)
     {
         LogDebug("[TourAPIManager] ProcessTourData 시작");
         List<TourPlaceData> places = null;
@@ -268,8 +294,8 @@ public class TourAPIManager : MonoBehaviour
         {
             for (int j = i + 1; j < places.Count; j++)
             {
-                float distA = CalculateDistance(currentLocation.latitude, currentLocation.longitude, places[i].mapy, places[i].mapx);
-                float distB = CalculateDistance(currentLocation.latitude, currentLocation.longitude, places[j].mapy, places[j].mapx);
+                float distA = CalculateDistance(latitude, longitude, places[i].mapy, places[i].mapx);
+                float distB = CalculateDistance(latitude, longitude, places[j].mapy, places[j].mapx);
                 if (distA > distB)
                 {
                     var temp = places[i];
@@ -298,7 +324,7 @@ public class TourAPIManager : MonoBehaviour
             for (int j = i; j < endIndex; j++)
             {
                 var place = places[j];
-                float distance = CalculateDistance(currentLocation.latitude, currentLocation.longitude, place.mapy, place.mapx);
+                float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
                 place.color = "FBC15D";
                 LogDebug($"[TourAPIManager] 장소 세부 정보 요청 시작: ID={place.contentid}, Title={place.title}");
                 yield return StartCoroutine(FetchDetailImages(place));
@@ -311,7 +337,7 @@ public class TourAPIManager : MonoBehaviour
 
         foreach (TourPlaceData place in places)
         {
-            float distance = CalculateDistance(currentLocation.latitude, currentLocation.longitude, place.mapy, place.mapx);
+            float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
             LogDebug($"[TourAPIManager] 처리 중 - ID: {place.contentid}, Distance: {distance}m");
             if (!spawnedObjects.ContainsKey(place.contentid))
             {
@@ -828,15 +854,25 @@ public class TourAPIManager : MonoBehaviour
                 fetchCoroutine = null;
                 LogDebug("[TourAPIManager] 기존 fetchCoroutine 중지");
             }
+            
+#if UNITY_EDITOR
+            // Mock movement (static for now)
+            float lat = VirtualLocation.Instance.Latitude;
+            float lon = VirtualLocation.Instance.Longitude;
+#else
             LocationInfo currentLocation = Input.location.lastData;
-            fetchCoroutine = StartCoroutine(FetchDataImmediately(currentLocation));
+            float lat = currentLocation.latitude;
+            float lon = currentLocation.longitude;
+#endif
+
+            fetchCoroutine = StartCoroutine(FetchDataImmediately(lat, lon));
         }
     }
 
-    private IEnumerator FetchDataImmediately(LocationInfo currentLocation)
+    private IEnumerator FetchDataImmediately(float latitude, float longitude)
     {
         LogDebug("[TourAPIManager] FetchDataImmediately 시작");
-        yield return StartCoroutine(FetchDataProgressively(currentLocation));
+        yield return StartCoroutine(FetchDataProgressively(latitude, longitude));
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         LogDebug("[TourAPIManager] FetchDataImmediately 완료, FetchDataPeriodically 시작");
     }
