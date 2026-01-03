@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Woopang Gemini Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap');
+
+        :root {
+            --bg-start: #2b2b2b; --bg-end: #0f1c3f;
+            --user-prefix: #ff4081; --user-content: #f8bbd0;
+            --ai-text: #ececec; --accent: #4fc3f7;
+            --sidebar-width: 260px;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-start), var(--bg-end));
+            color: var(--ai-text); font-family: 'Noto Sans KR', sans-serif;
+            margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /* --- Persistent Left Sidebar --- */
+        #sidebar {
+            width: var(--sidebar-width);
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(30px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex; flex-direction: column;
+            flex-shrink: 0; z-index: 1000;
+        }
+
+        #sidebar-header {
+            padding: 25px 20px; font-size: 18px; font-weight: 700; color: var(--accent);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            letter-spacing: 1px; text-transform: uppercase;
+        }
+
+        #session-list { flex-grow: 1; overflow-y: auto; padding: 10px; }
+        .session-item {
+            padding: 14px 15px; margin-bottom: 8px; border-radius: 10px; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.2s; font-size: 14px; background: rgba(255, 255, 255, 0.03);
+        }
+        .session-item:hover { background: rgba(255, 255, 255, 0.08); }
+        .session-item.active { background: rgba(79, 195, 247, 0.2); border: 1px solid var(--accent); box-shadow: 0 0 15px rgba(79, 195, 247, 0.1); }
+        
+        .session-name { flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .session-actions { display: none; gap: 8px; }
+        .session-item:hover .session-actions { display: flex; }
+        .action-btn { background: transparent; border: none; color: #aaa; padding: 2px; cursor: pointer; font-size: 14px; }
+        .action-btn:hover { color: #fff; }
+
+        #sidebar-footer { padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        #new-chat-sidebar-btn {
+            width: 100%; padding: 12px; background: var(--accent); color: #000;
+            border: none; border-radius: 8px; font-weight: 700; cursor: pointer;
+            transition: transform 0.2s;
+        }
+        #new-chat-sidebar-btn:hover { transform: scale(1.02); background: #fff; }
+
+        /* --- Main Chat Content --- */
+        #main-container {
+            flex-grow: 1; display: flex; flex-direction: column; min-width: 0;
+        }
+
+        #header {
+            padding: 12px 20px; background: rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; font-size: 11px; z-index: 100; backdrop-filter: blur(10px);
+        }
+        #chat-title-display { font-weight: 700; color: var(--accent); margin-right: auto; font-size: 13px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #f44336; margin-right: 8px; }
+        .status-connected { background: #4af626; box-shadow: 0 0 8px #4af626; }
+
+        #terminal { flex-grow: 1; overflow-y: auto; padding: 30px; scroll-behavior: smooth; font-size: 14px; line-height: 1.6; }
+
+        /* Messages */
+        .line { margin-bottom: 18px; }
+        .user-prefix { color: var(--user-prefix); font-weight: 700; margin-right: 8px; }
+        .user-content { color: var(--user-content); font-weight: 300; }
+        .markdown-body { color: var(--ai-text); font-weight: 400; margin-bottom: 12px; }
+        .markdown-body pre { background: rgba(0,0,0,0.3); padding: 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); position: relative; margin: 15px 0; overflow-x: auto; }
+        .copy-tag { position: absolute; right: 12px; top: 12px; font-size: 11px; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 6px; cursor: pointer; color: #aaa; }
+
+        .system-msg { 
+            background: rgba(0,0,0,0.2); padding: 35px 25px; border-radius: 15px; 
+            font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 12px; 
+            white-space: pre; text-align: center; margin: 25px auto 40px auto; border: 1px solid rgba(255,255,255,0.05); 
+            line-height: 1.2; overflow-x: auto; max-width: fit-content; display: flex; flex-direction: column; align-items: center;
+        }
+
+        #worker-bar {
+            padding: 12px 25px; background: rgba(0,0,0,0.9); font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; color: var(--accent); display: none; border-top: 1px solid var(--accent);
+            position: fixed; bottom: 135px; width: calc(100% - var(--sidebar-width)); box-sizing: border-box; z-index: 50;
+        }
+
+        #input-area { background: rgba(0,0,0,0.7); padding: 20px 25px; border-top: 1px solid rgba(255,255,255,0.1); position: relative; }
+        #cmd-input { width: 100%; background: transparent; border: none; color: #fff; font-family: inherit; font-size: 14px; outline: none; resize: none; height: 60px; }
+        
+        .btn-row { display: flex; gap: 15px; align-items: center; margin-top: 12px; position: relative; }
+
+        /* Centered Model Info Group */
+        #model-info-center {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+        }
+        #model-label { font-size: 11px; color: #777; font-weight: 500; }
+        .model-btns { display: flex; gap: 6px; }
+        .model-btns button { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #999; padding: 4px 10px; font-size: 10px; border-radius: 4px; cursor: pointer; }
+        .model-btns button.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 700; }
+
+        #action-btns-right { display: flex; gap: 10px; margin-left: auto; }
+
+        button.action-main { background: #333; color: #ccc; border: 1px solid #444; padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+        button.action-main:hover { background: #444; color: #fff; }
+        button.primary-send { background: #0e639c; border: none; color: white; padding: 6px 25px; font-weight: 700; }
+        button.primary-send:hover { background: #1177bb; }
+        button.cancel-mode { background: #c62828; border: none; color: white; display: none; }
+
+        @media (max-width: 1000px) {
+            #sidebar { display: none; }
+            #worker-bar { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div id="sidebar-header">대화 목록</div>
+        <div id="session-list"></div>
+        <div id="sidebar-footer">
+            <button id="new-chat-sidebar-btn" onclick="createNewSession()">+ 새 대화 시작</button>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div id="header">
+            <div id="chat-title-display">젬민이 에이전트</div>
+            <div id="status-dot" class="status-dot"></div>
+            <div id="status-text">연결 중...</div>
+        </div>
+
+        <div id="terminal"></div>
+        <div id="worker-bar"></div>
+        <div id="input-area">
+            <textarea id="cmd-input" placeholder="메시지를 입력하세요..."></textarea>
+            <div class="btn-row">
+                <!-- Centered Model Info -->
+                <div id="model-info-center">
+                    <div id="model-label">MODEL: GEMINI-3-FLASH-PREVIEW</div>
+                    <div class="model-btns">
+                        <button id="btn-flash" onclick="changeModel('gemini-3-flash-preview')" class="active">3.0 flash</button>
+                        <button id="btn-pro" onclick="changeModel('gemini-3-pro-preview')">3.0 pro</button>
+                    </div>
+                </div>
+
+                <div id="action-btns-right">
+                    <button id="cancel-btn" class="action-main cancel-mode" onclick="cancelTask()">CANCEL</button>
+                    <button onclick="createNewSession()" class="action-main">새 대화</button>
+                    <button onclick="send()" class="action-main primary-send">SEND</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const term = document.getElementById('terminal');
+        const cmdInput = document.getElementById('cmd-input');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const workerBar = document.getElementById('worker-bar');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const sessionList = document.getElementById('session-list');
+        const chatTitleDisplay = document.getElementById('chat-title-display');
+        const modelLabel = document.getElementById('model-label');
+        const API_BASE = window.location.pathname.replace(///$/, '') + '/api'; 
+        
+        let currentSessionId = localStorage.getItem('lastSessionId') || 'default';
+        let sessions = [];
+        let lastId = -1; 
+        let fullTextCache = {}; 
+        let isWorking = false;
+        let startTime = 0; let spinnerIdx = 0; let spinnerTimer = null;
+        let currentTaskName = "Gemini is thinking...";
+        const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+        marked.setOptions({ highlight: (code) => hljs.highlightAuto(code).value, breaks: true });
+
+        async function loadSessions() {
+            try {
+                const res = await fetch(`${API_BASE}/sessions?t=${Date.now()}`);
+                sessions = await res.json();
+                renderSessionList();
+                const current = sessions.find(s => s.id === currentSessionId);
+                if (current) chatTitleDisplay.textContent = current.name;
+            } catch (e) {}
+        }
+
+        function renderSessionList() {
+            sessionList.innerHTML = '';
+            sessions.forEach(s => {
+                const div = document.createElement('div');
+                div.className = `session-item ${s.id === currentSessionId ? 'active' : ''}`;
+                div.onclick = () => switchSession(s.id);
+                div.innerHTML = `
+                    <span class="session-name">${s.name}</span>
+                    <div class="session-actions">
+                        <button class="action-btn" onclick="event.stopPropagation(); renameSession('${s.id}')">✎</button>
+                        <button class="action-btn" onclick="event.stopPropagation(); deleteSession('${s.id}')">🗑</button>
+                    </div>
+                `;
+                sessionList.appendChild(div);
+            });
+        }
+
+        async function createNewSession() {
+            const res = await fetch(`${API_BASE}/sessions`, { method: 'POST' });
+            const data = await res.json();
+            await loadSessions();
+            switchSession(data.id);
+        }
+
+        async function renameSession(id) {
+            const newName = prompt("방 이름을 입력하세요:");
+            if (!newName) return;
+            await fetch(`${API_BASE}/sessions/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) });
+            await loadSessions();
+        }
+
+        async function deleteSession(id) {
+            if (id === 'default') return alert("기본 대화방은 삭제할 수 없습니다.");
+            if (!confirm("대화방을 삭제하시겠습니까?")) return;
+            await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' });
+            if (currentSessionId === id) switchSession('default');
+            else await loadSessions();
+        }
+
+        function switchSession(id) {
+            if (currentSessionId === id) return;
+            fullTextCache[currentSessionId] = { html: term.innerHTML, lastId: lastId };
+            currentSessionId = id;
+            localStorage.setItem('lastSessionId', id);
+            const cached = fullTextCache[id];
+            if (cached) { term.innerHTML = cached.html; lastId = cached.lastId; } 
+            else { term.innerHTML = ''; lastId = -1; }
+            const session = sessions.find(s => s.id === id);
+            if (session) chatTitleDisplay.textContent = session.name;
+            renderSessionList();
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function updateStatus(running) {
+            statusDot.className = 'status-dot' + (running ? ' status-connected' : '');
+            statusText.textContent = running ? '[AGENT CONNECTED]' : '[DISCONNECTED]';
+        }
+
+        function ansiToHtml(text) {
+            const colors = { '30': 'black', '31': '#f44747', '32': '#6a9955', '33': '#d7ba7d', '34': '#569cd6', '35': '#c586c0', '36': '#4ec9b0', '37': '#d4d4d4', '90': '#808080', '91': '#ff5555', '92': '#50fa7b', '93': '#f1fa8c', '94': '#bd93f9', '95': '#ff79c6', '96': '#8be9fd', '97': '#ffffff' };
+            let result = ""; let openSpans = 0;
+            let processed = text.replace(/\u001b\[38;2;(\d+);(\d+);(\d+)m/g, (match, r, g, b) => { openSpans++; return `<span style="color:rgb(${r},${g},${b})">`; });
+            processed = processed.replace(/\u001b\[([0-9;]*)m/g, (match, p1) => {
+                const codes = p1.split(';');
+                if (codes.includes('0')) { let close = ""; while(openSpans > 0) { close += "</span>"; openSpans--; } return close; }
+                let styles = []; codes.forEach(code => { if (colors[code]) styles.push(`color:${colors[code]}`); else if (code === '1') styles.push('font-weight:bold'); });
+                if (styles.length > 0) { openSpans++; return `<span style="${styles.join(';')}">`; }
+                return "";
+            });
+            result = processed; while(openSpans > 0) { result += "</span>"; openSpans--; }
+            return result;
+        }
+
+        function render(text) {
+            const lines = text.split('\n');
+            let currentState = 'system';
+            let currentContent = "";
+
+            function flushContent() {
+                if (!currentContent.trim() && currentState !== 'system') return;
+                const div = document.createElement('div');
+                if (currentState === 'user') {
+                    div.className = 'line';
+                    div.innerHTML = `<span class="user-prefix">피디놈 ></span><span class="user-content">${currentContent.trim()}</span>`;
+                } else if (currentState === 'ai') {
+                    div.className = 'markdown-body';
+                    div.innerHTML = marked.parse(currentContent.trim());
+                    div.querySelectorAll('pre').forEach(pre => {
+                        const btn = document.createElement('span'); btn.className = 'copy-tag'; btn.textContent = 'Copy';
+                        btn.onclick = () => { navigator.clipboard.writeText(pre.innerText.replace('Copy','').trim()); };
+                        pre.appendChild(btn);
+                    });
+                } else if (currentState === 'system') {
+                    if (currentContent.trim()) {
+                        div.className = 'system-msg';
+                        div.innerHTML = ansiToHtml(currentContent);
+                    } else return;
+                }
+                term.appendChild(div);
+                currentContent = "";
+            }
+
+            lines.forEach(line => {
+                if (line.startsWith("USER_START: ")) {
+                    flushContent(); currentState = 'user';
+                    currentContent = line.replace("USER_START: ", "");
+                } else if (line.trim() === "AI_START") {
+                    flushContent(); currentState = 'ai';
+                    startSpinner();
+                } else if (line.trim() === "AI_END") {
+                    flushContent(); currentState = 'system';
+                    stopSpinner();
+                } else if (line.startsWith("TASK_START: ")) {
+                    currentTaskName = line.replace("TASK_START: ", "").trim();
+                } else {
+                    currentContent += line + "\n";
+                }
+            });
+            flushContent();
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function startSpinner() {
+            if (spinnerTimer) return;
+            isWorking = true; startTime = Date.now();
+            workerBar.style.display = 'block'; cancelBtn.style.display = 'inline-block';
+            spinnerTimer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const char = spinnerChars[spinnerIdx % spinnerChars.length];
+                workerBar.textContent = `${char} ${currentTaskName} (${elapsed}s)`;
+                spinnerIdx++;
+            }, 100);
+        }
+
+        function stopSpinner() {
+            isWorking = false; workerBar.style.display = 'none'; cancelBtn.style.display = 'none';
+            if (spinnerTimer) { clearInterval(spinnerTimer); spinnerTimer = null; }
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch(`${API_BASE}/logs?session_id=${currentSessionId}&last_id=${lastId}&t=${Date.now()}`);
+                const data = await res.json();
+                updateStatus(data.running);
+                if (data.logs && data.logs.length > 0) {
+                    let incomingText = "";
+                    data.logs.forEach(l => { incomingText += l.text; lastId = l.id; });
+                    render(incomingText);
+                }
+            } catch (e) {}
+        }
+
+        async function send() {
+            const v = cmdInput.value.trim(); if (!v) return;
+            cmdInput.value = '';
+            if (!isWorking) startSpinner();
+            await fetch(`${API_BASE}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: currentSessionId, command: v }) });
+        }
+
+        async function cancelTask() {
+            await fetch(`${API_BASE}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: currentSessionId, command: 'cancel' }) });
+        }
+
+        async function changeModel(m) {
+            modelLabel.textContent = `MODEL: ${m.toUpperCase()}`;
+            document.querySelectorAll('.model-btns button').forEach(b => b.classList.remove('active'));
+            if (m.includes('flash')) document.getElementById('btn-flash').classList.add('active');
+            else document.getElementById('btn-pro').classList.add('active');
+            await fetch(`${API_BASE}/input`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id: currentSessionId, command: `/model ${m}` }) });
+        }
+
+        document.onkeydown = (e) => {
+            if (e.key === 'Escape') cancelTask();
+            if (e.target === cmdInput && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+        };
+
+        loadSessions();
+        setInterval(poll, 1500);
+        setInterval(loadSessions, 5000);
+    </script>
+</body>
+</html>
