@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>WOOPANG VDOWN</title>
+    <link href="https://fonts.googleapis.com/css?family=Poppins:400,600,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" />
+    <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+    <style>
+        :root { --bg-gradient: linear-gradient(135deg, #1c1c1e 0%, #0f172a 50%, #1e293b 100%); --accent-pink: #ff2953; --glass-bg: rgba(255, 255, 255, 0.05); --glass-border: rgba(255, 255, 255, 0.1); }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; width: 100%; overflow: hidden; }
+
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            background: var(--bg-gradient); 
+            background-attachment: fixed; 
+            color: #ffffff; 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between; /* 상/중/하 명확한 분할 */
+            min-width: 320px;
+            min-height: 500px;
+        }    
+        
+        /* 1. 상단 영역 */
+        .header_section { 
+            height: 15vh; /* 고정 px 대신 비율 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0; 
+            z-index: 10;
+        }
+        .navbar-brand span { 
+            font-weight: 600; 
+            font-size: clamp(16px, 3vh, 28px); 
+            color: rgba(255,255,255,0.7); 
+            text-transform: uppercase; 
+            letter-spacing: 2px; 
+            background: linear-gradient(to right, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.6) 40%, #ffffff 50%, rgba(255,255,255,0.6) 60%, rgba(255,255,255,0.6) 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: logoShimmer 4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @keyframes logoShimmer { 0% { background-position: 200% 0; } 25% { background-position: -100% 0; } 100% { background-position: -100% 0; } }
+
+        .brand-char { display: inline-block; transition: all 0.3s ease; white-space: pre; } 
+        .brand-char.bounce { animation: bounce 0.6s ease-out; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); color: var(--accent-pink); } }
+
+        /* 2. 메인 영역 (완벽한 수직 중앙) */
+        .vdown_area { 
+            flex: 1; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            position: relative; 
+            padding: 0 20px;
+            width: 100%;
+            min-height: 0;
+        }
+        .pulse-bg { position: absolute; width: 45vh; height: 45vh; background: radial-gradient(circle, rgba(255, 41, 83, 0.12) 0%, transparent 70%); border-radius: 50%; z-index: 0; animation: pulse 5s ease-in-out infinite; }
+
+        .glass-card { 
+            background: var(--glass-bg); 
+            backdrop-filter: blur(25px); 
+            border: 1px solid var(--glass-border); 
+            border-radius: 20px; 
+            padding: clamp(20px, 4vh, 40px) 50px; 
+            width: 100%; 
+            max-width: min(800px, 90vw);
+            max-height: 65vh;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5); 
+            text-align: center; 
+            z-index: 50; 
+            position: relative;
+            
+            /* 모든 px 기반 transform 제거: 이제 Flexbox가 완벽한 중앙 배치 담당 */
+            transform: none; 
+        }        
+        
+        h1#mainTitle { 
+            font-weight: 700; 
+            font-size: clamp(1.8rem, 5vh, 3rem); 
+            margin-bottom: 2vh; 
+            letter-spacing: 8px; 
+            color: #fff; 
+            text-shadow: 0 0 10px rgba(255, 41, 83, 0.5); 
+            animation: shimmer 3s ease-in-out infinite; 
+        }
+        @keyframes shimmer { 0% { text-shadow: 0 0 10px rgba(255, 41, 83, 0.5); } 50% { text-shadow: 0 0 25px var(--accent-pink); } }
+
+        .format-selector { display: flex; background: rgba(0, 0, 0, 0.4); padding: 4px; border-radius: 12px; margin-bottom: 2vh; border: 1px solid var(--glass-border); }
+        .format-option { flex: 1; padding: 1vh; cursor: pointer; border-radius: 8px; font-weight: 600; transition: all 0.3s; text-transform: uppercase; color: rgba(255,255,255,0.4); font-size: 0.8rem; }
+        .format-option.active { background: #ffffff; color: #000; }
+
+        input[type="text"] { 
+            width: 100%; 
+            padding: 1.5vh 20px; 
+            background: rgba(0, 0, 0, 0.4); 
+            border: 1px solid var(--glass-border); 
+            border-radius: 12px; 
+            color: #fff; 
+            font-size: clamp(14px, 1.8vh, 18px); 
+            outline: none; 
+            margin-bottom: 2vh; 
+            transition: all 0.3s; 
+        }
+        
+        .btn-vdown { 
+            display: inline-block; 
+            min-width: 200px; 
+            padding: 1.2vh 40px; 
+            background: transparent; 
+            border: 2px solid #fff; 
+            color: #fff; 
+            font-weight: 700; 
+            font-size: clamp(14px, 2vh, 20px); 
+            text-transform: uppercase; 
+            letter-spacing: 2px; 
+            cursor: pointer; 
+            transition: all 0.3s; 
+        }
+        .btn-vdown:hover { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.4); }
+
+        .global-status { 
+            margin-top: 2vh; 
+            font-weight: 700; 
+            font-size: 12px; letter-spacing: 2px; text-transform: uppercase; min-height: 1.2rem;
+            background: linear-gradient(to right, #ff2953, #ffffff, #ff2953);
+            background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: textShimmer 3s linear infinite;
+        }
+        @keyframes textShimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+        .task-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 15px; }
+        .task-item { position: relative; width: clamp(60px, 10vh, 80px); height: clamp(60px, 10vh, 80px); cursor: pointer; } 
+        .circular-progress { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }      
+        .task-item.is-active .circular-progress { animation: spin-ring 2s linear infinite; }
+        @keyframes spin-ring { 0% { transform: rotate(-90deg); } 100% { transform: rotate(270deg); } }
+        .circular-progress circle { fill: none; stroke-width: 5; stroke-linecap: round; }   
+        .circular-progress .bg { stroke: rgba(255, 255, 255, 0.1); }
+        .circular-progress .fg { stroke: var(--accent-pink); stroke-dasharray: 235; stroke-dashoffset: 235; transition: stroke-dashoffset 0.3s ease; filter: drop-shadow(0 0 2px var(--accent-pink)); }
+        .task-item.is-active .circular-progress .fg { animation: glow-pulse 3s ease-in-out infinite alternate; }
+        @keyframes glow-pulse { 0% { filter: drop-shadow(0 0 2px var(--accent-pink)); stroke: #ff2953; } 100% { filter: drop-shadow(0 0 6px var(--accent-pink)); stroke: #ff5c7c; } }
+
+        .progress-info { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+        .percent-val { font-size: clamp(0.7rem, 1.5vh, 1rem); font-weight: 700; line-height: 1; margin-bottom: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        .speed-val { font-size: clamp(0.4rem, 1vh, 0.6rem); font-weight: 600; opacity: 0.9; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+
+        .cancel-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%; background: rgba(255, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; z-index: 10; backdrop-filter: blur(2px); }
+        .task-item:hover .cancel-overlay { opacity: 1; }
+        .cancel-x { color: #fff; font-size: 24px; font-weight: bold; line-height: 1; }
+
+        .task-card { position: absolute; top: 120%; left: 50%; transform: translateX(-50%); width: 200px; background: rgba(20, 20, 22, 0.95); backdrop-filter: blur(15px); border: 1px solid var(--glass-border); border-radius: 12px; padding: 16px 12px 12px 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: none; z-index: 100; pointer-events: none; }
+        .task-card::after { content: ''; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border-width: 8px; border-style: solid; border-color: transparent transparent rgba(20, 20, 22, 0.95) transparent; }
+        .task-item:hover .task-card { display: block; animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, 5px); } to { opacity: 1; transform: translate(-50%, 0); } }
+        .task-card .title { font-size: 0.75rem; font-weight: 600; color: #fff; margin-bottom: 4px; line-height: 1.4; word-break: break-all; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .task-card .detail { font-size: 0.65rem; color: var(--accent-pink); font-weight: 600; }
+
+        /* 3. 하단 영역 (1/3 크기로 축소) */
+        .footer_section { 
+            height: 15vh; /* 이미지가 작아졌으므로 다시 영역 축소 */
+            display: flex;
+            align-items: flex-end; 
+            justify-content: center;
+            flex-shrink: 0;
+            z-index: 100;
+            padding-bottom: 5vh;
+        }
+        .footer_section img { 
+            /* 가로폭을 화면 너비의 약 1/3(32vw)로 설정 */
+            width: 32vw !important; 
+            max-width: none !important; 
+            max-height: 100%; 
+            height: auto; 
+            display: block; 
+            opacity: 0.8;
+            transition: all 0.5s ease;
+        }
+
+        /* 768px 이하 모바일용 미세 조정 (레이아웃 틀은 유지) */
+        @media (max-width: 768px) {
+            .navbar-brand span { font-size: 20px; }
+            .glass-card { padding: 3vh 20px; max-width: 90%; }
+            h1#mainTitle { font-size: 2.2rem; letter-spacing: 4px; }
+            .footer_section img { max-width: 100% !important; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header_section">
+        <a class="navbar-brand" href="/"><span id="brandText">Powered by woopang.com</span></a>
+    </header>
+    
+    <main class="vdown_area">
+        <div class="pulse-bg"></div>
+        <div class="glass-card">
+            <h1 id="mainTitle">VDOWN</h1>
+            <div class="format-selector">
+                <div class="format-option active" data-format="video">Video</div>
+                <div class="format-option" data-format="audio">Audio</div>
+            </div>
+            <form id="vdownForm">
+                <input type="text" id="urlInput" placeholder="Youtube / TVWIKI 등 사이트 링크 붙여넣기!" required>
+                <button type="submit" id="submitBtn" class="btn-vdown">Start Download</button>
+            </form>
+            <div class="global-status" id="globalStatus">READY TO DOWNLOAD</div>
+            <div class="task-container" id="taskContainer"></div>
+        </div>
+    </main>
+
+    <footer class="footer_section">
+        <img src="{{ url_for('vdown.static', filename='copy.png') }}" alt="Copyright">
+    </footer>
+
+    <script>
+        $(document).ready(function() {
+            function wrapText(id) {
+                const el = document.getElementById(id); if(!el) return;
+                const text = el.innerText; el.innerHTML = '';
+                [...text].forEach(c => { const s = document.createElement('span'); s.className = 'brand-char'; s.innerHTML = c === ' ' ? '&nbsp;' : c; el.appendChild(s); });
+            }
+            wrapText('brandText');
+            function triggerBrand() { $('.brand-char').each(function(i) { const $c = $(this); setTimeout(() => { $c.addClass('bounce'); setTimeout(() => $c.removeClass('bounce'), 600); }, i * 40); }); }
+            setTimeout(triggerBrand, 1000); setInterval(triggerBrand, 4000); 
+
+            let selectedFormat = 'video', activeTasks = JSON.parse(localStorage.getItem('vdown_tasks') || '[]');      
+            $('.format-option').click(function() { $('.format-option').removeClass('active'); $(this).addClass('active'); selectedFormat = $(this).data('format'); });
+            activeTasks.forEach(id => startPolling(id)); updateStatus();
+
+            $('#vdownForm').on('submit', function(e) {
+                e.preventDefault(); const url = $('#urlInput').val(); $('#urlInput').val('');
+                $.ajax({ url: './', method: 'POST', contentType: 'application/json', data: JSON.stringify({ url: url, format: selectedFormat }), success: function(res) {
+                    activeTasks.push(res.task_id); localStorage.setItem('vdown_tasks', JSON.stringify(activeTasks)); startPolling(res.task_id); updateStatus();
+                }});
+            });
+
+            function updateStatus() { const c = activeTasks.length; $('#globalStatus').text(c === 0 ? 'READY TO DOWNLOAD' : `DOWNLOADING ${c} ${c===1?'FILE':'FILES'}`); }
+
+            function startPolling(id) {
+                if ($('#task-'+id).length === 0) {
+                    $('#taskContainer').append(`<div class="task-item is-active" id="task-${id}"><svg class="circular-progress" viewBox="0 0 80 80"><circle class="bg" cx="40" cy="40" r="37.5"></circle><circle class="fg" id="fg-${id}" cx="40" cy="40" r="37.5"></circle></svg><div class="progress-info"><div class="percent-val" id="perc-${id}">0%</div><div class="speed-val" id="speed-${id}">0B/s</div></div><div class="cancel-overlay" onclick="cancelTask('${id}')"><div class="cancel-x">&times;</div></div><div class="task-card"><div class="title" id="title-${id}">Loading...</div><div class="detail" id="detail-${id}" style="display:none;"></div></div></div>`);
+                    $(`#cancel-${id}`).click(function(e) { e.stopPropagation(); if(confirm('Cancel download?')) { $.post('./cancel/' + id, function(res) { console.log('Cancelled:', res); }); } });
+                }
+                const timer = setInterval(() => {
+                    $.get('./status/' + id).done(t => {
+                        if (t.status === 'missing') { clearInterval(timer); removeTask(id); return; }
+                        if (t.status === 'cancelled') { 
+                            clearInterval(timer); 
+                            $(`#perc-${id}`).text('X'); $(`#speed-${id}`).text(''); $(`#fg-${id}`).css('stroke', '#ff4444'); $(`#task-${id}`).removeClass('is-active'); setTimeout(() => removeTask(id), 2000); return; 
+                        }
+                        if (t.status === 'error') { 
+                            clearInterval(timer); 
+                            $(`#perc-${id}`).text('ERR'); $(`#speed-${id}`).text(''); $(`#fg-${id}`).css('stroke', '#ff4444'); $(`#task-${id}`).removeClass('is-active'); setTimeout(() => removeTask(id), 5000); return; 
+                        }
+                        const p = t.progress || { percent: 0, speed: '0B/s', downloaded: '0B', total: '0B' };
+                        $(`#fg-${id}`).css('stroke-dashoffset', 235 - (235 * p.percent / 100));
+                        $(`#perc-${id}`).text(Math.round(p.percent) + '%');
+                        $(`#speed-${id}`).text(p.speed.replace(/\[[0-9;]*m/g, '').trim());
+                        if(t.title && t.title !== 'Fetching...' && t.title !== 'Loading...') { $(`#title-${id}`).text(t.title); $(`#detail-${id}`).text(p.downloaded + ' / ' + p.total).show(); }
+                        if (t.status === 'completed') { clearInterval(timer); $(`#perc-${id}`).text('100%'); $(`#speed-${id}`).text('DONE'); $(`#fg-${id}`).css('stroke', '#4CAF50'); $(`#task-${id}`).removeClass('is-active'); window.location.href = './download/' + id; setTimeout(() => removeTask(id), 5000); }
+                    }).fail(() => { clearInterval(timer); removeTask(id); });
+                }, 1500);
+            }
+            function removeTask(id) { $(`#task-${id}`).fadeOut(500, function() { $(this).remove(); activeTasks = activeTasks.filter(i => i !== id); localStorage.setItem('vdown_tasks', JSON.stringify(activeTasks)); updateStatus(); }); }
+        });
+
+        function cancelTask(id) {
+            if(confirm('Cancel download?')) $.post('./cancel/' + id);
+        }
+    </script>
+</body>
+</html>
