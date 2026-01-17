@@ -50,7 +50,7 @@ public class SpeechBubbleManager : MonoBehaviour
     public int maxContentLength = 200; // 최대 200자
 
     [Header("Server")]
-    [SerializeField] private string serverUrl = "http://210.105.65.145:5000";
+    private string serverUrl => ApiConfig.SPEECH_BUBBLE_SERVER;
 
     [Header("Create Bubble UI")]
     public GameObject createBubblePanel;

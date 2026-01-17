@@ -1,0 +1,11 @@
+[2026-01-07 11:47:28] Processing Task: d0677563-42a8-49a9-b68d-f5cd98333a02 URL: https://tvwiki4.net/ent/4526/406616447
+[2026-01-07 11:47:28] Fetching main page...
+[2026-01-07 11:47:29] Extracted Title: 환승연애 4 1화 다시보기
+[2026-01-07 11:47:29] TVWiki/TVMon logic started.
+[2026-01-07 11:47:29] Method 1: Standard iframe found.
+[2026-01-07 11:47:29] Fetching Player URL: https://player.bunny-frame.online/?s=5&vtt=&option=a&srt=&src=7bb3748888c2e8c9798400edefec99f35947ba11a247f33cf49c1d91c43b95f75ca03ca0e507e0b6d2270622a4f9e7898aa38db2dc6633090ff22d7c82c16aa2&t=환승연애 4 1화&p=7bb3748888c2e8c9798400edefec99f35947ba11a247f33cf49c1d91c43b95f72703d21c30179d724566b9ae9f51502e738590489f4f6d22696d324559db83b9
+[2026-01-07 11:47:30] Encrypted content found. Decrypting...
+[2026-01-07 11:47:30] Decrypted URL: https://every1.poorcdn.com/v/f/474211281064889e741df5c8f8917636ca6f8/c.html?token=aEqZ0W929d8bNQAxh_QEpw035Cc=&expires=1767754070
+[2026-01-07 11:47:31] Starting yt-dlp download for: https://every1.poorcdn.com/v/f/474211281064889e741df5c8f8917636ca6f8/c.html?token=aEqZ0W929d8bNQAxh_QEpw035Cc=&expires=1767754070
+[2026-01-07 11:47:32] yt-dlp failed: [0;31mERROR:[0m [generic] Unable to download webpage: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)
+[2026-01-07 11:47:32] Task failed: [0;31mERROR:[0m [generic] Unable to download webpage: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)

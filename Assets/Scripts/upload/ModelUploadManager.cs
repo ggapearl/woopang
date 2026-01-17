@@ -46,7 +46,7 @@ public class ModelUploadManager : MonoBehaviour
     private byte[] selectedFileData;
     private List<Texture2D> subPhotos = new List<Texture2D>();
     private List<Image> subPhotoDisplays = new List<Image>();
-    private string serverUrl = "https://woopang.com:5000/create-location-with-model";
+    private string serverUrl => ApiConfig.CREATE_LOCATION_WITH_MODEL;
     private string locationText;
     private string instagramID;
     private bool showInstagram;

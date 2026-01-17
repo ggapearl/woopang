@@ -126,13 +126,13 @@ public class AutoUpdateChecker : MonoBehaviour
         // 플랫폼별 URL 설정
 #if UNITY_ANDROID
         currentPlatform = "android";
-        serverVersionUrl = "https://woopang.com/version?platform=android";
+        serverVersionUrl = ApiConfig.VERSION_ANDROID;
 #elif UNITY_IOS
         currentPlatform = "ios";
-        serverVersionUrl = "https://woopang.com/version?platform=ios";
+        serverVersionUrl = ApiConfig.VERSION_IOS;
 #else
         currentPlatform = "unknown";
-        serverVersionUrl = "https://woopang.com/version"; // 기본 URL
+        serverVersionUrl = ApiConfig.VERSION;
 #endif
     }
 

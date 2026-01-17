@@ -35,7 +35,7 @@ public class BusStationManager : MonoBehaviour
         instance = this;
     }
 
-    private const string BASE_URL = "https://woopang.com/api/nearby-facilities";
+    private string BASE_URL => ApiConfig.NEARBY_FACILITIES;
     private const string SERVICE_KEY = "teLNDctkJ9YFlMFaPWTqqwgtgxvewuaqm53dhSOiNpfOV1Q4z8NxyhhvpW4ifx3eKhI8RgodlQ05pxVHAeh1sA==";
     private readonly string apiUrlTemplate = "{0}?lat={1}&lon={2}&radius={3}&type=bus";
 

@@ -22,17 +22,22 @@ public class SwipeToClose : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
     {
         startPos = eventData.position;
         isDragging = true;
+        Debug.Log($"[SwipeToClose] OnBeginDrag - startPos: {startPos}");
     }
 
     public void OnDrag(PointerEventData eventData)
     {
         if (!isDragging) return;
-        DragPanel(eventData.position.y - startPos.y);
+        float deltaY = eventData.position.y - startPos.y;
+        Debug.Log($"[SwipeToClose] OnDrag - deltaY: {deltaY}");
+        DragPanel(deltaY);
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        EndDrag(eventData.position.y - startPos.y);
+        float deltaY = eventData.position.y - startPos.y;
+        Debug.Log($"[SwipeToClose] OnEndDrag - deltaY: {deltaY}, threshold: {dismissThreshold}");
+        EndDrag(deltaY);
     }
 
     public void DragPanel(float totalDeltaY)

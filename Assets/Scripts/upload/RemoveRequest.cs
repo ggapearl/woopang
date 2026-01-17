@@ -6,33 +6,33 @@ using System;
 
 public class RemoveRequest : MonoBehaviour
 {
-    [SerializeField] private Button removeButton; // »èÁ¦ ¿äÃ» ¹öÆ°
-    [SerializeField] private Button cancelButton; // Ãë¼Ò ¹öÆ°
-    [SerializeField] private GameObject warningObj; // °æ°í ¸Þ½ÃÁö Ç¥½Ã¿ë ¿ÀºêÁ§Æ®
-    [SerializeField] private GameObject removeRequestPanel; // »èÁ¦ ¿äÃ» UI ÆÐ³Î
-    [SerializeField] private DoubleTap3D initialDoubleTap; // ÃÊ±â ÂüÁ¶¿ë DoubleTap3D (¼±ÅÃÀû)
+    [SerializeField] private Button removeButton; // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½Æ°
+    [SerializeField] private Button cancelButton; // ï¿½ï¿½ï¿½ ï¿½ï¿½Æ°
+    [SerializeField] private GameObject warningObj; // ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½ï¿½ï¿½ Ç¥ï¿½Ã¿ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
+    [SerializeField] private GameObject removeRequestPanel; // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» UI ï¿½Ð³ï¿½
+    [SerializeField] private DoubleTap3D initialDoubleTap; // ï¿½Ê±ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ DoubleTap3D (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
 
-    private DoubleTap3D doubleTap; // µ¿ÀûÀ¸·Î ÂüÁ¶ÇÒ DoubleTap3D
-    private CanvasGroup fullscreenCanvasGroup; // Ç®½ºÅ©¸° UI ÆÐ³Î
+    private DoubleTap3D doubleTap; // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ DoubleTap3D
+    private CanvasGroup fullscreenCanvasGroup; // Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½
 
-    private const string serverUrl = "https://woopang.com:5000/fix_upload/";
+    private string serverUrl => ApiConfig.FIX_UPLOAD + "/";
 
     void Start()
     {
-        doubleTap = initialDoubleTap; // ÃÊ±â°ª ¼³Á¤
+        doubleTap = initialDoubleTap; // ï¿½Ê±â°ª ï¿½ï¿½ï¿½ï¿½
 
         if (doubleTap != null)
         {
-            fullscreenCanvasGroup = doubleTap.GetComponent<CanvasGroup>(); // Ç®½ºÅ©¸° UI ÆÐ³Î ÂüÁ¶
+            fullscreenCanvasGroup = doubleTap.GetComponent<CanvasGroup>(); // Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½
             if (fullscreenCanvasGroup == null)
             {
-                Debug.LogError("[RemoveRequest] DoubleTap3D¿¡¼­ CanvasGroupÀ» Ã£À» ¼ö ¾ø½À´Ï´Ù!");
+                Debug.LogError("[RemoveRequest] DoubleTap3Dï¿½ï¿½ï¿½ï¿½ CanvasGroupï¿½ï¿½ Ã£ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½!");
             }
-            Debug.Log($"[RemoveRequest] ÃÊ±â DoubleTap3D ¿¬°áµÊ - ID: {doubleTap.GetId()}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
+            Debug.Log($"[RemoveRequest] ï¿½Ê±ï¿½ DoubleTap3D ï¿½ï¿½ï¿½ï¿½ï¿½ - ID: {doubleTap.GetId()}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
         }
         else
         {
-            Debug.LogWarning("[RemoveRequest] ÃÊ±â DoubleTap3D°¡ ¿¬°áµÇÁö ¾Ê¾Ò½À´Ï´Ù. ´õºí ÅÍÄ¡·Î µ¿ÀûÀ¸·Î ¼³Á¤µË´Ï´Ù.");
+            Debug.LogWarning("[RemoveRequest] ï¿½Ê±ï¿½ DoubleTap3Dï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò½ï¿½ï¿½Ï´ï¿½. ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ë´Ï´ï¿½.");
         }
 
         if (removeButton != null)
@@ -41,7 +41,7 @@ public class RemoveRequest : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[RemoveRequest] RemoveButtonÀÌ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogError("[RemoveRequest] RemoveButtonï¿½ï¿½ ï¿½Ò´ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò½ï¿½ï¿½Ï´ï¿½!");
         }
 
         if (cancelButton != null)
@@ -50,44 +50,44 @@ public class RemoveRequest : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[RemoveRequest] CancelButtonÀÌ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogError("[RemoveRequest] CancelButtonï¿½ï¿½ ï¿½Ò´ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò½ï¿½ï¿½Ï´ï¿½!");
         }
 
         if (warningObj != null)
         {
-            warningObj.SetActive(false); // ÃÊ±â ºñÈ°¼ºÈ­
+            warningObj.SetActive(false); // ï¿½Ê±ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
         }
         else
         {
-            Debug.LogError("[RemoveRequest] WarningObj°¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogError("[RemoveRequest] WarningObjï¿½ï¿½ ï¿½Ò´ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò½ï¿½ï¿½Ï´ï¿½!");
         }
 
         if (removeRequestPanel != null)
         {
-            removeRequestPanel.SetActive(false); // ÃÊ±â ºñÈ°¼ºÈ­
+            removeRequestPanel.SetActive(false); // ï¿½Ê±ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­
         }
         else
         {
-            Debug.LogError("[RemoveRequest] RemoveRequestPanelÀÌ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogError("[RemoveRequest] RemoveRequestPanelï¿½ï¿½ ï¿½Ò´ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò½ï¿½ï¿½Ï´ï¿½!");
         }
 
-        // ´õºí ÅÍÄ¡ ÀÌº¥Æ® ±¸µ¶
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½ï¿½
         DoubleTap3D.OnDoubleTapEvent += HandleDoubleTap;
-        Debug.Log("[RemoveRequest] DoubleTap3D.OnDoubleTapEvent ±¸µ¶ ¿Ï·á");
+        Debug.Log("[RemoveRequest] DoubleTap3D.OnDoubleTapEvent ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½");
     }
 
     void OnDestroy()
     {
-        // ÀÌº¥Æ® ±¸µ¶ ÇØÁ¦
+        // ï¿½Ìºï¿½Æ® ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         DoubleTap3D.OnDoubleTapEvent -= HandleDoubleTap;
-        Debug.Log("[RemoveRequest] DoubleTap3D.OnDoubleTapEvent ±¸µ¶ ÇØÁ¦");
+        Debug.Log("[RemoveRequest] DoubleTap3D.OnDoubleTapEvent ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½");
     }
 
     private void HandleDoubleTap(DoubleTap3D tappedDoubleTap)
     {
-        // ´õºí ÅÍÄ¡µÈ DoubleTap3D ÀÎ½ºÅÏ½º·Î ÂüÁ¶ ¾÷µ¥ÀÌÆ®
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ DoubleTap3D ï¿½Î½ï¿½ï¿½Ï½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
         doubleTap = tappedDoubleTap;
-        Debug.Log($"[RemoveRequest] ´õºí ÅÍÄ¡·Î DoubleTap3D ¾÷µ¥ÀÌÆ® - ID: {(doubleTap != null ? doubleTap.GetId() : -1)}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
+        Debug.Log($"[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ DoubleTap3D ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® - ID: {(doubleTap != null ? doubleTap.GetId() : -1)}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
     }
 
     private void OnRemoveButtonClicked()
@@ -95,7 +95,7 @@ public class RemoveRequest : MonoBehaviour
         if (doubleTap == null)
         {
             ShowWarning(LocalizationManager.Instance.GetText("no_object_selected"));
-            Debug.LogError("[RemoveRequest] OnRemoveButtonClicked: DoubleTap3D°¡ nullÀÔ´Ï´Ù!");
+            Debug.LogError("[RemoveRequest] OnRemoveButtonClicked: DoubleTap3Dï¿½ï¿½ nullï¿½Ô´Ï´ï¿½!");
             return;
         }
 
@@ -104,7 +104,7 @@ public class RemoveRequest : MonoBehaviour
         if (id <= 0)
         {
             ShowWarning(LocalizationManager.Instance.GetText("valid_id_not_found"));
-            Debug.LogError($"[RemoveRequest] À¯È¿ÇÏÁö ¾ÊÀº ID: {id}");
+            Debug.LogError($"[RemoveRequest] ï¿½ï¿½È¿ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ID: {id}");
             return;
         }
 
@@ -113,29 +113,29 @@ public class RemoveRequest : MonoBehaviour
 
     private void OnCancelButtonClicked()
     {
-        // Ãë¼Ò ¹öÆ° Å¬¸¯ ½Ã »èÁ¦ ¿äÃ» UI ÆÐ³Î°ú Ç®½ºÅ©¸° UI ÆÐ³Î ´Ý±â
+        // ï¿½ï¿½ï¿½ ï¿½ï¿½Æ° Å¬ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» UI ï¿½Ð³Î°ï¿½ Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ ï¿½Ý±ï¿½
         if (removeRequestPanel != null)
         {
             removeRequestPanel.SetActive(false);
-            Debug.Log("[RemoveRequest] Ãë¼Ò ¹öÆ° Å¬¸¯ - »èÁ¦ ¿äÃ» UI ÆÐ³Î ´ÝÈû");
+            Debug.Log("[RemoveRequest] ï¿½ï¿½ï¿½ ï¿½ï¿½Æ° Å¬ï¿½ï¿½ - ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» UI ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½");
         }
         if (fullscreenCanvasGroup != null)
         {
             fullscreenCanvasGroup.gameObject.SetActive(false);
-            Debug.Log("[RemoveRequest] Ãë¼Ò ¹öÆ° Å¬¸¯ - Ç®½ºÅ©¸° UI ÆÐ³Î ´ÝÈû");
+            Debug.Log("[RemoveRequest] ï¿½ï¿½ï¿½ ï¿½ï¿½Æ° Å¬ï¿½ï¿½ - Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½");
         }
         else
         {
-            Debug.LogWarning("[RemoveRequest] Ç®½ºÅ©¸° UI ÆÐ³ÎÀ» ´ÝÀ» ¼ö ¾ø½À´Ï´Ù: CanvasGroupÀÌ nullÀÔ´Ï´Ù!");
+            Debug.LogWarning("[RemoveRequest] Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½: CanvasGroupï¿½ï¿½ nullï¿½Ô´Ï´ï¿½!");
         }
     }
 
     private IEnumerator SendRemoveRequest(int id)
     {
         WWWForm formData = new WWWForm();
-        formData.AddField("target_id", id.ToString()); // locations_fix Å×ÀÌºíÀÇ target_id·Î ÀúÀå
-        formData.AddField("remove_request", "true"); // »èÁ¦ ¿äÃ»
-        // ³ª¸ÓÁö ÇÊµå´Â ±âº»°ªÀ¸·Î ¼³Á¤
+        formData.AddField("target_id", id.ToString()); // locations_fix ï¿½ï¿½ï¿½Ìºï¿½ï¿½ï¿½ target_idï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+        formData.AddField("remove_request", "true"); // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Êµï¿½ï¿½ ï¿½âº»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         formData.AddField("username", "");
         formData.AddField("name", "");
         formData.AddField("pet_friendly", "false");
@@ -143,14 +143,14 @@ public class RemoveRequest : MonoBehaviour
         formData.AddField("instagram_id", "");
         formData.AddField("description", "Remove request submitted via button");
         
-        // ½Ã°£´ë Á¤º¸ Ãß°¡
+        // ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
         
         formData.AddField("folder", $"remove_{DateTime.Now:yyyyMMdd_HHmmss}");
         formData.AddField("main_photo", "");
 
-        Debug.Log($"[RemoveRequest] »èÁ¦ ¿äÃ» Àü¼Û - Target ID: {id}");
+        Debug.Log($"[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½ - Target ID: {id}");
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
             www.timeout = 20;
@@ -159,41 +159,41 @@ public class RemoveRequest : MonoBehaviour
             if (www.result == UnityWebRequest.Result.Success)
             {
                 string responseText = www.downloadHandler.text;
-                Debug.Log($"[RemoveRequest] »èÁ¦ ¿äÃ» ÀÀ´ä: {responseText} (ÀÀ´ä ÄÚµå: {www.responseCode})");
+                Debug.Log($"[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½: {responseText} (ï¿½ï¿½ï¿½ï¿½ ï¿½Úµï¿½: {www.responseCode})");
 
                 if (responseText.Contains("Fix Upload Succeeded!") || www.responseCode == 200)
                 {
                     ShowWarning(LocalizationManager.Instance.GetText("delete_success"));
-                    Debug.Log("[RemoveRequest] »èÁ¦ ¿äÃ» ¼º°ø");
+                    Debug.Log("[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½");
 
-                    // »èÁ¦ ¿äÃ» UI ÆÐ³Î ´Ý±â
+                    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» UI ï¿½Ð³ï¿½ ï¿½Ý±ï¿½
                     if (removeRequestPanel != null)
                     {
                         removeRequestPanel.SetActive(false);
-                        Debug.Log("[RemoveRequest] »èÁ¦ ¿äÃ» ¼º°ø - »èÁ¦ ¿äÃ» UI ÆÐ³Î ´ÝÈû");
+                        Debug.Log("[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½ - ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» UI ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½");
                     }
 
-                    // Ç®½ºÅ©¸° UI ÆÐ³Î ´Ý±â
+                    // Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ ï¿½Ý±ï¿½
                     if (fullscreenCanvasGroup != null)
                     {
                         fullscreenCanvasGroup.gameObject.SetActive(false);
-                        Debug.Log("[RemoveRequest] »èÁ¦ ¿äÃ» ¼º°ø - Ç®½ºÅ©¸° UI ÆÐ³Î ´ÝÈû");
+                        Debug.Log("[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½ - Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ ï¿½ï¿½ï¿½ï¿½");
                     }
                     else
                     {
-                        Debug.LogWarning("[RemoveRequest] Ç®½ºÅ©¸° UI ÆÐ³ÎÀ» ´ÝÀ» ¼ö ¾ø½À´Ï´Ù: CanvasGroupÀÌ nullÀÔ´Ï´Ù!");
+                        Debug.LogWarning("[RemoveRequest] Ç®ï¿½ï¿½Å©ï¿½ï¿½ UI ï¿½Ð³ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½: CanvasGroupï¿½ï¿½ nullï¿½Ô´Ï´ï¿½!");
                     }
                 }
                 else
                 {
                     ShowWarning(LocalizationManager.Instance.GetText("server_error"));
-                    Debug.LogWarning($"[RemoveRequest] ¼­¹ö ÀÀ´äÀÌ ¼º°øÀ¸·Î °£ÁÖµÇÁö ¾ÊÀ½: {responseText}");
+                    Debug.LogWarning($"[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Öµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½: {responseText}");
                 }
             }
             else
             {
                 ShowWarning(LocalizationManager.Instance.GetText("server_error"));
-                Debug.LogError($"[RemoveRequest] »èÁ¦ ¿äÃ» ½ÇÆÐ: {www.error} (ÀÀ´ä ÄÚµå: {www.responseCode})");
+                Debug.LogError($"[RemoveRequest] ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½: {www.error} (ï¿½ï¿½ï¿½ï¿½ ï¿½Úµï¿½: {www.responseCode})");
             }
         }
     }
@@ -247,7 +247,7 @@ public class RemoveRequest : MonoBehaviour
         {
             warningObj.SetActive(true);
             CancelInvoke("HideWarning");
-            Invoke("HideWarning", 2f); // 2ÃÊ ÈÄ °æ°í ¸Þ½ÃÁö ¼û±è
+            Invoke("HideWarning", 2f); // 2ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         }
     }
 

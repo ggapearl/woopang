@@ -1,0 +1,660 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WOOPANG - Investment Master Deck</title>
+    <style>
+        /* =========================================
+           1. CORE STYLES & FONTS
+           ========================================= */
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;500;700;900&family=Noto+Sans+KR:wght@300;400;500;700;900&family=Playfair+Display:ital,wght@1,400;1,700&display=swap');
+
+        :root {
+            --bg-deep: #050a14;
+            --bg-navy: #0a192f;
+            --bg-pink: #ffc0cb;
+            --bg-gradient: linear-gradient(170deg, var(--bg-deep) 0%, var(--bg-navy) 40%, #4a2c40 80%, var(--bg-pink) 100%);
+            
+            --text-main: #ffffff;
+            --text-muted: #a8b2d1;
+            --accent-gold: #ffd700;
+            --accent-pink: #ff80ab;
+            --accent-cyan: #64ffda;
+            
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body, html {
+            width: 100%; min-height: 100%;
+            font-family: 'Noto Sans KR', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-main);
+            overflow-x: hidden; /* 가로 스크롤 방지 */
+        }
+
+        /* 배경 우주 애니메이션 캔버스 */
+        #starfield {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; pointer-events: none;
+            background: var(--bg-gradient);
+        }
+
+        /* 메인 레이아웃 */
+        .app-container {
+            position: relative; z-index: 1;
+            display: flex; height: 100vh; width: 100vw;
+            transition: all 0.5s ease;
+        }
+
+        /* =========================================
+           2. SIDEBAR UI
+           ========================================= */
+        .sidebar {
+            width: 280px;
+            background: rgba(10, 25, 47, 0.7);
+            backdrop-filter: blur(15px);
+            border-right: 1px solid var(--glass-border);
+            display: flex; flex-direction: column;
+            padding: 30px 20px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        
+        .brand-logo {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 2.2rem; font-weight: 900;
+            background: linear-gradient(to right, #fff, var(--bg-pink));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .brand-slogan { font-size: 0.8rem; color: var(--text-muted); letter-spacing: 1px; margin-top:5px; }
+
+        .nav-list { list-style: none; margin-top: 30px; display: flex; flex-direction: column; gap: 5px; }
+        .nav-item {
+            padding: 10px 15px; border-radius: 8px;
+            font-size: 0.85rem; color: var(--text-muted);
+            cursor: pointer; transition: 0.3s;
+            border-left: 3px solid transparent;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .nav-item.active {
+            background: linear-gradient(90deg, rgba(255, 192, 203, 0.15), transparent);
+            color: var(--accent-pink);
+            border-left-color: var(--accent-pink);
+            font-weight: 700;
+        }
+
+        /* =========================================
+           3. SLIDE CONTENT AREA
+           ========================================= */
+        .main-stage {
+            flex: 1; position: relative;
+            overflow: hidden; perspective: 1500px;
+        }
+
+        .slide {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 40px 80px; /* 여백 조정 */
+            display: flex; flex-direction: column; justify-content: center;
+            opacity: 0;
+            transform: translate3d(0, 50px, -100px);
+            transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+            pointer-events: none; visibility: hidden;
+        }
+
+        .slide.active {
+            opacity: 1; transform: translate3d(0, 0, 0);
+            pointer-events: auto; visibility: visible; z-index: 10;
+        }
+
+        /* Typography & Components */
+        h1.slide-title { font-family: 'Montserrat', sans-serif; font-size: 3.5rem; font-weight: 800; margin-bottom: 20px; line-height: 1.1; color: #fff; }
+        h2.slide-subtitle { font-family: 'Noto Sans KR', sans-serif; font-size: 2rem; font-weight: 700; color: var(--accent-pink); margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
+        p.slide-desc { font-size: 1.1rem; line-height: 1.7; color: var(--text-muted); max-width: 900px; margin-bottom: 20px; word-break: keep-all; }
+
+        .shimmer {
+            background: linear-gradient(to right, #fff 20%, var(--accent-gold) 40%, var(--accent-gold) 60%, #fff 80%);
+            background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: shimmer 3s linear infinite;
+        }
+
+        /* Grid & Cards */
+        .grid-container { display: grid; gap: 30px; width: 100%; margin-top: 30px; }
+        .grid-2 { grid-template-columns: 1fr 1fr; }
+        .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px; padding: 30px;
+            transition: 0.4s; position: relative; overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.08); border-color: var(--accent-pink); }
+        .card h3 { font-size: 1.3rem; margin-bottom: 15px; color: #fff; font-weight: 700; }
+        .card p { font-size: 0.95rem; color: #ccc; line-height: 1.6; }
+        
+        .badge { display: inline-block; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; border: 1px solid var(--accent-gold); color: var(--accent-gold); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Controls */
+        .control-panel { position: absolute; bottom: 40px; right: 50px; display: flex; gap: 10px; z-index: 100; }
+        .control-btn { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        .control-btn:hover { background: var(--accent-pink); color: #000; }
+
+        /* Animation Keyframes */
+        @keyframes shimmer { to { background-position: 200% center; } }
+
+        /* =========================================
+           4. PRINT / PDF MODE (CRITICAL)
+           ========================================= */
+        #pdf-toggle {
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            padding: 12px 25px; background: var(--accent-pink); color: #050a14;
+            border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4); transition: 0.3s;
+        }
+        #pdf-toggle:hover { background: #fff; transform: scale(1.05); }
+
+        /* 인쇄 모드가 켜졌을 때의 스타일 */
+        body.print-mode { overflow-y: auto !important; height: auto !important; }
+        body.print-mode .app-container { display: block; height: auto; }
+        body.print-mode .sidebar, 
+        body.print-mode .control-panel,
+        body.print-mode #pdf-toggle { display: none !important; } /* 버튼과 사이드바 숨김 */
+
+        body.print-mode .main-stage {
+            overflow: visible; height: auto; display: block;
+        }
+        
+        body.print-mode .slide {
+            position: relative; /* 겹치지 않게 */
+            opacity: 1 !important; visibility: visible !important;
+            transform: none !important;
+            height: 100vh; /* 한 페이지 꽉 차게 */
+            page-break-after: always; /* 프린트 시 강제 페이지 넘김 */
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            top: auto; left: auto;
+            padding: 60px; /* 인쇄용 여백 */
+        }
+        
+        /* 인쇄 시 브라우저 설정 강제 */
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: #050a14 !important; }
+            .sidebar, .control-panel, #pdf-toggle { display: none; }
+            .slide { page-break-after: always; break-inside: avoid; height: 100vh; position: relative; opacity: 1; visibility: visible; transform: none; }
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+
+<button id="pdf-toggle" onclick="togglePrintMode()">🖨️ PDF 저장 모드 (클릭)</button>
+
+<div class="app-container">
+    <aside class="sidebar">
+        <div style="margin-bottom:30px;">
+            <div class="brand-logo">WOOPANG</div>
+            <div class="brand-slogan">Global AR Platform</div>
+        </div>
+        <ul class="nav-list" id="navList">
+            </ul>
+        <div style="margin-top: auto; font-size: 0.7rem; color: #666;">
+            © 2026 WOOPANG Corp.<br>Confidential Document
+        </div>
+    </aside>
+
+    <main class="main-stage">
+
+        <div class="slide active" data-title="Intro: Vision">
+            <span class="badge">Series A Funding</span>
+            <h1 class="slide-title">GLORY FOR<br><span class="shimmer">YOU AND ME</span></h1>
+            <p class="slide-desc" style="font-size: 1.4rem;">
+                가상에 지친 인류에게 진짜 세상(Real World)을 선물하는<br>
+                대한민국 발(發) 글로벌 AR 플랫폼.
+            </p>
+            <div style="margin-top:30px; font-size:0.9rem; color:var(--accent-pink);">
+                * Lift Up Your Phone, Connect The Earth.
+            </div>
+        </div>
+
+        <div class="slide" data-title="Philosophy">
+            <h2 class="slide-subtitle">📜 Philosophical Base</h2>
+            <div style="display:flex; flex-direction:column; gap:20px;">
+                <div class="card" style="border-left: 5px solid var(--accent-gold);">
+                    <p style="font-family:'Playfair Display', serif; font-size: 1.3rem; font-style:italic;">
+                        "춤추는 별을 잉태하려면 반드시 내면에 혼돈을 지녀야 한다."
+                    </p>
+                    <span style="color:var(--text-muted); font-size:0.9rem;">- Friedrich Nietzsche</span>
+                </div>
+                <div class="card" style="border-left: 5px solid var(--accent-cyan);">
+                    <p style="font-family:'Playfair Display', serif; font-size: 1.3rem; font-style:italic;">
+                        "저 점을 보라. 저곳이 우리의 집이고, 저것이 우리다."
+                    </p>
+                    <span style="color:var(--text-muted); font-size:0.9rem;">- Carl Sagan (Pale Blue Dot)</span>
+                </div>
+            </div>
+            <p class="slide-desc" style="margin-top: 30px;">
+                우팡은 단순한 기술이 아닙니다. 스마트폰을 통해 고개를 들어(Head-up)<br>
+                지구와 역사, 그리고 타인을 마주하게 하는 <strong>인문학적 도구</strong>입니다.
+            </p>
+        </div>
+
+        <div class="slide" data-title="Problem">
+            <h2 class="slide-subtitle">🐢 The 'Turtle' Crisis</h2>
+            <div class="grid-container grid-2">
+                <div class="card">
+                    <h3>Head Down (Tech Neck)</h3>
+                    <p>우리는 스마트폰 속 작은 세상에 갇혀<br>점점 땅만 보고 걷는 거북이가 되어가고 있습니다.<br>신체적 불균형과 시야의 축소.</p>
+                </div>
+                <div class="card">
+                    <h3>Disconnected Reality</h3>
+                    <p>SNS 팔로워는 늘어나지만,<br>정작 내 옆의 이웃과는 단절된 고립된 사회.<br>진짜 만남이 사라진 '연결되지 않은 연결'.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Solution">
+            <h2 class="slide-subtitle">🚀 Solution: WOOPANG</h2>
+            <h1 class="slide-title" style="font-size:3rem;">LIFT UP, LOOK UP.</h1>
+            <p class="slide-desc">
+                폰을 위로 들어 올리는 순간, 카메라 너머 현실 공간에<br>
+                정보, 즐거움, 그리고 사람의 흔적이 AR로 펼쳐집니다.
+            </p>
+            <div class="grid-container grid-3">
+                <div class="card"><h3>시야 확장</h3><p>땅이 아닌 하늘을 봅니다.</p></div>
+                <div class="card"><h3>자세 교정</h3><p>거북목 예방 효과.</p></div>
+                <div class="card"><h3>지구 산책</h3><p>건강한 걷기와 탐험.</p></div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Tech: Patents">
+            <h2 class="slide-subtitle">🛰️ Core Technology</h2>
+            <div class="grid-container grid-2">
+                <div class="card">
+                    <h3>GPS Proof Protocol</h3>
+                    <p>반경 50m 내 실제 위치한 기기만 글쓰기 허용.<br><strong>가짜 리뷰(Fake Review) 원천 차단.</strong><br>조작 불가능한 청정 데이터 구역.</p>
+                </div>
+                <div class="card">
+                    <h3>Location Lock AR (특허출원)</h3>
+                    <p>전 세계 어디서든 GPS 오차를 보정하여<br>하늘, 건물 위 특정 좌표에 정확히 콘텐츠를 고정하는<br>독보적인 <strong>위치 보정 알고리즘</strong> 보유.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Community: Pet">
+            <span class="badge" style="border-color:var(--accent-pink); color:var(--accent-pink);">Yeonnam-dong Pilot Success</span>
+            <h2 class="slide-subtitle">🐕 "강아지 들어가도 돼요?"</h2>
+            <p class="slide-desc">
+                이제 문 앞에서 쭈뼛거리지 마세요.<br>
+                우팡 AR 마크가 뜬 곳은 <strong>모든 견종 환영(Welcome All)</strong>입니다.
+            </p>
+            <div class="grid-container grid-2">
+                <div class="card">
+                    <h3>Map for Dogs</h3>
+                    <p>산책로, 배변 봉투함 위치, 반려견 음수대.<br>오직 강아지를 위한 정보 레이어가 따로 존재합니다.</p>
+                </div>
+                <div class="card">
+                    <h3>Execution Power</h3>
+                    <p><strong>연남동 200+ 매장 제휴 완료.</strong><br>직접 발로 뛰어 만든 데이터베이스.<br>우팡 유저는 프리패스로 입장합니다.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Global: Translation">
+            <h2 class="slide-subtitle">🌐 No Language Barriers</h2>
+            <p class="slide-desc">한국, 유럽, 뉴욕, 아프리카 어디서든.</p>
+            <div class="card" style="display:flex; align-items:center; gap:30px;">
+                <div style="font-size:3rem;">🇰🇷 ↔️ 🇺🇸🇨🇳🇯🇵</div>
+                <div>
+                    <h3>Real-time AR Translation</h3>
+                    <p>외국인이 메뉴판이나 간판을 비추면?<br>
+                    스마트폰 화면 위에 <strong>모국어로 번역된 텍스트</strong>가 덮어씌워집니다.<br>
+                    클릭 한 번으로 언어의 장벽이 사라지는 글로벌 필수 앱.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Content: K-Pop">
+            <h2 class="slide-subtitle">🎵 Location-Locked Content</h2>
+            <p class="slide-desc">"그 장소"에 가야만 볼 수 있는 희소성 있는 콘텐츠.</p>
+            <div class="grid-container grid-2">
+                <div class="card">
+                    <h3>Gangnam Style AR</h3>
+                    <p>강남역 사거리에 가면 200m 크기의 싸이(PSY)가 춤을 춥니다.<br>관광객들이 앱을 켜고 함께 춤추는 진풍경 연출.</p>
+                </div>
+                <div class="card">
+                    <h3>BTS Pilgrimage</h3>
+                    <p>BTS가 다녀간 카페 의자 위에<br>멤버의 3D 홀로그램 메시지가 뜹니다.<br>전 세계 아미(ARMY)를 한국으로 부르는 힘.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="BM 1: Time Sale">
+            <span class="badge">Revenue Model</span>
+            <h2 class="slide-subtitle">📉 Hyper-Local Time Sale</h2>
+            <p class="slide-desc">소상공인이 가장 원했던 기능.</p>
+            <div class="grid-container grid-2">
+                <div class="card">
+                    <h3>"선착순 2팀만 50%!"</h3>
+                    <p>주말 저녁 홍대. 빈 테이블이 보이면 사장님이 버튼 클릭.<br>반경 500m 내 유저에게 즉시 <strong>게릴라 할인 풍선</strong>이 뜹니다.</p>
+                </div>
+                <div class="card">
+                    <h3>Walk-in Conversion</h3>
+                    <p>온라인 예약이 아닙니다.<br>메시지를 보고 <strong>즉시 걸어 들어오는(Walk-in)</strong><br>가장 강력한 오프라인 매출 전환 모델입니다.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="BM 2: Payment">
+            <h2 class="slide-subtitle">💳 Seamless Payment</h2>
+            <div class="grid-container grid-3">
+                <div class="card">
+                    <h3>No Entry Needed</h3>
+                    <p>지하 1층, 지상 3층 가게.<br>들어가지 않고 밖에서 AR로<br>메뉴와 빈자리를 확인합니다.</p>
+                </div>
+                <div class="card">
+                    <h3>Pre-Order</h3>
+                    <p>PayPal 처럼 간편하게.<br>앱 내에서 예약금 결제 및<br>선주문 시스템 완비.</p>
+                </div>
+                <div class="card">
+                    <h3>No Friction</h3>
+                    <p>"저기요" 부를 필요 없이,<br>외국인도 환전 없이<br>그 자리에서 해결.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Utility: Subway AR">
+            <h2 class="slide-subtitle">🚆 Indoor Navigation</h2>
+            <p class="slide-desc">지구 산책을 더 편안하게.</p>
+            <div class="card" style="width:100%;">
+                <h3>Subway & Station Guide</h3>
+                <p>복잡한 서울역, 강남역 지하상가.<br>
+                GPS가 튀는 실내에서도 작동하는 정밀 측위 기술로<br>
+                바닥에 <strong>목적지까지 가는 화살표</strong>를 그려줍니다.<br>
+                길치도, 외국인도 헤매지 않는 직관적인 인터페이스.</p>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Value: ESG">
+            <h2 class="slide-subtitle">🌿 Eco-Friendly Platform</h2>
+            <p class="slide-desc">우팡은 Greenpeace의 정신을 디지털로 계승합니다.</p>
+            <div class="grid-container grid-2">
+                <div class="card">
+                    <h3>Digital Signage</h3>
+                    <p>거리 미관을 해치는 현수막, 전단지, 입간판.<br>이 모든 쓰레기를 <strong>증강현실(AR) 간판</strong>으로 대체합니다.<br>깨끗한 거리, 정보는 더 풍부하게.</p>
+                </div>
+                <div class="card">
+                    <h3>Carbon Footprint</h3>
+                    <p>방구석 메타버스가 아닌, 걷는 플랫폼.<br>사람들을 밖으로 걷게 하여 건강을 증진시키고<br>친환경 도보 여행을 유도합니다.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Future: Sovereign AI">
+            <h2 class="slide-subtitle">🤖 AI Integration</h2>
+            <p class="slide-desc">한국형 소버린 AI (Sovereign AI)와의 만남.</p>
+            <div class="card">
+                <h3>With NAVER HyperCLOVA X (In Talks)</h3>
+                <p>"지금 내 기분은 우울해. 조용한 위스키 바 찾아줘."<br>
+                AI가 유저의 맥락을 분석하여,<br>
+                우팡 AR 지도 위에 <strong>맞춤형 장소 3곳</strong>만 띄워줍니다.<br>
+                검색의 수고로움을 없앤 초개인화 큐레이션.</p>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Vision: Global">
+            <h2 class="slide-subtitle">🇰🇷 From Korea to World</h2>
+            <p class="slide-desc">IT 강국 한국에서 탄생한 글로벌 표준.</p>
+            <div class="grid-container grid-4" style="text-align:center;">
+                <div class="card"><h3>SEOUL</h3><p>HQ & Testbed</p></div>
+                <div class="card"><h3>NEW YORK</h3><p>2026 Q3 Launch</p></div>
+                <div class="card"><h3>PARIS</h3><p>2026 Q4 Launch</p></div>
+                <div class="card"><h3>TOKYO</h3><p>2027 Q1 Launch</p></div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Biz: Partners">
+            <h2 class="slide-subtitle">🤝 Strategic Alliance</h2>
+            <p class="slide-desc">글로벌 마케팅 자이언트들과의 협업 로드맵.</p>
+            <div class="grid-container grid-3">
+                <div class="card">
+                    <h3 style="color:var(--accent-pink);">WPP (Europe)</h3>
+                    <p>유럽 전역 관광청 및<br>브랜드 캠페인 수주 논의.</p>
+                </div>
+                <div class="card">
+                    <h3 style="color:var(--accent-cyan);">Omnicom (USA)</h3>
+                    <p>북미 지역 엔터테인먼트<br>AR 광고 독점 제휴.</p>
+                </div>
+                <div class="card">
+                    <h3 style="color:var(--accent-gold);">Dentsu (Asia)</h3>
+                    <p>일본/동남아 지역<br>캐릭터 IP 및 팝업 스토어.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Data: Growth">
+            <h2 class="slide-subtitle">📊 Market Potential</h2>
+            <div class="grid-container grid-2">
+                <div class="card" style="text-align:center;">
+                    <span style="font-size:3rem; font-weight:900; color:var(--accent-gold);">350%</span>
+                    <p>QoQ User Growth (예상)</p>
+                </div>
+                <div class="card" style="text-align:center;">
+                    <span style="font-size:3rem; font-weight:900; color:var(--accent-cyan);">$120B</span>
+                    <p>Total Addressable Market</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Team">
+            <h2 class="slide-subtitle">👥 The Builders</h2>
+            <div class="grid-container grid-3">
+                <div class="card">
+                    <h3>CEO</h3>
+                    <p>철학과 비즈니스를 잇는 비전 메이커.<br>연남동 상권 직접 개척.</p>
+                </div>
+                <div class="card">
+                    <h3>CTO</h3>
+                    <p>AR 엔진 및 LBS 로직 특허 보유 개발자.<br>Global Tech 리드.</p>
+                </div>
+                <div class="card">
+                    <h3>CSO</h3>
+                    <p>글로벌 마케팅 전문가.<br>해외 파트너십 총괄.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="Plan: Roadmap">
+            <h2 class="slide-subtitle">🗓️ Milestone 2026</h2>
+            <ul style="list-style:none; padding:0;">
+                <li class="card" style="margin-bottom:15px; display:flex; gap:20px; align-items:center;">
+                    <strong style="color:var(--accent-pink); font-size:1.2rem; min-width:40px;">Q1</strong>
+                    <span>서울 주요 거점(홍대/성수/강남) 베타 서비스 & 펫 맵 오픈</span>
+                </li>
+                <li class="card" style="margin-bottom:15px; display:flex; gap:20px; align-items:center;">
+                    <strong style="color:var(--accent-cyan); font-size:1.2rem; min-width:40px;">Q2</strong>
+                    <span>타임세일(Time-Sale) BM 모듈 가동 & AI 추천 시스템 베타</span>
+                </li>
+                <li class="card" style="margin-bottom:15px; display:flex; gap:20px; align-items:center;">
+                    <strong style="color:var(--accent-gold); font-size:1.2rem; min-width:40px;">Q3</strong>
+                    <span>부산/제주 확장 & 글로벌 버전(영어/일어/중어) 런칭</span>
+                </li>
+                <li class="card" style="margin-bottom:15px; display:flex; gap:20px; align-items:center;">
+                    <strong style="color:#fff; font-size:1.2rem; min-width:40px;">Q4</strong>
+                    <span>해외 1호 도시(뉴욕) 진출 & Series B 펀딩</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="slide" data-title="Ask: Investment">
+            <h2 class="slide-subtitle">💰 Investment Proposal</h2>
+            <div class="card" style="text-align:center; padding:50px;">
+                <h3 style="font-size:2rem; margin-bottom:20px;">Series A Round</h3>
+                <p>우리는 단순한 앱을 만드는 것이 아니라<br><strong>새로운 라이프스타일 표준</strong>을 만듭니다.</p>
+                <div style="margin-top:30px; display:flex; justify-content:center; gap:20px; font-size:0.9rem; color:var(--text-muted); flex-wrap:wrap;">
+                    <span style="border:1px solid #555; padding:5px 15px; border-radius:20px;">AR 엔진 고도화</span>
+                    <span style="border:1px solid #555; padding:5px 15px; border-radius:20px;">글로벌 서버 확충</span>
+                    <span style="border:1px solid #555; padding:5px 15px; border-radius:20px;">마케팅 공격적 집행</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="slide" data-title="End: Contact">
+            <h1 class="slide-title" style="font-size:3.5rem;">INVEST IN <span class="shimmer">REALITY</span></h1>
+            <p class="slide-desc" style="text-align:center;">
+                "한 사람의 꿈은 꿈이지만, 만인의 꿈은 현실이 된다."
+            </p>
+            <p style="margin-top:20px; font-size:1.2rem; color:var(--accent-pink);">WOOPANG : Glory For You and Me.</p>
+            
+            <div style="margin-top: 50px; font-size: 0.9rem; color: rgba(255,255,255,0.5);">
+                CEO Direct: ceo@woopang.com<br>
+                HQ: Seoul, Republic of Korea
+            </div>
+        </div>
+
+    </main>
+
+    <div class="control-panel">
+        <button class="control-btn" onclick="prevSlide()">▲</button>
+        <button class="control-btn" onclick="nextSlide()">▼</button>
+    </div>
+</div>
+
+<script>
+    // =========================================
+    // 1. SLIDE NAVIGATION LOGIC
+    // =========================================
+    const slides = document.querySelectorAll('.slide');
+    const navList = document.getElementById('navList');
+    let currentIdx = 0;
+
+    // 사이드바 메뉴 자동 생성
+    slides.forEach((slide, index) => {
+        const title = slide.getAttribute('data-title');
+        const li = document.createElement('li');
+        li.className = 'nav-item';
+        li.innerHTML = `<span style="opacity:0.5; margin-right:10px;">${String(index + 1).padStart(2, '0')}</span> ${title}`;
+        li.onclick = () => goToSlide(index);
+        navList.appendChild(li);
+    });
+
+    const navItems = document.querySelectorAll('.nav-item');
+
+    function updateView() {
+        // Slide Change
+        slides.forEach(s => s.classList.remove('active'));
+        slides[currentIdx].classList.add('active');
+
+        // Nav Active Change
+        navItems.forEach(n => n.classList.remove('active'));
+        navItems[currentIdx].classList.add('active');
+        
+        // Auto Scroll Sidebar
+        navItems[currentIdx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function nextSlide() {
+        if (currentIdx < slides.length - 1) {
+            currentIdx++;
+            updateView();
+        }
+    }
+
+    function prevSlide() {
+        if (currentIdx > 0) {
+            currentIdx--;
+            updateView();
+        }
+    }
+
+    function goToSlide(idx) {
+        currentIdx = idx;
+        updateView();
+    }
+
+    // Keyboard Control
+    document.addEventListener('keydown', (e) => {
+        if (document.body.classList.contains('print-mode')) return; // 인쇄 모드일 땐 키보드 막기
+        if(e.key === 'ArrowDown' || e.key === 'ArrowRight') nextSlide();
+        if(e.key === 'ArrowUp' || e.key === 'ArrowLeft') prevSlide();
+    });
+
+    // =========================================
+    // 2. STARFIELD BACKGROUND ANIMATION
+    // =========================================
+    const canvas = document.getElementById('starfield');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    let stars = [];
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+
+    function initStars() {
+        stars = [];
+        const starCount = 150;
+        for (let i = 0; i < starCount; i++) {
+            stars.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                size: Math.random() * 2,
+                speed: Math.random() * 0.2 + 0.1,
+                opacity: Math.random()
+            });
+        }
+    }
+
+    function animateStars() {
+        ctx.clearRect(0, 0, width, height);
+        // 배경 그라데이션은 CSS로 처리
+        
+        stars.forEach(star => {
+            star.y -= star.speed; // 위로 이동 (Head Up 상징)
+            if (star.y < 0) star.y = height;
+            
+            ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        requestAnimationFrame(animateStars);
+    }
+
+    window.addEventListener('resize', () => { resize(); initStars(); });
+    resize();
+    initStars();
+    animateStars();
+
+    // Initial Load
+    updateView();
+
+    // =========================================
+    // 3. PDF PRINT MODE LOGIC (KEY FEATURE)
+    // =========================================
+    function togglePrintMode() {
+        document.body.classList.toggle('print-mode');
+        const btn = document.getElementById('pdf-toggle');
+        
+        if(document.body.classList.contains('print-mode')) {
+            // 인쇄 모드 진입
+            btn.innerHTML = "❌ (저장 후) 돌아가기";
+            alert("✅ PDF 저장 준비 완료!\n\n1. [Ctrl + P] 또는 [인쇄]를 누르세요.\n2. 대상: 'PDF로 저장' 선택\n3. 설정 더보기 -> '배경 그래픽' 체크 필수!\n4. 방향: 가로");
+        } else {
+            // 원래 모드 복귀
+            btn.innerHTML = "🖨️ PDF 저장 모드 (클릭)";
+            window.scrollTo(0, 0); // 맨 위로 이동
+        }
+    }
+</script>
+
+</body>
+</html>

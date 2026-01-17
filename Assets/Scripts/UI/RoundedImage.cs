@@ -5,7 +5,7 @@ using UnityEngine.UI;
 public class RoundedImage : MonoBehaviour
 {
     [Range(0, 100)]
-    public float cornerRadius = 20f;
+    public float cornerRadius = 5f;
 
     private Material material;
     private Image image;

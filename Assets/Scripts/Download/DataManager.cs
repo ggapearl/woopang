@@ -41,7 +41,7 @@ public class DataManager : MonoBehaviour
         instance = this;
     }
 
-    private string baseServerUrl = "https://woopang.com/locations?status=approved";
+    private string baseServerUrl = ApiConfig.LOCATIONS + "?status=approved";
     
     [Header("UI")]
     [Tooltip("오브젝트 개수 표시 UI")]
@@ -505,6 +505,7 @@ public class DataManager : MonoBehaviour
 
         // 서브사진 설정
         ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true); // includeInactive=true
+        Debug.Log($"[DataManager] SetupObjectComponents: place={place.name}, sub_photos={place.sub_photos?.Count ?? 0}, displayCtrl={displayCtrl != null}");
         if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
         {
             List<string> allSubPhotos = new List<string>();
@@ -518,7 +519,12 @@ public class DataManager : MonoBehaviour
                     }
                 }
             }
+            Debug.Log($"[DataManager] SetSubPhotos: place={place.name}, count={allSubPhotos.Count}, urls={string.Join(", ", allSubPhotos)}");
             displayCtrl.SetSubPhotos(allSubPhotos);
+        }
+        else
+        {
+            Debug.LogWarning($"[DataManager] SetSubPhotos 건너뜀: place={place.name}, displayCtrl={displayCtrl != null}, sub_photos count={place.sub_photos?.Count ?? 0}");
         }
 
         // model_type에 따른 분기 처리
@@ -593,7 +599,7 @@ public class DataManager : MonoBehaviour
         glbLoader.ClearModel();
         
         // GLB 로딩 시작
-        string fullUrl = "https://woopang.com/" + place.model_url;
+        string fullUrl = ApiConfig.MAIN_SERVER + "/" + place.model_url;
         float scale = place.model_scale > 0 ? place.model_scale : 1.0f;
         
         // 로딩 중인 GLB 추가
@@ -809,10 +815,19 @@ public class DataManager : MonoBehaviour
     {
         if (filters == null) return;
 
-        bool showPetFriendly = filters.ContainsKey("petFriendly") && filters["petFriendly"];
-        bool showAlcohol = filters.ContainsKey("alcohol") && filters["alcohol"];
-        bool showWoopangData = filters.ContainsKey("woopangData") && filters["woopangData"];
+        // 3단계 애견동반 필터 처리
+        bool petFriendlyAll = filters.ContainsKey("petFriendlyAll") && filters["petFriendlyAll"];
+        bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
+        bool noPetFriendly = filters.ContainsKey("noPetFriendly") && filters["noPetFriendly"];
+
+        // alcohol 키가 없으면 기본값 true
+        bool showAlcohol = !filters.ContainsKey("alcohol") || filters["alcohol"];
+        // woopangData 키가 없으면 기본값 true (모든 우팡 데이터 표시)
+        bool showWoopangData = !filters.ContainsKey("woopangData") || filters["woopangData"];
+        // object3D 키가 없으면 기본값 true
         bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
+
+        Debug.Log($"[DataManager] ApplyFilters: showWoopangData={showWoopangData}, showObject3D={showObject3D}, petFriendlyAll={petFriendlyAll}, petFriendlyOnly={petFriendlyOnly}, noPetFriendly={noPetFriendly}, showAlcohol={showAlcohol}");
 
         foreach (var kvp in spawnedObjects)
         {
@@ -833,8 +848,24 @@ public class DataManager : MonoBehaviour
 
                 if (shouldShow)
                 {
-                    if (place.pet_friendly && !showPetFriendly) shouldShow = false;
-                    else if (place.alcohol_available && !showAlcohol) shouldShow = false;
+                    // 애견동반 필터 적용
+                    if (petFriendlyOnly && !place.pet_friendly)
+                    {
+                        // 애견동반만 보기 모드인데 애견동반이 아닌 경우 숨김
+                        shouldShow = false;
+                    }
+                    else if (noPetFriendly && place.pet_friendly)
+                    {
+                        // 애견동반 아닌곳만 보기 모드인데 애견동반인 경우 숨김
+                        shouldShow = false;
+                    }
+                    // petFriendlyAll일 때는 모두 표시
+
+                    // 주류 판매 필터 적용
+                    if (shouldShow && place.alcohol_available && !showAlcohol)
+                    {
+                        shouldShow = false;
+                    }
                 }
                 obj.SetActive(shouldShow);
             }

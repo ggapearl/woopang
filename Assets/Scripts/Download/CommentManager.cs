@@ -31,8 +31,6 @@ public class CommentManager : MonoBehaviour
     private int currentLocationId = -1;
     public bool IsPanelOpen { get; private set; } = false;
     private bool isExpanded = false; // 패널 확장 상태 유지
-    
-    private const string BASE_URL = "https://woopang.com";
 
     void Awake()
     {
@@ -129,15 +127,29 @@ public class CommentManager : MonoBehaviour
 
     private void CreateCommentItem(CommentData data)
     {
-        if (commentItemPrefab == null) return;
+        if (commentItemPrefab == null)
+        {
+            Debug.LogError("[CommentManager] CreateCommentItem - commentItemPrefab이 null입니다! 인스펙터에서 연결 필요");
+            return;
+        }
+
+        Debug.Log($"[CommentManager] CreateCommentItem - 프리팹: {commentItemPrefab.name}");
 
         GameObject itemObj = Instantiate(commentItemPrefab, commentContent);
         itemObj.SetActive(true); // 템플릿이 꺼져있으므로 켜줌
+
         CommentItem itemScript = itemObj.GetComponent<CommentItem>();
         if (itemScript != null)
         {
+            Debug.Log($"[CommentManager] CreateCommentItem - CommentItem 컴포넌트 발견, Setup 호출");
             itemScript.Setup(data);
         }
+        else
+        {
+            Debug.LogError($"[CommentManager] CreateCommentItem - CommentItem 컴포넌트가 없습니다! 프리팹: {commentItemPrefab.name}");
+        }
+
+        // 레이아웃은 CommentItem.ForceLayoutUpdate()에서 처리됨
     }
 
     public void OpenCommentPanel(int locationId, string objectName = null)
@@ -160,12 +172,8 @@ public class CommentManager : MonoBehaviour
                                    ? LoginManager.Instance.CurrentUser.id 
                                    : "";
             
-            #if UNITY_EDITOR
-            GenerateMockComments(); 
-            // StartCoroutine(FetchComments(locationId, currentUserId)); // 실제 서버 테스트 시 주석 해제
-            #else
+            Debug.Log($"[CommentManager] OpenCommentPanel - locationId: {locationId}, currentUserId: {currentUserId}");
             StartCoroutine(FetchComments(locationId, currentUserId));
-            #endif
         }
         IsPanelOpen = true;
     }
@@ -210,7 +218,18 @@ public class CommentManager : MonoBehaviour
 
     private IEnumerator FetchComments(int locationId, string currentUserId)
     {
+        Debug.Log($"[CommentManager] FetchComments 시작 - locationId: {locationId}, userId: {currentUserId}");
+
+        // commentContent null 체크
+        if (commentContent == null)
+        {
+            Debug.LogError("[CommentManager] commentContent가 null입니다! 인스펙터에서 할당 필요");
+            yield break;
+        }
+
         // Clear existing comments (Real & Skeleton)
+        int existingChildCount = commentContent.childCount;
+        Debug.Log($"[CommentManager] 기존 댓글/스켈레톤 {existingChildCount}개 삭제");
         foreach (Transform child in commentContent)
         {
             Destroy(child.gameObject);
@@ -218,7 +237,9 @@ public class CommentManager : MonoBehaviour
 
         ShowSkeleton(); // 로딩 시작 시 스켈레톤 표시
 
-        string url = $"{BASE_URL}/comments?location_id={locationId}&user_id={currentUserId}";
+        string url = $"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={currentUserId}";
+        Debug.Log($"[CommentManager] FetchComments - URL: {url}");
+
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             yield return request.SendWebRequest();
@@ -228,16 +249,21 @@ public class CommentManager : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string json = request.downloadHandler.text;
-                List<CommentData> comments = ParseComments(json); 
-                
+                Debug.Log($"[CommentManager] FetchComments - Response: {json}");
+
+                List<CommentData> comments = ParseComments(json);
+                Debug.Log($"[CommentManager] FetchComments - Parsed {comments?.Count ?? 0} comments");
+
                 foreach (var comment in comments)
                 {
+                    Debug.Log($"[CommentManager] Comment: id={comment.id}, user={comment.username}, content={comment.content.Substring(0, Math.Min(20, comment.content.Length))}...");
                     CreateCommentItem(comment);
                 }
             }
             else
             {
-                Debug.LogError($"Failed to fetch comments: {request.error}");
+                Debug.LogError($"[CommentManager] Failed to fetch comments: {request.error}");
+                Debug.LogError($"[CommentManager] Response Code: {request.responseCode}");
             }
         }
     }
@@ -265,12 +291,13 @@ public class CommentManager : MonoBehaviour
     {
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
         {
-            Debug.LogWarning("로그인이 필요합니다.");
-            if (LoginManager.Instance != null) LoginManager.Instance.Logout(); 
+            Debug.LogWarning("[CommentManager] PostComment - 로그인이 필요합니다.");
+            if (LoginManager.Instance != null) LoginManager.Instance.Logout();
             return;
         }
 
         if (string.IsNullOrEmpty(commentInputField.text)) return;
+        Debug.Log($"[CommentManager] PostComment - content: {commentInputField.text}, locationId: {currentLocationId}");
         StartCoroutine(PostCommentCoroutine(commentInputField.text));
     }
 
@@ -283,8 +310,8 @@ public class CommentManager : MonoBehaviour
         
         Coroutine spinRoutine = StartCoroutine(SpinButton());
 
-        string url = $"{BASE_URL}/comments";
-        
+        string url = $"{ApiConfig.MAIN_SERVER}/comments";
+
         CommentPostData postData = new CommentPostData
         {
             location_id = currentLocationId,
@@ -294,6 +321,8 @@ public class CommentManager : MonoBehaviour
         };
 
         string json = JsonUtility.ToJson(postData);
+        Debug.Log($"[CommentManager] PostCommentCoroutine - URL: {url}");
+        Debug.Log($"[CommentManager] PostCommentCoroutine - JSON: {json}");
         
         using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
         {
@@ -311,13 +340,15 @@ public class CommentManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                Debug.Log($"[CommentManager] PostCommentCoroutine - Success! Response: {request.downloadHandler.text}");
                 commentInputField.text = "";
                 isExpanded = false; // 전송 후 축소
                 StartCoroutine(FetchComments(currentLocationId, LoginManager.Instance.CurrentUser.id));
             }
             else
             {
-                Debug.LogError($"Failed to post comment: {request.error}");
+                Debug.LogError($"[CommentManager] PostCommentCoroutine - Failed: {request.error}");
+                Debug.LogError($"[CommentManager] Response Code: {request.responseCode}, Body: {request.downloadHandler?.text}");
             }
         }
     }
@@ -351,38 +382,20 @@ public class CommentManager : MonoBehaviour
 
     public void GetBestComment(int locationId, System.Action<CommentData> callback)
     {
-        #if UNITY_EDITOR
-        // 에디터 목업 데이터: 좋아요가 가장 많은 댓글 반환
-        List<CommentData> mocks = new List<CommentData>();
-        for (int i = 0; i < 4; i++)
-        {
-            mocks.Add(new CommentData
-            {
-                id = i,
-                username = $"MockUser_{i}",
-                content = i == 3 ? "와! 여기가 거기인가요? 정말 멋지네요. 좋아요 꾹 누르고 갑니다!" : $"댓글 테스트 {i}",
-                like_count = i * 15 + 5, // 0:5, 1:20, 2:35, 3:50 (3번이 베스트)
-                created_at = System.DateTime.Now.AddMinutes(-i * 10).ToString(),
-                is_liked = false
-            });
-        }
-        // 정렬
-        mocks.Sort((a, b) => b.like_count.CompareTo(a.like_count));
-        
-        callback?.Invoke(mocks[0]);
-        return;
-        #endif
+        Debug.Log($"[CommentManager] GetBestComment - locationId: {locationId}");
 
         // 로그인 여부 상관없이 댓글 조회 가능
-        string currentUserId = (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn) 
-                                ? LoginManager.Instance.CurrentUser.id 
+        string currentUserId = (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
+                                ? LoginManager.Instance.CurrentUser.id
                                 : "";
         StartCoroutine(FetchBestCommentCoroutine(locationId, currentUserId, callback));
     }
 
     private IEnumerator FetchBestCommentCoroutine(int locationId, string userId, System.Action<CommentData> callback)
     {
-        string url = $"{BASE_URL}/comments?location_id={locationId}&user_id={userId}";
+        string url = $"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={userId}";
+        Debug.Log($"[CommentManager] FetchBestCommentCoroutine - URL: {url}");
+
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             yield return request.SendWebRequest();
@@ -390,8 +403,10 @@ public class CommentManager : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string json = request.downloadHandler.text;
-                List<CommentData> comments = ParseComments(json); 
-                
+                Debug.Log($"[CommentManager] FetchBestCommentCoroutine - Response: {json}");
+
+                List<CommentData> comments = ParseComments(json);
+
                 if (comments != null && comments.Count > 0)
                 {
                     // 좋아요 순 내림차순, 그 다음 최신순
@@ -400,16 +415,18 @@ public class CommentManager : MonoBehaviour
                         if (likeCompare != 0) return likeCompare;
                         return string.Compare(b.created_at, a.created_at);
                     });
+                    Debug.Log($"[CommentManager] FetchBestCommentCoroutine - Best comment: {comments[0].username}: {comments[0].content}");
                     callback?.Invoke(comments[0]);
                 }
                 else
                 {
+                    Debug.Log("[CommentManager] FetchBestCommentCoroutine - No comments found");
                     callback?.Invoke(null);
                 }
             }
             else
             {
-                // 에러 시 null 반환
+                Debug.LogError($"[CommentManager] FetchBestCommentCoroutine - Failed: {request.error}");
                 callback?.Invoke(null);
             }
         }
@@ -417,7 +434,7 @@ public class CommentManager : MonoBehaviour
 
     private IEnumerator ToggleLocationLikeCoroutine(int locationId, System.Action<int, bool> callback)
     {
-        string url = $"{BASE_URL}/locations/like";
+        string url = $"{ApiConfig.MAIN_SERVER}/locations/like";
         LikePostData data = new LikePostData { location_id = locationId, user_id = LoginManager.Instance.CurrentUser.id };
         string json = JsonUtility.ToJson(data);
 
@@ -436,6 +453,14 @@ public class CommentManager : MonoBehaviour
                 callback?.Invoke(response.total_likes, response.action == "liked");
             }
         }
+    }
+
+    void OnDestroy()
+    {
+        // 메모리 누수 방지: 이벤트 리스너 정리
+        if (sendButton != null) sendButton.onClick.RemoveListener(PostComment);
+        if (closeButton != null) closeButton.onClick.RemoveListener(ClosePanel);
+        if (commentInputField != null) commentInputField.onValueChanged.RemoveListener(OnInputValueChanged);
     }
 }
 

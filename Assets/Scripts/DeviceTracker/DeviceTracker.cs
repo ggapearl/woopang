@@ -5,7 +5,6 @@ using System.Collections;
 public class DeviceTracker : MonoBehaviour
 {
     [SerializeField] private float updateInterval = 10f; // 위치 전송 주기 (초)
-    [SerializeField] private string serverUrl = "https://woopang.com/device-location";
     private string deviceId;
     private string deviceName = "우팡이"; // UI 표시용 고정 이름
 
@@ -65,7 +64,7 @@ public class DeviceTracker : MonoBehaviour
             altitude = location.altitude
         });
 
-        using (UnityWebRequest request = new UnityWebRequest(serverUrl, "POST"))
+        using (UnityWebRequest request = new UnityWebRequest(ApiConfig.DEVICE_LOCATION, "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);

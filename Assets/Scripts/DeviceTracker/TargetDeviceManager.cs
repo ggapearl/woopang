@@ -13,7 +13,6 @@ public class TargetDeviceManager : MonoBehaviour
     [SerializeField] private float loadRadius = 1000f; // 조회 반경 (미터)
     [SerializeField] private GameObject devicePrefab; // 타겟 디바이스 프리팹
     [SerializeField] private int poolSize = 10; // 오브젝트 풀 크기
-    private string serverUrl = "https://woopang.com/device-locations";
     private Dictionary<string, GameObject> spawnedDevices = new Dictionary<string, GameObject>();
     private Dictionary<string, DeviceData> deviceDataMap = new Dictionary<string, DeviceData>();
     private Queue<GameObject> devicePool = new Queue<GameObject>();
@@ -71,7 +70,7 @@ public class TargetDeviceManager : MonoBehaviour
         while (true)
         {
             LocationInfo currentLocation = Input.location.lastData;
-            string url = $"{serverUrl}?lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
+            string url = $"{ApiConfig.DEVICE_LOCATIONS}?lat={currentLocation.latitude}&lon={currentLocation.longitude}&radius={loadRadius}";
             yield return StartCoroutine(FetchDeviceDataFromServer(url));
             yield return new WaitForSeconds(fetchInterval);
         }
@@ -161,7 +160,7 @@ public class TargetDeviceManager : MonoBehaviour
             Debug.LogError($"[TargetDeviceManager] Device {device.deviceId}에 ImageDisplayController 없음");
             return false;
         }
-        display.SetBaseMap("https://woopang.com/uploads/default_device.jpg");
+        display.SetBaseMap(ApiConfig.DEFAULT_DEVICE_IMAGE);
 
         DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>();
         if (doubleTap == null)

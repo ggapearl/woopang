@@ -50,7 +50,7 @@ public class UserProfilePage : MonoBehaviour {
             x_id = xInput.text
         });
 
-        using (UnityWebRequest www = new UnityWebRequest("https://woopang.com/api/profile/update", "POST")) {
+        using (UnityWebRequest www = new UnityWebRequest(ApiConfig.PROFILE_UPDATE, "POST")) {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             www.uploadHandler = new UploadHandlerRaw(bodyRaw);
             www.downloadHandler = new DownloadHandlerBuffer();

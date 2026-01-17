@@ -8,6 +8,14 @@ public class ImageDisplayController : MonoBehaviour
     public Renderer cubeRenderer;
     public DoubleTap3D doubleTap3DScript;
 
+    [Header("텍스처 패딩 설정")]
+    [Tooltip("텍스처 패딩 값 (0 = 패딩 없음, 0.05 = 5% 패딩)")]
+    [Range(0f, 0.2f)]
+    public float texturePadding = 0.05f;
+
+    [Tooltip("패딩 영역 색상")]
+    public Color paddingColor = new Color(0.05f, 0.05f, 0.05f, 1f);
+
     private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
 
@@ -44,7 +52,7 @@ public class ImageDisplayController : MonoBehaviour
 
     private IEnumerator LoadBaseMapTexture(string imageUrl)
     {
-        string fullUrl = imageUrl.StartsWith("http") ? imageUrl : "https://woopang.com/" + imageUrl.Replace("\\", "/");
+        string fullUrl = imageUrl.StartsWith("http") ? imageUrl : ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
@@ -66,6 +74,9 @@ public class ImageDisplayController : MonoBehaviour
                         {
                             if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
                             else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+
+                            // 패딩 설정 적용
+                            ApplyPaddingSettings();
 
                             // 큐브 표시
                             cubeRenderer.enabled = true;
@@ -93,7 +104,13 @@ public class ImageDisplayController : MonoBehaviour
     // 서브 사진 설정
     public void SetSubPhotos(List<string> subPhotoUrls)
     {
-        if (!enabled) return;
+        Debug.Log($"[ImageDisplayController] SetSubPhotos 호출됨: enabled={enabled}, urls count={subPhotoUrls?.Count ?? 0}, doubleTap3DScript={doubleTap3DScript != null}");
+
+        if (!enabled)
+        {
+            Debug.LogWarning("[ImageDisplayController] SetSubPhotos: 컴포넌트가 비활성화됨");
+            return;
+        }
 
         if (subPhotoUrls == null || subPhotoUrls.Count == 0)
         {
@@ -112,6 +129,8 @@ public class ImageDisplayController : MonoBehaviour
 
     private IEnumerator LoadSubPhotos(List<string> subPhotoUrls)
     {
+        Debug.Log($"[ImageDisplayController] LoadSubPhotos 코루틴 시작: {subPhotoUrls.Count}개 URL");
+
         // 기존 스프라이트 정리
         ClearSubPhotos();
 
@@ -119,7 +138,8 @@ public class ImageDisplayController : MonoBehaviour
 
         foreach (string photoUrl in subPhotoUrls)
         {
-            string fullUrl = photoUrl.StartsWith("http") ? photoUrl : "https://woopang.com/" + photoUrl.Replace("\\", "/");
+            string fullUrl = photoUrl.StartsWith("http") ? photoUrl : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
+            Debug.Log($"[ImageDisplayController] 이미지 로드 시도: {fullUrl}");
 
             using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
             {
@@ -135,6 +155,7 @@ public class ImageDisplayController : MonoBehaviour
                         {
                             spriteList.Add(sprite);
                             loadedSprites.Add(sprite);
+                            Debug.Log($"[ImageDisplayController] 스프라이트 생성 성공: {fullUrl}, 총 {spriteList.Count}개");
                         }
                         else
                         {
@@ -153,11 +174,18 @@ public class ImageDisplayController : MonoBehaviour
             }
         }
 
+        Debug.Log($"[ImageDisplayController] LoadSubPhotos 완료: 로드된 스프라이트 {spriteList.Count}개, doubleTap3DScript={doubleTap3DScript != null}");
+
         if (spriteList.Count > 0)
         {
             if (doubleTap3DScript != null)
             {
+                Debug.Log($"[ImageDisplayController] doubleTap3DScript.SetImageSprites 호출: {spriteList.Count}개 스프라이트");
                 doubleTap3DScript.SetImageSprites(spriteList);
+            }
+            else
+            {
+                Debug.LogError("[ImageDisplayController] doubleTap3DScript가 null입니다! 스프라이트를 설정할 수 없습니다.");
             }
         }
         else
@@ -216,5 +244,39 @@ public class ImageDisplayController : MonoBehaviour
     void OnDestroy()
     {
         ClearImages(); // 컴포넌트 파괴 시 메모리 정리
+    }
+
+    // 패딩 설정을 머티리얼에 적용
+    private void ApplyPaddingSettings()
+    {
+        if (cubeRenderer == null || cubeRenderer.material == null) return;
+
+        Material mat = cubeRenderer.material;
+
+        // 텍스처 패딩 값 적용
+        if (mat.HasProperty("_TexturePadding"))
+        {
+            mat.SetFloat("_TexturePadding", texturePadding);
+        }
+
+        // 패딩 영역 색상 적용
+        if (mat.HasProperty("_PaddingColor"))
+        {
+            mat.SetColor("_PaddingColor", paddingColor);
+        }
+    }
+
+    // 런타임에서 패딩 값 변경
+    public void SetTexturePadding(float padding)
+    {
+        texturePadding = Mathf.Clamp(padding, 0f, 0.2f);
+        ApplyPaddingSettings();
+    }
+
+    // 런타임에서 패딩 색상 변경
+    public void SetPaddingColor(Color color)
+    {
+        paddingColor = color;
+        ApplyPaddingSettings();
     }
 }

@@ -1,22 +1,22 @@
 using UnityEngine;
-using UnityEngine.UI; // UI ¿ä¼Ò¸¦ »ç¿ëÇÏ±â À§ÇØ ÇÊ¿ä
+using UnityEngine.UI; // UI ï¿½ï¿½Ò¸ï¿½ ï¿½ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½
 
 public class OpenPrivacyPolicy : MonoBehaviour
 {
-    // °³ÀÎÁ¤º¸Ã³¸®¹æÄ§ URL
-    private string privacyPolicyUrl = "https://woopang.com"; // ¿©±â¿¡ ½ÇÁ¦ URL ÀÔ·Â
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã³ï¿½ï¿½ï¿½ï¿½Ä§ URL
+    private string privacyPolicyUrl => ApiConfig.MAIN_SERVER;
 
     void Start()
     {
-        // ¹öÆ° ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿È
+        // ï¿½ï¿½Æ° ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         Button btn = GetComponent<Button>();
-        // ¹öÆ° Å¬¸¯ ½Ã OpenPrivacyPolicyLink ¸Þ¼­µå È£Ãâ
+        // ï¿½ï¿½Æ° Å¬ï¿½ï¿½ ï¿½ï¿½ OpenPrivacyPolicyLink ï¿½Þ¼ï¿½ï¿½ï¿½ È£ï¿½ï¿½
         btn.onClick.AddListener(OpenPrivacyPolicyLink);
     }
 
     void OpenPrivacyPolicyLink()
     {
-        // URLÀ» ¿ÜºÎ ºê¶ó¿ìÀú¿¡¼­ ¿­±â
+        // URLï¿½ï¿½ ï¿½Üºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         Application.OpenURL(privacyPolicyUrl);
     }
 }

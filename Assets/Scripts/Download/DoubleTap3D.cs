@@ -47,9 +47,9 @@ public class DoubleTap3D : MonoBehaviour
     private bool petFriendly;
     private bool separateRestroom;
     private string descriptionText;
-    private string placeName;
+    [SerializeField] private string placeName; // 인스펙터에서 설정 가능 (씬 배치 Cube용)
     private string instagramId;
-    private int id = -1;
+    [SerializeField] private int id = -1; // 인스펙터에서 설정 가능 (씬 배치 Cube용)
     private string username;
     private string tel;
     private string address;
@@ -72,7 +72,7 @@ public class DoubleTap3D : MonoBehaviour
     public Text previewLikeCount;
     public Image previewLikeIcon; // 좋아요 아이콘 이미지
     public Sprite likedSprite;    // 좋아요 있을 때 (채워진 하트)
-    public Sprite unlikedSprite;  // 좋아요 없을 때 (빈 하트 등)
+    public Sprite likeIcon;       // 좋아요 없을 때 (빈 하트)
 
     private Dictionary<string, string> noCommentTranslations = new Dictionary<string, string>
     {
@@ -102,18 +102,42 @@ public class DoubleTap3D : MonoBehaviour
             return;
         }
 
-        // 코멘트 프리뷰 UI 자동 생성 (없을 경우)
-        if (commentPreviewPanel == null && fullscreenCanvasGroup != null)
+        // 코멘트 프리뷰 UI: fullscreenCanvasGroup 안에 하나만 존재해야 함
+        if (fullscreenCanvasGroup != null)
         {
-            CreateCommentPreviewUI();
-        }
-        // UI는 있는데 텍스트 참조가 빠진 경우 자동 연결
-        else if (commentPreviewPanel != null)
-        {
-            if (previewText == null) 
-                previewText = commentPreviewPanel.transform.Find("PreviewText")?.GetComponent<Text>();
-            if (previewLikeCount == null) 
-                previewLikeCount = commentPreviewPanel.transform.Find("PreviewLike")?.GetComponent<Text>();
+            // 기존에 생성된 패널이 있는지 확인
+            Transform existingPanel = fullscreenCanvasGroup.transform.Find("CommentPreviewPanel");
+            if (existingPanel != null)
+            {
+                // 기존 패널 사용
+                commentPreviewPanel = existingPanel.gameObject;
+            }
+
+            // 패널이 없으면 새로 생성
+            if (commentPreviewPanel == null)
+            {
+                CreateCommentPreviewUI();
+            }
+
+            // 패널 참조 연결
+            if (commentPreviewPanel != null)
+            {
+                if (previewText == null)
+                    previewText = commentPreviewPanel.transform.Find("PreviewText")?.GetComponent<Text>();
+                if (previewLikeCount == null)
+                    previewLikeCount = commentPreviewPanel.transform.Find("PreviewLike")?.GetComponent<Text>();
+
+                // 버튼 클릭 리스너 연결 (각 인스턴스마다 등록하되, isFullscreen 체크로 필터링)
+                Button panelBtn = commentPreviewPanel.GetComponent<Button>();
+                if (panelBtn == null)
+                {
+                    panelBtn = commentPreviewPanel.AddComponent<Button>();
+                    panelBtn.transition = Selectable.Transition.None;
+                }
+                // 중복 등록 방지 후 리스너 추가
+                panelBtn.onClick.RemoveListener(OnCommentPreviewClicked);
+                panelBtn.onClick.AddListener(OnCommentPreviewClicked);
+            }
         }
 
         currentImageRect = fullscreenImage.GetComponent<RectTransform>();
@@ -122,10 +146,20 @@ public class DoubleTap3D : MonoBehaviour
         fullscreenImage.preserveAspect = true;
         fullscreenImage.type = Image.Type.Simple;
 
+        // fullscreenImage를 형제들 중 가장 먼저 그려지도록 (UI상 가장 뒤에 배치)
+        fullscreenImage.transform.SetAsFirstSibling();
+
         imageDisplayController = GetComponentInParent<ImageDisplayController>();
         if (imageDisplayController == null)
         {
             imageDisplayController = GetComponentInChildren<ImageDisplayController>();
+        }
+
+        // 씬 배치 Cube의 경우: id가 설정되지 않았으면 부모 이름에서 추출 시도
+        // 예: "0005_Cube_Train" -> 부모/조상 오브젝트에서 숫자 id를 찾음
+        if (id == -1)
+        {
+            TryParseIdFromHierarchy();
         }
 
         if (placeInfoTextPanel != null)
@@ -451,18 +485,16 @@ public class DoubleTap3D : MonoBehaviour
 
         // Button for click interaction
         Button panelBtn = panelObj.AddComponent<Button>();
-        panelBtn.onClick.AddListener(() => {
-            if (CommentManager.Instance != null)
-            {
-                CommentManager.Instance.OpenCommentPanel(this.id);
-            }
-        });
+        panelBtn.transition = Selectable.Transition.None; // 터치 피드백 제거
+        panelBtn.onClick.AddListener(OnCommentPreviewClicked);
 
         // Text
         GameObject textObj = new GameObject("PreviewText");
         textObj.transform.SetParent(panelObj.transform, false);
         previewText = textObj.AddComponent<Text>();
-        previewText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        previewText.font = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+        if (previewText.font == null)
+            previewText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         previewText.fontSize = 24; // Larger text
         previewText.color = Color.white;
         previewText.alignment = TextAnchor.MiddleLeft;
@@ -478,9 +510,11 @@ public class DoubleTap3D : MonoBehaviour
         GameObject likeObj = new GameObject("PreviewLike");
         likeObj.transform.SetParent(panelObj.transform, false);
         previewLikeCount = likeObj.AddComponent<Text>();
-        previewLikeCount.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        previewLikeCount.font = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+        if (previewLikeCount.font == null)
+            previewLikeCount.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         previewLikeCount.fontSize = 20;
-        previewLikeCount.color = Color.red; // Heart color hint
+        previewLikeCount.color = Color.white;
         previewLikeCount.alignment = TextAnchor.MiddleRight;
         
         RectTransform likeRect = likeObj.GetComponent<RectTransform>();
@@ -492,7 +526,7 @@ public class DoubleTap3D : MonoBehaviour
 
     private void OnDoubleTapCube()
     {
-        if (isCooldown) return; // 쿨다운 중이면 무시
+        if (isCooldown) return;
 
         isCooldown = true;
         StartCoroutine(ResetCooldown());
@@ -506,6 +540,26 @@ public class DoubleTap3D : MonoBehaviour
             // 열릴 때 닫기 방지 쿨다운 시작
             canClose = false;
             StartCoroutine(EnableCloseAfterDelay());
+
+            // ⭐ 이미지가 없거나 유효하지 않으면 서버에서 동적으로 로드
+            bool needsImageLoad = imageSprites == null || imageSprites.Count == 0;
+            if (!needsImageLoad && imageSprites.Count > 0)
+            {
+                // 스프라이트가 있지만 유효한지 확인
+                foreach (var sprite in imageSprites)
+                {
+                    if (sprite == null || sprite.texture == null || sprite.texture == Texture2D.blackTexture)
+                    {
+                        needsImageLoad = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsImageLoad && id > 0)
+            {
+                StartCoroutine(FetchSubPhotosFromServer(id));
+            }
 
             // 풀스크린 열 때 이미지 캐싱 (iOS 대비)
 #if UNITY_IOS
@@ -549,21 +603,40 @@ public class DoubleTap3D : MonoBehaviour
                             }
                             // 콜론 제거, 띄어쓰기 추가
                             previewText.text = $"<b>{data.username}</b>  {content}";
-                            
+
                             // 좋아요 아이콘/숫자 처리
-                            if (previewLikeCount != null) previewLikeCount.text = data.like_count.ToString();
-                            
                             if (previewLikeIcon != null)
                             {
-                                previewLikeIcon.sprite = (data.like_count > 0) ? likedSprite : unlikedSprite;
                                 previewLikeIcon.gameObject.SetActive(true);
+                                // 좋아요 있으면 채워진 하트, 없으면 빈 하트
+                                if (data.like_count > 0)
+                                {
+                                    previewLikeIcon.sprite = likedSprite;
+                                }
+                                else
+                                {
+                                    previewLikeIcon.sprite = likeIcon;
+                                }
+                                previewLikeIcon.color = Color.white;
+                            }
+
+                            if (previewLikeCount != null)
+                            {
+                                // 좋아요 0이면 숫자 표시 안함
+                                previewLikeCount.text = data.like_count > 0 ? data.like_count.ToString() : "";
                             }
                         }
                         else
                         {
                             previewText.text = "아직 댓글이 없습니다. 첫 댓글을 남겨보세요!";
                             if (previewLikeCount != null) previewLikeCount.text = "";
-                            if (previewLikeIcon != null) previewLikeIcon.gameObject.SetActive(false); // 댓글 없으면 아이콘 숨김
+                            // 댓글 없으면 빈 하트 표시
+                            if (previewLikeIcon != null)
+                            {
+                                previewLikeIcon.sprite = likeIcon;
+                                previewLikeIcon.color = Color.white;
+                                previewLikeIcon.gameObject.SetActive(true);
+                            }
                         }
                     }
                 });
@@ -659,6 +732,10 @@ public class DoubleTap3D : MonoBehaviour
         {
             fullscreenImage.enabled = true;
             fullscreenImage.sprite = imageSprites[index];
+            fullscreenImage.color = Color.white;
+
+            // fullscreenImage가 guidePanel(FullScreenGuide) 뒤에 위치하도록 설정
+            fullscreenImage.transform.SetAsFirstSibling();
         }
         ResetImagePosition();
     }
@@ -782,9 +859,8 @@ public class DoubleTap3D : MonoBehaviour
 
     public void SetImageSprites(List<Sprite> sprites)
     {
-        imageSprites = sprites;
+        imageSprites = sprites ?? new List<Sprite>();
 
-        // 이미 풀스크린이 열려있다면 이미지 재생성
         if (isFullscreen)
         {
             ShowImage(imageIndex);
@@ -883,4 +959,203 @@ public class DoubleTap3D : MonoBehaviour
         imageUrls.Clear();
         ClearImageCache();
     }
+
+    /// <summary>
+    /// 씬 배치 Cube용: 부모/조상 오브젝트 이름에서 id 파싱 시도
+    /// 패턴: "0132_Cube_집" -> id=132, placeName="집"
+    /// </summary>
+    private void TryParseIdFromHierarchy()
+    {
+        Transform current = transform;
+
+        // 자신과 부모들의 이름 확인
+        while (current != null)
+        {
+            string objName = current.gameObject.name;
+
+            // "0132_Cube_집" 또는 "Place_132_cube" 패턴 파싱
+            if (TryParseNamePattern(objName))
+            {
+                return;
+            }
+
+            current = current.parent;
+        }
+    }
+
+    /// <summary>
+    /// 오브젝트 이름에서 id와 placeName 파싱
+    /// </summary>
+    private bool TryParseNamePattern(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+
+        // 패턴 1: "0132_Cube_집" 또는 "132_Cube_집" (숫자 + _Cube_ + 이름)
+        var match1 = System.Text.RegularExpressions.Regex.Match(name, @"^(\d+)_Cube_(.+)$");
+        if (match1.Success)
+        {
+            if (int.TryParse(match1.Groups[1].Value, out int parsedId) && parsedId > 0)
+            {
+                id = parsedId;
+                if (string.IsNullOrEmpty(placeName))
+                {
+                    placeName = match1.Groups[2].Value;
+                }
+                return true;
+            }
+        }
+
+        // 패턴 2: "Place_132_cube" (DataManager 생성 패턴)
+        var match2 = System.Text.RegularExpressions.Regex.Match(name, @"Place_(\d+)_");
+        if (match2.Success)
+        {
+            if (int.TryParse(match2.Groups[1].Value, out int parsedId))
+            {
+                id = parsedId;
+                return true;
+            }
+        }
+
+        // 패턴 3: 이름에 숫자만 있는 경우 (예: "132")
+        if (int.TryParse(name, out int directId) && directId > 0)
+        {
+            id = directId;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void OnCommentPreviewClicked()
+    {
+        // 현재 fullscreen 상태인 인스턴스만 댓글창 열기
+        // (여러 DoubleTap3D 인스턴스가 동일한 버튼에 리스너를 등록하므로 필터링 필요)
+        if (!isFullscreen)
+        {
+            return;
+        }
+
+        if (CommentManager.Instance != null && this.id != -1)
+        {
+            Debug.Log($"[DoubleTap3D] OnCommentPreviewClicked - id: {this.id}, placeName: {this.placeName}");
+            CommentManager.Instance.OpenCommentPanel(this.id, this.placeName);
+        }
+    }
+
+    private IEnumerator FetchSubPhotosFromServer(int locationId)
+    {
+        string url = $"{ApiConfig.MAIN_SERVER}/locations/{locationId}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            request.timeout = 10;
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string json = request.downloadHandler.text;
+                List<string> allSubPhotos = ParseSubPhotosFromJson(json);
+
+                if (allSubPhotos != null && allSubPhotos.Count > 0)
+                {
+                    yield return StartCoroutine(LoadSubPhotosDirectly(allSubPhotos));
+                }
+            }
+        }
+    }
+
+    private List<string> ParseSubPhotosFromJson(string json)
+    {
+        List<string> photos = new List<string>();
+
+        try
+        {
+            int startIndex = json.IndexOf("\"sub_photos\":");
+            if (startIndex == -1) return photos;
+
+            int bracketStart = json.IndexOf('[', startIndex);
+            if (bracketStart == -1) return photos;
+
+            int depth = 0;
+            int bracketEnd = bracketStart;
+            for (int i = bracketStart; i < json.Length; i++)
+            {
+                if (json[i] == '[') depth++;
+                else if (json[i] == ']') depth--;
+
+                if (depth == 0)
+                {
+                    bracketEnd = i;
+                    break;
+                }
+            }
+
+            string subPhotosStr = json.Substring(bracketStart, bracketEnd - bracketStart + 1);
+
+            int pos = 0;
+            while (pos < subPhotosStr.Length)
+            {
+                int quoteStart = subPhotosStr.IndexOf('"', pos);
+                if (quoteStart == -1) break;
+
+                int quoteEnd = subPhotosStr.IndexOf('"', quoteStart + 1);
+                if (quoteEnd == -1) break;
+
+                string photoUrl = subPhotosStr.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
+                if (!string.IsNullOrEmpty(photoUrl) && (photoUrl.Contains("uploads/") || photoUrl.StartsWith("http")))
+                {
+                    photos.Add(photoUrl);
+                }
+
+                pos = quoteEnd + 1;
+            }
+        }
+        catch (System.Exception) { }
+
+        return photos;
+    }
+
+    private IEnumerator LoadSubPhotosDirectly(List<string> photoUrls)
+    {
+        List<Sprite> newSprites = new List<Sprite>();
+
+        foreach (string photoUrl in photoUrls)
+        {
+            string fullUrl = photoUrl.StartsWith("http") ? photoUrl : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
+
+            using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
+            {
+                request.timeout = 15;
+                yield return request.SendWebRequest();
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    Texture2D texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
+                    if (texture != null)
+                    {
+                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                        if (sprite != null)
+                        {
+                            newSprites.Add(sprite);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (newSprites.Count > 0)
+        {
+            imageSprites = newSprites;
+
+            if (isFullscreen && imageIndex >= 0)
+            {
+                ShowImage(imageIndex);
+            }
+
+#if UNITY_IOS
+            CacheImagesForFullscreen();
+#endif
+        }
+    }
+
 }

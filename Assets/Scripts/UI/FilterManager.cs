@@ -55,6 +55,8 @@ public class FilterManager : MonoBehaviour
     {
         { "en", new Dictionary<string, string> {
             { "petFriendly", "Pet Friendly" },
+            { "petFriendlyRequired", "Pet Friendly (Required)" },
+            { "petFriendlyNotAllowed", "Pet Friendly (N/A)" },
             { "publicData", "Public Data" },
             { "subway", "Metro" },
             { "alcohol", "Alcohol" },
@@ -64,6 +66,8 @@ public class FilterManager : MonoBehaviour
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "애견동반" },
+            { "petFriendlyRequired", "애견동반(필수)" },
+            { "petFriendlyNotAllowed", "애견동반(불가)" },
             { "publicData", "공공데이터" },
             { "subway", "지하철" },
             { "alcohol", "주류판매" },
@@ -73,6 +77,8 @@ public class FilterManager : MonoBehaviour
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "ペット同伴" },
+            { "petFriendlyRequired", "ペット同伴(必須)" },
+            { "petFriendlyNotAllowed", "ペット同伴(不可)" },
             { "publicData", "公共データ" },
             { "subway", "地下鉄" },
             { "alcohol", "アルコール" },
@@ -82,6 +88,8 @@ public class FilterManager : MonoBehaviour
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendly", "宠物友好" },
+            { "petFriendlyRequired", "宠物友好(必须)" },
+            { "petFriendlyNotAllowed", "宠物友好(禁止)" },
             { "publicData", "公共数据" },
             { "subway", "地铁" },
             { "alcohol", "酒类销售" },
@@ -91,6 +99,8 @@ public class FilterManager : MonoBehaviour
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendly", "Admite Mascotas" },
+            { "petFriendlyRequired", "Mascotas (Obligatorio)" },
+            { "petFriendlyNotAllowed", "Mascotas (No)" },
             { "publicData", "Datos Públicos" },
             { "subway", "Metro" },
             { "alcohol", "Alcohol" },
@@ -99,6 +109,9 @@ public class FilterManager : MonoBehaviour
             { "object3D", "Objetos 3D" }
         }}
     };
+
+    // 현재 언어 코드 저장
+    private string currentLangCode = "en";
 
     void Start()
     {
@@ -125,21 +138,21 @@ public class FilterManager : MonoBehaviour
 
     private void UpdateLanguage()
     {
-        string langCode = "en";
+        currentLangCode = "en";
         switch (Application.systemLanguage)
         {
-            case SystemLanguage.Korean: langCode = "ko"; break;
-            case SystemLanguage.Japanese: langCode = "ja"; break;
+            case SystemLanguage.Korean: currentLangCode = "ko"; break;
+            case SystemLanguage.Japanese: currentLangCode = "ja"; break;
             case SystemLanguage.Chinese:
             case SystemLanguage.ChineseSimplified:
-            case SystemLanguage.ChineseTraditional: langCode = "zh"; break;
-            case SystemLanguage.Spanish: langCode = "es"; break;
+            case SystemLanguage.ChineseTraditional: currentLangCode = "zh"; break;
+            case SystemLanguage.Spanish: currentLangCode = "es"; break;
         }
 
-        if (!localizedFilterNames.ContainsKey(langCode)) langCode = "en";
-        var texts = localizedFilterNames[langCode];
+        if (!localizedFilterNames.ContainsKey(currentLangCode)) currentLangCode = "en";
+        var texts = localizedFilterNames[currentLangCode];
 
-        SetToggleLabel(petFriendlyToggle, texts["petFriendly"]);
+        // petFriendly는 상태에 따라 다르게 표시하므로 UpdatePetFriendlyToggleUI에서 처리
         SetToggleLabel(publicDataToggle, texts["publicData"]);
         SetToggleLabel(subwayToggle, texts["subway"]);
         SetToggleLabel(alcoholToggle, texts["alcohol"]);
@@ -170,6 +183,11 @@ public class FilterManager : MonoBehaviour
             yellowColor = Color.yellow; // fallback
         }
 
+        // 다국어 텍스트 가져오기
+        var texts = localizedFilterNames.ContainsKey(currentLangCode)
+            ? localizedFilterNames[currentLangCode]
+            : localizedFilterNames["en"];
+
         // 상태에 따라 UI 업데이트
         switch (petFriendlyState)
         {
@@ -177,19 +195,22 @@ public class FilterManager : MonoBehaviour
                 petFriendlyToggle.isOn = true;
                 // 체크박스 흰색 배경, 글자만 노란색 - 모두 표시
                 SetToggleBackground(petFriendlyToggle, Color.white);
-                SetToggleLabelColor(petFriendlyToggle, yellowColor);
+                // 레이블 텍스트: "애견동반" (기본)
+                SetToggleLabel(petFriendlyToggle, texts["petFriendly"]);
                 break;
             case PetFriendlyFilterState.OnlyPetFriendly:
                 petFriendlyToggle.isOn = true;
                 // 체크박스 노란색(#fbc15d) 배경, 노란색 글자 - 애견동반만
                 SetToggleBackground(petFriendlyToggle, yellowColor);
-                SetToggleLabelColor(petFriendlyToggle, yellowColor);
+                // 레이블 텍스트: "애견동반(필수)"
+                SetToggleLabel(petFriendlyToggle, texts["petFriendlyRequired"]);
                 break;
             case PetFriendlyFilterState.NoPetFriendly:
                 petFriendlyToggle.isOn = false;
                 // 체크박스 회색 배경, 회색 글자 - 애견동반 아닌곳만
                 SetToggleBackground(petFriendlyToggle, Color.gray);
-                SetToggleLabelColor(petFriendlyToggle, Color.gray);
+                // 레이블 텍스트: "애견동반(불가)"
+                SetToggleLabel(petFriendlyToggle, texts["petFriendlyNotAllowed"]);
                 break;
         }
 

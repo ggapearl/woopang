@@ -17,8 +17,17 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Google.XR.ARCoreExtensions;
-using UnityEngine.XR.ARFoundation;
 using Google.XR.ARCoreExtensions.GeospatialCreator;
+
+/// <summary>
+/// 사용자 필터 모드
+/// </summary>
+public enum UserFilterMode
+{
+    All,            // 모든 사용자
+    FollowingOnly,  // 내가 팔로우하는 사람만
+    None            // 숨기기
+}
 
 [Serializable]
 public class NearbyUserData
@@ -57,7 +66,6 @@ public class P2PManager : MonoBehaviour
     public static P2PManager Instance { get; private set; }
 
     [Header("Server Configuration")]
-    [SerializeField] private string serverUrl = "http://210.105.65.145:5001";
     [SerializeField] private float positionUpdateInterval = 5f;  // 5초마다 위치 업데이트
     [SerializeField] private bool autoConnect = true;            // 자동 연결
 
@@ -67,8 +75,8 @@ public class P2PManager : MonoBehaviour
     [SerializeField] private float maxTrackingDistance = 1000f;  // 1km
     [SerializeField] private int initialPoolSize = 10;           // 초기 풀 크기
 
-    [Header("References")]
-    [SerializeField] private ARAnchorManager anchorManager;
+    [Header("User Filter Settings")]
+    [SerializeField] private UserFilterMode userFilterMode = UserFilterMode.All;  // 사용자 필터 모드
 
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs = true;
@@ -117,12 +125,6 @@ public class P2PManager : MonoBehaviour
 
     void Start()
     {
-        // Find components
-        if (anchorManager == null)
-        {
-            anchorManager = FindObjectOfType<ARAnchorManager>();
-        }
-
         earthManager = FindObjectOfType<AREarthManager>();
 
         if (autoConnect)
@@ -239,7 +241,7 @@ public class P2PManager : MonoBehaviour
         string json = JsonConvert.SerializeObject(reg);
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest($"{serverUrl}/api/p2p/register", "POST");
+        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_REGISTER, "POST");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -293,18 +295,26 @@ public class P2PManager : MonoBehaviour
     /// </summary>
     private IEnumerator UpdatePosition()
     {
-        UserPositionUpdate posUpdate = new UserPositionUpdate
+        // 비공개 모드면 위치 업데이트 전송 안함
+        if (locationVisibilityMode == LocationVisibilityMode.Private)
         {
-            user_id = currentUserId,
-            latitude = currentLatitude,
-            longitude = currentLongitude,
-            altitude = currentAltitude
+            yield break;
+        }
+
+        // visibility_mode 포함하여 전송
+        JObject posUpdate = new JObject
+        {
+            ["user_id"] = currentUserId,
+            ["latitude"] = currentLatitude,
+            ["longitude"] = currentLongitude,
+            ["altitude"] = currentAltitude,
+            ["visibility_mode"] = locationVisibilityMode.ToString().ToLower()
         };
 
-        string json = JsonConvert.SerializeObject(posUpdate);
+        string json = posUpdate.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest($"{serverUrl}/api/p2p/update_position", "POST");
+        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UPDATE_POSITION, "POST");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -352,7 +362,8 @@ public class P2PManager : MonoBehaviour
                     distance = (float)(userObj["distance"] ?? 0)
                 };
 
-                if (userData.distance <= maxTrackingDistance)
+                // 거리 및 필터 조건 확인
+                if (userData.distance <= maxTrackingDistance && ShouldShowUser(userData.user_id))
                 {
                     currentNearbyUserIds.Add(userData.user_id);
 
@@ -366,6 +377,11 @@ public class P2PManager : MonoBehaviour
                         // Create new avatar
                         CreateUserAvatar(userData);
                     }
+                }
+                else
+                {
+                    // 데이터는 저장 (나중에 필터 변경 시 사용)
+                    nearbyUsersData[userData.user_id] = userData;
                 }
             }
 
@@ -422,6 +438,11 @@ public class P2PManager : MonoBehaviour
             );
         }
 
+#if UNITY_EDITOR
+        // 에디터에서는 transform.position 직접 설정
+        UpdateAvatarPositionInEditor(avatarObj, userData);
+#endif
+
         avatarObj.SetActive(true);
         activeUserAvatars[userData.user_id] = avatarObj;
         nearbyUsersData[userData.user_id] = userData;
@@ -446,6 +467,11 @@ public class P2PManager : MonoBehaviour
             anchor.Altitude = userData.altitude;
         }
 
+#if UNITY_EDITOR
+        // 에디터에서는 transform.position 직접 업데이트 (ARGeospatialCreatorAnchor가 작동 안함)
+        UpdateAvatarPositionInEditor(avatarObj, userData);
+#endif
+
         // Update user info
         P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
         if (userInfo != null)
@@ -455,6 +481,56 @@ public class P2PManager : MonoBehaviour
 
         nearbyUsersData[userData.user_id] = userData;
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 에디터에서 GPS 좌표를 월드 좌표로 변환하여 아바타 위치 업데이트
+    /// </summary>
+    private void UpdateAvatarPositionInEditor(GameObject avatarObj, NearbyUserData userData)
+    {
+        // VirtualLocation 기준으로 상대 위치 계산
+        double baseLat = currentLatitude;
+        double baseLon = currentLongitude;
+
+        if (VirtualLocation.Instance != null)
+        {
+            baseLat = VirtualLocation.Instance.Latitude;
+            baseLon = VirtualLocation.Instance.Longitude;
+        }
+
+        // GPS 좌표 차이를 미터로 변환
+        Vector3 relativePos = GpsToLocalPosition(baseLat, baseLon, userData.latitude, userData.longitude);
+
+        // 카메라 기준 위치 계산
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null)
+        {
+            Vector3 worldPos = mainCamera.transform.position + relativePos;
+            worldPos.y = mainCamera.transform.position.y; // 같은 높이 유지
+
+            avatarObj.transform.position = worldPos;
+        }
+    }
+
+    /// <summary>
+    /// GPS 좌표 차이를 로컬 미터 단위로 변환
+    /// </summary>
+    private Vector3 GpsToLocalPosition(double baseLat, double baseLon, double targetLat, double targetLon)
+    {
+        // 위도 1도 = 약 111,320m
+        // 경도 1도 = 약 111,320m * cos(위도)
+        const double metersPerDegreeLat = 111320.0;
+        double metersPerDegreeLon = 111320.0 * Math.Cos(baseLat * Math.PI / 180.0);
+
+        double deltaLat = targetLat - baseLat;
+        double deltaLon = targetLon - baseLon;
+
+        float x = (float)(deltaLon * metersPerDegreeLon); // 동서 방향
+        float z = (float)(deltaLat * metersPerDegreeLat); // 남북 방향
+
+        return new Vector3(x, 0, z);
+    }
+#endif
 
     /// <summary>
     /// 사용자 아바타 제거
@@ -515,7 +591,7 @@ public class P2PManager : MonoBehaviour
         string json = gestureData.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest($"{serverUrl}/api/p2p/send_gesture", "POST");
+        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_SEND_GESTURE, "POST");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -554,6 +630,79 @@ public class P2PManager : MonoBehaviour
         StartCoroutine(SendPrivacyUpdate(visibilityMode, shareRadius));
     }
 
+    // 현재 위치 공개 모드
+    private LocationVisibilityMode locationVisibilityMode = LocationVisibilityMode.Public;
+
+    /// <summary>
+    /// 내 위치 공개 모드 설정 (P2POpenFilterPanel에서 호출)
+    /// </summary>
+    public void SetLocationVisibility(LocationVisibilityMode mode)
+    {
+        locationVisibilityMode = mode;
+        Log($"Location visibility set to: {mode}");
+
+        // 서버에 공개 설정 전송
+        string visibilityString = mode.ToString().ToLower();
+        StartCoroutine(SendPrivacyUpdate(visibilityString, (int)maxTrackingDistance));
+
+        // 비공개 모드면 위치 업데이트 중지
+        if (mode == LocationVisibilityMode.Private)
+        {
+            if (positionUpdateCoroutine != null)
+            {
+                StopCoroutine(positionUpdateCoroutine);
+                positionUpdateCoroutine = null;
+            }
+            // 서버에서 자신의 위치 데이터 삭제 요청
+            StartCoroutine(SendUnregisterRequest());
+        }
+        else if (isRegistered && positionUpdateCoroutine == null)
+        {
+            // 공개 모드로 변경 시 위치 업데이트 재개
+            positionUpdateCoroutine = StartCoroutine(SendPositionUpdates());
+        }
+    }
+
+    /// <summary>
+    /// 현재 위치 공개 모드 가져오기
+    /// </summary>
+    public LocationVisibilityMode GetLocationVisibility()
+    {
+        return locationVisibilityMode;
+    }
+
+    /// <summary>
+    /// 서버에서 자신의 위치 데이터 삭제 요청
+    /// </summary>
+    private IEnumerator SendUnregisterRequest()
+    {
+        JObject unregData = new JObject
+        {
+            ["user_id"] = currentUserId
+        };
+
+        string json = unregData.ToString();
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+
+        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UNREGISTER, "POST");
+        request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+
+        yield return request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            Log("User location unregistered (private mode)");
+        }
+        else
+        {
+            LogWarning($"Failed to unregister: {request.error}");
+        }
+
+        request.Dispose();
+    }
+
     private IEnumerator SendPrivacyUpdate(string visibilityMode, int shareRadius)
     {
         JObject privacyData = new JObject
@@ -566,7 +715,7 @@ public class P2PManager : MonoBehaviour
         string json = privacyData.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest($"{serverUrl}/api/p2p/update_privacy", "POST");
+        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UPDATE_PRIVACY, "POST");
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -586,10 +735,31 @@ public class P2PManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 거리에 따라 아바타 표시/숨김 처리
+    /// 거리 및 필터에 따라 아바타 표시/숨김 처리
     /// </summary>
     private void UpdateVisibleAvatars()
     {
+        // 필터 모드가 None이면 모든 아바타 숨김
+        if (userFilterMode == UserFilterMode.None)
+        {
+            foreach (var avatarObj in activeUserAvatars.Values)
+            {
+                SetAvatarVisible(avatarObj, false);
+            }
+            return;
+        }
+
+        // 필터에 맞지 않는 아바타 제거
+        var usersToRemove = activeUserAvatars.Keys
+            .Where(id => !ShouldShowUser(id))
+            .ToList();
+
+        foreach (string userId in usersToRemove)
+        {
+            RemoveUserAvatar(userId);
+        }
+
+        // 기존 아바타 가시성 업데이트
         foreach (var kvp in activeUserAvatars)
         {
             string userId = kvp.Key;
@@ -599,16 +769,43 @@ public class P2PManager : MonoBehaviour
             {
                 NearbyUserData userData = nearbyUsersData[userId];
 
-                // 200m 이상은 3D 오브젝트 숨김, 거리 설정 밖도 숨김
-                bool shouldShow = userData.distance <= 200f && userData.distance <= maxTrackingDistance;
+                // 200m 이상은 3D 오브젝트 숨김, 거리 설정 밖도 숨김, 필터 확인
+                bool shouldShow = userData.distance <= 200f &&
+                                  userData.distance <= maxTrackingDistance &&
+                                  ShouldShowUser(userId);
 
-                // MeshRenderer만 제어 (Target 컴포넌트는 유지)
-                MeshRenderer[] renderers = avatarObj.GetComponentsInChildren<MeshRenderer>();
-                foreach (var renderer in renderers)
+                SetAvatarVisible(avatarObj, shouldShow);
+            }
+        }
+
+        // 필터 모드 변경으로 새로 보여야 할 사용자 추가
+        if (userFilterMode != UserFilterMode.None)
+        {
+            foreach (var kvp in nearbyUsersData)
+            {
+                string userId = kvp.Key;
+                NearbyUserData userData = kvp.Value;
+
+                if (!activeUserAvatars.ContainsKey(userId) &&
+                    ShouldShowUser(userId) &&
+                    userData.distance <= maxTrackingDistance &&
+                    activeUserAvatars.Count < maxVisibleUsers)
                 {
-                    renderer.enabled = shouldShow;
+                    CreateUserAvatar(userData);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 아바타 가시성 설정
+    /// </summary>
+    private void SetAvatarVisible(GameObject avatarObj, bool visible)
+    {
+        MeshRenderer[] renderers = avatarObj.GetComponentsInChildren<MeshRenderer>();
+        foreach (var renderer in renderers)
+        {
+            renderer.enabled = visible;
         }
     }
 
@@ -652,6 +849,103 @@ public class P2PManager : MonoBehaviour
         Log($"Focusing on user: {userId}");
     }
 
+    #region User Filter Mode
+
+    // 팔로잉 목록 캐시
+    private HashSet<string> followingUserIds = new HashSet<string>();
+    private float lastFollowingCacheTime = 0f;
+    private const float FOLLOWING_CACHE_DURATION = 60f; // 60초마다 갱신
+
+    /// <summary>
+    /// 사용자 필터 모드 설정 (ListPanel에서 호출)
+    /// </summary>
+    public void SetUserFilterMode(UserFilterMode mode)
+    {
+        userFilterMode = mode;
+        Log($"User filter mode set to: {mode}");
+
+        if (mode == UserFilterMode.FollowingOnly)
+        {
+            // 팔로잉 목록 새로고침
+            StartCoroutine(RefreshFollowingList());
+        }
+
+        UpdateVisibleAvatars();
+    }
+
+    /// <summary>
+    /// 현재 필터 모드 가져오기
+    /// </summary>
+    public UserFilterMode GetUserFilterMode()
+    {
+        return userFilterMode;
+    }
+
+    /// <summary>
+    /// 팔로잉 목록 새로고침
+    /// </summary>
+    private IEnumerator RefreshFollowingList()
+    {
+        if (string.IsNullOrEmpty(currentUserId)) yield break;
+
+        string url = $"{ApiConfig.FOLLOWING}?user_id={currentUserId}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                try
+                {
+                    JObject response = JObject.Parse(request.downloadHandler.text);
+                    JArray followingArray = (JArray)response["following"];
+
+                    followingUserIds.Clear();
+                    if (followingArray != null)
+                    {
+                        foreach (JObject user in followingArray)
+                        {
+                            string id = user["id"]?.ToString();
+                            if (!string.IsNullOrEmpty(id))
+                            {
+                                followingUserIds.Add(id);
+                            }
+                        }
+                    }
+
+                    lastFollowingCacheTime = Time.time;
+                    Log($"Following list refreshed: {followingUserIds.Count} users");
+                }
+                catch (Exception e)
+                {
+                    LogError($"Failed to parse following list: {e.Message}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 사용자가 필터에 맞는지 확인
+    /// </summary>
+    private bool ShouldShowUser(string userId)
+    {
+        switch (userFilterMode)
+        {
+            case UserFilterMode.None:
+                return false;
+
+            case UserFilterMode.FollowingOnly:
+                return followingUserIds.Contains(userId);
+
+            case UserFilterMode.All:
+            default:
+                return true;
+        }
+    }
+
+    #endregion
+
     // Logging helpers
     private void Log(string message)
     {
@@ -674,4 +968,46 @@ public class P2PManager : MonoBehaviour
     {
         StopTracking();
     }
+
+    #region Test Methods (Virtual Users)
+
+    /// <summary>
+    /// 테스트용: 가상 사용자 데이터 직접 주입
+    /// P2PVirtualUserTester에서 호출
+    /// </summary>
+    public void InjectTestUsersData(string jsonResponse)
+    {
+        ProcessNearbyUsers(jsonResponse);
+    }
+
+    /// <summary>
+    /// 테스트용: 특정 가상 사용자 아바타 제거
+    /// </summary>
+    public void RemoveTestUserAvatar(string userId)
+    {
+        RemoveUserAvatar(userId);
+    }
+
+    /// <summary>
+    /// 테스트용: 현재 위치 수동 설정 (에디터에서 GPS 없이 테스트)
+    /// </summary>
+    public void SetTestPosition(double latitude, double longitude, double altitude)
+    {
+        currentLatitude = latitude;
+        currentLongitude = longitude;
+        currentAltitude = altitude;
+        Log($"Test position set: ({latitude}, {longitude}, {altitude})");
+    }
+
+    /// <summary>
+    /// 테스트용: 사용자 ID 수동 설정
+    /// </summary>
+    public void SetTestUserId(string userId, string username)
+    {
+        currentUserId = userId;
+        currentUsername = username;
+        Log($"Test user set: {username} ({userId})");
+    }
+
+    #endregion
 }

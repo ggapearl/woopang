@@ -16,6 +16,9 @@ public class PlaceListManager : MonoBehaviour
     public TrainStationManager trainManager;
     public SubwayManager subwayManager;
 
+    [Header("P2P User Manager")]
+    public P2PManager p2pManager;
+
     public Text listText;
 
     [Header("UI Update Settings")]
@@ -34,6 +37,10 @@ public class PlaceListManager : MonoBehaviour
     private int woopangCount;
     private int tourAPICount;
     private int publicTransportCount;
+    private int p2pUserCount;
+
+    // P2P 사용자 색상 (핑크)
+    private const string P2P_USER_COLOR = "E95383";
 
     private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
     {
@@ -42,7 +49,8 @@ public class PlaceListManager : MonoBehaviour
         { "publicData", true },
         { "subway", true },
         { "bus", true },
-        { "alcohol", true }
+        { "alcohol", true },
+        { "p2pUsers", true }
     };
 
     private Dictionary<string, Dictionary<string, string>> languageTexts = new Dictionary<string, Dictionary<string, string>>
@@ -50,12 +58,12 @@ public class PlaceListManager : MonoBehaviour
         { "en", new Dictionary<string, string> {
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
             { "woopangData", "WOOPANG DATA" }, { "tourApiData", "TourAPI DATA" },
-            { "transportData", "TRANSPORT DATA" }
+            { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
             { "woopangData", "우팡 데이터" }, { "tourApiData", "관광공사 데이터" },
-            { "transportData", "대중교통 데이터" }
+            { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" }
         }}
     };
 
@@ -126,7 +134,7 @@ public class PlaceListManager : MonoBehaviour
 #endif
 
         combinedPlaces.Clear();
-        woopangCount = 0; tourAPICount = 0; publicTransportCount = 0;
+        woopangCount = 0; tourAPICount = 0; publicTransportCount = 0; p2pUserCount = 0;
 
         bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
         bool petFriendlyAll = activeFilters.GetValueOrDefault("petFriendlyAll", true);
@@ -168,6 +176,13 @@ public class PlaceListManager : MonoBehaviour
         AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon);
         AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon);
 
+        // 4. P2P Users (근처 사용자)
+        bool showP2PUsers = activeFilters.GetValueOrDefault("p2pUsers", true);
+        if (showP2PUsers && p2pManager != null)
+        {
+            AddP2PUserData(lat, lon);
+        }
+
         combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
 
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
@@ -179,9 +194,31 @@ public class PlaceListManager : MonoBehaviour
         sb.Append($"\n{GetLocalizedText("woopangData")}: {woopangCount}");
         sb.Append($"\n{GetLocalizedText("tourApiData")}: {tourAPICount}");
         sb.Append($"\n{GetLocalizedText("transportData")}: {publicTransportCount}");
+        sb.Append($"\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}");
 
         if (listText != null) listText.text = sb.ToString();
         yield return null;
+    }
+
+    /// <summary>
+    /// P2P 사용자 데이터 추가
+    /// </summary>
+    private void AddP2PUserData(float lat, float lon)
+    {
+        if (p2pManager == null) return;
+
+        var nearbyUsers = p2pManager.GetNearbyUsers();
+        if (nearbyUsers == null) return;
+
+        foreach (var user in nearbyUsers)
+        {
+            if (user.distance <= maxDisplayDistance)
+            {
+                p2pUserCount++;
+                string displayText = $"👤 {user.username} - {Mathf.FloorToInt(user.distance)}m";
+                combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
+            }
+        }
     }
 
     private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon) where T : MonoBehaviour
@@ -257,6 +294,7 @@ public class PlaceListManager : MonoBehaviour
         if (terminalManager != null) terminalManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (trainManager != null) trainManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (subwayManager != null) subwayManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (p2pManager != null) p2pManager.SetMaxTrackingDistance(maxDisplayDistance);
     }
 
     private void UpdateDistanceValueText() {

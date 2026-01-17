@@ -4,7 +4,7 @@ Shader "UI/RoundedCorners"
     {
         _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
-        _CornerRadius ("Corner Radius", Range(0, 0.5)) = 0.1
+        _CornerRadius ("Corner Radius", Range(0, 0.5)) = 0.05
 
         _StencilComp ("Stencil Comparison", Float) = 8
         _Stencil ("Stencil ID", Float) = 0
@@ -86,23 +86,27 @@ Shader "UI/RoundedCorners"
                 // 텍스처 샘플링
                 fixed4 color = tex2D(_MainTex, IN.texcoord) * IN.color;
 
-                // UV 좌표를 -0.5 ~ 0.5 범위로 변환
-                float2 uv = IN.texcoord - 0.5;
+                // Corner Radius가 0이면 둥근 모서리 처리 건너뛰기
+                if (_CornerRadius > 0.001)
+                {
+                    // UV 좌표를 -0.5 ~ 0.5 범위로 변환
+                    float2 uv = IN.texcoord - 0.5;
 
-                // 모서리까지의 거리 계산
-                float2 dist = abs(uv);
+                    // 모서리까지의 거리 계산
+                    float2 dist = abs(uv);
 
-                // 둥근 모서리 영역인지 확인
-                float2 delta = dist - (0.5 - _CornerRadius);
-                delta = max(delta, 0.0);
+                    // 둥근 모서리 영역인지 확인
+                    float2 delta = dist - (0.5 - _CornerRadius);
+                    delta = max(delta, 0.0);
 
-                // 모서리 반경 내 거리 계산
-                float cornerDist = length(delta);
+                    // 모서리 반경 내 거리 계산
+                    float cornerDist = length(delta);
 
-                // 안티앨리어싱을 위한 부드러운 경계
-                float alpha = 1.0 - smoothstep(_CornerRadius - 0.01, _CornerRadius, cornerDist);
+                    // 안티앨리어싱을 위한 부드러운 경계
+                    float alpha = 1.0 - smoothstep(_CornerRadius - 0.01, _CornerRadius, cornerDist);
 
-                color.a *= alpha;
+                    color.a *= alpha;
+                }
 
                 return color;
             }

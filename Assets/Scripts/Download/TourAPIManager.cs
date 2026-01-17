@@ -42,7 +42,7 @@ public class TourAPIManager : MonoBehaviour
         instance = this;
     }
 
-    private const string BASE_URL = "https://woopang.com/proxy";
+    private string BASE_URL => ApiConfig.TOUR_API_PROXY;
     private const string SERVICE_KEY = "teLNDctkJ9YFlMFaPWTqqwgtgxvewuaqm53dhSOiNpfOV1Q4z8NxyhhvpW4ifx3eKhI8RgodlQ05pxVHAeh1sA==";
     private readonly string tourApiUrlTemplate = "{0}/locationBasedList?serviceKey={1}&pageNo=1&numOfRows=100&mapX={2}&mapY={3}&radius={4}&listYN=Y&arrange=A&MobileOS=ETC&MobileApp=AppTest&_type=json";
     private readonly string detailImageUrlTemplate = "{0}/detailImage?serviceKey={1}&contentId={2}&imageYN=Y&numOfRows=10&MobileOS=ETC&MobileApp=AppTest&_type=json";
@@ -798,8 +798,16 @@ private bool isDataLoaded = false;
     {
         if (filters == null) return;
 
-        bool showPublicData = filters.ContainsKey("publicData") && filters["publicData"];
-        bool showPetFriendly = filters.ContainsKey("petFriendly") && filters["petFriendly"];
+        // publicData 키가 없으면 기본값 true
+        bool showPublicData = !filters.ContainsKey("publicData") || filters["publicData"];
+        // petFriendlyAll 또는 petFriendlyOnly일 때 애견동반 장소 표시
+        bool showPetFriendly = filters.ContainsKey("petFriendlyAll") && filters["petFriendlyAll"] ||
+                               filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
+        // 기존 petFriendly 키도 지원 (하위 호환성)
+        if (!filters.ContainsKey("petFriendlyAll") && !filters.ContainsKey("petFriendlyOnly"))
+        {
+            showPetFriendly = !filters.ContainsKey("petFriendly") || filters["petFriendly"];
+        }
 
         // TourAPI 데이터는 모두 애견동반이므로 두 필터 모두 체크
         bool shouldShow = showPublicData && showPetFriendly;

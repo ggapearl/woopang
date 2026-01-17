@@ -918,6 +918,8 @@ public class FirebaseNotification : MonoBehaviour
     
     private void LoadTokenFromAndroidPrefs()
     {
+        if (Application.platform != RuntimePlatform.Android) return;
+
         try
         {
             using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
@@ -992,7 +994,7 @@ public class FirebaseNotification : MonoBehaviour
             form.AddField("location_consent", "false");
         }
         
-        UnityWebRequest request = UnityWebRequest.Post("https://woopang.com/register-token", form);
+        UnityWebRequest request = UnityWebRequest.Post(ApiConfig.REGISTER_TOKEN, form);
         request.timeout = 10;
         
         yield return request.SendWebRequest();

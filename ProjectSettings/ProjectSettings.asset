@@ -864,7 +864,7 @@ PlayerSettings:
   webWasm2023: 0
   webEnableSubmoduleStrippingCompatibility: 0
   scriptingDefineSymbols:
-    Android: ARCORE_INTERNAL_GEOSPATIAL_CREATOR_ENABLED;GLTFAST_SAFE
+    Android: ARCORE_INTERNAL_GEOSPATIAL_CREATOR_ENABLED;GLTFAST_SAFE;APP_UI_EDITOR_ONLY
     EmbeddedLinux: DOTWEEN
     GameCoreScarlett: DOTWEEN
     GameCoreXboxOne: DOTWEEN

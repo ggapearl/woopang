@@ -5,6 +5,10 @@ Shader "Universal Render Pipeline/T5EdgeLine"
         [MainTexture] _BaseMap ("Texture", 2D) = "white" {}
         [MainColor] _BaseColor ("Base Color", Color) = (0.1, 0.1, 0.1, 1)
 
+        [Header(Texture Padding)]
+        _TexturePadding ("Texture Padding", Range(0, 0.2)) = 0.05
+        _PaddingColor ("Padding Area Color", Color) = (0.05, 0.05, 0.05, 1)
+
         [Header(T5 Edge Lines)]
         _EdgeColor ("T5 Line Color", Color) = (1, 0.95, 0.8, 1)
         _EdgeWidth ("Line Width", Range(0.001, 0.2)) = 0.02
@@ -21,23 +25,185 @@ Shader "Universal Render Pipeline/T5EdgeLine"
 
         [Header(Rounded Corners)]
         _Roundness ("Corner Roundness", Range(0, 0.5)) = 0.1
+
+        [Header(Back Face)]
+        _BackFaceAlpha ("Back Face Alpha", Range(0, 1)) = 0.3
+        _BackFaceTint ("Back Face Tint", Color) = (0.7, 0.7, 0.7, 1)
     }
 
     SubShader
     {
         Tags
         {
-            "RenderType" = "Opaque"
+            "RenderType" = "Transparent"
             "RenderPipeline" = "UniversalPipeline"
-            "Queue" = "Geometry"
+            "Queue" = "Transparent"
         }
+
+        Blend SrcAlpha OneMinusSrcAlpha
+        ZWrite Off
 
         LOD 300
 
+        // 뒷면 먼저 렌더링 (흐리게)
+        Pass
+        {
+            Name "BackFace"
+            Tags { "LightMode" = "SRPDefaultUnlit" }
+
+            Cull Front
+            Blend SrcAlpha OneMinusSrcAlpha
+            ZWrite Off
+
+            HLSLPROGRAM
+            #pragma prefer_hlslcc gles
+            #pragma exclude_renderers d3d11_9x
+            #pragma target 2.0
+
+            #pragma vertex vert
+            #pragma fragment fragBack
+
+            #pragma multi_compile_fog
+            #pragma multi_compile_instancing
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalWS : TEXCOORD1;
+                float3 positionWS : TEXCOORD2;
+                float3 positionOS : TEXCOORD3;
+                float fogFactor : TEXCOORD4;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _BaseMap_ST;
+                half4 _BaseColor;
+                half4 _PaddingColor;
+                half4 _EdgeColor;
+                half4 _BackFaceTint;
+                half _TexturePadding;
+                half _EdgeWidth;
+                half _EdgeIntensity;
+                half _EdgeSharpness;
+                half _GlowPulseSpeed;
+                half _MinGlow;
+                half _TubeGlow;
+                half _InnerGlow;
+                half _Roundness;
+                half _BackFaceAlpha;
+            CBUFFER_END
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output = (Varyings)0;
+
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                VertexNormalInputs normalInput = GetVertexNormalInputs(input.normalOS);
+
+                output.positionCS = vertexInput.positionCS;
+                output.positionWS = vertexInput.positionWS;
+                output.normalWS = normalInput.normalWS;
+                output.positionOS = input.positionOS.xyz;
+                output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
+                output.fogFactor = ComputeFogFactor(vertexInput.positionCS.z);
+
+                return output;
+            }
+
+            float sdRoundBox(float3 p, float3 b, float r)
+            {
+                float3 q = abs(p) - b;
+                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+            }
+
+            half GetEdgeDistance(float3 pos)
+            {
+                float3 absPos = abs(pos);
+                float distX1 = length(absPos.yz - float2(0.5, 0.5));
+                float distY1 = length(absPos.xz - float2(0.5, 0.5));
+                float distZ1 = length(absPos.xy - float2(0.5, 0.5));
+                return min(distX1, min(distY1, distZ1));
+            }
+
+            half4 fragBack(Varyings input) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(input);
+
+                float3 boxSize = float3(0.5, 0.5, 0.5);
+                float dist = sdRoundBox(input.positionOS, boxSize - _Roundness, _Roundness);
+
+                if (dist > 0.01)
+                    discard;
+
+                // 텍스처 패딩
+                float2 paddedUV = (input.uv - 0.5) * (1.0 + _TexturePadding * 2.0) + 0.5;
+                bool isPaddingArea = paddedUV.x < 0.0 || paddedUV.x > 1.0 || paddedUV.y < 0.0 || paddedUV.y > 1.0;
+
+                half3 baseColor;
+                half baseAlpha = 1.0;
+
+                if (isPaddingArea)
+                {
+                    baseColor = _PaddingColor.rgb * _BaseColor.rgb;
+                    baseAlpha = _PaddingColor.a;
+                }
+                else
+                {
+                    half4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, paddedUV);
+                    baseColor = baseMap.rgb * _BaseColor.rgb;
+                    baseAlpha = baseMap.a;
+                }
+
+                // 모서리 글로우
+                half edgeDist = GetEdgeDistance(input.positionOS);
+                half edgeMask = 1.0 - saturate(edgeDist / _EdgeWidth);
+                edgeMask = pow(edgeMask, _EdgeSharpness);
+                half tubeGlow = 1.0 - saturate(edgeDist / (_EdgeWidth + _TubeGlow));
+                tubeGlow = pow(tubeGlow, _EdgeSharpness * 0.5);
+                half centerBright = 1.0 - saturate(edgeDist / (_EdgeWidth * 0.5));
+                centerBright = pow(centerBright, _EdgeSharpness * 2.0) * _InnerGlow;
+                half pulse = _MinGlow + (1.0 - _MinGlow) * (0.5 + 0.5 * sin(_Time.y * _GlowPulseSpeed));
+                half glowStrength = (edgeMask + tubeGlow * 0.5 + centerBright) * pulse;
+                half3 edgeGlow = _EdgeColor.rgb * glowStrength * _EdgeIntensity;
+
+                // 뒷면 색상: 흐리게 처리
+                half3 finalColor = (baseColor + edgeGlow) * _BackFaceTint.rgb;
+                finalColor = MixFog(finalColor, input.fogFactor);
+
+                // 뒷면 알파값 적용
+                half finalAlpha = max(baseAlpha, glowStrength * 0.5) * _BackFaceAlpha;
+
+                return half4(finalColor, finalAlpha);
+            }
+            ENDHLSL
+        }
+
+        // 앞면 렌더링
         Pass
         {
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
+
+            Cull Back
 
             HLSLPROGRAM
             #pragma prefer_hlslcc gles
@@ -78,7 +244,10 @@ Shader "Universal Render Pipeline/T5EdgeLine"
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
                 half4 _BaseColor;
+                half4 _PaddingColor;
                 half4 _EdgeColor;
+                half4 _BackFaceTint;
+                half _TexturePadding;
                 half _EdgeWidth;
                 half _EdgeIntensity;
                 half _EdgeSharpness;
@@ -87,6 +256,7 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half _TubeGlow;
                 half _InnerGlow;
                 half _Roundness;
+                half _BackFaceAlpha;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -152,9 +322,34 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 if (dist > 0.01)
                     discard;
 
-                // Base color
-                half4 baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
-                half3 baseColor = baseMap.rgb * _BaseColor.rgb;
+                // 텍스처 패딩 적용: UV를 중심으로 스케일링하여 텍스처를 작게 만듦
+                float2 paddedUV = input.uv;
+                float padding = _TexturePadding;
+
+                // UV를 중심(0.5, 0.5) 기준으로 스케일링
+                paddedUV = (input.uv - 0.5) * (1.0 + padding * 2.0) + 0.5;
+
+                // 패딩 영역인지 확인 (UV가 0~1 범위를 벗어나면 패딩 영역)
+                bool isPaddingArea = paddedUV.x < 0.0 || paddedUV.x > 1.0 || paddedUV.y < 0.0 || paddedUV.y > 1.0;
+
+                // Base color with alpha support
+                half4 baseMap;
+                half3 baseColor;
+                half baseAlpha = 1.0;
+
+                if (isPaddingArea)
+                {
+                    // 패딩 영역: 패딩 색상 사용
+                    baseColor = _PaddingColor.rgb * _BaseColor.rgb;
+                    baseAlpha = _PaddingColor.a;
+                }
+                else
+                {
+                    // 텍스처 영역: 텍스처 샘플링
+                    baseMap = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, paddedUV);
+                    baseColor = baseMap.rgb * _BaseColor.rgb;
+                    baseAlpha = baseMap.a; // 텍스처 알파값 사용
+                }
 
                 // 모서리까지의 거리 계산
                 half edgeDist = GetEdgeDistance(input.positionOS);
@@ -190,7 +385,10 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 // Apply fog
                 finalColor = MixFog(finalColor, input.fogFactor);
 
-                return half4(finalColor, 1.0);
+                // 최종 알파값: 텍스처 알파 + 엣지 글로우 영역은 항상 보이도록
+                half finalAlpha = max(baseAlpha, glowStrength * 0.5);
+
+                return half4(finalColor, finalAlpha);
             }
             ENDHLSL
         }

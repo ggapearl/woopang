@@ -37,7 +37,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: 42cb5a1632d99bb4c8c8bc5d0735dd90, type: 3}
+        m_Texture: {fileID: 2800000, guid: 32f4553f59427c44498ecd1f1b6ea1d4, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
@@ -46,16 +46,20 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _EdgeIntensity: 4.4
-    - _EdgeSharpness: 4.4
-    - _EdgeWidth: 0.044
-    - _GlowPulseSpeed: 1
-    - _InnerGlow: 1.5
-    - _MinGlow: 0.8
+    - _BackFaceAlpha: 0.1
+    - _EdgeIntensity: 2
+    - _EdgeSharpness: 4
+    - _EdgeWidth: 0.1
+    - _GlowPulseSpeed: 2
+    - _InnerGlow: 1
+    - _MinGlow: 0.5
     - _Roundness: 0
-    - _TubeGlow: 0.044
+    - _TexturePadding: 0.1
+    - _TubeGlow: 0.2
     m_Colors:
+    - _BackFaceTint: {r: 0.509434, g: 0.509434, b: 0.509434, a: 1}
     - _BaseColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
     - _EdgeColor: {r: 1, g: 0.95, b: 0.8, a: 1}
+    - _PaddingColor: {r: 0.049999967, g: 0.049999967, b: 0.049999967, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

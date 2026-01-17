@@ -29,7 +29,7 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Image loadingSpinner;
 
     [Header("Upload Settings")]
-    [SerializeField] private string serverUrl = "https://woopang.com:5000/fix_upload/";
+    private string serverUrl => ApiConfig.FIX_UPLOAD + "/";
     [SerializeField] private float uploadTimeoutSeconds = 20f;
     [SerializeField] private int countdownSeconds = 20;
 
@@ -391,7 +391,7 @@ public class CubeDataFixManager : MonoBehaviour
                 }
             }, new ImageCropper.Settings
             {
-                autoZoomEnabled = true,
+                autoZoomEnabled = false,  // 자동 확대 비활성화 - 핀치 줌으로만 조작
                 selectionMinAspectRatio = 1.0f,
                 selectionMaxAspectRatio = 1.0f
             });

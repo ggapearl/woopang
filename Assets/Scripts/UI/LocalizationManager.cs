@@ -468,6 +468,56 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "找到了{0}个附近的物体",
                 ["ja"] = "近くの{0}個のオブジェクトを見つけました",
                 ["es"] = "Se encontraron {0} objetos cercanos"
+            },
+
+            // AR Preview 확인 메시지
+            ["confirm_add_object"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Would you like to add an object here?",
+                ["ko"] = "이곳에 오브젝트를 추가하시겠습니까?",
+                ["zh"] = "您要在这里添加对象吗？",
+                ["ja"] = "ここにオブジェクトを追加しますか？",
+                ["es"] = "¿Desea agregar un objeto aquí?"
+            },
+            ["confirm"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Confirm",
+                ["ko"] = "확인",
+                ["zh"] = "确认",
+                ["ja"] = "確認",
+                ["es"] = "Confirmar"
+            },
+            ["cancel"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Cancel",
+                ["ko"] = "취소",
+                ["zh"] = "取消",
+                ["ja"] = "キャンセル",
+                ["es"] = "Cancelar"
+            },
+            ["uploading_object"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Uploading object...",
+                ["ko"] = "오브젝트 업로드 중...",
+                ["zh"] = "正在上传对象...",
+                ["ja"] = "オブジェクトをアップロード中...",
+                ["es"] = "Subiendo objeto..."
+            },
+            ["select_main_photo"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Select Main Photo",
+                ["ko"] = "메인 사진 선택",
+                ["zh"] = "选择主照片",
+                ["ja"] = "メイン写真を選択",
+                ["es"] = "Seleccionar foto principal"
+            },
+            ["select_sub_photos"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Select Sub Photos",
+                ["ko"] = "서브 사진 선택",
+                ["zh"] = "选择子照片",
+                ["ja"] = "サブ写真を選択",
+                ["es"] = "Seleccionar fotos secundarias"
             }
         };
     }

@@ -120,11 +120,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 411060de4483b5e4c9847cd3cbc18554, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  targetColor: {r: 0.3, g: 0.7, b: 1, a: 1}
+  targetColor: {r: 0.914, g: 0.325, b: 0.514, a: 1}
   needBoxIndicator: 1
   needArrowIndicator: 1
   needDistanceText: 1
-  distanceTextColor: {r: 0, g: 1, b: 1, a: 1}
+  distanceTextColor: {r: 0.914, g: 0.325, b: 0.514, a: 1}
   indicator: {fileID: 0}
 --- !u!114 &1234567890123456795
 MonoBehaviour:

@@ -6,16 +6,16 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 0
-    path: Assets/Scenes/WP_1119.unity
+    path: Assets/Scenes_2025/WP_1119.unity
     guid: 6ab4d9f386b89c24781ef15605bf8ff9
   - enabled: 0
-    path: Assets/Scenes/WP_1129.unity
+    path: Assets/Scenes_2025/WP_1129.unity
     guid: f4a8b9c3d2e1f0a5b6c7d8e9f0a1b2c3
   - enabled: 0
-    path: Assets/Scenes/WP_1201.unity
+    path: Assets/Scenes_2025/WP_1201.unity
     guid: da1dd099225a928498dac259894227e9
   - enabled: 1
-    path: Assets/Scenes/WP_1206.unity
+    path: Assets/Scenes_2025/WP_1206.unity
     guid: 016f0d2826cdffb40aaa7bda155bf6fb
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: c84e9f04bfb5140ffb4e02ebf9bbcd6e,
@@ -24,7 +24,10 @@ EditorBuildSettings:
       type: 2}
     UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: d73c104c8df2fd548b8b611f33315d58,
       type: 2}
+    com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f,
+      type: 2}
     com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 34f0f67ad9af8d74c9ab02cf994d2217,
       type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: f1d66e5450418a245a006782a2a5e5f3,
       type: 2}
+  m_UseUCBPForAssetBundles: 0

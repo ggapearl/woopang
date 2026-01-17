@@ -165,7 +165,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eb234b464311ff04481159aac8750959, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  cornerRadius: 30
+  cornerRadius: 5
 --- !u!1 &1470859529741358536
 GameObject:
   m_ObjectHideFlags: 0

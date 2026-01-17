@@ -7,6 +7,21 @@ public class UIFeedbackManager : MonoBehaviour
 {
     public static UIFeedbackManager Instance { get; private set; }
 
+    /// <summary>
+    /// 씬에 UIFeedbackManager가 없으면 자동 생성
+    /// RuntimeInitializeOnLoadMethod로 게임 시작 시 자동 호출
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void AutoInitialize()
+    {
+        if (Instance == null)
+        {
+            GameObject go = new GameObject("UIFeedbackManager");
+            go.AddComponent<UIFeedbackManager>();
+            Debug.Log("[UIFeedbackManager] Auto-initialized");
+        }
+    }
+
     [Header("Audio Settings")]
     [SerializeField] private AudioClip defaultButtonSound;
     [SerializeField] private float soundVolume = 1.0f;

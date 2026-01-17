@@ -45,7 +45,7 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private ARPreviewController arPreviewController; // AR 미리보기 컨트롤러
     [SerializeField] private GameObject cubePrefab; // 0000_Cube.prefab
 
-    [SerializeField] private string serverUrl = "https://woopang.com:5000/upload/";
+    private string serverUrl => ApiConfig.UPLOAD + "/";
 
     private Texture2D mainPhoto;
     private List<Texture2D> subPhotos = new List<Texture2D>();
@@ -312,7 +312,7 @@ public class CubeUploadManager : MonoBehaviour
                     SetMainPhotoUIState(true);
                     Debug.Log("[HEIC] 메인 사진 크롭 완료");
 
-                    // ✨ AR Preview 모드 시작
+                    // AR Preview 모드 시작 (메인 사진 크롭 직후)
                     StartARPreview(croppedTexture);
                 }
                 else
@@ -334,14 +334,15 @@ public class CubeUploadManager : MonoBehaviour
             }
         }, new ImageCropper.Settings
         {
-            autoZoomEnabled = true,
+            autoZoomEnabled = false,  // 자동 확대 비활성화 - 핀치 줌으로만 조작
             selectionMinAspectRatio = 1.0f,
             selectionMaxAspectRatio = 1.0f
         });
     }
 
     /// <summary>
-    /// AR Preview 모드 시작
+    /// AR Preview 모드 시작 (메인 사진 크롭 직후)
+    /// "이곳에 오브젝트를 추가하시겠습니까?" 메시지와 함께 AR Preview 표시
     /// </summary>
     private void StartARPreview(Texture2D mainPhotoTexture)
     {
@@ -361,23 +362,38 @@ public class CubeUploadManager : MonoBehaviour
         if (uploadPage != null)
             uploadPage.SetActive(false);
 
-        // ARPreviewController의 cubePrefab 설정 (Inspector에서 설정하지 않은 경우)
-        var type = typeof(ARPreviewController);
-        var cubePrefabField = type.GetField("cubePrefab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        if (cubePrefabField != null)
-        {
-            cubePrefabField.SetValue(arPreviewController, cubePrefab);
-        }
+        // ARPreviewController에 cubePrefab 설정
+        arPreviewController.SetCubePrefab(cubePrefab);
 
-        // AR Preview 시작
-        arPreviewController.StartPreview(mainPhotoTexture, onConfirmCallback: () =>
-        {
-            // 확인 버튼 클릭 시 → UploadPage 복귀
-            if (uploadPage != null)
-                uploadPage.SetActive(true);
+        // AR Preview 시작 (확인/취소 콜백 포함)
+        arPreviewController.StartPreview(
+            mainPhotoTexture,
+            onConfirmCallback: () =>
+            {
+                // 확인 버튼 클릭 → UploadPage 복귀하여 서브 사진 추가 진행
+                if (uploadPage != null)
+                    uploadPage.SetActive(true);
 
-            Debug.Log("[CubeUploadManager] AR Preview 종료, UploadPage로 복귀");
-        });
+                Debug.Log("[CubeUploadManager] AR Preview 확인됨, UploadPage로 복귀");
+            },
+            onCancelCallback: () =>
+            {
+                // 취소 버튼 클릭 → 메인 사진 초기화 후 UploadPage 복귀
+                if (mainPhoto != null)
+                {
+                    Destroy(mainPhoto);
+                    mainPhoto = null;
+                }
+                if (mainPhotoDisplay != null)
+                    mainPhotoDisplay.sprite = null;
+                SetMainPhotoUIState(false);
+
+                if (uploadPage != null)
+                    uploadPage.SetActive(true);
+
+                Debug.Log("[CubeUploadManager] AR Preview 취소됨, 메인 사진 초기화");
+            }
+        );
 
         Debug.Log("[CubeUploadManager] AR Preview 모드 시작");
     }
@@ -1203,6 +1219,7 @@ public class CubeUploadManager : MonoBehaviour
             yield break;
         }
 
+        // 검증 통과 → 바로 업로드 진행
         Coroutine countdownCoroutine = StartCoroutine(ShowCountdownWarning(10));
         yield return StartCoroutine(SendWithTimeout(
             ProcessAndUploadImages(
