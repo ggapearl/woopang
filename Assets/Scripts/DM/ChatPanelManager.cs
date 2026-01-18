@@ -308,7 +308,87 @@ public class ChatPanelManager : MonoBehaviour
                 {
                     failedIcon.gameObject.SetActive(true);
                 }
+                else
+                {
+                    // FailedIcon이 없으면 동적으로 생성
+                    CreateFailedIndicator(lastMessage.transform);
+                }
+
+                // 상태 텍스트 업데이트
+                Text statusText = lastMessage.transform.Find("StatusText")?.GetComponent<Text>();
+                if (statusText != null)
+                {
+                    statusText.text = "전송 실패 ⚠";
+                    statusText.color = new Color(1f, 0.4f, 0.4f);
+                }
             }
+        }
+    }
+
+    private void CreateFailedIndicator(Transform parent)
+    {
+        // 실패 아이콘 동적 생성
+        GameObject failedIcon = new GameObject("FailedIcon");
+        failedIcon.transform.SetParent(parent, false);
+
+        RectTransform rect = failedIcon.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0.5f);
+        rect.anchorMax = new Vector2(0, 0.5f);
+        rect.pivot = new Vector2(1, 0.5f);
+        rect.anchoredPosition = new Vector2(-5, 0);
+        rect.sizeDelta = new Vector2(20, 20);
+
+        Text failedText = failedIcon.AddComponent<Text>();
+        failedText.text = "⚠";
+        failedText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        failedText.fontSize = 16;
+        failedText.color = new Color(1f, 0.4f, 0.4f);
+        failedText.alignment = TextAnchor.MiddleCenter;
+    }
+
+    /// <summary>
+    /// 메시지 전송 상태 표시 업데이트
+    /// </summary>
+    private void UpdateMessageStatus(GameObject bubble, string status)
+    {
+        Text statusText = bubble.transform.Find("StatusText")?.GetComponent<Text>();
+        if (statusText == null)
+        {
+            // StatusText 없으면 생성
+            GameObject statusObj = new GameObject("StatusText");
+            statusObj.transform.SetParent(bubble.transform, false);
+
+            RectTransform rect = statusObj.AddComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 0);
+            rect.anchorMax = new Vector2(0, 0);
+            rect.pivot = new Vector2(1, 0);
+            rect.anchoredPosition = new Vector2(-5, 5);
+            rect.sizeDelta = new Vector2(50, 15);
+
+            statusText = statusObj.AddComponent<Text>();
+            statusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            statusText.fontSize = 10;
+            statusText.alignment = TextAnchor.MiddleRight;
+        }
+
+        switch (status)
+        {
+            case "sending":
+                statusText.text = "전송중...";
+                statusText.color = new Color(0.6f, 0.6f, 0.6f);
+                break;
+            case "sent":
+                statusText.text = "✓";
+                statusText.color = new Color(0.6f, 0.6f, 0.6f);
+                break;
+            case "read":
+                statusText.text = "✓✓";
+                statusText.color = new Color(0.3f, 0.7f, 1f); // 파란색
+                break;
+            case "failed":
+                statusText.text = "⚠ 실패";
+                statusText.color = new Color(1f, 0.4f, 0.4f);
+                break;
         }
     }
 
@@ -475,10 +555,94 @@ public class ChatPanelManager : MonoBehaviour
         rect.localScale = endScale;
     }
 
+    private GameObject typingIndicatorInstance;
+
     private IEnumerator ShowTypingAnimation()
     {
-        // 타이핑 인디케이터 애니메이션
-        yield return null;
+        // 타이핑 인디케이터 생성
+        if (typingIndicatorInstance == null && contentTransform != null)
+        {
+            if (typingIndicatorPrefab != null)
+            {
+                typingIndicatorInstance = Instantiate(typingIndicatorPrefab, contentTransform);
+            }
+            else
+            {
+                // 프리팹이 없으면 동적 생성
+                typingIndicatorInstance = CreateTypingIndicator();
+            }
+        }
+
+        if (typingIndicatorInstance == null) yield break;
+
+        typingIndicatorInstance.SetActive(true);
+        ScrollToBottom();
+
+        // 애니메이션 (... 점들이 깜빡이는 효과)
+        Text dotsText = typingIndicatorInstance.GetComponentInChildren<Text>();
+        if (dotsText != null)
+        {
+            string[] dots = { ".", "..", "..." };
+            int index = 0;
+            while (typingCoroutine != null)
+            {
+                dotsText.text = dots[index];
+                index = (index + 1) % dots.Length;
+                yield return new WaitForSeconds(0.4f);
+            }
+        }
+
+        // 타이핑 종료 시 숨김
+        if (typingIndicatorInstance != null)
+            typingIndicatorInstance.SetActive(false);
+    }
+
+    private GameObject CreateTypingIndicator()
+    {
+        if (contentTransform == null) return null;
+
+        // 타이핑 인디케이터 동적 생성
+        GameObject indicator = new GameObject("TypingIndicator");
+        indicator.transform.SetParent(contentTransform, false);
+
+        RectTransform rect = indicator.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0);
+        rect.anchorMax = new Vector2(1, 0);
+        rect.pivot = new Vector2(0, 0);
+        rect.sizeDelta = new Vector2(0, 40);
+
+        HorizontalLayoutGroup hlg = indicator.AddComponent<HorizontalLayoutGroup>();
+        hlg.padding = new RectOffset(16, 16, 8, 8);
+        hlg.spacing = 8;
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+
+        // 버블 배경
+        GameObject bubble = new GameObject("Bubble");
+        bubble.transform.SetParent(indicator.transform, false);
+
+        RectTransform bubbleRect = bubble.AddComponent<RectTransform>();
+        bubbleRect.sizeDelta = new Vector2(60, 30);
+
+        Image bubbleImg = bubble.AddComponent<Image>();
+        bubbleImg.color = otherBubbleColor;
+
+        // 점 텍스트
+        GameObject dotsObj = new GameObject("DotsText");
+        dotsObj.transform.SetParent(bubble.transform, false);
+
+        RectTransform dotsRect = dotsObj.AddComponent<RectTransform>();
+        dotsRect.anchorMin = Vector2.zero;
+        dotsRect.anchorMax = Vector2.one;
+        dotsRect.sizeDelta = Vector2.zero;
+
+        Text dotsText = dotsObj.AddComponent<Text>();
+        dotsText.text = "...";
+        dotsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        dotsText.fontSize = 20;
+        dotsText.color = subTextColor;
+        dotsText.alignment = TextAnchor.MiddleCenter;
+
+        return indicator;
     }
 
     // ============================================================

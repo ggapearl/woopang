@@ -539,12 +539,16 @@ public class MessagePanelManager : MonoBehaviour
         if (timeText != null)
             timeText.text = GetShortTime(msg.created_at);
 
-        // 읽음 표시 (내 메시지)
+        // 읽음 표시 (내 메시지) - 체크마크 스타일
         if (isMine)
         {
             Text readText = item.transform.Find("ReadText")?.GetComponent<Text>();
             if (readText != null)
-                readText.text = msg.is_read ? "읽음" : "";
+            {
+                // ✓ 단일 체크 = 전송됨, ✓✓ 더블 체크 = 읽음
+                readText.text = msg.is_read ? "✓✓" : "✓";
+                readText.color = msg.is_read ? new Color(0.3f, 0.7f, 1f) : new Color(0.6f, 0.6f, 0.6f);
+            }
         }
 
         // 좋아요 하트 표시 및 핸들러 설정
