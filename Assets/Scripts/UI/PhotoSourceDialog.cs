@@ -42,6 +42,8 @@ public class PhotoSourceDialog : MonoBehaviour
     /// </summary>
     public void Show(string title, Action onCamera, Action onGallery)
     {
+        Debug.Log($"[PhotoSourceDialog] Show called with title: {title}");
+
         onCameraSelected = onCamera;
         onGallerySelected = onGallery;
 
@@ -52,7 +54,14 @@ public class PhotoSourceDialog : MonoBehaviour
         UpdateLocalizedTexts();
 
         if (dialogPanel != null)
+        {
+            Debug.Log("[PhotoSourceDialog] Activating dialogPanel");
             dialogPanel.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("[PhotoSourceDialog] dialogPanel is NULL! Cannot show dialog.");
+        }
     }
 
     private void UpdateLocalizedTexts()

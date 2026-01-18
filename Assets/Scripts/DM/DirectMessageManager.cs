@@ -695,6 +695,7 @@ public class DMMessage
     public string recipient_id;
     public string content;
     public bool is_read;
+    public bool is_liked;
     public string created_at;
     public string sender_username;
     public string sender_avatar_url;

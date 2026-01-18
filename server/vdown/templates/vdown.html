@@ -366,6 +366,53 @@
         .task-card .title { font-size: 0.75rem; font-weight: 600; color: #fff; margin-bottom: 4px; line-height: 1.4; word-break: break-all; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
         .task-card .detail { font-size: 0.65rem; color: var(--accent-pink); font-weight: 600; }
 
+        /* 완료 상태 스타일 (녹색 계열) */
+        .task-item.is-completed .circular-progress .fg {
+            stroke: #4CAF50 !important;
+            filter: drop-shadow(0 0 8px #4CAF50);
+        }
+        .task-item.is-completed.pulse-glow .circular-progress .fg {
+            animation: greenPulseGlow 1.5s ease-in-out infinite;
+        }
+        @keyframes greenPulseGlow {
+            0%, 100% { filter: drop-shadow(0 0 4px #4CAF50); stroke: #4CAF50; }
+            50% { filter: drop-shadow(0 0 15px #69F0AE); stroke: #69F0AE; }
+        }
+
+        /* 완료 팝업 스타일 */
+        .completion-popup {
+            position: fixed;
+            top: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 50%, #388e3c 100%);
+            border: 2px solid #4CAF50;
+            border-radius: 16px;
+            padding: 20px 40px;
+            box-shadow: 0 10px 40px rgba(76, 175, 80, 0.5), 0 0 30px rgba(105, 240, 174, 0.3);
+            z-index: 2000;
+            text-align: center;
+            transition: top 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .completion-popup.show {
+            top: 30px;
+        }
+        .completion-popup .popup-icon {
+            font-size: 2.5rem;
+            margin-bottom: 8px;
+        }
+        .completion-popup .popup-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .completion-popup .popup-message {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.9);
+        }
+
         /* 3. 하단 영역 */
         .footer_section {
             height: 15vh;
@@ -474,6 +521,18 @@
         <img src="{{ url_for('vdown.static', filename='copy.png') }}" alt="Copyright">
     </footer>
 
+    <!-- 완료 팝업 -->
+    <div class="completion-popup" id="completionPopup">
+        <div class="popup-icon">🎬</div>
+        <div class="popup-title">다운로드 완료!</div>
+        <div class="popup-message" id="completionMessage">영화를 즐길 준비가 되었습니다</div>
+    </div>
+
+    <!-- 완료 효과음 (짜잔~!) -->
+    <audio id="completionSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQQPU6LY1K1kDQw4gt7VuoI0Ew9cn9/JoFQeETFjldK+j0kfEzJfjtXKmUYaCS5Ri9jSn0cQBi9NiNfWp1ANBzVMiNbVol0NCzFRjtbSoV0OCjJPjNXUnVMKBzZLidHQnVkNCzRKiM/SoVkLCTNIhc7QoV0MCTNIhM3PoV0MCjNJhs7PoVsLCjVJhs3On1kMCzVJhs7On1gKCzZKh87On1gKCzZKiM7OnlcKCzZKiM7PnlYKDDZKiM/PnlYKDDZKiM/PnlYKDDZKiM/PnlYKDDZKiM/PnlYKDDZKiM/PnlYKDDVJh87PnlcKDDVJh87OnlcKCzVJh87OnlcLCzVJh83OnlgLCzRIhs3OnlgLCzRIhs3OnlgLCzRIhszNnlkLCzNHhcvMnVoMCzJGhMrLnVsMCzFGg8nKnFwNCzBFgsjJm10NCy9EgcfIml4OCy5DgMbHmV8PCy1Cf8XGmGAPDCxBfsTFl2EQDCtAfcPElmIRDCo/fMLDlWMSDCk+e8HClGQTDCg9er/Bk2UUDCc8ebzAkmYVDCY7eLu/kWcWDCU6d7q+kGgXDCQ5drm9j2kYDCM4dbm8jmoZDCI3dLi7jWsaDCE2c7e6jGwbDB81crW5i20cDB40cbS4im4dDBwzcLO3iW8eDBsycLK2iHAgDBoyb7G1h3EhDBkxbrCzhXIiDBgwba+yhHMjDBcvbK6xg3QkDBYua62wgnUlDBUtas2vgXYmDBQsacyuf3cnDBMrasuufXgoDA0qaciue3opDAspaMetenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAkpaMatenwrDAkpaMatenwrDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAspaMetenwrDAspaMetenwrDAspaMetenwrDAspaMetenwrDA0paMetenwqDA4paMetenwqDA8paMetenwqDBEpaMetenwpDBIpaMetenwpDBMpaMetenwpDBQpaMetenwpDBUpaMetenwpDBYpaMetenwpDBcpaMetenwpDBgpaMetenwpDBkpaMetenwpDBkpaMetenwpDBkpaMetenwpDBkpaMetenwpDBgpaMetenwpDBcpaMetenwpDBYpaMetenwpDBUpaMetenwpDBQpaMetenwpDBMpaMetenwpDBIpaMetenwpDBEpaMetenwqDA8paMetenwqDA4paMetenwqDA0paMetenwrDAspaMetenwrDAspaMetenwrDAspaMetenwrDAspaMetenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAkpaMauenwsDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAopaMatenwrDAspaMetenwrDAspaMes=" type="audio/wav">
+    </audio>
+
     <script>
         let currentTaskId = null;
         let currentSubtitles = [];
@@ -523,11 +582,20 @@
                             clearInterval(timer);
                             $(`#perc-${id}`).text('100%');
                             $(`#speed-${id}`).text('DONE');
-                            $(`#fg-${id}`).css('stroke', '#4CAF50');
-                            $(`#task-${id}`).removeClass('is-active');
+                            $(`#task-${id}`).removeClass('is-active').addClass('is-completed pulse-glow');
+
+                            // 완료 팝업 & 효과음
+                            showCompletionPopup(t.title || '영상');
+                            playCompletionSound();
+
                             // 다운로드 완료 시 바로 파일 다운로드 (자막 옵션은 이미 선택됨)
                             triggerDownload(id, t.subtitle_option);
-                            setTimeout(() => removeTask(id), 5000);
+
+                            // 10분(600초) 후 펄스 애니메이션 중지, 이후 5초 뒤 제거
+                            setTimeout(() => {
+                                $(`#task-${id}`).removeClass('pulse-glow');
+                                setTimeout(() => removeTask(id), 5000);
+                            }, 600000);
                         }
                     }).fail(() => { clearInterval(timer); removeTask(id); });
                 }, 1500);
@@ -689,6 +757,69 @@
             pendingUrl = null;
             pendingFormat = 'video';
             console.log('[CANCEL] 사용자가 자막 모달에서 취소 버튼 클릭 - 영상 다운로드 취소됨');
+        }
+
+        // 완료 팝업 표시
+        function showCompletionPopup(title) {
+            const shortTitle = title.length > 25 ? title.substring(0, 25) + '...' : title;
+            $('#completionMessage').text(`"${shortTitle}" 준비 완료!`);
+            $('#completionPopup').addClass('show');
+
+            // 4초 후 자동 숨김
+            setTimeout(() => {
+                $('#completionPopup').removeClass('show');
+            }, 4000);
+        }
+
+        // 완료 효과음 재생 (짜잔~!)
+        function playCompletionSound() {
+            // Web Audio API로 "짜잔~!" 느낌의 효과음 생성
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                // 첫 번째 음 (낮은 음)
+                const osc1 = audioCtx.createOscillator();
+                const gain1 = audioCtx.createGain();
+                osc1.connect(gain1);
+                gain1.connect(audioCtx.destination);
+                osc1.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+                osc1.type = 'sine';
+                gain1.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc1.start(audioCtx.currentTime);
+                osc1.stop(audioCtx.currentTime + 0.3);
+
+                // 두 번째 음 (높은 음) - 약간 딜레이
+                setTimeout(() => {
+                    const osc2 = audioCtx.createOscillator();
+                    const gain2 = audioCtx.createGain();
+                    osc2.connect(gain2);
+                    gain2.connect(audioCtx.destination);
+                    osc2.frequency.setValueAtTime(783.99, audioCtx.currentTime); // G5
+                    osc2.type = 'sine';
+                    gain2.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                    osc2.start(audioCtx.currentTime);
+                    osc2.stop(audioCtx.currentTime + 0.5);
+                }, 150);
+
+                // 세 번째 음 (가장 높은 음) - 팡파레 느낌
+                setTimeout(() => {
+                    const osc3 = audioCtx.createOscillator();
+                    const gain3 = audioCtx.createGain();
+                    osc3.connect(gain3);
+                    gain3.connect(audioCtx.destination);
+                    osc3.frequency.setValueAtTime(1046.50, audioCtx.currentTime); // C6
+                    osc3.type = 'sine';
+                    gain3.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                    gain3.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+                    osc3.start(audioCtx.currentTime);
+                    osc3.stop(audioCtx.currentTime + 0.6);
+                }, 300);
+
+            } catch (e) {
+                console.log('효과음 재생 실패:', e);
+            }
         }
     </script>
 </body>

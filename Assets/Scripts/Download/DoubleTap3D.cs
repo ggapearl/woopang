@@ -23,6 +23,7 @@ public class DoubleTap3D : MonoBehaviour
     public Button closeButton;
     public Text nameText;
     public Text descriptionTextUI;
+    public Text createdByText; // Created by (username) 표시
     public GameObject placeInfoTextPanel;
     private Text placeInfoText;
     public float tapSpeed = 0.5f;
@@ -175,6 +176,25 @@ public class DoubleTap3D : MonoBehaviour
         if (descriptionTextUI != null)
         {
             descriptionTextUI.gameObject.SetActive(false);
+        }
+
+        // Created by (username) 텍스트 UI 동적 생성
+        if (createdByText == null && fullscreenCanvasGroup != null)
+        {
+            // 기존에 생성된 것이 있는지 확인
+            Transform existingCreatedBy = fullscreenCanvasGroup.transform.Find("CreatedByText");
+            if (existingCreatedBy != null)
+            {
+                createdByText = existingCreatedBy.GetComponent<Text>();
+            }
+            else
+            {
+                CreateCreatedByUI();
+            }
+        }
+        if (createdByText != null)
+        {
+            createdByText.gameObject.SetActive(false);
         }
 
         instagramButton.onClick.AddListener(OnInstagramButtonClick);
@@ -464,6 +484,38 @@ public class DoubleTap3D : MonoBehaviour
                 Time.deltaTime * swipeSpeed
             );
         }
+    }
+
+    /// <summary>
+    /// Created by (username) UI 동적 생성
+    /// </summary>
+    private void CreateCreatedByUI()
+    {
+        GameObject textObj = new GameObject("CreatedByText");
+        textObj.transform.SetParent(fullscreenCanvasGroup.transform, false);
+
+        createdByText = textObj.AddComponent<Text>();
+        createdByText.font = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+        if (createdByText.font == null)
+            createdByText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        createdByText.fontSize = 18;
+        createdByText.color = new Color(0.8f, 0.8f, 0.8f, 1f); // 연한 회색
+        createdByText.alignment = TextAnchor.MiddleLeft;
+
+        // 그림자 효과 추가
+        Shadow shadow = textObj.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0, 0, 0, 0.5f);
+        shadow.effectDistance = new Vector2(1, -1);
+
+        RectTransform rect = textObj.GetComponent<RectTransform>();
+        // 이미지 아래에 배치 (하단 왼쪽)
+        rect.anchorMin = new Vector2(0, 0);
+        rect.anchorMax = new Vector2(1, 0);
+        rect.pivot = new Vector2(0, 0);
+        rect.sizeDelta = new Vector2(0, 30);
+        rect.anchoredPosition = new Vector2(20, 190); // CommentPreviewPanel 위에 위치
+
+        textObj.SetActive(false);
     }
 
     private void CreateCommentPreviewUI()
@@ -816,6 +868,17 @@ public class DoubleTap3D : MonoBehaviour
 
         nameText.gameObject.SetActive(!string.IsNullOrEmpty(placeName) && isFullscreen);
         if (!string.IsNullOrEmpty(placeName)) nameText.text = placeName;
+
+        // Created by (username) 표시
+        if (createdByText != null)
+        {
+            bool showCreatedBy = !string.IsNullOrEmpty(username) && isFullscreen;
+            createdByText.gameObject.SetActive(showCreatedBy);
+            if (showCreatedBy)
+            {
+                createdByText.text = $"Created by {username}";
+            }
+        }
 
         if (descriptionTextUI != null)
         {

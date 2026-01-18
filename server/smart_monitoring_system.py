@@ -108,28 +108,28 @@ class SmartMonitoringSystem:
         self.check_interval = 10
         self.fast_check_interval = 2
         self.fast_check_attempts = 3
-        
+
         # Timeout settings
         self.http_timeout = 8
         self.response_time_threshold = 15.0
-        
+
         # Restart settings
         self.restart_attempts = 0
         self.max_restart_attempts = 3
         self.last_restart_time = None
-        
+
         # Server status tracking
         self.main_server_status = "unknown"
-        
+
         # Failure counters - 🔧 수정: 더 빠른 재시작을 위해 2로 변경
         self.main_consecutive_failures = 0
         self.max_consecutive_failures = 2  # 🔧 3에서 2로 변경
-        
+
         # Status tracking
         self.last_success_time = datetime.now()
         self.last_health_data = None
         self.main_process = None
-        
+
         # Statistics
         self.stats = {
             'total_checks': 0,
@@ -141,10 +141,10 @@ class SmartMonitoringSystem:
             'timeout_errors': 0,
             'ssl_errors': 0
         }
-        
+
         # Restart manager
         self.restart_manager = SingleServerRestart()
-        
+
         # Thread control
         self.monitoring_active = True
         self.restart_in_progress = False
@@ -221,12 +221,12 @@ class SmartMonitoringSystem:
             return response.status_code == 200, response.status_code
         except Exception:
             return False, None
-    
+
     def comprehensive_server_check(self):
         """Comprehensive server status check"""
         main_healthy, main_time = self.check_main_server()
         health_healthy, health_status = self.check_health_endpoint()
-        
+
         health_data = {
             'main_server': {
                 'status': self.main_server_status,
@@ -242,7 +242,7 @@ class SmartMonitoringSystem:
             'issues': [],
             'timestamp': datetime.now()
         }
-        
+
         # 상태별 이슈 추가
         if self.main_server_status == "ssl_error":
             health_data['issues'].append('SSL_CERTIFICATE_ERROR')
@@ -250,29 +250,29 @@ class SmartMonitoringSystem:
             health_data['issues'].append('CONNECTION_REFUSED')
         elif self.main_server_status == "timeout":
             health_data['issues'].append('REQUEST_TIMEOUT')
-        
+
         # Consecutive failure warnings
         if self.main_consecutive_failures >= self.max_consecutive_failures:
             health_data['issues'].append(f'CONSECUTIVE_FAILURES({self.main_consecutive_failures})')
-        
+
         # System resource check
         try:
             memory_usage = psutil.virtual_memory().percent
             cpu_usage = psutil.cpu_percent(interval=0.1)
-            
+
             health_data['system'] = {
                 'memory_usage': memory_usage,
                 'cpu_usage': cpu_usage
             }
-            
+
             if memory_usage > 90:
                 health_data['issues'].append(f'HIGH_MEMORY({memory_usage:.1f}%)')
             if cpu_usage > 95:
                 health_data['issues'].append(f'HIGH_CPU({cpu_usage:.1f}%)')
-                
+
         except Exception:
             health_data['issues'].append('SYSTEM_CHECK_FAILED')
-        
+
         self.last_health_data = health_data
         return health_data
     
@@ -281,7 +281,7 @@ class SmartMonitoringSystem:
         if self.last_health_data:
             overall_status = self.last_health_data['overall_status']
             main_healthy = self.last_health_data['main_server']['healthy']
-            
+
             # Status message
             if overall_status == 'healthy':
                 response_time = self.last_health_data['main_server']['response_time']
@@ -293,7 +293,7 @@ class SmartMonitoringSystem:
             else:
                 status_detail = self.main_server_status.upper().replace('_', ' ')
                 logger.error(f"🚨 External Access FAILED - woopang.com {status_detail}")
-                
+
                 # 구체적인 문제 제시
                 if self.main_server_status == "ssl_error":
                     logger.error("🔒 SSL certificate issue detected")
@@ -408,15 +408,23 @@ class SmartMonitoringSystem:
             env.pop('FORCE_HTTP_PORT', None)
             
             logger.info("🔧 Main server environment cleared")
-            
-            # Start main server
+
+            # Start main server with waitress (20 threads)
+            # waitress 사용: 멀티스레드 프로덕션 서버
             self.main_process = subprocess.Popen([
-                "python", "app_improved.py"
-            ], cwd="C:/woopang/server", 
+                "python", "-m", "waitress",
+                "--host=0.0.0.0",
+                "--port=443",
+                "--threads=20",
+                "--max-request-body-size=524288000",
+                "--url-scheme=https",
+                "--ident=WOOPANG",
+                "app_improved:app"
+            ], cwd="C:/woopang/server",
             env=env,
             creationflags=subprocess.CREATE_NEW_CONSOLE)
-            
-            logger.info(f"📋 Main server process started - PID: {self.main_process.pid}")
+
+            logger.info(f"📋 Main server started with waitress (20 threads) - PID: {self.main_process.pid}")
             
             # Wait for main server startup (90 seconds for external access)
             for i in range(90):
@@ -517,7 +525,7 @@ class SmartMonitoringSystem:
         print(f"{Fore.WHITE}🕐 Last success: {Fore.GREEN}{self.last_success_time.strftime('%H:%M:%S')}{Style.RESET_ALL}")
         if self.last_restart_time:
             print(f"{Fore.WHITE}🔧 Last restart: {Fore.CYAN}{self.last_restart_time.strftime('%H:%M:%S')}{Style.RESET_ALL}")
-        
+
         # 🔧 수정: 재시작 조건 표시 추가
         print(f"{Fore.WHITE}🚨 Consecutive failures: {Fore.RED if self.main_consecutive_failures >= self.max_consecutive_failures else Fore.YELLOW}{self.main_consecutive_failures}/{self.max_consecutive_failures}{Style.RESET_ALL}")
         
@@ -541,7 +549,7 @@ class SmartMonitoringSystem:
             health_icon = f"{Fore.GREEN}✅{Style.RESET_ALL}" if health_status['healthy'] else f"{Fore.YELLOW}⚠️{Style.RESET_ALL}"
             health_code = f" (HTTP {health_status['status_code']})" if health_status['status_code'] else ""
             print(f"  {health_icon} Health endpoint: {health_code}")
-            
+
             overall_status = self.last_health_data['overall_status']
             if overall_status == 'healthy':
                 print(f"  {Fore.GREEN}🎯 Overall: HEALTHY (External access working){Style.RESET_ALL}")
@@ -579,39 +587,39 @@ class SmartMonitoringSystem:
         logger.info(f"🎯 Strategy: External domain access monitoring (woopang.com)")
         logger.info(f"🔧 HTTP timeout: {self.http_timeout}s")
         logger.info(f"🔒 SSL verification: ENABLED (production mode)")
-        logger.info(f"🚨 Restart trigger: {self.max_consecutive_failures} consecutive failures")  # 🔧 추가: 재시작 조건 표시
+        logger.info(f"🚨 Restart trigger: {self.max_consecutive_failures} consecutive failures")
         logger.info(f"🚀 Monitoring system started successfully")
-        
+
         try:
             while self.monitoring_active:
                 self.stats['total_checks'] += 1
-                
+
                 # Comprehensive server status check
                 health_data = self.comprehensive_server_check()
-                
+
                 # Regular summary log
                 if self.stats['total_checks'] % 1 == 0:
                     self.log_monitoring_summary()
-                
+
                 # Status-based processing
                 if health_data['overall_status'] == 'healthy':
                     self.last_success_time = datetime.now()
-                    
+
                 elif health_data['overall_status'] == 'unhealthy':
                     # External access down
                     logger.warning("⚠️ External access down!")
                     self.stats['main_server_failures'] += 1
-                    
+
                     # 🔧 수정: 재시작 조건 체크 즉시 수행
                     if self.main_consecutive_failures >= self.max_consecutive_failures:
                         logger.error(f"🚨 재시작 조건 충족! (연속 {self.main_consecutive_failures}회 실패)")
-                        
+
                         # Fast external access re-check
                         main_recovered = self.fast_main_server_check()
-                        
+
                         if not main_recovered:
                             logger.error("🚨 External access confirmed down! Starting restart...")
-                            
+
                             # Start restart thread
                             restart_thread = threading.Thread(
                                 target=self.perform_server_restart,
@@ -619,16 +627,16 @@ class SmartMonitoringSystem:
                             )
                             restart_thread.start()
                             restart_thread.join(timeout=300)  # 5 minute timeout
-                            
+
                         else:
                             logger.info("✅ External access recovered during fast check")
                     else:
                         logger.warning(f"⚠️ 연속 실패 {self.main_consecutive_failures}/{self.max_consecutive_failures} - 재시작 대기 중")
-                
+
                 # Periodic detailed report (every 5 minutes)
                 if self.stats['total_checks'] % 30 == 0:
                     self.print_comprehensive_status()
-                
+
                 # Restart attempt limit check
                 if self.restart_attempts >= self.max_restart_attempts:
                     logger.error(f"🚨 Maximum restart attempts exceeded ({self.max_restart_attempts})")
@@ -636,10 +644,10 @@ class SmartMonitoringSystem:
                     time.sleep(300)
                     self.restart_attempts = 0
                     logger.info("🔄 Restart counter reset completed")
-                
+
                 # Wait
                 time.sleep(self.check_interval)
-                
+
         except KeyboardInterrupt:
             logger.info("👋 Monitoring stopped by user")
         except Exception as e:

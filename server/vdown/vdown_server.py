@@ -456,19 +456,32 @@ def process_vdown_task(task_id, url, upload_folder, format_type='video'):
 
                 # bunny-frame URL 찾기 (여러 패턴 시도)
                 iframe_url = None
-                m = re.search(r'src=(["\'])(https://player\.bunny-frame\.online/[^"\']+)\1', r.text)
+
+                # 패턴 1: data-player1 또는 data-player2 속성에서 찾기 (새로운 방식)
+                m = re.search(r'data-player[12]\s*=\s*["\']([^"\']+)["\']', r.text)
                 if m:
-                    iframe_url = m.group(2).replace("&amp;", "&").replace("\r", "").replace("\n", "").strip()
-                else:
-                    # src= 없이 URL만 있는 경우도 찾기
+                    iframe_url = m.group(1).replace("&amp;", "&").replace("\r", "").replace("\n", "").strip()
+                    if iframe_url.startswith('//'):
+                        iframe_url = 'https:' + iframe_url
+                    print(f"[DEBUG] data-player에서 찾음: {iframe_url}")
+
+                # 패턴 2: src 속성에서 bunny-frame URL
+                if not iframe_url:
+                    m = re.search(r'src=(["\'])(https://player\.bunny-frame\.online/[^"\']+)\1', r.text)
+                    if m:
+                        iframe_url = m.group(2).replace("&amp;", "&").replace("\r", "").replace("\n", "").strip()
+
+                # 패턴 3: src= 없이 URL만 있는 경우
+                if not iframe_url:
                     m = re.search(r'["\']?(https?://player\.bunny-frame\.online/[^\s"\'<>]+)["\']?', r.text)
                     if m:
                         iframe_url = m.group(1).replace("&amp;", "&").replace("\r", "").replace("\n", "").strip()
-                    else:
-                        # //로 시작하는 경우
-                        m = re.search(r'["\']?(//player\.bunny-frame\.online/[^\s"\'<>]+)["\']?', r.text)
-                        if m:
-                            iframe_url = 'https:' + m.group(1).replace("&amp;", "&").replace("\r", "").replace("\n", "").strip()
+
+                # 패턴 4: //로 시작하는 경우
+                if not iframe_url:
+                    m = re.search(r'["\']?(//player\.bunny-frame\.online/[^\s"\'<>]+)["\']?', r.text)
+                    if m:
+                        iframe_url = 'https:' + m.group(1).replace("&amp;", "&").replace("\r", "").replace("\n", "").strip()
 
                 if iframe_url:
                     print(f"[DEBUG] Cleaned iframe URL: {iframe_url}")

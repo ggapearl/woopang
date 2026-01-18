@@ -119,13 +119,22 @@ public class CubeUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator SelectAndCropMainPhoto()
     {
-        if (isProcessing) yield break;
+        Debug.Log("[CubeUploadManager] SelectAndCropMainPhoto called");
+
+        if (isProcessing)
+        {
+            Debug.LogWarning("[CubeUploadManager] Already processing, skipping");
+            yield break;
+        }
+
+        Debug.Log($"[CubeUploadManager] photoSourceDialog is {(photoSourceDialog != null ? "NOT NULL" : "NULL")}");
 
         // PhotoSourceDialog 표시
         if (photoSourceDialog != null)
         {
+            Debug.Log("[CubeUploadManager] Showing PhotoSourceDialog");
             photoSourceDialog.Show(
-                LocalizationManager.Instance.GetText("select_main_photo"),
+                LocalizationManager.Instance?.GetText("select_main_photo") ?? "Select Photo",
                 onCamera: () => StartCoroutine(CaptureMainPhotoFromCamera()),
                 onGallery: () => StartCoroutine(SelectMainPhotoFromGallery())
             );

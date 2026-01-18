@@ -54,6 +54,7 @@ public class ModelUploadManager : MonoBehaviour
     private bool isProcessing = false;
     private float elapsedTime = 0f;
     private const int MAX_SUB_PHOTOS = 10;
+    private bool canUploadToday = true; // 하루 1회 업로드 제한
 
     private void Awake()
     {
@@ -833,6 +834,25 @@ public class ModelUploadManager : MonoBehaviour
 
         Debug.Log("[ModelUploadManager] ValidateAndSubmit 시작");
 
+        // 0. 로그인 체크
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
+        {
+            ShowWarning(GetLocalizedText("login_required_for_upload"));
+            if (LoginManager.Instance != null)
+                LoginManager.Instance.ShowLoginRequirementPopup();
+            isProcessing = false;
+            yield break;
+        }
+
+        // 0-1. 하루 1회 업로드 제한 체크
+        yield return StartCoroutine(CheckDailyUploadLimit());
+        if (!canUploadToday)
+        {
+            ShowWarning(GetLocalizedText("daily_upload_limit_reached"));
+            isProcessing = false;
+            yield break;
+        }
+
         string modelName = nameInput?.text.Trim() ?? "";
         instagramID = showInstagram ? instagramIDInput?.text.Trim() ?? "" : "";
 
@@ -1035,7 +1055,14 @@ public class ModelUploadManager : MonoBehaviour
                     isProcessing = false;
                     ShowWarning(GetLocalizedText("upload_success"));
                     Debug.Log("[ModelUploadManager] 3D 모델 업로드 성공");
-                    
+
+                    // 업로드 성공 기록 저장
+                    int locationId = ParseLocationIdFromResponse(responseText);
+                    if (locationId > 0)
+                    {
+                        StartCoroutine(RecordUploadSuccess(locationId));
+                    }
+
                     FullReset();
                     yield break;
                 }
@@ -1401,6 +1428,28 @@ public class ModelUploadManager : MonoBehaviour
                     default: return "Storage permission denied";
                 }
 
+            case "login_required_for_upload":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "업로드하려면 로그인이 필요합니다";
+                    case SystemLanguage.Japanese: return "アップロードするにはログインが必要です";
+                    case SystemLanguage.Chinese: return "上传需要登录";
+                    case SystemLanguage.ChineseSimplified: return "上传需要登录";
+                    case SystemLanguage.Spanish: return "Inicie sesión para subir";
+                    default: return "Login required to upload";
+                }
+
+            case "daily_upload_limit_reached":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "오늘 업로드 횟수를 초과했습니다 (하루 1회)";
+                    case SystemLanguage.Japanese: return "本日のアップロード回数を超過しました（1日1回）";
+                    case SystemLanguage.Chinese: return "已超过今日上传次数（每日1次）";
+                    case SystemLanguage.ChineseSimplified: return "已超过今日上传次数（每日1次）";
+                    case SystemLanguage.Spanish: return "Límite de carga diaria alcanzado (1 vez al día)";
+                    default: return "Daily upload limit reached (once per day)";
+                }
+
             default:
                 return key;
         }
@@ -1445,6 +1494,140 @@ public class ModelUploadManager : MonoBehaviour
             }
             subPhotoDisplays.Clear();
         }
+    }
+
+    #endregion
+
+    #region Daily Upload Limit
+
+    /// <summary>
+    /// 하루 1회 업로드 제한 체크
+    /// </summary>
+    private IEnumerator CheckDailyUploadLimit()
+    {
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
+        {
+            canUploadToday = false;
+            yield break;
+        }
+
+        string userId = LoginManager.Instance.CurrentUser.id;
+        string url = $"{ApiConfig.MAIN_SERVER}/api/upload/can-upload?user_id={userId}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                try
+                {
+                    var response = JsonUtility.FromJson<CanUploadResponse>(request.downloadHandler.text);
+                    canUploadToday = response.can_upload;
+                    Debug.Log($"[ModelUploadManager] 업로드 가능 여부: {canUploadToday}");
+                }
+                catch
+                {
+                    canUploadToday = true; // 파싱 실패 시 기본값
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[ModelUploadManager] 업로드 제한 체크 실패: {request.error}");
+                canUploadToday = true; // 네트워크 오류 시 업로드 허용
+            }
+        }
+    }
+
+    /// <summary>
+    /// 업로드 성공 시 기록 저장
+    /// </summary>
+    private IEnumerator RecordUploadSuccess(int locationId)
+    {
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
+            yield break;
+
+        string userId = LoginManager.Instance.CurrentUser.id;
+        string url = $"{ApiConfig.MAIN_SERVER}/api/upload/record";
+
+        var postData = new UploadRecordRequest
+        {
+            user_id = userId,
+            location_id = locationId
+        };
+
+        string json = JsonUtility.ToJson(postData);
+
+        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("[ModelUploadManager] 업로드 기록 저장 완료");
+            }
+            else
+            {
+                Debug.LogWarning($"[ModelUploadManager] 업로드 기록 저장 실패: {request.error}");
+            }
+        }
+    }
+
+    [System.Serializable]
+    private class CanUploadResponse
+    {
+        public bool can_upload;
+        public bool already_uploaded_today;
+    }
+
+    [System.Serializable]
+    private class UploadRecordRequest
+    {
+        public string user_id;
+        public int location_id;
+    }
+
+    [System.Serializable]
+    private class UploadResponse
+    {
+        public string status;
+        public int location_id;
+        public string message;
+    }
+
+    /// <summary>
+    /// 서버 응답에서 location_id 파싱
+    /// </summary>
+    private int ParseLocationIdFromResponse(string responseText)
+    {
+        try
+        {
+            var response = JsonUtility.FromJson<UploadResponse>(responseText);
+            if (response != null && response.location_id > 0)
+            {
+                Debug.Log($"[ModelUploadManager] 파싱된 location_id: {response.location_id}");
+                return response.location_id;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[ModelUploadManager] location_id 파싱 실패: {e.Message}");
+        }
+
+        // JSON 파싱 실패 시 정규식으로 추출 시도
+        var match = Regex.Match(responseText, @"""location_id""\s*:\s*(\d+)");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out int id))
+        {
+            Debug.Log($"[ModelUploadManager] 정규식으로 파싱된 location_id: {id}");
+            return id;
+        }
+
+        return 0;
     }
 
     #endregion

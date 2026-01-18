@@ -258,20 +258,42 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OnMiniProfileClicked()
     {
-        if (LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null)
+        Debug.Log("[ProfileManager] OnMiniProfileClicked called");
+
+        if (LoginManager.Instance == null)
         {
-            ShowProfile(LoginManager.Instance.CurrentUser.id);
+            Debug.LogError("[ProfileManager] LoginManager.Instance is NULL!");
+            return;
         }
+
+        if (LoginManager.Instance.CurrentUser == null)
+        {
+            Debug.LogError("[ProfileManager] CurrentUser is NULL! IsLoggedIn=" + LoginManager.Instance.IsLoggedIn);
+            return;
+        }
+
+        Debug.Log($"[ProfileManager] Opening profile for user: {LoginManager.Instance.CurrentUser.id}");
+        ShowProfile(LoginManager.Instance.CurrentUser.id);
     }
 
     private void ShowProfilePanel(ProfileData profile)
     {
+        Debug.Log($"[ProfileManager] ShowProfilePanel called for: {profile?.username ?? "NULL"}");
+
+        if (profile == null)
+        {
+            Debug.LogError("[ProfileManager] profile is NULL!");
+            return;
+        }
+
         currentProfile = profile;
 
         // 내 프로필인지 확인
         isMyProfile = LoginManager.Instance != null &&
                       LoginManager.Instance.CurrentUser != null &&
                       LoginManager.Instance.CurrentUser.id == profile.id;
+
+        Debug.Log($"[ProfileManager] isMyProfile={isMyProfile}, fullProfilePanel={fullProfilePanel != null}");
 
         // UI 업데이트
         if (usernameText != null) usernameText.text = profile.username;
@@ -319,7 +341,14 @@ public class ProfileManager : MonoBehaviour
 
         // 패널 표시
         if (fullProfilePanel != null)
+        {
+            Debug.Log("[ProfileManager] Activating fullProfilePanel");
             fullProfilePanel.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("[ProfileManager] fullProfilePanel is NULL! Cannot show profile panel.");
+        }
     }
 
     public void CloseFullProfile()

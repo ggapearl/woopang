@@ -99,8 +99,21 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         if (contentText != null)
         {
             contentText.text = data.content;
-            // 4줄 제한 설정
+            // 초기: 4줄까지만 표시 (truncate), 클릭시 확장
             contentText.verticalOverflow = VerticalWrapMode.Truncate;
+
+            // RectTransform에서 최대 높이 제한 (4줄 기준 약 80px)
+            RectTransform contentRect = contentText.GetComponent<RectTransform>();
+            if (contentRect != null)
+            {
+                LayoutElement layoutElement = contentText.GetComponent<LayoutElement>();
+                if (layoutElement == null)
+                    layoutElement = contentText.gameObject.AddComponent<LayoutElement>();
+
+                // 축소 상태에서 최대 높이 제한 (긴 댓글이 템플릿과 겹치지 않도록)
+                layoutElement.preferredHeight = -1; // 내용에 맞춤
+                layoutElement.minHeight = 20;
+            }
             Debug.Log($"[CommentItem] contentText 설정됨");
         }
         else
@@ -172,7 +185,16 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         if (contentText != null)
         {
             contentText.verticalOverflow = isExpanded ? VerticalWrapMode.Overflow : VerticalWrapMode.Truncate;
-            LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+
+            // LayoutElement의 높이 제한도 조정
+            LayoutElement layoutElement = contentText.GetComponent<LayoutElement>();
+            if (layoutElement != null)
+            {
+                // 확장시 제한 해제, 축소시 최대 높이 제한
+                layoutElement.preferredHeight = isExpanded ? -1 : -1;
+            }
+
+            StartCoroutine(ForceLayoutUpdate());
         }
     }
 

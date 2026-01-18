@@ -14,9 +14,12 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes_2025/WP_1201.unity
     guid: da1dd099225a928498dac259894227e9
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes_2025/WP_1206.unity
     guid: 016f0d2826cdffb40aaa7bda155bf6fb
+  - enabled: 1
+    path: Assets/Scenes/WP_0111.unity
+    guid: 5bc939bb6511a514b935391a3cc88557
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: c84e9f04bfb5140ffb4e02ebf9bbcd6e,
       type: 2}

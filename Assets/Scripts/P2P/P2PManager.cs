@@ -29,6 +29,16 @@ public enum UserFilterMode
     None            // 숨기기
 }
 
+/// <summary>
+/// 내 위치 공개 모드
+/// </summary>
+public enum LocationVisibilityMode
+{
+    Public,         // 전체공개
+    FollowingOnly,  // 내가 팔로우하는 사람들에게만 공개
+    Private         // 비공개
+}
+
 [Serializable]
 public class NearbyUserData
 {
@@ -415,7 +425,8 @@ public class P2PManager : MonoBehaviour
             return;
         }
 
-        // Setup geospatial anchor
+        // Setup geospatial anchor (Editor only - runtime uses ARCore Geospatial API)
+#if UNITY_EDITOR
         var anchor = avatarObj.GetComponent<ARGeospatialCreatorAnchor>();
         if (anchor != null)
         {
@@ -424,6 +435,7 @@ public class P2PManager : MonoBehaviour
             anchor.Altitude = userData.altitude;
             anchor.AltitudeType = AnchorAltitudeType.WGS84;
         }
+#endif
 
         // Setup user info component
         P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
@@ -458,7 +470,8 @@ public class P2PManager : MonoBehaviour
         if (!activeUserAvatars.TryGetValue(userData.user_id, out GameObject avatarObj))
             return;
 
-        // Update position
+        // Update position (Editor only - runtime uses ARCore Geospatial API)
+#if UNITY_EDITOR
         var anchor = avatarObj.GetComponent<ARGeospatialCreatorAnchor>();
         if (anchor != null)
         {
@@ -466,8 +479,6 @@ public class P2PManager : MonoBehaviour
             anchor.Longitude = userData.longitude;
             anchor.Altitude = userData.altitude;
         }
-
-#if UNITY_EDITOR
         // 에디터에서는 transform.position 직접 업데이트 (ARGeospatialCreatorAnchor가 작동 안함)
         UpdateAvatarPositionInEditor(avatarObj, userData);
 #endif

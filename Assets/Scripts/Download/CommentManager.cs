@@ -25,8 +25,12 @@ public class CommentManager : MonoBehaviour
 
     [Header("Animation")]
     public float slideDuration = 0.3f;
-    public float expandedHeightRatio = 0.85f; // 최대 높이 비율 (인스펙터 조절 가능)
+    public float initialHeightRatio = 0.55f; // 초기 높이 비율 (입력 전, 기존 0.7보다 더 높게)
+    public float expandedHeightRatio = 0.85f; // 최대 높이 비율 (입력 시)
     public CanvasGroup panelCanvasGroup;
+
+    [Header("Input Settings")]
+    public int maxCommentLength = 500; // 댓글 최대 글자 수
 
     private int currentLocationId = -1;
     public bool IsPanelOpen { get; private set; } = false;
@@ -50,6 +54,7 @@ public class CommentManager : MonoBehaviour
         if (commentInputField != null)
         {
             commentInputField.onValueChanged.AddListener(OnInputValueChanged);
+            commentInputField.characterLimit = maxCommentLength; // 글자 수 제한 설정
         }
 
         // Add Swipe to Close capability
@@ -80,7 +85,7 @@ public class CommentManager : MonoBehaviour
                 isExpanded = true;
             }
 
-            float targetY = isExpanded ? expandedHeightRatio : 0.7f;
+            float targetY = isExpanded ? expandedHeightRatio : initialHeightRatio;
             Vector2 currentMax = panelRect.anchorMax;
             
             // 부드러운 슬라이드 애니메이션
