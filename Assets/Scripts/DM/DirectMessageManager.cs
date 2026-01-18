@@ -426,11 +426,14 @@ public class DirectMessageManager : MonoBehaviour
 
     private void PopulateInbox()
     {
-        // 기존 아이템 삭제
+        // 기존 아이템 삭제 (반복 중 수정 방지)
         if (inboxContent != null)
         {
+            var children = new System.Collections.Generic.List<GameObject>();
             foreach (Transform child in inboxContent)
-                Destroy(child.gameObject);
+                children.Add(child.gameObject);
+            foreach (var child in children)
+                Destroy(child);
         }
 
         if (dmItemPrefab == null || inboxContent == null) return;
@@ -488,11 +491,14 @@ public class DirectMessageManager : MonoBehaviour
 
     private void PopulateConversation()
     {
-        // 기존 메시지 삭제
+        // 기존 메시지 삭제 (반복 중 수정 방지)
         if (messageContent != null)
         {
+            var children = new System.Collections.Generic.List<GameObject>();
             foreach (Transform child in messageContent)
-                Destroy(child.gameObject);
+                children.Add(child.gameObject);
+            foreach (var child in children)
+                Destroy(child);
         }
 
         string myUserId = LoginManager.Instance.CurrentUser.id;
@@ -532,11 +538,14 @@ public class DirectMessageManager : MonoBehaviour
 
     private void PopulateFollowingList(List<FollowUser> following)
     {
-        // 기존 아이템 삭제
+        // 기존 아이템 삭제 (반복 중 수정 방지)
         if (followingListContent != null)
         {
+            var children = new System.Collections.Generic.List<GameObject>();
             foreach (Transform child in followingListContent)
-                Destroy(child.gameObject);
+                children.Add(child.gameObject);
+            foreach (var child in children)
+                Destroy(child);
         }
 
         if (followingItemPrefab == null || followingListContent == null) return;

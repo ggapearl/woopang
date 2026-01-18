@@ -47,6 +47,12 @@ public class MessagePanelManager : MonoBehaviour
     public GameObject heartAnimationPrefab;
     public Color heartColor = new Color(1f, 0.4f, 0.6f, 1f);
 
+    [Header("=== 빈 상태 UI ===")]
+    [Tooltip("메시지가 없을 때 표시할 텍스트")]
+    public string emptyInboxMessage = "아직 메시지가 없습니다.\n친구에게 첫 메시지를 보내보세요!";
+    public string emptySearchMessage = "검색 결과가 없습니다.";
+    private GameObject emptyStateObject;
+
     [Header("=== 테스트 모드 ===")]
     [Tooltip("에디터에서 테스트용 더미 메시지 생성")]
     public bool enableTestMode = true;
@@ -236,6 +242,15 @@ public class MessagePanelManager : MonoBehaviour
                     CreateConversationItem(conv);
                     conversations.Add(conv);
                 }
+
+                // 빈 상태 UI 처리
+                bool isEmpty = conversations.Count == 0 && adminBroadcasts.Count == 0;
+                ShowEmptyState(conversationListContent, emptyInboxMessage, isEmpty);
+            }
+            else
+            {
+                // 에러 시 빈 상태 표시
+                ShowEmptyState(conversationListContent, "메시지를 불러올 수 없습니다.", true);
             }
         }
     }
@@ -1026,8 +1041,14 @@ public class MessagePanelManager : MonoBehaviour
     private void ClearContent(Transform content)
     {
         if (content == null) return;
+
+        // 자식 목록을 먼저 수집 (반복 중 수정 방지)
+        var children = new System.Collections.Generic.List<GameObject>();
         foreach (Transform child in content)
-            Destroy(child.gameObject);
+            children.Add(child.gameObject);
+
+        foreach (var child in children)
+            Destroy(child);
     }
 
     private void ScrollToBottom()
@@ -1039,6 +1060,40 @@ public class MessagePanelManager : MonoBehaviour
         ScrollRect scrollRect = chatMessageContent.GetComponentInParent<ScrollRect>();
         if (scrollRect != null)
             scrollRect.normalizedPosition = Vector2.zero;
+    }
+
+    /// <summary>
+    /// 빈 상태 UI 표시/숨김
+    /// </summary>
+    private void ShowEmptyState(Transform parent, string message, bool show)
+    {
+        // 기존 빈 상태 UI 제거
+        if (emptyStateObject != null)
+        {
+            Destroy(emptyStateObject);
+            emptyStateObject = null;
+        }
+
+        if (!show || parent == null) return;
+
+        // 빈 상태 UI 생성
+        emptyStateObject = new GameObject("EmptyState");
+        emptyStateObject.transform.SetParent(parent, false);
+
+        RectTransform rect = emptyStateObject.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0.5f);
+        rect.anchorMax = new Vector2(1, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(0, 100);
+
+        Text emptyText = emptyStateObject.AddComponent<Text>();
+        emptyText.text = message;
+        emptyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        emptyText.fontSize = 16;
+        emptyText.color = new Color(0.5f, 0.5f, 0.55f);
+        emptyText.alignment = TextAnchor.MiddleCenter;
+        emptyText.horizontalOverflow = HorizontalWrapMode.Wrap;
     }
 
     private IEnumerator LoadAvatar(string url, Image targetImage)

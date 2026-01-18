@@ -28,7 +28,7 @@ public class ChatPanelSetup : EditorWindow
     public static void CreateChatPanel()
     {
         // Canvas 찾기
-        Canvas canvas = FindObjectOfType<Canvas>();
+        Canvas canvas = FindFirstObjectByType<Canvas>();
         if (canvas == null)
         {
             EditorUtility.DisplayDialog("Error", "씬에 Canvas가 없습니다. Canvas를 먼저 생성해주세요.", "OK");
