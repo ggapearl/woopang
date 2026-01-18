@@ -673,13 +673,14 @@ public class ProfileManager : MonoBehaviour
 
     private void PopulateFollowList(FollowUser[] users)
     {
-        // 기존 항목 제거
+        // 기존 항목 제거 (반복 중 수정 방지를 위해 리스트에 먼저 수집)
         if (followListContent != null)
         {
+            var children = new List<GameObject>();
             foreach (Transform child in followListContent)
-            {
-                Destroy(child.gameObject);
-            }
+                children.Add(child.gameObject);
+            foreach (var child in children)
+                Destroy(child);
         }
 
         // 항목 추가

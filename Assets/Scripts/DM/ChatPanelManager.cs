@@ -525,11 +525,10 @@ public class ChatPanelManager : MonoBehaviour
 
     private void TriggerHaptic()
     {
-        // UIFeedbackManager가 있으면 햅틱 피드백
-        var feedbackManager = FindObjectOfType<UIFeedbackManager>();
-        if (feedbackManager != null)
+        // UIFeedbackManager.Instance 사용 (deprecated FindObjectOfType 대체)
+        if (UIFeedbackManager.Instance != null)
         {
-            feedbackManager.TriggerLightHaptic();
+            UIFeedbackManager.Instance.TriggerLightHaptic();
         }
     }
 

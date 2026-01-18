@@ -113,7 +113,12 @@ public class CommentManager : MonoBehaviour
 
     private void GenerateMockComments()
     {
-        foreach (Transform child in commentContent) Destroy(child.gameObject);
+        // 반복 중 수정 방지를 위해 리스트에 먼저 수집
+        var children = new List<GameObject>();
+        foreach (Transform child in commentContent)
+            children.Add(child.gameObject);
+        foreach (var child in children)
+            Destroy(child);
 
         for (int i = 0; i < 4; i++)
         {
@@ -232,13 +237,14 @@ public class CommentManager : MonoBehaviour
             yield break;
         }
 
-        // Clear existing comments (Real & Skeleton)
+        // Clear existing comments (Real & Skeleton) - 반복 중 수정 방지
         int existingChildCount = commentContent.childCount;
         Debug.Log($"[CommentManager] 기존 댓글/스켈레톤 {existingChildCount}개 삭제");
+        var existingChildren = new List<GameObject>();
         foreach (Transform child in commentContent)
-        {
-            Destroy(child.gameObject);
-        }
+            existingChildren.Add(child.gameObject);
+        foreach (var child in existingChildren)
+            Destroy(child);
 
         ShowSkeleton(); // 로딩 시작 시 스켈레톤 표시
 
@@ -286,10 +292,15 @@ public class CommentManager : MonoBehaviour
 
     private void HideSkeleton()
     {
+        // 반복 중 수정 방지를 위해 삭제할 스켈레톤 먼저 수집
+        var skeletonsToRemove = new List<GameObject>();
         foreach (Transform child in commentContent)
         {
-            if (child.name.Contains("Skeleton")) Destroy(child.gameObject);
+            if (child.name.Contains("Skeleton"))
+                skeletonsToRemove.Add(child.gameObject);
         }
+        foreach (var skel in skeletonsToRemove)
+            Destroy(skel);
     }
 
     public void PostComment()
