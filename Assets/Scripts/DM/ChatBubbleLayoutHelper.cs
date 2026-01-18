@@ -12,13 +12,13 @@ using UnityEngine.UI;
 /// </summary>
 public static class ChatBubbleLayoutHelper
 {
-    // 버블 설정 상수
-    public const float MAX_BUBBLE_WIDTH_RATIO = 0.7f; // 화면 너비의 70%
-    public const float MIN_BUBBLE_WIDTH = 60f;
-    public const float BUBBLE_PADDING_H = 14f; // 좌우 패딩
-    public const float BUBBLE_PADDING_V = 10f; // 상하 패딩
-    public const int FONT_SIZE = 15;
-    public const float LINE_HEIGHT = 22f;
+    // 버블 설정 상수 (모바일 디바이스 최적화)
+    public const float MAX_BUBBLE_WIDTH_RATIO = 0.78f; // 화면 너비의 78% (더 넓게)
+    public const float MIN_BUBBLE_WIDTH = 80f;
+    public const float BUBBLE_PADDING_H = 16f; // 좌우 패딩
+    public const float BUBBLE_PADDING_V = 12f; // 상하 패딩
+    public const int FONT_SIZE = 17; // 더 큰 폰트 (모바일 가독성)
+    public const float LINE_HEIGHT = 26f;
 
     /// <summary>
     /// 메시지 버블 생성 및 크기 자동 조절
@@ -95,9 +95,10 @@ public static class ChatBubbleLayoutHelper
 
         hlg.childAlignment = isMine ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
         hlg.spacing = 8f;
+        // 패딩 축소: 버블이 화면에 더 크게 보이도록
         hlg.padding = isMine
-            ? new RectOffset(80, 12, 2, 2)
-            : new RectOffset(12, 80, 2, 2);
+            ? new RectOffset(50, 14, 4, 4)
+            : new RectOffset(14, 50, 4, 4);
         hlg.childForceExpandWidth = false;
         hlg.childForceExpandHeight = false;
         hlg.childControlWidth = false;
@@ -209,7 +210,7 @@ public static class ChatBubbleLayoutHelper
     /// <summary>
     /// 대화 목록 아이템 레이아웃 설정
     /// </summary>
-    public static void SetupConversationItem(RectTransform itemRect, float height = 76f)
+    public static void SetupConversationItem(RectTransform itemRect, float height = 84f)
     {
         if (itemRect == null) return;
 

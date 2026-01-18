@@ -260,9 +260,11 @@ public class ChatPanelManager : MonoBehaviour
         // UI에 내 메시지 추가
         AddMyMessage(content);
 
-        // 입력 필드 초기화
+        // 입력 필드 초기화 및 포커스 유지
         messageInputField.text = "";
-        messageInputField.ActivateInputField();
+
+        // 모바일에서 키보드 유지를 위해 다음 프레임에 활성화
+        StartCoroutine(KeepInputFieldActive());
 
         // DirectMessageManager를 통해 실제 전송
         if (DirectMessageManager.Instance != null && !string.IsNullOrEmpty(currentChatUserId))
@@ -272,13 +274,42 @@ public class ChatPanelManager : MonoBehaviour
                 if (!success)
                 {
                     Debug.LogWarning("[ChatPanel] Failed to send message");
-                    // 실패 시 UI 피드백
+                    // 실패 시 메시지 버블에 실패 표시 추가 가능
+                    ShowSendFailedIndicator();
                 }
             });
         }
 
         // 햅틱 피드백
         TriggerHaptic();
+    }
+
+    private IEnumerator KeepInputFieldActive()
+    {
+        yield return null;
+        if (messageInputField != null && isOpen)
+        {
+            messageInputField.Select();
+            messageInputField.ActivateInputField();
+        }
+    }
+
+    private void ShowSendFailedIndicator()
+    {
+        // 마지막 메시지에 전송 실패 표시 추가
+        if (messageItems.Count > 0)
+        {
+            var lastMessage = messageItems[messageItems.Count - 1];
+            if (lastMessage != null)
+            {
+                // 실패 표시 이미지 또는 텍스트 추가
+                Transform failedIcon = lastMessage.transform.Find("FailedIcon");
+                if (failedIcon != null)
+                {
+                    failedIcon.gameObject.SetActive(true);
+                }
+            }
+        }
     }
 
     private void SetupMessageBubble(GameObject bubble, string content, string time, bool isMine, string avatarUrl = null)
@@ -337,10 +368,27 @@ public class ChatPanelManager : MonoBehaviour
 
     private IEnumerator ScrollToBottomCoroutine()
     {
-        yield return null; // 레이아웃 업데이트 대기
+        // 여러 프레임 대기하여 레이아웃이 완전히 계산되도록 함
         yield return null;
+        Canvas.ForceUpdateCanvases();
+        yield return null;
+
         if (scrollRect != null)
-            scrollRect.normalizedPosition = Vector2.zero;
+        {
+            // 부드러운 스크롤 애니메이션
+            float duration = 0.2f;
+            float elapsed = 0f;
+            float startPos = scrollRect.verticalNormalizedPosition;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = easeCurve.Evaluate(elapsed / duration);
+                scrollRect.verticalNormalizedPosition = Mathf.Lerp(startPos, 0f, t);
+                yield return null;
+            }
+            scrollRect.verticalNormalizedPosition = 0f;
+        }
     }
 
     // ============================================================
