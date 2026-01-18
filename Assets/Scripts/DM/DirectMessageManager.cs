@@ -336,6 +336,12 @@ public class DirectMessageManager : MonoBehaviour
             {
                 Debug.LogError($"[DM] Failed to send message: {request.error}");
 
+                // 사용자에게 토스트 피드백 표시
+                if (ToastManager.Instance != null)
+                {
+                    ToastManager.Instance.ShowError("메시지 전송에 실패했습니다. 다시 시도해주세요.");
+                }
+
                 // 에러 메시지 확인
                 if (request.downloadHandler != null)
                 {
@@ -669,11 +675,28 @@ public class DirectMessageManager : MonoBehaviour
         }
     }
 
+    private bool isAppFocused = true;
+    private const float BACKGROUND_POLL_INTERVAL = 60f; // 백그라운드: 60초
+
+    void OnApplicationFocus(bool hasFocus)
+    {
+        isAppFocused = hasFocus;
+        Debug.Log($"[DM] App focus changed: {hasFocus}");
+    }
+
+    void OnApplicationPause(bool pauseStatus)
+    {
+        isAppFocused = !pauseStatus;
+        Debug.Log($"[DM] App pause changed: {pauseStatus}");
+    }
+
     private IEnumerator PollForNewMessages()
     {
         while (true)
         {
-            yield return new WaitForSeconds(POLL_INTERVAL);
+            // 포그라운드/백그라운드에 따라 폴링 간격 조절
+            float interval = isAppFocused ? POLL_INTERVAL : BACKGROUND_POLL_INTERVAL;
+            yield return new WaitForSeconds(interval);
 
             if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
             {
