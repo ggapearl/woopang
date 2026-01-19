@@ -352,10 +352,19 @@ public class DMTestDataGenerator : MonoBehaviour
 
     private void SetupAdminNoticeItem(GameObject item, string message)
     {
+        // 아이템 높이 설정
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+        itemLE.minHeight = 120f;
+        itemLE.preferredHeight = 120f;
+
         // TitleText
         Text titleText = item.transform.Find("TitleText")?.GetComponent<Text>();
         if (titleText != null)
+        {
             titleText.text = "WOOPANG";
+            titleText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TITLE_FONT_SIZE;
+        }
 
         // PreviewText
         Text previewText = item.transform.Find("PreviewText")?.GetComponent<Text>();
@@ -363,12 +372,16 @@ public class DMTestDataGenerator : MonoBehaviour
         {
             string preview = message.Length > 30 ? message.Substring(0, 30) + "..." : message;
             previewText.text = preview;
+            previewText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_PREVIEW_FONT_SIZE;
         }
 
         // TimeText
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
+        {
             timeText.text = "오전 10:00";
+            timeText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TIME_FONT_SIZE;
+        }
 
         // 클릭 이벤트
         Button btn = item.GetComponent<Button>();
@@ -384,6 +397,12 @@ public class DMTestDataGenerator : MonoBehaviour
 
     private void SetupTestConversationItem(GameObject item, string oderId, string username, string lastMessage, DateTime time, int unreadCount)
     {
+        // 아이템 높이 설정
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+        itemLE.minHeight = 120f;
+        itemLE.preferredHeight = 120f;
+
         // Content 영역 찾기
         Transform content = item.transform.Find("Content");
         if (content == null)
@@ -392,7 +411,10 @@ public class DMTestDataGenerator : MonoBehaviour
         // UsernameText
         Text usernameText = content.Find("UsernameText")?.GetComponent<Text>();
         if (usernameText != null)
+        {
             usernameText.text = username;
+            usernameText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TITLE_FONT_SIZE;
+        }
 
         // PreviewText
         Text previewText = content.Find("PreviewText")?.GetComponent<Text>();
@@ -400,12 +422,16 @@ public class DMTestDataGenerator : MonoBehaviour
         {
             string preview = lastMessage.Length > 30 ? lastMessage.Substring(0, 30) + "..." : lastMessage;
             previewText.text = preview;
+            previewText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_PREVIEW_FONT_SIZE;
         }
 
         // TimeText
         Text timeText = content.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
+        {
             timeText.text = GetRelativeTime(time);
+            timeText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TIME_FONT_SIZE;
+        }
 
         // UnreadBadge
         GameObject unreadBadge = content.Find("UnreadBadge")?.gameObject;
@@ -415,7 +441,10 @@ public class DMTestDataGenerator : MonoBehaviour
 
             Text unreadText = unreadBadge.transform.Find("UnreadCount")?.GetComponent<Text>();
             if (unreadText != null)
+            {
                 unreadText.text = unreadCount.ToString();
+                unreadText.fontSize = 22;
+            }
         }
 
         // 클릭 이벤트
@@ -688,6 +717,23 @@ public class DMTestDataGenerator : MonoBehaviour
         if (contentText != null)
         {
             contentText.text = content;
+            // 폰트 크기 대폭 증가
+            contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
+            contentText.lineSpacing = 1.2f;
+
+            // LayoutElement로 최소 높이 보장
+            LayoutElement le = contentText.GetComponent<LayoutElement>();
+            if (le == null) le = contentText.gameObject.AddComponent<LayoutElement>();
+            le.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+        }
+
+        // 버블 자체 최소 높이
+        RectTransform itemRect = item.GetComponent<RectTransform>();
+        if (itemRect != null)
+        {
+            LayoutElement itemLE = item.GetComponent<LayoutElement>();
+            if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+            itemLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
         }
 
         // TimeText
@@ -706,6 +752,7 @@ public class DMTestDataGenerator : MonoBehaviour
         {
             DateTime now = DateTime.Now.AddMinutes(-UnityEngine.Random.Range(1, 60));
             timeText.text = GetShortTime(now);
+            timeText.fontSize = 22; // 시간 폰트도 증가
         }
 
         // ReadText (내 메시지만)
@@ -715,6 +762,7 @@ public class DMTestDataGenerator : MonoBehaviour
             if (readText != null)
             {
                 readText.text = UnityEngine.Random.value > 0.3f ? "읽음" : "";
+                readText.fontSize = 20; // 읽음 표시 폰트 증가
             }
         }
     }

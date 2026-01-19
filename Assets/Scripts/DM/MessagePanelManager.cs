@@ -374,10 +374,19 @@ public class MessagePanelManager : MonoBehaviour
 
     private void SetupConversationItem(GameObject item, ConversationSummary conv)
     {
+        // 아이템 높이 설정
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+        itemLE.minHeight = 120f;
+        itemLE.preferredHeight = 120f;
+
         // 사용자명
         Text usernameText = item.transform.Find("UsernameText")?.GetComponent<Text>();
         if (usernameText != null)
+        {
             usernameText.text = conv.username ?? "Unknown";
+            usernameText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TITLE_FONT_SIZE;
+        }
 
         // 미리보기
         Text previewText = item.transform.Find("PreviewText")?.GetComponent<Text>();
@@ -387,12 +396,16 @@ public class MessagePanelManager : MonoBehaviour
             if (preview.Length > 30)
                 preview = preview.Substring(0, 30) + "...";
             previewText.text = preview;
+            previewText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_PREVIEW_FONT_SIZE;
         }
 
         // 시간
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
+        {
             timeText.text = GetRelativeTime(conv.lastMessageTime);
+            timeText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TIME_FONT_SIZE;
+        }
 
         // 안 읽음 표시
         GameObject unreadBadge = item.transform.Find("UnreadBadge")?.gameObject;
@@ -401,7 +414,10 @@ public class MessagePanelManager : MonoBehaviour
         {
             unreadBadge.SetActive(conv.unreadCount > 0);
             if (unreadText != null)
+            {
                 unreadText.text = conv.unreadCount.ToString();
+                unreadText.fontSize = 22;
+            }
         }
 
         // 아바타
@@ -529,15 +545,27 @@ public class MessagePanelManager : MonoBehaviour
 
     private void SetupMessageBubble(GameObject item, DMMessage msg, bool isMine)
     {
+        // 버블 최소 높이 설정
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+        itemLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+
         // 내용
         Text contentText = item.transform.Find("ContentText")?.GetComponent<Text>();
         if (contentText != null)
+        {
             contentText.text = msg.content;
+            contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
+            contentText.lineSpacing = 1.2f;
+        }
 
         // 시간
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
+        {
             timeText.text = GetShortTime(msg.created_at);
+            timeText.fontSize = 22;
+        }
 
         // 읽음 표시 (내 메시지) - 체크마크 스타일
         if (isMine)
@@ -548,6 +576,7 @@ public class MessagePanelManager : MonoBehaviour
                 // ✓ 단일 체크 = 전송됨, ✓✓ 더블 체크 = 읽음
                 readText.text = msg.is_read ? "✓✓" : "✓";
                 readText.color = msg.is_read ? new Color(0.3f, 0.7f, 1f) : new Color(0.6f, 0.6f, 0.6f);
+                readText.fontSize = 20;
             }
         }
 
@@ -589,15 +618,27 @@ public class MessagePanelManager : MonoBehaviour
 
         GameObject item = Instantiate(prefab, chatMessageContent);
 
+        // 버블 최소 높이 설정
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+        itemLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+
         // 내용
         Text contentText = item.transform.Find("ContentText")?.GetComponent<Text>();
         if (contentText != null)
+        {
             contentText.text = broadcast.content;
+            contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
+            contentText.lineSpacing = 1.2f;
+        }
 
         // 시간
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
+        {
             timeText.text = GetShortTime(broadcast.created_at);
+            timeText.fontSize = 22;
+        }
     }
 
     private void OnSendButtonClicked()

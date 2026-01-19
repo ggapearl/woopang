@@ -399,12 +399,30 @@ public class ChatPanelManager : MonoBehaviour
         if (contentText == null)
             contentText = bubble.GetComponentInChildren<Text>();
         if (contentText != null)
+        {
             contentText.text = content;
+            // 폰트 크기 대폭 증가
+            contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
+            contentText.lineSpacing = 1.2f;
+
+            // LayoutElement로 최소 높이 보장
+            LayoutElement le = contentText.GetComponent<LayoutElement>();
+            if (le == null) le = contentText.gameObject.AddComponent<LayoutElement>();
+            le.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+        }
+
+        // 버블 자체 최소 높이
+        LayoutElement bubbleLE = bubble.GetComponent<LayoutElement>();
+        if (bubbleLE == null) bubbleLE = bubble.AddComponent<LayoutElement>();
+        bubbleLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
 
         // 시간
         Text timeText = bubble.transform.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
+        {
             timeText.text = time;
+            timeText.fontSize = 22; // 시간 폰트도 증가
+        }
 
         // 아바타 (상대방 메시지만)
         if (!isMine && !string.IsNullOrEmpty(avatarUrl))

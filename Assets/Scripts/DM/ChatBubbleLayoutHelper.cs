@@ -12,13 +12,14 @@ using UnityEngine.UI;
 /// </summary>
 public static class ChatBubbleLayoutHelper
 {
-    // 버블 설정 상수 (모바일 디바이스 최적화)
-    public const float MAX_BUBBLE_WIDTH_RATIO = 0.78f; // 화면 너비의 78% (더 넓게)
-    public const float MIN_BUBBLE_WIDTH = 80f;
-    public const float BUBBLE_PADDING_H = 16f; // 좌우 패딩
-    public const float BUBBLE_PADDING_V = 12f; // 상하 패딩
-    public const int FONT_SIZE = 17; // 더 큰 폰트 (모바일 가독성)
-    public const float LINE_HEIGHT = 26f;
+    // 버블 설정 상수 (모바일 디바이스 최적화 - 대형 사이즈)
+    public const float MAX_BUBBLE_WIDTH_RATIO = 0.82f; // 화면 너비의 82%
+    public const float MIN_BUBBLE_WIDTH = 120f;        // 최소 너비 증가
+    public const float BUBBLE_PADDING_H = 24f;         // 좌우 패딩 증가
+    public const float BUBBLE_PADDING_V = 18f;         // 상하 패딩 증가
+    public const int FONT_SIZE = 32;                   // 폰트 크기 대폭 증가 (17 -> 32)
+    public const float LINE_HEIGHT = 42f;              // 줄 높이 증가
+    public const float MIN_BUBBLE_HEIGHT = 60f;        // 최소 높이 추가
 
     /// <summary>
     /// 메시지 버블 생성 및 크기 자동 조절
@@ -43,10 +44,11 @@ public static class ChatBubbleLayoutHelper
         {
             contentText.text = content;
 
-            // 텍스트 설정
+            // 텍스트 설정 - 대형 사이즈
             contentText.fontSize = FONT_SIZE;
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            contentText.lineSpacing = 1.2f; // 줄 간격 추가
 
             // 텍스트 선호 너비 계산
             float preferredWidth = contentText.preferredWidth + (BUBBLE_PADDING_H * 2);
@@ -58,7 +60,14 @@ public static class ChatBubbleLayoutHelper
                 layoutElement = contentText.gameObject.AddComponent<LayoutElement>();
 
             layoutElement.preferredWidth = actualWidth - (BUBBLE_PADDING_H * 2);
+            layoutElement.minHeight = MIN_BUBBLE_HEIGHT; // 최소 높이 설정
         }
+
+        // 버블 자체의 최소 높이 설정
+        LayoutElement bubbleLE = bubbleObj.GetComponent<LayoutElement>();
+        if (bubbleLE == null)
+            bubbleLE = bubbleObj.AddComponent<LayoutElement>();
+        bubbleLE.minHeight = MIN_BUBBLE_HEIGHT;
 
         // 정렬 설정
         HorizontalLayoutGroup hlg = bubbleObj.GetComponent<HorizontalLayoutGroup>();
@@ -210,7 +219,7 @@ public static class ChatBubbleLayoutHelper
     /// <summary>
     /// 대화 목록 아이템 레이아웃 설정
     /// </summary>
-    public static void SetupConversationItem(RectTransform itemRect, float height = 84f)
+    public static void SetupConversationItem(RectTransform itemRect, float height = 120f) // 84 -> 120
     {
         if (itemRect == null) return;
 
@@ -222,6 +231,13 @@ public static class ChatBubbleLayoutHelper
         le.minHeight = height;
         le.flexibleWidth = 1;
     }
+
+    /// <summary>
+    /// 대화 목록용 폰트 사이즈
+    /// </summary>
+    public const int CONVERSATION_TITLE_FONT_SIZE = 28;    // 사용자명
+    public const int CONVERSATION_PREVIEW_FONT_SIZE = 24;  // 메시지 미리보기
+    public const int CONVERSATION_TIME_FONT_SIZE = 20;     // 시간
 
     /// <summary>
     /// 자식 이름으로 컴포넌트 찾기
