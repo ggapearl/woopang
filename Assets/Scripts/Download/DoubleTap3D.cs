@@ -1173,7 +1173,10 @@ public class DoubleTap3D : MonoBehaviour
                 pos = quoteEnd + 1;
             }
         }
-        catch (System.Exception) { }
+        catch (System.Exception)
+        {
+            // JSON 파싱 실패 시 무시 (빈 리스트 반환)
+        }
 
         return photos;
     }
