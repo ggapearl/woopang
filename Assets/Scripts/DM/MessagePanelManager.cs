@@ -53,6 +53,26 @@ public class MessagePanelManager : MonoBehaviour
     public string emptySearchMessage = "검색 결과가 없습니다.";
     private GameObject emptyStateObject;
 
+    [Header("=== 팔로잉 선택 UI (새 메시지) ===")]
+    [Tooltip("팔로잉 리스트에서 메시지 보낼 대상 선택")]
+    public GameObject followingSelectPanel;
+    public Transform followingListContent;
+    public GameObject followingItemPrefab;
+    public Button newMessageButton;
+
+    [Header("=== 안읽음 카운트 ===")]
+    public Text globalUnreadCountText;
+    public GameObject globalUnreadIndicator;
+    private int totalUnreadCount = 0;
+
+    [Header("=== 메시지 폴링 ===")]
+    [Tooltip("포그라운드 폴링 간격 (초)")]
+    public float pollIntervalForeground = 10f;
+    [Tooltip("백그라운드 폴링 간격 (초)")]
+    public float pollIntervalBackground = 60f;
+    private Coroutine pollingCoroutine;
+    private bool isAppFocused = true;
+
     [Header("=== 테스트 모드 ===")]
     [Tooltip("에디터에서 테스트용 더미 메시지 생성")]
     public bool enableTestMode = true;
@@ -113,6 +133,25 @@ public class MessagePanelManager : MonoBehaviour
         {
             searchInput.onEndEdit.AddListener(OnSearchSubmit);
         }
+
+        // 새 메시지 버튼
+        if (newMessageButton != null)
+            newMessageButton.onClick.AddListener(OpenFollowingSelect);
+    }
+
+    void OnDestroy()
+    {
+        StopPolling();
+    }
+
+    void OnApplicationFocus(bool hasFocus)
+    {
+        isAppFocused = hasFocus;
+    }
+
+    void OnApplicationPause(bool pauseStatus)
+    {
+        isAppFocused = !pauseStatus;
     }
 
     #region Public Methods
@@ -127,6 +166,38 @@ public class MessagePanelManager : MonoBehaviour
             messagePanel.SetActive(true);
 
         StartCoroutine(LoadConversationList());
+        StartPolling();
+    }
+
+    /// <summary>
+    /// 팔로잉 리스트에서 메시지 보낼 사용자 선택 패널 열기
+    /// </summary>
+    public void OpenFollowingSelect()
+    {
+        if (!CheckLogin()) return;
+
+        HideAllPanels();
+        if (followingSelectPanel != null)
+            followingSelectPanel.SetActive(true);
+
+        StartCoroutine(LoadFollowingList());
+    }
+
+    /// <summary>
+    /// 안 읽은 메시지 수 새로고침
+    /// </summary>
+    public void RefreshUnreadCount()
+    {
+        if (CheckLogin())
+            StartCoroutine(FetchUnreadCount());
+    }
+
+    /// <summary>
+    /// 현재 안읽음 카운트 반환
+    /// </summary>
+    public int GetUnreadCount()
+    {
+        return totalUnreadCount;
     }
 
     /// <summary>
@@ -1081,6 +1152,7 @@ public class MessagePanelManager : MonoBehaviour
         if (messagePanel != null) messagePanel.SetActive(false);
         if (chatRoomPanel != null) chatRoomPanel.SetActive(false);
         if (searchResultPanel != null) searchResultPanel.SetActive(false);
+        if (followingSelectPanel != null) followingSelectPanel.SetActive(false);
     }
 
     private void ClearContent(Transform content)
@@ -1192,6 +1264,155 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     #endregion
+
+    #region Polling (새 메시지 확인)
+
+    private void StartPolling()
+    {
+        if (pollingCoroutine != null)
+            StopCoroutine(pollingCoroutine);
+
+        pollingCoroutine = StartCoroutine(PollForNewMessages());
+    }
+
+    private void StopPolling()
+    {
+        if (pollingCoroutine != null)
+        {
+            StopCoroutine(pollingCoroutine);
+            pollingCoroutine = null;
+        }
+    }
+
+    private IEnumerator PollForNewMessages()
+    {
+        while (true)
+        {
+            // 포그라운드/백그라운드에 따라 폴링 간격 조절
+            float interval = isAppFocused ? pollIntervalForeground : pollIntervalBackground;
+            yield return new WaitForSeconds(interval);
+
+            if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
+            {
+                yield return FetchUnreadCount();
+            }
+        }
+    }
+
+    #endregion
+
+    #region Following Select (새 메시지 대상 선택)
+
+    private IEnumerator LoadFollowingList()
+    {
+        ClearContent(followingListContent);
+
+        if (!CheckLogin()) yield break;
+
+        string userId = LoginManager.Instance.CurrentUser.id;
+        string url = $"{ApiConfig.FOLLOWING}?user_id={userId}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                var response = JsonUtility.FromJson<FollowingListResponse>(request.downloadHandler.text);
+                PopulateFollowingList(response.following);
+            }
+            else
+            {
+                Debug.LogError($"[MessagePanel] Failed to load following: {request.error}");
+                ShowEmptyState(followingListContent, "팔로잉 목록을 불러올 수 없습니다.", true);
+            }
+        }
+    }
+
+    private void PopulateFollowingList(List<FollowUser> following)
+    {
+        if (followingItemPrefab == null || followingListContent == null) return;
+
+        if (following == null || following.Count == 0)
+        {
+            ShowEmptyState(followingListContent, "팔로잉하는 사람이 없습니다.\n먼저 친구를 팔로우해보세요!", true);
+            return;
+        }
+
+        foreach (var user in following)
+        {
+            GameObject item = Instantiate(followingItemPrefab, followingListContent);
+            SetupFollowingItem(item, user);
+        }
+    }
+
+    private void SetupFollowingItem(GameObject item, FollowUser user)
+    {
+        // 아이템 높이 설정
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
+        itemLE.minHeight = 80f;
+        itemLE.preferredHeight = 80f;
+
+        // 사용자명
+        Text usernameText = item.transform.Find("UsernameText")?.GetComponent<Text>();
+        if (usernameText != null)
+        {
+            usernameText.text = user.username;
+            usernameText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TITLE_FONT_SIZE;
+        }
+
+        // 아바타
+        Image avatar = item.transform.Find("Avatar")?.GetComponent<Image>();
+        if (avatar != null && !string.IsNullOrEmpty(user.avatar_url))
+            StartCoroutine(LoadAvatar(user.avatar_url, avatar));
+
+        // 클릭 이벤트 - 대화방 열기
+        Button button = item.GetComponent<Button>();
+        if (button == null)
+            button = item.AddComponent<Button>();
+
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() =>
+        {
+            OpenChatRoom(user.id, user.username, user.avatar_url);
+        });
+    }
+
+    #endregion
+
+    #region Unread Count (안읽음 카운트)
+
+    private IEnumerator FetchUnreadCount()
+    {
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn) yield break;
+
+        string userId = LoginManager.Instance.CurrentUser.id;
+        string url = $"{ApiConfig.DM_UNREAD_COUNT}?user_id={userId}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                var response = JsonUtility.FromJson<DMUnreadCountResponse>(request.downloadHandler.text);
+                totalUnreadCount = response.unread_count;
+                UpdateUnreadUI();
+            }
+        }
+    }
+
+    private void UpdateUnreadUI()
+    {
+        if (globalUnreadCountText != null)
+            globalUnreadCountText.text = totalUnreadCount > 0 ? totalUnreadCount.ToString() : "";
+
+        if (globalUnreadIndicator != null)
+            globalUnreadIndicator.SetActive(totalUnreadCount > 0);
+    }
+
+    #endregion
 }
 
 #region Data Classes
@@ -1245,6 +1466,77 @@ public class LikeRequest
 {
     public string user_id;
     public bool set_liked;
+}
+
+[Serializable]
+public class FollowingListResponse
+{
+    public List<FollowUser> following;
+    public int count;
+}
+
+// FollowUser는 ProfileManager.cs에 정의되어 있음
+
+[Serializable]
+public class DMUnreadCountResponse
+{
+    public int unread_count;
+}
+
+[Serializable]
+public class DMMessage
+{
+    public int id;
+    public string sender_id;
+    public string recipient_id;
+    public string content;
+    public bool is_read;
+    public bool is_liked;
+    public string created_at;
+    public string sender_username;
+    public string sender_avatar_url;
+    public string recipient_username;
+    public string recipient_avatar_url;
+    public bool is_mine;
+}
+
+[Serializable]
+public class DMInboxResponse
+{
+    public List<DMMessage> messages;
+    public int unread_count;
+    public int count;
+}
+
+[Serializable]
+public class DMConversationResponse
+{
+    public List<DMMessage> messages;
+    public int count;
+    public DMOtherUser other_user;
+}
+
+[Serializable]
+public class DMOtherUser
+{
+    public string id;
+    public string username;
+    public string avatar_url;
+}
+
+[Serializable]
+public class DMSendRequest
+{
+    public string sender_id;
+    public string recipient_id;
+    public string content;
+}
+
+[Serializable]
+public class DMReadAllRequest
+{
+    public string user_id;
+    public string sender_id;
 }
 
 #endregion
