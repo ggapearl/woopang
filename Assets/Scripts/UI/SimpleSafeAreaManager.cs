@@ -33,8 +33,8 @@ public class SimpleSafeAreaManager : MonoBehaviour
 
         while (elapsed < maxWait)
         {
-            var splashPlayer = FindObjectOfType<SplashImagePlayer>();
-            var splashPlayerV2 = FindObjectOfType<SplashImagePlayer_V2>();
+            var splashPlayer = FindFirstObjectByType<SplashImagePlayer>();
+            var splashPlayerV2 = FindFirstObjectByType<SplashImagePlayer_V2>();
 
             // 스플래시가 모두 사라졌으면
             if (splashPlayer == null && splashPlayerV2 == null)

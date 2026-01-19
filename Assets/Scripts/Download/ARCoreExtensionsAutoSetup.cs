@@ -13,7 +13,7 @@ public class ARCoreExtensionsAutoSetup : MonoBehaviour
     void Awake()
     {
         // ARSession 찾기 (별도 GameObject에 있음)
-        ARSession arSession = FindObjectOfType<ARSession>();
+        ARSession arSession = FindFirstObjectByType<ARSession>();
         if (arSession == null)
         {
             Debug.LogError("[ARCoreExtensionsAutoSetup] ARSession을 찾을 수 없습니다!");
@@ -21,7 +21,7 @@ public class ARCoreExtensionsAutoSetup : MonoBehaviour
         }
 
         // XR Origin 찾기 (ARSession과는 별도 GameObject!)
-        Unity.XR.CoreUtils.XROrigin xrOriginComponent = FindObjectOfType<Unity.XR.CoreUtils.XROrigin>();
+        Unity.XR.CoreUtils.XROrigin xrOriginComponent = FindFirstObjectByType<Unity.XR.CoreUtils.XROrigin>();
         if (xrOriginComponent == null)
         {
             Debug.LogError("[ARCoreExtensionsAutoSetup] XROrigin을 찾을 수 없습니다!");

@@ -14,8 +14,8 @@ public class AttachToFixedAltitude : MonoBehaviour
 
     void Start()
     {
-        anchorManager = FindObjectOfType<ARAnchorManager>();
-        earthManager = FindObjectOfType<AREarthManager>();
+        anchorManager = FindFirstObjectByType<ARAnchorManager>();
+        earthManager = FindFirstObjectByType<AREarthManager>();
         objectTransform = transform;
 
         if (earthManager == null || anchorManager == null)

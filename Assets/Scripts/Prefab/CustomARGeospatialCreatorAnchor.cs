@@ -32,7 +32,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         return;
 #endif
 
-        if (anchorManager == null) anchorManager = FindObjectOfType<ARAnchorManager>();
+        if (anchorManager == null) anchorManager = FindFirstObjectByType<ARAnchorManager>();
 
         if (anchorManager != null)
         {

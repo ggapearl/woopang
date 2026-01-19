@@ -39,7 +39,7 @@ public class OffScreenIndicator : MonoBehaviour
 
     void Awake()
     {
-        mainCamera = FindObjectOfType<ARCameraManager>()?.GetComponent<Camera>() ?? Camera.main;
+        mainCamera = FindFirstObjectByType<ARCameraManager>()?.GetComponent<Camera>() ?? Camera.main;
         if (mainCamera == null)
         {
             Debug.LogError("AR 카메라 또는 메인 카메라를 찾을 수 없습니다!");

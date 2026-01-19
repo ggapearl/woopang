@@ -442,7 +442,7 @@ public static class DebugDisplayExtensions
         get
         {
             if (_instance == null)
-                _instance = GameObject.FindObjectOfType<DebugDisplay>();
+                _instance = GameObject.FindFirstObjectByType<DebugDisplay>();
             return _instance;
         }
     }

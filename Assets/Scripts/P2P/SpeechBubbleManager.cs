@@ -174,7 +174,7 @@ public class SpeechBubbleManager : MonoBehaviour
         }
 
         // 현재 위치 가져오기 (AREarthManager 사용)
-        Google.XR.ARCoreExtensions.AREarthManager earthManager = FindObjectOfType<Google.XR.ARCoreExtensions.AREarthManager>();
+        Google.XR.ARCoreExtensions.AREarthManager earthManager = FindFirstObjectByType<Google.XR.ARCoreExtensions.AREarthManager>();
         if (earthManager == null || earthManager.EarthTrackingState != UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
         {
             Debug.LogError("[SpeechBubbleManager] GPS not available");

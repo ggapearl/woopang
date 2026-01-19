@@ -135,7 +135,7 @@ public class P2PManager : MonoBehaviour
 
     void Start()
     {
-        earthManager = FindObjectOfType<AREarthManager>();
+        earthManager = FindFirstObjectByType<AREarthManager>();
 
         if (autoConnect)
         {
@@ -174,7 +174,7 @@ public class P2PManager : MonoBehaviour
         LoginManager loginManager = null;
         while (loginManager == null)
         {
-            loginManager = FindObjectOfType<LoginManager>();
+            loginManager = FindFirstObjectByType<LoginManager>();
             yield return new WaitForSeconds(0.5f);
         }
 
@@ -192,7 +192,7 @@ public class P2PManager : MonoBehaviour
         // Wait for GPS to be ready
         while (earthManager == null || earthManager.EarthTrackingState != UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
         {
-            if (earthManager == null) earthManager = FindObjectOfType<AREarthManager>();
+            if (earthManager == null) earthManager = FindFirstObjectByType<AREarthManager>();
             yield return new WaitForSeconds(1f);
         }
 

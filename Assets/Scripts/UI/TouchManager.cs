@@ -23,7 +23,7 @@ public class TouchManager : MonoBehaviour
         {
             if (instance == null)
             {
-                instance = FindObjectOfType<TouchManager>();
+                instance = FindFirstObjectByType<TouchManager>();
                 if (instance == null)
                 {
                     GameObject touchManagerObject = new GameObject("TouchManager");

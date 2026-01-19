@@ -47,7 +47,7 @@ public class ARDigitalZoomController : MonoBehaviour
         // ARCameraManager 자동 찾기
         if (arCameraManager == null)
         {
-            arCameraManager = FindObjectOfType<ARCameraManager>();
+            arCameraManager = FindFirstObjectByType<ARCameraManager>();
             if (arCameraManager == null)
             {
                 Debug.LogWarning("[ARDigitalZoomController] ARCameraManager를 찾을 수 없습니다. 일반 카메라 모드로 동작합니다.");
@@ -65,7 +65,7 @@ public class ARDigitalZoomController : MonoBehaviour
         }
         else
         {
-            zoomIndicator = FindObjectOfType<ZoomIndicator>();
+            zoomIndicator = FindFirstObjectByType<ZoomIndicator>();
             if (zoomIndicator == null)
             {
                 Debug.LogWarning("[ARDigitalZoomController] ZoomIndicator를 찾을 수 없습니다. 줌 표시 기능이 비활성화됩니다.");

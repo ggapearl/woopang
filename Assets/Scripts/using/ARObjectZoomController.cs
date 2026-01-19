@@ -70,7 +70,7 @@ public class ARObjectZoomController : MonoBehaviour
         // Inspector에 할당되지 않았거나 컴포넌트를 못 찾은 경우 씬에서 탐색
         if (zoomIndicator == null)
         {
-            zoomIndicator = FindObjectOfType<ZoomIndicator>(true);
+            zoomIndicator = FindFirstObjectByType<ZoomIndicator>(FindObjectsInactive.Include);
             if (zoomIndicator != null)
             {
                 zoomIndicatorObject = zoomIndicator.gameObject;

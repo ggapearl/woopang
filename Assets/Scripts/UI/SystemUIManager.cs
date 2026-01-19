@@ -498,13 +498,13 @@ public static class SystemUIHelper
 {
     public static void ForceShowSystemUI()
     {
-        var manager = Object.FindObjectOfType<SystemUIManager>();
+        var manager = Object.FindFirstObjectByType<SystemUIManager>();
         manager?.ForceRefresh();
     }
-    
+
     public static Rect GetSafeArea()
     {
-        var manager = Object.FindObjectOfType<SystemUIManager>();
+        var manager = Object.FindFirstObjectByType<SystemUIManager>();
         return manager?.GetCurrentSafeArea() ?? Screen.safeArea;
     }
     
@@ -535,7 +535,7 @@ public static class SystemUIHelper
     // OneUI 전용 헬퍼 메서드
     public static float GetNavigationBarHeight()
     {
-        var manager = Object.FindObjectOfType<SystemUIManager>();
+        var manager = Object.FindFirstObjectByType<SystemUIManager>();
         if (manager == null) return 0f;
         
         // private 필드 접근을 위한 reflection 사용

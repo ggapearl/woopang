@@ -5,14 +5,14 @@ using System.Collections.Generic;
 public class ARSessionRecovery : MonoBehaviour
 {
     [SerializeField] private ARSession arSession;
-    private List<GameObject> spawnedObjects = new List<GameObject>(); // »ý¼ºµÈ ¿ÀºêÁ§Æ® ¸ñ·Ï
-    private Vector2 lastKnownLocation; // ÀÌÀü À§Ä¡ ÀúÀå
+    private List<GameObject> spawnedObjects = new List<GameObject>(); // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½
+    private Vector2 lastKnownLocation; // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
 
     void OnEnable()
     {
         if (arSession == null)
         {
-            arSession = FindObjectOfType<ARSession>();
+            arSession = FindFirstObjectByType<ARSession>();
             if (arSession == null)
             {
                 Debug.LogError("ARSession not found!");
@@ -38,7 +38,7 @@ public class ARSessionRecovery : MonoBehaviour
 
     System.Collections.IEnumerator UpdateLocationAndObjects()
     {
-        // À§Ä¡ ¼­ºñ½º ÃÊ±âÈ­
+        // ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
         if (Input.location.status != LocationServiceStatus.Running)
         {
             Input.location.Start();
@@ -55,14 +55,14 @@ public class ARSessionRecovery : MonoBehaviour
         else
         {
             Debug.LogWarning("Failed to update location.");
-            ShowErrorMessage("À§Ä¡ Á¤º¸¸¦ °»½ÅÇÒ ¼ö ¾ø½À´Ï´Ù. ´Ù½Ã ½ÃµµÇÏ¼¼¿ä.");
+            ShowErrorMessage("ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½. ï¿½Ù½ï¿½ ï¿½Ãµï¿½ï¿½Ï¼ï¿½ï¿½ï¿½.");
         }
     }
 
     void UpdateARObjects()
     {
         Vector2 currentLocation = GetCurrentLocation();
-        // ±âÁ¸ ¿ÀºêÁ§Æ® Á¦°Å
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
         for (int i = spawnedObjects.Count - 1; i >= 0; i--)
         {
             if (!IsObjectValidForLocation(spawnedObjects[i], currentLocation))
@@ -71,7 +71,7 @@ public class ARSessionRecovery : MonoBehaviour
                 spawnedObjects.RemoveAt(i);
             }
         }
-        // »õ·Î¿î ¿ÀºêÁ§Æ® »ý¼º
+        // ï¿½ï¿½ï¿½Î¿ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
         if (ARSession.state == ARSessionState.SessionTracking)
         {
             SpawnObjectsForLocation(currentLocation);
@@ -85,18 +85,18 @@ public class ARSessionRecovery : MonoBehaviour
         {
             return new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
         }
-        return lastKnownLocation; // À§Ä¡ ¼­ºñ½º ½ÇÆÐ ½Ã ¸¶Áö¸· À§Ä¡ ¹ÝÈ¯
+        return lastKnownLocation; // ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½È¯
     }
 
     bool IsObjectValidForLocation(GameObject obj, Vector2 location)
     {
-        // ¿ÀºêÁ§Æ®ÀÇ À§Ä¡ ÅÂ±×¿Í ÇöÀç À§Ä¡ ºñ±³ (¾Ûº° ±¸Çö ÇÊ¿ä)
-        return true; // ÀÓ½Ã ±¸Çö
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½Â±×¿ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ (ï¿½Ûºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½)
+        return true; // ï¿½Ó½ï¿½ ï¿½ï¿½ï¿½ï¿½
     }
 
     void SpawnObjectsForLocation(Vector2 location)
     {
-        // À§Ä¡ ±â¹Ý ¿ÀºêÁ§Æ® »ý¼º (¾Ûº° ±¸Çö ÇÊ¿ä)
+        // ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ (ï¿½Ûºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½)
         // GameObject newObj = Instantiate(prefab, position, rotation);
         // spawnedObjects.Add(newObj);
     }
@@ -113,6 +113,6 @@ public class ARSessionRecovery : MonoBehaviour
     void ShowErrorMessage(string message)
     {
         Debug.LogError(message);
-        // UI·Î ¿¡·¯ ¸Þ½ÃÁö Ç¥½Ã (±¸Çö ÇÊ¿ä)
+        // UIï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Þ½ï¿½ï¿½ï¿½ Ç¥ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½)
     }
 }

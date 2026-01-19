@@ -15,7 +15,7 @@ public class ARCameraOptimizer : MonoBehaviour
     void Start()
     {
         if (arCameraManager == null)
-            arCameraManager = FindObjectOfType<ARCameraManager>();
+            arCameraManager = FindFirstObjectByType<ARCameraManager>();
             
         if (enableOptimization)
         {

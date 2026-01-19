@@ -47,7 +47,7 @@ public class PinchZoomController : MonoBehaviour
         // GameObject가 할당되지 않았으면 자동으로 찾기
         else
         {
-            zoomIndicator = FindObjectOfType<ZoomIndicator>();
+            zoomIndicator = FindFirstObjectByType<ZoomIndicator>();
             if (zoomIndicator == null)
             {
                 Debug.LogWarning("[PinchZoomController] ZoomIndicator를 찾을 수 없습니다. 줌 표시 기능이 비활성화됩니다.");

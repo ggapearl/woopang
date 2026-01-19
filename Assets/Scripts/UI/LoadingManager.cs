@@ -247,17 +247,17 @@ public class LoadingManager : MonoBehaviour
     
     void InitializeARComponents()
     {
-        arSession = FindObjectOfType<ARSession>();
+        arSession = FindFirstObjectByType<ARSession>();
         if (arSession == null)
         {
             Debug.LogWarning("ARSession을 찾을 수 없습니다. AR 환경 감지가 비활성화됩니다.");
             enableAREnvironmentDetection = false;
             return;
         }
-        
-        arCameraManager = FindObjectOfType<ARCameraManager>();
-        arPointCloudManager = FindObjectOfType<ARPointCloudManager>();
-        arCamera = Camera.main ?? FindObjectOfType<Camera>();
+
+        arCameraManager = FindFirstObjectByType<ARCameraManager>();
+        arPointCloudManager = FindFirstObjectByType<ARPointCloudManager>();
+        arCamera = Camera.main ?? FindFirstObjectByType<Camera>();
         
         Debug.Log("AR 환경 감지 컴포넌트 초기화 완료");
     }

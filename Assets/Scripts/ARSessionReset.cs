@@ -11,7 +11,7 @@ public class AutoARSessionReset : MonoBehaviour
     {
         if (arSession == null)
         {
-            arSession = FindObjectOfType<ARSession>(); // ARSession 자동 탐색
+            arSession = FindFirstObjectByType<ARSession>(); // ARSession 자동 탐색
         }
 
         StartCoroutine(AutoResetARSession());

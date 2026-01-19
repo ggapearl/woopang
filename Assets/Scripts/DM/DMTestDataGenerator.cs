@@ -311,11 +311,12 @@ public class DMTestDataGenerator : MonoBehaviour
             yield break;
         }
 
-        // 기존 항목 삭제
+        // 기존 항목 삭제 (안전한 패턴)
+        var childrenToDestroy = new List<GameObject>();
         foreach (Transform child in messagePanelManager.conversationListContent)
-        {
-            Destroy(child.gameObject);
-        }
+            childrenToDestroy.Add(child.gameObject);
+        foreach (var child in childrenToDestroy)
+            Destroy(child);
 
         yield return null;
 
@@ -588,11 +589,12 @@ public class DMTestDataGenerator : MonoBehaviour
     {
         if (messagePanelManager.chatMessageContent == null) yield break;
 
-        // 기존 메시지 삭제
+        // 기존 메시지 삭제 (안전한 패턴)
+        var messagesToDestroy = new List<GameObject>();
         foreach (Transform child in messagePanelManager.chatMessageContent)
-        {
-            Destroy(child.gameObject);
-        }
+            messagesToDestroy.Add(child.gameObject);
+        foreach (var msg in messagesToDestroy)
+            Destroy(msg);
         currentChatMessages.Clear();
 
         yield return null;
