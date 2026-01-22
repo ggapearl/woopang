@@ -53,12 +53,6 @@ public class MessagePanelManager : MonoBehaviour
     public string emptySearchMessage = "검색 결과가 없습니다.";
     private GameObject emptyStateObject;
 
-    [Header("=== 팔로잉 선택 UI (새 메시지) ===")]
-    [Tooltip("팔로잉 리스트에서 메시지 보낼 대상 선택")]
-    public GameObject followingSelectPanel;
-    public Transform followingListContent;
-    public GameObject followingItemPrefab;
-    public Button newMessageButton;
 
     [Header("=== 안읽음 카운트 ===")]
     public Text globalUnreadCountText;
@@ -75,7 +69,7 @@ public class MessagePanelManager : MonoBehaviour
 
     [Header("=== 테스트 모드 ===")]
     [Tooltip("에디터에서 테스트용 더미 메시지 생성")]
-    public bool enableTestMode = true;
+    public bool enableTestMode = false;
     public float testMessageDelay = 20f;
 
     // 현재 대화 상대
@@ -134,9 +128,6 @@ public class MessagePanelManager : MonoBehaviour
             searchInput.onEndEdit.AddListener(OnSearchSubmit);
         }
 
-        // 새 메시지 버튼
-        if (newMessageButton != null)
-            newMessageButton.onClick.AddListener(OpenFollowingSelect);
     }
 
     void OnDestroy()
@@ -167,20 +158,6 @@ public class MessagePanelManager : MonoBehaviour
 
         StartCoroutine(LoadConversationList());
         StartPolling();
-    }
-
-    /// <summary>
-    /// 팔로잉 리스트에서 메시지 보낼 사용자 선택 패널 열기
-    /// </summary>
-    public void OpenFollowingSelect()
-    {
-        if (!CheckLogin()) return;
-
-        HideAllPanels();
-        if (followingSelectPanel != null)
-            followingSelectPanel.SetActive(true);
-
-        StartCoroutine(LoadFollowingList());
     }
 
     /// <summary>
@@ -445,29 +422,29 @@ public class MessagePanelManager : MonoBehaviour
 
     private void SetupConversationItem(GameObject item, ConversationSummary conv)
     {
-        // 아이템 높이 설정
+        // 아이템 높이 설정 - 프리팹에 LayoutElement가 있으면 그 값 존중
         LayoutElement itemLE = item.GetComponent<LayoutElement>();
-        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
-        itemLE.minHeight = 120f;
-        itemLE.preferredHeight = 120f;
+        if (itemLE == null)
+        {
+            itemLE = item.AddComponent<LayoutElement>();
+            itemLE.minHeight = 120f;
+            itemLE.preferredHeight = 120f;
+        }
+        // 프리팹에 이미 설정된 값이 있으면 그대로 사용
 
         // 사용자명
         Text usernameText = item.transform.Find("UsernameText")?.GetComponent<Text>();
         if (usernameText != null)
         {
             usernameText.text = conv.username ?? "Unknown";
-            usernameText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TITLE_FONT_SIZE;
+            // fontSize는 프리팹 값 사용
         }
 
-        // 미리보기
+        // 미리보기 - 영역 크기에 맞게 자동 ellipsis 처리
         Text previewText = item.transform.Find("PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            string preview = conv.lastMessage;
-            if (preview.Length > 30)
-                preview = preview.Substring(0, 30) + "...";
-            previewText.text = preview;
-            previewText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_PREVIEW_FONT_SIZE;
+            SetTextWithEllipsis(previewText, conv.lastMessage);
         }
 
         // 시간
@@ -475,7 +452,7 @@ public class MessagePanelManager : MonoBehaviour
         if (timeText != null)
         {
             timeText.text = GetRelativeTime(conv.lastMessageTime);
-            timeText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TIME_FONT_SIZE;
+            // fontSize는 프리팹 값 사용
         }
 
         // 안 읽음 표시
@@ -487,7 +464,7 @@ public class MessagePanelManager : MonoBehaviour
             if (unreadText != null)
             {
                 unreadText.text = conv.unreadCount.ToString();
-                unreadText.fontSize = 22;
+                // fontSize는 프리팹 값 사용
             }
         }
 
@@ -822,7 +799,9 @@ public class MessagePanelManager : MonoBehaviour
 
         ClearContent(searchResultContent);
 
-        string url = $"{ApiConfig.MAIN_SERVER}/api/users/search?q={UnityWebRequest.EscapeURL(query)}";
+        // 팔로잉 유저만 검색 (following_only=true)
+        string userId = LoginManager.Instance.CurrentUser.id;
+        string url = $"{ApiConfig.MAIN_SERVER}/api/users/search?q={UnityWebRequest.EscapeURL(query)}&user_id={userId}&following_only=true";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -832,9 +811,21 @@ public class MessagePanelManager : MonoBehaviour
             {
                 var response = JsonUtility.FromJson<UserSearchResponse>(request.downloadHandler.text);
 
+                // 팔로잉 유저만 필터링 (서버에서 처리 안 될 경우 클라이언트에서 필터)
+                int displayCount = 0;
                 foreach (var user in response.users)
                 {
-                    CreateSearchResultItem(user);
+                    if (user.is_following)
+                    {
+                        CreateSearchResultItem(user);
+                        displayCount++;
+                    }
+                }
+
+                // 검색 결과가 없을 때 메시지 표시
+                if (displayCount == 0)
+                {
+                    ShowEmptyState(searchResultContent, GetLocalizedSearchEmptyMessage(), true);
                 }
             }
         }
@@ -851,38 +842,45 @@ public class MessagePanelManager : MonoBehaviour
         if (usernameText != null)
             usernameText.text = user.username;
 
-        // 팔로잉 상태
-        Text statusText = item.transform.Find("StatusText")?.GetComponent<Text>();
-        Button chatBtn = item.transform.Find("ChatButton")?.GetComponent<Button>();
+        // 클릭 이벤트 - 바로 채팅방 열기 (팔로잉 유저만 표시되므로)
+        Button btn = item.GetComponent<Button>();
+        if (btn == null)
+            btn = item.AddComponent<Button>();
 
-        if (user.is_following)
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(() =>
         {
-            if (statusText != null)
-                statusText.text = "팔로잉";
-            if (chatBtn != null)
-            {
-                chatBtn.interactable = true;
-                chatBtn.onClick.RemoveAllListeners();
-                chatBtn.onClick.AddListener(() =>
-                {
-                    if (searchResultPanel != null)
-                        searchResultPanel.SetActive(false);
-                    OpenChatRoom(user.id, user.username, user.avatar_url);
-                });
-            }
-        }
-        else
-        {
-            if (statusText != null)
-                statusText.text = "팔로우 필요";
-            if (chatBtn != null)
-                chatBtn.interactable = false;
-        }
+            if (searchResultPanel != null)
+                searchResultPanel.SetActive(false);
+            OpenChatRoom(user.id, user.username, user.avatar_url);
+        });
 
         // 아바타
         Image avatar = item.transform.Find("Avatar")?.GetComponent<Image>();
         if (avatar != null && !string.IsNullOrEmpty(user.avatar_url))
             StartCoroutine(LoadAvatar(user.avatar_url, avatar));
+    }
+
+    /// <summary>
+    /// 검색 결과 없음 메시지 다국어
+    /// </summary>
+    private string GetLocalizedSearchEmptyMessage()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return "팔로잉 중인 사용자 중 검색 결과가 없습니다.";
+            case SystemLanguage.Japanese:
+                return "フォロー中のユーザーに該当する結果がありません。";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return "在关注的用户中没有搜索结果。";
+            case SystemLanguage.Spanish:
+                return "No hay resultados entre los usuarios que sigues.";
+            default:
+                return "No results found among users you follow.";
+        }
     }
 
     #endregion
@@ -1152,7 +1150,6 @@ public class MessagePanelManager : MonoBehaviour
         if (messagePanel != null) messagePanel.SetActive(false);
         if (chatRoomPanel != null) chatRoomPanel.SetActive(false);
         if (searchResultPanel != null) searchResultPanel.SetActive(false);
-        if (followingSelectPanel != null) followingSelectPanel.SetActive(false);
     }
 
     private void ClearContent(Transform content)
@@ -1301,86 +1298,6 @@ public class MessagePanelManager : MonoBehaviour
 
     #endregion
 
-    #region Following Select (새 메시지 대상 선택)
-
-    private IEnumerator LoadFollowingList()
-    {
-        ClearContent(followingListContent);
-
-        if (!CheckLogin()) yield break;
-
-        string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.FOLLOWING}?user_id={userId}";
-
-        using (UnityWebRequest request = UnityWebRequest.Get(url))
-        {
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                var response = JsonUtility.FromJson<FollowingListResponse>(request.downloadHandler.text);
-                PopulateFollowingList(response.following);
-            }
-            else
-            {
-                Debug.LogError($"[MessagePanel] Failed to load following: {request.error}");
-                ShowEmptyState(followingListContent, "팔로잉 목록을 불러올 수 없습니다.", true);
-            }
-        }
-    }
-
-    private void PopulateFollowingList(List<FollowUser> following)
-    {
-        if (followingItemPrefab == null || followingListContent == null) return;
-
-        if (following == null || following.Count == 0)
-        {
-            ShowEmptyState(followingListContent, "팔로잉하는 사람이 없습니다.\n먼저 친구를 팔로우해보세요!", true);
-            return;
-        }
-
-        foreach (var user in following)
-        {
-            GameObject item = Instantiate(followingItemPrefab, followingListContent);
-            SetupFollowingItem(item, user);
-        }
-    }
-
-    private void SetupFollowingItem(GameObject item, FollowUser user)
-    {
-        // 아이템 높이 설정
-        LayoutElement itemLE = item.GetComponent<LayoutElement>();
-        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
-        itemLE.minHeight = 80f;
-        itemLE.preferredHeight = 80f;
-
-        // 사용자명
-        Text usernameText = item.transform.Find("UsernameText")?.GetComponent<Text>();
-        if (usernameText != null)
-        {
-            usernameText.text = user.username;
-            usernameText.fontSize = ChatBubbleLayoutHelper.CONVERSATION_TITLE_FONT_SIZE;
-        }
-
-        // 아바타
-        Image avatar = item.transform.Find("Avatar")?.GetComponent<Image>();
-        if (avatar != null && !string.IsNullOrEmpty(user.avatar_url))
-            StartCoroutine(LoadAvatar(user.avatar_url, avatar));
-
-        // 클릭 이벤트 - 대화방 열기
-        Button button = item.GetComponent<Button>();
-        if (button == null)
-            button = item.AddComponent<Button>();
-
-        button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(() =>
-        {
-            OpenChatRoom(user.id, user.username, user.avatar_url);
-        });
-    }
-
-    #endregion
-
     #region Unread Count (안읽음 카운트)
 
     private IEnumerator FetchUnreadCount()
@@ -1410,6 +1327,61 @@ public class MessagePanelManager : MonoBehaviour
 
         if (globalUnreadIndicator != null)
             globalUnreadIndicator.SetActive(totalUnreadCount > 0);
+    }
+
+    #endregion
+
+    #region Text Ellipsis
+
+    /// <summary>
+    /// 텍스트가 영역을 넘어가면 "..."으로 잘라서 표시
+    /// </summary>
+    private void SetTextWithEllipsis(Text textComponent, string fullText)
+    {
+        if (textComponent == null) return;
+
+        textComponent.text = fullText ?? "";
+
+        if (string.IsNullOrEmpty(fullText)) return;
+
+        StartCoroutine(ApplyEllipsisNextFrame(textComponent, fullText));
+    }
+
+    private IEnumerator ApplyEllipsisNextFrame(Text textComponent, string fullText)
+    {
+        yield return null;
+
+        if (textComponent == null) yield break;
+
+        RectTransform rt = textComponent.rectTransform;
+        float availableWidth = rt.rect.width;
+
+        if (availableWidth <= 0) yield break;
+
+        TextGenerator generator = textComponent.cachedTextGenerator;
+        TextGenerationSettings settings = textComponent.GetGenerationSettings(rt.rect.size);
+
+        float preferredWidth = generator.GetPreferredWidth(fullText, settings);
+
+        if (preferredWidth <= availableWidth) yield break;
+
+        // 이진 탐색으로 최적 길이 찾기
+        string ellipsis = "..";
+        int left = 0, right = fullText.Length;
+
+        while (left < right)
+        {
+            int mid = (left + right + 1) / 2;
+            string truncated = fullText.Substring(0, mid) + ellipsis;
+            float truncatedWidth = generator.GetPreferredWidth(truncated, settings);
+
+            if (truncatedWidth <= availableWidth)
+                left = mid;
+            else
+                right = mid - 1;
+        }
+
+        textComponent.text = left > 0 ? fullText.Substring(0, left) + ellipsis : ellipsis;
     }
 
     #endregion
@@ -1467,15 +1439,6 @@ public class LikeRequest
     public string user_id;
     public bool set_liked;
 }
-
-[Serializable]
-public class FollowingListResponse
-{
-    public List<FollowUser> following;
-    public int count;
-}
-
-// FollowUser는 ProfileManager.cs에 정의되어 있음
 
 [Serializable]
 public class DMUnreadCountResponse
