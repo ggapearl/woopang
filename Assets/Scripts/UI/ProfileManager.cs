@@ -81,6 +81,16 @@ public class ProfileManager : MonoBehaviour
     public string editorTestUserId = "";
     [Tooltip("체크하면 위 user_id의 프로필 열기")]
     public bool editorOpenTestProfile = false;
+
+    [Header("SNS 테스트")]
+    [Tooltip("테스트용 Instagram ID")]
+    public string testInstagramId = "";
+    [Tooltip("테스트용 X (Twitter) ID")]
+    public string testXId = "";
+    [Tooltip("테스트용 Facebook ID")]
+    public string testFacebookId = "";
+    [Tooltip("체크하면 테스트 SNS 아이콘 표시")]
+    public bool useTestSnsData = false;
 #endif
 
     private string BASE_URL => ApiConfig.MAIN_SERVER;
@@ -140,6 +150,47 @@ public class ProfileManager : MonoBehaviour
 
         // 앱 시작 시 미니 프로필 아웃라인 색상 초기화
         StartCoroutine(InitializeMiniProfileOutlineDelayed());
+
+        // SNS 아이콘 컨테이너 초기화 (Inspector에서 연결 안 되어 있으면 동적 생성)
+        StartCoroutine(InitializeSnsContainerDelayed());
+    }
+
+    /// <summary>
+    /// SNS 컨테이너 초기화 (FullProfilePanel 로드 후)
+    /// </summary>
+    private IEnumerator InitializeSnsContainerDelayed()
+    {
+        yield return new WaitForSeconds(0.3f);
+
+        // snsIconsContainer가 없으면 미리 생성
+        if (snsIconsContainer == null && fullProfilePanel != null)
+        {
+            CreateSnsIconsContainer();
+            Debug.Log("[ProfileManager] SNS 컨테이너 사전 초기화 완료");
+        }
+
+        // 버튼들도 미리 생성 (비활성화 상태로)
+        if (snsIconsContainer != null)
+        {
+            if (instagramButton == null)
+            {
+                instagramButton = CreateSnsIconButton("Instagram", new Color(0.88f, 0.19f, 0.42f), 0);
+                if (instagramButton != null) instagramButton.gameObject.SetActive(false);
+            }
+            if (xButton == null)
+            {
+                xButton = CreateSnsIconButton("X", Color.black, 1);
+                if (xButton != null) xButton.gameObject.SetActive(false);
+            }
+            if (facebookButton == null)
+            {
+                facebookButton = CreateSnsIconButton("Facebook", new Color(0.23f, 0.35f, 0.60f), 2);
+                if (facebookButton != null) facebookButton.gameObject.SetActive(false);
+            }
+
+            // 컨테이너 숨김 (프로필 열 때 표시)
+            snsIconsContainer.SetActive(false);
+        }
     }
 
     /// <summary>
@@ -780,13 +831,29 @@ public class ProfileManager : MonoBehaviour
     {
         if (profile == null) return;
 
-        bool hasInstagram = !string.IsNullOrEmpty(profile.instagram_id);
-        bool hasX = !string.IsNullOrEmpty(profile.x_id);
-        bool hasFacebook = !string.IsNullOrEmpty(profile.facebook_id);
+        // 프로필 데이터에서 SNS 정보 확인
+        string instagramId = profile.instagram_id;
+        string xId = profile.x_id;
+        string facebookId = profile.facebook_id;
+
+#if UNITY_EDITOR
+        // 에디터에서 테스트 SNS 데이터 사용
+        if (useTestSnsData)
+        {
+            if (!string.IsNullOrEmpty(testInstagramId)) instagramId = testInstagramId;
+            if (!string.IsNullOrEmpty(testXId)) xId = testXId;
+            if (!string.IsNullOrEmpty(testFacebookId)) facebookId = testFacebookId;
+            Debug.Log($"[ProfileManager] Using test SNS data - IG: {testInstagramId}, X: {testXId}, FB: {testFacebookId}");
+        }
+#endif
+
+        bool hasInstagram = !string.IsNullOrEmpty(instagramId);
+        bool hasX = !string.IsNullOrEmpty(xId);
+        bool hasFacebook = !string.IsNullOrEmpty(facebookId);
 
         bool hasAnySns = hasInstagram || hasX || hasFacebook;
 
-        Debug.Log($"[ProfileManager] SNS Check - Instagram: {hasInstagram} ({profile.instagram_id}), X: {hasX} ({profile.x_id}), Facebook: {hasFacebook} ({profile.facebook_id})");
+        Debug.Log($"[ProfileManager] SNS Check - Instagram: {hasInstagram} ({instagramId}), X: {hasX} ({xId}), Facebook: {hasFacebook} ({facebookId})");
 
         if (!hasAnySns)
         {
