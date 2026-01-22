@@ -30,13 +30,23 @@ public class ProfileManager : MonoBehaviour
     public Text bioText;
     public Text followersCountText;
     public Text followingCountText;
-    public Text likesCountText;       // 좋아요 수
     public Button followersButton;
     public Button followingButton;
     public Button followButton;
-    public Button likeButton;         // 좋아요 버튼
-    public Button editProfileButton;  // 웹으로 이동
+    public Text followButtonText;  // 팔로우 버튼 텍스트
+    public Button editProfileButton;  // 내 프로필: 웹으로 이동, 다른 사람: DM 보내기
+    public Text editProfileButtonText;  // 버튼 텍스트 (동적 변경용)
     public Button closeButton;
+
+    [Header("SNS Icons (팔로우 버튼 영역에 표시)")]
+    [Tooltip("Instagram 아이콘 버튼")]
+    public Button instagramButton;
+    [Tooltip("X (Twitter) 아이콘 버튼")]
+    public Button xButton;
+    [Tooltip("Facebook 아이콘 버튼")]
+    public Button facebookButton;
+    [Tooltip("SNS 아이콘 부모 오브젝트 (내 프로필에서 팔로우 버튼 대신 표시)")]
+    public GameObject snsIconsContainer;
 
     [Header("Follow List Panel")]
     public GameObject followListPanel;
@@ -67,6 +77,10 @@ public class ProfileManager : MonoBehaviour
     [Header("=== 에디터 테스트용 ===")]
     [Tooltip("Inspector에서 체크하면 프로필 새로고침")]
     public bool editorRefreshProfile = false;
+    [Tooltip("다른 유저 프로필 테스트용 - user_id 입력")]
+    public string editorTestUserId = "";
+    [Tooltip("체크하면 위 user_id의 프로필 열기")]
+    public bool editorOpenTestProfile = false;
 #endif
 
     private string BASE_URL => ApiConfig.MAIN_SERVER;
@@ -98,10 +112,16 @@ public class ProfileManager : MonoBehaviour
             editProfileButton.onClick.AddListener(OpenEditProfileWeb);
         if (followListCloseButton != null)
             followListCloseButton.onClick.AddListener(CloseFollowList);
-        if (likeButton != null)
-            likeButton.onClick.AddListener(OnLikeButtonClicked);
         if (avatarButton != null)
             avatarButton.onClick.AddListener(OnAvatarClicked);
+
+        // SNS 아이콘 버튼 리스너
+        if (instagramButton != null)
+            instagramButton.onClick.AddListener(OnInstagramClicked);
+        if (xButton != null)
+            xButton.onClick.AddListener(OnXClicked);
+        if (facebookButton != null)
+            facebookButton.onClick.AddListener(OnFacebookClicked);
     }
 
     void Start()
@@ -169,6 +189,21 @@ public class ProfileManager : MonoBehaviour
             Debug.Log("[ProfileManager] Editor: Manual profile refresh triggered");
             ClearAvatarCache();
             LoadMyProfile();
+        }
+
+        // 에디터에서 다른 유저 프로필 열기
+        if (editorOpenTestProfile)
+        {
+            editorOpenTestProfile = false;
+            if (!string.IsNullOrEmpty(editorTestUserId))
+            {
+                Debug.Log($"[ProfileManager] Editor: Opening test profile for user_id: {editorTestUserId}");
+                ShowProfile(editorTestUserId);
+            }
+            else
+            {
+                Debug.LogWarning("[ProfileManager] Editor: editorTestUserId is empty!");
+            }
         }
     }
 #endif
@@ -300,7 +335,6 @@ public class ProfileManager : MonoBehaviour
         if (bioText != null) bioText.text = string.IsNullOrEmpty(profile.bio) ? "" : profile.bio;
         if (followersCountText != null) followersCountText.text = profile.followers_count.ToString();
         if (followingCountText != null) followingCountText.text = profile.following_count.ToString();
-        if (likesCountText != null) likesCountText.text = profile.likes_count.ToString();
 
         // 아바타 이미지
         if (avatarImage != null)
@@ -315,26 +349,8 @@ public class ProfileManager : MonoBehaviour
             }
         }
 
-        // 버튼 상태
-        if (editProfileButton != null) editProfileButton.gameObject.SetActive(isMyProfile);
-        if (followButton != null)
-        {
-            followButton.gameObject.SetActive(!isMyProfile && !LoginManager.Instance.IsGuest);
-            if (!isMyProfile)
-            {
-                UpdateFollowButtonState();
-            }
-        }
-
-        // 좋아요 버튼 상태
-        if (likeButton != null)
-        {
-            likeButton.gameObject.SetActive(!isMyProfile && !LoginManager.Instance.IsGuest);
-            if (!isMyProfile)
-            {
-                UpdateLikeButtonState();
-            }
-        }
+        // 조건부 버튼 상태 설정
+        SetupConditionalUI();
 
         // 아바타 공개상태 UI 초기화
         InitializeVisibilityUI();
@@ -372,13 +388,15 @@ public class ProfileManager : MonoBehaviour
 
         StartCoroutine(CheckIsFollowing(myId, currentProfile.id, (isFollowing) =>
         {
-            Text btnText = followButton.GetComponentInChildren<Text>();
+            // 팔로우 버튼 텍스트 설정
+            Text btnText = followButtonText ?? followButton.GetComponentInChildren<Text>();
             if (btnText != null)
             {
-                btnText.text = isFollowing ? GetLocalizedText("unfollow") : GetLocalizedText("follow");
+                // "팔로우" / "팔로우 중" (팔로우 취소 대신)
+                btnText.text = isFollowing ? GetLocalizedText("following") : GetLocalizedText("follow");
             }
 
-            // 버튼 색상 변경
+            // 버튼 색상 변경 (팔로우 중일 때 연한 색상)
             Image btnImage = followButton.GetComponent<Image>();
             if (btnImage != null)
             {
@@ -485,135 +503,6 @@ public class ProfileManager : MonoBehaviour
             }
 
             callback?.Invoke(isFollowing);
-        }
-    }
-
-    #endregion
-
-    #region Like System
-
-    private void UpdateLikeButtonState()
-    {
-        if (likeButton == null || currentProfile == null) return;
-
-        string myId = LoginManager.Instance?.CurrentUser?.id;
-        if (string.IsNullOrEmpty(myId)) return;
-
-        StartCoroutine(CheckIsLiked(myId, currentProfile.id, (isLiked) =>
-        {
-            Text btnText = likeButton.GetComponentInChildren<Text>();
-            if (btnText != null)
-            {
-                btnText.text = isLiked ? GetLocalizedText("liked") : GetLocalizedText("like");
-            }
-
-            // 버튼 색상 변경 (좋아요한 상태면 빨간색)
-            Image btnImage = likeButton.GetComponent<Image>();
-            if (btnImage != null)
-            {
-                btnImage.color = isLiked ? new Color(1f, 0.3f, 0.3f) : new Color(0.9f, 0.9f, 0.9f);
-            }
-        }));
-    }
-
-    private void OnLikeButtonClicked()
-    {
-        if (currentProfile == null || LoginManager.Instance?.CurrentUser == null) return;
-
-        string myId = LoginManager.Instance.CurrentUser.id;
-        string targetId = currentProfile.id;
-
-        StartCoroutine(CheckIsLiked(myId, targetId, (isLiked) =>
-        {
-            if (isLiked)
-            {
-                StartCoroutine(UnlikeUser(myId, targetId));
-            }
-            else
-            {
-                StartCoroutine(LikeUser(myId, targetId));
-            }
-        }));
-    }
-
-    private IEnumerator LikeUser(string likerId, string likedId)
-    {
-        string url = $"{BASE_URL}/api/like";
-        string json = $"{{\"liker_id\":\"{likerId}\",\"liked_id\":\"{likedId}\"}}";
-
-        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
-        {
-            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                Debug.Log($"[ProfileManager] Liked: {likedId}");
-                // 카운트 업데이트
-                if (currentProfile != null)
-                {
-                    currentProfile.likes_count++;
-                    if (likesCountText != null)
-                        likesCountText.text = currentProfile.likes_count.ToString();
-                }
-                UpdateLikeButtonState();
-            }
-        }
-    }
-
-    private IEnumerator UnlikeUser(string likerId, string likedId)
-    {
-        string url = $"{BASE_URL}/api/unlike";
-        string json = $"{{\"liker_id\":\"{likerId}\",\"liked_id\":\"{likedId}\"}}";
-
-        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
-        {
-            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                Debug.Log($"[ProfileManager] Unliked: {likedId}");
-                // 카운트 업데이트
-                if (currentProfile != null)
-                {
-                    currentProfile.likes_count = Mathf.Max(0, currentProfile.likes_count - 1);
-                    if (likesCountText != null)
-                        likesCountText.text = currentProfile.likes_count.ToString();
-                }
-                UpdateLikeButtonState();
-            }
-        }
-    }
-
-    private IEnumerator CheckIsLiked(string likerId, string likedId, Action<bool> callback)
-    {
-        string url = $"{BASE_URL}/api/is_liked?liker_id={likerId}&liked_id={likedId}";
-
-        using (UnityWebRequest request = UnityWebRequest.Get(url))
-        {
-            yield return request.SendWebRequest();
-
-            bool isLiked = false;
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                try
-                {
-                    var response = JsonUtility.FromJson<IsLikedResponse>(request.downloadHandler.text);
-                    isLiked = response.is_liked;
-                }
-                catch { }
-            }
-
-            callback?.Invoke(isLiked);
         }
     }
 
@@ -828,16 +717,328 @@ public class ProfileManager : MonoBehaviour
 
     #endregion
 
+    #region Conditional UI Setup
+
+    /// <summary>
+    /// 본인/타인 프로필 여부에 따른 조건부 UI 설정
+    /// - 본인: 팔로우 버튼 숨김, SNS 아이콘 표시, "프로필 편집" 버튼
+    /// - 타인: 팔로우 버튼 표시, SNS 아이콘 표시 (등록된 경우), "DM 보내기" 버튼
+    /// </summary>
+    private void SetupConditionalUI()
+    {
+        bool isGuest = LoginManager.Instance?.IsGuest ?? true;
+
+        if (isMyProfile)
+        {
+            // === 내 프로필 ===
+            // 팔로우 버튼 숨김
+            if (followButton != null)
+                followButton.gameObject.SetActive(false);
+
+            // SNS 아이콘 표시 (등록된 것만)
+            SetupSnsIcons(currentProfile);
+
+            // "프로필 편집" 버튼 표시
+            if (editProfileButton != null)
+            {
+                editProfileButton.gameObject.SetActive(true);
+                if (editProfileButtonText != null)
+                    editProfileButtonText.text = GetLocalizedText("edit_profile");
+            }
+        }
+        else
+        {
+            // === 다른 사람 프로필 ===
+            // 팔로우 버튼 표시 (게스트가 아닐 때)
+            if (followButton != null)
+            {
+                followButton.gameObject.SetActive(!isGuest);
+                if (!isGuest)
+                {
+                    UpdateFollowButtonState();
+                }
+            }
+
+            // SNS 아이콘 표시 (등록된 것만)
+            SetupSnsIcons(currentProfile);
+
+            // "DM 보내기" 버튼 표시
+            if (editProfileButton != null)
+            {
+                editProfileButton.gameObject.SetActive(!isGuest);
+                if (editProfileButtonText != null)
+                    editProfileButtonText.text = GetLocalizedText("send_dm");
+            }
+        }
+    }
+
+    /// <summary>
+    /// SNS 아이콘 설정 (등록된 SNS만 표시)
+    /// Inspector에서 연결 안 되어 있으면 동적 생성
+    /// </summary>
+    private void SetupSnsIcons(ProfileData profile)
+    {
+        if (profile == null) return;
+
+        bool hasInstagram = !string.IsNullOrEmpty(profile.instagram_id);
+        bool hasX = !string.IsNullOrEmpty(profile.x_id);
+        bool hasFacebook = !string.IsNullOrEmpty(profile.facebook_id);
+
+        bool hasAnySns = hasInstagram || hasX || hasFacebook;
+
+        Debug.Log($"[ProfileManager] SNS Check - Instagram: {hasInstagram} ({profile.instagram_id}), X: {hasX} ({profile.x_id}), Facebook: {hasFacebook} ({profile.facebook_id})");
+
+        if (!hasAnySns)
+        {
+            // SNS 없으면 컨테이너 숨기기
+            if (snsIconsContainer != null)
+                snsIconsContainer.SetActive(false);
+            return;
+        }
+
+        // SNS 컨테이너가 없으면 동적 생성
+        if (snsIconsContainer == null)
+        {
+            CreateSnsIconsContainer();
+        }
+
+        if (snsIconsContainer != null)
+        {
+            snsIconsContainer.SetActive(true);
+
+            // Instagram 버튼
+            if (instagramButton != null)
+            {
+                instagramButton.gameObject.SetActive(hasInstagram);
+            }
+            else if (hasInstagram)
+            {
+                instagramButton = CreateSnsIconButton("Instagram", new Color(0.88f, 0.19f, 0.42f), 0);
+            }
+
+            // X (Twitter) 버튼
+            if (xButton != null)
+            {
+                xButton.gameObject.SetActive(hasX);
+            }
+            else if (hasX)
+            {
+                xButton = CreateSnsIconButton("X", Color.black, 1);
+            }
+
+            // Facebook 버튼
+            if (facebookButton != null)
+            {
+                facebookButton.gameObject.SetActive(hasFacebook);
+            }
+            else if (hasFacebook)
+            {
+                facebookButton = CreateSnsIconButton("Facebook", new Color(0.23f, 0.35f, 0.60f), 2);
+            }
+        }
+
+        Debug.Log($"[ProfileManager] SNS Icons setup complete - Container: {snsIconsContainer != null}");
+    }
+
+    /// <summary>
+    /// SNS 아이콘 컨테이너 동적 생성
+    /// followButton 또는 editProfileButton 위치 참조
+    /// </summary>
+    private void CreateSnsIconsContainer()
+    {
+        // 참조할 부모 찾기 (followButton 또는 editProfileButton의 부모)
+        Transform parent = null;
+        Vector2 referencePosition = Vector2.zero;
+
+        if (followButton != null)
+        {
+            parent = followButton.transform.parent;
+            RectTransform followRect = followButton.GetComponent<RectTransform>();
+            if (followRect != null)
+                referencePosition = followRect.anchoredPosition + new Vector2(0, -80f); // 팔로우 버튼 아래
+        }
+        else if (editProfileButton != null)
+        {
+            parent = editProfileButton.transform.parent;
+            RectTransform editRect = editProfileButton.GetComponent<RectTransform>();
+            if (editRect != null)
+                referencePosition = editRect.anchoredPosition + new Vector2(0, 80f); // 편집 버튼 위
+        }
+        else if (fullProfilePanel != null)
+        {
+            parent = fullProfilePanel.transform;
+            referencePosition = new Vector2(0, -200f);
+        }
+
+        if (parent == null)
+        {
+            Debug.LogWarning("[ProfileManager] Cannot create SNS container - no parent found");
+            return;
+        }
+
+        // 컨테이너 생성
+        GameObject containerObj = new GameObject("SnsIconsContainer");
+        containerObj.transform.SetParent(parent, false);
+
+        RectTransform containerRect = containerObj.AddComponent<RectTransform>();
+        containerRect.anchorMin = new Vector2(0.5f, 0.5f);
+        containerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        containerRect.pivot = new Vector2(0.5f, 0.5f);
+        containerRect.sizeDelta = new Vector2(200f, 60f);
+        containerRect.anchoredPosition = referencePosition;
+
+        // HorizontalLayoutGroup 추가
+        HorizontalLayoutGroup hlg = containerObj.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 20f;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+        hlg.childControlWidth = false;
+        hlg.childControlHeight = false;
+
+        snsIconsContainer = containerObj;
+
+        Debug.Log($"[ProfileManager] SNS container created at position: {referencePosition}");
+    }
+
+    /// <summary>
+    /// SNS 아이콘 버튼 동적 생성
+    /// Resources 폴더에서 아이콘 로드
+    /// </summary>
+    private Button CreateSnsIconButton(string snsName, Color bgColor, int index)
+    {
+        if (snsIconsContainer == null) return null;
+
+        GameObject btnObj = new GameObject($"{snsName}Button");
+        btnObj.transform.SetParent(snsIconsContainer.transform, false);
+
+        RectTransform btnRect = btnObj.AddComponent<RectTransform>();
+        btnRect.sizeDelta = new Vector2(50f, 50f);
+
+        // 배경 이미지
+        Image btnImage = btnObj.AddComponent<Image>();
+
+        // Resources에서 아이콘 로드
+        string iconPath = $"SNS/{snsName.ToLower()}_icon";
+        Sprite iconSprite = Resources.Load<Sprite>(iconPath);
+
+        if (iconSprite != null)
+        {
+            btnImage.sprite = iconSprite;
+            btnImage.color = Color.white;
+            Debug.Log($"[ProfileManager] Loaded {snsName} icon from Resources: {iconPath}");
+        }
+        else
+        {
+            // 폴백: 색상 배경 + 텍스트
+            btnImage.color = bgColor;
+            CreateFallbackLabel(btnImage.transform, snsName);
+            Debug.LogWarning($"[ProfileManager] Icon not found: {iconPath}, using fallback");
+        }
+
+        // 버튼 컴포넌트
+        Button btn = btnObj.AddComponent<Button>();
+        btn.targetGraphic = btnImage;
+
+        // 클릭 이벤트 연결
+        switch (snsName)
+        {
+            case "Instagram":
+                btn.onClick.AddListener(OnInstagramClicked);
+                break;
+            case "X":
+                btn.onClick.AddListener(OnXClicked);
+                break;
+            case "Facebook":
+                btn.onClick.AddListener(OnFacebookClicked);
+                break;
+        }
+
+        return btn;
+    }
+
+    /// <summary>
+    /// 아이콘 로드 실패 시 텍스트 라벨 생성
+    /// </summary>
+    private void CreateFallbackLabel(Transform parent, string snsName)
+    {
+        GameObject textObj = new GameObject("Label");
+        textObj.transform.SetParent(parent, false);
+
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        Text label = textObj.AddComponent<Text>();
+        label.text = snsName == "Instagram" ? "IG" : snsName == "X" ? "X" : "FB";
+        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        label.fontSize = 18;
+        label.fontStyle = FontStyle.Bold;
+        label.color = Color.white;
+        label.alignment = TextAnchor.MiddleCenter;
+    }
+
+    #endregion
+
+    #region SNS Button Handlers
+
+    private void OnInstagramClicked()
+    {
+        if (currentProfile == null || string.IsNullOrEmpty(currentProfile.instagram_id)) return;
+
+        string instagramUrl = $"https://www.instagram.com/{currentProfile.instagram_id}";
+        Debug.Log($"[ProfileManager] Opening Instagram: {instagramUrl}");
+        Application.OpenURL(instagramUrl);
+    }
+
+    private void OnXClicked()
+    {
+        if (currentProfile == null || string.IsNullOrEmpty(currentProfile.x_id)) return;
+
+        string xUrl = $"https://x.com/{currentProfile.x_id}";
+        Debug.Log($"[ProfileManager] Opening X: {xUrl}");
+        Application.OpenURL(xUrl);
+    }
+
+    private void OnFacebookClicked()
+    {
+        if (currentProfile == null || string.IsNullOrEmpty(currentProfile.facebook_id)) return;
+
+        string facebookUrl = $"https://www.facebook.com/{currentProfile.facebook_id}";
+        Debug.Log($"[ProfileManager] Opening Facebook: {facebookUrl}");
+        Application.OpenURL(facebookUrl);
+    }
+
+    #endregion
+
     #region Avatar Visibility Toggle
 
     /// <summary>
-    /// 아바타 클릭 시 공개상태 변경 (내 프로필에서만 동작)
+    /// 아바타 클릭 시
+    /// - 내 프로필: 공개상태 변경
+    /// - 다른 사람 프로필: DM 열기
     /// </summary>
     private void OnAvatarClicked()
     {
-        if (!isMyProfile) return;
+        if (isMyProfile)
+        {
+            // 내 프로필: 공개상태 순환
+            ToggleVisibilityMode();
+        }
+        else
+        {
+            // 다른 사람 프로필: DM 열기
+            OpenDMWithUser();
+        }
+    }
 
-        // 현재 공개상태 순환: 전체 -> 팔로잉에게만 -> 비공개 -> 전체
+    /// <summary>
+    /// 공개상태 순환 변경 (전체 -> 팔로잉에게만 -> 비공개 -> 전체)
+    /// </summary>
+    private void ToggleVisibilityMode()
+    {
         LocationVisibilityMode currentMode = LocationVisibilityMode.Public;
         if (P2PManager.Instance != null)
         {
@@ -946,20 +1147,32 @@ public class ProfileManager : MonoBehaviour
         switch (mode)
         {
             case "public":
-                return lang == "ko" ? "내 아바타 공개상태 : 전체" :
-                       lang == "ja" ? "アバター公開: 全員" :
-                       lang == "zh" ? "头像可见性: 全部" :
-                       "Avatar Visibility: Public";
+                switch (lang)
+                {
+                    case "ko": return "내 아바타 공개상태 : 전체";
+                    case "ja": return "アバター公開: 全員";
+                    case "zh": return "头像可见性: 全部";
+                    case "es": return "Visibilidad del Avatar: Público";
+                    default: return "Avatar Visibility: Public";
+                }
             case "followingonly":
-                return lang == "ko" ? "내 아바타 공개상태 : 팔로잉에게만" :
-                       lang == "ja" ? "アバター公開: フォロー中のみ" :
-                       lang == "zh" ? "头像可见性: 仅关注者" :
-                       "Avatar Visibility: Following Only";
+                switch (lang)
+                {
+                    case "ko": return "내 아바타 공개상태 : 팔로잉에게만";
+                    case "ja": return "アバター公開: フォロー中のみ";
+                    case "zh": return "头像可见性: 仅关注者";
+                    case "es": return "Visibilidad del Avatar: Solo Siguiendo";
+                    default: return "Avatar Visibility: Following Only";
+                }
             case "private":
-                return lang == "ko" ? "내 아바타 공개상태 : 비공개" :
-                       lang == "ja" ? "アバター公開: 非公開" :
-                       lang == "zh" ? "头像可见性: 私密" :
-                       "Avatar Visibility: Private";
+                switch (lang)
+                {
+                    case "ko": return "내 아바타 공개상태 : 비공개";
+                    case "ja": return "アバター公開: 非公開";
+                    case "zh": return "头像可见性: 私密";
+                    case "es": return "Visibilidad del Avatar: Privado";
+                    default: return "Avatar Visibility: Private";
+                }
             default:
                 return mode;
         }
@@ -998,13 +1211,73 @@ public class ProfileManager : MonoBehaviour
 
     #endregion
 
+    #region DM Integration
+
+    /// <summary>
+    /// 현재 프로필 유저에게 DM 열기
+    /// </summary>
+    private void OpenDMWithUser()
+    {
+        if (currentProfile == null)
+        {
+            Debug.LogWarning("[ProfileManager] Cannot open DM - no profile selected");
+            return;
+        }
+
+        if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null)
+        {
+            Debug.LogWarning("[ProfileManager] Cannot open DM - not logged in");
+            return;
+        }
+
+        Debug.Log($"[ProfileManager] Opening DM with user: {currentProfile.username} ({currentProfile.id})");
+
+        // MessagePanelManager를 통해 DM 열기
+        if (MessagePanelManager.Instance != null)
+        {
+            // 프로필 패널 닫기
+            CloseFullProfile();
+
+            // DM 채팅 열기
+            MessagePanelManager.Instance.OpenChatRoom(
+                currentProfile.id,
+                currentProfile.username,
+                currentProfile.avatar_url
+            );
+        }
+        else
+        {
+            Debug.LogWarning("[ProfileManager] MessagePanelManager not found");
+        }
+    }
+
+    #endregion
+
     #region Edit Profile
 
     /// <summary>
-    /// 프로필 편집 웹페이지 열기
-    /// 앱에서만 접근 가능하며, user_id와 언어 설정을 파라미터로 전달
+    /// 편집/DM 버튼 클릭 핸들러
+    /// - 내 프로필: 프로필 편집 웹페이지 열기
+    /// - 다른 사람 프로필: DM 보내기
     /// </summary>
     private void OpenEditProfileWeb()
+    {
+        if (isMyProfile)
+        {
+            // 내 프로필: 편집 페이지 열기
+            OpenEditProfileWebPage();
+        }
+        else
+        {
+            // 다른 사람 프로필: DM 보내기
+            OpenDMWithUser();
+        }
+    }
+
+    /// <summary>
+    /// 프로필 편집 웹페이지 열기 (내 프로필에서만)
+    /// </summary>
+    private void OpenEditProfileWebPage()
     {
         if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null)
         {
@@ -1048,30 +1321,91 @@ public class ProfileManager : MonoBehaviour
 
     private string GetLocalizedText(string key)
     {
-        string lang = "en";
-        switch (Application.systemLanguage)
-        {
-            case SystemLanguage.Korean: lang = "ko"; break;
-            case SystemLanguage.Japanese: lang = "ja"; break;
-            case SystemLanguage.Chinese:
-            case SystemLanguage.ChineseSimplified:
-            case SystemLanguage.ChineseTraditional: lang = "zh"; break;
-        }
+        string lang = GetCurrentLanguageCode();
 
         switch (key)
         {
             case "follow":
-                return lang == "ko" ? "팔로우" : lang == "ja" ? "フォロー" : lang == "zh" ? "关注" : "Follow";
+                switch (lang)
+                {
+                    case "ko": return "팔로우";
+                    case "ja": return "フォロー";
+                    case "zh": return "关注";
+                    case "es": return "Seguir";
+                    default: return "Follow";
+                }
+            case "following":  // 팔로우 중 상태
+                switch (lang)
+                {
+                    case "ko": return "팔로우 중";
+                    case "ja": return "フォロー中";
+                    case "zh": return "已关注";
+                    case "es": return "Siguiendo";
+                    default: return "Following";
+                }
             case "unfollow":
-                return lang == "ko" ? "팔로우 취소" : lang == "ja" ? "フォロー解除" : lang == "zh" ? "取消关注" : "Unfollow";
+                switch (lang)
+                {
+                    case "ko": return "팔로우 취소";
+                    case "ja": return "フォロー解除";
+                    case "zh": return "取消关注";
+                    case "es": return "Dejar de seguir";
+                    default: return "Unfollow";
+                }
             case "followers_title":
-                return lang == "ko" ? "팔로워" : lang == "ja" ? "フォロワー" : lang == "zh" ? "粉丝" : "Followers";
+                switch (lang)
+                {
+                    case "ko": return "팔로워";
+                    case "ja": return "フォロワー";
+                    case "zh": return "粉丝";
+                    case "es": return "Seguidores";
+                    default: return "Followers";
+                }
             case "following_title":
-                return lang == "ko" ? "팔로잉" : lang == "ja" ? "フォロー中" : lang == "zh" ? "关注" : "Following";
+                switch (lang)
+                {
+                    case "ko": return "팔로잉";
+                    case "ja": return "フォロー中";
+                    case "zh": return "关注";
+                    case "es": return "Siguiendo";
+                    default: return "Following";
+                }
+            case "edit_profile":
+                switch (lang)
+                {
+                    case "ko": return "프로필 편집";
+                    case "ja": return "プロフィール編集";
+                    case "zh": return "编辑资料";
+                    case "es": return "Editar perfil";
+                    default: return "Edit Profile";
+                }
+            case "send_dm":
+                switch (lang)
+                {
+                    case "ko": return "DM 보내기";
+                    case "ja": return "DMを送る";
+                    case "zh": return "发送私信";
+                    case "es": return "Enviar DM";
+                    default: return "Send DM";
+                }
             case "like":
-                return lang == "ko" ? "좋아요" : lang == "ja" ? "いいね" : lang == "zh" ? "点赞" : "Like";
+                switch (lang)
+                {
+                    case "ko": return "좋아요";
+                    case "ja": return "いいね";
+                    case "zh": return "点赞";
+                    case "es": return "Me gusta";
+                    default: return "Like";
+                }
             case "liked":
-                return lang == "ko" ? "좋아요 취소" : lang == "ja" ? "いいね解除" : lang == "zh" ? "取消点赞" : "Unlike";
+                switch (lang)
+                {
+                    case "ko": return "좋아요 취소";
+                    case "ja": return "いいね解除";
+                    case "zh": return "取消点赞";
+                    case "es": return "Ya no me gusta";
+                    default: return "Unlike";
+                }
             default:
                 return key;
         }
@@ -1096,7 +1430,6 @@ public class ProfileData
     public string x_id;
     public int followers_count;
     public int following_count;
-    public int likes_count;
     public string created_at;
 }
 
@@ -1104,12 +1437,6 @@ public class ProfileData
 public class IsFollowingResponse
 {
     public bool is_following;
-}
-
-[System.Serializable]
-public class IsLikedResponse
-{
-    public bool is_liked;
 }
 
 [System.Serializable]
