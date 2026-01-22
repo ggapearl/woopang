@@ -2,12 +2,84 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 
 /// <summary>
 /// FullProfilePanel prefab에 SNS 아이콘 컨테이너를 추가하는 Editor 도구
 /// </summary>
+[InitializeOnLoad]
 public class FullProfilePanelSetup : EditorWindow
 {
+    static FullProfilePanelSetup()
+    {
+        // 씬 열릴 때 자동으로 SNS 컨테이너 확인 및 추가
+        EditorSceneManager.sceneOpened += OnSceneOpened;
+        EditorApplication.delayCall += CheckAndAddSnsContainerOnLoad;
+    }
+
+    private static void OnSceneOpened(UnityEngine.SceneManagement.Scene scene, OpenSceneMode mode)
+    {
+        EditorApplication.delayCall += CheckAndAddSnsContainerSilent;
+    }
+
+    private static void CheckAndAddSnsContainerOnLoad()
+    {
+        CheckAndAddSnsContainerSilent();
+    }
+
+    /// <summary>
+    /// SNS 컨테이너가 없으면 자동으로 추가 (조용히)
+    /// </summary>
+    private static void CheckAndAddSnsContainerSilent()
+    {
+        // FullProfilePanel 찾기
+        GameObject fullProfilePanel = GameObject.Find("FullProfilePanel");
+        if (fullProfilePanel == null)
+        {
+            Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            foreach (var canvas in canvases)
+            {
+                Transform found = canvas.transform.Find("FullProfilePanel");
+                if (found != null)
+                {
+                    fullProfilePanel = found.gameObject;
+                    break;
+                }
+            }
+        }
+
+        if (fullProfilePanel == null) return;
+
+        Transform content = fullProfilePanel.transform.Find("Content");
+        if (content == null) return;
+
+        // 이미 존재하면 스킵
+        if (content.Find("SnsIconsContainer") != null) return;
+
+        // SnsIconsContainer 생성
+        Debug.Log("[FullProfilePanelSetup] SNS 아이콘 컨테이너 자동 추가 중...");
+
+        GameObject container = CreateSnsIconsContainerStatic(content);
+        CreateSnsIconButtonStatic(container.transform, "Instagram", new Color(0.88f, 0.19f, 0.42f));
+        CreateSnsIconButtonStatic(container.transform, "X", Color.black);
+        CreateSnsIconButtonStatic(container.transform, "Facebook", new Color(0.23f, 0.35f, 0.60f));
+
+        // ProfileManager 연결
+        ProfileManager profileManager = Object.FindFirstObjectByType<ProfileManager>();
+        if (profileManager != null)
+        {
+            profileManager.snsIconsContainer = container;
+            profileManager.instagramButton = container.transform.Find("InstagramButton")?.GetComponent<Button>();
+            profileManager.xButton = container.transform.Find("XButton")?.GetComponent<Button>();
+            profileManager.facebookButton = container.transform.Find("FacebookButton")?.GetComponent<Button>();
+            EditorUtility.SetDirty(profileManager);
+        }
+
+        // 씬 변경 표시
+        EditorSceneManager.MarkSceneDirty(fullProfilePanel.scene);
+        Debug.Log("[FullProfilePanelSetup] SNS 아이콘 컨테이너 자동 추가 완료!");
+    }
+
     [MenuItem("Tools/Woopang/Setup FullProfilePanel SNS Icons")]
     public static void ShowWindow()
     {
@@ -159,6 +231,11 @@ public class FullProfilePanelSetup : EditorWindow
 
     private GameObject CreateSnsIconsContainer(Transform parent)
     {
+        return CreateSnsIconsContainerStatic(parent);
+    }
+
+    private static GameObject CreateSnsIconsContainerStatic(Transform parent)
+    {
         GameObject container = new GameObject("SnsIconsContainer");
         container.transform.SetParent(parent, false);
 
@@ -182,6 +259,11 @@ public class FullProfilePanelSetup : EditorWindow
     }
 
     private void CreateSnsIconButton(Transform parent, string snsName, Color bgColor)
+    {
+        CreateSnsIconButtonStatic(parent, snsName, bgColor);
+    }
+
+    private static void CreateSnsIconButtonStatic(Transform parent, string snsName, Color bgColor)
     {
         GameObject btnObj = new GameObject($"{snsName}Button");
         btnObj.transform.SetParent(parent, false);
