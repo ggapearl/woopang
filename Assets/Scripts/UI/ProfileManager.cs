@@ -909,32 +909,44 @@ public class ProfileManager : MonoBehaviour
 
     /// <summary>
     /// SNS 아이콘 컨테이너 동적 생성
-    /// followButton 또는 editProfileButton 위치 참조
+    /// FullProfilePanel > Content 아래에 생성
     /// </summary>
     private void CreateSnsIconsContainer()
     {
-        // 참조할 부모 찾기 (followButton 또는 editProfileButton의 부모)
+        // 참조할 부모 찾기 (FullProfilePanel > Content)
         Transform parent = null;
-        Vector2 referencePosition = Vector2.zero;
+        Vector2 referencePosition = new Vector2(0, -370f); // FollowButton(-300)과 EditProfileButton(-440) 사이
 
-        if (followButton != null)
+        // 1. FullProfilePanel > Content 찾기
+        if (fullProfilePanel != null)
+        {
+            Transform content = fullProfilePanel.transform.Find("Content");
+            if (content != null)
+            {
+                parent = content;
+                Debug.Log("[ProfileManager] SNS 컨테이너 생성 위치: FullProfilePanel > Content");
+            }
+        }
+
+        // 2. Content 못 찾으면 followButton/editProfileButton의 부모 사용
+        if (parent == null && followButton != null)
         {
             parent = followButton.transform.parent;
             RectTransform followRect = followButton.GetComponent<RectTransform>();
             if (followRect != null)
-                referencePosition = followRect.anchoredPosition + new Vector2(0, -80f); // 팔로우 버튼 아래
+                referencePosition = followRect.anchoredPosition + new Vector2(0, -70f);
         }
-        else if (editProfileButton != null)
+        else if (parent == null && editProfileButton != null)
         {
             parent = editProfileButton.transform.parent;
             RectTransform editRect = editProfileButton.GetComponent<RectTransform>();
             if (editRect != null)
-                referencePosition = editRect.anchoredPosition + new Vector2(0, 80f); // 편집 버튼 위
+                referencePosition = editRect.anchoredPosition + new Vector2(0, 70f);
         }
-        else if (fullProfilePanel != null)
+        else if (parent == null && fullProfilePanel != null)
         {
             parent = fullProfilePanel.transform;
-            referencePosition = new Vector2(0, -200f);
+            referencePosition = new Vector2(0, -370f);
         }
 
         if (parent == null)
