@@ -62,19 +62,12 @@ public class DirectMessageManager : MonoBehaviour
     }
 
     /// <summary>
-    /// [DEPRECATED] OpenFollowingSelect -> MessagePanelManager.OpenFollowingSelect
+    /// [DEPRECATED] 이 기능은 제거되었습니다. 검색으로 팔로잉 유저와 대화를 시작하세요.
     /// </summary>
-    [Obsolete("OpenFollowingSelect은 더 이상 사용되지 않습니다. MessagePanelManager.Instance.OpenFollowingSelect()을 사용하세요.")]
+    [Obsolete("OpenFollowingSelect 기능이 제거되었습니다. MessagePanelManager의 검색 기능을 사용하세요.")]
     public void OpenFollowingSelect()
     {
-        if (MessagePanelManager.Instance != null)
-        {
-            MessagePanelManager.Instance.OpenFollowingSelect();
-        }
-        else
-        {
-            Debug.LogError("[DirectMessageManager] MessagePanelManager.Instance가 없습니다.");
-        }
+        Debug.LogWarning("[DirectMessageManager] OpenFollowingSelect 기능이 제거되었습니다. 검색을 사용하세요.");
     }
 
     /// <summary>
