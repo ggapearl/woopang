@@ -3,13 +3,13 @@
  * P2P 사용자 필터 UI 컨트롤러
  * - FilterButtonPanel.prefab 내 P2PUserToggle 에 부착
  * - 하나의 토글로 3가지 상태 순환:
- *   1. 체크 안 됨 (흰색 배경): 아바타 숨김 (None)
- *   2. 체크됨 (기본): 모든 사용자 표시 (All)
- *   3. 체크됨 + 진한 핑크색: 팔로잉만 표시 (FollowingOnly)
+ *   1. P2P(팔로잉) - 핑크색: 팔로잉만 표시 (FollowingOnly)
+ *   2. P2P(전체) - 흰색: 모든 사용자 표시 (All)
+ *   3. P2P(제외) - 회색: 아바타 숨김 (None)
  *
  * Author: Claude (Anthropic AI)
  * Date: 2026-01-11
- * Modified: 2026-01-12 - 3상태 순환 토글로 변경
+ * Modified: 2026-01-27 - 색상 및 순서 변경 (팔로잉=핑크, 전체=흰색, 제외=회색)
  */
 
 using UnityEngine;
@@ -26,24 +26,26 @@ public class P2PUserFilterPanel : MonoBehaviour
     [SerializeField] private Toggle p2pUserToggle;
 
     [Header("Visual Settings")]
-    [Tooltip("기본 배경색 (모든 사용자)")]
-    [SerializeField] private Color normalColor = Color.white;
-    [Tooltip("팔로잉만 모드 배경색 (#e95383)")]
-    [SerializeField] private Color followingOnlyColor = new Color(0.914f, 0.325f, 0.514f, 1f); // #e95383
-    [Tooltip("체크마크 기본 색상")]
-    [SerializeField] private Color checkmarkNormalColor = new Color(0.196f, 0.196f, 0.196f, 1f);
-    [Tooltip("체크마크 팔로잉 모드 색상")]
-    [SerializeField] private Color checkmarkFollowingColor = Color.white;
+    [Tooltip("팔로잉 모드 배경색 (핑크색)")]
+    [SerializeField] private Color followingColor = new Color(0.91f, 0.33f, 0.63f, 1f); // #E854A1
+    [Tooltip("전체 모드 배경색 (흰색)")]
+    [SerializeField] private Color allColor = Color.white;
+    [Tooltip("제외 모드 배경색 (회색)")]
+    [SerializeField] private Color noneColor = new Color(0.5f, 0.5f, 0.5f, 1f);
 
     [Header("Label Settings")]
     [Tooltip("토글 옆 레이블 텍스트 (TMPro)")]
     [SerializeField] private TMPro.TextMeshProUGUI labelText;
-    [Tooltip("기본 레이블 (모든 사용자 / 해제)")]
-    [SerializeField] private string defaultLabel = "P2P 사용자";
-    [Tooltip("팔로잉만 모드 레이블")]
-    [SerializeField] private string followingOnlyLabel = "팔로잉 사용자";
+    [Tooltip("토글 옆 레이블 텍스트 (Legacy)")]
+    [SerializeField] private Text legacyLabelText;
+    [Tooltip("팔로잉 모드 레이블")]
+    [SerializeField] private string followingLabel = "P2P(팔로잉)";
+    [Tooltip("전체 모드 레이블")]
+    [SerializeField] private string allLabel = "P2P(전체)";
+    [Tooltip("제외 모드 레이블")]
+    [SerializeField] private string noneLabel = "P2P(제외)";
 
-    private UserFilterMode currentMode = UserFilterMode.All;
+    private UserFilterMode currentMode = UserFilterMode.All;  // 기본값: 전체
     private const string FILTER_MODE_KEY = "P2PUserFilterMode";
 
     private Image backgroundImage;
@@ -60,7 +62,7 @@ public class P2PUserFilterPanel : MonoBehaviour
 
         if (p2pUserToggle == null)
         {
-            Debug.LogError("[P2PUserFilterPanel] Toggle component not found!");
+            // Toggle 컴포넌트가 없으면 조용히 스킵 (씬 구성에 따라 선택적으로 사용)
             return;
         }
 
@@ -104,32 +106,60 @@ public class P2PUserFilterPanel : MonoBehaviour
                 if (check != null) checkmarkImage = check.GetComponent<Image>();
             }
         }
+
+        // 라벨 텍스트 자동 찾기 (Inspector에서 연결 안 된 경우)
+        if (labelText == null && legacyLabelText == null)
+        {
+            // 1. 토글 자식에서 TMPro 찾기
+            labelText = p2pUserToggle.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+
+            // 2. TMPro 없으면 Legacy Text 찾기
+            if (labelText == null)
+            {
+                legacyLabelText = p2pUserToggle.GetComponentInChildren<Text>(true);
+            }
+
+            // 3. 부모에서 찾기
+            if (labelText == null && legacyLabelText == null && transform.parent != null)
+            {
+                labelText = transform.parent.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+                if (labelText == null)
+                {
+                    legacyLabelText = transform.parent.GetComponentInChildren<Text>(true);
+                }
+            }
+
+            // 4. "Label" 이름으로 찾기
+            if (labelText == null && legacyLabelText == null)
+            {
+                Transform labelTransform = transform.Find("Label");
+                if (labelTransform != null)
+                {
+                    labelText = labelTransform.GetComponent<TMPro.TextMeshProUGUI>();
+                    if (labelText == null)
+                        legacyLabelText = labelTransform.GetComponent<Text>();
+                }
+            }
+        }
     }
 
     private void LoadFilterMode()
     {
-        // 기본값: All (1) - 모든 사용자 표시
-        // FollowingOnly (2)는 팔로잉 유저가 없으면 아무도 안 보임
-        int savedMode = PlayerPrefs.GetInt(FILTER_MODE_KEY, 1); // 기본값: All (1)
-
-        // 에디터에서 테스트 시 항상 All 모드로 시작 (팔로잉 데이터 없음)
-#if UNITY_EDITOR
-        savedMode = 1; // All 모드 강제
-        Debug.Log("[P2PUserFilterPanel] 에디터 모드: All 필터로 강제 설정");
-#endif
+        // 기본값: All (1) - 모든 사용자 표시 (흰색)
+        int savedMode = PlayerPrefs.GetInt(FILTER_MODE_KEY, 1);
 
         currentMode = (UserFilterMode)savedMode;
 
-        // 클릭 카운트 설정
+        // 클릭 카운트 설정 (순환: 팔로잉 -> 전체 -> 제외)
         switch (currentMode)
         {
-            case UserFilterMode.None:
+            case UserFilterMode.FollowingOnly:
                 clickCount = 0;
                 break;
             case UserFilterMode.All:
                 clickCount = 1;
                 break;
-            case UserFilterMode.FollowingOnly:
+            case UserFilterMode.None:
                 clickCount = 2;
                 break;
         }
@@ -150,78 +180,69 @@ public class P2PUserFilterPanel : MonoBehaviour
 
     private void OnToggleValueChanged(bool isOn)
     {
-        // 클릭할 때마다 상태 순환
-        clickCount++;
-        if (clickCount > 2) clickCount = 0;
-
-        switch (clickCount)
+        // 3단계 순환: 팔로잉(핑크색) -> 전체(흰색) -> 제외(회색)
+        switch (currentMode)
         {
-            case 0: // 체크 안 됨 - 숨기기
-                currentMode = UserFilterMode.None;
-                p2pUserToggle.SetIsOnWithoutNotify(false);
-                break;
-
-            case 1: // 체크됨 - 모든 사용자
+            case UserFilterMode.FollowingOnly:
                 currentMode = UserFilterMode.All;
-                p2pUserToggle.SetIsOnWithoutNotify(true);
+                clickCount = 1;
                 break;
-
-            case 2: // 체크됨 + 핑크색 - 팔로잉만
+            case UserFilterMode.All:
+                currentMode = UserFilterMode.None;
+                clickCount = 2;
+                break;
+            case UserFilterMode.None:
                 currentMode = UserFilterMode.FollowingOnly;
-                p2pUserToggle.SetIsOnWithoutNotify(true);
+                clickCount = 0;
                 break;
         }
 
         SaveFilterMode();
         UpdateVisualState();
         ApplyFilterMode();
-
-        Debug.Log($"[P2PUserFilterPanel] Filter mode changed to: {currentMode}");
     }
 
     private void UpdateVisualState()
     {
+        // isOn은 항상 true로 유지 (Unity Toggle 색상 처리 방지)
+        if (p2pUserToggle != null)
+            p2pUserToggle.SetIsOnWithoutNotify(true);
+
+        Color bgColor = followingColor;
+        string label = followingLabel;
+
         switch (currentMode)
         {
-            case UserFilterMode.None:
-                // 체크 안 됨 상태
-                if (p2pUserToggle != null)
-                    p2pUserToggle.SetIsOnWithoutNotify(false);
-                if (backgroundImage != null)
-                    backgroundImage.color = normalColor;
-                if (checkmarkImage != null)
-                    checkmarkImage.color = checkmarkNormalColor;
-                // 레이블 텍스트 변경 (색상은 유지)
-                if (labelText != null)
-                    labelText.text = defaultLabel;
+            case UserFilterMode.FollowingOnly:
+                // 팔로잉 - 핑크색
+                bgColor = followingColor;
+                label = followingLabel;
                 break;
 
             case UserFilterMode.All:
-                // 체크됨 - 기본 상태 (흰색 배경, 모든 사용자)
-                if (p2pUserToggle != null)
-                    p2pUserToggle.SetIsOnWithoutNotify(true);
-                if (backgroundImage != null)
-                    backgroundImage.color = normalColor;
-                if (checkmarkImage != null)
-                    checkmarkImage.color = checkmarkNormalColor;
-                // 레이블 텍스트 변경 (색상은 유지)
-                if (labelText != null)
-                    labelText.text = defaultLabel;
+                // 전체 - 흰색
+                bgColor = allColor;
+                label = allLabel;
                 break;
 
-            case UserFilterMode.FollowingOnly:
-                // 체크됨 - 핑크색 (#e95383)
-                if (p2pUserToggle != null)
-                    p2pUserToggle.SetIsOnWithoutNotify(true);
-                if (backgroundImage != null)
-                    backgroundImage.color = followingOnlyColor;
-                if (checkmarkImage != null)
-                    checkmarkImage.color = checkmarkFollowingColor;
-                // 레이블 텍스트 변경 (색상은 유지)
-                if (labelText != null)
-                    labelText.text = followingOnlyLabel;
+            case UserFilterMode.None:
+                // 제외 - 회색
+                bgColor = noneColor;
+                label = noneLabel;
                 break;
         }
+
+        // 배경과 체크마크 모두 같은 색상으로 설정
+        if (backgroundImage != null)
+            backgroundImage.color = bgColor;
+        if (checkmarkImage != null)
+            checkmarkImage.color = bgColor;
+
+        // 레이블 텍스트 변경 (TMPro + Legacy 둘 다 지원)
+        if (labelText != null)
+            labelText.text = label;
+        if (legacyLabelText != null)
+            legacyLabelText.text = label;
     }
 
     private void ApplyFilterMode()
@@ -247,15 +268,16 @@ public class P2PUserFilterPanel : MonoBehaviour
     {
         currentMode = mode;
 
+        // 클릭 카운트 설정 (순환: 팔로잉 -> 전체 -> 제외)
         switch (mode)
         {
-            case UserFilterMode.None:
+            case UserFilterMode.FollowingOnly:
                 clickCount = 0;
                 break;
             case UserFilterMode.All:
                 clickCount = 1;
                 break;
-            case UserFilterMode.FollowingOnly:
+            case UserFilterMode.None:
                 clickCount = 2;
                 break;
         }

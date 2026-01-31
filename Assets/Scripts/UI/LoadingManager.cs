@@ -96,9 +96,7 @@ public class LoadingManager : MonoBehaviour
     void Start()
     {
         if (loadingPanel) loadingPanel.SetActive(false);
-        
-        Debug.Log($"현재 언어: {GetCurrentLanguageName()}");
-        
+
         InitializeLanguage();
         
         if (enableDataManagerMonitoring)
@@ -118,14 +116,10 @@ public class LoadingManager : MonoBehaviour
         if (pauseStatus)
         {
             wasInBackground = true;
-            Debug.Log("[LoadingManager] 앱이 백그라운드로 이동");
         }
         else if (wasInBackground && enableBackgroundRecoveryDetection)
         {
-            Debug.Log("[LoadingManager] 백그라운드에서 복구 - AR 환경 재감지 시작");
             wasInBackground = false;
-            
-            // 백그라운드 복구 시 AR 환경 재감지
             StartCoroutine(HandleBackgroundRecovery());
         }
     }
@@ -133,32 +127,20 @@ public class LoadingManager : MonoBehaviour
     IEnumerator HandleBackgroundRecovery()
     {
         // 1. 기본 복구 로딩 표시
-        ShowARLoading(() => {
-            Debug.Log("[LoadingManager] 백그라운드 복구 처리 완료");
-        }, "AR 세션 복구 중..");
-        
+        ShowARLoading(() => { }, "AR 세션 복구 중..");
+
         // 2. AR 세션이 안정화될 때까지 대기
         yield return new WaitForSeconds(backgroundRecoveryLoadingTime);
-        
+
         // 3. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
         if (enableAREnvironmentDetection)
         {
-            Debug.Log("[LoadingManager] 백그라운드 복구 후 AR 환경 즉시 체크");
-            
-            // AR 컴포넌트 재초기화 (필요한 경우)
             if (arSession == null)
-            {
                 InitializeARComponents();
-            }
-            
-            // 강제로 환경 체크 시작
+
             isCheckingAREnvironment = true;
-            
-            // 0.5초 대기 후 환경 체크 (AR 세션 안정화)
             yield return new WaitForSeconds(0.5f);
             CheckAREnvironment();
-            
-            Debug.Log("[LoadingManager] 백그라운드 복구 후 AR 환경 감지 재시작 완료");
         }
     }
     
@@ -205,8 +187,7 @@ public class LoadingManager : MonoBehaviour
     public void ShowARLoading(System.Action arWork, string message = "")
     {
         string displayMessage = string.IsNullOrEmpty(message) ? "AR 오브젝트 처리 중.." : message;
-        Debug.Log($"AR 작업 시작 - 즉시 로딩 표시: {displayMessage}");
-        
+
         if (enableAREnvironmentDetection)
         {
             AREnvironmentIssue issue = GetCurrentEnvironmentIssue();
@@ -216,7 +197,7 @@ public class LoadingManager : MonoBehaviour
                 return;
             }
         }
-        
+
         StartCoroutine(ARSpecificLoading(arWork, displayMessage));
     }
     
@@ -242,9 +223,8 @@ public class LoadingManager : MonoBehaviour
                 break;
         }
         
-        Debug.Log($"LoadingManager 언어 설정: {currentLanguage}");
     }
-    
+
     void InitializeARComponents()
     {
         arSession = FindFirstObjectByType<ARSession>();
@@ -258,8 +238,6 @@ public class LoadingManager : MonoBehaviour
         arCameraManager = FindFirstObjectByType<ARCameraManager>();
         arPointCloudManager = FindFirstObjectByType<ARPointCloudManager>();
         arCamera = Camera.main ?? FindFirstObjectByType<Camera>();
-        
-        Debug.Log("AR 환경 감지 컴포넌트 초기화 완료");
     }
     
     IEnumerator StartAREnvironmentMonitoring()
@@ -277,8 +255,9 @@ public class LoadingManager : MonoBehaviour
         }
         
         isCheckingAREnvironment = true;
+#if UNITY_EDITOR
         Debug.Log($"[LoadingManager] AR 환경 모니터링 시작 (대기시간: {waitTime}초)");
-        
+#endif
         CheckAREnvironment();
         StartCoroutine(ForceEnvironmentCheckAfterDelay());
     }
@@ -683,56 +662,36 @@ public class LoadingManager : MonoBehaviour
             lastObjectCount = dataManager.GetSpawnedObjectsCount();
             lastObjectCountChangeTime = Time.realtimeSinceStartup;
             isMonitoringDataManager = true;
-            Debug.Log("DataManager 모니터링 시작됨");
-        }
-        else
-        {
-            Debug.LogWarning("DataManager를 찾을 수 없어 모니터링을 시작할 수 없습니다.");
         }
     }
     
-    // ✅ 수정된 CheckARObjectChanges - 임계값 만족시 즉시 UI 표시
+    // 임계값 만족시 즉시 UI 표시
     void CheckARObjectChanges()
     {
         int currentObjectCount = dataManager.GetSpawnedObjectsCount();
-        
+
         if (currentObjectCount != lastObjectCount)
         {
-            int objectChange = currentObjectCount - lastObjectCount; // 증감량 (음수=삭제, 양수=생성)
+            int objectChange = currentObjectCount - lastObjectCount;
             float timeSinceLastChange = Time.realtimeSinceStartup - lastObjectCountChangeTime;
-            
+
             if (objectChange > 0)
             {
-                Debug.Log($"[LoadingManager] AR 오브젝트 생성 감지: {lastObjectCount} -> {currentObjectCount} (+{objectChange}개, 시간: {timeSinceLastChange:F2}초)");
-                
-                // ✅ 임계값 조건 만족시 즉시 UI 표시
-                if (enableImmediateDataManagerUI && 
-                    timeSinceLastChange <= creationTime && 
+                // 임계값 조건 만족시 즉시 UI 표시
+                if (enableImmediateDataManagerUI &&
+                    timeSinceLastChange <= creationTime &&
                     objectChange >= creationCount)
                 {
-                    Debug.Log($"[LoadingManager] 임계값 만족 - 즉시 UI 표시 ({creationTime}초 안에 {objectChange}개 생성)");
-                    
-                    // 이미 UI가 표시중이 아닐 때만 표시
                     if (!hasShownEnvironmentGuidance && !isLoading)
                     {
                         hasShownEnvironmentGuidance = true;
                         string message = GetEnvironmentGuidanceMessage(AREnvironmentIssue.DataLoading);
                         ShowAREnvironmentGuidance(message, AREnvironmentIssue.DataLoading);
                         StartCoroutine(AutoRetryEnvironmentCheck(AREnvironmentIssue.DataLoading));
-                        Debug.Log("[LoadingManager] 즉시 DataManager UI 표시 완료");
-                    }
-                    else
-                    {
-                        Debug.Log("[LoadingManager] 이미 UI 표시중이므로 중복 표시 방지");
                     }
                 }
             }
-            else
-            {
-                Debug.Log($"[LoadingManager] AR 오브젝트 삭제 감지: {lastObjectCount} -> {currentObjectCount} ({objectChange}개, 시간: {timeSinceLastChange:F2}초)");
-            }
-            
-            // 오브젝트 변화 정보 업데이트 (AR 환경 감지에서 생성만 체크)
+
             lastObjectCount = currentObjectCount;
             lastObjectCountChangeTime = Time.realtimeSinceStartup;
         }
@@ -782,8 +741,6 @@ public class LoadingManager : MonoBehaviour
         
         HideLoadingUI();
         isLoading = false;
-        
-        Debug.Log($"AR 작업 완료 (총 시간: {Time.realtimeSinceStartup - startTime:F2}초)");
     }
     
     IEnumerator ForcedLoadingProcess(System.Action heavyWork, string category)

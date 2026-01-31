@@ -133,12 +133,7 @@ public class DataManager : MonoBehaviour
 #if UNITY_EDITOR
         float lat = VirtualLocation.Instance.Latitude;
         float lon = VirtualLocation.Instance.Longitude;
-        Debug.Log($"[DataManager] 에디터 환경 감지: VirtualLocation 사용 (Lat: {lat}, Lon: {lon}, Alt: 80)");
-        // 고도 시뮬레이션은 API 호출 파라미터나 로직에 직접 반영해야 하지만, 
-        // 현재 DataManager 구조상 lat/lon을 주로 사용하므로 로그에만 명시하고 
-        // 필요한 경우 해당 변수를 참조하는 로직에서 80을 사용하도록 해야 합니다.
-        // 현재 구조에서는 lat/lon 위주로 처리되고 있음.
-        
+
         lastPosition = new Vector2(lat, lon);
         
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
@@ -387,7 +382,7 @@ public class DataManager : MonoBehaviour
         {
             places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
             ShowErrorMessage("데이터 파싱에 실패했습니다.");
             yield break;
@@ -505,7 +500,6 @@ public class DataManager : MonoBehaviour
 
         // 서브사진 설정
         ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true); // includeInactive=true
-        Debug.Log($"[DataManager] SetupObjectComponents: place={place.name}, sub_photos={place.sub_photos?.Count ?? 0}, displayCtrl={displayCtrl != null}");
         if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
         {
             List<string> allSubPhotos = new List<string>();
@@ -519,12 +513,7 @@ public class DataManager : MonoBehaviour
                     }
                 }
             }
-            Debug.Log($"[DataManager] SetSubPhotos: place={place.name}, count={allSubPhotos.Count}, urls={string.Join(", ", allSubPhotos)}");
             displayCtrl.SetSubPhotos(allSubPhotos);
-        }
-        else
-        {
-            Debug.LogWarning($"[DataManager] SetSubPhotos 건너뜀: place={place.name}, displayCtrl={displayCtrl != null}, sub_photos count={place.sub_photos?.Count ?? 0}");
         }
 
         // model_type에 따른 분기 처리
@@ -827,7 +816,9 @@ public class DataManager : MonoBehaviour
         // object3D 키가 없으면 기본값 true
         bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
 
+#if UNITY_EDITOR
         Debug.Log($"[DataManager] ApplyFilters: showWoopangData={showWoopangData}, showObject3D={showObject3D}, petFriendlyAll={petFriendlyAll}, petFriendlyOnly={petFriendlyOnly}, noPetFriendly={noPetFriendly}, showAlcohol={showAlcohol}");
+#endif
 
         foreach (var kvp in spawnedObjects)
         {

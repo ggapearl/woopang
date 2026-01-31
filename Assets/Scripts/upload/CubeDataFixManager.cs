@@ -49,7 +49,7 @@ public class CubeDataFixManager : MonoBehaviour
 
     private void Awake()
     {
-        if (FindObjectsOfType<CubeDataFixManager>().Length > 1)
+        if (FindObjectsByType<CubeDataFixManager>(FindObjectsSortMode.None).Length > 1)
         {
             Destroy(gameObject);
         }
@@ -61,38 +61,35 @@ public class CubeDataFixManager : MonoBehaviour
 
     private void Start()
     {
-        if (doubleTap != null)
-        {
-            Debug.Log($"[CubeDataFixManager] 초기 DoubleTap3D 연결됨 - ID: {doubleTap.GetId()}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
-        }
-        else
-        {
-            Debug.LogWarning("[CubeDataFixManager] DoubleTap3D가 연결되지 않았습니다. 더블 터치로 동적으로 설정됩니다.");
-        }
-
         InitializeComponents();
         ResetToInitialState();
 
         DoubleTap3D.OnDoubleTapEvent += HandleDoubleTap;
-        Debug.Log("[CubeDataFixManager] DoubleTap3D.OnDoubleTapEvent 구독 완료");
     }
 
     void OnDestroy()
     {
         DoubleTap3D.OnDoubleTapEvent -= HandleDoubleTap;
-        Debug.Log("[CubeDataFixManager] DoubleTap3D.OnDoubleTapEvent 구독 해제");
     }
 
     private void HandleDoubleTap(DoubleTap3D tappedDoubleTap)
     {
         doubleTap = tappedDoubleTap;
-        Debug.Log($"[CubeDataFixManager] 더블 터치로 DoubleTap3D 업데이트 - ID: {(doubleTap != null ? doubleTap.GetId() : -1)}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
     }
 
     #region Component Initialization
     private void InitializeComponents()
     {
-        if (instagramToggle != null) instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);
+        if (instagramToggle != null)
+        {
+            instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);
+            // 초기 상태: 토글 Off, 입력 필드 숨김
+            instagramToggle.isOn = false;
+            if (instagramIDInput != null)
+            {
+                instagramIDInput.gameObject.SetActive(false);
+            }
+        }
         else Debug.LogError("[CubeDataFixManager] InstagramToggle이 할당되지 않았습니다!");
 
         if (mainPhotoButton != null) mainPhotoButton.onClick.AddListener(() => StartCoroutine(SelectAndCropMainPhoto()));
@@ -134,8 +131,8 @@ public class CubeDataFixManager : MonoBehaviour
         showInstagram = value;
         if (instagramIDInput != null)
         {
-            instagramIDInput.interactable = value;
-            instagramIDInput.image.color = value ? Color.white : Color.gray;
+            // 토글 상태에 따라 입력 필드 표시/숨김
+            instagramIDInput.gameObject.SetActive(value);
             if (!value) instagramIDInput.text = "";
         }
     }
@@ -152,7 +149,6 @@ public class CubeDataFixManager : MonoBehaviour
             subPhotoDisplays.Add(img);
             imageObj.SetActive(false);
         }
-        Debug.Log($"✅ [CubeDataFixManager] 서브 사진 디스플레이 초기화 완료: {subPhotoDisplays.Count}개");
     }
     #endregion
 
@@ -560,8 +556,6 @@ public class CubeDataFixManager : MonoBehaviour
         {
             // 이미 정지된 경우 무시
         }
-        
-        Debug.Log("[CubeDataFixManager] 스피너 숨김 완료");
     }
 
     private IEnumerator SpinnerAnimation()
@@ -1190,21 +1184,18 @@ public class CubeDataFixManager : MonoBehaviour
             showInstagram = false;
             if (instagramIDInput != null)
             {
-                instagramIDInput.interactable = false;
-                instagramIDInput.image.color = Color.gray;
+                instagramIDInput.gameObject.SetActive(false);
+                instagramIDInput.text = "";
             }
         }
 
         if (disableObject != null)
         {
             disableObject.SetActive(false);
-            Debug.Log($"[CubeDataFixManager] DisableObject 비활성화됨: {disableObject.name}");
         }
 
         isProcessing = false;
         elapsedTime = 0f;
-
-        Debug.Log("✅ UI 및 상태 초기화 완료");
     }
     #endregion
 

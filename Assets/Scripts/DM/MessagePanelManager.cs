@@ -39,9 +39,13 @@ public class MessagePanelManager : MonoBehaviour
     public Image chatRoomAvatar;
     public Button chatRoomBackButton;
 
+    [Header("=== 네비게이션 버튼 연결 ===")]
+    [Tooltip("하단 네비게이션의 Message_Button (뒤로가기 시 이 버튼 클릭 트리거)")]
+    public Button navigationMessageButton;
+
     [Header("=== 스와이프 삭제 설정 ===")]
     public float swipeThreshold = 100f;
-    public Color deleteButtonColor = new Color(1f, 0.3f, 0.3f, 1f);
+    public Color deleteButtonColor = new Color(0.91f, 0.33f, 0.63f, 1f); // 핑크색 #E854A1
 
     [Header("=== 좋아요 하트 ===")]
     public GameObject heartAnimationPrefab;
@@ -51,11 +55,13 @@ public class MessagePanelManager : MonoBehaviour
     [Tooltip("메시지가 없을 때 표시할 텍스트")]
     public string emptyInboxMessage = "아직 메시지가 없습니다.\n친구에게 첫 메시지를 보내보세요!";
     public string emptySearchMessage = "검색 결과가 없습니다.";
+    [Tooltip("채팅방에 대화가 없을 때 표시할 텍스트")]
+    public string emptyChatMessage = "아직 대화가 없습니다.\n첫 메시지를 보내보세요!";
     private GameObject emptyStateObject;
+    private GameObject chatEmptyStateObject;
 
 
-    [Header("=== 안읽음 카운트 ===")]
-    public Text globalUnreadCountText;
+    [Header("=== 안읽음 인디케이터 ===")]
     public GameObject globalUnreadIndicator;
     private int totalUnreadCount = 0;
 
@@ -69,8 +75,40 @@ public class MessagePanelManager : MonoBehaviour
 
     [Header("=== 테스트 모드 ===")]
     [Tooltip("에디터에서 테스트용 더미 메시지 생성")]
-    public bool enableTestMode = false;
-    public float testMessageDelay = 20f;
+    public bool enableTestMode = true;  // 에디터에서 기본 활성화
+    public float testMessageDelay = 2f;  // 빠른 로드
+
+    [Header("=== 폰트 설정 ===")]
+    [Tooltip("채팅용 커스텀 폰트 (AppleSDGothicNeoM)")]
+    public Font chatFont;
+    [Tooltip("채팅 메시지 폰트 크기")]
+    public int chatFontSize = 60;
+
+    // 더미 데이터 보존용 플래그
+    private bool hasDummyDataLoaded = false;
+
+    [Header("=== 채팅 버블 설정 ===")]
+    [Tooltip("화면 너비 대비 최대 버블 너비 비율 (0.5 ~ 1.0)")]
+    [Range(0.5f, 1.0f)]
+    public float maxBubbleWidthRatio = 0.82f;
+
+    [Tooltip("버블 최소 너비 (픽셀)")]
+    public float minBubbleWidth = 120f;
+
+    [Tooltip("버블 좌우 패딩 (픽셀)")]
+    public float bubblePaddingH = 24f;
+
+    [Tooltip("버블 상하 패딩 (픽셀)")]
+    public float bubblePaddingV = 18f;
+
+    [Tooltip("메시지 폰트 크기")]
+    public int bubbleFontSize = 60;
+
+    [Tooltip("줄 높이 (픽셀)")]
+    public float bubbleLineHeight = 42f;
+
+    [Tooltip("버블 최소 높이 (픽셀)")]
+    public float minBubbleHeight = 60f;
 
     // 현재 대화 상대
     private string currentChatUserId;
@@ -96,12 +134,26 @@ public class MessagePanelManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
+        // 커스텀 폰트 로드 (AppleSDGothicNeoM)
+        if (chatFont == null)
+        {
+            chatFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+            if (chatFont == null)
+            {
+                chatFont = Resources.Load<Font>("AppleSDGothicNeoM");
+            }
+        }
     }
 
     void Start()
     {
         SetupButtons();
         HideAllPanels();
+
+        // 입력창 자동 확장 설정
+        if (chatInput != null)
+            AutoExpandInputField.Setup(chatInput, 50f, 150f);
 
         // 테스트 모드 (에디터에서만)
 #if UNITY_EDITOR
@@ -127,7 +179,6 @@ public class MessagePanelManager : MonoBehaviour
         {
             searchInput.onEndEdit.AddListener(OnSearchSubmit);
         }
-
     }
 
     void OnDestroy()
@@ -185,6 +236,9 @@ public class MessagePanelManager : MonoBehaviour
         HideAllPanels();
     }
 
+    // 채팅룸에서 돌아갈 때 메시지 패널 다시 열기 위한 플래그
+    private bool openedFromMessagePanel = false;
+
     /// <summary>
     /// 특정 사용자와의 대화방 열기
     /// </summary>
@@ -194,11 +248,28 @@ public class MessagePanelManager : MonoBehaviour
         currentChatUsername = username;
         isAdminChat = isAdmin;
 
+        // 메시지 패널에서 채팅룸으로 이동 시 메시지 패널 닫기
+        if (messagePanel != null && messagePanel.activeSelf)
+        {
+            openedFromMessagePanel = true;
+            messagePanel.SetActive(false);
+        }
+        else
+        {
+            openedFromMessagePanel = false;
+        }
+
         if (chatRoomPanel != null)
             chatRoomPanel.SetActive(true);
 
         if (chatRoomTitle != null)
-            chatRoomTitle.text = username;
+        {
+            // 다국어 제목 적용: "사용자와의 대화" 형식
+            if (LocalizationManager.Instance != null)
+                chatRoomTitle.text = LocalizationManager.Instance.GetText("chat_with_user", username);
+            else
+                chatRoomTitle.text = $"{username}와의 대화";
+        }
 
         if (chatRoomAvatar != null && !string.IsNullOrEmpty(avatarUrl))
             StartCoroutine(LoadAvatar(avatarUrl, chatRoomAvatar));
@@ -211,19 +282,32 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 대화방 닫기
+    /// 대화방 닫기 (뒤로가기 - Message_Button 클릭 시뮬레이션)
     /// </summary>
     public void CloseChatRoom()
     {
         if (chatRoomPanel != null)
             chatRoomPanel.SetActive(false);
 
+        // 채팅방 빈 상태 UI 정리
+        ShowChatEmptyState(false);
+
         currentChatUserId = null;
         currentChatUsername = null;
         isAdminChat = false;
+        openedFromMessagePanel = false;
 
-        // 대화 목록 새로고침
-        StartCoroutine(LoadConversationList());
+        // Message_Button 클릭 트리거 (모든 관련 로직 실행)
+        if (navigationMessageButton != null)
+        {
+            navigationMessageButton.onClick.Invoke();
+        }
+        else
+        {
+            // 폴백: 직접 메시지 패널 열기
+            Debug.LogWarning("[MessagePanelManager] navigationMessageButton이 연결되지 않음. 직접 열기.");
+            OpenMessagePanel();
+        }
     }
 
     /// <summary>
@@ -258,6 +342,26 @@ public class MessagePanelManager : MonoBehaviour
     {
         ClearContent(conversationListContent);
 
+#if UNITY_EDITOR
+        // 에디터에서 더미 데이터가 이미 로드되어 있으면 캐시된 데이터 재사용
+        if (enableTestMode && hasDummyDataLoaded && conversations.Count > 0)
+        {
+            // 관리자 공지 UI 생성
+            foreach (var broadcast in adminBroadcasts)
+            {
+                CreateAdminNoticeItem(broadcast);
+            }
+
+            // 캐시된 대화 목록 UI 생성
+            foreach (var conv in conversations)
+            {
+                CreateConversationItem(conv);
+            }
+
+            yield break;
+        }
+#endif
+
         // 1. 관리자 공지 로드 (항상 최상단)
         yield return StartCoroutine(LoadAdminBroadcasts());
 
@@ -268,7 +372,17 @@ public class MessagePanelManager : MonoBehaviour
         }
 
         // 2. 일반 대화 목록 로드
-        if (!CheckLogin()) yield break;
+        if (!CheckLogin())
+        {
+#if UNITY_EDITOR
+            // 에디터에서 로그인 안 된 경우 더미 데이터 표시
+            if (enableTestMode)
+            {
+                LoadDummyConversations();
+            }
+#endif
+            yield break;
+        }
 
         string userId = LoginManager.Instance.CurrentUser.id;
         string url = $"{ApiConfig.DM_INBOX}?user_id={userId}";
@@ -297,11 +411,96 @@ public class MessagePanelManager : MonoBehaviour
             }
             else
             {
+#if UNITY_EDITOR
+                // 에디터에서 서버 오류 시 더미 데이터 표시
+                if (enableTestMode)
+                {
+                    LoadDummyConversations();
+                }
+                else
+                {
+                    ShowEmptyState(conversationListContent, "메시지를 불러올 수 없습니다.", true);
+                }
+#else
                 // 에러 시 빈 상태 표시
                 ShowEmptyState(conversationListContent, "메시지를 불러올 수 없습니다.", true);
+#endif
             }
         }
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 에디터용 더미 대화 목록 로드
+    /// </summary>
+    private void LoadDummyConversations()
+    {
+        if (hasDummyDataLoaded && conversations.Count > 0)
+        {
+            // 이미 더미 데이터가 있으면 UI만 다시 생성
+            foreach (var conv in conversations)
+            {
+                CreateConversationItem(conv);
+            }
+            return;
+        }
+
+        conversations.Clear();
+
+        // 더미 대화 데이터
+        conversations.Add(new ConversationSummary
+        {
+            userId = "test_user_1",
+            username = "김민지",
+            lastMessage = "안녕하세요! 오늘 AR 콘텐츠 봤어요 👀",
+            lastMessageTime = DateTime.Now.AddMinutes(-5).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 2
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "test_user_2",
+            username = "이준호",
+            lastMessage = "주말에 같이 우팡 촬영 어때요?",
+            lastMessageTime = DateTime.Now.AddHours(-1).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 0
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "test_user_3",
+            username = "박서연",
+            lastMessage = "저도 AR 아티스트예요! 반가워요 ✨",
+            lastMessageTime = DateTime.Now.AddHours(-3).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 1
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "test_user_4",
+            username = "최영수",
+            lastMessage = "사진 잘 찍으셨네요!",
+            lastMessageTime = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 0
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "test_user_5",
+            username = "WOOPANG_크리에이터",
+            lastMessage = "다음 업데이트 기대해주세요 🚀",
+            lastMessageTime = DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 0
+        });
+
+        foreach (var conv in conversations)
+        {
+            CreateConversationItem(conv);
+        }
+
+        hasDummyDataLoaded = true;
+    }
+#endif
 
     private IEnumerator LoadAdminBroadcasts()
     {
@@ -545,6 +744,7 @@ public class MessagePanelManager : MonoBehaviour
     private IEnumerator LoadChatMessages(string otherUserId, bool isAdmin)
     {
         ClearContent(chatMessageContent);
+        ShowChatEmptyState(false); // 기존 빈 상태 제거
 
         if (isAdmin)
         {
@@ -556,10 +756,31 @@ public class MessagePanelManager : MonoBehaviour
             yield break;
         }
 
-        if (!CheckLogin()) yield break;
+        if (!CheckLogin())
+        {
+#if UNITY_EDITOR
+            // 에디터에서 로그인 안 된 경우 테스트 메시지 표시
+            if (enableTestMode)
+            {
+                CreateTestChatMessages(otherUserId);
+                yield return null;
+                ScrollToBottom();
+            }
+            else
+            {
+                // 테스트 모드가 아니면 빈 상태 표시
+                ShowChatEmptyState(true);
+            }
+#else
+            ShowChatEmptyState(true);
+#endif
+            yield break;
+        }
 
         string userId = LoginManager.Instance.CurrentUser.id;
         string url = $"{ApiConfig.DM_CONVERSATION}?user_id={userId}&other_id={otherUserId}";
+
+        bool hasMessages = false;
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -569,10 +790,14 @@ public class MessagePanelManager : MonoBehaviour
             {
                 var response = JsonUtility.FromJson<DMConversationResponse>(request.downloadHandler.text);
 
-                foreach (var msg in response.messages)
+                if (response.messages != null && response.messages.Count > 0)
                 {
-                    bool isMine = msg.sender_id == userId || msg.is_mine;
-                    CreateMessageBubble(msg, isMine);
+                    hasMessages = true;
+                    foreach (var msg in response.messages)
+                    {
+                        bool isMine = msg.sender_id == userId || msg.is_mine;
+                        CreateMessageBubble(msg, isMine);
+                    }
                 }
 
                 // 스크롤 맨 아래로
@@ -580,7 +805,85 @@ public class MessagePanelManager : MonoBehaviour
                 ScrollToBottom();
             }
         }
+
+        // 메시지가 없으면 빈 상태 표시
+        if (!hasMessages)
+        {
+#if UNITY_EDITOR
+            // 에디터 테스트 모드: 메시지가 없으면 테스트 메시지 표시
+            if (enableTestMode)
+            {
+                CreateTestChatMessages(otherUserId);
+                yield return null;
+                ScrollToBottom();
+            }
+            else
+            {
+                ShowChatEmptyState(true);
+            }
+#else
+            ShowChatEmptyState(true);
+#endif
+        }
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 에디터 테스트용 채팅 메시지 생성
+    /// </summary>
+    private void CreateTestChatMessages(string otherUserId)
+    {
+        string myId = LoginManager.Instance?.CurrentUser?.id ?? "my_test_id";
+
+        // 테스트 메시지들
+        var testMessages = new DMMessage[]
+        {
+            new DMMessage
+            {
+                sender_id = otherUserId,
+                content = "안녕하세요! 👋",
+                created_at = DateTime.Now.AddMinutes(-30).ToString("yyyy-MM-dd HH:mm:ss"),
+                is_read = true
+            },
+            new DMMessage
+            {
+                sender_id = myId,
+                content = "안녕하세요! 반갑습니다 😊",
+                created_at = DateTime.Now.AddMinutes(-28).ToString("yyyy-MM-dd HH:mm:ss"),
+                is_read = true,
+                is_mine = true
+            },
+            new DMMessage
+            {
+                sender_id = otherUserId,
+                content = "우팡 AR 앱 정말 재미있네요! 어디서 만들 수 있나요?",
+                created_at = DateTime.Now.AddMinutes(-25).ToString("yyyy-MM-dd HH:mm:ss"),
+                is_read = true
+            },
+            new DMMessage
+            {
+                sender_id = myId,
+                content = "감사합니다! 앱에서 + 버튼을 눌러서 새로운 장소를 추가할 수 있어요.",
+                created_at = DateTime.Now.AddMinutes(-20).ToString("yyyy-MM-dd HH:mm:ss"),
+                is_read = true,
+                is_mine = true
+            },
+            new DMMessage
+            {
+                sender_id = otherUserId,
+                content = "오 정말요? 한번 해볼게요! 🎉",
+                created_at = DateTime.Now.AddMinutes(-15).ToString("yyyy-MM-dd HH:mm:ss"),
+                is_read = false
+            }
+        };
+
+        foreach (var msg in testMessages)
+        {
+            bool isMine = msg.sender_id == myId || msg.is_mine;
+            CreateMessageBubble(msg, isMine);
+        }
+    }
+#endif
 
     private void CreateMessageBubble(DMMessage msg, bool isMine)
     {
@@ -605,7 +908,33 @@ public class MessagePanelManager : MonoBehaviour
             contentText.text = msg.content;
             contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
             contentText.lineSpacing = 1.2f;
+            // 텍스트 자동 줄바꿈 및 높이 확장 설정
+            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            // 커스텀 폰트 적용 (AppleSDGothicNeoM)
+            if (chatFont != null)
+                contentText.font = chatFont;
+
+            // ContentSizeFitter로 텍스트에 맞게 버블 높이 자동 조절
+            ContentSizeFitter textCsf = contentText.GetComponent<ContentSizeFitter>();
+            if (textCsf == null)
+                textCsf = contentText.gameObject.AddComponent<ContentSizeFitter>();
+            textCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // 텍스트 LayoutElement 설정
+            LayoutElement textLE = contentText.GetComponent<LayoutElement>();
+            if (textLE == null)
+                textLE = contentText.gameObject.AddComponent<LayoutElement>();
+            textLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
         }
+
+        // 버블 전체에도 ContentSizeFitter 적용
+        ContentSizeFitter itemCsf = item.GetComponent<ContentSizeFitter>();
+        if (itemCsf == null)
+            itemCsf = item.AddComponent<ContentSizeFitter>();
+        itemCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        itemCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         // 시간
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
@@ -613,6 +942,9 @@ public class MessagePanelManager : MonoBehaviour
         {
             timeText.text = GetShortTime(msg.created_at);
             timeText.fontSize = 22;
+            // 커스텀 폰트 적용
+            if (chatFont != null)
+                timeText.font = chatFont;
         }
 
         // 읽음 표시 (내 메시지) - 체크마크 스타일
@@ -678,7 +1010,27 @@ public class MessagePanelManager : MonoBehaviour
             contentText.text = broadcast.content;
             contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
             contentText.lineSpacing = 1.2f;
+            // 텍스트 자동 줄바꿈 및 높이 확장 설정
+            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            // 커스텀 폰트 적용 (AppleSDGothicNeoM)
+            if (chatFont != null)
+                contentText.font = chatFont;
+
+            // ContentSizeFitter로 텍스트에 맞게 버블 높이 자동 조절
+            ContentSizeFitter textCsf = contentText.GetComponent<ContentSizeFitter>();
+            if (textCsf == null)
+                textCsf = contentText.gameObject.AddComponent<ContentSizeFitter>();
+            textCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }
+
+        // 버블 전체에도 ContentSizeFitter 적용
+        ContentSizeFitter itemCsf = item.GetComponent<ContentSizeFitter>();
+        if (itemCsf == null)
+            itemCsf = item.AddComponent<ContentSizeFitter>();
+        itemCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        itemCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         // 시간
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
@@ -686,6 +1038,9 @@ public class MessagePanelManager : MonoBehaviour
         {
             timeText.text = GetShortTime(broadcast.created_at);
             timeText.fontSize = 22;
+            // 커스텀 폰트 적용
+            if (chatFont != null)
+                timeText.font = chatFont;
         }
     }
 
@@ -743,6 +1098,60 @@ public class MessagePanelManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 외부에서 메시지 전송 (ChatPanelManager 등에서 사용)
+    /// </summary>
+    /// <param name="recipientId">수신자 ID</param>
+    /// <param name="content">메시지 내용</param>
+    /// <param name="callback">전송 결과 콜백 (성공/실패)</param>
+    public void SendMessageToUser(string recipientId, string content, System.Action<bool> callback = null)
+    {
+        StartCoroutine(SendMessageWithCallbackCoroutine(recipientId, content, callback));
+    }
+
+    private IEnumerator SendMessageWithCallbackCoroutine(string recipientId, string content, System.Action<bool> callback)
+    {
+        if (!CheckLogin())
+        {
+            callback?.Invoke(false);
+            yield break;
+        }
+
+        string userId = LoginManager.Instance.CurrentUser.id;
+
+        var postData = new DMSendRequest
+        {
+            sender_id = userId,
+            recipient_id = recipientId,
+            content = content
+        };
+
+        string json = JsonUtility.ToJson(postData);
+
+        using (UnityWebRequest request = new UnityWebRequest(ApiConfig.DM_SEND, "POST"))
+        {
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            bool success = request.result == UnityWebRequest.Result.Success;
+
+            if (success)
+            {
+                Debug.Log($"[MessagePanel] Message sent to {recipientId}");
+            }
+            else
+            {
+                Debug.LogError($"[MessagePanel] Failed to send: {request.error}");
+            }
+
+            callback?.Invoke(success);
+        }
+    }
+
     private IEnumerator MarkMessagesAsRead(string senderId)
     {
         if (!CheckLogin()) yield break;
@@ -772,13 +1181,27 @@ public class MessagePanelManager : MonoBehaviour
 
     #region Search
 
+    /// <summary>
+    /// X 버튼 클릭 - 검색창 내용 삭제
+    /// </summary>
     private void OnSearchButtonClicked()
     {
-        string query = searchInput?.text?.Trim();
-        if (!string.IsNullOrEmpty(query))
+        ClearSearchInput();
+    }
+
+    /// <summary>
+    /// 검색창 내용 삭제 및 드롭다운 숨김
+    /// </summary>
+    private void ClearSearchInput()
+    {
+        if (searchInput != null)
         {
-            StartCoroutine(SearchUsers(query));
+            searchInput.text = "";
         }
+
+        // 검색 결과 패널 숨김
+        if (searchResultPanel != null)
+            searchResultPanel.SetActive(false);
     }
 
     private void OnSearchSubmit(string query)
@@ -1210,6 +1633,50 @@ public class MessagePanelManager : MonoBehaviour
         emptyText.horizontalOverflow = HorizontalWrapMode.Wrap;
     }
 
+    /// <summary>
+    /// 채팅방 빈 상태 UI 표시/숨김
+    /// </summary>
+    private void ShowChatEmptyState(bool show)
+    {
+        // 기존 빈 상태 UI 제거
+        if (chatEmptyStateObject != null)
+        {
+            Destroy(chatEmptyStateObject);
+            chatEmptyStateObject = null;
+        }
+
+        if (!show || chatMessageContent == null) return;
+
+        // 다국어 메시지 가져오기
+        string message = emptyChatMessage;
+        if (LocalizationManager.Instance != null)
+        {
+            string localizedMsg = LocalizationManager.Instance.GetText("empty_chat_message");
+            if (!string.IsNullOrEmpty(localizedMsg) && localizedMsg != "empty_chat_message")
+                message = localizedMsg;
+        }
+
+        // 빈 상태 UI 생성
+        chatEmptyStateObject = new GameObject("ChatEmptyState");
+        chatEmptyStateObject.transform.SetParent(chatMessageContent, false);
+
+        RectTransform rect = chatEmptyStateObject.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0.5f);
+        rect.anchorMax = new Vector2(1, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(0, 50);
+        rect.sizeDelta = new Vector2(-40, 120);
+
+        Text emptyText = chatEmptyStateObject.AddComponent<Text>();
+        emptyText.text = message;
+        emptyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        emptyText.fontSize = 24;
+        emptyText.color = new Color(0.5f, 0.5f, 0.55f);
+        emptyText.alignment = TextAnchor.MiddleCenter;
+        emptyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        emptyText.verticalOverflow = VerticalWrapMode.Overflow;
+    }
+
     private IEnumerator LoadAvatar(string url, Image targetImage)
     {
         if (string.IsNullOrEmpty(url) || targetImage == null) yield break;
@@ -1322,9 +1789,6 @@ public class MessagePanelManager : MonoBehaviour
 
     private void UpdateUnreadUI()
     {
-        if (globalUnreadCountText != null)
-            globalUnreadCountText.text = totalUnreadCount > 0 ? totalUnreadCount.ToString() : "";
-
         if (globalUnreadIndicator != null)
             globalUnreadIndicator.SetActive(totalUnreadCount > 0);
     }

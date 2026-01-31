@@ -45,6 +45,20 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private ARPreviewController arPreviewController; // AR 미리보기 컨트롤러
     [SerializeField] private GameObject cubePrefab; // 0000_Cube.prefab
 
+    [Header("=== Editor Test Mode ===")]
+    [Tooltip("에디터에서 테스트 업로드 활성화")]
+    public bool enableEditorTestMode = false;
+    [Tooltip("Play Mode 진입 시 자동 업로드 실행")]
+    public bool autoUploadOnPlayMode = false;
+    [Tooltip("테스트용 메인 이미지 (Texture2D)")]
+    public Texture2D testMainImage;
+    [Tooltip("테스트용 GPS 좌표 (lat, lon, alt)")]
+    public Vector3 testGpsCoordinates = new Vector3(37.5665f, 126.9780f, 30f); // 서울시청 기본값
+    [Tooltip("테스트용 장소명")]
+    public string testPlaceName = "TestPlace";
+    [Tooltip("테스트 업로드 실행 버튼")]
+    public bool triggerTestUpload = false;
+
     private string serverUrl => ApiConfig.UPLOAD + "/";
 
     private Texture2D mainPhoto;
@@ -69,9 +83,12 @@ public class CubeUploadManager : MonoBehaviour
 
     private void Awake()
     {
-        if (FindObjectsOfType<CubeUploadManager>().Length > 1)
+        int count = FindObjectsByType<CubeUploadManager>(FindObjectsSortMode.None).Length;
+
+        if (count > 1)
         {
             Destroy(gameObject);
+            return;
         }
         else
         {
@@ -81,16 +98,26 @@ public class CubeUploadManager : MonoBehaviour
 
     void Start()
     {
-        // ... (이전 초기화 코드들)
+        InitializeComponents();
 
 #if !UNITY_EDITOR
         StartCoroutine(InitializeLocationService());
 #endif
     }
 
+
     private void InitializeComponents()
     {
-        if (instagramToggle != null) instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);
+        if (instagramToggle != null)
+        {
+            instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);
+            // 초기 상태: 토글 Off, 입력 필드 숨김
+            instagramToggle.isOn = false;
+            if (instagramIDInput != null)
+            {
+                instagramIDInput.gameObject.SetActive(false);
+            }
+        }
         if (mainPhotoButton != null) mainPhotoButton.onClick.AddListener(() => StartCoroutine(SelectAndCropMainPhoto()));
         if (subPhotosButton != null) subPhotosButton.onClick.AddListener(() => StartCoroutine(SelectSubPhotos()));
         if (resetPhotosButton != null) resetPhotosButton.onClick.AddListener(ResetSubPhotos);
@@ -219,7 +246,7 @@ public class CubeUploadManager : MonoBehaviour
                 }
             }, LocalizationManager.Instance.GetText("select_main_photo"), "image/*");
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
             ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
             SetMainPhotoUIState(false);
@@ -570,7 +597,7 @@ public class CubeUploadManager : MonoBehaviour
                 }
             }, LocalizationManager.Instance.GetText("select_sub_photos"), "image/*");
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
             ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
             isLoading = false;
@@ -951,7 +978,6 @@ public class CubeUploadManager : MonoBehaviour
     {
         if (hasFocus)
         {
-            Debug.Log("앱이 포그라운드로 전환됨 - 위치 서비스 재시작");
             if (locationInput != null) locationInput.text = LocalizationManager.Instance.GetText("loading_location");
             StartCoroutine(InitializeLocationService());
         }
@@ -1107,8 +1133,8 @@ public class CubeUploadManager : MonoBehaviour
         showInstagram = value;
         if (instagramIDInput != null)
         {
-            instagramIDInput.interactable = value;
-            instagramIDInput.image.color = value ? Color.white : Color.gray;
+            // 토글 상태에 따라 입력 필드 표시/숨김
+            instagramIDInput.gameObject.SetActive(value);
             if (!value) instagramIDInput.text = "";
         }
     }
@@ -1530,8 +1556,8 @@ public class CubeUploadManager : MonoBehaviour
             showInstagram = false;
             if (instagramIDInput != null)
             {
-                instagramIDInput.interactable = false;
-                instagramIDInput.image.color = Color.gray;
+                instagramIDInput.gameObject.SetActive(false);
+                instagramIDInput.text = "";
             }
         }
 

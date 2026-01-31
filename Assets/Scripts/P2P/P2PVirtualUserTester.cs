@@ -66,7 +66,7 @@ public class P2PVirtualUserTester : MonoBehaviour
     public bool isSimulating = false;
 
     [Header("Debug")]
-    public bool showDebugLogs = true;
+    public bool showDebugLogs = false;
     public bool drawGizmos = true;
 
     private Coroutine simulationCoroutine;
@@ -76,11 +76,13 @@ public class P2PVirtualUserTester : MonoBehaviour
 
     void Awake()
     {
-        // 기본 가상 사용자 2명 설정
+#if UNITY_EDITOR
+        // 기본 가상 사용자 2명 설정 (에디터 테스트용)
         if (virtualUsers.Count == 0)
         {
             SetupDefaultVirtualUsers();
         }
+#endif
     }
 
     /// <summary>

@@ -58,7 +58,7 @@ public class ModelUploadManager : MonoBehaviour
 
     private void Awake()
     {
-        if (FindObjectsOfType<ModelUploadManager>().Length > 1)
+        if (FindObjectsByType<ModelUploadManager>(FindObjectsSortMode.None).Length > 1)
         {
             Destroy(gameObject);
         }
@@ -70,7 +70,7 @@ public class ModelUploadManager : MonoBehaviour
 
     void Start()
     {
-        // ... (이전 초기화 코드들)
+        InitializeComponents();
 
 #if !UNITY_EDITOR
         StartCoroutine(InitializeLocationService());
@@ -124,11 +124,17 @@ public class ModelUploadManager : MonoBehaviour
             Debug.LogError("resetPhotosButton이 할당되지 않았습니다!");
         }
 
-        if (instagramToggle != null) 
+        if (instagramToggle != null)
         {
             instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);
+            // 초기 상태: 토글 Off, 입력 필드 숨김
+            instagramToggle.isOn = false;
+            if (instagramIDInput != null)
+            {
+                instagramIDInput.gameObject.SetActive(false);
+            }
         }
-        else 
+        else
         {
             Debug.LogError("instagramToggle이 할당되지 않았습니다!");
         }
@@ -438,8 +444,8 @@ public class ModelUploadManager : MonoBehaviour
         showInstagram = value;
         if (instagramIDInput != null)
         {
-            instagramIDInput.interactable = value;
-            instagramIDInput.image.color = value ? Color.white : Color.gray;
+            // 토글 상태에 따라 입력 필드 표시/숨김
+            instagramIDInput.gameObject.SetActive(value);
             if (!value) instagramIDInput.text = "";
         }
     }
@@ -1183,8 +1189,8 @@ public class ModelUploadManager : MonoBehaviour
             showInstagram = false;
             if (instagramIDInput != null)
             {
-                instagramIDInput.interactable = false;
-                instagramIDInput.image.color = Color.gray;
+                instagramIDInput.gameObject.SetActive(false);
+                instagramIDInput.text = "";
             }
         }
 
@@ -1463,7 +1469,6 @@ public class ModelUploadManager : MonoBehaviour
     {
         if (hasFocus)
         {
-            Debug.Log("앱이 포그라운드로 전환됨 - 위치 서비스 재시작");
             if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
             StartCoroutine(InitializeLocationService());
         }

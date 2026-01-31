@@ -56,17 +56,8 @@ public static class MessagePanelAutoSetup
                 AutoConnectMessagePanelManager();
             }
         }
-
-        // DMNotificationManager 자동 연결
-        DMNotificationManager dmManager = Object.FindFirstObjectByType<DMNotificationManager>();
-        if (dmManager != null && dmManager.notificationPrefab == null)
-        {
-            Debug.Log("[AutoSetup] DMNotificationManager 자동 연결 시작...");
-            AutoConnectDMNotificationManager();
-        }
     }
 
-    [MenuItem("WOOPANG/Setup/Auto Connect MessagePanelManager")]
     public static void AutoConnectMessagePanelManager()
     {
         // MessagePanelManager 찾기
@@ -181,13 +172,7 @@ public static class MessagePanelAutoSetup
             if (manager.chatRoomBackButton != null) connectedCount++;
         }
 
-        // === 안읽음 카운트 ===
-        if (manager.globalUnreadCountText == null)
-        {
-            manager.globalUnreadCountText = FindComponentByNames<Text>("UnreadCountText", "BadgeText");
-            if (manager.globalUnreadCountText != null) connectedCount++;
-        }
-
+        // === 안읽음 인디케이터 ===
         if (manager.globalUnreadIndicator == null)
         {
             manager.globalUnreadIndicator = FindGameObjectByNames("UnreadIndicator", "Badge", "UnreadBadge");
@@ -379,78 +364,4 @@ public static class MessagePanelAutoSetup
         return null;
     }
 
-    #region DMNotificationManager Auto Connect
-
-    [MenuItem("WOOPANG/Setup/Auto Connect DMNotificationManager")]
-    public static void AutoConnectDMNotificationManager()
-    {
-        DMNotificationManager manager = Object.FindFirstObjectByType<DMNotificationManager>();
-        if (manager == null)
-        {
-            Debug.LogError("[AutoSetup] DMNotificationManager를 찾을 수 없습니다!");
-            return;
-        }
-
-        Undo.RecordObject(manager, "Auto Connect DMNotificationManager");
-
-        int connectedCount = 0;
-        string[] prefabPaths = new string[]
-        {
-            "Assets/Prefabs/DM",
-            "Assets/Prefab/DM",
-            "Assets/Prefabs",
-            "Assets/Prefab"
-        };
-
-        // NotificationPrefab
-        if (manager.notificationPrefab == null)
-        {
-            manager.notificationPrefab = FindPrefab("NotificationItem", prefabPaths)
-                ?? FindPrefab("DMNotificationItem", prefabPaths)
-                ?? FindPrefab("Notification", prefabPaths);
-            if (manager.notificationPrefab != null) connectedCount++;
-        }
-
-        // NotificationContainer - Canvas 하위의 NotificationContainer 찾기
-        if (manager.notificationContainer == null)
-        {
-            manager.notificationContainer = FindTransformByNames("NotificationContainer", "NotificationsContainer", "ToastContainer");
-            if (manager.notificationContainer != null) connectedCount++;
-        }
-
-        // NotificationSound - AudioClip 찾기
-        if (manager.notificationSound == null)
-        {
-            manager.notificationSound = FindAudioClip("notification", "message", "alert", "ding");
-            if (manager.notificationSound != null) connectedCount++;
-        }
-
-        EditorUtility.SetDirty(manager);
-
-        if (connectedCount > 0)
-        {
-            Debug.Log($"[AutoSetup] DMNotificationManager 자동 연결 완료! {connectedCount}개 필드 연결됨");
-        }
-        else
-        {
-            Debug.Log("[AutoSetup] DMNotificationManager: 연결할 에셋이 없습니다. (런타임에 자동 생성됨)");
-        }
-    }
-
-    private static AudioClip FindAudioClip(params string[] searchNames)
-    {
-        foreach (string name in searchNames)
-        {
-            string[] guids = AssetDatabase.FindAssets($"t:AudioClip {name}");
-            if (guids.Length > 0)
-            {
-                string assetPath = AssetDatabase.GUIDToAssetPath(guids[0]);
-                AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>(assetPath);
-                if (clip != null) return clip;
-            }
-        }
-        return null;
-    }
-
-    #endregion
 }

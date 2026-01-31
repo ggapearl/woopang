@@ -183,10 +183,21 @@ public class FirstTimeGuide : MonoBehaviour
     }
 
     // 가이드 강제 표시 (디버깅용)
+    [ContextMenu("Force Show Guide (테스트)")]
     public void ForceShowGuide()
     {
+        currentPage = 0;
         PlayerPrefs.DeleteKey(FIRST_TIME_KEY);
         PlayerPrefs.Save();
         ShowGuide();
+    }
+
+    // PlayerPrefs 초기화 (처음 실행 상태로 리셋)
+    [ContextMenu("Reset First Time Flag (처음 상태로 리셋)")]
+    public void ResetFirstTimeFlag()
+    {
+        PlayerPrefs.DeleteKey(FIRST_TIME_KEY);
+        PlayerPrefs.Save();
+        Debug.Log("[FirstTimeGuide] First time flag reset - 다음 실행 시 가이드가 표시됩니다.");
     }
 }
