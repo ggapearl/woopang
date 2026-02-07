@@ -64,7 +64,6 @@ public class LoginManager : MonoBehaviour
         OnLoginStateChanged?.Invoke(true);
         UpdateProfileUI();
 
-        Debug.Log($"[LoginManager] 에디터 로그인 완료: {editorUsername} (ID: {editorUserId})");
     }
 
     [ContextMenu("Editor Logout")]

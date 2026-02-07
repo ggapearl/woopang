@@ -1,7 +1,4 @@
-﻿// 디버그 로그를 Unity 에디터에서만 활성화 (릴리즈 빌드 성능 향상)
-// #define LOADING_DEBUG_LOGS_ENABLED  // 기본 비활성화 - 필요 시 주석 해제
-
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
@@ -86,13 +83,6 @@ public class LoadingManager : MonoBehaviour
         InitializeMessages();
     }
 
-    // 디버그 로그 헬퍼 메서드 (릴리즈 빌드에서 제거)
-    [System.Diagnostics.Conditional("LOADING_DEBUG_LOGS_ENABLED")]
-    private void DebugLog(string message)
-    {
-        Debug.Log($"[LoadingManager] {message}");
-    }
-    
     void Start()
     {
         if (loadingPanel) loadingPanel.SetActive(false);
@@ -163,15 +153,10 @@ public class LoadingManager : MonoBehaviour
     
     public void ShowLoading(System.Action heavyWork, string category = "General")
     {
-        if (isLoading) 
-        {
-            Debug.LogWarning("이미 로딩 중입니다.");
-            return;
-        }
+        if (isLoading) return;
         
         if (forceLoadingForAR || ShouldForceLoading(category))
         {
-            Debug.Log($"무거운 작업 감지 - 강제 로딩 표시 ({category})");
             StartCoroutine(ForcedLoadingProcess(heavyWork, category));
         }
         else if (detectHeavyOperations)
@@ -230,7 +215,6 @@ public class LoadingManager : MonoBehaviour
         arSession = FindFirstObjectByType<ARSession>();
         if (arSession == null)
         {
-            Debug.LogWarning("ARSession을 찾을 수 없습니다. AR 환경 감지가 비활성화됩니다.");
             enableAREnvironmentDetection = false;
             return;
         }
@@ -255,9 +239,6 @@ public class LoadingManager : MonoBehaviour
         }
         
         isCheckingAREnvironment = true;
-#if UNITY_EDITOR
-        Debug.Log($"[LoadingManager] AR 환경 모니터링 시작 (대기시간: {waitTime}초)");
-#endif
         CheckAREnvironment();
         StartCoroutine(ForceEnvironmentCheckAfterDelay());
     }
@@ -268,7 +249,6 @@ public class LoadingManager : MonoBehaviour
         
         if (!isCheckingAREnvironment)
         {
-            Debug.Log("[LoadingManager] AR 초기화 지연 - 강제로 환경 체크 시작");
             isCheckingAREnvironment = true;
         }
     }
@@ -295,56 +275,47 @@ public class LoadingManager : MonoBehaviour
     
     AREnvironmentIssue DetermineEnvironmentIssue(TrackingState trackingState)
     {
-        Debug.Log($"[LoadingManager] 환경 체크 - 트래킹 상태: {trackingState}");
-        
         // 1. DataManager 상태 먼저 체크 (최우선순위)
         if (enableDataManagerMonitoring && dataManager != null && IsDataManagerHeavyLoading())
         {
-            Debug.Log("[LoadingManager] DataManager 무거운 작업 감지 - 환경 감지 보류");
             return AREnvironmentIssue.DataLoading;
         }
-        
+
         // 2. DataManager 작업 중이면 환경 감지 1초 지연
         if (enableDataManagerMonitoring && dataManager != null && IsDataManagerRecentlyActive())
         {
-            Debug.Log("[LoadingManager] DataManager 작업 완료 후 1초 대기 - 환경 감지 보류");
             return AREnvironmentIssue.None;
         }
-        
+
         // 3. 어두운 환경 체크 (트래킹 상태와 무관하게 우선 체크)
         if (IsEnvironmentTooDark())
         {
-            Debug.Log("[LoadingManager] 어두운 환경 감지 - 트래킹 상태 무관");
             return AREnvironmentIssue.TooDark;
         }
-        
+
         // 4. 트래킹이 정상이고 환경도 밝으면 문제 없음
         if (trackingState == TrackingState.Tracking)
         {
             trackingLostStartTime = 0f;
-            Debug.Log("[LoadingManager] 트래킹 정상 + 환경 밝음 - 환경감지 불필요");
             return AREnvironmentIssue.None;
         }
-        
+
         // 5. 오브젝트가 이미 충분히 있으면 환경 감지 불필요 (트래킹 문제가 있어도)
         if (enableDataManagerMonitoring && dataManager != null && HasSufficientObjects())
         {
-            Debug.Log("[LoadingManager] 오브젝트가 충분히 발생한 상태 - 환경 감지 불필요");
             return AREnvironmentIssue.None;
         }
-        
+
         // 6. 트래킹에 문제가 있고 오브젝트도 부족한 경우에만 환경 분석
         if (trackingState == TrackingState.None || trackingState == TrackingState.Limited)
         {
             if (lastTrackingState == TrackingState.Tracking)
             {
                 trackingLostStartTime = Time.realtimeSinceStartup;
-                Debug.Log("[LoadingManager] 트래킹 손실 시작");
             }
-            
+
             if (Time.realtimeSinceStartup - trackingLostStartTime > trackingLostTimeout)
             {
-                Debug.Log("[LoadingManager] 트래킹 문제 지속 - 환경 분석 시작");
                 return AnalyzeTrackingIssue();
             }
         }
@@ -384,14 +355,7 @@ public class LoadingManager : MonoBehaviour
         if (objectIncrease <= 0) return false;
         
         // Creation Time 안에 Creation Count 이상 생성된 경우 감지
-        bool isHeavyLoading = (timeSinceLastChange <= creationTime && objectIncrease >= creationCount);
-        
-        if (isHeavyLoading)
-        {
-            Debug.Log($"[LoadingManager] AR 오브젝트 생성 중.. ({creationTime}초 안에 {objectIncrease}개 생성)");
-        }
-        
-        return isHeavyLoading;
+        return (timeSinceLastChange <= creationTime && objectIncrease >= creationCount);
     }
     
     bool IsDataManagerRecentlyActive()
@@ -401,14 +365,7 @@ public class LoadingManager : MonoBehaviour
         float timeSinceLastChange = Time.realtimeSinceStartup - lastObjectCountChangeTime;
         
         // DataManager 작업 완료 후 1초 동안은 환경 감지 보류
-        bool recentlyActive = timeSinceLastChange <= 1f;
-        
-        if (recentlyActive)
-        {
-            Debug.Log($"[LoadingManager] DataManager 최근 활동 감지: {timeSinceLastChange:F2}초 전 작업 - 환경 감지 1초 지연");
-        }
-        
-        return recentlyActive;
+        return timeSinceLastChange <= 1f;
     }
     
     bool HasSufficientObjects()
@@ -416,14 +373,7 @@ public class LoadingManager : MonoBehaviour
         if (dataManager == null || !isMonitoringDataManager) return false;
         
         int currentObjectCount = dataManager.GetSpawnedObjectsCount();
-        bool hasSufficientObjects = currentObjectCount >= sufficientObjectCount;
-        
-        if (hasSufficientObjects)
-        {
-            Debug.Log($"[LoadingManager] 충분한 오브젝트 존재: {currentObjectCount}개 (기준: {sufficientObjectCount}개) - 환경감지 생략");
-        }
-        
-        return hasSufficientObjects;
+        return currentObjectCount >= sufficientObjectCount;
     }
     
     bool IsEnvironmentTooDark()
@@ -473,13 +423,11 @@ public class LoadingManager : MonoBehaviour
     {
         if (hasShownEnvironmentGuidance) return;
         
-        Debug.Log($"AR 환경 문제 감지: {issue}");
         hasShownEnvironmentGuidance = true;
-        
-        // ✅ DataLoading의 경우 즉시 UI 표시, 다른 경우는 기존대로 2.5초 지연
+
+        // DataLoading의 경우 즉시 UI 표시, 다른 경우는 기존대로 2.5초 지연
         if (issue == AREnvironmentIssue.DataLoading && enableImmediateDataManagerUI)
         {
-            Debug.Log("[LoadingManager] DataManager 감지 - 즉시 UI 표시");
             string guidanceMessage = GetEnvironmentGuidanceMessage(issue);
             ShowAREnvironmentGuidance(guidanceMessage, issue);
             StartCoroutine(AutoRetryEnvironmentCheck(issue));
@@ -499,14 +447,11 @@ public class LoadingManager : MonoBehaviour
         
         if (currentIssue == issue && hasShownEnvironmentGuidance)
         {
-            Debug.Log($"환경 문제 지속됨, 안내 패널 표시: {issue}");
-            
             string guidanceMessage = GetEnvironmentGuidanceMessage(issue);
             ShowAREnvironmentGuidance(guidanceMessage, issue);
         }
         else if (currentIssue == AREnvironmentIssue.None)
         {
-            Debug.Log("환경 문제가 자연스럽게 해결됨");
             hasShownEnvironmentGuidance = false;
         }
     }
@@ -573,16 +518,12 @@ public class LoadingManager : MonoBehaviour
     
     void ShowAREnvironmentGuidance(string message, AREnvironmentIssue issue)
     {
-        Debug.Log($"AR 환경 안내 표시: {message}");
-        
         // 기존 로딩 UI만 사용 (스피너 포함)
         if (loadingPanel) loadingPanel.SetActive(true);
         if (loadingSpinner) StartCoroutine(SpinnerAnimation());
         UpdateMessage(message);
-        
-        Debug.Log("기존 로딩 UI로 AR 환경 안내 표시 (스피너 포함)");
-        
-        // ✅ DataLoading이 아닌 경우에만 AutoRetry 시작 (이미 시작된 경우 중복 방지)
+
+        // DataLoading이 아닌 경우에만 AutoRetry 시작 (이미 시작된 경우 중복 방지)
         if (issue != AREnvironmentIssue.DataLoading)
         {
             StartCoroutine(AutoRetryEnvironmentCheck(issue));
@@ -600,16 +541,12 @@ public class LoadingManager : MonoBehaviour
             
             if (currentIssue == AREnvironmentIssue.None)
             {
-                Debug.Log("AR 환경 문제 해결됨 - 정상 동작 재개");
-                
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
                 break;
             }
             else if (currentIssue != issue)
             {
-                Debug.Log($"환경 문제 변경: {issue} -> {currentIssue}");
-                
                 string newGuidanceMessage = GetEnvironmentGuidanceMessage(currentIssue);
                 UpdateMessage(newGuidanceMessage);
                 
@@ -623,7 +560,6 @@ public class LoadingManager : MonoBehaviour
         // 기존 로딩 UI 숨기기 (스피너 애니메이션도 정지)
         if (loadingPanel) loadingPanel.SetActive(false);
         StopAllCoroutines();
-        Debug.Log("기존 로딩 UI 숨김 (AR 환경 안내 종료, 스피너 정지)");
     }
     
     public AREnvironmentIssue GetCurrentEnvironmentIssue()
@@ -703,16 +639,12 @@ public class LoadingManager : MonoBehaviour
         
         if (Time.realtimeSinceStartup - lastLoadingTime < loadingCooldown)
         {
-            Debug.Log($"로딩 쿨다운 중... 남은 시간: {loadingCooldown - (Time.realtimeSinceStartup - lastLoadingTime):F1}초");
             return;
         }
-        
-        Debug.Log($"AR 오브젝트 처리 로딩 시작: {customMessage} (오브젝트 수: {objectCount})");
+
         lastLoadingTime = Time.realtimeSinceStartup;
-        
-        ShowARLoading(() => {
-            Debug.Log("AR 오브젝트 처리 대기 중...");
-        }, customMessage);
+
+        ShowARLoading(() => { }, customMessage);
     }
     
     IEnumerator ARSpecificLoading(System.Action arWork, string customMessage)
@@ -968,15 +900,9 @@ public class LoadingManager : MonoBehaviour
     
     public void ShowDataManagerLoading(string operation = "데이터 처리 중..")
     {
-        if (dataManager == null)
-        {
-            Debug.LogWarning("DataManager가 설정되지 않았습니다.");
-            return;
-        }
-        
-        ShowARLoading(() => {
-            Debug.Log($"DataManager 작업 완료: {operation}");
-        }, operation);
+        if (dataManager == null) return;
+
+        ShowARLoading(() => { }, operation);
     }
     
     public bool IsLoading => isLoading;
@@ -1005,7 +931,6 @@ public class LoadingManager : MonoBehaviour
     {
         if (hasShownEnvironmentGuidance)
         {
-            Debug.Log("강제로 AR 환경 문제 해결 처리");
             HideARGuidance();
             hasShownEnvironmentGuidance = false;
         }
@@ -1019,7 +944,6 @@ public class LoadingManager : MonoBehaviour
     public void SetImmediateDataManagerUI(bool enabled)
     {
         enableImmediateDataManagerUI = enabled;
-        Debug.Log($"[LoadingManager] DataManager 즉시 UI 표시: {enabled}");
     }
     
     /// <summary>
@@ -1029,7 +953,6 @@ public class LoadingManager : MonoBehaviour
     {
         creationTime = time;
         creationCount = count;
-        Debug.Log($"[LoadingManager] DataManager 임계값 설정: {time}초 안에 {count}개");
     }
     
     /// <summary>
@@ -1049,17 +972,13 @@ public class LoadingManager : MonoBehaviour
     [ContextMenu("Test Loading")]
     void TestLoading()
     {
-        ShowLoading(() => {
-            Debug.Log("테스트 완료!");
-        }, "General");
+        ShowLoading(() => { }, "General");
     }
-    
+
     [ContextMenu("Test AR Loading")]
     void TestARLoading()
     {
-        ShowARLoading(() => {
-            Debug.Log("AR 테스트 완료!");
-        }, "AR 테스트 로딩 중..");
+        ShowARLoading(() => { }, "AR 테스트 로딩 중..");
     }
     
     [ContextMenu("Test DataManager Immediate UI")]
@@ -1070,13 +989,7 @@ public class LoadingManager : MonoBehaviour
             // 임계값 조건을 강제로 시뮬레이션
             lastObjectCount = dataManager.GetSpawnedObjectsCount() - creationCount;
             lastObjectCountChangeTime = Time.realtimeSinceStartup;
-            
-            Debug.Log($"[LoadingManager] DataManager 즉시 UI 테스트 - 임계값: {creationTime}초 안에 {creationCount}개");
             CheckARObjectChanges();
-        }
-        else
-        {
-            Debug.LogWarning("DataManager가 없어서 테스트할 수 없습니다.");
         }
     }
     
@@ -1114,35 +1027,6 @@ public class LoadingManager : MonoBehaviour
     void TestBackgroundRecovery()
     {
         StartCoroutine(HandleBackgroundRecovery());
-        Debug.Log("백그라운드 복구 테스트 시작");
     }
     
-    [ContextMenu("Show Current Status")]
-    void ShowCurrentStatus()
-    {
-        Debug.Log($"=== LoadingManager Status ===");
-        Debug.Log($"Current Language: {currentLanguage}");
-        Debug.Log($"Is Loading: {isLoading}");
-        Debug.Log($"AR Environment Detection: {enableAREnvironmentDetection}");
-        Debug.Log($"Is Checking AR Environment: {isCheckingAREnvironment}");
-        Debug.Log($"Has Shown Environment Guidance: {hasShownEnvironmentGuidance}");
-        Debug.Log($"DataManager Monitoring: {isMonitoringDataManager}");
-        Debug.Log($"Immediate DataManager UI: {enableImmediateDataManagerUI}");
-        Debug.Log($"Creation Threshold: {creationTime}초 안에 {creationCount}개");
-        Debug.Log($"Is Threshold Met: {IsDataManagerThresholdMet()}");
-        if (arSession?.subsystem != null)
-        {
-            Debug.Log($"AR Tracking State: {arSession.subsystem.trackingState}");
-        }
-        Debug.Log($"Feature Point Count: {GetFeaturePointCount()}");
-        Debug.Log($"Average Brightness: {GetAverageBrightness()}");
-        Debug.Log($"Current AR Environment Issue: {GetCurrentEnvironmentIssue()}");
-        if (dataManager != null)
-        {
-            Debug.Log($"Current Object Count: {dataManager.GetSpawnedObjectsCount()}");
-            Debug.Log($"Last Object Count: {lastObjectCount}");
-            Debug.Log($"Time Since Last Change: {Time.realtimeSinceStartup - lastObjectCountChangeTime:F2}초");
-        }
-        Debug.Log($"========================");
-    }
 }

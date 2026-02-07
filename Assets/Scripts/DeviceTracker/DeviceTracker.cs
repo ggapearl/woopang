@@ -12,7 +12,6 @@ public class DeviceTracker : MonoBehaviour
     {
         deviceId = PlayerPrefs.GetString("DeviceId", SystemInfo.deviceUniqueIdentifier);
         PlayerPrefs.SetString("DeviceId", deviceId);
-        Debug.Log($"[DeviceTracker] Device ID: {deviceId}, Name: {deviceName}");
 
         StartCoroutine(StartLocationService());
     }
@@ -39,7 +38,6 @@ public class DeviceTracker : MonoBehaviour
             yield break;
         }
 
-        Debug.Log("[DeviceTracker] 위치 서비스 시작됨");
         StartCoroutine(SendLocationPeriodically());
     }
 
@@ -71,14 +69,9 @@ public class DeviceTracker : MonoBehaviour
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
 
-            Debug.Log($"[DeviceTracker] 위치 전송: {json}");
             yield return request.SendWebRequest();
 
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                Debug.Log($"[DeviceTracker] 위치 전송 성공: {request.downloadHandler.text}");
-            }
-            else
+            if (request.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"[DeviceTracker] 위치 전송 실패: {request.error}");
             }

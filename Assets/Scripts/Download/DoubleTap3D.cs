@@ -36,7 +36,6 @@ public class DoubleTap3D : MonoBehaviour
     private int currentIndex = 0;
     private int imageIndex = -1;
     private bool isPlaceInfoPage = true;
-    private bool isFading = false;
     private Vector2 touchStartPos;
     private bool isSwiping;
     private RectTransform currentImageRect;
@@ -942,7 +941,6 @@ public class DoubleTap3D : MonoBehaviour
 
     IEnumerator FadeOutCanvas(float duration)
     {
-        isFading = true;
         float elapsed = 0f;
 
         while (elapsed < duration)
@@ -964,7 +962,6 @@ public class DoubleTap3D : MonoBehaviour
             placeInfoTextPanel.SetActive(false);
         }
         isFullscreen = false;
-        isFading = false;
     }
 
     public int GetId()

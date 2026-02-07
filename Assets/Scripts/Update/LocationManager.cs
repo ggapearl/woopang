@@ -73,31 +73,26 @@ public class LocationManager : MonoBehaviour
 
         if (!Input.location.isEnabledByUser)
         {
-            Debug.Log("위치 서비스가 사용자에 의해 비활성화됨");
             DisplayLocationDisabledMessage();
             yield break;
         }
 
-        Debug.Log("위치 서비스 시작 시도");
         Input.location.Start();
 
         int maxWait = 20;
         while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
         {
-            Debug.Log($"초기화 대기 중... 남은 시간: {maxWait}초");
             yield return waitOneSecond;
             maxWait--;
         }
 
         if (Input.location.status == LocationServiceStatus.Failed)
         {
-            Debug.Log("위치 서비스 초기화 실패");
             DisplayLocationDisabledMessage();
             yield break;
         }
         else if (maxWait <= 0)
         {
-            Debug.Log("위치 서비스 초기화 타임아웃");
             DisplayLocationDisabledMessage();
             yield break;
         }
@@ -105,7 +100,6 @@ public class LocationManager : MonoBehaviour
         {
             float latitude = Input.location.lastData.latitude;
             float longitude = Input.location.lastData.longitude;
-            Debug.Log($"위치 서비스 성공 - Lat: {latitude}, Lon: {longitude}");
             StartCoroutine(GetAddressFromCoordinates(latitude, longitude));
 
             if (!isRefreshing)
@@ -180,7 +174,6 @@ public class LocationManager : MonoBehaviour
                     }
                     else
                     {
-                        Debug.LogWarning("[LocationManager] display_name 데이터가 없음");
                         textBuilder.Append(currentLanguage == "ko" ? "주소 정보 없음" : "No address");
                     }
 
@@ -229,7 +222,6 @@ public class LocationManager : MonoBehaviour
             }
             else
             {
-                Debug.Log("위치 서비스가 실행 중이 아님 - 갱신 중지");
                 isRefreshing = false;
             }
 #endif
@@ -238,7 +230,6 @@ public class LocationManager : MonoBehaviour
 
     public void RequestLocationUpdate()
     {
-        Debug.Log("수동 위치 갱신 요청");
         DisplayInitializingMessage();
         StartCoroutine(CheckLocationService());
     }

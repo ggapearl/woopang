@@ -67,11 +67,11 @@ public class EditorVirtualKeyboard : MonoBehaviour
 
     void Start()
     {
-#if !UNITY_EDITOR
-        // 에디터가 아니면 비활성화
-        enabled = false;
-        return;
-#endif
+        if (!Application.isEditor)
+        {
+            enabled = false;
+            return;
+        }
 
         // 폰트 로드
         if (keyFont == null)
@@ -84,7 +84,7 @@ public class EditorVirtualKeyboard : MonoBehaviour
         // 캔버스 찾기
         parentCanvas = GetComponentInParent<Canvas>();
         if (parentCanvas == null)
-            parentCanvas = FindObjectOfType<Canvas>();
+            parentCanvas = FindFirstObjectByType<Canvas>();
     }
 
     void Update()

@@ -30,10 +30,6 @@ public class Object3DTouchHaptic : MonoBehaviour
     void Start()
     {
         objectCollider = GetComponent<Collider>();
-        if (objectCollider == null)
-        {
-            Debug.LogWarning($"Object3DTouchHaptic on {gameObject.name} requires a Collider component!");
-        }
 
         audioSource = gameObject.GetComponent<AudioSource>();
         if (audioSource == null)
@@ -195,9 +191,8 @@ public class Object3DTouchHaptic : MonoBehaviour
                 UnityEngine.iOS.Device.GenerateHapticFeedback(UnityEngine.iOS.HapticFeedbackType.ImpactFeedback_Heavy);
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
-            Debug.LogWarning($"iOS Haptic Failed: {e.Message}");
             Handheld.Vibrate();
         }
 #elif UNITY_ANDROID
@@ -241,9 +236,8 @@ public class Object3DTouchHaptic : MonoBehaviour
                 Handheld.Vibrate();
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
-            Debug.LogWarning($"Android Vibrate Failed: {e.Message}, Falling back to Handheld.Vibrate");
             Handheld.Vibrate();
         }
 #else

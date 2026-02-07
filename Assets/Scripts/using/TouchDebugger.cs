@@ -32,11 +32,6 @@ public class TouchDebugger : MonoBehaviour
                 // ⭐ UI 위에 터치했는지 확인
                 bool isOverUI = IsPointerOverUIObject(touch.position);
 
-                if (enableDebugLogs)
-                {
-                    Debug.Log($"[TouchDebugger] Touch {i}: pos={touch.position}, phase={touch.phase}, overUI={isOverUI}");
-                }
-
                 // UI 위에 터치했다면 어떤 UI인지 확인
                 if (isOverUI)
                 {
@@ -44,40 +39,9 @@ public class TouchDebugger : MonoBehaviour
                     PointerEventData eventData = new PointerEventData(EventSystem.current);
                     eventData.position = touch.position;
                     EventSystem.current.RaycastAll(eventData, results);
-
-                    if (results.Count > 0 && enableDebugLogs)
-                    {
-                        Debug.LogWarning($"[TouchDebugger] ⚠️ UI가 터치 차단 중! 감지된 UI: {results[0].gameObject.name} (Canvas: {GetCanvasName(results[0].gameObject)})");
-
-                        // 모든 차단 UI 리스트
-                        for (int j = 0; j < Mathf.Min(results.Count, 3); j++)
-                        {
-                            Debug.Log($"[TouchDebugger]   - {j + 1}. {results[j].gameObject.name} (Raycast Target: {results[j].gameObject.GetComponent<UnityEngine.UI.Graphic>()?.raycastTarget})");
-                        }
-                    }
                 }
             }
 
-            // 핀치 감지 확인
-            if (Input.touchCount == 2)
-            {
-                Touch touch0 = Input.GetTouch(0);
-                Touch touch1 = Input.GetTouch(1);
-                bool touch0OverUI = IsPointerOverUIObject(touch0.position);
-                bool touch1OverUI = IsPointerOverUIObject(touch1.position);
-
-                if (enableDebugLogs)
-                {
-                    if (touch0OverUI || touch1OverUI)
-                    {
-                        Debug.LogError($"[TouchDebugger] ❌ 핀치 제스처 차단됨! Touch0 UI차단={touch0OverUI}, Touch1 UI차단={touch1OverUI}");
-                    }
-                    else
-                    {
-                        Debug.Log($"[TouchDebugger] ✅ 핀치 제스처 정상 감지 가능!");
-                    }
-                }
-            }
         }
     }
 
@@ -113,26 +77,6 @@ public class TouchDebugger : MonoBehaviour
     [ContextMenu("Print All Canvas Info")]
     public void PrintAllCanvasInfo()
     {
-        Canvas[] allCanvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
-        Debug.Log($"[TouchDebugger] === 전체 Canvas 목록 ({allCanvas.Length}개) ===");
-
-        foreach (Canvas canvas in allCanvas)
-        {
-            Debug.Log($"[TouchDebugger] Canvas: {canvas.gameObject.name}");
-            Debug.Log($"  - Render Mode: {canvas.renderMode}");
-            Debug.Log($"  - Sort Order: {canvas.sortingOrder}");
-            Debug.Log($"  - Enabled: {canvas.enabled}");
-            Debug.Log($"  - GraphicRaycaster: {canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>() != null}");
-
-            // Canvas 하위의 Raycast Target 체크
-            var graphics = canvas.GetComponentsInChildren<UnityEngine.UI.Graphic>(true);
-            int raycastTargetCount = 0;
-            foreach (var graphic in graphics)
-            {
-                if (graphic.raycastTarget)
-                    raycastTargetCount++;
-            }
-            Debug.Log($"  - Raycast Target 활성화된 UI 요소: {raycastTargetCount}개");
-        }
+        // ContextMenu debug utility - kept for editor inspection
     }
 }

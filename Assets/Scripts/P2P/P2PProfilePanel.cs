@@ -192,17 +192,13 @@ public class P2PProfilePanel : MonoBehaviour
     private void SendGesture(string gestureType)
     {
         if (string.IsNullOrEmpty(currentUserId))
-        {
-            Debug.LogWarning("[P2PProfilePanel] No user selected to send gesture");
             return;
-        }
 
         // Call P2PManager to send gesture
         P2PManager p2pManager = P2PManager.Instance;
         if (p2pManager != null)
         {
             p2pManager.SendGesture(currentUserId, gestureType);
-            Debug.Log($"[P2PProfilePanel] Sent {gestureType} gesture to {currentUsername}");
 
             // Visual feedback
             ShowGestureSentFeedback(gestureType);
@@ -222,8 +218,6 @@ public class P2PProfilePanel : MonoBehaviour
     private void ShowGestureSentFeedback(string gestureType)
     {
         // TODO: Implement visual feedback (e.g., button animation, toast message)
-        Debug.Log($"[P2PProfilePanel] Gesture '{gestureType}' sent successfully!");
-
         // Simple example: Flash the button
         // You can enhance this with better animations
     }
@@ -250,10 +244,6 @@ public class P2PProfilePanel : MonoBehaviour
                 );
                 avatarImage.sprite = sprite;
             }
-            else
-            {
-                Debug.LogWarning($"[P2PProfilePanel] Failed to load avatar: {url}");
-            }
         }
     }
 
@@ -263,8 +253,6 @@ public class P2PProfilePanel : MonoBehaviour
     private void OnAddFriend()
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
-
-        Debug.Log($"[P2PProfilePanel] Adding {currentUsername} as friend...");
 
         // TODO: Implement friend system API call
         // Example:
@@ -284,8 +272,6 @@ public class P2PProfilePanel : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
 
-        Debug.Log($"[P2PProfilePanel] Blocking user {currentUsername}...");
-
         // TODO: Implement block user API call
         // P2PManager.Instance.BlockUser(currentUserId);
 
@@ -300,8 +286,6 @@ public class P2PProfilePanel : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
 
-        Debug.Log($"[P2PProfilePanel] Reporting user {currentUsername}...");
-
         // TODO: Open report dialog with reason selection
         // For now, just show confirmation
 
@@ -314,8 +298,6 @@ public class P2PProfilePanel : MonoBehaviour
     private void ShowTemporaryMessage(string message)
     {
         // TODO: Implement proper toast notification system
-        Debug.Log($"[P2PProfilePanel] {message}");
-
         // Simple example using bioText temporarily
         if (bioText)
         {

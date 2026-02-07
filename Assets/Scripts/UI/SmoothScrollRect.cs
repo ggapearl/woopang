@@ -39,7 +39,6 @@ public class SmoothScrollRect : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             scrollRect.movementType = ScrollRect.MovementType.Elastic;
             scrollRect.elasticity = 0.1f; // 바운스 효과 감소
 
-            Debug.Log($"[SmoothScrollRect] 초기화 완료 - Sensitivity={scrollSensitivity}, Inertia={inertiaMult}");
         }
     }
 
@@ -120,7 +119,6 @@ public class SmoothScrollRect : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public void SetScrollSensitivity(float sensitivity)
     {
         scrollSensitivity = Mathf.Clamp(sensitivity, 0.5f, 5f);
-        Debug.Log($"[SmoothScrollRect] 민감도 변경: {scrollSensitivity}");
     }
 
     /// <summary>
@@ -133,6 +131,5 @@ public class SmoothScrollRect : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         {
             scrollRect.decelerationRate = 0.135f * inertiaMult;
         }
-        Debug.Log($"[SmoothScrollRect] 관성 변경: {inertiaMult}");
     }
 }

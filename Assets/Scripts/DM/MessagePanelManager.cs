@@ -281,10 +281,6 @@ public class MessagePanelManager : MonoBehaviour
                     }
                 }
             }
-            if (adminNoticePrefab != null)
-                Debug.Log("[MessagePanel] AdminNoticeItem 프리팹 자동 로드 성공");
-            else
-                Debug.LogWarning("[MessagePanel] AdminNoticeItem 프리팹을 Resources에서 찾을 수 없음");
         }
 
         // AdminMessageBubble 프리팹 자동 로드
@@ -327,7 +323,6 @@ public class MessagePanelManager : MonoBehaviour
             if (chatPanelObj != null)
             {
                 chatRoomPanel = chatPanelObj;
-                Debug.Log("[MessagePanel] chatRoomPanel 자동 연결 완료");
             }
         }
 
@@ -341,8 +336,6 @@ public class MessagePanelManager : MonoBehaviour
             if (!titleNeedsReconnect && chatRoomTitle != null)
             {
                 titleNeedsReconnect = !chatRoomTitle.transform.IsChildOf(chatRoomPanel.transform);
-                if (titleNeedsReconnect)
-                    Debug.LogWarning("[MessagePanel] chatRoomTitle이 ChatRoomPanel의 자식이 아님! 재연결 시도...");
             }
 
             if (titleNeedsReconnect)
@@ -358,14 +351,6 @@ public class MessagePanelManager : MonoBehaviour
                 if (titleTr != null)
                 {
                     chatRoomTitle = titleTr.GetComponent<Text>();
-                    if (chatRoomTitle != null)
-                        Debug.Log("[MessagePanel] chatRoomTitle 자동 연결 완료: Background/Header/ChatTitle");
-                    else
-                        Debug.LogWarning("[MessagePanel] ChatTitle Transform은 찾았으나 Text 컴포넌트 없음");
-                }
-                else
-                {
-                    Debug.LogWarning("[MessagePanel] ChatTitle Transform을 찾을 수 없음");
                 }
             }
 
@@ -382,13 +367,8 @@ public class MessagePanelManager : MonoBehaviour
                 if (inputAreaTr != null)
                 {
                     chatInputArea = inputAreaTr.gameObject;
-                    Debug.Log("[MessagePanel] chatInputArea 자동 연결 완료");
                 }
             }
-        }
-        else
-        {
-            Debug.LogWarning("[MessagePanel] chatRoomPanel을 찾을 수 없음 - ChatRoomPanel 오브젝트가 씬에 있는지 확인 필요");
         }
     }
 
@@ -556,13 +536,10 @@ public class MessagePanelManager : MonoBehaviour
                                 senderId.ToLower() == "woopang" ||
                                 senderUsername.ToLower().Contains("woopang");
 
-        Debug.Log($"[DM_DEBUG] AddOrUpdateConversationFromPush: senderId={senderId}, username={senderUsername}, isWoopang={isWoopangMessage}");
-
         // WOOPANG 메시지는 시스템 알림으로 처리
         if (isWoopangMessage)
         {
             string notificationId = $"woopang_{DateTime.Now.Ticks}";
-            Debug.Log($"[DM_DEBUG] → WOOPANG 메시지로 처리, notificationId={notificationId}");
             AddLocationNotificationFromPush("WOOPANG", messageContent, notificationId);
             return;
         }
@@ -669,8 +646,6 @@ public class MessagePanelManager : MonoBehaviour
     public void AddLocationNotificationFromPush(string title, string body, string notificationId,
         float latitude = 0f, float longitude = 0f, float radius = 0f, string distance = "")
     {
-        Debug.Log($"[DM_DEBUG] AddLocationNotificationFromPush: title={title}, body={body}, id={notificationId}");
-
         if (string.IsNullOrEmpty(notificationId))
         {
             notificationId = $"sys_{DateTime.Now.Ticks}";
@@ -681,7 +656,6 @@ public class MessagePanelManager : MonoBehaviour
         {
             if (existing.notificationId == notificationId)
             {
-                Debug.Log($"[DM_DEBUG] → 중복 notificationId, 스킵");
                 return;
             }
         }
@@ -706,7 +680,6 @@ public class MessagePanelManager : MonoBehaviour
             distance = distance
         };
 
-        Debug.Log($"[DM_DEBUG] → 시스템 메시지 추가: isSystemMessage=true, userId={systemMessage.userId}");
         conversations.Insert(0, systemMessage);
         SortConversationsByTime();
         SaveSystemNotifications();
@@ -808,9 +781,6 @@ public class MessagePanelManager : MonoBehaviour
 
     #endregion
 
-    // 채팅룸에서 돌아갈 때 메시지 패널 다시 열기 위한 플래그
-    private bool openedFromMessagePanel = false;
-
     /// <summary>
     /// 특정 사용자와의 대화방 열기
     /// </summary>
@@ -823,12 +793,12 @@ public class MessagePanelManager : MonoBehaviour
         // 메시지 패널에서 채팅룸으로 이동 시 메시지 패널 닫기
         if (messagePanel != null && messagePanel.activeSelf)
         {
-            openedFromMessagePanel = true;
+
             messagePanel.SetActive(false);
         }
         else
         {
-            openedFromMessagePanel = false;
+
         }
 
         if (chatRoomPanel != null)
@@ -845,11 +815,6 @@ public class MessagePanelManager : MonoBehaviour
                 : Color.white;
             Canvas.ForceUpdateCanvases();
         }
-        else
-        {
-            Debug.LogWarning($"[MessagePanel] chatRoomTitle이 null! 타이틀을 설정할 수 없음. username={username}");
-        }
-
         // 채팅방 아바타 - 원형 마스크 구조 적용
         if (chatRoomAvatar != null && !string.IsNullOrEmpty(avatarUrl))
             StartCoroutine(LoadAvatarWithMask(avatarUrl, chatRoomAvatar.transform));
@@ -886,8 +851,6 @@ public class MessagePanelManager : MonoBehaviour
     /// <param name="messageContent">메시지 내용</param>
     public void OpenSystemChatRoom(string notificationId, string messageContent)
     {
-        Debug.Log($"[DM_DEBUG] OpenSystemChatRoom: notificationId={notificationId}, content={messageContent}");
-
         currentChatUserId = "woopang";
         currentChatUsername = "WOOPANG";
         isAdminChat = true;
@@ -897,12 +860,12 @@ public class MessagePanelManager : MonoBehaviour
         // 메시지 패널에서 채팅룸으로 이동
         if (messagePanel != null && messagePanel.activeSelf)
         {
-            openedFromMessagePanel = true;
+
             messagePanel.SetActive(false);
         }
         else
         {
-            openedFromMessagePanel = false;
+
         }
 
         // chatRoomPanel이 null이면 자동으로 찾기
@@ -912,14 +875,12 @@ public class MessagePanelManager : MonoBehaviour
             if (chatPanelObj != null)
             {
                 chatRoomPanel = chatPanelObj;
-                Debug.Log($"[DM_DEBUG] chatRoomPanel 자동 연결 완료");
             }
         }
 
         if (chatRoomPanel != null)
         {
             chatRoomPanel.SetActive(true);
-            Debug.Log($"[DM_DEBUG] → chatRoomPanel 활성화");
         }
         else
         {
@@ -935,14 +896,8 @@ public class MessagePanelManager : MonoBehaviour
             chatRoomTitle.text = "WOOPANG";
             chatRoomTitle.color = new Color(1f, 0.84f, 0f, 1f); // 골드색
         }
-        else
-        {
-            Debug.LogWarning("[MessagePanel] chatRoomTitle이 null! WOOPANG 타이틀 설정 실패");
-        }
-
         // 입력창 비활성화 (읽기 전용)
         SetChatInputEnabled(false);
-        Debug.Log($"[DM_DEBUG] → InputArea 비활성화 (읽기 전용)");
 
         // 시스템 메시지 표시
         StartCoroutine(LoadSystemChatMessages(notificationId, messageContent));
@@ -974,8 +929,6 @@ public class MessagePanelManager : MonoBehaviour
             if (titleTr != null)
             {
                 chatRoomTitle = titleTr.GetComponent<Text>();
-                if (chatRoomTitle != null)
-                    Debug.Log("[MessagePanel] chatRoomTitle 재연결 완료: " + titleTr.name);
             }
         }
     }
@@ -1043,7 +996,6 @@ public class MessagePanelManager : MonoBehaviour
         currentChatUserId = null;
         currentChatUsername = null;
         isAdminChat = false;
-        openedFromMessagePanel = false;
         profileOpenedFromChatRoom = false;
 
         // Message_Button 클릭 트리거 (모든 관련 로직 실행)
@@ -1054,7 +1006,6 @@ public class MessagePanelManager : MonoBehaviour
         else
         {
             // 폴백: 직접 메시지 패널 열기
-            Debug.LogWarning("[MessagePanelManager] navigationMessageButton이 연결되지 않음. 직접 열기.");
             OpenMessagePanel();
         }
     }
@@ -1145,7 +1096,6 @@ public class MessagePanelManager : MonoBehaviour
         var testGenerator = GetComponent<DMTestDataGenerator>();
         if (testGenerator != null && (testGenerator.autoGenerateOnStart || testGenerator.autoLoadSystemNotification))
         {
-            Debug.Log("[MessagePanel] 테스트 모드 - 서버 로드 스킵, DMTestDataGenerator가 대화 목록 생성");
             yield break;  // DMTestDataGenerator.PopulateTestConversations()에서 처리
         }
 #endif
@@ -1374,14 +1324,11 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (conversationListContent == null) return;
 
-        Debug.Log($"[DM_DEBUG] CreateConversationItem: username={conv.username}, isSystemMessage={conv.isSystemMessage}, userId={conv.userId}");
-
         // 시스템 메시지는 AdminNoticeItem 프리팹 사용
         if (conv.isSystemMessage)
         {
             if (adminNoticePrefab != null)
             {
-                Debug.Log($"[DM_DEBUG] → AdminNoticeItem 프리팹 사용 (시스템 메시지)");
                 GameObject item = Instantiate(adminNoticePrefab, conversationListContent);
                 SetLayerRecursively(item, 5);
                 SetupSystemNoticeItem(item, conv);
@@ -1390,7 +1337,6 @@ public class MessagePanelManager : MonoBehaviour
             else
             {
                 // Fallback: conversationItemPrefab 사용하되 WOOPANG 스타일로 설정
-                Debug.LogWarning("[DM_DEBUG] adminNoticePrefab null - conversationItemPrefab fallback 사용");
                 if (conversationItemPrefab != null)
                 {
                     GameObject item = Instantiate(conversationItemPrefab, conversationListContent);
@@ -1409,7 +1355,6 @@ public class MessagePanelManager : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[DM_DEBUG] → ConversationItem 프리팹 사용 (일반 DM)");
         GameObject dmItem = Instantiate(conversationItemPrefab, conversationListContent);
         SetLayerRecursively(dmItem, 5);
         SetupConversationItem(dmItem, conv);
@@ -1623,9 +1568,6 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private IEnumerator LoadSystemChatMessages(string notificationId, string messageContent)
     {
-        Debug.Log($"[DM_DEBUG] LoadSystemChatMessages: notificationId={notificationId}, content={messageContent}");
-        Debug.Log($"[DM_DEBUG] conversations.Count={conversations.Count}");
-
         ClearContent(chatMessageContent);
         ShowChatEmptyState(false);
 
@@ -1636,11 +1578,9 @@ public class MessagePanelManager : MonoBehaviour
         ConversationSummary systemMsg = null;
         foreach (var conv in conversations)
         {
-            Debug.Log($"[DM_DEBUG] 검색 중: isSystem={conv.isSystemMessage}, notifId={conv.notificationId}, userId={conv.userId}");
             if (conv.isSystemMessage && conv.notificationId == notificationId)
             {
                 systemMsg = conv;
-                Debug.Log($"[DM_DEBUG] → 매칭 발견! lastMessage={conv.lastMessage}");
                 break;
             }
         }
@@ -1654,12 +1594,10 @@ public class MessagePanelManager : MonoBehaviour
             // 날짜 구분선 생성 (대화 메시지 위 가운데에 표시)
             CheckAndCreateDateSeparator(time);
 
-            Debug.Log($"[DM_DEBUG] → CreateSystemMessageBubble 호출: content={content}");
             CreateSystemMessageBubble("WOOPANG", content, time);
         }
         else
         {
-            Debug.Log("[DM_DEBUG] → 메시지 없음, 빈 상태 표시");
             ShowChatEmptyState(true);
         }
 
@@ -3447,7 +3385,6 @@ public class MessagePanelManager : MonoBehaviour
 
         // UI에 반영
         RefreshConversationUI();
-        Debug.Log("[MessagePanel] 더미 대화 목록 로드 완료 (에디터 전용)");
     }
 
     /// <summary>
@@ -3477,7 +3414,6 @@ public class MessagePanelManager : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         ScrollToBottom();
 
-        Debug.Log("[MessagePanel] 더미 시스템 채팅 메시지 로드 완료 (에디터 전용)");
     }
 
     /// <summary>
@@ -3525,7 +3461,6 @@ public class MessagePanelManager : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         ScrollToBottom();
 
-        Debug.Log("[MessagePanel] 더미 DM 채팅 메시지 로드 완료 (에디터 전용)");
     }
 
     private void CreateDummyBubble(GameObject prefab, string content, string time, bool isMine)

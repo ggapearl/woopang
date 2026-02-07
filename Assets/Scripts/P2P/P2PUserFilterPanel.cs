@@ -52,8 +52,6 @@ public class P2PUserFilterPanel : MonoBehaviour
 
     private Image backgroundImage;
     private Image checkmarkImage;
-    private int clickCount = 0;
-
     // 로그인 관련
     private LoginManager loginManager;
     private bool pendingToggleAction = false;  // 로그인 후 토글 액션 대기
@@ -130,7 +128,6 @@ public class P2PUserFilterPanel : MonoBehaviour
         {
             // 비로그인 시 None 상태로 강제
             currentMode = UserFilterMode.None;
-            clickCount = 2;
         }
     }
 
@@ -177,7 +174,6 @@ public class P2PUserFilterPanel : MonoBehaviour
         {
             // 로그아웃 또는 게스트 - None 상태로 변경
             currentMode = UserFilterMode.None;
-            clickCount = 2;
             SaveFilterMode();
             UpdateVisualState();
             ApplyFilterMode();
@@ -251,20 +247,6 @@ public class P2PUserFilterPanel : MonoBehaviour
         int savedMode = PlayerPrefs.GetInt(FILTER_MODE_KEY, 1);
 
         currentMode = (UserFilterMode)savedMode;
-
-        // 클릭 카운트 설정 (순환: 팔로잉 -> 전체 -> 제외)
-        switch (currentMode)
-        {
-            case UserFilterMode.FollowingOnly:
-                clickCount = 0;
-                break;
-            case UserFilterMode.All:
-                clickCount = 1;
-                break;
-            case UserFilterMode.None:
-                clickCount = 2;
-                break;
-        }
     }
 
     private void SaveFilterMode()
@@ -306,16 +288,13 @@ public class P2PUserFilterPanel : MonoBehaviour
         {
             case UserFilterMode.FollowingOnly:
                 currentMode = UserFilterMode.All;
-                clickCount = 1;
                 break;
             case UserFilterMode.All:
                 currentMode = UserFilterMode.None;
-                clickCount = 2;
                 break;
             case UserFilterMode.None:
                 // 비로그인 시 여기 도달 불가 (위에서 처리)
                 currentMode = UserFilterMode.FollowingOnly;
-                clickCount = 0;
                 break;
         }
 
@@ -408,20 +387,6 @@ public class P2PUserFilterPanel : MonoBehaviour
     public void SetFilterModeExternal(UserFilterMode mode)
     {
         currentMode = mode;
-
-        // 클릭 카운트 설정 (순환: 팔로잉 -> 전체 -> 제외)
-        switch (mode)
-        {
-            case UserFilterMode.FollowingOnly:
-                clickCount = 0;
-                break;
-            case UserFilterMode.All:
-                clickCount = 1;
-                break;
-            case UserFilterMode.None:
-                clickCount = 2;
-                break;
-        }
 
         SaveFilterMode();
         UpdateVisualState();

@@ -39,19 +39,11 @@ public class PinchZoomController : MonoBehaviour
         if (zoomIndicatorObject != null)
         {
             zoomIndicator = zoomIndicatorObject.GetComponent<ZoomIndicator>();
-            if (zoomIndicator == null)
-            {
-                Debug.LogWarning("[PinchZoomController] ZoomIndicator GameObject에 ZoomIndicator 컴포넌트가 없습니다!");
-            }
         }
         // GameObject가 할당되지 않았으면 자동으로 찾기
         else
         {
             zoomIndicator = FindFirstObjectByType<ZoomIndicator>();
-            if (zoomIndicator == null)
-            {
-                Debug.LogWarning("[PinchZoomController] ZoomIndicator를 찾을 수 없습니다. 줌 표시 기능이 비활성화됩니다.");
-            }
         }
 
         // 기본 줌 설정

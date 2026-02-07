@@ -69,13 +69,8 @@ public class PlaceListSkeletonLoader : MonoBehaviour
     /// </summary>
     public void ShowSkeletonLoader()
     {
-        Debug.Log($"[SkeletonLoader] ShowSkeletonLoader 호출 - isLoading={isLoading}");
-
         if (isLoading)
-        {
-            Debug.LogWarning("[SkeletonLoader] 이미 로딩 중입니다.");
             return;
-        }
 
         if (contentParent == null)
         {
@@ -96,11 +91,6 @@ public class PlaceListSkeletonLoader : MonoBehaviour
         if (textCanvasGroup != null)
         {
             textCanvasGroup.alpha = 0f;
-            Debug.Log("[SkeletonLoader] 텍스트 숨김 완료 (alpha=0)");
-        }
-        else
-        {
-            Debug.LogWarning("[SkeletonLoader] textCanvasGroup가 null입니다!");
         }
 
         // 스켈레톤 생성
@@ -108,8 +98,6 @@ public class PlaceListSkeletonLoader : MonoBehaviour
 
         // Shimmer 효과 시작
         StartCoroutine(ShimmerEffect());
-
-        Debug.Log($"[SkeletonLoader] 스켈레톤 로더 시작 완료 - 최소 표시시간: {minimumDisplayTime}초");
     }
 
     /// <summary>
@@ -117,13 +105,8 @@ public class PlaceListSkeletonLoader : MonoBehaviour
     /// </summary>
     public void HideSkeletonAndShowText()
     {
-        Debug.Log($"[SkeletonLoader] HideSkeletonAndShowText 호출 - isLoading={isLoading}, skeletonCount={skeletonObjects.Count}");
-
         if (!isLoading)
-        {
-            Debug.LogWarning("[SkeletonLoader] 로딩 중이 아닙니다. HideSkeletonAndShowText 무시됨.");
             return;
-        }
 
         StartCoroutine(FadeOutSkeletonAndFadeInText());
     }
@@ -154,7 +137,6 @@ public class PlaceListSkeletonLoader : MonoBehaviour
             skeletonObjects.Add(skeletonLine);
         }
 
-        Debug.Log($"[PlaceListSkeletonLoader] {skeletonCount}개의 스켈레톤 라인 생성 완료");
     }
 
     private GameObject CreateRoundedRectangle(float width, float height)
@@ -176,8 +158,6 @@ public class PlaceListSkeletonLoader : MonoBehaviour
         // CanvasGroup 추가 (페이드아웃용)
         CanvasGroup cg = obj.AddComponent<CanvasGroup>();
         cg.alpha = 1f;
-
-        Debug.Log($"[SkeletonLoader] 스켈레톤 사각형 생성 - 크기: {width}x{height}, 색상: {skeletonColor}");
 
         return obj;
     }
@@ -231,7 +211,6 @@ public class PlaceListSkeletonLoader : MonoBehaviour
 
         if (remainingTime > 0f)
         {
-            Debug.Log($"[SkeletonLoader] 최소 표시 시간 충족을 위해 {remainingTime:F1}초 대기 중...");
             yield return new WaitForSeconds(remainingTime);
         }
 
@@ -277,8 +256,6 @@ public class PlaceListSkeletonLoader : MonoBehaviour
         // 스켈레톤 완전히 제거
         ClearSkeletons();
         isLoading = false;
-
-        Debug.Log("[PlaceListSkeletonLoader] 스켈레톤 페이드아웃 및 텍스트 페이드인 완료");
     }
 
     void OnDestroy()

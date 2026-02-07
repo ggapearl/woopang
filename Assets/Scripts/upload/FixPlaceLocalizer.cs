@@ -90,8 +90,6 @@ public class FixPlaceLocalizer : MonoBehaviour
 
         // 텍스트 업데이트
         UpdateUI();
-        
-        Debug.Log($"FixPlaceLocalizer: 언어 설정 완료 - {currentLanguage}");
     }
 
     void DetectDeviceLanguage()
@@ -119,21 +117,20 @@ public class FixPlaceLocalizer : MonoBehaviour
                 break;
         }
         
-        Debug.Log($"Detected language: {currentLanguage} (Device: {deviceLanguage})");
     }
 
     bool ValidateUIElements()
     {
         bool isValid = true;
         
-        if (fixPlaceTitle == null) { Debug.LogWarning("fixPlaceTitle is not assigned"); isValid = false; }
-        if (changedNameLabel == null) { Debug.LogWarning("changedNameLabel is not assigned"); isValid = false; }
-        if (descriptionLabel == null) { Debug.LogWarning("descriptionLabel is not assigned"); isValid = false; }
-        if (addPlaceLogoLabel == null) { Debug.LogWarning("addPlaceLogoLabel is not assigned"); isValid = false; }
-        if (addPlaceImgsLabel == null) { Debug.LogWarning("addPlaceImgsLabel is not assigned"); isValid = false; }
-        if (petFriendlyLabel == null) { Debug.LogWarning("petFriendlyLabel is not assigned"); isValid = false; }
-        if (separatedRestroomLabel == null) { Debug.LogWarning("separatedRestroomLabel is not assigned"); isValid = false; }
-        if (instagramIdLabel == null) { Debug.LogWarning("instagramIdLabel is not assigned"); isValid = false; }
+        if (fixPlaceTitle == null) isValid = false;
+        if (changedNameLabel == null) isValid = false;
+        if (descriptionLabel == null) isValid = false;
+        if (addPlaceLogoLabel == null) isValid = false;
+        if (addPlaceImgsLabel == null) isValid = false;
+        if (petFriendlyLabel == null) isValid = false;
+        if (separatedRestroomLabel == null) isValid = false;
+        if (instagramIdLabel == null) isValid = false;
         
         return isValid;
     }
@@ -180,11 +177,6 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             currentLanguage = languageCode;
             UpdateUI();
-            Debug.Log($"Language changed to: {languageCode}");
-        }
-        else
-        {
-            Debug.LogWarning($"Language '{languageCode}' is not supported");
         }
     }
 
@@ -224,7 +216,6 @@ public class FixPlaceLocalizer : MonoBehaviour
                 if (instagramIdLabel != null) instagramIdLabel.text = customText;
                 break;
             default:
-                Debug.LogWarning($"Unknown text key: {textKey}");
                 break;
         }
     }

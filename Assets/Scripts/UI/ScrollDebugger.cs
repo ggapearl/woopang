@@ -26,7 +26,6 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     private float totalFrameTime;
 
     // 이벤트 추적
-    private bool isPointerDown = false;
     private bool isDragging = false;
     private Vector2 lastPosition;
 
@@ -34,14 +33,12 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     {
         if (enableDebug)
         {
-            UnityEngine.Debug.Log("[ScrollDebug] 디버거 시작 - 스크롤 성능 모니터링 활성화");
             InvokeRepeating(nameof(LogPerformanceStats), 1f, 1f);
         }
     }
 
     public void OnPointerDown(PointerEventData eventData)
     {
-        isPointerDown = true;
         frameTimer.Restart();
 
         if (enableDebug)
@@ -52,8 +49,6 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
     public void OnPointerUp(PointerEventData eventData)
     {
-        isPointerDown = false;
-
         if (enableDebug)
         {
             Log($"[UP] Pos={eventData.position}, Time={Time.realtimeSinceStartup:F3}");
@@ -114,11 +109,8 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
             Log($"[END_DRAG] TotalTime={totalDragTime:F3}s, Frames={frameCount}, AvgFrame={avgFrameTime:F1}ms, FPS={fps:F1}");
         }
 
-        // 성능 경고
-        if (avgFrameTime > 16f)
-        {
-            UnityEngine.Debug.LogWarning($"[ScrollDebug] 스크롤 성능 저하! 평균 프레임 시간: {avgFrameTime:F1}ms (목표: 16ms)");
-        }
+        // 성능 경고는 enableDebug 내에서만 출력
+
     }
 
     private void LogPerformanceStats()

@@ -140,7 +140,6 @@ public class SpeechBubbleManager : MonoBehaviour
     {
         if (contentInputField == null || string.IsNullOrEmpty(contentInputField.text.Trim()))
         {
-            Debug.LogWarning("[SpeechBubbleManager] Content is empty");
             return;
         }
 
@@ -207,8 +206,6 @@ public class SpeechBubbleManager : MonoBehaviour
 
         if (request.result == UnityWebRequest.Result.Success)
         {
-            Debug.Log("[SpeechBubbleManager] Speech bubble created successfully");
-
             // 응답에서 bubble_id 받아서 로컬에 생성
             JObject response = JObject.Parse(request.downloadHandler.text);
             string bubbleId = response["bubble_id"]?.ToString();

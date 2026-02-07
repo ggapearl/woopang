@@ -21,12 +21,10 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
     private Vector2 startPosition;
     private Vector2 originalPosition;
     private bool isSwipeActive = false;
-    private bool isShowingDelete = false;
     private Action onDelete;
     private bool isInitialized = false;
 
     // 에디터용 마우스 드래그 지원
-    private bool isPointerDown = false;
     private Vector2 pointerDownPosition;
 
     public void Initialize(string userId, float threshold, Action deleteCallback)
@@ -102,13 +100,11 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     public void OnPointerDown(PointerEventData eventData)
     {
-        isPointerDown = true;
         pointerDownPosition = eventData.position;
     }
 
     public void OnPointerUp(PointerEventData eventData)
     {
-        isPointerDown = false;
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -118,9 +114,6 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
         startPosition = eventData.position;
         isSwipeActive = true;
 
-        #if UNITY_EDITOR
-        Debug.Log($"[SwipeDelete] OnBeginDrag: position={eventData.position}");
-        #endif
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -139,9 +132,6 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
             if (deleteButton != null && Mathf.Abs(offset) > 10 && !deleteButton.activeSelf)
             {
                 deleteButton.SetActive(true);
-                #if UNITY_EDITOR
-                Debug.Log($"[SwipeDelete] Delete button shown, offset={offset}");
-                #endif
             }
         }
     }
@@ -153,19 +143,12 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
 
         float deltaX = eventData.position.x - startPosition.x;
 
-        #if UNITY_EDITOR
-        Debug.Log($"[SwipeDelete] OnEndDrag: deltaX={deltaX}, threshold={swipeThreshold}");
-        #endif
 
         if (deltaX < -swipeThreshold)
         {
             // 삭제 버튼 표시 상태로 고정
-            isShowingDelete = true;
             contentRect.anchoredPosition = new Vector2(originalPosition.x - deleteButtonWidth, originalPosition.y);
 
-            #if UNITY_EDITOR
-            Debug.Log($"[SwipeDelete] Showing delete button permanently");
-            #endif
         }
         else
         {
@@ -176,7 +159,6 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     public void ResetPosition()
     {
-        isShowingDelete = false;
         contentRect.anchoredPosition = originalPosition;
         if (deleteButton != null)
             deleteButton.SetActive(false);
@@ -184,10 +166,6 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     private void OnDeleteClicked()
     {
-        #if UNITY_EDITOR
-        Debug.Log($"[SwipeDelete] Delete clicked for userId={userId}");
-        #endif
-
         onDelete?.Invoke();
     }
 

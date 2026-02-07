@@ -184,8 +184,6 @@ public class ModelUploadManager : MonoBehaviour
             yield break;
         }
 
-        Debug.Log("[HEIC] iOS HEIC 변환 시작");
-
 #if UNITY_IOS && !UNITY_EDITOR
         // iOS에서 네이티브 변환 시도
         yield return StartCoroutine(ConvertHEICToJPG(imagePath, onComplete));
@@ -207,7 +205,6 @@ public class ModelUploadManager : MonoBehaviour
             
             if (texture.LoadImage(imageBytes))
             {
-                Debug.Log($"[HEIC] 직접 로드 성공: {texture.width}x{texture.height}");
                 onComplete?.Invoke(texture);
             }
             else
@@ -241,7 +238,6 @@ public class ModelUploadManager : MonoBehaviour
             // Unity로 직접 로드 시도 (실패할 가능성 높음)
             if (tempTexture.LoadImage(heicBytes))
             {
-                Debug.Log("[HEIC] 예상외로 Unity 직접 로드 성공");
                 onComplete?.Invoke(tempTexture);
                 yield break;
             }
@@ -265,8 +261,6 @@ public class ModelUploadManager : MonoBehaviour
                 Texture2D convertedTexture = new Texture2D(2, 2, TextureFormat.RGB24, false);
                 if (convertedTexture.LoadImage(jpgBytes))
                 {
-                    Debug.Log($"[HEIC] JPG 변환 성공: {convertedTexture.width}x{convertedTexture.height}");
-                    
                     // 임시 파일 삭제
                     try { File.Delete(jpgPath); } catch { }
                     
@@ -330,8 +324,6 @@ public class ModelUploadManager : MonoBehaviour
         if (isProcessing) yield break;
         isProcessing = true;
 
-        Debug.Log("[ModelUploadManager] SelectSubPhotos 호출됨");
-
         ShowSpinner(GetLocalizedText("loading_sub_photos"));
         bool isLoading = true;
 
@@ -376,8 +368,6 @@ public class ModelUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator LoadSubPhotosWithFallback(string[] paths, System.Action onComplete)
     {
-        Debug.Log($"[HEIC] 서브사진 처리 시작: {paths.Length}장");
-        
         foreach (string path in paths)
         {
             if (subPhotos.Count >= MAX_SUB_PHOTOS)
@@ -386,9 +376,6 @@ public class ModelUploadManager : MonoBehaviour
                 break;
             }
 
-            Debug.Log($"[HEIC] 서브사진 처리: {path}");
-            Debug.Log($"[HEIC] 파일 확장자: {Path.GetExtension(path).ToLower()}");
-            
             // 1단계: NativeGallery.LoadImageAtPath 시도
             Texture2D texture = NativeGallery.LoadImageAtPath(path, 
                 maxSize: 1024,  // 서브사진은 더 작게
@@ -398,12 +385,10 @@ public class ModelUploadManager : MonoBehaviour
             if (texture != null)
             {
                 subPhotos.Add(texture);
-                Debug.Log($"[HEIC] ✅ 서브사진 1단계 성공: {path} (총 {subPhotos.Count}장)");
             }
             else
             {
                 // 2단계: 수동 변환 시도
-                Debug.LogWarning($"[HEIC] ⚠️ 서브사진 1단계 실패, 2단계 시도: {path}");
                 bool conversionComplete = false;
                 Texture2D convertedTexture = null;
 
@@ -418,11 +403,10 @@ public class ModelUploadManager : MonoBehaviour
                 if (convertedTexture != null)
                 {
                     subPhotos.Add(convertedTexture);
-                    Debug.Log($"[HEIC] ✅ 서브사진 2단계 성공: {path} (총 {subPhotos.Count}장)");
                 }
                 else
                 {
-                    Debug.LogError($"[HEIC] ❌ 서브사진 모든 단계 실패: {path}");
+                    Debug.LogError($"[HEIC] 서브사진 모든 단계 실패: {path}");
                     ShowWarning(GetLocalizedText("photo_selection_failed"));
                 }
             }
@@ -430,7 +414,6 @@ public class ModelUploadManager : MonoBehaviour
             yield return null; // 한 프레임 대기
         }
 
-        Debug.Log($"[HEIC] 서브사진 처리 완료: 총 {subPhotos.Count}장 로드됨");
         UpdateSubPhotoGrid();
         onComplete?.Invoke();
     }
@@ -505,7 +488,6 @@ public class ModelUploadManager : MonoBehaviour
         if (loadingPanel != null) loadingPanel.SetActive(true);
         if (loadingText != null) loadingText.text = message;
         if (loadingSpinner != null) StartCoroutine(SpinnerAnimation());
-        Debug.Log($"[ModelUploadManager] {message}");
     }
 
     private void HideSpinner()
@@ -521,8 +503,6 @@ public class ModelUploadManager : MonoBehaviour
         {
             // 코루틴이 이미 정지된 경우 무시
         }
-        
-        Debug.Log("[ModelUploadManager] 스피너 숨김 완료");
     }
 
     private IEnumerator SpinnerAnimation()
@@ -540,8 +520,6 @@ public class ModelUploadManager : MonoBehaviour
 
     private void SelectModelFile()
     {
-        Debug.Log("[ModelUploadManager] SelectModelFile 호출됨");
-
 #if UNITY_EDITOR
         string path = UnityEditor.EditorUtility.OpenFilePanel(
             "3D Model File Selection",
@@ -564,8 +542,6 @@ public class ModelUploadManager : MonoBehaviour
 #if UNITY_ANDROID
     IEnumerator OpenAndroidFilePicker()
     {
-        Debug.Log("[ModelUploadManager] Android 파일 선택기 시작");
-
         // 권한 확인 및 요청
         if (!NativeFilePicker.CheckPermission())
         {
@@ -598,9 +574,6 @@ public class ModelUploadManager : MonoBehaviour
         {
             ProcessSelectedFile(selectedPath);
         }
-        else
-        {
-            Debug.LogWarning("[ModelUploadManager] Android: 파일이 선택되지 않음");
         }
     }
 #endif
@@ -608,7 +581,6 @@ public class ModelUploadManager : MonoBehaviour
 #if UNITY_IOS
     IEnumerator OpenIOSFilePicker()
     {
-        Debug.Log("[ModelUploadManager] iOS 파일 선택기 시작");
 
         bool isDone = false;
         string selectedPath = null;
@@ -634,9 +606,6 @@ public class ModelUploadManager : MonoBehaviour
         {
             ProcessSelectedFile(selectedPath);
         }
-        else
-        {
-            Debug.LogWarning("[ModelUploadManager] iOS: 파일이 선택되지 않음");
         }
     }
 #endif
@@ -647,8 +616,6 @@ public class ModelUploadManager : MonoBehaviour
         
         try
         {
-            Debug.Log($"[ModelUploadManager] 파일 처리 시작: {filePath}");
-            
             // 파일 존재 여부 확인
             if (!File.Exists(filePath))
             {
@@ -664,15 +631,12 @@ public class ModelUploadManager : MonoBehaviour
             string extension = Path.GetExtension(filePath).ToLower();
             float fileSizeMB = selectedFileData.Length / (1024f * 1024f);
 
-            Debug.Log($"[ModelUploadManager] 파일 정보: {fileName}, 확장자: {extension}, 크기: {fileSizeMB:F2}MB");
-
             // 지원되는 3D 모델 파일 확장자 확인
             string[] supportedExtensions = { ".glb", ".gltf", ".fbx", ".obj" };
             bool isSupportedFormat = Array.Exists(supportedExtensions, ext => ext == extension);
 
             if (!isSupportedFormat)
             {
-                Debug.LogWarning($"[ModelUploadManager] 지원되지 않는 파일 형식: {extension}");
                 ShowWarning($"Unsupported file format: {extension}. Please select GLB, GLTF, FBX, or OBJ files.");
                 ResetFileSelection();
                 return;
@@ -680,7 +644,6 @@ public class ModelUploadManager : MonoBehaviour
 
             if (fileSizeMB > 10f)
             {
-                Debug.LogWarning($"[ModelUploadManager] 파일 크기 초과: {fileSizeMB:F2}MB");
                 ShowWarning(GetLocalizedText("file_too_large"));
                 ResetFileSelection();
                 return;
@@ -690,7 +653,6 @@ public class ModelUploadManager : MonoBehaviour
             if (selectFileButton != null) selectFileButton.gameObject.SetActive(false);
             if (selectedFileButton != null) selectedFileButton.gameObject.SetActive(true);
 
-            Debug.Log($"[ModelUploadManager] 파일 선택 완료: {fileName} ({fileSizeMB:F2}MB)");
             processSuccess = true;
         }
         catch (System.Exception e)
@@ -747,7 +709,6 @@ public class ModelUploadManager : MonoBehaviour
             }
         }
 
-        Debug.Log($"[ModelUploadManager] 서브사진 그리드 업데이트: {subPhotos.Count}장");
     }
 
     private Sprite GetOrCreateSprite(Texture2D texture)
@@ -763,7 +724,6 @@ public class ModelUploadManager : MonoBehaviour
     {
         if (!Input.location.isEnabledByUser)
         {
-            Debug.LogWarning("위치 서비스가 꺼져 있습니다!");
             UpdateLocationDisplay();
             yield break;
         }
@@ -784,7 +744,6 @@ public class ModelUploadManager : MonoBehaviour
         }
         else
         {
-            Debug.Log("위치 서비스 초기화 성공!");
             UpdateLocationDisplay();
             StartCoroutine(UpdateLocation(10f));
         }
@@ -800,7 +759,6 @@ public class ModelUploadManager : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("위치 서비스가 실행 중이 아님 - 재시작 시도");
                 StartCoroutine(InitializeLocationService());
             }
             yield return new WaitForSeconds(interval);
@@ -818,13 +776,11 @@ public class ModelUploadManager : MonoBehaviour
             );
             // UI 표시용은 F4
             locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
-            Debug.Log($"GPS updated: {locationText}");
         }
         else
         {
             gpsData = Vector3.zero;
             locationText = GetLocalizedText("no_location_data");
-            Debug.LogWarning($"위치 서비스가 실행 중이 아님 - 상태: {Input.location.status}");
         }
         if (locationInput != null) locationInput.text = locationText;
     }
@@ -837,8 +793,6 @@ public class ModelUploadManager : MonoBehaviour
     {
         if (isProcessing) yield break;
         isProcessing = true;
-
-        Debug.Log("[ModelUploadManager] ValidateAndSubmit 시작");
 
         // 0. 로그인 체크
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
@@ -915,12 +869,7 @@ public class ModelUploadManager : MonoBehaviour
 
         if (!isProcessing)
         {
-            Debug.Log("[ModelUploadManager] 업로드 완료 후 추가 대기");
             yield return new WaitForSeconds(2f);
-        }
-        else
-        {
-            Debug.Log("[ModelUploadManager] 업로드 실패로 추가 대기 없음");
         }
 
         isProcessing = false;
@@ -949,11 +898,6 @@ public class ModelUploadManager : MonoBehaviour
         {
             isCompleted = true;
             StopCoroutine(countdownCoroutine);
-            Debug.Log("[ModelUploadManager] SendWithTimeout: 업로드 성공으로 완료 플래그 설정");
-        }
-        else
-        {
-            Debug.Log("[ModelUploadManager] SendWithTimeout: 업로드 실패로 완료 플래그 미설정");
         }
     }
 
@@ -962,24 +906,14 @@ public class ModelUploadManager : MonoBehaviour
         while (routine != null && elapsedTime < timeout && !isCompleted() && isProcessing)
         {
             elapsedTime += Time.deltaTime;
-            Debug.Log($"[ModelUploadManager] WaitForRoutine: 대기 중... Elapsed: {elapsedTime:F2}초 / Timeout: {timeout}초");
             yield return null;
         }
 
         if (routine != null && !isCompleted() && elapsedTime >= timeout)
         {
-            Debug.LogWarning($"[ModelUploadManager] 타임아웃 발생: Elapsed {elapsedTime:F2}초, Timeout: {timeout}초");
             StopCoroutine(routine);
             isProcessing = true;
             ShowWarning(GetLocalizedText("request_timeout"));
-        }
-        else if (isCompleted())
-        {
-            Debug.Log("[ModelUploadManager] WaitForRoutine: 업로드 성공으로 루프 종료");
-        }
-        else
-        {
-            Debug.Log("[ModelUploadManager] WaitForRoutine: 루프 종료 (기타 이유)");
         }
     }
 
@@ -988,8 +922,6 @@ public class ModelUploadManager : MonoBehaviour
         ShowSpinner(GetLocalizedText("uploading_object"));
 
         string modelName = nameInput.text.Trim();
-
-        Debug.Log($"[ModelUploadManager] 업로드 시작: {modelName}");
 
         WWWForm formData = new WWWForm();
 
@@ -1020,17 +952,12 @@ public class ModelUploadManager : MonoBehaviour
         string mimeType = GetMimeType(fileName);
         formData.AddBinaryData("model_file", selectedFileData, fileName, mimeType);
 
-        Debug.Log($"[ModelUploadManager] 3D 모델 파일: {fileName} ({selectedFileData.Length} bytes)");
-
-        Debug.Log($"[ModelUploadManager] 서브 사진 개수: {subPhotos.Count}");
         for (int i = 1; i <= subPhotos.Count; i++)
         {
             if (i > MAX_SUB_PHOTOS) break;
             Texture2D subPhoto = subPhotos[i - 1];
-            Debug.Log($"[ModelUploadManager] 서브 사진 #{i} 처리: {subPhoto.width}x{subPhoto.height}");
             Texture2D resizedSubPhoto = ResizeTextureKeepAspectWithRenderTexture(subPhoto, 800, 800);
             byte[] subPhotoBytes = resizedSubPhoto.EncodeToJPG(50);
-            Debug.Log($"[ModelUploadManager] 서브 사진 #{i} 바이트 크기: {subPhotoBytes.Length} bytes");
             if (subPhotoBytes.Length == 0)
             {
                 Debug.LogError($"[ModelUploadManager] 서브 사진 #{i} 데이터가 비어 있습니다!");
@@ -1043,8 +970,6 @@ public class ModelUploadManager : MonoBehaviour
             Destroy(resizedSubPhoto);
         }
 
-        Debug.Log($"[ModelUploadManager] 서버로 업로드 요청: {serverUrl}");
-
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
             www.timeout = Mathf.RoundToInt(uploadTimeoutSeconds); // Inspector에서 설정 가능한 타임아웃 사용
@@ -1055,13 +980,11 @@ public class ModelUploadManager : MonoBehaviour
             if (www.result == UnityWebRequest.Result.Success)
             {
                 string responseText = www.downloadHandler.text;
-                Debug.Log($"[ModelUploadManager] 업로드 응답: {responseText} (응답 코드: {www.responseCode})");
 
                 if (responseText.Contains("Upload Succeeded!") || responseText.Contains("success") || www.responseCode == 200)
                 {
                     isProcessing = false;
                     ShowWarning(GetLocalizedText("upload_success"));
-                    Debug.Log("[ModelUploadManager] 3D 모델 업로드 성공");
 
                     // 업로드 성공 기록 저장
                     int locationId = ParseLocationIdFromResponse(responseText);
@@ -1075,7 +998,6 @@ public class ModelUploadManager : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogWarning($"[ModelUploadManager] 서버 응답이 성공으로 간주되지 않음: {responseText}");
                     isProcessing = true;
                     ShowWarning(GetLocalizedText("server_error"));
                 }
@@ -1166,7 +1088,6 @@ public class ModelUploadManager : MonoBehaviour
         ResetToInitialState();
         StopAllCoroutines();
         StartCoroutine(InitializeLocationService());
-        Debug.Log("[ModelUploadManager] 완전 초기화 완료");
     }
 
     private void ResetToInitialState()
@@ -1208,8 +1129,6 @@ public class ModelUploadManager : MonoBehaviour
         isProcessing = false;
         elapsedTime = 0f;
         instagramID = "";
-
-        Debug.Log("[ModelUploadManager] UI 및 상태 초기화 완료");
     }
 
     #endregion
@@ -1530,7 +1449,6 @@ public class ModelUploadManager : MonoBehaviour
                 {
                     var response = JsonUtility.FromJson<CanUploadResponse>(request.downloadHandler.text);
                     canUploadToday = response.can_upload;
-                    Debug.Log($"[ModelUploadManager] 업로드 가능 여부: {canUploadToday}");
                 }
                 catch
                 {
@@ -1539,7 +1457,6 @@ public class ModelUploadManager : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning($"[ModelUploadManager] 업로드 제한 체크 실패: {request.error}");
                 canUploadToday = true; // 네트워크 오류 시 업로드 허용
             }
         }
@@ -1573,13 +1490,9 @@ public class ModelUploadManager : MonoBehaviour
 
             yield return request.SendWebRequest();
 
-            if (request.result == UnityWebRequest.Result.Success)
+            if (request.result != UnityWebRequest.Result.Success)
             {
-                Debug.Log("[ModelUploadManager] 업로드 기록 저장 완료");
-            }
-            else
-            {
-                Debug.LogWarning($"[ModelUploadManager] 업로드 기록 저장 실패: {request.error}");
+                Debug.LogError($"[ModelUploadManager] 업로드 기록 저장 실패: {request.error}");
             }
         }
     }
@@ -1616,20 +1529,17 @@ public class ModelUploadManager : MonoBehaviour
             var response = JsonUtility.FromJson<UploadResponse>(responseText);
             if (response != null && response.location_id > 0)
             {
-                Debug.Log($"[ModelUploadManager] 파싱된 location_id: {response.location_id}");
                 return response.location_id;
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
-            Debug.LogWarning($"[ModelUploadManager] location_id 파싱 실패: {e.Message}");
+            // JSON 파싱 실패 시 정규식으로 추출 시도
         }
 
-        // JSON 파싱 실패 시 정규식으로 추출 시도
         var match = Regex.Match(responseText, @"""location_id""\s*:\s*(\d+)");
         if (match.Success && int.TryParse(match.Groups[1].Value, out int id))
         {
-            Debug.Log($"[ModelUploadManager] 정규식으로 파싱된 location_id: {id}");
             return id;
         }
 

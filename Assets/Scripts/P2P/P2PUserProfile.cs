@@ -241,8 +241,7 @@ public class P2PUserProfile : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning($"[P2PUserProfile] Failed to load avatar: {url}");
-            }
+                }
         }
     }
 
@@ -281,7 +280,6 @@ public class P2PUserProfile : MonoBehaviour
         if (P2PManager.Instance == null) yield break;
 
         // TODO: 서버 API 호출
-        Debug.Log($"[P2PUserProfile] {action} user: {currentUserId}");
 
         // 임시로 상태 토글
         isFollowing = !isFollowing;
@@ -295,7 +293,6 @@ public class P2PUserProfile : MonoBehaviour
     /// </summary>
     private void OnMessageButtonClicked()
     {
-        Debug.Log($"[P2PUserProfile] Message to: {currentUsername}");
         // TODO: 메시지 시스템 구현
     }
 
@@ -312,7 +309,6 @@ public class P2PUserProfile : MonoBehaviour
             SpeechBubbleManager.Instance.ShowCreateBubbleUI("user", currentUserId);
         }
 
-        Debug.Log($"[P2PUserProfile] Add speech bubble to: {currentUsername}");
     }
 
     /// <summary>
@@ -323,7 +319,6 @@ public class P2PUserProfile : MonoBehaviour
         if (string.IsNullOrEmpty(currentUserId)) return;
 
         // 확인 다이얼로그 표시 (향후 구현)
-        Debug.Log($"[P2PUserProfile] Block user: {currentUsername}");
 
         // TODO: 서버 API 호출
         // StartCoroutine(SendBlockRequest());
@@ -339,7 +334,6 @@ public class P2PUserProfile : MonoBehaviour
         if (string.IsNullOrEmpty(currentUserId)) return;
 
         // 신고 사유 선택 UI 표시 (향후 구현)
-        Debug.Log($"[P2PUserProfile] Report user: {currentUsername}");
 
         // TODO: 신고 UI 표시
     }

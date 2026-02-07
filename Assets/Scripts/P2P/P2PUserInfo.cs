@@ -173,7 +173,6 @@ public class P2PUserInfo : MonoBehaviour
         if (billboardTransform != null)
             billboardTransform.gameObject.SetActive(false);
 
-        Debug.Log($"[P2PUserInfo] Avatar visuals hidden for user: {username}, OffscreenIndicator maintained");
     }
 
     /// <summary>
@@ -197,7 +196,6 @@ public class P2PUserInfo : MonoBehaviour
             touchCollider.enabled = false;
         }
 
-        Debug.Log($"[P2PUserInfo] User completely hidden: {username}");
     }
 
     /// <summary>
@@ -230,7 +228,6 @@ public class P2PUserInfo : MonoBehaviour
             }
         }
 
-        Debug.Log($"[P2PUserInfo] User shown again: {username}");
     }
 
     /// <summary>
@@ -259,7 +256,6 @@ public class P2PUserInfo : MonoBehaviour
         targetComponent.NeedArrowIndicator = true;    // 화면 밖: 화살표 표시
         targetComponent.NeedDistanceText = true;      // 거리 텍스트 표시
 
-        Debug.Log($"[P2PUserInfo] Target configured for user: {username} - BoxIndicator: on screen, ArrowIndicator: off screen");
     }
 
     /// <summary>
@@ -327,7 +323,6 @@ public class P2PUserInfo : MonoBehaviour
             cubeRenderer.material = cubeMaterial;
         }
 
-        Debug.Log($"[P2PUserInfo] Cube avatar created for user: {username}");
     }
 
     /// <summary>
@@ -340,7 +335,6 @@ public class P2PUserInfo : MonoBehaviour
         cubeMaterial.mainTexture = texture;
         cubeMaterial.color = Color.white; // 텍스처 적용 시 흰색으로 변경
 
-        Debug.Log($"[P2PUserInfo] Profile texture applied to cube avatar for user: {username}");
     }
 
     /// <summary>
@@ -411,7 +405,6 @@ public class P2PUserInfo : MonoBehaviour
             rectTransform.sizeDelta = new Vector2(200, 40);
         }
 
-        Debug.Log($"[P2PUserInfo] Auto UI created for user: {username}");
     }
 
     void Update()
@@ -513,8 +506,6 @@ public class P2PUserInfo : MonoBehaviour
     /// </summary>
     public void OnUserDoubleTapped()
     {
-        Debug.Log($"[P2PUserInfo] User double-tapped: {username} (ID: {userId})");
-
         // Highlight this user
         SetHighlight(true);
 
@@ -524,17 +515,12 @@ public class P2PUserInfo : MonoBehaviour
             // 가상 사용자(virtual_user_XXX)인 경우 테스트 프로필 표시
             if (IsVirtualUser(userId))
             {
-                Debug.Log($"[P2PUserInfo] Virtual user detected, showing test profile");
                 ProfileManager.Instance.ShowTestProfile(userId, username);
             }
             else
             {
                 ProfileManager.Instance.ShowProfile(userId);
             }
-        }
-        else
-        {
-            Debug.LogWarning("[P2PUserInfo] ProfileManager not found. Cannot show profile.");
         }
 
         // Reset highlight after delay
@@ -694,11 +680,6 @@ public class P2PUserInfo : MonoBehaviour
                 // 큐브 아바타에 프로필 텍스처 적용
                 ApplyProfileTextureToAvatar(texture);
 
-                Debug.Log($"[P2PUserInfo] Profile image loaded for user: {username}");
-            }
-            else
-            {
-                Debug.LogWarning($"[P2PUserInfo] Failed to load avatar image: {url}");
             }
         }
     }

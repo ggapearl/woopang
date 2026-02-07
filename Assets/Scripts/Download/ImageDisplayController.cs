@@ -25,10 +25,6 @@ public class ImageDisplayController : MonoBehaviour
     void Start()
     {
         // GLB 모델 등 동적으로 렌더러가 생성되는 경우를 위해 에러 처리 완화
-        if (cubeRenderer == null)
-        {
-            Debug.LogWarning("[ImageDisplayController] cubeRenderer가 할당되지 않았습니다!");
-        }
 
         if (doubleTap3DScript == null)
         {
@@ -156,7 +152,6 @@ public class ImageDisplayController : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[ImageDisplayController] 서브 사진 로드 실패, 기본 이미지 적용");
             if (doubleTap3DScript != null)
             {
                 Sprite defaultSprite = Sprite.Create(Texture2D.blackTexture, new Rect(0, 0, 100, 100), new Vector2(0.5f, 0.5f));

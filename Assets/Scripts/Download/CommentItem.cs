@@ -84,16 +84,9 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
             isMyComment = LoginManager.Instance.CurrentUser.id == data.user_id;
         }
 
-        Debug.Log($"[CommentItem] Setup - id: {data.id}, username: {data.username}, isMyComment: {isMyComment}");
-
         if (usernameText != null)
         {
             usernameText.text = data.username;
-            Debug.Log($"[CommentItem] usernameText 설정됨: {data.username}");
-        }
-        else
-        {
-            Debug.LogWarning("[CommentItem] usernameText가 null입니다!");
         }
 
         if (contentText != null)
@@ -114,11 +107,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
                 layoutElement.preferredHeight = -1; // 내용에 맞춤
                 layoutElement.minHeight = 20;
             }
-            Debug.Log($"[CommentItem] contentText 설정됨");
-        }
-        else
-        {
-            Debug.LogWarning("[CommentItem] contentText가 null입니다!");
         }
 
         if (contentButton != null)
@@ -130,11 +118,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         if (dateText != null)
         {
             dateText.text = GetRelativeTime(data.created_at);
-            Debug.Log($"[CommentItem] dateText 설정됨: {dateText.text}");
-        }
-        else
-        {
-            Debug.LogWarning("[CommentItem] dateText가 null입니다!");
         }
 
         likeCount = data.like_count;
@@ -146,11 +129,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         {
             likeButton.onClick.RemoveAllListeners();
             likeButton.onClick.AddListener(OnLikeClicked);
-            Debug.Log($"[CommentItem] likeButton 리스너 등록됨");
-        }
-        else
-        {
-            Debug.LogWarning("[CommentItem] likeButton이 null입니다!");
         }
 
         // 레이아웃 강제 재계산 (ContentSizeFitter가 제대로 동작하도록)
@@ -290,11 +268,8 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
     private void OnLikeClicked()
     {
-        Debug.Log($"[CommentItem] OnLikeClicked 호출됨 - commentId: {commentId}, 현재 isLiked: {isLiked}");
-
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
         {
-            Debug.Log("[CommentItem] 로그인 필요 - 팝업 표시");
             if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup();
             return;
         }
@@ -302,7 +277,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         // Optimistic UI Update
         isLiked = !isLiked;
         likeCount += isLiked ? 1 : -1;
-        Debug.Log($"[CommentItem] 좋아요 토글 - isLiked: {isLiked}, likeCount: {likeCount}");
         UpdateLikeUI();
 
         StartCoroutine(ToggleLike());
@@ -473,10 +447,7 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
     public void OnDeleteClicked()
     {
         if (!isMyComment)
-        {
-            Debug.LogWarning("[CommentItem] 본인 댓글만 삭제할 수 있습니다.");
             return;
-        }
 
         StartCoroutine(DeleteComment());
     }
@@ -499,8 +470,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log($"[CommentItem] 댓글 삭제 성공 - id: {commentId}");
-
                 // 애니메이션 후 삭제
                 StartCoroutine(AnimateAndDestroy());
             }

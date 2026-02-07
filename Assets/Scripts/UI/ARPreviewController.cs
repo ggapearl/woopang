@@ -58,10 +58,6 @@ public class ARPreviewController : MonoBehaviour
 
         // AR Camera 찾기
         arCamera = Camera.main;
-        if (arCamera == null)
-        {
-            Debug.LogWarning("[ARPreviewController] Main Camera를 찾을 수 없습니다.");
-        }
 
         // 전환 이미지 동적 생성 (스프라이트가 있는 경우)
         CreateTransitionImage();
@@ -109,7 +105,6 @@ public class ARPreviewController : MonoBehaviour
         // 초기 상태: 숨김
         transitionObj.SetActive(false);
 
-        Debug.Log($"[ARPreviewController] 전환 이미지 생성 완료: {transitionSprite.name}");
     }
 
     /// <summary>
@@ -613,9 +608,6 @@ public class ARPreviewController : MonoBehaviour
             ApplyTextureToCube(testTexture);
         }
 
-        Debug.Log($"<color=#00FF00>[ARPreviewController] 에디터 테스트 - 큐브 생성 위치: {spawnPosition}</color>");
-        Debug.Log($"<color=#00FF00>  - 거리: {spawnDistance}m, 높이: {spawnHeightOffset}m, 회전Y: {spawnRotationY}</color>");
-
         // Selection 변경하여 Scene View에서 확인
         UnityEditor.Selection.activeGameObject = spawnedCube;
         UnityEditor.SceneView.lastActiveSceneView?.Frame(new Bounds(spawnPosition, Vector3.one * 2f), false);
@@ -628,7 +620,6 @@ public class ARPreviewController : MonoBehaviour
     public void ClearTestCube()
     {
         CleanupCube();
-        Debug.Log("[ARPreviewController] 테스트 큐브 제거됨");
     }
 #endif
 

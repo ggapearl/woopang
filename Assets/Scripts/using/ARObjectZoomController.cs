@@ -27,7 +27,6 @@ public class ARObjectZoomController : MonoBehaviour
     private float currentZoom = 1f;
     private float previousTouchDistance = 0f;
     private bool isPinching = false;
-    private int lastTouchCount = 0; // 디버깅용 마지막 터치 개수
 
     void OnEnable()
     {
@@ -251,6 +250,5 @@ public class ARObjectZoomController : MonoBehaviour
             zoomIndicator.HideAfterDelay(1f);
         }
 
-        Debug.Log("[ARObjectZoomController] 줌 초기화");
     }
 }

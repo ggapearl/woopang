@@ -49,12 +49,10 @@ public class ARSessionRecovery : MonoBehaviour
         if (Input.location.status == LocationServiceStatus.Running)
         {
             lastKnownLocation = new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
-            Debug.Log($"Location updated: {lastKnownLocation}");
             UpdateARObjects();
         }
         else
         {
-            Debug.LogWarning("Failed to update location.");
             ShowErrorMessage("��ġ ������ ������ �� �����ϴ�. �ٽ� �õ��ϼ���.");
         }
     }
@@ -76,7 +74,6 @@ public class ARSessionRecovery : MonoBehaviour
         {
             SpawnObjectsForLocation(currentLocation);
         }
-        Debug.Log($"AR objects updated. Location: {currentLocation}, Objects: {spawnedObjects.Count}, Session state: {ARSession.state}");
     }
 
     Vector2 GetCurrentLocation()
@@ -103,7 +100,6 @@ public class ARSessionRecovery : MonoBehaviour
 
     void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
     {
-        Debug.Log($"ARSession state: {args.state}, NotTrackingReason: {ARSession.notTrackingReason}");
         if (args.state == ARSessionState.SessionTracking)
         {
             UpdateARObjects();

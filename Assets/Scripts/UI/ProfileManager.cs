@@ -296,36 +296,23 @@ public class ProfileManager : MonoBehaviour
             followingTabButton.onClick.RemoveAllListeners();
             followingTabButton.onClick.AddListener(() =>
             {
-                Debug.Log("[ProfileManager] 팔로잉 탭 클릭됨");
                 SwitchFollowListTab(false);
             });
         }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] followingTabButton이 null입니다!");
-        }
-
         if (followersTabButton != null)
         {
             followersTabButton.onClick.RemoveAllListeners();
             followersTabButton.onClick.AddListener(() =>
             {
-                Debug.Log("[ProfileManager] 팔로워 탭 클릭됨");
                 SwitchFollowListTab(true);
             });
         }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] followersTabButton이 null입니다!");
-        }
-
         // 뒤로가기 버튼 (새 UI와 레거시 모두 지원)
         if (followListBackButton != null)
         {
             followListBackButton.onClick.RemoveAllListeners();
             followListBackButton.onClick.AddListener(() =>
             {
-                Debug.Log("[ProfileManager] 팔로우 리스트 뒤로가기 클릭됨");
                 CloseFollowList();
             });
         }
@@ -451,8 +438,6 @@ public class ProfileManager : MonoBehaviour
                 // 비활성 → 활성 전환 시 (처음 열렸을 때)
                 if (isActive && !wasFollowListPanelActive)
                 {
-                    Debug.Log("[ProfileManager] 에디터 모드: FollowListPanel 활성화 감지 - 더미 데이터 로드");
-
                     // 버튼 연결 확인
                     SetupFollowListButtonListeners();
 
@@ -502,7 +487,6 @@ public class ProfileManager : MonoBehaviour
         if (snsIconsContainer == null && fullProfilePanel != null)
         {
             CreateSnsIconsContainer();
-            Debug.Log("[ProfileManager] SNS 컨테이너 사전 초기화 완료");
         }
 
         // 버튼들도 미리 생성 (비활성화 상태로)
@@ -695,7 +679,6 @@ public class ProfileManager : MonoBehaviour
             facebook_id = randomFb
         };
 
-        Debug.Log($"[ProfileManager] Showing test profile: {username} ({userId}) - SNS: Insta={randomInsta}, X={randomX}, FB={randomFb}");
         ShowProfilePanel(testProfile);
     }
 
@@ -811,7 +794,6 @@ public class ProfileManager : MonoBehaviour
             {
                 if (!parent.gameObject.activeSelf)
                 {
-                    Debug.LogWarning($"[ProfileManager] 부모 오브젝트 '{parent.name}'가 비활성화 상태입니다. 활성화합니다.");
                     parent.gameObject.SetActive(true);
                 }
                 parent = parent.parent;
@@ -837,7 +819,6 @@ public class ProfileManager : MonoBehaviour
         {
             openedFromFollowPanel = false;
             FollowManager.returnToFollowPanel = true;
-            Debug.Log("[ProfileManager] FollowPanel로 돌아갑니다");
         }
 
         // 등록된 닫기 콜백 호출 (ChatRoomPanel 복원 등)
@@ -911,7 +892,6 @@ public class ProfileManager : MonoBehaviour
             }
         }
 
-        Debug.Log($"[ProfileManager] FollowButton updated - iFollowThem: {iFollowThem}, theyFollowMe: {theyFollowMe}");
     }
 
     private void OnFollowButtonClicked()
@@ -950,7 +930,6 @@ public class ProfileManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log($"[ProfileManager] Followed: {followingId}");
                 // 카운트 업데이트
                 if (currentProfile != null)
                 {
@@ -979,7 +958,6 @@ public class ProfileManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log($"[ProfileManager] Unfollowed: {followingId}");
                 // 카운트 업데이트
                 if (currentProfile != null)
                 {
@@ -1036,7 +1014,6 @@ public class ProfileManager : MonoBehaviour
         // 내 프로필에서만 팔로워/팔로잉 목록 볼 수 있음
         if (!isMyProfile)
         {
-            Debug.Log("[ProfileManager] 다른 사용자의 팔로워/팔로잉 목록은 볼 수 없습니다.");
             return;
         }
 
@@ -1148,7 +1125,6 @@ public class ProfileManager : MonoBehaviour
         }
 #endif
 
-        Debug.Log($"[ProfileManager] Tab switched to: {(showFollowers ? "Followers" : "Following")}");
     }
 
     /// <summary>
@@ -1176,7 +1152,6 @@ public class ProfileManager : MonoBehaviour
         }
 #endif
 
-        Debug.Log($"[ProfileManager] Swiped to: {(showFollowers ? "Followers" : "Following")}");
     }
 
     /// <summary>
@@ -1275,7 +1250,6 @@ public class ProfileManager : MonoBehaviour
         // 에디터에서는 더미 데이터가 이미 로드되어 있으면 API 호출 스킵
         if (currentFollowersList != null && currentFollowersList.Length > 0)
         {
-            Debug.Log("[ProfileManager] 에디터 모드: 이미 팔로워 데이터 있음 - API 호출 스킵");
             yield break;
         }
 #endif
@@ -1294,14 +1268,7 @@ public class ProfileManager : MonoBehaviour
                     currentFollowersList = response.followers;
                     PopulateFollowersList(response.followers);
                 }
-                else
-                {
-                    Debug.Log("[ProfileManager] API가 빈 팔로워 리스트 반환 - 기존 데이터 유지");
                 }
-            }
-            else
-            {
-                Debug.LogWarning($"[ProfileManager] Failed to fetch followers: {request.error}");
             }
         }
     }
@@ -1315,7 +1282,6 @@ public class ProfileManager : MonoBehaviour
         // 에디터에서는 더미 데이터가 이미 로드되어 있으면 API 호출 스킵
         if (currentFollowingList != null && currentFollowingList.Length > 0)
         {
-            Debug.Log("[ProfileManager] 에디터 모드: 이미 팔로잉 데이터 있음 - API 호출 스킵");
             yield break;
         }
 #endif
@@ -1334,14 +1300,7 @@ public class ProfileManager : MonoBehaviour
                     currentFollowingList = response.following;
                     PopulateFollowingList(response.following);
                 }
-                else
-                {
-                    Debug.Log("[ProfileManager] API가 빈 팔로잉 리스트 반환 - 기존 데이터 유지");
                 }
-            }
-            else
-            {
-                Debug.LogWarning($"[ProfileManager] Failed to fetch following: {request.error}");
             }
         }
     }
@@ -1351,10 +1310,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void PopulateFollowersList(FollowUser[] users)
     {
-        Debug.Log($"[ProfileManager] PopulateFollowersList 시작 - users:{users?.Length ?? 0}, " +
-            $"prefab:{(followerItemPrefab != null ? "OK" : "NULL")}, " +
-            $"content:{(followersListContent != null ? "OK" : "NULL")}");
-
         // 기존 항목 제거
         if (followersListContent != null)
         {
@@ -1364,11 +1319,6 @@ public class ProfileManager : MonoBehaviour
             foreach (var child in children)
                 Destroy(child);
         }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] followersListContent가 null입니다! 패널 경로를 확인하세요.");
-        }
-
         // 항목 추가
         if (users != null && followerItemPrefab != null && followersListContent != null)
         {
@@ -1406,13 +1356,6 @@ public class ProfileManager : MonoBehaviour
             // 레이아웃 강제 업데이트
             Canvas.ForceUpdateCanvases();
             UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(followersListContent as RectTransform);
-
-            Debug.Log($"[ProfileManager] FollowerItem {users.Length}개 생성 완료");
-        }
-        else
-        {
-            if (followerItemPrefab == null)
-                Debug.LogWarning("[ProfileManager] followerItemPrefab이 null입니다!");
         }
     }
 
@@ -1421,10 +1364,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void PopulateFollowingList(FollowUser[] users)
     {
-        Debug.Log($"[ProfileManager] PopulateFollowingList 시작 - users:{users?.Length ?? 0}, " +
-            $"prefab:{(followingItemPrefab != null ? "OK" : "NULL")}, " +
-            $"content:{(followingListContent != null ? "OK" : "NULL")}");
-
         // 기존 항목 제거
         if (followingListContent != null)
         {
@@ -1434,11 +1373,6 @@ public class ProfileManager : MonoBehaviour
             foreach (var child in children)
                 Destroy(child);
         }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] followingListContent가 null입니다! 패널 경로를 확인하세요.");
-        }
-
         // 항목 추가
         if (users != null && followingItemPrefab != null && followingListContent != null)
         {
@@ -1476,13 +1410,6 @@ public class ProfileManager : MonoBehaviour
             // 레이아웃 강제 업데이트
             Canvas.ForceUpdateCanvases();
             UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(followingListContent as RectTransform);
-
-            Debug.Log($"[ProfileManager] FollowingItem {users.Length}개 생성 완료");
-        }
-        else
-        {
-            if (followingItemPrefab == null)
-                Debug.LogWarning("[ProfileManager] followingItemPrefab이 null입니다!");
         }
     }
 
@@ -1737,7 +1664,6 @@ public class ProfileManager : MonoBehaviour
                     });
                 }
 
-                Debug.Log($"[ProfileManager] Followed: {targetId}");
             }
         }
     }
@@ -1777,7 +1703,6 @@ public class ProfileManager : MonoBehaviour
                     });
                 }
 
-                Debug.Log($"[ProfileManager] Unfollowed: {targetId}");
             }
         }
     }
@@ -1789,7 +1714,6 @@ public class ProfileManager : MonoBehaviour
     {
         // 팔로워 삭제 = 상대방이 나를 팔로우하는 것을 취소
         // 실제로는 서버 API가 필요하지만, 일단 UI에서만 제거
-        Debug.Log($"[ProfileManager] Remove follower requested: {followerId}");
 
         // UI에서 제거
         Destroy(itemObj);
@@ -1802,7 +1726,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OnFollowingMoreClicked(string userId, GameObject itemObj)
     {
-        Debug.Log($"[ProfileManager] More options for following: {userId}");
         // TODO: 팝업 메뉴 표시 (언팔로우, 프로필 보기 등)
     }
 
@@ -1814,11 +1737,6 @@ public class ProfileManager : MonoBehaviour
         if (MessagePanelManager.Instance != null)
         {
             MessagePanelManager.Instance.OpenChatRoom(oderId, username, avatarUrl);
-            Debug.Log($"[ProfileManager] Opened ChatRoom with: {username} ({oderId})");
-        }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] MessagePanelManager not found - cannot open ChatRoom");
         }
     }
 
@@ -1849,8 +1767,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     public void ShowTestFollowersList()
     {
-        Debug.Log("[ProfileManager] ShowTestFollowersList 호출됨");
-
         // 버튼 연결 확인 (런타임 초기화 안 됐을 수 있음)
         SetupFollowListButtonListeners();
 
@@ -1883,8 +1799,6 @@ public class ProfileManager : MonoBehaviour
         // 패널 표시
         if (followListPanel != null)
             followListPanel.SetActive(true);
-
-        Debug.Log($"[ProfileManager] 테스트 팔로워 목록 표시 (양쪽 모두 로드됨)");
     }
 
     /// <summary>
@@ -1893,8 +1807,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     public void ShowTestFollowingList()
     {
-        Debug.Log("[ProfileManager] ShowTestFollowingList 호출됨");
-
         // 버튼 연결 확인 (런타임 초기화 안 됐을 수 있음)
         SetupFollowListButtonListeners();
 
@@ -1927,8 +1839,6 @@ public class ProfileManager : MonoBehaviour
         // 패널 표시
         if (followListPanel != null)
             followListPanel.SetActive(true);
-
-        Debug.Log($"[ProfileManager] 테스트 팔로잉 목록 표시 (양쪽 모두 로드됨)");
     }
 
     /// <summary>
@@ -1962,8 +1872,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void LoadBothListsWithDummyData()
     {
-        Debug.Log("[ProfileManager] 에디터 모드: 양쪽 리스트에 더미 데이터 로드");
-
         // 팔로워 더미 데이터 생성 및 표시
         FollowUser[] testFollowers = GenerateTestFollowUsers(8, "follower");
         currentFollowersList = testFollowers;
@@ -1973,8 +1881,6 @@ public class ProfileManager : MonoBehaviour
         FollowUser[] testFollowing = GenerateTestFollowUsers(6, "following");
         currentFollowingList = testFollowing;
         PopulateFollowingList(testFollowing);
-
-        Debug.Log($"[ProfileManager] 더미 데이터 로드 완료 - 팔로워: {testFollowers.Length}, 팔로잉: {testFollowing.Length}");
     }
 
     #endregion
@@ -2172,7 +2078,6 @@ public class ProfileManager : MonoBehaviour
             if (!string.IsNullOrEmpty(testInstagramId)) instagramId = testInstagramId;
             if (!string.IsNullOrEmpty(testXId)) xId = testXId;
             if (!string.IsNullOrEmpty(testFacebookId)) facebookId = testFacebookId;
-            Debug.Log($"[ProfileManager] Using test SNS data - IG: {testInstagramId}, X: {testXId}, FB: {testFacebookId}");
         }
 #endif
 
@@ -2277,7 +2182,6 @@ public class ProfileManager : MonoBehaviour
 
         if (containerParent == null)
         {
-            Debug.LogWarning("[ProfileManager] Cannot create SNS container - no parent found");
             return;
         }
 
@@ -2305,8 +2209,6 @@ public class ProfileManager : MonoBehaviour
         hlg.childControlHeight = false;
 
         snsIconsContainer = containerObj;
-
-        Debug.Log($"[ProfileManager] SNS container created at position: {referencePosition}");
     }
 
     /// <summary>
@@ -2372,14 +2274,12 @@ public class ProfileManager : MonoBehaviour
         {
             btnImage.sprite = iconSprite;
             btnImage.color = Color.white;
-            Debug.Log($"[ProfileManager] Loaded {snsName} icon from Resources: {iconPath}");
         }
         else
         {
             // 폴백: 색상 배경 + 텍스트
             btnImage.color = bgColor;
             CreateFallbackLabel(btnImage.transform, snsName);
-            Debug.LogWarning($"[ProfileManager] Icon not found: {iconPath}, using fallback");
         }
 
         // 버튼 컴포넌트
@@ -2435,7 +2335,6 @@ public class ProfileManager : MonoBehaviour
         if (currentProfile == null || string.IsNullOrEmpty(currentProfile.instagram_id)) return;
 
         string instagramUrl = $"https://www.instagram.com/{currentProfile.instagram_id}";
-        Debug.Log($"[ProfileManager] Opening Instagram: {instagramUrl}");
         Application.OpenURL(instagramUrl);
     }
 
@@ -2444,7 +2343,6 @@ public class ProfileManager : MonoBehaviour
         if (currentProfile == null || string.IsNullOrEmpty(currentProfile.x_id)) return;
 
         string xUrl = $"https://x.com/{currentProfile.x_id}";
-        Debug.Log($"[ProfileManager] Opening X: {xUrl}");
         Application.OpenURL(xUrl);
     }
 
@@ -2453,7 +2351,6 @@ public class ProfileManager : MonoBehaviour
         if (currentProfile == null || string.IsNullOrEmpty(currentProfile.facebook_id)) return;
 
         string facebookUrl = $"https://www.facebook.com/{currentProfile.facebook_id}";
-        Debug.Log($"[ProfileManager] Opening Facebook: {facebookUrl}");
         Application.OpenURL(facebookUrl);
     }
 
@@ -2514,8 +2411,6 @@ public class ProfileManager : MonoBehaviour
         // UI 업데이트
         UpdateVisibilityStatusText(newMode);
         UpdateAvatarOutlineColor(newMode);
-
-        Debug.Log($"[ProfileManager] Avatar visibility changed to: {newMode}");
     }
 
     /// <summary>
@@ -2662,19 +2557,9 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OpenDMWithUser()
     {
-        if (currentProfile == null)
-        {
-            Debug.LogWarning("[ProfileManager] Cannot open DM - no profile selected");
-            return;
-        }
+        if (currentProfile == null) return;
 
-        if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null)
-        {
-            Debug.LogWarning("[ProfileManager] Cannot open DM - not logged in");
-            return;
-        }
-
-        Debug.Log($"[ProfileManager] Opening DM with user: {currentProfile.username} ({currentProfile.id})");
+        if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null) return;
 
         // MessagePanelManager를 통해 DM 열기
         if (MessagePanelManager.Instance != null)
@@ -2688,10 +2573,6 @@ public class ProfileManager : MonoBehaviour
                 currentProfile.username,
                 currentProfile.avatar_url
             );
-        }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] MessagePanelManager not found");
         }
     }
 
@@ -2723,18 +2604,13 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OpenEditProfileWebPage()
     {
-        if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null)
-        {
-            Debug.LogWarning("[ProfileManager] Cannot open edit profile - not logged in");
-            return;
-        }
+        if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null) return;
 
         string userId = LoginManager.Instance.CurrentUser.id;
         string lang = GetCurrentLanguageCode();
 
         // URL with token (user_id) and language
         string editUrl = $"{BASE_URL}/profile/edit?token={userId}&lang={lang}";
-        Debug.Log($"[ProfileManager] Opening profile edit: {editUrl}");
 
         // 프로필 편집 페이지를 열었음을 표시 (돌아올 때 새로고침하기 위해)
         openedProfileEdit = true;
@@ -2900,7 +2776,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OnLogoutButtonClicked()
     {
-        Debug.Log("[ProfileManager] 로그아웃 버튼 클릭 - 확인 다이얼로그 표시");
         ShowLogoutConfirmDialog();
     }
 
@@ -2925,7 +2800,6 @@ public class ProfileManager : MonoBehaviour
         else
         {
             // 다이얼로그가 없으면 바로 로그아웃 (fallback)
-            Debug.LogWarning("[ProfileManager] 로그아웃 확인 다이얼로그가 없습니다. 바로 로그아웃합니다.");
             OnLogoutConfirmed();
         }
     }
@@ -2974,7 +2848,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OnLogoutConfirmed()
     {
-        Debug.Log("[ProfileManager] 로그아웃 확인됨");
         HideLogoutConfirmDialog();
 
         if (LoginManager.Instance != null)
@@ -2989,12 +2862,6 @@ public class ProfileManager : MonoBehaviour
                 miniUsernameText.text = "";
             if (miniAvatarImage != null && defaultAvatarSprite != null)
                 miniAvatarImage.sprite = defaultAvatarSprite;
-
-            Debug.Log("[ProfileManager] 로그아웃 완료 - UI 초기화됨 (미니 프로필 패널은 유지)");
-        }
-        else
-        {
-            Debug.LogWarning("[ProfileManager] LoginManager가 null입니다");
         }
     }
 
@@ -3003,7 +2870,6 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OnLogoutCancelled()
     {
-        Debug.Log("[ProfileManager] 로그아웃 취소됨");
         HideLogoutConfirmDialog();
     }
 

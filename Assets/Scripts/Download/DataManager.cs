@@ -34,7 +34,6 @@ public class DataManager : MonoBehaviour
         // Singleton 체크
         if (instance != null && instance != this)
         {
-            Debug.LogWarning("[DataManager] Duplicate instance detected. Destroying duplicate.");
             Destroy(gameObject);
             return;
         }
@@ -816,9 +815,6 @@ public class DataManager : MonoBehaviour
         // object3D 키가 없으면 기본값 true
         bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
 
-#if UNITY_EDITOR
-        Debug.Log($"[DataManager] ApplyFilters: showWoopangData={showWoopangData}, showObject3D={showObject3D}, petFriendlyAll={petFriendlyAll}, petFriendlyOnly={petFriendlyOnly}, noPetFriendly={noPetFriendly}, showAlcohol={showAlcohol}");
-#endif
 
         foreach (var kvp in spawnedObjects)
         {

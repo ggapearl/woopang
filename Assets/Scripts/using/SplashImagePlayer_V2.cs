@@ -39,8 +39,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
 
     private void Awake()
     {
-        Debug.Log($"[SplashV2] Awake 시작 - Time={Time.realtimeSinceStartup:F3}초");
-
         // Canvas 준비
         if (targetCanvas == null)
         {
@@ -61,7 +59,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
                 new Rect(0, 0, splashTexture.width, splashTexture.height),
                 new Vector2(0.5f, 0.5f)
             );
-            Debug.Log($"[SplashV2] Texture를 Sprite로 변환: {splashTexture.width}x{splashTexture.height}");
         }
 
         if (finalSprite == null)
@@ -72,8 +69,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
 
         // Image 오브젝트 생성 (즉시 최종 설정)
         CreateSplashImage(finalSprite);
-
-        Debug.Log($"[SplashV2] Awake 완료 - FillMode={fillMode}, Time={Time.realtimeSinceStartup:F3}초");
     }
 
     private Canvas CreateSplashCanvas()
@@ -91,7 +86,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
 
         canvasObj.AddComponent<GraphicRaycaster>();
 
-        Debug.Log("[SplashV2] Canvas 생성 완료");
         return canvas;
     }
 
@@ -124,7 +118,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
             }
         }
 
-        Debug.Log($"[SplashV2] Image 생성 완료 - Size={rectTransform.sizeDelta}");
     }
 
     private void SetupImageSize(RectTransform rectTransform, Sprite sprite)
@@ -137,7 +130,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
         float spriteHeight = sprite.rect.height;
         float spriteAspect = spriteWidth / spriteHeight;
 
-        Debug.Log($"[SplashV2] Screen={screenWidth}x{screenHeight} ({screenAspect:F2}), Sprite={spriteWidth}x{spriteHeight} ({spriteAspect:F2})");
 
         if (fillMode == ImageFillMode.Cover)
         {
@@ -163,7 +155,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
             rectTransform.anchoredPosition = Vector2.zero;
             rectTransform.sizeDelta = finalSize;
 
-            Debug.Log($"[SplashV2] Cover 모드 - FinalSize={finalSize}");
         }
         else
         {
@@ -189,14 +180,11 @@ public class SplashImagePlayer_V2 : MonoBehaviour
             rectTransform.anchoredPosition = Vector2.zero;
             rectTransform.sizeDelta = finalSize;
 
-            Debug.Log($"[SplashV2] Fit 모드 - FinalSize={finalSize}");
         }
     }
 
     private void Start()
     {
-        Debug.Log($"[SplashV2] Start 시작 - Time={Time.realtimeSinceStartup:F3}초");
-
         // 데이터 로딩 지연
         DelayDataLoading();
 
@@ -217,7 +205,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
         DataManager dataManager = DataManager.Instance;
         if (dataManager != null)
         {
-            Debug.Log($"[SplashV2] DataManager 발견 - {dataLoadDelay}초 지연 후 로딩");
             StartCoroutine(DelayedDataLoad(dataManager));
         }
     }
@@ -225,15 +212,12 @@ public class SplashImagePlayer_V2 : MonoBehaviour
     private IEnumerator DelayedDataLoad(DataManager dataManager)
     {
         yield return new WaitForSeconds(dataLoadDelay);
-        Debug.Log("[SplashV2] 데이터 로딩 지연 완료");
     }
 
     private IEnumerator ShowSplash()
     {
-        Debug.Log("[SplashV2] Splash 표시 시작");
         yield return new WaitForSeconds(displayDuration);
 
-        Debug.Log("[SplashV2] Splash 페이드아웃 시작");
         float timer = 0f;
         while (timer < fadeDuration)
         {
@@ -245,14 +229,11 @@ public class SplashImagePlayer_V2 : MonoBehaviour
             yield return null;
         }
 
-        Debug.Log("[SplashV2] Splash 페이드아웃 완료");
         HideSplash();
     }
 
     private void HideSplash()
     {
-        Debug.Log($"[SplashV2] Splash 숨김 - Time={Time.realtimeSinceStartup:F3}초");
-
         if (splashImageObject != null)
         {
             Destroy(splashImageObject);
@@ -276,7 +257,6 @@ public class SplashImagePlayer_V2 : MonoBehaviour
             // 포그라운드 복귀 시 사이즈 재설정
             RectTransform rectTransform = splashImage.GetComponent<RectTransform>();
             SetupImageSize(rectTransform, splashImage.sprite);
-            Debug.Log("[SplashV2] 포그라운드 복귀 - 사이즈 재설정");
         }
     }
 }

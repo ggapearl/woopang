@@ -28,10 +28,6 @@ public class DirectMessageManager : MonoBehaviour
             return;
         }
 
-        if (showDeprecationWarning)
-        {
-            Debug.LogWarning("[DirectMessageManager] DEPRECATED: 이 컴포넌트는 MessagePanelManager로 통합되었습니다. MessagePanelManager를 사용하세요.");
-        }
     }
 
     void Start()
@@ -67,7 +63,6 @@ public class DirectMessageManager : MonoBehaviour
     [Obsolete("OpenFollowingSelect 기능이 제거되었습니다. MessagePanelManager의 검색 기능을 사용하세요.")]
     public void OpenFollowingSelect()
     {
-        Debug.LogWarning("[DirectMessageManager] OpenFollowingSelect 기능이 제거되었습니다. 검색을 사용하세요.");
     }
 
     /// <summary>
@@ -116,7 +111,6 @@ public class DirectMessageManager : MonoBehaviour
     [Obsolete("SendMessage는 더 이상 사용되지 않습니다. MessagePanelManager의 채팅방 UI를 통해 메시지를 전송하세요.")]
     public void SendMessage(string recipientId, string content, Action<bool> callback = null)
     {
-        Debug.LogWarning("[DirectMessageManager] SendMessage는 deprecated입니다. MessagePanelManager의 채팅방 UI를 사용하세요.");
         callback?.Invoke(false);
     }
 

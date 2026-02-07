@@ -195,8 +195,7 @@ public class AutoUpdateChecker : MonoBehaviour
             }
             else
             {
-                Debug.LogError($"버전 체크 실패: {request.error}");
-                Debug.LogError($"Response Code: {request.responseCode}");
+                Debug.LogError($"버전 체크 실패: {request.error} (Code: {request.responseCode})");
             }
         }
     }

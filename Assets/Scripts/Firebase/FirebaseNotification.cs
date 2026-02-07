@@ -631,8 +631,6 @@ public class FirebaseNotification : MonoBehaviour
                 contentName = e.Message.Data["content_name"];
             }
 
-            Debug.Log($"[FCM] 업로드 완료 알림 수신: {contentName}");
-
             // MessagePanelManager에 시스템 알림으로 추가
             var manager = GetMessagePanelManager();
             if (manager != null)
@@ -802,8 +800,6 @@ public class FirebaseNotification : MonoBehaviour
             {
                 contentName = e.Message.Data["content_name"];
             }
-
-            Debug.Log($"[FCM] 업로드 완료 알림 수신 (백그라운드): {contentName}");
 
             // MessagePanelManager에 시스템 알림으로 추가
             var manager = GetMessagePanelManager();
@@ -1428,8 +1424,8 @@ public class FirebaseNotification : MonoBehaviour
         if (MessagePanelManager.Instance != null)
             return MessagePanelManager.Instance;
 
-        // Instance가 null이면 FindObjectOfType으로 찾기
-        return FindObjectOfType<MessagePanelManager>();
+        // Instance가 null이면 FindFirstObjectByType으로 찾기
+        return FindFirstObjectByType<MessagePanelManager>();
     }
 
     /// <summary>
@@ -1542,7 +1538,7 @@ public class FirebaseNotification : MonoBehaviour
     private void CreateNotificationBannerUI()
     {
         // Canvas 찾기
-        Canvas canvas = FindObjectOfType<Canvas>();
+        Canvas canvas = FindFirstObjectByType<Canvas>();
         if (canvas == null)
         {
             return;

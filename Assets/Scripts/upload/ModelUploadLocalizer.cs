@@ -96,8 +96,6 @@ public class ModelUploadLocalizer : MonoBehaviour
 
         // 텍스트 업데이트
         UpdateUI();
-        
-        Debug.Log($"ModelUploadLocalizer: 언어 설정 완료 - {currentLanguage}");
     }
 
     void DetectDeviceLanguage()
@@ -125,22 +123,21 @@ public class ModelUploadLocalizer : MonoBehaviour
                 break;
         }
         
-        Debug.Log($"Detected language: {currentLanguage} (Device: {deviceLanguage})");
     }
 
     bool ValidateUIElements()
     {
         bool isValid = true;
         
-        if (addModelTitle == null) { Debug.LogWarning("addModelTitle is not assigned"); isValid = false; }
-        if (nameLabel == null) { Debug.LogWarning("nameLabel is not assigned"); isValid = false; }
-        if (coordinateLabel == null) { Debug.LogWarning("coordinateLabel is not assigned"); isValid = false; }
-        if (coordinateSubtext == null) { Debug.LogWarning("coordinateSubtext is not assigned"); isValid = false; }
-        if (addFileLabel == null) { Debug.LogWarning("addFileLabel is not assigned"); isValid = false; }
-        if (addPlaceImgsLabel == null) { Debug.LogWarning("addPlaceImgsLabel is not assigned"); isValid = false; }
-        if (petFriendlyLabel == null) { Debug.LogWarning("petFriendlyLabel is not assigned"); isValid = false; }
-        if (separatedRestroomLabel == null) { Debug.LogWarning("separatedRestroomLabel is not assigned"); isValid = false; }
-        if (instagramIdLabel == null) { Debug.LogWarning("instagramIdLabel is not assigned"); isValid = false; }
+        if (addModelTitle == null) isValid = false;
+        if (nameLabel == null) isValid = false;
+        if (coordinateLabel == null) isValid = false;
+        if (coordinateSubtext == null) isValid = false;
+        if (addFileLabel == null) isValid = false;
+        if (addPlaceImgsLabel == null) isValid = false;
+        if (petFriendlyLabel == null) isValid = false;
+        if (separatedRestroomLabel == null) isValid = false;
+        if (instagramIdLabel == null) isValid = false;
         
         return isValid;
     }
@@ -180,11 +177,6 @@ public class ModelUploadLocalizer : MonoBehaviour
         {
             currentLanguage = languageCode;
             UpdateUI();
-            Debug.Log($"Language changed to: {languageCode}");
-        }
-        else
-        {
-            Debug.LogWarning($"Language '{languageCode}' is not supported");
         }
     }
 
@@ -227,7 +219,6 @@ public class ModelUploadLocalizer : MonoBehaviour
                 SafeSetText(instagramIdLabel, customText);
                 break;
             default:
-                Debug.LogWarning($"Unknown text key: {textKey}");
                 break;
         }
     }

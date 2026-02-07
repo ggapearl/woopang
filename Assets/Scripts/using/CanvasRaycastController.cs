@@ -53,7 +53,6 @@ public class CanvasRaycastController : MonoBehaviour
             if (raycaster != null)
             {
                 raycaster.enabled = false;
-                Debug.Log($"[CanvasRaycastController] GraphicRaycaster 비활성화: {targetCanvas.name}");
             }
         }
 
@@ -91,11 +90,9 @@ public class CanvasRaycastController : MonoBehaviour
                 {
                     graphic.raycastTarget = false;
                     disabledCount++;
-                    Debug.Log($"[CanvasRaycastController] Raycast 비활성화: {graphic.gameObject.name}");
                 }
             }
 
-            Debug.Log($"[CanvasRaycastController] 총 {disabledCount}개 UI 요소의 Raycast 비활성화 완료");
         }
     }
 
@@ -117,6 +114,5 @@ public class CanvasRaycastController : MonoBehaviour
         canvasGroup.blocksRaycasts = false; // ⭐ 핵심: 터치 차단 해제
         canvasGroup.interactable = true;
 
-        Debug.Log($"[CanvasRaycastController] CanvasGroup 추가 완료 (blocksRaycasts=false): {targetCanvas.name}");
     }
 }

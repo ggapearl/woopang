@@ -161,8 +161,6 @@ public class CubeDataFixManager : MonoBehaviour
 
     private IEnumerator LoadImageWithConversion(string imagePath, System.Action<Texture2D> onComplete)
     {
-        Debug.Log($"[HEIC] 2단계 변환 시작: {Path.GetFileName(imagePath)}");
-        
         Texture2D convertedTexture = null;
 
 #if UNITY_IOS && !UNITY_EDITOR
@@ -177,13 +175,9 @@ public class CubeDataFixManager : MonoBehaviour
         }));
 #endif
 
-        if (convertedTexture != null)
+        if (convertedTexture == null)
         {
-            Debug.Log($"[HEIC] ✅ 2단계 변환 성공: {convertedTexture.width}x{convertedTexture.height}");
-        }
-        else
-        {
-            Debug.LogError($"[HEIC] ❌ 2단계 변환 실패: {Path.GetFileName(imagePath)}");
+            Debug.LogError($"[HEIC] 2단계 변환 실패: {Path.GetFileName(imagePath)}");
         }
 
         onComplete?.Invoke(convertedTexture);
@@ -243,8 +237,6 @@ public class CubeDataFixManager : MonoBehaviour
                     // 변환된 JPG 로드
                     result = new Texture2D(2, 2, TextureFormat.RGB24, false);
                     result.LoadImage(jpgBytes);
-                    
-                    Debug.Log($"[HEIC] iOS 네이티브 변환 성공: {result.width}x{result.height}");
                     
                     // 임시 파일 정리
                     if (File.Exists(tempJpgPath))
@@ -306,12 +298,10 @@ public class CubeDataFixManager : MonoBehaviour
         // 1단계: NativeGallery.LoadImageAtPath 시도
         try
         {
-            Debug.Log($"[HEIC] 1단계 시도: {Path.GetFileName(path)}");
             Texture2D texture = NativeGallery.LoadImageAtPath(path, maxSize: 2048);
             
             if (texture != null && texture.width > 8 && texture.height > 8)
             {
-                Debug.Log($"[HEIC] ✅ 1단계 성공 - NativeGallery 로드: {texture.width}x{texture.height}");
                 ProcessCropAndDisplay(texture, () => {
                     processingComplete = true;
                 });
@@ -319,13 +309,12 @@ public class CubeDataFixManager : MonoBehaviour
             }
             else
             {
-                Debug.Log($"[HEIC] ⚠️ 1단계 실패 - 2단계 시도 필요");
                 if (texture != null) Destroy(texture);
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
-            Debug.LogError($"[HEIC] 1단계 예외: {e.Message}");
+            // 1단계 실패 - 2단계에서 재시도
         }
 
         if (step1Success)
@@ -339,14 +328,13 @@ public class CubeDataFixManager : MonoBehaviour
         yield return StartCoroutine(LoadImageWithConversion(path, (convertedTexture) => {
             if (convertedTexture != null)
             {
-                Debug.Log($"[HEIC] ✅ 2단계 성공 - 수동 변환: {convertedTexture.width}x{convertedTexture.height}");
                 ProcessCropAndDisplay(convertedTexture, () => {
                     processingComplete = true;
                 });
             }
             else
             {
-                Debug.LogError($"[HEIC] ❌ 모든 단계 실패: {Path.GetFileName(path)}");
+                Debug.LogError($"[HEIC] 모든 단계 실패: {Path.GetFileName(path)}");
                 ShowWarning(GetLocalizedText("photo_selection_failed"));
                 processingComplete = true;
             }
@@ -368,13 +356,12 @@ public class CubeDataFixManager : MonoBehaviour
                     {
                         if (mainPhoto != null) Destroy(mainPhoto);
                         mainPhoto = croppedTexture;
-                        
-                        if (mainPhotoDisplay != null) 
+
+                        if (mainPhotoDisplay != null)
                         {
                             mainPhotoDisplay.sprite = GetOrCreateSprite(mainPhoto);
                             mainPhotoDisplay.gameObject.SetActive(true);
                         }
-                        Debug.Log("[CubeDataFixManager] 메인사진 크롭 및 표시 완료");
                     }
                     else
                     {
@@ -457,25 +444,22 @@ public class CubeDataFixManager : MonoBehaviour
             
             if (texture != null && texture.width > 8 && texture.height > 8)
             {
-                Debug.Log($"[HEIC] ✅ 서브사진 1단계 성공: {Path.GetFileName(path)} - {texture.width}x{texture.height}");
                 subPhotos.Add(texture);
                 imageProcessed = true;
             }
             else
             {
-                Debug.Log($"[HEIC] ⚠️ 서브사진 1단계 실패, 2단계 시도: {Path.GetFileName(path)}");
                 if (texture != null) Destroy(texture);
                 
                 // 2단계: 수동 HEIC 변환
                 yield return StartCoroutine(LoadImageWithConversion(path, (convertedTexture) => {
                     if (convertedTexture != null)
                     {
-                        Debug.Log($"[HEIC] ✅ 서브사진 2단계 성공: {Path.GetFileName(path)} - {convertedTexture.width}x{convertedTexture.height}");
                         subPhotos.Add(convertedTexture);
                     }
                     else
                     {
-                        Debug.LogError($"[HEIC] ❌ 서브사진 로드 실패: {Path.GetFileName(path)}");
+                        Debug.LogError($"[HEIC] 서브사진 로드 실패: {Path.GetFileName(path)}");
                         ShowWarning(GetLocalizedText("photo_selection_failed"));
                     }
                     imageProcessed = true;
@@ -487,7 +471,6 @@ public class CubeDataFixManager : MonoBehaviour
             yield return null;
         }
 
-        Debug.Log($"[HEIC] 서브사진 처리 완료: 총 {subPhotos.Count}장 로드됨");
         onComplete?.Invoke();
     }
 
@@ -506,15 +489,12 @@ public class CubeDataFixManager : MonoBehaviour
 
     private void UpdateSubPhotoGrid()
     {
-        Debug.Log($"📸 [CubeDataFixManager] UpdateSubPhotoGrid 호출 - subPhotos: {subPhotos.Count}개, subPhotoDisplays: {subPhotoDisplays.Count}개");
-        
         for (int i = 0; i < subPhotoDisplays.Count; i++)
         {
             if (i < subPhotos.Count)
             {
                 subPhotoDisplays[i].sprite = GetOrCreateSprite(subPhotos[i]);
                 subPhotoDisplays[i].gameObject.SetActive(true);
-                Debug.Log($"✅ [CubeDataFixManager] 서브 사진 #{i+1} 미리보기 활성화");
             }
             else
             {
@@ -541,7 +521,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (loadingPanel != null) loadingPanel.SetActive(true);
         if (loadingText != null) loadingText.text = message;
         if (loadingSpinner != null) StartCoroutine(SpinnerAnimation());
-        Debug.Log($"[CubeDataFixManager] 스피너 표시: {message}");
     }
 
     private void HideSpinner()
@@ -605,7 +584,6 @@ public class CubeDataFixManager : MonoBehaviour
         }
 
         int id = doubleTap.GetId();
-        Debug.Log($"[CubeDataFixManager] ValidateAndSubmit - ID: {id}");
         if (id <= 0)
         {
             ShowWarning(GetLocalizedText("valid_id_not_found"));
@@ -632,13 +610,10 @@ public class CubeDataFixManager : MonoBehaviour
 
         string description = descriptionInput.text?.Trim() ?? "";
         string name = nameInput.text?.Trim() ?? "";
-        Debug.Log($"[CubeDataFixManager] Description 입력값: '{description}'");
-        Debug.Log($"[CubeDataFixManager] Name 입력값: '{name}'");
 
         if (string.IsNullOrEmpty(description))
         {
             ShowWarning(GetLocalizedText("enter_description"));
-            Debug.LogWarning("[CubeDataFixManager] 설명이 비어 있습니다!");
             isProcessing = false;
             yield break;
         }
@@ -646,7 +621,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (string.IsNullOrEmpty(name))
         {
             ShowWarning(GetLocalizedText("enter_place_name"));
-            Debug.LogWarning("[CubeDataFixManager] 이름이 비어 있습니다!");
             isProcessing = false;
             yield break;
         }
@@ -658,7 +632,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (mainPhoto == null)
         {
             ShowWarning(GetLocalizedText("upload_main_photo"));
-            Debug.LogWarning("[CubeDataFixManager] 메인 사진이 없습니다!");
             isProcessing = false;
             yield break;
         }
@@ -671,14 +644,10 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (!isProcessing)
         {
-            Debug.Log("✅ 수정 요청 성공 - UI 초기화");
             SetUIActive(fixUIPanel, false);
             ResetToInitialState();
             yield return new WaitForSeconds(2f);
         }
-        else
-        {
-            Debug.Log("⚠️ 수정 요청 실패 - UI 초기화하지 않음");
         }
         isProcessing = false;
     }
@@ -703,11 +672,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (!isProcessing)
         {
             isCompleted = true;
-            Debug.Log("✅ SendWithTimeout: 수정 요청 성공으로 완료 플래그 설정");
-        }
-        else
-        {
-            Debug.Log("⚠️ SendWithTimeout: 수정 요청 실패로 완료 플래그 미설정");
         }
     }
 
@@ -716,24 +680,14 @@ public class CubeDataFixManager : MonoBehaviour
         while (routine != null && elapsedTime < timeout && !isCompleted() && isProcessing)
         {
             elapsedTime += Time.deltaTime;
-            Debug.Log($"⏳ WaitForRoutine: 대기 중... Elapsed: {elapsedTime:F2}초 / Timeout: {timeout}초");
             yield return null;
         }
 
         if (routine != null && !isCompleted() && elapsedTime >= timeout)
         {
-            Debug.LogWarning($"⏰ 타임아웃 발생: Elapsed {elapsedTime:F2}초, Timeout: {timeout}초");
             StopCoroutine(routine);
             isProcessing = true;
             ShowWarning(GetLocalizedText("request_timeout"));
-        }
-        else if (isCompleted())
-        {
-            Debug.Log("✅ WaitForRoutine: 수정 요청 성공으로 루프 종료");
-        }
-        else
-        {
-            Debug.Log("⚠️ WaitForRoutine: 루프 종료 (기타 이유)");
         }
     }
 
@@ -754,20 +708,17 @@ public class CubeDataFixManager : MonoBehaviour
         formData.AddField("timezone_offset", GetTimezoneOffset());
         
         string folder = $"fix_{DateTime.Now:yyyyMMdd_HHmmss}";
-        Debug.Log($"📁 Folder value before sending: {folder}");
         formData.AddField("folder", folder);
         formData.AddField("username", "");
 
         Texture2D mainPhoto = form.GetMainPhoto();
         if (mainPhoto != null)
         {
-            Debug.Log($"📸 메인 사진 데이터 확인: 크기 {mainPhoto.width}x{mainPhoto.height}, 포맷 {mainPhoto.format}");
             Texture2D resizedMainPhoto = ResizeTextureWithRenderTexture(mainPhoto, 444, 444);
             byte[] mainPhotoBytes = resizedMainPhoto.EncodeToJPG(50);
-            Debug.Log($"📸 메인 사진 바이트 크기: {mainPhotoBytes.Length} bytes");
             if (mainPhotoBytes.Length == 0)
             {
-                Debug.LogError("❌ 메인 사진 데이터가 비어 있습니다!");
+                Debug.LogError("[CubeDataFixManager] 메인 사진 데이터가 비어 있습니다!");
                 ShowWarning(GetLocalizedText("main_photo_upload_failed"));
                 yield break;
             }
@@ -777,24 +728,20 @@ public class CubeDataFixManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("❌ 메인 사진이 없습니다!");
             ShowWarning(GetLocalizedText("upload_main_photo"));
             yield break;
         }
 
         List<Texture2D> subPhotos = form.GetSubPhotos();
-        Debug.Log($"📂 서브 사진 개수: {subPhotos.Count}");
         for (int i = 1; i <= subPhotos.Count; i++)
         {
             if (i > MAX_SUB_PHOTOS) break;
             Texture2D subPhoto = subPhotos[i - 1];
-            Debug.Log($"📸 서브 사진 #{i} 데이터 확인: 크기 {subPhoto.width}x{subPhoto.height}, 포맷 {subPhoto.format}");
             Texture2D resizedSubPhoto = ResizeTextureKeepAspectWithRenderTexture(subPhoto, 800, 800);
             byte[] subPhotoBytes = resizedSubPhoto.EncodeToJPG(50);
-            Debug.Log($"📸 서브 사진 #{i} 바이트 크기: {subPhotoBytes.Length} bytes");
             if (subPhotoBytes.Length == 0)
             {
-                Debug.LogError($"❌ 서브 사진 #{i} 데이터가 비어 있습니다!");
+                Debug.LogError($"[CubeDataFixManager] 서브 사진 #{i} 데이터가 비어 있습니다!");
                 ShowWarning(GetLocalizedText("sub_photo_upload_failed"));
                 Destroy(resizedSubPhoto);
                 continue;
@@ -804,7 +751,6 @@ public class CubeDataFixManager : MonoBehaviour
             Destroy(resizedSubPhoto);
         }
 
-        Debug.Log($"🌐 서버로 요청 전송: {serverUrl}");
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
             www.timeout = Mathf.RoundToInt(uploadTimeoutSeconds);
@@ -813,14 +759,12 @@ public class CubeDataFixManager : MonoBehaviour
             if (www.result == UnityWebRequest.Result.Success)
             {
                 string responseText = www.downloadHandler.text;
-                Debug.Log($"✅ 업로드 응답: {responseText} (응답 코드: {www.responseCode})");
 
                 if (responseText.Contains("Fix Upload Succeeded!") || www.responseCode == 200)
                 {
                     isProcessing = false;
                     StopCoroutine(countdownCoroutine);
                     ShowWarning(GetLocalizedText("fix_success"));
-                    Debug.Log("✅ 수정 요청 성공: 루틴 종료");
 
                     SetUIActive(fixUIPanel, false);
                     ResetToInitialState();
@@ -828,14 +772,14 @@ public class CubeDataFixManager : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogWarning($"⚠️ 서버 응답이 성공으로 간주되지 않음: {responseText}");
+                    Debug.LogWarning($"[CubeDataFixManager] 서버 응답이 성공으로 간주되지 않음: {responseText}");
                     isProcessing = true;
                     ShowWarning(GetLocalizedText("server_error"));
                 }
             }
             else
             {
-                Debug.LogError($"❌ 수정 요청 실패: {www.error} (응답 코드: {www.responseCode})");
+                Debug.LogError($"[CubeDataFixManager] 수정 요청 실패: {www.error} (응답 코드: {www.responseCode})");
                 isProcessing = true;
                 ShowWarning(GetLocalizedText("server_error"));
             }
@@ -1137,7 +1081,7 @@ public class CubeDataFixManager : MonoBehaviour
                 }
 
             default:
-                Debug.LogWarning($"[CubeDataFixManager] 알 수 없는 다국어 키: {key}");
+                // 알 수 없는 키는 원본 반환
                 return key; // 키를 그대로 반환
         }
     }
@@ -1206,7 +1150,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (fixUIPanel != null)
         {
             fixUIPanel.SetActive(!fixUIPanel.activeSelf);
-            Debug.Log($"Fix UI Panel 상태: {fixUIPanel.activeSelf}");
         }
     }
 
@@ -1214,23 +1157,6 @@ public class CubeDataFixManager : MonoBehaviour
     void ResetAllStates()
     {
         ResetToInitialState();
-        Debug.Log("모든 상태 리셋 완료");
-    }
-
-    [ContextMenu("Show Current Status")]
-    void ShowCurrentStatus()
-    {
-        Debug.Log($"=== CubeDataFixManager Status ===");
-        Debug.Log($"DoubleTap ID: {(doubleTap != null ? doubleTap.GetId().ToString() : "null")}");
-        Debug.Log($"Is Processing: {isProcessing}");
-        Debug.Log($"Has Main Photo: {mainPhoto != null}");
-        Debug.Log($"Sub Photos Count: {subPhotos.Count}");
-        Debug.Log($"Show Instagram: {showInstagram}");
-        Debug.Log($"Fix UI Panel Active: {(fixUIPanel != null ? fixUIPanel.activeSelf.ToString() : "null")}");
-        Debug.Log($"Sub Photo Displays Count: {subPhotoDisplays.Count}");
-        Debug.Log($"Upload Timeout: {uploadTimeoutSeconds}초");
-        Debug.Log($"Countdown Seconds: {countdownSeconds}초");
-        Debug.Log($"================================");
     }
     #endregion
 }

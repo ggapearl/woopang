@@ -153,7 +153,7 @@ public class FollowManager : MonoBehaviour
 
         if (panel == null)
         {
-            Debug.LogWarning("[FollowManager] FollowPanel을 찾을 수 없습니다. Tools > Woopang > Create FollowManager UI 실행 필요");
+            Debug.LogError("[FollowManager] FollowPanel을 찾을 수 없습니다.");
             return;
         }
 
@@ -680,11 +680,6 @@ public class FollowManager : MonoBehaviour
         if (ProfileManager.Instance != null && ProfileManager.Instance.fullProfilePanel != null)
         {
             ProfileManager.Instance.fullProfilePanel.SetActive(true);
-            Debug.Log("[FollowManager] 프로필 패널로 돌아감");
-        }
-        else
-        {
-            Debug.LogWarning("[FollowManager] ProfileManager 또는 fullProfilePanel을 찾을 수 없습니다.");
         }
     }
 
@@ -1096,8 +1091,6 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private void OnItemClicked(string userId, string username)
     {
-        Debug.Log($"[FollowManager] 아이템 클릭: {userId} ({username})");
-
         // FollowPanel 숨기기 (Close 대신 hide만)
         if (panel != null)
             panel.SetActive(false);
@@ -1219,8 +1212,6 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private void OnMessageButtonClicked(string userId, string username)
     {
-        Debug.Log($"[FollowManager] ★ 메시지 버튼 클릭: {userId} ({username})");
-
         // 뒤에 있는 FullProfilePanel 닫기
         if (ProfileManager.Instance != null && ProfileManager.Instance.fullProfilePanel != null)
         {
@@ -1258,7 +1249,6 @@ public class FollowManager : MonoBehaviour
         // 에디터에서는 즉시 UI 업데이트만
         yield return null;
         UpdateFollowButton(button, userId, true);
-        Debug.Log($"[FollowManager] (에디터) {userId} 팔로우 완료");
 #else
         string url = $"{BASE_URL}/api/users/{userId}/follow";
 
@@ -1274,7 +1264,6 @@ public class FollowManager : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 UpdateFollowButton(button, userId, true);
-                Debug.Log($"[FollowManager] {userId} 팔로우 성공");
             }
             else
             {
@@ -1293,7 +1282,6 @@ public class FollowManager : MonoBehaviour
         // 에디터에서는 즉시 UI 업데이트만
         yield return null;
         UpdateFollowButton(button, userId, false);
-        Debug.Log($"[FollowManager] (에디터) {userId} 언팔로우 완료");
 #else
         string url = $"{BASE_URL}/api/users/{userId}/unfollow";
 
@@ -1309,7 +1297,6 @@ public class FollowManager : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 UpdateFollowButton(button, userId, false);
-                Debug.Log($"[FollowManager] {userId} 언팔로우 성공");
             }
             else
             {

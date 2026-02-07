@@ -32,13 +32,6 @@ public class DMTestDataGenerator : MonoBehaviour
     [Tooltip("자동 메시지 시뮬레이션 활성화")]
     public bool enableAutoMessages = false;  // 기본 비활성화
 
-    [Header("디버그 로그")]
-    [Tooltip("디버그 로그 활성화")]
-#if UNITY_EDITOR
-    public bool showDebugLogs = true;  // 에디터에서는 기본 활성화
-#else
-    public bool showDebugLogs = false;  // 빌드에서는 기본 비활성화
-#endif
 
     [Header("=== 레이아웃 설정 (Inspector에서 조절 가능) ===")]
     [Tooltip("대화 아이템 최소 높이")]
@@ -81,16 +74,6 @@ public class DMTestDataGenerator : MonoBehaviour
     // 마지막 메시지 시간 (날짜 구분선용)
     private DateTime lastMessageTime = DateTime.MinValue;
 
-    /// <summary>
-    /// 조건부 디버그 로그 출력
-    /// </summary>
-    private void Log(string message)
-    {
-        if (showDebugLogs)
-        {
-            Debug.Log($"[DMTestData] {message}");
-        }
-    }
 
     [Tooltip("시뮬레이션 지속 시간 (초)")]
     public float simulationDuration = 600f; // 10분
@@ -202,7 +185,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (!autoGenerateOnStart && autoLoadSystemNotification)
         {
             autoGenerateOnStart = true;
-            Debug.Log("[DMTestData] autoGenerateOnStart 자동 활성화됨 (테스트 대화 생성 위해 필요)");
         }
 #endif
 
@@ -214,10 +196,7 @@ public class DMTestDataGenerator : MonoBehaviour
         if (messagePanelManager != null && (autoGenerateOnStart || autoLoadSystemNotification))
         {
             messagePanelManager.ClearAllConversations();
-            Debug.Log("[DMTestData] 이전 대화 데이터 클리어 (테스트 모드)");
         }
-
-        Debug.Log($"[DMTestData] Start - Manager: {messagePanelManager != null}, autoGenerate: {autoGenerateOnStart}, autoNotification: {autoLoadSystemNotification}");
 
         // 에디터에서 자동 시작
 #if UNITY_EDITOR
@@ -237,7 +216,6 @@ public class DMTestDataGenerator : MonoBehaviour
             messagePanelManager.messagePanel != null &&
             messagePanelManager.messagePanel.activeSelf)
         {
-            Debug.Log("[DMTestData] MessagePanel이 이미 열려있음 - 대화 생성 시작");
             StartCoroutine(PopulateTestConversationsDelayed());
         }
 
@@ -268,7 +246,6 @@ public class DMTestDataGenerator : MonoBehaviour
 #if UNITY_EDITOR
         messagePanelManager.LoadDummyDMChatMessages();
 #endif
-        Log("ChatRoomPanel 자동 열기 완료 - 버블 테스트");
     }
 
     /// <summary>
@@ -282,7 +259,6 @@ public class DMTestDataGenerator : MonoBehaviour
 
         // 시스템 알림 (업로드 완료, WOOPANG 공지 등) 더미 데이터 추가
         AddDummySystemNotifications();
-        Log("시스템 알림 더미 데이터 자동 로드 완료");
     }
 
     /// <summary>
@@ -293,20 +269,16 @@ public class DMTestDataGenerator : MonoBehaviour
     {
         if (messagePanelManager == null) return;
 
-        Debug.Log("[DMTestData] AddDummySystemNotifications 실행");
-
         // MessagePanel이 열려있으면 바로 전체 대화 목록 생성
         if (messagePanelManager.messagePanel != null &&
             messagePanelManager.messagePanel.activeSelf &&
             !isGenerated && !isPopulatingConversations)
         {
-            Debug.Log("[DMTestData] MessagePanel 열려있음 - 전체 대화 목록 생성");
             StartCoroutine(PopulateTestConversations());
         }
         else
         {
             // 패널이 닫혀있으면 나중에 열 때 Update()에서 PopulateTestConversations 호출됨
-            Debug.Log("[DMTestData] MessagePanel 닫힘 - 나중에 열 때 대화 생성됨");
         }
     }
 
@@ -323,7 +295,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (enableAutoMessages)
         {
             StartAutoMessageSimulation();
-            Log("에디터: 자동 메시지 시뮬레이션 시작 (패널은 수동으로 열어야 함)");
         }
     }
 #endif
@@ -349,16 +320,9 @@ public class DMTestDataGenerator : MonoBehaviour
             // 패널이 방금 열렸을 때 (비활성→활성) - 아직 생성 안됨 + 생성 중 아님
             if (isPanelActive && !wasPanelActive)
             {
-                Debug.Log($"[DMTestData] 패널 열림 감지! isGenerated={isGenerated}, isPopulating={isPopulatingConversations}");
-
                 if (!isGenerated && !isPopulatingConversations)
                 {
-                    Debug.Log("[DMTestData] 테스트 대화 생성 시작");
                     StartCoroutine(PopulateTestConversations());
-                }
-                else
-                {
-                    Debug.Log("[DMTestData] 테스트 대화 생성 스킵 (이미 생성됨 또는 생성 중)");
                 }
             }
 
@@ -406,16 +370,12 @@ public class DMTestDataGenerator : MonoBehaviour
     /// </summary>
     private void OpenTestProfile()
     {
-        Log(" OpenTestProfile 버튼 클릭됨");
-
         ProfileManager profileManager = FindFirstObjectByType<ProfileManager>();
         if (profileManager == null)
         {
             Debug.LogError("[DMTestData] ProfileManager를 찾을 수 없습니다!");
             return;
         }
-
-        Log($"ProfileManager 찾음, fullProfilePanel={profileManager.fullProfilePanel != null}");
 
         if (profileManager.fullProfilePanel == null)
         {
@@ -428,8 +388,6 @@ public class DMTestDataGenerator : MonoBehaviour
         string testUserId = $"test_user_{userIndex}";
         string testUsername = testUsernames[userIndex];
 
-        Log($"테스트 프로필 열기 시도: {testUsername} ({testUserId})");
-
         // 테스트 프로필 표시 (API 호출 없이 더미 데이터 사용)
         profileManager.ShowTestProfile(testUserId, testUsername);
     }
@@ -441,7 +399,7 @@ public class DMTestDataGenerator : MonoBehaviour
 
         if (!isGenerated)
         {
-            Log(" 테스트 데이터 자동 생성 준비 완료");
+            // 테스트 데이터 자동 생성 준비 완료
         }
     }
 
@@ -454,7 +412,6 @@ public class DMTestDataGenerator : MonoBehaviour
 
         if (!isGenerated && !isPopulatingConversations)
         {
-            Debug.Log("[DMTestData] PopulateTestConversationsDelayed 실행");
             yield return StartCoroutine(PopulateTestConversations());
         }
     }
@@ -493,12 +450,10 @@ public class DMTestDataGenerator : MonoBehaviour
         // 중복 실행 방지 - 이미 실행 중이면 스킵
         if (isPopulatingConversations || isGenerated)
         {
-            Debug.Log($"[DMTestData] PopulateTestConversations 스킵 - isPopulating:{isPopulatingConversations}, isGenerated:{isGenerated}");
             yield break;
         }
 
         isPopulatingConversations = true;
-        Debug.Log($"[DMTestData] PopulateTestConversations 시작!");
 
         if (messagePanelManager == null)
         {
@@ -509,11 +464,6 @@ public class DMTestDataGenerator : MonoBehaviour
 
         // 런타임 프리팹 로딩 (null인 경우)
         LoadPrefabsIfNeeded();
-
-        Debug.Log($"[DMTestData] 프리팹 상태:");
-        Debug.Log($"  - conversationListContent: {messagePanelManager.conversationListContent != null}");
-        Debug.Log($"  - adminNoticePrefab: {messagePanelManager.adminNoticePrefab != null}");
-        Debug.Log($"  - conversationItemPrefab: {messagePanelManager.conversationItemPrefab != null}");
 
         if (messagePanelManager.conversationListContent == null)
         {
@@ -545,11 +495,6 @@ public class DMTestDataGenerator : MonoBehaviour
         {
             GameObject adminItem = Instantiate(messagePanelManager.adminNoticePrefab, messagePanelManager.conversationListContent);
             SetupAdminNoticeItem(adminItem, adminMessages[UnityEngine.Random.Range(0, adminMessages.Length)]);
-            Log(" AdminNoticeItem 생성 완료");
-        }
-        else
-        {
-            Debug.LogWarning("[DMTestData] adminNoticePrefab이 null - 프리팹 연결 필요");
         }
 
         yield return null;
@@ -557,7 +502,6 @@ public class DMTestDataGenerator : MonoBehaviour
         // 2. 테스트 대화 생성 (일반 DM: 김민지, 이준호 등)
         if (messagePanelManager.conversationItemPrefab == null)
         {
-            Debug.LogWarning("[DMTestData] conversationItemPrefab이 null - 자동 로드 시도");
             LoadPrefabsIfNeeded();
         }
 
@@ -567,7 +511,6 @@ public class DMTestDataGenerator : MonoBehaviour
         }
         else
         {
-            Debug.Log($"[DMTestData] 일반 DM 대화 {conversationCount}개 생성 시작");
             for (int i = 0; i < conversationCount; i++)
             {
                 GameObject item = Instantiate(messagePanelManager.conversationItemPrefab, messagePanelManager.conversationListContent);
@@ -580,7 +523,6 @@ public class DMTestDataGenerator : MonoBehaviour
                 DateTime time = DateTime.Now.AddMinutes(-UnityEngine.Random.Range(1, 1440)); // 1분 ~ 24시간 전
 
                 SetupTestConversationItem(item, $"test_user_{i}", username, lastMessage, time, unreadCount, emoji);
-                Debug.Log($"[DMTestData] ConversationItem #{i} 생성: {username}");
 
                 yield return null;
             }
@@ -588,9 +530,6 @@ public class DMTestDataGenerator : MonoBehaviour
 
         isGenerated = true;
         isPopulatingConversations = false;
-        Debug.Log($"[DMTestData] ★★★ 테스트 대화 목록 생성 완료! ★★★");
-        Debug.Log($"  - AdminNoticeItem: 1개 (WOOPANG 공지)");
-        Debug.Log($"  - ConversationItem: {conversationCount}개 (일반 DM 대화)");
     }
 
     private void SetupAdminNoticeItem(GameObject item, string message)
@@ -672,8 +611,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (content == null)
             content = item.transform;
 
-        Log($"ConversationItem content 찾음: {content.name}");
-
         // UsernameText - 여러 경로 시도
         Text usernameText = content.Find("UsernameText")?.GetComponent<Text>();
         if (usernameText == null)
@@ -686,11 +623,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (usernameText != null)
         {
             usernameText.text = username;
-            Log($"  UsernameText 설정: {username}");
-        }
-        else
-        {
-            Debug.LogWarning($"[DMTestData] UsernameText를 찾을 수 없음: {item.name}");
         }
 
         // PreviewText - 영역 크기에 맞게 자동 ellipsis 처리
@@ -705,11 +637,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (previewText != null)
         {
             SetTextWithEllipsis(previewText, lastMessage);
-            Log($"  PreviewText 설정: {lastMessage}");
-        }
-        else
-        {
-            Debug.LogWarning($"[DMTestData] PreviewText를 찾을 수 없음: {item.name}");
         }
 
         // TimeText
@@ -722,7 +649,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (timeText != null)
         {
             timeText.text = GetRelativeTime(time);
-            Log($"  TimeText 설정: {timeText.text}");
         }
 
         // UnreadBadge
@@ -873,11 +799,6 @@ public class DMTestDataGenerator : MonoBehaviour
             if (titleTr != null)
             {
                 messagePanelManager.chatRoomTitle = titleTr.GetComponent<Text>();
-                Log($"chatRoomTitle 재연결 완료: {titleTr.name}");
-            }
-            else
-            {
-                Debug.LogWarning("[DMTestData] chatRoomTitle를 찾을 수 없음! ChatRoomPanel 하위에 ChatTitle 또는 TitleText가 필요합니다.");
             }
         }
 
@@ -1013,7 +934,6 @@ public class DMTestDataGenerator : MonoBehaviour
         // 자동 응답 시뮬레이션 (1-3초 후)
         StartCoroutine(SimulateAutoReply());
 
-        Log($"메시지 전송: {message}");
     }
 
     /// <summary>
@@ -1039,7 +959,6 @@ public class DMTestDataGenerator : MonoBehaviour
         }
 
         messageReadStatus[msgId] = true;
-        Log($"메시지 읽음 확인: {msgId}");
     }
 
     /// <summary>
@@ -1065,7 +984,6 @@ public class DMTestDataGenerator : MonoBehaviour
         // 스크롤 맨 아래로
         StartCoroutine(ScrollToBottomDelayed());
 
-        Log($"자동 응답: {replyMessage}");
     }
 
     private IEnumerator PopulateTestMessages(string oderId, string username, bool isAdmin)
@@ -1393,12 +1311,10 @@ public class DMTestDataGenerator : MonoBehaviour
     {
         if (isSimulationRunning)
         {
-            Debug.LogWarning("[DMTestData] 시뮬레이션이 이미 실행 중입니다.");
             return;
         }
 
         simulationCoroutine = StartCoroutine(AutoMessageSimulationRoutine());
-        Log($"자동 메시지 시뮬레이션 시작 - {simulationDuration}초 동안 {totalMessages}개 메시지");
     }
 
     /// <summary>
@@ -1413,7 +1329,6 @@ public class DMTestDataGenerator : MonoBehaviour
         }
 
         isSimulationRunning = false;
-        Log(" 자동 메시지 시뮬레이션 중지");
     }
 
     /// <summary>
@@ -1426,8 +1341,6 @@ public class DMTestDataGenerator : MonoBehaviour
         // 평균 간격 계산 (약간의 랜덤 변동)
         float averageInterval = simulationDuration / totalMessages;
         int messagesSent = 0;
-
-        Log($"시뮬레이션 시작 - 평균 간격: {averageInterval:F1}초");
 
         while (messagesSent < totalMessages && isSimulationRunning)
         {
@@ -1458,11 +1371,9 @@ public class DMTestDataGenerator : MonoBehaviour
             UpdateConversationListPreview(senderId, senderName, message);
 
             messagesSent++;
-            Log($"시뮬레이션 메시지 #{messagesSent}: {senderName} - {message}");
         }
 
         isSimulationRunning = false;
-        Log($"자동 메시지 시뮬레이션 완료 - 총 {messagesSent}개 메시지 전송됨");
     }
 
     /// <summary>
@@ -1560,7 +1471,6 @@ public class DMTestDataGenerator : MonoBehaviour
                 if (titleText != null && titleText.text == username)
                 {
                     ClearUnreadBadgeOnItem(item, content);
-                    Log($"읽지않음 배지 클리어: {username} (AdminNotice)");
                     return;
                 }
             }
@@ -1569,12 +1479,10 @@ public class DMTestDataGenerator : MonoBehaviour
             if (usernameText != null && usernameText.text == username)
             {
                 ClearUnreadBadgeOnItem(item, content);
-                Log($"읽지않음 배지 클리어: {username}");
                 return;
             }
         }
 
-        Log($"읽지않음 배지 클리어 대상 못찾음: {username}");
     }
 
     /// <summary>
@@ -1667,7 +1575,6 @@ public class DMTestDataGenerator : MonoBehaviour
         // 이미 CSF가 있으면 기존 설정 유지
 
         // 앵커 설정은 건드리지 않음 - 씬/프리팹에서 설정한 값 존중
-        Log($"Content 레이아웃 확인 완료: {content.name}");
     }
 
     /// <summary>
@@ -1678,28 +1585,18 @@ public class DMTestDataGenerator : MonoBehaviour
         if (messagePanelManager == null) return;
 
 #if UNITY_EDITOR
-        Debug.Log("[DMTestData] LoadPrefabsIfNeeded 실행");
-
         // 에디터에서는 AssetDatabase로 로드
         if (messagePanelManager.conversationItemPrefab == null)
         {
             messagePanelManager.conversationItemPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/DM/ConversationItem.prefab");
-            if (messagePanelManager.conversationItemPrefab != null)
-                Debug.Log("[DMTestData] ConversationItem 프리팹 AssetDatabase에서 로드 성공");
-            else
+            if (messagePanelManager.conversationItemPrefab == null)
                 Debug.LogError("[DMTestData] ConversationItem 프리팹 로드 실패! Assets/Prefabs/DM/ConversationItem.prefab 확인 필요");
-        }
-        else
-        {
-            Debug.Log("[DMTestData] ConversationItem 프리팹 이미 연결됨");
         }
 
         if (messagePanelManager.adminNoticePrefab == null)
         {
             messagePanelManager.adminNoticePrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/DM/AdminNoticeItem.prefab");
-            if (messagePanelManager.adminNoticePrefab != null)
-                Debug.Log("[DMTestData] AdminNoticeItem 프리팹 AssetDatabase에서 로드 성공");
-            else
+            if (messagePanelManager.adminNoticePrefab == null)
                 Debug.LogError("[DMTestData] AdminNoticeItem 프리팹 로드 실패!");
         }
 
@@ -1746,7 +1643,6 @@ public class DMTestDataGenerator : MonoBehaviour
             if (found != null)
             {
                 messagePanelManager.conversationListContent = found;
-                Log($"conversationListContent 자동 찾기 성공: {path}");
                 return;
             }
         }
@@ -1756,7 +1652,6 @@ public class DMTestDataGenerator : MonoBehaviour
         if (content != null)
         {
             messagePanelManager.conversationListContent = content;
-            Log($"conversationListContent 재귀 찾기 성공: {content.name}");
         }
     }
 
@@ -1837,7 +1732,6 @@ public class DMTestDataGenerator : MonoBehaviour
         }
 
         // 마스크가 적용되면 자식 이미지가 원형으로 클리핑됨
-        Log($"원형 아바타 설정 완료: {avatarObj.name}");
     }
 
     /// <summary>

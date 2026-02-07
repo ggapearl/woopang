@@ -153,8 +153,9 @@ public class SystemUIManager : MonoBehaviour
             Log($"네비게이션 바 체크 실패: {e.Message}");
             return true; // 안전하게 존재한다고 가정
         }
-#endif
+#else
         return false;
+#endif
     }
     
     void SetupSystemUI()
