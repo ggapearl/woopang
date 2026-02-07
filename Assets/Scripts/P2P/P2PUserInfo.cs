@@ -57,6 +57,10 @@ public class P2PUserInfo : MonoBehaviour
     [Tooltip("인디케이터 색상 - P2P 사용자 색상 #E95383")]
     public Color indicatorColor = new Color(0.914f, 0.325f, 0.514f, 1f); // #E95383
 
+    [Header("Avatar Visibility")]
+    [Tooltip("아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)")]
+    public bool hideAvatarVisuals = true;
+
     private Target targetComponent;
 
     [Header("Auto-Generated Avatar")]
@@ -121,11 +125,118 @@ public class P2PUserInfo : MonoBehaviour
 
         // UI 자동 생성 (usernameText, distanceText)
         SetupAutoUI();
+
+        // 아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)
+        if (hideAvatarVisuals)
+        {
+            HideAllVisuals();
+        }
+    }
+
+    /// <summary>
+    /// 모든 시각적 요소 숨기기 (OffscreenIndicator는 유지)
+    /// 렌더러만 비활성화하고 콜라이더/Target 컴포넌트는 유지
+    /// </summary>
+    private void HideAllVisuals()
+    {
+        // 3D 아바타 렌더러 숨기기
+        if (avatarRenderer != null)
+            avatarRenderer.enabled = false;
+
+        if (pulseRenderer != null)
+            pulseRenderer.enabled = false;
+
+        // 자동 생성된 큐브 아바타 숨기기
+        if (generatedCubeAvatar != null)
+        {
+            var cubeRenderer = generatedCubeAvatar.GetComponent<MeshRenderer>();
+            if (cubeRenderer != null)
+                cubeRenderer.enabled = false;
+        }
+
+        // 모든 자식 렌더러 숨기기
+        foreach (var renderer in GetComponentsInChildren<Renderer>())
+        {
+            renderer.enabled = false;
+        }
+
+        // UI 요소 숨기기 (Canvas, Text 등)
+        foreach (var canvas in GetComponentsInChildren<Canvas>())
+        {
+            canvas.enabled = false;
+        }
+
+        if (canvasGroup != null)
+            canvasGroup.alpha = 0f;
+
+        // Billboard 숨기기
+        if (billboardTransform != null)
+            billboardTransform.gameObject.SetActive(false);
+
+        Debug.Log($"[P2PUserInfo] Avatar visuals hidden for user: {username}, OffscreenIndicator maintained");
+    }
+
+    /// <summary>
+    /// P2P 사용자 완전히 숨기기 (오프스크린 인디케이터 포함)
+    /// 필터가 None일 때 호출
+    /// </summary>
+    public void HideCompletely()
+    {
+        // 모든 렌더러 숨기기
+        HideAllVisuals();
+
+        // 오프스크린 인디케이터(Target) 비활성화
+        if (targetComponent != null)
+        {
+            targetComponent.enabled = false;
+        }
+
+        // 콜라이더 비활성화 (터치 방지)
+        if (touchCollider != null)
+        {
+            touchCollider.enabled = false;
+        }
+
+        Debug.Log($"[P2PUserInfo] User completely hidden: {username}");
+    }
+
+    /// <summary>
+    /// P2P 사용자 다시 표시 (필터 해제 시)
+    /// </summary>
+    public void ShowAgain()
+    {
+        // 오프스크린 인디케이터(Target) 활성화
+        if (targetComponent != null)
+        {
+            targetComponent.enabled = true;
+        }
+
+        // 콜라이더 활성화
+        if (touchCollider != null)
+        {
+            touchCollider.enabled = true;
+        }
+
+        // hideAvatarVisuals 설정에 따라 렌더러 처리
+        if (!hideAvatarVisuals)
+        {
+            // 렌더러 다시 활성화 (hideAvatarVisuals가 false인 경우에만)
+            if (avatarRenderer != null) avatarRenderer.enabled = true;
+            if (pulseRenderer != null) pulseRenderer.enabled = true;
+            if (generatedCubeAvatar != null)
+            {
+                var cubeRenderer = generatedCubeAvatar.GetComponent<MeshRenderer>();
+                if (cubeRenderer != null) cubeRenderer.enabled = true;
+            }
+        }
+
+        Debug.Log($"[P2PUserInfo] User shown again: {username}");
     }
 
     /// <summary>
     /// 오프스크린 인디케이터용 Target 컴포넌트 설정
     /// Target 색상을 #E95383 (핑크)으로 강제 설정
+    /// 화면 안에 있을 때 BoxIndicator, 화면 밖에 있을 때 ArrowIndicator 표시
     /// </summary>
     private void SetupOffScreenIndicator()
     {
@@ -143,7 +254,12 @@ public class P2PUserInfo : MonoBehaviour
         targetComponent.TargetColor = indicatorColor;
         targetComponent.PlaceName = username;
 
-        Debug.Log($"[P2PUserInfo] Target color set to #E95383 for user: {username}");
+        // 인디케이터 설정: 화면 안에 있을 때 BoxIndicator, 화면 밖에 있을 때 ArrowIndicator
+        targetComponent.NeedBoxIndicator = true;      // 화면 안: 박스 표시
+        targetComponent.NeedArrowIndicator = true;    // 화면 밖: 화살표 표시
+        targetComponent.NeedDistanceText = true;      // 거리 텍스트 표시
+
+        Debug.Log($"[P2PUserInfo] Target configured for user: {username} - BoxIndicator: on screen, ArrowIndicator: off screen");
     }
 
     /// <summary>
@@ -405,7 +521,16 @@ public class P2PUserInfo : MonoBehaviour
         // Open profile using ProfileManager
         if (ProfileManager.Instance != null)
         {
-            ProfileManager.Instance.ShowProfile(userId);
+            // 가상 사용자(virtual_user_XXX)인 경우 테스트 프로필 표시
+            if (IsVirtualUser(userId))
+            {
+                Debug.Log($"[P2PUserInfo] Virtual user detected, showing test profile");
+                ProfileManager.Instance.ShowTestProfile(userId, username);
+            }
+            else
+            {
+                ProfileManager.Instance.ShowProfile(userId);
+            }
         }
         else
         {
@@ -414,6 +539,15 @@ public class P2PUserInfo : MonoBehaviour
 
         // Reset highlight after delay
         StartCoroutine(ResetHighlightAfterDelay(0.5f));
+    }
+
+    /// <summary>
+    /// 가상 사용자인지 확인 (virtual_user_ 접두사로 시작하는 ID)
+    /// </summary>
+    private bool IsVirtualUser(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+        return id.StartsWith("virtual_user_") || id.StartsWith("test_user_");
     }
 
     /// <summary>

@@ -44,7 +44,6 @@ public class ObjectCountUI : MonoBehaviour
         // 초기 상태: 숨김 (DataManager가 FetchDataProgressively 시작 시 활성화)
         canvasGroup.alpha = 0f;
         gameObject.SetActive(false);
-        Debug.Log("[WoopangDebug][ObjectCountUI] Awake - 초기 상태: 비활성화");
     }
 
     /// <summary>
@@ -54,6 +53,9 @@ public class ObjectCountUI : MonoBehaviour
     /// <param name="isFinal">마지막 Tier 완료 여부</param>
     public void UpdateObjectCount(int count, bool isFinal)
     {
+        // 비활성 상태면 무시
+        if (!gameObject.activeInHierarchy) return;
+
         // 최소 표시 시간이 지났는지 확인
         float timeSinceLastUpdate = Time.time - lastUpdateTime;
 
@@ -160,8 +162,6 @@ public class ObjectCountUI : MonoBehaviour
             countText.text = noDataText;
         }
 
-        Debug.Log("[WoopangDebug][ObjectCountUI] 데이터 없음 - 타임아웃 메시지 표시");
-
         // 3초 대기 (기존 displayDuration과 동일하게 처리하거나 별도 대기)
         yield return new WaitForSeconds(3f);
 
@@ -207,10 +207,11 @@ public class ObjectCountUI : MonoBehaviour
     /// </summary>
     public void ResetUI()
     {
-        Debug.Log("[WoopangDebug][ObjectCountUI] ResetUI 호출 - 활성화 시작");
-
-        // 진행 중인 코루틴 모두 중단
-        StopAllCoroutines();
+        // 진행 중인 코루틴 모두 중단 (활성 상태일 때만)
+        if (gameObject.activeInHierarchy)
+        {
+            StopAllCoroutines();
+        }
         fadeOutCoroutine = null;
         timeoutCoroutine = null;
 
@@ -221,11 +222,12 @@ public class ObjectCountUI : MonoBehaviour
 
         // UI 활성화 및 페이드인
         gameObject.SetActive(true);
-        canvasGroup.alpha = 1f;
+        if (canvasGroup != null) canvasGroup.alpha = 1f;
+
+        // 활성화 후에도 비활성 상태면 (부모가 비활성) 코루틴 시작 안함
+        if (!gameObject.activeInHierarchy) return;
 
         // 타임아웃 체크 시작
         timeoutCoroutine = StartCoroutine(CheckForNoDataTimeout());
-
-        Debug.Log("[WoopangDebug][ObjectCountUI] ResetUI 완료 - 활성화됨");
     }
 }

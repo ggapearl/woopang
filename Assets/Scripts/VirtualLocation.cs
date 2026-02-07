@@ -76,17 +76,13 @@ public class VirtualLocation : MonoBehaviour
             if (sessionOrigin != null)
             {
                 xrOrigin = sessionOrigin.transform;
-                Debug.Log($"[VirtualLocation] XR Origin 자동 검색 성공: {xrOrigin.name}");
             }
             else
             {
                 // ARSessionOrigin이 없으면 "XR Origin" 이름으로 검색
                 GameObject xrObj = GameObject.Find("XR Origin");
                 if (xrObj != null)
-                {
                     xrOrigin = xrObj.transform;
-                    Debug.Log($"[VirtualLocation] XR Origin 이름으로 검색 성공: {xrOrigin.name}");
-                }
             }
         }
 
@@ -163,10 +159,7 @@ public class VirtualLocation : MonoBehaviour
         // XR Origin을 반대 방향으로 이동 (카메라가 해당 위치에 있는 것처럼)
         Vector3 newPosition = new Vector3(-x, xrOrigin.position.y, -z);
         xrOrigin.position = newPosition;
-
         lastKnownPosition = newPosition;
-
-        Debug.Log($"[VirtualLocation] XR Origin 이동: GPS({mockLatitude:F6}, {mockLongitude:F6}) → World({newPosition.x:F2}, {newPosition.y:F2}, {newPosition.z:F2})");
     }
 
 #if UNITY_EDITOR

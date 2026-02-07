@@ -998,7 +998,8 @@ public class ModelUploadManager : MonoBehaviour
         formData.AddField("longitude", gpsData.y.ToString("F6"));
         formData.AddField("altitude", gpsData.z.ToString("F2"));
         formData.AddField("model_type", "custom");
-        formData.AddField("status", "approved");
+        // status는 서버에서 AUTO_APPROVE 설정에 따라 결정
+        formData.AddField("device_id", SystemInfo.deviceUniqueIdentifier);  // 업로더 추적용
         formData.AddField("pet_friendly", petFriendlyToggle?.isOn ?? false ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroomToggle?.isOn ?? false ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");

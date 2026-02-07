@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using TMPro;
 
 public class FilterManager : MonoBehaviour
 {
     [Header("Filter Toggles")]
     [SerializeField] private Toggle petFriendlyToggle;
+    private Toggle p2pToggle;  // 자동 연결 (Inspector 사용 안함)
     [SerializeField] private Toggle publicDataToggle;
     [SerializeField] private Toggle subwayToggle;
     [SerializeField] private Toggle alcoholToggle;
@@ -31,7 +33,16 @@ public class FilterManager : MonoBehaviour
         NoPetFriendly = 2        // 애견동반 안되는 곳만 (체크해제)
     }
 
-    private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;
+    // P2P 사용자 필터 상태
+    public enum P2PFilterState
+    {
+        All = 0,                 // P2P 전체 (핑크색)
+        FollowingOnly = 1,       // P2P 팔로잉 (흰색)
+        None = 2                 // P2P 제외 (회색)
+    }
+
+    private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
+    private P2PFilterState p2pFilterState = P2PFilterState.FollowingOnly;  // 기본값: 팔로잉
     private bool filterPublicData = true;
     private bool filterSubway = true;
     private bool filterAlcohol = true;
@@ -43,6 +54,7 @@ public class FilterManager : MonoBehaviour
 
     // PlayerPrefs 키 (V2)
     private const string PREF_PET_FRIENDLY = "Filter_PetFriendly_V3";
+    private const string PREF_P2P = "Filter_P2P_V1";
     private const string PREF_PUBLIC_DATA = "Filter_PublicData_V2";
     private const string PREF_SUBWAY = "Filter_Subway_V2";
     private const string PREF_ALCOHOL = "Filter_Alcohol_V2";
@@ -54,9 +66,12 @@ public class FilterManager : MonoBehaviour
     private Dictionary<string, Dictionary<string, string>> localizedFilterNames = new Dictionary<string, Dictionary<string, string>>
     {
         { "en", new Dictionary<string, string> {
-            { "petFriendly", "Pet Friendly" },
+            { "petFriendlyInclude", "Pet Friendly (Include)" },
             { "petFriendlyRequired", "Pet Friendly (Required)" },
-            { "petFriendlyNotAllowed", "Pet Friendly (N/A)" },
+            { "petFriendlyExclude", "Pet Friendly (Exclude)" },
+            { "p2pAll", "P2P (All)" },
+            { "p2pFollowing", "P2P (Following)" },
+            { "p2pNone", "P2P (Exclude)" },
             { "publicData", "Public Data" },
             { "subway", "Metro" },
             { "alcohol", "Alcohol" },
@@ -65,9 +80,12 @@ public class FilterManager : MonoBehaviour
             { "object3D", "3D Objects" }
         }},
         { "ko", new Dictionary<string, string> {
-            { "petFriendly", "애견동반" },
+            { "petFriendlyInclude", "애견동반(포함)" },
             { "petFriendlyRequired", "애견동반(필수)" },
-            { "petFriendlyNotAllowed", "애견동반(불가)" },
+            { "petFriendlyExclude", "애견동반(제외)" },
+            { "p2pAll", "P2P(전체)" },
+            { "p2pFollowing", "P2P(팔로잉)" },
+            { "p2pNone", "P2P(제외)" },
             { "publicData", "공공데이터" },
             { "subway", "지하철" },
             { "alcohol", "주류판매" },
@@ -76,9 +94,12 @@ public class FilterManager : MonoBehaviour
             { "object3D", "3D 오브젝트" }
         }},
         { "ja", new Dictionary<string, string> {
-            { "petFriendly", "ペット同伴" },
+            { "petFriendlyInclude", "ペット同伴(含む)" },
             { "petFriendlyRequired", "ペット同伴(必須)" },
-            { "petFriendlyNotAllowed", "ペット同伴(不可)" },
+            { "petFriendlyExclude", "ペット同伴(除外)" },
+            { "p2pAll", "P2P(全員)" },
+            { "p2pFollowing", "P2P(フォロー中)" },
+            { "p2pNone", "P2P(除外)" },
             { "publicData", "公共データ" },
             { "subway", "地下鉄" },
             { "alcohol", "アルコール" },
@@ -87,9 +108,12 @@ public class FilterManager : MonoBehaviour
             { "object3D", "3Dオブジェクト" }
         }},
         { "zh", new Dictionary<string, string> {
-            { "petFriendly", "宠物友好" },
+            { "petFriendlyInclude", "宠物友好(包含)" },
             { "petFriendlyRequired", "宠物友好(必须)" },
-            { "petFriendlyNotAllowed", "宠物友好(禁止)" },
+            { "petFriendlyExclude", "宠物友好(排除)" },
+            { "p2pAll", "P2P(全部)" },
+            { "p2pFollowing", "P2P(关注)" },
+            { "p2pNone", "P2P(排除)" },
             { "publicData", "公共数据" },
             { "subway", "地铁" },
             { "alcohol", "酒类销售" },
@@ -98,9 +122,12 @@ public class FilterManager : MonoBehaviour
             { "object3D", "3D对象" }
         }},
         { "es", new Dictionary<string, string> {
-            { "petFriendly", "Admite Mascotas" },
+            { "petFriendlyInclude", "Mascotas (Incluir)" },
             { "petFriendlyRequired", "Mascotas (Obligatorio)" },
-            { "petFriendlyNotAllowed", "Mascotas (No)" },
+            { "petFriendlyExclude", "Mascotas (Excluir)" },
+            { "p2pAll", "P2P (Todos)" },
+            { "p2pFollowing", "P2P (Siguiendo)" },
+            { "p2pNone", "P2P (Excluir)" },
             { "publicData", "Datos Públicos" },
             { "subway", "Metro" },
             { "alcohol", "Alcohol" },
@@ -113,15 +140,17 @@ public class FilterManager : MonoBehaviour
     // 현재 언어 코드 저장
     private string currentLangCode = "en";
 
+    // P2P 토글은 P2PUserFilterPanel이 전담 처리 (충돌 방지)
+    // FilterManager에서는 P2P 토글을 연결하지 않음
+
     void Start()
     {
         LoadFilterSettings();
         UpdateLanguage();
 
-        // PetFriendly는 별도 처리 (3-state) - IPointerClickHandler 방식으로 처리
+        // PetFriendly는 별도 처리 (3-state)
         if (petFriendlyToggle != null)
         {
-            // Toggle의 onValueChanged를 사용하여 클릭 감지
             petFriendlyToggle.onValueChanged.AddListener(OnPetFriendlyToggleChanged);
             UpdatePetFriendlyToggleUI();
         }
@@ -163,12 +192,27 @@ public class FilterManager : MonoBehaviour
 
     private void SetToggleLabel(Toggle toggle, string text)
     {
-        if (toggle != null)
+        if (toggle == null) return;
+
+        // Legacy Text 시도
+        Text label = toggle.GetComponentInChildren<Text>(true);
+        if (label != null)
         {
-            Text label = toggle.GetComponentInChildren<Text>();
-            if (label != null) label.text = text;
+            label.text = text;
+        }
+
+        // TMPro Text 시도
+        TextMeshProUGUI tmpLabel = toggle.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (tmpLabel != null)
+        {
+            tmpLabel.text = text;
         }
     }
+
+    // 애견동반 필터 색상 (하드코딩)
+    private static readonly Color PET_COLOR_YELLOW = new Color(0.984f, 0.757f, 0.365f);  // 노란색 #fbc15d (필수)
+    private static readonly Color PET_COLOR_WHITE = Color.white;                          // 흰색 (포함)
+    private static readonly Color PET_COLOR_GRAY = new Color(0.5f, 0.5f, 0.5f);          // 회색 (제외)
 
     private void UpdatePetFriendlyToggleUI()
     {
@@ -176,43 +220,83 @@ public class FilterManager : MonoBehaviour
 
         isUpdatingToggles = true;
 
-        // 노란색 파싱
-        Color yellowColor;
-        if (!ColorUtility.TryParseHtmlString("#fbc15d", out yellowColor))
-        {
-            yellowColor = Color.yellow; // fallback
-        }
+        // isOn은 항상 true로 유지 (Unity Toggle 색상 처리 방지)
+        petFriendlyToggle.isOn = true;
 
         // 다국어 텍스트 가져오기
         var texts = localizedFilterNames.ContainsKey(currentLangCode)
             ? localizedFilterNames[currentLangCode]
             : localizedFilterNames["en"];
 
+        string newLabelText = "";
+        Color bgColor = PET_COLOR_YELLOW;
+
         // 상태에 따라 UI 업데이트
+        // 필수(노란색) -> 포함(흰색) -> 제외(회색)
         switch (petFriendlyState)
         {
-            case PetFriendlyFilterState.All:
-                petFriendlyToggle.isOn = true;
-                // 체크박스 흰색 배경, 글자만 노란색 - 모두 표시
-                SetToggleBackground(petFriendlyToggle, Color.white);
-                // 레이블 텍스트: "애견동반" (기본)
-                SetToggleLabel(petFriendlyToggle, texts["petFriendly"]);
-                break;
             case PetFriendlyFilterState.OnlyPetFriendly:
-                petFriendlyToggle.isOn = true;
-                // 체크박스 노란색(#fbc15d) 배경, 노란색 글자 - 애견동반만
-                SetToggleBackground(petFriendlyToggle, yellowColor);
-                // 레이블 텍스트: "애견동반(필수)"
-                SetToggleLabel(petFriendlyToggle, texts["petFriendlyRequired"]);
+                bgColor = PET_COLOR_YELLOW;  // 노란색
+                newLabelText = texts["petFriendlyRequired"];  // 애견동반(필수)
+                break;
+            case PetFriendlyFilterState.All:
+                bgColor = PET_COLOR_WHITE;  // 흰색
+                newLabelText = texts["petFriendlyInclude"];  // 애견동반(포함)
                 break;
             case PetFriendlyFilterState.NoPetFriendly:
-                petFriendlyToggle.isOn = false;
-                // 체크박스 회색 배경, 회색 글자 - 애견동반 아닌곳만
-                SetToggleBackground(petFriendlyToggle, Color.gray);
-                // 레이블 텍스트: "애견동반(불가)"
-                SetToggleLabel(petFriendlyToggle, texts["petFriendlyNotAllowed"]);
+                bgColor = PET_COLOR_GRAY;  // 회색
+                newLabelText = texts["petFriendlyExclude"];  // 애견동반(제외)
                 break;
         }
+
+        SetToggleBackgroundAndCheckmark(petFriendlyToggle, bgColor);
+        SetToggleLabel(petFriendlyToggle, newLabelText);
+
+        isUpdatingToggles = false;
+    }
+
+    // P2P 필터 색상 (하드코딩)
+    private static readonly Color P2P_COLOR_FOLLOWING = new Color(0.91f, 0.33f, 0.63f);  // 핑크색 #E854A1 (팔로잉)
+    private static readonly Color P2P_COLOR_ALL = Color.white;                            // 흰색 (전체)
+    private static readonly Color P2P_COLOR_NONE = new Color(0.5f, 0.5f, 0.5f);          // 회색 (제외)
+
+    private void UpdateP2PToggleUI()
+    {
+        if (p2pToggle == null) return;
+
+        isUpdatingToggles = true;
+
+        // isOn은 항상 true로 유지 (Unity Toggle 색상 처리 방지)
+        p2pToggle.isOn = true;
+
+        // 다국어 텍스트 가져오기
+        var texts = localizedFilterNames.ContainsKey(currentLangCode)
+            ? localizedFilterNames[currentLangCode]
+            : localizedFilterNames["en"];
+
+        string newLabelText = "";
+        Color bgColor = P2P_COLOR_FOLLOWING;
+
+        // 상태에 따라 UI 업데이트
+        // 팔로잉(핑크색) -> 전체(흰색) -> 제외(회색)
+        switch (p2pFilterState)
+        {
+            case P2PFilterState.FollowingOnly:
+                bgColor = P2P_COLOR_FOLLOWING;  // 핑크색
+                newLabelText = texts["p2pFollowing"];
+                break;
+            case P2PFilterState.All:
+                bgColor = P2P_COLOR_ALL;        // 흰색
+                newLabelText = texts["p2pAll"];
+                break;
+            case P2PFilterState.None:
+                bgColor = P2P_COLOR_NONE;       // 회색
+                newLabelText = texts["p2pNone"];
+                break;
+        }
+
+        SetToggleBackgroundAndCheckmark(p2pToggle, bgColor);
+        SetToggleLabel(p2pToggle, newLabelText);
 
         isUpdatingToggles = false;
     }
@@ -230,6 +314,53 @@ public class FilterManager : MonoBehaviour
             {
                 bgImage.color = color;
             }
+        }
+    }
+
+    /// <summary>
+    /// Toggle의 Background와 Checkmark 모두 같은 색상으로 설정
+    /// </summary>
+    private void SetToggleBackgroundAndCheckmark(Toggle toggle, Color color)
+    {
+        if (toggle == null) return;
+
+        // Background 색상 설정
+        Transform bgTransform = toggle.transform.Find("Background");
+        if (bgTransform != null)
+        {
+            Image bgImage = bgTransform.GetComponent<Image>();
+            if (bgImage != null)
+            {
+                bgImage.color = color;
+            }
+
+            // Checkmark도 같은 색상으로 (Background 아래에 있는 경우)
+            Transform checkmark = bgTransform.Find("Checkmark");
+            if (checkmark != null)
+            {
+                Image checkImage = checkmark.GetComponent<Image>();
+                if (checkImage != null)
+                {
+                    checkImage.color = color;
+                }
+            }
+        }
+
+        // Checkmark가 직접 자식인 경우
+        Transform directCheckmark = toggle.transform.Find("Checkmark");
+        if (directCheckmark != null)
+        {
+            Image checkImage = directCheckmark.GetComponent<Image>();
+            if (checkImage != null)
+            {
+                checkImage.color = color;
+            }
+        }
+
+        // Graphic (targetGraphic) 색상도 설정
+        if (toggle.graphic != null)
+        {
+            toggle.graphic.color = color;
         }
     }
 
@@ -264,6 +395,8 @@ public class FilterManager : MonoBehaviour
 
         // PetFriendly는 All 상태로 설정
         petFriendlyState = (filterName == "petFriendly") ? PetFriendlyFilterState.All : PetFriendlyFilterState.NoPetFriendly;
+        // P2P도 마찬가지
+        p2pFilterState = (filterName == "p2p") ? P2PFilterState.All : P2PFilterState.None;
         filterPublicData = (filterName == "publicData");
         filterSubway = (filterName == "subway");
         filterAlcohol = (filterName == "alcohol");
@@ -280,7 +413,8 @@ public class FilterManager : MonoBehaviour
 
     private void LoadFilterSettings()
     {
-        petFriendlyState = (PetFriendlyFilterState)PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 0); // 기본값 All (0)
+        petFriendlyState = (PetFriendlyFilterState)PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 0); // 기본값 All (0) = 포함
+        p2pFilterState = (P2PFilterState)PlayerPrefs.GetInt(PREF_P2P, 1); // 기본값 FollowingOnly (1) = 팔로잉
         filterPublicData = PlayerPrefs.GetInt(PREF_PUBLIC_DATA, 1) == 1;
         filterSubway = PlayerPrefs.GetInt(PREF_SUBWAY, 1) == 1;
         filterAlcohol = PlayerPrefs.GetInt(PREF_ALCOHOL, 1) == 1;
@@ -292,6 +426,7 @@ public class FilterManager : MonoBehaviour
     private void SaveFilterSettings()
     {
         PlayerPrefs.SetInt(PREF_PET_FRIENDLY, (int)petFriendlyState);
+        PlayerPrefs.SetInt(PREF_P2P, (int)p2pFilterState);
         PlayerPrefs.SetInt(PREF_PUBLIC_DATA, filterPublicData ? 1 : 0);
         PlayerPrefs.SetInt(PREF_SUBWAY, filterSubway ? 1 : 0);
         PlayerPrefs.SetInt(PREF_ALCOHOL, filterAlcohol ? 1 : 0);
@@ -304,6 +439,7 @@ public class FilterManager : MonoBehaviour
     private void UpdateAllToggleUI()
     {
         UpdatePetFriendlyToggleUI();
+        // P2P 토글은 P2PUserFilterPanel이 전담 처리
         if (publicDataToggle != null) publicDataToggle.isOn = filterPublicData;
         if (subwayToggle != null) subwayToggle.isOn = filterSubway;
         if (alcoholToggle != null) alcoholToggle.isOn = filterAlcohol;
@@ -316,21 +452,44 @@ public class FilterManager : MonoBehaviour
     {
         if (isUpdatingToggles) return;
 
-        // 3단계 순환: All(체크, 흰색) -> OnlyPetFriendly(체크, 노란색) -> NoPetFriendly(체크해제)
+        // 3단계 순환: 필수(노란색) -> 포함(흰색) -> 제외(회색)
         switch (petFriendlyState)
         {
-            case PetFriendlyFilterState.All:
-                petFriendlyState = PetFriendlyFilterState.OnlyPetFriendly;
-                break;
             case PetFriendlyFilterState.OnlyPetFriendly:
+                petFriendlyState = PetFriendlyFilterState.All;
+                break;
+            case PetFriendlyFilterState.All:
                 petFriendlyState = PetFriendlyFilterState.NoPetFriendly;
                 break;
             case PetFriendlyFilterState.NoPetFriendly:
-                petFriendlyState = PetFriendlyFilterState.All;
+                petFriendlyState = PetFriendlyFilterState.OnlyPetFriendly;
                 break;
         }
 
         UpdatePetFriendlyToggleUI();
+        SaveFilterSettings();
+        ApplyAllFilters();
+    }
+
+    private void OnP2PToggleChanged(bool isOn)
+    {
+        if (isUpdatingToggles) return;
+
+        // 3단계 순환: 팔로잉(핑크색) -> 전체(흰색) -> 제외(회색)
+        switch (p2pFilterState)
+        {
+            case P2PFilterState.FollowingOnly:
+                p2pFilterState = P2PFilterState.All;
+                break;
+            case P2PFilterState.All:
+                p2pFilterState = P2PFilterState.None;
+                break;
+            case P2PFilterState.None:
+                p2pFilterState = P2PFilterState.FollowingOnly;
+                break;
+        }
+
+        UpdateP2PToggleUI();
         SaveFilterSettings();
         ApplyAllFilters();
     }
@@ -390,6 +549,8 @@ public class FilterManager : MonoBehaviour
         if (placeListManager != null) placeListManager.ApplyFilters(filters);
         if (dataManager != null) dataManager.ApplyFilters(filters);
         if (tourAPIManager != null) tourAPIManager.ApplyFilters(filters);
+
+        // P2P 필터는 P2PUserFilterPanel이 전담 처리
     }
 
     public Dictionary<string, bool> GetActiveFilters()

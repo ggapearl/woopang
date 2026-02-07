@@ -151,7 +151,7 @@ public class IndicatorSparkleHelper : MonoBehaviour
 
     private static Canvas FindIndicatorCanvas()
     {
-        Canvas[] canvases = FindObjectsOfType<Canvas>();
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         foreach (Canvas canvas in canvases)
         {
             if (canvas.name.Contains("Offscreen") || canvas.name.Contains("Indicator"))

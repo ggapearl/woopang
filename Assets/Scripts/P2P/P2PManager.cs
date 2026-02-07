@@ -84,12 +84,14 @@ public class P2PManager : MonoBehaviour
     [SerializeField] private int maxVisibleUsers = 20;           // 최대 표시 사용자 수
     [SerializeField] private float maxTrackingDistance = 1000f;  // 1km
     [SerializeField] private int initialPoolSize = 10;           // 초기 풀 크기
+    [Tooltip("아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)")]
+    [SerializeField] private bool hideAvatarVisuals = true;      // 아바타 숨기고 인디케이터만 표시
 
     [Header("User Filter Settings")]
     [SerializeField] private UserFilterMode userFilterMode = UserFilterMode.All;  // 사용자 필터 모드
 
     [Header("Debug")]
-    [SerializeField] private bool showDebugLogs = true;
+    [SerializeField] private bool showDebugLogs = false;
 
     // User tracking
     private Dictionary<string, GameObject> activeUserAvatars = new Dictionary<string, GameObject>();
@@ -157,6 +159,14 @@ public class P2PManager : MonoBehaviour
         for (int i = 0; i < initialPoolSize; i++)
         {
             GameObject avatar = Instantiate(userAvatarPrefab, Vector3.zero, Quaternion.identity);
+
+            // 아바타 시각적 요소 숨기기 설정 적용
+            P2PUserInfo userInfo = avatar.GetComponent<P2PUserInfo>();
+            if (userInfo != null)
+            {
+                userInfo.hideAvatarVisuals = hideAvatarVisuals;
+            }
+
             avatar.SetActive(false);
             avatar.transform.SetParent(transform);
             avatarPool.Enqueue(avatar);
@@ -441,6 +451,9 @@ public class P2PManager : MonoBehaviour
         P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
         if (userInfo != null)
         {
+            // 아바타 시각적 요소 숨기기 설정 적용
+            userInfo.hideAvatarVisuals = hideAvatarVisuals;
+
             userInfo.Initialize(
                 userData.user_id,
                 userData.username,
@@ -575,6 +588,14 @@ public class P2PManager : MonoBehaviour
         {
             GameObject newAvatar = Instantiate(userAvatarPrefab, Vector3.zero, Quaternion.identity);
             newAvatar.transform.SetParent(transform);
+
+            // 아바타 시각적 요소 숨기기 설정 적용
+            P2PUserInfo userInfo = newAvatar.GetComponent<P2PUserInfo>();
+            if (userInfo != null)
+            {
+                userInfo.hideAvatarVisuals = hideAvatarVisuals;
+            }
+
             return newAvatar;
         }
 
@@ -750,14 +771,21 @@ public class P2PManager : MonoBehaviour
     /// </summary>
     private void UpdateVisibleAvatars()
     {
-        // 필터 모드가 None이면 모든 아바타 숨김
+        // 필터 모드가 None이면 모든 아바타 완전히 숨김 (인디케이터 포함)
         if (userFilterMode == UserFilterMode.None)
         {
             foreach (var avatarObj in activeUserAvatars.Values)
             {
-                SetAvatarVisible(avatarObj, false);
+                SetAvatarCompletelyHidden(avatarObj, true);
             }
+            Log("P2P filter set to None - all avatars hidden completely");
             return;
+        }
+
+        // 필터 모드가 None에서 변경된 경우, 완전 숨김 해제 먼저 수행
+        foreach (var avatarObj in activeUserAvatars.Values)
+        {
+            SetAvatarCompletelyHidden(avatarObj, false);
         }
 
         // 필터에 맞지 않는 아바타 제거
@@ -770,7 +798,7 @@ public class P2PManager : MonoBehaviour
             RemoveUserAvatar(userId);
         }
 
-        // 기존 아바타 가시성 업데이트
+        // 기존 아바타 가시성 업데이트 (3D 렌더러만 - 거리 기준)
         foreach (var kvp in activeUserAvatars)
         {
             string userId = kvp.Key;
@@ -780,36 +808,35 @@ public class P2PManager : MonoBehaviour
             {
                 NearbyUserData userData = nearbyUsersData[userId];
 
-                // 200m 이상은 3D 오브젝트 숨김, 거리 설정 밖도 숨김, 필터 확인
-                bool shouldShow = userData.distance <= 200f &&
-                                  userData.distance <= maxTrackingDistance &&
-                                  ShouldShowUser(userId);
+                // 200m 이상은 3D 오브젝트 숨김, 거리 설정 밖도 숨김
+                // (오프스크린 인디케이터는 계속 표시)
+                bool shouldShowMesh = userData.distance <= 200f &&
+                                      userData.distance <= maxTrackingDistance;
 
-                SetAvatarVisible(avatarObj, shouldShow);
+                SetAvatarVisible(avatarObj, shouldShowMesh);
             }
         }
 
         // 필터 모드 변경으로 새로 보여야 할 사용자 추가
-        if (userFilterMode != UserFilterMode.None)
+        foreach (var kvp in nearbyUsersData)
         {
-            foreach (var kvp in nearbyUsersData)
-            {
-                string userId = kvp.Key;
-                NearbyUserData userData = kvp.Value;
+            string userId = kvp.Key;
+            NearbyUserData userData = kvp.Value;
 
-                if (!activeUserAvatars.ContainsKey(userId) &&
-                    ShouldShowUser(userId) &&
-                    userData.distance <= maxTrackingDistance &&
-                    activeUserAvatars.Count < maxVisibleUsers)
-                {
-                    CreateUserAvatar(userData);
-                }
+            if (!activeUserAvatars.ContainsKey(userId) &&
+                ShouldShowUser(userId) &&
+                userData.distance <= maxTrackingDistance &&
+                activeUserAvatars.Count < maxVisibleUsers)
+            {
+                CreateUserAvatar(userData);
             }
         }
+
+        Log($"P2P avatars updated - filter: {userFilterMode}, active: {activeUserAvatars.Count}");
     }
 
     /// <summary>
-    /// 아바타 가시성 설정
+    /// 아바타 가시성 설정 (3D 렌더러만)
     /// </summary>
     private void SetAvatarVisible(GameObject avatarObj, bool visible)
     {
@@ -821,11 +848,46 @@ public class P2PManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 근처 사용자 데이터 가져오기 (P2PUserListPanel에서 호출)
+    /// 아바타 완전 숨김/표시 (오프스크린 인디케이터 포함)
+    /// </summary>
+    private void SetAvatarCompletelyHidden(GameObject avatarObj, bool hidden)
+    {
+        P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
+        if (userInfo != null)
+        {
+            if (hidden)
+            {
+                userInfo.HideCompletely();
+            }
+            else
+            {
+                userInfo.ShowAgain();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 근처 사용자 데이터 가져오기 (필터 적용 안됨 - 전체 목록)
     /// </summary>
     public List<NearbyUserData> GetNearbyUsers()
     {
         return nearbyUsersData.Values.ToList();
+    }
+
+    /// <summary>
+    /// 필터가 적용된 근처 사용자 데이터 가져오기 (PlaceListManager용)
+    /// None: 빈 리스트, All: 전체, FollowingOnly: 팔로잉만
+    /// </summary>
+    public List<NearbyUserData> GetFilteredNearbyUsers()
+    {
+        if (userFilterMode == UserFilterMode.None)
+        {
+            return new List<NearbyUserData>();
+        }
+
+        return nearbyUsersData.Values
+            .Where(user => ShouldShowUser(user.user_id))
+            .ToList();
     }
 
     /// <summary>

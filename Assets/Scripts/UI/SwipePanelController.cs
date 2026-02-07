@@ -21,6 +21,19 @@ public class SwipePanelController : MonoBehaviour
     void OnEnable()
     {
         EnhancedTouchSupport.Enable();
+        ResetToFirstPanel();
+    }
+
+    private void ResetToFirstPanel()
+    {
+        currentPanel = 0;
+        panel1Pos = Vector2.zero;
+        panel2Pos = new Vector2(Screen.width, 0);
+
+        if (panel1 != null)
+            panel1.anchoredPosition = panel1Pos;
+        if (panel2 != null)
+            panel2.anchoredPosition = panel2Pos;
     }
 
     void OnDisable()

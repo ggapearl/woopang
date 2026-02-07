@@ -138,7 +138,6 @@ public class ARObjectZoomController : MonoBehaviour
             {
                 previousTouchDistance = currentTouchDistance;
                 isPinching = true;
-                Debug.Log($"[ARObjectZoomController] 핀치 시작! 거리: {currentTouchDistance:F2}px");
             }
             // 핀치 진행 중
             else if (touch0.phase == UnityEngine.InputSystem.TouchPhase.Moved || touch1.phase == UnityEngine.InputSystem.TouchPhase.Moved)
@@ -177,7 +176,6 @@ public class ARObjectZoomController : MonoBehaviour
             {
                 isPinching = false;
                 previousTouchDistance = 0f;
-                Debug.Log($"[ARObjectZoomController] 핀치 종료! 최종 Zoom: {currentZoom:F2}x");
 
                 // 줌 인디케이터 숨김 (5초 딜레이)
                 if (zoomIndicator != null)

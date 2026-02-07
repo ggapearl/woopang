@@ -1,5 +1,5 @@
 ﻿// 디버그 로그를 Unity 에디터에서만 활성화 (릴리즈 빌드 성능 향상)
-#define LOADING_DEBUG_LOGS_ENABLED
+// #define LOADING_DEBUG_LOGS_ENABLED  // 기본 비활성화 - 필요 시 주석 해제
 
 using UnityEngine;
 using UnityEngine.UI;

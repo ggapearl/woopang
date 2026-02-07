@@ -93,31 +93,21 @@ public class AutoUpdateChecker : MonoBehaviour
 
     void Start()
     {
-        // 플랫폼별 서버 URL 설정
         SetPlatformSpecificUrl();
-        
         currentVersion = Application.version;
-        Debug.Log($"Current App Version: {currentVersion}");
-        Debug.Log($"Platform: {Application.platform} ({currentPlatform})");
-        Debug.Log($"Server URL: {serverVersionUrl}");
-        
         DetectDeviceLanguage();
-        
-        // UI 초기 설정
+
         if (updatePanel == null || updateButton == null || cancelButton == null || updateMessageText == null)
         {
             Debug.LogError("UI 요소가 연결되지 않았습니다! Inspector에서 확인해주세요.");
             return;
         }
-        
+
         updatePanel.SetActive(false);
-        
-        // 일반 업데이트 버튼 설정
+
         updateButton.onClick.AddListener(OnUpdateButtonClicked);
         cancelButton.onClick.AddListener(OnCancelButtonClicked);
 
-        // 앱 초기화 후 업데이트 체크 시작
-        Debug.Log($"업데이트 체크를 {startDelay}초 후에 시작합니다...");
         StartCoroutine(DelayedUpdateCheck());
     }
 
@@ -160,23 +150,16 @@ public class AutoUpdateChecker : MonoBehaviour
                 currentLanguage = "en";
                 break;
         }
-        
-        Debug.Log($"Detected language: {currentLanguage} (Device: {deviceLanguage})");
     }
 
     IEnumerator DelayedUpdateCheck()
     {
-        // 앱 초기화 완료까지 대기
         yield return new WaitForSecondsRealtime(startDelay);
-        
-        Debug.Log("지연 시간 완료, 업데이트 체크 시작!");
         StartCoroutine(CheckForUpdates());
     }
 
     IEnumerator CheckForUpdates()
     {
-        Debug.Log($"서버 버전 체크 시작: {serverVersionUrl}");
-        
         using (UnityWebRequest request = UnityWebRequest.Get(serverVersionUrl))
         {
             yield return request.SendWebRequest();
@@ -184,38 +167,25 @@ public class AutoUpdateChecker : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string jsonResponse = request.downloadHandler.text;
-                Debug.Log($"서버 응답: {jsonResponse}");
-                
+
                 try
                 {
                     VersionResponse versionData = JsonUtility.FromJson<VersionResponse>(jsonResponse);
                     latestVersion = versionData.version;
                     forceUpdate = versionData.forceUpdate;
-                    
-                    Debug.Log($"서버 버전: {latestVersion}, 강제 업데이트: {forceUpdate} (플랫폼: {currentPlatform})");
-                    Debug.Log($"현재 버전: {currentVersion}");
-                    
+
                     bool updateRequired = IsUpdateRequired(currentVersion, latestVersion);
-                    Debug.Log($"업데이트 필요?: {updateRequired}");
 
                     if (updateRequired)
                     {
-                        Debug.Log($"새 버전({latestVersion})이 있습니다! 강제 업데이트: {forceUpdate}");
-                        
                         if (forceUpdate)
                         {
-                            Debug.Log("강제 업데이트 시작");
                             StartCoroutine(ShowForceUpdateAndRedirect());
                         }
                         else
                         {
-                            Debug.Log("일반 업데이트 패널 표시");
                             ShowNormalUpdatePanel();
                         }
-                    }
-                    else
-                    {
-                        Debug.Log("최신 버전입니다.");
                     }
                 }
                 catch (System.Exception e)
@@ -324,8 +294,6 @@ public class AutoUpdateChecker : MonoBehaviour
 
     void RedirectToStore()
     {
-        Debug.Log($"자동으로 스토어로 이동합니다... (플랫폼: {currentPlatform})");
-        
 #if UNITY_ANDROID
         try
         {
@@ -345,7 +313,6 @@ public class AutoUpdateChecker : MonoBehaviour
 
     void OnUpdateButtonClicked()
     {
-        Debug.Log("수동 업데이트를 진행합니다...");
         RedirectToStore();
         
         if (updatePanel != null)
@@ -356,7 +323,6 @@ public class AutoUpdateChecker : MonoBehaviour
 
     void OnCancelButtonClicked()
     {
-        Debug.Log("업데이트를 취소했습니다.");
         if (updatePanel != null)
         {
             updatePanel.SetActive(false);

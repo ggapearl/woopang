@@ -8,7 +8,7 @@ public class SystemUIManager : MonoBehaviour
     public bool forceShowSystemUI = true;
     
     [Header("디버그")]
-    public bool showDebugInfo = true;
+    public bool showDebugInfo = false;  // 기본 비활성화
     
     [Header("OneUI 대응")]
     public bool enableOneUIWorkaround = true;
@@ -248,7 +248,7 @@ public class SystemUIManager : MonoBehaviour
     
     void AdjustCanvasForSystemUI()
     {
-        Canvas[] canvases = FindObjectsOfType<Canvas>();
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         
         foreach (Canvas canvas in canvases)
         {

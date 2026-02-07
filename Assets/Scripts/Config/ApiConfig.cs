@@ -55,6 +55,7 @@ public static class ApiConfig
     public const string DM_INBOX = MAIN_SERVER + "/api/dm/inbox";
     public const string DM_SENT = MAIN_SERVER + "/api/dm/sent";
     public const string DM_CONVERSATION = MAIN_SERVER + "/api/dm/conversation";
+    public const string DM_CONVERSATIONS = MAIN_SERVER + "/api/dm/conversations";
     public const string DM_READ = MAIN_SERVER + "/api/dm/read";
     public const string DM_READ_ALL = MAIN_SERVER + "/api/dm/read-all";
     public const string DM_UNREAD_COUNT = MAIN_SERVER + "/api/dm/unread-count";

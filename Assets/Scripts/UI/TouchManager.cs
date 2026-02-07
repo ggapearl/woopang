@@ -6,7 +6,7 @@ using System.Collections.Generic;
 public class TouchManager : MonoBehaviour
 {
     [Header("디버깅")]
-    public bool enableDebugLogs = true;
+    public bool enableDebugLogs = false;
     public bool enableDetailedLogs = false;
     
     [Header("디버깅 키워드")]
@@ -272,7 +272,7 @@ public class TouchManager : MonoBehaviour
     /// </summary>
     bool CheckAllCanvases(PointerEventData pointerData)
     {
-        Canvas[] allCanvases = FindObjectsOfType<Canvas>();
+        Canvas[] allCanvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         
         if (enableDetailedLogs)
             Debug.Log($"[UI_CANVAS_CHECK] 전체 Canvas 수: {allCanvases.Length}");
@@ -427,7 +427,7 @@ public class TouchManager : MonoBehaviour
         }
         
         // Canvas 상태
-        Canvas[] canvases = FindObjectsOfType<Canvas>();
+        Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         Debug.Log($"📋 전체 Canvas 수: {canvases.Length}");
         
         foreach (Canvas canvas in canvases)

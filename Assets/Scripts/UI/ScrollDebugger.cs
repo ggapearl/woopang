@@ -11,7 +11,7 @@ using System.Diagnostics;
 public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
 {
     [Header("디버깅 설정")]
-    [SerializeField] private bool enableDebug = true;
+    [SerializeField] private bool enableDebug = false;
     [SerializeField] private bool logToFile = false;
     [SerializeField] private int maxLogCount = 100;
 
@@ -134,7 +134,7 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         string eventSystemStatus = eventSystem != null ? "Active" : "Missing!";
 
         // Raycaster 개수
-        GraphicRaycaster[] raycasters = FindObjectsOfType<GraphicRaycaster>();
+        GraphicRaycaster[] raycasters = FindObjectsByType<GraphicRaycaster>(FindObjectsSortMode.None);
 
         Log($"[STATS] Memory={memoryMB:F1}MB, EventSystem={eventSystemStatus}, Raycasters={raycasters.Length}, FPS={1f / Time.deltaTime:F0}");
     }
@@ -174,7 +174,7 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     [ContextMenu("Check EventSystem")]
     public void CheckEventSystem()
     {
-        EventSystem[] eventSystems = FindObjectsOfType<EventSystem>();
+        EventSystem[] eventSystems = FindObjectsByType<EventSystem>(FindObjectsSortMode.None);
         UnityEngine.Debug.Log($"[ScrollDebug] EventSystem 개수: {eventSystems.Length}");
 
         foreach (EventSystem es in eventSystems)
@@ -183,7 +183,7 @@ public class ScrollDebugger : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         }
 
         // Raycaster 검사
-        GraphicRaycaster[] raycasters = FindObjectsOfType<GraphicRaycaster>();
+        GraphicRaycaster[] raycasters = FindObjectsByType<GraphicRaycaster>(FindObjectsSortMode.None);
         UnityEngine.Debug.Log($"[ScrollDebug] GraphicRaycaster 개수: {raycasters.Length}");
 
         foreach (GraphicRaycaster rc in raycasters)

@@ -1,9 +1,11 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System;
+using System.Collections;
 
 /// <summary>
-/// 연속 촬영 모드에서 "계속 촬영하시겠습니까?" 다이얼로그
+/// iOS ActionSheet 스타일 연속 촬영 다이얼로그
+/// 하단에서 슬라이드 업 애니메이션으로 표시
 /// </summary>
 public class ContinueCaptureDialog : MonoBehaviour
 {
@@ -16,8 +18,17 @@ public class ContinueCaptureDialog : MonoBehaviour
     [SerializeField] private Text yesButtonText;
     [SerializeField] private Text noButtonText;
 
+    [Header("Animation Settings")]
+    [SerializeField] private float animationDuration = 0.3f;
+    [SerializeField] private AnimationCurve showCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    [SerializeField] private AnimationCurve hideCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+
     private Action onYes;
     private Action onNo;
+    private RectTransform bottomContainer;
+    private CanvasGroup overlayCanvasGroup;
+    private Coroutine animationCoroutine;
+    private bool isAnimating;
 
     private void Awake()
     {
@@ -27,19 +38,37 @@ public class ContinueCaptureDialog : MonoBehaviour
         if (noButton != null)
             noButton.onClick.AddListener(OnNoButtonClicked);
 
-        // 다이얼로그 초기 상태: 비활성화
+        // 배경 클릭 시 닫기 (No와 동일)
+        if (dialogPanel != null)
+        {
+            var bgButton = dialogPanel.GetComponent<Button>();
+            if (bgButton != null)
+                bgButton.onClick.AddListener(OnNoButtonClicked);
+        }
+
+        SetupAnimationComponents();
+
         if (dialogPanel != null)
             dialogPanel.SetActive(false);
     }
 
-    /// <summary>
-    /// 다이얼로그를 표시하고 콜백 설정
-    /// </summary>
-    /// <param name="message">표시할 메시지 (예: "현재 3/10장\n계속 촬영하시겠습니까?")</param>
-    /// <param name="onYes">예 버튼 클릭 시 콜백</param>
-    /// <param name="onNo">아니오 버튼 클릭 시 콜백</param>
+    private void SetupAnimationComponents()
+    {
+        if (dialogPanel == null) return;
+
+        var bottomContainerTransform = dialogPanel.transform.Find("BottomContainer");
+        if (bottomContainerTransform != null)
+            bottomContainer = bottomContainerTransform as RectTransform;
+
+        overlayCanvasGroup = dialogPanel.GetComponent<CanvasGroup>();
+        if (overlayCanvasGroup == null)
+            overlayCanvasGroup = dialogPanel.AddComponent<CanvasGroup>();
+    }
+
     public void Show(string message, Action onYes, Action onNo)
     {
+        if (isAnimating) return;
+
         this.onYes = onYes;
         this.onNo = onNo;
 
@@ -49,11 +78,15 @@ public class ContinueCaptureDialog : MonoBehaviour
         if (messageText != null)
             messageText.text = message;
 
-        // 다국어 지원
         UpdateLocalizedTexts();
 
         if (dialogPanel != null)
+        {
             dialogPanel.SetActive(true);
+            if (animationCoroutine != null)
+                StopCoroutine(animationCoroutine);
+            animationCoroutine = StartCoroutine(ShowAnimation());
+        }
     }
 
     private void UpdateLocalizedTexts()
@@ -65,25 +98,100 @@ public class ContinueCaptureDialog : MonoBehaviour
             noButtonText.text = GetLocalizedText("no_finish");
     }
 
+    private IEnumerator ShowAnimation()
+    {
+        isAnimating = true;
+        float elapsed = 0f;
+
+        if (overlayCanvasGroup != null)
+            overlayCanvasGroup.alpha = 0f;
+
+        Vector2 startPos = new Vector2(0, -700f);
+        Vector2 endPos = Vector2.zero;
+
+        if (bottomContainer != null)
+            bottomContainer.anchoredPosition = startPos;
+
+        while (elapsed < animationDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = showCurve.Evaluate(elapsed / animationDuration);
+
+            if (overlayCanvasGroup != null)
+                overlayCanvasGroup.alpha = t;
+
+            if (bottomContainer != null)
+                bottomContainer.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
+
+            yield return null;
+        }
+
+        if (overlayCanvasGroup != null)
+            overlayCanvasGroup.alpha = 1f;
+
+        if (bottomContainer != null)
+            bottomContainer.anchoredPosition = endPos;
+
+        isAnimating = false;
+    }
+
+    private IEnumerator HideAnimation(Action onComplete = null)
+    {
+        isAnimating = true;
+        float elapsed = 0f;
+
+        Vector2 startPos = Vector2.zero;
+        Vector2 endPos = new Vector2(0, -700f);
+
+        float startAlpha = overlayCanvasGroup != null ? overlayCanvasGroup.alpha : 1f;
+
+        while (elapsed < animationDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = hideCurve.Evaluate(elapsed / animationDuration);
+
+            if (overlayCanvasGroup != null)
+                overlayCanvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, t);
+
+            if (bottomContainer != null)
+                bottomContainer.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
+
+            yield return null;
+        }
+
+        if (dialogPanel != null)
+            dialogPanel.SetActive(false);
+
+        isAnimating = false;
+        onComplete?.Invoke();
+    }
+
     private void OnYesButtonClicked()
     {
-        Hide();
-        onYes?.Invoke();
+        if (isAnimating) return;
+        var callback = onYes;
+        Hide(() => callback?.Invoke());
     }
 
     private void OnNoButtonClicked()
     {
-        Hide();
-        onNo?.Invoke();
+        if (isAnimating) return;
+        var callback = onNo;
+        Hide(() => callback?.Invoke());
     }
 
-    private void Hide()
+    private void Hide(Action onComplete = null)
     {
-        if (dialogPanel != null)
-            dialogPanel.SetActive(false);
-
         onYes = null;
         onNo = null;
+
+        if (animationCoroutine != null)
+            StopCoroutine(animationCoroutine);
+
+        if (dialogPanel != null && dialogPanel.activeSelf)
+            animationCoroutine = StartCoroutine(HideAnimation(onComplete));
+        else
+            onComplete?.Invoke();
     }
 
     private string GetLocalizedText(string key)
@@ -91,12 +199,12 @@ public class ContinueCaptureDialog : MonoBehaviour
         if (LocalizationManager.Instance != null)
             return LocalizationManager.Instance.GetText(key);
 
-        // Fallback
+        // Fallback (영어 기본)
         switch (key)
         {
-            case "continue_capture_title": return "계속 촬영하시겠습니까?";
-            case "yes_continue": return "✅ 예, 계속 촬영";
-            case "no_finish": return "❌ 아니오, 종료";
+            case "continue_capture_title": return "Continue capturing?";
+            case "yes_continue": return "Continue";
+            case "no_finish": return "Done";
             default: return key;
         }
     }
@@ -108,5 +216,12 @@ public class ContinueCaptureDialog : MonoBehaviour
 
         if (noButton != null)
             noButton.onClick.RemoveListener(OnNoButtonClicked);
+
+        if (dialogPanel != null)
+        {
+            var bgButton = dialogPanel.GetComponent<Button>();
+            if (bgButton != null)
+                bgButton.onClick.RemoveListener(OnNoButtonClicked);
+        }
     }
 }

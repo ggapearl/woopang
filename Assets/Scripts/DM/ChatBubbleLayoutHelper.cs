@@ -12,18 +12,60 @@ using UnityEngine.UI;
 /// </summary>
 public static class ChatBubbleLayoutHelper
 {
-    // 버블 설정 상수 (모바일 디바이스 최적화 - 대형 사이즈)
-    public const float MAX_BUBBLE_WIDTH_RATIO = 0.82f; // 화면 너비의 82%
-    public const float MIN_BUBBLE_WIDTH = 120f;        // 최소 너비 증가
-    public const float BUBBLE_PADDING_H = 24f;         // 좌우 패딩 증가
-    public const float BUBBLE_PADDING_V = 18f;         // 상하 패딩 증가
-    public const int FONT_SIZE = 32;                   // 폰트 크기 대폭 증가 (17 -> 32)
-    public const float LINE_HEIGHT = 42f;              // 줄 높이 증가
-    public const float MIN_BUBBLE_HEIGHT = 60f;        // 최소 높이 추가
+    // 버블 설정 - MessagePanelManager 인스펙터에서 조절 가능
+    // 기본값은 MessagePanelManager가 없을 때 사용됨 (폰트 60 기준)
+    private const float DEFAULT_MAX_BUBBLE_WIDTH_RATIO = 0.82f;
+    private const float DEFAULT_MIN_BUBBLE_WIDTH = 160f;
+    private const float DEFAULT_BUBBLE_PADDING_H = 36f;
+    private const float DEFAULT_BUBBLE_PADDING_V = 28f;
+    private const int DEFAULT_FONT_SIZE = 60;
+    private const float DEFAULT_LINE_HEIGHT = 78f;
+    private const float DEFAULT_MIN_BUBBLE_HEIGHT = 0f; // 텍스트 높이에 맞게 자동 조절
+
+    // 행 레이아웃 기본값
+    private const float DEFAULT_ROW_SPACING = 8f;
+    private const int DEFAULT_MY_PADDING_LEFT = 50;
+    private const int DEFAULT_MY_PADDING_RIGHT = 14;
+    private const int DEFAULT_OTHER_PADDING_LEFT = 14;
+    private const int DEFAULT_OTHER_PADDING_RIGHT = 50;
+    private const int DEFAULT_ROW_PADDING_VERTICAL = 4;
+
+    // 버블 설정값 (프리팹에서 직접 설정, 여기는 기본값만 사용)
+    public static float MAX_BUBBLE_WIDTH_RATIO =>
+        MessagePanelManager.Instance != null ? MessagePanelManager.Instance.maxBubbleWidthRatio : DEFAULT_MAX_BUBBLE_WIDTH_RATIO;
+    public static float MIN_BUBBLE_WIDTH =>
+        MessagePanelManager.Instance != null ? MessagePanelManager.Instance.minBubbleWidth : DEFAULT_MIN_BUBBLE_WIDTH;
+    public static float BUBBLE_PADDING_H => DEFAULT_BUBBLE_PADDING_H;
+    public static float BUBBLE_PADDING_V => DEFAULT_BUBBLE_PADDING_V;
+    public static int FONT_SIZE => DEFAULT_FONT_SIZE;
+    public static float LINE_HEIGHT => DEFAULT_LINE_HEIGHT;
+    public static float MIN_BUBBLE_HEIGHT => DEFAULT_MIN_BUBBLE_HEIGHT;
+
+    // 행 레이아웃 (프리팹에서 직접 설정)
+    public static float ROW_SPACING => DEFAULT_ROW_SPACING;
+    public static int MY_PADDING_LEFT => DEFAULT_MY_PADDING_LEFT;
+    public static int MY_PADDING_RIGHT => DEFAULT_MY_PADDING_RIGHT;
+    public static int OTHER_PADDING_LEFT => DEFAULT_OTHER_PADDING_LEFT;
+    public static int OTHER_PADDING_RIGHT => DEFAULT_OTHER_PADDING_RIGHT;
+    public static int ROW_PADDING_VERTICAL => DEFAULT_ROW_PADDING_VERTICAL;
+
+    // 채팅 Content 레이아웃 기본값
+    private const float DEFAULT_CHAT_CONTENT_SPACING = 4f;
+    private const int DEFAULT_CHAT_CONTENT_PADDING_VERTICAL = 10;
+
+    // 채팅 Content 레이아웃 (프리팹에서 직접 설정)
+    public static float CHAT_CONTENT_SPACING => DEFAULT_CHAT_CONTENT_SPACING;
+    public static int CHAT_CONTENT_PADDING_VERTICAL => DEFAULT_CHAT_CONTENT_PADDING_VERTICAL;
+
+    // TimeArea 내부 배치 설정 (Instagram DM 스타일)
+    public static bool TIME_INSIDE_BUBBLE => true;
+    public static float TIME_INSIDE_MARGIN_RIGHT => 8f;
+    public static float TIME_INSIDE_MARGIN_BOTTOM => 4f;
 
     /// <summary>
     /// 메시지 버블 생성 및 크기 자동 조절
     /// ContentSizeFitter + LayoutElement 조합으로 텍스트 길이에 맞게 버블 크기 조절
+    /// 참고: fontSize, lineSpacing 등 스타일은 프리팹 값을 유지, 텍스트 내용만 설정
     /// </summary>
     public static void SetupBubble(GameObject bubbleObj, string content, bool isMine, float screenWidth)
     {
@@ -42,32 +84,20 @@ public static class ChatBubbleLayoutHelper
 
         if (contentText != null)
         {
+            // 텍스트 내용만 설정 (fontSize, lineSpacing 등은 프리팹 값 유지)
             contentText.text = content;
-
-            // 텍스트 설정 - 대형 사이즈
-            contentText.fontSize = FONT_SIZE;
-            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            contentText.verticalOverflow = VerticalWrapMode.Overflow;
-            contentText.lineSpacing = 1.2f; // 줄 간격 추가
 
             // 텍스트 선호 너비 계산
             float preferredWidth = contentText.preferredWidth + (BUBBLE_PADDING_H * 2);
             float actualWidth = Mathf.Clamp(preferredWidth, MIN_BUBBLE_WIDTH, maxWidth);
 
-            // LayoutElement 설정
+            // LayoutElement 설정 (너비만, 높이는 프리팹 값 유지)
             LayoutElement layoutElement = contentText.GetComponent<LayoutElement>();
             if (layoutElement == null)
                 layoutElement = contentText.gameObject.AddComponent<LayoutElement>();
 
             layoutElement.preferredWidth = actualWidth - (BUBBLE_PADDING_H * 2);
-            layoutElement.minHeight = MIN_BUBBLE_HEIGHT; // 최소 높이 설정
         }
-
-        // 버블 자체의 최소 높이 설정
-        LayoutElement bubbleLE = bubbleObj.GetComponent<LayoutElement>();
-        if (bubbleLE == null)
-            bubbleLE = bubbleObj.AddComponent<LayoutElement>();
-        bubbleLE.minHeight = MIN_BUBBLE_HEIGHT;
 
         // 정렬 설정
         HorizontalLayoutGroup hlg = bubbleObj.GetComponent<HorizontalLayoutGroup>();
@@ -76,14 +106,6 @@ public static class ChatBubbleLayoutHelper
             hlg.childAlignment = isMine ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
         }
 
-        // ContentSizeFitter가 버블 크기 자동 조절
-        ContentSizeFitter csf = bubbleObj.GetComponent<ContentSizeFitter>();
-        if (csf == null)
-            csf = bubbleObj.AddComponent<ContentSizeFitter>();
-
-        csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
         // 강제 레이아웃 업데이트
         LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleRect);
     }
@@ -91,6 +113,7 @@ public static class ChatBubbleLayoutHelper
     /// <summary>
     /// 메시지 버블 컨테이너 설정
     /// (버블 + 시간 + 읽음 표시를 포함하는 전체 행)
+    /// 모든 값은 MessagePanelManager 인스펙터에서 조절 가능
     /// </summary>
     public static void SetupMessageRow(GameObject rowObj, bool isMine)
     {
@@ -103,30 +126,32 @@ public static class ChatBubbleLayoutHelper
             hlg = rowObj.AddComponent<HorizontalLayoutGroup>();
 
         hlg.childAlignment = isMine ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-        hlg.spacing = 8f;
-        // 패딩 축소: 버블이 화면에 더 크게 보이도록
+        hlg.spacing = ROW_SPACING; // 인스펙터에서 조절 가능
+
+        // 패딩 - 인스펙터에서 조절 가능
         hlg.padding = isMine
-            ? new RectOffset(50, 14, 4, 4)
-            : new RectOffset(14, 50, 4, 4);
+            ? new RectOffset(MY_PADDING_LEFT, MY_PADDING_RIGHT, ROW_PADDING_VERTICAL, ROW_PADDING_VERTICAL)
+            : new RectOffset(OTHER_PADDING_LEFT, OTHER_PADDING_RIGHT, ROW_PADDING_VERTICAL, ROW_PADDING_VERTICAL);
+
         hlg.childForceExpandWidth = false;
         hlg.childForceExpandHeight = false;
-        hlg.childControlWidth = false;
+        hlg.childControlWidth = false;  // 자식 너비 제어 비활성화 (BubbleContainer의 ContentSizeFitter가 결정)
         hlg.childControlHeight = true;
 
-        // 높이 자동 조절
+        // 행 자체는 부모 너비에 맞춤 (내부 정렬용)
+        // ContentSizeFitter 제거 (행은 부모 너비 사용, 내부 버블만 컨텐츠에 맞춤)
         ContentSizeFitter csf = rowObj.GetComponent<ContentSizeFitter>();
-        if (csf == null)
-            csf = rowObj.AddComponent<ContentSizeFitter>();
+        if (csf != null)
+            Object.DestroyImmediate(csf);
 
-        csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        // 너비는 부모에 맞춤
+        // LayoutElement - 행은 부모 너비에 맞추고, 높이는 자동
         LayoutElement le = rowObj.GetComponent<LayoutElement>();
         if (le == null)
             le = rowObj.AddComponent<LayoutElement>();
 
-        le.flexibleWidth = 1;
+        le.flexibleWidth = 1;  // 행은 부모 너비에 맞춤
+        le.preferredWidth = -1;
+        le.minHeight = -1;
     }
 
     /// <summary>
@@ -184,31 +209,38 @@ public static class ChatBubbleLayoutHelper
 
     /// <summary>
     /// 스크롤 영역 Content 레이아웃 설정
+    /// 이미 VLG가 있으면 씬에서 설정한 값을 존중함 (spacing, padding 덮어쓰지 않음)
     /// </summary>
     public static void SetupScrollContent(RectTransform content)
     {
         if (content == null) return;
 
-        // VerticalLayoutGroup 설정
+        // VerticalLayoutGroup 설정 - 이미 있으면 기존 spacing/padding 유지
         VerticalLayoutGroup vlg = content.GetComponent<VerticalLayoutGroup>();
         if (vlg == null)
+        {
+            // VLG가 없을 때만 추가하고 기본값 설정
             vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = CHAT_CONTENT_SPACING;
+            vlg.padding = new RectOffset(0, 0, CHAT_CONTENT_PADDING_VERTICAL, CHAT_CONTENT_PADDING_VERTICAL);
+        }
+        // 이미 VLG가 있으면 spacing, padding은 씬 값 유지 (덮어쓰지 않음)
 
-        vlg.spacing = 4f;
-        vlg.padding = new RectOffset(0, 0, 10, 10);
+        // 레이아웃 동작 설정만 적용
         vlg.childAlignment = TextAnchor.UpperCenter;
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
         vlg.childControlWidth = true;
         vlg.childControlHeight = true;
 
-        // ContentSizeFitter 설정
+        // ContentSizeFitter 설정 - 이미 있으면 유지
         ContentSizeFitter csf = content.GetComponent<ContentSizeFitter>();
         if (csf == null)
+        {
             csf = content.gameObject.AddComponent<ContentSizeFitter>();
-
-        csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        }
 
         // 앵커 설정 (상단 스트레치)
         content.anchorMin = new Vector2(0, 1);
@@ -219,7 +251,7 @@ public static class ChatBubbleLayoutHelper
     /// <summary>
     /// 대화 목록 아이템 레이아웃 설정
     /// </summary>
-    public static void SetupConversationItem(RectTransform itemRect, float height = 120f) // 84 -> 120
+    public static void SetupConversationItem(RectTransform itemRect, float height = 140f) // 폰트 60 기준
     {
         if (itemRect == null) return;
 
@@ -233,11 +265,11 @@ public static class ChatBubbleLayoutHelper
     }
 
     /// <summary>
-    /// 대화 목록용 폰트 사이즈
+    /// 대화 목록용 폰트 사이즈 (폰트 60 기준 조정)
     /// </summary>
-    public const int CONVERSATION_TITLE_FONT_SIZE = 28;    // 사용자명
-    public const int CONVERSATION_PREVIEW_FONT_SIZE = 24;  // 메시지 미리보기
-    public const int CONVERSATION_TIME_FONT_SIZE = 20;     // 시간
+    public const int CONVERSATION_TITLE_FONT_SIZE = 42;    // 사용자명
+    public const int CONVERSATION_PREVIEW_FONT_SIZE = 36;  // 메시지 미리보기
+    public const int CONVERSATION_TIME_FONT_SIZE = 28;     // 시간
 
     /// <summary>
     /// 자식 이름으로 컴포넌트 찾기

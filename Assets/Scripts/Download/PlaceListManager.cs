@@ -202,13 +202,18 @@ public class PlaceListManager : MonoBehaviour
 
     /// <summary>
     /// P2P 사용자 데이터 추가
+    /// P2PManager의 필터 모드에 따라 표시 여부 결정
+    /// - None: 목록에 표시 안함
+    /// - All: 모든 사용자 표시
+    /// - FollowingOnly: 팔로잉한 사용자만 표시
     /// </summary>
     private void AddP2PUserData(float lat, float lon)
     {
         if (p2pManager == null) return;
 
-        var nearbyUsers = p2pManager.GetNearbyUsers();
-        if (nearbyUsers == null) return;
+        // 필터링된 사용자 목록 가져오기 (None이면 빈 리스트 반환)
+        var nearbyUsers = p2pManager.GetFilteredNearbyUsers();
+        if (nearbyUsers == null || nearbyUsers.Count == 0) return;
 
         foreach (var user in nearbyUsers)
         {

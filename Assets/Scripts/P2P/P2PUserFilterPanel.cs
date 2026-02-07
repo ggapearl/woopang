@@ -10,6 +10,7 @@
  * Author: Claude (Anthropic AI)
  * Date: 2026-01-11
  * Modified: 2026-01-27 - 색상 및 순서 변경 (팔로잉=핑크, 전체=흰색, 제외=회색)
+ * Modified: 2026-02-03 - 로그인 필수 기능으로 변경 (비로그인 시 LoginPrompt 표시)
  */
 
 using UnityEngine;
@@ -18,6 +19,7 @@ using UnityEngine.UI;
 /// <summary>
 /// P2P 사용자 필터 토글 - PetFriendlyToggle과 동일한 구조
 /// 토글을 반복 클릭하면 3가지 상태가 순환됨
+/// ※ P2P 추적 기능은 로그인 필수 - 비로그인 시 LoginPrompt 표시
 /// </summary>
 public class P2PUserFilterPanel : MonoBehaviour
 {
@@ -52,18 +54,40 @@ public class P2PUserFilterPanel : MonoBehaviour
     private Image checkmarkImage;
     private int clickCount = 0;
 
+    // 로그인 관련
+    private LoginManager loginManager;
+    private bool pendingToggleAction = false;  // 로그인 후 토글 액션 대기
+
     void Start()
     {
-        // 토글 참조가 없으면 자신에게서 찾기
+        // 토글 참조가 없으면 자신 → 자식 "P2PUserToggle" 순서로 찾기
         if (p2pUserToggle == null)
         {
             p2pUserToggle = GetComponent<Toggle>();
         }
+        if (p2pUserToggle == null)
+        {
+            Transform toggleChild = transform.Find("P2PUserToggle");
+            if (toggleChild != null)
+                p2pUserToggle = toggleChild.GetComponent<Toggle>();
+        }
 
         if (p2pUserToggle == null)
         {
-            // Toggle 컴포넌트가 없으면 조용히 스킵 (씬 구성에 따라 선택적으로 사용)
             return;
+        }
+
+        // LoginManager 참조
+        loginManager = LoginManager.Instance;
+        if (loginManager == null)
+        {
+            loginManager = FindFirstObjectByType<LoginManager>();
+        }
+
+        // 로그인 상태 변경 이벤트 구독
+        if (loginManager != null)
+        {
+            loginManager.OnLoginStateChanged += OnLoginStateChanged;
         }
 
         // Background와 Checkmark 이미지 찾기
@@ -71,6 +95,9 @@ public class P2PUserFilterPanel : MonoBehaviour
 
         // 저장된 필터 모드 로드
         LoadFilterMode();
+
+        // 로그인 여부 체크 - 비로그인 시 None 상태로 강제
+        CheckLoginAndSetInitialState();
 
         // 토글 이벤트 설정
         SetupToggle();
@@ -82,6 +109,81 @@ public class P2PUserFilterPanel : MonoBehaviour
         ApplyFilterMode();
     }
 
+    void OnDestroy()
+    {
+        // 이벤트 구독 해제
+        if (loginManager != null)
+        {
+            loginManager.OnLoginStateChanged -= OnLoginStateChanged;
+        }
+    }
+
+    /// <summary>
+    /// 로그인 상태에 따라 초기 상태 설정
+    /// 비로그인 시 None(제외) 모드로 강제 설정
+    /// </summary>
+    private void CheckLoginAndSetInitialState()
+    {
+        bool isLoggedIn = IsUserLoggedIn();
+
+        if (!isLoggedIn)
+        {
+            // 비로그인 시 None 상태로 강제
+            currentMode = UserFilterMode.None;
+            clickCount = 2;
+        }
+    }
+
+    /// <summary>
+    /// 로그인 여부 확인 (게스트 로그인 제외)
+    /// </summary>
+    private bool IsUserLoggedIn()
+    {
+        if (loginManager == null)
+        {
+            loginManager = LoginManager.Instance;
+            if (loginManager == null)
+            {
+                loginManager = FindFirstObjectByType<LoginManager>();
+            }
+        }
+
+        // 로그인 매니저가 없거나, 로그인 안됨, 또는 게스트인 경우 false
+        if (loginManager == null) return false;
+        if (!loginManager.IsLoggedIn) return false;
+        if (loginManager.IsGuest) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// 로그인 상태 변경 시 호출
+    /// </summary>
+    private void OnLoginStateChanged(bool isLoggedIn)
+    {
+        if (isLoggedIn && !loginManager.IsGuest)
+        {
+            // 로그인 완료 - 이전에 시도했던 토글 액션 수행
+            if (pendingToggleAction)
+            {
+                pendingToggleAction = false;
+                // 저장된 필터 모드 복원
+                LoadFilterMode();
+                UpdateVisualState();
+                ApplyFilterMode();
+            }
+        }
+        else
+        {
+            // 로그아웃 또는 게스트 - None 상태로 변경
+            currentMode = UserFilterMode.None;
+            clickCount = 2;
+            SaveFilterMode();
+            UpdateVisualState();
+            ApplyFilterMode();
+        }
+    }
+
     private void FindVisualComponents()
     {
         // Background 찾기 (토글의 targetGraphic)
@@ -90,16 +192,16 @@ public class P2PUserFilterPanel : MonoBehaviour
         // Checkmark 찾기 (토글의 graphic)
         checkmarkImage = p2pUserToggle.graphic as Image;
 
-        // 또는 자식에서 찾기
+        // 또는 토글 자식에서 찾기 (P2PUserFilterPanel이 root에 있을 경우 대비)
         if (backgroundImage == null)
         {
-            Transform bg = transform.Find("Background");
+            Transform bg = p2pUserToggle.transform.Find("Background");
             if (bg != null) backgroundImage = bg.GetComponent<Image>();
         }
 
         if (checkmarkImage == null)
         {
-            Transform bg = transform.Find("Background");
+            Transform bg = p2pUserToggle.transform.Find("Background");
             if (bg != null)
             {
                 Transform check = bg.Find("Checkmark");
@@ -180,6 +282,25 @@ public class P2PUserFilterPanel : MonoBehaviour
 
     private void OnToggleValueChanged(bool isOn)
     {
+        // 로그인 여부 체크
+        bool isLoggedIn = IsUserLoggedIn();
+
+        // 비로그인 상태에서 None이 아닌 상태로 변경하려는 경우
+        if (!isLoggedIn)
+        {
+            // 현재 None 상태에서 벗어나려고 할 때 로그인 요구
+            if (currentMode == UserFilterMode.None)
+            {
+                // 토글 상태를 원래대로 유지 (변경 안함)
+                p2pUserToggle.SetIsOnWithoutNotify(true);
+                UpdateVisualState();
+
+                // 로그인 프롬프트 표시
+                ShowLoginPrompt();
+                return;
+            }
+        }
+
         // 3단계 순환: 팔로잉(핑크색) -> 전체(흰색) -> 제외(회색)
         switch (currentMode)
         {
@@ -192,6 +313,7 @@ public class P2PUserFilterPanel : MonoBehaviour
                 clickCount = 2;
                 break;
             case UserFilterMode.None:
+                // 비로그인 시 여기 도달 불가 (위에서 처리)
                 currentMode = UserFilterMode.FollowingOnly;
                 clickCount = 0;
                 break;
@@ -200,6 +322,25 @@ public class P2PUserFilterPanel : MonoBehaviour
         SaveFilterMode();
         UpdateVisualState();
         ApplyFilterMode();
+    }
+
+    /// <summary>
+    /// 로그인 프롬프트 표시
+    /// ListPanel은 열린 상태 유지, LoginPrompt만 표시
+    /// </summary>
+    private void ShowLoginPrompt()
+    {
+        pendingToggleAction = true;  // 로그인 완료 후 토글 액션 대기
+
+        if (loginManager != null)
+        {
+            // LoginManager의 ShowLoginRequirementPopup 사용
+            loginManager.ShowLoginRequirementPopup();
+        }
+        else
+        {
+            Debug.LogWarning("[P2PUserFilterPanel] LoginManager를 찾을 수 없습니다.");
+        }
     }
 
     private void UpdateVisualState()

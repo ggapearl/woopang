@@ -178,18 +178,15 @@ public class DoubleTap3D : MonoBehaviour
             descriptionTextUI.gameObject.SetActive(false);
         }
 
-        // Created by (username) 텍스트 UI 동적 생성
-        if (createdByText == null && fullscreenCanvasGroup != null)
+        // Created by (username) 텍스트 UI 연결
+        // ⚠️ 동적 생성 대신 FullScreenGuide 자식에 미리 배치된 오브젝트 사용
+        // 에디터에서 WOOPANG > Setup > Add CreatedByText to FullScreenGuide 실행
+        if (createdByText == null && guidePanel != null)
         {
-            // 기존에 생성된 것이 있는지 확인
-            Transform existingCreatedBy = fullscreenCanvasGroup.transform.Find("CreatedByText");
+            Transform existingCreatedBy = guidePanel.transform.Find("CreatedByText");
             if (existingCreatedBy != null)
             {
                 createdByText = existingCreatedBy.GetComponent<Text>();
-            }
-            else
-            {
-                CreateCreatedByUI();
             }
         }
         if (createdByText != null)
@@ -245,8 +242,9 @@ public class DoubleTap3D : MonoBehaviour
                     byte[] imageData = imageSprites[i].texture.EncodeToPNG();
                     cachedImageData[i] = imageData;
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
+                    // 이미지 캐싱 실패 - 무시
                 }
             }
         }
@@ -279,8 +277,9 @@ public class DoubleTap3D : MonoBehaviour
 
                 restoredSprites.Add(restoredSprite);
             }
-            catch (Exception e)
+            catch (Exception)
             {
+                // 이미지 복원 실패 - 무시
             }
         }
 
@@ -486,37 +485,8 @@ public class DoubleTap3D : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Created by (username) UI 동적 생성
-    /// </summary>
-    private void CreateCreatedByUI()
-    {
-        GameObject textObj = new GameObject("CreatedByText");
-        textObj.transform.SetParent(fullscreenCanvasGroup.transform, false);
-
-        createdByText = textObj.AddComponent<Text>();
-        createdByText.font = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
-        if (createdByText.font == null)
-            createdByText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        createdByText.fontSize = 18;
-        createdByText.color = new Color(0.8f, 0.8f, 0.8f, 1f); // 연한 회색
-        createdByText.alignment = TextAnchor.MiddleLeft;
-
-        // 그림자 효과 추가
-        Shadow shadow = textObj.AddComponent<Shadow>();
-        shadow.effectColor = new Color(0, 0, 0, 0.5f);
-        shadow.effectDistance = new Vector2(1, -1);
-
-        RectTransform rect = textObj.GetComponent<RectTransform>();
-        // 이미지 아래에 배치 (하단 왼쪽)
-        rect.anchorMin = new Vector2(0, 0);
-        rect.anchorMax = new Vector2(1, 0);
-        rect.pivot = new Vector2(0, 0);
-        rect.sizeDelta = new Vector2(0, 30);
-        rect.anchoredPosition = new Vector2(20, 190); // CommentPreviewPanel 위에 위치
-
-        textObj.SetActive(false);
-    }
+    // CreateCreatedByUI() 제거됨 - FullScreenGuide 자식으로 미리 배치
+    // 에디터에서 WOOPANG > Setup > Add CreatedByText to FullScreenGuide 실행
 
     private void CreateCommentPreviewUI()
     {

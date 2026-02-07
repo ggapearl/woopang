@@ -16,6 +16,7 @@ public class MessagePanelManager : MonoBehaviour
 
     [Header("=== 메인 패널 ===")]
     public GameObject messagePanel;
+    public Button closeButton;
     public Transform conversationListContent;
     public GameObject conversationItemPrefab;
     public GameObject adminNoticePrefab;
@@ -33,8 +34,12 @@ public class MessagePanelManager : MonoBehaviour
     public GameObject myMessageBubblePrefab;
     public GameObject otherMessageBubblePrefab;
     public GameObject adminMessageBubblePrefab;
+    [Tooltip("시스템 메시지 아바타 스프라이트 (WOOPANG 로고)")]
+    public Sprite systemAvatarSprite;
     public InputField chatInput;
     public Button sendButton;
+    [Tooltip("시스템 알림에서 숨길 입력 영역 (전체 InputArea GameObject)")]
+    public GameObject chatInputArea;
     public Text chatRoomTitle;
     public Image chatRoomAvatar;
     public Button chatRoomBackButton;
@@ -52,11 +57,29 @@ public class MessagePanelManager : MonoBehaviour
     public Color heartColor = new Color(1f, 0.4f, 0.6f, 1f);
 
     [Header("=== 빈 상태 UI ===")]
-    [Tooltip("메시지가 없을 때 표시할 텍스트")]
-    public string emptyInboxMessage = "아직 메시지가 없습니다.\n친구에게 첫 메시지를 보내보세요!";
+    [Tooltip("메시지가 없을 때 표시할 텍스트 (fallback)")]
+    public string emptyInboxMessage = "아직 대화가 없습니다 ❤️\n\n근처에 있는 친구를 팔로우해서\n대화를 시작해보세요!";
     public string emptySearchMessage = "검색 결과가 없습니다.";
     [Tooltip("채팅방에 대화가 없을 때 표시할 텍스트")]
     public string emptyChatMessage = "아직 대화가 없습니다.\n첫 메시지를 보내보세요!";
+
+    [Tooltip("빈 상태 메시지 폰트 크기")]
+    public int emptyStateFontSize = 42;
+
+    [Tooltip("빈 상태 메시지 텍스트 색상")]
+    public Color emptyStateTextColor = new Color(0.45f, 0.45f, 0.5f, 1f);
+
+    [Header("=== 읽음 표시 색상 설정 ===")]
+    [Tooltip("읽음 완료 표시 색상 (✓✓)")]
+    public Color readIndicatorColorRead = new Color(0.3f, 0.7f, 1f, 1f);
+
+    [Tooltip("전송 완료 표시 색상 (✓)")]
+    public Color readIndicatorColorUnread = new Color(0.6f, 0.6f, 0.6f, 1f);
+
+    [Header("=== 하트 아이콘 설정 ===")]
+    [Tooltip("하트 아이콘 크기 (픽셀)")]
+    public Vector2 heartIconSize = new Vector2(24, 24);
+
     private GameObject emptyStateObject;
     private GameObject chatEmptyStateObject;
 
@@ -64,6 +87,13 @@ public class MessagePanelManager : MonoBehaviour
     [Header("=== 안읽음 인디케이터 ===")]
     public GameObject globalUnreadIndicator;
     private int totalUnreadCount = 0;
+
+    [Header("=== 시스템 메시지 설정 ===")]
+    [Tooltip("시스템 메시지 배경색 (어두운 색)")]
+    public Color systemMessageBgColor = new Color(0.12f, 0.12f, 0.15f, 1f);
+    [Tooltip("일반 DM 배경색")]
+    public Color normalMessageBgColor = new Color(0.18f, 0.18f, 0.22f, 1f);
+    private const string SystemNotificationKey = "SystemNotifications";
 
     [Header("=== 메시지 폴링 ===")]
     [Tooltip("포그라운드 폴링 간격 (초)")]
@@ -73,42 +103,53 @@ public class MessagePanelManager : MonoBehaviour
     private Coroutine pollingCoroutine;
     private bool isAppFocused = true;
 
-    [Header("=== 테스트 모드 ===")]
-    [Tooltip("에디터에서 테스트용 더미 메시지 생성")]
-    public bool enableTestMode = true;  // 에디터에서 기본 활성화
-    public float testMessageDelay = 2f;  // 빠른 로드
-
     [Header("=== 폰트 설정 ===")]
-    [Tooltip("채팅용 커스텀 폰트 (AppleSDGothicNeoM)")]
+    [Tooltip("채팅용 커스텀 폰트 (AppleSDGothicNeoM) - 프리팹에 폰트 없을 때 사용")]
     public Font chatFont;
-    [Tooltip("채팅 메시지 폰트 크기")]
-    public int chatFontSize = 60;
 
-    // 더미 데이터 보존용 플래그
-    private bool hasDummyDataLoaded = false;
-
-    [Header("=== 채팅 버블 설정 ===")]
+    [Header("=== 채팅 버블 최대 너비 설정 ===")]
     [Tooltip("화면 너비 대비 최대 버블 너비 비율 (0.5 ~ 1.0)")]
     [Range(0.5f, 1.0f)]
     public float maxBubbleWidthRatio = 0.82f;
 
+    [Tooltip("버블 최대 너비 (픽셀) - 이 값과 화면비율 중 작은 값 적용")]
+    public float maxBubbleWidthPixels = 800f;
+
     [Tooltip("버블 최소 너비 (픽셀)")]
     public float minBubbleWidth = 120f;
 
-    [Tooltip("버블 좌우 패딩 (픽셀)")]
-    public float bubblePaddingH = 24f;
+    [Tooltip("기본 화면 너비 (에디터에서 Screen.width가 0일 때 사용)")]
+    public float defaultScreenWidth = 1080f;
 
-    [Tooltip("버블 상하 패딩 (픽셀)")]
-    public float bubblePaddingV = 18f;
+    [Header("=== 대화 목록 설정 ===")]
+    [Tooltip("대화 목록 아이템 높이")]
+    public float conversationItemHeight = 140f;
 
-    [Tooltip("메시지 폰트 크기")]
-    public int bubbleFontSize = 60;
+    [Tooltip("대화 목록 아이템 간격 (픽셀)")]
+    public float conversationListSpacing = 2f;
 
-    [Tooltip("줄 높이 (픽셀)")]
-    public float bubbleLineHeight = 42f;
+    // 내부용 상수 (프리팹 값 유지, 너비 계산용)
+    private const float DEFAULT_BUBBLE_PADDING = 24f;
+    private const float DEFAULT_MIN_TEXT_WIDTH = 50f;
+    private const float DEFAULT_BUBBLE_INNER_SPACING = 4f;
+    private const bool TIME_INSIDE_BUBBLE = true;
+    private const float TIME_INSIDE_MARGIN_RIGHT = 8f;
+    private const float TIME_INSIDE_MARGIN_BOTTOM = 4f;
+    private const float TIME_AREA_WIDTH = 150f;
+    private const float TIME_AREA_MIN_WIDTH = 100f;
+    private const int DATE_SEPARATOR_FONT_SIZE = 28;
+    private const float DATE_SEPARATOR_MARGIN = 20f;
+    private static readonly Color DATE_SEPARATOR_COLOR = new Color(0.6f, 0.6f, 0.6f, 1f);
 
-    [Tooltip("버블 최소 높이 (픽셀)")]
-    public float minBubbleHeight = 60f;
+    [Header("=== 날짜 구분선 설정 ===")]
+    [Tooltip("날짜 구분선 사용 (24시간 기준)")]
+    public bool useDateSeparator = true;
+
+    [Tooltip("날짜 구분선 사용 시 버블 내 시간 숨김")]
+    public bool hideTimeInBubbleWhenSeparator = true;
+
+    // 마지막 메시지 시간 (날짜 구분선용)
+    private DateTime lastMessageTime = DateTime.MinValue;
 
     // 현재 대화 상대
     private string currentChatUserId;
@@ -122,6 +163,64 @@ public class MessagePanelManager : MonoBehaviour
     // 스와이프 추적
     private Dictionary<GameObject, Vector2> swipeStartPositions = new Dictionary<GameObject, Vector2>();
     private Dictionary<GameObject, bool> isSwipingItem = new Dictionary<GameObject, bool>();
+
+    // 현재 표시 중인 메시지 버블 목록 (실시간 반영용)
+    private List<GameObject> displayedBubbles = new List<GameObject>();
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// Inspector에서 값 변경 시 실시간 반영
+    /// </summary>
+    private void OnValidate()
+    {
+        // Play 모드에서만 실시간 반영
+        if (!Application.isPlaying) return;
+        if (chatMessageContent == null) return;
+
+        // 기존 버블들의 최대 너비 업데이트
+        UnityEditor.EditorApplication.delayCall += () =>
+        {
+            if (this == null || chatMessageContent == null) return;
+            RefreshBubbleWidths();
+        };
+    }
+
+    /// <summary>
+    /// 모든 버블의 최대 너비 업데이트
+    /// </summary>
+    private void RefreshBubbleWidths()
+    {
+        float screenWidth = Screen.width > 0 ? Screen.width : defaultScreenWidth;
+        float maxWidth = Mathf.Min(maxBubbleWidthPixels, screenWidth * maxBubbleWidthRatio);
+        float maxTextWidth = maxWidth - (DEFAULT_BUBBLE_PADDING * 2);
+
+        foreach (Transform child in chatMessageContent)
+        {
+            if (child == null) continue;
+
+            // BubbleContainer 찾기
+            Transform bubbleContainer = child.Find("BubbleContainer");
+            if (bubbleContainer == null) bubbleContainer = child.Find("Bubble");
+            if (bubbleContainer == null) continue;
+
+            // ContentText의 LayoutElement 업데이트
+            Text contentText = bubbleContainer.GetComponentInChildren<Text>();
+            if (contentText == null) continue;
+
+            LayoutElement textLE = contentText.GetComponent<LayoutElement>();
+            if (textLE != null)
+            {
+                float actualTextWidth = contentText.preferredWidth;
+                float finalTextWidth = Mathf.Clamp(actualTextWidth, DEFAULT_MIN_TEXT_WIDTH, maxTextWidth);
+                textLE.preferredWidth = finalTextWidth;
+            }
+        }
+
+        // 레이아웃 리빌드
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(chatMessageContent as RectTransform);
+    }
+#endif
 
     void Awake()
     {
@@ -148,24 +247,197 @@ public class MessagePanelManager : MonoBehaviour
 
     void Start()
     {
+        AutoConnectFields();
         SetupButtons();
         HideAllPanels();
+
+        // 시스템 알림 로드 (로그인 전에도 로드)
+        LoadSystemNotifications();
 
         // 입력창 자동 확장 설정
         if (chatInput != null)
             AutoExpandInputField.Setup(chatInput, 50f, 150f);
+    }
 
-        // 테스트 모드 (에디터에서만)
-#if UNITY_EDITOR
-        if (enableTestMode)
+    /// <summary>
+    /// Inspector에서 연결되지 않은 필드 자동 연결
+    /// </summary>
+    private void AutoConnectFields()
+    {
+        // AdminNoticeItem 프리팹 자동 로드
+        if (adminNoticePrefab == null)
         {
-            StartCoroutine(GenerateTestMessages());
+            adminNoticePrefab = Resources.Load<GameObject>("Prefabs/DM/AdminNoticeItem");
+            if (adminNoticePrefab == null)
+            {
+                // Assets/Prefabs/DM 폴더에서도 시도
+                var prefabs = Resources.LoadAll<GameObject>("Prefabs");
+                foreach (var p in prefabs)
+                {
+                    if (p.name == "AdminNoticeItem")
+                    {
+                        adminNoticePrefab = p;
+                        break;
+                    }
+                }
+            }
+            if (adminNoticePrefab != null)
+                Debug.Log("[MessagePanel] AdminNoticeItem 프리팹 자동 로드 성공");
+            else
+                Debug.LogWarning("[MessagePanel] AdminNoticeItem 프리팹을 Resources에서 찾을 수 없음");
         }
-#endif
+
+        // AdminMessageBubble 프리팹 자동 로드
+        if (adminMessageBubblePrefab == null)
+        {
+            adminMessageBubblePrefab = Resources.Load<GameObject>("Prefabs/DM/AdminMessageBubble");
+            if (adminMessageBubblePrefab == null)
+                adminMessageBubblePrefab = otherMessageBubblePrefab; // fallback
+        }
+
+        // closeButton 자동 연결
+        if (closeButton == null && messagePanel != null)
+        {
+            // 닫기 버튼 이름 패턴들을 찾아봄
+            string[] closeButtonNames = { "CloseButton", "Close_Button", "X_Button", "BackButton", "Back_Button", "닫기" };
+            foreach (string buttonName in closeButtonNames)
+            {
+                Transform found = messagePanel.transform.Find(buttonName);
+                if (found != null)
+                {
+                    closeButton = found.GetComponent<Button>();
+                    if (closeButton != null)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            // 직접 자식에서 못 찾으면 재귀 검색
+            if (closeButton == null)
+            {
+                closeButton = FindButtonInChildren(messagePanel.transform, closeButtonNames);
+            }
+        }
+
+        // chatRoomPanel이 null이면 자동으로 찾기
+        if (chatRoomPanel == null)
+        {
+            GameObject chatPanelObj = GameObject.Find("ChatRoomPanel");
+            if (chatPanelObj != null)
+            {
+                chatRoomPanel = chatPanelObj;
+                Debug.Log("[MessagePanel] chatRoomPanel 자동 연결 완료");
+            }
+        }
+
+        // chatRoomPanel UI 자동 연결
+        if (chatRoomPanel != null)
+        {
+            // chatRoomTitle 자동 연결
+            // 실제 씬 구조: ChatRoomPanel > Background > Header > ChatTitle
+            // ★ null이 아니어도 chatRoomPanel의 자식이 아니면 재연결 (잘못된 참조 수정)
+            bool titleNeedsReconnect = (chatRoomTitle == null);
+            if (!titleNeedsReconnect && chatRoomTitle != null)
+            {
+                titleNeedsReconnect = !chatRoomTitle.transform.IsChildOf(chatRoomPanel.transform);
+                if (titleNeedsReconnect)
+                    Debug.LogWarning("[MessagePanel] chatRoomTitle이 ChatRoomPanel의 자식이 아님! 재연결 시도...");
+            }
+
+            if (titleNeedsReconnect)
+            {
+                Transform titleTr = chatRoomPanel.transform.Find("Background/Header/ChatTitle");
+                if (titleTr == null)
+                    titleTr = chatRoomPanel.transform.Find("Header/ChatTitle");
+                if (titleTr == null)
+                    titleTr = chatRoomPanel.transform.Find("Background/Header/TitleText");
+                if (titleTr == null)
+                    titleTr = FindChildByName(chatRoomPanel.transform, "ChatTitle");
+
+                if (titleTr != null)
+                {
+                    chatRoomTitle = titleTr.GetComponent<Text>();
+                    if (chatRoomTitle != null)
+                        Debug.Log("[MessagePanel] chatRoomTitle 자동 연결 완료: Background/Header/ChatTitle");
+                    else
+                        Debug.LogWarning("[MessagePanel] ChatTitle Transform은 찾았으나 Text 컴포넌트 없음");
+                }
+                else
+                {
+                    Debug.LogWarning("[MessagePanel] ChatTitle Transform을 찾을 수 없음");
+                }
+            }
+
+            // chatInputArea 자동 연결
+            // 실제 씬 구조: ChatRoomPanel > Background > InputArea
+            if (chatInputArea == null)
+            {
+                Transform inputAreaTr = chatRoomPanel.transform.Find("Background/InputArea");
+                if (inputAreaTr == null)
+                    inputAreaTr = chatRoomPanel.transform.Find("InputArea");
+                if (inputAreaTr == null)
+                    inputAreaTr = FindChildByName(chatRoomPanel.transform, "InputArea");
+
+                if (inputAreaTr != null)
+                {
+                    chatInputArea = inputAreaTr.gameObject;
+                    Debug.Log("[MessagePanel] chatInputArea 자동 연결 완료");
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[MessagePanel] chatRoomPanel을 찾을 수 없음 - ChatRoomPanel 오브젝트가 씬에 있는지 확인 필요");
+        }
+    }
+
+    /// <summary>
+    /// 이름으로 자식 Transform 찾기 (재귀)
+    /// </summary>
+    private Transform FindChildByName(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == name)
+                return child;
+
+            Transform found = FindChildByName(child, name);
+            if (found != null)
+                return found;
+        }
+        return null;
+    }
+
+    private Button FindButtonInChildren(Transform parent, string[] names)
+    {
+        foreach (Transform child in parent)
+        {
+            foreach (string name in names)
+            {
+                if (child.name.Contains(name) || child.name.ToLower().Contains("close") || child.name.ToLower().Contains("back"))
+                {
+                    Button btn = child.GetComponent<Button>();
+                    if (btn != null)
+                    {
+                        return btn;
+                    }
+                }
+            }
+
+            // 자식의 자식도 검색
+            Button found = FindButtonInChildren(child, names);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private void SetupButtons()
     {
+        // 메시지 패널 닫기 버튼
+        if (closeButton != null)
+            closeButton.onClick.AddListener(CloseMessagePanel);
+
         if (sendButton != null)
             sendButton.onClick.AddListener(OnSendButtonClicked);
 
@@ -203,9 +475,35 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     public void OpenMessagePanel()
     {
+        // 로그인 체크 - 로그인 안 되어 있으면 로그인 팝업 표시
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
+        {
+            if (LoginManager.Instance != null)
+            {
+                LoginManager.Instance.ShowLoginRequirementPopup();
+            }
+            return;
+        }
+
         HideAllPanels();
         if (messagePanel != null)
+        {
             messagePanel.SetActive(true);
+
+            // CloseButton도 명시적으로 활성화
+            if (closeButton != null)
+            {
+                closeButton.gameObject.SetActive(true);
+            }
+            else
+            {
+                Transform closeBtnTransform = messagePanel.transform.Find("CloseButton");
+                if (closeBtnTransform != null)
+                {
+                    closeBtnTransform.gameObject.SetActive(true);
+                }
+            }
+        }
 
         StartCoroutine(LoadConversationList());
         StartPolling();
@@ -218,6 +516,133 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (CheckLogin())
             StartCoroutine(FetchUnreadCount());
+    }
+
+    /// <summary>
+    /// FCM 푸시 수신 시 대화 목록 새로고침 (외부 호출용)
+    /// </summary>
+    public void RefreshConversations()
+    {
+        if (!CheckLogin()) return;
+
+        // 메시지 패널이 열려있으면 대화 목록 새로고침
+        if (messagePanel != null && messagePanel.activeInHierarchy)
+        {
+            StartCoroutine(LoadConversationList());
+        }
+
+        // 안읽음 카운트 항상 업데이트
+        StartCoroutine(FetchUnreadCount());
+    }
+
+    /// <summary>
+    /// FCM 푸시로 수신된 DM을 즉시 대화 목록에 추가/업데이트
+    /// </summary>
+    /// <param name="senderId">발신자 ID</param>
+    /// <param name="senderUsername">발신자 이름</param>
+    /// <param name="messageContent">메시지 내용</param>
+    /// <param name="avatarUrl">발신자 아바타 URL (선택)</param>
+    public void AddOrUpdateConversationFromPush(string senderId, string senderUsername, string messageContent, string avatarUrl = null)
+    {
+        if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(senderUsername))
+            return;
+
+        // 자신이 보낸 메시지는 무시
+        if (LoginManager.Instance != null && senderId == LoginManager.Instance.CurrentUserId.ToString())
+            return;
+
+        // WOOPANG/관리자 메시지 확인 (sender_id=3 또는 username에 woopang 포함)
+        bool isWoopangMessage = senderId == "3" ||
+                                senderId.ToLower() == "woopang" ||
+                                senderUsername.ToLower().Contains("woopang");
+
+        Debug.Log($"[DM_DEBUG] AddOrUpdateConversationFromPush: senderId={senderId}, username={senderUsername}, isWoopang={isWoopangMessage}");
+
+        // WOOPANG 메시지는 시스템 알림으로 처리
+        if (isWoopangMessage)
+        {
+            string notificationId = $"woopang_{DateTime.Now.Ticks}";
+            Debug.Log($"[DM_DEBUG] → WOOPANG 메시지로 처리, notificationId={notificationId}");
+            AddLocationNotificationFromPush("WOOPANG", messageContent, notificationId);
+            return;
+        }
+
+        string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        // 기존 대화 찾기
+        int existingIndex = -1;
+        for (int i = 0; i < conversations.Count; i++)
+        {
+            if (conversations[i].userId == senderId)
+            {
+                existingIndex = i;
+                break;
+            }
+        }
+
+        if (existingIndex >= 0)
+        {
+            // 기존 대화 업데이트
+            var existingConv = conversations[existingIndex];
+            existingConv.lastMessage = messageContent;
+            existingConv.lastMessageTime = currentTime;
+            existingConv.unreadCount++;
+        }
+        else
+        {
+            // 새 대화 추가
+            var newConv = new ConversationSummary
+            {
+                userId = senderId,
+                username = senderUsername,
+                avatarUrl = avatarUrl ?? "",
+                lastMessage = messageContent,
+                lastMessageTime = currentTime,
+                unreadCount = 1,
+                isSystemMessage = false
+            };
+
+            conversations.Add(newConv);
+        }
+
+        SortConversationsByTime();
+        totalUnreadCount++;
+        UpdateUnreadUI();
+
+        // 메시지 패널이 열려있으면 UI 즉시 갱신
+        if (messagePanel != null && messagePanel.activeInHierarchy)
+        {
+            RefreshConversationUI();
+        }
+    }
+
+    /// <summary>
+    /// 대화 목록 UI 갱신 (conversations 리스트 기반)
+    /// </summary>
+    private void RefreshConversationUI()
+    {
+        if (conversationListContent == null) return;
+
+        SortConversationsByTime();
+
+        // 모든 기존 아이템 삭제
+        ClearContent(conversationListContent);
+
+        // Admin 공지 먼저 생성
+        foreach (var broadcast in adminBroadcasts)
+        {
+            CreateAdminNoticeItem(broadcast);
+        }
+
+        // 대화 목록 생성 (DM + 시스템 알림 통합, 시간순)
+        foreach (var conv in conversations)
+        {
+            CreateConversationItem(conv);
+        }
+
+        // 빈 상태 체크
+        bool isEmpty = conversations.Count == 0 && adminBroadcasts.Count == 0;
+        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
     }
 
     /// <summary>
@@ -235,6 +660,153 @@ public class MessagePanelManager : MonoBehaviour
     {
         HideAllPanels();
     }
+
+    #region System Notification (시스템 알림 - DM과 통합)
+
+    /// <summary>
+    /// FCM 푸시로 수신된 시스템 알림 추가 (DM 목록에 통합, 로그인 없이도 저장)
+    /// </summary>
+    public void AddLocationNotificationFromPush(string title, string body, string notificationId,
+        float latitude = 0f, float longitude = 0f, float radius = 0f, string distance = "")
+    {
+        Debug.Log($"[DM_DEBUG] AddLocationNotificationFromPush: title={title}, body={body}, id={notificationId}");
+
+        if (string.IsNullOrEmpty(notificationId))
+        {
+            notificationId = $"sys_{DateTime.Now.Ticks}";
+        }
+
+        // 중복 체크
+        foreach (var existing in conversations)
+        {
+            if (existing.notificationId == notificationId)
+            {
+                Debug.Log($"[DM_DEBUG] → 중복 notificationId, 스킵");
+                return;
+            }
+        }
+
+        string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        // 시스템 메시지로 conversations에 추가
+        var systemMessage = new ConversationSummary
+        {
+            userId = $"system_{notificationId}",
+            username = title,
+            avatarUrl = "",
+            lastMessage = body,
+            lastMessageTime = currentTime,
+            unreadCount = 1,
+            isSystemMessage = true,
+            isRead = false,
+            notificationId = notificationId,
+            latitude = latitude,
+            longitude = longitude,
+            radius = radius,
+            distance = distance
+        };
+
+        Debug.Log($"[DM_DEBUG] → 시스템 메시지 추가: isSystemMessage=true, userId={systemMessage.userId}");
+        conversations.Insert(0, systemMessage);
+        SortConversationsByTime();
+        SaveSystemNotifications();
+
+        // 메시지 패널이 열려있으면 UI 갱신
+        if (messagePanel != null && messagePanel.activeInHierarchy)
+        {
+            RefreshConversationUI();
+        }
+
+        // 안읽음 카운트 업데이트
+        UpdateUnreadUI();
+    }
+
+    /// <summary>
+    /// 시스템 알림만 저장 (PlayerPrefs)
+    /// </summary>
+    private void SaveSystemNotifications()
+    {
+        try
+        {
+            // 시스템 메시지만 필터링하여 저장
+            var systemMessages = conversations.FindAll(c => c.isSystemMessage);
+            var list = new ConversationSummaryList { conversations = systemMessages };
+            string json = JsonUtility.ToJson(list);
+            PlayerPrefs.SetString(SystemNotificationKey, json);
+            PlayerPrefs.Save();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[MessagePanel] 시스템 알림 저장 실패: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 시스템 알림 로드 (PlayerPrefs)
+    /// </summary>
+    private void LoadSystemNotifications()
+    {
+        try
+        {
+            string json = PlayerPrefs.GetString(SystemNotificationKey, "");
+            if (!string.IsNullOrEmpty(json))
+            {
+                var list = JsonUtility.FromJson<ConversationSummaryList>(json);
+                if (list != null && list.conversations != null)
+                {
+                    // 기존 시스템 메시지 제거 후 로드
+                    conversations.RemoveAll(c => c.isSystemMessage);
+                    conversations.AddRange(list.conversations);
+                    SortConversationsByTime();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[MessagePanel] 시스템 알림 로드 실패: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 대화 목록을 시간순으로 정렬 (최신순)
+    /// </summary>
+    private void SortConversationsByTime()
+    {
+        conversations.Sort((a, b) =>
+        {
+            DateTime timeA, timeB;
+            DateTime.TryParse(a.lastMessageTime, out timeA);
+            DateTime.TryParse(b.lastMessageTime, out timeB);
+            return timeB.CompareTo(timeA); // 최신순
+        });
+    }
+
+    /// <summary>
+    /// 시스템 알림 안읽음 개수
+    /// </summary>
+    public int GetUnreadLocationNotificationCount()
+    {
+        int count = 0;
+        foreach (var c in conversations)
+        {
+            if (c.isSystemMessage && !c.isRead) count++;
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// 시스템 메시지 읽음 처리
+    /// </summary>
+    private void MarkSystemMessageAsRead(ConversationSummary conv)
+    {
+        if (conv == null || !conv.isSystemMessage || conv.isRead) return;
+
+        conv.isRead = true;
+        SaveSystemNotifications();
+        UpdateUnreadUI();
+    }
+
+    #endregion
 
     // 채팅룸에서 돌아갈 때 메시지 패널 다시 열기 위한 플래그
     private bool openedFromMessagePanel = false;
@@ -262,23 +834,196 @@ public class MessagePanelManager : MonoBehaviour
         if (chatRoomPanel != null)
             chatRoomPanel.SetActive(true);
 
+        // chatRoomTitle 유효성 검증 + 재연결
+        ValidateAndReconnectChatRoomTitle();
+
         if (chatRoomTitle != null)
         {
-            // 다국어 제목 적용: "사용자와의 대화" 형식
-            if (LocalizationManager.Instance != null)
-                chatRoomTitle.text = LocalizationManager.Instance.GetText("chat_with_user", username);
-            else
-                chatRoomTitle.text = $"{username}와의 대화";
+            chatRoomTitle.text = username;
+            chatRoomTitle.color = isAdmin
+                ? new Color(1f, 0.84f, 0f, 1f)
+                : Color.white;
+            Canvas.ForceUpdateCanvases();
+        }
+        else
+        {
+            Debug.LogWarning($"[MessagePanel] chatRoomTitle이 null! 타이틀을 설정할 수 없음. username={username}");
         }
 
+        // 채팅방 아바타 - 원형 마스크 구조 적용
         if (chatRoomAvatar != null && !string.IsNullOrEmpty(avatarUrl))
-            StartCoroutine(LoadAvatar(avatarUrl, chatRoomAvatar));
+            StartCoroutine(LoadAvatarWithMask(avatarUrl, chatRoomAvatar.transform));
+
+        // 채팅방 아바타 터치 → 프로필 열기 (Admin이 아닌 경우만)
+        if (chatRoomAvatar != null && !isAdmin)
+        {
+            // AvatarMask(부모) 또는 chatRoomAvatar 자체에 핸들러 추가
+            GameObject targetObj = chatRoomAvatar.transform.parent != null
+                ? chatRoomAvatar.transform.parent.gameObject
+                : chatRoomAvatar.gameObject;
+
+            AvatarTapHandler avatarHandler = targetObj.GetComponent<AvatarTapHandler>();
+            if (avatarHandler == null)
+                avatarHandler = targetObj.AddComponent<AvatarTapHandler>();
+
+            avatarHandler.Initialize(userId, username, OpenProfileFromChatRoom);
+        }
+
+        // Admin/시스템 메시지인 경우 입력창 비활성화
+        SetChatInputEnabled(!isAdmin);
 
         StartCoroutine(LoadChatMessages(userId, isAdmin));
 
         // 읽음 처리
         if (!isAdmin)
             StartCoroutine(MarkMessagesAsRead(userId));
+    }
+
+    /// <summary>
+    /// 시스템 알림 채팅방 열기 (FCM으로 받은 시스템 메시지)
+    /// </summary>
+    /// <param name="notificationId">알림 ID</param>
+    /// <param name="messageContent">메시지 내용</param>
+    public void OpenSystemChatRoom(string notificationId, string messageContent)
+    {
+        Debug.Log($"[DM_DEBUG] OpenSystemChatRoom: notificationId={notificationId}, content={messageContent}");
+
+        currentChatUserId = "woopang";
+        currentChatUsername = "WOOPANG";
+        isAdminChat = true;
+        currentSystemNotificationId = notificationId;
+        currentSystemMessageContent = messageContent;
+
+        // 메시지 패널에서 채팅룸으로 이동
+        if (messagePanel != null && messagePanel.activeSelf)
+        {
+            openedFromMessagePanel = true;
+            messagePanel.SetActive(false);
+        }
+        else
+        {
+            openedFromMessagePanel = false;
+        }
+
+        // chatRoomPanel이 null이면 자동으로 찾기
+        if (chatRoomPanel == null)
+        {
+            GameObject chatPanelObj = GameObject.Find("ChatRoomPanel");
+            if (chatPanelObj != null)
+            {
+                chatRoomPanel = chatPanelObj;
+                Debug.Log($"[DM_DEBUG] chatRoomPanel 자동 연결 완료");
+            }
+        }
+
+        if (chatRoomPanel != null)
+        {
+            chatRoomPanel.SetActive(true);
+            Debug.Log($"[DM_DEBUG] → chatRoomPanel 활성화");
+        }
+        else
+        {
+            Debug.LogError("[DM_DEBUG] chatRoomPanel이 null! ChatRoomPanel 오브젝트가 씬에 있는지 확인 필요");
+            return;
+        }
+
+        // chatRoomTitle 유효성 검증 + 재연결
+        ValidateAndReconnectChatRoomTitle();
+
+        if (chatRoomTitle != null)
+        {
+            chatRoomTitle.text = "WOOPANG";
+            chatRoomTitle.color = new Color(1f, 0.84f, 0f, 1f); // 골드색
+        }
+        else
+        {
+            Debug.LogWarning("[MessagePanel] chatRoomTitle이 null! WOOPANG 타이틀 설정 실패");
+        }
+
+        // 입력창 비활성화 (읽기 전용)
+        SetChatInputEnabled(false);
+        Debug.Log($"[DM_DEBUG] → InputArea 비활성화 (읽기 전용)");
+
+        // 시스템 메시지 표시
+        StartCoroutine(LoadSystemChatMessages(notificationId, messageContent));
+    }
+
+    // 현재 시스템 메시지 정보 저장
+    private string currentSystemNotificationId;
+    private string currentSystemMessageContent;
+
+    /// <summary>
+    /// chatRoomTitle이 chatRoomPanel의 자식인지 검증하고, 아니면 재연결
+    /// </summary>
+    private void ValidateAndReconnectChatRoomTitle()
+    {
+        if (chatRoomPanel == null) return;
+
+        bool needsReconnect = (chatRoomTitle == null);
+        if (!needsReconnect && chatRoomTitle != null)
+        {
+            needsReconnect = !chatRoomTitle.transform.IsChildOf(chatRoomPanel.transform);
+        }
+
+        if (needsReconnect)
+        {
+            Transform titleTr = chatRoomPanel.transform.Find("Background/Header/ChatTitle");
+            if (titleTr == null) titleTr = chatRoomPanel.transform.Find("Header/ChatTitle");
+            if (titleTr == null) titleTr = chatRoomPanel.transform.Find("Background/Header/TitleText");
+            if (titleTr == null) titleTr = FindChildByName(chatRoomPanel.transform, "ChatTitle");
+            if (titleTr != null)
+            {
+                chatRoomTitle = titleTr.GetComponent<Text>();
+                if (chatRoomTitle != null)
+                    Debug.Log("[MessagePanel] chatRoomTitle 재연결 완료: " + titleTr.name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 채팅 입력창 활성화/비활성화
+    /// Admin/WOOPANG: InputArea 표시 + 입력 비활성화 + placeholder 안내
+    /// 일반 DM: InputArea 표시 + 입력 활성화 + "메시지 입력" placeholder
+    /// </summary>
+    private void SetChatInputEnabled(bool enabled)
+    {
+        // InputArea는 항상 표시 (레이아웃 유지, 비활성화만 처리)
+        if (chatInputArea != null)
+        {
+            chatInputArea.SetActive(true);
+        }
+
+        if (chatInput != null)
+        {
+            chatInput.interactable = enabled;
+            if (!enabled) chatInput.text = "";
+
+            // placeholder 설정 (다국어 지원)
+            if (chatInput.placeholder != null)
+            {
+                Text placeholderText = chatInput.placeholder.GetComponent<Text>();
+                if (placeholderText != null)
+                {
+                    if (enabled)
+                    {
+                        placeholderText.text = LocalizationManager.Instance != null
+                            ? LocalizationManager.Instance.GetText("message_placeholder")
+                            : "메시지 입력";
+                    }
+                    else
+                    {
+                        placeholderText.text = LocalizationManager.Instance != null
+                            ? LocalizationManager.Instance.GetText("chat_readonly_placeholder")
+                            : "대화를 할 수 없는 채팅방입니다";
+                    }
+                }
+            }
+        }
+
+        if (sendButton != null)
+        {
+            sendButton.interactable = enabled;
+        }
     }
 
     /// <summary>
@@ -292,10 +1037,14 @@ public class MessagePanelManager : MonoBehaviour
         // 채팅방 빈 상태 UI 정리
         ShowChatEmptyState(false);
 
+        // 입력창 다시 활성화 (다음 대화를 위해)
+        SetChatInputEnabled(true);
+
         currentChatUserId = null;
         currentChatUsername = null;
         isAdminChat = false;
         openedFromMessagePanel = false;
+        profileOpenedFromChatRoom = false;
 
         // Message_Button 클릭 트리거 (모든 관련 로직 실행)
         if (navigationMessageButton != null)
@@ -308,6 +1057,57 @@ public class MessagePanelManager : MonoBehaviour
             Debug.LogWarning("[MessagePanelManager] navigationMessageButton이 연결되지 않음. 직접 열기.");
             OpenMessagePanel();
         }
+    }
+
+    // ============================================================
+    // 아바타 탭 → 프로필 열기 & 패널 전환
+    // ============================================================
+
+    private bool profileOpenedFromChatRoom = false;
+    private string savedChatUserId;
+    private string savedChatUsername;
+
+    /// <summary>
+    /// 채팅방에서 아바타 탭 시 프로필 열기
+    /// ChatRoomPanel을 숨기고 FullProfilePanel을 표시
+    /// </summary>
+    public void OpenProfileFromChatRoom(string userId, string username)
+    {
+        if (ProfileManager.Instance == null) return;
+
+        // 현재 채팅방 정보 저장 (나중에 돌아오기 위해)
+        savedChatUserId = currentChatUserId;
+        savedChatUsername = currentChatUsername;
+        profileOpenedFromChatRoom = true;
+
+        // ChatRoomPanel 숨기기
+        if (chatRoomPanel != null)
+            chatRoomPanel.SetActive(false);
+
+        // 프로필 열기
+        ProfileManager.Instance.ShowProfile(userId);
+
+        // ProfileManager에 콜백 등록 (프로필 닫힐 때 채팅방으로 돌아가기)
+        ProfileManager.Instance.SetOnCloseCallback(OnProfileClosedReturnToChatRoom);
+    }
+
+    /// <summary>
+    /// 프로필 패널이 닫힐 때 채팅방으로 돌아가기
+    /// </summary>
+    private void OnProfileClosedReturnToChatRoom()
+    {
+        if (!profileOpenedFromChatRoom) return;
+
+        profileOpenedFromChatRoom = false;
+
+        // ChatRoomPanel 다시 표시
+        if (chatRoomPanel != null && !string.IsNullOrEmpty(savedChatUserId))
+        {
+            chatRoomPanel.SetActive(true);
+        }
+
+        savedChatUserId = null;
+        savedChatUsername = null;
     }
 
     /// <summary>
@@ -340,52 +1140,41 @@ public class MessagePanelManager : MonoBehaviour
 
     private IEnumerator LoadConversationList()
     {
-        ClearContent(conversationListContent);
-
+        // 에디터 테스트 모드 체크 - DMTestDataGenerator가 활성화되어 있으면 서버 로드 스킵
 #if UNITY_EDITOR
-        // 에디터에서 더미 데이터가 이미 로드되어 있으면 캐시된 데이터 재사용
-        if (enableTestMode && hasDummyDataLoaded && conversations.Count > 0)
+        var testGenerator = GetComponent<DMTestDataGenerator>();
+        if (testGenerator != null && (testGenerator.autoGenerateOnStart || testGenerator.autoLoadSystemNotification))
         {
-            // 관리자 공지 UI 생성
-            foreach (var broadcast in adminBroadcasts)
-            {
-                CreateAdminNoticeItem(broadcast);
-            }
-
-            // 캐시된 대화 목록 UI 생성
-            foreach (var conv in conversations)
-            {
-                CreateConversationItem(conv);
-            }
-
-            yield break;
+            Debug.Log("[MessagePanel] 테스트 모드 - 서버 로드 스킵, DMTestDataGenerator가 대화 목록 생성");
+            yield break;  // DMTestDataGenerator.PopulateTestConversations()에서 처리
         }
 #endif
+
+        ClearContent(conversationListContent);
 
         // 1. 관리자 공지 로드 (항상 최상단)
         yield return StartCoroutine(LoadAdminBroadcasts());
 
-        // 관리자 공지 UI 생성
         foreach (var broadcast in adminBroadcasts)
         {
             CreateAdminNoticeItem(broadcast);
         }
 
-        // 2. 일반 대화 목록 로드
+        // 2. 시스템 메시지 (WOOPANG 알림) 표시
+        var systemMessages = conversations.FindAll(c => c.isSystemMessage);
+        foreach (var sysMsg in systemMessages)
+        {
+            CreateConversationItem(sysMsg);
+        }
+
+        // 3. 일반 대화 목록 로드
         if (!CheckLogin())
         {
-#if UNITY_EDITOR
-            // 에디터에서 로그인 안 된 경우 더미 데이터 표시
-            if (enableTestMode)
-            {
-                LoadDummyConversations();
-            }
-#endif
             yield break;
         }
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.DM_INBOX}?user_id={userId}";
+        string url = $"{ApiConfig.DM_CONVERSATIONS}?user_id={userId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -393,114 +1182,85 @@ public class MessagePanelManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                var response = JsonUtility.FromJson<DMInboxResponse>(request.downloadHandler.text);
+                var response = JsonUtility.FromJson<DMConversationsResponse>(request.downloadHandler.text);
 
-                // 대화 요약 생성
-                conversations.Clear();
-                var grouped = GroupMessagesByUser(response.messages);
+                // 일반 DM 대화 목록만 새로 로드 (시스템 메시지 유지)
+                conversations.RemoveAll(c => !c.isSystemMessage);
 
-                foreach (var conv in grouped)
+                if (response.conversations != null)
                 {
-                    CreateConversationItem(conv);
-                    conversations.Add(conv);
+                    foreach (var conv in response.conversations)
+                    {
+                        var summary = new ConversationSummary
+                        {
+                            userId = conv.partner_id,
+                            username = conv.partner_username,
+                            avatarUrl = conv.partner_avatar_url,
+                            lastMessage = conv.last_message,
+                            lastMessageTime = conv.last_message_time,
+                            unreadCount = conv.unread_count
+                        };
+
+                        CreateConversationItem(summary);
+                        conversations.Add(summary);
+                    }
                 }
 
-                // 빈 상태 UI 처리
+                // 전체 안 읽음 수 업데이트
+                totalUnreadCount = response.total_unread;
+                UpdateUnreadUI();
+
                 bool isEmpty = conversations.Count == 0 && adminBroadcasts.Count == 0;
-                ShowEmptyState(conversationListContent, emptyInboxMessage, isEmpty);
+                ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
             }
             else
             {
-#if UNITY_EDITOR
-                // 에디터에서 서버 오류 시 더미 데이터 표시
-                if (enableTestMode)
-                {
-                    LoadDummyConversations();
-                }
-                else
-                {
-                    ShowEmptyState(conversationListContent, "메시지를 불러올 수 없습니다.", true);
-                }
-#else
-                // 에러 시 빈 상태 표시
-                ShowEmptyState(conversationListContent, "메시지를 불러올 수 없습니다.", true);
-#endif
+                string errorMsg = LocalizationManager.Instance != null
+                    ? LocalizationManager.Instance.GetText("failed_to_load_messages")
+                    : "메시지를 불러올 수 없습니다.";
+                ShowEmptyState(conversationListContent, errorMsg, true);
             }
         }
+
+        // 레이아웃 강제 업데이트
+        ForceLayoutUpdate();
     }
 
-#if UNITY_EDITOR
     /// <summary>
-    /// 에디터용 더미 대화 목록 로드
+    /// 레이아웃 강제 업데이트 - 동적으로 추가된 아이템이 즉시 표시되도록
     /// </summary>
-    private void LoadDummyConversations()
+    private void ForceLayoutUpdate()
     {
-        if (hasDummyDataLoaded && conversations.Count > 0)
+        if (conversationListContent == null) return;
+
+        // VerticalLayoutGroup 체크
+        VerticalLayoutGroup vlg = conversationListContent.GetComponent<VerticalLayoutGroup>();
+        if (vlg == null)
         {
-            // 이미 더미 데이터가 있으면 UI만 다시 생성
-            foreach (var conv in conversations)
-            {
-                CreateConversationItem(conv);
-            }
-            return;
+            vlg = conversationListContent.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.spacing = conversationListSpacing; // Inspector에서 조절 가능
         }
 
-        conversations.Clear();
-
-        // 더미 대화 데이터
-        conversations.Add(new ConversationSummary
+        // ContentSizeFitter 체크
+        ContentSizeFitter csf = conversationListContent.GetComponent<ContentSizeFitter>();
+        if (csf == null)
         {
-            userId = "test_user_1",
-            username = "김민지",
-            lastMessage = "안녕하세요! 오늘 AR 콘텐츠 봤어요 👀",
-            lastMessageTime = DateTime.Now.AddMinutes(-5).ToString("yyyy-MM-dd HH:mm:ss"),
-            unreadCount = 2
-        });
-
-        conversations.Add(new ConversationSummary
-        {
-            userId = "test_user_2",
-            username = "이준호",
-            lastMessage = "주말에 같이 우팡 촬영 어때요?",
-            lastMessageTime = DateTime.Now.AddHours(-1).ToString("yyyy-MM-dd HH:mm:ss"),
-            unreadCount = 0
-        });
-
-        conversations.Add(new ConversationSummary
-        {
-            userId = "test_user_3",
-            username = "박서연",
-            lastMessage = "저도 AR 아티스트예요! 반가워요 ✨",
-            lastMessageTime = DateTime.Now.AddHours(-3).ToString("yyyy-MM-dd HH:mm:ss"),
-            unreadCount = 1
-        });
-
-        conversations.Add(new ConversationSummary
-        {
-            userId = "test_user_4",
-            username = "최영수",
-            lastMessage = "사진 잘 찍으셨네요!",
-            lastMessageTime = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd HH:mm:ss"),
-            unreadCount = 0
-        });
-
-        conversations.Add(new ConversationSummary
-        {
-            userId = "test_user_5",
-            username = "WOOPANG_크리에이터",
-            lastMessage = "다음 업데이트 기대해주세요 🚀",
-            lastMessageTime = DateTime.Now.AddDays(-2).ToString("yyyy-MM-dd HH:mm:ss"),
-            unreadCount = 0
-        });
-
-        foreach (var conv in conversations)
-        {
-            CreateConversationItem(conv);
+            csf = conversationListContent.gameObject.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }
 
-        hasDummyDataLoaded = true;
+        // 강제 레이아웃 리빌드
+        Canvas.ForceUpdateCanvases();
+        RectTransform contentRectTransform = conversationListContent as RectTransform;
+        if (contentRectTransform != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRectTransform);
+        }
     }
-#endif
 
     private IEnumerator LoadAdminBroadcasts()
     {
@@ -612,51 +1372,169 @@ public class MessagePanelManager : MonoBehaviour
 
     private void CreateConversationItem(ConversationSummary conv)
     {
-        if (conversationItemPrefab == null || conversationListContent == null) return;
+        if (conversationListContent == null) return;
 
-        GameObject item = Instantiate(conversationItemPrefab, conversationListContent);
-        SetupConversationItem(item, conv);
-        SetupSwipeDelete(item, conv.userId);
+        Debug.Log($"[DM_DEBUG] CreateConversationItem: username={conv.username}, isSystemMessage={conv.isSystemMessage}, userId={conv.userId}");
+
+        // 시스템 메시지는 AdminNoticeItem 프리팹 사용
+        if (conv.isSystemMessage)
+        {
+            if (adminNoticePrefab != null)
+            {
+                Debug.Log($"[DM_DEBUG] → AdminNoticeItem 프리팹 사용 (시스템 메시지)");
+                GameObject item = Instantiate(adminNoticePrefab, conversationListContent);
+                SetLayerRecursively(item, 5);
+                SetupSystemNoticeItem(item, conv);
+                return;
+            }
+            else
+            {
+                // Fallback: conversationItemPrefab 사용하되 WOOPANG 스타일로 설정
+                Debug.LogWarning("[DM_DEBUG] adminNoticePrefab null - conversationItemPrefab fallback 사용");
+                if (conversationItemPrefab != null)
+                {
+                    GameObject item = Instantiate(conversationItemPrefab, conversationListContent);
+                    SetLayerRecursively(item, 5);
+                    conv.username = "WOOPANG"; // 강제로 WOOPANG으로 설정
+                    SetupConversationItem(item, conv);
+                    return;
+                }
+            }
+        }
+
+        // 일반 DM은 ConversationItem 프리팹 사용
+        if (conversationItemPrefab == null)
+        {
+            Debug.LogError("[DM_DEBUG] conversationItemPrefab이 null!");
+            return;
+        }
+
+        Debug.Log($"[DM_DEBUG] → ConversationItem 프리팹 사용 (일반 DM)");
+        GameObject dmItem = Instantiate(conversationItemPrefab, conversationListContent);
+        SetLayerRecursively(dmItem, 5);
+        SetupConversationItem(dmItem, conv);
+        SetupSwipeDelete(dmItem, conv.userId);
     }
 
-    private void SetupConversationItem(GameObject item, ConversationSummary conv)
+    /// <summary>
+    /// 시스템 알림 아이템 설정 (AdminNoticeItem 프리팹 사용)
+    /// </summary>
+    private void SetupSystemNoticeItem(GameObject item, ConversationSummary conv)
     {
-        // 아이템 높이 설정 - 프리팹에 LayoutElement가 있으면 그 값 존중
-        LayoutElement itemLE = item.GetComponent<LayoutElement>();
-        if (itemLE == null)
-        {
-            itemLE = item.AddComponent<LayoutElement>();
-            itemLE.minHeight = 120f;
-            itemLE.preferredHeight = 120f;
-        }
-        // 프리팹에 이미 설정된 값이 있으면 그대로 사용
+        // 제목 - 항상 "WOOPANG"
+        Text titleText = item.transform.Find("TitleText")?.GetComponent<Text>();
+        if (titleText != null)
+            titleText.text = "WOOPANG";
 
-        // 사용자명
-        Text usernameText = item.transform.Find("UsernameText")?.GetComponent<Text>();
-        if (usernameText != null)
-        {
-            usernameText.text = conv.username ?? "Unknown";
-            // fontSize는 프리팹 값 사용
-        }
-
-        // 미리보기 - 영역 크기에 맞게 자동 ellipsis 처리
+        // 미리보기
         Text previewText = item.transform.Find("PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            SetTextWithEllipsis(previewText, conv.lastMessage);
+            string preview = conv.lastMessage;
+            if (!string.IsNullOrEmpty(preview) && preview.Length > 30)
+                preview = preview.Substring(0, 30) + "...";
+            previewText.text = preview ?? "";
         }
 
         // 시간
         Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
-        {
             timeText.text = GetRelativeTime(conv.lastMessageTime);
-            // fontSize는 프리팹 값 사용
+
+        // 안읽음 표시
+        GameObject unreadBadge = item.transform.Find("UnreadBadge")?.gameObject;
+        if (unreadBadge != null)
+            unreadBadge.SetActive(!conv.isRead);
+
+        // 클릭 이벤트 - WOOPANG 이름으로 채팅방 열기, 시스템 메시지 전달
+        Button btn = item.GetComponent<Button>();
+        if (btn == null)
+            btn = item.AddComponent<Button>();
+
+        btn.onClick.RemoveAllListeners();
+        string notificationId = conv.notificationId;
+        string messageContent = conv.lastMessage;
+        btn.onClick.AddListener(() =>
+        {
+            // 읽음 처리
+            MarkSystemMessageAsRead(conv);
+            // 시스템 메시지 ID와 함께 채팅방 열기
+            OpenSystemChatRoom(notificationId, messageContent);
+        });
+    }
+
+    private void SetupConversationItem(GameObject item, ConversationSummary conv)
+    {
+        // CanvasGroup 확인 (alpha가 0이면 보이지 않음)
+        CanvasGroup cg = item.GetComponent<CanvasGroup>();
+        if (cg != null && cg.alpha < 1f)
+        {
+            cg.alpha = 1f;
         }
 
-        // 안 읽음 표시
-        GameObject unreadBadge = item.transform.Find("UnreadBadge")?.gameObject;
-        Text unreadText = item.transform.Find("UnreadBadge/UnreadCount")?.GetComponent<Text>();
+        // 아이템이 활성화 상태인지 확인
+        if (!item.activeSelf)
+        {
+            item.SetActive(true);
+        }
+
+        // 아이템 높이 설정 - 프리팹에 LayoutElement가 있으면 그 값 존중
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null)
+        {
+            itemLE = item.AddComponent<LayoutElement>();
+            itemLE.minHeight = conversationItemHeight;
+            itemLE.preferredHeight = conversationItemHeight;
+        }
+
+        // 시스템 메시지 배경색 적용 (DM과 구분)
+        Image bgImage = item.GetComponent<Image>();
+        if (bgImage == null)
+        {
+            // Content 영역에서 배경 이미지 찾기
+            Transform bgArea = item.transform.Find("Content");
+            if (bgArea != null)
+                bgImage = bgArea.GetComponent<Image>();
+        }
+        if (bgImage != null)
+        {
+            bgImage.color = conv.isSystemMessage ? systemMessageBgColor : normalMessageBgColor;
+        }
+
+        // 시스템 메시지 읽음 처리 (클릭 시)
+        if (conv.isSystemMessage && !conv.isRead)
+        {
+            Button itemBtn = item.GetComponent<Button>();
+            if (itemBtn == null)
+                itemBtn = item.AddComponent<Button>();
+
+            itemBtn.onClick.AddListener(() => MarkSystemMessageAsRead(conv));
+        }
+
+        // 사용자명 (Content 아래에 있음)
+        Text usernameText = item.transform.Find("Content/UsernameText")?.GetComponent<Text>();
+        if (usernameText != null)
+        {
+            usernameText.text = conv.username ?? "Unknown";
+        }
+
+        // 미리보기 - 영역 크기에 맞게 자동 ellipsis 처리 (Content 아래에 있음)
+        Text previewText = item.transform.Find("Content/PreviewText")?.GetComponent<Text>();
+        if (previewText != null)
+        {
+            SetTextWithEllipsis(previewText, conv.lastMessage);
+        }
+
+        // 시간 (Content 아래에 있음)
+        Text timeText = item.transform.Find("Content/TimeText")?.GetComponent<Text>();
+        if (timeText != null)
+        {
+            timeText.text = GetRelativeTime(conv.lastMessageTime);
+        }
+
+        // 안 읽음 표시 (Content 아래에 있음)
+        GameObject unreadBadge = item.transform.Find("Content/UnreadBadge")?.gameObject;
+        Text unreadText = item.transform.Find("Content/UnreadBadge/UnreadCount")?.GetComponent<Text>();
         if (unreadBadge != null)
         {
             unreadBadge.SetActive(conv.unreadCount > 0);
@@ -667,10 +1545,10 @@ public class MessagePanelManager : MonoBehaviour
             }
         }
 
-        // 아바타
-        Image avatar = item.transform.Find("Avatar")?.GetComponent<Image>();
-        if (avatar != null && !string.IsNullOrEmpty(conv.avatarUrl))
-            StartCoroutine(LoadAvatar(conv.avatarUrl, avatar));
+        // 아바타 (Content 아래에 있음) - 원형 마스크 구조 적용
+        Transform avatarTransform = item.transform.Find("Content/Avatar");
+        if (avatarTransform != null && !string.IsNullOrEmpty(conv.avatarUrl))
+            StartCoroutine(LoadAvatarWithMask(conv.avatarUrl, avatarTransform));
 
         // 클릭 이벤트 (Content 영역에)
         Transform contentArea = item.transform.Find("Content");
@@ -683,7 +1561,8 @@ public class MessagePanelManager : MonoBehaviour
             btn.onClick.RemoveAllListeners();
             btn.onClick.AddListener(() =>
             {
-                OpenChatRoom(conv.userId, conv.username, conv.avatarUrl);
+                // 시스템 메시지면 isAdmin=true로 전달 (타이틀 색상 및 입력창 처리)
+                OpenChatRoom(conv.userId, conv.username, conv.avatarUrl, conv.isSystemMessage);
             });
         }
     }
@@ -717,8 +1596,6 @@ public class MessagePanelManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log($"[MessagePanel] Conversation deleted: {otherUserId}");
-
                 // UI에서 제거
                 foreach (Transform child in conversationListContent)
                 {
@@ -741,16 +1618,347 @@ public class MessagePanelManager : MonoBehaviour
 
     #region Chat Room
 
+    /// <summary>
+    /// 시스템 알림 메시지 로드 (conversations에서 해당 시스템 메시지 찾아서 표시)
+    /// </summary>
+    private IEnumerator LoadSystemChatMessages(string notificationId, string messageContent)
+    {
+        Debug.Log($"[DM_DEBUG] LoadSystemChatMessages: notificationId={notificationId}, content={messageContent}");
+        Debug.Log($"[DM_DEBUG] conversations.Count={conversations.Count}");
+
+        ClearContent(chatMessageContent);
+        ShowChatEmptyState(false);
+
+        // 날짜 구분선 추적 초기화
+        ResetDateSeparatorTracking();
+
+        // conversations에서 해당 시스템 메시지 찾기
+        ConversationSummary systemMsg = null;
+        foreach (var conv in conversations)
+        {
+            Debug.Log($"[DM_DEBUG] 검색 중: isSystem={conv.isSystemMessage}, notifId={conv.notificationId}, userId={conv.userId}");
+            if (conv.isSystemMessage && conv.notificationId == notificationId)
+            {
+                systemMsg = conv;
+                Debug.Log($"[DM_DEBUG] → 매칭 발견! lastMessage={conv.lastMessage}");
+                break;
+            }
+        }
+
+        // 메시지 버블 생성 (AdminNoticeItem 스타일)
+        if (systemMsg != null || !string.IsNullOrEmpty(messageContent))
+        {
+            string content = systemMsg != null ? systemMsg.lastMessage : messageContent;
+            string time = systemMsg != null ? systemMsg.lastMessageTime : DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+            // 날짜 구분선 생성 (대화 메시지 위 가운데에 표시)
+            CheckAndCreateDateSeparator(time);
+
+            Debug.Log($"[DM_DEBUG] → CreateSystemMessageBubble 호출: content={content}");
+            CreateSystemMessageBubble("WOOPANG", content, time);
+        }
+        else
+        {
+            Debug.Log("[DM_DEBUG] → 메시지 없음, 빈 상태 표시");
+            ShowChatEmptyState(true);
+        }
+
+        yield return null;
+        ScrollToBottom();
+    }
+
+    /// <summary>
+    /// 날짜 구분선 생성 (24시간 이상 차이날 때 표시)
+    /// 형식: "11월 3일 오후 7:41"
+    /// </summary>
+    private void CreateDateSeparator(DateTime messageTime)
+    {
+        if (chatMessageContent == null || !useDateSeparator) return;
+
+        // 날짜 구분선 컨테이너 생성
+        GameObject separator = new GameObject("DateSeparator");
+        separator.transform.SetParent(chatMessageContent, false);
+        SetLayerRecursively(separator, 5);
+
+        RectTransform separatorRect = separator.AddComponent<RectTransform>();
+        separatorRect.anchorMin = new Vector2(0, 1);
+        separatorRect.anchorMax = new Vector2(1, 1);
+        separatorRect.pivot = new Vector2(0.5f, 1);
+
+        // LayoutElement 추가
+        LayoutElement separatorLE = separator.AddComponent<LayoutElement>();
+        separatorLE.flexibleWidth = 1;
+        separatorLE.preferredHeight = DATE_SEPARATOR_FONT_SIZE + (DATE_SEPARATOR_MARGIN * 2);
+
+        // 텍스트 생성
+        GameObject textObj = new GameObject("DateText");
+        textObj.transform.SetParent(separator.transform, false);
+
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        Text dateText = textObj.AddComponent<Text>();
+        dateText.text = FormatDateSeparator(messageTime);
+        dateText.fontSize = DATE_SEPARATOR_FONT_SIZE;
+        dateText.color = DATE_SEPARATOR_COLOR;
+        dateText.alignment = TextAnchor.MiddleCenter;
+        if (chatFont != null)
+            dateText.font = chatFont;
+    }
+
+    /// <summary>
+    /// 날짜 구분선 형식 지정 - 디바이스 언어에 따라 다국어 지원
+    /// 한국어: "11월 3일 오후 7:41"
+    /// 영어: "Nov 3, 7:41 PM"
+    /// 일본어: "11月3日 午後7:41"
+    /// 중국어: "11月3日 下午7:41"
+    /// 스페인어: "3 nov. 19:41"
+    /// </summary>
+    private string FormatDateSeparator(DateTime dateTime)
+    {
+        string langCode = Application.systemLanguage.ToString();
+
+        int hour12 = dateTime.Hour % 12;
+        if (hour12 == 0) hour12 = 12;
+        bool isPM = dateTime.Hour >= 12;
+
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return $"{dateTime.Month}월 {dateTime.Day}일 {(isPM ? "오후" : "오전")} {hour12}:{dateTime.Minute:D2}";
+
+            case SystemLanguage.Japanese:
+                return $"{dateTime.Month}月{dateTime.Day}日 {(isPM ? "午後" : "午前")}{hour12}:{dateTime.Minute:D2}";
+
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return $"{dateTime.Month}月{dateTime.Day}日 {(isPM ? "下午" : "上午")}{hour12}:{dateTime.Minute:D2}";
+
+            case SystemLanguage.Spanish:
+                string[] monthsEs = { "", "ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sep.", "oct.", "nov.", "dic." };
+                return $"{dateTime.Day} {monthsEs[dateTime.Month]} {dateTime.Hour:D2}:{dateTime.Minute:D2}";
+
+            default: // English and others
+                string[] monthsEn = { "", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+                return $"{monthsEn[dateTime.Month]} {dateTime.Day}, {hour12}:{dateTime.Minute:D2} {(isPM ? "PM" : "AM")}";
+        }
+    }
+
+    /// <summary>
+    /// 24시간 이상 차이나는지 확인하고 필요시 날짜 구분선 생성
+    /// </summary>
+    private void CheckAndCreateDateSeparator(string timeStr)
+    {
+        if (!useDateSeparator) return;
+
+        DateTime messageTime;
+        if (!DateTime.TryParse(timeStr, out messageTime))
+            messageTime = DateTime.Now;
+
+        // 24시간 이상 차이나면 날짜 구분선 생성
+        if (lastMessageTime == DateTime.MinValue ||
+            (messageTime - lastMessageTime).TotalHours >= 24)
+        {
+            CreateDateSeparator(messageTime);
+        }
+
+        lastMessageTime = messageTime;
+    }
+
+    /// <summary>
+    /// 채팅방 열 때 마지막 메시지 시간 초기화
+    /// </summary>
+    private void ResetDateSeparatorTracking()
+    {
+        lastMessageTime = DateTime.MinValue;
+    }
+
+    /// <summary>
+    /// 시스템 메시지 버블 생성 (채팅방 내에서 AdminMessageBubble 프리팹 사용)
+    /// </summary>
+    private void CreateSystemMessageBubble(string senderName, string content, string time)
+    {
+        if (chatMessageContent == null) return;
+
+        // adminMessageBubblePrefab 사용
+        GameObject prefab = adminMessageBubblePrefab ?? otherMessageBubblePrefab;
+        if (prefab == null) return;
+
+        GameObject bubble = Instantiate(prefab, chatMessageContent);
+        SetLayerRecursively(bubble, 5);
+
+        // === 1. TimeArea 완전히 제거 (DateSeparator가 날짜/시간 표시하므로 불필요) ===
+        Transform timeAreaTr = bubble.transform.Find("TimeArea");
+        if (timeAreaTr != null)
+        {
+            timeAreaTr.gameObject.SetActive(false);
+        }
+
+        // === 2. 아바타 설정 (WOOPANG 로고) - 먼저 처리 ===
+        Transform avatarTr = bubble.transform.Find("AvatarContainer");
+        if (avatarTr == null)
+            avatarTr = bubble.transform.Find("Avatar");
+        if (avatarTr != null)
+        {
+            avatarTr.gameObject.SetActive(true);
+
+            // AvatarContainer에 직접 이미지 설정 (간단한 구조)
+            Image avatarImage = avatarTr.GetComponent<Image>();
+            if (avatarImage == null)
+                avatarImage = avatarTr.gameObject.AddComponent<Image>();
+
+            // 프리팹에 스프라이트가 이미 설정되어 있으면 유지
+            if (avatarImage.sprite == null)
+            {
+                // WOOPANG 로고 설정 (Inspector에서 설정 우선)
+                Sprite logoSprite = systemAvatarSprite;
+
+                // Inspector에 없으면 Resources에서 로드 시도
+                if (logoSprite == null)
+                    logoSprite = Resources.Load<Sprite>("Textures/woopang_logo");
+                if (logoSprite == null)
+                    logoSprite = Resources.Load<Sprite>("UI/woopang_logo");
+                if (logoSprite == null)
+                    logoSprite = Resources.Load<Sprite>("woopang_logo");
+
+                if (logoSprite != null)
+                {
+                    avatarImage.sprite = logoSprite;
+                    avatarImage.preserveAspect = true;
+                    avatarImage.type = Image.Type.Simple;
+                    avatarImage.color = Color.white;
+                }
+            }
+
+            // 아바타 탭 핸들러
+            AvatarTapHandler avatarHandler = avatarTr.GetComponent<AvatarTapHandler>();
+            if (avatarHandler == null)
+                avatarHandler = avatarTr.gameObject.AddComponent<AvatarTapHandler>();
+            avatarHandler.Initialize("3", senderName, OpenProfileFromChatRoom);
+        }
+
+        // === 3. LabelText 비활성화 (ChatTitle로 대체됨) ===
+        Transform labelText = bubble.transform.Find("BubbleContainer/LabelText");
+        if (labelText != null)
+            labelText.gameObject.SetActive(false);
+
+        // === 4. BubbleContainer 레이아웃 설정 ===
+        Transform bubbleContainerTr = bubble.transform.Find("BubbleContainer");
+        if (bubbleContainerTr != null)
+        {
+            // 기존 LayoutElement의 고정값 초기화
+            LayoutElement bubbleLE = bubbleContainerTr.GetComponent<LayoutElement>();
+            if (bubbleLE != null)
+            {
+                bubbleLE.preferredWidth = -1;
+                bubbleLE.minWidth = -1;
+                bubbleLE.flexibleWidth = 0;
+            }
+
+            // VerticalLayoutGroup 설정 (프리팹에 없으면 추가, 있으면 프리팹 값 유지)
+            VerticalLayoutGroup bubbleVLG = bubbleContainerTr.GetComponent<VerticalLayoutGroup>();
+            if (bubbleVLG == null)
+            {
+                bubbleVLG = bubbleContainerTr.gameObject.AddComponent<VerticalLayoutGroup>();
+                bubbleVLG.padding = new RectOffset((int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING);
+                bubbleVLG.spacing = DEFAULT_BUBBLE_INNER_SPACING;
+                bubbleVLG.childAlignment = TextAnchor.UpperLeft;
+            }
+            // childControl은 레이아웃 동작에 필수이므로 항상 설정
+            bubbleVLG.childControlWidth = true;
+            bubbleVLG.childControlHeight = true;
+            bubbleVLG.childForceExpandWidth = false;
+            bubbleVLG.childForceExpandHeight = false;
+
+            // ContentSizeFitter - 가로/세로 모두 컨텐츠에 맞춤 (프리팹에 없으면 추가)
+            ContentSizeFitter bubbleCSF = bubbleContainerTr.GetComponent<ContentSizeFitter>();
+            if (bubbleCSF == null)
+            {
+                bubbleCSF = bubbleContainerTr.gameObject.AddComponent<ContentSizeFitter>();
+                bubbleCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                bubbleCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+        }
+
+        // === 5. 메시지 내용 설정 ===
+        Text contentText = bubble.transform.Find("BubbleContainer/ContentText")?.GetComponent<Text>();
+        if (contentText == null)
+            contentText = bubble.GetComponentInChildren<Text>();
+        if (contentText != null)
+        {
+            // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
+            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            contentText.text = content;
+            // 폰트만 설정 (프리팹에 없을 경우)
+            if (chatFont != null && contentText.font == null)
+                contentText.font = chatFont;
+
+            // 강제 캔버스 업데이트
+            Canvas.ForceUpdateCanvases();
+
+            // 버블 최대/최소 너비 계산
+            float screenWidth = Screen.width > 0 ? Screen.width : defaultScreenWidth;
+            float maxWidth = Mathf.Min(maxBubbleWidthPixels, screenWidth * maxBubbleWidthRatio);
+            float maxTextWidth = maxWidth - (DEFAULT_BUBBLE_PADDING * 2);
+            float DEFAULT_MIN_TEXT_WIDTHCalc = Mathf.Max(DEFAULT_MIN_TEXT_WIDTH, minBubbleWidth - (DEFAULT_BUBBLE_PADDING * 2));
+
+            // 실제 텍스트 너비 (줄바꿈 전)
+            float actualTextWidth = contentText.preferredWidth;
+
+            // 텍스트 너비 결정: 최소 ~ 최대 사이로 제한
+            float finalTextWidth = Mathf.Clamp(actualTextWidth, DEFAULT_MIN_TEXT_WIDTHCalc, maxTextWidth);
+
+            // LayoutElement - 최대 너비만 제한 (프리팹에 없으면만 추가)
+            LayoutElement textLE = contentText.GetComponent<LayoutElement>();
+            if (textLE == null)
+                textLE = contentText.gameObject.AddComponent<LayoutElement>();
+            textLE.preferredWidth = finalTextWidth;
+
+            // ContentSizeFitter (프리팹에 없으면만 추가)
+            ContentSizeFitter textCSF = contentText.GetComponent<ContentSizeFitter>();
+            if (textCSF == null)
+            {
+                textCSF = contentText.gameObject.AddComponent<ContentSizeFitter>();
+                textCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                textCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+            // 레이아웃 강제 리빌드
+            RectTransform textRect = contentText.GetComponent<RectTransform>();
+            Canvas.ForceUpdateCanvases();
+            if (textRect != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(textRect);
+        }
+
+        // === 6. 행 레이아웃 적용 ===
+        ChatBubbleLayoutHelper.SetupMessageRow(bubble, false); // 시스템 메시지는 왼쪽 정렬
+
+        // === 7. 최종 레이아웃 리빌드 ===
+        Canvas.ForceUpdateCanvases();
+        RectTransform bubbleRect = bubble.GetComponent<RectTransform>();
+        if (bubbleRect != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleRect);
+    }
+
     private IEnumerator LoadChatMessages(string otherUserId, bool isAdmin)
     {
         ClearContent(chatMessageContent);
         ShowChatEmptyState(false); // 기존 빈 상태 제거
+        ResetDateSeparatorTracking(); // 날짜 구분선 추적 초기화
 
         if (isAdmin)
         {
             // 관리자 공지 메시지 표시
             foreach (var broadcast in adminBroadcasts)
             {
+                // 날짜 구분선 체크 (관리자 메시지는 useDateSeparator가 false면 스킵)
+                if (useDateSeparator)
+                    CheckAndCreateDateSeparator(broadcast.created_at);
                 CreateAdminMessageBubble(broadcast);
             }
             yield break;
@@ -758,22 +1966,7 @@ public class MessagePanelManager : MonoBehaviour
 
         if (!CheckLogin())
         {
-#if UNITY_EDITOR
-            // 에디터에서 로그인 안 된 경우 테스트 메시지 표시
-            if (enableTestMode)
-            {
-                CreateTestChatMessages(otherUserId);
-                yield return null;
-                ScrollToBottom();
-            }
-            else
-            {
-                // 테스트 모드가 아니면 빈 상태 표시
-                ShowChatEmptyState(true);
-            }
-#else
             ShowChatEmptyState(true);
-#endif
             yield break;
         }
 
@@ -795,6 +1988,9 @@ public class MessagePanelManager : MonoBehaviour
                     hasMessages = true;
                     foreach (var msg in response.messages)
                     {
+                        // 날짜 구분선 체크 (24시간 기준)
+                        CheckAndCreateDateSeparator(msg.created_at);
+
                         bool isMine = msg.sender_id == userId || msg.is_mine;
                         CreateMessageBubble(msg, isMine);
                     }
@@ -809,81 +2005,9 @@ public class MessagePanelManager : MonoBehaviour
         // 메시지가 없으면 빈 상태 표시
         if (!hasMessages)
         {
-#if UNITY_EDITOR
-            // 에디터 테스트 모드: 메시지가 없으면 테스트 메시지 표시
-            if (enableTestMode)
-            {
-                CreateTestChatMessages(otherUserId);
-                yield return null;
-                ScrollToBottom();
-            }
-            else
-            {
-                ShowChatEmptyState(true);
-            }
-#else
             ShowChatEmptyState(true);
-#endif
         }
     }
-
-#if UNITY_EDITOR
-    /// <summary>
-    /// 에디터 테스트용 채팅 메시지 생성
-    /// </summary>
-    private void CreateTestChatMessages(string otherUserId)
-    {
-        string myId = LoginManager.Instance?.CurrentUser?.id ?? "my_test_id";
-
-        // 테스트 메시지들
-        var testMessages = new DMMessage[]
-        {
-            new DMMessage
-            {
-                sender_id = otherUserId,
-                content = "안녕하세요! 👋",
-                created_at = DateTime.Now.AddMinutes(-30).ToString("yyyy-MM-dd HH:mm:ss"),
-                is_read = true
-            },
-            new DMMessage
-            {
-                sender_id = myId,
-                content = "안녕하세요! 반갑습니다 😊",
-                created_at = DateTime.Now.AddMinutes(-28).ToString("yyyy-MM-dd HH:mm:ss"),
-                is_read = true,
-                is_mine = true
-            },
-            new DMMessage
-            {
-                sender_id = otherUserId,
-                content = "우팡 AR 앱 정말 재미있네요! 어디서 만들 수 있나요?",
-                created_at = DateTime.Now.AddMinutes(-25).ToString("yyyy-MM-dd HH:mm:ss"),
-                is_read = true
-            },
-            new DMMessage
-            {
-                sender_id = myId,
-                content = "감사합니다! 앱에서 + 버튼을 눌러서 새로운 장소를 추가할 수 있어요.",
-                created_at = DateTime.Now.AddMinutes(-20).ToString("yyyy-MM-dd HH:mm:ss"),
-                is_read = true,
-                is_mine = true
-            },
-            new DMMessage
-            {
-                sender_id = otherUserId,
-                content = "오 정말요? 한번 해볼게요! 🎉",
-                created_at = DateTime.Now.AddMinutes(-15).ToString("yyyy-MM-dd HH:mm:ss"),
-                is_read = false
-            }
-        };
-
-        foreach (var msg in testMessages)
-        {
-            bool isMine = msg.sender_id == myId || msg.is_mine;
-            CreateMessageBubble(msg, isMine);
-        }
-    }
-#endif
 
     private void CreateMessageBubble(DMMessage msg, bool isMine)
     {
@@ -896,55 +2020,192 @@ public class MessagePanelManager : MonoBehaviour
 
     private void SetupMessageBubble(GameObject item, DMMessage msg, bool isMine)
     {
-        // 버블 최소 높이 설정
-        LayoutElement itemLE = item.GetComponent<LayoutElement>();
-        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
-        itemLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+        SetLayerRecursively(item, 5);
 
-        // 내용
+        // BubbleContainer 또는 Bubble 찾기
+        Transform bubbleContainerTr = item.transform.Find("BubbleContainer");
+        if (bubbleContainerTr == null)
+            bubbleContainerTr = item.transform.Find("Bubble");
+
+        // BubbleContainer 레이아웃 설정
+        if (bubbleContainerTr != null)
+        {
+            // 기존 LayoutElement 고정값 초기화
+            LayoutElement existingLE = bubbleContainerTr.GetComponent<LayoutElement>();
+            if (existingLE != null)
+            {
+                existingLE.preferredWidth = -1;
+                existingLE.minWidth = -1;
+                existingLE.flexibleWidth = 0;
+            }
+
+            // VerticalLayoutGroup 설정 (프리팹에 없으면 추가, 있으면 프리팹 값 유지)
+            VerticalLayoutGroup bubbleVLG = bubbleContainerTr.GetComponent<VerticalLayoutGroup>();
+            if (bubbleVLG == null)
+            {
+                bubbleVLG = bubbleContainerTr.gameObject.AddComponent<VerticalLayoutGroup>();
+                bubbleVLG.padding = new RectOffset((int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING);
+                bubbleVLG.spacing = DEFAULT_BUBBLE_INNER_SPACING;
+                bubbleVLG.childAlignment = isMine ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
+            }
+            // childControl은 레이아웃 동작에 필수이므로 항상 설정
+            bubbleVLG.childControlWidth = true;
+            bubbleVLG.childControlHeight = true;
+            bubbleVLG.childForceExpandWidth = false;
+            bubbleVLG.childForceExpandHeight = false;
+
+            // ContentSizeFitter - 가로/세로 모두 컨텐츠에 맞춤 (프리팹에 없으면 추가)
+            ContentSizeFitter bubbleCSF = bubbleContainerTr.GetComponent<ContentSizeFitter>();
+            if (bubbleCSF == null)
+            {
+                bubbleCSF = bubbleContainerTr.gameObject.AddComponent<ContentSizeFitter>();
+                bubbleCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                bubbleCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+        }
+
+        // 내용 설정
         Text contentText = item.transform.Find("ContentText")?.GetComponent<Text>();
+        if (contentText == null)
+            contentText = bubbleContainerTr?.Find("ContentText")?.GetComponent<Text>();
+        if (contentText == null)
+            contentText = item.GetComponentInChildren<Text>();
+
         if (contentText != null)
         {
+            // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
             contentText.text = msg.content;
-            contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
-            contentText.lineSpacing = 1.2f;
-            // 텍스트 자동 줄바꿈 및 높이 확장 설정
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
-            // 커스텀 폰트 적용 (AppleSDGothicNeoM)
-            if (chatFont != null)
+            // 폰트만 설정 (프리팹에 없을 경우)
+            if (chatFont != null && contentText.font == null)
                 contentText.font = chatFont;
 
-            // ContentSizeFitter로 텍스트에 맞게 버블 높이 자동 조절
-            ContentSizeFitter textCsf = contentText.GetComponent<ContentSizeFitter>();
-            if (textCsf == null)
-                textCsf = contentText.gameObject.AddComponent<ContentSizeFitter>();
-            textCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            // 캔버스 업데이트 후 버블 너비 계산
+            Canvas.ForceUpdateCanvases();
 
-            // 텍스트 LayoutElement 설정
+            // 버블 최대 너비 계산 (최대 800 또는 화면의 maxBubbleWidthRatio)
+            float screenWidth = Screen.width > 0 ? Screen.width : defaultScreenWidth;
+            float maxWidth = Mathf.Min(maxBubbleWidthPixels, screenWidth * maxBubbleWidthRatio);
+            float maxTextWidth = maxWidth - (DEFAULT_BUBBLE_PADDING * 2);
+            float DEFAULT_MIN_TEXT_WIDTHCalc = Mathf.Max(DEFAULT_MIN_TEXT_WIDTH, minBubbleWidth - (DEFAULT_BUBBLE_PADDING * 2));
+
+            // 실제 텍스트 너비
+            float actualTextWidth = contentText.preferredWidth;
+
+            // === 동적 버블 너비: min/max 범위 내에서 텍스트 양에 따라 조절 ===
+            // 한 줄이면 텍스트 크기에 맞게, 여러 줄이면 최대 너비 사용
+            float finalTextWidth = Mathf.Clamp(actualTextWidth, DEFAULT_MIN_TEXT_WIDTHCalc, maxTextWidth);
+
+            // ContentSizeFitter 추가 - 텍스트 크기에 맞춤
+            ContentSizeFitter textCSF = contentText.GetComponent<ContentSizeFitter>();
+            if (textCSF == null)
+                textCSF = contentText.gameObject.AddComponent<ContentSizeFitter>();
+            textCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            textCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // LayoutElement 설정 - min/max 너비 모두 설정
             LayoutElement textLE = contentText.GetComponent<LayoutElement>();
             if (textLE == null)
                 textLE = contentText.gameObject.AddComponent<LayoutElement>();
-            textLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+            textLE.preferredWidth = finalTextWidth;
+            textLE.minWidth = DEFAULT_MIN_TEXT_WIDTHCalc;  // 최소 너비 설정
+            textLE.flexibleWidth = 0;
+            textLE.preferredHeight = -1;
+
+            // RectTransform 설정 - 내 메시지는 우측 정렬, 상대방은 좌측 정렬
+            RectTransform textRect = contentText.GetComponent<RectTransform>();
+            if (textRect != null)
+            {
+                if (isMine)
+                {
+                    // 내 메시지: 우측 고정, 좌측으로 확장
+                    textRect.anchorMin = new Vector2(1, 1);
+                    textRect.anchorMax = new Vector2(1, 1);
+                    textRect.pivot = new Vector2(1, 1);
+                }
+                else
+                {
+                    // 상대방 메시지: 좌측 고정, 우측으로 확장
+                    textRect.anchorMin = new Vector2(0, 1);
+                    textRect.anchorMax = new Vector2(0, 1);
+                    textRect.pivot = new Vector2(0, 1);
+                }
+                textRect.sizeDelta = new Vector2(finalTextWidth, textRect.sizeDelta.y);
+            }
         }
 
-        // 버블 전체에도 ContentSizeFitter 적용
-        ContentSizeFitter itemCsf = item.GetComponent<ContentSizeFitter>();
-        if (itemCsf == null)
-            itemCsf = item.AddComponent<ContentSizeFitter>();
-        itemCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        itemCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        // TimeArea 처리
+        Transform timeAreaTr = item.transform.Find("TimeArea");
+        Text timeText = timeAreaTr?.Find("TimeText")?.GetComponent<Text>();
+        if (timeText == null)
+            timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
 
-        // 시간
-        Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
-        if (timeText != null)
+        // 날짜 구분선 사용 시 버블 내 시간 숨김
+        if (useDateSeparator && hideTimeInBubbleWhenSeparator && timeAreaTr != null)
         {
+            timeAreaTr.gameObject.SetActive(false);
+        }
+        else if (TIME_INSIDE_BUBBLE && timeAreaTr != null && bubbleContainerTr != null)
+        {
+            // === Instagram DM 스타일: TimeArea를 BubbleContainer 안으로 이동 ===
+            timeAreaTr.SetParent(bubbleContainerTr, false);
+            timeAreaTr.SetAsLastSibling();
+
+            // 기존 VLG 제거
+            VerticalLayoutGroup timeVLG = timeAreaTr.GetComponent<VerticalLayoutGroup>();
+            if (timeVLG != null) DestroyImmediate(timeVLG);
+
+            // ContentSizeFitter 제거 (버블 너비에 영향 주지 않도록)
+            ContentSizeFitter timeAreaCSF = timeAreaTr.GetComponent<ContentSizeFitter>();
+            if (timeAreaCSF != null) DestroyImmediate(timeAreaCSF);
+
+            // LayoutElement 설정 - 버블 너비에 영향 없음
+            LayoutElement timeLE = timeAreaTr.GetComponent<LayoutElement>();
+            if (timeLE == null)
+                timeLE = timeAreaTr.gameObject.AddComponent<LayoutElement>();
+            timeLE.preferredWidth = -1;
+            timeLE.minWidth = -1;
+            timeLE.flexibleWidth = 0;
+
+            // HorizontalLayoutGroup으로 오른쪽 정렬
+            HorizontalLayoutGroup timeHLG = timeAreaTr.GetComponent<HorizontalLayoutGroup>();
+            if (timeHLG == null)
+                timeHLG = timeAreaTr.gameObject.AddComponent<HorizontalLayoutGroup>();
+            timeHLG.childAlignment = TextAnchor.MiddleRight;
+            timeHLG.padding = new RectOffset(0, (int)TIME_INSIDE_MARGIN_RIGHT, 0, (int)TIME_INSIDE_MARGIN_BOTTOM);
+            timeHLG.childForceExpandWidth = false;
+            timeHLG.childForceExpandHeight = false;
+
+            // TimeText 설정 (폰트 크기/색상은 프리팹 값 유지)
+            if (timeText != null)
+            {
+                timeText.text = GetShortTime(msg.created_at);
+                timeText.alignment = TextAnchor.MiddleRight;
+                if (chatFont != null && timeText.font == null)
+                    timeText.font = chatFont;
+
+                ContentSizeFitter timeCSF = timeText.GetComponent<ContentSizeFitter>();
+                if (timeCSF == null)
+                    timeCSF = timeText.gameObject.AddComponent<ContentSizeFitter>();
+                timeCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                timeCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+        }
+        else if (timeText != null)
+        {
+            // 기존 스타일: TimeArea 버블 옆에 위치 (폰트 크기/색상은 프리팹 값 유지)
             timeText.text = GetShortTime(msg.created_at);
-            timeText.fontSize = 22;
-            // 커스텀 폰트 적용
-            if (chatFont != null)
+            if (chatFont != null && timeText.font == null)
                 timeText.font = chatFont;
+        }
+
+        // 레이아웃 리빌드
+        if (bubbleContainerTr != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleContainerTr as RectTransform);
         }
 
         // 읽음 표시 (내 메시지) - 체크마크 스타일
@@ -955,8 +2216,7 @@ public class MessagePanelManager : MonoBehaviour
             {
                 // ✓ 단일 체크 = 전송됨, ✓✓ 더블 체크 = 읽음
                 readText.text = msg.is_read ? "✓✓" : "✓";
-                readText.color = msg.is_read ? new Color(0.3f, 0.7f, 1f) : new Color(0.6f, 0.6f, 0.6f);
-                readText.fontSize = 20;
+                readText.color = msg.is_read ? readIndicatorColorRead : readIndicatorColorUnread;
             }
         }
 
@@ -989,6 +2249,33 @@ public class MessagePanelManager : MonoBehaviour
         {
             LikeMessage(messageId, rect);
         });
+
+        // 아바타 탭 핸들러 (상대방 버블에서만 - 프로필 열기)
+        if (!isMine)
+        {
+            Transform avatarTr = item.transform.Find("AvatarContainer");
+            if (avatarTr == null)
+                avatarTr = item.transform.Find("Avatar");
+            if (avatarTr != null)
+            {
+                string senderId = msg.sender_id;
+                string senderName = msg.sender_username ?? currentChatUsername;
+
+                // 아바타 탭 핸들러 설정
+                AvatarTapHandler avatarHandler = avatarTr.GetComponent<AvatarTapHandler>();
+                if (avatarHandler == null)
+                    avatarHandler = avatarTr.gameObject.AddComponent<AvatarTapHandler>();
+
+                avatarHandler.Initialize(senderId, senderName, OpenProfileFromChatRoom);
+
+                // 아바타 이미지 로드 (원형 마스크 구조 적용)
+                if (!string.IsNullOrEmpty(msg.sender_avatar_url))
+                {
+                    StartCoroutine(LoadAvatarWithMask(msg.sender_avatar_url, avatarTr));
+                }
+                // 아바타 URL이 없으면 프리팹 값 유지 (덮어쓰지 않음)
+            }
+        }
     }
 
     private void CreateAdminMessageBubble(AdminBroadcast broadcast)
@@ -997,50 +2284,201 @@ public class MessagePanelManager : MonoBehaviour
         if (prefab == null || chatMessageContent == null) return;
 
         GameObject item = Instantiate(prefab, chatMessageContent);
+        SetLayerRecursively(item, 5);
 
-        // 버블 최소 높이 설정
-        LayoutElement itemLE = item.GetComponent<LayoutElement>();
-        if (itemLE == null) itemLE = item.AddComponent<LayoutElement>();
-        itemLE.minHeight = ChatBubbleLayoutHelper.MIN_BUBBLE_HEIGHT;
+        // LabelText 비활성화 (ChatTitle로 대체됨)
+        Transform labelText = item.transform.Find("BubbleContainer/LabelText");
+        if (labelText != null)
+            labelText.gameObject.SetActive(false);
 
-        // 내용
-        Text contentText = item.transform.Find("ContentText")?.GetComponent<Text>();
-        if (contentText != null)
+        // BubbleContainer 설정 (프리팹 값 유지, 없으면만 추가)
+        Transform bubbleContainerTr = item.transform.Find("BubbleContainer");
+        if (bubbleContainerTr != null)
         {
-            contentText.text = broadcast.content;
-            contentText.fontSize = ChatBubbleLayoutHelper.FONT_SIZE;
-            contentText.lineSpacing = 1.2f;
-            // 텍스트 자동 줄바꿈 및 높이 확장 설정
-            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            contentText.verticalOverflow = VerticalWrapMode.Overflow;
-            // 커스텀 폰트 적용 (AppleSDGothicNeoM)
-            if (chatFont != null)
-                contentText.font = chatFont;
+            // ContentSizeFitter (프리팹에 없으면만 추가)
+            ContentSizeFitter bubbleCSF = bubbleContainerTr.GetComponent<ContentSizeFitter>();
+            if (bubbleCSF == null)
+            {
+                bubbleCSF = bubbleContainerTr.gameObject.AddComponent<ContentSizeFitter>();
+                bubbleCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                bubbleCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
 
-            // ContentSizeFitter로 텍스트에 맞게 버블 높이 자동 조절
-            ContentSizeFitter textCsf = contentText.GetComponent<ContentSizeFitter>();
-            if (textCsf == null)
-                textCsf = contentText.gameObject.AddComponent<ContentSizeFitter>();
-            textCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            // VerticalLayoutGroup (프리팹에 없으면만 추가, 있으면 프리팹 값 유지)
+            VerticalLayoutGroup bubbleVLG = bubbleContainerTr.GetComponent<VerticalLayoutGroup>();
+            if (bubbleVLG == null)
+            {
+                bubbleVLG = bubbleContainerTr.gameObject.AddComponent<VerticalLayoutGroup>();
+                bubbleVLG.padding = new RectOffset((int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING);
+                bubbleVLG.spacing = DEFAULT_BUBBLE_INNER_SPACING;
+                bubbleVLG.childAlignment = TextAnchor.MiddleLeft;
+            }
+            // childControl은 레이아웃 동작에 필수이므로 항상 설정
+            bubbleVLG.childControlWidth = true;
+            bubbleVLG.childControlHeight = true;
+            bubbleVLG.childForceExpandWidth = false;
+            bubbleVLG.childForceExpandHeight = false;
         }
 
-        // 버블 전체에도 ContentSizeFitter 적용
-        ContentSizeFitter itemCsf = item.GetComponent<ContentSizeFitter>();
-        if (itemCsf == null)
-            itemCsf = item.AddComponent<ContentSizeFitter>();
-        itemCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        itemCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        // 시간
-        Text timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
-        if (timeText != null)
+        // 내용 설정 (프리팹의 폰트/색상/크기 유지)
+        Text contentText = item.transform.Find("ContentText")?.GetComponent<Text>();
+        if (contentText == null)
+            contentText = item.transform.Find("BubbleContainer/ContentText")?.GetComponent<Text>();
+        if (contentText != null)
         {
+            // 텍스트 내용만 설정 (폰트 크기/색상은 프리팹 값 유지)
+            contentText.text = broadcast.content;
+            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            // 폰트만 설정 (프리팹에 없을 경우)
+            if (chatFont != null && contentText.font == null)
+                contentText.font = chatFont;
+
+            Canvas.ForceUpdateCanvases();
+
+            // 버블 최대 너비 계산 (Inspector에서 조절 가능)
+            // Admin 버블은 아바타 + HLG 패딩 + spacing 공간을 고려해야 함
+            float screenWidth = Screen.width > 0 ? Screen.width : defaultScreenWidth;
+            float avatarSpace = 80f + 32f + 8f; // 아바타(80) + HLG패딩(16*2) + spacing(8)
+            float maxWidth = Mathf.Min(maxBubbleWidthPixels, screenWidth * maxBubbleWidthRatio) - avatarSpace;
+            float maxTextWidth = maxWidth - (DEFAULT_BUBBLE_PADDING * 2);
+            float DEFAULT_MIN_TEXT_WIDTHCalc = Mathf.Max(DEFAULT_MIN_TEXT_WIDTH, minBubbleWidth - (DEFAULT_BUBBLE_PADDING * 2));
+
+            // 실제 텍스트 너비
+            float actualTextWidth = contentText.preferredWidth;
+
+            // 텍스트가 짧으면 텍스트 크기에 맞춤, 길면 최대 너비로 제한
+            float finalTextWidth = Mathf.Clamp(actualTextWidth, DEFAULT_MIN_TEXT_WIDTHCalc, maxTextWidth);
+
+            // ContentSizeFitter (프리팹에 없으면만 추가)
+            ContentSizeFitter textCSF = contentText.GetComponent<ContentSizeFitter>();
+            if (textCSF == null)
+            {
+                textCSF = contentText.gameObject.AddComponent<ContentSizeFitter>();
+                textCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                textCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+            // LayoutElement - 최대 너비 제한 (OtherMessageBubble과 동일하게)
+            LayoutElement textLE = contentText.GetComponent<LayoutElement>();
+            if (textLE == null)
+                textLE = contentText.gameObject.AddComponent<LayoutElement>();
+            textLE.preferredWidth = finalTextWidth;
+            textLE.minWidth = DEFAULT_MIN_TEXT_WIDTHCalc;
+            textLE.flexibleWidth = 0;
+            textLE.preferredHeight = -1;
+
+            // RectTransform 설정 - 좌측 정렬 (Admin 메시지는 항상 좌측)
+            RectTransform textRect = contentText.GetComponent<RectTransform>();
+            if (textRect != null)
+            {
+                textRect.anchorMin = new Vector2(0, 1);
+                textRect.anchorMax = new Vector2(0, 1);
+                textRect.pivot = new Vector2(0, 1);
+                textRect.sizeDelta = new Vector2(finalTextWidth, textRect.sizeDelta.y);
+            }
+        }
+
+        // TimeArea 처리
+        Transform timeAreaTr = item.transform.Find("TimeArea");
+        Text timeText = timeAreaTr?.Find("TimeText")?.GetComponent<Text>();
+        if (timeText == null)
+            timeText = item.transform.Find("TimeText")?.GetComponent<Text>();
+
+        // 날짜 구분선 사용 시 버블 내 시간 숨김
+        if (useDateSeparator && hideTimeInBubbleWhenSeparator && timeAreaTr != null)
+        {
+            timeAreaTr.gameObject.SetActive(false);
+        }
+        else if (TIME_INSIDE_BUBBLE && timeAreaTr != null && bubbleContainerTr != null)
+        {
+            // Instagram DM 스타일: TimeArea를 BubbleContainer 안으로 이동
+            timeAreaTr.SetParent(bubbleContainerTr, false);
+            timeAreaTr.SetAsLastSibling();
+
+            // 기존 VLG 제거
+            VerticalLayoutGroup timeVLG = timeAreaTr.GetComponent<VerticalLayoutGroup>();
+            if (timeVLG != null) DestroyImmediate(timeVLG);
+
+            // TimeArea ContentSizeFitter 제거 (버블 너비에 영향 주지 않도록!)
+            ContentSizeFitter timeAreaCSF = timeAreaTr.GetComponent<ContentSizeFitter>();
+            if (timeAreaCSF != null)
+                DestroyImmediate(timeAreaCSF);
+
+            // TimeArea LayoutElement 설정 - preferredWidth 없이, 버블 너비 계산에 영향 X
+            LayoutElement timeLE = timeAreaTr.GetComponent<LayoutElement>();
+            if (timeLE == null)
+                timeLE = timeAreaTr.gameObject.AddComponent<LayoutElement>();
+            timeLE.preferredWidth = -1;
+            timeLE.minWidth = -1;
+            timeLE.flexibleWidth = 0;
+            timeLE.preferredHeight = -1;
+            timeLE.minHeight = -1;
+
+            // HorizontalLayoutGroup으로 오른쪽 정렬
+            HorizontalLayoutGroup timeHLG = timeAreaTr.GetComponent<HorizontalLayoutGroup>();
+            if (timeHLG == null)
+                timeHLG = timeAreaTr.gameObject.AddComponent<HorizontalLayoutGroup>();
+            timeHLG.childAlignment = TextAnchor.MiddleRight;
+            timeHLG.padding = new RectOffset(0, (int)TIME_INSIDE_MARGIN_RIGHT, 0, (int)TIME_INSIDE_MARGIN_BOTTOM);
+            timeHLG.childForceExpandWidth = false;
+            timeHLG.childForceExpandHeight = false;
+            timeHLG.childControlWidth = false;
+            timeHLG.childControlHeight = false;
+
+            // TimeText 설정 (폰트 크기/색상은 프리팹 값 유지)
+            if (timeText != null)
+            {
+                timeText.text = GetShortTime(broadcast.created_at);
+                timeText.alignment = TextAnchor.MiddleRight;
+                if (chatFont != null && timeText.font == null)
+                    timeText.font = chatFont;
+
+                ContentSizeFitter timeCSF = timeText.GetComponent<ContentSizeFitter>();
+                if (timeCSF == null)
+                    timeCSF = timeText.gameObject.AddComponent<ContentSizeFitter>();
+                timeCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                timeCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+        }
+        else if (timeText != null)
+        {
+            // 기존 스타일 (폰트 크기/색상은 프리팹 값 유지)
             timeText.text = GetShortTime(broadcast.created_at);
-            timeText.fontSize = 22;
-            // 커스텀 폰트 적용
-            if (chatFont != null)
+            if (chatFont != null && timeText.font == null)
                 timeText.font = chatFont;
+        }
+
+        // 행 레이아웃 적용
+        ChatBubbleLayoutHelper.SetupMessageRow(item, false);
+
+        // 레이아웃 강제 리빌드
+        if (bubbleContainerTr != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleContainerTr as RectTransform);
+        }
+
+        // 아바타 설정 (프리팹 값 유지, Inspector의 systemAvatarSprite 있으면 적용)
+        Transform avatarTr = item.transform.Find("AvatarContainer");
+        if (avatarTr == null)
+            avatarTr = item.transform.Find("Avatar");
+        if (avatarTr != null)
+        {
+            // 프리팹에 스프라이트가 없고, systemAvatarSprite가 설정되어 있으면 적용
+            Image avatarImage = avatarTr.GetComponent<Image>();
+            if (avatarImage != null && avatarImage.sprite == null && systemAvatarSprite != null)
+            {
+                avatarImage.sprite = systemAvatarSprite;
+                avatarImage.preserveAspect = true;
+            }
+
+            // 아바타 탭 핸들러 (WOOPANG 프로필 열기)
+            AvatarTapHandler avatarHandler = avatarTr.GetComponent<AvatarTapHandler>();
+            if (avatarHandler == null)
+                avatarHandler = avatarTr.gameObject.AddComponent<AvatarTapHandler>();
+
+            avatarHandler.Initialize("3", "WOOPANG", OpenProfileFromChatRoom);
         }
     }
 
@@ -1138,16 +2576,6 @@ public class MessagePanelManager : MonoBehaviour
             yield return request.SendWebRequest();
 
             bool success = request.result == UnityWebRequest.Result.Success;
-
-            if (success)
-            {
-                Debug.Log($"[MessagePanel] Message sent to {recipientId}");
-            }
-            else
-            {
-                Debug.LogError($"[MessagePanel] Failed to send: {request.error}");
-            }
-
             callback?.Invoke(success);
         }
     }
@@ -1278,10 +2706,10 @@ public class MessagePanelManager : MonoBehaviour
             OpenChatRoom(user.id, user.username, user.avatar_url);
         });
 
-        // 아바타
-        Image avatar = item.transform.Find("Avatar")?.GetComponent<Image>();
-        if (avatar != null && !string.IsNullOrEmpty(user.avatar_url))
-            StartCoroutine(LoadAvatar(user.avatar_url, avatar));
+        // 아바타 - 원형 마스크 구조 적용
+        Transform avatarTransform = item.transform.Find("Avatar");
+        if (avatarTransform != null && !string.IsNullOrEmpty(user.avatar_url))
+            StartCoroutine(LoadAvatarWithMask(user.avatar_url, avatarTransform));
     }
 
     /// <summary>
@@ -1390,12 +2818,6 @@ public class MessagePanelManager : MonoBehaviour
                 // 햅틱 피드백
                 if (UIFeedbackManager.Instance != null)
                     UIFeedbackManager.Instance.TriggerLightHaptic();
-
-                Debug.Log($"[MessagePanel] Message {messageId} like status: {setLiked}");
-            }
-            else
-            {
-                Debug.LogError($"[MessagePanel] Failed to toggle like: {request.error}");
             }
 
             handler?.OnRequestComplete();
@@ -1422,7 +2844,7 @@ public class MessagePanelManager : MonoBehaviour
         heartRect.anchorMin = new Vector2(1, 0);
         heartRect.anchorMax = new Vector2(1, 0);
         heartRect.pivot = new Vector2(1, 0);
-        heartRect.sizeDelta = new Vector2(24, 24);
+        heartRect.sizeDelta = heartIconSize; // Inspector에서 조절 가능
         heartRect.anchoredPosition = new Vector2(-5, 5);
 
         Image heartImg = heartObj.AddComponent<Image>();
@@ -1520,52 +2942,11 @@ public class MessagePanelManager : MonoBehaviour
 
     #endregion
 
-    #region Test Mode
-
-    private IEnumerator GenerateTestMessages()
-    {
-        yield return new WaitForSeconds(testMessageDelay);
-
-        Debug.Log("[MessagePanel] Generating test messages...");
-
-        // 테스트 대화 데이터 생성
-        if (conversations.Count == 0)
-        {
-            conversations.Add(new ConversationSummary
-            {
-                userId = "test_user_1",
-                username = "테스트유저1",
-                lastMessage = "안녕하세요! 반갑습니다.",
-                lastMessageTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                unreadCount = 1
-            });
-
-            conversations.Add(new ConversationSummary
-            {
-                userId = "test_user_2",
-                username = "테스트유저2",
-                lastMessage = "어제 올린 AR 콘텐츠 정말 멋있었어요!",
-                lastMessageTime = DateTime.Now.AddHours(-2).ToString("yyyy-MM-dd HH:mm:ss"),
-                unreadCount = 0
-            });
-        }
-
-        // 알림 표시
-        Debug.Log("[MessagePanel] Test messages generated. Open message panel to see.");
-    }
-
-    #endregion
-
     #region Helpers
 
     private bool CheckLogin()
     {
-        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
-        {
-            Debug.LogWarning("[MessagePanel] Login required");
-            return false;
-        }
-        return true;
+        return LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn;
     }
 
     private void HideAllPanels()
@@ -1585,7 +2966,31 @@ public class MessagePanelManager : MonoBehaviour
             children.Add(child.gameObject);
 
         foreach (var child in children)
+        {
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                DestroyImmediate(child);
+            else
+                Destroy(child);
+#else
             Destroy(child);
+#endif
+        }
+    }
+
+    /// <summary>
+    /// 모든 대화 목록 및 데이터 초기화 (빈 상태 테스트용)
+    /// </summary>
+    public void ClearAllConversations()
+    {
+        conversations.Clear();
+        adminBroadcasts.Clear();
+
+        if (conversationListContent != null)
+            ClearContent(conversationListContent);
+
+        // 빈 상태 표시
+        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), true);
     }
 
     private void ScrollToBottom()
@@ -1618,19 +3023,43 @@ public class MessagePanelManager : MonoBehaviour
         emptyStateObject.transform.SetParent(parent, false);
 
         RectTransform rect = emptyStateObject.AddComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0, 0.5f);
-        rect.anchorMax = new Vector2(1, 0.5f);
+        rect.anchorMin = new Vector2(0, 0);
+        rect.anchorMax = new Vector2(1, 1);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = Vector2.zero;
-        rect.sizeDelta = new Vector2(0, 100);
+        rect.anchoredPosition = new Vector2(0, -50); // 살짝 위로
+        rect.sizeDelta = new Vector2(-40, 0); // 좌우 여백
 
         Text emptyText = emptyStateObject.AddComponent<Text>();
         emptyText.text = message;
-        emptyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        emptyText.fontSize = 16;
-        emptyText.color = new Color(0.5f, 0.5f, 0.55f);
+
+        // AppleSDGothicNeoM 폰트 사용
+        if (chatFont != null)
+            emptyText.font = chatFont;
+        else
+            emptyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        emptyText.fontSize = emptyStateFontSize;
+        emptyText.color = emptyStateTextColor;
         emptyText.alignment = TextAnchor.MiddleCenter;
         emptyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        emptyText.verticalOverflow = VerticalWrapMode.Overflow;
+        emptyText.lineSpacing = 1.2f;
+    }
+
+    /// <summary>
+    /// 다국어 빈 대화목록 메시지 가져오기
+    /// </summary>
+    private string GetLocalizedEmptyInboxMessage()
+    {
+        if (LocalizationManager.Instance != null)
+        {
+            string localizedMsg = LocalizationManager.Instance.GetText("empty_inbox_message");
+            if (!string.IsNullOrEmpty(localizedMsg) && localizedMsg != "empty_inbox_message")
+            {
+                return localizedMsg;
+            }
+        }
+        return emptyInboxMessage; // fallback
     }
 
     /// <summary>
@@ -1669,12 +3098,78 @@ public class MessagePanelManager : MonoBehaviour
 
         Text emptyText = chatEmptyStateObject.AddComponent<Text>();
         emptyText.text = message;
-        emptyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        emptyText.fontSize = 24;
-        emptyText.color = new Color(0.5f, 0.5f, 0.55f);
+
+        // AppleSDGothicNeoM 폰트 사용
+        if (chatFont != null)
+            emptyText.font = chatFont;
+        else
+            emptyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        emptyText.fontSize = emptyStateFontSize; // Inspector에서 조절 가능
+        emptyText.color = emptyStateTextColor;   // Inspector에서 조절 가능
         emptyText.alignment = TextAnchor.MiddleCenter;
         emptyText.horizontalOverflow = HorizontalWrapMode.Wrap;
         emptyText.verticalOverflow = VerticalWrapMode.Overflow;
+    }
+
+    /// <summary>
+    /// 아바타를 원형 마스크 구조로 설정하고 이미지를 로드할 Image 컴포넌트 반환
+    /// FullProfilePanel 패턴 준수: AvatarMask(Mask+Knob) → AvatarImage(실제 이미지)
+    /// </summary>
+    private Image SetupCircularAvatarStructure(Transform avatarContainer)
+    {
+        if (avatarContainer == null) return null;
+
+        // 1. 컨테이너 Image (프리팹에 없으면만 추가)
+        Image containerImage = avatarContainer.GetComponent<Image>();
+        bool containerImageWasNull = containerImage == null;
+        if (containerImageWasNull)
+        {
+            containerImage = avatarContainer.gameObject.AddComponent<Image>();
+            containerImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            containerImage.type = Image.Type.Simple;
+            containerImage.preserveAspect = true;
+        }
+
+        // 2. Mask 컴포넌트 추가 (없으면)
+        Mask mask = avatarContainer.GetComponent<Mask>();
+        if (mask == null)
+        {
+            mask = avatarContainer.gameObject.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+        }
+
+        // 3. 자식 AvatarImage 찾기 또는 생성
+        Transform avatarImageTransform = avatarContainer.Find("AvatarImage");
+        if (avatarImageTransform == null)
+        {
+            // 프리팹에 AvatarImage 없으면 새로 생성
+            GameObject avatarImageObj = new GameObject("AvatarImage");
+            avatarImageObj.transform.SetParent(avatarContainer, false);
+            avatarImageObj.layer = 5; // UI Layer
+
+            RectTransform avatarImageRect = avatarImageObj.AddComponent<RectTransform>();
+            avatarImageRect.anchorMin = Vector2.zero;
+            avatarImageRect.anchorMax = Vector2.one;
+            avatarImageRect.offsetMin = Vector2.zero;
+            avatarImageRect.offsetMax = Vector2.zero;
+
+            Image avatarImage = avatarImageObj.AddComponent<Image>();
+            avatarImage.color = Color.white; // 투명하게 시작 (URL 로드 후 적용됨)
+            avatarImage.raycastTarget = false;
+
+            return avatarImage;
+        }
+
+        // 프리팹에 AvatarImage 있으면 그대로 반환 (색상/스프라이트 유지)
+        Image existingImage = avatarImageTransform.GetComponent<Image>();
+        if (existingImage == null)
+        {
+            existingImage = avatarImageTransform.gameObject.AddComponent<Image>();
+            existingImage.raycastTarget = false;
+        }
+
+        return existingImage;
     }
 
     private IEnumerator LoadAvatar(string url, Image targetImage)
@@ -1701,6 +3196,20 @@ public class MessagePanelManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 아바타를 원형 마스크 구조로 로드 (구조 설정 + 이미지 로드)
+    /// </summary>
+    private IEnumerator LoadAvatarWithMask(string url, Transform avatarContainer)
+    {
+        if (string.IsNullOrEmpty(url) || avatarContainer == null) yield break;
+
+        // 원형 마스크 구조 설정 및 AvatarImage 가져오기
+        Image targetImage = SetupCircularAvatarStructure(avatarContainer);
+        if (targetImage == null) yield break;
+
+        yield return LoadAvatar(url, targetImage);
+    }
+
     private string GetRelativeTime(string dateStr)
     {
         if (string.IsNullOrEmpty(dateStr)) return "";
@@ -1725,6 +3234,19 @@ public class MessagePanelManager : MonoBehaviour
         if (hour12 == 0) hour12 = 12;
 
         return $"{(isAM ? "오전" : "오후")} {hour12}:{date.Minute:D2}";
+    }
+
+    /// <summary>
+    /// 오브젝트와 모든 자식의 레이어를 재귀적으로 설정
+    /// </summary>
+    private void SetLayerRecursively(GameObject obj, int layer)
+    {
+        if (obj == null) return;
+        obj.layer = layer;
+        foreach (Transform child in obj.transform)
+        {
+            SetLayerRecursively(child.gameObject, layer);
+        }
     }
 
     #endregion
@@ -1789,8 +3311,12 @@ public class MessagePanelManager : MonoBehaviour
 
     private void UpdateUnreadUI()
     {
+        // DM 안읽음 + 위치 알림 안읽음 합산
+        int locationUnread = GetUnreadLocationNotificationCount();
+        int totalUnread = totalUnreadCount + locationUnread;
+
         if (globalUnreadIndicator != null)
-            globalUnreadIndicator.SetActive(totalUnreadCount > 0);
+            globalUnreadIndicator.SetActive(totalUnread > 0);
     }
 
     #endregion
@@ -1849,6 +3375,393 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     #endregion
+
+    #region Editor Test Data (UI 수정용 더미 데이터)
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 에디터에서 UI 테스트용 더미 대화 목록 로드
+    /// </summary>
+    public void LoadDummyConversations()
+    {
+        conversations.Clear();
+
+        // 시스템 메시지 (AdminNoticeItem 프리팹 사용)
+        conversations.Add(new ConversationSummary
+        {
+            userId = "system_woopang_1",
+            username = "WOOPANG",
+            avatarUrl = "",
+            lastMessage = "새로운 AR 콘텐츠가 주변에 등록되었습니다!",
+            lastMessageTime = DateTime.Now.AddMinutes(-5).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 1,
+            isSystemMessage = true,
+            notificationId = "woopang_test_1"
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "system_woopang_2",
+            username = "WOOPANG",
+            avatarUrl = "",
+            lastMessage = "WOOPANG 업데이트 안내: 새로운 기능이 추가되었습니다.",
+            lastMessageTime = DateTime.Now.AddHours(-2).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 1,
+            isSystemMessage = true,
+            notificationId = "woopang_test_2"
+        });
+
+        // 일반 DM (ConversationItem 프리팹 사용)
+        conversations.Add(new ConversationSummary
+        {
+            userId = "user_1",
+            username = "테스트유저1",
+            avatarUrl = "",
+            lastMessage = "안녕하세요! 반갑습니다.",
+            lastMessageTime = DateTime.Now.AddMinutes(-30).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 2,
+            isSystemMessage = false
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "user_2",
+            username = "AR크리에이터",
+            avatarUrl = "",
+            lastMessage = "새로운 AR 작품 올렸어요! 확인해주세요~",
+            lastMessageTime = DateTime.Now.AddHours(-1).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 0,
+            isSystemMessage = false
+        });
+
+        conversations.Add(new ConversationSummary
+        {
+            userId = "user_3",
+            username = "디자이너Kim",
+            avatarUrl = "",
+            lastMessage = "콜라보 작업 어떠세요?",
+            lastMessageTime = DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd HH:mm:ss"),
+            unreadCount = 5,
+            isSystemMessage = false
+        });
+
+        // UI에 반영
+        RefreshConversationUI();
+        Debug.Log("[MessagePanel] 더미 대화 목록 로드 완료 (에디터 전용)");
+    }
+
+    /// <summary>
+    /// 에디터에서 UI 테스트용 더미 채팅 메시지 로드 (시스템 메시지)
+    /// </summary>
+    public void LoadDummyChatMessages()
+    {
+        if (chatMessageContent == null) return;
+
+        // ChatRoomPanel 활성화 및 타이틀 설정
+        if (chatRoomPanel != null)
+            chatRoomPanel.SetActive(true);
+        ValidateAndReconnectChatRoomTitle();
+        if (chatRoomTitle != null)
+            chatRoomTitle.text = "WOOPANG";
+
+        // 입력창 비활성화 (시스템 메시지는 읽기 전용)
+        SetChatInputEnabled(false);
+
+        ClearContent(chatMessageContent);
+
+        // 시스템 메시지 (AdminMessageBubble 프리팹 사용)
+        CreateSystemMessageBubble("WOOPANG", "WOOPANG 공지: 새로운 이벤트가 시작되었습니다!", DateTime.Now.AddMinutes(-60).ToString("yyyy-MM-dd HH:mm:ss"));
+        CreateSystemMessageBubble("WOOPANG", "주변 500m 이내에 새로운 AR 콘텐츠가 등록되었습니다.", DateTime.Now.AddMinutes(-30).ToString("yyyy-MM-dd HH:mm:ss"));
+        CreateSystemMessageBubble("WOOPANG", "업로드 완료! 콘텐츠가 성공적으로 등록되었습니다.", DateTime.Now.AddMinutes(-5).ToString("yyyy-MM-dd HH:mm:ss"));
+
+        Canvas.ForceUpdateCanvases();
+        ScrollToBottom();
+
+        Debug.Log("[MessagePanel] 더미 시스템 채팅 메시지 로드 완료 (에디터 전용)");
+    }
+
+    /// <summary>
+    /// 에디터에서 일반 DM 채팅 더미 메시지 로드
+    /// </summary>
+    public void LoadDummyDMChatMessages()
+    {
+        if (chatMessageContent == null) return;
+
+        // ChatRoomPanel 활성화 및 타이틀 설정
+        if (chatRoomPanel != null)
+            chatRoomPanel.SetActive(true);
+        ValidateAndReconnectChatRoomTitle();
+        if (chatRoomTitle != null)
+        {
+            chatRoomTitle.text = "테스트유저";
+            chatRoomTitle.color = Color.white; // 일반 DM은 흰색
+        }
+
+        // 입력창 활성화 (일반 DM은 메시지 전송 가능)
+        SetChatInputEnabled(true);
+
+        ClearContent(chatMessageContent);
+
+        // 상대방 메시지 (otherMessageBubblePrefab 사용) - 아바타 표시
+        if (otherMessageBubblePrefab != null)
+        {
+            CreateDummyBubble(otherMessageBubblePrefab, "안녕하세요!", DateTime.Now.AddMinutes(-60).ToString("yyyy-MM-dd HH:mm:ss"), false);
+            CreateDummyBubble(otherMessageBubblePrefab, "AR 작품 정말 멋지네요!", DateTime.Now.AddMinutes(-55).ToString("yyyy-MM-dd HH:mm:ss"), false);
+        }
+
+        // 내 메시지 (myMessageBubblePrefab 사용) - 아바타 없음
+        if (myMessageBubblePrefab != null)
+        {
+            CreateDummyBubble(myMessageBubblePrefab, "감사합니다!", DateTime.Now.AddMinutes(-50).ToString("yyyy-MM-dd HH:mm:ss"), true);
+            CreateDummyBubble(myMessageBubblePrefab, "다음 작품도 기대해주세요~", DateTime.Now.AddMinutes(-45).ToString("yyyy-MM-dd HH:mm:ss"), true);
+        }
+
+        // 상대방 메시지 - 아바타 표시
+        if (otherMessageBubblePrefab != null)
+        {
+            CreateDummyBubble(otherMessageBubblePrefab, "네! 팔로우 했어요 ㅎㅎ", DateTime.Now.AddMinutes(-40).ToString("yyyy-MM-dd HH:mm:ss"), false);
+        }
+
+        Canvas.ForceUpdateCanvases();
+        ScrollToBottom();
+
+        Debug.Log("[MessagePanel] 더미 DM 채팅 메시지 로드 완료 (에디터 전용)");
+    }
+
+    private void CreateDummyBubble(GameObject prefab, string content, string time, bool isMine)
+    {
+        if (prefab == null || chatMessageContent == null) return;
+
+        GameObject bubble = Instantiate(prefab, chatMessageContent);
+        SetLayerRecursively(bubble, 5);
+
+        // LabelText 비활성화 (ChatTitle로 대체됨)
+        Transform labelText = bubble.transform.Find("BubbleContainer/LabelText");
+        if (labelText != null)
+            labelText.gameObject.SetActive(false);
+
+        // BubbleContainer 레이아웃 설정
+        Transform bubbleContainerTr = bubble.transform.Find("BubbleContainer");
+
+        if (bubbleContainerTr != null)
+        {
+            // 기존 LayoutElement 제거
+            LayoutElement bubbleLE = bubbleContainerTr.GetComponent<LayoutElement>();
+            if (bubbleLE != null)
+                DestroyImmediate(bubbleLE);
+
+            // VerticalLayoutGroup 설정 (프리팹에 없으면 추가, 있으면 프리팹 값 유지)
+            VerticalLayoutGroup bubbleVLG = bubbleContainerTr.GetComponent<VerticalLayoutGroup>();
+            if (bubbleVLG == null)
+            {
+                bubbleVLG = bubbleContainerTr.gameObject.AddComponent<VerticalLayoutGroup>();
+                bubbleVLG.padding = new RectOffset((int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING, (int)DEFAULT_BUBBLE_PADDING);
+                bubbleVLG.spacing = DEFAULT_BUBBLE_INNER_SPACING;
+                bubbleVLG.childAlignment = TextAnchor.MiddleLeft;
+            }
+            // childControl은 레이아웃 동작에 필수이므로 항상 설정
+            bubbleVLG.childControlWidth = true;
+            bubbleVLG.childControlHeight = true;
+            bubbleVLG.childForceExpandWidth = false;
+            bubbleVLG.childForceExpandHeight = false;
+
+            // ContentSizeFitter - 텍스트에 맞게 자동 크기 (프리팹에 없으면 추가)
+            ContentSizeFitter bubbleCSF = bubbleContainerTr.GetComponent<ContentSizeFitter>();
+            if (bubbleCSF == null)
+            {
+                bubbleCSF = bubbleContainerTr.gameObject.AddComponent<ContentSizeFitter>();
+            }
+            bubbleCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            bubbleCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        }
+
+        // 메시지 내용 설정
+        Text contentText = bubble.transform.Find("BubbleContainer/ContentText")?.GetComponent<Text>();
+        if (contentText == null)
+            contentText = bubble.transform.Find("ContentText")?.GetComponent<Text>();
+        if (contentText == null)
+            contentText = bubble.GetComponentInChildren<Text>();
+        if (contentText != null)
+        {
+            // 기존 ContentSizeFitter 제거
+            ContentSizeFitter textCSF = contentText.GetComponent<ContentSizeFitter>();
+            if (textCSF != null)
+                DestroyImmediate(textCSF);
+
+            // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
+            contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            contentText.text = content;
+            if (chatFont != null && contentText.font == null)
+                contentText.font = chatFont;
+
+            // 강제 캔버스 업데이트
+            Canvas.ForceUpdateCanvases();
+
+            // 버블 최대 너비 계산
+            float screenWidth = Screen.width;
+            float maxWidth = screenWidth * maxBubbleWidthRatio;
+            float maxTextWidth = maxWidth - (DEFAULT_BUBBLE_PADDING * 2);
+
+            // 실제 텍스트 너비
+            float actualTextWidth = contentText.preferredWidth;
+
+            // 텍스트가 짧으면 텍스트 크기에 맞춤, 길면 최대 너비로 제한
+            float finalTextWidth = Mathf.Min(actualTextWidth, maxTextWidth);
+            finalTextWidth = Mathf.Max(finalTextWidth, minBubbleWidth - (DEFAULT_BUBBLE_PADDING * 2));
+
+            // LayoutElement 설정
+            LayoutElement textLE = contentText.GetComponent<LayoutElement>();
+            if (textLE == null)
+                textLE = contentText.gameObject.AddComponent<LayoutElement>();
+            textLE.preferredWidth = finalTextWidth;
+            textLE.minWidth = -1;
+            textLE.flexibleWidth = 0;
+            textLE.preferredHeight = -1;
+
+            // RectTransform 초기화
+            RectTransform textRect = contentText.GetComponent<RectTransform>();
+            if (textRect != null)
+            {
+                textRect.sizeDelta = new Vector2(finalTextWidth, textRect.sizeDelta.y);
+            }
+        }
+
+        // 레이아웃 강제 리빌드
+        if (bubbleContainerTr != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleContainerTr as RectTransform);
+        }
+
+        // TimeArea 처리
+        Transform timeAreaTr = bubble.transform.Find("TimeArea");
+        Text timeText = timeAreaTr?.Find("TimeText")?.GetComponent<Text>();
+        if (timeText == null)
+            timeText = bubble.transform.Find("TimeText")?.GetComponent<Text>();
+
+        // 날짜 구분선 사용 시 버블 내 시간 숨김
+        if (useDateSeparator && hideTimeInBubbleWhenSeparator && timeAreaTr != null)
+        {
+            timeAreaTr.gameObject.SetActive(false);
+        }
+        else if (TIME_INSIDE_BUBBLE && timeAreaTr != null && bubbleContainerTr != null)
+        {
+            // === Instagram DM 스타일: TimeArea를 BubbleContainer 안으로 이동 ===
+
+            // TimeArea를 BubbleContainer의 자식으로 이동
+            timeAreaTr.SetParent(bubbleContainerTr, false);
+            timeAreaTr.SetAsLastSibling(); // ContentText 아래에 배치
+
+            // 기존 VerticalLayoutGroup 제거
+            VerticalLayoutGroup timeVLG = timeAreaTr.GetComponent<VerticalLayoutGroup>();
+            if (timeVLG != null)
+                DestroyImmediate(timeVLG);
+
+            // TimeArea ContentSizeFitter 제거 (버블 너비에 영향 주지 않도록!)
+            ContentSizeFitter timeAreaCSF = timeAreaTr.GetComponent<ContentSizeFitter>();
+            if (timeAreaCSF != null)
+                DestroyImmediate(timeAreaCSF);
+
+            // TimeArea LayoutElement 설정 - preferredWidth 없이, 버블 너비 계산에 영향 X
+            LayoutElement timeLE = timeAreaTr.GetComponent<LayoutElement>();
+            if (timeLE == null)
+                timeLE = timeAreaTr.gameObject.AddComponent<LayoutElement>();
+            timeLE.preferredWidth = -1;
+            timeLE.minWidth = -1;
+            timeLE.flexibleWidth = 0;
+            timeLE.preferredHeight = -1;
+            timeLE.minHeight = -1;
+
+            // HorizontalLayoutGroup으로 오른쪽 정렬
+            HorizontalLayoutGroup timeHLG = timeAreaTr.GetComponent<HorizontalLayoutGroup>();
+            if (timeHLG == null)
+                timeHLG = timeAreaTr.gameObject.AddComponent<HorizontalLayoutGroup>();
+            timeHLG.childAlignment = TextAnchor.MiddleRight;
+            timeHLG.padding = new RectOffset(0, (int)TIME_INSIDE_MARGIN_RIGHT, 0, (int)TIME_INSIDE_MARGIN_BOTTOM);
+            timeHLG.childForceExpandWidth = false;
+            timeHLG.childForceExpandHeight = false;
+            timeHLG.childControlWidth = false;
+            timeHLG.childControlHeight = false;
+
+            // TimeText 설정 (폰트 크기/색상은 프리팹 값 유지)
+            if (timeText != null)
+            {
+                timeText.text = GetRelativeTime(time);
+                timeText.alignment = TextAnchor.MiddleRight;
+                if (chatFont != null && timeText.font == null)
+                    timeText.font = chatFont;
+
+                ContentSizeFitter timeCSF = timeText.GetComponent<ContentSizeFitter>();
+                if (timeCSF == null)
+                    timeCSF = timeText.gameObject.AddComponent<ContentSizeFitter>();
+                timeCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                timeCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+        }
+        else if (timeAreaTr != null)
+        {
+            // === 기존 스타일: TimeArea가 버블 옆에 위치 (폰트 크기/색상은 프리팹 값 유지) ===
+            if (timeText != null)
+            {
+                timeText.text = GetRelativeTime(time);
+                if (chatFont != null && timeText.font == null)
+                    timeText.font = chatFont;
+
+                ContentSizeFitter timeCSF = timeText.GetComponent<ContentSizeFitter>();
+                if (timeCSF == null)
+                    timeCSF = timeText.gameObject.AddComponent<ContentSizeFitter>();
+                timeCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                timeCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+            LayoutElement timeLE = timeAreaTr.GetComponent<LayoutElement>();
+            if (timeLE == null)
+                timeLE = timeAreaTr.gameObject.AddComponent<LayoutElement>();
+            timeLE.preferredWidth = TIME_AREA_WIDTH;
+            timeLE.minWidth = TIME_AREA_MIN_WIDTH;
+            timeLE.flexibleWidth = 0;
+        }
+        else if (timeText != null)
+        {
+            // TimeArea 없이 TimeText만 있는 경우 (폰트 크기/색상은 프리팹 값 유지)
+            timeText.text = GetRelativeTime(time);
+            if (chatFont != null && timeText.font == null)
+                timeText.font = chatFont;
+        }
+
+        // 아바타 처리 - 내 메시지는 아바타 없음, 상대방 메시지는 아바타 표시
+        Transform avatarTr = bubble.transform.Find("AvatarContainer");
+        if (avatarTr == null)
+            avatarTr = bubble.transform.Find("Avatar");
+        if (avatarTr != null)
+        {
+            if (isMine)
+            {
+                // 내 메시지: 아바타 컨테이너 비활성화
+                avatarTr.gameObject.SetActive(false);
+            }
+            else
+            {
+                // 상대방 메시지: 아바타 표시 (프리팹 값 유지)
+                avatarTr.gameObject.SetActive(true);
+                SetupCircularAvatarStructure(avatarTr);
+                // 색상/스프라이트는 프리팹에서 설정한 값 유지
+            }
+        }
+
+        // 행 레이아웃 적용 - Inspector에서 조절 가능 (패딩, 스페이싱 등)
+        ChatBubbleLayoutHelper.SetupMessageRow(bubble, isMine);
+
+        // 강제 레이아웃 리빌드 - 버블 크기 업데이트
+        Canvas.ForceUpdateCanvases();
+        RectTransform bubbleRect = bubble.GetComponent<RectTransform>();
+        if (bubbleRect != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleRect);
+    }
+#endif
+
+    #endregion
 }
 
 #region Data Classes
@@ -1862,6 +3775,23 @@ public class ConversationSummary
     public string lastMessage;
     public string lastMessageTime;
     public int unreadCount;
+
+    // 시스템 메시지 (위치 알림, 관리자 메시지 등) 구분용
+    public bool isSystemMessage;    // true면 어두운 배경
+    public bool isRead;             // 읽음 여부
+    public string notificationId;   // 시스템 알림용 고유 ID
+
+    // 위치 정보 (위치 알림용)
+    public float latitude;
+    public float longitude;
+    public float radius;
+    public string distance;
+}
+
+[Serializable]
+public class ConversationSummaryList
+{
+    public List<ConversationSummary> conversations;
 }
 
 [Serializable]
@@ -1952,6 +3882,29 @@ public class DMOtherUser
 }
 
 [Serializable]
+public class DMConversationsResponse
+{
+    public List<DMConversationItem> conversations;
+    public int count;
+    public int total_unread;
+}
+
+[Serializable]
+public class DMConversationItem
+{
+    public string partner_id;
+    public int message_id;
+    public string sender_id;
+    public string recipient_id;
+    public string last_message;
+    public bool is_read;
+    public string last_message_time;
+    public string partner_username;
+    public string partner_avatar_url;
+    public int unread_count;
+}
+
+[Serializable]
 public class DMSendRequest
 {
     public string sender_id;
@@ -1964,6 +3917,26 @@ public class DMReadAllRequest
 {
     public string user_id;
     public string sender_id;
+}
+
+[Serializable]
+public class LocationNotification
+{
+    public string id;
+    public string title;
+    public string body;
+    public string receivedAt;
+    public bool isRead;
+    public float latitude;
+    public float longitude;
+    public float radius;
+    public string currentDistance;
+}
+
+[Serializable]
+public class LocationNotificationList
+{
+    public List<LocationNotification> notifications;
 }
 
 #endregion

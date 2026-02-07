@@ -37,13 +37,8 @@ public class SplashImagePlayer : MonoBehaviour
                 splashCanvas.sortingOrder = 10000;
                 // Canvas가 가장 앞에 렌더링되도록 설정
                 splashCanvas.overrideSorting = true;
-                Debug.Log($"[SplashImagePlayer] Splash Canvas Sort Order를 10000으로 설정 (overrideSorting=true)");
             }
         }
-
-        // ✅ 다른 UI 숨김 로직 제거 (검은색 플래시 원인)
-        // Sort Order가 충분히 높으면 다른 Canvas를 숨길 필요 없음
-        Debug.Log($"[SplashImagePlayer] Sort Order 우선순위로 스플래시 표시 (Canvas 숨김 생략)");
 
         // 텍스처와 AspectRatioFitter 설정 (한 번만 실행)
         if (splashRawImage != null && splashTexture != null)
@@ -62,8 +57,6 @@ public class SplashImagePlayer : MonoBehaviour
             float aspectRatio = (float)splashTexture.width / (float)splashTexture.height;
             fitter.aspectRatio = aspectRatio;
 
-            Debug.Log($"[SplashImagePlayer] AspectRatioFitter 설정 완료 - Mode: EnvelopeParent, Ratio: {aspectRatio:F2}");
-
             // Canvas Group 설정
             if (canvasGroup == null)
             {
@@ -74,8 +67,6 @@ public class SplashImagePlayer : MonoBehaviour
                 }
             }
             canvasGroup.alpha = 1f;
-
-            Debug.Log($"[SplashImagePlayer] Awake에서 이미지 설정 완료 - 전체 화면 채움, 비율 유지");
         }
     }
 
@@ -107,7 +98,6 @@ public class SplashImagePlayer : MonoBehaviour
         }
 
         hiddenCanvases.Clear();
-        Debug.Log("[SplashImagePlayer] Canvas를 다시 표시했습니다.");
     }
 
     private void DelayDataLoading()
@@ -126,7 +116,6 @@ public class SplashImagePlayer : MonoBehaviour
         yield return new WaitForSeconds(dataLoadDelay);
 
         // DataManager의 초기 로딩 트리거 (필요시 public 메서드 호출)
-        Debug.Log("[SplashImagePlayer] 데이터 로딩 시작");
     }
 
     private IEnumerator ShowSplash()

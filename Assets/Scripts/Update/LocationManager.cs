@@ -36,7 +36,6 @@ public class LocationManager : MonoBehaviour
     {
         if (hasFocus)
         {
-            Debug.Log("앱이 포그라운드로 전환됨 - 위치 요청 재시작");
             DisplayInitializingMessage();
             StartCoroutine(CheckLocationService());
         }
@@ -63,7 +62,6 @@ public class LocationManager : MonoBehaviour
         // VirtualLocation이 있으면 그 좌표를, 없으면 기본 청주 좌표 사용
         float lat = VirtualLocation.Instance != null ? VirtualLocation.Instance.Latitude : 36.6361f;
         float lon = VirtualLocation.Instance != null ? VirtualLocation.Instance.Longitude : 126.8280f;
-        Debug.Log($"[LocationManager] 에디터 환경 감지: VirtualLocation 좌표({lat}, {lon})로 시뮬레이션합니다.");
         StartCoroutine(GetAddressFromCoordinates(lat, lon));
         if (!isRefreshing)
         {
@@ -158,7 +156,6 @@ public class LocationManager : MonoBehaviour
                 try
                 {
                     string jsonResponse = request.downloadHandler.text;
-                    Debug.Log($"[LocationManager] API 응답: {jsonResponse}");
                     JSONNode data = JSON.Parse(jsonResponse);
 
                     textBuilder.Clear();
@@ -200,7 +197,7 @@ public class LocationManager : MonoBehaviour
             }
             else
             {
-                Debug.LogError($"[LocationManager] API 요청 실패: {request.error}, Status Code: {request.responseCode}");
+                // API 요청 실패 시 조용히 처리 (에디터에서 타임아웃 발생 정상)
 
                 // 좌표만이라도 표시
                 textBuilder.Clear();
@@ -220,14 +217,14 @@ public class LocationManager : MonoBehaviour
             // VirtualLocation이 있으면 그 좌표를, 없으면 기본 청주 좌표 사용
             float latitude = VirtualLocation.Instance != null ? VirtualLocation.Instance.Latitude : 36.6361f;
             float longitude = VirtualLocation.Instance != null ? VirtualLocation.Instance.Longitude : 126.8280f;
-            Debug.Log($"[LocationManager] 에디터 주기적 갱신 - VirtualLocation 좌표: Lat: {latitude}, Lon: {longitude}");
+            // 에디터에서 주기적 갱신 (로그 제거)
             StartCoroutine(GetAddressFromCoordinates(latitude, longitude));
 #else
             if (Input.location.status == LocationServiceStatus.Running)
             {
                 float latitude = Input.location.lastData.latitude;
                 float longitude = Input.location.lastData.longitude;
-                Debug.Log($"주기적 갱신 - Lat: {latitude}, Lon: {longitude}");
+                // 주기적 갱신 (로그 제거)
                 StartCoroutine(GetAddressFromCoordinates(latitude, longitude));
             }
             else
@@ -250,6 +247,5 @@ public class LocationManager : MonoBehaviour
     {
         isRefreshing = false;
         Input.location.Stop();
-        Debug.Log("LocationManager 비활성화 - 위치 서비스 중지");
     }
 }

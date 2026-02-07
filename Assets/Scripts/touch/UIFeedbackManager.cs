@@ -205,24 +205,27 @@ public class UIFeedbackManager : MonoBehaviour
             Handheld.Vibrate();
         }
 #else
-        // ��Ÿ �÷����� �⺻ ����
+        // 기타 플랫폼 기본 진동 (에디터 제외 - 불필요한 로그 방지)
+#if !UNITY_EDITOR
         if (intensity > 0.1f)
         {
             Handheld.Vibrate();
         }
 #endif
+#endif
     }
 
-    // iOS Medium Haptic ����
+    // iOS Medium Haptic 호출
     private void TriggerIOSMediumHaptic()
     {
 #if UNITY_IOS && !UNITY_EDITOR
-        // ����Ƽ�� iOS Medium Haptic ȣ��
+        // 네이티브 iOS Medium Haptic 호출
         _TriggerMediumHaptic();
-#else
-        // �����ͳ� �ٸ� ȯ�濡���� �⺻ ����
+#elif !UNITY_EDITOR
+        // 에디터가 아닌 다른 환경에서는 기본 진동
         Handheld.Vibrate();
 #endif
+        // 에디터에서는 진동 호출 생략 (불필요한 로그 방지)
     }
 
 #if UNITY_IOS && !UNITY_EDITOR

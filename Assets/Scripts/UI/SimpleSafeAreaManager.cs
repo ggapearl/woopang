@@ -72,7 +72,7 @@ public class SimpleSafeAreaManager : MonoBehaviour
         // targetCanvases가 비어있으면 모든 Canvas 찾기
         if (canvases == null || canvases.Length == 0)
         {
-            canvases = FindObjectsOfType<Canvas>();
+            canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         }
 
         foreach (Canvas canvas in canvases)

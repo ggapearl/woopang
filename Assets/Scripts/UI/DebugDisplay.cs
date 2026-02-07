@@ -4,7 +4,7 @@ using UnityEngine;
 public class DebugDisplay : MonoBehaviour
 {
     [Header("Debug Settings")]
-    public bool showDebugInfo = true;
+    public bool showDebugInfo = false;  // 기본 비활성화
     public int maxLines = 100;
     public int fontSize = 16;
     public Color textColor = Color.white;

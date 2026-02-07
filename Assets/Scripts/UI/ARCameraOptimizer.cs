@@ -37,8 +37,6 @@ public class ARCameraOptimizer : MonoBehaviour
         
         // 렌더링 모드 최적화
         arCameraManager.requestedBackgroundRenderingMode = CameraBackgroundRenderingMode.AfterOpaques;
-        
-        Debug.Log("[ARCameraOptimizer] AR 카메라 최적화 완료");
     }
     
     void Update()

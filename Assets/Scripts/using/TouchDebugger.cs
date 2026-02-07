@@ -9,7 +9,7 @@ using System.Collections.Generic;
 public class TouchDebugger : MonoBehaviour
 {
     [Header("Debug Settings")]
-    [SerializeField] private bool enableDebugLogs = true;
+    [SerializeField] private bool enableDebugLogs = false;
     [SerializeField] private float logInterval = 1f; // 로그 간격
 
     private float lastLogTime = 0f;
@@ -113,7 +113,7 @@ public class TouchDebugger : MonoBehaviour
     [ContextMenu("Print All Canvas Info")]
     public void PrintAllCanvasInfo()
     {
-        Canvas[] allCanvas = FindObjectsOfType<Canvas>();
+        Canvas[] allCanvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         Debug.Log($"[TouchDebugger] === 전체 Canvas 목록 ({allCanvas.Length}개) ===");
 
         foreach (Canvas canvas in allCanvas)

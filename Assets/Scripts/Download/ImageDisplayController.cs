@@ -104,22 +104,15 @@ public class ImageDisplayController : MonoBehaviour
     // 서브 사진 설정
     public void SetSubPhotos(List<string> subPhotoUrls)
     {
-        Debug.Log($"[ImageDisplayController] SetSubPhotos 호출됨: enabled={enabled}, urls count={subPhotoUrls?.Count ?? 0}, doubleTap3DScript={doubleTap3DScript != null}");
-
-        if (!enabled)
-        {
-            Debug.LogWarning("[ImageDisplayController] SetSubPhotos: 컴포넌트가 비활성화됨");
-            return;
-        }
+        if (!enabled) return;
 
         if (subPhotoUrls == null || subPhotoUrls.Count == 0)
         {
-            Debug.LogWarning("[ImageDisplayController] 서브 사진 URL이 비어 있습니다. 기본 이미지 적용");
             if (doubleTap3DScript != null)
             {
                 Sprite defaultSprite = Sprite.Create(Texture2D.blackTexture, new Rect(0, 0, 100, 100), new Vector2(0.5f, 0.5f));
                 doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
-                loadedSprites.Add(defaultSprite); // 해제를 위해 저장
+                loadedSprites.Add(defaultSprite);
             }
             return;
         }
@@ -129,9 +122,6 @@ public class ImageDisplayController : MonoBehaviour
 
     private IEnumerator LoadSubPhotos(List<string> subPhotoUrls)
     {
-        Debug.Log($"[ImageDisplayController] LoadSubPhotos 코루틴 시작: {subPhotoUrls.Count}개 URL");
-
-        // 기존 스프라이트 정리
         ClearSubPhotos();
 
         List<Sprite> spriteList = new List<Sprite>();
@@ -139,7 +129,6 @@ public class ImageDisplayController : MonoBehaviour
         foreach (string photoUrl in subPhotoUrls)
         {
             string fullUrl = photoUrl.StartsWith("http") ? photoUrl : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
-            Debug.Log($"[ImageDisplayController] 이미지 로드 시도: {fullUrl}");
 
             using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
             {
@@ -155,38 +144,15 @@ public class ImageDisplayController : MonoBehaviour
                         {
                             spriteList.Add(sprite);
                             loadedSprites.Add(sprite);
-                            Debug.Log($"[ImageDisplayController] 스프라이트 생성 성공: {fullUrl}, 총 {spriteList.Count}개");
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"[ImageDisplayController] 스프라이트 생성 실패: {fullUrl}");
                         }
                     }
-                    else
-                    {
-                        Debug.LogWarning($"[ImageDisplayController] 텍스처 로드 실패: {fullUrl}");
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"[ImageDisplayController] 서브 사진 로드 실패: {fullUrl}, 오류: {request.error}");
                 }
             }
         }
 
-        Debug.Log($"[ImageDisplayController] LoadSubPhotos 완료: 로드된 스프라이트 {spriteList.Count}개, doubleTap3DScript={doubleTap3DScript != null}");
-
-        if (spriteList.Count > 0)
+        if (spriteList.Count > 0 && doubleTap3DScript != null)
         {
-            if (doubleTap3DScript != null)
-            {
-                Debug.Log($"[ImageDisplayController] doubleTap3DScript.SetImageSprites 호출: {spriteList.Count}개 스프라이트");
-                doubleTap3DScript.SetImageSprites(spriteList);
-            }
-            else
-            {
-                Debug.LogError("[ImageDisplayController] doubleTap3DScript가 null입니다! 스프라이트를 설정할 수 없습니다.");
-            }
+            doubleTap3DScript.SetImageSprites(spriteList);
         }
         else
         {

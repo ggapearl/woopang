@@ -42,24 +42,9 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private ContinueCaptureDialog continueCaptureDialog; // 연속 촬영 다이얼로그
 
     [Header("AR Preview")]
-    [SerializeField] private ARPreviewController arPreviewController; // AR 미리보기 컨트롤러
-    [SerializeField] private GameObject cubePrefab; // 0000_Cube.prefab
+    [SerializeField] private ARPreviewController arPreviewController; // AR 미리보기 컨트롤러 (cubePrefab은 ARPreviewController에서 직접 연결)
 
-    [Header("=== Editor Test Mode ===")]
-    [Tooltip("에디터에서 테스트 업로드 활성화")]
-    public bool enableEditorTestMode = false;
-    [Tooltip("Play Mode 진입 시 자동 업로드 실행")]
-    public bool autoUploadOnPlayMode = false;
-    [Tooltip("테스트용 메인 이미지 (Texture2D)")]
-    public Texture2D testMainImage;
-    [Tooltip("테스트용 GPS 좌표 (lat, lon, alt)")]
-    public Vector3 testGpsCoordinates = new Vector3(37.5665f, 126.9780f, 30f); // 서울시청 기본값
-    [Tooltip("테스트용 장소명")]
-    public string testPlaceName = "TestPlace";
-    [Tooltip("테스트 업로드 실행 버튼")]
-    public bool triggerTestUpload = false;
-
-    private string serverUrl => ApiConfig.UPLOAD + "/";
+    private string serverUrl => ApiConfig.UPLOAD;
 
     private Texture2D mainPhoto;
     private List<Texture2D> subPhotos = new List<Texture2D>();
@@ -333,11 +318,30 @@ public class CubeUploadManager : MonoBehaviour
     /// </summary>
     private void ProcessCropAndDisplay(Texture2D texture, System.Action onComplete)
     {
+        if (texture == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
         // 크롭 시작 전에 현재 패널 상태 저장
         SaveCurrentPanelState();
 
-        ImageCropper.Instance.Show(texture, (success, original, cropped) =>
+        // 크롭 화면이 열릴 때 uploadPage 숨기기 (크롭 화면만 보이도록)
+        if (uploadPage != null)
+            uploadPage.SetActive(false);
+
+        var cropper = ImageCropper.Instance;
+        if (cropper == null)
         {
+            onComplete?.Invoke();
+            return;
+        }
+
+        cropper.Show(texture, (success, original, cropped) =>
+        {
+            bool arPreviewStarted = false;
+
             try
             {
                 if (success && cropped is Texture2D croppedTexture)
@@ -346,10 +350,13 @@ public class CubeUploadManager : MonoBehaviour
                     mainPhoto = croppedTexture;
                     if (mainPhotoDisplay != null) mainPhotoDisplay.sprite = GetOrCreateSprite(mainPhoto);
                     SetMainPhotoUIState(true);
-                    Debug.Log("[HEIC] 메인 사진 크롭 완료");
 
                     // AR Preview 모드 시작 (메인 사진 크롭 직후)
-                    StartARPreview(croppedTexture);
+                    if (arPreviewController != null)
+                    {
+                        StartARPreview(croppedTexture);
+                        arPreviewStarted = true;
+                    }
                 }
                 else
                 {
@@ -362,15 +369,20 @@ public class CubeUploadManager : MonoBehaviour
             }
             finally
             {
-                // 크롭 완료 후 패널 상태 복원
-                RestoreCurrentPanelState();
+                // AR Preview가 시작되지 않았을 때만 uploadPage 복원
+                if (!arPreviewStarted)
+                {
+                    if (uploadPage != null)
+                        uploadPage.SetActive(true);
 
-                // 반드시 콜백 호출하여 로딩 상태 해제
+                    RestoreCurrentPanelState();
+                }
+
                 onComplete?.Invoke();
             }
         }, new ImageCropper.Settings
         {
-            autoZoomEnabled = false,  // 자동 확대 비활성화 - 핀치 줌으로만 조작
+            autoZoomEnabled = false,
             selectionMinAspectRatio = 1.0f,
             selectionMaxAspectRatio = 1.0f
         });
@@ -388,18 +400,9 @@ public class CubeUploadManager : MonoBehaviour
             return;
         }
 
-        if (cubePrefab == null)
-        {
-            Debug.LogWarning("[CubeUploadManager] Cube Prefab이 할당되지 않았습니다. AR Preview를 건너뜁니다.");
-            return;
-        }
-
         // UploadPage 비활성화
         if (uploadPage != null)
             uploadPage.SetActive(false);
-
-        // ARPreviewController에 cubePrefab 설정
-        arPreviewController.SetCubePrefab(cubePrefab);
 
         // AR Preview 시작 (확인/취소 콜백 포함)
         arPreviewController.StartPreview(
@@ -474,16 +477,17 @@ public class CubeUploadManager : MonoBehaviour
 
     /// <summary>
     /// 다음 Sub 사진 촬영 (연속 촬영 모드)
+    /// 촬영 즉시 리스트에 반영하고 그리드 업데이트
     /// </summary>
     private IEnumerator CaptureNextSubPhoto()
     {
-        int remainingSlots = MAX_SUB_PHOTOS - subPhotos.Count - continuousCapturedPaths.Count;
+        int remainingSlots = MAX_SUB_PHOTOS - subPhotos.Count;
 
         if (remainingSlots <= 0)
         {
-            // 최대 개수 도달 → 촬영 종료, 모든 사진 로드
+            // 최대 개수 도달 → 촬영 종료
             ShowWarning($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.");
-            yield return StartCoroutine(LoadContinuousCapturedPhotos());
+            isContinuousCaptureMode = false;
             yield break;
         }
 
@@ -500,7 +504,7 @@ public class CubeUploadManager : MonoBehaviour
         if (permission != NativeCamera.Permission.Granted)
         {
             ShowWarning("카메라 권한이 필요합니다.");
-            yield return StartCoroutine(LoadContinuousCapturedPhotos());
+            isContinuousCaptureMode = false;
             yield break;
         }
 
@@ -509,11 +513,48 @@ public class CubeUploadManager : MonoBehaviour
 
         if (!string.IsNullOrEmpty(capturedPath))
         {
-            // 촬영 성공 → 리스트에 추가
-            continuousCapturedPaths.Add(capturedPath);
+            // 촬영 성공 → 즉시 로드하여 리스트에 추가
+            Debug.Log($"[HEIC] 연속촬영 사진 즉시 로드: {capturedPath}");
+
+            Texture2D texture = NativeGallery.LoadImageAtPath(capturedPath,
+                maxSize: 1024,
+                markTextureNonReadable: false,
+                generateMipmaps: false);
+
+            if (texture != null)
+            {
+                subPhotos.Add(texture);
+                UpdateSubPhotoGrid();  // 즉시 그리드 업데이트
+                Debug.Log($"[HEIC] ✅ 연속촬영 사진 즉시 추가 완료 (총 {subPhotos.Count}장)");
+            }
+            else
+            {
+                // 1단계 실패 시 2단계 수동 변환 시도
+                bool conversionComplete = false;
+                Texture2D convertedTexture = null;
+
+                yield return StartCoroutine(LoadImageWithConversion(capturedPath, (result) =>
+                {
+                    convertedTexture = result;
+                    conversionComplete = true;
+                }));
+
+                yield return new WaitUntil(() => conversionComplete);
+
+                if (convertedTexture != null)
+                {
+                    subPhotos.Add(convertedTexture);
+                    UpdateSubPhotoGrid();
+                    Debug.Log($"[HEIC] ✅ 연속촬영 2단계 변환 후 추가 완료 (총 {subPhotos.Count}장)");
+                }
+                else
+                {
+                    Debug.LogError($"[HEIC] ❌ 연속촬영 사진 로드 실패: {capturedPath}");
+                }
+            }
 
             // "계속 촬영하시겠습니까?" 다이얼로그 표시
-            int currentCount = subPhotos.Count + continuousCapturedPaths.Count;
+            int currentCount = subPhotos.Count;
             string message = $"현재 {currentCount}/{MAX_SUB_PHOTOS}장\n계속 촬영하시겠습니까?";
 
             if (continueCaptureDialog != null)
@@ -521,20 +562,25 @@ public class CubeUploadManager : MonoBehaviour
                 continueCaptureDialog.Show(
                     message,
                     onYes: () => StartCoroutine(CaptureNextSubPhoto()), // 다시 촬영
-                    onNo: () => StartCoroutine(LoadContinuousCapturedPhotos()) // 종료
+                    onNo: () => {
+                        isContinuousCaptureMode = false;
+                        ShowWarning($"Sub 사진 촬영 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
+                    }
                 );
             }
             else
             {
                 // Fallback: 다이얼로그 없으면 자동 종료
                 Debug.LogWarning("[CubeUploadManager] ContinueCaptureDialog가 할당되지 않았습니다. 촬영을 종료합니다.");
-                yield return StartCoroutine(LoadContinuousCapturedPhotos());
+                isContinuousCaptureMode = false;
             }
         }
         else
         {
-            // 촬영 취소 → 지금까지 찍은 사진들 로드
-            yield return StartCoroutine(LoadContinuousCapturedPhotos());
+            // 촬영 취소
+            isContinuousCaptureMode = false;
+            if (subPhotos.Count > 0)
+                ShowWarning($"Sub 사진 촬영 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
         }
     }
 
@@ -1219,12 +1265,23 @@ public class CubeUploadManager : MonoBehaviour
             yield break;
         }
 
+        // 에디터에서는 위치 서비스 검증 스킵 (테스트 좌표 사용)
+#if UNITY_EDITOR
+        if (gpsData == Vector3.zero)
+        {
+            // 테스트용 기본 좌표 (서울)
+            gpsData = new Vector3(37.5665f, 126.9780f, 30f);
+            locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
+            Debug.Log($"[CubeUploadManager] 에디터 테스트 모드: 기본 좌표 사용 - {locationText}");
+        }
+#else
         if (Input.location.status != LocationServiceStatus.Running || gpsData == Vector3.zero)
         {
             ShowWarning(LocalizationManager.Instance.GetText("enable_location_service"));
             isProcessing = false;
             yield break;
         }
+#endif
 
         if (mainPhoto == null)
         {
@@ -1330,28 +1387,43 @@ public class CubeUploadManager : MonoBehaviour
     }
 
     private IEnumerator ProcessAndUploadImages(
-        CubeUploadManager form, string userName, string instagramID, bool showInstagram,
+        CubeUploadManager form, string placeName, string instagramID, bool showInstagram,
         Vector3 gpsData, string locationText, bool petFriendly, bool separateRestroom,
         Coroutine countdownCoroutine)
     {
         ShowSpinner(LocalizationManager.Instance.GetText("uploading_object"));
-        
+
         WWWForm formData = new WWWForm();
 
-        formData.AddField("username", string.IsNullOrEmpty(userName) ? "" : userName);
-        formData.AddField("name", userName);
+        // 로그인된 사용자의 username 사용 (로그인 안됐으면 빈 문자열)
+        string loggedInUsername = "";
+        if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
+        {
+            loggedInUsername = LoginManager.Instance.CurrentUsername ?? "";
+            Debug.Log($"[CubeUploadManager] 로그인된 사용자: {loggedInUsername}");
+        }
+        else
+        {
+            Debug.Log("[CubeUploadManager] 로그인되지 않은 상태로 업로드");
+        }
+
+        formData.AddField("username", loggedInUsername);
+        formData.AddField("name", placeName);  // 장소명
         formData.AddField("latitude", gpsData.x.ToString("F6"));
         formData.AddField("longitude", gpsData.y.ToString("F6"));
         formData.AddField("altitude", gpsData.z.ToString("F2"));  // iOS는 이미 +20m 보정됨 (Android 기준 통일)
         formData.AddField("pet_friendly", petFriendly ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroom ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
-        formData.AddField("status", "approved");
+        // status는 서버에서 AUTO_APPROVE 설정에 따라 결정
+        formData.AddField("device_id", SystemInfo.deviceUniqueIdentifier);  // 업로더 추적용
 
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
-        
-        string folder = $"{DateTime.Now:yyyyMMdd_HHmmss}_{userName}";
+
+        // 폴더명: 날짜_시간_사용자명 (로그인 안됐으면 장소명 사용)
+        string folderName = !string.IsNullOrEmpty(loggedInUsername) ? loggedInUsername : placeName;
+        string folder = $"{DateTime.Now:yyyyMMdd_HHmmss}_{folderName}";
         Debug.Log($"[CubeUploadManager] Folder value before sending: {folder}");
         formData.AddField("folder", folder);
 
@@ -1421,7 +1493,9 @@ public class CubeUploadManager : MonoBehaviour
                     isProcessing = false;
                     StopCoroutine(countdownCoroutine);
                     ShowWarning(LocalizationManager.Instance.GetText("upload_success"));
-                    Debug.Log("[CubeUploadManager] 업로드 성공: 루틴 종료");
+
+                    // 업로드 성공 10초 후 FCM 알림 발송 (주변 사용자에게 새 콘텐츠 알림)
+                    StartCoroutine(SendUploadNotificationDelayed(10f));
 
                     FullReset();
                     yield break;
@@ -1435,7 +1509,10 @@ public class CubeUploadManager : MonoBehaviour
             }
             else
             {
+                string errorResponse = www.downloadHandler?.text ?? "No response body";
                 Debug.LogError($"[CubeUploadManager] 업로드 실패: {www.error} (응답 코드: {www.responseCode})");
+                Debug.LogError($"[CubeUploadManager] 서버 응답 내용: {errorResponse}");
+                Debug.LogError($"[CubeUploadManager] 요청 URL: {serverUrl}");
                 isProcessing = true;
                 ShowWarning(LocalizationManager.Instance.GetText("server_error"));
             }
@@ -1445,6 +1522,68 @@ public class CubeUploadManager : MonoBehaviour
     #endregion
 
     #region Utility Methods
+
+    /// <summary>
+    /// 업로드 성공 후 지정된 시간(초) 뒤에 업로더에게 FCM 알림 발송
+    /// </summary>
+    private IEnumerator SendUploadNotificationDelayed(float delaySeconds)
+    {
+        yield return new WaitForSeconds(delaySeconds);
+
+        // device_id 가져오기 (로그인 여부와 관계없이 알림 가능)
+        string deviceId = SystemInfo.deviceUniqueIdentifier;
+
+        // 현재 위치 가져오기
+        float latitude = 0f, longitude = 0f;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            latitude = Input.location.lastData.latitude;
+            longitude = Input.location.lastData.longitude;
+        }
+
+        // 콘텐츠 이름
+        string contentName = "AR 콘텐츠";
+
+        // JSON body 생성
+        var requestData = new System.Collections.Generic.Dictionary<string, object>
+        {
+            { "device_id", deviceId },
+            { "latitude", latitude },
+            { "longitude", longitude },
+            { "content_name", contentName }
+        };
+
+        string jsonBody = JsonUtility.ToJson(new UploadNotificationRequest
+        {
+            device_id = deviceId,
+            latitude = latitude,
+            longitude = longitude,
+            content_name = contentName
+        });
+
+        // 서버에 푸시 알림 요청
+        string url = $"{ApiConfig.MAIN_SERVER}/api/upload-notification";
+
+        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.timeout = 10;
+            yield return request.SendWebRequest();
+            // 실패해도 무시 - 업로드 자체는 이미 성공
+        }
+    }
+
+    [System.Serializable]
+    private class UploadNotificationRequest
+    {
+        public string device_id;
+        public float latitude;
+        public float longitude;
+        public string content_name;
+    }
 
     private string GetTimezone()
     {

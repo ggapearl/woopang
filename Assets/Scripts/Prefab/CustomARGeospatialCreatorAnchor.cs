@@ -26,9 +26,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         float x = (float)(dLon * metersPerLon);
 
         // 카메라가 (0,0,0)에 있다고 가정하고 상대 위치 배치
-        transform.position = new Vector3(x, 0, z); // y는 0으로 고정 (또는 altitude 반영)
-        
-        Debug.Log($"[CustomAnchor] (에디터) 앵커 시뮬레이션 배치: {latitude}, {longitude} -> Pos({x:F1}, 0, {z:F1})");
+        transform.position = new Vector3(x, 0, z);
         return;
 #endif
 
@@ -49,12 +47,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
                 transform.SetParent(anchor.transform, false);
                 transform.localPosition = Vector3.zero;
                 transform.localRotation = Quaternion.identity;
-                
-                Debug.Log($"[CustomAnchor] 앵커 생성 성공: {latitude}, {longitude}");
-            }
-            else
-            {
-                Debug.LogError($"[CustomAnchor] 앵커 생성 실패: {latitude}, {longitude}");
             }
         }
         else

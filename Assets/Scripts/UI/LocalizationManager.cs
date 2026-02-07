@@ -28,8 +28,6 @@ public class LocalizationManager : MonoBehaviour
     private void Initialize()
     {
         currentLanguage = GetDeviceLanguage();
-        Debug.Log($"[LocalizationManager] Current language: {currentLanguage}");
-        // Lazy initialization - InitializeTexts()는 GetText() 첫 호출 시 실행
     }
     
     private string GetDeviceLanguage()
@@ -518,6 +516,154 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "选择子照片",
                 ["ja"] = "サブ写真を選択",
                 ["es"] = "Seleccionar fotos secundarias"
+            },
+
+            // Follow List Search
+            ["search_id_placeholder"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Search ID..",
+                ["ko"] = "아이디 검색..",
+                ["zh"] = "搜索ID..",
+                ["ja"] = "ID検索..",
+                ["es"] = "Buscar ID.."
+            },
+
+            // Chat Room Title
+            ["chat_with_user"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Chat with {0}",
+                ["ko"] = "{0}와의 대화",
+                ["zh"] = "与{0}的对话",
+                ["ja"] = "{0}との会話",
+                ["es"] = "Chat con {0}"
+            },
+
+            // Empty Chat Message
+            ["empty_chat_message"] = new Dictionary<string, string>()
+            {
+                ["en"] = "No messages yet.\nSend your first message!",
+                ["ko"] = "아직 대화가 없습니다.\n첫 메시지를 보내보세요!",
+                ["zh"] = "暂无消息。\n发送您的第一条消息吧！",
+                ["ja"] = "まだメッセージがありません。\n最初のメッセージを送ってみましょう！",
+                ["es"] = "Aún no hay mensajes.\n¡Envía tu primer mensaje!"
+            },
+
+            // Empty Inbox Message (Message Panel)
+            ["empty_inbox_message"] = new Dictionary<string, string>()
+            {
+                ["en"] = "No conversations yet ❤️\n\nFollow friends nearby\nto start chatting!",
+                ["ko"] = "아직 대화가 없습니다 ❤️\n\n근처에 있는 친구를 팔로우해서\n대화를 시작해보세요!",
+                ["zh"] = "还没有对话 ❤️\n\n关注附近的朋友\n开始聊天吧！",
+                ["ja"] = "まだ会話がありません ❤️\n\n近くの友達をフォローして\n会話を始めましょう！",
+                ["es"] = "Aún no hay conversaciones ❤️\n\n¡Sigue a amigos cercanos\npara empezar a chatear!"
+            },
+
+            // Failed to load messages
+            ["failed_to_load_messages"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Failed to load messages.",
+                ["ko"] = "메시지를 불러올 수 없습니다.",
+                ["zh"] = "无法加载消息。",
+                ["ja"] = "メッセージを読み込めませんでした。",
+                ["es"] = "No se pudieron cargar los mensajes."
+            },
+
+            // Photo Dialog - PhotoSourceDialog
+            ["camera_capture"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Take Photo",
+                ["ko"] = "촬영",
+                ["zh"] = "拍照",
+                ["ja"] = "撮影",
+                ["es"] = "Tomar foto"
+            },
+            ["gallery_select"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Gallery",
+                ["ko"] = "갤러리",
+                ["zh"] = "相册",
+                ["ja"] = "ギャラリー",
+                ["es"] = "Galería"
+            },
+
+            // Photo Dialog - ContinueCaptureDialog
+            ["continue_capture_title"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Continue capturing?",
+                ["ko"] = "계속 촬영하시겠습니까?",
+                ["zh"] = "继续拍摄吗？",
+                ["ja"] = "撮影を続けますか？",
+                ["es"] = "¿Continuar capturando?"
+            },
+            ["yes_continue"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Continue",
+                ["ko"] = "계속 촬영",
+                ["zh"] = "继续",
+                ["ja"] = "続ける",
+                ["es"] = "Continuar"
+            },
+            ["no_finish"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Done",
+                ["ko"] = "완료",
+                ["zh"] = "完成",
+                ["ja"] = "完了",
+                ["es"] = "Listo"
+            },
+            ["current_photo_count"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Current {0}/{1}",
+                ["ko"] = "현재 {0}/{1}장",
+                ["zh"] = "当前 {0}/{1}",
+                ["ja"] = "現在 {0}/{1}枚",
+                ["es"] = "Actual {0}/{1}"
+            },
+
+            // AR Preview - Loading Text
+            ["creating_ar_object"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Creating AR object",
+                ["ko"] = "AR 오브젝트 생성 중",
+                ["zh"] = "正在创建AR对象",
+                ["ja"] = "ARオブジェクトを作成中",
+                ["es"] = "Creando objeto AR"
+            },
+
+            // Logout Dialog
+            ["logout_confirm_message"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Log out?",
+                ["ko"] = "로그아웃 하시겠습니까?",
+                ["zh"] = "退出登录？",
+                ["ja"] = "ログアウトしますか？",
+                ["es"] = "¿Cerrar sesión?"
+            },
+            ["logout"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Logout",
+                ["ko"] = "로그아웃",
+                ["zh"] = "退出登录",
+                ["ja"] = "ログアウト",
+                ["es"] = "Cerrar sesión"
+            },
+
+            // DM 채팅 관련
+            ["message_placeholder"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Enter message",
+                ["ko"] = "메시지 입력",
+                ["zh"] = "输入消息",
+                ["ja"] = "メッセージを入力",
+                ["es"] = "Escribir mensaje"
+            },
+            ["chat_readonly_placeholder"] = new Dictionary<string, string>()
+            {
+                ["en"] = "This chat room is not available for conversation",
+                ["ko"] = "대화를 할 수 없는 채팅방입니다",
+                ["zh"] = "此聊天室无法进行对话",
+                ["ja"] = "会話ができないチャットルームです",
+                ["es"] = "Esta sala de chat no está disponible para conversación"
             }
         };
     }
@@ -566,6 +712,5 @@ public class LocalizationManager : MonoBehaviour
         }
         
         currentLanguage = isSupported ? languageCode : "en";
-        Debug.Log($"[LocalizationManager] Language changed to: {currentLanguage}");
     }
 }

@@ -20,7 +20,7 @@ public class SmoothScrollRect : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     [Header("Debug")]
     [Tooltip("디버그 로그 활성화")]
-    [SerializeField] private bool enableDebugLog = true;
+    [SerializeField] private bool enableDebugLog = false;  // 기본 비활성화
 
     private ScrollRect scrollRect;
     private Vector2 lastDragPosition;

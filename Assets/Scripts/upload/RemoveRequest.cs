@@ -19,75 +19,38 @@ public class RemoveRequest : MonoBehaviour
 
     void Start()
     {
-        doubleTap = initialDoubleTap; // �ʱⰪ ����
+        doubleTap = initialDoubleTap;
 
         if (doubleTap != null)
         {
-            fullscreenCanvasGroup = doubleTap.GetComponent<CanvasGroup>(); // Ǯ��ũ�� UI �г� ����
-            if (fullscreenCanvasGroup == null)
-            {
-                Debug.LogError("[RemoveRequest] DoubleTap3D���� CanvasGroup�� ã�� �� �����ϴ�!");
-            }
-            Debug.Log($"[RemoveRequest] �ʱ� DoubleTap3D ����� - ID: {doubleTap.GetId()}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
-        }
-        else
-        {
-            Debug.LogWarning("[RemoveRequest] �ʱ� DoubleTap3D�� ������� �ʾҽ��ϴ�. ���� ��ġ�� �������� �����˴ϴ�.");
+            fullscreenCanvasGroup = doubleTap.GetComponent<CanvasGroup>();
+            // CanvasGroup은 선택적 - 없어도 기능 동작에 문제 없음
         }
 
         if (removeButton != null)
-        {
             removeButton.onClick.AddListener(OnRemoveButtonClicked);
-        }
-        else
-        {
-            Debug.LogError("[RemoveRequest] RemoveButton�� �Ҵ���� �ʾҽ��ϴ�!");
-        }
 
         if (cancelButton != null)
-        {
             cancelButton.onClick.AddListener(OnCancelButtonClicked);
-        }
-        else
-        {
-            Debug.LogError("[RemoveRequest] CancelButton�� �Ҵ���� �ʾҽ��ϴ�!");
-        }
 
         if (warningObj != null)
-        {
-            warningObj.SetActive(false); // �ʱ� ��Ȱ��ȭ
-        }
-        else
-        {
-            Debug.LogError("[RemoveRequest] WarningObj�� �Ҵ���� �ʾҽ��ϴ�!");
-        }
+            warningObj.SetActive(false);
 
         if (removeRequestPanel != null)
-        {
-            removeRequestPanel.SetActive(false); // �ʱ� ��Ȱ��ȭ
-        }
-        else
-        {
-            Debug.LogError("[RemoveRequest] RemoveRequestPanel�� �Ҵ���� �ʾҽ��ϴ�!");
-        }
+            removeRequestPanel.SetActive(false);
 
-        // ���� ��ġ �̺�Ʈ ����
+        // 더블 터치 이벤트 연결
         DoubleTap3D.OnDoubleTapEvent += HandleDoubleTap;
-        Debug.Log("[RemoveRequest] DoubleTap3D.OnDoubleTapEvent ���� �Ϸ�");
     }
 
     void OnDestroy()
     {
-        // �̺�Ʈ ���� ����
         DoubleTap3D.OnDoubleTapEvent -= HandleDoubleTap;
-        Debug.Log("[RemoveRequest] DoubleTap3D.OnDoubleTapEvent ���� ����");
     }
 
     private void HandleDoubleTap(DoubleTap3D tappedDoubleTap)
     {
-        // ���� ��ġ�� DoubleTap3D �ν��Ͻ��� ���� ������Ʈ
         doubleTap = tappedDoubleTap;
-        Debug.Log($"[RemoveRequest] ���� ��ġ�� DoubleTap3D ������Ʈ - ID: {(doubleTap != null ? doubleTap.GetId() : -1)}, GameObject: {(doubleTap != null ? doubleTap.gameObject.name : "null")}");
     }
 
     private void OnRemoveButtonClicked()
@@ -95,16 +58,13 @@ public class RemoveRequest : MonoBehaviour
         if (doubleTap == null)
         {
             ShowWarning(LocalizationManager.Instance.GetText("no_object_selected"));
-            Debug.LogError("[RemoveRequest] OnRemoveButtonClicked: DoubleTap3D�� null�Դϴ�!");
             return;
         }
 
         int id = doubleTap.GetId();
-        Debug.Log($"[RemoveRequest] OnRemoveButtonClicked - ID: {id}");
         if (id <= 0)
         {
             ShowWarning(LocalizationManager.Instance.GetText("valid_id_not_found"));
-            Debug.LogError($"[RemoveRequest] ��ȿ���� ���� ID: {id}");
             return;
         }
 
@@ -113,21 +73,11 @@ public class RemoveRequest : MonoBehaviour
 
     private void OnCancelButtonClicked()
     {
-        // ��� ��ư Ŭ�� �� ���� ��û UI �гΰ� Ǯ��ũ�� UI �г� �ݱ�
         if (removeRequestPanel != null)
-        {
             removeRequestPanel.SetActive(false);
-            Debug.Log("[RemoveRequest] ��� ��ư Ŭ�� - ���� ��û UI �г� ����");
-        }
+
         if (fullscreenCanvasGroup != null)
-        {
             fullscreenCanvasGroup.gameObject.SetActive(false);
-            Debug.Log("[RemoveRequest] ��� ��ư Ŭ�� - Ǯ��ũ�� UI �г� ����");
-        }
-        else
-        {
-            Debug.LogWarning("[RemoveRequest] Ǯ��ũ�� UI �г��� ���� �� �����ϴ�: CanvasGroup�� null�Դϴ�!");
-        }
     }
 
     private IEnumerator SendRemoveRequest(int id)
@@ -150,7 +100,6 @@ public class RemoveRequest : MonoBehaviour
         formData.AddField("folder", $"remove_{DateTime.Now:yyyyMMdd_HHmmss}");
         formData.AddField("main_photo", "");
 
-        Debug.Log($"[RemoveRequest] ���� ��û ���� - Target ID: {id}");
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
             www.timeout = 20;
@@ -159,41 +108,25 @@ public class RemoveRequest : MonoBehaviour
             if (www.result == UnityWebRequest.Result.Success)
             {
                 string responseText = www.downloadHandler.text;
-                Debug.Log($"[RemoveRequest] ���� ��û ����: {responseText} (���� �ڵ�: {www.responseCode})");
 
                 if (responseText.Contains("Fix Upload Succeeded!") || www.responseCode == 200)
                 {
                     ShowWarning(LocalizationManager.Instance.GetText("delete_success"));
-                    Debug.Log("[RemoveRequest] ���� ��û ����");
 
-                    // ���� ��û UI �г� �ݱ�
                     if (removeRequestPanel != null)
-                    {
                         removeRequestPanel.SetActive(false);
-                        Debug.Log("[RemoveRequest] ���� ��û ���� - ���� ��û UI �г� ����");
-                    }
 
-                    // Ǯ��ũ�� UI �г� �ݱ�
                     if (fullscreenCanvasGroup != null)
-                    {
                         fullscreenCanvasGroup.gameObject.SetActive(false);
-                        Debug.Log("[RemoveRequest] ���� ��û ���� - Ǯ��ũ�� UI �г� ����");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("[RemoveRequest] Ǯ��ũ�� UI �г��� ���� �� �����ϴ�: CanvasGroup�� null�Դϴ�!");
-                    }
                 }
                 else
                 {
                     ShowWarning(LocalizationManager.Instance.GetText("server_error"));
-                    Debug.LogWarning($"[RemoveRequest] ���� ������ �������� ���ֵ��� ����: {responseText}");
                 }
             }
             else
             {
                 ShowWarning(LocalizationManager.Instance.GetText("server_error"));
-                Debug.LogError($"[RemoveRequest] ���� ��û ����: {www.error} (���� �ڵ�: {www.responseCode})");
             }
         }
     }

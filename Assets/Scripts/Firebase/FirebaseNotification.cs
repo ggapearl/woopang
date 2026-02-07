@@ -88,31 +88,24 @@ public class FirebaseNotification : MonoBehaviour
     public static FirebaseNotification Instance;
 
     [Header("UI References")]
-    public Transform Content;
-    public GameObject MessageDetailPopup;
-    public Text MessageDetailText;
-    public GameObject MessageDetailScrollView;
-    public Button MessageDetailConfirmButton;
-    public GameObject MessageTextPrefab;
+    [Tooltip("안읽은 알림 인디케이터 (선택사항)")]
     public Image UnreadIndicatorIcon;
-    
-    [Header("Message Delete UI")]
-    [Tooltip("메시지 삭제 버튼을 연결하세요.")]
-    public Button MessageDeleteButton;
-    [Tooltip("삭제 확인 버튼을 연결하세요. (다른 색상으로 디자인된 확인 버튼)")]
-    public Button DeleteConfirmButton;
-    
-    [Header("Message Panel Monitoring")]
-    [Tooltip("메시지 패널을 연결하세요. 이 패널이 활성화되면 거리 업데이트가 시작됩니다.")]
-    public GameObject MessagePanel; // 인스펙터에서 연결할 메시지 패널
 
-    [Header("Time Display Settings")]
-    public bool useRelativeTimeDisplay = true;
-    public int maxRelativeHours = 24;
+    [Header("=== 인앱 알림 배너 ===")]
+    [Tooltip("알림 배너 패널 (자동 생성됨)")]
+    public GameObject notificationBanner;
+    public Text bannerTitleText;
+    public Text bannerBodyText;
+    public Button bannerButton;
 
-    private List<MessageData> receivedMessages = new List<MessageData>();
-    private string latestMessage;
-    private const int MaxMessages = 30;
+    [Header("알림 배너 설정")]
+    public float bannerDisplayDuration = 4f;
+    public float bannerSlideSpeed = 800f;
+
+    private RectTransform bannerRectTransform;
+    private Coroutine bannerCoroutine;
+    private float bannerHeight = 120f;
+    private bool isBannerShowing = false;
 
     // 알림 관리를 위한 변수들
     private const int MAX_ACTIVE_NOTIFICATIONS = 5;
@@ -127,8 +120,10 @@ public class FirebaseNotification : MonoBehaviour
 
     private bool isLocationServiceEnabled = false;
     private Vector2 currentUserLocation = Vector2.zero;
-    private MessageData selectedMessage = null;
-    private bool isDeleteConfirmMode = false; // 삭제 확인 모드 상태
+
+    // 클릭 시 열 대화 정보
+    private string pendingOpenUserId;
+    private string pendingOpenUsername;
 
     public static FirebaseNotification GetInstance()
     {
@@ -160,35 +155,14 @@ public class FirebaseNotification : MonoBehaviour
 
         Time.timeScale = 1f;
         InitializeLocationService();
-        CheckUIReferences();
-        LoadMessages();
         LoadProcessedMessageIds();
+        InitializeBannerRect();
 
-        if (MessageDetailPopup != null)
-        {
-            MessageDetailPopup.SetActive(false);
-        }
-        if (MessageDetailConfirmButton != null)
-        {
-            MessageDetailConfirmButton.onClick.AddListener(OnMessageDetailConfirmButtonClicked);
-        }
-        
-        // 삭제 관련 버튼 이벤트 연결
-        SetupDeleteButtons();
-        
-        // 앱 시작 시 삭제 확인 모드 강제 리셋
-        ResetDeleteConfirmMode();
-
-        UpdateUnreadIndicator();
-        UpdateSystemBadge();
+#if UNITY_ANDROID
         RequestNotificationPermission();
         InitializeAndroidNotificationChannel();
-
-        // 알림 정리 시스템 시작
         StartNotificationCleanup();
-
-        // 메시지 패널 모니터링 시작
-        StartCoroutine(MonitorMessagePanel());
+#endif
 
         FirebaseMessaging.TokenReceived += OnTokenReceived;
         FirebaseMessaging.MessageReceived += OnMessageReceived;
@@ -196,253 +170,6 @@ public class FirebaseNotification : MonoBehaviour
         StartCoroutine(CheckBackgroundNotificationOnStartup());
     }
 
-    // 삭제 관련 버튼들 설정
-    private void SetupDeleteButtons()
-    {
-        // 삭제 버튼 이벤트 연결
-        if (MessageDeleteButton != null)
-        {
-            MessageDeleteButton.onClick.AddListener(OnMessageDeleteButtonClicked);
-        }
-        
-        // 삭제 확인 버튼 이벤트 연결
-        if (DeleteConfirmButton != null)
-        {
-            DeleteConfirmButton.onClick.AddListener(OnDeleteConfirmButtonClicked);
-        }
-        
-        // 초기 상태 설정: 삭제 버튼은 보이고, 확인 버튼은 숨김
-        if (MessageDeleteButton != null)
-        {
-            MessageDeleteButton.gameObject.SetActive(true);
-        }
-        if (DeleteConfirmButton != null)
-        {
-            DeleteConfirmButton.gameObject.SetActive(false);
-        }
-    }
-
-    // 삭제 버튼 클릭 시 (첫 번째 단계 - 확인 버튼으로 변경)
-    private void OnMessageDeleteButtonClicked()
-    {
-        if (!isDeleteConfirmMode)
-        {
-            // 삭제 확인 모드로 전환
-            isDeleteConfirmMode = true;
-            
-            // 삭제 버튼 숨기고 확인 버튼 표시
-            if (MessageDeleteButton != null)
-            {
-                MessageDeleteButton.gameObject.SetActive(false);
-            }
-            if (DeleteConfirmButton != null)
-            {
-                DeleteConfirmButton.gameObject.SetActive(true);
-            }
-        }
-    }
-
-    // 삭제 확인 버튼 클릭 시 (두 번째 단계 - 실제 삭제)
-    private void OnDeleteConfirmButtonClicked()
-    {
-        if (selectedMessage != null)
-        {
-            // 메시지 삭제 실행
-            DeleteSelectedMessage();
-            
-            // 팝업 닫기
-            CloseMessageDetailPopup();
-        }
-    }
-
-    // 실제 메시지 삭제 로직
-    private void DeleteSelectedMessage()
-    {
-        if (selectedMessage == null) return;
-        
-        // receivedMessages 리스트에서 제거
-        for (int i = receivedMessages.Count - 1; i >= 0; i--)
-        {
-            if (receivedMessages[i].messageId == selectedMessage.messageId)
-            {
-                receivedMessages.RemoveAt(i);
-                break;
-            }
-        }
-        
-        // processedMessageIds에서도 제거 (같은 메시지를 다시 받을 수 있도록)
-        if (!string.IsNullOrEmpty(selectedMessage.messageId))
-        {
-            processedMessageIds.Remove(selectedMessage.messageId);
-        }
-        
-        // 저장
-        SaveMessages();
-        SaveProcessedMessageIds();
-        
-        // UI 업데이트
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
-        UpdateSystemBadge();
-        
-        // 선택된 메시지 초기화
-        selectedMessage = null;
-    }
-
-    // 삭제 확인 모드 리셋
-    private void ResetDeleteConfirmMode()
-    {
-        isDeleteConfirmMode = false;
-        
-        // 확인 버튼 숨기고 삭제 버튼 다시 표시
-        if (DeleteConfirmButton != null)
-        {
-            DeleteConfirmButton.gameObject.SetActive(false);
-        }
-        if (MessageDeleteButton != null)
-        {
-            MessageDeleteButton.gameObject.SetActive(true);
-        }
-    }
-
-    // 메시지 상세 팝업 닫기
-    private void CloseMessageDetailPopup()
-    {
-        if (MessageDetailPopup != null)
-        {
-            MessageDetailPopup.SetActive(false);
-        }
-        
-        // 삭제 확인 모드 리셋
-        ResetDeleteConfirmMode();
-    }
-
-    // Update 메서드 추가 (팝업 상태 모니터링)
-    void Update()
-    {
-        // 팝업이 비활성화되었는데 삭제 확인 모드가 활성화된 경우 리셋
-        if (isDeleteConfirmMode && MessageDetailPopup != null && !MessageDetailPopup.activeInHierarchy)
-        {
-            ResetDeleteConfirmMode();
-        }
-    }
-
-    // 메시지 패널 활성화 상태 모니터링 (간단한 방식)
-    private IEnumerator MonitorMessagePanel()
-    {
-        bool wasActive = false;
-        
-        while (true)
-        {
-            yield return new WaitForSeconds(1f); // 1초마다 체크 (0.1초보다 효율적)
-            
-            if (MessagePanel != null)
-            {
-                bool isCurrentlyActive = MessagePanel.activeInHierarchy;
-                
-                // 패널이 방금 활성화된 경우
-                if (isCurrentlyActive && !wasActive)
-                {
-                    OnMessagePanelActivated();
-                }
-                // 패널이 방금 비활성화된 경우  
-                else if (!isCurrentlyActive && wasActive)
-                {
-                    OnMessagePanelDeactivated();
-                }
-                
-                wasActive = isCurrentlyActive;
-            }
-        }
-    }
-
-    // 메시지 패널이 활성화될 때 호출
-    private void OnMessagePanelActivated()
-    {
-        // 즉시 한 번 거리 업데이트
-        if (selectedMessage != null)
-        {
-            UpdateSelectedMessageDistance();
-        }
-        
-        // 1분마다 거리 업데이트 시작
-        StartCoroutine(MessagePanelDistanceUpdateLoop());
-    }
-
-    // 메시지 패널이 비활성화될 때 호출
-    private void OnMessagePanelDeactivated()
-    {
-        // 거리 업데이트 중지 (코루틴은 자동으로 중지됨)
-    }
-
-    // 메시지 패널이 활성화된 동안 1분마다 거리 업데이트
-    private IEnumerator MessagePanelDistanceUpdateLoop()
-    {
-        while (MessagePanel != null && MessagePanel.activeInHierarchy)
-        {
-            yield return new WaitForSeconds(60f); // 1분 대기
-            
-            // 패널이 여전히 활성화되어 있으면 거리 업데이트
-            if (MessagePanel != null && MessagePanel.activeInHierarchy && selectedMessage != null)
-            {
-                UpdateSelectedMessageDistance();
-            }
-        }
-    }
-
-    // 선택된 메시지의 거리 업데이트
-    private void UpdateSelectedMessageDistance()
-    {
-        if (selectedMessage == null) return;
-        
-        // 위치 기반 메시지인지 확인
-        if (selectedMessage.messageLat == 0f && selectedMessage.messageLon == 0f) return;
-
-        // 현재 거리 계산
-        string newDistance = GetCurrentDistance(selectedMessage.messageLat, selectedMessage.messageLon);
-        
-        // 거리가 변경되었으면 업데이트
-        if (selectedMessage.currentDistance != newDistance)
-        {
-            // 메시지 데이터 업데이트
-            selectedMessage.currentDistance = newDistance;
-            
-            // 제목에서 거리 부분 업데이트
-            string originalTitle = selectedMessage.title;
-            int dashIndex = originalTitle.LastIndexOf(" - ");
-            if (dashIndex > 0)
-            {
-                string baseTitlePart = originalTitle.Substring(0, dashIndex);
-                selectedMessage.title = $"{baseTitlePart} - {newDistance}";
-            }
-            
-            // receivedMessages 리스트에서도 업데이트
-            for (int i = 0; i < receivedMessages.Count; i++)
-            {
-                if (receivedMessages[i].messageId == selectedMessage.messageId)
-                {
-                    receivedMessages[i] = selectedMessage;
-                    break;
-                }
-            }
-            
-            // 상세 패널 텍스트 업데이트 (MessageDetailPopup이 활성화된 경우)
-            if (MessageDetailPopup != null && MessageDetailPopup.activeInHierarchy && MessageDetailText != null)
-            {
-                string timeString = GetTimeDisplayString(selectedMessage);
-                string updatedTitle = selectedMessage.title;
-                
-                string displayText = $"<b>{updatedTitle}</b>\n\n{selectedMessage.body}";
-                displayText += $"\n\n<size=40><color=#888888>{timeString}</color></size>";
-                
-                MessageDetailText.text = displayText;
-            }
-            
-            // 메시지 리스트도 업데이트
-            UpdateNotificationUI();
-            SaveMessages();
-        }
-    }
 
     private void InitializeLocationService()
     {
@@ -514,9 +241,7 @@ public class FirebaseNotification : MonoBehaviour
         if (initializationComplete && dependencyStatus == Firebase.DependencyStatus.Available)
         {
             firebaseInitialized = true;
-            FirebaseMessaging.TokenReceived += OnTokenReceived;
-            FirebaseMessaging.MessageReceived += OnMessageReceived;
-            UpdateNotificationUI();
+            // 이벤트 핸들러는 Start()에서 이미 등록됨 - 중복 등록 제거
             StartCoroutine(CheckBackgroundNotification());
         }
     }
@@ -547,7 +272,7 @@ public class FirebaseNotification : MonoBehaviour
                 string[] ids = processedIds.Split('|');
                 processedMessageIds = new HashSet<string>(ids);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
                 processedMessageIds = new HashSet<string>();
             }
@@ -620,68 +345,24 @@ public class FirebaseNotification : MonoBehaviour
         return serverTime;
     }
 
-    private bool SaveMessageSafelyWithLocation(string title, string body, string formattedMessage, DateTime serverTimestamp, string messageId, float lat = 0f, float lon = 0f, float radius = 0f, string preCalculatedDistance = "")
+    /// <summary>
+    /// 메시지 ID를 처리됨으로 표시 (중복 방지)
+    /// </summary>
+    private bool MarkMessageAsProcessed(string messageId, string title, string body, DateTime serverTimestamp)
     {
         if (string.IsNullOrEmpty(messageId))
         {
             messageId = GenerateMessageId(title, body, serverTimestamp);
         }
-        
+
         if (processedMessageIds.Contains(messageId))
         {
             return false;
         }
-        
-        foreach (var existingMessage in receivedMessages)
-        {
-            if (existingMessage.messageId == messageId)
-            {
-                return false;
-            }
-        }
-        
-        if (receivedMessages.Count >= MaxMessages)
-        {
-            var oldestMessage = receivedMessages[receivedMessages.Count - 1];
-            receivedMessages.RemoveAt(receivedMessages.Count - 1);
-            
-            if (!string.IsNullOrEmpty(oldestMessage.messageId))
-            {
-                processedMessageIds.Remove(oldestMessage.messageId);
-            }
-        }
 
-        string currentDistance = "";
-        if (!string.IsNullOrEmpty(preCalculatedDistance))
-        {
-            currentDistance = preCalculatedDistance;
-        }
-        else
-        {
-            currentDistance = GetCurrentDistance(lat, lon);
-        }
-
-        var newMessage = new MessageData
-        {
-            title = title,
-            body = body,
-            message = formattedMessage,
-            isRead = false,
-            timestampString = DateTimeToString(DateTime.Now),
-            receivedAtString = DateTimeToString(serverTimestamp),
-            messageId = messageId,
-            messageLat = lat,
-            messageLon = lon,
-            messageRadius = radius,
-            currentDistance = currentDistance
-        };
-        
-        receivedMessages.Insert(0, newMessage);
         processedMessageIds.Add(messageId);
-        
-        SaveMessages();
         SaveProcessedMessageIds();
-        
+
         return true;
     }
 
@@ -700,222 +381,7 @@ public class FirebaseNotification : MonoBehaviour
         return langCode;
     }
 
-    private string GetTimeDisplayString(MessageData messageData)
-    {
-        DateTime displayTime;
-        
-        if (!string.IsNullOrEmpty(messageData.receivedAtString))
-        {
-            displayTime = StringToDateTime(messageData.receivedAtString);
-        }
-        else if (!string.IsNullOrEmpty(messageData.timestampString))
-        {
-            displayTime = StringToDateTime(messageData.timestampString);
-        }
-        else
-        {
-            displayTime = DateTime.Now;
-        }
-        
-        DateTime now = DateTime.Now;
-        TimeSpan timeDiff = now - displayTime;
-        
-        if (!useRelativeTimeDisplay || timeDiff.TotalHours > maxRelativeHours)
-        {
-            return displayTime.ToString("yyyy-MM-dd HH:mm");
-        }
-        
-        string langCode = GetCurrentLanguageCode();
 
-        if (timeDiff.TotalMinutes < 1)
-        {
-            return TimeLocalization.GetLocalizedTime("just_now", langCode);
-        }
-        else if (timeDiff.TotalHours < 1)
-        {
-            int minutes = (int)timeDiff.TotalMinutes;
-            if (minutes == 1)
-                return TimeLocalization.GetLocalizedTime("minute_ago", langCode);
-            else
-                return TimeLocalization.GetLocalizedTime("minutes_ago", langCode, minutes);
-        }
-        else if (timeDiff.TotalHours < maxRelativeHours)
-        {
-            int hours = (int)timeDiff.TotalHours;
-            if (hours == 1)
-                return TimeLocalization.GetLocalizedTime("hour_ago", langCode);
-            else
-                return TimeLocalization.GetLocalizedTime("hours_ago", langCode, hours);
-        }
-        else
-        {
-            return displayTime.ToString("yyyy-MM-dd HH:mm");
-        }
-    }
-
-    public void SetRelativeTimeDisplay(bool useRelative)
-    {
-        useRelativeTimeDisplay = useRelative;
-        UpdateNotificationUI();
-    }
-    
-    public void SetMaxRelativeHours(int hours)
-    {
-        maxRelativeHours = Mathf.Max(1, hours);
-        UpdateNotificationUI();
-    }
-
-    private void CheckUIReferences()
-    {
-        if (Content != null)
-        {
-            VerticalLayoutGroup vlg = Content.GetComponent<VerticalLayoutGroup>();
-            if (vlg == null)
-            {
-                vlg = Content.gameObject.AddComponent<VerticalLayoutGroup>();
-                vlg.spacing = 10f;
-                vlg.childForceExpandWidth = true;
-                vlg.childForceExpandHeight = false;
-                vlg.childControlWidth = true;
-                vlg.childControlHeight = true;
-            }
-            
-            ContentSizeFitter csf = Content.GetComponent<ContentSizeFitter>();
-            if (csf == null)
-            {
-                csf = Content.gameObject.AddComponent<ContentSizeFitter>();
-                csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            }
-        }
-    }
-
-    private void LoadMessages()
-    {
-        string messagesJson = PlayerPrefs.GetString("ReceivedMessages", "");
-
-        if (!string.IsNullOrEmpty(messagesJson))
-        {
-            try
-            {
-                MessageDataList dataList = JsonUtility.FromJson<MessageDataList>(messagesJson);
-                if (dataList != null && dataList.messages != null)
-                {
-                    receivedMessages = new List<MessageData>(dataList.messages);
-                }
-                else
-                {
-                    receivedMessages = new List<MessageData>();
-                }
-            }
-            catch (System.Exception ex)
-            {
-                receivedMessages = new List<MessageData>();
-            }
-        }
-        else
-        {
-            receivedMessages = new List<MessageData>();
-        }
-
-        LoadPendingMessagesFromAndroid();
-        LoadTokenFromAndroidPrefs();
-    }
-
-    private void LoadPendingMessagesFromAndroid()
-    {
-        if (Application.platform != RuntimePlatform.Android) return;
-        
-        try
-        {
-            using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-            using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
-            using (AndroidJavaObject sharedPrefs = currentActivity.Call<AndroidJavaObject>("getSharedPreferences", "firebase_messages", 0))
-            {
-                string pendingMessagesJson = sharedPrefs.Call<string>("getString", "pending_messages", "[]");
-                
-                if (!string.IsNullOrEmpty(pendingMessagesJson) && pendingMessagesJson != "[]")
-                {
-                    try
-                    {
-                        var wrapper = JsonUtility.FromJson<PendingMessagesWrapper>("{\"messages\":" + pendingMessagesJson + "}");
-                        
-                        if (wrapper != null && wrapper.messages != null)
-                        {
-                            int addedCount = 0;
-                            
-                            foreach (var newMessage in wrapper.messages)
-                            {
-                                bool isDuplicate = false;
-                                foreach (var existingMessage in receivedMessages)
-                                {
-                                    if (existingMessage.messageId == newMessage.messageId)
-                                    {
-                                        isDuplicate = true;
-                                        break;
-                                    }
-                                }
-                                
-                                if (!isDuplicate)
-                                {
-                                    receivedMessages.Insert(0, newMessage);
-                                    if (!string.IsNullOrEmpty(newMessage.messageId))
-                                    {
-                                        processedMessageIds.Add(newMessage.messageId);
-                                    }
-                                    addedCount++;
-                                }
-                            }
-                            
-                            while (receivedMessages.Count > MaxMessages)
-                            {
-                                var removedMessage = receivedMessages[receivedMessages.Count - 1];
-                                receivedMessages.RemoveAt(receivedMessages.Count - 1);
-                                if (!string.IsNullOrEmpty(removedMessage.messageId))
-                                {
-                                    processedMessageIds.Remove(removedMessage.messageId);
-                                }
-                            }
-                            
-                            if (addedCount > 0)
-                            {
-                                SaveMessages();
-                                SaveProcessedMessageIds();
-                                ClearAndroidPendingMessages();
-                            }
-                        }
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogError($"Failed to parse Android pending messages: {ex.Message}");
-                    }
-                }
-            }
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"Failed to load pending messages from Android: {ex.Message}");
-        }
-    }
-    
-    private void ClearAndroidPendingMessages()
-    {
-        try
-        {
-            using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-            using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
-            using (AndroidJavaObject sharedPrefs = currentActivity.Call<AndroidJavaObject>("getSharedPreferences", "firebase_messages", 0))
-            using (AndroidJavaObject editor = sharedPrefs.Call<AndroidJavaObject>("edit"))
-            {
-                editor.Call<AndroidJavaObject>("remove", "pending_messages");
-                editor.Call("apply");
-            }
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"Failed to clear Android pending messages: {ex.Message}");
-        }
-    }
-    
     private void LoadTokenFromAndroidPrefs()
     {
         if (Application.platform != RuntimePlatform.Android) return;
@@ -982,6 +448,24 @@ public class FirebaseNotification : MonoBehaviour
         form.AddField("device_model", SystemInfo.deviceModel);
         form.AddField("os_version", SystemInfo.operatingSystem);
         form.AddField("app_version", Application.version);
+
+        // user_id 추가 (로그인된 경우)
+        if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
+        {
+            string userId = LoginManager.Instance.CurrentUserId.ToString();
+            if (!string.IsNullOrEmpty(userId) && userId != "0")
+            {
+                form.AddField("user_id", userId);
+            }
+        }
+
+#if UNITY_IOS
+        form.AddField("platform", "ios");
+#elif UNITY_ANDROID
+        form.AddField("platform", "android");
+#else
+        form.AddField("platform", "unknown");
+#endif
         
         if (locationConsent && latitude != 0f && longitude != 0f)
         {
@@ -1004,17 +488,7 @@ public class FirebaseNotification : MonoBehaviour
     {
         if (!pauseStatus)
         {
-            LoadMessages();
             StartCoroutine(CheckBackgroundNotification());
-            UpdateNotificationUI();
-            UpdateUnreadIndicator();
-            UpdateSystemBadge();
-        }
-        else
-        {
-            SaveMessages();
-            // 앱이 일시정지될 때 삭제 확인 모드 리셋
-            ResetDeleteConfirmMode();
         }
     }
 
@@ -1022,50 +496,11 @@ public class FirebaseNotification : MonoBehaviour
     {
         if (hasFocus)
         {
-            LoadMessages();
             StartCoroutine(CheckBackgroundNotification());
-            UpdateNotificationUI();
-            UpdateUnreadIndicator();
-            UpdateSystemBadge();
-            StartCoroutine(DelayedBackgroundCheck());
-        }
-        else
-        {
-            SaveMessages();
-            // 앱이 포커스를 잃을 때 삭제 확인 모드 리셋
-            ResetDeleteConfirmMode();
         }
     }
 
-    private IEnumerator DelayedBackgroundCheck()
-    {
-        yield return new WaitForSeconds(0.5f);
-        LoadMessages();
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
-        UpdateSystemBadge();
-    }
-
-    private void SaveMessages()
-    {
-        try
-        {
-            MessageDataList dataList = new MessageDataList { messages = receivedMessages };
-            string messagesJson = JsonUtility.ToJson(dataList);
-            PlayerPrefs.SetString("ReceivedMessages", messagesJson);
-            PlayerPrefs.Save();
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"Failed to save messages: {ex.Message}");
-        }
-    }
-
-    private void UpdateSystemBadge()
-    {
-        int unreadCount = GetUnreadCount();
-    }
-
+#if UNITY_ANDROID
     void RequestNotificationPermission()
     {
         if (!Permission.HasUserAuthorizedPermission("android.permission.POST_NOTIFICATIONS"))
@@ -1091,6 +526,7 @@ public class FirebaseNotification : MonoBehaviour
         };
         AndroidNotificationCenter.RegisterNotificationChannel(channel);
     }
+#endif
 
     void OnTokenReceived(object sender, TokenReceivedEventArgs token)
     {
@@ -1115,12 +551,9 @@ public class FirebaseNotification : MonoBehaviour
     private IEnumerator UpdateFirebaseStatusOnMainThread(string token)
     {
         yield return null;
-        
+
         firebaseInitialized = true;
         currentFCMToken = token;
-        
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
     }
 
     void OnMessageReceived(object sender, MessageReceivedEventArgs e)
@@ -1164,6 +597,7 @@ public class FirebaseNotification : MonoBehaviour
             messageId = GenerateMessageId(originalTitle, body, serverTimestamp);
         }
 
+        // 중복 메시지 스킵
         if (processedMessageIds.Contains(messageId))
         {
             return;
@@ -1181,7 +615,123 @@ public class FirebaseNotification : MonoBehaviour
 
     private IEnumerator HandleForegroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
-        string formattedMessage = $"[{title}] {body}";
+        // 메시지 타입 확인
+        string messageType = "";
+        if (e.Message.Data != null && e.Message.Data.ContainsKey("type"))
+        {
+            messageType = e.Message.Data["type"];
+        }
+
+        // === 업로드 완료 알림 처리 ===
+        if (messageType == "upload_complete")
+        {
+            string contentName = "AR 콘텐츠";
+            if (e.Message.Data != null && e.Message.Data.ContainsKey("content_name"))
+            {
+                contentName = e.Message.Data["content_name"];
+            }
+
+            Debug.Log($"[FCM] 업로드 완료 알림 수신: {contentName}");
+
+            // MessagePanelManager에 시스템 알림으로 추가
+            var manager = GetMessagePanelManager();
+            if (manager != null)
+            {
+                manager.AddLocationNotificationFromPush(title, body, messageId);
+            }
+
+            // 인앱 알림 배너 표시
+            ShowInAppNotification(title, body);
+
+            // 중복 방지용 메시지 ID 저장
+            MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
+
+#if UNITY_ANDROID
+            var uploadNotif = new AndroidNotification
+            {
+                Title = title,
+                Text = body,
+                FireTime = System.DateTime.Now,
+                SmallIcon = "icon_0",
+                LargeIcon = "icon_1",
+                ShouldAutoCancel = true
+            };
+            AndroidNotificationCenter.SendNotification(uploadNotif, "default_channel");
+#endif
+
+            yield break;
+        }
+
+        // === DM 메시지 처리 ===
+        bool isDMMessage = false;
+        if (e.Message.Data != null)
+        {
+            if (messageType == "dm")
+                isDMMessage = true;
+            if (e.Message.Data.ContainsKey("msg_type") && e.Message.Data["msg_type"] == "dm")
+                isDMMessage = true;
+        }
+
+        // DM 메시지면 MessagePanelManager에 즉시 추가
+        if (isDMMessage)
+        {
+            // FCM 데이터에서 발신자 정보 추출
+            string senderId = "";
+            string senderUsername = "";
+            string messageContent = body;
+
+            if (e.Message.Data != null)
+            {
+                if (e.Message.Data.ContainsKey("sender_id"))
+                    senderId = e.Message.Data["sender_id"];
+                if (e.Message.Data.ContainsKey("sender_username"))
+                    senderUsername = e.Message.Data["sender_username"];
+                else if (e.Message.Data.ContainsKey("sender"))
+                    senderUsername = e.Message.Data["sender"];
+
+                // body에서 "username: " 접두사 제거
+                if (!string.IsNullOrEmpty(senderUsername) && messageContent.StartsWith(senderUsername + ": "))
+                {
+                    messageContent = messageContent.Substring(senderUsername.Length + 2);
+                }
+            }
+
+            // MessagePanelManager를 안전하게 찾기
+            var manager = GetMessagePanelManager();
+
+            if (manager != null && !string.IsNullOrEmpty(senderId))
+            {
+                try
+                {
+                    manager.AddOrUpdateConversationFromPush(senderId, senderUsername, messageContent);
+                }
+                catch (System.Exception)
+                {
+                    // 예외 무시 - DM 추가 실패해도 앱 동작에 영향 없음
+                }
+            }
+
+            // 인앱 알림 배너 표시
+            ShowInAppNotification(title, messageContent, senderId, senderUsername);
+
+#if UNITY_ANDROID
+            // DM 메시지도 포그라운드에서 시스템 알림 표시
+            var dmNotification = new AndroidNotification
+            {
+                Title = title,
+                Text = body,
+                FireTime = System.DateTime.Now,
+                SmallIcon = "icon_0",
+                LargeIcon = "icon_1",
+                ShouldAutoCancel = true
+            };
+            AndroidNotificationCenter.SendNotification(dmNotification, "default_channel");
+#endif
+
+            yield break; // DM은 위치 기반 알림 저장 안 함
+        }
+
+        // 위치 기반 알림 처리
 
         float targetLat = 0f, targetLon = 0f, radius = 0f;
         string currentDistance = "";
@@ -1198,18 +748,24 @@ public class FirebaseNotification : MonoBehaviour
 
         currentDistance = ExtractDistanceFromTitle(title);
 
-        bool saved = SaveMessageSafelyWithLocation(title, body, formattedMessage, serverTimestamp, messageId, targetLat, targetLon, radius, currentDistance);
-        if (!saved)
+        // MessagePanelManager에 위치 알림 추가 (로그인 없이도 저장됨)
+        if (MessagePanelManager.Instance != null)
         {
-            yield break;
+            MessagePanelManager.Instance.AddLocationNotificationFromPush(
+                title, body, messageId,
+                targetLat, targetLon, radius, currentDistance
+            );
         }
+
+        // 중복 방지용 메시지 ID 저장
+        MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
 
         // 스마트 알림 관리
         ManageActiveNotifications();
 
-        int unreadCount = GetUnreadCount();
-
-        // 알림 설정 (Unity에서 자동 삭제 관리)
+#if UNITY_ANDROID
+        // Android 시스템 알림 (잠금화면/상태바용)
+        int badgeCount = MessagePanelManager.Instance != null ? MessagePanelManager.Instance.GetUnreadCount() : 1;
         var notification = new AndroidNotification
         {
             Title = title,
@@ -1218,23 +774,139 @@ public class FirebaseNotification : MonoBehaviour
             SmallIcon = "icon_0",
             LargeIcon = "icon_1",
             ShouldAutoCancel = true,
-            Number = unreadCount
+            Number = badgeCount
         };
-        
+
         int newNotificationId = (int)System.DateTime.Now.Ticks;
         AndroidNotificationCenter.SendNotification(notification, "default_channel");
-        
+
         // 활성 알림 ID 추가
         activeNotificationIds.Add(newNotificationId);
-
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
+#endif
     }
 
     private IEnumerator HandleBackgroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
-        string formattedMessage = $"[{title}] {body}";
-        LoadMessages();
+        // 메시지 타입 확인
+        string messageType = "";
+        if (e.Message.Data != null && e.Message.Data.ContainsKey("type"))
+        {
+            messageType = e.Message.Data["type"];
+        }
+
+        // === 업로드 완료 알림 처리 ===
+        if (messageType == "upload_complete")
+        {
+            string contentName = "AR 콘텐츠";
+            if (e.Message.Data != null && e.Message.Data.ContainsKey("content_name"))
+            {
+                contentName = e.Message.Data["content_name"];
+            }
+
+            Debug.Log($"[FCM] 업로드 완료 알림 수신 (백그라운드): {contentName}");
+
+            // MessagePanelManager에 시스템 알림으로 추가
+            var manager = GetMessagePanelManager();
+            if (manager != null)
+            {
+                manager.AddLocationNotificationFromPush(title, body, messageId);
+            }
+
+            // 중복 방지용 메시지 ID 저장
+            MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
+
+#if UNITY_ANDROID
+            var uploadNotif = new AndroidNotification
+            {
+                Title = title,
+                Text = body,
+                FireTime = System.DateTime.Now,
+                SmallIcon = "icon_0",
+                LargeIcon = "icon_1",
+                ShouldAutoCancel = true,
+                Group = "woopang_system"
+            };
+            int uploadNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+            AndroidNotificationCenter.SendNotification(uploadNotif, "default_channel");
+            activeNotificationIds.Add(uploadNotifId);
+#endif
+
+            yield break;
+        }
+
+        // === DM 메시지 처리 ===
+        bool isDMMessage = false;
+        if (e.Message.Data != null)
+        {
+            if (messageType == "dm")
+                isDMMessage = true;
+            if (e.Message.Data.ContainsKey("msg_type") && e.Message.Data["msg_type"] == "dm")
+                isDMMessage = true;
+        }
+
+        // DM 메시지면 MessagePanelManager에 즉시 추가
+        if (isDMMessage)
+        {
+            // FCM 데이터에서 발신자 정보 추출
+            string senderId = "";
+            string senderUsername = "";
+            string messageContent = body;
+
+            if (e.Message.Data != null)
+            {
+                if (e.Message.Data.ContainsKey("sender_id"))
+                    senderId = e.Message.Data["sender_id"];
+                if (e.Message.Data.ContainsKey("sender_username"))
+                    senderUsername = e.Message.Data["sender_username"];
+                else if (e.Message.Data.ContainsKey("sender"))
+                    senderUsername = e.Message.Data["sender"];
+
+                // body에서 "username: " 접두사 제거
+                if (!string.IsNullOrEmpty(senderUsername) && messageContent.StartsWith(senderUsername + ": "))
+                {
+                    messageContent = messageContent.Substring(senderUsername.Length + 2);
+                }
+            }
+
+            // MessagePanelManager를 안전하게 찾기
+            var manager = GetMessagePanelManager();
+
+            if (manager != null && !string.IsNullOrEmpty(senderId))
+            {
+                try
+                {
+                    manager.AddOrUpdateConversationFromPush(senderId, senderUsername, messageContent);
+                }
+                catch (System.Exception)
+                {
+                    // 예외 무시
+                }
+            }
+
+            // 인앱 알림 배너 표시 (앱이 포커스 돌아왔을 때)
+            ShowInAppNotification(title, messageContent, senderId, senderUsername);
+
+#if UNITY_ANDROID
+            // DM 메시지도 백그라운드에서 시스템 알림 표시
+            var dmNotification = new AndroidNotification
+            {
+                Title = title,
+                Text = body,
+                FireTime = System.DateTime.Now,
+                SmallIcon = "icon_0",
+                LargeIcon = "icon_1",
+                ShouldAutoCancel = true,
+                Group = "woopang_dm"
+            };
+            int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+            AndroidNotificationCenter.SendNotification(dmNotification, "default_channel");
+            activeNotificationIds.Add(dmNotificationId);
+#endif
+
+            yield break; // DM은 위치 기반 알림 저장 안 함
+        }
+
+        // 위치 기반 알림 처리 (백그라운드)
 
         float targetLat = 0f, targetLon = 0f, radius = 0f;
         string currentDistance = "";
@@ -1251,20 +923,24 @@ public class FirebaseNotification : MonoBehaviour
 
         currentDistance = ExtractDistanceFromTitle(title);
 
-        bool saved = SaveMessageSafelyWithLocation(title, body, formattedMessage, serverTimestamp, messageId, targetLat, targetLon, radius, currentDistance);
-        if (!saved)
+        // MessagePanelManager에 위치 알림 추가 (로그인 없이도 저장됨)
+        if (MessagePanelManager.Instance != null)
         {
-            yield break;
+            MessagePanelManager.Instance.AddLocationNotificationFromPush(
+                title, body, messageId,
+                targetLat, targetLon, radius, currentDistance
+            );
         }
 
-        UpdateSystemBadge();
+        // 중복 방지용 메시지 ID 저장
+        MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
 
         // 스마트 알림 관리
         ManageActiveNotifications();
 
-        int unreadCount = GetUnreadCount();
-
-        // 알림 설정 (Unity에서 자동 삭제 관리)
+#if UNITY_ANDROID
+        // Android 시스템 알림 (잠금화면/상태바용)
+        int badgeCount = MessagePanelManager.Instance != null ? MessagePanelManager.Instance.GetUnreadCount() : 1;
         var notification = new AndroidNotification
         {
             Title = title,
@@ -1273,60 +949,55 @@ public class FirebaseNotification : MonoBehaviour
             SmallIcon = "icon_0",
             LargeIcon = "icon_1",
             ShouldAutoCancel = true,
-            Number = unreadCount,
-            // 알림 그룹화
+            Number = badgeCount,
             Group = "woopang_messages"
         };
 
         int newNotificationId = (int)System.DateTime.Now.Ticks;
         AndroidNotificationCenter.SendNotification(notification, "default_channel");
-        
+
         // 활성 알림 ID 추가
         activeNotificationIds.Add(newNotificationId);
+#endif
     }
 
     private IEnumerator CheckBackgroundNotification()
     {
+#if UNITY_ANDROID
         var notificationIntent = AndroidNotificationCenter.GetLastNotificationIntent();
         if (notificationIntent != null)
         {
             string title = notificationIntent.Notification.Title ?? "알림";
             string body = notificationIntent.Notification.Text ?? "";
-    
+
             if (IsDuplicateMessage(title, body))
             {
                 yield break;
             }
-    
-            string formattedMessage = $"[{title}] {body}";
+
             DateTime timestamp = DateTime.Now;
             string messageId = GenerateMessageId(title, body, timestamp);
 
-            LoadMessages();
-    
-            float targetLat = 0f;
-            float targetLon = 0f;
-            float radius = 0f;
-            string distanceString = "";
-        
-            bool saved = SaveMessageSafelyWithLocation(title, body, formattedMessage, timestamp, messageId, targetLat, targetLon, radius, distanceString);
-
-            if (saved)
+            // MessagePanelManager에 시스템 알림 추가
+            if (MessagePanelManager.Instance != null)
             {
-                UpdateNotificationUI();
-                UpdateUnreadIndicator();
-                UpdateSystemBadge();
+                MessagePanelManager.Instance.AddLocationNotificationFromPush(title, body, messageId);
             }
+
+            // 중복 방지용 메시지 ID 저장
+            MarkMessageAsProcessed(messageId, title, body, timestamp);
         }
+#endif
         yield break;
     }
 
     // 활성 알림 스마트 관리
     private void ManageActiveNotifications()
     {
+#if UNITY_ANDROID
         // 만료된 알림 ID 정리
         CleanExpiredNotificationIds();
-        
+
         // 최대 개수 초과 시 오래된 알림 삭제
         while (activeNotificationIds.Count >= MAX_ACTIVE_NOTIFICATIONS)
         {
@@ -1334,6 +1005,7 @@ public class FirebaseNotification : MonoBehaviour
             AndroidNotificationCenter.CancelNotification(oldestId);
             activeNotificationIds.RemoveAt(0);
         }
+#endif
     }
 
     // 만료된 알림 ID 정리
@@ -1349,27 +1021,19 @@ public class FirebaseNotification : MonoBehaviour
         }
     }
 
-    // 읽지 않은 메시지 수 계산
-    private int GetUnreadCount()
-    {
-        int unreadCount = 0;
-        foreach (var message in receivedMessages)
-        {
-            if (!message.isRead) unreadCount++;
-        }
-        return unreadCount;
-    }
-
     // 모든 알림 정리 (앱 종료 시 호출)
     public void ClearAllNotifications()
     {
+#if UNITY_ANDROID
         foreach (int notificationId in activeNotificationIds)
         {
             AndroidNotificationCenter.CancelNotification(notificationId);
         }
+#endif
         activeNotificationIds.Clear();
     }
 
+#if UNITY_ANDROID
     // 자동 알림 정리 시스템 (시간 기반)
     private void StartNotificationCleanup()
     {
@@ -1381,7 +1045,7 @@ public class FirebaseNotification : MonoBehaviour
         while (true)
         {
             yield return new WaitForSeconds(180); // 3분마다 정리
-            
+
             // 오래된 알림들 자동 삭제 (포그라운드: 5분, 백그라운드: 3분)
             AutoCleanOldNotifications();
         }
@@ -1394,7 +1058,7 @@ public class FirebaseNotification : MonoBehaviour
         {
             // 가장 오래된 알림부터 삭제 (새로운 알림을 위한 공간 확보)
             int notificationsToRemove = Mathf.Max(0, activeNotificationIds.Count - MAX_ACTIVE_NOTIFICATIONS + 1);
-            
+
             for (int i = 0; i < notificationsToRemove; i++)
             {
                 if (activeNotificationIds.Count > 0)
@@ -1406,6 +1070,7 @@ public class FirebaseNotification : MonoBehaviour
             }
         }
     }
+#endif
 
     private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
     {
@@ -1417,151 +1082,6 @@ public class FirebaseNotification : MonoBehaviour
                   Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
         float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
         return R * c;
-    }
-
-    private void UpdateNotificationUI()
-    {
-        if (Content == null || MessageTextPrefab == null)
-        {
-            return;
-        }
-
-        foreach (Transform child in Content)
-        {
-            Destroy(child.gameObject);
-        }
-
-        for (int i = 0; i < receivedMessages.Count; i++)
-        {
-            int index = i;
-            MessageData messageData = receivedMessages[i];
-            GameObject messageObj = Instantiate(MessageTextPrefab, Content);
-            messageObj.SetActive(true);
-
-            RectTransform rect = messageObj.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0, 1);
-            rect.anchorMax = new Vector2(1, 1);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(0, 200);
-
-            Text text = messageObj.GetComponentInChildren<Text>();
-            if (text != null)
-            {
-                string timeString = GetTimeDisplayString(messageData);
-                string displayTitle = "";
-                string displayBody = "";
-            
-                if (!string.IsNullOrEmpty(messageData.title) && !string.IsNullOrEmpty(messageData.body))
-                {
-                    displayTitle = messageData.title;
-                    displayBody = messageData.body;
-                }
-                else
-                {
-                    displayTitle = messageData.message;
-                    displayBody = "";
-                }
-            
-                if (!string.IsNullOrEmpty(displayBody))
-                {
-                    text.text = $"[{displayTitle}] {displayBody}\n<size=40><color=#888888>{timeString}</color></size>";
-                }
-                else
-                {
-                    text.text = $"{displayTitle}\n<size=40><color=#888888>{timeString}</color></size>";
-                }
-            }
-
-            Transform iconTransform = messageObj.transform.Find("Icon");
-            if (iconTransform != null)
-            {
-                GameObject iconObj = iconTransform.gameObject;
-                iconObj.SetActive(!messageData.isRead);
-            }
-
-            Button button = messageObj.GetComponent<Button>();
-            if (button == null)
-            {
-                button = messageObj.AddComponent<Button>();
-            }
-            button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(() => OnMessageClicked(index));
-        }
-
-        StartCoroutine(RefreshLayout());
-    }
-
-    private IEnumerator RefreshLayout()
-    {
-        yield return new WaitForEndOfFrame();
-        yield return new WaitForEndOfFrame();
-        yield return null;
-
-        if (Content != null)
-        {
-            LayoutRebuilder.ForceRebuildLayoutImmediate(Content.GetComponent<RectTransform>());
-        }
-    }
-
-    private void UpdateUnreadIndicator()
-    {
-        if (UnreadIndicatorIcon != null)
-        {
-            bool hasUnreadMessage = false;
-            foreach (var messageData in receivedMessages)
-            {
-                if (!messageData.isRead)
-                {
-                    hasUnreadMessage = true;
-                    break;
-                }
-            }
-            UnreadIndicatorIcon.gameObject.SetActive(hasUnreadMessage);
-        }
-    }
-
-    private void OnMessageClicked(int index)
-    {
-        selectedMessage = receivedMessages[index]; // 선택된 메시지를 직접 참조로 저장
-
-        if (MessageDetailPopup != null && MessageDetailText != null)
-        {
-            string timeString = GetTimeDisplayString(selectedMessage);
-            string displayText = "";
-        
-            if (!string.IsNullOrEmpty(selectedMessage.title) && !string.IsNullOrEmpty(selectedMessage.body))
-            {
-                string titleWithDistance = selectedMessage.title;
-            
-                displayText = $"<b>{titleWithDistance}</b>\n\n{selectedMessage.body}";
-                displayText += $"\n\n<size=40><color=#888888>{timeString}</color></size>";
-            
-                if (!string.IsNullOrEmpty(selectedMessage.receivedAtString) && 
-                    !string.IsNullOrEmpty(selectedMessage.timestampString))
-                {
-                    DateTime receivedTime = StringToDateTime(selectedMessage.receivedAtString);
-                    DateTime processedTime = StringToDateTime(selectedMessage.timestampString);
-                
-                    if (Math.Abs((receivedTime - processedTime).TotalSeconds) > 60)
-                    {
-                        string serverTimeString = receivedTime.ToString("yyyy-MM-dd HH:mm:ss");
-                        string deviceTimeString = processedTime.ToString("yyyy-MM-dd HH:mm:ss");
-                        displayText += $"\n<size=30><color=#666666>수신: {serverTimeString}\n처리: {deviceTimeString}</color></size>";
-                    }
-                }
-            }
-            else
-            {
-                displayText = $"{selectedMessage.message}\n\n<size=40><color=#888888>{timeString}</color></size>";
-            }
-        
-            MessageDetailText.text = displayText;
-            MessageDetailPopup.SetActive(true);
-            
-            // 새 메시지 선택 시 삭제 확인 모드 리셋 (초기 화면으로 돌아가기)
-            ResetDeleteConfirmMode();
-        }
     }
 
     public void OnNativeMessageReceived(string message)
@@ -1581,14 +1101,14 @@ public class FirebaseNotification : MonoBehaviour
 
                 if (parts.Length >= 5)
                 {
-                    if (float.TryParse(parts[2], out targetLat) && 
+                    if (float.TryParse(parts[2], out targetLat) &&
                         float.TryParse(parts[3], out targetLon))
                     {
                         float.TryParse(parts[4], out radius);
-                
-                        bool alreadyHasDistance = title.Contains(" - ") && 
+
+                        bool alreadyHasDistance = title.Contains(" - ") &&
                                                 (title.EndsWith("m") || title.EndsWith("km"));
-                    
+
                         if (alreadyHasDistance)
                         {
                             int lastDashIndex = title.LastIndexOf(" - ");
@@ -1605,7 +1125,7 @@ public class FirebaseNotification : MonoBehaviour
                                     currentUserLocation.x, currentUserLocation.y,
                                     targetLat, targetLon
                                 );
-                        
+
                                 distanceString = FormatDistance(distance);
                                 title = $"{title} - {distanceString}";
                             }
@@ -1613,27 +1133,20 @@ public class FirebaseNotification : MonoBehaviour
                     }
                 }
 
-                string formattedMessage = $"[{title}] {body}";
                 DateTime timestamp = DateTime.Now;
                 string messageId = GenerateMessageId(title, body, timestamp);
-        
-                LoadMessages();
-        
-                bool saved = SaveMessageSafelyWithLocation(title, body, formattedMessage, timestamp, messageId, targetLat, targetLon, radius, distanceString);
-                if (saved)
+
+                // MessagePanelManager에 시스템 알림 추가
+                if (MessagePanelManager.Instance != null)
                 {
-                    StartCoroutine(UpdateUIAfterNativeMessage());
+                    MessagePanelManager.Instance.AddLocationNotificationFromPush(
+                        title, body, messageId, targetLat, targetLon, radius, distanceString);
                 }
+
+                // 중복 방지용 메시지 ID 저장
+                MarkMessageAsProcessed(messageId, title, body, timestamp);
             }
         }
-    }
-
-    private IEnumerator UpdateUIAfterNativeMessage()
-    {
-        yield return null;
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
-        UpdateSystemBadge();
     }
 
     public void OnNativeTokenReceived(string token)
@@ -1751,39 +1264,107 @@ public class FirebaseNotification : MonoBehaviour
         return "";
     }
 
-    private void OnMessageDetailConfirmButtonClicked()
+
+    /// <summary>
+    /// 로그인 시 토큰에 user_id 연결하여 재등록
+    /// </summary>
+    public void RegisterTokenWithUserId(string userId)
     {
-        if (selectedMessage != null)
+        if (string.IsNullOrEmpty(currentFCMToken))
         {
-            selectedMessage.isRead = true;
-            
-            // receivedMessages 리스트에서도 업데이트
-            for (int i = 0; i < receivedMessages.Count; i++)
+            string savedToken = PlayerPrefs.GetString("FCMToken", "");
+            if (!string.IsNullOrEmpty(savedToken))
             {
-                if (receivedMessages[i].messageId == selectedMessage.messageId)
-                {
-                    receivedMessages[i].isRead = true;
-                    break;
-                }
+                currentFCMToken = savedToken;
             }
-            
-            SaveMessages();
         }
 
-        // 팝업 닫기 (삭제 확인 모드도 함께 리셋)
-        CloseMessageDetailPopup();
-
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
-        UpdateSystemBadge();
+        if (!string.IsNullOrEmpty(currentFCMToken))
+        {
+            StartCoroutine(SendTokenToServerWithUserId(currentFCMToken, userId));
+        }
     }
 
-    public void ForceUpdateUI()
+    /// <summary>
+    /// 로그아웃 시 토큰에서 user_id 제거
+    /// </summary>
+    public void UnregisterUserFromToken(string userId = null)
     {
-        LoadMessages();
-        UpdateNotificationUI();
-        UpdateUnreadIndicator();
-        UpdateSystemBadge();
+        StartCoroutine(UnregisterUserFromTokenCoroutine(userId));
+    }
+
+    private IEnumerator SendTokenToServerWithUserId(string token, string userId)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            yield break;
+        }
+
+        float latitude = 0f;
+        float longitude = 0f;
+        bool locationConsent = false;
+
+        if (Input.location.isEnabledByUser && Input.location.status == LocationServiceStatus.Running)
+        {
+            latitude = Input.location.lastData.latitude;
+            longitude = Input.location.lastData.longitude;
+            locationConsent = true;
+        }
+
+        WWWForm form = new WWWForm();
+        form.AddField("token", token);
+        form.AddField("device_id", SystemInfo.deviceUniqueIdentifier);
+        form.AddField("device_name", SystemInfo.deviceName);
+        form.AddField("device_model", SystemInfo.deviceModel);
+        form.AddField("os_version", SystemInfo.operatingSystem);
+        form.AddField("app_version", Application.version);
+
+        if (!string.IsNullOrEmpty(userId) && userId != "0")
+        {
+            form.AddField("user_id", userId);
+        }
+
+#if UNITY_IOS
+        form.AddField("platform", "ios");
+#elif UNITY_ANDROID
+        form.AddField("platform", "android");
+#else
+        form.AddField("platform", "unknown");
+#endif
+
+        if (locationConsent && latitude != 0f && longitude != 0f)
+        {
+            form.AddField("latitude", latitude.ToString("F6"));
+            form.AddField("longitude", longitude.ToString("F6"));
+            form.AddField("location_consent", "true");
+        }
+        else
+        {
+            form.AddField("location_consent", "false");
+        }
+
+        UnityWebRequest request = UnityWebRequest.Post(ApiConfig.REGISTER_TOKEN, form);
+        request.timeout = 10;
+
+        yield return request.SendWebRequest();
+
+    }
+
+    private IEnumerator UnregisterUserFromTokenCoroutine(string userId)
+    {
+        WWWForm form = new WWWForm();
+        form.AddField("device_id", SystemInfo.deviceUniqueIdentifier);
+
+        if (!string.IsNullOrEmpty(userId))
+        {
+            form.AddField("user_id", userId);
+        }
+
+        string unregisterUrl = ApiConfig.MAIN_SERVER + "/unregister-user-token";
+        UnityWebRequest request = UnityWebRequest.Post(unregisterUrl, form);
+        request.timeout = 10;
+
+        yield return request.SendWebRequest();
     }
 
     private string CalculateMessageDistance(Firebase.Messaging.FirebaseMessage message)
@@ -1831,11 +1412,220 @@ public class FirebaseNotification : MonoBehaviour
             string formattedDistance = FormatDistance(distance);
             return formattedDistance;
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
             return "";
         }
     }
+
+    #region 인앱 알림 배너
+
+    /// <summary>
+    /// MessagePanelManager 인스턴스를 안전하게 가져옴
+    /// </summary>
+    private MessagePanelManager GetMessagePanelManager()
+    {
+        if (MessagePanelManager.Instance != null)
+            return MessagePanelManager.Instance;
+
+        // Instance가 null이면 FindObjectOfType으로 찾기
+        return FindObjectOfType<MessagePanelManager>();
+    }
+
+    /// <summary>
+    /// 인앱 알림 배너 표시
+    /// </summary>
+    public void ShowInAppNotification(string title, string body, string userId = "", string username = "")
+    {
+        if (notificationBanner == null)
+        {
+            CreateNotificationBannerUI();
+        }
+
+        if (notificationBanner == null)
+        {
+            return;
+        }
+
+        // 클릭 시 열 대화 정보 저장
+        pendingOpenUserId = userId;
+        pendingOpenUsername = username;
+
+        // 텍스트 설정
+        if (bannerTitleText != null)
+            bannerTitleText.text = title;
+        if (bannerBodyText != null)
+            bannerBodyText.text = body;
+
+        // 기존 코루틴 중지
+        if (bannerCoroutine != null)
+        {
+            StopCoroutine(bannerCoroutine);
+        }
+
+        // 배너 표시 코루틴 시작
+        bannerCoroutine = StartCoroutine(ShowBannerCoroutine());
+    }
+
+    private IEnumerator ShowBannerCoroutine()
+    {
+        if (notificationBanner == null || bannerRectTransform == null)
+            yield break;
+
+        // 배너 활성화 및 초기 위치 (화면 위로 숨김)
+        notificationBanner.SetActive(true);
+        bannerRectTransform.anchoredPosition = new Vector2(0, bannerHeight);
+        isBannerShowing = true;
+
+        // 슬라이드 다운
+        float targetY = 0f;
+        while (bannerRectTransform.anchoredPosition.y > targetY + 1f)
+        {
+            float newY = Mathf.MoveTowards(bannerRectTransform.anchoredPosition.y, targetY, bannerSlideSpeed * Time.deltaTime);
+            bannerRectTransform.anchoredPosition = new Vector2(0, newY);
+            yield return null;
+        }
+        bannerRectTransform.anchoredPosition = new Vector2(0, targetY);
+
+        // 표시 유지
+        yield return new WaitForSeconds(bannerDisplayDuration);
+
+        // 슬라이드 업
+        float hideY = bannerHeight;
+        while (bannerRectTransform.anchoredPosition.y < hideY - 1f)
+        {
+            float newY = Mathf.MoveTowards(bannerRectTransform.anchoredPosition.y, hideY, bannerSlideSpeed * Time.deltaTime);
+            bannerRectTransform.anchoredPosition = new Vector2(0, newY);
+            yield return null;
+        }
+
+        notificationBanner.SetActive(false);
+        isBannerShowing = false;
+    }
+
+    /// <summary>
+    /// 배너 클릭 시 호출
+    /// </summary>
+    public void OnNotificationBannerClicked()
+    {
+        // 배너 숨기기
+        if (bannerCoroutine != null)
+        {
+            StopCoroutine(bannerCoroutine);
+        }
+        if (notificationBanner != null)
+        {
+            notificationBanner.SetActive(false);
+        }
+        isBannerShowing = false;
+
+        // MessagePanel 열기
+        var manager = GetMessagePanelManager();
+        if (manager != null)
+        {
+            if (!string.IsNullOrEmpty(pendingOpenUserId))
+            {
+                // 특정 대화방 열기
+                manager.OpenChatRoom(pendingOpenUserId, pendingOpenUsername);
+            }
+            else
+            {
+                // MessagePanel 열기
+                manager.OpenMessagePanel();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 알림 배너 UI 동적 생성
+    /// </summary>
+    private void CreateNotificationBannerUI()
+    {
+        // Canvas 찾기
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            return;
+        }
+
+        // 배너 패널 생성
+        notificationBanner = new GameObject("NotificationBanner");
+        notificationBanner.transform.SetParent(canvas.transform, false);
+
+        // RectTransform 설정 (화면 상단)
+        bannerRectTransform = notificationBanner.AddComponent<RectTransform>();
+        bannerRectTransform.anchorMin = new Vector2(0, 1);
+        bannerRectTransform.anchorMax = new Vector2(1, 1);
+        bannerRectTransform.pivot = new Vector2(0.5f, 1);
+        bannerRectTransform.anchoredPosition = new Vector2(0, bannerHeight);
+        bannerRectTransform.sizeDelta = new Vector2(0, bannerHeight);
+
+        // 배경 이미지
+        Image bgImage = notificationBanner.AddComponent<Image>();
+        bgImage.color = new Color(0.15f, 0.15f, 0.2f, 0.95f);
+
+        // 버튼 추가 (클릭 영역)
+        bannerButton = notificationBanner.AddComponent<Button>();
+        bannerButton.onClick.AddListener(OnNotificationBannerClicked);
+
+        // 제목 텍스트
+        GameObject titleObj = new GameObject("TitleText");
+        titleObj.transform.SetParent(notificationBanner.transform, false);
+        bannerTitleText = titleObj.AddComponent<Text>();
+        bannerTitleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        bannerTitleText.fontSize = 32;
+        bannerTitleText.fontStyle = FontStyle.Bold;
+        bannerTitleText.color = Color.white;
+        bannerTitleText.alignment = TextAnchor.MiddleLeft;
+
+        RectTransform titleRect = titleObj.GetComponent<RectTransform>();
+        titleRect.anchorMin = new Vector2(0, 0.5f);
+        titleRect.anchorMax = new Vector2(1, 1);
+        titleRect.offsetMin = new Vector2(20, 10);
+        titleRect.offsetMax = new Vector2(-20, -10);
+
+        // 내용 텍스트
+        GameObject bodyObj = new GameObject("BodyText");
+        bodyObj.transform.SetParent(notificationBanner.transform, false);
+        bannerBodyText = bodyObj.AddComponent<Text>();
+        bannerBodyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        bannerBodyText.fontSize = 26;
+        bannerBodyText.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+        bannerBodyText.alignment = TextAnchor.MiddleLeft;
+
+        RectTransform bodyRect = bodyObj.GetComponent<RectTransform>();
+        bodyRect.anchorMin = new Vector2(0, 0);
+        bodyRect.anchorMax = new Vector2(1, 0.5f);
+        bodyRect.offsetMin = new Vector2(20, 10);
+        bodyRect.offsetMax = new Vector2(-20, -5);
+
+        // 폰트 로드 시도 (AppleSDGothicNeoM)
+        Font customFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+        if (customFont != null)
+        {
+            bannerTitleText.font = customFont;
+            bannerBodyText.font = customFont;
+        }
+
+        // 초기에는 숨김
+        notificationBanner.SetActive(false);
+
+        // 가장 앞에 표시
+        notificationBanner.transform.SetAsLastSibling();
+    }
+
+    /// <summary>
+    /// 배너 RectTransform 초기화
+    /// </summary>
+    private void InitializeBannerRect()
+    {
+        if (notificationBanner != null && bannerRectTransform == null)
+        {
+            bannerRectTransform = notificationBanner.GetComponent<RectTransform>();
+        }
+    }
+
+    #endregion
 
     void OnDestroy()
     {

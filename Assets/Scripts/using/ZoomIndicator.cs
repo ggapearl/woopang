@@ -106,6 +106,8 @@ public class ZoomIndicator : MonoBehaviour
     /// </summary>
     public void HideAfterDelay(float delay)
     {
+        if (!gameObject.activeInHierarchy) return;
+
         if (hideCoroutine != null)
         {
             StopCoroutine(hideCoroutine);

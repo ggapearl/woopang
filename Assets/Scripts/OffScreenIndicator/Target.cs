@@ -54,11 +54,23 @@ public class Target : MonoBehaviour
         }
     }
 
-    public bool NeedBoxIndicator => needBoxIndicator;
+    public bool NeedBoxIndicator
+    {
+        get => needBoxIndicator;
+        set => needBoxIndicator = value;
+    }
 
-    public bool NeedArrowIndicator => needArrowIndicator;
+    public bool NeedArrowIndicator
+    {
+        get => needArrowIndicator;
+        set => needArrowIndicator = value;
+    }
 
-    public bool NeedDistanceText => needDistanceText;
+    public bool NeedDistanceText
+    {
+        get => needDistanceText;
+        set => needDistanceText = value;
+    }
 
     public Color DistanceTextColor => distanceTextColor;
 

@@ -4,35 +4,24 @@ using UnityEngine.Networking;
 using System.Collections;
 using System;
 
-/// <summary>
-/// 웹 로그인 방식 LoginManager
-/// - 로그인 버튼 클릭 → 웹 브라우저에서 로그인
-/// - Deep Link로 앱에 토큰 전달
-/// - 토큰으로 프로필 조회
-/// </summary>
 public class LoginManager : MonoBehaviour
 {
     public static LoginManager Instance { get; private set; }
 
-    // Event for login state changes
     public event Action<bool> OnLoginStateChanged;
 
     [Header("Login Prompt Popup")]
-    [Tooltip("로그인이 필요할 때 표시되는 팝업")]
     public GameObject loginPromptPanel;
     public Text promptText;
-    public Button webLoginButton;      // "로그인하기" → 웹 열기
-    public Button guestLoginButton;    // "로그인 없이 이용"
-    public Button cancelButton;        // "취소" (팝업 닫기)
+    public Button webLoginButton;
+    public Button cancelButton;
 
     [Header("Profile Display")]
     public Text profileUsernameText;
     public Transform uiCanvasRoot;
 
     [Header("Settings")]
-    public float loginPromptDelay = 30f;  // 앱 시작 후 로그인 팝업 표시 딜레이
-
-    // URLs (ApiConfig 사용)
+    public float loginPromptDelay = 30f;
 
     // User State
     public UserData CurrentUser { get; private set; }
@@ -41,8 +30,68 @@ public class LoginManager : MonoBehaviour
     public int CurrentUserId => int.TryParse(CurrentUser?.id, out int id) ? id : 0;
     public string CurrentUsername => CurrentUser?.username;
 
-    // Localization
     private string currentLang = "en";
+
+#if UNITY_EDITOR
+    [Header("=== 에디터 로그인 ===")]
+    [SerializeField] private string editorUserId = "3";
+    [SerializeField] private string editorUsername = "woopang";
+
+    [ContextMenu("Editor Login")]
+    public void EditorLogin()
+    {
+        if (string.IsNullOrEmpty(editorUserId) || string.IsNullOrEmpty(editorUsername))
+        {
+            Debug.LogError("[LoginManager] editorUserId 또는 editorUsername이 비어있습니다.");
+            return;
+        }
+
+        CurrentUser = new UserData
+        {
+            id = editorUserId,
+            username = editorUsername
+        };
+        IsGuest = false;
+
+        PlayerPrefs.SetString("SavedUserId", editorUserId);
+        PlayerPrefs.SetString("SavedUsername", editorUsername);
+        PlayerPrefs.DeleteKey("IsGuest");
+        PlayerPrefs.Save();
+
+        // FCM 토큰에 user_id 연결
+        RegisterFCMTokenWithUserId(editorUserId);
+
+        OnLoginStateChanged?.Invoke(true);
+        UpdateProfileUI();
+
+        Debug.Log($"[LoginManager] 에디터 로그인 완료: {editorUsername} (ID: {editorUserId})");
+    }
+
+    [ContextMenu("Editor Logout")]
+    public void EditorLogout()
+    {
+        Logout();
+    }
+
+    [Header("=== 딥링크 테스트 ===")]
+    [SerializeField] private string testDeepLinkUrl = "woopang://auth?token=3&username=woopang&provider=email";
+
+    [ContextMenu("Test Deep Link")]
+    public void TestDeepLinkInEditor()
+    {
+        if (string.IsNullOrEmpty(testDeepLinkUrl))
+        {
+            Debug.LogError("[LoginManager] testDeepLinkUrl이 비어있습니다.");
+            return;
+        }
+        OnDeepLinkActivated(testDeepLinkUrl);
+    }
+
+    public void SimulateDeepLink(string url)
+    {
+        OnDeepLinkActivated(url);
+    }
+#endif
 
     void Awake()
     {
@@ -56,63 +105,25 @@ public class LoginManager : MonoBehaviour
             return;
         }
 
-        // 언어 설정
         SetLanguage();
 
-        // 버튼 리스너
         if (webLoginButton != null)
             webLoginButton.onClick.AddListener(OpenWebLogin);
-        if (guestLoginButton != null)
-            guestLoginButton.onClick.AddListener(GuestLogin);
         if (cancelButton != null)
             cancelButton.onClick.AddListener(CloseLoginPrompt);
 
-        // 자동 로그인 시도
         TryAutoLogin();
     }
 
     void Start()
     {
-        // Deep Link 핸들러 등록
         Application.deepLinkActivated += OnDeepLinkActivated;
 
-        // 앱 시작 시 Deep Link 확인 (콜드 스타트)
         if (!string.IsNullOrEmpty(Application.absoluteURL))
         {
             OnDeepLinkActivated(Application.absoluteURL);
         }
     }
-
-#if UNITY_EDITOR
-    [Header("=== 에디터 테스트용 ===")]
-    [Tooltip("웹에서 복사한 딥링크 URL을 여기에 붙여넣기 하세요")]
-    [SerializeField] private string testDeepLinkUrl = "woopang://auth?token=3&username=woopang&provider=email";
-
-    /// <summary>
-    /// 에디터에서 딥링크 테스트용 메서드
-    /// Inspector에서 Context Menu로 호출 가능
-    /// </summary>
-    [ContextMenu("Test Deep Link (Editor Only)")]
-    public void TestDeepLinkInEditor()
-    {
-        if (string.IsNullOrEmpty(testDeepLinkUrl))
-        {
-            Debug.LogError("[LoginManager] testDeepLinkUrl이 비어있습니다. Inspector에서 URL을 입력하세요.");
-            return;
-        }
-        Debug.Log($"[LoginManager] 에디터 딥링크 테스트: {testDeepLinkUrl}");
-        OnDeepLinkActivated(testDeepLinkUrl);
-    }
-
-    /// <summary>
-    /// 커스텀 딥링크 테스트
-    /// </summary>
-    public void SimulateDeepLink(string url)
-    {
-        Debug.Log($"[LoginManager] 딥링크 시뮬레이션: {url}");
-        OnDeepLinkActivated(url);
-    }
-#endif
 
     void OnDestroy()
     {
@@ -169,21 +180,11 @@ public class LoginManager : MonoBehaviour
 
     private void TryAutoLogin()
     {
-        // 게스트 로그인 상태 확인
-        if (PlayerPrefs.GetInt("IsGuest", 0) == 1)
-        {
-            RestoreGuestLogin();
-            return;
-        }
-
-        // 저장된 토큰으로 자동 로그인
-        string savedToken = PlayerPrefs.GetString("AuthToken", "");
         string savedUserId = PlayerPrefs.GetString("SavedUserId", "");
         string savedUsername = PlayerPrefs.GetString("SavedUsername", "");
 
-        if (!string.IsNullOrEmpty(savedToken) && !string.IsNullOrEmpty(savedUserId))
+        if (!string.IsNullOrEmpty(savedUserId) && !string.IsNullOrEmpty(savedUsername))
         {
-            // 저장된 정보로 로그인 상태 복원
             CurrentUser = new UserData
             {
                 id = savedUserId,
@@ -192,52 +193,34 @@ public class LoginManager : MonoBehaviour
             IsGuest = false;
             OnLoginStateChanged?.Invoke(true);
             UpdateProfileUI();
-            Debug.Log($"[LoginManager] 자동 로그인: {savedUsername}");
-        }
-        else
-        {
-            // 로그인 안됨 → 일정 시간 후 로그인 팝업 표시
-            StartCoroutine(ShowLoginPromptAfterDelay());
+
+            // 자동 로그인 시에도 FCM 토큰에 user_id 연결 (앱 재시작 시)
+            StartCoroutine(DelayedTokenRegistration(savedUserId));
         }
     }
 
-    private IEnumerator ShowLoginPromptAfterDelay()
+    private IEnumerator DelayedTokenRegistration(string userId)
     {
-        yield return new WaitForSeconds(loginPromptDelay);
-
-        // 여전히 로그인 안됐으면 팝업 표시
-        if (!IsLoggedIn && !IsGuest)
-        {
-            ShowLoginRequirementPopup();
-        }
+        // Firebase 초기화 대기
+        yield return new WaitForSeconds(3f);
+        RegisterFCMTokenWithUserId(userId);
     }
 
     #endregion
 
     #region Web Login
 
-    /// <summary>
-    /// 웹 브라우저에서 로그인 페이지 열기
-    /// </summary>
     public void OpenWebLogin()
     {
         string url = $"{ApiConfig.LOGIN_VIEW}?lang={currentLang}";
         Application.OpenURL(url);
         CloseLoginPrompt();
-        Debug.Log($"[LoginManager] 웹 로그인 페이지 열기: {url}");
     }
 
-    /// <summary>
-    /// Deep Link 수신 처리
-    /// 형식: woopang://auth?token=xxx&username=xxx&provider=email
-    /// </summary>
     private void OnDeepLinkActivated(string url)
     {
-        Debug.Log($"[LoginManager] Deep Link 수신: {url}");
-
         if (string.IsNullOrEmpty(url)) return;
 
-        // woopang://auth?token=xxx&username=xxx&provider=email
         if (url.StartsWith("woopang://auth"))
         {
             ParseAuthDeepLink(url);
@@ -248,7 +231,6 @@ public class LoginManager : MonoBehaviour
     {
         try
         {
-            // URL 파싱
             Uri uri = new Uri(url);
             string query = uri.Query.TrimStart('?');
 
@@ -275,7 +257,6 @@ public class LoginManager : MonoBehaviour
 
             if (!string.IsNullOrEmpty(token))
             {
-                // 로그인 성공 처리
                 HandleLoginSuccess(token, username, provider);
             }
         }
@@ -287,14 +268,11 @@ public class LoginManager : MonoBehaviour
 
     private void HandleLoginSuccess(string token, string username, string provider)
     {
-        // JWT 토큰을 서버에서 검증
         StartCoroutine(VerifyTokenAndLogin(token));
     }
 
     private IEnumerator VerifyTokenAndLogin(string jwtToken)
     {
-        Debug.Log("[LoginManager] JWT 토큰 검증 시작...");
-
         string verifyUrl = $"{ApiConfig.MAIN_SERVER}/api/auth/verify";
         string jsonBody = $"{{\"token\":\"{jwtToken}\"}}";
 
@@ -315,7 +293,6 @@ public class LoginManager : MonoBehaviour
 
                     if (response.success && response.data != null)
                     {
-                        // 검증 성공 - 사용자 정보로 로그인 완료
                         CurrentUser = new UserData
                         {
                             id = response.data.id.ToString(),
@@ -330,7 +307,6 @@ public class LoginManager : MonoBehaviour
                         };
                         IsGuest = false;
 
-                        // 저장 (JWT 토큰과 user_id 모두 저장)
                         PlayerPrefs.SetString("AuthToken", jwtToken);
                         PlayerPrefs.SetString("SavedUserId", response.data.id.ToString());
                         PlayerPrefs.SetString("SavedUsername", response.data.username);
@@ -338,15 +314,12 @@ public class LoginManager : MonoBehaviour
                         PlayerPrefs.DeleteKey("IsGuest");
                         PlayerPrefs.Save();
 
+                        // FCM 토큰에 user_id 연결
+                        RegisterFCMTokenWithUserId(response.data.id.ToString());
+
                         OnLoginStateChanged?.Invoke(true);
                         UpdateProfileUI();
                         CloseLoginPrompt();
-
-                        Debug.Log($"[LoginManager] JWT 검증 성공 - 로그인 완료: {response.data.username}");
-                    }
-                    else
-                    {
-                        Debug.LogError($"[LoginManager] JWT 검증 실패: {response.message}");
                     }
                 }
                 catch (Exception e)
@@ -354,55 +327,7 @@ public class LoginManager : MonoBehaviour
                     Debug.LogError($"[LoginManager] 응답 파싱 오류: {e.Message}");
                 }
             }
-            else
-            {
-                Debug.LogError($"[LoginManager] JWT 검증 요청 실패: {request.error}");
-            }
         }
-    }
-
-    #endregion
-
-    #region Guest Login
-
-    public void GuestLogin()
-    {
-        string deviceId = SystemInfo.deviceUniqueIdentifier;
-        CurrentUser = new UserData
-        {
-            id = deviceId,
-            username = "Guest_" + deviceId.Substring(0, 4)
-        };
-        IsGuest = true;
-
-        PlayerPrefs.SetInt("IsGuest", 1);
-        PlayerPrefs.SetString("SavedUserId", deviceId);
-        PlayerPrefs.SetString("SavedUsername", CurrentUser.username);
-        PlayerPrefs.Save();
-
-        OnLoginStateChanged?.Invoke(true);
-        UpdateProfileUI();
-        CloseLoginPrompt();
-
-        Debug.Log($"[LoginManager] 게스트 로그인: {CurrentUser.username}");
-    }
-
-    private void RestoreGuestLogin()
-    {
-        string deviceId = PlayerPrefs.GetString("SavedUserId", SystemInfo.deviceUniqueIdentifier);
-        string username = PlayerPrefs.GetString("SavedUsername", "Guest_" + deviceId.Substring(0, 4));
-
-        CurrentUser = new UserData
-        {
-            id = deviceId,
-            username = username
-        };
-        IsGuest = true;
-
-        OnLoginStateChanged?.Invoke(true);
-        UpdateProfileUI();
-
-        Debug.Log($"[LoginManager] 게스트 상태 복원: {username}");
     }
 
     #endregion
@@ -411,6 +336,9 @@ public class LoginManager : MonoBehaviour
 
     public void Logout()
     {
+        // 로그아웃 전에 user_id 저장 (토큰 해제에 사용)
+        string previousUserId = CurrentUser?.id;
+
         CurrentUser = null;
         IsGuest = false;
 
@@ -421,19 +349,47 @@ public class LoginManager : MonoBehaviour
         PlayerPrefs.DeleteKey("IsGuest");
         PlayerPrefs.Save();
 
+        // FCM 토큰에서 user_id 제거 (푸시 알림 수신 중지)
+        UnregisterFCMToken(previousUserId);
+
         OnLoginStateChanged?.Invoke(false);
         UpdateProfileUI();
+    }
 
-        Debug.Log("[LoginManager] 로그아웃 완료");
+    #endregion
+
+    #region FCM Token Management
+
+    /// <summary>
+    /// FCM 토큰에 user_id 연결 (로그인 시 호출)
+    /// </summary>
+    private void RegisterFCMTokenWithUserId(string userId)
+    {
+        if (string.IsNullOrEmpty(userId) || userId == "0") return;
+
+        var fcm = FirebaseNotification.GetInstance();
+        if (fcm != null)
+        {
+            fcm.RegisterTokenWithUserId(userId);
+        }
+    }
+
+    /// <summary>
+    /// FCM 토큰에서 user_id 제거 (로그아웃 시 호출)
+    /// </summary>
+    private void UnregisterFCMToken(string userId = null)
+    {
+        var fcm = FirebaseNotification.GetInstance();
+        if (fcm != null)
+        {
+            fcm.UnregisterUserFromToken(userId);
+        }
     }
 
     #endregion
 
     #region Login Prompt Popup
 
-    /// <summary>
-    /// 로그인이 필요한 기능 사용 시 팝업 표시
-    /// </summary>
     public void ShowLoginRequirementPopup()
     {
         if (loginPromptPanel != null)
@@ -466,9 +422,6 @@ public class LoginManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 서버에서 최신 프로필 정보 가져오기
-    /// </summary>
     public IEnumerator FetchProfileCoroutine(string userId)
     {
         string url = $"{ApiConfig.USER_PROFILE}?user_id={userId}";
@@ -492,7 +445,6 @@ public class LoginManager : MonoBehaviour
                     {
                         CurrentUser = profile;
                         UpdateProfileUI();
-                        Debug.Log($"[LoginManager] 프로필 조회 성공: {profile.username}");
                     }
                 }
                 catch (Exception e)
@@ -500,19 +452,12 @@ public class LoginManager : MonoBehaviour
                     Debug.LogError($"[LoginManager] 프로필 파싱 오류: {e.Message}");
                 }
             }
-            else
-            {
-                Debug.LogWarning($"[LoginManager] 프로필 조회 실패: {request.error}");
-            }
         }
     }
 
     #endregion
 }
 
-/// <summary>
-/// 사용자 데이터
-/// </summary>
 [System.Serializable]
 public class UserData
 {
@@ -527,9 +472,6 @@ public class UserData
     public string x_id;
 }
 
-/// <summary>
-/// JWT 토큰 검증 API 응답
-/// </summary>
 [System.Serializable]
 public class AuthVerifyResponse
 {
