@@ -16,7 +16,9 @@ public class SmoothScrollRect : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     [SerializeField] private float inertiaMult = 1.5f;
 
     [Tooltip("최소 드래그 거리 (픽셀) - 낮을수록 민감")]
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float minDragDistance = 5f;
+#pragma warning restore CS0414
 
     [Header("Debug")]
     [Tooltip("디버그 로그 활성화")]

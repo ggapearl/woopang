@@ -738,6 +738,166 @@ def process_vdown_task(task_id, url, upload_folder, format_type='video'):
             except Exception as e:
                 print(f"TVWiki extraction error: {e}")
 
+        # --- Dailymotion Logic (yt-dlp 버그 우회) ---
+        elif 'dailymotion.com' in url or 'dai.ly' in url:
+            try:
+                print(f"[DAILYMOTION] ========== 직접 추출 시작 ==========")
+                # video ID 추출
+                dm_match = re.search(r'(?:dailymotion\.com/video/|dai\.ly/)([a-zA-Z0-9]+)', url)
+                if dm_match:
+                    video_id = dm_match.group(1)
+                    print(f"[DAILYMOTION] Video ID: {video_id}")
+
+                    dm_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                        'Accept': '*/*',
+                        'Accept-Language': 'en-US,en;q=0.9,ko;q=0.8',
+                        'Referer': 'https://www.dailymotion.com/',
+                        'Origin': 'https://www.dailymotion.com',
+                    }
+
+                    # 방법 1: embed 페이지에서 config 추출
+                    print(f"[DAILYMOTION] 방법 1: embed 페이지 분석...")
+                    embed_url = f'https://www.dailymotion.com/embed/video/{video_id}'
+                    embed_response = requests.get(embed_url, headers=dm_headers, timeout=15)
+                    print(f"[DAILYMOTION] embed 응답: {embed_response.status_code}, size={len(embed_response.text)}")
+
+                    if embed_response.status_code == 200:
+                        embed_html = embed_response.text
+
+                        # 제목 추출
+                        title_match = re.search(r'"title"\s*:\s*"([^"]+)"', embed_html)
+                        if title_match:
+                            extracted_title = title_match.group(1).encode().decode('unicode_escape')
+                            print(f"[DAILYMOTION] 제목: {extracted_title}")
+
+                        # __PLAYER_CONFIG__ 또는 config 객체에서 URL 찾기
+                        # HLS manifest URL 패턴들
+                        hls_patterns = [
+                            r'"url"\s*:\s*"(https?://[^"]+\.m3u8[^"]*)"',
+                            r'"hls"\s*:\s*"(https?://[^"]+)"',
+                            r'"stream_url"\s*:\s*"(https?://[^"]+\.m3u8[^"]*)"',
+                            r'(https?://www\.dailymotion\.com/cdn/manifest/video/[^"\'\\]+)',
+                        ]
+
+                        for pattern in hls_patterns:
+                            m = re.search(pattern, embed_html)
+                            if m:
+                                found_url = m.group(1).replace('\\/', '/').replace('\\u0026', '&')
+                                print(f"[DAILYMOTION] HLS URL 후보: {found_url[:100]}...")
+                                if 'm3u8' in found_url or 'manifest' in found_url:
+                                    actual_url = found_url
+                                    direct_download_url = found_url
+                                    ydl_headers = dm_headers
+                                    print(f"[DAILYMOTION] ✅ HLS URL 발견!")
+                                    break
+
+                        # MP4 직접 URL 찾기
+                        if not direct_download_url:
+                            mp4_patterns = [
+                                r'"(https?://[^"]+/video/[^"]+\.mp4[^"]*)"',
+                                r'"url"\s*:\s*"(https?://[^"]+\.mp4[^"]*)"',
+                            ]
+                            for pattern in mp4_patterns:
+                                m = re.search(pattern, embed_html)
+                                if m:
+                                    found_url = m.group(1).replace('\\/', '/').replace('\\u0026', '&')
+                                    if '.mp4' in found_url and 'sprite' not in found_url:
+                                        actual_url = found_url
+                                        direct_download_url = found_url
+                                        ydl_headers = dm_headers
+                                        print(f"[DAILYMOTION] ✅ MP4 URL 발견: {found_url[:100]}...")
+                                        break
+
+                    # 방법 2: Player Metadata API 시도
+                    if not direct_download_url:
+                        print(f"[DAILYMOTION] 방법 2: Player API 시도...")
+                        api_url = f'https://www.dailymotion.com/player/metadata/video/{video_id}'
+                        try:
+                            api_response = requests.get(api_url, headers=dm_headers, timeout=15)
+                            print(f"[DAILYMOTION] API 응답: {api_response.status_code}")
+
+                            if api_response.status_code == 200:
+                                api_data = api_response.json()
+                                if not extracted_title:
+                                    extracted_title = api_data.get('title', 'Dailymotion Video')
+
+                                # qualities에서 URL 찾기
+                                qualities = api_data.get('qualities', {})
+                                print(f"[DAILYMOTION] qualities 키: {list(qualities.keys())}")
+
+                                # auto 품질 먼저 시도
+                                if 'auto' in qualities:
+                                    for q in qualities['auto']:
+                                        q_url = q.get('url', '')
+                                        q_type = q.get('type', '')
+                                        print(f"[DAILYMOTION] auto 품질 - type: {q_type}, url: {q_url[:80] if q_url else 'N/A'}...")
+                                        if 'm3u8' in q_type or 'mpegURL' in q_type or 'm3u8' in q_url:
+                                            actual_url = q_url
+                                            direct_download_url = q_url
+                                            ydl_headers = dm_headers
+                                            print(f"[DAILYMOTION] ✅ API에서 HLS URL 발견!")
+                                            break
+
+                                # 다른 품질 시도
+                                if not direct_download_url:
+                                    for quality in ['1080', '720', '480', '380', '240']:
+                                        if quality in qualities:
+                                            for stream in qualities[quality]:
+                                                stream_url = stream.get('url', '')
+                                                if stream_url:
+                                                    actual_url = stream_url
+                                                    direct_download_url = stream_url
+                                                    ydl_headers = dm_headers
+                                                    print(f"[DAILYMOTION] ✅ API에서 {quality}p URL 발견!")
+                                                    break
+                                            if direct_download_url:
+                                                break
+                        except Exception as api_err:
+                            print(f"[DAILYMOTION] API 호출 실패: {api_err}")
+
+                    # 방법 3: 직접 비디오 페이지 파싱
+                    if not direct_download_url:
+                        print(f"[DAILYMOTION] 방법 3: 직접 페이지 분석...")
+                        try:
+                            video_url = f'https://www.dailymotion.com/video/{video_id}'
+                            page_response = requests.get(video_url, headers=dm_headers, timeout=15)
+                            if page_response.status_code == 200:
+                                page_html = page_response.text
+
+                                # __PLAYER_CONFIG__ JSON 찾기
+                                config_match = re.search(r'var\s+__PLAYER_CONFIG__\s*=\s*(\{.+?\});', page_html, re.DOTALL)
+                                if config_match:
+                                    print(f"[DAILYMOTION] __PLAYER_CONFIG__ 발견")
+                                    import json
+                                    try:
+                                        config = json.loads(config_match.group(1))
+                                        metadata = config.get('metadata', {})
+                                        qualities = metadata.get('qualities', {})
+                                        if qualities:
+                                            for q in qualities.get('auto', []):
+                                                if 'm3u8' in q.get('type', ''):
+                                                    actual_url = q.get('url')
+                                                    direct_download_url = actual_url
+                                                    ydl_headers = dm_headers
+                                                    print(f"[DAILYMOTION] ✅ Config에서 URL 발견!")
+                                                    break
+                                    except json.JSONDecodeError:
+                                        pass
+                        except Exception as page_err:
+                            print(f"[DAILYMOTION] 페이지 분석 실패: {page_err}")
+
+                    if direct_download_url:
+                        print(f"[DAILYMOTION] ========== 추출 성공 ==========")
+                        print(f"[DAILYMOTION] actual_url: {actual_url[:100]}...")
+                    else:
+                        print(f"[DAILYMOTION] ========== 추출 실패 - yt-dlp로 폴백 ==========")
+
+            except Exception as e:
+                print(f"[DAILYMOTION] 추출 오류: {e}")
+                import traceback
+                traceback.print_exc()
+
         # --- Nooo (Noonoo) Logic ---
         elif 'nooo' in url or 'noonoo' in url:
             try:
@@ -770,6 +930,10 @@ def process_vdown_task(task_id, url, upload_folder, format_type='video'):
         # 자막 옵션 확인
         subtitle_option = vdown_tasks[task_id].get('subtitle_option', 'none')
 
+        # Dailymotion, Vimeo 등 추가 사이트 지원을 위한 강화된 옵션
+        is_dailymotion = 'dailymotion.com' in url or 'dai.ly' in url
+        is_vimeo = 'vimeo.com' in url
+
         ydl_opts = {
             'outtmpl': os.path.join(upload_folder, f"{task_id}.%(ext)s"),
             'quiet': True,
@@ -779,7 +943,57 @@ def process_vdown_task(task_id, url, upload_folder, format_type='video'):
             'encoding': 'utf-8',
             'http_headers': ydl_headers,
             'noplaylist': True,  # 플레이리스트가 아닌 단일 영상만 다운로드
+            'socket_timeout': 30,
+            'retries': 5,
+            'fragment_retries': 5,
         }
+
+        # YouTube 전용 옵션 (403 에러 우회)
+        is_youtube = 'youtube.com' in url or 'youtu.be' in url
+        if is_youtube:
+            print(f"[VDOWN] YouTube 감지됨 - 403 우회 옵션 적용")
+            ydl_opts.update({
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate',
+                },
+                # YouTube 403 우회를 위한 핵심 옵션
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['web', 'android', 'ios'],  # 여러 클라이언트 시도
+                        'player_skip': ['webpage', 'configs'],  # 불필요한 요청 스킵
+                    }
+                },
+                'sleep_interval_requests': 1,  # 요청 간 딜레이
+            })
+
+        # Dailymotion 전용 옵션
+        if is_dailymotion:
+            print(f"[VDOWN] Dailymotion 감지됨 - 전용 옵션 적용")
+
+            # 직접 추출에서 URL을 찾지 못한 경우에만 embed URL로 폴백
+            if not direct_download_url:
+                dm_match = re.search(r'dailymotion\.com/video/([a-zA-Z0-9]+)', url)
+                if dm_match:
+                    video_id = dm_match.group(1)
+                    actual_url = f'https://www.dailymotion.com/embed/video/{video_id}'
+                    print(f"[VDOWN] 직접 추출 실패 - embed URL로 폴백: {actual_url}")
+            else:
+                print(f"[VDOWN] 직접 추출 URL 사용: {actual_url[:80]}...")
+
+            ydl_opts.update({
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://www.dailymotion.com/',
+                    'Origin': 'https://www.dailymotion.com',
+                },
+                'format': 'best[ext=mp4]/best',
+                'extractor_args': {'dailymotion': {'embed': ['1']}},
+            })
 
         # 자막 다운로드는 'separate' 옵션일 때만 + TVWiki/TVMon이 아닐 때만
         is_tvwiki = 'tvwiki' in url or 'tvmon' in url
@@ -791,7 +1005,8 @@ def process_vdown_task(task_id, url, upload_folder, format_type='video'):
                 'subtitlesformat': 'srt/vtt/best',
             })
 
-        if HAS_CURL_CFFI:
+        # curl_cffi 설정 (YouTube, Dailymotion 등 특수 설정이 있는 경우 덮어쓰지 않음)
+        if HAS_CURL_CFFI and not is_youtube and not is_dailymotion:
             ydl_opts['extractor_args'] = {'generic': {'impersonate': ['chrome']}}
 
         if format_type == 'audio':

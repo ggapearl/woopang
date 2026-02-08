@@ -58,7 +58,9 @@ public class TourAPIManager : MonoBehaviour
     private Dictionary<string, TourPlaceData> cachedPlaceDetails = new Dictionary<string, TourPlaceData>(50);
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
     [SerializeField] public int poolSize = 50;
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float updateInterval = 600f;
+#pragma warning restore CS0414
 
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터): 1km → 5km (TourAPI 429 에러 방지)")]
@@ -141,8 +143,7 @@ private bool isDataLoaded = false;
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
         yield break;
-#endif
-
+#else
         LogDebug("[TourAPIManager] 위치 서비스 시작 시도");
         if (!Input.location.isEnabledByUser)
         {
@@ -167,6 +168,7 @@ private bool isDataLoaded = false;
         LogDebug("[TourAPIManager] 초기 위치 설정 완료");
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
+#endif
     }
 
     private IEnumerator FetchDataPeriodically()

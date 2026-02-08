@@ -26,7 +26,9 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private float spinnerScale = 1.5f; // 스피너 스케일 (기본 1.5배)
     [SerializeField] private float spinnerRotationSpeed = 30f; // 스피너 회전 속도 (도/초)
     [SerializeField] private float spinnerMinDuration = 2f; // 스피너 최소 표시 시간 (회전)
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float spinnerFadeDuration = 1.5f; // 스피너 페이드아웃 시간 (큐브와 겹침)
+#pragma warning restore CS0414
     [SerializeField] private float cubeFadeInDuration = 1.5f; // 큐브 디졸브(페이드인) 시간
     [SerializeField] private float overlapDuration = 1.5f; // 스피너↔큐브 겹치는 시간
 

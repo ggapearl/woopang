@@ -349,82 +349,75 @@ class SmartMonitoringSystem:
         return False
     
     def kill_all_server_processes(self):
-        """🔧 추가: 모든 서버 프로세스와 포트 점유 해제 - 중복 실행 방지"""
+        """서버 프로세스 정리 - taskkill 기반 (빠름)"""
         try:
-            logger.info("🔧 모든 서버 프로세스 정리 시작...")
-            
-            # 1. 포트 443을 사용하는 모든 프로세스 종료
+            logger.info("🔧 서버 프로세스 정리 중...")
+
+            # 1. 기존 서버 프로세스 PID 확인 (저장된 값)
+            if self.main_process and self.main_process.poll() is None:
+                try:
+                    pid = self.main_process.pid
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                   capture_output=True, timeout=5)
+                    logger.info(f"✅ 서버 프로세스 종료: PID {pid}")
+                except Exception:
+                    pass
+
+            # 2. app_improved.py 실행 중인 프로세스 종료 (wmic 사용 - 빠름)
             try:
-                result = subprocess.run(['netstat', '-ano'], capture_output=True, text=True)
+                result = subprocess.run(
+                    ['wmic', 'process', 'where',
+                     "commandline like '%app_improved%' and name='python.exe'",
+                     'get', 'processid'],
+                    capture_output=True, text=True, timeout=5
+                )
                 for line in result.stdout.split('\n'):
-                    if ':443 ' in line and 'LISTENING' in line:
-                        pid = line.strip().split()[-1]
-                        try:
-                            subprocess.run(['taskkill', '/F', '/PID', pid], check=True, capture_output=True)
-                            logger.info(f"✅ 포트 443 점유 프로세스 종료: PID {pid}")
-                        except:
-                            pass
-            except Exception as e:
-                logger.warning(f"⚠️ 포트 정리 실패: {e}")
-            
-            # 2. Python 프로세스 중 app_improved.py 실행 중인 것 모두 종료
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmdline = proc.info['cmdline']
-                    if cmdline and any('app_improved.py' in str(cmd) for cmd in cmdline):
-                        psutil.Process(proc.info['pid']).terminate()
-                        logger.info(f"✅ app_improved.py 프로세스 종료: PID {proc.info['pid']}")
-                except:
-                    pass
-            
-            # 3. 잠시 대기 후 강제 종료
-            time.sleep(3)
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    cmdline = proc.info['cmdline']
-                    if cmdline and any('app_improved.py' in str(cmd) for cmd in cmdline):
-                        psutil.Process(proc.info['pid']).kill()
-                        logger.info(f"🔥 app_improved.py 프로세스 강제 종료: PID {proc.info['pid']}")
-                except:
-                    pass
-                    
-            logger.info("✅ 서버 프로세스 정리 완료")
-            time.sleep(5)  # 포트 해제 대기
-            
+                    line = line.strip()
+                    if line.isdigit():
+                        subprocess.run(['taskkill', '/F', '/PID', line],
+                                       capture_output=True, timeout=3)
+                        logger.info(f"✅ 프로세스 종료: PID {line}")
+            except subprocess.TimeoutExpired:
+                logger.warning("⚠️ wmic 타임아웃")
+            except Exception:
+                pass
+
+            # 3. 포트 해제 대기 (최소)
+            time.sleep(1)
+            logger.info("✅ 프로세스 정리 완료")
+
         except Exception as e:
             logger.error(f"❌ 프로세스 정리 실패: {e}")
     
     def restart_main_server(self):
-        """Restart main server - 🔧 수정: 프로세스 정리 강화"""
+        """Restart main server"""
         try:
-            logger.info("🚀 Attempting to restart main server...")
-            
-            # 🔧 수정: 기존 restart_manager.kill_port_processes 대신 강화된 프로세스 정리 사용
+            logger.info("🚀 서버 재시작 시작...")
+
+            # 기존 프로세스 정리
             self.kill_all_server_processes()
-            
-            # Set environment variables (normal mode)
+
+            # 환경변수 설정 (nginx 모드 유지)
             env = os.environ.copy()
             env.pop('BACKUP_MODE', None)
             env.pop('FORCE_HTTP_PORT', None)
-            
-            logger.info("🔧 Main server environment cleared")
 
-            # Start main server with waitress (20 threads)
-            # waitress 사용: 멀티스레드 프로덕션 서버
+            # USE_NGINX 모드 확인 및 설정
+            use_nginx = os.getenv('USE_NGINX', 'false').lower() == 'true'
+            if use_nginx:
+                env['USE_NGINX'] = 'true'
+                logger.info("🔧 nginx 프로덕션 모드로 재시작")
+            else:
+                logger.info("🔧 단독 모드로 재시작")
+
+            # 서버 시작
             self.main_process = subprocess.Popen([
-                "python", "-m", "waitress",
-                "--host=0.0.0.0",
-                "--port=443",
-                "--threads=20",
-                "--max-request-body-size=524288000",
-                "--url-scheme=https",
-                "--ident=WOOPANG",
-                "app_improved:app"
+                "python", "app_improved.py"
             ], cwd="C:/woopang/server",
             env=env,
             creationflags=subprocess.CREATE_NEW_CONSOLE)
 
-            logger.info(f"📋 Main server started with waitress (20 threads) - PID: {self.main_process.pid}")
+            logger.info(f"📋 서버 시작됨 - PID: {self.main_process.pid}")
             
             # Wait for main server startup (90 seconds for external access)
             for i in range(90):

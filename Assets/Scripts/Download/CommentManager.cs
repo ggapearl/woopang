@@ -48,6 +48,15 @@ public class CommentManager : MonoBehaviour
                 panelRect.anchoredPosition = new Vector2(0, -Screen.height);
         }
 
+        // closeButton 자동 연결 (Inspector에서 연결되지 않은 경우 fallback)
+        if (closeButton == null)
+        {
+            Transform found = transform.Find("CloseButton");
+            if (found == null) found = transform.Find("closeButton");
+            if (found == null) found = transform.Find("Close");
+            if (found != null) closeButton = found.GetComponent<Button>();
+        }
+
         if (sendButton != null) sendButton.onClick.AddListener(PostComment);
         if (closeButton != null) closeButton.onClick.AddListener(ClosePanel);
 

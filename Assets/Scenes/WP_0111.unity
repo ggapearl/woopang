@@ -2146,10 +2146,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.VerticalLayoutGroup
   m_Padding:
-    m_Left: 0
-    m_Right: 0
-    m_Top: 10
-    m_Bottom: 10
+    m_Left: 20
+    m_Right: 20
+    m_Top: 20
+    m_Bottom: 20
   m_ChildAlignment: 1
   m_Spacing: 2
   m_ChildForceExpandWidth: 1
@@ -12363,7 +12363,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1023704320}
   - component: {fileID: 1023704319}
-  - component: {fileID: 1023704318}
   m_Layer: 0
   m_Name: MessagePanelManager
   m_TagString: Untagged
@@ -12371,39 +12370,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1023704318
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1023704317}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: be2a7edb5cda5aa4bbb467415ade766a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DMTestDataGenerator
-  autoGenerateOnStart: 0
-  autoLoadSystemNotification: 1
-  autoOpenChatRoom: 0
-  conversationCount: 5
-  openPanelKey: 109
-  enableAutoMessages: 0
-  showDebugLogs: 0
-  conversationItemHeight: 140
-  chatFontSize: 0
-  timeFontSize: 22
-  readFontSize: 20
-  readTextColor: {r: 0.5, g: 0.8, b: 1, a: 1}
-  defaultAvatarColor: {r: 0.9, g: 0.9, b: 0.9, a: 1}
-  contentSpacing: 8
-  contentPadding: 10
-  useDateSeparator: 1
-  dateSeparatorFontSize: 28
-  dateSeparatorColor: {r: 0.6, g: 0.6, b: 0.6, a: 1}
-  dateSeparatorMargin: 20
-  simulationDuration: 600
-  totalMessages: 13
 --- !u!114 &1023704319
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12473,6 +12439,8 @@ MonoBehaviour:
   conversationItemHeight: 140
   conversationListSpacing: 2
   useDateSeparator: 1
+  dateSeparatorPrefab: {fileID: 6546184606543604314, guid: 26b72294744bcdd4daa3930491c9e4a0,
+    type: 3}
   hideTimeInBubbleWhenSeparator: 1
 --- !u!4 &1023704320
 Transform:
@@ -16532,6 +16500,7 @@ MonoBehaviour:
   warningObj: {fileID: 1595540}
   uploadPage: {fileID: 1929578798}
   disableObject: {fileID: 462629739}
+  plusButton: {fileID: 0}
   loadingPanel: {fileID: 1066345737}
   loadingText: {fileID: 1152959673}
   loadingSpinner: {fileID: 341861396}
@@ -16581,6 +16550,13 @@ MonoBehaviour:
   scrollRect: {fileID: 1452960879}
   contentParent: {fileID: 125390221}
   itemTemplate: {fileID: 678572757}
+  itemPrefab: {fileID: 8020874303451910978, guid: 4bd9cee315c0aae49b0d1efa5788378f,
+    type: 3}
+  followButtonColor: {r: 0.35, g: 0.45, b: 0.95, a: 1}
+  followingButtonColor: {r: 0.3, g: 0.3, b: 0.35, a: 1}
+  messageButtonColor: {r: 0.2, g: 0.6, b: 0.9, a: 1}
+  titleFontSize: 60
+  tabFontSize: 50
   customFont: {fileID: 12800000, guid: 4849f330da2e62a4bafe9ccbe3d6553f, type: 3}
   defaultFontSize: 60
   activeTabColor: {r: 1, g: 1, b: 1, a: 1}
@@ -22713,7 +22689,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2054965586}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -22722,10 +22698,10 @@ RectTransform:
   - {fileID: 3633711570900781295}
   m_Father: {fileID: 4228186759829547138}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 105, y: -396}
+  m_SizeDelta: {x: 440, y: 70}
   m_Pivot: {x: 0, y: 1}
 --- !u!1 &2068929559
 GameObject:
@@ -25179,6 +25155,18 @@ MonoBehaviour:
           m_FloatArgument: 0
           m_StringArgument: 
           m_BoolArgument: 1
+        m_CallState: 2
+      - m_Target: {fileID: 4328735587431845036}
+        m_TargetAssemblyTypeName: UnityEngine.GameObject, UnityEngine
+        m_MethodName: SetActive
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
         m_CallState: 2
 --- !u!1 &994410331548351852
 GameObject:
@@ -34167,6 +34155,11 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: -1050
       objectReference: {fileID: 0}
+    - target: {fileID: 268693453425787793, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 30
+      objectReference: {fileID: 0}
     - target: {fileID: 441642527838510037, guid: c12de6fed811ad740ac1c494f94ad320,
         type: 3}
       propertyPath: m_FontData.m_Font
@@ -34531,6 +34524,12 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: -40
       objectReference: {fileID: 0}
+    - target: {fileID: 6621311183669897686, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 9ec80ad4f8c6b4945ad41fa06acb4074,
+        type: 3}
     - target: {fileID: 6893651029956859936, guid: c12de6fed811ad740ac1c494f94ad320,
         type: 3}
       propertyPath: m_Name
@@ -34639,6 +34638,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_AnchoredPosition.y
       value: -844.21
+      objectReference: {fileID: 0}
+    - target: {fileID: 8176939502009703517, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8176939502009703517, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8176939502009703517, guid: c12de6fed811ad740ac1c494f94ad320,
         type: 3}
@@ -36318,7 +36327,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1143351677869848880}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
@@ -36328,7 +36337,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 669.7, y: 333.5}
+  m_AnchoredPosition: {x: 669.7, y: 220}
   m_SizeDelta: {x: 1000, y: 1000}
   m_Pivot: {x: 0, y: 0}
 --- !u!114 &9132224336326778217

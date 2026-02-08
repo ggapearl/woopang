@@ -46,7 +46,9 @@ public class TrainStationManager : MonoBehaviour
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
 
     [SerializeField] public int poolSize = 10;
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float updateInterval = 600f;
+#pragma warning restore CS0414
 
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터)")]
@@ -90,7 +92,7 @@ public class TrainStationManager : MonoBehaviour
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
         yield break;
-#endif
+#else
         if (!Input.location.isEnabledByUser) yield break;
         Input.location.Start();
         int maxWait = 20;
@@ -104,6 +106,7 @@ public class TrainStationManager : MonoBehaviour
         lastPosition = new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
+#endif
     }
 
     private IEnumerator FetchDataPeriodically()

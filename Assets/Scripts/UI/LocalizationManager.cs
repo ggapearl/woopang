@@ -551,11 +551,11 @@ public class LocalizationManager : MonoBehaviour
             // Empty Inbox Message (Message Panel)
             ["empty_inbox_message"] = new Dictionary<string, string>()
             {
-                ["en"] = "No conversations yet ❤️\n\nFollow friends nearby\nto start chatting!",
-                ["ko"] = "아직 대화가 없습니다 ❤️\n\n근처에 있는 친구를 팔로우해서\n대화를 시작해보세요!",
-                ["zh"] = "还没有对话 ❤️\n\n关注附近的朋友\n开始聊天吧！",
-                ["ja"] = "まだ会話がありません ❤️\n\n近くの友達をフォローして\n会話を始めましょう！",
-                ["es"] = "Aún no hay conversaciones ❤️\n\n¡Sigue a amigos cercanos\npara empezar a chatear!"
+                ["en"] = "No conversations yet.\nFollow friends nearby\nto start chatting\u2665",
+                ["ko"] = "아직 대화가 없습니다.\n근처에 있는 친구를 팔로우해서\n대화를 시작해보세요\u2665",
+                ["zh"] = "还没有对话。\n关注附近的朋友\n开始聊天吧\u2665",
+                ["ja"] = "まだ会話がありません。\n近くの友達をフォローして\n会話を始めましょう\u2665",
+                ["es"] = "Aún no hay conversaciones.\nSigue a amigos cercanos\npara empezar a chatear\u2665"
             },
 
             // Failed to load messages
@@ -664,6 +664,14 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "此聊天室无法进行对话",
                 ["ja"] = "会話ができないチャットルームです",
                 ["es"] = "Esta sala de chat no está disponible para conversación"
+            },
+            ["swipe_delete"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Delete",
+                ["ko"] = "삭제",
+                ["zh"] = "删除",
+                ["ja"] = "削除",
+                ["es"] = "Eliminar"
             }
         };
     }

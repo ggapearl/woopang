@@ -7,8 +7,10 @@ using Firebase.Messaging;
 using Firebase.Extensions;
 using System;
 using System.Globalization;
+#if UNITY_ANDROID
 using UnityEngine.Android;
 using Unity.Notifications.Android;
+#endif
 
 [System.Serializable]
 public class MessageData
@@ -103,16 +105,18 @@ public class FirebaseNotification : MonoBehaviour
     public float bannerSlideSpeed = 800f;
 
     private RectTransform bannerRectTransform;
+
+    // Cached font to avoid repeated Resources.Load calls
+    private static Font _cachedFont;
+    private static Font CachedFont => _cachedFont ?? (_cachedFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM"));
     private Coroutine bannerCoroutine;
     private float bannerHeight = 120f;
-    private bool isBannerShowing = false;
 
     // 알림 관리를 위한 변수들
     private const int MAX_ACTIVE_NOTIFICATIONS = 5;
     private List<int> activeNotificationIds = new List<int>();
 
     private string currentFCMToken = "";
-    private bool firebaseInitialized = false;
 
     private HashSet<string> processedMessageIds = new HashSet<string>();
     private Dictionary<string, DateTime> recentMessageTracker = new Dictionary<string, DateTime>();
@@ -147,7 +151,6 @@ public class FirebaseNotification : MonoBehaviour
             if (!string.IsNullOrEmpty(savedToken) && string.IsNullOrEmpty(Instance.currentFCMToken))
             {
                 Instance.currentFCMToken = savedToken;
-                Instance.firebaseInitialized = true;
             }
             Destroy(gameObject);
             return;
@@ -203,6 +206,7 @@ public class FirebaseNotification : MonoBehaviour
 
     private void SaveLocationToAndroidPrefs(float latitude, float longitude)
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
             using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
@@ -219,6 +223,7 @@ public class FirebaseNotification : MonoBehaviour
         {
             Debug.LogError($"Failed to save location to Android prefs: {ex.Message}");
         }
+#endif
     }
 
     private IEnumerator InitializeFirebaseCoroutine()
@@ -240,7 +245,6 @@ public class FirebaseNotification : MonoBehaviour
 
         if (initializationComplete && dependencyStatus == Firebase.DependencyStatus.Available)
         {
-            firebaseInitialized = true;
             // 이벤트 핸들러는 Start()에서 이미 등록됨 - 중복 등록 제거
             StartCoroutine(CheckBackgroundNotification());
         }
@@ -384,8 +388,7 @@ public class FirebaseNotification : MonoBehaviour
 
     private void LoadTokenFromAndroidPrefs()
     {
-        if (Application.platform != RuntimePlatform.Android) return;
-
+#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
             using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
@@ -393,12 +396,11 @@ public class FirebaseNotification : MonoBehaviour
             using (AndroidJavaObject sharedPrefs = currentActivity.Call<AndroidJavaObject>("getSharedPreferences", "firebase_messages", 0))
             {
                 string token = sharedPrefs.Call<string>("getString", "FCMToken", "");
-                
+
                 if (!string.IsNullOrEmpty(token))
                 {
                     currentFCMToken = token;
-                    firebaseInitialized = true;
-                    
+
                     PlayerPrefs.SetString("FCMToken", token);
                     PlayerPrefs.Save();
                 }
@@ -408,6 +410,7 @@ public class FirebaseNotification : MonoBehaviour
         {
             Debug.LogError($"Failed to load token from Android: {ex.Message}");
         }
+#endif
     }
 
     private IEnumerator SendTokenToServer(string token)
@@ -552,7 +555,6 @@ public class FirebaseNotification : MonoBehaviour
     {
         yield return null;
 
-        firebaseInitialized = true;
         currentFCMToken = token;
     }
 
@@ -615,15 +617,19 @@ public class FirebaseNotification : MonoBehaviour
 
     private IEnumerator HandleForegroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
-        // 메시지 타입 확인
+        // 메시지 타입 확인 (type 또는 notification_type 키 모두 확인)
         string messageType = "";
-        if (e.Message.Data != null && e.Message.Data.ContainsKey("type"))
+        if (e.Message.Data != null)
         {
-            messageType = e.Message.Data["type"];
+            if (e.Message.Data.ContainsKey("type"))
+                messageType = e.Message.Data["type"];
+            else if (e.Message.Data.ContainsKey("notification_type"))
+                messageType = e.Message.Data["notification_type"];
         }
 
-        // === 업로드 완료 알림 처리 ===
-        if (messageType == "upload_complete")
+
+        // === 업로드 완료/승인 알림 처리 ===
+        if (messageType == "upload_complete" || messageType == "upload_approved")
         {
             string contentName = "AR 콘텐츠";
             if (e.Message.Data != null && e.Message.Data.ContainsKey("content_name"))
@@ -637,9 +643,6 @@ public class FirebaseNotification : MonoBehaviour
             {
                 manager.AddLocationNotificationFromPush(title, body, messageId);
             }
-
-            // 인앱 알림 배너 표시
-            ShowInAppNotification(title, body);
 
             // 중복 방지용 메시지 ID 저장
             MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
@@ -708,9 +711,6 @@ public class FirebaseNotification : MonoBehaviour
                     // 예외 무시 - DM 추가 실패해도 앱 동작에 영향 없음
                 }
             }
-
-            // 인앱 알림 배너 표시
-            ShowInAppNotification(title, messageContent, senderId, senderUsername);
 
 #if UNITY_ANDROID
             // DM 메시지도 포그라운드에서 시스템 알림 표시
@@ -785,15 +785,18 @@ public class FirebaseNotification : MonoBehaviour
 
     private IEnumerator HandleBackgroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
-        // 메시지 타입 확인
+        // 메시지 타입 확인 (type 또는 notification_type 키 모두 확인)
         string messageType = "";
-        if (e.Message.Data != null && e.Message.Data.ContainsKey("type"))
+        if (e.Message.Data != null)
         {
-            messageType = e.Message.Data["type"];
+            if (e.Message.Data.ContainsKey("type"))
+                messageType = e.Message.Data["type"];
+            else if (e.Message.Data.ContainsKey("notification_type"))
+                messageType = e.Message.Data["notification_type"];
         }
 
-        // === 업로드 완료 알림 처리 ===
-        if (messageType == "upload_complete")
+        // === 업로드 완료/승인 알림 처리 ===
+        if (messageType == "upload_complete" || messageType == "upload_approved")
         {
             string contentName = "AR 콘텐츠";
             if (e.Message.Data != null && e.Message.Data.ContainsKey("content_name"))
@@ -878,9 +881,6 @@ public class FirebaseNotification : MonoBehaviour
                     // 예외 무시
                 }
             }
-
-            // 인앱 알림 배너 표시 (앱이 포커스 돌아왔을 때)
-            ShowInAppNotification(title, messageContent, senderId, senderUsername);
 
 #if UNITY_ANDROID
             // DM 메시지도 백그라운드에서 시스템 알림 표시
@@ -983,6 +983,9 @@ public class FirebaseNotification : MonoBehaviour
             // 중복 방지용 메시지 ID 저장
             MarkMessageAsProcessed(messageId, title, body, timestamp);
         }
+#elif UNITY_IOS
+        // iOS는 시스템 알림 센터가 백그라운드 알림을 자동 처리
+        // 앱 활성화 시 FCM OnMessageReceived로 처리됨
 #endif
         yield break;
     }
@@ -1148,8 +1151,7 @@ public class FirebaseNotification : MonoBehaviour
     public void OnNativeTokenReceived(string token)
     {
         currentFCMToken = token;
-        firebaseInitialized = true;
-    
+
         PlayerPrefs.SetString("FCMToken", token);
         PlayerPrefs.Save();
     
@@ -1471,7 +1473,6 @@ public class FirebaseNotification : MonoBehaviour
         // 배너 활성화 및 초기 위치 (화면 위로 숨김)
         notificationBanner.SetActive(true);
         bannerRectTransform.anchoredPosition = new Vector2(0, bannerHeight);
-        isBannerShowing = true;
 
         // 슬라이드 다운
         float targetY = 0f;
@@ -1496,7 +1497,6 @@ public class FirebaseNotification : MonoBehaviour
         }
 
         notificationBanner.SetActive(false);
-        isBannerShowing = false;
     }
 
     /// <summary>
@@ -1513,7 +1513,6 @@ public class FirebaseNotification : MonoBehaviour
         {
             notificationBanner.SetActive(false);
         }
-        isBannerShowing = false;
 
         // MessagePanel 열기
         var manager = GetMessagePanelManager();
@@ -1595,8 +1594,8 @@ public class FirebaseNotification : MonoBehaviour
         bodyRect.offsetMin = new Vector2(20, 10);
         bodyRect.offsetMax = new Vector2(-20, -5);
 
-        // 폰트 로드 시도 (AppleSDGothicNeoM)
-        Font customFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+        // 폰트 로드 시도 (AppleSDGothicNeoM) - cached static field
+        Font customFont = CachedFont;
         if (customFont != null)
         {
             bannerTitleText.font = customFont;

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
+using Unity.XR.CoreUtils;
 
 /// <summary>
 /// 에디터 모드에서 사용할 가상 GPS 좌표를 중앙에서 관리하는 싱글톤
@@ -72,14 +73,14 @@ public class VirtualLocation : MonoBehaviour
         // XR Origin 자동 검색
         if (xrOrigin == null)
         {
-            ARSessionOrigin sessionOrigin = FindFirstObjectByType<ARSessionOrigin>();
-            if (sessionOrigin != null)
+            XROrigin xrOriginComponent = FindFirstObjectByType<XROrigin>();
+            if (xrOriginComponent != null)
             {
-                xrOrigin = sessionOrigin.transform;
+                xrOrigin = xrOriginComponent.transform;
             }
             else
             {
-                // ARSessionOrigin이 없으면 "XR Origin" 이름으로 검색
+                // XROrigin이 없으면 "XR Origin" 이름으로 검색
                 GameObject xrObj = GameObject.Find("XR Origin");
                 if (xrObj != null)
                     xrOrigin = xrObj.transform;

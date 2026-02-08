@@ -58,7 +58,9 @@ public static class PlayModeSaver
 
         foreach (var kvp in savedComponents)
         {
+#pragma warning disable CS0618 // InstanceIDToObject is obsolete but EntityIdToObject is not available in this Unity version
             var obj = EditorUtility.InstanceIDToObject(kvp.Key) as Component;
+#pragma warning restore CS0618
             if (obj != null)
             {
                 // Clone 오브젝트인지 확인 (부모 계층 포함)

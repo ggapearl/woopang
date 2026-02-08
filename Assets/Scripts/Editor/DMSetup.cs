@@ -76,10 +76,16 @@ public class DMSetup
         {
             // UnfollowConfirmDialog 체크 및 생성
             CheckAndCreateUnfollowDialog(followManager);
+
+            // itemPrefab 자동 연결
+            ConnectFollowListItemPrefab(followManager);
         }
 
         // MessagePanelManager의 closeButton 연결
         SetupMessagePanelCloseButton();
+
+        // AdminNoticeItem 프리팹 정리 (Badge→UnreadBadge, 불필요한 래퍼 제거)
+        EnsureAdminNoticeItemContent();
 
         // MessagePanelManager의 모든 필드 자동 연결
         AutoConnectMessagePanelManager();
@@ -198,10 +204,84 @@ public class DMSetup
             }
         }
 
+        // DateSeparator 프리팹 자동 생성 및 연결
+        if (manager.dateSeparatorPrefab == null)
+        {
+            EnsureDateSeparatorPrefab(manager);
+            wasChanged = true;
+        }
+
         if (wasChanged)
         {
             EditorUtility.SetDirty(manager);
             EditorSceneManager.MarkSceneDirty(manager.gameObject.scene);
+        }
+    }
+
+    /// <summary>
+    /// DateSeparator 프리팹 자동 생성 (없을 때만)
+    /// </summary>
+    private static void EnsureDateSeparatorPrefab(MessagePanelManager manager)
+    {
+        string prefabDir = "Assets/Prefabs/DM";
+        string prefabPath = prefabDir + "/DateSeparator.prefab";
+
+        // 이미 존재하면 로드만
+        GameObject existingPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (existingPrefab != null)
+        {
+            manager.dateSeparatorPrefab = existingPrefab;
+            return;
+        }
+
+        // 폴더 확인
+        if (!AssetDatabase.IsValidFolder(prefabDir))
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/Prefabs"))
+                AssetDatabase.CreateFolder("Assets", "Prefabs");
+            AssetDatabase.CreateFolder("Assets/Prefabs", "DM");
+        }
+
+        // DateSeparator 프리팹 생성
+        GameObject separator = new GameObject("DateSeparator");
+
+        RectTransform separatorRect = separator.AddComponent<RectTransform>();
+        separatorRect.anchorMin = new Vector2(0, 1);
+        separatorRect.anchorMax = new Vector2(1, 1);
+        separatorRect.pivot = new Vector2(0.5f, 1);
+
+        LayoutElement separatorLE = separator.AddComponent<LayoutElement>();
+        separatorLE.flexibleWidth = 1;
+        separatorLE.preferredHeight = 68f;
+
+        // 텍스트
+        GameObject textObj = new GameObject("DateText");
+        textObj.transform.SetParent(separator.transform, false);
+
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        Text dateText = textObj.AddComponent<Text>();
+        dateText.text = "날짜";
+        dateText.fontSize = 28;
+        dateText.color = new Color(0.6f, 0.6f, 0.6f, 1f);
+        dateText.alignment = TextAnchor.MiddleCenter;
+
+        Font customFont = AssetDatabase.LoadAssetAtPath<Font>("Assets/Fonts/AppleSDGothicNeoM.ttf");
+        if (customFont != null)
+            dateText.font = customFont;
+
+        // 프리팹 저장
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(separator, prefabPath);
+        Object.DestroyImmediate(separator);
+
+        if (prefab != null)
+        {
+            manager.dateSeparatorPrefab = prefab;
+            Debug.Log("[DMSetup] DateSeparator 프리팹 생성 완료: " + prefabPath);
         }
     }
 
@@ -258,6 +338,32 @@ public class DMSetup
             if (found != null) return found;
         }
         return null;
+    }
+
+    /// <summary>
+    /// FollowListItem 프리팹 자동 연결
+    /// </summary>
+    private static void ConnectFollowListItemPrefab(FollowManager manager)
+    {
+        if (manager.itemPrefab != null) return;
+
+        string[] paths = new[]
+        {
+            "Assets/Prefabs/FollowListItem.prefab",
+            "Assets/Prefabs/Profile/FollowListItem.prefab"
+        };
+
+        foreach (var path in paths)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (prefab != null)
+            {
+                manager.itemPrefab = prefab;
+                EditorUtility.SetDirty(manager);
+                EditorSceneManager.MarkSceneDirty(manager.gameObject.scene);
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -554,47 +660,6 @@ public class DMSetup
         Debug.Log($"[DMSetup] DM 연결 새로고침 완료 - {connectedCount}개 필드 연결됨");
     }
 
-    /// <summary>
-    /// 더미 데이터 자동 생성 끄기
-    /// DMTestDataGenerator의 autoGenerateOnStart를 false로 설정
-    /// </summary>
-    [MenuItem("Woopang/Setup/더미 데이터 자동생성 끄기")]
-    private static void DisableDummyDataGeneration()
-    {
-        DMTestDataGenerator generator = Object.FindFirstObjectByType<DMTestDataGenerator>();
-        if (generator == null)
-        {
-            EditorUtility.DisplayDialog("알림", "DMTestDataGenerator를 찾을 수 없습니다.\n더미 데이터 자동 생성이 비활성화되어 있습니다.", "확인");
-            return;
-        }
-
-        bool wasChanged = false;
-
-        if (generator.autoGenerateOnStart)
-        {
-            generator.autoGenerateOnStart = false;
-            wasChanged = true;
-            Debug.Log("[DMSetup] autoGenerateOnStart = false 설정됨");
-        }
-
-        if (generator.enableAutoMessages)
-        {
-            generator.enableAutoMessages = false;
-            wasChanged = true;
-            Debug.Log("[DMSetup] enableAutoMessages = false 설정됨");
-        }
-
-        if (wasChanged)
-        {
-            EditorUtility.SetDirty(generator);
-            EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
-            EditorUtility.DisplayDialog("완료", "더미 데이터 자동 생성이 비활성화되었습니다.\n\n씬을 저장하세요 (Ctrl+S).", "확인");
-        }
-        else
-        {
-            EditorUtility.DisplayDialog("알림", "이미 더미 데이터 자동 생성이 비활성화되어 있습니다.", "확인");
-        }
-    }
 
     // 커스텀 폰트 경로
     private static readonly string CUSTOM_FONT_PATH = "Fonts/AppleSDGothicNeoM";
@@ -1741,6 +1806,11 @@ public class DMSetup
         manager.contentParent = content.transform;
         manager.itemTemplate = itemTemplate;
 
+        // 프리팹 연결 (프리팹 수정 시 레이아웃 변경 가능)
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/FollowListItem.prefab");
+        if (prefab != null)
+            manager.itemPrefab = prefab;
+
         // 언팔로우 확인 다이얼로그 연결
         manager.unfollowConfirmDialog = unfollowDialog;
         manager.unfollowConfirmText = unfollowDialog.transform.Find("DialogBox/ConfirmText")?.GetComponent<Text>();
@@ -2028,7 +2098,7 @@ public class DMSetup
         usernameRect.anchorMin = new Vector2(0, 0);
         usernameRect.anchorMax = new Vector2(1, 1);
         usernameRect.offsetMin = new Vector2(140, 0);  // 아바타 오른쪽
-        usernameRect.offsetMax = new Vector2(-200, 0); // 버튼 왼쪽 여유
+        usernameRect.offsetMax = new Vector2(-280, 0); // 버튼 왼쪽 여유
 
         Text usernameTxt = username.AddComponent<Text>();
         usernameTxt.text = "Username";
@@ -2045,8 +2115,8 @@ public class DMSetup
         actionBtnRect.anchorMin = new Vector2(1, 0.5f);
         actionBtnRect.anchorMax = new Vector2(1, 0.5f);
         actionBtnRect.pivot = new Vector2(1, 0.5f);
-        actionBtnRect.anchoredPosition = new Vector2(-20, 0);
-        actionBtnRect.sizeDelta = new Vector2(160, 50);
+        actionBtnRect.anchoredPosition = new Vector2(-145, 0);
+        actionBtnRect.sizeDelta = new Vector2(120, 56);
 
         Image actionBtnImg = actionBtn.AddComponent<Image>();
         actionBtnImg.color = buttonColor;
@@ -2069,11 +2139,44 @@ public class DMSetup
         actionBtnTextRect.offsetMax = Vector2.zero;
 
         Text actionBtnText = actionBtnTextObj.AddComponent<Text>();
-        actionBtnText.text = "액션";
+        actionBtnText.text = "Follow";
         actionBtnText.fontSize = 20;
         actionBtnText.color = Color.white;
         actionBtnText.alignment = TextAnchor.MiddleCenter;
         actionBtnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        // MessageButton (DM 버튼 - 팔로워 탭에서 사용, 팔로잉 탭에서는 숨김)
+        GameObject msgBtn = new GameObject("MessageButton");
+        msgBtn.transform.SetParent(item.transform, false);
+
+        RectTransform msgBtnRect = msgBtn.AddComponent<RectTransform>();
+        msgBtnRect.anchorMin = new Vector2(1, 0.5f);
+        msgBtnRect.anchorMax = new Vector2(1, 0.5f);
+        msgBtnRect.pivot = new Vector2(1, 0.5f);
+        msgBtnRect.anchoredPosition = new Vector2(-15, 0);
+        msgBtnRect.sizeDelta = new Vector2(120, 56);
+
+        Image msgBtnImg = msgBtn.AddComponent<Image>();
+        msgBtnImg.color = new Color(0.2f, 0.6f, 0.9f, 1f);
+
+        Button msgBtnComp = msgBtn.AddComponent<Button>();
+        msgBtnComp.targetGraphic = msgBtnImg;
+
+        GameObject msgBtnTextObj = new GameObject("MessageText");
+        msgBtnTextObj.transform.SetParent(msgBtn.transform, false);
+
+        RectTransform msgBtnTextRect = msgBtnTextObj.AddComponent<RectTransform>();
+        msgBtnTextRect.anchorMin = Vector2.zero;
+        msgBtnTextRect.anchorMax = Vector2.one;
+        msgBtnTextRect.offsetMin = Vector2.zero;
+        msgBtnTextRect.offsetMax = Vector2.zero;
+
+        Text msgBtnText = msgBtnTextObj.AddComponent<Text>();
+        msgBtnText.text = "DM";
+        msgBtnText.fontSize = 20;
+        msgBtnText.color = Color.white;
+        msgBtnText.alignment = TextAnchor.MiddleCenter;
+        msgBtnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         return item;
     }
@@ -2121,9 +2224,6 @@ public class DMSetup
 
         // 6. DM 프리팹 연결
         ConnectDMPrefabs(manager);
-
-        // 7. 테스트 시스템 설정
-        SetupTestSystem(manager);
 
         // 씬 변경 표시
         EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
@@ -2689,29 +2789,6 @@ public class DMSetup
 
     #endregion
 
-    #region Step 6: 테스트 시스템 설정
-
-    private static void SetupTestSystem(MessagePanelManager manager)
-    {
-        if (manager == null) return;
-
-        // DMTestDataGenerator 추가
-        DMTestDataGenerator generator = manager.GetComponent<DMTestDataGenerator>();
-        if (generator == null)
-        {
-            generator = manager.gameObject.AddComponent<DMTestDataGenerator>();
-            generator.autoGenerateOnStart = true;
-            generator.conversationCount = 5;
-            generator.enableAutoMessages = false;
-            Debug.Log("[DMSetup] DMTestDataGenerator 추가됨");
-        }
-
-        EditorUtility.SetDirty(manager);
-        Debug.Log("[DMSetup] 테스트 시스템 설정 완료");
-    }
-
-    #endregion
-
     #region DM 프리팹 생성 헬퍼
 
     private static GameObject CreateConversationItemPrefab()
@@ -2773,25 +2850,82 @@ public class DMSetup
         layout.preferredHeight = 76;
         layout.flexibleWidth = 1;
 
-        // Avatar (Gold)
+        // Avatar (Gold) - 루트 직접 자식
         GameObject avatar = CreateUIElement("Avatar", obj.transform,
             new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(16, 0), new Vector2(50, 50));
         avatar.AddComponent<Image>().color = new Color(1f, 0.84f, 0f); // Gold
 
-        // TitleText
+        // TitleText - 루트 직접 자식
         GameObject title = CreateText("TitleText", obj.transform, "WOOPANG", 16, FontStyle.Bold, new Color(1f, 0.84f, 0f));
         SetRect(title, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(76, 10), new Vector2(150, 24));
 
-        // PreviewText
+        // PreviewText - 루트 직접 자식
         GameObject preview = CreateText("PreviewText", obj.transform, "공지사항...", 14, FontStyle.Normal, new Color(0.8f, 0.8f, 0.8f));
         SetRect(preview, new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0.5f), new Vector2(76, -12), new Vector2(-150, 20));
 
-        // TimeText
+        // TimeText - 루트 직접 자식
         GameObject time = CreateText("TimeText", obj.transform, "오전 10:00", 12, FontStyle.Normal, new Color(0.6f, 0.6f, 0.6f));
         SetRect(time, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-16, 10), new Vector2(70, 20));
         time.GetComponent<Text>().alignment = TextAnchor.MiddleRight;
 
+        // UnreadBadge - 루트 직접 자식
+        GameObject badge = CreateUIElement("UnreadBadge", obj.transform,
+            new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-16, -12), new Vector2(22, 22));
+        badge.AddComponent<Image>().color = new Color(0.902f, 0.294f, 0.294f, 1f); // #E64B4B
+
+        GameObject unreadCount = CreateText("UnreadCount", badge.transform, "1", 11, FontStyle.Bold, Color.white);
+        SetRect(unreadCount, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        unreadCount.GetComponent<Text>().alignment = TextAnchor.MiddleCenter;
+
         return obj;
+    }
+
+    /// <summary>
+    /// AdminNoticeItem 프리팹의 Badge → UnreadBadge 이름 변경 + 불필요한 ContentWrapper 제거
+    /// </summary>
+    private static void EnsureAdminNoticeItemContent()
+    {
+        string prefabPath = Path.Combine(DM_PREFAB_FOLDER, "AdminNoticeItem.prefab");
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (prefab == null) return;
+
+        bool changed = false;
+
+        // Badge → UnreadBadge 이름 변경 (루트 직접 자식)
+        Transform badge = prefab.transform.Find("Badge");
+        if (badge != null)
+        {
+            badge.gameObject.name = "UnreadBadge";
+            changed = true;
+        }
+
+        // 불필요한 ContentWrapper 잔존물 제거
+        Transform wrapper = prefab.transform.Find("ContentWrapper");
+        if (wrapper != null)
+        {
+            // ContentWrapper 자식들을 루트로 이동 후 제거
+            System.Collections.Generic.List<Transform> wrapperChildren = new System.Collections.Generic.List<Transform>();
+            for (int i = 0; i < wrapper.childCount; i++)
+                wrapperChildren.Add(wrapper.GetChild(i));
+            foreach (var child in wrapperChildren)
+                child.SetParent(prefab.transform, false);
+            Object.DestroyImmediate(wrapper.gameObject, true);
+            changed = true;
+        }
+
+        // 불필요한 빈 Content 잔존물 제거
+        Transform emptyContent = prefab.transform.Find("Content");
+        if (emptyContent != null && emptyContent.childCount == 0)
+        {
+            Object.DestroyImmediate(emptyContent.gameObject, true);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            PrefabUtility.SavePrefabAsset(prefab);
+            Debug.Log("[DMSetup] AdminNoticeItem 프리팹 정리 완료 (Badge→UnreadBadge)");
+        }
     }
 
     private static GameObject CreateMessageBubblePrefab(string name, bool isMine)

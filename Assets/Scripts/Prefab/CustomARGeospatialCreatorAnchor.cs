@@ -28,8 +28,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         // 카메라가 (0,0,0)에 있다고 가정하고 상대 위치 배치
         transform.position = new Vector3(x, 0, z);
         return;
-#endif
-
+#else
         if (anchorManager == null) anchorManager = FindFirstObjectByType<ARAnchorManager>();
 
         if (anchorManager != null)
@@ -53,5 +52,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         {
             Debug.LogError("[CustomAnchor] ARAnchorManager를 찾을 수 없습니다.");
         }
+#endif
     }
 }

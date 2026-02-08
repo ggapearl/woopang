@@ -21,13 +21,11 @@ public class GeospatialManager : MonoBehaviour
     [SerializeField]
     private ARCoreExtensions arcoreExtensions;
 
-    private bool waitingForLocationService = false;
-
     private Coroutine locationServiceLauncher;
 
     private void Awake()
     {
-        // [»èÁ¦] ÇÁ·¹ÀÓ ¼Óµµ ¼³Á¤ ·Î±×
+        // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Óµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
         Application.targetFrameRate = 30;
     }
 
@@ -35,14 +33,14 @@ public class GeospatialManager : MonoBehaviour
     {
         if (!Debug.isDebugBuild || earthManager == null)
         {
-            // [»èÁ¦] µð¹ö±× ºôµå ¶Ç´Â earthManager null ·Î±×
+            // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ç´ï¿½ earthManager null ï¿½Î±ï¿½
             return;
         }
 
         if (ARSession.state != ARSessionState.SessionInitializing &&
                ARSession.state != ARSessionState.SessionTracking)
         {
-            // [»èÁ¦] ARSession »óÅÂ ·Î±×
+            // [ï¿½ï¿½ï¿½ï¿½] ARSession ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
             return;
         }
 
@@ -51,15 +49,15 @@ public class GeospatialManager : MonoBehaviour
         switch (featureSupport)
         {
             case FeatureSupported.Unknown:
-                // [»èÁ¦] Geospatial ¸ðµå Áö¿ø ¾Ë ¼ö ¾øÀ½ ·Î±×
+                // [ï¿½ï¿½ï¿½ï¿½] Geospatial ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
                 break;
             case FeatureSupported.Unsupported:
-                // [»èÁ¦] Geospatial API ¹ÌÁö¿ø ·Î±×
+                // [ï¿½ï¿½ï¿½ï¿½] Geospatial API ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
                 break;
             case FeatureSupported.Supported:
                 if (arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
                 {
-                    // [»èÁ¦] GeospatialMode È°¼ºÈ­ ·Î±×
+                    // [ï¿½ï¿½ï¿½ï¿½] GeospatialMode È°ï¿½ï¿½È­ ï¿½Î±ï¿½
                     arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
                     arcoreExtensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
                 }
@@ -90,13 +88,13 @@ public class GeospatialManager : MonoBehaviour
 
     private void OnEnable()
     {
-        // [»èÁ¦] À§Ä¡ ¼­ºñ½º ÄÚ·çÆ¾ ½ÃÀÛ ·Î±×
+        // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½Ú·ï¿½Æ¾ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
         locationServiceLauncher = StartCoroutine(StartLocationService());
     }
 
     private void OnDisable()
     {
-        // [»èÁ¦] ÄÚ·çÆ¾ ¹× À§Ä¡ ¼­ºñ½º ÁßÁö ·Î±×
+        // [ï¿½ï¿½ï¿½ï¿½] ï¿½Ú·ï¿½Æ¾ ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
         if (locationServiceLauncher != null)
         {
             StopCoroutine(locationServiceLauncher);
@@ -109,13 +107,13 @@ public class GeospatialManager : MonoBehaviour
     {
         while (true)
         {
-            waitingForLocationService = true;
-            // [»èÁ¦] À§Ä¡ ¼­ºñ½º ÃÊ±âÈ­ ½ÃÀÛ ·Î±×
+
+            // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
 
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
             {
-                // [»èÁ¦] À§Ä¡ ±ÇÇÑ ¿äÃ» ·Î±×
+                // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½Î±ï¿½
                 Permission.RequestUserPermission(Permission.FineLocation);
                 yield return new WaitForSeconds(3.0f);
             }
@@ -123,30 +121,29 @@ public class GeospatialManager : MonoBehaviour
 
             if (!Input.location.isEnabledByUser)
             {
-                // [»èÁ¦] À§Ä¡ ¼­ºñ½º ºñÈ°¼ºÈ­ ·Î±×
-                waitingForLocationService = false;
+                // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È°ï¿½ï¿½È­ ï¿½Î±ï¿½
+
                 yield return new WaitForSeconds(60.0f);
                 continue;
             }
 
-            // [»èÁ¦] À§Ä¡ ¼­ºñ½º ½ÃÀÛ ·Î±×
+            // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
             Input.location.Start();
 
             while (Input.location.status == LocationServiceStatus.Initializing)
             {
-                // [»èÁ¦] À§Ä¡ ¼­ºñ½º ÃÊ±âÈ­ ´ë±â ·Î±×
+                // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­ ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
                 yield return null;
             }
 
-            waitingForLocationService = false;
             if (Input.location.status != LocationServiceStatus.Running)
             {
-                // [»èÁ¦] À§Ä¡ ¼­ºñ½º ½ÇÆÐ ·Î±×
+                // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
                 Input.location.Stop();
             }
             else
             {
-                // [»èÁ¦] À§Ä¡ ¼­ºñ½º ¼º°ø ·Î±×
+                // [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Î±ï¿½
             }
 
             yield return new WaitForSeconds(60.0f);

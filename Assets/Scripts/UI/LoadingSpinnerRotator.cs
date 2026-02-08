@@ -6,7 +6,7 @@ using UnityEngine;
 public class LoadingSpinnerRotator : MonoBehaviour
 {
     [Header("Rotation Settings")]
-    public float rotationSpeed = 200f;
+    [SerializeField] private float rotationSpeed = 200f;
 
     void Update()
     {

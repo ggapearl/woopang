@@ -24,7 +24,6 @@ public class AutoUpdateChecker : MonoBehaviour
     private string latestVersion;
     private bool forceUpdate;
     private string currentLanguage;
-    private string currentPlatform; // 현재 플랫폼 저장
 
     // 강화된 다국어 메시지
     private Dictionary<string, LocalizedText> localizedTexts = new Dictionary<string, LocalizedText>()
@@ -115,13 +114,10 @@ public class AutoUpdateChecker : MonoBehaviour
     {
         // 플랫폼별 URL 설정
 #if UNITY_ANDROID
-        currentPlatform = "android";
         serverVersionUrl = ApiConfig.VERSION_ANDROID;
 #elif UNITY_IOS
-        currentPlatform = "ios";
         serverVersionUrl = ApiConfig.VERSION_IOS;
 #else
-        currentPlatform = "unknown";
         serverVersionUrl = ApiConfig.VERSION;
 #endif
     }

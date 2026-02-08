@@ -14,18 +14,18 @@ public class P2PBillboard : MonoBehaviour
 {
     [Header("Settings")]
     [Tooltip("카메라 참조 (null이면 메인 카메라 자동 탐색)")]
-    public Camera targetCamera;
+    [SerializeField] private Camera targetCamera;
 
     [Tooltip("오브젝트 위치 오프셋")]
-    public Vector3 offset = Vector3.zero;
+    [SerializeField] private Vector3 offset = Vector3.zero;
 
     [Tooltip("Y축만 회전 (평면 회전)")]
-    public bool lockX = false;
-    public bool lockY = false;
-    public bool lockZ = false;
+    [SerializeField] private bool lockX = false;
+    [SerializeField] private bool lockY = false;
+    [SerializeField] private bool lockZ = false;
 
     [Tooltip("역방향 (카메라 반대쪽 향함)")]
-    public bool reverse = false;
+    [SerializeField] private bool reverse = false;
 
     void Start()
     {

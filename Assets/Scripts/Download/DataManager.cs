@@ -138,8 +138,7 @@ public class DataManager : MonoBehaviour
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
         yield break;
-#endif
-
+#else
         if (!Input.location.isEnabledByUser)
         {
             ShowErrorMessage("위치 서비스를 활성화해 주세요.");
@@ -174,6 +173,7 @@ public class DataManager : MonoBehaviour
         
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
+#endif
     }
 
     private void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
@@ -181,7 +181,7 @@ public class DataManager : MonoBehaviour
 #if UNITY_EDITOR
         // 에디터에서는 AR 세션 상태 변화 무시 (이미 Start에서 시작함)
         return;
-#endif
+#else
         if (args.state == ARSessionState.SessionTracking && !isDataLoaded)
         {
             float lat = 37.5665f;
@@ -198,6 +198,7 @@ public class DataManager : MonoBehaviour
             }
             fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
         }
+#endif
     }
 
     private IEnumerator FetchDataPeriodically()

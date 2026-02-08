@@ -9,7 +9,9 @@ using System.Collections.Generic;
 public class TouchDebugger : MonoBehaviour
 {
     [Header("Debug Settings")]
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private bool enableDebugLogs = false;
+#pragma warning restore CS0414
     [SerializeField] private float logInterval = 1f; // 로그 간격
 
     private float lastLogTime = 0f;

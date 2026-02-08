@@ -7,6 +7,8 @@ public class AutoARSessionReset : MonoBehaviour
     public ARSession arSession;
     public float resetInterval = 5f; // AR 세션을 주기적으로 리셋하는 시간 (초)
 
+    private Coroutine autoResetCoroutine;
+
     void Start()
     {
         if (arSession == null)
@@ -14,7 +16,16 @@ public class AutoARSessionReset : MonoBehaviour
             arSession = FindFirstObjectByType<ARSession>(); // ARSession 자동 탐색
         }
 
-        StartCoroutine(AutoResetARSession());
+        autoResetCoroutine = StartCoroutine(AutoResetARSession());
+    }
+
+    void OnDestroy()
+    {
+        if (autoResetCoroutine != null)
+        {
+            StopCoroutine(autoResetCoroutine);
+            autoResetCoroutine = null;
+        }
     }
 
     IEnumerator AutoResetARSession()

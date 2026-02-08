@@ -181,6 +181,7 @@ public class LoginManager : MonoBehaviour
     {
         string savedUserId = PlayerPrefs.GetString("SavedUserId", "");
         string savedUsername = PlayerPrefs.GetString("SavedUsername", "");
+        string savedProvider = PlayerPrefs.GetString("LoginProvider", "");
 
         if (!string.IsNullOrEmpty(savedUserId) && !string.IsNullOrEmpty(savedUsername))
         {
@@ -190,11 +191,16 @@ public class LoginManager : MonoBehaviour
                 username = savedUsername
             };
             IsGuest = false;
+
             OnLoginStateChanged?.Invoke(true);
             UpdateProfileUI();
 
             // 자동 로그인 시에도 FCM 토큰에 user_id 연결 (앱 재시작 시)
             StartCoroutine(DelayedTokenRegistration(savedUserId));
+        }
+        else
+        {
+            // 저장된 로그인 정보 없음
         }
     }
 
@@ -423,6 +429,12 @@ public class LoginManager : MonoBehaviour
 
     public IEnumerator FetchProfileCoroutine(string userId)
     {
+        // 안전 가드: 현재 로그인 유저의 프로필만 업데이트 허용
+        if (CurrentUser == null || CurrentUser.id != userId)
+        {
+            yield break;
+        }
+
         string url = $"{ApiConfig.USER_PROFILE}?user_id={userId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -442,8 +454,12 @@ public class LoginManager : MonoBehaviour
                     UserData profile = JsonUtility.FromJson<UserData>(request.downloadHandler.text);
                     if (profile != null)
                     {
-                        CurrentUser = profile;
-                        UpdateProfileUI();
+                        // 이중 안전 가드: 서버 응답의 ID도 현재 유저와 일치하는지 확인
+                        if (CurrentUser != null && CurrentUser.id == profile.id)
+                        {
+                            CurrentUser = profile;
+                            UpdateProfileUI();
+                        }
                     }
                 }
                 catch (Exception e)

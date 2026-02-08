@@ -1,10 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Text;
 
 public class OnScreenLog : MonoBehaviour
 {
-    public Text logText; // UI Text ¿ÀºêÁ§Æ®
-    private string logContent = "";
+    public Text logText; // UI Text ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
+    private StringBuilder logBuffer = new StringBuilder(5120);
+    private const int MaxLogLength = 5000;
 
     void OnEnable()
     {
@@ -18,21 +20,23 @@ public class OnScreenLog : MonoBehaviour
 
     void HandleLog(string logString, string stackTrace, LogType type)
     {
-        logContent += $"[{System.DateTime.Now}] [{type}] {logString}\n";
+        logBuffer.Append($"[{System.DateTime.Now}] [{type}] {logString}\n");
         if (type == LogType.Error || type == LogType.Exception)
         {
-            logContent += stackTrace + "\n";
+            logBuffer.Append(stackTrace).Append("\n");
         }
 
-        // ·Î±×°¡ ³Ê¹« ±æ¾îÁöÁö ¾Êµµ·Ï Á¦ÇÑ
-        if (logContent.Length > 5000)
+        // ë¡œê·¸ê°€ ë„ˆë¬´ ê¸¸ì–´ì§€ì§€ ì•Šë„ë¡ ì œí•œ
+        if (logBuffer.Length > MaxLogLength)
         {
-            logContent = logContent.Substring(logContent.Length - 5000);
+            string trimmed = logBuffer.ToString(logBuffer.Length - MaxLogLength, MaxLogLength);
+            logBuffer.Clear();
+            logBuffer.Append(trimmed);
         }
 
         if (logText != null)
         {
-            logText.text = logContent;
+            logText.text = logBuffer.ToString();
         }
     }
 }

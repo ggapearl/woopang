@@ -11,12 +11,8 @@ public static class ApiConfig
     public const string MAIN_SERVER = "https://woopang.com";
 #endif
 
-    // P2P 서버 (실시간 위치 추적)
-#if UNITY_EDITOR
-    public const string P2P_SERVER = "http://210.105.65.145:5001";
-#else
-    public const string P2P_SERVER = "http://210.105.65.145:5001";
-#endif
+    // P2P 서버 (실시간 위치 추적) - nginx 리버스 프록시를 통해 HTTPS 사용
+    public const string P2P_SERVER = MAIN_SERVER;
 
     // === 메인 서버 API 엔드포인트 ===
 
@@ -96,6 +92,6 @@ public static class ApiConfig
     public const string P2P_UPDATE_PRIVACY = P2P_SERVER + "/api/p2p/update_privacy";
     public const string P2P_STATUS = P2P_SERVER + "/api/p2p/status";
 
-    // SpeechBubble 서버 (별도 포트)
-    public const string SPEECH_BUBBLE_SERVER = "http://210.105.65.145:5000";
+    // SpeechBubble 서버 - nginx 리버스 프록시를 통해 HTTPS 사용
+    public const string SPEECH_BUBBLE_SERVER = MAIN_SERVER;
 }

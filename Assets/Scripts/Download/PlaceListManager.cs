@@ -42,6 +42,8 @@ public class PlaceListManager : MonoBehaviour
     // P2P 사용자 색상 (핑크)
     private const string P2P_USER_COLOR = "E95383";
 
+    private Coroutine updatePeriodicCoroutine;
+
     private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
     {
         { "woopangData", true },
@@ -98,7 +100,7 @@ public class PlaceListManager : MonoBehaviour
 
         if (skeletonLoader != null) skeletonLoader.HideSkeletonAndShowText();
         UpdateUI();
-        StartCoroutine(UpdateUIPeriodically());
+        updatePeriodicCoroutine = StartCoroutine(UpdateUIPeriodically());
     }
 
     private IEnumerator UpdateUIPeriodically()
@@ -111,6 +113,13 @@ public class PlaceListManager : MonoBehaviour
     }
 
     private Coroutine updateUICoroutine;
+
+    private void OnDestroy()
+    {
+        if (updatePeriodicCoroutine != null) StopCoroutine(updatePeriodicCoroutine);
+        if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
+        if (distanceSlider != null) distanceSlider.onValueChanged.RemoveListener(OnDistanceSliderChanged);
+    }
 
     private void UpdateUI()
     {

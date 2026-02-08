@@ -41,7 +41,7 @@ public class MessagePanelUISetup
     public static void SetupMessagePanelUI()
     {
         // MessagePanelManager 찾기
-        var manager = Object.FindObjectOfType<MessagePanelManager>();
+        var manager = Object.FindFirstObjectByType<MessagePanelManager>();
         if (manager == null)
         {
             Debug.LogError("[MessagePanelUISetup] MessagePanelManager를 찾을 수 없습니다.");

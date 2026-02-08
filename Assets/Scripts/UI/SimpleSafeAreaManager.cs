@@ -12,7 +12,9 @@ public class SimpleSafeAreaManager : MonoBehaviour
     [SerializeField] private Canvas[] targetCanvases;
 
     [Tooltip("스플래시 완료 대기 시간 (초)")]
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float waitForSplash = 4.0f;
+#pragma warning restore CS0414
 
     [Tooltip("적용 전 추가 대기 (안전 마진)")]
     [SerializeField] private float safetyMargin = 0.5f;

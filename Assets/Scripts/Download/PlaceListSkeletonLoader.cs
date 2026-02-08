@@ -28,7 +28,9 @@ public class PlaceListSkeletonLoader : MonoBehaviour
     [SerializeField] private int skeletonCount = 4;
 
     [Tooltip("둥근 모서리 반경")]
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float cornerRadius = 10f;
+#pragma warning restore CS0414
 
     [Tooltip("스켈레톤 색상 (알파값 높여서 잘 보이도록)")]
     [SerializeField] private Color skeletonColor = new Color(0.7f, 0.7f, 0.7f, 0.8f);

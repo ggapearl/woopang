@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 1122334455667788993}
   - component: {fileID: 1122334455667788994}
   - component: {fileID: 1122334455667788995}
+  - component: {fileID: 322009703365732552}
   m_Layer: 5
   m_Name: AvatarContainer
   m_TagString: Untagged
@@ -111,6 +112,19 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &322009703365732552
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1122334455667788991}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e37f823d8ce54ca4682e2ffa4183acf3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UITouchForwarder
+  customSound: {fileID: 0}
 --- !u!1 &2233445566778899001
 GameObject:
   m_ObjectHideFlags: 0
@@ -518,8 +532,8 @@ MonoBehaviour:
   m_Padding:
     m_Left: 16
     m_Right: 16
-    m_Top: 8
-    m_Bottom: 8
+    m_Top: 20
+    m_Bottom: 20
   m_ChildAlignment: 0
   m_Spacing: 4
   m_ChildForceExpandWidth: 0
@@ -557,7 +571,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 0a8cfdceba2c0f14c8438a2fdc87d86b, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 8b156479aefa2ac43804248280bb78c7, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -583,7 +597,7 @@ MonoBehaviour:
   m_MinWidth: -1
   m_MinHeight: -1
   m_PreferredWidth: 400
-  m_PreferredHeight: 76
+  m_PreferredHeight: 100
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1

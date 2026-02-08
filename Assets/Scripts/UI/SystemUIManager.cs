@@ -14,10 +14,14 @@ public class SystemUIManager : MonoBehaviour
     public bool enableOneUIWorkaround = true;
     public float fallbackBottomPadding = 100f; // OneUI 감지 실패 시 기본 하단 패딩
     
+#if UNITY_ANDROID
     private AndroidJavaObject currentActivity;
     private AndroidJavaObject window;
     private AndroidJavaObject decorView;
+#endif
+#pragma warning disable CS0414 // Android 빌드에서만 사용 (#if UNITY_ANDROID)
     private bool isInitialized = false;
+#pragma warning restore CS0414
     
     // Safe Area 캐싱
     private Rect lastSafeArea;

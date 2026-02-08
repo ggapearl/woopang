@@ -1,34 +1,42 @@
 using UnityEngine;
-using UnityEngine.UI; // Button ÄÄÆ÷³ÍÆ®¸¦ »ç¿ëÇÏ±â À§ÇØ ÇÊ¿ä
+using UnityEngine.UI; // Button ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½
 
 public class HapticButton : MonoBehaviour
 {
-    [SerializeField] private Button hapticButton; // ÇÝÆ½ ¹ÝÀÀÀ» ÀÏÀ¸Å³ ¹öÆ°
+    [SerializeField] private Button hapticButton; // ï¿½ï¿½Æ½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Å³ ï¿½ï¿½Æ°
 
     private void Start()
     {
-        // ¹öÆ° Å¬¸¯ ÀÌº¥Æ®¿¡ ÇÝÆ½ ¹ÝÀÀ ¸Þ¼­µå ¿¬°á
+        // ï¿½ï¿½Æ° Å¬ï¿½ï¿½ ï¿½Ìºï¿½Æ®ï¿½ï¿½ ï¿½ï¿½Æ½ ï¿½ï¿½ï¿½ï¿½ ï¿½Þ¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (hapticButton != null)
         {
             hapticButton.onClick.AddListener(TriggerHapticFeedback);
         }
         else
         {
-            Debug.LogError("HapticButtonÀÌ ¼³Á¤µÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogError("HapticButtonï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¾Ò½ï¿½ï¿½Ï´ï¿½!");
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (hapticButton != null)
+        {
+            hapticButton.onClick.RemoveListener(TriggerHapticFeedback);
         }
     }
 
     private void TriggerHapticFeedback()
     {
-        // ¸ð¹ÙÀÏ µð¹ÙÀÌ½º¿¡¼­ Áøµ¿ ¹ß»ý (¾Èµå·ÎÀÌµå/iOS Áö¿ø)
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ì½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ß»ï¿½ (ï¿½Èµï¿½ï¿½ï¿½Ìµï¿½/iOS ï¿½ï¿½ï¿½ï¿½)
         if (Application.isMobilePlatform)
         {
-            Handheld.Vibrate(); // ±âº» Áøµ¿ ÆÐÅÏ (¾à 0.5ÃÊ µ¿¾È Áøµ¿)
-            Debug.Log("¹öÆ° Å¬¸¯: ÇÝÆ½ ÇÇµå¹é ¹ß»ý!");
+            Handheld.Vibrate(); // ï¿½âº» ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ 0.5ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
+            Debug.Log("ï¿½ï¿½Æ° Å¬ï¿½ï¿½: ï¿½ï¿½Æ½ ï¿½Çµï¿½ï¿½ ï¿½ß»ï¿½!");
         }
         else
         {
-            Debug.LogWarning("ÀÌ ±â´ÉÀº ¸ð¹ÙÀÏ µð¹ÙÀÌ½º¿¡¼­¸¸ ÀÛµ¿ÇÕ´Ï´Ù.");
+            Debug.LogWarning("ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ì½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ûµï¿½ï¿½Õ´Ï´ï¿½.");
         }
     }
 }

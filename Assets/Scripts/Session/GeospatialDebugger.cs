@@ -21,8 +21,6 @@ public class GeospatialDebugger : MonoBehaviour
     [SerializeField]
     private ARCoreExtensions arcoreExtensions;
 
-    private bool waitingForLocationService = false;
-
     private Coroutine locationServiceLauncher;
 
     private void Awake()
@@ -101,7 +99,7 @@ public class GeospatialDebugger : MonoBehaviour
     {
         while (true)
         {
-            waitingForLocationService = true;
+
 
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
@@ -113,7 +111,7 @@ public class GeospatialDebugger : MonoBehaviour
 
             if (!Input.location.isEnabledByUser)
             {
-                waitingForLocationService = false;
+
                 yield return new WaitForSeconds(60.0f);
                 continue;
             }
@@ -125,7 +123,6 @@ public class GeospatialDebugger : MonoBehaviour
                 yield return null;
             }
 
-            waitingForLocationService = false;
             if (Input.location.status != LocationServiceStatus.Running)
             {
                 Input.location.Stop();

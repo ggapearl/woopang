@@ -512,28 +512,11 @@ public class P2PUserInfo : MonoBehaviour
         // Open profile using ProfileManager
         if (ProfileManager.Instance != null)
         {
-            // 가상 사용자(virtual_user_XXX)인 경우 테스트 프로필 표시
-            if (IsVirtualUser(userId))
-            {
-                ProfileManager.Instance.ShowTestProfile(userId, username);
-            }
-            else
-            {
-                ProfileManager.Instance.ShowProfile(userId);
-            }
+            ProfileManager.Instance.ShowProfile(userId);
         }
 
         // Reset highlight after delay
         StartCoroutine(ResetHighlightAfterDelay(0.5f));
-    }
-
-    /// <summary>
-    /// 가상 사용자인지 확인 (virtual_user_ 접두사로 시작하는 ID)
-    /// </summary>
-    private bool IsVirtualUser(string id)
-    {
-        if (string.IsNullOrEmpty(id)) return false;
-        return id.StartsWith("virtual_user_") || id.StartsWith("test_user_");
     }
 
     /// <summary>

@@ -9,17 +9,21 @@ public class PinchZoomController : MonoBehaviour
     [Header("Camera Settings")]
     [SerializeField] private Camera arCamera; // AR 카메라
     [SerializeField] private float defaultZoom = 1f; // 기본 줌 (1.0)
+#pragma warning disable CS0414 // Update()가 주석 처리되어 있으나 Legacy Input 복원 시 사용
     [SerializeField] private float minZoom = 0.5f; // 최소 줌 (축소)
     [SerializeField] private float maxZoom = 3f; // 최대 줌 (확대)
     [SerializeField] private float zoomSpeed = 0.01f; // 줌 속도
+#pragma warning restore CS0414
 
     [Header("Zoom Indicator")]
     [SerializeField] private GameObject zoomIndicatorObject; // 줌 인디케이터 GameObject
     private ZoomIndicator zoomIndicator; // 줌 인디케이터 컴포넌트
 
     private float currentZoom = 1f;
+#pragma warning disable CS0414 // Update()가 주석 처리되어 있으나 Legacy Input 복원 시 사용
     private float previousTouchDistance = 0f;
     private bool isPinching = false;
+#pragma warning restore CS0414
     private Vector3 initialScale;
 
     void Start()

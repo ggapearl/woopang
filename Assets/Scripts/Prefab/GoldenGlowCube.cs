@@ -26,9 +26,13 @@ public class GoldenGlowCube : MonoBehaviour
     [SerializeField] private float glowPulseMax = 3f;
 
     [Header("Edge Glow")]
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private bool enableEdgeGlow = true;
+#pragma warning restore CS0414
     [SerializeField] private Color edgeGlowColor = new Color(1f, 0.9f, 0.5f, 0.5f);
+#pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float edgeWidth = 0.02f;
+#pragma warning restore CS0414
 
     [Header("Interaction")]
     [SerializeField] private bool enableTouchResponse = true;
@@ -46,7 +50,9 @@ public class GoldenGlowCube : MonoBehaviour
     private float targetGlowMultiplier = 1f;
     private float currentScale = 1f;
     private float targetScale = 1f;
+#pragma warning disable CS0414 // 터치 상태 추적용 (할당만 되지만 향후 사용 예정)
     private bool isTouched = false;
+#pragma warning restore CS0414
 
     // Shader property IDs (for performance)
     private static readonly int EmissionColorID = Shader.PropertyToID("_EmissionColor");

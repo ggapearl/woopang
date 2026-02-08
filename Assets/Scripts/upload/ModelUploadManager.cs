@@ -574,7 +574,6 @@ public class ModelUploadManager : MonoBehaviour
         {
             ProcessSelectedFile(selectedPath);
         }
-        }
     }
 #endif
 
@@ -605,7 +604,6 @@ public class ModelUploadManager : MonoBehaviour
         if (selectedPath != null)
         {
             ProcessSelectedFile(selectedPath);
-        }
         }
     }
 #endif

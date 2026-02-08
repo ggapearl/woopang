@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>WOOPANG VDOWN</title>
+    <link rel="icon" type="image/svg+xml" href="/vdown/static/favicon.svg">
     <link rel="icon" type="image/x-icon" href="/vdown/static/favicon.ico">
+    <link rel="apple-touch-icon" href="/vdown/static/favicon.svg">
     <link href="https://fonts.googleapis.com/css?family=Poppins:400,600,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" />
     <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
@@ -109,6 +111,14 @@
             margin-bottom: 2vh;
             transition: all 0.3s;
         }
+        input[type="text"]:focus {
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 20px rgba(255, 41, 83, 0.3), inset 0 0 10px rgba(255, 41, 83, 0.1);
+        }
+        input[type="text"].has-url {
+            border-color: #4CAF50;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+        }
 
         .btn-vdown {
             display: inline-block;
@@ -123,8 +133,51 @@
             letter-spacing: 2px;
             cursor: pointer;
             transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
         .btn-vdown:hover { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.4); }
+        .btn-vdown.loading {
+            pointer-events: none;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .btn-vdown.loading::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: btnShimmer 1s infinite;
+        }
+        @keyframes btnShimmer { to { left: 100%; } }
+
+        /* 토스트 메시지 */
+        .toast-message {
+            position: fixed;
+            bottom: -80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 15px 30px;
+            color: #fff;
+            font-size: 0.9rem;
+            z-index: 3000;
+            transition: bottom 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .toast-message.show { bottom: 30px; }
+        .toast-message.success { border-color: #4CAF50; }
+        .toast-message.success .toast-icon { color: #4CAF50; }
+        .toast-message.error { border-color: #f44336; }
+        .toast-message.error .toast-icon { color: #f44336; }
+        .toast-message.info { border-color: #2196F3; }
+        .toast-message.info .toast-icon { color: #2196F3; }
+        .toast-icon { font-size: 1.2rem; }
 
         .global-status {
             margin-top: 2vh;
@@ -379,38 +432,66 @@
             50% { filter: drop-shadow(0 0 15px #69F0AE); stroke: #69F0AE; }
         }
 
-        /* 완료 팝업 스타일 */
+        /* 완료 팝업 스타일 - header 아래에서 여기저기 나타남 */
         .completion-popup {
             position: fixed;
-            top: -120px;
+            top: 18vh;
             left: 50%;
-            transform: translateX(-50%);
+            transform: translate(-50%, 0) scale(0);
             background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 50%, #388e3c 100%);
-            border: 2px solid #4CAF50;
-            border-radius: 16px;
+            border: 3px solid #4CAF50;
+            border-radius: 20px;
             padding: 20px 40px;
-            box-shadow: 0 10px 40px rgba(76, 175, 80, 0.5), 0 0 30px rgba(105, 240, 174, 0.3);
+            box-shadow: 0 10px 50px rgba(76, 175, 80, 0.6), 0 0 40px rgba(105, 240, 174, 0.4);
             z-index: 2000;
             text-align: center;
-            transition: top 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            opacity: 0;
         }
         .completion-popup.show {
-            top: 30px;
+            animation: popupDance 5s ease-in-out forwards;
+        }
+        @keyframes popupDance {
+            0% { opacity: 0; transform: translate(-50%, -30px) scale(0); background: linear-gradient(135deg, #1b5e20, #2e7d32); }
+            5% { opacity: 1; transform: translate(-50%, 0) scale(1.1); background: linear-gradient(135deg, #4CAF50, #69F0AE); border-color: #69F0AE; }
+            10% { transform: translate(-70%, 20px) scale(1); background: linear-gradient(135deg, #00BCD4, #4DD0E1); border-color: #00BCD4; }
+            18% { transform: translate(-30%, 40px) scale(1.05); background: linear-gradient(135deg, #9C27B0, #E040FB); border-color: #E040FB; }
+            26% { transform: translate(-60%, 10px) scale(0.95); background: linear-gradient(135deg, #FF5722, #FF8A65); border-color: #FF5722; }
+            34% { transform: translate(-50%, 30px) scale(1.1); background: linear-gradient(135deg, #2196F3, #64B5F6); border-color: #2196F3; }
+            42% { transform: translate(-40%, 50px) scale(1); background: linear-gradient(135deg, #E91E63, #F48FB1); border-color: #E91E63; }
+            50% { transform: translate(-65%, 20px) scale(1.05); background: linear-gradient(135deg, #FFEB3B, #FFF176); border-color: #FFC107; }
+            58% { transform: translate(-50%, 45px) scale(0.95); background: linear-gradient(135deg, #00E676, #69F0AE); border-color: #00E676; }
+            66% { transform: translate(-35%, 15px) scale(1); background: linear-gradient(135deg, #7C4DFF, #B388FF); border-color: #7C4DFF; }
+            74% { transform: translate(-55%, 35px) scale(1.05); background: linear-gradient(135deg, #FF9800, #FFB74D); border-color: #FF9800; }
+            82% { transform: translate(-50%, 25px) scale(1); background: linear-gradient(135deg, #4CAF50, #81C784); border-color: #4CAF50; }
+            90% { opacity: 1; transform: translate(-50%, 20px) scale(1); background: linear-gradient(135deg, #1b5e20, #4CAF50); border-color: #4CAF50; }
+            95% { opacity: 0.5; transform: translate(-50%, 0) scale(0.8); }
+            100% { opacity: 0; transform: translate(-50%, -20px) scale(0); }
         }
         .completion-popup .popup-icon {
             font-size: 2.5rem;
             margin-bottom: 8px;
+            display: inline-block;
+        }
+        .completion-popup.show .popup-icon {
+            animation: iconWiggle 0.3s ease-in-out infinite;
+        }
+        @keyframes iconWiggle {
+            0%, 100% { transform: rotate(-15deg) scale(1); }
+            50% { transform: rotate(15deg) scale(1.2); }
         }
         .completion-popup .popup-title {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             font-weight: 700;
             color: #fff;
             margin-bottom: 4px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            letter-spacing: 2px;
         }
         .completion-popup .popup-message {
-            font-size: 0.85rem;
-            color: rgba(255,255,255,0.9);
+            font-size: 1.1rem;
+            color: #fff;
+            font-weight: 600;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.4);
         }
 
         /* 3. 하단 영역 */
@@ -523,9 +604,15 @@
 
     <!-- 완료 팝업 -->
     <div class="completion-popup" id="completionPopup">
-        <div class="popup-icon">🎬</div>
-        <div class="popup-title">다운로드 완료!</div>
-        <div class="popup-message" id="completionMessage">영화를 즐길 준비가 되었습니다</div>
+        <div class="popup-icon">🎉</div>
+        <div class="popup-title">영상 뿜뿜쓰!?</div>
+        <div class="popup-message" id="completionMessage">준비쓰!?</div>
+    </div>
+
+    <!-- 토스트 메시지 -->
+    <div class="toast-message" id="toastMessage">
+        <span class="toast-icon">ℹ️</span>
+        <span class="toast-text">메시지</span>
     </div>
 
     <!-- 완료 효과음 (짜잔~!) -->
@@ -541,6 +628,7 @@
         let pendingFormat = 'video';
         let selectedFormat = 'video';
         let activeTasks = JSON.parse(localStorage.getItem('vdown_tasks') || '[]');
+        let taskFormats = {};  // 작업별 포맷 저장 (video/audio)
 
         // 전역 함수로 정의
         function updateStatus() {
@@ -552,6 +640,7 @@
             $(`#task-${id}`).fadeOut(500, function() {
                 $(this).remove();
                 activeTasks = activeTasks.filter(i => i !== id);
+                delete taskFormats[id];  // 작업 포맷 정보도 정리
                 localStorage.setItem('vdown_tasks', JSON.stringify(activeTasks));
                 updateStatus();
             });
@@ -571,7 +660,9 @@
                         }
                         if (t.status === 'error') {
                             clearInterval(timer);
-                            $(`#perc-${id}`).text('ERR'); $(`#speed-${id}`).text(''); $(`#fg-${id}`).css('stroke', '#ff4444'); $(`#task-${id}`).removeClass('is-active'); setTimeout(() => removeTask(id), 5000); return;
+                            $(`#perc-${id}`).text('ERR'); $(`#speed-${id}`).text(''); $(`#fg-${id}`).css('stroke', '#ff4444'); $(`#task-${id}`).removeClass('is-active');
+                            showToast(t.error || '다운로드 실패 - 지원되지 않는 URL이거나 영상을 찾을 수 없습니다', 'error');
+                            setTimeout(() => removeTask(id), 5000); return;
                         }
                         const p = t.progress || { percent: 0, speed: '0B/s', downloaded: '0B', total: '0B' };
                         $(`#fg-${id}`).css('stroke-dashoffset', 235 - (235 * p.percent / 100));
@@ -585,7 +676,7 @@
                             $(`#task-${id}`).removeClass('is-active').addClass('is-completed pulse-glow');
 
                             // 완료 팝업 & 효과음
-                            showCompletionPopup(t.title || '영상');
+                            showCompletionPopup(t.title || '영상', taskFormats[id] || 'video');
                             playCompletionSound();
 
                             // 다운로드 완료 시 바로 파일 다운로드 (자막 옵션은 이미 선택됨)
@@ -614,10 +705,44 @@
             $('.format-option').click(function() { $('.format-option').removeClass('active'); $(this).addClass('active'); selectedFormat = $(this).data('format'); });
             activeTasks.forEach(id => startPolling(id)); updateStatus();
 
+            // URL 입력 감지 - 초록색 테두리
+            $('#urlInput').on('input', function() {
+                const val = $(this).val().trim();
+                if (isValidUrl(val)) {
+                    $(this).addClass('has-url');
+                } else {
+                    $(this).removeClass('has-url');
+                }
+            });
+
+            // 클립보드 자동 감지 (페이지 포커스 시)
+            $(window).on('focus', async function() {
+                try {
+                    if (!navigator.clipboard) return;
+                    const text = await navigator.clipboard.readText();
+                    if (text && isValidUrl(text) && !$('#urlInput').val()) {
+                        $('#urlInput').val(text).addClass('has-url');
+                        showToast('클립보드에서 URL을 붙여넣었습니다', 'info');
+                        playClickSound();
+                    }
+                } catch (e) { /* 클립보드 접근 불가 */ }
+            });
+
+            // 폼 제출
             $('#vdownForm').on('submit', function(e) {
                 e.preventDefault();
                 const url = $('#urlInput').val().trim();
-                if (!url) return;
+                if (!url) {
+                    showToast('URL을 입력해주세요', 'error');
+                    return;
+                }
+                if (!isValidUrl(url)) {
+                    showToast('올바른 URL 형식이 아닙니다', 'error');
+                    return;
+                }
+
+                // 버튼 로딩 상태
+                $('#submitBtn').addClass('loading').text('확인 중...');
 
                 // 먼저 URL을 체크하여 자막 여부 확인
                 $('#globalStatus').text('URL 확인 중...');
@@ -627,6 +752,7 @@
                     contentType: 'application/json',
                     data: JSON.stringify({ url: url }),
                     success: function(res) {
+                        $('#submitBtn').removeClass('loading').text('Start Download');
                         console.log('[DEBUG] Check URL response:', res);
                         if (res.has_subtitle) {
                             // 자막이 있으면 모달 표시
@@ -639,12 +765,72 @@
                         }
                     },
                     error: function() {
+                        $('#submitBtn').removeClass('loading').text('Start Download');
                         // 체크 실패 시 바로 다운로드 시작
                         startDownload(url, selectedFormat, 'none');
                     }
                 });
             });
         });
+
+        // URL 유효성 검사
+        function isValidUrl(string) {
+            try {
+                const url = new URL(string);
+                return url.protocol === 'http:' || url.protocol === 'https:';
+            } catch (_) {
+                return false;
+            }
+        }
+
+        // 토스트 메시지 표시
+        function showToast(message, type = 'info') {
+            const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+            $('#toastMessage').removeClass('show success error info')
+                .find('.toast-icon').text(icons[type] || 'ℹ️');
+            $('#toastMessage').find('.toast-text').text(message);
+            $('#toastMessage').addClass('show ' + type);
+            setTimeout(() => $('#toastMessage').removeClass('show'), 3000);
+        }
+
+        // 클릭 효과음 (작은 삑 소리)
+        function playClickSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(800, ctx.currentTime);
+                osc.type = 'sine';
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.1);
+            } catch (e) {}
+        }
+
+        // 다운로드 시작 효과음
+        function playStartSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                // 상승하는 두 음
+                [440, 660].forEach((freq, i) => {
+                    setTimeout(() => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                        osc.type = 'sine';
+                        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+                        osc.start(ctx.currentTime);
+                        osc.stop(ctx.currentTime + 0.15);
+                    }, i * 100);
+                });
+            } catch (e) {}
+        }
 
         let pendingCancelTaskId = null;
 
@@ -663,6 +849,7 @@
                 $.post('./cancel/' + pendingCancelTaskId, function(res) {
                     console.log('Cancelled:', res);
                     $('#cancelModal').removeClass('active');
+                    showToast('다운로드가 취소되었습니다', 'info');
                     pendingCancelTaskId = null;
                 });
             }
@@ -692,7 +879,9 @@
 
         // 다운로드 시작 함수
         function startDownload(url, format, subtitleOption) {
-            $('#urlInput').val('');
+            $('#urlInput').val('').removeClass('has-url');
+            playStartSound(); // 시작 효과음
+
             $.ajax({
                 url: './',
                 method: 'POST',
@@ -704,8 +893,15 @@
                 }),
                 success: function(res) {
                     activeTasks.push(res.task_id);
+                    taskFormats[res.task_id] = format;  // 작업별 포맷 저장
                     localStorage.setItem('vdown_tasks', JSON.stringify(activeTasks));
                     startPolling(res.task_id);
+                    updateStatus();
+                    showToast('다운로드가 시작되었습니다! 🚀', 'success');
+                },
+                error: function(xhr) {
+                    const errMsg = xhr.responseJSON?.error || '다운로드 시작 실패';
+                    showToast(errMsg, 'error');
                     updateStatus();
                 }
             });
@@ -759,16 +955,34 @@
             console.log('[CANCEL] 사용자가 자막 모달에서 취소 버튼 클릭 - 영상 다운로드 취소됨');
         }
 
-        // 완료 팝업 표시
-        function showCompletionPopup(title) {
-            const shortTitle = title.length > 25 ? title.substring(0, 25) + '...' : title;
-            $('#completionMessage').text(`"${shortTitle}" 준비 완료!`);
-            $('#completionPopup').addClass('show');
+        // 완료 팝업 표시 - 다이나믹 왔다갔다
+        function showCompletionPopup(title, format) {
+            const shortTitle = title.length > 20 ? title.substring(0, 20) + '...' : title;
 
-            // 4초 후 자동 숨김
+            // 포맷에 따라 다른 메시지 표시
+            if (format === 'audio') {
+                // 오디오: 노래 뿜뿜쓰?!ㅎㅎ 맛잇게 들으시와용💕
+                $('#completionPopup .popup-icon').text('🎵');
+                $('#completionPopup .popup-title').text('노래 뿜뿜쓰?!ㅎㅎ');
+                $('#completionMessage').html(`"${shortTitle}"<br>맛잇게 들으시와용💕`);
+            } else {
+                // 비디오: 영상 뿜뿜쓰!? 준비쓰!?
+                $('#completionPopup .popup-icon').text('🎉');
+                $('#completionPopup .popup-title').text('영상 뿜뿜쓰!?');
+                $('#completionMessage').html(`"${shortTitle}"<br>준비쓰!?`);
+            }
+
+            $('#completionPopup').removeClass('show');
+
+            // 약간의 딜레이 후 애니메이션 시작 (리셋 보장)
+            setTimeout(() => {
+                $('#completionPopup').addClass('show');
+            }, 50);
+
+            // 5초 후 클래스 제거 (애니메이션이 자동으로 숨김)
             setTimeout(() => {
                 $('#completionPopup').removeClass('show');
-            }, 4000);
+            }, 5100);
         }
 
         // 완료 효과음 재생 (짜잔~!)

@@ -265,6 +265,7 @@ public class UIFeedbackManager : MonoBehaviour
 
     private int AndroidVersion()
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
             AndroidJavaClass buildVersion = new AndroidJavaClass("android.os.Build$VERSION");
@@ -272,8 +273,11 @@ public class UIFeedbackManager : MonoBehaviour
         }
         catch
         {
-            return 1; // �⺻��
+            return 1;
         }
+#else
+        return 0;
+#endif
     }
 
     // ���� �޼���� - �ܺο��� ȣ�� ����

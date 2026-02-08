@@ -6,7 +6,8 @@
       <repository>https://repo.maven.apache.org/maven2</repository>
       <repository>https://maven.google.com</repository>
     </repositories>
-    <androidPackage spec="com.google.firebase:firebase-messaging-ktx:22.0.0" />
+    <!-- ktx는 firebase-messaging:24.x에 이미 포함됨 - 중복 제거 -->
+    <!-- <androidPackage spec="com.google.firebase:firebase-messaging-ktx:22.0.0" /> -->
     <settings>
       <setting name="useAndroidX" value="true" />
     </settings>

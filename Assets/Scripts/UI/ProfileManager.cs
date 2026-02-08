@@ -135,26 +135,6 @@ public class ProfileManager : MonoBehaviour
     [Header("Settings")]
     public Sprite defaultAvatarSprite;
 
-#if UNITY_EDITOR
-    [Header("=== 에디터 테스트용 ===")]
-    [Tooltip("Inspector에서 체크하면 프로필 새로고침")]
-    public bool editorRefreshProfile = false;
-    [Tooltip("다른 유저 프로필 테스트용 - user_id 입력")]
-    public string editorTestUserId = "";
-    [Tooltip("체크하면 위 user_id의 프로필 열기")]
-    public bool editorOpenTestProfile = false;
-
-    [Header("SNS 테스트")]
-    [Tooltip("테스트용 Instagram ID")]
-    public string testInstagramId = "";
-    [Tooltip("테스트용 X (Twitter) ID")]
-    public string testXId = "";
-    [Tooltip("테스트용 Facebook ID")]
-    public string testFacebookId = "";
-    [Tooltip("체크하면 테스트 SNS 아이콘 표시")]
-    public bool useTestSnsData = false;
-#endif
-
     private string BASE_URL => ApiConfig.MAIN_SERVER;
 
     // 현재 표시 중인 프로필
@@ -360,10 +340,6 @@ public class ProfileManager : MonoBehaviour
         // SwipeViewport 투명화 수정 (잘못된 이미지가 설정되어 있을 수 있음)
         FixSwipeViewportTransparency();
 
-#if UNITY_EDITOR
-        // 에디터 모드에서 FollowListPanel 자동 감지 및 더미 데이터 로드
-        StartCoroutine(EditorAutoTestRoutine());
-#endif
     }
 
     /// <summary>
@@ -418,63 +394,6 @@ public class ProfileManager : MonoBehaviour
         }
     }
 
-#if UNITY_EDITOR
-    private bool wasFollowListPanelActive = false;
-
-    /// <summary>
-    /// 에디터 모드에서 패널 활성화 감지 및 자동 더미 데이터 로드
-    /// </summary>
-    private IEnumerator EditorAutoTestRoutine()
-    {
-        yield return new WaitForSeconds(0.5f);
-
-        while (true)
-        {
-            // FollowListPanel 활성화 감지
-            if (followListPanel != null)
-            {
-                bool isActive = followListPanel.activeSelf;
-
-                // 비활성 → 활성 전환 시 (처음 열렸을 때)
-                if (isActive && !wasFollowListPanelActive)
-                {
-                    // 버튼 연결 확인
-                    SetupFollowListButtonListeners();
-
-                    // 더미 데이터가 없으면 로드
-                    if (currentFollowersList == null || currentFollowingList == null)
-                    {
-                        // 테스트 프로필 설정
-                        if (currentProfile == null)
-                        {
-                            currentProfile = new ProfileData
-                            {
-                                id = "test_user",
-                                username = "테스트유저",
-                                followers_count = 8,
-                                following_count = 6
-                            };
-                        }
-
-                        // 타이틀 설정
-                        if (followListTitleText != null)
-                            followListTitleText.text = currentProfile.username;
-
-                        // 탭 텍스트 업데이트
-                        UpdateFollowListTabTexts();
-
-                        // 양쪽 모두 더미 데이터 로드
-                        LoadBothListsWithDummyData();
-                    }
-                }
-
-                wasFollowListPanelActive = isActive;
-            }
-
-            yield return new WaitForSeconds(0.3f);
-        }
-    }
-#endif
 
     /// <summary>
     /// SNS 컨테이너 초기화 (FullProfilePanel 로드 후)
@@ -549,29 +468,6 @@ public class ProfileManager : MonoBehaviour
         }
     }
 
-#if UNITY_EDITOR
-    void Update()
-    {
-        // 에디터에서 Inspector 체크박스로 프로필 새로고침
-        if (editorRefreshProfile)
-        {
-            editorRefreshProfile = false;
-            ClearAvatarCache();
-            LoadMyProfile();
-        }
-
-        // 에디터에서 다른 유저 프로필 열기
-        if (editorOpenTestProfile)
-        {
-            editorOpenTestProfile = false;
-            if (!string.IsNullOrEmpty(editorTestUserId))
-            {
-                ShowProfile(editorTestUserId);
-            }
-        }
-    }
-#endif
-
     private void OnLoginStateChanged(bool isLoggedIn)
     {
         if (isLoggedIn)
@@ -595,27 +491,62 @@ public class ProfileManager : MonoBehaviour
             return;
 
         string userId = LoginManager.Instance.CurrentUser.id;
+
         StartCoroutine(FetchProfile(userId, (profile) =>
         {
             if (profile != null)
             {
+                // 안전 가드: 서버에서 받은 프로필이 현재 로그인 유저와 일치하는지 확인
+                string currentId = LoginManager.Instance?.CurrentUser?.id;
+                if (currentId != null && currentId != profile.id)
+                {
+                    return;
+                }
                 UpdateMiniProfile(profile);
             }
         }));
     }
 
+    // 미니 아바타 로딩 코루틴 추적 (race condition 방지)
+    private Coroutine miniAvatarLoadCoroutine;
+
     private void UpdateMiniProfile(ProfileData profile)
     {
+        // 안전 가드: 현재 로그인 유저의 프로필인지 최종 확인
+        if (LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null)
+        {
+            string currentId = LoginManager.Instance.CurrentUser.id;
+            if (currentId != profile.id)
+            {
+                return;
+            }
+        }
+
         if (miniUsernameText != null)
             miniUsernameText.text = profile.username;
 
-        if (miniAvatarImage != null && !string.IsNullOrEmpty(profile.avatar_url))
+        if (miniAvatarImage != null)
         {
-            StartCoroutine(LoadAvatarImage(profile.avatar_url, miniAvatarImage));
-        }
-        else if (miniAvatarImage != null && defaultAvatarSprite != null)
-        {
-            miniAvatarImage.sprite = defaultAvatarSprite;
+            // 이전 아바타 로딩 코루틴 취소 (race condition 방지)
+            if (miniAvatarLoadCoroutine != null)
+            {
+                StopCoroutine(miniAvatarLoadCoroutine);
+                miniAvatarLoadCoroutine = null;
+            }
+
+            if (!string.IsNullOrEmpty(profile.avatar_url))
+            {
+                miniAvatarLoadCoroutine = StartCoroutine(LoadAvatarImage(profile.avatar_url, miniAvatarImage));
+            }
+            else if (defaultAvatarSprite != null)
+            {
+                miniAvatarImage.sprite = defaultAvatarSprite;
+            }
+            else
+            {
+                // defaultAvatarSprite도 없으면 유저이름 기반 색상 아바타 생성
+                miniAvatarImage.color = GetAvatarColorFromName(profile.username);
+            }
         }
 
         if (miniProfilePanel != null)
@@ -650,36 +581,6 @@ public class ProfileManager : MonoBehaviour
                 ShowProfilePanel(profile);
             }
         }));
-    }
-
-    /// <summary>
-    /// 테스트용 프로필 표시 (API 호출 없이 더미 데이터 사용)
-    /// </summary>
-    public void ShowTestProfile(string userId, string username)
-    {
-        // SNS ID 랜덤 생성 (50% 확률로 각각 존재)
-        string[] sampleInstaIds = { "insta_user", "photo_lover", "travel_gram", "daily_life", "" };
-        string[] sampleXIds = { "x_user", "tweeter123", "social_butterfly", "" };
-        string[] sampleFbIds = { "fb_user", "facebook_friend", "" };
-
-        string randomInsta = UnityEngine.Random.value > 0.5f ? sampleInstaIds[UnityEngine.Random.Range(0, sampleInstaIds.Length - 1)] : "";
-        string randomX = UnityEngine.Random.value > 0.5f ? sampleXIds[UnityEngine.Random.Range(0, sampleXIds.Length - 1)] : "";
-        string randomFb = UnityEngine.Random.value > 0.5f ? sampleFbIds[UnityEngine.Random.Range(0, sampleFbIds.Length - 1)] : "";
-
-        ProfileData testProfile = new ProfileData
-        {
-            id = userId,
-            username = username,
-            bio = "테스트 사용자입니다. 안녕하세요!",
-            avatar_url = "",
-            followers_count = UnityEngine.Random.Range(10, 500),
-            following_count = UnityEngine.Random.Range(5, 200),
-            instagram_id = randomInsta,
-            x_id = randomX,
-            facebook_id = randomFb
-        };
-
-        ShowProfilePanel(testProfile);
     }
 
     /// <summary>
@@ -925,6 +826,7 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            request.certificateHandler = new BypassCertificateHandler();
 
             yield return request.SendWebRequest();
 
@@ -953,6 +855,7 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            request.certificateHandler = new BypassCertificateHandler();
 
             yield return request.SendWebRequest();
 
@@ -976,6 +879,7 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             bool isFollowing = false;
@@ -1057,13 +961,6 @@ public class ProfileManager : MonoBehaviour
         // 탭 전환
         SwitchFollowListTab(showFollowers);
 
-#if UNITY_EDITOR
-        // 에디터에서는 더미 데이터 사용
-        if (Application.isPlaying)
-        {
-            LoadBothListsWithDummyData();
-        }
-#else
         // 데이터 로드
         if (showFollowers)
         {
@@ -1073,7 +970,6 @@ public class ProfileManager : MonoBehaviour
         {
             StartCoroutine(FetchFollowingNew(currentProfile.id));
         }
-#endif
 
         // 패널 표시
         if (followListPanel != null)
@@ -1113,8 +1009,6 @@ public class ProfileManager : MonoBehaviour
         UpdateFollowListTabUI(showFollowers);
 
         // 해당 탭의 데이터가 없으면 로드
-#if !UNITY_EDITOR
-        // 빌드에서만 API 호출 (에디터에서는 더미 데이터 사용)
         if (showFollowers && currentFollowersList == null && currentProfile != null)
         {
             StartCoroutine(FetchFollowersNew(currentProfile.id));
@@ -1123,7 +1017,6 @@ public class ProfileManager : MonoBehaviour
         {
             StartCoroutine(FetchFollowingNew(currentProfile.id));
         }
-#endif
 
     }
 
@@ -1140,8 +1033,6 @@ public class ProfileManager : MonoBehaviour
         UpdateFollowListTabUI(showFollowers);
 
         // 해당 탭의 데이터가 없으면 로드
-#if !UNITY_EDITOR
-        // 빌드에서만 API 호출 (에디터에서는 더미 데이터 사용)
         if (showFollowers && currentFollowersList == null && currentProfile != null)
         {
             StartCoroutine(FetchFollowersNew(currentProfile.id));
@@ -1150,7 +1041,6 @@ public class ProfileManager : MonoBehaviour
         {
             StartCoroutine(FetchFollowingNew(currentProfile.id));
         }
-#endif
 
     }
 
@@ -1246,28 +1136,21 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private IEnumerator FetchFollowersNew(string userId)
     {
-#if UNITY_EDITOR
-        // 에디터에서는 더미 데이터가 이미 로드되어 있으면 API 호출 스킵
-        if (currentFollowersList != null && currentFollowersList.Length > 0)
-        {
-            yield break;
-        }
-#endif
         string url = $"{BASE_URL}/api/followers?user_id={userId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
                 var response = JsonUtility.FromJson<FollowListResponse>(request.downloadHandler.text);
-                // 빈 데이터가 반환되면 기존 더미 데이터 유지
+                // 빈 응답이면 기존 데이터 유지
                 if (response.followers != null && response.followers.Length > 0)
                 {
                     currentFollowersList = response.followers;
                     PopulateFollowersList(response.followers);
-                }
                 }
             }
         }
@@ -1278,28 +1161,21 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private IEnumerator FetchFollowingNew(string userId)
     {
-#if UNITY_EDITOR
-        // 에디터에서는 더미 데이터가 이미 로드되어 있으면 API 호출 스킵
-        if (currentFollowingList != null && currentFollowingList.Length > 0)
-        {
-            yield break;
-        }
-#endif
         string url = $"{BASE_URL}/api/following?user_id={userId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
                 var response = JsonUtility.FromJson<FollowListResponse>(request.downloadHandler.text);
-                // 빈 데이터가 반환되면 기존 더미 데이터 유지
+                // 빈 응답이면 기존 데이터 유지
                 if (response.following != null && response.following.Length > 0)
                 {
                     currentFollowingList = response.following;
                     PopulateFollowingList(response.following);
-                }
                 }
             }
         }
@@ -1640,6 +1516,7 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            request.certificateHandler = new BypassCertificateHandler();
 
             yield return request.SendWebRequest();
 
@@ -1679,6 +1556,7 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            request.certificateHandler = new BypassCertificateHandler();
 
             yield return request.SendWebRequest();
 
@@ -1761,127 +1639,6 @@ public class ProfileManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 테스트용 팔로워 목록 표시 (API 호출 없이 더미 데이터 사용)
-    /// 양쪽 리스트 모두 채워서 스와이프 가능하게 함
-    /// </summary>
-    public void ShowTestFollowersList()
-    {
-        // 버튼 연결 확인 (런타임 초기화 안 됐을 수 있음)
-        SetupFollowListButtonListeners();
-
-        // 테스트용 프로필 설정
-        if (currentProfile == null)
-        {
-            currentProfile = new ProfileData
-            {
-                id = "test_user",
-                username = "테스트유저",
-                followers_count = 8,
-                following_count = 6
-            };
-        }
-
-        // 타이틀 설정
-        if (followListTitleText != null)
-            followListTitleText.text = currentProfile.username;
-
-        // 탭 텍스트 업데이트
-        UpdateFollowListTabTexts();
-
-        // 양쪽 모두 더미 데이터 생성 (스와이프 뷰용)
-        LoadBothListsWithDummyData();
-
-        // 팔로워 탭으로 전환
-        isShowingFollowers = true;
-        SwitchFollowListTab(true);
-
-        // 패널 표시
-        if (followListPanel != null)
-            followListPanel.SetActive(true);
-    }
-
-    /// <summary>
-    /// 테스트용 팔로잉 목록 표시 (API 호출 없이 더미 데이터 사용)
-    /// 양쪽 리스트 모두 채워서 스와이프 가능하게 함
-    /// </summary>
-    public void ShowTestFollowingList()
-    {
-        // 버튼 연결 확인 (런타임 초기화 안 됐을 수 있음)
-        SetupFollowListButtonListeners();
-
-        // 테스트용 프로필 설정
-        if (currentProfile == null)
-        {
-            currentProfile = new ProfileData
-            {
-                id = "test_user",
-                username = "테스트유저",
-                followers_count = 8,
-                following_count = 6
-            };
-        }
-
-        // 타이틀 설정
-        if (followListTitleText != null)
-            followListTitleText.text = currentProfile.username;
-
-        // 탭 텍스트 업데이트
-        UpdateFollowListTabTexts();
-
-        // 양쪽 모두 더미 데이터 생성 (스와이프 뷰용)
-        LoadBothListsWithDummyData();
-
-        // 팔로잉 탭으로 전환
-        isShowingFollowers = false;
-        SwitchFollowListTab(false);
-
-        // 패널 표시
-        if (followListPanel != null)
-            followListPanel.SetActive(true);
-    }
-
-    /// <summary>
-    /// 테스트용 팔로우 사용자 데이터 생성
-    /// </summary>
-    private FollowUser[] GenerateTestFollowUsers(int count, string prefix)
-    {
-        string[] testNames = new string[]
-        {
-            "김민지", "이준호", "박서연", "최영수", "정하늘",
-            "AR_Master", "여행러버", "맛집탐험가", "사진작가", "우팡러버",
-            "서울탐험", "부산여행", "제주도민", "카페투어", "맛집헌터"
-        };
-
-        FollowUser[] users = new FollowUser[count];
-        for (int i = 0; i < count; i++)
-        {
-            users[i] = new FollowUser
-            {
-                id = $"test_{prefix}_{i}",
-                username = testNames[i % testNames.Length],
-                avatar_url = ""
-            };
-        }
-        return users;
-    }
-
-    /// <summary>
-    /// 양쪽 리스트 모두에 더미 데이터 로드 (에디터 테스트용)
-    /// 스와이프 뷰에서 양쪽 모두 데이터가 필요함
-    /// </summary>
-    private void LoadBothListsWithDummyData()
-    {
-        // 팔로워 더미 데이터 생성 및 표시
-        FollowUser[] testFollowers = GenerateTestFollowUsers(8, "follower");
-        currentFollowersList = testFollowers;
-        PopulateFollowersList(testFollowers);
-
-        // 팔로잉 더미 데이터 생성 및 표시
-        FollowUser[] testFollowing = GenerateTestFollowUsers(6, "following");
-        currentFollowingList = testFollowing;
-        PopulateFollowingList(testFollowing);
-    }
 
     #endregion
 
@@ -1895,19 +1652,26 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             ProfileData profile = null;
+
             if (request.result == UnityWebRequest.Result.Success)
             {
                 try
                 {
-                    profile = JsonUtility.FromJson<ProfileData>(request.downloadHandler.text);
+                    string responseText = request.downloadHandler.text;
+                    profile = JsonUtility.FromJson<ProfileData>(responseText);
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"[ProfileManager] Parse error: {e.Message}");
                 }
+            }
+            else
+            {
+                Debug.LogWarning($"[ProfileManager] FetchProfile 실패: error={request.error}");
             }
 
             callback?.Invoke(profile);
@@ -1936,9 +1700,9 @@ public class ProfileManager : MonoBehaviour
     private IEnumerator LoadAvatarImage(string url, Image targetImage)
     {
         // URL이 비어있거나 null이면 기본 아바타 사용
-        if (string.IsNullOrEmpty(url))
+        if (string.IsNullOrEmpty(url) || targetImage == null)
         {
-            if (defaultAvatarSprite != null)
+            if (targetImage != null && defaultAvatarSprite != null)
                 targetImage.sprite = defaultAvatarSprite;
             yield break;
         }
@@ -1953,27 +1717,36 @@ public class ProfileManager : MonoBehaviour
         // 캐시 확인
         if (avatarCache.TryGetValue(fullUrl, out Sprite cached))
         {
-            targetImage.sprite = cached;
+            if (targetImage != null)
+            {
+                targetImage.sprite = cached;
+            }
             yield break;
         }
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
+            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
                 Texture2D texture = DownloadHandlerTexture.GetContent(request);
-                Sprite sprite = Sprite.Create(texture,
-                    new Rect(0, 0, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f));
+                if (texture != null && targetImage != null)
+                {
+                    Sprite sprite = Sprite.Create(texture,
+                        new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f));
 
-                avatarCache[fullUrl] = sprite;
-                targetImage.sprite = sprite;
+                    avatarCache[fullUrl] = sprite;
+                    targetImage.sprite = sprite;
+                }
             }
-            else if (defaultAvatarSprite != null)
+            else
             {
-                targetImage.sprite = defaultAvatarSprite;
+                Debug.LogWarning($"[ProfileManager] 아바타 로드 실패: {request.error}");
+                if (targetImage != null && defaultAvatarSprite != null)
+                    targetImage.sprite = defaultAvatarSprite;
             }
         }
     }
@@ -2070,16 +1843,6 @@ public class ProfileManager : MonoBehaviour
         string instagramId = profile.instagram_id;
         string xId = profile.x_id;
         string facebookId = profile.facebook_id;
-
-#if UNITY_EDITOR
-        // 에디터에서 테스트 SNS 데이터 사용
-        if (useTestSnsData)
-        {
-            if (!string.IsNullOrEmpty(testInstagramId)) instagramId = testInstagramId;
-            if (!string.IsNullOrEmpty(testXId)) xId = testXId;
-            if (!string.IsNullOrEmpty(testFacebookId)) facebookId = testFacebookId;
-        }
-#endif
 
         bool hasInstagram = !string.IsNullOrEmpty(instagramId);
         bool hasX = !string.IsNullOrEmpty(xId);

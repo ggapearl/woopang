@@ -250,6 +250,7 @@ public class Object3DTouchHaptic : MonoBehaviour
 
     private int AndroidVersion()
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
             AndroidJavaClass buildVersion = new AndroidJavaClass("android.os.Build$VERSION");
@@ -259,5 +260,8 @@ public class Object3DTouchHaptic : MonoBehaviour
         {
             return 1;
         }
+#else
+        return 0;
+#endif
     }
 }

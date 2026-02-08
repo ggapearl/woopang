@@ -648,7 +648,6 @@ public class CubeDataFixManager : MonoBehaviour
             ResetToInitialState();
             yield return new WaitForSeconds(2f);
         }
-        }
         isProcessing = false;
     }
 

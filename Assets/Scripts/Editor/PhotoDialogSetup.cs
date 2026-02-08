@@ -12,7 +12,6 @@ using UnityEditor.Callbacks;
 public class PhotoDialogSetup
 {
     private const int DIALOG_VERSION = 6;
-    private static readonly string VERSION_KEY = "PhotoDialogSetup_Version";
 
     static PhotoDialogSetup()
     {

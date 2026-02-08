@@ -287,7 +287,7 @@ public class GLBModelLoader : MonoBehaviour
         Color originalColor = ExtractColorFromGLB(glbData);
         
         // GLTFast 파싱
-        var loadTask = gltf.LoadGltfBinary(glbData);
+        var loadTask = gltf.Load(glbData);
         
         while (!loadTask.IsCompleted)
         {

@@ -9,26 +9,26 @@ public class ShimmerEffect : MonoBehaviour
     [Header("Shimmer Settings")]
     [Tooltip("쉬머 효과 속도")]
     [Range(0.1f, 3f)]
-    public float shimmerSpeed = 0.5f;
+    [SerializeField] private float shimmerSpeed = 0.5f;
 
     [Tooltip("쉬머 효과 너비")]
     [Range(50f, 400f)]
-    public float shimmerWidth = 150f;
+    [SerializeField] private float shimmerWidth = 150f;
 
     [Tooltip("쉬머 효과 강도 (밝기)")]
     [Range(0f, 2f)]
-    public float shimmerIntensity = 0.8f;
+    [SerializeField] private float shimmerIntensity = 0.8f;
 
     [Tooltip("쉬머 색상")]
-    public Color shimmerColor = new Color(1f, 1f, 1f, 1f);
+    [SerializeField] private Color shimmerColor = new Color(1f, 1f, 1f, 1f);
 
     [Tooltip("쉬머 각도 (도)")]
     [Range(-45f, 45f)]
-    public float shimmerAngle = 15f;
+    [SerializeField] private float shimmerAngle = 15f;
 
     [Tooltip("그라디언트 부드러움 (높을수록 부드러움)")]
     [Range(1f, 5f)]
-    public float gradientSmoothness = 2f;
+    [SerializeField] private float gradientSmoothness = 2f;
 
     private Image shimmerImage;
     private RectTransform shimmerRect;

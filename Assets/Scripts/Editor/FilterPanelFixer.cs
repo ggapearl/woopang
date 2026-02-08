@@ -55,13 +55,11 @@ public static class FilterPanelFixer
             {
                 Object.DestroyImmediate(childFilter);
                 modified = true;
-                Debug.Log("[FilterPanelFixer] P2PUserToggle 자식의 중복 P2PUserFilterPanel 제거됨");
             }
 
             // 4. root의 P2PUserFilterPanel에 토글 연결
             if (rootFilter != null && toggle != null)
             {
-                // SerializedObject를 사용하여 private 필드 설정
                 SerializedObject so = new SerializedObject(rootFilter);
                 SerializedProperty toggleProp = so.FindProperty("p2pUserToggle");
                 if (toggleProp != null && toggleProp.objectReferenceValue == null)
@@ -69,7 +67,6 @@ public static class FilterPanelFixer
                     toggleProp.objectReferenceValue = toggle;
                     so.ApplyModifiedPropertiesWithoutUndo();
                     modified = true;
-                    Debug.Log("[FilterPanelFixer] root P2PUserFilterPanel.p2pUserToggle → P2PUserToggle 연결됨");
                 }
             }
         }
@@ -78,7 +75,6 @@ public static class FilterPanelFixer
         {
             PrefabUtility.SaveAsPrefabAsset(instance, assetPath);
             AssetDatabase.SaveAssets();
-            Debug.Log("[FilterPanelFixer] FilterButtonPanel 프리팹 수정 완료!");
         }
 
         PrefabUtility.UnloadPrefabContents(instance);

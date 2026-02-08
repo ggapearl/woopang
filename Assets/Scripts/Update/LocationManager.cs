@@ -69,8 +69,7 @@ public class LocationManager : MonoBehaviour
             StartCoroutine(RefreshLocationPeriodically());
         }
         yield break;
-#endif
-
+#else
         if (!Input.location.isEnabledByUser)
         {
             DisplayLocationDisabledMessage();
@@ -108,6 +107,7 @@ public class LocationManager : MonoBehaviour
                 StartCoroutine(RefreshLocationPeriodically());
             }
         }
+#endif
     }
 
     void DisplayLocationDisabledMessage()

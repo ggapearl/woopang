@@ -19,7 +19,9 @@ public class ZoomIndicator : MonoBehaviour
     [SerializeField] private Sprite zoomResetIcon; // 기본 아이콘 (1.0x)
 
     [Header("Animation")]
+#pragma warning disable CS0414 // Inspector 설정용 필드 (현재 즉시 표시로 미사용)
     [SerializeField] private float fadeInDuration = 0.2f; // 사용 안 함 (즉시 표시)
+#pragma warning restore CS0414
     [SerializeField] private float fadeOutDuration = 0.5f;
 
     private Coroutine hideCoroutine;

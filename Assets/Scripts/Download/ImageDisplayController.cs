@@ -19,7 +19,6 @@ public class ImageDisplayController : MonoBehaviour
     private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
 
-    private Coroutine currentBaseMapCoroutine;
     private Coroutine currentSubPhotoCoroutine;
 
     void Start()
@@ -54,45 +53,38 @@ public class ImageDisplayController : MonoBehaviour
         {
             request.timeout = 20;
 
-            try
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
             {
-                yield return request.SendWebRequest();
-
-                if (request.result == UnityWebRequest.Result.Success)
+                Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
+                if (newTexture != null)
                 {
-                    Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
-                    if (newTexture != null)
-                    {
-                        if (baseMapTexture != null) Destroy(baseMapTexture);
-                        baseMapTexture = newTexture;
+                    if (baseMapTexture != null) Destroy(baseMapTexture);
+                    baseMapTexture = newTexture;
 
-                        if (cubeRenderer != null)
-                        {
-                            if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
-                            else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
-
-                            // 패딩 설정 적용
-                            ApplyPaddingSettings();
-
-                            // 큐브 표시
-                            cubeRenderer.enabled = true;
-                        }
-                    }
-                }
-                else
-                {
-                    Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
-
-                    // 로딩 실패 시에도 큐브 표시
                     if (cubeRenderer != null)
                     {
+                        if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
+                        else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+
+                        // 패딩 설정 적용
+                        ApplyPaddingSettings();
+
+                        // 큐브 표시
                         cubeRenderer.enabled = true;
                     }
                 }
             }
-            finally
+            else
             {
-                currentBaseMapCoroutine = null;
+                Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
+
+                // 로딩 실패 시에도 큐브 표시
+                if (cubeRenderer != null)
+                {
+                    cubeRenderer.enabled = true;
+                }
             }
         }
     }

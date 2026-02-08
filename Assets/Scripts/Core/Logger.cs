@@ -47,6 +47,14 @@ public class Logger : Singleton<Logger>
         });
     }
 
+    void OnDestroy()
+    {
+        if (toggleButton != null)
+        {
+            toggleButton.onClick.RemoveAllListeners();
+        }
+    }
+
     void OnEnable()
     {
         debugAreaText.enabled = enableDebug;

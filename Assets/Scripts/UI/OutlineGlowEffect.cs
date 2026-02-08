@@ -9,30 +9,30 @@ public class OutlineGlowEffect : MonoBehaviour
     [Header("Glow Settings")]
     [Tooltip("펄스 속도 (낮을수록 느림)")]
     [Range(0.1f, 10f)]
-    public float pulseSpeed = 2f;
+    [SerializeField] private float pulseSpeed = 2f;
 
     [Tooltip("최소 밝기 (0~1)")]
     [Range(0f, 1f)]
-    public float minIntensity = 0.3f;
+    [SerializeField] private float minIntensity = 0.3f;
 
     [Tooltip("최대 밝기 (0~1)")]
     [Range(0f, 1f)]
-    public float maxIntensity = 1f;
+    [SerializeField] private float maxIntensity = 1f;
 
     [Tooltip("그림자 색상")]
-    public Color glowColor = new Color(1f, 1f, 1f, 0.8f);
+    [SerializeField] private Color glowColor = new Color(1f, 1f, 1f, 0.8f);
 
     [Tooltip("그림자 거리 (최소)")]
     [Range(0f, 20f)]
-    public float minShadowDistance = 3f;
+    [SerializeField] private float minShadowDistance = 3f;
 
     [Tooltip("그림자 거리 (최대)")]
     [Range(0f, 20f)]
-    public float maxShadowDistance = 10f;
+    [SerializeField] private float maxShadowDistance = 10f;
 
     [Header("Animation Type")]
     [Tooltip("펄스 애니메이션 타입")]
-    public PulseType pulseType = PulseType.Smooth;
+    [SerializeField] private PulseType pulseType = PulseType.Smooth;
 
     private Shadow shadowComponent;
     private float currentTime = 0f;
