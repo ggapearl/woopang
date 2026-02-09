@@ -27,6 +27,16 @@ public static class FilterPanelFixer
         GameObject instance = PrefabUtility.LoadPrefabContents(assetPath);
         bool modified = false;
 
+        // 0. P2POpenToggle에서 누락된 스크립트 제거
+        Transform p2pOpenToggle = instance.transform.Find("P2POpenToggle");
+        if (p2pOpenToggle != null)
+        {
+            if (RemoveMissingScripts(p2pOpenToggle.gameObject))
+            {
+                modified = true;
+            }
+        }
+
         // 1. root의 P2PUserFilterPanel 찾기
         P2PUserFilterPanel rootFilter = instance.GetComponent<P2PUserFilterPanel>();
 
@@ -78,5 +88,34 @@ public static class FilterPanelFixer
         }
 
         PrefabUtility.UnloadPrefabContents(instance);
+    }
+
+    /// <summary>
+    /// GameObject에서 모든 누락된 스크립트 컴포넌트 제거
+    /// </summary>
+    private static bool RemoveMissingScripts(GameObject go)
+    {
+        SerializedObject so = new SerializedObject(go);
+        SerializedProperty components = so.FindProperty("m_Component");
+
+        bool modified = false;
+        for (int i = components.arraySize - 1; i >= 0; i--)
+        {
+            SerializedProperty component = components.GetArrayElementAtIndex(i);
+            SerializedProperty componentRef = component.FindPropertyRelative("component");
+
+            if (componentRef.objectReferenceValue == null)
+            {
+                components.DeleteArrayElementAtIndex(i);
+                modified = true;
+            }
+        }
+
+        if (modified)
+        {
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        return modified;
     }
 }
