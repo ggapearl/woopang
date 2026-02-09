@@ -176,25 +176,8 @@ public class Object3DTouchHaptic : MonoBehaviour
     private void TriggerHaptic()
     {
 #if UNITY_IOS
-        try
-        {
-            if (hapticIntensity <= 0.33f)
-            {
-                UnityEngine.iOS.Device.GenerateHapticFeedback(UnityEngine.iOS.HapticFeedbackType.ImpactFeedback_Light);
-            }
-            else if (hapticIntensity <= 0.66f)
-            {
-                UnityEngine.iOS.Device.GenerateHapticFeedback(UnityEngine.iOS.HapticFeedbackType.ImpactFeedback_Medium);
-            }
-            else
-            {
-                UnityEngine.iOS.Device.GenerateHapticFeedback(UnityEngine.iOS.HapticFeedbackType.ImpactFeedback_Heavy);
-            }
-        }
-        catch (System.Exception)
-        {
-            Handheld.Vibrate();
-        }
+        // Unity 6+ uses Handheld.Vibrate() for iOS haptic feedback
+        Handheld.Vibrate();
 #elif UNITY_ANDROID
         try
         {

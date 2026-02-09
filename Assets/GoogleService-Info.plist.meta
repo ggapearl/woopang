@@ -1,5 +1,9 @@
 fileFormatVersion: 2
-guid: 395b44b6bdd0e2c429c0193551326db0
+guid: b8c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7
+labels:
+- gvh
+- gvh_version-13.7.0
+- gvhp_exportpath-GoogleService-Info.plist
 PluginImporter:
   externalObjects: {}
   serializedVersion: 2
@@ -17,16 +21,21 @@ PluginImporter:
       enabled: 0
       settings: {}
   - first:
-      Android: Android
-    second:
-      enabled: 1
-      settings: {}
-  - first:
       Editor: Editor
     second:
       enabled: 0
       settings:
         DefaultValueInitialized: true
+  - first:
+      iPhone: iOS
+    second:
+      enabled: 1
+      settings: {}
+  - first:
+      tvOS: tvOS
+    second:
+      enabled: 1
+      settings: {}
   userData:
   assetBundleName:
   assetBundleVariant:

@@ -509,6 +509,41 @@
       },
       "url": "https://packages.unity.com"
     },
+    "com.yasirkula.imagecropper": {
+      "version": "https://github.com/yasirkula/UnityImageCropper.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "c382ea853c21423824cf85283825a21d5d234fd5"
+    },
+    "com.yasirkula.nativecamera": {
+      "version": "https://github.com/yasirkula/UnityNativeCamera.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "72f5ebba26c219b4c4cda202bff2f59bfdaa47f8"
+    },
+    "com.yasirkula.nativefilepicker": {
+      "version": "https://github.com/yasirkula/UnityNativeFilePicker.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "de7bbba0dbbdde9a87f0be0c504fc8ed81426a7f"
+    },
+    "com.yasirkula.nativegallery": {
+      "version": "https://github.com/yasirkula/UnityNativeGallery.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "e05fc5a14fe582e4938d2597fc1401ca3fceafb0"
+    },
+    "com.yasirkula.simplefilebrowser": {
+      "version": "https://github.com/yasirkula/UnitySimpleFileBrowser.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "e24fa529103603043f6dad1b66192ff72954ef6e"
+    },
     "com.unity.modules.ai": {
       "version": "1.0.0",
       "depth": 0,

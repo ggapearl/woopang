@@ -168,23 +168,29 @@ public class CubeUploadManager : MonoBehaviour
         ShowSpinner(LocalizationManager.Instance.GetText("loading_main_photo"));
         bool isLoading = true;
         string capturedPath = null;
+        bool permissionDenied = false;
 
-        // NativeCamera로 사진 촬영
-        NativeCamera.Permission permission = NativeCamera.TakePicture((path) =>
+        // NativeCamera로 사진 촬영 (내부적으로 권한 처리)
+        NativeCamera.TakePicture((path) =>
         {
+            if (string.IsNullOrEmpty(path))
+            {
+                // 권한 거부 또는 취소
+                permissionDenied = true;
+            }
             capturedPath = path;
             isLoading = false;
         }, maxSize: 2048);
 
-        if (permission != NativeCamera.Permission.Granted)
+        yield return new WaitUntil(() => !isLoading);
+
+        if (permissionDenied)
         {
             ShowWarning("카메라 권한이 필요합니다.");
             HideSpinner();
             isProcessing = false;
             yield break;
         }
-
-        yield return new WaitUntil(() => !isLoading);
 
         if (!string.IsNullOrEmpty(capturedPath))
         {
@@ -469,22 +475,28 @@ public class CubeUploadManager : MonoBehaviour
 
         bool captureDone = false;
         string capturedPath = null;
+        bool permissionDenied = false;
 
-        // NativeCamera로 사진 촬영
-        NativeCamera.Permission permission = NativeCamera.TakePicture((path) =>
+        // NativeCamera로 사진 촬영 (내부적으로 권한 처리)
+        NativeCamera.TakePicture((path) =>
         {
+            if (string.IsNullOrEmpty(path))
+            {
+                // 권한 거부 또는 취소
+                permissionDenied = true;
+            }
             capturedPath = path;
             captureDone = true;
         }, maxSize: 2048);
 
-        if (permission != NativeCamera.Permission.Granted)
+        // 촬영 완료 대기
+        yield return new WaitUntil(() => captureDone);
+
+        if (permissionDenied)
         {
             ShowWarning("카메라 권한이 필요합니다.");
             yield break;
         }
-
-        // 촬영 완료 대기
-        yield return new WaitUntil(() => captureDone);
 
         if (!string.IsNullOrEmpty(capturedPath))
         {

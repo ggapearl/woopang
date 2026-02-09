@@ -1,33 +1,46 @@
 using UnityEngine;
 using UnityEngine.UI;
-using DG.Tweening;
+using System.Collections;
 
 public class PanelSlideIn : MonoBehaviour
 {
-    public Button openButton;      // ∆–≥Œ¿ª ø≠ πˆ∆∞
-    public RectTransform panelRect; // ΩΩ∂Û¿ÃµÂ ¿Œ«“ ∆–≥Œ¿« RectTransform
-    public float slideDuration = 0.5f; // ΩΩ∂Û¿ÃµÂ æ÷¥œ∏ﬁ¿Ãº« ¡ˆº” Ω√∞£
-    public Vector3 startPosition;    // ∆–≥Œ¿« Ω√¿€ ¿ßƒ° (»≠∏È π€)
-    public Vector3 endPosition;      // ∆–≥Œ¿« ∏Ò«• ¿ßƒ° (»≠∏È æ»)
+    public Button openButton;
+    public RectTransform panelRect;
+    public float slideDuration = 0.5f;
+    public Vector3 startPosition;
+    public Vector3 endPosition;
 
     void Start()
     {
-        // πˆ∆∞ ≈¨∏Ø ¿Ã∫•∆Æø° ΩΩ∂Û¿ÃµÂ ¿Œ ∏ﬁº≠µÂ ø¨∞·
         openButton.onClick.AddListener(SlideInPanel);
-
-        // ∆–≥Œ¿ª Ω√¿€ ¿ßƒ°∑Œ º≥¡§«œ∞Ì ∫Ò»∞º∫»≠ (« ø‰ Ω√)
         panelRect.localPosition = startPosition;
         panelRect.gameObject.SetActive(false);
     }
 
     void SlideInPanel()
     {
-        // ∆–≥Œ »∞º∫»≠
         panelRect.gameObject.SetActive(true);
+        StartCoroutine(SlideInCoroutine());
+    }
 
-        // ∆–≥Œ¿ª Ω√¿€ ¿ßƒ°ø°º≠ ∏Ò«• ¿ßƒ°∑Œ ΩΩ∂Û¿ÃµÂ ¿Œ
-        panelRect.DOLocalMove(endPosition, slideDuration)
-            .SetEase(Ease.OutQuad) // ∫ŒµÂ∑ØøÓ ∞®º” »ø∞˙
-            .OnComplete(() => Debug.Log("∆–≥Œ ΩΩ∂Û¿ÃµÂ ¿Œ øœ∑·"));
+    IEnumerator SlideInCoroutine()
+    {
+        float elapsed = 0f;
+        Vector3 startPos = panelRect.localPosition;
+
+        while (elapsed < slideDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / slideDuration;
+
+            // Ease.OutQuad Ìö®Í≥º Íµ¨ÌòÑ
+            t = 1f - (1f - t) * (1f - t);
+
+            panelRect.localPosition = Vector3.Lerp(startPos, endPosition, t);
+            yield return null;
+        }
+
+        panelRect.localPosition = endPosition;
+        Debug.Log("Ìå®ÎÑê Ïä¨ÎùºÏù¥Îìú Ïù∏ ÏôÑÎ£å");
     }
 }

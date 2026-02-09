@@ -1,5 +1,10 @@
 {
   "dependencies": {
+    "com.yasirkula.nativecamera": "https://github.com/yasirkula/UnityNativeCamera.git",
+    "com.yasirkula.nativegallery": "https://github.com/yasirkula/UnityNativeGallery.git",
+    "com.yasirkula.nativefilepicker": "https://github.com/yasirkula/UnityNativeFilePicker.git",
+    "com.yasirkula.simplefilebrowser": "https://github.com/yasirkula/UnitySimpleFileBrowser.git",
+    "com.yasirkula.imagecropper": "https://github.com/yasirkula/UnityImageCropper.git",
     "com.gamelovers.mcp-unity": "https://github.com/CoderGamester/mcp-unity.git",
     "com.community.unity-mcp": "https://github.com/usmanbutt-dev/unity-mcp.git",
     "com.atteneder.gltfast": "https://github.com/atteneder/glTFast.git",
