@@ -1,0 +1,42 @@
+apply plugin: 'com.android.application'
+apply from: 'setupSymbols.gradle'
+apply from: '../shared/keepUnitySymbols.gradle'
+
+dependencies {
+    implementation project(':unityLibrary')
+}
+
+android {
+    ndkPath "**NDKPATH**"
+    ndkVersion "**NDKVERSION**"
+    namespace "com.que.woopang"
+    compileSdk **APIVERSION**
+    buildToolsVersion '**BUILDTOOLS**'
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk **MINSDK**
+        targetSdk **TARGETSDK**
+        versionCode **VERSIONCODE**
+        versionName '**VERSIONNAME**'
+    }
+
+    lint {
+        abortOnError false
+    }
+
+    androidResources {
+        noCompress = **BUILTIN_NOCOMPRESS** + unityStreamingAssets.tokenize(', ')
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+
+    packaging {
+        jniLibs {
+            excludes += ['/lib/armeabi/**', '/lib/mips/**', '/lib/mips64/**', '/lib/x86/**', '/lib/x86_64/**']
+        }
+    }
+}

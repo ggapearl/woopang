@@ -1,0 +1,104 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" 
+         xmlns:tools="http://schemas.android.com/tools" 
+         package="com.que.woopang" 
+         android:versionCode="1" 
+         android:versionName="1.0">
+         
+ <!-- ✅ 네트워크 권한 (기존 유지) -->
+ <uses-permission android:name="android.permission.INTERNET" />
+ <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+ 
+ <!-- ✅ 위치 권한 (기존 유지) -->
+ <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+ <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+ 
+ <!-- ✅ 알림 권한 (기존 유지) -->
+ <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+ 
+ <!-- ✅ 광고 ID 권한 (기존 유지) -->
+ <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+ 
+ <!-- 🔥 추가: Firebase Messaging에 필요한 권한들 -->
+ <uses-permission android:name="android.permission.WAKE_LOCK" />
+ <uses-permission android:name="android.permission.VIBRATE" />
+ <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+ 
+ <!-- ✅ 하드웨어 요구사항 (기존 유지) -->
+ <uses-feature android:name="android.hardware.location" 
+               android:required="false" />
+ <uses-feature android:name="android.hardware.location.gps" 
+               android:required="false" />
+ <uses-feature android:name="android.hardware.location.network" 
+               android:required="false" />
+
+ <application android:label="@string/app_name" 
+              android:icon="@mipmap/app_icon"
+              android:theme="@android:style/Theme.NoTitleBar"
+              android:allowBackup="false"
+              android:hardwareAccelerated="true">
+              
+   <!-- ✅ Unity Activity -->
+   <activity android:name="com.unity3d.player.UnityPlayerActivity" 
+             android:configChanges="fontScale|keyboard|keyboardHidden|locale|mnc|mcc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|touchscreen|density|layoutDirection" 
+             android:launchMode="singleTask"
+             android:theme="@android:style/Theme.NoTitleBar"
+             android:windowSoftInputMode="adjustResize"
+             android:screenOrientation="portrait"
+             android:exported="true">
+     <intent-filter>
+       <action android:name="android.intent.action.MAIN" />
+       <category android:name="android.intent.category.LAUNCHER" />
+     </intent-filter>
+     
+     <!-- ✅ Unity 관련 메타데이터 (기존 유지) -->
+     <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+     <meta-data android:name="android.app.lib_name" android:value="unity" />
+     <meta-data android:name="unityplayer.ForwardNativeEventsToDalvik" android:value="false" />
+   </activity>
+   
+   <!-- 🔥 추가: 커스텀 Firebase 메시징 서비스 -->
+   <service
+       android:name="com.que.woopang.CustomFirebaseMessagingService"
+       android:exported="false"
+       android:directBootAware="true">
+       <intent-filter android:priority="1000">
+           <action android:name="com.google.firebase.MESSAGING_EVENT" />
+       </intent-filter>
+   </service>
+   
+   <!-- 🔥 수정: Unity Firebase Messaging 서비스 -->
+   <service android:name="com.google.firebase.messaging.unity.MessagingUnityPlayerActivity"
+            android:exported="false" />
+   
+   <service android:name="com.google.firebase.messaging.unity.RegistrationIntentService"
+            android:exported="false" />
+   
+   <!-- 🔥 추가: Firebase 관련 리시버 -->
+   <receiver
+       android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver"
+       android:exported="true"
+       android:permission="com.google.android.c2dm.permission.SEND">
+       <intent-filter>
+           <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+       </intent-filter>
+   </receiver>
+   
+   <!-- 🔥 추가: 알림 아이콘 메타데이터 (중요!) -->
+   <meta-data android:name="com.google.firebase.messaging.default_notification_icon"
+              android:resource="@mipmap/app_icon" />
+   
+   <!-- ✅ Firebase 알림 관련 메타데이터 (기존 유지) -->
+   <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" 
+              android:value="default_channel" />
+              
+   <!-- ✅ 기본 알림 색상 (기존 유지) -->
+   <meta-data android:name="com.google.firebase.messaging.default_notification_color"
+              android:resource="@android:color/white" />
+   
+   <!-- ✅ 시스템 UI 관련 메타데이터 (기존 유지) -->
+   <meta-data android:name="android.max_aspect" android:value="2.4" />
+   <meta-data android:name="android.allow_backup" android:value="false" />
+              
+ </application>
+</manifest>

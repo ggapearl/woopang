@@ -126,25 +126,8 @@ Packages/com.kyrylokuzyk.arfoundationremote
 ARFoundationRemoteCompanionApp/
 ARFoundationRemoteInstaller
 
-# Assets 폴더 제한 (특정 폴더만 포함)
-# 먼저 Assets의 모든 것을 제외
-Assets/*
-# 그 다음 필요한 폴더만 포함
-!Assets/sou/
-!Assets/sound/
-!Assets/Scripts/
-!Assets/Scenes/
-!Assets/Scenes_2025/
-!Assets/Prefab/
-!Assets/Prefabs/
-!Assets/Menu/
-# .meta 파일도 포함 (Unity 필수)
-!Assets/*.meta
-!Assets/sou/**/*.meta
-!Assets/sound/**/*.meta
-!Assets/Scripts/**/*.meta
-!Assets/Scenes/**/*.meta
-!Assets/Prefab/**/*.meta
-!Assets/Prefabs/**/*.meta
-!Assets/Menu/**/*.meta
+# Assets 폴더 전체 포함 (모든 하위 폴더 추적)
+# 100MB 초과 파일 제외 (GitHub 제한)
+Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.bundle
+Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.so
 T28_박진수 인터뷰 공원 및 자택_20251120_FX6_part02.mp4
