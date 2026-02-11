@@ -134,6 +134,7 @@ Assets/*
 !Assets/sound/
 !Assets/Scripts/
 !Assets/Scenes/
+!Assets/Scenes_2025/
 !Assets/Prefab/
 !Assets/Prefabs/
 !Assets/Menu/
