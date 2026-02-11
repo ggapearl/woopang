@@ -1,0 +1,33 @@
+apply plugin: 'com.android.application'
+
+dependencies {
+    implementation project(':unityLibrary')
+}
+
+android {
+    namespace "com.que.woopang"
+    compileSdk **APIVERSION**
+    buildToolsVersion '**BUILDTOOLS**'
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    defaultConfig {
+        minSdk **MINSDK**
+        targetSdk **TARGETSDK**
+        versionCode **VERSIONCODE**
+        versionName '**VERSIONNAME**'
+    }
+
+    lint {
+        abortOnError false
+    }
+
+    packaging {
+        jniLibs {
+            excludes += ['/lib/armeabi/**', '/lib/mips/**', '/lib/mips64/**', '/lib/x86/**', '/lib/x86_64/**']
+        }
+    }
+}
