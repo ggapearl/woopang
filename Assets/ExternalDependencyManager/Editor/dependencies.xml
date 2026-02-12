@@ -1,6 +1,0 @@
-<dependencies>
-  <androidPackages>
-    <androidPackage spec="com.google.ar:core:1.43.0" />
-    <androidPackage spec="com.google.android.gms:play-services-base:18.5.0" />
-  </androidPackages>
-</dependencies>

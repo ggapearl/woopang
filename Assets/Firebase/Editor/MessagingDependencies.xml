@@ -4,6 +4,8 @@ FirebaseMessaging iOS and Android Dependencies.
 -->
 
 <dependencies>
+  <!-- iOS는 네이티브 APNs 사용하므로 Firebase 제외 -->
+  <!--
   <remoteSwiftPackage url="https://github.com/firebase/firebase-ios-sdk.git" version="12.8.0">
     <swiftPackage name="FirebaseMessaging" replacesPod="Firebase/Messaging"/>
   </remoteSwiftPackage>
@@ -11,6 +13,7 @@ FirebaseMessaging iOS and Android Dependencies.
     <iosPod name="Firebase/Messaging" version="12.8.0" minTargetSdk="15.0">
     </iosPod>
   </iosPods>
+  -->
   <androidPackages>
     <androidPackage spec="com.google.firebase:firebase-messaging:25.0.1">
     </androidPackage>

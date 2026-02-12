@@ -1351,33 +1351,39 @@ public class ProfileManager : MonoBehaviour
             {
                 string targetId = user.id;
 
-                // 내가 상대방을 이미 팔로우하는지 확인
+                // 내가 상대방을 이미 팔로우하는지 + 상대방이 나를 팔로우하는지 양방향 확인
                 string myId = LoginManager.Instance?.CurrentUser?.id;
                 if (!string.IsNullOrEmpty(myId))
                 {
                     StartCoroutine(CheckIsFollowing(myId, targetId, (iFollowThem) =>
                     {
-                        if (followBtnText != null)
+                        StartCoroutine(CheckIsFollowing(targetId, myId, (theyFollowMe) =>
                         {
-                            followBtnText.text = iFollowThem ?
-                                GetLocalizedText("following") :
-                                GetLocalizedText("follow_back");
-                        }
+                            if (followBtnText != null)
+                            {
+                                if (iFollowThem)
+                                    followBtnText.text = GetLocalizedText("following");
+                                else if (theyFollowMe)
+                                    followBtnText.text = GetLocalizedText("follow_back");
+                                else
+                                    followBtnText.text = GetLocalizedText("follow");
+                            }
 
-                        // 버튼 배경색 변경
-                        Image btnBg = followBtnTr.GetComponent<Image>();
-                        if (btnBg != null)
-                        {
-                            btnBg.color = iFollowThem ?
-                                new Color(0.25f, 0.25f, 0.28f, 1f) : // 팔로우 중: 회색
-                                new Color(0.35f, 0.45f, 0.95f, 1f);  // 팔로우 전: 파란색
-                        }
+                            // 버튼 배경색 변경
+                            Image btnBg = followBtnTr.GetComponent<Image>();
+                            if (btnBg != null)
+                            {
+                                btnBg.color = iFollowThem ?
+                                    new Color(0.25f, 0.25f, 0.28f, 1f) : // 팔로우 중: 회색
+                                    new Color(0.35f, 0.45f, 0.95f, 1f);  // 팔로우 전: 파란색
+                            }
 
-                        followBtn.onClick.RemoveAllListeners();
-                        followBtn.onClick.AddListener(() =>
-                        {
-                            OnFollowerItemFollowClicked(targetId, followBtnTr, iFollowThem);
-                        });
+                            followBtn.onClick.RemoveAllListeners();
+                            followBtn.onClick.AddListener(() =>
+                            {
+                                OnFollowerItemFollowClicked(targetId, followBtnTr, iFollowThem);
+                            });
+                        }));
                     }));
                 }
             }
@@ -1562,25 +1568,27 @@ public class ProfileManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // 버튼 UI 업데이트
-                Text btnText = buttonTr.Find("Text")?.GetComponent<Text>();
-                if (btnText != null)
-                    btnText.text = GetLocalizedText("follow_back");
-
-                Image btnBg = buttonTr.GetComponent<Image>();
-                if (btnBg != null)
-                    btnBg.color = new Color(0.35f, 0.45f, 0.95f, 1f);
-
-                Button btn = buttonTr.GetComponent<Button>();
-                if (btn != null)
+                // 상대방이 나를 팔로우하는지 확인 후 텍스트 결정
+                StartCoroutine(CheckIsFollowing(targetId, myId, (theyFollowMe) =>
                 {
-                    btn.onClick.RemoveAllListeners();
-                    btn.onClick.AddListener(() =>
-                    {
-                        OnFollowerItemFollowClicked(targetId, buttonTr, false);
-                    });
-                }
+                    Text btnText = buttonTr.Find("Text")?.GetComponent<Text>();
+                    if (btnText != null)
+                        btnText.text = theyFollowMe ? GetLocalizedText("follow_back") : GetLocalizedText("follow");
 
+                    Image btnBg = buttonTr.GetComponent<Image>();
+                    if (btnBg != null)
+                        btnBg.color = new Color(0.35f, 0.45f, 0.95f, 1f);
+
+                    Button btn = buttonTr.GetComponent<Button>();
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        btn.onClick.AddListener(() =>
+                        {
+                            OnFollowerItemFollowClicked(targetId, buttonTr, false);
+                        });
+                    }
+                }));
             }
         }
     }

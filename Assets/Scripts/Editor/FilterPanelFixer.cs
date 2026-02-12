@@ -12,10 +12,10 @@ public static class FilterPanelFixer
 {
     private const string PREFAB_PATH = "Assets/Prefabs/FilterButtonPanel.prefab";
 
-    [DidReloadScripts]
+    // [DidReloadScripts] // 임시 비활성화 - Prefab 수정 권한 에러 방지
     private static void OnScriptsReloaded()
     {
-        EditorApplication.delayCall += FixFilterButtonPanel;
+        // EditorApplication.delayCall += FixFilterButtonPanel; // 임시 비활성화
     }
 
     private static void FixFilterButtonPanel()

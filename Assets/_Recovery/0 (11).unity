@@ -15762,7 +15762,7 @@ GameObject:
   - component: {fileID: 1403374501}
   - component: {fileID: 1403374504}
   m_Layer: 0
-  m_Name: MiniProfile_iOS
+  m_Name: MiniProfilei_iOS
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

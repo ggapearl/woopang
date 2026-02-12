@@ -105,15 +105,15 @@ public class SafeAreaPanel : MonoBehaviour
                 }
                 // 간단한 계산으로 변경
                 AndroidJavaObject resources = activity.Call<AndroidJavaObject>("getResources");
-                int statusBarHeight = GetSystemBarHeight(resources, "status_bar_height");
                 int navigationBarHeight = GetSystemBarHeight(resources, "navigation_bar_height");
-                
-                // Unity 동적 해상도에 맞춰 계산 (2200~2274px)
+
+                // 상단 status bar는 투명 오버레이로 처리 (iOS와 동일)
+                // 하단 navigation bar만 safe area에서 제외
                 safeArea = new Rect(
                     0,
                     navigationBarHeight,
                     Screen.width,
-                    Screen.height - statusBarHeight - navigationBarHeight
+                    Screen.height - navigationBarHeight
                 );
                 
             }

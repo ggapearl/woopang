@@ -29,18 +29,25 @@ public class GeospatialManager : MonoBehaviour
         Application.targetFrameRate = 30;
     }
 
+    private float _logTimer = 0f;
+
     void Update()
     {
-        if (!Debug.isDebugBuild || earthManager == null)
+        // 5초마다 상태 로그 출력
+        _logTimer += Time.deltaTime;
+        if (_logTimer >= 5f)
         {
-            // [����] ����� ���� �Ǵ� earthManager null �α�
-            return;
+            _logTimer = 0f;
+            Debug.Log($"[GeospatialManager] earthManager={earthManager != null}, arcoreExtensions={arcoreExtensions != null}, ARSession.state={ARSession.state}");
+            if (earthManager != null)
+                Debug.Log($"[GeospatialManager] EarthState={earthManager.EarthState}, EarthTrackingState={earthManager.EarthTrackingState}");
         }
+
+        if (earthManager == null) return;
 
         if (ARSession.state != ARSessionState.SessionInitializing &&
                ARSession.state != ARSessionState.SessionTracking)
         {
-            // [����] ARSession ���� �α�
             return;
         }
 
@@ -49,20 +56,20 @@ public class GeospatialManager : MonoBehaviour
         switch (featureSupport)
         {
             case FeatureSupported.Unknown:
-                // [����] Geospatial ��� ���� �� �� ���� �α�
                 break;
             case FeatureSupported.Unsupported:
-                // [����] Geospatial API ������ �α�
                 break;
             case FeatureSupported.Supported:
                 if (arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
                 {
-                    // [����] GeospatialMode Ȱ��ȭ �α�
                     arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
                     arcoreExtensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
                 }
                 break;
         }
+
+        // 디버그 UI 표시 (Debug Build에서만)
+        if (!Debug.isDebugBuild) return;
 
         var pose = earthManager.EarthState == EarthState.Enabled &&
             earthManager.EarthTrackingState == TrackingState.Tracking ?

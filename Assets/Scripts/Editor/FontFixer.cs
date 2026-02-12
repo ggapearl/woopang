@@ -36,7 +36,7 @@ public static class FontFixer
         int tmpTextFixed = 0;
 
         // Fix all Legacy Text components
-        Text[] allTexts = Object.FindObjectsOfType<Text>(true);
+        Text[] allTexts = Object.FindObjectsByType<Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (Text text in allTexts)
         {
             if (text.font == null || text.font != appleFont)
@@ -50,7 +50,7 @@ public static class FontFixer
         }
 
         // Fix all TextMeshPro components
-        TextMeshProUGUI[] allTMPTexts = Object.FindObjectsOfType<TextMeshProUGUI>(true);
+        TextMeshProUGUI[] allTMPTexts = Object.FindObjectsByType<TextMeshProUGUI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (TextMeshProUGUI tmpText in allTMPTexts)
         {
             if (tmpText.font == null || tmpText.font != appleFontSDF)
@@ -88,7 +88,7 @@ public static class FontFixer
         int tmpCorrect = 0, tmpMissing = 0, tmpWrong = 0;
 
         // Check Legacy Text
-        Text[] allTexts = Object.FindObjectsOfType<Text>(true);
+        Text[] allTexts = Object.FindObjectsByType<Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (Text text in allTexts)
         {
             if (text.font == null)
@@ -108,7 +108,7 @@ public static class FontFixer
         }
 
         // Check TextMeshPro
-        TextMeshProUGUI[] allTMPTexts = Object.FindObjectsOfType<TextMeshProUGUI>(true);
+        TextMeshProUGUI[] allTMPTexts = Object.FindObjectsByType<TextMeshProUGUI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (TextMeshProUGUI tmpText in allTMPTexts)
         {
             if (tmpText.font == null)
@@ -190,7 +190,7 @@ public static class FontFixer
             bool sceneModified = false;
 
             // Fix Legacy Text
-            Text[] allTexts = Object.FindObjectsOfType<Text>(true);
+            Text[] allTexts = Object.FindObjectsByType<Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (Text text in allTexts)
             {
                 if (text.font == null || text.font != appleFont)
@@ -204,7 +204,7 @@ public static class FontFixer
             }
 
             // Fix TextMeshPro
-            TextMeshProUGUI[] allTMPTexts = Object.FindObjectsOfType<TextMeshProUGUI>(true);
+            TextMeshProUGUI[] allTMPTexts = Object.FindObjectsByType<TextMeshProUGUI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (TextMeshProUGUI tmpText in allTMPTexts)
             {
                 if (tmpText.font == null || tmpText.font != appleFontSDF)

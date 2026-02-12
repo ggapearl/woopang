@@ -203,26 +203,30 @@ public class SystemUIManager : MonoBehaviour
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
         // OneUI용 더 안정적인 플래그 조합
-        int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE | 
+        int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE |
                    SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
                    SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-        
+
         decorView.Call("setSystemUiVisibility", flags);
-        
+
         // 윈도우 플래그 설정
         using (AndroidJavaClass wmClass = new AndroidJavaClass("android.view.WindowManager$LayoutParams"))
         {
             int FLAG_FULLSCREEN = wmClass.GetStatic<int>("FLAG_FULLSCREEN");
             int FLAG_FORCE_NOT_FULLSCREEN = wmClass.GetStatic<int>("FLAG_FORCE_NOT_FULLSCREEN");
             int FLAG_LAYOUT_NO_LIMITS = wmClass.GetStatic<int>("FLAG_LAYOUT_NO_LIMITS");
-            
+
             window.Call("clearFlags", FLAG_FULLSCREEN);
             window.Call("addFlags", FLAG_FORCE_NOT_FULLSCREEN);
-            
+
             // OneUI의 경우 추가 플래그
             window.Call("clearFlags", FLAG_LAYOUT_NO_LIMITS);
         }
-        
+
+        // Status bar 투명 설정 (iOS처럼 아이콘만 오버레이)
+        window.Call("addFlags", unchecked((int)0x80000000)); // FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+        window.Call("setStatusBarColor", 0); // Color.TRANSPARENT
+
         // 추가 대기 후 Canvas 조정
         StartCoroutine(DelayedCanvasAdjustment());
 #endif
@@ -233,15 +237,19 @@ public class SystemUIManager : MonoBehaviour
 #if UNITY_ANDROID && !UNITY_EDITOR
         int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
         decorView.Call("setSystemUiVisibility", flags);
-        
+
         using (AndroidJavaClass wmClass = new AndroidJavaClass("android.view.WindowManager$LayoutParams"))
         {
             int FLAG_FULLSCREEN = wmClass.GetStatic<int>("FLAG_FULLSCREEN");
             int FLAG_FORCE_NOT_FULLSCREEN = wmClass.GetStatic<int>("FLAG_FORCE_NOT_FULLSCREEN");
-            
+
             window.Call("clearFlags", FLAG_FULLSCREEN);
             window.Call("addFlags", FLAG_FORCE_NOT_FULLSCREEN);
         }
+
+        // Status bar 투명 설정 (iOS처럼 아이콘만 오버레이)
+        window.Call("addFlags", unchecked((int)0x80000000)); // FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+        window.Call("setStatusBarColor", 0); // Color.TRANSPARENT
 #endif
     }
     
@@ -294,13 +302,20 @@ public class SystemUIManager : MonoBehaviour
     Rect GetEnhancedSafeArea()
     {
         Rect safeArea = Screen.safeArea;
-        
+
+        // Android: 상단 status bar 영역 무시 (투명 오버레이이므로 콘텐츠가 뒤에 깔림)
+        float topInset = Screen.height - (safeArea.y + safeArea.height);
+        if (topInset > 0)
+        {
+            safeArea.height += topInset; // 상단까지 확장
+        }
+
         // OneUI에서 Safe Area가 제대로 감지되지 않는 경우 보정
         if (isOneUIDevice && enableOneUIWorkaround)
         {
             safeArea = CorrectSafeAreaForOneUI(safeArea);
         }
-        
+
         return safeArea;
     }
     

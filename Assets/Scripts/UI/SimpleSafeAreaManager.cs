@@ -60,6 +60,17 @@ public class SimpleSafeAreaManager : MonoBehaviour
         if (isApplied) return;
 
         Rect safeArea = Screen.safeArea;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // Android: 상단 status bar는 투명 오버레이로 처리 (iOS와 동일)
+        // 상단 인셋 무시하고 전체 화면 사용
+        float topInset = Screen.height - (safeArea.y + safeArea.height);
+        if (topInset > 0)
+        {
+            safeArea.height += topInset;
+        }
+#endif
+
         Vector2 anchorMin = safeArea.position;
         Vector2 anchorMax = safeArea.position + safeArea.size;
 

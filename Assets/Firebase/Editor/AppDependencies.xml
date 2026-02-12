@@ -4,6 +4,8 @@ FirebaseApp iOS and Android Dependencies.
 -->
 
 <dependencies>
+  <!-- iOS는 네이티브 APNs 사용하므로 Firebase 제외 -->
+  <!--
   <remoteSwiftPackage url="https://github.com/firebase/firebase-ios-sdk.git" version="12.8.0">
     <swiftPackage name="FirebaseCore" replacesPod="Firebase/Core"/>
   </remoteSwiftPackage>
@@ -11,6 +13,7 @@ FirebaseApp iOS and Android Dependencies.
     <iosPod name="Firebase/Core" version="12.8.0" minTargetSdk="15.0">
     </iosPod>
   </iosPods>
+  -->
   <androidPackages>
     <androidPackage spec="com.google.firebase:firebase-common:22.0.1">
     </androidPackage>

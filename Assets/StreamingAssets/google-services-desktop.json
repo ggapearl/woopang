@@ -7,20 +7,22 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:326869418613:android:ce9310eec098a3ec8c6e3c",
+        "mobilesdk_app_id": "1:326869418613:ios:YOUR_IOS_APP_ID",
         "android_client_info": {
           "package_name": "com.que.woopang"
         }
       },
-      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAZbJhj4F3UAnndhPLB5AtAClzc3Vl33bk"
+          "current_key": "YOUR_IOS_API_KEY"
         }
       ],
       "services": {
+        "analytics_service": {
+          "status": 0
+        },
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "status": 1
         }
       }
     }

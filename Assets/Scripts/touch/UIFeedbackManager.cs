@@ -218,21 +218,12 @@ public class UIFeedbackManager : MonoBehaviour
     // iOS Medium Haptic 호출
     private void TriggerIOSMediumHaptic()
     {
-#if UNITY_IOS && !UNITY_EDITOR
-        // 네이티브 iOS Medium Haptic 호출
-        _TriggerMediumHaptic();
-#elif !UNITY_EDITOR
-        // 에디터가 아닌 다른 환경에서는 기본 진동
+#if !UNITY_EDITOR
+        // 모든 플랫폼에서 기본 진동 사용
         Handheld.Vibrate();
 #endif
         // 에디터에서는 진동 호출 생략 (불필요한 로그 방지)
     }
-
-#if UNITY_IOS && !UNITY_EDITOR
-    // iOS ����Ƽ�� Medium Haptic �Լ� ����
-    [System.Runtime.InteropServices.DllImport("__Internal")]
-    private static extern void _TriggerMediumHaptic();
-#endif
 
     private void PlaySound(AudioClip clip)
     {

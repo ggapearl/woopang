@@ -165,12 +165,34 @@ public class FirebaseNotification : MonoBehaviour
         RequestNotificationPermission();
         InitializeAndroidNotificationChannel();
         StartNotificationCleanup();
-#endif
 
+        // Firebase는 Android에서만 사용
         FirebaseMessaging.TokenReceived += OnTokenReceived;
         FirebaseMessaging.MessageReceived += OnMessageReceived;
         StartCoroutine(InitializeFirebaseCoroutine());
+#elif UNITY_IOS
+        // iOS는 네이티브 APNs 사용 (UnityAppController.mm에서 처리)
+        // OnNativeTokenReceived와 OnNativeMessageReceived 콜백 사용
+        LoadTokenFromPlayerPrefs();
+#endif
+
         StartCoroutine(CheckBackgroundNotificationOnStartup());
+    }
+
+    private void LoadTokenFromPlayerPrefs()
+    {
+        string savedToken = PlayerPrefs.GetString("FCMToken", "");
+        if (!string.IsNullOrEmpty(savedToken))
+        {
+            currentFCMToken = savedToken;
+        }
+
+        // APNs 토큰도 확인
+        string apnsToken = PlayerPrefs.GetString("APNSDeviceToken", "");
+        if (!string.IsNullOrEmpty(apnsToken))
+        {
+            currentFCMToken = apnsToken;
+        }
     }
 
 
@@ -228,6 +250,7 @@ public class FirebaseNotification : MonoBehaviour
 
     private IEnumerator InitializeFirebaseCoroutine()
     {
+#if UNITY_ANDROID
         bool initializationComplete = false;
         Firebase.DependencyStatus dependencyStatus = Firebase.DependencyStatus.UnavailableOther;
 
@@ -248,6 +271,9 @@ public class FirebaseNotification : MonoBehaviour
             // 이벤트 핸들러는 Start()에서 이미 등록됨 - 중복 등록 제거
             StartCoroutine(CheckBackgroundNotification());
         }
+#else
+        yield break;
+#endif
     }
 
     private string DateTimeToString(DateTime dateTime)
@@ -1431,10 +1457,12 @@ public class FirebaseNotification : MonoBehaviour
     }
 
     /// <summary>
-    /// 인앱 알림 배너 표시
+    /// 인앱 알림 배너 표시 (iOS만 - Android는 시스템 알림으로 충분)
     /// </summary>
     public void ShowInAppNotification(string title, string body, string userId = "", string username = "")
     {
+#if UNITY_IOS
+        // iOS만 인앱 배너 표시 (Android는 포그라운드에서도 시스템 상단 알림이 표시되므로 불필요)
         if (notificationBanner == null)
         {
             CreateNotificationBannerUI();
@@ -1463,6 +1491,7 @@ public class FirebaseNotification : MonoBehaviour
 
         // 배너 표시 코루틴 시작
         bannerCoroutine = StartCoroutine(ShowBannerCoroutine());
+#endif
     }
 
     private IEnumerator ShowBannerCoroutine()
@@ -1625,10 +1654,11 @@ public class FirebaseNotification : MonoBehaviour
     void OnDestroy()
     {
         Input.location.Stop();
-        
+
         // 모든 활성 알림 정리
         ClearAllNotifications();
-        
+
+#if UNITY_ANDROID
         try
         {
             FirebaseMessaging.TokenReceived -= OnTokenReceived;
@@ -1638,5 +1668,6 @@ public class FirebaseNotification : MonoBehaviour
         {
             Debug.LogError($"Error unregistering Firebase events: {ex.Message}");
         }
+#endif
     }
 }

@@ -1,198 +1,69 @@
-# 최종 수정 가이드
+# iOS AR 카메라 & 상태바 문제 최종 해결 가이드
 
-## 문제 1: 스크롤 민감도 - 즉각 반응 개선 ✅
+## 🔴 발생한 문제
+1. **AR 카메라 작동 안 함** - UpdatableTextureFactory.Create() 에러 무한 반복
+2. **상태바 UI 겹침** - SafeAreaHandler가 Canvas에 잘못 부착됨
 
-### 원인
-- `SmoothScrollRect.cs`의 `minDragDistance` 체크가 즉각 반응을 막고 있었음
-- 드래그 이벤트가 기본 ScrollRect에 전달되지 않음
+## 🔍 근본 원인
+- **ARFoundation 6.3.1**이 Unity 6에서 iOS ARKit 텍스처 관리에 버그 있음
+- packages-lock.json이 manifest.json 무시하고 6.3.1 자동 설치
+- SafeAreaHandler가 Canvas 전체에 적용되어 모든 UI 왜곡
 
-### 해결 방법
-[SmoothScrollRect.cs](c:\woopang\Assets\Scripts\UI\SmoothScrollRect.cs) 개선:
-- **최소 드래그 거리 체크 제거**
-- **기본 ScrollRect 이벤트 전달 추가** (`OnBeginDrag`, `OnDrag`, `OnEndDrag`)
-- **velocity 누적 방식으로 변경** (덮어쓰기 → 추가)
+## ✅ 적용된 해결책 (자동 수정 완료)
 
-### 변경된 로직
-```csharp
-public void OnDrag(PointerEventData eventData)
-{
-    // 1. 기본 ScrollRect 드래그 전달 (즉각 반응)
-    scrollRect.OnDrag(eventData);
+### 1. ARFoundation 5.1.6 강제 고정
 
-    // 2. 추가 민감도 증폭 (velocity 누적)
-    scrollRect.velocity += additionalVelocity;
-}
-```
+Packages/manifest.json:
+- ✅ com.unity.xr.arfoundation: "5.1.6" (manifest에 명시적 추가)
+- ✅ com.unity.xr.arcore: "5.1.6"
+- ✅ com.unity.xr.arkit: "5.1.6"
+- ✅ ARCore Extensions: arf5
+- ✅ ARFoundation 6.3.1 캐시 삭제 완료
 
-**이제 살짝 스와이프해도 즉시 반응합니다!**
+### 2. SafeAreaHandler 올바른 위치로 이동
 
----
+Assets/Scenes/WP_0111.unity:
+- ✅ Canvas에서 SafeAreaHandler 제거
+- ✅ Panel_Top에 SafeAreaHandler 추가
+- 이제 상단 패널만 Safe Area 적용됨
 
-## 문제 2: SystemUIManager 깜빡임 - 완전히 새로운 접근 ✅
+## 🚀 Unity에서 진행할 작업
 
-### 원인
-- 기존 `SystemUIManager.cs`가 너무 복잡하고 Canvas를 여러 번 조정함
-- OneUI 특화 로직이 일반 기기에서 간섭 발생
-- 스플래시와 타이밍이 겹쳐서 깜빡임 발생
+### Step 1: Unity 에디터 재시작
+1. **Unity 완전 종료**
+2. Unity 재실행하여 패키지 재설치 트리거
+3. Window → Package Manager에서 버전 확인:
+   - ARFoundation: 5.1.6 (6.3.1 아님!)
+   - ARCore: 5.1.6
+   - ARKit: 5.1.6
+   - ARCore Extensions: arf5
+4. **컴파일 에러 발생 시 (CS0592):**
+   - 이미 수정됨: `Library/PackageCache/.../ARGeospatialCreatorOrigin.cs`
+   - Line 87: `[SerializeField]` 주석처리됨
+5. 콘솔에서 컴파일 에러 없는지 확인
 
-### 해결 방법: 기존 스크립트 비활성화 + 새 스크립트 2개 사용
+### Step 2: 씬 리로드 확인
+1. Assets/Scenes/WP_0111.unity 씬 열기
+2. Hierarchy에서 Canvas → Panel_Top 선택
+3. Inspector에서 SafeAreaHandler 컴포넌트 확인
+4. Canvas GameObject에는 SafeAreaHandler 없어야 함
 
-#### 1단계: 기존 SystemUIManager 비활성화
-Hierarchy에서:
-1. `SystemUIManager` 오브젝트 선택
-2. Inspector에서 **SystemUIManager 컴포넌트 체크 해제** (비활성화)
-3. 오브젝트 자체는 유지 (나중에 필요하면 다시 활성화 가능)
+### Step 3: iOS 빌드 & 테스트
+1. File → Build Settings → iOS → Build
+2. Xcode에서 프로젝트 열기
+3. 실제 iOS 디바이스에서 실행
+4. **테스트 항목:**
+   - ✅ AR 카메라 정상 작동 (UpdatableTextureFactory 에러 없음)
+   - ✅ 상단바가 Safe Area 내에 표시됨
+   - ✅ 카메라/위치 권한 프롬프트 정상 표시
 
-#### 2단계: 새 스크립트 2개 추가
+## 📝 변경 사항 요약
 
-**새로 만든 스크립트:**
-1. **[SimpleSafeAreaManager.cs](c:\woopang\Assets\Scripts\UI\SimpleSafeAreaManager.cs)**
-   - Safe Area 적용 (노치, 펀치홀 대응)
-   - 스플래시 완료 후 **딱 한 번만** 실행
-   - 깜빡임 없음 보장
+**수정된 파일:**
+1. `Packages/manifest.json` - ARFoundation 5.1.6 명시적 추가
+2. `Assets/Scenes/WP_0111.unity` - SafeAreaHandler를 Canvas → Panel_Top으로 이동
+3. `Library/PackageCache/` - ARFoundation 6.3.1 캐시 삭제
 
-2. **[AndroidSystemUIController.cs](c:\woopang\Assets\Scripts\UI\AndroidSystemUIController.cs)**
-   - Android 시스템 UI 바 강제 표시
-   - 상태바/네비게이션바 유지
-   - 간단하고 안정적
-
-#### 3단계: Unity에서 설정
-
-**Hierarchy에 새 오브젝트 2개 생성:**
-
-1. **SimpleSafeAreaManager 오브젝트**:
-   ```
-   - 우클릭 → Create Empty
-   - 이름: SimpleSafeAreaManager
-   - Add Component → Simple Safe Area Manager
-   - Inspector 설정:
-     - Wait For Splash: 4.0 (스플래시 시간)
-     - Safety Margin: 0.5 (안전 마진)
-     - Target Canvases: 비워두기 (자동으로 모든 Canvas 적용)
-   ```
-
-2. **AndroidSystemUIController 오브젝트**:
-   ```
-   - 우클릭 → Create Empty
-   - 이름: AndroidSystemUIController
-   - Add Component → Android System UI Controller
-   - 설정 필요 없음 (자동)
-   ```
-
----
-
-## 비교표
-
-| 항목 | 기존 SystemUIManager | 새로운 방식 |
-|------|---------------------|------------|
-| **복잡도** | 매우 높음 (500+ 줄) | 간단함 (각 150줄) |
-| **깜빡임** | 있음 | 없음 |
-| **OneUI 특화** | 있음 (일반 기기에 간섭) | 없음 (모든 기기 동일) |
-| **실행 횟수** | 여러 번 (InvokeRepeating) | 단 한 번 |
-| **Safe Area** | 복잡한 계산 | Unity 기본 제공 사용 |
-| **디버그** | 많은 로그 | 최소한의 로그 |
-
----
-
-## 최종 설정 체크리스트
-
-### ✅ 스크롤 민감도
-- [x] `SmoothScrollRect.cs` 수정 완료
-- [x] `ListPanel/Scroll View`에 `SmoothScrollRect` 컴포넌트 추가
-- [x] Inspector 설정:
-  - Scroll Sensitivity: `3.0 ~ 4.0`
-  - Inertia Mult: `1.5 ~ 2.0`
-  - Min Drag Distance: `1.0` (이제 큰 의미 없음)
-
-### ✅ SystemUI 깜빡임 제거
-- [x] 기존 `SystemUIManager` 컴포넌트 **비활성화**
-- [x] `SimpleSafeAreaManager.cs` 생성 완료
-- [x] `AndroidSystemUIController.cs` 생성 완료
-- [x] Hierarchy에 2개 오브젝트 생성 필요 (Unity에서)
-
-### ✅ Content Vertical Layout Group
-- [x] Child Force Expand - Height: **OFF**
-- [x] Spacing: `15 ~ 20`
-
----
-
-## 테스트 방법
-
-### 스크롤 민감도 테스트
-1. ✓ 살짝 스와이프 → 즉시 반응
-2. ✓ 빠르게 스와이프 → 부드러운 관성
-3. ✓ 드래그 시작 → 딜레이 없음
-
-### 깜빡임 테스트
-1. ✓ 앱 시작 → 검은 화면 없음
-2. ✓ 스플래시 종료 → 깜빡임 없음
-3. ✓ 백그라운드 복귀 → 깜빡임 없음
-
----
-
-## 문제 발생 시
-
-### 스크롤이 여전히 느리다면
-1. `SmoothScrollRect` 컴포넌트의 `Scroll Sensitivity`를 `5.0`까지 올려보기
-2. `Content`의 `Child Force Expand - Height`가 **OFF**인지 재확인
-
-### 깜빡임이 여전히 발생한다면
-1. 기존 `SystemUIManager` 컴포넌트가 **완전히 비활성화**되었는지 확인
-2. `SimpleSafeAreaManager`의 `Wait For Splash` 값을 `5.0`으로 증가
-3. Logcat에서 에러 확인:
-   ```bash
-   adb logcat | grep "SimpleSafeArea\|AndroidSystemUI"
-   ```
-
-### Safe Area가 적용 안 된다면
-1. `SimpleSafeAreaManager`의 `Target Canvases`를 비워두기 (자동 탐색)
-2. 또는 수동으로 적용할 Canvas들을 드래그 앤 드롭
-
----
-
-## 권장 최종 구조
-
-```
-Hierarchy
-├─ SystemUIManager (기존 - 컴포넌트 비활성화)
-├─ SimpleSafeAreaManager (새로 추가)
-│   └─ SimpleSafeAreaManager 컴포넌트
-├─ AndroidSystemUIController (새로 추가)
-│   └─ AndroidSystemUIController 컴포넌트
-└─ ListPanel
-    └─ Scroll View
-        ├─ Scroll Rect (기존 - 유지)
-        ├─ Smooth Scroll Rect (추가됨 - 개선됨)
-        └─ Viewport
-            └─ Content
-                └─ Vertical Layout Group
-                    └─ Child Force Expand Height: OFF
-```
-
----
-
-## 성능 비교
-
-| 항목 | 개선 전 | 개선 후 |
-|------|---------|---------|
-| 스크롤 반응 시간 | ~200ms | ~10ms (즉시) |
-| 깜빡임 발생 | 매우 자주 | 없음 |
-| Canvas 조정 횟수 | 매 0.5초 | 단 1회 |
-| CPU 사용률 | 높음 (반복 체크) | 낮음 (1회 실행) |
-
----
-
-## 추가 팁
-
-### ScrollRect 기본 설정 최적화
-`ListPanel/Scroll View`의 `Scroll Rect`:
-- **Scroll Sensitivity**: `80 ~ 100`
-- **Deceleration Rate**: `0.15 ~ 0.2`
-- **Inertia**: ON
-- **Elasticity**: `0.05 ~ 0.1` (바운스 감소)
-
-### Viewport 최적화
-- **Image 컴포넌트**: Raycast Target **OFF**
-- **Mask 컴포넌트**: Show Mask Graphic **OFF**
-
-이제 완벽하게 작동할 것입니다! 🎉
+**핵심 수정:**
+- ARFoundation 버전 고정으로 자동 업그레이드 방지
+- SafeAreaHandler를 올바른 GameObject에 적용하여 UI 레이아웃 보호

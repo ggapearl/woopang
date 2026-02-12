@@ -1,9 +1,18 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+#if UNITY_IOS && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 
 public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
 {
+#if UNITY_IOS && !UNITY_EDITOR
+    // iOS 네이티브: Status Bar 아이콘 색상 변경 (true=흰색, false=검정색)
+    [DllImport("__Internal")]
+    private static extern void _SetStatusBarStyle(bool lightContent);
+#endif
+
     [Header("References")]
     [SerializeField] private Image backgroundImage;
     [SerializeField] private Image logoImage;
@@ -128,8 +137,9 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
             if (logoImage != null && originalColorsSaved)
                 logoImage.color = originalLogoColor;
 
-            // 0번(원본)일 때 miniUsernameText 흰색
+            // 0번(원본)일 때 miniUsernameText 흰색, status bar 흰색 아이콘
             UpdateMiniUsernameTextColor(Color.white);
+            UpdateStatusBarStyle(true);
             return;
         }
 
@@ -150,6 +160,8 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
         // 밝은 배경일 때 miniUsernameText 검정색, 아니면 흰색
         bool isLightBackground = System.Array.IndexOf(lightBackgroundIndices, currentColorIndex) >= 0;
         UpdateMiniUsernameTextColor(isLightBackground ? Color.black : Color.white);
+        // 밝은 배경 → 검정 아이콘, 어두운 배경 → 흰색 아이콘 (iOS + Android)
+        UpdateStatusBarStyle(!isLightBackground);
     }
 
     /// <summary>
@@ -162,6 +174,58 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
             ProfileManager.Instance.miniUsernameText.color = color;
         }
     }
+
+    /// <summary>
+    /// Status Bar 아이콘 색상 업데이트 (iOS + Android)
+    /// </summary>
+    /// <param name="lightContent">true=흰색 아이콘(어두운 배경), false=검정 아이콘(밝은 배경)</param>
+    private void UpdateStatusBarStyle(bool lightContent)
+    {
+#if UNITY_IOS && !UNITY_EDITOR
+        _SetStatusBarStyle(lightContent);
+#elif UNITY_ANDROID && !UNITY_EDITOR
+        SetAndroidStatusBarStyle(lightContent);
+#endif
+    }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private const int SYSTEM_UI_FLAG_LIGHT_STATUS_BAR = 0x2000;
+
+    private void SetAndroidStatusBarStyle(bool lightContent)
+    {
+        try
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            {
+                var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                var window = activity.Call<AndroidJavaObject>("getWindow");
+                var decorView = window.Call<AndroidJavaObject>("getDecorView");
+
+                activity.Call("runOnUiThread", new AndroidJavaRunnable(() =>
+                {
+                    int currentFlags = decorView.Call<int>("getSystemUiVisibility");
+
+                    if (lightContent)
+                    {
+                        // 흰색 아이콘 (어두운 배경) - LIGHT_STATUS_BAR 플래그 제거
+                        currentFlags &= ~SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                    }
+                    else
+                    {
+                        // 검정 아이콘 (밝은 배경) - LIGHT_STATUS_BAR 플래그 추가
+                        currentFlags |= SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                    }
+
+                    decorView.Call("setSystemUiVisibility", currentFlags);
+                }));
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[TopPanelColorChanger] Android status bar 색상 변경 실패: {e.Message}");
+        }
+    }
+#endif
 
     public void NextColor()
     {
