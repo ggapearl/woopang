@@ -120,7 +120,7 @@ public class PlaceListManager : MonoBehaviour
         if (distanceSlider != null) distanceSlider.onValueChanged.RemoveListener(OnDistanceSliderChanged);
     }
 
-    private void UpdateUI()
+    public void UpdateUI()
     {
         if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
         updateUICoroutine = StartCoroutine(UpdateUIWithFadeIn());

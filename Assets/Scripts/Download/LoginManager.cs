@@ -129,6 +129,23 @@ public class LoginManager : MonoBehaviour
         Application.deepLinkActivated -= OnDeepLinkActivated;
     }
 
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (hasFocus && !IsLoggedIn)
+        {
+            // 웹 로그인 후 앱 복귀 시 딥링크가 누락된 경우 대비
+            if (!string.IsNullOrEmpty(Application.absoluteURL))
+            {
+                OnDeepLinkActivated(Application.absoluteURL);
+            }
+            else
+            {
+                // 저장된 토큰이 있으면 자동 로그인 재시도
+                TryAutoLogin();
+            }
+        }
+    }
+
     #region Language
 
     private void SetLanguage()

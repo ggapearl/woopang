@@ -9,12 +9,11 @@
         <item name="android:windowTranslucentStatus">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <!-- 네비게이션바도 투명 -->
+        <!-- 네비게이션바: 검은색 배경 유지 -->
         <item name="android:windowTranslucentNavigation">false</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#000000</item>
         <!-- 상태바 대비 강제 비활성화 (API 29+) -->
         <item name="android:enforceStatusBarContrast">false</item>
-        <item name="android:enforceNavigationBarContrast">false</item>
         <!-- fitsSystemWindows false -->
         <item name="android:fitsSystemWindows">false</item>
     </style>

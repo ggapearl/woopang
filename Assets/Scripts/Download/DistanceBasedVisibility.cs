@@ -4,6 +4,7 @@ public class DistanceBasedVisibility : MonoBehaviour
 {
     public Transform player;
     public float hideDistance = 50f; // 동적으로 설정
+    public float minDistance = 2f;   // 최소 거리 (이 거리 이내면 숨김)
     private bool isVisible = true;
     private float checkInterval = 0.5f; // 거리 체크 간격 (0.5초)
     private float lastCheckTime;
@@ -33,7 +34,7 @@ public class DistanceBasedVisibility : MonoBehaviour
 
         // 초기 거리 체크
         float initialDistance = Vector3.Distance(player.position, transform.position);
-        isVisible = initialDistance <= hideDistance;
+        isVisible = initialDistance >= minDistance && initialDistance <= hideDistance;
         SetVisibility(isVisible);
     }
 
@@ -52,14 +53,15 @@ public class DistanceBasedVisibility : MonoBehaviour
         }
 
         float distance = Vector3.Distance(player.position, transform.position);
+        bool shouldBeVisible = distance >= minDistance && distance <= hideDistance;
 
-        if (distance > hideDistance && isVisible)
-        {
-            SetVisibility(false);
-        }
-        else if (distance <= hideDistance && !isVisible)
+        if (shouldBeVisible && !isVisible)
         {
             SetVisibility(true);
+        }
+        else if (!shouldBeVisible && isVisible)
+        {
+            SetVisibility(false);
         }
     }
 

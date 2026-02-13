@@ -9,6 +9,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private ARAnchorManager anchorManager;
     private double _lat, _lon, _alt;
     private bool _anchorCreated = false;
+    public bool IsAnchorCreated => _anchorCreated;
     private int _retryCount = 0;
     private const int MAX_RETRIES = 30; // 최대 30회 (약 30초)
 

@@ -1392,6 +1392,9 @@ public class CubeUploadManager : MonoBehaviour
                     // 업로드 성공 10초 후 FCM 알림 발송 (주변 사용자에게 새 콘텐츠 알림)
                     StartCoroutine(SendUploadNotificationDelayed(10f));
 
+                    // 업로드 성공 1초 후 AR 오브젝트 + 리스트 즉시 새로고침
+                    StartCoroutine(RefreshDataAfterUpload(1f));
+
                     FullReset();
                     yield break;
                 }
@@ -1413,6 +1416,21 @@ public class CubeUploadManager : MonoBehaviour
     #endregion
 
     #region Utility Methods
+
+    /// <summary>
+    /// 업로드 성공 후 AR 오브젝트 + PlaceList 즉시 새로고침
+    /// </summary>
+    private IEnumerator RefreshDataAfterUpload(float delaySeconds)
+    {
+        yield return new WaitForSeconds(delaySeconds);
+
+        if (DataManager.Instance != null)
+            DataManager.Instance.RefreshData();
+
+        PlaceListManager plm = FindFirstObjectByType<PlaceListManager>();
+        if (plm != null)
+            plm.UpdateUI();
+    }
 
     /// <summary>
     /// 업로드 성공 후 지정된 시간(초) 뒤에 업로더에게 FCM 알림 발송

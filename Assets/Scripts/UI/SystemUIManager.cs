@@ -251,7 +251,10 @@ public class SystemUIManager : MonoBehaviour
         window.Call("addFlags", unchecked((int)0x80000000)); // FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
         window.Call("setStatusBarColor", 0); // Color.TRANSPARENT
 
-        // API 29+: 대비 강제 scrim 비활성화 (블랙바 원인 제거)
+        // 네비게이션바: 검은색 배경 유지
+        window.Call("setNavigationBarColor", unchecked((int)0xFF000000)); // Color.BLACK
+
+        // API 29+: 상태바 대비 scrim 비활성화 (네비게이션바는 유지)
         AndroidJavaClass buildClassOneUI = new AndroidJavaClass("android.os.Build$VERSION");
         int sdkIntOneUI = buildClassOneUI.GetStatic<int>("SDK_INT");
         if (sdkIntOneUI >= 29)
@@ -259,7 +262,6 @@ public class SystemUIManager : MonoBehaviour
             try
             {
                 window.Call("setStatusBarContrastEnforced", false);
-                window.Call("setNavigationBarContrastEnforced", false);
             }
             catch (System.Exception) { /* API 29 미만 폴백 */ }
         }
@@ -268,7 +270,7 @@ public class SystemUIManager : MonoBehaviour
         StartCoroutine(DelayedCanvasAdjustment());
 #endif
     }
-    
+
     void SetupStandardSystemUI()
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -317,13 +319,15 @@ public class SystemUIManager : MonoBehaviour
         window.Call("addFlags", unchecked((int)0x80000000)); // FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
         window.Call("setStatusBarColor", 0); // Color.TRANSPARENT
 
-        // API 29+: 대비 강제 scrim 비활성화 (블랙바 원인 제거)
+        // 네비게이션바: 검은색 배경 유지
+        window.Call("setNavigationBarColor", unchecked((int)0xFF000000)); // Color.BLACK
+
+        // API 29+: 상태바 대비 scrim 비활성화 (네비게이션바는 유지)
         if (sdkInt >= 29)
         {
             try
             {
                 window.Call("setStatusBarContrastEnforced", false);
-                window.Call("setNavigationBarContrastEnforced", false);
             }
             catch (System.Exception) { /* API 29 미만 폴백 */ }
         }

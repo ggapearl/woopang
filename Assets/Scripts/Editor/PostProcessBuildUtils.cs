@@ -312,6 +312,17 @@ namespace Editor
             rootDict.SetBoolean("UIViewControllerBasedStatusBarAppearance", false); // _SetStatusBarStyle API 사용 위해 false 필수
             rootDict.SetBoolean("UIRequiresFullScreen", true); // Safe Area 강제 적용
 
+            // === URL Scheme 등록 (딥링크: woopang://auth?token=...) ===
+            if (!rootDict.values.ContainsKey("CFBundleURLTypes"))
+            {
+                PlistElementArray urlTypes = rootDict.CreateArray("CFBundleURLTypes");
+                PlistElementDict woopangScheme = urlTypes.AddDict();
+                woopangScheme.SetString("CFBundleURLName", "com.woopang.app");
+                PlistElementArray schemes = woopangScheme.CreateArray("CFBundleURLSchemes");
+                schemes.AddString("woopang");
+                UnityEngine.Debug.Log("[WOOPANG] URL Scheme 'woopang://' 등록 완료");
+            }
+
             // === ATS(App Transport Security) 설정 ===
             // 모든 API가 HTTPS (woopang.com) 경유하므로 기본 ATS 정책 유지
             if (!rootDict.values.ContainsKey("NSAppTransportSecurity"))

@@ -925,6 +925,29 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 즉시 데이터 새로고침 (업로드 성공 등 외부 호출용)
+    /// </summary>
+    public void RefreshData()
+    {
+        if (fetchCoroutine != null)
+            StopCoroutine(fetchCoroutine);
+
+#if UNITY_EDITOR
+        float lat = VirtualLocation.Instance.Latitude;
+        float lon = VirtualLocation.Instance.Longitude;
+#else
+        float lat = 37.5665f;
+        float lon = 126.9780f;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+#endif
+        fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
+    }
+
     void OnApplicationFocus(bool hasFocus)
     {
         if (hasFocus && Input.location.isEnabledByUser)
