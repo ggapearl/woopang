@@ -9,7 +9,6 @@ using System.Linq;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
-using TMPro;
 
 public class DataManager : MonoBehaviour
 {
@@ -82,15 +81,11 @@ public class DataManager : MonoBehaviour
     [SerializeField] private float updateDistanceThreshold = 50f;
 
     [Header("AR 준비 상태 가이드")]
-    public GameObject arGuidePanel;
-    public TextMeshProUGUI arGuideText;
-    public CanvasGroup arGuideCanvasGroup;
-    [SerializeField] private float arGuideFadeDuration = 1.5f;
+    [SerializeField] private int arGuideFontSize = 22;
 
     private bool isDataLoaded = false;
     private bool isGeospatialReady = false;
     private Coroutine fetchCoroutine;
-    private Coroutine arGuideFadeCoroutine;
     private Vector2 lastPosition;
 
     // 현재 활성 필터 저장 (거리 필터와 동기화용)
@@ -1009,67 +1004,33 @@ public class DataManager : MonoBehaviour
 
     private void ShowARGuide(string message)
     {
-        if (arGuidePanel == null) return;
+        GameObject warningObj = GameObject.Find("WarningText");
+        if (warningObj == null) return;
 
-        arGuidePanel.SetActive(true);
-
-        if (arGuideText != null)
-            arGuideText.text = message;
-
-        if (arGuideCanvasGroup != null)
+        Text warningText = warningObj.GetComponentInChildren<Text>();
+        if (warningText != null)
         {
-            if (arGuideFadeCoroutine != null)
-                StopCoroutine(arGuideFadeCoroutine);
-            arGuideFadeCoroutine = StartCoroutine(FadeARGuide(0f, 1f));
+            warningText.text = message;
+            warningText.fontSize = arGuideFontSize;
         }
+        warningObj.SetActive(true);
     }
 
     private void HideARGuide()
     {
-        if (arGuidePanel == null) return;
-
-        if (arGuideCanvasGroup != null)
-        {
-            if (arGuideFadeCoroutine != null)
-                StopCoroutine(arGuideFadeCoroutine);
-            arGuideFadeCoroutine = StartCoroutine(FadeARGuideAndHide());
-        }
-        else
-        {
-            arGuidePanel.SetActive(false);
-        }
+        GameObject warningObj = GameObject.Find("WarningText");
+        if (warningObj != null)
+            warningObj.SetActive(false);
     }
 
     private void UpdateARGuideText(string message)
     {
-        if (arGuideText != null)
-            arGuideText.text = message;
-    }
+        GameObject warningObj = GameObject.Find("WarningText");
+        if (warningObj == null) return;
 
-    private IEnumerator FadeARGuide(float from, float to)
-    {
-        if (arGuideCanvasGroup == null) yield break;
-
-        float elapsed = 0f;
-        arGuideCanvasGroup.alpha = from;
-
-        while (elapsed < arGuideFadeDuration)
-        {
-            elapsed += Time.deltaTime;
-            float t = elapsed / arGuideFadeDuration;
-            arGuideCanvasGroup.alpha = Mathf.Lerp(from, to, t);
-            yield return null;
-        }
-        arGuideCanvasGroup.alpha = to;
-        arGuideFadeCoroutine = null;
-    }
-
-    private IEnumerator FadeARGuideAndHide()
-    {
-        yield return StartCoroutine(FadeARGuide(1f, 0f));
-        if (arGuidePanel != null)
-            arGuidePanel.SetActive(false);
-        arGuideFadeCoroutine = null;
+        Text warningText = warningObj.GetComponentInChildren<Text>();
+        if (warningText != null)
+            warningText.text = message;
     }
 
     private void ShowErrorMessage(string message)
