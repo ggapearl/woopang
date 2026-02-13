@@ -63,6 +63,47 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
     {
         LoadSavedColorIndex();
         ApplyCurrentColor();
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // SystemUIManager보다 늦게 실행되도록 딜레이 후 재적용
+        // (SystemUIManager가 상태바 투명 설정 후 아이콘 색상이 리셋될 수 있음)
+        StartCoroutine(ReapplyStatusBarStyleDelayed());
+#endif
+    }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private System.Collections.IEnumerator ReapplyStatusBarStyleDelayed()
+    {
+        yield return new WaitForSeconds(1.0f);
+        ApplyStatusBarIconColor();
+    }
+#endif
+
+    /// <summary>
+    /// 현재 배경색에 맞게 상태바 아이콘 색상 재적용
+    /// </summary>
+    private void ApplyStatusBarIconColor()
+    {
+        if (currentColorIndex == 0)
+        {
+            // 원본 색상일 때 배경 밝기 자동 감지
+            if (backgroundImage != null)
+            {
+                Color bgColor = backgroundImage.color;
+                float luminance = 0.299f * bgColor.r + 0.587f * bgColor.g + 0.114f * bgColor.b;
+                bool isLight = luminance > 0.5f;
+                UpdateStatusBarStyle(!isLight); // 밝은 배경 → 검정 아이콘
+            }
+            else
+            {
+                UpdateStatusBarStyle(true); // 기본: 흰색 아이콘
+            }
+        }
+        else
+        {
+            bool isLightBackground = System.Array.IndexOf(lightBackgroundIndices, currentColorIndex) >= 0;
+            UpdateStatusBarStyle(!isLightBackground);
+        }
     }
 
     /// <summary>
@@ -190,6 +231,7 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
 
 #if UNITY_ANDROID && !UNITY_EDITOR
     private const int SYSTEM_UI_FLAG_LIGHT_STATUS_BAR = 0x2000;
+    private const int APPEARANCE_LIGHT_STATUS_BARS = 8;
 
     private void SetAndroidStatusBarStyle(bool lightContent)
     {
@@ -203,16 +245,56 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
 
                 activity.Call("runOnUiThread", new AndroidJavaRunnable(() =>
                 {
+                    // API 30+ (Android 11): WindowInsetsController 사용
+                    AndroidJavaClass buildClass = new AndroidJavaClass("android.os.Build$VERSION");
+                    int sdkInt = buildClass.GetStatic<int>("SDK_INT");
+
+                    if (sdkInt >= 30)
+                    {
+                        try
+                        {
+                            AndroidJavaObject insetsController = window.Call<AndroidJavaObject>("getInsetsController");
+                            if (insetsController != null)
+                            {
+                                // 상태바 강제 표시
+                                AndroidJavaClass insetsType = new AndroidJavaClass("android.view.WindowInsets$Type");
+                                int statusBarsType = insetsType.CallStatic<int>("statusBars");
+                                insetsController.Call("show", statusBarsType);
+
+                                if (lightContent)
+                                {
+                                    // 흰색 아이콘 (어두운 배경) - LIGHT 플래그 제거
+                                    insetsController.Call("setSystemBarsAppearance", 0, APPEARANCE_LIGHT_STATUS_BARS);
+                                }
+                                else
+                                {
+                                    // 검정 아이콘 (밝은 배경) - LIGHT 플래그 추가
+                                    insetsController.Call("setSystemBarsAppearance", APPEARANCE_LIGHT_STATUS_BARS, APPEARANCE_LIGHT_STATUS_BARS);
+                                }
+                            }
+                        }
+                        catch (System.Exception) { /* fallback to legacy */ }
+                    }
+
+                    // API 29+: 대비 강제 scrim 비활성화 (블랙바 원인 제거)
+                    if (sdkInt >= 29)
+                    {
+                        try
+                        {
+                            window.Call("setStatusBarContrastEnforced", false);
+                        }
+                        catch (System.Exception) { /* API 29 미만 폴백 */ }
+                    }
+
+                    // 레거시 API (호환성 유지)
                     int currentFlags = decorView.Call<int>("getSystemUiVisibility");
 
                     if (lightContent)
                     {
-                        // 흰색 아이콘 (어두운 배경) - LIGHT_STATUS_BAR 플래그 제거
                         currentFlags &= ~SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
                     }
                     else
                     {
-                        // 검정 아이콘 (밝은 배경) - LIGHT_STATUS_BAR 플래그 추가
                         currentFlags |= SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
                     }
 

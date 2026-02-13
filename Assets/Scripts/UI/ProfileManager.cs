@@ -150,6 +150,27 @@ public class ProfileManager : MonoBehaviour
     // 이미지 캐시
     private Dictionary<string, Sprite> avatarCache = new Dictionary<string, Sprite>();
 
+    // ============================================================
+    // Centralized Avatar Cache System
+    // ============================================================
+
+    [Header("Avatar Loading Settings")]
+    [Tooltip("쉬머 애니메이션 밝기 최소값")]
+    public float shimmerMinAlpha = 0.3f;
+    [Tooltip("쉬머 애니메이션 밝기 최대값")]
+    public float shimmerMaxAlpha = 0.7f;
+    [Tooltip("쉬머 애니메이션 속도 (초)")]
+    public float shimmerCycleDuration = 1.2f;
+    [Tooltip("쉬머 베이스 색상")]
+    public Color shimmerBaseColor = new Color(0.75f, 0.75f, 0.78f, 1f);
+
+    // userId 기반 캐시 (URL 변경에 관계없이 동일 유저면 캐시 히트)
+    private Dictionary<string, Sprite> userAvatarCache = new Dictionary<string, Sprite>();
+    // 요청 버전 카운터: Image 인스턴스 ID → 현재 요청 버전
+    private Dictionary<int, int> avatarRequestVersions = new Dictionary<int, int>();
+    // 현재 쉬머 중인 Image 추적
+    private Dictionary<int, Coroutine> activeShimmerCoroutines = new Dictionary<int, Coroutine>();
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -1765,6 +1786,356 @@ public class ProfileManager : MonoBehaviour
     public void ClearAvatarCache()
     {
         avatarCache.Clear();
+        userAvatarCache.Clear();
+    }
+
+    /// <summary>
+    /// 특정 유저의 아바타 캐시만 제거 (프로필 업데이트 후)
+    /// </summary>
+    public void ClearAvatarCacheForUser(string userId)
+    {
+        if (!string.IsNullOrEmpty(userId))
+            userAvatarCache.Remove(userId);
+    }
+
+    // ============================================================
+    // Public API - 모든 매니저에서 호출
+    // ============================================================
+
+    /// <summary>
+    /// 중앙화된 아바타 로드 (모든 매니저에서 호출)
+    /// - userId 기반 캐시 / 쉬머 로딩 효과 / 버전 카운터로 stale 결과 방지
+    /// </summary>
+    public static void LoadAvatarAsync(
+        string userId,
+        string avatarUrl,
+        Image targetImage,
+        string username = null,
+        System.Action<Texture2D> onTextureLoaded = null)
+    {
+        if (Instance == null || targetImage == null) return;
+        Instance.StartCoroutine(Instance.LoadAvatarAsyncCoroutine(
+            userId, avatarUrl, targetImage, username, onTextureLoaded));
+    }
+
+    /// <summary>
+    /// 원형 마스크 구조 + 아바타 로드 (DM, Follow 등에서 사용)
+    /// </summary>
+    public static void LoadAvatarWithMaskAsync(
+        string userId,
+        string avatarUrl,
+        Transform avatarContainer,
+        string username = null)
+    {
+        if (Instance == null || avatarContainer == null) return;
+
+        Image targetImage = Instance.EnsureCircularAvatarStructure(avatarContainer);
+        if (targetImage == null) return;
+
+        LoadAvatarAsync(userId, avatarUrl, targetImage, username);
+    }
+
+    /// <summary>
+    /// 유저네임 기반 그라데이션 원형 아바타 Sprite 생성 (중앙화)
+    /// </summary>
+    public static Sprite GenerateDefaultAvatarSprite(string username, int size = 128)
+    {
+        Texture2D tex = GenerateAvatarTextureInternal(username, size);
+        return Sprite.Create(tex,
+            new Rect(0, 0, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f));
+    }
+
+    // ============================================================
+    // Internal Implementation
+    // ============================================================
+
+    private IEnumerator LoadAvatarAsyncCoroutine(
+        string userId,
+        string avatarUrl,
+        Image targetImage,
+        string username,
+        System.Action<Texture2D> onTextureLoaded)
+    {
+        if (targetImage == null) yield break;
+
+        int imageId = targetImage.GetInstanceID();
+
+        // 1. 버전 카운터 증가 (이전 요청 무효화)
+        if (!avatarRequestVersions.ContainsKey(imageId))
+            avatarRequestVersions[imageId] = 0;
+        int thisVersion = ++avatarRequestVersions[imageId];
+
+        // 2. userId 캐시 확인
+        Sprite cached = null;
+        if (!string.IsNullOrEmpty(userId) && userAvatarCache.TryGetValue(userId, out cached))
+        {
+            if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
+            {
+                StopShimmer(imageId);
+                targetImage.sprite = cached;
+                targetImage.color = Color.white;
+            }
+            yield break;
+        }
+
+        // 3. URL 캐시 확인
+        string fullUrl = ResolveFullUrl(avatarUrl);
+        if (!string.IsNullOrEmpty(fullUrl) && avatarCache.TryGetValue(fullUrl, out cached))
+        {
+            if (!string.IsNullOrEmpty(userId))
+                userAvatarCache[userId] = cached;
+
+            if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
+            {
+                StopShimmer(imageId);
+                targetImage.sprite = cached;
+                targetImage.color = Color.white;
+            }
+            yield break;
+        }
+
+        // 4. URL이 없으면 기본 아바타 생성
+        if (string.IsNullOrEmpty(fullUrl))
+        {
+            if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
+            {
+                StopShimmer(imageId);
+                if (!string.IsNullOrEmpty(username))
+                {
+                    Sprite defaultSprite = GenerateDefaultAvatarSprite(username);
+                    targetImage.sprite = defaultSprite;
+                    targetImage.color = Color.white;
+                    if (!string.IsNullOrEmpty(userId))
+                        userAvatarCache[userId] = defaultSprite;
+                }
+                else if (defaultAvatarSprite != null)
+                {
+                    targetImage.sprite = defaultAvatarSprite;
+                    targetImage.color = Color.white;
+                }
+            }
+            yield break;
+        }
+
+        // 5. 쉬머 시작
+        StartShimmer(imageId, targetImage);
+
+        // 6. 다운로드
+        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
+        {
+            request.certificateHandler = new BypassCertificateHandler();
+            yield return request.SendWebRequest();
+
+            // 7. 버전 체크 (stale 방지)
+            if (!IsCurrentVersion(imageId, thisVersion) || targetImage == null)
+                yield break;
+
+            // 8. 쉬머 중지
+            StopShimmer(imageId);
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Texture2D texture = DownloadHandlerTexture.GetContent(request);
+                if (texture != null && targetImage != null)
+                {
+                    Sprite sprite = Sprite.Create(texture,
+                        new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f));
+
+                    avatarCache[fullUrl] = sprite;
+                    if (!string.IsNullOrEmpty(userId))
+                        userAvatarCache[userId] = sprite;
+
+                    targetImage.sprite = sprite;
+                    targetImage.color = Color.white;
+
+                    onTextureLoaded?.Invoke(texture);
+                }
+            }
+            else
+            {
+                if (targetImage != null)
+                {
+                    if (!string.IsNullOrEmpty(username))
+                    {
+                        Sprite defaultSprite = GenerateDefaultAvatarSprite(username);
+                        targetImage.sprite = defaultSprite;
+                        targetImage.color = Color.white;
+                    }
+                    else if (defaultAvatarSprite != null)
+                    {
+                        targetImage.sprite = defaultAvatarSprite;
+                        targetImage.color = Color.white;
+                    }
+                }
+            }
+        }
+    }
+
+    private bool IsCurrentVersion(int imageId, int version)
+    {
+        return avatarRequestVersions.TryGetValue(imageId, out int current) && current == version;
+    }
+
+    private string ResolveFullUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return null;
+        if (url.StartsWith("http")) return url;
+        return BASE_URL + (url.StartsWith("/") ? url : "/" + url);
+    }
+
+    // ============================================================
+    // Shimmer System
+    // ============================================================
+
+    private void StartShimmer(int imageId, Image targetImage)
+    {
+        StopShimmer(imageId);
+        targetImage.sprite = null;
+        Coroutine shimmer = StartCoroutine(ShimmerCoroutine(imageId, targetImage));
+        activeShimmerCoroutines[imageId] = shimmer;
+    }
+
+    private void StopShimmer(int imageId)
+    {
+        if (activeShimmerCoroutines.TryGetValue(imageId, out Coroutine coroutine))
+        {
+            if (coroutine != null)
+                StopCoroutine(coroutine);
+            activeShimmerCoroutines.Remove(imageId);
+        }
+    }
+
+    private IEnumerator ShimmerCoroutine(int imageId, Image targetImage)
+    {
+        if (targetImage == null) yield break;
+
+        float elapsed = 0f;
+
+        while (targetImage != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = (Mathf.Sin(elapsed * Mathf.PI * 2f / shimmerCycleDuration) + 1f) / 2f;
+            float alpha = Mathf.Lerp(shimmerMinAlpha, shimmerMaxAlpha, t);
+
+            Color c = shimmerBaseColor;
+            c.a = alpha;
+            targetImage.color = c;
+
+            yield return null;
+        }
+    }
+
+    // ============================================================
+    // Circular Avatar Structure (중앙화)
+    // ============================================================
+
+    /// <summary>
+    /// 원형 마스크 구조 설정 (Mask + AvatarImage 자식)
+    /// MessagePanelManager, FollowManager 공용
+    /// </summary>
+    public Image EnsureCircularAvatarStructure(Transform avatarContainer)
+    {
+        if (avatarContainer == null) return null;
+
+        Image containerImage = avatarContainer.GetComponent<Image>();
+        if (containerImage != null && containerImage.sprite == null)
+        {
+            containerImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            containerImage.type = Image.Type.Simple;
+            containerImage.preserveAspect = true;
+        }
+        else if (containerImage == null)
+        {
+            containerImage = avatarContainer.gameObject.AddComponent<Image>();
+            containerImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+            containerImage.type = Image.Type.Simple;
+            containerImage.preserveAspect = true;
+        }
+
+        Mask mask = avatarContainer.GetComponent<Mask>();
+        if (mask == null)
+        {
+            mask = avatarContainer.gameObject.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+        }
+
+        Transform avatarImageTransform = avatarContainer.Find("AvatarImage");
+        if (avatarImageTransform == null)
+        {
+            GameObject avatarImageObj = new GameObject("AvatarImage");
+            avatarImageObj.transform.SetParent(avatarContainer, false);
+            avatarImageObj.layer = 5;
+
+            RectTransform avatarImageRect = avatarImageObj.AddComponent<RectTransform>();
+            avatarImageRect.anchorMin = Vector2.zero;
+            avatarImageRect.anchorMax = Vector2.one;
+            avatarImageRect.offsetMin = Vector2.zero;
+            avatarImageRect.offsetMax = Vector2.zero;
+
+            Image avatarImage = avatarImageObj.AddComponent<Image>();
+            avatarImage.color = Color.white;
+            avatarImage.raycastTarget = false;
+
+            return avatarImage;
+        }
+
+        Image existingImage = avatarImageTransform.GetComponent<Image>();
+        if (existingImage == null)
+        {
+            existingImage = avatarImageTransform.gameObject.AddComponent<Image>();
+            existingImage.raycastTarget = false;
+        }
+
+        return existingImage;
+    }
+
+    // ============================================================
+    // Default Avatar Generation (중앙화)
+    // ============================================================
+
+    private static Texture2D GenerateAvatarTextureInternal(string username, int size)
+    {
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+
+        int hash = string.IsNullOrEmpty(username) ? 0 : username.GetHashCode();
+        float hue1 = Mathf.Abs(hash % 360) / 360f;
+        float hue2 = (hue1 + 0.15f) % 1f;
+        Color color1 = Color.HSVToRGB(hue1, 0.5f, 0.9f);
+        Color color2 = Color.HSVToRGB(hue2, 0.4f, 0.75f);
+
+        float center = size / 2f;
+        float radius = size / 2f;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                if (dist <= radius)
+                {
+                    float t = ((float)x + y) / (size * 2f);
+                    Color c = Color.Lerp(color1, color2, t);
+
+                    if (dist > radius - 1.5f)
+                        c.a = Mathf.Clamp01((radius - dist) / 1.5f);
+
+                    tex.SetPixel(x, y, c);
+                }
+                else
+                {
+                    tex.SetPixel(x, y, Color.clear);
+                }
+            }
+        }
+
+        tex.Apply();
+        return tex;
     }
 
     #endregion

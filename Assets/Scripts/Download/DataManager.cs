@@ -8,6 +8,8 @@ using Google.XR.ARCoreExtensions.GeospatialCreator;
 using System.Linq;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
+using TMPro;
 
 public class DataManager : MonoBehaviour
 {
@@ -79,9 +81,20 @@ public class DataManager : MonoBehaviour
 
     [SerializeField] private float updateDistanceThreshold = 50f;
 
+    [Header("AR 준비 상태 가이드")]
+    public GameObject arGuidePanel;
+    public TextMeshProUGUI arGuideText;
+    public CanvasGroup arGuideCanvasGroup;
+    [SerializeField] private float arGuideFadeDuration = 1.5f;
+
     private bool isDataLoaded = false;
+    private bool isGeospatialReady = false;
     private Coroutine fetchCoroutine;
+    private Coroutine arGuideFadeCoroutine;
     private Vector2 lastPosition;
+
+    // 현재 활성 필터 저장 (거리 필터와 동기화용)
+    private Dictionary<string, bool> currentFilters;
 
     void OnEnable()
     {
@@ -209,9 +222,18 @@ public class DataManager : MonoBehaviour
             // 에디터에서는 AR 세션 추적 대기 생략
             float lat = VirtualLocation.Instance.Latitude;
             float lon = VirtualLocation.Instance.Longitude;
+            isGeospatialReady = true;
 #else
             yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
-            
+
+            // Geospatial 추적 준비 대기 + 가이드 표시
+            if (!isGeospatialReady)
+            {
+                ShowARGuide("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...");
+                yield return StartCoroutine(WaitForGeospatialTracking());
+                HideARGuide();
+            }
+
             float lat = 37.5665f;
             float lon = 126.9780f;
             if (Input.location.status == LocationServiceStatus.Running)
@@ -445,6 +467,9 @@ public class DataManager : MonoBehaviour
 
     private void CreateObjectFromData(PlaceData place)
     {
+        // 서버 원본 model_type 보존 (필터용 - GLB 실패 시 cube로 바뀌어도 원본 유지)
+        if (string.IsNullOrEmpty(place.original_model_type))
+            place.original_model_type = place.model_type;
 
         // GLB 동시 로딩 제한
         if (place.model_type == "custom" && currentlyLoadingGLB.Count >= maxConcurrentGLBLoads)
@@ -803,6 +828,7 @@ public class DataManager : MonoBehaviour
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
         if (filters == null) return;
+        currentFilters = filters;
 
         // 3단계 애견동반 필터 처리
         bool petFriendlyAll = filters.ContainsKey("petFriendlyAll") && filters["petFriendlyAll"];
@@ -823,15 +849,18 @@ public class DataManager : MonoBehaviour
             GameObject obj = kvp.Value;
             if (obj == null) continue;
 
-            if (!showObject3D)
-            {
-                obj.SetActive(false);
-                continue;
-            }
-
             if (placeDataMap.ContainsKey(placeId))
             {
                 PlaceData place = placeDataMap[placeId];
+
+                // Object3D 토글 OFF: 원본이 custom인 오브젝트만 숨김 (GLB 실패로 cube 전환된 것도 포함)
+                string origType = place.original_model_type ?? place.model_type;
+                if (!showObject3D && origType == "custom")
+                {
+                    obj.SetActive(false);
+                    continue;
+                }
+
                 bool shouldShow = showWoopangData;
 
                 if (shouldShow)
@@ -839,15 +868,12 @@ public class DataManager : MonoBehaviour
                     // 애견동반 필터 적용
                     if (petFriendlyOnly && !place.pet_friendly)
                     {
-                        // 애견동반만 보기 모드인데 애견동반이 아닌 경우 숨김
                         shouldShow = false;
                     }
                     else if (noPetFriendly && place.pet_friendly)
                     {
-                        // 애견동반 아닌곳만 보기 모드인데 애견동반인 경우 숨김
                         shouldShow = false;
                     }
-                    // petFriendlyAll일 때는 모두 표시
 
                     // 주류 판매 필터 적용
                     if (shouldShow && place.alcohol_available && !showAlcohol)
@@ -857,11 +883,22 @@ public class DataManager : MonoBehaviour
                 }
                 obj.SetActive(shouldShow);
             }
+            else if (!showObject3D)
+            {
+                // placeData 없는 오브젝트는 custom으로 간주하여 숨김
+                obj.SetActive(false);
+            }
         }
     }
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
+        // 현재 필터 상태 확인 (Object3D 토글 OFF 시 custom 오브젝트는 숨김 유지)
+        bool showObject3D = currentFilters == null || !currentFilters.ContainsKey("object3D") || currentFilters["object3D"];
+        bool showAlcohol = currentFilters == null || !currentFilters.ContainsKey("alcohol") || currentFilters["alcohol"];
+        bool petFriendlyOnly = currentFilters != null && currentFilters.ContainsKey("petFriendlyOnly") && currentFilters["petFriendlyOnly"];
+        bool noPetFriendly = currentFilters != null && currentFilters.ContainsKey("noPetFriendly") && currentFilters["noPetFriendly"];
+
         foreach (var kvp in spawnedObjects)
         {
             int id = kvp.Key;
@@ -871,9 +908,17 @@ public class DataManager : MonoBehaviour
             if (placeDataMap.ContainsKey(id))
             {
                 PlaceData place = placeDataMap[id];
+
+                // 필터에 의해 숨겨야 하는 오브젝트는 거리와 무관하게 숨김 유지
+                string origType = place.original_model_type ?? place.model_type;
+                if (!showObject3D && origType == "custom") { obj.SetActive(false); continue; }
+                if (petFriendlyOnly && !place.pet_friendly) { obj.SetActive(false); continue; }
+                if (noPetFriendly && place.pet_friendly) { obj.SetActive(false); continue; }
+                if (!showAlcohol && place.alcohol_available) { obj.SetActive(false); continue; }
+
                 float dist = CalculateDistance(currentLat, currentLon, place.latitude, place.longitude);
                 bool inRange = dist <= maxDistance;
-                if (!inRange) 
+                if (!inRange)
                 {
                     if (obj.activeSelf) obj.SetActive(false);
                 }
@@ -928,6 +973,105 @@ public class DataManager : MonoBehaviour
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
     }
 
+    // ============================================================
+    // AR Geospatial 준비 대기 + 가이드 UI
+    // ============================================================
+
+    private IEnumerator WaitForGeospatialTracking()
+    {
+        AREarthManager earthManager = FindFirstObjectByType<AREarthManager>();
+        float elapsed = 0f;
+        float maxWait = 60f;
+
+        while (elapsed < maxWait)
+        {
+            if (earthManager != null && earthManager.EarthTrackingState == TrackingState.Tracking)
+            {
+                isGeospatialReady = true;
+                yield break;
+            }
+
+            // 단계별 안내 메시지 변경
+            if (elapsed > 30f)
+                UpdateARGuideText("위치 파악이 지연되고 있습니다\n실외로 이동하거나 주변을 둘러봐 주세요");
+            else if (elapsed > 15f)
+                UpdateARGuideText("주변 건물이 보이도록\n핸드폰을 천천히 이동해주세요");
+
+            elapsed += 1f;
+            yield return new WaitForSeconds(1f);
+        }
+
+        // 타임아웃: GPS 기반으로 진행 (정확도 낮음)
+        isGeospatialReady = true;
+        UpdateARGuideText("위치 정확도가 낮을 수 있습니다");
+        yield return new WaitForSeconds(2f);
+    }
+
+    private void ShowARGuide(string message)
+    {
+        if (arGuidePanel == null) return;
+
+        arGuidePanel.SetActive(true);
+
+        if (arGuideText != null)
+            arGuideText.text = message;
+
+        if (arGuideCanvasGroup != null)
+        {
+            if (arGuideFadeCoroutine != null)
+                StopCoroutine(arGuideFadeCoroutine);
+            arGuideFadeCoroutine = StartCoroutine(FadeARGuide(0f, 1f));
+        }
+    }
+
+    private void HideARGuide()
+    {
+        if (arGuidePanel == null) return;
+
+        if (arGuideCanvasGroup != null)
+        {
+            if (arGuideFadeCoroutine != null)
+                StopCoroutine(arGuideFadeCoroutine);
+            arGuideFadeCoroutine = StartCoroutine(FadeARGuideAndHide());
+        }
+        else
+        {
+            arGuidePanel.SetActive(false);
+        }
+    }
+
+    private void UpdateARGuideText(string message)
+    {
+        if (arGuideText != null)
+            arGuideText.text = message;
+    }
+
+    private IEnumerator FadeARGuide(float from, float to)
+    {
+        if (arGuideCanvasGroup == null) yield break;
+
+        float elapsed = 0f;
+        arGuideCanvasGroup.alpha = from;
+
+        while (elapsed < arGuideFadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / arGuideFadeDuration;
+            arGuideCanvasGroup.alpha = Mathf.Lerp(from, to, t);
+            yield return null;
+        }
+        arGuideCanvasGroup.alpha = to;
+        arGuideFadeCoroutine = null;
+    }
+
+    private IEnumerator FadeARGuideAndHide()
+    {
+        yield return StartCoroutine(FadeARGuide(1f, 0f));
+        if (arGuidePanel != null)
+            arGuidePanel.SetActive(false);
+        arGuideFadeCoroutine = null;
+    }
+
     private void ShowErrorMessage(string message)
     {
         var errorPanel = GameObject.Find("ErrorPanel")?.GetComponent<Text>();
@@ -961,6 +1105,7 @@ public class PlaceData
     public string color { get; set; }
     public string username { get; set; }
     public string model_type { get; set; } = "cube";
+    public string original_model_type { get; set; } // 서버에서 받은 원본 값 (필터용)
     public string model_url { get; set; }
     public float model_scale { get; set; } = 1f;
 }

@@ -51,7 +51,6 @@ public class PlaceListManager : MonoBehaviour
         { "publicData", true },
         { "subway", true },
         { "bus", true },
-        { "alcohol", true },
         { "p2pUsers", true }
     };
 
@@ -152,10 +151,15 @@ public class PlaceListManager : MonoBehaviour
         bool showSubway = activeFilters.GetValueOrDefault("subway", true);
         bool showTrain = activeFilters.GetValueOrDefault("train", true);
         bool showTerminal = activeFilters.GetValueOrDefault("terminal", true);
+        bool showObject3D = activeFilters.GetValueOrDefault("object3D", true);
 
         // 1. Woopang Data
         if (dataManager != null) {
             foreach(var p in dataManager.GetPlaceDataMap().Values) {
+                // Object3D 필터: custom 모델은 토글 OFF 시 목록에서도 제외
+                string origType = p.original_model_type ?? p.model_type;
+                if (!showObject3D && origType == "custom") continue;
+
                 // 애견동반 필터 적용
                 if (petFriendlyOnly && !p.pet_friendly) continue; // 애견동반만 (노란색)
                 if (noPetFriendly && p.pet_friendly) continue;     // 애견동반 아닌곳만 (체크해제)

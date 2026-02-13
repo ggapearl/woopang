@@ -767,20 +767,11 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private void SetupItem(GameObject item, FollowUserData user)
     {
-        // Avatar 설정 (원형 마스크)
+        // Avatar 설정 - 중앙 캐시 시스템 사용
         Transform avatarTr = item.transform.Find("Avatar");
         if (avatarTr != null)
         {
-            if (!string.IsNullOrEmpty(user.avatarUrl))
-            {
-                Image targetImage = SetupCircularAvatarStructure(avatarTr);
-                if (targetImage != null)
-                    StartCoroutine(LoadAvatar(user.avatarUrl, targetImage));
-            }
-            else
-            {
-                SetDefaultAvatar(avatarTr, user.username);
-            }
+            ProfileManager.LoadAvatarWithMaskAsync(user.userId, user.avatarUrl, avatarTr, user.username);
         }
 
         // Username 설정

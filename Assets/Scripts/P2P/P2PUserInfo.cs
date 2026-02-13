@@ -554,10 +554,11 @@ public class P2PUserInfo : MonoBehaviour
             targetComponent.TargetColor = indicatorColor; // #E95383
         }
 
-        // Load avatar image if URL provided
-        if (!string.IsNullOrEmpty(avatarUrl))
+        // Load avatar image - 중앙 캐시 시스템 사용
+        if (avatarImage != null)
         {
-            StartCoroutine(LoadAvatarImage(avatarUrl));
+            ProfileManager.LoadAvatarAsync(userId, avatarUrl, avatarImage, username,
+                (texture) => ApplyProfileTextureToAvatar(texture));
         }
     }
 

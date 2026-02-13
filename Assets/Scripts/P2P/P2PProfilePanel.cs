@@ -111,10 +111,10 @@ public class P2PProfilePanel : MonoBehaviour
 
         if (lastSeenText) lastSeenText.text = "Now";
 
-        // Load avatar image
-        if (!string.IsNullOrEmpty(avatarUrl) && avatarImage != null)
+        // Load avatar image - 중앙 캐시 시스템 사용
+        if (avatarImage != null)
         {
-            StartCoroutine(LoadAvatarImage(avatarUrl));
+            ProfileManager.LoadAvatarAsync(currentUserId, avatarUrl, avatarImage, username);
         }
 
         // Show panel with animation

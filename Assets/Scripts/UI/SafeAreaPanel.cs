@@ -152,11 +152,10 @@ public class SafeAreaPanel : MonoBehaviour
     
     private Rect GetFallbackSafeArea()
     {
-        // Android 전용 기본 시스템 바 높이 (Unity 좌표 기준)
-        float topOffset = Screen.height * 0.025f; // 상태바
-        float bottomOffset = Screen.height * 0.05f; // 네비게이션바
-        
-        return new Rect(0, bottomOffset, Screen.width, Screen.height - topOffset - bottomOffset);
+        // Android: 상단은 Panel_Top이 상태바 배경 역할 → 상단 여백 없음
+        float bottomOffset = Screen.height * 0.05f; // 네비게이션바만 고려
+
+        return new Rect(0, bottomOffset, Screen.width, Screen.height - bottomOffset);
     }
     
     private void ApplySafeAreaToRectTransform(Rect safeArea)

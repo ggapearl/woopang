@@ -31,6 +31,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         transform.position = new Vector3(x, 0, z);
 #else
+        // 앵커 생성 전까지 렌더러 숨김 (Vector3.zero에 보이는 문제 방지)
+        SetVisible(false);
+
         _lat = latitude;
         _lon = longitude;
         _alt = altitude;
@@ -82,6 +85,10 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             transform.localPosition = Vector3.zero;
             transform.localRotation = Quaternion.identity;
             _anchorCreated = true;
+
+            // 앵커 생성 성공 → 렌더러 표시
+            SetVisible(true);
+
             Debug.Log($"[CustomAnchor] 앵커 생성 성공: {gameObject.name} (재시도 {_retryCount}회)");
             return true;
         }
@@ -104,6 +111,18 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         if (!_anchorCreated)
         {
             Debug.LogError($"[CustomAnchor] 앵커 생성 최종 실패: {gameObject.name} ({MAX_RETRIES}회 재시도 후)");
+            // 앵커 생성 실패 → 오브젝트 비활성화 (원점에 남지 않도록)
+            gameObject.SetActive(false);
         }
+    }
+
+    /// <summary>
+    /// 자신 + 자식의 모든 Renderer on/off (앵커 생성 전후 가시성 제어)
+    /// </summary>
+    private void SetVisible(bool visible)
+    {
+        Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+        foreach (var r in renderers)
+            r.enabled = visible;
     }
 }

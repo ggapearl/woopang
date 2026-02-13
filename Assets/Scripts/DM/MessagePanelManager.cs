@@ -170,6 +170,7 @@ public class MessagePanelManager : MonoBehaviour
     // 현재 대화 상대
     private string currentChatUserId;
     private string currentChatUsername;
+    private string currentChatAvatarUrl;
     private bool isAdminChat;
 
     // 대화 목록 캐시
@@ -850,6 +851,7 @@ public class MessagePanelManager : MonoBehaviour
     {
         currentChatUserId = userId;
         currentChatUsername = username;
+        currentChatAvatarUrl = avatarUrl;
         isAdminChat = isAdmin;
 
         // 메시지 패널에서 채팅룸으로 이동 시 메시지 패널 닫기
@@ -877,13 +879,10 @@ public class MessagePanelManager : MonoBehaviour
                 : Color.white;
             Canvas.ForceUpdateCanvases();
         }
-        // 채팅방 아바타 - 원형 마스크 구조 적용
+        // 채팅방 아바타 - 중앙 캐시 시스템 사용
         if (chatRoomAvatar != null)
         {
-            if (!string.IsNullOrEmpty(avatarUrl))
-                StartCoroutine(LoadAvatarWithMask(avatarUrl, chatRoomAvatar.transform));
-            else
-                SetDefaultAvatar(chatRoomAvatar.transform, username);
+            ProfileManager.LoadAvatarWithMaskAsync(userId, avatarUrl, chatRoomAvatar.transform, username);
         }
 
         // 채팅방 아바타 터치 → 프로필 열기 (Admin이 아닌 경우만)
@@ -941,6 +940,7 @@ public class MessagePanelManager : MonoBehaviour
     {
         currentChatUserId = "woopang";
         currentChatUsername = "WOOPANG";
+        currentChatAvatarUrl = null;
         isAdminChat = true;
         currentSystemNotificationId = notificationId;
         currentSystemMessageContent = messageContent;
@@ -1083,6 +1083,7 @@ public class MessagePanelManager : MonoBehaviour
 
         currentChatUserId = null;
         currentChatUsername = null;
+        currentChatAvatarUrl = null;
         isAdminChat = false;
         profileOpenedFromChatRoom = false;
 
@@ -1610,14 +1611,11 @@ public class MessagePanelManager : MonoBehaviour
                 unreadText.text = conv.unreadCount.ToString();
         }
 
-        // 아바타 (Content 아래에 있음) - 원형 마스크 구조 적용
+        // 아바타 (Content 아래에 있음) - 중앙 캐시 시스템 사용
         Transform avatarTransform = item.transform.Find("Content/Avatar");
         if (avatarTransform != null)
         {
-            if (!string.IsNullOrEmpty(conv.avatarUrl))
-                StartCoroutine(LoadAvatarWithMask(conv.avatarUrl, avatarTransform));
-            else
-                SetDefaultAvatar(avatarTransform, conv.username);
+            ProfileManager.LoadAvatarWithMaskAsync(conv.userId, conv.avatarUrl, avatarTransform, conv.username);
         }
 
         // 클릭 이벤트 (Content 영역에)
@@ -2372,14 +2370,18 @@ public class MessagePanelManager : MonoBehaviour
             LikeMessage(messageId, rect);
         });
 
-        // 아바타 탭 핸들러 (상대방 버블에서만 - 프로필 열기)
-        if (!isMine)
+        // 아바타 처리 (상대방 버블: 표시 + 프로필 열기 / 내 버블: 숨김)
+        Transform avatarTr = item.transform.Find("AvatarContainer");
+        if (avatarTr == null)
+            avatarTr = item.transform.Find("Avatar");
+
+        if (avatarTr != null)
         {
-            Transform avatarTr = item.transform.Find("AvatarContainer");
-            if (avatarTr == null)
-                avatarTr = item.transform.Find("Avatar");
-            if (avatarTr != null)
+            if (!isMine)
             {
+                // 상대방 메시지: 아바타 명시적 활성화 + 이미지 설정
+                avatarTr.gameObject.SetActive(true);
+
                 string senderId = msg.sender_id;
                 string senderName = msg.sender_username ?? currentChatUsername;
 
@@ -2390,12 +2392,17 @@ public class MessagePanelManager : MonoBehaviour
 
                 avatarHandler.Initialize(senderId, senderName, OpenProfileFromChatRoom);
 
-                // 아바타 이미지 로드 (원형 마스크 구조 적용)
-                if (!string.IsNullOrEmpty(msg.sender_avatar_url))
-                {
-                    StartCoroutine(LoadAvatarWithMask(msg.sender_avatar_url, avatarTr));
-                }
-                // 아바타 URL이 없으면 프리팹 값 유지 (덮어쓰지 않음)
+                // 아바타 이미지 로드 - 중앙 캐시 시스템 사용
+                string avatarUrl = msg.sender_avatar_url;
+                if (string.IsNullOrEmpty(avatarUrl))
+                    avatarUrl = currentChatAvatarUrl;
+
+                ProfileManager.LoadAvatarWithMaskAsync(senderId, avatarUrl, avatarTr, senderName);
+            }
+            else
+            {
+                // 내 메시지: 아바타 숨김 (MyMessageBubble 프리팹에 없을 수도 있지만 안전 처리)
+                avatarTr.gameObject.SetActive(false);
             }
         }
     }
@@ -2832,10 +2839,10 @@ public class MessagePanelManager : MonoBehaviour
             OpenChatRoom(user.id, user.username, user.avatar_url);
         });
 
-        // 아바타 - 원형 마스크 구조 적용
+        // 아바타 - 중앙 캐시 시스템 사용
         Transform avatarTransform = item.transform.Find("Avatar");
-        if (avatarTransform != null && !string.IsNullOrEmpty(user.avatar_url))
-            StartCoroutine(LoadAvatarWithMask(user.avatar_url, avatarTransform));
+        if (avatarTransform != null)
+            ProfileManager.LoadAvatarWithMaskAsync(user.id, user.avatar_url, avatarTransform, user.username);
     }
 
     /// <summary>

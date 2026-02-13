@@ -146,10 +146,10 @@ public class P2PUserProfile : MonoBehaviour
         if (bioText != null)
             bioText.text = string.IsNullOrEmpty(bio) ? "소개가 없습니다." : bio;
 
-        // 아바타 이미지 로드
-        if (!string.IsNullOrEmpty(avatarUrl) && avatarImage != null)
+        // 아바타 이미지 로드 - 중앙 캐시 시스템 사용
+        if (avatarImage != null)
         {
-            StartCoroutine(LoadAvatarImage(avatarUrl));
+            ProfileManager.LoadAvatarAsync(currentUserId, avatarUrl, avatarImage, username);
         }
 
         // 팔로우 상태 확인

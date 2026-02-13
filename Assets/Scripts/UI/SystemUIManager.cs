@@ -202,6 +202,30 @@ public class SystemUIManager : MonoBehaviour
     void SetupOneUISystemUI()
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
+        // API 30+ (Android 11): WindowInsetsController 사용
+        AndroidJavaClass buildClass = new AndroidJavaClass("android.os.Build$VERSION");
+        int sdkInt = buildClass.GetStatic<int>("SDK_INT");
+
+        if (sdkInt >= 30)
+        {
+            try
+            {
+                AndroidJavaObject insetsController = window.Call<AndroidJavaObject>("getInsetsController");
+                if (insetsController != null)
+                {
+                    AndroidJavaClass insetsType = new AndroidJavaClass("android.view.WindowInsets$Type");
+                    int statusBarsType = insetsType.CallStatic<int>("statusBars");
+                    insetsController.Call("show", statusBarsType);
+
+                    insetsController.Call("setSystemBarsAppearance", 0, 8);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Log($"OneUI WindowInsetsController 설정 실패: {e.Message}");
+            }
+        }
+
         // OneUI용 더 안정적인 플래그 조합
         int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE |
                    SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
@@ -223,9 +247,22 @@ public class SystemUIManager : MonoBehaviour
             window.Call("clearFlags", FLAG_LAYOUT_NO_LIMITS);
         }
 
-        // Status bar 투명 설정 (iOS처럼 아이콘만 오버레이)
+        // Status bar 투명 설정 (배경만 투명, 아이콘은 그대로)
         window.Call("addFlags", unchecked((int)0x80000000)); // FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
         window.Call("setStatusBarColor", 0); // Color.TRANSPARENT
+
+        // API 29+: 대비 강제 scrim 비활성화 (블랙바 원인 제거)
+        AndroidJavaClass buildClassOneUI = new AndroidJavaClass("android.os.Build$VERSION");
+        int sdkIntOneUI = buildClassOneUI.GetStatic<int>("SDK_INT");
+        if (sdkIntOneUI >= 29)
+        {
+            try
+            {
+                window.Call("setStatusBarContrastEnforced", false);
+                window.Call("setNavigationBarContrastEnforced", false);
+            }
+            catch (System.Exception) { /* API 29 미만 폴백 */ }
+        }
 
         // 추가 대기 후 Canvas 조정
         StartCoroutine(DelayedCanvasAdjustment());
@@ -235,6 +272,35 @@ public class SystemUIManager : MonoBehaviour
     void SetupStandardSystemUI()
     {
 #if UNITY_ANDROID && !UNITY_EDITOR
+        // API 30+ (Android 11): WindowInsetsController 사용
+        AndroidJavaClass buildClass = new AndroidJavaClass("android.os.Build$VERSION");
+        int sdkInt = buildClass.GetStatic<int>("SDK_INT");
+
+        if (sdkInt >= 30)
+        {
+            // WindowInsetsController로 상태바 강제 표시
+            try
+            {
+                AndroidJavaObject insetsController = window.Call<AndroidJavaObject>("getInsetsController");
+                if (insetsController != null)
+                {
+                    // WindowInsets.Type.statusBars() = 상태바 표시
+                    AndroidJavaClass insetsType = new AndroidJavaClass("android.view.WindowInsets$Type");
+                    int statusBarsType = insetsType.CallStatic<int>("statusBars");
+                    insetsController.Call("show", statusBarsType);
+
+                    // APPEARANCE_LIGHT_STATUS_BARS 초기 설정 (어두운 배경용 흰색 아이콘)
+                    // TopPanelColorChanger가 나중에 배경에 맞게 재설정함
+                    insetsController.Call("setSystemBarsAppearance", 0, 8); // 8 = APPEARANCE_LIGHT_STATUS_BARS
+                }
+            }
+            catch (System.Exception e)
+            {
+                Log($"WindowInsetsController 설정 실패: {e.Message}");
+            }
+        }
+
+        // 레거시 API (API 30 미만 + 추가 호환성)
         int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
         decorView.Call("setSystemUiVisibility", flags);
 
@@ -247,12 +313,23 @@ public class SystemUIManager : MonoBehaviour
             window.Call("addFlags", FLAG_FORCE_NOT_FULLSCREEN);
         }
 
-        // Status bar 투명 설정 (iOS처럼 아이콘만 오버레이)
+        // Status bar 투명 설정 (배경만 투명, 아이콘은 그대로)
         window.Call("addFlags", unchecked((int)0x80000000)); // FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
         window.Call("setStatusBarColor", 0); // Color.TRANSPARENT
+
+        // API 29+: 대비 강제 scrim 비활성화 (블랙바 원인 제거)
+        if (sdkInt >= 29)
+        {
+            try
+            {
+                window.Call("setStatusBarContrastEnforced", false);
+                window.Call("setNavigationBarContrastEnforced", false);
+            }
+            catch (System.Exception) { /* API 29 미만 폴백 */ }
+        }
 #endif
     }
-    
+
     IEnumerator DelayedCanvasAdjustment()
     {
         yield return new WaitForSeconds(0.5f);

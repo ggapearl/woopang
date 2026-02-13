@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- UnityThemeSelector 오버라이드: 상태바 투명 배경 (API 21+) -->
+    <style name="UnityThemeSelector" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <!-- 상태바 투명: 블랙바 제거 -->
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- 네비게이션바도 투명 처리 -->
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- fitsSystemWindows false: 앱 콘텐츠가 상태바 뒤까지 확장 -->
+        <item name="android:fitsSystemWindows">false</item>
+    </style>
+</resources>
