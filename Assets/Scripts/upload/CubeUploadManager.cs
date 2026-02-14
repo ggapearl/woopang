@@ -330,6 +330,17 @@ public class CubeUploadManager : MonoBehaviour
             return;
         }
 
+        // [FIX] ImageCropper Canvas Sorting Order 조정
+        // 기본 Canvas보다 앞에 오도록 Sorting Order를 높임
+        Canvas cropperCanvas = cropper.GetComponent<Canvas>();
+        if (cropperCanvas == null) cropperCanvas = cropper.GetComponentInChildren<Canvas>();
+        
+        if (cropperCanvas != null)
+        {
+            cropperCanvas.overrideSorting = true;
+            cropperCanvas.sortingOrder = 30000;
+        }
+
         cropper.Show(texture, (success, original, cropped) =>
         {
             bool arPreviewStarted = false;

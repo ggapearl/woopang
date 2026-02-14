@@ -39,4 +39,17 @@ android {
             excludes += ['/lib/armeabi/**', '/lib/mips/**', '/lib/mips64/**', '/lib/x86/**', '/lib/x86_64/**']
         }
     }
+
+    **SIGN**
+
+    buildTypes {
+        debug {
+            minifyEnabled **MINIFY_DEBUG**
+            proguardFiles getDefaultProguardFile('proguard-android.txt')**SIGNCONFIG**
+        }
+        release {
+            minifyEnabled **MINIFY_RELEASE**
+            proguardFiles getDefaultProguardFile('proguard-android.txt')**SIGNCONFIG**
+        }
+    }
 }
