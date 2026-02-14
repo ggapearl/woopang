@@ -218,7 +218,8 @@ public class SystemUIManager : MonoBehaviour
                     int statusBarsType = insetsType.CallStatic<int>("statusBars");
                     insetsController.Call("show", statusBarsType);
 
-                    insetsController.Call("setSystemBarsAppearance", 0, 8);
+                    // [FIX] SystemUIManager는 상태바 표시 여부만 제어하고, 아이콘 색상(APPEARANCE)은 TopPanelColorChanger에 위임합니다.
+                    // 여기서 setSystemBarsAppearance를 호출하면 기존 색상 설정을 덮어쓰게 되어 아이콘이 사라질 수 있습니다.
                 }
             }
             catch (System.Exception e)
@@ -231,6 +232,17 @@ public class SystemUIManager : MonoBehaviour
         int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE |
                    SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
                    SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+
+        // [FIX] 기존에 설정된 Light Status Bar 플래그(0x2000)가 있다면 유지합니다.
+        try
+        {
+            int currentFlags = decorView.Call<int>("getSystemUiVisibility");
+            if ((currentFlags & 0x2000) != 0) // SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            {
+                flags |= 0x2000;
+            }
+        }
+        catch { /* 무시 */ }
 
         decorView.Call("setSystemUiVisibility", flags);
 
@@ -292,9 +304,7 @@ public class SystemUIManager : MonoBehaviour
                     int statusBarsType = insetsType.CallStatic<int>("statusBars");
                     insetsController.Call("show", statusBarsType);
 
-                    // APPEARANCE_LIGHT_STATUS_BARS 초기 설정 (어두운 배경용 흰색 아이콘)
-                    // TopPanelColorChanger가 나중에 배경에 맞게 재설정함
-                    insetsController.Call("setSystemBarsAppearance", 0, 8); // 8 = APPEARANCE_LIGHT_STATUS_BARS
+                    // [FIX] SystemUIManager는 상태바 표시 여부만 제어하고, 아이콘 색상은 건드리지 않습니다.
                 }
             }
             catch (System.Exception e)
@@ -305,6 +315,18 @@ public class SystemUIManager : MonoBehaviour
 
         // 레거시 API (API 30 미만 + 추가 호환성)
         int flags = SYSTEM_UI_FLAG_LAYOUT_STABLE | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+
+        // [FIX] 기존에 설정된 Light Status Bar 플래그(0x2000)가 있다면 유지합니다.
+        try
+        {
+            int currentFlags = decorView.Call<int>("getSystemUiVisibility");
+            if ((currentFlags & 0x2000) != 0) // SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            {
+                flags |= 0x2000;
+            }
+        }
+        catch { /* 무시 */ }
+
         decorView.Call("setSystemUiVisibility", flags);
 
         using (AndroidJavaClass wmClass = new AndroidJavaClass("android.view.WindowManager$LayoutParams"))
@@ -484,7 +506,6 @@ public class SystemUIManager : MonoBehaviour
             else
             {
                 // API 30+: WindowInsetsController로 상태바 강제 표시
-                // 레거시 플래그로 감지 안 되는 경우에도 상태바 아이콘 복원
                 EnsureStatusBarVisible();
             }
         }
@@ -569,8 +590,14 @@ public class SystemUIManager : MonoBehaviour
     
     IEnumerator DelayedSetup()
     {
-        yield return new WaitForSeconds(0.3f);
-        SetupSystemUI();
+        // Unity가 백그라운드 복귀 시 상태바를 숨기는 동작과 싸우기 위해
+        // 0.5초 간격으로 3번 반복해서 상태바 표시를 강제합니다.
+        for (int i = 0; i < 3; i++)
+        {
+            yield return new WaitForSeconds(0.5f);
+            SetupSystemUI();
+            EnsureStatusBarVisible();
+        }
     }
     
     void OnDestroy()
