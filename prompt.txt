@@ -1,1 +1,197 @@
-dongdong:2672 Uncaught SyntaxError: Invalid or unexpected token
+The referenced script on this Behaviour (Game Object '') is missing!
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-Anchors' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationAnchorSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/Anchors/SimulationAnchorSubsystem.cs:118)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-Camera' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationCameraSubsystem:Register () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/SimulationCameraSubsystem.cs:281)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-EnvironmentProbe' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationEnvironmentProbeSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/EnvironmentProbe/SimulationEnvironmentProbeSubsystem.cs:122)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-ImageTracking' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationImageTrackingSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/ImageTracking/SimulationImageTrackingSubsystem.cs:201)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-Plane' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationPlaneSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/Plane/SimulationPlaneSubsystem.cs:428)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-PointCloud' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationPointCloudSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/PointCloud/SimulationPointCloudSubsystem.cs:232)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-Raycast' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationRaycastSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/Raycast/SimulationRaycastSubsystem.cs:68)
+
+Registering subsystem descriptor with duplicate ID 'XRSimulation-Session' - overwriting previous entry.
+UnityEngine.XR.Simulation.SimulationSessionSubsystem:RegisterDescriptor () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/Simulation/Subsystems/SimulationSessionSubsystem.cs:163)
+
+No active UnityEngine.XR.ARSubsystems.XRSessionSubsystem is available. This feature is either not supported on the current platform, or you may need to enable a provider in <b>Project Settings</b> > <b>XR Plug-in Management</b>.
+UnityEngine.XR.ARFoundation.ARSession:OnEnable () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/ARFoundation/ARSession.cs:345)
+
+No active UnityEngine.XR.ARSubsystems.XRCameraSubsystem is available. This feature is either not supported on the current platform, or you may need to enable a provider in <b>Project Settings</b> > <b>XR Plug-in Management</b>.
+UnityEngine.XR.ARFoundation.SubsystemLifecycleManager`3<UnityEngine.XR.ARSubsystems.XRCameraSubsystem, UnityEngine.XR.ARSubsystems.XRCameraSubsystemDescriptor, UnityEngine.XR.ARSubsystems.XRCameraSubsystem/Provider>:OnEnable () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/ARFoundation/SubsystemLifecycleManager.cs:67)
+
+No active UnityEngine.XR.ARSubsystems.XRAnchorSubsystem is available. This feature is either not supported on the current platform, or you may need to enable a provider in <b>Project Settings</b> > <b>XR Plug-in Management</b>.
+UnityEngine.XR.ARFoundation.ARTrackableManager`5<UnityEngine.XR.ARSubsystems.XRAnchorSubsystem, UnityEngine.XR.ARSubsystems.XRAnchorSubsystemDescriptor, UnityEngine.XR.ARSubsystems.XRAnchorSubsystem/Provider, UnityEngine.XR.ARSubsystems.XRAnchor, UnityEngine.XR.ARFoundation.ARAnchor>:OnEnable () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/ARFoundation/ARTrackableManager.cs:106)
+
+No active UnityEngine.XR.XRInputSubsystem is available. Please ensure that a valid loader configuration exists in the XR project settings.
+UnityEngine.XR.ARFoundation.ARInputManager:OnEnable () (at ./Library/PackageCache/com.unity.xr.arfoundation@f442ec1f087d/Runtime/ARFoundation/ARInputManager.cs:24)
+
+<color=#00FFFF>[P2PVirtualUserTester]</color> 기본 가상 사용자 2명 생성됨
+UnityEngine.Debug:Log (object)
+P2PVirtualUserTester:Log (string) (at Assets/Scripts/P2P/P2PVirtualUserTester.cs:407)
+P2PVirtualUserTester:SetupDefaultVirtualUsers () (at Assets/Scripts/P2P/P2PVirtualUserTester.cs:124)
+P2PVirtualUserTester:Awake () (at Assets/Scripts/P2P/P2PVirtualUserTester.cs:83)
+
+[P2PManager] Initialized avatar pool with 10 avatars
+UnityEngine.Debug:Log (object)
+P2PManager:Log (string) (at Assets/Scripts/P2P/P2PManager.cs:1026)
+P2PManager:InitializeAvatarPool () (at Assets/Scripts/P2P/P2PManager.cs:175)
+P2PManager:Awake () (at Assets/Scripts/P2P/P2PManager.cs:135)
+
+No active ARCoreSessionSubsystem is available in this session, Please ensure that a valid loader configuration exists in the XR project settings.
+UnityEngine.Debug:LogError (object)
+Google.XR.ARCoreExtensions.ARCoreExtensions:OnEnable () (at ./Library/PackageCache/com.google.ar.core.arfoundation.extensions@ad14e3f6490a/Runtime/Scripts/ARCoreExtensions.cs:205)
+
+No active ARCoreCameraSubsystem is available in this session, Please ensure that a valid loader configuration exists in the XR project settings.
+UnityEngine.Debug:LogError (object)
+Google.XR.ARCoreExtensions.ARCoreExtensions:OnEnable () (at ./Library/PackageCache/com.google.ar.core.arfoundation.extensions@ad14e3f6490a/Runtime/Scripts/ARCoreExtensions.cs:217)
+
+UITouchForwarder on Panel_Top_iOS requires a Button component!
+UnityEngine.Debug:LogWarning (object)
+UITouchForwarder:Start () (at Assets/Scripts/touch/UITouchForwarder.cs:13)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[P2PManager] User info loaded: woopang (3)
+UnityEngine.Debug:Log (object)
+P2PManager:Log (string) (at Assets/Scripts/P2P/P2PManager.cs:1026)
+P2PManager/<AutoConnectWhenReady>d__31:MoveNext () (at Assets/Scripts/P2P/P2PManager.cs:200)
+UnityEngine.SetupCoroutine:InvokeMoveNext (System.Collections.IEnumerator,intptr)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
+DllNotFoundException: arcore_sdk_c assembly:<unknown assembly> type:<unknown type> member:(null)
+Google.XR.ARCoreExtensions.Internal.EarthApi.ReportGeospatialCreatorPlatform (System.IntPtr session, Google.XR.ARCoreExtensions.Internal.ApiGeospatialCreatorPlatform platform) (at ./Library/PackageCache/com.google.ar.core.arfoundation.extensions@ad14e3f6490a/Runtime/Scripts/Internal/Wrappers/EarthApi.cs:123)
+Google.XR.ARCoreExtensions.ARCoreExtensions+<ReportGeospatialCreatorPlatformWithDelay>d__37.MoveNext () (at ./Library/PackageCache/com.google.ar.core.arfoundation.extensions@ad14e3f6490a/Runtime/Scripts/ARCoreExtensions.cs:568)
+UnityEngine.SetupCoroutine.InvokeMoveNext (System.Collections.IEnumerator enumerator, System.IntPtr returnValueAddress) (at <07c12a9d8ce247d18a35c5e3e7bb065f>:0)
+
+[ImageDisplayController] 로딩 실패: HTTP/1.1 404 Not Found (https://woopang.com/uploads/20251001_225217_세븐일레븐_예산공주대점_+0900/main.jpg)
+UnityEngine.Debug:LogError (object)
+ImageDisplayController/<LoadBaseMapTexture>d__9:MoveNext () (at Assets/Scripts/Download/ImageDisplayController.cs:81)
+UnityEngine.SetupCoroutine:InvokeMoveNext (System.Collections.IEnumerator,intptr)
+
+Android Vibrate Failed: Field currentActivity or type signature  not found, Falling back to Handheld.Vibrate
+UnityEngine.Debug:LogWarning (object)
+UIFeedbackManager:TriggerHaptic (single) (at Assets/Scripts/touch/UIFeedbackManager.cs:204)
+UIFeedbackManager:HandleTouchFeedbackDirect (UnityEngine.AudioClip) (at Assets/Scripts/touch/UIFeedbackManager.cs:95)
+UITouchForwarder:OnPointerClick (UnityEngine.EventSystems.PointerEventData) (at Assets/Scripts/touch/UITouchForwarder.cs:21)
+UnityEngine.EventSystems.EventSystem:Update () (at ./Library/PackageCache/com.unity.ugui@4ee0fac0c6e4/Runtime/UGUI/EventSystem/EventSystem.cs:514)
+
+iPhoneUtils.Vibrate()
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UIFeedbackManager:TriggerHaptic (single) (at Assets/Scripts/touch/UIFeedbackManager.cs:205)
+UIFeedbackManager:HandleTouchFeedbackDirect (UnityEngine.AudioClip) (at Assets/Scripts/touch/UIFeedbackManager.cs:95)
+UITouchForwarder:OnPointerClick (UnityEngine.EventSystems.PointerEventData) (at Assets/Scripts/touch/UITouchForwarder.cs:21)
+UnityEngine.EventSystems.EventSystem:Update ()
+
+[MessagePanel DEBUG] OpenChatRoom 호출됨. 타겟 아바타 오브젝트: Avatar (InstanceID: 388048)
+UnityEngine.Debug:Log (object)
+MessagePanelManager:OpenChatRoom (string,string,string,bool) (at Assets/Scripts/DM/MessagePanelManager.cs:855)
+MessagePanelManager/<>c__DisplayClass129_0:<SetupConversationItem>b__1 () (at Assets/Scripts/DM/MessagePanelManager.cs:1679)
+UnityEngine.EventSystems.EventSystem:Update () (at ./Library/PackageCache/com.unity.ugui@4ee0fac0c6e4/Runtime/UGUI/EventSystem/EventSystem.cs:514)
+
+[MessagePanel] 주의: ChatRoomAvatar가 MiniProfileAvatar와 동일한 오브젝트로 설정되어 있습니다. 채팅방 진입 시 MiniProfile이 상대방 아바타로 변경될 수 있습니다.
+UnityEngine.Debug:LogWarning (object)
+MessagePanelManager:OpenChatRoom (string,string,string,bool) (at Assets/Scripts/DM/MessagePanelManager.cs:898)
+MessagePanelManager/<>c__DisplayClass129_0:<SetupConversationItem>b__1 () (at Assets/Scripts/DM/MessagePanelManager.cs:1679)
+UnityEngine.EventSystems.EventSystem:Update () (at ./Library/PackageCache/com.unity.ugui@4ee0fac0c6e4/Runtime/UGUI/EventSystem/EventSystem.cs:514)
+
+UITouchForwarder on AvatarContainer requires a Button component!
+UnityEngine.Debug:LogWarning (object)
+UITouchForwarder:Start () (at Assets/Scripts/touch/UITouchForwarder.cs:13)
+
+UITouchForwarder on AvatarContainer requires a Button component!
+UnityEngine.Debug:LogWarning (object)
+UITouchForwarder:Start () (at Assets/Scripts/touch/UITouchForwarder.cs:13)
+
+UITouchForwarder on AvatarContainer requires a Button component!
+UnityEngine.Debug:LogWarning (object)
+UITouchForwarder:Start () (at Assets/Scripts/touch/UITouchForwarder.cs:13)
+
+UITouchForwarder on AvatarContainer requires a Button component!
+UnityEngine.Debug:LogWarning (object)
+UITouchForwarder:Start () (at Assets/Scripts/touch/UITouchForwarder.cs:13)
+
+[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.
+UnityEngine.Debug:LogWarning (object)
+IndicatorSparkleHelper:PlaySparkleForIndicator (UnityEngine.Vector3,IndicatorType,UnityEngine.Sprite) (at Assets/Scripts/UI/IndicatorSparkleHelper.cs:83)
+OffScreenIndicator:GetIndicator (Indicator&,IndicatorType,Target,UnityEngine.Vector3) (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:195)
+OffScreenIndicator:DrawIndicators () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:89)
+OffScreenIndicator:LateUpdate () (at Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs:57)
+
