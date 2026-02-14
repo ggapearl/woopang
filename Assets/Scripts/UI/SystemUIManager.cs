@@ -27,6 +27,7 @@ public class SystemUIManager : MonoBehaviour
     private Rect lastSafeArea;
     private float lastScreenWidth, lastScreenHeight;
     private bool isOneUIDevice = false;
+    private int cachedSdkInt = -1;
     private bool hasNavigationBar = false;
     private float navigationBarHeight = 0f;
     private float statusBarHeight = 0f;
@@ -466,19 +467,25 @@ public class SystemUIManager : MonoBehaviour
         
 #if UNITY_ANDROID && !UNITY_EDITOR
         if (!isInitialized || decorView == null) return;
-        
+
         try
         {
             int currentFlags = decorView.Call<int>("getSystemUiVisibility");
-            
-            // 시스템 UI가 숨겨졌는지 체크
+
+            // 시스템 UI가 숨겨졌는지 체크 (레거시 플래그)
             bool isFullscreen = (currentFlags & SYSTEM_UI_FLAG_FULLSCREEN) != 0;
             bool isNavigationHidden = (currentFlags & SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0;
-            
+
             if (isFullscreen || isNavigationHidden)
             {
                 RestoreSystemUI();
-                Log("시스템 UI 복원됨");
+                Log("시스템 UI 복원됨 (레거시 플래그 감지)");
+            }
+            else
+            {
+                // API 30+: WindowInsetsController로 상태바 강제 표시
+                // 레거시 플래그로 감지 안 되는 경우에도 상태바 아이콘 복원
+                EnsureStatusBarVisible();
             }
         }
         catch (System.Exception e)
@@ -514,6 +521,36 @@ public class SystemUIManager : MonoBehaviour
 #endif
     }
     
+    /// <summary>
+    /// API 30+에서 WindowInsetsController.show(statusBars)를 호출하여 상태바 아이콘 복원
+    /// 레거시 플래그로 감지되지 않는 상태바 숨김을 주기적으로 복원
+    /// </summary>
+    void EnsureStatusBarVisible()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            if (cachedSdkInt < 0)
+            {
+                AndroidJavaClass buildClass = new AndroidJavaClass("android.os.Build$VERSION");
+                cachedSdkInt = buildClass.GetStatic<int>("SDK_INT");
+            }
+
+            if (cachedSdkInt >= 30 && window != null)
+            {
+                AndroidJavaObject insetsController = window.Call<AndroidJavaObject>("getInsetsController");
+                if (insetsController != null)
+                {
+                    AndroidJavaClass insetsType = new AndroidJavaClass("android.view.WindowInsets$Type");
+                    int statusBarsType = insetsType.CallStatic<int>("statusBars");
+                    insetsController.Call("show", statusBarsType);
+                }
+            }
+        }
+        catch (System.Exception) { /* 무시 */ }
+#endif
+    }
+
     void OnApplicationFocus(bool hasFocus)
     {
         if (hasFocus && forceShowSystemUI)

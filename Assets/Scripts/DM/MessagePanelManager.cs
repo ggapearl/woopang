@@ -1953,11 +1953,10 @@ public class MessagePanelManager : MonoBehaviour
                 }
             }
 
-            // 아바타 탭 핸들러
+            // 시스템 메시지 아바타: 프로필 열기 비활성화 (WOOPANG 시스템이므로)
             AvatarTapHandler avatarHandler = avatarTr.GetComponent<AvatarTapHandler>();
-            if (avatarHandler == null)
-                avatarHandler = avatarTr.gameObject.AddComponent<AvatarTapHandler>();
-            avatarHandler.Initialize("3", senderName, OpenProfileFromChatRoom);
+            if (avatarHandler != null)
+                Destroy(avatarHandler);
         }
 
         // === 3. LabelText 비활성화 (ChatTitle로 대체됨) ===
@@ -2602,12 +2601,10 @@ public class MessagePanelManager : MonoBehaviour
                 avatarImage.preserveAspect = true;
             }
 
-            // 아바타 탭 핸들러 (WOOPANG 프로필 열기)
+            // 관리자 메시지 아바타: 프로필 열기 비활성화 (WOOPANG 시스템이므로)
             AvatarTapHandler avatarHandler = avatarTr.GetComponent<AvatarTapHandler>();
-            if (avatarHandler == null)
-                avatarHandler = avatarTr.gameObject.AddComponent<AvatarTapHandler>();
-
-            avatarHandler.Initialize("3", "WOOPANG", OpenProfileFromChatRoom);
+            if (avatarHandler != null)
+                Destroy(avatarHandler);
         }
     }
 

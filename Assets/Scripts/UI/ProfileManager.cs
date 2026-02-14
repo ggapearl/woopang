@@ -176,6 +176,12 @@ public class ProfileManager : MonoBehaviour
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
+        // Inspector 참조 검증
+        if (avatarImage != null && miniAvatarImage != null && avatarImage == miniAvatarImage)
+        {
+            Debug.LogError("[ProfileManager] avatarImage와 miniAvatarImage가 같은 오브젝트를 가리킵니다! FullProfile 아바타에 별도 Image를 연결하세요.");
+        }
+
         // 버튼 리스너
         if (miniProfileButton != null)
             miniProfileButton.onClick.AddListener(OnMiniProfileClicked);
@@ -530,6 +536,10 @@ public class ProfileManager : MonoBehaviour
 
     // 미니 아바타 로딩 코루틴 추적 (race condition 방지)
     private Coroutine miniAvatarLoadCoroutine;
+    // MiniProfile에 로드된 프로필의 user_id (OnMiniProfileClicked에서 사용)
+    private string miniProfileUserId;
+    // MiniProfile 아바타 Sprite 보관 (다른 로딩에 의해 덮어쓰기 방지용)
+    private Sprite miniProfileAvatarSprite;
 
     private void UpdateMiniProfile(ProfileData profile)
     {
@@ -539,9 +549,13 @@ public class ProfileManager : MonoBehaviour
             string currentId = LoginManager.Instance.CurrentUser.id;
             if (currentId != profile.id)
             {
+                Debug.LogWarning($"[ProfileManager] MiniProfile ID 불일치! CurrentUser.id={currentId}, profile.id={profile.id} - 무시");
                 return;
             }
         }
+
+        // MiniProfile에 로드된 정확한 ID 저장
+        miniProfileUserId = profile.id;
 
         if (miniUsernameText != null)
             miniUsernameText.text = profile.username;
@@ -557,16 +571,20 @@ public class ProfileManager : MonoBehaviour
 
             if (!string.IsNullOrEmpty(profile.avatar_url))
             {
-                miniAvatarLoadCoroutine = StartCoroutine(LoadAvatarImage(profile.avatar_url, miniAvatarImage));
-            }
-            else if (defaultAvatarSprite != null)
-            {
-                miniAvatarImage.sprite = defaultAvatarSprite;
+                // 새 방식: 버전 카운터 + userId 캐시 사용, 로드 완료 시 Sprite 보관
+                miniAvatarLoadCoroutine = StartCoroutine(LoadAvatarAsyncCoroutine(
+                    profile.id, profile.avatar_url, miniAvatarImage, profile.username,
+                    (tex) => {
+                        if (miniAvatarImage != null && miniAvatarImage.sprite != null)
+                            miniProfileAvatarSprite = miniAvatarImage.sprite;
+                    }));
             }
             else
             {
-                // defaultAvatarSprite도 없으면 유저이름 기반 색상 아바타 생성
-                miniAvatarImage.color = GetAvatarColorFromName(profile.username);
+                Sprite fallback = GenerateDefaultAvatarSprite(profile.username);
+                miniAvatarImage.sprite = fallback;
+                miniAvatarImage.color = Color.white;
+                miniProfileAvatarSprite = fallback;
             }
         }
 
@@ -576,6 +594,8 @@ public class ProfileManager : MonoBehaviour
 
     private void ClearMiniProfile()
     {
+        miniProfileUserId = null;
+
         if (miniUsernameText != null)
             miniUsernameText.text = "Login";  // 로그인 전 기본 텍스트 (번역 안 함)
 
@@ -584,6 +604,20 @@ public class ProfileManager : MonoBehaviour
 
         // 미니 프로필 패널은 로그아웃 후에도 유지 (비활성화하지 않음)
         // 패널 내용만 초기화하고 UI 구조는 유지
+    }
+
+    /// <summary>
+    /// MiniProfile 아바타가 다른 프로필 로딩에 의해 변경되었을 때 복원
+    /// </summary>
+    private void RestoreMiniProfileAvatar()
+    {
+        if (miniAvatarImage == null || miniProfileAvatarSprite == null) return;
+
+        if (miniAvatarImage.sprite != miniProfileAvatarSprite)
+        {
+            miniAvatarImage.sprite = miniProfileAvatarSprite;
+            miniAvatarImage.color = Color.white;
+        }
     }
 
     #endregion
@@ -637,7 +671,18 @@ public class ProfileManager : MonoBehaviour
             return;
         }
 
-        ShowProfile(LoginManager.Instance.CurrentUser.id);
+        // 항상 LoginManager의 CurrentUser.id 사용 (절대 다른 ID가 열리지 않도록)
+        string myId = LoginManager.Instance.CurrentUser.id;
+
+        // MiniProfile에 로드된 ID와 불일치 감지 시 아바타 재로드
+        if (!string.IsNullOrEmpty(miniProfileUserId) && miniProfileUserId != myId)
+        {
+            Debug.LogWarning($"[ProfileManager] MiniProfile ID 불일치! miniProfileUserId={miniProfileUserId}, CurrentUser.id={myId} → 아바타 재로드");
+            ClearAvatarCache();
+            LoadMyProfile();
+        }
+
+        ShowProfile(myId);
     }
 
     private void ShowProfilePanel(ProfileData profile)
@@ -663,8 +708,8 @@ public class ProfileManager : MonoBehaviour
         if (followingCountText != null)
             followingCountText.text = $"{profile.following_count}\n{GetLocalizedText("following_label")}";
 
-        // 아바타 이미지
-        if (avatarImage != null)
+        // 아바타 이미지 (miniAvatarImage와 동일 참조인지 확인 → 동일하면 건너뜀)
+        if (avatarImage != null && avatarImage != miniAvatarImage)
         {
             if (!string.IsNullOrEmpty(profile.avatar_url))
             {
@@ -676,7 +721,6 @@ public class ProfileManager : MonoBehaviour
             }
             else
             {
-                // 기본 스프라이트가 없으면 유저이름 기반 색상 생성
                 avatarImage.color = GetAvatarColorFromName(profile.username);
             }
         }
@@ -735,6 +779,9 @@ public class ProfileManager : MonoBehaviour
             fullProfilePanel.SetActive(false);
 
         currentProfile = null;
+
+        // MiniProfile 아바타 복원 (다른 프로필 열람 후 변경되었을 수 있음)
+        RestoreMiniProfileAvatar();
 
         // FollowPanel에서 열렸으면 돌아가기
         if (openedFromFollowPanel)
