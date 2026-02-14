@@ -849,6 +849,16 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     public void OpenChatRoom(string userId, string username, string avatarUrl = null, bool isAdmin = false)
     {
+        // [DEBUG LOG] 채팅방 진입 시 타겟 아바타 확인
+        if (chatRoomAvatar != null)
+        {
+            Debug.Log($"[MessagePanel DEBUG] OpenChatRoom 호출됨. 타겟 아바타 오브젝트: {chatRoomAvatar.name} (InstanceID: {chatRoomAvatar.GetInstanceID()})");
+        }
+        else
+        {
+            Debug.LogError("[MessagePanel DEBUG] OpenChatRoom 호출됨. chatRoomAvatar가 NULL입니다!");
+        }
+
         currentChatUserId = userId;
         currentChatUsername = username;
         currentChatAvatarUrl = avatarUrl;
@@ -857,12 +867,7 @@ public class MessagePanelManager : MonoBehaviour
         // 메시지 패널에서 채팅룸으로 이동 시 메시지 패널 닫기
         if (messagePanel != null && messagePanel.activeSelf)
         {
-
             messagePanel.SetActive(false);
-        }
-        else
-        {
-
         }
 
         if (chatRoomPanel != null)
@@ -879,6 +884,7 @@ public class MessagePanelManager : MonoBehaviour
                 : Color.white;
             Canvas.ForceUpdateCanvases();
         }
+
         // 채팅방 아바타 - 중앙 캐시 시스템 사용
         if (chatRoomAvatar != null)
         {
@@ -902,10 +908,12 @@ public class MessagePanelManager : MonoBehaviour
             }
             parentImg.raycastTarget = true;
 
-            AvatarTapHandler avatarHandler = targetObj.GetComponent<AvatarTapHandler>();
-            if (avatarHandler == null)
-                avatarHandler = targetObj.AddComponent<AvatarTapHandler>();
+            // 기존 핸들러 제거 (이전 세션의 핸들러가 남지 않도록)
+            AvatarTapHandler existingHandler = targetObj.GetComponent<AvatarTapHandler>();
+            if (existingHandler != null)
+                Destroy(existingHandler);
 
+            AvatarTapHandler avatarHandler = targetObj.AddComponent<AvatarTapHandler>();
             avatarHandler.Initialize(userId, username, OpenProfileFromChatRoom);
         }
 
@@ -1074,6 +1082,21 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (chatRoomPanel != null)
             chatRoomPanel.SetActive(false);
+
+        // 채팅방 닫을 때 아바타 핸들러 정리
+        if (chatRoomAvatar != null)
+        {
+            GameObject targetObj = chatRoomAvatar.transform.parent != null
+                ? chatRoomAvatar.transform.parent.gameObject
+                : chatRoomAvatar.gameObject;
+
+            // AvatarTapHandler 제거
+            AvatarTapHandler handler = targetObj.GetComponent<AvatarTapHandler>();
+            if (handler != null)
+            {
+                Destroy(handler);
+            }
+        }
 
         // 채팅방 빈 상태 UI 정리
         ShowChatEmptyState(false);
