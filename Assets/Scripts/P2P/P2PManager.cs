@@ -76,7 +76,7 @@ public class P2PManager : MonoBehaviour
     public static P2PManager Instance { get; private set; }
 
     [Header("Server Configuration")]
-    [SerializeField] private float positionUpdateInterval = 5f;  // 5초마다 위치 업데이트
+    [SerializeField] private float positionUpdateInterval = 1f;  // 1초마다 위치 업데이트
     [SerializeField] private bool autoConnect = true;            // 자동 연결
 
     [Header("User Avatar Settings")]

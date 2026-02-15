@@ -253,8 +253,279 @@ public class FirebaseNotification : MonoBehaviour
         }
 #endif
     }
-    
-    // ... (InitializeFirebaseCoroutine omitted for brevity) ...
+
+    private IEnumerator InitializeFirebaseCoroutine()
+    {
+#if UNITY_ANDROID
+        bool initializationComplete = false;
+        Firebase.DependencyStatus dependencyStatus = Firebase.DependencyStatus.UnavailableOther;
+
+        Firebase.FirebaseApp.CheckAndFixDependenciesAsync().ContinueWith(task => {
+            dependencyStatus = task.Result;
+            initializationComplete = true;
+        });
+
+        float timeout = 30f;
+        while (!initializationComplete && timeout > 0)
+        {
+            yield return new WaitForSeconds(1f);
+            timeout -= 1f;
+        }
+
+        if (initializationComplete && dependencyStatus == Firebase.DependencyStatus.Available)
+        {
+            // 이벤트 핸들러는 Start()에서 이미 등록됨 - 중복 등록 제거
+            StartCoroutine(CheckBackgroundNotification());
+        }
+#else
+        yield break;
+#endif
+    }
+
+    private string DateTimeToString(DateTime dateTime)
+    {
+        return dateTime.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private DateTime StringToDateTime(string timeString)
+    {
+        if (string.IsNullOrEmpty(timeString))
+            return DateTime.Now;
+            
+        if (DateTime.TryParse(timeString, out DateTime result))
+            return result;
+            
+        return DateTime.Now;
+    }
+
+    private void LoadProcessedMessageIds()
+    {
+        string processedIds = PlayerPrefs.GetString("ProcessedMessageIds", "");
+        if (!string.IsNullOrEmpty(processedIds))
+        {
+            try
+            {
+                string[] ids = processedIds.Split('|');
+                processedMessageIds = new HashSet<string>(ids);
+            }
+            catch (System.Exception)
+            {
+                processedMessageIds = new HashSet<string>();
+            }
+        }
+    }
+
+    private void SaveProcessedMessageIds()
+    {
+        try
+        {
+            string[] ids = new string[processedMessageIds.Count];
+            processedMessageIds.CopyTo(ids);
+            string processedIds = string.Join("|", ids);
+            PlayerPrefs.SetString("ProcessedMessageIds", processedIds);
+            PlayerPrefs.Save();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"Failed to save processed message IDs: {ex.Message}");
+        }
+    }
+
+    private string GenerateMessageId(string title, string body, DateTime timestamp)
+    {
+        string combined = $"{title}_{body}_{timestamp:yyyyMMddHHmmss}";
+        return combined.GetHashCode().ToString();
+    }
+
+    private DateTime ParseServerTimestamp(Firebase.Messaging.FirebaseMessage message)
+    {
+        DateTime serverTime = DateTime.Now;
+        
+        if (message.Data != null)
+        {
+            string[] timestampKeys = { "timestamp", "sent_time", "server_time", "created_at" };
+            
+            foreach (string key in timestampKeys)
+            {
+                if (message.Data.ContainsKey(key))
+                {
+                    string timestampStr = message.Data[key];
+                    
+                    if (long.TryParse(timestampStr, out long unixTimestamp))
+                    {
+                        try
+                        {
+                            serverTime = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp).DateTime;
+                            return serverTime;
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                serverTime = DateTimeOffset.FromUnixTimeMilliseconds(unixTimestamp).DateTime;
+                                return serverTime;
+                            }
+                            catch { }
+                        }
+                    }
+                    
+                    if (DateTime.TryParse(timestampStr, out DateTime parsedTime))
+                    {
+                        serverTime = parsedTime;
+                        return serverTime;
+                    }
+                }
+            }
+        }
+        
+        return serverTime;
+    }
+
+    /// <summary>
+    /// 메시지 ID를 처리됨으로 표시 (중복 방지)
+    /// </summary>
+    private bool MarkMessageAsProcessed(string messageId, string title, string body, DateTime serverTimestamp)
+    {
+        if (string.IsNullOrEmpty(messageId))
+        {
+            messageId = GenerateMessageId(title, body, serverTimestamp);
+        }
+
+        if (processedMessageIds.Contains(messageId))
+        {
+            return false;
+        }
+
+        processedMessageIds.Add(messageId);
+        SaveProcessedMessageIds();
+
+        return true;
+    }
+
+    private string GetCurrentLanguageCode()
+    {
+        string langCode = Application.systemLanguage switch
+        {
+            SystemLanguage.Korean => "ko",
+            SystemLanguage.Japanese => "ja",
+            SystemLanguage.Chinese => "zh",
+            SystemLanguage.ChineseSimplified => "zh",
+            SystemLanguage.ChineseTraditional => "zh",
+            SystemLanguage.Spanish => "es",
+            _ => "en"
+        };
+        return langCode;
+    }
+
+
+    private void LoadTokenFromAndroidPrefs()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (AndroidJavaObject sharedPrefs = currentActivity.Call<AndroidJavaObject>("getSharedPreferences", "firebase_messages", 0))
+            {
+                string token = sharedPrefs.Call<string>("getString", "FCMToken", "");
+
+                if (!string.IsNullOrEmpty(token))
+                {
+                    currentFCMToken = token;
+
+                    PlayerPrefs.SetString("FCMToken", token);
+                    PlayerPrefs.Save();
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"Failed to load token from Android: {ex.Message}");
+        }
+#endif
+    }
+
+    private IEnumerator SendTokenToServer(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            yield break;
+        }
+
+        float latitude = 0f;
+        float longitude = 0f;
+        bool locationConsent = false;
+        
+        if (Input.location.isEnabledByUser)
+        {
+            Input.location.Start(10f, 1f);
+            int maxWait = 20;
+            while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
+            {
+                yield return new WaitForSeconds(1);
+                maxWait--;
+            }
+            
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                latitude = Input.location.lastData.latitude;
+                longitude = Input.location.lastData.longitude;
+                locationConsent = true;
+            }
+            
+            Input.location.Stop();
+        }
+        
+        WWWForm form = new WWWForm();
+        form.AddField("token", token);
+        form.AddField("device_id", SystemInfo.deviceUniqueIdentifier);
+        form.AddField("device_name", SystemInfo.deviceName);
+        form.AddField("device_model", SystemInfo.deviceModel);
+        form.AddField("os_version", SystemInfo.operatingSystem);
+        form.AddField("app_version", Application.version);
+
+        // user_id 추가 (로그인된 경우)
+        if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
+        {
+            string userId = LoginManager.Instance.CurrentUserId.ToString();
+            if (!string.IsNullOrEmpty(userId) && userId != "0")
+            {
+                form.AddField("user_id", userId);
+            }
+        }
+
+#if UNITY_IOS
+        form.AddField("platform", "ios");
+#elif UNITY_ANDROID
+        form.AddField("platform", "android");
+#else
+        form.AddField("platform", "unknown");
+#endif
+        
+        if (locationConsent && latitude != 0f && longitude != 0f)
+        {
+            form.AddField("latitude", latitude.ToString("F6"));
+            form.AddField("longitude", longitude.ToString("F6"));
+            form.AddField("location_consent", "true");
+        }
+        else
+        {
+            form.AddField("location_consent", "false");
+        }
+        
+        UnityWebRequest request = UnityWebRequest.Post(ApiConfig.REGISTER_TOKEN, form);
+        request.timeout = 10;
+        
+        yield return request.SendWebRequest();
+    }
+
+    void OnApplicationPause(bool pauseStatus)
+    {
+        if (!pauseStatus)
+        {
+            StartCoroutine(CheckBackgroundNotification());
+        }
+    }
 
     void OnApplicationFocus(bool hasFocus)
     {
