@@ -460,6 +460,78 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    public void ApplyFilters(Dictionary<string, bool> filters)
+    {
+        if (filters == null) return;
+        currentFilters = filters;
+
+        foreach (var kvp in spawnedObjects)
+        {
+            int placeId = kvp.Key;
+            GameObject obj = kvp.Value;
+            if (obj == null) continue;
+
+            if (placeDataMap.ContainsKey(placeId))
+            {
+                PlaceData place = placeDataMap[placeId];
+                bool shouldShow = ShouldShowObject(place);
+                obj.SetActive(shouldShow);
+            }
+            else if (currentFilters.ContainsKey("object3D") && !currentFilters["object3D"])
+            {
+                // placeData 없는 오브젝트는 custom으로 간주하여 숨김
+                obj.SetActive(false);
+            }
+        }
+    }
+
+    private bool ShouldShowObject(PlaceData place)
+    {
+        if (currentFilters == null) return true;
+
+        // 3단계 애견동반 필터 처리
+        bool petFriendlyAll = currentFilters.ContainsKey("petFriendlyAll") && currentFilters["petFriendlyAll"];
+        bool petFriendlyOnly = currentFilters.ContainsKey("petFriendlyOnly") && currentFilters["petFriendlyOnly"];
+        bool noPetFriendly = currentFilters.ContainsKey("noPetFriendly") && currentFilters["noPetFriendly"];
+
+        // alcohol 키가 없으면 기본값 true
+        bool showAlcohol = !currentFilters.ContainsKey("alcohol") || currentFilters["alcohol"];
+        // woopangData 키가 없으면 기본값 true (모든 우팡 데이터 표시)
+        bool showWoopangData = !currentFilters.ContainsKey("woopangData") || currentFilters["woopangData"];
+        // object3D 키가 없으면 기본값 true
+        bool showObject3D = !currentFilters.ContainsKey("object3D") || currentFilters["object3D"];
+
+        // Object3D 토글 OFF: 원본이 custom인 오브젝트만 숨김 (GLB 실패로 cube 전환된 것도 포함)
+        string origType = place.original_model_type ?? place.model_type;
+        if (!showObject3D && origType == "custom")
+        {
+            return false;
+        }
+
+        bool shouldShow = showWoopangData;
+
+        if (shouldShow)
+        {
+            // 애견동반 필터 적용
+            if (petFriendlyOnly && !place.pet_friendly)
+            {
+                shouldShow = false;
+            }
+            else if (noPetFriendly && place.pet_friendly)
+            {
+                shouldShow = false;
+            }
+
+            // 주류 판매 필터 적용
+            if (shouldShow && place.alcohol_available && !showAlcohol)
+            {
+                shouldShow = false;
+            }
+        }
+
+        return shouldShow;
+    }
+
     private void CreateObjectFromData(PlaceData place)
     {
         // 서버 원본 model_type 보존 (필터용 - GLB 실패 시 cube로 바뀌어도 원본 유지)
@@ -485,7 +557,10 @@ public class DataManager : MonoBehaviour
             return;
         }
 
-        newObj.SetActive(true);
+        // [FIX] 생성 시 필터 적용하여 활성화 여부 결정
+        bool shouldShow = ShouldShowObject(place);
+        newObj.SetActive(shouldShow);
+        
         newObj.name = $"Place_{place.id}_{place.model_type}";
 
         bool setupSuccess = SetupObjectComponents(newObj, place);
@@ -498,391 +573,6 @@ public class DataManager : MonoBehaviour
         else
         {
             ReturnToPool(newObj, place.model_type);
-        }
-    }
-
-    private void UpdateExistingObject(PlaceData place, GameObject existingObj)
-    {
-        SetupObjectComponents(existingObj, place);
-        placeDataMap[place.id] = place; // ⭐ 업데이트된 데이터도 맵에 반영
-    }
-
-    private bool SetupObjectComponents(GameObject obj, PlaceData place)
-    {
-
-        // GPS 앵커 설정
-        CustomARGeospatialCreatorAnchor anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true); // includeInactive=true
-        if (anchor == null)
-        {
-            return false;
-        }
-        anchor.SetCoordinatesAndCreateAnchor(place.latitude, place.longitude, place.altitude);
-
-        // 서브사진 설정
-        ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true); // includeInactive=true
-        if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
-        {
-            List<string> allSubPhotos = new List<string>();
-            foreach (var photoGroup in place.sub_photos)
-            {
-                if (photoGroup != null)
-                {
-                    foreach (var photo in photoGroup)
-                    {
-                        if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
-                    }
-                }
-            }
-            displayCtrl.SetSubPhotos(allSubPhotos);
-        }
-
-        // model_type에 따른 분기 처리
-        bool result;
-        if (place.model_type == "cube")
-        {
-            result = SetupCubeObject(obj, place);
-        }
-        else if (place.model_type == "custom")
-        {
-            result = SetupGLBObject(obj, place);
-        }
-        else
-        {
-            result = SetupCubeObject(obj, place); // 기본값으로 cube 처리
-        }
-
-        return result;
-    }
-
-    private bool SetupCubeObject(GameObject obj, PlaceData place)
-    {
-
-        // 큐브 텍스처 설정
-        ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true); // includeInactive=true
-        if (display != null && !string.IsNullOrEmpty(place.main_photo))
-        {
-            display.SetBaseMap(place.main_photo);
-        }
-        else
-        {
-        }
-
-        // DoubleTap3D 설정
-        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true); // includeInactive=true
-        if (doubleTap == null)
-        {
-            return false;
-        }
-        SetupDoubleTapInfo(doubleTap, place);
-
-        // Target 설정
-        Target target = obj.GetComponentInChildren<Target>(true); // includeInactive=true
-        if (target == null)
-        {
-            return false;
-        }
-        SetupTargetInfo(target, place);
-
-        return true;
-    }
-
-    private bool SetupGLBObject(GameObject obj, PlaceData place)
-    {
-        if (string.IsNullOrEmpty(place.model_url))
-        {
-            // GLB URL이 없으면 큐브로 fallback
-            if (fallbackToCube)
-            {
-                place.model_type = "cube";
-                return SetupCubeObject(obj, place);
-            }
-            return false;
-        }
-
-        GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
-        if (glbLoader == null)
-        {
-            glbLoader = obj.AddComponent<GLBModelLoader>();
-        }
-        
-        glbLoader.ClearModel();
-        
-        // GLB 로딩 시작
-        string fullUrl = ApiConfig.MAIN_SERVER + "/" + place.model_url;
-        float scale = place.model_scale > 0 ? place.model_scale : 1.0f;
-        
-        // 로딩 중인 GLB 추가
-        currentlyLoadingGLB.Add(place.id);
-        
-        StartCoroutine(LoadGLBAsync(glbLoader, fullUrl, scale, place.id, obj, place));
-
-        return true;
-    }
-
-    private void SetupDoubleTapInfo(DoubleTap3D doubleTap, PlaceData place)
-    {
-        Sprite petFriendlySprite = Resources.Load<Sprite>("Sprites/pet_friendly_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
-        Sprite restroomSprite = Resources.Load<Sprite>("Sprites/separate_restroom_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
-        
-        doubleTap.SetInfoImages(petFriendlySprite, restroomSprite, place.pet_friendly, place.separate_restroom, place.instagram_id, place.name, place.id, place.username, place.instagram_id);
-    }
-
-    private void SetupTargetInfo(Target target, PlaceData place)
-    {
-        Color placeColor;
-        string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-        if (ColorUtility.TryParseHtmlString($"#{colorHex}", out placeColor))
-        {
-            target.TargetColor = placeColor;
-        }
-        else
-        {
-            target.TargetColor = Color.white;
-        }
-        target.PlaceName = place.name;
-    }
-
-    private IEnumerator LoadGLBAsync(GLBModelLoader loader, string url, float scale, int placeId, GameObject glbObj, PlaceData place)
-    {
-        
-        bool loadCompleted = false;
-        bool loadSuccess = false;
-        
-        // 타임아웃 처리
-        float startTime = Time.time;
-        
-        // GLB 로딩을 여러번 시도
-        int maxAttempts = 3;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            
-            loadCompleted = false;
-            loadSuccess = false;
-            
-            StartCoroutine(LoadGLBCoroutine(loader, url, scale, (success) => {
-                loadSuccess = success;
-                loadCompleted = true;
-            }));
-            
-            // 로딩 완료 또는 타임아웃까지 대기
-            while (!loadCompleted && (Time.time - startTime) < glbLoadTimeout)
-            {
-                yield return null;
-            }
-            
-            if (loadCompleted && loadSuccess)
-            {
-                break;
-            }
-            else
-            {
-                
-                // 마지막 시도가 아니면 잠시 대기 후 재시도
-                if (attempt < maxAttempts)
-                {
-                    yield return new WaitForSeconds(attempt + 1);
-                    
-                    // GLBModelLoader 리셋
-                    loader.ClearModel();
-                }
-            }
-        }
-        
-        // 로딩 상태에서 제거
-        currentlyLoadingGLB.Remove(placeId);
-        
-        if (loadCompleted && loadSuccess)
-        {
-            
-            // GLB 로딩 성공 시 UI 컴포넌트 설정
-            DoubleTap3D doubleTap = glbObj.GetComponentInChildren<DoubleTap3D>();
-            if (doubleTap != null)
-            {
-                SetupDoubleTapInfo(doubleTap, place);
-            }
-
-            Target target = glbObj.GetComponentInChildren<Target>();
-            if (target != null)
-            {
-                SetupTargetInfo(target, place);
-            }
-        }
-        else
-        {
-            
-            // GLB 로딩 실패 시 처리
-            if (fallbackToCube && spawnedObjects.ContainsKey(placeId))
-            {
-                
-                // 큐브로 대체
-                ReturnToPool(glbObj, "custom");
-                spawnedObjects.Remove(placeId);
-                
-                place.model_type = "cube";
-                CreateObjectFromData(place);
-            }
-            else
-            {
-                glbObj.SetActive(false);
-            }
-        }
-    }
-
-    private IEnumerator LoadGLBCoroutine(GLBModelLoader loader, string url, float scale, System.Action<bool> onComplete)
-    {
-        yield return StartCoroutine(loader.LoadGLBModelCoroutine(url, scale, onComplete));
-    }
-
-    private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
-    {
-        const float R = 6371000;
-        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
-        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
-        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) +
-                  Mathf.Cos(Mathf.Deg2Rad * (lat1)) * Mathf.Cos(Mathf.Deg2Rad * (lat2)) *
-                  Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
-        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
-        return R * c;
-    }
-
-    private GameObject GetFromPool(string modelType)
-    {
-        Queue<GameObject> targetPool = modelType == "cube" ? cubeObjectPool : glbObjectPool;
-        string poolName = modelType == "cube" ? "Cube" : "GLB";
-
-
-        if (targetPool.Count > 0)
-        {
-            GameObject obj = targetPool.Dequeue();
-            ResetObjectState(obj, modelType);
-            obj.SetActive(true);
-            obj.name = $"Place_ID_{modelType}";
-            return obj;
-        }
-        else if (spawnedObjects.Count < poolSize * 4)
-        {
-            GameObject prefab = modelType == "cube" ? cubePrefab : glbPrefab;
-            GameObject obj = Instantiate(prefab, Vector3.zero, Quaternion.identity);
-            ResetObjectState(obj, modelType);
-            obj.name = $"Place_ID_{modelType}";
-            return obj;
-        }
-
-        ShowErrorMessage("너무 많은 장소가 로드되었습니다.");
-        return null;
-    }
-
-    private void ResetObjectState(GameObject obj, string modelType)
-    {
-        // DoubleTap3D 리셋
-        DoubleTap3D[] doubleTaps = obj.GetComponentsInChildren<DoubleTap3D>(true);
-        foreach (var doubleTap in doubleTaps)
-        {
-            doubleTap.ResetData();
-        }
-        
-        // GLB 타입인 경우에만 GLBModelLoader 정리
-        if (modelType == "custom")
-        {
-            GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
-            if (glbLoader != null)
-            {
-                glbLoader.ClearModel();
-            }
-        }
-    }
-
-    private void ReturnToPool(GameObject obj, string modelType)
-    {
-        Queue<GameObject> targetPool = modelType == "cube" ? cubeObjectPool : glbObjectPool;
-        
-        // GLB 타입인 경우에만 모델 정리
-        if (modelType == "custom")
-        {
-            GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
-            if (glbLoader != null)
-            {
-                glbLoader.ClearModel();
-            }
-        }
-        
-        obj.SetActive(false);
-        targetPool.Enqueue(obj);
-    }
-
-    public Dictionary<int, GameObject> GetSpawnedObjects() => spawnedObjects;
-    public int GetSpawnedObjectsCount() => spawnedObjects.Count;
-    public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
-    public bool IsDataLoaded() => isDataLoaded;
-
-    public GameObject GetSpawnedObject(int placeId)
-    {
-        return spawnedObjects.ContainsKey(placeId) ? spawnedObjects[placeId] : null;
-    }
-
-    public void ApplyFilters(Dictionary<string, bool> filters)
-    {
-        if (filters == null) return;
-        currentFilters = filters;
-
-        // 3단계 애견동반 필터 처리
-        bool petFriendlyAll = filters.ContainsKey("petFriendlyAll") && filters["petFriendlyAll"];
-        bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
-        bool noPetFriendly = filters.ContainsKey("noPetFriendly") && filters["noPetFriendly"];
-
-        // alcohol 키가 없으면 기본값 true
-        bool showAlcohol = !filters.ContainsKey("alcohol") || filters["alcohol"];
-        // woopangData 키가 없으면 기본값 true (모든 우팡 데이터 표시)
-        bool showWoopangData = !filters.ContainsKey("woopangData") || filters["woopangData"];
-        // object3D 키가 없으면 기본값 true
-        bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
-
-
-        foreach (var kvp in spawnedObjects)
-        {
-            int placeId = kvp.Key;
-            GameObject obj = kvp.Value;
-            if (obj == null) continue;
-
-            if (placeDataMap.ContainsKey(placeId))
-            {
-                PlaceData place = placeDataMap[placeId];
-
-                // Object3D 토글 OFF: 원본이 custom인 오브젝트만 숨김 (GLB 실패로 cube 전환된 것도 포함)
-                string origType = place.original_model_type ?? place.model_type;
-                if (!showObject3D && origType == "custom")
-                {
-                    obj.SetActive(false);
-                    continue;
-                }
-
-                bool shouldShow = showWoopangData;
-
-                if (shouldShow)
-                {
-                    // 애견동반 필터 적용
-                    if (petFriendlyOnly && !place.pet_friendly)
-                    {
-                        shouldShow = false;
-                    }
-                    else if (noPetFriendly && place.pet_friendly)
-                    {
-                        shouldShow = false;
-                    }
-
-                    // 주류 판매 필터 적용
-                    if (shouldShow && place.alcohol_available && !showAlcohol)
-                    {
-                        shouldShow = false;
-                    }
-                }
-                obj.SetActive(shouldShow);
-            }
-            else if (!showObject3D)
-            {
-                // placeData 없는 오브젝트는 custom으로 간주하여 숨김
-                obj.SetActive(false);
-            }
         }
     }
 
