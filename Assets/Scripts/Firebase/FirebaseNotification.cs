@@ -3,11 +3,12 @@ using UnityEngine.UI;
 using UnityEngine.Networking;
 using System.Collections.Generic;
 using System.Collections;
-using Firebase.Messaging;
-using Firebase.Extensions;
 using System;
 using System.Globalization;
+
 #if UNITY_ANDROID
+using Firebase.Messaging;
+using Firebase.Extensions;
 using UnityEngine.Android;
 using Unity.Notifications.Android;
 #endif
@@ -337,6 +338,7 @@ public class FirebaseNotification : MonoBehaviour
         return combined.GetHashCode().ToString();
     }
 
+#if UNITY_ANDROID
     private DateTime ParseServerTimestamp(Firebase.Messaging.FirebaseMessage message)
     {
         DateTime serverTime = DateTime.Now;
@@ -380,6 +382,7 @@ public class FirebaseNotification : MonoBehaviour
         
         return serverTime;
     }
+#endif
 
     /// <summary>
     /// 메시지 ID를 처리됨으로 표시 (중복 방지)
@@ -569,6 +572,7 @@ public class FirebaseNotification : MonoBehaviour
     }
 #endif
 
+#if UNITY_ANDROID
     void OnTokenReceived(object sender, TokenReceivedEventArgs token)
     {
         if (Instance == null || Instance != this)
@@ -598,7 +602,9 @@ public class FirebaseNotification : MonoBehaviour
 
         currentFCMToken = token;
     }
+#endif
 
+#if UNITY_ANDROID
     void OnMessageReceived(object sender, MessageReceivedEventArgs e)
     {
         string title = "";
@@ -655,7 +661,9 @@ public class FirebaseNotification : MonoBehaviour
             StartCoroutine(HandleBackgroundMessage(title, body, serverTimestamp, messageId, e));
         }
     }
+#endif
 
+#if UNITY_ANDROID
     private IEnumerator HandleForegroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
         // 메시지 타입 확인 (type 또는 notification_type 키 모두 확인)
@@ -823,7 +831,9 @@ public class FirebaseNotification : MonoBehaviour
         activeNotificationIds.Add(newNotificationId);
 #endif
     }
+#endif
 
+#if UNITY_ANDROID
     private IEnumerator HandleBackgroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
         // 메시지 타입 확인 (type 또는 notification_type 키 모두 확인)
@@ -997,6 +1007,7 @@ public class FirebaseNotification : MonoBehaviour
         activeNotificationIds.Add(newNotificationId);
 #endif
     }
+#endif
 
     private IEnumerator CheckBackgroundNotification()
     {
@@ -1406,6 +1417,7 @@ public class FirebaseNotification : MonoBehaviour
         yield return request.SendWebRequest();
     }
 
+#if UNITY_ANDROID
     private string CalculateMessageDistance(Firebase.Messaging.FirebaseMessage message)
     {
         try
@@ -1456,6 +1468,7 @@ public class FirebaseNotification : MonoBehaviour
             return "";
         }
     }
+#endif
 
     #region 인앱 알림 배너
 
