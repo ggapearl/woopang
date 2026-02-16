@@ -1191,7 +1191,7 @@ GameObject:
   - component: {fileID: 51447638}
   - component: {fileID: 51447637}
   m_Layer: 5
-  m_Name: Canvas_iOS
+  m_Name: Canvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5520,6 +5520,18 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 8332123155115899612}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &393337710
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 393337709}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!1 &405466463
 GameObject:
   m_ObjectHideFlags: 0
@@ -15932,7 +15944,7 @@ GameObject:
   - component: {fileID: 1403374501}
   - component: {fileID: 1403374504}
   m_Layer: 0
-  m_Name: MiniProfile_iOS
+  m_Name: MiniProfile
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -27572,6 +27584,7 @@ GameObject:
   - component: {fileID: 2670943868151156421}
   - component: {fileID: 1518120387784317341}
   - component: {fileID: 8333774022583629856}
+  - component: {fileID: 8333774022583629857}
   m_Layer: 0
   m_Name: CloseButton
   m_TagString: Untagged
@@ -27737,7 +27750,7 @@ GameObject:
   - component: {fileID: 8398098266282394505}
   - component: {fileID: 8398098266282394506}
   m_Layer: 5
-  m_Name: Panel_Top_iOS
+  m_Name: Panel_Top
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -29962,7 +29975,7 @@ GameObject:
   - component: {fileID: 973817295873890222}
   - component: {fileID: 5269988119258133666}
   m_Layer: 5
-  m_Name: PlusButton_iOS
+  m_Name: PlusButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -29999,6 +30012,7 @@ GameObject:
   - component: {fileID: 2611769703047846694}
   - component: {fileID: 5491226868495810075}
   - component: {fileID: 3780714020823071225}
+  - component: {fileID: 6663170558000473459}
   m_Layer: 5
   m_Name: CloseButton
   m_TagString: Untagged
@@ -32252,6 +32266,7 @@ GameObject:
   - component: {fileID: 3571208906583446180}
   - component: {fileID: 4466896431477080225}
   - component: {fileID: 2451319996004109817}
+  - component: {fileID: 6010715398770783155}
   m_Layer: 5
   m_Name: XButton_List
   m_TagString: Untagged
@@ -32259,6 +32274,18 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 0
+--- !u!114 &6010715398770783155
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6010715398770783154}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!1 &6016638246184894617
 GameObject:
   m_ObjectHideFlags: 0
@@ -32918,6 +32945,18 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4347991095218125241}
   m_CullTransparentMesh: 1
+--- !u!114 &6663170558000473459
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4347991095218125241}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!114 &6670102078226555381
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34981,8 +35020,88 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 6893651029956859936, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8332123155115899615}
+    - targetCorrespondingSourceObject: {fileID: 6893651029956859936, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8332123155115899614}
+    - targetCorrespondingSourceObject: {fileID: 2631052420045515589, guid: c12de6fed811ad740ac1c494f94ad320,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 393337710}
   m_SourcePrefab: {fileID: 100100000, guid: c12de6fed811ad740ac1c494f94ad320, type: 3}
+--- !u!114 &8332123155115899613 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4080218626213960231, guid: c12de6fed811ad740ac1c494f94ad320,
+    type: 3}
+  m_PrefabInstance: {fileID: 8332123155115899612}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1929578798}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &8332123155115899614
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1929578798}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
+--- !u!114 &8332123155115899615
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1929578798}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 8332123155115899613}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!222 &8333774022583629855
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -35004,6 +35123,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UITouchForwarder
   customSound: {fileID: 8300000, guid: 25112313c968f8b4ca60e7e5eb64dd69, type: 3}
+--- !u!114 &8333774022583629857
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2714774442694648339}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!114 &8350665807689140014
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -36771,6 +36902,6 @@ SceneRoots:
   - {fileID: 7799775519177430484}
   - {fileID: 1023704320}
   - {fileID: 1493430015}
-  - {fileID: 2134957385}
   - {fileID: 1220596689}
+  - {fileID: 2134957385}
   - {fileID: 1468488187}
