@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -103,8 +103,28 @@ public class DataManager : MonoBehaviour
 
     void Start()
     {
+        // [FIX] 데이터 로드 전 저장된 필터 설정을 미리 로드하여 초기화
+        LoadInitialFilters();
+
         StartCoroutine(InitializeObjectPoolsAsync());
         StartCoroutine(StartLocationServiceAndFetchData());
+    }
+
+    private void LoadInitialFilters()
+    {
+        currentFilters = new Dictionary<string, bool>();
+        
+        // FilterManager와 동일한 PlayerPrefs 키를 사용하여 초기값 로드
+        int petState = PlayerPrefs.GetInt("Filter_PetFriendly_V3", 0); // 0:All, 1:Only, 2:No
+        currentFilters["petFriendlyAll"] = (petState == 0);
+        currentFilters["petFriendlyOnly"] = (petState == 1);
+        currentFilters["noPetFriendly"] = (petState == 2);
+        
+        currentFilters["object3D"] = PlayerPrefs.GetInt("Filter_Object3D_V2", 1) == 1;
+        currentFilters["alcohol"] = PlayerPrefs.GetInt("Filter_Alcohol_V2", 1) == 1;
+        
+        // WoopangData는 기본적으로 표시
+        currentFilters["woopangData"] = true; 
     }
 
     private IEnumerator InitializeObjectPoolsAsync()
@@ -288,7 +308,7 @@ public class DataManager : MonoBehaviour
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
             float radius = loadRadii[tierIndex];
-            string serverUrl = $"{baseServerUrl}&lat={lat}&lon={lon}&radius={radius}";
+            string serverUrl = string.Format("{0}&lat={1}&lon={2}&radius={3}", baseServerUrl, lat, lon, radius);
 
             List<PlaceData> newPlaces = new List<PlaceData>();
             yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, newPlaces));
@@ -561,7 +581,7 @@ public class DataManager : MonoBehaviour
         bool shouldShow = ShouldShowObject(place);
         newObj.SetActive(shouldShow);
         
-        newObj.name = $"Place_{place.id}_{place.model_type}";
+        newObj.name = string.Format("Place_{0}_{1}", place.id, place.model_type);
 
         bool setupSuccess = SetupObjectComponents(newObj, place);
 
@@ -574,6 +594,219 @@ public class DataManager : MonoBehaviour
         {
             ReturnToPool(newObj, place.model_type);
         }
+    }
+
+    private void UpdateExistingObject(PlaceData place, GameObject existingObj)
+    {
+        SetupObjectComponents(existingObj, place);
+        placeDataMap[place.id] = place;
+    }
+
+    private bool SetupObjectComponents(GameObject obj, PlaceData place)
+    {
+        CustomARGeospatialCreatorAnchor anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor == null) return false;
+        anchor.SetCoordinatesAndCreateAnchor(place.latitude, place.longitude, place.altitude);
+
+        ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
+        if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
+        {
+            List<string> allSubPhotos = new List<string>();
+            foreach (var photoGroup in place.sub_photos)
+            {
+                if (photoGroup != null)
+                {
+                    foreach (var photo in photoGroup)
+                    {
+                        if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
+                    }
+                }
+            }
+            displayCtrl.SetSubPhotos(allSubPhotos);
+        }
+
+        if (place.model_type == "cube") return SetupCubeObject(obj, place);
+        else if (place.model_type == "custom") return SetupGLBObject(obj, place);
+        else return SetupCubeObject(obj, place);
+    }
+
+    private bool SetupCubeObject(GameObject obj, PlaceData place)
+    {
+        ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
+        if (display != null && !string.IsNullOrEmpty(place.main_photo)) display.SetBaseMap(place.main_photo);
+
+        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
+        if (doubleTap == null) return false;
+        SetupDoubleTapInfo(doubleTap, place);
+
+        Target target = obj.GetComponentInChildren<Target>(true);
+        if (target == null) return false;
+        SetupTargetInfo(target, place);
+
+        return true;
+    }
+
+    private bool SetupGLBObject(GameObject obj, PlaceData place)
+    {
+        if (string.IsNullOrEmpty(place.model_url))
+        {
+            if (fallbackToCube)
+            {
+                place.model_type = "cube";
+                return SetupCubeObject(obj, place);
+            }
+            return false;
+        }
+
+        GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
+        if (glbLoader == null) glbLoader = obj.AddComponent<GLBModelLoader>();
+        
+        glbLoader.ClearModel();
+        
+        string fullUrl = ApiConfig.MAIN_SERVER + "/" + place.model_url;
+        float scale = place.model_scale > 0 ? place.model_scale : 1.0f;
+        
+        currentlyLoadingGLB.Add(place.id);
+        StartCoroutine(LoadGLBAsync(glbLoader, fullUrl, scale, place.id, obj, place));
+
+        return true;
+    }
+
+    private void SetupDoubleTapInfo(DoubleTap3D doubleTap, PlaceData place)
+    {
+        Sprite petFriendlySprite = Resources.Load<Sprite>("Sprites/pet_friendly_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
+        Sprite restroomSprite = Resources.Load<Sprite>("Sprites/separate_restroom_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
+        doubleTap.SetInfoImages(petFriendlySprite, restroomSprite, place.pet_friendly, place.separate_restroom, place.instagram_id, place.name, place.id, place.username, place.instagram_id);
+    }
+
+    private void SetupTargetInfo(Target target, PlaceData place)
+    {
+        Color placeColor;
+        string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
+        if (ColorUtility.TryParseHtmlString($"#{colorHex}", out placeColor)) target.TargetColor = placeColor;
+        else target.TargetColor = Color.white;
+        target.PlaceName = place.name;
+    }
+
+    private IEnumerator LoadGLBAsync(GLBModelLoader loader, string url, float scale, int placeId, GameObject glbObj, PlaceData place)
+    {
+        bool loadCompleted = false;
+        bool loadSuccess = false;
+        float startTime = Time.time;
+        int maxAttempts = 3;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            loadCompleted = false;
+            loadSuccess = false;
+            StartCoroutine(LoadGLBCoroutine(loader, url, scale, (success) => {
+                loadSuccess = success;
+                loadCompleted = true;
+            }));
+            
+            while (!loadCompleted && (Time.time - startTime) < glbLoadTimeout) yield return null;
+            
+            if (loadCompleted && loadSuccess) break;
+            else if (attempt < maxAttempts)
+            {
+                yield return new WaitForSeconds(attempt + 1);
+                loader.ClearModel();
+            }
+        }
+        
+        currentlyLoadingGLB.Remove(placeId);
+        
+        if (loadCompleted && loadSuccess)
+        {
+            DoubleTap3D doubleTap = glbObj.GetComponentInChildren<DoubleTap3D>();
+            if (doubleTap != null) SetupDoubleTapInfo(doubleTap, place);
+
+            Target target = glbObj.GetComponentInChildren<Target>();
+            if (target != null) SetupTargetInfo(target, place);
+        }
+        else
+        {
+            if (fallbackToCube && spawnedObjects.ContainsKey(placeId))
+            {
+                ReturnToPool(glbObj, "custom");
+                spawnedObjects.Remove(placeId);
+                place.model_type = "cube";
+                CreateObjectFromData(place);
+            }
+            else glbObj.SetActive(false);
+        }
+    }
+
+    private IEnumerator LoadGLBCoroutine(GLBModelLoader loader, string url, float scale, System.Action<bool> onComplete)
+    {
+        yield return StartCoroutine(loader.LoadGLBModelCoroutine(url, scale, onComplete));
+    }
+
+    private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
+    {
+        const float R = 6371000;
+        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
+        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
+        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) + Mathf.Cos(Mathf.Deg2Rad * (lat1)) * Mathf.Cos(Mathf.Deg2Rad * (lat2)) * Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
+        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
+        return R * c;
+    }
+
+    private GameObject GetFromPool(string modelType)
+    {
+        Queue<GameObject> targetPool = modelType == "cube" ? cubeObjectPool : glbObjectPool;
+        if (targetPool.Count > 0)
+        {
+            GameObject obj = targetPool.Dequeue();
+            ResetObjectState(obj, modelType);
+            obj.SetActive(true);
+            obj.name = $"Place_ID_{modelType}";
+            return obj;
+        }
+        else if (spawnedObjects.Count < poolSize * 4)
+        {
+            GameObject prefab = modelType == "cube" ? cubePrefab : glbPrefab;
+            GameObject obj = Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            ResetObjectState(obj, modelType);
+            obj.name = $"Place_ID_{modelType}";
+            return obj;
+        }
+        ShowErrorMessage("너무 많은 장소가 로드되었습니다.");
+        return null;
+    }
+
+    private void ResetObjectState(GameObject obj, string modelType)
+    {
+        DoubleTap3D[] doubleTaps = obj.GetComponentsInChildren<DoubleTap3D>(true);
+        foreach (var doubleTap in doubleTaps) doubleTap.ResetData();
+        
+        if (modelType == "custom")
+        {
+            GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
+            if (glbLoader != null) glbLoader.ClearModel();
+        }
+    }
+
+    private void ReturnToPool(GameObject obj, string modelType)
+    {
+        Queue<GameObject> targetPool = modelType == "cube" ? cubeObjectPool : glbObjectPool;
+        if (modelType == "custom")
+        {
+            GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
+            if (glbLoader != null) glbLoader.ClearModel();
+        }
+        obj.SetActive(false);
+        targetPool.Enqueue(obj);
+    }
+
+    public Dictionary<int, GameObject> GetSpawnedObjects() => spawnedObjects;
+    public int GetSpawnedObjectsCount() => spawnedObjects.Count;
+    public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
+    public bool IsDataLoaded() => isDataLoaded;
+
+    public GameObject GetSpawnedObject(int placeId)
+    {
+        return spawnedObjects.ContainsKey(placeId) ? spawnedObjects[placeId] : null;
     }
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
@@ -681,9 +914,9 @@ public class DataManager : MonoBehaviour
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
     }
 
-    // ============================================================
+    // ============================================================ 
     // AR Geospatial 준비 대기 + 가이드 UI
-    // ============================================================
+    // ============================================================ 
 
     private IEnumerator WaitForGeospatialTracking()
     {
