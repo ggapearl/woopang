@@ -1135,20 +1135,60 @@ public class FirebaseNotification : MonoBehaviour
         return R * c;
     }
 
+    [Serializable]
+    private class NativeMessageData
+    {
+        public string title;
+        public string body;
+        public string latitude;
+        public string longitude;
+        public string radius;
+    }
+
     public void OnNativeMessageReceived(string message)
     {
-        if (!string.IsNullOrEmpty(message) && message.Contains("|"))
+        Debug.Log($"[FirebaseNotification] OnNativeMessageReceived: {message}");
+
+        if (string.IsNullOrEmpty(message)) return;
+
+        string title = "";
+        string body = "";
+        float targetLat = 0f;
+        float targetLon = 0f;
+        float radius = 0f;
+
+        // 1. Try JSON parsing
+        if (message.Trim().StartsWith("{"))
+        {
+            try
+            {
+                var data = JsonUtility.FromJson<NativeMessageData>(message);
+                if (data != null)
+                {
+                    title = data.title;
+                    body = data.body;
+                    float.TryParse(data.latitude, out targetLat);
+                    float.TryParse(data.longitude, out targetLon);
+                    float.TryParse(data.radius, out radius);
+                    
+                    ProcessNativeMessage(title, body, targetLat, targetLon, radius);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[FirebaseNotification] JSON parse error: {ex.Message}");
+            }
+        }
+
+        // 2. Try Pipe-separated parsing (Legacy)
+        if (message.Contains("|"))
         {
             string[] parts = message.Split('|');
             if (parts.Length >= 2)
             {
-                string title = parts[0];
-                string body = parts[1];
-
-                float targetLat = 0f;
-                float targetLon = 0f;
-                float radius = 0f;
-                string distanceString = "";
+                title = parts[0];
+                body = parts[1];
 
                 if (parts.Length >= 5)
                 {
@@ -1156,48 +1196,57 @@ public class FirebaseNotification : MonoBehaviour
                         float.TryParse(parts[3], out targetLon))
                     {
                         float.TryParse(parts[4], out radius);
-
-                        bool alreadyHasDistance = title.Contains(" - ") &&
-                                                (title.EndsWith("m") || title.EndsWith("km"));
-
-                        if (alreadyHasDistance)
-                        {
-                            int lastDashIndex = title.LastIndexOf(" - ");
-                            if (lastDashIndex > 0)
-                            {
-                                distanceString = title.Substring(lastDashIndex + 3);
-                            }
-                        }
-                        else
-                        {
-                            if (isLocationServiceEnabled && currentUserLocation != Vector2.zero)
-                            {
-                                float distance = CalculateDistanceInMeters(
-                                    currentUserLocation.x, currentUserLocation.y,
-                                    targetLat, targetLon
-                                );
-
-                                distanceString = FormatDistance(distance);
-                                title = $"{title} - {distanceString}";
-                            }
-                        }
                     }
                 }
-
-                DateTime timestamp = DateTime.Now;
-                string messageId = GenerateMessageId(title, body, timestamp);
-
-                // MessagePanelManager에 시스템 알림 추가
-                if (MessagePanelManager.Instance != null)
-                {
-                    MessagePanelManager.Instance.AddLocationNotificationFromPush(
-                        title, body, messageId, targetLat, targetLon, radius, distanceString);
-                }
-
-                // 중복 방지용 메시지 ID 저장
-                MarkMessageAsProcessed(messageId, title, body, timestamp);
+                
+                ProcessNativeMessage(title, body, targetLat, targetLon, radius);
             }
         }
+    }
+
+    private void ProcessNativeMessage(string title, string body, float targetLat, float targetLon, float radius)
+    {
+        string distanceString = "";
+
+        if (targetLat != 0 && targetLon != 0)
+        {
+            bool alreadyHasDistance = title.Contains(" - ") && (title.EndsWith("m") || title.EndsWith("km"));
+
+            if (alreadyHasDistance)
+            {
+                int lastDashIndex = title.LastIndexOf(" - ");
+                if (lastDashIndex > 0)
+                {
+                    distanceString = title.Substring(lastDashIndex + 3);
+                }
+            }
+            else
+            {
+                if (isLocationServiceEnabled && currentUserLocation != Vector2.zero)
+                {
+                    float distance = CalculateDistanceInMeters(
+                        currentUserLocation.x, currentUserLocation.y,
+                        targetLat, targetLon
+                    );
+
+                    distanceString = FormatDistance(distance);
+                    title = $"{title} - {distanceString}";
+                }
+            }
+        }
+
+        DateTime timestamp = DateTime.Now;
+        string messageId = GenerateMessageId(title, body, timestamp);
+
+        // MessagePanelManager에 시스템 알림 추가
+        if (MessagePanelManager.Instance != null)
+        {
+            MessagePanelManager.Instance.AddLocationNotificationFromPush(
+                title, body, messageId, targetLat, targetLon, radius, distanceString);
+        }
+
+        // 중복 방지용 메시지 ID 저장
+        MarkMessageAsProcessed(messageId, title, body, timestamp);
     }
 
     public void OnNativeTokenReceived(string token)
