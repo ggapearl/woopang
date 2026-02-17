@@ -6,6 +6,19 @@ MonoImporter:
   defaultReferences: []
   executionOrder: 0
   icon: {instanceID: 0}
-  userData: 
-  assetBundleName: 
-  assetBundleVariant: 
+  userData:
+  assetBundleName:
+  assetBundleVariant:
+platformData:
+- first:
+    '': Any
+  second:
+    enabled: 1
+    settings:
+      ExcludeFromAll: 0
+      OverrideSettings: 1
+- first:
+    iOS: iOS
+  second:
+    enabled: 0
+    settings: {} 
