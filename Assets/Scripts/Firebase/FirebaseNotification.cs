@@ -13,6 +13,10 @@ using UnityEngine.Android;
 using Unity.Notifications.Android;
 #endif
 
+#if UNITY_IOS
+using Unity.Notifications.iOS;
+#endif
+
 [System.Serializable]
 public class MessageData
 {
@@ -175,6 +179,46 @@ public class FirebaseNotification : MonoBehaviour
         // iOS는 네이티브 APNs 사용 (UnityAppController.mm에서 처리)
         // OnNativeTokenReceived와 OnNativeMessageReceived 콜백 사용
         LoadTokenFromPlayerPrefs();
+
+        // iOS 앱 실행 시 백그라운드 알림 처리
+        var notification = Unity.Notifications.iOS.iOSNotificationCenter.GetLastRespondedNotification();
+        if (notification != null)
+        {
+            string title = notification.Title;
+            string body = notification.Body;
+            float targetLat = 0f;
+            float targetLon = 0f;
+            float radius = 0f;
+
+            string msgType = "";
+            string senderId = "";
+            string senderUsername = "";
+
+            if (notification.UserInfo != null)
+            {
+                if (notification.UserInfo.Contains("latitude"))
+                    float.TryParse(notification.UserInfo["latitude"], out targetLat);
+                if (notification.UserInfo.Contains("longitude"))
+                    float.TryParse(notification.UserInfo["longitude"], out targetLon);
+                if (notification.UserInfo.Contains("radius"))
+                    float.TryParse(notification.UserInfo["radius"], out radius);
+
+                if (notification.UserInfo.Contains("msg_type"))
+                    msgType = notification.UserInfo["msg_type"];
+                else if (notification.UserInfo.Contains("type"))
+                    msgType = notification.UserInfo["type"];
+
+                if (notification.UserInfo.Contains("sender_id"))
+                    senderId = notification.UserInfo["sender_id"];
+                
+                if (notification.UserInfo.Contains("sender_username"))
+                    senderUsername = notification.UserInfo["sender_username"];
+                else if (notification.UserInfo.Contains("sender"))
+                    senderUsername = notification.UserInfo["sender"];
+            }
+
+            ProcessNativeMessage(title, body, targetLat, targetLon, radius, msgType, senderId, senderUsername);
+        }
 #endif
 
         StartCoroutine(CheckBackgroundNotificationOnStartup());
@@ -563,7 +607,7 @@ public class FirebaseNotification : MonoBehaviour
     {
         var channel = new AndroidNotificationChannel()
         {
-            Id = "default_channel",
+            Id = "woopang_channel_high",
             Name = "Default Channel",
             Importance = Importance.High,
             Description = "Generic notifications",
@@ -654,17 +698,18 @@ public class FirebaseNotification : MonoBehaviour
 
         if (Application.isFocused)
         {
-            StartCoroutine(HandleForegroundMessage(title, body, serverTimestamp, messageId, e));
+            HandleForegroundMessage(title, body, serverTimestamp, messageId, e);
         }
         else
         {
-            StartCoroutine(HandleBackgroundMessage(title, body, serverTimestamp, messageId, e));
+            // 백그라운드에서는 코루틴이 돌지 않으므로 직접 호출 (void로 변경 예정)
+            HandleBackgroundMessage(title, body, serverTimestamp, messageId, e);
         }
     }
 #endif
 
 #if UNITY_ANDROID
-    private IEnumerator HandleForegroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
+    private void HandleForegroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
         // 메시지 타입 확인 (type 또는 notification_type 키 모두 확인)
         string messageType = "";
@@ -706,10 +751,10 @@ public class FirebaseNotification : MonoBehaviour
                 LargeIcon = "icon_1",
                 ShouldAutoCancel = true
             };
-            AndroidNotificationCenter.SendNotification(uploadNotif, "default_channel");
+            AndroidNotificationCenter.SendNotification(uploadNotif, "woopang_channel_high");
 #endif
 
-            yield break;
+            return;
         }
 
         // === DM 메시지 처리 ===
@@ -762,20 +807,40 @@ public class FirebaseNotification : MonoBehaviour
             }
 
 #if UNITY_ANDROID
-            // DM 메시지도 포그라운드에서 시스템 알림 표시
-            var dmNotification = new AndroidNotification
+            try
             {
-                Title = title,
-                Text = body,
-                FireTime = System.DateTime.Now,
-                SmallIcon = "icon_0",
-                LargeIcon = "icon_1",
-                ShouldAutoCancel = true
-            };
-            AndroidNotificationCenter.SendNotification(dmNotification, "default_channel");
+                var channel = new AndroidNotificationChannel()
+                {
+                    Id = "woopang_channel_high",
+                    Name = "Default Channel",
+                    Importance = Importance.High,
+                    Description = "Generic notifications",
+                };
+                AndroidNotificationCenter.RegisterNotificationChannel(channel);
+
+                // DM 메시지도 포그라운드에서 시스템 알림 표시
+                var dmNotification = new AndroidNotification
+                {
+                    Title = title,
+                    Text = body,
+                    FireTime = System.DateTime.Now.AddSeconds(0.5f),
+                    SmallIcon = "icon_0",
+                    LargeIcon = "icon_1",
+                    ShouldAutoCancel = true,
+                    Group = "woopang_dm"
+                };
+                
+                int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+                AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
+                activeNotificationIds.Add(dmNotificationId);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[FirebaseNotification] Failed to send foreground notification: {ex.Message}");
+            }
 #endif
 
-            yield break; // DM은 위치 기반 알림 저장 안 함
+            return; // DM은 위치 기반 알림 저장 안 함
         }
 
         // 위치 기반 알림 처리
@@ -825,7 +890,7 @@ public class FirebaseNotification : MonoBehaviour
         };
 
         int newNotificationId = (int)System.DateTime.Now.Ticks;
-        AndroidNotificationCenter.SendNotification(notification, "default_channel");
+        AndroidNotificationCenter.SendNotification(notification, "woopang_channel_high");
 
         // 활성 알림 ID 추가
         activeNotificationIds.Add(newNotificationId);
@@ -834,7 +899,7 @@ public class FirebaseNotification : MonoBehaviour
 #endif
 
 #if UNITY_ANDROID
-    private IEnumerator HandleBackgroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
+    private void HandleBackgroundMessage(string title, string body, DateTime serverTimestamp, string messageId, MessageReceivedEventArgs e)
     {
         // 메시지 타입 확인 (type 또는 notification_type 키 모두 확인)
         string messageType = "";
@@ -870,18 +935,18 @@ public class FirebaseNotification : MonoBehaviour
             {
                 Title = title,
                 Text = body,
-                FireTime = System.DateTime.Now,
+                FireTime = System.DateTime.Now.AddSeconds(0.5f),
                 SmallIcon = "icon_0",
                 LargeIcon = "icon_1",
                 ShouldAutoCancel = true,
                 Group = "woopang_system"
             };
             int uploadNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-            AndroidNotificationCenter.SendNotification(uploadNotif, "default_channel");
+            AndroidNotificationCenter.SendNotification(uploadNotif, "woopang_channel_high");
             activeNotificationIds.Add(uploadNotifId);
 #endif
 
-            yield break;
+            return;
         }
 
         // === DM 메시지 처리 ===
@@ -934,23 +999,42 @@ public class FirebaseNotification : MonoBehaviour
             }
 
 #if UNITY_ANDROID
-            // DM 메시지도 백그라운드에서 시스템 알림 표시
-            var dmNotification = new AndroidNotification
+            try
             {
-                Title = title,
-                Text = body,
-                FireTime = System.DateTime.Now,
-                SmallIcon = "icon_0",
-                LargeIcon = "icon_1",
-                ShouldAutoCancel = true,
-                Group = "woopang_dm"
-            };
-            int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-            AndroidNotificationCenter.SendNotification(dmNotification, "default_channel");
-            activeNotificationIds.Add(dmNotificationId);
+                // 채널이 없는 경우를 대비해 다시 등록
+                var channel = new AndroidNotificationChannel()
+                {
+                    Id = "woopang_channel_high",
+                    Name = "Default Channel",
+                    Importance = Importance.High,
+                    Description = "Generic notifications",
+                };
+                AndroidNotificationCenter.RegisterNotificationChannel(channel);
+
+                // DM 메시지도 백그라운드에서 시스템 알림 표시
+                var dmNotification = new AndroidNotification
+                {
+                    Title = title,
+                    Text = body,
+                    FireTime = System.DateTime.Now.AddSeconds(0.5f), // 0.5초 뒤 발송
+                    SmallIcon = "icon_0",
+                    LargeIcon = "icon_1",
+                    ShouldAutoCancel = true,
+                    Group = "woopang_dm"
+                };
+                
+                int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+                AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
+                activeNotificationIds.Add(dmNotificationId);
+                
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[FirebaseNotification] Failed to send background notification: {ex.Message}");
+            }
 #endif
 
-            yield break; // DM은 위치 기반 알림 저장 안 함
+            return; // DM은 위치 기반 알림 저장 안 함
         }
 
         // 위치 기반 알림 처리 (백그라운드)
@@ -992,7 +1076,7 @@ public class FirebaseNotification : MonoBehaviour
         {
             Title = title,
             Text = body,
-            FireTime = System.DateTime.Now,
+            FireTime = System.DateTime.Now.AddSeconds(0.5f),
             SmallIcon = "icon_0",
             LargeIcon = "icon_1",
             ShouldAutoCancel = true,
@@ -1001,7 +1085,7 @@ public class FirebaseNotification : MonoBehaviour
         };
 
         int newNotificationId = (int)System.DateTime.Now.Ticks;
-        AndroidNotificationCenter.SendNotification(notification, "default_channel");
+        AndroidNotificationCenter.SendNotification(notification, "woopang_channel_high");
 
         // 활성 알림 ID 추가
         activeNotificationIds.Add(newNotificationId);
@@ -1143,12 +1227,15 @@ public class FirebaseNotification : MonoBehaviour
         public string latitude;
         public string longitude;
         public string radius;
+        public string msg_type;
+        public string type;
+        public string sender_id;
+        public string sender_username;
+        public string sender;
     }
 
     public void OnNativeMessageReceived(string message)
     {
-        Debug.Log($"[FirebaseNotification] OnNativeMessageReceived: {message}");
-
         if (string.IsNullOrEmpty(message)) return;
 
         string title = "";
@@ -1156,6 +1243,9 @@ public class FirebaseNotification : MonoBehaviour
         float targetLat = 0f;
         float targetLon = 0f;
         float radius = 0f;
+        string msgType = "";
+        string senderId = "";
+        string senderUsername = "";
 
         // 1. Try JSON parsing
         if (message.Trim().StartsWith("{"))
@@ -1171,7 +1261,11 @@ public class FirebaseNotification : MonoBehaviour
                     float.TryParse(data.longitude, out targetLon);
                     float.TryParse(data.radius, out radius);
                     
-                    ProcessNativeMessage(title, body, targetLat, targetLon, radius);
+                    msgType = !string.IsNullOrEmpty(data.msg_type) ? data.msg_type : data.type;
+                    senderId = data.sender_id;
+                    senderUsername = !string.IsNullOrEmpty(data.sender_username) ? data.sender_username : data.sender;
+
+                    ProcessNativeMessage(title, body, targetLat, targetLon, radius, msgType, senderId, senderUsername);
                     return;
                 }
             }
@@ -1204,8 +1298,28 @@ public class FirebaseNotification : MonoBehaviour
         }
     }
 
-    private void ProcessNativeMessage(string title, string body, float targetLat, float targetLon, float radius)
+    private void ProcessNativeMessage(string title, string body, float targetLat, float targetLon, float radius, string msgType = "", string senderId = "", string senderUsername = "")
     {
+        // DM Handling
+        if (msgType == "dm" || msgType == "DM")
+        {
+            var manager = FindFirstObjectByType<MessagePanelManager>();
+            if (manager != null && !string.IsNullOrEmpty(senderId))
+            {
+                string messageContent = body;
+                if (!string.IsNullOrEmpty(senderUsername) && messageContent.StartsWith(senderUsername + ": "))
+                {
+                    messageContent = messageContent.Substring(senderUsername.Length + 2);
+                }
+                
+                manager.AddOrUpdateConversationFromPush(senderId, senderUsername, messageContent);
+
+                // iOS 포그라운드에서는 시스템 알림이 안 뜨므로 인앱 배너 표시
+                ShowInAppNotification(title, body, senderId, senderUsername);
+            }
+            return;
+        }
+
         string distanceString = "";
 
         if (targetLat != 0 && targetLon != 0)

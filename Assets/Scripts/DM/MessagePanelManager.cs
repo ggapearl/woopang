@@ -504,6 +504,22 @@ public class MessagePanelManager : MonoBehaviour
     void OnApplicationFocus(bool hasFocus)
     {
         isAppFocused = hasFocus;
+        
+        if (hasFocus)
+        {
+            // 앱이 포그라운드로 돌아왔을 때 데이터 갱신
+            if (CheckLogin())
+            {
+                // 패널이 열려있으면 목록 새로고침
+                if (messagePanel != null && messagePanel.activeInHierarchy)
+                {
+                    StartCoroutine(LoadConversationList());
+                }
+                
+                // 안읽음 카운트 갱신 (뱃지)
+                StartCoroutine(FetchUnreadCount());
+            }
+        }
     }
 
     void OnApplicationPause(bool pauseStatus)
@@ -587,6 +603,7 @@ public class MessagePanelManager : MonoBehaviour
     /// <param name="avatarUrl">발신자 아바타 URL (선택)</param>
     public void AddOrUpdateConversationFromPush(string senderId, string senderUsername, string messageContent, string avatarUrl = null)
     {
+
         if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(senderUsername))
             return;
 
@@ -598,16 +615,18 @@ public class MessagePanelManager : MonoBehaviour
         bool isWoopangMessage = senderId == "3" ||
                                 senderId.ToLower() == "woopang" ||
                                 senderUsername.ToLower().Contains("woopang");
+        
 
-        // WOOPANG 메시지는 시스템 알림으로 처리
-        if (isWoopangMessage)
-        {
-            string notificationId = $"woopang_{DateTime.Now.Ticks}";
-            AddLocationNotificationFromPush("WOOPANG", messageContent, notificationId);
-            return;
-        }
+        // WOOPANG 메시지도 이제 대화 목록에 스레딩되도록 처리 (AddLocationNotificationFromPush로 보내지 않음)
+        // 단, isSystemMessage 플래그를 true로 설정하여 스타일링 유지
 
         string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        // 관리자 메시지인 경우 로컬 히스토리에 저장 (채팅방 진입 시 불러오기 위함)
+        if (isWoopangMessage)
+        {
+            SaveLocalAdminMessage(messageContent, currentTime);
+        }
 
         // 기존 대화 찾기
         int existingIndex = -1;
@@ -627,6 +646,8 @@ public class MessagePanelManager : MonoBehaviour
             existingConv.lastMessage = messageContent;
             existingConv.lastMessageTime = currentTime;
             existingConv.unreadCount++;
+            // 기존 대화가 있다면 시스템 메시지 여부 업데이트 (혹시 모르니)
+            if (isWoopangMessage) existingConv.isSystemMessage = true;
         }
         else
         {
@@ -639,7 +660,7 @@ public class MessagePanelManager : MonoBehaviour
                 lastMessage = messageContent,
                 lastMessageTime = currentTime,
                 unreadCount = 1,
-                isSystemMessage = false
+                isSystemMessage = isWoopangMessage // WOOPANG 메시지면 시스템 메시지로 처리
             };
 
             conversations.Add(newConv);
@@ -852,7 +873,6 @@ public class MessagePanelManager : MonoBehaviour
         // [DEBUG LOG] 채팅방 진입 시 타겟 아바타 확인
         if (chatRoomAvatar != null)
         {
-            Debug.Log($"[MessagePanel DEBUG] OpenChatRoom 호출됨. 타겟 아바타 오브젝트: {chatRoomAvatar.name} (InstanceID: {chatRoomAvatar.GetInstanceID()})");
         }
         else
         {
@@ -1303,26 +1323,71 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 관리자 공지(AdminBroadcast)를 ConversationSummary로 변환하여 conversations 리스트에 통합
+    /// 관리자 공지(Server)와 로컬 푸시(Local)를 통합하여 'WOOPANG' 대화방 하나로 병합
     /// </summary>
     private void MergeAdminBroadcastsIntoConversations()
     {
-        // 기존 관리자 공지 항목 제거
-        conversations.RemoveAll(c => c.isAdminBroadcast);
+        // 1. 기존 'WOOPANG' 또는 관리자 공지 항목 제거 (중복 방지)
+        conversations.RemoveAll(c => c.isAdminBroadcast || c.userId == "woopang" || c.username == "WOOPANG");
 
-        // 새로운 관리자 공지를 ConversationSummary로 변환하여 추가
-        foreach (var broadcast in adminBroadcasts)
+        string latestContent = "";
+        string latestTime = "";
+        DateTime lastDateTime = DateTime.MinValue;
+
+        // 2. 서버 공지사항 확인 (숨김 처리된 공지 필터링)
+        int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
+        if (adminBroadcasts != null)
+        {
+            foreach (var broadcast in adminBroadcasts)
+            {
+                // 사용자가 삭제한 공지는 건너뜀
+                if (broadcast.id <= hiddenMaxId) continue;
+
+                DateTime dt;
+                if (DateTime.TryParse(broadcast.created_at, out dt))
+                {
+                    if (dt > lastDateTime)
+                    {
+                        lastDateTime = dt;
+                        latestContent = broadcast.content;
+                        latestTime = broadcast.created_at;
+                    }
+                }
+            }
+        }
+
+        // 3. 로컬 푸시 내역 확인
+        var localMessages = LoadLocalAdminMessages();
+        if (localMessages != null)
+        {
+            foreach (var msg in localMessages)
+            {
+                DateTime dt;
+                if (DateTime.TryParse(msg.created_at, out dt))
+                {
+                    if (dt > lastDateTime)
+                    {
+                        lastDateTime = dt;
+                        latestContent = msg.content;
+                        latestTime = msg.created_at;
+                    }
+                }
+            }
+        }
+
+        // 4. 표시할 메시지가 있다면 'WOOPANG' 대화방 생성
+        if (lastDateTime != DateTime.MinValue)
         {
             var summary = new ConversationSummary
             {
                 userId = "woopang",
                 username = "WOOPANG",
-                avatarUrl = "",
-                lastMessage = broadcast.content,
-                lastMessageTime = broadcast.created_at,
-                unreadCount = 0,
-                isAdminBroadcast = true,
-                notificationId = $"broadcast_{broadcast.id}"
+                avatarUrl = "", // 시스템 아바타 사용
+                lastMessage = latestContent,
+                lastMessageTime = latestTime,
+                unreadCount = 0, // 로컬은 읽음 처리됨 (개선 가능)
+                isAdminBroadcast = true, // 스타일링용 플래그
+                isSystemMessage = true
             };
             conversations.Add(summary);
         }
@@ -1362,6 +1427,84 @@ public class MessagePanelManager : MonoBehaviour
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRectTransform);
         }
+    }
+
+    [Serializable]
+    public class LocalAdminMessage
+    {
+        public string content;
+        public string created_at;
+    }
+
+    [Serializable]
+    public class LocalAdminMessageList
+    {
+        public List<LocalAdminMessage> messages = new List<LocalAdminMessage>();
+    }
+
+    private void SaveLocalAdminMessage(string content, string time)
+    {
+        try
+        {
+            string json = PlayerPrefs.GetString("LocalAdminMessages", "{\"messages\":[]}");
+            var list = JsonUtility.FromJson<LocalAdminMessageList>(json) ?? new LocalAdminMessageList();
+            
+            // Check if message already exists to avoid duplicates (optional but good)
+            bool exists = false;
+            foreach(var msg in list.messages) {
+                if (msg.content == content && msg.created_at == time) { exists = true; break; }
+            }
+
+            if (!exists) {
+                list.messages.Add(new LocalAdminMessage { content = content, created_at = time });
+            }
+
+            // Limit history to 50
+            if (list.messages.Count > 50) list.messages.RemoveAt(0);
+
+            string newJson = JsonUtility.ToJson(list);
+            PlayerPrefs.SetString("LocalAdminMessages", newJson);
+            PlayerPrefs.Save();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[MessagePanel] Failed to save admin message: {ex.Message}");
+        }
+    }
+
+    private List<DMMessage> LoadLocalAdminMessages()
+    {
+        var result = new List<DMMessage>();
+        try
+        {
+            string json = PlayerPrefs.GetString("LocalAdminMessages", "{\"messages\":[]}");
+            var list = JsonUtility.FromJson<LocalAdminMessageList>(json);
+
+            if (list != null && list.messages != null)
+            {
+                string userId = LoginManager.Instance?.CurrentUser?.id ?? "0";
+                foreach (var msg in list.messages)
+                {
+                    result.Add(new DMMessage
+                    {
+                        id = 0,
+                        sender_id = "woopang",
+                        recipient_id = userId,
+                        content = msg.content,
+                        created_at = msg.created_at,
+                        is_read = true,
+                        sender_username = "WOOPANG",
+                        sender_avatar_url = "",
+                        is_mine = false
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[MessagePanel] Failed to load admin messages: {ex.Message}");
+        }
+        return result;
     }
 
     private IEnumerator LoadAdminBroadcasts()
@@ -1470,6 +1613,7 @@ public class MessagePanelManager : MonoBehaviour
                 GameObject item = Instantiate(adminNoticePrefab, conversationListContent);
                 SetLayerRecursively(item, 5);
                 SetupAdminBroadcastItem(item, conv);
+                SetupSwipeDeleteForAdminBroadcast(item);
                 return;
             }
         }
@@ -1687,6 +1831,57 @@ public class MessagePanelManager : MonoBehaviour
         {
             DeleteSystemNotification(notificationId, item);
         });
+    }
+
+    /// <summary>
+    /// 관리자 공지 스와이프 삭제 설정 (로컬 숨김)
+    /// </summary>
+    private void SetupSwipeDeleteForAdminBroadcast(GameObject item)
+    {
+        SwipeToDeleteHandler handler = item.GetComponent<SwipeToDeleteHandler>();
+        if (handler == null)
+            handler = item.AddComponent<SwipeToDeleteHandler>();
+
+        handler.Initialize("woopang_admin", swipeThreshold, () =>
+        {
+            DeleteAdminBroadcast(item);
+        });
+    }
+
+    /// <summary>
+    /// 관리자 공지 삭제 (로컬: conversations에서 제거 + 로컬 메시지 삭제 + 숨김 처리)
+    /// </summary>
+    private void DeleteAdminBroadcast(GameObject item)
+    {
+        // conversations 리스트에서 관리자 공지 제거
+        conversations.RemoveAll(c => c.isAdminBroadcast);
+
+        // 로컬 저장된 관리자 메시지 삭제
+        PlayerPrefs.DeleteKey("LocalAdminMessages");
+        PlayerPrefs.Save();
+
+        // 서버 공지 숨김 처리 (앱 재시작 시에도 숨김 유지)
+        if (adminBroadcasts != null && adminBroadcasts.Count > 0)
+        {
+            // 최신 공지 ID를 기록 → 이 ID 이하의 공지는 숨김
+            int latestId = 0;
+            foreach (var b in adminBroadcasts)
+            {
+                if (b.id > latestId) latestId = b.id;
+            }
+            PlayerPrefs.SetInt("HiddenAdminBroadcastMaxId", latestId);
+            PlayerPrefs.Save();
+            adminBroadcasts.Clear();
+        }
+
+        // UI에서 제거
+        if (item != null)
+            Destroy(item);
+
+        UpdateUnreadUI();
+
+        if (UIFeedbackManager.Instance != null)
+            UIFeedbackManager.Instance.TriggerMediumHaptic();
     }
 
     /// <summary>
@@ -2094,13 +2289,45 @@ public class MessagePanelManager : MonoBehaviour
 
         if (isAdmin)
         {
-            // 관리자 공지 메시지 표시
+            // 1. 로컬 저장된 관리자 메시지 (푸시 수신 내역)
+            var localMessages = LoadLocalAdminMessages();
+            
+            // 2. 서버에서 불러온 공지사항 (adminBroadcasts)
+            // 중복 제거를 위해 내용+시간으로 키 생성
+            var uniqueMessages = new Dictionary<string, LocalAdminMessage>();
+            
+            foreach (var msg in localMessages)
+            {
+                string key = $"{msg.content}_{msg.created_at}";
+                if (!uniqueMessages.ContainsKey(key))
+                    uniqueMessages[key] = new LocalAdminMessage { content = msg.content, created_at = msg.created_at };
+            }
+            
             foreach (var broadcast in adminBroadcasts)
             {
-                // 날짜 구분선 체크 (관리자 메시지는 useDateSeparator가 false면 스킵)
+                string key = $"{broadcast.content}_{broadcast.created_at}";
+                if (!uniqueMessages.ContainsKey(key))
+                    uniqueMessages[key] = new LocalAdminMessage { content = broadcast.content, created_at = broadcast.created_at };
+            }
+            
+            // 리스트로 변환 및 시간순 정렬 (최신순이 위로 오게 - dtB vs dtA)
+            var allMessages = new List<LocalAdminMessage>(uniqueMessages.Values);
+            allMessages.Sort((a, b) => 
+            {
+                DateTime dtA, dtB;
+                DateTime.TryParse(a.created_at, out dtA);
+                DateTime.TryParse(b.created_at, out dtB);
+                return dtB.CompareTo(dtA);
+            });
+            
+            // 표시
+            foreach (var msg in allMessages)
+            {
                 if (useDateSeparator)
-                    CheckAndCreateDateSeparator(broadcast.created_at);
-                CreateAdminMessageBubble(broadcast);
+                    CheckAndCreateDateSeparator(msg.created_at);
+                
+                // CreateSystemMessageBubble 사용 (AdminMessageBubble 프리팹 사용)
+                CreateSystemMessageBubble("WOOPANG", msg.content, msg.created_at);
             }
             yield break;
         }

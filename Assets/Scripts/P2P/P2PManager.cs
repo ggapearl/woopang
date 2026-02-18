@@ -76,12 +76,13 @@ public class P2PManager : MonoBehaviour
     public static P2PManager Instance { get; private set; }
 
     [Header("Server Configuration")]
-    [SerializeField] private float positionUpdateInterval = 1f;  // 1초마다 위치 업데이트
-    [SerializeField] private bool autoConnect = true;            // 자동 연결
+    [SerializeField] private float foregroundUpdateInterval = 1f;   // 포그라운드: 1초
+    [SerializeField] private float backgroundUpdateInterval = 60f;  // 백그라운드: 60초
+    [SerializeField] private bool autoConnect = true;               // 자동 연결
 
     [Header("User Avatar Settings")]
     [SerializeField] private GameObject userAvatarPrefab;        // P2P_User.prefab
-    [SerializeField] private int maxVisibleUsers = 20;           // 최대 표시 사용자 수
+    [SerializeField] private int maxVisibleUsers = 100;          // 최대 표시 사용자 수
     [SerializeField] private float maxTrackingDistance = 1000f;  // 1km
     [SerializeField] private int initialPoolSize = 10;           // 초기 풀 크기
     [Tooltip("아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)")]
@@ -113,6 +114,8 @@ public class P2PManager : MonoBehaviour
 
     // State
     private bool isRegistered = false;
+    private bool isInBackground = false;
+    private float currentUpdateInterval => isInBackground ? backgroundUpdateInterval : foregroundUpdateInterval;
 
     // Statistics
     public int NearbyUsersCount => activeUserAvatars.Count;
@@ -294,19 +297,34 @@ public class P2PManager : MonoBehaviour
     {
         while (isRegistered)
         {
-            // Get current GPS position
+            bool positionUpdated = false;
+
+            // Get current GPS position (ARCore Geospatial)
             if (earthManager != null && earthManager.EarthTrackingState == UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
             {
                 var pose = earthManager.CameraGeospatialPose;
                 currentLatitude = pose.Latitude;
                 currentLongitude = pose.Longitude;
                 currentAltitude = pose.Altitude;
+                positionUpdated = true;
+            }
+            // 백그라운드 GPS fallback (AREarthManager가 작동 안할 때)
+            else if (isInBackground && Input.location.status == LocationServiceStatus.Running)
+            {
+                var loc = Input.location.lastData;
+                currentLatitude = loc.latitude;
+                currentLongitude = loc.longitude;
+                currentAltitude = loc.altitude;
+                positionUpdated = true;
+            }
 
-                // Send position update
+            if (positionUpdated)
+            {
                 yield return StartCoroutine(UpdatePosition());
             }
 
-            yield return new WaitForSeconds(positionUpdateInterval);
+            // 포그라운드/백그라운드에 따라 다른 간격 사용
+            yield return new WaitForSeconds(currentUpdateInterval);
         }
     }
 
@@ -1035,6 +1053,56 @@ public class P2PManager : MonoBehaviour
     private void LogError(string message)
     {
         Debug.LogError($"[P2PManager] {message}");
+    }
+
+    private void OnApplicationPause(bool pauseStatus)
+    {
+        isInBackground = pauseStatus;
+
+        if (pauseStatus)
+        {
+            // 백그라운드 진입
+            Log("Entering background mode");
+            // Private 모드면 추적 중지
+            if (locationVisibilityMode == LocationVisibilityMode.Private)
+            {
+                if (positionUpdateCoroutine != null)
+                {
+                    StopCoroutine(positionUpdateCoroutine);
+                    positionUpdateCoroutine = null;
+                }
+            }
+            // Public/FollowingOnly: SendPositionUpdates 코루틴이 계속 실행되며
+            // 다음 루프에서 backgroundUpdateInterval(60초) 대기
+        }
+        else
+        {
+            // 포그라운드 복귀
+            Log("Returning to foreground");
+            if (isRegistered && positionUpdateCoroutine == null &&
+                locationVisibilityMode != LocationVisibilityMode.Private)
+            {
+                positionUpdateCoroutine = StartCoroutine(SendPositionUpdates());
+            }
+        }
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        // Android에서 OnApplicationPause와 함께 호출될 수 있음
+        if (!hasFocus && !isInBackground)
+        {
+            isInBackground = true;
+        }
+        else if (hasFocus && isInBackground)
+        {
+            isInBackground = false;
+            if (isRegistered && positionUpdateCoroutine == null &&
+                locationVisibilityMode != LocationVisibilityMode.Private)
+            {
+                positionUpdateCoroutine = StartCoroutine(SendPositionUpdates());
+            }
+        }
     }
 
     void OnDestroy()
