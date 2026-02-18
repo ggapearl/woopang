@@ -196,24 +196,24 @@ public class FirebaseNotification : MonoBehaviour
 
             if (notification.UserInfo != null)
             {
-                if (notification.UserInfo.Contains("latitude"))
+                if (notification.UserInfo.ContainsKey("latitude"))
                     float.TryParse(notification.UserInfo["latitude"], out targetLat);
-                if (notification.UserInfo.Contains("longitude"))
+                if (notification.UserInfo.ContainsKey("longitude"))
                     float.TryParse(notification.UserInfo["longitude"], out targetLon);
-                if (notification.UserInfo.Contains("radius"))
+                if (notification.UserInfo.ContainsKey("radius"))
                     float.TryParse(notification.UserInfo["radius"], out radius);
 
-                if (notification.UserInfo.Contains("msg_type"))
+                if (notification.UserInfo.ContainsKey("msg_type"))
                     msgType = notification.UserInfo["msg_type"];
-                else if (notification.UserInfo.Contains("type"))
+                else if (notification.UserInfo.ContainsKey("type"))
                     msgType = notification.UserInfo["type"];
 
-                if (notification.UserInfo.Contains("sender_id"))
+                if (notification.UserInfo.ContainsKey("sender_id"))
                     senderId = notification.UserInfo["sender_id"];
-                
-                if (notification.UserInfo.Contains("sender_username"))
+
+                if (notification.UserInfo.ContainsKey("sender_username"))
                     senderUsername = notification.UserInfo["sender_username"];
-                else if (notification.UserInfo.Contains("sender"))
+                else if (notification.UserInfo.ContainsKey("sender"))
                     senderUsername = notification.UserInfo["sender"];
             }
 

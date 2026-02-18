@@ -29,19 +29,23 @@ public class ObjectCountUI : MonoBehaviour
     private int currentCount = 0;
     private bool isFinalCount = false;
     private Coroutine fadeOutCoroutine;
-    private Coroutine timeoutCoroutine; // 타임아웃 코루틴 추가
+    private Coroutine timeoutCoroutine;
+    private Coroutine delayedUpdateCoroutine;
     private float lastUpdateTime = 0f;
+
+    // 지연 업데이트 큐: 가장 최신 값만 유지
+    private int pendingCount = 0;
+    private bool pendingIsFinal = false;
+    private bool hasPendingUpdate = false;
 
     void Awake()
     {
-        // CanvasGroup 추가 (페이드용)
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
         {
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
         }
 
-        // 초기 상태: 숨김 (DataManager가 FetchDataProgressively 시작 시 활성화)
         canvasGroup.alpha = 0f;
         gameObject.SetActive(false);
     }
@@ -53,28 +57,67 @@ public class ObjectCountUI : MonoBehaviour
     /// <param name="isFinal">마지막 Tier 완료 여부</param>
     public void UpdateObjectCount(int count, bool isFinal)
     {
-        // 비활성 상태면 무시
         if (!gameObject.activeInHierarchy) return;
 
-        // 최소 표시 시간이 지났는지 확인
+        // isFinal은 항상 즉시 처리 (지연 시 noDataTimeout과 충돌 가능)
+        if (isFinal)
+        {
+            // 진행 중인 지연 업데이트 취소
+            CancelDelayedUpdate();
+            ApplyUpdate(count, true);
+            return;
+        }
+
+        // 개수가 0→양수로 변할 때도 즉시 처리 ("찾고 있습니다" → "N개 찾았습니다" 전환)
+        if (count > 0 && currentCount == 0 && !hasPendingUpdate)
+        {
+            CancelDelayedUpdate();
+            ApplyUpdate(count, false);
+            return;
+        }
+
         float timeSinceLastUpdate = Time.time - lastUpdateTime;
 
         if (timeSinceLastUpdate < minDisplayTime)
         {
-            // 최소 표시 시간이 지나지 않았으면 대기 후 업데이트
-            StartCoroutine(DelayedUpdate(count, isFinal, minDisplayTime - timeSinceLastUpdate));
+            // 이전 지연 업데이트가 있으면 최신 값으로 교체 (코루틴은 하나만 유지)
+            pendingCount = count;
+            pendingIsFinal = isFinal;
+            hasPendingUpdate = true;
+
+            if (delayedUpdateCoroutine == null)
+            {
+                delayedUpdateCoroutine = StartCoroutine(DelayedUpdate(minDisplayTime - timeSinceLastUpdate));
+            }
         }
         else
         {
-            // 즉시 업데이트
+            CancelDelayedUpdate();
             ApplyUpdate(count, isFinal);
         }
     }
 
-    private IEnumerator DelayedUpdate(int count, bool isFinal, float delay)
+    private void CancelDelayedUpdate()
+    {
+        if (delayedUpdateCoroutine != null)
+        {
+            StopCoroutine(delayedUpdateCoroutine);
+            delayedUpdateCoroutine = null;
+        }
+        hasPendingUpdate = false;
+    }
+
+    private IEnumerator DelayedUpdate(float delay)
     {
         yield return new WaitForSeconds(delay);
-        ApplyUpdate(count, isFinal);
+
+        delayedUpdateCoroutine = null;
+
+        if (hasPendingUpdate)
+        {
+            hasPendingUpdate = false;
+            ApplyUpdate(pendingCount, pendingIsFinal);
+        }
     }
 
     private void ApplyUpdate(int count, bool isFinal)
@@ -95,21 +138,17 @@ public class ObjectCountUI : MonoBehaviour
         // 최종 완료 시 페이드아웃 시작 (데이터가 있는 경우)
         if (isFinal && count > 0)
         {
-            // 기존 페이드아웃 중단
             if (fadeOutCoroutine != null)
             {
                 StopCoroutine(fadeOutCoroutine);
             }
-
-            // displayDuration 후 페이드아웃
             fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay());
         }
-        // 최종 완료인데 데이터가 0개인 경우 (타임아웃 전에 로딩이 끝남)
+        // 최종 완료인데 데이터가 0개인 경우
         else if (isFinal && count == 0)
         {
-             // 즉시 "데이터 없음" 처리 (타임아웃 코루틴이 돌고 있다면 중복 방지 위해 정지 후 즉시 실행)
-             if (timeoutCoroutine != null) StopCoroutine(timeoutCoroutine);
-             timeoutCoroutine = StartCoroutine(HandleNoData());
+            if (timeoutCoroutine != null) StopCoroutine(timeoutCoroutine);
+            timeoutCoroutine = StartCoroutine(HandleNoData());
         }
     }
 
@@ -119,12 +158,10 @@ public class ObjectCountUI : MonoBehaviour
 
         if (count == 0)
         {
-            // 0개일 때는 항상 "찾고 있습니다"
             countText.text = LocalizationManager.Instance.GetText("searching_objects");
         }
         else
         {
-            // 1개 이상일 때는 "N개의 오브젝트를 찾았습니다"
             string template = LocalizationManager.Instance.GetText("found_objects");
             countText.text = string.Format(template, count);
         }
@@ -134,8 +171,8 @@ public class ObjectCountUI : MonoBehaviour
     {
         yield return new WaitForSeconds(noDataTimeout);
 
-        // 타임아웃 후에도 여전히 0개라면
-        if (currentCount == 0)
+        // 타임아웃 후에도 여전히 0개이고 최종 완료가 아니라면
+        if (currentCount == 0 && !isFinalCount)
         {
             yield return StartCoroutine(HandleNoData());
         }
@@ -143,15 +180,7 @@ public class ObjectCountUI : MonoBehaviour
 
     private IEnumerator HandleNoData()
     {
-        // 텍스트 변경: "주변에 AR데이터가 없습니다"
-        // LocalizationManager에 키가 없다면 기본 텍스트 사용, 있다면 사용
-        // 여기서는 직접 할당하거나 키를 추가해야 함. 일단 하드코딩 + Localization 시도
-        
         string noDataText = "주변에 AR데이터가 없습니다";
-        // 만약 LocalizationManager에 해당 키가 있다면 사용 (예시)
-        // noDataText = LocalizationManager.Instance.GetText("no_ar_data_found"); 
-        
-        // 다국어 지원을 위해 간단히 분기 (LocalizationManager에 키 추가 권장)
         if (Application.systemLanguage != SystemLanguage.Korean)
         {
             noDataText = "No AR data found nearby";
@@ -162,25 +191,21 @@ public class ObjectCountUI : MonoBehaviour
             countText.text = noDataText;
         }
 
-        // 3초 대기 (기존 displayDuration과 동일하게 처리하거나 별도 대기)
         yield return new WaitForSeconds(3f);
 
-        // 페이드아웃 시작
         if (fadeOutCoroutine != null) StopCoroutine(fadeOutCoroutine);
-        fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay(0f)); // 0초 딜레이로 즉시 페이드아웃 시작
+        fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay(0f));
     }
 
     private IEnumerator FadeOutAfterDelay(float delay = -1f)
     {
-        // delay가 -1이면 기본 displayDuration 사용
         float waitTime = (delay < 0) ? displayDuration : delay;
-        
+
         if (waitTime > 0)
         {
             yield return new WaitForSeconds(waitTime);
         }
 
-        // 페이드아웃
         float elapsed = 0f;
         float startAlpha = canvasGroup.alpha;
 
@@ -188,17 +213,14 @@ public class ObjectCountUI : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float t = elapsed / fadeOutDuration;
-
             canvasGroup.alpha = Mathf.Lerp(startAlpha, 0f, t);
-
             yield return null;
         }
 
         canvasGroup.alpha = 0f;
         fadeOutCoroutine = null;
-        timeoutCoroutine = null; // 타임아웃 코루틴 참조 해제
+        timeoutCoroutine = null;
 
-        // UI 비활성화
         gameObject.SetActive(false);
     }
 
@@ -207,27 +229,25 @@ public class ObjectCountUI : MonoBehaviour
     /// </summary>
     public void ResetUI()
     {
-        // 진행 중인 코루틴 모두 중단 (활성 상태일 때만)
         if (gameObject.activeInHierarchy)
         {
             StopAllCoroutines();
         }
         fadeOutCoroutine = null;
         timeoutCoroutine = null;
+        delayedUpdateCoroutine = null;
+        hasPendingUpdate = false;
 
-        // 초기 상태로 리셋
         currentCount = 0;
         isFinalCount = false;
+        lastUpdateTime = 0f;
         UpdateText(0, false);
 
-        // UI 활성화 및 페이드인
         gameObject.SetActive(true);
         if (canvasGroup != null) canvasGroup.alpha = 1f;
 
-        // 활성화 후에도 비활성 상태면 (부모가 비활성) 코루틴 시작 안함
         if (!gameObject.activeInHierarchy) return;
 
-        // 타임아웃 체크 시작
         timeoutCoroutine = StartCoroutine(CheckForNoDataTimeout());
     }
 }
