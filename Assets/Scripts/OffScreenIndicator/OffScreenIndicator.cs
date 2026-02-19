@@ -177,6 +177,7 @@ public class OffScreenIndicator : MonoBehaviour
                 indicator.ResetForPool(); // Pool 반환 전 완전히 리셋
                 indicator.Activate(false);
                 indicator = type == IndicatorType.BOX ? BoxObjectPool.current.GetPooledObject() : ArrowObjectPool.current.GetPooledObject();
+                indicator.ownerTarget = target;
                 indicator.Activate(true);
                 isNewlyActivated = true;
             }
@@ -184,6 +185,7 @@ public class OffScreenIndicator : MonoBehaviour
         else
         {
             indicator = type == IndicatorType.BOX ? BoxObjectPool.current.GetPooledObject() : ArrowObjectPool.current.GetPooledObject();
+            indicator.ownerTarget = target;
             indicator.Activate(true);
             isNewlyActivated = true;
         }

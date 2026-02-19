@@ -9,6 +9,11 @@ public class Indicator : MonoBehaviour
     private Image indicatorImage;
     private Text distanceText;
 
+    /// <summary>
+    /// 이 인디케이터가 표시하는 Target 참조 (터치 콜백용)
+    /// </summary>
+    [HideInInspector] public Target ownerTarget;
+
     [Header("Fade In Settings")]
     [Tooltip("스프라이트 페이드인 시간 (초)")]
     public float spriteFadeDuration = 0.3f;
@@ -49,6 +54,16 @@ public class Indicator : MonoBehaviour
     {
         indicatorImage = transform.GetComponent<Image>();
         distanceText = transform.GetComponentInChildren<Text>();
+
+        // 터치 가능하도록 Button 추가
+        Button btn = GetComponent<Button>();
+        if (btn == null)
+        {
+            btn = gameObject.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+        }
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(OnIndicatorClicked);
 
         // CanvasGroup 추가 (페이드인용)
         canvasGroup = GetComponent<CanvasGroup>();
@@ -305,6 +320,17 @@ public class Indicator : MonoBehaviour
         fadeCoroutine = null;
     }
 
+    /// <summary>
+    /// 인디케이터 터치/클릭 시 호출
+    /// </summary>
+    private void OnIndicatorClicked()
+    {
+        if (ownerTarget != null && ownerTarget.OnIndicatorTapped != null)
+        {
+            ownerTarget.OnIndicatorTapped.Invoke();
+        }
+    }
+
     public void SetScale(Vector3 scale)
     {
         transform.localScale = scale;
@@ -316,6 +342,7 @@ public class Indicator : MonoBehaviour
     public void ResetForPool()
     {
         isFirstActivation = true;
+        ownerTarget = null;
 
         // 페이드인 중이었다면 중단
         if (fadeCoroutine != null)

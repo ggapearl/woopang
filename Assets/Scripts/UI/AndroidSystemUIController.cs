@@ -97,7 +97,7 @@ public class AndroidSystemUIController : MonoBehaviour
                 }
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
             // 무시 (에러 로그 스팸 방지)
         }

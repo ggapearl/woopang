@@ -25,7 +25,7 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private GameObject loadingSpinnerPrefab; // 3D 로딩 스피너 프리팹
     [SerializeField] private float spinnerScale = 1.5f; // 스피너 스케일 (기본 1.5배)
     [SerializeField] private float spinnerRotationSpeed = 30f; // 스피너 회전 속도 (도/초)
-    [SerializeField] private float spinnerMinDuration = 2f; // 스피너 최소 표시 시간 (회전)
+    [SerializeField] private float spinnerMinDuration = 3f; // 스피너 최소 표시 시간 (회전)
 #pragma warning disable CS0414 // Inspector 설정용 필드
     [SerializeField] private float spinnerFadeDuration = 1.5f; // 스피너 페이드아웃 시간 (큐브와 겹침)
 #pragma warning restore CS0414
@@ -37,7 +37,18 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private float transitionScaleMultiplier = 2f; // 전환 이미지 커지는 배율
     [SerializeField] private float transitionDuration = 0.6f; // 전환 애니메이션 시간
 
+    [Header("Spawn Emphasis Effect")]
+    [Tooltip("스폰 강조 효과 크기 배율 (기본 sparkle 대비)")]
+    [SerializeField] private float spawnEmphasisScale = 3f;
+    [Tooltip("스폰 강조 효과 사용 여부")]
+    [SerializeField] private bool enableSpawnEmphasis = true;
+
     private Image transitionImage; // 런타임 생성되는 전환 이미지
+
+    [Header("Spinner Sparkle Effect")]
+    [SerializeField] private float sparkleSpeed = 1.5f; // 반짝이 속도 (주기/초)
+    [SerializeField] private float sparkleMinAlpha = 0.6f; // 반짝이 최소 알파
+    [SerializeField] private float sparkleMaxAlpha = 1.0f; // 반짝이 최대 알파
 
     [Header("Loading Text Animation")]
     [SerializeField] private float dotAnimationSpeed = 0.4f; // 점 애니메이션 속도 (초)
@@ -200,13 +211,18 @@ public class ARPreviewController : MonoBehaviour
             // 스피너 페이드인 (빠르게)
             yield return StartCoroutine(FadeObject(spawnedSpinner, 0f, 1f, 0.5f));
 
-            // 스피너 회전 (최소 시간)
+            // 스피너 회전 + 반짝이 효과 (최소 시간)
             float spinTime = 0f;
             while (spinTime < spinnerMinDuration)
             {
                 if (spawnedSpinner != null)
                 {
                     spawnedSpinner.transform.Rotate(Vector3.up, spinnerRotationSpeed * Time.deltaTime);
+
+                    // 반짝이 효과: 사인파로 알파 펄스
+                    float sparkle = Mathf.Lerp(sparkleMinAlpha, sparkleMaxAlpha,
+                        (Mathf.Sin(spinTime * sparkleSpeed * Mathf.PI * 2f) + 1f) * 0.5f);
+                    SetObjectAlpha(spawnedSpinner, sparkle);
                 }
                 spinTime += Time.deltaTime;
                 yield return null;
@@ -246,7 +262,13 @@ public class ARPreviewController : MonoBehaviour
             yield return StartCoroutine(FadeObject(spawnedCube, 0f, 1f, cubeFadeInDuration));
         }
 
-        // 4. 로딩 완료 → 텍스트 전환
+        // 4. 스폰 강조 효과 (큐브 위치에 크게 커지는 sparkle)
+        if (enableSpawnEmphasis)
+        {
+            PlaySpawnEmphasisEffect(position);
+        }
+
+        // 5. 로딩 완료 → 텍스트 전환
         isLoadingComplete = true;
         yield return StartCoroutine(TransitionToConfirmText());
     }
@@ -382,6 +404,35 @@ public class ARPreviewController : MonoBehaviour
         Color color = image.color;
         color.a = alpha;
         image.color = color;
+    }
+
+    /// <summary>
+    /// 큐브 스폰 위치에 OffScreenIndicator의 sparkle 효과를 크게 재생
+    /// </summary>
+    private void PlaySpawnEmphasisEffect(Vector3 worldPosition)
+    {
+        if (arCamera == null) return;
+
+        // 월드 좌표 → 스크린 좌표
+        Vector3 screenPos = arCamera.WorldToScreenPoint(worldPosition);
+        if (screenPos.z <= 0) return; // 카메라 뒤에 있으면 무시
+
+        // IndicatorSparkleHelper의 sparkleSize를 임시로 크게 설정
+        IndicatorSparkleHelper sparkleHelper = FindFirstObjectByType<IndicatorSparkleHelper>();
+        if (sparkleHelper == null) return;
+
+        // 원본 사이즈 저장 후 크게 변경
+        Vector2 originalSize = sparkleHelper.sparkleSize;
+        float originalSpawnDelay = sparkleHelper.spawnDelay;
+        sparkleHelper.sparkleSize = originalSize * spawnEmphasisScale;
+        sparkleHelper.spawnDelay = 0f; // 스폰 시 딜레이 없이 즉시
+
+        // Sparkle 재생 (arrowOnly 무시를 위해 ARROW 타입으로)
+        IndicatorSparkleHelper.PlaySparkleForIndicator(screenPos, IndicatorType.ARROW);
+
+        // 원본 복원
+        sparkleHelper.sparkleSize = originalSize;
+        sparkleHelper.spawnDelay = originalSpawnDelay;
     }
 
     /// <summary>

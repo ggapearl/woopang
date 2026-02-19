@@ -415,6 +415,7 @@ public class P2PVirtualUserTester : MonoBehaviour
 
     void OnDestroy()
     {
+        if (!isSimulating) return;
         StopSimulation();
     }
 

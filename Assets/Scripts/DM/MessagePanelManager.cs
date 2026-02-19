@@ -140,6 +140,16 @@ public class MessagePanelManager : MonoBehaviour
     [Tooltip("대화 목록 아이템 간격 (픽셀)")]
     public float conversationListSpacing = 2f;
 
+    [Header("=== 스켈레톤 로딩 설정 ===")]
+    [Tooltip("스켈레톤 아이템 개수")]
+    public int skeletonItemCount = 12;
+    [Tooltip("스켈레톤 최소 표시 시간 (초)")]
+    public float skeletonMinDuration = 1f;
+    [Tooltip("스켈레톤 배경 색상")]
+    public Color skeletonBgColor = new Color(0.15f, 0.15f, 0.18f, 1f);
+    [Tooltip("스켈레톤 콘텐츠 색상 (텍스트/아바타 자리)")]
+    public Color skeletonContentColor = new Color(0.22f, 0.22f, 0.26f, 1f);
+
     // 내부용 상수 (프리팹 값 유지, 너비 계산용)
     private const float DEFAULT_BUBBLE_PADDING = 24f;
     private const float DEFAULT_MIN_TEXT_WIDTH = 50f;
@@ -1236,6 +1246,19 @@ public class MessagePanelManager : MonoBehaviour
     {
         ClearContent(conversationListContent);
 
+        // Inspector에서 이전 값(4)이 남아 있을 수 있으므로 최소 12개 보장
+        if (skeletonItemCount < 12) skeletonItemCount = 12;
+
+        // 스켈레톤 로딩 표시
+        float skeletonStartTime = Time.time;
+        List<GameObject> skeletonItems = new List<GameObject>();
+        for (int i = 0; i < skeletonItemCount; i++)
+        {
+            GameObject skeleton = CreateSkeletonItem(conversationListContent);
+            skeletonItems.Add(skeleton);
+        }
+        ForceLayoutUpdate();
+
         // 1. 관리자 공지 로드
         yield return StartCoroutine(LoadAdminBroadcasts());
 
@@ -1245,6 +1268,12 @@ public class MessagePanelManager : MonoBehaviour
         // 2. 로그인 안 된 경우: 기존 대화 시간순 렌더링 후 종료
         if (!CheckLogin())
         {
+            // 스켈레톤 최소 표시 시간 보장
+            float elapsed = Time.time - skeletonStartTime;
+            if (elapsed < skeletonMinDuration)
+                yield return new WaitForSeconds(skeletonMinDuration - elapsed);
+            RemoveSkeletonItems(skeletonItems);
+
             SortConversationsByTime();
             foreach (var conv in conversations)
             {
@@ -1305,6 +1334,12 @@ public class MessagePanelManager : MonoBehaviour
                 totalUnreadCount = response.total_unread;
                 UpdateUnreadUI();
             }
+
+            // 스켈레톤 최소 표시 시간 보장
+            float elapsed = Time.time - skeletonStartTime;
+            if (elapsed < skeletonMinDuration)
+                yield return new WaitForSeconds(skeletonMinDuration - elapsed);
+            RemoveSkeletonItems(skeletonItems);
 
             // 시간순 정렬 후 모든 대화 (DM + 시스템 알림 + 관리자 공지) 통합 렌더링
             SortConversationsByTime();
@@ -1396,6 +1431,100 @@ public class MessagePanelManager : MonoBehaviour
     /// <summary>
     /// 레이아웃 강제 업데이트 - 동적으로 추가된 아이템이 즉시 표시되도록
     /// </summary>
+    // ============================================================
+    // 스켈레톤 로딩 UI
+    // ============================================================
+
+    /// <summary>
+    /// 대화 목록 스켈레톤 아이템 생성 (쉬머 효과 포함)
+    /// </summary>
+    private GameObject CreateSkeletonItem(Transform parent)
+    {
+        float itemHeight = conversationItemHeight > 0 ? conversationItemHeight : 140f;
+
+        // 루트 컨테이너
+        GameObject item = new GameObject("SkeletonItem");
+        item.transform.SetParent(parent, false);
+
+        RectTransform itemRect = item.AddComponent<RectTransform>();
+        itemRect.sizeDelta = new Vector2(0, itemHeight);
+
+        LayoutElement le = item.AddComponent<LayoutElement>();
+        le.preferredHeight = itemHeight;
+        le.minHeight = itemHeight;
+
+        Image itemBg = item.AddComponent<Image>();
+        itemBg.color = skeletonBgColor;
+
+        // 아바타 플레이스홀더 (둥근 원)
+        float avatarSize = itemHeight * 0.65f;
+        GameObject avatar = CreateSkeletonBlock(item.transform, "Avatar",
+            new Vector2(16f + avatarSize * 0.5f, 0f),
+            new Vector2(avatarSize, avatarSize),
+            skeletonContentColor, true);
+
+        // 이름 플레이스홀더 (상단 바)
+        float textStartX = 16f + avatarSize + 16f;
+        float availableWidth = 600f; // 대략적인 사용 가능 너비
+        GameObject nameLine = CreateSkeletonBlock(item.transform, "NameLine",
+            new Vector2(textStartX + availableWidth * 0.2f, itemHeight * 0.18f),
+            new Vector2(availableWidth * 0.4f, 20f),
+            skeletonContentColor, false);
+
+        // 메시지 플레이스홀더 (하단 바, 더 넓고 옅게)
+        GameObject msgLine = CreateSkeletonBlock(item.transform, "MsgLine",
+            new Vector2(textStartX + availableWidth * 0.35f, -itemHeight * 0.15f),
+            new Vector2(availableWidth * 0.7f, 16f),
+            new Color(skeletonContentColor.r, skeletonContentColor.g, skeletonContentColor.b, 0.6f), false);
+
+        // 쉬머 효과 적용
+        item.AddComponent<ShimmerEffect>();
+
+        return item;
+    }
+
+    /// <summary>
+    /// 스켈레톤 블록 (사각형 또는 원형) 생성
+    /// </summary>
+    private GameObject CreateSkeletonBlock(Transform parent, string name, Vector2 position, Vector2 size, Color color, bool circle)
+    {
+        GameObject block = new GameObject(name);
+        block.transform.SetParent(parent, false);
+
+        RectTransform rect = block.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0.5f);
+        rect.anchorMax = new Vector2(0, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+
+        Image img = block.AddComponent<Image>();
+        img.color = color;
+        img.raycastTarget = false;
+
+        // 둥근 모서리 (원형 마스크 대용 — 모서리 둥글게)
+        if (circle)
+        {
+            // 원형: 기본 UI Sprite를 사용 (Unity 내장)
+            img.type = Image.Type.Sliced;
+        }
+
+        return block;
+    }
+
+    /// <summary>
+    /// 스켈레톤 아이템 제거
+    /// </summary>
+    private void RemoveSkeletonItems(List<GameObject> skeletonItems)
+    {
+        foreach (var item in skeletonItems)
+        {
+            if (item != null)
+                Destroy(item);
+        }
+        skeletonItems.Clear();
+    }
+
     private void ForceLayoutUpdate()
     {
         if (conversationListContent == null) return;
@@ -3328,7 +3457,13 @@ public class MessagePanelManager : MonoBehaviour
 
     private bool CheckLogin()
     {
-        return LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn;
+        if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
+            return true;
+
+        // 로그인 안 되어있으면 로그인 유도 팝업 표시
+        if (LoginManager.Instance != null)
+            LoginManager.Instance.ShowLoginRequirementPopup();
+        return false;
     }
 
     private void HideAllPanels()

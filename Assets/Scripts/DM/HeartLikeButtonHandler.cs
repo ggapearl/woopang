@@ -49,34 +49,17 @@ public class HeartLikeButtonHandler : MonoBehaviour, IPointerClickHandler
 
         // 쿨다운 체크 - 연속 터치 방지
         if (currentTime - lastClickTime < clickCooldown)
-        {
-            Debug.Log("[HeartLikeButton] Cooldown active, ignoring click");
             return;
-        }
 
         // 이미 요청 진행 중이면 무시
         if (isProcessing)
-        {
-            Debug.Log("[HeartLikeButton] Request in progress, ignoring click");
             return;
-        }
 
         lastClickTime = currentTime;
         isProcessing = true;
 
-        // 좋아요 상태인 경우에만 취소 (unlike)
-        // 좋아요가 아닌 상태에서는 하트가 보이지 않으므로 이 경우는 없지만 안전장치
-        if (isLiked)
-        {
-            Debug.Log($"[HeartLikeButton] Unliking message {messageId}");
-            onLikeToggle?.Invoke(messageId, false); // false = 좋아요 취소
-        }
-        else
-        {
-            // 좋아요가 아닌 상태에서 하트를 탭하면 좋아요
-            Debug.Log($"[HeartLikeButton] Liking message {messageId}");
-            onLikeToggle?.Invoke(messageId, true); // true = 좋아요
-        }
+        // 좋아요 토글
+        onLikeToggle?.Invoke(messageId, !isLiked);
     }
 
     /// <summary>

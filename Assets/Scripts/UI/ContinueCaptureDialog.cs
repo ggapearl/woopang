@@ -32,6 +32,16 @@ public class ContinueCaptureDialog : MonoBehaviour
 
     private void Awake()
     {
+        // 앵커 보정 — 에디터 스크립트에서 잘못 설정된 값(0.04 등) 수정
+        RectTransform rt = GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
         if (yesButton != null)
             yesButton.onClick.AddListener(OnYesButtonClicked);
 

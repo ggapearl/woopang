@@ -21,7 +21,7 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
     private RectTransform deleteButtonRect;
     private Vector2 startPosition;
     private bool isSwipeActive = false;
-    private bool isOpen = false;
+
     private Action onDelete;
     private bool isInitialized = false;
 
@@ -231,7 +231,6 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
         {
             // 오버레이 고정 (삭제 버튼 전체 너비로 노출)
             deleteButtonRect.sizeDelta = new Vector2(deleteButtonWidth, 0);
-            isOpen = true;
         }
         else
         {
@@ -247,8 +246,6 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
 
         if (deleteButton != null)
             deleteButton.SetActive(false);
-
-        isOpen = false;
 
         // 루트 Button 복원 (클릭 가능 상태로)
         if (rootButton != null)

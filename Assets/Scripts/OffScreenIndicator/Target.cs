@@ -1,8 +1,15 @@
 ﻿using UnityEngine;
+using System;
 
 [DefaultExecutionOrder(0)]
 public class Target : MonoBehaviour
 {
+    /// <summary>
+    /// 인디케이터(Box/Arrow) 터치 시 호출되는 콜백
+    /// P2P 사용자의 경우 프로필 열기 등에 사용
+    /// </summary>
+    [HideInInspector] public Action OnIndicatorTapped;
+
     [Tooltip("This color will be set by the server data")]
     [SerializeField] private Color targetColor = Color.white;
 

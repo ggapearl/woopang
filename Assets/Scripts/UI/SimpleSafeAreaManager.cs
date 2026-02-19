@@ -98,8 +98,8 @@ public class SimpleSafeAreaManager : MonoBehaviour
                 continue;
             }
 
-            // ScreenSpaceOverlay만 적용
-            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            // 루트 Canvas + ScreenSpaceOverlay만 적용 (Nested Canvas 제외)
+            if (canvas.isRootCanvas && canvas.renderMode == RenderMode.ScreenSpaceOverlay)
             {
                 RectTransform canvasRect = canvas.GetComponent<RectTransform>();
                 if (canvasRect != null)

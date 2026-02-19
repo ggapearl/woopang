@@ -66,8 +66,7 @@ public class DataManager : MonoBehaviour
     private HashSet<int> currentlyLoadingGLB = new HashSet<int>();
     
     [SerializeField] public int poolSize = 50;
-    [SerializeField] private float updateInterval = 600f;
-    
+
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터)")]
     public float[] loadRadii = new float[] { 25f, 50f, 75f, 100f, 150f, 200f, 500f, 1000f, 2000f, 5000f, 10000f };
@@ -85,8 +84,12 @@ public class DataManager : MonoBehaviour
 
     private bool isDataLoaded = false;
     private bool isGeospatialReady = false;
+    private bool isFetching = false; // FetchDataProgressively 중복 실행 방지
+    private int fetchGeneration = 0; // 세대 번호: StopAllFetching 시 증가하여 이전 코루틴 무효화
     private Coroutine fetchCoroutine;
+    private Coroutine checkPositionCoroutine;
     private Vector2 lastPosition;
+    private bool isInitialStartComplete = false; // 앱 첫 시작 완료 여부 (OnApplicationFocus 무시용)
 
     // 현재 활성 필터 저장 (거리 필터와 동기화용)
     private Dictionary<string, bool> currentFilters;
@@ -101,10 +104,37 @@ public class DataManager : MonoBehaviour
         ARSession.stateChanged -= OnARSessionStateChanged;
     }
 
+    /// <summary>
+    /// 모든 fetch 관련 코루틴을 중단하고 세대 번호를 증가시켜 이전 코루틴 무효화
+    /// </summary>
+    private void StopAllFetching()
+    {
+        fetchGeneration++; // 세대 증가 → 이전 FetchDataProgressively가 yield 후 자동 중단
+
+
+        if (fetchCoroutine != null)
+        {
+            StopCoroutine(fetchCoroutine);
+            fetchCoroutine = null;
+        }
+        if (checkPositionCoroutine != null)
+        {
+            StopCoroutine(checkPositionCoroutine);
+            checkPositionCoroutine = null;
+        }
+        isFetching = false;
+    }
+
     void Start()
     {
         // [FIX] 데이터 로드 전 저장된 필터 설정을 미리 로드하여 초기화
         LoadInitialFilters();
+
+        // 앱 시작 시 "찾고 있습니다" 즉시 표시
+        if (objectCountUI != null)
+        {
+            objectCountUI.ResetUI();
+        }
 
         StartCoroutine(InitializeObjectPoolsAsync());
         StartCoroutine(StartLocationServiceAndFetchData());
@@ -163,8 +193,8 @@ public class DataManager : MonoBehaviour
 
         lastPosition = new Vector2(lat, lon);
         
-        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
-        StartCoroutine(CheckPositionAndFetchData());
+        fetchCoroutine = StartCoroutine(FetchDataOnce());
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
         yield break;
 #else
         if (!Input.location.isEnabledByUser)
@@ -199,75 +229,81 @@ public class DataManager : MonoBehaviour
         
         lastPosition = new Vector2(latitude, longitude);
         
-        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
-        StartCoroutine(CheckPositionAndFetchData());
+        fetchCoroutine = StartCoroutine(FetchDataOnce());
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
 #endif
     }
 
     private void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
     {
-#if UNITY_EDITOR
-        // 에디터에서는 AR 세션 상태 변화 무시 (이미 Start에서 시작함)
-        return;
-#else
-        if (args.state == ARSessionState.SessionTracking && !isDataLoaded)
-        {
-            float lat = 37.5665f;
-            float lon = 126.9780f;
-            if (Input.location.status == LocationServiceStatus.Running)
-            {
-                lat = Input.location.lastData.latitude;
-                lon = Input.location.lastData.longitude;
-            }
-
-            if (fetchCoroutine != null)
-            {
-                StopCoroutine(fetchCoroutine);
-            }
-            fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
-        }
-#endif
+        // FetchDataPeriodically 내부에서 WaitUntil(SessionTracking)으로 대기하므로
+        // 여기서 별도로 fetch를 시작할 필요 없음 (이중 실행 방지)
     }
 
-    private IEnumerator FetchDataPeriodically()
+    /// <summary>
+    /// 최초 1회 데이터 로드 (AR 세션 + Geospatial 준비 후)
+    /// 이후 위치 변경은 CheckPositionAndFetchData에서 처리
+    /// </summary>
+    private IEnumerator FetchDataOnce()
     {
-        while (true)
-        {
 #if UNITY_EDITOR
-            // 에디터에서는 AR 세션 추적 대기 생략
-            float lat = VirtualLocation.Instance.Latitude;
-            float lon = VirtualLocation.Instance.Longitude;
-            isGeospatialReady = true;
+        float lat = VirtualLocation.Instance.Latitude;
+        float lon = VirtualLocation.Instance.Longitude;
+        isGeospatialReady = true;
 #else
-            yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
+        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
 
-            // Geospatial 추적 준비 대기 + 가이드 표시
-            if (!isGeospatialReady)
-            {
-                ShowARGuide("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...");
-                yield return StartCoroutine(WaitForGeospatialTracking());
-                HideARGuide();
-            }
+        // Geospatial 추적 준비 대기 + 가이드 표시
+        if (!isGeospatialReady)
+        {
+            ShowARGuide("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...");
+            yield return StartCoroutine(WaitForGeospatialTracking());
+            HideARGuide();
+        }
 
-            float lat = 37.5665f;
-            float lon = 126.9780f;
+        float lat = 37.5665f;
+        float lon = 126.9780f;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+#endif
+
+        // 위치가 기본값(서울)인지 확인 — GPS가 준비되지 않았으면 대기
+#if !UNITY_EDITOR
+        float waitForGPS = 0f;
+        while (lat == 37.5665f && lon == 126.9780f && waitForGPS < 10f)
+        {
+            yield return new WaitForSeconds(0.5f);
+            waitForGPS += 0.5f;
             if (Input.location.status == LocationServiceStatus.Running)
             {
                 lat = Input.location.lastData.latitude;
                 lon = Input.location.lastData.longitude;
             }
+        }
 #endif
 
-            yield return StartCoroutine(FetchDataProgressively(lat, lon));
-            isDataLoaded = true;
-            yield return new WaitForSeconds(updateInterval);
-        }
+        lastPosition = new Vector2(lat, lon);
+        yield return StartCoroutine(FetchDataProgressively(lat, lon));
+        isDataLoaded = true;
+        isInitialStartComplete = true;
+
     }
 
     private IEnumerator CheckPositionAndFetchData()
     {
+        int myGeneration = fetchGeneration;
+
+        // 최초 데이터 로드 완료까지 대기
+        yield return new WaitUntil(() => isDataLoaded || myGeneration != fetchGeneration);
+
         while (true)
         {
+            // 세대 체크: StopAllFetching으로 무효화된 코루틴은 즉시 종료
+            if (myGeneration != fetchGeneration) yield break;
+
 #if UNITY_EDITOR
             float lat = VirtualLocation.Instance.Latitude;
             float lon = VirtualLocation.Instance.Longitude;
@@ -280,47 +316,75 @@ public class DataManager : MonoBehaviour
                 lon = Input.location.lastData.longitude;
             }
 #endif
-            
+
             Vector2 currentPos = new Vector2(lat, lon);
             float distanceMoved = CalculateDistance(lastPosition.x, lastPosition.y, currentPos.x, currentPos.y);
-            
+
             if (distanceMoved > updateDistanceThreshold)
             {
                 yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
             }
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSeconds(5f); // 5초마다 체크 (1초는 너무 빈번)
         }
     }
 
-    private IEnumerator FetchDataProgressively(float lat, float lon)
+    private IEnumerator FetchDataProgressivelySilent(float lat, float lon)
     {
+        yield return StartCoroutine(FetchDataProgressively(lat, lon, true));
+    }
+
+    private IEnumerator FetchDataProgressively(float lat, float lon, bool silent = false)
+    {
+        // 중복 실행 방지
+        if (isFetching)
+        {
+            yield break;
+        }
+        isFetching = true;
+        int myGeneration = fetchGeneration; // 이 코루틴의 세대 번호 기록
+
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
 
-        // UI 리셋 (새로운 로드 시작)
-        if (objectCountUI != null)
+        // UI 리셋 (새로운 로드 시작) — silent 모드에서는 UI 표시 안함
+        if (!silent && objectCountUI != null)
         {
             objectCountUI.ResetUI();
         }
 
-        int currentTierCount = 0; // 현재 Tier까지의 누적 개수
+        int currentTierCount = 0; // 이번 실행에서 새로 추가된 개수
 
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
+            // 세대 체크: StopAllFetching으로 무효화된 코루틴은 즉시 종료
+            if (myGeneration != fetchGeneration)
+            {
+                yield break;
+            }
+
             float radius = loadRadii[tierIndex];
             string serverUrl = string.Format("{0}&lat={1}&lon={2}&radius={3}", baseServerUrl, lat, lon, radius);
 
             List<PlaceData> newPlaces = new List<PlaceData>();
             yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, newPlaces));
 
+            // yield 후 세대 재확인
+            if (myGeneration != fetchGeneration)
+            {
+                yield break;
+            }
+
             // 새로운 오브젝트를 하나씩 스폰
             foreach (PlaceData place in newPlaces)
             {
                 CreateObjectFromData(place);
                 loadedIds.Add(place.id);
-                currentTierCount++; // 현재 Tier 카운트 증가
 
-                // UI 업데이트 (현재 Tier까지의 개수만 표시)
+                // 필터링 적용된 오브젝트만 카운트 (숨겨진 것은 제외)
+                if (ShouldShowObject(place))
+                    currentTierCount++;
+
+                // UI 업데이트 (필터링된 개수만 표시)
                 if (objectCountUI != null)
                 {
                     objectCountUI.UpdateObjectCount(currentTierCount, false);
@@ -335,13 +399,17 @@ public class DataManager : MonoBehaviour
             // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
             {
-                objectCountUI.UpdateObjectCount(currentTierCount, true);
+                // 이번에 새로 추가된 게 없어도, 이미 활성화된 오브젝트가 있으면 그 수를 보고
+                int visibleCount = GetVisibleObjectCount();
+                int finalCount = currentTierCount > 0 ? currentTierCount : visibleCount;
+                objectCountUI.UpdateObjectCount(finalCount, true);
             }
 
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
 
         isDataLoaded = true;
+        isFetching = false;
     }
 
     private IEnumerator FetchDataFromServerForTier(string url, float lat, float lon, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)
@@ -503,6 +571,20 @@ public class DataManager : MonoBehaviour
                 obj.SetActive(false);
             }
         }
+    }
+
+    /// <summary>
+    /// 현재 활성화(visible) 상태인 오브젝트 수 반환
+    /// </summary>
+    private int GetVisibleObjectCount()
+    {
+        int count = 0;
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value != null && kvp.Value.activeSelf)
+                count++;
+        }
+        return count;
     }
 
     private bool ShouldShowObject(PlaceData place)
@@ -853,8 +935,7 @@ public class DataManager : MonoBehaviour
     /// </summary>
     public void RefreshData()
     {
-        if (fetchCoroutine != null)
-            StopCoroutine(fetchCoroutine);
+        StopAllFetching();
 
 #if UNITY_EDITOR
         float lat = VirtualLocation.Instance.Latitude;
@@ -868,15 +949,41 @@ public class DataManager : MonoBehaviour
             lon = Input.location.lastData.longitude;
         }
 #endif
-        fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
+        fetchCoroutine = StartCoroutine(FetchDataOnce());
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
     }
 
     void OnApplicationFocus(bool hasFocus)
     {
+        // 앱 첫 시작 시에는 무시 (Start → FetchDataOnce에서 이미 처리)
+        if (!isInitialStartComplete) return;
+
         if (hasFocus && Input.location.isEnabledByUser)
         {
-            StartCoroutine(WaitForARSessionAndFetchData());
+            // 포그라운드 복귀 시 "찾고 있습니다" UI를 다시 표시하지 않고 조용히 데이터 갱신
+            StartCoroutine(WaitForARSessionAndFetchDataSilent());
         }
+    }
+
+    private IEnumerator WaitForARSessionAndFetchDataSilent()
+    {
+        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || Time.unscaledTime > 5f);
+        if (ARSession.state != ARSessionState.SessionTracking)
+            yield break;
+
+        StopAllFetching();
+
+        float lat = 37.5665f;
+        float lon = 126.9780f;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+
+        // ResetUI를 호출하지 않는 FetchDataProgressively 사용 (UI 표시 없이 데이터만 갱신)
+        fetchCoroutine = StartCoroutine(FetchDataProgressivelySilent(lat, lon));
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
     }
 
     private IEnumerator WaitForARSessionAndFetchData()
@@ -888,11 +995,8 @@ public class DataManager : MonoBehaviour
             yield break;
         }
 
-        if (fetchCoroutine != null)
-        {
-            StopCoroutine(fetchCoroutine);
-        }
-        
+        StopAllFetching();
+
         float lat = 37.5665f;
         float lon = 126.9780f;
         if (Input.location.status == LocationServiceStatus.Running)
@@ -900,8 +1004,9 @@ public class DataManager : MonoBehaviour
             lat = Input.location.lastData.latitude;
             lon = Input.location.lastData.longitude;
         }
-        
-        fetchCoroutine = StartCoroutine(FetchDataProgressively(lat, lon));
+
+        fetchCoroutine = StartCoroutine(FetchDataOnce());
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
     }
 
     private IEnumerator FetchDataImmediately(string url, LocationInfo currentLocation)
@@ -911,7 +1016,7 @@ public class DataManager : MonoBehaviour
             yield break;
         }
         yield return StartCoroutine(FetchDataFromServer(url, currentLocation));
-        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
+        fetchCoroutine = StartCoroutine(FetchDataOnce());
     }
 
     // ============================================================ 

@@ -120,16 +120,17 @@ public class P2PUserInfo : MonoBehaviour
         // Setup offscreen indicator (색상 강제 적용)
         SetupOffScreenIndicator();
 
-        // 큐브 아바타 자동 생성
-        SetupCubeAvatar();
-
-        // UI 자동 생성 (usernameText, distanceText)
-        SetupAutoUI();
-
-        // 아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)
         if (hideAvatarVisuals)
         {
+            // OffScreenIndicator만 표시 모드:
+            // 큐브 아바타/UI 생성 스킵 → 불필요한 오브젝트 생성 방지
             HideAllVisuals();
+        }
+        else
+        {
+            // 3D 아바타 표시 모드: 큐브 아바타 + UI 생성
+            SetupCubeAvatar();
+            SetupAutoUI();
         }
     }
 
@@ -218,13 +219,19 @@ public class P2PUserInfo : MonoBehaviour
         // hideAvatarVisuals 설정에 따라 렌더러 처리
         if (!hideAvatarVisuals)
         {
+            // 큐브/UI가 아직 생성되지 않았으면 지금 생성
+            if (generatedCubeAvatar == null && autoCreateCubeAvatar)
+                SetupCubeAvatar();
+            if (usernameText == null && distanceText == null)
+                SetupAutoUI();
+
             // 렌더러 다시 활성화 (hideAvatarVisuals가 false인 경우에만)
             if (avatarRenderer != null) avatarRenderer.enabled = true;
             if (pulseRenderer != null) pulseRenderer.enabled = true;
             if (generatedCubeAvatar != null)
             {
-                var cubeRenderer = generatedCubeAvatar.GetComponent<MeshRenderer>();
-                if (cubeRenderer != null) cubeRenderer.enabled = true;
+                var cubeRend = generatedCubeAvatar.GetComponent<MeshRenderer>();
+                if (cubeRend != null) cubeRend.enabled = true;
             }
         }
 
@@ -255,6 +262,15 @@ public class P2PUserInfo : MonoBehaviour
         targetComponent.NeedBoxIndicator = true;      // 화면 안: 박스 표시
         targetComponent.NeedArrowIndicator = true;    // 화면 밖: 화살표 표시
         targetComponent.NeedDistanceText = true;      // 거리 텍스트 표시
+
+        // 인디케이터 터치 시 프로필 열기 콜백 연결
+        targetComponent.OnIndicatorTapped = () =>
+        {
+            if (!string.IsNullOrEmpty(userId) && ProfileManager.Instance != null)
+            {
+                ProfileManager.Instance.ShowProfile(userId);
+            }
+        };
 
     }
 

@@ -29,6 +29,12 @@ public class CommentManager : MonoBehaviour
     public float expandedHeightRatio = 0.85f; // 최대 높이 비율 (입력 시)
     public CanvasGroup panelCanvasGroup;
 
+    [Header("Heart Sprites")]
+    [Tooltip("빈 하트 스프라이트 (좋아요 안 누른 상태)")]
+    public Sprite unlikeSprite; // heart_unlike 스프라이트 연결
+    [Tooltip("채워진 하트 스프라이트 (좋아요 누른 상태)")]
+    public Sprite likedSprite; // heart_pink 또는 heart 스프라이트 연결
+
     [Header("Input Settings")]
     public int maxCommentLength = 500; // 댓글 최대 글자 수
 
@@ -160,6 +166,12 @@ public class CommentManager : MonoBehaviour
         CommentItem itemScript = itemObj.GetComponent<CommentItem>();
         if (itemScript != null)
         {
+            // 하트 스프라이트 주입 (프리팹에 설정되어 있지 않으면 CommentManager에서 연결)
+            if (itemScript.likeIcon == null && unlikeSprite != null)
+                itemScript.likeIcon = unlikeSprite;
+            if (itemScript.likedSprite == null && likedSprite != null)
+                itemScript.likedSprite = likedSprite;
+
             itemScript.Setup(data);
         }
         else
@@ -250,12 +262,18 @@ public class CommentManager : MonoBehaviour
             Destroy(child);
 
         ShowSkeleton(); // 로딩 시작 시 스켈레톤 표시
+        float skeletonStartTime = Time.time;
 
         string url = $"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={currentUserId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             yield return request.SendWebRequest();
+
+            // 최소 0.8초 스켈레톤 표시 (너무 빨리 사라지지 않도록)
+            float elapsed = Time.time - skeletonStartTime;
+            if (elapsed < 0.8f)
+                yield return new WaitForSeconds(0.8f - elapsed);
 
             HideSkeleton(); // 로딩 완료 시 제거
 
@@ -278,13 +296,78 @@ public class CommentManager : MonoBehaviour
 
     private void ShowSkeleton()
     {
-        if (skeletonPrefab == null) return;
-        
-        for(int i=0; i<5; i++)
+        if (commentContent == null) return;
+
+        // skeletonPrefab이 있으면 프리팹 사용, 없으면 동적 생성
+        int count = 4;
+        for (int i = 0; i < count; i++)
         {
-            GameObject skel = Instantiate(skeletonPrefab, commentContent);
+            GameObject skel;
+            if (skeletonPrefab != null)
+            {
+                skel = Instantiate(skeletonPrefab, commentContent);
+            }
+            else
+            {
+                skel = CreateCommentSkeletonItem(commentContent);
+            }
+            skel.name = "SkeletonItem";
             skel.SetActive(true);
         }
+    }
+
+    private GameObject CreateCommentSkeletonItem(Transform parent)
+    {
+        Color bgColor = new Color(0.15f, 0.15f, 0.18f, 1f);
+        Color contentColor = new Color(0.22f, 0.22f, 0.26f, 1f);
+        float itemHeight = 80f;
+
+        GameObject item = new GameObject("SkeletonItem");
+        item.transform.SetParent(parent, false);
+
+        RectTransform itemRect = item.AddComponent<RectTransform>();
+        itemRect.sizeDelta = new Vector2(0, itemHeight);
+
+        LayoutElement le = item.AddComponent<LayoutElement>();
+        le.preferredHeight = itemHeight;
+        le.minHeight = itemHeight;
+
+        Image itemBg = item.AddComponent<Image>();
+        itemBg.color = bgColor;
+
+        // 아바타 (둥근 원)
+        CreateSkeletonBlock(item.transform, "Avatar",
+            new Vector2(30f, 0f), new Vector2(40f, 40f), contentColor);
+
+        // 유저명 바
+        CreateSkeletonBlock(item.transform, "NameLine",
+            new Vector2(80f, 12f), new Vector2(100f, 14f), contentColor);
+
+        // 댓글 내용 바 (넓게)
+        CreateSkeletonBlock(item.transform, "ContentLine",
+            new Vector2(80f, -10f), new Vector2(250f, 12f),
+            new Color(contentColor.r, contentColor.g, contentColor.b, 0.6f));
+
+        // 쉬머 효과
+        item.AddComponent<ShimmerEffect>();
+
+        return item;
+    }
+
+    private static void CreateSkeletonBlock(Transform parent, string name, Vector2 pos, Vector2 size, Color color)
+    {
+        GameObject block = new GameObject(name);
+        block.transform.SetParent(parent, false);
+
+        RectTransform rect = block.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0.5f);
+        rect.anchorMax = new Vector2(0, 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = size;
+
+        Image img = block.AddComponent<Image>();
+        img.color = color;
     }
 
     private void HideSkeleton()
@@ -304,7 +387,7 @@ public class CommentManager : MonoBehaviour
     {
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
         {
-            if (LoginManager.Instance != null) LoginManager.Instance.Logout();
+            if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup();
             return;
         }
 

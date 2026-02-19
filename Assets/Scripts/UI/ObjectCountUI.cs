@@ -46,8 +46,9 @@ public class ObjectCountUI : MonoBehaviour
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
         }
 
+        // alpha=0으로 숨김 (SetActive(false)하면 ResetUI 호출 시 Awake가 다시 비활성화하는 문제 발생)
         canvasGroup.alpha = 0f;
-        gameObject.SetActive(false);
+        canvasGroup.blocksRaycasts = false;
     }
 
     /// <summary>
@@ -57,12 +58,14 @@ public class ObjectCountUI : MonoBehaviour
     /// <param name="isFinal">마지막 Tier 완료 여부</param>
     public void UpdateObjectCount(int count, bool isFinal)
     {
-        if (!gameObject.activeInHierarchy) return;
+        if (canvasGroup == null)
+        {
+            return;
+        }
 
         // isFinal은 항상 즉시 처리 (지연 시 noDataTimeout과 충돌 가능)
         if (isFinal)
         {
-            // 진행 중인 지연 업데이트 취소
             CancelDelayedUpdate();
             ApplyUpdate(count, true);
             return;
@@ -218,10 +221,9 @@ public class ObjectCountUI : MonoBehaviour
         }
 
         canvasGroup.alpha = 0f;
+        canvasGroup.blocksRaycasts = false;
         fadeOutCoroutine = null;
         timeoutCoroutine = null;
-
-        gameObject.SetActive(false);
     }
 
     /// <summary>
@@ -229,10 +231,23 @@ public class ObjectCountUI : MonoBehaviour
     /// </summary>
     public void ResetUI()
     {
-        if (gameObject.activeInHierarchy)
+        // 부모가 비활성이면 활성화 시도
+        if (!gameObject.activeInHierarchy)
         {
-            StopAllCoroutines();
+            // 부모 체인을 순회하며 비활성 부모 활성화
+            Transform t = transform;
+            while (t != null)
+            {
+                if (!t.gameObject.activeSelf)
+                {
+                    t.gameObject.SetActive(true);
+                }
+                t = t.parent;
+            }
+            gameObject.SetActive(true);
         }
+
+        StopAllCoroutines();
         fadeOutCoroutine = null;
         timeoutCoroutine = null;
         delayedUpdateCoroutine = null;
@@ -243,10 +258,11 @@ public class ObjectCountUI : MonoBehaviour
         lastUpdateTime = 0f;
         UpdateText(0, false);
 
-        gameObject.SetActive(true);
-        if (canvasGroup != null) canvasGroup.alpha = 1f;
-
-        if (!gameObject.activeInHierarchy) return;
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.blocksRaycasts = false;
+        }
 
         timeoutCoroutine = StartCoroutine(CheckForNoDataTimeout());
     }

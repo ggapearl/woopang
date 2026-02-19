@@ -366,10 +366,11 @@ public class SystemUIManager : MonoBehaviour
     void AdjustCanvasForSystemUI()
     {
         Canvas[] canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
-        
+
         foreach (Canvas canvas in canvases)
         {
-            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            // 루트 Canvas만 처리 (Nested Canvas는 부모 renderMode를 상속하므로 제외)
+            if (canvas.isRootCanvas && canvas.renderMode == RenderMode.ScreenSpaceOverlay)
             {
                 RectTransform canvasRect = canvas.GetComponent<RectTransform>();
                 if (canvasRect != null)

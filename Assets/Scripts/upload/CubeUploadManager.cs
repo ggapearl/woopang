@@ -319,10 +319,6 @@ public class CubeUploadManager : MonoBehaviour
         // 크롭 시작 전에 현재 패널 상태 저장
         SaveCurrentPanelState();
 
-        // 크롭 화면이 열릴 때 uploadPage 숨기기 (크롭 화면만 보이도록)
-        if (uploadPage != null)
-            uploadPage.SetActive(false);
-
         var cropper = ImageCropper.Instance;
         if (cropper == null)
         {
@@ -334,12 +330,16 @@ public class CubeUploadManager : MonoBehaviour
         // 기본 Canvas보다 앞에 오도록 Sorting Order를 높임
         Canvas cropperCanvas = cropper.GetComponent<Canvas>();
         if (cropperCanvas == null) cropperCanvas = cropper.GetComponentInChildren<Canvas>();
-        
+
         if (cropperCanvas != null)
         {
             cropperCanvas.overrideSorting = true;
             cropperCanvas.sortingOrder = 30000;
         }
+
+        // 크로퍼가 sortingOrder 30000으로 앞에 렌더링되므로
+        // uploadPage는 크로퍼 표시 후 숨김 (깜빡임 방지)
+        StartCoroutine(HideUploadPageDelayed());
 
         cropper.Show(texture, (success, original, cropped) =>
         {
@@ -1685,6 +1685,18 @@ public class CubeUploadManager : MonoBehaviour
         {
             savedCurrentPanel = swipePanelController.GetCurrentPanel();
         }
+    }
+
+    /// <summary>
+    /// 크로퍼가 렌더링된 후 uploadPage를 숨김 (깜빡임 방지)
+    /// </summary>
+    private IEnumerator HideUploadPageDelayed()
+    {
+        // 2프레임 대기: 크로퍼 Canvas가 완전히 렌더링된 후 숨김
+        yield return null;
+        yield return null;
+        if (uploadPage != null)
+            uploadPage.SetActive(false);
     }
     
     /// <summary>

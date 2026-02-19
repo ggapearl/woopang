@@ -558,7 +558,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &27795819
 RectTransform:
   m_ObjectHideFlags: 0
@@ -572,13 +572,13 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 94217398}
-  - {fileID: 1101380177}
   - {fileID: 1002892667}
+  - {fileID: 1101380177}
   m_Father: {fileID: 817412384339006792}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 0, y: 250}
+  m_AnchoredPosition: {x: 0, y: 200}
   m_SizeDelta: {x: 0, y: 200}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &27795820
@@ -1799,10 +1799,10 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: f362e42f47abbda40893ce3c633d788d, type: 3}
-    m_FontSize: 60
+    m_FontSize: 50
     m_FontStyle: 0
     m_BestFit: 0
-    m_MinSize: 6
+    m_MinSize: 5
     m_MaxSize: 60
     m_Alignment: 3
     m_AlignByGeometry: 0
@@ -1810,7 +1810,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 0.8
-  m_Text: '<b>User</b>: Comment content...'
+  m_Text: "<b>gogle</b>  \uC774\uAC70\uC2A8 \uCD94\uAC00\uB313\uAE00"
 --- !u!222 &94217400
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2594,6 +2594,7 @@ MonoBehaviour:
   fullscreenCanvasGroup: {fileID: 8011970282693692960}
   guidePanel: {fileID: 2355704332572803199}
   fullscreenImage: {fileID: 1804107371538445955}
+  nextFullscreenImage: {fileID: 0}
   imageSprites: []
   infoImage1: {fileID: 9132224336326778217}
   infoImage2: {fileID: 114220114135134914}
@@ -2609,14 +2610,17 @@ MonoBehaviour:
   swipeThreshold: 120
   fadeDuration: 0.4
   swipeSpeed: 15
+  slideDuration: 0.25
+  slideImageGap: 400
+  slideFadeDuration: 0.4
   placeName: 
   id: -1
-  commentPreviewPanel: {fileID: 0}
-  previewText: {fileID: 0}
-  previewLikeCount: {fileID: 0}
-  previewLikeIcon: {fileID: 0}
-  likedSprite: {fileID: 0}
-  likeIcon: {fileID: 0}
+  commentPreviewPanel: {fileID: 27795818}
+  previewText: {fileID: 94217399}
+  previewLikeCount: {fileID: 1002892668}
+  previewLikeIcon: {fileID: 1101380180}
+  likedSprite: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132, type: 3}
+  likeIcon: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063, type: 3}
 --- !u!114 &131624113
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3259,18 +3263,36 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 209896223}
   m_CullTransparentMesh: 1
+--- !u!1 &213011705 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7851519061560039208, guid: 71987b416b735a445886f23f2f816649,
+    type: 3}
+  m_PrefabInstance: {fileID: 3117631384143716837}
+  m_PrefabAsset: {fileID: 0}
 --- !u!114 &229516894 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 1459198778682504854, guid: 71987b416b735a445886f23f2f816649,
     type: 3}
   m_PrefabInstance: {fileID: 3117631384143716837}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 213011705}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+--- !u!114 &229516899
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 213011705}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!1 &233479601
 GameObject:
   m_ObjectHideFlags: 0
@@ -4471,6 +4493,7 @@ MonoBehaviour:
   fullscreenCanvasGroup: {fileID: 8011970282693692960}
   guidePanel: {fileID: 2355704332572803199}
   fullscreenImage: {fileID: 1804107371538445955}
+  nextFullscreenImage: {fileID: 0}
   imageSprites: []
   infoImage1: {fileID: 9132224336326778217}
   infoImage2: {fileID: 114220114135134914}
@@ -4486,14 +4509,17 @@ MonoBehaviour:
   swipeThreshold: 120
   fadeDuration: 0.4
   swipeSpeed: 15
+  slideDuration: 0.25
+  slideImageGap: 400
+  slideFadeDuration: 0.4
   placeName: 
   id: -1
-  commentPreviewPanel: {fileID: 0}
-  previewText: {fileID: 0}
-  previewLikeCount: {fileID: 0}
-  previewLikeIcon: {fileID: 0}
-  likedSprite: {fileID: 0}
-  likeIcon: {fileID: 0}
+  commentPreviewPanel: {fileID: 27795818}
+  previewText: {fileID: 94217399}
+  previewLikeCount: {fileID: 1002892668}
+  previewLikeIcon: {fileID: 1101380180}
+  likedSprite: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132, type: 3}
+  likeIcon: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063, type: 3}
 --- !u!114 &312391472
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4618,184 +4644,6 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!43 &323137419
-Mesh:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: pb_Mesh204916(Clone)(Clone)(Clone)(Clone)(Clone)(Clone)(Clone)
-  serializedVersion: 12
-  m_SubMeshes:
-  - serializedVersion: 2
-    firstByte: 0
-    indexCount: 36
-    topology: 0
-    baseVertex: 0
-    firstVertex: 0
-    vertexCount: 24
-    localAABB:
-      m_Center: {x: 0, y: 0, z: 0}
-      m_Extent: {x: 0.5, y: 0.5, z: 0.5}
-  m_Shapes:
-    vertices: []
-    shapes: []
-    channels: []
-    fullWeights: []
-  m_BindPose: []
-  m_BoneNameHashes: 
-  m_RootBoneNameHash: 0
-  m_BonesAABB: []
-  m_VariableBoneCountWeights:
-    m_Data: 
-  m_MeshCompression: 0
-  m_IsReadable: 1
-  m_KeepVertices: 1
-  m_KeepIndices: 1
-  m_IndexFormat: 0
-  m_IndexBuffer: 000001000200000002000300040005000600040006000700080009000a0008000a000b000c000d000e000c000e000f00100011001200100012001300140015001600140016001700
-  m_VertexData:
-    serializedVersion: 3
-    m_VertexCount: 24
-    m_Channels:
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 3
-    - stream: 0
-      offset: 12
-      format: 0
-      dimension: 3
-    - stream: 0
-      offset: 24
-      format: 0
-      dimension: 4
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 40
-      format: 0
-      dimension: 2
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    - stream: 0
-      offset: 0
-      format: 0
-      dimension: 0
-    m_DataSize: 1152
-    _typelessdata: 0000003f000000bf0000003f00000000000000000000803f000080bf0000000000000000000080bf00000000000000000000003f0000003f0000003f00000000000000000000803f000080bf0000000000000000000080bf000000000000803f000000bf0000003f0000003f00000000000000000000803f000080bf0000000000000000000080bf0000803f0000803f000000bf000000bf0000003f00000000000000000000803f000080bf0000000000000000000080bf0000803f000000000000003f0000003f0000003f000000000000803f00000000000080bf0000000000000000000080bf00000000000000000000003f0000003f000000bf000000000000803f00000000000080bf0000000000000000000080bf000000000000803f000000bf0000003f000000bf000000000000803f00000000000080bf0000000000000000000080bf0000803f0000803f000000bf0000003f0000003f000000000000803f00000000000080bf0000000000000000000080bf0000803f000000000000003f0000003f000000bf0000000000000000000080bf0000803f0000000000000000000080bffeff7f3fffff7f3f0000003f000000bf000000bf0000000000000000000080bf0000803f0000000000000000000080bffeff7f3f00008033000000bf000000bf000000bf0000000000000000000080bf0000803f0000000000000000000080bf0000003400008033000000bf0000003f000000bf0000000000000000000080bf0000803f0000000000000000000080bf00000034ffff7f3f0000003f000000bf000000bf00000000000080bf00000000000080bf0000000000000000000080bf00000000000000000000003f000000bf0000003f00000000000080bf00000000000080bf0000000000000000000080bf000000000000803f000000bf000000bf0000003f00000000000080bf00000000000080bf0000000000000000000080bf0000803f0000803f000000bf000000bf000000bf00000000000080bf00000000000080bf0000000000000000000080bf0000803f00000000000000bf000000bf0000003f000080bf00000000000000000000000000000000000080bf000080bf0000000000000000000000bf0000003f0000003f000080bf00000000000000000000000000000000000080bf000080bf000000000000803f000000bf0000003f000000bf000080bf00000000000000000000000000000000000080bf000080bf0000803f0000803f000000bf000000bf000000bf000080bf00000000000000000000000000000000000080bf000080bf0000803f000000000000003f000000bf000000bf0000803f000000000000000000000000000000000000803f000080bf00000000000000000000003f0000003f000000bf0000803f000000000000000000000000000000000000803f000080bf000000000000803f0000003f0000003f0000003f0000803f000000000000000000000000000000000000803f000080bf0000803f0000803f0000003f000000bf0000003f0000803f000000000000000000000000000000000000803f000080bf0000803f00000000
-  m_CompressedMesh:
-    m_Vertices:
-      m_NumItems: 0
-      m_Range: 0
-      m_Start: 0
-      m_Data: 
-      m_BitSize: 0
-    m_UV:
-      m_NumItems: 0
-      m_Range: 0
-      m_Start: 0
-      m_Data: 
-      m_BitSize: 0
-    m_Normals:
-      m_NumItems: 0
-      m_Range: 0
-      m_Start: 0
-      m_Data: 
-      m_BitSize: 0
-    m_Tangents:
-      m_NumItems: 0
-      m_Range: 0
-      m_Start: 0
-      m_Data: 
-      m_BitSize: 0
-    m_Weights:
-      m_NumItems: 0
-      m_Data: 
-      m_BitSize: 0
-    m_NormalSigns:
-      m_NumItems: 0
-      m_Data: 
-      m_BitSize: 0
-    m_TangentSigns:
-      m_NumItems: 0
-      m_Data: 
-      m_BitSize: 0
-    m_FloatColors:
-      m_NumItems: 0
-      m_Range: 0
-      m_Start: 0
-      m_Data: 
-      m_BitSize: 0
-    m_BoneIndices:
-      m_NumItems: 0
-      m_Data: 
-      m_BitSize: 0
-    m_Triangles:
-      m_NumItems: 0
-      m_Data: 
-      m_BitSize: 0
-    m_UVInfo: 0
-  m_LocalAABB:
-    m_Center: {x: 0, y: 0, z: 0}
-    m_Extent: {x: 0.5, y: 0.5, z: 0.5}
-  m_MeshUsageFlags: 0
-  m_CookingOptions: 30
-  m_BakedConvexCollisionMesh: 
-  m_BakedTriangleCollisionMesh: 
-  'm_MeshMetrics[0]': 1.0000004
-  'm_MeshMetrics[1]': 1
-  m_MeshOptimizationFlags: 1
-  m_StreamData:
-    serializedVersion: 2
-    offset: 0
-    size: 0
-    path: 
-  m_MeshLodInfo:
-    serializedVersion: 2
-    m_LodSelectionCurve:
-      serializedVersion: 1
-      m_LodSlope: 0
-      m_LodBias: 0
-    m_NumLevels: 1
-    m_SubMeshes:
-    - serializedVersion: 2
-      m_Levels:
-      - serializedVersion: 1
-        m_IndexStart: 0
-        m_IndexCount: 0
 --- !u!114 &330565471 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 5715946340790614149, guid: c12de6fed811ad740ac1c494f94ad320,
@@ -6931,7 +6779,7 @@ GameObject:
   - component: {fileID: 547149852}
   - component: {fileID: 547149851}
   m_Layer: 5
-  m_Name: OffScreenIndicator Panel_iOS
+  m_Name: OffScreenIndicator Panel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7100,6 +6948,8 @@ MonoBehaviour:
   initialHeightRatio: 0.55
   expandedHeightRatio: 0.9
   panelCanvasGroup: {fileID: 1539004906}
+  unlikeSprite: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063, type: 3}
+  likedSprite: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132, type: 3}
   maxCommentLength: 500
 --- !u!4 &564737221
 Transform:
@@ -7890,6 +7740,7 @@ MonoBehaviour:
   fullscreenCanvasGroup: {fileID: 8011970282693692960}
   guidePanel: {fileID: 2355704332572803199}
   fullscreenImage: {fileID: 1804107371538445955}
+  nextFullscreenImage: {fileID: 0}
   imageSprites: []
   infoImage1: {fileID: 9132224336326778217}
   infoImage2: {fileID: 114220114135134914}
@@ -7905,14 +7756,17 @@ MonoBehaviour:
   swipeThreshold: 120
   fadeDuration: 0.4
   swipeSpeed: 15
+  slideDuration: 0.25
+  slideImageGap: 400
+  slideFadeDuration: 0.4
   placeName: 
   id: -1
-  commentPreviewPanel: {fileID: 0}
-  previewText: {fileID: 0}
-  previewLikeCount: {fileID: 0}
-  previewLikeIcon: {fileID: 0}
-  likedSprite: {fileID: 0}
-  likeIcon: {fileID: 0}
+  commentPreviewPanel: {fileID: 27795818}
+  previewText: {fileID: 94217399}
+  previewLikeCount: {fileID: 1002892668}
+  previewLikeIcon: {fileID: 1101380180}
+  likedSprite: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132, type: 3}
+  likeIcon: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063, type: 3}
 --- !u!114 &643494988
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11954,7 +11808,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 768873a317510cd4ea6c0b1de555544c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::P2PManager
-  positionUpdateInterval: 5
+  foregroundUpdateInterval: 1
+  backgroundUpdateInterval: 60
   autoConnect: 1
   userAvatarPrefab: {fileID: 1371161466}
   maxVisibleUsers: 100
@@ -12091,8 +11946,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -100, y: -50}
-  m_SizeDelta: {x: 100, y: -100}
+  m_AnchoredPosition: {x: -100, y: -40}
+  m_SizeDelta: {x: 100, y: -80}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1002892668
 MonoBehaviour:
@@ -12116,7 +11971,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: f362e42f47abbda40893ce3c633d788d, type: 3}
-    m_FontSize: 44
+    m_FontSize: 40
     m_FontStyle: 1
     m_BestFit: 0
     m_MinSize: 4
@@ -12127,7 +11982,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 0.8
-  m_Text: 20
+  m_Text: 1
 --- !u!222 &1002892669
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -12620,6 +12475,10 @@ MonoBehaviour:
   defaultScreenWidth: 1080
   conversationItemHeight: 140
   conversationListSpacing: 2
+  skeletonItemCount: 15
+  skeletonMinDuration: 1
+  skeletonBgColor: {r: 0.15, g: 0.15, b: 0.18, a: 1}
+  skeletonContentColor: {r: 0.22, g: 0.22, b: 0.26, a: 1}
   useDateSeparator: 1
   dateSeparatorPrefab: {fileID: 6546184606543604314, guid: 26b72294744bcdd4daa3930491c9e4a0,
     type: 3}
@@ -13024,8 +12883,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -100, y: 25}
-  m_SizeDelta: {x: 170, y: -50}
+  m_AnchoredPosition: {x: -100, y: 30}
+  m_SizeDelta: {x: 160, y: -60}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1101380179
 CanvasRenderer:
@@ -15572,6 +15431,11 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1210333796435509330, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 4396521119291071978, guid: 569f512ddad81f8469304ed3141954d4,
         type: 3}
       propertyPath: m_Name
@@ -16815,7 +16679,6 @@ MonoBehaviour:
   glbLoadTimeout: 20
   fallbackToCube: 1
   poolSize: 100
-  updateInterval: 600
   loadRadii:
   - 25
   - 50
@@ -19756,6 +19619,184 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!43 &1757146723
+Mesh:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: pb_Mesh204916(Clone)(Clone)(Clone)(Clone)(Clone)(Clone)(Clone)(Clone)(Clone)
+  serializedVersion: 12
+  m_SubMeshes:
+  - serializedVersion: 2
+    firstByte: 0
+    indexCount: 36
+    topology: 0
+    baseVertex: 0
+    firstVertex: 0
+    vertexCount: 24
+    localAABB:
+      m_Center: {x: 0, y: 0, z: 0}
+      m_Extent: {x: 0.5, y: 0.5, z: 0.5}
+  m_Shapes:
+    vertices: []
+    shapes: []
+    channels: []
+    fullWeights: []
+  m_BindPose: []
+  m_BoneNameHashes: 
+  m_RootBoneNameHash: 0
+  m_BonesAABB: []
+  m_VariableBoneCountWeights:
+    m_Data: 
+  m_MeshCompression: 0
+  m_IsReadable: 1
+  m_KeepVertices: 1
+  m_KeepIndices: 1
+  m_IndexFormat: 0
+  m_IndexBuffer: 000001000200000002000300040005000600040006000700080009000a0008000a000b000c000d000e000c000e000f00100011001200100012001300140015001600140016001700
+  m_VertexData:
+    serializedVersion: 3
+    m_VertexCount: 24
+    m_Channels:
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 3
+    - stream: 0
+      offset: 12
+      format: 0
+      dimension: 3
+    - stream: 0
+      offset: 24
+      format: 0
+      dimension: 4
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 40
+      format: 0
+      dimension: 2
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    - stream: 0
+      offset: 0
+      format: 0
+      dimension: 0
+    m_DataSize: 1152
+    _typelessdata: 0000003f000000bf0000003f00000000000000000000803f000080bf0000000000000000000080bf00000000000000000000003f0000003f0000003f00000000000000000000803f000080bf0000000000000000000080bf000000000000803f000000bf0000003f0000003f00000000000000000000803f000080bf0000000000000000000080bf0000803f0000803f000000bf000000bf0000003f00000000000000000000803f000080bf0000000000000000000080bf0000803f000000000000003f0000003f0000003f000000000000803f00000000000080bf0000000000000000000080bf00000000000000000000003f0000003f000000bf000000000000803f00000000000080bf0000000000000000000080bf000000000000803f000000bf0000003f000000bf000000000000803f00000000000080bf0000000000000000000080bf0000803f0000803f000000bf0000003f0000003f000000000000803f00000000000080bf0000000000000000000080bf0000803f000000000000003f0000003f000000bf0000000000000000000080bf0000803f0000000000000000000080bffeff7f3fffff7f3f0000003f000000bf000000bf0000000000000000000080bf0000803f0000000000000000000080bffeff7f3f00008033000000bf000000bf000000bf0000000000000000000080bf0000803f0000000000000000000080bf0000003400008033000000bf0000003f000000bf0000000000000000000080bf0000803f0000000000000000000080bf00000034ffff7f3f0000003f000000bf000000bf00000000000080bf00000000000080bf0000000000000000000080bf00000000000000000000003f000000bf0000003f00000000000080bf00000000000080bf0000000000000000000080bf000000000000803f000000bf000000bf0000003f00000000000080bf00000000000080bf0000000000000000000080bf0000803f0000803f000000bf000000bf000000bf00000000000080bf00000000000080bf0000000000000000000080bf0000803f00000000000000bf000000bf0000003f000080bf00000000000000000000000000000000000080bf000080bf0000000000000000000000bf0000003f0000003f000080bf00000000000000000000000000000000000080bf000080bf000000000000803f000000bf0000003f000000bf000080bf00000000000000000000000000000000000080bf000080bf0000803f0000803f000000bf000000bf000000bf000080bf00000000000000000000000000000000000080bf000080bf0000803f000000000000003f000000bf000000bf0000803f000000000000000000000000000000000000803f000080bf00000000000000000000003f0000003f000000bf0000803f000000000000000000000000000000000000803f000080bf000000000000803f0000003f0000003f0000003f0000803f000000000000000000000000000000000000803f000080bf0000803f0000803f0000003f000000bf0000003f0000803f000000000000000000000000000000000000803f000080bf0000803f00000000
+  m_CompressedMesh:
+    m_Vertices:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_UV:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Normals:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Tangents:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Weights:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_NormalSigns:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_TangentSigns:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_FloatColors:
+      m_NumItems: 0
+      m_Range: 0
+      m_Start: 0
+      m_Data: 
+      m_BitSize: 0
+    m_BoneIndices:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_Triangles:
+      m_NumItems: 0
+      m_Data: 
+      m_BitSize: 0
+    m_UVInfo: 0
+  m_LocalAABB:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 0.5, y: 0.5, z: 0.5}
+  m_MeshUsageFlags: 0
+  m_CookingOptions: 30
+  m_BakedConvexCollisionMesh: 
+  m_BakedTriangleCollisionMesh: 
+  'm_MeshMetrics[0]': 1.0000004
+  'm_MeshMetrics[1]': 1
+  m_MeshOptimizationFlags: 1
+  m_StreamData:
+    serializedVersion: 2
+    offset: 0
+    size: 0
+    path: 
+  m_MeshLodInfo:
+    serializedVersion: 2
+    m_LodSelectionCurve:
+      serializedVersion: 1
+      m_LodSlope: 0
+      m_LodBias: 0
+    m_NumLevels: 1
+    m_SubMeshes:
+    - serializedVersion: 2
+      m_Levels:
+      - serializedVersion: 1
+        m_IndexStart: 0
+        m_IndexCount: 0
 --- !u!114 &1764434250 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 6341073448493193977, guid: c12de6fed811ad740ac1c494f94ad320,
@@ -20267,6 +20308,7 @@ GameObject:
   - component: {fileID: 1845358706}
   - component: {fileID: 1845358705}
   - component: {fileID: 1845358708}
+  - component: {fileID: 1845358709}
   m_Layer: 0
   m_Name: BackButton
   m_TagString: Untagged
@@ -20400,6 +20442,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UITouchForwarder
   customSound: {fileID: 0}
+--- !u!114 &1845358709
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845358703}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!1 &1848384896
 GameObject:
   m_ObjectHideFlags: 0
@@ -23470,6 +23524,11 @@ MonoBehaviour:
   transitionSprite: {fileID: 21300000, guid: 75e5cd7ac5d77d44f8cc26a913bf5c41, type: 3}
   transitionScaleMultiplier: 2
   transitionDuration: 1
+  spawnEmphasisScale: 3
+  enableSpawnEmphasis: 1
+  sparkleSpeed: 1.5
+  sparkleMinAlpha: 0.6
+  sparkleMaxAlpha: 1
   dotAnimationSpeed: 0.4
   testTexture: {fileID: 0}
 --- !u!4 &2131759811
@@ -26944,7 +27003,7 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5464671184667790674}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -27389,15 +27448,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10917, guid: 0000000000000000f000000000000000, type: 0}
-  m_Type: 1
+  m_Sprite: {fileID: 0}
+  m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 4
@@ -27988,6 +28047,16 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 110
       objectReference: {fileID: 0}
+    - target: {fileID: 4698802260055821299, guid: 71987b416b735a445886f23f2f816649,
+        type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: -150
+      objectReference: {fileID: 0}
+    - target: {fileID: 5832163321702921242, guid: 71987b416b735a445886f23f2f816649,
+        type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 150
+      objectReference: {fileID: 0}
     - target: {fileID: 7804769186853734536, guid: 71987b416b735a445886f23f2f816649,
         type: 3}
       propertyPath: m_FontData.m_Font
@@ -28007,7 +28076,11 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 7851519061560039208, guid: 71987b416b735a445886f23f2f816649,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 229516899}
   m_SourcePrefab: {fileID: 100100000, guid: 71987b416b735a445886f23f2f816649, type: 3}
 --- !u!222 &3145951543682877570
 CanvasRenderer:
@@ -28165,6 +28238,12 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
+      propertyPath: likeIcon
+      value: 
+      objectReference: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063,
+        type: 3}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
       propertyPath: nameText
       value: 
       objectReference: {fileID: 6670102078226555381}
@@ -28195,9 +28274,25 @@ PrefabInstance:
       objectReference: {fileID: 8174985257722002584}
     - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
+      propertyPath: likedSprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132,
+        type: 3}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
+      propertyPath: previewText
+      value: 
+      objectReference: {fileID: 94217399}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
       propertyPath: createdByText
       value: 
       objectReference: {fileID: 1484426347}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
+      propertyPath: slideImageGap
+      value: 400
+      objectReference: {fileID: 0}
     - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: previousButton
@@ -28215,6 +28310,16 @@ PrefabInstance:
       objectReference: {fileID: 555000537993309500}
     - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
+      propertyPath: previewLikeIcon
+      value: 
+      objectReference: {fileID: 1101380180}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
+      propertyPath: previewLikeCount
+      value: 
+      objectReference: {fileID: 1002892668}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
       propertyPath: descriptionTextUI
       value: 
       objectReference: {fileID: 6429585331911193511}
@@ -28225,6 +28330,11 @@ PrefabInstance:
       objectReference: {fileID: 1945157754}
     - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
+      propertyPath: commentPreviewPanel
+      value: 
+      objectReference: {fileID: 27795818}
+    - target: {fileID: 900244166359823204, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
       propertyPath: fullscreenCanvasGroup
       value: 
       objectReference: {fileID: 8011970282693692960}
@@ -28232,11 +28342,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Mesh
       value: 
-      objectReference: {fileID: 323137419}
+      objectReference: {fileID: 1757146723}
     - target: {fileID: 1279877576191648393, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 199
+      value: 208
       objectReference: {fileID: 0}
     - target: {fileID: 1794623478198708475, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
@@ -28332,7 +28442,7 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Mesh
       value: 
-      objectReference: {fileID: 323137419}
+      objectReference: {fileID: 1757146723}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -28687,7 +28797,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 9ec80ad4f8c6b4945ad41fa06acb4074, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 0b7de0bd6f510400e89e295e56f82536, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -28987,6 +29097,12 @@ PrefabInstance:
       objectReference: {fileID: 4197367440617647869}
     - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
+      propertyPath: likeIcon
+      value: 
+      objectReference: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063,
+        type: 3}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
       propertyPath: nameText
       value: 
       objectReference: {fileID: 6670102078226555381}
@@ -29017,9 +29133,25 @@ PrefabInstance:
       objectReference: {fileID: 8174985257722002584}
     - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
+      propertyPath: likedSprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132,
+        type: 3}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: previewText
+      value: 
+      objectReference: {fileID: 94217399}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
       propertyPath: createdByText
       value: 
       objectReference: {fileID: 1484426347}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: slideImageGap
+      value: 400
+      objectReference: {fileID: 0}
     - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
       propertyPath: previousButton
@@ -29035,6 +29167,21 @@ PrefabInstance:
       propertyPath: instagramButton
       value: 
       objectReference: {fileID: 555000537993309500}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: previewLikeIcon
+      value: 
+      objectReference: {fileID: 1101380180}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: previewLikeCount
+      value: 
+      objectReference: {fileID: 1002892668}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: commentPreviewPanel
+      value: 
+      objectReference: {fileID: 27795818}
     - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
       propertyPath: fullscreenCanvasGroup
@@ -29109,8 +29256,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Padding:
-    m_Left: 10
-    m_Right: 10
+    m_Left: 20
+    m_Right: 20
     m_Top: 10
     m_Bottom: 10
   m_ChildAlignment: 0
@@ -32093,6 +32240,7 @@ GameObject:
   - component: {fileID: 4057886224092614258}
   - component: {fileID: 8174985257722002584}
   - component: {fileID: 4951040197210436721}
+  - component: {fileID: 8174985257722002585}
   m_Layer: 5
   m_Name: Button_Close
   m_TagString: Untagged
@@ -32384,6 +32532,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: ButtonManager
+      objectReference: {fileID: 0}
+    - target: {fileID: 8807830821746844384, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
+        type: 3}
+      propertyPath: soundVolume
+      value: 0.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8807830821746844384, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
+        type: 3}
+      propertyPath: hapticIntensity
+      value: 0.2
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -32805,6 +32963,7 @@ MonoBehaviour:
   fullscreenCanvasGroup: {fileID: 8011970282693692960}
   guidePanel: {fileID: 2355704332572803199}
   fullscreenImage: {fileID: 1804107371538445955}
+  nextFullscreenImage: {fileID: 0}
   imageSprites: []
   infoImage1: {fileID: 9132224336326778217}
   infoImage2: {fileID: 114220114135134914}
@@ -32820,6 +32979,9 @@ MonoBehaviour:
   swipeThreshold: 120
   fadeDuration: 0.6
   swipeSpeed: 15
+  slideDuration: 0.25
+  slideImageGap: 400
+  slideFadeDuration: 0.4
   placeName: 
   id: -1
   commentPreviewPanel: {fileID: 27795818}
@@ -32827,7 +32989,7 @@ MonoBehaviour:
   previewLikeCount: {fileID: 1002892668}
   previewLikeIcon: {fileID: 1101380180}
   likedSprite: {fileID: 21300000, guid: 6fb088dc1b014764eaa45c1201801132, type: 3}
-  likeIcon: {fileID: 0}
+  likeIcon: {fileID: 21300000, guid: ad4c0168d02f1ae448a5aa1eca86c063, type: 3}
 --- !u!114 &6429585331911193511
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34342,6 +34504,18 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &8174985257722002585
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5767768001675712835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eee7c2a5b0aeafa4386c27317e86fc99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ClickButtonOnBack
 --- !u!224 &8209064109941407321 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 6106884984273415909, guid: 45a1b7ff6c62ae843a69ce180b91da10,

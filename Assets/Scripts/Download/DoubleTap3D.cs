@@ -14,6 +14,7 @@ public class DoubleTap3D : MonoBehaviour
     public CanvasGroup fullscreenCanvasGroup;
     public GameObject guidePanel;
     public Image fullscreenImage;
+    public Image nextFullscreenImage; // 슬라이드 전환용 두 번째 이미지
     public List<Sprite> imageSprites = new List<Sprite>();
     public Image infoImage1;
     public Image infoImage2;
@@ -23,13 +24,20 @@ public class DoubleTap3D : MonoBehaviour
     public Button closeButton;
     public Text nameText;
     public Text descriptionTextUI;
-    public Text createdByText; // Created by (username) 표시
+    public Text createdByText;
     public GameObject placeInfoTextPanel;
     private Text placeInfoText;
     public float tapSpeed = 0.5f;
     public float swipeThreshold = 50f;
     public float fadeDuration = 0.3f;
     public float swipeSpeed = 15f;
+
+    [Header("Slide Settings")]
+    public float slideDuration = 0.25f;
+    [Tooltip("슬라이드 시 이미지 간 간격 (px)")]
+    public float slideImageGap = 200f;
+    [Tooltip("다음/이전 이미지 페이드인/아웃 시간 (초)")]
+    public float slideFadeDuration = 0.4f;
 
     private float lastTapTime = 0f;
     private bool isFullscreen = false;
@@ -39,8 +47,13 @@ public class DoubleTap3D : MonoBehaviour
     private Vector2 touchStartPos;
     private bool isSwiping;
     private RectTransform currentImageRect;
+    private RectTransform nextImageRect;
     private Vector2 imageTargetPos;
+    private Vector2 imageBasePos; // Inspector에서 설정한 기본 위치 (Y=-200 등)
     private bool isDragging = false;
+    private bool isSliding = false;
+    private int dragDirection = 0; // -1: 왼쪽(다음), 1: 오른쪽(이전), 0: 없음
+    private float nextImageFadeTime = 0f; // 다음 이미지 페이드인 시작 시간
 
     private Sprite infoSprite1;
     private Sprite infoSprite2;
@@ -124,6 +137,8 @@ public class DoubleTap3D : MonoBehaviour
             {
                 if (previewText == null)
                     previewText = commentPreviewPanel.transform.Find("PreviewText")?.GetComponent<Text>();
+                if (previewLikeIcon == null)
+                    previewLikeIcon = commentPreviewPanel.transform.Find("PreviewLikeIcon")?.GetComponent<Image>();
                 if (previewLikeCount == null)
                     previewLikeCount = commentPreviewPanel.transform.Find("PreviewLike")?.GetComponent<Text>();
 
@@ -142,12 +157,56 @@ public class DoubleTap3D : MonoBehaviour
 
         currentImageRect = fullscreenImage.GetComponent<RectTransform>();
 
-        // 이미지 비율 유지 설정
+        // Inspector에서 설정한 기본 위치 저장 (Y=-200 등)
+        imageBasePos = currentImageRect.anchoredPosition;
+        imageTargetPos = imageBasePos;
+
+        // Inspector에서 이전 값이 남아있을 수 있으므로 최소 200px 보장
+        if (slideImageGap < 200f) slideImageGap = 200f;
+        if (slideFadeDuration <= 0f) slideFadeDuration = 0.4f;
+
         fullscreenImage.preserveAspect = true;
         fullscreenImage.type = Image.Type.Simple;
 
+        // nextFullscreenImage: 같은 부모에 이미 존재하면 재사용
+        if (nextFullscreenImage == null)
+        {
+            Transform existingNext = fullscreenImage.transform.parent.Find("NextFullscreenImage");
+            if (existingNext != null)
+            {
+                nextFullscreenImage = existingNext.GetComponent<Image>();
+            }
+            else
+            {
+                GameObject nextImgObj = new GameObject("NextFullscreenImage");
+                nextImgObj.transform.SetParent(fullscreenImage.transform.parent, false);
+                nextFullscreenImage = nextImgObj.AddComponent<Image>();
+            }
+        }
+
+        // nextFullscreenImage 설정 (fullscreenImage와 동일)
+        nextFullscreenImage.preserveAspect = true;
+        nextFullscreenImage.type = Image.Type.Simple;
+        // Material 복사 (fullscreenImage에 설정된 UI Material 적용)
+        if (fullscreenImage.material != null)
+        {
+            nextFullscreenImage.material = fullscreenImage.material;
+        }
+
+        // RectTransform 동기화
+        RectTransform srcRect = currentImageRect;
+        nextImageRect = nextFullscreenImage.GetComponent<RectTransform>();
+        nextImageRect.anchorMin = srcRect.anchorMin;
+        nextImageRect.anchorMax = srcRect.anchorMax;
+        nextImageRect.pivot = srcRect.pivot;
+        nextImageRect.sizeDelta = srcRect.sizeDelta;
+        nextImageRect.anchoredPosition = new Vector2(Screen.width + slideImageGap, imageBasePos.y);
+
+        nextFullscreenImage.enabled = false;
+
         // fullscreenImage를 형제들 중 가장 먼저 그려지도록 (UI상 가장 뒤에 배치)
         fullscreenImage.transform.SetAsFirstSibling();
+        nextFullscreenImage.transform.SetAsFirstSibling();
 
         imageDisplayController = GetComponentInParent<ImageDisplayController>();
         if (imageDisplayController == null)
@@ -396,52 +455,65 @@ public class DoubleTap3D : MonoBehaviour
                     }
                 }
             }
-            else if (touch.phase == TouchPhase.Moved && isSwiping && isFullscreen)
+            else if (touch.phase == TouchPhase.Moved && isSwiping && isFullscreen && !isSliding)
             {
                 Vector2 swipeDelta = touch.screenPosition - touchStartPos;
 
                 // 드래그 중: 이미지를 실시간으로 이동
                 if (Mathf.Abs(swipeDelta.x) > Mathf.Abs(swipeDelta.y))
                 {
-                    // 좌우 스와이프 - 이미지 드래그
                     isDragging = true;
                     if (currentImageRect != null)
                     {
-                        // 경계 체크 (엘라스틱 효과)
                         float dragX = swipeDelta.x;
 
-                        // 첫 이미지에서 오른쪽 드래그 제한
+                        // 경계 체크
                         bool isAtStart = (placeInfoTextPanel == null || !isPlaceInfoPage) && imageIndex == 0;
-                        if (isAtStart && dragX > 0)
-                        {
-                            dragX *= 0.3f; // 엘라스틱 저항
-                        }
-
-                        // 마지막 이미지에서 왼쪽 드래그 제한
                         bool isAtEnd = imageIndex == imageSprites.Count - 1 && !isPlaceInfoPage;
+
+                        if (isAtStart && dragX > 0)
+                            dragX *= 0.3f;
                         if (isAtEnd && dragX < 0)
+                            dragX *= 0.3f;
+
+                        // 현재 이미지 이동 (Y는 기본 위치 유지)
+                        currentImageRect.anchoredPosition = new Vector2(imageTargetPos.x + dragX, imageBasePos.y);
+
+                        // 다음/이전 이미지 미리보기
+                        float screenW = Screen.width;
+                        int newDir = dragX < 0 ? -1 : (dragX > 0 ? 1 : 0);
+
+                        if (newDir != 0 && newDir != dragDirection)
                         {
-                            dragX *= 0.3f; // 엘라스틱 저항
+                            dragDirection = newDir;
+                            PrepareNextImage(dragDirection);
                         }
 
-                        currentImageRect.anchoredPosition = imageTargetPos + new Vector2(dragX, 0);
+                        if (nextFullscreenImage != null && nextFullscreenImage.enabled && nextImageRect != null)
+                        {
+                            // 간격 포함하여 다음 이미지 위치 계산
+                            float nextBaseX = (dragDirection == -1) ? (screenW + slideImageGap) : -(screenW + slideImageGap);
+                            nextImageRect.anchoredPosition = new Vector2(nextBaseX + dragX, imageBasePos.y);
+
+                            // 페이드인: 드래그 시작 후 slideFadeDuration 동안 알파 0→1
+                            float fadeElapsed = Time.time - nextImageFadeTime;
+                            float fadeAlpha = (slideFadeDuration > 0f) ? Mathf.Clamp01(fadeElapsed / slideFadeDuration) : 1f;
+                            nextFullscreenImage.color = new Color(1f, 1f, 1f, fadeAlpha);
+                        }
                     }
                 }
                 else
                 {
-                    // 수직 스와이프 감지
                     if (swipeDelta.y > swipeThreshold)
                     {
-                        // 위로 스와이프 -> 댓글창 열기
                         if (CommentManager.Instance != null)
                         {
                             CommentManager.Instance.OpenCommentPanel(this.id, this.placeName);
-                            isSwiping = false; // 스와이프 종료 처리
+                            isSwiping = false;
                         }
                     }
                     else if (swipeDelta.y < -swipeThreshold)
                     {
-                        // 아래로 스와이프 -> 패널 닫기 (기존 로직)
                         CloseFullscreen();
                         isSwiping = false;
                         isDragging = false;
@@ -450,11 +522,10 @@ public class DoubleTap3D : MonoBehaviour
             }
             else if (touch.phase == TouchPhase.Ended && isFullscreen)
             {
-                if (isDragging)
+                if (isDragging && !isSliding)
                 {
                     Vector2 swipeDelta = touch.screenPosition - touchStartPos;
 
-                    // 스와이프 거리가 threshold를 넘었는지 확인
                     if (Mathf.Abs(swipeDelta.x) > swipeThreshold)
                     {
                         if (swipeDelta.x > 0)
@@ -464,23 +535,39 @@ public class DoubleTap3D : MonoBehaviour
                     }
                     else
                     {
-                        // threshold 미달 - 원래 위치로 복귀
                         ResetImagePosition();
                     }
                     isDragging = false;
                 }
                 isSwiping = false;
+                dragDirection = 0;
             }
         }
 
-        // 이미지가 타겟 위치로 부드럽게 이동
-        if (!isDragging && isFullscreen && currentImageRect != null)
+        // 드래그 중이 아니고 슬라이드 중이 아닐 때: 위치 스냅백
+        if (!isDragging && !isSliding && isFullscreen && currentImageRect != null)
         {
             currentImageRect.anchoredPosition = Vector2.Lerp(
                 currentImageRect.anchoredPosition,
                 imageTargetPos,
                 Time.deltaTime * swipeSpeed
             );
+            if (nextFullscreenImage != null && nextFullscreenImage.enabled && nextImageRect != null)
+            {
+                float snapX = (dragDirection == -1) ? (Screen.width + slideImageGap) : -(Screen.width + slideImageGap);
+                nextImageRect.anchoredPosition = Vector2.Lerp(
+                    nextImageRect.anchoredPosition,
+                    new Vector2(snapX, imageBasePos.y),
+                    Time.deltaTime * swipeSpeed
+                );
+
+                // 스냅백 시 페이드아웃
+                float curAlpha = nextFullscreenImage.color.a;
+                float newAlpha = Mathf.MoveTowards(curAlpha, 0f, Time.deltaTime / Mathf.Max(slideFadeDuration, 0.01f));
+                nextFullscreenImage.color = new Color(1f, 1f, 1f, newAlpha);
+                if (newAlpha <= 0f)
+                    nextFullscreenImage.enabled = false;
+            }
         }
     }
 
@@ -527,7 +614,23 @@ public class DoubleTap3D : MonoBehaviour
         textRect.offsetMin = new Vector2(20, 0);
         textRect.offsetMax = new Vector2(-80, 0); // Space for likes
 
-        // Like Count
+        // Like Icon (하트 아이콘 Image)
+        GameObject likeIconObj = new GameObject("PreviewLikeIcon");
+        likeIconObj.transform.SetParent(panelObj.transform, false);
+        previewLikeIcon = likeIconObj.AddComponent<Image>();
+        previewLikeIcon.preserveAspect = true;
+        previewLikeIcon.raycastTarget = false;
+        if (likeIcon != null) previewLikeIcon.sprite = likeIcon;
+        previewLikeIcon.color = Color.white;
+
+        RectTransform likeIconRect = likeIconObj.GetComponent<RectTransform>();
+        likeIconRect.anchorMin = new Vector2(1, 0.5f);
+        likeIconRect.anchorMax = new Vector2(1, 0.5f);
+        likeIconRect.pivot = new Vector2(1, 0.5f);
+        likeIconRect.sizeDelta = new Vector2(28, 28);
+        likeIconRect.anchoredPosition = new Vector2(-52, 0);
+
+        // Like Count (좋아요 숫자)
         GameObject likeObj = new GameObject("PreviewLike");
         likeObj.transform.SetParent(panelObj.transform, false);
         previewLikeCount = likeObj.AddComponent<Text>();
@@ -537,12 +640,12 @@ public class DoubleTap3D : MonoBehaviour
         previewLikeCount.fontSize = 20;
         previewLikeCount.color = Color.white;
         previewLikeCount.alignment = TextAnchor.MiddleRight;
-        
+
         RectTransform likeRect = likeObj.GetComponent<RectTransform>();
         likeRect.anchorMin = new Vector2(1, 0);
         likeRect.anchorMax = new Vector2(1, 1);
-        likeRect.offsetMin = new Vector2(-80, 0);
-        likeRect.offsetMax = new Vector2(-20, 0);
+        likeRect.offsetMin = new Vector2(-45, 0);
+        likeRect.offsetMax = new Vector2(-10, 0);
     }
 
     private void OnDoubleTapCube()
@@ -629,15 +732,8 @@ public class DoubleTap3D : MonoBehaviour
                             if (previewLikeIcon != null)
                             {
                                 previewLikeIcon.gameObject.SetActive(true);
-                                // 좋아요 있으면 채워진 하트, 없으면 빈 하트
-                                if (data.like_count > 0)
-                                {
-                                    previewLikeIcon.sprite = likedSprite;
-                                }
-                                else
-                                {
-                                    previewLikeIcon.sprite = likeIcon;
-                                }
+                                // 현재 사용자가 좋아요를 눌렀으면 채워진 하트, 아니면 빈 하트
+                                previewLikeIcon.sprite = data.is_liked ? likedSprite : likeIcon;
                                 previewLikeIcon.color = Color.white;
                             }
 
@@ -649,7 +745,13 @@ public class DoubleTap3D : MonoBehaviour
                         }
                         else
                         {
-                            previewText.text = "아직 댓글이 없습니다. 첫 댓글을 남겨보세요!";
+                            string langCode = Application.systemLanguage == SystemLanguage.Korean ? "ko"
+                            : Application.systemLanguage == SystemLanguage.Japanese ? "ja"
+                            : Application.systemLanguage == SystemLanguage.Chinese || Application.systemLanguage == SystemLanguage.ChineseSimplified || Application.systemLanguage == SystemLanguage.ChineseTraditional ? "zh"
+                            : Application.systemLanguage == SystemLanguage.Spanish ? "es"
+                            : "en";
+                        string noCommentMsg = noCommentTranslations.ContainsKey(langCode) ? noCommentTranslations[langCode] : noCommentTranslations["en"];
+                        previewText.text = noCommentMsg;
                             if (previewLikeCount != null) previewLikeCount.text = "";
                             // 댓글 없으면 빈 하트 표시
                             if (previewLikeIcon != null)
@@ -689,50 +791,56 @@ public class DoubleTap3D : MonoBehaviour
 
     public void ShowNextImage()
     {
-        if (imageSprites.Count == 0) return;
+        if (imageSprites.Count == 0 || isSliding) return;
 
         // PlaceInfo 페이지에서 첫 이미지로 이동
         if (placeInfoTextPanel != null && isPlaceInfoPage)
         {
+            int targetIdx = 0;
             isPlaceInfoPage = false;
-            imageIndex = 0;
+            imageIndex = targetIdx;
             currentIndex++;
-            StartCoroutine(CrossFadeImage(imageIndex));
+            StartCoroutine(SlideToImage(-1, targetIdx));
             UpdatePlaceInfoVisibility();
         }
-        // 마지막 이미지가 아니면 다음 이미지로
         else if (imageIndex < imageSprites.Count - 1)
         {
-            imageIndex++;
+            int targetIdx = imageIndex + 1;
+            imageIndex = targetIdx;
             currentIndex++;
-            StartCoroutine(CrossFadeImage(imageIndex));
+            StartCoroutine(SlideToImage(-1, targetIdx));
         }
-        // 마지막 이미지에서는 더 이상 진행하지 않음 (경계)
+        else
+        {
+            ResetImagePosition();
+        }
     }
 
     public void ShowPreviousImage()
     {
-        if (imageSprites.Count == 0) return;
+        if (imageSprites.Count == 0 || isSliding) return;
 
-        // 첫 이미지에서 PlaceInfo 페이지로 이동
         if (placeInfoTextPanel != null && !isPlaceInfoPage && imageIndex == 0)
         {
             isPlaceInfoPage = true;
             imageIndex = -1;
             currentIndex--;
             if (currentIndex < 0) currentIndex = 0;
-            ShowImage(-1);
+            StartCoroutine(SlideToImage(1, -1));
             UpdatePlaceInfoVisibility();
         }
-        // 첫 이미지가 아니면 이전 이미지로
         else if (imageIndex > 0)
         {
-            imageIndex--;
+            int targetIdx = imageIndex - 1;
+            imageIndex = targetIdx;
             currentIndex--;
             if (currentIndex < 0) currentIndex = 0;
-            StartCoroutine(CrossFadeImage(imageIndex));
+            StartCoroutine(SlideToImage(1, targetIdx));
         }
-        // PlaceInfo 페이지이거나 첫 이미지에서는 더 이상 뒤로 가지 않음 (경계)
+        else
+        {
+            ResetImagePosition();
+        }
     }
 
     private void UpdatePlaceInfoVisibility()
@@ -761,46 +869,162 @@ public class DoubleTap3D : MonoBehaviour
         ResetImagePosition();
     }
 
-    private IEnumerator CrossFadeImage(int index)
+    /// <summary>
+    /// 드래그 방향에 따라 nextFullscreenImage에 다음/이전 이미지를 준비
+    /// </summary>
+    private void PrepareNextImage(int direction)
     {
-        if (index < 0 || index >= imageSprites.Count) yield break;
+        if (nextFullscreenImage == null) return;
+
+        int targetIndex = -999;
+        if (direction == -1) // 왼쪽 드래그 → 다음 이미지
+        {
+            if (isPlaceInfoPage && placeInfoTextPanel != null)
+                targetIndex = 0;
+            else if (imageIndex < imageSprites.Count - 1)
+                targetIndex = imageIndex + 1;
+        }
+        else if (direction == 1) // 오른쪽 드래그 → 이전 이미지
+        {
+            if (!isPlaceInfoPage && imageIndex == 0 && placeInfoTextPanel != null)
+                targetIndex = -1; // PlaceInfo 페이지
+            else if (imageIndex > 0)
+                targetIndex = imageIndex - 1;
+        }
+
+        if (targetIndex == -999)
+        {
+            nextFullscreenImage.enabled = false;
+            return;
+        }
+
+        if (targetIndex == -1)
+        {
+            // PlaceInfo 페이지 (이미지 없음)
+            nextFullscreenImage.enabled = false;
+        }
+        else if (targetIndex >= 0 && targetIndex < imageSprites.Count)
+        {
+            nextFullscreenImage.sprite = imageSprites[targetIndex];
+            nextFullscreenImage.color = new Color(1f, 1f, 1f, 0f); // 페이드인 시작: 투명
+            nextFullscreenImage.enabled = true;
+            nextImageFadeTime = Time.time;
+
+            float screenW = Screen.width;
+            float posX = (direction == -1) ? (screenW + slideImageGap) : -(screenW + slideImageGap);
+            if (nextImageRect != null)
+                nextImageRect.anchoredPosition = new Vector2(posX, imageBasePos.y);
+        }
+    }
+
+    /// <summary>
+    /// 슬라이드 애니메이션으로 이미지 전환
+    /// </summary>
+    private IEnumerator SlideToImage(int direction, int targetIndex)
+    {
+        // direction: -1 = 다음(왼쪽 슬라이드), 1 = 이전(오른쪽 슬라이드)
+        isSliding = true;
+        float screenW = Screen.width;
+        float baseY = imageBasePos.y;
+
+        // 현재 이미지: direction 방향으로 밀려남 (간격 포함)
+        Vector2 currentStart = currentImageRect.anchoredPosition;
+        Vector2 currentEnd = new Vector2(direction * (screenW + slideImageGap) + imageBasePos.x, baseY);
+
+        // 다음 이미지: 반대편에서 중앙으로 (간격 포함)
+        Vector2 nextStart = (nextImageRect != null && nextFullscreenImage.enabled)
+            ? nextImageRect.anchoredPosition
+            : new Vector2(-direction * (screenW + slideImageGap) + imageBasePos.x, baseY);
+        Vector2 nextEnd = imageBasePos;
+
+        // targetIndex == -1은 PlaceInfo 페이지 (이미지 숨김)
+        bool showNext = targetIndex >= 0 && targetIndex < imageSprites.Count;
+
+        if (showNext && nextFullscreenImage != null)
+        {
+            nextFullscreenImage.sprite = imageSprites[targetIndex];
+            nextFullscreenImage.enabled = true;
+            if (nextImageRect != null)
+                nextImageRect.anchoredPosition = nextStart;
+        }
+
+        // 슬라이드 시작 시 nextImage 알파 = 드래그 중 페이드인된 값 유지 → slideDuration 동안 1로 보간
+        float nextAlphaStart = (showNext && nextFullscreenImage != null) ? nextFullscreenImage.color.a : 1f;
 
         float elapsed = 0f;
-        Color startColor = fullscreenImage.color;
-
-        // Fade out
-        while (elapsed < fadeDuration / 2)
+        while (elapsed < slideDuration)
         {
             elapsed += Time.deltaTime;
-            float alpha = Mathf.Lerp(1f, 0f, elapsed / (fadeDuration / 2));
-            fullscreenImage.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / slideDuration);
+
+            currentImageRect.anchoredPosition = Vector2.Lerp(currentStart, currentEnd, t);
+            if (showNext && nextImageRect != null)
+            {
+                nextImageRect.anchoredPosition = Vector2.Lerp(nextStart, nextEnd, t);
+                // 슬라이드 중 알파 보간 (현재값 → 1)
+                float a = Mathf.Lerp(nextAlphaStart, 1f, t);
+                nextFullscreenImage.color = new Color(1f, 1f, 1f, a);
+            }
+
             yield return null;
         }
 
-        // 이미지 변경
-        fullscreenImage.sprite = imageSprites[index];
-        ResetImagePosition();
-
-        // Fade in
-        elapsed = 0f;
-        while (elapsed < fadeDuration / 2)
+        // 슬라이드 완료
+        if (showNext)
         {
-            elapsed += Time.deltaTime;
-            float alpha = Mathf.Lerp(0f, 1f, elapsed / (fadeDuration / 2));
-            fullscreenImage.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
+            // nextImage가 중앙에 도착 — 위치 확정
+            if (nextImageRect != null)
+                nextImageRect.anchoredPosition = imageBasePos;
+
+            // fullscreenImage를 새 스프라이트로 교체 (nextImage 뒤에 있어 보이지 않음)
+            fullscreenImage.sprite = imageSprites[targetIndex];
+            fullscreenImage.color = Color.white;
+            fullscreenImage.enabled = true;
+            currentImageRect.anchoredPosition = imageBasePos;
+
+            // 한 프레임 대기 — fullscreenImage 렌더링 후 nextImage 숨김 (깜빡임 방지)
             yield return null;
+
+            if (nextFullscreenImage != null)
+            {
+                nextFullscreenImage.enabled = false;
+                if (nextImageRect != null)
+                    nextImageRect.anchoredPosition = new Vector2(screenW + slideImageGap, baseY);
+            }
+        }
+        else
+        {
+            // PlaceInfo 전환 — 화면 밖으로 완전히 나간 후 비활성화
+            currentImageRect.anchoredPosition = currentEnd;
+            yield return null;
+            fullscreenImage.enabled = false;
+            currentImageRect.anchoredPosition = imageBasePos;
         }
 
-        fullscreenImage.color = startColor;
+        imageTargetPos = imageBasePos;
+
+        fullscreenImage.transform.SetAsFirstSibling();
+        if (nextFullscreenImage != null)
+            nextFullscreenImage.transform.SetAsFirstSibling();
+
+        isSliding = false;
+        dragDirection = 0;
     }
 
     private void ResetImagePosition()
     {
-        imageTargetPos = Vector2.zero;
+        imageTargetPos = imageBasePos;
         if (currentImageRect != null)
         {
-            currentImageRect.anchoredPosition = Vector2.zero;
+            currentImageRect.anchoredPosition = imageBasePos;
         }
+        if (nextFullscreenImage != null)
+        {
+            nextFullscreenImage.enabled = false;
+            if (nextImageRect != null)
+                nextImageRect.anchoredPosition = new Vector2(Screen.width + slideImageGap, imageBasePos.y);
+        }
+        dragDirection = 0;
     }
 
     public void SetInfoImages(Sprite sprite1, Sprite sprite2, bool petFriendly, bool separateRestroom, string description, string name, int id = -1, string username = null, string instagramId = null, string tel = null, string address = null, string overview = null, string petInfo = null)
