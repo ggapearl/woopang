@@ -16639,8 +16639,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   objectCountUI: {fileID: 743247744926779296}
-  cubePrefab: {fileID: 8039681795900228701}
-  glbPrefab: {fileID: 8908901386216368541}
+  cubePrefab: {fileID: 1149881228227649779, guid: a5bd0b42b939f3e419ea7be6469cf686,
+    type: 3}
+  glbPrefab: {fileID: 6165146719137553165, guid: 28284456d8ad3ce4a8fed7daf6536421,
+    type: 3}
   maxConcurrentGLBLoads: 20
   glbLoadTimeout: 20
   fallbackToCube: 1
