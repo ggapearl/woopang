@@ -266,12 +266,6 @@ public class FirebaseNotification : MonoBehaviour
                     Input.location.lastData.longitude
                 );
                 SaveLocationToAndroidPrefs(currentUserLocation.x, currentUserLocation.y);
-
-                // [FIX] 주기적으로 서버에 위치 정보 업데이트 전송
-                if (!string.IsNullOrEmpty(currentFCMToken))
-                {
-                    StartCoroutine(SendTokenToServer(currentFCMToken));
-                }
             }
             yield return new WaitForSeconds(30f);
         }

@@ -76,8 +76,8 @@ public class P2PManager : MonoBehaviour
     public static P2PManager Instance { get; private set; }
 
     [Header("Server Configuration")]
-    [SerializeField] private float foregroundUpdateInterval = 1f;   // 포그라운드: 1초
-    [SerializeField] private float backgroundUpdateInterval = 60f;  // 백그라운드: 60초
+    [SerializeField] private float foregroundUpdateInterval = 5f;   // 포그라운드: 5초
+    [SerializeField] private float backgroundUpdateInterval = 10f;  // 백그라운드: 10초
     [SerializeField] private bool autoConnect = true;               // 자동 연결
 
     [Header("User Avatar Settings")]
@@ -92,7 +92,7 @@ public class P2PManager : MonoBehaviour
     [SerializeField] private UserFilterMode userFilterMode = UserFilterMode.All;  // 사용자 필터 모드
 
     [Header("Debug")]
-    [SerializeField] private bool showDebugLogs = false;
+    [SerializeField] private bool showDebugLogs = true;
 
     // User tracking
     private Dictionary<string, GameObject> activeUserAvatars = new Dictionary<string, GameObject>();
@@ -202,14 +202,51 @@ public class P2PManager : MonoBehaviour
 
         Log($"User info loaded: {currentUsername} ({currentUserId})");
 
-        // Wait for GPS to be ready
-        while (earthManager == null || earthManager.EarthTrackingState != UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
+        // Input.location 직접 시작 (다른 스크립트에서 아직 시작 안 했을 수 있음)
+        if (Input.location.status == LocationServiceStatus.Stopped)
         {
+            Log("Starting Input.location service for P2P...");
+            Input.location.Start(10f, 1f);
+        }
+
+        // Wait for GPS to be ready (AREarthManager 또는 Input.location 둘 중 하나)
+        float gpsWaitTime = 0f;
+        float gpsMaxWait = 15f; // AREarthManager 대기
+        float absoluteMaxWait = 30f; // 절대 최대 대기 시간
+        bool gpsReady = false;
+
+        while (!gpsReady)
+        {
+            // AREarthManager 트래킹 확인
             if (earthManager == null) earthManager = FindFirstObjectByType<AREarthManager>();
+            if (earthManager != null && earthManager.EarthTrackingState == UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
+            {
+                Log("AREarthManager GPS tracking ready");
+                gpsReady = true;
+                break;
+            }
+
+            // Fallback: Input.location이 작동 중이면 15초 후 진행
+            if (gpsWaitTime >= gpsMaxWait && Input.location.status == LocationServiceStatus.Running)
+            {
+                Log($"AREarthManager not tracking after {gpsMaxWait}s, using Input.location fallback for P2P");
+                gpsReady = true;
+                break;
+            }
+
+            // 절대 타임아웃: GPS 없이도 등록 진행 (위치 업데이트는 나중에)
+            if (gpsWaitTime >= absoluteMaxWait)
+            {
+                Log($"GPS not available after {absoluteMaxWait}s, proceeding with registration anyway (location status: {Input.location.status})");
+                gpsReady = true;
+                break;
+            }
+
+            gpsWaitTime += 1f;
             yield return new WaitForSeconds(1f);
         }
 
-        Log("GPS tracking ready, registering user...");
+        Log("GPS ready, registering user...");
         StartTracking();
     }
 
@@ -308,13 +345,14 @@ public class P2PManager : MonoBehaviour
                 currentAltitude = pose.Altitude;
                 positionUpdated = true;
             }
-            // 백그라운드 GPS fallback (AREarthManager가 작동 안할 때)
-            else if (isInBackground && Input.location.status == LocationServiceStatus.Running)
+            // GPS fallback (AREarthManager가 작동 안할 때 - 포그라운드/백그라운드 모두)
+            else if (Input.location.status == LocationServiceStatus.Running)
             {
                 var loc = Input.location.lastData;
                 currentLatitude = loc.latitude;
                 currentLongitude = loc.longitude;
-                currentAltitude = loc.altitude;
+                // iOS는 WGS84 타원체 고도 → MSL 보정 필요 (Android는 그대로)
+                currentAltitude = GeoidHelper.NormalizeAltitude(loc.altitude, loc.latitude, loc.longitude);
                 positionUpdated = true;
             }
 

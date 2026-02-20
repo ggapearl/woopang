@@ -767,11 +767,12 @@ public class ModelUploadManager : MonoBehaviour
     {
         if (Input.location.status == LocationServiceStatus.Running)
         {
-            gpsData = new Vector3(
-                Input.location.lastData.latitude,
-                Input.location.lastData.longitude,
-                Input.location.lastData.altitude
-            );
+            float lat = Input.location.lastData.latitude;
+            float lon = Input.location.lastData.longitude;
+            float alt = GeoidHelper.NormalizeAltitude(
+                Input.location.lastData.altitude, lat, lon);
+
+            gpsData = new Vector3(lat, lon, alt);
             // UI 표시용은 F4
             locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
         }

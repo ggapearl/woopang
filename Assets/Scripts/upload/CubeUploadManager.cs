@@ -1015,22 +1015,15 @@ public class CubeUploadManager : MonoBehaviour
         // Fallback: 기본 GPS 사용 (ARCore 사용 안 함 또는 실패 시)
         if (!locationObtained && Input.location.status == LocationServiceStatus.Running)
         {
-            float rawAltitude = Input.location.lastData.altitude;
-            float normalizedAltitude = rawAltitude;
-
-#if UNITY_IOS && !UNITY_EDITOR
-            // iOS WGS84 → MSL 보정 (지역별 Geoid 높이)
-            float latitude = Input.location.lastData.latitude;
-            float longitude = Input.location.lastData.longitude;
-            float geoidOffset = GetGeoidOffset(latitude, longitude);
-
-            normalizedAltitude = rawAltitude + geoidOffset;
-#endif
+            float lat = Input.location.lastData.latitude;
+            float lon = Input.location.lastData.longitude;
+            float normalizedAltitude = GeoidHelper.NormalizeAltitude(
+                Input.location.lastData.altitude, lat, lon);
 
             gpsData = new Vector3(
-                Input.location.lastData.latitude,
-                Input.location.lastData.longitude,
-                normalizedAltitude  // Android 기준으로 통일된 고도
+                lat,
+                lon,
+                normalizedAltitude  // Android 기준으로 통일된 고도 (iOS는 GeoidHelper로 보정)
             );
 
             locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
@@ -1047,72 +1040,7 @@ public class CubeUploadManager : MonoBehaviour
         if (locationInput != null) locationInput.text = locationText;
     }
 
-    /// <summary>
-    /// 위도/경도 기반 Geoid 높이 오프셋 반환 (iOS WGS84 → MSL 변환용)
-    /// 전세계 주요 지역별 평균 Geoid 높이 적용
-    /// </summary>
-    private float GetGeoidOffset(float lat, float lon)
-    {
-        // 동아시아
-        if (lat >= 30f && lat <= 45f && lon >= 120f && lon <= 145f)
-        {
-            // 한국, 일본, 중국 동부
-            if (lat >= 33f && lat <= 43f && lon >= 126f && lon <= 142f)
-                return 30f; // 일본: ~35-40m, 한국: ~20-25m, 평균 30m
-            else
-                return 25f; // 중국 동부
-        }
-        // 동남아시아
-        else if (lat >= -10f && lat <= 25f && lon >= 95f && lon <= 140f)
-        {
-            return 15f; // 태국, 베트남, 필리핀, 인도네시아
-        }
-        // 남아시아 (인도)
-        else if (lat >= 8f && lat <= 35f && lon >= 68f && lon <= 97f)
-        {
-            return 20f; // 인도
-        }
-        // 북미 서부
-        else if (lat >= 30f && lat <= 60f && lon >= -130f && lon <= -110f)
-        {
-            return -25f; // 미국 서부, 캐나다 서부 (음수: 해수면보다 낮음)
-        }
-        // 북미 동부
-        else if (lat >= 25f && lat <= 50f && lon >= -100f && lon <= -65f)
-        {
-            return -30f; // 미국 동부, 캐나다 동부
-        }
-        // 유럽
-        else if (lat >= 35f && lat <= 70f && lon >= -10f && lon <= 40f)
-        {
-            return 45f; // 서유럽/동유럽 평균
-        }
-        // 호주
-        else if (lat >= -45f && lat <= -10f && lon >= 110f && lon <= 155f)
-        {
-            return 10f; // 호주
-        }
-        // 남미
-        else if (lat >= -55f && lat <= 13f && lon >= -82f && lon <= -34f)
-        {
-            return 5f; // 브라질, 아르헨티나 등
-        }
-        // 아프리카
-        else if (lat >= -35f && lat <= 37f && lon >= -20f && lon <= 52f)
-        {
-            return 15f; // 아프리카 대륙
-        }
-        // 중동
-        else if (lat >= 12f && lat <= 42f && lon >= 35f && lon <= 65f)
-        {
-            return 25f; // 중동 지역
-        }
-        // 기본값 (기타 지역)
-        else
-        {
-            return 20f; // 전세계 평균 약 20m
-        }
-    }
+    // GetGeoidOffset → GeoidHelper.GetGeoidOffset() 으로 통합됨
 
     #endregion
 
