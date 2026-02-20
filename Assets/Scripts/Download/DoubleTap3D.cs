@@ -105,8 +105,88 @@ public class DoubleTap3D : MonoBehaviour
     private static bool savedIsPlaceInfoPage = true;
 #endif
 
+    /// <summary>
+    /// 프리팹에서 Instantiate된 경우 UI 참조가 null → 씬에서 이름으로 자동 검색
+    /// </summary>
+    private void AutoConnectFullscreenUI()
+    {
+        if (fullscreenCanvasGroup != null) return; // 이미 연결됨
+
+        GameObject panel = GameObject.Find("FullScreenPanel");
+        if (panel == null) return;
+
+        fullscreenCanvasGroup = panel.GetComponent<CanvasGroup>();
+
+        Transform panelT = panel.transform;
+        Transform guideT = panelT.Find("GuidePanel");
+        if (guideT != null) guidePanel = guideT.gameObject;
+
+        // FullScreenPanel 하위 재귀 검색 헬퍼
+        System.Func<string, Transform> findChild = null;
+        findChild = (string name) => {
+            Transform found = panelT.Find(name);
+            if (found != null) return found;
+            // 재귀 검색
+            foreach (Transform child in panelT.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == name) return child;
+            }
+            return null;
+        };
+
+        Transform t;
+        t = findChild("FullScreenImage");
+        if (t != null) fullscreenImage = t.GetComponent<Image>();
+
+        t = findChild("NextFullscreenImage");
+        if (t != null) nextFullscreenImage = t.GetComponent<Image>();
+
+        t = findChild("InfoImage1");
+        if (t != null) infoImage1 = t.GetComponent<Image>();
+
+        t = findChild("InfoImage2");
+        if (t != null) infoImage2 = t.GetComponent<Image>();
+
+        t = findChild("InstagramButton");
+        if (t != null) instagramButton = t.GetComponent<Button>();
+
+        t = findChild("PreviousButton");
+        if (t != null) previousButton = t.GetComponent<Button>();
+        if (previousButton == null)
+        {
+            t = findChild("Button_Previous");
+            if (t != null) previousButton = t.GetComponent<Button>();
+        }
+
+        t = findChild("NextButton");
+        if (t != null) nextButton = t.GetComponent<Button>();
+        if (nextButton == null)
+        {
+            t = findChild("Button_Next");
+            if (t != null) nextButton = t.GetComponent<Button>();
+        }
+
+        t = findChild("CloseButton");
+        if (t != null) closeButton = t.GetComponent<Button>();
+
+        t = findChild("NameText");
+        if (t != null) nameText = t.GetComponent<Text>();
+
+        t = findChild("DescriptionText");
+        if (t != null) descriptionTextUI = t.GetComponent<Text>();
+
+        t = findChild("CreatedByText");
+        if (t != null) createdByText = t.GetComponent<Text>();
+
+        t = findChild("PlaceInfoTextPanel");
+        if (t != null) placeInfoTextPanel = t.gameObject;
+    }
+
     void Start()
     {
+        // 프리팹에서 Instantiate된 경우 UI 참조가 null이므로 씬에서 자동 검색
+        AutoConnectFullscreenUI();
+
         if (fullscreenCanvasGroup == null || fullscreenImage == null || guidePanel == null ||
             infoImage1 == null || infoImage2 == null || instagramButton == null ||
             previousButton == null || nextButton == null || closeButton == null || nameText == null)

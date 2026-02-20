@@ -15402,6 +15402,36 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: maxBoxSize
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: maxDistance
+      value: 100
+      objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: minDistance
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: maxArrowSize
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: defaultBoxSize
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: defaultArrowSize
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 4396521119291071978, guid: 569f512ddad81f8469304ed3141954d4,
         type: 3}
       propertyPath: m_Name
@@ -16639,10 +16669,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   objectCountUI: {fileID: 743247744926779296}
-  cubePrefab: {fileID: 1149881228227649779, guid: a5bd0b42b939f3e419ea7be6469cf686,
-    type: 3}
-  glbPrefab: {fileID: 6165146719137553165, guid: 28284456d8ad3ce4a8fed7daf6536421,
-    type: 3}
+  cubePrefab: {fileID: 8039681795900228701}
+  glbPrefab: {fileID: 8908901386216368541}
   maxConcurrentGLBLoads: 20
   glbLoadTimeout: 20
   fallbackToCube: 1
