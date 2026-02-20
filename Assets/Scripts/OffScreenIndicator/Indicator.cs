@@ -65,12 +65,16 @@ public class Indicator : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(OnIndicatorClicked);
 
-        // CanvasGroup 추가 (페이드인용)
+        // CanvasGroup 추가 (페이드인용 + 터치 활성화)
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
         {
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
         }
+        // 부모 패널의 CanvasGroup(BlocksRaycasts=0)을 무시하여 개별 인디케이터 터치 가능
+        canvasGroup.ignoreParentGroups = true;
+        canvasGroup.interactable = true;
+        canvasGroup.blocksRaycasts = true;
 
         // spriteImage가 없고 sprite가 할당되어 있으면 자동으로 Image 생성
         if (spriteImage == null && sprite != null)

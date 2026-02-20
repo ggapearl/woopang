@@ -96,6 +96,12 @@ public class CubeUploadManager : MonoBehaviour
 
     private void InitializeComponents()
     {
+        // AREarthManager 자동 연결 (Inspector 미연결 시)
+        if (earthManager == null)
+        {
+            earthManager = FindFirstObjectByType<AREarthManager>();
+        }
+
         if (instagramToggle != null)
         {
             instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);

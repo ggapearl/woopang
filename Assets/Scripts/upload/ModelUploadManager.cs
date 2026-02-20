@@ -6,6 +6,8 @@ using UnityEngine.Networking;
 using System.IO;
 using System;
 using System.Text.RegularExpressions;
+using Google.XR.ARCoreExtensions;
+using UnityEngine.XR.ARSubsystems;
 
 public class ModelUploadManager : MonoBehaviour
 {
@@ -37,6 +39,10 @@ public class ModelUploadManager : MonoBehaviour
 
     [Header("Warning System")]
     [SerializeField] private GameObject warningObj;
+
+    [Header("Geospatial API")]
+    [SerializeField] private AREarthManager earthManager;
+    [SerializeField] private bool useGeospatialAPI = true;
 
     [Header("Upload Settings")]
     [SerializeField] private float uploadTimeoutSeconds = 30f;
@@ -79,7 +85,13 @@ public class ModelUploadManager : MonoBehaviour
 
     private void InitializeComponents()
     {
-        if (selectFileButton != null) 
+        // AREarthManager 자동 연결 (Inspector 미연결 시)
+        if (earthManager == null)
+        {
+            earthManager = FindFirstObjectByType<AREarthManager>();
+        }
+
+        if (selectFileButton != null)
         {
             selectFileButton.onClick.AddListener(SelectModelFile);
         }
@@ -765,22 +777,46 @@ public class ModelUploadManager : MonoBehaviour
 
     private void UpdateLocationDisplay()
     {
-        if (Input.location.status == LocationServiceStatus.Running)
+        bool locationObtained = false;
+
+        // ARCore Geospatial API 우선 사용 (CubeUploadManager와 동일)
+        if (useGeospatialAPI && earthManager != null)
+        {
+            if (earthManager.EarthTrackingState == TrackingState.Tracking)
+            {
+                var pose = earthManager.CameraGeospatialPose;
+
+                // Geospatial API는 자동으로 MSL 고도 제공 (iOS/Android 통일)
+                gpsData = new Vector3(
+                    (float)pose.Latitude,
+                    (float)pose.Longitude,
+                    (float)pose.Altitude
+                );
+
+                locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
+                locationObtained = true;
+            }
+        }
+
+        // Fallback: 기본 GPS 사용 (ARCore 사용 안 함 또는 실패 시)
+        if (!locationObtained && Input.location.status == LocationServiceStatus.Running)
         {
             float lat = Input.location.lastData.latitude;
             float lon = Input.location.lastData.longitude;
-            float alt = GeoidHelper.NormalizeAltitude(
+            float normalizedAltitude = GeoidHelper.NormalizeAltitude(
                 Input.location.lastData.altitude, lat, lon);
 
-            gpsData = new Vector3(lat, lon, alt);
-            // UI 표시용은 F4
+            gpsData = new Vector3(lat, lon, normalizedAltitude);
             locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
+            locationObtained = true;
         }
-        else
+
+        if (!locationObtained)
         {
             gpsData = Vector3.zero;
             locationText = GetLocalizedText("no_location_data");
         }
+
         if (locationInput != null) locationInput.text = locationText;
     }
 

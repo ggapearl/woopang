@@ -474,9 +474,17 @@ public class P2PUserInfo : MonoBehaviour
 
         if (!hasTouchInput) return;
 
-        // Skip if touching UI
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            return;
+        // Skip if touching UI (모바일에서는 fingerId 필수)
+        if (EventSystem.current != null)
+        {
+#if UNITY_EDITOR || UNITY_STANDALONE
+            if (EventSystem.current.IsPointerOverGameObject())
+                return;
+#else
+            if (Input.touchCount > 0 && EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId))
+                return;
+#endif
+        }
 
         // Raycast from touch position
         Ray ray = mainCamera.ScreenPointToRay(touchPosition);
@@ -563,11 +571,30 @@ public class P2PUserInfo : MonoBehaviour
         UpdateUI();
         isInitialized = true;
 
-        // 오프스크린 인디케이터 업데이트 (이름 및 색상)
+        // 오프스크린 인디케이터 업데이트 (이름, 색상, 콜백 재연결)
+        if (targetComponent == null)
+        {
+            // Pool 재사용 시 Awake()가 실행되지 않을 수 있으므로 재설정
+            SetupOffScreenIndicator();
+        }
         if (targetComponent != null)
         {
             targetComponent.PlaceName = username;
             targetComponent.TargetColor = indicatorColor; // #E95383
+            // Pool 재사용 시 콜백이 이전 사용자를 참조할 수 있으므로 재연결
+            targetComponent.OnIndicatorTapped = () =>
+            {
+                Debug.Log($"[P2PUserInfo] Indicator tapped! userId={userId}, username={username}");
+                if (!string.IsNullOrEmpty(userId) && ProfileManager.Instance != null)
+                {
+                    ProfileManager.Instance.ShowProfile(userId);
+                }
+            };
+            Debug.Log($"[P2PUserInfo] Initialize: PlaceName='{targetComponent.PlaceName}', userId={userId}, username={username}, targetComponent={targetComponent != null}");
+        }
+        else
+        {
+            Debug.LogWarning($"[P2PUserInfo] Initialize: targetComponent is NULL! username={username}");
         }
 
         // Load avatar image - 중앙 캐시 시스템 사용

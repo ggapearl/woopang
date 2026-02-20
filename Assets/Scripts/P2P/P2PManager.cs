@@ -164,7 +164,7 @@ public class P2PManager : MonoBehaviour
             GameObject avatar = Instantiate(userAvatarPrefab, Vector3.zero, Quaternion.identity);
 
             // 아바타 시각적 요소 숨기기 설정 적용
-            P2PUserInfo userInfo = avatar.GetComponent<P2PUserInfo>();
+            P2PUserInfo userInfo = avatar.GetComponentInChildren<P2PUserInfo>(true);
             if (userInfo != null)
             {
                 userInfo.hideAvatarVisuals = hideAvatarVisuals;
@@ -504,7 +504,7 @@ public class P2PManager : MonoBehaviour
 #endif
 
         // Setup user info component
-        P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
+        P2PUserInfo userInfo = avatarObj.GetComponentInChildren<P2PUserInfo>(true);
         if (userInfo != null)
         {
             // 아바타 시각적 요소 숨기기 설정 적용
@@ -553,7 +553,7 @@ public class P2PManager : MonoBehaviour
 #endif
 
         // Update user info
-        P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
+        P2PUserInfo userInfo = avatarObj.GetComponentInChildren<P2PUserInfo>(true);
         if (userInfo != null)
         {
             userInfo.UpdateDistance(userData.distance);
@@ -646,7 +646,7 @@ public class P2PManager : MonoBehaviour
             newAvatar.transform.SetParent(transform);
 
             // 아바타 시각적 요소 숨기기 설정 적용
-            P2PUserInfo userInfo = newAvatar.GetComponent<P2PUserInfo>();
+            P2PUserInfo userInfo = newAvatar.GetComponentInChildren<P2PUserInfo>(true);
             if (userInfo != null)
             {
                 userInfo.hideAvatarVisuals = hideAvatarVisuals;
@@ -908,7 +908,7 @@ public class P2PManager : MonoBehaviour
     /// </summary>
     private void SetAvatarCompletelyHidden(GameObject avatarObj, bool hidden)
     {
-        P2PUserInfo userInfo = avatarObj.GetComponent<P2PUserInfo>();
+        P2PUserInfo userInfo = avatarObj.GetComponentInChildren<P2PUserInfo>(true);
         if (userInfo != null)
         {
             if (hidden)
