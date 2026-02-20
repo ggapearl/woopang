@@ -11808,8 +11808,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 768873a317510cd4ea6c0b1de555544c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::P2PManager
-  foregroundUpdateInterval: 1
-  backgroundUpdateInterval: 60
+  foregroundUpdateInterval: 5
+  backgroundUpdateInterval: 10
   autoConnect: 1
   userAvatarPrefab: {fileID: 1371161466}
   maxVisibleUsers: 100
