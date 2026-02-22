@@ -85,8 +85,6 @@ public class P2PManager : MonoBehaviour
     [SerializeField] private int maxVisibleUsers = 100;          // 최대 표시 사용자 수
     [SerializeField] private float maxTrackingDistance = 1000f;  // 1km
     [SerializeField] private int initialPoolSize = 10;           // 초기 풀 크기
-    [Tooltip("아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)")]
-    [SerializeField] private bool hideAvatarVisuals = true;      // 아바타 숨기고 인디케이터만 표시
 
     [Header("User Filter Settings")]
     [SerializeField] private UserFilterMode userFilterMode = UserFilterMode.All;  // 사용자 필터 모드
@@ -162,13 +160,6 @@ public class P2PManager : MonoBehaviour
         for (int i = 0; i < initialPoolSize; i++)
         {
             GameObject avatar = Instantiate(userAvatarPrefab, Vector3.zero, Quaternion.identity);
-
-            // 아바타 시각적 요소 숨기기 설정 적용
-            P2PUserInfo userInfo = avatar.GetComponentInChildren<P2PUserInfo>(true);
-            if (userInfo != null)
-            {
-                userInfo.hideAvatarVisuals = hideAvatarVisuals;
-            }
 
             avatar.SetActive(false);
             avatar.transform.SetParent(transform);
@@ -507,9 +498,6 @@ public class P2PManager : MonoBehaviour
         P2PUserInfo userInfo = avatarObj.GetComponentInChildren<P2PUserInfo>(true);
         if (userInfo != null)
         {
-            // 아바타 시각적 요소 숨기기 설정 적용
-            userInfo.hideAvatarVisuals = hideAvatarVisuals;
-
             userInfo.Initialize(
                 userData.user_id,
                 userData.username,
@@ -644,13 +632,6 @@ public class P2PManager : MonoBehaviour
         {
             GameObject newAvatar = Instantiate(userAvatarPrefab, Vector3.zero, Quaternion.identity);
             newAvatar.transform.SetParent(transform);
-
-            // 아바타 시각적 요소 숨기기 설정 적용
-            P2PUserInfo userInfo = newAvatar.GetComponentInChildren<P2PUserInfo>(true);
-            if (userInfo != null)
-            {
-                userInfo.hideAvatarVisuals = hideAvatarVisuals;
-            }
 
             return newAvatar;
         }

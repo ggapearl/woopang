@@ -8,6 +8,7 @@ public class Indicator : MonoBehaviour
     [SerializeField] private IndicatorType indicatorType;
     private Image indicatorImage;
     private Text distanceText;
+    private Text nameText;
 
     /// <summary>
     /// 이 인디케이터가 표시하는 Target 참조 (터치 콜백용)
@@ -53,7 +54,18 @@ public class Indicator : MonoBehaviour
     void Awake()
     {
         indicatorImage = transform.GetComponent<Image>();
-        distanceText = transform.GetComponentInChildren<Text>();
+
+        // NameText / DistanceText 분리 검색 (BoxIndicator용)
+        Transform nameT = transform.Find("NameText");
+        Transform distT = transform.Find("DistanceText");
+        if (nameT != null) nameText = nameT.GetComponent<Text>();
+        if (distT != null) distanceText = distT.GetComponent<Text>();
+
+        // fallback: 기존 "Text" 자식 (ArrowIndicator 등 호환)
+        if (distanceText == null)
+        {
+            distanceText = transform.GetComponentInChildren<Text>();
+        }
 
         // 터치 가능하도록 Button 추가
         Button btn = GetComponent<Button>();
@@ -130,7 +142,19 @@ public class Indicator : MonoBehaviour
 
     public void SetDistanceText(float value, Color textColor, string placeName)
     {
-        if (distanceText != null)
+        if (indicatorType == IndicatorType.BOX && nameText != null)
+        {
+            // 박스 인디케이터: 이름(위) + 거리(아래) 분리 표시
+            nameText.text = string.IsNullOrEmpty(placeName) ? "" : $"<b>{placeName}</b>";
+            nameText.color = textColor;
+
+            if (distanceText != null)
+            {
+                distanceText.text = value >= 0 ? $"{Mathf.Floor(value)}m" : "";
+                distanceText.color = textColor;
+            }
+        }
+        else if (distanceText != null)
         {
             if (indicatorType == IndicatorType.ARROW)
             {
@@ -139,32 +163,29 @@ public class Indicator : MonoBehaviour
                 int charIndex = 0;
                 string truncatedName = placeName;
 
-                // 글자 수 계산
                 foreach (char c in placeName)
                 {
-                    length += (c >= '\uAC00' && c <= '\uD7A3') ? 2 : 1; // 한글은 2, 영어는 1
+                    length += (c >= '\uAC00' && c <= '\uD7A3') ? 2 : 1;
                     charIndex++;
                     if (length > 16)
                     {
-                        // 16글자 초과 시 잘라내고 ".." 추가
                         truncatedName = placeName.Substring(0, charIndex - 1) + "..";
                         break;
                     }
                 }
 
-                // 텍스트 설정: 두 줄 (이름 + 거리), 사이즈 동일, 굵기 효과 없음
-                distanceText.text = string.IsNullOrEmpty(placeName) ? 
-                    (value >= 0 ? $"{Mathf.Floor(value)}m" : "") : 
+                distanceText.text = string.IsNullOrEmpty(placeName) ?
+                    (value >= 0 ? $"{Mathf.Floor(value)}m" : "") :
                     $"{truncatedName}\n{Mathf.Floor(value)}m";
             }
             else
             {
-                // 박스 인디케이터: 글자 수 제한 없이 전체 이름 표시, 모두 굵게
-                distanceText.text = string.IsNullOrEmpty(placeName) ? 
-                    (value >= 0 ? $"<b>{Mathf.Floor(value)}m</b>" : "") : 
+                // 박스 인디케이터 fallback (nameText가 없는 경우): 기존 방식
+                distanceText.text = string.IsNullOrEmpty(placeName) ?
+                    (value >= 0 ? $"<b>{Mathf.Floor(value)}m</b>" : "") :
                     $"<b>{placeName}\n{Mathf.Floor(value)}m</b>";
             }
-            distanceText.color = textColor; // 서버에서 가져온 색상 적용
+            distanceText.color = textColor;
         }
     }
 
@@ -173,6 +194,10 @@ public class Indicator : MonoBehaviour
         if (distanceText != null)
         {
             distanceText.rectTransform.rotation = rotation;
+        }
+        if (nameText != null)
+        {
+            nameText.rectTransform.rotation = rotation;
         }
     }
 

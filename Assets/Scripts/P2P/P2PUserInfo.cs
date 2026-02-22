@@ -1,89 +1,67 @@
 /**
  * P2PUserInfo.cs
- * Displays user information on P2P user avatars
- * Shows username, distance, avatar image, and status
- *
- * Author: Claude (Anthropic AI)
- * Date: 2026-01-01
+ * P2P 사용자 아바타 - 터치(더블탭) → 프로필 열기, 프로필 사진 텍스처 적용
+ * 0000_Cube.prefab의 DoubleTap3D 패턴을 참고하여 단순화
  */
 
 using UnityEngine;
-using TMPro;
-using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem; // New Input System
+using UnityEngine.Networking;
+using System.Collections;
 
 public class P2PUserInfo : MonoBehaviour
 {
-    [Header("User Data")]
-    public string userId;
-    public string username;
-    public string avatarUrl;
-    public string bio;
-    public float distance; // Distance in meters
+    // ============================================================
+    // User Data (Initialize()로 설정됨)
+    // ============================================================
+    [HideInInspector] public string userId;
+    [HideInInspector] public string username;
+    [HideInInspector] public string avatarUrl;
+    [HideInInspector] public string bio;
+    [HideInInspector] public float distance;
 
-    [Header("UI References")]
-    public TextMeshProUGUI usernameText;
-    public TextMeshProUGUI distanceText;
-    public Image avatarImage;
-    public GameObject statusIndicator; // Green dot for online status
-    public CanvasGroup canvasGroup;
-
-    [Header("Settings")]
-    public float maxVisibleDistance = 500f; // Fade out after this distance
-    public bool alwaysShowUsername = true;
-    public bool showDistance = true;
-
-    [Header("3D Avatar Renderers")]
-    [Tooltip("아바타 메시 렌더러 (P2P_Avatar 프리팹용)")]
+    // ============================================================
+    // 3D Avatar Renderer
+    // ============================================================
+    [Header("3D Avatar Renderer")]
+    [Tooltip("큐브의 MeshRenderer (프리팹에서 연결)")]
     [SerializeField] private MeshRenderer avatarRenderer;
-    [Tooltip("펄스 이펙트 렌더러 (P2P_Avatar 프리팹용)")]
-    [SerializeField] private MeshRenderer pulseRenderer;
 
+    // ============================================================
+    // OffScreen Indicator
+    // ============================================================
+    [Header("OffScreen Indicator")]
+    [Tooltip("오프스크린 인디케이터 사용 여부")]
+    public bool enableOffScreenIndicator = true;
+    [Tooltip("인디케이터 색상 - P2P 사용자 색상 #E95383")]
+    public Color indicatorColor = new Color(0.914f, 0.325f, 0.514f, 1f);
+
+    // ============================================================
+    // Touch Settings
+    // ============================================================
+    [Header("Touch Settings")]
+    public bool enableTouch = true;
+    public float doubleTapThreshold = 0.4f;
+
+    // ============================================================
+    // Avatar Colors
+    // ============================================================
     [Header("Avatar Colors")]
     [SerializeField] private Color defaultAvatarColor = new Color(0.2f, 0.6f, 1f, 1f);
     [SerializeField] private Color followingAvatarColor = new Color(0.2f, 1f, 0.4f, 1f);
     [SerializeField] private Color highlightColor = new Color(1f, 0.9f, 0.2f, 1f);
 
-    private Color originalAvatarColor;
-    private bool isFollowing = false;
-
-    [Header("Billboard Settings")]
-    public bool enableBillboard = true; // Always face camera
-    public Vector3 billboardOffset = new Vector3(0, 2.5f, 0); // Above avatar
-
-    [Header("OffScreen Indicator")]
-    [Tooltip("오프스크린 인디케이터 사용 여부")]
-    public bool enableOffScreenIndicator = true;
-    [Tooltip("인디케이터 색상 - P2P 사용자 색상 #E95383")]
-    public Color indicatorColor = new Color(0.914f, 0.325f, 0.514f, 1f); // #E95383
-
-    [Header("Avatar Visibility")]
-    [Tooltip("아바타 시각적 요소 숨기기 (OffscreenIndicator만 표시)")]
-    public bool hideAvatarVisuals = true;
-
+    // ============================================================
+    // Private
+    // ============================================================
     private Target targetComponent;
-
-    [Header("Auto-Generated Avatar")]
-    [Tooltip("프로필 사진 기반 큐브 아바타 자동 생성")]
-    public bool autoCreateCubeAvatar = true;
-    [Tooltip("큐브 아바타 크기")]
-    public float cubeAvatarSize = 1.5f;
-    [Tooltip("큐브 아바타 Y 오프셋")]
-    public float cubeAvatarYOffset = 1f;
-
-    private GameObject generatedCubeAvatar;
-    private MeshRenderer cubeRenderer;
-    private Material cubeMaterial;
-
-    [Header("Touch Settings")]
-    public bool enableTouch = true;
-    public float touchRadius = 1.5f; // Collider radius for touch detection
-    public float doubleTapThreshold = 0.4f; // 더블탭 인식 시간 (초)
-
     private Camera mainCamera;
     private Collider touchCollider;
-    private Transform billboardTransform;
     private bool isInitialized = false;
+    private Color originalAvatarColor;
+    private bool isFollowing = false;
+    private Coroutine downloadCoroutine;
 
     // 더블탭 감지
     private float lastTapTime = 0f;
@@ -93,155 +71,251 @@ public class P2PUserInfo : MonoBehaviour
     {
         mainCamera = Camera.main;
 
-        // 원래 아바타 색상 저장
+        // avatarRenderer 자동 연결
+        if (avatarRenderer == null)
+        {
+            avatarRenderer = GetComponent<MeshRenderer>();
+        }
+
+        // 원래 아바타 색상 저장 및 적용
         originalAvatarColor = defaultAvatarColor;
         if (avatarRenderer != null)
         {
             avatarRenderer.material.color = originalAvatarColor;
         }
 
-        // Create billboard parent for UI elements (UI가 있는 경우에만)
-        if (usernameText != null || distanceText != null || avatarImage != null)
-        {
-            GameObject billboardObj = new GameObject("Billboard");
-            billboardObj.transform.SetParent(transform);
-            billboardObj.transform.localPosition = billboardOffset;
-            billboardTransform = billboardObj.transform;
-
-            // Move UI elements to billboard
-            if (usernameText) usernameText.transform.SetParent(billboardTransform, false);
-            if (distanceText) distanceText.transform.SetParent(billboardTransform, false);
-            if (avatarImage) avatarImage.transform.SetParent(billboardTransform, false);
-        }
-
-        // Setup touch collider for AR touch detection
+        // 터치 콜라이더 설정
         SetupTouchCollider();
 
-        // Setup offscreen indicator (색상 강제 적용)
+        // 오프스크린 인디케이터 설정
         SetupOffScreenIndicator();
+    }
 
-        if (hideAvatarVisuals)
+    // ============================================================
+    // Initialize — P2PManager에서 호출
+    // ============================================================
+    public void Initialize(string uid, string uname, string avatar, string userBio, float dist)
+    {
+        userId = uid;
+        username = uname;
+        avatarUrl = avatar;
+        bio = userBio;
+        distance = dist;
+        isInitialized = true;
+
+        // 오프스크린 인디케이터 업데이트
+        if (targetComponent == null)
         {
-            // OffScreenIndicator만 표시 모드:
-            // 큐브 아바타/UI 생성 스킵 → 불필요한 오브젝트 생성 방지
-            HideAllVisuals();
+            SetupOffScreenIndicator();
+        }
+        if (targetComponent != null)
+        {
+            targetComponent.PlaceName = username;
+            targetComponent.TargetColor = indicatorColor;
+            targetComponent.OnIndicatorTapped = () =>
+            {
+                if (!string.IsNullOrEmpty(userId) && ProfileManager.Instance != null)
+                {
+                    ProfileManager.Instance.ShowProfile(userId);
+                }
+            };
+        }
+
+        // 텍스처 로딩은 OnEnable에서 처리 (오브젝트가 활성화될 때)
+    }
+
+    void OnEnable()
+    {
+        if (isInitialized)
+        {
+            LoadProfileTexture();
+        }
+    }
+
+    void OnDisable()
+    {
+        if (downloadCoroutine != null)
+        {
+            StopCoroutine(downloadCoroutine);
+            downloadCoroutine = null;
+        }
+    }
+
+    // ============================================================
+    // Profile Texture Loading
+    // ============================================================
+
+    /// <summary>
+    /// 프로필 사진 로딩 → 큐브 MeshRenderer에 텍스처 적용
+    /// </summary>
+    private void LoadProfileTexture()
+    {
+        if (avatarRenderer == null) return;
+
+        // URL이 없으면 기본 색상 사용
+        if (string.IsNullOrEmpty(avatarUrl))
+        {
+            return;
+        }
+
+        if (gameObject.activeInHierarchy)
+        {
+            if (downloadCoroutine != null) StopCoroutine(downloadCoroutine);
+            downloadCoroutine = StartCoroutine(DownloadTexture(avatarUrl));
+        }
+    }
+
+    private IEnumerator DownloadTexture(string url)
+    {
+        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url))
+        {
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Texture2D texture = DownloadHandlerTexture.GetContent(request);
+                if (texture != null)
+                {
+                    ApplyProfileTextureToAvatar(texture);
+                }
+            }
+        }
+        
+        downloadCoroutine = null;
+    }
+
+    /// <summary>
+    /// 프로필 사진을 큐브 MeshRenderer에 적용
+    /// </summary>
+    private void ApplyProfileTextureToAvatar(Texture2D texture)
+    {
+        if (texture == null || avatarRenderer == null) return;
+
+        Material mat = avatarRenderer.material;
+
+        if (mat.HasProperty("_BaseMap"))
+        {
+            mat.SetTexture("_BaseMap", texture);
+            mat.color = Color.white;
+        }
+        else if (mat.HasProperty("_MainTex"))
+        {
+            mat.SetTexture("_MainTex", texture);
+            mat.color = Color.white;
         }
         else
         {
-            // 3D 아바타 표시 모드: 큐브 아바타 + UI 생성
-            SetupCubeAvatar();
-            SetupAutoUI();
-        }
-    }
-
-    /// <summary>
-    /// 모든 시각적 요소 숨기기 (OffscreenIndicator는 유지)
-    /// 렌더러만 비활성화하고 콜라이더/Target 컴포넌트는 유지
-    /// </summary>
-    private void HideAllVisuals()
-    {
-        // 3D 아바타 렌더러 숨기기
-        if (avatarRenderer != null)
-            avatarRenderer.enabled = false;
-
-        if (pulseRenderer != null)
-            pulseRenderer.enabled = false;
-
-        // 자동 생성된 큐브 아바타 숨기기
-        if (generatedCubeAvatar != null)
-        {
-            var cubeRenderer = generatedCubeAvatar.GetComponent<MeshRenderer>();
-            if (cubeRenderer != null)
-                cubeRenderer.enabled = false;
-        }
-
-        // 모든 자식 렌더러 숨기기
-        foreach (var renderer in GetComponentsInChildren<Renderer>())
-        {
-            renderer.enabled = false;
-        }
-
-        // UI 요소 숨기기 (Canvas, Text 등)
-        foreach (var canvas in GetComponentsInChildren<Canvas>())
-        {
-            canvas.enabled = false;
-        }
-
-        if (canvasGroup != null)
-            canvasGroup.alpha = 0f;
-
-        // Billboard 숨기기
-        if (billboardTransform != null)
-            billboardTransform.gameObject.SetActive(false);
-
-    }
-
-    /// <summary>
-    /// P2P 사용자 완전히 숨기기 (오프스크린 인디케이터 포함)
-    /// 필터가 None일 때 호출
-    /// </summary>
-    public void HideCompletely()
-    {
-        // 모든 렌더러 숨기기
-        HideAllVisuals();
-
-        // 오프스크린 인디케이터(Target) 비활성화
-        if (targetComponent != null)
-        {
-            targetComponent.enabled = false;
-        }
-
-        // 콜라이더 비활성화 (터치 방지)
-        if (touchCollider != null)
-        {
-            touchCollider.enabled = false;
-        }
-
-    }
-
-    /// <summary>
-    /// P2P 사용자 다시 표시 (필터 해제 시)
-    /// </summary>
-    public void ShowAgain()
-    {
-        // 오프스크린 인디케이터(Target) 활성화
-        if (targetComponent != null)
-        {
-            targetComponent.enabled = true;
-        }
-
-        // 콜라이더 활성화
-        if (touchCollider != null)
-        {
-            touchCollider.enabled = true;
-        }
-
-        // hideAvatarVisuals 설정에 따라 렌더러 처리
-        if (!hideAvatarVisuals)
-        {
-            // 큐브/UI가 아직 생성되지 않았으면 지금 생성
-            if (generatedCubeAvatar == null && autoCreateCubeAvatar)
-                SetupCubeAvatar();
-            if (usernameText == null && distanceText == null)
-                SetupAutoUI();
-
-            // 렌더러 다시 활성화 (hideAvatarVisuals가 false인 경우에만)
-            if (avatarRenderer != null) avatarRenderer.enabled = true;
-            if (pulseRenderer != null) pulseRenderer.enabled = true;
-            if (generatedCubeAvatar != null)
+            Material unlitMat = new Material(Shader.Find("Unlit/Texture"));
+            if (unlitMat.shader == null || unlitMat.shader.name == "Hidden/InternalErrorShader")
             {
-                var cubeRend = generatedCubeAvatar.GetComponent<MeshRenderer>();
-                if (cubeRend != null) cubeRend.enabled = true;
+                unlitMat = new Material(Shader.Find("Standard"));
+            }
+            unlitMat.mainTexture = texture;
+            unlitMat.color = Color.white;
+            avatarRenderer.material = unlitMat;
+        }
+    }
+
+    // ============================================================
+    // Touch Input
+    // ============================================================
+    void Update()
+    {
+        if (!isInitialized) return;
+
+        if (mainCamera == null) mainCamera = Camera.main;
+
+        if (enableTouch)
+        {
+            HandleTouchInput();
+        }
+    }
+
+    private void HandleTouchInput()
+    {
+        bool hasTouchInput = false;
+        Vector2 touchPosition = Vector2.zero;
+
+        // New Input System
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            hasTouchInput = true;
+            touchPosition = Mouse.current.position.ReadValue();
+        }
+        else if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+        {
+            hasTouchInput = true;
+            touchPosition = Touchscreen.current.primaryTouch.position.ReadValue();
+        }
+
+        if (!hasTouchInput) return;
+
+        // UI 터치 무시
+        if (EventSystem.current != null)
+        {
+            if (EventSystem.current.IsPointerOverGameObject())
+            {
+                return;
             }
         }
 
+        if (mainCamera == null) mainCamera = Camera.main;
+        if (mainCamera == null) return;
+
+        Ray ray = mainCamera.ScreenPointToRay(touchPosition);
+        RaycastHit hit;
+
+        if (Physics.Raycast(ray, out hit, 1000f))
+        {
+            if (hit.collider.gameObject == gameObject || hit.transform.IsChildOf(transform))
+            {
+                OnUserTapped();
+            }
+        }
     }
 
     /// <summary>
-    /// 오프스크린 인디케이터용 Target 컴포넌트 설정
-    /// Target 색상을 #E95383 (핑크)으로 강제 설정
-    /// 화면 안에 있을 때 BoxIndicator, 화면 밖에 있을 때 ArrowIndicator 표시
+    /// 싱글탭 → 더블탭 확인
     /// </summary>
+    private void OnUserTapped()
+    {
+        float currentTime = Time.time;
+
+        if (waitingForSecondTap && (currentTime - lastTapTime) <= doubleTapThreshold)
+        {
+            waitingForSecondTap = false;
+            OnUserDoubleTapped();
+        }
+        else
+        {
+            waitingForSecondTap = true;
+            lastTapTime = currentTime;
+        }
+    }
+
+    /// <summary>
+    /// 더블탭 → ProfileManager로 프로필 열기
+    /// </summary>
+    public void OnUserDoubleTapped()
+    {
+        if (ProfileManager.Instance != null)
+        {
+            ProfileManager.Instance.ShowProfile(userId);
+        }
+    }
+
+    /// <summary>
+    /// 외부에서 강제로 프로필 열기
+    /// </summary>
+    public void OnUserTouched()
+    {
+        OnUserDoubleTapped();
+    }
+
+    // ============================================================
+    // OffScreen Indicator
+    // ============================================================
+
     private void SetupOffScreenIndicator()
     {
         if (!enableOffScreenIndicator) return;
@@ -252,18 +326,14 @@ public class P2PUserInfo : MonoBehaviour
             targetComponent = gameObject.AddComponent<Target>();
         }
 
-        // 인디케이터 색상을 #E95383 (핑크)으로 강제 설정
-        // 프리팹에서 설정된 하늘색(0.3, 0.7, 1)을 덮어씀
-        indicatorColor = new Color(0.914f, 0.325f, 0.514f, 1f); // #E95383 강제 적용
+        indicatorColor = new Color(0.914f, 0.325f, 0.514f, 1f); // #E95383
         targetComponent.TargetColor = indicatorColor;
         targetComponent.PlaceName = username;
 
-        // 인디케이터 설정: 화면 안에 있을 때 BoxIndicator, 화면 밖에 있을 때 ArrowIndicator
-        targetComponent.NeedBoxIndicator = true;      // 화면 안: 박스 표시
-        targetComponent.NeedArrowIndicator = true;    // 화면 밖: 화살표 표시
-        targetComponent.NeedDistanceText = true;      // 거리 텍스트 표시
+        targetComponent.NeedBoxIndicator = true;
+        targetComponent.NeedArrowIndicator = true;
+        targetComponent.NeedDistanceText = true;
 
-        // 인디케이터 터치 시 프로필 열기 콜백 연결
         targetComponent.OnIndicatorTapped = () =>
         {
             if (!string.IsNullOrEmpty(userId) && ProfileManager.Instance != null)
@@ -271,474 +341,42 @@ public class P2PUserInfo : MonoBehaviour
                 ProfileManager.Instance.ShowProfile(userId);
             }
         };
-
     }
 
-    /// <summary>
-    /// Setup collider for touch detection in AR
-    /// </summary>
+    // ============================================================
+    // Touch Collider
+    // ============================================================
+
     private void SetupTouchCollider()
     {
         if (!enableTouch) return;
 
-        // Add sphere collider if not exists
         touchCollider = GetComponent<Collider>();
         if (touchCollider == null)
         {
-            SphereCollider sphere = gameObject.AddComponent<SphereCollider>();
-            sphere.radius = touchRadius;
-            sphere.center = new Vector3(0, 1f, 0); // Center at user height
-            sphere.isTrigger = true;
-            touchCollider = sphere;
+            BoxCollider box = gameObject.AddComponent<BoxCollider>();
+            box.size = Vector3.one;
+            box.center = Vector3.zero;
+            box.isTrigger = false;
+            touchCollider = box;
         }
 
-        // Ensure layer is set for raycast detection
+        if (touchCollider is BoxCollider boxCol)
+        {
+            boxCol.isTrigger = false;
+        }
+
         gameObject.layer = LayerMask.NameToLayer("P2PUser") != -1
             ? LayerMask.NameToLayer("P2PUser")
             : LayerMask.NameToLayer("Default");
     }
 
-    /// <summary>
-    /// 프로필 사진 기반 큐브 아바타 자동 생성 (0000_Cube.prefab 스타일)
-    /// </summary>
-    private void SetupCubeAvatar()
-    {
-        if (!autoCreateCubeAvatar) return;
+    // ============================================================
+    // Visual State
+    // ============================================================
 
-        // 기존 아바타 렌더러가 있으면 비활성화
-        if (avatarRenderer != null)
-        {
-            avatarRenderer.enabled = false;
-        }
-
-        // 큐브 아바타 생성
-        generatedCubeAvatar = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        generatedCubeAvatar.name = "ProfileCubeAvatar";
-        generatedCubeAvatar.transform.SetParent(transform);
-        generatedCubeAvatar.transform.localPosition = new Vector3(0, cubeAvatarYOffset, 0);
-        generatedCubeAvatar.transform.localScale = Vector3.one * cubeAvatarSize;
-
-        // 콜라이더 제거 (터치 콜라이더는 별도로 관리)
-        var cubeCollider = generatedCubeAvatar.GetComponent<Collider>();
-        if (cubeCollider != null)
-        {
-            Destroy(cubeCollider);
-        }
-
-        // 렌더러 및 머티리얼 설정
-        cubeRenderer = generatedCubeAvatar.GetComponent<MeshRenderer>();
-        if (cubeRenderer != null)
-        {
-            // Unlit 머티리얼 생성 (조명 영향 안받음)
-            cubeMaterial = new Material(Shader.Find("Unlit/Texture"));
-            if (cubeMaterial.shader == null)
-            {
-                cubeMaterial = new Material(Shader.Find("Standard"));
-            }
-            cubeMaterial.color = indicatorColor; // 기본 색상은 핑크
-            cubeRenderer.material = cubeMaterial;
-        }
-
-    }
-
-    /// <summary>
-    /// 프로필 사진을 큐브 아바타에 적용
-    /// </summary>
-    private void ApplyProfileTextureToAvatar(Texture2D texture)
-    {
-        if (cubeRenderer == null || cubeMaterial == null) return;
-
-        cubeMaterial.mainTexture = texture;
-        cubeMaterial.color = Color.white; // 텍스처 적용 시 흰색으로 변경
-
-    }
-
-    /// <summary>
-    /// UI 요소 자동 생성 (usernameText, distanceText 등)
-    /// </summary>
-    private void SetupAutoUI()
-    {
-        // UI가 이미 할당되어 있으면 스킵
-        if (usernameText != null && distanceText != null) return;
-
-        // World Space Canvas 생성
-        GameObject canvasObj = new GameObject("UserInfoCanvas");
-        canvasObj.transform.SetParent(transform);
-        canvasObj.transform.localPosition = billboardOffset;
-        canvasObj.transform.localScale = Vector3.one * 0.01f; // 작은 스케일로 월드 공간에 배치
-
-        Canvas canvas = canvasObj.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-
-        // Canvas Group 추가
-        canvasGroup = canvasObj.AddComponent<CanvasGroup>();
-
-        // Canvas Scaler 설정
-        var scaler = canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
-        scaler.dynamicPixelsPerUnit = 10;
-
-        // Billboard로 사용할 transform 업데이트
-        if (billboardTransform == null)
-        {
-            billboardTransform = canvasObj.transform;
-        }
-
-        // Username Text 생성
-        if (usernameText == null)
-        {
-            GameObject usernameObj = new GameObject("UsernameText");
-            usernameObj.transform.SetParent(canvasObj.transform);
-            usernameObj.transform.localPosition = new Vector3(0, 50, 0);
-            usernameObj.transform.localScale = Vector3.one;
-
-            usernameText = usernameObj.AddComponent<TMPro.TextMeshProUGUI>();
-            usernameText.text = username;
-            usernameText.fontSize = 36;
-            usernameText.alignment = TMPro.TextAlignmentOptions.Center;
-            usernameText.color = Color.white;
-
-            // RectTransform 설정
-            var rectTransform = usernameText.rectTransform;
-            rectTransform.sizeDelta = new Vector2(300, 50);
-        }
-
-        // Distance Text 생성
-        if (distanceText == null)
-        {
-            GameObject distanceObj = new GameObject("DistanceText");
-            distanceObj.transform.SetParent(canvasObj.transform);
-            distanceObj.transform.localPosition = new Vector3(0, 0, 0);
-            distanceObj.transform.localScale = Vector3.one;
-
-            distanceText = distanceObj.AddComponent<TMPro.TextMeshProUGUI>();
-            distanceText.text = "0m";
-            distanceText.fontSize = 28;
-            distanceText.alignment = TMPro.TextAlignmentOptions.Center;
-            distanceText.color = indicatorColor; // 핑크색
-
-            // RectTransform 설정
-            var rectTransform = distanceText.rectTransform;
-            rectTransform.sizeDelta = new Vector2(200, 40);
-        }
-
-    }
-
-    void Update()
-    {
-        if (!isInitialized) return;
-
-        // Billboard effect - always face camera
-        if (enableBillboard && mainCamera != null && billboardTransform != null)
-        {
-            billboardTransform.rotation = Quaternion.LookRotation(
-                billboardTransform.position - mainCamera.transform.position
-            );
-        }
-
-        // Update distance-based alpha
-        UpdateDistanceBasedAlpha();
-
-        // Handle touch input for profile opening
-        if (enableTouch)
-        {
-            HandleTouchInput();
-        }
-    }
-
-    /// <summary>
-    /// Handle touch/click input to open user profile
-    /// </summary>
-    private void HandleTouchInput()
-    {
-        // Check for touch (mobile) or mouse click (editor)
-        bool hasTouchInput = false;
-        Vector2 touchPosition = Vector2.zero;
-
-#if UNITY_EDITOR || UNITY_STANDALONE
-        if (Input.GetMouseButtonDown(0))
-        {
-            hasTouchInput = true;
-            touchPosition = Input.mousePosition;
-        }
-#else
-        if (Input.touchCount > 0)
-        {
-            Touch touch = Input.GetTouch(0);
-            if (touch.phase == TouchPhase.Began)
-            {
-                hasTouchInput = true;
-                touchPosition = touch.position;
-            }
-        }
-#endif
-
-        if (!hasTouchInput) return;
-
-        // Skip if touching UI (모바일에서는 fingerId 필수)
-        if (EventSystem.current != null)
-        {
-#if UNITY_EDITOR || UNITY_STANDALONE
-            if (EventSystem.current.IsPointerOverGameObject())
-                return;
-#else
-            if (Input.touchCount > 0 && EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId))
-                return;
-#endif
-        }
-
-        // Raycast from touch position
-        Ray ray = mainCamera.ScreenPointToRay(touchPosition);
-        RaycastHit hit;
-
-        if (Physics.Raycast(ray, out hit, 1000f))
-        {
-            // Check if this object was hit
-            if (hit.collider.gameObject == gameObject || hit.transform.IsChildOf(transform))
-            {
-                OnUserTapped();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 싱글탭 처리 - 더블탭 확인
-    /// </summary>
-    private void OnUserTapped()
-    {
-        float currentTime = Time.time;
-
-        if (waitingForSecondTap && (currentTime - lastTapTime) <= doubleTapThreshold)
-        {
-            // 더블탭 인식됨 - 프로필 열기
-            waitingForSecondTap = false;
-            OnUserDoubleTapped();
-        }
-        else
-        {
-            // 첫 번째 탭 - 하이라이트만
-            waitingForSecondTap = true;
-            lastTapTime = currentTime;
-            SetHighlight(true);
-
-            // 일정 시간 후 하이라이트 해제 (더블탭 안 된 경우)
-            StartCoroutine(ResetHighlightAfterDelay(doubleTapThreshold + 0.1f));
-        }
-    }
-
-    /// <summary>
-    /// 더블탭 시 프로필 열기
-    /// </summary>
-    public void OnUserDoubleTapped()
-    {
-        // Highlight this user
-        SetHighlight(true);
-
-        // Open profile using ProfileManager
-        if (ProfileManager.Instance != null)
-        {
-            ProfileManager.Instance.ShowProfile(userId);
-        }
-
-        // Reset highlight after delay
-        StartCoroutine(ResetHighlightAfterDelay(0.5f));
-    }
-
-    /// <summary>
-    /// 외부에서 강제로 프로필 열기 (리스트에서 선택 시 등)
-    /// </summary>
-    public void OnUserTouched()
-    {
-        OnUserDoubleTapped();
-    }
-
-    private System.Collections.IEnumerator ResetHighlightAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        SetHighlight(false);
-    }
-
-    /// <summary>
-    /// Initialize user information display
-    /// </summary>
-    public void Initialize(string uid, string uname, string avatar, string userBio, float dist)
-    {
-        userId = uid;
-        username = uname;
-        avatarUrl = avatar;
-        bio = userBio;
-        distance = dist;
-
-        UpdateUI();
-        isInitialized = true;
-
-        // 오프스크린 인디케이터 업데이트 (이름, 색상, 콜백 재연결)
-        if (targetComponent == null)
-        {
-            // Pool 재사용 시 Awake()가 실행되지 않을 수 있으므로 재설정
-            SetupOffScreenIndicator();
-        }
-        if (targetComponent != null)
-        {
-            targetComponent.PlaceName = username;
-            targetComponent.TargetColor = indicatorColor; // #E95383
-            // Pool 재사용 시 콜백이 이전 사용자를 참조할 수 있으므로 재연결
-            targetComponent.OnIndicatorTapped = () =>
-            {
-                Debug.Log($"[P2PUserInfo] Indicator tapped! userId={userId}, username={username}");
-                if (!string.IsNullOrEmpty(userId) && ProfileManager.Instance != null)
-                {
-                    ProfileManager.Instance.ShowProfile(userId);
-                }
-            };
-            Debug.Log($"[P2PUserInfo] Initialize: PlaceName='{targetComponent.PlaceName}', userId={userId}, username={username}, targetComponent={targetComponent != null}");
-        }
-        else
-        {
-            Debug.LogWarning($"[P2PUserInfo] Initialize: targetComponent is NULL! username={username}");
-        }
-
-        // Load avatar image - 중앙 캐시 시스템 사용
-        if (avatarImage != null)
-        {
-            ProfileManager.LoadAvatarAsync(userId, avatarUrl, avatarImage, username,
-                (texture) => ApplyProfileTextureToAvatar(texture));
-        }
-    }
-
-    /// <summary>
-    /// Update distance value (called by P2PManager during position updates)
-    /// </summary>
-    public void UpdateDistance(float newDistance)
-    {
-        distance = newDistance;
-        UpdateDistanceText();
-        UpdateDistanceBasedAlpha();
-    }
-
-    /// <summary>
-    /// Update all UI elements
-    /// </summary>
-    private void UpdateUI()
-    {
-        // Update username
-        if (usernameText != null)
-        {
-            usernameText.text = username;
-            usernameText.gameObject.SetActive(alwaysShowUsername);
-        }
-
-        // Update distance
-        UpdateDistanceText();
-
-        // Show online status indicator
-        if (statusIndicator != null)
-        {
-            statusIndicator.SetActive(true);
-        }
-    }
-
-    /// <summary>
-    /// Update distance text with formatted string
-    /// </summary>
-    private void UpdateDistanceText()
-    {
-        if (distanceText != null && showDistance)
-        {
-            if (distance < 1000f)
-            {
-                distanceText.text = $"{Mathf.RoundToInt(distance)}m";
-            }
-            else
-            {
-                distanceText.text = $"{(distance / 1000f):F1}km";
-            }
-            distanceText.gameObject.SetActive(true);
-        }
-    }
-
-    /// <summary>
-    /// Fade UI based on distance (distant users become more transparent)
-    /// </summary>
-    private void UpdateDistanceBasedAlpha()
-    {
-        if (canvasGroup == null) return;
-
-        float alpha = 1f;
-
-        // Start fading at 70% of max distance
-        float fadeStartDistance = maxVisibleDistance * 0.7f;
-
-        if (distance > fadeStartDistance)
-        {
-            float fadeRange = maxVisibleDistance - fadeStartDistance;
-            float fadeProgress = (distance - fadeStartDistance) / fadeRange;
-            alpha = Mathf.Lerp(1f, 0.3f, fadeProgress); // Fade to 30% opacity
-        }
-
-        canvasGroup.alpha = alpha;
-    }
-
-    /// <summary>
-    /// Load avatar image from URL (supports PNG/JPG)
-    /// 프로필 이미지를 다운로드하여 UI 및 큐브 아바타에 적용
-    /// </summary>
-    private System.Collections.IEnumerator LoadAvatarImage(string url)
-    {
-        using (UnityEngine.Networking.UnityWebRequest www =
-            UnityEngine.Networking.UnityWebRequestTexture.GetTexture(url))
-        {
-            yield return www.SendWebRequest();
-
-            if (www.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
-            {
-                Texture2D texture = UnityEngine.Networking.DownloadHandlerTexture.GetContent(www);
-
-                // UI Image에 적용 (할당된 경우)
-                if (avatarImage != null)
-                {
-                    Sprite sprite = Sprite.Create(
-                        texture,
-                        new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f)
-                    );
-                    avatarImage.sprite = sprite;
-                }
-
-                // 큐브 아바타에 프로필 텍스처 적용
-                ApplyProfileTextureToAvatar(texture);
-
-            }
-        }
-    }
-
-    /// <summary>
-    /// Show/hide user information
-    /// </summary>
-    public void SetVisible(bool visible)
-    {
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = visible ? 1f : 0f;
-            canvasGroup.blocksRaycasts = visible;
-        }
-        else
-        {
-            gameObject.SetActive(visible);
-        }
-    }
-
-    /// <summary>
-    /// Highlight user (e.g., when selected or hovered)
-    /// </summary>
     public void SetHighlight(bool highlighted)
     {
-        if (usernameText != null)
-        {
-            usernameText.color = highlighted ? Color.yellow : Color.white;
-            usernameText.fontStyle = highlighted ? FontStyles.Bold : FontStyles.Normal;
-        }
-
-        // 3D 아바타 하이라이트
         if (avatarRenderer != null)
         {
             if (highlighted)
@@ -752,9 +390,6 @@ public class P2PUserInfo : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 팔로잉 여부 설정 (아바타 색상 변경)
-    /// </summary>
     public void SetFollowing(bool following)
     {
         isFollowing = following;
@@ -767,27 +402,73 @@ public class P2PUserInfo : MonoBehaviour
     }
 
     /// <summary>
-    /// 사용자 ID 가져오기
+    /// P2P 사용자 완전히 숨기기 (필터가 None일 때)
     /// </summary>
+    public void HideCompletely()
+    {
+        if (avatarRenderer != null)
+            avatarRenderer.enabled = false;
+
+        if (targetComponent != null)
+            targetComponent.enabled = false;
+
+        if (touchCollider != null)
+            touchCollider.enabled = false;
+    }
+
+    /// <summary>
+    /// P2P 사용자 다시 표시 (필터 해제 시)
+    /// </summary>
+    public void ShowAgain()
+    {
+        if (targetComponent != null)
+            targetComponent.enabled = true;
+
+        if (touchCollider != null)
+            touchCollider.enabled = true;
+
+        if (avatarRenderer != null)
+            avatarRenderer.enabled = true;
+    }
+
+    // ============================================================
+    // Distance Update
+    // ============================================================
+
+    public void UpdateDistance(float newDistance)
+    {
+        distance = newDistance;
+    }
+
+    // ============================================================
+    // Getters
+    // ============================================================
+
     public string GetUserId()
     {
         return userId;
     }
 
-    /// <summary>
-    /// Get user info for profile display
-    /// </summary>
     public (string userId, string username, string bio, float distance) GetUserInfo()
     {
         return (userId, username, bio, distance);
     }
 
+    // ============================================================
+    // Helpers
+    // ============================================================
+
+    private IEnumerator ResetHighlightAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        SetHighlight(false);
+    }
+
 #if UNITY_EDITOR
     void OnDrawGizmosSelected()
     {
-        // Draw distance sphere in editor
         Gizmos.color = new Color(0, 1, 0, 0.2f);
-        Gizmos.DrawWireSphere(transform.position, maxVisibleDistance);
+        Gizmos.DrawWireSphere(transform.position, 500f);
     }
 #endif
 }

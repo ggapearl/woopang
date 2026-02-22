@@ -15,6 +15,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Networking; // Added for UnityWebRequest
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -85,43 +86,65 @@ public class P2PVirtualUserTester : MonoBehaviour
 #endif
     }
 
+    void Start()
+    {
+#if UNITY_EDITOR
+        // 에디터에서 자동 시작
+        if (Application.isPlaying && !isSimulating)
+        {
+            StartCoroutine(AutoStartSimulation());
+        }
+#endif
+    }
+
+    private IEnumerator AutoStartSimulation()
+    {
+        // P2PManager 초기화 대기
+        yield return new WaitForSeconds(1.0f);
+        
+        if (!isSimulating && P2PManager.Instance != null)
+        {
+            StartSimulation();
+        }
+    }
+
     /// <summary>
-    /// 기본 가상 사용자 2명 생성
+    /// 기본 가상 사용자 2명 생성 (실제 DB user_id=3 woopang 사용)
     /// </summary>
     private void SetupDefaultVirtualUsers()
     {
-        // 사용자 1: 동쪽으로 30m 떨어진 위치에서 시작
+        // 사용자 1: 실제 DB user_id=3 (woopang)
         var user1 = new VirtualUserConfig
         {
-            userId = "virtual_user_001",
-            username = "걷는사람A",
+            userId = "3",
+            username = "woopang",
             startLatitude = baseLatitude,
-            startLongitude = baseLongitude + 0.0003, // 약 30m 동쪽
+            startLongitude = baseLongitude + 0.00015, // 약 15m 동쪽
             altitude = 10.0,
-            bio = "산책 중인 가상 사용자 A",
-            movementRadius = 40f,
+            avatarUrl = "", // 서버에서 가져오도록 비워둠
+            bio = "WOOPANG 테스트 사용자 1",
+            movementRadius = 15f,
             walkingSpeed = 1.2f,
             directionChangeInterval = 4f
         };
 
-        // 사용자 2: 북서쪽으로 50m 떨어진 위치에서 시작
+        // 사용자 2: 실제 DB user_id=3 (woopang) - 다른 위치
         var user2 = new VirtualUserConfig
         {
-            userId = "virtual_user_002",
-            username = "산책러B",
-            startLatitude = baseLatitude + 0.0004, // 약 44m 북쪽
-            startLongitude = baseLongitude - 0.0002, // 약 20m 서쪽
+            userId = "3",
+            username = "woopang",
+            startLatitude = baseLatitude + 0.0002, // 약 20m 북쪽
+            startLongitude = baseLongitude - 0.0001, // 약 10m 서쪽
             altitude = 10.0,
-            bio = "운동 중인 가상 사용자 B",
-            movementRadius = 60f,
-            walkingSpeed = 1.6f, // 조금 빠르게
+            avatarUrl = "", // 서버에서 가져오도록 비워둠
+            bio = "WOOPANG 테스트 사용자 2",
+            movementRadius = 20f,
+            walkingSpeed = 1.4f,
             directionChangeInterval = 6f
         };
 
         virtualUsers.Add(user1);
         virtualUsers.Add(user2);
-
-        Log("기본 가상 사용자 2명 생성됨");
     }
 
     /// <summary>
@@ -132,7 +155,6 @@ public class P2PVirtualUserTester : MonoBehaviour
     {
         if (isSimulating)
         {
-            Log("이미 시뮬레이션 중입니다.");
             return;
         }
 
@@ -143,13 +165,62 @@ public class P2PVirtualUserTester : MonoBehaviour
             return;
         }
 
-        // 가상 사용자 초기화
+        // 가상 사용자 초기화 및 실제 아바타 URL 가져오기
         InitializeVirtualUsers();
+        StartCoroutine(FetchAvatarsAndStartLoop());
+    }
+
+    private IEnumerator FetchAvatarsAndStartLoop()
+    {
+        foreach (var user in virtualUsers)
+        {
+            yield return StartCoroutine(FetchRealUserAvatar(user));
+        }
 
         isSimulating = true;
         simulationCoroutine = StartCoroutine(SimulationLoop());
+    }
 
-        Log($"가상 사용자 시뮬레이션 시작 - {virtualUsers.Count}명");
+    private IEnumerator FetchRealUserAvatar(VirtualUserConfig user)
+    {
+        string url = $"https://woopang.com/api/user/profile?user_id={user.userId}";
+        
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                try
+                {
+                    string json = request.downloadHandler.text;
+                    // Simple parsing to avoid extra dependency or classes
+                    if (json.Contains("\"avatar_url\":\""))
+                    {
+                        int start = json.IndexOf("\"avatar_url\":\"") + 14;
+                        int end = json.IndexOf("\"", start);
+                        string avatarUrl = json.Substring(start, end - start);
+                        
+                        // Handle relative URL
+                        if (avatarUrl.StartsWith("/"))
+                        {
+                            avatarUrl = "https://woopang.com" + avatarUrl;
+                        }
+                        
+                        // Handle escaped slashes if any
+                        avatarUrl = avatarUrl.Replace("\\/", "/");
+
+                        if (!string.IsNullOrEmpty(avatarUrl))
+                        {
+                            user.avatarUrl = avatarUrl;
+                        }
+                    }
+                }
+                catch (System.Exception)
+                {
+                }
+            }
+        }
     }
 
     /// <summary>

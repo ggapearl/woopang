@@ -6745,6 +6745,27 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 3117631384143716837}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &540699923 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1210333796435509330, guid: 569f512ddad81f8469304ed3141954d4,
+    type: 3}
+  m_PrefabInstance: {fileID: 1371161465}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &540699930
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 540699923}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 76433e99ec8b2cc40b2ed9988b479fb9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  hapticIntensity: 0.2
+  touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  soundVolume: 0.2
 --- !u!1 &547149849
 GameObject:
   m_ObjectHideFlags: 0
@@ -11781,7 +11802,6 @@ MonoBehaviour:
   maxVisibleUsers: 100
   maxTrackingDistance: 1000
   initialPoolSize: 10
-  hideAvatarVisuals: 1
   userFilterMode: 0
   showDebugLogs: 1
 --- !u!4 &994372376
@@ -15402,6 +15422,21 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 2951887880931798745, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 07409db6d7cf99e429d4fabcc25f4db2, type: 2}
+    - target: {fileID: 3047864899795572450, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: cubeAvatarSize
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3047864899795572450, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: maxVisibleDistance
+      value: 200
+      objectReference: {fileID: 0}
     - target: {fileID: 3047864899795572451, guid: 569f512ddad81f8469304ed3141954d4,
         type: 3}
       propertyPath: maxBoxSize
@@ -15441,6 +15476,21 @@ PrefabInstance:
         type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4671661754324655211, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: m_LocalScale.x
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4671661754324655211, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: m_LocalScale.y
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4671661754324655211, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: m_LocalScale.z
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 4671661754324655211, guid: 569f512ddad81f8469304ed3141954d4,
         type: 3}
@@ -15492,10 +15542,19 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4671661754324655211, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      propertyPath: m_ConstrainProportionsScale
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 1210333796435509330, guid: 569f512ddad81f8469304ed3141954d4,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 540699930}
   m_SourcePrefab: {fileID: 100100000, guid: 569f512ddad81f8469304ed3141954d4, type: 3}
 --- !u!1 &1371161466 stripped
 GameObject:
@@ -32745,7 +32804,7 @@ PrefabInstance:
     - target: {fileID: 8807830821746844384, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
         type: 3}
       propertyPath: soundVolume
-      value: 0.3
+      value: 0.2
       objectReference: {fileID: 0}
     - target: {fileID: 8807830821746844384, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
         type: 3}
@@ -34835,6 +34894,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: 0000_Cube
       objectReference: {fileID: 0}
+    - target: {fileID: 1149881228227649779, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 5179096195668386051, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -34965,6 +35029,16 @@ PrefabInstance:
       propertyPath: fullscreenCanvasGroup
       value: 
       objectReference: {fileID: 8011970282693692960}
+    - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: soundVolume
+      value: 0.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: hapticIntensity
+      value: 0.2
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

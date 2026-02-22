@@ -112,7 +112,23 @@ public class DoubleTap3D : MonoBehaviour
     {
         if (fullscreenCanvasGroup != null) return; // 이미 연결됨
 
+        // GameObject.Find()는 비활성 오브젝트를 못 찾음
+        // FullScreenPanel은 비활성 상태(m_IsActive:0)이므로 Canvas에서 재귀 검색
         GameObject panel = GameObject.Find("FullScreenPanel");
+        if (panel == null)
+        {
+            // 비활성 오브젝트 검색: 모든 Canvas에서 자식 중 "FullScreenPanel" 찾기
+            foreach (Canvas canvas in Resources.FindObjectsOfTypeAll<Canvas>())
+            {
+                if (canvas.gameObject.scene.name == null) continue; // 프리팹 에셋 제외
+                Transform found = FindChildRecursive(canvas.transform, "FullScreenPanel");
+                if (found != null)
+                {
+                    panel = found.gameObject;
+                    break;
+                }
+            }
+        }
         if (panel == null) return;
 
         fullscreenCanvasGroup = panel.GetComponent<CanvasGroup>();
@@ -180,6 +196,20 @@ public class DoubleTap3D : MonoBehaviour
 
         t = findChild("PlaceInfoTextPanel");
         if (t != null) placeInfoTextPanel = t.gameObject;
+    }
+
+    /// <summary>
+    /// 비활성 오브젝트 포함 재귀 검색
+    /// </summary>
+    private static Transform FindChildRecursive(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == name) return child;
+            Transform found = FindChildRecursive(child, name);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     void Start()
