@@ -30,7 +30,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         float z = (float)(dLat * metersPerLat);
         float x = (float)(dLon * metersPerLon);
 
-        transform.position = new Vector3(x, 0, z);
+        transform.position = new Vector3(x, (float)altitude, z);
 #else
         // 앵커 생성 전까지 렌더러 숨김 (Vector3.zero에 보이는 문제 방지)
         SetVisible(false);

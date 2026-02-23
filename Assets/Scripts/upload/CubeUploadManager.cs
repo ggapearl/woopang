@@ -69,6 +69,31 @@ public class CubeUploadManager : MonoBehaviour
     // 연속 촬영 모드용
     private List<string> continuousCapturedPaths = new List<string>();
 
+    public void ShowUploadPage()
+    {
+        if (uploadPage != null) uploadPage.SetActive(true);
+        if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
+        StartCoroutine(InitializeLocationService());
+
+        // [Fix] CubeUploadPage와 ModelUploadPage를 모두 활성화하여 스와이프 가능하게 함
+        var modelManager = FindFirstObjectByType<ModelUploadManager>();
+        if (modelManager != null)
+        {
+            modelManager.ShowUploadPage();
+        }
+
+        // 스와이프 패널을 0번(CubeUploadPage)으로 초기화
+        if (swipePanelController == null)
+        {
+            swipePanelController = FindFirstObjectByType<SwipePanelController>();
+        }
+        
+        if (swipePanelController != null)
+        {
+            swipePanelController.SetCurrentPanel(0);
+        }
+    }
+
     private void Awake()
     {
         int count = FindObjectsByType<CubeUploadManager>(FindObjectsSortMode.None).Length;
@@ -1659,5 +1684,310 @@ public class CubeUploadManager : MonoBehaviour
         }
     }
     
+    #endregion
+
+    #region Localization
+
+    private string GetLocalizedText(string key)
+    {
+        if (LocalizationManager.Instance != null)
+        {
+            return LocalizationManager.Instance.GetText(key);
+        }
+
+        SystemLanguage lang = Application.systemLanguage;
+        switch (key)
+        {
+            case "loading_location":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "위치 정보 불러오는 중...";
+                    case SystemLanguage.Japanese: return "位置情報を読み込み中...";
+                    case SystemLanguage.Chinese: return "正在加载位置信息...";
+                    case SystemLanguage.ChineseSimplified: return "正在加载位置信息...";
+                    case SystemLanguage.Spanish: return "Cargando información de ubicación...";
+                    default: return "Loading location...";
+                }
+
+            case "loading_main_photo":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "메인 사진 로딩 중...";
+                    case SystemLanguage.Japanese: return "メイン写真を読み込み中...";
+                    case SystemLanguage.Chinese: return "正在加载主照片...";
+                    case SystemLanguage.ChineseSimplified: return "正在加载主照片...";
+                    case SystemLanguage.Spanish: return "Cargando foto principal...";
+                    default: return "Loading main photo...";
+                }
+
+            case "loading_sub_photos":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "서브 사진 로딩 중...";
+                    case SystemLanguage.Japanese: return "サブ写真を読み込み中...";
+                    case SystemLanguage.Chinese: return "正在加载子照片...";
+                    case SystemLanguage.ChineseSimplified: return "正在加载子照片...";
+                    case SystemLanguage.Spanish: return "Cargando sub fotos...";
+                    default: return "Loading sub photos...";
+                }
+
+            case "uploading_object":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "오브젝트를 업로드 중입니다...";
+                    case SystemLanguage.Japanese: return "オブジェクトをアップロード中です...";
+                    case SystemLanguage.Chinese: return "正在上传对象...";
+                    case SystemLanguage.ChineseSimplified: return "正在上传对象...";
+                    case SystemLanguage.Spanish: return "Subiendo objeto...";
+                    default: return "Uploading object...";
+                }
+
+            case "file_not_selected":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "3D 모델 파일을 먼저 선택해주세요";
+                    case SystemLanguage.Japanese: return "3Dモデルファイルを先に選択してください";
+                    case SystemLanguage.Chinese: return "请先选择3D模型文件";
+                    case SystemLanguage.ChineseSimplified: return "请先选择3D模型文件";
+                    case SystemLanguage.Spanish: return "Por favor seleccione primero el archivo del modelo 3D";
+                    default: return "Please select a 3D model file first";
+                }
+
+            case "enter_name":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "모델 이름을 입력해주세요";
+                    case SystemLanguage.Japanese: return "モデル名を入力してください";
+                    case SystemLanguage.Chinese: return "请输入模型名称";
+                    case SystemLanguage.ChineseSimplified: return "请输入模型名称";
+                    case SystemLanguage.Spanish: return "Por favor ingrese el nombre del modelo";
+                    default: return "Please enter model name";
+                }
+
+            case "enter_instagram_id":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "인스타그램 ID를 입력해주세요";
+                    case SystemLanguage.Japanese: return "インスタグラムIDを入力してください";
+                    case SystemLanguage.Chinese: return "请输入Instagram ID";
+                    case SystemLanguage.ChineseSimplified: return "请输入Instagram ID";
+                    case SystemLanguage.Spanish: return "Por favor ingrese el ID de Instagram";
+                    default: return "Please enter Instagram ID";
+                }
+
+            case "instagram_id_invalid":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "유효하지 않은 인스타그램 ID입니다";
+                    case SystemLanguage.Japanese: return "無効なインスタグラムIDです";
+                    case SystemLanguage.Chinese: return "无效的Instagram ID";
+                    case SystemLanguage.ChineseSimplified: return "无效的Instagram ID";
+                    case SystemLanguage.Spanish: return "ID de Instagram inválido";
+                    default: return "Invalid Instagram ID";
+                }
+
+            case "upload_logo_photo":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "대표 사진을 업로드해주세요";
+                    case SystemLanguage.Japanese: return "代表写真をアップロードしてください";
+                    case SystemLanguage.Chinese: return "请上传代表照片";
+                    case SystemLanguage.ChineseSimplified: return "请上传代表照片";
+                    case SystemLanguage.Spanish: return "Sube una foto representativa";
+                    default: return "Please upload a representative photo";
+                }
+
+            case "upload_min_one_photo":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "최소 1장의 사진을 업로드해주세요";
+                    case SystemLanguage.Japanese: return "最低1枚の写真をアップロードしてください";
+                    case SystemLanguage.Chinese: return "请至少上传1张照片";
+                    case SystemLanguage.ChineseSimplified: return "请至少上传1张照片";
+                    case SystemLanguage.Spanish: return "Por favor suba al menos 1 foto";
+                    default: return "Please upload at least 1 photo";
+                }
+
+            case "max_sub_photos_exceeded":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return $"최대 {MAX_SUB_PHOTOS}장까지만 선택 가능합니다";
+                    case SystemLanguage.Japanese: return $"最大{MAX_SUB_PHOTOS}枚まで選択可能です";
+                    case SystemLanguage.Chinese: return $"最多只能选择{MAX_SUB_PHOTOS}张";
+                    case SystemLanguage.ChineseSimplified: return $"最多只能选择{MAX_SUB_PHOTOS}张";
+                    case SystemLanguage.Spanish: return $"Solo se pueden seleccionar hasta {MAX_SUB_PHOTOS} fotos";
+                    default: return $"Maximum {MAX_SUB_PHOTOS} photos can be selected";
+                }
+
+            case "photo_selection_failed":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "사진 선택에 실패했습니다";
+                    case SystemLanguage.Japanese: return "写真の選択に失敗しました";
+                    case SystemLanguage.Chinese: return "照片选择失败";
+                    case SystemLanguage.ChineseSimplified: return "照片选择失败";
+                    case SystemLanguage.Spanish: return "Falló la selección de fotos";
+                    default: return "Photo selection failed";
+                }
+
+            case "main_photo_crop_failed":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "사진 크롭에 실패했습니다";
+                    case SystemLanguage.Japanese: return "写真のクロップに失敗しました";
+                    case SystemLanguage.Chinese: return "照片裁剪失败";
+                    case SystemLanguage.ChineseSimplified: return "照片裁剪失败";
+                    case SystemLanguage.Spanish: return "Error al recortar la foto";
+                    default: return "Photo crop failed";
+                }
+
+            case "sub_photos_reset":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "서브 사진이 리셋되었습니다";
+                    case SystemLanguage.Japanese: return "サブ写真がリセットされました";
+                    case SystemLanguage.Chinese: return "子照片已重置";
+                    case SystemLanguage.ChineseSimplified: return "子照片已重置";
+                    case SystemLanguage.Spanish: return "Fotos secundarias restablecidas";
+                    default: return "Sub photos reset";
+                }
+
+            case "enable_location_service":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "위치 서비스를 활성화해주세요";
+                    case SystemLanguage.Japanese: return "位置サービスを有効にしてください";
+                    case SystemLanguage.Chinese: return "请启用位置服务";
+                    case SystemLanguage.ChineseSimplified: return "请启用位置服务";
+                    case SystemLanguage.Spanish: return "Por favor active el servicio de ubicación";
+                    default: return "Please enable location service";
+                }
+
+            case "file_too_large":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "파일 크기가 10MB를 초과합니다";
+                    case SystemLanguage.Japanese: return "ファイルサイズが10MBを超えています";
+                    case SystemLanguage.Chinese: return "文件大小超过10MB";
+                    case SystemLanguage.ChineseSimplified: return "文件大小超过10MB";
+                    case SystemLanguage.Spanish: return "El tamaño del archivo excede 10MB";
+                    default: return "File size exceeds 10MB";
+                }
+
+            case "upload_success":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "업로드 성공!";
+                    case SystemLanguage.Japanese: return "アップロード成功！";
+                    case SystemLanguage.Chinese: return "上传成功！";
+                    case SystemLanguage.ChineseSimplified: return "上传成功！";
+                    case SystemLanguage.Spanish: return "¡Subida exitosa!";
+                    default: return "Upload successful!";
+                }
+
+            case "server_error":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "서버 오류가 발생했습니다";
+                    case SystemLanguage.Japanese: return "サーバーエラーが発生しました";
+                    case SystemLanguage.Chinese: return "发生服务器错误";
+                    case SystemLanguage.ChineseSimplified: return "发生服务器错误";
+                    case SystemLanguage.Spanish: return "Error del servidor";
+                    default: return "Server error occurred";
+                }
+
+            case "request_timeout":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "요청 시간이 초과되었습니다";
+                    case SystemLanguage.Japanese: return "リクエストがタイムアウトしました";
+                    case SystemLanguage.Chinese: return "请求超时";
+                    case SystemLanguage.ChineseSimplified: return "请求超时";
+                    case SystemLanguage.Spanish: return "Tiempo de espera agotado";
+                    default: return "Request timeout";
+                }
+
+            case "no_location_data":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "위치 정보 없음";
+                    case SystemLanguage.Japanese: return "位置情報がありません";
+                    case SystemLanguage.Chinese: return "无位置信息";
+                    case SystemLanguage.ChineseSimplified: return "无位置信息";
+                    case SystemLanguage.Spanish: return "Sin información de ubicación";
+                    default: return "No location data";
+                }
+
+            case "submitting_countdown":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "제출 중... {0}초 남음";
+                    case SystemLanguage.Japanese: return "送信中... {0}秒残り";
+                    case SystemLanguage.Chinese: return "提交中... 剩余{0}秒";
+                    case SystemLanguage.ChineseSimplified: return "提交中... 剩余{0}秒";
+                    case SystemLanguage.Spanish: return "Enviando... {0} segundos restantes";
+                    default: return "Submitting... {0} seconds remaining";
+                }
+
+            case "permission_denied":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "저장소 권한이 거부되었습니다";
+                    case SystemLanguage.Japanese: return "ストレージ権限が拒否されました";
+                    case SystemLanguage.Chinese: return "存储权限被拒绝";
+                    case SystemLanguage.ChineseSimplified: return "存储权限被拒绝";
+                    case SystemLanguage.Spanish: return "Permiso de almacenamiento denegado";
+                    default: return "Storage permission denied";
+                }
+
+            case "login_required_for_upload":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "업로드하려면 로그인이 필요합니다";
+                    case SystemLanguage.Japanese: return "アップロードするにはログインが必要です";
+                    case SystemLanguage.Chinese: return "上传需要登录";
+                    case SystemLanguage.ChineseSimplified: return "上传需要登录";
+                    case SystemLanguage.Spanish: return "Inicie sesión para subir";
+                    default: return "Login required to upload";
+                }
+
+            case "daily_upload_limit_reached":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "오늘 업로드 횟수를 초과했습니다 (하루 1회)";
+                    case SystemLanguage.Japanese: return "本日のアップロード回数を超過しました（1日1回）";
+                    case SystemLanguage.Chinese: return "已超过今日上传次数（每日1次）";
+                    case SystemLanguage.ChineseSimplified: return "已超过今日上传次数（每日1次）";
+                    case SystemLanguage.Spanish: return "Límite de carga diaria alcanzado (1 vez al día)";
+                    default: return "Daily upload limit reached (once per day)";
+                }
+
+            case "main_photo_upload_failed":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "메인 사진 업로드에 실패했습니다";
+                    case SystemLanguage.Japanese: return "メイン写真のアップロードに失敗しました";
+                    case SystemLanguage.Chinese: return "主照片上传失败";
+                    case SystemLanguage.ChineseSimplified: return "主照片上传失败";
+                    case SystemLanguage.Spanish: return "Falló la carga de la foto principal";
+                    default: return "Main photo upload failed";
+                }
+
+            case "sub_photo_upload_failed":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "서브 사진 업로드에 실패했습니다";
+                    case SystemLanguage.Japanese: return "サブ写真のアップロードに失敗しました";
+                    case SystemLanguage.Chinese: return "子照片上传失败";
+                    case SystemLanguage.ChineseSimplified: return "子照片上传失败";
+                    case SystemLanguage.Spanish: return "Falló la carga de la foto secundaria";
+                    default: return "Sub photo upload failed";
+                }
+
+            default:
+                return key;
+        }
+    }
+
     #endregion
 }

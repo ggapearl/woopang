@@ -480,8 +480,28 @@ private bool isDataLoaded = false;
             placeId = -1;
         }
 
-        doubleTap.SetInfoImages(petFriendlySprite, restroomSprite, true, true, place.description, place.title, 
-            placeId, tel: place.tel, address: address, overview: overview, petInfo: petInfo);
+        // [UI Update] Description 제거 (상단 텍스트), PlaceInfoText 통합
+        string combinedOverview = overview;
+        if (!string.IsNullOrEmpty(place.description))
+        {
+             combinedOverview = place.description + "\n\n" + overview;
+        }
+
+        doubleTap.SetInfoImages(
+            sprite1: petFriendlySprite, 
+            sprite2: restroomSprite, 
+            petFriendly: true, 
+            separateRestroom: true, 
+            description: null, // 상단 텍스트 제거
+            name: place.title, 
+            id: placeId, 
+            username: "WOOPANG", // Created By WOOPANG
+            instagramId: null, 
+            tel: place.tel, 
+            address: address, 
+            overview: combinedOverview, // 개요에 제공처 정보 포함
+            petInfo: petInfo
+        );
         LogDebug($"[TourAPIManager] DoubleTap3D 컴포넌트 설정 완료: ID={place.contentid}, Title={place.title}");
 
         TourAPIImageController tourImageController = obj.GetComponentInChildren<TourAPIImageController>();

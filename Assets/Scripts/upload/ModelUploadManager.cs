@@ -495,6 +495,7 @@ public class ModelUploadManager : MonoBehaviour
         ResetToInitialState();
     }
 
+
     private void ShowSpinner(string message)
     {
         if (loadingPanel != null) loadingPanel.SetActive(true);

@@ -233,8 +233,22 @@ public class BusStationManager : MonoBehaviour
         DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>();
         if (doubleTap != null)
         {
-            string desc = data.extra_info + "\n주소: " + data.address;
-            doubleTap.SetInfoImages(null, null, false, false, desc, data.name, -1, address: data.address);
+            // [UI Update] Description 제거, PlaceInfoText로 통합
+            doubleTap.SetInfoImages(
+                sprite1: null, 
+                sprite2: null, 
+                petFriendly: false, 
+                separateRestroom: false, 
+                description: null, // 상단 텍스트 제거
+                name: data.name, 
+                id: -1, 
+                username: "WOOPANG", // Created By WOOPANG
+                instagramId: null, 
+                tel: null, 
+                address: data.address, 
+                overview: data.extra_info, // 개요에 extra_info 표시
+                petInfo: null
+            );
         }
 
         Target target = obj.GetComponentInChildren<Target>();

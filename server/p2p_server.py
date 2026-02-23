@@ -672,7 +672,7 @@ def update_position_rest():
                 user_info = cur.fetchone()
                 
             else:
-                
+                pass
 
         uname = user_info['username'] if user_info else '?'
         print(f"[P2P] >>> UPDATE_POSITION: user={user_id} ({uname}), lat={lat:.5f}, lon={lon:.5f}, alt={alt:.2f}", flush=True)

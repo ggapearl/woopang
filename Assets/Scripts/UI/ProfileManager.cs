@@ -35,6 +35,7 @@ public class ProfileManager : MonoBehaviour
     public Button followButton;
     public Button followedButton;  // 팔로우 중 상태 버튼 (다른 배경)
     public Text followButtonText;  // 팔로우 버튼 텍스트
+    public Text followedButtonText; // 팔로우 중 버튼 텍스트
     public Button editProfileButton;  // 내 프로필: 웹으로 이동, 다른 사람: DM 보내기
     public Text editProfileButtonText;  // 버튼 텍스트 (동적 변경용)
     public Button closeButton;
@@ -848,19 +849,25 @@ public class ProfileManager : MonoBehaviour
             // followedButton 클릭 이벤트 연결 (한 번만)
             followedButton.onClick.RemoveAllListeners();
             followedButton.onClick.AddListener(OnFollowButtonClicked);
+
+            // 팔로우 중 텍스트 설정
+            Text fldText = followedButtonText ?? followedButton.GetComponentInChildren<Text>();
+            if (fldText != null)
+            {
+                fldText.text = GetLocalizedText("following");
+            }
         }
 
         // followButton 텍스트 설정 (맞팔로우 여부에 따라)
         // 상대방이 나를 팔로우하면 "맞팔로우 하기", 아니면 "팔로우 하기"
-        if (!iFollowThem)
+        if (!iFollowThem && followButton != null)
         {
-            Text btnText = followButtonText ?? followButton?.GetComponentInChildren<Text>();
+            Text btnText = followButtonText ?? followButton.GetComponentInChildren<Text>();
             if (btnText != null)
             {
                 btnText.text = theyFollowMe ? GetLocalizedText("follow_back") : GetLocalizedText("follow");
             }
         }
-
     }
 
     private void OnFollowButtonClicked()
