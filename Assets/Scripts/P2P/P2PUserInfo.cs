@@ -6,7 +6,9 @@
 
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.InputSystem; // New Input System
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using UnityEngine.Networking;
 using System.Collections;
 
@@ -126,6 +128,8 @@ public class P2PUserInfo : MonoBehaviour
 
     void OnEnable()
     {
+        EnhancedTouchSupport.Enable();
+
         if (isInitialized)
         {
             LoadProfileTexture();
@@ -134,6 +138,8 @@ public class P2PUserInfo : MonoBehaviour
 
     void OnDisable()
     {
+        EnhancedTouchSupport.Disable();
+
         if (downloadCoroutine != null)
         {
             StopCoroutine(downloadCoroutine);
@@ -147,28 +153,78 @@ public class P2PUserInfo : MonoBehaviour
 
     /// <summary>
     /// 프로필 사진 로딩 → 큐브 MeshRenderer에 텍스처 적용
+    /// avatarUrl이 비어있으면 서버에서 userId로 프로필 조회 후 avatar_url을 가져옴
     /// </summary>
     private void LoadProfileTexture()
     {
         if (avatarRenderer == null) return;
+        if (!gameObject.activeInHierarchy) return;
 
-        // URL이 없으면 기본 색상 사용
-        if (string.IsNullOrEmpty(avatarUrl))
-        {
-            return;
-        }
+        if (downloadCoroutine != null) StopCoroutine(downloadCoroutine);
 
-        if (gameObject.activeInHierarchy)
+        if (!string.IsNullOrEmpty(avatarUrl))
         {
-            if (downloadCoroutine != null) StopCoroutine(downloadCoroutine);
+            // avatar_url이 있으면 바로 다운로드
             downloadCoroutine = StartCoroutine(DownloadTexture(avatarUrl));
         }
+        else if (!string.IsNullOrEmpty(userId))
+        {
+            // avatar_url이 없으면 서버에서 프로필 조회 후 다운로드
+            downloadCoroutine = StartCoroutine(FetchAvatarUrlAndDownload());
+        }
+    }
+
+    /// <summary>
+    /// 서버에서 userId로 프로필 조회 → avatar_url을 가져와 텍스처 다운로드
+    /// </summary>
+    private IEnumerator FetchAvatarUrlAndDownload()
+    {
+        string profileUrl = $"{ApiConfig.USER_PROFILE}?user_id={userId}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(profileUrl))
+        {
+            request.timeout = 10;
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string fetchedUrl = null;
+                try
+                {
+                    var json = JsonUtility.FromJson<ProfileResponse>(request.downloadHandler.text);
+                    if (!string.IsNullOrEmpty(json.avatar_url))
+                    {
+                        fetchedUrl = json.avatar_url;
+                        if (fetchedUrl.StartsWith("/"))
+                        {
+                            fetchedUrl = ApiConfig.MAIN_SERVER + fetchedUrl;
+                        }
+                    }
+                }
+                catch (System.Exception) { }
+
+                if (!string.IsNullOrEmpty(fetchedUrl))
+                {
+                    avatarUrl = fetchedUrl;
+                    yield return StartCoroutine(DownloadTexture(avatarUrl));
+                }
+            }
+        }
+
+        downloadCoroutine = null;
+    }
+
+    [System.Serializable]
+    private class ProfileResponse
+    {
+        public string avatar_url;
     }
 
     private IEnumerator DownloadTexture(string url)
     {
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url))
         {
+            request.timeout = 15;
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -180,7 +236,7 @@ public class P2PUserInfo : MonoBehaviour
                 }
             }
         }
-        
+
         downloadCoroutine = null;
     }
 
@@ -233,31 +289,17 @@ public class P2PUserInfo : MonoBehaviour
 
     private void HandleTouchInput()
     {
-        bool hasTouchInput = false;
-        Vector2 touchPosition = Vector2.zero;
+        // EnhancedTouch 패턴 (DoubleTap3D와 동일)
+        if (Touch.activeTouches.Count != 1) return;
 
-        // New Input System
-        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-        {
-            hasTouchInput = true;
-            touchPosition = Mouse.current.position.ReadValue();
-        }
-        else if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
-        {
-            hasTouchInput = true;
-            touchPosition = Touchscreen.current.primaryTouch.position.ReadValue();
-        }
+        var touch = Touch.activeTouches[0];
+        if (touch.phase != UnityEngine.InputSystem.TouchPhase.Began) return;
 
-        if (!hasTouchInput) return;
+        Vector2 touchPosition = touch.screenPosition;
 
         // UI 터치 무시
-        if (EventSystem.current != null)
-        {
-            if (EventSystem.current.IsPointerOverGameObject())
-            {
-                return;
-            }
-        }
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
 
         if (mainCamera == null) mainCamera = Camera.main;
         if (mainCamera == null) return;

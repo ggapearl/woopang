@@ -100,6 +100,9 @@ public class MessagePanelManager : MonoBehaviour
     public GameObject globalUnreadIndicator;
     private int totalUnreadCount = 0;
 
+    // 읽음 처리 직후 서버 반영 전까지 로컬에서 강제 0 유지할 유저 ID
+    private HashSet<string> recentlyMarkedReadUserIds = new HashSet<string>();
+
     [Header("=== 시스템 메시지 설정 ===")]
     [Tooltip("시스템 메시지 배경색 (어두운 색)")]
     public Color systemMessageBgColor = new Color(0.12f, 0.12f, 0.15f, 1f);
@@ -514,7 +517,7 @@ public class MessagePanelManager : MonoBehaviour
     void OnApplicationFocus(bool hasFocus)
     {
         isAppFocused = hasFocus;
-        
+
         if (hasFocus)
         {
             // 앱이 포그라운드로 돌아왔을 때 데이터 갱신
@@ -525,7 +528,14 @@ public class MessagePanelManager : MonoBehaviour
                 {
                     StartCoroutine(LoadConversationList());
                 }
-                
+
+                // chatRoomPanel이 열려있으면 채팅방도 새로고침
+                if (chatRoomPanel != null && chatRoomPanel.activeInHierarchy && !string.IsNullOrEmpty(currentChatUserId))
+                {
+                    Debug.Log($"[WP_PUSH] OnApplicationFocus chatRoom 리프레시: userId={currentChatUserId}");
+                    StartCoroutine(LoadChatMessages(currentChatUserId, isAdminChat));
+                }
+
                 // 안읽음 카운트 갱신 (뱃지)
                 StartCoroutine(FetchUnreadCount());
             }
@@ -538,6 +548,32 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     #region Public Methods
+
+    /// <summary>
+    /// chatRoomPanel이 열려있고 해당 userId 대화방이면 리프레시
+    /// FirebaseNotification에서 포그라운드 복귀 시 호출
+    /// </summary>
+    public void RefreshChatRoomIfNeeded(string userId)
+    {
+        if (chatRoomPanel != null && chatRoomPanel.activeInHierarchy && currentChatUserId == userId)
+        {
+            Debug.Log($"[WP_PUSH] RefreshChatRoomIfNeeded: userId={userId} 리프레시");
+            StartCoroutine(LoadChatMessages(userId, isAdminChat));
+
+            // 관리자 채팅방이 열려있으면 읽음 시간 갱신 (unread 0 유지)
+            if (isAdminChat)
+            {
+                PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                PlayerPrefs.Save();
+            }
+        }
+
+        // messagePanel이 열려있으면 목록도 갱신
+        if (messagePanel != null && messagePanel.activeInHierarchy)
+        {
+            RefreshConversationUI();
+        }
+    }
 
     /// <summary>
     /// 메시지 패널 열기
@@ -613,6 +649,7 @@ public class MessagePanelManager : MonoBehaviour
     /// <param name="avatarUrl">발신자 아바타 URL (선택)</param>
     public void AddOrUpdateConversationFromPush(string senderId, string senderUsername, string messageContent, string avatarUrl = null)
     {
+        Debug.Log($"[WP_PUSH] AddOrUpdateConversation: senderId={senderId} sender={senderUsername} msg={messageContent}");
 
         if (string.IsNullOrEmpty(senderId) || string.IsNullOrEmpty(senderUsername))
             return;
@@ -632,11 +669,8 @@ public class MessagePanelManager : MonoBehaviour
 
         string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
-        // 관리자 메시지인 경우 로컬 히스토리에 저장 (채팅방 진입 시 불러오기 위함)
-        if (isWoopangMessage)
-        {
-            SaveLocalAdminMessage(messageContent, currentTime);
-        }
+        // 관리자 메시지는 서버 DB에 이미 저장됨 → 로컬 저장 불필요
+        // 채팅방 진입 시 서버 API에서 조회
 
         // 기존 대화 찾기
         int existingIndex = -1;
@@ -649,15 +683,19 @@ public class MessagePanelManager : MonoBehaviour
             }
         }
 
+        // 채팅방이 열려있고 해당 대화방이면 unreadCount 증가 스킵
+        bool isChatRoomOpen = chatRoomPanel != null && chatRoomPanel.activeInHierarchy && currentChatUserId == senderId;
+
         if (existingIndex >= 0)
         {
             // 기존 대화 업데이트
             var existingConv = conversations[existingIndex];
             existingConv.lastMessage = messageContent;
             existingConv.lastMessageTime = currentTime;
-            existingConv.unreadCount++;
-            // 기존 대화가 있다면 시스템 메시지 여부 업데이트 (혹시 모르니)
+            if (!isChatRoomOpen)
+                existingConv.unreadCount++;
             if (isWoopangMessage) existingConv.isSystemMessage = true;
+            Debug.Log($"[WP_PUSH] 기존 대화 업데이트: userId={senderId} unread={existingConv.unreadCount} chatOpen={isChatRoomOpen}");
         }
         else
         {
@@ -669,16 +707,37 @@ public class MessagePanelManager : MonoBehaviour
                 avatarUrl = avatarUrl ?? "",
                 lastMessage = messageContent,
                 lastMessageTime = currentTime,
-                unreadCount = 1,
-                isSystemMessage = isWoopangMessage // WOOPANG 메시지면 시스템 메시지로 처리
+                unreadCount = isChatRoomOpen ? 0 : 1,
+                isSystemMessage = isWoopangMessage
             };
 
             conversations.Add(newConv);
+            Debug.Log($"[WP_PUSH] 새 대화 추가: userId={senderId} isSystem={isWoopangMessage} chatOpen={isChatRoomOpen}");
         }
 
         SortConversationsByTime();
-        totalUnreadCount++;
+
+        if (!isChatRoomOpen)
+        {
+            totalUnreadCount++;
+        }
         UpdateUnreadUI();
+
+        // 채팅방이 열려있으면 즉시 메시지 버블 추가
+        if (isChatRoomOpen)
+        {
+            Debug.Log($"[WP_PUSH] chatRoomPanel 열림 - 즉시 메시지 추가: userId={senderId} msg={messageContent}");
+            if (isAdminChat)
+            {
+                // 관리자 채팅방: 최신 메시지를 상단에 삽입
+                InsertAdminMessageAtTop("WOOPANG", messageContent, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            }
+            else
+            {
+                // 일반 DM: 서버에서 재조회
+                StartCoroutine(LoadChatMessages(senderId, false));
+            }
+        }
 
         // 메시지 패널이 열려있으면 UI 즉시 갱신
         if (messagePanel != null && messagePanel.activeInHierarchy)
@@ -816,7 +875,19 @@ public class MessagePanelManager : MonoBehaviour
                 {
                     // 기존 시스템 메시지 제거 후 로드
                     conversations.RemoveAll(c => c.isSystemMessage);
-                    conversations.AddRange(list.conversations);
+
+                    foreach (var conv in list.conversations)
+                    {
+                        // 기존 system_{id} 형태의 WOOPANG 대화방은 스킵 (중복 방지)
+                        // 이제 WOOPANG은 userId="3"으로 통합됨
+                        if (conv.userId != null && conv.userId.StartsWith("system_") &&
+                            (conv.username == "WOOPANG" || (conv.username != null && conv.username.Contains("WOOPANG"))))
+                        {
+                            continue;
+                        }
+                        conversations.Add(conv);
+                    }
+
                     SortConversationsByTime();
                 }
             }
@@ -952,20 +1023,46 @@ public class MessagePanelManager : MonoBehaviour
 
         StartCoroutine(LoadChatMessages(userId, isAdmin));
 
-        // 읽음 처리
-        if (!isAdmin)
+        // 읽음 처리 (WOOPANG 관리자 채팅방 포함)
         {
             // 로컬 unreadCount 즉시 0으로 설정 (UI 즉시 반영)
             var conv = conversations.Find(c => c.userId == userId);
             if (conv != null && conv.unreadCount > 0)
             {
+                Debug.Log($"[WP_PUSH] OpenChatRoom 읽음처리: userId={userId} unread={conv.unreadCount} isAdmin={isAdmin}");
                 totalUnreadCount = Mathf.Max(0, totalUnreadCount - conv.unreadCount);
                 conv.unreadCount = 0;
+                conv.isRead = true;
                 UpdateUnreadUI();
+
+                // 시스템 메시지면 로컬 저장도 업데이트
+                if (conv.isSystemMessage)
+                {
+                    SaveSystemNotifications();
+                }
             }
 
-            // 서버에도 읽음 처리 요청
-            StartCoroutine(MarkMessagesAsRead(userId));
+            if (isAdmin)
+            {
+                // 관리자 채팅방 읽음 시간 저장 (unread 카운트 계산용)
+                PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                PlayerPrefs.Save();
+                Debug.Log($"[WP_PUSH] AdminBroadcastLastReadTime 저장: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            }
+            else
+            {
+                // 서버 반영 전까지 이 유저의 unreadCount를 로컬에서 강제 0 유지
+                recentlyMarkedReadUserIds.Add(userId);
+
+                // 서버에도 읽음 처리 요청
+                StartCoroutine(MarkMessagesAsRead(userId));
+            }
+
+            // 메시지 패널이 열려있으면 UI 갱신
+            if (messagePanel != null && messagePanel.activeInHierarchy)
+            {
+                RefreshConversationUI();
+            }
         }
     }
 
@@ -976,7 +1073,7 @@ public class MessagePanelManager : MonoBehaviour
     /// <param name="messageContent">메시지 내용</param>
     public void OpenSystemChatRoom(string notificationId, string messageContent)
     {
-        currentChatUserId = "woopang";
+        currentChatUserId = "3";
         currentChatUsername = "WOOPANG";
         currentChatAvatarUrl = null;
         isAdminChat = true;
@@ -1312,10 +1409,19 @@ public class MessagePanelManager : MonoBehaviour
                 conversations.RemoveAll(c => !c.isSystemMessage && !c.isAdminBroadcast && serverUserIds.Contains(c.userId));
 
                 // 서버 대화 추가
+                int adjustedTotalUnread = 0;
                 if (response.conversations != null)
                 {
                     foreach (var conv in response.conversations)
                     {
+                        int unread = conv.unread_count;
+
+                        // 최근 읽음 처리한 유저는 로컬에서 강제 0 유지 (서버 반영 지연 대응)
+                        if (recentlyMarkedReadUserIds.Contains(conv.partner_id))
+                        {
+                            unread = 0;
+                        }
+
                         var summary = new ConversationSummary
                         {
                             userId = conv.partner_id,
@@ -1323,15 +1429,23 @@ public class MessagePanelManager : MonoBehaviour
                             avatarUrl = conv.partner_avatar_url,
                             lastMessage = conv.last_message,
                             lastMessageTime = conv.last_message_time,
-                            unreadCount = conv.unread_count
+                            unreadCount = unread
                         };
 
+                        adjustedTotalUnread += unread;
                         conversations.Add(summary);
                     }
                 }
 
-                // 전체 안 읽음 수 업데이트
-                totalUnreadCount = response.total_unread;
+                // 전체 안 읽음 수 업데이트 (로컬 강제 0 반영)
+                if (recentlyMarkedReadUserIds.Count > 0)
+                {
+                    totalUnreadCount = adjustedTotalUnread;
+                }
+                else
+                {
+                    totalUnreadCount = response.total_unread;
+                }
                 UpdateUnreadUI();
             }
 
@@ -1358,70 +1472,96 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 관리자 공지(Server)와 로컬 푸시(Local)를 통합하여 'WOOPANG' 대화방 하나로 병합
+    /// 서버 관리자 공지를 'WOOPANG' 대화방 하나로 병합 (userId="3" 통일)
     /// </summary>
     private void MergeAdminBroadcastsIntoConversations()
     {
-        // 1. 기존 'WOOPANG' 또는 관리자 공지 항목 제거 (중복 방지)
-        conversations.RemoveAll(c => c.isAdminBroadcast || c.userId == "woopang" || c.username == "WOOPANG");
+        // 기존 WOOPANG 관련 항목 모두 제거 (중복 방지, userId 통일)
+        conversations.RemoveAll(c =>
+            c.isAdminBroadcast ||
+            c.userId == "woopang" ||
+            c.userId == "3" ||
+            (c.username != null && c.username == "WOOPANG"));
 
         string latestContent = "";
         string latestTime = "";
         DateTime lastDateTime = DateTime.MinValue;
+        int totalUnread = 0;
 
-        // 2. 서버 공지사항 확인 (숨김 처리된 공지 필터링)
+        // 서버 공지사항에서 최신 메시지 정보 추출
         int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
+
+        Debug.Log($"[WP_PUSH] MergeAdmin 시작: adminBroadcasts={adminBroadcasts?.Count ?? 0} hiddenMaxId={hiddenMaxId}");
+
         if (adminBroadcasts != null)
         {
             foreach (var broadcast in adminBroadcasts)
             {
-                // 사용자가 삭제한 공지는 건너뜀
                 if (broadcast.id <= hiddenMaxId) continue;
 
                 DateTime dt;
                 if (DateTime.TryParse(broadcast.created_at, out dt))
                 {
+                    totalUnread++;
                     if (dt > lastDateTime)
                     {
                         lastDateTime = dt;
-                        latestContent = broadcast.content;
+                        // 제목+내용 합쳐서 표시 (미리보기에서 태그 자동 제거됨)
+                        latestContent = !string.IsNullOrEmpty(broadcast.title)
+                            ? $"<b>{broadcast.title}</b>\n{broadcast.content}"
+                            : broadcast.content;
                         latestTime = broadcast.created_at;
                     }
                 }
+                Debug.Log($"[WP_PUSH] MergeAdmin broadcast: id={broadcast.id} created_at='{broadcast.created_at}' parsed={DateTime.TryParse(broadcast.created_at, out _)}");
             }
         }
 
-        // 3. 로컬 푸시 내역 확인
-        var localMessages = LoadLocalAdminMessages();
-        if (localMessages != null)
+        // 표시할 메시지가 있다면 'WOOPANG' 대화방 생성 (userId="3" 통일)
+        if (lastDateTime != DateTime.MinValue)
         {
-            foreach (var msg in localMessages)
+            // 마지막으로 읽은 시간 기반으로 unread 계산
+            string lastReadTime = PlayerPrefs.GetString("AdminBroadcastLastReadTime", "");
+            int unreadCount = 0;
+
+            Debug.Log($"[WP_PUSH] MergeAdmin lastReadTime='{lastReadTime}' totalBroadcasts={totalUnread}");
+
+            if (!string.IsNullOrEmpty(lastReadTime) && adminBroadcasts != null)
             {
-                DateTime dt;
-                if (DateTime.TryParse(msg.created_at, out dt))
+                DateTime readDt;
+                bool readParsed = DateTime.TryParse(lastReadTime, out readDt);
+                Debug.Log($"[WP_PUSH] MergeAdmin readDt parsed={readParsed} readDt={readDt:yyyy-MM-dd HH:mm:ss}");
+
+                foreach (var broadcast in adminBroadcasts)
                 {
-                    if (dt > lastDateTime)
+                    if (broadcast.id <= hiddenMaxId) continue;
+                    DateTime dt;
+                    if (DateTime.TryParse(broadcast.created_at, out dt))
                     {
-                        lastDateTime = dt;
-                        latestContent = msg.content;
-                        latestTime = msg.created_at;
+                        bool isUnread = dt > readDt;
+                        if (isUnread) unreadCount++;
+                        Debug.Log($"[WP_PUSH] MergeAdmin 비교: id={broadcast.id} broadcastDt={dt:yyyy-MM-dd HH:mm:ss.fff} readDt={readDt:yyyy-MM-dd HH:mm:ss.fff} isUnread={isUnread}");
                     }
                 }
             }
-        }
+            else if (string.IsNullOrEmpty(lastReadTime))
+            {
+                // 한번도 읽지 않은 경우 전체 unread
+                unreadCount = totalUnread;
+                Debug.Log($"[WP_PUSH] MergeAdmin 첫 방문: unread={totalUnread}");
+            }
 
-        // 4. 표시할 메시지가 있다면 'WOOPANG' 대화방 생성
-        if (lastDateTime != DateTime.MinValue)
-        {
+            Debug.Log($"[WP_PUSH] MergeAdmin 결과: unreadCount={unreadCount} latestTime='{latestTime}'");
+
             var summary = new ConversationSummary
             {
-                userId = "woopang",
+                userId = "3",
                 username = "WOOPANG",
-                avatarUrl = "", // 시스템 아바타 사용
+                avatarUrl = "",
                 lastMessage = latestContent,
                 lastMessageTime = latestTime,
-                unreadCount = 0, // 로컬은 읽음 처리됨 (개선 가능)
-                isAdminBroadcast = true, // 스타일링용 플래그
+                unreadCount = unreadCount,
+                isAdminBroadcast = true,
                 isSystemMessage = true
             };
             conversations.Add(summary);
@@ -1617,7 +1757,7 @@ public class MessagePanelManager : MonoBehaviour
                     result.Add(new DMMessage
                     {
                         id = 0,
-                        sender_id = "woopang",
+                        sender_id = "3",
                         recipient_id = userId,
                         content = msg.content,
                         created_at = msg.created_at,
@@ -1708,15 +1848,39 @@ public class MessagePanelManager : MonoBehaviour
         Text previewText = searchRoot.Find("PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            string preview = conv.lastMessage;
-            if (!string.IsNullOrEmpty(preview) && preview.Length > 30)
+            string preview = conv.lastMessage ?? "";
+            // Rich text 태그 제거 + 줄바꿈을 공백으로 (미리보기용)
+            preview = System.Text.RegularExpressions.Regex.Replace(preview, "<.*?>", "");
+            preview = preview.Replace("\n", " ").Trim();
+            if (preview.Length > 30)
                 preview = preview.Substring(0, 30) + "...";
-            previewText.text = preview ?? "";
+            previewText.text = preview;
         }
 
         Text timeText = searchRoot.Find("TimeText")?.GetComponent<Text>();
         if (timeText != null)
             timeText.text = GetRelativeTime(conv.lastMessageTime);
+
+        // 안읽음 배지 표시
+        GameObject unreadBadge = searchRoot.Find("UnreadBadge")?.gameObject;
+        if (unreadBadge != null)
+        {
+            bool hasUnread = conv.unreadCount > 0;
+            unreadBadge.SetActive(hasUnread);
+
+            if (hasUnread)
+            {
+                Text countText = unreadBadge.GetComponentInChildren<Text>();
+                if (countText != null)
+                    countText.text = conv.unreadCount.ToString();
+            }
+
+            Debug.Log($"[WP_PUSH] SetupAdminBroadcastItem: unreadBadge found, unread={conv.unreadCount} active={hasUnread}");
+        }
+        else
+        {
+            Debug.Log($"[WP_PUSH] SetupAdminBroadcastItem: UnreadBadge NOT found in prefab, unread={conv.unreadCount}");
+        }
 
         Transform clickTarget = content != null ? content : item.transform;
         Button btn = clickTarget.GetComponent<Button>();
@@ -1726,7 +1890,7 @@ public class MessagePanelManager : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() =>
         {
-            OpenChatRoom("woopang", "WOOPANG", null, true);
+            OpenChatRoom("3", "WOOPANG", null, true);
         });
     }
 
@@ -1796,10 +1960,13 @@ public class MessagePanelManager : MonoBehaviour
         Text previewText = searchRoot.Find("PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            string preview = conv.lastMessage;
-            if (!string.IsNullOrEmpty(preview) && preview.Length > 30)
+            string preview = conv.lastMessage ?? "";
+            // Rich text 태그 제거 + 줄바꿈을 공백으로 (미리보기용)
+            preview = System.Text.RegularExpressions.Regex.Replace(preview, "<.*?>", "");
+            preview = preview.Replace("\n", " ").Trim();
+            if (preview.Length > 30)
                 preview = preview.Substring(0, 30) + "...";
-            previewText.text = preview ?? "";
+            previewText.text = preview;
         }
 
         // 시간
@@ -1832,10 +1999,21 @@ public class MessagePanelManager : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         string notificationId = conv.notificationId;
         string messageContent = conv.lastMessage;
+        string convUserId = conv.userId;
+
         btn.onClick.AddListener(() =>
         {
-            MarkSystemMessageAsRead(conv);
-            OpenSystemChatRoom(notificationId, messageContent);
+            // WOOPANG 관리자 메시지 (userId="3")는 OpenChatRoom으로 열기
+            if (convUserId == "3")
+            {
+                Debug.Log($"[WP_PUSH] AdminNoticeItem 클릭: WOOPANG 채팅방 열기 userId={convUserId}");
+                OpenChatRoom("3", "WOOPANG", null, true);
+            }
+            else
+            {
+                MarkSystemMessageAsRead(conv);
+                OpenSystemChatRoom(notificationId, messageContent);
+            }
         });
     }
 
@@ -2244,6 +2422,46 @@ public class MessagePanelManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 관리자 메시지를 채팅방 상단에 즉시 삽입 (푸시 수신 시 실시간 표시용)
+    /// </summary>
+    private void InsertAdminMessageAtTop(string senderName, string content, string time)
+    {
+        if (chatMessageContent == null) return;
+
+        // 삽입 전 자식 수 기록 (날짜 구분선 + 버블 모두 상단으로 이동시키기 위해)
+        int childCountBefore = chatMessageContent.childCount;
+
+        // 날짜 구분선 체크 (새 날짜면 구분선 추가됨)
+        if (useDateSeparator)
+            CheckAndCreateDateSeparator(time);
+
+        // 버블 생성
+        CreateSystemMessageBubble(senderName, content, time);
+
+        // 새로 생성된 모든 요소(날짜구분선 + 버블)를 맨 위로 이동
+        int newChildCount = chatMessageContent.childCount;
+        int addedCount = newChildCount - childCountBefore;
+        if (addedCount > 0)
+        {
+            // 뒤에서부터 (구분선→버블 순서 유지하며) SetAsFirstSibling
+            for (int i = 0; i < addedCount; i++)
+            {
+                Transform child = chatMessageContent.GetChild(childCountBefore);
+                child.SetAsFirstSibling();
+            }
+        }
+
+        // 레이아웃 강제 갱신
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(chatMessageContent as RectTransform);
+
+        // 스크롤을 맨 위로 (최신 메시지 보이도록)
+        ScrollToTop();
+
+        Debug.Log($"[WP_PUSH] InsertAdminMessageAtTop: 상단에 {addedCount}개 요소 삽입 완료");
+    }
+
+    /// <summary>
     /// 시스템 메시지 버블 생성 (채팅방 내에서 AdminMessageBubble 프리팹 사용)
     /// </summary>
     private void CreateSystemMessageBubble(string senderName, string content, string time)
@@ -2418,45 +2636,71 @@ public class MessagePanelManager : MonoBehaviour
 
         if (isAdmin)
         {
-            // 1. 로컬 저장된 관리자 메시지 (푸시 수신 내역)
-            var localMessages = LoadLocalAdminMessages();
-            
-            // 2. 서버에서 불러온 공지사항 (adminBroadcasts)
-            // 중복 제거를 위해 내용+시간으로 키 생성
-            var uniqueMessages = new Dictionary<string, LocalAdminMessage>();
-            
-            foreach (var msg in localMessages)
+            // 서버 DB에서 관리자 메시지 조회 (admin_broadcasts 테이블)
+            string adminUrl = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50";
+            bool hasAdminMessages = false;
+
+            using (UnityWebRequest adminRequest = UnityWebRequest.Get(adminUrl))
             {
-                string key = $"{msg.content}_{msg.created_at}";
-                if (!uniqueMessages.ContainsKey(key))
-                    uniqueMessages[key] = new LocalAdminMessage { content = msg.content, created_at = msg.created_at };
+                adminRequest.certificateHandler = new BypassCertificateHandler();
+                adminRequest.timeout = 10;
+                yield return adminRequest.SendWebRequest();
+
+                if (adminRequest.result == UnityWebRequest.Result.Success)
+                {
+                    var response = JsonUtility.FromJson<AdminMessageResponse>(adminRequest.downloadHandler.text);
+
+                    if (response != null && response.success && response.messages != null && response.messages.Count > 0)
+                    {
+                        hasAdminMessages = true;
+
+                        // API는 DESC 순서(최신 먼저) → 그대로 표시 (최신이 상단)
+                        for (int i = 0; i < response.messages.Count; i++)
+                        {
+                            var msg = response.messages[i];
+                            if (useDateSeparator)
+                                CheckAndCreateDateSeparator(msg.created_at);
+
+                            // 제목+내용 합쳐서 표시
+                            string displayContent = !string.IsNullOrEmpty(msg.title)
+                                ? $"<b>{msg.title}</b>\n{msg.body}"
+                                : msg.body;
+                            CreateSystemMessageBubble("WOOPANG", displayContent, msg.created_at);
+                        }
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"[WP_PUSH] 관리자 메시지 서버 조회 실패: {adminRequest.error}");
+                }
             }
-            
-            foreach (var broadcast in adminBroadcasts)
+
+            // 서버 조회 실패/빈 경우 로컬 fallback
+            if (!hasAdminMessages)
             {
-                string key = $"{broadcast.content}_{broadcast.created_at}";
-                if (!uniqueMessages.ContainsKey(key))
-                    uniqueMessages[key] = new LocalAdminMessage { content = broadcast.content, created_at = broadcast.created_at };
+                var localMessages = LoadLocalAdminMessages();
+                if (localMessages.Count > 0)
+                {
+                    foreach (var msg in localMessages)
+                    {
+                        if (useDateSeparator)
+                            CheckAndCreateDateSeparator(msg.created_at);
+
+                        CreateSystemMessageBubble("WOOPANG", msg.content, msg.created_at);
+                    }
+                }
             }
-            
-            // 리스트로 변환 및 시간순 정렬 (최신순이 위로 오게 - dtB vs dtA)
-            var allMessages = new List<LocalAdminMessage>(uniqueMessages.Values);
-            allMessages.Sort((a, b) => 
+
+            // 관리자 채팅방은 최신이 상단이므로 스크롤을 맨 위로
+            yield return null;
+            ScrollToTop();
+
+            // 메시지 없으면 빈 상태 표시
+            if (!hasAdminMessages)
             {
-                DateTime dtA, dtB;
-                DateTime.TryParse(a.created_at, out dtA);
-                DateTime.TryParse(b.created_at, out dtB);
-                return dtB.CompareTo(dtA);
-            });
-            
-            // 표시
-            foreach (var msg in allMessages)
-            {
-                if (useDateSeparator)
-                    CheckAndCreateDateSeparator(msg.created_at);
-                
-                // CreateSystemMessageBubble 사용 (AdminMessageBubble 프리팹 사용)
-                CreateSystemMessageBubble("WOOPANG", msg.content, msg.created_at);
+                var localCheck = LoadLocalAdminMessages();
+                if (localCheck.Count == 0)
+                    ShowChatEmptyState(true);
             }
             yield break;
         }
@@ -3103,13 +3347,22 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = new UnityWebRequest(ApiConfig.DM_READ_ALL, "POST"))
         {
-            byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.certificateHandler = new BypassCertificateHandler();
             request.SetRequestHeader("Content-Type", "application/json");
 
             yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                // 서버 읽음 처리 완료 → 로컬 강제 0 해제
+                recentlyMarkedReadUserIds.Remove(senderId);
+
+                // 서버에서 최신 안읽음 카운트 다시 조회
+                yield return StartCoroutine(FetchUnreadCount());
+            }
         }
     }
 
@@ -3519,6 +3772,17 @@ public class MessagePanelManager : MonoBehaviour
         ScrollRect scrollRect = chatMessageContent.GetComponentInParent<ScrollRect>();
         if (scrollRect != null)
             scrollRect.normalizedPosition = Vector2.zero;
+    }
+
+    private void ScrollToTop()
+    {
+        if (chatMessageContent == null) return;
+
+        Canvas.ForceUpdateCanvases();
+
+        ScrollRect scrollRect = chatMessageContent.GetComponentInParent<ScrollRect>();
+        if (scrollRect != null)
+            scrollRect.normalizedPosition = Vector2.one;
     }
 
     /// <summary>

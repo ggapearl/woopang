@@ -250,6 +250,7 @@ GameObject:
   - component: {fileID: 4665253901918536140}
   - component: {fileID: 8162742276075675684}
   - component: {fileID: 3205665381121554828}
+  - component: {fileID: 534382841620475528}
   m_Layer: 5
   m_Name: AdminNoticeItem
   m_TagString: Untagged
@@ -335,6 +336,19 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &534382841620475528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4056793556258043473}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e37f823d8ce54ca4682e2ffa4183acf3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UITouchForwarder
+  customSound: {fileID: 0}
 --- !u!1 &5231804753480408899
 GameObject:
   m_ObjectHideFlags: 0

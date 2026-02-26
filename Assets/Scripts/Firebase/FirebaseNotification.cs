@@ -46,6 +46,24 @@ public class MessageDataList
 }
 
 [System.Serializable]
+public class AdminMessageResponse
+{
+    public bool success;
+    public List<AdminMessageItem> messages;
+}
+
+[System.Serializable]
+public class AdminMessageItem
+{
+    public int id;
+    public string title;
+    public string body;
+    public string sender_id;
+    public string sender_username;
+    public string created_at;
+}
+
+[System.Serializable]
 public class TokenResponse
 {
     public string message;
@@ -574,6 +592,9 @@ public class FirebaseNotification : MonoBehaviour
         {
             StartCoroutine(CheckBackgroundNotification());
 
+            // 포그라운드 복귀 시 서버에서 놓친 관리자 메시지 복구
+            StartCoroutine(RecoverAdminMessagesFromServer());
+
             // [FIX] 포그라운드 복귀 시 위치 정보 즉시 업데이트
             if (!string.IsNullOrEmpty(currentFCMToken))
             {
@@ -648,6 +669,17 @@ public class FirebaseNotification : MonoBehaviour
         string title = "";
         string body = "";
 
+        // 디버깅: 수신된 FCM 메시지 정보
+        string dataKeys = (e.Message.Data != null) ? string.Join(",", e.Message.Data.Keys) : "none";
+        string msgType = "";
+        string dbgTitle = "";
+        if (e.Message.Data != null)
+        {
+            if (e.Message.Data.ContainsKey("type")) msgType = e.Message.Data["type"];
+            if (e.Message.Data.ContainsKey("title")) dbgTitle = e.Message.Data["title"];
+        }
+        Debug.Log($"[WP_PUSH] OnMessageReceived focused={Application.isFocused} type={msgType} title={dbgTitle} keys=[{dataKeys}]");
+
         if (e.Message.Notification != null)
         {
             title = e.Message.Notification.Title ?? "";
@@ -714,6 +746,7 @@ public class FirebaseNotification : MonoBehaviour
             else if (e.Message.Data.ContainsKey("notification_type"))
                 messageType = e.Message.Data["notification_type"];
         }
+        Debug.Log($"[WP_PUSH] HandleForeground type={messageType} title={title} msgId={messageId}");
 
 
         // === 업로드 완료/승인 알림 처리 ===
@@ -837,7 +870,63 @@ public class FirebaseNotification : MonoBehaviour
             return; // DM은 위치 기반 알림 저장 안 함
         }
 
-        // 위치 기반 알림 처리
+        // === 관리자 브로드캐스트 메시지 처리 (DM 대화방 형태로 통합) ===
+        if (messageType == "admin_broadcast")
+        {
+            string adminSenderId = "3";
+            string adminSenderName = "WOOPANG";
+
+            if (e.Message.Data != null)
+            {
+                if (e.Message.Data.ContainsKey("sender_id"))
+                    adminSenderId = e.Message.Data["sender_id"];
+                if (e.Message.Data.ContainsKey("sender_username"))
+                    adminSenderName = e.Message.Data["sender_username"];
+            }
+
+            // 제목과 내용을 합쳐서 전달 (채팅방에서 제목+내용 모두 표시)
+            string combinedMessage = !string.IsNullOrEmpty(title) ? $"<b>{title}</b>\n{body}" : body;
+
+            Debug.Log($"[WP_PUSH] HandleForeground admin_broadcast: senderId={adminSenderId} sender={adminSenderName} title={title} body={body}");
+
+            var manager = GetMessagePanelManager();
+            if (manager != null)
+            {
+                try
+                {
+                    manager.AddOrUpdateConversationFromPush(adminSenderId, adminSenderName, combinedMessage);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[WP_PUSH] AddOrUpdateConversation 예외: {ex.Message}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[WP_PUSH] MessagePanelManager를 찾을 수 없음!");
+            }
+
+            MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
+
+#if UNITY_ANDROID
+            var adminNotif = new AndroidNotification
+            {
+                Title = title,
+                Text = body,
+                FireTime = System.DateTime.Now,
+                SmallIcon = "icon_0",
+                LargeIcon = "icon_1",
+                ShouldAutoCancel = true,
+                Group = "woopang_admin"
+            };
+            int adminNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+            AndroidNotificationCenter.SendNotification(adminNotif, "woopang_channel_high");
+            activeNotificationIds.Add(adminNotifId);
+#endif
+            return;
+        }
+
+        // 위치 기반 알림 처리 (type이 없는 기존 알림)
 
         float targetLat = 0f, targetLon = 0f, radius = 0f;
         string currentDistance = "";
@@ -904,6 +993,7 @@ public class FirebaseNotification : MonoBehaviour
             else if (e.Message.Data.ContainsKey("notification_type"))
                 messageType = e.Message.Data["notification_type"];
         }
+        Debug.Log($"[WP_PUSH] HandleBackground type={messageType} title={title} msgId={messageId}");
 
         // === 업로드 완료/승인 알림 처리 ===
         if (messageType == "upload_complete" || messageType == "upload_approved")
@@ -1031,7 +1121,43 @@ public class FirebaseNotification : MonoBehaviour
             return; // DM은 위치 기반 알림 저장 안 함
         }
 
-        // 위치 기반 알림 처리 (백그라운드)
+        // === 관리자 브로드캐스트 메시지 처리 (DM 대화방 형태로 통합) ===
+        if (messageType == "admin_broadcast")
+        {
+            string adminSenderId = "3";
+            string adminSenderName = "WOOPANG";
+
+            if (e.Message.Data != null)
+            {
+                if (e.Message.Data.ContainsKey("sender_id"))
+                    adminSenderId = e.Message.Data["sender_id"];
+                if (e.Message.Data.ContainsKey("sender_username"))
+                    adminSenderName = e.Message.Data["sender_username"];
+            }
+
+            // 제목과 내용을 합쳐서 전달
+            string bgCombinedMessage = !string.IsNullOrEmpty(title) ? $"<b>{title}</b>\n{body}" : body;
+
+            var manager = GetMessagePanelManager();
+            if (manager != null)
+            {
+                try
+                {
+                    manager.AddOrUpdateConversationFromPush(adminSenderId, adminSenderName, bgCombinedMessage);
+                }
+                catch (System.Exception) { }
+            }
+
+            MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
+
+            // 서버가 notification 필드를 포함하므로 Android가 자동으로 알림바 표시
+            // AndroidNotificationCenter.SendNotification 호출하면 중복 알림 발생하므로 생략
+
+            Debug.Log($"[WP_PUSH] HandleBackground admin_broadcast 저장완료: title={title} body={body}");
+            return;
+        }
+
+        // 위치 기반 알림 처리 (백그라운드, type이 없는 기존 알림)
 
         float targetLat = 0f, targetLon = 0f, radius = 0f;
         string currentDistance = "";
@@ -1118,6 +1244,104 @@ public class FirebaseNotification : MonoBehaviour
         // 앱 활성화 시 FCM OnMessageReceived로 처리됨
 #endif
         yield break;
+    }
+
+    /// <summary>
+    /// 포그라운드 복귀 시 서버에서 놓친 관리자 메시지 복구
+    /// 백그라운드에서 OnMessageReceived가 호출되지 않아 메시지 저장이 안 된 경우 보완
+    /// </summary>
+    private IEnumerator RecoverAdminMessagesFromServer()
+    {
+        // 약간의 딜레이 (다른 초기화가 끝난 후 실행)
+        yield return new WaitForSeconds(1.5f);
+
+        var manager = GetMessagePanelManager();
+        if (manager == null) yield break;
+
+        // 마지막 관리자 메시지 수신 시간 (PlayerPrefs에 저장)
+        string lastAdminMsgTime = PlayerPrefs.GetString("LastAdminMsgRecoveryTime", "");
+        string url = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent";
+        if (!string.IsNullOrEmpty(lastAdminMsgTime))
+        {
+            url += $"?since={UnityWebRequest.EscapeURL(lastAdminMsgTime)}";
+        }
+
+        Debug.Log($"[WP_PUSH] RecoverAdminMessages: url={url}");
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            request.certificateHandler = new BypassCertificateHandler();
+            request.timeout = 10;
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string responseText = request.downloadHandler.text;
+                var response = JsonUtility.FromJson<AdminMessageResponse>(responseText);
+
+                if (response != null && response.success && response.messages != null && response.messages.Count > 0)
+                {
+                    int recoveredCount = 0;
+                    string latestTime = lastAdminMsgTime;
+
+                    // 오래된 순서로 처리 (리스트는 DESC로 오므로 역순으로)
+                    for (int i = response.messages.Count - 1; i >= 0; i--)
+                    {
+                        var msg = response.messages[i];
+                        string senderId = msg.sender_id ?? "3";
+                        string senderName = msg.sender_username ?? "WOOPANG";
+                        string msgTitle = msg.title ?? "";
+                        string msgBody = msg.body ?? "";
+                        string createdAt = msg.created_at ?? "";
+
+                        // 제목+내용 합치기
+                        string combinedMsg = !string.IsNullOrEmpty(msgTitle) ? $"<b>{msgTitle}</b>\n{msgBody}" : msgBody;
+
+                        // 이미 처리된 메시지인지 중복 체크 (내용+시간 기반)
+                        string dupKey = $"admin_{msgBody}_{createdAt}";
+                        if (processedMessageIds.Contains(dupKey)) continue;
+                        processedMessageIds.Add(dupKey);
+
+                        // 대화 목록에 추가/업데이트
+                        try
+                        {
+                            manager.AddOrUpdateConversationFromPush(senderId, senderName, combinedMsg);
+                            recoveredCount++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[WP_PUSH] RecoverAdmin 메시지 추가 실패: {ex.Message}");
+                        }
+
+                        // 가장 최근 시간 추적
+                        if (string.Compare(createdAt, latestTime) > 0)
+                            latestTime = createdAt;
+                    }
+
+                    // 마지막 복구 시간 저장
+                    if (!string.IsNullOrEmpty(latestTime))
+                    {
+                        PlayerPrefs.SetString("LastAdminMsgRecoveryTime", latestTime);
+                        PlayerPrefs.Save();
+                    }
+
+                    if (recoveredCount > 0)
+                    {
+                        Debug.Log($"[WP_PUSH] RecoverAdmin 완료: {recoveredCount}건 복구");
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[WP_PUSH] RecoverAdmin API 실패: {request.error}");
+            }
+        }
+
+        // chatRoomPanel이 열려있고 WOOPANG 채팅방이면 리프레시
+        if (manager != null)
+        {
+            manager.RefreshChatRoomIfNeeded("3");
+        }
     }
 
     // 활성 알림 스마트 관리
@@ -1294,6 +1518,8 @@ public class FirebaseNotification : MonoBehaviour
 
     private void ProcessNativeMessage(string title, string body, float targetLat, float targetLon, float radius, string msgType = "", string senderId = "", string senderUsername = "")
     {
+        Debug.Log($"[WP_PUSH] ProcessNativeMessage type={msgType} senderId={senderId} title={title}");
+
         // DM Handling
         if (msgType == "dm" || msgType == "DM")
         {
@@ -1305,11 +1531,61 @@ public class FirebaseNotification : MonoBehaviour
                 {
                     messageContent = messageContent.Substring(senderUsername.Length + 2);
                 }
-                
+
                 manager.AddOrUpdateConversationFromPush(senderId, senderUsername, messageContent);
 
                 // iOS 포그라운드에서는 시스템 알림이 안 뜨므로 인앱 배너 표시
                 ShowInAppNotification(title, body, senderId, senderUsername);
+            }
+            return;
+        }
+
+        // === 관리자 브로드캐스트 처리 (iOS) ===
+        if (msgType == "admin_broadcast")
+        {
+            string adminSenderId = !string.IsNullOrEmpty(senderId) ? senderId : "3";
+            string adminSenderName = !string.IsNullOrEmpty(senderUsername) ? senderUsername : "WOOPANG";
+
+            // 제목+내용 합쳐서 전달
+            string iosCombinedMsg = !string.IsNullOrEmpty(title) ? $"<b>{title}</b>\n{body}" : body;
+
+            Debug.Log($"[WP_PUSH] iOS admin_broadcast: senderId={adminSenderId} sender={adminSenderName} title={title} body={body}");
+
+            var manager = FindFirstObjectByType<MessagePanelManager>();
+            if (manager != null)
+            {
+                try
+                {
+                    manager.AddOrUpdateConversationFromPush(adminSenderId, adminSenderName, iosCombinedMsg);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[WP_PUSH] iOS admin_broadcast 저장 실패: {ex.Message}");
+                }
+            }
+
+            // iOS 포그라운드에서 인앱 배너 표시
+            if (Application.isFocused)
+            {
+                ShowInAppNotification(title, body, adminSenderId, adminSenderName);
+            }
+
+            DateTime ts = DateTime.Now;
+            string msgId = GenerateMessageId(title, body, ts);
+            MarkMessageAsProcessed(msgId, title, body, ts);
+            return;
+        }
+
+        // === 업로드 완료/승인 알림 처리 (iOS) ===
+        if (msgType == "upload_complete" || msgType == "upload_approved")
+        {
+            var manager = FindFirstObjectByType<MessagePanelManager>();
+            if (manager != null)
+            {
+                DateTime ts = DateTime.Now;
+                string msgId = GenerateMessageId(title, body, ts);
+                manager.AddLocationNotificationFromPush(title, body, msgId);
+                MarkMessageAsProcessed(msgId, title, body, ts);
             }
             return;
         }
