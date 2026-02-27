@@ -685,7 +685,6 @@ public class FirebaseNotification : MonoBehaviour
             if (e.Message.Data.ContainsKey("type")) msgType = e.Message.Data["type"];
             if (e.Message.Data.ContainsKey("title")) dbgTitle = e.Message.Data["title"];
         }
-        Debug.Log($"[WP_PUSH] OnMessageReceived focused={Application.isFocused} type={msgType} title={dbgTitle} keys=[{dataKeys}]");
 
         if (e.Message.Notification != null)
         {
@@ -753,7 +752,6 @@ public class FirebaseNotification : MonoBehaviour
             else if (e.Message.Data.ContainsKey("notification_type"))
                 messageType = e.Message.Data["notification_type"];
         }
-        Debug.Log($"[WP_PUSH] HandleForeground type={messageType} title={title} msgId={messageId}");
 
 
         // === 업로드 완료/승인 알림 처리 ===
@@ -840,39 +838,46 @@ public class FirebaseNotification : MonoBehaviour
                 }
             }
 
+            // chatRoomPanel에서 해당 상대와 대화 중이면 시스템 알림 억제
+            bool isChatOpen = manager != null && manager.IsChatRoomOpenForUser(senderId);
+            if (!isChatOpen)
+            {
 #if UNITY_ANDROID
-            try
-            {
-                var channel = new AndroidNotificationChannel()
+                try
                 {
-                    Id = "woopang_channel_high",
-                    Name = "Default Channel",
-                    Importance = Importance.High,
-                    Description = "Generic notifications",
-                };
-                AndroidNotificationCenter.RegisterNotificationChannel(channel);
+                    var channel = new AndroidNotificationChannel()
+                    {
+                        Id = "woopang_channel_high",
+                        Name = "Default Channel",
+                        Importance = Importance.High,
+                        Description = "Generic notifications",
+                    };
+                    AndroidNotificationCenter.RegisterNotificationChannel(channel);
 
-                // DM 메시지도 포그라운드에서 시스템 알림 표시
-                var dmNotification = new AndroidNotification
+                    var dmNotification = new AndroidNotification
+                    {
+                        Title = title,
+                        Text = body,
+                        FireTime = System.DateTime.Now.AddSeconds(0.5f),
+                        SmallIcon = "icon_0",
+                        LargeIcon = "icon_1",
+                        ShouldAutoCancel = true,
+                        Group = "woopang_dm"
+                    };
+
+                    int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+                    AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
+                    activeNotificationIds.Add(dmNotificationId);
+                }
+                catch (System.Exception ex)
                 {
-                    Title = title,
-                    Text = body,
-                    FireTime = System.DateTime.Now.AddSeconds(0.5f),
-                    SmallIcon = "icon_0",
-                    LargeIcon = "icon_1",
-                    ShouldAutoCancel = true,
-                    Group = "woopang_dm"
-                };
-                
-                int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-                AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
-                activeNotificationIds.Add(dmNotificationId);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[FirebaseNotification] Failed to send foreground notification: {ex.Message}");
-            }
+                    Debug.LogError($"[FirebaseNotification] Failed to send foreground notification: {ex.Message}");
+                }
 #endif
+            }
+            else
+            {
+            }
 
             return; // DM은 위치 기반 알림 저장 안 함
         }
@@ -894,7 +899,6 @@ public class FirebaseNotification : MonoBehaviour
             // 제목과 내용을 합쳐서 전달 (채팅방에서 제목+내용 모두 표시)
             string combinedMessage = !string.IsNullOrEmpty(title) ? $"<b>{title}</b>\n{body}" : body;
 
-            Debug.Log($"[WP_PUSH] HandleForeground admin_broadcast: senderId={adminSenderId} sender={adminSenderName} title={title} body={body}");
 
             var manager = GetMessagePanelManager();
             if (manager != null)
@@ -915,21 +919,29 @@ public class FirebaseNotification : MonoBehaviour
 
             MarkMessageAsProcessed(messageId, title, body, serverTimestamp);
 
-#if UNITY_ANDROID
-            var adminNotif = new AndroidNotification
+            // 관리자 채팅방이 열려있으면 시스템 알림 억제
+            bool isAdminChatOpen = manager != null && manager.IsChatRoomOpenForUser(adminSenderId);
+            if (!isAdminChatOpen)
             {
-                Title = title,
-                Text = body,
-                FireTime = System.DateTime.Now,
-                SmallIcon = "icon_0",
-                LargeIcon = "icon_1",
-                ShouldAutoCancel = true,
-                Group = "woopang_admin"
-            };
-            int adminNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-            AndroidNotificationCenter.SendNotification(adminNotif, "woopang_channel_high");
-            activeNotificationIds.Add(adminNotifId);
+#if UNITY_ANDROID
+                var adminNotif = new AndroidNotification
+                {
+                    Title = title,
+                    Text = body,
+                    FireTime = System.DateTime.Now,
+                    SmallIcon = "icon_0",
+                    LargeIcon = "icon_1",
+                    ShouldAutoCancel = true,
+                    Group = "woopang_admin"
+                };
+                int adminNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+                AndroidNotificationCenter.SendNotification(adminNotif, "woopang_channel_high");
+                activeNotificationIds.Add(adminNotifId);
 #endif
+            }
+            else
+            {
+            }
             return;
         }
 
@@ -1000,7 +1012,6 @@ public class FirebaseNotification : MonoBehaviour
             else if (e.Message.Data.ContainsKey("notification_type"))
                 messageType = e.Message.Data["notification_type"];
         }
-        Debug.Log($"[WP_PUSH] HandleBackground type={messageType} title={title} msgId={messageId}");
 
         // === 업로드 완료/승인 알림 처리 ===
         if (messageType == "upload_complete" || messageType == "upload_approved")
@@ -1089,41 +1100,46 @@ public class FirebaseNotification : MonoBehaviour
                 }
             }
 
+            // chatRoomPanel에서 해당 상대와 대화 중이면 알림 억제
+            bool bgDmChatOpen = manager != null && manager.IsChatRoomOpenForUser(senderId);
+            if (!bgDmChatOpen)
+            {
 #if UNITY_ANDROID
-            try
-            {
-                // 채널이 없는 경우를 대비해 다시 등록
-                var channel = new AndroidNotificationChannel()
+                try
                 {
-                    Id = "woopang_channel_high",
-                    Name = "Default Channel",
-                    Importance = Importance.High,
-                    Description = "Generic notifications",
-                };
-                AndroidNotificationCenter.RegisterNotificationChannel(channel);
+                    var channel = new AndroidNotificationChannel()
+                    {
+                        Id = "woopang_channel_high",
+                        Name = "Default Channel",
+                        Importance = Importance.High,
+                        Description = "Generic notifications",
+                    };
+                    AndroidNotificationCenter.RegisterNotificationChannel(channel);
 
-                // DM 메시지도 백그라운드에서 시스템 알림 표시
-                var dmNotification = new AndroidNotification
+                    var dmNotification = new AndroidNotification
+                    {
+                        Title = title,
+                        Text = body,
+                        FireTime = System.DateTime.Now.AddSeconds(0.5f),
+                        SmallIcon = "icon_0",
+                        LargeIcon = "icon_1",
+                        ShouldAutoCancel = true,
+                        Group = "woopang_dm"
+                    };
+
+                    int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
+                    AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
+                    activeNotificationIds.Add(dmNotificationId);
+                }
+                catch (System.Exception ex)
                 {
-                    Title = title,
-                    Text = body,
-                    FireTime = System.DateTime.Now.AddSeconds(0.5f), // 0.5초 뒤 발송
-                    SmallIcon = "icon_0",
-                    LargeIcon = "icon_1",
-                    ShouldAutoCancel = true,
-                    Group = "woopang_dm"
-                };
-                
-                int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-                AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
-                activeNotificationIds.Add(dmNotificationId);
-                
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[FirebaseNotification] Failed to send background notification: {ex.Message}");
-            }
+                    Debug.LogError($"[FirebaseNotification] Failed to send background notification: {ex.Message}");
+                }
 #endif
+            }
+            else
+            {
+            }
 
             return; // DM은 위치 기반 알림 저장 안 함
         }
@@ -1160,7 +1176,6 @@ public class FirebaseNotification : MonoBehaviour
             // 서버가 notification 필드를 포함하므로 Android가 자동으로 알림바 표시
             // AndroidNotificationCenter.SendNotification 호출하면 중복 알림 발생하므로 생략
 
-            Debug.Log($"[WP_PUSH] HandleBackground admin_broadcast 저장완료: title={title} body={body}");
             return;
         }
 
@@ -1266,14 +1281,24 @@ public class FirebaseNotification : MonoBehaviour
         if (manager == null) yield break;
 
         // 마지막 관리자 메시지 수신 시간 (PlayerPrefs에 저장)
-        string lastAdminMsgTime = PlayerPrefs.GetString("LastAdminMsgRecoveryTime", "");
+        // LastAdminMsgRecoveryTime과 AdminBroadcastLastReadTime 중 더 최신 값 사용
+        // → 이미 읽은 오래된 메시지를 서버에서 가져오지 않음
+        string lastRecoveryTime = PlayerPrefs.GetString("LastAdminMsgRecoveryTime", "");
+        string lastReadTime2 = PlayerPrefs.GetString("AdminBroadcastLastReadTime", "");
+        string lastAdminMsgTime = lastRecoveryTime;
+        if (!string.IsNullOrEmpty(lastReadTime2))
+        {
+            if (string.IsNullOrEmpty(lastAdminMsgTime) || string.Compare(lastReadTime2, lastAdminMsgTime) > 0)
+            {
+                lastAdminMsgTime = lastReadTime2;
+            }
+        }
         string url = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent";
         if (!string.IsNullOrEmpty(lastAdminMsgTime))
         {
             url += $"?since={UnityWebRequest.EscapeURL(lastAdminMsgTime)}";
         }
 
-        Debug.Log($"[WP_PUSH] RecoverAdminMessages: url={url}");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -1294,6 +1319,14 @@ public class FirebaseNotification : MonoBehaviour
                     // 숨김 처리된 메시지 ID 확인 (삭제한 관리자 메시지 재복구 방지)
                     int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
 
+                    // 이미 읽은 메시지 시간 확인 (읽음 표시된 메시지 재복구 시 unread 방지)
+                    string lastReadTimeStr = PlayerPrefs.GetString("AdminBroadcastLastReadTime", "");
+                    DateTime lastReadTime = DateTime.MinValue;
+                    if (!string.IsNullOrEmpty(lastReadTimeStr))
+                    {
+                        DateTime.TryParse(lastReadTimeStr, out lastReadTime);
+                    }
+
                     // 오래된 순서로 처리 (리스트는 DESC로 오므로 역순으로)
                     for (int i = response.messages.Count - 1; i >= 0; i--)
                     {
@@ -1302,7 +1335,6 @@ public class FirebaseNotification : MonoBehaviour
                         // 숨김 처리된 메시지는 스킵 (사용자가 삭제한 관리자 메시지)
                         if (msg.id > 0 && msg.id <= hiddenMaxId)
                         {
-                            Debug.Log($"[WP_PUSH] RecoverAdmin 스킵 (숨김): id={msg.id} hiddenMaxId={hiddenMaxId}");
                             continue;
                         }
 
@@ -1311,6 +1343,17 @@ public class FirebaseNotification : MonoBehaviour
                         string msgTitle = msg.title ?? "";
                         string msgBody = msg.body ?? "";
                         string createdAt = msg.created_at ?? "";
+
+                        // 이미 읽은 메시지인지 확인 (created_at <= AdminBroadcastLastReadTime)
+                        bool isAlreadyRead = false;
+                        if (lastReadTime > DateTime.MinValue && !string.IsNullOrEmpty(createdAt))
+                        {
+                            DateTime msgTime;
+                            if (DateTime.TryParse(createdAt, out msgTime))
+                            {
+                                isAlreadyRead = msgTime <= lastReadTime;
+                            }
+                        }
 
                         // 제목+내용 합치기
                         string combinedMsg = !string.IsNullOrEmpty(msgTitle) ? $"<b>{msgTitle}</b>\n{msgBody}" : msgBody;
@@ -1323,7 +1366,15 @@ public class FirebaseNotification : MonoBehaviour
                         // 대화 목록에 추가/업데이트
                         try
                         {
-                            manager.AddOrUpdateConversationFromPush(senderId, senderName, combinedMsg);
+                            if (isAlreadyRead)
+                            {
+                                // 이미 읽은 메시지: 대화 목록에는 추가하되 unread 증가 없이
+                                manager.AddOrUpdateConversationFromPush(senderId, senderName, combinedMsg, null, true);
+                            }
+                            else
+                            {
+                                manager.AddOrUpdateConversationFromPush(senderId, senderName, combinedMsg);
+                            }
                             recoveredCount++;
                         }
                         catch (Exception ex)
@@ -1345,7 +1396,6 @@ public class FirebaseNotification : MonoBehaviour
 
                     if (recoveredCount > 0)
                     {
-                        Debug.Log($"[WP_PUSH] RecoverAdmin 완료: {recoveredCount}건 복구");
                     }
                 }
             }
@@ -1536,7 +1586,6 @@ public class FirebaseNotification : MonoBehaviour
 
     private void ProcessNativeMessage(string title, string body, float targetLat, float targetLon, float radius, string msgType = "", string senderId = "", string senderUsername = "")
     {
-        Debug.Log($"[WP_PUSH] ProcessNativeMessage type={msgType} senderId={senderId} title={title}");
 
         // DM Handling
         if (msgType == "dm" || msgType == "DM")
@@ -1552,8 +1601,14 @@ public class FirebaseNotification : MonoBehaviour
 
                 manager.AddOrUpdateConversationFromPush(senderId, senderUsername, messageContent);
 
-                // iOS 포그라운드에서는 시스템 알림이 안 뜨므로 인앱 배너 표시
-                ShowInAppNotification(title, body, senderId, senderUsername);
+                // chatRoomPanel에서 해당 상대와 대화 중이면 인앱 배너 억제
+                if (!manager.IsChatRoomOpenForUser(senderId))
+                {
+                    ShowInAppNotification(title, body, senderId, senderUsername);
+                }
+                else
+                {
+                }
             }
             return;
         }
@@ -1567,7 +1622,6 @@ public class FirebaseNotification : MonoBehaviour
             // 제목+내용 합쳐서 전달
             string iosCombinedMsg = !string.IsNullOrEmpty(title) ? $"<b>{title}</b>\n{body}" : body;
 
-            Debug.Log($"[WP_PUSH] iOS admin_broadcast: senderId={adminSenderId} sender={adminSenderName} title={title} body={body}");
 
             var manager = FindFirstObjectByType<MessagePanelManager>();
             if (manager != null)
@@ -1582,10 +1636,16 @@ public class FirebaseNotification : MonoBehaviour
                 }
             }
 
-            // iOS 포그라운드에서 인앱 배너 표시
+            // iOS 포그라운드에서 인앱 배너 표시 (관리자 채팅방 열려있으면 억제)
             if (Application.isFocused)
             {
-                ShowInAppNotification(title, body, adminSenderId, adminSenderName);
+                if (manager == null || !manager.IsChatRoomOpenForUser(adminSenderId))
+                {
+                    ShowInAppNotification(title, body, adminSenderId, adminSenderName);
+                }
+                else
+                {
+                }
             }
 
             DateTime ts = DateTime.Now;
