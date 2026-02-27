@@ -737,7 +737,16 @@ public class MessagePanelManager : MonoBehaviour
 
         if (!isChatRoomOpen)
         {
-            totalUnreadCount++;
+            // 관리자 공지는 GetAdminBroadcastUnreadCount()로 별도 계산하므로 totalUnreadCount에 더하지 않음
+            if (!isWoopangMessage)
+            {
+                totalUnreadCount++;
+                Debug.Log($"[WP_PUSH] totalUnreadCount++ → {totalUnreadCount} (DM from {senderId})");
+            }
+            else
+            {
+                Debug.Log($"[WP_PUSH] 관리자 메시지 unread: totalUnreadCount 변경 없음 (adminUnread로 별도 계산)");
+            }
         }
         UpdateUnreadUI();
 
@@ -1047,14 +1056,21 @@ public class MessagePanelManager : MonoBehaviour
             var conv = conversations.Find(c => c.userId == userId);
             if (conv != null && conv.unreadCount > 0)
             {
-                Debug.Log($"[WP_PUSH] OpenChatRoom 읽음처리: userId={userId} unread={conv.unreadCount} isAdmin={isAdmin}");
-                totalUnreadCount = Mathf.Max(0, totalUnreadCount - conv.unreadCount);
+                Debug.Log($"[WP_PUSH] OpenChatRoom 읽음처리: userId={userId} unread={conv.unreadCount} isAdmin={isAdmin} isAdminBroadcast={conv.isAdminBroadcast}");
+
+                // 관리자 공지는 totalUnreadCount에 포함되지 않으므로 차감하지 않음
+                // (GetAdminBroadcastUnreadCount()로 별도 계산)
+                if (!conv.isAdminBroadcast)
+                {
+                    totalUnreadCount = Mathf.Max(0, totalUnreadCount - conv.unreadCount);
+                }
                 conv.unreadCount = 0;
                 conv.isRead = true;
+                Debug.Log($"[WP_PUSH] OpenChatRoom 읽음처리 후: totalUnreadCount={totalUnreadCount} conv.unreadCount={conv.unreadCount}");
                 UpdateUnreadUI();
 
                 // 시스템 메시지면 로컬 저장도 업데이트
-                if (conv.isSystemMessage)
+                if (conv.isSystemMessage && !conv.isAdminBroadcast)
                 {
                     SaveSystemNotifications();
                 }
@@ -1066,6 +1082,12 @@ public class MessagePanelManager : MonoBehaviour
                 PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                 PlayerPrefs.Save();
                 Debug.Log($"[WP_PUSH] AdminBroadcastLastReadTime 저장: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+
+                // conv가 없거나 unreadCount가 이미 0이더라도 UI 갱신 (관리자 unread 반영)
+                if (conv != null && conv.unreadCount == 0)
+                {
+                    UpdateUnreadUI();
+                }
             }
             else
             {
@@ -2196,8 +2218,14 @@ public class MessagePanelManager : MonoBehaviour
             }
             PlayerPrefs.SetInt("HiddenAdminBroadcastMaxId", latestId);
             PlayerPrefs.Save();
+            Debug.Log($"[WP_PUSH] DeleteAdminBroadcast: HiddenAdminBroadcastMaxId={latestId} adminBroadcasts.Clear()");
             adminBroadcasts.Clear();
         }
+
+        // 관리자 메시지 읽음 시간도 현재로 갱신 (삭제 = 읽음)
+        PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+        PlayerPrefs.Save();
+        Debug.Log($"[WP_PUSH] DeleteAdminBroadcast: AdminBroadcastLastReadTime 갱신={DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 
         // UI에서 제거
         if (item != null)
@@ -2248,17 +2276,21 @@ public class MessagePanelManager : MonoBehaviour
             request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
+            Debug.Log($"[WP_PUSH] DeleteConversation: otherUserId={otherUserId} result={request.result} responseCode={request.responseCode}");
+
             if (request.result == UnityWebRequest.Result.Success)
             {
                 // conversations 리스트에서 제거 + unread 차감
                 var conv = conversations.Find(c => c.userId == otherUserId);
                 if (conv != null)
                 {
+                    Debug.Log($"[WP_PUSH] DeleteConversation 성공: userId={otherUserId} unread={conv.unreadCount} totalBefore={totalUnreadCount}");
                     if (conv.unreadCount > 0)
                     {
                         totalUnreadCount = Mathf.Max(0, totalUnreadCount - conv.unreadCount);
                     }
                     conversations.Remove(conv);
+                    Debug.Log($"[WP_PUSH] DeleteConversation 후: totalUnreadCount={totalUnreadCount} conversations.Count={conversations.Count}");
                 }
 
                 // UI에서 제거
@@ -4189,6 +4221,7 @@ public class MessagePanelManager : MonoBehaviour
                 var response = JsonUtility.FromJson<DMUnreadCountResponse>(request.downloadHandler.text);
                 int previousCount = totalUnreadCount;
                 totalUnreadCount = response.unread_count;
+                Debug.Log($"[WP_PUSH] FetchUnreadCount: server={response.unread_count} prev={previousCount} → totalUnreadCount={totalUnreadCount}");
                 UpdateUnreadUI();
 
                 // 안읽음 수가 변경되었고, 메시지 패널이 열려있으면 대화 목록 갱신
@@ -4207,8 +4240,11 @@ public class MessagePanelManager : MonoBehaviour
         int adminUnread = GetAdminBroadcastUnreadCount();
         int totalUnread = totalUnreadCount + locationUnread + adminUnread;
 
+        bool shouldShow = totalUnread > 0;
+        Debug.Log($"[WP_PUSH] UpdateUnreadUI: dmUnread={totalUnreadCount} locationUnread={locationUnread} adminUnread={adminUnread} totalUnread={totalUnread} indicator={shouldShow}");
+
         if (globalUnreadIndicator != null)
-            globalUnreadIndicator.SetActive(totalUnread > 0);
+            globalUnreadIndicator.SetActive(shouldShow);
 
         // iOS 앱 배지 업데이트
         UpdateAppBadgeCount(totalUnread);
