@@ -1288,10 +1288,21 @@ public class FirebaseNotification : MonoBehaviour
                     int recoveredCount = 0;
                     string latestTime = lastAdminMsgTime;
 
+                    // 숨김 처리된 메시지 ID 확인 (삭제한 관리자 메시지 재복구 방지)
+                    int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
+
                     // 오래된 순서로 처리 (리스트는 DESC로 오므로 역순으로)
                     for (int i = response.messages.Count - 1; i >= 0; i--)
                     {
                         var msg = response.messages[i];
+
+                        // 숨김 처리된 메시지는 스킵 (사용자가 삭제한 관리자 메시지)
+                        if (msg.id > 0 && msg.id <= hiddenMaxId)
+                        {
+                            Debug.Log($"[WP_PUSH] RecoverAdmin 스킵 (숨김): id={msg.id} hiddenMaxId={hiddenMaxId}");
+                            continue;
+                        }
+
                         string senderId = msg.sender_id ?? "3";
                         string senderName = msg.sender_username ?? "WOOPANG";
                         string msgTitle = msg.title ?? "";

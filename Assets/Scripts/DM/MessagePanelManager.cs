@@ -712,8 +712,12 @@ public class MessagePanelManager : MonoBehaviour
             existingConv.lastMessageTime = currentTime;
             if (!isChatRoomOpen)
                 existingConv.unreadCount++;
-            if (isWoopangMessage) existingConv.isSystemMessage = true;
-            Debug.Log($"[WP_PUSH] 기존 대화 업데이트: userId={senderId} unread={existingConv.unreadCount} chatOpen={isChatRoomOpen}");
+            if (isWoopangMessage)
+            {
+                existingConv.isSystemMessage = true;
+                existingConv.isAdminBroadcast = true;
+            }
+            Debug.Log($"[WP_PUSH] 기존 대화 업데이트: userId={senderId} unread={existingConv.unreadCount} chatOpen={isChatRoomOpen} isAdminBroadcast={existingConv.isAdminBroadcast}");
         }
         else
         {
@@ -726,11 +730,12 @@ public class MessagePanelManager : MonoBehaviour
                 lastMessage = messageContent,
                 lastMessageTime = currentTime,
                 unreadCount = isChatRoomOpen ? 0 : 1,
-                isSystemMessage = isWoopangMessage
+                isSystemMessage = isWoopangMessage,
+                isAdminBroadcast = isWoopangMessage
             };
 
             conversations.Add(newConv);
-            Debug.Log($"[WP_PUSH] 새 대화 추가: userId={senderId} isSystem={isWoopangMessage} chatOpen={isChatRoomOpen}");
+            Debug.Log($"[WP_PUSH] 새 대화 추가: userId={senderId} isSystem={isWoopangMessage} isAdminBroadcast={isWoopangMessage} chatOpen={isChatRoomOpen}");
         }
 
         SortConversationsByTime();
@@ -947,7 +952,8 @@ public class MessagePanelManager : MonoBehaviour
         int count = 0;
         foreach (var c in conversations)
         {
-            if (c.isSystemMessage && !c.isRead) count++;
+            // 관리자 공지는 별도로 GetAdminBroadcastUnreadCount()에서 계산하므로 제외
+            if (c.isSystemMessage && !c.isAdminBroadcast && !c.isRead) count++;
         }
         return count;
     }
