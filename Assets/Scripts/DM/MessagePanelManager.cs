@@ -2709,6 +2709,7 @@ public class MessagePanelManager : MonoBehaviour
             // 서버 DB에서 관리자 메시지 조회 (admin_broadcasts 테이블)
             string adminUrl = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50";
             bool hasAdminMessages = false;
+            int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
 
             using (UnityWebRequest adminRequest = UnityWebRequest.Get(adminUrl))
             {
@@ -2722,18 +2723,42 @@ public class MessagePanelManager : MonoBehaviour
 
                     if (response != null && response.success && response.messages != null && response.messages.Count > 0)
                     {
-                        hasAdminMessages = true;
+                        // 현재 GPS 위치 가져오기 (거리 표시용)
+                        float myLat = 0f, myLon = 0f;
+                        bool hasGPS = Input.location.status == LocationServiceStatus.Running;
+                        if (hasGPS)
+                        {
+                            myLat = Input.location.lastData.latitude;
+                            myLon = Input.location.lastData.longitude;
+                        }
 
                         // API는 DESC 순서(최신 먼저) → 그대로 표시 (최신이 상단)
                         for (int i = 0; i < response.messages.Count; i++)
                         {
                             var msg = response.messages[i];
+
+                            // 사용자가 삭제(숨김)한 메시지는 스킵
+                            if (msg.id > 0 && msg.id <= hiddenMaxId) continue;
+
+                            hasAdminMessages = true;
+
                             if (useDateSeparator)
                                 CheckAndCreateDateSeparator(msg.created_at);
 
+                            // 제목에 거리 표시 (좌표가 있는 경우)
+                            string titleWithDistance = msg.title ?? "";
+                            if (hasGPS && msg.latitude != 0 && msg.longitude != 0)
+                            {
+                                float dist = CalculateDistanceMeters(myLat, myLon, msg.latitude, msg.longitude);
+                                string distStr = dist < 1000f ? $"{Mathf.RoundToInt(dist)}m"
+                                    : dist < 10000f ? $"{(dist / 1000f):F1}km"
+                                    : $"{Mathf.RoundToInt(dist / 1000f)}km";
+                                titleWithDistance = $"{titleWithDistance} - {distStr}";
+                            }
+
                             // 제목+내용 합쳐서 표시
-                            string displayContent = !string.IsNullOrEmpty(msg.title)
-                                ? $"<b>{msg.title}</b>\n{msg.body}"
+                            string displayContent = !string.IsNullOrEmpty(titleWithDistance)
+                                ? $"<b>{titleWithDistance}</b>\n{msg.body}"
                                 : msg.body;
                             CreateSystemMessageBubble("WOOPANG", displayContent, msg.created_at);
                         }
@@ -4284,6 +4309,21 @@ public class MessagePanelManager : MonoBehaviour
             Unity.Notifications.Android.AndroidNotificationCenter.CancelAllDisplayedNotifications();
         }
 #endif
+    }
+
+    /// <summary>
+    /// 두 GPS 좌표 간 거리 계산 (Haversine, 미터 단위)
+    /// </summary>
+    private float CalculateDistanceMeters(float lat1, float lon1, float lat2, float lon2)
+    {
+        const float R = 6371000f;
+        float dLat = (lat2 - lat1) * Mathf.Deg2Rad;
+        float dLon = (lon2 - lon1) * Mathf.Deg2Rad;
+        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) +
+                  Mathf.Cos(lat1 * Mathf.Deg2Rad) * Mathf.Cos(lat2 * Mathf.Deg2Rad) *
+                  Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
+        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
+        return R * c;
     }
 
     #endregion

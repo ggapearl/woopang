@@ -61,6 +61,9 @@ public class AdminMessageItem
     public string sender_id;
     public string sender_username;
     public string created_at;
+    public float latitude;
+    public float longitude;
+    public float radius;
 }
 
 [System.Serializable]
