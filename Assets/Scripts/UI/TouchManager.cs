@@ -255,11 +255,10 @@ public class TouchManager : MonoBehaviour
             if (FollowManager.Instance.panel != null && FollowManager.Instance.panel.activeSelf) return true;
         }
 
-        // ProfileManager 패널 확인
+        // ProfileManager 패널 확인 (fullProfilePanel만 — miniProfile은 항상 활성이므로 제외)
         if (ProfileManager.Instance != null)
         {
             if (ProfileManager.Instance.fullProfilePanel != null && ProfileManager.Instance.fullProfilePanel.activeSelf) return true;
-            if (ProfileManager.Instance.miniProfilePanel != null && ProfileManager.Instance.miniProfilePanel.activeSelf) return true;
         }
 
         return false;
