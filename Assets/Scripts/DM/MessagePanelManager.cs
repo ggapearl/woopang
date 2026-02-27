@@ -520,6 +520,9 @@ public class MessagePanelManager : MonoBehaviour
 
         if (hasFocus)
         {
+            // 앱이 포그라운드로 돌아왔을 때 시스템 알림 및 배지 클리어
+            ClearSystemNotificationsAndBadge();
+
             // 앱이 포그라운드로 돌아왔을 때 데이터 갱신
             if (CheckLogin())
             {
@@ -540,6 +543,21 @@ public class MessagePanelManager : MonoBehaviour
                 StartCoroutine(FetchUnreadCount());
             }
         }
+    }
+
+    /// <summary>
+    /// 시스템 알림 센터 및 앱 배지 클리어 (앱 포그라운드 복귀 시)
+    /// </summary>
+    private void ClearSystemNotificationsAndBadge()
+    {
+#if UNITY_IOS
+        // iOS: 알림 센터 클리어 + 앱 아이콘 배지 리셋
+        Unity.Notifications.iOS.iOSNotificationCenter.RemoveAllDeliveredNotifications();
+        Unity.Notifications.iOS.iOSNotificationCenter.ApplicationBadge = 0;
+#elif UNITY_ANDROID
+        // Android: 상태바 알림 클리어
+        Unity.Notifications.Android.AndroidNotificationCenter.CancelAllDisplayedNotifications();
+#endif
     }
 
     void OnApplicationPause(bool pauseStatus)
@@ -774,7 +792,7 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     public int GetUnreadCount()
     {
-        return totalUnreadCount;
+        return totalUnreadCount + GetAdminBroadcastUnreadCount() + GetUnreadLocationNotificationCount();
     }
 
     /// <summary>
@@ -2232,6 +2250,17 @@ public class MessagePanelManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                // conversations 리스트에서 제거 + unread 차감
+                var conv = conversations.Find(c => c.userId == otherUserId);
+                if (conv != null)
+                {
+                    if (conv.unreadCount > 0)
+                    {
+                        totalUnreadCount = Mathf.Max(0, totalUnreadCount - conv.unreadCount);
+                    }
+                    conversations.Remove(conv);
+                }
+
                 // UI에서 제거
                 foreach (Transform child in conversationListContent)
                 {
@@ -2242,6 +2271,9 @@ public class MessagePanelManager : MonoBehaviour
                         break;
                     }
                 }
+
+                // 안읽음 UI 업데이트
+                UpdateUnreadUI();
 
                 // 햅틱 피드백
                 if (UIFeedbackManager.Instance != null)
@@ -4170,12 +4202,46 @@ public class MessagePanelManager : MonoBehaviour
 
     private void UpdateUnreadUI()
     {
-        // DM 안읽음 + 위치 알림 안읽음 합산
+        // DM 안읽음 + 위치 알림 안읽음 + 관리자 공지 안읽음 합산
         int locationUnread = GetUnreadLocationNotificationCount();
-        int totalUnread = totalUnreadCount + locationUnread;
+        int adminUnread = GetAdminBroadcastUnreadCount();
+        int totalUnread = totalUnreadCount + locationUnread + adminUnread;
 
         if (globalUnreadIndicator != null)
             globalUnreadIndicator.SetActive(totalUnread > 0);
+
+        // iOS 앱 배지 업데이트
+        UpdateAppBadgeCount(totalUnread);
+    }
+
+    /// <summary>
+    /// 관리자 공지 안읽음 카운트 (conversations 리스트 기반)
+    /// </summary>
+    private int GetAdminBroadcastUnreadCount()
+    {
+        foreach (var c in conversations)
+        {
+            if (c.isAdminBroadcast && c.unreadCount > 0)
+                return c.unreadCount;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// 앱 아이콘 배지 카운트 업데이트 (iOS/Android)
+    /// </summary>
+    private void UpdateAppBadgeCount(int count)
+    {
+#if UNITY_IOS
+        Unity.Notifications.iOS.iOSNotificationCenter.ApplicationBadge = count;
+#elif UNITY_ANDROID
+        // Android는 시스템 알림 Number로 배지 표시 (별도 API 없음)
+        // 0이면 기존 알림 클리어
+        if (count == 0)
+        {
+            Unity.Notifications.Android.AndroidNotificationCenter.CancelAllDisplayedNotifications();
+        }
+#endif
     }
 
     #endregion

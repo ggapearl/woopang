@@ -198,6 +198,10 @@ public class FirebaseNotification : MonoBehaviour
         // OnNativeTokenReceived와 OnNativeMessageReceived 콜백 사용
         LoadTokenFromPlayerPrefs();
 
+        // iOS 앱 시작 시 배지 및 알림 센터 클리어
+        Unity.Notifications.iOS.iOSNotificationCenter.RemoveAllDeliveredNotifications();
+        Unity.Notifications.iOS.iOSNotificationCenter.ApplicationBadge = 0;
+
         // iOS 앱 실행 시 백그라운드 알림 처리
         var notification = Unity.Notifications.iOS.iOSNotificationCenter.GetLastRespondedNotification();
         if (notification != null)
