@@ -536,8 +536,8 @@ public class DoubleTap3D : MonoBehaviour
 
     void Update()
     {
-        // 댓글창이 열려있으면 DoubleTap3D 스와이프 동작 중지
-        if (CommentManager.Instance != null && CommentManager.Instance.IsPanelOpen) return;
+        // 전체화면 UI가 열려있으면 AR 터치 차단
+        if (TouchManager.IsFullscreenUIOpen()) return;
 
         if (Touch.activeTouches.Count == 1 && Time.timeSinceLevelLoad > 2f)
         {

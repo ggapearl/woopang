@@ -297,6 +297,9 @@ public class P2PUserInfo : MonoBehaviour
 
         Vector2 touchPosition = touch.screenPosition;
 
+        // 전체화면 UI가 열려있으면 AR 터치 차단
+        if (TouchManager.IsFullscreenUIOpen()) return;
+
         // UI 터치 무시
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return;

@@ -48,6 +48,9 @@ public class TouchManager : MonoBehaviour
 
     void HandleTouch()
     {
+        // 전체화면 UI가 열려있으면 3D 터치 차단
+        if (IsFullscreenUIOpen()) return;
+
         // 터치 또는 마우스 클릭 감지
         bool touchDetected = false;
         Vector2 touchPosition = Vector2.zero;
@@ -227,6 +230,39 @@ public class TouchManager : MonoBehaviour
     public void EnableAll3DTouch()
     {
         touchableLayerMask = -1;
+    }
+
+    /// <summary>
+    /// 전체화면 UI 패널이 열려있는지 체크 (AR 터치 차단용)
+    /// 모든 AR 터치 스크립트에서 이 메서드로 통일하여 체크
+    /// </summary>
+    public static bool IsFullscreenUIOpen()
+    {
+        // MessagePanelManager 패널 확인
+        if (MessagePanelManager.Instance != null)
+        {
+            var mgr = MessagePanelManager.Instance;
+            if (mgr.messagePanel != null && mgr.messagePanel.activeSelf) return true;
+            if (mgr.chatRoomPanel != null && mgr.chatRoomPanel.activeSelf) return true;
+        }
+
+        // CommentManager 패널 확인
+        if (CommentManager.Instance != null && CommentManager.Instance.IsPanelOpen) return true;
+
+        // FollowManager 패널 확인
+        if (FollowManager.Instance != null)
+        {
+            if (FollowManager.Instance.panel != null && FollowManager.Instance.panel.activeSelf) return true;
+        }
+
+        // ProfileManager 패널 확인
+        if (ProfileManager.Instance != null)
+        {
+            if (ProfileManager.Instance.fullProfilePanel != null && ProfileManager.Instance.fullProfilePanel.activeSelf) return true;
+            if (ProfileManager.Instance.miniProfilePanel != null && ProfileManager.Instance.miniProfilePanel.activeSelf) return true;
+        }
+
+        return false;
     }
 }
 
