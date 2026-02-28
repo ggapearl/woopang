@@ -1,7 +1,11 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.Rendering;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
 using System.Collections.Generic;
+using ETouch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 public class TouchManager : MonoBehaviour
 {
@@ -27,6 +31,16 @@ public class TouchManager : MonoBehaviour
         }
     }
 
+    void OnEnable()
+    {
+        EnhancedTouchSupport.Enable();
+    }
+
+    void OnDisable()
+    {
+        EnhancedTouchSupport.Disable();
+    }
+
     private void Awake()
     {
         // 싱글톤 패턴
@@ -34,6 +48,9 @@ public class TouchManager : MonoBehaviour
         {
             instance = this;
             DontDestroyOnLoad(gameObject);
+
+            // URP 디버그 메뉴 비활성화 (3손가락 더블탭으로 Display Stats 열리는 것 방지)
+            DebugManager.instance.enableRuntimeUI = false;
         }
         else if (instance != this)
         {
@@ -43,44 +60,43 @@ public class TouchManager : MonoBehaviour
 
     void Update()
     {
+        // URP 디버그 메뉴 완전 차단
+        var dbgMgr = DebugManager.instance;
+        if (dbgMgr.enableRuntimeUI)
+            dbgMgr.enableRuntimeUI = false;
+        if (dbgMgr.displayRuntimeUI)
+            dbgMgr.displayRuntimeUI = false;
+
         HandleTouch();
     }
 
     void HandleTouch()
     {
-        // 전체화면 UI가 열려있으면 3D 터치 차단
-        if (IsFullscreenUIOpen()) return;
-
-        // 터치 또는 마우스 클릭 감지
+        // 터치 또는 마우스 클릭 감지 (New Input System)
         bool touchDetected = false;
         Vector2 touchPosition = Vector2.zero;
         int touchFingerId = -1;
 
-#if UNITY_EDITOR
-        // 에디터에서는 마우스 클릭
-        if (Input.GetMouseButtonDown(0))
+        // 터치 입력
+        if (ETouch.activeTouches.Count > 0 && ETouch.activeTouches[0].phase == UnityEngine.InputSystem.TouchPhase.Began)
+        {
+            var touch = ETouch.activeTouches[0];
+            touchDetected = true;
+            touchPosition = touch.screenPosition;
+            touchFingerId = touch.touchId;
+        }
+        // 마우스 입력 (에디터)
+        else if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
             touchDetected = true;
-            touchPosition = Input.mousePosition;
+            touchPosition = Mouse.current.position.ReadValue();
         }
-#else
-        // 디바이스에서는 터치
-        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
-        {
-            touchDetected = true;
-            Touch touch = Input.GetTouch(0);
-            touchPosition = touch.position;
-            touchFingerId = touch.fingerId;
-        }
-#endif
 
         if (!touchDetected) return;
 
         // UI 터치 검사
         if (IsUITouch(touchPosition, touchFingerId))
-        {
             return;
-        }
 
         // 3D 오브젝트 터치 처리
         Handle3DTouch(touchPosition);
@@ -111,9 +127,7 @@ public class TouchManager : MonoBehaviour
 #endif
 
         if (isOverUI)
-        {
             return true;
-        }
 
         // 방법 2: 직접 UI Raycast (더 정확함)
         PointerEventData pointerData = new PointerEventData(EventSystem.current);
@@ -123,15 +137,11 @@ public class TouchManager : MonoBehaviour
         EventSystem.current.RaycastAll(pointerData, raycastResults);
 
         if (raycastResults.Count > 0)
-        {
             return true;
-        }
 
         // 방법 3: 모든 Canvas 직접 검사 (최후의 방법)
         if (CheckAllCanvases(pointerData))
-        {
             return true;
-        }
 
         return false;
     }
@@ -160,15 +170,6 @@ public class TouchManager : MonoBehaviour
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// GameObject가 속한 Canvas 이름 반환
-    /// </summary>
-    string GetCanvasName(GameObject go)
-    {
-        Canvas canvas = go.GetComponentInParent<Canvas>();
-        return canvas != null ? canvas.name : "Unknown";
     }
 
     /// <summary>
@@ -232,37 +233,6 @@ public class TouchManager : MonoBehaviour
         touchableLayerMask = -1;
     }
 
-    /// <summary>
-    /// 전체화면 UI 패널이 열려있는지 체크 (AR 터치 차단용)
-    /// 모든 AR 터치 스크립트에서 이 메서드로 통일하여 체크
-    /// </summary>
-    public static bool IsFullscreenUIOpen()
-    {
-        // MessagePanelManager 패널 확인
-        if (MessagePanelManager.Instance != null)
-        {
-            var mgr = MessagePanelManager.Instance;
-            if (mgr.messagePanel != null && mgr.messagePanel.activeSelf) return true;
-            if (mgr.chatRoomPanel != null && mgr.chatRoomPanel.activeSelf) return true;
-        }
-
-        // CommentManager 패널 확인
-        if (CommentManager.Instance != null && CommentManager.Instance.IsPanelOpen) return true;
-
-        // FollowManager 패널 확인
-        if (FollowManager.Instance != null)
-        {
-            if (FollowManager.Instance.panel != null && FollowManager.Instance.panel.activeSelf) return true;
-        }
-
-        // ProfileManager 패널 확인 (fullProfilePanel만 — miniProfile은 항상 활성이므로 제외)
-        if (ProfileManager.Instance != null)
-        {
-            if (ProfileManager.Instance.fullProfilePanel != null && ProfileManager.Instance.fullProfilePanel.activeSelf) return true;
-        }
-
-        return false;
-    }
 }
 
 /// <summary>

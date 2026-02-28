@@ -109,7 +109,7 @@ public class ChatSkeletonPrefabCreator
             avatarRect.sizeDelta = new Vector2(72f, 72f);
 
             Image avatarImg = avatar.AddComponent<Image>();
-            avatarImg.color = new Color(0.25f, 0.25f, 0.30f, 1f);
+            avatarImg.color = new Color(0.25f, 0.25f, 0.30f, 0.078f);
             avatarImg.raycastTarget = false;
 
             // ShimmerEffect 추가
@@ -143,8 +143,8 @@ public class ChatSkeletonPrefabCreator
 
         Image bubbleImg = bubble.AddComponent<Image>();
         bubbleImg.color = isRight
-            ? new Color(0.20f, 0.22f, 0.32f, 0.8f)   // 내 버블 (약간 푸른 톤)
-            : new Color(0.22f, 0.22f, 0.26f, 0.9f);   // 상대 버블 (어두운 톤)
+            ? new Color(0.20f, 0.22f, 0.32f, 0.078f)   // 내 버블 (약간 푸른 톤)
+            : new Color(0.22f, 0.22f, 0.26f, 0.078f);   // 상대 버블 (어두운 톤)
         bubbleImg.raycastTarget = false;
 
         // ShimmerEffect 추가

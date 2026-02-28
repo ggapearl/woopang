@@ -42,9 +42,6 @@ public class Object3DTouchHaptic : MonoBehaviour
 
     void Update()
     {
-        // 전체화면 UI가 열려있으면 AR 터치 차단
-        if (TouchManager.IsFullscreenUIOpen()) return;
-
         bool inputDetected = false;
         Vector2 inputPosition = Vector2.zero;
 

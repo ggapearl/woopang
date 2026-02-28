@@ -82,15 +82,15 @@ public class CubeUploadManager : MonoBehaviour
             modelManager.ShowUploadPage();
         }
 
-        // 스와이프 패널을 0번(CubeUploadPage)으로 초기화
+        // 스와이프 패널을 0번(CubeUploadPage)으로 즉시 초기화
         if (swipePanelController == null)
         {
             swipePanelController = FindFirstObjectByType<SwipePanelController>();
         }
-        
+
         if (swipePanelController != null)
         {
-            swipePanelController.SetCurrentPanel(0);
+            swipePanelController.ResetToFirstPanel();
         }
     }
 

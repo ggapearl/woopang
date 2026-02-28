@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System;
 using UnityEngine.Networking;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
@@ -536,10 +537,32 @@ public class DoubleTap3D : MonoBehaviour
 
     void Update()
     {
-        // 전체화면 UI가 열려있으면 AR 터치 차단
-        if (TouchManager.IsFullscreenUIOpen()) return;
+#if UNITY_EDITOR
+        // 에디터 마우스 디버깅
+        if (UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame && Time.timeSinceLevelLoad > 2f)
+        {
+            Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
 
-        if (Touch.activeTouches.Count == 1 && Time.timeSinceLevelLoad > 2f)
+            if (isFullscreen) { /* 풀스크린 모드는 스와이프 처리 */ }
+            else
+            {
+                Ray ray = Camera.main.ScreenPointToRay(mousePos);
+                RaycastHit hit;
+                if (Physics.Raycast(ray, out hit) && hit.collider.gameObject == gameObject)
+                {
+                    float timeSinceLastTap = Time.time - lastTapTime;
+                    if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
+                    {
+                        OnDoubleTapCube();
+                    }
+                    lastTapTime = Time.time;
+                }
+            }
+        }
+#endif
+
+        int touchCount = Touch.activeTouches.Count;
+        if (touchCount == 1 && Time.timeSinceLevelLoad > 2f)
         {
             var touch = Touch.activeTouches[0];
 
@@ -548,21 +571,24 @@ public class DoubleTap3D : MonoBehaviour
                 touchStartPos = touch.screenPosition;
                 isSwiping = true;
 
+                // UI 위 터치이면 3D 오브젝트 터치 무시
+                if (!isFullscreen && EventSystem.current != null &&
+                    EventSystem.current.IsPointerOverGameObject(touch.touchId))
+                {
+                    return;
+                }
+
                 Ray ray = Camera.main.ScreenPointToRay(touch.screenPosition);
                 RaycastHit hit;
 
-                if (Physics.Raycast(ray, out hit))
+                if (Physics.Raycast(ray, out hit) && hit.collider.gameObject == gameObject)
                 {
-                    if (hit.collider.gameObject == gameObject)
+                    float timeSinceLastTap = Time.time - lastTapTime;
+                    if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
                     {
-                        float timeSinceLastTap = Time.time - lastTapTime;
-
-                        if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
-                        {
-                            OnDoubleTapCube();
-                        }
-                        lastTapTime = Time.time;
+                        OnDoubleTapCube();
                     }
+                    lastTapTime = Time.time;
                 }
             }
             else if (touch.phase == TouchPhase.Moved && isSwiping && isFullscreen && !isSliding)
@@ -1401,7 +1427,6 @@ public class DoubleTap3D : MonoBehaviour
 
         if (CommentManager.Instance != null && this.id != -1)
         {
-            Debug.Log($"[DoubleTap3D] OnCommentPreviewClicked - id: {this.id}, placeName: {this.placeName}");
             CommentManager.Instance.OpenCommentPanel(this.id, this.placeName);
         }
     }

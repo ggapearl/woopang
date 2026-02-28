@@ -83,44 +83,7 @@ public class ARObjectZoomController : MonoBehaviour
     void Update()
     {
 #if UNITY_EDITOR
-        // 에디터에서 마우스 스크롤 및 키보드로 줌 테스트 (New Input System 대응)
-        float scroll = 0f;
-        
-        // 1. 마우스 스크롤 시도
-        if (UnityEngine.InputSystem.Mouse.current != null)
-        {
-            Vector2 scrollVal = UnityEngine.InputSystem.Mouse.current.scroll.ReadValue();
-            scroll = scrollVal.y;
-        }
-
-        // 2. 키보드 화살표 시도 (Fallback)
-        if (UnityEngine.InputSystem.Keyboard.current != null)
-        {
-            if (UnityEngine.InputSystem.Keyboard.current.upArrowKey.isPressed)
-            {
-                scroll = 1f; // 확대
-            }
-            else if (UnityEngine.InputSystem.Keyboard.current.downArrowKey.isPressed)
-            {
-                scroll = -1f; // 축소
-            }
-        }
-
-        if (Mathf.Abs(scroll) > 0.001f)
-        {
-            // 스크롤 방향에 따라 줌 조절
-            // 에디터에서는 zoomSpeed를 조금 더 크게 적용
-            currentZoom += scroll * zoomSpeed * 0.5f; // 민감도 조정
-            currentZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
-
-            ApplyZoomToARObjects();
-
-            if (zoomIndicator != null)
-            {
-                zoomIndicator.UpdateZoom(currentZoom);
-                zoomIndicator.HideAfterDelay(5f);
-            }
-        }
+        return; // 에디터에서는 핀치 줌 비활성화 (실기기 전용)
 #endif
 
         // 터치 입력이 2개일 때 (핀치 제스처)

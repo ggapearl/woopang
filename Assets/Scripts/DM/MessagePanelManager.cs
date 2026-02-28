@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Networking;
+using UnityEngine.InputSystem;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -36,6 +37,10 @@ public class MessagePanelManager : MonoBehaviour
     [Header("=== 검색 UI ===")]
     public InputField searchInput;
     public Button searchButton;
+    [Tooltip("검색 모드일 때 표시할 X 아이콘 (Image)")]
+    public GameObject searchCloseIcon;
+    [Tooltip("기본 상태에서 표시할 검색 아이콘 (Image)")]
+    public GameObject searchOpenIcon;
     public GameObject searchResultPanel;
     public Transform searchResultContent;
     public GameObject searchResultItemPrefab;
@@ -149,9 +154,9 @@ public class MessagePanelManager : MonoBehaviour
     [Tooltip("스켈레톤 최소 표시 시간 (초)")]
     public float skeletonMinDuration = 1f;
     [Tooltip("스켈레톤 배경 색상")]
-    public Color skeletonBgColor = new Color(0.15f, 0.15f, 0.18f, 1f);
+    public Color skeletonBgColor = new Color(0.15f, 0.15f, 0.18f, 0.078f);
     [Tooltip("스켈레톤 콘텐츠 색상 (텍스트/아바타 자리)")]
-    public Color skeletonContentColor = new Color(0.22f, 0.22f, 0.26f, 1f);
+    public Color skeletonContentColor = new Color(0.22f, 0.22f, 0.26f, 0.078f);
 
     [Header("=== 채팅방 메시지 수신 효과음 ===")]
     [Tooltip("채팅방에서 메시지 수신 시 재생할 효과음 (바람소리 등)")]
@@ -545,6 +550,7 @@ public class MessagePanelManager : MonoBehaviour
 
         if (searchInput != null)
         {
+            searchInput.onValueChanged.AddListener(OnSearchInputChanged);
             searchInput.onEndEdit.AddListener(OnSearchSubmit);
         }
     }
@@ -675,6 +681,26 @@ public class MessagePanelManager : MonoBehaviour
                 }
             }
         }
+
+        // 검색 상태 초기화
+        isSearchMode = false;
+        isServerSearchActive = false;
+        if (searchInput != null)
+        {
+            searchInput.text = "";
+            searchInput.gameObject.SetActive(true);
+
+            // placeholder 다국어 설정
+            if (searchInput.placeholder != null)
+            {
+                Text placeholderText = searchInput.placeholder.GetComponent<Text>();
+                if (placeholderText != null)
+                {
+                    placeholderText.text = GetLocalizedSearchPlaceholder();
+                }
+            }
+        }
+        UpdateSearchButtonIcon(false);
 
         StartCoroutine(LoadConversationList());
         StartPolling();
@@ -1681,6 +1707,10 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private GameObject CreateSkeletonItem(Transform parent)
     {
+        // Inspector에 이전 직렬화 값이 남아있을 수 있으므로 알파 강제 보정
+        skeletonBgColor.a = 0.078f;
+        skeletonContentColor.a = 0.078f;
+
         float itemHeight = conversationItemHeight > 0 ? conversationItemHeight : 140f;
 
         // 루트 컨테이너
@@ -1716,7 +1746,7 @@ public class MessagePanelManager : MonoBehaviour
         GameObject msgLine = CreateSkeletonBlock(item.transform, "MsgLine",
             new Vector2(textStartX + availableWidth * 0.35f, -itemHeight * 0.15f),
             new Vector2(availableWidth * 0.7f, 16f),
-            new Color(skeletonContentColor.r, skeletonContentColor.g, skeletonContentColor.b, 0.6f), false);
+            new Color(skeletonContentColor.r, skeletonContentColor.g, skeletonContentColor.b, 0.05f), false);
 
         // 쉬머 효과 적용
         item.AddComponent<ShimmerEffect>();
@@ -3604,50 +3634,212 @@ public class MessagePanelManager : MonoBehaviour
 
     #region Search
 
+    private bool isSearchMode = false;
+    private bool isServerSearchActive = false; // 서버 검색 결과 표시 중
+    private Coroutine serverSearchCoroutine;
+
     /// <summary>
-    /// X 버튼 클릭 - 검색창 내용 삭제
+    /// 검색 버튼 클릭
+    /// - 돋보기 상태 + 텍스트 있음 → 서버 검색 실행 + X 아이콘 전환
+    /// - 돋보기 상태 + 텍스트 없음 → InputField 포커스
+    /// - X 상태 → 검색 취소 + 대화 목록 복원 + 돋보기 전환
     /// </summary>
     private void OnSearchButtonClicked()
     {
-        ClearSearchInput();
+        if (isServerSearchActive)
+        {
+            // X 상태 → 검색 취소
+            ExitSearchMode();
+            return;
+        }
+
+        if (searchInput != null && !string.IsNullOrEmpty(searchInput.text))
+        {
+            // 돋보기 상태 + 텍스트 있음 → 서버 검색 실행
+            if (serverSearchCoroutine != null)
+            {
+                StopCoroutine(serverSearchCoroutine);
+                serverSearchCoroutine = null;
+            }
+            serverSearchCoroutine = StartCoroutine(SearchUsersFromServer(searchInput.text));
+            UpdateSearchButtonIcon(true);
+        }
+        else
+        {
+            // 텍스트 없음 → InputField에 포커스
+            EnterSearchMode();
+        }
     }
 
     /// <summary>
-    /// 검색창 내용 삭제 및 드롭다운 숨김
+    /// 검색 모드 진입 - InputField 표시/포커스 + X 아이콘
+    /// </summary>
+    private void EnterSearchMode()
+    {
+        isSearchMode = true;
+        UpdateSearchButtonIcon(true);
+
+        if (searchInput != null)
+        {
+            searchInput.ActivateInputField();
+            searchInput.Select();
+        }
+    }
+
+    /// <summary>
+    /// 검색 모드 종료 - 대화 목록 복원 + 검색 아이콘
+    /// </summary>
+    private void ExitSearchMode()
+    {
+        ClearSearchInput();
+        UpdateSearchButtonIcon(false);
+    }
+
+    /// <summary>
+    /// 검색 버튼 아이콘 전환 (검색 아이콘 ↔ X 아이콘)
+    /// </summary>
+    private void UpdateSearchButtonIcon(bool showCloseIcon)
+    {
+        if (searchOpenIcon != null)
+            searchOpenIcon.SetActive(!showCloseIcon);
+        if (searchCloseIcon != null)
+            searchCloseIcon.SetActive(showCloseIcon);
+    }
+
+    /// <summary>
+    /// 검색 초기화 및 대화 목록 복원
     /// </summary>
     private void ClearSearchInput()
     {
-        if (searchInput != null)
+        isServerSearchActive = false;
+
+        if (serverSearchCoroutine != null)
         {
-            searchInput.text = "";
+            StopCoroutine(serverSearchCoroutine);
+            serverSearchCoroutine = null;
         }
 
-        // 검색 결과 패널 숨김
-        if (searchResultPanel != null)
-            searchResultPanel.SetActive(false);
+        // searchInput.text 변경 시 onValueChanged가 트리거되므로 플래그로 보호
+        if (searchInput != null && !string.IsNullOrEmpty(searchInput.text))
+        {
+            isSearchMode = false; // onValueChanged에서 RestoreConversationList 호출 방지
+            searchInput.text = ""; // 이 시점에 onValueChanged("") 호출됨 → isSearchMode=false이므로 무시
+        }
+
+        if (isSearchMode)
+        {
+            isSearchMode = false;
+            RestoreConversationList();
+        }
+        else
+        {
+            // isSearchMode가 이미 false여도 목록이 비었을 수 있으므로 복원
+            RestoreConversationList();
+        }
     }
 
+    /// <summary>
+    /// 캐시된 대화 목록을 다시 렌더링 (서버 재요청 없이)
+    /// </summary>
+    private void RestoreConversationList()
+    {
+        ClearContent(conversationListContent);
+        SortConversationsByTime();
+        foreach (var conv in conversations)
+        {
+            CreateConversationItem(conv);
+        }
+
+        bool isEmpty = conversations.Count == 0;
+        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
+        ForceLayoutUpdate();
+    }
+
+    /// <summary>
+    /// 입력 중 실시간 필터링 (대화 목록에서 매칭되는 아이디만 표시)
+    /// </summary>
+    private void OnSearchInputChanged(string text)
+    {
+        // 서버 검색 결과가 표시 중이면 실시간 필터링 무시
+        if (isServerSearchActive) return;
+
+        if (string.IsNullOrEmpty(text))
+        {
+            if (isSearchMode)
+            {
+                isSearchMode = false;
+                UpdateSearchButtonIcon(false);
+                RestoreConversationList();
+            }
+            return;
+        }
+
+        isSearchMode = true;
+        string query = text.ToLower();
+
+        ClearContent(conversationListContent);
+
+        int matchCount = 0;
+        foreach (var conv in conversations)
+        {
+            if (conv.username != null && conv.username.ToLower().Contains(query))
+            {
+                CreateConversationItem(conv);
+                matchCount++;
+            }
+        }
+
+        if (matchCount == 0)
+        {
+            ShowEmptyState(conversationListContent, GetLocalizedFilterEmptyMessage(), true);
+        }
+
+        ForceLayoutUpdate();
+    }
+
+    /// <summary>
+    /// Enter/Submit 시 서버 검색 (전체 유저 대상)
+    /// onEndEdit은 포커스 손실 시에도 호출되므로 실제 Submit인지 확인
+    /// </summary>
     private void OnSearchSubmit(string query)
     {
-        if (!string.IsNullOrEmpty(query))
+        // 포커스 손실로 onEndEdit이 호출된 경우 무시 (wasCanceled 또는 텍스트가 비었을 때)
+        if (searchInput != null && searchInput.wasCanceled)
+            return;
+
+        // InputField가 포커스를 잃었을 때 호출되는 경우 무시
+        // Enter로 submit된 경우에만 서버 검색 실행
+        if (searchInput != null && !searchInput.isFocused &&
+            (Keyboard.current == null || !Keyboard.current.enterKey.wasPressedThisFrame))
+            return;
+
+        if (string.IsNullOrEmpty(query))
+            return;
+
+        if (serverSearchCoroutine != null)
         {
-            StartCoroutine(SearchUsers(query));
+            StopCoroutine(serverSearchCoroutine);
+            serverSearchCoroutine = null;
         }
+
+        serverSearchCoroutine = StartCoroutine(SearchUsersFromServer(query));
     }
 
-    private IEnumerator SearchUsers(string query)
+    /// <summary>
+    /// 서버에서 유저 검색 (팔로잉 여부 무관, 전체 유저 대상)
+    /// </summary>
+    private IEnumerator SearchUsersFromServer(string query)
     {
         if (!CheckLogin()) yield break;
 
-        // 검색 결과 패널 표시
-        if (searchResultPanel != null)
-            searchResultPanel.SetActive(true);
+        isSearchMode = true;
+        isServerSearchActive = true;
+        UpdateSearchButtonIcon(true);
+        ClearContent(conversationListContent);
 
-        ClearContent(searchResultContent);
-
-        // 팔로잉 유저만 검색 (following_only=true)
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/users/search?q={UnityWebRequest.EscapeURL(query)}&user_id={userId}&following_only=true";
+        string url = $"{ApiConfig.MAIN_SERVER}/api/users/search?q={UnityWebRequest.EscapeURL(query)}&user_id={userId}";
+        Debug.Log($"[MessagePanel] 검색 요청: {url}");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -3656,77 +3848,200 @@ public class MessagePanelManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                var response = JsonUtility.FromJson<UserSearchResponse>(request.downloadHandler.text);
+                string responseText = request.downloadHandler.text;
+                Debug.Log($"[MessagePanel] 검색 응답: {responseText}");
 
-                // 팔로잉 유저만 필터링 (서버에서 처리 안 될 경우 클라이언트에서 필터)
+                var response = JsonUtility.FromJson<UserSearchResponse>(responseText);
+
                 int displayCount = 0;
-                foreach (var user in response.users)
+                if (response != null && response.users != null)
                 {
-                    if (user.is_following)
+                    foreach (var user in response.users)
                     {
                         CreateSearchResultItem(user);
                         displayCount++;
                     }
                 }
 
-                // 검색 결과가 없을 때 메시지 표시
                 if (displayCount == 0)
                 {
-                    ShowEmptyState(searchResultContent, GetLocalizedSearchEmptyMessage(), true);
+                    ShowEmptyState(conversationListContent, GetLocalizedSearchEmptyMessage(), true);
                 }
             }
+            else
+            {
+                Debug.LogWarning($"[MessagePanel] 검색 실패: {request.error} / URL: {url}");
+                ShowEmptyState(conversationListContent, GetLocalizedSearchEmptyMessage(), true);
+            }
         }
-    }
 
-    private void CreateSearchResultItem(SearchedUser user)
-    {
-        if (searchResultItemPrefab == null || searchResultContent == null) return;
-
-        GameObject item = Instantiate(searchResultItemPrefab, searchResultContent);
-
-        // 사용자명
-        Text usernameText = item.transform.Find("UsernameText")?.GetComponent<Text>();
-        if (usernameText != null)
-            usernameText.text = user.username;
-
-        // 클릭 이벤트 - 바로 채팅방 열기 (팔로잉 유저만 표시되므로)
-        Button btn = item.GetComponent<Button>();
-        if (btn == null)
-            btn = item.AddComponent<Button>();
-
-        btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(() =>
-        {
-            if (searchResultPanel != null)
-                searchResultPanel.SetActive(false);
-            OpenChatRoom(user.id, user.username, user.avatar_url);
-        });
-
-        // 아바타 - 중앙 캐시 시스템 사용
-        Transform avatarTransform = item.transform.Find("Avatar");
-        if (avatarTransform != null)
-            ProfileManager.LoadAvatarWithMaskAsync(user.id, user.avatar_url, avatarTransform, user.username);
+        ForceLayoutUpdate();
+        serverSearchCoroutine = null;
     }
 
     /// <summary>
-    /// 검색 결과 없음 메시지 다국어
+    /// 서버 검색 결과를 대화 목록과 동일한 프리팹으로 표시
+    /// </summary>
+    private void CreateSearchResultItem(SearchedUser user)
+    {
+        if (conversationItemPrefab == null || conversationListContent == null) return;
+
+        GameObject item = Instantiate(conversationItemPrefab, conversationListContent);
+        SetLayerRecursively(item, 5);
+
+        CanvasGroup cg = item.GetComponent<CanvasGroup>();
+        if (cg != null && cg.alpha < 1f)
+            cg.alpha = 1f;
+
+        if (!item.activeSelf)
+            item.SetActive(true);
+
+        LayoutElement itemLE = item.GetComponent<LayoutElement>();
+        if (itemLE == null)
+        {
+            itemLE = item.AddComponent<LayoutElement>();
+            itemLE.minHeight = conversationItemHeight;
+            itemLE.preferredHeight = conversationItemHeight;
+        }
+
+        // 사용자명
+        Text usernameText = item.transform.Find("Content/UsernameText")?.GetComponent<Text>();
+        if (usernameText != null)
+            usernameText.text = user.username;
+
+        // 미리보기 — 팔로잉 상태 표시
+        Text previewText = item.transform.Find("Content/PreviewText")?.GetComponent<Text>();
+        if (previewText != null)
+        {
+            if (user.is_following)
+            {
+                previewText.text = GetLocalizedText("tap_to_chat");
+            }
+            else
+            {
+                previewText.text = GetLocalizedText("tap_to_follow_and_chat");
+            }
+            previewText.color = new Color(previewText.color.r, previewText.color.g, previewText.color.b, 0.5f);
+        }
+
+        // 시간 숨김
+        Text timeText = item.transform.Find("Content/TimeText")?.GetComponent<Text>();
+        if (timeText != null)
+            timeText.text = "";
+
+        // 안읽음 배지 숨김
+        GameObject unreadBadge = item.transform.Find("Content/UnreadBadge")?.gameObject;
+        if (unreadBadge != null)
+            unreadBadge.SetActive(false);
+
+        // 아바타
+        Transform avatarTransform = item.transform.Find("Content/Avatar");
+        if (avatarTransform != null)
+            ProfileManager.LoadAvatarWithMaskAsync(user.id, user.avatar_url, avatarTransform, user.username);
+
+        // 클릭 이벤트
+        Transform contentArea = item.transform.Find("Content");
+        if (contentArea != null)
+        {
+            Button btn = contentArea.GetComponent<Button>();
+            if (btn == null)
+                btn = contentArea.gameObject.AddComponent<Button>();
+
+            if (contentArea.GetComponent<UITouchForwarder>() == null)
+                contentArea.gameObject.AddComponent<UITouchForwarder>();
+
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() =>
+            {
+                OpenChatRoom(user.id, user.username, user.avatar_url);
+            });
+        }
+    }
+
+    private string GetLocalizedText(string key)
+    {
+        switch (key)
+        {
+            case "tap_to_chat":
+            case "tap_to_follow_and_chat":
+                switch (Application.systemLanguage)
+                {
+                    case SystemLanguage.Korean: return "탭하여 대화 시작";
+                    case SystemLanguage.Japanese: return "タップして会話を開始";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified:
+                    case SystemLanguage.ChineseTraditional: return "点击开始聊天";
+                    case SystemLanguage.Spanish: return "Toca para iniciar chat";
+                    default: return "Tap to start chat";
+                }
+            default:
+                return key;
+        }
+    }
+
+    /// <summary>
+    /// 필터 결과 없음 메시지
+    /// </summary>
+    private string GetLocalizedFilterEmptyMessage()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return "일치하는 대화가 없습니다.";
+            case SystemLanguage.Japanese:
+                return "一致する会話がありません。";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return "没有匹配的对话。";
+            case SystemLanguage.Spanish:
+                return "No hay conversaciones coincidentes.";
+            default:
+                return "No matching conversations.";
+        }
+    }
+
+    /// <summary>
+    /// 서버 검색 결과 없음 메시지
     /// </summary>
     private string GetLocalizedSearchEmptyMessage()
     {
         switch (Application.systemLanguage)
         {
             case SystemLanguage.Korean:
-                return "팔로잉 중인 사용자 중 검색 결과가 없습니다.";
+                return "검색 결과가 없습니다.";
             case SystemLanguage.Japanese:
-                return "フォロー中のユーザーに該当する結果がありません。";
+                return "検索結果がありません。";
             case SystemLanguage.Chinese:
             case SystemLanguage.ChineseSimplified:
             case SystemLanguage.ChineseTraditional:
-                return "在关注的用户中没有搜索结果。";
+                return "未找到搜索结果。";
             case SystemLanguage.Spanish:
-                return "No hay resultados entre los usuarios que sigues.";
+                return "No se encontraron resultados.";
             default:
-                return "No results found among users you follow.";
+                return "No results found.";
+        }
+    }
+
+    /// <summary>
+    /// 검색 입력 placeholder 다국어
+    /// </summary>
+    private string GetLocalizedSearchPlaceholder()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return "아이디 검색...";
+            case SystemLanguage.Japanese:
+                return "ID検索...";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return "搜索ID...";
+            case SystemLanguage.Spanish:
+                return "Buscar ID...";
+            default:
+                return "Search ID...";
         }
     }
 
@@ -4079,18 +4394,41 @@ public class MessagePanelManager : MonoBehaviour
 
         if (!show || parent == null) return;
 
-        // 빈 상태 UI 생성
+        // 컨테이너 (LayoutGroup 자식으로 들어감)
         emptyStateObject = new GameObject("EmptyState");
         emptyStateObject.transform.SetParent(parent, false);
 
-        RectTransform rect = emptyStateObject.AddComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0, 0);
-        rect.anchorMax = new Vector2(1, 1);
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = new Vector2(0, -50); // 살짝 위로
-        rect.sizeDelta = new Vector2(-40, 0); // 좌우 여백
+        RectTransform containerRect = emptyStateObject.AddComponent<RectTransform>();
+        containerRect.anchorMin = new Vector2(0, 1);
+        containerRect.anchorMax = new Vector2(1, 1);
+        containerRect.pivot = new Vector2(0.5f, 1f);
+        containerRect.sizeDelta = new Vector2(0, 200f);
 
-        Text emptyText = emptyStateObject.AddComponent<Text>();
+        LayoutElement containerLe = emptyStateObject.AddComponent<LayoutElement>();
+        containerLe.preferredHeight = 200f;
+        containerLe.flexibleWidth = 1f;
+
+        // 상단 여백용 spacer
+        GameObject spacer = new GameObject("Spacer");
+        spacer.transform.SetParent(emptyStateObject.transform, false);
+        RectTransform spacerRect = spacer.AddComponent<RectTransform>();
+        spacerRect.anchorMin = new Vector2(0, 1);
+        spacerRect.anchorMax = new Vector2(1, 1);
+        spacerRect.pivot = new Vector2(0.5f, 1f);
+        spacerRect.anchoredPosition = Vector2.zero;
+        spacerRect.sizeDelta = new Vector2(0, 100f);
+
+        // 텍스트 (spacer 아래에 배치)
+        GameObject textObj = new GameObject("EmptyText");
+        textObj.transform.SetParent(emptyStateObject.transform, false);
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = new Vector2(0, 1);
+        textRect.anchorMax = new Vector2(1, 1);
+        textRect.pivot = new Vector2(0.5f, 1f);
+        textRect.anchoredPosition = new Vector2(0, -100f);
+        textRect.sizeDelta = new Vector2(-40, 80f);
+
+        Text emptyText = textObj.AddComponent<Text>();
         emptyText.text = message;
 
         // AppleSDGothicNeoM 폰트 사용

@@ -106,6 +106,10 @@ public class ARDigitalZoomController : MonoBehaviour
 
     private void HandleTouchInput()
     {
+#if UNITY_EDITOR
+        return; // 에디터에서는 핀치 줌 비활성화 (실기기 전용)
+#endif
+
         // 터치 입력이 2개일 때 (핀치 제스처)
         if (Input.touchCount == 2)
         {
@@ -156,21 +160,6 @@ public class ARDigitalZoomController : MonoBehaviour
             }
         }
 
-        // 에디터에서 테스트용 (마우스 스크롤)
-#if UNITY_EDITOR
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (scroll != 0f)
-        {
-            targetZoom += scroll * 0.5f;
-            targetZoom = Mathf.Clamp(targetZoom, minZoom, maxZoom);
-
-            if (zoomIndicator != null)
-            {
-                zoomIndicator.UpdateZoom(targetZoom);
-                zoomIndicator.HideAfterDelay(2f);
-            }
-        }
-#endif
     }
 
     /// <summary>
