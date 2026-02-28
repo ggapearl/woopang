@@ -64,16 +64,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         var earthManager = FindFirstObjectByType<AREarthManager>();
         if (earthManager == null || earthManager.EarthTrackingState != TrackingState.Tracking)
         {
-            // iOS 디버깅용 상세 로그
-            var extensions = FindFirstObjectByType<ARCoreExtensions>();
-                $"EarthManager={earthManager != null}, " +
-                $"EarthState={earthManager?.EarthState}, " +
-                $"TrackingState={earthManager?.EarthTrackingState}, " +
-                $"ARSession.state={ARSession.state}, " +
-                $"LocationStatus={Input.location.status}, " +
-                $"LocationEnabled={Input.location.isEnabledByUser}, " +
-                $"ARCoreExtensions={extensions != null}, " +
-                $"GeospatialMode={extensions?.ARCoreExtensionsConfig?.GeospatialMode}");
             return false;
         }
 

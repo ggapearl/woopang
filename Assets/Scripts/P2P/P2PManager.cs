@@ -1059,7 +1059,6 @@ public class P2PManager : MonoBehaviour
     // Logging helpers
     private void Log(string message)
     {
-        if (showDebugLogs)
     }
 
     private void LogWarning(string message)

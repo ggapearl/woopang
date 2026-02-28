@@ -38,7 +38,6 @@ public class GeospatialManager : MonoBehaviour
         if (_logTimer >= 5f)
         {
             _logTimer = 0f;
-            if (earthManager != null)
         }
 
         if (earthManager == null) return;

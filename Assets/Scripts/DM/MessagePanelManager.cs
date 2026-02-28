@@ -490,6 +490,35 @@ public class MessagePanelManager : MonoBehaviour
                     chatInputArea = inputAreaTr.gameObject;
                 }
             }
+
+            // MobileKeyboardHandler 자동 설정
+            SetupMobileKeyboardHandler();
+        }
+    }
+
+    /// <summary>
+    /// MobileKeyboardHandler를 ChatRoomPanel에 자동 설정
+    /// 키보드가 올라올 때 Background 패널을 키보드 위로 이동
+    /// </summary>
+    private void SetupMobileKeyboardHandler()
+    {
+        if (chatRoomPanel == null) return;
+
+        Transform bgTransform = chatRoomPanel.transform.Find("Background");
+        if (bgTransform == null) return;
+
+        MobileKeyboardHandler handler = chatRoomPanel.GetComponent<MobileKeyboardHandler>();
+        if (handler == null)
+            handler = chatRoomPanel.AddComponent<MobileKeyboardHandler>();
+
+        handler.backgroundRect = bgTransform.GetComponent<RectTransform>();
+
+        // ScrollRect 찾기
+        if (chatMessageContent != null)
+        {
+            ScrollRect sr = chatMessageContent.GetComponentInParent<ScrollRect>();
+            if (sr != null)
+                handler.chatScrollRect = sr;
         }
     }
 
