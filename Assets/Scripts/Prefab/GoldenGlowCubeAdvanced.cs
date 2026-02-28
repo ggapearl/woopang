@@ -300,7 +300,6 @@ public class GoldenGlowCubeAdvanced : MonoBehaviour
         }
 
         Start();
-        Debug.Log("<color=#D4AF37>Golden Glow Cube effects setup complete!</color>");
     }
 #endif
 }

@@ -65,11 +65,9 @@ public class ChatSkeletonPrefabCreator
                 manager.chatLoadingPrefab = prefabAsset;
                 EditorUtility.SetDirty(manager);
                 UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(manager.gameObject.scene);
-                Debug.Log("[ChatSkeleton] MessagePanelManager.chatLoadingPrefab 자동 연결 완료");
             }
         }
 
-        Debug.Log($"[ChatSkeleton] 프리팹 생성 완료: {path}");
         EditorUtility.DisplayDialog("완료", $"프리팹 생성됨:\n{path}\n\nMessagePanelManager에 자동 연결됨.\nInspector에서 직접 수정 가능합니다.", "확인");
     }
 

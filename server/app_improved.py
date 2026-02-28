@@ -4087,7 +4087,6 @@ def search_users():
         if not query:
             return jsonify({"users": [], "count": 0})
 
-        safe_print(f"[Search] query='{query}', user_id='{user_id}', limit={limit}")
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -4110,7 +4109,6 @@ def search_users():
             """, (f'%{query}%', limit))
 
         rows = cursor.fetchall()
-        safe_print(f"[Search] Found {len(rows)} results for '{query}'")
 
         users = []
         for row in rows:

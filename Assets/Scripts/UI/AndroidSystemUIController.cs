@@ -30,7 +30,6 @@ public class AndroidSystemUIController : MonoBehaviour
 #if UNITY_ANDROID && !UNITY_EDITOR
         // 깜빡임 방지를 위해 스크립트 통한 강제 설정 비활성화
         // Unity Player Settings 사용 권장
-        Debug.Log("[AndroidSystemUI] 스크립트 통한 시스템 UI 강제 설정 비활성화됨.");
         
         // SetupSystemUI();
         
@@ -67,7 +66,6 @@ public class AndroidSystemUIController : MonoBehaviour
                     window.Call("addFlags", FLAG_FORCE_NOT_FULLSCREEN);
                 }
 
-                Debug.Log("[AndroidSystemUI] 시스템 UI 설정 완료");
             }
         }
         catch (System.Exception e)

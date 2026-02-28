@@ -107,7 +107,6 @@ public class PinchZoomController : MonoBehaviour
                         zoomIndicator.UpdateZoom(currentZoom);
                     }
 
-                    Debug.Log($"[PinchZoomController] Zoom: {currentZoom:F2}x");
                 }
             }
         }
@@ -152,7 +151,6 @@ public class PinchZoomController : MonoBehaviour
                 zoomIndicator.HideAfterDelay(2f);
             }
 
-            Debug.Log($"[PinchZoomController] Editor Zoom: {currentZoom:F2}x");
         }
 #endif
         */

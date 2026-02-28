@@ -57,7 +57,6 @@ public class SmoothScrollRect : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
             if (enableDebugLog)
             {
-                Debug.Log($"[SmoothScroll] BeginDrag - Pos={eventData.position}, ScrollRect.velocity={scrollRect.velocity}");
             }
         }
         else if (enableDebugLog)

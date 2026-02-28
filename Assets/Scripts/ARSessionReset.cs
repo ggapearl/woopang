@@ -42,7 +42,6 @@ public class AutoARSessionReset : MonoBehaviour
         if (arSession != null)
         {
             arSession.Reset();
-            Debug.Log("🔄 AR Session이 자동으로 초기화되었습니다.");
         }
         else
         {

@@ -475,7 +475,6 @@ public class P2PVirtualUserTester : MonoBehaviour
     {
         if (showDebugLogs)
         {
-            Debug.Log($"<color=#00FFFF>[P2PVirtualUserTester]</color> {message}");
         }
     }
 

@@ -23,7 +23,6 @@ public class ChatBubblePrefabSetup : EditorWindow
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        Debug.Log("[ChatBubblePrefabSetup] 모든 버블 프리팹 레이아웃 수정 완료");
     }
 
     private static void SetupPrefab(string prefabPath, bool isMine)
@@ -43,7 +42,6 @@ public class ChatBubblePrefabSetup : EditorWindow
         {
             SetupBubbleLayout(instance, isMine);
             PrefabUtility.SaveAsPrefabAsset(instance, assetPath);
-            Debug.Log($"[ChatBubblePrefabSetup] 수정됨: {prefabPath}");
         }
         finally
         {

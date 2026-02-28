@@ -58,7 +58,6 @@ public class UserProfilePage : MonoBehaviour {
             yield return www.SendWebRequest();
 
             if (www.result == UnityWebRequest.Result.Success) {
-                Debug.Log("Profile Updated!");
                 StartCoroutine(LoginManager.Instance.FetchProfileCoroutine(user.id));
             }
         }

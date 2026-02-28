@@ -30,7 +30,6 @@ public class BackButtonHandler : MonoBehaviour
     void Start()
     {
         keyboard = Keyboard.current;
-        Debug.Log("[BackButtonHandler] Initialized");
     }
 
     /// <summary>

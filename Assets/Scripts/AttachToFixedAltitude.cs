@@ -41,7 +41,6 @@ public class AttachToFixedAltitude : MonoBehaviour
         if (anchor != null)
         {
             objectTransform.SetParent(anchor.transform);
-            Debug.Log($"📍 고도 무시: {gameObject.name} 오브젝트가 (Lat: {latitude}, Lon: {longitude}, Alt: {fixedAltitude})에 배치됨.");
         }
         else
         {

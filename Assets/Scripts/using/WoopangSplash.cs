@@ -197,7 +197,6 @@ public class WoopangSplash : MonoBehaviour
             bottomTextComponent.raycastTarget = false;
         }
 
-        Debug.Log("[WoopangSplash] 스플래시 UI 생성 완료");
     }
 
     /// <summary>
@@ -305,7 +304,6 @@ public class WoopangSplash : MonoBehaviour
     /// </summary>
     private void HideSplash()
     {
-        Debug.Log("[WoopangSplash] 스플래시 종료");
 
         if (splashCanvas != null)
         {

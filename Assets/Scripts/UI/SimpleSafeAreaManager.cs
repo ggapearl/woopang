@@ -115,7 +115,6 @@ public class SimpleSafeAreaManager : MonoBehaviour
         lastSafeArea = safeArea;
         isApplied = true;
 
-        Debug.Log($"[SimpleSafeArea] Safe Area 적용 완료: {safeArea}");
     }
 
     /// <summary>

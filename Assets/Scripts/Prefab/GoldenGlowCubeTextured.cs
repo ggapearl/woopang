@@ -253,7 +253,6 @@ public class GoldenGlowCubeTextured : MonoBehaviour
         {
             material = meshRenderer.sharedMaterial;
             ApplyMaterialSettings();
-            Debug.Log("<color=#D4AF37>Settings applied!</color>");
         }
     }
 #endif

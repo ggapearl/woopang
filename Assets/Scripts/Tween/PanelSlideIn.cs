@@ -41,6 +41,5 @@ public class PanelSlideIn : MonoBehaviour
         }
 
         panelRect.localPosition = endPosition;
-        Debug.Log("패널 슬라이드 인 완료");
     }
 }

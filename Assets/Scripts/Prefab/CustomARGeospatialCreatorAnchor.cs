@@ -66,7 +66,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         {
             // iOS 디버깅용 상세 로그
             var extensions = FindFirstObjectByType<ARCoreExtensions>();
-            Debug.Log($"[CustomAnchor] Geospatial 준비 안 됨 | " +
                 $"EarthManager={earthManager != null}, " +
                 $"EarthState={earthManager?.EarthState}, " +
                 $"TrackingState={earthManager?.EarthTrackingState}, " +
@@ -90,11 +89,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             // 앵커 생성 성공 → 렌더러 표시
             SetVisible(true);
 
-            Debug.Log($"[CustomAnchor] 앵커 생성 성공: {gameObject.name} (재시도 {_retryCount}회)");
             return true;
         }
 
-        Debug.Log($"[CustomAnchor] AddAnchor null 반환: {gameObject.name}");
         return false;
     }
 

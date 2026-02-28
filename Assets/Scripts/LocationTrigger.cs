@@ -80,7 +80,6 @@ public class LocationTrigger : MonoBehaviour
 
     void TriggerEvent()
     {
-        Debug.Log("Target location reached!");
 
         // 오브젝트를 활성화하거나 배치
         if (objectToActivate != null)

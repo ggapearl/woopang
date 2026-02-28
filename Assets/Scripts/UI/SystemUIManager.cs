@@ -610,7 +610,6 @@ public class SystemUIManager : MonoBehaviour
     {
         if (showDebugInfo)
         {
-            Debug.Log($"[SystemUI] {message}");
         }
     }
     

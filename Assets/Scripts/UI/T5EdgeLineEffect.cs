@@ -73,7 +73,6 @@ public class T5EdgeLineEffect : MonoBehaviour
         // Material이 제대로 할당되었는지 확인
         if (image.material != null && image.material.shader.name == "UI/T5EdgeLine")
         {
-            Debug.Log($"[T5EdgeLineEffect] ✅ 셰이더 적용 성공: {gameObject.name}");
             UpdateMaterialProperties();
         }
         else

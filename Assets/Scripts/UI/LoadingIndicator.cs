@@ -68,7 +68,6 @@ public class LoadingIndicator : MonoBehaviour
             loadingText.text = message ?? loadingMessage;
         }
 
-        Debug.Log($"[LoadingIndicator] 로딩 표시 시작: {loadingText?.text}");
     }
 
     /// <summary>
@@ -105,7 +104,6 @@ public class LoadingIndicator : MonoBehaviour
         }
 
         isShowing = false;
-        Debug.Log("[LoadingIndicator] 로딩 표시 종료");
     }
 
     /// <summary>

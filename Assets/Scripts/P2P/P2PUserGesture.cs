@@ -70,7 +70,6 @@ public class P2PUserGesture : MonoBehaviour
     public void PlayGesture(string gestureType)
     {
         if (showDebugLogs)
-            Debug.Log($"[P2PUserGesture] Playing gesture: {gestureType}");
 
         // Stop current gesture if playing
         if (currentGestureCoroutine != null)

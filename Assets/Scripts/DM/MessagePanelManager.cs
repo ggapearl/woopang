@@ -1707,10 +1707,6 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private GameObject CreateSkeletonItem(Transform parent)
     {
-        // Inspector에 이전 직렬화 값이 남아있을 수 있으므로 알파 강제 보정
-        skeletonBgColor.a = 0.078f;
-        skeletonContentColor.a = 0.078f;
-
         float itemHeight = conversationItemHeight > 0 ? conversationItemHeight : 140f;
 
         // 루트 컨테이너
@@ -2212,13 +2208,6 @@ public class MessagePanelManager : MonoBehaviour
 
     private void SetupConversationItem(GameObject item, ConversationSummary conv)
     {
-        // CanvasGroup 확인 (alpha가 0이면 보이지 않음)
-        CanvasGroup cg = item.GetComponent<CanvasGroup>();
-        if (cg != null && cg.alpha < 1f)
-        {
-            cg.alpha = 1f;
-        }
-
         // 아이템이 활성화 상태인지 확인
         if (!item.activeSelf)
         {
@@ -3839,7 +3828,6 @@ public class MessagePanelManager : MonoBehaviour
 
         string userId = LoginManager.Instance.CurrentUser.id;
         string url = $"{ApiConfig.MAIN_SERVER}/api/users/search?q={UnityWebRequest.EscapeURL(query)}&user_id={userId}";
-        Debug.Log($"[MessagePanel] 검색 요청: {url}");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -3849,7 +3837,6 @@ public class MessagePanelManager : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 string responseText = request.downloadHandler.text;
-                Debug.Log($"[MessagePanel] 검색 응답: {responseText}");
 
                 var response = JsonUtility.FromJson<UserSearchResponse>(responseText);
 
@@ -3888,10 +3875,6 @@ public class MessagePanelManager : MonoBehaviour
 
         GameObject item = Instantiate(conversationItemPrefab, conversationListContent);
         SetLayerRecursively(item, 5);
-
-        CanvasGroup cg = item.GetComponent<CanvasGroup>();
-        if (cg != null && cg.alpha < 1f)
-            cg.alpha = 1f;
 
         if (!item.activeSelf)
             item.SetActive(true);

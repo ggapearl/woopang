@@ -1060,7 +1060,6 @@ public class P2PManager : MonoBehaviour
     private void Log(string message)
     {
         if (showDebugLogs)
-            Debug.Log($"[P2PManager] {message}");
     }
 
     private void LogWarning(string message)

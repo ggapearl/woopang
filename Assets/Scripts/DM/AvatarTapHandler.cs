@@ -38,7 +38,6 @@ public class AvatarTapHandler : MonoBehaviour, IPointerClickHandler
         if (string.IsNullOrEmpty(userId)) return;
 
         #if UNITY_EDITOR
-        Debug.Log($"[AvatarTap] Avatar tapped: userId={userId}, username={username}");
         #endif
 
         onAvatarTapped?.Invoke(userId, username);

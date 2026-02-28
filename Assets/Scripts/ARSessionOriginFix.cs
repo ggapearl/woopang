@@ -14,7 +14,6 @@ public class ARSessionOriginFix : MonoBehaviour
         {
             // ARCameraManager 연결
             arCoreExtensions.CameraManager = xrOrigin.Camera.GetComponent<ARCameraManager>();
-            Debug.Log("AR Session Origin 연결 완료");
         }
     }
 }

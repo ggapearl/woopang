@@ -38,9 +38,7 @@ public class GeospatialManager : MonoBehaviour
         if (_logTimer >= 5f)
         {
             _logTimer = 0f;
-            Debug.Log($"[GeospatialManager] earthManager={earthManager != null}, arcoreExtensions={arcoreExtensions != null}, ARSession.state={ARSession.state}");
             if (earthManager != null)
-                Debug.Log($"[GeospatialManager] EarthState={earthManager.EarthState}, EarthTrackingState={earthManager.EarthTrackingState}");
         }
 
         if (earthManager == null) return;

@@ -55,7 +55,6 @@ public class ToggleImageController : MonoBehaviour
 
         backgroundImage.sprite = isOn ? checkedSprite : uncheckedSprite;
 
-        Debug.Log($"[ToggleImageController] {gameObject.name} 이미지 변경: {(isOn ? "체크됨" : "체크 안됨")}");
     }
 
 #if UNITY_EDITOR

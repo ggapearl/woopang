@@ -373,7 +373,6 @@ public class P2PUserListPanel : MonoBehaviour
             P2PManager.Instance.FocusOnUser(userId);
         }
 
-        Debug.Log($"[P2PUserListPanel] User clicked: {userId}");
     }
 
     void OnDestroy()

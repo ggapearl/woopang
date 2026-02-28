@@ -39,11 +39,9 @@ public class ARCoreExtensionsAutoSetup : MonoBehaviour
 
             // ARCoreExtensions 추가
             arCoreExtensions = xrOrigin.AddComponent<ARCoreExtensions>();
-            Debug.Log($"[ARCoreExtensionsAutoSetup] ✅ ARCoreExtensions 컴포넌트를 {xrOrigin.name}에 추가했습니다.");
         }
         else
         {
-            Debug.Log($"[ARCoreExtensionsAutoSetup] ARCoreExtensions가 이미 {xrOrigin.name}에 존재합니다.");
         }
 
         // ⭐ CRITICAL: Unity 6에서는 XROrigin을 절대 제거하면 안 됩니다!
@@ -54,25 +52,21 @@ public class ARCoreExtensionsAutoSetup : MonoBehaviour
         // SessionOrigin 필드를 설정하지 않아도 ARCore Extensions가 내부적으로 XROrigin을 찾아서 사용합니다.
         // 따라서 SessionOrigin 필드는 null로 두어도 됩니다.
 
-        Debug.Log($"[ARCoreExtensionsAutoSetup] ✅ XROrigin 컴포넌트 확인 완료: {xrOrigin.name}");
 
         // Session 필드도 설정
         arCoreExtensions.Session = arSession;
-        Debug.Log($"[ARCoreExtensionsAutoSetup] ✅ Session 필드 설정 완료");
 
         // CameraManager 설정
         ARCameraManager cameraManager = xrOrigin.GetComponentInChildren<ARCameraManager>();
         if (cameraManager != null)
         {
             arCoreExtensions.CameraManager = cameraManager;
-            Debug.Log($"[ARCoreExtensionsAutoSetup] ✅ CameraManager 필드 설정 완료");
         }
 
         // Config 설정 (ARCoreExtensions가 추가되었거나 이미 있는 경우 모두 설정)
         if (config != null)
         {
             arCoreExtensions.ARCoreExtensionsConfig = config;
-            Debug.Log($"[ARCoreExtensionsAutoSetup] ✅ ARCoreExtensionsConfig를 설정했습니다. (GeospatialMode={config.GeospatialMode})");
         }
         else
         {

@@ -52,12 +52,10 @@ public class SwipeHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         {
             if (delta.x < 0)
             {
-                Debug.Log("[SwipeHandler] 왼쪽 스와이프 감지");
                 OnSwipeLeft?.Invoke();
             }
             else
             {
-                Debug.Log("[SwipeHandler] 오른쪽 스와이프 감지");
                 OnSwipeRight?.Invoke();
             }
         }

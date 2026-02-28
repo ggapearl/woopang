@@ -18,7 +18,6 @@ public class UIFeedbackManager : MonoBehaviour
         {
             GameObject go = new GameObject("UIFeedbackManager");
             go.AddComponent<UIFeedbackManager>();
-            Debug.Log("[UIFeedbackManager] Auto-initialized");
         }
     }
 
