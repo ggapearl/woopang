@@ -90,6 +90,12 @@ public class GLBModelLoader : MonoBehaviour
                 yield return new WaitForSeconds(retryDelay);
             }
             
+            if (!gameObject.activeInHierarchy)
+            {
+                onComplete?.Invoke(false);
+                yield break;
+            }
+
             yield return StartCoroutine(AttemptGLBLoad(url, scale, (success) => {
                 loadSuccess = success;
             }));

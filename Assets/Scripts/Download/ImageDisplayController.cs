@@ -105,7 +105,8 @@ public class ImageDisplayController : MonoBehaviour
             return;
         }
 
-        StartCoroutine(LoadSubPhotos(subPhotoUrls));
+        if (gameObject.activeInHierarchy)
+            StartCoroutine(LoadSubPhotos(subPhotoUrls));
     }
 
     private IEnumerator LoadSubPhotos(List<string> subPhotoUrls)

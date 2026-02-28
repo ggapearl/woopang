@@ -659,16 +659,18 @@ public class DataManager : MonoBehaviour
             return;
         }
 
-        // [FIX] 생성 시 필터 적용하여 활성화 여부 결정
-        bool shouldShow = ShouldShowObject(place);
-        newObj.SetActive(shouldShow);
-        
+        // 코루틴 실행을 위해 먼저 활성화 후 컴포넌트 설정
+        newObj.SetActive(true);
         newObj.name = string.Format("Place_{0}_{1}", place.id, place.model_type);
 
         bool setupSuccess = SetupObjectComponents(newObj, place);
 
         if (setupSuccess)
         {
+            // 컴포넌트 설정 완료 후 필터에 따라 활성/비활성 결정
+            bool shouldShow = ShouldShowObject(place);
+            if (!shouldShow) newObj.SetActive(false);
+
             spawnedObjects[place.id] = newObj;
             placeDataMap[place.id] = place; // ⭐ PlaceListManager가 사용하는 데이터 맵에 추가
         }
