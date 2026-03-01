@@ -537,6 +537,10 @@ public class DoubleTap3D : MonoBehaviour
 
     void Update()
     {
+        // 댓글 패널이 열려있으면 모든 터치 입력 무시 (댓글 패널이 최상위 UI)
+        if (CommentManager.Instance != null && CommentManager.Instance.IsPanelOpen)
+            return;
+
 #if UNITY_EDITOR
         // 에디터 마우스 디버깅
         if (UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame && Time.timeSinceLevelLoad > 2f)

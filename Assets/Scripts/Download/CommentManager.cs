@@ -25,8 +25,6 @@ public class CommentManager : MonoBehaviour
 
     [Header("Animation")]
     public float slideDuration = 0.3f;
-    public float initialHeightRatio = 0.55f; // 초기 높이 비율 (입력 전, 기존 0.7보다 더 높게)
-    public float expandedHeightRatio = 0.85f; // 최대 높이 비율 (입력 시)
     public CanvasGroup panelCanvasGroup;
 
     [Header("Heart Sprites")]
@@ -40,13 +38,14 @@ public class CommentManager : MonoBehaviour
 
     private int currentLocationId = -1;
     public bool IsPanelOpen { get; private set; } = false;
-    private bool isExpanded = false; // 패널 확장 상태 유지
 
     void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
-        
+
+        AutoConnectFields();
+
         if (commentPanel != null)
         {
             commentPanel.SetActive(false);
@@ -71,7 +70,10 @@ public class CommentManager : MonoBehaviour
             commentInputField.onValueChanged.AddListener(OnInputValueChanged);
             commentInputField.characterLimit = maxCommentLength; // 글자 수 제한 설정
             // 입력창 자동 확장 설정
-            AutoExpandInputField.Setup(commentInputField, 50f, 120f);
+            AutoExpandInputField.Setup(commentInputField, 0f, 300f);
+
+            // 네이티브 모바일 입력바 숨기기 (iOS "완료/취소" 바 제거)
+            commentInputField.shouldHideMobileInput = true;
         }
 
         // Add Swipe to Close capability
@@ -79,10 +81,113 @@ public class CommentManager : MonoBehaviour
         {
             SwipeToClose swipeHandler = commentPanel.GetComponent<SwipeToClose>();
             if (swipeHandler == null) swipeHandler = commentPanel.AddComponent<SwipeToClose>();
-            
+
             swipeHandler.panelRect = panelRect;
             swipeHandler.onClose = ClosePanel;
         }
+
+        // MobileKeyboardHandler 자동 설정
+        SetupMobileKeyboardHandler();
+    }
+
+    /// <summary>
+    /// Inspector에서 연결되지 않은 필드를 런타임에 자동 연결 (fallback)
+    /// </summary>
+    private void AutoConnectFields()
+    {
+        // CommentPanel_HQ 찾기
+        if (commentPanel == null)
+        {
+            GameObject[] roots = gameObject.scene.GetRootGameObjects();
+            foreach (var root in roots)
+            {
+                Transform found = FindInChildren(root.transform, "CommentPanel_HQ");
+                if (found != null)
+                {
+                    commentPanel = found.gameObject;
+                    break;
+                }
+            }
+            // Canvas 하위에서도 찾기
+            if (commentPanel == null)
+            {
+                Canvas canvas = FindFirstObjectByType<Canvas>();
+                if (canvas != null)
+                {
+                    Transform found = FindInChildren(canvas.transform, "CommentPanel_HQ");
+                    if (found != null) commentPanel = found.gameObject;
+                }
+            }
+        }
+
+        if (commentPanel == null) return;
+
+        // panelRect (Sheet 또는 CommentPanel_HQ 자체)
+        if (panelRect == null)
+        {
+            Transform sheet = commentPanel.transform.Find("Sheet");
+            panelRect = sheet != null ? sheet.GetComponent<RectTransform>() : commentPanel.GetComponent<RectTransform>();
+        }
+
+        // panelCanvasGroup
+        if (panelCanvasGroup == null)
+            panelCanvasGroup = commentPanel.GetComponentInChildren<CanvasGroup>(true);
+
+        // commentInputField
+        if (commentInputField == null)
+            commentInputField = commentPanel.GetComponentInChildren<InputField>(true);
+
+        // commentContent (Scroll View > Viewport > Content)
+        if (commentContent == null)
+        {
+            Transform content = FindInChildren(commentPanel.transform, "Content");
+            if (content != null) commentContent = content;
+        }
+
+        // sendButton (InputArea 하위 Button)
+        if (sendButton == null)
+        {
+            Transform inputArea = FindInChildren(commentPanel.transform, "InputArea");
+            if (inputArea != null)
+            {
+                Button[] btns = inputArea.GetComponentsInChildren<Button>(true);
+                foreach (var btn in btns)
+                {
+                    if (btn.GetComponent<InputField>() == null)
+                    {
+                        sendButton = btn;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // closeButton (Header 하위 Button)
+        if (closeButton == null)
+        {
+            Transform header = FindInChildren(commentPanel.transform, "Header");
+            if (header != null)
+                closeButton = header.GetComponentInChildren<Button>(true);
+        }
+
+        // titleText (Header 하위 Text)
+        if (titleText == null)
+        {
+            Transform header = FindInChildren(commentPanel.transform, "Header");
+            if (header != null)
+                titleText = header.GetComponentInChildren<Text>(true);
+        }
+    }
+
+    private Transform FindInChildren(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == name) return child;
+            Transform found = FindInChildren(child, name);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     void Update()
@@ -91,27 +196,6 @@ public class CommentManager : MonoBehaviour
         if (IsPanelOpen && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {
             ClosePanel();
-        }
-
-        // Panel Expansion Animation
-        if (IsPanelOpen && panelRect != null)
-        {
-            // 입력창 포커스 시 확장 상태로 전환
-            if (commentInputField != null && commentInputField.isFocused)
-            {
-                isExpanded = true;
-            }
-
-            float targetY = isExpanded ? expandedHeightRatio : initialHeightRatio;
-            Vector2 currentMax = panelRect.anchorMax;
-            
-            // 부드러운 슬라이드 애니메이션
-            if (Mathf.Abs(currentMax.y - targetY) > 0.001f)
-            {
-                float newY = Mathf.Lerp(currentMax.y, targetY, Time.deltaTime * 10f);
-                panelRect.anchorMax = new Vector2(1, newY);
-                panelRect.offsetMax = Vector2.zero;
-            }
         }
     }
 
@@ -207,6 +291,43 @@ public class CommentManager : MonoBehaviour
         IsPanelOpen = true;
     }
 
+    /// <summary>
+    /// MobileKeyboardHandler를 댓글 패널에 자동 설정
+    /// </summary>
+    private void SetupMobileKeyboardHandler()
+    {
+        if (commentPanel == null) return;
+
+        MobileKeyboardHandler handler = commentPanel.GetComponent<MobileKeyboardHandler>();
+        if (handler == null)
+            handler = commentPanel.AddComponent<MobileKeyboardHandler>();
+
+        // InputArea 찾기
+        Transform inputAreaTr = commentPanel.transform.Find("InputArea");
+        if (inputAreaTr == null)
+        {
+            // 직접 InputField의 부모를 InputArea로 사용
+            if (commentInputField != null)
+                inputAreaTr = commentInputField.transform.parent;
+        }
+        if (inputAreaTr != null)
+            handler.inputAreaRect = inputAreaTr.GetComponent<RectTransform>();
+
+        // ScrollRect 연결
+        if (commentContent != null)
+        {
+            ScrollRect sr = commentContent.GetComponentInParent<ScrollRect>();
+            if (sr != null)
+            {
+                handler.chatScrollRect = sr;
+                handler.scrollViewRect = sr.GetComponent<RectTransform>();
+            }
+        }
+
+        // 키보드 닫기 대상 InputField 연결
+        handler.targetInputField = commentInputField;
+    }
+
     public void ClosePanel()
     {
         if (IsPanelOpen)
@@ -214,7 +335,6 @@ public class CommentManager : MonoBehaviour
             StopAllCoroutines();
             StartCoroutine(SlidePanel(false));
             IsPanelOpen = false;
-            isExpanded = false; // 확장 상태 초기화
         }
     }
 
@@ -392,18 +512,69 @@ public class CommentManager : MonoBehaviour
         }
 
         if (string.IsNullOrEmpty(commentInputField.text)) return;
-        StartCoroutine(PostCommentCoroutine(commentInputField.text));
+
+        string content = commentInputField.text.Trim();
+        if (string.IsNullOrEmpty(content)) return;
+
+        // 입력 초기화
+        commentInputField.text = "";
+
+        // 선처리: 즉시 댓글 아이템 표시
+        GameObject optimisticItem = AddOptimisticComment(content);
+
+        StartCoroutine(PostCommentCoroutine(content, optimisticItem));
     }
 
-    private IEnumerator PostCommentCoroutine(string content)
+    /// <summary>
+    /// 선처리: 즉시 댓글 아이템을 화면에 표시 (서버 응답 전)
+    /// </summary>
+    private GameObject AddOptimisticComment(string content)
     {
-        // 로딩 시작
-        Text btnText = sendButton.GetComponentInChildren<Text>();
-        if (buttonSpinner != null) buttonSpinner.SetActive(true);
-        if (btnText != null) btnText.enabled = false;
+        if (commentItemPrefab == null || commentContent == null) return null;
 
-        Coroutine spinRoutine = StartCoroutine(SpinButton());
+        string userId = LoginManager.Instance?.CurrentUser?.id ?? "";
+        string username = LoginManager.Instance?.CurrentUser?.username ?? "";
 
+        CommentData tempData = new CommentData
+        {
+            id = -1, // 임시 ID
+            user_id = userId,
+            username = username,
+            content = content,
+            created_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            like_count = 0,
+            is_liked = false
+        };
+
+        // 댓글 아이템 생성
+        GameObject itemObj = Instantiate(commentItemPrefab, commentContent);
+        itemObj.SetActive(true);
+
+        CommentItem itemScript = itemObj.GetComponent<CommentItem>();
+        if (itemScript != null)
+        {
+            if (itemScript.likeIcon == null && unlikeSprite != null)
+                itemScript.likeIcon = unlikeSprite;
+            if (itemScript.likedSprite == null && likedSprite != null)
+                itemScript.likedSprite = likedSprite;
+
+            itemScript.Setup(tempData);
+        }
+
+        // 스크롤 최하단으로
+        if (commentContent != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            ScrollRect sr = commentContent.GetComponentInParent<ScrollRect>();
+            if (sr != null)
+                sr.normalizedPosition = Vector2.zero;
+        }
+
+        return itemObj;
+    }
+
+    private IEnumerator PostCommentCoroutine(string content, GameObject optimisticItem = null)
+    {
         string url = $"{ApiConfig.MAIN_SERVER}/comments";
 
         CommentPostData postData = new CommentPostData
@@ -425,20 +596,17 @@ public class CommentManager : MonoBehaviour
 
             yield return request.SendWebRequest();
 
-            // 로딩 종료
-            if (buttonSpinner != null) buttonSpinner.SetActive(false);
-            if (btnText != null) btnText.enabled = true;
-            if (spinRoutine != null) StopCoroutine(spinRoutine);
-
             if (request.result == UnityWebRequest.Result.Success)
             {
-                commentInputField.text = "";
-                isExpanded = false; // 전송 후 축소
-                StartCoroutine(FetchComments(currentLocationId, LoginManager.Instance.CurrentUser.id));
+                // 선처리 아이템이 이미 표시되어 있으므로 전체 새로고침 불필요
             }
             else
             {
                 Debug.LogError($"[CommentManager] PostComment failed: {request.error}");
+
+                // 전송 실패: 선처리 아이템 제거
+                if (optimisticItem != null)
+                    Destroy(optimisticItem);
             }
         }
     }

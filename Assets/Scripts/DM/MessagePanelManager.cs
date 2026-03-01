@@ -61,6 +61,14 @@ public class MessagePanelManager : MonoBehaviour
     public Image chatRoomAvatar;
     public Button chatRoomBackButton;
 
+    [Header("=== 전송 버튼 아이콘 설정 ===")]
+    [Tooltip("전송 버튼 아이콘 스프라이트 (WhiteArrow 등)")]
+    public Sprite sendButtonIconSprite;
+    [Tooltip("전송 버튼 아이콘 크기")]
+    public Vector2 sendButtonIconSize = new Vector2(40f, 40f);
+    [Tooltip("전송 버튼 아이콘 색상")]
+    public Color sendButtonIconColor = Color.white;
+
     [Header("=== 네비게이션 버튼 연결 ===")]
     [Tooltip("하단 네비게이션의 Message_Button (뒤로가기 시 이 버튼 클릭 트리거)")]
     public Button navigationMessageButton;
@@ -311,7 +319,12 @@ public class MessagePanelManager : MonoBehaviour
 
         // 입력창 자동 확장 설정
         if (chatInput != null)
-            AutoExpandInputField.Setup(chatInput, 50f, 150f);
+        {
+            AutoExpandInputField.Setup(chatInput, 0f, 250f);
+
+            // 네이티브 모바일 입력바 숨기기 (iOS "완료/취소" 바 제거)
+            chatInput.shouldHideMobileInput = true;
+        }
     }
 
     /// <summary>
@@ -498,7 +511,7 @@ public class MessagePanelManager : MonoBehaviour
 
     /// <summary>
     /// MobileKeyboardHandler를 ChatRoomPanel에 자동 설정
-    /// 키보드가 올라올 때 Background 패널을 키보드 위로 이동
+    /// 키보드가 올라올 때 InputArea만 키보드 위로 이동 + ScrollView 하단 조정
     /// </summary>
     private void SetupMobileKeyboardHandler()
     {
@@ -513,13 +526,29 @@ public class MessagePanelManager : MonoBehaviour
 
         handler.backgroundRect = bgTransform.GetComponent<RectTransform>();
 
-        // ScrollRect 찾기
+        // InputArea 연결
+        if (chatInputArea != null)
+            handler.inputAreaRect = chatInputArea.GetComponent<RectTransform>();
+        else
+        {
+            Transform inputAreaTr = bgTransform.Find("InputArea");
+            if (inputAreaTr != null)
+                handler.inputAreaRect = inputAreaTr.GetComponent<RectTransform>();
+        }
+
+        // ScrollRect 및 ScrollView RectTransform 연결
         if (chatMessageContent != null)
         {
             ScrollRect sr = chatMessageContent.GetComponentInParent<ScrollRect>();
             if (sr != null)
+            {
                 handler.chatScrollRect = sr;
+                handler.scrollViewRect = sr.GetComponent<RectTransform>();
+            }
         }
+
+        // 키보드 닫기 대상 InputField 연결
+        handler.targetInputField = chatInput;
     }
 
     /// <summary>
@@ -3524,10 +3553,52 @@ public class MessagePanelManager : MonoBehaviour
         if (chatInput != null)
             chatInput.text = "";
 
-        StartCoroutine(SendMessageCoroutine(currentChatUserId, content));
+        // 선처리: 즉시 내 메시지 버블 표시
+        GameObject optimisticBubble = AddOptimisticMyBubble(content);
+
+        StartCoroutine(SendMessageCoroutine(currentChatUserId, content, optimisticBubble));
     }
 
-    private IEnumerator SendMessageCoroutine(string recipientId, string content)
+    /// <summary>
+    /// 선처리: 즉시 내 메시지 버블을 화면에 표시 (서버 응답 전)
+    /// </summary>
+    private GameObject AddOptimisticMyBubble(string content)
+    {
+        if (myMessageBubblePrefab == null || chatMessageContent == null) return null;
+
+        string userId = LoginManager.Instance?.CurrentUser?.id ?? "";
+
+        // 임시 DMMessage 생성
+        DMMessage tempMsg = new DMMessage
+        {
+            id = -1, // 임시 ID
+            sender_id = userId,
+            recipient_id = currentChatUserId,
+            content = content,
+            is_read = false,
+            is_liked = false,
+            is_mine = true,
+            created_at = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+        };
+
+        // 날짜 구분선 체크
+        CheckAndCreateDateSeparator(tempMsg.created_at);
+
+        // 버블 생성
+        GameObject item = Instantiate(myMessageBubblePrefab, chatMessageContent);
+        SetupMessageBubble(item, tempMsg, true);
+
+        // 스크롤 최하단으로
+        ScrollToBottom();
+
+        // 햅틱 피드백
+        if (UIFeedbackManager.Instance != null)
+            UIFeedbackManager.Instance.TriggerLightHaptic();
+
+        return item;
+    }
+
+    private IEnumerator SendMessageCoroutine(string recipientId, string content, GameObject optimisticBubble = null)
     {
         if (!CheckLogin()) yield break;
 
@@ -3554,16 +3625,22 @@ public class MessagePanelManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // 대화 새로고침
-                StartCoroutine(LoadChatMessages(recipientId, false));
-
-                // 햅틱 피드백
-                if (UIFeedbackManager.Instance != null)
-                    UIFeedbackManager.Instance.TriggerLightHaptic();
+                // 선처리 버블이 이미 표시되어 있으므로 전체 새로고침 불필요
+                // 읽음 표시만 업데이트 (서버에서 받은 실제 ID 반영)
+                if (optimisticBubble != null)
+                {
+                    Text readText = optimisticBubble.transform.Find("ReadText")?.GetComponent<Text>();
+                    if (readText != null)
+                        readText.text = "✓";
+                }
             }
             else
             {
                 Debug.LogError($"[MessagePanel] Failed to send: {request.error}");
+
+                // 전송 실패: 선처리 버블 제거
+                if (optimisticBubble != null)
+                    Destroy(optimisticBubble);
             }
         }
     }
