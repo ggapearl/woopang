@@ -1488,7 +1488,7 @@ GameObject:
   - component: {fileID: 75665562}
   - component: {fileID: 75665565}
   - component: {fileID: 75665564}
-  - component: {fileID: 75665563}
+  - component: {fileID: 75665566}
   m_Layer: 5
   m_Name: ChatInput
   m_TagString: Untagged
@@ -1517,74 +1517,6 @@ RectTransform:
   m_AnchoredPosition: {x: -25.000122, y: 0}
   m_SizeDelta: {x: -150, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &75665563
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 75665561}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d199490a83bb2b844b9695cbf13b01ef, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.InputField
-  m_Navigation:
-    m_Mode: 3
-    m_WrapAround: 0
-    m_SelectOnUp: {fileID: 0}
-    m_SelectOnDown: {fileID: 0}
-    m_SelectOnLeft: {fileID: 0}
-    m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
-  m_Colors:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
-    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
-    m_ColorMultiplier: 1
-    m_FadeDuration: 0.1
-  m_SpriteState:
-    m_HighlightedSprite: {fileID: 0}
-    m_PressedSprite: {fileID: 0}
-    m_SelectedSprite: {fileID: 0}
-    m_DisabledSprite: {fileID: 0}
-  m_AnimationTriggers:
-    m_NormalTrigger: Normal
-    m_HighlightedTrigger: Highlighted
-    m_PressedTrigger: Pressed
-    m_SelectedTrigger: Selected
-    m_DisabledTrigger: Disabled
-  m_Interactable: 1
-  m_TargetGraphic: {fileID: 75665564}
-  m_TextComponent: {fileID: 2019973867}
-  m_Placeholder: {fileID: 1123288792}
-  m_ContentType: 0
-  m_InputType: 0
-  m_AsteriskChar: 42
-  m_KeyboardType: 0
-  m_LineType: 0
-  m_HideMobileInput: 0
-  m_CharacterValidation: 0
-  m_CharacterLimit: 0
-  m_OnSubmit:
-    m_PersistentCalls:
-      m_Calls: []
-  m_OnDidEndEdit:
-    m_PersistentCalls:
-      m_Calls: []
-  m_OnValueChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_CaretColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
-  m_CustomCaretColor: 0
-  m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
-  m_Text: 
-  m_CaretBlinkRate: 0.85
-  m_CaretWidth: 1
-  m_ReadOnly: 0
-  m_ShouldActivateOnSelect: 1
 --- !u!114 &75665564
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1623,6 +1555,75 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 75665561}
   m_CullTransparentMesh: 1
+--- !u!114 &75665566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 75665561}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4107c9b4f94f67442a8eb5c0117c905a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.InputField
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 75665564}
+  m_TextComponent: {fileID: 1123288792}
+  m_Placeholder: {fileID: 1123288792}
+  m_ContentType: 0
+  m_InputType: 0
+  m_AsteriskChar: 42
+  m_KeyboardType: 0
+  m_LineType: 0
+  m_HideMobileInput: 0
+  m_CharacterValidation: 0
+  m_CharacterLimit: 0
+  m_OnSubmit:
+    m_PersistentCalls:
+      m_Calls: []
+  m_OnDidEndEdit:
+    m_PersistentCalls:
+      m_Calls: []
+  m_OnValueChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_CaretColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
+  m_CustomCaretColor: 0
+  m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
+  m_Text: 
+  m_CaretBlinkRate: 0.85
+  m_CaretWidth: 1
+  m_ReadOnly: 0
+  m_ShouldActivateOnSelect: 1
+  lockFocus: 0
 --- !u!1 &78690740 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6685623840763709567, guid: 092d69863f3af264daa761e2ed3164ce,
@@ -7306,7 +7307,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CommentManager
   commentPanel: {fileID: 510460621852055757}
   panelRect: {fileID: 6540955624610580479}
-  commentInputField: {fileID: 5029334610826288367}
+  commentInputField: {fileID: 5533815816961319037}
   sendButton: {fileID: 238233720393783727}
   commentContent: {fileID: 8362660588082499323}
   commentItemPrefab: {fileID: 484240228533486302, guid: 0eb25e68b49bb3a4cbc8e6e43f800842,
@@ -10861,10 +10862,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MobileKeyboardHandler
   backgroundRect: {fileID: 1006471371}
-  chatScrollRect: {fileID: 0}
-  targetInputField: {fileID: 75665563}
+  chatScrollRect: {fileID: 1482961527}
+  targetInputField: {fileID: 75665566}
   inputAreaRect: {fileID: 1621736303}
-  scrollViewRect: {fileID: 0}
+  scrollViewRect: {fileID: 1482961526}
   keyboardTopPadding: -20
   lerpSpeed: 12
   expandPanelOnKeyboard: 1
@@ -10874,9 +10875,10 @@ MonoBehaviour:
   viewportRect: {fileID: 1215460795}
   expandedViewportTop: 150
   expandedViewportBottom: 150
-  inputAreaExpandX: 50
-  dismissThreshold: 50
-  velocityThreshold: 400
+  inputAreaExpandX: 0
+  dismissGracePeriod: 1
+  touchRecencyThreshold: 0.3
+  maxReactivateTime: 3
   editorPreviewActive: 0
   editorPreviewKeyboardHeight: 0
   editorKeyboardPreviewObj: {fileID: 0}
@@ -12829,7 +12831,7 @@ MonoBehaviour:
   adminMessageBubblePrefab: {fileID: 3321048554349960604, guid: a3a4ebd5759a3c64fac5e62dbcf318eb,
     type: 3}
   systemAvatarSprite: {fileID: 0}
-  chatInput: {fileID: 75665563}
+  chatInput: {fileID: 75665566}
   sendButton: {fileID: 531594245}
   chatInputArea: {fileID: 1621736302}
   chatRoomTitle: {fileID: 1966837982}
@@ -13885,7 +13887,7 @@ MonoBehaviour:
     m_Alignment: 3
     m_AlignByGeometry: 0
     m_RichText: 1
-    m_HorizontalOverflow: 0
+    m_HorizontalOverflow: 1
     m_VerticalOverflow: 0
     m_LineSpacing: 1
   m_Text: "\uBA54\uC2DC\uC9C0 \uC785\uB825..."
@@ -31795,74 +31797,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &5029334610826288367
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5533815816961319036}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d199490a83bb2b844b9695cbf13b01ef, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.InputField
-  m_Navigation:
-    m_Mode: 3
-    m_WrapAround: 0
-    m_SelectOnUp: {fileID: 0}
-    m_SelectOnDown: {fileID: 0}
-    m_SelectOnLeft: {fileID: 0}
-    m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
-  m_Colors:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
-    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
-    m_ColorMultiplier: 1
-    m_FadeDuration: 0.1
-  m_SpriteState:
-    m_HighlightedSprite: {fileID: 0}
-    m_PressedSprite: {fileID: 0}
-    m_SelectedSprite: {fileID: 0}
-    m_DisabledSprite: {fileID: 0}
-  m_AnimationTriggers:
-    m_NormalTrigger: Normal
-    m_HighlightedTrigger: Highlighted
-    m_PressedTrigger: Pressed
-    m_SelectedTrigger: Selected
-    m_DisabledTrigger: Disabled
-  m_Interactable: 1
-  m_TargetGraphic: {fileID: 3550050782396266409}
-  m_TextComponent: {fileID: 3220934753777062641}
-  m_Placeholder: {fileID: 8890659987956238110}
-  m_ContentType: 0
-  m_InputType: 0
-  m_AsteriskChar: 42
-  m_KeyboardType: 0
-  m_LineType: 0
-  m_HideMobileInput: 0
-  m_CharacterValidation: 0
-  m_CharacterLimit: 200
-  m_OnSubmit:
-    m_PersistentCalls:
-      m_Calls: []
-  m_OnDidEndEdit:
-    m_PersistentCalls:
-      m_Calls: []
-  m_OnValueChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_CaretColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
-  m_CustomCaretColor: 0
-  m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
-  m_Text: 
-  m_CaretBlinkRate: 0.85
-  m_CaretWidth: 1
-  m_ReadOnly: 0
-  m_ShouldActivateOnSelect: 1
 --- !u!114 &5042212042531189438
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -32819,7 +32753,7 @@ GameObject:
   - component: {fileID: 1851356251829087442}
   - component: {fileID: 3427109849467823554}
   - component: {fileID: 3550050782396266409}
-  - component: {fileID: 5029334610826288367}
+  - component: {fileID: 5533815816961319037}
   m_Layer: 5
   m_Name: InputContainer
   m_TagString: Untagged
@@ -32827,6 +32761,75 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &5533815816961319037
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5533815816961319036}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4107c9b4f94f67442a8eb5c0117c905a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.InputField
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 3550050782396266409}
+  m_TextComponent: {fileID: 3220934753777062641}
+  m_Placeholder: {fileID: 0}
+  m_ContentType: 0
+  m_InputType: 0
+  m_AsteriskChar: 42
+  m_KeyboardType: 0
+  m_LineType: 0
+  m_HideMobileInput: 0
+  m_CharacterValidation: 0
+  m_CharacterLimit: 200
+  m_OnSubmit:
+    m_PersistentCalls:
+      m_Calls: []
+  m_OnDidEndEdit:
+    m_PersistentCalls:
+      m_Calls: []
+  m_OnValueChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_CaretColor: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
+  m_CustomCaretColor: 0
+  m_SelectionColor: {r: 0.65882355, g: 0.80784315, b: 1, a: 0.7529412}
+  m_Text: 
+  m_CaretBlinkRate: 0.85
+  m_CaretWidth: 1
+  m_ReadOnly: 0
+  m_ShouldActivateOnSelect: 1
+  lockFocus: 0
 --- !u!114 &5553331945532891663
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34625,7 +34628,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 40, y: 150}
+  m_SizeDelta: {x: 0, y: 150}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!222 &6838273719259657762
 CanvasRenderer:
@@ -38916,24 +38919,25 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MobileKeyboardHandler
   backgroundRect: {fileID: 6540955624610580479}
-  chatScrollRect: {fileID: 0}
-  targetInputField: {fileID: 5029334610826288367}
+  chatScrollRect: {fileID: 7224410843148408590}
+  targetInputField: {fileID: 5533815816961319037}
   inputAreaRect: {fileID: 6834374791078079749}
-  scrollViewRect: {fileID: 0}
-  keyboardTopPadding: -20
+  scrollViewRect: {fileID: 5571165430691620498}
+  keyboardTopPadding: 0
   lerpSpeed: 12
   expandPanelOnKeyboard: 1
   expandedTopAnchorY: 1
   expandedTopOffset: -360
   expandedSideOffset: 0
-  viewportRect: {fileID: 0}
+  viewportRect: {fileID: 2863025186053885421}
   expandedViewportTop: 150
   expandedViewportBottom: 150
-  inputAreaExpandX: 50
-  dismissThreshold: 50
-  velocityThreshold: 400
-  editorPreviewActive: 0
-  editorPreviewKeyboardHeight: 0
+  inputAreaExpandX: 30
+  dismissGracePeriod: 1
+  touchRecencyThreshold: 0.3
+  maxReactivateTime: 3
+  editorPreviewActive: 1
+  editorPreviewKeyboardHeight: 1326.3082
   editorKeyboardPreviewObj: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
