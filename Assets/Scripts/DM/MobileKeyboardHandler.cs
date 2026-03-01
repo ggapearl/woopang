@@ -789,7 +789,7 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         if (targetInputField != null && targetInputField.touchScreenKeyboard != null)
         {
-            Rect area = targetInputField.touchScreenKeyboard.area;
+            Rect area = TouchScreenKeyboard.area;
             if (area.height > 0)
                 return area.height;
         }
