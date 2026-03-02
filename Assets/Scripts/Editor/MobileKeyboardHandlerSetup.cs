@@ -158,9 +158,6 @@ public class MobileKeyboardHandlerSetup
             newInput.animationTriggers = animationTriggers;
 
             EditorUtility.SetDirty(go);
-            Debug.Log($"[MKH Setup] InputField → KPI 교체 완료: {go.name} " +
-                      $"textComp={textComponent != null} graphic={targetGraphic != null} interactable={interactable}");
-
             return newInput;
         }
         catch (System.Exception e)
@@ -188,36 +185,49 @@ public class MobileKeyboardHandlerSetup
 
         bool repaired = false;
 
+        // 자식에서 Text("Text")와 Placeholder("Placeholder") 탐색
+        Transform textTr = kpi.transform.Find("Text");
+        if (textTr == null) textTr = kpi.transform.Find("Text (Legacy)");
+        Transform placeholderTr = kpi.transform.Find("Placeholder");
+        if (placeholderTr == null) placeholderTr = kpi.transform.Find("placeholder");
+
+        Text textComp = textTr != null ? textTr.GetComponent<Text>() : null;
+        Graphic placeholderGraphic = placeholderTr != null ? placeholderTr.GetComponent<Graphic>() : null;
+
+        // ★ 교차 오류 감지: textComponent와 placeholder가 같은 오브젝트
+        bool crossLinked = kpi.textComponent != null && kpi.placeholder != null
+                           && kpi.textComponent.gameObject == kpi.placeholder.gameObject;
+
         // textComponent 복구
-        if (kpi.textComponent == null)
+        if (kpi.textComponent == null || crossLinked)
         {
-            var texts = kpi.GetComponentsInChildren<Text>(true);
-            foreach (var t in texts)
+            if (textComp != null)
             {
-                // placeholder가 아닌 Text 자식을 textComponent로 사용
-                if (kpi.placeholder != null && t.gameObject == kpi.placeholder.gameObject) continue;
-                if (t.gameObject == kpi.gameObject) continue;
-                kpi.textComponent = t;
+                kpi.textComponent = textComp;
                 repaired = true;
-                Debug.Log($"[MKH Setup] textComponent 복구: {t.gameObject.name}");
-                break;
+            }
+            else
+            {
+                // 이름으로 못 찾으면 placeholder가 아닌 첫 번째 Text 자식 사용
+                var texts = kpi.GetComponentsInChildren<Text>(true);
+                foreach (var t in texts)
+                {
+                    if (placeholderGraphic != null && t.gameObject == placeholderGraphic.gameObject) continue;
+                    if (t.gameObject == kpi.gameObject) continue;
+                    kpi.textComponent = t;
+                    repaired = true;
+                    break;
+                }
             }
         }
 
         // placeholder 복구
-        if (kpi.placeholder == null)
+        if (kpi.placeholder == null || crossLinked)
         {
-            Transform placeholderTr = kpi.transform.Find("Placeholder");
-            if (placeholderTr == null) placeholderTr = kpi.transform.Find("placeholder");
-            if (placeholderTr != null)
+            if (placeholderGraphic != null)
             {
-                var placeholderGraphic = placeholderTr.GetComponent<Graphic>();
-                if (placeholderGraphic != null)
-                {
-                    kpi.placeholder = placeholderGraphic;
-                    repaired = true;
-                    Debug.Log($"[MKH Setup] placeholder 복구: {placeholderTr.name}");
-                }
+                kpi.placeholder = placeholderGraphic;
+                repaired = true;
             }
         }
 
@@ -229,7 +239,6 @@ public class MobileKeyboardHandlerSetup
             {
                 kpi.targetGraphic = graphic;
                 repaired = true;
-                Debug.Log($"[MKH Setup] targetGraphic 복구: {graphic.GetType().Name}");
             }
         }
 
@@ -238,14 +247,12 @@ public class MobileKeyboardHandlerSetup
         {
             kpi.interactable = true;
             repaired = true;
-            Debug.Log("[MKH Setup] interactable 복구: true");
         }
 
         if (repaired)
         {
             EditorUtility.SetDirty(kpi);
             EditorUtility.SetDirty(kpi.gameObject);
-            Debug.Log($"[MKH Setup] KPI 복구 완료: {kpi.gameObject.name}");
         }
     }
 

@@ -651,11 +651,19 @@ public class LocalizationManager : MonoBehaviour
             // DM 채팅 관련
             ["message_placeholder"] = new Dictionary<string, string>()
             {
-                ["en"] = "Enter message",
-                ["ko"] = "메시지 입력",
-                ["zh"] = "输入消息",
-                ["ja"] = "メッセージを入力",
-                ["es"] = "Escribir mensaje"
+                ["en"] = "Enter message...",
+                ["ko"] = "메시지 입력...",
+                ["zh"] = "输入消息...",
+                ["ja"] = "メッセージを入力...",
+                ["es"] = "Escribir mensaje..."
+            },
+            ["comment_placeholder"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Add a comment...",
+                ["ko"] = "댓글 입력...",
+                ["zh"] = "输入评论...",
+                ["ja"] = "コメントを入力...",
+                ["es"] = "Escribir comentario..."
             },
             ["chat_readonly_placeholder"] = new Dictionary<string, string>()
             {

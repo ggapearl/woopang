@@ -151,14 +151,7 @@ public class MobileKeyboardHandler : MonoBehaviour
     /// <summary>키보드 없을 때의 visibleFrame.bottom (네비게이션바 offset 제거용)</summary>
     private int baselineVisibleBottom = -1;
 
-    // ============================================================
-    // Debug Logging
-    // ============================================================
-
-    private float lastLogTime;
     private float lastJniErrorTime;
-    private const float LOG_INTERVAL = 1f;
-    private bool firstUpdateLogged;
     private int updateCallCount;
 
     // ============================================================
@@ -167,27 +160,43 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     void OnEnable()
     {
-        TryInitialize();
+#if UNITY_EDITOR
+        // 에디터 프리뷰 상태 리셋 — 패널 열 때마다 깨끗한 상태로 시작
+        editorPreviewActive = false;
+        editorPreviewKeyboardHeight = 0;
+#endif
+
+        Debug.Log($"[WP-DBG] OnEnable() go={gameObject.name} initialized={initialized} kbLogActive={keyboardLogicallyActive} bgRect={(backgroundRect != null ? backgroundRect.gameObject.name : "null")}");
+        hksmLogCount = 0;
+        expandLogCount = 0;
+
+        if (initialized && backgroundRect != null)
+        {
+            // 이미 초기화된 상태에서 re-enable — 현재 위치 기준으로 원본값 재캡처
+            // (SlidePanel 완료 후 re-enable되므로 올바른 위치)
+            origBgAnchorMin = backgroundRect.anchorMin;
+            origBgAnchorMax = backgroundRect.anchorMax;
+            origBgOffsetMin = backgroundRect.offsetMin;
+            origBgOffsetMax = backgroundRect.offsetMax;
+            SetCollapsedTargets();
+            Debug.Log($"[WP-DBG] OnEnable RE-CAPTURE: origBgAnchorMin={origBgAnchorMin} origBgAnchorMax={origBgAnchorMax} origBgOffsetMin={origBgOffsetMin} origBgOffsetMax={origBgOffsetMax}");
+        }
+        else
+        {
+            TryInitialize();
+        }
+
         if (initialized)
         {
-            Debug.Log($"[MKH] OnEnable: bgRect={backgroundRect != null} scrollRect={chatScrollRect != null} " +
-                      $"inputArea={inputAreaRect != null} targetInput={targetInputField != null} go={gameObject.name}");
-
-            // InputField 상태 진단 — 포커스 불가 원인 파악용
-            if (targetInputField != null)
-            {
-                Debug.Log($"[MKH] InputField DIAG: type={targetInputField.GetType().Name} " +
-                          $"interactable={targetInputField.interactable} " +
-                          $"activeEnabled={targetInputField.isActiveAndEnabled} " +
-                          $"textComp={targetInputField.textComponent != null} " +
-                          $"graphic={((Selectable)targetInputField).targetGraphic != null} " +
-                          $"goActive={targetInputField.gameObject.activeInHierarchy}");
-            }
+            Debug.Log($"[WP-DBG] OnEnable post-init: origBgAnchorMin={origBgAnchorMin} origBgAnchorMax={origBgAnchorMax} origBgOffsetMin={origBgOffsetMin} origBgOffsetMax={origBgOffsetMax}");
+            Debug.Log($"[WP-DBG] OnEnable targets: tgtAnchorMin={targetAnchorMin} tgtAnchorMax={targetAnchorMax} tgtOffsetMin={targetOffsetMin} tgtOffsetMax={targetOffsetMax}");
+            Debug.Log($"[WP-DBG] OnEnable current bg: anchorMin={backgroundRect.anchorMin} anchorMax={backgroundRect.anchorMax} offsetMin={backgroundRect.offsetMin} offsetMax={backgroundRect.offsetMax} anchoredPos={backgroundRect.anchoredPosition}");
         }
     }
 
     void OnDisable()
     {
+        Debug.Log($"[WP-DBG] OnDisable() go={gameObject.name} initialized={initialized} kbLogActive={keyboardLogicallyActive}");
         if (!initialized || backgroundRect == null) return;
 
         // 즉시 원상 복구
@@ -212,11 +221,11 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         if (inputAreaRect != null)
         {
-            inputAreaRect.offsetMin = origInputAreaOffsetMin;
-            inputAreaRect.offsetMax = origInputAreaOffsetMax;
+            // X만 복원 — Y는 AutoExpandInputField가 제어
+            inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
+            inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
         }
 
-        Debug.Log("[MKH] OnDisable: restored original state");
     }
 
     // ============================================================
@@ -267,7 +276,6 @@ public class MobileKeyboardHandler : MonoBehaviour
                 scrollViewRect = chatScrollRect.GetComponent<RectTransform>();
                 if (viewportRect == null && chatScrollRect.viewport != null)
                     viewportRect = chatScrollRect.viewport;
-                Debug.Log($"[MKH] ScrollRect auto-discovered: {chatScrollRect.gameObject.name}");
             }
         }
 
@@ -275,7 +283,14 @@ public class MobileKeyboardHandler : MonoBehaviour
         persistentInput = targetInputField as KeyboardPersistentInputField;
 
         initialized = true;
-        Debug.Log($"[MKH] Initialized OK: canvas={canvasRect != null} viewport={viewportRect != null} scrollRect={chatScrollRect != null} persistent={persistentInput != null}");
+
+        Debug.Log($"[WP-DBG] TryInitialize() DONE go={gameObject.name} bgRect={backgroundRect.gameObject.name} " +
+                  $"origAnchorMin={origBgAnchorMin} origAnchorMax={origBgAnchorMax} " +
+                  $"origOffsetMin={origBgOffsetMin} origOffsetMax={origBgOffsetMax} " +
+                  $"inputAreaRect={(inputAreaRect != null ? inputAreaRect.gameObject.name : "null")} " +
+                  $"viewportRect={(viewportRect != null ? viewportRect.gameObject.name : "null")} " +
+                  $"scrollRect={(chatScrollRect != null ? "found" : "null")} " +
+                  $"canvasRect={(canvasRect != null ? canvasRect.rect.height.ToString("F0") : "null")}h");
     }
 
     // ============================================================
@@ -284,16 +299,8 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     void Update()
     {
-        if (!firstUpdateLogged)
-        {
-            firstUpdateLogged = true;
-            Debug.Log($"[MKH] Update() FIRST CALL. isEditor={Application.isEditor} init={initialized} bgRect={backgroundRect != null}");
-        }
-
         if (!initialized) { TryInitialize(); if (!initialized) return; }
         if (backgroundRect == null) return;
-
-        updateCallCount++;
 
         try
         {
@@ -305,7 +312,7 @@ public class MobileKeyboardHandler : MonoBehaviour
         {
             // [MKH] 태그로 출력 → 사용자 logcat 필터에서 보임
             if (updateCallCount <= 5)
-                Debug.Log($"[MKH] *** UPDATE ERROR *** {e.GetType().Name}: {e.Message}");
+                Debug.LogWarning($"[MKH] Update 오류: {e.GetType().Name}: {e.Message}");
         }
 
         if (refocusCooldown > 0)
@@ -334,7 +341,6 @@ public class MobileKeyboardHandler : MonoBehaviour
             targetInputField.ActivateInputField();
             refocusCooldown = 0.15f;
 
-            Debug.Log($"[MKH] LateUpdate REFOCUS (touching={isTouchActive})");
         }
     }
 
@@ -405,23 +411,25 @@ public class MobileKeyboardHandler : MonoBehaviour
     //   3. timeout (maxReactivateTime 초과)
     // ============================================================
 
-    private int hksmCount;
+    private int hksmLogCount; // 디버깅용 로그 카운터
 
     private void HandleKeyboardStateMachine()
     {
-        hksmCount++;
-
         float kbH = GetKeyboardHeightInCanvasPixels();
         bool inputFocused = targetInputField != null && targetInputField.isFocused;
 
-        // 처음 3번 + 주기적 상태 로그
-        bool shouldLog = hksmCount <= 3 || (Time.time - lastLogTime > LOG_INTERVAL);
-        if (shouldLog)
+        // 첫 몇 프레임만 로그 출력 (스팸 방지)
+        if (hksmLogCount < 5)
         {
-            Debug.Log($"[MKH] state#{hksmCount}: focused={inputFocused} kbH={kbH:F1} active={keyboardLogicallyActive} " +
-                      $"touching={isTouchActive} " +
-                      $"touchAge={Time.time - lastTouchActiveTime:F2}s kbGone={(kbGoneStartTime > 0 ? Time.time - kbGoneStartTime : 0):F1}s");
-            lastLogTime = Time.time;
+            hksmLogCount++;
+#if UNITY_EDITOR
+            Debug.Log($"[WP-DBG] HKSM go={gameObject.name} kbH={kbH:F1} kbLogActive={keyboardLogicallyActive} inputFocused={inputFocused} " +
+                      $"editorPreview={editorPreviewActive} editorKbH={editorPreviewKeyboardHeight:F1} " +
+                      $"curBgAnchorMin={backgroundRect.anchorMin} curBgAnchorMax={backgroundRect.anchorMax}");
+#else
+            Debug.Log($"[WP-DBG] HKSM go={gameObject.name} kbH={kbH:F1} kbLogActive={keyboardLogicallyActive} inputFocused={inputFocused} " +
+                      $"curBgAnchorMin={backgroundRect.anchorMin} curBgAnchorMax={backgroundRect.anchorMax}");
+#endif
         }
 
         // ── 키보드 높이 > 0 감지됨 ──
@@ -436,7 +444,7 @@ public class MobileKeyboardHandler : MonoBehaviour
                 keyboardLogicallyActive = true;
                 needsScrollToBottom = true;
                 if (persistentInput != null) persistentInput.lockFocus = true;
-                Debug.Log($"[MKH] === ACTIVATED === kbH={kbH:F1} focused={inputFocused} lockFocus={persistentInput != null}");
+                Debug.Log($"[WP-DBG] ★ ACTIVATED go={gameObject.name} kbH={kbH:F1}");
             }
 
             SetExpandedTargets(kbH);
@@ -450,10 +458,7 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         // kbH가 처음 0이 된 시점 기록
         if (kbGoneStartTime <= 0)
-        {
             kbGoneStartTime = Time.time;
-            Debug.Log($"[MKH] kbH→0. focused={inputFocused} touchAge={Time.time - lastTouchActiveTime:F2}s");
-        }
 
         float timeSinceGone = Time.time - kbGoneStartTime;
         float timeSinceTouch = Time.time - lastTouchActiveTime;
@@ -462,7 +467,7 @@ public class MobileKeyboardHandler : MonoBehaviour
         if (isTouchActive)
         {
             SetExpandedTargets(lastKbHeight);
-            kbGoneStartTime = Time.time; // gone 타이머 리셋 (터치 중에는 카운트 안 함)
+            kbGoneStartTime = Time.time;
             return;
         }
 
@@ -477,13 +482,11 @@ public class MobileKeyboardHandler : MonoBehaviour
         if (inputFocused)
         {
             SetExpandedTargets(lastKbHeight);
-            kbGoneStartTime = Time.time; // 타이머 리셋
+            kbGoneStartTime = Time.time;
             return;
         }
 
         // ── 터치 안 됨 + focused 아님 + grace 만료 → native dismiss ──
-
-        Debug.Log($"[MKH] === DISMISSED (native) === gone={timeSinceGone:F2}s touchAge={timeSinceTouch:F2}s focused={inputFocused}");
         DismissKeyboardCleanly();
     }
 
@@ -493,6 +496,7 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private void DismissKeyboardCleanly()
     {
+        Debug.Log($"[WP-DBG] ★ DISMISS go={gameObject.name}");
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
         kbGoneStartTime = 0;
@@ -507,9 +511,49 @@ public class MobileKeyboardHandler : MonoBehaviour
         SetCollapsedTargets();
     }
 
+    /// <summary>
+    /// 키보드만 dismiss (패널은 유지) — 댓글 전송 후 호출용.
+    /// 키보드 레이아웃만 collapsed로 되돌리되 패널 자체는 열린 상태 유지.
+    /// </summary>
+    /// <summary>
+    /// 키보드만 닫고 패널 확장 상태는 유지.
+    /// keepExpanded=true 이면 SetCollapsedTargets를 호출하지 않음.
+    /// </summary>
+    public void DismissKeyboardOnly(bool keepExpanded = false)
+    {
+        Debug.Log($"[WP-DBG] DismissKeyboardOnly go={gameObject.name} keepExpanded={keepExpanded}");
+        if (persistentInput != null) persistentInput.lockFocus = false;
+        keyboardLogicallyActive = false;
+        kbGoneStartTime = 0;
+        needsScrollToBottom = false;
+
+#if UNITY_EDITOR
+        editorPreviewActive = false;
+        editorPreviewKeyboardHeight = 0;
+#endif
+
+        if (!keepExpanded)
+        {
+            SetCollapsedTargets();
+        }
+        else
+        {
+            // 패널은 확장 유지하되, 키보드 영역만 제거 — bottom anchor를 0으로
+            if (expandPanelOnKeyboard)
+            {
+                targetAnchorMin = new Vector2(0, 0);
+                targetAnchorMax = new Vector2(1, expandedTopAnchorY);
+                targetOffsetMin = new Vector2(expandedSideOffset, 0);
+                targetOffsetMax = new Vector2(-expandedSideOffset, expandedTopOffset);
+            }
+        }
+    }
+
     // ============================================================
     // Expansion Targets
     // ============================================================
+
+    private int expandLogCount; // 디버깅용
 
     private void SetExpandedTargets(float kbH)
     {
@@ -517,6 +561,12 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
         float bottomAnchor = (kbH + keyboardTopPadding) / canvasHeight;
+
+        if (expandLogCount < 3)
+        {
+            expandLogCount++;
+            Debug.Log($"[WP-DBG] SetExpandedTargets go={gameObject.name} kbH={kbH:F1} canvasH={canvasHeight:F0} bottomAnchor={bottomAnchor:F3}");
+        }
 
         targetAnchorMin = new Vector2(0, bottomAnchor);
         targetAnchorMax = new Vector2(1, expandedTopAnchorY);
@@ -538,6 +588,7 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private void SetCollapsedTargets()
     {
+        Debug.Log($"[WP-DBG] SetCollapsedTargets go={gameObject.name} → origAnchorMin={origBgAnchorMin} origAnchorMax={origBgAnchorMax}");
         targetAnchorMin = origBgAnchorMin;
         targetAnchorMax = origBgAnchorMax;
         targetOffsetMin = origBgOffsetMin;
@@ -579,8 +630,12 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         if (inputAreaRect != null)
         {
-            inputAreaRect.offsetMin = Vector2.Lerp(inputAreaRect.offsetMin, targetInputAreaOffsetMin, dt);
-            inputAreaRect.offsetMax = Vector2.Lerp(inputAreaRect.offsetMax, targetInputAreaOffsetMax, dt);
+            // X만 lerp (inputAreaExpandX 확장/축소용)
+            // Y는 AutoExpandInputField가 제어하므로 건드리지 않음
+            float newMinX = Mathf.Lerp(inputAreaRect.offsetMin.x, targetInputAreaOffsetMin.x, dt);
+            float newMaxX = Mathf.Lerp(inputAreaRect.offsetMax.x, targetInputAreaOffsetMax.x, dt);
+            inputAreaRect.offsetMin = new Vector2(newMinX, inputAreaRect.offsetMin.y);
+            inputAreaRect.offsetMax = new Vector2(newMaxX, inputAreaRect.offsetMax.y);
         }
 
         // 키보드 최초 활성화 시 한 번만 스크롤을 맨 아래로 이동
@@ -599,6 +654,12 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private float GetKeyboardHeightInCanvasPixels()
     {
+#if UNITY_EDITOR
+        // 에디터 프리뷰: 이미 캔버스 픽셀 단위이므로 변환 불필요
+        if (editorPreviewActive && editorPreviewKeyboardHeight > 0)
+            return editorPreviewKeyboardHeight;
+#endif
+
         float screenHeight = Screen.height;
         if (screenHeight <= 0) return 0;
 
@@ -617,6 +678,13 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private float GetNativeKeyboardHeight()
     {
+#if UNITY_EDITOR
+        // 에디터 프리뷰 활성 시 프리뷰 키보드 높이 반환
+        // → HandleKeyboardStateMachine이 expanded targets를 설정하여
+        //   AnimatePanel과 정상적으로 연동됨
+        if (editorPreviewActive && editorPreviewKeyboardHeight > 0)
+            return editorPreviewKeyboardHeight;
+#endif
 #if UNITY_IOS
         return GetKeyboardHeightIOS();
 #elif UNITY_ANDROID
@@ -631,9 +699,10 @@ public class MobileKeyboardHandler : MonoBehaviour
     // ============================================================
 
 #if UNITY_EDITOR
-    [HideInInspector] public bool editorPreviewActive;
-    [HideInInspector] public float editorPreviewKeyboardHeight;
-    [HideInInspector] public GameObject editorKeyboardPreviewObj;
+    // ★ NonSerialized: 씬 저장 시 true 상태로 남아 다른 패널에서 오동작 방지
+    [System.NonSerialized] public bool editorPreviewActive;
+    [System.NonSerialized] public float editorPreviewKeyboardHeight;
+    [System.NonSerialized] public GameObject editorKeyboardPreviewObj;
 
     public void EditorPreviewKeyboard(float canvasKeyboardHeight)
     {
@@ -641,59 +710,22 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         if (!initialized)
         {
-            origBgAnchorMin = backgroundRect.anchorMin;
-            origBgAnchorMax = backgroundRect.anchorMax;
-            origBgOffsetMin = backgroundRect.offsetMin;
-            origBgOffsetMax = backgroundRect.offsetMax;
-            parentCanvas = backgroundRect.GetComponentInParent<Canvas>();
-            if (parentCanvas != null)
-                canvasRect = parentCanvas.GetComponent<RectTransform>();
-            initialized = true;
+            TryInitialize();
+            if (!initialized) return;
         }
 
         editorPreviewActive = true;
         editorPreviewKeyboardHeight = canvasKeyboardHeight;
 
+        // 상태 머신이 expanded targets를 설정하도록 유도
+        // → AnimatePanel이 자연스럽게 lerp하여 확장
+        // GetNativeKeyboardHeight()가 editorPreviewKeyboardHeight를 반환하므로
+        // HandleKeyboardStateMachine → SetExpandedTargets 경로로 동작
+
         float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
-        float bottomAnchor = (canvasKeyboardHeight + keyboardTopPadding) / canvasHeight;
-
-        if (expandPanelOnKeyboard)
-        {
-            backgroundRect.anchorMin = new Vector2(0, bottomAnchor);
-            backgroundRect.anchorMax = new Vector2(1, expandedTopAnchorY);
-            backgroundRect.offsetMin = new Vector2(expandedSideOffset, 0);
-            backgroundRect.offsetMax = new Vector2(-expandedSideOffset, expandedTopOffset);
-        }
-
-        if (viewportRect != null)
-        {
-            if (origViewportOffsetMin == Vector2.zero && origViewportOffsetMax == Vector2.zero)
-            {
-                origViewportOffsetMin = viewportRect.offsetMin;
-                origViewportOffsetMax = viewportRect.offsetMax;
-            }
-            viewportRect.offsetMin = new Vector2(origViewportOffsetMin.x, expandedViewportBottom);
-            viewportRect.offsetMax = new Vector2(origViewportOffsetMax.x, -expandedViewportTop);
-        }
-
-        if (inputAreaRect != null && inputAreaExpandX > 0)
-        {
-            if (origInputAreaOffsetMin == Vector2.zero && origInputAreaOffsetMax == Vector2.zero)
-            {
-                origInputAreaOffsetMin = inputAreaRect.offsetMin;
-                origInputAreaOffsetMax = inputAreaRect.offsetMax;
-            }
-            inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x - inputAreaExpandX, origInputAreaOffsetMin.y);
-            inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x + inputAreaExpandX, origInputAreaOffsetMax.y);
-        }
-
         CreateEditorKeyboardPreview(canvasKeyboardHeight, canvasHeight);
 
-        if (chatScrollRect != null)
-        {
-            Canvas.ForceUpdateCanvases();
-            chatScrollRect.normalizedPosition = Vector2.zero;
-        }
+        needsScrollToBottom = true;
     }
 
     public void EditorResetPreview()
@@ -701,25 +733,9 @@ public class MobileKeyboardHandler : MonoBehaviour
         editorPreviewActive = false;
         editorPreviewKeyboardHeight = 0;
 
-        if (backgroundRect != null)
-        {
-            backgroundRect.anchorMin = origBgAnchorMin;
-            backgroundRect.anchorMax = origBgAnchorMax;
-            backgroundRect.offsetMin = origBgOffsetMin;
-            backgroundRect.offsetMax = origBgOffsetMax;
-        }
-
-        if (viewportRect != null)
-        {
-            viewportRect.offsetMin = origViewportOffsetMin;
-            viewportRect.offsetMax = origViewportOffsetMax;
-        }
-
-        if (inputAreaRect != null)
-        {
-            inputAreaRect.offsetMin = origInputAreaOffsetMin;
-            inputAreaRect.offsetMax = origInputAreaOffsetMax;
-        }
+        // GetNativeKeyboardHeight()가 0을 반환하게 되므로
+        // HandleKeyboardStateMachine → DismissKeyboardCleanly → SetCollapsedTargets
+        // → AnimatePanel이 자연스럽게 lerp하여 축소
 
         DestroyEditorKeyboardPreview();
     }
@@ -846,7 +862,7 @@ public class MobileKeyboardHandler : MonoBehaviour
         {
             if (Time.time - lastJniErrorTime > 5f)
             {
-                Debug.Log($"[MKH] JNI ERROR: {e.GetType().Name}: {e.Message}");
+                Debug.LogWarning($"[MKH] JNI 오류: {e.GetType().Name}: {e.Message}");
                 lastJniErrorTime = Time.time;
             }
         }

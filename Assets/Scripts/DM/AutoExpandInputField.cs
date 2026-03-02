@@ -169,6 +169,10 @@ public class AutoExpandInputField : MonoBehaviour
 
         if (Mathf.Abs(newHeightDelta - lastHeightDelta) < 0.5f) return;
 
+        Debug.Log($"[WP-DBG] prefH={preferredHeight:F1} target={targetHeight:F1} delta={newHeightDelta:F1} " +
+                  $"min={minHeight:F1} max={maxHeight:F1} textComp={textComponent?.gameObject.name} " +
+                  $"inputArea={inputAreaRect?.gameObject.name} sizeDelta.y={inputAreaRect?.sizeDelta.y:F1}");
+
         lastHeightDelta = newHeightDelta;
 
         // 1. InputField 자체 높이 업데이트
@@ -182,6 +186,7 @@ public class AutoExpandInputField : MonoBehaviour
             Vector2 areaSizeDelta = inputAreaRect.sizeDelta;
             areaSizeDelta.y = originalInputAreaHeight + newHeightDelta;
             inputAreaRect.sizeDelta = areaSizeDelta;
+            Debug.Log($"[WP-DBG] InputArea sizeDelta.y → {areaSizeDelta.y:F1} (orig={originalInputAreaHeight:F1} + delta={newHeightDelta:F1})");
         }
 
         // 3. ScrollView bottom offset 조정 (메시지/댓글을 위로 밀어올림)

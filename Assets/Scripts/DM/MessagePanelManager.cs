@@ -1357,7 +1357,7 @@ public class MessagePanelManager : MonoBehaviour
                     {
                         placeholderText.text = LocalizationManager.Instance != null
                             ? LocalizationManager.Instance.GetText("message_placeholder")
-                            : "메시지 입력";
+                            : "메시지 입력...";
                     }
                     else
                     {
