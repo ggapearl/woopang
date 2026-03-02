@@ -1,11 +1,16 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Networking;
-using UnityEngine.EventSystems;
 using System.Collections;
 using System.Text;
 
-public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+/// <summary>
+/// 댓글 아이템.
+/// - 좋아요: LikeButton(Button.onClick) + ContentArea 더블탭(IPointerClickHandler)
+/// - 스와이프 삭제: SwipeToDeleteHandler를 CommentManager에서 런타임 부착
+/// - 스크롤: 드래그 이벤트를 부모 ScrollRect로 전파
+/// </summary>
+public class CommentItem : MonoBehaviour
 {
     public Text usernameText;
     public Text contentText;
@@ -21,42 +26,21 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
     [Tooltip("채워진 하트 스프라이트 (좋아요 눌렀을 때)")]
     public Sprite likedSprite;
 
-    [Header("Swipe Delete Settings")]
-    [Tooltip("삭제 버튼 (스와이프 시 표시)")]
-    public GameObject deleteButton;
-    [Tooltip("삭제 확인 텍스트")]
-    public Text deleteText;
-
     private int commentId;
-    private string commentUserId; // 댓글 작성자 ID
+    private string commentUserId;
     private bool isLiked;
     private int likeCount;
-
     private bool isExpanded = false;
-
-    // 더블터치 감지용
-    private float lastClickTime = 0f;
-    private const float DOUBLE_CLICK_TIME = 0.3f; // 더블클릭 인식 시간
-
-    // 스와이프 삭제용
-    private RectTransform rectTransform;
-    private Vector2 dragStartPos;
-    private float originalX;
     private bool isMyComment = false;
-    private bool isDeleteVisible = false;
-    private const float SWIPE_THRESHOLD = 80f; // 스와이프 임계값
-    private const float DELETE_BUTTON_WIDTH = 100f; // 삭제 버튼 너비
+
+    // 더블터치 감지는 CommentDoubleTapHandler에 위임
 
 #if UNITY_EDITOR
-    /// <summary>
-    /// 에디터에서 likeIcon 스프라이트를 HeartIcon Image에 미리보기로 표시
-    /// </summary>
     private void OnValidate()
     {
         if (likeButton != null && likeIcon != null)
         {
             Image heartIcon = likeButton.GetComponentInChildren<Image>();
-            // likeButton 자체의 Image가 아닌 자식 Image만 대상
             if (heartIcon != null && heartIcon.gameObject != likeButton.gameObject)
             {
                 heartIcon.sprite = likeIcon;
@@ -68,17 +52,115 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
     void Awake()
     {
-        rectTransform = GetComponent<RectTransform>();
-        if (deleteButton != null)
-            deleteButton.SetActive(false);
+        // 프리팹의 기존 DeleteButton 제거 (SwipeToDeleteHandler가 자체 생성)
+        Transform oldDeleteBtn = transform.Find("DeleteButton");
+        if (oldDeleteBtn != null)
+            Destroy(oldDeleteBtn.gameObject);
+
+        EnsureLayoutComponents();
+        SetupDoubleTapOnContent();
+    }
+
+    /// <summary>
+    /// 루트/자식 레이아웃 컴포넌트의 설정을 런타임에 보장.
+    /// </summary>
+    private void EnsureLayoutComponents()
+    {
+        // 루트 HorizontalLayoutGroup
+        HorizontalLayoutGroup hlg = GetComponent<HorizontalLayoutGroup>();
+        if (hlg != null)
+        {
+            hlg.childControlHeight = true;
+            hlg.childForceExpandHeight = false;
+        }
+
+        // ★ 루트 Image의 raycastTarget을 false로 — LikeButton 클릭이 가로채지 않도록
+        Image rootImg = GetComponent<Image>();
+        if (rootImg != null)
+        {
+            rootImg.raycastTarget = false;
+        }
+
+        // ContentArea의 VerticalLayoutGroup
+        Transform contentArea = transform.Find("ContentArea");
+        if (contentArea != null)
+        {
+            VerticalLayoutGroup vlg = contentArea.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null)
+            {
+                vlg.childControlHeight = true;
+                vlg.childControlWidth = true;
+            }
+        }
+
+        // 루트에 ContentSizeFitter가 있는지 확인
+        ContentSizeFitter csf = GetComponent<ContentSizeFitter>();
+        if (csf != null)
+        {
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        }
+
+        // LikeButton에 Image(raycast 수신용)와 TargetGraphic 보장
+        if (likeButton != null)
+        {
+            Image likeImg = likeButton.GetComponent<Image>();
+            if (likeImg == null)
+            {
+                likeImg = likeButton.gameObject.AddComponent<Image>();
+                likeImg.color = new Color(0, 0, 0, 0);
+            }
+            likeImg.raycastTarget = true;
+            if (likeButton.targetGraphic == null)
+                likeButton.targetGraphic = likeImg;
+
+            // LikeButton을 레이아웃에서 분리 → 우측 중앙 고정
+            LayoutElement likeLe = likeButton.GetComponent<LayoutElement>();
+            if (likeLe != null) likeLe.ignoreLayout = true;
+
+            RectTransform likeRect = likeButton.GetComponent<RectTransform>();
+            if (likeRect != null)
+            {
+                likeRect.anchorMin = new Vector2(1, 0.5f);
+                likeRect.anchorMax = new Vector2(1, 0.5f);
+                likeRect.pivot = new Vector2(1, 0.5f);
+                likeRect.anchoredPosition = new Vector2(-5, 0);
+                likeRect.sizeDelta = new Vector2(80, 100);
+            }
+        }
+    }
+
+    /// <summary>
+    /// ContentArea에 더블탭 감지용 핸들러를 설치.
+    /// CommentDoubleTapHandler(IPointerClickHandler만 구현)를 사용하여
+    /// 드래그 이벤트가 부모(SwipeToDeleteHandler/ScrollRect)로 정상 전파됨.
+    /// </summary>
+    private void SetupDoubleTapOnContent()
+    {
+        Transform contentArea = transform.Find("ContentArea");
+        if (contentArea == null) return;
+
+        // ContentArea에 Image (raycast target) 보장
+        Image caImg = contentArea.GetComponent<Image>();
+        if (caImg == null)
+        {
+            caImg = contentArea.gameObject.AddComponent<Image>();
+            caImg.color = new Color(0, 0, 0, 0);
+        }
+        caImg.raycastTarget = true;
+
+        // CommentDoubleTapHandler 부착 (IPointerClickHandler만 — 드래그 버블링 OK)
+        CommentDoubleTapHandler doubleTap = contentArea.GetComponent<CommentDoubleTapHandler>();
+        if (doubleTap == null)
+            doubleTap = contentArea.gameObject.AddComponent<CommentDoubleTapHandler>();
+
+        doubleTap.Initialize(() => OnLikeClicked());
     }
 
     public void Setup(CommentData data)
     {
         commentId = data.id;
-        commentUserId = data.user_id; // 댓글 작성자 ID 저장
+        commentUserId = data.user_id;
 
-        // 현재 로그인한 사용자의 댓글인지 확인
         if (LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null)
         {
             isMyComment = LoginManager.Instance.CurrentUser.id == data.user_id;
@@ -92,10 +174,8 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         if (contentText != null)
         {
             contentText.text = data.content;
-            // 초기: 4줄까지만 표시 (truncate), 클릭시 확장
             contentText.verticalOverflow = VerticalWrapMode.Truncate;
 
-            // RectTransform에서 최대 높이 제한 (4줄 기준 약 80px)
             RectTransform contentRect = contentText.GetComponent<RectTransform>();
             if (contentRect != null)
             {
@@ -103,8 +183,7 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
                 if (layoutElement == null)
                     layoutElement = contentText.gameObject.AddComponent<LayoutElement>();
 
-                // 축소 상태에서 최대 높이 제한 (긴 댓글이 템플릿과 겹치지 않도록)
-                layoutElement.preferredHeight = -1; // 내용에 맞춤
+                layoutElement.preferredHeight = -1;
                 layoutElement.minHeight = 20;
             }
         }
@@ -131,26 +210,38 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
             likeButton.onClick.AddListener(OnLikeClicked);
         }
 
-        // 레이아웃 강제 재계산 (ContentSizeFitter가 제대로 동작하도록)
         StartCoroutine(ForceLayoutUpdate());
     }
 
+    /// <summary>
+    /// 내 댓글인지 여부 반환 (SwipeToDeleteHandler 설정용)
+    /// </summary>
+    public bool IsMyComment => isMyComment;
+
+    /// <summary>
+    /// 댓글 ID 반환 (삭제 API용)
+    /// </summary>
+    public int CommentId => commentId;
+
     private IEnumerator ForceLayoutUpdate()
     {
-        // Canvas가 업데이트될 때까지 대기
         yield return null;
+        RebuildAllLayouts();
+        yield return null;
+        yield return null;
+        RebuildAllLayouts();
+    }
 
-        // 모든 ContentSizeFitter의 레이아웃 재계산 (자식부터 부모 순서로)
+    private void RebuildAllLayouts()
+    {
         var fitters = GetComponentsInChildren<ContentSizeFitter>(true);
         foreach (var fitter in fitters)
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(fitter.GetComponent<RectTransform>());
         }
 
-        // 자신의 레이아웃도 재계산
         LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
 
-        // 부모 Content의 레이아웃도 재계산
         if (transform.parent != null)
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(transform.parent as RectTransform);
@@ -164,11 +255,9 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         {
             contentText.verticalOverflow = isExpanded ? VerticalWrapMode.Overflow : VerticalWrapMode.Truncate;
 
-            // LayoutElement의 높이 제한도 조정
             LayoutElement layoutElement = contentText.GetComponent<LayoutElement>();
             if (layoutElement != null)
             {
-                // 확장시 제한 해제, 축소시 최대 높이 제한
                 layoutElement.preferredHeight = isExpanded ? -1 : -1;
             }
 
@@ -201,10 +290,8 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
             likeCountText.text = likeCount > 0 ? FormatLikeCount(likeCount) : "";
         }
 
-        // likeButton의 자식에서 HeartIcon Image 찾기
         if (likeButton != null)
         {
-            // HeartIcon 이름으로 직접 찾기 (더 정확함)
             Transform heartIconTransform = likeButton.transform.Find("HeartIcon");
             Image likeIconImage = null;
 
@@ -214,7 +301,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
             }
             else
             {
-                // 폴백: 자식 중 Image가 있고 Button이 아닌 것 찾기
                 foreach (Transform child in likeButton.transform)
                 {
                     Image img = child.GetComponent<Image>();
@@ -228,7 +314,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
             if (likeIconImage != null)
             {
-                // 좋아요 상태면 채워진 하트, 아니면 빈 하트
                 likeIconImage.sprite = isLiked ? likedSprite : likeIcon;
                 likeIconImage.color = Color.white;
             }
@@ -251,7 +336,7 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         {
             if (count >= 100000000) return $"{(count / 100000000f):0.#}億";
             if (count >= 10000) return $"{(count / 10000f):0.#}万";
-            return count.ToString(); // 일본어는 천단위 표기 잘 안함 (보통 만단위)
+            return count.ToString();
         }
         else if (lang == SystemLanguage.Chinese || lang == SystemLanguage.ChineseSimplified || lang == SystemLanguage.ChineseTraditional)
         {
@@ -259,14 +344,14 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
             if (count >= 10000) return $"{(count / 10000f):0.#}万";
             return count.ToString();
         }
-        else // English, Spanish, etc.
+        else
         {
             if (count >= 1000000) return $"{(count / 1000000f):0.#}m";
             return $"{(count / 1000f):0.#}k";
         }
     }
 
-    private void OnLikeClicked()
+    public void OnLikeClicked()
     {
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
         {
@@ -299,15 +384,12 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // Server sync (optional, can just trust optimistic update or parse response)
                 var response = JsonUtility.FromJson<CommentLikeResponse>(request.downloadHandler.text);
                 likeCount = response.like_count;
-                // isLiked is already toggled, but could verify action string
                 UpdateLikeUI();
             }
             else
             {
-                // Revert on failure
                 isLiked = !isLiked;
                 likeCount += isLiked ? 1 : -1;
                 UpdateLikeUI();
@@ -316,139 +398,12 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
         }
     }
 
-    private string FormatDate(string dateStr)
-    {
-        // Simple parsing, can be improved
-        if (System.DateTime.TryParse(dateStr, out System.DateTime date))
-        {
-            return date.ToString("MM/dd HH:mm");
-        }
-        return dateStr;
-    }
-
     /// <summary>
-    /// 댓글 더블터치 시 좋아요 토글
+    /// 댓글 삭제 API 호출 후 애니메이션 삭제
     /// </summary>
-    public void OnPointerClick(PointerEventData eventData)
+    public void DeleteThisComment()
     {
-        // 삭제 버튼이 보이는 상태에서 클릭하면 닫기
-        if (isDeleteVisible)
-        {
-            HideDeleteButton();
-            return;
-        }
-
-        float timeSinceLastClick = Time.unscaledTime - lastClickTime;
-        lastClickTime = Time.unscaledTime;
-
-        if (timeSinceLastClick <= DOUBLE_CLICK_TIME && timeSinceLastClick > 0.05f)
-        {
-            // 더블터치 감지 - 좋아요 토글
-            OnLikeClicked();
-        }
-    }
-
-    #region Swipe Delete
-
-    public void OnBeginDrag(PointerEventData eventData)
-    {
-        // 본인 댓글이 아니면 스와이프 무시
         if (!isMyComment) return;
-
-        dragStartPos = eventData.position;
-        originalX = rectTransform.anchoredPosition.x;
-    }
-
-    public void OnDrag(PointerEventData eventData)
-    {
-        // 본인 댓글이 아니면 스와이프 무시
-        if (!isMyComment) return;
-
-        float deltaX = eventData.position.x - dragStartPos.x;
-
-        // 왼쪽으로만 스와이프 가능 (삭제 버튼 표시)
-        if (deltaX < 0)
-        {
-            float newX = Mathf.Max(originalX + deltaX, originalX - DELETE_BUTTON_WIDTH);
-            rectTransform.anchoredPosition = new Vector2(newX, rectTransform.anchoredPosition.y);
-        }
-        else if (isDeleteVisible)
-        {
-            // 오른쪽으로 스와이프하면 닫기
-            float newX = Mathf.Min(originalX - DELETE_BUTTON_WIDTH + deltaX, originalX);
-            rectTransform.anchoredPosition = new Vector2(newX, rectTransform.anchoredPosition.y);
-        }
-    }
-
-    public void OnEndDrag(PointerEventData eventData)
-    {
-        // 본인 댓글이 아니면 스와이프 무시
-        if (!isMyComment) return;
-
-        float deltaX = eventData.position.x - dragStartPos.x;
-
-        if (deltaX < -SWIPE_THRESHOLD && !isDeleteVisible)
-        {
-            // 삭제 버튼 표시
-            ShowDeleteButton();
-        }
-        else if (deltaX > SWIPE_THRESHOLD && isDeleteVisible)
-        {
-            // 삭제 버튼 숨기기
-            HideDeleteButton();
-        }
-        else
-        {
-            // 원래 위치로 복귀
-            if (isDeleteVisible)
-                rectTransform.anchoredPosition = new Vector2(originalX - DELETE_BUTTON_WIDTH, rectTransform.anchoredPosition.y);
-            else
-                rectTransform.anchoredPosition = new Vector2(originalX, rectTransform.anchoredPosition.y);
-        }
-    }
-
-    private void ShowDeleteButton()
-    {
-        isDeleteVisible = true;
-        StartCoroutine(AnimatePosition(originalX - DELETE_BUTTON_WIDTH));
-        if (deleteButton != null)
-            deleteButton.SetActive(true);
-    }
-
-    private void HideDeleteButton()
-    {
-        isDeleteVisible = false;
-        StartCoroutine(AnimatePosition(originalX));
-        if (deleteButton != null)
-            deleteButton.SetActive(false);
-    }
-
-    private IEnumerator AnimatePosition(float targetX)
-    {
-        float startX = rectTransform.anchoredPosition.x;
-        float duration = 0.2f;
-        float elapsed = 0f;
-
-        while (elapsed < duration)
-        {
-            elapsed += Time.deltaTime;
-            float t = Mathf.SmoothStep(0, 1, elapsed / duration);
-            float newX = Mathf.Lerp(startX, targetX, t);
-            rectTransform.anchoredPosition = new Vector2(newX, rectTransform.anchoredPosition.y);
-            yield return null;
-        }
-
-        rectTransform.anchoredPosition = new Vector2(targetX, rectTransform.anchoredPosition.y);
-    }
-
-    /// <summary>
-    /// 삭제 버튼 클릭 시 호출 (Inspector에서 연결)
-    /// </summary>
-    public void OnDeleteClicked()
-    {
-        if (!isMyComment)
-            return;
-
         StartCoroutine(DeleteComment());
     }
 
@@ -470,20 +425,20 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // 애니메이션 후 삭제
                 StartCoroutine(AnimateAndDestroy());
             }
             else
             {
                 Debug.LogError($"[CommentItem] 댓글 삭제 실패: {request.error}");
-                HideDeleteButton();
+                // SwipeToDeleteHandler 복원
+                var handler = GetComponent<SwipeToDeleteHandler>();
+                if (handler != null) handler.ResetPosition();
             }
         }
     }
 
     private IEnumerator AnimateAndDestroy()
     {
-        // 페이드아웃 또는 축소 애니메이션
         CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
@@ -500,8 +455,6 @@ public class CommentItem : MonoBehaviour, IPointerClickHandler, IBeginDragHandle
 
         Destroy(gameObject);
     }
-
-    #endregion
 }
 
 [System.Serializable]

@@ -34,7 +34,17 @@ public class CommentManager : MonoBehaviour
     public Sprite likedSprite; // heart_pink 또는 heart 스프라이트 연결
 
     [Header("Input Settings")]
-    public int maxCommentLength = 500; // 댓글 최대 글자 수
+    public int maxCommentLength = 500;
+
+    [Header("Skeleton Settings")]
+    [Tooltip("스켈레톤 아이템 높이 (실제 댓글과 유사하게)")]
+    public float skeletonItemHeight = 160f;
+    [Tooltip("스켈레톤 아바타 사이즈")]
+    public float skeletonAvatarSize = 60f;
+    [Tooltip("스켈레톤 이름 바 너비")]
+    public float skeletonNameWidth = 150f;
+    [Tooltip("스켈레톤 내용 바 너비")]
+    public float skeletonContentWidth = 380f;
 
     private int currentLocationId = -1;
     public bool IsPanelOpen { get; private set; } = false;
@@ -67,16 +77,28 @@ public class CommentManager : MonoBehaviour
 
         if (commentInputField != null)
         {
-            commentInputField.onValueChanged.AddListener(OnInputValueChanged);
-            commentInputField.characterLimit = maxCommentLength; // 글자 수 제한 설정
-            // 입력창 자동 확장 설정
-            AutoExpandInputField.Setup(commentInputField, 0f, 300f);
+            // ★ textComponent/placeholder 교차 참조 수정 (씬 직렬화 오류 방지)
+            RepairInputFieldReferences(commentInputField);
 
-            // 네이티브 모바일 입력바 숨기기 (iOS "완료/취소" 바 제거)
+            // 디버그: 수정 후 상태 확인
+            Debug.Log($"[WP-DBG] CommentInput after repair: " +
+                $"textComp={(commentInputField.textComponent != null ? commentInputField.textComponent.gameObject.name : "null")} " +
+                $"placeholder={(commentInputField.placeholder != null ? commentInputField.placeholder.gameObject.name : "null")} " +
+                $"same={(commentInputField.textComponent != null && commentInputField.placeholder != null && commentInputField.textComponent.gameObject == commentInputField.placeholder.gameObject)}");
+
+            commentInputField.onValueChanged.AddListener(OnInputValueChanged);
+            commentInputField.characterLimit = maxCommentLength;
+            AutoExpandInputField.Setup(commentInputField, 0f, 300f);
             commentInputField.shouldHideMobileInput = true;
+
+            // 로컬라이즈된 placeholder 설정
+            ApplyLocalizedPlaceholder();
         }
 
-        // Add Swipe to Close capability
+        // commentContent에 VerticalLayoutGroup + ContentSizeFitter 보장 (댓글 겹침 방지)
+        EnsureContentLayout();
+
+        // Add Swipe to Close capability — HandleArea에서만 닫기 스와이프 반응
         if (commentPanel != null)
         {
             SwipeToClose swipeHandler = commentPanel.GetComponent<SwipeToClose>();
@@ -84,6 +106,53 @@ public class CommentManager : MonoBehaviour
 
             swipeHandler.panelRect = panelRect;
             swipeHandler.onClose = ClosePanel;
+            swipeHandler.enableSwipeUpExpand = true;
+            swipeHandler.onExpand = ExpandPanelWithoutKeyboard;
+
+            // HandleArea를 찾아서 handleBar로 설정
+            // HandleArea 자체(부모)를 설정해야 함 — 자식 Handle 핸들바 오브젝트가 아니라
+            Transform handleArea = FindInChildren(commentPanel.transform, "HandleArea");
+            if (handleArea == null) handleArea = FindInChildren(commentPanel.transform, "HandleBar");
+            // HandleArea가 없으면 Handle의 부모를 사용
+            if (handleArea == null)
+            {
+                Transform handle = FindInChildren(commentPanel.transform, "Handle");
+                if (handle != null) handleArea = handle.parent;
+            }
+
+            // 추가 스와이프 영역: 타이틀("댓글") 텍스트 포함
+            System.Collections.Generic.List<RectTransform> extraAreas = new System.Collections.Generic.List<RectTransform>();
+
+            if (handleArea != null)
+            {
+                swipeHandler.handleBar = handleArea.GetComponent<RectTransform>();
+                Debug.Log($"[WP-DBG] SwipeToClose handleBar set to: {handleArea.name}");
+
+                // HandleArea의 부모(헤더 전체 영역)도 포함 — 타이틀 텍스트 터치 포함
+                if (handleArea.parent != null && handleArea.parent != commentPanel.transform)
+                {
+                    RectTransform headerRect = handleArea.parent.GetComponent<RectTransform>();
+                    if (headerRect != null) extraAreas.Add(headerRect);
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[WP-DBG] SwipeToClose: HandleArea not found, entire panel will respond to swipe");
+            }
+
+            // 타이틀 텍스트 오브젝트 직접 탐색해서 추가
+            Transform titleObj = FindInChildren(commentPanel.transform, "TitleText");
+            if (titleObj == null) titleObj = FindInChildren(commentPanel.transform, "Title");
+            if (titleObj == null) titleObj = FindInChildren(commentPanel.transform, "Text_Title");
+            if (titleObj != null)
+            {
+                RectTransform titleRect = titleObj.GetComponent<RectTransform>();
+                if (titleRect != null && !extraAreas.Contains(titleRect))
+                    extraAreas.Add(titleRect);
+            }
+
+            if (extraAreas.Count > 0)
+                swipeHandler.additionalSwipeAreas = extraAreas.ToArray();
         }
 
         // MobileKeyboardHandler 자동 설정
@@ -190,6 +259,134 @@ public class CommentManager : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// commentContent에 VerticalLayoutGroup + ContentSizeFitter가 없으면 추가.
+    /// 댓글 아이템들이 겹치지 않고 올바르게 배치되도록 보장.
+    /// </summary>
+    private void EnsureContentLayout()
+    {
+        if (commentContent == null) return;
+
+        // VerticalLayoutGroup 확인/추가
+        VerticalLayoutGroup vlg = commentContent.GetComponent<VerticalLayoutGroup>();
+        if (vlg == null)
+        {
+            vlg = commentContent.gameObject.AddComponent<VerticalLayoutGroup>();
+            Debug.Log("[WP-DBG] Added VerticalLayoutGroup to commentContent");
+        }
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+        vlg.spacing = 12f; // 댓글 간 간격
+        vlg.padding = new RectOffset(0, 0, 8, 8);
+
+        // ContentSizeFitter 확인/추가
+        ContentSizeFitter csf = commentContent.GetComponent<ContentSizeFitter>();
+        if (csf == null)
+        {
+            csf = commentContent.gameObject.AddComponent<ContentSizeFitter>();
+            Debug.Log("[WP-DBG] Added ContentSizeFitter to commentContent");
+        }
+        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+    }
+
+    /// <summary>
+    /// InputField의 textComponent/placeholder 교차 참조 수정.
+    /// 씬 직렬화 오류로 둘이 같은 오브젝트를 가리킬 수 있음.
+    /// </summary>
+    private void RepairInputFieldReferences(InputField input)
+    {
+        if (input == null) return;
+
+        bool crossLinked = input.textComponent != null && input.placeholder != null
+                           && input.textComponent.gameObject == input.placeholder.gameObject;
+
+        if (input.textComponent == null || crossLinked)
+        {
+            // "Text" 또는 "Text (Legacy)" 자식에서 Text 컴포넌트 탐색
+            Transform textTr = input.transform.Find("Text");
+            if (textTr == null) textTr = input.transform.Find("Text (Legacy)");
+
+            if (textTr != null)
+            {
+                Text textComp = textTr.GetComponent<Text>();
+                if (textComp != null)
+                {
+                    input.textComponent = textComp;
+                    Debug.Log($"[WP-DBG] RepairInputField: textComponent → {textTr.name}");
+                }
+            }
+            else
+            {
+                // 이름으로 못 찾으면 placeholder가 아닌 첫 번째 Text 자식 사용
+                Graphic placeholderGraphic = input.placeholder;
+                Text[] texts = input.GetComponentsInChildren<Text>(true);
+                foreach (var t in texts)
+                {
+                    if (placeholderGraphic != null && t.gameObject == placeholderGraphic.gameObject) continue;
+                    if (t.gameObject == input.gameObject) continue;
+                    input.textComponent = t;
+                    Debug.Log($"[WP-DBG] RepairInputField: textComponent → {t.gameObject.name} (fallback)");
+                    break;
+                }
+            }
+        }
+
+        if (input.placeholder == null || crossLinked)
+        {
+            // 이름으로 찾기 (다양한 이름 시도)
+            Transform placeholderTr = input.transform.Find("Placeholder");
+            if (placeholderTr == null) placeholderTr = input.transform.Find("placeholder");
+            if (placeholderTr == null) placeholderTr = input.transform.Find("PlaceholderText");
+
+            if (placeholderTr != null)
+            {
+                Graphic graphic = placeholderTr.GetComponent<Graphic>();
+                if (graphic != null)
+                {
+                    input.placeholder = graphic;
+                    Debug.Log($"[WP-DBG] RepairInputField: placeholder → {placeholderTr.name}");
+                }
+            }
+            else
+            {
+                // 이름으로 못 찾으면 textComponent가 아닌 다른 Text 자식 사용
+                Text[] texts = input.GetComponentsInChildren<Text>(true);
+                foreach (var t in texts)
+                {
+                    if (t == input.textComponent) continue;
+                    if (t.gameObject == input.gameObject) continue;
+                    input.placeholder = t;
+                    Debug.Log($"[WP-DBG] RepairInputField: placeholder → {t.gameObject.name} (fallback)");
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 댓글 입력창에 디바이스 언어에 맞는 placeholder 텍스트 적용
+    /// </summary>
+    private void ApplyLocalizedPlaceholder()
+    {
+        if (commentInputField == null || commentInputField.placeholder == null) return;
+
+        Text placeholderText = commentInputField.placeholder.GetComponent<Text>();
+        if (placeholderText == null) return;
+
+        // LocalizationManager가 있으면 사용, 없으면 fallback
+        string localizedText = null;
+        if (LocalizationManager.Instance != null)
+            localizedText = LocalizationManager.Instance.GetText("comment_placeholder");
+
+        if (string.IsNullOrEmpty(localizedText))
+            localizedText = "댓글 입력...";
+
+        placeholderText.text = localizedText;
+    }
+
     void Update()
     {
         // Android Back Button support (New Input System)
@@ -257,13 +454,39 @@ public class CommentManager : MonoBehaviour
                 itemScript.likedSprite = likedSprite;
 
             itemScript.Setup(data);
+
+            // 내 댓글이면 SwipeToDeleteHandler 부착 (MessagePanel과 동일한 오버레이 패턴)
+            if (itemScript.IsMyComment)
+            {
+                SetupCommentSwipeDelete(itemObj, itemScript);
+            }
         }
         else
         {
             Debug.LogError($"[CommentManager] CreateCommentItem - CommentItem 컴포넌트가 없습니다! 프리팹: {commentItemPrefab.name}");
         }
 
-        // 레이아웃은 CommentItem.ForceLayoutUpdate()에서 처리됨
+        // 부모(commentContent) 레이아웃도 재계산 — 새 아이템 높이 반영
+        LayoutRebuilder.ForceRebuildLayoutImmediate(commentContent as RectTransform);
+    }
+
+    /// <summary>
+    /// 댓글 아이템에 SwipeToDeleteHandler 부착 (MessagePanel과 동일한 패턴)
+    /// </summary>
+    private void SetupCommentSwipeDelete(GameObject itemObj, CommentItem itemScript)
+    {
+        SwipeToDeleteHandler handler = itemObj.GetComponent<SwipeToDeleteHandler>();
+        if (handler == null)
+            handler = itemObj.AddComponent<SwipeToDeleteHandler>();
+
+        string userId = "";
+        if (LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null)
+            userId = LoginManager.Instance.CurrentUser.id;
+
+        handler.Initialize(userId, 80f, () =>
+        {
+            itemScript.DeleteThisComment();
+        });
     }
 
     public void OpenCommentPanel(int locationId, string objectName = null)
@@ -271,15 +494,44 @@ public class CommentManager : MonoBehaviour
         currentLocationId = locationId;
         if (commentPanel != null)
         {
+            Debug.Log($"[WP-DBG] OpenCommentPanel: panelRect={panelRect?.gameObject.name} anchoredPos={panelRect?.anchoredPosition} " +
+                      $"anchMin={panelRect?.anchorMin} anchMax={panelRect?.anchorMax} offMin={panelRect?.offsetMin} offMax={panelRect?.offsetMax}");
+
+            // MKH backgroundRect 확인
+            MobileKeyboardHandler mkhComp = commentPanel.GetComponent<MobileKeyboardHandler>();
+            if (mkhComp != null)
+            {
+                Debug.Log($"[WP-DBG] MKH bgRect={(mkhComp.backgroundRect != null ? mkhComp.backgroundRect.gameObject.name : "null")} " +
+                          $"isSameAsPanelRect={mkhComp.backgroundRect == panelRect} " +
+                          $"expandOnKb={mkhComp.expandPanelOnKeyboard}");
+            }
+
+            // MKH를 슬라이드 애니메이션 동안 비활성화
+            // → 패널이 화면 밖(-2532)에 있을 때 원본값을 캡처하면 AnimatePanel이 패널을 다시 밖으로 밀어냄
+            MobileKeyboardHandler mkhToDefer = commentPanel.GetComponent<MobileKeyboardHandler>();
+            if (mkhToDefer != null) mkhToDefer.enabled = false;
+
+            // ★ CommentPanel을 항상 최상위 형제로 이동 — FullScreenPanel보다 위에 렌더되도록
+            commentPanel.transform.SetAsLastSibling();
             commentPanel.SetActive(true);
             StopAllCoroutines();
-            StartCoroutine(SlidePanel(true));
+            StartCoroutine(SlidePanelThenEnableMKH(mkhToDefer));
+
+            // SwipeToClose 쿨다운 시작 — 오픈 스와이프가 닫기로 오인되는 것 방지
+            SwipeToClose swipe = commentPanel.GetComponent<SwipeToClose>();
+            if (swipe != null) swipe.NotifyOpened();
             
-            // Placeholder 업데이트
-            if (!string.IsNullOrEmpty(objectName) && commentInputField != null && commentInputField.placeholder != null)
+            // Placeholder 업데이트 (object name이 있으면 커스텀, 없으면 기본 로컬라이즈)
+            if (commentInputField != null && commentInputField.placeholder != null)
             {
                 Text placeText = commentInputField.placeholder.GetComponent<Text>();
-                if (placeText != null) placeText.text = $"{objectName}에 댓글 달기...";
+                if (placeText != null)
+                {
+                    if (!string.IsNullOrEmpty(objectName))
+                        placeText.text = $"{objectName}에 댓글 달기...";
+                    else
+                        ApplyLocalizedPlaceholder();
+                }
             }
             
             string currentUserId = (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn) 
@@ -328,13 +580,46 @@ public class CommentManager : MonoBehaviour
         handler.targetInputField = commentInputField;
     }
 
+    /// <summary>
+    /// 핸들바 위로 스와이프 시 키보드 없이 패널 전체 확장
+    /// </summary>
+    public void ExpandPanelWithoutKeyboard()
+    {
+        MobileKeyboardHandler mkh = commentPanel != null ? commentPanel.GetComponent<MobileKeyboardHandler>() : null;
+        if (mkh != null)
+        {
+            mkh.DismissKeyboardOnly(keepExpanded: true);
+        }
+        Debug.Log("[WP-DBG] ExpandPanelWithoutKeyboard called");
+    }
+
     public void ClosePanel()
     {
+        Debug.Log($"[WP-DBG] ClosePanel() called, IsPanelOpen={IsPanelOpen}\n{System.Environment.StackTrace}");
         if (IsPanelOpen)
         {
+            // MKH 먼저 비활성화 — 닫기 슬라이드 중 offset 충돌 방지
+            MobileKeyboardHandler mkh = commentPanel.GetComponent<MobileKeyboardHandler>();
+            if (mkh != null) mkh.enabled = false;
+
             StopAllCoroutines();
             StartCoroutine(SlidePanel(false));
             IsPanelOpen = false;
+        }
+    }
+
+    /// <summary>
+    /// 슬라이드 완료 후 MKH 활성화 — MKH가 최종 위치 기준으로 원본값을 캡처하도록
+    /// </summary>
+    private IEnumerator SlidePanelThenEnableMKH(MobileKeyboardHandler mkhToEnable)
+    {
+        yield return StartCoroutine(SlidePanel(true));
+
+        // 슬라이드 완료 → MKH 활성화 (이때 offset이 올바른 값)
+        if (mkhToEnable != null)
+        {
+            mkhToEnable.enabled = true;
+            Debug.Log($"[WP-DBG] MKH re-enabled after slide, bgRect offset=({panelRect.offsetMin}, {panelRect.offsetMax})");
         }
     }
 
@@ -343,25 +628,29 @@ public class CommentManager : MonoBehaviour
         float timer = 0f;
         Vector2 startPos = panelRect.anchoredPosition;
         Vector2 targetPos = open ? Vector2.zero : new Vector2(0, -Screen.height);
-        
+
         float startAlpha = panelCanvasGroup.alpha;
         float targetAlpha = open ? 1f : 0f;
+
+        Debug.Log($"[WP-DBG] SlidePanel START open={open} startPos={startPos} targetPos={targetPos} duration={slideDuration}");
 
         while (timer < slideDuration)
         {
             timer += Time.deltaTime;
             float t = timer / slideDuration;
             t = t * t * (3f - 2f * t);
-            
+
             panelRect.anchoredPosition = Vector2.Lerp(startPos, targetPos, t);
             if (panelCanvasGroup != null) panelCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, t);
-            
+
             yield return null;
         }
 
         panelRect.anchoredPosition = targetPos;
         if (panelCanvasGroup != null) panelCanvasGroup.alpha = targetAlpha;
-        
+
+        Debug.Log($"[WP-DBG] SlidePanel DONE open={open} finalPos={panelRect.anchoredPosition}");
+
         if (!open) commentPanel.SetActive(false);
     }
 
@@ -406,6 +695,9 @@ public class CommentManager : MonoBehaviour
                 {
                     CreateCommentItem(comment);
                 }
+
+                // 모든 댓글 로드 후 전체 레이아웃 재계산
+                StartCoroutine(RebuildContentLayoutDelayed());
             }
             else
             {
@@ -440,33 +732,56 @@ public class CommentManager : MonoBehaviour
     {
         Color bgColor = new Color(0.15f, 0.15f, 0.18f, 1f);
         Color contentColor = new Color(0.22f, 0.22f, 0.26f, 1f);
-        float itemHeight = 80f;
+        float height = skeletonItemHeight > 0 ? skeletonItemHeight : 140f;
+        float avatarSz = skeletonAvatarSize > 0 ? skeletonAvatarSize : 50f;
+        float nameW = skeletonNameWidth > 0 ? skeletonNameWidth : 120f;
+        float contentW = skeletonContentWidth > 0 ? skeletonContentWidth : 300f;
 
         GameObject item = new GameObject("SkeletonItem");
         item.transform.SetParent(parent, false);
 
         RectTransform itemRect = item.AddComponent<RectTransform>();
-        itemRect.sizeDelta = new Vector2(0, itemHeight);
+        itemRect.sizeDelta = new Vector2(0, height);
 
         LayoutElement le = item.AddComponent<LayoutElement>();
-        le.preferredHeight = itemHeight;
-        le.minHeight = itemHeight;
+        le.preferredHeight = height;
+        le.minHeight = height;
 
         Image itemBg = item.AddComponent<Image>();
         itemBg.color = bgColor;
 
-        // 아바타 (둥근 원)
+        // 구분선 (하단에 얇은 라인) — 스켈레톤 간 시각적 구분
+        GameObject divider = new GameObject("Divider");
+        divider.transform.SetParent(item.transform, false);
+        RectTransform divRect = divider.AddComponent<RectTransform>();
+        divRect.anchorMin = new Vector2(0.05f, 0f);
+        divRect.anchorMax = new Vector2(0.95f, 0f);
+        divRect.pivot = new Vector2(0.5f, 0f);
+        divRect.sizeDelta = new Vector2(0, 1f);
+        divRect.anchoredPosition = Vector2.zero;
+        Image divImg = divider.AddComponent<Image>();
+        divImg.color = new Color(0.3f, 0.3f, 0.35f, 0.5f);
+
+        float avatarX = 20f;
+        float textStartX = avatarX + avatarSz + 16f;
+
+        // 아바타 (둥근 원) — 상단에 배치
         CreateSkeletonBlock(item.transform, "Avatar",
-            new Vector2(30f, 0f), new Vector2(40f, 40f), contentColor);
+            new Vector2(avatarX, height * 0.2f), new Vector2(avatarSz, avatarSz), contentColor);
 
         // 유저명 바
         CreateSkeletonBlock(item.transform, "NameLine",
-            new Vector2(80f, 12f), new Vector2(100f, 14f), contentColor);
+            new Vector2(textStartX, height * 0.22f), new Vector2(nameW, 16f), contentColor);
 
-        // 댓글 내용 바 (넓게)
-        CreateSkeletonBlock(item.transform, "ContentLine",
-            new Vector2(80f, -10f), new Vector2(250f, 12f),
-            new Color(contentColor.r, contentColor.g, contentColor.b, 0.6f));
+        // 댓글 내용 바 1 (긴 줄)
+        CreateSkeletonBlock(item.transform, "ContentLine1",
+            new Vector2(textStartX, -2f), new Vector2(contentW, 14f),
+            new Color(contentColor.r, contentColor.g, contentColor.b, 0.7f));
+
+        // 댓글 내용 바 2 (짧은 줄)
+        CreateSkeletonBlock(item.transform, "ContentLine2",
+            new Vector2(textStartX, -22f), new Vector2(contentW * 0.6f, 14f),
+            new Color(contentColor.r, contentColor.g, contentColor.b, 0.4f));
 
         // 쉬머 효과
         item.AddComponent<ShimmerEffect>();
@@ -503,6 +818,31 @@ public class CommentManager : MonoBehaviour
             Destroy(skel);
     }
 
+    /// <summary>
+    /// 댓글 로드/추가 후 전체 Content 레이아웃을 지연 재계산.
+    /// ContentSizeFitter + VLG 전파를 보장하기 위해 수 프레임 대기.
+    /// </summary>
+    private IEnumerator RebuildContentLayoutDelayed()
+    {
+        yield return null;
+        yield return null;
+
+        if (commentContent != null)
+        {
+            Canvas.ForceUpdateCanvases();
+
+            // 각 CommentItem의 ContentSizeFitter 재계산
+            var fitters = commentContent.GetComponentsInChildren<ContentSizeFitter>(true);
+            foreach (var fitter in fitters)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(fitter.GetComponent<RectTransform>());
+            }
+
+            // commentContent 전체 재계산
+            LayoutRebuilder.ForceRebuildLayoutImmediate(commentContent as RectTransform);
+        }
+    }
+
     public void PostComment()
     {
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
@@ -518,6 +858,21 @@ public class CommentManager : MonoBehaviour
 
         // 입력 초기화
         commentInputField.text = "";
+
+        // 키보드만 닫고 패널 확장 상태 유지
+        MobileKeyboardHandler mkh = commentPanel.GetComponent<MobileKeyboardHandler>();
+        if (mkh != null)
+        {
+            mkh.DismissKeyboardOnly(keepExpanded: true);
+        }
+
+        // 입력필드 포커스 해제 (키보드 닫기)
+        if (commentInputField != null)
+        {
+            commentInputField.DeactivateInputField();
+            if (UnityEngine.EventSystems.EventSystem.current != null)
+                UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+        }
 
         // 선처리: 즉시 댓글 아이템 표시
         GameObject optimisticItem = AddOptimisticComment(content);
