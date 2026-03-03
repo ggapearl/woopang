@@ -12,6 +12,12 @@ using UnityEngine.XR.ARSubsystems;
 
 public class DataManager : MonoBehaviour
 {
+    /// <summary>
+    /// 위치 권한이 허용되었을 때 발행되는 이벤트
+    /// TourAPIManager, TerminalManager, TrainStationManager, P2PManager가 구독하여 데이터 로드 시작
+    /// </summary>
+    public static event System.Action OnLocationPermissionGranted;
+
     // Singleton pattern
     private static DataManager instance;
     public static DataManager Instance
@@ -161,6 +167,7 @@ public class DataManager : MonoBehaviour
     {
         if (cubePrefab == null || glbPrefab == null)
         {
+            Debug.LogError($"[DataManager] 프리팹 누락! cubePrefab={cubePrefab}, glbPrefab={glbPrefab}");
             yield break;
         }
 
@@ -192,43 +199,75 @@ public class DataManager : MonoBehaviour
         float lon = VirtualLocation.Instance.Longitude;
 
         lastPosition = new Vector2(lat, lon);
-        
+
         fetchCoroutine = StartCoroutine(FetchDataOnce());
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
         yield break;
 #else
+        // 위치 권한이 아직 없으면 최대 30초 대기 (첫 설치 시 권한 요청 팝업 뜨는 시간)
         if (!Input.location.isEnabledByUser)
         {
-            ShowErrorMessage("위치 서비스를 활성화해 주세요.");
-            yield break;
+            float waited = 0f;
+            while (!Input.location.isEnabledByUser && waited < 30f)
+            {
+                yield return new WaitForSeconds(0.5f);
+                waited += 0.5f;
+            }
         }
-        
-        Input.location.Start();
-        int maxWait = 20;
-        while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
+
+        // 30초 대기 후에도 권한 없으면 → 설정 안내 패널 표시 후 대기
+        if (!Input.location.isEnabledByUser)
         {
-            yield return new WaitForSeconds(1);
-            maxWait--;
+            if (LocationPermissionManager.Instance != null)
+                LocationPermissionManager.Instance.ShowPanel();
+
+            // 사용자가 설정에서 권한 허용 후 돌아올 때까지 대기 (최대 5분)
+            float settingsWait = 0f;
+            while (!Input.location.isEnabledByUser && settingsWait < 300f)
+            {
+                yield return new WaitForSeconds(1f);
+                settingsWait += 1f;
+            }
+
+            if (LocationPermissionManager.Instance != null)
+                LocationPermissionManager.Instance.ClosePanel();
         }
-        
-        if (Input.location.status == LocationServiceStatus.Failed)
+
+        // 그래도 권한 없으면 기본 위치로 조용히 진행
+        if (!Input.location.isEnabledByUser)
         {
-            ShowErrorMessage("위치 서비스를 시작할 수 없습니다. 기본 위치로 시작합니다.");
-            // 실패해도 계속 진행 (기본값 사용)
+            Debug.Log("[DataManager] 위치 권한 없음 — 기본 위치로 데이터 로드 진행");
         }
-        
-        // 위치 데이터가 없으면 기본값 사용
+        else
+        {
+            // 권한 획득 시 다른 매니저들에게 이벤트 발행 (TourAPI, Terminal, TrainStation, P2P)
+            OnLocationPermissionGranted?.Invoke();
+            Input.location.Start();
+            int maxWait = 20;
+            while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
+            {
+                yield return new WaitForSeconds(1);
+                maxWait--;
+            }
+
+            if (Input.location.status == LocationServiceStatus.Failed)
+            {
+                Debug.LogWarning("[DataManager] 위치 서비스 시작 실패 — 기본 위치로 진행");
+            }
+        }
+
+        // 위치 데이터가 없으면 기본값(서울) 사용
         float latitude = 37.5665f;
         float longitude = 126.9780f;
-        
+
         if (Input.location.status == LocationServiceStatus.Running)
         {
             latitude = Input.location.lastData.latitude;
             longitude = Input.location.lastData.longitude;
         }
-        
+
         lastPosition = new Vector2(latitude, longitude);
-        
+
         fetchCoroutine = StartCoroutine(FetchDataOnce());
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
 #endif
@@ -246,10 +285,12 @@ public class DataManager : MonoBehaviour
     /// </summary>
     private IEnumerator FetchDataOnce()
     {
+        Debug.Log("[DataManager] FetchDataOnce 시작");
 #if UNITY_EDITOR
         float lat = VirtualLocation.Instance.Latitude;
         float lon = VirtualLocation.Instance.Longitude;
         isGeospatialReady = true;
+        Debug.Log($"[DataManager] 에디터 위치: lat={lat}, lon={lon}");
 #else
         yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
 
@@ -286,9 +327,11 @@ public class DataManager : MonoBehaviour
 #endif
 
         lastPosition = new Vector2(lat, lon);
+        Debug.Log($"[DataManager] FetchDataProgressively 시작: lat={lat}, lon={lon}");
         yield return StartCoroutine(FetchDataProgressively(lat, lon));
         isDataLoaded = true;
         isInitialStartComplete = true;
+        Debug.Log("[DataManager] FetchDataOnce 완료");
 
     }
 
@@ -451,6 +494,7 @@ public class DataManager : MonoBehaviour
             }
             else
             {
+                Debug.LogError($"[DataManager] 서버 요청 실패: {request.result} / {request.error} / URL={url}");
             }
         }
     }
@@ -960,10 +1004,23 @@ public class DataManager : MonoBehaviour
         // 앱 첫 시작 시에는 무시 (Start → FetchDataOnce에서 이미 처리)
         if (!isInitialStartComplete) return;
 
-        if (hasFocus && Input.location.isEnabledByUser)
+        if (hasFocus)
         {
-            // 포그라운드 복귀 시 "찾고 있습니다" UI를 다시 표시하지 않고 조용히 데이터 갱신
-            StartCoroutine(WaitForARSessionAndFetchDataSilent());
+            // 설정 화면에서 돌아올 때 패널은 무조건 닫기 (허용/거부 무관)
+            if (LocationPermissionManager.Instance != null)
+                LocationPermissionManager.Instance.ClosePanel();
+
+            if (Input.location.isEnabledByUser)
+            {
+                // 권한 허용된 경우: 조용히 데이터 갱신
+                StartCoroutine(WaitForARSessionAndFetchDataSilent());
+            }
+            else
+            {
+                // 권한이 여전히 거부된 경우: 패널 다시 표시
+                if (LocationPermissionManager.Instance != null)
+                    LocationPermissionManager.Instance.ShowPanel();
+            }
         }
     }
 

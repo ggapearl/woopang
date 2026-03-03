@@ -139,17 +139,25 @@ private bool isDataLoaded = false;
     {
 #if UNITY_EDITOR
         LogDebug("[Manager] 에디터 모드: 위치 서비스 모의 (Mock)");
-        lastPosition = new Vector2(VirtualLocation.Instance.Latitude, VirtualLocation.Instance.Longitude); 
+        lastPosition = new Vector2(VirtualLocation.Instance.Latitude, VirtualLocation.Instance.Longitude);
         fetchCoroutine = StartCoroutine(FetchDataPeriodically());
         StartCoroutine(CheckPositionAndFetchData());
         yield break;
 #else
         LogDebug("[TourAPIManager] 위치 서비스 시작 시도");
+
+        // 권한이 없으면 DataManager의 이벤트를 기다린 후 진행
         if (!Input.location.isEnabledByUser)
         {
-            LogDebug("[TourAPIManager] 위치 서비스 비활성화됨 - 데이터 로드 중단");
-            yield break;
+            LogDebug("[TourAPIManager] 위치 권한 없음 - DataManager.OnLocationPermissionGranted 대기");
+            bool permissionGranted = false;
+            System.Action onGranted = () => permissionGranted = true;
+            DataManager.OnLocationPermissionGranted += onGranted;
+            yield return new WaitUntil(() => permissionGranted);
+            DataManager.OnLocationPermissionGranted -= onGranted;
+            LogDebug("[TourAPIManager] 위치 권한 획득 확인 - 데이터 로드 재개");
         }
+
         Input.location.Start();
         int maxWait = 20;
         while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)

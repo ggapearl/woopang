@@ -93,7 +93,16 @@ public class TrainStationManager : MonoBehaviour
         StartCoroutine(CheckPositionAndFetchData());
         yield break;
 #else
-        if (!Input.location.isEnabledByUser) yield break;
+        // 권한이 없으면 DataManager의 이벤트를 기다린 후 진행
+        if (!Input.location.isEnabledByUser)
+        {
+            bool permissionGranted = false;
+            System.Action onGranted = () => permissionGranted = true;
+            DataManager.OnLocationPermissionGranted += onGranted;
+            yield return new WaitUntil(() => permissionGranted);
+            DataManager.OnLocationPermissionGranted -= onGranted;
+        }
+
         Input.location.Start();
         int maxWait = 20;
         while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)

@@ -193,6 +193,18 @@ public class P2PManager : MonoBehaviour
 
         Log($"User info loaded: {currentUsername} ({currentUserId})");
 
+        // 위치 권한이 없으면 DataManager의 이벤트를 기다린 후 진행
+        if (!Input.location.isEnabledByUser)
+        {
+            Log("위치 권한 없음 - DataManager.OnLocationPermissionGranted 대기 중...");
+            bool permissionGranted = false;
+            System.Action onGranted = () => permissionGranted = true;
+            DataManager.OnLocationPermissionGranted += onGranted;
+            yield return new WaitUntil(() => permissionGranted);
+            DataManager.OnLocationPermissionGranted -= onGranted;
+            Log("위치 권한 획득 - P2P 연결 재개");
+        }
+
         // Input.location 직접 시작 (다른 스크립트에서 아직 시작 안 했을 수 있음)
         if (Input.location.status == LocationServiceStatus.Stopped)
         {

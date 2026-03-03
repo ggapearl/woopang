@@ -627,8 +627,8 @@ public class MessagePanelManager : MonoBehaviour
             // 앱이 포그라운드로 돌아왔을 때 시스템 알림 및 배지 클리어
             ClearSystemNotificationsAndBadge();
 
-            // 앱이 포그라운드로 돌아왔을 때 데이터 갱신
-            if (CheckLogin())
+            // 앱이 포그라운드로 돌아왔을 때 데이터 갱신 (패널이 열려있을 때만, 로그인 팝업 오발 방지)
+            if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn)
             {
                 // 패널이 열려있으면 목록 새로고침
                 if (messagePanel != null && messagePanel.activeInHierarchy)
