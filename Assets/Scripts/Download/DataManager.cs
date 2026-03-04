@@ -144,6 +144,29 @@ public class DataManager : MonoBehaviour
 
         StartCoroutine(InitializeObjectPoolsAsync());
         StartCoroutine(StartLocationServiceAndFetchData());
+
+        // 첫 설치 대비: 초기 로드가 완료되지 않은 경우 10/15/20초에 자동 재시도
+        StartCoroutine(FirstInstallRetryIfNotLoaded());
+    }
+
+    /// <summary>
+    /// 첫 설치 시 AR 세션 타이밍 문제로 초기 로드 실패하는 경우 자동 재시도
+    /// isInitialStartComplete가 true가 되면 즉시 종료
+    /// </summary>
+    private IEnumerator FirstInstallRetryIfNotLoaded()
+    {
+        int[] retryDelays = new int[] { 10, 5, 5 }; // 10초, 15초, 20초 (누적)
+        foreach (int delay in retryDelays)
+        {
+            yield return new WaitForSeconds(delay);
+            if (isInitialStartComplete) yield break; // 이미 완료됐으면 종료
+
+            Debug.Log("[DataManager] 초기 로드 미완료 — 재시도");
+            StopAllFetching();
+            isGeospatialReady = false;
+            fetchCoroutine = StartCoroutine(FetchDataOnce());
+            checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
+        }
     }
 
     private void LoadInitialFilters()
