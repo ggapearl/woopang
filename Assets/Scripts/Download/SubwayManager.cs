@@ -297,6 +297,16 @@ public class SubwayManager : MonoBehaviour
         }
     }
 
+    public void ApplyFilters(Dictionary<string, bool> filters)
+    {
+        if (filters == null) return;
+        bool show = !filters.ContainsKey("subway") || filters["subway"];
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value != null) kvp.Value.SetActive(show);
+        }
+    }
+
     public Dictionary<string, FacilityData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
