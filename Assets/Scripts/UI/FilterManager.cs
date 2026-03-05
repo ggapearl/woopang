@@ -21,6 +21,9 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private PlaceListManager placeListManager;
     [SerializeField] private DataManager dataManager;
     [SerializeField] private TourAPIManager tourAPIManager;
+    [SerializeField] private TerminalManager terminalManager;
+    [SerializeField] private TrainStationManager trainStationManager;
+    [SerializeField] private SubwayManager subwayManager;
 
     [Header("Long Press Settings")]
     [SerializeField] private float longPressDuration = 0.8f;
@@ -145,6 +148,11 @@ public class FilterManager : MonoBehaviour
 
     void Start()
     {
+        // Inspector에 연결되지 않은 매니저는 자동으로 찾기
+        if (terminalManager == null) terminalManager = Object.FindFirstObjectByType<TerminalManager>();
+        if (trainStationManager == null) trainStationManager = Object.FindFirstObjectByType<TrainStationManager>();
+        if (subwayManager == null) subwayManager = Object.FindFirstObjectByType<SubwayManager>();
+
         LoadFilterSettings();
         UpdateLanguage();
 
@@ -549,6 +557,9 @@ public class FilterManager : MonoBehaviour
         if (placeListManager != null) placeListManager.ApplyFilters(filters);
         if (dataManager != null) dataManager.ApplyFilters(filters);
         if (tourAPIManager != null) tourAPIManager.ApplyFilters(filters);
+        if (terminalManager != null) terminalManager.ApplyFilters(filters);
+        if (trainStationManager != null) trainStationManager.ApplyFilters(filters);
+        if (subwayManager != null) subwayManager.ApplyFilters(filters);
 
         // P2P 필터는 P2PUserFilterPanel이 전담 처리
     }
