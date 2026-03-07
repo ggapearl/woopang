@@ -36,20 +36,61 @@ public class LocationPermissionSetup
         // 패널이 이미 연결되어 있으면 스킵
         if (mgr.locationPermissionPanel != null) return;
 
-        // uiCanvasRoot를 Canvas로 사용
-        LoginManager lm = Object.FindFirstObjectByType<LoginManager>();
-        if (lm == null || lm.uiCanvasRoot == null) return;
-
-        Canvas canvas = lm.uiCanvasRoot.GetComponentInParent<Canvas>();
-        if (canvas == null) canvas = lm.uiCanvasRoot.GetComponent<Canvas>();
-        if (canvas == null) canvas = Object.FindFirstObjectByType<Canvas>();
-        if (canvas == null)
+        // 씬에서 기존 패널을 이름으로 찾아 연결 (자동 생성 X → 씬에서 직접 UI 수정 가능)
+        GameObject existingPanel = GameObject.Find("LocationPermissionPanel");
+        if (existingPanel == null)
         {
-            Debug.LogWarning("[LocationPermissionSetup] Canvas를 찾을 수 없습니다.");
-            return;
+            // 비활성 오브젝트는 Find로 못 찾으므로 Canvas 아래에서 탐색
+            Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            foreach (var canvas in canvases)
+            {
+                Transform found = canvas.transform.Find("LocationPermissionPanel");
+                if (found != null)
+                {
+                    existingPanel = found.gameObject;
+                    break;
+                }
+            }
         }
 
-        CreateLocationPermissionPanel(mgr, canvas);
+        if (existingPanel != null)
+        {
+            // 기존 씬 패널을 연결만 수행
+            mgr.locationPermissionPanel = existingPanel;
+
+            Transform box = existingPanel.transform.Find("Box");
+            if (box != null)
+            {
+                Transform label = box.Find("Label");
+                if (label != null) mgr.promptText = label.GetComponent<Text>();
+
+                Transform buttons = box.Find("Buttons");
+                if (buttons != null)
+                {
+                    Transform btnSettings = buttons.Find("Btn_Settings");
+                    if (btnSettings != null) mgr.goToSettingsButton = btnSettings.GetComponent<Button>();
+
+                    Transform btnClose = buttons.Find("Btn_Close");
+                    if (btnClose != null) mgr.cancelButton = btnClose.GetComponent<Button>();
+                }
+            }
+
+            EditorUtility.SetDirty(mgr);
+            EditorSceneManager.MarkSceneDirty(mgr.gameObject.scene);
+        }
+        else
+        {
+            // 씬에 패널이 없으면 새로 생성 (최초 1회만)
+            LoginManager lm = Object.FindFirstObjectByType<LoginManager>();
+            if (lm == null || lm.uiCanvasRoot == null) return;
+
+            Canvas canvas = lm.uiCanvasRoot.GetComponentInParent<Canvas>();
+            if (canvas == null) canvas = lm.uiCanvasRoot.GetComponent<Canvas>();
+            if (canvas == null) canvas = Object.FindFirstObjectByType<Canvas>();
+            if (canvas == null) return;
+
+            CreateLocationPermissionPanel(mgr, canvas);
+        }
     }
 
     private static void CreateLocationPermissionPanel(LocationPermissionManager mgr, Canvas canvas)
@@ -116,11 +157,11 @@ public class LocationPermissionSetup
         buttonsRect.sizeDelta = new Vector2(500, 90);
         buttonsRect.anchoredPosition = new Vector2(0, 50);
 
-        // ── 설정으로 이동 버튼 ──
+        // ── 설정으로 이동 버튼 (흰색) ──
         Button btnSettings = CreateButton("Btn_Settings", buttons.transform,
             new Vector2(-130, 0), new Vector2(220, 90),
             customFont, roundedSprite, "설정으로 이동",
-            new Color(0.2f, 0.6f, 1f, 1f), Color.white);
+            Color.white, new Color(0.2f, 0.2f, 0.2f));
 
         // ── 닫기 버튼 ──
         Button btnClose = CreateButton("Btn_Close", buttons.transform,

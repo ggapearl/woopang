@@ -56,6 +56,7 @@ public class TourAPIManager : MonoBehaviour
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(100);
     private Dictionary<string, TourPlaceData> placeDataMap = new Dictionary<string, TourPlaceData>(100);
     private Dictionary<string, TourPlaceData> cachedPlaceDetails = new Dictionary<string, TourPlaceData>(50);
+    private Dictionary<string, bool> currentFilters;
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
     [SerializeField] public int poolSize = 50;
 #pragma warning disable CS0414 // Inspector 설정용 필드
@@ -99,6 +100,15 @@ private bool isDataLoaded = false;
         {
             LogDebug("[TourAPIManager] 디버그 텍스트 필드가 설정되지 않음! UI 로그 표시 불가");
         }
+
+        // PlayerPrefs에서 필터 상태 초기화 (DataManager 패턴)
+        currentFilters = new Dictionary<string, bool>();
+        int petState = PlayerPrefs.GetInt("Filter_PetFriendly_V3", 0);
+        currentFilters["petFriendlyAll"] = (petState == 0);
+        currentFilters["petFriendlyOnly"] = (petState == 1);
+        currentFilters["noPetFriendly"] = (petState == 2);
+        currentFilters["publicData"] = PlayerPrefs.GetInt("Filter_PublicData_V2", 1) == 1;
+
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
     }
@@ -432,7 +442,9 @@ private bool isDataLoaded = false;
         {
             LogDebug($"[TourAPIManager] 풀에서 오브젝트 가져옴: {newObj.name}");
         }
-        newObj.SetActive(true);
+        // 필터 상태에 따라 활성화 결정
+        bool shouldShow = ShouldShowByFilter();
+        newObj.SetActive(shouldShow);
         newObj.name = $"Place_{place.contentid}";
         LogDebug($"[TourAPIManager] 오브젝트 이름 설정: {newObj.name}, 활성화 상태: {newObj.activeSelf}");
         if (SetupObjectComponents(newObj, place))
@@ -821,6 +833,24 @@ private bool isDataLoaded = false;
     }
 
     /// <summary>
+    /// 현재 필터 상태에 따라 오브젝트를 표시할지 결정
+    /// </summary>
+    private bool ShouldShowByFilter()
+    {
+        if (currentFilters == null) return true;
+
+        bool showPublicData = !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
+        bool showPetFriendly = currentFilters.ContainsKey("petFriendlyAll") && currentFilters["petFriendlyAll"] ||
+                               currentFilters.ContainsKey("petFriendlyOnly") && currentFilters["petFriendlyOnly"];
+        if (!currentFilters.ContainsKey("petFriendlyAll") && !currentFilters.ContainsKey("petFriendlyOnly"))
+        {
+            showPetFriendly = !currentFilters.ContainsKey("petFriendly") || currentFilters["petFriendly"];
+        }
+
+        return showPublicData && showPetFriendly;
+    }
+
+    /// <summary>
     /// 필터 적용 - 스폰된 AR 오브젝트의 표시/숨김 제어
     /// TourAPI 데이터는 모두 애견동반이므로 publicData 필터에 따라 전체 표시/숨김
     /// </summary>
@@ -828,19 +858,10 @@ private bool isDataLoaded = false;
     {
         if (filters == null) return;
 
-        // publicData 키가 없으면 기본값 true
-        bool showPublicData = !filters.ContainsKey("publicData") || filters["publicData"];
-        // petFriendlyAll 또는 petFriendlyOnly일 때 애견동반 장소 표시
-        bool showPetFriendly = filters.ContainsKey("petFriendlyAll") && filters["petFriendlyAll"] ||
-                               filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
-        // 기존 petFriendly 키도 지원 (하위 호환성)
-        if (!filters.ContainsKey("petFriendlyAll") && !filters.ContainsKey("petFriendlyOnly"))
-        {
-            showPetFriendly = !filters.ContainsKey("petFriendly") || filters["petFriendly"];
-        }
+        // 필터 상태 저장 (오브젝트 생성 시 참조)
+        currentFilters = new Dictionary<string, bool>(filters);
 
-        // TourAPI 데이터는 모두 애견동반이므로 두 필터 모두 체크
-        bool shouldShow = showPublicData && showPetFriendly;
+        bool shouldShow = ShouldShowByFilter();
 
         foreach (var kvp in spawnedObjects)
         {
@@ -848,7 +869,7 @@ private bool isDataLoaded = false;
             obj.SetActive(shouldShow);
         }
 
-        LogDebug($"[TourAPIManager] 필터 적용: publicData={showPublicData}, petFriendly={showPetFriendly}, 오브젝트 표시={shouldShow}");
+        LogDebug($"[TourAPIManager] 필터 적용: 오브젝트 표시={shouldShow}");
     }
 
     /// <summary>

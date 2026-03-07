@@ -66,6 +66,7 @@ public class LoadingManager : MonoBehaviour
     
     // 백그라운드 복구 관련 변수
     private bool wasInBackground = false;
+    private Coroutine dotAnimationCoroutine;
     
     public enum AREnvironmentIssue
     {
@@ -75,7 +76,8 @@ public class LoadingManager : MonoBehaviour
         InsufficientLight, // 조명 부족
         TrackingLost,      // 트래킹 손실
         CameraCovered,     // 카메라 가림
-        DataLoading        // 데이터 로딩 중 (DataManager 통합)
+        DataLoading,       // 데이터 로딩 중 (DataManager 통합)
+        SessionPreparing   // AR 세션 작동 준비 중 (세션 미초기화/완전 실패)
     }
     
     void Awake()
@@ -116,8 +118,11 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator HandleBackgroundRecovery()
     {
-        // 1. 기본 복구 로딩 표시
-        ShowARLoading(() => { }, "AR 세션 복구 중..");
+        // 1. 다국어 복구 메시지 + 점 애니메이션 표시
+        string baseMessage = GetSessionRecoveringMessage();
+        if (loadingPanel) loadingPanel.SetActive(true);
+        if (loadingSpinner) StartCoroutine(SpinnerAnimation());
+        StartDotAnimation(baseMessage);
 
         // 2. AR 세션이 안정화될 때까지 대기
         yield return new WaitForSeconds(backgroundRecoveryLoadingTime);
@@ -131,6 +136,11 @@ public class LoadingManager : MonoBehaviour
             isCheckingAREnvironment = true;
             yield return new WaitForSeconds(0.5f);
             CheckAREnvironment();
+        }
+        else
+        {
+            StopDotAnimation();
+            HideLoadingUI();
         }
     }
     
@@ -255,21 +265,27 @@ public class LoadingManager : MonoBehaviour
     
     void CheckAREnvironment()
     {
-        if (arSession == null || arSession.subsystem == null) return;
-        
+        if (arSession == null || arSession.subsystem == null)
+        {
+            // AR 세션이 아직 초기화되지 않음 → SessionPreparing
+            HandleEnvironmentIssue(AREnvironmentIssue.SessionPreparing);
+            return;
+        }
+
         TrackingState currentTrackingState = arSession.subsystem.trackingState;
         AREnvironmentIssue issue = DetermineEnvironmentIssue(currentTrackingState);
-        
+
         if (issue != AREnvironmentIssue.None)
         {
             HandleEnvironmentIssue(issue);
         }
         else if (hasShownEnvironmentGuidance)
         {
+            StopDotAnimation();
             HideARGuidance();
             hasShownEnvironmentGuidance = false;
         }
-        
+
         lastTrackingState = currentTrackingState;
     }
     
@@ -418,15 +434,27 @@ public class LoadingManager : MonoBehaviour
         return brightness < 0.01f;
     }
     
-    // ✅ 수정된 HandleEnvironmentIssue - DataLoading의 경우 즉시 UI 표시
+    // ✅ 수정된 HandleEnvironmentIssue - DataLoading/SessionPreparing의 경우 즉시 UI 표시
     void HandleEnvironmentIssue(AREnvironmentIssue issue)
     {
         if (hasShownEnvironmentGuidance) return;
-        
+
         hasShownEnvironmentGuidance = true;
 
-        // DataLoading의 경우 즉시 UI 표시, 다른 경우는 기존대로 2.5초 지연
-        if (issue == AREnvironmentIssue.DataLoading && enableImmediateDataManagerUI)
+        if (issue == AREnvironmentIssue.SessionPreparing)
+        {
+            // SessionPreparing: 점 애니메이션 + 즉시 표시
+            string baseMessage = GetEnvironmentGuidanceMessage(issue);
+            if (loadingPanel) loadingPanel.SetActive(true);
+            if (loadingSpinner) StartCoroutine(SpinnerAnimation());
+            StartDotAnimation(baseMessage);
+            StartCoroutine(AutoRetryEnvironmentCheck(issue));
+
+            // OffScreenIndicator 폴백 모드 활성화
+            OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+            if (osi != null) osi.EnableFallbackMode(true);
+        }
+        else if (issue == AREnvironmentIssue.DataLoading && enableImmediateDataManagerUI)
         {
             string guidanceMessage = GetEnvironmentGuidanceMessage(issue);
             ShowAREnvironmentGuidance(guidanceMessage, issue);
@@ -500,6 +528,14 @@ public class LoadingManager : MonoBehaviour
                 ["zh"] = "正在处理AR对象。\n请稍等片刻。",
                 ["ja"] = "ARオブジェクトを処理中です。\n少々お待ちください。",
                 ["es"] = "Procesando objetos AR.\nPor favor, espera un momento."
+            },
+            [AREnvironmentIssue.SessionPreparing] = new Dictionary<string, string>
+            {
+                ["ko"] = "AR 세션 작동 준비 중",
+                ["en"] = "Preparing AR session",
+                ["zh"] = "正在准备AR会话",
+                ["ja"] = "ARセッション準備中",
+                ["es"] = "Preparando sesión AR"
             }
         };
         
@@ -521,7 +557,16 @@ public class LoadingManager : MonoBehaviour
         // 기존 로딩 UI만 사용 (스피너 포함)
         if (loadingPanel) loadingPanel.SetActive(true);
         if (loadingSpinner) StartCoroutine(SpinnerAnimation());
-        UpdateMessage(message);
+
+        // SessionPreparing/DataLoading은 점 애니메이션 적용
+        if (issue == AREnvironmentIssue.SessionPreparing || issue == AREnvironmentIssue.DataLoading)
+        {
+            StartDotAnimation(message);
+        }
+        else
+        {
+            UpdateMessage(message);
+        }
 
         // DataLoading이 아닌 경우에만 AutoRetry 시작 (이미 시작된 경우 중복 방지)
         if (issue != AREnvironmentIssue.DataLoading)
@@ -557,9 +602,14 @@ public class LoadingManager : MonoBehaviour
     
     void HideARGuidance()
     {
+        StopDotAnimation();
         // 기존 로딩 UI 숨기기 (스피너 애니메이션도 정지)
         if (loadingPanel) loadingPanel.SetActive(false);
         StopAllCoroutines();
+
+        // OffScreenIndicator 폴백 모드 해제
+        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        if (osi != null) osi.EnableFallbackMode(false);
     }
     
     public AREnvironmentIssue GetCurrentEnvironmentIssue()
@@ -776,6 +826,51 @@ public class LoadingManager : MonoBehaviour
         {
             loadingSpinner.transform.Rotate(0, 0, -90 * Time.deltaTime);
             yield return null;
+        }
+    }
+
+    /// <summary>
+    /// 점(.) 하나씩 추가되는 애니메이션 ("준비 중" → "준비 중." → "준비 중.." → "준비 중...")
+    /// </summary>
+    IEnumerator DotAnimation(string baseMessage)
+    {
+        int dotCount = 0;
+        while (true)
+        {
+            dotCount = (dotCount % 3) + 1;
+            string dots = new string('.', dotCount);
+            UpdateMessage(baseMessage + dots);
+            yield return new WaitForSeconds(0.6f);
+        }
+    }
+
+    void StartDotAnimation(string baseMessage)
+    {
+        StopDotAnimation();
+        dotAnimationCoroutine = StartCoroutine(DotAnimation(baseMessage));
+    }
+
+    void StopDotAnimation()
+    {
+        if (dotAnimationCoroutine != null)
+        {
+            StopCoroutine(dotAnimationCoroutine);
+            dotAnimationCoroutine = null;
+        }
+    }
+
+    /// <summary>
+    /// "AR 세션 복구 중" 다국어 메시지
+    /// </summary>
+    string GetSessionRecoveringMessage()
+    {
+        switch (currentLanguage)
+        {
+            case "ko": return "AR 세션 복구 중";
+            case "ja": return "ARセッション復旧中";
+            case "zh": return "AR会话恢复中";
+            case "es": return "Recuperando sesión AR";
+            default:   return "Recovering AR session";
         }
     }
     

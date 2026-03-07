@@ -28,10 +28,6 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private GameObject uploadPage;
     [SerializeField] private GameObject disableObject;
 
-    [Header("업로드 완료 후 복원")]
-    [Tooltip("UploadPage를 여는 버튼 (업로드 완료 시 활성화)")]
-    [SerializeField] private GameObject plusButton;
-
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private Text loadingText;
@@ -1531,12 +1527,6 @@ public class CubeUploadManager : MonoBehaviour
         if (disableObject != null)
         {
             disableObject.SetActive(false);
-        }
-
-        // UploadPage가 닫히면 PlusButton을 다시 활성화하여 재진입 가능하게
-        if (plusButton != null)
-        {
-            plusButton.SetActive(true);
         }
 
         SetMainPhotoUIState(false);

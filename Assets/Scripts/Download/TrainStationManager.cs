@@ -43,6 +43,7 @@ public class TrainStationManager : MonoBehaviour
 
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(100);
     private Dictionary<string, FacilityData> placeDataMap = new Dictionary<string, FacilityData>(100);
+    private Dictionary<string, bool> currentFilters;
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
 
     [SerializeField] public int poolSize = 10;
@@ -70,6 +71,10 @@ public class TrainStationManager : MonoBehaviour
 
     void Start()
     {
+        // PlayerPrefs에서 필터 상태 초기화 (DataManager 패턴)
+        currentFilters = new Dictionary<string, bool>();
+        currentFilters["train"] = PlayerPrefs.GetInt("Filter_Train_V2", 1) == 1;
+
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
     }
@@ -212,6 +217,9 @@ public class TrainStationManager : MonoBehaviour
                 if (newObj != null)
                 {
                     SetupObject(newObj, data);
+                    // 필터 상태에 따라 활성화 결정
+                    bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("train") || currentFilters["train"];
+                    newObj.SetActive(shouldShow);
                     spawnedObjects[uniqueId] = newObj;
                     placeDataMap[uniqueId] = data;
                 }
@@ -219,7 +227,9 @@ public class TrainStationManager : MonoBehaviour
             else
             {
                 GameObject existing = spawnedObjects[uniqueId];
-                if (!existing.activeSelf) existing.SetActive(true);
+                bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("train") || currentFilters["train"];
+                if (shouldShow && !existing.activeSelf) existing.SetActive(true);
+                else if (!shouldShow && existing.activeSelf) existing.SetActive(false);
             }
 
             if (objectSpawnDelay > 0)
@@ -304,6 +314,7 @@ public class TrainStationManager : MonoBehaviour
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
         if (filters == null) return;
+        currentFilters = new Dictionary<string, bool>(filters);
         bool show = !filters.ContainsKey("train") || filters["train"];
         foreach (var kvp in spawnedObjects)
         {
@@ -320,7 +331,6 @@ public class TrainStationManager : MonoBehaviour
         if (objectPool.Count > 0)
         {
             GameObject obj = objectPool.Dequeue();
-            obj.SetActive(true);
             return obj;
         }
         else if (spawnedObjects.Count < poolSize * 2)

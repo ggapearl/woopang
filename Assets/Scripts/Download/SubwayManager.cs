@@ -43,6 +43,7 @@ public class SubwayManager : MonoBehaviour
 
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(100);
     private Dictionary<string, FacilityData> placeDataMap = new Dictionary<string, FacilityData>(100);
+    private Dictionary<string, bool> currentFilters;
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
 
     [SerializeField] public int poolSize = 10;
@@ -70,6 +71,10 @@ public class SubwayManager : MonoBehaviour
 
     void Start()
     {
+        // PlayerPrefs에서 필터 상태 초기화 (DataManager 패턴)
+        currentFilters = new Dictionary<string, bool>();
+        currentFilters["subway"] = PlayerPrefs.GetInt("Filter_Subway_V2", 1) == 1;
+
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
     }
@@ -203,6 +208,9 @@ public class SubwayManager : MonoBehaviour
                 if (newObj != null)
                 {
                     SetupObject(newObj, data);
+                    // 필터 상태에 따라 활성화 결정
+                    bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"];
+                    newObj.SetActive(shouldShow);
                     spawnedObjects[uniqueId] = newObj;
                     placeDataMap[uniqueId] = data;
                 }
@@ -210,7 +218,9 @@ public class SubwayManager : MonoBehaviour
             else
             {
                 GameObject existing = spawnedObjects[uniqueId];
-                if (!existing.activeSelf) existing.SetActive(true);
+                bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"];
+                if (shouldShow && !existing.activeSelf) existing.SetActive(true);
+                else if (!shouldShow && existing.activeSelf) existing.SetActive(false);
             }
 
             if (objectSpawnDelay > 0)
@@ -300,6 +310,7 @@ public class SubwayManager : MonoBehaviour
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
         if (filters == null) return;
+        currentFilters = new Dictionary<string, bool>(filters);
         bool show = !filters.ContainsKey("subway") || filters["subway"];
         foreach (var kvp in spawnedObjects)
         {
@@ -316,7 +327,6 @@ public class SubwayManager : MonoBehaviour
         if (objectPool.Count > 0)
         {
             GameObject obj = objectPool.Dequeue();
-            obj.SetActive(true);
             return obj;
         }
         else if (spawnedObjects.Count < poolSize * 2)

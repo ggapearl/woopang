@@ -37,6 +37,20 @@ public class OffScreenIndicator : MonoBehaviour
 
     public static Action<Target, bool> TargetStateChanged;
 
+    // ============================================================
+    // Fallback Mode - AR 세션 미작동 시 화살표 분산 배치 + 펄스
+    // ============================================================
+    private bool isFallbackMode = false;
+    private Dictionary<Target, FallbackData> fallbackDataMap = new Dictionary<Target, FallbackData>();
+
+    private class FallbackData
+    {
+        public Vector3 assignedPosition;    // 모서리 위의 랜덤 배치 위치
+        public float assignedAngle;         // 화살표 회전각
+        public float baseScale;             // 기본 스케일 (0.8~1.2)
+        public float pulsePhaseOffset;      // 펄스 애니메이션 위상 오프셋
+    }
+
     void Awake()
     {
         mainCamera = FindFirstObjectByType<ARCameraManager>()?.GetComponent<Camera>() ?? Camera.main;
@@ -59,6 +73,12 @@ public class OffScreenIndicator : MonoBehaviour
 
     void DrawIndicators()
     {
+        if (isFallbackMode)
+        {
+            DrawFallbackIndicators();
+            return;
+        }
+
         foreach (Target target in targets)
         {
             Vector3 screenPosition = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
@@ -77,15 +97,14 @@ public class OffScreenIndicator : MonoBehaviour
                 OffScreenIndicatorCore.GetArrowIndicatorPositionAndAngle(ref screenPosition, ref angle, screenCentre, screenBoundsX);
 
                 // 수정: 추가 경계 값을 반영한 클램프
-                float limitX = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetLeft; // 좌측 경계
-                float limitXRight = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetRight; // 우측 경계
-                float limitY = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetBottom; // 하단 경계
-                float limitYTop = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetTop; // 상단 경계
+                float limitX = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetLeft;
+                float limitXRight = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetRight;
+                float limitY = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetBottom;
+                float limitYTop = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetTop;
 
                 screenPosition.x = Mathf.Clamp(screenPosition.x, screenCentre.x - limitX, screenCentre.x + limitXRight);
                 screenPosition.y = Mathf.Clamp(screenPosition.y, screenCentre.y - limitY, screenCentre.y + limitYTop);
 
-                // ✅ 최종 위치 계산 후 GetIndicator() 호출 (Sparkle 정확한 위치에 생성)
                 indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target, screenPosition);
                 indicator.transform.rotation = Quaternion.Euler(0, 0, angle * Mathf.Rad2Deg);
             }
@@ -104,22 +123,15 @@ public class OffScreenIndicator : MonoBehaviour
                 indicator.transform.position = screenPosition;
                 indicator.SetTextRotation(Quaternion.identity);
 
-                // Box와 Arrow의 스케일을 최소/최대 거리와 사이즈로 동적 조절
                 float size;
                 if (indicator.Type == IndicatorType.BOX)
                 {
-                    // BoxIndicator 스케일링
                     if (distanceFromCamera <= target.MinDistance)
-                    {
-                        size = target.MaxBoxSize; // 최소 거리에서 최대 사이즈
-                    }
+                        size = target.MaxBoxSize;
                     else if (distanceFromCamera >= target.MaxDistance)
-                    {
-                        size = target.DefaultBoxSize; // 최대 거리에서 기본 사이즈
-                    }
+                        size = target.DefaultBoxSize;
                     else
                     {
-                        // 최소-최대 거리 사이에서 선형 보간
                         float t = (target.MaxDistance - distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultBoxSize, target.MaxBoxSize, t);
                     }
@@ -127,23 +139,172 @@ public class OffScreenIndicator : MonoBehaviour
                 }
                 else
                 {
-                    // ArrowIndicator 스케일링
                     if (distanceFromCamera <= target.MinDistance)
-                    {
-                        size = target.MaxArrowSize; // 최소 거리에서 최대 사이즈
-                    }
+                        size = target.MaxArrowSize;
                     else if (distanceFromCamera >= target.MaxDistance)
-                    {
-                        size = target.DefaultArrowSize; // 최대 거리에서 기본 사이즈
-                    }
+                        size = target.DefaultArrowSize;
                     else
                     {
-                        // 최소-최대 거리 사이에서 선형 보간
                         float t = (target.MaxDistance - distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultArrowSize, target.MaxArrowSize, t);
                     }
                     indicator.SetScale(new Vector3(size, size, 1f));
                 }
+            }
+        }
+    }
+
+    // ============================================================
+    // Fallback Mode: 모서리에 화살표 랜덤 분산 + 느린 펄스 애니메이션
+    // ============================================================
+
+    /// <summary>
+    /// 폴백 모드 ON/OFF (LoadingManager에서 호출)
+    /// </summary>
+    public void EnableFallbackMode(bool enable)
+    {
+        if (isFallbackMode == enable) return;
+        isFallbackMode = enable;
+
+        if (enable)
+        {
+            AssignFallbackPositions();
+        }
+        else
+        {
+            fallbackDataMap.Clear();
+        }
+    }
+
+    /// <summary>
+    /// 각 타겟에 모서리 위 랜덤 위치/스케일/위상 할당
+    /// </summary>
+    private void AssignFallbackPositions()
+    {
+        fallbackDataMap.Clear();
+        if (targets.Count == 0) return;
+
+        // 화면 모서리 경계 계산
+        float marginX = Screen.width * (1f - screenBoundOffsetX) + additionalBoundOffsetLeft;
+        float marginXRight = Screen.width * (1f - screenBoundOffsetX) + additionalBoundOffsetRight;
+        float marginY = Screen.height * (1f - screenBoundOffsetY) + additionalBoundOffsetBottom;
+        float marginYTop = Screen.height * (1f - screenBoundOffsetY) + additionalBoundOffsetTop;
+
+        float left   = marginX;
+        float right  = Screen.width - marginXRight;
+        float bottom = marginY;
+        float top    = Screen.height - marginYTop;
+
+        // 4변 둘레를 따라 균등 분배 + 약간의 랜덤 오프셋
+        float perimeter = 2f * (right - left) + 2f * (top - bottom);
+        float spacing = perimeter / Mathf.Max(targets.Count, 1);
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            // 균등 위치 + 랜덤 오프셋 (간격의 ±30%)
+            float pos = (spacing * i + UnityEngine.Random.Range(-spacing * 0.3f, spacing * 0.3f) + perimeter) % perimeter;
+
+            Vector3 screenPos;
+            float angle;
+            GetPositionOnPerimeter(pos, left, right, bottom, top, out screenPos, out angle);
+
+            FallbackData data = new FallbackData
+            {
+                assignedPosition = screenPos,
+                assignedAngle = angle,
+                baseScale = UnityEngine.Random.Range(0.8f, 1.2f),
+                pulsePhaseOffset = UnityEngine.Random.Range(0f, Mathf.PI * 2f)
+            };
+
+            fallbackDataMap[targets[i]] = data;
+        }
+    }
+
+    /// <summary>
+    /// 둘레 위 거리 값으로 화면 모서리 좌표 + 안쪽 방향 각도 계산
+    /// </summary>
+    private void GetPositionOnPerimeter(float dist, float left, float right, float bottom, float top, out Vector3 pos, out float angle)
+    {
+        float w = right - left;
+        float h = top - bottom;
+
+        pos = Vector3.zero;
+        angle = 0f;
+
+        if (dist < w) // 하단 변
+        {
+            pos = new Vector3(left + dist, bottom, 0);
+            angle = 90f;
+        }
+        else if (dist < w + h) // 우측 변
+        {
+            pos = new Vector3(right, bottom + (dist - w), 0);
+            angle = 180f;
+        }
+        else if (dist < 2f * w + h) // 상단 변
+        {
+            pos = new Vector3(right - (dist - w - h), top, 0);
+            angle = 270f;
+        }
+        else // 좌측 변
+        {
+            pos = new Vector3(left, top - (dist - 2f * w - h), 0);
+            angle = 0f;
+        }
+
+        // 약간의 랜덤 각도 변동 (±15도)
+        angle += UnityEngine.Random.Range(-15f, 15f);
+    }
+
+    /// <summary>
+    /// 폴백 모드에서의 인디케이터 렌더링
+    /// </summary>
+    private void DrawFallbackIndicators()
+    {
+        // 새로 추가된 타겟이 있으면 위치 재할당
+        bool needsReassign = false;
+        foreach (Target target in targets)
+        {
+            if (!fallbackDataMap.ContainsKey(target))
+            {
+                needsReassign = true;
+                break;
+            }
+        }
+        if (needsReassign) AssignFallbackPositions();
+
+        float time = Time.time;
+
+        foreach (Target target in targets)
+        {
+            if (!target.NeedArrowIndicator) continue;
+            if (!fallbackDataMap.ContainsKey(target)) continue;
+
+            FallbackData data = fallbackDataMap[target];
+            Vector3 screenPosition = data.assignedPosition;
+
+            Indicator indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target, screenPosition);
+
+            if (indicator)
+            {
+                indicator.SetImageColor(target.TargetColor);
+                if (target.NeedDistanceText)
+                {
+                    indicator.SetDistanceText(float.MinValue, target.DistanceTextColor, target.PlaceName);
+                }
+                else
+                {
+                    indicator.SetDistanceText(float.MinValue, Color.clear, "");
+                }
+
+                indicator.transform.position = screenPosition;
+                indicator.transform.rotation = Quaternion.Euler(0, 0, data.assignedAngle);
+                indicator.SetTextRotation(Quaternion.identity);
+
+                // 느린 펄스 애니메이션 (12초 주기, 스케일 0.9~1.1 왕복)
+                float pulse = Mathf.Sin(time * 0.52f + data.pulsePhaseOffset) * 0.1f; // ±0.1
+                float size = data.baseScale * target.DefaultArrowSize * (1f + pulse);
+                indicator.SetScale(new Vector3(size, size, 1f));
             }
         }
     }
@@ -158,11 +319,12 @@ public class OffScreenIndicator : MonoBehaviour
         {
             if (target.indicator != null)
             {
-                target.indicator.ResetForPool(); // Pool 반환 전 완전히 리셋
+                target.indicator.ResetForPool();
                 target.indicator.Activate(false);
             }
             target.indicator = null;
             targets.Remove(target);
+            fallbackDataMap.Remove(target);
         }
     }
 
