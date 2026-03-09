@@ -285,9 +285,9 @@ public class DataManager : MonoBehaviour
             }
         }
 
-        // 위치 데이터가 없으면 기본값(서울) 사용
-        float latitude = 37.5665f;
-        float longitude = 126.9780f;
+        // GPS 위치 확보 (Running이면 사용, 아니면 FetchDataOnce에서 재시도)
+        float latitude = 0f;
+        float longitude = 0f;
 
         if (Input.location.status == LocationServiceStatus.Running)
         {
@@ -295,7 +295,10 @@ public class DataManager : MonoBehaviour
             longitude = Input.location.lastData.longitude;
         }
 
-        lastPosition = new Vector2(latitude, longitude);
+        if (latitude != 0f || longitude != 0f)
+        {
+            lastPosition = new Vector2(latitude, longitude);
+        }
 
         fetchCoroutine = StartCoroutine(FetchDataOnce());
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
@@ -335,17 +338,17 @@ public class DataManager : MonoBehaviour
         // ============================================================
         // Phase 1: GPS lat/lon으로 서버 데이터 선행 수집 (Geospatial 대기 없이)
         // ============================================================
-        float lat = 37.5665f;
-        float lon = 126.9780f;
+        float lat = 0f;
+        float lon = 0f;
         if (Input.location.status == LocationServiceStatus.Running)
         {
             lat = Input.location.lastData.latitude;
             lon = Input.location.lastData.longitude;
         }
 
-        // GPS가 기본값(서울)이면 짧게 대기
+        // GPS가 아직 안 잡혔으면 짧게 대기 (최대 5초)
         float waitForGPS = 0f;
-        while (lat == 37.5665f && lon == 126.9780f && waitForGPS < 5f)
+        while ((lat == 0f && lon == 0f) && waitForGPS < 5f)
         {
             yield return new WaitForSeconds(0.5f);
             waitForGPS += 0.5f;
@@ -356,7 +359,17 @@ public class DataManager : MonoBehaviour
             }
         }
 
-        lastPosition = new Vector2(lat, lon);
+        // 그래도 없으면 lastPosition fallback (Start()에서 이미 받아놓은 GPS)
+        if (lat == 0f && lon == 0f)
+        {
+            lat = lastPosition.x;
+            lon = lastPosition.y;
+        }
+
+        if (lat != 0f || lon != 0f)
+        {
+            lastPosition = new Vector2(lat, lon);
+        }
 
         // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
         List<PlaceData> preFetchedData = new List<PlaceData>();
@@ -479,13 +492,14 @@ public class DataManager : MonoBehaviour
             float lat = VirtualLocation.Instance.Latitude;
             float lon = VirtualLocation.Instance.Longitude;
 #else
-            float lat = 37.5665f;
-            float lon = 126.9780f;
-            if (Input.location.status == LocationServiceStatus.Running)
+            // GPS가 Running이면 바로 사용, 아니면 이번 사이클 skip
+            if (Input.location.status != LocationServiceStatus.Running)
             {
-                lat = Input.location.lastData.latitude;
-                lon = Input.location.lastData.longitude;
+                yield return new WaitForSeconds(5f);
+                continue;
             }
+            float lat = Input.location.lastData.latitude;
+            float lon = Input.location.lastData.longitude;
 #endif
 
             Vector2 currentPos = new Vector2(lat, lon);
@@ -1150,8 +1164,9 @@ public class DataManager : MonoBehaviour
         float lat = VirtualLocation.Instance.Latitude;
         float lon = VirtualLocation.Instance.Longitude;
 #else
-        float lat = 37.5665f;
-        float lon = 126.9780f;
+        // GPS 우선 → lastPosition fallback (서울 기본값 방지)
+        float lat = lastPosition.x;
+        float lon = lastPosition.y;
         if (Input.location.status == LocationServiceStatus.Running)
         {
             lat = Input.location.lastData.latitude;
@@ -1199,12 +1214,20 @@ public class DataManager : MonoBehaviour
 
         StopAllFetching();
 
-        float lat = 37.5665f;
-        float lon = 126.9780f;
+        // GPS 우선 → lastPosition fallback (서울 기본값 방지)
+        float lat = lastPosition.x;
+        float lon = lastPosition.y;
         if (Input.location.status == LocationServiceStatus.Running)
         {
             lat = Input.location.lastData.latitude;
             lon = Input.location.lastData.longitude;
+        }
+
+        // lastPosition이 0이면 아직 한번도 GPS를 받지 못한 상태 → skip
+        if (lat == 0f && lon == 0f)
+        {
+            Debug.Log("[WP-DBG] WaitForARSessionAndFetchDataSilent: no GPS data, skip");
+            yield break;
         }
 
         Debug.Log($"[WP-DBG] WaitForARSessionAndFetchDataSilent: lat={lat}, lon={lon}, existingObjects={spawnedObjects.Count}");
@@ -1232,12 +1255,38 @@ public class DataManager : MonoBehaviour
 
         StopAllFetching();
 
-        float lat = 37.5665f;
-        float lon = 126.9780f;
+        // GPS 우선 → 짧게 대기 → lastPosition fallback (서울 기본값 방지)
+        float lat = 0f;
+        float lon = 0f;
         if (Input.location.status == LocationServiceStatus.Running)
         {
             lat = Input.location.lastData.latitude;
             lon = Input.location.lastData.longitude;
+        }
+
+        // GPS가 아직 안 잡혔으면 짧게 대기
+        float waitGPS = 0f;
+        while ((lat == 0f && lon == 0f) && waitGPS < 3f)
+        {
+            yield return new WaitForSeconds(0.5f);
+            waitGPS += 0.5f;
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                lat = Input.location.lastData.latitude;
+                lon = Input.location.lastData.longitude;
+            }
+        }
+
+        // 그래도 없으면 lastPosition fallback
+        if (lat == 0f && lon == 0f)
+        {
+            lat = lastPosition.x;
+            lon = lastPosition.y;
+        }
+
+        if (lat != 0f || lon != 0f)
+        {
+            lastPosition = new Vector2(lat, lon);
         }
 
         fetchCoroutine = StartCoroutine(FetchDataOnce());
