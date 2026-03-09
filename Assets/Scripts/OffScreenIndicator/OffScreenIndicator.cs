@@ -127,7 +127,7 @@ public class OffScreenIndicator : MonoBehaviour
         // 자신의 RectTransform 캐싱
         panelRectTransform = GetComponent<RectTransform>();
 
-        Debug.Log($"[OSI-DBG] Awake: mainCamera={mainCamera?.name}, parentCanvas={(parentCanvas != null ? parentCanvas.renderMode.ToString() : "NULL")}, canvasRectTransform={(canvasRectTransform != null ? $"({canvasRectTransform.rect.width:F0}x{canvasRectTransform.rect.height:F0})" : "NULL")}, screen=({Screen.width}x{Screen.height})");
+        Debug.Log($"[WP-DBG] Awake: mainCamera={mainCamera?.name}, parentCanvas={(parentCanvas != null ? parentCanvas.renderMode.ToString() : "NULL")}, canvasRectTransform={(canvasRectTransform != null ? $"({canvasRectTransform.rect.width:F0}x{canvasRectTransform.rect.height:F0})" : "NULL")}, screen=({Screen.width}x{Screen.height})");
 
         TargetStateChanged += HandleTargetStateChanged;
     }
@@ -334,7 +334,7 @@ public class OffScreenIndicator : MonoBehaviour
 
     public void EnableFallbackMode(bool enable, FallbackConfig config = null)
     {
-        Debug.Log($"[OSI-DBG] EnableFallbackMode({enable}) called, isFallbackMode={isFallbackMode}, isTransitioning={isTransitioning}, targets={targets.Count}");
+        Debug.Log($"[WP-DBG] EnableFallbackMode({enable}) called, isFallbackMode={isFallbackMode}, isTransitioning={isTransitioning}, targets={targets.Count}");
 
         if (enable)
         {
@@ -352,7 +352,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
-            Debug.Log($"[OSI-DBG] Fallback ON: fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}");
+            Debug.Log($"[WP-DBG] Fallback ON: fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}");
         }
         else
         {
@@ -435,7 +435,7 @@ public class OffScreenIndicator : MonoBehaviour
         fallbackDataMap.Clear();
         if (targets.Count == 0)
         {
-            Debug.Log("[OSI-DBG] AssignFallbackPositions: targets=0, skip");
+            Debug.Log("[WP-DBG] AssignFallbackPositions: targets=0, skip");
             return;
         }
 
@@ -456,7 +456,7 @@ public class OffScreenIndicator : MonoBehaviour
         float cw = canvasSize.x;
         float ch = canvasSize.y;
 
-        Debug.Log($"[OSI-DBG] AssignFallbackPositions: targets={targets.Count}, displayCount={displayCount}, maxIndicator={cfg.maxIndicatorCount}, canvasSize=({cw:F0},{ch:F0}), mainCamera={(mainCamera != null ? "OK" : "NULL")}, canvasRect={(canvasRectTransform != null ? "OK" : "NULL")}");
+        Debug.Log($"[WP-DBG] AssignFallbackPositions: targets={targets.Count}, displayCount={displayCount}, maxIndicator={cfg.maxIndicatorCount}, canvasSize=({cw:F0},{ch:F0}), mainCamera={(mainCamera != null ? "OK" : "NULL")}, canvasRect={(canvasRectTransform != null ? "OK" : "NULL")}");
 
         // Canvas pivot(0.5, 0.5) 기준: LoadingManager에서 설정한 마진 적용
         float left   = -cw / 2f + cw * cfg.marginLeft;
@@ -488,7 +488,7 @@ public class OffScreenIndicator : MonoBehaviour
             };
 
             fallbackDataMap[sortedTargets[i]] = data;
-            Debug.Log($"[OSI-DBG] FallbackPos[{i}]: canvasLocal=({canvasLocalPos.x:F0},{canvasLocalPos.y:F0}), worldPos=({data.assignedPosition.x:F2},{data.assignedPosition.y:F2},{data.assignedPosition.z:F2}), angle={data.assignedAngle:F1}, scale={data.baseScale:F2}");
+            Debug.Log($"[WP-DBG] FallbackPos[{i}]: canvasLocal=({canvasLocalPos.x:F0},{canvasLocalPos.y:F0}), worldPos=({data.assignedPosition.x:F2},{data.assignedPosition.y:F2},{data.assignedPosition.z:F2}), angle={data.assignedAngle:F1}, scale={data.baseScale:F2}");
         }
     }
 
@@ -548,7 +548,7 @@ public class OffScreenIndicator : MonoBehaviour
         }
         if (needsReassign)
         {
-            Debug.Log($"[OSI-DBG] DrawFallback: needsReassign=true, targets={targets.Count}, fallbackMap={fallbackDataMap.Count}");
+            Debug.Log($"[WP-DBG] DrawFallback: needsReassign=true, targets={targets.Count}, fallbackMap={fallbackDataMap.Count}");
             AssignFallbackPositions();
         }
 
@@ -624,7 +624,7 @@ public class OffScreenIndicator : MonoBehaviour
         if (drawFallbackLogCount < 5)
         {
             drawFallbackLogCount++;
-            Debug.Log($"[OSI-DBG] DrawFallback: rendered={renderedCount}, skippedNoArrow={skippedNoArrow}, skippedNoFallback={skippedNoFallback}, totalTargets={targets.Count}, fallbackMap={fallbackDataMap.Count}, openingT={openingT:F2}, centerWorld=({centerWorld.x:F2},{centerWorld.y:F2})");
+            Debug.Log($"[WP-DBG] DrawFallback: rendered={renderedCount}, skippedNoArrow={skippedNoArrow}, skippedNoFallback={skippedNoFallback}, totalTargets={targets.Count}, fallbackMap={fallbackDataMap.Count}, openingT={openingT:F2}, centerWorld=({centerWorld.x:F2},{centerWorld.y:F2})");
         }
     }
 
@@ -639,12 +639,12 @@ public class OffScreenIndicator : MonoBehaviour
             if (targetChangeLogCount < 20)
             {
                 targetChangeLogCount++;
-                Debug.Log($"[OSI-DBG] TargetAdded: total={targets.Count}, needArrow={target.NeedArrowIndicator}, needBox={target.NeedBoxIndicator}, name={target.gameObject.name}");
+                Debug.Log($"[WP-DBG] TargetAdded: total={targets.Count}, needArrow={target.NeedArrowIndicator}, needBox={target.NeedBoxIndicator}, name={target.gameObject.name}");
             }
             else if (targetChangeLogCount == 20)
             {
                 targetChangeLogCount++;
-                Debug.Log($"[OSI-DBG] TargetAdded: total={targets.Count} (suppressing further logs...)");
+                Debug.Log($"[WP-DBG] TargetAdded: total={targets.Count} (suppressing further logs...)");
             }
         }
         else

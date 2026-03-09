@@ -126,7 +126,7 @@ public class LoadingManager : MonoBehaviour
 
     void Start()
     {
-        Debug.Log($"[LM-DBG] Start: loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, enableAREnvironmentDetection={enableAREnvironmentDetection}, enableDataManagerMonitoring={enableDataManagerMonitoring}, enableBackgroundRecoveryDetection={enableBackgroundRecoveryDetection}");
+        Debug.Log($"[WP-DBG] Start: loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, enableAREnvironmentDetection={enableAREnvironmentDetection}, enableDataManagerMonitoring={enableDataManagerMonitoring}, enableBackgroundRecoveryDetection={enableBackgroundRecoveryDetection}");
 
         if (loadingPanel) loadingPanel.SetActive(false);
 
@@ -148,14 +148,14 @@ public class LoadingManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[LM-DBG] Start: enableAREnvironmentDetection=false → no fallback/env monitoring!");
+            Debug.LogWarning("[WP-DBG] Start: enableAREnvironmentDetection=false → no fallback/env monitoring!");
         }
 #endif
     }
     
     void OnApplicationPause(bool pauseStatus)
     {
-        Debug.Log($"[LM-DBG] OnApplicationPause({pauseStatus}): wasInBackground={wasInBackground}, enableBackgroundRecovery={enableBackgroundRecoveryDetection}");
+        Debug.Log($"[WP-DBG] OnApplicationPause({pauseStatus}): wasInBackground={wasInBackground}, enableBackgroundRecovery={enableBackgroundRecoveryDetection}");
 
         if (pauseStatus)
         {
@@ -170,11 +170,11 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator HandleBackgroundRecovery()
     {
-        Debug.Log($"[LM-DBG] HandleBackgroundRecovery: started, loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, arSession={(arSession != null ? "OK" : "NULL")}");
+        Debug.Log($"[WP-DBG] HandleBackgroundRecovery: started, loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, arSession={(arSession != null ? "OK" : "NULL")}");
 
         // 1. 다국어 복구 메시지 + 점 애니메이션 표시
         string baseMessage = GetSessionRecoveringMessage();
-        Debug.Log($"[LM-DBG] HandleBackgroundRecovery: message=\"{baseMessage}\"");
+        Debug.Log($"[WP-DBG] HandleBackgroundRecovery: message=\"{baseMessage}\"");
         if (loadingPanel) loadingPanel.SetActive(true);
         StartSpinner();
         StartDotAnimation(baseMessage);
@@ -220,7 +220,7 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi)
     {
-        Debug.Log("[LM-DBG] WaitForTrackingRecovery: started");
+        Debug.Log("[WP-DBG] WaitForTrackingRecovery: started");
         float maxWait = 15f;
         float waited = 0f;
 
@@ -229,7 +229,7 @@ public class LoadingManager : MonoBehaviour
             if (arSession?.subsystem?.trackingState == TrackingState.Tracking)
             {
                 int objCount = dataManager != null ? dataManager.GetSpawnedObjectsCount() : -1;
-                Debug.Log($"[LM-DBG] WaitForTrackingRecovery: tracking OK, objects={objCount}");
+                Debug.Log($"[WP-DBG] WaitForTrackingRecovery: tracking OK, objects={objCount}");
 
                 // 로딩 패널 숨기기
                 StopDotAnimation();
@@ -256,7 +256,7 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
         }
 
-        Debug.Log("[LM-DBG] WaitForTrackingRecovery: timeout (15s)");
+        Debug.Log("[WP-DBG] WaitForTrackingRecovery: timeout (15s)");
     }
     
     void Update()
@@ -379,11 +379,11 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator StartAREnvironmentMonitoring()
     {
-        Debug.Log($"[LM-DBG] StartAREnvironmentMonitoring: arSession={(arSession != null ? "OK" : "NULL")}, enableDataManagerMonitoring={enableDataManagerMonitoring}");
+        Debug.Log($"[WP-DBG] StartAREnvironmentMonitoring: arSession={(arSession != null ? "OK" : "NULL")}, enableDataManagerMonitoring={enableDataManagerMonitoring}");
 
         // 앱 시작 시 즉시 fallback 모드 활성화 (데이터 로드 전까지 화살표 표시)
         OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
-        Debug.Log($"[LM-DBG] StartAREnvironmentMonitoring: osi={(osi != null ? "FOUND" : "NULL")}");
+        Debug.Log($"[WP-DBG] StartAREnvironmentMonitoring: osi={(osi != null ? "FOUND" : "NULL")}");
         if (osi != null)
         {
             osi.EnableFallbackMode(true, GetFallbackConfig());
@@ -419,7 +419,7 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     IEnumerator WaitForFirstObjectsAndDisableFallback(OffScreenIndicator osi)
     {
-        Debug.Log($"[LM-DBG] WaitForFirstObjects: started, osi={(osi != null ? "OK" : "NULL")}, dataManager={(dataManager != null ? "OK" : "NULL")}");
+        Debug.Log($"[WP-DBG] WaitForFirstObjects: started, osi={(osi != null ? "OK" : "NULL")}, dataManager={(dataManager != null ? "OK" : "NULL")}");
 
         // DataManager 초기화 대기
         float maxWait = 60f; // 최대 60초 대기
@@ -430,7 +430,7 @@ public class LoadingManager : MonoBehaviour
             // 오브젝트가 생성되었으면 fallback 해제
             if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
             {
-                Debug.Log($"[LM-DBG] WaitForFirstObjects: {dataManager.GetSpawnedObjectsCount()} objects → disabling fallback (waited={waited:F0}s)");
+                Debug.Log($"[WP-DBG] WaitForFirstObjects: {dataManager.GetSpawnedObjectsCount()} objects → disabling fallback (waited={waited:F0}s)");
                 if (osi != null) osi.EnableFallbackMode(false);
                 yield break;
             }
@@ -438,13 +438,13 @@ public class LoadingManager : MonoBehaviour
             // 환경 이슈가 감지되면 HandleEnvironmentIssue가 fallback을 관리하므로 여기서 종료
             if (hasShownEnvironmentGuidance)
             {
-                Debug.Log("[LM-DBG] WaitForFirstObjects: env guidance active → exit");
+                Debug.Log("[WP-DBG] WaitForFirstObjects: env guidance active → exit");
                 yield break;
             }
 
             if (waited > 0 && waited % 5 == 0)
             {
-                Debug.Log($"[LM-DBG] WaitForFirstObjects: waiting... {waited:F0}s, objects={(dataManager != null ? dataManager.GetSpawnedObjectsCount().ToString() : "null")}");
+                Debug.Log($"[WP-DBG] WaitForFirstObjects: waiting... {waited:F0}s, objects={(dataManager != null ? dataManager.GetSpawnedObjectsCount().ToString() : "null")}");
             }
 
             waited += 1f;
@@ -469,7 +469,7 @@ public class LoadingManager : MonoBehaviour
     {
         if (arSession == null || arSession.subsystem == null)
         {
-            Debug.Log($"[LM-DBG] CheckAREnvironment: session/subsystem null → SessionPreparing");
+            Debug.Log($"[WP-DBG] CheckAREnvironment: session/subsystem null → SessionPreparing");
             HandleEnvironmentIssue(AREnvironmentIssue.SessionPreparing);
             return;
         }
@@ -478,7 +478,7 @@ public class LoadingManager : MonoBehaviour
         NotTrackingReason ntReason = arSession.subsystem.notTrackingReason;
         AREnvironmentIssue issue = DetermineEnvironmentIssue(currentTrackingState);
 
-        Debug.Log($"[LM-DBG] CheckAREnvironment: tracking={currentTrackingState}, reason={ntReason}, issue={issue}, hasGuidance={hasShownEnvironmentGuidance}");
+        Debug.Log($"[WP-DBG] CheckAREnvironment: tracking={currentTrackingState}, reason={ntReason}, issue={issue}, hasGuidance={hasShownEnvironmentGuidance}");
 
         if (issue != AREnvironmentIssue.None)
         {
@@ -486,7 +486,7 @@ public class LoadingManager : MonoBehaviour
         }
         else if (hasShownEnvironmentGuidance)
         {
-            Debug.Log("[LM-DBG] CheckAREnvironment: issue=None → hiding guidance");
+            Debug.Log("[WP-DBG] CheckAREnvironment: issue=None → hiding guidance");
             StopDotAnimation();
             HideARGuidance();
             hasShownEnvironmentGuidance = false;
@@ -674,7 +674,7 @@ public class LoadingManager : MonoBehaviour
     
     void HandleEnvironmentIssue(AREnvironmentIssue issue)
     {
-        Debug.Log($"[LM-DBG] HandleEnvironmentIssue({issue}): hasShownGuidance={hasShownEnvironmentGuidance}, loadingPanel={(loadingPanel != null ? (loadingPanel.activeSelf ? "ACTIVE" : "inactive") : "NULL")}");
+        Debug.Log($"[WP-DBG] HandleEnvironmentIssue({issue}): hasShownGuidance={hasShownEnvironmentGuidance}, loadingPanel={(loadingPanel != null ? (loadingPanel.activeSelf ? "ACTIVE" : "inactive") : "NULL")}");
 
         if (hasShownEnvironmentGuidance)
         {
