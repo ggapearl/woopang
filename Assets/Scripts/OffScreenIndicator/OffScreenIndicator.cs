@@ -127,6 +127,8 @@ public class OffScreenIndicator : MonoBehaviour
         // 자신의 RectTransform 캐싱
         panelRectTransform = GetComponent<RectTransform>();
 
+        Debug.Log($"[OSI-DBG] Awake: mainCamera={mainCamera?.name}, parentCanvas={(parentCanvas != null ? parentCanvas.renderMode.ToString() : "NULL")}, canvasRectTransform={(canvasRectTransform != null ? $"({canvasRectTransform.rect.width:F0}x{canvasRectTransform.rect.height:F0})" : "NULL")}, screen=({Screen.width}x{Screen.height})");
+
         TargetStateChanged += HandleTargetStateChanged;
     }
 
@@ -332,6 +334,8 @@ public class OffScreenIndicator : MonoBehaviour
 
     public void EnableFallbackMode(bool enable, FallbackConfig config = null)
     {
+        Debug.Log($"[OSI-DBG] EnableFallbackMode({enable}) called, isFallbackMode={isFallbackMode}, isTransitioning={isTransitioning}, targets={targets.Count}");
+
         if (enable)
         {
             // 지연 해제 코루틴이 실행 중이면 취소
@@ -348,6 +352,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
+            Debug.Log($"[OSI-DBG] Fallback ON: fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}");
         }
         else
         {
@@ -428,7 +433,11 @@ public class OffScreenIndicator : MonoBehaviour
     private void AssignFallbackPositions()
     {
         fallbackDataMap.Clear();
-        if (targets.Count == 0) return;
+        if (targets.Count == 0)
+        {
+            Debug.Log("[OSI-DBG] AssignFallbackPositions: targets=0, skip");
+            return;
+        }
 
         FallbackConfig cfg = currentFallbackConfig ?? new FallbackConfig();
 
@@ -446,6 +455,8 @@ public class OffScreenIndicator : MonoBehaviour
         Vector2 canvasSize = GetCanvasSize();
         float cw = canvasSize.x;
         float ch = canvasSize.y;
+
+        Debug.Log($"[OSI-DBG] AssignFallbackPositions: targets={targets.Count}, displayCount={displayCount}, maxIndicator={cfg.maxIndicatorCount}, canvasSize=({cw:F0},{ch:F0}), mainCamera={(mainCamera != null ? "OK" : "NULL")}, canvasRect={(canvasRectTransform != null ? "OK" : "NULL")}");
 
         // Canvas pivot(0.5, 0.5) 기준: LoadingManager에서 설정한 마진 적용
         float left   = -cw / 2f + cw * cfg.marginLeft;
@@ -477,6 +488,7 @@ public class OffScreenIndicator : MonoBehaviour
             };
 
             fallbackDataMap[sortedTargets[i]] = data;
+            Debug.Log($"[OSI-DBG] FallbackPos[{i}]: canvasLocal=({canvasLocalPos.x:F0},{canvasLocalPos.y:F0}), worldPos=({data.assignedPosition.x:F2},{data.assignedPosition.y:F2},{data.assignedPosition.z:F2}), angle={data.assignedAngle:F1}, scale={data.baseScale:F2}");
         }
     }
 
@@ -520,6 +532,8 @@ public class OffScreenIndicator : MonoBehaviour
     /// <summary>
     /// 폴백 모드에서의 인디케이터 렌더링
     /// </summary>
+    private int drawFallbackLogCount = 0;
+
     private void DrawFallbackIndicators()
     {
         // 새로 추가된 타겟이 있으면 위치 재할당
@@ -532,7 +546,11 @@ public class OffScreenIndicator : MonoBehaviour
                 break;
             }
         }
-        if (needsReassign) AssignFallbackPositions();
+        if (needsReassign)
+        {
+            Debug.Log($"[OSI-DBG] DrawFallback: needsReassign=true, targets={targets.Count}, fallbackMap={fallbackDataMap.Count}");
+            AssignFallbackPositions();
+        }
 
         float time = Time.time;
 
@@ -545,10 +563,14 @@ public class OffScreenIndicator : MonoBehaviour
         // 화면 중앙 월드 좌표 (오프닝 시작점)
         Vector3 centerWorld = CanvasLocalToWorldPosition(Vector2.zero);
 
+        int renderedCount = 0;
+        int skippedNoArrow = 0;
+        int skippedNoFallback = 0;
+
         foreach (Target target in targets)
         {
-            if (!target.NeedArrowIndicator) continue;
-            if (!fallbackDataMap.ContainsKey(target)) continue;
+            if (!target.NeedArrowIndicator) { skippedNoArrow++; continue; }
+            if (!fallbackDataMap.ContainsKey(target)) { skippedNoFallback++; continue; }
 
             FallbackData data = fallbackDataMap[target];
 
@@ -594,15 +616,36 @@ public class OffScreenIndicator : MonoBehaviour
                 }
 
                 indicator.SetScale(new Vector3(size, size, 1f));
+                renderedCount++;
             }
         }
+
+        // 처음 5프레임만 상세 로그
+        if (drawFallbackLogCount < 5)
+        {
+            drawFallbackLogCount++;
+            Debug.Log($"[OSI-DBG] DrawFallback: rendered={renderedCount}, skippedNoArrow={skippedNoArrow}, skippedNoFallback={skippedNoFallback}, totalTargets={targets.Count}, fallbackMap={fallbackDataMap.Count}, openingT={openingT:F2}, centerWorld=({centerWorld.x:F2},{centerWorld.y:F2})");
+        }
     }
+
+    private int targetChangeLogCount = 0;
 
     private void HandleTargetStateChanged(Target target, bool active)
     {
         if (active)
         {
             targets.Add(target);
+            // 처음 20개만 로그 (수백 개 등록 시 스팸 방지)
+            if (targetChangeLogCount < 20)
+            {
+                targetChangeLogCount++;
+                Debug.Log($"[OSI-DBG] TargetAdded: total={targets.Count}, needArrow={target.NeedArrowIndicator}, needBox={target.NeedBoxIndicator}, name={target.gameObject.name}");
+            }
+            else if (targetChangeLogCount == 20)
+            {
+                targetChangeLogCount++;
+                Debug.Log($"[OSI-DBG] TargetAdded: total={targets.Count} (suppressing further logs...)");
+            }
         }
         else
         {
