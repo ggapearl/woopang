@@ -187,14 +187,20 @@ public class LoadingManager : MonoBehaviour
     {
         Debug.Log($"[WP-DBG] HandleBackgroundRecovery: started, loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, arSession={(arSession != null ? "OK" : "NULL")}");
 
-        // 1. 다국어 복구 메시지 + 점 애니메이션 표시
+        // 1. 기존 AR 오브젝트를 즉시 숨기기 (Geospatial 앵커 미복구 상태에서 카메라 앞에 렌더링 방지)
+        if (dataManager != null)
+        {
+            dataManager.SetAllObjectsVisible(false);
+        }
+
+        // 2. 다국어 복구 메시지 + 점 애니메이션 표시
         string baseMessage = GetSessionRecoveringMessage();
         Debug.Log($"[WP-DBG] HandleBackgroundRecovery: message=\"{baseMessage}\"");
         if (loadingPanel) loadingPanel.SetActive(true);
         StartSpinner();
         StartDotAnimation(baseMessage);
 
-        // 2. 즉시 fallback 모드 활성화 (복구 중 화살표 표시, 1초 유지)
+        // 3. 즉시 fallback 모드 활성화 (복구 중 화살표 표시)
         OffScreenIndicator osi = GetCachedOSI();
         if (osi != null)
         {
@@ -252,19 +258,14 @@ public class LoadingManager : MonoBehaviour
                 if (loadingPanel) loadingPanel.SetActive(false);
                 StopSpinner();
 
-                // 오브젝트가 이미 있으면 fallback 해제, 없으면 유지
-                if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+                // 트래킹 복구 후 숨겨둔 AR 오브젝트 다시 표시
+                if (dataManager != null)
                 {
-                    if (osi != null) osi.EnableFallbackMode(false);
+                    dataManager.SetAllObjectsVisible(true);
+                    Debug.Log("[WP-DBG] WaitForTrackingRecovery: AR objects restored");
                 }
-                else
-                {
-                    // WaitForFirstObjectsAndDisableFallback 시작
-                    if (osi != null)
-                    {
-                        StartCoroutine(WaitForFirstObjectsAndDisableFallback(osi));
-                    }
-                }
+
+                // fallback은 자동 타이머에 의해 해제됨 (EnableFallbackMode 내부의 autoDisableCoroutine)
                 yield break;
             }
 
@@ -273,6 +274,15 @@ public class LoadingManager : MonoBehaviour
         }
 
         Debug.Log("[WP-DBG] WaitForTrackingRecovery: timeout (15s)");
+
+        // 타임아웃 시에도 오브젝트 다시 표시 (무한 숨김 방지)
+        if (dataManager != null)
+        {
+            dataManager.SetAllObjectsVisible(true);
+        }
+        StopDotAnimation();
+        if (loadingPanel) loadingPanel.SetActive(false);
+        StopSpinner();
     }
     
     void Update()

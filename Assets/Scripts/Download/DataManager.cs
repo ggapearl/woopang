@@ -1064,6 +1064,37 @@ public class DataManager : MonoBehaviour
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
 
+    /// <summary>
+    /// 모든 스폰된 오브젝트를 일시적으로 숨기기/표시 (백그라운드 복귀 시 사용)
+    /// </summary>
+    public void SetAllObjectsVisible(bool visible)
+    {
+        Debug.Log($"[WP-DBG] SetAllObjectsVisible({visible}): objects={spawnedObjects.Count}");
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value != null)
+            {
+                if (visible)
+                {
+                    // 표시 시 필터 상태에 따라 결정
+                    if (placeDataMap.ContainsKey(kvp.Key))
+                    {
+                        bool shouldShow = ShouldShowObject(placeDataMap[kvp.Key]);
+                        kvp.Value.SetActive(shouldShow);
+                    }
+                    else
+                    {
+                        kvp.Value.SetActive(true);
+                    }
+                }
+                else
+                {
+                    kvp.Value.SetActive(false);
+                }
+            }
+        }
+    }
+
     public GameObject GetSpawnedObject(int placeId)
     {
         return spawnedObjects.ContainsKey(placeId) ? spawnedObjects[placeId] : null;
