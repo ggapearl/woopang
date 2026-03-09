@@ -332,6 +332,15 @@ public class OffScreenIndicator : MonoBehaviour
     /// </summary>
     private Coroutine delayedDisableCoroutine;
 
+    /// <summary>
+    /// fallback 최소 유지 시간을 동적으로 설정 (LoadingManager에서 호출)
+    /// </summary>
+    public void SetFallbackMinDuration(float duration)
+    {
+        fallbackMinDuration = duration;
+        Debug.Log($"[WP-DBG] SetFallbackMinDuration: {duration}s");
+    }
+
     public void EnableFallbackMode(bool enable, FallbackConfig config = null)
     {
         Debug.Log($"[WP-DBG] EnableFallbackMode({enable}) called, isFallbackMode={isFallbackMode}, isTransitioning={isTransitioning}, targets={targets.Count}");

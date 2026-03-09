@@ -105,6 +105,18 @@ public class LoadingManager : MonoBehaviour
     private Coroutine dotAnimationCoroutine;
     private Coroutine spinnerCoroutine; // Spinner 중복 실행 방지
     private float? lastCameraBrightness = null; // ARCameraManager 밝기 캐시
+
+    [Header("=== Fallback 타이밍 설정 ===")]
+    [Tooltip("앱 시작 시 fallback 최소 유지 시간 (초)")]
+    public float initialFallbackDuration = 1.5f;
+
+    [Tooltip("백그라운드 복귀 시 fallback 최소 유지 시간 (초)")]
+    public float backgroundFallbackDuration = 1.0f;
+
+    [Tooltip("데이터 로드 완료 후 fallback 활성화 딜레이 (초)")]
+    public float fallbackActivationDelay = 0.2f;
+
+    private OffScreenIndicator cachedOSI; // OffScreenIndicator 캐시
     
     public enum AREnvironmentIssue
     {
@@ -131,6 +143,9 @@ public class LoadingManager : MonoBehaviour
         if (loadingPanel) loadingPanel.SetActive(false);
 
         InitializeLanguage();
+
+        // DataManager 선행 로드 완료 이벤트 구독
+        DataManager.OnPreFetchCompleted += OnDataPreFetchCompleted;
 
         if (enableDataManagerMonitoring)
         {
@@ -179,10 +194,11 @@ public class LoadingManager : MonoBehaviour
         StartSpinner();
         StartDotAnimation(baseMessage);
 
-        // 2. 즉시 fallback 모드 활성화 (복구 중 화살표 표시)
-        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        // 2. 즉시 fallback 모드 활성화 (복구 중 화살표 표시, 1초 유지)
+        OffScreenIndicator osi = GetCachedOSI();
         if (osi != null)
         {
+            osi.SetFallbackMinDuration(backgroundFallbackDuration);
             osi.EnableFallbackMode(true, GetFallbackConfig());
         }
 
@@ -358,6 +374,7 @@ public class LoadingManager : MonoBehaviour
 
     void OnDestroy()
     {
+        DataManager.OnPreFetchCompleted -= OnDataPreFetchCompleted;
         if (arCameraManager != null)
         {
             arCameraManager.frameReceived -= OnCameraFrameReceived;
@@ -377,25 +394,59 @@ public class LoadingManager : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// DataManager 선행 데이터 로드 완료 시 호출 → 0.2초 딜레이 후 fallback 활성화
+    /// </summary>
+    private void OnDataPreFetchCompleted()
+    {
+        Debug.Log("[WP-DBG] OnDataPreFetchCompleted: data loaded, scheduling fallback activation");
+        StartCoroutine(ActivateFallbackAfterDelay(fallbackActivationDelay, initialFallbackDuration));
+    }
+
+    /// <summary>
+    /// 딜레이 후 fallback 모드 활성화
+    /// </summary>
+    private IEnumerator ActivateFallbackAfterDelay(float delay, float minDuration)
+    {
+        yield return new WaitForSeconds(delay);
+
+        OffScreenIndicator osi = GetCachedOSI();
+        if (osi == null)
+        {
+            Debug.LogWarning("[WP-DBG] ActivateFallbackAfterDelay: OSI not found");
+            yield break;
+        }
+
+        int objCount = dataManager != null ? dataManager.GetSpawnedObjectsCount() : 0;
+        Debug.Log($"[WP-DBG] ActivateFallbackAfterDelay: delay={delay}, minDuration={minDuration}, objects={objCount}");
+
+        if (objCount > 0)
+        {
+            // OffScreenIndicator의 fallbackMinDuration을 동적으로 설정
+            osi.SetFallbackMinDuration(minDuration);
+            osi.EnableFallbackMode(true, GetFallbackConfig());
+        }
+    }
+
+    private OffScreenIndicator GetCachedOSI()
+    {
+        if (cachedOSI == null)
+            cachedOSI = FindFirstObjectByType<OffScreenIndicator>();
+        return cachedOSI;
+    }
+
     IEnumerator StartAREnvironmentMonitoring()
     {
         Debug.Log($"[WP-DBG] StartAREnvironmentMonitoring: arSession={(arSession != null ? "OK" : "NULL")}, enableDataManagerMonitoring={enableDataManagerMonitoring}");
 
-        // 앱 시작 시 즉시 fallback 모드 활성화 (데이터 로드 전까지 화살표 표시)
-        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
-        Debug.Log($"[WP-DBG] StartAREnvironmentMonitoring: osi={(osi != null ? "FOUND" : "NULL")}");
-        if (osi != null)
-        {
-            osi.EnableFallbackMode(true, GetFallbackConfig());
-        }
+        // fallback은 OnDataPreFetchCompleted에서 데이터 로드 후 활성화됨
+        // 여기서는 AR 환경 모니터링만 시작
 
         float waitTime = 0f;
         while (waitTime < 10f)
         {
             if (arSession != null && arSession.subsystem?.trackingState == TrackingState.Tracking)
             {
-                // 트래킹 확립되었지만, 오브젝트가 아직 없으면 fallback 유지
-                // fallback 해제는 CheckARObjectChanges()에서 오브젝트 생성 시 처리
                 break;
             }
 
@@ -408,6 +459,7 @@ public class LoadingManager : MonoBehaviour
         StartCoroutine(ForceEnvironmentCheckAfterDelay());
 
         // 오브젝트가 생성될 때까지 fallback 유지 (tracking 확립 후에도)
+        OffScreenIndicator osi = GetCachedOSI();
         if (osi != null && enableDataManagerMonitoring)
         {
             yield return StartCoroutine(WaitForFirstObjectsAndDisableFallback(osi));
@@ -686,7 +738,7 @@ public class LoadingManager : MonoBehaviour
         // OffScreenIndicator 폴백 모드 활성화 (DataLoading 제외 — 모든 환경 이슈에서)
         if (issue != AREnvironmentIssue.DataLoading)
         {
-            OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+            OffScreenIndicator osi = GetCachedOSI();
             if (osi != null)
             {
                 osi.EnableFallbackMode(true, GetFallbackConfig());
@@ -866,7 +918,7 @@ public class LoadingManager : MonoBehaviour
         spinnerCoroutine = null; // StopAllCoroutines 후 정리
 
         // OffScreenIndicator 폴백 모드 — 오브젝트가 있으면 해제, 없으면 유지
-        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        OffScreenIndicator osi = GetCachedOSI();
         if (osi != null)
         {
             bool hasObjects = dataManager != null && dataManager.GetSpawnedObjectsCount() > 0;
@@ -1373,14 +1425,14 @@ public class LoadingManager : MonoBehaviour
     [ContextMenu("Test: Fallback ON")]
     public void DebugFallbackOn()
     {
-        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        OffScreenIndicator osi = GetCachedOSI();
         if (osi != null) osi.EnableFallbackMode(true, GetFallbackConfig());
     }
 
     [ContextMenu("Test: Fallback OFF")]
     public void DebugFallbackOff()
     {
-        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        OffScreenIndicator osi = GetCachedOSI();
         if (osi != null) osi.EnableFallbackMode(false);
     }
 

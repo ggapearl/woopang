@@ -18,6 +18,12 @@ public class DataManager : MonoBehaviour
     /// </summary>
     public static event System.Action OnLocationPermissionGranted;
 
+    /// <summary>
+    /// GPS 기반 선행 데이터 로드 완료 시 발행 (LoadingManager가 구독하여 fallback 활성화)
+    /// Geospatial 대기 전에 발행됨
+    /// </summary>
+    public static event System.Action OnPreFetchCompleted;
+
     // Singleton pattern
     private static DataManager instance;
     public static DataManager Instance
@@ -308,23 +314,17 @@ public class DataManager : MonoBehaviour
     /// </summary>
     private IEnumerator FetchDataOnce()
     {
-        Debug.Log("[DataManager] FetchDataOnce 시작");
+        Debug.Log("[WP-DBG] FetchDataOnce 시작");
 #if UNITY_EDITOR
         float lat = VirtualLocation.Instance.Latitude;
         float lon = VirtualLocation.Instance.Longitude;
         isGeospatialReady = true;
-        Debug.Log($"[DataManager] 에디터 위치: lat={lat}, lon={lon}");
+        Debug.Log($"[WP-DBG] 에디터 위치: lat={lat}, lon={lon}");
 #else
-        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
-
-        // Geospatial 추적 준비 대기 + 가이드 표시
-        if (!isGeospatialReady)
-        {
-            ShowARGuide("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...");
-            yield return StartCoroutine(WaitForGeospatialTracking());
-            HideARGuide();
-        }
-
+        // ============================================================
+        // Phase 1: GPS lat/lon으로 선행 데이터 로드 (Geospatial 대기 없이)
+        // → Target 등록 → fallback UI에서 화살표 표시
+        // ============================================================
         float lat = 37.5665f;
         float lon = 126.9780f;
         if (Input.location.status == LocationServiceStatus.Running)
@@ -332,12 +332,10 @@ public class DataManager : MonoBehaviour
             lat = Input.location.lastData.latitude;
             lon = Input.location.lastData.longitude;
         }
-#endif
 
-        // 위치가 기본값(서울)인지 확인 — GPS가 준비되지 않았으면 대기
-#if !UNITY_EDITOR
+        // GPS가 기본값(서울)이면 짧게 대기
         float waitForGPS = 0f;
-        while (lat == 37.5665f && lon == 126.9780f && waitForGPS < 10f)
+        while (lat == 37.5665f && lon == 126.9780f && waitForGPS < 5f)
         {
             yield return new WaitForSeconds(0.5f);
             waitForGPS += 0.5f;
@@ -347,14 +345,40 @@ public class DataManager : MonoBehaviour
                 lon = Input.location.lastData.longitude;
             }
         }
-#endif
 
         lastPosition = new Vector2(lat, lon);
-        Debug.Log($"[DataManager] FetchDataProgressively 시작: lat={lat}, lon={lon}");
+        Debug.Log($"[WP-DBG] Phase1 선행 로드 시작: lat={lat}, lon={lon}");
         yield return StartCoroutine(FetchDataProgressively(lat, lon));
+        Debug.Log($"[WP-DBG] Phase1 선행 로드 완료: objects={spawnedObjects.Count}");
+
+        // LoadingManager에 선행 로드 완료 알림 → fallback 활성화
+        OnPreFetchCompleted?.Invoke();
+
+        // ============================================================
+        // Phase 2: AR 세션 + Geospatial 대기 → 고도값 기반 정밀 배치
+        // ============================================================
+        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
+
+        if (!isGeospatialReady)
+        {
+            ShowARGuide("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...");
+            yield return StartCoroutine(WaitForGeospatialTracking());
+            HideARGuide();
+        }
+
+        // Geospatial 준비 완료 → GPS 위치 갱신 (더 정확한 값)
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+        lastPosition = new Vector2(lat, lon);
+        Debug.Log($"[WP-DBG] Phase2 Geospatial 준비 완료: lat={lat}, lon={lon}");
+#endif
+
         isDataLoaded = true;
         isInitialStartComplete = true;
-        Debug.Log("[DataManager] FetchDataOnce 완료");
+        Debug.Log("[WP-DBG] FetchDataOnce 완료");
 
     }
 
@@ -405,10 +429,13 @@ public class DataManager : MonoBehaviour
         // 중복 실행 방지
         if (isFetching)
         {
+            Debug.Log("[WP-DBG] FetchDataProgressively: already fetching, skip");
             yield break;
         }
         isFetching = true;
         int myGeneration = fetchGeneration; // 이 코루틴의 세대 번호 기록
+
+        Debug.Log($"[WP-DBG] FetchDataProgressively: lat={lat:F5}, lon={lon:F5}, silent={silent}, existingObjects={spawnedObjects.Count}");
 
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
 
@@ -418,7 +445,8 @@ public class DataManager : MonoBehaviour
             objectCountUI.ResetUI();
         }
 
-        int currentTierCount = 0; // 이번 실행에서 새로 추가된 개수
+        // silent 모드: 기존 visible 오브젝트 수를 기반 카운트로 시작 (중복 누적 방지)
+        int currentTierCount = silent ? GetVisibleObjectCount() : 0;
 
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
@@ -1049,9 +1077,13 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator WaitForARSessionAndFetchDataSilent()
     {
+        Debug.Log("[WP-DBG] WaitForARSessionAndFetchDataSilent: started");
         yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || Time.unscaledTime > 5f);
         if (ARSession.state != ARSessionState.SessionTracking)
+        {
+            Debug.Log("[WP-DBG] WaitForARSessionAndFetchDataSilent: AR not tracking, skip");
             yield break;
+        }
 
         StopAllFetching();
 
@@ -1061,6 +1093,15 @@ public class DataManager : MonoBehaviour
         {
             lat = Input.location.lastData.latitude;
             lon = Input.location.lastData.longitude;
+        }
+
+        Debug.Log($"[WP-DBG] WaitForARSessionAndFetchDataSilent: lat={lat}, lon={lon}, existingObjects={spawnedObjects.Count}");
+
+        // 기존 visible 오브젝트 수를 기반으로 UI 유지 (카운트 중복 방지)
+        if (objectCountUI != null)
+        {
+            int visibleCount = GetVisibleObjectCount();
+            objectCountUI.UpdateObjectCount(visibleCount, false);
         }
 
         // ResetUI를 호출하지 않는 FetchDataProgressively 사용 (UI 표시 없이 데이터만 갱신)
