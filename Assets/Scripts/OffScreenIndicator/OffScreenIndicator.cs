@@ -331,6 +331,7 @@ public class OffScreenIndicator : MonoBehaviour
     /// config가 null이면 기본값 사용
     /// </summary>
     private Coroutine delayedDisableCoroutine;
+    private Coroutine autoDisableCoroutine;
 
     /// <summary>
     /// fallback 최소 유지 시간을 동적으로 설정 (LoadingManager에서 호출)
@@ -347,11 +348,16 @@ public class OffScreenIndicator : MonoBehaviour
 
         if (enable)
         {
-            // 지연 해제 코루틴이 실행 중이면 취소
+            // 기존 타이머 모두 취소
             if (delayedDisableCoroutine != null)
             {
                 StopCoroutine(delayedDisableCoroutine);
                 delayedDisableCoroutine = null;
+            }
+            if (autoDisableCoroutine != null)
+            {
+                StopCoroutine(autoDisableCoroutine);
+                autoDisableCoroutine = null;
             }
 
             if (isFallbackMode) return; // 이미 활성화 상태
@@ -361,10 +367,20 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
-            Debug.Log($"[WP-DBG] Fallback ON: fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}");
+            Debug.Log($"[WP-DBG] Fallback ON: fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}, autoDisable={fallbackMinDuration}s");
+
+            // 자동 해제 타이머 시작 (minDuration 후 자동으로 전환)
+            autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
         }
         else
         {
+            // 자동 해제 타이머 취소 (수동 해제가 우선)
+            if (autoDisableCoroutine != null)
+            {
+                StopCoroutine(autoDisableCoroutine);
+                autoDisableCoroutine = null;
+            }
+
             if (!isFallbackMode && !isTransitioning) return; // 이미 비활성화 상태
 
             // 최소 유지 시간 체크
@@ -381,6 +397,18 @@ public class OffScreenIndicator : MonoBehaviour
             }
 
             // 전환 애니메이션 시작
+            StartFallbackTransition();
+        }
+    }
+
+    private IEnumerator AutoDisableFallback(float duration)
+    {
+        yield return new WaitForSeconds(duration);
+        autoDisableCoroutine = null;
+        Debug.Log($"[WP-DBG] AutoDisableFallback: {duration}s elapsed, transitioning to normal mode");
+
+        if (isFallbackMode)
+        {
             StartFallbackTransition();
         }
     }

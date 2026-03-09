@@ -467,34 +467,30 @@ public class LoadingManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 오브젝트가 생성될 때까지 fallback 모드를 유지하고, 생성되면 해제
+    /// 오브젝트 로드 상태를 모니터링 (fallback 해제는 OffScreenIndicator 자동 타이머에 위임)
     /// </summary>
     IEnumerator WaitForFirstObjectsAndDisableFallback(OffScreenIndicator osi)
     {
         Debug.Log($"[WP-DBG] WaitForFirstObjects: started, osi={(osi != null ? "OK" : "NULL")}, dataManager={(dataManager != null ? "OK" : "NULL")}");
 
-        // DataManager 초기화 대기
-        float maxWait = 60f; // 최대 60초 대기
+        float maxWait = 60f;
         float waited = 0f;
 
         while (waited < maxWait)
         {
-            // 오브젝트가 생성되었으면 fallback 해제
             if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
             {
-                Debug.Log($"[WP-DBG] WaitForFirstObjects: {dataManager.GetSpawnedObjectsCount()} objects → disabling fallback (waited={waited:F0}s)");
-                if (osi != null) osi.EnableFallbackMode(false);
+                Debug.Log($"[WP-DBG] WaitForFirstObjects: {dataManager.GetSpawnedObjectsCount()} objects found (waited={waited:F0}s)");
                 yield break;
             }
 
-            // 환경 이슈가 감지되면 HandleEnvironmentIssue가 fallback을 관리하므로 여기서 종료
             if (hasShownEnvironmentGuidance)
             {
                 Debug.Log("[WP-DBG] WaitForFirstObjects: env guidance active → exit");
                 yield break;
             }
 
-            if (waited > 0 && waited % 5 == 0)
+            if (waited > 0 && waited % 10 == 0)
             {
                 Debug.Log($"[WP-DBG] WaitForFirstObjects: waiting... {waited:F0}s, objects={(dataManager != null ? dataManager.GetSpawnedObjectsCount().ToString() : "null")}");
             }
@@ -503,8 +499,7 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(1f);
         }
 
-        // 60초 지나도 오브젝트 없으면 fallback 해제 (무한 대기 방지)
-        if (osi != null) osi.EnableFallbackMode(false);
+        Debug.Log("[WP-DBG] WaitForFirstObjects: 60s timeout, no objects found");
     }
     
     IEnumerator ForceEnvironmentCheckAfterDelay()
@@ -530,7 +525,11 @@ public class LoadingManager : MonoBehaviour
         NotTrackingReason ntReason = arSession.subsystem.notTrackingReason;
         AREnvironmentIssue issue = DetermineEnvironmentIssue(currentTrackingState);
 
-        Debug.Log($"[WP-DBG] CheckAREnvironment: tracking={currentTrackingState}, reason={ntReason}, issue={issue}, hasGuidance={hasShownEnvironmentGuidance}");
+        // 정상 추적 중이고 이슈 없으면 로그 생략 (스팸 방지)
+        if (issue != AREnvironmentIssue.None || hasShownEnvironmentGuidance || currentTrackingState != TrackingState.Tracking)
+        {
+            Debug.Log($"[WP-DBG] CheckAREnvironment: tracking={currentTrackingState}, reason={ntReason}, issue={issue}, hasGuidance={hasShownEnvironmentGuidance}");
+        }
 
         if (issue != AREnvironmentIssue.None)
         {
