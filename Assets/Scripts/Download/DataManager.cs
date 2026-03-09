@@ -86,8 +86,8 @@ public class DataManager : MonoBehaviour
     [Tooltip("각 거리 단계 사이의 딜레이 (초)")]
     public float tierDelay = 0.5f;
 
-    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초)")]
-    public float objectSpawnDelay = 0.1f;
+    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초) [HARDCODED]")]
+    public float objectSpawnDelay = 0.2f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
 
@@ -320,12 +320,20 @@ public class DataManager : MonoBehaviour
         float lon = VirtualLocation.Instance.Longitude;
         isGeospatialReady = true;
         Debug.Log($"[WP-DBG] 에디터 위치: lat={lat}, lon={lon}");
-        yield return StartCoroutine(FetchDataProgressively(lat, lon));
+
+        // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
+        List<PlaceData> preFetchedData = new List<PlaceData>();
+        yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
+        Debug.Log($"[WP-DBG] Phase1 데이터 수집 완료: {preFetchedData.Count}건");
+
+        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작
         OnPreFetchCompleted?.Invoke();
+
+        // fallback 활성화 후 오브젝트 순차 생성
+        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
 #else
         // ============================================================
-        // Phase 1: GPS lat/lon으로 선행 데이터 로드 (Geospatial 대기 없이)
-        // → Target 등록 → fallback UI에서 화살표 표시
+        // Phase 1: GPS lat/lon으로 서버 데이터 선행 수집 (Geospatial 대기 없이)
         // ============================================================
         float lat = 37.5665f;
         float lon = 126.9780f;
@@ -349,12 +357,19 @@ public class DataManager : MonoBehaviour
         }
 
         lastPosition = new Vector2(lat, lon);
-        Debug.Log($"[WP-DBG] Phase1 선행 로드 시작: lat={lat}, lon={lon}");
-        yield return StartCoroutine(FetchDataProgressively(lat, lon));
-        Debug.Log($"[WP-DBG] Phase1 선행 로드 완료: objects={spawnedObjects.Count}");
 
-        // LoadingManager에 선행 로드 완료 알림 → fallback 활성화
+        // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
+        List<PlaceData> preFetchedData = new List<PlaceData>();
+        Debug.Log($"[WP-DBG] Phase1 데이터 수집 시작: lat={lat}, lon={lon}");
+        yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
+        Debug.Log($"[WP-DBG] Phase1 데이터 수집 완료: {preFetchedData.Count}건");
+
+        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작
         OnPreFetchCompleted?.Invoke();
+
+        // fallback 활성화 후 오브젝트 순차 생성
+        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
+        Debug.Log($"[WP-DBG] Phase1 오브젝트 배치 완료: objects={spawnedObjects.Count}");
 
         // ============================================================
         // Phase 2: AR 세션 + Geospatial 대기 → 고도값 기반 정밀 배치
@@ -381,7 +396,71 @@ public class DataManager : MonoBehaviour
         isDataLoaded = true;
         isInitialStartComplete = true;
         Debug.Log("[WP-DBG] FetchDataOnce 완료");
+    }
 
+    /// <summary>
+    /// 모든 Tier에서 서버 데이터만 수집 (오브젝트 생성 X)
+    /// </summary>
+    private IEnumerator PreFetchAllTiers(float lat, float lon, List<PlaceData> outData)
+    {
+        HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+
+        for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
+        {
+            float radius = loadRadii[tierIndex];
+            string serverUrl = string.Format("{0}&lat={1}&lon={2}&radius={3}", baseServerUrl, lat, lon, radius);
+
+            List<PlaceData> tierPlaces = new List<PlaceData>();
+            yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, tierPlaces));
+
+            foreach (var place in tierPlaces)
+            {
+                loadedIds.Add(place.id);
+                outData.Add(place);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 사전 수집된 데이터로 오브젝트를 순차 생성
+    /// </summary>
+    private IEnumerator SpawnPreFetchedObjects(List<PlaceData> places, bool silent)
+    {
+        if (!silent && objectCountUI != null)
+        {
+            objectCountUI.ResetUI();
+        }
+
+        int currentCount = silent ? GetVisibleObjectCount() : 0;
+
+        foreach (PlaceData place in places)
+        {
+            CreateObjectFromData(place);
+
+            if (ShouldShowObject(place))
+                currentCount++;
+
+            if (objectCountUI != null)
+            {
+                objectCountUI.UpdateObjectCount(currentCount, false);
+            }
+
+            if (objectSpawnDelay > 0)
+            {
+                yield return new WaitForSeconds(objectSpawnDelay);
+            }
+        }
+
+        // 최종 업데이트
+        if (objectCountUI != null)
+        {
+            int visibleCount = GetVisibleObjectCount();
+            int finalCount = currentCount > 0 ? currentCount : visibleCount;
+            objectCountUI.UpdateObjectCount(finalCount, true);
+        }
+
+        isDataLoaded = true;
+        isFetching = false;
     }
 
     private IEnumerator CheckPositionAndFetchData()

@@ -156,6 +156,26 @@ Claude가 해야 할 것:
 - 다양한 화면 크기에 대응 용이
 ```
 
+### 2.3.4 하드코딩 필드 Inspector 표시 규칙 (필수)
+```
+⚠️ "하드코딩 해줘" 요청 시 반드시 적용:
+
+1. 해당 필드의 Tooltip에 [HARDCODED] 추가
+   [Tooltip("오브젝트 스폰 딜레이 (초) [HARDCODED]")]
+   public float objectSpawnDelay = 0.2f;
+
+2. CustomEditor 스크립트에서 초록색 배경 + "HARDCODED" 뱃지 표시
+   - 배경색: new Color(0.18f, 0.55f, 0.34f, 0.35f)
+   - 라벨색: new Color(0.3f, 0.85f, 0.5f, 1f)
+   - 읽기 전용 (DisabledScope)
+   - "HARDCODED" 뱃지 우측 표시
+
+3. 이미 CustomEditor가 있으면 hardcodedFields 배열에 추가
+   없으면 새로 생성 (Assets/Scripts/Editor/{클래스명}Editor.cs)
+
+4. 참고 패턴: DoubleTap3DEditor.cs, DataManagerEditor.cs
+```
+
 ### 2.4 코드 품질
 ```
 지양:
