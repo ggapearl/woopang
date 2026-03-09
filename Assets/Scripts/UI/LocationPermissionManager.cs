@@ -63,20 +63,12 @@ public class LocationPermissionManager : MonoBehaviour
     {
         if (locationPermissionPanel == null)
         {
-            Transform t = transform.root.Find("LocationPermissionPanel");
-            if (t == null)
+            // Canvas 하위에서 찾기
+            Canvas canvas = FindFirstObjectByType<Canvas>();
+            if (canvas != null)
             {
-                // Canvas 하위에서 찾기
-                Canvas canvas = FindFirstObjectByType<Canvas>();
-                if (canvas != null)
-                {
-                    Transform found = canvas.transform.Find("LocationPermissionPanel");
-                    if (found != null) locationPermissionPanel = found.gameObject;
-                }
-            }
-            else
-            {
-                locationPermissionPanel = t.gameObject;
+                Transform found = canvas.transform.Find("LocationPermissionPanel");
+                if (found != null) locationPermissionPanel = found.gameObject;
             }
         }
 

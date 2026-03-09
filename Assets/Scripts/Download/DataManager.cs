@@ -320,6 +320,8 @@ public class DataManager : MonoBehaviour
         float lon = VirtualLocation.Instance.Longitude;
         isGeospatialReady = true;
         Debug.Log($"[WP-DBG] 에디터 위치: lat={lat}, lon={lon}");
+        yield return StartCoroutine(FetchDataProgressively(lat, lon));
+        OnPreFetchCompleted?.Invoke();
 #else
         // ============================================================
         // Phase 1: GPS lat/lon으로 선행 데이터 로드 (Geospatial 대기 없이)

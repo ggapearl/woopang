@@ -5668,7 +5668,7 @@ GameObject:
   - component: {fileID: 389524707}
   - component: {fileID: 389524706}
   m_Layer: 5
-  m_Name: LocationDisplayManager
+  m_Name: LocationManagerPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -10671,7 +10671,6 @@ GameObject:
   m_Component:
   - component: {fileID: 809260165}
   - component: {fileID: 809260164}
-  - component: {fileID: 809260166}
   m_Layer: 0
   m_Name: LoginManager
   m_TagString: Untagged
@@ -10722,11 +10721,11 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 809260163}
+  m_GameObject: {fileID: 2004534401}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 61083601db35ff94cb75a680b4ce710a, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::LocationPermissionManager
   locationPermissionPanel: {fileID: 184328056}
   promptText: {fileID: 1016771508}
@@ -23201,8 +23200,9 @@ GameObject:
   m_Component:
   - component: {fileID: 2004534403}
   - component: {fileID: 2004534402}
+  - component: {fileID: 809260166}
   m_Layer: 0
-  m_Name: LocationDisplay
+  m_Name: LocationManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

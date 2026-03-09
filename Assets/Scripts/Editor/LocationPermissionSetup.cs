@@ -22,15 +22,25 @@ public class LocationPermissionSetup
 
     private static void CheckAndSetup()
     {
-        // LocationPermissionManager가 없으면 LoginManager 오브젝트에 자동으로 추가
+        // LocationPermissionManager가 없으면 LocationManager 오브젝트에 자동으로 추가
         LocationPermissionManager mgr = Object.FindFirstObjectByType<LocationPermissionManager>();
         if (mgr == null)
         {
-            LoginManager loginManager = Object.FindFirstObjectByType<LoginManager>();
-            if (loginManager == null) return;
-
-            mgr = loginManager.gameObject.AddComponent<LocationPermissionManager>();
-            EditorUtility.SetDirty(loginManager.gameObject);
+            // LocationManager(구 LocationDisplay) 오브젝트에서 찾기
+            LocationManager locMgr = Object.FindFirstObjectByType<LocationManager>();
+            if (locMgr != null)
+            {
+                mgr = locMgr.gameObject.AddComponent<LocationPermissionManager>();
+                EditorUtility.SetDirty(locMgr.gameObject);
+            }
+            else
+            {
+                // fallback: LoginManager에 추가
+                LoginManager loginManager = Object.FindFirstObjectByType<LoginManager>();
+                if (loginManager == null) return;
+                mgr = loginManager.gameObject.AddComponent<LocationPermissionManager>();
+                EditorUtility.SetDirty(loginManager.gameObject);
+            }
         }
 
         // 패널이 이미 연결되어 있으면 스킵
@@ -81,12 +91,13 @@ public class LocationPermissionSetup
         else
         {
             // 씬에 패널이 없으면 새로 생성 (최초 1회만)
-            LoginManager lm = Object.FindFirstObjectByType<LoginManager>();
-            if (lm == null || lm.uiCanvasRoot == null) return;
-
-            Canvas canvas = lm.uiCanvasRoot.GetComponentInParent<Canvas>();
-            if (canvas == null) canvas = lm.uiCanvasRoot.GetComponent<Canvas>();
-            if (canvas == null) canvas = Object.FindFirstObjectByType<Canvas>();
+            Canvas canvas = Object.FindFirstObjectByType<Canvas>();
+            if (canvas == null)
+            {
+                LoginManager lm = Object.FindFirstObjectByType<LoginManager>();
+                if (lm != null && lm.uiCanvasRoot != null)
+                    canvas = lm.uiCanvasRoot.GetComponentInParent<Canvas>();
+            }
             if (canvas == null) return;
 
             CreateLocationPermissionPanel(mgr, canvas);
