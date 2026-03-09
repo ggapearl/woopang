@@ -142,6 +142,9 @@ public class Indicator : MonoBehaviour
 
     public void SetDistanceText(float value, Color textColor, string placeName)
     {
+        bool hasValidDistance = value >= 0;
+        string distanceStr = hasValidDistance ? $"{Mathf.Floor(value)}m" : "";
+
         if (indicatorType == IndicatorType.BOX && nameText != null)
         {
             // 박스 인디케이터: 이름(위) + 거리(아래) 분리 표시
@@ -150,7 +153,7 @@ public class Indicator : MonoBehaviour
 
             if (distanceText != null)
             {
-                distanceText.text = value >= 0 ? $"{Mathf.Floor(value)}m" : "";
+                distanceText.text = distanceStr;
                 distanceText.color = textColor;
             }
         }
@@ -174,16 +177,22 @@ public class Indicator : MonoBehaviour
                     }
                 }
 
-                distanceText.text = string.IsNullOrEmpty(placeName) ?
-                    (value >= 0 ? $"{Mathf.Floor(value)}m" : "") :
-                    $"{truncatedName}\n{Mathf.Floor(value)}m";
+                if (string.IsNullOrEmpty(placeName))
+                    distanceText.text = distanceStr;
+                else if (hasValidDistance)
+                    distanceText.text = $"{truncatedName}\n{distanceStr}";
+                else
+                    distanceText.text = truncatedName;
             }
             else
             {
                 // 박스 인디케이터 fallback (nameText가 없는 경우): 기존 방식
-                distanceText.text = string.IsNullOrEmpty(placeName) ?
-                    (value >= 0 ? $"<b>{Mathf.Floor(value)}m</b>" : "") :
-                    $"<b>{placeName}\n{Mathf.Floor(value)}m</b>";
+                if (string.IsNullOrEmpty(placeName))
+                    distanceText.text = hasValidDistance ? $"<b>{distanceStr}</b>" : "";
+                else if (hasValidDistance)
+                    distanceText.text = $"<b>{placeName}\n{distanceStr}</b>";
+                else
+                    distanceText.text = $"<b>{placeName}</b>";
             }
             distanceText.color = textColor;
         }
@@ -363,6 +372,17 @@ public class Indicator : MonoBehaviour
     public void SetScale(Vector3 scale)
     {
         transform.localScale = scale;
+    }
+
+    /// <summary>
+    /// 인디케이터 알파값 직접 설정 (전환 애니메이션용)
+    /// </summary>
+    public void SetAlpha(float alpha)
+    {
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = alpha;
+        }
     }
 
     /// <summary>

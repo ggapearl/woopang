@@ -81,7 +81,6 @@ public class SwipeToClose : MonoBehaviour
         isDragging = false;
         isValidSwipe = false;
         trackingFingerId = -1;
-        Debug.Log($"[WP-DBG] SwipeToClose.NotifyOpened() go={gameObject.name}");
     }
 
     void Update()
@@ -187,7 +186,6 @@ public class SwipeToClose : MonoBehaviour
         // 쿨다운 체크
         if (Time.unscaledTime - openTime < OPEN_COOLDOWN)
         {
-            Debug.Log($"[WP-DBG] SwipeToClose: cooldown active, ignoring touch");
             return;
         }
 
@@ -337,12 +335,10 @@ public class SwipeToClose : MonoBehaviour
 
         if (shouldClose)
         {
-            Debug.Log($"[WP-DBG] SwipeToClose: closing panel (deltaY={totalDeltaY:F0} vel={velocity:F0})");
             StartCoroutine(SlideOutAndClose());
         }
         else if (shouldExpand)
         {
-            Debug.Log($"[WP-DBG] SwipeToClose: expanding panel (deltaY={totalDeltaY:F0} vel={velocity:F0})");
             StartCoroutine(SnapBack());
             onExpand?.Invoke();
         }

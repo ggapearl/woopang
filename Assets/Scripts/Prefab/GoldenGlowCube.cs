@@ -46,6 +46,7 @@ public class GoldenGlowCube : MonoBehaviour
     private Vector3 initialPosition;
     private Vector3 initialScale;
     private float floatOffset;
+    private float glowPhaseOffset;  // 랜덤 glow 위상 오프셋 (타이밍 분산)
     private float currentGlowMultiplier = 1f;
     private float targetGlowMultiplier = 1f;
     private float currentScale = 1f;
@@ -58,6 +59,7 @@ public class GoldenGlowCube : MonoBehaviour
     private static readonly int EmissionColorID = Shader.PropertyToID("_EmissionColor");
     private static readonly int BaseColorID = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorID = Shader.PropertyToID("_Color");
+    private static readonly int PulsePhaseOffsetID = Shader.PropertyToID("_PulsePhaseOffset");
 
     private void Awake()
     {
@@ -65,7 +67,8 @@ public class GoldenGlowCube : MonoBehaviour
         propertyBlock = new MaterialPropertyBlock();
         initialPosition = transform.localPosition;
         initialScale = transform.localScale;
-        floatOffset = Random.Range(0f, Mathf.PI * 2f); // 랜덤 시작 위치
+        floatOffset = Random.Range(0f, Mathf.PI * 2f); // 랜덤 float 시작 위치
+        glowPhaseOffset = Random.Range(0f, Mathf.PI * 2f); // 랜덤 glow 타이밍
     }
 
     private void Start()
@@ -89,6 +92,9 @@ public class GoldenGlowCube : MonoBehaviour
         {
             propertyBlock.SetColor(ColorID, baseColor);
         }
+
+        // 랜덤 위상 오프셋 — 같은 프리팹이라도 반짝이는 타이밍이 다르게
+        propertyBlock.SetFloat(PulsePhaseOffsetID, glowPhaseOffset);
 
         meshRenderer.SetPropertyBlock(propertyBlock);
     }
@@ -122,7 +128,7 @@ public class GoldenGlowCube : MonoBehaviour
 
         // Calculate pulsing glow intensity
         float pulseValue = Mathf.Lerp(glowPulseMin, glowPulseMax,
-            (Mathf.Sin(Time.time * glowPulseSpeed) + 1f) * 0.5f);
+            (Mathf.Sin(Time.time * glowPulseSpeed + glowPhaseOffset) + 1f) * 0.5f);
 
         float finalIntensity = glowIntensity * pulseValue * currentGlowMultiplier;
 

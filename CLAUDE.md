@@ -363,4 +363,31 @@ Overall stability and bug fixes
 
 ---
 
-*최종 업데이트: 2026-02-13*
+## 10. Git 커밋 규칙
+
+### 10.1 의존 파일 누락 방지 (필수)
+```
+⚠️ 중요: 커밋 시 의존 관계가 있는 파일을 반드시 함께 포함
+
+실제 발생한 사례:
+- CommentManager.cs에서 MobileKeyboardHandler.DismissKeyboardOnly() 호출
+- CommentManager.cs만 커밋하고 MobileKeyboardHandler.cs는 누락
+- iOS 빌드 시 "does not contain a definition for 'DismissKeyboardOnly'" 에러 발생
+- 로컬에서는 두 파일 모두 있으므로 에러가 안 나지만, 빌드 서버는 커밋된 버전만 사용
+
+커밋 전 체크리스트:
+[ ] 수정한 파일에서 호출하는 메서드가 다른 파일에 있는가?
+[ ] 그 파일도 함께 커밋에 포함했는가?
+[ ] git diff HEAD --name-only로 스테이징된 파일 목록 재확인
+[ ] 새로 추가한 public 메서드/클래스를 참조하는 파일이 있다면 함께 커밋
+```
+
+### 10.2 씬 파일 커밋 규칙
+```
+- WP_0111.unity 씬 파일은 항상 커밋에 포함 (절대 빠뜨리지 말 것)
+- 프리팹만 수정해도 씬 파일에 미커밋 변경사항이 쌓일 수 있으므로 항상 같이 커밋
+```
+
+---
+
+*최종 업데이트: 2026-03-02*

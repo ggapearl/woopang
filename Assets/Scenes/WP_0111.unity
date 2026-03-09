@@ -2460,6 +2460,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hapticIntensity: 0.4
   touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  doubleTapSound: {fileID: 0}
   soundVolume: 0.4
 --- !u!114 &131624111
 MonoBehaviour:
@@ -4628,6 +4629,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hapticIntensity: 0.4
   touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  doubleTapSound: {fileID: 0}
   soundVolume: 0.4
 --- !u!114 &312391470
 MonoBehaviour:
@@ -7318,6 +7320,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hapticIntensity: 0.2
   touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  doubleTapSound: {fileID: 0}
   soundVolume: 0.2
 --- !u!114 &540699937
 MonoBehaviour:
@@ -8093,6 +8096,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hapticIntensity: 0.4
   touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  doubleTapSound: {fileID: 0}
   soundVolume: 0.4
 --- !u!114 &643494986
 MonoBehaviour:
@@ -15927,6 +15931,16 @@ MonoBehaviour:
   sufficientObjectCount: 3
   enableBackgroundRecoveryDetection: 1
   backgroundRecoveryLoadingTime: 2
+  fallbackBaseScaleMultiplier: 2.44
+  fallbackScaleRandomMin: 0.6
+  fallbackScaleRandomMax: 2.4
+  fallbackPulseSpeed: 1.44
+  fallbackPulseAmplitude: 0.44
+  fallbackMarginTop: 0.144
+  fallbackMarginBottom: 0.1
+  fallbackMarginLeft: 0.1
+  fallbackMarginRight: 0.1
+  fallbackMaxIndicatorCount: 10
 --- !u!1 &1309482254
 GameObject:
   m_ObjectHideFlags: 0
@@ -17586,7 +17600,6 @@ MonoBehaviour:
   warningObj: {fileID: 1595540}
   uploadPage: {fileID: 1929578798}
   disableObject: {fileID: 462629739}
-  plusButton: {fileID: 0}
   loadingPanel: {fileID: 1066345737}
   loadingText: {fileID: 1152959673}
   loadingSpinner: {fileID: 341861396}
@@ -29327,7 +29340,7 @@ PrefabInstance:
     - target: {fileID: 1279877576191648393, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 217
+      value: 220
       objectReference: {fileID: 0}
     - target: {fileID: 1794623478198708475, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
@@ -30207,6 +30220,11 @@ PrefabInstance:
       propertyPath: nameText
       value: 
       objectReference: {fileID: 6670102078226555381}
+    - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: tapSpeed
+      value: 0.3
+      objectReference: {fileID: 0}
     - target: {fileID: 7245720370229379832, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
       propertyPath: guidePanel
@@ -34538,7 +34556,7 @@ PrefabInstance:
     - target: {fileID: 4501830455440689553, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
         type: 3}
       propertyPath: m_Name
-      value: ButtonManager
+      value: UIFeedbackManager
       objectReference: {fileID: 0}
     - target: {fileID: 8807830821746844384, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
         type: 3}
@@ -36700,7 +36718,7 @@ PrefabInstance:
     - target: {fileID: 92528271963126980, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 355
+      value: 358
       objectReference: {fileID: 0}
     - target: {fileID: 499417013053605411, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
@@ -36784,6 +36802,11 @@ PrefabInstance:
       objectReference: {fileID: 6670102078226555381}
     - target: {fileID: 6472823875114833344, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
+      propertyPath: tapSpeed
+      value: 0.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 6472823875114833344, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
       propertyPath: guidePanel
       value: 
       objectReference: {fileID: 2355704332572803199}
@@ -36854,9 +36877,19 @@ PrefabInstance:
       objectReference: {fileID: 8011970282693692960}
     - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
+      propertyPath: touchSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e6f6ea5012778c141ad434d90e971e58, type: 3}
+    - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
       propertyPath: soundVolume
       value: 0.2
       objectReference: {fileID: 0}
+    - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: doubleTapSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
     - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: hapticIntensity

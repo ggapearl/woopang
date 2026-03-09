@@ -43,6 +43,7 @@ public class GoldenGlowCubeTextured : MonoBehaviour
     private Material material;
     private Vector3 initialPosition;
     private float floatOffset;
+    private float glowPhaseOffset; // 랜덤 glow 타이밍 오프셋
 
     // Shader property IDs
     private static readonly int MainTexID = Shader.PropertyToID("_MainTex");
@@ -57,12 +58,14 @@ public class GoldenGlowCubeTextured : MonoBehaviour
     private static readonly int PulseSpeedID = Shader.PropertyToID("_PulseSpeed");
     private static readonly int PulseMinID = Shader.PropertyToID("_PulseMin");
     private static readonly int PulseMaxID = Shader.PropertyToID("_PulseMax");
+    private static readonly int PulsePhaseOffsetID = Shader.PropertyToID("_PulsePhaseOffset");
 
     private void Awake()
     {
         meshRenderer = GetComponent<MeshRenderer>();
         initialPosition = transform.localPosition;
         floatOffset = Random.Range(0f, Mathf.PI * 2f);
+        glowPhaseOffset = Random.Range(0f, Mathf.PI * 2f);
     }
 
     private void Start()
@@ -135,6 +138,9 @@ public class GoldenGlowCubeTextured : MonoBehaviour
             material.SetFloat(PulseMinID, 1f);
             material.SetFloat(PulseMaxID, 1f);
         }
+
+        // 랜덤 위상 오프셋 — 같은 프리팹이라도 반짝이는 타이밍이 다르게
+        material.SetFloat(PulsePhaseOffsetID, glowPhaseOffset);
     }
 
     private void Update()

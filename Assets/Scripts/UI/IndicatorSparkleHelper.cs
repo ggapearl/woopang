@@ -77,12 +77,8 @@ public class IndicatorSparkleHelper : MonoBehaviour
     /// </summary>
     public static void PlaySparkleForIndicator(Vector3 screenPosition, IndicatorType type, Sprite sprite = null)
     {
-        // 인스턴스가 없으면 반환
-        if (instance == null)
-        {
-            Debug.LogWarning("[IndicatorSparkleHelper] 인스턴스가 없습니다. Hierarchy에 IndicatorSparkleHelper를 추가하세요.");
-            return;
-        }
+        // 인스턴스가 없으면 반환 (조용히 무시 — 에디터에서 없을 수 있음)
+        if (instance == null) return;
 
         // Sparkle 비활성화 시 반환
         if (!instance.enableSparkle) return;

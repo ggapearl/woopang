@@ -10,7 +10,13 @@ public class Object3DTouchHaptic : MonoBehaviour
     [Header("Haptic Settings")]
     [SerializeField, Range(0f, 1f)] private float hapticIntensity = 0.7f;
 
+    [Header("Sound Settings")]
+    [Tooltip("1번째 터치(싱글탭) 사운드")]
     [SerializeField] private AudioClip touchSound;
+
+    [Tooltip("2번째 터치(더블탭 확정) 사운드 — 미설정 시 touchSound 사용")]
+    [SerializeField] private AudioClip doubleTapSound;
+
     [SerializeField] private float soundVolume = 1.0f;
 
     private AudioSource audioSource;
@@ -79,6 +85,7 @@ public class Object3DTouchHaptic : MonoBehaviour
 
             if (Physics.Raycast(ray, out hit) && hit.collider == objectCollider)
             {
+                // 1st 터치 사운드 + 햅틱 (더블탭 사운드는 DoubleTap3D가 직접 호출)
                 TriggerFeedback();
             }
         }
@@ -167,10 +174,26 @@ public class Object3DTouchHaptic : MonoBehaviour
 
     private void PlaySound()
     {
-        if (touchSound != null)
+        // Update()에서 호출: 항상 1st 터치 사운드만 재생
+        // 2nd 터치 사운드는 DoubleTap3D가 PlayDoubleTapFeedback()을 직접 호출
+        AudioClip clip = touchSound;
+        if (clip != null)
         {
-            audioSource.PlayOneShot(touchSound, soundVolume);
+            audioSource.PlayOneShot(clip, soundVolume);
         }
+    }
+
+    /// <summary>
+    /// DoubleTap3D에서 더블탭 확정 시 호출 — 2nd 터치 사운드 + 햅틱
+    /// </summary>
+    public void PlayDoubleTapFeedback()
+    {
+        AudioClip clip = doubleTapSound != null ? doubleTapSound : touchSound;
+        if (clip != null)
+        {
+            audioSource.PlayOneShot(clip, soundVolume);
+        }
+        TriggerHaptic();
     }
 
     private void TriggerHaptic()

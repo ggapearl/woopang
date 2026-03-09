@@ -34,6 +34,7 @@ public class GoldenGlowCubeAdvanced : MonoBehaviour
     private ParticleSystem sparkleParticles;
     private Light pointLight;
     private float baseLightIntensity;
+    private float lightPhaseOffset;
 
     private void Awake()
     {
@@ -46,6 +47,7 @@ public class GoldenGlowCubeAdvanced : MonoBehaviour
                 baseCube = gameObject.AddComponent<GoldenGlowCube>();
             }
         }
+        lightPhaseOffset = Random.Range(0f, Mathf.PI * 2f);
     }
 
     private void Start()
@@ -71,7 +73,7 @@ public class GoldenGlowCubeAdvanced : MonoBehaviour
         if (animateLight && pointLight != null)
         {
             // Animate light intensity
-            float pulse = (Mathf.Sin(Time.time * 2f) + 1f) * 0.5f;
+            float pulse = (Mathf.Sin(Time.time * 2f + lightPhaseOffset) + 1f) * 0.5f;
             pointLight.intensity = baseLightIntensity * (0.8f + pulse * 0.4f);
         }
     }

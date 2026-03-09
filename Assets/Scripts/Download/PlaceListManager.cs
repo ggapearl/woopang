@@ -42,6 +42,11 @@ public class PlaceListManager : MonoBehaviour
     // P2P 사용자 색상 (핑크)
     private const string P2P_USER_COLOR = "E95383";
 
+    // 교통 수단별 색상
+    private const string TERMINAL_COLOR = "00FF00";
+    private const string TRAIN_COLOR = "00FF00";
+    private const string SUBWAY_COLOR = "3DA29C";
+
     private Coroutine updatePeriodicCoroutine;
 
     private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
@@ -185,9 +190,9 @@ public class PlaceListManager : MonoBehaviour
         }
 
         // 3. New Public Transport Managers
-        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon);
-        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon);
-        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon);
+        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR);
+        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon, TRAIN_COLOR);
+        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR);
 
         // 4. P2P Users (근처 사용자)
         bool showP2PUsers = activeFilters.GetValueOrDefault("p2pUsers", true);
@@ -239,11 +244,10 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
-    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon) where T : MonoBehaviour
+    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00") where T : MonoBehaviour
     {
         if (!filter || manager == null) return;
 
-        // Use reflection to get data map generically as they use different data types
         var method = manager.GetType().GetMethod("GetPlaceDataMap");
         if (method == null) return;
 
@@ -251,7 +255,6 @@ public class PlaceListManager : MonoBehaviour
         if (dataMap == null) return;
 
         foreach (var val in dataMap.Values) {
-            // FacilityData uses different property names
             var latProp = val.GetType().GetProperty("latitude");
             var lonProp = val.GetType().GetProperty("longitude");
             var nameProp = val.GetType().GetProperty("name");
@@ -268,7 +271,7 @@ public class PlaceListManager : MonoBehaviour
             float d = CalculateDistance(lat, lon, pLat, pLon);
             if (d <= maxDisplayDistance) {
                 count++;
-                combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", "00FF00")); // Green
+                combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", colorHex));
             }
         }
     }

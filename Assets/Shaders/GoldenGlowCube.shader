@@ -24,6 +24,7 @@ Shader "Woopang/GoldenGlowCube"
         _PulseSpeed ("Pulse Speed", Range(0, 5)) = 1
         _PulseMin ("Pulse Min", Range(0, 2)) = 0.8
         _PulseMax ("Pulse Max", Range(1, 5)) = 1.5
+        _PulsePhaseOffset ("Pulse Phase Offset", Float) = 0
     }
 
     SubShader
@@ -84,6 +85,7 @@ Shader "Woopang/GoldenGlowCube"
                 float _PulseSpeed;
                 float _PulseMin;
                 float _PulseMax;
+                float _PulsePhaseOffset;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -113,7 +115,7 @@ Shader "Woopang/GoldenGlowCube"
                 float fresnel = pow(1.0 - saturate(dot(normalWS, viewDirWS)), _EdgePower);
 
                 // Animated pulse
-                float pulse = lerp(_PulseMin, _PulseMax, (sin(_Time.y * _PulseSpeed) + 1.0) * 0.5);
+                float pulse = lerp(_PulseMin, _PulseMax, (sin(_Time.y * _PulseSpeed + _PulsePhaseOffset) + 1.0) * 0.5);
 
                 // Base surface color (dark purple-brown)
                 half3 baseColor = _BaseColor.rgb;

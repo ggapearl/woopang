@@ -31,6 +31,7 @@ Shader "Woopang/GoldenGlowCubeTextured"
         _PulseSpeed ("Pulse Speed", Range(0, 5)) = 1
         _PulseMin ("Pulse Min", Range(0, 2)) = 0.8
         _PulseMax ("Pulse Max", Range(1, 5)) = 1.3
+        _PulsePhaseOffset ("Pulse Phase Offset", Float) = 0
     }
 
     SubShader
@@ -95,6 +96,7 @@ Shader "Woopang/GoldenGlowCubeTextured"
                 float _PulseSpeed;
                 float _PulseMin;
                 float _PulseMax;
+                float _PulsePhaseOffset;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -138,7 +140,7 @@ Shader "Woopang/GoldenGlowCubeTextured"
                 edgeMask = max(edgeMask, cornerMask);
 
                 // Animated pulse
-                float pulse = lerp(_PulseMin, _PulseMax, (sin(_Time.y * _PulseSpeed) + 1.0) * 0.5);
+                float pulse = lerp(_PulseMin, _PulseMax, (sin(_Time.y * _PulseSpeed + _PulsePhaseOffset) + 1.0) * 0.5);
 
                 // Base color (텍스처 또는 기본 색상)
                 half3 baseColor = lerp(_BaseColor.rgb, texColor.rgb, _TextureBlend * texColor.a);

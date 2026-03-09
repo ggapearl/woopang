@@ -38,7 +38,43 @@ public class LoadingManager : MonoBehaviour
     [Header("백그라운드 복구 감지 설정")]
     public bool enableBackgroundRecoveryDetection = true;
     public float backgroundRecoveryLoadingTime = 2f;
-    
+
+    [Header("=== Fallback 화살표 설정 ===")]
+    [Tooltip("화살표 기본 스케일 배수 (1.0 = 기본, 1.5 = 1.5배)")]
+    public float fallbackBaseScaleMultiplier = 1.5f;
+
+    [Tooltip("화살표 스케일 랜덤 범위 (최소)")]
+    public float fallbackScaleRandomMin = 0.85f;
+
+    [Tooltip("화살표 스케일 랜덤 범위 (최대)")]
+    public float fallbackScaleRandomMax = 1.3f;
+
+    [Tooltip("펄스 애니메이션 속도 (값이 클수록 빠름)")]
+    public float fallbackPulseSpeed = 0.8f;
+
+    [Tooltip("펄스 애니메이션 진폭 (0.15 = ±15%)")]
+    public float fallbackPulseAmplitude = 0.15f;
+
+    [Tooltip("화면 경계 마진 (상단, Canvas 논리적 크기 비율 0~0.5)")]
+    [Range(0f, 0.5f)]
+    public float fallbackMarginTop = 0.08f;
+
+    [Tooltip("화면 경계 마진 (하단, Canvas 논리적 크기 비율 0~0.5)")]
+    [Range(0f, 0.5f)]
+    public float fallbackMarginBottom = 0.05f;
+
+    [Tooltip("화면 경계 마진 (좌측, Canvas 논리적 크기 비율 0~0.5)")]
+    [Range(0f, 0.5f)]
+    public float fallbackMarginLeft = 0.05f;
+
+    [Tooltip("화면 경계 마진 (우측, Canvas 논리적 크기 비율 0~0.5)")]
+    [Range(0f, 0.5f)]
+    public float fallbackMarginRight = 0.05f;
+
+    [Tooltip("최대 화살표 표시 개수 (가까운 순으로 선택)")]
+    [Range(1, 20)]
+    public int fallbackMaxIndicatorCount = 10;
+
     // 다국어 메시지 데이터
     private Dictionary<string, Dictionary<SystemLanguage, string[]>> allMessages;
     private bool isLoading = false;
@@ -67,6 +103,8 @@ public class LoadingManager : MonoBehaviour
     // 백그라운드 복구 관련 변수
     private bool wasInBackground = false;
     private Coroutine dotAnimationCoroutine;
+    private Coroutine spinnerCoroutine; // Spinner 중복 실행 방지
+    private float? lastCameraBrightness = null; // ARCameraManager 밝기 캐시
     
     public enum AREnvironmentIssue
     {
@@ -76,6 +114,7 @@ public class LoadingManager : MonoBehaviour
         InsufficientLight, // 조명 부족
         TrackingLost,      // 트래킹 손실
         CameraCovered,     // 카메라 가림
+        ExcessiveMotion,   // 과도한 움직임
         DataLoading,       // 데이터 로딩 중 (DataManager 통합)
         SessionPreparing   // AR 세션 작동 준비 중 (세션 미초기화/완전 실패)
     }
@@ -90,17 +129,22 @@ public class LoadingManager : MonoBehaviour
         if (loadingPanel) loadingPanel.SetActive(false);
 
         InitializeLanguage();
-        
+
         if (enableDataManagerMonitoring)
         {
             StartCoroutine(InitializeDataManagerMonitoring());
         }
-        
+
+#if UNITY_EDITOR
+        // 에디터에서는 AR 서브시스템이 없으므로 환경 감지 비활성화 (loadingPanel 차단 방지)
+        enableAREnvironmentDetection = false;
+#else
         if (enableAREnvironmentDetection)
         {
             InitializeARComponents();
             StartCoroutine(StartAREnvironmentMonitoring());
         }
+#endif
     }
     
     void OnApplicationPause(bool pauseStatus)
@@ -121,27 +165,83 @@ public class LoadingManager : MonoBehaviour
         // 1. 다국어 복구 메시지 + 점 애니메이션 표시
         string baseMessage = GetSessionRecoveringMessage();
         if (loadingPanel) loadingPanel.SetActive(true);
-        if (loadingSpinner) StartCoroutine(SpinnerAnimation());
+        StartSpinner();
         StartDotAnimation(baseMessage);
 
-        // 2. AR 세션이 안정화될 때까지 대기
+        // 2. 즉시 fallback 모드 활성화 (복구 중 화살표 표시)
+        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        if (osi != null)
+        {
+            osi.EnableFallbackMode(true, GetFallbackConfig());
+        }
+
+        // 3. AR 세션이 안정화될 때까지 대기
         yield return new WaitForSeconds(backgroundRecoveryLoadingTime);
 
-        // 3. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
+        // 4. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
         if (enableAREnvironmentDetection)
         {
             if (arSession == null)
                 InitializeARComponents();
 
+            // 백그라운드 복구 후 트래킹 상태 초기화 (DetermineEnvironmentIssue가 올바르게 동작하도록)
+            trackingLostStartTime = 0f;
+            lastTrackingState = TrackingState.None;
+            hasShownEnvironmentGuidance = false;
+
             isCheckingAREnvironment = true;
             yield return new WaitForSeconds(0.5f);
             CheckAREnvironment();
+
+            // 트래킹 복구되면 로딩 패널 숨기고, 오브젝트 존재 시 fallback 해제
+            yield return StartCoroutine(WaitForTrackingRecoveryAndCleanup(osi));
         }
         else
         {
             StopDotAnimation();
             HideLoadingUI();
+            // fallback은 유지 (오브젝트가 있으면 WaitForFirstObjects에서 해제)
         }
+    }
+
+    /// <summary>
+    /// 백그라운드 복구 후 트래킹이 정상화되면 로딩 패널 숨기고 fallback 관리
+    /// </summary>
+    IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi)
+    {
+        float maxWait = 15f;
+        float waited = 0f;
+
+        while (waited < maxWait)
+        {
+            if (arSession?.subsystem?.trackingState == TrackingState.Tracking)
+            {
+                // 로딩 패널 숨기기
+                StopDotAnimation();
+                if (loadingPanel) loadingPanel.SetActive(false);
+                StopSpinner();
+
+                // 오브젝트가 이미 있으면 fallback 해제, 없으면 유지
+                if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+                {
+                    if (osi != null) osi.EnableFallbackMode(false);
+                }
+                else
+                {
+                    // WaitForFirstObjectsAndDisableFallback 시작
+                    if (osi != null)
+                    {
+                        StartCoroutine(WaitForFirstObjectsAndDisableFallback(osi));
+                    }
+                }
+                yield break;
+            }
+
+            waited += 0.5f;
+            yield return new WaitForSeconds(0.5f);
+        }
+
+        // 15초 내 트래킹 미복구 시 — HandleEnvironmentIssue가 관리 중일 것
     }
     
     void Update()
@@ -232,25 +332,100 @@ public class LoadingManager : MonoBehaviour
         arCameraManager = FindFirstObjectByType<ARCameraManager>();
         arPointCloudManager = FindFirstObjectByType<ARPointCloudManager>();
         arCamera = Camera.main ?? FindFirstObjectByType<Camera>();
+
+        // ARCameraManager 밝기 이벤트 구독
+        if (arCameraManager != null)
+        {
+            arCameraManager.frameReceived += OnCameraFrameReceived;
+        }
+
+    }
+
+    void OnDestroy()
+    {
+        if (arCameraManager != null)
+        {
+            arCameraManager.frameReceived -= OnCameraFrameReceived;
+        }
+    }
+
+    void OnCameraFrameReceived(ARCameraFrameEventArgs args)
+    {
+        if (args.lightEstimation.averageBrightness.HasValue)
+        {
+            lastCameraBrightness = args.lightEstimation.averageBrightness.Value;
+        }
+        else if (args.lightEstimation.averageIntensityInLumens.HasValue)
+        {
+            // lumen 기반 추정 (1000 lumen = 밝음 ≈ 1.0)
+            lastCameraBrightness = Mathf.Clamp01(args.lightEstimation.averageIntensityInLumens.Value / 1000f);
+        }
     }
     
     IEnumerator StartAREnvironmentMonitoring()
     {
+        // 앱 시작 시 즉시 fallback 모드 활성화 (데이터 로드 전까지 화살표 표시)
+        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        if (osi != null)
+        {
+            osi.EnableFallbackMode(true, GetFallbackConfig());
+        }
+
         float waitTime = 0f;
         while (waitTime < 10f)
         {
             if (arSession != null && arSession.subsystem?.trackingState == TrackingState.Tracking)
             {
+                // 트래킹 확립되었지만, 오브젝트가 아직 없으면 fallback 유지
+                // fallback 해제는 CheckARObjectChanges()에서 오브젝트 생성 시 처리
                 break;
             }
-            
+
             waitTime += 0.5f;
             yield return new WaitForSeconds(0.5f);
         }
-        
+
         isCheckingAREnvironment = true;
         CheckAREnvironment();
         StartCoroutine(ForceEnvironmentCheckAfterDelay());
+
+        // 오브젝트가 생성될 때까지 fallback 유지 (tracking 확립 후에도)
+        if (osi != null && enableDataManagerMonitoring)
+        {
+            yield return StartCoroutine(WaitForFirstObjectsAndDisableFallback(osi));
+        }
+    }
+
+    /// <summary>
+    /// 오브젝트가 생성될 때까지 fallback 모드를 유지하고, 생성되면 해제
+    /// </summary>
+    IEnumerator WaitForFirstObjectsAndDisableFallback(OffScreenIndicator osi)
+    {
+        // DataManager 초기화 대기
+        float maxWait = 60f; // 최대 60초 대기
+        float waited = 0f;
+
+        while (waited < maxWait)
+        {
+            // 오브젝트가 생성되었으면 fallback 해제
+            if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+            {
+                if (osi != null) osi.EnableFallbackMode(false);
+                yield break;
+            }
+
+            // 환경 이슈가 감지되면 HandleEnvironmentIssue가 fallback을 관리하므로 여기서 종료
+            if (hasShownEnvironmentGuidance)
+            {
+                yield break;
+            }
+
+            waited += 1f;
+            yield return new WaitForSeconds(1f);
+        }
+
+        // 60초 지나도 오브젝트 없으면 fallback 해제 (무한 대기 방지)
+        if (osi != null) osi.EnableFallbackMode(false);
     }
     
     IEnumerator ForceEnvironmentCheckAfterDelay()
@@ -267,12 +442,12 @@ public class LoadingManager : MonoBehaviour
     {
         if (arSession == null || arSession.subsystem == null)
         {
-            // AR 세션이 아직 초기화되지 않음 → SessionPreparing
             HandleEnvironmentIssue(AREnvironmentIssue.SessionPreparing);
             return;
         }
 
         TrackingState currentTrackingState = arSession.subsystem.trackingState;
+        NotTrackingReason ntReason = arSession.subsystem.notTrackingReason;
         AREnvironmentIssue issue = DetermineEnvironmentIssue(currentTrackingState);
 
         if (issue != AREnvironmentIssue.None)
@@ -325,37 +500,62 @@ public class LoadingManager : MonoBehaviour
         // 6. 트래킹에 문제가 있고 오브젝트도 부족한 경우에만 환경 분석
         if (trackingState == TrackingState.None || trackingState == TrackingState.Limited)
         {
-            if (lastTrackingState == TrackingState.Tracking)
+            // 트래킹 손실 시작 시점 기록
+            // - Tracking → Limited/None 전환 시
+            // - 앱 시작 직후 (한 번도 Tracking 상태가 아니었던 경우)
+            if (lastTrackingState == TrackingState.Tracking || trackingLostStartTime == 0f)
             {
                 trackingLostStartTime = Time.realtimeSinceStartup;
             }
 
-            if (Time.realtimeSinceStartup - trackingLostStartTime > trackingLostTimeout)
+            float elapsed = Time.realtimeSinceStartup - trackingLostStartTime;
+            if (elapsed > trackingLostTimeout)
             {
                 return AnalyzeTrackingIssue();
             }
         }
-        
+
         return AREnvironmentIssue.None;
     }
     
     AREnvironmentIssue AnalyzeTrackingIssue()
     {
-        if (IsEnvironmentTooDark())
+        // NotTrackingReason 활용 (ARFoundation 제공)
+        NotTrackingReason reason = NotTrackingReason.None;
+        if (arSession?.subsystem != null)
         {
-            return AREnvironmentIssue.TooDark;
+            reason = arSession.subsystem.notTrackingReason;
         }
-        
-        if (GetFeaturePointCount() < minimumFeaturePoints)
+
+        // NotTrackingReason 기반 판단
+        switch (reason)
         {
-            return AREnvironmentIssue.NoFeatures;
+            case NotTrackingReason.InsufficientLight:
+                return AREnvironmentIssue.TooDark;
+            case NotTrackingReason.ExcessiveMotion:
+                return AREnvironmentIssue.ExcessiveMotion;
+            case NotTrackingReason.InsufficientFeatures:
+                return AREnvironmentIssue.NoFeatures;
+            case NotTrackingReason.Unsupported:
+                return AREnvironmentIssue.SessionPreparing;
         }
-        
+
+        // NotTrackingReason이 None이거나 Initializing인 경우 밝기/특징점 기반 판단
         if (IsCameraCovered())
         {
             return AREnvironmentIssue.CameraCovered;
         }
-        
+
+        if (IsEnvironmentTooDark())
+        {
+            return AREnvironmentIssue.TooDark;
+        }
+
+        if (GetFeaturePointCount() < minimumFeaturePoints)
+        {
+            return AREnvironmentIssue.NoFeatures;
+        }
+
         return AREnvironmentIssue.InsufficientLight;
     }
     
@@ -400,6 +600,13 @@ public class LoadingManager : MonoBehaviour
     
     float GetAverageBrightness()
     {
+        // 실제 ARCameraManager 밝기 사용
+        if (lastCameraBrightness.HasValue)
+        {
+            return lastCameraBrightness.Value;
+        }
+
+        // fallback: 밝기 데이터 없을 때 트래킹 상태로 추정
         if (arSession?.subsystem?.trackingState == TrackingState.Tracking)
         {
             return 0.7f;
@@ -408,8 +615,8 @@ public class LoadingManager : MonoBehaviour
         {
             return 0.6f;
         }
-        
-        return 0.5f;
+
+        return 0.3f; // 밝기 데이터 없고 트래킹도 안 되면 어둡다고 판단
     }
     
     int GetFeaturePointCount()
@@ -434,25 +641,33 @@ public class LoadingManager : MonoBehaviour
         return brightness < 0.01f;
     }
     
-    // ✅ 수정된 HandleEnvironmentIssue - DataLoading/SessionPreparing의 경우 즉시 UI 표시
     void HandleEnvironmentIssue(AREnvironmentIssue issue)
     {
-        if (hasShownEnvironmentGuidance) return;
+        if (hasShownEnvironmentGuidance)
+        {
+            return;
+        }
 
         hasShownEnvironmentGuidance = true;
+
+        // OffScreenIndicator 폴백 모드 활성화 (DataLoading 제외 — 모든 환경 이슈에서)
+        if (issue != AREnvironmentIssue.DataLoading)
+        {
+            OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+            if (osi != null)
+            {
+                osi.EnableFallbackMode(true, GetFallbackConfig());
+            }
+        }
 
         if (issue == AREnvironmentIssue.SessionPreparing)
         {
             // SessionPreparing: 점 애니메이션 + 즉시 표시
             string baseMessage = GetEnvironmentGuidanceMessage(issue);
             if (loadingPanel) loadingPanel.SetActive(true);
-            if (loadingSpinner) StartCoroutine(SpinnerAnimation());
+            StartSpinner();
             StartDotAnimation(baseMessage);
             StartCoroutine(AutoRetryEnvironmentCheck(issue));
-
-            // OffScreenIndicator 폴백 모드 활성화
-            OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
-            if (osi != null) osi.EnableFallbackMode(true);
         }
         else if (issue == AREnvironmentIssue.DataLoading && enableImmediateDataManagerUI)
         {
@@ -521,6 +736,14 @@ public class LoadingManager : MonoBehaviour
                 ["ja"] = "カメラが覆われているようです。\n指や物体をカメラから取り除いてください。",
                 ["es"] = "La cámara parece estar cubierta.\nPor favor, retira los dedos u objetos de la cámara."
             },
+            [AREnvironmentIssue.ExcessiveMotion] = new Dictionary<string, string>
+            {
+                ["ko"] = "기기를 너무 빠르게 움직이고 있습니다.\n천천히 움직여주세요.",
+                ["en"] = "Moving too fast.\nPlease move the device slowly.",
+                ["zh"] = "设备移动过快。\n请缓慢移动。",
+                ["ja"] = "デバイスの動きが速すぎます。\nゆっくり動かしてください。",
+                ["es"] = "Movimiento demasiado rápido.\nPor favor, mueve el dispositivo lentamente."
+            },
             [AREnvironmentIssue.DataLoading] = new Dictionary<string, string>
             {
                 ["ko"] = "AR 오브젝트 처리 중입니다.\n잠시만 기다려주세요.",
@@ -556,7 +779,7 @@ public class LoadingManager : MonoBehaviour
     {
         // 기존 로딩 UI만 사용 (스피너 포함)
         if (loadingPanel) loadingPanel.SetActive(true);
-        if (loadingSpinner) StartCoroutine(SpinnerAnimation());
+        StartSpinner();
 
         // SessionPreparing/DataLoading은 점 애니메이션 적용
         if (issue == AREnvironmentIssue.SessionPreparing || issue == AREnvironmentIssue.DataLoading)
@@ -580,10 +803,10 @@ public class LoadingManager : MonoBehaviour
         while (hasShownEnvironmentGuidance)
         {
             yield return new WaitForSeconds(1f);
-            
+
             AREnvironmentIssue currentIssue = DetermineEnvironmentIssue(
                 arSession?.subsystem?.trackingState ?? TrackingState.None);
-            
+
             if (currentIssue == AREnvironmentIssue.None)
             {
                 HideARGuidance();
@@ -603,13 +826,26 @@ public class LoadingManager : MonoBehaviour
     void HideARGuidance()
     {
         StopDotAnimation();
-        // 기존 로딩 UI 숨기기 (스피너 애니메이션도 정지)
+        StopSpinner();
+        // 기존 로딩 UI 숨기기
         if (loadingPanel) loadingPanel.SetActive(false);
         StopAllCoroutines();
+        spinnerCoroutine = null; // StopAllCoroutines 후 정리
 
-        // OffScreenIndicator 폴백 모드 해제
+        // OffScreenIndicator 폴백 모드 — 오브젝트가 있으면 해제, 없으면 유지
         OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
-        if (osi != null) osi.EnableFallbackMode(false);
+        if (osi != null)
+        {
+            bool hasObjects = dataManager != null && dataManager.GetSpawnedObjectsCount() > 0;
+            if (hasObjects)
+            {
+                osi.EnableFallbackMode(false);
+            }
+            else
+            {
+                StartCoroutine(WaitForFirstObjectsAndDisableFallback(osi));
+            }
+        }
     }
     
     public AREnvironmentIssue GetCurrentEnvironmentIssue()
@@ -806,13 +1042,14 @@ public class LoadingManager : MonoBehaviour
     void ShowLoadingUI()
     {
         if (loadingPanel) loadingPanel.SetActive(true);
-        if (loadingSpinner) StartCoroutine(SpinnerAnimation());
+        StartSpinner();
     }
     
     void HideLoadingUI()
     {
         if (loadingPanel) loadingPanel.SetActive(false);
         StopAllCoroutines();
+        spinnerCoroutine = null; // StopAllCoroutines 후 정리
     }
     
     void UpdateMessage(string message)
@@ -820,6 +1057,21 @@ public class LoadingManager : MonoBehaviour
         if (loadingText) loadingText.text = message;
     }
     
+    void StartSpinner()
+    {
+        if (spinnerCoroutine != null) return; // 중복 방지
+        if (loadingSpinner) spinnerCoroutine = StartCoroutine(SpinnerAnimation());
+    }
+
+    void StopSpinner()
+    {
+        if (spinnerCoroutine != null)
+        {
+            StopCoroutine(spinnerCoroutine);
+            spinnerCoroutine = null;
+        }
+    }
+
     IEnumerator SpinnerAnimation()
     {
         while (loadingPanel && loadingPanel.activeInHierarchy && loadingSpinner)
@@ -827,10 +1079,11 @@ public class LoadingManager : MonoBehaviour
             loadingSpinner.transform.Rotate(0, 0, -90 * Time.deltaTime);
             yield return null;
         }
+        spinnerCoroutine = null; // 자연 종료 시 정리
     }
 
     /// <summary>
-    /// 점(.) 하나씩 추가되는 애니메이션 ("준비 중" → "준비 중." → "준비 중.." → "준비 중...")
+    /// 점(.) 하나씩 추가되는 애니메이션 (위치 고정: 보이는 점 + 투명 점으로 총 3자리 유지)
     /// </summary>
     IEnumerator DotAnimation(string baseMessage)
     {
@@ -838,8 +1091,13 @@ public class LoadingManager : MonoBehaviour
         while (true)
         {
             dotCount = (dotCount % 3) + 1;
-            string dots = new string('.', dotCount);
-            UpdateMessage(baseMessage + dots);
+            string visibleDots = new string('.', dotCount);
+            // 나머지 점은 투명 색상으로 채워서 전체 폭 고정 (텍스트 흔들림 방지)
+            int invisibleCount = 3 - dotCount;
+            string invisibleDots = invisibleCount > 0
+                ? $"<color=#00000000>{new string('.', invisibleCount)}</color>"
+                : "";
+            UpdateMessage(baseMessage + visibleDots + invisibleDots);
             yield return new WaitForSeconds(0.6f);
         }
     }
@@ -1064,64 +1322,93 @@ public class LoadingManager : MonoBehaviour
         return (objectIncrease > 0 && timeSinceLastChange <= creationTime && objectIncrease >= creationCount);
     }
     
-    [ContextMenu("Test Loading")]
-    void TestLoading()
+
+    // ============================================================
+    // 에디터 테스트용 public 메서드 (Inspector ContextMenu + Custom Editor 버튼)
+    // ============================================================
+
+    /// <summary>
+    /// 테스트: AR 세션 준비 중 (폴백 모드 + 점 애니메이션)
+    /// </summary>
+    [ContextMenu("Test: Session Preparing (폴백모드)")]
+    public void DebugSessionPreparing()
     {
-        ShowLoading(() => { }, "General");
+        hasShownEnvironmentGuidance = false;
+        HandleEnvironmentIssue(AREnvironmentIssue.SessionPreparing);
     }
 
-    [ContextMenu("Test AR Loading")]
-    void TestARLoading()
+    [ContextMenu("Test: Fallback ON")]
+    public void DebugFallbackOn()
     {
-        ShowARLoading(() => { }, "AR 테스트 로딩 중..");
+        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        if (osi != null) osi.EnableFallbackMode(true, GetFallbackConfig());
     }
-    
-    [ContextMenu("Test DataManager Immediate UI")]
-    void TestDataManagerImmediateUI()
+
+    [ContextMenu("Test: Fallback OFF")]
+    public void DebugFallbackOff()
     {
-        if (dataManager != null)
+        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        if (osi != null) osi.EnableFallbackMode(false);
+    }
+
+    /// <summary>
+    /// Inspector 설정값으로 FallbackConfig 생성
+    /// </summary>
+    private OffScreenIndicator.FallbackConfig GetFallbackConfig()
+    {
+        return new OffScreenIndicator.FallbackConfig
         {
-            // 임계값 조건을 강제로 시뮬레이션
-            lastObjectCount = dataManager.GetSpawnedObjectsCount() - creationCount;
-            lastObjectCountChangeTime = Time.realtimeSinceStartup;
-            CheckARObjectChanges();
-        }
+            baseScaleMultiplier = fallbackBaseScaleMultiplier,
+            scaleRandomMin = fallbackScaleRandomMin,
+            scaleRandomMax = fallbackScaleRandomMax,
+            pulseSpeed = fallbackPulseSpeed,
+            pulseAmplitude = fallbackPulseAmplitude,
+            marginTop = fallbackMarginTop,
+            marginBottom = fallbackMarginBottom,
+            marginLeft = fallbackMarginLeft,
+            marginRight = fallbackMarginRight,
+            maxIndicatorCount = fallbackMaxIndicatorCount
+        };
     }
-    
-    [ContextMenu("Test Dark Environment")]
-    void TestDarkEnvironment()
+
+    [ContextMenu("Test: Hide Guidance (복구)")]
+    public void DebugHideGuidance()
     {
+        HideARGuidance();
+        hasShownEnvironmentGuidance = false;
+    }
+
+    [ContextMenu("Test: Dark Environment")]
+    public void DebugDarkEnvironment()
+    {
+        hasShownEnvironmentGuidance = false;
         HandleEnvironmentIssue(AREnvironmentIssue.TooDark);
     }
-    
-    [ContextMenu("Test No Features Environment")]
-    void TestNoFeaturesEnvironment()
+
+    [ContextMenu("Test: No Features")]
+    public void DebugNoFeatures()
     {
+        hasShownEnvironmentGuidance = false;
         HandleEnvironmentIssue(AREnvironmentIssue.NoFeatures);
     }
-    
-    [ContextMenu("Test Insufficient Light")]
-    void TestInsufficientLight()
+
+    [ContextMenu("Test: Camera Covered")]
+    public void DebugCameraCovered()
     {
-        HandleEnvironmentIssue(AREnvironmentIssue.InsufficientLight);
-    }
-    
-    [ContextMenu("Test Camera Covered")]
-    void TestCameraCovered()
-    {
+        hasShownEnvironmentGuidance = false;
         HandleEnvironmentIssue(AREnvironmentIssue.CameraCovered);
     }
-    
-    [ContextMenu("Test Data Loading")]
-    void TestDataLoading()
+
+    [ContextMenu("Test: Data Loading")]
+    public void DebugDataLoading()
     {
+        hasShownEnvironmentGuidance = false;
         HandleEnvironmentIssue(AREnvironmentIssue.DataLoading);
     }
-    
-    [ContextMenu("Test Background Recovery")]
-    void TestBackgroundRecovery()
+
+    [ContextMenu("Test: Background Recovery")]
+    public void DebugBackgroundRecovery()
     {
         StartCoroutine(HandleBackgroundRecovery());
     }
-    
 }

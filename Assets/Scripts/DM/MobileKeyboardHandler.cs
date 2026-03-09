@@ -166,8 +166,6 @@ public class MobileKeyboardHandler : MonoBehaviour
         editorPreviewKeyboardHeight = 0;
 #endif
 
-        Debug.Log($"[WP-DBG] OnEnable() go={gameObject.name} initialized={initialized} kbLogActive={keyboardLogicallyActive} bgRect={(backgroundRect != null ? backgroundRect.gameObject.name : "null")}");
-        hksmLogCount = 0;
         expandLogCount = 0;
 
         if (initialized && backgroundRect != null)
@@ -179,7 +177,6 @@ public class MobileKeyboardHandler : MonoBehaviour
             origBgOffsetMin = backgroundRect.offsetMin;
             origBgOffsetMax = backgroundRect.offsetMax;
             SetCollapsedTargets();
-            Debug.Log($"[WP-DBG] OnEnable RE-CAPTURE: origBgAnchorMin={origBgAnchorMin} origBgAnchorMax={origBgAnchorMax} origBgOffsetMin={origBgOffsetMin} origBgOffsetMax={origBgOffsetMax}");
         }
         else
         {
@@ -188,15 +185,11 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         if (initialized)
         {
-            Debug.Log($"[WP-DBG] OnEnable post-init: origBgAnchorMin={origBgAnchorMin} origBgAnchorMax={origBgAnchorMax} origBgOffsetMin={origBgOffsetMin} origBgOffsetMax={origBgOffsetMax}");
-            Debug.Log($"[WP-DBG] OnEnable targets: tgtAnchorMin={targetAnchorMin} tgtAnchorMax={targetAnchorMax} tgtOffsetMin={targetOffsetMin} tgtOffsetMax={targetOffsetMax}");
-            Debug.Log($"[WP-DBG] OnEnable current bg: anchorMin={backgroundRect.anchorMin} anchorMax={backgroundRect.anchorMax} offsetMin={backgroundRect.offsetMin} offsetMax={backgroundRect.offsetMax} anchoredPos={backgroundRect.anchoredPosition}");
         }
     }
 
     void OnDisable()
     {
-        Debug.Log($"[WP-DBG] OnDisable() go={gameObject.name} initialized={initialized} kbLogActive={keyboardLogicallyActive}");
         if (!initialized || backgroundRect == null) return;
 
         // 즉시 원상 복구
@@ -283,14 +276,6 @@ public class MobileKeyboardHandler : MonoBehaviour
         persistentInput = targetInputField as KeyboardPersistentInputField;
 
         initialized = true;
-
-        Debug.Log($"[WP-DBG] TryInitialize() DONE go={gameObject.name} bgRect={backgroundRect.gameObject.name} " +
-                  $"origAnchorMin={origBgAnchorMin} origAnchorMax={origBgAnchorMax} " +
-                  $"origOffsetMin={origBgOffsetMin} origOffsetMax={origBgOffsetMax} " +
-                  $"inputAreaRect={(inputAreaRect != null ? inputAreaRect.gameObject.name : "null")} " +
-                  $"viewportRect={(viewportRect != null ? viewportRect.gameObject.name : "null")} " +
-                  $"scrollRect={(chatScrollRect != null ? "found" : "null")} " +
-                  $"canvasRect={(canvasRect != null ? canvasRect.rect.height.ToString("F0") : "null")}h");
     }
 
     // ============================================================
@@ -411,26 +396,10 @@ public class MobileKeyboardHandler : MonoBehaviour
     //   3. timeout (maxReactivateTime 초과)
     // ============================================================
 
-    private int hksmLogCount; // 디버깅용 로그 카운터
-
     private void HandleKeyboardStateMachine()
     {
         float kbH = GetKeyboardHeightInCanvasPixels();
         bool inputFocused = targetInputField != null && targetInputField.isFocused;
-
-        // 첫 몇 프레임만 로그 출력 (스팸 방지)
-        if (hksmLogCount < 5)
-        {
-            hksmLogCount++;
-#if UNITY_EDITOR
-            Debug.Log($"[WP-DBG] HKSM go={gameObject.name} kbH={kbH:F1} kbLogActive={keyboardLogicallyActive} inputFocused={inputFocused} " +
-                      $"editorPreview={editorPreviewActive} editorKbH={editorPreviewKeyboardHeight:F1} " +
-                      $"curBgAnchorMin={backgroundRect.anchorMin} curBgAnchorMax={backgroundRect.anchorMax}");
-#else
-            Debug.Log($"[WP-DBG] HKSM go={gameObject.name} kbH={kbH:F1} kbLogActive={keyboardLogicallyActive} inputFocused={inputFocused} " +
-                      $"curBgAnchorMin={backgroundRect.anchorMin} curBgAnchorMax={backgroundRect.anchorMax}");
-#endif
-        }
 
         // ── 키보드 높이 > 0 감지됨 ──
         if (kbH > 0)
@@ -444,7 +413,6 @@ public class MobileKeyboardHandler : MonoBehaviour
                 keyboardLogicallyActive = true;
                 needsScrollToBottom = true;
                 if (persistentInput != null) persistentInput.lockFocus = true;
-                Debug.Log($"[WP-DBG] ★ ACTIVATED go={gameObject.name} kbH={kbH:F1}");
             }
 
             SetExpandedTargets(kbH);
@@ -496,7 +464,6 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private void DismissKeyboardCleanly()
     {
-        Debug.Log($"[WP-DBG] ★ DISMISS go={gameObject.name}");
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
         kbGoneStartTime = 0;
@@ -521,7 +488,6 @@ public class MobileKeyboardHandler : MonoBehaviour
     /// </summary>
     public void DismissKeyboardOnly(bool keepExpanded = false)
     {
-        Debug.Log($"[WP-DBG] DismissKeyboardOnly go={gameObject.name} keepExpanded={keepExpanded}");
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
         kbGoneStartTime = 0;
@@ -565,7 +531,6 @@ public class MobileKeyboardHandler : MonoBehaviour
         if (expandLogCount < 3)
         {
             expandLogCount++;
-            Debug.Log($"[WP-DBG] SetExpandedTargets go={gameObject.name} kbH={kbH:F1} canvasH={canvasHeight:F0} bottomAnchor={bottomAnchor:F3}");
         }
 
         targetAnchorMin = new Vector2(0, bottomAnchor);
@@ -588,7 +553,6 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private void SetCollapsedTargets()
     {
-        Debug.Log($"[WP-DBG] SetCollapsedTargets go={gameObject.name} → origAnchorMin={origBgAnchorMin} origAnchorMax={origBgAnchorMax}");
         targetAnchorMin = origBgAnchorMin;
         targetAnchorMax = origBgAnchorMax;
         targetOffsetMin = origBgOffsetMin;

@@ -1,2 +1,30 @@
-Assets\Scripts\upload\CubeUploadManager.cs(75,57): error CS0103: The name 'GetLocalizedText' does not exist in the current context
-
+[Info] 관리자 Android 좌표 전송 성공: 1
+[Info] APNs JWT 토큰 생성 성공
+[Info] SSL 인증서 유효기간 넉넉함 (38일). 7일 뒤 다시 확인합니다.
+2026-02-24 16:57:20,267 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/e4fae07e7923077396466de9b63dc17e3c1da3034e332b7f9308fa35ffaefbc1 "HTTP/2 403 Forbidden"
+2026-02-24 16:57:20,267 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/e4fae07e7923077396466de9b63dc17e3c1da3034e332b7f9308fa35ffaefbc1 "HTTP/2 403 Forbidden"
+[Error] APNs 전송 실패: 403
+[Info] APNs JWT 토큰 생성 성공
+2026-02-24 16:57:21,608 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/c947a4ae602b6f35031dbe29c5cbd975c43a4e4cbe08e87717b1c6ffc9101497 "HTTP/2 403 Forbidden"
+2026-02-24 16:57:21,608 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/c947a4ae602b6f35031dbe29c5cbd975c43a4e4cbe08e87717b1c6ffc9101497 "HTTP/2 403 Forbidden"
+[Error] APNs 전송 실패: 403
+[Info] APNs JWT 토큰 생성 성공
+2026-02-24 16:57:22,775 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/d731bf7c6f8db4d8e626a5b38f9d1521a9ef686e21ef58fe02d5923b17dcc73c "HTTP/2 403 Forbidden"
+2026-02-24 16:57:22,775 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/d731bf7c6f8db4d8e626a5b38f9d1521a9ef686e21ef58fe02d5923b17dcc73c "HTTP/2 403 Forbidden"
+[Error] APNs 전송 실패: 403
+[Info] 관리자 좌표 기반 메시지 전송
+[Info] 타겟 좌표: (36.6363, 126.8282), 반경: 1000.0m
+[Info] 좌표 기반 토큰 조회: (36.6363, 126.8282) 반경 1000.0m → Android: 1, iOS: 3
+[Info] 관리자 Android 좌표 전송 성공: 1
+[Info] APNs JWT 토큰 생성 성공
+2026-02-24 16:57:32,410 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/e4fae07e7923077396466de9b63dc17e3c1da3034e332b7f9308fa35ffaefbc1 "HTTP/2 403 Forbidden"
+2026-02-24 16:57:32,410 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/e4fae07e7923077396466de9b63dc17e3c1da3034e332b7f9308fa35ffaefbc1 "HTTP/2 403 Forbidden"
+[Error] APNs 전송 실패: 403
+[Info] APNs JWT 토큰 생성 성공
+2026-02-24 16:57:33,703 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/c947a4ae602b6f35031dbe29c5cbd975c43a4e4cbe08e87717b1c6ffc9101497 "HTTP/2 403 Forbidden"
+2026-02-24 16:57:33,703 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/c947a4ae602b6f35031dbe29c5cbd975c43a4e4cbe08e87717b1c6ffc9101497 "HTTP/2 403 Forbidden"
+[Error] APNs 전송 실패: 403
+[Info] APNs JWT 토큰 생성 성공
+2026-02-24 16:57:34,782 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/d731bf7c6f8db4d8e626a5b38f9d1521a9ef686e21ef58fe02d5923b17dcc73c "HTTP/2 403 Forbidden"
+2026-02-24 16:57:34,782 - INFO - HTTP Request: POST https://api.development.push.apple.com/3/device/d731bf7c6f8db4d8e626a5b38f9d1521a9ef686e21ef58fe02d5923b17dcc73c "HTTP/2 403 Forbidden"
+[Error] APNs 전송 실패: 403

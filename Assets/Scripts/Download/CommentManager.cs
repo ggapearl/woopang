@@ -80,11 +80,6 @@ public class CommentManager : MonoBehaviour
             // ★ textComponent/placeholder 교차 참조 수정 (씬 직렬화 오류 방지)
             RepairInputFieldReferences(commentInputField);
 
-            // 디버그: 수정 후 상태 확인
-            Debug.Log($"[WP-DBG] CommentInput after repair: " +
-                $"textComp={(commentInputField.textComponent != null ? commentInputField.textComponent.gameObject.name : "null")} " +
-                $"placeholder={(commentInputField.placeholder != null ? commentInputField.placeholder.gameObject.name : "null")} " +
-                $"same={(commentInputField.textComponent != null && commentInputField.placeholder != null && commentInputField.textComponent.gameObject == commentInputField.placeholder.gameObject)}");
 
             commentInputField.onValueChanged.AddListener(OnInputValueChanged);
             commentInputField.characterLimit = maxCommentLength;
@@ -126,7 +121,6 @@ public class CommentManager : MonoBehaviour
             if (handleArea != null)
             {
                 swipeHandler.handleBar = handleArea.GetComponent<RectTransform>();
-                Debug.Log($"[WP-DBG] SwipeToClose handleBar set to: {handleArea.name}");
 
                 // HandleArea의 부모(헤더 전체 영역)도 포함 — 타이틀 텍스트 터치 포함
                 if (handleArea.parent != null && handleArea.parent != commentPanel.transform)
@@ -137,7 +131,6 @@ public class CommentManager : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("[WP-DBG] SwipeToClose: HandleArea not found, entire panel will respond to swipe");
             }
 
             // 타이틀 텍스트 오브젝트 직접 탐색해서 추가
@@ -272,7 +265,6 @@ public class CommentManager : MonoBehaviour
         if (vlg == null)
         {
             vlg = commentContent.gameObject.AddComponent<VerticalLayoutGroup>();
-            Debug.Log("[WP-DBG] Added VerticalLayoutGroup to commentContent");
         }
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
@@ -286,7 +278,6 @@ public class CommentManager : MonoBehaviour
         if (csf == null)
         {
             csf = commentContent.gameObject.AddComponent<ContentSizeFitter>();
-            Debug.Log("[WP-DBG] Added ContentSizeFitter to commentContent");
         }
         csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -315,7 +306,6 @@ public class CommentManager : MonoBehaviour
                 if (textComp != null)
                 {
                     input.textComponent = textComp;
-                    Debug.Log($"[WP-DBG] RepairInputField: textComponent → {textTr.name}");
                 }
             }
             else
@@ -328,7 +318,6 @@ public class CommentManager : MonoBehaviour
                     if (placeholderGraphic != null && t.gameObject == placeholderGraphic.gameObject) continue;
                     if (t.gameObject == input.gameObject) continue;
                     input.textComponent = t;
-                    Debug.Log($"[WP-DBG] RepairInputField: textComponent → {t.gameObject.name} (fallback)");
                     break;
                 }
             }
@@ -347,7 +336,6 @@ public class CommentManager : MonoBehaviour
                 if (graphic != null)
                 {
                     input.placeholder = graphic;
-                    Debug.Log($"[WP-DBG] RepairInputField: placeholder → {placeholderTr.name}");
                 }
             }
             else
@@ -359,7 +347,6 @@ public class CommentManager : MonoBehaviour
                     if (t == input.textComponent) continue;
                     if (t.gameObject == input.gameObject) continue;
                     input.placeholder = t;
-                    Debug.Log($"[WP-DBG] RepairInputField: placeholder → {t.gameObject.name} (fallback)");
                     break;
                 }
             }
@@ -494,18 +481,6 @@ public class CommentManager : MonoBehaviour
         currentLocationId = locationId;
         if (commentPanel != null)
         {
-            Debug.Log($"[WP-DBG] OpenCommentPanel: panelRect={panelRect?.gameObject.name} anchoredPos={panelRect?.anchoredPosition} " +
-                      $"anchMin={panelRect?.anchorMin} anchMax={panelRect?.anchorMax} offMin={panelRect?.offsetMin} offMax={panelRect?.offsetMax}");
-
-            // MKH backgroundRect 확인
-            MobileKeyboardHandler mkhComp = commentPanel.GetComponent<MobileKeyboardHandler>();
-            if (mkhComp != null)
-            {
-                Debug.Log($"[WP-DBG] MKH bgRect={(mkhComp.backgroundRect != null ? mkhComp.backgroundRect.gameObject.name : "null")} " +
-                          $"isSameAsPanelRect={mkhComp.backgroundRect == panelRect} " +
-                          $"expandOnKb={mkhComp.expandPanelOnKeyboard}");
-            }
-
             // MKH를 슬라이드 애니메이션 동안 비활성화
             // → 패널이 화면 밖(-2532)에 있을 때 원본값을 캡처하면 AnimatePanel이 패널을 다시 밖으로 밀어냄
             MobileKeyboardHandler mkhToDefer = commentPanel.GetComponent<MobileKeyboardHandler>();
@@ -590,12 +565,10 @@ public class CommentManager : MonoBehaviour
         {
             mkh.DismissKeyboardOnly(keepExpanded: true);
         }
-        Debug.Log("[WP-DBG] ExpandPanelWithoutKeyboard called");
     }
 
     public void ClosePanel()
     {
-        Debug.Log($"[WP-DBG] ClosePanel() called, IsPanelOpen={IsPanelOpen}\n{System.Environment.StackTrace}");
         if (IsPanelOpen)
         {
             // MKH 먼저 비활성화 — 닫기 슬라이드 중 offset 충돌 방지
@@ -619,7 +592,6 @@ public class CommentManager : MonoBehaviour
         if (mkhToEnable != null)
         {
             mkhToEnable.enabled = true;
-            Debug.Log($"[WP-DBG] MKH re-enabled after slide, bgRect offset=({panelRect.offsetMin}, {panelRect.offsetMax})");
         }
     }
 
@@ -632,7 +604,6 @@ public class CommentManager : MonoBehaviour
         float startAlpha = panelCanvasGroup.alpha;
         float targetAlpha = open ? 1f : 0f;
 
-        Debug.Log($"[WP-DBG] SlidePanel START open={open} startPos={startPos} targetPos={targetPos} duration={slideDuration}");
 
         while (timer < slideDuration)
         {
@@ -649,7 +620,6 @@ public class CommentManager : MonoBehaviour
         panelRect.anchoredPosition = targetPos;
         if (panelCanvasGroup != null) panelCanvasGroup.alpha = targetAlpha;
 
-        Debug.Log($"[WP-DBG] SlidePanel DONE open={open} finalPos={panelRect.anchoredPosition}");
 
         if (!open) commentPanel.SetActive(false);
     }

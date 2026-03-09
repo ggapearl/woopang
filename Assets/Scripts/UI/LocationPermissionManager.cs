@@ -19,6 +19,8 @@ public class LocationPermissionManager : MonoBehaviour
 
     private string currentLang = "en";
 
+    private CanvasGroup panelCanvasGroup;
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -27,10 +29,34 @@ public class LocationPermissionManager : MonoBehaviour
         SetLanguage();
         AutoConnectFields();
 
+        // CanvasGroup으로 레이캐스트 완전 차단 (SetActive보다 확실)
+        if (locationPermissionPanel != null)
+        {
+            panelCanvasGroup = locationPermissionPanel.GetComponent<CanvasGroup>();
+            if (panelCanvasGroup == null)
+                panelCanvasGroup = locationPermissionPanel.AddComponent<CanvasGroup>();
+
+            // 초기 상태: 보이지 않고 레이캐스트 차단하지 않음
+            SetPanelVisible(false);
+        }
+
         if (goToSettingsButton != null)
             goToSettingsButton.onClick.AddListener(OpenAppSettings);
         if (cancelButton != null)
             cancelButton.onClick.AddListener(ClosePanel);
+    }
+
+    private void SetPanelVisible(bool visible)
+    {
+        if (locationPermissionPanel == null) return;
+
+        if (panelCanvasGroup != null)
+        {
+            panelCanvasGroup.alpha = visible ? 1f : 0f;
+            panelCanvasGroup.blocksRaycasts = visible;
+            panelCanvasGroup.interactable = visible;
+        }
+        locationPermissionPanel.SetActive(visible);
     }
 
     private void AutoConnectFields()
@@ -127,6 +153,11 @@ public class LocationPermissionManager : MonoBehaviour
         {
             AutoConnectFields();
             if (locationPermissionPanel == null) return;
+
+            // CanvasGroup 재초기화
+            panelCanvasGroup = locationPermissionPanel.GetComponent<CanvasGroup>();
+            if (panelCanvasGroup == null)
+                panelCanvasGroup = locationPermissionPanel.AddComponent<CanvasGroup>();
         }
 
         if (promptText != null)
@@ -144,13 +175,12 @@ public class LocationPermissionManager : MonoBehaviour
         }
 
         locationPermissionPanel.transform.SetAsLastSibling();
-        locationPermissionPanel.SetActive(true);
+        SetPanelVisible(true);
     }
 
     public void ClosePanel()
     {
-        if (locationPermissionPanel != null)
-            locationPermissionPanel.SetActive(false);
+        SetPanelVisible(false);
     }
 
     private void OpenAppSettings()

@@ -28,7 +28,7 @@ public class DoubleTap3D : MonoBehaviour
     public Text createdByText;
     public GameObject placeInfoTextPanel;
     private Text placeInfoText;
-    public float tapSpeed = 0.5f;
+    public float tapSpeed = 0.3f;
     public float swipeThreshold = 50f;
     public float fadeDuration = 0.3f;
     public float swipeSpeed = 15f;
@@ -548,7 +548,6 @@ public class DoubleTap3D : MonoBehaviour
             bool actual = fullscreenCanvasGroup.gameObject.activeSelf;
             if (isFullscreen && !actual)
             {
-                Debug.LogWarning($"[WP-DBG] Update: isFullscreen=true지만 gameObject 비활성 — isFullscreen을 false로 복구 (id={id})");
                 isFullscreen = false;
             }
         }
@@ -563,7 +562,7 @@ public class DoubleTap3D : MonoBehaviour
         {
             Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
 
-            if (isFullscreen) { /* 풀스크린 모드는 스와이프 처리 */ }
+            if (isFullscreen) { /* 풀스크린 모드는 스와이프로만 닫기 — 더블탭 닫기 방지 */ }
             else
             {
                 Ray ray = Camera.main.ScreenPointToRay(mousePos);
@@ -593,8 +592,16 @@ public class DoubleTap3D : MonoBehaviour
 
                 // 비풀스크린: UI 위 터치이면 3D 오브젝트 터치 무시
                 // 풀스크린: 전체 화면이 UI이므로 가드 스킵 (스와이프/버튼 모두 필요)
-                if (!isFullscreen && EventSystem.current != null &&
-                    EventSystem.current.IsPointerOverGameObject(touch.touchId))
+                bool isOverUI = !isFullscreen && EventSystem.current != null &&
+                    EventSystem.current.IsPointerOverGameObject(touch.touchId);
+
+                if (isOverUI)
+                {
+                    return;
+                }
+
+                // 풀스크린 상태에서는 3D 더블탭으로 닫기 방지 (스와이프로만 닫기)
+                if (isFullscreen)
                 {
                     return;
                 }
@@ -663,14 +670,13 @@ public class DoubleTap3D : MonoBehaviour
                 {
                     if (swipeDelta.y > swipeThreshold)
                     {
-                        Debug.Log($"[WP-DBG] DoubleTap3D: swipe-UP detected, opening comment panel id={this.id}");
                         if (CommentManager.Instance != null)
                         {
                             CommentManager.Instance.OpenCommentPanel(this.id, this.placeName);
                         }
                         else
                         {
-                            Debug.LogWarning("[WP-DBG] DoubleTap3D: CommentManager.Instance is null!");
+                            Debug.LogWarning("[DoubleTap3D] CommentManager.Instance is null");
                         }
                         isSwiping = false;
                         isDragging = false;
@@ -678,7 +684,6 @@ public class DoubleTap3D : MonoBehaviour
                     }
                     else if (swipeDelta.y < -swipeThreshold)
                     {
-                        Debug.Log($"[WP-DBG] DoubleTap3D: swipe-DOWN detected, closing fullscreen");
                         CloseFullscreen();
                         isSwiping = false;
                         isDragging = false;
@@ -816,13 +821,15 @@ public class DoubleTap3D : MonoBehaviour
 
     private void OnDoubleTapCube()
     {
-        if (isCooldown) return;
+        if (isCooldown)
+        {
+            return;
+        }
 
         // ★ 상태 일관성 검증: isFullscreen과 실제 GameObject 상태가 다른 경우 수정
         bool actualState = fullscreenCanvasGroup != null && fullscreenCanvasGroup.gameObject.activeSelf;
         if (isFullscreen != actualState)
         {
-            Debug.LogWarning($"[WP-DBG] DoubleTap3D id={id} isFullscreen({isFullscreen}) != actualState({actualState}) — 강제 동기화");
             isFullscreen = actualState;
         }
 
@@ -833,10 +840,17 @@ public class DoubleTap3D : MonoBehaviour
 
         // 열기/닫기 결정 (토글 전 상태 기준)
         bool shouldOpen = !isFullscreen;
-        Debug.Log($"[WP-DBG] OnDoubleTapCube id={id} isFullscreen={isFullscreen} → {(shouldOpen ? "열기" : "닫기")} isFading={isFadingOut}");
 
         if (shouldOpen)
         {
+            // 더블탭 확정 사운드 + 햅틱 (Object3DTouchHaptic 연동)
+            Object3DTouchHaptic haptic = GetComponentInChildren<Object3DTouchHaptic>(true);
+            if (haptic == null) haptic = GetComponent<Object3DTouchHaptic>();
+            if (haptic != null)
+            {
+                haptic.PlayDoubleTapFeedback();
+            }
+
             isFullscreen = true;
 
             // 열릴 때 닫기 방지 쿨다운 시작
@@ -878,7 +892,6 @@ public class DoubleTap3D : MonoBehaviour
             // 진행 중이던 FadeOut 코루틴 중단 후 열기
             if (isFadingOut)
             {
-                Debug.Log($"[WP-DBG] OnDoubleTapCube: FadeOut 도중 열기 요청 — 코루틴 중단");
                 StopAllCoroutines();
                 isFadingOut = false;
             }
@@ -910,7 +923,6 @@ public class DoubleTap3D : MonoBehaviour
                         panelBtn.onClick.RemoveAllListeners();
                         panelBtn.onClick.AddListener(OnCommentPreviewClicked);
                     }
-                    Debug.Log($"[WP-DBG] CommentPreview re-registered for id={this.id} isFullscreen={isFullscreen}");
                 }
                 
                 CommentManager.Instance.GetBestComment(this.id, (data) => 
@@ -969,7 +981,6 @@ public class DoubleTap3D : MonoBehaviour
             // 닫기 시도: 쿨다운 중이면 닫지 않음
             if (!canClose)
             {
-                Debug.Log($"[WP-DBG] OnDoubleTapCube id={id}: canClose=false, 닫기 차단");
                 return;
             }
             CloseFullscreen();
@@ -980,7 +991,6 @@ public class DoubleTap3D : MonoBehaviour
     {
         yield return new WaitForSeconds(touchBlockDuration);
         isCooldown = false;
-        Debug.Log($"[WP-DBG] DoubleTap3D id={id}: 터치 차단 해제 ({touchBlockDuration}초 경과)");
     }
 
     IEnumerator EnableCloseAfterDelay()
@@ -1336,11 +1346,9 @@ public class DoubleTap3D : MonoBehaviour
         // 이미 FadeOut 진행 중이면 중복 실행 방지
         if (isFadingOut)
         {
-            Debug.Log($"[WP-DBG] CloseFullscreen id={id}: 이미 FadeOut 중 — 중복 호출 무시");
             return;
         }
 
-        Debug.Log($"[WP-DBG] CloseFullscreen id={id}: FadeOut 시작");
 
         // 풀스크린 닫을 때 캐시 메모리 해제
 #if UNITY_IOS
@@ -1374,7 +1382,6 @@ public class DoubleTap3D : MonoBehaviour
         }
 
         fullscreenCanvasGroup.alpha = 1f;
-        Debug.Log($"[WP-DBG] FadeInCanvas 완료 id={id}: isFullscreen={isFullscreen}, gameObject.active={fullscreenCanvasGroup.gameObject.activeSelf}");
     }
 
     IEnumerator FadeOutCanvas(float duration)
@@ -1401,7 +1408,7 @@ public class DoubleTap3D : MonoBehaviour
         }
         isFullscreen = false;
         isFadingOut = false;
-        Debug.Log($"[WP-DBG] FadeOutCanvas 완료 id={id}: isFullscreen=false, gameObject.active=false");
+
     }
 
     public int GetId()
@@ -1498,7 +1505,6 @@ public class DoubleTap3D : MonoBehaviour
 
     private void OnCommentPreviewClicked()
     {
-        Debug.Log($"[WP-DBG] OnCommentPreviewClicked: isFullscreen={isFullscreen} id={this.id} CommentMgr={(CommentManager.Instance != null ? "OK" : "null")}");
 
         if (!isFullscreen)
         {
