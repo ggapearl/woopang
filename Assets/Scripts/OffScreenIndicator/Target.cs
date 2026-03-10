@@ -46,6 +46,9 @@ public class Target : MonoBehaviour
     [Tooltip("Name of the place, set by DataManager")]
     [SerializeField] private string placeName = "";
 
+    [HideInInspector] public float gpsLatitude;
+    [HideInInspector] public float gpsLongitude;
+
     [HideInInspector] public Indicator indicator;
 
     // Sparkle 효과를 한 번만 재생하기 위한 플래그
@@ -123,5 +126,21 @@ public class Target : MonoBehaviour
     {
         float distanceFromCamera = Vector3.Distance(cameraPosition, transform.position);
         return distanceFromCamera;
+    }
+
+    /// <summary>
+    /// GPS 좌표 기반 거리 계산 (Haversine) — fallback 모드에서 비활성 타겟 거리 표시용
+    /// </summary>
+    public float GetGPSDistance(float userLat, float userLon)
+    {
+        if (gpsLatitude == 0f && gpsLongitude == 0f) return -1f;
+        const float R = 6371000f;
+        float dLat = Mathf.Deg2Rad * (gpsLatitude - userLat);
+        float dLon = Mathf.Deg2Rad * (gpsLongitude - userLon);
+        float a = Mathf.Sin(dLat / 2f) * Mathf.Sin(dLat / 2f) +
+                  Mathf.Cos(Mathf.Deg2Rad * userLat) * Mathf.Cos(Mathf.Deg2Rad * gpsLatitude) *
+                  Mathf.Sin(dLon / 2f) * Mathf.Sin(dLon / 2f);
+        float c = 2f * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1f - a));
+        return R * c;
     }
 }

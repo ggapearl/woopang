@@ -317,6 +317,12 @@ public class DataManager : MonoBehaviour
     /// </summary>
     private IEnumerator FetchDataOnce()
     {
+        if (isFetching)
+        {
+            Debug.Log("[WP-DBG] FetchDataOnce: already fetching, skip");
+            yield break;
+        }
+        isFetching = true;
         Debug.Log("[WP-DBG] FetchDataOnce 시작");
 #if UNITY_EDITOR
         float lat = VirtualLocation.Instance.Latitude;
@@ -329,8 +335,11 @@ public class DataManager : MonoBehaviour
         yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
         Debug.Log($"[WP-DBG] Phase1 데이터 수집 완료: {preFetchedData.Count}건");
 
-        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작
-        OnPreFetchCompleted?.Invoke();
+        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작 (새 데이터가 있을 때만)
+        if (preFetchedData.Count > 0)
+        {
+            OnPreFetchCompleted?.Invoke();
+        }
 
         // fallback 활성화 후 오브젝트 순차 생성
         yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
@@ -377,12 +386,21 @@ public class DataManager : MonoBehaviour
         yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
         Debug.Log($"[WP-DBG] Phase1 데이터 수집 완료: {preFetchedData.Count}건");
 
-        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작
-        OnPreFetchCompleted?.Invoke();
+        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작 (새 데이터가 있을 때만)
+        if (preFetchedData.Count > 0)
+        {
+            OnPreFetchCompleted?.Invoke();
+        }
 
         // fallback 활성화 후 오브젝트 순차 생성
         yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
         Debug.Log($"[WP-DBG] Phase1 오브젝트 배치 완료: objects={spawnedObjects.Count}");
+
+        // Phase1 완료 시점에서 초기 로드 완료로 표시
+        // - isInitialStartComplete: FirstInstallRetry 재시도 방지
+        // - isDataLoaded: CheckPositionAndFetchData 위치 모니터링 시작
+        isInitialStartComplete = true;
+        isDataLoaded = true;
 
         // ============================================================
         // Phase 2: AR 세션 + Geospatial 대기 → 고도값 기반 정밀 배치
@@ -408,6 +426,7 @@ public class DataManager : MonoBehaviour
 
         isDataLoaded = true;
         isInitialStartComplete = true;
+        isFetching = false;
         Debug.Log("[WP-DBG] FetchDataOnce 완료");
     }
 
@@ -473,7 +492,7 @@ public class DataManager : MonoBehaviour
         }
 
         isDataLoaded = true;
-        isFetching = false;
+        // isFetching은 FetchDataOnce/FetchDataProgressively 호출자에서 관리
     }
 
     private IEnumerator CheckPositionAndFetchData()
@@ -960,6 +979,8 @@ public class DataManager : MonoBehaviour
         if (ColorUtility.TryParseHtmlString($"#{colorHex}", out placeColor)) target.TargetColor = placeColor;
         else target.TargetColor = Color.white;
         target.PlaceName = place.name;
+        target.gpsLatitude = place.latitude;
+        target.gpsLongitude = place.longitude;
     }
 
     private IEnumerator LoadGLBAsync(GLBModelLoader loader, string url, float scale, int placeId, GameObject glbObj, PlaceData place)

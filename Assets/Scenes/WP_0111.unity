@@ -2774,6 +2774,8 @@ MonoBehaviour:
   minDistance: 10
   maxDistance: 100
   placeName: 
+  gpsLatitude: 0
+  gpsLongitude: 0
   indicator: {fileID: 0}
   hasPlayedSparkle: 0
 --- !u!65 &131624116
@@ -4943,6 +4945,8 @@ MonoBehaviour:
   minDistance: 10
   maxDistance: 100
   placeName: 
+  gpsLatitude: 0
+  gpsLongitude: 0
   indicator: {fileID: 0}
   hasPlayedSparkle: 0
 --- !u!65 &312391475
@@ -7453,6 +7457,11 @@ MonoBehaviour:
   additionalBoundOffsetBottom: 100
   additionalBoundOffsetLeft: 0
   additionalBoundOffsetRight: 0
+  fallbackMinDuration: 2
+  fallbackOpeningDuration: 1
+  fallbackTransitionDuration: 0.6
+  fallbackFadeOutDuration: 0.4
+  arrowMinSpacing: 80
 --- !u!114 &547149855
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8410,6 +8419,8 @@ MonoBehaviour:
   minDistance: 10
   maxDistance: 100
   placeName: 
+  gpsLatitude: 0
+  gpsLongitude: 0
   indicator: {fileID: 0}
   hasPlayedSparkle: 0
 --- !u!65 &643494991
@@ -10725,7 +10736,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 61083601db35ff94cb75a680b4ce710a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LocationPermissionManager
   locationPermissionPanel: {fileID: 184328056}
   promptText: {fileID: 1016771508}
@@ -15940,6 +15951,9 @@ MonoBehaviour:
   fallbackMarginLeft: 0.1
   fallbackMarginRight: 0.1
   fallbackMaxIndicatorCount: 10
+  initialFallbackDuration: 1.5
+  backgroundFallbackDuration: 1
+  fallbackActivationDelay: 0.2
 --- !u!1 &1309482254
 GameObject:
   m_ObjectHideFlags: 0
@@ -28994,6 +29008,8 @@ MonoBehaviour:
   minDistance: 10
   maxDistance: 100
   placeName: 
+  gpsLatitude: 0
+  gpsLongitude: 0
   indicator: {fileID: 0}
   hasPlayedSparkle: 0
 --- !u!114 &3047864898962331035
@@ -29340,7 +29356,7 @@ PrefabInstance:
     - target: {fileID: 1279877576191648393, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 220
+      value: 223
       objectReference: {fileID: 0}
     - target: {fileID: 1794623478198708475, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
@@ -36718,7 +36734,7 @@ PrefabInstance:
     - target: {fileID: 92528271963126980, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 358
+      value: 361
       objectReference: {fileID: 0}
     - target: {fileID: 499417013053605411, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}

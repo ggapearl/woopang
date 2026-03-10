@@ -816,13 +816,26 @@ public class OffScreenIndicator : MonoBehaviour
             if (indicator)
             {
                 indicator.SetImageColor(target.TargetColor);
-                float distanceFromCamera = (target.NeedDistanceText && mainCamera != null)
-                    ? target.GetDistanceFromCamera(mainCamera.transform.position)
-                    : float.MinValue;
 
+                // fallback 모드: GPS 좌표 기반 거리 계산 (활성/비활성 타겟 모두 동일)
                 if (target.NeedDistanceText)
                 {
-                    indicator.SetDistanceText(distanceFromCamera, target.DistanceTextColor, target.PlaceName);
+                    float gpsDistance = -1f;
+                    if (Input.location.status == LocationServiceStatus.Running)
+                    {
+                        float userLat = Input.location.lastData.latitude;
+                        float userLon = Input.location.lastData.longitude;
+                        gpsDistance = target.GetGPSDistance(userLat, userLon);
+                    }
+
+                    if (gpsDistance >= 0f)
+                    {
+                        indicator.SetDistanceText(gpsDistance, target.DistanceTextColor, target.PlaceName);
+                    }
+                    else
+                    {
+                        indicator.SetDistanceText(float.MinValue, target.DistanceTextColor, target.PlaceName);
+                    }
                 }
                 else
                 {

@@ -610,22 +610,22 @@ public class LoadingManager : MonoBehaviour
             return AREnvironmentIssue.DataLoading;
         }
 
-        // 2. DataManager 작업 중이면 환경 감지 1초 지연
-        if (enableDataManagerMonitoring && dataManager != null && IsDataManagerRecentlyActive())
-        {
-            return AREnvironmentIssue.None;
-        }
-
-        // 3. 어두운 환경 체크 (트래킹 상태와 무관하게 우선 체크)
+        // 2. 어두운 환경 체크 (트래킹 상태와 무관하게 우선 체크)
         if (IsEnvironmentTooDark())
         {
             return AREnvironmentIssue.TooDark;
         }
 
-        // 4. 트래킹이 정상이고 환경도 밝으면 문제 없음
+        // 3. 트래킹이 정상이고 환경도 밝으면 문제 없음
         if (trackingState == TrackingState.Tracking)
         {
             trackingLostStartTime = 0f;
+            return AREnvironmentIssue.None;
+        }
+
+        // 4. DataManager 작업 중이면 환경 감지 지연 (트래킹 정상일 때만 — Limited/None이면 즉시 분석)
+        if (enableDataManagerMonitoring && dataManager != null && IsDataManagerRecentlyActive())
+        {
             return AREnvironmentIssue.None;
         }
 
@@ -962,8 +962,7 @@ public class LoadingManager : MonoBehaviour
         StopSpinner();
         // 기존 로딩 UI 숨기기
         if (loadingPanel) loadingPanel.SetActive(false);
-        StopAllCoroutines();
-        spinnerCoroutine = null; // StopAllCoroutines 후 정리
+        // StopAllCoroutines 사용 금지 — HandleBackgroundRecovery, WaitForTrackingRecovery 등이 중단됨
 
         // OffScreenIndicator 폴백 모드 — 오브젝트가 있으면 해제, 없으면 유지
         OffScreenIndicator osi = GetCachedOSI();
@@ -1181,8 +1180,9 @@ public class LoadingManager : MonoBehaviour
     void HideLoadingUI()
     {
         if (loadingPanel) loadingPanel.SetActive(false);
-        StopAllCoroutines();
-        spinnerCoroutine = null; // StopAllCoroutines 후 정리
+        StopSpinner();
+        StopDotAnimation();
+        // StopAllCoroutines 사용 금지 — HandleBackgroundRecovery, CheckAREnvironment 등이 중단됨
     }
     
     void UpdateMessage(string message)
