@@ -108,7 +108,7 @@ public class LoadingManager : MonoBehaviour
 
     [Header("=== Fallback 타이밍 설정 ===")]
     [Tooltip("앱 시작 시 fallback 최소 유지 시간 (초)")]
-    public float initialFallbackDuration = 1.5f;
+    public float initialFallbackDuration = 2f;
 
     [Tooltip("백그라운드 복귀 시 fallback 최소 유지 시간 (초)")]
     public float backgroundFallbackDuration = 1.0f;
@@ -587,6 +587,22 @@ public class LoadingManager : MonoBehaviour
             Debug.Log($"[WP-DBG] CheckAREnvironment: tracking={currentTrackingState}, reason={ntReason}, issue={issue}, hasGuidance={hasShownEnvironmentGuidance}");
         }
 
+        // 트래킹 Lost 시 즉시 오브젝트 숨기기 + fallback 활성화 (환경 안내 판정 전이라도)
+        // — anchor 손실로 오브젝트가 카메라 앞에 모이는 현상 방지
+        if (currentTrackingState != TrackingState.Tracking && lastTrackingState == TrackingState.Tracking)
+        {
+            if (!hasShownEnvironmentGuidance && dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+            {
+                OffScreenIndicator osi = GetCachedOSI();
+                if (osi != null && !osi.IsFallbackMode)
+                {
+                    osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+                    dataManager.SetAllObjectsVisible(false);
+                    Debug.Log("[WP-DBG] CheckAREnvironment: tracking lost → immediate fallback + hide objects");
+                }
+            }
+        }
+
         if (issue != AREnvironmentIssue.None)
         {
             HandleEnvironmentIssue(issue);
@@ -789,7 +805,15 @@ public class LoadingManager : MonoBehaviour
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null)
             {
+                // fallback 먼저 활성화 (타겟이 활성 상태에서 fallbackDataMap 확보)
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+            }
+
+            // AR 오브젝트 숨기기 (anchor 손실로 카메라 앞에 모이는 현상 방지)
+            if (dataManager != null)
+            {
+                dataManager.SetAllObjectsVisible(false);
+                Debug.Log("[WP-DBG] HandleEnvironmentIssue: AR objects hidden (prevent clumping)");
             }
         }
 
@@ -963,6 +987,13 @@ public class LoadingManager : MonoBehaviour
         // 기존 로딩 UI 숨기기
         if (loadingPanel) loadingPanel.SetActive(false);
         // StopAllCoroutines 사용 금지 — HandleBackgroundRecovery, WaitForTrackingRecovery 등이 중단됨
+
+        // 환경 복구 → AR 오브젝트 다시 표시
+        if (dataManager != null)
+        {
+            dataManager.SetAllObjectsVisible(true);
+            Debug.Log("[WP-DBG] HideARGuidance: AR objects restored");
+        }
 
         // OffScreenIndicator 폴백 모드 — 오브젝트가 있으면 해제, 없으면 유지
         OffScreenIndicator osi = GetCachedOSI();

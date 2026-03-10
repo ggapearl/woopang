@@ -48,6 +48,7 @@ public class OffScreenIndicator : MonoBehaviour
     // Fallback Mode - AR 세션 미작동 시 화살표 분산 배치 + 펄스
     // ============================================================
     private bool isFallbackMode = false;
+    public bool IsFallbackMode => isFallbackMode;
     private Dictionary<Target, FallbackData> fallbackDataMap = new Dictionary<Target, FallbackData>();
     private FallbackConfig currentFallbackConfig;
     private float fallbackStartTime = 0f; // fallback 모드 시작 시간 (realtimeSinceStartup)
@@ -662,10 +663,20 @@ public class OffScreenIndicator : MonoBehaviour
 
         FallbackConfig cfg = currentFallbackConfig ?? new FallbackConfig();
 
-        // 카메라에서 가까운 순으로 정렬하여 maxIndicatorCount개만 선택
+        // GPS 기반으로 가까운 순 정렬 → maxIndicatorCount개만 선택
+        // (transform.position은 트래킹 Lost 시 부정확하므로 GPS 좌표 사용)
         List<Target> sortedTargets = new List<Target>(targets);
-        if (mainCamera != null)
+        bool hasGPS = Input.location.status == LocationServiceStatus.Running;
+        if (hasGPS)
         {
+            float userLat = Input.location.lastData.latitude;
+            float userLon = Input.location.lastData.longitude;
+            sortedTargets.Sort((a, b) =>
+                a.GetGPSDistance(userLat, userLon).CompareTo(b.GetGPSDistance(userLat, userLon)));
+        }
+        else if (mainCamera != null)
+        {
+            // GPS 없으면 카메라 거리 fallback
             Vector3 camPos = mainCamera.transform.position;
             sortedTargets.Sort((a, b) =>
                 a.GetDistanceFromCamera(camPos).CompareTo(b.GetDistanceFromCamera(camPos)));
