@@ -144,8 +144,6 @@ public class OffScreenIndicator : MonoBehaviour
         // 자신의 RectTransform 캐싱
         panelRectTransform = GetComponent<RectTransform>();
 
-        Debug.Log($"[WP-DBG] Awake: mainCamera={mainCamera?.name}, parentCanvas={(parentCanvas != null ? parentCanvas.renderMode.ToString() : "NULL")}, canvasRectTransform={(canvasRectTransform != null ? $"({canvasRectTransform.rect.width:F0}x{canvasRectTransform.rect.height:F0})" : "NULL")}, screen=({Screen.width}x{Screen.height})");
-
         TargetStateChanged += HandleTargetStateChanged;
     }
 
@@ -487,18 +485,16 @@ public class OffScreenIndicator : MonoBehaviour
     public void SetFallbackMinDuration(float duration)
     {
         fallbackMinDuration = duration;
-        Debug.Log($"[WP-DBG] SetFallbackMinDuration: {duration}s");
     }
 
     /// <summary>
     /// fallback 모드 활성화/비활성화
     /// autoDisable=true: 타이머 후 자동 해제 (앱 시작, 백그라운드 복귀 용)
     /// autoDisable=false: 수동 해제 전까지 유지 (환경 문제 감지 용)
+    /// forceDisable=true: fallbackMinDuration 무시하고 즉시 해제 (트래킹 복구 시)
     /// </summary>
-    public void EnableFallbackMode(bool enable, FallbackConfig config = null, bool autoDisable = true)
+    public void EnableFallbackMode(bool enable, FallbackConfig config = null, bool autoDisable = true, bool forceDisable = false)
     {
-        Debug.Log($"[WP-DBG] EnableFallbackMode({enable}) called, isFallbackMode={isFallbackMode}, isTransitioning={isTransitioning}, targets={targets.Count}, autoDisable={autoDisable}");
-
         if (enable)
         {
             // 기존 타이머 모두 취소
@@ -513,24 +509,18 @@ public class OffScreenIndicator : MonoBehaviour
                 autoDisableCoroutine = null;
             }
 
-            if (isFallbackMode) return; // 이미 활성화 상태
+            if (isFallbackMode) return;
             isFallbackMode = true;
             isTransitioning = false;
-            disabledFallbackTargets.Clear(); // 새 fallback 세션 시작
+            disabledFallbackTargets.Clear();
             currentFallbackConfig = config ?? new FallbackConfig();
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
-            drawFallbackLogCount = 0; // 로그 카운터 리셋
             AssignFallbackPositions();
 
             if (autoDisable)
             {
-                Debug.Log($"[WP-DBG] Fallback ON: fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}, autoDisable={fallbackMinDuration}s");
                 autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
-            }
-            else
-            {
-                Debug.Log($"[WP-DBG] Fallback ON (manual): fallbackDataMap={fallbackDataMap.Count}, maxIndicator={currentFallbackConfig.maxIndicatorCount}, no autoDisable");
             }
         }
         else
@@ -542,22 +532,32 @@ public class OffScreenIndicator : MonoBehaviour
                 autoDisableCoroutine = null;
             }
 
-            if (!isFallbackMode && !isTransitioning) return; // 이미 비활성화 상태
+            if (!isFallbackMode && !isTransitioning) return;
 
-            // 최소 유지 시간 체크
-            float elapsed = Time.realtimeSinceStartup - fallbackStartTime;
-            if (elapsed < fallbackMinDuration)
+            // 최소 유지 시간 체크 (forceDisable이면 무시)
+            if (!forceDisable)
             {
-                // 아직 최소 시간이 안 됐으면 지연 후 해제
-                if (delayedDisableCoroutine == null)
+                float elapsed = Time.realtimeSinceStartup - fallbackStartTime;
+                if (elapsed < fallbackMinDuration)
                 {
-                    float delay = fallbackMinDuration - elapsed;
-                    delayedDisableCoroutine = StartCoroutine(DelayedDisableFallback(delay));
+                    if (delayedDisableCoroutine == null)
+                    {
+                        float delay = fallbackMinDuration - elapsed;
+                        delayedDisableCoroutine = StartCoroutine(DelayedDisableFallback(delay));
+                    }
+                    return;
                 }
-                return;
+            }
+            else
+            {
+                // forceDisable 시 지연 해제 코루틴도 취소
+                if (delayedDisableCoroutine != null)
+                {
+                    StopCoroutine(delayedDisableCoroutine);
+                    delayedDisableCoroutine = null;
+                }
             }
 
-            // 전환 애니메이션 시작
             StartFallbackTransition();
         }
     }
@@ -566,7 +566,6 @@ public class OffScreenIndicator : MonoBehaviour
     {
         yield return new WaitForSeconds(duration);
         autoDisableCoroutine = null;
-        Debug.Log($"[WP-DBG] AutoDisableFallback: {duration}s elapsed, transitioning to normal mode");
 
         if (isFallbackMode)
         {
@@ -643,7 +642,6 @@ public class OffScreenIndicator : MonoBehaviour
         if (targets.Count == 0)
         {
             fallbackDataMap.Clear();
-            Debug.Log("[WP-DBG] AssignFallbackPositions: targets=0, skip");
             return;
         }
 
@@ -655,7 +653,6 @@ public class OffScreenIndicator : MonoBehaviour
         // canvasSize가 0이면 (레이아웃 미완료) 기존 위치 유지 — 다음 프레임에 재시도
         if (cw <= 0f || ch <= 0f)
         {
-            Debug.Log($"[WP-DBG] AssignFallbackPositions: canvasSize=({cw:F0},{ch:F0}), skip (layout not ready)");
             return;
         }
 
@@ -682,8 +679,6 @@ public class OffScreenIndicator : MonoBehaviour
                 a.GetDistanceFromCamera(camPos).CompareTo(b.GetDistanceFromCamera(camPos)));
         }
         int displayCount = Mathf.Min(sortedTargets.Count, cfg.maxIndicatorCount);
-
-        Debug.Log($"[WP-DBG] AssignFallbackPositions: targets={targets.Count}, displayCount={displayCount}, maxIndicator={cfg.maxIndicatorCount}, canvasSize=({cw:F0},{ch:F0}), mainCamera={(mainCamera != null ? "OK" : "NULL")}, canvasRect={(canvasRectTransform != null ? "OK" : "NULL")}");
 
         // Canvas pivot(0.5, 0.5) 기준: LoadingManager에서 설정한 마진 적용
         float left   = -cw / 2f + cw * cfg.marginLeft;
@@ -715,7 +710,6 @@ public class OffScreenIndicator : MonoBehaviour
             };
 
             fallbackDataMap[sortedTargets[i]] = data;
-            Debug.Log($"[WP-DBG] FallbackPos[{i}]: canvasLocal=({canvasLocalPos.x:F0},{canvasLocalPos.y:F0}), worldPos=({data.assignedPosition.x:F2},{data.assignedPosition.y:F2},{data.assignedPosition.z:F2}), angle={data.assignedAngle:F1}, scale={data.baseScale:F2}");
         }
     }
 
@@ -759,8 +753,6 @@ public class OffScreenIndicator : MonoBehaviour
     /// <summary>
     /// 폴백 모드에서의 인디케이터 렌더링
     /// </summary>
-    private int drawFallbackLogCount = 0;
-
     private void DrawFallbackIndicators()
     {
         // 활성 타겟 + 캐시된 비활성 타겟을 합쳐서 렌더링 대상 구성
@@ -784,7 +776,6 @@ public class OffScreenIndicator : MonoBehaviour
         bool needsReassign = mappedCount < expectedDisplay && targets.Count > 0;
         if (needsReassign)
         {
-            Debug.Log($"[WP-DBG] DrawFallback: needsReassign=true, active={targets.Count}, cached={disabledFallbackTargets.Count}, fallbackMap={fallbackDataMap.Count}");
             AssignFallbackPositions();
         }
 
@@ -805,11 +796,6 @@ public class OffScreenIndicator : MonoBehaviour
         RenderFallbackTarget(targets, ref renderedCount, ref skippedNoArrow, ref skippedNoFallback, time, openingT, openingEased, centerWorld);
         RenderFallbackTarget(disabledFallbackTargets, ref renderedCount, ref skippedNoArrow, ref skippedNoFallback, time, openingT, openingEased, centerWorld);
 
-        if (drawFallbackLogCount < 5)
-        {
-            drawFallbackLogCount++;
-            Debug.Log($"[WP-DBG] DrawFallback: rendered={renderedCount}, skippedNoArrow={skippedNoArrow}, skippedNoFallback={skippedNoFallback}, active={targets.Count}, cached={disabledFallbackTargets.Count}, fallbackMap={fallbackDataMap.Count}, openingT={openingT:F2}");
-        }
     }
 
     private void RenderFallbackTarget(IEnumerable<Target> targetList, ref int renderedCount, ref int skippedNoArrow, ref int skippedNoFallback, float time, float openingT, float openingEased, Vector3 centerWorld)
@@ -879,26 +865,13 @@ public class OffScreenIndicator : MonoBehaviour
         }
     }
 
-    private int targetChangeLogCount = 0;
-
     private void HandleTargetStateChanged(Target target, bool active)
     {
         if (active)
         {
             if (!targets.Contains(target))
                 targets.Add(target);
-            disabledFallbackTargets.Remove(target); // 다시 활성화됨 → 캐시에서 제거
-
-            if (targetChangeLogCount < 20)
-            {
-                targetChangeLogCount++;
-                Debug.Log($"[WP-DBG] TargetAdded: total={targets.Count}, needArrow={target.NeedArrowIndicator}, needBox={target.NeedBoxIndicator}, name={target.gameObject.name}");
-            }
-            else if (targetChangeLogCount == 20)
-            {
-                targetChangeLogCount++;
-                Debug.Log($"[WP-DBG] TargetAdded: total={targets.Count} (suppressing further logs...)");
-            }
+            disabledFallbackTargets.Remove(target);
         }
         else
         {
@@ -907,8 +880,6 @@ public class OffScreenIndicator : MonoBehaviour
             {
                 targets.Remove(target);
                 disabledFallbackTargets.Add(target);
-                // indicator와 fallbackDataMap은 보존 → DrawFallbackIndicators에서 계속 렌더링
-                Debug.Log($"[WP-DBG] TargetDisabled(fallback preserved): disabledCache={disabledFallbackTargets.Count}, fallbackMap={fallbackDataMap.Count}");
                 return;
             }
 

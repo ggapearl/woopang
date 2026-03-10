@@ -319,21 +319,16 @@ public class DataManager : MonoBehaviour
     {
         if (isFetching)
         {
-            Debug.Log("[WP-DBG] FetchDataOnce: already fetching, skip");
             yield break;
         }
         isFetching = true;
-        Debug.Log("[WP-DBG] FetchDataOnce 시작");
 #if UNITY_EDITOR
         float lat = VirtualLocation.Instance.Latitude;
         float lon = VirtualLocation.Instance.Longitude;
         isGeospatialReady = true;
-        Debug.Log($"[WP-DBG] 에디터 위치: lat={lat}, lon={lon}");
-
         // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
         List<PlaceData> preFetchedData = new List<PlaceData>();
         yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
-        Debug.Log($"[WP-DBG] Phase1 데이터 수집 완료: {preFetchedData.Count}건");
 
         // fallback 활성화 알림 → LoadingManager가 fallback UI 시작 (새 데이터가 있을 때만)
         if (preFetchedData.Count > 0)
@@ -382,9 +377,7 @@ public class DataManager : MonoBehaviour
 
         // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
         List<PlaceData> preFetchedData = new List<PlaceData>();
-        Debug.Log($"[WP-DBG] Phase1 데이터 수집 시작: lat={lat}, lon={lon}");
         yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
-        Debug.Log($"[WP-DBG] Phase1 데이터 수집 완료: {preFetchedData.Count}건");
 
         // fallback 활성화 알림 → LoadingManager가 fallback UI 시작 (새 데이터가 있을 때만)
         if (preFetchedData.Count > 0)
@@ -394,7 +387,6 @@ public class DataManager : MonoBehaviour
 
         // fallback 활성화 후 오브젝트 순차 생성
         yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
-        Debug.Log($"[WP-DBG] Phase1 오브젝트 배치 완료: objects={spawnedObjects.Count}");
 
         // Phase1 완료 시점에서 초기 로드 완료로 표시
         // - isInitialStartComplete: FirstInstallRetry 재시도 방지
@@ -421,13 +413,11 @@ public class DataManager : MonoBehaviour
             lon = Input.location.lastData.longitude;
         }
         lastPosition = new Vector2(lat, lon);
-        Debug.Log($"[WP-DBG] Phase2 Geospatial 준비 완료: lat={lat}, lon={lon}");
 #endif
 
         isDataLoaded = true;
         isInitialStartComplete = true;
         isFetching = false;
-        Debug.Log("[WP-DBG] FetchDataOnce 완료");
     }
 
     /// <summary>
@@ -543,13 +533,10 @@ public class DataManager : MonoBehaviour
         // 중복 실행 방지
         if (isFetching)
         {
-            Debug.Log("[WP-DBG] FetchDataProgressively: already fetching, skip");
             yield break;
         }
         isFetching = true;
         int myGeneration = fetchGeneration; // 이 코루틴의 세대 번호 기록
-
-        Debug.Log($"[WP-DBG] FetchDataProgressively: lat={lat:F5}, lon={lon:F5}, silent={silent}, existingObjects={spawnedObjects.Count}");
 
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
 
@@ -1104,7 +1091,6 @@ public class DataManager : MonoBehaviour
     /// </summary>
     public void SetAllObjectsVisible(bool visible)
     {
-        Debug.Log($"[WP-DBG] SetAllObjectsVisible({visible}): objects={spawnedObjects.Count}");
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value != null)
@@ -1225,11 +1211,9 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator WaitForARSessionAndFetchDataSilent()
     {
-        Debug.Log("[WP-DBG] WaitForARSessionAndFetchDataSilent: started");
         yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || Time.unscaledTime > 5f);
         if (ARSession.state != ARSessionState.SessionTracking)
         {
-            Debug.Log("[WP-DBG] WaitForARSessionAndFetchDataSilent: AR not tracking, skip");
             yield break;
         }
 
@@ -1247,11 +1231,8 @@ public class DataManager : MonoBehaviour
         // lastPosition이 0이면 아직 한번도 GPS를 받지 못한 상태 → skip
         if (lat == 0f && lon == 0f)
         {
-            Debug.Log("[WP-DBG] WaitForARSessionAndFetchDataSilent: no GPS data, skip");
             yield break;
         }
-
-        Debug.Log($"[WP-DBG] WaitForARSessionAndFetchDataSilent: lat={lat}, lon={lon}, existingObjects={spawnedObjects.Count}");
 
         // 기존 visible 오브젝트 수를 기반으로 UI 유지 (카운트 중복 방지)
         if (objectCountUI != null)

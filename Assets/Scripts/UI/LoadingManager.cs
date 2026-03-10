@@ -138,8 +138,6 @@ public class LoadingManager : MonoBehaviour
 
     void Start()
     {
-        Debug.Log($"[WP-DBG] Start: loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, enableAREnvironmentDetection={enableAREnvironmentDetection}, enableDataManagerMonitoring={enableDataManagerMonitoring}, enableBackgroundRecoveryDetection={enableBackgroundRecoveryDetection}");
-
         if (loadingPanel) loadingPanel.SetActive(false);
 
         InitializeLanguage();
@@ -163,15 +161,12 @@ public class LoadingManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[WP-DBG] Start: enableAREnvironmentDetection=false → no fallback/env monitoring!");
         }
 #endif
     }
     
     void OnApplicationPause(bool pauseStatus)
     {
-        Debug.Log($"[WP-DBG] OnApplicationPause({pauseStatus}): wasInBackground={wasInBackground}, enableBackgroundRecovery={enableBackgroundRecoveryDetection}");
-
         if (pauseStatus)
         {
             wasInBackground = true;
@@ -185,8 +180,6 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator HandleBackgroundRecovery()
     {
-        Debug.Log($"[WP-DBG] HandleBackgroundRecovery: started, loadingPanel={(loadingPanel != null ? "OK" : "NULL")}, arSession={(arSession != null ? "OK" : "NULL")}");
-
         // 1. 먼저 fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
         // autoDisable=false: 트래킹 복구 확인 후 수동으로 해제 (1초 타이머로 끄면 AR 미복구 상태에서 화살표 사라짐)
         OffScreenIndicator osi = GetCachedOSI();
@@ -204,7 +197,6 @@ public class LoadingManager : MonoBehaviour
 
         // 3. 다국어 복구 메시지 + 점 애니메이션 표시
         string baseMessage = GetSessionRecoveringMessage();
-        Debug.Log($"[WP-DBG] HandleBackgroundRecovery: message=\"{baseMessage}\"");
         if (loadingPanel) loadingPanel.SetActive(true);
         StartSpinner();
         StartDotAnimation(baseMessage);
@@ -243,7 +235,6 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi)
     {
-        Debug.Log("[WP-DBG] WaitForTrackingRecovery: started");
         float maxWait = 15f;
         float waited = 0f;
 
@@ -251,9 +242,6 @@ public class LoadingManager : MonoBehaviour
         {
             if (arSession?.subsystem?.trackingState == TrackingState.Tracking)
             {
-                int objCount = dataManager != null ? dataManager.GetSpawnedObjectsCount() : -1;
-                Debug.Log($"[WP-DBG] WaitForTrackingRecovery: tracking OK, objects={objCount}");
-
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
@@ -263,14 +251,12 @@ public class LoadingManager : MonoBehaviour
                 if (dataManager != null)
                 {
                     dataManager.SetAllObjectsVisible(true);
-                    Debug.Log("[WP-DBG] WaitForTrackingRecovery: AR objects restored");
                 }
 
                 // 트래킹 복구 → fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
                     osi.EnableFallbackMode(false);
-                    Debug.Log("[WP-DBG] WaitForTrackingRecovery: fallback disabled");
                 }
                 yield break;
             }
@@ -278,8 +264,6 @@ public class LoadingManager : MonoBehaviour
             waited += 0.5f;
             yield return new WaitForSeconds(0.5f);
         }
-
-        Debug.Log("[WP-DBG] WaitForTrackingRecovery: timeout (15s)");
 
         // 타임아웃 시에도 오브젝트 다시 표시 (무한 숨김 방지)
         if (dataManager != null)
@@ -294,7 +278,6 @@ public class LoadingManager : MonoBehaviour
         if (osi != null && !hasShownEnvironmentGuidance)
         {
             osi.EnableFallbackMode(false);
-            Debug.Log("[WP-DBG] WaitForTrackingRecovery: timeout, fallback disabled");
         }
     }
     
@@ -304,13 +287,66 @@ public class LoadingManager : MonoBehaviour
         {
             CheckARObjectChanges();
         }
-        
+
         if (isCheckingAREnvironment && enableAREnvironmentDetection)
         {
+            // 매 프레임: 트래킹 상태 변화 즉시 감지 (오브젝트 뭉침/복구)
+            CheckTrackingStateChange();
+
+            // 2초 간격: 환경 분석 (어둡다/특징점 부족 등)
             if (Time.realtimeSinceStartup - lastEnvironmentCheckTime >= environmentCheckInterval)
             {
                 CheckAREnvironment();
                 lastEnvironmentCheckTime = Time.realtimeSinceStartup;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 매 프레임 트래킹 상태 변화 감지 — Tracking→Limited 즉시 fallback, Limited→Tracking 즉시 복구
+    /// CheckAREnvironment(2초 간격)와 별개로 동작하여 오브젝트 뭉침 방지
+    /// </summary>
+    private TrackingState lastFrameTrackingState = TrackingState.None;
+
+    void CheckTrackingStateChange()
+    {
+        if (arSession == null || arSession.subsystem == null) return;
+
+        TrackingState current = arSession.subsystem.trackingState;
+        if (current == lastFrameTrackingState) return;
+
+        TrackingState previous = lastFrameTrackingState;
+        lastFrameTrackingState = current;
+
+        // Tracking → Limited/None: 즉시 fallback + 오브젝트 숨기기
+        if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
+        {
+            float timeSinceFallbackOff = Time.realtimeSinceStartup - lastFallbackDisableTime;
+            if (timeSinceFallbackOff > 3f && !hasShownEnvironmentGuidance && !isFallbackWithoutGuidance
+                && dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+            {
+                OffScreenIndicator osi = GetCachedOSI();
+                if (osi != null && !osi.IsFallbackMode)
+                {
+                    osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+                    dataManager.SetAllObjectsVisible(false);
+                    isFallbackWithoutGuidance = true;
+                }
+            }
+        }
+        // Limited/None → Tracking: 즉시 fallback 해제 + 오브젝트 복구
+        else if (current == TrackingState.Tracking && isFallbackWithoutGuidance)
+        {
+            isFallbackWithoutGuidance = false;
+            lastFallbackDisableTime = Time.realtimeSinceStartup;
+            if (dataManager != null)
+            {
+                dataManager.SetAllObjectsVisible(true);
+            }
+            OffScreenIndicator osi = GetCachedOSI();
+            if (osi != null)
+            {
+                osi.EnableFallbackMode(false, forceDisable: true);
             }
         }
     }
@@ -422,7 +458,6 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     private void OnDataPreFetchCompleted()
     {
-        Debug.Log("[WP-DBG] OnDataPreFetchCompleted: data loaded, scheduling fallback activation");
         StartCoroutine(ActivateFallbackAfterDelay(fallbackActivationDelay, initialFallbackDuration));
     }
 
@@ -436,7 +471,6 @@ public class LoadingManager : MonoBehaviour
         OffScreenIndicator osi = GetCachedOSI();
         if (osi == null)
         {
-            Debug.LogWarning("[WP-DBG] ActivateFallbackAfterDelay: OSI not found");
             yield break;
         }
 
@@ -453,8 +487,6 @@ public class LoadingManager : MonoBehaviour
                 if (objCount > 0) break;
             }
         }
-
-        Debug.Log($"[WP-DBG] ActivateFallbackAfterDelay: delay={delay}, minDuration={minDuration}, objects={objCount}");
 
         if (objCount > 0)
         {
@@ -474,8 +506,6 @@ public class LoadingManager : MonoBehaviour
 
     IEnumerator StartAREnvironmentMonitoring()
     {
-        Debug.Log($"[WP-DBG] StartAREnvironmentMonitoring: arSession={(arSession != null ? "OK" : "NULL")}, enableDataManagerMonitoring={enableDataManagerMonitoring}");
-
         // fallback은 OnDataPreFetchCompleted에서 데이터 로드 후 활성화됨
         // 여기서는 AR 환경 모니터링만 시작
 
@@ -509,8 +539,6 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     IEnumerator WaitForFirstObjectsAndDisableFallback(OffScreenIndicator osi)
     {
-        Debug.Log($"[WP-DBG] WaitForFirstObjects: started, osi={(osi != null ? "OK" : "NULL")}, dataManager={(dataManager != null ? "OK" : "NULL")}");
-
         float maxWait = 60f;
         float waited = 0f;
 
@@ -520,15 +548,12 @@ public class LoadingManager : MonoBehaviour
             if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
             {
                 bool isTracking = arSession?.subsystem?.trackingState == TrackingState.Tracking;
-                Debug.Log($"[WP-DBG] WaitForFirstObjects: {dataManager.GetSpawnedObjectsCount()} objects found (waited={waited:F0}s, tracking={isTracking})");
-
                 if (isTracking)
                 {
                     // 트래킹 정상 → fallback 해제 (정확한 AR 위치로 전환)
                     if (osi != null)
                     {
                         osi.EnableFallbackMode(false);
-                        Debug.Log("[WP-DBG] WaitForFirstObjects: tracking OK → fallback disabled");
                     }
                     yield break;
                 }
@@ -538,20 +563,13 @@ public class LoadingManager : MonoBehaviour
             if (hasShownEnvironmentGuidance)
             {
                 // 환경 문제 감지됨 → HandleEnvironmentIssue가 fallback 관리
-                Debug.Log("[WP-DBG] WaitForFirstObjects: env guidance active → exit (fallback managed by env check)");
                 yield break;
-            }
-
-            if (waited > 0 && waited % 10 == 0)
-            {
-                Debug.Log($"[WP-DBG] WaitForFirstObjects: waiting... {waited:F0}s, objects={(dataManager != null ? dataManager.GetSpawnedObjectsCount().ToString() : "null")}");
             }
 
             waited += 1f;
             yield return new WaitForSeconds(1f);
         }
 
-        Debug.Log("[WP-DBG] WaitForFirstObjects: 60s timeout, disabling fallback");
         if (osi != null)
         {
             osi.EnableFallbackMode(false);
@@ -572,64 +590,20 @@ public class LoadingManager : MonoBehaviour
     // hasShownEnvironmentGuidance 없이 fallback에 진입한 경우를 추적
     private bool isFallbackWithoutGuidance = false;
     private float lastFallbackDisableTime = 0f; // fallback 해제 시점 (재진입 쿨다운용)
-    private AREnvironmentIssue lastLoggedIssue = AREnvironmentIssue.None; // 로그 스팸 방지
 
     void CheckAREnvironment()
     {
         if (arSession == null || arSession.subsystem == null)
         {
-            Debug.Log($"[WP-DBG] CheckAREnvironment: session/subsystem null → SessionPreparing");
             HandleEnvironmentIssue(AREnvironmentIssue.SessionPreparing);
             return;
         }
 
         TrackingState currentTrackingState = arSession.subsystem.trackingState;
-        NotTrackingReason ntReason = arSession.subsystem.notTrackingReason;
         AREnvironmentIssue issue = DetermineEnvironmentIssue(currentTrackingState);
 
-        // 로그 스팸 방지: 상태 변화 또는 중요 이벤트만 출력
-        bool stateChanged = currentTrackingState != lastTrackingState || issue != lastLoggedIssue;
-        if (stateChanged || (!hasShownEnvironmentGuidance && (issue != AREnvironmentIssue.None || isFallbackWithoutGuidance)))
-        {
-            Debug.Log($"[WP-DBG] CheckAREnvironment: tracking={currentTrackingState}, reason={ntReason}, issue={issue}, hasGuidance={hasShownEnvironmentGuidance}, earlyFallback={isFallbackWithoutGuidance}");
-            lastLoggedIssue = issue;
-        }
-
-        // 트래킹 Lost 시 즉시 오브젝트 숨기기 + fallback 활성화 (환경 안내 판정 전이라도)
-        // — anchor 손실로 오브젝트가 카메라 앞에 모이는 현상 방지
-        // — 쿨다운 3초: 해제 직후 트래킹 흔들림으로 재진입 방지
-        float timeSinceFallbackOff = Time.realtimeSinceStartup - lastFallbackDisableTime;
-        if (currentTrackingState != TrackingState.Tracking && lastTrackingState == TrackingState.Tracking && timeSinceFallbackOff > 3f)
-        {
-            if (!hasShownEnvironmentGuidance && !isFallbackWithoutGuidance && dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
-            {
-                OffScreenIndicator osi = GetCachedOSI();
-                if (osi != null && !osi.IsFallbackMode)
-                {
-                    osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
-                    dataManager.SetAllObjectsVisible(false);
-                    isFallbackWithoutGuidance = true;
-                    Debug.Log("[WP-DBG] CheckAREnvironment: tracking lost → immediate fallback + hide objects");
-                }
-            }
-        }
-
-        // 트래킹 복구 시: 환경안내 없이 진입한 fallback 해제
-        if (currentTrackingState == TrackingState.Tracking && isFallbackWithoutGuidance)
-        {
-            isFallbackWithoutGuidance = false;
-            lastFallbackDisableTime = Time.realtimeSinceStartup;
-            if (dataManager != null)
-            {
-                dataManager.SetAllObjectsVisible(true);
-            }
-            OffScreenIndicator osi = GetCachedOSI();
-            if (osi != null)
-            {
-                osi.EnableFallbackMode(false);
-            }
-            Debug.Log("[WP-DBG] CheckAREnvironment: tracking restored → fallback disabled + objects restored");
-        }
+        // 트래킹 Lost/Recovery는 CheckTrackingStateChange()에서 매 프레임 처리
+        // 여기서는 환경 분석(어둡다/특징점 부족 등)만 담당
 
         if (issue != AREnvironmentIssue.None)
         {
@@ -637,7 +611,6 @@ public class LoadingManager : MonoBehaviour
         }
         else if (hasShownEnvironmentGuidance)
         {
-            Debug.Log("[WP-DBG] CheckAREnvironment: issue=None → hiding guidance");
             StopDotAnimation();
             HideARGuidance();
             hasShownEnvironmentGuidance = false;
@@ -822,7 +795,6 @@ public class LoadingManager : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[WP-DBG] HandleEnvironmentIssue({issue}): activating guidance");
         hasShownEnvironmentGuidance = true;
         isFallbackWithoutGuidance = false; // 환경안내가 fallback 관리를 인계
 
@@ -841,7 +813,6 @@ public class LoadingManager : MonoBehaviour
             if (dataManager != null)
             {
                 dataManager.SetAllObjectsVisible(false);
-                Debug.Log("[WP-DBG] HandleEnvironmentIssue: AR objects hidden (prevent clumping)");
             }
         }
 
@@ -1020,7 +991,6 @@ public class LoadingManager : MonoBehaviour
         if (dataManager != null)
         {
             dataManager.SetAllObjectsVisible(true);
-            Debug.Log("[WP-DBG] HideARGuidance: AR objects restored");
         }
 
         // OffScreenIndicator 폴백 모드 — 오브젝트가 있으면 해제, 없으면 유지
