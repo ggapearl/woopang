@@ -583,18 +583,10 @@ public class LoadingManager : MonoBehaviour
             return AREnvironmentIssue.None;
         }
 
-        // 5. 오브젝트가 이미 충분히 있으면 환경 감지 불필요 (트래킹 문제가 있어도)
-        if (enableDataManagerMonitoring && dataManager != null && HasSufficientObjects())
-        {
-            return AREnvironmentIssue.None;
-        }
-
-        // 6. 트래킹에 문제가 있고 오브젝트도 부족한 경우에만 환경 분석
+        // 5. 트래킹에 문제가 있으면 환경 분석 (오브젝트 수와 무관)
         if (trackingState == TrackingState.None || trackingState == TrackingState.Limited)
         {
             // 트래킹 손실 시작 시점 기록
-            // - Tracking → Limited/None 전환 시
-            // - 앱 시작 직후 (한 번도 Tracking 상태가 아니었던 경우)
             if (lastTrackingState == TrackingState.Tracking || trackingLostStartTime == 0f)
             {
                 trackingLostStartTime = Time.realtimeSinceStartup;

@@ -81,6 +81,21 @@ public class OffScreenIndicator : MonoBehaviour
     private Dictionary<Target, TransitionData> transitionDataMap = new Dictionary<Target, TransitionData>();
     private HashSet<Target> fadeOutTargets = new HashSet<Target>(); // box 전환으로 fade-out 대상
 
+    // 화살표 겹침 방지용 최소 간격 (Canvas 픽셀 단위)
+    [Header("=== 화살표 겹침 방지 ===")]
+    [Tooltip("화살표 간 최소 간격 (Canvas 픽셀)")]
+    [SerializeField] private float arrowMinSpacing = 80f;
+
+    private struct ArrowInfo
+    {
+        public Target target;
+        public Vector3 screenPosition;
+        public float angle;
+        public float distanceFromCamera;
+        public bool isArrow;
+        public bool skipThisFrame;
+    }
+
     /// <summary>
     /// 폴백 모드 설정값 (LoadingManager에서 전달)
     /// </summary>
@@ -205,12 +220,14 @@ public class OffScreenIndicator : MonoBehaviour
             }
         }
 
+        // ── Pass 1: 각 타겟의 스크린 위치/각도/타입 수집 ──
+        List<ArrowInfo> arrowInfos = new List<ArrowInfo>();
+
         foreach (Target target in targets)
         {
             Vector3 screenPosition = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
             bool isTargetVisible = OffScreenIndicatorCore.IsTargetVisible(screenPosition);
             float distanceFromCamera = target.NeedDistanceText ? target.GetDistanceFromCamera(mainCamera.transform.position) : float.MinValue;
-            Indicator indicator = null;
 
             // 전환 중 fade-out 대상 (화살표→box 전환): 기존 화살표를 fade-out
             if (isTransitioning && fadeOutTargets.Contains(target))
@@ -222,7 +239,6 @@ public class OffScreenIndicator : MonoBehaviour
 
                     if (fadeT >= 1f)
                     {
-                        // fade-out 완료 → 풀 반환, 다음 프레임에 box로 새로 생성
                         target.indicator.SetAlpha(1f);
                         target.indicator.ResetForPool();
                         target.indicator.Activate(false);
@@ -231,7 +247,7 @@ public class OffScreenIndicator : MonoBehaviour
                     }
                     else
                     {
-                        // fade-out 중에는 위치 유지
+                        arrowInfos.Add(new ArrowInfo { target = target, skipThisFrame = true });
                         continue;
                     }
                 }
@@ -240,14 +256,17 @@ public class OffScreenIndicator : MonoBehaviour
             if (target.NeedBoxIndicator && isTargetVisible)
             {
                 screenPosition.z = 0;
-                indicator = GetIndicator(ref target.indicator, IndicatorType.BOX, target, screenPosition);
+                arrowInfos.Add(new ArrowInfo
+                {
+                    target = target, screenPosition = screenPosition, angle = 0f,
+                    distanceFromCamera = distanceFromCamera, isArrow = false, skipThisFrame = false
+                });
             }
             else if (target.NeedArrowIndicator && !isTargetVisible)
             {
                 float angle = float.MinValue;
                 OffScreenIndicatorCore.GetArrowIndicatorPositionAndAngle(ref screenPosition, ref angle, screenCentre, screenBoundsX);
 
-                // 수정: 추가 경계 값을 반영한 클램프
                 float limitX = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetLeft;
                 float limitXRight = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetRight;
                 float limitY = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetBottom;
@@ -256,8 +275,34 @@ public class OffScreenIndicator : MonoBehaviour
                 screenPosition.x = Mathf.Clamp(screenPosition.x, screenCentre.x - limitX, screenCentre.x + limitXRight);
                 screenPosition.y = Mathf.Clamp(screenPosition.y, screenCentre.y - limitY, screenCentre.y + limitYTop);
 
-                indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target, screenPosition);
-                indicator.transform.rotation = Quaternion.Euler(0, 0, angle * Mathf.Rad2Deg);
+                arrowInfos.Add(new ArrowInfo
+                {
+                    target = target, screenPosition = screenPosition, angle = angle,
+                    distanceFromCamera = distanceFromCamera, isArrow = true, skipThisFrame = false
+                });
+            }
+        }
+
+        // ── Pass 1.5: 화살표 겹침 해소 ──
+        ResolveArrowOverlap(arrowInfos);
+
+        // ── Pass 2: 인디케이터 생성/업데이트 ──
+        for (int i = 0; i < arrowInfos.Count; i++)
+        {
+            ArrowInfo info = arrowInfos[i];
+            if (info.skipThisFrame) continue;
+
+            Target target = info.target;
+            Indicator indicator = null;
+
+            if (!info.isArrow)
+            {
+                indicator = GetIndicator(ref target.indicator, IndicatorType.BOX, target, info.screenPosition);
+            }
+            else
+            {
+                indicator = GetIndicator(ref target.indicator, IndicatorType.ARROW, target, info.screenPosition);
+                indicator.transform.rotation = Quaternion.Euler(0, 0, info.angle * Mathf.Rad2Deg);
             }
 
             if (indicator)
@@ -265,39 +310,39 @@ public class OffScreenIndicator : MonoBehaviour
                 indicator.SetImageColor(target.TargetColor);
                 if (target.NeedDistanceText)
                 {
-                    indicator.SetDistanceText(distanceFromCamera, target.DistanceTextColor, target.PlaceName);
+                    indicator.SetDistanceText(info.distanceFromCamera, target.DistanceTextColor, target.PlaceName);
                 }
                 else
                 {
                     indicator.SetDistanceText(float.MinValue, Color.clear, "");
                 }
 
-                Vector3 targetPosition = ScreenToCanvasWorldPosition(screenPosition);
+                Vector3 targetPosition = ScreenToCanvasWorldPosition(info.screenPosition);
                 indicator.SetTextRotation(Quaternion.identity);
 
                 float size;
                 if (indicator.Type == IndicatorType.BOX)
                 {
-                    if (distanceFromCamera <= target.MinDistance)
+                    if (info.distanceFromCamera <= target.MinDistance)
                         size = target.MaxBoxSize;
-                    else if (distanceFromCamera >= target.MaxDistance)
+                    else if (info.distanceFromCamera >= target.MaxDistance)
                         size = target.DefaultBoxSize;
                     else
                     {
-                        float t = (target.MaxDistance - distanceFromCamera) / (target.MaxDistance - target.MinDistance);
+                        float t = (target.MaxDistance - info.distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultBoxSize, target.MaxBoxSize, t);
                     }
                     indicator.SetScale(new Vector3(size, size, size));
                 }
                 else
                 {
-                    if (distanceFromCamera <= target.MinDistance)
+                    if (info.distanceFromCamera <= target.MinDistance)
                         size = target.MaxArrowSize;
-                    else if (distanceFromCamera >= target.MaxDistance)
+                    else if (info.distanceFromCamera >= target.MaxDistance)
                         size = target.DefaultArrowSize;
                     else
                     {
-                        float t = (target.MaxDistance - distanceFromCamera) / (target.MaxDistance - target.MinDistance);
+                        float t = (target.MaxDistance - info.distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultArrowSize, target.MaxArrowSize, t);
                     }
                     indicator.SetScale(new Vector3(size, size, 1f));
@@ -307,8 +352,8 @@ public class OffScreenIndicator : MonoBehaviour
                 if (isTransitioning && transitionDataMap.ContainsKey(target) && indicator.Type == IndicatorType.ARROW)
                 {
                     TransitionData td = transitionDataMap[target];
-                    Vector3 targetScale = indicator.transform.localScale; // SetScale로 설정된 정상 스케일
-                    Quaternion targetRotation = indicator.transform.rotation; // 정상 회전
+                    Vector3 targetScale = indicator.transform.localScale;
+                    Quaternion targetRotation = indicator.transform.rotation;
 
                     indicator.transform.position = Vector3.Lerp(td.startPosition, targetPosition, transitionT);
                     indicator.transform.localScale = Vector3.Lerp(td.startScale, targetScale, transitionT);
@@ -319,6 +364,107 @@ public class OffScreenIndicator : MonoBehaviour
                     indicator.transform.position = targetPosition;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 화살표 간 최소 간격을 유지하도록 겹치는 화살표를 화면 가장자리를 따라 분산
+    /// </summary>
+    void ResolveArrowOverlap(List<ArrowInfo> infos)
+    {
+        if (arrowMinSpacing <= 0f) return;
+
+        // 화살표만 필터링 (index 유지)
+        List<int> arrowIndices = new List<int>();
+        for (int i = 0; i < infos.Count; i++)
+        {
+            if (infos[i].isArrow && !infos[i].skipThisFrame)
+                arrowIndices.Add(i);
+        }
+
+        if (arrowIndices.Count < 2) return;
+
+        float spacingSq = arrowMinSpacing * arrowMinSpacing;
+
+        // 반복적으로 겹침 해소 (최대 3회)
+        for (int pass = 0; pass < 3; pass++)
+        {
+            bool anyMoved = false;
+
+            for (int a = 0; a < arrowIndices.Count; a++)
+            {
+                for (int b = a + 1; b < arrowIndices.Count; b++)
+                {
+                    ArrowInfo infoA = infos[arrowIndices[a]];
+                    ArrowInfo infoB = infos[arrowIndices[b]];
+
+                    float dx = infoA.screenPosition.x - infoB.screenPosition.x;
+                    float dy = infoA.screenPosition.y - infoB.screenPosition.y;
+                    float distSq = dx * dx + dy * dy;
+
+                    if (distSq < spacingSq)
+                    {
+                        // 겹침 발생 — 화면 가장자리를 따라 분산
+                        float dist = Mathf.Sqrt(distSq);
+                        float overlap = arrowMinSpacing - dist;
+                        float halfPush = overlap * 0.5f + 1f;
+
+                        // 방향 벡터 (동일 위치면 임의 방향)
+                        Vector2 dir;
+                        if (dist < 0.1f)
+                        {
+                            float randAngle = (a * 137.5f + b * 59.3f) % 360f * Mathf.Deg2Rad;
+                            dir = new Vector2(Mathf.Cos(randAngle), Mathf.Sin(randAngle));
+                        }
+                        else
+                        {
+                            dir = new Vector2(dx / dist, dy / dist);
+                        }
+
+                        // 화면 가장자리에 가까운 축을 따라 분산
+                        float limitLeft = screenCentre.x - screenCentre.x * screenBoundOffsetX + additionalBoundOffsetLeft;
+                        float limitRight = screenCentre.x + screenCentre.x * screenBoundOffsetX - additionalBoundOffsetRight;
+                        float limitBottom = screenCentre.y - screenCentre.y * screenBoundOffsetY + additionalBoundOffsetBottom;
+                        float limitTop = screenCentre.y + screenCentre.y * screenBoundOffsetY - additionalBoundOffsetTop;
+
+                        Vector3 posA = infoA.screenPosition;
+                        Vector3 posB = infoB.screenPosition;
+
+                        // 가장자리에 붙어있는 축을 판별하여 해당 축의 반대 축으로 분산
+                        bool onLeftRight = Mathf.Abs(posA.x - limitLeft) < 5f || Mathf.Abs(posA.x - limitRight) < 5f;
+                        bool onTopBottom = Mathf.Abs(posA.y - limitBottom) < 5f || Mathf.Abs(posA.y - limitTop) < 5f;
+
+                        if (onLeftRight && !onTopBottom)
+                        {
+                            // 좌/우 가장자리에 있으면 Y축으로 분산
+                            posA.y = Mathf.Clamp(posA.y + halfPush, limitBottom, limitTop);
+                            posB.y = Mathf.Clamp(posB.y - halfPush, limitBottom, limitTop);
+                        }
+                        else if (onTopBottom && !onLeftRight)
+                        {
+                            // 상/하 가장자리에 있으면 X축으로 분산
+                            posA.x = Mathf.Clamp(posA.x + halfPush, limitLeft, limitRight);
+                            posB.x = Mathf.Clamp(posB.x - halfPush, limitLeft, limitRight);
+                        }
+                        else
+                        {
+                            // 모서리이거나 판별 불가 — 양방향으로 분산
+                            posA.x = Mathf.Clamp(posA.x + dir.x * halfPush, limitLeft, limitRight);
+                            posA.y = Mathf.Clamp(posA.y + dir.y * halfPush, limitBottom, limitTop);
+                            posB.x = Mathf.Clamp(posB.x - dir.x * halfPush, limitLeft, limitRight);
+                            posB.y = Mathf.Clamp(posB.y - dir.y * halfPush, limitBottom, limitTop);
+                        }
+
+                        infoA.screenPosition = posA;
+                        infoB.screenPosition = posB;
+                        infos[arrowIndices[a]] = infoA;
+                        infos[arrowIndices[b]] = infoB;
+                        anyMoved = true;
+                    }
+                }
+            }
+
+            if (!anyMoved) break;
         }
     }
 
