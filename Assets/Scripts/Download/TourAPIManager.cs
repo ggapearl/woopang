@@ -833,6 +833,23 @@ private bool isDataLoaded = false;
     }
 
     /// <summary>
+    /// 백그라운드 복귀 시 모든 스폰된 오브젝트의 Geospatial 앵커를 재생성
+    /// </summary>
+    public void RecreateAllAnchors()
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value == null) continue;
+            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+            {
+                kvp.Value.SetActive(true);
+                anchor.RecreateAnchor();
+            }
+        }
+    }
+
+    /// <summary>
     /// 현재 필터 상태에 따라 오브젝트를 표시할지 결정
     /// </summary>
     private bool ShouldShowByFilter()

@@ -12,6 +12,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     public bool IsAnchorCreated => _anchorCreated;
     private int _retryCount = 0;
     private const int MAX_RETRIES = 30; // 최대 30회 (약 30초)
+    private Coroutine retryCoroutine;
 
     // 좌표 설정 및 앵커 생성 메서드
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
@@ -41,10 +42,57 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         _anchorCreated = false;
         _retryCount = 0;
 
+        // 기존 재시도 코루틴 중단
+        if (retryCoroutine != null)
+        {
+            StopCoroutine(retryCoroutine);
+            retryCoroutine = null;
+        }
+
         // 즉시 시도 후, 실패하면 코루틴으로 재시도
         if (!TryCreateAnchor())
         {
-            StartCoroutine(RetryCreateAnchor());
+            retryCoroutine = StartCoroutine(RetryCreateAnchor());
+        }
+#endif
+    }
+
+    /// <summary>
+    /// 백그라운드 복귀 시 기존 앵커를 해제하고 재생성
+    /// 기존 좌표(_lat, _lon, _alt)를 그대로 사용하므로 서버 재요청 불필요
+    /// </summary>
+    public void RecreateAnchor()
+    {
+#if UNITY_EDITOR
+        return;
+#else
+        // 재시도 코루틴 중단
+        if (retryCoroutine != null)
+        {
+            StopCoroutine(retryCoroutine);
+            retryCoroutine = null;
+        }
+
+        // 기존 앵커 부모 해제 (앵커 자체는 ARCore가 관리)
+        if (_anchorCreated && transform.parent != null)
+        {
+            Transform oldAnchorTransform = transform.parent;
+            transform.SetParent(oldAnchorTransform.parent, true);
+
+            // 기존 앵커 오브젝트 파괴 (ARCore에서 생성한 앵커)
+            ARGeospatialAnchor oldAnchor = oldAnchorTransform.GetComponent<ARGeospatialAnchor>();
+            if (oldAnchor != null)
+                Destroy(oldAnchorTransform.gameObject);
+        }
+
+        // 렌더러 숨기고 재생성 시작
+        SetVisible(false);
+        _anchorCreated = false;
+        _retryCount = 0;
+
+        if (!TryCreateAnchor())
+        {
+            retryCoroutine = StartCoroutine(RetryCreateAnchor());
         }
 #endif
     }
@@ -93,14 +141,19 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             _retryCount++;
 
             if (TryCreateAnchor())
+            {
+                retryCoroutine = null;
                 yield break;
+            }
         }
+
+        retryCoroutine = null;
 
         if (!_anchorCreated)
         {
-            Debug.LogError($"[CustomAnchor] 앵커 생성 최종 실패: {gameObject.name} ({MAX_RETRIES}회 재시도 후)");
-            // 앵커 생성 실패 → 오브젝트 비활성화 (원점에 남지 않도록)
-            gameObject.SetActive(false);
+            Debug.LogWarning($"[CustomAnchor] 앵커 생성 최종 실패: {gameObject.name} ({MAX_RETRIES}회 재시도 후)");
+            // 앵커 실패 → 렌더러만 숨김 유지 (오브젝트는 살려둬서 다음 RecreateAnchor에서 재시도 가능)
+            SetVisible(false);
         }
     }
 

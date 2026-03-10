@@ -326,6 +326,23 @@ public class TrainStationManager : MonoBehaviour
     public bool IsDataLoaded() => isDataLoaded;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
 
+    /// <summary>
+    /// 백그라운드 복귀 시 모든 스폰된 오브젝트의 Geospatial 앵커를 재생성
+    /// </summary>
+    public void RecreateAllAnchors()
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value == null) continue;
+            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+            {
+                kvp.Value.SetActive(true);
+                anchor.RecreateAnchor();
+            }
+        }
+    }
+
     private GameObject GetFromPool()
     {
         if (objectPool.Count > 0)

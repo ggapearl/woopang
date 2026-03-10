@@ -1121,6 +1121,26 @@ public class DataManager : MonoBehaviour
         return spawnedObjects.ContainsKey(placeId) ? spawnedObjects[placeId] : null;
     }
 
+    /// <summary>
+    /// 백그라운드 복귀 시 모든 스폰된 오브젝트의 Geospatial 앵커를 재생성
+    /// 오브젝트/컴포넌트는 유지하고 앵커만 재연결 (서버 재요청 불필요)
+    /// 앵커 재생성 성공 시 Renderer가 자동 표시됨 (CustomARGeospatialCreatorAnchor.SetVisible)
+    /// </summary>
+    public void RecreateAllAnchors()
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value == null) continue;
+
+            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+            {
+                kvp.Value.SetActive(true);
+                anchor.RecreateAnchor();
+            }
+        }
+    }
+
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
         // 현재 필터 상태 확인 (Object3D 토글 OFF 시 custom 오브젝트는 숨김 유지)

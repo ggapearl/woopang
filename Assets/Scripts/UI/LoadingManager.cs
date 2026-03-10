@@ -102,6 +102,7 @@ public class LoadingManager : MonoBehaviour
     
     // 백그라운드 복구 관련 변수
     private bool wasInBackground = false;
+    private bool isBackgroundRecovering = false; // HandleBackgroundRecovery 진행 중 플래그
     private Coroutine dotAnimationCoroutine;
     private Coroutine spinnerCoroutine; // Spinner 중복 실행 방지
     private float? lastCameraBrightness = null; // ARCameraManager 밝기 캐시
@@ -180,6 +181,8 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator HandleBackgroundRecovery()
     {
+        isBackgroundRecovering = true;
+
         // 1. 먼저 fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
         // autoDisable=false: 트래킹 복구 확인 후 수동으로 해제 (1초 타이머로 끄면 AR 미복구 상태에서 화살표 사라짐)
         OffScreenIndicator osi = GetCachedOSI();
@@ -201,10 +204,10 @@ public class LoadingManager : MonoBehaviour
         StartSpinner();
         StartDotAnimation(baseMessage);
 
-        // 3. AR 세션이 안정화될 때까지 대기
+        // 4. AR 세션이 안정화될 때까지 대기
         yield return new WaitForSeconds(backgroundRecoveryLoadingTime);
 
-        // 4. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
+        // 5. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
         if (enableAREnvironmentDetection)
         {
             if (arSession == null)
@@ -219,7 +222,7 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
             CheckAREnvironment();
 
-            // 트래킹 복구되면 로딩 패널 숨기고, 오브젝트 존재 시 fallback 해제
+            // 트래킹 복구되면 앵커 재생성 → 개별 표시 → fallback 해제
             yield return StartCoroutine(WaitForTrackingRecoveryAndCleanup(osi));
         }
         else
@@ -231,7 +234,9 @@ public class LoadingManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 백그라운드 복구 후 트래킹이 정상화되면 로딩 패널 숨기고 fallback 관리
+    /// 백그라운드 복구 후 트래킹이 정상화되면 앵커 재생성 → 로딩 패널 숨기기 → fallback 해제
+    /// SetAllObjectsVisible(true) 대신 RecreateAllAnchors()를 호출하여
+    /// 앵커가 실제로 생성 완료된 오브젝트만 개별적으로 표시 (뭉침 방지)
     /// </summary>
     IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi)
     {
@@ -247,17 +252,16 @@ public class LoadingManager : MonoBehaviour
                 if (loadingPanel) loadingPanel.SetActive(false);
                 StopSpinner();
 
-                // 트래킹 복구 후 숨겨둔 AR 오브젝트 다시 표시
-                if (dataManager != null)
-                {
-                    dataManager.SetAllObjectsVisible(true);
-                }
+                // 트래킹 복구 → 모든 매니저의 앵커 재생성
+                // (오브젝트는 앵커 생성 성공 시 CustomARGeospatialCreatorAnchor.SetVisible(true)로 개별 표시)
+                RecreateAllManagerAnchors();
 
-                // 트래킹 복구 → fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
+                // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
                     osi.EnableFallbackMode(false);
                 }
+                isBackgroundRecovering = false;
                 yield break;
             }
 
@@ -265,20 +269,48 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
         }
 
-        // 타임아웃 시에도 오브젝트 다시 표시 (무한 숨김 방지)
-        if (dataManager != null)
-        {
-            dataManager.SetAllObjectsVisible(true);
-        }
+        // 타임아웃 시에도 앵커 재생성 시도 (무한 숨김 방지)
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
+
+        RecreateAllManagerAnchors();
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
         if (osi != null && !hasShownEnvironmentGuidance)
         {
             osi.EnableFallbackMode(false);
         }
+        isBackgroundRecovering = false;
+    }
+
+    /// <summary>
+    /// 모든 매니저의 Geospatial 앵커를 재생성
+    /// 기존 오브젝트/컴포넌트는 유지하고 앵커만 재연결
+    /// 앵커 생성 성공 시 Renderer가 자동 표시됨 (서버 재요청 불필요)
+    /// </summary>
+    void RecreateAllManagerAnchors()
+    {
+        // DataManager
+        if (dataManager != null)
+            dataManager.RecreateAllAnchors();
+
+        // 시설 매니저들 (SubwayManager, TrainStationManager, TerminalManager, BusStationManager)
+        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
+        if (subwayMgr != null) subwayMgr.RecreateAllAnchors();
+
+        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
+        if (trainMgr != null) trainMgr.RecreateAllAnchors();
+
+        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
+        if (terminalMgr != null) terminalMgr.RecreateAllAnchors();
+
+        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
+        if (busMgr != null) busMgr.RecreateAllAnchors();
+
+        // TourAPIManager
+        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
+        if (tourMgr != null) tourMgr.RecreateAllAnchors();
     }
     
     void Update()
@@ -311,6 +343,9 @@ public class LoadingManager : MonoBehaviour
     void CheckTrackingStateChange()
     {
         if (arSession == null || arSession.subsystem == null) return;
+
+        // 백그라운드 복귀 처리 중에는 간섭하지 않음 (HandleBackgroundRecovery가 앵커 재생성 관리)
+        if (isBackgroundRecovering) return;
 
         TrackingState current = arSession.subsystem.trackingState;
         if (current == lastFrameTrackingState) return;
