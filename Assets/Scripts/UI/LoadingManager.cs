@@ -164,9 +164,7 @@ public class LoadingManager : MonoBehaviour
             InitializeARComponents();
             StartCoroutine(StartAREnvironmentMonitoring());
         }
-        else
-        {
-        }
+
 #endif
     }
     
@@ -628,6 +626,19 @@ public class LoadingManager : MonoBehaviour
             yield break;
         }
 
+#if !UNITY_EDITOR
+        // 첫 설치 시 AR 세션이 아직 준비 안 됐으면 fallback 건너뜀
+        // (카메라/위치 권한 승인 대기 중 → subsystem이 null이거나 트래킹 불가)
+        // 권한 승인 후 정상 트래킹이 시작되면 fallback 없이 바로 정상 모드로 진입
+        bool arReady = arSession != null &&
+                       arSession.subsystem != null &&
+                       arSession.subsystem.trackingState == TrackingState.Tracking;
+        if (!arReady)
+        {
+            yield break;
+        }
+#endif
+
         // 오브젝트가 아직 스폰 안 됐으면 최대 3초간 대기 (SpawnPreFetchedObjects 진행 중일 수 있음)
         int objCount = dataManager != null ? dataManager.GetSpawnedObjectsCount() : 0;
         if (objCount == 0)
@@ -669,13 +680,16 @@ public class LoadingManager : MonoBehaviour
         // fallback은 OnDataPreFetchCompleted에서 데이터 로드 후 활성화됨
         // 여기서는 AR 환경 모니터링만 시작
 
-        // AR 세션 트래킹 대기 (최대 3초) — 트래킹 안 되면 즉시 환경 체크 시작
+        // AR 서브시스템 준비 대기 (최대 15초)
+        // 첫 설치 시 카메라 권한 승인까지 서브시스템이 null일 수 있음
         float waitTime = 0f;
-        while (waitTime < 3f)
+        float maxSubsystemWait = 15f;
+        while (waitTime < maxSubsystemWait)
         {
-            if (arSession != null && arSession.subsystem?.trackingState == TrackingState.Tracking)
+            if (arSession != null && arSession.subsystem != null)
             {
-                break;
+                if (arSession.subsystem.trackingState == TrackingState.Tracking)
+                    break;
             }
 
             waitTime += 0.5f;
@@ -736,7 +750,17 @@ public class LoadingManager : MonoBehaviour
 
             if (hasShownEnvironmentGuidance)
             {
-                // 환경 문제 감지됨 → HandleEnvironmentIssue가 fallback 관리
+                // 환경 문제 감지됨 → AutoRetryEnvironmentCheck가 해결할 때까지 대기
+                while (hasShownEnvironmentGuidance && waited < maxWait)
+                {
+                    waited += 1f;
+                    yield return new WaitForSeconds(1f);
+                }
+                // 환경 문제 해결 후 다시 fallback 해제 확인
+                if (osi != null && osi.IsFallbackMode)
+                {
+                    osi.EnableFallbackMode(false, forceDisable: true);
+                }
                 yield break;
             }
 
@@ -769,7 +793,7 @@ public class LoadingManager : MonoBehaviour
     {
         if (arSession == null || arSession.subsystem == null)
         {
-            HandleEnvironmentIssue(AREnvironmentIssue.SessionPreparing);
+            // 세션 미초기화 시 fallback 진입하지 않음 (첫 설치 시 권한 대기 중에 fallback 영구 유지 방지)
             return;
         }
 
@@ -1139,9 +1163,13 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator AutoRetryEnvironmentCheck(AREnvironmentIssue issue)
     {
+        float elapsed = 0f;
+        float maxRetryTime = 30f; // 최대 30초 대기 후 강제 해제
+
         while (hasShownEnvironmentGuidance)
         {
             yield return new WaitForSeconds(1f);
+            elapsed += 1f;
 
             AREnvironmentIssue currentIssue = DetermineEnvironmentIssue(
                 arSession?.subsystem?.trackingState ?? TrackingState.None);
@@ -1156,8 +1184,22 @@ public class LoadingManager : MonoBehaviour
             {
                 string newGuidanceMessage = GetEnvironmentGuidanceMessage(currentIssue);
                 UpdateMessage(newGuidanceMessage);
-                
+
                 issue = currentIssue;
+            }
+
+            // 타임아웃: 환경 문제가 지속되면 강제로 fallback 해제
+            if (elapsed >= maxRetryTime)
+            {
+                HideARGuidance();
+                hasShownEnvironmentGuidance = false;
+
+                OffScreenIndicator osi = GetCachedOSI();
+                if (osi != null && osi.IsFallbackMode)
+                {
+                    osi.EnableFallbackMode(false, forceDisable: true);
+                }
+                break;
             }
         }
     }
