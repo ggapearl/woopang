@@ -408,6 +408,32 @@ Overall stability and bug fixes
 - 프리팹만 수정해도 씬 파일에 미커밋 변경사항이 쌓일 수 있으므로 항상 같이 커밋
 ```
 
+### 10.3 Untracked 파일 확인 (필수)
+```
+⚠️ 중요: 커밋 전 반드시 untracked 파일을 확인하고 포함
+
+新규 스크립트 추가 시 발생하는 문제:
+- Assets/Scripts/ 폴더에 새 파일을 생성했지만 git add에서 누락
+- 예: CubeTouchRotator.cs, 에디터 스크립트들
+- 다른 컴퓨터에서 pull 시 파일 부재 → 씬의 컴포넌트 참조 끊김
+
+커밋 전 절차:
+[ ] git status로 전체 변경사항 확인
+[ ] Untracked files에 새로 추가한 스크립트가 있는가?
+[ ] Assets/ 폴더 내 모든 변경사항 확인 (Assets/Scripts/, Assets/Editor/ 등)
+[ ] git add Assets/로 폴더 전체 추가 (수정 + untracked 파일 모두)
+[ ] git status로 다시 확인
+[ ] git commit → git push
+
+올바른 커밋 순서:
+1. 코드 작성/수정 완료
+2. git status  # 전체 확인
+3. git add Assets/  # Assets 폴더 전체 추가
+4. git status  # 스테이징 재확인
+5. git commit -m "..."
+6. git push
+```
+
 ---
 
-*최종 업데이트: 2026-03-02*
+*최종 업데이트: 2026-03-15*
