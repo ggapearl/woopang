@@ -9,6 +9,9 @@ using System.Linq;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
+#if UNITY_ANDROID
+using UnityEngine.Android;
+#endif
 
 public class DataManager : MonoBehaviour
 {
@@ -51,6 +54,35 @@ public class DataManager : MonoBehaviour
             return;
         }
         instance = this;
+
+        // 첫 설치 시 위치 권한 없이 Geospatial 초기화되면 iOS 네이티브에서 실패를 캐시하여
+        // 이후 권한을 획득해도 EarthTrackingState가 영구적으로 None 유지됨.
+        // Awake()에서 권한 체크 → 없으면 GeospatialMode=Disabled → 첫 Update() 전에 적용
+        // DataManager.StartLocationServiceAndFetchData()에서 권한 획득 후 Enabled로 변경
+        DisableGeospatialIfNoPermission();
+    }
+
+    private void DisableGeospatialIfNoPermission()
+    {
+#if UNITY_EDITOR
+        return;
+#else
+        bool hasLocationPermission = false;
+#if UNITY_ANDROID
+        hasLocationPermission = Permission.HasUserAuthorizedPermission(Permission.FineLocation);
+#elif UNITY_IOS
+        hasLocationPermission = Input.location.isEnabledByUser;
+#endif
+        if (hasLocationPermission) return;
+
+        ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
+        if (extensions != null && extensions.ARCoreExtensionsConfig != null
+            && extensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Enabled)
+        {
+            Debug.Log("[DBG] 위치 권한 없음 → GeospatialMode Disabled로 시작");
+            extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Disabled;
+        }
+#endif
     }
 
     private string baseServerUrl = ApiConfig.LOCATIONS + "?status=approved";
@@ -301,17 +333,19 @@ public class DataManager : MonoBehaviour
                 Debug.LogWarning("[DataManager] 위치 서비스 시작 실패 — 기본 위치로 진행");
             }
 
-            // 첫 설치 시 ARSession이 권한 없이 시작되면 Geospatial(AREarthManager) 초기화 실패
-            // ARSession.Reset()만으로는 부족 → ARCoreExtensions를 재시작해야 Geospatial 재초기화
-            AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
-            if (earthMgr == null || earthMgr.EarthTrackingState != TrackingState.Tracking)
+            // 첫 설치 시 Awake()에서 GeospatialMode=Disabled로 시작됨
+            // 권한 획득 후 Enabled로 변경하여 Geospatial 초기화 시작
+            ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
+            if (extensions != null && extensions.ARCoreExtensionsConfig != null
+                && extensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
             {
-                Debug.Log($"[DBG] 권한 획득 후 Earth={earthMgr?.EarthTrackingState} → ARCoreExtensions 재시작");
-                yield return StartCoroutine(RestartGeospatial());
+                Debug.Log("[DBG] 위치 권한 획득 → GeospatialMode Enabled 활성화");
+                extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
+                extensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
             }
             else
             {
-                Debug.Log("[DBG] 권한 획득 시 Earth 이미 Tracking → 재시작 불필요");
+                Debug.Log("[DBG] 권한 획득 시 GeospatialMode 이미 Enabled");
             }
         }
 
@@ -1282,62 +1316,6 @@ public class DataManager : MonoBehaviour
         }
 
         Debug.LogWarning($"[DBG] WaitForEarth: 타임아웃 ({maxWait}s), EarthState={earthManager?.EarthTrackingState}");
-    }
-
-    /// <summary>
-    /// AR 세션 전체를 재시작하여 Geospatial 재초기화
-    /// 첫 설치 시 권한 없이 시작된 AR 세션에서는 Geospatial이 초기화 안 됨
-    /// ARCoreExtensions → ARSession 순으로 종료 후, ARSession → ARCoreExtensions 순으로 재시작
-    /// </summary>
-    private IEnumerator RestartGeospatial()
-    {
-        ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
-        ARSession arSession = FindFirstObjectByType<ARSession>();
-
-        if (arSession == null)
-        {
-            Debug.LogWarning("[DBG] RestartGeospatial: ARSession 없음");
-            yield break;
-        }
-
-        // 1. ARCoreExtensions 먼저 종료 (Geospatial 스택 정리)
-        if (extensions != null)
-        {
-            Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions disable");
-            extensions.enabled = false;
-        }
-
-        // 2. ARSession 종료 (네이티브 AR 세션 파괴)
-        Debug.Log("[DBG] RestartGeospatial: ARSession disable");
-        arSession.enabled = false;
-
-        yield return new WaitForSeconds(1f);
-
-        // 3. ARSession 재시작 (새 네이티브 세션 생성, 권한 있는 상태)
-        Debug.Log("[DBG] RestartGeospatial: ARSession enable");
-        arSession.enabled = true;
-
-        // 4. ARSession이 Tracking 될 때까지 대기
-        float waited = 0f;
-        while (ARSession.state != ARSessionState.SessionTracking && waited < 15f)
-        {
-            yield return new WaitForSeconds(0.5f);
-            waited += 0.5f;
-        }
-        Debug.Log($"[DBG] RestartGeospatial: ARSession state={ARSession.state} ({waited}s)");
-
-        // 5. ARCoreExtensions 재시작 (config의 GeospatialMode=Enabled 적용)
-        if (extensions != null)
-        {
-            Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions enable");
-            extensions.enabled = true;
-        }
-
-        // 6. Geospatial 초기화 대기
-        yield return new WaitForSeconds(2f);
-
-        AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
-        Debug.Log($"[DBG] RestartGeospatial 완료: EarthState={earthMgr?.EarthTrackingState}");
     }
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)

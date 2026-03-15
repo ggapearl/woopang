@@ -70,7 +70,7 @@ public class ARCoreExtensionsAutoSetup : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[ARCoreExtensionsAutoSetup] ❌ ARCoreExtensionsConfig가 null입니다! Inspector에서 config를 연결하세요.");
+            Debug.LogError("[ARCoreExtensionsAutoSetup] ARCoreExtensionsConfig가 null입니다! Inspector에서 config를 연결하세요.");
         }
     }
 }
