@@ -1285,43 +1285,56 @@ public class DataManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ARCoreExtensions를 disable→enable하여 Geospatial API 완전 재초기화
-    /// ARSession.Reset()만으로는 Geospatial이 재초기화되지 않음
+    /// AR 세션 전체를 재시작하여 Geospatial 재초기화
+    /// 첫 설치 시 권한 없이 시작된 AR 세션에서는 Geospatial이 초기화 안 됨
+    /// ARCoreExtensions → ARSession 순으로 종료 후, ARSession → ARCoreExtensions 순으로 재시작
     /// </summary>
     private IEnumerator RestartGeospatial()
     {
         ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
         ARSession arSession = FindFirstObjectByType<ARSession>();
 
-        if (extensions == null)
+        if (arSession == null)
         {
-            Debug.LogWarning("[DBG] RestartGeospatial: ARCoreExtensions 없음");
-            if (arSession != null) arSession.Reset();
+            Debug.LogWarning("[DBG] RestartGeospatial: ARSession 없음");
             yield break;
         }
 
-        // ARCoreExtensions disable → 잠시 대기 → enable
-        Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions disable");
-        extensions.enabled = false;
-
-        // ARSession도 리셋
-        if (arSession != null)
-            arSession.Reset();
-
-        yield return new WaitForSeconds(0.5f);
-
-        Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions enable");
-        extensions.enabled = true;
-
-        // Geospatial 모드 재설정
-        if (extensions.ARCoreExtensionsConfig != null)
+        // 1. ARCoreExtensions 먼저 종료 (Geospatial 스택 정리)
+        if (extensions != null)
         {
-            extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
-            Debug.Log("[DBG] RestartGeospatial: GeospatialMode → Enabled");
+            Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions disable");
+            extensions.enabled = false;
         }
 
-        // 재초기화 후 Earth 상태 확인용 대기
+        // 2. ARSession 종료 (네이티브 AR 세션 파괴)
+        Debug.Log("[DBG] RestartGeospatial: ARSession disable");
+        arSession.enabled = false;
+
         yield return new WaitForSeconds(1f);
+
+        // 3. ARSession 재시작 (새 네이티브 세션 생성, 권한 있는 상태)
+        Debug.Log("[DBG] RestartGeospatial: ARSession enable");
+        arSession.enabled = true;
+
+        // 4. ARSession이 Tracking 될 때까지 대기
+        float waited = 0f;
+        while (ARSession.state != ARSessionState.SessionTracking && waited < 15f)
+        {
+            yield return new WaitForSeconds(0.5f);
+            waited += 0.5f;
+        }
+        Debug.Log($"[DBG] RestartGeospatial: ARSession state={ARSession.state} ({waited}s)");
+
+        // 5. ARCoreExtensions 재시작 (config의 GeospatialMode=Enabled 적용)
+        if (extensions != null)
+        {
+            Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions enable");
+            extensions.enabled = true;
+        }
+
+        // 6. Geospatial 초기화 대기
+        yield return new WaitForSeconds(2f);
 
         AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
         Debug.Log($"[DBG] RestartGeospatial 완료: EarthState={earthMgr?.EarthTrackingState}");

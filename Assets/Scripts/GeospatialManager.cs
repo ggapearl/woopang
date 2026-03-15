@@ -28,68 +28,18 @@ public class GeospatialManager : MonoBehaviour
         Application.targetFrameRate = 30;
     }
 
-    private void Start()
-    {
-        // Inspector에서 연결 안 된 경우 자동 탐색
-        if (earthManager == null)
-        {
-            earthManager = FindFirstObjectByType<AREarthManager>();
-            Debug.Log($"[DBG] GeoMgr Start: earthManager 자동 탐색 → {(earthManager != null ? "성공" : "실패")}");
-        }
-        if (arcoreExtensions == null)
-        {
-            arcoreExtensions = FindFirstObjectByType<ARCoreExtensions>();
-            Debug.Log($"[DBG] GeoMgr Start: arcoreExtensions 자동 탐색 → {(arcoreExtensions != null ? "성공" : "실패")}");
-        }
-
-        Debug.Log($"[DBG] GeoMgr Start: earthManager={earthManager != null}, arcoreExtensions={arcoreExtensions != null}");
-    }
-
-    private float _logTimer = 0f;
-
     void Update()
     {
-        _logTimer += Time.deltaTime;
-        bool shouldLog = false;
-        if (_logTimer >= 5f)
-        {
-            _logTimer = 0f;
-            shouldLog = true;
-        }
-
-        if (earthManager == null)
-        {
-            // 주기적으로 재탐색 시도
-            if (shouldLog)
-            {
-                earthManager = FindFirstObjectByType<AREarthManager>();
-                Debug.Log($"[DBG] GeoMgr: earthManager null → 재탐색 {(earthManager != null ? "성공" : "실패")}");
-            }
-            if (earthManager == null) return;
-        }
-
-        if (arcoreExtensions == null)
-        {
-            arcoreExtensions = FindFirstObjectByType<ARCoreExtensions>();
-            if (arcoreExtensions == null) return;
-        }
+        if (earthManager == null) return;
 
         if (ARSession.state != ARSessionState.SessionInitializing &&
                ARSession.state != ARSessionState.SessionTracking)
         {
-            if (shouldLog)
-                Debug.Log($"[DBG] GeoMgr: ARSession.state={ARSession.state} → skip");
             return;
         }
 
         // Check feature support and enable Geospatial API when it's supported.
         var featureSupport = earthManager.IsGeospatialModeSupported(GeospatialMode.Enabled);
-
-        if (shouldLog)
-        {
-            Debug.Log($"[DBG] GeoMgr: featureSupport={featureSupport}, GeoMode={arcoreExtensions?.ARCoreExtensionsConfig?.GeospatialMode}, EarthState={earthManager.EarthState}, EarthTracking={earthManager.EarthTrackingState}");
-        }
-
         switch (featureSupport)
         {
             case FeatureSupported.Unknown:
@@ -99,7 +49,6 @@ public class GeospatialManager : MonoBehaviour
             case FeatureSupported.Supported:
                 if (arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
                 {
-                    Debug.Log("[DBG] GeoMgr: GeospatialMode Disabled → Enabled 전환");
                     arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
                     arcoreExtensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
                 }
