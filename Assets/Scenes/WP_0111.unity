@@ -26030,14 +26030,14 @@ MonoBehaviour:
   loadingSpinnerPrefab: {fileID: 812358606491578410, guid: e5cd5b569ba59624793d7fec55949790,
     type: 3}
   spinnerScale: 4
-  spinnerRotationSpeed: 10
+  spinnerRotationSpeed: 5
   spinnerMinDuration: 2
-  spinnerFadeDuration: 2
+  spinnerFadeDuration: 4
   cubeFadeInDuration: 2
   spawnEmphasisScale: 4
-  enableSpawnEmphasis: 1
-  sparkleSpeed: 1
-  sparkleMinAlpha: 0
+  enableSpawnEmphasis: 0
+  sparkleSpeed: 0.5
+  sparkleMinAlpha: 0.7
   sparkleMaxAlpha: 1
   dotAnimationSpeed: 0.5
   enableTouchRotation: 1
