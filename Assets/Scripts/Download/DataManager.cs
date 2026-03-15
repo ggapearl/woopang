@@ -302,20 +302,16 @@ public class DataManager : MonoBehaviour
             }
 
             // 첫 설치 시 ARSession이 권한 없이 시작되면 Geospatial(AREarthManager) 초기화 실패
-            // 권한 획득 후 Earth가 아직 None이면 ARSession 리셋 → 껐다 켰을 때와 동일 효과
+            // ARSession.Reset()만으로는 부족 → ARCoreExtensions를 재시작해야 Geospatial 재초기화
             AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
             if (earthMgr == null || earthMgr.EarthTrackingState != TrackingState.Tracking)
             {
-                ARSession arSession = FindFirstObjectByType<ARSession>();
-                if (arSession != null)
-                {
-                    Debug.Log($"[DBG] 권한 획득 후 Earth={earthMgr?.EarthTrackingState} → ARSession.Reset()");
-                    arSession.Reset();
-                }
+                Debug.Log($"[DBG] 권한 획득 후 Earth={earthMgr?.EarthTrackingState} → ARCoreExtensions 재시작");
+                yield return StartCoroutine(RestartGeospatial());
             }
             else
             {
-                Debug.Log("[DBG] 권한 획득 시 Earth 이미 Tracking → Reset 불필요");
+                Debug.Log("[DBG] 권한 획득 시 Earth 이미 Tracking → 재시작 불필요");
             }
         }
 
@@ -1286,6 +1282,49 @@ public class DataManager : MonoBehaviour
         }
 
         Debug.LogWarning($"[DBG] WaitForEarth: 타임아웃 ({maxWait}s), EarthState={earthManager?.EarthTrackingState}");
+    }
+
+    /// <summary>
+    /// ARCoreExtensions를 disable→enable하여 Geospatial API 완전 재초기화
+    /// ARSession.Reset()만으로는 Geospatial이 재초기화되지 않음
+    /// </summary>
+    private IEnumerator RestartGeospatial()
+    {
+        ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
+        ARSession arSession = FindFirstObjectByType<ARSession>();
+
+        if (extensions == null)
+        {
+            Debug.LogWarning("[DBG] RestartGeospatial: ARCoreExtensions 없음");
+            if (arSession != null) arSession.Reset();
+            yield break;
+        }
+
+        // ARCoreExtensions disable → 잠시 대기 → enable
+        Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions disable");
+        extensions.enabled = false;
+
+        // ARSession도 리셋
+        if (arSession != null)
+            arSession.Reset();
+
+        yield return new WaitForSeconds(0.5f);
+
+        Debug.Log("[DBG] RestartGeospatial: ARCoreExtensions enable");
+        extensions.enabled = true;
+
+        // Geospatial 모드 재설정
+        if (extensions.ARCoreExtensionsConfig != null)
+        {
+            extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
+            Debug.Log("[DBG] RestartGeospatial: GeospatialMode → Enabled");
+        }
+
+        // 재초기화 후 Earth 상태 확인용 대기
+        yield return new WaitForSeconds(1f);
+
+        AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
+        Debug.Log($"[DBG] RestartGeospatial 완료: EarthState={earthMgr?.EarthTrackingState}");
     }
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)

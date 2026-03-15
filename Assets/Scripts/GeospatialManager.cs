@@ -50,6 +50,13 @@ public class GeospatialManager : MonoBehaviour
 
         // Check feature support and enable Geospatial API when it's supported.
         var featureSupport = earthManager.IsGeospatialModeSupported(GeospatialMode.Enabled);
+
+        // 5초마다 상태 로그
+        if (_logTimer == 0f)
+        {
+            Debug.Log($"[DBG] GeoMgr: featureSupport={featureSupport}, GeoMode={arcoreExtensions?.ARCoreExtensionsConfig?.GeospatialMode}, EarthState={earthManager.EarthState}, EarthTracking={earthManager.EarthTrackingState}");
+        }
+
         switch (featureSupport)
         {
             case FeatureSupported.Unknown:
@@ -59,6 +66,7 @@ public class GeospatialManager : MonoBehaviour
             case FeatureSupported.Supported:
                 if (arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
                 {
+                    Debug.Log("[DBG] GeoMgr: GeospatialMode Disabled → Enabled 전환");
                     arcoreExtensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
                     arcoreExtensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
                 }
