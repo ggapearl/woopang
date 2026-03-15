@@ -66,8 +66,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 #if UNITY_EDITOR
         return;
 #else
-        Debug.Log($"[DBG] {gameObject.name}: RecreateAnchor, anchorCreated={_anchorCreated}, lat={_lat}, lon={_lon}");
-
         // 재시도 코루틴 중단
         if (retryCoroutine != null)
         {
@@ -106,7 +104,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         if (anchorManager == null)
         {
-            Debug.LogError($"[DBG] {gameObject.name}: ARAnchorManager 없음");
+            Debug.LogError($"[{gameObject.name}] ARAnchorManager 없음");
             return false;
         }
 
@@ -114,9 +112,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         var earthManager = FindFirstObjectByType<AREarthManager>();
         if (earthManager == null || earthManager.EarthTrackingState != TrackingState.Tracking)
         {
-            // 10회마다만 로그 (스팸 방지)
-            if (_retryCount % 10 == 0)
-                Debug.Log($"[DBG] {gameObject.name}: EarthState={earthManager?.EarthTrackingState}, retry={_retryCount}");
             return false;
         }
 
@@ -132,11 +127,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             // 앵커 생성 성공 → 렌더러 표시
             SetVisible(true);
 
-            Debug.Log($"[DBG] {gameObject.name}: 앵커 성공! retry={_retryCount}, lat={_lat}, lon={_lon}");
             return true;
         }
 
-        Debug.LogWarning($"[DBG] {gameObject.name}: AddAnchor null 반환, EarthState={earthManager.EarthTrackingState}");
         return false;
     }
 
@@ -158,8 +151,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         if (!_anchorCreated)
         {
-            var em = FindFirstObjectByType<AREarthManager>();
-            Debug.LogWarning($"[DBG] 최종 실패: {gameObject.name} ({MAX_RETRIES}회), EarthState={em?.EarthTrackingState}");
             // 앵커 실패 → 렌더러만 숨김 유지 (오브젝트는 살려둬서 다음 RecreateAnchor에서 재시도 가능)
             SetVisible(false);
         }

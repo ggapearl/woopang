@@ -443,8 +443,6 @@ public class LoadingManager : MonoBehaviour
         TrackingState previous = lastFrameTrackingState;
         lastFrameTrackingState = current;
 
-        Debug.Log($"[DBG] TrackingChange: {previous} → {current}");
-
         // 빠른 이동 모드 중에는 ExcessiveMotion에 의한 오브젝트 숨김/fallback 진입 생략
         // 오브젝트는 GPS 기반으로 계속 스폰/제거되고 OffScreenIndicator도 유지
         if (dataManager != null && dataManager.IsRapidMovementMode)
@@ -608,7 +606,6 @@ public class LoadingManager : MonoBehaviour
     {
         // 최초 데이터 로드 시에만 fallback 활성화
         // RefreshData(업로드 후 새로고침 등)에서는 fallback을 다시 켜지 않음
-        Debug.Log($"[DBG] OnDataPreFetchCompleted: hasInitialFallbackActivated={hasInitialFallbackActivated}");
         if (!hasInitialFallbackActivated)
         {
             hasInitialFallbackActivated = true;
@@ -636,10 +633,8 @@ public class LoadingManager : MonoBehaviour
         bool arReady = arSession != null &&
                        arSession.subsystem != null &&
                        arSession.subsystem.trackingState == TrackingState.Tracking;
-        Debug.Log($"[DBG] ActivateFallback: arSession={arSession != null}, subsystem={arSession?.subsystem != null}, tracking={arSession?.subsystem?.trackingState}, arReady={arReady}");
         if (!arReady)
         {
-            Debug.Log("[DBG] ActivateFallback: AR not ready → SKIP fallback");
             yield break;
         }
 #endif
@@ -701,8 +696,6 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
         }
 
-        Debug.Log($"[DBG] StartAREnvMonitoring: subsystem wait done ({waitTime}s), arSession={arSession != null}, subsystem={arSession?.subsystem != null}, tracking={arSession?.subsystem?.trackingState}");
-
         isCheckingAREnvironment = true;
         CheckAREnvironment();
         StartCoroutine(ForceEnvironmentCheckAfterDelay());
@@ -729,9 +722,6 @@ public class LoadingManager : MonoBehaviour
             bool isTracking = arSession?.subsystem?.trackingState == TrackingState.Tracking;
             bool isFB = osi != null && osi.IsFallbackMode;
 
-            if (waited % 5f < 1f) // 5초마다 로그
-                Debug.Log($"[DBG] WaitForFirstObj: waited={waited}s, objCount={objCount}, tracking={isTracking}, fallback={isFB}, envGuidance={hasShownEnvironmentGuidance}");
-
             // 오브젝트 존재 + AR 트래킹 정상 → fallback 해제
             if (objCount > 0)
             {
@@ -741,7 +731,6 @@ public class LoadingManager : MonoBehaviour
                 {
                     if (osi.IsFallbackMode)
                     {
-                        Debug.Log("[DBG] WaitForFirstObj: editor fallback OFF (force)");
                         osi.EnableFallbackMode(false, forceDisable: true);
                         yield break;
                     }
@@ -749,7 +738,6 @@ public class LoadingManager : MonoBehaviour
 #else
                 if (isTracking)
                 {
-                    Debug.Log($"[DBG] WaitForFirstObj: tracking OK + {objCount} objects → fallback OFF");
                     if (osi != null)
                     {
                         osi.EnableFallbackMode(false);
@@ -762,7 +750,6 @@ public class LoadingManager : MonoBehaviour
 
             if (hasShownEnvironmentGuidance)
             {
-                Debug.Log("[DBG] WaitForFirstObj: envGuidance active → waiting for AutoRetry");
                 while (hasShownEnvironmentGuidance && waited < maxWait)
                 {
                     waited += 1f;
@@ -770,7 +757,6 @@ public class LoadingManager : MonoBehaviour
                 }
                 if (osi != null && osi.IsFallbackMode)
                 {
-                    Debug.Log("[DBG] WaitForFirstObj: envGuidance done → fallback OFF (force)");
                     osi.EnableFallbackMode(false, forceDisable: true);
                 }
                 yield break;
@@ -780,7 +766,6 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(1f);
         }
 
-        Debug.Log("[DBG] WaitForFirstObj: TIMEOUT 60s → fallback OFF (force)");
         if (osi != null)
         {
             osi.EnableFallbackMode(false, forceDisable: true);
@@ -807,7 +792,6 @@ public class LoadingManager : MonoBehaviour
         if (arSession == null || arSession.subsystem == null)
         {
             // 세션 미초기화 시 fallback 진입하지 않음 (첫 설치 시 권한 대기 중에 fallback 영구 유지 방지)
-            Debug.Log($"[DBG] CheckAREnv: SKIP (arSession={arSession != null}, subsystem={arSession?.subsystem != null})");
             return;
         }
 
