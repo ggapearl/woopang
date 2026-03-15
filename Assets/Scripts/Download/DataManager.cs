@@ -9,6 +9,7 @@ using System.Linq;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
+using UnityEngine.SceneManagement;
 
 public class DataManager : MonoBehaviour
 {
@@ -52,25 +53,6 @@ public class DataManager : MonoBehaviour
         }
         instance = this;
 
-        // 첫 설치 시 위치 권한 없이 Geospatial 초기화되면 iOS 네이티브에서 실패를 캐시하여
-        // 이후 권한을 획득해도 EarthTrackingState가 영구적으로 None 유지됨.
-        // Awake()에서 항상 GeospatialMode=Disabled → 위치 서비스 시작 성공 후 Enabled로 변경
-        DisableGeospatialUntilLocationReady();
-    }
-
-    private void DisableGeospatialUntilLocationReady()
-    {
-#if UNITY_EDITOR
-        return;
-#else
-        ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
-        if (extensions != null && extensions.ARCoreExtensionsConfig != null
-            && extensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Enabled)
-        {
-            Debug.Log("[DBG] Geospatial 지연 활성화: GeospatialMode Disabled로 시작");
-            extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Disabled;
-        }
-#endif
     }
 
     private string baseServerUrl = ApiConfig.LOCATIONS + "?status=approved";
@@ -306,8 +288,6 @@ public class DataManager : MonoBehaviour
         }
         else
         {
-            // 권한 획득 시 다른 매니저들에게 이벤트 발행 (TourAPI, Terminal, TrainStation, P2P)
-            OnLocationPermissionGranted?.Invoke();
             Input.location.Start();
             int maxWait = 20;
             while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
@@ -320,23 +300,26 @@ public class DataManager : MonoBehaviour
             {
                 Debug.LogWarning("[DataManager] 위치 서비스 시작 실패 — 기본 위치로 진행");
             }
-        }
 
-        // Awake()에서 Disabled로 시작 → 위치 서비스 초기화 완료 후 Enabled로 변경
-        // 위치 서비스 실패해도 Geospatial은 활성화 (GPS 권한은 이미 있을 수 있음)
-        {
-            ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
-            if (extensions != null && extensions.ARCoreExtensionsConfig != null
-                && extensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
+            // iOS 첫 설치: 위치 권한 없이 시작된 ARSession의 네이티브 Geospatial 모듈이
+            // 실패 상태를 캐시하여 EarthTrackingState가 영구적으로 None 유지됨.
+            // 런타임 config 변경으로는 네이티브 세션을 재생성할 수 없으므로,
+            // 씬 리로드로 ARSession/ARCoreExtensions를 완전히 재생성.
+            // 리로드 후에는 권한이 이미 있으므로 Geospatial이 정상 초기화됨.
+#if UNITY_IOS
+            if (PlayerPrefs.GetInt("geospatial_init_done", 0) == 0
+                && Input.location.status == LocationServiceStatus.Running)
             {
-                Debug.Log("[DBG] 위치 서비스 초기화 완료 → GeospatialMode Enabled 활성화");
-                extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
-                extensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
+                PlayerPrefs.SetInt("geospatial_init_done", 1);
+                PlayerPrefs.Save();
+                Debug.Log("[DBG] iOS 첫 설치: 위치 서비스 시작 성공 → 씬 리로드로 Geospatial 재초기화");
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                yield break;
             }
-            else
-            {
-                Debug.Log("[DBG] GeospatialMode 이미 Enabled (에디터 모드)");
-            }
+#endif
+
+            // 권한 획득 시 다른 매니저들에게 이벤트 발행 (TourAPI, Terminal, TrainStation, P2P)
+            OnLocationPermissionGranted?.Invoke();
         }
 
         // GPS 위치 확보 (Running이면 사용, 아니면 FetchDataOnce에서 재시도)
