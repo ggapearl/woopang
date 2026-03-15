@@ -430,6 +430,10 @@ public class DataManager : MonoBehaviour
             lon = Input.location.lastData.longitude;
         }
         lastPosition = new Vector2(lat, lon);
+
+        // Phase1에서 Geospatial 없이 스폰된 오브젝트의 앵커를 재생성
+        // (첫 설치 시 앵커 생성 실패 → RetryCreateAnchor 30회 소진 → SetVisible(false) 상태 복구)
+        RecreateAllAnchors();
 #endif
 
         isDataLoaded = true;
