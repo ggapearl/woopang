@@ -168,8 +168,8 @@ PlayerSettings:
   androidMinAspectRatio: 1
   applicationIdentifier:
     Android: com.que.woopang
-    Standalone: com.Unity-Technologies.com.unity.template.urp-blank
-    iPhone: com.Unity-Technologies.com.unity.template.urp-blank
+    Standalone: com.que.woopang
+    iPhone: com.que.woopang
   buildNumber:
     Standalone: 0
     VisionOS: 0
