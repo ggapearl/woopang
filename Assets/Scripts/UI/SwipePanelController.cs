@@ -1,23 +1,24 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
+using System.Collections;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 public class SwipePanelController : MonoBehaviour
 {
     public RectTransform panel1;
     public RectTransform panel2;
-    
+
     private Vector2 startPos;
     private float dragStartPosX;
     private bool isDragging = false;
-    private float swipeThreshold = 50f; // 좀 더 민감하게 조정
+    private float swipeThreshold = 50f;
     private float moveSpeed = 15f;
 
     private int currentPanel = 0;
     private float panelWidth;
     private float panelDistance;
-    private float currentAnchoredX; // 실제 적용할 부드러운 X 위치값
+    private float currentAnchoredX;
 
     [Header("Settings")]
     [Tooltip("다음 패널 미리보기 간격 (픽셀 단위).")]
@@ -26,12 +27,22 @@ public class SwipePanelController : MonoBehaviour
     void OnEnable()
     {
         EnhancedTouchSupport.Enable();
-        ResetToFirstPanel();
+        StartCoroutine(ResetToFirstPanelDelayed());
     }
 
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
+    }
+
+    private IEnumerator ResetToFirstPanelDelayed()
+    {
+        currentPanel = 0;
+        currentAnchoredX = 0;
+        if (panel1 != null) panel1.anchoredPosition = new Vector2(0, 0);
+
+        yield return null;
+        ResetToFirstPanel();
     }
 
     public void ResetToFirstPanel()

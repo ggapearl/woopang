@@ -87,19 +87,14 @@ public class CubeUploadManager : MonoBehaviour
         if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
         StartCoroutine(InitializeLocationService());
 
-        // [Fix] CubeUploadPage와 ModelUploadPage를 모두 활성화하여 스와이프 가능하게 함
         var modelManager = FindFirstObjectByType<ModelUploadManager>();
         if (modelManager != null)
         {
             modelManager.ShowUploadPage();
         }
 
-        // 스와이프 패널을 0번(CubeUploadPage)으로 즉시 초기화
-        if (swipePanelController == null)
-        {
-            swipePanelController = FindFirstObjectByType<SwipePanelController>();
-        }
-
+        // 캐시 무효화 후 항상 새로 찾기
+        swipePanelController = FindFirstObjectByType<SwipePanelController>();
         if (swipePanelController != null)
         {
             swipePanelController.ResetToFirstPanel();

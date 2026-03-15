@@ -18360,53 +18360,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   customSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
---- !u!1 &1408865361
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1408865363}
-  - component: {fileID: 1408865362}
-  m_Layer: 0
-  m_Name: PanelController
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1408865362
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1408865361}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ddcc4123595e560428ef4fbbfb123d67, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  panel1: {fileID: 4076024544812920216}
-  panel2: {fileID: 5060755313065250105}
-  panelPreviewAmount: 80
---- !u!4 &1408865363
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1408865361}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1413256329 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 6988694686685824197, guid: 092d69863f3af264daa761e2ed3164ce,
@@ -33105,6 +33058,7 @@ GameObject:
   - component: {fileID: 5421908327746969851}
   - component: {fileID: 8332123155115899615}
   - component: {fileID: 8332123155115899614}
+  - component: {fileID: 8332123155115899616}
   m_Layer: 5
   m_Name: UploadPage
   m_TagString: Untagged
@@ -45308,6 +45262,18 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &8332123155115899616
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3173505891499041532}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a772998d0399e04cb13d4d94399c233, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UploadPageResetHelper
 --- !u!222 &8333774022583629855
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -47862,7 +47828,6 @@ SceneRoots:
   - {fileID: 660799756}
   - {fileID: 274283916}
   - {fileID: 1828759181}
-  - {fileID: 1408865363}
   - {fileID: 1273394269486567397}
   - {fileID: 564737221}
   - {fileID: 809260165}
