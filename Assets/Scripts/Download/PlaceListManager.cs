@@ -157,6 +157,13 @@ public class PlaceListManager : MonoBehaviour
         bool showTrain = activeFilters.GetValueOrDefault("train", true);
         bool showTerminal = activeFilters.GetValueOrDefault("terminal", true);
         bool showObject3D = activeFilters.GetValueOrDefault("object3D", true);
+        bool categoryFilterActive = activeFilters.GetValueOrDefault("categoryFilter", false);
+
+        // 카테고리 필터 값 가져오기
+        string activeCategoryFilter = "";
+        FilterManager filterMgr = UnityEngine.Object.FindFirstObjectByType<FilterManager>();
+        if (filterMgr != null)
+            activeCategoryFilter = filterMgr.GetActiveCategoryFilter();
 
         // 1. Woopang Data
         if (dataManager != null) {
@@ -169,6 +176,12 @@ public class PlaceListManager : MonoBehaviour
                 if (petFriendlyOnly && !p.pet_friendly) continue; // 애견동반만 (노란색)
                 if (noPetFriendly && p.pet_friendly) continue;     // 애견동반 아닌곳만 (체크해제)
                 // petFriendlyAll일 경우 모두 표시 (흰색)
+
+                // 카테고리 필터 적용
+                if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
+                {
+                    if ((p.category ?? "") != activeCategoryFilter) continue;
+                }
 
                 float d = CalculateDistance(lat, lon, p.latitude, p.longitude);
                 if (d <= maxDisplayDistance) {

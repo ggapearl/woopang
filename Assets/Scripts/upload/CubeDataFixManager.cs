@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine.Networking;
 using System;
+using System.Text.RegularExpressions;
 
 public class CubeDataFixManager : MonoBehaviour
 {
@@ -28,15 +29,30 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private Image loadingSpinner;
 
+    [Header("카테고리 설정")]
+    [SerializeField] private Toggle categoryToggle;
+    [SerializeField] private Text categoryToggleLabel;
+
+    [Tooltip("카테고리별 토글 배경색 (순서: shop, food, cafe, park, etc)")]
+    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f);
+    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
+    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
+    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
+    [SerializeField] private Color categoryColorEtc = new Color(0.5f, 0.5f, 0.5f, 1f);
+
+    [Header("Photo Dialogs")]
+    [SerializeField] private PhotoSourceDialog photoSourceDialog;
+    [SerializeField] private ContinueCaptureDialog continueCaptureDialog;
+
     [Header("Upload Settings")]
-    private string serverUrl => ApiConfig.FIX_UPLOAD + "/";
+    private string serverUrl => ApiConfig.FIX_UPLOAD;
     [SerializeField] private float uploadTimeoutSeconds = 20f;
     [SerializeField] private int countdownSeconds = 20;
 
     // HEIC 처리용 변수들
-    private readonly string[] iOSImageFormats = { 
-        ".heic", ".heif", ".png", ".jpg", ".jpeg", 
-        ".tiff", ".tif", ".bmp", ".gif" 
+    private readonly string[] iOSImageFormats = {
+        ".heic", ".heif", ".png", ".jpg", ".jpeg",
+        ".tiff", ".tif", ".bmp", ".gif"
     };
 
     private Texture2D mainPhoto;
@@ -46,6 +62,11 @@ public class CubeDataFixManager : MonoBehaviour
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
     private float elapsedTime = 0f;
+
+    // 카테고리 순환 (none → shop → food → cafe → park → etc → none)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "etc" };
+    private int currentCategoryIndex = 0;
+    private string selectedCategory = "";
 
     private void Awake()
     {
@@ -78,8 +99,39 @@ public class CubeDataFixManager : MonoBehaviour
     }
 
     #region Component Initialization
+    private void AutoConnectFields()
+    {
+        if (categoryToggle == null && petFriendlyToggle != null)
+        {
+            Transform panel = petFriendlyToggle.transform.parent;
+            if (panel != null)
+            {
+                Transform ct = panel.Find("CategoryToggle");
+                if (ct != null) categoryToggle = ct.GetComponent<Toggle>();
+            }
+        }
+        if (categoryToggleLabel == null && categoryToggle != null)
+        {
+            categoryToggleLabel = categoryToggle.GetComponentInChildren<Text>(true);
+        }
+        if (photoSourceDialog == null)
+        {
+            photoSourceDialog = GetComponentInChildren<PhotoSourceDialog>(true);
+            if (photoSourceDialog == null)
+                photoSourceDialog = FindFirstObjectByType<PhotoSourceDialog>();
+        }
+        if (continueCaptureDialog == null)
+        {
+            continueCaptureDialog = GetComponentInChildren<ContinueCaptureDialog>(true);
+            if (continueCaptureDialog == null)
+                continueCaptureDialog = FindFirstObjectByType<ContinueCaptureDialog>();
+        }
+    }
+
     private void InitializeComponents()
     {
+        AutoConnectFields();
+
         if (instagramToggle != null)
         {
             instagramToggle.onValueChanged.AddListener(OnInstagramToggleChanged);
@@ -103,6 +155,14 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (submitButton != null) submitButton.onClick.AddListener(() => StartCoroutine(ValidateAndSubmit()));
         else Debug.LogError("[CubeDataFixManager] SubmitButton이 할당되지 않았습니다!");
+
+        // 카테고리 토글 초기화
+        if (categoryToggle != null)
+        {
+            categoryToggle.isOn = false;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+            UpdateCategoryToggleUI();
+        }
 
         // Component validation
         if (descriptionInput == null) Debug.LogError("[CubeDataFixManager] DescriptionInput이 할당되지 않았습니다!");
@@ -149,6 +209,32 @@ public class CubeDataFixManager : MonoBehaviour
             subPhotoDisplays.Add(img);
             imageObj.SetActive(false);
         }
+    }
+    #endregion
+
+    #region Image Path Sorting
+    /// <summary>
+    /// iOS PHPickerViewController 비동기 반환 경로를 선택 순서대로 정렬
+    /// </summary>
+    private void SortPathsByFileIndex(string[] paths)
+    {
+        if (paths == null || paths.Length <= 1) return;
+        if (Application.platform != RuntimePlatform.IPhonePlayer) return;
+
+        Array.Sort(paths, (a, b) =>
+        {
+            int indexA = ExtractFileIndex(a);
+            int indexB = ExtractFileIndex(b);
+            return indexA.CompareTo(indexB);
+        });
+    }
+
+    private int ExtractFileIndex(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return int.MaxValue;
+        string fileName = Path.GetFileNameWithoutExtension(path);
+        var match = Regex.Match(fileName, @"(\d+)$");
+        return match.Success ? int.Parse(match.Groups[1].Value) : int.MaxValue;
     }
     #endregion
 
@@ -262,7 +348,77 @@ public class CubeDataFixManager : MonoBehaviour
     #endregion
 
     #region Photo Processing Methods
+    /// <summary>
+    /// 메인 사진 선택 - PhotoSourceDialog로 촬영/갤러리/취소 표시
+    /// </summary>
     private IEnumerator SelectAndCropMainPhoto()
+    {
+        if (isProcessing) yield break;
+
+        if (photoSourceDialog != null)
+        {
+            photoSourceDialog.Show(
+                "",
+                onCamera: () => StartCoroutine(CaptureMainPhotoFromCamera()),
+                onGallery: () => StartCoroutine(SelectMainPhotoFromGallery())
+            );
+        }
+        else
+        {
+            yield return StartCoroutine(SelectMainPhotoFromGallery());
+        }
+
+        yield break;
+    }
+
+    /// <summary>
+    /// 카메라로 메인 사진 촬영
+    /// </summary>
+    private IEnumerator CaptureMainPhotoFromCamera()
+    {
+        if (isProcessing) yield break;
+        isProcessing = true;
+
+        ShowSpinner(GetLocalizedText("loading_main_photo"));
+        bool isLoading = true;
+        string capturedPath = null;
+        bool permissionDenied = false;
+
+        NativeCamera.TakePicture((path) =>
+        {
+            if (string.IsNullOrEmpty(path))
+                permissionDenied = true;
+            capturedPath = path;
+            isLoading = false;
+        }, maxSize: 2048);
+
+        yield return new WaitUntil(() => !isLoading);
+
+        if (permissionDenied)
+        {
+            ShowWarning("Camera permission required");
+            HideSpinner();
+            isProcessing = false;
+            yield break;
+        }
+
+        if (!string.IsNullOrEmpty(capturedPath))
+        {
+            yield return StartCoroutine(ProcessMainPhotoWithFallback(capturedPath, () => { }));
+        }
+        else
+        {
+            ShowWarning(GetLocalizedText("photo_selection_failed"));
+        }
+
+        HideSpinner();
+        isProcessing = false;
+    }
+
+    /// <summary>
+    /// 갤러리에서 메인 사진 선택
+    /// </summary>
+    private IEnumerator SelectMainPhotoFromGallery()
     {
         if (isProcessing) yield break;
         isProcessing = true;
@@ -320,6 +476,7 @@ public class CubeDataFixManager : MonoBehaviour
         if (step1Success)
         {
             yield return new WaitUntil(() => processingComplete);
+            onComplete?.Invoke();
             yield break;
         }
 
@@ -348,10 +505,27 @@ public class CubeDataFixManager : MonoBehaviour
     {
         try
         {
-            ImageCropper.Instance.Show(sourceTexture, (success, original, cropped) =>
+            var cropper = ImageCropper.Instance;
+            if (cropper == null)
+            {
+                ShowWarning(GetLocalizedText("main_photo_crop_failed"));
+                onComplete?.Invoke();
+                return;
+            }
+
+            // CubeUploadManager와 동일한 ImageCropper Canvas 설정 사용
+            CubeUploadManager.ConfigureImageCropperCanvas(cropper);
+
+            // 크로퍼가 앞에 렌더링되므로 fixUIPanel 숨김 (깜빡임 방지)
+            StartCoroutine(HideFixUIPanelDelayed());
+
+            cropper.Show(sourceTexture, (success, original, cropped) =>
             {
                 try
                 {
+                    // 크롭 완료 후 fixUIPanel 복원
+                    if (fixUIPanel != null) fixUIPanel.SetActive(true);
+
                     if (success && cropped is Texture2D croppedTexture)
                     {
                         if (mainPhoto != null) Destroy(mainPhoto);
@@ -387,7 +561,119 @@ public class CubeDataFixManager : MonoBehaviour
         }
     }
 
+    private IEnumerator HideFixUIPanelDelayed()
+    {
+        // 2프레임 대기: 크로퍼 Canvas가 완전히 렌더링된 후 숨김
+        yield return null;
+        yield return null;
+        if (fixUIPanel != null)
+            fixUIPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// 서브 사진 선택 - PhotoSourceDialog로 촬영/갤러리/취소 표시
+    /// </summary>
     private IEnumerator SelectSubPhotos()
+    {
+        if (isProcessing) yield break;
+
+        if (photoSourceDialog != null)
+        {
+            photoSourceDialog.Show(
+                "",
+                onCamera: () => StartCoroutine(StartContinuousCaptureMode()),
+                onGallery: () => StartCoroutine(SelectSubPhotosFromGallery())
+            );
+        }
+        else
+        {
+            yield return StartCoroutine(SelectSubPhotosFromGallery());
+        }
+
+        yield break;
+    }
+
+    /// <summary>
+    /// 연속 촬영 모드 시작 (Sub 사진들을 여러 장 연속 촬영)
+    /// </summary>
+    private IEnumerator StartContinuousCaptureMode()
+    {
+        yield return StartCoroutine(CaptureNextSubPhoto());
+    }
+
+    /// <summary>
+    /// 다음 Sub 사진 촬영 (연속 촬영 모드)
+    /// </summary>
+    private IEnumerator CaptureNextSubPhoto()
+    {
+        int remainingSlots = MAX_SUB_PHOTOS - subPhotos.Count;
+        if (remainingSlots <= 0)
+        {
+            ShowWarning(GetLocalizedText("max_sub_photos_exceeded"));
+            yield break;
+        }
+
+        bool captureDone = false;
+        string capturedPath = null;
+        bool permissionDenied = false;
+
+        NativeCamera.TakePicture((path) =>
+        {
+            if (string.IsNullOrEmpty(path))
+                permissionDenied = true;
+            capturedPath = path;
+            captureDone = true;
+        }, maxSize: 2048);
+
+        yield return new WaitUntil(() => captureDone);
+
+        if (permissionDenied)
+        {
+            ShowWarning("Camera permission required");
+            yield break;
+        }
+
+        if (!string.IsNullOrEmpty(capturedPath))
+        {
+            Texture2D texture = NativeGallery.LoadImageAtPath(capturedPath, maxSize: 1024);
+            if (texture != null && texture.width > 8 && texture.height > 8)
+            {
+                subPhotos.Add(texture);
+                UpdateSubPhotoGrid();
+            }
+            else
+            {
+                if (texture != null) Destroy(texture);
+                bool conversionComplete = false;
+                yield return StartCoroutine(LoadImageWithConversion(capturedPath, (result) =>
+                {
+                    if (result != null)
+                    {
+                        subPhotos.Add(result);
+                        UpdateSubPhotoGrid();
+                    }
+                    conversionComplete = true;
+                }));
+                yield return new WaitUntil(() => conversionComplete);
+            }
+
+            int currentCount = subPhotos.Count;
+            if (continueCaptureDialog != null)
+            {
+                string message = $"{currentCount}/{MAX_SUB_PHOTOS}";
+                continueCaptureDialog.Show(
+                    message,
+                    onYes: () => StartCoroutine(CaptureNextSubPhoto()),
+                    onNo: () => { }
+                );
+            }
+        }
+    }
+
+    /// <summary>
+    /// 갤러리에서 Sub 사진들 선택 (여러 장 동시 선택)
+    /// </summary>
+    private IEnumerator SelectSubPhotosFromGallery()
     {
         if (isProcessing) yield break;
         isProcessing = true;
@@ -426,6 +712,10 @@ public class CubeDataFixManager : MonoBehaviour
 
     private IEnumerator LoadSubPhotosWithFallback(string[] paths, System.Action onComplete)
     {
+        // iOS PHPickerViewController는 비동기 처리로 선택 순서가 보장되지 않음
+        // 임시 파일명에 포함된 인덱스 번호로 정렬하여 선택 순서 복원
+        SortPathsByFileIndex(paths);
+
         int processedCount = 0;
         int totalPaths = paths.Length;
 
@@ -569,6 +859,75 @@ public class CubeDataFixManager : MonoBehaviour
     }
     #endregion
 
+    // ============================================================
+    // 카테고리 토글 — 누를 때마다 순환 (none → shop → food → cafe → park → etc → none)
+    // ============================================================
+    #region Category Toggle
+
+    private void OnCategoryToggleChanged(bool value)
+    {
+        currentCategoryIndex = (currentCategoryIndex + 1) % categoryValues.Length;
+        selectedCategory = categoryValues[currentCategoryIndex];
+        UpdateCategoryToggleUI();
+
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = currentCategoryIndex != 0;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+    }
+
+    private void UpdateCategoryToggleUI()
+    {
+        Color bgColor = GetCategoryColor(selectedCategory);
+
+        if (categoryToggle != null)
+        {
+            Transform bgTf = categoryToggle.transform.Find("Background");
+            if (bgTf != null)
+            {
+                Image bgImg = bgTf.GetComponent<Image>();
+                if (bgImg != null) bgImg.color = bgColor;
+
+                Transform checkTf = bgTf.Find("Checkmark");
+                if (checkTf != null)
+                {
+                    Image checkImg = checkTf.GetComponent<Image>();
+                    if (checkImg != null) checkImg.color = bgColor;
+                }
+            }
+
+            if (categoryToggle.graphic != null)
+                categoryToggle.graphic.color = bgColor;
+        }
+
+        if (categoryToggleLabel != null)
+        {
+            if (string.IsNullOrEmpty(selectedCategory))
+                categoryToggleLabel.text = GetLocalizedText("category_select");
+            else
+                categoryToggleLabel.text = GetLocalizedText("category_" + selectedCategory);
+
+            categoryToggleLabel.color = string.IsNullOrEmpty(selectedCategory) ? Color.white : bgColor;
+        }
+    }
+
+    public Color GetCategoryColor(string category)
+    {
+        switch (category)
+        {
+            case "shop": return categoryColorShop;
+            case "food": return categoryColorFood;
+            case "cafe": return categoryColorCafe;
+            case "park": return categoryColorPark;
+            case "etc": return categoryColorEtc;
+            default: return Color.white;
+        }
+    }
+
+    #endregion
+
     #region Validation and Upload
     private IEnumerator ValidateAndSubmit()
     {
@@ -629,6 +988,14 @@ public class CubeDataFixManager : MonoBehaviour
         bool petFriendly = petFriendlyToggle?.isOn ?? false;
         bool separateRestroom = separateRestroomToggle?.isOn ?? false;
 
+        // 카테고리 필수 검증
+        if (string.IsNullOrEmpty(selectedCategory))
+        {
+            ShowWarning(GetLocalizedText("category_required"));
+            isProcessing = false;
+            yield break;
+        }
+
         if (mainPhoto == null)
         {
             ShowWarning(GetLocalizedText("upload_main_photo"));
@@ -640,7 +1007,7 @@ public class CubeDataFixManager : MonoBehaviour
         yield return StartCoroutine(SendWithTimeout(
             ProcessAndUploadData(
                 this, id, petFriendly, separateRestroom, instagramID, showInstagram, description, name,
-                countdownCoroutine)));
+                selectedCategory, countdownCoroutine)));
 
         if (!isProcessing)
         {
@@ -692,7 +1059,8 @@ public class CubeDataFixManager : MonoBehaviour
 
     private IEnumerator ProcessAndUploadData(
         CubeDataFixManager form, int id, bool petFriendly, bool separateRestroom,
-        string instagramID, bool showInstagram, string description, string name, Coroutine countdownCoroutine)
+        string instagramID, bool showInstagram, string description, string name,
+        string category, Coroutine countdownCoroutine)
     {
         WWWForm formData = new WWWForm();
 
@@ -702,10 +1070,11 @@ public class CubeDataFixManager : MonoBehaviour
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
         formData.AddField("description", description);
         formData.AddField("name", name);
-        
+        formData.AddField("category", category);
+
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
-        
+
         string folder = $"fix_{DateTime.Now:yyyyMMdd_HHmmss}";
         formData.AddField("folder", folder);
         formData.AddField("username", "");
@@ -1079,9 +1448,85 @@ public class CubeDataFixManager : MonoBehaviour
                     default: return "Server error occurred";
                 }
 
+            case "category_required":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "카테고리를 선택해주세요";
+                    case SystemLanguage.Japanese: return "カテゴリーを選択してください";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "请选择类别";
+                    case SystemLanguage.Spanish: return "Seleccione una categoría";
+                    default: return "Please select a category";
+                }
+
+            case "category_select":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "분류";
+                    case SystemLanguage.Japanese: return "カテゴリー";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "分类";
+                    case SystemLanguage.Spanish: return "Categoría";
+                    default: return "Category";
+                }
+
+            case "category_shop":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "샵";
+                    case SystemLanguage.Japanese: return "ショップ";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "商店";
+                    case SystemLanguage.Spanish: return "Tienda";
+                    default: return "Shop";
+                }
+
+            case "category_food":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "음식점";
+                    case SystemLanguage.Japanese: return "飲食店";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "餐厅";
+                    case SystemLanguage.Spanish: return "Restaurante";
+                    default: return "Restaurant";
+                }
+
+            case "category_cafe":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "카페";
+                    case SystemLanguage.Japanese: return "カフェ";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "咖啡厅";
+                    case SystemLanguage.Spanish: return "Café";
+                    default: return "Cafe";
+                }
+
+            case "category_park":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "공원";
+                    case SystemLanguage.Japanese: return "公園";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "公园";
+                    case SystemLanguage.Spanish: return "Parque";
+                    default: return "Park";
+                }
+
+            case "category_etc":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "기타";
+                    case SystemLanguage.Japanese: return "その他";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "其他";
+                    case SystemLanguage.Spanish: return "Otros";
+                    default: return "Others";
+                }
+
             default:
-                // 알 수 없는 키는 원본 반환
-                return key; // 키를 그대로 반환
+                return key;
         }
     }
     #endregion
@@ -1136,6 +1581,17 @@ public class CubeDataFixManager : MonoBehaviour
         {
             disableObject.SetActive(false);
         }
+
+        // 카테고리 초기화
+        currentCategoryIndex = 0;
+        selectedCategory = "";
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = false;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+        UpdateCategoryToggleUI();
 
         isProcessing = false;
         elapsedTime = 0f;

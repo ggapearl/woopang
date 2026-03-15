@@ -58,6 +58,11 @@ MeshRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 2
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -79,9 +84,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!1 &4996985200490522202
 GameObject:
@@ -129,15 +136,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 11b24264630bcf84eacbf2e958164e2a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _altitudeOffset: NaN
-  _latitude: 37.42209800000002
-  _longitude: -122.08286000000001
-  _altitude: 11.500000000931323
-  _altitudeType: 0
-  _useEditorAltitudeOverride: 0
-  _editorAltitudeOverride: 0
-  _anchorManager: {fileID: 0}
-  Origin: {fileID: 0}
 --- !u!114 &7652744218790468082
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -148,15 +146,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3380985a27ae52c4a9e05cf0779b105b, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   cubeRenderer: {fileID: 8025986680963324023}
   doubleTap3DScript: {fileID: 146804131848832087}
-  loadingSpinnerPrefab: {fileID: 812358606491578410, guid: e5cd5b569ba59624793d7fec55949790,
-    type: 3}
-  spinnerDuration: 3
-  testLoadOnStart: 0
-  testImageUrl: uploads/20250220_115747_\xC1\xFD/main.jpg
+  texturePadding: 0.05
+  paddingColor: {r: 0.05, g: 0.05, b: 0.05, a: 1}
 --- !u!1 &6314238471570715350
 GameObject:
   m_ObjectHideFlags: 0
@@ -175,6 +170,7 @@ GameObject:
   - component: {fileID: 146804131848832087}
   - component: {fileID: 6055906692734445132}
   - component: {fileID: 7202288649973367051}
+  - component: {fileID: 5783568240981611702}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -223,6 +219,11 @@ MeshRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 2
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -244,9 +245,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!65 &3820874151553556086
 BoxCollider:
@@ -293,7 +296,10 @@ MonoBehaviour:
   minDistance: 10
   maxDistance: 100
   placeName: 
+  gpsLatitude: 0
+  gpsLongitude: 0
   indicator: {fileID: 0}
+  hasPlayedSparkle: 0
 --- !u!114 &3715805387881244858
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -308,6 +314,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   player: {fileID: 0}
   hideDistance: 200
+  minDistance: 2
 --- !u!114 &3606405907495792752
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -336,6 +343,7 @@ MonoBehaviour:
   fullscreenCanvasGroup: {fileID: 0}
   guidePanel: {fileID: 0}
   fullscreenImage: {fileID: 0}
+  nextFullscreenImage: {fileID: 0}
   imageSprites: []
   infoImage1: {fileID: 0}
   infoImage2: {fileID: 0}
@@ -345,11 +353,24 @@ MonoBehaviour:
   closeButton: {fileID: 0}
   nameText: {fileID: 0}
   descriptionTextUI: {fileID: 0}
+  createdByText: {fileID: 0}
   placeInfoTextPanel: {fileID: 0}
-  debugText: {fileID: 0}
   tapSpeed: 0.4
   swipeThreshold: 120
   fadeDuration: 0.4
+  swipeSpeed: 15
+  slideDuration: 0.25
+  slideImageGap: 200
+  slideFadeDuration: 0.4
+  touchBlockDuration: 2
+  placeName: 
+  id: -1
+  commentPreviewPanel: {fileID: 0}
+  previewText: {fileID: 0}
+  previewLikeCount: {fileID: 0}
+  previewLikeIcon: {fileID: 0}
+  likedSprite: {fileID: 0}
+  likeIcon: {fileID: 0}
 --- !u!114 &6055906692734445132
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -581,4 +602,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hapticIntensity: 0.4
   touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  doubleTapSound: {fileID: 0}
   soundVolume: 0.4
+--- !u!114 &5783568240981611702
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6314238471570715350}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 099a37c5395d06a4aa88c9cd7a717f47, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CubeTouchRotator
+  rotationSpeed: 0.3
+  inertiaDecay: 0.92
+  dragThreshold: 10
+  maxInertiaSpeed: 5

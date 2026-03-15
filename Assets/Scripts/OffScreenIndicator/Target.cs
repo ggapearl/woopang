@@ -54,6 +54,32 @@ public class Target : MonoBehaviour
     // Sparkle 효과를 한 번만 재생하기 위한 플래그
     [HideInInspector] public bool hasPlayedSparkle = false;
 
+    // Geospatial 앵커 캐시 (앵커 미생성 시 OffScreenIndicator에서 표시 생략용)
+    private CustomARGeospatialCreatorAnchor _cachedGeoAnchor;
+    private bool _geoAnchorSearched = false;
+
+    /// <summary>
+    /// 이 타겟이 Geospatial 앵커를 사용하는 경우, 앵커가 실제로 생성되었는지 반환.
+    /// 앵커 컴포넌트가 없으면(P2P 등) true 반환 (필터링 안 함).
+    /// </summary>
+    public bool IsAnchorReady
+    {
+        get
+        {
+            if (!_geoAnchorSearched)
+            {
+                _cachedGeoAnchor = GetComponentInParent<CustomARGeospatialCreatorAnchor>();
+                _geoAnchorSearched = true;
+            }
+#if UNITY_EDITOR
+            // 에디터에서는 AR 앵커가 생성되지 않으므로 항상 ready로 처리
+            return true;
+#else
+            return _cachedGeoAnchor == null || _cachedGeoAnchor.IsAnchorCreated;
+#endif
+        }
+    }
+
     public Color TargetColor
     {
         get => targetColor;

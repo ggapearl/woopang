@@ -29,6 +29,9 @@ Shader "Universal Render Pipeline/T5EdgeLine"
         [Header(Back Face)]
         _BackFaceAlpha ("Back Face Alpha", Range(0, 1)) = 0.3
         _BackFaceTint ("Back Face Tint", Color) = (0.7, 0.7, 0.7, 1)
+
+        [Header(Fade Control)]
+        _GlobalAlpha ("Global Alpha", Range(0, 1)) = 1.0
     }
 
     SubShader
@@ -107,6 +110,7 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half _InnerGlow;
                 half _Roundness;
                 half _BackFaceAlpha;
+                half _GlobalAlpha;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -189,8 +193,8 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half3 finalColor = (baseColor + edgeGlow) * _BackFaceTint.rgb;
                 finalColor = MixFog(finalColor, input.fogFactor);
 
-                // 뒷면 알파값 적용
-                half finalAlpha = max(baseAlpha, glowStrength * 0.5) * _BackFaceAlpha;
+                // 뒷면 알파값 적용 (GlobalAlpha로 전체 투명도 제어)
+                half finalAlpha = max(baseAlpha, glowStrength * 0.5) * _BackFaceAlpha * _GlobalAlpha;
 
                 return half4(finalColor, finalAlpha);
             }
@@ -257,6 +261,7 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half _InnerGlow;
                 half _Roundness;
                 half _BackFaceAlpha;
+                half _GlobalAlpha;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -385,8 +390,8 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 // Apply fog
                 finalColor = MixFog(finalColor, input.fogFactor);
 
-                // 최종 알파값: 텍스처 알파 + 엣지 글로우 영역은 항상 보이도록
-                half finalAlpha = max(baseAlpha, glowStrength * 0.5);
+                // 최종 알파값: 텍스처 알파 + 엣지 글로우 영역은 항상 보이도록 (GlobalAlpha로 전체 투명도 제어)
+                half finalAlpha = max(baseAlpha, glowStrength * 0.5) * _GlobalAlpha;
 
                 return half4(finalColor, finalAlpha);
             }

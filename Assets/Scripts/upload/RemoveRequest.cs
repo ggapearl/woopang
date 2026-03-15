@@ -6,16 +6,21 @@ using System;
 
 public class RemoveRequest : MonoBehaviour
 {
-    [SerializeField] private Button removeButton; // ���� ��û ��ư
-    [SerializeField] private Button cancelButton; // ��� ��ư
-    [SerializeField] private GameObject warningObj; // ��� �޽��� ǥ�ÿ� ������Ʈ
-    [SerializeField] private GameObject removeRequestPanel; // ���� ��û UI �г�
-    [SerializeField] private DoubleTap3D initialDoubleTap; // �ʱ� ������ DoubleTap3D (������)
+    [SerializeField] private Button removeButton;
+    [SerializeField] private Button cancelButton;
+    [SerializeField] private GameObject warningObj;
+    [SerializeField] private GameObject removeRequestPanel;
+    [SerializeField] private DoubleTap3D initialDoubleTap;
 
-    private DoubleTap3D doubleTap; // �������� ������ DoubleTap3D
-    private CanvasGroup fullscreenCanvasGroup; // Ǯ��ũ�� UI �г�
+    [Header("Localized UI Texts")]
+    [SerializeField] private Text titleText;
+    [SerializeField] private Text removeButtonText;
+    [SerializeField] private Text cancelButtonText;
 
-    private string serverUrl => ApiConfig.FIX_UPLOAD + "/";
+    private DoubleTap3D doubleTap;
+    private CanvasGroup fullscreenCanvasGroup;
+
+    private string serverUrl => ApiConfig.FIX_UPLOAD;
 
     void Start()
     {
@@ -24,8 +29,9 @@ public class RemoveRequest : MonoBehaviour
         if (doubleTap != null)
         {
             fullscreenCanvasGroup = doubleTap.GetComponent<CanvasGroup>();
-            // CanvasGroup은 선택적 - 없어도 기능 동작에 문제 없음
         }
+
+        AutoConnectFields();
 
         if (removeButton != null)
             removeButton.onClick.AddListener(OnRemoveButtonClicked);
@@ -36,11 +42,106 @@ public class RemoveRequest : MonoBehaviour
         if (warningObj != null)
             warningObj.SetActive(false);
 
+        LocalizeUI();
+
         if (removeRequestPanel != null)
             removeRequestPanel.SetActive(false);
 
-        // 더블 터치 이벤트 연결
         DoubleTap3D.OnDoubleTapEvent += HandleDoubleTap;
+    }
+
+    private void AutoConnectFields()
+    {
+        if (removeRequestPanel == null) return;
+
+        if (titleText == null)
+        {
+            Text[] texts = removeRequestPanel.GetComponentsInChildren<Text>(true);
+            foreach (Text t in texts)
+            {
+                if (t.transform.parent == removeRequestPanel.transform ||
+                    (t.transform.parent != null && t.transform.parent.GetComponent<Button>() == null))
+                {
+                    titleText = t;
+                    break;
+                }
+            }
+        }
+
+        if (removeButtonText == null && removeButton != null)
+            removeButtonText = removeButton.GetComponentInChildren<Text>(true);
+
+        if (cancelButtonText == null && cancelButton != null)
+            cancelButtonText = cancelButton.GetComponentInChildren<Text>(true);
+    }
+
+    private void LocalizeUI()
+    {
+        if (titleText != null)
+            titleText.text = GetLocalizedRemoveTitle();
+
+        if (removeButtonText != null)
+            removeButtonText.text = GetLocalizedRemoveButton();
+
+        if (cancelButtonText != null)
+            cancelButtonText.text = GetLocalizedCancelButton();
+    }
+
+    private string GetLocalizedRemoveTitle()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return "삭제 요청하시겠습니까?";
+            case SystemLanguage.Japanese:
+                return "削除をリクエストしますか？";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return "请求删除此地点？";
+            case SystemLanguage.Spanish:
+                return "¿Solicitar eliminación del lugar?";
+            default:
+                return "Request place removal?";
+        }
+    }
+
+    private string GetLocalizedRemoveButton()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return "삭제 요청";
+            case SystemLanguage.Japanese:
+                return "削除リクエスト";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return "请求删除";
+            case SystemLanguage.Spanish:
+                return "Solicitar eliminación";
+            default:
+                return "Request Removal";
+        }
+    }
+
+    private string GetLocalizedCancelButton()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean:
+                return "취소";
+            case SystemLanguage.Japanese:
+                return "キャンセル";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified:
+            case SystemLanguage.ChineseTraditional:
+                return "取消";
+            case SystemLanguage.Spanish:
+                return "Cancelar";
+            default:
+                return "Cancel";
+        }
     }
 
     void OnDestroy()

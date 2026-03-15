@@ -14,6 +14,7 @@ public class AddPlaceLocalizer : MonoBehaviour
     [SerializeField] private Text petFriendlyLabel;     // "Pet Friendly" 라벨
     [SerializeField] private Text separatedRestroomLabel; // "Separated Restroom" 라벨
     [SerializeField] private Text instagramIdLabel;     // "Instagram ID" 라벨
+    [SerializeField] private Text categoryLabel;         // "Select Category" 라벨
 
     private string currentLanguage;
 
@@ -30,7 +31,8 @@ public class AddPlaceLocalizer : MonoBehaviour
             addPlaceImgsLabel = "Add Place Imgs",
             petFriendlyLabel = "Pet Friendly",
             separatedRestroomLabel = "Separated Restroom",
-            instagramIdLabel = "Instagram ID"
+            instagramIdLabel = "Instagram ID",
+            categoryLabel = "Select Category"
         },
         ["ko"] = new LocalizedAddPlaceTexts
         {
@@ -42,7 +44,8 @@ public class AddPlaceLocalizer : MonoBehaviour
             addPlaceImgsLabel = "장소 이미지 추가",
             petFriendlyLabel = "반려동물 동반 가능",
             separatedRestroomLabel = "분리된 화장실",
-            instagramIdLabel = "인스타그램 ID"
+            instagramIdLabel = "인스타그램 ID",
+            categoryLabel = "분류 선택"
         },
         ["ja"] = new LocalizedAddPlaceTexts
         {
@@ -54,7 +57,8 @@ public class AddPlaceLocalizer : MonoBehaviour
             addPlaceImgsLabel = "場所の画像を追加",
             petFriendlyLabel = "ペット可",
             separatedRestroomLabel = "分離されたトイレ",
-            instagramIdLabel = "インスタグラム ID"
+            instagramIdLabel = "インスタグラム ID",
+            categoryLabel = "分類選択"
         },
         ["zh"] = new LocalizedAddPlaceTexts
         {
@@ -66,7 +70,8 @@ public class AddPlaceLocalizer : MonoBehaviour
             addPlaceImgsLabel = "添加地点图片",
             petFriendlyLabel = "宠物友好",
             separatedRestroomLabel = "独立洗手间",
-            instagramIdLabel = "Instagram ID"
+            instagramIdLabel = "Instagram ID",
+            categoryLabel = "选择分类"
         },
         ["es"] = new LocalizedAddPlaceTexts
         {
@@ -78,7 +83,8 @@ public class AddPlaceLocalizer : MonoBehaviour
             addPlaceImgsLabel = "Agregar Imágenes del Lugar",
             petFriendlyLabel = "Acepta Mascotas",
             separatedRestroomLabel = "Baño Separado",
-            instagramIdLabel = "ID de Instagram"
+            instagramIdLabel = "ID de Instagram",
+            categoryLabel = "Elegir categoría"
         }
     };
 
@@ -138,7 +144,8 @@ public class AddPlaceLocalizer : MonoBehaviour
         if (petFriendlyLabel == null) isValid = false;
         if (separatedRestroomLabel == null) isValid = false;
         if (instagramIdLabel == null) isValid = false;
-        
+        // categoryLabel은 선택적 (에디터 스크립트로 자동 생성되므로 null 허용)
+
         return isValid;
     }
 
@@ -178,6 +185,9 @@ public class AddPlaceLocalizer : MonoBehaviour
             
         if (instagramIdLabel != null)
             instagramIdLabel.text = texts.instagramIdLabel;
+
+        if (categoryLabel != null)
+            categoryLabel.text = texts.categoryLabel;
     }
 
     // 언어를 수동으로 변경하고 싶을 때 사용 (선택사항)
@@ -228,6 +238,9 @@ public class AddPlaceLocalizer : MonoBehaviour
             case "instagram":
                 if (instagramIdLabel != null) instagramIdLabel.text = customText;
                 break;
+            case "category":
+                if (categoryLabel != null) categoryLabel.text = customText;
+                break;
             default:
                 break;
         }
@@ -246,4 +259,5 @@ public class LocalizedAddPlaceTexts
     public string petFriendlyLabel;
     public string separatedRestroomLabel;
     public string instagramIdLabel;
+    public string categoryLabel;
 }

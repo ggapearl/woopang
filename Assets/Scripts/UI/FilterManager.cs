@@ -16,6 +16,14 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Toggle trainToggle;
     [SerializeField] private Toggle terminalToggle;
     [SerializeField] private Toggle object3DToggle;
+    [SerializeField] private Toggle categoryToggle;
+
+    [Header("카테고리 색상 설정")]
+    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f); // 파란색
+    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
+    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
+    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
+    [SerializeField] private Color categoryColorEtc = new Color(0.5f, 0.5f, 0.5f, 1f);   // 회색
 
     [Header("References")]
     [SerializeField] private PlaceListManager placeListManager;
@@ -44,8 +52,22 @@ public class FilterManager : MonoBehaviour
         None = 2                 // P2P 제외 (회색)
     }
 
+    // 카테고리 필터 상태
+    public enum CategoryFilterState
+    {
+        All = 0,    // 전체 (흰색)
+        Shop = 1,
+        Food = 2,
+        Cafe = 3,
+        Park = 4,
+        Etc = 5     // 기타 (회색)
+    }
+
+    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "etc" };
+
     private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
     private P2PFilterState p2pFilterState = P2PFilterState.FollowingOnly;  // 기본값: 팔로잉
+    private CategoryFilterState categoryState = CategoryFilterState.All;  // 기본값: 전체
     private bool filterPublicData = true;
     private bool filterSubway = true;
     private bool filterAlcohol = true;
@@ -54,6 +76,16 @@ public class FilterManager : MonoBehaviour
     private bool filterObject3D = true;
 
     private bool isUpdatingToggles = false;
+
+    // 카테고리 선택 시 비활성화할 토글들의 원래 상태 저장
+    private bool savedPublicData;
+    private bool savedSubway;
+    private bool savedTrain;
+    private bool savedTerminal;
+    private bool savedAlcohol;
+    private P2PFilterState savedP2PState;
+    private bool isCategoryOverrideActive = false;
+    private static readonly Color DISABLED_GRAY = new Color(0.5f, 0.5f, 0.5f, 1f);
 
     // PlayerPrefs 키 (V2)
     private const string PREF_PET_FRIENDLY = "Filter_PetFriendly_V3";
@@ -64,6 +96,7 @@ public class FilterManager : MonoBehaviour
     private const string PREF_TRAIN = "Filter_Train_V2";
     private const string PREF_TERMINAL = "Filter_Terminal_V2";
     private const string PREF_OBJECT3D = "Filter_Object3D_V2";
+    private const string PREF_CATEGORY = "Filter_Category_V1";
 
     // 다국어 데이터
     private Dictionary<string, Dictionary<string, string>> localizedFilterNames = new Dictionary<string, Dictionary<string, string>>
@@ -80,7 +113,13 @@ public class FilterManager : MonoBehaviour
             { "alcohol", "Alcohol" },
             { "train", "Train" },
             { "terminal", "Terminal/Airport" },
-            { "object3D", "3D Objects" }
+            { "object3D", "3D Objects" },
+            { "categoryAll", "Category" },
+            { "categoryShop", "Shop" },
+            { "categoryFood", "Food" },
+            { "categoryCafe", "Cafe" },
+            { "categoryPark", "Park" },
+            { "categoryEtc", "Etc." }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendlyInclude", "애견동반(포함)" },
@@ -94,7 +133,13 @@ public class FilterManager : MonoBehaviour
             { "alcohol", "주류판매" },
             { "train", "기차역" },
             { "terminal", "터미널" },
-            { "object3D", "3D 오브젝트" }
+            { "object3D", "3D 오브젝트" },
+            { "categoryAll", "카테고리" },
+            { "categoryShop", "샵" },
+            { "categoryFood", "음식점" },
+            { "categoryCafe", "카페" },
+            { "categoryPark", "공원" },
+            { "categoryEtc", "기타" }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendlyInclude", "ペット同伴(含む)" },
@@ -108,7 +153,13 @@ public class FilterManager : MonoBehaviour
             { "alcohol", "アルコール" },
             { "train", "鉄道駅" },
             { "terminal", "ターミナル" },
-            { "object3D", "3Dオブジェクト" }
+            { "object3D", "3Dオブジェクト" },
+            { "categoryAll", "カテゴリ" },
+            { "categoryShop", "ショップ" },
+            { "categoryFood", "グルメ" },
+            { "categoryCafe", "カフェ" },
+            { "categoryPark", "公園" },
+            { "categoryEtc", "その他" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendlyInclude", "宠物友好(包含)" },
@@ -122,7 +173,13 @@ public class FilterManager : MonoBehaviour
             { "alcohol", "酒类销售" },
             { "train", "火车站" },
             { "terminal", "航站楼" },
-            { "object3D", "3D对象" }
+            { "object3D", "3D对象" },
+            { "categoryAll", "分类" },
+            { "categoryShop", "商店" },
+            { "categoryFood", "美食" },
+            { "categoryCafe", "咖啡厅" },
+            { "categoryPark", "公园" },
+            { "categoryEtc", "其他" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendlyInclude", "Mascotas (Incluir)" },
@@ -136,7 +193,13 @@ public class FilterManager : MonoBehaviour
             { "alcohol", "Alcohol" },
             { "train", "Estación de Tren" },
             { "terminal", "Terminal" },
-            { "object3D", "Objetos 3D" }
+            { "object3D", "Objetos 3D" },
+            { "categoryAll", "Categoría" },
+            { "categoryShop", "Tienda" },
+            { "categoryFood", "Comida" },
+            { "categoryCafe", "Café" },
+            { "categoryPark", "Parque" },
+            { "categoryEtc", "Otros" }
         }}
     };
 
@@ -146,8 +209,19 @@ public class FilterManager : MonoBehaviour
     // P2P 토글은 P2PUserFilterPanel이 전담 처리 (충돌 방지)
     // FilterManager에서는 P2P 토글을 연결하지 않음
 
+    private void AutoConnectFields()
+    {
+        if (categoryToggle == null)
+        {
+            Transform ct = transform.Find("CategoryToggle");
+            if (ct != null) categoryToggle = ct.GetComponent<Toggle>();
+        }
+    }
+
     void Start()
     {
+        AutoConnectFields();
+
         // Inspector에 연결되지 않은 매니저는 자동으로 찾기
         if (terminalManager == null) terminalManager = Object.FindFirstObjectByType<TerminalManager>();
         if (trainStationManager == null) trainStationManager = Object.FindFirstObjectByType<TrainStationManager>();
@@ -169,6 +243,19 @@ public class FilterManager : MonoBehaviour
         SetupToggle(trainToggle, filterTrain, OnTrainToggleChanged, "train");
         SetupToggle(terminalToggle, filterTerminal, OnTerminalToggleChanged, "terminal");
         SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
+
+        // Category는 PetFriendly처럼 multi-state이므로 별도 처리
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+            UpdateCategoryToggleUI();
+        }
+
+        // 저장된 카테고리 상태가 All이 아니면 오버라이드 적용
+        if (categoryState != CategoryFilterState.All)
+        {
+            ApplyCategoryOverride();
+        }
 
         ApplyAllFilters();
     }
@@ -411,6 +498,7 @@ public class FilterManager : MonoBehaviour
         filterTrain = (filterName == "train");
         filterTerminal = (filterName == "terminal");
         filterObject3D = (filterName == "object3D");
+        categoryState = (filterName == "category") ? CategoryFilterState.All : CategoryFilterState.All;
 
         UpdateAllToggleUI();
         SaveFilterSettings();
@@ -429,6 +517,7 @@ public class FilterManager : MonoBehaviour
         filterTrain = PlayerPrefs.GetInt(PREF_TRAIN, 1) == 1;
         filterTerminal = PlayerPrefs.GetInt(PREF_TERMINAL, 1) == 1;
         filterObject3D = PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
+        categoryState = (CategoryFilterState)PlayerPrefs.GetInt(PREF_CATEGORY, 0);
     }
 
     private void SaveFilterSettings()
@@ -441,6 +530,7 @@ public class FilterManager : MonoBehaviour
         PlayerPrefs.SetInt(PREF_TRAIN, filterTrain ? 1 : 0);
         PlayerPrefs.SetInt(PREF_TERMINAL, filterTerminal ? 1 : 0);
         PlayerPrefs.SetInt(PREF_OBJECT3D, filterObject3D ? 1 : 0);
+        PlayerPrefs.SetInt(PREF_CATEGORY, (int)categoryState);
         PlayerPrefs.Save();
     }
 
@@ -454,6 +544,7 @@ public class FilterManager : MonoBehaviour
         if (trainToggle != null) trainToggle.isOn = filterTrain;
         if (terminalToggle != null) terminalToggle.isOn = filterTerminal;
         if (object3DToggle != null) object3DToggle.isOn = filterObject3D;
+        UpdateCategoryToggleUI();
     }
 
     private void OnPetFriendlyToggleChanged(bool isOn)
@@ -550,6 +641,208 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
+    // ============================================================
+    // 카테고리 토글 — 누를 때마다 순환 (All → Shop → Food → Cafe → Park → All)
+    // ============================================================
+
+    private void OnCategoryToggleChanged(bool isOn)
+    {
+        if (isUpdatingToggles) return;
+
+        // 6단계 순환: All → Shop → Food → Cafe → Park → Etc → All
+        int next = ((int)categoryState + 1) % categoryStateValues.Length;
+        categoryState = (CategoryFilterState)next;
+
+        // 카테고리 선택 시 공공데이터/P2P 토글 비활성화
+        ApplyCategoryOverride();
+
+        UpdateCategoryToggleUI();
+        SaveFilterSettings();
+        ApplyAllFilters();
+    }
+
+    /// <summary>
+    /// 카테고리가 선택되면 공공데이터/P2P/주류 토글을 회색으로 비활성화
+    /// 카테고리=All로 돌아오면 원래 상태 복원
+    /// </summary>
+    private void ApplyCategoryOverride()
+    {
+        bool categoryActive = categoryState != CategoryFilterState.All;
+
+        if (categoryActive && !isCategoryOverrideActive)
+        {
+            // 카테고리 선택됨 → 현재 상태 저장 후 비활성화
+            isCategoryOverrideActive = true;
+            savedPublicData = filterPublicData;
+            savedSubway = filterSubway;
+            savedTrain = filterTrain;
+            savedTerminal = filterTerminal;
+            savedAlcohol = filterAlcohol;
+            savedP2PState = p2pFilterState;
+        }
+        else if (!categoryActive && isCategoryOverrideActive)
+        {
+            // 카테고리=All로 복귀 → 원래 상태 복원
+            isCategoryOverrideActive = false;
+            filterPublicData = savedPublicData;
+            filterSubway = savedSubway;
+            filterTrain = savedTrain;
+            filterTerminal = savedTerminal;
+            filterAlcohol = savedAlcohol;
+            p2pFilterState = savedP2PState;
+        }
+
+        isUpdatingToggles = true;
+
+        if (categoryActive)
+        {
+            // 체크된 채로 회색 박스 표시 (비활성화 상태)
+            SetToggleDisabledVisual(publicDataToggle);
+            SetToggleDisabledVisual(subwayToggle);
+            SetToggleDisabledVisual(trainToggle);
+            SetToggleDisabledVisual(terminalToggle);
+            SetToggleDisabledVisual(alcoholToggle);
+
+            // 토글 터치 불가
+            SetToggleInteractable(publicDataToggle, false);
+            SetToggleInteractable(subwayToggle, false);
+            SetToggleInteractable(trainToggle, false);
+            SetToggleInteractable(terminalToggle, false);
+            SetToggleInteractable(alcoholToggle, false);
+
+            // P2P도 비활성화
+            var p2pPanel = Object.FindFirstObjectByType<P2PUserFilterPanel>();
+            if (p2pPanel != null)
+            {
+                p2pPanel.SetFilterModeExternal(UserFilterMode.None);
+                SetToggleInteractable(p2pPanel.GetToggle(), false);
+            }
+        }
+        else
+        {
+            // 원래 상태로 복원
+            if (publicDataToggle != null) publicDataToggle.isOn = filterPublicData;
+            if (subwayToggle != null) subwayToggle.isOn = filterSubway;
+            if (trainToggle != null) trainToggle.isOn = filterTrain;
+            if (terminalToggle != null) terminalToggle.isOn = filterTerminal;
+            if (alcoholToggle != null) alcoholToggle.isOn = filterAlcohol;
+
+            // 토글 터치 가능으로 복원
+            SetToggleInteractable(publicDataToggle, true);
+            SetToggleInteractable(subwayToggle, true);
+            SetToggleInteractable(trainToggle, true);
+            SetToggleInteractable(terminalToggle, true);
+            SetToggleInteractable(alcoholToggle, true);
+
+            // P2P 복원
+            var p2pPanel = Object.FindFirstObjectByType<P2PUserFilterPanel>();
+            if (p2pPanel != null)
+            {
+                p2pPanel.SetFilterModeExternal(savedP2PState == P2PFilterState.None ? UserFilterMode.None
+                    : savedP2PState == P2PFilterState.All ? UserFilterMode.All
+                    : UserFilterMode.FollowingOnly);
+                SetToggleInteractable(p2pPanel.GetToggle(), true);
+            }
+
+            // 비활성화 비주얼 해제 → 원래 on/off 색상 복원
+            RestoreToggleVisual(publicDataToggle, filterPublicData);
+            RestoreToggleVisual(subwayToggle, filterSubway);
+            RestoreToggleVisual(trainToggle, filterTrain);
+            RestoreToggleVisual(terminalToggle, filterTerminal);
+            RestoreToggleVisual(alcoholToggle, filterAlcohol);
+        }
+
+        isUpdatingToggles = false;
+    }
+
+    /// <summary>
+    /// 토글을 체크된 상태로 유지하면서 박스만 회색으로 표시
+    /// </summary>
+    private void SetToggleDisabledVisual(Toggle toggle)
+    {
+        if (toggle == null) return;
+        toggle.SetIsOnWithoutNotify(true);
+        SetToggleBackgroundAndCheckmark(toggle, DISABLED_GRAY);
+        SetToggleLabelColor(toggle, DISABLED_GRAY);
+    }
+
+    /// <summary>
+    /// 토글 원래 색상 복원
+    /// </summary>
+    private void RestoreToggleVisual(Toggle toggle, bool isOn)
+    {
+        if (toggle == null) return;
+        toggle.SetIsOnWithoutNotify(isOn);
+        Color color = isOn ? Color.white : DISABLED_GRAY;
+        SetToggleBackgroundAndCheckmark(toggle, color);
+        SetToggleLabelColor(toggle, Color.white);
+    }
+
+    private void SetToggleInteractable(Toggle toggle, bool interactable)
+    {
+        if (toggle == null) return;
+        toggle.interactable = interactable;
+    }
+
+    private void UpdateCategoryToggleUI()
+    {
+        if (categoryToggle == null) return;
+
+        isUpdatingToggles = true;
+
+        // isOn은 항상 true로 유지 (Unity Toggle 색상 처리 방지)
+        categoryToggle.isOn = true;
+
+        var texts = localizedFilterNames.ContainsKey(currentLangCode)
+            ? localizedFilterNames[currentLangCode]
+            : localizedFilterNames["en"];
+
+        string labelText = "";
+        Color bgColor = Color.white;
+
+        switch (categoryState)
+        {
+            case CategoryFilterState.All:
+                bgColor = Color.white;
+                labelText = texts["categoryAll"];
+                break;
+            case CategoryFilterState.Shop:
+                bgColor = categoryColorShop;
+                labelText = texts["categoryShop"];
+                break;
+            case CategoryFilterState.Food:
+                bgColor = categoryColorFood;
+                labelText = texts["categoryFood"];
+                break;
+            case CategoryFilterState.Cafe:
+                bgColor = categoryColorCafe;
+                labelText = texts["categoryCafe"];
+                break;
+            case CategoryFilterState.Park:
+                bgColor = categoryColorPark;
+                labelText = texts["categoryPark"];
+                break;
+            case CategoryFilterState.Etc:
+                bgColor = categoryColorEtc;
+                labelText = texts["categoryEtc"];
+                break;
+        }
+
+        SetToggleBackgroundAndCheckmark(categoryToggle, bgColor);
+        SetToggleLabel(categoryToggle, labelText);
+        SetToggleLabelColor(categoryToggle, categoryState == CategoryFilterState.All ? Color.white : bgColor);
+
+        isUpdatingToggles = false;
+    }
+
+    /// <summary>
+    /// 현재 선택된 카테고리 필터 값 반환 (빈 문자열 = 전체)
+    /// </summary>
+    public string GetActiveCategoryFilter()
+    {
+        return categoryStateValues[(int)categoryState];
+    }
+
     private void ApplyAllFilters()
     {
         Dictionary<string, bool> filters = GetActiveFilters();
@@ -566,17 +859,21 @@ public class FilterManager : MonoBehaviour
 
     public Dictionary<string, bool> GetActiveFilters()
     {
+        bool categoryActive = categoryState != CategoryFilterState.All;
+
         return new Dictionary<string, bool>
         {
             { "petFriendlyOnly", petFriendlyState == PetFriendlyFilterState.OnlyPetFriendly },
             { "petFriendlyAll", petFriendlyState == PetFriendlyFilterState.All },
             { "noPetFriendly", petFriendlyState == PetFriendlyFilterState.NoPetFriendly },
-            { "publicData", filterPublicData },
-            { "subway", filterSubway },
-            { "alcohol", filterAlcohol },
-            { "train", filterTrain },
-            { "terminal", filterTerminal },
-            { "object3D", filterObject3D }
+            { "publicData", categoryActive ? false : filterPublicData },
+            { "subway", categoryActive ? false : filterSubway },
+            { "alcohol", categoryActive ? false : filterAlcohol },
+            { "train", categoryActive ? false : filterTrain },
+            { "terminal", categoryActive ? false : filterTerminal },
+            { "object3D", filterObject3D },
+            { "categoryFilter", categoryActive },
+            { "p2pUsers", categoryActive ? false : true }
         };
     }
 }

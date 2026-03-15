@@ -520,31 +520,47 @@ def send_slack_fix_request_notification(data):
         return False
 
     try:
-        request_type = "삭제 요청" if data.get('remove_request') else "수정 요청"
+        is_delete = data.get('remove_request', False)
+        request_type = "삭제 요청" if is_delete else "수정 요청"
         target_info = f"대상 ID: {data.get('target_id')}" if data.get('target_id', -1) > 0 else "새로운 데이터"
-        emoji = ":x:" if data.get('remove_request') else ":pencil2:"
+        emoji = ":rotating_light:" if is_delete else ":pencil2:"
+        color = "#DC3545" if is_delete else "#3B82F6"  # 빨간색 / 파란색
+
+        fields_list = [
+            {"type": "mrkdwn", "text": f"*요청 ID*\n{data.get('id', 'N/A')}"},
+            {"type": "mrkdwn", "text": f"*대상*\n{target_info}"},
+            {"type": "mrkdwn", "text": f"*사용자*\n{data.get('username', '익명')}"},
+            {"type": "mrkdwn", "text": f"*장소명*\n{data.get('name', '미제공')}"},
+        ]
+
+        if is_delete:
+            fields_list.append({"type": "mrkdwn", "text": f"*설명*\n{data.get('description') or '없음'}"})
+        else:
+            fields_list.extend([
+                {"type": "mrkdwn", "text": f"*카테고리*\n{data.get('category') or '미지정'}"},
+                {"type": "mrkdwn", "text": f"*반려동물*\n{'O' if data.get('pet_friendly') else 'X'}"},
+                {"type": "mrkdwn", "text": f"*화장실 분리*\n{'O' if data.get('separate_restroom') else 'X'}"},
+                {"type": "mrkdwn", "text": f"*인스타그램*\n{data.get('instagram_id') or 'X'}"},
+                {"type": "mrkdwn", "text": f"*설명*\n{data.get('description') or '없음'}"},
+            ])
 
         payload = {
             "channel": "#admin-notifications",
             "text": f"{request_type}이 접수되었습니다!",
             "icon_emoji": emoji,
             "username": "ARFixBot",
-            "blocks": [
+            "attachments": [
                 {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": f"*{request_type}이 접수되었습니다!*"}
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {"type": "mrkdwn", "text": f"*요청 ID*\n{data.get('id', 'N/A')}"},
-                        {"type": "mrkdwn", "text": f"*대상*\n{target_info}"},
-                        {"type": "mrkdwn", "text": f"*사용자*\n{data.get('username', '익명')}"},
-                        {"type": "mrkdwn", "text": f"*장소명*\n{data.get('name', '미제공')}"},
-                        {"type": "mrkdwn", "text": f"*반려동물*\n{'O' if data.get('pet_friendly') else 'X'}"},
-                        {"type": "mrkdwn", "text": f"*화장실 분리*\n{'O' if data.get('separate_restroom') else 'X'}"},
-                        {"type": "mrkdwn", "text": f"*인스타그램*\n{data.get('instagram_id') or 'X'}"},
-                        {"type": "mrkdwn", "text": f"*설명*\n{data.get('description') or '없음'}"}
+                    "color": color,
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f"*{emoji} {request_type}이 접수되었습니다!*"}
+                        },
+                        {
+                            "type": "section",
+                            "fields": fields_list
+                        }
                     ]
                 }
             ]
@@ -807,6 +823,54 @@ def init_tables():
             safe_print("[Info] locations 테이블에 device_id 컬럼 추가됨")
         except Exception as e:
             safe_print(f"[Info] Locations migration note: {e}")
+
+        # locations 테이블에 remove_request_count 컬럼 추가 (삭제 요청 수 추적)
+        try:
+            cursor.execute("ALTER TABLE locations ADD COLUMN IF NOT EXISTS remove_request_count INTEGER DEFAULT 0;")
+            safe_print("[Info] locations 테이블에 remove_request_count 컬럼 추가됨")
+        except Exception as e:
+            safe_print(f"[Info] Locations remove_request_count migration note: {e}")
+
+        # locations 테이블에 category 컬럼 추가 (카테고리 필터링용)
+        try:
+            cursor.execute("ALTER TABLE locations ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_locations_category ON locations(category);")
+            safe_print("[Info] locations 테이블에 category 컬럼 추가됨")
+        except Exception as e:
+            safe_print(f"[Info] Locations category migration note: {e}")
+
+        # fix_requests 테이블 생성 (수정/삭제 요청용)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fix_requests (
+                id SERIAL PRIMARY KEY,
+                target_id INTEGER,
+                username TEXT,
+                name TEXT,
+                pet_friendly BOOLEAN DEFAULT FALSE,
+                separate_restroom BOOLEAN DEFAULT FALSE,
+                instagram_id TEXT,
+                description TEXT,
+                category TEXT DEFAULT '',
+                remove_request BOOLEAN DEFAULT FALSE,
+                status TEXT DEFAULT 'pending',
+                folder TEXT,
+                main_photo TEXT,
+                sub_photos TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        safe_print("[Info] fix_requests 테이블 생성/확인 완료")
+
+        # fix_requests 테이블에 누락된 컬럼 추가 (기존 테이블 호환)
+        try:
+            cursor.execute("ALTER TABLE fix_requests ADD COLUMN IF NOT EXISTS main_photo TEXT;")
+            cursor.execute("ALTER TABLE fix_requests ADD COLUMN IF NOT EXISTS sub_photos TEXT;")
+            cursor.execute("ALTER TABLE fix_requests ADD COLUMN IF NOT EXISTS folder TEXT;")
+            cursor.execute("ALTER TABLE fix_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';")
+            cursor.execute("ALTER TABLE fix_requests ADD COLUMN IF NOT EXISTS category TEXT DEFAULT '';")
+            safe_print("[Info] fix_requests 테이블 컬럼 마이그레이션 완료")
+        except Exception as e:
+            safe_print(f"[Info] fix_requests migration note: {e}")
 
         # 팔로우 테이블 생성
         cursor.execute("""
@@ -2399,6 +2463,7 @@ def upload():
         pet_friendly = request.form.get('pet_friendly') == 'true'
         separate_restroom = request.form.get('separate_restroom') == 'true'
         instagram_id = request.form.get('instagram_id', '')
+        category = request.form.get('category', '')
         timezone_offset = request.form.get('timezone_offset', '+0000')
         device_id = request.form.get('device_id', '')  # 업로더 추적용
         # AUTO_APPROVE_UPLOADS 설정에 따라 status 결정
@@ -2449,11 +2514,11 @@ def upload():
             insert_query = """
                 INSERT INTO locations (
                     id, username, name, latitude, longitude, altitude,
-                    pet_friendly, separate_restroom, instagram_id,
+                    pet_friendly, separate_restroom, instagram_id, category,
                     status, folder, main_photo, sub_photos, model_type,
                     animation_loop, animation_auto_play, created_at, device_id
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, 'cube', false, false, CURRENT_TIMESTAMP, %s
                 )
                 RETURNING id
@@ -2461,7 +2526,7 @@ def upload():
 
             cursor.execute(insert_query, (
                 next_id, username, name, latitude, longitude, altitude,
-                pet_friendly, separate_restroom, instagram_id,
+                pet_friendly, separate_restroom, instagram_id, category,
                 upload_status, folder, main_photo_url, json.dumps(sub_photos_list), device_id
             ))
 
@@ -2534,7 +2599,7 @@ def get_locations():
                    separate_restroom, instagram_id, status, folder, main_photo, sub_photos, color,
                    model_type, model_url, model_scale, model_rotation_x, model_rotation_y, model_rotation_z,
                    animation_name, animation_speed, animation_loop, animation_auto_play,
-                   model_format, has_animation, username
+                   model_format, has_animation, username, COALESCE(category, '') as category
             FROM locations
             WHERE status = 'approved'
               AND latitude BETWEEN %s AND %s
@@ -2575,6 +2640,7 @@ def get_locations():
             model_format = row[23] if len(row) > 23 and row[23] else 'glb'
             has_animation = bool(row[24]) if len(row) > 24 and row[24] is not None else False
             username = row[25] if len(row) > 25 and row[25] else None
+            category = row[26] if len(row) > 26 and row[26] else ''
 
             result_item = OrderedDict({
                 "id": row[0], 
@@ -2602,7 +2668,8 @@ def get_locations():
                 "animation_auto_play": animation_auto_play,
                 "model_format": model_format,
                 "has_animation": has_animation,
-                "username": username
+                "username": username,
+                "category": category
             })
             
             results.append(result_item)
@@ -2692,7 +2759,7 @@ def delete_uploads_folder(folder):
         safe_print(f"[Error] Delete folder failed: {e}")
         return jsonify({"error": "Delete failed", "details": str(e)}), 500
 
-@app.route('/fix_upload', methods=['POST'])
+@app.route('/fix_upload', methods=['POST'], strict_slashes=False)
 def fix_upload():
     """수정/삭제 요청 처리"""
     conn = None
@@ -2705,6 +2772,7 @@ def fix_upload():
         separate_restroom = request.form.get('separate_restroom', 'false').lower() == 'true'
         instagram_id = request.form.get('instagram_id', '').strip() or None
         description = request.form.get('description', '').strip() or None
+        category = request.form.get('category', '').strip() or None
         folder = request.form.get('folder', '').strip() or f"fix_{int(datetime.now().timestamp())}"
 
         base_folder = "locations_fix"
@@ -2735,17 +2803,29 @@ def fix_upload():
         cursor.execute("""
             INSERT INTO fix_requests (
                 target_id, remove_request, username, name, pet_friendly,
-                separate_restroom, instagram_id, description, folder,
+                separate_restroom, instagram_id, description, category, folder,
                 main_photo, sub_photos, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             RETURNING id
         """, (
             target_id, remove_request, username, name, pet_friendly,
-            separate_restroom, instagram_id, description, full_folder,
+            separate_restroom, instagram_id, description, category, full_folder,
             main_photo, json.dumps(sub_photos) if sub_photos else None
         ))
 
         fix_id = cursor.fetchone()[0]
+
+        # 삭제 요청인 경우 locations 테이블의 remove_request_count 증가
+        if remove_request and target_id > 0:
+            try:
+                cursor.execute("""
+                    UPDATE locations
+                    SET remove_request_count = COALESCE(remove_request_count, 0) + 1
+                    WHERE id = %s
+                """, (target_id,))
+            except Exception as count_err:
+                safe_print(f"[Warning] remove_request_count 업데이트 실패: {count_err}")
+
         conn.commit()
 
         send_slack_fix_request_notification({
@@ -2758,6 +2838,7 @@ def fix_upload():
             'separate_restroom': separate_restroom,
             'instagram_id': instagram_id,
             'description': description,
+            'category': category,
             'folder': full_folder
         })
 

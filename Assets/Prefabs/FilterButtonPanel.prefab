@@ -1116,6 +1116,11 @@ MonoBehaviour:
   placeListManager: {fileID: 0}
   dataManager: {fileID: 0}
   tourAPIManager: {fileID: 0}
+  categoryColorShop: {r: 0.25, g: 0.5, b: 0.95, a: 1}
+  categoryColorFood: {r: 0.984, g: 0.757, b: 0.365, a: 1}
+  categoryColorCafe: {r: 0.91, g: 0.33, b: 0.63, a: 1}
+  categoryColorPark: {r: 0.3, g: 0.85, b: 0.5, a: 1}
+  categoryColorEtc: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   longPressDuration: 0.8
 --- !u!114 &8598950729752566839
 MonoBehaviour:

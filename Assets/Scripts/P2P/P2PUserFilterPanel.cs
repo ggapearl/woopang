@@ -400,4 +400,12 @@ public class P2PUserFilterPanel : MonoBehaviour
     {
         p2pUserToggle = toggle;
     }
+
+    /// <summary>
+    /// 토글 참조 반환 (카테고리 필터 비활성화용)
+    /// </summary>
+    public Toggle GetToggle()
+    {
+        return p2pUserToggle;
+    }
 }

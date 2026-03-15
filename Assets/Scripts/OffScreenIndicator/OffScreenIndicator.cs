@@ -225,6 +225,10 @@ public class OffScreenIndicator : MonoBehaviour
 
         foreach (Target target in targets)
         {
+            // 앵커가 아직 생성되지 않은 오브젝트는 위치가 원점(0,0,0)이므로 표시 생략
+            if (!target.IsAnchorReady)
+                continue;
+
             Vector3 screenPosition = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
             bool isTargetVisible = OffScreenIndicatorCore.IsTargetVisible(screenPosition);
             float distanceFromCamera = target.NeedDistanceText ? target.GetDistanceFromCamera(mainCamera.transform.position) : float.MinValue;

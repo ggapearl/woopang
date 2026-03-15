@@ -39,6 +39,9 @@ public class LoadingManager : MonoBehaviour
     public bool enableBackgroundRecoveryDetection = true;
     public float backgroundRecoveryLoadingTime = 2f;
 
+    [Tooltip("백그라운드 복귀 시 이 거리(m) 이상 이동했으면 데이터 전체 재로드")]
+    public float backgroundRelocationThreshold = 200f;
+
     [Header("=== Fallback 화살표 설정 ===")]
     [Tooltip("화살표 기본 스케일 배수 (1.0 = 기본, 1.5 = 1.5배)")]
     public float fallbackBaseScaleMultiplier = 1.5f;
@@ -103,6 +106,7 @@ public class LoadingManager : MonoBehaviour
     // 백그라운드 복구 관련 변수
     private bool wasInBackground = false;
     private bool isBackgroundRecovering = false; // HandleBackgroundRecovery 진행 중 플래그
+    public bool IsBackgroundRecovering => isBackgroundRecovering;
     private Coroutine dotAnimationCoroutine;
     private Coroutine spinnerCoroutine; // Spinner 중복 실행 방지
     private float? lastCameraBrightness = null; // ARCameraManager 밝기 캐시
@@ -183,13 +187,44 @@ public class LoadingManager : MonoBehaviour
     {
         isBackgroundRecovering = true;
 
+        // ============================================================
+        // 0. GPS 위치 변동 체크 — 200m 이상 이동 시 전체 재로드 필요 판단
+        // ============================================================
+        bool needFullReload = false;
+#if !UNITY_EDITOR
+        if (dataManager != null && Input.location.status == LocationServiceStatus.Running)
+        {
+            Vector2 lastFetch = dataManager.GetLastFetchPosition();
+            float currentLat = Input.location.lastData.latitude;
+            float currentLon = Input.location.lastData.longitude;
+
+            // lastFetch가 유효한 경우에만 비교 (0,0이면 아직 한번도 fetch 안 한 상태)
+            if (lastFetch.x != 0f || lastFetch.y != 0f)
+            {
+                float movedDistance = CalculateDistanceHaversine(lastFetch.x, lastFetch.y, currentLat, currentLon);
+                if (movedDistance > backgroundRelocationThreshold)
+                {
+                    needFullReload = true;
+                }
+            }
+        }
+#endif
+
         // 1. 먼저 fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
         // autoDisable=false: 트래킹 복구 확인 후 수동으로 해제 (1초 타이머로 끄면 AR 미복구 상태에서 화살표 사라짐)
         OffScreenIndicator osi = GetCachedOSI();
         if (osi != null)
         {
-            osi.SetFallbackMinDuration(backgroundFallbackDuration);
-            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+            // 위치 대폭 변동 시 이전 위치의 fallback 데이터를 그대로 쓰면 안 됨 → fallback 모드 생략
+            if (!needFullReload)
+            {
+                osi.SetFallbackMinDuration(backgroundFallbackDuration);
+#if UNITY_EDITOR
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
+#else
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+#endif
+            }
         }
 
         // 2. fallback 위치 확보 후 AR 오브젝트 숨기기 (Geospatial 앵커 미복구 상태에서 카메라 앞에 렌더링 방지)
@@ -223,7 +258,7 @@ public class LoadingManager : MonoBehaviour
             CheckAREnvironment();
 
             // 트래킹 복구되면 앵커 재생성 → 개별 표시 → fallback 해제
-            yield return StartCoroutine(WaitForTrackingRecoveryAndCleanup(osi));
+            yield return StartCoroutine(WaitForTrackingRecoveryAndCleanup(osi, needFullReload));
         }
         else
         {
@@ -234,11 +269,26 @@ public class LoadingManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Haversine 공식으로 두 GPS 좌표 간 거리(m) 계산
+    /// </summary>
+    private float CalculateDistanceHaversine(float lat1, float lon1, float lat2, float lon2)
+    {
+        const float R = 6371000f;
+        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
+        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
+        float a = Mathf.Sin(dLat / 2f) * Mathf.Sin(dLat / 2f)
+                + Mathf.Cos(Mathf.Deg2Rad * lat1) * Mathf.Cos(Mathf.Deg2Rad * lat2)
+                * Mathf.Sin(dLon / 2f) * Mathf.Sin(dLon / 2f);
+        float c = 2f * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1f - a));
+        return R * c;
+    }
+
+    /// <summary>
     /// 백그라운드 복구 후 트래킹이 정상화되면 앵커 재생성 → 로딩 패널 숨기기 → fallback 해제
     /// SetAllObjectsVisible(true) 대신 RecreateAllAnchors()를 호출하여
     /// 앵커가 실제로 생성 완료된 오브젝트만 개별적으로 표시 (뭉침 방지)
     /// </summary>
-    IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi)
+    IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi, bool needFullReload = false)
     {
         float maxWait = 15f;
         float waited = 0f;
@@ -252,9 +302,20 @@ public class LoadingManager : MonoBehaviour
                 if (loadingPanel) loadingPanel.SetActive(false);
                 StopSpinner();
 
-                // 트래킹 복구 → 모든 매니저의 앵커 재생성
-                // (오브젝트는 앵커 생성 성공 시 CustomARGeospatialCreatorAnchor.SetVisible(true)로 개별 표시)
-                RecreateAllManagerAnchors();
+                if (needFullReload)
+                {
+                    // 위치 대폭 변동 → 기존 오브젝트 전부 제거 + 새 위치 기준 데이터 재로드
+                    if (dataManager != null)
+                        dataManager.FullRefreshFromNewLocation();
+
+                    // 시설 매니저들도 앵커 재생성 (데이터는 이미 로컬에 있으므로 앵커만 갱신)
+                    RecreateTransitManagerAnchors();
+                }
+                else
+                {
+                    // 근거리 복귀 → 기존 앵커만 재생성
+                    RecreateAllManagerAnchors();
+                }
 
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
@@ -269,12 +330,21 @@ public class LoadingManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
         }
 
-        // 타임아웃 시에도 앵커 재생성 시도 (무한 숨김 방지)
+        // 타임아웃 시에도 처리 (무한 숨김 방지)
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
 
-        RecreateAllManagerAnchors();
+        if (needFullReload)
+        {
+            if (dataManager != null)
+                dataManager.FullRefreshFromNewLocation();
+            RecreateTransitManagerAnchors();
+        }
+        else
+        {
+            RecreateAllManagerAnchors();
+        }
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
         if (osi != null && !hasShownEnvironmentGuidance)
@@ -312,7 +382,29 @@ public class LoadingManager : MonoBehaviour
         TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
         if (tourMgr != null) tourMgr.RecreateAllAnchors();
     }
-    
+
+    /// <summary>
+    /// DataManager를 제외한 시설 매니저들만 앵커 재생성
+    /// (DataManager는 FullRefreshFromNewLocation에서 별도 처리)
+    /// </summary>
+    void RecreateTransitManagerAnchors()
+    {
+        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
+        if (subwayMgr != null) subwayMgr.RecreateAllAnchors();
+
+        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
+        if (trainMgr != null) trainMgr.RecreateAllAnchors();
+
+        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
+        if (terminalMgr != null) terminalMgr.RecreateAllAnchors();
+
+        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
+        if (busMgr != null) busMgr.RecreateAllAnchors();
+
+        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
+        if (tourMgr != null) tourMgr.RecreateAllAnchors();
+    }
+
     void Update()
     {
         if (isMonitoringDataManager && dataManager != null && !isLoading)
@@ -352,6 +444,25 @@ public class LoadingManager : MonoBehaviour
 
         TrackingState previous = lastFrameTrackingState;
         lastFrameTrackingState = current;
+
+        // 빠른 이동 모드 중에는 ExcessiveMotion에 의한 오브젝트 숨김/fallback 진입 생략
+        // 오브젝트는 GPS 기반으로 계속 스폰/제거되고 OffScreenIndicator도 유지
+        if (dataManager != null && dataManager.IsRapidMovementMode)
+        {
+            // 트래킹 복구 시에만 fallback 해제 처리
+            if (current == TrackingState.Tracking && isFallbackWithoutGuidance)
+            {
+                isFallbackWithoutGuidance = false;
+                lastFallbackDisableTime = Time.realtimeSinceStartup;
+                dataManager.SetAllObjectsVisible(true);
+                OffScreenIndicator osi = GetCachedOSI();
+                if (osi != null)
+                {
+                    osi.EnableFallbackMode(false, forceDisable: true);
+                }
+            }
+            return;
+        }
 
         // Tracking → Limited/None: 즉시 fallback + 오브젝트 숨기기
         if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
@@ -491,9 +602,17 @@ public class LoadingManager : MonoBehaviour
     /// <summary>
     /// DataManager 선행 데이터 로드 완료 시 호출 → 0.2초 딜레이 후 fallback 활성화
     /// </summary>
+    private bool hasInitialFallbackActivated = false;
+
     private void OnDataPreFetchCompleted()
     {
-        StartCoroutine(ActivateFallbackAfterDelay(fallbackActivationDelay, initialFallbackDuration));
+        // 최초 데이터 로드 시에만 fallback 활성화
+        // RefreshData(업로드 후 새로고침 등)에서는 fallback을 다시 켜지 않음
+        if (!hasInitialFallbackActivated)
+        {
+            hasInitialFallbackActivated = true;
+            StartCoroutine(ActivateFallbackAfterDelay(fallbackActivationDelay, initialFallbackDuration));
+        }
     }
 
     /// <summary>
@@ -525,10 +644,16 @@ public class LoadingManager : MonoBehaviour
 
         if (objCount > 0)
         {
+#if UNITY_EDITOR
+            // 에디터에서는 AR 트래킹이 없으므로 autoDisable=true → 타이머 후 자동 해제
+            osi.SetFallbackMinDuration(minDuration);
+            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
+#else
             // autoDisable=false: 트래킹이 정상화되고 오브젝트가 배치될 때까지 fallback 유지
             // WaitForFirstObjectsAndDisableFallback에서 수동 해제
             osi.SetFallbackMinDuration(minDuration);
             osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+#endif
         }
     }
 
@@ -582,6 +707,19 @@ public class LoadingManager : MonoBehaviour
             // 오브젝트 존재 + AR 트래킹 정상 → fallback 해제
             if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
             {
+#if UNITY_EDITOR
+                // 에디터에서는 AR 서브시스템이 없으므로 오브젝트만 있으면 해제
+                if (osi != null)
+                {
+                    if (osi.IsFallbackMode)
+                    {
+                        // fallback이 켜져있으면 즉시 강제 해제
+                        osi.EnableFallbackMode(false, forceDisable: true);
+                        yield break;
+                    }
+                    // fallback이 아직 안 켜져 있으면 계속 대기 (ActivateFallbackAfterDelay가 나중에 켤 수 있음)
+                }
+#else
                 bool isTracking = arSession?.subsystem?.trackingState == TrackingState.Tracking;
                 if (isTracking)
                 {
@@ -593,6 +731,7 @@ public class LoadingManager : MonoBehaviour
                     yield break;
                 }
                 // 트래킹 아직 안 됨 → fallback 유지하면서 계속 대기
+#endif
             }
 
             if (hasShownEnvironmentGuidance)
@@ -607,7 +746,7 @@ public class LoadingManager : MonoBehaviour
 
         if (osi != null)
         {
-            osi.EnableFallbackMode(false);
+            osi.EnableFallbackMode(false, forceDisable: true);
         }
     }
     
@@ -656,6 +795,15 @@ public class LoadingManager : MonoBehaviour
     
     AREnvironmentIssue DetermineEnvironmentIssue(TrackingState trackingState)
     {
+        // 0. 빠른 이동 모드에서는 ExcessiveMotion 무시 (오브젝트 스폰/표시 유지)
+        if (dataManager != null && dataManager.IsRapidMovementMode)
+        {
+            // 어두움/카메라 가림 같은 진짜 환경 문제는 계속 감지
+            if (IsEnvironmentTooDark()) return AREnvironmentIssue.TooDark;
+            if (IsCameraCovered()) return AREnvironmentIssue.CameraCovered;
+            return AREnvironmentIssue.None;
+        }
+
         // 1. DataManager 상태 먼저 체크 (최우선순위)
         if (enableDataManagerMonitoring && dataManager != null && IsDataManagerHeavyLoading())
         {
@@ -1546,7 +1694,7 @@ public class LoadingManager : MonoBehaviour
     public void DebugFallbackOff()
     {
         OffScreenIndicator osi = GetCachedOSI();
-        if (osi != null) osi.EnableFallbackMode(false);
+        if (osi != null) osi.EnableFallbackMode(false, forceDisable: true);
     }
 
     /// <summary>

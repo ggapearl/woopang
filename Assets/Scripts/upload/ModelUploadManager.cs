@@ -32,6 +32,17 @@ public class ModelUploadManager : MonoBehaviour
     [SerializeField] private Toggle instagramToggle;
     [SerializeField] private InputField instagramIDInput;
 
+    [Header("카테고리 설정")]
+    [SerializeField] private Toggle categoryToggle;
+    [SerializeField] private Text categoryToggleLabel;
+
+    [Tooltip("카테고리별 토글 배경색")]
+    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f);   // 파란색
+    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f); // 노란색
+    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);    // 핑크색
+    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);      // 초록색
+    [SerializeField] private Color categoryColorEtc = new Color(0.5f, 0.5f, 0.5f, 1f);        // 회색
+
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private Text loadingText;
@@ -57,6 +68,11 @@ public class ModelUploadManager : MonoBehaviour
     private string instagramID;
     private bool showInstagram;
     private Vector3 gpsData = Vector3.zero;
+    // 카테고리 순환 (none → shop → food → cafe → park → etc → none)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "etc" };
+    private int currentCategoryIndex = 0;
+    private string selectedCategory = "";
+
     private bool isProcessing = false;
     private float elapsedTime = 0f;
     private const int MAX_SUB_PHOTOS = 10;
@@ -83,8 +99,25 @@ public class ModelUploadManager : MonoBehaviour
 #endif
     }
 
+    private void AutoConnectFields()
+    {
+        if (categoryToggle == null && petFriendlyToggle != null)
+        {
+            Transform panel = petFriendlyToggle.transform.parent;
+            if (panel != null)
+            {
+                Transform ct = panel.Find("CategoryToggle");
+                if (ct != null) categoryToggle = ct.GetComponent<Toggle>();
+            }
+        }
+        if (categoryToggleLabel == null && categoryToggle != null)
+            categoryToggleLabel = categoryToggle.GetComponentInChildren<Text>(true);
+    }
+
     private void InitializeComponents()
     {
+        AutoConnectFields();
+
         // AREarthManager 자동 연결 (Inspector 미연결 시)
         if (earthManager == null)
         {
@@ -149,6 +182,14 @@ public class ModelUploadManager : MonoBehaviour
         else
         {
             Debug.LogError("instagramToggle이 할당되지 않았습니다!");
+        }
+
+        // 카테고리 토글 초기화
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = false;
+            UpdateCategoryToggleUI();
         }
 
         if (uploadButton != null) uploadButton.interactable = true;
@@ -442,6 +483,72 @@ public class ModelUploadManager : MonoBehaviour
             // 토글 상태에 따라 입력 필드 표시/숨김
             instagramIDInput.gameObject.SetActive(value);
             if (!value) instagramIDInput.text = "";
+        }
+    }
+
+    // ============================================================
+    // 카테고리 토글 — 누를 때마다 순환 (none → shop → food → cafe → park → etc → none)
+    // ============================================================
+
+    private void OnCategoryToggleChanged(bool value)
+    {
+        currentCategoryIndex = (currentCategoryIndex + 1) % categoryValues.Length;
+        selectedCategory = categoryValues[currentCategoryIndex];
+        UpdateCategoryToggleUI();
+
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = currentCategoryIndex != 0;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+    }
+
+    private void UpdateCategoryToggleUI()
+    {
+        Color bgColor = GetCategoryColor(selectedCategory);
+
+        if (categoryToggle != null)
+        {
+            Transform bgTf = categoryToggle.transform.Find("Background");
+            if (bgTf != null)
+            {
+                Image bgImg = bgTf.GetComponent<Image>();
+                if (bgImg != null) bgImg.color = bgColor;
+
+                Transform checkTf = bgTf.Find("Checkmark");
+                if (checkTf != null)
+                {
+                    Image checkImg = checkTf.GetComponent<Image>();
+                    if (checkImg != null) checkImg.color = bgColor;
+                }
+            }
+
+            if (categoryToggle.graphic != null)
+                categoryToggle.graphic.color = bgColor;
+        }
+
+        if (categoryToggleLabel != null)
+        {
+            if (string.IsNullOrEmpty(selectedCategory))
+                categoryToggleLabel.text = LocalizationManager.Instance.GetText("category_select");
+            else
+                categoryToggleLabel.text = LocalizationManager.Instance.GetText("category_" + selectedCategory);
+
+            categoryToggleLabel.color = string.IsNullOrEmpty(selectedCategory) ? Color.white : bgColor;
+        }
+    }
+
+    public Color GetCategoryColor(string category)
+    {
+        switch (category)
+        {
+            case "shop": return categoryColorShop;
+            case "food": return categoryColorFood;
+            case "cafe": return categoryColorCafe;
+            case "park": return categoryColorPark;
+            case "etc": return categoryColorEtc;
+            default: return Color.white;
         }
     }
 
@@ -900,6 +1007,14 @@ public class ModelUploadManager : MonoBehaviour
             yield break;
         }
 
+        // 7. 카테고리 선택 필수 체크
+        if (string.IsNullOrEmpty(selectedCategory))
+        {
+            ShowWarning(GetLocalizedText("category_required"));
+            isProcessing = false;
+            yield break;
+        }
+
         Coroutine countdownCoroutine = StartCoroutine(ShowCountdownWarning(countdownSeconds));
         yield return StartCoroutine(SendWithTimeout(ProcessAndUploadModel(), countdownCoroutine));
 
@@ -971,6 +1086,7 @@ public class ModelUploadManager : MonoBehaviour
         formData.AddField("pet_friendly", petFriendlyToggle?.isOn ?? false ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroomToggle?.isOn ?? false ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
+        formData.AddField("category", selectedCategory);
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
         formData.AddField("model_scale", "1.0");
@@ -1151,6 +1267,17 @@ public class ModelUploadManager : MonoBehaviour
                 instagramIDInput.text = "";
             }
         }
+
+        // 카테고리 리셋
+        currentCategoryIndex = 0;
+        selectedCategory = "";
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = false;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+        UpdateCategoryToggleUI();
 
         ResetFileSelection();
 

@@ -629,6 +629,14 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "ARオブジェクトを作成中",
                 ["es"] = "Creando objeto AR"
             },
+            ["new_object"] = new Dictionary<string, string>()
+            {
+                ["en"] = "New Object",
+                ["ko"] = "신규 오브젝트",
+                ["zh"] = "新对象",
+                ["ja"] = "新規オブジェクト",
+                ["es"] = "Nuevo Objeto"
+            },
 
             // Logout Dialog
             ["logout_confirm_message"] = new Dictionary<string, string>()
@@ -680,6 +688,72 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "删除",
                 ["ja"] = "削除",
                 ["es"] = "Eliminar"
+            },
+
+            // Category 필터/업로드
+            ["category_select"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Select Category",
+                ["ko"] = "분류 선택",
+                ["zh"] = "选择分类",
+                ["ja"] = "分類選択",
+                ["es"] = "Elegir categoría"
+            },
+            ["category_none"] = new Dictionary<string, string>()
+            {
+                ["en"] = "All",
+                ["ko"] = "전체",
+                ["zh"] = "全部",
+                ["ja"] = "すべて",
+                ["es"] = "Todo"
+            },
+            ["category_shop"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Shop",
+                ["ko"] = "샵",
+                ["zh"] = "商店",
+                ["ja"] = "ショップ",
+                ["es"] = "Tienda"
+            },
+            ["category_required"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Please select a category",
+                ["ko"] = "분류를 선택해주세요",
+                ["zh"] = "请选择分类",
+                ["ja"] = "分類を選択してください",
+                ["es"] = "Seleccione una categoría"
+            },
+            ["category_food"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Food",
+                ["ko"] = "음식점",
+                ["zh"] = "美食",
+                ["ja"] = "グルメ",
+                ["es"] = "Comida"
+            },
+            ["category_cafe"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Cafe",
+                ["ko"] = "카페",
+                ["zh"] = "咖啡厅",
+                ["ja"] = "カフェ",
+                ["es"] = "Café"
+            },
+            ["category_park"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Park",
+                ["ko"] = "공원",
+                ["zh"] = "公园",
+                ["ja"] = "公園",
+                ["es"] = "Parque"
+            },
+            ["category_etc"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Etc.",
+                ["ko"] = "기타",
+                ["zh"] = "其他",
+                ["ja"] = "その他",
+                ["es"] = "Otros"
             }
         };
     }

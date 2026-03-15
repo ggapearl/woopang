@@ -24,6 +24,17 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private InputField instagramIDInput;
     [SerializeField] private Button submitButton;
 
+    [Header("카테고리 설정")]
+    [SerializeField] private Toggle categoryToggle;
+    [SerializeField] private Text categoryToggleLabel;
+
+    [Tooltip("카테고리별 토글 배경색 (순서: shop, food, cafe, park)")]
+    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f); // 파란색
+    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f); // #fbc15d 노란색
+    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);    // 핑크색
+    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);      // 초록색
+    [SerializeField] private Color categoryColorEtc = new Color(0.5f, 0.5f, 0.5f, 1f);      // 회색
+
     [SerializeField] private GameObject warningObj;
     [SerializeField] private GameObject uploadPage;
     [SerializeField] private GameObject disableObject;
@@ -53,6 +64,11 @@ public class CubeUploadManager : MonoBehaviour
     private string instagramID;
     private bool showInstagram;
     private Vector3 gpsData = Vector3.zero;
+
+    // 카테고리 순환 (none → shop → food → cafe → park → none)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "etc" };
+    private int currentCategoryIndex = 0;
+    private string selectedCategory = "";
     private string locationText;
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
@@ -115,8 +131,28 @@ public class CubeUploadManager : MonoBehaviour
     }
 
 
+    private void AutoConnectFields()
+    {
+        if (categoryToggle == null && petFriendlyToggle != null)
+        {
+            // CategoryToggle은 PetFriendlyToggle과 같은 부모 패널에 있음
+            Transform panel = petFriendlyToggle.transform.parent;
+            if (panel != null)
+            {
+                Transform ct = panel.Find("CategoryToggle");
+                if (ct != null) categoryToggle = ct.GetComponent<Toggle>();
+            }
+        }
+        if (categoryToggleLabel == null && categoryToggle != null)
+        {
+            categoryToggleLabel = categoryToggle.GetComponentInChildren<Text>(true);
+        }
+    }
+
     private void InitializeComponents()
     {
+        AutoConnectFields();
+
         // AREarthManager 자동 연결 (Inspector 미연결 시)
         if (earthManager == null)
         {
@@ -137,6 +173,14 @@ public class CubeUploadManager : MonoBehaviour
         if (subPhotosButton != null) subPhotosButton.onClick.AddListener(() => StartCoroutine(SelectSubPhotos()));
         if (resetPhotosButton != null) resetPhotosButton.onClick.AddListener(ResetSubPhotos);
         if (submitButton != null) submitButton.onClick.AddListener(() => StartCoroutine(ValidateAndSubmit()));
+
+        // 카테고리 토글 초기화
+        if (categoryToggle != null)
+        {
+            categoryToggle.isOn = false;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+            UpdateCategoryToggleUI();
+        }
 
         if (locationInput != null)
         {
@@ -353,16 +397,8 @@ public class CubeUploadManager : MonoBehaviour
             return;
         }
 
-        // [FIX] ImageCropper Canvas Sorting Order 조정
-        // 기본 Canvas보다 앞에 오도록 Sorting Order를 높임
-        Canvas cropperCanvas = cropper.GetComponent<Canvas>();
-        if (cropperCanvas == null) cropperCanvas = cropper.GetComponentInChildren<Canvas>();
-
-        if (cropperCanvas != null)
-        {
-            cropperCanvas.overrideSorting = true;
-            cropperCanvas.sortingOrder = 30000;
-        }
+        // ImageCropper Canvas를 메인 UI 위에 표시되도록 설정
+        ConfigureImageCropperCanvas(cropper);
 
         // 크로퍼가 sortingOrder 30000으로 앞에 렌더링되므로
         // uploadPage는 크로퍼 표시 후 숨김 (깜빡임 방지)
@@ -671,6 +707,10 @@ public class CubeUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator LoadMultipleImagesWithFallback(string[] paths, System.Action onComplete)
     {
+        // iOS PHPickerViewController는 비동기 처리로 선택 순서가 보장되지 않음
+        // 임시 파일명에 포함된 인덱스 번호로 정렬하여 선택 순서 복원
+        SortPathsByFileIndex(paths);
+
         foreach (string path in paths)
         {
             if (subPhotos.Count >= MAX_SUB_PHOTOS)
@@ -718,6 +758,50 @@ public class CubeUploadManager : MonoBehaviour
 
         UpdateSubPhotoGrid();
         onComplete?.Invoke();
+    }
+
+    /// <summary>
+    /// iOS PHPickerViewController 비동기 반환 경로를 선택 순서대로 정렬
+    /// 임시 파일명 패턴: {basePath}{index}.{ext} (예: /tmp/ngallery1.jpg, /tmp/ngallery2.png)
+    /// </summary>
+    /// <summary>
+    /// ImageCropper Canvas를 메인 UI보다 앞에 표시되도록 설정 (sortingOrder 30000)
+    /// 다른 매니저에서도 동일하게 호출 가능
+    /// </summary>
+    public static void ConfigureImageCropperCanvas(ImageCropper cropper)
+    {
+        if (cropper == null) return;
+
+        Canvas cropperCanvas = cropper.GetComponent<Canvas>();
+        if (cropperCanvas == null) cropperCanvas = cropper.GetComponentInChildren<Canvas>();
+
+        if (cropperCanvas != null)
+        {
+            cropperCanvas.overrideSorting = true;
+            cropperCanvas.sortingOrder = 30000;
+        }
+    }
+
+    private void SortPathsByFileIndex(string[] paths)
+    {
+        if (paths == null || paths.Length <= 1) return;
+        if (Application.platform != RuntimePlatform.IPhonePlayer) return;
+
+        System.Array.Sort(paths, (a, b) =>
+        {
+            int indexA = ExtractFileIndex(a);
+            int indexB = ExtractFileIndex(b);
+            return indexA.CompareTo(indexB);
+        });
+    }
+
+    private int ExtractFileIndex(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return int.MaxValue;
+        string fileName = Path.GetFileNameWithoutExtension(path);
+        // 파일명 끝의 숫자 추출 (예: "ngallery3" → 3)
+        var match = Regex.Match(fileName, @"(\d+)$");
+        return match.Success ? int.Parse(match.Groups[1].Value) : int.MaxValue;
     }
 
     /// <summary>
@@ -1084,6 +1168,83 @@ public class CubeUploadManager : MonoBehaviour
         }
     }
 
+    // ============================================================
+    // 카테고리 토글 — 누를 때마다 순환 (none → shop → food → cafe → park → none)
+    // ============================================================
+
+    private void OnCategoryToggleChanged(bool value)
+    {
+        // 토글 isOn 상태와 무관하게 클릭할 때마다 순환
+        currentCategoryIndex = (currentCategoryIndex + 1) % categoryValues.Length;
+        selectedCategory = categoryValues[currentCategoryIndex];
+        UpdateCategoryToggleUI();
+
+        // 토글을 항상 On 상태로 유지 (0번 인덱스 = 미선택일 때만 Off)
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = currentCategoryIndex != 0;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+    }
+
+    private void UpdateCategoryToggleUI()
+    {
+        Color bgColor = GetCategoryColor(selectedCategory);
+
+        // 토글 Background + Checkmark 색상 변경
+        if (categoryToggle != null)
+        {
+            // Background 자식 오브젝트의 Image 찾기
+            Transform bgTf = categoryToggle.transform.Find("Background");
+            if (bgTf != null)
+            {
+                Image bgImg = bgTf.GetComponent<Image>();
+                if (bgImg != null) bgImg.color = bgColor;
+
+                // Checkmark도 동일 색상
+                Transform checkTf = bgTf.Find("Checkmark");
+                if (checkTf != null)
+                {
+                    Image checkImg = checkTf.GetComponent<Image>();
+                    if (checkImg != null) checkImg.color = bgColor;
+                }
+            }
+
+            // Graphic (toggle.graphic) 색상도 동기화
+            if (categoryToggle.graphic != null)
+                categoryToggle.graphic.color = bgColor;
+        }
+
+        // 라벨 텍스트 + 색상 업데이트
+        if (categoryToggleLabel != null)
+        {
+            if (string.IsNullOrEmpty(selectedCategory))
+                categoryToggleLabel.text = LocalizationManager.Instance.GetText("category_select");
+            else
+                categoryToggleLabel.text = LocalizationManager.Instance.GetText("category_" + selectedCategory);
+
+            // 라벨 색상도 카테고리 색상으로 변경 (미선택 시 흰색)
+            categoryToggleLabel.color = string.IsNullOrEmpty(selectedCategory) ? Color.white : bgColor;
+        }
+    }
+
+    /// <summary>
+    /// 카테고리 값에 따른 색상 반환 (Inspector에서 조절 가능)
+    /// </summary>
+    public Color GetCategoryColor(string category)
+    {
+        switch (category)
+        {
+            case "shop": return categoryColorShop;
+            case "food": return categoryColorFood;
+            case "cafe": return categoryColorCafe;
+            case "park": return categoryColorPark;
+            case "etc": return categoryColorEtc;
+            default: return Color.white;
+        }
+    }
+
     #endregion
 
     #region Photo Management
@@ -1208,6 +1369,13 @@ public class CubeUploadManager : MonoBehaviour
             yield break;
         }
 
+        if (string.IsNullOrEmpty(selectedCategory))
+        {
+            ShowWarning(LocalizationManager.Instance.GetText("category_required"));
+            isProcessing = false;
+            yield break;
+        }
+
         // 검증 통과 → 바로 업로드 진행
         Coroutine countdownCoroutine = StartCoroutine(ShowCountdownWarning(10));
         yield return StartCoroutine(SendWithTimeout(
@@ -1287,6 +1455,7 @@ public class CubeUploadManager : MonoBehaviour
         formData.AddField("pet_friendly", petFriendly ? "true" : "false");
         formData.AddField("separate_restroom", separateRestroom ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
+        formData.AddField("category", selectedCategory);
         // status는 서버에서 AUTO_APPROVE 설정에 따라 결정
         formData.AddField("device_id", SystemInfo.deviceUniqueIdentifier);  // 업로더 추적용
 
@@ -1355,13 +1524,16 @@ public class CubeUploadManager : MonoBehaviour
                     StopCoroutine(countdownCoroutine);
                     ShowWarning(LocalizationManager.Instance.GetText("upload_success"));
 
-                    // 업로드 성공 10초 후 FCM 알림 발송 (주변 사용자에게 새 콘텐츠 알림)
-                    StartCoroutine(SendUploadNotificationDelayed(10f));
+                    // FullReset 먼저 수행 (StopAllCoroutines 포함)
+                    FullReset();
 
+                    // FullReset 이후 코루틴 시작 (StopAllCoroutines에 의해 죽지 않도록)
                     // 업로드 성공 1초 후 AR 오브젝트 + 리스트 즉시 새로고침
                     StartCoroutine(RefreshDataAfterUpload(1f));
 
-                    FullReset();
+                    // 업로드 성공 10초 후 FCM 알림 발송 (주변 사용자에게 새 콘텐츠 알림)
+                    StartCoroutine(SendUploadNotificationDelayed(10f));
+
                     yield break;
                 }
                 else
@@ -1524,11 +1696,6 @@ public class CubeUploadManager : MonoBehaviour
             uploadPage.SetActive(false);
         }
 
-        if (disableObject != null)
-        {
-            disableObject.SetActive(false);
-        }
-
         SetMainPhotoUIState(false);
         if (mainPhotoDisplay != null) mainPhotoDisplay.sprite = null;
         
@@ -1562,6 +1729,17 @@ public class CubeUploadManager : MonoBehaviour
                 instagramIDInput.text = "";
             }
         }
+
+        // 카테고리 초기화
+        currentCategoryIndex = 0;
+        selectedCategory = "";
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = false;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+        UpdateCategoryToggleUI();
 
         userName = "";
         instagramID = "";

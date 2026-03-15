@@ -80,6 +80,7 @@ GameObject:
   - component: {fileID: 6472823875114833344}
   - component: {fileID: 92528271963126980}
   - component: {fileID: 7466876097659136025}
+  - component: {fileID: 4625993759921407496}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -204,6 +205,8 @@ MonoBehaviour:
   minDistance: 10
   maxDistance: 100
   placeName: 
+  gpsLatitude: 0
+  gpsLongitude: 0
   indicator: {fileID: 0}
   hasPlayedSparkle: 0
 --- !u!114 &5371929105765987969
@@ -268,6 +271,7 @@ MonoBehaviour:
   slideDuration: 0.25
   slideImageGap: 400
   slideFadeDuration: 0.4
+  touchBlockDuration: 2
   placeName: 
   id: -1
   commentPreviewPanel: {fileID: 0}
@@ -507,4 +511,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hapticIntensity: 0.4
   touchSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
+  doubleTapSound: {fileID: 0}
   soundVolume: 0.4
+--- !u!114 &4625993759921407496
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2027224086041261672}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 099a37c5395d06a4aa88c9cd7a717f47, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CubeTouchRotator
+  rotationSpeed: 0.3
+  inertiaDecay: 0.92
+  dragThreshold: 10
+  maxInertiaSpeed: 5

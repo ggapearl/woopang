@@ -91,6 +91,14 @@ public class DataManager : MonoBehaviour
 
     [SerializeField] private float updateDistanceThreshold = 50f;
 
+    [Header("빠른 이동 모드 설정")]
+    [Tooltip("이 시간(초) 이내에 refreshThresholdCount회 새로고침 발생 시 빠른 이동 모드 진입")]
+    [SerializeField] private float rapidRefreshWindow = 60f;
+    [Tooltip("빠른 이동 모드 진입 조건 — 새로고침 횟수")]
+    [SerializeField] private int rapidRefreshThresholdCount = 4;
+    [Tooltip("빠른 이동 모드 자동 해제 시간 (초)")]
+    [SerializeField] private float rapidModeResetInterval = 600f;
+
     [Header("AR 준비 상태 가이드")]
     [SerializeField] private int arGuideFontSize = 22;
 
@@ -103,8 +111,17 @@ public class DataManager : MonoBehaviour
     private Vector2 lastPosition;
     private bool isInitialStartComplete = false; // 앱 첫 시작 완료 여부 (OnApplicationFocus 무시용)
 
+    // ============================================================
+    // 빠른 이동 모드 — 1분 이내 4회 새로고침 시 ObjectCountUI 억제
+    // ============================================================
+    private List<float> recentRefreshTimes = new List<float>();
+    private bool isRapidMovementMode = false;
+    private float rapidModeStartTime = 0f;
+    public bool IsRapidMovementMode => isRapidMovementMode;
+
     // 현재 활성 필터 저장 (거리 필터와 동기화용)
     private Dictionary<string, bool> currentFilters;
+    private string currentCategoryFilter = ""; // 카테고리 필터 ("" = 전체, "shop"/"food"/"cafe"/"park")
 
     void OnEnable()
     {
@@ -516,6 +533,7 @@ public class DataManager : MonoBehaviour
 
             if (distanceMoved > updateDistanceThreshold)
             {
+                TrackRefreshForRapidMode();
                 yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
             }
@@ -540,8 +558,11 @@ public class DataManager : MonoBehaviour
 
         HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
 
-        // UI 리셋 (새로운 로드 시작) — silent 모드에서는 UI 표시 안함
-        if (!silent && objectCountUI != null)
+        // 빠른 이동 모드에서는 ObjectCountUI 표시 억제 (오브젝트 자체는 정상 스폰)
+        bool suppressCountUI = isRapidMovementMode;
+
+        // UI 리셋 (새로운 로드 시작) — silent 모드 또는 빠른 이동 모드에서는 UI 표시 안함
+        if (!silent && !suppressCountUI && objectCountUI != null)
         {
             objectCountUI.ResetUI();
         }
@@ -579,8 +600,8 @@ public class DataManager : MonoBehaviour
                 if (ShouldShowObject(place))
                     currentTierCount++;
 
-                // UI 업데이트 (필터링된 개수만 표시)
-                if (objectCountUI != null)
+                // UI 업데이트 — 빠른 이동 모드에서는 억제
+                if (!suppressCountUI && objectCountUI != null)
                 {
                     objectCountUI.UpdateObjectCount(currentTierCount, false);
                 }
@@ -592,7 +613,7 @@ public class DataManager : MonoBehaviour
             }
 
             // 마지막 Tier 완료 시 최종 업데이트
-            if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
+            if (tierIndex == loadRadii.Length - 1 && !suppressCountUI && objectCountUI != null)
             {
                 // 이번에 새로 추가된 게 없어도, 이미 활성화된 오브젝트가 있으면 그 수를 보고
                 int visibleCount = GetVisibleObjectCount();
@@ -744,10 +765,23 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 카테고리 필터 문자열 설정 (FilterManager에서 호출)
+    /// </summary>
+    public void SetCategoryFilter(string category)
+    {
+        currentCategoryFilter = category ?? "";
+    }
+
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
         if (filters == null) return;
         currentFilters = filters;
+
+        // FilterManager에서 카테고리 필터값 가져오기
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>();
+        if (filterMgr != null)
+            currentCategoryFilter = filterMgr.GetActiveCategoryFilter();
 
         foreach (var kvp in spawnedObjects)
         {
@@ -824,6 +858,13 @@ public class DataManager : MonoBehaviour
             if (shouldShow && place.alcohol_available && !showAlcohol)
             {
                 shouldShow = false;
+            }
+
+            // 카테고리 필터 적용
+            if (shouldShow && !string.IsNullOrEmpty(currentCategoryFilter))
+            {
+                if (place.category != currentCategoryFilter)
+                    shouldShow = false;
             }
         }
 
@@ -1024,6 +1065,39 @@ public class DataManager : MonoBehaviour
         yield return StartCoroutine(loader.LoadGLBModelCoroutine(url, scale, onComplete));
     }
 
+    // ============================================================
+    // 빠른 이동 모드 — 새로고침 빈도 추적 + 자동 진입/해제
+    // ============================================================
+
+    /// <summary>
+    /// 새로고침 시각을 기록하고, 1분 이내 4회 이상이면 빠른 이동 모드 진입
+    /// </summary>
+    private void TrackRefreshForRapidMode()
+    {
+        float now = Time.realtimeSinceStartup;
+
+        // 빠른 이동 모드 10분 자동 해제 체크
+        if (isRapidMovementMode && (now - rapidModeStartTime) >= rapidModeResetInterval)
+        {
+            isRapidMovementMode = false;
+            recentRefreshTimes.Clear();
+        }
+
+        // 이미 빠른 이동 모드면 추가 체크 불필요
+        if (isRapidMovementMode) return;
+
+        recentRefreshTimes.Add(now);
+
+        // 윈도우 밖의 오래된 기록 제거
+        recentRefreshTimes.RemoveAll(t => (now - t) > rapidRefreshWindow);
+
+        if (recentRefreshTimes.Count >= rapidRefreshThresholdCount)
+        {
+            isRapidMovementMode = true;
+            rapidModeStartTime = now;
+        }
+    }
+
     private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
     {
         const float R = 6371000;
@@ -1181,6 +1255,37 @@ public class DataManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 마지막 fetch 시 사용한 GPS 좌표 반환 (백그라운드 복귀 시 위치 변동 체크용)
+    /// </summary>
+    public Vector2 GetLastFetchPosition()
+    {
+        return lastPosition;
+    }
+
+    /// <summary>
+    /// 기존 오브젝트 전부 제거 후 새 위치 기준으로 데이터 재로드 (위치 대폭 변동 시 사용)
+    /// </summary>
+    public void FullRefreshFromNewLocation()
+    {
+        StopAllFetching();
+
+        // 기존 스폰된 오브젝트 전부 제거
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value != null)
+                Destroy(kvp.Value);
+        }
+        spawnedObjects.Clear();
+        placeDataMap.Clear();
+        isDataLoaded = false;
+        isFetching = false;
+
+        // 새 GPS로 처음부터 데이터 로드
+        fetchCoroutine = StartCoroutine(FetchDataOnce());
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
+    }
+
+    /// <summary>
     /// 즉시 데이터 새로고침 (업로드 성공 등 외부 호출용)
     /// </summary>
     public void RefreshData()
@@ -1214,6 +1319,12 @@ public class DataManager : MonoBehaviour
             // 설정 화면에서 돌아올 때 패널은 무조건 닫기 (허용/거부 무관)
             if (LocationPermissionManager.Instance != null)
                 LocationPermissionManager.Instance.ClosePanel();
+
+            // LoadingManager가 백그라운드 복구 중이면 중복 fetch 방지
+            // (HandleBackgroundRecovery에서 위치 변동 체크 + 전체 재로드/앵커 재생성을 이미 처리)
+            LoadingManager loadingMgr = FindFirstObjectByType<LoadingManager>();
+            if (loadingMgr != null && loadingMgr.IsBackgroundRecovering)
+                return;
 
             if (Input.location.isEnabledByUser)
             {
@@ -1426,4 +1537,5 @@ public class PlaceData
     public string original_model_type { get; set; } // 서버에서 받은 원본 값 (필터용)
     public string model_url { get; set; }
     public float model_scale { get; set; } = 1f;
+    public string category { get; set; } = ""; // shop, food, cafe, park
 }
