@@ -25,34 +25,67 @@ public class GeospatialManager : MonoBehaviour
 
     private void Awake()
     {
-        // [����] ������ �ӵ� ���� �α�
         Application.targetFrameRate = 30;
+    }
+
+    private void Start()
+    {
+        // Inspector에서 연결 안 된 경우 자동 탐색
+        if (earthManager == null)
+        {
+            earthManager = FindFirstObjectByType<AREarthManager>();
+            Debug.Log($"[DBG] GeoMgr Start: earthManager 자동 탐색 → {(earthManager != null ? "성공" : "실패")}");
+        }
+        if (arcoreExtensions == null)
+        {
+            arcoreExtensions = FindFirstObjectByType<ARCoreExtensions>();
+            Debug.Log($"[DBG] GeoMgr Start: arcoreExtensions 자동 탐색 → {(arcoreExtensions != null ? "성공" : "실패")}");
+        }
+
+        Debug.Log($"[DBG] GeoMgr Start: earthManager={earthManager != null}, arcoreExtensions={arcoreExtensions != null}");
     }
 
     private float _logTimer = 0f;
 
     void Update()
     {
-        // 5초마다 상태 로그 출력
         _logTimer += Time.deltaTime;
+        bool shouldLog = false;
         if (_logTimer >= 5f)
         {
             _logTimer = 0f;
+            shouldLog = true;
         }
 
-        if (earthManager == null) return;
+        if (earthManager == null)
+        {
+            // 주기적으로 재탐색 시도
+            if (shouldLog)
+            {
+                earthManager = FindFirstObjectByType<AREarthManager>();
+                Debug.Log($"[DBG] GeoMgr: earthManager null → 재탐색 {(earthManager != null ? "성공" : "실패")}");
+            }
+            if (earthManager == null) return;
+        }
+
+        if (arcoreExtensions == null)
+        {
+            arcoreExtensions = FindFirstObjectByType<ARCoreExtensions>();
+            if (arcoreExtensions == null) return;
+        }
 
         if (ARSession.state != ARSessionState.SessionInitializing &&
                ARSession.state != ARSessionState.SessionTracking)
         {
+            if (shouldLog)
+                Debug.Log($"[DBG] GeoMgr: ARSession.state={ARSession.state} → skip");
             return;
         }
 
         // Check feature support and enable Geospatial API when it's supported.
         var featureSupport = earthManager.IsGeospatialModeSupported(GeospatialMode.Enabled);
 
-        // 5초마다 상태 로그
-        if (_logTimer == 0f)
+        if (shouldLog)
         {
             Debug.Log($"[DBG] GeoMgr: featureSupport={featureSupport}, GeoMode={arcoreExtensions?.ARCoreExtensionsConfig?.GeospatialMode}, EarthState={earthManager.EarthState}, EarthTracking={earthManager.EarthTrackingState}");
         }
@@ -100,13 +133,11 @@ public class GeospatialManager : MonoBehaviour
 
     private void OnEnable()
     {
-        // [����] ��ġ ���� �ڷ�ƾ ���� �α�
         locationServiceLauncher = StartCoroutine(StartLocationService());
     }
 
     private void OnDisable()
     {
-        // [����] �ڷ�ƾ �� ��ġ ���� ���� �α�
         if (locationServiceLauncher != null)
         {
             StopCoroutine(locationServiceLauncher);
@@ -119,13 +150,9 @@ public class GeospatialManager : MonoBehaviour
     {
         while (true)
         {
-
-            // [����] ��ġ ���� �ʱ�ȭ ���� �α�
-
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
             {
-                // [����] ��ġ ���� ��û �α�
                 Permission.RequestUserPermission(Permission.FineLocation);
                 yield return new WaitForSeconds(3.0f);
             }
@@ -133,29 +160,20 @@ public class GeospatialManager : MonoBehaviour
 
             if (!Input.location.isEnabledByUser)
             {
-                // [����] ��ġ ���� ��Ȱ��ȭ �α�
-
                 yield return new WaitForSeconds(60.0f);
                 continue;
             }
 
-            // [����] ��ġ ���� ���� �α�
             Input.location.Start();
 
             while (Input.location.status == LocationServiceStatus.Initializing)
             {
-                // [����] ��ġ ���� �ʱ�ȭ ��� �α�
                 yield return null;
             }
 
             if (Input.location.status != LocationServiceStatus.Running)
             {
-                // [����] ��ġ ���� ���� �α�
                 Input.location.Stop();
-            }
-            else
-            {
-                // [����] ��ġ ���� ���� �α�
             }
 
             yield return new WaitForSeconds(60.0f);
