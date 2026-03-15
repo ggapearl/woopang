@@ -432,7 +432,8 @@ public class DataManager : MonoBehaviour
         lastPosition = new Vector2(lat, lon);
 
         // Phase1에서 Geospatial 없이 스폰된 오브젝트의 앵커를 재생성
-        // (첫 설치 시 앵커 생성 실패 → RetryCreateAnchor 30회 소진 → SetVisible(false) 상태 복구)
+        var earthMgr = FindFirstObjectByType<AREarthManager>();
+        Debug.Log($"[DBG_ANCHOR] Phase2 완료: isGeospatialReady={isGeospatialReady}, EarthManager={earthMgr != null}, EarthState={earthMgr?.EarthTrackingState}, spawnedCount={spawnedObjects.Count}");
         RecreateAllAnchors();
 #endif
 
@@ -1206,6 +1207,10 @@ public class DataManager : MonoBehaviour
     /// </summary>
     public void RecreateAllAnchors()
     {
+        var earthMgr = FindFirstObjectByType<AREarthManager>();
+        Debug.Log($"[DBG_ANCHOR] RecreateAllAnchors: count={spawnedObjects.Count}, EarthState={earthMgr?.EarthTrackingState}");
+
+        int recreated = 0;
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value == null) continue;
@@ -1215,8 +1220,10 @@ public class DataManager : MonoBehaviour
             {
                 kvp.Value.SetActive(true);
                 anchor.RecreateAnchor();
+                recreated++;
             }
         }
+        Debug.Log($"[DBG_ANCHOR] RecreateAllAnchors 완료: {recreated}개 재생성 시작");
     }
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
@@ -1447,16 +1454,25 @@ public class DataManager : MonoBehaviour
     private IEnumerator WaitForGeospatialTracking()
     {
         AREarthManager earthManager = FindFirstObjectByType<AREarthManager>();
+        Debug.Log($"[DBG_ANCHOR] WaitForGeo 시작: EarthManager={earthManager != null}, EarthState={earthManager?.EarthTrackingState}");
         float elapsed = 0f;
         float maxWait = 60f;
 
         while (elapsed < maxWait)
         {
+            if (earthManager == null)
+                earthManager = FindFirstObjectByType<AREarthManager>();
+
             if (earthManager != null && earthManager.EarthTrackingState == TrackingState.Tracking)
             {
+                Debug.Log($"[DBG_ANCHOR] WaitForGeo 성공! elapsed={elapsed}s");
                 isGeospatialReady = true;
                 yield break;
             }
+
+            // 5초마다 상태 로그
+            if (elapsed % 5 == 0)
+                Debug.Log($"[DBG_ANCHOR] WaitForGeo: elapsed={elapsed}s, EarthManager={earthManager != null}, EarthState={earthManager?.EarthTrackingState}");
 
             // 단계별 안내 메시지 변경
             if (elapsed > 30f)
@@ -1469,6 +1485,7 @@ public class DataManager : MonoBehaviour
         }
 
         // 타임아웃: GPS 기반으로 진행 (정확도 낮음)
+        Debug.LogWarning($"[DBG_ANCHOR] WaitForGeo 타임아웃 ({maxWait}s)! EarthState={earthManager?.EarthTrackingState}");
         isGeospatialReady = true;
         UpdateARGuideText("위치 정확도가 낮을 수 있습니다");
         yield return new WaitForSeconds(2f);
