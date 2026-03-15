@@ -1,7 +1,4 @@
 using UnityEngine;
-using UnityEngine.XR.ARFoundation;
-using UnityEngine.XR.ARSubsystems;
-using Google.XR.ARCoreExtensions;
 using System.Collections;
 
 /// <summary>
@@ -9,8 +6,8 @@ using System.Collections;
 /// Android: UnityEngine.Android.Permission API 사용
 /// iOS: Info.plist 설정 + 기능 사용 시 자동 요청
 ///
-/// 첫 설치 시 ARSession이 권한 부여 전에 시작되면 Geospatial이 초기화 안 됨.
-/// 권한 부여 직후 ARSession.Reset()으로 재초기화하여 해결.
+/// 참고: 실제 ARSession.Reset()은 DataManager.StartLocationServiceAndFetchData()에서 수행
+/// (PermissionRequester 시점에서는 isEnabledByUser가 아직 false일 수 있음)
 /// </summary>
 public class PermissionRequester : MonoBehaviour
 {
@@ -76,25 +73,7 @@ public class PermissionRequester : MonoBehaviour
 
         if (Input.location.status == LocationServiceStatus.Running)
         {
-            Debug.Log("[DBG] iOS: Location Permission Granted");
-
-            // Geospatial이 이미 초기화되어있으면 리셋 불필요
-            AREarthManager earthManager = FindFirstObjectByType<AREarthManager>();
-            if (earthManager != null && earthManager.EarthTrackingState == TrackingState.Tracking)
-            {
-                Debug.Log("[DBG] iOS: Earth 이미 Tracking → ARSession 리셋 불필요");
-            }
-            else
-            {
-                // 첫 설치 시 ARSession이 권한 없이 시작되면 Geospatial 초기화 안 됨
-                // 리셋하면 권한이 있는 상태에서 재초기화 → 껐다 켰을 때와 동일한 효과
-                ARSession arSession = FindFirstObjectByType<ARSession>();
-                if (arSession != null)
-                {
-                    Debug.Log("[DBG] iOS: Earth NOT Tracking → ARSession.Reset() 호출");
-                    arSession.Reset();
-                }
-            }
+            Debug.Log("[iOS] Location Permission Granted");
         }
         else if (Input.location.status == LocationServiceStatus.Failed)
         {

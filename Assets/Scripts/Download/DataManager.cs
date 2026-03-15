@@ -300,6 +300,23 @@ public class DataManager : MonoBehaviour
             {
                 Debug.LogWarning("[DataManager] 위치 서비스 시작 실패 — 기본 위치로 진행");
             }
+
+            // 첫 설치 시 ARSession이 권한 없이 시작되면 Geospatial(AREarthManager) 초기화 실패
+            // 권한 획득 후 Earth가 아직 None이면 ARSession 리셋 → 껐다 켰을 때와 동일 효과
+            AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
+            if (earthMgr == null || earthMgr.EarthTrackingState != TrackingState.Tracking)
+            {
+                ARSession arSession = FindFirstObjectByType<ARSession>();
+                if (arSession != null)
+                {
+                    Debug.Log($"[DBG] 권한 획득 후 Earth={earthMgr?.EarthTrackingState} → ARSession.Reset()");
+                    arSession.Reset();
+                }
+            }
+            else
+            {
+                Debug.Log("[DBG] 권한 획득 시 Earth 이미 Tracking → Reset 불필요");
+            }
         }
 
         // GPS 위치 확보 (Running이면 사용, 아니면 FetchDataOnce에서 재시도)
