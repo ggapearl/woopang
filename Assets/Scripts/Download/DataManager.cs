@@ -9,9 +9,6 @@ using System.Linq;
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
-#if UNITY_ANDROID
-using UnityEngine.Android;
-#endif
 
 public class DataManager : MonoBehaviour
 {
@@ -57,29 +54,20 @@ public class DataManager : MonoBehaviour
 
         // 첫 설치 시 위치 권한 없이 Geospatial 초기화되면 iOS 네이티브에서 실패를 캐시하여
         // 이후 권한을 획득해도 EarthTrackingState가 영구적으로 None 유지됨.
-        // Awake()에서 권한 체크 → 없으면 GeospatialMode=Disabled → 첫 Update() 전에 적용
-        // DataManager.StartLocationServiceAndFetchData()에서 권한 획득 후 Enabled로 변경
-        DisableGeospatialIfNoPermission();
+        // Awake()에서 항상 GeospatialMode=Disabled → 위치 서비스 시작 성공 후 Enabled로 변경
+        DisableGeospatialUntilLocationReady();
     }
 
-    private void DisableGeospatialIfNoPermission()
+    private void DisableGeospatialUntilLocationReady()
     {
 #if UNITY_EDITOR
         return;
 #else
-        bool hasLocationPermission = false;
-#if UNITY_ANDROID
-        hasLocationPermission = Permission.HasUserAuthorizedPermission(Permission.FineLocation);
-#elif UNITY_IOS
-        hasLocationPermission = Input.location.isEnabledByUser;
-#endif
-        if (hasLocationPermission) return;
-
         ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
         if (extensions != null && extensions.ARCoreExtensionsConfig != null
             && extensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Enabled)
         {
-            Debug.Log("[DBG] 위치 권한 없음 → GeospatialMode Disabled로 시작");
+            Debug.Log("[DBG] Geospatial 지연 활성화: GeospatialMode Disabled로 시작");
             extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Disabled;
         }
 #endif
@@ -332,20 +320,22 @@ public class DataManager : MonoBehaviour
             {
                 Debug.LogWarning("[DataManager] 위치 서비스 시작 실패 — 기본 위치로 진행");
             }
+        }
 
-            // 첫 설치 시 Awake()에서 GeospatialMode=Disabled로 시작됨
-            // 권한 획득 후 Enabled로 변경하여 Geospatial 초기화 시작
+        // Awake()에서 Disabled로 시작 → 위치 서비스 초기화 완료 후 Enabled로 변경
+        // 위치 서비스 실패해도 Geospatial은 활성화 (GPS 권한은 이미 있을 수 있음)
+        {
             ARCoreExtensions extensions = FindFirstObjectByType<ARCoreExtensions>();
             if (extensions != null && extensions.ARCoreExtensionsConfig != null
                 && extensions.ARCoreExtensionsConfig.GeospatialMode == GeospatialMode.Disabled)
             {
-                Debug.Log("[DBG] 위치 권한 획득 → GeospatialMode Enabled 활성화");
+                Debug.Log("[DBG] 위치 서비스 초기화 완료 → GeospatialMode Enabled 활성화");
                 extensions.ARCoreExtensionsConfig.GeospatialMode = GeospatialMode.Enabled;
                 extensions.ARCoreExtensionsConfig.StreetscapeGeometryMode = StreetscapeGeometryMode.Enabled;
             }
             else
             {
-                Debug.Log("[DBG] 권한 획득 시 GeospatialMode 이미 Enabled");
+                Debug.Log("[DBG] GeospatialMode 이미 Enabled (에디터 모드)");
             }
         }
 
