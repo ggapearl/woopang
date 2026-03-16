@@ -513,7 +513,11 @@ public class OffScreenIndicator : MonoBehaviour
                 autoDisableCoroutine = null;
             }
 
-            if (isFallbackMode) return;
+            if (isFallbackMode)
+            {
+                Debug.Log("[DBG] EnableFallbackMode(true): 이미 fallback 모드 → 스킵");
+                return;
+            }
             isFallbackMode = true;
             isTransitioning = false;
             disabledFallbackTargets.Clear();
@@ -521,6 +525,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
+            Debug.Log($"[DBG] EnableFallbackMode(true): ★ FALLBACK ON (autoDisable={autoDisable}, minDuration={fallbackMinDuration}s)");
 
             if (autoDisable)
             {
@@ -536,7 +541,11 @@ public class OffScreenIndicator : MonoBehaviour
                 autoDisableCoroutine = null;
             }
 
-            if (!isFallbackMode && !isTransitioning) return;
+            if (!isFallbackMode && !isTransitioning)
+            {
+                Debug.Log("[DBG] EnableFallbackMode(false): 이미 fallback 꺼짐 → 스킵");
+                return;
+            }
 
             // 최소 유지 시간 체크 (forceDisable이면 무시)
             if (!forceDisable)
@@ -547,7 +556,12 @@ public class OffScreenIndicator : MonoBehaviour
                     if (delayedDisableCoroutine == null)
                     {
                         float delay = fallbackMinDuration - elapsed;
+                        Debug.Log($"[DBG] EnableFallbackMode(false): minDuration 미달 (elapsed={elapsed:F1}s < min={fallbackMinDuration}s) → {delay:F1}s 후 해제 예약");
                         delayedDisableCoroutine = StartCoroutine(DelayedDisableFallback(delay));
+                    }
+                    else
+                    {
+                        Debug.Log("[DBG] EnableFallbackMode(false): minDuration 미달, 이미 지연 해제 예약됨");
                     }
                     return;
                 }
@@ -562,29 +576,42 @@ public class OffScreenIndicator : MonoBehaviour
                 }
             }
 
+            Debug.Log($"[DBG] EnableFallbackMode(false): ★ FALLBACK OFF → StartFallbackTransition (forceDisable={forceDisable})");
             StartFallbackTransition();
         }
     }
 
     private IEnumerator AutoDisableFallback(float duration)
     {
+        Debug.Log($"[DBG] AutoDisableFallback: {duration}s 타이머 시작");
         yield return new WaitForSeconds(duration);
         autoDisableCoroutine = null;
 
         if (isFallbackMode)
         {
+            Debug.Log("[DBG] AutoDisableFallback: ★ 자동 해제 → StartFallbackTransition");
             StartFallbackTransition();
+        }
+        else
+        {
+            Debug.Log("[DBG] AutoDisableFallback: 이미 fallback 꺼져있음, 스킵");
         }
     }
 
     private IEnumerator DelayedDisableFallback(float delay)
     {
+        Debug.Log($"[DBG] DelayedDisableFallback: {delay:F1}s 지연 해제 시작");
         yield return new WaitForSeconds(delay);
         delayedDisableCoroutine = null;
 
         if (isFallbackMode)
         {
+            Debug.Log("[DBG] DelayedDisableFallback: ★ 지연 해제 → StartFallbackTransition");
             StartFallbackTransition();
+        }
+        else
+        {
+            Debug.Log("[DBG] DelayedDisableFallback: 이미 fallback 꺼져있음, 스킵");
         }
     }
 
@@ -595,6 +622,7 @@ public class OffScreenIndicator : MonoBehaviour
     /// </summary>
     private void StartFallbackTransition()
     {
+        Debug.Log("[DBG] StartFallbackTransition: fallback → 정상 모드 전환 시작");
         isFallbackMode = false;
         isTransitioning = true;
         transitionStartTime = Time.time;
