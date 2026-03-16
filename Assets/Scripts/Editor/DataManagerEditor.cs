@@ -7,7 +7,6 @@ public class DataManagerEditor : UnityEditor.Editor
     // 하드코딩된 필드 목록 (초록색으로 표시)
     private static readonly string[] hardcodedFields = new string[]
     {
-        "objectSpawnDelay"
     };
 
     private static readonly Color hardcodedBgColor = new Color(0.18f, 0.55f, 0.34f, 0.35f);

@@ -3032,6 +3032,11 @@ PrefabInstance:
       objectReference: {fileID: 8224608110580610902}
     - target: {fileID: 8368148461676137752, guid: 397546a2339432a478cf59ab11207ae0,
         type: 3}
+      propertyPath: objectSpawnDelay
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8368148461676137752, guid: 397546a2339432a478cf59ab11207ae0,
+        type: 3}
       propertyPath: loadRadii.Array.size
       value: 5
       objectReference: {fileID: 0}
@@ -3059,6 +3064,11 @@ PrefabInstance:
         type: 3}
       propertyPath: 'loadRadii.Array.data[4]'
       value: 10000
+      objectReference: {fileID: 0}
+    - target: {fileID: 8368148461676137752, guid: 397546a2339432a478cf59ab11207ae0,
+        type: 3}
+      propertyPath: updateDistanceThreshold
+      value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 8581350476779091680, guid: 397546a2339432a478cf59ab11207ae0,
         type: 3}
@@ -14618,6 +14628,11 @@ PrefabInstance:
       objectReference: {fileID: 4401074753219425664}
     - target: {fileID: 82674362891000162, guid: bc7049408600ff34fa25e1ec236b4bc6,
         type: 3}
+      propertyPath: objectSpawnDelay
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 82674362891000162, guid: bc7049408600ff34fa25e1ec236b4bc6,
+        type: 3}
       propertyPath: loadRadii.Array.size
       value: 5
       objectReference: {fileID: 0}
@@ -14645,6 +14660,11 @@ PrefabInstance:
         type: 3}
       propertyPath: 'loadRadii.Array.data[4]'
       value: 10000
+      objectReference: {fileID: 0}
+    - target: {fileID: 82674362891000162, guid: bc7049408600ff34fa25e1ec236b4bc6,
+        type: 3}
+      propertyPath: updateDistanceThreshold
+      value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 7457048772242098766, guid: bc7049408600ff34fa25e1ec236b4bc6,
         type: 3}
@@ -19391,8 +19411,8 @@ MonoBehaviour:
   - 2000
   - 5000
   - 10000
-  tierDelay: 0.1
-  objectSpawnDelay: 0.1
+  tierDelay: 0.2
+  objectSpawnDelay: 0.2
   updateDistanceThreshold: 50
   rapidRefreshWindow: 60
   rapidRefreshThresholdCount: 4
@@ -24492,6 +24512,11 @@ PrefabInstance:
       objectReference: {fileID: 4347816810142038966}
     - target: {fileID: 4668791666596358310, guid: 6ee342ad07ce7e5478c5e8bb50052b9d,
         type: 3}
+      propertyPath: objectSpawnDelay
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4668791666596358310, guid: 6ee342ad07ce7e5478c5e8bb50052b9d,
+        type: 3}
       propertyPath: loadRadii.Array.size
       value: 5
       objectReference: {fileID: 0}
@@ -24519,6 +24544,11 @@ PrefabInstance:
         type: 3}
       propertyPath: 'loadRadii.Array.data[4]'
       value: 10000
+      objectReference: {fileID: 0}
+    - target: {fileID: 4668791666596358310, guid: 6ee342ad07ce7e5478c5e8bb50052b9d,
+        type: 3}
+      propertyPath: updateDistanceThreshold
+      value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 7457048772242098766, guid: 6ee342ad07ce7e5478c5e8bb50052b9d,
         type: 3}
@@ -35516,6 +35546,46 @@ PrefabInstance:
       propertyPath: themeColor.r
       value: 0.9843137
       objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: objectSpawnDelay
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: loadRadii.Array.size
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: 'loadRadii.Array.data[0]'
+      value: 100
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: 'loadRadii.Array.data[1]'
+      value: 500
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: 'loadRadii.Array.data[2]'
+      value: 1000
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: 'loadRadii.Array.data[3]'
+      value: 5000
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: 'loadRadii.Array.data[4]'
+      value: 10000
+      objectReference: {fileID: 0}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
+      propertyPath: updateDistanceThreshold
+      value: 200
+      objectReference: {fileID: 0}
     - target: {fileID: 8581350476779091680, guid: abc4802ece141624ebc1aaae8831b362,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -44620,7 +44690,12 @@ PrefabInstance:
     - target: {fileID: 1149881228227649779, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2027224086041261672, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5179096195668386051, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}

@@ -88,7 +88,7 @@ public class DataManager : MonoBehaviour
     [Tooltip("각 거리 단계 사이의 딜레이 (초)")]
     public float tierDelay = 0.5f;
 
-    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초) [HARDCODED]")]
+    [Tooltip("같은 단계 내 오브젝트 사이의 딜레이 (초)")]
     public float objectSpawnDelay = 0.2f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
