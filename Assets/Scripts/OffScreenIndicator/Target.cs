@@ -51,9 +51,6 @@ public class Target : MonoBehaviour
 
     [HideInInspector] public Indicator indicator;
 
-    // Sparkle 효과를 한 번만 재생하기 위한 플래그
-    [HideInInspector] public bool hasPlayedSparkle = false;
-
     // Geospatial 앵커 캐시 (앵커 미생성 시 OffScreenIndicator에서 표시 생략용)
     private CustomARGeospatialCreatorAnchor _cachedGeoAnchor;
     private bool _geoAnchorSearched = false;
@@ -142,10 +139,6 @@ public class Target : MonoBehaviour
         {
             OffScreenIndicator.TargetStateChanged.Invoke(this, false);
         }
-
-        // Target이 완전히 비활성화되면 Sparkle 플래그 리셋
-        // (다시 활성화될 때 Sparkle 재생)
-        hasPlayedSparkle = false;
     }
 
     public float GetDistanceFromCamera(Vector3 cameraPosition)

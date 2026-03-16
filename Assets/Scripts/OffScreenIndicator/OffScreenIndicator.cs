@@ -924,17 +924,6 @@ public class OffScreenIndicator : MonoBehaviour
             isNewlyActivated = true;
         }
 
-        // 화살표 인디케이터가 새로 활성화되고, Target이 아직 Sparkle을 재생하지 않았으면 재생
-        // ✅ 수정: indicator.transform.position 대신 finalScreenPosition (최종 계산된 위치) 사용
-        if (isNewlyActivated && type == IndicatorType.ARROW && !target.hasPlayedSparkle)
-        {
-            // 폴백 모드: finalScreenPosition이 이미 월드 좌표
-            // 일반 모드: Screen 좌표이므로 변환 필요
-            Vector3 sparklePos = isFallbackMode ? finalScreenPosition : ScreenToCanvasWorldPosition(finalScreenPosition);
-            IndicatorSparkleHelper.PlaySparkleForIndicator(sparklePos, type);
-            target.hasPlayedSparkle = true;
-        }
-
         return indicator;
     }
 
