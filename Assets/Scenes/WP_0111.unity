@@ -2921,7 +2921,6 @@ MonoBehaviour:
   gpsLatitude: 0
   gpsLongitude: 0
   indicator: {fileID: 0}
-  hasPlayedSparkle: 0
 --- !u!65 &131624116
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -5160,7 +5159,6 @@ MonoBehaviour:
   gpsLatitude: 0
   gpsLongitude: 0
   indicator: {fileID: 0}
-  hasPlayedSparkle: 0
 --- !u!65 &312391475
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -7894,7 +7892,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   player: {fileID: 8332089163549216840}
   hideDistance: 200
-  minDistance: 1
+  minDistance: 0
 --- !u!1 &547149849
 GameObject:
   m_ObjectHideFlags: 0
@@ -8970,7 +8968,6 @@ MonoBehaviour:
   gpsLatitude: 0
   gpsLongitude: 0
   indicator: {fileID: 0}
-  hasPlayedSparkle: 0
 --- !u!65 &643494991
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -32855,7 +32852,6 @@ MonoBehaviour:
   gpsLatitude: 0
   gpsLongitude: 0
   indicator: {fileID: 0}
-  hasPlayedSparkle: 0
 --- !u!114 &3047864898962331035
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -33382,7 +33378,7 @@ PrefabInstance:
     - target: {fileID: 1279877576191648393, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 223
+      value: 226
       objectReference: {fileID: 0}
     - target: {fileID: 1794623478198708475, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
@@ -44609,7 +44605,7 @@ PrefabInstance:
     - target: {fileID: 92528271963126980, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: m_VersionIndex
-      value: 364
+      value: 367
       objectReference: {fileID: 0}
     - target: {fileID: 499417013053605411, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}

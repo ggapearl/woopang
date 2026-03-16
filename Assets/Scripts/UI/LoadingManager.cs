@@ -480,48 +480,67 @@ public class LoadingManager : MonoBehaviour
             return;
         }
 
-        // Tracking → Limited/None: 즉시 fallback + 오브젝트 숨기기
+        // Tracking → Limited/None: 오브젝트 숨기기 + fallback 진입
         if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
         {
+            // ★ 트래킹 Lost 시 항상 오브젝트 숨김 (fallback 상태와 무관)
+            // anchor 위치 손실로 인한 카메라 앞 뭉침 방지
+            if (dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+            {
+                Debug.Log("[DBG] TrackingChange: Tracking Lost → 오브젝트 숨김");
+                dataManager.SetAllObjectsVisible(false);
+            }
+
             float timeSinceFallbackOff = Time.realtimeSinceStartup - lastFallbackDisableTime;
-            Debug.Log($"[DBG] TrackingChange: Tracking Lost → timeSinceFallbackOff={timeSinceFallbackOff:F1}s, hasEnvGuidance={hasShownEnvironmentGuidance}, isFBwoGuidance={isFallbackWithoutGuidance}, objCount={dataManager?.GetSpawnedObjectsCount()}");
-            if (timeSinceFallbackOff > 3f && !hasShownEnvironmentGuidance && !isFallbackWithoutGuidance
-                && dataManager != null && dataManager.GetSpawnedObjectsCount() > 0)
+            Debug.Log($"[DBG] TrackingChange: Tracking Lost → timeSinceFallbackOff={timeSinceFallbackOff:F1}s, hasEnvGuidance={hasShownEnvironmentGuidance}, isFBwoGuidance={isFallbackWithoutGuidance}");
+
+            // fallback 아직 안 켜져있으면 진입
+            if (timeSinceFallbackOff > 3f && !hasShownEnvironmentGuidance && !isFallbackWithoutGuidance)
             {
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && !osi.IsFallbackMode)
                 {
                     Debug.Log("[DBG] TrackingChange: ★ ENABLE fallback (트래킹 Lost, autoDisable=false)");
                     osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
-                    dataManager.SetAllObjectsVisible(false);
+                    isFallbackWithoutGuidance = true;
+                }
+                else if (osi != null && osi.IsFallbackMode)
+                {
+                    // 이미 fallback ON (초기 fallback 등) → 트래킹 복구 시 해제 가능하도록 플래그 설정
+                    Debug.Log("[DBG] TrackingChange: 이미 fallback ON → isFallbackWithoutGuidance=true 설정");
                     isFallbackWithoutGuidance = true;
                 }
                 else
                 {
-                    Debug.Log($"[DBG] TrackingChange: fallback 진입 스킵 (osi={osi != null}, isFallbackMode={osi?.IsFallbackMode})");
+                    Debug.Log($"[DBG] TrackingChange: fallback 진입 스킵 (osi={osi != null})");
                 }
             }
         }
-        // Limited/None → Tracking: 즉시 fallback 해제 + 오브젝트 복구
-        else if (current == TrackingState.Tracking && isFallbackWithoutGuidance)
+        // Limited/None → Tracking: fallback 해제 + 오브젝트 복구
+        else if (current == TrackingState.Tracking)
         {
-            Debug.Log("[DBG] TrackingChange: ★ DISABLE fallback (트래킹 복구, forceDisable=true)");
-            isFallbackWithoutGuidance = false;
-            lastFallbackDisableTime = Time.realtimeSinceStartup;
+            // 트래킹 복구 시 항상 오브젝트 보이기
             if (dataManager != null)
             {
                 dataManager.SetAllObjectsVisible(true);
             }
-            OffScreenIndicator osi = GetCachedOSI();
-            if (osi != null)
+
+            if (isFallbackWithoutGuidance)
             {
-                osi.EnableFallbackMode(false, forceDisable: true);
+                Debug.Log("[DBG] TrackingChange: ★ DISABLE fallback (트래킹 복구, forceDisable=true)");
+                isFallbackWithoutGuidance = false;
+                lastFallbackDisableTime = Time.realtimeSinceStartup;
+                OffScreenIndicator osi = GetCachedOSI();
+                if (osi != null)
+                {
+                    osi.EnableFallbackMode(false, forceDisable: true);
+                }
             }
-        }
-        else if (current == TrackingState.Tracking && !isFallbackWithoutGuidance)
-        {
-            OffScreenIndicator osi = GetCachedOSI();
-            Debug.Log($"[DBG] TrackingChange: 트래킹 복구됐지만 isFallbackWithoutGuidance=false (isFallbackMode={osi?.IsFallbackMode})");
+            else
+            {
+                OffScreenIndicator osi = GetCachedOSI();
+                Debug.Log($"[DBG] TrackingChange: 트래킹 복구 → 오브젝트 복구 (isFallbackWithoutGuidance=false, isFallbackMode={osi?.IsFallbackMode})");
+            }
         }
     }
     
@@ -701,11 +720,12 @@ public class LoadingManager : MonoBehaviour
             osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
             Debug.Log($"[DBG] ActivateFallbackAfterDelay: ★ ENABLE fallback (Editor, autoDisable=true, minDuration={minDuration}s)");
 #else
-            // autoDisable=false: 트래킹이 정상화되고 오브젝트가 배치될 때까지 fallback 유지
-            // WaitForFirstObjectsAndDisableFallback에서 수동 해제
+            // autoDisable=true: minDuration 후 자동 해제 (안전장치)
+            // WaitForFirstObjectsAndDisableFallback에서도 조건 충족 시 조기 해제 가능
+            // 이전: autoDisable=false → WaitForFirstObj 레이스 컨디션으로 fallback 영구 유지 버그
             osi.SetFallbackMinDuration(minDuration);
-            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
-            Debug.Log($"[DBG] ActivateFallbackAfterDelay: ★ ENABLE fallback (Device, autoDisable=false, minDuration={minDuration}s)");
+            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
+            Debug.Log($"[DBG] ActivateFallbackAfterDelay: ★ ENABLE fallback (Device, autoDisable=true, minDuration={minDuration}s)");
 #endif
         }
         else
@@ -793,8 +813,35 @@ public class LoadingManager : MonoBehaviour
                 {
                     if (osi != null)
                     {
-                        Debug.Log($"[DBG] WaitForFirstObj: ★ DISABLE fallback (Device, objCount={objCount}, isTracking=true, waited={waited:F0}s)");
-                        osi.EnableFallbackMode(false);
+                        if (osi.IsFallbackMode)
+                        {
+                            // fallback ON 상태 → 즉시 해제
+                            Debug.Log($"[DBG] WaitForFirstObj: ★ DISABLE fallback (Device, objCount={objCount}, isTracking=true, waited={waited:F0}s)");
+                            osi.EnableFallbackMode(false);
+                            yield break;
+                        }
+                        else
+                        {
+                            // 레이스 컨디션: 조건 충족이지만 fallback 아직 활성화 안 됨
+                            // ActivateFallbackAfterDelay가 아직 실행 안 됐을 수 있음 → 대기
+                            Debug.Log($"[DBG] WaitForFirstObj: 조건 충족이지만 fallback 아직 OFF → 활성화 대기 (objCount={objCount}, waited={waited:F0}s)");
+                            float extraWait = 0f;
+                            while (extraWait < 3f)
+                            {
+                                yield return new WaitForSeconds(0.2f);
+                                extraWait += 0.2f;
+                                waited += 0.2f;
+                                if (osi.IsFallbackMode)
+                                {
+                                    Debug.Log($"[DBG] WaitForFirstObj: ★ fallback 활성화 감지 → DISABLE (extraWait={extraWait:F1}s)");
+                                    osi.EnableFallbackMode(false);
+                                    yield break;
+                                }
+                            }
+                            // 3초 대기해도 fallback 안 켜짐 → autoDisable 타이머에 위임
+                            Debug.Log("[DBG] WaitForFirstObj: fallback 대기 타임아웃 (3s) → autoDisable에 위임");
+                            yield break;
+                        }
                     }
                     yield break;
                 }
