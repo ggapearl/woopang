@@ -1289,6 +1289,20 @@ public class DataManager : MonoBehaviour
     /// <summary>
     /// 모든 스폰된 오브젝트를 일시적으로 숨기기/표시 (백그라운드 복귀 시 사용)
     /// </summary>
+    /// <summary>
+    /// 3D 렌더러만 on/off (SetActive 건드리지 않음 → Target 유지 → fallback 화살표 정상 동작)
+    /// fallback 진입 시 렌더러 숨기고, 해제 시 복원
+    /// </summary>
+    public void SetAllRenderersVisible(bool visible)
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value == null) continue;
+            Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers) r.enabled = visible;
+        }
+    }
+
     public void SetAllObjectsVisible(bool visible)
     {
         if (visible)

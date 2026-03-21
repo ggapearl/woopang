@@ -942,6 +942,16 @@ private bool isDataLoaded = false;
     /// <summary>
     /// DataManager에서 호출하는 거리 필터 업데이트 메서드
     /// </summary>
+    public void SetAllRenderersVisible(bool visible)
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value == null) continue;
+            Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers) r.enabled = visible;
+        }
+    }
+
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
         foreach (var kvp in spawnedObjects)

@@ -309,6 +309,16 @@ public class SubwayManager : MonoBehaviour
         return R * 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
     }
 
+    public void SetAllRenderersVisible(bool visible)
+    {
+        foreach (var kvp in spawnedObjects)
+        {
+            if (kvp.Value == null) continue;
+            Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers) r.enabled = visible;
+        }
+    }
+
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
         foreach (var kvp in spawnedObjects)

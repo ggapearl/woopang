@@ -223,12 +223,14 @@ public class LoadingManager : MonoBehaviour
         }
 #endif
 
-        // 1. 먼저 fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
-        // autoDisable=false: 트래킹 복구 확인 후 수동으로 해제 (1초 타이머로 끄면 AR 미복구 상태에서 화살표 사라짐)
+        // 1. 3D 렌더러 즉시 숨김 (백그라운드 복귀 직후 앵커 미복구 상태에서 프리팹이 카메라 앞에 보이는 것 방지)
+        //    SetActive는 건드리지 않으므로 Target은 살아있음 → fallback 화살표 정상 동작
+        SetAllManagerRenderersVisible(false);
+
+        // 2. fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
         OffScreenIndicator osi = GetCachedOSI();
         if (osi != null)
         {
-            // 위치 대폭 변동 시 이전 위치의 fallback 데이터를 그대로 쓰면 안 됨 → fallback 모드 생략
             if (!needFullReload)
             {
                 int targetCount = osi.GetActiveTargetCount();
@@ -247,7 +249,7 @@ public class LoadingManager : MonoBehaviour
             }
         }
 
-        // 2. fallback 위치 확보 후 AR 오브젝트 숨기기 (Geospatial 앵커 미복구 상태에서 카메라 앞에 렌더링 방지)
+        // 3. 오브젝트 비활성화 (렌더러는 이미 숨김 상태)
         if (dataManager != null)
         {
             int objCount = dataManager.GetSpawnedObjectsCount();
@@ -474,17 +476,18 @@ public class LoadingManager : MonoBehaviour
 
         NotTrackingReason reason = arSession.subsystem.notTrackingReason;
 
-        // Tracking → Limited/None: fallback 진입
+        // Tracking → Limited/None: fallback 진입 + 3D 렌더러 숨김
         if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
         {
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
                 Debug.Log($"[OSID] 트래킹 Lost → fallback 진입 (reason={reason})");
+                SetAllManagerRenderersVisible(false); // 3D 프리팹 숨김 (Target 유지)
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
-        // Limited/None → Tracking: 즉시 fallback 해제
+        // Limited/None → Tracking: 즉시 fallback 해제 + 렌더러 복원
         else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
         {
             if (hasShownEnvironmentGuidance)
@@ -495,6 +498,7 @@ public class LoadingManager : MonoBehaviour
             }
             else
             {
+                SetAllManagerRenderersVisible(true); // 3D 프리팹 복원
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
                 {
@@ -1267,6 +1271,20 @@ public class LoadingManager : MonoBehaviour
     /// fallback 해제 시 모든 매니저의 오브젝트에 거리 필터 적용
     /// 200m 밖 오브젝트를 SetActive(false)로 비활성화
     /// </summary>
+    /// <summary>
+    /// 모든 매니저의 3D 렌더러만 on/off (SetActive 건드리지 않음 → Target 유지)
+    /// fallback 진입 시 숨기고, 해제 시 복원
+    /// </summary>
+    private void SetAllManagerRenderersVisible(bool visible)
+    {
+        if (dataManager != null) dataManager.SetAllRenderersVisible(visible);
+        if (TourAPIManager.Instance != null) TourAPIManager.Instance.SetAllRenderersVisible(visible);
+        if (SubwayManager.Instance != null) SubwayManager.Instance.SetAllRenderersVisible(visible);
+        if (TerminalManager.Instance != null) TerminalManager.Instance.SetAllRenderersVisible(visible);
+        if (TrainStationManager.Instance != null) TrainStationManager.Instance.SetAllRenderersVisible(visible);
+        if (BusStationManager.Instance != null) BusStationManager.Instance.SetAllRenderersVisible(visible);
+    }
+
     private void RestoreAllManagerObjects()
     {
         float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
@@ -1291,7 +1309,8 @@ public class LoadingManager : MonoBehaviour
         StopSpinner();
         if (loadingPanel) loadingPanel.SetActive(false);
 
-        // 환경 복구 → 모든 매니저 오브젝트 거리 필터 적용하며 복원
+        // 환경 복구 → 3D 렌더러 복원 + 거리 필터 적용
+        SetAllManagerRenderersVisible(true);
         RestoreAllManagerObjects();
 
         // fallback 모드 해제
