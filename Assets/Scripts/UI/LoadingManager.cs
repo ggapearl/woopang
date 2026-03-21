@@ -227,14 +227,9 @@ public class LoadingManager : MonoBehaviour
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
-            Debug.Log("[OSID] 트래킹 이미 정상 → 경량 복구 (앵커 재생성 스킵)");
-            // 렌더러만 잠깐 숨기고 복원 (앵커는 유효하므로 재생성 불필요)
-            SetAllManagerRenderersVisible(false);
-            yield return null; // 1프레임 대기
-            SetAllManagerRenderersVisible(true);
+            Debug.Log("[OSID] 트래킹 이미 정상 → 복구 스킵 (앵커 유효, 렌더러 정상)");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
-            Debug.Log("[OSID] HandleBackgroundRecovery 완료 (경량 복구)");
             yield break;
         }
 #endif

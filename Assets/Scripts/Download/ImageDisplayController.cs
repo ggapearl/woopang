@@ -94,11 +94,26 @@ public class ImageDisplayController : MonoBehaviour
     {
         if (!enabled) return;
 
+        // 이전 로딩 코루틴이 있으면 중단 (이전 장소 이미지가 나중에 덮어쓰는 문제 방지)
+        if (currentSubPhotoCoroutine != null)
+        {
+            StopCoroutine(currentSubPhotoCoroutine);
+            currentSubPhotoCoroutine = null;
+        }
+
+        // 이전 서브 사진 정리
+        ClearSubPhotos();
+
         if (subPhotoUrls == null || subPhotoUrls.Count == 0)
         {
             if (doubleTap3DScript != null)
             {
-                Sprite defaultSprite = Sprite.Create(Texture2D.blackTexture, new Rect(0, 0, 100, 100), new Vector2(0.5f, 0.5f));
+                Texture2D fallbackTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                Color[] pixels = new Color[16];
+                for (int i = 0; i < 16; i++) pixels[i] = Color.black;
+                fallbackTex.SetPixels(pixels);
+                fallbackTex.Apply();
+                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
                 doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
                 loadedSprites.Add(defaultSprite);
             }
@@ -106,7 +121,7 @@ public class ImageDisplayController : MonoBehaviour
         }
 
         if (gameObject.activeInHierarchy)
-            StartCoroutine(LoadSubPhotos(subPhotoUrls));
+            currentSubPhotoCoroutine = StartCoroutine(LoadSubPhotos(subPhotoUrls));
     }
 
     private IEnumerator LoadSubPhotos(List<string> subPhotoUrls)
@@ -147,9 +162,14 @@ public class ImageDisplayController : MonoBehaviour
         {
             if (doubleTap3DScript != null)
             {
-                Sprite defaultSprite = Sprite.Create(Texture2D.blackTexture, new Rect(0, 0, 100, 100), new Vector2(0.5f, 0.5f));
+                Texture2D fallbackTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                Color[] pixels = new Color[16];
+                for (int i = 0; i < 16; i++) pixels[i] = Color.black;
+                fallbackTex.SetPixels(pixels);
+                fallbackTex.Apply();
+                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
                 doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
-                loadedSprites.Add(defaultSprite); // 해제를 위해 저장
+                loadedSprites.Add(defaultSprite);
             }
         }
     }
@@ -180,10 +200,14 @@ public class ImageDisplayController : MonoBehaviour
     public void ClearImages()
     {
         StopAllCoroutines();
+        currentSubPhotoCoroutine = null;
 
-        if (cubeRenderer != null && cubeRenderer.material.HasProperty("_MainTex"))
+        if (cubeRenderer != null)
         {
-            cubeRenderer.material.SetTexture("_MainTex", null);
+            if (cubeRenderer.material.HasProperty("_BaseMap"))
+                cubeRenderer.material.SetTexture("_BaseMap", null);
+            if (cubeRenderer.material.HasProperty("_MainTex"))
+                cubeRenderer.material.SetTexture("_MainTex", null);
         }
 
         if (baseMapTexture != null && baseMapTexture != Texture2D.blackTexture)

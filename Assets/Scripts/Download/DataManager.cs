@@ -1261,7 +1261,11 @@ public class DataManager : MonoBehaviour
     {
         DoubleTap3D[] doubleTaps = obj.GetComponentsInChildren<DoubleTap3D>(true);
         foreach (var doubleTap in doubleTaps) doubleTap.ResetData();
-        
+
+        // 이전 장소의 이미지 데이터 정리 (풀 재사용 시 이전 사진이 보이는 문제 방지)
+        ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
+        if (displayCtrl != null) displayCtrl.ClearImages();
+
         if (modelType == "custom")
         {
             GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
