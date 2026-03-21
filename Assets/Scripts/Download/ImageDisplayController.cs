@@ -196,6 +196,16 @@ public class ImageDisplayController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 진행 중인 로딩 코루틴만 중단 (풀 재사용 전 호출 — 이전 장소 코루틴이 새 데이터를 덮어쓰는 것 방지)
+    /// 텍스처/스프라이트는 SetBaseMap/SetSubPhotos에서 새 데이터로 교체됨
+    /// </summary>
+    public void CancelPendingLoads()
+    {
+        StopAllCoroutines();
+        currentSubPhotoCoroutine = null;
+    }
+
     // 모든 텍스처 해제
     public void ClearImages()
     {

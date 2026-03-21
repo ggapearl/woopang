@@ -196,7 +196,6 @@ public class LoadingManager : MonoBehaviour
     IEnumerator HandleBackgroundRecovery()
     {
         isBackgroundRecovering = true;
-        Debug.Log("[OSID] HandleBackgroundRecovery 시작");
 
         // ============================================================
         // 0. GPS 위치 변동 체크 — 200m 이상 이동 시 전체 재로드 필요 판단
@@ -212,11 +211,9 @@ public class LoadingManager : MonoBehaviour
             if (lastFetch.x != 0f || lastFetch.y != 0f)
             {
                 float movedDistance = CalculateDistanceHaversine(lastFetch.x, lastFetch.y, currentLat, currentLon);
-                Debug.Log($"[OSID] 백그라운드 복귀 이동거리={movedDistance:F0}m, threshold={backgroundRelocationThreshold}m");
                 if (movedDistance > backgroundRelocationThreshold)
                 {
                     needFullReload = true;
-                    Debug.Log("[OSID] needFullReload=true (위치 대폭 변동)");
                 }
             }
         }
@@ -227,7 +224,6 @@ public class LoadingManager : MonoBehaviour
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
-            Debug.Log("[OSID] 트래킹 이미 정상 → 복구 스킵 (앵커 유효, 렌더러 정상)");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
             yield break;
@@ -244,18 +240,15 @@ public class LoadingManager : MonoBehaviour
             if (!needFullReload)
             {
                 int targetCount = osi.GetActiveTargetCount();
-                Debug.Log($"[OSID] fallback 활성화 시도: targets={targetCount}, isFallback={osi.IsFallbackMode}");
                 osi.SetFallbackMinDuration(backgroundFallbackDuration);
 #if UNITY_EDITOR
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
 #else
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
 #endif
-                Debug.Log($"[OSID] fallback 활성화 완료: isFallback={osi.IsFallbackMode}");
             }
             else
             {
-                Debug.Log("[OSID] 위치 변동으로 fallback 생략");
             }
         }
 
@@ -319,19 +312,16 @@ public class LoadingManager : MonoBehaviour
     {
         float maxWait = 15f;
         float waited = 0f;
-        Debug.Log($"[OSID] WaitForTrackingRecovery 시작: needFullReload={needFullReload}, maxWait={maxWait}s");
 
         while (waited < maxWait)
         {
             TrackingState ts = arSession?.subsystem?.trackingState ?? TrackingState.None;
             if (waited % 2f < 0.6f) // 2초마다 상태 로그
             {
-                Debug.Log($"[OSID] 트래킹 대기중: state={ts}, waited={waited:F1}s");
             }
 
             if (ts == TrackingState.Tracking)
             {
-                Debug.Log($"[OSID] 트래킹 복구됨! waited={waited:F1}s, needFullReload={needFullReload}");
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
@@ -349,7 +339,6 @@ public class LoadingManager : MonoBehaviour
                 else
                 {
                     // 근거리 복귀 → 기존 앵커만 재생성
-                    Debug.Log("[OSID] RecreateAllManagerAnchors 호출");
                     RecreateAllManagerAnchors();
                 }
 
@@ -359,12 +348,10 @@ public class LoadingManager : MonoBehaviour
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
-                    Debug.Log($"[OSID] fallback 해제 요청: isFallback={osi.IsFallbackMode}");
                     osi.EnableFallbackMode(false);
                 }
                 isBackgroundRecovering = false;
                 lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
-                Debug.Log("[OSID] HandleBackgroundRecovery 완료 (트래킹 복구)");
                 yield break;
             }
 
@@ -373,7 +360,6 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃 시에도 처리 (무한 숨김 방지)
-        Debug.Log($"[OSID] 트래킹 복구 타임아웃 ({maxWait}s), 강제 처리 진행");
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
@@ -393,23 +379,19 @@ public class LoadingManager : MonoBehaviour
         SetAllManagerRenderersVisible(true);
         if (dataManager != null)
         {
-            Debug.Log("[OSID] 타임아웃 — SetAllObjectsVisible(true) 강제 복구");
             dataManager.SetAllObjectsVisible(true);
         }
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
         if (osi != null && !hasShownEnvironmentGuidance)
         {
-            Debug.Log("[OSID] 타임아웃 — fallback 해제");
             osi.EnableFallbackMode(false);
         }
         else if (osi != null && hasShownEnvironmentGuidance)
         {
-            Debug.Log("[OSID] 타임아웃 — 환경안내 활성 상태, fallback 유지");
         }
         isBackgroundRecovering = false;
         lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
-        Debug.Log("[OSID] HandleBackgroundRecovery 완료 (타임아웃)");
     }
 
     /// <summary>
@@ -488,7 +470,6 @@ public class LoadingManager : MonoBehaviour
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
-                Debug.Log($"[OSID] 트래킹 Lost → fallback 진입 (reason={reason})");
                 SetAllManagerRenderersVisible(false); // 3D 프리팹 숨김 (Target 유지)
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
@@ -498,7 +479,6 @@ public class LoadingManager : MonoBehaviour
         {
             if (hasShownEnvironmentGuidance)
             {
-                Debug.Log("[OSID] 트래킹 복구 → 환경안내 fallback 해제");
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
             }
@@ -508,7 +488,6 @@ public class LoadingManager : MonoBehaviour
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
                 {
-                    Debug.Log("[OSID] 트래킹 복구 → fallback 해제");
                     osi.EnableFallbackMode(false, forceDisable: true);
                 }
             }
@@ -1065,7 +1044,6 @@ public class LoadingManager : MonoBehaviour
     
     void HandleEnvironmentIssue(AREnvironmentIssue issue)
     {
-        Debug.Log($"[OSID] HandleEnvironmentIssue: {issue}, hasShown={hasShownEnvironmentGuidance}");
         if (hasShownEnvironmentGuidance)
         {
             return;
@@ -1082,7 +1060,6 @@ public class LoadingManager : MonoBehaviour
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
-                Debug.Log($"[OSID] 환경 이슈 → fallback 진입: {issue}");
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
@@ -1244,7 +1221,6 @@ public class LoadingManager : MonoBehaviour
             if (currentIssue == AREnvironmentIssue.None)
             {
                 // 환경 복구 → 안내 숨기고 fallback 해제
-                Debug.Log("[OSID] AutoRetry: 환경 복구 → fallback 해제");
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
                 break;
@@ -1268,7 +1244,6 @@ public class LoadingManager : MonoBehaviour
                 StopSpinner();
                 if (loadingPanel) loadingPanel.SetActive(false);
                 textHidden = true;
-                Debug.Log("[OSID] AutoRetry: 안내 텍스트 숨김 (fallback 유지)");
             }
         }
     }
@@ -1286,14 +1261,12 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     private void HideAllManagerObjects()
     {
-        int totalCount = 0;
-        if (dataManager != null) { totalCount += dataManager.GetSpawnedObjectsCount(); dataManager.SetAllObjectsVisible(false); }
-        if (TourAPIManager.Instance != null) { totalCount += TourAPIManager.Instance.GetSpawnedObjectsCount(); TourAPIManager.Instance.SetAllObjectsVisible(false); }
-        if (SubwayManager.Instance != null) { totalCount += SubwayManager.Instance.GetSpawnedObjectsCount(); SubwayManager.Instance.SetAllObjectsVisible(false); }
-        if (TerminalManager.Instance != null) { totalCount += TerminalManager.Instance.GetSpawnedObjectsCount(); TerminalManager.Instance.SetAllObjectsVisible(false); }
-        if (TrainStationManager.Instance != null) { totalCount += TrainStationManager.Instance.GetSpawnedObjectsCount(); TrainStationManager.Instance.SetAllObjectsVisible(false); }
-        if (BusStationManager.Instance != null) { totalCount += BusStationManager.Instance.GetSpawnedObjectsCount(); BusStationManager.Instance.SetAllObjectsVisible(false); }
-        Debug.Log($"[OSID] 전체 오브젝트 숨김: count={totalCount}");
+        if (dataManager != null) dataManager.SetAllObjectsVisible(false);
+        if (TourAPIManager.Instance != null) TourAPIManager.Instance.SetAllObjectsVisible(false);
+        if (SubwayManager.Instance != null) SubwayManager.Instance.SetAllObjectsVisible(false);
+        if (TerminalManager.Instance != null) TerminalManager.Instance.SetAllObjectsVisible(false);
+        if (TrainStationManager.Instance != null) TrainStationManager.Instance.SetAllObjectsVisible(false);
+        if (BusStationManager.Instance != null) BusStationManager.Instance.SetAllObjectsVisible(false);
     }
 
     private void SetAllManagerRenderersVisible(bool visible)
@@ -1315,7 +1288,6 @@ public class LoadingManager : MonoBehaviour
 #else
         if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
 #endif
-        Debug.Log($"[OSID] RestoreAllManagerObjects: maxDist={maxDist}, lat={lat}, lon={lon}");
         if (dataManager != null) dataManager.UpdateDistanceFilter(maxDist, lat, lon);
         if (TourAPIManager.Instance != null) TourAPIManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (SubwayManager.Instance != null) SubwayManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
@@ -1338,7 +1310,6 @@ public class LoadingManager : MonoBehaviour
         OffScreenIndicator osi = GetCachedOSI();
         if (osi != null && osi.IsFallbackMode)
         {
-            Debug.Log("[OSID] HideARGuidance → fallback 해제");
             osi.EnableFallbackMode(false, forceDisable: true);
         }
     }

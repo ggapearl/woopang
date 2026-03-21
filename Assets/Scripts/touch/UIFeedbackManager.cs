@@ -2,9 +2,17 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using System.Collections;
+using System.Runtime.InteropServices;
 
 public class UIFeedbackManager : MonoBehaviour
 {
+#if UNITY_IOS && !UNITY_EDITOR
+    [DllImport("__Internal")]
+    private static extern void _WoopangTriggerHaptic(int style);
+
+    [DllImport("__Internal")]
+    private static extern void _WoopangTriggerSelectionHaptic();
+#endif
     public static UIFeedbackManager Instance { get; private set; }
 
     /// <summary>
@@ -142,17 +150,22 @@ public class UIFeedbackManager : MonoBehaviour
 #if UNITY_IOS
         try
         {
-            // iOS�� Medium Haptic�� ��� (���� ���� ����)
-            if (intensity > 0.1f) // 0.1 �̻��̸� Medium Haptic
-            {
-                // iOS Medium Haptic ���� (����Ƽ�� ���)
-                TriggerIOSMediumHaptic();
-            }
+            // iOS Taptic Engine — intensity에 따라 Light/Medium/Heavy 선택
+            int style;
+            if (intensity <= 0.33f)
+                style = 0; // Light
+            else if (intensity <= 0.66f)
+                style = 0; // Light (기본 터치 — Medium은 iOS에서 꽤 강함)
+            else
+                style = 1; // Medium (Heavy 대신 Medium — iOS 햅틱이 Android보다 강함)
+
+#if !UNITY_EDITOR
+            _WoopangTriggerHaptic(style);
+#endif
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"iOS Medium Haptic Failed: {e.Message}");
-            // Fallback�� ���� ���� (Medium Haptic�� �����̹Ƿ�)
+            Debug.LogWarning($"iOS Haptic Failed: {e.Message}");
         }
 #elif UNITY_ANDROID
         try
@@ -212,16 +225,6 @@ public class UIFeedbackManager : MonoBehaviour
         }
 #endif
 #endif
-    }
-
-    // iOS Medium Haptic 호출
-    private void TriggerIOSMediumHaptic()
-    {
-#if !UNITY_EDITOR
-        // 모든 플랫폼에서 기본 진동 사용
-        Handheld.Vibrate();
-#endif
-        // 에디터에서는 진동 호출 생략 (불필요한 로그 방지)
     }
 
     private void PlaySound(AudioClip clip)

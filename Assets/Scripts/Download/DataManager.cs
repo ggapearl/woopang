@@ -1262,9 +1262,10 @@ public class DataManager : MonoBehaviour
         DoubleTap3D[] doubleTaps = obj.GetComponentsInChildren<DoubleTap3D>(true);
         foreach (var doubleTap in doubleTaps) doubleTap.ResetData();
 
-        // 이전 장소의 이미지 데이터 정리 (풀 재사용 시 이전 사진이 보이는 문제 방지)
+        // 이전 장소의 이미지 로딩 코루틴 중단 (이전 코루틴이 새 데이터를 덮어쓰는 문제 방지)
+        // 텍스처/스프라이트 자체는 SetBaseMap/SetSubPhotos에서 새 데이터로 교체됨
         ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
-        if (displayCtrl != null) displayCtrl.ClearImages();
+        if (displayCtrl != null) displayCtrl.CancelPendingLoads();
 
         if (modelType == "custom")
         {
