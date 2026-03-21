@@ -1294,22 +1294,13 @@ public class LoadingManager : MonoBehaviour
 #else
         if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
 #endif
+        Debug.Log($"[OSID] RestoreAllManagerObjects: maxDist={maxDist}, lat={lat}, lon={lon}");
         if (dataManager != null) dataManager.UpdateDistanceFilter(maxDist, lat, lon);
-
-        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
-        if (tourMgr != null) tourMgr.UpdateDistanceFilter(maxDist, lat, lon);
-
-        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
-        if (subwayMgr != null) subwayMgr.UpdateDistanceFilter(maxDist, lat, lon);
-
-        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
-        if (terminalMgr != null) terminalMgr.UpdateDistanceFilter(maxDist, lat, lon);
-
-        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
-        if (trainMgr != null) trainMgr.UpdateDistanceFilter(maxDist, lat, lon);
-
-        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
-        if (busMgr != null) busMgr.UpdateDistanceFilter(maxDist, lat, lon);
+        if (TourAPIManager.Instance != null) TourAPIManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
+        if (SubwayManager.Instance != null) SubwayManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
+        if (TerminalManager.Instance != null) TerminalManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
+        if (TrainStationManager.Instance != null) TrainStationManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
+        if (BusStationManager.Instance != null) BusStationManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
     }
 
     void HideARGuidance()
