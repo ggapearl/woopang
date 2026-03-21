@@ -49,6 +49,9 @@ public class OffScreenIndicator : MonoBehaviour
     // ============================================================
     private bool isFallbackMode = false;
     public bool IsFallbackMode => isFallbackMode;
+
+    // fallback 진입 전 일반 모드 인디케이터 억제 (앱 시작 시 화살표 뭉침 방지)
+    private bool suppressNormalIndicators = false;
     private Dictionary<Target, FallbackData> fallbackDataMap = new Dictionary<Target, FallbackData>();
     private FallbackConfig currentFallbackConfig;
     private float fallbackStartTime = 0f; // fallback 모드 시작 시간 (realtimeSinceStartup)
@@ -87,6 +90,14 @@ public class OffScreenIndicator : MonoBehaviour
     [Header("=== 화살표 겹침 방지 ===")]
     [Tooltip("화살표 간 최소 간격 (Canvas 픽셀)")]
     [SerializeField] private float arrowMinSpacing = 80f;
+
+    [Header("=== 화살표 위치 스무딩 ===")]
+    [Tooltip("화살표 위치 보간 속도 (높을수록 빠르게 이동, 0이면 즉시)")]
+    [SerializeField] private float arrowSmoothSpeed = 8f;
+
+    // 각 타겟의 이전 프레임 스크린 위치/각도 캐시 (스무딩용)
+    private Dictionary<Target, Vector3> previousArrowScreenPositions = new Dictionary<Target, Vector3>();
+    private Dictionary<Target, float> previousArrowAngles = new Dictionary<Target, float>();
 
     private struct ArrowInfo
     {
@@ -128,7 +139,7 @@ public class OffScreenIndicator : MonoBehaviour
         mainCamera = FindFirstObjectByType<ARCameraManager>()?.GetComponent<Camera>() ?? Camera.main;
         if (mainCamera == null)
         {
-            Debug.LogError("AR 카메라 또는 메인 카메라를 찾을 수 없습니다!");
+            Debug.LogError("[OSID] AR 카메라 또는 메인 카메라를 찾을 수 없습니다!");
             return;
         }
 
@@ -201,6 +212,10 @@ public class OffScreenIndicator : MonoBehaviour
             DrawFallbackIndicators();
             return;
         }
+
+        // fallback 대기 중: 일반 모드 인디케이터 억제 (앱 시작 시 화살표 뭉침 방지)
+        if (suppressNormalIndicators)
+            return;
 
         // 전환 중 진행률 계산
         float transitionT = 1f;
@@ -289,6 +304,50 @@ public class OffScreenIndicator : MonoBehaviour
 
         // ── Pass 1.5: 화살표 겹침 해소 ──
         ResolveArrowOverlap(arrowInfos);
+
+        // ── Pass 1.7: 화살표 위치/각도 스무딩 (진동/텔레포트 방지) ──
+        if (arrowSmoothSpeed > 0f)
+        {
+            float lerpT = Mathf.Clamp01(Time.deltaTime * arrowSmoothSpeed);
+            HashSet<Target> activeArrowTargets = new HashSet<Target>();
+            for (int i = 0; i < arrowInfos.Count; i++)
+            {
+                ArrowInfo info = arrowInfos[i];
+                if (info.skipThisFrame || !info.isArrow) continue;
+
+                activeArrowTargets.Add(info.target);
+
+                // 위치 스무딩
+                if (previousArrowScreenPositions.TryGetValue(info.target, out Vector3 prevPos))
+                {
+                    info.screenPosition = Vector3.Lerp(prevPos, info.screenPosition, lerpT);
+                }
+                previousArrowScreenPositions[info.target] = info.screenPosition;
+
+                // 각도 스무딩 (라디안 → 도 변환 후 LerpAngle → 라디안 복원)
+                if (previousArrowAngles.TryGetValue(info.target, out float prevAngle))
+                {
+                    float prevDeg = prevAngle * Mathf.Rad2Deg;
+                    float curDeg = info.angle * Mathf.Rad2Deg;
+                    info.angle = Mathf.LerpAngle(prevDeg, curDeg, lerpT) * Mathf.Deg2Rad;
+                }
+                previousArrowAngles[info.target] = info.angle;
+
+                arrowInfos[i] = info;
+            }
+            // 더 이상 화살표가 아닌 타겟은 캐시에서 제거
+            var keysToRemove = new List<Target>();
+            foreach (var kvp in previousArrowScreenPositions)
+            {
+                if (!activeArrowTargets.Contains(kvp.Key))
+                    keysToRemove.Add(kvp.Key);
+            }
+            foreach (var key in keysToRemove)
+            {
+                previousArrowScreenPositions.Remove(key);
+                previousArrowAngles.Remove(key);
+            }
+        }
 
         // ── Pass 2: 인디케이터 생성/업데이트 ──
         for (int i = 0; i < arrowInfos.Count; i++)
@@ -492,6 +551,15 @@ public class OffScreenIndicator : MonoBehaviour
     }
 
     /// <summary>
+    /// 일반 모드 인디케이터 억제 (fallback 진입 전 화살표 뭉침 방지)
+    /// LoadingManager에서 fallback 활성화 대기 중에 호출
+    /// </summary>
+    public void SetSuppressNormalIndicators(bool suppress)
+    {
+        suppressNormalIndicators = suppress;
+    }
+
+    /// <summary>
     /// fallback 모드 활성화/비활성화
     /// autoDisable=true: 타이머 후 자동 해제 (앱 시작, 백그라운드 복귀 용)
     /// autoDisable=false: 수동 해제 전까지 유지 (환경 문제 감지 용)
@@ -515,10 +583,16 @@ public class OffScreenIndicator : MonoBehaviour
 
             if (isFallbackMode)
             {
+                // 이미 fallback 중이면 autoDisable 타이머만 재시작 (영구 유지 방지)
+                if (autoDisable)
+                {
+                    autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
+                }
                 return;
             }
             isFallbackMode = true;
             isTransitioning = false;
+            suppressNormalIndicators = false; // fallback 진입 시 억제 해제
             disabledFallbackTargets.Clear();
             currentFallbackConfig = config ?? new FallbackConfig();
             fallbackStartTime = Time.realtimeSinceStartup;
@@ -612,9 +686,12 @@ public class OffScreenIndicator : MonoBehaviour
     {
         isFallbackMode = false;
         isTransitioning = true;
+        suppressNormalIndicators = false; // 전환 시작 시 억제 해제
         transitionStartTime = Time.time;
         transitionDataMap.Clear();
         fadeOutTargets.Clear();
+        previousArrowScreenPositions.Clear(); // 스무딩 캐시 초기화 (fallback 위치 잔류 방지)
+        previousArrowAngles.Clear();
 
         // 캐시된 비활성 타겟의 indicator 정리 (오브젝트가 비활성이므로 전환 불가 → 즉시 해제)
         foreach (Target target in disabledFallbackTargets)

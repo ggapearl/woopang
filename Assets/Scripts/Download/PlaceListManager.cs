@@ -63,13 +63,28 @@ public class PlaceListManager : MonoBehaviour
     {
         { "en", new Dictionary<string, string> {
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
-            { "woopangData", "WOOPANG DATA" }, { "tourApiData", "TourAPI DATA" },
+            { "woopangData", "WOOPANG DATA" }, { "tourApiData", "Public Data" },
             { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
-            { "woopangData", "우팡 데이터" }, { "tourApiData", "관광공사 데이터" },
+            { "woopangData", "우팡 데이터" }, { "tourApiData", "공공데이터" },
             { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" }
+        }},
+        { "ja", new Dictionary<string, string> {
+            { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
+            { "woopangData", "WOOPANGデータ" }, { "tourApiData", "公共データ" },
+            { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" }
+        }},
+        { "zh", new Dictionary<string, string> {
+            { "petFriendly", "[宠物友好]" }, { "noImage", "[无图片]" },
+            { "woopangData", "WOOPANG数据" }, { "tourApiData", "公共数据" },
+            { "transportData", "交通数据" }, { "p2pUserData", "附近用户" }
+        }},
+        { "es", new Dictionary<string, string> {
+            { "petFriendly", "[Mascotas]" }, { "noImage", "[Sin imagen]" },
+            { "woopangData", "Datos WOOPANG" }, { "tourApiData", "Datos Públicos" },
+            { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" }
         }}
     };
 
@@ -185,7 +200,16 @@ public class PlaceListManager : MonoBehaviour
 
                 float d = CalculateDistance(lat, lon, p.latitude, p.longitude);
                 if (d <= maxDisplayDistance) {
-                    woopangCount++;
+                    bool isPublicData = FilterManager.PublicDataCategories.Contains(p.category ?? "");
+                    if (isPublicData)
+                    {
+                        if (!showPublic) continue; // 공공데이터 토글 OFF 시 목록에서 제외
+                        tourAPICount++;
+                    }
+                    else
+                    {
+                        woopangCount++;
+                    }
                     combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", p.color));
                 }
             }

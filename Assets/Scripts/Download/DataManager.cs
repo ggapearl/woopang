@@ -97,7 +97,7 @@ public class DataManager : MonoBehaviour
     [Tooltip("이 시간(초) 이내에 refreshThresholdCount회 새로고침 발생 시 빠른 이동 모드 진입")]
     [SerializeField] private float rapidRefreshWindow = 60f;
     [Tooltip("빠른 이동 모드 진입 조건 — 새로고침 횟수")]
-    [SerializeField] private int rapidRefreshThresholdCount = 4;
+    [SerializeField] private int rapidRefreshThresholdCount = 2;
     [Tooltip("빠른 이동 모드 자동 해제 시간 (초)")]
     [SerializeField] private float rapidModeResetInterval = 600f;
 
@@ -171,7 +171,10 @@ public class DataManager : MonoBehaviour
         StartCoroutine(StartLocationServiceAndFetchData());
 
         // 첫 설치 대비: 초기 로드가 완료되지 않은 경우 10/15/20초에 자동 재시도
+        // 에디터에서는 AR 세션이 없으므로 재시도 불필요 (기존 코루틴을 강제 중단하는 부작용 방지)
+#if !UNITY_EDITOR
         StartCoroutine(FirstInstallRetryIfNotLoaded());
+#endif
     }
 
     /// <summary>
@@ -374,6 +377,11 @@ public class DataManager : MonoBehaviour
 
         // fallback 활성화 후 오브젝트 순차 생성
         yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
+
+        // 에디터에서도 초기 로드 완료 표시 (FirstInstallRetry 재시도 방지)
+        isInitialStartComplete = true;
+        isDataLoaded = true;
+        isFetching = false;
 #else
         // ============================================================
         // Phase 1: GPS lat/lon으로 서버 데이터 선행 수집 (Geospatial 대기 없이)
@@ -506,7 +514,14 @@ public class DataManager : MonoBehaviour
 
         foreach (PlaceData place in places)
         {
-            CreateObjectFromData(place);
+            try
+            {
+                CreateObjectFromData(place);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={place.id}, name={place.name}: {ex.Message}");
+            }
 
             if (ShouldShowObject(place))
                 currentCount++;
@@ -671,10 +686,41 @@ public class DataManager : MonoBehaviour
 
                 try
                 {
-                    List<PlaceData> places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
-                    if (places != null)
+                    List<PlaceData> places = null;
+                    try
                     {
-                        // ... 정렬 및 필터링 ...
+                        places = JsonConvert.DeserializeObject<List<PlaceData>>(json);
+                    }
+                    catch (System.Exception parseEx)
+                    {
+                        Debug.LogWarning($"[DataManager] JSON 일괄 파싱 실패, 개별 파싱 시도: {parseEx.Message}");
+                        // 개별 파싱 fallback: JArray로 한 건씩 처리
+                        try
+                        {
+                            var jArray = Newtonsoft.Json.Linq.JArray.Parse(json);
+                            places = new List<PlaceData>();
+                            foreach (var jItem in jArray)
+                            {
+                                try
+                                {
+                                    var p = jItem.ToObject<PlaceData>();
+                                    if (p != null) places.Add(p);
+                                }
+                                catch (System.Exception itemEx)
+                                {
+                                    Debug.LogWarning($"[DataManager] 개별 파싱 실패: id={jItem["id"]}, name={jItem["name"]}: {itemEx.Message}");
+                                }
+                            }
+                            Debug.Log($"[DataManager] 개별 파싱으로 {places.Count}/{jArray.Count}건 복구");
+                        }
+                        catch (System.Exception fallbackEx)
+                        {
+                            Debug.LogError($"[DataManager] 개별 파싱도 실패: {fallbackEx.Message}");
+                        }
+                    }
+
+                    if (places != null && places.Count > 0)
+                    {
                         // 거리순 정렬
                         places.Sort((a, b) =>
                         {
@@ -690,11 +736,12 @@ public class DataManager : MonoBehaviour
                     }
                     else
                     {
+                        Debug.LogWarning($"[DataManager] 서버 응답 파싱 결과 null 또는 0건");
                     }
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"[DataManager] Error parsing JSON: {e.Message}");
+                    Debug.LogError($"[DataManager] FetchDataFromServerForTier 예외: {e.Message}");
                 }
             }
             else
@@ -864,12 +911,22 @@ public class DataManager : MonoBehaviour
         bool showWoopangData = !currentFilters.ContainsKey("woopangData") || currentFilters["woopangData"];
         // object3D 키가 없으면 기본값 true
         bool showObject3D = !currentFilters.ContainsKey("object3D") || currentFilters["object3D"];
+        // publicData 키가 없으면 기본값 true
+        bool showPublicData = !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
 
         // Object3D 토글 OFF: 원본이 custom인 오브젝트만 숨김 (GLB 실패로 cube 전환된 것도 포함)
         string origType = place.original_model_type ?? place.model_type;
         if (!showObject3D && origType == "custom")
         {
             return false;
+        }
+
+        // 공공데이터 필터: 공공 카테고리(gov, edu 등)인 경우 publicData 토글에 따라 표시/숨김
+        string cat = place.category ?? "";
+        bool isPublicCategory = FilterManager.PublicDataCategories.Contains(cat);
+        if (isPublicCategory)
+        {
+            if (!showPublicData) return false;
         }
 
         bool shouldShow = showWoopangData;
@@ -1600,5 +1657,5 @@ public class PlaceData
     public string original_model_type { get; set; } // 서버에서 받은 원본 값 (필터용)
     public string model_url { get; set; }
     public float model_scale { get; set; } = 1f;
-    public string category { get; set; } = ""; // shop, food, cafe, park
+    public string category { get; set; } = ""; // shop, food, cafe, park, toilet, gov, edu, utility, landmark, medical, culture, sport, religious, welfare
 }

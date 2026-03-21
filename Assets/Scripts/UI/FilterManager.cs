@@ -23,7 +23,7 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
     [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
     [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
-    [SerializeField] private Color categoryColorEtc = new Color(0.5f, 0.5f, 0.5f, 1f);   // 회색
+    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f); // 보라색 (공공화장실)
 
     [Header("References")]
     [SerializeField] private PlaceListManager placeListManager;
@@ -60,10 +60,17 @@ public class FilterManager : MonoBehaviour
         Food = 2,
         Cafe = 3,
         Park = 4,
-        Etc = 5     // 기타 (회색)
+        Toilet = 5  // 공공화장실 (보라색)
     }
 
-    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "etc" };
+    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "toilet" };
+
+    // 공공데이터 카테고리 (publicData 토글로 필터링)
+    public static readonly HashSet<string> PublicDataCategories = new HashSet<string>
+    {
+        "gov", "edu", "utility", "landmark", "medical",
+        "culture", "sport", "religious", "welfare", "park"
+    };
 
     private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
     private P2PFilterState p2pFilterState = P2PFilterState.FollowingOnly;  // 기본값: 팔로잉
@@ -119,7 +126,7 @@ public class FilterManager : MonoBehaviour
             { "categoryFood", "Food" },
             { "categoryCafe", "Cafe" },
             { "categoryPark", "Park" },
-            { "categoryEtc", "Etc." }
+            { "categoryToilet", "Restroom" }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendlyInclude", "애견동반(포함)" },
@@ -139,7 +146,7 @@ public class FilterManager : MonoBehaviour
             { "categoryFood", "음식점" },
             { "categoryCafe", "카페" },
             { "categoryPark", "공원" },
-            { "categoryEtc", "기타" }
+            { "categoryToilet", "공공화장실" }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendlyInclude", "ペット同伴(含む)" },
@@ -159,7 +166,7 @@ public class FilterManager : MonoBehaviour
             { "categoryFood", "グルメ" },
             { "categoryCafe", "カフェ" },
             { "categoryPark", "公園" },
-            { "categoryEtc", "その他" }
+            { "categoryToilet", "公衆トイレ" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendlyInclude", "宠物友好(包含)" },
@@ -179,7 +186,7 @@ public class FilterManager : MonoBehaviour
             { "categoryFood", "美食" },
             { "categoryCafe", "咖啡厅" },
             { "categoryPark", "公园" },
-            { "categoryEtc", "其他" }
+            { "categoryToilet", "公共厕所" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendlyInclude", "Mascotas (Incluir)" },
@@ -199,7 +206,7 @@ public class FilterManager : MonoBehaviour
             { "categoryFood", "Comida" },
             { "categoryCafe", "Café" },
             { "categoryPark", "Parque" },
-            { "categoryEtc", "Otros" }
+            { "categoryToilet", "Baño Público" }
         }}
     };
 
@@ -642,14 +649,14 @@ public class FilterManager : MonoBehaviour
     }
 
     // ============================================================
-    // 카테고리 토글 — 누를 때마다 순환 (All → Shop → Food → Cafe → Park → All)
+    // 카테고리 토글 — 누를 때마다 순환 (All → Shop → Food → Cafe → Park → Toilet → All)
     // ============================================================
 
     private void OnCategoryToggleChanged(bool isOn)
     {
         if (isUpdatingToggles) return;
 
-        // 6단계 순환: All → Shop → Food → Cafe → Park → Etc → All
+        // 6단계 순환: All → Shop → Food → Cafe → Park → Toilet → All
         int next = ((int)categoryState + 1) % categoryStateValues.Length;
         categoryState = (CategoryFilterState)next;
 
@@ -822,9 +829,9 @@ public class FilterManager : MonoBehaviour
                 bgColor = categoryColorPark;
                 labelText = texts["categoryPark"];
                 break;
-            case CategoryFilterState.Etc:
-                bgColor = categoryColorEtc;
-                labelText = texts["categoryEtc"];
+            case CategoryFilterState.Toilet:
+                bgColor = categoryColorToilet;
+                labelText = texts["categoryToilet"];
                 break;
         }
 
