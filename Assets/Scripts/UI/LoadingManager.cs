@@ -477,8 +477,6 @@ public class LoadingManager : MonoBehaviour
     void CheckTrackingStateChange()
     {
         if (arSession == null || arSession.subsystem == null) return;
-
-        // 백그라운드 복귀 처리 중에는 간섭하지 않음 (HandleBackgroundRecovery가 앵커 재생성 관리)
         if (isBackgroundRecovering) return;
 
         TrackingState current = arSession.subsystem.trackingState;
@@ -488,53 +486,11 @@ public class LoadingManager : MonoBehaviour
         lastFrameTrackingState = current;
 
         NotTrackingReason reason = arSession.subsystem.notTrackingReason;
-        Debug.Log($"[OSID] TrackingState 변경: {previous}→{current}, reason={reason}, isBgRecovering={isBackgroundRecovering}");
+        Debug.Log($"[OSID] TrackingState 변경: {previous}→{current}, reason={reason}");
 
-        // Tracking → Limited/None: fallback 진입 (오브젝트는 숨기지 않음)
-        if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
-        {
-            float timeSinceFallbackOff = Time.realtimeSinceStartup - lastFallbackDisableTime;
-
-            // fallback 아직 안 켜져있으면 진입
-            if (timeSinceFallbackOff > 3f && !hasShownEnvironmentGuidance && !isFallbackWithoutGuidance)
-            {
-                OffScreenIndicator osi = GetCachedOSI();
-                if (osi != null && !osi.IsFallbackMode)
-                {
-                    Debug.Log($"[OSID] 트래킹 Lost → fallback 진입 (reason={reason})");
-                    osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
-                    isFallbackWithoutGuidance = true;
-                }
-                else if (osi != null && osi.IsFallbackMode)
-                {
-                    Debug.Log("[OSID] 트래킹 Lost → 이미 fallback 상태, 플래그만 설정");
-                    isFallbackWithoutGuidance = true;
-                }
-            }
-            else
-            {
-                Debug.Log($"[OSID] 트래킹 Lost → fallback 진입 생략 (cooldown={timeSinceFallbackOff:F1}s, guidance={hasShownEnvironmentGuidance}, fbNoGuide={isFallbackWithoutGuidance})");
-            }
-        }
-        // Limited/None → Tracking: fallback 해제
-        else if (current == TrackingState.Tracking)
-        {
-            if (isFallbackWithoutGuidance)
-            {
-                Debug.Log("[OSID] 트래킹 복구 → fallback 해제 (forceDisable)");
-                isFallbackWithoutGuidance = false;
-                lastFallbackDisableTime = Time.realtimeSinceStartup;
-                OffScreenIndicator osi = GetCachedOSI();
-                if (osi != null)
-                {
-                    osi.EnableFallbackMode(false, forceDisable: true);
-                }
-            }
-            else
-            {
-                Debug.Log("[OSID] 트래킹 복구 → isFallbackWithoutGuidance=false, 별도 처리 없음");
-            }
-        }
+        // 트래킹 상태 변화에서는 fallback 진입/해제하지 않음
+        // fallback은 앱 시작(OnDataPreFetchCompleted)과 백그라운드 복귀(HandleBackgroundRecovery)에서만 관리
+        // 오브젝트와 인디케이터는 트래킹 Lost에서도 그대로 유지 (앵커가 위치 유지)
     }
     
     public void ShowLoading(System.Action heavyWork, string category = "General")
@@ -766,13 +722,17 @@ public class LoadingManager : MonoBehaviour
 
         while (waited < maxWait)
         {
+            // 백그라운드 복귀 중이면 이 코루틴은 간섭하지 않음
+            if (isBackgroundRecovering)
+            {
+                yield return new WaitForSeconds(1f);
+                waited += 1f;
+                continue;
+            }
+
             int objCount = dataManager != null ? dataManager.GetSpawnedObjectsCount() : 0;
             bool isTracking = arSession?.subsystem?.trackingState == TrackingState.Tracking;
             bool isFB = osi != null && osi.IsFallbackMode;
-
-            if (waited % 5f < 1f) // 5초마다 상태 로그
-            {
-            }
 
             // 오브젝트 존재 + AR 트래킹 정상 → fallback 해제
             if (objCount > 0)
@@ -1092,17 +1052,9 @@ public class LoadingManager : MonoBehaviour
         hasShownEnvironmentGuidance = true;
         isFallbackWithoutGuidance = false; // 환경안내가 fallback 관리를 인계
 
-        // OffScreenIndicator 폴백 모드 활성화 (DataLoading 제외 — 모든 환경 이슈에서)
-        // autoDisable=false: 환경이 복구될 때까지 유지 (HideARGuidance에서 수동 해제)
-        // 이미 스폰된 오브젝트는 숨기지 않음 (앵커가 유지되므로 위치 유지됨)
-        if (issue != AREnvironmentIssue.DataLoading)
-        {
-            OffScreenIndicator osi = GetCachedOSI();
-            if (osi != null)
-            {
-                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
-            }
-        }
+        // 환경 이슈에서는 fallback 모드 진입하지 않음
+        // fallback은 앱 시작(OnDataPreFetchCompleted)과 백그라운드 복귀(HandleBackgroundRecovery)에서만 관리
+        // 오브젝트와 인디케이터는 환경 이슈에서도 그대로 유지 (앵커가 위치 유지됨)
 
         if (issue == AREnvironmentIssue.SessionPreparing)
         {
@@ -1269,17 +1221,11 @@ public class LoadingManager : MonoBehaviour
                 issue = currentIssue;
             }
 
-            // 타임아웃: 환경 문제가 지속되면 강제로 fallback 해제
+            // 타임아웃: 환경 문제가 지속되면 안내 텍스트만 숨김 (fallback/오브젝트 제어 없음)
             if (elapsed >= maxRetryTime)
             {
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
-
-                OffScreenIndicator osi = GetCachedOSI();
-                if (osi != null && osi.IsFallbackMode)
-                {
-                    osi.EnableFallbackMode(false, forceDisable: true);
-                }
                 break;
             }
         }
@@ -1291,29 +1237,8 @@ public class LoadingManager : MonoBehaviour
         StopSpinner();
         // 기존 로딩 UI 숨기기
         if (loadingPanel) loadingPanel.SetActive(false);
-        // StopAllCoroutines 사용 금지 — HandleBackgroundRecovery, WaitForTrackingRecovery 등이 중단됨
-
-        // 환경 복구 → AR 오브젝트 다시 표시
-        if (dataManager != null)
-        {
-            dataManager.SetAllObjectsVisible(true);
-        }
-
-        // OffScreenIndicator 폴백 모드 — 오브젝트가 있으면 해제, 없으면 유지
-        lastFallbackDisableTime = Time.realtimeSinceStartup;
-        OffScreenIndicator osi = GetCachedOSI();
-        if (osi != null)
-        {
-            bool hasObjects = dataManager != null && dataManager.GetSpawnedObjectsCount() > 0;
-            if (hasObjects)
-            {
-                osi.EnableFallbackMode(false);
-            }
-            else
-            {
-                StartCoroutine(WaitForFirstObjectsAndDisableFallback(osi));
-            }
-        }
+        // 환경 안내 텍스트만 숨김 — fallback 모드와 오브젝트 가시성은 건드리지 않음
+        // fallback은 앱 시작/백그라운드 복귀에서만 관리
     }
     
     public AREnvironmentIssue GetCurrentEnvironmentIssue()
