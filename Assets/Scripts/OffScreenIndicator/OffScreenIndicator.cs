@@ -92,6 +92,10 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("화살표 간 최소 간격 (Canvas 픽셀)")]
     [SerializeField] private float arrowMinSpacing = 80f;
 
+    [Header("=== 인디케이터 거리 제한 ===")]
+    [Tooltip("이 거리(m) 이상의 오브젝트는 인디케이터 표시 안함 (0이면 제한 없음)")]
+    [SerializeField] private float maxIndicatorDistance = 0f;
+
     [Header("=== 화살표 위치 스무딩 ===")]
     [Tooltip("화살표 위치 보간 속도 (높을수록 빠르게 이동, 0이면 즉시)")]
     [SerializeField] private float arrowSmoothSpeed = 8f;
@@ -157,6 +161,20 @@ public class OffScreenIndicator : MonoBehaviour
         panelRectTransform = GetComponent<RectTransform>();
 
         TargetStateChanged += HandleTargetStateChanged;
+
+        // PlaceListManager의 거리 슬라이더 값과 동기화
+        if (maxIndicatorDistance <= 0f)
+        {
+            maxIndicatorDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+        }
+    }
+
+    /// <summary>
+    /// 인디케이터 최대 표시 거리 설정 (PlaceListManager 거리 슬라이더 연동용)
+    /// </summary>
+    public void SetMaxIndicatorDistance(float distance)
+    {
+        maxIndicatorDistance = distance;
     }
 
     /// <summary>
@@ -247,7 +265,22 @@ public class OffScreenIndicator : MonoBehaviour
 
             Vector3 screenPosition = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
             bool isTargetVisible = OffScreenIndicatorCore.IsTargetVisible(screenPosition);
-            float distanceFromCamera = target.NeedDistanceText ? target.GetDistanceFromCamera(mainCamera.transform.position) : float.MinValue;
+            float distanceFromCamera = target.GetDistanceFromCamera(mainCamera.transform.position);
+
+            // 거리 필터: maxIndicatorDistance 밖의 타겟은 인디케이터 표시 안 함
+            if (maxIndicatorDistance > 0f && distanceFromCamera > maxIndicatorDistance)
+            {
+                // 기존 인디케이터가 있으면 숨김
+                if (target.indicator != null)
+                {
+                    target.indicator.Activate(false);
+                    target.indicator = null;
+                }
+                continue;
+            }
+
+            if (!target.NeedDistanceText)
+                distanceFromCamera = float.MinValue;
 
             // 전환 중 fade-out 대상 (화살표→box 전환): 기존 화살표를 fade-out
             if (isTransitioning && fadeOutTargets.Contains(target))

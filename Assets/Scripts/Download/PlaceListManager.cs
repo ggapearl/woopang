@@ -353,6 +353,10 @@ public class PlaceListManager : MonoBehaviour
         if (trainManager != null) trainManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (subwayManager != null) subwayManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (p2pManager != null) p2pManager.SetMaxTrackingDistance(maxDisplayDistance);
+
+        // OffScreenIndicator 거리 필터 동기화
+        OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
+        if (osi != null) osi.SetMaxIndicatorDistance(maxDisplayDistance);
     }
 
     private void UpdateDistanceValueText() {

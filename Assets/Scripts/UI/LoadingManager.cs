@@ -488,15 +488,37 @@ public class LoadingManager : MonoBehaviour
         NotTrackingReason reason = arSession.subsystem.notTrackingReason;
         Debug.Log($"[OSID] TrackingState 변경: {previous}→{current}, reason={reason}");
 
-        // Tracking 복구 시: 환경안내 fallback이 켜져있으면 해제
-        // (HandleEnvironmentIssue에서 진입한 fallback을 트래킹 복구 시점에 바로 풀어줌)
-        if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
+        // Tracking → Limited/None: 즉시 fallback 진입 (오브젝트 뭉침 방지)
+        // HandleEnvironmentIssue의 주기적 체크를 기다리지 않고 프레임 단위로 즉시 반응
+        if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
         {
+            OffScreenIndicator osi = GetCachedOSI();
+            if (osi != null && !osi.IsFallbackMode)
+            {
+                Debug.Log($"[OSID] 트래킹 Lost → 즉시 fallback 진입 (reason={reason})");
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+            }
+        }
+        // Limited/None → Tracking: fallback 해제
+        else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
+        {
+            // 환경안내가 활성 상태면 해제
             if (hasShownEnvironmentGuidance)
             {
                 Debug.Log("[OSID] 트래킹 복구 → 환경안내 fallback 해제");
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
+            }
+            else
+            {
+                // 환경안내 없이 CheckTrackingStateChange에서 직접 진입한 fallback 해제
+                OffScreenIndicator osi = GetCachedOSI();
+                if (osi != null && osi.IsFallbackMode)
+                {
+                    Debug.Log("[OSID] 트래킹 복구 → fallback 해제");
+                    osi.EnableFallbackMode(false, forceDisable: true);
+                    if (dataManager != null) dataManager.SetAllObjectsVisible(true);
+                }
             }
         }
     }
