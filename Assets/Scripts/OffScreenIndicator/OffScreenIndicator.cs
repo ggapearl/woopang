@@ -611,7 +611,6 @@ public class OffScreenIndicator : MonoBehaviour
     /// </summary>
     public void EnableFallbackMode(bool enable, FallbackConfig config = null, bool autoDisable = true, bool forceDisable = false)
     {
-        Debug.Log($"[OSID] EnableFallbackMode({enable}, autoDisable={autoDisable}, forceDisable={forceDisable}) — current isFallback={isFallbackMode}, targets={targets.Count}");
 
         if (enable)
         {
@@ -630,7 +629,6 @@ public class OffScreenIndicator : MonoBehaviour
             if (isFallbackMode)
             {
                 // 이미 fallback 중이면 autoDisable 타이머만 재시작 (영구 유지 방지)
-                Debug.Log($"[OSID] 이미 fallback 중 — autoDisable 타이머 재시작={autoDisable}");
                 if (autoDisable)
                 {
                     autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
@@ -645,7 +643,6 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
-            Debug.Log($"[OSID] fallback 진입 완료: fallbackDataMap={fallbackDataMap.Count}개, autoDisable={autoDisable}");
 
             if (autoDisable)
             {
@@ -663,7 +660,6 @@ public class OffScreenIndicator : MonoBehaviour
 
             if (!isFallbackMode && !isTransitioning)
             {
-                Debug.Log("[OSID] fallback 해제 요청이지만 이미 꺼져있음");
                 return;
             }
 
@@ -733,7 +729,6 @@ public class OffScreenIndicator : MonoBehaviour
     /// </summary>
     private void StartFallbackTransition()
     {
-        Debug.Log("[OSID] StartFallbackTransition — fallback→정상 전환 시작");
         isFallbackMode = false;
         isTransitioning = true;
         suppressNormalIndicators = false; // 전환 시작 시 억제 해제
