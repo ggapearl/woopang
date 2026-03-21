@@ -1254,26 +1254,63 @@ public class DataManager : MonoBehaviour
     /// </summary>
     public void SetAllObjectsVisible(bool visible)
     {
-        foreach (var kvp in spawnedObjects)
+        if (visible)
         {
-            if (kvp.Value != null)
+            // 표시 시 거리 필터 + 카테고리 필터 모두 적용
+            RestoreObjectsWithDistanceFilter();
+        }
+        else
+        {
+            foreach (var kvp in spawnedObjects)
             {
-                if (visible)
-                {
-                    // 표시 시 필터 상태에 따라 결정
-                    if (placeDataMap.ContainsKey(kvp.Key))
-                    {
-                        bool shouldShow = ShouldShowObject(placeDataMap[kvp.Key]);
-                        kvp.Value.SetActive(shouldShow);
-                    }
-                    else
-                    {
-                        kvp.Value.SetActive(true);
-                    }
-                }
-                else
-                {
+                if (kvp.Value != null)
                     kvp.Value.SetActive(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 거리 필터 + 카테고리 필터를 적용하여 오브젝트 표시 복원
+    /// SetAllObjectsVisible(true) 시 거리 무관하게 전체 켜지는 문제 방지
+    /// </summary>
+    public void RestoreObjectsWithDistanceFilter()
+    {
+        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+        float lat = 0f, lon = 0f;
+
+#if UNITY_EDITOR
+        if (VirtualLocation.Instance != null)
+        {
+            lat = VirtualLocation.Instance.Latitude;
+            lon = VirtualLocation.Instance.Longitude;
+        }
+#else
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+#endif
+
+        // GPS 좌표가 없으면 lastPosition 사용
+        if (lat == 0f && lon == 0f)
+        {
+            lat = lastPosition.x;
+            lon = lastPosition.y;
+        }
+
+        if (lat != 0f || lon != 0f)
+        {
+            UpdateDistanceFilter(maxDist, lat, lon);
+        }
+        else
+        {
+            // GPS도 없으면 필터만 적용하여 복원
+            foreach (var kvp in spawnedObjects)
+            {
+                if (kvp.Value != null && placeDataMap.ContainsKey(kvp.Key))
+                {
+                    kvp.Value.SetActive(ShouldShowObject(placeDataMap[kvp.Key]));
                 }
             }
         }

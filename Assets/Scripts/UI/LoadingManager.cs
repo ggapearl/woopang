@@ -474,6 +474,10 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     private TrackingState lastFrameTrackingState = TrackingState.None;
 
+    // 트래킹 안정화 유예기간 (Tracking↔Limited 빠른 진동 시 fallback ON/OFF 깜박임 방지)
+    private Coroutine trackingRecoveryGraceCoroutine;
+    private const float TRACKING_RECOVERY_GRACE = 3f; // Tracking 상태 3초 유지 후 fallback 해제
+
     void CheckTrackingStateChange()
     {
         if (arSession == null || arSession.subsystem == null) return;
@@ -489,9 +493,16 @@ public class LoadingManager : MonoBehaviour
         Debug.Log($"[OSID] TrackingState 변경: {previous}→{current}, reason={reason}");
 
         // Tracking → Limited/None: 즉시 fallback 진입 (오브젝트 뭉침 방지)
-        // HandleEnvironmentIssue의 주기적 체크를 기다리지 않고 프레임 단위로 즉시 반응
         if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
         {
+            // 유예기간 대기 중이면 취소 (아직 Tracking이 안정되지 않았으므로 fallback 유지)
+            if (trackingRecoveryGraceCoroutine != null)
+            {
+                StopCoroutine(trackingRecoveryGraceCoroutine);
+                trackingRecoveryGraceCoroutine = null;
+                Debug.Log("[OSID] 트래킹 다시 Lost → 유예기간 취소, fallback 유지");
+            }
+
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
@@ -499,26 +510,47 @@ public class LoadingManager : MonoBehaviour
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
-        // Limited/None → Tracking: fallback 해제
+        // Limited/None → Tracking: 유예기간 후 fallback 해제 (즉시 해제 X)
         else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
         {
-            // 환경안내가 활성 상태면 해제
-            if (hasShownEnvironmentGuidance)
+            if (trackingRecoveryGraceCoroutine == null)
             {
-                Debug.Log("[OSID] 트래킹 복구 → 환경안내 fallback 해제");
-                HideARGuidance();
-                hasShownEnvironmentGuidance = false;
+                Debug.Log($"[OSID] 트래킹 복구 → {TRACKING_RECOVERY_GRACE}초 안정화 대기 시작");
+                trackingRecoveryGraceCoroutine = StartCoroutine(TrackingRecoveryGrace());
             }
-            else
+        }
+    }
+
+    /// <summary>
+    /// 트래킹 복구 후 안정화 유예기간 — 지정 시간 동안 Tracking 유지 시 fallback 해제
+    /// 중간에 Limited/None으로 떨어지면 CheckTrackingStateChange에서 코루틴 취소
+    /// </summary>
+    private IEnumerator TrackingRecoveryGrace()
+    {
+        yield return new WaitForSeconds(TRACKING_RECOVERY_GRACE);
+        trackingRecoveryGraceCoroutine = null;
+
+        // 유예기간 완료 — 여전히 Tracking 상태인지 확인
+        if (arSession?.subsystem?.trackingState != TrackingState.Tracking)
+        {
+            Debug.Log("[OSID] 유예기간 완료했지만 트래킹 아직 불안정 → fallback 유지");
+            yield break;
+        }
+
+        Debug.Log("[OSID] 트래킹 안정 확인 → fallback 해제");
+
+        if (hasShownEnvironmentGuidance)
+        {
+            HideARGuidance();
+            hasShownEnvironmentGuidance = false;
+        }
+        else
+        {
+            OffScreenIndicator osi = GetCachedOSI();
+            if (osi != null && osi.IsFallbackMode)
             {
-                // 환경안내 없이 CheckTrackingStateChange에서 직접 진입한 fallback 해제
-                OffScreenIndicator osi = GetCachedOSI();
-                if (osi != null && osi.IsFallbackMode)
-                {
-                    Debug.Log("[OSID] 트래킹 복구 → fallback 해제");
-                    osi.EnableFallbackMode(false, forceDisable: true);
-                    if (dataManager != null) dataManager.SetAllObjectsVisible(true);
-                }
+                osi.EnableFallbackMode(false, forceDisable: true);
+                if (dataManager != null) dataManager.SetAllObjectsVisible(true);
             }
         }
     }
@@ -609,6 +641,11 @@ public class LoadingManager : MonoBehaviour
         if (arCameraManager != null)
         {
             arCameraManager.frameReceived -= OnCameraFrameReceived;
+        }
+        if (trackingRecoveryGraceCoroutine != null)
+        {
+            StopCoroutine(trackingRecoveryGraceCoroutine);
+            trackingRecoveryGraceCoroutine = null;
         }
     }
 
