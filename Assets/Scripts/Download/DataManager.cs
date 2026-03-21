@@ -993,8 +993,27 @@ public class DataManager : MonoBehaviour
 
         if (setupSuccess)
         {
-            // 컴포넌트 설정 완료 후 필터에 따라 활성/비활성 결정
+            // 컴포넌트 설정 완료 후 필터 + 거리에 따라 활성/비활성 결정
             bool shouldShow = ShouldShowObject(place);
+
+            // 거리 필터: maxDisplayDistance 밖의 오브젝트는 비활성화
+            if (shouldShow)
+            {
+                float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+                float lat = 0f, lon = 0f;
+#if UNITY_EDITOR
+                if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
+#else
+                if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
+#endif
+                if (lat == 0f && lon == 0f) { lat = lastPosition.x; lon = lastPosition.y; }
+                if (lat != 0f || lon != 0f)
+                {
+                    float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
+                    if (dist > maxDist) shouldShow = false;
+                }
+            }
+
             if (!shouldShow) newObj.SetActive(false);
 
             spawnedObjects[place.id] = newObj;
