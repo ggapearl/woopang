@@ -344,6 +344,10 @@ public class BusStationManager : MonoBehaviour
             CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor != null)
             {
+                // 렌더러 먼저 비활성화 → SetActive(true) 시 원점 플래시 방지
+                Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
+                foreach (var r in renderers) r.enabled = false;
+
                 kvp.Value.SetActive(true);
                 anchor.RecreateAnchor();
             }

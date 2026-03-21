@@ -997,6 +997,11 @@ public class DataManager : MonoBehaviour
         if (targetComp != null && !shouldShow)
             targetComp.enabled = false;
 
+        // 렌더러 먼저 비활성화 → SetActive(true) 시 원점(Vector3.zero)에서 플래시 방지
+        // SetCoordinatesAndCreateAnchor 내부에서 앵커 생성 성공 시 SetVisible(true) 호출
+        Renderer[] preRenderers = newObj.GetComponentsInChildren<Renderer>(true);
+        foreach (var r in preRenderers) r.enabled = false;
+
         // 코루틴 실행을 위해 먼저 활성화 후 컴포넌트 설정
         newObj.SetActive(true);
         newObj.name = string.Format("Place_{0}_{1}", place.id, place.model_type);
@@ -1368,6 +1373,11 @@ public class DataManager : MonoBehaviour
             CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor != null)
             {
+                // 렌더러 먼저 비활성화 → SetActive(true) 시 원점(Vector3.zero)에서 플래시 방지
+                // RecreateAnchor() 내부에서 앵커 생성 성공 시 SetVisible(true) 호출
+                Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
+                foreach (var r in renderers) r.enabled = false;
+
                 kvp.Value.SetActive(true);
                 anchor.RecreateAnchor();
                 recreated++;

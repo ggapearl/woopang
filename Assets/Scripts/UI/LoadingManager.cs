@@ -181,7 +181,11 @@ public class LoadingManager : MonoBehaviour
         else if (wasInBackground && enableBackgroundRecoveryDetection)
         {
             wasInBackground = false;
-            StartCoroutine(HandleBackgroundRecovery());
+            // 이미 복구 진행 중이면 중복 실행 방지 (OnApplicationPause가 연속 호출될 수 있음)
+            if (!isBackgroundRecovering)
+            {
+                StartCoroutine(HandleBackgroundRecovery());
+            }
         }
 #endif
     }
@@ -402,26 +406,14 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     void RecreateAllManagerAnchors()
     {
-        // DataManager
         if (dataManager != null)
             dataManager.RecreateAllAnchors();
 
-        // 시설 매니저들 (SubwayManager, TrainStationManager, TerminalManager, BusStationManager)
-        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
-        if (subwayMgr != null) subwayMgr.RecreateAllAnchors();
-
-        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
-        if (trainMgr != null) trainMgr.RecreateAllAnchors();
-
-        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
-        if (terminalMgr != null) terminalMgr.RecreateAllAnchors();
-
-        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
-        if (busMgr != null) busMgr.RecreateAllAnchors();
-
-        // TourAPIManager
-        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
-        if (tourMgr != null) tourMgr.RecreateAllAnchors();
+        if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
+        if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
+        if (TerminalManager.Instance != null) TerminalManager.Instance.RecreateAllAnchors();
+        if (BusStationManager.Instance != null) BusStationManager.Instance.RecreateAllAnchors();
+        if (TourAPIManager.Instance != null) TourAPIManager.Instance.RecreateAllAnchors();
     }
 
     /// <summary>
@@ -430,20 +422,11 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     void RecreateTransitManagerAnchors()
     {
-        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
-        if (subwayMgr != null) subwayMgr.RecreateAllAnchors();
-
-        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
-        if (trainMgr != null) trainMgr.RecreateAllAnchors();
-
-        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
-        if (terminalMgr != null) terminalMgr.RecreateAllAnchors();
-
-        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
-        if (busMgr != null) busMgr.RecreateAllAnchors();
-
-        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
-        if (tourMgr != null) tourMgr.RecreateAllAnchors();
+        if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
+        if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
+        if (TerminalManager.Instance != null) TerminalManager.Instance.RecreateAllAnchors();
+        if (BusStationManager.Instance != null) BusStationManager.Instance.RecreateAllAnchors();
+        if (TourAPIManager.Instance != null) TourAPIManager.Instance.RecreateAllAnchors();
     }
 
     void Update()

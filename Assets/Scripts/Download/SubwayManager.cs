@@ -377,6 +377,9 @@ public class SubwayManager : MonoBehaviour
             CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor != null)
             {
+                Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
+                foreach (var r in renderers) r.enabled = false;
+
                 kvp.Value.SetActive(true);
                 anchor.RecreateAnchor();
             }
