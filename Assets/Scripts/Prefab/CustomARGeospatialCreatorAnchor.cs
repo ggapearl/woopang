@@ -124,8 +124,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             transform.localRotation = Quaternion.identity;
             _anchorCreated = true;
 
-            // 앵커 생성 성공 → 렌더러 표시
-            SetVisible(true);
+            // 앵커 생성 성공 → 1프레임 대기 후 렌더러 표시
+            // (앵커 위치가 월드 좌표에 반영되기까지 1프레임 필요 — 즉시 표시 시 원점 플래시 발생)
+            StartCoroutine(ShowAfterFrame());
 
             return true;
         }
@@ -153,6 +154,18 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         {
             // 앵커 실패 → 렌더러만 숨김 유지 (오브젝트는 살려둬서 다음 RecreateAnchor에서 재시도 가능)
             SetVisible(false);
+        }
+    }
+
+    /// <summary>
+    /// 앵커 위치가 월드 좌표에 반영된 후 렌더러 표시 (1프레임 대기)
+    /// </summary>
+    private IEnumerator ShowAfterFrame()
+    {
+        yield return null; // 1프레임 대기 — 앵커 Transform이 실제 GPS 위치로 업데이트됨
+        if (_anchorCreated)
+        {
+            SetVisible(true);
         }
     }
 

@@ -107,6 +107,8 @@ public class LoadingManager : MonoBehaviour
     private bool wasInBackground = false;
     private bool isBackgroundRecovering = false; // HandleBackgroundRecovery 진행 중 플래그
     public bool IsBackgroundRecovering => isBackgroundRecovering;
+    private float lastBackgroundRecoveryTime = -10f; // 마지막 복구 완료 시각 (쿨다운용)
+    private const float BACKGROUND_RECOVERY_COOLDOWN = 3f; // 복구 후 3초 이내 재실행 방지
     private Coroutine dotAnimationCoroutine;
     private Coroutine spinnerCoroutine; // Spinner 중복 실행 방지
     private float? lastCameraBrightness = null; // ARCameraManager 밝기 캐시
@@ -181,8 +183,9 @@ public class LoadingManager : MonoBehaviour
         else if (wasInBackground && enableBackgroundRecoveryDetection)
         {
             wasInBackground = false;
-            // 이미 복구 진행 중이면 중복 실행 방지 (OnApplicationPause가 연속 호출될 수 있음)
-            if (!isBackgroundRecovering)
+            // 이미 복구 진행 중이거나 최근 완료된 경우 중복 실행 방지
+            if (!isBackgroundRecovering &&
+                Time.realtimeSinceStartup - lastBackgroundRecoveryTime > BACKGROUND_RECOVERY_COOLDOWN)
             {
                 StartCoroutine(HandleBackgroundRecovery());
             }
@@ -352,6 +355,7 @@ public class LoadingManager : MonoBehaviour
                     osi.EnableFallbackMode(false);
                 }
                 isBackgroundRecovering = false;
+                lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
                 Debug.Log("[OSID] HandleBackgroundRecovery 완료 (트래킹 복구)");
                 yield break;
             }
@@ -396,6 +400,7 @@ public class LoadingManager : MonoBehaviour
             Debug.Log("[OSID] 타임아웃 — 환경안내 활성 상태, fallback 유지");
         }
         isBackgroundRecovering = false;
+        lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
         Debug.Log("[OSID] HandleBackgroundRecovery 완료 (타임아웃)");
     }
 
