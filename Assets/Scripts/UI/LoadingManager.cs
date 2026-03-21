@@ -249,13 +249,8 @@ public class LoadingManager : MonoBehaviour
             }
         }
 
-        // 3. 오브젝트 비활성화 (렌더러는 이미 숨김 상태)
-        if (dataManager != null)
-        {
-            int objCount = dataManager.GetSpawnedObjectsCount();
-            Debug.Log($"[OSID] 오브젝트 숨김: count={objCount}");
-            dataManager.SetAllObjectsVisible(false);
-        }
+        // 3. 모든 매니저 오브젝트 비활성화 (렌더러는 이미 숨김 상태)
+        HideAllManagerObjects();
 
         // 3. 다국어 복구 메시지 + 점 애니메이션 표시
         string baseMessage = GetSessionRecoveringMessage();
@@ -1275,6 +1270,21 @@ public class LoadingManager : MonoBehaviour
     /// 모든 매니저의 3D 렌더러만 on/off (SetActive 건드리지 않음 → Target 유지)
     /// fallback 진입 시 숨기고, 해제 시 복원
     /// </summary>
+    /// <summary>
+    /// 모든 매니저의 오브젝트를 SetActive(false)로 숨김 (백그라운드 복구 시 사용)
+    /// </summary>
+    private void HideAllManagerObjects()
+    {
+        int totalCount = 0;
+        if (dataManager != null) { totalCount += dataManager.GetSpawnedObjectsCount(); dataManager.SetAllObjectsVisible(false); }
+        if (TourAPIManager.Instance != null) { totalCount += TourAPIManager.Instance.GetSpawnedObjectsCount(); TourAPIManager.Instance.SetAllObjectsVisible(false); }
+        if (SubwayManager.Instance != null) { totalCount += SubwayManager.Instance.GetSpawnedObjectsCount(); SubwayManager.Instance.SetAllObjectsVisible(false); }
+        if (TerminalManager.Instance != null) { totalCount += TerminalManager.Instance.GetSpawnedObjectsCount(); TerminalManager.Instance.SetAllObjectsVisible(false); }
+        if (TrainStationManager.Instance != null) { totalCount += TrainStationManager.Instance.GetSpawnedObjectsCount(); TrainStationManager.Instance.SetAllObjectsVisible(false); }
+        if (BusStationManager.Instance != null) { totalCount += BusStationManager.Instance.GetSpawnedObjectsCount(); BusStationManager.Instance.SetAllObjectsVisible(false); }
+        Debug.Log($"[OSID] 전체 오브젝트 숨김: count={totalCount}");
+    }
+
     private void SetAllManagerRenderersVisible(bool visible)
     {
         if (dataManager != null) dataManager.SetAllRenderersVisible(visible);

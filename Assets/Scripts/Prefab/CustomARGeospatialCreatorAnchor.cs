@@ -14,6 +14,10 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private const int MAX_RETRIES = 120; // 최대 120회 (약 2분) - Earth 초기화 대기 충분
     private Coroutine retryCoroutine;
 
+    // 외부에서 렌더러를 강제로 숨기는 플래그 (fallback 모드 등)
+    // true인 동안 앵커 생성 성공해도 렌더러를 켜지 않음
+    private bool _forceHideRenderers = false;
+
     // 좌표 설정 및 앵커 생성 메서드
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
@@ -163,7 +167,25 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private IEnumerator ShowAfterFrame()
     {
         yield return null; // 1프레임 대기 — 앵커 Transform이 실제 GPS 위치로 업데이트됨
-        if (_anchorCreated)
+        if (_anchorCreated && !_forceHideRenderers)
+        {
+            SetVisible(true);
+        }
+    }
+
+    /// <summary>
+    /// 외부에서 렌더러 강제 숨김/해제 (fallback 모드, 백그라운드 복구 시 사용)
+    /// forceHide=true: 렌더러 즉시 끄고, 앵커 생성 성공해도 켜지지 않음
+    /// forceHide=false: 앵커가 이미 생성된 경우 렌더러 즉시 복원
+    /// </summary>
+    public void SetForceHideRenderers(bool forceHide)
+    {
+        _forceHideRenderers = forceHide;
+        if (forceHide)
+        {
+            SetVisible(false);
+        }
+        else if (_anchorCreated)
         {
             SetVisible(true);
         }

@@ -947,8 +947,9 @@ private bool isDataLoaded = false;
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value == null) continue;
-            Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
-            foreach (var r in renderers) r.enabled = visible;
+            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+                anchor.SetForceHideRenderers(!visible);
         }
     }
 
