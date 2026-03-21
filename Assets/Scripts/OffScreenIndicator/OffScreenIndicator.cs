@@ -796,14 +796,15 @@ public class OffScreenIndicator : MonoBehaviour
 
         FallbackConfig cfg = currentFallbackConfig ?? new FallbackConfig();
 
-        // GPS 기반으로 가까운 순 정렬 → maxIndicatorCount개만 선택
+        // GPS 기반으로 가까운 순 정렬 → 거리 필터 + 이름 필터 → maxIndicatorCount개만 선택
         // (transform.position은 트래킹 Lost 시 부정확하므로 GPS 좌표 사용)
         List<Target> sortedTargets = new List<Target>(targets);
+        float userLat = 0f, userLon = 0f;
         bool hasGPS = Input.location.status == LocationServiceStatus.Running;
         if (hasGPS)
         {
-            float userLat = Input.location.lastData.latitude;
-            float userLon = Input.location.lastData.longitude;
+            userLat = Input.location.lastData.latitude;
+            userLon = Input.location.lastData.longitude;
             sortedTargets.Sort((a, b) =>
                 a.GetGPSDistance(userLat, userLon).CompareTo(b.GetGPSDistance(userLat, userLon)));
         }
@@ -814,6 +815,18 @@ public class OffScreenIndicator : MonoBehaviour
             sortedTargets.Sort((a, b) =>
                 a.GetDistanceFromCamera(camPos).CompareTo(b.GetDistanceFromCamera(camPos)));
         }
+
+        // 거리 필터: maxIndicatorDistance 밖의 타겟 제거 + 이름 없는 타겟 제거
+        if (maxIndicatorDistance > 0f && hasGPS)
+        {
+            sortedTargets.RemoveAll(t =>
+            {
+                float gpsDist = t.GetGPSDistance(userLat, userLon);
+                return gpsDist < 0f || gpsDist > maxIndicatorDistance;
+            });
+        }
+        sortedTargets.RemoveAll(t => string.IsNullOrEmpty(t.PlaceName));
+
         int displayCount = Mathf.Min(sortedTargets.Count, cfg.maxIndicatorCount);
 
         // Canvas pivot(0.5, 0.5) 기준: LoadingManager에서 설정한 마진 적용

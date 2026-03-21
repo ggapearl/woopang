@@ -1082,12 +1082,13 @@ public class LoadingManager : MonoBehaviour
         hasShownEnvironmentGuidance = true;
         isFallbackWithoutGuidance = false; // 환경안내가 fallback 관리를 인계
 
-        // 환경 이슈 → fallback 모드 즉시 진입 (오브젝트 뭉침 방지)
+        // 환경 이슈 → fallback 모드 진입 (오브젝트 뭉침 방지)
+        // 이미 CheckTrackingStateChange에서 fallback 진입했으면 중복 진입하지 않음
         // DataLoading은 제외 — 데이터 로드 중에는 오브젝트가 아직 없으므로 뭉침 없음
         if (issue != AREnvironmentIssue.DataLoading)
         {
             OffScreenIndicator osi = GetCachedOSI();
-            if (osi != null)
+            if (osi != null && !osi.IsFallbackMode)
             {
                 Debug.Log($"[OSID] 환경 이슈 → fallback 진입: {issue}");
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
