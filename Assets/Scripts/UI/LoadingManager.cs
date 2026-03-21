@@ -495,6 +495,8 @@ public class LoadingManager : MonoBehaviour
             if (osi != null && !osi.IsFallbackMode)
             {
                 Debug.Log($"[OSID] 트래킹 Lost → 즉시 fallback 진입 (reason={reason})");
+                // 오브젝트 모두 숨기기 (트래킹 Lost 시 뭉치는 것 방지 + 희미하게 보이는 것 방지)
+                HideAllManagerObjects();
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
@@ -513,8 +515,9 @@ public class LoadingManager : MonoBehaviour
                 if (osi != null && osi.IsFallbackMode)
                 {
                     Debug.Log("[OSID] 트래킹 복구 → fallback 해제");
+                    // 먼저 거리 필터 적용하며 오브젝트 복원 → 그 후 fallback 해제
+                    RestoreAllManagerObjects();
                     osi.EnableFallbackMode(false, forceDisable: true);
-                    if (dataManager != null) dataManager.SetAllObjectsVisible(true);
                 }
             }
         }
@@ -1088,6 +1091,7 @@ public class LoadingManager : MonoBehaviour
             if (osi != null && !osi.IsFallbackMode)
             {
                 Debug.Log($"[OSID] 환경 이슈 → fallback 진입: {issue}");
+                HideAllManagerObjects();
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
@@ -1278,17 +1282,60 @@ public class LoadingManager : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// fallback 진입 시 모든 매니저의 3D 오브젝트를 숨김 (뭉침/희미하게 보이는 것 방지)
+    /// </summary>
+    private void HideAllManagerObjects()
+    {
+        if (dataManager != null) dataManager.SetAllObjectsVisible(false);
+
+        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
+        if (tourMgr != null) tourMgr.SetAllObjectsVisible(false);
+
+        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
+        if (subwayMgr != null) subwayMgr.SetAllObjectsVisible(false);
+
+        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
+        if (terminalMgr != null) terminalMgr.SetAllObjectsVisible(false);
+
+        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
+        if (trainMgr != null) trainMgr.SetAllObjectsVisible(false);
+
+        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
+        if (busMgr != null) busMgr.SetAllObjectsVisible(false);
+    }
+
+    /// <summary>
+    /// fallback 해제 시 모든 매니저의 오브젝트를 거리 필터 적용하여 복원
+    /// </summary>
+    private void RestoreAllManagerObjects()
+    {
+        if (dataManager != null) dataManager.SetAllObjectsVisible(true);
+
+        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
+        if (tourMgr != null) tourMgr.SetAllObjectsVisible(true);
+
+        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
+        if (subwayMgr != null) subwayMgr.SetAllObjectsVisible(true);
+
+        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
+        if (terminalMgr != null) terminalMgr.SetAllObjectsVisible(true);
+
+        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
+        if (trainMgr != null) trainMgr.SetAllObjectsVisible(true);
+
+        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
+        if (busMgr != null) busMgr.SetAllObjectsVisible(true);
+    }
+
     void HideARGuidance()
     {
         StopDotAnimation();
         StopSpinner();
         if (loadingPanel) loadingPanel.SetActive(false);
 
-        // 환경 복구 → 오브젝트 다시 표시
-        if (dataManager != null)
-        {
-            dataManager.SetAllObjectsVisible(true);
-        }
+        // 환경 복구 → 모든 매니저 오브젝트 거리 필터 적용하며 복원
+        RestoreAllManagerObjects();
 
         // fallback 모드 해제
         OffScreenIndicator osi = GetCachedOSI();

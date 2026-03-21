@@ -442,16 +442,41 @@ private bool isDataLoaded = false;
         {
             LogDebug($"[TourAPIManager] 풀에서 오브젝트 가져옴: {newObj.name}");
         }
-        // 필터 상태에 따라 활성화 결정
+        // 필터 + 거리 체크
         bool shouldShow = ShouldShowByFilter();
-        newObj.SetActive(shouldShow);
+        if (shouldShow)
+        {
+            float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+            float lat = 0f, lon = 0f;
+#if UNITY_EDITOR
+            if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
+#else
+            if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
+#endif
+            if ((lat != 0f || lon != 0f) && CalculateDistance(lat, lon, place.mapy, place.mapx) > maxDist)
+                shouldShow = false;
+        }
+
+        // Target 미리 비활성화 (SetActive 시 인디케이터 등록 방지)
+        if (!shouldShow)
+        {
+            Target targetComp = newObj.GetComponentInChildren<Target>(true);
+            if (targetComp != null) targetComp.enabled = false;
+        }
+
+        newObj.SetActive(true); // 컴포넌트 설정을 위해 활성화
         newObj.name = $"Place_{place.contentid}";
         LogDebug($"[TourAPIManager] 오브젝트 이름 설정: {newObj.name}, 활성화 상태: {newObj.activeSelf}");
         if (SetupObjectComponents(newObj, place))
         {
+            if (!shouldShow)
+            {
+                newObj.SetActive(false);
+                Target targetComp = newObj.GetComponentInChildren<Target>(true);
+                if (targetComp != null) targetComp.enabled = true;
+            }
             spawnedObjects[place.contentid] = newObj;
             placeDataMap[place.contentid] = place;
-            LogDebug($"[TourAPIManager] 새 오브젝트 생성 성공 - ID: {place.contentid}, 이름={newObj.name}, spawnedObjects 크기: {spawnedObjects.Count}");
             return newObj;
         }
         LogDebug($"[TourAPIManager] SetupObjectComponents 실패, 오브젝트 풀에 반환: {newObj.name}");
@@ -797,6 +822,28 @@ private bool isDataLoaded = false;
             catch (JsonException ex)
             {
                 LogDebug($"[TourAPIManager] detailPetTour JSON 파싱 실패: ID={place.contentid}, 에러: {ex.Message}");
+            }
+        }
+    }
+
+    public void SetAllObjectsVisible(bool visible)
+    {
+        if (visible)
+        {
+            float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+            float lat = 0f, lon = 0f;
+#if UNITY_EDITOR
+            if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
+#else
+            if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
+#endif
+            UpdateDistanceFilter(maxDist, lat, lon);
+        }
+        else
+        {
+            foreach (var kvp in spawnedObjects)
+            {
+                if (kvp.Value != null) kvp.Value.SetActive(false);
             }
         }
     }

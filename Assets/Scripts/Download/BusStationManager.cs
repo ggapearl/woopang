@@ -202,7 +202,21 @@ public class BusStationManager : MonoBehaviour
                 GameObject newObj = GetFromPool();
                 if (newObj != null)
                 {
+                    // 거리 체크
+                    bool shouldShow = true;
+                    float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+                    float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
+                    if (dist > maxDist) shouldShow = false;
+
+                    // Target 플래시 방지: 비활성 상태에서 Target 끄기
+                    Target targetComp = newObj.GetComponentInChildren<Target>(true);
+                    if (targetComp != null && !shouldShow) targetComp.enabled = false;
+
                     SetupObject(newObj, data);
+                    newObj.SetActive(shouldShow);
+
+                    if (!shouldShow && targetComp != null) targetComp.enabled = true;
+
                     spawnedObjects[uniqueId] = newObj;
                     placeDataMap[uniqueId] = data;
                 }
@@ -210,7 +224,11 @@ public class BusStationManager : MonoBehaviour
             else
             {
                 GameObject existing = spawnedObjects[uniqueId];
-                if (!existing.activeSelf) existing.SetActive(true);
+                float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+                float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
+                bool shouldShow = dist <= maxDist;
+                if (shouldShow && !existing.activeSelf) existing.SetActive(true);
+                else if (!shouldShow && existing.activeSelf) existing.SetActive(false);
             }
 
             if (objectSpawnDelay > 0)
@@ -288,6 +306,28 @@ public class BusStationManager : MonoBehaviour
         }
     }
 
+    public void SetAllObjectsVisible(bool visible)
+    {
+        if (visible)
+        {
+            float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+            float lat = 0f, lon = 0f;
+#if UNITY_EDITOR
+            if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
+#else
+            if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
+#endif
+            UpdateDistanceFilter(maxDist, lat, lon);
+        }
+        else
+        {
+            foreach (var kvp in spawnedObjects)
+            {
+                if (kvp.Value != null) kvp.Value.SetActive(false);
+            }
+        }
+    }
+
     public Dictionary<string, FacilityData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
@@ -314,7 +354,6 @@ public class BusStationManager : MonoBehaviour
         if (objectPool.Count > 0)
         {
             GameObject obj = objectPool.Dequeue();
-            obj.SetActive(true);
             return obj;
         }
         else if (spawnedObjects.Count < poolSize * 2)

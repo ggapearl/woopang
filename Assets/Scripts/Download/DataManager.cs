@@ -979,11 +979,23 @@ public class DataManager : MonoBehaviour
             }
         }
 
+        // 거리 + 필터 체크 (오브젝트 생성 전에 판단)
+        bool shouldShow = ShouldShowObject(place);
+        if (shouldShow)
+        {
+            shouldShow = IsPlaceInDisplayRange(place);
+        }
+
         GameObject newObj = GetFromPool(place.model_type);
         if (newObj == null)
         {
             return;
         }
+
+        // Target 컴포넌트를 비활성 상태에서 미리 끄기 (SetActive 시 인디케이터 등록 방지)
+        Target targetComp = newObj.GetComponentInChildren<Target>(true);
+        if (targetComp != null && !shouldShow)
+            targetComp.enabled = false;
 
         // 코루틴 실행을 위해 먼저 활성화 후 컴포넌트 설정
         newObj.SetActive(true);
@@ -993,31 +1005,15 @@ public class DataManager : MonoBehaviour
 
         if (setupSuccess)
         {
-            // 컴포넌트 설정 완료 후 필터 + 거리에 따라 활성/비활성 결정
-            bool shouldShow = ShouldShowObject(place);
-
-            // 거리 필터: maxDisplayDistance 밖의 오브젝트는 비활성화
-            if (shouldShow)
+            if (!shouldShow)
             {
-                float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-                float lat = 0f, lon = 0f;
-#if UNITY_EDITOR
-                if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
-#else
-                if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
-#endif
-                if (lat == 0f && lon == 0f) { lat = lastPosition.x; lon = lastPosition.y; }
-                if (lat != 0f || lon != 0f)
-                {
-                    float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
-                    if (dist > maxDist) shouldShow = false;
-                }
+                newObj.SetActive(false);
+                // Target 복원 (다음에 활성화될 때 정상 동작하도록)
+                if (targetComp != null) targetComp.enabled = true;
             }
 
-            if (!shouldShow) newObj.SetActive(false);
-
             spawnedObjects[place.id] = newObj;
-            placeDataMap[place.id] = place; // ⭐ PlaceListManager가 사용하는 데이터 맵에 추가
+            placeDataMap[place.id] = place;
         }
         else
         {
@@ -1206,6 +1202,23 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 장소가 현재 표시 거리 범위 내에 있는지 GPS 기반 체크
+    /// </summary>
+    private bool IsPlaceInDisplayRange(PlaceData place)
+    {
+        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+        float lat = 0f, lon = 0f;
+#if UNITY_EDITOR
+        if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
+#else
+        if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
+#endif
+        if (lat == 0f && lon == 0f) { lat = lastPosition.x; lon = lastPosition.y; }
+        if (lat == 0f && lon == 0f) return true; // GPS 없으면 일단 표시
+        return CalculateDistance(lat, lon, place.latitude, place.longitude) <= maxDist;
+    }
+
     private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
     {
         const float R = 6371000;
@@ -1223,7 +1236,7 @@ public class DataManager : MonoBehaviour
         {
             GameObject obj = targetPool.Dequeue();
             ResetObjectState(obj, modelType);
-            obj.SetActive(true);
+            // SetActive는 CreateObjectFromData에서 거리/필터 체크 후 호출
             obj.name = $"Place_ID_{modelType}";
             return obj;
         }
