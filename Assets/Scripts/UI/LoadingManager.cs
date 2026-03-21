@@ -209,7 +209,6 @@ public class LoadingManager : MonoBehaviour
             float currentLat = Input.location.lastData.latitude;
             float currentLon = Input.location.lastData.longitude;
 
-            // lastFetch가 유효한 경우에만 비교 (0,0이면 아직 한번도 fetch 안 한 상태)
             if (lastFetch.x != 0f || lastFetch.y != 0f)
             {
                 float movedDistance = CalculateDistanceHaversine(lastFetch.x, lastFetch.y, currentLat, currentLon);
@@ -221,10 +220,26 @@ public class LoadingManager : MonoBehaviour
                 }
             }
         }
+
+        // ============================================================
+        // 0-1. 트래킹이 이미 정상이면 경량 복구 (앵커 재생성 불필요)
+        // ============================================================
+        TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
+        if (!needFullReload && currentTrackingState == TrackingState.Tracking)
+        {
+            Debug.Log("[OSID] 트래킹 이미 정상 → 경량 복구 (앵커 재생성 스킵)");
+            // 렌더러만 잠깐 숨기고 복원 (앵커는 유효하므로 재생성 불필요)
+            SetAllManagerRenderersVisible(false);
+            yield return null; // 1프레임 대기
+            SetAllManagerRenderersVisible(true);
+            isBackgroundRecovering = false;
+            lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+            Debug.Log("[OSID] HandleBackgroundRecovery 완료 (경량 복구)");
+            yield break;
+        }
 #endif
 
-        // 1. 3D 렌더러 즉시 숨김 (백그라운드 복귀 직후 앵커 미복구 상태에서 프리팹이 카메라 앞에 보이는 것 방지)
-        //    SetActive는 건드리지 않으므로 Target은 살아있음 → fallback 화살표 정상 동작
+        // 1. 3D 렌더러 즉시 숨김 (앵커 미복구 상태에서 프리팹이 카메라 앞에 보이는 것 방지)
         SetAllManagerRenderersVisible(false);
 
         // 2. fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
@@ -252,22 +267,21 @@ public class LoadingManager : MonoBehaviour
         // 3. 모든 매니저 오브젝트 비활성화 (렌더러는 이미 숨김 상태)
         HideAllManagerObjects();
 
-        // 3. 다국어 복구 메시지 + 점 애니메이션 표시
+        // 4. 다국어 복구 메시지 + 점 애니메이션 표시
         string baseMessage = GetSessionRecoveringMessage();
         if (loadingPanel) loadingPanel.SetActive(true);
         StartSpinner();
         StartDotAnimation(baseMessage);
 
-        // 4. AR 세션이 안정화될 때까지 대기
+        // 5. AR 세션이 안정화될 때까지 대기
         yield return new WaitForSeconds(backgroundRecoveryLoadingTime);
 
-        // 5. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
+        // 6. AR 환경 감지가 활성화되어 있다면 즉시 환경 체크
         if (enableAREnvironmentDetection)
         {
             if (arSession == null)
                 InitializeARComponents();
 
-            // 백그라운드 복구 후 트래킹 상태 초기화 (DetermineEnvironmentIssue가 올바르게 동작하도록)
             trackingLostStartTime = 0f;
             lastTrackingState = TrackingState.None;
             hasShownEnvironmentGuidance = false;
@@ -283,7 +297,6 @@ public class LoadingManager : MonoBehaviour
         {
             StopDotAnimation();
             HideLoadingUI();
-            // fallback은 유지 (오브젝트가 있으면 WaitForFirstObjects에서 해제)
         }
     }
 
@@ -345,6 +358,9 @@ public class LoadingManager : MonoBehaviour
                     RecreateAllManagerAnchors();
                 }
 
+                // 렌더러 복원 (RecreateAllAnchors에서 _forceHideRenderers 해제)
+                SetAllManagerRenderersVisible(true);
+
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
@@ -379,7 +395,7 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃이어도 오브젝트 보이기 (무한 숨김 방지)
-        // RecreateAllAnchors가 Earth Tracking 실패 시 렌더러를 꺼두므로 명시적 복구
+        SetAllManagerRenderersVisible(true);
         if (dataManager != null)
         {
             Debug.Log("[OSID] 타임아웃 — SetAllObjectsVisible(true) 강제 복구");
