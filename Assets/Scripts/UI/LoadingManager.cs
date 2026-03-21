@@ -1283,49 +1283,105 @@ public class LoadingManager : MonoBehaviour
     }
     
     /// <summary>
-    /// fallback 진입 시 모든 매니저의 3D 오브젝트를 숨김 (뭉침/희미하게 보이는 것 방지)
+    /// fallback 진입 시 모든 매니저의 3D 오브젝트 렌더러만 끔
+    /// GameObject는 활성 유지 (Target 컴포넌트가 targets 리스트에 남아야 fallback 화살표 표시 가능)
+    /// SetActive(false) 사용 시 Target.OnDisable → targets=0 → fallbackDataMap=0 문제 발생
     /// </summary>
     private void HideAllManagerObjects()
     {
-        if (dataManager != null) dataManager.SetAllObjectsVisible(false);
-
-        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
-        if (tourMgr != null) tourMgr.SetAllObjectsVisible(false);
-
-        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
-        if (subwayMgr != null) subwayMgr.SetAllObjectsVisible(false);
-
-        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
-        if (terminalMgr != null) terminalMgr.SetAllObjectsVisible(false);
-
-        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
-        if (trainMgr != null) trainMgr.SetAllObjectsVisible(false);
-
-        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
-        if (busMgr != null) busMgr.SetAllObjectsVisible(false);
+        // 모든 스폰된 오브젝트의 Renderer만 끄기
+        SetAllRenderersVisible(false);
     }
 
     /// <summary>
-    /// fallback 해제 시 모든 매니저의 오브젝트를 거리 필터 적용하여 복원
+    /// fallback 해제 시 렌더러 복원 + 거리 필터 적용
     /// </summary>
     private void RestoreAllManagerObjects()
     {
-        if (dataManager != null) dataManager.SetAllObjectsVisible(true);
+        // 렌더러 다시 켜기
+        SetAllRenderersVisible(true);
+
+        // 거리 필터 적용 (범위 밖 오브젝트는 SetActive(false)로 완전 비활성화)
+        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+        float lat = 0f, lon = 0f;
+#if UNITY_EDITOR
+        if (VirtualLocation.Instance != null) { lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; }
+#else
+        if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
+#endif
+        if (dataManager != null) dataManager.UpdateDistanceFilter(maxDist, lat, lon);
 
         TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
-        if (tourMgr != null) tourMgr.SetAllObjectsVisible(true);
+        if (tourMgr != null) tourMgr.UpdateDistanceFilter(maxDist, lat, lon);
 
         SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
-        if (subwayMgr != null) subwayMgr.SetAllObjectsVisible(true);
+        if (subwayMgr != null) subwayMgr.UpdateDistanceFilter(maxDist, lat, lon);
 
         TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
-        if (terminalMgr != null) terminalMgr.SetAllObjectsVisible(true);
+        if (terminalMgr != null) terminalMgr.UpdateDistanceFilter(maxDist, lat, lon);
 
         TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
-        if (trainMgr != null) trainMgr.SetAllObjectsVisible(true);
+        if (trainMgr != null) trainMgr.UpdateDistanceFilter(maxDist, lat, lon);
 
         BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
-        if (busMgr != null) busMgr.SetAllObjectsVisible(true);
+        if (busMgr != null) busMgr.UpdateDistanceFilter(maxDist, lat, lon);
+    }
+
+    /// <summary>
+    /// 모든 스폰된 오브젝트의 Renderer 활성/비활성 (GameObject는 유지)
+    /// </summary>
+    private void SetAllRenderersVisible(bool visible)
+    {
+        System.Action<GameObject> setRenderers = (obj) =>
+        {
+            if (obj == null) return;
+            Renderer[] renderers = obj.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].enabled = visible;
+            }
+        };
+
+        if (dataManager != null)
+        {
+            foreach (var kvp in dataManager.GetSpawnedObjects())
+                setRenderers(kvp.Value);
+        }
+
+        TourAPIManager tourMgr = FindFirstObjectByType<TourAPIManager>();
+        if (tourMgr != null)
+        {
+            foreach (var kvp in tourMgr.GetSpawnedObjects())
+                setRenderers(kvp.Value);
+        }
+
+        SubwayManager subwayMgr = FindFirstObjectByType<SubwayManager>();
+        if (subwayMgr != null)
+        {
+            foreach (var kvp in subwayMgr.GetSpawnedObjects())
+                setRenderers(kvp.Value);
+        }
+
+        TerminalManager terminalMgr = FindFirstObjectByType<TerminalManager>();
+        if (terminalMgr != null)
+        {
+            foreach (var kvp in terminalMgr.GetSpawnedObjects())
+                setRenderers(kvp.Value);
+        }
+
+        TrainStationManager trainMgr = FindFirstObjectByType<TrainStationManager>();
+        if (trainMgr != null)
+        {
+            foreach (var kvp in trainMgr.GetSpawnedObjects())
+                setRenderers(kvp.Value);
+        }
+
+        BusStationManager busMgr = FindFirstObjectByType<BusStationManager>();
+        if (busMgr != null)
+        {
+            foreach (var kvp in busMgr.GetSpawnedObjects())
+                setRenderers(kvp.Value);
+        }
     }
 
     void HideARGuidance()

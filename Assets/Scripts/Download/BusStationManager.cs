@@ -330,6 +330,7 @@ public class BusStationManager : MonoBehaviour
 
     public Dictionary<string, FacilityData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
+    public Dictionary<string, GameObject> GetSpawnedObjects() => spawnedObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
 
     /// <summary>
