@@ -472,9 +472,6 @@ public class LoadingManager : MonoBehaviour
     /// Tracking↔Limited 빠른 전환 시 디바운스 적용 (1초 이내 재해제 무시)
     /// </summary>
     private TrackingState lastFrameTrackingState = TrackingState.None;
-    private float lastFallbackExitTime = 0f; // 마지막 fallback 해제 시간
-    private float lastFallbackEnterTime = 0f; // 마지막 fallback 진입 시간 (디바운스용)
-    private const float FALLBACK_REENTER_COOLDOWN = 2f; // fallback 진입 후 최소 유지 시간 (초)
 
     void CheckTrackingStateChange()
     {
@@ -496,27 +493,17 @@ public class LoadingManager : MonoBehaviour
             if (osi != null && !osi.IsFallbackMode)
             {
                 Debug.Log($"[OSID] 트래킹 Lost → fallback 진입 (reason={reason})");
-                lastFallbackEnterTime = Time.realtimeSinceStartup;
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
-        // Limited/None → Tracking: fallback 해제
+        // Limited/None → Tracking: 즉시 fallback 해제
         else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
         {
-            // 디바운스: fallback 진입 후 쿨다운 이내 복구 → 해제하지 않음 (곧 다시 Lost될 가능성 높음)
-            float sinceEnter = Time.realtimeSinceStartup - lastFallbackEnterTime;
-            if (sinceEnter < FALLBACK_REENTER_COOLDOWN && !hasShownEnvironmentGuidance)
-            {
-                Debug.Log($"[OSID] 트래킹 복구 but 디바운스 스킵 ({sinceEnter:F1}s < {FALLBACK_REENTER_COOLDOWN}s)");
-                return;
-            }
-
             if (hasShownEnvironmentGuidance)
             {
                 Debug.Log("[OSID] 트래킹 복구 → 환경안내 fallback 해제");
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
-                lastFallbackExitTime = Time.realtimeSinceStartup;
             }
             else
             {
@@ -524,9 +511,7 @@ public class LoadingManager : MonoBehaviour
                 if (osi != null && osi.IsFallbackMode)
                 {
                     Debug.Log("[OSID] 트래킹 복구 → fallback 해제");
-                    RestoreAllManagerObjects();
                     osi.EnableFallbackMode(false, forceDisable: true);
-                    lastFallbackExitTime = Time.realtimeSinceStartup;
                 }
             }
         }
