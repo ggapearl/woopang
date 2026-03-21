@@ -488,9 +488,17 @@ public class LoadingManager : MonoBehaviour
         NotTrackingReason reason = arSession.subsystem.notTrackingReason;
         Debug.Log($"[OSID] TrackingState 변경: {previous}→{current}, reason={reason}");
 
-        // 트래킹 상태 변화에서는 fallback 진입/해제하지 않음
-        // fallback은 앱 시작(OnDataPreFetchCompleted)과 백그라운드 복귀(HandleBackgroundRecovery)에서만 관리
-        // 오브젝트와 인디케이터는 트래킹 Lost에서도 그대로 유지 (앵커가 위치 유지)
+        // Tracking 복구 시: 환경안내 fallback이 켜져있으면 해제
+        // (HandleEnvironmentIssue에서 진입한 fallback을 트래킹 복구 시점에 바로 풀어줌)
+        if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
+        {
+            if (hasShownEnvironmentGuidance)
+            {
+                Debug.Log("[OSID] 트래킹 복구 → 환경안내 fallback 해제");
+                HideARGuidance();
+                hasShownEnvironmentGuidance = false;
+            }
+        }
     }
     
     public void ShowLoading(System.Action heavyWork, string category = "General")
@@ -1052,9 +1060,17 @@ public class LoadingManager : MonoBehaviour
         hasShownEnvironmentGuidance = true;
         isFallbackWithoutGuidance = false; // 환경안내가 fallback 관리를 인계
 
-        // 환경 이슈에서는 fallback 모드 진입하지 않음
-        // fallback은 앱 시작(OnDataPreFetchCompleted)과 백그라운드 복귀(HandleBackgroundRecovery)에서만 관리
-        // 오브젝트와 인디케이터는 환경 이슈에서도 그대로 유지 (앵커가 위치 유지됨)
+        // 환경 이슈 → fallback 모드 즉시 진입 (오브젝트 뭉침 방지)
+        // DataLoading은 제외 — 데이터 로드 중에는 오브젝트가 아직 없으므로 뭉침 없음
+        if (issue != AREnvironmentIssue.DataLoading)
+        {
+            OffScreenIndicator osi = GetCachedOSI();
+            if (osi != null)
+            {
+                Debug.Log($"[OSID] 환경 이슈 → fallback 진입: {issue}");
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+            }
+        }
 
         if (issue == AREnvironmentIssue.SessionPreparing)
         {
@@ -1196,8 +1212,11 @@ public class LoadingManager : MonoBehaviour
     
     IEnumerator AutoRetryEnvironmentCheck(AREnvironmentIssue issue)
     {
+        // 환경 복구(None)될 때까지 계속 모니터링 — 타임아웃으로 리셋하지 않음
+        // 안내 텍스트만 일정 시간 후 숨기고, fallback 모드는 환경 복구까지 유지
+        float textDisplayTime = 10f;
         float elapsed = 0f;
-        float maxRetryTime = 30f; // 최대 30초 대기 후 강제 해제
+        bool textHidden = false;
 
         while (hasShownEnvironmentGuidance)
         {
@@ -1209,24 +1228,32 @@ public class LoadingManager : MonoBehaviour
 
             if (currentIssue == AREnvironmentIssue.None)
             {
+                // 환경 복구 → 안내 숨기고 fallback 해제
+                Debug.Log("[OSID] AutoRetry: 환경 복구 → fallback 해제");
                 HideARGuidance();
                 hasShownEnvironmentGuidance = false;
                 break;
             }
             else if (currentIssue != issue)
             {
+                // 환경 이슈 종류 변경 → 안내 텍스트 업데이트
                 string newGuidanceMessage = GetEnvironmentGuidanceMessage(currentIssue);
                 UpdateMessage(newGuidanceMessage);
-
                 issue = currentIssue;
+                // 텍스트 타이머 리셋
+                elapsed = 0f;
+                textHidden = false;
+                if (loadingPanel) loadingPanel.SetActive(true);
             }
 
-            // 타임아웃: 환경 문제가 지속되면 안내 텍스트만 숨김 (fallback/오브젝트 제어 없음)
-            if (elapsed >= maxRetryTime)
+            // 안내 텍스트만 일정 시간 후 숨김 (fallback 모드는 유지)
+            if (!textHidden && elapsed >= textDisplayTime)
             {
-                HideARGuidance();
-                hasShownEnvironmentGuidance = false;
-                break;
+                StopDotAnimation();
+                StopSpinner();
+                if (loadingPanel) loadingPanel.SetActive(false);
+                textHidden = true;
+                Debug.Log("[OSID] AutoRetry: 안내 텍스트 숨김 (fallback 유지)");
             }
         }
     }
@@ -1235,10 +1262,21 @@ public class LoadingManager : MonoBehaviour
     {
         StopDotAnimation();
         StopSpinner();
-        // 기존 로딩 UI 숨기기
         if (loadingPanel) loadingPanel.SetActive(false);
-        // 환경 안내 텍스트만 숨김 — fallback 모드와 오브젝트 가시성은 건드리지 않음
-        // fallback은 앱 시작/백그라운드 복귀에서만 관리
+
+        // 환경 복구 → 오브젝트 다시 표시
+        if (dataManager != null)
+        {
+            dataManager.SetAllObjectsVisible(true);
+        }
+
+        // fallback 모드 해제
+        OffScreenIndicator osi = GetCachedOSI();
+        if (osi != null && osi.IsFallbackMode)
+        {
+            Debug.Log("[OSID] HideARGuidance → fallback 해제");
+            osi.EnableFallbackMode(false, forceDisable: true);
+        }
     }
     
     public AREnvironmentIssue GetCurrentEnvironmentIssue()
