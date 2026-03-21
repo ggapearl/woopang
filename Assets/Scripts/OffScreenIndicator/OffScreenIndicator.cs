@@ -268,15 +268,25 @@ public class OffScreenIndicator : MonoBehaviour
             float distanceFromCamera = target.GetDistanceFromCamera(mainCamera.transform.position);
 
             // 거리 필터: maxIndicatorDistance 밖의 타겟은 인디케이터 표시 안 함
-            if (maxIndicatorDistance > 0f && distanceFromCamera > maxIndicatorDistance)
+            // 카메라 거리 + GPS 거리 이중 체크 (트래킹 Lost 시 카메라 거리가 부정확할 수 있음)
+            if (maxIndicatorDistance > 0f)
             {
-                // 기존 인디케이터가 있으면 숨김
-                if (target.indicator != null)
+                bool outOfRange = distanceFromCamera > maxIndicatorDistance;
+                // GPS 거리도 체크 (GPS가 유효한 경우)
+                if (!outOfRange && Input.location.status == LocationServiceStatus.Running)
                 {
-                    target.indicator.Activate(false);
-                    target.indicator = null;
+                    float gpsDist = target.GetGPSDistance(Input.location.lastData.latitude, Input.location.lastData.longitude);
+                    if (gpsDist >= 0f && gpsDist > maxIndicatorDistance) outOfRange = true;
                 }
-                continue;
+                if (outOfRange)
+                {
+                    if (target.indicator != null)
+                    {
+                        target.indicator.Activate(false);
+                        target.indicator = null;
+                    }
+                    continue;
+                }
             }
 
             if (!target.NeedDistanceText)
