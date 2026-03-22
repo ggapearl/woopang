@@ -620,6 +620,7 @@ public class DataManager : MonoBehaviour
         }
         isFetching = true;
         int myGeneration = fetchGeneration; // 이 코루틴의 세대 번호 기록
+        Debug.Log($"[DBG] FetchDataProgressively START lat={lat}, lon={lon}, objectSpawnRadius={objectSpawnRadius}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
 
         // placeDataMap.Keys 기준으로 중복 서버 요청 방지 (좌표만 저장된 것도 포함)
         HashSet<int> loadedIds = new HashSet<int>(placeDataMap.Keys);
@@ -656,6 +657,8 @@ public class DataManager : MonoBehaviour
             }
 
             // 새로운 데이터 저장 + objectSpawnRadius 이내만 3D 오브젝트 생성
+            Debug.Log($"[DBG] FetchTier radius={radius}: newPlaces={newPlaces.Count}, objectSpawnRadius={objectSpawnRadius}");
+            int spawnedInTier = 0, skippedInTier = 0;
             foreach (PlaceData place in newPlaces)
             {
                 // 모든 데이터는 placeDataMap에 좌표/메타데이터 저장 (3D 생성 여부와 무관)
@@ -666,7 +669,9 @@ public class DataManager : MonoBehaviour
                 float distToPlace = CalculateDistance(lat, lon, place.latitude, place.longitude);
                 if (distToPlace <= objectSpawnRadius && !spawnedObjects.ContainsKey(place.id))
                 {
+                    Debug.Log($"[DBG] SPAWN id={place.id} name={place.name} dist={distToPlace:F1}m");
                     CreateObjectFromData(place);
+                    spawnedInTier++;
 
                     // UI 업데이트 — 빠른 이동 모드에서는 억제
                     if (!suppressCountUI && objectCountUI != null)
@@ -679,7 +684,12 @@ public class DataManager : MonoBehaviour
                         yield return new WaitForSeconds(objectSpawnDelay);
                     }
                 }
+                else
+                {
+                    skippedInTier++;
+                }
             }
+            Debug.Log($"[DBG] FetchTier radius={radius} 완료: spawned={spawnedInTier}, skipped={skippedInTier}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
 
             // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && !suppressCountUI && objectCountUI != null)
@@ -777,14 +787,22 @@ public class DataManager : MonoBehaviour
         }
 
         // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
+        int newlySpawned = 0;
+        int withinRange = 0;
         foreach (var kvp in placeDataMap)
         {
             if (spawnedObjects.ContainsKey(kvp.Key)) continue;
             float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
             if (dist <= objectSpawnRadius)
             {
+                withinRange++;
                 CreateObjectFromData(kvp.Value);
+                if (spawnedObjects.ContainsKey(kvp.Key)) newlySpawned++;
             }
+        }
+        if (toRemove.Count > 0 || newlySpawned > 0)
+        {
+            Debug.Log($"[DBG] SpawnNearby: removed={toRemove.Count}, newlySpawned={newlySpawned}, withinRange={withinRange}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
         }
     }
 
