@@ -380,7 +380,7 @@ public class DataManager : MonoBehaviour
         }
 
         // fallback 활성화 후 오브젝트 순차 생성
-        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
+        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false, lat, lon));
 
         // 에디터에서도 초기 로드 완료 표시 (FirstInstallRetry 재시도 방지)
         isInitialStartComplete = true;
@@ -434,7 +434,7 @@ public class DataManager : MonoBehaviour
         }
 
         // fallback 활성화 후 오브젝트 순차 생성
-        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false));
+        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false, lat, lon));
 
         // Phase1 완료 시점에서 초기 로드 완료로 표시
         // - isInitialStartComplete: FirstInstallRetry 재시도 방지
@@ -507,21 +507,16 @@ public class DataManager : MonoBehaviour
     /// <summary>
     /// 사전 수집된 데이터로 오브젝트를 순차 생성
     /// </summary>
-    private IEnumerator SpawnPreFetchedObjects(List<PlaceData> places, bool silent)
+    private IEnumerator SpawnPreFetchedObjects(List<PlaceData> places, bool silent, float fetchLat, float fetchLon)
     {
         if (!silent && objectCountUI != null)
         {
             objectCountUI.ResetUI();
         }
 
-        // 현재 GPS 위치 가져오기
-#if UNITY_EDITOR
-        float curLat = VirtualLocation.Instance.Latitude;
-        float curLon = VirtualLocation.Instance.Longitude;
-#else
-        float curLat = Input.location.status == LocationServiceStatus.Running ? Input.location.lastData.latitude : 0f;
-        float curLon = Input.location.status == LocationServiceStatus.Running ? Input.location.lastData.longitude : 0f;
-#endif
+        // 서버 요청에 사용한 좌표를 그대로 사용 (Android GPS 초기화 지연 대응)
+        float curLat = fetchLat;
+        float curLon = fetchLon;
 
         foreach (PlaceData place in places)
         {
