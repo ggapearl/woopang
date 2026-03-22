@@ -8,6 +8,7 @@ using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 public class Object3DTouchHaptic : MonoBehaviour
 {
     [Header("Haptic Settings")]
+    [Tooltip("진동 강도 (0~1). UIFeedbackManager를 통해 iOS/Android 동일하게 적용")]
     [SerializeField, Range(0f, 1f)] private float hapticIntensity = 0.7f;
 
     [Header("Sound Settings")]
@@ -56,8 +57,7 @@ public class Object3DTouchHaptic : MonoBehaviour
         {
             inputDetected = true;
             inputPosition = Touch.activeTouches[0].screenPosition;
-            
-            // Check UI
+
             if (IsOverUIOrIndicator(inputPosition))
             {
                 return;
@@ -68,15 +68,13 @@ public class Object3DTouchHaptic : MonoBehaviour
         {
             inputDetected = true;
             inputPosition = Mouse.current.position.ReadValue();
-            
-            // Check UI
+
             if (IsOverUIOrIndicator(inputPosition))
             {
                 return;
             }
         }
-        
-        // Processing
+
         if (inputDetected)
         {
             isProcessingTouch = true;
@@ -85,15 +83,14 @@ public class Object3DTouchHaptic : MonoBehaviour
 
             if (Physics.Raycast(ray, out hit) && hit.collider == objectCollider)
             {
-                // 1st 터치 사운드 + 햅틱 (더블탭 사운드는 DoubleTap3D가 직접 호출)
                 TriggerFeedback();
             }
         }
-        
+
         // Reset Processing
         bool isTouching = Touch.activeTouches.Count > 0;
         bool isClicking = Mouse.current != null && Mouse.current.leftButton.isPressed;
-        
+
         if (!isTouching && !isClicking)
         {
             isProcessingTouch = false;
@@ -114,16 +111,14 @@ public class Object3DTouchHaptic : MonoBehaviour
         foreach (var result in results)
         {
             GameObject hitObject = result.gameObject;
-            
+
             if (IsIndicatorRelated(hitObject))
             {
-                // Debug.Log($"Indicator related object ignored: {hitObject.name}");
                 continue;
             }
 
             if (hitObject.layer == 5)
             {
-                // Debug.Log($"Real UI detected: {hitObject.name} - blocking touch");
                 return true;
             }
         }
@@ -137,49 +132,40 @@ public class Object3DTouchHaptic : MonoBehaviour
         while (current != null)
         {
             string name = current.name;
-            
-            // Log for debugging
-            // Debug.Log($"Checking object: {name}, Parent: {(current.parent ? current.parent.name : "null")}");
-            
-            // Check for indicator related objects
-            if ((name.Contains("Indicator") && !name.Contains("Button")) || 
-                (name.Contains("Arrow") && !name.Contains("Button")) || 
+
+            if ((name.Contains("Indicator") && !name.Contains("Button")) ||
+                (name.Contains("Arrow") && !name.Contains("Button")) ||
                 (name.Contains("Box") && !name.Contains("Button")) ||
                 name.Contains("OffScreen") ||
                 (name == "Text" && (current.parent?.name.Contains("Indicator") == true)) ||
                 current.GetComponent<Indicator>() != null)
             {
-                // Debug.Log($"Found indicator related object: {name}");
                 return true;
             }
-            
+
             current = current.parent;
         }
-        
-        // Debug.Log($"Object {obj.name} is NOT indicator related");
+
         return false;
     }
 
     void OnMouseDown()
     {
-        // Update handles logic
         return;
     }
 
     private void TriggerFeedback()
     {
-        PlaySound();
-        TriggerHaptic();
-    }
-
-    private void PlaySound()
-    {
-        // Update()에서 호출: 항상 1st 터치 사운드만 재생
-        // 2nd 터치 사운드는 DoubleTap3D가 PlayDoubleTapFeedback()을 직접 호출
-        AudioClip clip = touchSound;
-        if (clip != null)
+        // UIFeedbackManager를 통해 소리/진동 통합 처리
+        // 무음 모드면 진동만, 소리 나면 소리만 (hapticOnlyWhenSilent 설정에 따라)
+        if (UIFeedbackManager.Instance != null)
         {
-            audioSource.PlayOneShot(clip, soundVolume);
+            UIFeedbackManager.Instance.HandleTouchFeedbackDirect(hapticIntensity, touchSound);
+        }
+        else
+        {
+            if (touchSound != null && audioSource != null)
+                audioSource.PlayOneShot(touchSound, soundVolume);
         }
     }
 
@@ -189,85 +175,15 @@ public class Object3DTouchHaptic : MonoBehaviour
     public void PlayDoubleTapFeedback()
     {
         AudioClip clip = doubleTapSound != null ? doubleTapSound : touchSound;
-        if (clip != null)
-        {
-            audioSource.PlayOneShot(clip, soundVolume);
-        }
-        TriggerHaptic();
-    }
 
-    private void TriggerHaptic()
-    {
-#if UNITY_IOS
-        // Unity 6+ uses Handheld.Vibrate() for iOS haptic feedback
-        Handheld.Vibrate();
-#elif UNITY_ANDROID
-        try
+        if (UIFeedbackManager.Instance != null)
         {
-            AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-            AndroidJavaObject vibrator = activity.Call<AndroidJavaObject>("getSystemService", "vibrator");
-
-            if (vibrator != null)
-            {
-                if (AndroidVersion() >= 26)
-                {
-                    AndroidJavaClass vibrationEffectClass = new AndroidJavaClass("android.os.VibrationEffect");
-                    int effectType;
-                    
-                    if (hapticIntensity <= 0.33f)
-                    {
-                        effectType = vibrationEffectClass.GetStatic<int>("EFFECT_TICK");
-                    }
-                    else if (hapticIntensity <= 0.66f)
-                    {
-                        effectType = vibrationEffectClass.GetStatic<int>("EFFECT_CLICK");
-                    }
-                    else
-                    {
-                        effectType = vibrationEffectClass.GetStatic<int>("EFFECT_HEAVY_CLICK");
-                    }
-                    
-                    AndroidJavaObject vibrationEffect = vibrationEffectClass.CallStatic<AndroidJavaObject>("createPredefined", effectType);
-                    vibrator.Call("vibrate", vibrationEffect);
-                }
-                else
-                {
-                    long duration = (long)(30 + (hapticIntensity * 70));
-                    vibrator.Call("vibrate", duration);
-                }
-            }
-            else
-            {
-                Handheld.Vibrate();
-            }
+            UIFeedbackManager.Instance.HandleTouchFeedbackDirect(hapticIntensity, clip);
         }
-        catch (System.Exception)
+        else
         {
-            Handheld.Vibrate();
+            if (clip != null && audioSource != null)
+                audioSource.PlayOneShot(clip, soundVolume);
         }
-#else
-        if (hapticIntensity > 0.1f)
-        {
-            Handheld.Vibrate();
-        }
-#endif
-    }
-
-    private int AndroidVersion()
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        try
-        {
-            AndroidJavaClass buildVersion = new AndroidJavaClass("android.os.Build$VERSION");
-            return buildVersion.GetStatic<int>("SDK_INT");
-        }
-        catch
-        {
-            return 1;
-        }
-#else
-        return 0;
-#endif
     }
 }

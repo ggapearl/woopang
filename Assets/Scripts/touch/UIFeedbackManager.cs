@@ -101,6 +101,22 @@ public class UIFeedbackManager : MonoBehaviour
         ExecuteFeedback(hapticIntensity, clipToPlay);
     }
 
+    /// <summary>
+    /// IsValidUIEvent 체크 없이 직접 실행 (3D 오브젝트 터치 등 non-UI 컨텍스트용)
+    /// </summary>
+    public void HandleTouchFeedbackDirect(float intensity, AudioClip customSound = null)
+    {
+        AudioClip clipToPlay = customSound ?? cachedButtonSound;
+
+        if (clipToPlay == null || !clipToPlay)
+        {
+            cachedButtonSound = Resources.Load<AudioClip>("Audio/Touch");
+            clipToPlay = cachedButtonSound;
+        }
+
+        ExecuteFeedback(intensity, clipToPlay);
+    }
+
     public void HandleTouchFeedback(float intensity, AudioClip customSound = null)
     {
         if (IsValidUIEvent())
