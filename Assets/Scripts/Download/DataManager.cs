@@ -654,8 +654,44 @@ public class DataManager : MonoBehaviour
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
 
+        // Stale object cleanup: 현재 위치에서 MaxDisplayDistance × 1.5 밖의 오브젝트를 풀로 반환
+        CleanupStaleObjects(lat, lon);
+
         isDataLoaded = true;
         isFetching = false;
+    }
+
+    /// <summary>
+    /// MaxDisplayDistance × 1.5 범위 밖의 오브젝트를 풀로 반환하여 메모리 관리
+    /// 여유 범위(×1.5)를 두어 이동 시 미리 로드된 오브젝트가 자연스럽게 보이도록 함
+    /// </summary>
+    private void CleanupStaleObjects(float lat, float lon)
+    {
+        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+        float cleanupRange = maxDist * 1.5f;
+
+        List<int> toRemove = new List<int>();
+        foreach (var kvp in spawnedObjects)
+        {
+            int id = kvp.Key;
+            if (!placeDataMap.ContainsKey(id)) continue;
+            PlaceData place = placeDataMap[id];
+            float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
+            if (dist > cleanupRange)
+            {
+                toRemove.Add(id);
+            }
+        }
+
+        foreach (int id in toRemove)
+        {
+            GameObject obj = spawnedObjects[id];
+            string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
+            spawnedObjects.Remove(id);
+            placeDataMap.Remove(id);
+            currentlyLoadingGLB.Remove(id);
+            ReturnToPool(obj, modelType);
+        }
     }
 
     private IEnumerator FetchDataFromServerForTier(string url, float lat, float lon, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)

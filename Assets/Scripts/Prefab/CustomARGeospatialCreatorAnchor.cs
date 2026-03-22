@@ -92,6 +92,8 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         }
 
         // 렌더러 숨기고 재생성 시작
+        // forceHide 해제 — RecreateAnchor 성공 시 ShowAfterFrame에서 개별 복원
+        _forceHideRenderers = false;
         SetVisible(false);
         _anchorCreated = false;
         _retryCount = 0;

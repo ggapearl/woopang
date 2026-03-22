@@ -166,6 +166,7 @@ public class TrainStationManager : MonoBehaviour
                     yield return StartCoroutine(FetchFacilityData(lat, lon, radius));
                     if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
                 }
+                CleanupStaleObjects(lat, lon);
                 lastPosition = currentPos;
             }
             yield return new WaitForSeconds(1f);
@@ -191,6 +192,43 @@ public class TrainStationManager : MonoBehaviour
                 Debug.LogError($"[TrainStationManager] API request failed: {request.error}");
             }
         }
+    }
+
+    /// <summary>
+    /// MaxDisplayDistance × 1.5 범위 밖의 오브젝트를 풀로 반환하여 메모리 관리
+    /// </summary>
+    private void CleanupStaleObjects(float lat, float lon)
+    {
+        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+        float cleanupRange = maxDist * 1.5f;
+
+        List<string> toRemove = new List<string>();
+        foreach (var kvp in spawnedObjects)
+        {
+            string id = kvp.Key;
+            if (!placeDataMap.ContainsKey(id)) continue;
+            var data = placeDataMap[id];
+            float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
+            if (dist > cleanupRange)
+            {
+                toRemove.Add(id);
+            }
+        }
+
+        foreach (string id in toRemove)
+        {
+            GameObject obj = spawnedObjects[id];
+            spawnedObjects.Remove(id);
+            placeDataMap.Remove(id);
+            ReturnToPool(obj);
+        }
+    }
+
+    private void ReturnToPool(GameObject obj)
+    {
+        if (obj == null) return;
+        obj.SetActive(false);
+        objectPool.Enqueue(obj);
     }
 
     private IEnumerator ProcessFacilityData(string json, float latitude, float longitude)

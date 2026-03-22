@@ -346,11 +346,10 @@ public class LoadingManager : MonoBehaviour
                     RecreateAllManagerAnchors();
                 }
 
-                // 렌더러 복원 (RecreateAllAnchors에서 _forceHideRenderers 해제)
-                Debug.Log("[DBG] SetAllManagerRenderersVisible(true) + RestoreAllManagerObjects()");
-                SetAllManagerRenderersVisible(true);
-
                 // 거리 + 카테고리 필터 적용 (범위 밖/토글 OFF 오브젝트 비활성화)
+                // 렌더러는 RecreateAnchor → TryCreateAnchor 성공 시 ShowAfterFrame에서 개별 복원
+                // SetAllManagerRenderersVisible(true) 제거 — pos=(0,0,0) 플래시 방지
+                Debug.Log("[DBG] RestoreAllManagerObjects() — 렌더러는 앵커 생성 후 개별 복원");
                 RestoreAllManagerObjects();
 
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
@@ -385,8 +384,7 @@ public class LoadingManager : MonoBehaviour
             RecreateAllManagerAnchors();
         }
 
-        // 타임아웃이어도 오브젝트 보이기 (무한 숨김 방지)
-        SetAllManagerRenderersVisible(true);
+        // 타임아웃이어도 오브젝트 복원 — 렌더러는 앵커 재생성 후 개별 복원
         RestoreAllManagerObjects();
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
@@ -470,8 +468,11 @@ public class LoadingManager : MonoBehaviour
         NotTrackingReason reason = arSession.subsystem.notTrackingReason;
 
         // Tracking → Limited/None: fallback 진입 + 3D 렌더러 숨김
+        // ExcessiveMotion(빠른 이동/흔들림)은 무시 — 차량 이동 중 오브젝트 깜빡임 방지
         if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
         {
+            if (reason == NotTrackingReason.ExcessiveMotion) return;
+
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
@@ -479,7 +480,8 @@ public class LoadingManager : MonoBehaviour
                 osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
             }
         }
-        // Limited/None → Tracking: 즉시 fallback 해제 + 렌더러 복원
+        // Limited/None → Tracking: 앵커 재생성 + fallback 해제
+        // 앵커 재생성 후 개별적으로 ShowAfterFrame에서 렌더러 복원 (뭉침/플래시 방지)
         else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
         {
             if (hasShownEnvironmentGuidance)
@@ -489,9 +491,12 @@ public class LoadingManager : MonoBehaviour
             }
             else
             {
-                Debug.Log("[DBG] CheckTrackingStateChange: Limited→Tracking — SetAllManagerRenderersVisible(true) + RestoreAllManagerObjects()");
-                SetAllManagerRenderersVisible(true); // 3D 프리팹 복원
-                RestoreAllManagerObjects(); // 거리 + 카테고리 필터 적용
+                Debug.Log("[DBG] CheckTrackingStateChange: Limited→Tracking — RecreateAllAnchors + RestoreAllManagerObjects()");
+                // 앵커 재생성 (기존 앵커 파괴 → 새 앵커 생성 → 성공 시 개별 ShowAfterFrame)
+                RecreateAllManagerAnchors();
+                // 거리 + 카테고리 필터 적용 (범위 밖/토글 OFF 오브젝트 비활성화)
+                RestoreAllManagerObjects();
+                // fallback 해제
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
                 {
@@ -1306,8 +1311,9 @@ public class LoadingManager : MonoBehaviour
         StopSpinner();
         if (loadingPanel) loadingPanel.SetActive(false);
 
-        // 환경 복구 → 3D 렌더러 복원 + 거리 필터 적용
-        SetAllManagerRenderersVisible(true);
+        // 앵커 재생성 → 성공 시 개별 ShowAfterFrame에서 렌더러 복원
+        RecreateAllManagerAnchors();
+        // 거리 + 카테고리 필터 적용
         RestoreAllManagerObjects();
 
         // fallback 모드 해제
