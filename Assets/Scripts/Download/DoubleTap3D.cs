@@ -78,8 +78,15 @@ public class DoubleTap3D : MonoBehaviour
     private List<string> imageUrls = new List<string>();
     private ImageDisplayController imageDisplayController;
 
-    // iOS 캐싱 시스템
-    private Dictionary<int, byte[]> cachedImageData = new Dictionary<int, byte[]>();
+    // iOS 캐싱 시스템 (백그라운드 복귀 시 텍스처 복원용)
+    private struct CachedTextureData
+    {
+        public byte[] rawData;
+        public int width;
+        public int height;
+        public TextureFormat format;
+    }
+    private Dictionary<int, CachedTextureData> cachedImageData = new Dictionary<int, CachedTextureData>();
     private bool imagesAreCached = false;
     private bool isCooldown = false; // 더블탭 쿨다운
     private bool canClose = true; // 닫기 방지 쿨다운
@@ -412,8 +419,14 @@ public class DoubleTap3D : MonoBehaviour
             {
                 try
                 {
-                    byte[] imageData = imageSprites[i].texture.EncodeToPNG();
-                    cachedImageData[i] = imageData;
+                    Texture2D tex = imageSprites[i].texture;
+                    cachedImageData[i] = new CachedTextureData
+                    {
+                        rawData = tex.GetRawTextureData(),
+                        width = tex.width,
+                        height = tex.height,
+                        format = tex.format
+                    };
                 }
                 catch (Exception)
                 {
@@ -439,12 +452,14 @@ public class DoubleTap3D : MonoBehaviour
         {
             try
             {
-                Texture2D restoredTexture = new Texture2D(2, 2);
-                restoredTexture.LoadImage(kvp.Value);
+                CachedTextureData cached = kvp.Value;
+                Texture2D restoredTexture = new Texture2D(cached.width, cached.height, cached.format, false);
+                restoredTexture.LoadRawTextureData(cached.rawData);
+                restoredTexture.Apply();
 
                 Sprite restoredSprite = Sprite.Create(
                     restoredTexture,
-                    new Rect(0, 0, restoredTexture.width, restoredTexture.height),
+                    new Rect(0, 0, cached.width, cached.height),
                     new Vector2(0.5f, 0.5f)
                 );
 
@@ -475,6 +490,7 @@ public class DoubleTap3D : MonoBehaviour
             savedObjectId = this.id;
             savedImageIndex = imageIndex;
             savedIsPlaceInfoPage = isPlaceInfoPage;
+            CacheImagesForFullscreen();
         }
         else if (!pauseStatus && savedFullscreenState && savedObjectId == this.id)
         {
@@ -876,11 +892,6 @@ public class DoubleTap3D : MonoBehaviour
             {
                 StartCoroutine(FetchSubPhotosFromServer(id));
             }
-
-            // 풀스크린 열 때 이미지 캐싱 (iOS 대비)
-#if UNITY_IOS
-            CacheImagesForFullscreen();
-#endif
 
             currentIndex = 0;
             isPlaceInfoPage = placeInfoTextPanel != null;
@@ -1326,13 +1337,11 @@ public class DoubleTap3D : MonoBehaviour
     public void SetImageSprites(List<Sprite> sprites)
     {
         imageSprites = sprites ?? new List<Sprite>();
+        imagesAreCached = false;
 
         if (isFullscreen)
         {
             ShowImage(imageIndex);
-#if UNITY_IOS
-            CacheImagesForFullscreen();
-#endif
         }
     }
 
@@ -1434,6 +1443,7 @@ public class DoubleTap3D : MonoBehaviour
         overview = null;
         petInfo = null;
         imageUrls.Clear();
+        imageSprites.Clear();
         ClearImageCache();
     }
 
@@ -1624,15 +1634,12 @@ public class DoubleTap3D : MonoBehaviour
         if (newSprites.Count > 0)
         {
             imageSprites = newSprites;
+            imagesAreCached = false;
 
             if (isFullscreen && imageIndex >= 0)
             {
                 ShowImage(imageIndex);
             }
-
-#if UNITY_IOS
-            CacheImagesForFullscreen();
-#endif
         }
     }
 
