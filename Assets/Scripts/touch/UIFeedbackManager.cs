@@ -36,8 +36,8 @@ public class UIFeedbackManager : MonoBehaviour
     [SerializeField] private bool enableHaptics = true;
 
     [Header("Haptic Mode")]
-    [Tooltip("true: 무음(매너모드)일 때만 진동 / false: 항상 진동")]
-    [SerializeField] private bool hapticOnlyWhenSilent = true;
+    [Tooltip("true: 무음(매너모드)일 때만 진동 / false: 항상 진동 (권장)")]
+    [SerializeField] private bool hapticOnlyWhenSilent = false;
 
     private AudioSource audioSource;
     private AudioClip cachedButtonSound;
@@ -101,9 +101,6 @@ public class UIFeedbackManager : MonoBehaviour
         ExecuteFeedback(hapticIntensity, clipToPlay);
     }
 
-    /// <summary>
-    /// IsValidUIEvent 체크 없이 직접 실행 (3D 오브젝트 터치 등 non-UI 컨텍스트용)
-    /// </summary>
     public void HandleTouchFeedbackDirect(float intensity, AudioClip customSound = null)
     {
         AudioClip clipToPlay = customSound ?? cachedButtonSound;
@@ -151,24 +148,24 @@ public class UIFeedbackManager : MonoBehaviour
     public bool IsHapticsEnabled() => enableHaptics;
 
     // ============================================================
-    // 핵심 로직: 소리가 나면 진동 생략, 무음이면 진동 발생
+    // 핵심 로직
     // ============================================================
 
     private void ExecuteFeedback(float intensity, AudioClip clip)
     {
-        bool soundPlayed = PlaySound(clip);
+        PlaySound(clip);
 
         if (hapticOnlyWhenSilent)
         {
-            // 소리가 실제로 재생되지 않았을 때만 진동
-            if (!soundPlayed)
+            // 무음 모드일 때만 진동 (Android만 정확히 감지 가능)
+            if (IsSystemVolumeMuted())
             {
                 TriggerHaptic(intensity);
             }
         }
         else
         {
-            // 항상 진동
+            // 항상 진동 (권장 — 소리/진동은 시스템이 관리)
             TriggerHaptic(intensity);
         }
     }
@@ -186,11 +183,11 @@ public class UIFeedbackManager : MonoBehaviour
 #if UNITY_IOS
         try
         {
-            // iOS Taptic Engine — intensity에 따라 Light(0)/Medium(1)/Heavy(2)
+            // iOS Taptic Engine
+            // 0~0.5  → Medium(1)
+            // 0.5~1.0 → Heavy(2)
             int style;
-            if (intensity <= 0.33f)
-                style = 0; // Light
-            else if (intensity <= 0.66f)
+            if (intensity <= 0.5f)
                 style = 1; // Medium
             else
                 style = 2; // Heavy
@@ -229,7 +226,7 @@ public class UIFeedbackManager : MonoBehaviour
                 }
                 else
                 {
-                    long duration = (long)(50 + (intensity * 100)); // 50-150ms
+                    long duration = (long)(50 + (intensity * 100));
                     vibrator.Call("vibrate", duration);
                 }
             }
@@ -249,30 +246,19 @@ public class UIFeedbackManager : MonoBehaviour
     }
 
     // ============================================================
-    // 사운드 재생 — 실제로 소리가 들리는지 여부 반환
+    // 사운드 재생
     // ============================================================
 
-    private bool PlaySound(AudioClip clip)
+    private void PlaySound(AudioClip clip)
     {
-        if (clip == null || audioSource == null) return false;
-
-        // Unity 앱 내부 볼륨 체크
-        if (AudioListener.volume <= 0.01f || soundVolume <= 0.01f) return false;
-
-        // 시스템 볼륨 체크 — 기기 볼륨이 0이면 소리가 안 들림
-        if (IsSystemVolumeMuted())
-        {
-            // 소리는 재생하되 (볼륨 올리면 들릴 수 있도록) "안 들린다"고 반환
-            audioSource.PlayOneShot(clip, soundVolume);
-            return false;
-        }
+        if (clip == null || audioSource == null) return;
+        if (AudioListener.volume <= 0.01f || soundVolume <= 0.01f) return;
 
         audioSource.PlayOneShot(clip, soundVolume);
-        return true;
     }
 
     /// <summary>
-    /// 시스템 미디어 볼륨이 0인지 체크 (Android: AudioManager, iOS: outputVolume)
+    /// 시스템이 무음/진동 모드인지 체크 (Android만 지원)
     /// </summary>
     private bool IsSystemVolumeMuted()
     {
@@ -284,20 +270,12 @@ public class UIFeedbackManager : MonoBehaviour
             AndroidJavaObject audioManager = activity.Call<AndroidJavaObject>("getSystemService", "audio");
             if (audioManager != null)
             {
-                // STREAM_MUSIC = 3
                 int musicVolume = audioManager.Call<int>("getStreamVolume", 3);
-                // 벨소리 모드: 0=Normal, 1=Silent, 2=Vibrate
                 int ringerMode = audioManager.Call<int>("getRingerMode");
-                // 미디어 볼륨 0이거나 진동/무음 모드이면 소리가 안 들림
                 return musicVolume == 0 || ringerMode != 0;
             }
         }
         catch (System.Exception) { }
-#elif UNITY_IOS && !UNITY_EDITOR
-        // iOS: 시스템 볼륨은 정확히 체크할 수 없으나
-        // 사일런트 스위치 ON 시 Unity 사운드도 무음이 되므로
-        // 보수적으로 항상 소리가 난다고 판단 (Taptic Engine은 사일런트에서도 동작)
-        return false;
 #endif
         return false;
     }
