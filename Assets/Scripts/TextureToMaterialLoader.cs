@@ -1,6 +1,6 @@
-using System.Collections; // Ãß°¡: IEnumerator¸¦ »ç¿ëÇÏ±â À§ÇØ ÇÊ¿ä
+using System.Collections; // ï¿½ß°ï¿½: IEnumeratorï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½
 using UnityEngine;
-using UnityEngine.Networking; // UnityWebRequest¸¦ »ç¿ëÇÏ±â À§ÇØ ÇÊ¿ä
+using UnityEngine.Networking; // UnityWebRequestï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ï±ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½
 
 public class TextureToMaterialLoader : MonoBehaviour
 {
@@ -10,7 +10,7 @@ public class TextureToMaterialLoader : MonoBehaviour
     [Tooltip("Target Renderer to apply the material with the downloaded texture.")]
     public Renderer targetRenderer;
 
-    private Material newMaterial; // »õ·Î »ý¼ºÇÒ Material
+    private Material newMaterial; // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Material
 
     private void Start()
     {
@@ -22,25 +22,22 @@ public class TextureToMaterialLoader : MonoBehaviour
     {
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url))
         {
-            Debug.Log("Downloading texture from: " + url);
 
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // ÅØ½ºÃ³ ´Ù¿î·Îµå ¼º°ø
+                // ï¿½Ø½ï¿½Ã³ ï¿½Ù¿ï¿½Îµï¿½ ï¿½ï¿½ï¿½ï¿½
                 Texture2D downloadedTexture = DownloadHandlerTexture.GetContent(request);
-                Debug.Log("Texture downloaded successfully!");
 
-                // »õ Material »ý¼º ¹× ÅØ½ºÃ³ Àû¿ë
-                newMaterial = new Material(Shader.Find("Standard")); // Standard Shader »ç¿ë
+                // ï¿½ï¿½ Material ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ø½ï¿½Ã³ ï¿½ï¿½ï¿½ï¿½
+                newMaterial = new Material(Shader.Find("Standard")); // Standard Shader ï¿½ï¿½ï¿½
                 newMaterial.mainTexture = downloadedTexture;
 
-                // Å¥ºê¿¡ Material Àû¿ë
+                // Å¥ï¿½ê¿¡ Material ï¿½ï¿½ï¿½ï¿½
                 if (targetRenderer != null)
                 {
                     targetRenderer.material = newMaterial;
-                    Debug.Log("Material applied to the target Renderer.");
                 }
             }
             else

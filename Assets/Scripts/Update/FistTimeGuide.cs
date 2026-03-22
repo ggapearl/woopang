@@ -198,6 +198,5 @@ public class FirstTimeGuide : MonoBehaviour
     {
         PlayerPrefs.DeleteKey(FIRST_TIME_KEY);
         PlayerPrefs.Save();
-        Debug.Log("[FirstTimeGuide] First time flag reset - 다음 실행 시 가이드가 표시됩니다.");
     }
 }

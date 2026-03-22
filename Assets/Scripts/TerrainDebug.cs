@@ -12,9 +12,6 @@ public class TerrainDebug : MonoBehaviour
 
         if (anchor != null)
         {
-            Debug.Log($"📍 현재 위도 (Latitude): {anchor.transform.position.x}");
-            Debug.Log($"📍 현재 경도 (Longitude): {anchor.transform.position.z}");
-            Debug.Log($"📍 현재 고도 (Altitude): {anchor.transform.position.y}");
         }
         else
         {

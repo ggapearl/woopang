@@ -193,7 +193,7 @@ public class DataManager : MonoBehaviour
             yield return new WaitForSeconds(delay);
             if (isInitialStartComplete) yield break; // 이미 완료됐으면 종료
 
-            Debug.Log("[DataManager] 초기 로드 미완료 — 재시도");
+            Debug.LogWarning("[DataManager] 초기 로드 미완료 — 재시도");
             StopAllFetching();
             isGeospatialReady = false;
             fetchCoroutine = StartCoroutine(FetchDataOnce());
@@ -291,7 +291,7 @@ public class DataManager : MonoBehaviour
         // 그래도 권한 없으면 기본 위치로 조용히 진행
         if (!Input.location.isEnabledByUser)
         {
-            Debug.Log("[DataManager] 위치 권한 없음 — 기본 위치로 데이터 로드 진행");
+            Debug.LogWarning("[DataManager] 위치 권한 없음 — 기본 위치로 데이터 로드 진행");
         }
         else
         {
@@ -615,8 +615,6 @@ public class DataManager : MonoBehaviour
         }
         isFetching = true;
         int myGeneration = fetchGeneration; // 이 코루틴의 세대 번호 기록
-        Debug.Log($"[DBG] FetchDataProgressively START lat={lat}, lon={lon}, objectSpawnRadius={objectSpawnRadius}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
-
         // placeDataMap.Keys 기준으로 중복 서버 요청 방지 (좌표만 저장된 것도 포함)
         HashSet<int> loadedIds = new HashSet<int>(placeDataMap.Keys);
         foreach (int id in spawnedObjects.Keys)
@@ -652,7 +650,6 @@ public class DataManager : MonoBehaviour
             }
 
             // 새로운 데이터 저장 + objectSpawnRadius 이내만 3D 오브젝트 생성
-            Debug.Log($"[DBG] FetchTier radius={radius}: newPlaces={newPlaces.Count}, objectSpawnRadius={objectSpawnRadius}");
             int spawnedInTier = 0, skippedInTier = 0;
             foreach (PlaceData place in newPlaces)
             {
@@ -664,7 +661,6 @@ public class DataManager : MonoBehaviour
                 float distToPlace = CalculateDistance(lat, lon, place.latitude, place.longitude);
                 if (distToPlace <= objectSpawnRadius && !spawnedObjects.ContainsKey(place.id))
                 {
-                    Debug.Log($"[DBG] SPAWN id={place.id} name={place.name} dist={distToPlace:F1}m");
                     CreateObjectFromData(place);
                     spawnedInTier++;
 
@@ -684,8 +680,6 @@ public class DataManager : MonoBehaviour
                     skippedInTier++;
                 }
             }
-            Debug.Log($"[DBG] FetchTier radius={radius} 완료: spawned={spawnedInTier}, skipped={skippedInTier}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
-
             // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && !suppressCountUI && objectCountUI != null)
             {
@@ -800,10 +794,6 @@ public class DataManager : MonoBehaviour
             CreateObjectFromData(place);
             if (spawnedObjects.ContainsKey(place.id)) newlySpawned++;
         }
-        if (toRemove.Count > 0 || newlySpawned > 0)
-        {
-            Debug.Log($"[DBG] SpawnNearby: removed={toRemove.Count}, newlySpawned={newlySpawned}, withinRange={toSpawn.Count}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
-        }
     }
 
     private IEnumerator FetchDataFromServerForTier(string url, float lat, float lon, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)
@@ -842,7 +832,7 @@ public class DataManager : MonoBehaviour
                                     Debug.LogWarning($"[DataManager] 개별 파싱 실패: id={jItem["id"]}, name={jItem["name"]}: {itemEx.Message}");
                                 }
                             }
-                            Debug.Log($"[DataManager] 개별 파싱으로 {places.Count}/{jArray.Count}건 복구");
+                            Debug.LogWarning($"[DataManager] 개별 파싱으로 {places.Count}/{jArray.Count}건 복구");
                         }
                         catch (System.Exception fallbackEx)
                         {

@@ -32,7 +32,6 @@ public class HapticButton : MonoBehaviour
         if (Application.isMobilePlatform)
         {
             Handheld.Vibrate(); // �⺻ ���� ���� (�� 0.5�� ���� ����)
-            Debug.Log("��ư Ŭ��: ��ƽ �ǵ�� �߻�!");
         }
         else
         {

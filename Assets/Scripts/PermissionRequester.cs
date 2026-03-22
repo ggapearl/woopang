@@ -23,31 +23,25 @@ public class PermissionRequester : MonoBehaviour
         if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.FineLocation))
         {
             UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.FineLocation);
-            Debug.Log("[Android] Requesting Fine Location Permission...");
         }
         else
         {
-            Debug.Log("[Android] Fine Location Permission Already Granted");
         }
 
         // Android 카메라 권한 확인 및 요청
         if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
         {
             UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Camera);
-            Debug.Log("[Android] Requesting Camera Permission...");
         }
         else
         {
-            Debug.Log("[Android] Camera Permission Already Granted");
         }
 
         #elif UNITY_IOS
         // iOS 위치 권한 요청
-        Debug.Log("[iOS] Requesting Location Permission (via Input.location.Start)...");
         StartCoroutine(RequestIOSLocationPermission());
 
         // iOS 카메라 권한은 ARSession이 시작될 때 자동으로 요청됨
-        Debug.Log("[iOS] Camera permission will be requested when ARSession starts");
         #endif
     }
 
@@ -73,7 +67,6 @@ public class PermissionRequester : MonoBehaviour
 
         if (Input.location.status == LocationServiceStatus.Running)
         {
-            Debug.Log("[iOS] Location Permission Granted");
         }
         else if (Input.location.status == LocationServiceStatus.Failed)
         {

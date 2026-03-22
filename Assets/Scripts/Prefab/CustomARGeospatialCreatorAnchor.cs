@@ -76,7 +76,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 #if UNITY_EDITOR
         return;
 #else
-        Debug.Log($"[DBG] RecreateAnchor: {gameObject.name} pos={transform.position}");
 
         // 이전 ShowAfterFrame 코루틴 무효화
         _showGeneration++;
@@ -189,11 +188,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             if (myGeneration != _showGeneration) yield break;
         }
 
-        Debug.Log($"[DBG] ShowAfterFrame: {gameObject.name} anchorCreated={_anchorCreated} forceHide={_forceHideRenderers} pos={transform.position} active={gameObject.activeSelf}");
         if (_anchorCreated && !_forceHideRenderers)
         {
             SetVisible(true);
-            Debug.Log($"[DBG] ShowAfterFrame: {gameObject.name} → VISIBLE at pos={transform.position}");
         }
     }
 
@@ -213,7 +210,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         else if (_anchorCreated)
         {
             // 즉시 표시하지 않고 1프레임 대기 후 표시 (원점 플래시 방지)
-            Debug.Log($"[DBG] SetForceHideRenderers(false): {gameObject.name} → ShowAfterFrame 예약 pos={transform.position}");
             StartCoroutine(ShowAfterFrame());
         }
     }

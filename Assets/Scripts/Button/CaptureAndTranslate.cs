@@ -21,12 +21,10 @@ public class CaptureAndTranslate : MonoBehaviour
         if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission("android.permission.WRITE_EXTERNAL_STORAGE"))
         {
             UnityEngine.Android.Permission.RequestUserPermission("android.permission.WRITE_EXTERNAL_STORAGE");
-            Debug.Log("WRITE_EXTERNAL_STORAGE ±ÇÇÑ ¿äÃ»");
         }
         if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission("android.permission.READ_EXTERNAL_STORAGE"))
         {
             UnityEngine.Android.Permission.RequestUserPermission("android.permission.READ_EXTERNAL_STORAGE");
-            Debug.Log("READ_EXTERNAL_STORAGE ±ÇÇÑ ¿äÃ»");
         }
     }
     #endif
@@ -38,7 +36,7 @@ public class CaptureAndTranslate : MonoBehaviour
 
     private IEnumerator CaptureWithZoomAndFlash()
     {
-        // 1. È­¸é »ìÂ¦ È®´ë ¾Ö´Ï¸ÞÀÌ¼Ç
+        // 1. È­ï¿½ï¿½ ï¿½ï¿½Â¦ È®ï¿½ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½
         if (captureArea != null)
         {
             Vector3 originalScale = captureArea.localScale;
@@ -61,7 +59,7 @@ public class CaptureAndTranslate : MonoBehaviour
             captureArea.localScale = originalScale;
         }
 
-        // 2. ÇÃ·¡½Ã È¿°ú
+        // 2. ï¿½Ã·ï¿½ï¿½ï¿½ È¿ï¿½ï¿½
         if (flashImage != null)
         {
             flashImage.gameObject.SetActive(true);
@@ -70,7 +68,7 @@ public class CaptureAndTranslate : MonoBehaviour
             flashImage.color = new Color(1, 1, 1, 0);
         }
 
-        // 3. È­¸é Ä¸Ã³
+        // 3. È­ï¿½ï¿½ Ä¸Ã³
         yield return new WaitForEndOfFrame();
         Texture2D screenImage;
         Rect captureRect;
@@ -101,7 +99,7 @@ public class CaptureAndTranslate : MonoBehaviour
         screenImage.ReadPixels(captureRect, 0, 0);
         screenImage.Apply();
 
-        // 4. °¶·¯¸® Pictures Æú´õ¿¡ ÀúÀå
+        // 4. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Pictures ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         string fileName = "CapturedImage_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png";
         string galleryPath;
 
@@ -122,9 +120,8 @@ public class CaptureAndTranslate : MonoBehaviour
             }
 
             File.WriteAllBytes(galleryPath, bytes);
-            Debug.Log("°¶·¯¸®¿¡ ÀúÀå ¼º°ø: " + galleryPath);
 
-            // 5. °¶·¯¸® »õ·Î°íÄ§
+            // 5. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î°ï¿½Ä§
             #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
@@ -133,26 +130,24 @@ public class CaptureAndTranslate : MonoBehaviour
                     using (AndroidJavaClass mediaScanner = new AndroidJavaClass("android.media.MediaScannerConnection"))
                     {
                         mediaScanner.CallStatic("scanFile", context, new string[] { galleryPath }, new string[] { "image/png" }, null);
-                        Debug.Log("°¶·¯¸® »õ·Î°íÄ§ ¿äÃ» ¿Ï·á");
                     }
                 }
             }
             catch (System.Exception e)
             {
-                Debug.LogError("°¶·¯¸® »õ·Î°íÄ§ ½ÇÆÐ: " + e.Message);
+                Debug.LogError("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î°ï¿½Ä§ ï¿½ï¿½ï¿½ï¿½: " + e.Message);
             }
             #endif
         }
         catch (System.Exception e)
         {
-            Debug.LogError("°¶·¯¸® ÀúÀå ½ÇÆÐ: " + e.Message);
+            Debug.LogError("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½: " + e.Message);
             string fallbackPath = Path.Combine(Application.persistentDataPath, fileName);
             File.WriteAllBytes(fallbackPath, bytes);
-            Debug.Log("´ëÃ¼ ÀúÀå: " + fallbackPath);
             yield break;
         }
 
-        // 6. ±¸±Û ¹ø¿ª ÆäÀÌÁö·Î ÀÌµ¿
+        // 6. ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½
         string url = "https://translate.google.com/?sl=auto&tl=ko&op=images";
         Application.OpenURL(url);
     }

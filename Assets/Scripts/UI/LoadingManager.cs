@@ -196,8 +196,6 @@ public class LoadingManager : MonoBehaviour
     IEnumerator HandleBackgroundRecovery()
     {
         isBackgroundRecovering = true;
-        Debug.Log("[DBG] === HandleBackgroundRecovery START ===");
-
         // ============================================================
         // 0. GPS 위치 변동 체크 — 200m 이상 이동 시 전체 재로드 필요 판단
         // ============================================================
@@ -225,7 +223,6 @@ public class LoadingManager : MonoBehaviour
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
-            Debug.Log("[DBG] Lightweight recovery — tracking already OK, skipping");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
             yield break;
@@ -324,8 +321,6 @@ public class LoadingManager : MonoBehaviour
 
             if (ts == TrackingState.Tracking)
             {
-                Debug.Log($"[DBG] Tracking recovered after {waited}s, needFullReload={needFullReload}");
-
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
@@ -352,12 +347,10 @@ public class LoadingManager : MonoBehaviour
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
-                    Debug.Log("[DBG] EnableFallbackMode(false) — fallback 해제");
                     osi.EnableFallbackMode(false);
                 }
                 isBackgroundRecovering = false;
                 lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
-                Debug.Log("[DBG] === HandleBackgroundRecovery DONE ===");
                 yield break;
             }
 
@@ -489,7 +482,6 @@ public class LoadingManager : MonoBehaviour
             }
             else
             {
-                Debug.Log("[DBG] CheckTrackingStateChange: Limited→Tracking — RestoreFilters + RecreateAnchors");
                 // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
                 RestoreAllManagerObjects();
                 // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
