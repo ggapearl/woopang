@@ -70,6 +70,8 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 #if UNITY_EDITOR
         return;
 #else
+        Debug.Log($"[DBG] RecreateAnchor: {gameObject.name} pos={transform.position}");
+
         // 재시도 코루틴 중단
         if (retryCoroutine != null)
         {
@@ -94,7 +96,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         _anchorCreated = false;
         _retryCount = 0;
 
-        if (!TryCreateAnchor())
+        bool immediate = TryCreateAnchor();
+        Debug.Log($"[DBG] RecreateAnchor: {gameObject.name} immediate={immediate}");
+        if (!immediate)
         {
             retryCoroutine = StartCoroutine(RetryCreateAnchor());
         }
@@ -167,9 +171,11 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private IEnumerator ShowAfterFrame()
     {
         yield return null; // 1프레임 대기 — 앵커 Transform이 실제 GPS 위치로 업데이트됨
+        Debug.Log($"[DBG] ShowAfterFrame: {gameObject.name} anchorCreated={_anchorCreated} forceHide={_forceHideRenderers} pos={transform.position}");
         if (_anchorCreated && !_forceHideRenderers)
         {
             SetVisible(true);
+            Debug.Log($"[DBG] ShowAfterFrame: {gameObject.name} → VISIBLE at pos={transform.position}");
         }
     }
 
@@ -187,6 +193,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         }
         else if (_anchorCreated)
         {
+            Debug.Log($"[DBG] SetForceHideRenderers(false): {gameObject.name} → VISIBLE at pos={transform.position} (anchorCreated={_anchorCreated})");
             SetVisible(true);
         }
     }

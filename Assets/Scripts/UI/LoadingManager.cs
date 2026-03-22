@@ -196,6 +196,7 @@ public class LoadingManager : MonoBehaviour
     IEnumerator HandleBackgroundRecovery()
     {
         isBackgroundRecovering = true;
+        Debug.Log("[DBG] === HandleBackgroundRecovery START ===");
 
         // ============================================================
         // 0. GPS 위치 변동 체크 — 200m 이상 이동 시 전체 재로드 필요 판단
@@ -224,6 +225,7 @@ public class LoadingManager : MonoBehaviour
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
+            Debug.Log("[DBG] Lightweight recovery — tracking already OK, skipping");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
             yield break;
@@ -231,6 +233,7 @@ public class LoadingManager : MonoBehaviour
 #endif
 
         // 1. 3D 렌더러 즉시 숨김 (앵커 미복구 상태에서 프리팹이 카메라 앞에 보이는 것 방지)
+        Debug.Log("[DBG] Step1: SetAllManagerRenderersVisible(false)");
         SetAllManagerRenderersVisible(false);
 
         // 2. fallback 모드 활성화 (타겟이 살아있는 상태에서 fallbackDataMap 확보)
@@ -253,6 +256,7 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 3. 모든 매니저 오브젝트 비활성화 (렌더러는 이미 숨김 상태)
+        Debug.Log("[DBG] Step3: HideAllManagerObjects()");
         HideAllManagerObjects();
 
         // 4. 다국어 복구 메시지 + 점 애니메이션 표시
@@ -322,6 +326,8 @@ public class LoadingManager : MonoBehaviour
 
             if (ts == TrackingState.Tracking)
             {
+                Debug.Log($"[DBG] Tracking recovered after {waited}s, needFullReload={needFullReload}");
+
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
@@ -339,19 +345,24 @@ public class LoadingManager : MonoBehaviour
                 else
                 {
                     // 근거리 복귀 → 기존 앵커만 재생성
+                    Debug.Log("[DBG] RecreateAllManagerAnchors() — 앵커 재생성 시작");
                     RecreateAllManagerAnchors();
+                    Debug.Log("[DBG] RecreateAllManagerAnchors() — 완료, 앵커 비동기 생성 중...");
                 }
 
                 // 렌더러 복원 (RecreateAllAnchors에서 _forceHideRenderers 해제)
+                Debug.Log("[DBG] SetAllManagerRenderersVisible(true) — 렌더러 즉시 복원 ⚠️");
                 SetAllManagerRenderersVisible(true);
 
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
+                    Debug.Log("[DBG] EnableFallbackMode(false) — fallback 해제");
                     osi.EnableFallbackMode(false);
                 }
                 isBackgroundRecovering = false;
                 lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+                Debug.Log("[DBG] === HandleBackgroundRecovery DONE ===");
                 yield break;
             }
 
@@ -360,6 +371,7 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃 시에도 처리 (무한 숨김 방지)
+        Debug.Log($"[DBG] TIMEOUT after {maxWait}s — forcing recovery");
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
@@ -376,6 +388,7 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃이어도 오브젝트 보이기 (무한 숨김 방지)
+        Debug.Log("[DBG] TIMEOUT: SetAllManagerRenderersVisible(true) ⚠️");
         SetAllManagerRenderersVisible(true);
         if (dataManager != null)
         {

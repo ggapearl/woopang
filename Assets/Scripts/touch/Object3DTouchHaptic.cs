@@ -157,7 +157,6 @@ public class Object3DTouchHaptic : MonoBehaviour
     private void TriggerFeedback()
     {
         // UIFeedbackManager를 통해 소리/진동 통합 처리
-        // 무음 모드면 진동만, 소리 나면 소리만 (hapticOnlyWhenSilent 설정에 따라)
         if (UIFeedbackManager.Instance != null)
         {
             UIFeedbackManager.Instance.HandleTouchFeedbackDirect(hapticIntensity, touchSound);

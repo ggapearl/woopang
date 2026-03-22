@@ -860,6 +860,14 @@ private bool isDataLoaded = false;
         return spawnedObjects.Count;
     }
 
+    public int GetVisibleObjectCount()
+    {
+        int count = 0;
+        foreach (var kvp in spawnedObjects)
+            if (kvp.Value != null && kvp.Value.activeSelf) count++;
+        return count;
+    }
+
     public Dictionary<string, GameObject> GetSpawnedObjects()
     {
         return spawnedObjects;

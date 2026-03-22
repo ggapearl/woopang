@@ -31,13 +31,8 @@ public class UIFeedbackManager : MonoBehaviour
     [SerializeField] private float soundVolume = 1.0f;
 
     [Header("Haptic Settings")]
-    [Tooltip("진동 강도 (0~1). iOS: Light/Medium/Heavy, Android: TICK/CLICK/HEAVY_CLICK")]
+    [Tooltip("진동 강도 (0~1). iOS: Medium/Heavy, Android: TICK/CLICK/HEAVY_CLICK")]
     [SerializeField, Range(0f, 1f)] private float hapticIntensity = 0.5f;
-    [SerializeField] private bool enableHaptics = true;
-
-    [Header("Haptic Mode")]
-    [Tooltip("true: 무음(매너모드)일 때만 진동 / false: 항상 진동 (권장)")]
-    [SerializeField] private bool hapticOnlyWhenSilent = false;
 
     private AudioSource audioSource;
     private AudioClip cachedButtonSound;
@@ -143,9 +138,7 @@ public class UIFeedbackManager : MonoBehaviour
     public void TriggerHeavyHaptic() => TriggerHaptic(1.0f);
 
     public void SetHapticIntensity(float intensity) => hapticIntensity = Mathf.Clamp01(intensity);
-    public void SetHapticsEnabled(bool enabled) => enableHaptics = enabled;
     public float GetCurrentHapticIntensity() => hapticIntensity;
-    public bool IsHapticsEnabled() => enableHaptics;
 
     // ============================================================
     // 핵심 로직
@@ -154,20 +147,7 @@ public class UIFeedbackManager : MonoBehaviour
     private void ExecuteFeedback(float intensity, AudioClip clip)
     {
         PlaySound(clip);
-
-        if (hapticOnlyWhenSilent)
-        {
-            // 무음 모드일 때만 진동 (Android만 정확히 감지 가능)
-            if (IsSystemVolumeMuted())
-            {
-                TriggerHaptic(intensity);
-            }
-        }
-        else
-        {
-            // 항상 진동 (권장 — 소리/진동은 시스템이 관리)
-            TriggerHaptic(intensity);
-        }
+        TriggerHaptic(intensity);
     }
 
     // ============================================================
@@ -176,18 +156,19 @@ public class UIFeedbackManager : MonoBehaviour
 
     private void TriggerHaptic(float intensity = 0.5f)
     {
-        if (!enableHaptics) return;
-
         intensity = Mathf.Clamp01(intensity);
 
 #if UNITY_IOS
         try
         {
             // iOS Taptic Engine
-            // 0~0.5  → Medium(1)
-            // 0.5~1.0 → Heavy(2)
+            // 0~0.3   → Light(0)
+            // 0.31~0.6 → Medium(1)
+            // 0.61~1.0 → Heavy(2)
             int style;
-            if (intensity <= 0.5f)
+            if (intensity <= 0.3f)
+                style = 0; // Light
+            else if (intensity <= 0.6f)
                 style = 1; // Medium
             else
                 style = 2; // Heavy
@@ -255,29 +236,6 @@ public class UIFeedbackManager : MonoBehaviour
         if (AudioListener.volume <= 0.01f || soundVolume <= 0.01f) return;
 
         audioSource.PlayOneShot(clip, soundVolume);
-    }
-
-    /// <summary>
-    /// 시스템이 무음/진동 모드인지 체크 (Android만 지원)
-    /// </summary>
-    private bool IsSystemVolumeMuted()
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        try
-        {
-            AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-            AndroidJavaObject audioManager = activity.Call<AndroidJavaObject>("getSystemService", "audio");
-            if (audioManager != null)
-            {
-                int musicVolume = audioManager.Call<int>("getStreamVolume", 3);
-                int ringerMode = audioManager.Call<int>("getRingerMode");
-                return musicVolume == 0 || ringerMode != 0;
-            }
-        }
-        catch (System.Exception) { }
-#endif
-        return false;
     }
 
     // ============================================================

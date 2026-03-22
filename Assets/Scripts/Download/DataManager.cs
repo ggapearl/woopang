@@ -510,8 +510,6 @@ public class DataManager : MonoBehaviour
             objectCountUI.ResetUI();
         }
 
-        int currentCount = silent ? GetVisibleObjectCount() : 0;
-
         foreach (PlaceData place in places)
         {
             try
@@ -523,12 +521,9 @@ public class DataManager : MonoBehaviour
                 Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={place.id}, name={place.name}: {ex.Message}");
             }
 
-            if (ShouldShowObject(place))
-                currentCount++;
-
             if (objectCountUI != null)
             {
-                objectCountUI.UpdateObjectCount(currentCount, false);
+                objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
             }
 
             if (objectSpawnDelay > 0)
@@ -540,9 +535,7 @@ public class DataManager : MonoBehaviour
         // 최종 업데이트
         if (objectCountUI != null)
         {
-            int visibleCount = GetVisibleObjectCount();
-            int finalCount = currentCount > 0 ? currentCount : visibleCount;
-            objectCountUI.UpdateObjectCount(finalCount, true);
+            objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), true);
         }
 
         isDataLoaded = true;
@@ -614,9 +607,6 @@ public class DataManager : MonoBehaviour
             objectCountUI.ResetUI();
         }
 
-        // silent 모드: 기존 visible 오브젝트 수를 기반 카운트로 시작 (중복 누적 방지)
-        int currentTierCount = silent ? GetVisibleObjectCount() : 0;
-
         for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
         {
             // 세대 체크: StopAllFetching으로 무효화된 코루틴은 즉시 종료
@@ -643,14 +633,10 @@ public class DataManager : MonoBehaviour
                 CreateObjectFromData(place);
                 loadedIds.Add(place.id);
 
-                // 필터링 적용된 오브젝트만 카운트 (숨겨진 것은 제외)
-                if (ShouldShowObject(place))
-                    currentTierCount++;
-
                 // UI 업데이트 — 빠른 이동 모드에서는 억제
                 if (!suppressCountUI && objectCountUI != null)
                 {
-                    objectCountUI.UpdateObjectCount(currentTierCount, false);
+                    objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
                 }
 
                 if (objectSpawnDelay > 0)
@@ -662,10 +648,7 @@ public class DataManager : MonoBehaviour
             // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && !suppressCountUI && objectCountUI != null)
             {
-                // 이번에 새로 추가된 게 없어도, 이미 활성화된 오브젝트가 있으면 그 수를 보고
-                int visibleCount = GetVisibleObjectCount();
-                int finalCount = currentTierCount > 0 ? currentTierCount : visibleCount;
-                objectCountUI.UpdateObjectCount(finalCount, true);
+                objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), true);
             }
 
             if (tierIndex < loadRadii.Length - 1 && tierDelay > 0) yield return new WaitForSeconds(tierDelay);
@@ -883,9 +866,9 @@ public class DataManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 현재 활성화(visible) 상태인 오브젝트 수 반환
+    /// DataManager 자체 오브젝트 중 활성화(visible) 상태인 수 반환
     /// </summary>
-    private int GetVisibleObjectCount()
+    public int GetVisibleObjectCount()
     {
         int count = 0;
         foreach (var kvp in spawnedObjects)
@@ -894,6 +877,20 @@ public class DataManager : MonoBehaviour
                 count++;
         }
         return count;
+    }
+
+    /// <summary>
+    /// 모든 매니저의 visible 오브젝트 합산 카운트 (필터+거리 적용된 실제 표시 수)
+    /// </summary>
+    public int GetAllVisibleObjectCount()
+    {
+        int total = GetVisibleObjectCount();
+        if (TourAPIManager.Instance != null) total += TourAPIManager.Instance.GetVisibleObjectCount();
+        if (SubwayManager.Instance != null) total += SubwayManager.Instance.GetVisibleObjectCount();
+        if (TerminalManager.Instance != null) total += TerminalManager.Instance.GetVisibleObjectCount();
+        if (TrainStationManager.Instance != null) total += TrainStationManager.Instance.GetVisibleObjectCount();
+        if (BusStationManager.Instance != null) total += BusStationManager.Instance.GetVisibleObjectCount();
+        return total;
     }
 
     private bool ShouldShowObject(PlaceData place)
@@ -1592,8 +1589,7 @@ public class DataManager : MonoBehaviour
         // 기존 visible 오브젝트 수를 기반으로 UI 유지 (카운트 중복 방지)
         if (objectCountUI != null)
         {
-            int visibleCount = GetVisibleObjectCount();
-            objectCountUI.UpdateObjectCount(visibleCount, false);
+            objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
         }
 
         // ResetUI를 호출하지 않는 FetchDataProgressively 사용 (UI 표시 없이 데이터만 갱신)

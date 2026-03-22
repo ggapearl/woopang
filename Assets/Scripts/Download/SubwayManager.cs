@@ -377,6 +377,14 @@ public class SubwayManager : MonoBehaviour
     public Dictionary<string, GameObject> GetSpawnedObjects() => spawnedObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
 
+    public int GetVisibleObjectCount()
+    {
+        int count = 0;
+        foreach (var kvp in spawnedObjects)
+            if (kvp.Value != null && kvp.Value.activeSelf) count++;
+        return count;
+    }
+
     /// <summary>
     /// 백그라운드 복귀 시 모든 스폰된 오브젝트의 Geospatial 앵커를 재생성
     /// </summary>
