@@ -326,11 +326,20 @@ public class TrainStationManager : MonoBehaviour
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
+        // 카테고리 토글 OFF면 거리와 무관하게 전부 숨김
+        bool show = currentFilters == null || !currentFilters.ContainsKey("train") || currentFilters["train"];
+
         foreach (var kvp in spawnedObjects)
         {
             string id = kvp.Key;
             GameObject obj = kvp.Value;
             if (obj == null) continue;
+
+            if (!show)
+            {
+                if (obj.activeSelf) obj.SetActive(false);
+                continue;
+            }
 
             if (placeDataMap.ContainsKey(id))
             {

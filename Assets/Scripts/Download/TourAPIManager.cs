@@ -963,17 +963,26 @@ private bool isDataLoaded = false;
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
+        // 카테고리 토글 OFF면 거리와 무관하게 전부 숨김
+        bool showByFilter = ShouldShowByFilter();
+
         foreach (var kvp in spawnedObjects)
         {
             string id = kvp.Key;
             GameObject obj = kvp.Value;
             if (obj == null) continue;
 
+            if (!showByFilter)
+            {
+                if (obj.activeSelf) obj.SetActive(false);
+                continue;
+            }
+
             if (placeDataMap.ContainsKey(id))
             {
                 TourPlaceData place = placeDataMap[id];
                 float dist = CalculateDistance(currentLat, currentLon, place.mapy, place.mapx);
-                
+
                 bool inRange = dist <= maxDistance;
                 if (!inRange)
                 {
@@ -981,7 +990,6 @@ private bool isDataLoaded = false;
                 }
                 else
                 {
-                    // 범위 내로 들어오면 활성화 (필터 매니저와 충돌 주의)
                     if (!obj.activeSelf) obj.SetActive(true);
                 }
             }

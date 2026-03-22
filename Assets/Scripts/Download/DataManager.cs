@@ -1438,12 +1438,6 @@ public class DataManager : MonoBehaviour
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
-        // 현재 필터 상태 확인 (Object3D 토글 OFF 시 custom 오브젝트는 숨김 유지)
-        bool showObject3D = currentFilters == null || !currentFilters.ContainsKey("object3D") || currentFilters["object3D"];
-        bool showAlcohol = currentFilters == null || !currentFilters.ContainsKey("alcohol") || currentFilters["alcohol"];
-        bool petFriendlyOnly = currentFilters != null && currentFilters.ContainsKey("petFriendlyOnly") && currentFilters["petFriendlyOnly"];
-        bool noPetFriendly = currentFilters != null && currentFilters.ContainsKey("noPetFriendly") && currentFilters["noPetFriendly"];
-
         foreach (var kvp in spawnedObjects)
         {
             int id = kvp.Key;
@@ -1454,13 +1448,14 @@ public class DataManager : MonoBehaviour
             {
                 PlaceData place = placeDataMap[id];
 
-                // 필터에 의해 숨겨야 하는 오브젝트는 거리와 무관하게 숨김 유지
-                string origType = place.original_model_type ?? place.model_type;
-                if (!showObject3D && origType == "custom") { obj.SetActive(false); continue; }
-                if (petFriendlyOnly && !place.pet_friendly) { obj.SetActive(false); continue; }
-                if (noPetFriendly && place.pet_friendly) { obj.SetActive(false); continue; }
-                if (!showAlcohol && place.alcohol_available) { obj.SetActive(false); continue; }
+                // 카테고리/토글 필터 먼저 적용 (거리와 무관하게 숨김)
+                if (!ShouldShowObject(place))
+                {
+                    if (obj.activeSelf) obj.SetActive(false);
+                    continue;
+                }
 
+                // 거리 필터
                 float dist = CalculateDistance(currentLat, currentLon, place.latitude, place.longitude);
                 bool inRange = dist <= maxDistance;
                 if (!inRange)
