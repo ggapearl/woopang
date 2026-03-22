@@ -38,7 +38,7 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
     [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
     [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
-    [SerializeField] private Color categoryColorEtc = new Color(0.5f, 0.5f, 0.5f, 1f);
+    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f);
 
     [Header("Photo Dialogs")]
     [SerializeField] private PhotoSourceDialog photoSourceDialog;
@@ -64,7 +64,7 @@ public class CubeDataFixManager : MonoBehaviour
     private float elapsedTime = 0f;
 
     // 카테고리 순환 (none → shop → food → cafe → park → etc → none)
-    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "etc" };
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet" };
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
 
@@ -921,7 +921,7 @@ public class CubeDataFixManager : MonoBehaviour
             case "food": return categoryColorFood;
             case "cafe": return categoryColorCafe;
             case "park": return categoryColorPark;
-            case "etc": return categoryColorEtc;
+            case "toilet": return categoryColorToilet;
             default: return Color.white;
         }
     }

@@ -436,4 +436,351 @@ Overall stability and bug fixes
 
 ---
 
-*최종 업데이트: 2026-03-15*
+## 11. 마케팅 / 캠페인 핵심 로직
+
+### 11.1 "Look Up" 캠페인 컨셉
+```
+핵심 메시지: 다른 SNS는 고개를 숙이게 만들지만, WOOPANG은 고개를 들게 만든다.
+
+- AR 오브젝트가 하늘/높은 곳에도 배치됨 → 터치하려면 허리를 펴고 고개를 들어야 함
+- 자연스럽게 건강한 자세를 유도하는 "Healthy Social" 앱
+- 기존 SNS (Instagram, Facebook, TikTok, Google Maps)는 모두 고개를 숙이고 스크롤
+- WOOPANG은 현실 공간을 걸어다니며 AR로 세상을 탐험 → 자연스러운 운동 + 바깥 활동
+```
+
+### 11.2 차별화 포인트 (vs 기존 SNS)
+```
+WOOPANG만의 강점:
+- 실제 근처에 있는 사람만 팔로우 가능 → 진짜 만남, 가짜 없음
+- 가게에 들어가지 않아도 AR로 인테리어/정보 확인 가능
+- 화장실 분리 여부, 애견동반 가능 여부 등 실용 정보 제공
+- 검색 없이 주변을 둘러보면 정보가 보임 (AR 오버레이)
+- 모든 정보가 위치 기반 → 가짜 리뷰/봇 계정 원천 차단
+
+기존 SNS 단점 (비교 포인트):
+- Instagram/Facebook: 가짜 계정, 봇, 조작된 리뷰, 중독성 스크롤
+- Google Maps: 가짜/매수 리뷰, 실제와 다른 사진, 들어가봐야 아는 정보
+- TikTok: 무한 스크롤 중독, 비현실적 콘텐츠, 실제 연결 부재
+- 공통: 항상 고개 숙임, 실내에서만 사용, 실제 만남 없음
+```
+
+### 11.3 광고 영상 기본 구조 (타임라인)
+```
+[0-6초]   오프닝: 사람들이 고개 숙이고 핸드폰 보는 일상 (어둡고 우울한 톤)
+[6-8초]   전환: "But what if..." 텍스트 또는 나레이션
+[8-8.5초] Instagram 아이콘 + 고개 숙인 사람 (빠른 컷)
+[8.5-9초] Facebook 아이콘 + 고개 숙인 사람 (빠른 컷)
+[9-9.5초] TikTok/Google Maps 아이콘 + 고개 숙인 사람 (빠른 컷)
+[9.5-14초] WOOPANG 앱 사용 장면: 고개 들고 하늘 보며 AR 탐험 (밝고 활기찬 톤)
+[14-15초] WOOPANG 로고 + 슬로건 "Look Up. Live Real."
+```
+
+---
+
+## 12. 공공 장소 데이터 일괄 등록 가이드
+
+### 12.1 카테고리 분류
+```
+⚠️ 모든 공공데이터 색상: NULL (DB에서 color 컬럼 비워둠, 앱 기본색 white로 처리)
+⚠️ 공공데이터 카테고리는 publicData 토글로 필터링 (TourAPI와 동일)
+⚠️ 공공화장실(toilet)만 별도 카테고리 토글 (보라색)
+
+[publicData 토글 — 공공데이터]
+gov        - 시청, 군청, 구청, 경찰서, 소방서, 읍면동 행정복지센터
+edu        - 대학교, 도서관, 교육청, 교육지원청
+park       - 산 정상(고도 필수), 강/호수, 국립공원, 해수욕장, 공원
+utility    - 농협, 우체국
+landmark   - 역사 유적지, 다리, 지역 특화 명소, 온천
+medical    - 보건소, 종합병원, 보건지소
+culture    - 박물관, 미술관, 문화예술회관
+sport      - 종합운동장, 체육관
+religious  - 주요 사찰, 성당/성지, 향교/서원 (역사적 건축물)
+welfare    - 종합사회복지관, 노인복지관, 장애인복지관
+
+[별도 카테고리 토글]
+toilet     - 공공화장실 (보라색, CategoryFilterState.Toilet)
+
+[기존 카테고리 토글 — 사용자 데이터]
+shop       - 샵/매장 (파란색)
+food       - 음식점 (주황색)
+cafe       - 카페 (핑크색)
+
+[기존 별도 토글]
+hub(터미널) - 고속도로 휴게소는 terminal 토글에 포함 (이미 추가 완료)
+```
+
+### 12.2 이미지 파일 규칙 (필수)
+```
+⚠️ 중요: 폴더 내에는 아래 파일명만 허용. 다른 파일은 저장하지 않는다.
+
+허용 파일명:
+   main.jpg      ← 로고 또는 대표 이미지 (필수, 최소 1장)
+   sub_01.jpg     ← 보조 사진 1 (선택)
+   sub_02.jpg     ← 보조 사진 2 (선택)
+   sub_03.jpg     ← 보조 사진 3 (선택)
+   sub_04.jpg     ← 보조 사진 4 (선택, 최대)
+
+규칙:
+- 최소 1장(main.jpg), 최대 5장(main + sub 4장)
+- 원본 파일명(logo.png, visual_1.jpg 등)으로 저장 금지
+- 다운로드 후 반드시 main.jpg / sub_XX.jpg로 변환하여 저장
+- 불필요한 원본 파일은 삭제
+
+main.jpg 1:1 비율 규칙:
+- main.jpg는 반드시 가로세로 1:1 비율이어야 함
+- 최종 저장 크기: 444x444px (JPEG, quality=95)
+
+방법 1: 고해상도 로고/사진이 있는 경우
+  from PIL import Image
+  logo = Image.open('원본.png')
+  size = max(logo.size)
+  canvas = Image.new('RGB', (size, size), (255, 255, 255))
+  canvas.paste(logo, ((size-logo.width)//2, (size-logo.height)//2))
+  canvas = canvas.resize((444, 444), Image.LANCZOS)
+  canvas.save('main.jpg', 'JPEG', quality=95)
+
+방법 2: 로고가 저해상도(250px 미만)인 경우 → 상급기관 심볼마크 SVG 활용
+  ⚠️ 저해상도 로고를 확대하면 픽셀화 발생 → SVG 벡터 활용 필수
+  1. 나무위키/공식사이트에서 상급기관 SVG 로고 검색
+  2. SVG에서 심볼 path만 추출 (fill 색상으로 구분: #e6280f, #004799, #0f9e33 등)
+  3. 심볼만 포함하는 새 SVG 생성 (흰색 배경, 적절한 viewBox)
+  4. Chrome Headless로 800x800 PNG 렌더링:
+     chrome --headless --disable-gpu --screenshot=output.png --window-size=800,800 render.html
+  5. Pillow로 444x444 JPEG 변환:
+     img = Image.open('output.png').convert('RGB')
+     img = img.resize((444, 444), Image.LANCZOS)
+     img.save('main.jpg', 'JPEG', quality=95)
+  6. 임시 파일(svg, html, png) 정리
+
+방법 3: 로고를 구할 수 없는 경우
+  → sub 사진(건물/내부) 중 대표적인 것을 1:1 중앙 크롭하여 main.jpg로 사용
+  from PIL import Image
+  img = Image.open('sub_01.jpg')
+  w, h = img.size
+  size = min(w, h)
+  left, top = (w - size) // 2, (h - size) // 2
+  cropped = img.crop((left, top, left + size, top + size))
+  cropped = cropped.resize((444, 444), Image.LANCZOS)
+  cropped.save('main.jpg', 'JPEG', quality=95)
+```
+
+### 12.2.1 공공데이터 이미지 자동 생성 규칙 (필수)
+```
+⚠️ 중요: 공공데이터 INSERT 시 이미지를 반드시 함께 생성해야 함
+   main_photo, folder, sub_photos가 비어있으면 앱에서 오브젝트 생성 실패
+
+카테고리별 이미지 생성 전략:
+┌─────────────┬──────────────────────────────────────────────┐
+│ 카테고리    │ 이미지 생성 방법                             │
+├─────────────┼──────────────────────────────────────────────┤
+│ 주요 거점   │ 공식 사이트에서 로고/사진 수집               │
+│ (landmark,  │ → main.jpg (444x444) + sub_01~04.jpg         │
+│  culture,   │                                              │
+│  religious) │                                              │
+├─────────────┼──────────────────────────────────────────────┤
+│ 일반 공공   │ 카테고리별 심볼 아이콘 자동 생성 (Pillow)    │
+│ (gov, edu,  │ → main.jpg = sub_01.jpg (동일 파일)          │
+│  medical,   │ 실제 사진 구할 수 없는 경우 심볼로 대체      │
+│  sport,     │                                              │
+│  welfare,   │                                              │
+│  utility)   │                                              │
+├─────────────┼──────────────────────────────────────────────┤
+│ toilet      │ SVG 심볼 아이콘 직접 생성                    │
+│ (공공화장실)│ → _shared_toilet/ 공용 폴더 1개 사용         │
+│             │ → 모든 화장실이 동일 폴더/파일 공유          │
+│             │ → 각 폴더에 파일 복제 불필요                 │
+└─────────────┴──────────────────────────────────────────────┘
+
+sub 사진 규칙:
+- 주요 거점(박물관, 종합운동장, 랜드마크 등): 실제 사진 sub_01~04 수집
+- 일반 공공(행정복지센터, 보건소 등): main.jpg를 sub_01.jpg로 복제 (동일 파일)
+- 화장실: 절대 실사 sub 없음 → main.jpg = sub_01.jpg 동일 SVG 아이콘
+
+카테고리별 심볼 아이콘 색상:
+- gov:       (45, 85, 130)  — 파란 계열 (관공서)
+- medical:   (40, 110, 80)  — 녹색 계열 (보건)
+- edu:       (55, 90, 140)  — 파란 계열 (교육)
+- sport:     (50, 120, 90)  — 녹색 계열 (체육)
+- religious: (100, 75, 55)  — 갈색 계열 (전통)
+- landmark:  (70, 130, 180) — 하늘색 계열 (명소)
+- toilet:    (88, 55, 140)  — 보라색 계열 (화장실)
+
+생성 스크립트: server/generate_public_icons.py
+실행: python server/generate_public_icons.py
+```
+
+### 12.3 출처 추적 (username 필드)
+```
+⚠️ 중요: username 필드에 이미지 출처를 기록한다. 'admin' 사용 금지.
+
+출처 표기 규칙:
+- 공식 홈페이지: 도메인 대문자 (예: YESAN.GO.KR, CNE.GO.KR)
+- Wikimedia Commons: WIKIMEDIA
+- 공공누리: GONURI
+- 공공데이터포털: DATA.GO.KR
+- 직접 촬영: WOOPANG (자체 촬영)
+
+DB INSERT 시:
+   username = '{출처}'    ← 'admin' 대신 실제 이미지 출처 기록
+```
+
+### 12.4 DB INSERT 절차
+```
+1. 장소 정보 수집
+   - 이름, 주소, 좌표(위도/경도/고도), 카테고리
+   - 공식 홈페이지에서 로고/건물사진 다운로드
+
+2. 이미지 저장 구조 (필수)
+   uploads/
+   └── {YYYYMMDD}_{장소명}/
+       ├── main.jpg      ← 로고 또는 대표 이미지 (1:1 비율 필수)
+       ├── sub_01.jpg     ← 내부/외관 사진 1
+       └── sub_02.jpg     ← 내부/외관 사진 2
+   ※ 위 파일 외 다른 파일 저장 금지
+
+3. DB INSERT 양식
+   INSERT INTO locations (
+       username, name, latitude, longitude, altitude,
+       pet_friendly, separate_restroom, instagram_id,
+       color, category, status, folder, main_photo, sub_photos,
+       model_type, model_scale, created_at
+   ) VALUES (
+       '{출처}', '{이름}', {위도}, {경도}, {고도},
+       false, false, '',
+       '{색상}', '{카테고리}', 'approved',
+       'uploads/{폴더명}', 'uploads/{폴더명}/main.jpg',
+       '["uploads/{폴더명}/sub_01.jpg","uploads/{폴더명}/sub_02.jpg"]',
+       'cube', 1.0, CURRENT_TIMESTAMP
+   )
+
+4. 색상 규칙
+   공공데이터 전체: NULL (color 컬럼 비워둠, 앱에서 기본색 white 처리)
+   공공화장실(toilet): NULL (카테고리 토글에서만 보라색 표시)
+   ※ 기존 COLOR_MAP(blue/green/purple 등)은 공공데이터에 적용하지 않음
+   ※ color='white' 사용 금지 → NULL로 설정
+```
+
+### 12.5 이미지 소스 우선순위
+```
+1순위: 해당 기관 공식 홈페이지 (go.kr 등) - 공공기관 로고/배너
+2순위: 공공누리 1유형 (출처 표기만으로 상업적 이용 가능)
+3순위: 공공데이터포털 (data.go.kr)
+4순위: Wikimedia Commons CC0 / Public Domain
+⚠️ 주의: 저작권 미확인 이미지 사용 금지
+⚠️ 주의: 서비스 전 반드시 라이선스 재확인
+```
+
+### 12.6 삭제 시 FK 순서 (필수)
+```
+DELETE 순서 (반드시 이 순서대로):
+1. comment_likes  (WHERE comment_id IN (SELECT id FROM comments WHERE location_id = %s))
+2. comments       (WHERE location_id = %s)
+3. location_likes (WHERE location_id = %s)
+4. fix_requests   (WHERE target_id = %s)
+5. locations_fix  (WHERE target_id = %s)
+6. locations      (WHERE id = %s)
+```
+
+### 12.7 충청도 데이터 규모 예측
+```
+충청남도: 약 870건 (15 시군, ~155 읍면동)
+충청북도: 약 670건 (11 시군, ~130 읍면동)
+합계: 약 1,540건
+
+대부분 Gov(행정복지센터)가 차지 (~380건/전체의 25%)
+Utility(농협/우체국)가 두 번째 (~234건)
+```
+
+---
+
+## 13. 기획안 / 제안서 (HTML 페이퍼) 작업 가이드
+
+### 13.1 기본 원칙
+```
+- 모든 기획안/제안서는 단일 HTML 파일로 작성 (외부 의존성 최소화)
+- 최종 산출물은 PDF 배포 → 인쇄 시 레이아웃이 깨지지 않아야 함
+- 서버 라우팅도 함께 등록하여 웹에서도 열람 가능하게 (woopang.com/경로)
+- 파일 위치: documents/ 폴더
+```
+
+### 13.2 디자인 톤
+```
+- 다크 배경 (#0a0a0a ~ #141414) 기본
+- 빨간 액센트 (#e50914, Netflix 레드 계열)
+- 골드 포인트 (#d4a843, #f0d78c)
+- 프리미엄 + 화끈한 느낌 (고급스러우면서 자극적)
+- 폰트: Noto Sans KR (웹), 다국어 지원 필수
+```
+
+### 13.3 PDF 인쇄 대응 (필수)
+```
+⚠️ 중요: @media print 스타일 반드시 포함
+
+필수 규칙:
+- 다크 배경 유지: -webkit-print-color-adjust: exact; print-color-adjust: exact;
+- 애니메이션 비활성: animation: none !important;
+- 그림자/글로우 단순화 (인쇄 시 깨짐 방지)
+- page-break-inside: avoid; (섹션 중간 잘림 방지)
+- page-break-before: always; (주요 섹션마다 페이지 넘김)
+- 배경색/배경이미지 인쇄 허용 설정 포함
+
+@media print 기본 템플릿:
+@media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { background: #0a0a0a !important; }
+    .section { page-break-inside: avoid; page-break-before: always; }
+    .animated, .particle, .shimmer { animation: none !important; display: none !important; }
+    .no-print { display: none !important; }
+}
+```
+
+### 13.4 다국어 지원 (필수)
+```
+⚠️ 중요: 글로벌 OTT/플랫폼 대상 제안서는 반드시 다국어 전환 포함
+
+기본 언어 세트: 한국어(KO) / 영어(EN) / 일본어(JA) / 중국어(ZH) / 스페인어(ES)
+
+구현 방식:
+- 상단 중앙에 언어 선택 버튼 배치 (🇰🇷 🇺🇸 🇯🇵 🇨🇳 🇪🇸)
+- data-lang 속성으로 텍스트 관리
+- JavaScript로 즉시 전환 (페이지 리로드 X)
+- 기본값: 영어 (EN) — 글로벌 플랫폼 대상이므로
+
+예시:
+<span data-lang="ko">프로그램 개요</span>
+<span data-lang="en">Program Overview</span>
+<span data-lang="ja">番組概要</span>
+```
+
+### 13.5 시각 효과 (웹 전용, 인쇄 시 비활성)
+```
+웹 열람 시 적용할 효과:
+- 계절감 파티클 (꽃잎, 눈, 낙엽 등 — CSS/JS 애니메이션)
+- 배경 쉬머/펄스 효과 (은은한 빛 움직임)
+- 스크롤 연동 페이드인 (IntersectionObserver)
+- 호버 시 카드 글로우 효과
+
+모든 효과에 .animated 또는 .web-only 클래스 부여
+→ @media print에서 일괄 숨김 처리
+```
+
+### 13.6 파비콘
+```
+제안서별 SVG 파비콘 생성:
+- 파일명: {프로젝트명}_favicon.svg
+- 위치: documents/ 폴더 (HTML과 같은 경로)
+- HTML <head>에 <link rel="icon" type="image/svg+xml"> 연결
+- 디자인: 프로젝트 컨셉에 맞는 심볼 + 그라디언트 + 글로우
+```
+
+### 13.7 서버 라우팅 연동
+```
+documents/ 폴더의 HTML 제안서를 웹에서 접근 가능하게:
+- app_improved.py에 라우트 추가
+- 경로: /documents/{파일명} 또는 커스텀 경로 (예: /swapping)
+- static 파일 서빙으로 처리
+```
+
+---
+
+*최종 업데이트: 2026-03-21 (카테고리 Etc→Toilet 변경, 공공데이터 publicData 토글 연동, 색상 NULL 통일, 공공데이터 이미지 자동 생성 규칙 추가)*

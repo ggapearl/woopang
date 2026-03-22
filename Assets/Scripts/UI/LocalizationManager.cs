@@ -747,13 +747,13 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "公園",
                 ["es"] = "Parque"
             },
-            ["category_etc"] = new Dictionary<string, string>()
+            ["category_toilet"] = new Dictionary<string, string>()
             {
-                ["en"] = "Etc.",
-                ["ko"] = "기타",
-                ["zh"] = "其他",
-                ["ja"] = "その他",
-                ["es"] = "Otros"
+                ["en"] = "Restroom",
+                ["ko"] = "공공화장실",
+                ["zh"] = "公共厕所",
+                ["ja"] = "公衆トイレ",
+                ["es"] = "Baño Público"
             }
         };
     }

@@ -321,6 +321,10 @@ def hiro_index():
 def hiro_full():
     return send_from_directory(r'C:\woopang\guide\danggun', 'daangn_chat_full.html')
 
+@app.route('/swapping')
+def swapping_proposal():
+    return send_from_directory(r'C:\woopang\documents', 'swapping_game_proposal.html')
+
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your-secret-key-here")
 
 # Set 10GB limit for large file uploads (e.g., DongDong)
@@ -619,8 +623,8 @@ COLOR_MAP = {
     "purple": "ae53c5",
     "blue": "44619b",
     "dark": "6a493c",
-    "black": "202020"
-    # "pink": "d92898"  # DEPRECATED: PINk 기능 제거됨
+    "black": "202020",
+    "white": "ffffff"
 }
 # 기존 설정 섹션에 추가
 try:
@@ -2625,7 +2629,7 @@ def get_locations():
                     sub_photos = []
             
             raw_color = row[12]
-            mapped_color = COLOR_MAP.get(raw_color.lower() if raw_color else None, None)
+            mapped_color = COLOR_MAP.get(raw_color.lower() if raw_color else None, raw_color)
             
             model_type = row[13] if len(row) > 13 and row[13] else 'cube'
             model_url = row[14] if len(row) > 14 and row[14] else None

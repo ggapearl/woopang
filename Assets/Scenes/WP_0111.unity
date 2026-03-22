@@ -41032,7 +41032,7 @@ PrefabInstance:
     - target: {fileID: 8807830821746844384, guid: 5520113af458e9941a6ffcf9f1e6d7e6,
         type: 3}
       propertyPath: hapticIntensity
-      value: 0.2
+      value: 0.1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
