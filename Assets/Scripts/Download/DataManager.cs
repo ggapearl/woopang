@@ -889,7 +889,6 @@ public class DataManager : MonoBehaviour
         if (SubwayManager.Instance != null) total += SubwayManager.Instance.GetVisibleObjectCount();
         if (TerminalManager.Instance != null) total += TerminalManager.Instance.GetVisibleObjectCount();
         if (TrainStationManager.Instance != null) total += TrainStationManager.Instance.GetVisibleObjectCount();
-        if (BusStationManager.Instance != null) total += BusStationManager.Instance.GetVisibleObjectCount();
         return total;
     }
 

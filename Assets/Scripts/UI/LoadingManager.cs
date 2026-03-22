@@ -414,7 +414,6 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
         if (TerminalManager.Instance != null) TerminalManager.Instance.RecreateAllAnchors();
-        if (BusStationManager.Instance != null) BusStationManager.Instance.RecreateAllAnchors();
         if (TourAPIManager.Instance != null) TourAPIManager.Instance.RecreateAllAnchors();
     }
 
@@ -427,7 +426,6 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
         if (TerminalManager.Instance != null) TerminalManager.Instance.RecreateAllAnchors();
-        if (BusStationManager.Instance != null) BusStationManager.Instance.RecreateAllAnchors();
         if (TourAPIManager.Instance != null) TourAPIManager.Instance.RecreateAllAnchors();
     }
 
@@ -1275,7 +1273,6 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.SetAllObjectsVisible(false);
         if (TerminalManager.Instance != null) TerminalManager.Instance.SetAllObjectsVisible(false);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.SetAllObjectsVisible(false);
-        if (BusStationManager.Instance != null) BusStationManager.Instance.SetAllObjectsVisible(false);
     }
 
     private void SetAllManagerRenderersVisible(bool visible)
@@ -1285,7 +1282,6 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.SetAllRenderersVisible(visible);
         if (TerminalManager.Instance != null) TerminalManager.Instance.SetAllRenderersVisible(visible);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.SetAllRenderersVisible(visible);
-        if (BusStationManager.Instance != null) BusStationManager.Instance.SetAllRenderersVisible(visible);
     }
 
     private void RestoreAllManagerObjects()
@@ -1302,7 +1298,6 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (TerminalManager.Instance != null) TerminalManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
-        if (BusStationManager.Instance != null) BusStationManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
     }
 
     void HideARGuidance()

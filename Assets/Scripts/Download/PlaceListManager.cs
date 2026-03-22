@@ -11,7 +11,6 @@ public class PlaceListManager : MonoBehaviour
     public TourAPIManager tourAPIManager;
     
     [Header("New Public Data Managers")]
-    public BusStationManager busManager;
     public TerminalManager terminalManager;
     public TrainStationManager trainManager;
     public SubwayManager subwayManager;
@@ -348,7 +347,6 @@ public class PlaceListManager : MonoBehaviour
 #endif
         if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
-        if (busManager != null) busManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (terminalManager != null) terminalManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (trainManager != null) trainManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (subwayManager != null) subwayManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
