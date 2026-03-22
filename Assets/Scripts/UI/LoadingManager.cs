@@ -345,6 +345,9 @@ public class LoadingManager : MonoBehaviour
                 // 렌더러 복원 (RecreateAllAnchors에서 _forceHideRenderers 해제)
                 SetAllManagerRenderersVisible(true);
 
+                // 거리 필터 적용 (범위 밖 오브젝트 비활성화)
+                RestoreAllManagerObjects();
+
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
@@ -377,10 +380,7 @@ public class LoadingManager : MonoBehaviour
 
         // 타임아웃이어도 오브젝트 보이기 (무한 숨김 방지)
         SetAllManagerRenderersVisible(true);
-        if (dataManager != null)
-        {
-            dataManager.SetAllObjectsVisible(true);
-        }
+        RestoreAllManagerObjects();
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
         if (osi != null && !hasShownEnvironmentGuidance)
@@ -485,6 +485,7 @@ public class LoadingManager : MonoBehaviour
             else
             {
                 SetAllManagerRenderersVisible(true); // 3D 프리팹 복원
+                RestoreAllManagerObjects(); // 거리 필터 적용
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
                 {
