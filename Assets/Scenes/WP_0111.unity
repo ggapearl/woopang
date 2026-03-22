@@ -2602,7 +2602,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76433e99ec8b2cc40b2ed9988b479fb9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hapticIntensity: 0.1
+  hapticIntensity: 0.6
   touchSound: {fileID: 8300000, guid: e6f6ea5012778c141ad434d90e971e58, type: 3}
   doubleTapSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
   soundVolume: 0.2
@@ -4850,7 +4850,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76433e99ec8b2cc40b2ed9988b479fb9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hapticIntensity: 0.1
+  hapticIntensity: 0.6
   touchSound: {fileID: 8300000, guid: e6f6ea5012778c141ad434d90e971e58, type: 3}
   doubleTapSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
   soundVolume: 0.2
@@ -7871,7 +7871,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76433e99ec8b2cc40b2ed9988b479fb9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hapticIntensity: 0.1
+  hapticIntensity: 0.6
   touchSound: {fileID: 8300000, guid: e6f6ea5012778c141ad434d90e971e58, type: 3}
   doubleTapSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
   soundVolume: 0.2
@@ -8661,7 +8661,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76433e99ec8b2cc40b2ed9988b479fb9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hapticIntensity: 0.1
+  hapticIntensity: 0.6
   touchSound: {fileID: 8300000, guid: e6f6ea5012778c141ad434d90e971e58, type: 3}
   doubleTapSound: {fileID: 8300000, guid: 09e44d8fc422ff94fbac962611b973e7, type: 3}
   soundVolume: 0.2
@@ -33440,7 +33440,7 @@ PrefabInstance:
     - target: {fileID: 2458422746304798914, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: hapticIntensity
-      value: 0.1
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: 3885831977993364324, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
@@ -34636,7 +34636,7 @@ PrefabInstance:
     - target: {fileID: 877152680402378402, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
       propertyPath: hapticIntensity
-      value: 0.1
+      value: 0.6
       objectReference: {fileID: 0}
     - target: {fileID: 2225212074725628771, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
@@ -44897,7 +44897,7 @@ PrefabInstance:
     - target: {fileID: 7466876097659136025, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}
       propertyPath: hapticIntensity
-      value: 0.1
+      value: 0.6
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
