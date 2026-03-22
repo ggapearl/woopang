@@ -1429,6 +1429,18 @@ public class DoubleTap3D : MonoBehaviour
 
     public void ResetData()
     {
+        // 진행 중인 이미지 로딩 코루틴 중단 (이전 장소 사진이 새 오브젝트에 표시되는 것 방지)
+        StopAllCoroutines();
+
+        // fullscreen 열려있으면 닫기
+        if (isFullscreen)
+        {
+            isFullscreen = false;
+            isFadingOut = false;
+            if (fullscreenCanvasGroup != null)
+                fullscreenCanvasGroup.gameObject.SetActive(false);
+        }
+
         infoSprite1 = null;
         infoSprite2 = null;
         petFriendly = false;
@@ -1529,12 +1541,16 @@ public class DoubleTap3D : MonoBehaviour
 
     private IEnumerator FetchSubPhotosFromServer(int locationId)
     {
+        int myId = locationId; // 요청 시점의 장소 ID 기록
         string url = $"{ApiConfig.MAIN_SERVER}/locations/{locationId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             request.timeout = 10;
             yield return request.SendWebRequest();
+
+            // yield 후 장소가 바뀌었으면 무시 (풀 재활용)
+            if (this.id != myId) yield break;
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -1605,6 +1621,7 @@ public class DoubleTap3D : MonoBehaviour
 
     private IEnumerator LoadSubPhotosDirectly(List<string> photoUrls)
     {
+        int myId = this.id; // 로딩 시작 시점의 장소 ID 기록
         List<Sprite> newSprites = new List<Sprite>();
 
         foreach (string photoUrl in photoUrls)
@@ -1615,6 +1632,16 @@ public class DoubleTap3D : MonoBehaviour
             {
                 request.timeout = 15;
                 yield return request.SendWebRequest();
+
+                // 장소 ID가 바뀌었으면 풀 재활용으로 다른 장소가 된 것 → 즉시 종료
+                if (this.id != myId)
+                {
+                    foreach (var s in newSprites)
+                    {
+                        if (s != null) { if (s.texture != null) Destroy(s.texture); Destroy(s); }
+                    }
+                    yield break;
+                }
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
@@ -1630,6 +1657,9 @@ public class DoubleTap3D : MonoBehaviour
                 }
             }
         }
+
+        // 최종 ID 체크
+        if (this.id != myId) yield break;
 
         if (newSprites.Count > 0)
         {

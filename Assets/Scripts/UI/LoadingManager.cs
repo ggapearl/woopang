@@ -331,26 +331,23 @@ public class LoadingManager : MonoBehaviour
                 if (loadingPanel) loadingPanel.SetActive(false);
                 StopSpinner();
 
+                // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
+                RestoreAllManagerObjects();
+
                 if (needFullReload)
                 {
                     // 위치 대폭 변동 → 기존 오브젝트 전부 제거 + 새 위치 기준 데이터 재로드
                     if (dataManager != null)
                         dataManager.FullRefreshFromNewLocation();
 
-                    // 시설 매니저들도 앵커 재생성 (데이터는 이미 로컬에 있으므로 앵커만 갱신)
+                    // 시설 매니저들도 활성 오브젝트만 앵커 재생성
                     RecreateTransitManagerAnchors();
                 }
                 else
                 {
-                    // 근거리 복귀 → 기존 앵커만 재생성
+                    // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
                     RecreateAllManagerAnchors();
                 }
-
-                // 거리 + 카테고리 필터 적용 (범위 밖/토글 OFF 오브젝트 비활성화)
-                // 렌더러는 RecreateAnchor → TryCreateAnchor 성공 시 ShowAfterFrame에서 개별 복원
-                // SetAllManagerRenderersVisible(true) 제거 — pos=(0,0,0) 플래시 방지
-                Debug.Log("[DBG] RestoreAllManagerObjects() — 렌더러는 앵커 생성 후 개별 복원");
-                RestoreAllManagerObjects();
 
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
@@ -373,6 +370,9 @@ public class LoadingManager : MonoBehaviour
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
 
+        // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
+        RestoreAllManagerObjects();
+
         if (needFullReload)
         {
             if (dataManager != null)
@@ -381,11 +381,9 @@ public class LoadingManager : MonoBehaviour
         }
         else
         {
+            // 활성 오브젝트만 앵커 재생성
             RecreateAllManagerAnchors();
         }
-
-        // 타임아웃이어도 오브젝트 복원 — 렌더러는 앵커 재생성 후 개별 복원
-        RestoreAllManagerObjects();
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
         if (osi != null && !hasShownEnvironmentGuidance)
@@ -491,11 +489,11 @@ public class LoadingManager : MonoBehaviour
             }
             else
             {
-                Debug.Log("[DBG] CheckTrackingStateChange: Limited→Tracking — RecreateAllAnchors + RestoreAllManagerObjects()");
-                // 앵커 재생성 (기존 앵커 파괴 → 새 앵커 생성 → 성공 시 개별 ShowAfterFrame)
-                RecreateAllManagerAnchors();
-                // 거리 + 카테고리 필터 적용 (범위 밖/토글 OFF 오브젝트 비활성화)
+                Debug.Log("[DBG] CheckTrackingStateChange: Limited→Tracking — RestoreFilters + RecreateAnchors");
+                // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
                 RestoreAllManagerObjects();
+                // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
+                RecreateAllManagerAnchors();
                 // fallback 해제
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
@@ -1311,10 +1309,10 @@ public class LoadingManager : MonoBehaviour
         StopSpinner();
         if (loadingPanel) loadingPanel.SetActive(false);
 
-        // 앵커 재생성 → 성공 시 개별 ShowAfterFrame에서 렌더러 복원
-        RecreateAllManagerAnchors();
-        // 거리 + 카테고리 필터 적용
+        // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
         RestoreAllManagerObjects();
+        // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
+        RecreateAllManagerAnchors();
 
         // fallback 모드 해제
         OffScreenIndicator osi = GetCachedOSI();

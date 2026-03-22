@@ -895,13 +895,12 @@ private bool isDataLoaded = false;
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value == null) continue;
+            // 비활성 오브젝트(거리 필터로 숨김)는 앵커 재생성 스킵
+            if (!kvp.Value.activeSelf) continue;
+
             CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor != null)
             {
-                Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
-                foreach (var r in renderers) r.enabled = false;
-
-                kvp.Value.SetActive(true);
                 anchor.RecreateAnchor();
             }
         }

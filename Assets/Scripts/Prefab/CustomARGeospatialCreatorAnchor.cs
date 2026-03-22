@@ -132,8 +132,8 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             transform.localRotation = Quaternion.identity;
             _anchorCreated = true;
 
-            // 앵커 생성 성공 → 1프레임 대기 후 렌더러 표시
-            // (앵커 위치가 월드 좌표에 반영되기까지 1프레임 필요 — 즉시 표시 시 원점 플래시 발생)
+            // 앵커 생성 성공 → 10프레임 대기 후 렌더러 표시
+            // (앵커 위치가 월드 좌표에 안정적으로 반영되기까지 여유 필요 — 즉시 표시 시 원점 플래시 발생)
             StartCoroutine(ShowAfterFrame());
 
             return true;
@@ -166,11 +166,14 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     }
 
     /// <summary>
-    /// 앵커 위치가 월드 좌표에 반영된 후 렌더러 표시 (1프레임 대기)
+    /// 앵커 위치가 월드 좌표에 반영된 후 렌더러 표시 (10프레임 대기)
     /// </summary>
     private IEnumerator ShowAfterFrame()
     {
-        yield return null; // 1프레임 대기 — 앵커 Transform이 실제 GPS 위치로 업데이트됨
+        // 10프레임 대기 — 앵커 Transform이 GPS 좌표로 안정적으로 반영될 때까지 여유 확보
+        for (int i = 0; i < 10; i++)
+            yield return null;
+
         Debug.Log($"[DBG] ShowAfterFrame: {gameObject.name} anchorCreated={_anchorCreated} forceHide={_forceHideRenderers} pos={transform.position} active={gameObject.activeSelf}");
         if (_anchorCreated && !_forceHideRenderers)
         {
@@ -182,8 +185,8 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     /// <summary>
     /// 외부에서 렌더러 강제 숨김/해제 (fallback 모드, 백그라운드 복구 시 사용)
     /// forceHide=true: 렌더러 즉시 끄고, 앵커 생성 성공해도 켜지지 않음
-    /// forceHide=false: 앵커가 이미 생성된 경우 1프레임 대기 후 렌더러 복원
-    ///                  (앵커 Transform이 GPS 좌표로 반영되기까지 1프레임 필요 — 즉시 표시 시 원점 플래시 발생)
+    /// forceHide=false: 앵커가 이미 생성된 경우 10프레임 대기 후 렌더러 복원
+    ///                  (앵커 Transform이 GPS 좌표로 안정적으로 반영되기까지 여유 필요)
     /// </summary>
     public void SetForceHideRenderers(bool forceHide)
     {

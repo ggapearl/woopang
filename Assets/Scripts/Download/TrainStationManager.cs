@@ -443,13 +443,11 @@ public class TrainStationManager : MonoBehaviour
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value == null) continue;
+            if (!kvp.Value.activeSelf) continue;
+
             CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor != null)
             {
-                Renderer[] renderers = kvp.Value.GetComponentsInChildren<Renderer>(true);
-                foreach (var r in renderers) r.enabled = false;
-
-                kvp.Value.SetActive(true);
                 anchor.RecreateAnchor();
             }
         }

@@ -20,6 +20,10 @@ public class ImageDisplayController : MonoBehaviour
     private Texture2D baseMapTexture;
 
     private Coroutine currentSubPhotoCoroutine;
+    private Coroutine currentBaseMapCoroutine;
+
+    // 세대 번호: 풀 재활용 시 증가 → 이전 코루틴이 yield 후 자신의 세대와 다르면 즉시 종료
+    private int loadGeneration = 0;
 
     void Start()
     {
@@ -36,17 +40,25 @@ public class ImageDisplayController : MonoBehaviour
     {
         if (!enabled) return;
 
+        // 이전 BaseMap 코루틴 중단
+        if (currentBaseMapCoroutine != null)
+        {
+            StopCoroutine(currentBaseMapCoroutine);
+            currentBaseMapCoroutine = null;
+        }
+
         // 큐브 숨기기 (로딩 중)
         if (cubeRenderer != null)
         {
             cubeRenderer.enabled = false;
         }
 
-        StartCoroutine(LoadBaseMapTexture(imageUrl));
+        currentBaseMapCoroutine = StartCoroutine(LoadBaseMapTexture(imageUrl));
     }
 
     private IEnumerator LoadBaseMapTexture(string imageUrl)
     {
+        int myGeneration = loadGeneration;
         string fullUrl = imageUrl.StartsWith("http") ? imageUrl : ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
@@ -54,6 +66,9 @@ public class ImageDisplayController : MonoBehaviour
             request.timeout = 20;
 
             yield return request.SendWebRequest();
+
+            // 세대 체크: 풀 재활용으로 이미 다른 장소가 되었으면 무시
+            if (myGeneration != loadGeneration) yield break;
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -87,6 +102,7 @@ public class ImageDisplayController : MonoBehaviour
                 }
             }
         }
+        currentBaseMapCoroutine = null;
     }
 
     // 서브 사진 설정
@@ -126,6 +142,7 @@ public class ImageDisplayController : MonoBehaviour
 
     private IEnumerator LoadSubPhotos(List<string> subPhotoUrls)
     {
+        int myGeneration = loadGeneration;
         ClearSubPhotos();
 
         List<Sprite> spriteList = new List<Sprite>();
@@ -137,6 +154,17 @@ public class ImageDisplayController : MonoBehaviour
             using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
             {
                 yield return request.SendWebRequest();
+
+                // 세대 체크: 풀 재활용으로 이미 다른 장소가 되었으면 즉시 종료
+                if (myGeneration != loadGeneration)
+                {
+                    // 이미 다운로드한 스프라이트 정리
+                    foreach (var s in spriteList)
+                    {
+                        if (s != null) { if (s.texture != null) Destroy(s.texture); Destroy(s); }
+                    }
+                    yield break;
+                }
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
@@ -153,6 +181,9 @@ public class ImageDisplayController : MonoBehaviour
                 }
             }
         }
+
+        // 최종 세대 체크
+        if (myGeneration != loadGeneration) yield break;
 
         if (spriteList.Count > 0 && doubleTap3DScript != null)
         {
@@ -197,20 +228,24 @@ public class ImageDisplayController : MonoBehaviour
     }
 
     /// <summary>
-    /// 진행 중인 로딩 코루틴만 중단 (풀 재사용 전 호출 — 이전 장소 코루틴이 새 데이터를 덮어쓰는 것 방지)
-    /// 텍스처/스프라이트는 SetBaseMap/SetSubPhotos에서 새 데이터로 교체됨
+    /// 진행 중인 로딩 코루틴 전부 중단 + 세대 번호 증가 (풀 재사용 전 호출)
+    /// 세대 번호가 바뀌므로 yield 후 돌아온 이전 코루틴도 자동 무효화됨
     /// </summary>
     public void CancelPendingLoads()
     {
+        loadGeneration++; // 세대 증가 → yield 후 돌아온 이전 코루틴 무효화
         StopAllCoroutines();
         currentSubPhotoCoroutine = null;
+        currentBaseMapCoroutine = null;
     }
 
     // 모든 텍스처 해제
     public void ClearImages()
     {
+        loadGeneration++;
         StopAllCoroutines();
         currentSubPhotoCoroutine = null;
+        currentBaseMapCoroutine = null;
 
         if (cubeRenderer != null)
         {
