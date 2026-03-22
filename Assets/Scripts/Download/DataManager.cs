@@ -807,7 +807,7 @@ public class DataManager : MonoBehaviour
         }
         if (toRemove.Count > 0 || newlySpawned > 0)
         {
-            Debug.Log($"[DBG] SpawnNearby: removed={toRemove.Count}, newlySpawned={newlySpawned}, withinRange={withinRange}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
+            Debug.Log($"[DBG] SpawnNearby: removed={toRemove.Count}, newlySpawned={newlySpawned}, withinRange={toSpawn.Count}, placeDataMap={placeDataMap.Count}, spawnedObjects={spawnedObjects.Count}");
         }
     }
 
