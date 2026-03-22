@@ -63,6 +63,10 @@ public class TerminalManager : MonoBehaviour
 
     [SerializeField] private float updateDistanceThreshold = 50f;
 
+    [Header("Object Spawn Radius")]
+    [Tooltip("이 거리(m) 이내만 3D 오브젝트 생성. 밖은 좌표만 저장")]
+    [SerializeField] private float objectSpawnRadius = 400f;
+
     private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
@@ -169,6 +173,10 @@ public class TerminalManager : MonoBehaviour
                 CleanupStaleObjects(lat, lon);
                 lastPosition = currentPos;
             }
+
+            // objectSpawnRadius 기반 스폰/정리 (서버 재요청 없이)
+            SpawnNearbyUnspawnedObjects(lat, lon);
+
             yield return new WaitForSeconds(1f);
         }
     }
@@ -195,32 +203,87 @@ public class TerminalManager : MonoBehaviour
     }
 
     /// <summary>
-    /// MaxDisplayDistance × 1.5 범위 밖의 오브젝트를 풀로 반환하여 메모리 관리
+    /// 듀얼 레인지 정리: objectSpawnRadius*1.5 밖은 오브젝트만 풀 반환,
+    /// MaxDisplayDistance*1.5 밖은 데이터도 제거
     /// </summary>
     private void CleanupStaleObjects(float lat, float lon)
     {
+        float objCleanupRange = objectSpawnRadius * 1.5f;
         float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-        float cleanupRange = maxDist * 1.5f;
+        float dataCleanupRange = maxDist * 1.5f;
 
-        List<string> toRemove = new List<string>();
+        // 1) objectSpawnRadius*1.5 밖: 오브젝트만 풀 반환 (데이터 유지)
+        List<string> objToRemove = new List<string>();
         foreach (var kvp in spawnedObjects)
         {
             string id = kvp.Key;
             if (!placeDataMap.ContainsKey(id)) continue;
             var data = placeDataMap[id];
             float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
-            if (dist > cleanupRange)
+            if (dist > objCleanupRange)
             {
-                toRemove.Add(id);
+                objToRemove.Add(id);
             }
         }
+        foreach (string id in objToRemove)
+        {
+            ReturnToPool(spawnedObjects[id]);
+            spawnedObjects.Remove(id);
+        }
 
+        // 2) MaxDisplayDistance*1.5 밖: 데이터도 제거
+        List<string> dataToRemove = new List<string>();
+        foreach (var kvp in placeDataMap)
+        {
+            float dist = CalculateDistance(lat, lon, (float)kvp.Value.latitude, (float)kvp.Value.longitude);
+            if (dist > dataCleanupRange)
+            {
+                dataToRemove.Add(kvp.Key);
+            }
+        }
+        foreach (string id in dataToRemove)
+        {
+            if (spawnedObjects.ContainsKey(id))
+            {
+                ReturnToPool(spawnedObjects[id]);
+                spawnedObjects.Remove(id);
+            }
+            placeDataMap.Remove(id);
+        }
+    }
+
+    private void SpawnNearbyUnspawnedObjects(float lat, float lon)
+    {
+        float cleanupRange = objectSpawnRadius * 1.5f;
+        List<string> toRemove = new List<string>();
+        foreach (var kvp in spawnedObjects)
+        {
+            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
+            var data = placeDataMap[kvp.Key];
+            float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
+            if (dist > cleanupRange) toRemove.Add(kvp.Key);
+        }
         foreach (string id in toRemove)
         {
-            GameObject obj = spawnedObjects[id];
+            ReturnToPool(spawnedObjects[id]);
             spawnedObjects.Remove(id);
-            placeDataMap.Remove(id);
-            ReturnToPool(obj);
+        }
+        foreach (var kvp in placeDataMap)
+        {
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            var data = kvp.Value;
+            float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
+            if (dist <= objectSpawnRadius)
+            {
+                GameObject newObj = GetFromPool();
+                if (newObj != null)
+                {
+                    SetupObject(newObj, data);
+                    bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("terminal") || currentFilters["terminal"];
+                    newObj.SetActive(shouldShow);
+                    spawnedObjects[kvp.Key] = newObj;
+                }
+            }
         }
     }
 
@@ -249,31 +312,39 @@ public class TerminalManager : MonoBehaviour
         foreach (var data in facilities)
         {
             string uniqueId = data.name + "_" + data.latitude + "_" + data.longitude;
+
+            // 항상 데이터 저장 (오브젝트 생성 여부와 무관)
+            placeDataMap[uniqueId] = data;
+
+            float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
+
             if (!spawnedObjects.ContainsKey(uniqueId))
             {
-                GameObject newObj = GetFromPool();
-                if (newObj != null)
+                // objectSpawnRadius 이내만 오브젝트 생성
+                if (dist <= objectSpawnRadius)
                 {
-                    // 필터 + 거리 체크
-                    bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("terminal") || currentFilters["terminal"];
-                    if (shouldShow)
+                    GameObject newObj = GetFromPool();
+                    if (newObj != null)
                     {
-                        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-                        float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
-                        if (dist > maxDist) shouldShow = false;
+                        // 필터 + 거리 체크
+                        bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("terminal") || currentFilters["terminal"];
+                        if (shouldShow)
+                        {
+                            float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+                            if (dist > maxDist) shouldShow = false;
+                        }
+
+                        // Target 플래시 방지: 비활성 상태에서 Target 끄기
+                        Target targetComp = newObj.GetComponentInChildren<Target>(true);
+                        if (targetComp != null && !shouldShow) targetComp.enabled = false;
+
+                        SetupObject(newObj, data);
+                        newObj.SetActive(shouldShow);
+
+                        if (!shouldShow && targetComp != null) targetComp.enabled = true;
+
+                        spawnedObjects[uniqueId] = newObj;
                     }
-
-                    // Target 플래시 방지: 비활성 상태에서 Target 끄기
-                    Target targetComp = newObj.GetComponentInChildren<Target>(true);
-                    if (targetComp != null && !shouldShow) targetComp.enabled = false;
-
-                    SetupObject(newObj, data);
-                    newObj.SetActive(shouldShow);
-
-                    if (!shouldShow && targetComp != null) targetComp.enabled = true;
-
-                    spawnedObjects[uniqueId] = newObj;
-                    placeDataMap[uniqueId] = data;
                 }
             }
             else
@@ -283,7 +354,6 @@ public class TerminalManager : MonoBehaviour
                 if (shouldShow)
                 {
                     float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-                    float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
                     if (dist > maxDist) shouldShow = false;
                 }
                 if (shouldShow && !existing.activeSelf) existing.SetActive(true);

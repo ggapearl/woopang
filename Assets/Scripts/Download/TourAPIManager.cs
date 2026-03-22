@@ -70,7 +70,12 @@ public class TourAPIManager : MonoBehaviour
     public float objectSpawnDelay = 0.1f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
-private bool isDataLoaded = false;
+
+    [Header("Object Spawn Radius")]
+    [Tooltip("이 거리(m) 이내만 3D 오브젝트 생성 + 이미지 다운로드. 밖은 좌표만 저장")]
+    [SerializeField] private float objectSpawnRadius = 400f;
+
+    private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
 
@@ -248,8 +253,11 @@ private bool isDataLoaded = false;
                 LogDebug($"[TourAPIManager] {distanceMoved:F2}m 이동 감지, 데이터 갱신 시작");
                 yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
-                LogDebug("[TourAPIManager] 마지막 위치 갱신 완료");
             }
+
+            // objectSpawnRadius 기반 스폰/정리 (서버 재요청 없이)
+            SpawnNearbyUnspawnedObjects(lat, lon);
+
             yield return waitOneSecond;
         }
     }
@@ -336,21 +344,24 @@ private bool isDataLoaded = false;
             }
         }
 
+        // 상세 정보 요청은 objectSpawnRadius 이내 장소만 수행 (API 호출 절약)
         const int CHUNK_SIZE = 10;
         for (int i = 0; i < places.Count; i += CHUNK_SIZE)
         {
             int endIndex = Mathf.Min(i + CHUNK_SIZE, places.Count);
-            LogDebug($"[TourAPIManager] 청크 처리 시작: {i + 1}~{endIndex}/{places.Count}");
             for (int j = i; j < endIndex; j++)
             {
                 var place = places[j];
                 float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
                 place.color = "FBC15D";
-                LogDebug($"[TourAPIManager] 장소 세부 정보 요청 시작: ID={place.contentid}, Title={place.title}");
-                yield return StartCoroutine(FetchDetailImages(place));
-                yield return StartCoroutine(FetchDetailCommon(place));
-                yield return StartCoroutine(FetchDetailPetTour(place));
-                LogDebug($"[TourAPIManager] 정렬된 장소: ID={place.contentid}, Title={place.title}, Tel={place.tel}, Address={place.addr1}, Images={place.imageUrls.Count}, Distance={distance}m");
+
+                // objectSpawnRadius 이내만 상세 API 요청 (이미지, 공통정보, 펫투어)
+                if (distance <= objectSpawnRadius)
+                {
+                    yield return StartCoroutine(FetchDetailImages(place));
+                    yield return StartCoroutine(FetchDetailCommon(place));
+                    yield return StartCoroutine(FetchDetailPetTour(place));
+                }
             }
             yield return null;
         }
@@ -358,71 +369,108 @@ private bool isDataLoaded = false;
         foreach (TourPlaceData place in places)
         {
             float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
-            LogDebug($"[TourAPIManager] 처리 중 - ID: {place.contentid}, Distance: {distance}m");
-            if (!spawnedObjects.ContainsKey(place.contentid))
+
+            // 모든 데이터는 placeDataMap에 저장 (좌표/기본정보)
+            placeDataMap[place.contentid] = place;
+
+            if (spawnedObjects.ContainsKey(place.contentid))
             {
-                LogDebug($"[TourAPIManager] 새 오브젝트 생성 시도: ID={place.contentid}");
+                // 기존 오브젝트 업데이트
+                GameObject existingObj = spawnedObjects[place.contentid];
+                if (distance <= objectSpawnRadius)
+                {
+                    ImageDisplayController display = existingObj.GetComponentInChildren<ImageDisplayController>();
+                    if (display != null && !string.IsNullOrEmpty(place.firstimage))
+                    {
+                        display.SetBaseMap(place.firstimage);
+                    }
+                    UpdateExistingObject(place, existingObj);
+                }
+            }
+            else if (distance <= objectSpawnRadius)
+            {
+                // objectSpawnRadius 이내만 3D 오브젝트 생성 + 이미지 다운로드
                 GameObject newObj = CreateObjectFromData(place);
                 if (newObj != null)
                 {
-                    LogDebug($"[TourAPIManager] 오브젝트 생성 성공: ID={place.contentid}, 이름={newObj.name}");
                     ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
                     if (display != null && !string.IsNullOrEmpty(place.firstimage))
                     {
-                        LogDebug($"[TourAPIManager] ImageDisplayController 이미지 설정: {place.firstimage}");
                         display.SetBaseMap(place.firstimage);
-                    }
-                    else
-                    {
-                        LogDebug($"[TourAPIManager] ImageDisplayController 없음 또는 firstimage 비어 있음: ID={place.contentid}");
                     }
                     if (objectSpawnDelay > 0) yield return new WaitForSeconds(objectSpawnDelay);
                 }
-                else
-                {
-                    LogDebug($"[TourAPIManager] 오브젝트 생성 실패: ID={place.contentid}");
-                }
-            }
-            else
-            {
-                GameObject existingObj = spawnedObjects[place.contentid];
-                LogDebug($"[TourAPIManager] 기존 오브젝트 업데이트 시도: ID={place.contentid}, 이름={existingObj.name}");
-                ImageDisplayController display = existingObj.GetComponentInChildren<ImageDisplayController>();
-                if (display != null && !string.IsNullOrEmpty(place.firstimage))
-                {
-                    LogDebug($"[TourAPIManager] 기존 오브젝트 이미지 업데이트: {place.firstimage}");
-                    display.SetBaseMap(place.firstimage);
-                }
-                UpdateExistingObject(place, existingObj);
-                placeDataMap[place.contentid] = place;
-                LogDebug($"[TourAPIManager] 기존 오브젝트 업데이트 완료 - ID: {place.contentid}");
             }
         }
 
-        // Remove outdated objects without LINQ
-        List<string> toRemove = new List<string>(spawnedObjects.Count);
-        HashSet<string> receivedIds = new HashSet<string>(places.Count);
-        foreach (var place in places)
+        // objectSpawnRadius × 1.5 밖 오브젝트 풀로 반환 (placeDataMap 유지)
+        float cleanupRange = objectSpawnRadius * 1.5f;
+        List<string> toRemove = new List<string>();
+        foreach (var kvp in spawnedObjects)
         {
-            receivedIds.Add(place.contentid);
-        }
-        foreach (var id in spawnedObjects.Keys)
-        {
-            if (!receivedIds.Contains(id))
+            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
+            TourPlaceData p = placeDataMap[kvp.Key];
+            float dist = CalculateDistance(latitude, longitude, p.mapy, p.mapx);
+            if (dist > cleanupRange)
             {
-                toRemove.Add(id);
+                toRemove.Add(kvp.Key);
             }
         }
-        LogDebug($"[TourAPIManager] 제거할 오브젝트 수: {toRemove.Count}");
         foreach (var id in toRemove)
         {
             GameObject obj = spawnedObjects[id];
             spawnedObjects.Remove(id);
-            placeDataMap.Remove(id);
             ReturnToPool(obj);
-            LogDebug($"[TourAPIManager] 제거된 오브젝트 - ID: {id}, 이름={obj.name}, 현재 spawnedObjects 크기: {spawnedObjects.Count}");
         }
         LogDebug($"[TourAPIManager] ProcessTourData 완료, placeDataMap 크기: {placeDataMap.Count}, spawnedObjects 크기: {spawnedObjects.Count}");
+    }
+
+    /// <summary>
+    /// placeDataMap에 좌표만 저장된 장소 중, objectSpawnRadius 이내에 들어온 것을 3D 생성
+    /// 동시에 objectSpawnRadius × 1.5 밖으로 벗어난 오브젝트를 풀로 반환
+    /// </summary>
+    private void SpawnNearbyUnspawnedObjects(float lat, float lon)
+    {
+        float cleanupRange = objectSpawnRadius * 1.5f;
+
+        // 1) 범위 밖 오브젝트 풀로 반환
+        List<string> toRemove = new List<string>();
+        foreach (var kvp in spawnedObjects)
+        {
+            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
+            TourPlaceData p = placeDataMap[kvp.Key];
+            float dist = CalculateDistance(lat, lon, p.mapy, p.mapx);
+            if (dist > cleanupRange)
+            {
+                toRemove.Add(kvp.Key);
+            }
+        }
+        foreach (string id in toRemove)
+        {
+            GameObject obj = spawnedObjects[id];
+            spawnedObjects.Remove(id);
+            ReturnToPool(obj);
+        }
+
+        // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
+        foreach (var kvp in placeDataMap)
+        {
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            TourPlaceData p = kvp.Value;
+            float dist = CalculateDistance(lat, lon, p.mapy, p.mapx);
+            if (dist <= objectSpawnRadius)
+            {
+                GameObject newObj = CreateObjectFromData(p);
+                if (newObj != null)
+                {
+                    ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
+                    if (display != null && !string.IsNullOrEmpty(p.firstimage))
+                    {
+                        display.SetBaseMap(p.firstimage);
+                    }
+                }
+            }
+        }
     }
 
     private GameObject CreateObjectFromData(TourPlaceData place)

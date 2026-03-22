@@ -93,6 +93,10 @@ public class DataManager : MonoBehaviour
 
     [SerializeField] private float updateDistanceThreshold = 50f;
 
+    [Header("Object Spawn Radius")]
+    [Tooltip("이 거리(m) 이내만 3D 오브젝트 생성 + 이미지 다운로드. 밖은 좌표만 저장")]
+    [SerializeField] private float objectSpawnRadius = 400f;
+
     [Header("빠른 이동 모드 설정")]
     [Tooltip("이 시간(초) 이내에 refreshThresholdCount회 새로고침 발생 시 빠른 이동 모드 진입")]
     [SerializeField] private float rapidRefreshWindow = 60f;
@@ -510,8 +514,24 @@ public class DataManager : MonoBehaviour
             objectCountUI.ResetUI();
         }
 
+        // 현재 GPS 위치 가져오기
+#if UNITY_EDITOR
+        float curLat = VirtualLocation.Instance.Latitude;
+        float curLon = VirtualLocation.Instance.Longitude;
+#else
+        float curLat = Input.location.status == LocationServiceStatus.Running ? Input.location.lastData.latitude : 0f;
+        float curLon = Input.location.status == LocationServiceStatus.Running ? Input.location.lastData.longitude : 0f;
+#endif
+
         foreach (PlaceData place in places)
         {
+            // 모든 데이터는 placeDataMap에 저장
+            placeDataMap[place.id] = place;
+
+            // objectSpawnRadius 이내만 3D 오브젝트 생성
+            float dist = CalculateDistance(curLat, curLon, place.latitude, place.longitude);
+            if (dist > objectSpawnRadius || spawnedObjects.ContainsKey(place.id)) continue;
+
             try
             {
                 CreateObjectFromData(place);
@@ -577,6 +597,11 @@ public class DataManager : MonoBehaviour
                 yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
             }
+
+            // 50m 미만 이동이라도 objectSpawnRadius 기반 스폰/정리 수행
+            // (서버 재요청 없이 placeDataMap 기준으로 근거리 오브젝트 관리)
+            SpawnNearbyUnspawnedObjects(lat, lon);
+
             yield return new WaitForSeconds(5f); // 5초마다 체크 (1초는 너무 빈번)
         }
     }
@@ -596,7 +621,10 @@ public class DataManager : MonoBehaviour
         isFetching = true;
         int myGeneration = fetchGeneration; // 이 코루틴의 세대 번호 기록
 
-        HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+        // placeDataMap.Keys 기준으로 중복 서버 요청 방지 (좌표만 저장된 것도 포함)
+        HashSet<int> loadedIds = new HashSet<int>(placeDataMap.Keys);
+        foreach (int id in spawnedObjects.Keys)
+            loadedIds.Add(id);
 
         // 빠른 이동 모드에서는 ObjectCountUI 표시 억제 (오브젝트 자체는 정상 스폰)
         bool suppressCountUI = isRapidMovementMode;
@@ -627,21 +655,29 @@ public class DataManager : MonoBehaviour
                 yield break;
             }
 
-            // 새로운 오브젝트를 하나씩 스폰
+            // 새로운 데이터 저장 + objectSpawnRadius 이내만 3D 오브젝트 생성
             foreach (PlaceData place in newPlaces)
             {
-                CreateObjectFromData(place);
+                // 모든 데이터는 placeDataMap에 좌표/메타데이터 저장 (3D 생성 여부와 무관)
+                placeDataMap[place.id] = place;
                 loadedIds.Add(place.id);
 
-                // UI 업데이트 — 빠른 이동 모드에서는 억제
-                if (!suppressCountUI && objectCountUI != null)
+                // objectSpawnRadius 이내만 3D 오브젝트 생성 + 이미지 다운로드
+                float distToPlace = CalculateDistance(lat, lon, place.latitude, place.longitude);
+                if (distToPlace <= objectSpawnRadius && !spawnedObjects.ContainsKey(place.id))
                 {
-                    objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
-                }
+                    CreateObjectFromData(place);
 
-                if (objectSpawnDelay > 0)
-                {
-                    yield return new WaitForSeconds(objectSpawnDelay);
+                    // UI 업데이트 — 빠른 이동 모드에서는 억제
+                    if (!suppressCountUI && objectCountUI != null)
+                    {
+                        objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
+                    }
+
+                    if (objectSpawnDelay > 0)
+                    {
+                        yield return new WaitForSeconds(objectSpawnDelay);
+                    }
                 }
             }
 
@@ -662,35 +698,93 @@ public class DataManager : MonoBehaviour
     }
 
     /// <summary>
-    /// MaxDisplayDistance × 1.5 범위 밖의 오브젝트를 풀로 반환하여 메모리 관리
-    /// 여유 범위(×1.5)를 두어 이동 시 미리 로드된 오브젝트가 자연스럽게 보이도록 함
+    /// objectSpawnRadius × 1.5 밖의 3D 오브젝트를 풀로 반환 (placeDataMap은 유지)
+    /// MaxDisplayDistance × 1.5 밖의 데이터는 placeDataMap에서도 제거
     /// </summary>
     private void CleanupStaleObjects(float lat, float lon)
     {
+        float objectCleanupRange = objectSpawnRadius * 1.5f;
         float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-        float cleanupRange = maxDist * 1.5f;
+        float dataCleanupRange = maxDist * 1.5f;
 
-        List<int> toRemove = new List<int>();
+        // 1) 3D 오브젝트 정리: objectSpawnRadius × 1.5 밖 → 풀 반환 (placeDataMap 유지)
+        List<int> objectsToRemove = new List<int>();
         foreach (var kvp in spawnedObjects)
         {
             int id = kvp.Key;
             if (!placeDataMap.ContainsKey(id)) continue;
             PlaceData place = placeDataMap[id];
             float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
-            if (dist > cleanupRange)
+            if (dist > objectCleanupRange)
             {
-                toRemove.Add(id);
+                objectsToRemove.Add(id);
             }
         }
 
+        foreach (int id in objectsToRemove)
+        {
+            GameObject obj = spawnedObjects[id];
+            string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
+            spawnedObjects.Remove(id);
+            currentlyLoadingGLB.Remove(id);
+            ReturnToPool(obj, modelType);
+        }
+
+        // 2) 데이터 정리: MaxDisplayDistance × 1.5 밖 → placeDataMap에서도 제거
+        List<int> dataToRemove = new List<int>();
+        foreach (var kvp in placeDataMap)
+        {
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue; // 오브젝트 있으면 유지
+            float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
+            if (dist > dataCleanupRange)
+            {
+                dataToRemove.Add(kvp.Key);
+            }
+        }
+
+        foreach (int id in dataToRemove)
+        {
+            placeDataMap.Remove(id);
+        }
+    }
+
+    /// <summary>
+    /// placeDataMap에 좌표만 저장되어 있고, objectSpawnRadius 이내에 들어온 장소를 3D 오브젝트로 생성
+    /// 동시에 objectSpawnRadius × 1.5 밖으로 벗어난 오브젝트를 풀로 반환
+    /// </summary>
+    private void SpawnNearbyUnspawnedObjects(float lat, float lon)
+    {
+        float cleanupRange = objectSpawnRadius * 1.5f;
+
+        // 1) 범위 밖 오브젝트 풀로 반환
+        List<int> toRemove = new List<int>();
+        foreach (var kvp in spawnedObjects)
+        {
+            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
+            float dist = CalculateDistance(lat, lon, placeDataMap[kvp.Key].latitude, placeDataMap[kvp.Key].longitude);
+            if (dist > cleanupRange)
+            {
+                toRemove.Add(kvp.Key);
+            }
+        }
         foreach (int id in toRemove)
         {
             GameObject obj = spawnedObjects[id];
             string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
             spawnedObjects.Remove(id);
-            placeDataMap.Remove(id);
             currentlyLoadingGLB.Remove(id);
             ReturnToPool(obj, modelType);
+        }
+
+        // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
+        foreach (var kvp in placeDataMap)
+        {
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
+            if (dist <= objectSpawnRadius)
+            {
+                CreateObjectFromData(kvp.Value);
+            }
         }
     }
 
@@ -819,45 +913,52 @@ public class DataManager : MonoBehaviour
             .CompareTo(CalculateDistance(currentLocation.latitude, currentLocation.longitude, b.latitude, b.longitude)));
         places = places.Take(poolSize * 2).ToList();
 
+        float curLat = currentLocation.latitude;
+        float curLon = currentLocation.longitude;
+
         // 청크 단위로 처리
-        const int CHUNK_SIZE = 5; // 청크 크기 줄임
+        const int CHUNK_SIZE = 5;
         for (int i = 0; i < places.Count; i += CHUNK_SIZE)
         {
             var chunk = places.Skip(i).Take(CHUNK_SIZE).ToList();
             foreach (PlaceData place in chunk)
             {
-                // 서버 데이터 상세 로그 제거 (lat, lon, distance, type 등)
-                // Debug.Log($"[DataManager] 데이터 처리: ID={place.id}, 이름={place.name}"); // 디버깅용
-                
-                if (!spawnedObjects.ContainsKey(place.id))
+                // 모든 데이터는 placeDataMap에 저장
+                placeDataMap[place.id] = place;
+
+                float dist = CalculateDistance(curLat, curLon, place.latitude, place.longitude);
+
+                if (spawnedObjects.ContainsKey(place.id))
                 {
-                    CreateObjectFromData(place);
-                    if (spawnedObjects.ContainsKey(place.id))
-                    {
-                        placeDataMap[place.id] = place;
-                        // Debug.Log($"[DataManager] 맵에 추가됨: ID={place.id}");
-                    }
-                }
-                else
-                {
+                    // 이미 오브젝트 있으면 데이터 업데이트
                     UpdateExistingObject(place, spawnedObjects[place.id]);
-                    placeDataMap[place.id] = place;
-                    // Debug.Log($"[DataManager] 맵 업데이트됨: ID={place.id}");
+                }
+                else if (dist <= objectSpawnRadius)
+                {
+                    // objectSpawnRadius 이내만 3D 오브젝트 생성
+                    CreateObjectFromData(place);
                 }
             }
             yield return null; // 프레임 양보
         }
 
-        // 범위 밖 오브젝트 제거
-        HashSet<int> receivedIds = new HashSet<int>(places.Select(p => p.id));
-        List<int> toRemove = spawnedObjects.Keys.Where(id => !receivedIds.Contains(id)).ToList();
+        // objectSpawnRadius × 1.5 밖 오브젝트 풀로 반환 (placeDataMap 유지)
+        float cleanupRange = objectSpawnRadius * 1.5f;
+        List<int> toRemove = new List<int>();
+        foreach (var kvp in spawnedObjects)
+        {
+            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
+            float dist = CalculateDistance(curLat, curLon, placeDataMap[kvp.Key].latitude, placeDataMap[kvp.Key].longitude);
+            if (dist > cleanupRange)
+            {
+                toRemove.Add(kvp.Key);
+            }
+        }
         foreach (var id in toRemove)
         {
             GameObject obj = spawnedObjects[id];
-            PlaceData placeData = placeDataMap.ContainsKey(id) ? placeDataMap[id] : null;
-            string modelType = placeData?.model_type ?? "cube";
+            string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
             spawnedObjects.Remove(id);
-            placeDataMap.Remove(id);
             currentlyLoadingGLB.Remove(id);
             ReturnToPool(obj, modelType);
         }

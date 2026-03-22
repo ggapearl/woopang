@@ -18,6 +18,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     // true인 동안 앵커 생성 성공해도 렌더러를 켜지 않음
     private bool _forceHideRenderers = false;
 
+    // ShowAfterFrame 세대 번호 — 앵커 재생성 시 이전 코루틴 무효화
+    private int _showGeneration = 0;
+
     // 좌표 설정 및 앵커 생성 메서드
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
@@ -37,6 +40,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         transform.position = new Vector3(x, (float)altitude, z);
 #else
+        // 이전 ShowAfterFrame 코루틴 무효화
+        _showGeneration++;
+
         // 앵커 생성 전까지 렌더러 숨김 (Vector3.zero에 보이는 문제 방지)
         SetVisible(false);
 
@@ -71,6 +77,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         return;
 #else
         Debug.Log($"[DBG] RecreateAnchor: {gameObject.name} pos={transform.position}");
+
+        // 이전 ShowAfterFrame 코루틴 무효화
+        _showGeneration++;
 
         // 재시도 코루틴 중단
         if (retryCoroutine != null)
@@ -170,9 +179,15 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     /// </summary>
     private IEnumerator ShowAfterFrame()
     {
+        int myGeneration = _showGeneration;
+
         // 10프레임 대기 — 앵커 Transform이 GPS 좌표로 안정적으로 반영될 때까지 여유 확보
         for (int i = 0; i < 10; i++)
+        {
             yield return null;
+            // 대기 중 앵커가 재생성되었으면 이 코루틴은 무효
+            if (myGeneration != _showGeneration) yield break;
+        }
 
         Debug.Log($"[DBG] ShowAfterFrame: {gameObject.name} anchorCreated={_anchorCreated} forceHide={_forceHideRenderers} pos={transform.position} active={gameObject.activeSelf}");
         if (_anchorCreated && !_forceHideRenderers)
