@@ -453,6 +453,8 @@ public class TourAPIManager : MonoBehaviour
         }
 
         // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
+        //    ※ CreateObjectFromData가 placeDataMap을 수정하므로, 먼저 리스트로 수집
+        List<TourPlaceData> toSpawn = new List<TourPlaceData>();
         foreach (var kvp in placeDataMap)
         {
             if (spawnedObjects.ContainsKey(kvp.Key)) continue;
@@ -460,14 +462,18 @@ public class TourAPIManager : MonoBehaviour
             float dist = CalculateDistance(lat, lon, p.mapy, p.mapx);
             if (dist <= objectSpawnRadius)
             {
-                GameObject newObj = CreateObjectFromData(p);
-                if (newObj != null)
+                toSpawn.Add(p);
+            }
+        }
+        foreach (var p in toSpawn)
+        {
+            GameObject newObj = CreateObjectFromData(p);
+            if (newObj != null)
+            {
+                ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
+                if (display != null && !string.IsNullOrEmpty(p.firstimage))
                 {
-                    ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
-                    if (display != null && !string.IsNullOrEmpty(p.firstimage))
-                    {
-                        display.SetBaseMap(p.firstimage);
-                    }
+                    display.SetBaseMap(p.firstimage);
                 }
             }
         }

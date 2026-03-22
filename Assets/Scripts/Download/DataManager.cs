@@ -787,18 +787,23 @@ public class DataManager : MonoBehaviour
         }
 
         // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
+        //    ※ CreateObjectFromData가 placeDataMap을 수정하므로, 순회 중 직접 호출 불가
+        //       먼저 리스트로 수집 후 생성
         int newlySpawned = 0;
-        int withinRange = 0;
+        List<PlaceData> toSpawn = new List<PlaceData>();
         foreach (var kvp in placeDataMap)
         {
             if (spawnedObjects.ContainsKey(kvp.Key)) continue;
             float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
             if (dist <= objectSpawnRadius)
             {
-                withinRange++;
-                CreateObjectFromData(kvp.Value);
-                if (spawnedObjects.ContainsKey(kvp.Key)) newlySpawned++;
+                toSpawn.Add(kvp.Value);
             }
+        }
+        foreach (var place in toSpawn)
+        {
+            CreateObjectFromData(place);
+            if (spawnedObjects.ContainsKey(place.id)) newlySpawned++;
         }
         if (toRemove.Count > 0 || newlySpawned > 0)
         {
