@@ -13,12 +13,9 @@ public class UIFeedbackManager : MonoBehaviour
     [DllImport("__Internal")]
     private static extern void _WoopangTriggerSelectionHaptic();
 #endif
+
     public static UIFeedbackManager Instance { get; private set; }
 
-    /// <summary>
-    /// 씬에 UIFeedbackManager가 없으면 자동 생성
-    /// RuntimeInitializeOnLoadMethod로 게임 시작 시 자동 호출
-    /// </summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoInitialize()
     {
@@ -34,13 +31,17 @@ public class UIFeedbackManager : MonoBehaviour
     [SerializeField] private float soundVolume = 1.0f;
 
     [Header("Haptic Settings")]
+    [Tooltip("진동 강도 (0~1). iOS: Light/Medium/Heavy, Android: TICK/CLICK/HEAVY_CLICK")]
     [SerializeField, Range(0f, 1f)] private float hapticIntensity = 0.5f;
     [SerializeField] private bool enableHaptics = true;
 
-    private AudioSource audioSource;
-    private AudioClip cachedButtonSound; // 레퍼런스 손실 방지용 캐시
+    [Header("Haptic Mode")]
+    [Tooltip("true: 무음(매너모드)일 때만 진동 / false: 항상 진동")]
+    [SerializeField] private bool hapticOnlyWhenSilent = true;
 
-    // ��ƽ ���� ������
+    private AudioSource audioSource;
+    private AudioClip cachedButtonSound;
+
     public enum HapticIntensity
     {
         Light = 0,
@@ -55,12 +56,10 @@ public class UIFeedbackManager : MonoBehaviour
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            // AudioSource 초기화
             audioSource = gameObject.AddComponent<AudioSource>();
             audioSource.playOnAwake = false;
             audioSource.volume = soundVolume;
 
-            // AudioClip을 Resources에서 로드하여 씬과 독립적으로 관리
             if (defaultButtonSound != null)
             {
                 cachedButtonSound = defaultButtonSound;
@@ -76,45 +75,41 @@ public class UIFeedbackManager : MonoBehaviour
         }
     }
 
-    // �⺻ ��ġ �ǵ�� (���� ���� ���)
+    // ============================================================
+    // 공개 API
+    // ============================================================
+
     public void HandleTouchFeedback(AudioClip customSound = null)
     {
         if (IsValidUIEvent())
         {
             AudioClip fallbackSound = defaultButtonSound ?? cachedButtonSound;
-            TriggerHaptic(hapticIntensity);
-            PlaySound(customSound ?? fallbackSound);
+            ExecuteFeedback(hapticIntensity, customSound ?? fallbackSound);
         }
     }
 
-    // UITouchForwarder에서 직접 호출 (IsValidUIEvent 체크 생략)
     public void HandleTouchFeedbackDirect(AudioClip customSound = null)
     {
         AudioClip clipToPlay = customSound ?? cachedButtonSound;
 
-        // 만약 cachedButtonSound도 손실되었다면 재로드
         if (clipToPlay == null || !clipToPlay)
         {
             cachedButtonSound = Resources.Load<AudioClip>("Audio/Touch");
             clipToPlay = cachedButtonSound;
         }
 
-        TriggerHaptic(hapticIntensity);
-        PlaySound(clipToPlay);
+        ExecuteFeedback(hapticIntensity, clipToPlay);
     }
 
-    // Ư�� ������ ��ġ �ǵ��
     public void HandleTouchFeedback(float intensity, AudioClip customSound = null)
     {
         if (IsValidUIEvent())
         {
             AudioClip fallbackSound = defaultButtonSound ?? cachedButtonSound;
-            TriggerHaptic(intensity);
-            PlaySound(customSound ?? fallbackSound);
+            ExecuteFeedback(intensity, customSound ?? fallbackSound);
         }
     }
 
-    // �������� �̿��� ��ġ �ǵ��
     public void HandleTouchFeedback(HapticIntensity intensityType, AudioClip customSound = null)
     {
         float intensity = GetIntensityFromType(intensityType);
@@ -126,20 +121,45 @@ public class UIFeedbackManager : MonoBehaviour
         if (!string.IsNullOrEmpty(newText))
         {
             AudioClip fallbackSound = defaultButtonSound ?? cachedButtonSound;
-            TriggerHaptic(hapticIntensity * 0.7f);
-            PlaySound(fallbackSound);
+            ExecuteFeedback(hapticIntensity * 0.7f, fallbackSound);
         }
     }
 
-    public void SetHapticIntensity(float intensity)
+    public void TriggerLightHaptic() => TriggerHaptic(0.25f);
+    public void TriggerMediumHaptic() => TriggerHaptic(0.5f);
+    public void TriggerHeavyHaptic() => TriggerHaptic(1.0f);
+
+    public void SetHapticIntensity(float intensity) => hapticIntensity = Mathf.Clamp01(intensity);
+    public void SetHapticsEnabled(bool enabled) => enableHaptics = enabled;
+    public float GetCurrentHapticIntensity() => hapticIntensity;
+    public bool IsHapticsEnabled() => enableHaptics;
+
+    // ============================================================
+    // 핵심 로직: 소리가 나면 진동 생략, 무음이면 진동 발생
+    // ============================================================
+
+    private void ExecuteFeedback(float intensity, AudioClip clip)
     {
-        hapticIntensity = Mathf.Clamp01(intensity);
+        bool soundPlayed = PlaySound(clip);
+
+        if (hapticOnlyWhenSilent)
+        {
+            // 소리가 실제로 재생되지 않았을 때만 진동
+            if (!soundPlayed)
+            {
+                TriggerHaptic(intensity);
+            }
+        }
+        else
+        {
+            // 항상 진동
+            TriggerHaptic(intensity);
+        }
     }
 
-    public void SetHapticsEnabled(bool enabled)
-    {
-        enableHaptics = enabled;
-    }
+    // ============================================================
+    // 진동 (iOS: Taptic Engine, Android: VibrationEffect)
+    // ============================================================
 
     private void TriggerHaptic(float intensity = 0.5f)
     {
@@ -150,14 +170,14 @@ public class UIFeedbackManager : MonoBehaviour
 #if UNITY_IOS
         try
         {
-            // iOS Taptic Engine — intensity에 따라 Light/Medium/Heavy 선택
+            // iOS Taptic Engine — intensity에 따라 Light(0)/Medium(1)/Heavy(2)
             int style;
             if (intensity <= 0.33f)
                 style = 0; // Light
             else if (intensity <= 0.66f)
-                style = 0; // Light (기본 터치 — Medium은 iOS에서 꽤 강함)
+                style = 1; // Medium
             else
-                style = 1; // Medium (Heavy 대신 Medium — iOS 햅틱이 Android보다 강함)
+                style = 2; // Heavy
 
 #if !UNITY_EDITOR
             _WoopangTriggerHaptic(style);
@@ -176,48 +196,33 @@ public class UIFeedbackManager : MonoBehaviour
 
             if (vibrator != null)
             {
-                // Android API 26+ (VibrationEffect)
                 if (AndroidVersion() >= 26)
                 {
                     AndroidJavaClass vibrationEffectClass = new AndroidJavaClass("android.os.VibrationEffect");
-                    
-                    // ������ ���� ���� ���� ����
+
                     int effectType;
                     if (intensity <= 0.33f)
-                    {
                         effectType = vibrationEffectClass.GetStatic<int>("EFFECT_TICK");
-                    }
                     else if (intensity <= 0.66f)
-                    {
                         effectType = vibrationEffectClass.GetStatic<int>("EFFECT_CLICK");
-                    }
                     else
-                    {
                         effectType = vibrationEffectClass.GetStatic<int>("EFFECT_HEAVY_CLICK");
-                    }
 
                     AndroidJavaObject vibrationEffect = vibrationEffectClass.CallStatic<AndroidJavaObject>("createPredefined", effectType);
                     vibrator.Call("vibrate", vibrationEffect);
                 }
                 else
                 {
-                    // Android API 25 ���� - �ð� ��� ����
                     long duration = (long)(50 + (intensity * 100)); // 50-150ms
                     vibrator.Call("vibrate", duration);
                 }
             }
-            else
-            {
-                Handheld.Vibrate();
-            }
         }
         catch (System.Exception e)
         {
-            Debug.LogWarning($"Android Vibrate Failed: {e.Message}, Falling back to Handheld.Vibrate");
-            Handheld.Vibrate();
+            Debug.LogWarning($"Android Vibrate Failed: {e.Message}");
         }
 #else
-        // 기타 플랫폼 기본 진동 (에디터 제외 - 불필요한 로그 방지)
 #if !UNITY_EDITOR
         if (intensity > 0.1f)
         {
@@ -227,32 +232,42 @@ public class UIFeedbackManager : MonoBehaviour
 #endif
     }
 
-    private void PlaySound(AudioClip clip)
+    // ============================================================
+    // 사운드 재생 — 실제 재생 여부 반환
+    // ============================================================
+
+    private bool PlaySound(AudioClip clip)
     {
-        if (clip != null && audioSource != null)
-        {
-            audioSource.PlayOneShot(clip, soundVolume);
-        }
+        if (clip == null || audioSource == null) return false;
+
+        // 시스템 볼륨이 0이면 소리가 나지 않는 것으로 판단
+        // AudioListener.volume은 앱 전체 볼륨, soundVolume은 이 매니저 볼륨
+        if (AudioListener.volume <= 0.01f || soundVolume <= 0.01f) return false;
+
+        // 실제 기기 볼륨 체크 (Android/iOS)
+        // Unity의 AudioSource는 시스템 미디어 볼륨이 0이어도 Play를 호출하므로
+        // 명시적으로 체크할 수 없음 — AudioListener.volume으로 근사
+        audioSource.PlayOneShot(clip, soundVolume);
+        return true;
     }
+
+    // ============================================================
+    // 유틸리티
+    // ============================================================
 
     private bool IsValidUIEvent()
     {
-        bool isValid = EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null;
-        return isValid;
+        return EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null;
     }
 
     private float GetIntensityFromType(HapticIntensity intensityType)
     {
         switch (intensityType)
         {
-            case HapticIntensity.Light:
-                return 0.25f;
-            case HapticIntensity.Medium:
-                return 0.5f;
-            case HapticIntensity.Heavy:
-                return 1.0f;
-            default:
-                return 0.5f;
+            case HapticIntensity.Light: return 0.25f;
+            case HapticIntensity.Medium: return 0.5f;
+            case HapticIntensity.Heavy: return 1.0f;
+            default: return 0.5f;
         }
     }
 
@@ -271,32 +286,5 @@ public class UIFeedbackManager : MonoBehaviour
 #else
         return 0;
 #endif
-    }
-
-    // ���� �޼���� - �ܺο��� ȣ�� ����
-    public void TriggerLightHaptic()
-    {
-        TriggerHaptic(0.25f);
-    }
-
-    public void TriggerMediumHaptic()
-    {
-        TriggerHaptic(0.5f);
-    }
-
-    public void TriggerHeavyHaptic()
-    {
-        TriggerHaptic(1.0f);
-    }
-
-    // ���� ���� Ȯ�ο�
-    public float GetCurrentHapticIntensity()
-    {
-        return hapticIntensity;
-    }
-
-    public bool IsHapticsEnabled()
-    {
-        return enableHaptics;
     }
 }
