@@ -249,22 +249,57 @@ public class UIFeedbackManager : MonoBehaviour
     }
 
     // ============================================================
-    // 사운드 재생 — 실제 재생 여부 반환
+    // 사운드 재생 — 실제로 소리가 들리는지 여부 반환
     // ============================================================
 
     private bool PlaySound(AudioClip clip)
     {
         if (clip == null || audioSource == null) return false;
 
-        // 시스템 볼륨이 0이면 소리가 나지 않는 것으로 판단
-        // AudioListener.volume은 앱 전체 볼륨, soundVolume은 이 매니저 볼륨
+        // Unity 앱 내부 볼륨 체크
         if (AudioListener.volume <= 0.01f || soundVolume <= 0.01f) return false;
 
-        // 실제 기기 볼륨 체크 (Android/iOS)
-        // Unity의 AudioSource는 시스템 미디어 볼륨이 0이어도 Play를 호출하므로
-        // 명시적으로 체크할 수 없음 — AudioListener.volume으로 근사
+        // 시스템 볼륨 체크 — 기기 볼륨이 0이면 소리가 안 들림
+        if (IsSystemVolumeMuted())
+        {
+            // 소리는 재생하되 (볼륨 올리면 들릴 수 있도록) "안 들린다"고 반환
+            audioSource.PlayOneShot(clip, soundVolume);
+            return false;
+        }
+
         audioSource.PlayOneShot(clip, soundVolume);
         return true;
+    }
+
+    /// <summary>
+    /// 시스템 미디어 볼륨이 0인지 체크 (Android: AudioManager, iOS: outputVolume)
+    /// </summary>
+    private bool IsSystemVolumeMuted()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+            AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+            AndroidJavaObject audioManager = activity.Call<AndroidJavaObject>("getSystemService", "audio");
+            if (audioManager != null)
+            {
+                // STREAM_MUSIC = 3
+                int musicVolume = audioManager.Call<int>("getStreamVolume", 3);
+                // 벨소리 모드: 0=Normal, 1=Silent, 2=Vibrate
+                int ringerMode = audioManager.Call<int>("getRingerMode");
+                // 미디어 볼륨 0이거나 진동/무음 모드이면 소리가 안 들림
+                return musicVolume == 0 || ringerMode != 0;
+            }
+        }
+        catch (System.Exception) { }
+#elif UNITY_IOS && !UNITY_EDITOR
+        // iOS: 시스템 볼륨은 정확히 체크할 수 없으나
+        // 사일런트 스위치 ON 시 Unity 사운드도 무음이 되므로
+        // 보수적으로 항상 소리가 난다고 판단 (Taptic Engine은 사일런트에서도 동작)
+        return false;
+#endif
+        return false;
     }
 
     // ============================================================
