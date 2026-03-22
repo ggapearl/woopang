@@ -182,7 +182,8 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     /// <summary>
     /// 외부에서 렌더러 강제 숨김/해제 (fallback 모드, 백그라운드 복구 시 사용)
     /// forceHide=true: 렌더러 즉시 끄고, 앵커 생성 성공해도 켜지지 않음
-    /// forceHide=false: 앵커가 이미 생성된 경우 렌더러 즉시 복원
+    /// forceHide=false: 앵커가 이미 생성된 경우 1프레임 대기 후 렌더러 복원
+    ///                  (앵커 Transform이 GPS 좌표로 반영되기까지 1프레임 필요 — 즉시 표시 시 원점 플래시 발생)
     /// </summary>
     public void SetForceHideRenderers(bool forceHide)
     {
@@ -193,8 +194,8 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         }
         else if (_anchorCreated)
         {
-            Debug.Log($"[DBG] SetForceHideRenderers(false): {gameObject.name} → VISIBLE at pos={transform.position} (anchorCreated={_anchorCreated})");
-            SetVisible(true);
+            // 즉시 표시하지 않고 1프레임 대기 후 표시 (원점 플래시 방지)
+            StartCoroutine(ShowAfterFrame());
         }
     }
 
