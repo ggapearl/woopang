@@ -705,11 +705,10 @@ Utility(농협/우체국)가 두 번째 (~234건)
 
 ### 13.2 디자인 톤
 ```
-- 다크 배경 (#0a0a0a ~ #141414) 기본
-- 빨간 액센트 (#e50914, Netflix 레드 계열)
-- 골드 포인트 (#d4a843, #f0d78c)
-- 프리미엄 + 화끈한 느낌 (고급스러우면서 자극적)
+- 기획안별 컨셉에 맞는 색감 사용 (다크/라이트 자유)
 - 폰트: Noto Sans KR (웹), 다국어 지원 필수
+- 분량: 스와핑게임 기획안 수준 (10+ 섹션, 에피소드 20개, 수익/제작/글로벌 전략 포함)
+- 부족한 내용은 인터넷 검색으로 트렌드/데이터 보충하여 채울 것
 ```
 
 ### 13.3 PDF 인쇄 대응 (필수)
@@ -764,23 +763,57 @@ Utility(농협/우체국)가 두 번째 (~234건)
 → @media print에서 일괄 숨김 처리
 ```
 
-### 13.6 파비콘
+### 13.6 파비콘 (자동 생성 필수)
 ```
-제안서별 SVG 파비콘 생성:
-- 파일명: {프로젝트명}_favicon.svg
-- 위치: documents/ 폴더 (HTML과 같은 경로)
-- HTML <head>에 <link rel="icon" type="image/svg+xml"> 연결
-- 디자인: 프로젝트 컨셉에 맞는 심볼 + 그라디언트 + 글로우
+⚠️ 기획안 작업 시 반드시 아래 3곳 모두 처리:
+
+1. SVG 파비콘 파일 생성
+   - 파일명: {프로젝트명}_favicon.svg
+   - 위치: documents/ 폴더 (HTML과 같은 경로)
+   - 디자인: 기획안 분위기/색감에 맞는 심볼 + 그라디언트 + 글로우
+
+2. HTML <head>에 연결
+   <link rel="icon" type="image/svg+xml" href="{프로젝트명}_favicon.svg">
+
+3. 서버 라우트 등록 (app_improved.py)
+   @app.route('/plan/{프로젝트명}_favicon.svg')
+   @app.route('/{프로젝트명}_favicon.svg')  ← 레거시 경로 호환
+   def {프로젝트명}_favicon():
+       return send_from_directory(r'C:\woopang\documents', '{프로젝트명}_favicon.svg', mimetype='image/svg+xml')
+
+4. 북마크 페이지 파비콘 매핑 (bookmark.html)
+   bookmark.html의 getFaviconUrl() 함수 내 planFavicons 객체에 추가:
+   '{프로젝트명}': '/plan/{프로젝트명}_favicon.svg'
 ```
 
 ### 13.7 서버 라우팅 연동
 ```
-documents/ 폴더의 HTML 제안서를 웹에서 접근 가능하게:
-- app_improved.py에 라우트 추가
-- 경로: /documents/{파일명} 또는 커스텀 경로 (예: /swapping)
-- static 파일 서빙으로 처리
+기획안 접속 경로: /plan/{프로젝트명}
+
+기획안 추가 시 수정할 파일 3개:
+1. app_improved.py — HTML 라우트 + 파비콘 라우트 추가
+2. bookmark.html — planFavicons 객체에 파비콘 경로 추가
+3. documents/ — HTML 파일 + SVG 파비콘 파일 생성
+
+현재 등록된 기획안:
+- /plan/swapping → documents/swapping_game_proposal.html + swapping_favicon.svg
+- /plan/dogting  → documents/dogting_proposal.html + dogting_favicon.svg
+```
+
+### 13.8 하단 푸터 (고정 정보)
+```
+⚠️ 모든 기획안에 동일하게 적용:
+
+© 2019. 쾌엔터테인먼트. All rights reserved. CONFIDENTIAL.
+기획자 : 김영훈 | 연락처 : +82 10.4444.4395
+
+다국어 번역 시에도 기획자명/연락처 포함:
+- EN: Producer : Young-Hoon Kim | Contact : +82 10.4444.4395
+- JA: 企画者 : キム・ヨンフン | 連絡先 : +82 10.4444.4395
+- ZH: 策划人 : 金英勋 | 联系方式 : +82 10.4444.4395
+- ES: Productor : Young-Hoon Kim | Contacto : +82 10.4444.4395
 ```
 
 ---
 
-*최종 업데이트: 2026-03-21 (카테고리 Etc→Toilet 변경, 공공데이터 publicData 토글 연동, 색상 NULL 통일, 공공데이터 이미지 자동 생성 규칙 추가)*
+*최종 업데이트: 2026-03-22 (기획안 파비콘 3곳 처리 체크리스트 추가, 서버+북마크+로컬 경로 정리)*
