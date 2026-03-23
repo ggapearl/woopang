@@ -646,7 +646,7 @@ DB INSERT 시:
        model_type, model_scale, created_at
    ) VALUES (
        '{출처}', '{이름}', {위도}, {경도}, {고도},
-       false, false, '',
+       {pet_friendly}, {separate_restroom}, '',
        '{색상}', '{카테고리}', 'approved',
        'uploads/{폴더명}', 'uploads/{폴더명}/main.jpg',
        '["uploads/{폴더명}/sub_01.jpg","uploads/{폴더명}/sub_02.jpg"]',
@@ -654,10 +654,35 @@ DB INSERT 시:
    )
 
 4. 색상 규칙
-   공공데이터 전체: NULL (color 컬럼 비워둠, 앱에서 기본색 white 처리)
-   공공화장실(toilet): NULL (카테고리 토글에서만 보라색 표시)
-   ※ 기존 COLOR_MAP(blue/green/purple 등)은 공공데이터에 적용하지 않음
+   gov (시청/군청/구청/경찰서/소방서/행정복지센터): color='blue'
+   toilet (공공화장실): color='purple'
+   나머지 (edu/park/medical/culture/sport/utility/landmark/religious/welfare): color=NULL
    ※ color='white' 사용 금지 → NULL로 설정
+
+5. 토글 규칙 (pet_friendly / separate_restroom)
+   ⚠️ 중요: DB INSERT 시 반드시 적용
+
+   separate_restroom (화장실분리):
+   - 한국 공공기관 전체: true (gov/medical/edu/culture/sport/welfare/utility)
+   - 일본 공공기관: false (기본값, 화장실 분리가 보편적이지 않음)
+   - 공원/산/해수욕장: false (별도 공중화장실 등록으로 대체)
+
+   pet_friendly (애견동반):
+   - 반려견 놀이터/전용 공간: true
+   - 한강공원/근린공원/체육공원/산책로/숲길: true (일반적으로 가능)
+   - 공원이지만 반려견 금지인 곳: false (예: 신주쿠교엔)
+   - 국립공원/자연휴양림: true (외부 산책로 가능)
+   - 공공기관(gov/medical/edu 등): false
+
+6. 지하철/기차역/터미널 등록 규칙
+   ⚠️ 중요: 지하철역, 기차역, 터미널은 locations 테이블이 아닌 public_facilities 테이블에 관리
+   - public_facilities 테이블 (type: subway/train/terminal/airport)
+   - SubwayManager, TrainStationManager, TerminalManager가 이 테이블에서 데이터 조회
+   - 해당 데이터는 각 매니저의 카테고리 토글로 표시/숨김 제어
+   - DB 추가 작업 시 해당 지역 역/터미널 데이터도 public_facilities에 업데이트
+   - 기존 main_photo는 수정 금지 (sub 사진 추가는 가능)
+   - 위치 이동/폐역/신설역 등 최신 정보를 검색하여 반영
+   - 역 근처 공중화장실은 locations 테이블에 toilet 카테고리로 등록 가능
 ```
 
 ### 12.5 이미지 소스 우선순위
