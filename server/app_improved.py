@@ -34,6 +34,7 @@ from admin.admin_server import admin_bp
 from majang.majang_server import majang_bp
 from email_service.email_server import email_bp
 from firewave.firewave_server import firewave_bp
+from ai_office.routes import ai_office_bp
 
 # Rate Limiting (보안)
 try:
@@ -282,6 +283,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(majang_bp, url_prefix='/majang')
 app.register_blueprint(email_bp)
 app.register_blueprint(firewave_bp, url_prefix='/firewave')
+app.register_blueprint(ai_office_bp, url_prefix='/AI')
 
 # ==================== Monitor Proxy ====================
 @app.route('/monitor', defaults={'path': ''})
@@ -321,9 +323,158 @@ def hiro_index():
 def hiro_full():
     return send_from_directory(r'C:\woopang\guide\danggun', 'daangn_chat_full.html')
 
-@app.route('/swapping')
+# ============================================================
+# 기획안 인덱스 페이지
+# ============================================================
+@app.route('/plan')
+@app.route('/plan/')
+def plan_index():
+    return send_from_directory(r'C:\woopang\documents', 'plan_index.html')
+
+@app.route('/plan/plan_index_favicon.svg')
+@app.route('/plan_index_favicon.svg')
+def plan_index_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'plan_index_favicon.svg', mimetype='image/svg+xml')
+
+@app.route('/plan/swapping')
 def swapping_proposal():
     return send_from_directory(r'C:\woopang\documents', 'swapping_game_proposal.html')
+
+@app.route('/plan/swapping_favicon.svg')
+@app.route('/swapping_favicon.svg')
+def swapping_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'swapping_favicon.svg', mimetype='image/svg+xml')
+
+@app.route('/plan/dogting')
+def dogting_proposal():
+    return send_from_directory(r'C:\woopang\documents', 'dogting_proposal.html')
+
+@app.route('/plan/dogting_favicon.svg')
+@app.route('/dogting_favicon.svg')
+def dogting_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'dogting_favicon.svg', mimetype='image/svg+xml')
+
+# ============================================================
+# 삼촌교육대 기획안
+# ============================================================
+@app.route('/plan/3chon')
+def samchon_proposal():
+    return send_from_directory(r'C:\woopang\documents', '3chon_proposal.html')
+
+@app.route('/plan/3chon_favicon.svg')
+@app.route('/3chon_favicon.svg')
+def samchon_favicon():
+    return send_from_directory(r'C:\woopang\documents', '3chon_favicon.svg', mimetype='image/svg+xml')
+
+# ============================================================
+# 염따대왕 기획안
+# ============================================================
+@app.route('/plan/yumddajudge')
+def yumdda_proposal():
+    return send_from_directory(r'C:\woopang\documents', 'yumdda_proposal.html')
+
+@app.route('/plan/yumddajudge_favicon.svg')
+@app.route('/yumddajudge_favicon.svg')
+def yumdda_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'yumdda_favicon.svg', mimetype='image/svg+xml')
+
+@app.route('/plan/works')
+def works_proposal():
+    return send_from_directory(r'C:\woopang\documents', 'works_proposal.html')
+
+@app.route('/plan/works_favicon.svg')
+@app.route('/works_favicon.svg')
+def works_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'works_favicon.svg', mimetype='image/svg+xml')
+
+# ============================================================
+# @atheart 유튜브 제안서
+# ============================================================
+@app.route('/plan/atheart')
+def atheart_proposal():
+    return send_from_directory(r'C:\woopang\documents', 'atheart_proposal.html')
+
+@app.route('/plan/atheart_favicon.svg')
+@app.route('/atheart_favicon.svg')
+def atheart_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'atheart_favicon.svg', mimetype='image/svg+xml')
+
+@app.route('/plan/younghero')
+def younghero_proposal():
+    return send_from_directory(r'C:\woopang\documents', 'younghero_proposal.html')
+
+@app.route('/plan/younghero_favicon.svg')
+@app.route('/younghero_favicon.svg')
+def younghero_favicon():
+    return send_from_directory(r'C:\woopang\documents', 'younghero_favicon.svg', mimetype='image/svg+xml')
+
+# ============================================================
+# AI 워커가 생성한 기획안 자동 서빙 (/plan/<name>)
+# documents 폴더에 {name}_proposal.html 또는 {name}.html이 있으면 서빙
+# ============================================================
+@app.route('/plan/<plan_name>')
+def ai_plan_page(plan_name):
+    if '..' in plan_name or '/' in plan_name or '\\' in plan_name:
+        return "404 - Page not found", 404
+    docs = r'C:\woopang\documents'
+    # 1) {name}_proposal.html (기존 네이밍 패턴)
+    f1 = f"{plan_name}_proposal.html"
+    if os.path.exists(os.path.join(docs, f1)):
+        return send_from_directory(docs, f1)
+    # 2) {name}.html
+    f2 = f"{plan_name}.html"
+    if os.path.exists(os.path.join(docs, f2)):
+        return send_from_directory(docs, f2)
+    return "404 - 기획안을 찾을 수 없습니다", 404
+
+@app.route('/plan/<plan_name>_favicon.svg')
+def ai_plan_favicon(plan_name):
+    docs = r'C:\woopang\documents'
+    svg = f"{plan_name}_favicon.svg"
+    if os.path.exists(os.path.join(docs, svg)):
+        return send_from_directory(docs, svg, mimetype='image/svg+xml')
+    return "", 404
+
+# ============================================================
+# 구수한농장 부사 연간일정표
+# ============================================================
+@app.route('/goosoon')
+def goosoon_schedule():
+    return send_from_directory(r'C:\woopang\documents', 'goosoon_schedule.html')
+
+@app.route('/goosoon/save', methods=['POST'])
+def goosoon_save():
+    try:
+        data = request.get_json()
+        html_content = data.get('html', '')
+        if not html_content:
+            return jsonify({'success': False, 'error': 'HTML 내용이 비어있습니다'}), 400
+        file_path = r'C:\woopang\documents\goosoon_schedule.html'
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ============================================================
+# AI 워커가 생성한 페이지 자동 서빙 (documents 폴더)
+# /welcome, /test 등 → documents/welcome.html, documents/test.html
+# ============================================================
+_AI_PAGE_DOCS_DIR = r'C:\woopang\documents'
+_AI_PAGE_RESERVED = {'plan', 'goosoon', 'AI', 'api', 'auth', 'admin', 'upload', 'static'}
+
+@app.route('/<page_name>')
+def ai_generated_page(page_name):
+    # 예약된 경로는 건너뛰기 (다른 라우트에서 처리)
+    if page_name in _AI_PAGE_RESERVED or '.' in page_name or '/' in page_name or '..' in page_name:
+        return "404 - Page not found", 404
+    # documents 폴더에서 {page_name}.html 찾기
+    filename = f"{page_name}.html"
+    full_path = os.path.join(_AI_PAGE_DOCS_DIR, filename)
+    if os.path.exists(full_path):
+        return send_from_directory(_AI_PAGE_DOCS_DIR, filename)
+    return "404 - Page not found", 404
+
 
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your-secret-key-here")
 
@@ -2069,7 +2220,7 @@ def apply_security_headers(response):
     # 보안 헤더
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'  # DENY에서 변경 (iframe 임베드 허용)
+    # X-Frame-Options는 Nginx에서 SAMEORIGIN으로 설정 (여기서 중복 설정 시 브라우저가 충돌로 DENY 처리)
 
     # CORS 헤더 (허용된 Origin만)
     origin = request.headers.get('Origin')
@@ -4838,9 +4989,41 @@ def serve_apple_images(filename):
         safe_print(f"[Error] 사과 이미지 서빙 실패 {filename}: {e}")
         return jsonify({"error": "Failed to serve apple image"}), 404
 
+@app.route('/api/apple-people-data', methods=['GET', 'POST'])
+def apple_people_data():
+    """참석자 명단 회비 데이터 저장/로드"""
+    data_file = r'C:\Users\pdnom\Desktop\구수한농장\문서\people_data.json'
+    if request.method == 'GET':
+        try:
+            with open(data_file, 'r', encoding='utf-8') as f:
+                return jsonify(json.load(f))
+        except FileNotFoundError:
+            return jsonify({"error": "no data"}), 404
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    else:  # POST
+        try:
+            data = request.get_json()
+            with open(data_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return jsonify({"status": "ok"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
 @app.route('/apple', defaults={'path': ''})
 @app.route('/apple/<path:path>')
 def apple_page(path):
+    # 참석자 명단 (회비) 페이지
+    if path == 'people':
+        try:
+            people_html_path = r'C:\Users\pdnom\Desktop\구수한농장\문서\참석자_명단_회비.html'
+            with open(people_html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+        except Exception as e:
+            safe_print(f"[Error] 참석자 명단 파일 읽기 실패: {e}")
+            return "파일을 찾을 수 없습니다.", 404
+
     # 이미지 요청은 직접 서빙
     if path.startswith('images/'):
         return serve_apple_images(path[7:])
