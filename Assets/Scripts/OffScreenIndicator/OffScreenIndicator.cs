@@ -96,6 +96,10 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("이 거리(m) 이상의 오브젝트는 인디케이터 표시 안함 (0이면 제한 없음)")]
     [SerializeField] private float maxIndicatorDistance = 0f;
 
+    [Header("=== 일반 모드 인디케이터 개수 제한 ===")]
+    [Tooltip("일반 모드에서 화살표 최대 표시 개수 (0이면 제한 없음, 가까운 순)")]
+    [SerializeField] private int maxNormalIndicatorCount = 12;
+
     [Header("=== 화살표 위치 스무딩 ===")]
     [Tooltip("화살표 위치 보간 속도 (높을수록 빠르게 이동, 0이면 즉시)")]
     [SerializeField] private float arrowSmoothSpeed = 8f;
@@ -344,6 +348,30 @@ public class OffScreenIndicator : MonoBehaviour
                     distanceFromCamera = distanceFromCamera, isArrow = true, skipThisFrame = false
                 });
             }
+        }
+
+        // ── Pass 1.4: 일반 모드 개수 제한 (가까운 순으로 maxNormalIndicatorCount개만 유지) ──
+        if (maxNormalIndicatorCount > 0 && arrowInfos.Count > maxNormalIndicatorCount)
+        {
+            // GPS 거리 기준 정렬 (가까운 순), skipThisFrame은 뒤로
+            arrowInfos.Sort((a, b) =>
+            {
+                if (a.skipThisFrame != b.skipThisFrame)
+                    return a.skipThisFrame ? 1 : -1;
+                return a.distanceFromCamera.CompareTo(b.distanceFromCamera);
+            });
+
+            // 초과분의 인디케이터 비활성화 후 제거
+            for (int i = maxNormalIndicatorCount; i < arrowInfos.Count; i++)
+            {
+                Target t = arrowInfos[i].target;
+                if (t.indicator != null)
+                {
+                    t.indicator.Activate(false);
+                    t.indicator = null;
+                }
+            }
+            arrowInfos.RemoveRange(maxNormalIndicatorCount, arrowInfos.Count - maxNormalIndicatorCount);
         }
 
         // ── Pass 1.5: 화살표 겹침 해소 ──

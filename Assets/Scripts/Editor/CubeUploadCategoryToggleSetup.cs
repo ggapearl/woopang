@@ -42,6 +42,10 @@ public class CubeUploadCategoryToggleSetup
         if (mgr == null) return;
 
         SerializedObject so = new SerializedObject(mgr);
+
+        // PlusButton 자동 연결
+        ConnectPlusButton(so, mgr);
+
         SerializedProperty categoryToggleProp = so.FindProperty("categoryToggle");
         SerializedProperty categoryToggleLabelProp = so.FindProperty("categoryToggleLabel");
         if (categoryToggleProp == null) return;
@@ -337,6 +341,41 @@ public class CubeUploadCategoryToggleSetup
         }
 
         return toggle;
+    }
+
+    /// <summary>
+    /// PlusButton 자동 연결 (씬에서 "PlusButton" 이름으로 찾아 연결)
+    /// </summary>
+    private static void ConnectPlusButton(SerializedObject so, CubeUploadManager mgr)
+    {
+        SerializedProperty plusButtonProp = so.FindProperty("plusButton");
+        if (plusButtonProp == null) return;
+        if (plusButtonProp.objectReferenceValue != null) return;
+
+        // 씬에서 PlusButton 찾기 (비활성 포함)
+        foreach (GameObject root in mgr.gameObject.scene.GetRootGameObjects())
+        {
+            Transform found = FindChildRecursive(root.transform, "PlusButton");
+            if (found != null)
+            {
+                plusButtonProp.objectReferenceValue = found.gameObject;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(mgr);
+                EditorSceneManager.MarkSceneDirty(mgr.gameObject.scene);
+                return;
+            }
+        }
+    }
+
+    private static Transform FindChildRecursive(Transform parent, string name)
+    {
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            Transform result = FindChildRecursive(parent.GetChild(i), name);
+            if (result != null) return result;
+        }
+        return null;
     }
 
     private static string GetCategoryLabel()

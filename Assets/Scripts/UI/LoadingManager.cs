@@ -219,12 +219,19 @@ public class LoadingManager : MonoBehaviour
 
         // ============================================================
         // 0-1. 트래킹이 이미 정상이면 경량 복구 (앵커 재생성 불필요)
+        //      단, DataManager 데이터 갱신은 반드시 실행 (백그라운드 중 위치 변동 반영)
         // ============================================================
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+
+            // DataManager 데이터 갱신 + 위치 모니터링 재시작
+            if (dataManager != null)
+            {
+                dataManager.RestartFetchingAfterResume();
+            }
             yield break;
         }
 #endif
@@ -351,6 +358,12 @@ public class LoadingManager : MonoBehaviour
                 }
                 isBackgroundRecovering = false;
                 lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+
+                // DataManager 데이터 갱신 + 위치 모니터링 재시작
+                if (dataManager != null)
+                {
+                    dataManager.RestartFetchingAfterResume();
+                }
                 yield break;
             }
 
@@ -388,6 +401,12 @@ public class LoadingManager : MonoBehaviour
         }
         isBackgroundRecovering = false;
         lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+
+        // 타임아웃 경로에서도 DataManager 데이터 갱신 재시작
+        if (dataManager != null)
+        {
+            dataManager.RestartFetchingAfterResume();
+        }
     }
 
     /// <summary>

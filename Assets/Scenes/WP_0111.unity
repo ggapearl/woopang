@@ -2914,8 +2914,8 @@ MonoBehaviour:
   defaultBoxSize: 5
   maxBoxSize: 10
   defaultArrowSize: 2
-  maxArrowSize: 4
-  minDistance: 10
+  maxArrowSize: 6
+  minDistance: 50
   maxDistance: 100
   placeName: 
   gpsLatitude: 0
@@ -5162,8 +5162,8 @@ MonoBehaviour:
   defaultBoxSize: 5
   maxBoxSize: 10
   defaultArrowSize: 2
-  maxArrowSize: 4
-  minDistance: 10
+  maxArrowSize: 6
+  minDistance: 50
   maxDistance: 100
   placeName: 
   gpsLatitude: 0
@@ -8013,6 +8013,7 @@ MonoBehaviour:
   fallbackFadeOutDuration: 0.4
   arrowMinSpacing: 80
   maxIndicatorDistance: 0
+  maxNormalIndicatorCount: 16
   arrowSmoothSpeed: 8
 --- !u!114 &547149855
 MonoBehaviour:
@@ -8973,8 +8974,8 @@ MonoBehaviour:
   defaultBoxSize: 5
   maxBoxSize: 10
   defaultArrowSize: 2
-  maxArrowSize: 4
-  minDistance: 10
+  maxArrowSize: 6
+  minDistance: 50
   maxDistance: 100
   placeName: 
   gpsLatitude: 0
@@ -9947,7 +9948,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   dataManager: {fileID: 1494518812}
   tourAPIManager: {fileID: 680892036}
-  busManager: {fileID: 0}
   terminalManager: {fileID: 1698416076}
   trainManager: {fileID: 686459913}
   subwayManager: {fileID: 1988252644}
@@ -19271,6 +19271,7 @@ MonoBehaviour:
   warningObj: {fileID: 1595540}
   uploadPage: {fileID: 3173505891499041532}
   disableObject: {fileID: 6036906995065098568}
+  plusButton: {fileID: 4328735587431845036}
   loadingPanel: {fileID: 1066345737}
   loadingText: {fileID: 1152959673}
   loadingSpinner: {fileID: 341861396}
@@ -19416,10 +19417,14 @@ MonoBehaviour:
   tierDelay: 0.2
   objectSpawnDelay: 0.2
   updateDistanceThreshold: 50
+  objectSpawnRadius: 400
+  indicatorOnlyRadius: 2000
+  maxIndicatorOnlyObjects: 10
   rapidRefreshWindow: 60
   rapidRefreshThresholdCount: 4
   rapidModeResetInterval: 600
   arGuideFontSize: 22
+  stopDetectionThreshold: 3
 --- !u!1 &1503493417
 GameObject:
   m_ObjectHideFlags: 0
@@ -32877,8 +32882,8 @@ MonoBehaviour:
   defaultBoxSize: 5
   maxBoxSize: 10
   defaultArrowSize: 2
-  maxArrowSize: 4
-  minDistance: 10
+  maxArrowSize: 6
+  minDistance: 50
   maxDistance: 100
   placeName: 
   gpsLatitude: 0
@@ -33402,6 +33407,16 @@ PrefabInstance:
       propertyPath: fullscreenCanvasGroup
       value: 
       objectReference: {fileID: 8011970282693692960}
+    - target: {fileID: 953628556301182359, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
+      propertyPath: minDistance
+      value: 50
+      objectReference: {fileID: 0}
+    - target: {fileID: 953628556301182359, guid: 9565e5aa9f468ec47be64a1b09e6888c,
+        type: 3}
+      propertyPath: maxArrowSize
+      value: 6
+      objectReference: {fileID: 0}
     - target: {fileID: 1279877576191648393, guid: 9565e5aa9f468ec47be64a1b09e6888c,
         type: 3}
       propertyPath: m_Mesh
@@ -34637,6 +34652,16 @@ PrefabInstance:
         type: 3}
       propertyPath: hapticIntensity
       value: 0.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 1051671892869768407, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: minDistance
+      value: 50
+      objectReference: {fileID: 0}
+    - target: {fileID: 1051671892869768407, guid: e25c498f9cb9b5d49a8441954e000363,
+        type: 3}
+      propertyPath: maxArrowSize
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 2225212074725628771, guid: e25c498f9cb9b5d49a8441954e000363,
         type: 3}
@@ -44738,6 +44763,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2391275357790075031, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: minDistance
+      value: 50
+      objectReference: {fileID: 0}
+    - target: {fileID: 2391275357790075031, guid: a5bd0b42b939f3e419ea7be6469cf686,
+        type: 3}
+      propertyPath: maxArrowSize
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 5179096195668386051, guid: a5bd0b42b939f3e419ea7be6469cf686,
         type: 3}

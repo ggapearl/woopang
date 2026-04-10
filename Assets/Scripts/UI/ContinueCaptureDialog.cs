@@ -77,7 +77,13 @@ public class ContinueCaptureDialog : MonoBehaviour
 
     public void Show(string message, Action onYes, Action onNo)
     {
-        if (isAnimating) return;
+        // 이전 애니메이션이 진행 중이면 강제 중단 후 리셋
+        if (isAnimating)
+        {
+            if (animationCoroutine != null)
+                StopCoroutine(animationCoroutine);
+            isAnimating = false;
+        }
 
         this.onYes = onYes;
         this.onNo = onNo;
@@ -93,9 +99,31 @@ public class ContinueCaptureDialog : MonoBehaviour
         if (dialogPanel != null)
         {
             dialogPanel.SetActive(true);
+
+            // 버튼 상태 강제 갱신 (카메라 복귀 후 ColorTint가 stuck 방지)
+            ResetButtonStates();
+
             if (animationCoroutine != null)
                 StopCoroutine(animationCoroutine);
             animationCoroutine = StartCoroutine(ShowAnimation());
+        }
+    }
+
+    /// <summary>
+    /// 버튼의 ColorTint 상태를 Normal로 강제 리셋
+    /// (NativeCamera 복귀 후 Pressed/Selected 상태가 stuck되는 현상 방지)
+    /// </summary>
+    private void ResetButtonStates()
+    {
+        if (yesButton != null)
+        {
+            yesButton.interactable = false;
+            yesButton.interactable = true;
+        }
+        if (noButton != null)
+        {
+            noButton.interactable = false;
+            noButton.interactable = true;
         }
     }
 
@@ -196,7 +224,10 @@ public class ContinueCaptureDialog : MonoBehaviour
         onNo = null;
 
         if (animationCoroutine != null)
+        {
             StopCoroutine(animationCoroutine);
+            isAnimating = false;
+        }
 
         if (dialogPanel != null && dialogPanel.activeSelf)
             animationCoroutine = StartCoroutine(HideAnimation(onComplete));

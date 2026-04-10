@@ -34,10 +34,14 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);    // 핑크색
     [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);      // 초록색
     [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f); // 보라색 (공공화장실)
+    [SerializeField] private Color categoryColorSport = new Color(0.95f, 0.45f, 0.25f, 1f); // 주황색 (스포츠)
+    [SerializeField] private Color categoryColorLandmark = new Color(0.2f, 0.7f, 0.9f, 1f); // 하늘색 (랜드마크)
+    [SerializeField] private Color categoryColorEtc = new Color(0.6f, 0.6f, 0.6f, 1f); // 회색 (기타)
 
     [SerializeField] private GameObject warningObj;
     [SerializeField] private GameObject uploadPage;
     [SerializeField] private GameObject disableObject;
+    [SerializeField] private GameObject plusButton;
 
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
@@ -65,8 +69,8 @@ public class CubeUploadManager : MonoBehaviour
     private bool showInstagram;
     private Vector3 gpsData = Vector3.zero;
 
-    // 카테고리 순환 (none → shop → food → cafe → park → none)
-    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet" };
+    // 카테고리 순환 (none → shop → food → cafe → park → toilet → sport → landmark → etc → none)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
     private string locationText;
@@ -1236,6 +1240,9 @@ public class CubeUploadManager : MonoBehaviour
             case "cafe": return categoryColorCafe;
             case "park": return categoryColorPark;
             case "toilet": return categoryColorToilet;
+            case "sport": return categoryColorSport;
+            case "landmark": return categoryColorLandmark;
+            case "etc": return categoryColorEtc;
             default: return Color.white;
         }
     }
@@ -1689,6 +1696,12 @@ public class CubeUploadManager : MonoBehaviour
         if (uploadPage != null)
         {
             uploadPage.SetActive(false);
+        }
+
+        // PlusButton 다시 활성화 (OnClick에서 자기 자신을 SetActive(false)로 숨기므로)
+        if (plusButton != null)
+        {
+            plusButton.SetActive(true);
         }
 
         SetMainPhotoUIState(false);

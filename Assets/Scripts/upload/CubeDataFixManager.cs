@@ -39,6 +39,9 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
     [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
     [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f);
+    [SerializeField] private Color categoryColorSport = new Color(0.95f, 0.45f, 0.25f, 1f);
+    [SerializeField] private Color categoryColorLandmark = new Color(0.2f, 0.7f, 0.9f, 1f);
+    [SerializeField] private Color categoryColorEtc = new Color(0.6f, 0.6f, 0.6f, 1f);
 
     [Header("Photo Dialogs")]
     [SerializeField] private PhotoSourceDialog photoSourceDialog;
@@ -63,8 +66,8 @@ public class CubeDataFixManager : MonoBehaviour
     private bool isProcessing = false;
     private float elapsedTime = 0f;
 
-    // 카테고리 순환 (none → shop → food → cafe → park → etc → none)
-    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet" };
+    // 카테고리 순환 (none → shop → food → cafe → park → toilet → sport → landmark → etc → none)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
 
@@ -922,6 +925,9 @@ public class CubeDataFixManager : MonoBehaviour
             case "cafe": return categoryColorCafe;
             case "park": return categoryColorPark;
             case "toilet": return categoryColorToilet;
+            case "sport": return categoryColorSport;
+            case "landmark": return categoryColorLandmark;
+            case "etc": return categoryColorEtc;
             default: return Color.white;
         }
     }

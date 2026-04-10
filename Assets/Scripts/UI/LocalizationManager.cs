@@ -754,6 +754,30 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "公共厕所",
                 ["ja"] = "公衆トイレ",
                 ["es"] = "Baño Público"
+            },
+            ["category_sport"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Sports",
+                ["ko"] = "스포츠",
+                ["zh"] = "体育",
+                ["ja"] = "スポーツ",
+                ["es"] = "Deportes"
+            },
+            ["category_landmark"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Landmark",
+                ["ko"] = "랜드마크",
+                ["zh"] = "地标",
+                ["ja"] = "ランドマーク",
+                ["es"] = "Monumento"
+            },
+            ["category_etc"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Others",
+                ["ko"] = "기타",
+                ["zh"] = "其他",
+                ["ja"] = "その他",
+                ["es"] = "Otros"
             }
         };
     }

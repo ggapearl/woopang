@@ -75,6 +75,17 @@ public class TourAPIManager : MonoBehaviour
     [Tooltip("이 거리(m) 이내만 3D 오브젝트 생성 + 이미지 다운로드. 밖은 좌표만 저장")]
     [SerializeField] private float objectSpawnRadius = 400f;
 
+    [Header("Indicator-Only Objects (경량 인디케이터 전용)")]
+    [Tooltip("objectSpawnRadius ~ indicatorOnlyRadius 범위에 인디케이터 전용 경량 오브젝트 생성")]
+    [SerializeField] private float indicatorOnlyRadius = 2000f;
+    [Tooltip("경량 인디케이터 오브젝트 최대 개수")]
+    [SerializeField] private int maxIndicatorOnlyObjects = 8;
+    [Tooltip("인디케이터 전용 프리팹 (Target 사이즈 등 Inspector에서 조절)")]
+    [SerializeField] private GameObject indicatorOnlyPrefab;
+
+    // 경량 인디케이터 전용 오브젝트 (Target + Anchor만, 메시 없음)
+    private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
+
     private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
@@ -389,16 +400,21 @@ public class TourAPIManager : MonoBehaviour
             }
             else if (distance <= objectSpawnRadius)
             {
-                // objectSpawnRadius 이내만 3D 오브젝트 생성 + 이미지 다운로드
-                GameObject newObj = CreateObjectFromData(place);
-                if (newObj != null)
+                // 빠른 이동 모드: placeDataMap에만 저장, 3D 오브젝트 생성 건너뜀
+                bool isRapid = DataManager.Instance != null && DataManager.Instance.IsRapidMovementMode;
+                if (!isRapid)
                 {
-                    ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
-                    if (display != null && !string.IsNullOrEmpty(place.firstimage))
+                    // objectSpawnRadius 이내만 3D 오브젝트 생성 + 이미지 다운로드
+                    GameObject newObj = CreateObjectFromData(place);
+                    if (newObj != null)
                     {
-                        display.SetBaseMap(place.firstimage);
+                        ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
+                        if (display != null && !string.IsNullOrEmpty(place.firstimage))
+                        {
+                            display.SetBaseMap(place.firstimage);
+                        }
+                        if (objectSpawnDelay > 0) yield return new WaitForSeconds(objectSpawnDelay);
                     }
-                    if (objectSpawnDelay > 0) yield return new WaitForSeconds(objectSpawnDelay);
                 }
             }
         }
@@ -453,30 +469,37 @@ public class TourAPIManager : MonoBehaviour
         }
 
         // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
-        //    ※ CreateObjectFromData가 placeDataMap을 수정하므로, 먼저 리스트로 수집
-        List<TourPlaceData> toSpawn = new List<TourPlaceData>();
-        foreach (var kvp in placeDataMap)
+        //    빠른 이동 모드에서는 3D 스폰 건너뜀 (인디케이터만 관리)
+        bool isRapid = DataManager.Instance != null && DataManager.Instance.IsRapidMovementMode;
+        if (!isRapid)
         {
-            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
-            TourPlaceData p = kvp.Value;
-            float dist = CalculateDistance(lat, lon, p.mapy, p.mapx);
-            if (dist <= objectSpawnRadius)
+            List<TourPlaceData> toSpawn = new List<TourPlaceData>();
+            foreach (var kvp in placeDataMap)
             {
-                toSpawn.Add(p);
-            }
-        }
-        foreach (var p in toSpawn)
-        {
-            GameObject newObj = CreateObjectFromData(p);
-            if (newObj != null)
-            {
-                ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
-                if (display != null && !string.IsNullOrEmpty(p.firstimage))
+                if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+                TourPlaceData p = kvp.Value;
+                float dist = CalculateDistance(lat, lon, p.mapy, p.mapx);
+                if (dist <= objectSpawnRadius)
                 {
-                    display.SetBaseMap(p.firstimage);
+                    toSpawn.Add(p);
+                }
+            }
+            foreach (var p in toSpawn)
+            {
+                GameObject newObj = CreateObjectFromData(p);
+                if (newObj != null)
+                {
+                    ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
+                    if (display != null && !string.IsNullOrEmpty(p.firstimage))
+                    {
+                        display.SetBaseMap(p.firstimage);
+                    }
                 }
             }
         }
+
+        // 3) 경량 인디케이터 오브젝트 관리 (objectSpawnRadius ~ indicatorOnlyRadius)
+        UpdateIndicatorOnlyObjects(lat, lon);
     }
 
     private GameObject CreateObjectFromData(TourPlaceData place)
@@ -997,6 +1020,12 @@ public class TourAPIManager : MonoBehaviour
             obj.SetActive(shouldShow);
         }
 
+        // 경량 인디케이터 오브젝트에도 필터 적용
+        foreach (var kvp in indicatorOnlyObjects)
+        {
+            if (kvp.Value != null) kvp.Value.SetActive(shouldShow);
+        }
+
         LogDebug($"[TourAPIManager] 필터 적용: 오브젝트 표시={shouldShow}");
     }
 
@@ -1083,8 +1112,167 @@ public class TourAPIManager : MonoBehaviour
         LogDebug("[TourAPIManager] FetchDataImmediately 완료, FetchDataPeriodically 시작");
     }
 
+    // ============================================================
+    // Indicator-Only Objects — 경량 화살표 전용 오브젝트
+    // ============================================================
+
+    private void UpdateIndicatorOnlyObjects(float lat, float lon)
+    {
+        if (indicatorOnlyRadius <= objectSpawnRadius) return;
+
+        float cleanupRange = indicatorOnlyRadius * 1.5f;
+        // 빠른 이동 모드: 0m~2000m 전체 범위 (3D 없으므로 objectSpawnRadius 제한 해제)
+        bool isRapid = DataManager.Instance != null && DataManager.Instance.IsRapidMovementMode;
+        float minRange = isRapid ? 0f : objectSpawnRadius;
+        int maxCount = isRapid ? maxIndicatorOnlyObjects * 2 : maxIndicatorOnlyObjects;
+
+        // 1) 범위 밖 또는 3D 승격된 경량 오브젝트 제거
+        List<string> toRemove = new List<string>();
+        foreach (var kvp in indicatorOnlyObjects)
+        {
+            string id = kvp.Key;
+            if (spawnedObjects.ContainsKey(id)) { toRemove.Add(id); continue; }
+            if (!placeDataMap.ContainsKey(id)) { toRemove.Add(id); continue; }
+            float dist = CalculateDistance(lat, lon, placeDataMap[id].mapy, placeDataMap[id].mapx);
+            if (dist > cleanupRange || dist < minRange) toRemove.Add(id);
+        }
+        foreach (string id in toRemove)
+        {
+            if (indicatorOnlyObjects.TryGetValue(id, out GameObject obj))
+            {
+                if (obj != null) Destroy(obj);
+                indicatorOnlyObjects.Remove(id);
+            }
+        }
+
+        // 2) 후보 수집
+        bool showByFilter = ShouldShowByFilter();
+        if (!showByFilter) return;
+
+        List<KeyValuePair<string, float>> candidates = new List<KeyValuePair<string, float>>();
+        foreach (var kvp in placeDataMap)
+        {
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            if (indicatorOnlyObjects.ContainsKey(kvp.Key)) continue;
+
+            TourPlaceData place = kvp.Value;
+            float dist = CalculateDistance(lat, lon, place.mapy, place.mapx);
+            if (dist >= minRange && dist <= indicatorOnlyRadius)
+                candidates.Add(new KeyValuePair<string, float>(kvp.Key, dist));
+        }
+
+        // 3) 가까운 순 정렬, 최대 개수까지 생성
+        candidates.Sort((a, b) => a.Value.CompareTo(b.Value));
+
+        int slotsAvailable = maxCount - indicatorOnlyObjects.Count;
+        int created = 0;
+        for (int i = 0; i < candidates.Count && created < slotsAvailable; i++)
+        {
+            string id = candidates[i].Key;
+            if (!placeDataMap.ContainsKey(id)) continue;
+
+            TourPlaceData place = placeDataMap[id];
+            GameObject indicatorObj = CreateIndicatorOnlyObject(place);
+            if (indicatorObj != null)
+            {
+                indicatorOnlyObjects[id] = indicatorObj;
+                created++;
+            }
+        }
+    }
+
+    private GameObject CreateIndicatorOnlyObject(TourPlaceData place)
+    {
+        GameObject root;
+        if (indicatorOnlyPrefab != null)
+        {
+            root = Instantiate(indicatorOnlyPrefab);
+            root.name = $"TourIndicatorOnly_{place.contentid}_{place.title}";
+        }
+        else
+        {
+            root = new GameObject($"TourIndicatorOnly_{place.contentid}_{place.title}");
+            root.SetActive(false);
+            root.AddComponent<CustomARGeospatialCreatorAnchor>();
+            GameObject targetChild = new GameObject("Target");
+            targetChild.transform.SetParent(root.transform, false);
+            targetChild.AddComponent<Target>();
+        }
+
+        CustomARGeospatialCreatorAnchor anchor = root.GetComponent<CustomARGeospatialCreatorAnchor>();
+        if (anchor == null) anchor = root.AddComponent<CustomARGeospatialCreatorAnchor>();
+
+        Target target = root.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = place.title ?? "";
+            target.gpsLatitude = place.mapy;
+            target.gpsLongitude = place.mapx;
+
+            Color placeColor;
+            string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
+            if (ColorUtility.TryParseHtmlString($"#{colorHex}", out placeColor))
+                target.TargetColor = placeColor;
+            else
+                target.TargetColor = Color.white;
+        }
+
+        root.SetActive(true);
+        anchor.SetCoordinatesAndCreateAnchor(place.mapy, place.mapx, 0);
+
+        return root;
+    }
+
+    /// <summary>
+    /// 빠른 이동 정지 후: 캐시된 placeDataMap에서 objectSpawnRadius 이내 3D 오브젝트 즉시 생성
+    /// </summary>
+    public void SpawnObjectsFromCache(float lat, float lon)
+    {
+        List<TourPlaceData> toSpawn = new List<TourPlaceData>();
+        foreach (var kvp in placeDataMap)
+        {
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            float dist = CalculateDistance(lat, lon, kvp.Value.mapy, kvp.Value.mapx);
+            if (dist <= objectSpawnRadius)
+            {
+                toSpawn.Add(kvp.Value);
+            }
+        }
+
+        foreach (var place in toSpawn)
+        {
+            // 인디케이터 전용 오브젝트 제거 (3D로 승격)
+            if (indicatorOnlyObjects.TryGetValue(place.contentid, out GameObject indicatorObj))
+            {
+                if (indicatorObj != null) Destroy(indicatorObj);
+                indicatorOnlyObjects.Remove(place.contentid);
+            }
+            GameObject newObj = CreateObjectFromData(place);
+            if (newObj != null)
+            {
+                ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
+                if (display != null && !string.IsNullOrEmpty(place.firstimage))
+                {
+                    display.SetBaseMap(place.firstimage);
+                }
+            }
+        }
+    }
+
+    private void CleanupAllIndicatorOnlyObjects()
+    {
+        foreach (var kvp in indicatorOnlyObjects)
+        {
+            if (kvp.Value != null) Destroy(kvp.Value);
+        }
+        indicatorOnlyObjects.Clear();
+    }
+
+    public int GetIndicatorOnlyCount() => indicatorOnlyObjects.Count;
+
     void OnDestroy()
     {
+        CleanupAllIndicatorOnlyObjects();
         Input.location.Stop();
         LogDebug("[TourAPIManager] 위치 서비스 중지");
     }
