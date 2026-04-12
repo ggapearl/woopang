@@ -19268,6 +19268,9 @@ MonoBehaviour:
   categoryColorCafe: {r: 0.91, g: 0.33, b: 0.63, a: 1}
   categoryColorPark: {r: 0.3, g: 0.85, b: 0.5, a: 1}
   categoryColorToilet: {r: 0.68, g: 0.33, b: 0.77, a: 1}
+  categoryColorSport: {r: 0.95, g: 0.45, b: 0.25, a: 1}
+  categoryColorLandmark: {r: 0.2, g: 0.7, b: 0.9, a: 1}
+  categoryColorEtc: {r: 0.6, g: 0.6, b: 0.6, a: 1}
   warningObj: {fileID: 1595540}
   uploadPage: {fileID: 3173505891499041532}
   disableObject: {fileID: 6036906995065098568}
@@ -19418,13 +19421,14 @@ MonoBehaviour:
   objectSpawnDelay: 0.2
   updateDistanceThreshold: 50
   objectSpawnRadius: 400
+  indicatorOnlyPrefab: {fileID: 1000000000000000000, guid: fc7117170b38c8b4d9f5db6cbaf1d1e5,
+    type: 3}
   indicatorOnlyRadius: 2000
   maxIndicatorOnlyObjects: 10
   rapidRefreshWindow: 60
   rapidRefreshThresholdCount: 4
   rapidModeResetInterval: 600
   arGuideFontSize: 22
-  stopDetectionThreshold: 3
 --- !u!1 &1503493417
 GameObject:
   m_ObjectHideFlags: 0
@@ -19480,6 +19484,9 @@ MonoBehaviour:
   categoryColorCafe: {r: 0.91, g: 0.33, b: 0.63, a: 1}
   categoryColorPark: {r: 0.3, g: 0.85, b: 0.5, a: 1}
   categoryColorToilet: {r: 0.68, g: 0.33, b: 0.77, a: 1}
+  categoryColorSport: {r: 0.95, g: 0.45, b: 0.25, a: 1}
+  categoryColorLandmark: {r: 0.2, g: 0.7, b: 0.9, a: 1}
+  categoryColorEtc: {r: 0.6, g: 0.6, b: 0.6, a: 1}
   photoSourceDialog: {fileID: 946567459}
   continueCaptureDialog: {fileID: 2029901662}
   uploadTimeoutSeconds: 20
@@ -35620,6 +35627,12 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
         type: 3}
+      propertyPath: indicatorOnlyPrefab
+      value: 
+      objectReference: {fileID: 1000000000000000000, guid: fc7117170b38c8b4d9f5db6cbaf1d1e5,
+        type: 3}
+    - target: {fileID: 7846553691897608810, guid: abc4802ece141624ebc1aaae8831b362,
+        type: 3}
       propertyPath: loadRadii.Array.size
       value: 5
       objectReference: {fileID: 0}
@@ -41677,7 +41690,7 @@ PrefabInstance:
     - target: {fileID: 1601744079313318032, guid: ec6ba3c364befc9499972d881e3e92cf,
         type: 3}
       propertyPath: maxZoom
-      value: 10
+      value: 100
       objectReference: {fileID: 0}
     - target: {fileID: 1601744079313318032, guid: ec6ba3c364befc9499972d881e3e92cf,
         type: 3}
@@ -43865,6 +43878,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SliderSwipeHandler
   dragSensitivity: 1
+  handleScaleOnDrag: 1.4
+  scaleAnimSpeed: 10
+  bgBrightenAmount: 0.08
+  bgColorAnimSpeed: 8
 --- !u!114 &7571394001053317310
 MonoBehaviour:
   m_ObjectHideFlags: 0

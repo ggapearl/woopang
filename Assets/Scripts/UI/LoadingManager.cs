@@ -417,7 +417,10 @@ public class LoadingManager : MonoBehaviour
     void RecreateAllManagerAnchors()
     {
         if (dataManager != null)
+        {
             dataManager.RecreateAllAnchors();
+            dataManager.RecreateIndicatorOnlyAnchors();
+        }
 
         if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
@@ -1307,6 +1310,13 @@ public class LoadingManager : MonoBehaviour
 #else
         if (Input.location.status == LocationServiceStatus.Running) { lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude; }
 #endif
+        // GPS 미획득 시 DataManager의 마지막 GPS 위치를 fallback으로 사용
+        if (lat == 0f && lon == 0f && dataManager != null)
+        {
+            Vector2 lastPos = dataManager.GetLastFetchPosition();
+            lat = lastPos.x;
+            lon = lastPos.y;
+        }
         if (dataManager != null) dataManager.UpdateDistanceFilter(maxDist, lat, lon);
         if (TourAPIManager.Instance != null) TourAPIManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (SubwayManager.Instance != null) SubwayManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);

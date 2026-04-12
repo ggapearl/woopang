@@ -78,9 +78,6 @@ public class DataManager : MonoBehaviour
     private Queue<GameObject> cubeObjectPool = new Queue<GameObject>();
     private Queue<GameObject> glbObjectPool = new Queue<GameObject>();
     private HashSet<int> currentlyLoadingGLB = new HashSet<int>();
-
-    // 경량 인디케이터 전용 오브젝트 (Target + Anchor만, 메시 없음)
-    private Dictionary<int, GameObject> indicatorOnlyObjects = new Dictionary<int, GameObject>();
     
     [SerializeField] public int poolSize = 50;
 
@@ -100,13 +97,14 @@ public class DataManager : MonoBehaviour
     [Tooltip("이 거리(m) 이내만 3D 오브젝트 생성 + 이미지 다운로드. 밖은 좌표만 저장")]
     [SerializeField] private float objectSpawnRadius = 400f;
 
-    [Header("Indicator-Only Objects (경량 인디케이터 전용)")]
-    [Tooltip("objectSpawnRadius ~ indicatorOnlyRadius 범위에 인디케이터 전용 경량 오브젝트 생성")]
-    [SerializeField] private float indicatorOnlyRadius = 2000f;
-    [Tooltip("경량 인디케이터 오브젝트 최대 개수")]
-    [SerializeField] private int maxIndicatorOnlyObjects = 8;
-    [Tooltip("인디케이터 전용 프리팹 (Target 사이즈 등 Inspector에서 조절)")]
+    [Header("IndicatorOnly (원거리 인디케이터)")]
+    [Tooltip("IndicatorOnly 프리팹 (Target 컴포넌트만 가진 경량 오브젝트)")]
     [SerializeField] private GameObject indicatorOnlyPrefab;
+    [Tooltip("IndicatorOnly 생성 최대 거리 (m)")]
+    [SerializeField] private float indicatorOnlyRadius = 2000f;
+    [Tooltip("최대 IndicatorOnly 오브젝트 수")]
+    [SerializeField] private int maxIndicatorOnlyObjects = 8;
+    private Dictionary<int, GameObject> indicatorOnlyObjects = new Dictionary<int, GameObject>();
 
     [Header("빠른 이동 모드 설정")]
     [Tooltip("이 시간(초) 이내에 refreshThresholdCount회 새로고침 발생 시 빠른 이동 모드 진입")]
@@ -129,16 +127,12 @@ public class DataManager : MonoBehaviour
     private bool isInitialStartComplete = false; // 앱 첫 시작 완료 여부 (OnApplicationFocus 무시용)
 
     // ============================================================
-    // 빠른 이동 모드 — 빠른 이동 중 3D 스폰 억제, 인디케이터만 표시
+    // 빠른 이동 모드 — 1분 이내 4회 새로고침 시 ObjectCountUI 억제
     // ============================================================
     private List<float> recentRefreshTimes = new List<float>();
     private bool isRapidMovementMode = false;
     private float rapidModeStartTime = 0f;
     public bool IsRapidMovementMode => isRapidMovementMode;
-
-    // 정지 감지 — 연속 소이동 횟수 카운트
-    private int consecutiveSmallMoveCount = 0;
-    [SerializeField] private int stopDetectionThreshold = 2; // 2회 연속 소이동 시 정지 판단 (rapid: 2초×2=4초)
 
     // 현재 활성 필터 저장 (거리 필터와 동기화용)
     private Dictionary<string, bool> currentFilters;
@@ -397,6 +391,9 @@ public class DataManager : MonoBehaviour
         // fallback 활성화 후 오브젝트 순차 생성
         yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false, lat, lon));
 
+        // IndicatorOnly: 3D 큐브 범위 밖 원거리 인디케이터 생성 (별도 시스템)
+        UpdateIndicatorOnlyObjects(lat, lon);
+
         // 에디터에서도 초기 로드 완료 표시 (FirstInstallRetry 재시도 방지)
         isInitialStartComplete = true;
         isDataLoaded = true;
@@ -450,6 +447,9 @@ public class DataManager : MonoBehaviour
 
         // fallback 활성화 후 오브젝트 순차 생성
         yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false, lat, lon));
+
+        // IndicatorOnly: 3D 큐브 범위 밖 원거리 인디케이터 생성 (별도 시스템)
+        UpdateIndicatorOnlyObjects(lat, lon);
 
         // Phase1 완료 시점에서 초기 로드 완료로 표시
         // - isInitialStartComplete: FirstInstallRetry 재시도 방지
@@ -603,46 +603,19 @@ public class DataManager : MonoBehaviour
 
             if (distanceMoved > updateDistanceThreshold)
             {
-                consecutiveSmallMoveCount = 0; // 큰 이동 시 리셋
                 TrackRefreshForRapidMode();
-
-                // 빠른 이동 모드에서는 진행 중인 fetch를 세대 교체로 중단 후 새로 시작
-                if (isRapidMovementMode && isFetching)
-                {
-                    fetchGeneration++;
-                    isFetching = false;
-                }
-
                 yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
-            }
-            else
-            {
-                // 50m 미만 이동 — 정지 감지 카운트
-                consecutiveSmallMoveCount++;
-
-                // 빠른 이동 모드 중 정지 감지: N회 연속 소이동 시 정지로 판단
-                if (isRapidMovementMode && consecutiveSmallMoveCount >= stopDetectionThreshold)
-                {
-                    isRapidMovementMode = false;
-                    consecutiveSmallMoveCount = 0;
-                    recentRefreshTimes.Clear();
-
-                    // 캐시된 placeDataMap에서 즉시 3D 오브젝트 생성
-                    SpawnObjectsFromCache(lat, lon);
-
-                    // 현재 위치 기준 서버 데이터 1회 새로고침
-                    yield return StartCoroutine(FetchDataProgressively(lat, lon));
-                    lastPosition = currentPos;
-                }
             }
 
             // 50m 미만 이동이라도 objectSpawnRadius 기반 스폰/정리 수행
             // (서버 재요청 없이 placeDataMap 기준으로 근거리 오브젝트 관리)
             SpawnNearbyUnspawnedObjects(lat, lon);
 
-            // 빠른 이동 모드: 2초 간격으로 빠르게 감지 / 일반: 5초
-            yield return new WaitForSeconds(isRapidMovementMode ? 2f : 5f);
+            // IndicatorOnly 갱신 (별도 시스템 — 3D 큐브 파이프라인과 독립)
+            UpdateIndicatorOnlyObjects(lat, lon);
+
+            yield return new WaitForSeconds(5f); // 5초마다 체크 (1초는 너무 빈번)
         }
     }
 
@@ -701,13 +674,6 @@ public class DataManager : MonoBehaviour
                 // 모든 데이터는 placeDataMap에 좌표/메타데이터 저장 (3D 생성 여부와 무관)
                 placeDataMap[place.id] = place;
                 loadedIds.Add(place.id);
-
-                // 빠른 이동 모드: placeDataMap에만 저장, 3D 오브젝트 생성 건너뜀
-                if (isRapidMovementMode)
-                {
-                    skippedInTier++;
-                    continue;
-                }
 
                 // objectSpawnRadius 이내만 3D 오브젝트 생성 + 이미지 다운로드
                 float distToPlace = CalculateDistance(lat, lon, place.latitude, place.longitude);
@@ -796,7 +762,7 @@ public class DataManager : MonoBehaviour
         foreach (int id in dataToRemove)
         {
             placeDataMap.Remove(id);
-            // placeDataMap에서 제거된 장소의 경량 인디케이터도 정리
+            // IndicatorOnly도 함께 정리
             if (indicatorOnlyObjects.TryGetValue(id, out GameObject indicatorObj))
             {
                 if (indicatorObj != null) Destroy(indicatorObj);
@@ -834,29 +800,24 @@ public class DataManager : MonoBehaviour
         }
 
         // 2) 범위 안에 들어온 미생성 장소 오브젝트 생성
-        //    빠른 이동 모드에서는 3D 스폰 건너뜀 (인디케이터만 관리)
-        if (!isRapidMovementMode)
+        //    ※ CreateObjectFromData가 placeDataMap을 수정하므로, 순회 중 직접 호출 불가
+        //       먼저 리스트로 수집 후 생성
+        int newlySpawned = 0;
+        List<PlaceData> toSpawn = new List<PlaceData>();
+        foreach (var kvp in placeDataMap)
         {
-            int newlySpawned = 0;
-            List<PlaceData> toSpawn = new List<PlaceData>();
-            foreach (var kvp in placeDataMap)
+            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
+            if (dist <= objectSpawnRadius)
             {
-                if (spawnedObjects.ContainsKey(kvp.Key)) continue;
-                float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
-                if (dist <= objectSpawnRadius)
-                {
-                    toSpawn.Add(kvp.Value);
-                }
-            }
-            foreach (var place in toSpawn)
-            {
-                CreateObjectFromData(place);
-                if (spawnedObjects.ContainsKey(place.id)) newlySpawned++;
+                toSpawn.Add(kvp.Value);
             }
         }
-
-        // 3) 경량 인디케이터 오브젝트 관리 (objectSpawnRadius ~ indicatorOnlyRadius)
-        UpdateIndicatorOnlyObjects(lat, lon);
+        foreach (var place in toSpawn)
+        {
+            CreateObjectFromData(place);
+            if (spawnedObjects.ContainsKey(place.id)) newlySpawned++;
+        }
     }
 
     private IEnumerator FetchDataFromServerForTier(string url, float lat, float lon, HashSet<int> loadedIds, List<PlaceData> outNewPlaces)
@@ -1071,19 +1032,6 @@ public class DataManager : MonoBehaviour
                 obj.SetActive(false);
             }
         }
-
-        // 경량 인디케이터 오브젝트에도 필터 적용
-        List<int> indicatorToRemove = new List<int>();
-        foreach (var kvp in indicatorOnlyObjects)
-        {
-            if (kvp.Value == null) { indicatorToRemove.Add(kvp.Key); continue; }
-            if (placeDataMap.ContainsKey(kvp.Key))
-            {
-                bool shouldShow = ShouldShowObject(placeDataMap[kvp.Key]);
-                kvp.Value.SetActive(shouldShow);
-            }
-        }
-        foreach (int id in indicatorToRemove) indicatorOnlyObjects.Remove(id);
     }
 
     /// <summary>
@@ -1539,11 +1487,6 @@ public class DataManager : MonoBehaviour
         {
             // 표시 시 거리 필터 + 카테고리 필터 모두 적용
             RestoreObjectsWithDistanceFilter();
-            // 경량 인디케이터도 복원
-            foreach (var kvp in indicatorOnlyObjects)
-            {
-                if (kvp.Value != null) kvp.Value.SetActive(true);
-            }
         }
         else
         {
@@ -1552,11 +1495,13 @@ public class DataManager : MonoBehaviour
                 if (kvp.Value != null)
                     kvp.Value.SetActive(false);
             }
-            // 경량 인디케이터도 숨김
-            foreach (var kvp in indicatorOnlyObjects)
-            {
-                if (kvp.Value != null) kvp.Value.SetActive(false);
-            }
+        }
+
+        // IndicatorOnly도 동일하게 처리
+        foreach (var kvp in indicatorOnlyObjects)
+        {
+            if (kvp.Value != null)
+                kvp.Value.SetActive(visible);
         }
     }
 
@@ -1633,18 +1578,6 @@ public class DataManager : MonoBehaviour
                 recreated++;
             }
         }
-
-        // 경량 인디케이터 오브젝트 앵커도 재생성
-        foreach (var kvp in indicatorOnlyObjects)
-        {
-            if (kvp.Value == null || !kvp.Value.activeSelf) continue;
-            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponent<CustomARGeospatialCreatorAnchor>();
-            if (anchor != null)
-            {
-                anchor.RecreateAnchor();
-                recreated++;
-            }
-        }
     }
 
     /// <summary>
@@ -1676,6 +1609,15 @@ public class DataManager : MonoBehaviour
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
+        // GPS=(0,0)이면 lastPosition fallback 사용
+        if (currentLat == 0f && currentLon == 0f)
+        {
+            currentLat = lastPosition.x;
+            currentLon = lastPosition.y;
+        }
+        // 그래도 (0,0)이면 거리 필터 건너뜀 (잘못된 비활성화 방지)
+        if (currentLat == 0f && currentLon == 0f) return;
+
         foreach (var kvp in spawnedObjects)
         {
             int id = kvp.Key;
@@ -1730,7 +1672,6 @@ public class DataManager : MonoBehaviour
                 Destroy(kvp.Value);
         }
         spawnedObjects.Clear();
-        CleanupAllIndicatorOnlyObjects();
         placeDataMap.Clear();
         isDataLoaded = false;
         isFetching = false;
@@ -1795,35 +1736,9 @@ public class DataManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 백그라운드 복귀 후 LoadingManager에서 호출 — 데이터 갱신 + 위치 모니터링 재시작
-    /// HandleBackgroundRecovery 완료 후 DataManager.OnApplicationFocus와 중복되지 않도록
-    /// isBackgroundRecovering=false 이후에만 호출됨
-    /// </summary>
-    public void RestartFetchingAfterResume()
-    {
-        StopAllFetching();
-
-        float lat = lastPosition.x;
-        float lon = lastPosition.y;
-        if (Input.location.status == LocationServiceStatus.Running)
-        {
-            lat = Input.location.lastData.latitude;
-            lon = Input.location.lastData.longitude;
-        }
-
-        if (lat == 0f && lon == 0f) return;
-
-        // 기존 캐시로 오브젝트 즉시 생성 + 서버 갱신
-        SpawnNearbyUnspawnedObjects(lat, lon);
-        fetchCoroutine = StartCoroutine(FetchDataProgressivelySilent(lat, lon));
-        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
-    }
-
     private IEnumerator WaitForARSessionAndFetchDataSilent()
     {
-        float waitStart = Time.unscaledTime;
-        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || (Time.unscaledTime - waitStart) > 5f);
+        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || Time.unscaledTime > 5f);
         if (ARSession.state != ARSessionState.SessionTracking)
         {
             yield break;
@@ -1859,8 +1774,7 @@ public class DataManager : MonoBehaviour
 
     private IEnumerator WaitForARSessionAndFetchData()
     {
-        float waitStart = Time.unscaledTime;
-        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || (Time.unscaledTime - waitStart) > 5f);
+        yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || Time.unscaledTime > 5f);
         if (ARSession.state != ARSessionState.SessionTracking)
         {
             ShowErrorMessage("AR 세션을 복구할 수 없습니다.");
@@ -1995,193 +1909,97 @@ public class DataManager : MonoBehaviour
     }
 
     // ============================================================
-    // Indicator-Only Objects — 경량 화살표 전용 오브젝트
-    // objectSpawnRadius(400m) ~ indicatorOnlyRadius(2000m) 범위
-    // Target + Anchor만 생성 (메시/이미지 없음)
+    // IndicatorOnly 별도 시스템 (기존 3D 큐브 파이프라인과 완전 분리)
+    // objectSpawnRadius(400m) 밖 ~ indicatorOnlyRadius(2000m) 이내 장소를
+    // 경량 프리팹으로 생성하여 OffScreenIndicator에만 표시
     // ============================================================
 
     /// <summary>
-    /// 경량 인디케이터 오브젝트 생성/정리
-    /// 3D 오브젝트가 없는 장소 중 가까운 순으로 최대 maxIndicatorOnlyObjects개 생성
+    /// placeDataMap 기준으로 IndicatorOnly 오브젝트를 갱신
+    /// - 3D 큐브가 이미 있는 장소는 스킵
+    /// - objectSpawnRadius 밖 ~ indicatorOnlyRadius 이내만 대상
+    /// - 가까운 순으로 maxIndicatorOnlyObjects개까지 생성
     /// </summary>
     private void UpdateIndicatorOnlyObjects(float lat, float lon)
     {
-        if (indicatorOnlyRadius <= objectSpawnRadius) return;
+        if (indicatorOnlyPrefab == null) return;
 
-        float cleanupRange = indicatorOnlyRadius * 1.5f;
-        // 빠른 이동 모드: 0m~2000m 전체 범위 (3D 없으므로 objectSpawnRadius 제한 해제)
-        // 일반 모드: objectSpawnRadius~indicatorOnlyRadius 범위만
-        float minRange = isRapidMovementMode ? 0f : objectSpawnRadius;
-        int maxCount = isRapidMovementMode ? maxIndicatorOnlyObjects * 2 : maxIndicatorOnlyObjects;
-
-        // 1) 범위 밖 또는 3D 오브젝트로 승격된 경량 오브젝트 제거
+        // 1) 범위 밖으로 나간 IndicatorOnly 제거
         List<int> toRemove = new List<int>();
         foreach (var kvp in indicatorOnlyObjects)
         {
-            int id = kvp.Key;
-            // 3D 오브젝트로 이미 생성된 경우 경량 오브젝트 제거
-            if (spawnedObjects.ContainsKey(id))
+            if (kvp.Value == null) { toRemove.Add(kvp.Key); continue; }
+            if (!placeDataMap.ContainsKey(kvp.Key)) { toRemove.Add(kvp.Key); continue; }
+
+            float dist = CalculateDistance(lat, lon, placeDataMap[kvp.Key].latitude, placeDataMap[kvp.Key].longitude);
+            // 3D 큐브로 이미 스폰되었거나, 범위 밖이면 제거
+            if (spawnedObjects.ContainsKey(kvp.Key) || dist > indicatorOnlyRadius * 1.2f || dist <= objectSpawnRadius)
             {
-                toRemove.Add(id);
-                continue;
-            }
-            if (!placeDataMap.ContainsKey(id))
-            {
-                toRemove.Add(id);
-                continue;
-            }
-            float dist = CalculateDistance(lat, lon, placeDataMap[id].latitude, placeDataMap[id].longitude);
-            if (dist > cleanupRange || dist < minRange)
-            {
-                toRemove.Add(id);
+                toRemove.Add(kvp.Key);
             }
         }
         foreach (int id in toRemove)
         {
-            if (indicatorOnlyObjects.TryGetValue(id, out GameObject obj))
-            {
-                if (obj != null) Destroy(obj);
-                indicatorOnlyObjects.Remove(id);
-            }
+            if (indicatorOnlyObjects.TryGetValue(id, out GameObject obj) && obj != null)
+                Destroy(obj);
+            indicatorOnlyObjects.Remove(id);
         }
 
-        // 2) 후보 수집: minRange ~ indicatorOnlyRadius, 3D 미생성, 경량 미생성, 필터 통과
-        List<KeyValuePair<int, float>> candidates = new List<KeyValuePair<int, float>>();
-        foreach (var kvp in placeDataMap)
-        {
-            int id = kvp.Key;
-            if (spawnedObjects.ContainsKey(id)) continue;
-            if (indicatorOnlyObjects.ContainsKey(id)) continue;
-
-            PlaceData place = kvp.Value;
-            if (!ShouldShowObject(place)) continue;
-
-            float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
-            if (dist >= minRange && dist <= indicatorOnlyRadius)
-            {
-                candidates.Add(new KeyValuePair<int, float>(id, dist));
-            }
-        }
-
-        // 3) 가까운 순 정렬, 최대 개수까지 생성
-        candidates.Sort((a, b) => a.Value.CompareTo(b.Value));
-
-        int slotsAvailable = maxCount - indicatorOnlyObjects.Count;
-        int created = 0;
-        for (int i = 0; i < candidates.Count && created < slotsAvailable; i++)
-        {
-            int id = candidates[i].Key;
-            if (!placeDataMap.ContainsKey(id)) continue;
-
-            PlaceData place = placeDataMap[id];
-            GameObject indicatorObj = CreateIndicatorOnlyObject(place);
-            if (indicatorObj != null)
-            {
-                indicatorOnlyObjects[id] = indicatorObj;
-                created++;
-            }
-        }
-    }
-
-    /// <summary>
-    /// 인디케이터 전용 경량 오브젝트 생성 (프리팹 기반 — Inspector에서 Target 사이즈 조절 가능)
-    /// 프리팹 미설정 시 런타임 생성 fallback
-    /// </summary>
-    private GameObject CreateIndicatorOnlyObject(PlaceData place)
-    {
-        GameObject root;
-        if (indicatorOnlyPrefab != null)
-        {
-            root = Instantiate(indicatorOnlyPrefab);
-            root.name = $"IndicatorOnly_{place.id}_{place.name}";
-            // 프리팹은 m_IsActive:0으로 저장되어 있으므로 비활성 상태로 생성됨
-        }
-        else
-        {
-            // Fallback: 프리팹 없으면 런타임 생성
-            root = new GameObject($"IndicatorOnly_{place.id}_{place.name}");
-            root.SetActive(false);
-            root.AddComponent<CustomARGeospatialCreatorAnchor>();
-            GameObject targetChild = new GameObject("Target");
-            targetChild.transform.SetParent(root.transform, false);
-            targetChild.AddComponent<Target>();
-        }
-
-        // Anchor 좌표 설정
-        CustomARGeospatialCreatorAnchor anchor = root.GetComponent<CustomARGeospatialCreatorAnchor>();
-        if (anchor == null) anchor = root.AddComponent<CustomARGeospatialCreatorAnchor>();
-
-        // Target 설정 (프리팹의 기본 사이즈 유지, 장소 정보만 덮어쓰기)
-        Target target = root.GetComponentInChildren<Target>(true);
-        if (target != null)
-        {
-            target.PlaceName = place.name ?? "";
-            target.gpsLatitude = place.latitude;
-            target.gpsLongitude = place.longitude;
-
-            // 색상 설정
-            Color placeColor;
-            string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-            if (ColorUtility.TryParseHtmlString($"#{colorHex}", out placeColor))
-                target.TargetColor = placeColor;
-            else
-                target.TargetColor = Color.white;
-        }
-
-        // 활성화 (Target.OnEnable → OffScreenIndicator에 자동 등록)
-        root.SetActive(true);
-
-        // 앵커 생성 (SetActive 이후에 호출해야 코루틴 동작)
-        anchor.SetCoordinatesAndCreateAnchor(place.latitude, place.longitude, place.altitude);
-
-        return root;
-    }
-
-    /// <summary>
-    /// 빠른 이동 정지 후: 캐시된 placeDataMap에서 objectSpawnRadius 이내 3D 오브젝트 즉시 생성
-    /// 이미 인디케이터 전용으로 존재하는 것은 제거 후 3D로 승격
-    /// </summary>
-    private void SpawnObjectsFromCache(float lat, float lon)
-    {
-        List<PlaceData> toSpawn = new List<PlaceData>();
+        // 2) 후보 수집 (objectSpawnRadius 밖 ~ indicatorOnlyRadius 이내, 3D 큐브 없는 것)
+        List<(PlaceData place, float dist)> candidates = new List<(PlaceData, float)>();
         foreach (var kvp in placeDataMap)
         {
             if (spawnedObjects.ContainsKey(kvp.Key)) continue;
+            if (indicatorOnlyObjects.ContainsKey(kvp.Key)) continue;
+
             float dist = CalculateDistance(lat, lon, kvp.Value.latitude, kvp.Value.longitude);
-            if (dist <= objectSpawnRadius && ShouldShowObject(kvp.Value))
+            if (dist > objectSpawnRadius && dist <= indicatorOnlyRadius)
             {
-                toSpawn.Add(kvp.Value);
+                candidates.Add((kvp.Value, dist));
             }
         }
 
-        foreach (var place in toSpawn)
-        {
-            // 인디케이터 전용 오브젝트가 있으면 먼저 제거 (3D로 승격)
-            if (indicatorOnlyObjects.TryGetValue(place.id, out GameObject indicatorObj))
-            {
-                if (indicatorObj != null) Destroy(indicatorObj);
-                indicatorOnlyObjects.Remove(place.id);
-            }
-            CreateObjectFromData(place);
-        }
+        // 가까운 순 정렬
+        candidates.Sort((a, b) => a.dist.CompareTo(b.dist));
 
-        // TourAPIManager 캐시도 함께 스폰
-        if (TourAPIManager.Instance != null)
+        // 3) 최대 개수까지 생성
+        int remaining = maxIndicatorOnlyObjects - indicatorOnlyObjects.Count;
+        for (int i = 0; i < candidates.Count && remaining > 0; i++)
         {
-            TourAPIManager.Instance.SpawnObjectsFromCache(lat, lon);
-        }
-
-        // UI 업데이트
-        if (objectCountUI != null)
-        {
-            objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), true);
+            CreateIndicatorOnlyObject(candidates[i].place);
+            remaining--;
         }
     }
 
+    private void CreateIndicatorOnlyObject(PlaceData place)
+    {
+        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        obj.name = $"Indicator_{place.id}_{place.name}";
+        obj.SetActive(true);
+
+        // Target 컴포넌트 설정 (OffScreenIndicator용)
+        var target = obj.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = place.name;
+            target.gpsLatitude = place.latitude;
+            target.gpsLongitude = place.longitude;
+        }
+
+        // 앵커 생성 (CustomARGeospatialCreatorAnchor가 있으면)
+        var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor != null)
+        {
+            anchor.SetCoordinatesAndCreateAnchor(place.latitude, place.longitude, place.altitude);
+        }
+
+        indicatorOnlyObjects[place.id] = obj;
+    }
+
     /// <summary>
-    /// 모든 경량 인디케이터 오브젝트 제거
+    /// 모든 IndicatorOnly 오브젝트 제거
     /// </summary>
-    private void CleanupAllIndicatorOnlyObjects()
+    private void ClearAllIndicatorOnlyObjects()
     {
         foreach (var kvp in indicatorOnlyObjects)
         {
@@ -2191,13 +2009,46 @@ public class DataManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 경량 인디케이터 오브젝트 개수 반환 (디버그용)
+    /// 백그라운드 복귀 후 데이터 갱신 + 위치 모니터링 재시작
     /// </summary>
-    public int GetIndicatorOnlyCount() => indicatorOnlyObjects.Count;
+    public void RestartFetchingAfterResume()
+    {
+        StopAllFetching();
+
+        float lat = lastPosition.x;
+        float lon = lastPosition.y;
+#if !UNITY_EDITOR
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+#endif
+
+        if (lat == 0f && lon == 0f) return;
+
+        SpawnNearbyUnspawnedObjects(lat, lon);
+        UpdateIndicatorOnlyObjects(lat, lon);
+        fetchCoroutine = StartCoroutine(FetchDataProgressivelySilent(lat, lon));
+        checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
+    }
+
+    /// <summary>
+    /// IndicatorOnly 오브젝트의 앵커를 재생성 (백그라운드 복귀 시)
+    /// </summary>
+    public void RecreateIndicatorOnlyAnchors()
+    {
+        foreach (var kvp in indicatorOnlyObjects)
+        {
+            if (kvp.Value == null || !kvp.Value.activeSelf) continue;
+            var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+                anchor.RecreateAnchor();
+        }
+    }
 
     void OnDestroy()
     {
-        CleanupAllIndicatorOnlyObjects();
         Input.location.Stop();
     }
 }
