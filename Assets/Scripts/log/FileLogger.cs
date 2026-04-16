@@ -271,6 +271,15 @@ public class FileLogger : MonoBehaviour
         {
             Debug.LogError($"[FileLogger] 공유 실패: {ex.Message}");
         }
+#elif UNITY_IOS && !UNITY_EDITOR
+        // iOS: 클립보드에 로그 내용 복사
+        string content = ReadLogFile(latestFile);
+        if (!string.IsNullOrEmpty(content))
+        {
+            GUIUtility.systemCopyBuffer = content;
+            Log("SYSTEM", "로그 내용이 클립보드에 복사되었습니다 — 메모/메시지 앱에 붙여넣기 하세요");
+            FlushBuffer();
+        }
 #else
         Debug.LogWarning($"[FileLogger] 로그 파일 경로: {latestFile}");
 #endif

@@ -997,6 +997,7 @@ public class FilterManager : MonoBehaviour
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
     private HashSet<string> currentIndicatorAllocations = new HashSet<string>();
+    private HashSet<string> detailPendingIds = new HashSet<string>(); // Detail API 응답 대기 중인 ID
     private Vector2 lastAllocationPosition;
     private Vector2 lastCacheRefreshPosition;
     private bool allocationStarted = false;
@@ -1162,12 +1163,18 @@ public class FilterManager : MonoBehaviour
         {
             if (!newFullSet.Contains(id))
             {
-                // 어느 프로바이더 것인지 찾아서 디스폰
+                detailPendingIds.Remove(id);
                 foreach (var provider in cacheProviders)
                 {
                     if (provider.GetSpawnedFullIds().Contains(id))
                     {
                         provider.DespawnFullObject(ExtractRawId(id));
+                        break;
+                    }
+                    // Detail 대기 중 임시 IndicatorOnly도 함께 디스폰
+                    if (provider.GetSpawnedIndicatorIds().Contains(id))
+                    {
+                        provider.DespawnIndicatorOnly(ExtractRawId(id));
                         break;
                     }
                 }
@@ -1192,6 +1199,14 @@ public class FilterManager : MonoBehaviour
 
         // Full 스폰 (새로 추가된 것)
         // Detail API 대기 중인 Full은 임시로 IndicatorOnly 표시
+        // Detail API 응답 완료된 ID 정리 (Full 스폰 성공한 것은 pending에서 제거)
+        detailPendingIds.RemoveWhere(pid =>
+        {
+            if (fullProviderMap.TryGetValue(pid, out var p))
+                return p.GetSpawnedFullIds().Contains(pid);
+            return false;
+        });
+
         HashSet<string> pendingFullIds = new HashSet<string>();
         foreach (string id in newFullSet)
         {
@@ -1207,8 +1222,9 @@ public class FilterManager : MonoBehaviour
                     bool spawned = provider.SpawnFullObject(ExtractRawId(id));
                     if (!spawned)
                     {
-                        // Detail API 대기 중 → 임시 IndicatorOnly 표시
+                        // Detail API 대기 중 → 임시 IndicatorOnly 표시 (최초 1회만)
                         pendingFullIds.Add(id);
+                        detailPendingIds.Add(id);
                         provider.SpawnIndicatorOnly(ExtractRawId(id));
                     }
                 }
@@ -1224,13 +1240,16 @@ public class FilterManager : MonoBehaviour
                     {
                         // Full 스폰 완료 후 임시 IndicatorOnly가 남아있으면 제거
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        detailPendingIds.Remove(id);
                     }
-                    else if (!hasFullSpawn && !hasIndicator)
+                    else if (!hasFullSpawn && !hasIndicator && !detailPendingIds.Contains(id))
                     {
-                        // 이미 Full 배분된 것 중 실제 스폰 안 된 것도 IndicatorOnly 보장
+                        // Detail API 대기 중이 아닌데 Full도 Indicator도 없으면 복구
                         pendingFullIds.Add(id);
+                        detailPendingIds.Add(id);
                         provider.SpawnIndicatorOnly(ExtractRawId(id));
                     }
+                    // detailPendingIds에 있으면 → Detail API 응답 대기 중이므로 아무것도 안 함
                 }
             }
         }
@@ -1349,6 +1368,7 @@ public class FilterManager : MonoBehaviour
     /// </summary>
     private void RefreshAllCaches(float lat, float lon)
     {
+        detailPendingIds.Clear();
         foreach (var provider in cacheProviders)
         {
             provider.RefreshCache(lat, lon);
