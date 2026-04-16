@@ -46,6 +46,54 @@ public class FileLogger : MonoBehaviour
             StartLogging("auto");
     }
 
+    void Start()
+    {
+        // 런타임에 버튼 이벤트 연결 (에디터 Persistent Listener가 누락된 경우 대비)
+        ConnectButtons();
+    }
+
+    private void ConnectButtons()
+    {
+        // VersionButton_Open 하위에서 버튼 찾기 (비활성 포함)
+        GameObject versionBtn = null;
+        foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            var found = FindInChildrenRecursive(root.transform, "VersionButton_Open");
+            if (found != null) { versionBtn = found.gameObject; break; }
+        }
+        if (versionBtn == null) return;
+
+        Transform toggleT = versionBtn.transform.Find("FileLoggerToggleBtn");
+        if (toggleT != null)
+        {
+            Button toggleBtn = toggleT.GetComponent<Button>();
+            if (toggleBtn != null)
+            {
+                toggleBtn.onClick.RemoveAllListeners();
+                toggleBtn.onClick.AddListener(ToggleLogging);
+            }
+
+            // toggleButtonText 자동 연결
+            if (toggleButtonText == null)
+            {
+                toggleButtonText = toggleT.GetComponentInChildren<Text>();
+            }
+        }
+
+        Transform shareT = versionBtn.transform.Find("FileLoggerShareBtn");
+        if (shareT != null)
+        {
+            Button shareBtn = shareT.GetComponent<Button>();
+            if (shareBtn != null)
+            {
+                shareBtn.onClick.RemoveAllListeners();
+                shareBtn.onClick.AddListener(ShareLatestLog);
+            }
+        }
+
+        UpdateToggleButtonText();
+    }
+
     void Update()
     {
         if (!isLogging) return;
@@ -305,5 +353,16 @@ public class FileLogger : MonoBehaviour
         var img = toggleButtonText.transform.parent.GetComponent<Image>();
         if (img != null)
             img.color = isLogging ? new Color(0.8f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.7f, 0.3f, 1f);
+    }
+
+    private static Transform FindInChildrenRecursive(Transform parent, string name)
+    {
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var found = FindInChildrenRecursive(parent.GetChild(i), name);
+            if (found != null) return found;
+        }
+        return null;
     }
 }
