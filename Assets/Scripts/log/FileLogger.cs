@@ -17,9 +17,6 @@ public class FileLogger : MonoBehaviour
     [SerializeField] private bool autoStartOnLaunch = false;
     [SerializeField] private int maxFileSizeKB = 2048; // 2MB 제한
 
-    [Header("UI (테스트용)")]
-    [SerializeField] private Text toggleButtonText;
-
     private bool isLogging = false;
     private string currentLogPath;
     private StringBuilder buffer = new StringBuilder(4096);
@@ -29,6 +26,11 @@ public class FileLogger : MonoBehaviour
     // 로그 통계
     private int logCount;
     private DateTime sessionStartTime;
+
+    // 자체 생성 UI 참조
+    private GameObject uiRoot;
+    private Text toggleButtonText;
+    private Image toggleButtonImage;
 
     public bool IsLogging => isLogging;
     public string CurrentLogPath => currentLogPath;
@@ -48,50 +50,111 @@ public class FileLogger : MonoBehaviour
 
     void Start()
     {
-        // 런타임에 버튼 이벤트 연결 (에디터 Persistent Listener가 누락된 경우 대비)
-        ConnectButtons();
+        CreateUI();
     }
 
-    private void ConnectButtons()
+    /// <summary>
+    /// 독립 Canvas + 버튼 2개를 런타임에 자체 생성
+    /// VersionButton_Open 등 외부 오브젝트에 의존하지 않음
+    /// </summary>
+    private void CreateUI()
     {
-        // VersionButton_Open 하위에서 버튼 찾기 (비활성 포함)
-        GameObject versionBtn = null;
-        foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
-        {
-            var found = FindInChildrenRecursive(root.transform, "VersionButton_Open");
-            if (found != null) { versionBtn = found.gameObject; break; }
-        }
-        if (versionBtn == null) return;
+        if (uiRoot != null) return;
 
-        Transform toggleT = versionBtn.transform.Find("FileLoggerToggleBtn");
-        if (toggleT != null)
-        {
-            Button toggleBtn = toggleT.GetComponent<Button>();
-            if (toggleBtn != null)
-            {
-                toggleBtn.onClick.RemoveAllListeners();
-                toggleBtn.onClick.AddListener(ToggleLogging);
-            }
+        // Canvas 생성
+        uiRoot = new GameObject("FileLoggerUI");
+        uiRoot.transform.SetParent(transform);
 
-            // toggleButtonText 자동 연결
-            if (toggleButtonText == null)
-            {
-                toggleButtonText = toggleT.GetComponentInChildren<Text>();
-            }
-        }
+        Canvas canvas = uiRoot.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 9999; // 항상 최상위
 
-        Transform shareT = versionBtn.transform.Find("FileLoggerShareBtn");
-        if (shareT != null)
-        {
-            Button shareBtn = shareT.GetComponent<Button>();
-            if (shareBtn != null)
-            {
-                shareBtn.onClick.RemoveAllListeners();
-                shareBtn.onClick.AddListener(ShareLatestLog);
-            }
-        }
+        CanvasScaler scaler = uiRoot.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080, 1920);
 
-        UpdateToggleButtonText();
+        uiRoot.AddComponent<GraphicRaycaster>();
+
+        // 버튼 컨테이너 (좌측 하단)
+        GameObject container = new GameObject("Container", typeof(RectTransform));
+        container.transform.SetParent(uiRoot.transform, false);
+        RectTransform containerRect = container.GetComponent<RectTransform>();
+        containerRect.anchorMin = new Vector2(0, 0);
+        containerRect.anchorMax = new Vector2(0, 0);
+        containerRect.pivot = new Vector2(0, 0);
+        containerRect.anchoredPosition = new Vector2(20, 20);
+        containerRect.sizeDelta = new Vector2(260, 160);
+
+        // 폰트 로드
+        Font customFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+
+        // LOG START/STOP 토글 버튼
+        GameObject toggleObj = CreateButton(container.transform, "ToggleBtn", "LOG START",
+            new Vector2(0, 80), new Vector2(260, 70),
+            new Color(0.2f, 0.7f, 0.3f, 1f), customFont);
+        Button toggleBtn = toggleObj.GetComponent<Button>();
+        toggleBtn.onClick.AddListener(ToggleLogging);
+        toggleButtonText = toggleObj.GetComponentInChildren<Text>();
+        toggleButtonImage = toggleObj.GetComponent<Image>();
+
+        // SHARE LOG 버튼
+        GameObject shareObj = CreateButton(container.transform, "ShareBtn", "SHARE LOG",
+            new Vector2(0, 0), new Vector2(260, 70),
+            new Color(0.3f, 0.5f, 0.9f, 1f), customFont);
+        Button shareBtn = shareObj.GetComponent<Button>();
+        shareBtn.onClick.AddListener(ShareLatestLog);
+
+        // 기본 비표시 — VersionButton_Open 열릴 때 함께 표시하거나, 항상 표시
+        // 테스트 편의상 항상 표시
+        uiRoot.SetActive(true);
+    }
+
+    private GameObject CreateButton(Transform parent, string name, string label,
+        Vector2 pos, Vector2 size, Color bgColor, Font font)
+    {
+        GameObject btnObj = new GameObject(name, typeof(RectTransform));
+        btnObj.layer = 5;
+        btnObj.transform.SetParent(parent, false);
+
+        RectTransform rect = btnObj.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0, 0);
+        rect.anchorMax = new Vector2(0, 0);
+        rect.pivot = new Vector2(0, 0);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = size;
+
+        Image img = btnObj.AddComponent<Image>();
+        img.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.normalColor = bgColor;
+        colors.highlightedColor = bgColor * 1.1f;
+        colors.pressedColor = bgColor * 0.8f;
+        btn.colors = colors;
+        btn.targetGraphic = img;
+
+        GameObject textObj = new GameObject("Text", typeof(RectTransform));
+        textObj.layer = 5;
+        textObj.transform.SetParent(btnObj.transform, false);
+
+        RectTransform textRect = textObj.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        Text text = textObj.AddComponent<Text>();
+        text.text = label;
+        text.fontSize = 28;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = Color.white;
+        text.fontStyle = FontStyle.Bold;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        if (font != null) text.font = font;
+
+        return btnObj;
     }
 
     void Update()
@@ -346,29 +409,24 @@ public class FileLogger : MonoBehaviour
 
     private void UpdateToggleButtonText()
     {
-        // toggleButtonText가 null이면 런타임에 다시 찾기
-        if (toggleButtonText == null)
+        if (toggleButtonText != null)
+            toggleButtonText.text = isLogging ? "LOG STOP" : "LOG START";
+
+        if (toggleButtonImage != null)
         {
-            ConnectButtons();
+            Color c = isLogging ? new Color(0.8f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.7f, 0.3f, 1f);
+            toggleButtonImage.color = c;
+
+            // Button ColorBlock도 동기화
+            Button btn = toggleButtonImage.GetComponent<Button>();
+            if (btn != null)
+            {
+                var colors = btn.colors;
+                colors.normalColor = c;
+                colors.highlightedColor = c * 1.1f;
+                colors.pressedColor = c * 0.8f;
+                btn.colors = colors;
+            }
         }
-        if (toggleButtonText == null) return;
-
-        toggleButtonText.text = isLogging ? "LOG STOP" : "LOG START";
-
-        // 버튼 배경색도 변경
-        var img = toggleButtonText.transform.parent.GetComponent<Image>();
-        if (img != null)
-            img.color = isLogging ? new Color(0.8f, 0.2f, 0.2f, 1f) : new Color(0.2f, 0.7f, 0.3f, 1f);
-    }
-
-    private static Transform FindInChildrenRecursive(Transform parent, string name)
-    {
-        if (parent.name == name) return parent;
-        for (int i = 0; i < parent.childCount; i++)
-        {
-            var found = FindInChildrenRecursive(parent.GetChild(i), name);
-            if (found != null) return found;
-        }
-        return null;
     }
 }

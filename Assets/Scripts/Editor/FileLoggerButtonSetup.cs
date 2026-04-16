@@ -1,167 +1,41 @@
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEditor;
-using UnityEditor.Callbacks;
 using UnityEditor.SceneManagement;
 
 /// <summary>
-/// VersionButton_Open 하위에 FileLogger 테스트 버튼 2개 생성
-/// - LOG START/STOP 토글 버튼
-/// - SHARE LOG 공유 버튼
-/// 런칭 전 테스트용 — 나중에 삭제
+/// [비활성] FileLogger가 자체 런타임 UI를 생성하므로 더 이상 사용하지 않음
+/// VersionButton_Open 하위에 이미 생성된 FileLoggerToggleBtn/FileLoggerShareBtn 제거용
 /// </summary>
 [InitializeOnLoad]
 public class FileLoggerButtonSetup
 {
-    private const string TOGGLE_BTN_NAME = "FileLoggerToggleBtn";
-    private const string SHARE_BTN_NAME = "FileLoggerShareBtn";
-
     static FileLoggerButtonSetup()
     {
-        EditorSceneManager.sceneOpened += (scene, mode) => EditorApplication.delayCall += Setup;
-        EditorApplication.delayCall += Setup;
+        EditorSceneManager.sceneOpened += (scene, mode) => EditorApplication.delayCall += CleanupOldButtons;
+        EditorApplication.delayCall += CleanupOldButtons;
     }
 
-    [DidReloadScripts]
-    private static void OnScriptsReloaded()
+    private static void CleanupOldButtons()
     {
-        EditorApplication.delayCall += Setup;
-    }
-
-    private static void Setup()
-    {
-        // VersionButton_Open 찾기
-        GameObject versionBtn = null;
         foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
         {
             var found = FindInChildren(root.transform, "VersionButton_Open");
-            if (found != null) { versionBtn = found.gameObject; break; }
-        }
-        if (versionBtn == null) return;
+            if (found == null) continue;
 
-        RectTransform parentRect = versionBtn.GetComponent<RectTransform>();
-        if (parentRect == null) return;
+            bool changed = false;
+            Transform toggle = found.Find("FileLoggerToggleBtn");
+            if (toggle != null) { Object.DestroyImmediate(toggle.gameObject); changed = true; }
 
-        // 폰트 로드
-        Font customFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
+            Transform share = found.Find("FileLoggerShareBtn");
+            if (share != null) { Object.DestroyImmediate(share.gameObject); changed = true; }
 
-        bool changed = false;
-
-        // 토글 버튼 생성
-        if (parentRect.Find(TOGGLE_BTN_NAME) == null)
-        {
-            CreateButton(parentRect, TOGGLE_BTN_NAME, "LOG START",
-                new Vector2(0, -120), new Vector2(280, 80),
-                new Color(0.2f, 0.7f, 0.3f, 1f), customFont);
-            changed = true;
-        }
-
-        // 공유 버튼 생성
-        if (parentRect.Find(SHARE_BTN_NAME) == null)
-        {
-            CreateButton(parentRect, SHARE_BTN_NAME, "SHARE LOG",
-                new Vector2(0, -220), new Vector2(280, 80),
-                new Color(0.3f, 0.5f, 0.9f, 1f), customFont);
-            changed = true;
-        }
-
-        if (changed)
-        {
-            // FileLogger 연결
-            FileLogger logger = Object.FindFirstObjectByType<FileLogger>(FindObjectsInactive.Include);
-            if (logger != null)
+            if (changed)
             {
-                // 토글 버튼 → ToggleLogging
-                Transform toggleT = parentRect.Find(TOGGLE_BTN_NAME);
-                if (toggleT != null)
-                {
-                    Button toggleBtn = toggleT.GetComponent<Button>();
-                    if (toggleBtn != null)
-                    {
-                        UnityEditor.Events.UnityEventTools.AddPersistentListener(
-                            toggleBtn.onClick,
-                            new UnityEngine.Events.UnityAction(logger.ToggleLogging));
-                    }
-
-                    // toggleButtonText 필드 자동 연결
-                    Text toggleText = toggleT.GetComponentInChildren<Text>();
-                    if (toggleText != null)
-                    {
-                        var so = new SerializedObject(logger);
-                        var prop = so.FindProperty("toggleButtonText");
-                        if (prop != null)
-                        {
-                            prop.objectReferenceValue = toggleText;
-                            so.ApplyModifiedProperties();
-                        }
-                    }
-                }
-
-                // 공유 버튼 → ShareLatestLog
-                Transform shareT = parentRect.Find(SHARE_BTN_NAME);
-                if (shareT != null)
-                {
-                    Button shareBtn = shareT.GetComponent<Button>();
-                    if (shareBtn != null)
-                    {
-                        UnityEditor.Events.UnityEventTools.AddPersistentListener(
-                            shareBtn.onClick,
-                            new UnityEngine.Events.UnityAction(logger.ShareLatestLog));
-                    }
-                }
+                EditorUtility.SetDirty(found.gameObject);
+                EditorSceneManager.MarkSceneDirty(found.gameObject.scene);
             }
-
-            EditorUtility.SetDirty(versionBtn);
-            EditorSceneManager.MarkSceneDirty(versionBtn.scene);
+            break;
         }
-    }
-
-    private static void CreateButton(RectTransform parent, string name, string label,
-        Vector2 anchoredPos, Vector2 size, Color bgColor, Font font)
-    {
-        GameObject btnObj = new GameObject(name, typeof(RectTransform));
-        btnObj.layer = 5; // UI
-        btnObj.transform.SetParent(parent, false);
-
-        RectTransform rect = btnObj.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0.5f, 1f);
-        rect.anchorMax = new Vector2(0.5f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = anchoredPos;
-        rect.sizeDelta = size;
-
-        // Background Image
-        Image img = btnObj.AddComponent<Image>();
-        img.color = bgColor;
-
-        // Button
-        Button btn = btnObj.AddComponent<Button>();
-        var colors = btn.colors;
-        colors.normalColor = bgColor;
-        colors.highlightedColor = bgColor * 1.1f;
-        colors.pressedColor = bgColor * 0.8f;
-        btn.colors = colors;
-
-        // Text (일반 Unity Text — TMP 폰트 아틀라스 깨짐 방지)
-        GameObject textObj = new GameObject("Text", typeof(RectTransform));
-        textObj.layer = 5;
-        textObj.transform.SetParent(btnObj.transform, false);
-
-        RectTransform textRect = textObj.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
-
-        Text text = textObj.AddComponent<Text>();
-        text.text = label;
-        text.fontSize = 28;
-        text.alignment = TextAnchor.MiddleCenter;
-        text.color = Color.white;
-        text.fontStyle = FontStyle.Bold;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        if (font != null) text.font = font;
     }
 
     private static Transform FindInChildren(Transform parent, string name)
