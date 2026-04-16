@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
+using System.Linq;
 
 public class FilterManager : MonoBehaviour
 {
@@ -23,7 +24,9 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
     [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
     [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
-    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f); // 보라색 (공공화장실)
+    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f); // 보라색 (공중화장실)
+    [SerializeField] private Color categoryColorSport = new Color(0.2f, 0.75f, 0.75f, 1f); // 청록색 (스포츠)
+    [SerializeField] private Color categoryColorLandmark = new Color(0.85f, 0.65f, 0.13f, 1f); // 금색 (랜드마크)
 
     [Header("References")]
     [SerializeField] private PlaceListManager placeListManager;
@@ -60,10 +63,12 @@ public class FilterManager : MonoBehaviour
         Food = 2,
         Cafe = 3,
         Park = 4,
-        Toilet = 5  // 공공화장실 (보라색)
+        Toilet = 5,  // 공중화장실 (보라색)
+        Sport = 6,   // 스포츠 (청록색)
+        Landmark = 7 // 랜드마크 (금색)
     }
 
-    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "toilet" };
+    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark" };
 
     // 공공데이터 카테고리 (publicData 토글로 필터링)
     public static readonly HashSet<string> PublicDataCategories = new HashSet<string>
@@ -121,12 +126,14 @@ public class FilterManager : MonoBehaviour
             { "train", "Train" },
             { "terminal", "Terminal/Airport" },
             { "object3D", "3D Objects" },
-            { "categoryAll", "Category" },
+            { "categoryAll", "Category (All)" },
             { "categoryShop", "Shop" },
             { "categoryFood", "Food" },
             { "categoryCafe", "Cafe" },
             { "categoryPark", "Park" },
-            { "categoryToilet", "Restroom" }
+            { "categoryToilet", "Public Restroom" },
+            { "categorySport", "Sports" },
+            { "categoryLandmark", "Landmark" }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendlyInclude", "애견동반(포함)" },
@@ -141,12 +148,14 @@ public class FilterManager : MonoBehaviour
             { "train", "기차역" },
             { "terminal", "터미널" },
             { "object3D", "3D 오브젝트" },
-            { "categoryAll", "카테고리" },
+            { "categoryAll", "카테고리(전체)" },
             { "categoryShop", "샵" },
             { "categoryFood", "음식점" },
             { "categoryCafe", "카페" },
             { "categoryPark", "공원" },
-            { "categoryToilet", "공공화장실" }
+            { "categoryToilet", "공중화장실" },
+            { "categorySport", "스포츠" },
+            { "categoryLandmark", "랜드마크" }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendlyInclude", "ペット同伴(含む)" },
@@ -161,12 +170,14 @@ public class FilterManager : MonoBehaviour
             { "train", "鉄道駅" },
             { "terminal", "ターミナル" },
             { "object3D", "3Dオブジェクト" },
-            { "categoryAll", "カテゴリ" },
+            { "categoryAll", "カテゴリ(全体)" },
             { "categoryShop", "ショップ" },
             { "categoryFood", "グルメ" },
             { "categoryCafe", "カフェ" },
             { "categoryPark", "公園" },
-            { "categoryToilet", "公衆トイレ" }
+            { "categoryToilet", "公衆トイレ" },
+            { "categorySport", "スポーツ" },
+            { "categoryLandmark", "ランドマーク" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendlyInclude", "宠物友好(包含)" },
@@ -181,12 +192,14 @@ public class FilterManager : MonoBehaviour
             { "train", "火车站" },
             { "terminal", "航站楼" },
             { "object3D", "3D对象" },
-            { "categoryAll", "分类" },
+            { "categoryAll", "分类(全部)" },
             { "categoryShop", "商店" },
             { "categoryFood", "美食" },
             { "categoryCafe", "咖啡厅" },
             { "categoryPark", "公园" },
-            { "categoryToilet", "公共厕所" }
+            { "categoryToilet", "公共卫生间" },
+            { "categorySport", "运动" },
+            { "categoryLandmark", "地标" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendlyInclude", "Mascotas (Incluir)" },
@@ -201,12 +214,14 @@ public class FilterManager : MonoBehaviour
             { "train", "Estación de Tren" },
             { "terminal", "Terminal" },
             { "object3D", "Objetos 3D" },
-            { "categoryAll", "Categoría" },
+            { "categoryAll", "Categoría (Todo)" },
             { "categoryShop", "Tienda" },
             { "categoryFood", "Comida" },
             { "categoryCafe", "Café" },
             { "categoryPark", "Parque" },
-            { "categoryToilet", "Baño Público" }
+            { "categoryToilet", "Baño Público" },
+            { "categorySport", "Deportes" },
+            { "categoryLandmark", "Punto de Interés" }
         }}
     };
 
@@ -265,6 +280,56 @@ public class FilterManager : MonoBehaviour
         }
 
         ApplyAllFilters();
+
+        // Start 시점에서 이미 프로바이더가 등록되어 있으면 바로 시작
+        EnsureAllocationLoopStarted();
+
+        // 역방향 안전장치: 매니저들이 먼저 Start되어 등록 실패한 경우 여기서 재탐색
+        StartCoroutine(DelayedProviderScan());
+    }
+
+    /// <summary>
+    /// Start 직후 1초 뒤 프로바이더 탐색 (매니저보다 늦게 Start되는 경우 대비)
+    /// </summary>
+    private IEnumerator DelayedProviderScan()
+    {
+        yield return new WaitForSeconds(1f);
+
+        // 아직 등록되지 않은 프로바이더 탐색
+        IPlaceCacheProvider[] allProviders = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+            as IPlaceCacheProvider[];
+
+        // FindObjectsByType는 인터페이스로 직접 검색 불가 → 개별 매니저 탐색
+        if (dataManager != null && dataManager is IPlaceCacheProvider dmProvider && !cacheProviders.Contains(dmProvider))
+        {
+            RegisterCacheProvider(dmProvider);
+            Debug.LogWarning("[dbg] FilterManager: DataManager 지연 등록");
+        }
+        if (tourAPIManager != null && tourAPIManager is IPlaceCacheProvider tourProvider && !cacheProviders.Contains(tourProvider))
+        {
+            RegisterCacheProvider(tourProvider);
+            Debug.LogWarning("[dbg] FilterManager: TourAPIManager 지연 등록");
+        }
+        if (subwayManager != null && subwayManager is IPlaceCacheProvider subwayProvider && !cacheProviders.Contains(subwayProvider))
+        {
+            RegisterCacheProvider(subwayProvider);
+            Debug.LogWarning("[dbg] FilterManager: SubwayManager 지연 등록");
+        }
+        if (trainStationManager != null && trainStationManager is IPlaceCacheProvider trainProvider && !cacheProviders.Contains(trainProvider))
+        {
+            RegisterCacheProvider(trainProvider);
+            Debug.LogWarning("[dbg] FilterManager: TrainStationManager 지연 등록");
+        }
+        if (terminalManager != null && terminalManager is IPlaceCacheProvider terminalProvider && !cacheProviders.Contains(terminalProvider))
+        {
+            RegisterCacheProvider(terminalProvider);
+            Debug.LogWarning("[dbg] FilterManager: TerminalManager 지연 등록");
+        }
+
+        Debug.LogWarning($"[dbg] FilterManager.DelayedProviderScan 완료: 총 {cacheProviders.Count}개 프로바이더");
+
+        // 프로바이더가 있으면 AllocationLoop 시작 보장
+        EnsureAllocationLoopStarted();
     }
 
     private void UpdateLanguage()
@@ -727,12 +792,12 @@ public class FilterManager : MonoBehaviour
         }
         else
         {
-            // 원래 상태로 복원
-            if (publicDataToggle != null) publicDataToggle.isOn = filterPublicData;
-            if (subwayToggle != null) subwayToggle.isOn = filterSubway;
-            if (trainToggle != null) trainToggle.isOn = filterTrain;
-            if (terminalToggle != null) terminalToggle.isOn = filterTerminal;
-            if (alcoholToggle != null) alcoholToggle.isOn = filterAlcohol;
+            // 원래 상태로 복원 (SetIsOnWithoutNotify로 이벤트 발생 방지)
+            if (publicDataToggle != null) publicDataToggle.SetIsOnWithoutNotify(filterPublicData);
+            if (subwayToggle != null) subwayToggle.SetIsOnWithoutNotify(filterSubway);
+            if (trainToggle != null) trainToggle.SetIsOnWithoutNotify(filterTrain);
+            if (terminalToggle != null) terminalToggle.SetIsOnWithoutNotify(filterTerminal);
+            if (alcoholToggle != null) alcoholToggle.SetIsOnWithoutNotify(filterAlcohol);
 
             // 토글 터치 가능으로 복원
             SetToggleInteractable(publicDataToggle, true);
@@ -757,9 +822,27 @@ public class FilterManager : MonoBehaviour
             RestoreToggleVisual(trainToggle, filterTrain);
             RestoreToggleVisual(terminalToggle, filterTerminal);
             RestoreToggleVisual(alcoholToggle, filterAlcohol);
+
+            // Unity Toggle 내부 PlayEffect가 비동기로 색상을 덮어쓸 수 있으므로
+            // 1프레임 후 색상 강제 재적용
+            StartCoroutine(DelayedRestoreToggleVisuals());
         }
 
         isUpdatingToggles = false;
+    }
+
+    /// <summary>
+    /// Unity Toggle 내부 PlayEffect가 비동기로 graphic 색상을 덮어쓰는 문제 방지
+    /// 1프레임 뒤에 색상 강제 재적용
+    /// </summary>
+    private IEnumerator DelayedRestoreToggleVisuals()
+    {
+        yield return null;
+        RestoreToggleVisual(publicDataToggle, filterPublicData);
+        RestoreToggleVisual(subwayToggle, filterSubway);
+        RestoreToggleVisual(trainToggle, filterTrain);
+        RestoreToggleVisual(terminalToggle, filterTerminal);
+        RestoreToggleVisual(alcoholToggle, filterAlcohol);
     }
 
     /// <summary>
@@ -833,6 +916,14 @@ public class FilterManager : MonoBehaviour
                 bgColor = categoryColorToilet;
                 labelText = texts["categoryToilet"];
                 break;
+            case CategoryFilterState.Sport:
+                bgColor = categoryColorSport;
+                labelText = texts["categorySport"];
+                break;
+            case CategoryFilterState.Landmark:
+                bgColor = categoryColorLandmark;
+                labelText = texts["categoryLandmark"];
+                break;
         }
 
         SetToggleBackgroundAndCheckmark(categoryToggle, bgColor);
@@ -862,6 +953,9 @@ public class FilterManager : MonoBehaviour
         if (subwayManager != null) subwayManager.ApplyFilters(filters);
 
         // P2P 필터는 P2PUserFilterPanel이 전담 처리
+
+        // 중앙 배분 즉시 재실행 (필터 변경 반영)
+        TriggerReallocation();
     }
 
     public Dictionary<string, bool> GetActiveFilters()
@@ -882,6 +976,425 @@ public class FilterManager : MonoBehaviour
             { "categoryFilter", categoryActive },
             { "p2pUsers", categoryActive ? false : true }
         };
+    }
+
+    // ============================================================
+    // 중앙 배분 시스템 — Full 20개 + IndicatorOnly 20개 + OffScreen 16개
+    // ============================================================
+
+    [Header("Central Allocation")]
+    [Tooltip("Full 3D 오브젝트 최대 수")]
+    [SerializeField] private int maxFullObjects = 20;
+    [Tooltip("IndicatorOnly 경량 오브젝트 최대 수")]
+    [SerializeField] private int maxIndicatorObjects = 20;
+    [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
+    [SerializeField] private float fullObjectRadius = 500f;
+    [Tooltip("배분 갱신 주기 (초)")]
+    [SerializeField] private float allocationInterval = 3f;
+    [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
+    [SerializeField] private float cacheRefreshDistance = 5000f;
+
+    private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
+    private HashSet<string> currentFullAllocations = new HashSet<string>();
+    private HashSet<string> currentIndicatorAllocations = new HashSet<string>();
+    private Vector2 lastAllocationPosition;
+    private Vector2 lastCacheRefreshPosition;
+    private bool allocationStarted = false;
+    private Coroutine allocationCoroutine;
+
+    /// <summary>
+    /// IPlaceCacheProvider를 등록 (각 매니저가 Start에서 호출)
+    /// 코루틴은 여기서 시작하지 않음 — FilterManager 자체 OnEnable에서 시작
+    /// </summary>
+    public void RegisterCacheProvider(IPlaceCacheProvider provider)
+    {
+        if (provider != null && !cacheProviders.Contains(provider))
+        {
+            cacheProviders.Add(provider);
+            Debug.LogWarning($"[dbg] RegisterCacheProvider: {provider.FilterKey}, total={cacheProviders.Count}, active={gameObject.activeInHierarchy}");
+
+            // 활성 상태이면 즉시 시작 시도 (비활성이면 OnEnable에서 나중에 시작)
+            EnsureAllocationLoopStarted();
+        }
+    }
+
+    private void OnEnable()
+    {
+        // 비활성→활성 전환 시 AllocationLoop 시작 (코루틴은 활성 오브젝트에서만 실행 가능)
+        if (!allocationStarted && cacheProviders.Count > 0)
+        {
+            allocationStarted = true;
+            allocationCoroutine = StartCoroutine(AllocationLoop());
+            Debug.LogWarning($"[dbg] AllocationLoop OnEnable에서 시작 (providers={cacheProviders.Count})");
+        }
+    }
+
+    /// <summary>
+    /// AllocationLoop를 확실히 시작 — Start/DelayedProviderScan 등에서 호출
+    /// </summary>
+    private void EnsureAllocationLoopStarted()
+    {
+        if (!allocationStarted && gameObject.activeInHierarchy && cacheProviders.Count > 0)
+        {
+            allocationStarted = true;
+            allocationCoroutine = StartCoroutine(AllocationLoop());
+            Debug.LogWarning($"[dbg] AllocationLoop EnsureStart에서 시작 (providers={cacheProviders.Count})");
+        }
+    }
+
+    /// <summary>
+    /// 배분 주기 코루틴 — allocationInterval마다 재배분
+    /// </summary>
+    private IEnumerator AllocationLoop()
+    {
+        // 최초 캐시 준비 대기 (최소 1개 프로바이더 준비)
+        yield return new WaitForSeconds(2f);
+
+        while (true)
+        {
+            Vector2 gps = GetCurrentGPS();
+
+            // [DEBUG] 프로바이더 준비 상태 로깅 (첫 10회만)
+            int readyCount = 0;
+            foreach (var p in cacheProviders) if (p.IsCacheReady) readyCount++;
+            Debug.LogWarning($"[dbg] AllocationLoop: GPS=({gps.x:F5},{gps.y:F5}), providers={cacheProviders.Count}, ready={readyCount}");
+
+            // FileLogger: GPS 위치 + 프로바이더 상태
+            if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                FileLogger.Instance.LogGPS(gps.x, gps.y, $"providers={cacheProviders.Count}, ready={readyCount}");
+
+            if (gps.x != 0f || gps.y != 0f)
+            {
+                // 5km 이상 이동 시 캐시 갱신
+                float movedFromCache = CalculateGPSDistance(lastCacheRefreshPosition.x, lastCacheRefreshPosition.y, gps.x, gps.y);
+                if (lastCacheRefreshPosition == Vector2.zero || movedFromCache >= cacheRefreshDistance)
+                {
+                    RefreshAllCaches(gps.x, gps.y);
+                    lastCacheRefreshPosition = gps;
+
+                    if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                        FileLogger.Instance.Log("CACHE", $"캐시 갱신 트리거: moved={movedFromCache:F0}m, threshold={cacheRefreshDistance}m at ({gps.x:F6},{gps.y:F6})");
+                }
+
+                AllocateObjects(gps.x, gps.y);
+                lastAllocationPosition = gps;
+            }
+
+            yield return new WaitForSeconds(allocationInterval);
+        }
+    }
+
+    /// <summary>
+    /// 필터 변경 시 즉시 재배분 트리거
+    /// </summary>
+    public void TriggerReallocation()
+    {
+        Vector2 gps = GetCurrentGPS();
+        if (gps.x != 0f || gps.y != 0f)
+        {
+            AllocateObjects(gps.x, gps.y);
+        }
+    }
+
+    /// <summary>
+    /// 핵심 배분 로직
+    /// 1) 모든 매니저 캐시에서 데이터 수집
+    /// 2) Full 후보: 필터 통과 + fullObjectRadius 이내 + 거리순 → 최대 maxFullObjects
+    /// 3) IndicatorOnly 후보: 필터 무시 + Full 아닌 것 + 거리순 → 최대 maxIndicatorObjects
+    /// 4) 이전 배분과 비교하여 스폰/디스폰
+    /// </summary>
+    private void AllocateObjects(float lat, float lon)
+    {
+        // 1) 전체 캐시 수집 + 거리 계산
+        List<(CachedPlaceData data, IPlaceCacheProvider provider, float distance)> allPlaces
+            = new List<(CachedPlaceData, IPlaceCacheProvider, float)>();
+
+        foreach (var provider in cacheProviders)
+        {
+            if (!provider.IsCacheReady) continue;
+
+            foreach (var place in provider.GetCachedPlaces())
+            {
+                float dist = CalculateGPSDistance(lat, lon, place.latitude, place.longitude);
+                allPlaces.Add((place, provider, dist));
+            }
+        }
+
+        // 거리순 정렬
+        allPlaces.Sort((a, b) => a.distance.CompareTo(b.distance));
+
+        Dictionary<string, bool> filters = GetActiveFilters();
+
+        // 2) Full 후보: 필터 통과 + fullObjectRadius 이내
+        HashSet<string> newFullSet = new HashSet<string>();
+        Dictionary<string, IPlaceCacheProvider> fullProviderMap = new Dictionary<string, IPlaceCacheProvider>();
+
+        foreach (var item in allPlaces)
+        {
+            if (newFullSet.Count >= maxFullObjects) break;
+            if (item.distance > fullObjectRadius) continue;
+            if (!IsPassingFilter(item.data, filters)) continue;
+
+            newFullSet.Add(item.data.uniqueId);
+            fullProviderMap[item.data.uniqueId] = item.provider;
+        }
+
+        // 3) IndicatorOnly 후보: 매니저 토글만 적용 (세부 필터는 무시), Full 제외
+        HashSet<string> newIndicatorSet = new HashSet<string>();
+        Dictionary<string, IPlaceCacheProvider> indicatorProviderMap = new Dictionary<string, IPlaceCacheProvider>();
+
+        foreach (var item in allPlaces)
+        {
+            if (newIndicatorSet.Count >= maxIndicatorObjects) break;
+            if (newFullSet.Contains(item.data.uniqueId)) continue;
+
+            // 매니저별 토글 체크 (publicData, subway, train, terminal OFF 시 제외)
+            if (!IsPassingManagerToggle(item.data, filters)) continue;
+
+            newIndicatorSet.Add(item.data.uniqueId);
+            indicatorProviderMap[item.data.uniqueId] = item.provider;
+        }
+
+        // 4) Diff: 디스폰 → 스폰 순서로 처리
+
+        // Full 디스폰 (이전에 있었지만 새 배분에 없는 것)
+        foreach (string id in currentFullAllocations)
+        {
+            if (!newFullSet.Contains(id))
+            {
+                // 어느 프로바이더 것인지 찾아서 디스폰
+                foreach (var provider in cacheProviders)
+                {
+                    if (provider.GetSpawnedFullIds().Contains(id))
+                    {
+                        provider.DespawnFullObject(ExtractRawId(id));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // IndicatorOnly 디스폰
+        foreach (string id in currentIndicatorAllocations)
+        {
+            if (!newIndicatorSet.Contains(id))
+            {
+                foreach (var provider in cacheProviders)
+                {
+                    if (provider.GetSpawnedIndicatorIds().Contains(id))
+                    {
+                        provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Full 스폰 (새로 추가된 것)
+        // Detail API 대기 중인 Full은 임시로 IndicatorOnly 표시
+        HashSet<string> pendingFullIds = new HashSet<string>();
+        foreach (string id in newFullSet)
+        {
+            if (!currentFullAllocations.Contains(id))
+            {
+                if (fullProviderMap.TryGetValue(id, out var provider))
+                {
+                    // IndicatorOnly에서 승격 또는 임시 IndicatorOnly가 남아있는 경우 먼저 디스폰
+                    if (currentIndicatorAllocations.Contains(id) || provider.GetSpawnedIndicatorIds().Contains(id))
+                    {
+                        provider.DespawnIndicatorOnly(ExtractRawId(id));
+                    }
+                    bool spawned = provider.SpawnFullObject(ExtractRawId(id));
+                    if (!spawned)
+                    {
+                        // Detail API 대기 중 → 임시 IndicatorOnly 표시
+                        pendingFullIds.Add(id);
+                        provider.SpawnIndicatorOnly(ExtractRawId(id));
+                    }
+                }
+            }
+            else
+            {
+                if (fullProviderMap.TryGetValue(id, out var provider))
+                {
+                    bool hasFullSpawn = provider.GetSpawnedFullIds().Contains(id);
+                    bool hasIndicator = provider.GetSpawnedIndicatorIds().Contains(id);
+
+                    if (hasFullSpawn && hasIndicator)
+                    {
+                        // Full 스폰 완료 후 임시 IndicatorOnly가 남아있으면 제거
+                        provider.DespawnIndicatorOnly(ExtractRawId(id));
+                    }
+                    else if (!hasFullSpawn && !hasIndicator)
+                    {
+                        // 이미 Full 배분된 것 중 실제 스폰 안 된 것도 IndicatorOnly 보장
+                        pendingFullIds.Add(id);
+                        provider.SpawnIndicatorOnly(ExtractRawId(id));
+                    }
+                }
+            }
+        }
+
+        // IndicatorOnly 스폰 (새로 추가된 것)
+        foreach (string id in newIndicatorSet)
+        {
+            if (!currentIndicatorAllocations.Contains(id))
+            {
+                if (indicatorProviderMap.TryGetValue(id, out var provider))
+                {
+                    provider.SpawnIndicatorOnly(ExtractRawId(id));
+                }
+            }
+        }
+
+        // [DEBUG] 배분 결과 로깅
+        int totalPlaces = 0;
+        foreach (var provider in cacheProviders)
+            if (provider.IsCacheReady) totalPlaces += provider.GetCachedPlaces().Count;
+        Debug.LogWarning($"[dbg] AllocateObjects 결과: 총캐시={totalPlaces}, Full={newFullSet.Count}(이전={currentFullAllocations.Count}), Indicator={newIndicatorSet.Count}(이전={currentIndicatorAllocations.Count}), radius={fullObjectRadius}m");
+
+        // FileLogger: 배분 결과
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogAllocation(totalPlaces, newFullSet.Count, newIndicatorSet.Count, fullObjectRadius);
+
+        currentFullAllocations = newFullSet;
+        currentIndicatorAllocations = newIndicatorSet;
+    }
+
+    /// <summary>
+    /// CachedPlaceData가 현재 필터를 통과하는지 판단
+    /// IndicatorOnly는 이 검사를 거치지 않음 (항상 표시)
+    /// </summary>
+    private bool IsPassingFilter(CachedPlaceData place, Dictionary<string, bool> filters)
+    {
+        if (filters == null) return true;
+
+        // 매니저별 토글 체크
+        string fk = place.filterKey;
+        if (!string.IsNullOrEmpty(fk) && filters.ContainsKey(fk) && !filters[fk])
+            return false;
+
+        // 카테고리 필터 (shop, food, cafe, park, toilet, sport, landmark)
+        bool categoryFilterActive = filters.ContainsKey("categoryFilter") && filters["categoryFilter"];
+        if (categoryFilterActive)
+        {
+            // 카테고리 필터가 활성이면 해당 카테고리만 통과 (publicData 토글 무시)
+            string activeCat = GetActiveCategoryFilter();
+            if (!string.IsNullOrEmpty(activeCat) && place.category != activeCat)
+                return false;
+        }
+        else
+        {
+            // 카테고리 필터 비활성 시에만 공공데이터 토글 적용
+            string cat = place.category ?? "";
+            if (PublicDataCategories.Contains(cat))
+            {
+                bool showPublicData = !filters.ContainsKey("publicData") || filters["publicData"];
+                if (!showPublicData) return false;
+            }
+        }
+
+        // 3D 오브젝트 필터 (model_type == "custom")
+        bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
+        if (!showObject3D && place.modelType == "custom")
+            return false;
+
+        // 애견동반 필터
+        bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
+        bool noPetFriendly = filters.ContainsKey("noPetFriendly") && filters["noPetFriendly"];
+        if (petFriendlyOnly && !place.petFriendly) return false;
+        if (noPetFriendly && place.petFriendly) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// IndicatorOnly용 필터 체크
+    /// 매니저 토글(publicData, subway, train, terminal) + 카테고리 필터 적용
+    /// 세부 필터(petFriendly, object3D)는 적용하지 않음
+    /// </summary>
+    private bool IsPassingManagerToggle(CachedPlaceData place, Dictionary<string, bool> filters)
+    {
+        if (filters == null) return true;
+
+        // 카테고리 필터 (shop, food, cafe, park, toilet, sport, landmark) — IndicatorOnly에도 적용
+        bool categoryFilterActive = filters.ContainsKey("categoryFilter") && filters["categoryFilter"];
+        if (categoryFilterActive)
+        {
+            // 카테고리 필터가 활성이면 해당 카테고리만 통과 (매니저 토글/publicData 무시)
+            string activeCat = GetActiveCategoryFilter();
+            if (!string.IsNullOrEmpty(activeCat) && place.category != activeCat)
+                return false;
+        }
+        else
+        {
+            // 카테고리 필터 비활성 시에만 매니저 토글 + publicData 적용
+            string fk = place.filterKey;
+            if (!string.IsNullOrEmpty(fk) && filters.ContainsKey(fk) && !filters[fk])
+                return false;
+
+            string cat = place.category ?? "";
+            if (PublicDataCategories.Contains(cat))
+            {
+                bool showPublicData = !filters.ContainsKey("publicData") || filters["publicData"];
+                if (!showPublicData) return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 모든 프로바이더 캐시 갱신 (5km 이동 시)
+    /// </summary>
+    private void RefreshAllCaches(float lat, float lon)
+    {
+        foreach (var provider in cacheProviders)
+        {
+            provider.RefreshCache(lat, lon);
+        }
+    }
+
+    /// <summary>
+    /// uniqueId에서 rawId 추출 ("dm_123" → "123", "subway_강남역" → "강남역")
+    /// </summary>
+    private string ExtractRawId(string uniqueId)
+    {
+        int underscoreIndex = uniqueId.IndexOf('_');
+        if (underscoreIndex >= 0 && underscoreIndex < uniqueId.Length - 1)
+            return uniqueId.Substring(underscoreIndex + 1);
+        return uniqueId;
+    }
+
+    private Vector2 GetCurrentGPS()
+    {
+#if UNITY_EDITOR
+        if (VirtualLocation.Instance != null)
+            return new Vector2(VirtualLocation.Instance.Latitude, VirtualLocation.Instance.Longitude);
+        return Vector2.zero;
+#else
+        if (Input.location.status == LocationServiceStatus.Running)
+            return new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
+        // fallback: DataManager의 마지막 위치
+        if (dataManager != null)
+            return dataManager.GetLastFetchPosition();
+        return Vector2.zero;
+#endif
+    }
+
+    /// <summary>
+    /// GPS 거리 계산 (Haversine)
+    /// </summary>
+    private float CalculateGPSDistance(float lat1, float lon1, float lat2, float lon2)
+    {
+        const float R = 6371000f;
+        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
+        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
+        float a = Mathf.Sin(dLat / 2f) * Mathf.Sin(dLat / 2f)
+                + Mathf.Cos(Mathf.Deg2Rad * lat1) * Mathf.Cos(Mathf.Deg2Rad * lat2)
+                * Mathf.Sin(dLon / 2f) * Mathf.Sin(dLon / 2f);
+        float c = 2f * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1f - a));
+        return R * c;
     }
 }
 

@@ -23,6 +23,12 @@ public class Indicator : MonoBehaviour
     private Coroutine fadeCoroutine;
     private bool isFirstActivation = true;
 
+    /// <summary>
+    /// 마지막으로 DrawIndicators에서 업데이트된 프레임 번호
+    /// 2프레임 이상 업데이트 안 되면 orphan으로 판단하여 자동 해제
+    /// </summary>
+    [HideInInspector] public int lastUpdatedFrame;
+
     public bool Active
     {
         get

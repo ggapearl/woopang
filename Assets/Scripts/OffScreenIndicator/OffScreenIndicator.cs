@@ -230,6 +230,11 @@ public class OffScreenIndicator : MonoBehaviour
 
     void DrawIndicators()
     {
+        // 안전장치: null/Destroyed 타겟 + orphan 인디케이터 정리
+        CleanupNullTargets();
+        if (Time.frameCount % 10 == 0)
+            CleanupOrphanIndicators();
+
         if (isFallbackMode)
         {
             DrawFallbackIndicators();
@@ -265,7 +270,16 @@ public class OffScreenIndicator : MonoBehaviour
         {
             // 앵커가 아직 생성되지 않은 오브젝트는 위치가 원점(0,0,0)이므로 표시 생략
             if (!target.IsAnchorReady)
+            {
+                // fallback에서 전환 후 앵커 미생성 타겟의 잔류 인디케이터 정리
+                if (target.indicator != null)
+                {
+                    target.indicator.ResetForPool();
+                    target.indicator.Activate(false);
+                    target.indicator = null;
+                }
                 continue;
+            }
 
             Vector3 screenPosition = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
             bool isTargetVisible = OffScreenIndicatorCore.IsTargetVisible(screenPosition);
@@ -781,6 +795,15 @@ public class OffScreenIndicator : MonoBehaviour
         {
             if (target.indicator != null)
             {
+                // 앵커 미생성 타겟: 정상 모드에서 표시할 위치가 없으므로 즉시 해제
+                if (!target.IsAnchorReady)
+                {
+                    target.indicator.ResetForPool();
+                    target.indicator.Activate(false);
+                    target.indicator = null;
+                    continue;
+                }
+
                 transitionDataMap[target] = new TransitionData
                 {
                     startPosition = target.indicator.transform.position,
@@ -1046,6 +1069,64 @@ public class OffScreenIndicator : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 안전장치: 매 프레임 null/Destroyed 타겟과 잔류 인디케이터 정리
+    /// Destroy 타이밍으로 HandleTargetStateChanged가 미호출되는 엣지 케이스 대비
+    /// </summary>
+    private void CleanupNullTargets()
+    {
+        // targets 리스트에서 null 제거
+        for (int i = targets.Count - 1; i >= 0; i--)
+        {
+            if (targets[i] == null)
+            {
+                targets.RemoveAt(i);
+            }
+        }
+
+        // disabledFallbackTargets에서 null/Destroyed 타겟 정리 + 인디케이터 해제
+        if (disabledFallbackTargets.Count > 0)
+        {
+            var toRemove = new List<Target>();
+            foreach (var target in disabledFallbackTargets)
+            {
+                if (target == null)
+                {
+                    toRemove.Add(target);
+                    continue;
+                }
+                // Destroy 후 다음 프레임에 null이 되기 전: gameObject 체크
+                if (target.gameObject == null)
+                {
+                    if (target.indicator != null)
+                    {
+                        target.indicator.ResetForPool();
+                        target.indicator.Activate(false);
+                        target.indicator = null;
+                    }
+                    toRemove.Add(target);
+                }
+            }
+            foreach (var t in toRemove)
+            {
+                disabledFallbackTargets.Remove(t);
+                fallbackDataMap.Remove(t);
+            }
+        }
+
+        // transitionDataMap/fadeOutTargets에서 null 제거
+        if (isTransitioning)
+        {
+            var nullTransTargets = new List<Target>();
+            foreach (var kvp in transitionDataMap)
+                if (kvp.Key == null) nullTransTargets.Add(kvp.Key);
+            foreach (var t in nullTransTargets)
+                transitionDataMap.Remove(t);
+
+            fadeOutTargets.RemoveWhere(t => t == null);
+        }
+    }
+
     private void HandleTargetStateChanged(Target target, bool active)
     {
         if (active)
@@ -1056,14 +1137,15 @@ public class OffScreenIndicator : MonoBehaviour
         }
         else
         {
-            // fallback 모드일 때: fallbackDataMap 보존, 타겟을 캐시에 보관 (화살표 계속 표시)
-            if (isFallbackMode && fallbackDataMap.ContainsKey(target))
+            // fallback 모드 중(전환 아닌 상태): disabledFallbackTargets에 보관하여 화살표 유지
+            if (isFallbackMode && !isTransitioning && fallbackDataMap.ContainsKey(target))
             {
                 targets.Remove(target);
                 disabledFallbackTargets.Add(target);
                 return;
             }
 
+            // 인디케이터 즉시 해제
             if (target.indicator != null)
             {
                 target.indicator.ResetForPool();
@@ -1071,6 +1153,7 @@ public class OffScreenIndicator : MonoBehaviour
             }
             target.indicator = null;
             targets.Remove(target);
+            disabledFallbackTargets.Remove(target);
             fallbackDataMap.Remove(target);
             transitionDataMap.Remove(target);
             fadeOutTargets.Remove(target);
@@ -1101,7 +1184,44 @@ public class OffScreenIndicator : MonoBehaviour
             isNewlyActivated = true;
         }
 
+        indicator.lastUpdatedFrame = Time.frameCount;
         return indicator;
+    }
+
+    /// <summary>
+    /// 활성 인디케이터 풀에서 orphan(2프레임 이상 미업데이트) 인디케이터 자동 해제
+    /// Target이 Destroy되면서 인디케이터 해제를 놓친 경우의 안전장치
+    /// </summary>
+    private void CleanupOrphanIndicators()
+    {
+        int currentFrame = Time.frameCount;
+        int staleThreshold = 3; // 3프레임 이상 미업데이트면 orphan
+
+        // Arrow pool
+        if (ArrowObjectPool.current != null)
+        {
+            foreach (var indicator in ArrowObjectPool.current.GetAllActiveIndicators())
+            {
+                if (indicator != null && indicator.Active && currentFrame - indicator.lastUpdatedFrame > staleThreshold)
+                {
+                    indicator.ResetForPool();
+                    indicator.Activate(false);
+                }
+            }
+        }
+
+        // Box pool
+        if (BoxObjectPool.current != null)
+        {
+            foreach (var indicator in BoxObjectPool.current.GetAllActiveIndicators())
+            {
+                if (indicator != null && indicator.Active && currentFrame - indicator.lastUpdatedFrame > staleThreshold)
+                {
+                    indicator.ResetForPool();
+                    indicator.Activate(false);
+                }
+            }
+        }
     }
 
     private void OnDestroy()

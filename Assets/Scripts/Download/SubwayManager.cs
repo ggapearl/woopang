@@ -10,7 +10,7 @@ using System.Text;
 using System.Linq;
 using UnityEngine.XR.ARFoundation;
 
-public class SubwayManager : MonoBehaviour
+public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
 {
     private static SubwayManager instance;
     public static SubwayManager Instance
@@ -71,6 +71,12 @@ public class SubwayManager : MonoBehaviour
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
 
+    // Light Cache (FilterManager 중앙 배분용)
+    private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
+    private bool isCacheReady = false;
+    private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
+    [SerializeField] private GameObject indicatorOnlyPrefab;
+
     private static readonly WaitForSeconds waitUpdateInterval = new WaitForSeconds(600f);
 
     void Start()
@@ -81,6 +87,10 @@ public class SubwayManager : MonoBehaviour
 
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
+
+        FilterManager filterMgr = Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        Debug.LogWarning($"[dbg] SubwayManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
+        if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
     private void InitializeObjectPool()
@@ -299,6 +309,30 @@ public class SubwayManager : MonoBehaviour
         }
 
         if (facilities == null || facilities.Count == 0) yield break;
+
+        // Light 캐시 갱신
+        lightCache.Clear();
+        foreach (var f in facilities)
+        {
+            string uid = "subway_" + f.name + "_" + f.latitude + "_" + f.longitude;
+            lightCache.Add(new CachedPlaceData
+            {
+                uniqueId = uid,
+                rawId = f.name + "_" + f.latitude + "_" + f.longitude,
+                displayName = f.name ?? "",
+                latitude = (float)f.latitude,
+                longitude = (float)f.longitude,
+                altitude = f.altitude,
+                category = "subway",
+                sourceManager = "Subway",
+                modelType = "cube",
+                petFriendly = false,
+                filterKey = "subway"
+            });
+        }
+        // 최대 100개로 제한 (거리순 정렬 상태)
+        if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
+        isCacheReady = true;
 
         foreach (var data in facilities)
         {
@@ -527,5 +561,119 @@ public class SubwayManager : MonoBehaviour
             return Instantiate(samplePrefab, Vector3.zero, Quaternion.identity);
         }
         return null;
+    }
+
+    // ============================================================
+    // IPlaceCacheProvider 구현
+    // ============================================================
+
+    public string FilterKey => "subway";
+    public int MaxCacheSize => 100;
+    public bool IsCacheReady => isCacheReady;
+
+    public List<CachedPlaceData> GetCachedPlaces() => lightCache;
+
+    public bool SpawnFullObject(string rawId)
+    {
+        if (spawnedObjects.ContainsKey(rawId)) return true;
+        if (!placeDataMap.ContainsKey(rawId)) return false;
+
+        GameObject newObj = GetFromPool();
+        if (newObj == null) return false;
+
+        FacilityData data = placeDataMap[rawId];
+        SetupObject(newObj, data);
+        newObj.SetActive(true);
+        spawnedObjects[rawId] = newObj;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("Subway_Full", rawId, placeDataMap[rawId].name, true);
+
+        return true;
+    }
+
+    public bool SpawnIndicatorOnly(string rawId)
+    {
+        if (indicatorOnlyObjects.ContainsKey(rawId)) return true;
+        if (indicatorOnlyPrefab == null) return false;
+
+        CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
+        if (cached == null) return false;
+
+        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        obj.name = $"Indicator_Subway_{cached.displayName}";
+        obj.SetActive(true);
+
+        var target = obj.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = cached.displayName;
+            target.gpsLatitude = cached.latitude;
+            target.gpsLongitude = cached.longitude;
+            Color subwayColor;
+            if (ColorUtility.TryParseHtmlString("#3da29c", out subwayColor))
+                target.TargetColor = subwayColor;
+        }
+
+        var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor != null)
+            anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
+
+        indicatorOnlyObjects[rawId] = obj;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("Subway_Indicator", rawId, cached.displayName, true);
+
+        return true;
+    }
+
+    public void DespawnFullObject(string rawId)
+    {
+        if (!spawnedObjects.ContainsKey(rawId)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            string name = placeDataMap.ContainsKey(rawId) ? placeDataMap[rawId].name : "";
+            FileLogger.Instance.LogSpawn("Subway_Full", rawId, name, false);
+        }
+
+        ReturnToPool(spawnedObjects[rawId]);
+        spawnedObjects.Remove(rawId);
+    }
+
+    public void DespawnIndicatorOnly(string rawId)
+    {
+        if (!indicatorOnlyObjects.ContainsKey(rawId)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            var cached = lightCache.Find(c => c.rawId == rawId);
+            FileLogger.Instance.LogSpawn("Subway_Indicator", rawId, cached?.displayName ?? "", false);
+        }
+
+        if (indicatorOnlyObjects[rawId] != null) Destroy(indicatorOnlyObjects[rawId]);
+        indicatorOnlyObjects.Remove(rawId);
+    }
+
+    public HashSet<string> GetSpawnedFullIds()
+    {
+        var result = new HashSet<string>();
+        foreach (string id in spawnedObjects.Keys)
+            result.Add("subway_" + id);
+        return result;
+    }
+
+    public HashSet<string> GetSpawnedIndicatorIds()
+    {
+        var result = new HashSet<string>();
+        foreach (string id in indicatorOnlyObjects.Keys)
+            result.Add("subway_" + id);
+        return result;
+    }
+
+    public void RefreshCache(float lat, float lon)
+    {
+        // 기존 FetchFacilityData를 최대 반경으로 재요청
+        StartCoroutine(FetchFacilityData(lat, lon, 10000f));
     }
 }

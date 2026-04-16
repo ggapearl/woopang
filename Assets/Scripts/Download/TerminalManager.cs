@@ -10,7 +10,7 @@ using System.Text;
 using System.Linq;
 using UnityEngine.XR.ARFoundation;
 
-public class TerminalManager : MonoBehaviour
+public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 {
     private static TerminalManager instance;
     public static TerminalManager Instance
@@ -71,16 +71,24 @@ public class TerminalManager : MonoBehaviour
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
 
+    private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
+    private bool isCacheReady = false;
+    private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
+    [SerializeField] private GameObject indicatorOnlyPrefab;
+
     private static readonly WaitForSeconds waitUpdateInterval = new WaitForSeconds(600f);
 
     void Start()
     {
-        // PlayerPrefs에서 필터 상태 초기화 (DataManager 패턴)
         currentFilters = new Dictionary<string, bool>();
         currentFilters["terminal"] = PlayerPrefs.GetInt("Filter_Terminal_V2", 1) == 1;
 
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
+
+        FilterManager filterMgr = Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        Debug.LogWarning($"[dbg] TerminalManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
+        if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
     private void InitializeObjectPool()
@@ -309,11 +317,33 @@ public class TerminalManager : MonoBehaviour
 
         if (facilities == null || facilities.Count == 0) yield break;
 
+        // Light 캐시 갱신
+        lightCache.Clear();
+        foreach (var f in facilities)
+        {
+            string uid = "terminal_" + f.name + "_" + f.latitude + "_" + f.longitude;
+            lightCache.Add(new CachedPlaceData
+            {
+                uniqueId = uid,
+                rawId = f.name + "_" + f.latitude + "_" + f.longitude,
+                displayName = f.name ?? "",
+                latitude = (float)f.latitude,
+                longitude = (float)f.longitude,
+                altitude = f.altitude,
+                category = "terminal",
+                sourceManager = "Terminal",
+                modelType = "cube",
+                petFriendly = false,
+                filterKey = "terminal"
+            });
+        }
+        if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
+        isCacheReady = true;
+
         foreach (var data in facilities)
         {
             string uniqueId = data.name + "_" + data.latitude + "_" + data.longitude;
 
-            // 항상 데이터 저장 (오브젝트 생성 여부와 무관)
             placeDataMap[uniqueId] = data;
 
             float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
@@ -531,5 +561,114 @@ public class TerminalManager : MonoBehaviour
             return Instantiate(samplePrefab, Vector3.zero, Quaternion.identity);
         }
         return null;
+    }
+
+    // ============================================================
+    // IPlaceCacheProvider 구현
+    // ============================================================
+
+    public string FilterKey => "terminal";
+    public int MaxCacheSize => 20;
+    public bool IsCacheReady => isCacheReady;
+
+    public List<CachedPlaceData> GetCachedPlaces() => lightCache;
+
+    public bool SpawnFullObject(string rawId)
+    {
+        if (spawnedObjects.ContainsKey(rawId)) return true;
+        if (!placeDataMap.ContainsKey(rawId)) return false;
+
+        GameObject newObj = GetFromPool();
+        if (newObj == null) return false;
+
+        SetupObject(newObj, placeDataMap[rawId]);
+        newObj.SetActive(true);
+        spawnedObjects[rawId] = newObj;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, placeDataMap[rawId].name, true);
+
+        return true;
+    }
+
+    public bool SpawnIndicatorOnly(string rawId)
+    {
+        if (indicatorOnlyObjects.ContainsKey(rawId)) return true;
+        if (indicatorOnlyPrefab == null) return false;
+
+        CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
+        if (cached == null) return false;
+
+        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        obj.name = $"Indicator_Terminal_{cached.displayName}";
+        obj.SetActive(true);
+
+        var target = obj.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = cached.displayName;
+            target.gpsLatitude = cached.latitude;
+            target.gpsLongitude = cached.longitude;
+            Color catColor = DataManager.GetCategoryColor(cached.category);
+            target.TargetColor = catColor != Color.white ? catColor : Color.green;
+        }
+
+        var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor != null)
+            anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
+
+        indicatorOnlyObjects[rawId] = obj;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, cached.displayName, true);
+
+        return true;
+    }
+
+    public void DespawnFullObject(string rawId)
+    {
+        if (!spawnedObjects.ContainsKey(rawId)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            string name = placeDataMap.ContainsKey(rawId) ? placeDataMap[rawId].name : "";
+            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, name, false);
+        }
+
+        ReturnToPool(spawnedObjects[rawId]);
+        spawnedObjects.Remove(rawId);
+    }
+
+    public void DespawnIndicatorOnly(string rawId)
+    {
+        if (!indicatorOnlyObjects.ContainsKey(rawId)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            var cached = lightCache.Find(c => c.rawId == rawId);
+            FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, cached?.displayName ?? "", false);
+        }
+
+        if (indicatorOnlyObjects[rawId] != null) Destroy(indicatorOnlyObjects[rawId]);
+        indicatorOnlyObjects.Remove(rawId);
+    }
+
+    public HashSet<string> GetSpawnedFullIds()
+    {
+        var result = new HashSet<string>();
+        foreach (string id in spawnedObjects.Keys) result.Add("terminal_" + id);
+        return result;
+    }
+
+    public HashSet<string> GetSpawnedIndicatorIds()
+    {
+        var result = new HashSet<string>();
+        foreach (string id in indicatorOnlyObjects.Keys) result.Add("terminal_" + id);
+        return result;
+    }
+
+    public void RefreshCache(float lat, float lon)
+    {
+        StartCoroutine(FetchFacilityData(lat, lon, 10000f));
     }
 }

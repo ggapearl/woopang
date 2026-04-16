@@ -22,6 +22,8 @@ public static class ApiConfig
 
     // 위치/장소
     public const string LOCATIONS = MAIN_SERVER + "/locations";
+    public const string LOCATIONS_LIGHT = MAIN_SERVER + "/locations_light";
+    public const string LOCATIONS_DETAIL = MAIN_SERVER + "/locations_detail";
     public const string LOCATIONS_LIKE = MAIN_SERVER + "/locations/like";
     public const string LOCATIONS_LIKES = MAIN_SERVER + "/locations/likes";
 

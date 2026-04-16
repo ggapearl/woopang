@@ -10,7 +10,7 @@ using System.Text;
 using System.Linq;
 using UnityEngine.XR.ARFoundation;
 
-public class TourAPIManager : MonoBehaviour
+public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 {
     // Singleton pattern
     private static TourAPIManager instance;
@@ -90,6 +90,10 @@ public class TourAPIManager : MonoBehaviour
     private Coroutine fetchCoroutine;
     private Vector2 lastPosition;
 
+    // Light Cache (FilterManager 중앙 배분용)
+    private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
+    private bool isCacheReady = false;
+
     private static readonly WaitForSeconds waitOneSecond = new WaitForSeconds(1f);
     private static readonly WaitForSeconds waitFiveSeconds = new WaitForSeconds(5f);
     private static readonly WaitForSeconds waitUpdateInterval = new WaitForSeconds(600f);
@@ -127,6 +131,10 @@ public class TourAPIManager : MonoBehaviour
 
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
+
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        Debug.LogWarning($"[dbg] TourAPIManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
+        if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
     private void LogDebug(string message)
@@ -327,6 +335,28 @@ public class TourAPIManager : MonoBehaviour
             LogDebug("[TourAPIManager] TourAPI에서 반환된 장소 데이터가 없음");
             yield break;
         }
+
+        // Light 캐시 갱신
+        lightCache.Clear();
+        foreach (var p in places)
+        {
+            lightCache.Add(new CachedPlaceData
+            {
+                uniqueId = "tour_" + p.contentid,
+                rawId = p.contentid,
+                displayName = p.title ?? "",
+                latitude = p.mapy,
+                longitude = p.mapx,
+                altitude = 0f,
+                category = "tour",
+                sourceManager = "TourAPI",
+                modelType = "cube",
+                petFriendly = false,
+                filterKey = ""
+            });
+        }
+        if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
+        isCacheReady = true;
 
         // Sort places by distance without LINQ
         for (int i = 0; i < places.Count - 1; i++)
@@ -1275,6 +1305,119 @@ public class TourAPIManager : MonoBehaviour
         CleanupAllIndicatorOnlyObjects();
         Input.location.Stop();
         LogDebug("[TourAPIManager] 위치 서비스 중지");
+    }
+
+    // ============================================================
+    // IPlaceCacheProvider 구현
+    // ============================================================
+
+    public string FilterKey => "";
+    public int MaxCacheSize => 100;
+    public bool IsCacheReady => isCacheReady;
+
+    public List<CachedPlaceData> GetCachedPlaces() => lightCache;
+
+    public bool SpawnFullObject(string rawId)
+    {
+        if (spawnedObjects.ContainsKey(rawId)) return true;
+        if (!placeDataMap.ContainsKey(rawId)) return false;
+
+        TourPlaceData place = placeDataMap[rawId];
+        GameObject newObj = CreateObjectFromData(place);
+        if (newObj != null)
+        {
+            ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
+            if (display != null && !string.IsNullOrEmpty(place.firstimage))
+                display.SetBaseMap(place.firstimage);
+
+            if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                FileLogger.Instance.LogSpawn("Tour_Full", rawId, place.title ?? "", true);
+
+            return true;
+        }
+        return false;
+    }
+
+    public bool SpawnIndicatorOnly(string rawId)
+    {
+        if (indicatorOnlyObjects.ContainsKey(rawId)) return true;
+        if (indicatorOnlyPrefab == null) return false;
+
+        CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
+        if (cached == null) return false;
+
+        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        obj.name = $"Indicator_Tour_{cached.displayName}";
+        obj.SetActive(true);
+
+        var target = obj.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = cached.displayName;
+            target.gpsLatitude = cached.latitude;
+            target.gpsLongitude = cached.longitude;
+            Color tourColor;
+            if (ColorUtility.TryParseHtmlString("#FBC15D", out tourColor))
+                target.TargetColor = tourColor;
+        }
+
+        var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor != null)
+            anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, 0);
+
+        indicatorOnlyObjects[rawId] = obj;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("Tour_Indicator", rawId, cached.displayName, true);
+
+        return true;
+    }
+
+    public void DespawnFullObject(string rawId)
+    {
+        if (!spawnedObjects.ContainsKey(rawId)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            string name = placeDataMap.ContainsKey(rawId) ? (placeDataMap[rawId].title ?? "") : "";
+            FileLogger.Instance.LogSpawn("Tour_Full", rawId, name, false);
+        }
+
+        ReturnToPool(spawnedObjects[rawId]);
+        spawnedObjects.Remove(rawId);
+    }
+
+    public void DespawnIndicatorOnly(string rawId)
+    {
+        if (!indicatorOnlyObjects.ContainsKey(rawId)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            var cached = lightCache.Find(c => c.rawId == rawId);
+            FileLogger.Instance.LogSpawn("Tour_Indicator", rawId, cached?.displayName ?? "", false);
+        }
+
+        if (indicatorOnlyObjects[rawId] != null) Destroy(indicatorOnlyObjects[rawId]);
+        indicatorOnlyObjects.Remove(rawId);
+    }
+
+    public HashSet<string> GetSpawnedFullIds()
+    {
+        var result = new HashSet<string>();
+        foreach (string id in spawnedObjects.Keys) result.Add("tour_" + id);
+        return result;
+    }
+
+    public HashSet<string> GetSpawnedIndicatorIds()
+    {
+        var result = new HashSet<string>();
+        foreach (string id in indicatorOnlyObjects.Keys) result.Add("tour_" + id);
+        return result;
+    }
+
+    public void RefreshCache(float lat, float lon)
+    {
+        StartCoroutine(FetchDataProgressively(lat, lon));
     }
 }
 

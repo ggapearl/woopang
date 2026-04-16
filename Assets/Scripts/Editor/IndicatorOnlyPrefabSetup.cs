@@ -4,7 +4,8 @@ using UnityEditor.Callbacks;
 using UnityEditor.SceneManagement;
 
 /// <summary>
-/// DataManager/TourAPIManager의 indicatorOnlyPrefab 필드를 자동으로 연결
+/// 모든 매니저의 indicatorOnlyPrefab 필드를 자동으로 연결
+/// DataManager, TourAPIManager, SubwayManager, TrainStationManager, TerminalManager
 /// Assets/Prefab/IndicatorOnly.prefab을 찾아 연결
 /// </summary>
 [InitializeOnLoad]
@@ -33,30 +34,48 @@ public class IndicatorOnlyPrefabSetup
         DataManager dm = Object.FindFirstObjectByType<DataManager>(FindObjectsInactive.Include);
         if (dm != null)
         {
-            SerializedObject so = new SerializedObject(dm);
-            SerializedProperty prop = so.FindProperty("indicatorOnlyPrefab");
-            if (prop != null && prop.objectReferenceValue == null)
-            {
-                prop.objectReferenceValue = prefab;
-                so.ApplyModifiedPropertiesWithoutUndo();
-                EditorUtility.SetDirty(dm);
-                EditorSceneManager.MarkSceneDirty(dm.gameObject.scene);
-            }
+            ConnectPrefab(dm, prefab);
         }
 
         // TourAPIManager
         TourAPIManager tam = Object.FindFirstObjectByType<TourAPIManager>(FindObjectsInactive.Include);
         if (tam != null)
         {
-            SerializedObject so = new SerializedObject(tam);
-            SerializedProperty prop = so.FindProperty("indicatorOnlyPrefab");
-            if (prop != null && prop.objectReferenceValue == null)
-            {
-                prop.objectReferenceValue = prefab;
-                so.ApplyModifiedPropertiesWithoutUndo();
-                EditorUtility.SetDirty(tam);
-                EditorSceneManager.MarkSceneDirty(tam.gameObject.scene);
-            }
+            ConnectPrefab(tam, prefab);
+        }
+
+        // SubwayManager
+        SubwayManager sm = Object.FindFirstObjectByType<SubwayManager>(FindObjectsInactive.Include);
+        if (sm != null)
+        {
+            ConnectPrefab(sm, prefab);
+        }
+
+        // TrainStationManager
+        TrainStationManager tsm = Object.FindFirstObjectByType<TrainStationManager>(FindObjectsInactive.Include);
+        if (tsm != null)
+        {
+            ConnectPrefab(tsm, prefab);
+        }
+
+        // TerminalManager
+        TerminalManager tm = Object.FindFirstObjectByType<TerminalManager>(FindObjectsInactive.Include);
+        if (tm != null)
+        {
+            ConnectPrefab(tm, prefab);
+        }
+    }
+
+    private static void ConnectPrefab(MonoBehaviour manager, GameObject prefab)
+    {
+        SerializedObject so = new SerializedObject(manager);
+        SerializedProperty prop = so.FindProperty("indicatorOnlyPrefab");
+        if (prop != null && prop.objectReferenceValue == null)
+        {
+            prop.objectReferenceValue = prefab;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(manager);
+            EditorSceneManager.MarkSceneDirty(manager.gameObject.scene);
         }
     }
 }

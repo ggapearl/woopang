@@ -66,4 +66,18 @@ public class BoxObjectPool : MonoBehaviour
             box.Activate(false);
         }
     }
+
+    /// <summary>
+    /// 활성 인디케이터 목록 반환 (orphan 감지용)
+    /// </summary>
+    public List<Indicator> GetAllActiveIndicators()
+    {
+        var result = new List<Indicator>();
+        foreach (var ind in pooledObjects)
+        {
+            if (ind != null && ind.Active)
+                result.Add(ind);
+        }
+        return result;
+    }
 }

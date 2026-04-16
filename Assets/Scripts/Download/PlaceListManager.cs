@@ -46,6 +46,23 @@ public class PlaceListManager : MonoBehaviour
     private const string TRAIN_COLOR = "00FF00";
     private const string SUBWAY_COLOR = "3DA29C";
 
+    // 카테고리별 색상 (FilterManager와 동일)
+    private static readonly Dictionary<string, string> CATEGORY_COLORS = new Dictionary<string, string>
+    {
+        { "shop",     "4080F2" }, // 파란색
+        { "food",     "FBC15D" }, // 주황색
+        { "cafe",     "E854A1" }, // 핑크색
+        { "park",     "4DD980" }, // 녹색
+        { "toilet",   "AE54C4" }, // 보라색
+        { "sport",    "33BFBF" }, // 청록색
+        { "landmark", "D9A621" }, // 금색
+        { "culture",  "C76ED7" }, // 문화 (연보라)
+        { "gov",      "8899AA" }, // 정부기관 (회청색)
+        { "edu",      "5599CC" }, // 교육 (하늘색)
+        { "medical",  "FF6666" }, // 의료 (연빨강)
+        { "welfare",  "77BB77" }, // 복지 (연초록)
+    };
+
     private Coroutine updatePeriodicCoroutine;
 
     private Dictionary<string, bool> activeFilters = new Dictionary<string, bool>
@@ -175,23 +192,60 @@ public class PlaceListManager : MonoBehaviour
 
         // 카테고리 필터 값 가져오기
         string activeCategoryFilter = "";
-        FilterManager filterMgr = UnityEngine.Object.FindFirstObjectByType<FilterManager>();
+        FilterManager filterMgr = UnityEngine.Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
         if (filterMgr != null)
             activeCategoryFilter = filterMgr.GetActiveCategoryFilter();
 
-        // 1. Woopang Data
+        // 1. Woopang Data (lightCache 기반 — placeDataMap에 있으면 상세 데이터 활용)
         if (dataManager != null) {
-            foreach(var p in dataManager.GetPlaceDataMap().Values) {
-                // Object3D 필터: custom 모델은 토글 OFF 시 목록에서도 제외
+            HashSet<int> addedIds = new HashSet<int>();
+            var placeDataMap = dataManager.GetPlaceDataMap();
+
+            // 1a. lightCache에서 전체 목록 빌드
+            foreach (var cached in dataManager.GetLightCache()) {
+                if (!int.TryParse(cached.rawId, out int id)) continue;
+                string cat = cached.category ?? "";
+                string modelType = cached.modelType ?? "cube";
+
+                if (!showObject3D && modelType == "custom") continue;
+                if (petFriendlyOnly && !cached.petFriendly) continue;
+                if (noPetFriendly && cached.petFriendly) continue;
+                if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
+                {
+                    if (cat != activeCategoryFilter) continue;
+                }
+
+                float d = CalculateDistance(lat, lon, cached.latitude, cached.longitude);
+                if (d <= maxDisplayDistance) {
+                    bool isPublicData = FilterManager.PublicDataCategories.Contains(cat);
+                    if (isPublicData)
+                    {
+                        // 카테고리 필터 활성 시 publicData 토글 무시 (카테고리 매칭이 이미 필터링)
+                        if (!categoryFilterActive && !showPublic) continue;
+                        tourAPICount++;
+                    }
+                    else
+                    {
+                        woopangCount++;
+                    }
+
+                    // 색상 우선순위: placeDataMap 상세 색상 > 카테고리 색상 > null(기본 흰색)
+                    string colorHex = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
+                    if (string.IsNullOrEmpty(colorHex) && !string.IsNullOrEmpty(cat))
+                        CATEGORY_COLORS.TryGetValue(cat, out colorHex);
+                    string displayName = cached.displayName;
+                    combinedPlaces.Add((cached, d, id.ToString(), $"{displayName} - {Mathf.FloorToInt(d)}m", colorHex));
+                    addedIds.Add(id);
+                }
+            }
+
+            // 1b. placeDataMap에만 있고 lightCache에 없는 데이터 (Detail API로 가져온 것)
+            foreach (var p in placeDataMap.Values) {
+                if (addedIds.Contains(p.id)) continue;
                 string origType = p.original_model_type ?? p.model_type;
                 if (!showObject3D && origType == "custom") continue;
-
-                // 애견동반 필터 적용
-                if (petFriendlyOnly && !p.pet_friendly) continue; // 애견동반만 (노란색)
-                if (noPetFriendly && p.pet_friendly) continue;     // 애견동반 아닌곳만 (체크해제)
-                // petFriendlyAll일 경우 모두 표시 (흰색)
-
-                // 카테고리 필터 적용
+                if (petFriendlyOnly && !p.pet_friendly) continue;
+                if (noPetFriendly && p.pet_friendly) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {
                     if ((p.category ?? "") != activeCategoryFilter) continue;
@@ -202,14 +256,17 @@ public class PlaceListManager : MonoBehaviour
                     bool isPublicData = FilterManager.PublicDataCategories.Contains(p.category ?? "");
                     if (isPublicData)
                     {
-                        if (!showPublic) continue; // 공공데이터 토글 OFF 시 목록에서 제외
+                        if (!categoryFilterActive && !showPublic) continue;
                         tourAPICount++;
                     }
                     else
                     {
                         woopangCount++;
                     }
-                    combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", p.color));
+                    string pColor = p.color;
+                    if (string.IsNullOrEmpty(pColor) && !string.IsNullOrEmpty(p.category))
+                        CATEGORY_COLORS.TryGetValue(p.category, out pColor);
+                    combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", pColor));
                 }
             }
         }

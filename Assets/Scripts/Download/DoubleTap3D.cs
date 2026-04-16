@@ -1080,12 +1080,26 @@ public class DoubleTap3D : MonoBehaviour
         }
         else if (index >= 0 && index < imageSprites.Count)
         {
-            fullscreenImage.enabled = true;
-            fullscreenImage.sprite = imageSprites[index];
-            fullscreenImage.color = Color.white;
+            Sprite sprite = imageSprites[index];
+            // 유효하지 않은 스프라이트(null 또는 검정 텍스처)면 이미지 숨김 — 서버 로드 완료 시 갱신됨
+            if (sprite == null || sprite.texture == null || sprite.texture == Texture2D.blackTexture)
+            {
+                fullscreenImage.enabled = false;
+            }
+            else
+            {
+                fullscreenImage.enabled = true;
+                fullscreenImage.sprite = sprite;
+                fullscreenImage.color = Color.white;
 
-            // fullscreenImage가 guidePanel(FullScreenGuide) 뒤에 위치하도록 설정
-            fullscreenImage.transform.SetAsFirstSibling();
+                // fullscreenImage가 guidePanel(FullScreenGuide) 뒤에 위치하도록 설정
+                fullscreenImage.transform.SetAsFirstSibling();
+            }
+        }
+        else
+        {
+            // imageSprites 범위 밖 (아직 로드 중) — 이미지 숨김
+            fullscreenImage.enabled = false;
         }
         ResetImagePosition();
     }

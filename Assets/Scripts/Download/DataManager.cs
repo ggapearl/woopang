@@ -11,7 +11,7 @@ using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using UnityEngine.SceneManagement;
 
-public class DataManager : MonoBehaviour
+public class DataManager : MonoBehaviour, IPlaceCacheProvider
 {
     /// <summary>
     /// 위치 권한이 허용되었을 때 발행되는 이벤트
@@ -106,6 +106,14 @@ public class DataManager : MonoBehaviour
     [SerializeField] private int maxIndicatorOnlyObjects = 8;
     private Dictionary<int, GameObject> indicatorOnlyObjects = new Dictionary<int, GameObject>();
 
+    // ============================================================
+    // Light Cache 시스템 (FilterManager 중앙 배분용)
+    // ============================================================
+    private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
+    private bool isCacheReady = false;
+    private HashSet<int> pendingDetailFetchIds = new HashSet<int>();
+    private Coroutine batchDetailCoroutine;
+
     [Header("빠른 이동 모드 설정")]
     [Tooltip("이 시간(초) 이내에 refreshThresholdCount회 새로고침 발생 시 빠른 이동 모드 진입")]
     [SerializeField] private float rapidRefreshWindow = 60f;
@@ -182,6 +190,12 @@ public class DataManager : MonoBehaviour
 
         StartCoroutine(InitializeObjectPoolsAsync());
         StartCoroutine(StartLocationServiceAndFetchData());
+
+        // FilterManager에 캐시 프로바이더 등록 (비활성 오브젝트도 탐색)
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        Debug.LogWarning($"[dbg] DataManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
+        if (filterMgr != null)
+            filterMgr.RegisterCacheProvider(this);
 
         // 첫 설치 대비: 초기 로드가 완료되지 않은 경우 10/15/20초에 자동 재시도
         // 에디터에서는 AR 세션이 없으므로 재시도 불필요 (기존 코루틴을 강제 중단하는 부작용 방지)
@@ -378,29 +392,23 @@ public class DataManager : MonoBehaviour
         float lat = VirtualLocation.Instance.Latitude;
         float lon = VirtualLocation.Instance.Longitude;
         isGeospatialReady = true;
-        // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
-        List<PlaceData> preFetchedData = new List<PlaceData>();
-        yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
 
-        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작 (새 데이터가 있을 때만)
-        if (preFetchedData.Count > 0)
+        // Light API로 캐시 수집 (11-tier → 단일 요청)
+        yield return StartCoroutine(FetchLightCache(lat, lon));
+
+        // fallback 활성화 알림
+        if (lightCache.Count > 0)
         {
             OnPreFetchCompleted?.Invoke();
         }
 
-        // fallback 활성화 후 오브젝트 순차 생성
-        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false, lat, lon));
-
-        // IndicatorOnly: 3D 큐브 범위 밖 원거리 인디케이터 생성 (별도 시스템)
-        UpdateIndicatorOnlyObjects(lat, lon);
-
-        // 에디터에서도 초기 로드 완료 표시 (FirstInstallRetry 재시도 방지)
+        // 에디터에서도 초기 로드 완료 표시
         isInitialStartComplete = true;
         isDataLoaded = true;
         isFetching = false;
 #else
         // ============================================================
-        // Phase 1: GPS lat/lon으로 서버 데이터 선행 수집 (Geospatial 대기 없이)
+        // Phase 1: GPS lat/lon으로 Light 캐시 수집 (Geospatial 대기 없이)
         // ============================================================
         float lat = 0f;
         float lon = 0f;
@@ -423,7 +431,7 @@ public class DataManager : MonoBehaviour
             }
         }
 
-        // 그래도 없으면 lastPosition fallback (Start()에서 이미 받아놓은 GPS)
+        // 그래도 없으면 lastPosition fallback
         if (lat == 0f && lon == 0f)
         {
             lat = lastPosition.x;
@@ -435,25 +443,16 @@ public class DataManager : MonoBehaviour
             lastPosition = new Vector2(lat, lon);
         }
 
-        // Phase1: 서버에서 데이터만 수집 (오브젝트 생성 X)
-        List<PlaceData> preFetchedData = new List<PlaceData>();
-        yield return StartCoroutine(PreFetchAllTiers(lat, lon, preFetchedData));
+        // Light API로 캐시 수집 (11-tier → 단일 요청)
+        yield return StartCoroutine(FetchLightCache(lat, lon));
 
-        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작 (새 데이터가 있을 때만)
-        if (preFetchedData.Count > 0)
+        // fallback 활성화 알림 → LoadingManager가 fallback UI 시작
+        if (lightCache.Count > 0)
         {
             OnPreFetchCompleted?.Invoke();
         }
 
-        // fallback 활성화 후 오브젝트 순차 생성
-        yield return StartCoroutine(SpawnPreFetchedObjects(preFetchedData, false, lat, lon));
-
-        // IndicatorOnly: 3D 큐브 범위 밖 원거리 인디케이터 생성 (별도 시스템)
-        UpdateIndicatorOnlyObjects(lat, lon);
-
-        // Phase1 완료 시점에서 초기 로드 완료로 표시
-        // - isInitialStartComplete: FirstInstallRetry 재시도 방지
-        // - isDataLoaded: CheckPositionAndFetchData 위치 모니터링 시작
+        // Phase1 완료 — FilterManager가 AllocateObjects에서 스폰 결정
         isInitialStartComplete = true;
         isDataLoaded = true;
 
@@ -478,7 +477,6 @@ public class DataManager : MonoBehaviour
         lastPosition = new Vector2(lat, lon);
 
         // Earth Tracking이 실제로 Tracking 상태인지 확인 후 앵커 재생성
-        // WaitForGeospatialTracking이 타임아웃되면 isGeospatialReady=true이지만 Earth는 아직 None일 수 있음
         var earthMgr = FindFirstObjectByType<AREarthManager>();
 
         if (earthMgr != null && earthMgr.EarthTrackingState == TrackingState.Tracking)
@@ -497,79 +495,126 @@ public class DataManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 모든 Tier에서 서버 데이터만 수집 (오브젝트 생성 X)
+    /// Light API로 경량 캐시 수집 (11-tier 반복 요청 → 단일 요청으로 대체)
+    /// FilterManager가 이 캐시를 기반으로 Full/IndicatorOnly 배분 결정
     /// </summary>
-    private IEnumerator PreFetchAllTiers(float lat, float lon, List<PlaceData> outData)
+    private IEnumerator FetchLightCache(float lat, float lon)
     {
-        HashSet<int> loadedIds = new HashSet<int>(spawnedObjects.Keys);
+        string url = string.Format("{0}?lat={1}&lon={2}&radius=10000&limit=100", ApiConfig.LOCATIONS_LIGHT, lat, lon);
 
-        for (int tierIndex = 0; tierIndex < loadRadii.Length; tierIndex++)
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            float radius = loadRadii[tierIndex];
-            string serverUrl = string.Format("{0}&lat={1}&lon={2}&radius={3}", baseServerUrl, lat, lon, radius);
-
-            List<PlaceData> tierPlaces = new List<PlaceData>();
-            yield return StartCoroutine(FetchDataFromServerForTier(serverUrl, lat, lon, loadedIds, tierPlaces));
-
-            foreach (var place in tierPlaces)
+            yield return request.SendWebRequest();
+            if (request.result == UnityWebRequest.Result.Success)
             {
-                loadedIds.Add(place.id);
-                outData.Add(place);
+                try
+                {
+                    var items = JsonConvert.DeserializeObject<List<LightPlaceData>>(request.downloadHandler.text);
+                    if (items != null)
+                    {
+                        lightCache.Clear();
+                        foreach (var item in items)
+                        {
+                            string cat = item.category ?? "";
+                            lightCache.Add(new CachedPlaceData
+                            {
+                                uniqueId = "dm_" + item.id,
+                                rawId = item.id.ToString(),
+                                displayName = item.name ?? "",
+                                latitude = item.latitude,
+                                longitude = item.longitude,
+                                altitude = item.altitude,
+                                category = cat,
+                                sourceManager = "DataManager",
+                                modelType = item.model_type ?? "cube",
+                                petFriendly = item.pet_friendly,
+                                filterKey = FilterManager.PublicDataCategories.Contains(cat) ? "publicData" : ""
+                            });
+                        }
+                        isCacheReady = true;
+                        Debug.LogWarning($"[dbg] FetchLightCache 완료: {lightCache.Count}개 캐시, indicatorOnlyPrefab={(indicatorOnlyPrefab != null ? "연결됨" : "NULL!")}");
+
+                        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                            FileLogger.Instance.LogCacheRefresh("DataManager", lightCache.Count, lat, lon);
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[DataManager] FetchLightCache 파싱 실패: {e.Message}");
+                }
+            }
+            else
+            {
+                Debug.LogError($"[DataManager] FetchLightCache 서버 요청 실패: {request.error}");
             }
         }
     }
 
     /// <summary>
-    /// 사전 수집된 데이터로 오브젝트를 순차 생성
+    /// Detail API에서 특정 ID의 전체 데이터를 배치로 가져와서 스폰
+    /// FilterManager.SpawnFullObject → pendingDetailFetchIds 큐잉 → 이 코루틴에서 배치 처리
     /// </summary>
-    private IEnumerator SpawnPreFetchedObjects(List<PlaceData> places, bool silent, float fetchLat, float fetchLon)
+    private IEnumerator BatchFetchDetailAndSpawn()
     {
-        if (!silent && objectCountUI != null)
+        // 한 프레임 대기하여 같은 배분 사이클의 모든 ID 수집
+        yield return null;
+
+        while (pendingDetailFetchIds.Count > 0)
         {
-            objectCountUI.ResetUI();
+            List<int> ids = new List<int>(pendingDetailFetchIds);
+            pendingDetailFetchIds.Clear();
+
+            string idsParam = string.Join(",", ids);
+            string url = string.Format("{0}?ids={1}", ApiConfig.LOCATIONS_DETAIL, idsParam);
+
+            using (UnityWebRequest request = UnityWebRequest.Get(url))
+            {
+                yield return request.SendWebRequest();
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    try
+                    {
+                        var places = JsonConvert.DeserializeObject<List<PlaceData>>(request.downloadHandler.text);
+                        if (places != null)
+                        {
+                            foreach (var place in places)
+                            {
+                                placeDataMap[place.id] = place;
+                                if (!spawnedObjects.ContainsKey(place.id))
+                                {
+                                    // Full 스폰 전에 임시 IndicatorOnly가 있으면 제거
+                                    string rawId = place.id.ToString();
+                                    if (indicatorOnlyObjects.ContainsKey(place.id))
+                                    {
+                                        DespawnIndicatorOnly(rawId);
+                                    }
+
+                                    try { CreateObjectFromData(place); }
+                                    catch (System.Exception ex)
+                                    {
+                                        Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={place.id}: {ex.Message}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogError($"[DataManager] BatchFetchDetail 파싱 실패: {e.Message}");
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"[DataManager] BatchFetchDetail 서버 요청 실패: {request.error}");
+                }
+            }
         }
 
-        // 서버 요청에 사용한 좌표를 그대로 사용 (Android GPS 초기화 지연 대응)
-        float curLat = fetchLat;
-        float curLon = fetchLon;
-
-        foreach (PlaceData place in places)
-        {
-            // 모든 데이터는 placeDataMap에 저장
-            placeDataMap[place.id] = place;
-
-            // objectSpawnRadius 이내만 3D 오브젝트 생성
-            float dist = CalculateDistance(curLat, curLon, place.latitude, place.longitude);
-            if (dist > objectSpawnRadius || spawnedObjects.ContainsKey(place.id)) continue;
-
-            try
-            {
-                CreateObjectFromData(place);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={place.id}, name={place.name}: {ex.Message}");
-            }
-
-            if (objectCountUI != null)
-            {
-                objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
-            }
-
-            if (objectSpawnDelay > 0)
-            {
-                yield return new WaitForSeconds(objectSpawnDelay);
-            }
-        }
-
-        // 최종 업데이트
+        // ObjectCountUI 업데이트
         if (objectCountUI != null)
-        {
             objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), true);
-        }
 
-        isDataLoaded = true;
-        // isFetching은 FetchDataOnce/FetchDataProgressively 호출자에서 관리
+        batchDetailCoroutine = null;
     }
 
     private IEnumerator CheckPositionAndFetchData()
@@ -581,14 +626,12 @@ public class DataManager : MonoBehaviour
 
         while (true)
         {
-            // 세대 체크: StopAllFetching으로 무효화된 코루틴은 즉시 종료
             if (myGeneration != fetchGeneration) yield break;
 
 #if UNITY_EDITOR
             float lat = VirtualLocation.Instance.Latitude;
             float lon = VirtualLocation.Instance.Longitude;
 #else
-            // GPS가 Running이면 바로 사용, 아니면 이번 사이클 skip
             if (Input.location.status != LocationServiceStatus.Running)
             {
                 yield return new WaitForSeconds(5f);
@@ -604,18 +647,14 @@ public class DataManager : MonoBehaviour
             if (distanceMoved > updateDistanceThreshold)
             {
                 TrackRefreshForRapidMode();
-                yield return StartCoroutine(FetchDataProgressively(lat, lon));
                 lastPosition = currentPos;
+                // 50m 이동마다 위치 업데이트 (실제 캐시 갱신은 FilterManager가 5km 기준으로 결정)
+
+                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                    FileLogger.Instance.LogGPS(lat, lon, $"이동감지 dist={distanceMoved:F0}m, rapid={isRapidMovementMode}");
             }
 
-            // 50m 미만 이동이라도 objectSpawnRadius 기반 스폰/정리 수행
-            // (서버 재요청 없이 placeDataMap 기준으로 근거리 오브젝트 관리)
-            SpawnNearbyUnspawnedObjects(lat, lon);
-
-            // IndicatorOnly 갱신 (별도 시스템 — 3D 큐브 파이프라인과 독립)
-            UpdateIndicatorOnlyObjects(lat, lon);
-
-            yield return new WaitForSeconds(5f); // 5초마다 체크 (1초는 너무 빈번)
+            yield return new WaitForSeconds(5f);
         }
     }
 
@@ -1010,7 +1049,7 @@ public class DataManager : MonoBehaviour
         currentFilters = filters;
 
         // FilterManager에서 카테고리 필터값 가져오기
-        FilterManager filterMgr = FindFirstObjectByType<FilterManager>();
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
         if (filterMgr != null)
             currentCategoryFilter = filterMgr.GetActiveCategoryFilter();
 
@@ -1355,6 +1394,12 @@ public class DataManager : MonoBehaviour
         {
             isRapidMovementMode = false;
             recentRefreshTimes.Clear();
+
+            if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            {
+                FileLogger.Instance.Log("RAPID", "빠른이동 모드 자동 해제 (10분 경과)");
+                FileLogger.Instance.StopLogging();
+            }
         }
 
         // 이미 빠른 이동 모드면 추가 체크 불필요
@@ -1369,6 +1414,13 @@ public class DataManager : MonoBehaviour
         {
             isRapidMovementMode = true;
             rapidModeStartTime = now;
+
+            // 빠른이동 진입 시 FileLogger 자동 시작
+            if (FileLogger.Instance != null && !FileLogger.Instance.IsLogging)
+                FileLogger.Instance.StartLogging("rapid");
+
+            if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                FileLogger.Instance.Log("RAPID", $"빠른이동 모드 진입 (refreshCount={recentRefreshTimes.Count})");
         }
     }
 
@@ -1454,6 +1506,7 @@ public class DataManager : MonoBehaviour
     public Dictionary<int, GameObject> GetSpawnedObjects() => spawnedObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
+    public List<CachedPlaceData> GetLightCache() => lightCache;
     public bool IsDataLoaded() => isDataLoaded;
 
     /// <summary>
@@ -1767,9 +1820,17 @@ public class DataManager : MonoBehaviour
             objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
         }
 
-        // ResetUI를 호출하지 않는 FetchDataProgressively 사용 (UI 표시 없이 데이터만 갱신)
-        fetchCoroutine = StartCoroutine(FetchDataProgressivelySilent(lat, lon));
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.Log("SYSTEM", $"백그라운드 복귀 데이터 갱신 시작 at ({lat:F6},{lon:F6})");
+
+        // Light cache 재요청 + 위치 체크 코루틴 재시작
+        lastPosition = new Vector2(lat, lon);
+        StartCoroutine(FetchLightCache(lat, lon));
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
+
+        // FilterManager에 즉시 재배분 트리거
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filterMgr != null) filterMgr.TriggerReallocation();
     }
 
     private IEnumerator WaitForARSessionAndFetchData()
@@ -2027,10 +2088,14 @@ public class DataManager : MonoBehaviour
 
         if (lat == 0f && lon == 0f) return;
 
-        SpawnNearbyUnspawnedObjects(lat, lon);
-        UpdateIndicatorOnlyObjects(lat, lon);
-        fetchCoroutine = StartCoroutine(FetchDataProgressivelySilent(lat, lon));
+        // Light cache 재요청 + 위치 체크 코루틴 재시작
+        lastPosition = new Vector2(lat, lon);
+        StartCoroutine(FetchLightCache(lat, lon));
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
+
+        // FilterManager에 즉시 재배분 트리거
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filterMgr != null) filterMgr.TriggerReallocation();
     }
 
     /// <summary>
@@ -2051,6 +2116,198 @@ public class DataManager : MonoBehaviour
     {
         Input.location.Stop();
     }
+
+    // ============================================================
+    // IPlaceCacheProvider 구현
+    // ============================================================
+
+    public string FilterKey => "publicData";
+    public int MaxCacheSize => 100;
+    public bool IsCacheReady => isCacheReady;
+
+    public List<CachedPlaceData> GetCachedPlaces()
+    {
+        return lightCache;
+    }
+
+    public bool SpawnFullObject(string rawId)
+    {
+        if (!int.TryParse(rawId, out int id)) return false;
+        if (spawnedObjects.ContainsKey(id)) return true; // 이미 스폰됨
+
+        // placeDataMap에 상세 데이터가 있으면 즉시 스폰
+        if (placeDataMap.ContainsKey(id))
+        {
+            try
+            {
+                CreateObjectFromData(placeDataMap[id]);
+                bool success = spawnedObjects.ContainsKey(id);
+                if (success && FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                    FileLogger.Instance.LogSpawn("Full", rawId, placeDataMap[id].name ?? "", true);
+                return success;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[DataManager] SpawnFullObject 예외: id={id}: {ex.Message}");
+                return false;
+            }
+        }
+
+        // 상세 데이터 없으면 Detail API 요청 큐잉
+        Debug.LogWarning($"[dbg] SpawnFullObject: id={id} → Detail API 큐잉 (pending={pendingDetailFetchIds.Count + 1})");
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.Log("DETAIL", $"Detail API 큐잉: id={id}, pending={pendingDetailFetchIds.Count + 1}");
+
+        pendingDetailFetchIds.Add(id);
+        if (batchDetailCoroutine == null)
+        {
+            batchDetailCoroutine = StartCoroutine(BatchFetchDetailAndSpawn());
+        }
+        return false;
+    }
+
+    public bool SpawnIndicatorOnly(string rawId)
+    {
+        if (!int.TryParse(rawId, out int id)) return false;
+        if (indicatorOnlyObjects.ContainsKey(id)) return true;
+
+        // lightCache에서 좌표 찾기
+        CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
+        if (cached == null) return false;
+
+        if (indicatorOnlyPrefab == null)
+        {
+            Debug.LogWarning("[dbg] SpawnIndicatorOnly 실패: indicatorOnlyPrefab이 null! Inspector에서 연결 필요");
+            return false;
+        }
+
+        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        obj.name = $"Indicator_{id}_{cached.displayName}";
+        obj.SetActive(true);
+
+        var target = obj.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = cached.displayName;
+            target.gpsLatitude = cached.latitude;
+            target.gpsLongitude = cached.longitude;
+
+            // 카테고리별 인디케이터 색상 설정
+            Color catColor = GetCategoryColor(cached.category);
+            if (catColor != Color.white)
+                target.TargetColor = catColor;
+        }
+
+        var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor != null)
+        {
+            anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
+        }
+
+        indicatorOnlyObjects[id] = obj;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("IndicatorOnly", rawId, cached.displayName, true);
+
+        return true;
+    }
+
+    public void DespawnFullObject(string rawId)
+    {
+        if (!int.TryParse(rawId, out int id)) return;
+        if (!spawnedObjects.ContainsKey(id)) return;
+
+        string objName = placeDataMap.ContainsKey(id) ? (placeDataMap[id].name ?? "") : "";
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.LogSpawn("Full", rawId, objName, false);
+
+        GameObject obj = spawnedObjects[id];
+        string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
+        spawnedObjects.Remove(id);
+        currentlyLoadingGLB.Remove(id);
+        ReturnToPool(obj, modelType);
+    }
+
+    public void DespawnIndicatorOnly(string rawId)
+    {
+        if (!int.TryParse(rawId, out int id)) return;
+        if (!indicatorOnlyObjects.ContainsKey(id)) return;
+
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            string name = "";
+            var cached = lightCache.Find(c => c.rawId == rawId);
+            if (cached != null) name = cached.displayName;
+            FileLogger.Instance.LogSpawn("IndicatorOnly", rawId, name, false);
+        }
+
+        GameObject obj = indicatorOnlyObjects[id];
+        if (obj != null) Destroy(obj);
+        indicatorOnlyObjects.Remove(id);
+    }
+
+    public HashSet<string> GetSpawnedFullIds()
+    {
+        var result = new HashSet<string>();
+        foreach (int id in spawnedObjects.Keys)
+            result.Add("dm_" + id);
+        return result;
+    }
+
+    public HashSet<string> GetSpawnedIndicatorIds()
+    {
+        var result = new HashSet<string>();
+        foreach (int id in indicatorOnlyObjects.Keys)
+            result.Add("dm_" + id);
+        return result;
+    }
+
+    public void RefreshCache(float lat, float lon)
+    {
+        StartCoroutine(FetchLightCache(lat, lon));
+    }
+
+    /// <summary>
+    /// 카테고리별 인디케이터 색상 반환 (FilterManager 색상과 동일)
+    /// </summary>
+    public static Color GetCategoryColor(string category)
+    {
+        if (string.IsNullOrEmpty(category)) return Color.white;
+        switch (category)
+        {
+            case "shop":     return new Color(0.25f, 0.5f, 0.95f);
+            case "food":     return new Color(0.984f, 0.757f, 0.365f);
+            case "cafe":     return new Color(0.91f, 0.33f, 0.63f);
+            case "park":     return new Color(0.3f, 0.85f, 0.5f);
+            case "toilet":   return new Color(0.68f, 0.33f, 0.77f);
+            case "sport":    return new Color(0.2f, 0.75f, 0.75f);
+            case "landmark": return new Color(0.85f, 0.65f, 0.13f);
+            case "culture":  return new Color(0.78f, 0.43f, 0.84f);
+            case "gov":      return new Color(0.53f, 0.6f, 0.67f);
+            case "edu":      return new Color(0.33f, 0.6f, 0.8f);
+            case "medical":  return new Color(1f, 0.4f, 0.4f);
+            case "welfare":  return new Color(0.47f, 0.73f, 0.47f);
+            default:         return Color.white;
+        }
+    }
+}
+
+/// <summary>
+/// Light API 응답용 경량 데이터 구조 (이미지/모델 URL 없음)
+/// </summary>
+[System.Serializable]
+public class LightPlaceData
+{
+    public int id { get; set; }
+    public string name { get; set; }
+    public float latitude { get; set; }
+    public float longitude { get; set; }
+    public float altitude { get; set; }
+    public string category { get; set; }
+    public string model_type { get; set; }
+    public bool pet_friendly { get; set; }
+    public bool separate_restroom { get; set; }
 }
 
 [System.Serializable]
