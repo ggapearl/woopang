@@ -346,7 +346,13 @@ public class FileLogger : MonoBehaviour
 
     private void UpdateToggleButtonText()
     {
+        // toggleButtonText가 null이면 런타임에 다시 찾기
+        if (toggleButtonText == null)
+        {
+            ConnectButtons();
+        }
         if (toggleButtonText == null) return;
+
         toggleButtonText.text = isLogging ? "LOG STOP" : "LOG START";
 
         // 버튼 배경색도 변경
