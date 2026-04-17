@@ -47,9 +47,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
 
     [SerializeField] public int poolSize = 10;
-#pragma warning disable CS0414 // Inspector 설정용 필드
-    [SerializeField] private float updateInterval = 600f;
-#pragma warning restore CS0414
 
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터)")]
@@ -73,10 +70,11 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
     private bool isCacheReady = false;
-    private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
-    [SerializeField] private GameObject indicatorOnlyPrefab;
 
-    private static readonly WaitForSeconds waitUpdateInterval = new WaitForSeconds(600f);
+    [Header("IndicatorOnly (FilterManager 배분 전용)")]
+    [Tooltip("IndicatorOnly 프리팹 — FilterManager가 중앙 배분")]
+    [SerializeField] private GameObject indicatorOnlyPrefab;
+    private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
 
     void Start()
     {
@@ -104,10 +102,10 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     private IEnumerator StartLocationServiceAndFetchData()
     {
+        // 초기 DB 로드는 FilterManager.RefreshAllCaches()가 중앙 처리 (중복 페치 방지)
 #if UNITY_EDITOR
         lastPosition = new Vector2(VirtualLocation.Instance.Latitude, VirtualLocation.Instance.Longitude);
-        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
-        StartCoroutine(CheckPositionAndFetchData());
+        StartCoroutine(TrackPosition());
         yield break;
 #else
         // 권한이 없으면 DataManager의 이벤트를 기다린 후 진행
@@ -130,33 +128,12 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         if (Input.location.status == LocationServiceStatus.Failed) yield break;
 
         lastPosition = new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
-        fetchCoroutine = StartCoroutine(FetchDataPeriodically());
-        StartCoroutine(CheckPositionAndFetchData());
+        StartCoroutine(TrackPosition());
 #endif
     }
 
-    private IEnumerator FetchDataPeriodically()
-    {
-        while (true)
-        {
-#if UNITY_EDITOR
-            float lat = VirtualLocation.Instance.Latitude;
-            float lon = VirtualLocation.Instance.Longitude;
-#else
-            yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking);
-            float lat = Input.location.lastData.latitude;
-            float lon = Input.location.lastData.longitude;
-#endif
-            foreach (float radius in loadRadii)
-            {
-                yield return StartCoroutine(FetchFacilityData(lat, lon, radius));
-                if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
-            }
-            yield return waitUpdateInterval;
-        }
-    }
-
-    private IEnumerator CheckPositionAndFetchData()
+    // 위치 추적 전용 (DB 재요청/스폰은 FilterManager가 중앙 처리)
+    private IEnumerator TrackPosition()
     {
         while (true)
         {
@@ -173,19 +150,12 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
             if (distanceMoved > updateDistanceThreshold)
             {
-                foreach (float radius in loadRadii)
-                {
-                    yield return StartCoroutine(FetchFacilityData(lat, lon, radius));
-                    if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
-                }
-                CleanupStaleObjects(lat, lon);
                 lastPosition = currentPos;
+                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                    FileLogger.Instance.LogGPS(lat, lon, $"[Terminal] 이동감지 dist={distanceMoved:F0}m");
             }
 
-            // objectSpawnRadius 기반 스폰/정리 (서버 재요청 없이)
-            SpawnNearbyUnspawnedObjects(lat, lon);
-
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSeconds(5f);
         }
     }
 
@@ -210,91 +180,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         }
     }
 
-    /// <summary>
-    /// 듀얼 레인지 정리: objectSpawnRadius*1.5 밖은 오브젝트만 풀 반환,
-    /// MaxDisplayDistance*1.5 밖은 데이터도 제거
-    /// </summary>
-    private void CleanupStaleObjects(float lat, float lon)
-    {
-        float objCleanupRange = objectSpawnRadius * 1.5f;
-        float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-        float dataCleanupRange = maxDist * 1.5f;
-
-        // 1) objectSpawnRadius*1.5 밖: 오브젝트만 풀 반환 (데이터 유지)
-        List<string> objToRemove = new List<string>();
-        foreach (var kvp in spawnedObjects)
-        {
-            string id = kvp.Key;
-            if (!placeDataMap.ContainsKey(id)) continue;
-            var data = placeDataMap[id];
-            float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
-            if (dist > objCleanupRange)
-            {
-                objToRemove.Add(id);
-            }
-        }
-        foreach (string id in objToRemove)
-        {
-            ReturnToPool(spawnedObjects[id]);
-            spawnedObjects.Remove(id);
-        }
-
-        // 2) MaxDisplayDistance*1.5 밖: 데이터도 제거
-        List<string> dataToRemove = new List<string>();
-        foreach (var kvp in placeDataMap)
-        {
-            float dist = CalculateDistance(lat, lon, (float)kvp.Value.latitude, (float)kvp.Value.longitude);
-            if (dist > dataCleanupRange)
-            {
-                dataToRemove.Add(kvp.Key);
-            }
-        }
-        foreach (string id in dataToRemove)
-        {
-            if (spawnedObjects.ContainsKey(id))
-            {
-                ReturnToPool(spawnedObjects[id]);
-                spawnedObjects.Remove(id);
-            }
-            placeDataMap.Remove(id);
-        }
-    }
-
-    private void SpawnNearbyUnspawnedObjects(float lat, float lon)
-    {
-        float cleanupRange = objectSpawnRadius * 1.5f;
-        List<string> toRemove = new List<string>();
-        foreach (var kvp in spawnedObjects)
-        {
-            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
-            var data = placeDataMap[kvp.Key];
-            float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
-            if (dist > cleanupRange) toRemove.Add(kvp.Key);
-        }
-        foreach (string id in toRemove)
-        {
-            ReturnToPool(spawnedObjects[id]);
-            spawnedObjects.Remove(id);
-        }
-        foreach (var kvp in placeDataMap)
-        {
-            if (spawnedObjects.ContainsKey(kvp.Key)) continue;
-            var data = kvp.Value;
-            float dist = CalculateDistance(lat, lon, (float)data.latitude, (float)data.longitude);
-            if (dist <= objectSpawnRadius)
-            {
-                GameObject newObj = GetFromPool();
-                if (newObj != null)
-                {
-                    SetupObject(newObj, data);
-                    bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("terminal") || currentFilters["terminal"];
-                    newObj.SetActive(shouldShow);
-                    spawnedObjects[kvp.Key] = newObj;
-                }
-            }
-        }
-    }
-
     private void ReturnToPool(GameObject obj)
     {
         if (obj == null) return;
@@ -315,7 +200,13 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
             yield break;
         }
 
-        if (facilities == null || facilities.Count == 0) yield break;
+        if (facilities == null || facilities.Count == 0)
+        {
+            lightCache.Clear();
+            isCacheReady = true;
+            Debug.LogWarning($"[dbg][TerminalManager][CACHE] 0개 반환 — isCacheReady=true 설정");
+            yield break;
+        }
 
         // Light 캐시 갱신
         lightCache.Clear();
@@ -581,12 +472,14 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         GameObject newObj = GetFromPool();
         if (newObj == null) return false;
 
-        SetupObject(newObj, placeDataMap[rawId]);
+        FacilityData data = placeDataMap[rawId];
+        SetupObject(newObj, data);
         newObj.SetActive(true);
         spawnedObjects[rawId] = newObj;
 
+        Debug.LogWarning($"[dbg][TerminalManager][SPAWN] Full id={rawId} name={data.name} total={spawnedObjects.Count}");
         if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, placeDataMap[rawId].name, true);
+            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, data.name, true);
 
         return true;
     }
@@ -619,6 +512,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
         indicatorOnlyObjects[rawId] = obj;
 
+        Debug.LogWarning($"[dbg][TerminalManager][SPAWN] Indicator id={rawId} name={cached.displayName} total={indicatorOnlyObjects.Count}");
         if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
             FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, cached.displayName, true);
 
@@ -629,11 +523,10 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     {
         if (!spawnedObjects.ContainsKey(rawId)) return;
 
+        string objName = placeDataMap.ContainsKey(rawId) ? placeDataMap[rawId].name : "";
+        Debug.LogWarning($"[dbg][TerminalManager][DESPAWN] Full id={rawId} name={objName} remaining={spawnedObjects.Count - 1}");
         if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-        {
-            string name = placeDataMap.ContainsKey(rawId) ? placeDataMap[rawId].name : "";
-            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, name, false);
-        }
+            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, objName, false);
 
         ReturnToPool(spawnedObjects[rawId]);
         spawnedObjects.Remove(rawId);
@@ -643,11 +536,11 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     {
         if (!indicatorOnlyObjects.ContainsKey(rawId)) return;
 
+        var cached = lightCache.Find(c => c.rawId == rawId);
+        string displayName = cached?.displayName ?? "";
+        Debug.LogWarning($"[dbg][TerminalManager][DESPAWN] Indicator id={rawId} name={displayName} remaining={indicatorOnlyObjects.Count - 1}");
         if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-        {
-            var cached = lightCache.Find(c => c.rawId == rawId);
-            FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, cached?.displayName ?? "", false);
-        }
+            FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, displayName, false);
 
         if (indicatorOnlyObjects[rawId] != null) Destroy(indicatorOnlyObjects[rawId]);
         indicatorOnlyObjects.Remove(rawId);
@@ -669,6 +562,41 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     public void RefreshCache(float lat, float lon)
     {
+        Debug.LogWarning($"[dbg][TerminalManager][CACHE] RefreshCache 시작 lat={lat:F6} lon={lon:F6}");
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.Log("CACHE", $"[Terminal] RefreshCache lat={lat:F6} lon={lon:F6}");
+
         StartCoroutine(FetchFacilityData(lat, lon, 10000f));
+    }
+
+    public void RefreshAnchors()
+    {
+        int full = 0, indicator = 0;
+        foreach (var kv in spawnedObjects)
+        {
+            if (kv.Value == null) continue;
+            if (!placeDataMap.TryGetValue(kv.Key, out var data)) continue;
+            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+            {
+                anchor.SetCoordinatesAndCreateAnchor(data.latitude, data.longitude, data.altitude);
+                full++;
+            }
+        }
+        foreach (var kv in indicatorOnlyObjects)
+        {
+            if (kv.Value == null) continue;
+            var cached = lightCache.Find(c => c.rawId == kv.Key);
+            if (cached == null) continue;
+            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor != null)
+            {
+                anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
+                indicator++;
+            }
+        }
+        Debug.LogWarning($"[dbg][TerminalManager][ANCHOR] RefreshAnchors Full={full} Indicator={indicator}");
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+            FileLogger.Instance.Log("ANCHOR", $"[Terminal] RefreshAnchors Full={full} Indicator={indicator}");
     }
 }

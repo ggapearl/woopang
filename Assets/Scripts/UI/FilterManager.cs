@@ -990,14 +990,37 @@ public class FilterManager : MonoBehaviour
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
     [SerializeField] private float fullObjectRadius = 500f;
     [Tooltip("배분 갱신 주기 (초)")]
-    [SerializeField] private float allocationInterval = 3f;
+    [SerializeField] private float allocationInterval = 2f;
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
     [SerializeField] private float cacheRefreshDistance = 5000f;
+
+    [Header("Walking Mode — 도보 속도에서 AR 앵커 재배치")]
+    [Tooltip("Walking 모드 진입 속도 임계값 (km/h) — 평균 속도가 이 값 이하")]
+    [SerializeField] private float walkingSpeedThreshold = 5f;
+    [Tooltip("Walking 모드 진입 지속 시간 (초) — 임계값 이하 유지 시간")]
+    [SerializeField] private float walkingModeDwellTime = 10f;
+    [Tooltip("Walking 모드 최대 유지 시간 (초) — 이 시간 경과 시 Normal 자동 복귀")]
+    [SerializeField] private float walkingModeDuration = 60f;
+    [Tooltip("Normal 복귀 속도 임계값 (km/h) — Walking 중 이 속도 초과 시 즉시 Normal 복귀")]
+    [SerializeField] private float normalSpeedThreshold = 10f;
+    [Tooltip("Walking 모드 재진입 쿨다운 (초, 진입 시각 기준) — 연속 refresh 방지")]
+    [SerializeField] private float walkingModeCooldown = 120f;
+    [Tooltip("속도 계산 이동 평균 윈도우 (초)")]
+    [SerializeField] private float speedAverageWindow = 5f;
+
+    // Walking mode 상태
+    private bool isWalkingMode = false;
+    private float slowSpeedStartTime = -1f;
+    private float lastWalkingModeEnterTime = -1f;
+    // GPS 샘플 큐: (time, lat, lon)
+    private Queue<(float time, float lat, float lon)> gpsSamples = new Queue<(float, float, float)>();
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
     private HashSet<string> currentIndicatorAllocations = new HashSet<string>();
-    private HashSet<string> detailPendingIds = new HashSet<string>(); // Detail API 응답 대기 중인 ID
+    // Detail API 응답 대기 중인 ID + 큐잉 시각 (타임아웃 판정용)
+    private Dictionary<string, float> detailPendingIds = new Dictionary<string, float>();
+    private const float DETAIL_PENDING_TIMEOUT = 15f; // Detail API 대기 타임아웃 (초)
     private Vector2 lastAllocationPosition;
     private Vector2 lastCacheRefreshPosition;
     private bool allocationStarted = false;
@@ -1055,10 +1078,9 @@ public class FilterManager : MonoBehaviour
         {
             Vector2 gps = GetCurrentGPS();
 
-            // [DEBUG] 프로바이더 준비 상태 로깅 (첫 10회만)
+            // 프로바이더 준비 상태 집계 (FileLogger 기록용)
             int readyCount = 0;
             foreach (var p in cacheProviders) if (p.IsCacheReady) readyCount++;
-            Debug.LogWarning($"[dbg] AllocationLoop: GPS=({gps.x:F5},{gps.y:F5}), providers={cacheProviders.Count}, ready={readyCount}");
 
             // FileLogger: GPS 위치 + 프로바이더 상태
             if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
@@ -1066,10 +1088,14 @@ public class FilterManager : MonoBehaviour
 
             if (gps.x != 0f || gps.y != 0f)
             {
+                // 속도 추적 + Walking/Normal 모드 전환
+                UpdateSpeedAndMode(gps);
+
                 // 5km 이상 이동 시 캐시 갱신
                 float movedFromCache = CalculateGPSDistance(lastCacheRefreshPosition.x, lastCacheRefreshPosition.y, gps.x, gps.y);
                 if (lastCacheRefreshPosition == Vector2.zero || movedFromCache >= cacheRefreshDistance)
                 {
+                    Debug.LogWarning($"[dbg][FilterManager][CACHE] 5km 이동 감지 → 캐시 갱신 트리거 moved={movedFromCache:F0}m threshold={cacheRefreshDistance}m");
                     RefreshAllCaches(gps.x, gps.y);
                     lastCacheRefreshPosition = gps;
 
@@ -1090,10 +1116,116 @@ public class FilterManager : MonoBehaviour
     /// </summary>
     public void TriggerReallocation()
     {
+        if (cacheProviders.Count == 0) return;
         Vector2 gps = GetCurrentGPS();
         if (gps.x != 0f || gps.y != 0f)
         {
             AllocateObjects(gps.x, gps.y);
+        }
+    }
+
+    /// <summary>
+    /// GPS 샘플 기반 평균 속도 계산 및 Walking/Normal 모드 전환
+    ///
+    /// 규칙:
+    /// - Walking 진입: 평균 속도 ≤ 5km/h가 10초 이상 지속 + 쿨다운(120s) 경과
+    /// - Walking 진입 시: RefreshAllAnchors() 1회 호출 (AR 드리프트 보정)
+    /// - Walking 복귀 조건 (둘 중 먼저 만족):
+    ///   (a) 속도가 10km/h 이상 올라가면 즉시 Normal
+    ///   (b) 최대 유지 시간(60s) 경과하면 자동 Normal
+    /// - 복귀 후 쿨다운(진입 시각 기준 120s) 동안 재진입 차단 → 연속 refresh 없음
+    /// </summary>
+    private void UpdateSpeedAndMode(Vector2 gps)
+    {
+        float now = Time.realtimeSinceStartup;
+
+        // 평균 속도 계산 (Walking 중에도 조기 복귀 판단용으로 필요)
+        gpsSamples.Enqueue((now, gps.x, gps.y));
+        while (gpsSamples.Count > 0 && now - gpsSamples.Peek().time > speedAverageWindow)
+            gpsSamples.Dequeue();
+
+        float speedKmh = -1f;
+        if (gpsSamples.Count >= 2)
+        {
+            var first = gpsSamples.Peek();
+            float elapsed = now - first.time;
+            if (elapsed >= 1f)
+            {
+                float meters = CalculateGPSDistance(first.lat, first.lon, gps.x, gps.y);
+                speedKmh = (meters / elapsed) * 3.6f;
+            }
+        }
+
+        if (isWalkingMode)
+        {
+            // (a) 속도 상승 → 즉시 Normal
+            if (speedKmh >= normalSpeedThreshold)
+            {
+                float walkingElapsed = now - lastWalkingModeEnterTime;
+                isWalkingMode = false;
+                slowSpeedStartTime = -1f;
+                Debug.LogWarning($"[dbg][FilterManager][MODE] Normal 조기 복귀 speed={speedKmh:F1}km/h (Walking {walkingElapsed:F1}s)");
+                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                    FileLogger.Instance.Log("MODE", $"Normal 조기 복귀: speed={speedKmh:F1}km/h ({walkingElapsed:F1}s)");
+                return;
+            }
+
+            // (b) 최대 유지 시간 경과 → 자동 Normal
+            float elapsedInWalking = now - lastWalkingModeEnterTime;
+            if (elapsedInWalking >= walkingModeDuration)
+            {
+                isWalkingMode = false;
+                slowSpeedStartTime = -1f;
+                Debug.LogWarning($"[dbg][FilterManager][MODE] Normal 시간 복귀 (Walking {elapsedInWalking:F1}s 경과) speed={speedKmh:F1}km/h");
+                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                    FileLogger.Instance.Log("MODE", $"Normal 시간 복귀: {elapsedInWalking:F1}s");
+            }
+            return;
+        }
+
+        // Normal 모드 — Walking 진입 판정
+        if (speedKmh < 0f) return; // 아직 속도 계산 불가
+
+        if (speedKmh <= walkingSpeedThreshold)
+        {
+            if (slowSpeedStartTime < 0f) slowSpeedStartTime = now;
+            float slowDuration = now - slowSpeedStartTime;
+
+            if (slowDuration >= walkingModeDwellTime)
+            {
+                bool cooldownPassed = lastWalkingModeEnterTime < 0f
+                    || (now - lastWalkingModeEnterTime) >= walkingModeCooldown;
+
+                if (cooldownPassed)
+                {
+                    isWalkingMode = true;
+                    lastWalkingModeEnterTime = now;
+                    Debug.LogWarning($"[dbg][FilterManager][MODE] Walking 진입 speed={speedKmh:F1}km/h (slow={slowDuration:F1}s, max={walkingModeDuration}s, cooldown={walkingModeCooldown}s)");
+                    if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+                        FileLogger.Instance.Log("MODE", $"Walking 진입: speed={speedKmh:F1}km/h");
+
+                    RefreshAllAnchors();
+                }
+                // 쿨다운 미경과 → slowSpeedStartTime 초기화 안 함(느린 상태 유지 인식) 하지만 진입은 하지 않음
+            }
+        }
+        else
+        {
+            slowSpeedStartTime = -1f;
+        }
+    }
+
+    /// <summary>
+    /// 모든 provider에게 스폰된 오브젝트 AR 앵커 재설정 요청
+    /// Walking 모드 진입 시 호출 — 차량 이동 중 누적된 Geospatial 드리프트 보정
+    /// </summary>
+    private void RefreshAllAnchors()
+    {
+        Debug.LogWarning($"[dbg][FilterManager][ANCHOR] RefreshAllAnchors providers={cacheProviders.Count}");
+        foreach (var provider in cacheProviders)
+        {
+            if (!provider.IsCacheReady) continue;
+            provider.RefreshAnchors();
         }
     }
 
@@ -1120,6 +1252,9 @@ public class FilterManager : MonoBehaviour
                 allPlaces.Add((place, provider, dist));
             }
         }
+
+        // 캐시가 모두 준비 안 된 상태라면 조용히 리턴 (이른 호출 방어)
+        if (allPlaces.Count == 0) return;
 
         // 거리순 정렬
         allPlaces.Sort((a, b) => a.distance.CompareTo(b.distance));
@@ -1199,13 +1334,20 @@ public class FilterManager : MonoBehaviour
 
         // Full 스폰 (새로 추가된 것)
         // Detail API 대기 중인 Full은 임시로 IndicatorOnly 표시
-        // Detail API 응답 완료된 ID 정리 (Full 스폰 성공한 것은 pending에서 제거)
-        detailPendingIds.RemoveWhere(pid =>
+        float nowTime = Time.realtimeSinceStartup;
+
+        // pending 정리:
+        //   1) Full 스폰 성공 (Detail API 응답 도착 → Full 오브젝트 생성됨)
+        //   2) 타임아웃 경과 (API 응답 실패/지연 — 다시 시도 가능하게 해제)
+        List<string> pendingToRemove = new List<string>();
+        foreach (var kv in detailPendingIds)
         {
-            if (fullProviderMap.TryGetValue(pid, out var p))
-                return p.GetSpawnedFullIds().Contains(pid);
-            return false;
-        });
+            bool fullSpawned = fullProviderMap.TryGetValue(kv.Key, out var pp) && pp.GetSpawnedFullIds().Contains(kv.Key);
+            bool timedOut = (nowTime - kv.Value) >= DETAIL_PENDING_TIMEOUT;
+            if (fullSpawned || timedOut)
+                pendingToRemove.Add(kv.Key);
+        }
+        foreach (string rid in pendingToRemove) detailPendingIds.Remove(rid);
 
         HashSet<string> pendingFullIds = new HashSet<string>();
         foreach (string id in newFullSet)
@@ -1224,7 +1366,7 @@ public class FilterManager : MonoBehaviour
                     {
                         // Detail API 대기 중 → 임시 IndicatorOnly 표시 (최초 1회만)
                         pendingFullIds.Add(id);
-                        detailPendingIds.Add(id);
+                        detailPendingIds[id] = nowTime;
                         provider.SpawnIndicatorOnly(ExtractRawId(id));
                     }
                 }
@@ -1242,12 +1384,16 @@ public class FilterManager : MonoBehaviour
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
                         detailPendingIds.Remove(id);
                     }
-                    else if (!hasFullSpawn && !hasIndicator && !detailPendingIds.Contains(id))
+                    else if (!hasFullSpawn && !hasIndicator && !detailPendingIds.ContainsKey(id))
                     {
-                        // Detail API 대기 중이 아닌데 Full도 Indicator도 없으면 복구
-                        pendingFullIds.Add(id);
-                        detailPendingIds.Add(id);
-                        provider.SpawnIndicatorOnly(ExtractRawId(id));
+                        // Detail API 대기 중이 아닌데 Full도 Indicator도 없으면 복구 시도
+                        bool spawned = provider.SpawnFullObject(ExtractRawId(id));
+                        if (!spawned)
+                        {
+                            pendingFullIds.Add(id);
+                            detailPendingIds[id] = nowTime;
+                            provider.SpawnIndicatorOnly(ExtractRawId(id));
+                        }
                     }
                     // detailPendingIds에 있으면 → Detail API 응답 대기 중이므로 아무것도 안 함
                 }
@@ -1266,11 +1412,18 @@ public class FilterManager : MonoBehaviour
             }
         }
 
-        // [DEBUG] 배분 결과 로깅
+        // [DEBUG] 배분 결과 로깅 — 총 캐시 수, Full/Indicator 배분 크기 + Diff
         int totalPlaces = 0;
         foreach (var provider in cacheProviders)
             if (provider.IsCacheReady) totalPlaces += provider.GetCachedPlaces().Count;
-        Debug.LogWarning($"[dbg] AllocateObjects 결과: 총캐시={totalPlaces}, Full={newFullSet.Count}(이전={currentFullAllocations.Count}), Indicator={newIndicatorSet.Count}(이전={currentIndicatorAllocations.Count}), radius={fullObjectRadius}m");
+
+        int fullAdded = 0, fullRemoved = 0, indicatorAdded = 0, indicatorRemoved = 0;
+        foreach (string id in newFullSet) if (!currentFullAllocations.Contains(id)) fullAdded++;
+        foreach (string id in currentFullAllocations) if (!newFullSet.Contains(id)) fullRemoved++;
+        foreach (string id in newIndicatorSet) if (!currentIndicatorAllocations.Contains(id)) indicatorAdded++;
+        foreach (string id in currentIndicatorAllocations) if (!newIndicatorSet.Contains(id)) indicatorRemoved++;
+
+        Debug.LogWarning($"[dbg][FilterManager][ALLOC] cache={totalPlaces} Full={newFullSet.Count}(+{fullAdded}/-{fullRemoved}) Indicator={newIndicatorSet.Count}(+{indicatorAdded}/-{indicatorRemoved}) radius={fullObjectRadius}m gps=({lat:F5},{lon:F5})");
 
         // FileLogger: 배분 결과
         if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
@@ -1364,15 +1517,29 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 모든 프로바이더 캐시 갱신 (5km 이동 시)
+    /// 모든 프로바이더 캐시 갱신
+    /// - 최초 호출(hasInitiatedCacheOnce=false): isCacheReady=false인 provider만 호출 (중복 페치 방지)
+    /// - 이후 호출(5km 이동): 모든 provider 호출
     /// </summary>
+    private bool hasInitiatedCacheOnce = false;
     private void RefreshAllCaches(float lat, float lon)
     {
+        int skipped = 0, called = 0;
+        Debug.LogWarning($"[dbg][FilterManager][CACHE] RefreshAllCaches providers={cacheProviders.Count} lat={lat:F6} lon={lon:F6} initial={!hasInitiatedCacheOnce}");
         detailPendingIds.Clear();
         foreach (var provider in cacheProviders)
         {
+            // 최초 호출 시 이미 준비된 provider는 건너뜀 (자체 Start 로드와 중복 방지)
+            if (!hasInitiatedCacheOnce && provider.IsCacheReady)
+            {
+                skipped++;
+                continue;
+            }
             provider.RefreshCache(lat, lon);
+            called++;
         }
+        Debug.LogWarning($"[dbg][FilterManager][CACHE] RefreshAllCaches 결과 called={called} skipped={skipped}");
+        hasInitiatedCacheOnce = true;
     }
 
     /// <summary>

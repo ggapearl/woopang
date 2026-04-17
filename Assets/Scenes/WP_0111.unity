@@ -19469,11 +19469,6 @@ MonoBehaviour:
   objectSpawnRadius: 400
   indicatorOnlyPrefab: {fileID: 1000000000000000000, guid: fc7117170b38c8b4d9f5db6cbaf1d1e5,
     type: 3}
-  indicatorOnlyRadius: 2000
-  maxIndicatorOnlyObjects: 10
-  rapidRefreshWindow: 60
-  rapidRefreshThresholdCount: 4
-  rapidModeResetInterval: 600
   arGuideFontSize: 22
 --- !u!114 &1494518813
 MonoBehaviour:
@@ -20679,6 +20674,11 @@ MonoBehaviour:
   nextButton: {fileID: 370905712}
   previousButton: {fileID: 449483261}
   confirmButton: {fileID: 1898854565}
+  swipeThreshold: 80
+  snapDuration: 0.3
+  pageFadeDuration: 0.6
+  pageSlideOffset: 60
+  textFadeDelay: 0.2
 --- !u!4 &1623039004
 Transform:
   m_ObjectHideFlags: 0
@@ -43066,7 +43066,7 @@ PrefabInstance:
     - target: {fileID: 1601744079313318032, guid: ec6ba3c364befc9499972d881e3e92cf,
         type: 3}
       propertyPath: zoomSpeed
-      value: 0.02
+      value: 0.01
       objectReference: {fileID: 0}
     - target: {fileID: 1601744079313318032, guid: ec6ba3c364befc9499972d881e3e92cf,
         type: 3}
