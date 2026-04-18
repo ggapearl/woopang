@@ -248,9 +248,9 @@ public class LoadingManager : MonoBehaviour
                 int targetCount = osi.GetActiveTargetCount();
                 osi.SetFallbackMinDuration(backgroundFallbackDuration);
 #if UNITY_EDITOR
-                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true, reason: "BgRecover_Editor");
 #else
-                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: "BgRecover");
 #endif
             }
             else
@@ -354,7 +354,7 @@ public class LoadingManager : MonoBehaviour
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
                 if (osi != null)
                 {
-                    osi.EnableFallbackMode(false);
+                    osi.EnableFallbackMode(false, reason: "BgRecover_Complete");
                 }
                 isBackgroundRecovering = false;
                 lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
@@ -394,7 +394,7 @@ public class LoadingManager : MonoBehaviour
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
         if (osi != null && !hasShownEnvironmentGuidance)
         {
-            osi.EnableFallbackMode(false);
+            osi.EnableFallbackMode(false, reason: "BgRecover_Timeout");
         }
         else if (osi != null && hasShownEnvironmentGuidance)
         {
@@ -463,9 +463,18 @@ public class LoadingManager : MonoBehaviour
 
     /// <summary>
     /// 매 프레임 트래킹 상태 변화 감지 — fallback 진입/해제만 관리
-    /// Tracking↔Limited 빠른 전환 시 디바운스 적용 (1초 이내 재해제 무시)
+    /// Tracking↔Limited 빠른 전환 시 디바운스 적용 (글리치 필터링)
+    /// iOS ARKit 차량 이동 시 Limited로 자주 떨어지는 현상 대응
     /// </summary>
     private TrackingState lastFrameTrackingState = TrackingState.None;
+    private float trackingDropStartTime = -1f;     // Limited/None 진입 시각 (디바운스 기준)
+    private bool pendingFallbackEntry = false;     // 디바운스 대기 중 플래그
+
+    [Header("=== Tracking Fallback 디바운스 ===")]
+    [Tooltip("트래킹 손실 후 fallback 활성화까지 대기 시간 (초) — 순간 글리치 무시")]
+    public float trackingLossDebounceTime = 2.0f;
+    [Tooltip("차량 이동 판정 속도 (km/h) — 이 이상 시 fallback 완전 차단")]
+    public float vehicleSpeedThreshold = 15f;
 
     void CheckTrackingStateChange()
     {
@@ -473,30 +482,75 @@ public class LoadingManager : MonoBehaviour
         if (isBackgroundRecovering) return;
 
         TrackingState current = arSession.subsystem.trackingState;
-        if (current == lastFrameTrackingState) return;
-
-        TrackingState previous = lastFrameTrackingState;
-        lastFrameTrackingState = current;
-
         NotTrackingReason reason = arSession.subsystem.notTrackingReason;
+        TrackingState previous = lastFrameTrackingState;
 
-        // Tracking → Limited/None: fallback 진입 + 3D 렌더러 숨김
-        // ExcessiveMotion(빠른 이동/흔들림)은 무시 — 차량 이동 중 오브젝트 깜빡임 방지
-        if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
+        // --- 디바운스 대기 중 처리 (상태 변화 없어도 매 프레임 체크) ---
+        if (pendingFallbackEntry && current != TrackingState.Tracking)
         {
-            if (reason == NotTrackingReason.ExcessiveMotion) return;
-
-            OffScreenIndicator osi = GetCachedOSI();
-            if (osi != null && !osi.IsFallbackMode)
+            float elapsed = Time.realtimeSinceStartup - trackingDropStartTime;
+            if (elapsed >= trackingLossDebounceTime)
             {
-                SetAllManagerRenderersVisible(false); // 3D 프리팹 숨김 (Target 유지)
-                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+                // 디바운스 경과 — 속도 체크 후 fallback 활성화 결정
+                float speedKmh = GetCurrentSpeedKmh();
+                if (speedKmh < vehicleSpeedThreshold)
+                {
+                    OffScreenIndicator osi = GetCachedOSI();
+                    if (osi != null && !osi.IsFallbackMode)
+                    {
+                        SetAllManagerRenderersVisible(false);
+                        osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"TrackLost_Debounced_{reason}");
+                        LogFallback("ENTER", current, reason, speedKmh);
+                    }
+                }
+                else
+                {
+                    LogFallback("SKIP_VEHICLE", current, reason, speedKmh);
+                }
+                pendingFallbackEntry = false;
             }
         }
-        // Limited/None → Tracking: 앵커 재생성 + fallback 해제
-        // 앵커 재생성 후 개별적으로 ShowAfterFrame에서 렌더러 복원 (뭉침/플래시 방지)
+
+        if (current == lastFrameTrackingState) return;
+        lastFrameTrackingState = current;
+
+        // --- 모든 TrackingState 변화 이벤트 기록 (디바운스 영향 없는 순수 상태 변화) ---
+        LogTrackingTransition(previous, current, reason);
+
+        // --- Tracking → Limited/None: 디바운스 시작 ---
+        if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
+        {
+            // ExcessiveMotion은 즉시 제외 (차량 이동 중 기본 무시)
+            if (reason == NotTrackingReason.ExcessiveMotion)
+            {
+                LogFallback("SKIP_MOTION", current, reason, GetCurrentSpeedKmh());
+                return;
+            }
+
+            // 차량 속도면 즉시 제외 (디바운스조차 시작 안 함)
+            float speedKmh = GetCurrentSpeedKmh();
+            if (speedKmh >= vehicleSpeedThreshold)
+            {
+                LogFallback("SKIP_VEHICLE_IMMEDIATE", current, reason, speedKmh);
+                return;
+            }
+
+            // 디바운스 타이머 시작 (N초 지속 시 fallback 활성화)
+            trackingDropStartTime = Time.realtimeSinceStartup;
+            pendingFallbackEntry = true;
+            LogFallback("DEBOUNCE_START", current, reason, speedKmh);
+        }
+        // --- Limited/None → Tracking: 앵커 재생성 + fallback 해제 ---
         else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
         {
+            // 디바운스 대기 중이었다면 취소 (글리치였음 — 복구)
+            if (pendingFallbackEntry)
+            {
+                pendingFallbackEntry = false;
+                LogFallback("DEBOUNCE_CANCEL", current, reason, GetCurrentSpeedKmh());
+                return; // fallback 들어간 적 없음 → 복원 작업 불필요
+            }
+
             if (hasShownEnvironmentGuidance)
             {
                 HideARGuidance();
@@ -504,18 +558,53 @@ public class LoadingManager : MonoBehaviour
             }
             else
             {
-                // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
                 RestoreAllManagerObjects();
-                // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
                 RecreateAllManagerAnchors();
-                // fallback 해제
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
                 {
-                    osi.EnableFallbackMode(false, forceDisable: true);
+                    osi.EnableFallbackMode(false, forceDisable: true, reason: "TrackRecovered");
+                    LogFallback("EXIT", current, reason, GetCurrentSpeedKmh());
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// FilterManager의 최근 GPS 속도 조회 (차량 이동 판정용)
+    /// </summary>
+    private FilterManager cachedFilterManager;
+    private float GetCurrentSpeedKmh()
+    {
+        if (cachedFilterManager == null)
+            cachedFilterManager = UnityEngine.Object.FindFirstObjectByType<FilterManager>();
+        if (cachedFilterManager == null) return -1f;
+        return cachedFilterManager.CurrentSpeedKmh;
+    }
+
+    /// <summary>
+    /// Fallback 진입/해제 사유를 FileLogger에 기록 (iOS 진단용)
+    /// </summary>
+    private void LogFallback(string evt, TrackingState state, NotTrackingReason reason, float speedKmh)
+    {
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            FileLogger.Instance.Log("FALLBACK",
+                $"{evt} state={state} reason={reason} speed={speedKmh:F1}km/h");
+        }
+    }
+
+    /// <summary>
+    /// AR TrackingState 변화 자체를 기록 (Tracking↔Limited 전이, 디바운스 발동 전 원본)
+    /// </summary>
+    private void LogTrackingTransition(TrackingState previous, TrackingState current, NotTrackingReason reason)
+    {
+        if (FileLogger.Instance == null || !FileLogger.Instance.IsLogging) return;
+        float speedKmh = GetCurrentSpeedKmh();
+        OffScreenIndicator osi = GetCachedOSI();
+        bool fbActive = osi != null && osi.IsFallbackMode;
+        FileLogger.Instance.Log("TRACK",
+            $"{previous}→{current} ntr={reason} pending={pendingFallbackEntry} fb={fbActive} speed={speedKmh:F1}km/h");
     }
     
     public void ShowLoading(System.Action heavyWork, string category = "General")
@@ -689,7 +778,7 @@ public class LoadingManager : MonoBehaviour
         {
             // EnableFallbackMode(true) 내부에서 suppressNormalIndicators = false 처리됨
             osi.SetFallbackMinDuration(minDuration);
-            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true);
+            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true, reason: $"DataLoaded_objCount={objCount}");
         }
         else
         {
@@ -768,7 +857,7 @@ public class LoadingManager : MonoBehaviour
                 {
                     if (osi.IsFallbackMode)
                     {
-                        osi.EnableFallbackMode(false, forceDisable: true);
+                        osi.EnableFallbackMode(false, forceDisable: true, reason: "FirstObjs_Editor");
                         yield break;
                     }
                 }
@@ -780,7 +869,7 @@ public class LoadingManager : MonoBehaviour
                         if (osi.IsFallbackMode)
                         {
                             // fallback ON 상태 → 즉시 해제
-                            osi.EnableFallbackMode(false);
+                            osi.EnableFallbackMode(false, reason: "FirstObjs_Tracking");
                             yield break;
                         }
                         else
@@ -795,7 +884,7 @@ public class LoadingManager : MonoBehaviour
                                 waited += 0.2f;
                                 if (osi.IsFallbackMode)
                                 {
-                                    osi.EnableFallbackMode(false);
+                                    osi.EnableFallbackMode(false, reason: "FirstObjs_RaceResolve");
                                     yield break;
                                 }
                             }
@@ -821,7 +910,7 @@ public class LoadingManager : MonoBehaviour
                 }
                 if (osi != null && osi.IsFallbackMode)
                 {
-                    osi.EnableFallbackMode(false, forceDisable: true);
+                    osi.EnableFallbackMode(false, forceDisable: true, reason: "EnvGuidance_End");
                 }
                 yield break;
             }
@@ -832,10 +921,10 @@ public class LoadingManager : MonoBehaviour
 
         if (osi != null)
         {
-            osi.EnableFallbackMode(false, forceDisable: true);
+            osi.EnableFallbackMode(false, forceDisable: true, reason: "FirstObjs_Timeout");
         }
     }
-    
+
     IEnumerator ForceEnvironmentCheckAfterDelay()
     {
         yield return new WaitForSeconds(5f);
@@ -1084,7 +1173,7 @@ public class LoadingManager : MonoBehaviour
             OffScreenIndicator osi = GetCachedOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
-                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false);
+                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"EnvIssue_{issue}");
             }
         }
 
@@ -1339,10 +1428,10 @@ public class LoadingManager : MonoBehaviour
         OffScreenIndicator osi = GetCachedOSI();
         if (osi != null && osi.IsFallbackMode)
         {
-            osi.EnableFallbackMode(false, forceDisable: true);
+            osi.EnableFallbackMode(false, forceDisable: true, reason: "HideGuidance");
         }
     }
-    
+
     public AREnvironmentIssue GetCurrentEnvironmentIssue()
     {
         if (!enableAREnvironmentDetection || arSession?.subsystem == null)
@@ -1837,14 +1926,14 @@ public class LoadingManager : MonoBehaviour
     public void DebugFallbackOn()
     {
         OffScreenIndicator osi = GetCachedOSI();
-        if (osi != null) osi.EnableFallbackMode(true, GetFallbackConfig());
+        if (osi != null) osi.EnableFallbackMode(true, GetFallbackConfig(), reason: "Debug_Manual");
     }
 
     [ContextMenu("Test: Fallback OFF")]
     public void DebugFallbackOff()
     {
         OffScreenIndicator osi = GetCachedOSI();
-        if (osi != null) osi.EnableFallbackMode(false, forceDisable: true);
+        if (osi != null) osi.EnableFallbackMode(false, forceDisable: true, reason: "Debug_Manual");
     }
 
     /// <summary>

@@ -650,9 +650,11 @@ public class OffScreenIndicator : MonoBehaviour
     /// autoDisable=true: 타이머 후 자동 해제 (앱 시작, 백그라운드 복귀 용)
     /// autoDisable=false: 수동 해제 전까지 유지 (환경 문제 감지 용)
     /// forceDisable=true: fallbackMinDuration 무시하고 즉시 해제 (트래킹 복구 시)
+    /// reason: 호출 경로 진단용 (FileLogger에 기록) — e.g., "BgRecover", "TrackingLost", "EnvIssue_SessionPreparing"
     /// </summary>
-    public void EnableFallbackMode(bool enable, FallbackConfig config = null, bool autoDisable = true, bool forceDisable = false)
+    public void EnableFallbackMode(bool enable, FallbackConfig config = null, bool autoDisable = true, bool forceDisable = false, string reason = null)
     {
+        string effectiveReason = reason ?? "unspecified";
 
         if (enable)
         {
@@ -674,6 +676,11 @@ public class OffScreenIndicator : MonoBehaviour
                 if (autoDisable)
                 {
                     autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
+                    LogFallbackEvent("RENEW", effectiveReason, $"autoDisable=true min={fallbackMinDuration:F1}s targets={targets.Count}");
+                }
+                else
+                {
+                    LogFallbackEvent("REDUNDANT", effectiveReason, $"already in fallback, autoDisable=false");
                 }
                 return;
             }
@@ -685,6 +692,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
+            LogFallbackEvent("ENTER", effectiveReason, $"autoDisable={autoDisable} targets={targets.Count} maxIndicator={currentFallbackConfig.maxIndicatorCount}");
             if (autoDisable)
             {
                 autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
@@ -701,6 +709,7 @@ public class OffScreenIndicator : MonoBehaviour
 
             if (!isFallbackMode && !isTransitioning)
             {
+                LogFallbackEvent("EXIT_NOOP", effectiveReason, "not in fallback");
                 return;
             }
 
@@ -714,9 +723,7 @@ public class OffScreenIndicator : MonoBehaviour
                     {
                         float delay = fallbackMinDuration - elapsed;
                         delayedDisableCoroutine = StartCoroutine(DelayedDisableFallback(delay));
-                    }
-                    else
-                    {
+                        LogFallbackEvent("EXIT_DELAYED", effectiveReason, $"elapsed={elapsed:F1}s min={fallbackMinDuration:F1}s waitMore={delay:F1}s");
                     }
                     return;
                 }
@@ -731,7 +738,20 @@ public class OffScreenIndicator : MonoBehaviour
                 }
             }
 
+            float heldFor = Time.realtimeSinceStartup - fallbackStartTime;
+            LogFallbackEvent("EXIT", effectiveReason, $"forceDisable={forceDisable} heldFor={heldFor:F1}s targets={targets.Count}");
             StartFallbackTransition();
+        }
+    }
+
+    /// <summary>
+    /// Fallback 상태 변화를 FileLogger에 기록 (iOS 차량 주행 중 진단용)
+    /// </summary>
+    private void LogFallbackEvent(string evt, string reason, string ctx)
+    {
+        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
+        {
+            FileLogger.Instance.Log("FALLBACK", $"{evt} reason={reason} | {ctx}");
         }
     }
 

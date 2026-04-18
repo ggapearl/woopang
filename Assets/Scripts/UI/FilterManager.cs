@@ -1014,6 +1014,10 @@ public class FilterManager : MonoBehaviour
     private float lastWalkingModeEnterTime = -1f;
     // GPS 샘플 큐: (time, lat, lon)
     private Queue<(float time, float lat, float lon)> gpsSamples = new Queue<(float, float, float)>();
+    // 외부 조회용 최근 계산 속도 (km/h). -1 = 샘플 부족
+    private float cachedSpeedKmh = -1f;
+    public float CurrentSpeedKmh => cachedSpeedKmh;
+    public bool IsWalkingMode => isWalkingMode;
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
@@ -1082,9 +1086,10 @@ public class FilterManager : MonoBehaviour
             int readyCount = 0;
             foreach (var p in cacheProviders) if (p.IsCacheReady) readyCount++;
 
-            // FileLogger: GPS 위치 + 프로바이더 상태
+            // FileLogger: GPS 위치 + 프로바이더 상태 + 속도/모드 (fallback 진단용)
             if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                FileLogger.Instance.LogGPS(gps.x, gps.y, $"providers={cacheProviders.Count}, ready={readyCount}");
+                FileLogger.Instance.LogGPS(gps.x, gps.y,
+                    $"providers={cacheProviders.Count}, ready={readyCount}, speed={cachedSpeedKmh:F1}km/h, walking={isWalkingMode}");
 
             if (gps.x != 0f || gps.y != 0f)
             {
@@ -1155,6 +1160,7 @@ public class FilterManager : MonoBehaviour
                 speedKmh = (meters / elapsed) * 3.6f;
             }
         }
+        cachedSpeedKmh = speedKmh; // 외부 시스템(LoadingManager fallback 판정 등) 조회용
 
         if (isWalkingMode)
         {
