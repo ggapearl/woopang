@@ -994,30 +994,30 @@ public class FilterManager : MonoBehaviour
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
     [SerializeField] private float cacheRefreshDistance = 5000f;
 
-    [Header("Walking Mode — 도보 속도에서 AR 앵커 재배치")]
-    [Tooltip("Walking 모드 진입 속도 임계값 (km/h) — 평균 속도가 이 값 이하")]
-    [SerializeField] private float walkingSpeedThreshold = 5f;
-    [Tooltip("Walking 모드 진입 지속 시간 (초) — 임계값 이하 유지 시간")]
-    [SerializeField] private float walkingModeDwellTime = 10f;
-    [Tooltip("Walking 모드 최대 유지 시간 (초) — 이 시간 경과 시 Normal 자동 복귀")]
-    [SerializeField] private float walkingModeDuration = 60f;
-    [Tooltip("Normal 복귀 속도 임계값 (km/h) — Walking 중 이 속도 초과 시 즉시 Normal 복귀")]
-    [SerializeField] private float normalSpeedThreshold = 10f;
-    [Tooltip("Walking 모드 재진입 쿨다운 (초, 진입 시각 기준) — 연속 refresh 방지")]
-    [SerializeField] private float walkingModeCooldown = 120f;
+    [Header("Deceleration Event — 차량 이동 후 감속 시 AR 앵커 재배치")]
+    [Tooltip("감속 이벤트 판정 속도 임계값 (km/h) — 평균 속도가 이 값 이하로 떨어지면 감속으로 간주")]
+    [SerializeField] private float slowSpeedThreshold = 5f;
+    [Tooltip("감속 이벤트 발화 지속 시간 (초) — 임계값 이하 유지 시간")]
+    [SerializeField] private float slowSpeedDwellTime = 10f;
+    [Tooltip("빠른 이동 감지 속도 임계값 (km/h) — 이 속도 이상 관측되면 '차량 이동 중'으로 마킹")]
+    [SerializeField] private float fastSpeedThreshold = 15f;
+    [Tooltip("감속 이벤트 재발화 쿨다운 (초) — 연속 refresh 방지")]
+    [SerializeField] private float decelerationCooldown = 60f;
     [Tooltip("속도 계산 이동 평균 윈도우 (초)")]
     [SerializeField] private float speedAverageWindow = 5f;
 
-    // Walking mode 상태
-    private bool isWalkingMode = false;
+    // 감속 이벤트 상태
+    // hasBeenFast = true: 최근 fastSpeedThreshold 이상 속도 관측됨 (차량/대중교통 이동 중)
+    // 감속 이벤트(fast → slow 전환)가 발화하면 RefreshAllAnchors 1회 + hasBeenFast 리셋
+    private bool hasBeenFast = false;
     private float slowSpeedStartTime = -1f;
-    private float lastWalkingModeEnterTime = -1f;
+    private float lastDecelerationTime = -1f;
     // GPS 샘플 큐: (time, lat, lon)
     private Queue<(float time, float lat, float lon)> gpsSamples = new Queue<(float, float, float)>();
     // 외부 조회용 최근 계산 속도 (km/h). -1 = 샘플 부족
     private float cachedSpeedKmh = -1f;
     public float CurrentSpeedKmh => cachedSpeedKmh;
-    public bool IsWalkingMode => isWalkingMode;
+    public bool HasBeenFast => hasBeenFast;
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
@@ -1089,7 +1089,7 @@ public class FilterManager : MonoBehaviour
             // FileLogger: GPS 위치 + 프로바이더 상태 + 속도/모드 (fallback 진단용)
             if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
                 FileLogger.Instance.LogGPS(gps.x, gps.y,
-                    $"providers={cacheProviders.Count}, ready={readyCount}, speed={cachedSpeedKmh:F1}km/h, walking={isWalkingMode}");
+                    $"providers={cacheProviders.Count}, ready={readyCount}, speed={cachedSpeedKmh:F1}km/h, fastSeen={hasBeenFast}");
 
             if (gps.x != 0f || gps.y != 0f)
             {
@@ -1130,21 +1130,20 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
-    /// GPS 샘플 기반 평균 속도 계산 및 Walking/Normal 모드 전환
+    /// GPS 샘플 기반 평균 속도 계산 및 감속 이벤트 발화
     ///
-    /// 규칙:
-    /// - Walking 진입: 평균 속도 ≤ 5km/h가 10초 이상 지속 + 쿨다운(120s) 경과
-    /// - Walking 진입 시: RefreshAllAnchors() 1회 호출 (AR 드리프트 보정)
-    /// - Walking 복귀 조건 (둘 중 먼저 만족):
-    ///   (a) 속도가 10km/h 이상 올라가면 즉시 Normal
-    ///   (b) 최대 유지 시간(60s) 경과하면 자동 Normal
-    /// - 복귀 후 쿨다운(진입 시각 기준 120s) 동안 재진입 차단 → 연속 refresh 없음
+    /// 핵심 개념: "모드"가 아니라 "이벤트"
+    /// - 사용자가 fastSpeedThreshold 이상으로 이동한 적이 있을 때만 hasBeenFast = true
+    /// - hasBeenFast 상태에서 평균 속도가 slowSpeedThreshold 이하로 slowSpeedDwellTime 동안 유지되면
+    ///   → 감속 이벤트 발화 → RefreshAllAnchors() 1회 → hasBeenFast 리셋
+    /// - 정지 상태로 앱만 켠 사용자에겐 절대 발화하지 않음 (불필요한 앵커 재생성 방지)
+    /// - 쿨다운(decelerationCooldown): 이벤트 연속 발화 차단
     /// </summary>
     private void UpdateSpeedAndMode(Vector2 gps)
     {
         float now = Time.realtimeSinceStartup;
 
-        // 평균 속도 계산 (Walking 중에도 조기 복귀 판단용으로 필요)
+        // 평균 속도 계산
         gpsSamples.Enqueue((now, gps.x, gps.y));
         while (gpsSamples.Count > 0 && now - gpsSamples.Peek().time > speedAverageWindow)
             gpsSamples.Dequeue();
@@ -1162,61 +1161,56 @@ public class FilterManager : MonoBehaviour
         }
         cachedSpeedKmh = speedKmh; // 외부 시스템(LoadingManager fallback 판정 등) 조회용
 
-        if (isWalkingMode)
-        {
-            // (a) 속도 상승 → 즉시 Normal
-            if (speedKmh >= normalSpeedThreshold)
-            {
-                float walkingElapsed = now - lastWalkingModeEnterTime;
-                isWalkingMode = false;
-                slowSpeedStartTime = -1f;
-                Debug.LogWarning($"[dbg][FilterManager][MODE] Normal 조기 복귀 speed={speedKmh:F1}km/h (Walking {walkingElapsed:F1}s)");
-                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                    FileLogger.Instance.Log("MODE", $"Normal 조기 복귀: speed={speedKmh:F1}km/h ({walkingElapsed:F1}s)");
-                return;
-            }
+        if (speedKmh < 0f) return; // 아직 속도 계산 불가
 
-            // (b) 최대 유지 시간 경과 → 자동 Normal
-            float elapsedInWalking = now - lastWalkingModeEnterTime;
-            if (elapsedInWalking >= walkingModeDuration)
+        // 빠른 이동 감지 → '차량 이동 중' 마킹
+        if (speedKmh >= fastSpeedThreshold)
+        {
+            if (!hasBeenFast)
             {
-                isWalkingMode = false;
-                slowSpeedStartTime = -1f;
-                Debug.LogWarning($"[dbg][FilterManager][MODE] Normal 시간 복귀 (Walking {elapsedInWalking:F1}s 경과) speed={speedKmh:F1}km/h");
+                hasBeenFast = true;
+                Debug.LogWarning($"[dbg][FilterManager][DECEL] hasBeenFast=true speed={speedKmh:F1}km/h");
                 if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                    FileLogger.Instance.Log("MODE", $"Normal 시간 복귀: {elapsedInWalking:F1}s");
+                    FileLogger.Instance.Log("DECEL", $"빠른 이동 감지: speed={speedKmh:F1}km/h → hasBeenFast=true");
             }
+            slowSpeedStartTime = -1f; // 빠르게 움직이면 slow 카운트 초기화
             return;
         }
 
-        // Normal 모드 — Walking 진입 판정
-        if (speedKmh < 0f) return; // 아직 속도 계산 불가
+        // 느린 속도 — hasBeenFast일 때만 감속 이벤트 후보
+        if (!hasBeenFast)
+        {
+            slowSpeedStartTime = -1f;
+            return;
+        }
 
-        if (speedKmh <= walkingSpeedThreshold)
+        if (speedKmh <= slowSpeedThreshold)
         {
             if (slowSpeedStartTime < 0f) slowSpeedStartTime = now;
             float slowDuration = now - slowSpeedStartTime;
 
-            if (slowDuration >= walkingModeDwellTime)
+            if (slowDuration >= slowSpeedDwellTime)
             {
-                bool cooldownPassed = lastWalkingModeEnterTime < 0f
-                    || (now - lastWalkingModeEnterTime) >= walkingModeCooldown;
+                bool cooldownPassed = lastDecelerationTime < 0f
+                    || (now - lastDecelerationTime) >= decelerationCooldown;
 
                 if (cooldownPassed)
                 {
-                    isWalkingMode = true;
-                    lastWalkingModeEnterTime = now;
-                    Debug.LogWarning($"[dbg][FilterManager][MODE] Walking 진입 speed={speedKmh:F1}km/h (slow={slowDuration:F1}s, max={walkingModeDuration}s, cooldown={walkingModeCooldown}s)");
+                    lastDecelerationTime = now;
+                    hasBeenFast = false; // 다음 감속 이벤트를 위해 리셋 (빠른 이동 다시 관측되어야 발화)
+                    slowSpeedStartTime = -1f;
+
+                    Debug.LogWarning($"[dbg][FilterManager][DECEL] 감속 이벤트 발화 speed={speedKmh:F1}km/h (slow={slowDuration:F1}s)");
                     if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                        FileLogger.Instance.Log("MODE", $"Walking 진입: speed={speedKmh:F1}km/h");
+                        FileLogger.Instance.Log("DECEL", $"감속 이벤트 발화: speed={speedKmh:F1}km/h (slow={slowDuration:F1}s) → RefreshAllAnchors");
 
                     RefreshAllAnchors();
                 }
-                // 쿨다운 미경과 → slowSpeedStartTime 초기화 안 함(느린 상태 유지 인식) 하지만 진입은 하지 않음
             }
         }
         else
         {
+            // 중간 속도(slowSpeedThreshold ~ fastSpeedThreshold): slow 카운트 유지하지 않음
             slowSpeedStartTime = -1f;
         }
     }
