@@ -174,24 +174,33 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     }
 
     /// <summary>
-    /// 앵커 위치가 월드 좌표에 반영된 후 렌더러 표시 (10프레임 대기)
+    /// ARCore가 anchor의 world pose를 계산 완료할 때까지 대기 후 렌더러 표시
+    /// AddAnchor 직후엔 anchor.transform.position = (0,0,0)이고, ARCore가 N프레임에 걸쳐
+    /// GPS 좌표에 대응하는 world 좌표로 갱신 (ExcessiveMotion 구간엔 더 오래 걸림)
+    /// → pose가 원점에서 벗어난 시점을 직접 확인해서 표시 (시간 추측 대신 이벤트 검증)
     /// </summary>
     private IEnumerator ShowAfterFrame()
     {
         int myGeneration = _showGeneration;
+        const float maxWait = 3f;
+        float start = Time.realtimeSinceStartup;
 
-        // 10프레임 대기 — 앵커 Transform이 GPS 좌표로 안정적으로 반영될 때까지 여유 확보
-        for (int i = 0; i < 10; i++)
+        while (Time.realtimeSinceStartup - start < maxWait)
         {
             yield return null;
-            // 대기 중 앵커가 재생성되었으면 이 코루틴은 무효
             if (myGeneration != _showGeneration) yield break;
+            if (!_anchorCreated) yield break;
+            if (transform.parent == null) continue;
+
+            // pose가 원점에서 충분히 벗어난 순간 = ARCore가 계산 완료한 증거
+            if (transform.parent.position.sqrMagnitude < 0.01f) continue;
+
+            if (!_forceHideRenderers) SetVisible(true);
+            yield break;
         }
 
-        if (_anchorCreated && !_forceHideRenderers)
-        {
-            SetVisible(true);
-        }
+        // 3초 안에 pose 안정화 실패 — 실패 처리해서 FilterManager.RetryFailedAnchors가 재시도
+        _anchorCreated = false;
     }
 
     /// <summary>
