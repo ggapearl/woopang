@@ -461,7 +461,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
         if (earthMgr != null && earthMgr.EarthTrackingState == TrackingState.Tracking)
         {
-            RecreateAllAnchors();
+            CreateAllInitialAnchors();
         }
         else
         {
@@ -1490,25 +1490,45 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     }
 
     /// <summary>
-    /// 백그라운드 복귀 시 모든 스폰된 오브젝트의 Geospatial 앵커를 재생성
-    /// 오브젝트/컴포넌트는 유지하고 앵커만 재연결 (서버 재요청 불필요)
-    /// 앵커 재생성 성공 시 Renderer가 자동 표시됨 (CustomARGeospatialCreatorAnchor.SetVisible)
+    /// 앱 시작 Phase2에서 Earth 준비 완료 시 일괄 앵커 생성 (1회성)
+    /// 이후 정기 복구는 RetryFailedAnchors (FilterManager.AllocationLoop 주도)가 담당
     /// </summary>
-    public void RecreateAllAnchors()
+    private void CreateAllInitialAnchors()
     {
-        int recreated = 0;
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value == null) continue;
-            // 비활성 오브젝트(거리 필터로 숨김)는 앵커 재생성 스킵
             if (!kvp.Value.activeSelf) continue;
 
-            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor != null)
-            {
                 anchor.RecreateAnchor();
-                recreated++;
-            }
+        }
+    }
+
+    /// <summary>
+    /// 앵커 생성에 실패한 오브젝트만 선별하여 재시도 (Full + IndicatorOnly 양쪽)
+    /// FilterManager.AllocationLoop가 매 tick(2s) 호출 — AR Limited 구간 실패 항목 자동 복원
+    /// </summary>
+    public void RetryFailedAnchors()
+    {
+        RetryFailedAnchorsIn(spawnedObjects);
+        RetryFailedAnchorsIn(indicatorOnlyObjects);
+    }
+
+    private static void RetryFailedAnchorsIn<TKey>(Dictionary<TKey, GameObject> objects)
+    {
+        if (objects == null) return;
+        foreach (var kvp in objects)
+        {
+            if (kvp.Value == null) continue;
+            if (!kvp.Value.activeSelf) continue;
+
+            var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor == null) continue;
+            if (anchor.IsAnchorCreated) continue;
+
+            anchor.RecreateAnchor();
         }
     }
 
@@ -1529,7 +1549,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
             if (earthManager != null && earthManager.EarthTrackingState == TrackingState.Tracking)
             {
-                RecreateAllAnchors();
+                CreateAllInitialAnchors();
                 yield break;
             }
 
@@ -1875,20 +1895,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         // FilterManager에 즉시 재배분 트리거
         FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
         if (filterMgr != null) filterMgr.TriggerReallocation();
-    }
-
-    /// <summary>
-    /// IndicatorOnly 오브젝트의 앵커를 재생성 (백그라운드 복귀 시)
-    /// </summary>
-    public void RecreateIndicatorOnlyAnchors()
-    {
-        foreach (var kvp in indicatorOnlyObjects)
-        {
-            if (kvp.Value == null || !kvp.Value.activeSelf) continue;
-            var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-                anchor.RecreateAnchor();
-        }
     }
 
     void OnDestroy()

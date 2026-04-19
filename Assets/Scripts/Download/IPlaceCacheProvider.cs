@@ -31,6 +31,12 @@ public interface IPlaceCacheProvider
     /// <summary>캐시 갱신 요청 (5km 이동 등)</summary>
     void RefreshCache(float lat, float lon);
 
+    /// <summary>
+    /// 스폰된 오브젝트 중 앵커 생성에 실패한 것만 선별하여 재시도
+    /// FilterManager.AllocationLoop가 매 tick 호출 — AR 세션 복구 시 자동 복원
+    /// </summary>
+    void RetryFailedAnchors();
+
     /// <summary>이 매니저의 필터 키 ("publicData", "subway", "train", "terminal")</summary>
     string FilterKey { get; }
 

@@ -310,9 +310,8 @@ public class LoadingManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 백그라운드 복구 후 트래킹이 정상화되면 앵커 재생성 → 로딩 패널 숨기기 → fallback 해제
-    /// SetAllObjectsVisible(true) 대신 RecreateAllAnchors()를 호출하여
-    /// 앵커가 실제로 생성 완료된 오브젝트만 개별적으로 표시 (뭉침 방지)
+    /// 백그라운드 복구 후 트래킹 정상화 → 로딩 패널 숨기기 → fallback 해제
+    /// 앵커 재생성은 FilterManager.AllocationLoop의 RetryFailedAnchors(매 2초)가 자동 처리
     /// </summary>
     IEnumerator WaitForTrackingRecoveryAndCleanup(OffScreenIndicator osi, bool needFullReload = false)
     {
@@ -322,9 +321,6 @@ public class LoadingManager : MonoBehaviour
         while (waited < maxWait)
         {
             TrackingState ts = arSession?.subsystem?.trackingState ?? TrackingState.None;
-            if (waited % 2f < 0.6f) // 2초마다 상태 로그
-            {
-            }
 
             if (ts == TrackingState.Tracking)
             {
@@ -341,14 +337,6 @@ public class LoadingManager : MonoBehaviour
                     // 위치 대폭 변동 → 기존 오브젝트 전부 제거 + 새 위치 기준 데이터 재로드
                     if (dataManager != null)
                         dataManager.FullRefreshFromNewLocation();
-
-                    // 시설 매니저들도 활성 오브젝트만 앵커 재생성
-                    RecreateTransitManagerAnchors();
-                }
-                else
-                {
-                    // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
-                    RecreateAllManagerAnchors();
                 }
 
                 // fallback 명시적 해제 (autoDisable=false이므로 수동 해제 필요)
@@ -379,16 +367,9 @@ public class LoadingManager : MonoBehaviour
         // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
         RestoreAllManagerObjects();
 
-        if (needFullReload)
+        if (needFullReload && dataManager != null)
         {
-            if (dataManager != null)
-                dataManager.FullRefreshFromNewLocation();
-            RecreateTransitManagerAnchors();
-        }
-        else
-        {
-            // 활성 오브젝트만 앵커 재생성
-            RecreateAllManagerAnchors();
+            dataManager.FullRefreshFromNewLocation();
         }
 
         // 타임아웃이어도 fallback 해제 (CheckAREnvironment가 이어서 환경 감지)
@@ -407,37 +388,6 @@ public class LoadingManager : MonoBehaviour
         {
             dataManager.RestartFetchingAfterResume();
         }
-    }
-
-    /// <summary>
-    /// 모든 매니저의 Geospatial 앵커를 재생성
-    /// 기존 오브젝트/컴포넌트는 유지하고 앵커만 재연결
-    /// 앵커 생성 성공 시 Renderer가 자동 표시됨 (서버 재요청 불필요)
-    /// </summary>
-    void RecreateAllManagerAnchors()
-    {
-        if (dataManager != null)
-        {
-            dataManager.RecreateAllAnchors();
-            dataManager.RecreateIndicatorOnlyAnchors();
-        }
-
-        if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
-        if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
-        if (TerminalManager.Instance != null) TerminalManager.Instance.RecreateAllAnchors();
-        if (TourAPIManager.Instance != null) TourAPIManager.Instance.RecreateAllAnchors();
-    }
-
-    /// <summary>
-    /// DataManager를 제외한 시설 매니저들만 앵커 재생성
-    /// (DataManager는 FullRefreshFromNewLocation에서 별도 처리)
-    /// </summary>
-    void RecreateTransitManagerAnchors()
-    {
-        if (SubwayManager.Instance != null) SubwayManager.Instance.RecreateAllAnchors();
-        if (TrainStationManager.Instance != null) TrainStationManager.Instance.RecreateAllAnchors();
-        if (TerminalManager.Instance != null) TerminalManager.Instance.RecreateAllAnchors();
-        if (TourAPIManager.Instance != null) TourAPIManager.Instance.RecreateAllAnchors();
     }
 
     void Update()
@@ -559,7 +509,7 @@ public class LoadingManager : MonoBehaviour
             else
             {
                 RestoreAllManagerObjects();
-                RecreateAllManagerAnchors();
+                // 앵커 재생성은 FilterManager.AllocationLoop의 RetryFailedAnchors(매 2초)가 자동 처리
                 OffScreenIndicator osi = GetCachedOSI();
                 if (osi != null && osi.IsFallbackMode)
                 {
@@ -1421,8 +1371,7 @@ public class LoadingManager : MonoBehaviour
 
         // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
         RestoreAllManagerObjects();
-        // 활성 오브젝트만 앵커 재생성 (비활성은 스킵 → pos=(0,0,0) 플래시 방지)
-        RecreateAllManagerAnchors();
+        // 앵커 재생성은 FilterManager.AllocationLoop의 RetryFailedAnchors(매 2초)가 자동 처리
 
         // fallback 모드 해제
         OffScreenIndicator osi = GetCachedOSI();

@@ -1095,6 +1095,13 @@ public class FilterManager : MonoBehaviour
 
                 AllocateObjects(gps.x, gps.y);
                 lastAllocationPosition = gps;
+
+                // 앵커 생성 실패한 오브젝트 선별 복구 — AR Limited 구간에서 실패한 항목 자동 재시도
+                foreach (var provider in cacheProviders)
+                {
+                    if (provider == null) continue;
+                    provider.RetryFailedAnchors();
+                }
             }
 
             yield return new WaitForSeconds(allocationInterval);

@@ -424,20 +424,28 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
     }
 
     /// <summary>
-    /// 백그라운드 복귀 시 모든 스폰된 오브젝트의 Geospatial 앵커를 재생성
+    /// 앵커 생성에 실패한 오브젝트만 선별하여 재시도
+    /// FilterManager.AllocationLoop가 매 tick(2s) 호출 — AR Limited 구간에서 실패한 항목을 자동 복원
     /// </summary>
-    public void RecreateAllAnchors()
+    public void RetryFailedAnchors()
     {
-        foreach (var kvp in spawnedObjects)
+        RetryFailedAnchorsIn(spawnedObjects);
+        RetryFailedAnchorsIn(indicatorOnlyObjects);
+    }
+
+    private static void RetryFailedAnchorsIn(Dictionary<string, GameObject> objects)
+    {
+        if (objects == null) return;
+        foreach (var kvp in objects)
         {
             if (kvp.Value == null) continue;
             if (!kvp.Value.activeSelf) continue;
 
-            CustomARGeospatialCreatorAnchor anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                anchor.RecreateAnchor();
-            }
+            var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+            if (anchor == null) continue;
+            if (anchor.IsAnchorCreated) continue;
+
+            anchor.RecreateAnchor();
         }
     }
 
