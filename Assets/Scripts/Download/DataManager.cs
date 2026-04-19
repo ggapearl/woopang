@@ -2055,38 +2055,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(FetchLightCache(lat, lon));
     }
 
-    public void RefreshAnchors()
-    {
-        int full = 0, indicator = 0;
-        foreach (var kv in spawnedObjects)
-        {
-            if (kv.Value == null) continue;
-            if (!placeDataMap.TryGetValue(kv.Key, out var data)) continue;
-            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                anchor.SetCoordinatesAndCreateAnchor(data.latitude, data.longitude, data.altitude);
-                full++;
-            }
-        }
-        foreach (var kv in indicatorOnlyObjects)
-        {
-            if (kv.Value == null) continue;
-            string rawId = kv.Key.ToString();
-            var cached = lightCache.Find(c => c.rawId == rawId);
-            if (cached == null) continue;
-            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
-                indicator++;
-            }
-        }
-        Debug.LogWarning($"[dbg][DataManager][ANCHOR] RefreshAnchors Full={full} Indicator={indicator}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("ANCHOR", $"[DataManager] RefreshAnchors Full={full} Indicator={indicator}");
-    }
-
     /// <summary>
     /// 카테고리별 인디케이터 색상 반환 (FilterManager 색상과 동일)
     /// </summary>

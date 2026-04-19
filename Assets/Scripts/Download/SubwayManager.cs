@@ -572,35 +572,4 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
 
         StartCoroutine(FetchFacilityData(lat, lon, 10000f));
     }
-
-    public void RefreshAnchors()
-    {
-        int full = 0, indicator = 0;
-        foreach (var kv in spawnedObjects)
-        {
-            if (kv.Value == null) continue;
-            if (!placeDataMap.TryGetValue(kv.Key, out var data)) continue;
-            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                anchor.SetCoordinatesAndCreateAnchor(data.latitude, data.longitude, data.altitude);
-                full++;
-            }
-        }
-        foreach (var kv in indicatorOnlyObjects)
-        {
-            if (kv.Value == null) continue;
-            var cached = lightCache.Find(c => c.rawId == kv.Key);
-            if (cached == null) continue;
-            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
-                indicator++;
-            }
-        }
-        Debug.LogWarning($"[dbg][SubwayManager][ANCHOR] RefreshAnchors Full={full} Indicator={indicator}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("ANCHOR", $"[Subway] RefreshAnchors Full={full} Indicator={indicator}");
-    }
 }

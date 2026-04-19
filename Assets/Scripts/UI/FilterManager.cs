@@ -994,30 +994,15 @@ public class FilterManager : MonoBehaviour
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
     [SerializeField] private float cacheRefreshDistance = 5000f;
 
-    [Header("Deceleration Event — 차량 이동 후 감속 시 AR 앵커 재배치")]
-    [Tooltip("감속 이벤트 판정 속도 임계값 (km/h) — 평균 속도가 이 값 이하로 떨어지면 감속으로 간주")]
-    [SerializeField] private float slowSpeedThreshold = 5f;
-    [Tooltip("감속 이벤트 발화 지속 시간 (초) — 임계값 이하 유지 시간")]
-    [SerializeField] private float slowSpeedDwellTime = 10f;
-    [Tooltip("빠른 이동 감지 속도 임계값 (km/h) — 이 속도 이상 관측되면 '차량 이동 중'으로 마킹")]
-    [SerializeField] private float fastSpeedThreshold = 15f;
-    [Tooltip("감속 이벤트 재발화 쿨다운 (초) — 연속 refresh 방지")]
-    [SerializeField] private float decelerationCooldown = 60f;
+    [Header("Speed Tracking — LoadingManager fallback 판정용")]
     [Tooltip("속도 계산 이동 평균 윈도우 (초)")]
     [SerializeField] private float speedAverageWindow = 5f;
 
-    // 감속 이벤트 상태
-    // hasBeenFast = true: 최근 fastSpeedThreshold 이상 속도 관측됨 (차량/대중교통 이동 중)
-    // 감속 이벤트(fast → slow 전환)가 발화하면 RefreshAllAnchors 1회 + hasBeenFast 리셋
-    private bool hasBeenFast = false;
-    private float slowSpeedStartTime = -1f;
-    private float lastDecelerationTime = -1f;
     // GPS 샘플 큐: (time, lat, lon)
     private Queue<(float time, float lat, float lon)> gpsSamples = new Queue<(float, float, float)>();
     // 외부 조회용 최근 계산 속도 (km/h). -1 = 샘플 부족
     private float cachedSpeedKmh = -1f;
     public float CurrentSpeedKmh => cachedSpeedKmh;
-    public bool HasBeenFast => hasBeenFast;
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
@@ -1089,12 +1074,12 @@ public class FilterManager : MonoBehaviour
             // FileLogger: GPS 위치 + 프로바이더 상태 + 속도/모드 (fallback 진단용)
             if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
                 FileLogger.Instance.LogGPS(gps.x, gps.y,
-                    $"providers={cacheProviders.Count}, ready={readyCount}, speed={cachedSpeedKmh:F1}km/h, fastSeen={hasBeenFast}");
+                    $"providers={cacheProviders.Count}, ready={readyCount}, speed={cachedSpeedKmh:F1}km/h");
 
             if (gps.x != 0f || gps.y != 0f)
             {
-                // 속도 추적 + Walking/Normal 모드 전환
-                UpdateSpeedAndMode(gps);
+                // GPS 샘플 기반 평균 속도 계산 (LoadingManager fallback 판정용)
+                UpdateSpeed(gps);
 
                 // 5km 이상 이동 시 캐시 갱신
                 float movedFromCache = CalculateGPSDistance(lastCacheRefreshPosition.x, lastCacheRefreshPosition.y, gps.x, gps.y);
@@ -1130,20 +1115,13 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
-    /// GPS 샘플 기반 평균 속도 계산 및 감속 이벤트 발화
-    ///
-    /// 핵심 개념: "모드"가 아니라 "이벤트"
-    /// - 사용자가 fastSpeedThreshold 이상으로 이동한 적이 있을 때만 hasBeenFast = true
-    /// - hasBeenFast 상태에서 평균 속도가 slowSpeedThreshold 이하로 slowSpeedDwellTime 동안 유지되면
-    ///   → 감속 이벤트 발화 → RefreshAllAnchors() 1회 → hasBeenFast 리셋
-    /// - 정지 상태로 앱만 켠 사용자에겐 절대 발화하지 않음 (불필요한 앵커 재생성 방지)
-    /// - 쿨다운(decelerationCooldown): 이벤트 연속 발화 차단
+    /// GPS 샘플 기반 평균 속도 계산
+    /// LoadingManager가 fallback 진입 시 차량 속도 임계값 판정에 사용 (CurrentSpeedKmh 프로퍼티)
     /// </summary>
-    private void UpdateSpeedAndMode(Vector2 gps)
+    private void UpdateSpeed(Vector2 gps)
     {
         float now = Time.realtimeSinceStartup;
 
-        // 평균 속도 계산
         gpsSamples.Enqueue((now, gps.x, gps.y));
         while (gpsSamples.Count > 0 && now - gpsSamples.Peek().time > speedAverageWindow)
             gpsSamples.Dequeue();
@@ -1159,74 +1137,7 @@ public class FilterManager : MonoBehaviour
                 speedKmh = (meters / elapsed) * 3.6f;
             }
         }
-        cachedSpeedKmh = speedKmh; // 외부 시스템(LoadingManager fallback 판정 등) 조회용
-
-        if (speedKmh < 0f) return; // 아직 속도 계산 불가
-
-        // 빠른 이동 감지 → '차량 이동 중' 마킹
-        if (speedKmh >= fastSpeedThreshold)
-        {
-            if (!hasBeenFast)
-            {
-                hasBeenFast = true;
-                Debug.LogWarning($"[dbg][FilterManager][DECEL] hasBeenFast=true speed={speedKmh:F1}km/h");
-                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                    FileLogger.Instance.Log("DECEL", $"빠른 이동 감지: speed={speedKmh:F1}km/h → hasBeenFast=true");
-            }
-            slowSpeedStartTime = -1f; // 빠르게 움직이면 slow 카운트 초기화
-            return;
-        }
-
-        // 느린 속도 — hasBeenFast일 때만 감속 이벤트 후보
-        if (!hasBeenFast)
-        {
-            slowSpeedStartTime = -1f;
-            return;
-        }
-
-        if (speedKmh <= slowSpeedThreshold)
-        {
-            if (slowSpeedStartTime < 0f) slowSpeedStartTime = now;
-            float slowDuration = now - slowSpeedStartTime;
-
-            if (slowDuration >= slowSpeedDwellTime)
-            {
-                bool cooldownPassed = lastDecelerationTime < 0f
-                    || (now - lastDecelerationTime) >= decelerationCooldown;
-
-                if (cooldownPassed)
-                {
-                    lastDecelerationTime = now;
-                    hasBeenFast = false; // 다음 감속 이벤트를 위해 리셋 (빠른 이동 다시 관측되어야 발화)
-                    slowSpeedStartTime = -1f;
-
-                    Debug.LogWarning($"[dbg][FilterManager][DECEL] 감속 이벤트 발화 speed={speedKmh:F1}km/h (slow={slowDuration:F1}s)");
-                    if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                        FileLogger.Instance.Log("DECEL", $"감속 이벤트 발화: speed={speedKmh:F1}km/h (slow={slowDuration:F1}s) → RefreshAllAnchors");
-
-                    RefreshAllAnchors();
-                }
-            }
-        }
-        else
-        {
-            // 중간 속도(slowSpeedThreshold ~ fastSpeedThreshold): slow 카운트 유지하지 않음
-            slowSpeedStartTime = -1f;
-        }
-    }
-
-    /// <summary>
-    /// 모든 provider에게 스폰된 오브젝트 AR 앵커 재설정 요청
-    /// Walking 모드 진입 시 호출 — 차량 이동 중 누적된 Geospatial 드리프트 보정
-    /// </summary>
-    private void RefreshAllAnchors()
-    {
-        Debug.LogWarning($"[dbg][FilterManager][ANCHOR] RefreshAllAnchors providers={cacheProviders.Count}");
-        foreach (var provider in cacheProviders)
-        {
-            if (!provider.IsCacheReady) continue;
-            provider.RefreshAnchors();
-        }
+        cachedSpeedKmh = speedKmh;
     }
 
     /// <summary>

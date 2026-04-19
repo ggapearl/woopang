@@ -1171,37 +1171,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(FetchDataProgressively(lat, lon));
     }
 
-    public void RefreshAnchors()
-    {
-        int full = 0, indicator = 0;
-        foreach (var kv in spawnedObjects)
-        {
-            if (kv.Value == null) continue;
-            if (!placeDataMap.TryGetValue(kv.Key, out var data)) continue;
-            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                // Tour: mapy=lat, mapx=lon, altitude=0
-                anchor.SetCoordinatesAndCreateAnchor(data.mapy, data.mapx, 0);
-                full++;
-            }
-        }
-        foreach (var kv in indicatorOnlyObjects)
-        {
-            if (kv.Value == null) continue;
-            var cached = lightCache.Find(c => c.rawId == kv.Key);
-            if (cached == null) continue;
-            var anchor = kv.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-            {
-                anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, 0);
-                indicator++;
-            }
-        }
-        Debug.LogWarning($"[dbg][TourAPIManager][ANCHOR] RefreshAnchors Full={full} Indicator={indicator}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("ANCHOR", $"[Tour] RefreshAnchors Full={full} Indicator={indicator}");
-    }
 }
 
 [System.Serializable]

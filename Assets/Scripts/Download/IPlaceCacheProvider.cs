@@ -31,13 +31,6 @@ public interface IPlaceCacheProvider
     /// <summary>캐시 갱신 요청 (5km 이동 등)</summary>
     void RefreshCache(float lat, float lon);
 
-    /// <summary>
-    /// 스폰된 오브젝트들의 AR 앵커 재설정 (Walking 모드 진입 시 호출)
-    /// 차량 이동 중 누적된 AR 드리프트 보정 — 이미 스폰된 Full/IndicatorOnly 오브젝트의
-    /// ARGeospatialCreatorAnchor를 동일 좌표로 재생성해 최신 Geospatial 기준으로 재배치
-    /// </summary>
-    void RefreshAnchors();
-
     /// <summary>이 매니저의 필터 키 ("publicData", "subway", "train", "terminal")</summary>
     string FilterKey { get; }
 
