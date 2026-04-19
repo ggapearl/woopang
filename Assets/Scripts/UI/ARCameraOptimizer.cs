@@ -6,10 +6,10 @@ public class ARCameraOptimizer : MonoBehaviour
     [Header("AR Camera 최적화 설정")]
     [SerializeField] private ARCameraManager arCameraManager;
     [SerializeField] private bool enableOptimization = true;
-    [SerializeField] private int targetFrameRate = 30;
-    
+    [SerializeField] private int targetFrameRate = 60;
+
     private float lastFrameTime;
-    private const float FRAME_INTERVAL = 1f / 30f; // 30fps 제한
+    private const float FRAME_INTERVAL = 1f / 60f;
 
     void Start()
     {
@@ -31,7 +31,8 @@ public class ARCameraOptimizer : MonoBehaviour
         
         // iOS ARKit 최적화 설정
         arCameraManager.requestedLightEstimation = LightEstimation.None;
-        arCameraManager.autoFocusRequested = false;
+        // autoFocus 활성화 — 차량 이동 중 원근 전환 시 선명도 유지, 특징점 검출률↑ (InsufficientFeatures 감소)
+        arCameraManager.autoFocusRequested = true;
         arCameraManager.requestedFacingDirection = CameraFacingDirection.World;
         
         // 렌더링 모드: BeforeOpaques가 더 안정적 (카메라 배경을 먼저 그리고 오브젝트를 위에 렌더링)

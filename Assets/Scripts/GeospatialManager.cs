@@ -25,7 +25,8 @@ public class GeospatialManager : MonoBehaviour
 
     private void Awake()
     {
-        Application.targetFrameRate = 30;
+        // 60fps — ARKit 권장. 30fps 대비 프레임간 모션 델타 반감으로 ExcessiveMotion 감소
+        Application.targetFrameRate = 60;
     }
 
     void Update()

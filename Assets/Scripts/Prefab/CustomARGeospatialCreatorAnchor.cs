@@ -7,21 +7,25 @@ using UnityEngine.XR.ARSubsystems;
 public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 {
     private ARAnchorManager anchorManager;
+    private ARGeospatialAnchor currentAnchor;
     private double _lat, _lon, _alt;
     private bool _anchorCreated = false;
     public bool IsAnchorCreated => _anchorCreated;
     private int _retryCount = 0;
-    private const int MAX_RETRIES = 120; // 최대 120회 (약 2분) - Earth 초기화 대기 충분
+    private const int MAX_RETRIES = 120; // 최대 120회 (약 2분) — Earth 초기화 대기 충분
     private Coroutine retryCoroutine;
 
     // 외부에서 렌더러를 강제로 숨기는 플래그 (fallback 모드 등)
-    // true인 동안 앵커 생성 성공해도 렌더러를 켜지 않음
     private bool _forceHideRenderers = false;
 
-    // ShowAfterFrame 세대 번호 — 앵커 재생성 시 이전 코루틴 무효화
-    private int _showGeneration = 0;
+    // trackingState 기반 가시성 관리
+    private bool _hasBeenTracking = false;           // 최초 Tracking 도달 여부 (최초 표시 판정)
+    private bool _isFrozen = false;                  // Limited 중 world pos 고정 상태인지
+    private float _limitedSince = -1f;               // Limited 진입 시각 (10s 버퍼 판정용)
+    private const float LIMITED_BUFFER = 10f;        // 10s 이내 Tracking 복귀 시 freeze 유지
+    private const float REATTACH_LERP_DURATION = 0.3f; // 재부착 후 부드러운 보정 시간
+    private Coroutine reattachLerpCoroutine;
 
-    // 좌표 설정 및 앵커 생성 메서드
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
 #if UNITY_EDITOR
@@ -40,26 +44,21 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         transform.position = new Vector3(x, (float)altitude, z);
 #else
-        // 이전 ShowAfterFrame 코루틴 무효화
-        _showGeneration++;
-
-        // 앵커 생성 전까지 렌더러 숨김 (Vector3.zero에 보이는 문제 방지)
+        // 앵커 생성 전까지 렌더러 숨김
         SetVisible(false);
 
         _lat = latitude;
         _lon = longitude;
         _alt = altitude;
         _anchorCreated = false;
+        _hasBeenTracking = false;
+        _isFrozen = false;
+        _limitedSince = -1f;
         _retryCount = 0;
 
-        // 기존 재시도 코루틴 중단
-        if (retryCoroutine != null)
-        {
-            StopCoroutine(retryCoroutine);
-            retryCoroutine = null;
-        }
+        if (retryCoroutine != null) { StopCoroutine(retryCoroutine); retryCoroutine = null; }
+        if (reattachLerpCoroutine != null) { StopCoroutine(reattachLerpCoroutine); reattachLerpCoroutine = null; }
 
-        // 즉시 시도 후, 실패하면 코루틴으로 재시도
         if (!TryCreateAnchor())
         {
             retryCoroutine = StartCoroutine(RetryCreateAnchor());
@@ -69,41 +68,30 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
     /// <summary>
     /// 백그라운드 복귀 시 기존 앵커를 해제하고 재생성
-    /// 기존 좌표(_lat, _lon, _alt)를 그대로 사용하므로 서버 재요청 불필요
     /// </summary>
     public void RecreateAnchor()
     {
 #if UNITY_EDITOR
         return;
 #else
+        if (retryCoroutine != null) { StopCoroutine(retryCoroutine); retryCoroutine = null; }
+        if (reattachLerpCoroutine != null) { StopCoroutine(reattachLerpCoroutine); reattachLerpCoroutine = null; }
 
-        // 이전 ShowAfterFrame 코루틴 무효화
-        _showGeneration++;
-
-        // 재시도 코루틴 중단
-        if (retryCoroutine != null)
+        // 기존 앵커 정리 — freeze로 detach 됐을 수도 있으므로 currentAnchor 기준으로 파괴
+        if (currentAnchor != null)
         {
-            StopCoroutine(retryCoroutine);
-            retryCoroutine = null;
+            if (transform.parent == currentAnchor.transform)
+                transform.SetParent(currentAnchor.transform.parent, true);
+            Destroy(currentAnchor.gameObject);
+            currentAnchor = null;
         }
 
-        // 기존 앵커 부모 해제 (앵커 자체는 ARCore가 관리)
-        if (_anchorCreated && transform.parent != null)
-        {
-            Transform oldAnchorTransform = transform.parent;
-            transform.SetParent(oldAnchorTransform.parent, true);
-
-            // 기존 앵커 오브젝트 파괴 (ARCore에서 생성한 앵커)
-            ARGeospatialAnchor oldAnchor = oldAnchorTransform.GetComponent<ARGeospatialAnchor>();
-            if (oldAnchor != null)
-                Destroy(oldAnchorTransform.gameObject);
-        }
-
-        // 렌더러 숨기고 재생성 시작
-        // forceHide 해제 — RecreateAnchor 성공 시 ShowAfterFrame에서 개별 복원
         _forceHideRenderers = false;
         SetVisible(false);
         _anchorCreated = false;
+        _hasBeenTracking = false;
+        _isFrozen = false;
+        _limitedSince = -1f;
         _retryCount = 0;
 
         if (!TryCreateAnchor())
@@ -124,7 +112,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             return false;
         }
 
-        // EarthManager 상태 확인
         var earthManager = FindFirstObjectByType<AREarthManager>();
         if (earthManager == null || earthManager.EarthTrackingState != TrackingState.Tracking)
         {
@@ -135,15 +122,12 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         if (anchor != null)
         {
+            currentAnchor = anchor;
             transform.SetParent(anchor.transform, false);
             transform.localPosition = Vector3.zero;
             transform.localRotation = Quaternion.identity;
             _anchorCreated = true;
-
-            // 앵커 생성 성공 → 10프레임 대기 후 렌더러 표시
-            // (앵커 위치가 월드 좌표에 안정적으로 반영되기까지 여유 필요 — 즉시 표시 시 원점 플래시 발생)
-            StartCoroutine(ShowAfterFrame());
-
+            // 렌더러 표시는 Update()가 anchor.trackingState == Tracking 시점에 처리
             return true;
         }
 
@@ -168,79 +152,110 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         if (!_anchorCreated)
         {
-            // 앵커 실패 → 렌더러만 숨김 유지 (오브젝트는 살려둬서 다음 RecreateAnchor에서 재시도 가능)
             SetVisible(false);
         }
     }
 
     /// <summary>
-    /// ARCore가 anchor의 world pose를 계산 완료할 때까지 대기 후 렌더러 표시
-    /// AddAnchor 직후엔 anchor.transform.position = (0,0,0)이고, ARCore가 N프레임에 걸쳐
-    /// GPS 좌표에 대응하는 world 좌표로 갱신 (ExcessiveMotion 구간엔 더 오래 걸림)
-    /// → pose가 원점에서 벗어난 시점을 직접 확인해서 표시 (시간 추측 대신 이벤트 검증)
+    /// 앵커의 trackingState를 매 프레임 감시하여 가시성·freeze·10s timeout 관리
+    /// Tracking → 정상 표시 (앵커 자식)
+    /// Limited/None (10s 이내) → 마지막 world pos로 freeze (detach, 계속 표시)
+    /// Limited/None (10s 초과) → 앵커 포기, _anchorCreated=false로 재앵커링 유도
     /// </summary>
-    private IEnumerator ShowAfterFrame()
+    private void Update()
     {
-        int myGeneration = _showGeneration;
-        const float maxWait = 3f;
-        const float stableThresholdSqr = 1f; // 프레임간 pose 변화 1m 이하면 안정으로 간주
-        const int requiredStableFrames = 2;  // 연속 2프레임 안정 조건
-        float start = Time.realtimeSinceStartup;
-
-        Vector3 lastPose = Vector3.zero;
-        int stableCount = 0;
-        bool firstNonZero = false;
-
-        while (Time.realtimeSinceStartup - start < maxWait)
+        if (!_anchorCreated) return;
+        if (currentAnchor == null)
         {
-            yield return null;
-            if (myGeneration != _showGeneration) yield break;
-            if (!_anchorCreated) yield break;
-            if (transform.parent == null) continue;
-
-            Vector3 currentPose = transform.parent.position;
-
-            // pose가 원점이면 아직 ARCore 계산 전 — 계속 대기
-            if (currentPose.sqrMagnitude < 0.01f)
-            {
-                stableCount = 0;
-                firstNonZero = false;
-                continue;
-            }
-
-            // 첫 non-zero 진입은 기준점만 저장, 아직 보이지 않음 (중간 계산 값일 가능성)
-            if (!firstNonZero)
-            {
-                firstNonZero = true;
-                lastPose = currentPose;
-                stableCount = 0;
-                continue;
-            }
-
-            // 프레임간 변화량이 임계 이하면 stable 카운트 증가
-            if ((currentPose - lastPose).sqrMagnitude <= stableThresholdSqr)
-                stableCount++;
-            else
-                stableCount = 0;
-
-            lastPose = currentPose;
-
-            if (stableCount >= requiredStableFrames)
-            {
-                if (!_forceHideRenderers) SetVisible(true);
-                yield break;
-            }
+            // 앵커가 외부에서 파괴됨 → 재앵커링 유도
+            _anchorCreated = false;
+            _isFrozen = false;
+            _limitedSince = -1f;
+            SetVisible(false);
+            return;
         }
 
-        // 3초 안에 pose 안정화 실패 — 실패 처리해서 FilterManager.RetryFailedAnchors가 재시도
-        _anchorCreated = false;
+        TrackingState state = currentAnchor.trackingState;
+
+        if (state == TrackingState.Tracking)
+        {
+            // Limited에서 복귀 — freeze 해제 + 앵커에 재부착
+            if (_isFrozen)
+            {
+                _isFrozen = false;
+                _limitedSince = -1f;
+
+                // world position 유지하며 재부착 (순간이동 방지)
+                transform.SetParent(currentAnchor.transform, true);
+
+                // 로컬 좌표가 (0,0,0)이 아닐 수 있음 → 0.3s Lerp로 부드럽게 보정
+                if (reattachLerpCoroutine != null) StopCoroutine(reattachLerpCoroutine);
+                reattachLerpCoroutine = StartCoroutine(LerpToAnchorOrigin());
+            }
+
+            // 최초 Tracking 도달 시 렌더러 표시
+            if (!_hasBeenTracking)
+            {
+                _hasBeenTracking = true;
+                if (!_forceHideRenderers) SetVisible(true);
+            }
+        }
+        else // Limited or None
+        {
+            // Tracking → Limited 전환: 현재 world pos 스냅샷 + 앵커에서 분리
+            // (앵커 transform이 원점으로 drift해도 이 오브젝트는 제자리 유지)
+            if (!_isFrozen && _hasBeenTracking)
+            {
+                _isFrozen = true;
+                _limitedSince = Time.realtimeSinceStartup;
+
+                if (reattachLerpCoroutine != null)
+                {
+                    StopCoroutine(reattachLerpCoroutine);
+                    reattachLerpCoroutine = null;
+                }
+
+                // worldPositionStays=true → 현재 world 좌표 그대로 유지
+                transform.SetParent(null, true);
+            }
+
+            // Limited 10s 초과 → 앵커 포기, RetryFailedAnchors(FilterManager 2s tick)가 재생성
+            if (_isFrozen && _limitedSince > 0f &&
+                Time.realtimeSinceStartup - _limitedSince > LIMITED_BUFFER)
+            {
+                _anchorCreated = false;
+                _isFrozen = false;
+                _limitedSince = -1f;
+                SetVisible(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 재부착 후 localPosition을 0으로 Lerp — AR 권위 좌표로 부드럽게 수렴
+    /// </summary>
+    private IEnumerator LerpToAnchorOrigin()
+    {
+        Vector3 startLocal = transform.localPosition;
+        Quaternion startLocalRot = transform.localRotation;
+        float t = 0f;
+
+        while (t < REATTACH_LERP_DURATION)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.Clamp01(t / REATTACH_LERP_DURATION);
+            transform.localPosition = Vector3.Lerp(startLocal, Vector3.zero, k);
+            transform.localRotation = Quaternion.Slerp(startLocalRot, Quaternion.identity, k);
+            yield return null;
+        }
+
+        transform.localPosition = Vector3.zero;
+        transform.localRotation = Quaternion.identity;
+        reattachLerpCoroutine = null;
     }
 
     /// <summary>
     /// 외부에서 렌더러 강제 숨김/해제 (fallback 모드, 백그라운드 복구 시 사용)
-    /// forceHide=true: 렌더러 즉시 끄고, 앵커 생성 성공해도 켜지지 않음
-    /// forceHide=false: 앵커가 이미 생성된 경우 10프레임 대기 후 렌더러 복원
-    ///                  (앵커 Transform이 GPS 좌표로 안정적으로 반영되기까지 여유 필요)
     /// </summary>
     public void SetForceHideRenderers(bool forceHide)
     {
@@ -249,15 +264,15 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         {
             SetVisible(false);
         }
-        else if (_anchorCreated)
+        else if (_anchorCreated && _hasBeenTracking)
         {
-            // 즉시 표시하지 않고 1프레임 대기 후 표시 (원점 플래시 방지)
-            StartCoroutine(ShowAfterFrame());
+            // freeze 중이든 아니든 이미 world pos가 유효하므로 즉시 복원
+            SetVisible(true);
         }
     }
 
     /// <summary>
-    /// 자신 + 자식의 모든 Renderer on/off (앵커 생성 전후 가시성 제어)
+    /// 자신 + 자식의 모든 Renderer on/off
     /// </summary>
     private void SetVisible(bool visible)
     {
