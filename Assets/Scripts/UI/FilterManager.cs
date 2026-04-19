@@ -301,32 +301,15 @@ public class FilterManager : MonoBehaviour
 
         // FindObjectsByType는 인터페이스로 직접 검색 불가 → 개별 매니저 탐색
         if (dataManager != null && dataManager is IPlaceCacheProvider dmProvider && !cacheProviders.Contains(dmProvider))
-        {
             RegisterCacheProvider(dmProvider);
-            Debug.LogWarning("[dbg] FilterManager: DataManager 지연 등록");
-        }
         if (tourAPIManager != null && tourAPIManager is IPlaceCacheProvider tourProvider && !cacheProviders.Contains(tourProvider))
-        {
             RegisterCacheProvider(tourProvider);
-            Debug.LogWarning("[dbg] FilterManager: TourAPIManager 지연 등록");
-        }
         if (subwayManager != null && subwayManager is IPlaceCacheProvider subwayProvider && !cacheProviders.Contains(subwayProvider))
-        {
             RegisterCacheProvider(subwayProvider);
-            Debug.LogWarning("[dbg] FilterManager: SubwayManager 지연 등록");
-        }
         if (trainStationManager != null && trainStationManager is IPlaceCacheProvider trainProvider && !cacheProviders.Contains(trainProvider))
-        {
             RegisterCacheProvider(trainProvider);
-            Debug.LogWarning("[dbg] FilterManager: TrainStationManager 지연 등록");
-        }
         if (terminalManager != null && terminalManager is IPlaceCacheProvider terminalProvider && !cacheProviders.Contains(terminalProvider))
-        {
             RegisterCacheProvider(terminalProvider);
-            Debug.LogWarning("[dbg] FilterManager: TerminalManager 지연 등록");
-        }
-
-        Debug.LogWarning($"[dbg] FilterManager.DelayedProviderScan 완료: 총 {cacheProviders.Count}개 프로바이더");
 
         // 프로바이더가 있으면 AllocationLoop 시작 보장
         EnsureAllocationLoopStarted();
@@ -1026,7 +1009,6 @@ public class FilterManager : MonoBehaviour
         if (provider != null && !cacheProviders.Contains(provider))
         {
             cacheProviders.Add(provider);
-            Debug.LogWarning($"[dbg] RegisterCacheProvider: {provider.FilterKey}, total={cacheProviders.Count}, active={gameObject.activeInHierarchy}");
 
             // 활성 상태이면 즉시 시작 시도 (비활성이면 OnEnable에서 나중에 시작)
             EnsureAllocationLoopStarted();
@@ -1040,7 +1022,6 @@ public class FilterManager : MonoBehaviour
         {
             allocationStarted = true;
             allocationCoroutine = StartCoroutine(AllocationLoop());
-            Debug.LogWarning($"[dbg] AllocationLoop OnEnable에서 시작 (providers={cacheProviders.Count})");
         }
     }
 
@@ -1053,7 +1034,6 @@ public class FilterManager : MonoBehaviour
         {
             allocationStarted = true;
             allocationCoroutine = StartCoroutine(AllocationLoop());
-            Debug.LogWarning($"[dbg] AllocationLoop EnsureStart에서 시작 (providers={cacheProviders.Count})");
         }
     }
 
@@ -1069,15 +1049,6 @@ public class FilterManager : MonoBehaviour
         {
             Vector2 gps = GetCurrentGPS();
 
-            // 프로바이더 준비 상태 집계 (FileLogger 기록용)
-            int readyCount = 0;
-            foreach (var p in cacheProviders) if (p.IsCacheReady) readyCount++;
-
-            // FileLogger: GPS 위치 + 프로바이더 상태 + 속도/모드 (fallback 진단용)
-            if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                FileLogger.Instance.LogGPS(gps.x, gps.y,
-                    $"providers={cacheProviders.Count}, ready={readyCount}, speed={cachedSpeedKmh:F1}km/h");
-
             if (gps.x != 0f || gps.y != 0f)
             {
                 // GPS 샘플 기반 평균 속도 계산 (LoadingManager fallback 판정용)
@@ -1087,12 +1058,8 @@ public class FilterManager : MonoBehaviour
                 float movedFromCache = CalculateGPSDistance(lastCacheRefreshPosition.x, lastCacheRefreshPosition.y, gps.x, gps.y);
                 if (lastCacheRefreshPosition == Vector2.zero || movedFromCache >= cacheRefreshDistance)
                 {
-                    Debug.LogWarning($"[dbg][FilterManager][CACHE] 5km 이동 감지 → 캐시 갱신 트리거 moved={movedFromCache:F0}m threshold={cacheRefreshDistance}m");
                     RefreshAllCaches(gps.x, gps.y);
                     lastCacheRefreshPosition = gps;
-
-                    if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                        FileLogger.Instance.Log("CACHE", $"캐시 갱신 트리거: moved={movedFromCache:F0}m, threshold={cacheRefreshDistance}m at ({gps.x:F6},{gps.y:F6})");
                 }
 
                 AllocateObjects(gps.x, gps.y);
@@ -1344,23 +1311,6 @@ public class FilterManager : MonoBehaviour
             }
         }
 
-        // [DEBUG] 배분 결과 로깅 — 총 캐시 수, Full/Indicator 배분 크기 + Diff
-        int totalPlaces = 0;
-        foreach (var provider in cacheProviders)
-            if (provider.IsCacheReady) totalPlaces += provider.GetCachedPlaces().Count;
-
-        int fullAdded = 0, fullRemoved = 0, indicatorAdded = 0, indicatorRemoved = 0;
-        foreach (string id in newFullSet) if (!currentFullAllocations.Contains(id)) fullAdded++;
-        foreach (string id in currentFullAllocations) if (!newFullSet.Contains(id)) fullRemoved++;
-        foreach (string id in newIndicatorSet) if (!currentIndicatorAllocations.Contains(id)) indicatorAdded++;
-        foreach (string id in currentIndicatorAllocations) if (!newIndicatorSet.Contains(id)) indicatorRemoved++;
-
-        Debug.LogWarning($"[dbg][FilterManager][ALLOC] cache={totalPlaces} Full={newFullSet.Count}(+{fullAdded}/-{fullRemoved}) Indicator={newIndicatorSet.Count}(+{indicatorAdded}/-{indicatorRemoved}) fullR={fullObjectRadius}m indR={indicatorObjectRadius}m gps=({lat:F5},{lon:F5})");
-
-        // FileLogger: 배분 결과
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogAllocation(totalPlaces, newFullSet.Count, newIndicatorSet.Count, fullObjectRadius);
-
         currentFullAllocations = newFullSet;
         currentIndicatorAllocations = newIndicatorSet;
     }
@@ -1456,21 +1406,13 @@ public class FilterManager : MonoBehaviour
     private bool hasInitiatedCacheOnce = false;
     private void RefreshAllCaches(float lat, float lon)
     {
-        int skipped = 0, called = 0;
-        Debug.LogWarning($"[dbg][FilterManager][CACHE] RefreshAllCaches providers={cacheProviders.Count} lat={lat:F6} lon={lon:F6} initial={!hasInitiatedCacheOnce}");
         detailPendingIds.Clear();
         foreach (var provider in cacheProviders)
         {
             // 최초 호출 시 이미 준비된 provider는 건너뜀 (자체 Start 로드와 중복 방지)
-            if (!hasInitiatedCacheOnce && provider.IsCacheReady)
-            {
-                skipped++;
-                continue;
-            }
+            if (!hasInitiatedCacheOnce && provider.IsCacheReady) continue;
             provider.RefreshCache(lat, lon);
-            called++;
         }
-        Debug.LogWarning($"[dbg][FilterManager][CACHE] RefreshAllCaches 결과 called={called} skipped={skipped}");
         hasInitiatedCacheOnce = true;
     }
 

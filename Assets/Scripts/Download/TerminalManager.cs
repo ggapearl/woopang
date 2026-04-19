@@ -75,6 +75,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     [Tooltip("IndicatorOnly 프리팹 — FilterManager가 중앙 배분")]
     [SerializeField] private GameObject indicatorOnlyPrefab;
     private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
+    private Queue<GameObject> indicatorOnlyPool = new Queue<GameObject>(20);
 
     void Start()
     {
@@ -85,7 +86,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(StartLocationServiceAndFetchData());
 
         FilterManager filterMgr = Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-        Debug.LogWarning($"[dbg] TerminalManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
         if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
@@ -151,8 +151,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
             if (distanceMoved > updateDistanceThreshold)
             {
                 lastPosition = currentPos;
-                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                    FileLogger.Instance.LogGPS(lat, lon, $"[Terminal] 이동감지 dist={distanceMoved:F0}m");
             }
 
             yield return new WaitForSeconds(5f);
@@ -204,7 +202,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         {
             lightCache.Clear();
             isCacheReady = true;
-            Debug.LogWarning($"[dbg][TerminalManager][CACHE] 0개 반환 — isCacheReady=true 설정");
             yield break;
         }
 
@@ -484,11 +481,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         SetupObject(newObj, data);
         newObj.SetActive(true);
         spawnedObjects[rawId] = newObj;
-
-        Debug.LogWarning($"[dbg][TerminalManager][SPAWN] Full id={rawId} name={data.name} total={spawnedObjects.Count}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, data.name, true);
-
         return true;
     }
 
@@ -500,7 +492,9 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
         if (cached == null) return false;
 
-        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        GameObject obj = GetIndicatorFromPool();
+        if (obj == null) return false;
+
         obj.name = $"Indicator_Terminal_{cached.displayName}";
         obj.SetActive(true);
 
@@ -519,22 +513,29 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
             anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, cached.altitude);
 
         indicatorOnlyObjects[rawId] = obj;
-
-        Debug.LogWarning($"[dbg][TerminalManager][SPAWN] Indicator id={rawId} name={cached.displayName} total={indicatorOnlyObjects.Count}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, cached.displayName, true);
-
         return true;
+    }
+
+    private GameObject GetIndicatorFromPool()
+    {
+        while (indicatorOnlyPool.Count > 0)
+        {
+            GameObject pooled = indicatorOnlyPool.Dequeue();
+            if (pooled != null) return pooled;
+        }
+        return Instantiate(indicatorOnlyPrefab);
+    }
+
+    private void ReturnIndicatorToPool(GameObject obj)
+    {
+        if (obj == null) return;
+        obj.SetActive(false);
+        indicatorOnlyPool.Enqueue(obj);
     }
 
     public void DespawnFullObject(string rawId)
     {
         if (!spawnedObjects.ContainsKey(rawId)) return;
-
-        string objName = placeDataMap.ContainsKey(rawId) ? placeDataMap[rawId].name : "";
-        Debug.LogWarning($"[dbg][TerminalManager][DESPAWN] Full id={rawId} name={objName} remaining={spawnedObjects.Count - 1}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Terminal_Full", rawId, objName, false);
 
         ReturnToPool(spawnedObjects[rawId]);
         spawnedObjects.Remove(rawId);
@@ -544,14 +545,9 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     {
         if (!indicatorOnlyObjects.ContainsKey(rawId)) return;
 
-        var cached = lightCache.Find(c => c.rawId == rawId);
-        string displayName = cached?.displayName ?? "";
-        Debug.LogWarning($"[dbg][TerminalManager][DESPAWN] Indicator id={rawId} name={displayName} remaining={indicatorOnlyObjects.Count - 1}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Terminal_Indicator", rawId, displayName, false);
-
-        if (indicatorOnlyObjects[rawId] != null) Destroy(indicatorOnlyObjects[rawId]);
+        GameObject obj = indicatorOnlyObjects[rawId];
         indicatorOnlyObjects.Remove(rawId);
+        ReturnIndicatorToPool(obj);
     }
 
     public HashSet<string> GetSpawnedFullIds()
@@ -570,10 +566,6 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     public void RefreshCache(float lat, float lon)
     {
-        Debug.LogWarning($"[dbg][TerminalManager][CACHE] RefreshCache 시작 lat={lat:F6} lon={lon:F6}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("CACHE", $"[Terminal] RefreshCache lat={lat:F6} lon={lon:F6}");
-
         StartCoroutine(FetchFacilityData(lat, lon, 10000f));
     }
 }

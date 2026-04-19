@@ -31,7 +31,6 @@ public class LoadingManager : MonoBehaviour
     public bool enableAREnvironmentDetection = true;
     public float environmentCheckInterval = 2f;
     public float darkEnvironmentThreshold = 0.1f;
-    public int minimumFeaturePoints = 10;
     public float trackingLostTimeout = 2f;
     public int sufficientObjectCount = 3; // 충분한 오브젝트 수 (환경감지 생략 기준)
     
@@ -94,7 +93,6 @@ public class LoadingManager : MonoBehaviour
     // AR 환경 감지 관련 변수
     private ARSession arSession;
     private ARCameraManager arCameraManager;
-    private ARPointCloudManager arPointCloudManager;
     private Camera arCamera;
     private bool isCheckingAREnvironment = false;
     private float lastEnvironmentCheckTime = 0f;
@@ -450,12 +448,7 @@ public class LoadingManager : MonoBehaviour
                     {
                         SetAllManagerRenderersVisible(false);
                         osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"TrackLost_Debounced_{reason}");
-                        LogFallback("ENTER", current, reason, speedKmh);
                     }
-                }
-                else
-                {
-                    LogFallback("SKIP_VEHICLE", current, reason, speedKmh);
                 }
                 pendingFallbackEntry = false;
             }
@@ -464,31 +457,19 @@ public class LoadingManager : MonoBehaviour
         if (current == lastFrameTrackingState) return;
         lastFrameTrackingState = current;
 
-        // --- 모든 TrackingState 변화 이벤트 기록 (디바운스 영향 없는 순수 상태 변화) ---
-        LogTrackingTransition(previous, current, reason);
-
         // --- Tracking → Limited/None: 디바운스 시작 ---
         if (previous == TrackingState.Tracking && current != TrackingState.Tracking)
         {
             // ExcessiveMotion은 즉시 제외 (차량 이동 중 기본 무시)
-            if (reason == NotTrackingReason.ExcessiveMotion)
-            {
-                LogFallback("SKIP_MOTION", current, reason, GetCurrentSpeedKmh());
-                return;
-            }
+            if (reason == NotTrackingReason.ExcessiveMotion) return;
 
             // 차량 속도면 즉시 제외 (디바운스조차 시작 안 함)
             float speedKmh = GetCurrentSpeedKmh();
-            if (speedKmh >= vehicleSpeedThreshold)
-            {
-                LogFallback("SKIP_VEHICLE_IMMEDIATE", current, reason, speedKmh);
-                return;
-            }
+            if (speedKmh >= vehicleSpeedThreshold) return;
 
             // 디바운스 타이머 시작 (N초 지속 시 fallback 활성화)
             trackingDropStartTime = Time.realtimeSinceStartup;
             pendingFallbackEntry = true;
-            LogFallback("DEBOUNCE_START", current, reason, speedKmh);
         }
         // --- Limited/None → Tracking: 앵커 재생성 + fallback 해제 ---
         else if (current == TrackingState.Tracking && previous != TrackingState.Tracking)
@@ -497,7 +478,6 @@ public class LoadingManager : MonoBehaviour
             if (pendingFallbackEntry)
             {
                 pendingFallbackEntry = false;
-                LogFallback("DEBOUNCE_CANCEL", current, reason, GetCurrentSpeedKmh());
                 return; // fallback 들어간 적 없음 → 복원 작업 불필요
             }
 
@@ -514,7 +494,6 @@ public class LoadingManager : MonoBehaviour
                 if (osi != null && osi.IsFallbackMode)
                 {
                     osi.EnableFallbackMode(false, forceDisable: true, reason: "TrackRecovered");
-                    LogFallback("EXIT", current, reason, GetCurrentSpeedKmh());
                 }
             }
         }
@@ -532,31 +511,6 @@ public class LoadingManager : MonoBehaviour
         return cachedFilterManager.CurrentSpeedKmh;
     }
 
-    /// <summary>
-    /// Fallback 진입/해제 사유를 FileLogger에 기록 (iOS 진단용)
-    /// </summary>
-    private void LogFallback(string evt, TrackingState state, NotTrackingReason reason, float speedKmh)
-    {
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-        {
-            FileLogger.Instance.Log("FALLBACK",
-                $"{evt} state={state} reason={reason} speed={speedKmh:F1}km/h");
-        }
-    }
-
-    /// <summary>
-    /// AR TrackingState 변화 자체를 기록 (Tracking↔Limited 전이, 디바운스 발동 전 원본)
-    /// </summary>
-    private void LogTrackingTransition(TrackingState previous, TrackingState current, NotTrackingReason reason)
-    {
-        if (FileLogger.Instance == null || !FileLogger.Instance.IsLogging) return;
-        float speedKmh = GetCurrentSpeedKmh();
-        OffScreenIndicator osi = GetCachedOSI();
-        bool fbActive = osi != null && osi.IsFallbackMode;
-        FileLogger.Instance.Log("TRACK",
-            $"{previous}→{current} ntr={reason} pending={pendingFallbackEntry} fb={fbActive} speed={speedKmh:F1}km/h");
-    }
-    
     public void ShowLoading(System.Action heavyWork, string category = "General")
     {
         if (isLoading) return;
@@ -626,7 +580,6 @@ public class LoadingManager : MonoBehaviour
         }
 
         arCameraManager = FindFirstObjectByType<ARCameraManager>();
-        arPointCloudManager = FindFirstObjectByType<ARPointCloudManager>();
         arCamera = Camera.main ?? FindFirstObjectByType<Camera>();
 
         // ARCameraManager 밝기 이벤트 구독
@@ -1015,11 +968,6 @@ public class LoadingManager : MonoBehaviour
             return AREnvironmentIssue.TooDark;
         }
 
-        if (GetFeaturePointCount() < minimumFeaturePoints)
-        {
-            return AREnvironmentIssue.NoFeatures;
-        }
-
         return AREnvironmentIssue.InsufficientLight;
     }
     
@@ -1075,30 +1023,10 @@ public class LoadingManager : MonoBehaviour
         {
             return 0.7f;
         }
-        else if (GetFeaturePointCount() > minimumFeaturePoints)
-        {
-            return 0.6f;
-        }
 
         return 0.3f; // 밝기 데이터 없고 트래킹도 안 되면 어둡다고 판단
     }
-    
-    int GetFeaturePointCount()
-    {
-        if (arPointCloudManager?.trackables == null) return 0;
-        
-        int totalPoints = 0;
-        foreach (var pointCloud in arPointCloudManager.trackables)
-        {
-            if (pointCloud.positions.HasValue)
-            {
-                totalPoints += pointCloud.positions.Value.Length;
-            }
-        }
-        
-        return totalPoints;
-    }
-    
+
     bool IsCameraCovered()
     {
         float brightness = GetAverageBrightness();

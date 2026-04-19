@@ -59,6 +59,15 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         if (retryCoroutine != null) { StopCoroutine(retryCoroutine); retryCoroutine = null; }
         if (reattachLerpCoroutine != null) { StopCoroutine(reattachLerpCoroutine); reattachLerpCoroutine = null; }
 
+        // 풀에서 재사용될 때 이전 앵커가 남아있으면 정리
+        if (currentAnchor != null)
+        {
+            if (transform.parent == currentAnchor.transform)
+                transform.SetParent(currentAnchor.transform.parent, true);
+            Destroy(currentAnchor.gameObject);
+            currentAnchor = null;
+        }
+
         if (!TryCreateAnchor())
         {
             retryCoroutine = StartCoroutine(RetryCreateAnchor());

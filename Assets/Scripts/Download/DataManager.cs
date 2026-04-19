@@ -101,6 +101,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     [Tooltip("IndicatorOnly 프리팹 (Target 컴포넌트만 가진 경량 오브젝트) — FilterManager가 중앙 배분")]
     [SerializeField] private GameObject indicatorOnlyPrefab;
     private Dictionary<int, GameObject> indicatorOnlyObjects = new Dictionary<int, GameObject>();
+    private Queue<GameObject> indicatorOnlyPool = new Queue<GameObject>(20);
 
     // ============================================================
     // Light Cache 시스템 (FilterManager 중앙 배분용)
@@ -173,7 +174,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
         // FilterManager에 캐시 프로바이더 등록 (비활성 오브젝트도 탐색)
         FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-        Debug.LogWarning($"[dbg] DataManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
         if (filterMgr != null)
             filterMgr.RegisterCacheProvider(this);
 
@@ -512,10 +512,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
                             });
                         }
                         isCacheReady = true;
-                        Debug.LogWarning($"[dbg] FetchLightCache 완료: {lightCache.Count}개 캐시, indicatorOnlyPrefab={(indicatorOnlyPrefab != null ? "연결됨" : "NULL!")}");
-
-                        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                            FileLogger.Instance.LogCacheRefresh("DataManager", lightCache.Count, lat, lon);
                     }
                 }
                 catch (System.Exception e)
@@ -627,9 +623,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             if (distanceMoved > updateDistanceThreshold)
             {
                 lastPosition = currentPos;
-                // 50m 이동마다 위치 로깅 (실제 캐시 갱신은 FilterManager가 5km 기준으로 결정)
-                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                    FileLogger.Instance.LogGPS(lat, lon, $"이동감지 dist={distanceMoved:F0}m");
             }
 
             yield return new WaitForSeconds(5f);
@@ -1719,9 +1712,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
         }
 
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("SYSTEM", $"백그라운드 복귀 데이터 갱신 시작 at ({lat:F6},{lon:F6})");
-
         // Light cache 재요청 + 위치 체크 코루틴 재시작
         lastPosition = new Vector2(lat, lon);
         StartCoroutine(FetchLightCache(lat, lon));
@@ -1926,14 +1916,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             try
             {
                 CreateObjectFromData(placeDataMap[id]);
-                bool success = spawnedObjects.ContainsKey(id);
-                if (success)
-                {
-                    Debug.LogWarning($"[dbg][DataManager][SPAWN] Full id={id} name={placeDataMap[id].name} total={spawnedObjects.Count}");
-                    if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                        FileLogger.Instance.LogSpawn("Full", rawId, placeDataMap[id].name ?? "", true);
-                }
-                return success;
+                return spawnedObjects.ContainsKey(id);
             }
             catch (System.Exception ex)
             {
@@ -1941,12 +1924,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
                 return false;
             }
         }
-
-        // 상세 데이터 없으면 Detail API 요청 큐잉
-        Debug.LogWarning($"[dbg] SpawnFullObject: id={id} → Detail API 큐잉 (pending={pendingDetailFetchIds.Count + 1})");
-
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("DETAIL", $"Detail API 큐잉: id={id}, pending={pendingDetailFetchIds.Count + 1}");
 
         pendingDetailFetchIds.Add(id);
         if (batchDetailCoroutine == null)
@@ -1961,17 +1938,14 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         if (!int.TryParse(rawId, out int id)) return false;
         if (indicatorOnlyObjects.ContainsKey(id)) return true;
 
-        // lightCache에서 좌표 찾기
         CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
         if (cached == null) return false;
 
-        if (indicatorOnlyPrefab == null)
-        {
-            Debug.LogWarning("[dbg] SpawnIndicatorOnly 실패: indicatorOnlyPrefab이 null! Inspector에서 연결 필요");
-            return false;
-        }
+        if (indicatorOnlyPrefab == null) return false;
 
-        GameObject obj = Instantiate(indicatorOnlyPrefab);
+        GameObject obj = GetIndicatorFromPool();
+        if (obj == null) return false;
+
         obj.name = $"Indicator_{id}_{cached.displayName}";
         obj.SetActive(true);
 
@@ -1982,7 +1956,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             target.gpsLatitude = cached.latitude;
             target.gpsLongitude = cached.longitude;
 
-            // 카테고리별 인디케이터 색상 설정
             Color catColor = GetCategoryColor(cached.category);
             if (catColor != Color.white)
                 target.TargetColor = catColor;
@@ -1995,22 +1968,30 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         }
 
         indicatorOnlyObjects[id] = obj;
-
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("IndicatorOnly", rawId, cached.displayName, true);
-
         return true;
+    }
+
+    private GameObject GetIndicatorFromPool()
+    {
+        while (indicatorOnlyPool.Count > 0)
+        {
+            GameObject pooled = indicatorOnlyPool.Dequeue();
+            if (pooled != null) return pooled;
+        }
+        return Instantiate(indicatorOnlyPrefab);
+    }
+
+    private void ReturnIndicatorToPool(GameObject obj)
+    {
+        if (obj == null) return;
+        obj.SetActive(false);
+        indicatorOnlyPool.Enqueue(obj);
     }
 
     public void DespawnFullObject(string rawId)
     {
         if (!int.TryParse(rawId, out int id)) return;
         if (!spawnedObjects.ContainsKey(id)) return;
-
-        string objName = placeDataMap.ContainsKey(id) ? (placeDataMap[id].name ?? "") : "";
-        Debug.LogWarning($"[dbg][DataManager][DESPAWN] Full id={id} name={objName} remaining={spawnedObjects.Count - 1}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Full", rawId, objName, false);
 
         GameObject obj = spawnedObjects[id];
         string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
@@ -2024,17 +2005,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         if (!int.TryParse(rawId, out int id)) return;
         if (!indicatorOnlyObjects.ContainsKey(id)) return;
 
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-        {
-            string name = "";
-            var cached = lightCache.Find(c => c.rawId == rawId);
-            if (cached != null) name = cached.displayName;
-            FileLogger.Instance.LogSpawn("IndicatorOnly", rawId, name, false);
-        }
-
         GameObject obj = indicatorOnlyObjects[id];
-        if (obj != null) Destroy(obj);
         indicatorOnlyObjects.Remove(id);
+        ReturnIndicatorToPool(obj);
     }
 
     public HashSet<string> GetSpawnedFullIds()
@@ -2055,9 +2028,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
     public void RefreshCache(float lat, float lon)
     {
-        Debug.LogWarning($"[dbg][DataManager][CACHE] RefreshCache 시작 lat={lat:F6} lon={lon:F6}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("CACHE", $"[DataManager] RefreshCache lat={lat:F6} lon={lon:F6}");
         StartCoroutine(FetchLightCache(lat, lon));
     }
 

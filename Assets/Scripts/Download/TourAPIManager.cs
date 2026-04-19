@@ -125,7 +125,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(StartLocationServiceAndFetchData());
 
         FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-        Debug.LogWarning($"[dbg] TourAPIManager.Start: FilterManager={(filterMgr != null ? "찾음" : "NULL!")}");
         if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
@@ -239,8 +238,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             if (distanceMoved > updateDistanceThreshold)
             {
                 lastPosition = currentPos;
-                if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                    FileLogger.Instance.LogGPS(lat, lon, $"[TourAPI] 이동감지 dist={distanceMoved:F0}m");
             }
 
             yield return waitFiveSeconds;
@@ -301,7 +298,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             LogDebug("[TourAPIManager] TourAPI에서 반환된 장소 데이터가 없음");
             lightCache.Clear();
             isCacheReady = true;
-            Debug.LogWarning($"[dbg][TourAPIManager][CACHE] 0개 반환 — isCacheReady=true 설정");
             yield break;
         }
 
@@ -1083,10 +1079,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             if (display != null && !string.IsNullOrEmpty(place.firstimage))
                 display.SetBaseMap(place.firstimage);
 
-            Debug.LogWarning($"[dbg][TourAPIManager][SPAWN] Full id={rawId} name={place.title} total={spawnedObjects.Count}");
-            if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-                FileLogger.Instance.LogSpawn("Tour_Full", rawId, place.title ?? "", true);
-
             return true;
         }
         return false;
@@ -1120,22 +1112,12 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             anchor.SetCoordinatesAndCreateAnchor(cached.latitude, cached.longitude, 0);
 
         indicatorOnlyObjects[rawId] = obj;
-
-        Debug.LogWarning($"[dbg][TourAPIManager][SPAWN] Indicator id={rawId} name={cached.displayName} total={indicatorOnlyObjects.Count}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Tour_Indicator", rawId, cached.displayName, true);
-
         return true;
     }
 
     public void DespawnFullObject(string rawId)
     {
         if (!spawnedObjects.ContainsKey(rawId)) return;
-
-        string objName = placeDataMap.ContainsKey(rawId) ? (placeDataMap[rawId].title ?? "") : "";
-        Debug.LogWarning($"[dbg][TourAPIManager][DESPAWN] Full id={rawId} name={objName} remaining={spawnedObjects.Count - 1}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Tour_Full", rawId, objName, false);
 
         ReturnToPool(spawnedObjects[rawId]);
         spawnedObjects.Remove(rawId);
@@ -1144,12 +1126,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
     public void DespawnIndicatorOnly(string rawId)
     {
         if (!indicatorOnlyObjects.ContainsKey(rawId)) return;
-
-        var cached = lightCache.Find(c => c.rawId == rawId);
-        string displayName = cached?.displayName ?? "";
-        Debug.LogWarning($"[dbg][TourAPIManager][DESPAWN] Indicator id={rawId} name={displayName} remaining={indicatorOnlyObjects.Count - 1}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.LogSpawn("Tour_Indicator", rawId, displayName, false);
 
         if (indicatorOnlyObjects[rawId] != null) Destroy(indicatorOnlyObjects[rawId]);
         indicatorOnlyObjects.Remove(rawId);
@@ -1171,10 +1147,6 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 
     public void RefreshCache(float lat, float lon)
     {
-        Debug.LogWarning($"[dbg][TourAPIManager][CACHE] RefreshCache 시작 lat={lat:F6} lon={lon:F6}");
-        if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
-            FileLogger.Instance.Log("CACHE", $"[TourAPI] RefreshCache lat={lat:F6} lon={lon:F6}");
-
         StartCoroutine(FetchDataProgressively(lat, lon));
     }
 
