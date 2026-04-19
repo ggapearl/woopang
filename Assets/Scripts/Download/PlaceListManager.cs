@@ -115,6 +115,10 @@ public class PlaceListManager : MonoBehaviour
             distanceSlider.value = savedDistance;
             distanceSlider.onValueChanged.AddListener(OnDistanceSliderChanged);
             UpdateDistanceValueText();
+
+            // FilterManager IndicatorOnly 반경 초기 동기화 (FilterManager가 비활성일 수 있으므로 Include)
+            FilterManager filterMgr = UnityEngine.Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+            if (filterMgr != null) filterMgr.SetIndicatorRadius(savedDistance);
         }
 
         StartCoroutine(InitializeAndUpdateUI());
@@ -412,6 +416,10 @@ public class PlaceListManager : MonoBehaviour
         // OffScreenIndicator 거리 필터 동기화
         OffScreenIndicator osi = FindFirstObjectByType<OffScreenIndicator>();
         if (osi != null) osi.SetMaxIndicatorDistance(maxDisplayDistance);
+
+        // FilterManager IndicatorOnly 스폰 반경 동기화 — 사용자가 슬라이더로 줄이면 먼 POI도 즉시 제외
+        FilterManager filterMgr = UnityEngine.Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filterMgr != null) filterMgr.SetIndicatorRadius(maxDisplayDistance);
     }
 
     private void UpdateDistanceValueText() {

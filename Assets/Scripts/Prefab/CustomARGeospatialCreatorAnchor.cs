@@ -183,7 +183,13 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     {
         int myGeneration = _showGeneration;
         const float maxWait = 3f;
+        const float stableThresholdSqr = 1f; // 프레임간 pose 변화 1m 이하면 안정으로 간주
+        const int requiredStableFrames = 2;  // 연속 2프레임 안정 조건
         float start = Time.realtimeSinceStartup;
+
+        Vector3 lastPose = Vector3.zero;
+        int stableCount = 0;
+        bool firstNonZero = false;
 
         while (Time.realtimeSinceStartup - start < maxWait)
         {
@@ -192,11 +198,38 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             if (!_anchorCreated) yield break;
             if (transform.parent == null) continue;
 
-            // pose가 원점에서 충분히 벗어난 순간 = ARCore가 계산 완료한 증거
-            if (transform.parent.position.sqrMagnitude < 0.01f) continue;
+            Vector3 currentPose = transform.parent.position;
 
-            if (!_forceHideRenderers) SetVisible(true);
-            yield break;
+            // pose가 원점이면 아직 ARCore 계산 전 — 계속 대기
+            if (currentPose.sqrMagnitude < 0.01f)
+            {
+                stableCount = 0;
+                firstNonZero = false;
+                continue;
+            }
+
+            // 첫 non-zero 진입은 기준점만 저장, 아직 보이지 않음 (중간 계산 값일 가능성)
+            if (!firstNonZero)
+            {
+                firstNonZero = true;
+                lastPose = currentPose;
+                stableCount = 0;
+                continue;
+            }
+
+            // 프레임간 변화량이 임계 이하면 stable 카운트 증가
+            if ((currentPose - lastPose).sqrMagnitude <= stableThresholdSqr)
+                stableCount++;
+            else
+                stableCount = 0;
+
+            lastPose = currentPose;
+
+            if (stableCount >= requiredStableFrames)
+            {
+                if (!_forceHideRenderers) SetVisible(true);
+                yield break;
+            }
         }
 
         // 3초 안에 pose 안정화 실패 — 실패 처리해서 FilterManager.RetryFailedAnchors가 재시도

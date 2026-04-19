@@ -989,6 +989,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private int maxIndicatorObjects = 20;
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
     [SerializeField] private float fullObjectRadius = 500f;
+    [Tooltip("IndicatorOnly 생성 반경 (m) — PlaceListManager.distanceSlider로 런타임 동기화됨")]
+    [SerializeField] private float indicatorObjectRadius = 5000f;
     [Tooltip("배분 갱신 주기 (초)")]
     [SerializeField] private float allocationInterval = 2f;
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
@@ -1109,6 +1111,16 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
+    /// PlaceListManager.distanceSlider 변경 시 호출 — IndicatorOnly 스폰 반경 동기화
+    /// 사용자가 직접 조절하는 표시 거리(100m~10km)를 IndicatorOnly 배분에 반영
+    /// </summary>
+    public void SetIndicatorRadius(float meters)
+    {
+        indicatorObjectRadius = Mathf.Max(meters, fullObjectRadius);
+        TriggerReallocation();
+    }
+
+    /// <summary>
     /// 필터 변경 시 즉시 재배분 트리거
     /// </summary>
     public void TriggerReallocation()
@@ -1201,6 +1213,8 @@ public class FilterManager : MonoBehaviour
         {
             if (newIndicatorSet.Count >= maxIndicatorObjects) break;
             if (newFullSet.Contains(item.data.uniqueId)) continue;
+            // 사용자가 설정한 표시 반경 밖은 IndicatorOnly도 제외 (PlaceListManager.distanceSlider 동기화)
+            if (item.distance > indicatorObjectRadius) continue;
 
             // 매니저별 토글 체크 (publicData, subway, train, terminal OFF 시 제외)
             if (!IsPassingManagerToggle(item.data, filters)) continue;
@@ -1341,7 +1355,7 @@ public class FilterManager : MonoBehaviour
         foreach (string id in newIndicatorSet) if (!currentIndicatorAllocations.Contains(id)) indicatorAdded++;
         foreach (string id in currentIndicatorAllocations) if (!newIndicatorSet.Contains(id)) indicatorRemoved++;
 
-        Debug.LogWarning($"[dbg][FilterManager][ALLOC] cache={totalPlaces} Full={newFullSet.Count}(+{fullAdded}/-{fullRemoved}) Indicator={newIndicatorSet.Count}(+{indicatorAdded}/-{indicatorRemoved}) radius={fullObjectRadius}m gps=({lat:F5},{lon:F5})");
+        Debug.LogWarning($"[dbg][FilterManager][ALLOC] cache={totalPlaces} Full={newFullSet.Count}(+{fullAdded}/-{fullRemoved}) Indicator={newIndicatorSet.Count}(+{indicatorAdded}/-{indicatorRemoved}) fullR={fullObjectRadius}m indR={indicatorObjectRadius}m gps=({lat:F5},{lon:F5})");
 
         // FileLogger: 배분 결과
         if (FileLogger.Instance != null && FileLogger.Instance.IsLogging)
