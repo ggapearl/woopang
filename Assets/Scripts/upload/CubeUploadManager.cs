@@ -1458,6 +1458,13 @@ public class CubeUploadManager : MonoBehaviour
         formData.AddField("separate_restroom", separateRestroom ? "true" : "false");
         formData.AddField("instagram_id", showInstagram ? instagramID : "");
         formData.AddField("category", selectedCategory);
+
+        // 카테고리 색상을 HEX로 직접 전송 (서버가 locations.color에 저장)
+        // → 업로드 직후부터 OffScreenIndicator/PlaceList에 즉시 카테고리 색상 반영
+        Color catColor = GetCategoryColor(selectedCategory);
+        string colorHex = ColorUtility.ToHtmlStringRGB(catColor); // 6자리 RGB (#없이)
+        formData.AddField("color", colorHex);
+
         // status는 서버에서 AUTO_APPROVE 설정에 따라 결정
         formData.AddField("device_id", SystemInfo.deviceUniqueIdentifier);  // 업로더 추적용
 
@@ -1526,15 +1533,18 @@ public class CubeUploadManager : MonoBehaviour
                     StopCoroutine(countdownCoroutine);
                     ShowWarning(LocalizationManager.Instance.GetText("upload_success"));
 
-                    // FullReset 먼저 수행 (StopAllCoroutines 포함)
+                    // FullReset 먼저 수행 (StopAllCoroutines + uploadPage.SetActive(false) 포함)
                     FullReset();
 
-                    // FullReset 이후 코루틴 시작 (StopAllCoroutines에 의해 죽지 않도록)
-                    // 업로드 성공 1초 후 AR 오브젝트 + 리스트 즉시 새로고침
-                    StartCoroutine(RefreshDataAfterUpload(1f));
-
-                    // 업로드 성공 10초 후 FCM 알림 발송 (주변 사용자에게 새 콘텐츠 알림)
-                    StartCoroutine(SendUploadNotificationDelayed(10f));
+                    // ★ 중요: FullReset 후 uploadPage가 비활성화되면 CubeUploadManager의
+                    //   StartCoroutine이 InvalidOperationException으로 실패함.
+                    //   → 영속 싱글톤 DataManager.Instance 위에서 코루틴 실행
+                    //   (업로드 완료 후 간헐적 미리프레쉬 버그 근본 수정)
+                    MonoBehaviour host = DataManager.Instance != null
+                        ? (MonoBehaviour)DataManager.Instance
+                        : this;
+                    host.StartCoroutine(RefreshDataAfterUpload(1f));
+                    host.StartCoroutine(SendUploadNotificationDelayed(10f));
 
                     yield break;
                 }
@@ -1559,6 +1569,7 @@ public class CubeUploadManager : MonoBehaviour
 
     /// <summary>
     /// 업로드 성공 후 AR 오브젝트 + PlaceList 즉시 새로고침
+    /// + 캐시 수신 후 FilterManager 즉시 재배분 트리거 (allocationInterval 2s 대기 우회)
     /// </summary>
     private IEnumerator RefreshDataAfterUpload(float delaySeconds)
     {
@@ -1570,6 +1581,23 @@ public class CubeUploadManager : MonoBehaviour
         PlaceListManager plm = FindFirstObjectByType<PlaceListManager>();
         if (plm != null)
             plm.UpdateUI();
+
+        // 캐시가 새로 들어오는 데 약간의 시간 필요 → 2회 분산 트리거
+        // (서버 응답 + 라이트 캐시 수신 타이밍 분산 — 둘 중 하나라도 잡힘)
+        yield return new WaitForSeconds(1.5f);
+        TriggerImmediateAllocation();
+
+        yield return new WaitForSeconds(2.5f);
+        TriggerImmediateAllocation();
+    }
+
+    /// <summary>
+    /// FilterManager 즉시 재배분 — 업로드 직후 / 백그라운드 복귀 / 필터 변경 시 사용
+    /// </summary>
+    private void TriggerImmediateAllocation()
+    {
+        FilterManager fm = FindFirstObjectByType<FilterManager>();
+        if (fm != null) fm.TriggerReallocation();
     }
 
     /// <summary>

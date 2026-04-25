@@ -983,11 +983,23 @@ public class FilterManager : MonoBehaviour
     [Tooltip("속도 계산 이동 평균 윈도우 (초)")]
     [SerializeField] private float speedAverageWindow = 5f;
 
+    [Header("Slow-down Refresh — 감속 시 위치 재검토")]
+    [Tooltip("이 속도(km/h) 미만으로 감속 시 한 번 리프레쉬 (차량/지하철 하차 후 정확한 위치 재동기화)")]
+    [SerializeField] private float slowRefreshThresholdKmh = 5f;
+    [Tooltip("리프레쉬를 트리거하기 위해 필요한 직전 최고 속도 (km/h) — 이보다 빨랐어야 감속으로 인정")]
+    [SerializeField] private float slowRefreshRequiredPeakKmh = 25f;
+    [Tooltip("감속 리프레쉬 쿨다운 (초) — 이 시간 이내 재트리거 방지")]
+    [SerializeField] private float slowRefreshCooldown = 30f;
+
     // GPS 샘플 큐: (time, lat, lon)
     private Queue<(float time, float lat, float lon)> gpsSamples = new Queue<(float, float, float)>();
     // 외부 조회용 최근 계산 속도 (km/h). -1 = 샘플 부족
     private float cachedSpeedKmh = -1f;
     public float CurrentSpeedKmh => cachedSpeedKmh;
+
+    // 감속 리프레쉬 상태
+    private float peakSpeedKmh = 0f;            // 최근 관측된 피크 속도 (감속 판정 기준)
+    private float lastSlowRefreshTime = -999f;  // 마지막 감속 리프레쉬 시각
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
@@ -1103,6 +1115,7 @@ public class FilterManager : MonoBehaviour
     /// <summary>
     /// GPS 샘플 기반 평균 속도 계산
     /// LoadingManager가 fallback 진입 시 차량 속도 임계값 판정에 사용 (CurrentSpeedKmh 프로퍼티)
+    /// 감속 시 (차량/지하철 하차 등) 한 번 리프레쉬 트리거도 여기서 판정
     /// </summary>
     private void UpdateSpeed(Vector2 gps)
     {
@@ -1124,6 +1137,39 @@ public class FilterManager : MonoBehaviour
             }
         }
         cachedSpeedKmh = speedKmh;
+
+        // === 감속 리프레쉬 판정 ===
+        // 조건: 피크가 slowRefreshRequiredPeakKmh 이상 → 현재 slowRefreshThresholdKmh 미만으로 진입
+        //       + 쿨다운 경과 → DataManager.RestartFetchingAfterResume 한 번 호출
+        if (speedKmh >= 0f)
+        {
+            if (speedKmh > peakSpeedKmh) peakSpeedKmh = speedKmh;
+
+            bool cooldownPassed = (now - lastSlowRefreshTime) >= slowRefreshCooldown;
+            bool wasFastEnough = peakSpeedKmh >= slowRefreshRequiredPeakKmh;
+            bool nowSlowEnough = speedKmh < slowRefreshThresholdKmh;
+
+            if (cooldownPassed && wasFastEnough && nowSlowEnough)
+            {
+                TriggerSlowdownRefresh();
+                lastSlowRefreshTime = now;
+                peakSpeedKmh = speedKmh; // 피크 리셋 → 다음 감속 사이클 준비
+            }
+        }
+    }
+
+    /// <summary>
+    /// 감속 시 백그라운드 복귀와 동일한 경량 리프레쉬 수행
+    /// — Light 캐시 재요청 + 위치 체크 재시작 + FilterManager 재배분
+    /// — LoadingManager가 복구 중이면 중복 방지 위해 스킵
+    /// </summary>
+    private void TriggerSlowdownRefresh()
+    {
+        LoadingManager loadingMgr = UnityEngine.Object.FindFirstObjectByType<LoadingManager>();
+        if (loadingMgr != null && loadingMgr.IsBackgroundRecovering) return;
+
+        DataManager dm = UnityEngine.Object.FindFirstObjectByType<DataManager>(FindObjectsInactive.Include);
+        if (dm != null) dm.RestartFetchingAfterResume();
     }
 
     /// <summary>
@@ -1292,6 +1338,21 @@ public class FilterManager : MonoBehaviour
                             pendingFullIds.Add(id);
                             detailPendingIds[id] = nowTime;
                             provider.SpawnIndicatorOnly(ExtractRawId(id));
+                        }
+                    }
+                    // ★ Detail 타임아웃 후 IndicatorOnly만 남아 고착된 상태 — Full 재승격 시도
+                    //   백그라운드 복귀 / API 일시 실패 후 영구 고착 방지 (이슈 A)
+                    else if (!hasFullSpawn && hasIndicator && !detailPendingIds.ContainsKey(id))
+                    {
+                        bool spawned = provider.SpawnFullObject(ExtractRawId(id));
+                        if (spawned)
+                        {
+                            provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        }
+                        else
+                        {
+                            // Detail API 응답 다시 대기 — 다음 타임아웃 후 또 시도하여 무한 진동 방지
+                            detailPendingIds[id] = nowTime;
                         }
                     }
                     // detailPendingIds에 있으면 → Detail API 응답 대기 중이므로 아무것도 안 함

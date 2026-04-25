@@ -44,6 +44,11 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
         transform.position = new Vector3(x, (float)altitude, z);
 #else
+        // 풀에서 재사용된 오브젝트가 이전 fallback 모드의 _forceHideRenderers=true를 그대로
+        // 들고 있으면, 앵커 생성 후에도 SetVisible(true)가 막혀 영영 안 보이는 고착 발생.
+        // 새 좌표로 시작할 때 반드시 리셋.
+        _forceHideRenderers = false;
+
         // 앵커 생성 전까지 렌더러 숨김
         SetVisible(false);
 

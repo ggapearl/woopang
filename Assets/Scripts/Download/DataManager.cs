@@ -1233,10 +1233,15 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
     private void SetupTargetInfo(Target target, PlaceData place)
     {
-        Color placeColor;
-        string colorHex = string.IsNullOrEmpty(place.color) ? "FFFFFF" : place.color;
-        if (ColorUtility.TryParseHtmlString($"#{colorHex}", out placeColor)) target.TargetColor = placeColor;
-        else target.TargetColor = Color.white;
+        // 서버의 locations.color (HEX)를 그대로 사용 — 업로드 시점에 카테고리 색이 주입됨
+        Color placeColor = Color.white;
+        if (!string.IsNullOrEmpty(place.color) &&
+            ColorUtility.TryParseHtmlString($"#{place.color}", out Color parsed))
+        {
+            placeColor = parsed;
+        }
+
+        target.TargetColor = placeColor;
         target.PlaceName = place.name;
         target.gpsLatitude = place.latitude;
         target.gpsLongitude = place.longitude;
@@ -1629,6 +1634,25 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     /// <summary>
     /// 즉시 데이터 새로고침 (업로드 성공 등 외부 호출용)
     /// </summary>
+    /// <summary>
+    /// 캐시 갱신 직후 FilterManager 재배분을 분산 호출
+    /// — Light cache 즉시 도달 / Detail API 응답 / 앵커 Tracking 도달 — 각 시점에 한 번씩
+    /// 백그라운드 복귀 시 IndicatorOnly만 남고 Full로 승격 못 하는 고착 상태 방지
+    /// </summary>
+    private IEnumerator StaggeredReallocation()
+    {
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filterMgr == null) yield break;
+
+        filterMgr.TriggerReallocation();
+
+        yield return new WaitForSeconds(1.5f);
+        if (filterMgr != null) filterMgr.TriggerReallocation();
+
+        yield return new WaitForSeconds(2.5f);
+        if (filterMgr != null) filterMgr.TriggerReallocation();
+    }
+
     public void RefreshData()
     {
         StopAllFetching();
@@ -1717,9 +1741,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(FetchLightCache(lat, lon));
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
 
-        // FilterManager에 즉시 재배분 트리거
-        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-        if (filterMgr != null) filterMgr.TriggerReallocation();
+        // FilterManager에 즉시 재배분 트리거 — 캐시 수신 타이밍 분산 (즉시 + 1.5s + 4s)
+        // 백그라운드 복귀 시 detailPendingIds 고착 / IndicatorOnly 영구 잔존 방지
+        StartCoroutine(StaggeredReallocation());
     }
 
     private IEnumerator WaitForARSessionAndFetchData()
@@ -1882,9 +1906,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(FetchLightCache(lat, lon));
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
 
-        // FilterManager에 즉시 재배분 트리거
-        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-        if (filterMgr != null) filterMgr.TriggerReallocation();
+        // FilterManager에 즉시 재배분 트리거 — 캐시 수신 타이밍 분산 (즉시 + 1.5s + 4s)
+        // 백그라운드 복귀 시 detailPendingIds 고착 / IndicatorOnly 영구 잔존 방지
+        StartCoroutine(StaggeredReallocation());
     }
 
     void OnDestroy()
