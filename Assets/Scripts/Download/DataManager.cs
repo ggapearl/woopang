@@ -79,7 +79,12 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     private Queue<GameObject> glbObjectPool = new Queue<GameObject>();
     private HashSet<int> currentlyLoadingGLB = new HashSet<int>();
     
-    [SerializeField] public int poolSize = 50;
+    [SerializeField] public int poolSize = 100;       // 호환용 (다른 곳에서 참조 — 이전 단일 풀 사이즈)
+    [Header("Object Pool Sizes")]
+    [Tooltip("Cube 프리팹 풀 사이즈")]
+    [SerializeField] public int cubePoolSize = 100;
+    [Tooltip("GLB 프리팹 풀 사이즈 (메모리 비용 큼 — cube보다 적게 권장)")]
+    [SerializeField] public int glbPoolSize = 50;
 
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터)")]
@@ -92,10 +97,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     public float objectSpawnDelay = 0.2f;
 
     [SerializeField] private float updateDistanceThreshold = 50f;
-
-    [Header("Object Spawn Radius")]
-    [Tooltip("이 거리(m) 이내만 3D 오브젝트 생성 + 이미지 다운로드. 밖은 좌표만 저장")]
-    [SerializeField] private float objectSpawnRadius = 400f;
 
     [Header("IndicatorOnly (FilterManager 배분 전용)")]
     [Tooltip("IndicatorOnly 프리팹 (Target 컴포넌트만 가진 경량 오브젝트) — FilterManager가 중앙 배분")]
@@ -229,8 +230,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             yield break;
         }
 
-        // Cube 오브젝트 풀 초기화 (5개씩 생성하고 프레임 양보)
-        for (int i = 0; i < poolSize; i++)
+        // Cube 오브젝트 풀 초기화 (cubePoolSize만큼, 5개씩 생성하고 프레임 양보)
+        for (int i = 0; i < cubePoolSize; i++)
         {
             GameObject cubeObj = Instantiate(cubePrefab, Vector3.zero, Quaternion.identity);
             cubeObj.SetActive(false);
@@ -239,8 +240,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             if (i % 5 == 4) yield return null; // 5개마다 프레임 양보
         }
 
-        // GLB 오브젝트 풀 초기화 (5개씩 생성하고 프레임 양보)
-        for (int i = 0; i < poolSize; i++)
+        // GLB 오브젝트 풀 초기화 (glbPoolSize만큼 — 메모리 비용 커서 cube보다 적게)
+        for (int i = 0; i < glbPoolSize; i++)
         {
             GameObject glbObj = Instantiate(glbPrefab, Vector3.zero, Quaternion.identity);
             glbObj.SetActive(false);
@@ -480,7 +481,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     /// </summary>
     private IEnumerator FetchLightCache(float lat, float lon)
     {
-        string url = string.Format("{0}?lat={1}&lon={2}&radius=10000&limit=100", ApiConfig.LOCATIONS_LIGHT, lat, lon);
+        string url = string.Format("{0}?lat={1}&lon={2}&radius=10000&limit=500", ApiConfig.LOCATIONS_LIGHT, lat, lon);
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -674,37 +675,13 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
                 yield break;
             }
 
-            // 새로운 데이터 저장 + objectSpawnRadius 이내만 3D 오브젝트 생성
-            int spawnedInTier = 0, skippedInTier = 0;
+            // 새로운 데이터 저장 — 3D 오브젝트 스폰은 FilterManager가 중앙에서 담당
+            // (DataManager는 데이터 보관소 역할만, 직접 스폰 안 함)
             foreach (PlaceData place in newPlaces)
             {
-                // 모든 데이터는 placeDataMap에 좌표/메타데이터 저장 (3D 생성 여부와 무관)
                 placeDataMap[place.id] = place;
                 loadedIds.Add(place.id);
-
-                // objectSpawnRadius 이내만 3D 오브젝트 생성 + 이미지 다운로드
-                float distToPlace = CalculateDistance(lat, lon, place.latitude, place.longitude);
-                if (distToPlace <= objectSpawnRadius && !spawnedObjects.ContainsKey(place.id))
-                {
-                    CreateObjectFromData(place);
-                    spawnedInTier++;
-
-                    if (objectCountUI != null)
-                    {
-                        objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), false);
-                    }
-
-                    if (objectSpawnDelay > 0)
-                    {
-                        yield return new WaitForSeconds(objectSpawnDelay);
-                    }
-                }
-                else
-                {
-                    skippedInTier++;
-                }
             }
-            // 마지막 Tier 완료 시 최종 업데이트
             if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
             {
                 objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), true);
@@ -721,39 +698,15 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     }
 
     /// <summary>
-    /// objectSpawnRadius × 1.5 밖의 3D 오브젝트를 풀로 반환 (placeDataMap은 유지)
-    /// MaxDisplayDistance × 1.5 밖의 데이터는 placeDataMap에서도 제거
+    /// 데이터 정리: MaxDisplayDistance × 1.5 밖의 placeDataMap 항목 제거
+    /// (3D 오브젝트 스폰/디스폰은 FilterManager가 중앙 관리하므로 여기서 처리하지 않음)
     /// </summary>
     private void CleanupStaleObjects(float lat, float lon)
     {
-        float objectCleanupRange = objectSpawnRadius * 1.5f;
         float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
         float dataCleanupRange = maxDist * 1.5f;
 
-        // 1) 3D 오브젝트 정리: objectSpawnRadius × 1.5 밖 → 풀 반환 (placeDataMap 유지)
-        List<int> objectsToRemove = new List<int>();
-        foreach (var kvp in spawnedObjects)
-        {
-            int id = kvp.Key;
-            if (!placeDataMap.ContainsKey(id)) continue;
-            PlaceData place = placeDataMap[id];
-            float dist = CalculateDistance(lat, lon, place.latitude, place.longitude);
-            if (dist > objectCleanupRange)
-            {
-                objectsToRemove.Add(id);
-            }
-        }
-
-        foreach (int id in objectsToRemove)
-        {
-            GameObject obj = spawnedObjects[id];
-            string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
-            spawnedObjects.Remove(id);
-            currentlyLoadingGLB.Remove(id);
-            ReturnToPool(obj, modelType);
-        }
-
-        // 2) 데이터 정리: MaxDisplayDistance × 1.5 밖 → placeDataMap에서도 제거
+        // 데이터 정리: MaxDisplayDistance × 1.5 밖 → placeDataMap에서도 제거
         List<int> dataToRemove = new List<int>();
         foreach (var kvp in placeDataMap)
         {
@@ -905,51 +858,22 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         float curLat = currentLocation.latitude;
         float curLon = currentLocation.longitude;
 
-        // 청크 단위로 처리
+        // 청크 단위로 placeDataMap만 채움 — 3D 스폰은 FilterManager가 담당
         const int CHUNK_SIZE = 5;
         for (int i = 0; i < places.Count; i += CHUNK_SIZE)
         {
             var chunk = places.Skip(i).Take(CHUNK_SIZE).ToList();
             foreach (PlaceData place in chunk)
             {
-                // 모든 데이터는 placeDataMap에 저장
                 placeDataMap[place.id] = place;
-
-                float dist = CalculateDistance(curLat, curLon, place.latitude, place.longitude);
 
                 if (spawnedObjects.ContainsKey(place.id))
                 {
-                    // 이미 오브젝트 있으면 데이터 업데이트
+                    // 이미 스폰된 오브젝트는 데이터만 업데이트
                     UpdateExistingObject(place, spawnedObjects[place.id]);
-                }
-                else if (dist <= objectSpawnRadius)
-                {
-                    // objectSpawnRadius 이내만 3D 오브젝트 생성
-                    CreateObjectFromData(place);
                 }
             }
             yield return null; // 프레임 양보
-        }
-
-        // objectSpawnRadius × 1.5 밖 오브젝트 풀로 반환 (placeDataMap 유지)
-        float cleanupRange = objectSpawnRadius * 1.5f;
-        List<int> toRemove = new List<int>();
-        foreach (var kvp in spawnedObjects)
-        {
-            if (!placeDataMap.ContainsKey(kvp.Key)) continue;
-            float dist = CalculateDistance(curLat, curLon, placeDataMap[kvp.Key].latitude, placeDataMap[kvp.Key].longitude);
-            if (dist > cleanupRange)
-            {
-                toRemove.Add(kvp.Key);
-            }
-        }
-        foreach (var id in toRemove)
-        {
-            GameObject obj = spawnedObjects[id];
-            string modelType = placeDataMap.ContainsKey(id) ? (placeDataMap[id].model_type ?? "cube") : "cube";
-            spawnedObjects.Remove(id);
-            currentlyLoadingGLB.Remove(id);
-            ReturnToPool(obj, modelType);
         }
     }
 
@@ -1598,6 +1522,32 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
                 }
             }
         }
+
+        // ★ IndicatorOnly도 동일하게 거리 필터 적용 + 활성화 복원
+        // (백그라운드 진입 시 SetAllObjectsVisible(false)로 비활성화된 상태에서 복원)
+        foreach (var kvp in indicatorOnlyObjects)
+        {
+            int id = kvp.Key;
+            GameObject obj = kvp.Value;
+            if (obj == null) continue;
+
+            // lightCache에서 좌표 찾기
+            string rawId = id.ToString();
+            CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);
+            if (cached == null) continue;
+
+            // IndicatorOnly는 카테고리 필터만 (거리 필터는 fullObjectRadius 밖에서 표시되는 게 정상)
+            float dist = CalculateDistance(currentLat, currentLon, cached.latitude, cached.longitude);
+            bool inRange = dist <= maxDistance;
+            if (!inRange)
+            {
+                if (obj.activeSelf) obj.SetActive(false);
+            }
+            else
+            {
+                if (!obj.activeSelf) obj.SetActive(true);
+            }
+        }
     }
 
     /// <summary>
@@ -1634,25 +1584,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     /// <summary>
     /// 즉시 데이터 새로고침 (업로드 성공 등 외부 호출용)
     /// </summary>
-    /// <summary>
-    /// 캐시 갱신 직후 FilterManager 재배분을 분산 호출
-    /// — Light cache 즉시 도달 / Detail API 응답 / 앵커 Tracking 도달 — 각 시점에 한 번씩
-    /// 백그라운드 복귀 시 IndicatorOnly만 남고 Full로 승격 못 하는 고착 상태 방지
-    /// </summary>
-    private IEnumerator StaggeredReallocation()
-    {
-        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-        if (filterMgr == null) yield break;
-
-        filterMgr.TriggerReallocation();
-
-        yield return new WaitForSeconds(1.5f);
-        if (filterMgr != null) filterMgr.TriggerReallocation();
-
-        yield return new WaitForSeconds(2.5f);
-        if (filterMgr != null) filterMgr.TriggerReallocation();
-    }
-
     public void RefreshData()
     {
         StopAllFetching();
@@ -1741,9 +1672,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(FetchLightCache(lat, lon));
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
 
-        // FilterManager에 즉시 재배분 트리거 — 캐시 수신 타이밍 분산 (즉시 + 1.5s + 4s)
-        // 백그라운드 복귀 시 detailPendingIds 고착 / IndicatorOnly 영구 잔존 방지
-        StartCoroutine(StaggeredReallocation());
+        // AllocationLoop가 10초 주기로 자동 재배분하므로 별도 트리거 불필요
+        // (StaggeredReallocation 제거 — RecreateAnchor 중복 호출 부작용 + 중복 부하)
     }
 
     private IEnumerator WaitForARSessionAndFetchData()
@@ -1882,11 +1812,24 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         }
     }
 
+    // 중복 호출 방지용 throttle (LoadingManager 여러 분기 + FilterManager 감속 리프레쉬가 동시 호출 가능)
+    private float _lastResumeFetchTime = -10f;
+    private const float RESUME_FETCH_THROTTLE = 2f; // 2초 안에 재호출 차단
+
     /// <summary>
     /// 백그라운드 복귀 후 데이터 갱신 + 위치 모니터링 재시작
     /// </summary>
     public void RestartFetchingAfterResume()
     {
+        // 2초 throttle — LoadingManager + FilterManager가 같은 시점에 호출해도 1번만 실행
+        float now = Time.realtimeSinceStartup;
+        if (now - _lastResumeFetchTime < RESUME_FETCH_THROTTLE)
+        {
+            // 2초 throttle — 중복 호출 무시
+            return;
+        }
+        _lastResumeFetchTime = now;
+
         StopAllFetching();
 
         float lat = lastPosition.x;
@@ -1906,9 +1849,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         StartCoroutine(FetchLightCache(lat, lon));
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
 
-        // FilterManager에 즉시 재배분 트리거 — 캐시 수신 타이밍 분산 (즉시 + 1.5s + 4s)
-        // 백그라운드 복귀 시 detailPendingIds 고착 / IndicatorOnly 영구 잔존 방지
-        StartCoroutine(StaggeredReallocation());
+        // AllocationLoop가 10초 주기로 자동 재배분하므로 별도 트리거 불필요
+        // (StaggeredReallocation 제거 — RecreateAnchor 중복 호출 부작용 + 중복 부하)
     }
 
     void OnDestroy()

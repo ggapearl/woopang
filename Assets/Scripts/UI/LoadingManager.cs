@@ -289,6 +289,11 @@ public class LoadingManager : MonoBehaviour
         {
             StopDotAnimation();
             HideLoadingUI();
+            // 환경 감지 비활성 경로 — Renderer 강제 복원 (영구 숨김 방지)
+            SetAllManagerRenderersVisible(true);
+            isBackgroundRecovering = false;
+            lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+            if (dataManager != null) dataManager.RestartFetchingAfterResume();
         }
     }
 
@@ -327,6 +332,10 @@ public class LoadingManager : MonoBehaviour
                 if (loadingPanel) loadingPanel.SetActive(false);
                 StopSpinner();
 
+                // ★ Tracking 정상화 → 백그라운드 진입 시 강제로 끈 Renderer/forceHide 해제
+                //   (이게 빠져 있으면 풀 오브젝트의 Renderer가 영원히 꺼진 상태로 남음)
+                SetAllManagerRenderersVisible(true);
+
                 // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
                 RestoreAllManagerObjects();
 
@@ -361,6 +370,9 @@ public class LoadingManager : MonoBehaviour
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
+
+        // ★ 타임아웃이어도 Renderer 해제 — 영구 숨김 방지
+        SetAllManagerRenderersVisible(true);
 
         // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
         RestoreAllManagerObjects();

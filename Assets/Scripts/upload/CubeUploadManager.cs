@@ -1569,7 +1569,7 @@ public class CubeUploadManager : MonoBehaviour
 
     /// <summary>
     /// 업로드 성공 후 AR 오브젝트 + PlaceList 즉시 새로고침
-    /// + 캐시 수신 후 FilterManager 즉시 재배분 트리거 (allocationInterval 2s 대기 우회)
+    /// + 캐시 수신 후 FilterManager 즉시 재배분 트리거 1회 (AllocationLoop가 이후 자동 처리)
     /// </summary>
     private IEnumerator RefreshDataAfterUpload(float delaySeconds)
     {
@@ -1582,12 +1582,8 @@ public class CubeUploadManager : MonoBehaviour
         if (plm != null)
             plm.UpdateUI();
 
-        // 캐시가 새로 들어오는 데 약간의 시간 필요 → 2회 분산 트리거
-        // (서버 응답 + 라이트 캐시 수신 타이밍 분산 — 둘 중 하나라도 잡힘)
-        yield return new WaitForSeconds(1.5f);
-        TriggerImmediateAllocation();
-
-        yield return new WaitForSeconds(2.5f);
+        // 라이트 캐시 수신 후 1회만 즉시 재배분 (이후는 AllocationLoop가 자동 처리)
+        yield return new WaitForSeconds(2f);
         TriggerImmediateAllocation();
     }
 

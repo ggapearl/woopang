@@ -46,7 +46,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
     private Dictionary<string, bool> currentFilters;
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
 
-    [SerializeField] public int poolSize = 10;
+    [SerializeField] public int poolSize = 50;
 
     [Header("Progressive Loading Settings")]
     [Tooltip("거리별 로딩 단계 (미터)")]

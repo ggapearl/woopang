@@ -966,18 +966,20 @@ public class FilterManager : MonoBehaviour
     // ============================================================
 
     [Header("Central Allocation")]
-    [Tooltip("Full 3D 오브젝트 최대 수")]
-    [SerializeField] private int maxFullObjects = 20;
-    [Tooltip("IndicatorOnly 경량 오브젝트 최대 수")]
-    [SerializeField] private int maxIndicatorObjects = 20;
+    [Tooltip("화면에 동시 표시되는 오브젝트 총 한도 (Full + IndicatorOnly 합계)")]
+    [SerializeField] private int maxTotalObjects = 16;
+    [Tooltip("Full 3D 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
+    [SerializeField] private int maxFullObjects = 16;
+    [Tooltip("IndicatorOnly 경량 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
+    [SerializeField] private int maxIndicatorObjects = 16;
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
     [SerializeField] private float fullObjectRadius = 500f;
     [Tooltip("IndicatorOnly 생성 반경 (m) — PlaceListManager.distanceSlider로 런타임 동기화됨")]
     [SerializeField] private float indicatorObjectRadius = 5000f;
-    [Tooltip("배분 갱신 주기 (초)")]
-    [SerializeField] private float allocationInterval = 2f;
+    [Tooltip("배분 갱신 주기 (초) — 도보 1.1m/s 기준 10초 = 11m 이동, 충분한 정밀도")]
+    [SerializeField] private float allocationInterval = 10f;
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
-    [SerializeField] private float cacheRefreshDistance = 5000f;
+    [SerializeField] private float cacheRefreshDistance = 1000f;
 
     [Header("Speed Tracking — LoadingManager fallback 판정용")]
     [Tooltip("속도 계산 이동 평균 윈도우 (초)")]
@@ -1204,36 +1206,40 @@ public class FilterManager : MonoBehaviour
 
         Dictionary<string, bool> filters = GetActiveFilters();
 
-        // 2) Full 후보: 필터 통과 + fullObjectRadius 이내
+        // 통합 예산 방식: 가까운 순으로 maxTotalObjects(16)개를 채움
+        // - fullObjectRadius(500m) 이내 → Full 우선 (단, maxFullObjects 한도)
+        // - 그 외 → IndicatorOnly (단, maxIndicatorObjects 한도)
+        // 가까운 곳에 풀이 다 차면 인디케이터는 0개, 가까운 곳이 부족하면 인디케이터로 채움
         HashSet<string> newFullSet = new HashSet<string>();
         Dictionary<string, IPlaceCacheProvider> fullProviderMap = new Dictionary<string, IPlaceCacheProvider>();
-
-        foreach (var item in allPlaces)
-        {
-            if (newFullSet.Count >= maxFullObjects) break;
-            if (item.distance > fullObjectRadius) continue;
-            if (!IsPassingFilter(item.data, filters)) continue;
-
-            newFullSet.Add(item.data.uniqueId);
-            fullProviderMap[item.data.uniqueId] = item.provider;
-        }
-
-        // 3) IndicatorOnly 후보: 매니저 토글만 적용 (세부 필터는 무시), Full 제외
         HashSet<string> newIndicatorSet = new HashSet<string>();
         Dictionary<string, IPlaceCacheProvider> indicatorProviderMap = new Dictionary<string, IPlaceCacheProvider>();
 
         foreach (var item in allPlaces)
         {
-            if (newIndicatorSet.Count >= maxIndicatorObjects) break;
-            if (newFullSet.Contains(item.data.uniqueId)) continue;
-            // 사용자가 설정한 표시 반경 밖은 IndicatorOnly도 제외 (PlaceListManager.distanceSlider 동기화)
+            // 총 한도 도달 → 종료
+            if (newFullSet.Count + newIndicatorSet.Count >= maxTotalObjects) break;
+
+            // 표시 반경 밖은 제외 (PlaceListManager.distanceSlider 동기화)
             if (item.distance > indicatorObjectRadius) continue;
 
-            // 매니저별 토글 체크 (publicData, subway, train, terminal OFF 시 제외)
-            if (!IsPassingManagerToggle(item.data, filters)) continue;
+            // fullObjectRadius 이내 + 세부 필터 통과 → Full 후보
+            if (item.distance <= fullObjectRadius
+                && newFullSet.Count < maxFullObjects
+                && IsPassingFilter(item.data, filters))
+            {
+                newFullSet.Add(item.data.uniqueId);
+                fullProviderMap[item.data.uniqueId] = item.provider;
+                continue;
+            }
 
-            newIndicatorSet.Add(item.data.uniqueId);
-            indicatorProviderMap[item.data.uniqueId] = item.provider;
+            // 그 외 → IndicatorOnly 후보 (매니저 토글만 적용)
+            if (newIndicatorSet.Count < maxIndicatorObjects
+                && IsPassingManagerToggle(item.data, filters))
+            {
+                newIndicatorSet.Add(item.data.uniqueId);
+                indicatorProviderMap[item.data.uniqueId] = item.provider;
+            }
         }
 
         // 4) Diff: 디스폰 → 스폰 순서로 처리
@@ -1360,15 +1366,20 @@ public class FilterManager : MonoBehaviour
             }
         }
 
-        // IndicatorOnly 스폰 (새로 추가된 것)
+        // IndicatorOnly 스폰
+        // - 새로 추가된 것 (currentIndicatorAllocations에 없음) → 스폰
+        // - 또는 set엔 있지만 실제 indicatorOnlyObjects엔 없는 고아 상태 → 재스폰
+        //   (백그라운드 복귀 시 GameObject가 풀로 반환됐는데 set은 stale한 케이스 방지)
         foreach (string id in newIndicatorSet)
         {
-            if (!currentIndicatorAllocations.Contains(id))
+            if (!indicatorProviderMap.TryGetValue(id, out var provider)) continue;
+
+            bool inAllocSet = currentIndicatorAllocations.Contains(id);
+            bool actuallySpawned = provider.GetSpawnedIndicatorIds().Contains(id);
+
+            if (!inAllocSet || !actuallySpawned)
             {
-                if (indicatorProviderMap.TryGetValue(id, out var provider))
-                {
-                    provider.SpawnIndicatorOnly(ExtractRawId(id));
-                }
+                provider.SpawnIndicatorOnly(ExtractRawId(id));
             }
         }
 
