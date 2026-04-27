@@ -1,0 +1,186 @@
+using UnityEngine;
+using UnityEngine.UI;
+
+// ============================================================
+// 업로드 페이지 InputField가 모바일 키보드와 겹치지 않도록
+// contentRoot를 위로 shift. focused InputField의 bottom edge가
+// 키보드 top과 딱 붙게 이동. DM 채팅용 MobileKeyboardHandler의
+// 업로드 전용 경량 버전 (확장/스크롤 없음, 단순 수직 이동만).
+// ============================================================
+public class UploadInputKeyboardShift : MonoBehaviour
+{
+    [Header("대상 설정")]
+    [Tooltip("위로 shift할 컨텐츠 루트 (null이면 이 GameObject의 RectTransform 사용)")]
+    [SerializeField] private RectTransform contentRoot;
+
+    [Tooltip("감시할 InputField 목록 (비어있으면 자식에서 자동 탐색)")]
+    [SerializeField] private InputField[] monitoredInputs;
+
+    [Header("동작 설정")]
+    [Tooltip("input bottom과 keyboard top 간 여백 (0=딱 붙음, 음수=겹침)")]
+    [SerializeField] private float bottomGap = 0f;
+
+    [Tooltip("iOS 키보드 위 시스템 toolbar(완료/취소 자동 표시 영역) 보정 (px) — 사이 빈 공간 방지")]
+    [SerializeField] private float iosToolbarCompensation = 60f;
+
+    [Tooltip("shift 애니메이션 속도 (클수록 빠름)")]
+    [SerializeField] private float lerpSpeed = 12f;
+
+    [Tooltip("최대 shift 거리 제한 (px, 0이면 제한없음)")]
+    [SerializeField] private float maxShiftPx = 0f;
+
+    // ─── 상태 ───
+    private Vector2 origAnchoredPos;
+    private bool initialized;
+    private Canvas parentCanvas;
+    private RectTransform canvasRect;
+    private float targetShift;
+    private int baselineVisibleBottom = -1;
+    private float lastJniErrorTime;
+
+    void OnEnable()
+    {
+        TryInitialize();
+        targetShift = 0f;
+        if (initialized) contentRoot.anchoredPosition = origAnchoredPos;
+    }
+
+    void OnDisable()
+    {
+        if (!initialized || contentRoot == null) return;
+        targetShift = 0f;
+        contentRoot.anchoredPosition = origAnchoredPos;
+    }
+
+    private void TryInitialize()
+    {
+        if (initialized) return;
+        if (contentRoot == null) contentRoot = transform as RectTransform;
+        if (contentRoot == null) return;
+
+        origAnchoredPos = contentRoot.anchoredPosition;
+        parentCanvas = contentRoot.GetComponentInParent<Canvas>();
+        if (parentCanvas != null) canvasRect = parentCanvas.GetComponent<RectTransform>();
+
+        if (monitoredInputs == null || monitoredInputs.Length == 0)
+            monitoredInputs = contentRoot.GetComponentsInChildren<InputField>(true);
+
+        initialized = true;
+    }
+
+    void Update()
+    {
+        if (!initialized) { TryInitialize(); if (!initialized) return; }
+
+        float kbH = GetKeyboardHeightCanvas();
+        InputField focused = GetFocusedMonitoredInput();
+
+        if (kbH > 0f && focused != null)
+        {
+            float required = ComputeRequiredShift(focused, kbH);
+            if (maxShiftPx > 0f) required = Mathf.Min(required, maxShiftPx);
+            targetShift = Mathf.Max(0f, required);
+        }
+        else
+        {
+            targetShift = 0f;
+        }
+
+        float current = contentRoot.anchoredPosition.y - origAnchoredPos.y;
+        float next = Mathf.Lerp(current, targetShift, Time.unscaledDeltaTime * lerpSpeed);
+        contentRoot.anchoredPosition = new Vector2(origAnchoredPos.x, origAnchoredPos.y + next);
+    }
+
+    private InputField GetFocusedMonitoredInput()
+    {
+        if (monitoredInputs == null) return null;
+        for (int i = 0; i < monitoredInputs.Length; i++)
+        {
+            var inp = monitoredInputs[i];
+            if (inp != null && inp.isFocused && inp.gameObject.activeInHierarchy) return inp;
+        }
+        return null;
+    }
+
+    private float ComputeRequiredShift(InputField inp, float keyboardCanvasHeight)
+    {
+        if (canvasRect == null) return 0f;
+
+        RectTransform inpRect = inp.transform as RectTransform;
+        if (inpRect == null) return 0f;
+
+        Vector3[] corners = new Vector3[4];
+        inpRect.GetWorldCorners(corners);
+
+        Vector2 localBottomLeft = canvasRect.InverseTransformPoint(corners[0]);
+        float inputBottomY = localBottomLeft.y + canvasRect.rect.height * canvasRect.pivot.y;
+
+        float keyboardTopY = keyboardCanvasHeight;
+        return (keyboardTopY + bottomGap) - inputBottomY;
+    }
+
+    private float GetKeyboardHeightCanvas()
+    {
+        float native = GetNativeKeyboardHeight();
+        if (native <= 0f) return 0f;
+        if (canvasRect != null)
+        {
+            float canvasH = canvasRect.rect.height;
+            return native * (canvasH / Screen.height);
+        }
+        return native;
+    }
+
+    private float GetNativeKeyboardHeight()
+    {
+#if UNITY_IOS
+        Rect area = TouchScreenKeyboard.area;
+        // iOS는 area에 시스템 toolbar(완료/취소 자동 표시)가 포함 안 되는 경우가 있어
+        // 키보드 top과 InputField 사이 빈 공간 발생. iosToolbarCompensation으로 보정.
+        return area.height > 0 ? area.height + iosToolbarCompensation : 0f;
+#elif UNITY_ANDROID
+        try
+        {
+            using (var up = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var act = up.GetStatic<AndroidJavaObject>("currentActivity"))
+            {
+                if (act == null) return 0f;
+                using (var win = act.Call<AndroidJavaObject>("getWindow"))
+                {
+                    if (win == null) return 0f;
+                    using (var decor = win.Call<AndroidJavaObject>("getDecorView"))
+                    {
+                        if (decor == null) return 0f;
+                        using (var rect = new AndroidJavaObject("android.graphics.Rect"))
+                        {
+                            decor.Call("getWindowVisibleDisplayFrame", rect);
+                            int visibleBottom = rect.Get<int>("bottom");
+                            if (baselineVisibleBottom < 0) baselineVisibleBottom = visibleBottom;
+                            int kbH = baselineVisibleBottom - visibleBottom;
+                            if (kbH > baselineVisibleBottom * 0.15f) return kbH;
+                            if (kbH <= 0) baselineVisibleBottom = visibleBottom;
+                        }
+                    }
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            if (Time.time - lastJniErrorTime > 5f)
+            {
+                Debug.LogWarning($"[UploadKbShift] JNI 오류: {e.GetType().Name}: {e.Message}");
+                lastJniErrorTime = Time.time;
+            }
+        }
+        return 0f;
+#else
+        return 0f;
+#endif
+    }
+
+    // ─── 외부 API ───
+    public void SetMonitoredInputs(InputField[] inputs)
+    {
+        monitoredInputs = inputs;
+    }
+}
