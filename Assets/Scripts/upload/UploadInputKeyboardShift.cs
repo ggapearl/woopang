@@ -20,8 +20,14 @@ public class UploadInputKeyboardShift : MonoBehaviour
     [Tooltip("input bottom과 keyboard top 간 여백 (0=딱 붙음, 음수=겹침)")]
     [SerializeField] private float bottomGap = 0f;
 
-    [Tooltip("iOS 키보드 위 시스템 toolbar(완료/취소 자동 표시 영역) 보정 (px) — 사이 빈 공간 방지")]
-    [SerializeField] private float iosToolbarCompensation = 60f;
+    [Tooltip("iOS 키보드 위 시스템 toolbar(완료/취소 자동 표시 영역) 보정 (px). area.y 기반 계산으로 자동 처리되지만, 디바이스별 미세조정 필요시 사용")]
+    [SerializeField] private float iosToolbarCompensation = 0f;
+
+    [Header("Editor 시뮬레이션 (iOS 키보드 미리보기)")]
+    [Tooltip("Editor에서 InputField가 포커스되면 이 값만큼 가짜 키보드 높이로 시뮬레이션 (실제 빌드는 무시)")]
+    [SerializeField] private float editorSimKeyboardHeight = 0f;
+    [Tooltip("Editor에서 항상 시뮬레이션 활성화 (포커스 없어도). 빠른 미리보기용.")]
+    [SerializeField] private bool editorSimAlways = false;
 
     [Tooltip("shift 애니메이션 속도 (클수록 빠름)")]
     [SerializeField] private float lerpSpeed = 12f;
@@ -133,11 +139,24 @@ public class UploadInputKeyboardShift : MonoBehaviour
 
     private float GetNativeKeyboardHeight()
     {
-#if UNITY_IOS
+#if UNITY_EDITOR
+        // Editor 시뮬레이션 — Inspector에서 editorSimKeyboardHeight 설정 시 가짜 키보드 표시
+        if (editorSimKeyboardHeight > 0f)
+        {
+            if (editorSimAlways) return editorSimKeyboardHeight;
+            // 포커스된 InputField가 있을 때만 시뮬레이션 (실제 동작에 가깝게)
+            if (GetFocusedMonitoredInput() != null) return editorSimKeyboardHeight;
+        }
+        return 0f;
+#elif UNITY_IOS
+        // iOS: TouchScreenKeyboard.area의 좌표는 좌하단 원점.
+        // 키보드 top 위치 = area.y + area.height (좌하단 기준)
+        // 화면에서 키보드가 차지하는 높이 = Screen.height - area.y
+        // → toolbar 포함된 진짜 키보드 영역 높이.
         Rect area = TouchScreenKeyboard.area;
-        // iOS는 area에 시스템 toolbar(완료/취소 자동 표시)가 포함 안 되는 경우가 있어
-        // 키보드 top과 InputField 사이 빈 공간 발생. iosToolbarCompensation으로 보정.
-        return area.height > 0 ? area.height + iosToolbarCompensation : 0f;
+        if (area.height <= 0) return 0f;
+        float kbHeight = Screen.height - area.y;
+        return Mathf.Max(area.height, kbHeight) + iosToolbarCompensation;
 #elif UNITY_ANDROID
         try
         {

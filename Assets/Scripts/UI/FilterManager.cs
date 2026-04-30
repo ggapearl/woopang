@@ -982,8 +982,12 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private float cacheRefreshDistance = 1000f;
 
     [Header("Speed Tracking — LoadingManager fallback 판정용")]
-    [Tooltip("속도 계산 이동 평균 윈도우 (초)")]
-    [SerializeField] private float speedAverageWindow = 5f;
+    [Tooltip("속도 계산 이동 평균 윈도우 (초) — 길수록 GPS 노이즈에 덜 민감, 짧을수록 반응 빠름")]
+    [SerializeField] private float speedAverageWindow = 15f;
+    [Tooltip("GPS 노이즈 필터 — 이 거리(m) 미만 변화는 무시 (정지/도보 시 좌표 떨림 제거)")]
+    [SerializeField] private float gpsNoiseThresholdMeters = 8f;
+    [Tooltip("Peak 속도 자동 감쇠율 (per second) — 이동 멈추면 peak가 점진적으로 줄어듦")]
+    [SerializeField] private float peakSpeedDecayPerSec = 2f;
 
     [Header("Slow-down Refresh — 감속 시 위치 재검토")]
     [Tooltip("이 속도(km/h) 미만으로 감속 시 한 번 리프레쉬 (차량/지하철 하차 후 정확한 위치 재동기화)")]
@@ -1002,6 +1006,8 @@ public class FilterManager : MonoBehaviour
     // 감속 리프레쉬 상태
     private float peakSpeedKmh = 0f;            // 최근 관측된 피크 속도 (감속 판정 기준)
     private float lastSlowRefreshTime = -999f;  // 마지막 감속 리프레쉬 시각
+    private float lastPeakUpdateTime = -1f;     // peak 마지막 갱신 시각 (감쇠 계산용)
+    private Vector2 lastValidGpsPosition = Vector2.zero; // GPS 노이즈 필터용 마지막 유효 위치
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
     private HashSet<string> currentFullAllocations = new HashSet<string>();
@@ -1123,6 +1129,27 @@ public class FilterManager : MonoBehaviour
     {
         float now = Time.realtimeSinceStartup;
 
+        // === GPS 노이즈 필터 ===
+        // 직전 유효 위치와 gpsNoiseThresholdMeters 미만 차이는 노이즈로 판정
+        // → lastValidGpsPosition 그대로 유지 + 0속도로 처리 (정지/도보 시 좌표 떨림 무시)
+        if (lastValidGpsPosition == Vector2.zero)
+        {
+            lastValidGpsPosition = gps;
+        }
+        else
+        {
+            float diffMeters = CalculateGPSDistance(lastValidGpsPosition.x, lastValidGpsPosition.y, gps.x, gps.y);
+            if (diffMeters < gpsNoiseThresholdMeters)
+            {
+                // 노이즈 — 샘플 큐에는 마지막 유효 위치를 추가 (실제 이동 0)
+                gps = lastValidGpsPosition;
+            }
+            else
+            {
+                lastValidGpsPosition = gps;
+            }
+        }
+
         gpsSamples.Enqueue((now, gps.x, gps.y));
         while (gpsSamples.Count > 0 && now - gpsSamples.Peek().time > speedAverageWindow)
             gpsSamples.Dequeue();
@@ -1139,6 +1166,18 @@ public class FilterManager : MonoBehaviour
             }
         }
         cachedSpeedKmh = speedKmh;
+
+        // === Peak 자동 감쇠 ===
+        // 멈춰있어도 peakSpeedKmh가 영원히 안 줄어드는 문제 해결.
+        // peakSpeedDecayPerSec 만큼 매 초 감소시키되, 현재 속도보다는 안 내려감.
+        if (lastPeakUpdateTime < 0f) lastPeakUpdateTime = now;
+        float dt = now - lastPeakUpdateTime;
+        lastPeakUpdateTime = now;
+        if (peakSpeedKmh > 0f && peakSpeedDecayPerSec > 0f)
+        {
+            float decayed = peakSpeedKmh - peakSpeedDecayPerSec * dt;
+            peakSpeedKmh = Mathf.Max(decayed, Mathf.Max(0f, speedKmh));
+        }
 
         // === 감속 리프레쉬 판정 ===
         // 조건: 피크가 slowRefreshRequiredPeakKmh 이상 → 현재 slowRefreshThresholdKmh 미만으로 진입
