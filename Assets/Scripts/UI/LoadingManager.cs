@@ -235,9 +235,24 @@ public class LoadingManager : MonoBehaviour
         Debug.Log($"[BG-iOS-DBG] HandleRecovery 진입 needFullReload={needFullReload} currentTracking={currentTrackingState}");
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
-            Debug.Log($"[BG-iOS-DBG] 경량복구 (Tracking 유지) → RestartFetchingAfterResume only");
+            Debug.Log($"[BG-iOS-DBG] 경량복구 (Tracking 유지) → SetAllRenderers(true) + RestoreObjects + RetryAnchors + RestartFetching");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
+
+            // 백그라운드 진입 직전 fallback/forceHide로 꺼진 Renderer/SetActive 복원
+            // (경량복구 경로에서도 반드시 복원해야 풀 오브젝트가 보임)
+            SetAllManagerRenderersVisible(true);
+            RestoreAllManagerObjects();
+
+            // 트래킹은 유지됐어도 ARSession 일시 중단 동안 anchor가 망가졌을 수 있음 — 실패한 것만 재시도
+            ForceRetryAllAnchors();
+
+            // fallback 모드 중이었다면 명시적 해제
+            OffScreenIndicator osiLight = GetCachedOSI();
+            if (osiLight != null && osiLight.IsFallbackMode)
+            {
+                osiLight.EnableFallbackMode(false, reason: "BgRecover_Light");
+            }
 
             // DataManager 데이터 갱신 + 위치 모니터링 재시작
             if (dataManager != null)
