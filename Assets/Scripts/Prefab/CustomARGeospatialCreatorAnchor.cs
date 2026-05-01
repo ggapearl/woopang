@@ -88,6 +88,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 #if UNITY_EDITOR
         return;
 #else
+        Debug.Log($"[BG-iOS-DBG] {gameObject.name} RecreateAnchor 호출 (anchorCreated={_anchorCreated}, forceHide={_forceHideRenderers}, hasBeenTracking={_hasBeenTracking})");
         if (retryCoroutine != null) { StopCoroutine(retryCoroutine); retryCoroutine = null; }
         if (reattachLerpCoroutine != null) { StopCoroutine(reattachLerpCoroutine); reattachLerpCoroutine = null; }
 
@@ -141,6 +142,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             transform.localPosition = Vector3.zero;
             transform.localRotation = Quaternion.identity;
             _anchorCreated = true;
+            Debug.Log($"[BG-iOS-DBG] {gameObject.name} AddAnchor 성공 retry={_retryCount}");
             // 렌더러 표시는 Update()가 anchor.trackingState == Tracking 시점에 처리
             return true;
         }
@@ -211,6 +213,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             if (!_hasBeenTracking)
             {
                 _hasBeenTracking = true;
+                Debug.Log($"[BG-iOS-DBG] {gameObject.name} 최초 Tracking 도달 (forceHide={_forceHideRenderers}) → SetVisible({!_forceHideRenderers})");
                 if (!_forceHideRenderers) SetVisible(true);
             }
         }
@@ -281,7 +284,13 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         else if (_anchorCreated && _hasBeenTracking)
         {
             // freeze 중이든 아니든 이미 world pos가 유효하므로 즉시 복원
+            Debug.Log($"[BG-iOS-DBG] {gameObject.name} SetForceHideRenderers(false) → SetVisible(true) (anchorCreated={_anchorCreated}, hasBeenTracking={_hasBeenTracking})");
             SetVisible(true);
+        }
+        else
+        {
+            // anchor가 아직 준비 안 됨 — Update에서 Tracking 도달 시 자동으로 켜짐
+            Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} SetForceHideRenderers(false) 호출됐지만 anchor 미준비 (anchorCreated={_anchorCreated}, hasBeenTracking={_hasBeenTracking}) → SetVisible 보류");
         }
     }
 

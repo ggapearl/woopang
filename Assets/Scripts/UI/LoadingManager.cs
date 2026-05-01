@@ -174,6 +174,7 @@ public class LoadingManager : MonoBehaviour
         // 에디터에서는 포커스 변경 시마다 OnApplicationPause가 호출되므로 background recovery 건너뜀
         return;
 #else
+        Debug.Log($"[BG-iOS-DBG] OnApplicationPause paused={pauseStatus} wasInBg={wasInBackground} enableDet={enableBackgroundRecoveryDetection} isRec={isBackgroundRecovering} ts={arSession?.subsystem?.trackingState}");
         if (pauseStatus)
         {
             wasInBackground = true;
@@ -185,7 +186,12 @@ public class LoadingManager : MonoBehaviour
             if (!isBackgroundRecovering &&
                 Time.realtimeSinceStartup - lastBackgroundRecoveryTime > BACKGROUND_RECOVERY_COOLDOWN)
             {
+                Debug.Log($"[BG-iOS-DBG] HandleBackgroundRecovery 시작");
                 StartCoroutine(HandleBackgroundRecovery());
+            }
+            else
+            {
+                Debug.LogWarning($"[BG-iOS-DBG] HandleBackgroundRecovery 스킵 (isRec={isBackgroundRecovering}, lastRecAgo={(Time.realtimeSinceStartup - lastBackgroundRecoveryTime):F1}s, cooldown={BACKGROUND_RECOVERY_COOLDOWN}s)");
             }
         }
 #endif
@@ -220,8 +226,10 @@ public class LoadingManager : MonoBehaviour
         //      단, DataManager 데이터 갱신은 반드시 실행 (백그라운드 중 위치 변동 반영)
         // ============================================================
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
+        Debug.Log($"[BG-iOS-DBG] HandleRecovery 진입 needFullReload={needFullReload} currentTracking={currentTrackingState}");
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
+            Debug.Log($"[BG-iOS-DBG] 경량복구 (Tracking 유지) → RestartFetchingAfterResume only");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
 
@@ -232,6 +240,7 @@ public class LoadingManager : MonoBehaviour
             }
             yield break;
         }
+        Debug.Log($"[BG-iOS-DBG] 풀 복구 진행 (tracking={currentTrackingState}) → SetAllRenderers(false) + WaitForTrackingRecovery");
 #endif
 
         // 1. 3D 렌더러 즉시 숨김 (앵커 미복구 상태에서 프리팹이 카메라 앞에 보이는 것 방지)
@@ -320,6 +329,7 @@ public class LoadingManager : MonoBehaviour
     {
         float maxWait = 15f;
         float waited = 0f;
+        Debug.Log($"[BG-iOS-DBG] WaitForTrackingRecoveryAndCleanup 진입 (maxWait={maxWait}s)");
 
         while (waited < maxWait)
         {
@@ -327,6 +337,8 @@ public class LoadingManager : MonoBehaviour
 
             if (ts == TrackingState.Tracking)
             {
+                Debug.Log($"[BG-iOS-DBG] Tracking 도달 (waited={waited:F1}s) → SetAllRenderers(true) + RestoreObjects + RetryAnchors");
+
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
@@ -338,6 +350,10 @@ public class LoadingManager : MonoBehaviour
 
                 // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
                 RestoreAllManagerObjects();
+
+                // ★ anchor 재시도 즉시 트리거 (iOS는 ARSession 재시작 후 currentAnchor가 망가져 있음)
+                //   FilterManager.AllocationLoop가 10초 주기라 그동안 풀 오브젝트가 안 보이는 문제 해결
+                ForceRetryAllAnchors();
 
                 if (needFullReload)
                 {
@@ -367,6 +383,7 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃 시에도 처리 (무한 숨김 방지)
+        Debug.LogWarning($"[BG-iOS-DBG] Tracking 복구 타임아웃 ({maxWait}s) → 강제 SetAllRenderers(true) + RestoreObjects + RetryAnchors (마지막 ts={arSession?.subsystem?.trackingState})");
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
@@ -376,6 +393,9 @@ public class LoadingManager : MonoBehaviour
 
         // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
         RestoreAllManagerObjects();
+
+        // ★ 타임아웃이어도 anchor 재시도 (트래킹 복구 가능성 살림)
+        ForceRetryAllAnchors();
 
         if (needFullReload && dataManager != null)
         {
@@ -1301,6 +1321,20 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (TerminalManager.Instance != null) TerminalManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
+    }
+
+    /// <summary>
+    /// 백그라운드 복귀 시 ARSession 재시작으로 망가진 anchor를 즉시 재시도.
+    /// AllocationLoop(10초 주기)를 기다리지 않고 트래킹 복구 직후 호출하여 풀 오브젝트
+    /// 표시 지연 최소화.
+    /// </summary>
+    private void ForceRetryAllAnchors()
+    {
+        if (dataManager != null) dataManager.RetryFailedAnchors();
+        if (TourAPIManager.Instance != null) TourAPIManager.Instance.RetryFailedAnchors();
+        if (SubwayManager.Instance != null) SubwayManager.Instance.RetryFailedAnchors();
+        if (TerminalManager.Instance != null) TerminalManager.Instance.RetryFailedAnchors();
+        if (TrainStationManager.Instance != null) TrainStationManager.Instance.RetryFailedAnchors();
     }
 
     void HideARGuidance()
