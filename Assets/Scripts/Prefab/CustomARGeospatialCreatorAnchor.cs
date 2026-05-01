@@ -27,6 +27,10 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private const float REATTACH_LERP_DURATION = 0.3f; // 재부착 후 부드러운 보정 시간
     private Coroutine reattachLerpCoroutine;
 
+    // 진단용 — Update 로그 throttle (모든 프레임 로그하면 폭주)
+    private float _lastDiagLogTime = -10f;
+    private TrackingState _lastLoggedState = TrackingState.None;
+
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
 #if UNITY_EDITOR
@@ -184,6 +188,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         if (!_anchorCreated) return;
         if (currentAnchor == null)
         {
+#if !UNITY_EDITOR
+            Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} currentAnchor null → 재앵커링 유도, SetVisible(false)");
+#endif
             // 앵커가 외부에서 파괴됨 → 재앵커링 유도
             _anchorCreated = false;
             _isFrozen = false;
@@ -193,6 +200,15 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         }
 
         TrackingState state = currentAnchor.trackingState;
+
+#if !UNITY_EDITOR
+        // 트래킹 상태 변경 시 로그 (state 전환 시 1회)
+        if (state != _lastLoggedState)
+        {
+            Debug.Log($"[BG-iOS-DBG] {gameObject.name} TrackingState 변경 {_lastLoggedState}→{state} (frozen={_isFrozen}, hasBeenTracking={_hasBeenTracking}, forceHide={_forceHideRenderers})");
+            _lastLoggedState = state;
+        }
+#endif
 
         if (state == TrackingState.Tracking)
         {
@@ -241,6 +257,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             if (_isFrozen && _limitedSince > 0f &&
                 Time.realtimeSinceStartup - _limitedSince > LIMITED_BUFFER)
             {
+#if !UNITY_EDITOR
+                Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} Limited 10s 초과 → 앵커 포기 + SetVisible(false)");
+#endif
                 _anchorCreated = false;
                 _isFrozen = false;
                 _limitedSince = -1f;
@@ -301,7 +320,24 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private void SetVisible(bool visible)
     {
         Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+#if !UNITY_EDITOR
+        Debug.Log($"[BG-iOS-DBG] {gameObject.name} SetVisible({visible}) renderers={renderers.Length} active={gameObject.activeInHierarchy} pos={transform.position}");
+#endif
         foreach (var r in renderers)
             r.enabled = visible;
+    }
+
+    void OnEnable()
+    {
+#if !UNITY_EDITOR
+        Debug.Log($"[BG-iOS-DBG] {gameObject.name} OnEnable anchorCreated={_anchorCreated} hasBeenTracking={_hasBeenTracking} forceHide={_forceHideRenderers}");
+#endif
+    }
+
+    void OnDisable()
+    {
+#if !UNITY_EDITOR
+        Debug.Log($"[BG-iOS-DBG] {gameObject.name} OnDisable anchorCreated={_anchorCreated} hasBeenTracking={_hasBeenTracking}");
+#endif
     }
 }
