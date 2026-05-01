@@ -1207,10 +1207,30 @@ public class FilterManager : MonoBehaviour
     private void TriggerSlowdownRefresh()
     {
         LoadingManager loadingMgr = UnityEngine.Object.FindFirstObjectByType<LoadingManager>();
-        if (loadingMgr != null && loadingMgr.IsBackgroundRecovering) return;
+        if (loadingMgr != null)
+        {
+            if (loadingMgr.IsBackgroundRecovering) return;
+            // 백그라운드 복귀 직후 30초 이내면 스킵 — 복귀 중 GPS 노이즈가 가짜 감속을 유발하는 문제 방지
+            if (loadingMgr.TimeSinceLastBackgroundRecovery < 30f) return;
+        }
 
         DataManager dm = UnityEngine.Object.FindFirstObjectByType<DataManager>(FindObjectsInactive.Include);
         if (dm != null) dm.RestartFetchingAfterResume();
+    }
+
+    /// <summary>
+    /// 백그라운드 복귀 시 LoadingManager에서 호출 — GPS 샘플 큐 + peak 속도 리셋
+    /// 백그라운드 진입 중 끊긴 GPS가 복귀 시 가짜 감속을 유발하는 문제 방지
+    /// </summary>
+    public void ResetSpeedTracking()
+    {
+        gpsSamples.Clear();
+        peakSpeedKmh = 0f;
+        cachedSpeedKmh = -1f;
+        lastValidGpsPosition = Vector2.zero;
+        lastPeakUpdateTime = -1f;
+        // 쿨다운도 리셋해서 복귀 직후 정당한 감속이 와도 30초 cooldown 위에 추가로 막진 않음
+        // (TriggerSlowdownRefresh의 TimeSinceLastBackgroundRecovery 가드가 우선)
     }
 
     /// <summary>

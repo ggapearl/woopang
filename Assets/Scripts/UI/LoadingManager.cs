@@ -105,6 +105,7 @@ public class LoadingManager : MonoBehaviour
     private bool wasInBackground = false;
     private bool isBackgroundRecovering = false; // HandleBackgroundRecovery 진행 중 플래그
     public bool IsBackgroundRecovering => isBackgroundRecovering;
+    public float TimeSinceLastBackgroundRecovery => Time.realtimeSinceStartup - lastBackgroundRecoveryTime;
     private float lastBackgroundRecoveryTime = -10f; // 마지막 복구 완료 시각 (쿨다운용)
     private const float BACKGROUND_RECOVERY_COOLDOWN = 3f; // 복구 후 3초 이내 재실행 방지
     private Coroutine dotAnimationCoroutine;
@@ -200,6 +201,11 @@ public class LoadingManager : MonoBehaviour
     IEnumerator HandleBackgroundRecovery()
     {
         isBackgroundRecovering = true;
+
+        // 백그라운드 진입 중 끊긴 GPS 샘플로 인한 가짜 감속 트리거 방지
+        FilterManager fm = UnityEngine.Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (fm != null) fm.ResetSpeedTracking();
+
         // ============================================================
         // 0. GPS 위치 변동 체크 — 200m 이상 이동 시 전체 재로드 필요 판단
         // ============================================================
