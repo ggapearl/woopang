@@ -441,6 +441,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
             var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor == null) continue;
             if (anchor.IsAnchorCreated) continue;
+            if (anchor.IsRetrying) continue;
 
             anchor.RecreateAnchor();
         }

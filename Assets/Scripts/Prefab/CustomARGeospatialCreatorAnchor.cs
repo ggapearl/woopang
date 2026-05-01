@@ -11,6 +11,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private double _lat, _lon, _alt;
     private bool _anchorCreated = false;
     public bool IsAnchorCreated => _anchorCreated;
+    public bool IsRetrying => retryCoroutine != null;
     private int _retryCount = 0;
     private const int MAX_RETRIES = 120; // 최대 120회 (약 2분) — Earth 초기화 대기 충분
     private Coroutine retryCoroutine;

@@ -1449,6 +1449,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (anchor == null) continue;
             if (anchor.IsAnchorCreated) continue;
+            if (anchor.IsRetrying) continue; // 이미 재시도 코루틴 실행 중이면 건드리지 않음
 
             anchor.RecreateAnchor();
         }
