@@ -1423,8 +1423,11 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             if (!kvp.Value.activeSelf) continue;
 
             var anchor = kvp.Value.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
-            if (anchor != null)
-                anchor.RecreateAnchor();
+            if (anchor == null) continue;
+            if (anchor.IsAnchorCreated) continue;
+            if (anchor.IsRetrying) continue;
+
+            anchor.RecreateAnchor();
         }
     }
 
