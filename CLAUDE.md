@@ -1,226 +1,54 @@
 # WOOPANG 프로젝트 작업 가이드
 
-> Claude Code가 이 프로젝트에서 작업할 때 참고하는 가이드라인
-> 새 대화 시작 시 자동으로 읽힘
-
----
-
 ## 1. 프로젝트 개요
-
-- **프로젝트**: WOOPANG - AR 기반 SNS 앱 (Unity)
+- **프로젝트**: WOOPANG - AR 기반 SNS 앱 (Unity 6000.3.13f1)
 - **회사명**: 쾌엔터테인먼트 (QUE. ENT)
-- **타겟**: 100만~1000만 사용자 규모
+- **타겟**: 100만~1000만 사용자 규모, 모바일 (iOS/Android)
 - **상태**: 개발 중 (앱서비스 활성화 전)
-- **폰트**: AppleSDGothicNeoM.ttf (모든 UI에 적용)
 
-### 1.1 회사명 표기 규칙 (필수)
-```
-⚠️ 중요: 기획안/제안서/웹페이지 작성 시 회사명 표기 통일
-
-사용할 이름:
-- 한국어 페이지 상단/본문: "QUE. ENT"
-- 영어/다국어 페이지 상단/본문: "QUE. ENT"
-- 푸터(하단 저작권): "쾌엔터테인먼트" (한국어), "KWAE Entertainment" (영어) — 풀네임 유지
-
-사용하지 말 것:
-- ❌ "쾌ENT" → ✅ "QUE. ENT"
-- ❌ 본문/상단에 "쾌엔터테인먼트" 풀네임 사용 (푸터만 가능)
-- ❌ "KWAE ENT" → ✅ "QUE. ENT"
-- ❌ "QUE Entertainment" → ✅ "QUE. ENT" (본문), "쾌엔터테인먼트" (푸터)
-```
+### 회사명 표기 규칙 (필수)
+- 본문/상단: **"QUE. ENT"** (한국어/영어 모두)
+- 푸터(저작권): **"쾌엔터테인먼트"** (한국어), **"KWAE Entertainment"** (영어)
+- ❌ 금지: "쾌ENT", "KWAE ENT", "QUE Entertainment"
 
 ---
 
 ## 2. 핵심 작업 원칙
 
-### 2.1 개발 방향
-```
-- 단순하게 X → 사용자 친화적으로 꼼꼼하게
-- 필요한 기능/로직을 충분히 갖추도록 작업
-- 대규모 사용자를 고려한 안정적인 구조
-- 복잡하더라도 완성도 높게
-```
-
-### 2.2 기존 코드 존중
-```
-⚠️ 중요: 기존에 잘 작동하는 로직은 함부로 삭제/변경 금지
-- 기존 기능 안에서 추가/개선하는 방향
-- 삭제가 필요하면 반드시 먼저 제안
+### 2.1 기존 코드 존중 (중요)
+- 기존에 잘 작동하는 로직은 함부로 삭제/변경 금지
+- 삭제가 필요하면 **반드시 먼저 제안**
 - 수정 시 기존 기능이 초기화되지 않도록 주의
-```
 
-### 2.3 완전한 작업 수행
-```
-⚠️ 중요: 로직 작업 시 UI 오브젝트까지 생성하고 연결 완료해야 함
+### 2.2 완전한 작업 수행
+로직 작업 시 UI 오브젝트까지 생성하고 연결 완료해야 함:
+1. 스크립트 생성/수정
+2. 에디터 스크립트로 UI 오브젝트 생성 (`Assets/Scripts/Editor/`)
+3. 컴포넌트 연결, Inspector 필드 연결
+4. 누락된 참조 체크 (AutoConnectFields 패턴)
 
-Claude가 해야 할 것:
-1. 스크립트 생성/수정 (로직 구현)
-2. 에디터 스크립트로 UI 오브젝트 생성 (Assets/Scripts/Editor/)
-3. 컴포넌트 연결 (스크립트 → 게임오브젝트)
-4. Inspector 필드 → 오브젝트 연결
-5. 누락된 참조 체크 (AutoConnectFields 패턴 사용)
-6. Play 모드 또는 씬 로드 시 정상 동작 확인
-```
-
-### 2.4 코드 품질
-```
-지양:
-- 불필요한 Debug.Log
-- 과도한 주석
-- 사용하지 않는 코드
-
-지향:
-- 깔끔하고 정리된 코드
-- 필수적인 에러 로그만 유지
-- 재사용 가능한 구조
-```
-
-### 2.5 적극적인 제안
-```
-언제든 제안 환영:
-- 개선할 로직/기능
-- 추가할 UI 요소
-- 더 나은 사용자 경험
-- 성능 최적화 방안
-```
+### 2.3 코드 품질
+- 지양: 불필요한 Debug.Log, 과도한 주석, 미사용 코드
+- 지향: 깔끔한 코드, 필수 에러 로그만, 재사용 가능 구조
+- 폰트: `AppleSDGothicNeoM.ttf` (모든 UI)
 
 ---
 
-## 3. UI/디자인 성향
+## 3. 작업별 상세 가이드 (해당 작업 시 반드시 읽을 것)
 
-### 3.1 일반 원칙
-```
-- 과하지 않고 심플하게
-- 느리고 부드러운 애니메이션
-- 고급스럽고 프리미엄한 느낌
-- 모든 상황/각도에서 동작하는 완성도
-```
-
-### 3.2 애니메이션 속도 기준
-| 유형 | 선호 속도 |
-|------|-----------|
-| 호버 효과 | 0.2s ~ 0.4s |
-| 페이드 인/아웃 | 1s ~ 5s (느리게) |
-| 반복 애니메이션 | 10s ~ 25s 주기 |
-| 배경 색상 움직임 | 매우 느리게 |
-
-### 3.3 시각적 효과 선호
-```
-선호:
-✓ 글로우/빛 번짐 효과
-✓ 그라데이션 배경
-✓ 부드러운 그림자
-✓ 미묘한 패럴랙스
-✓ 호버 시 자연스러운 확대/강조
-
-비선호:
-✗ 급격한 색상 변화
-✗ 과도한 바운스 효과
-✗ 요란한 알림음
-✗ 번쩍임 효과
-```
-
-### 3.4 폰트 설정
-```csharp
-// 모든 UI에 적용
-Font: AppleSDGothicNeoM.ttf
-경로: Assets/Fonts/AppleSDGothicNeoM.ttf
-
-// 코드에서 로드
-Font customFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
-```
-
----
-
-## 4. 코드 작성 스타일
-
-### 4.1 구조 선호
-```csharp
-// ============================================================
-// 섹션 제목 - 영어/한국어 병행
-// ============================================================
-
-// 설정값은 상단에 모아두기
-[Header("설정")]
-public float animationDuration = 2f;
-public float fadeTime = 3f;
-```
-
-### 4.2 에러 처리
-```csharp
-// 조용한 실패 처리 선호 (사용자에게 불필요한 에러 노출 지양)
-try {
-    riskyOperation();
-} catch(e) {
-    Debug.LogWarning($"[클래스명] 처리 실패: {e.Message}");
-    // fallback 동작
-}
-```
-
-### 4.3 Null 체크 패턴
-```csharp
-// 필드 연결 확인 필수
-if (targetField == null)
-{
-    Debug.LogError($"[클래스명] targetField가 null입니다! 인스펙터에서 연결 필요");
-    return;
-}
-```
-
----
-
-## 5. 체크리스트
-
-### 작업 전 확인
-```
-[ ] 기존 코드 먼저 읽었는가?
-[ ] 기존 기능에 영향 없는가?
-[ ] 삭제할 코드가 있다면 먼저 제안했는가?
-```
-
-### 작업 중 확인
-```
-[ ] 모든 필드 참조가 연결되어 있는가?
-[ ] null 체크가 충분한가?
-[ ] AppleSDGothicNeoM 폰트를 적용했는가?
-[ ] 불필요한 Debug.Log를 제거했는가?
-[ ] UI 사이즈가 하드코딩 없이 Inspector에서 조절 가능한가?
-```
-
-### 작업 후 확인
-```
-[ ] 모든 상황에서 동작하는가?
-[ ] 엣지 케이스를 고려했는가?
-[ ] 추가로 개선할 점이 있는가? (있다면 제안)
-```
-
----
-
-## 6. 키워드 정리
-
-```
-#꼼꼼함 #디테일 #부드러움 #심플함 #고급스러움
-#모든각도 #엣지케이스 #직관적 #재사용가능
-#느린애니메이션 #조용한사운드 #패럴랙스
-#글로우효과 #호버피드백 #모바일대응
-#대규모사용자 #안정성 #완성도
-```
-
----
-
-## 7. 작업별 상세 가이드 (해당 작업 시 반드시 읽을 것)
-
-| 작업 유형 | 참조 파일 | 언제 읽나 |
-|-----------|-----------|-----------|
-| Unity 앱 개발 (UI/에디터/프리팹/매니저) | [docs/claude/unity-app.md](docs/claude/unity-app.md) | Unity 스크립트/UI 작업 시 |
-| Git 커밋/푸시 | [docs/claude/git-rules.md](docs/claude/git-rules.md) | 커밋 요청 시 |
-| 마케팅/캠페인/광고 | [docs/claude/marketing.md](docs/claude/marketing.md) | 마케팅 자료 작업 시 |
-| 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) | DB 장소 등록 작업 시 |
-| 기획안/제안서 HTML | [docs/claude/proposals.md](docs/claude/proposals.md) | 기획안/제안서 작성 시 |
-| 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) | 서버 설정/인프라 작업 시 |
+| 작업 유형 | 참조 파일 |
+|-----------|-----------|
+| Unity 앱 개발 (UI/에디터/프리팹/매니저/스타일) | [docs/claude/unity-app.md](docs/claude/unity-app.md) |
+| **AR 오브젝트 스폰 / 백그라운드 복귀 / 가시성 (필독)** | **[docs/claude/ar-object-spawn.md](docs/claude/ar-object-spawn.md)** |
+| Git 커밋/푸시 | [docs/claude/git-rules.md](docs/claude/git-rules.md) |
+| 마케팅/캠페인/광고 | [docs/claude/marketing.md](docs/claude/marketing.md) |
+| 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) |
+| 기획안/제안서 HTML | [docs/claude/proposals.md](docs/claude/proposals.md) |
+| 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
+| MCP Unity (Claude ↔ Unity Editor) | [docs/claude/mcp-unity.md](docs/claude/mcp-unity.md) |
 
 ⚠️ 해당 작업을 할 때만 관련 파일을 읽을 것. 불필요한 파일은 읽지 않는다.
 
 ---
 
-*최종 업데이트: 2026-04-02 (상세 가이드 분리 — docs/claude/)*
+*최종 업데이트: 2026-05-01 (슬림화 — UI/디자인/코드스타일/MCP는 docs/claude/로 이동)*
