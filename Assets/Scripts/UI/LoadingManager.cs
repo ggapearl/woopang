@@ -541,6 +541,9 @@ public class LoadingManager : MonoBehaviour
             }
             else
             {
+                // ★ fallback 진입 시 SetForceHideRenderers(true)로 박힌 상태를 명시적으로 해제
+                //   (이게 빠지면 트래킹 복구 후에도 풀 오브젝트가 영원히 숨겨진 채로 남음)
+                SetAllManagerRenderersVisible(true);
                 RestoreAllManagerObjects();
                 // 앵커 재생성은 FilterManager.AllocationLoop의 RetryFailedAnchors(매 2초)가 자동 처리
                 OffScreenIndicator osi = GetCachedOSI();
