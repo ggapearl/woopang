@@ -334,6 +334,17 @@ public class OffScreenIndicator : MonoBehaviour
                 }
             }
 
+#if !UNITY_EDITOR
+            // 가까운 오브젝트(집/구수한농장/충청남도교육청기록원) 진단 로그 — 5프레임마다 1회
+            string tname = target.gameObject.name;
+            bool focusLog = (tname.Contains("Place_1_") || tname.Contains("Place_98_") || tname.Contains("Place_665_"))
+                            && Time.frameCount % 60 == 0;
+            if (focusLog)
+            {
+                Debug.Log($"[BG-iOS-DBG-OSI] {tname} visible={isTargetVisible} needBox={target.NeedBoxIndicator} needArrow={target.NeedArrowIndicator} dist={distanceFromCamera:F1} screenPos={screenPosition}");
+            }
+#endif
+
             if (target.NeedBoxIndicator && isTargetVisible)
             {
                 screenPosition.z = 0;
