@@ -358,19 +358,21 @@ public class LoadingManager : MonoBehaviour
 
             if (ts == TrackingState.Tracking)
             {
-                Debug.Log($"[BG-iOS-DBG] Tracking 도달 (waited={waited:F1}s) → SetAllRenderers(true) + RestoreObjects + RetryAnchors");
+                Debug.Log($"[BG-iOS-DBG] Tracking 도달 (waited={waited:F1}s) → RestoreObjects + SetAllRenderers(true) + RetryAnchors");
 
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
                 StopSpinner();
 
+                // ★ 순서 중요: 먼저 GameObject를 SetActive(true)로 활성화해야 Renderer를 켤 수 있음
+                //   HideAllManagerObjects()로 SetActive(false)된 상태에서 SetVisible(true)만 하면
+                //   Renderer는 켜지지만 GameObject가 비활성이라 화면에 안 보임 (실제 발생한 버그)
+                RestoreAllManagerObjects();
+
                 // ★ Tracking 정상화 → 백그라운드 진입 시 강제로 끈 Renderer/forceHide 해제
                 //   (이게 빠져 있으면 풀 오브젝트의 Renderer가 영원히 꺼진 상태로 남음)
                 SetAllManagerRenderersVisible(true);
-
-                // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
-                RestoreAllManagerObjects();
 
                 // ★ anchor 재시도 즉시 트리거 (iOS는 ARSession 재시작 후 currentAnchor가 망가져 있음)
                 //   FilterManager.AllocationLoop가 10초 주기라 그동안 풀 오브젝트가 안 보이는 문제 해결
@@ -404,16 +406,16 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃 시에도 처리 (무한 숨김 방지)
-        Debug.LogWarning($"[BG-iOS-DBG] Tracking 복구 타임아웃 ({maxWait}s) → 강제 SetAllRenderers(true) + RestoreObjects + RetryAnchors (마지막 ts={arSession?.subsystem?.trackingState})");
+        Debug.LogWarning($"[BG-iOS-DBG] Tracking 복구 타임아웃 ({maxWait}s) → RestoreObjects + 강제 SetAllRenderers(true) + RetryAnchors (마지막 ts={arSession?.subsystem?.trackingState})");
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
 
+        // ★ 순서 중요: 먼저 GameObject 활성화, 그 다음 Renderer 켜기
+        RestoreAllManagerObjects();
+
         // ★ 타임아웃이어도 Renderer 해제 — 영구 숨김 방지
         SetAllManagerRenderersVisible(true);
-
-        // 거리 + 카테고리 필터 먼저 적용 → 범위 밖 오브젝트 비활성화
-        RestoreAllManagerObjects();
 
         // ★ 타임아웃이어도 anchor 재시도 (트래킹 복구 가능성 살림)
         ForceRetryAllAnchors();
