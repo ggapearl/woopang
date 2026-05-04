@@ -31,12 +31,12 @@ public class FirstTimeGuide : MonoBehaviour
 
     [Header("스와이프 설정")]
     [SerializeField] private float swipeThreshold = 80f;
-    [SerializeField] private float snapDuration = 0.18f;
+    [SerializeField] private float snapDuration = 0.08f;
 
     [Header("애니메이션 설정")]
-    [SerializeField] private float pageFadeDuration = 0.32f;
+    [SerializeField] private float pageFadeDuration = 0.14f;
     [SerializeField] private float pageSlideOffset = 50f;
-    [SerializeField] private float textFadeDelay = 0.05f;
+    [SerializeField] private float textFadeDelay = 0.02f;
 
     [Header("비주얼 설정")]
     [SerializeField] private float backgroundDimAlpha = 0.55f;    // 뒤 화면 디밍 강도

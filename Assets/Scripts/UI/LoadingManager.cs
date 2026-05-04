@@ -181,7 +181,6 @@ public class LoadingManager : MonoBehaviour
         // 에디터에서는 포커스 변경 시마다 OnApplicationPause가 호출되므로 background recovery 건너뜀
         return;
 #else
-        Debug.Log($"[BG-iOS-DBG] OnApplicationPause paused={pauseStatus} wasInBg={wasInBackground} enableDet={enableBackgroundRecoveryDetection} isRec={isBackgroundRecovering} ts={arSession?.subsystem?.trackingState}");
         if (pauseStatus)
         {
             wasInBackground = true;
@@ -193,12 +192,7 @@ public class LoadingManager : MonoBehaviour
             if (!isBackgroundRecovering &&
                 Time.realtimeSinceStartup - lastBackgroundRecoveryTime > BACKGROUND_RECOVERY_COOLDOWN)
             {
-                Debug.Log($"[BG-iOS-DBG] HandleBackgroundRecovery 시작");
                 StartCoroutine(HandleBackgroundRecovery());
-            }
-            else
-            {
-                Debug.LogWarning($"[BG-iOS-DBG] HandleBackgroundRecovery 스킵 (isRec={isBackgroundRecovering}, lastRecAgo={(Time.realtimeSinceStartup - lastBackgroundRecoveryTime):F1}s, cooldown={BACKGROUND_RECOVERY_COOLDOWN}s)");
             }
         }
 #endif
@@ -238,10 +232,8 @@ public class LoadingManager : MonoBehaviour
         //      단, DataManager 데이터 갱신은 반드시 실행 (백그라운드 중 위치 변동 반영)
         // ============================================================
         TrackingState currentTrackingState = arSession?.subsystem?.trackingState ?? TrackingState.None;
-        Debug.Log($"[BG-iOS-DBG] HandleRecovery 진입 needFullReload={needFullReload} currentTracking={currentTrackingState}");
         if (!needFullReload && currentTrackingState == TrackingState.Tracking)
         {
-            Debug.Log($"[BG-iOS-DBG] 경량복구 (Tracking 유지) → SetAllRenderers(true) + RestoreObjects + RetryAnchors + RestartFetching");
             isBackgroundRecovering = false;
             lastBackgroundRecoveryTime = Time.realtimeSinceStartup;
 
@@ -267,7 +259,6 @@ public class LoadingManager : MonoBehaviour
             }
             yield break;
         }
-        Debug.Log($"[BG-iOS-DBG] 풀 복구 진행 (tracking={currentTrackingState}) → SetAllRenderers(false) + WaitForTrackingRecovery");
 #endif
 
         // 1. 3D 렌더러 즉시 숨김 (앵커 미복구 상태에서 프리팹이 카메라 앞에 보이는 것 방지)
@@ -356,7 +347,6 @@ public class LoadingManager : MonoBehaviour
     {
         float maxWait = 15f;
         float waited = 0f;
-        Debug.Log($"[BG-iOS-DBG] WaitForTrackingRecoveryAndCleanup 진입 (maxWait={maxWait}s)");
 
         while (waited < maxWait)
         {
@@ -364,8 +354,6 @@ public class LoadingManager : MonoBehaviour
 
             if (ts == TrackingState.Tracking)
             {
-                Debug.Log($"[BG-iOS-DBG] Tracking 도달 (waited={waited:F1}s) → RestoreObjects + SetAllRenderers(true) + RetryAnchors");
-
                 // 로딩 패널 숨기기
                 StopDotAnimation();
                 if (loadingPanel) loadingPanel.SetActive(false);
@@ -412,7 +400,6 @@ public class LoadingManager : MonoBehaviour
         }
 
         // 타임아웃 시에도 처리 (무한 숨김 방지)
-        Debug.LogWarning($"[BG-iOS-DBG] Tracking 복구 타임아웃 ({maxWait}s) → RestoreObjects + 강제 SetAllRenderers(true) + RetryAnchors (마지막 ts={arSession?.subsystem?.trackingState})");
         StopDotAnimation();
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
@@ -470,7 +457,6 @@ public class LoadingManager : MonoBehaviour
     IEnumerator HandleSlowdownRefresh()
     {
         isSlowdownRefreshing = true;
-        Debug.Log("[BG-iOS-DBG] SlowdownRefresh 시작 — fallback ON + ARSession.Reset");
 
         // 1. fallback ON — 사용자에게는 화살표만 보임 (loadingPanel 안 띄움 → UX 끊김 없음)
         OffScreenIndicator osi = GetCachedOSI();
@@ -491,7 +477,6 @@ public class LoadingManager : MonoBehaviour
         if (arSession == null) InitializeARComponents();
         if (arSession != null)
         {
-            Debug.Log("[BG-iOS-DBG] SlowdownRefresh: ARSession.Reset() 호출");
             arSession.Reset();
         }
         // ARSession 재초기화 시간 보장
@@ -504,7 +489,6 @@ public class LoadingManager : MonoBehaviour
         yield return StartCoroutine(WaitForVpsStable(maxWait: 10f, accuracyThreshold: 10f, stableDuration: 1f));
 
         // 4. 새 좌표계에서 anchor 재생성
-        Debug.Log("[BG-iOS-DBG] SlowdownRefresh: VPS 안정 → ForceRetryAllAnchors + Restore");
         RestoreAllManagerObjects();
         SetAllManagerRenderersVisible(true);
         ForceRetryAllAnchors();
@@ -520,7 +504,6 @@ public class LoadingManager : MonoBehaviour
 
         isSlowdownRefreshing = false;
         slowdownRefreshCoroutine = null;
-        Debug.Log("[BG-iOS-DBG] SlowdownRefresh 완료");
     }
 
     /// <summary>
@@ -562,7 +545,6 @@ public class LoadingManager : MonoBehaviour
                 if (stableSince < 0f) stableSince = waited;
                 if (waited - stableSince >= stableDuration)
                 {
-                    Debug.Log($"[BG-iOS-DBG] WaitForVpsStable 안정 도달 (waited={waited:F1}s, horizAcc={horizAcc:F2}m)");
                     yield break;
                 }
             }
@@ -574,7 +556,6 @@ public class LoadingManager : MonoBehaviour
             waited += TICK;
             yield return new WaitForSeconds(TICK);
         }
-        Debug.LogWarning($"[BG-iOS-DBG] WaitForVpsStable 타임아웃 ({maxWait}s) — 그대로 진행");
 #endif
     }
 

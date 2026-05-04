@@ -40,7 +40,6 @@ public class DebugLogCaptureUI : MonoBehaviour, IPointerDownHandler, IPointerCli
 
     void Awake()
     {
-        Debug.Log($"[LogCapUI] Awake. startStopButton={(startStopButton!=null)}, copyButton={(copyButton!=null)}, statusLabel={(statusLabel!=null)}, bg={(startStopButtonBg!=null)}, label={(startStopButtonLabel!=null)}");
         WireListeners();
         if (autoStartOnAwake) StartCapture();
         UpdateUI();
@@ -48,23 +47,8 @@ public class DebugLogCaptureUI : MonoBehaviour, IPointerDownHandler, IPointerCli
 
     void OnEnable()
     {
-        Debug.Log("[LogCapUI] OnEnable");
         WireListeners();
         UpdateUI();
-    }
-
-    void Start()
-    {
-        // Canvas/EventSystem/Raycaster 환경 진단
-        var es = EventSystem.current;
-        var canvas = GetComponentInParent<Canvas>();
-        var gr = canvas != null ? canvas.GetComponent<GraphicRaycaster>() : null;
-        Debug.Log($"[LogCapUI] Start env. EventSystem={(es!=null)}, Canvas={(canvas!=null?canvas.name:"null")}, GraphicRaycaster={(gr!=null)}");
-        if (startStopButton != null)
-        {
-            var img = startStopButton.GetComponent<Image>();
-            Debug.Log($"[LogCapUI] btn state. interactable={startStopButton.interactable}, image.raycastTarget={(img!=null && img.raycastTarget)}, listenerCount={startStopButton.onClick.GetPersistentEventCount()}");
-        }
     }
 
     private void WireListeners()
@@ -72,48 +56,25 @@ public class DebugLogCaptureUI : MonoBehaviour, IPointerDownHandler, IPointerCli
         if (startStopButton != null)
         {
             startStopButton.onClick.RemoveAllListeners();
-            startStopButton.onClick.AddListener(OnStartButtonClicked);
-            Debug.Log("[LogCapUI] startStopButton onClick AddListener 완료");
-        }
-        else
-        {
-            Debug.LogWarning("[LogCapUI] startStopButton == null — 씬 슬롯 비어있음!");
+            startStopButton.onClick.AddListener(ToggleCapture);
         }
         if (copyButton != null)
         {
             copyButton.onClick.RemoveAllListeners();
-            copyButton.onClick.AddListener(OnCopyButtonClicked);
+            copyButton.onClick.AddListener(CopyLogsToClipboard);
         }
     }
 
-    private void OnStartButtonClicked()
-    {
-        Debug.Log("[LogCapUI] onClick(StartStop) 발화됨");
-        ToggleCapture();
-    }
-
-    private void OnCopyButtonClicked()
-    {
-        Debug.Log("[LogCapUI] onClick(Copy) 발화됨");
-        CopyLogsToClipboard();
-    }
-
-    // 패널 어디든 터치/클릭 들어오는지 진단 — Button 우회 안전망
-    public void OnPointerDown(PointerEventData eventData)
-    {
-        Debug.Log($"[LogCapUI] OnPointerDown 패널수신. target={(eventData.pointerCurrentRaycast.gameObject!=null?eventData.pointerCurrentRaycast.gameObject.name:"null")}");
-    }
+    // 안전망: Button.onClick이 어떤 이유로든 미발화여도 패널 클릭으로 토글
+    public void OnPointerDown(PointerEventData eventData) { }
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        Debug.Log($"[LogCapUI] OnPointerClick 패널수신. target={(eventData.pointerCurrentRaycast.gameObject!=null?eventData.pointerCurrentRaycast.gameObject.name:"null")}");
-        // 안전망: 버튼 onClick이 안 와도 패널에 클릭이 들어오면 토글
         if (eventData.pointerCurrentRaycast.gameObject != null &&
             (eventData.pointerCurrentRaycast.gameObject.name == "StartStopButton" ||
              eventData.pointerCurrentRaycast.gameObject.transform.parent != null &&
              eventData.pointerCurrentRaycast.gameObject.transform.parent.name == "StartStopButton"))
         {
-            Debug.Log("[LogCapUI] 안전망: StartStopButton 클릭 감지 → ToggleCapture");
             ToggleCapture();
         }
     }
@@ -125,29 +86,26 @@ public class DebugLogCaptureUI : MonoBehaviour, IPointerDownHandler, IPointerCli
 
     public void ToggleCapture()
     {
-        Debug.Log($"[LogCapUI] ToggleCapture() 호출됨. 현재 _isCapturing={_isCapturing}");
         if (_isCapturing) StopCapture();
         else StartCapture();
     }
 
     public void StartCapture()
     {
-        if (_isCapturing) { Debug.Log("[LogCapUI] StartCapture 무시 (이미 캡처중)"); return; }
+        if (_isCapturing) return;
         _capturedLogs.Clear();
         _totalLogsSeen = 0;
         _filteredOutCount = 0;
         Application.logMessageReceivedThreaded += HandleLog;
         _isCapturing = true;
-        Debug.Log($"[LogCapUI] StartCapture 시작. filter='{logPrefixFilter}'");
         UpdateUI();
     }
 
     public void StopCapture()
     {
-        if (!_isCapturing) { Debug.Log("[LogCapUI] StopCapture 무시 (캡처중 아님)"); return; }
+        if (!_isCapturing) return;
         Application.logMessageReceivedThreaded -= HandleLog;
         _isCapturing = false;
-        Debug.Log($"[LogCapUI] StopCapture. 수집={_capturedLogs.Count} / 전체본것={_totalLogsSeen} / 필터제외={_filteredOutCount}");
         UpdateUI();
     }
 

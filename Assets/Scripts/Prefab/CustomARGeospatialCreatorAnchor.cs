@@ -27,20 +27,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private const float REATTACH_LERP_DURATION = 0.3f; // 재부착 후 부드러운 보정 시간
     private Coroutine reattachLerpCoroutine;
 
-    // 진단용 — Update 로그 throttle (모든 프레임 로그하면 폭주)
-    private float _lastDiagLogTime = -10f;
-    private TrackingState _lastLoggedState = TrackingState.None;
-
-    // 진단용 — 로그를 특정 가까운 오브젝트로 한정 (Place_1, Place_665, Place_98 = 집, 충청남도교육청기록원, 구수한농장)
-    private static readonly string[] _focusNames = new[] { "Place_1_", "Place_665_", "Place_98_", "Indicator_1_", "Indicator_665_", "Indicator_98_" };
-    private bool ShouldLog()
-    {
-        string n = gameObject.name;
-        for (int i = 0; i < _focusNames.Length; i++)
-            if (n.StartsWith(_focusNames[i])) return true;
-        return false;
-    }
-
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
 #if UNITY_EDITOR
@@ -103,7 +89,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 #if UNITY_EDITOR
         return;
 #else
-        if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} RecreateAnchor 호출 (anchorCreated={_anchorCreated}, forceHide={_forceHideRenderers}, hasBeenTracking={_hasBeenTracking})");
         if (retryCoroutine != null) { StopCoroutine(retryCoroutine); retryCoroutine = null; }
         if (reattachLerpCoroutine != null) { StopCoroutine(reattachLerpCoroutine); reattachLerpCoroutine = null; }
 
@@ -157,7 +142,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             transform.localPosition = Vector3.zero;
             transform.localRotation = Quaternion.identity;
             _anchorCreated = true;
-            if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} AddAnchor 성공 retry={_retryCount}");
             // 렌더러 표시는 Update()가 anchor.trackingState == Tracking 시점에 처리
             return true;
         }
@@ -214,9 +198,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             var osi = GetOSI();
             if (osi != null && !osi.IsFallbackMode)
             {
-#if !UNITY_EDITOR
-                if (ShouldLog()) Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} 워치독 — fallback OFF인데 forceHide=true → 자동 복원");
-#endif
                 _forceHideRenderers = false;
                 SetVisible(true);
             }
@@ -225,9 +206,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         if (!_anchorCreated) return;
         if (currentAnchor == null)
         {
-#if !UNITY_EDITOR
-            if (ShouldLog()) Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} currentAnchor null → 재앵커링 유도, SetVisible(false)");
-#endif
             // 앵커가 외부에서 파괴됨 → 재앵커링 유도
             _anchorCreated = false;
             _isFrozen = false;
@@ -237,15 +215,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         }
 
         TrackingState state = currentAnchor.trackingState;
-
-#if !UNITY_EDITOR
-        // 트래킹 상태 변경 시 로그 (state 전환 시 1회)
-        if (state != _lastLoggedState)
-        {
-            if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} TrackingState 변경 {_lastLoggedState}→{state} (frozen={_isFrozen}, hasBeenTracking={_hasBeenTracking}, forceHide={_forceHideRenderers})");
-            _lastLoggedState = state;
-        }
-#endif
 
         if (state == TrackingState.Tracking)
         {
@@ -267,7 +236,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             if (!_hasBeenTracking)
             {
                 _hasBeenTracking = true;
-                if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} 최초 Tracking 도달 (forceHide={_forceHideRenderers}) → SetVisible({!_forceHideRenderers})");
                 if (!_forceHideRenderers) SetVisible(true);
             }
         }
@@ -294,9 +262,6 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
             if (_isFrozen && _limitedSince > 0f &&
                 Time.realtimeSinceStartup - _limitedSince > LIMITED_BUFFER)
             {
-#if !UNITY_EDITOR
-                if (ShouldLog()) Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} Limited 10s 초과 → 앵커 포기 + SetVisible(false)");
-#endif
                 _anchorCreated = false;
                 _isFrozen = false;
                 _limitedSince = -1f;
@@ -333,14 +298,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     /// </summary>
     public void SetForceHideRenderers(bool forceHide)
     {
-        bool changed = (_forceHideRenderers != forceHide);
         _forceHideRenderers = forceHide;
-#if !UNITY_EDITOR
-        if (changed && ShouldLog())
-        {
-            Debug.Log($"[BG-iOS-DBG] {gameObject.name} SetForceHideRenderers({forceHide}) called\n{System.Environment.StackTrace}");
-        }
-#endif
         if (forceHide)
         {
             SetVisible(false);
@@ -348,14 +306,9 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         else if (_anchorCreated && _hasBeenTracking)
         {
             // freeze 중이든 아니든 이미 world pos가 유효하므로 즉시 복원
-            if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} SetForceHideRenderers(false) → SetVisible(true) (anchorCreated={_anchorCreated}, hasBeenTracking={_hasBeenTracking})");
             SetVisible(true);
         }
-        else
-        {
-            // anchor가 아직 준비 안 됨 — Update에서 Tracking 도달 시 자동으로 켜짐
-            if (ShouldLog()) Debug.LogWarning($"[BG-iOS-DBG] {gameObject.name} SetForceHideRenderers(false) 호출됐지만 anchor 미준비 (anchorCreated={_anchorCreated}, hasBeenTracking={_hasBeenTracking}) → SetVisible 보류");
-        }
+        // 그 외: anchor 미준비 — Update에서 Tracking 도달 시 자동으로 켜짐
     }
 
     /// <summary>
@@ -364,24 +317,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     private void SetVisible(bool visible)
     {
         Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
-#if !UNITY_EDITOR
-        if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} SetVisible({visible}) renderers={renderers.Length} active={gameObject.activeInHierarchy} pos={transform.position}");
-#endif
         foreach (var r in renderers)
             r.enabled = visible;
-    }
-
-    void OnEnable()
-    {
-#if !UNITY_EDITOR
-        if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} OnEnable anchorCreated={_anchorCreated} hasBeenTracking={_hasBeenTracking} forceHide={_forceHideRenderers}");
-#endif
-    }
-
-    void OnDisable()
-    {
-#if !UNITY_EDITOR
-        if (ShouldLog()) Debug.Log($"[BG-iOS-DBG] {gameObject.name} OnDisable anchorCreated={_anchorCreated} hasBeenTracking={_hasBeenTracking}");
-#endif
     }
 }

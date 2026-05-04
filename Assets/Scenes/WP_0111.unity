@@ -21271,10 +21271,10 @@ MonoBehaviour:
     glowAmplitude: 0.35
     pulseSpeed: 2.4
   swipeThreshold: 80
-  snapDuration: 0.3
-  pageFadeDuration: 0.6
+  snapDuration: 0.08
+  pageFadeDuration: 0.14
   pageSlideOffset: 60
-  textFadeDelay: 0.2
+  textFadeDelay: 0.02
   backgroundDimAlpha: 0.55
   panelEntryDuration: 0.9
   imageParallaxFactor: 1.35
