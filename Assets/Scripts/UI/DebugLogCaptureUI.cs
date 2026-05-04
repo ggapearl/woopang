@@ -25,6 +25,9 @@ public class DebugLogCaptureUI : MonoBehaviour
     [Tooltip("이 prefix를 포함한 로그만 캡처. 비워두면 모든 로그 캡처")]
     [SerializeField] private string logPrefixFilter = "[BG-iOS-DBG]";
 
+    [Tooltip("필터 무시하고 모든 로그 캡처 (디버깅용)")]
+    [SerializeField] private bool captureAllLogs = false;
+
     [Tooltip("최대 캡처 라인 수 — 초과 시 가장 오래된 항목 제거")]
     [SerializeField] private int maxCapturedLines = 5000;
 
@@ -34,6 +37,8 @@ public class DebugLogCaptureUI : MonoBehaviour
 
     private readonly List<string> _capturedLogs = new List<string>();
     private bool _isCapturing = false;
+    private int _totalLogsSeen = 0;       // 필터 통과 전 전체 로그 카운트
+    private int _filteredOutCount = 0;    // 필터로 걸러진 로그 카운트
 
     void Awake()
     {
@@ -69,24 +74,29 @@ public class DebugLogCaptureUI : MonoBehaviour
 
     public void ToggleCapture()
     {
+        Debug.Log($"[LogCapUI] ToggleCapture() 호출됨. 현재 _isCapturing={_isCapturing}");
         if (_isCapturing) StopCapture();
         else StartCapture();
     }
 
     public void StartCapture()
     {
-        if (_isCapturing) return;
+        if (_isCapturing) { Debug.Log("[LogCapUI] StartCapture 무시 (이미 캡처중)"); return; }
         _capturedLogs.Clear();
+        _totalLogsSeen = 0;
+        _filteredOutCount = 0;
         Application.logMessageReceivedThreaded += HandleLog;
         _isCapturing = true;
+        Debug.Log($"[LogCapUI] StartCapture 시작. filter='{logPrefixFilter}' captureAll={captureAllLogs}");
         UpdateUI();
     }
 
     public void StopCapture()
     {
-        if (!_isCapturing) return;
+        if (!_isCapturing) { Debug.Log("[LogCapUI] StopCapture 무시 (캡처중 아님)"); return; }
         Application.logMessageReceivedThreaded -= HandleLog;
         _isCapturing = false;
+        Debug.Log($"[LogCapUI] StopCapture. 수집={_capturedLogs.Count} / 전체본것={_totalLogsSeen} / 필터제외={_filteredOutCount}");
         UpdateUI();
     }
 
@@ -107,8 +117,14 @@ public class DebugLogCaptureUI : MonoBehaviour
 
     private void HandleLog(string condition, string stackTrace, LogType type)
     {
-        if (!string.IsNullOrEmpty(logPrefixFilter) && !condition.Contains(logPrefixFilter))
+        System.Threading.Interlocked.Increment(ref _totalLogsSeen);
+
+        bool useFilter = !captureAllLogs && !string.IsNullOrEmpty(logPrefixFilter);
+        if (useFilter && !condition.Contains(logPrefixFilter))
+        {
+            System.Threading.Interlocked.Increment(ref _filteredOutCount);
             return;
+        }
 
         lock (_capturedLogs)
         {
@@ -122,10 +138,10 @@ public class DebugLogCaptureUI : MonoBehaviour
     {
         if (_isCapturing && statusLabel != null)
         {
-            // 캡처 중일 때만 라인 카운트 + REC 깜빡임
+            // 캡처 중: kept / total 둘 다 표시 — 필터 문제 진단용
             bool blink = (Time.unscaledTime % 1f) < 0.5f;
             string dot = blink ? "<color=#FF3030>●</color> " : "  ";
-            statusLabel.text = $"{dot}REC  {_capturedLogs.Count} lines";
+            statusLabel.text = $"{dot}REC  {_capturedLogs.Count}/{_totalLogsSeen} lines";
             statusLabel.supportRichText = true;
         }
     }
@@ -142,8 +158,8 @@ public class DebugLogCaptureUI : MonoBehaviour
         {
             statusLabel.supportRichText = true;
             statusLabel.text = _isCapturing
-                ? $"<color=#FF3030>●</color> REC  {_capturedLogs.Count} lines"
-                : $"Stopped ({_capturedLogs.Count} lines)";
+                ? $"<color=#FF3030>●</color> REC  {_capturedLogs.Count}/{_totalLogsSeen} lines"
+                : $"Stopped ({_capturedLogs.Count}/{_totalLogsSeen} lines)";
         }
 
         if (copyButton != null)
