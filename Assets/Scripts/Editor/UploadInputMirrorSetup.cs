@@ -3,11 +3,13 @@ using UnityEngine.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
+using System;
 using System.Collections.Generic;
 
 // ============================================================
-// CubeUploadManager.uploadPage 안에 UploadInputMirror 컴포넌트와
-// 미러 InputArea(DM 채팅 디자인 복제)를 자동 생성/연결.
+// CubeUploadManager / ModelUploadManager / CubeDataFixManager 의 페이지에
+// UploadInputMirror 컴포넌트와 미러 InputArea(DM 채팅 디자인 복제)를
+// 자동 생성/연결.
 //
 // 트리거: 씬 오픈 / 스크립트 재컴파일 / 메뉴 수동 실행.
 // 멱등: 이미 연결되어 있으면 변경 없이 종료.
@@ -20,6 +22,36 @@ public static class UploadInputMirrorSetup
     private const string MirrorPlaceholderName = "Placeholder";
     private const string MirrorTextName = "Text";
     private const string MirrorCloseButtonName = "CloseButton";
+
+    /// <summary>매니저별 page 필드명 + 미러에 연결할 source InputField 필드명들</summary>
+    private struct ManagerSpec
+    {
+        public string TypeName;
+        public string PageFieldName;
+        public string[] InputFieldNames;
+    }
+
+    private static readonly ManagerSpec[] Specs = new[]
+    {
+        new ManagerSpec
+        {
+            TypeName = "CubeUploadManager",
+            PageFieldName = "uploadPage",
+            InputFieldNames = new[] { "nameInput", "instagramIDInput" }
+        },
+        new ManagerSpec
+        {
+            TypeName = "ModelUploadManager",
+            PageFieldName = "uploadPage",
+            InputFieldNames = new[] { "nameInput", "instagramIDInput" }
+        },
+        new ManagerSpec
+        {
+            TypeName = "CubeDataFixManager",
+            PageFieldName = "fixUIPanel",
+            InputFieldNames = new[] { "nameInput", "instagramIDInput", "descriptionInput" }
+        },
+    };
 
     static UploadInputMirrorSetup()
     {
@@ -44,30 +76,45 @@ public static class UploadInputMirrorSetup
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
         if (!SceneManager.GetActiveScene().isLoaded) return;
 
-        var uploadMgr = GameObject.FindFirstObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
-        if (uploadMgr == null) return;
+        foreach (var spec in Specs)
+        {
+            ProcessManager(spec);
+        }
+    }
 
-        var so = new SerializedObject(uploadMgr);
-        var uploadPageProp = so.FindProperty("uploadPage");
-        if (uploadPageProp == null || uploadPageProp.objectReferenceValue == null) return;
+    private static void ProcessManager(ManagerSpec spec)
+    {
+        Type managerType = FindTypeByName(spec.TypeName);
+        if (managerType == null) return;
 
-        GameObject uploadPage = uploadPageProp.objectReferenceValue as GameObject;
-        if (uploadPage == null) return;
+        var manager = GameObject.FindFirstObjectByType(managerType, FindObjectsInactive.Include) as Component;
+        if (manager == null) return;
 
-        var nameInput = (so.FindProperty("nameInput")?.objectReferenceValue) as InputField;
-        var instagramInput = (so.FindProperty("instagramIDInput")?.objectReferenceValue) as InputField;
-        if (nameInput == null && instagramInput == null) return;
+        var so = new SerializedObject(manager);
+        var pageProp = so.FindProperty(spec.PageFieldName);
+        if (pageProp == null || pageProp.objectReferenceValue == null) return;
 
-        var mirrorComp = uploadPage.GetComponent<UploadInputMirror>();
+        GameObject pageObj = pageProp.objectReferenceValue as GameObject;
+        if (pageObj == null) return;
+
+        var sources = new List<InputField>();
+        foreach (var fieldName in spec.InputFieldNames)
+        {
+            var fp = so.FindProperty(fieldName);
+            var inp = fp?.objectReferenceValue as InputField;
+            if (inp != null) sources.Add(inp);
+        }
+        if (sources.Count == 0) return;
+
+        var mirrorComp = pageObj.GetComponent<UploadInputMirror>();
         bool added = false;
         if (mirrorComp == null)
         {
-            mirrorComp = Undo.AddComponent<UploadInputMirror>(uploadPage);
+            mirrorComp = Undo.AddComponent<UploadInputMirror>(pageObj);
             added = true;
         }
 
-        // 미러 패널 찾거나 생성
-        Transform existingMirror = uploadPage.transform.Find(MirrorObjName);
+        Transform existingMirror = pageObj.transform.Find(MirrorObjName);
         GameObject mirrorPanel;
         if (existingMirror != null)
         {
@@ -75,14 +122,13 @@ public static class UploadInputMirrorSetup
         }
         else
         {
-            mirrorPanel = CreateMirrorPanel(uploadPage);
+            mirrorPanel = CreateMirrorPanel(pageObj);
             added = true;
         }
 
         InputField mirrorInput = mirrorPanel.GetComponentInChildren<InputField>(true);
         Button closeBtn = mirrorPanel.GetComponentInChildren<Button>(true);
-        Text placeholder = null;
-        if (mirrorInput != null && mirrorInput.placeholder is Text p) placeholder = p;
+        Text placeholder = (mirrorInput != null && mirrorInput.placeholder is Text p) ? p : null;
 
         var ms = new SerializedObject(mirrorComp);
         bool changed = false;
@@ -91,19 +137,30 @@ public static class UploadInputMirrorSetup
         changed |= AssignIfDifferent(ms, "mirrorPlaceholder", placeholder);
         changed |= AssignIfDifferent(ms, "closeButton", closeBtn);
         changed |= AssignIfDifferent(ms, "mirrorRect", mirrorPanel.transform as RectTransform);
-        changed |= AssignIfDifferent(ms, "nameInput", nameInput);
-        changed |= AssignIfDifferent(ms, "instagramInput", instagramInput);
+        changed |= AssignArrayIfDifferent(ms, "sourceInputs", sources);
 
         if (changed || added)
         {
             ms.ApplyModifiedPropertiesWithoutUndo();
-            EditorUtility.SetDirty(uploadPage);
-            EditorSceneManager.MarkSceneDirty(uploadPage.scene);
-            Debug.Log($"[UpInputMirror Setup] {uploadPage.name}에 UploadInputMirror {(added ? "생성" : "업데이트")} 완료");
+            EditorUtility.SetDirty(pageObj);
+            EditorSceneManager.MarkSceneDirty(pageObj.scene);
+            Debug.Log($"[UpInputMirror Setup] {spec.TypeName} → {pageObj.name}: 미러 {(added ? "생성" : "업데이트")}, source {sources.Count}개 연결");
         }
     }
 
-    private static bool AssignIfDifferent(SerializedObject so, string propName, Object value)
+    private static Type FindTypeByName(string name)
+    {
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            foreach (var t in asm.GetTypes())
+            {
+                if (t.Name == name) return t;
+            }
+        }
+        return null;
+    }
+
+    private static bool AssignIfDifferent(SerializedObject so, string propName, UnityEngine.Object value)
     {
         var p = so.FindProperty(propName);
         if (p == null) return false;
@@ -112,12 +169,33 @@ public static class UploadInputMirrorSetup
         return true;
     }
 
-    /// <summary>DM ChatInput InputArea 디자인 모방 — 화면 하단 부착, 좌측 입력칸 + 우측 80x80 닫기 버튼</summary>
-    private static GameObject CreateMirrorPanel(GameObject uploadPage)
+    private static bool AssignArrayIfDifferent(SerializedObject so, string propName, List<InputField> values)
     {
-        // ─── 컨테이너 ───
+        var p = so.FindProperty(propName);
+        if (p == null) return false;
+        bool changed = p.arraySize != values.Count;
+        if (!changed)
+        {
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (p.GetArrayElementAtIndex(i).objectReferenceValue != values[i])
+                { changed = true; break; }
+            }
+        }
+        if (changed)
+        {
+            p.arraySize = values.Count;
+            for (int i = 0; i < values.Count; i++)
+                p.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+        }
+        return changed;
+    }
+
+    /// <summary>DM ChatInput InputArea 디자인 모방 — 화면 하단 부착, 좌측 입력칸 + 우측 80x80 닫기 버튼</summary>
+    private static GameObject CreateMirrorPanel(GameObject parent)
+    {
         GameObject panel = new GameObject(MirrorObjName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        panel.transform.SetParent(uploadPage.transform, false);
+        panel.transform.SetParent(parent.transform, false);
         panel.layer = LayerMask.NameToLayer("UI");
 
         RectTransform rt = panel.GetComponent<RectTransform>();
@@ -130,7 +208,7 @@ public static class UploadInputMirrorSetup
         Image bg = panel.GetComponent<Image>();
         bg.color = new Color(0.95f, 0.95f, 0.95f, 1f);
 
-        // ─── 입력칸 컨테이너 (Image + InputField) ───
+        // 입력칸 컨테이너
         GameObject inputObj = new GameObject(MirrorInputObjName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(InputField));
         inputObj.transform.SetParent(panel.transform, false);
         inputObj.layer = LayerMask.NameToLayer("UI");
@@ -148,7 +226,7 @@ public static class UploadInputMirrorSetup
         InputField input = inputObj.GetComponent<InputField>();
         input.targetGraphic = inputBg;
 
-        // ─── Placeholder ───
+        // Placeholder
         GameObject placeholderObj = new GameObject(MirrorPlaceholderName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
         placeholderObj.transform.SetParent(inputObj.transform, false);
         placeholderObj.layer = LayerMask.NameToLayer("UI");
@@ -167,7 +245,7 @@ public static class UploadInputMirrorSetup
         phText.raycastTarget = false;
         input.placeholder = phText;
 
-        // ─── Text (실제 입력 표시) ───
+        // Text
         GameObject textObj = new GameObject(MirrorTextName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
         textObj.transform.SetParent(inputObj.transform, false);
         textObj.layer = LayerMask.NameToLayer("UI");
@@ -186,7 +264,7 @@ public static class UploadInputMirrorSetup
         txText.raycastTarget = false;
         input.textComponent = txText;
 
-        // ─── Close Button (우측, 80x80 — DM SendButton과 동일 위치) ───
+        // Close Button
         GameObject btnObj = new GameObject(MirrorCloseButtonName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         btnObj.transform.SetParent(panel.transform, false);
         btnObj.layer = LayerMask.NameToLayer("UI");
@@ -201,7 +279,6 @@ public static class UploadInputMirrorSetup
         Button btn = btnObj.GetComponent<Button>();
         btn.targetGraphic = btnImg;
 
-        // 버튼 라벨
         GameObject btnLabelObj = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
         btnLabelObj.transform.SetParent(btnObj.transform, false);
         btnLabelObj.layer = LayerMask.NameToLayer("UI");
@@ -218,7 +295,6 @@ public static class UploadInputMirrorSetup
         lbText.font = LoadAppleFont();
         lbText.raycastTarget = false;
 
-        // 마지막 sibling으로 — UploadPage 자식 중 최상위에 그려짐
         panel.transform.SetAsLastSibling();
         panel.SetActive(false);
 

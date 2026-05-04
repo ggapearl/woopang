@@ -2,13 +2,16 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // ============================================================
-// 업로드 페이지: NameInput / InstagramAccountInput 클릭 시
-// DM 채팅 InputArea와 동일한 디자인의 미러 입력바를 키보드 위에 표시.
+// 업로드/수정 페이지: source InputField 클릭 시 DM 채팅 InputArea와
+// 동일한 디자인의 미러 입력바를 키보드 위에 표시.
 // 사용자는 미러 InputField에 직접 입력 → source InputField에 실시간 반영.
 // 우측 닫기 버튼 → 키보드 dismiss + 미러 숨김.
 //
 // iOS native input toolbar와 키보드 본체 사이 갭 영역을 미러 InputArea가
 // 자연스럽게 덮어 시각적 불연속 해소.
+//
+// 사용처: CubeUploadPage / ModelUploadPage / FixPage
+// 각 페이지의 sourceInputs를 자동 연결 (Setup 스크립트가 처리).
 // ============================================================
 public class UploadInputMirror : MonoBehaviour
 {
@@ -19,13 +22,8 @@ public class UploadInputMirror : MonoBehaviour
     [SerializeField] private Button closeButton;
     [SerializeField] private RectTransform mirrorRect;
 
-    [Header("Source 입력칸")]
-    [SerializeField] private InputField nameInput;
-    [SerializeField] private InputField instagramInput;
-
-    [Header("Placeholder 텍스트")]
-    [SerializeField] private string namePlaceholder = "이름을 입력하세요";
-    [SerializeField] private string instagramPlaceholder = "인스타그램 ID를 입력하세요";
+    [Header("Source 입력칸 — Setup이 자동 채움")]
+    [SerializeField] private InputField[] sourceInputs;
 
     [Header("동작 설정")]
     [Tooltip("미러를 키보드 top에 부착할 때 추가 여백 (canvas px)")]
@@ -95,7 +93,6 @@ public class UploadInputMirror : MonoBehaviour
         }
         else if (focused == null && activeSource != null && !mirrorInput.isFocused)
         {
-            // source / mirror 모두 포커스 잃음 → 키보드 내려간 것으로 간주
             HideMirror();
         }
 
@@ -107,8 +104,12 @@ public class UploadInputMirror : MonoBehaviour
 
     private InputField DetectFocusedSource()
     {
-        if (nameInput != null && nameInput.isFocused) return nameInput;
-        if (instagramInput != null && instagramInput.isFocused) return instagramInput;
+        if (sourceInputs == null) return null;
+        for (int i = 0; i < sourceInputs.Length; i++)
+        {
+            var inp = sourceInputs[i];
+            if (inp != null && inp.isFocused && inp.gameObject.activeInHierarchy) return inp;
+        }
         return null;
     }
 
@@ -120,9 +121,11 @@ public class UploadInputMirror : MonoBehaviour
 
         syncing = true;
         mirrorInput.text = source.text;
+
         if (mirrorPlaceholder != null)
         {
-            mirrorPlaceholder.text = (source == nameInput) ? namePlaceholder : instagramPlaceholder;
+            string ph = ExtractPlaceholderText(source);
+            mirrorPlaceholder.text = string.IsNullOrEmpty(ph) ? "입력하세요" : ph;
         }
 
         mirrorInput.contentType = source.contentType;
@@ -131,10 +134,16 @@ public class UploadInputMirror : MonoBehaviour
         mirrorInput.keyboardType = source.keyboardType;
         syncing = false;
 
-        // 포커스를 mirror로 이전 — source는 클릭 트리거 역할만
         mirrorInput.ActivateInputField();
         mirrorInput.Select();
         mirrorInput.caretPosition = mirrorInput.text.Length;
+    }
+
+    private static string ExtractPlaceholderText(InputField src)
+    {
+        if (src == null || src.placeholder == null) return null;
+        var t = src.placeholder as Text;
+        return t != null ? t.text : null;
     }
 
     private void OnMirrorChanged(string value)
@@ -171,7 +180,6 @@ public class UploadInputMirror : MonoBehaviour
         float kbCanvas = GetKeyboardHeightCanvas();
         if (kbCanvas <= 0f) return;
 
-        // bottom anchor를 키보드 top에 부착 — DM과 동일한 방식
         float canvasH = canvasRect.rect.height;
         float anchor = (kbCanvas + keyboardTopPadding) / canvasH;
         anchor = Mathf.Clamp01(anchor);
