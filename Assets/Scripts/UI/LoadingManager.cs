@@ -2,6 +2,7 @@
 using UnityEngine.UI;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
+using Google.XR.ARCoreExtensions;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -108,6 +109,11 @@ public class LoadingManager : MonoBehaviour
     public float TimeSinceLastBackgroundRecovery => Time.realtimeSinceStartup - lastBackgroundRecoveryTime;
     private float lastBackgroundRecoveryTime = -10f; // 마지막 복구 완료 시각 (쿨다운용)
     private const float BACKGROUND_RECOVERY_COOLDOWN = 3f; // 복구 후 3초 이내 재실행 방지
+
+    // 감속(SlowdownRefresh) 진행 중 플래그 — fallback ON + ARSession.Reset + VPS 안정 대기
+    private bool isSlowdownRefreshing = false;
+    public bool IsSlowdownRefreshing => isSlowdownRefreshing;
+    private Coroutine slowdownRefreshCoroutine;
     private Coroutine dotAnimationCoroutine;
     private Coroutine spinnerCoroutine; // Spinner 중복 실행 방지
     private float? lastCameraBrightness = null; // ARCameraManager 밝기 캐시
@@ -441,6 +447,135 @@ public class LoadingManager : MonoBehaviour
         {
             dataManager.RestartFetchingAfterResume();
         }
+    }
+
+    // ============================================================
+    // SlowdownRefresh — FilterManager가 25km/h+ → <5km/h 감속 감지 시 호출
+    //
+    // 흐름 (사용자 화면을 가리지 않고 fallback 화살표만 표시):
+    //   1. fallback ON (autoDisable=false) → cube/렌더러 숨기고 화살표 표시
+    //   2. ARSession.Reset() → VIO drift 누적 제거
+    //   3. WaitForVpsStable → EarthTrackingState=Tracking + HorizontalAccuracy 안정 대기
+    //   4. ForceRetryAllAnchors → 새 좌표계에서 anchor 재생성
+    //   5. RestoreObjects + RestartFetchingAfterResume
+    //   6. fallback OFF → cube가 정상 위치에 자연스럽게 등장
+    // ============================================================
+    public void StartSlowdownRefresh()
+    {
+        if (isSlowdownRefreshing) return;
+        if (isBackgroundRecovering) return;
+        slowdownRefreshCoroutine = StartCoroutine(HandleSlowdownRefresh());
+    }
+
+    IEnumerator HandleSlowdownRefresh()
+    {
+        isSlowdownRefreshing = true;
+        Debug.Log("[BG-iOS-DBG] SlowdownRefresh 시작 — fallback ON + ARSession.Reset");
+
+        // 1. fallback ON — 사용자에게는 화살표만 보임 (loadingPanel 안 띄움 → UX 끊김 없음)
+        OffScreenIndicator osi = GetCachedOSI();
+        if (osi != null)
+        {
+            osi.SetFallbackMinDuration(0.5f);
+#if UNITY_EDITOR
+            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true, reason: "SlowdownRefresh_Editor");
+#else
+            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: "SlowdownRefresh");
+#endif
+        }
+        // 모든 cube/indicator의 Renderer 숨김 (drift된 위치 표시 방지)
+        SetAllManagerRenderersVisible(false);
+
+        // 2. ARSession.Reset — drift 누적 제거 (Editor에서는 스킵)
+#if !UNITY_EDITOR
+        if (arSession == null) InitializeARComponents();
+        if (arSession != null)
+        {
+            Debug.Log("[BG-iOS-DBG] SlowdownRefresh: ARSession.Reset() 호출");
+            arSession.Reset();
+        }
+        // ARSession 재초기화 시간 보장
+        yield return new WaitForSeconds(1.0f);
+#else
+        yield return null;
+#endif
+
+        // 3. VPS 측위 안정 대기
+        yield return StartCoroutine(WaitForVpsStable(maxWait: 10f, accuracyThreshold: 10f, stableDuration: 1f));
+
+        // 4. 새 좌표계에서 anchor 재생성
+        Debug.Log("[BG-iOS-DBG] SlowdownRefresh: VPS 안정 → ForceRetryAllAnchors + Restore");
+        RestoreAllManagerObjects();
+        SetAllManagerRenderersVisible(true);
+        ForceRetryAllAnchors();
+
+        // 5. DataManager 갱신
+        if (dataManager != null) dataManager.RestartFetchingAfterResume();
+
+        // 6. fallback OFF — cube가 정상 위치에 등장
+        if (osi != null && osi.IsFallbackMode)
+        {
+            osi.EnableFallbackMode(false, reason: "SlowdownRefresh_Complete");
+        }
+
+        isSlowdownRefreshing = false;
+        slowdownRefreshCoroutine = null;
+        Debug.Log("[BG-iOS-DBG] SlowdownRefresh 완료");
+    }
+
+    /// <summary>
+    /// EarthManager가 보고하는 위치 정확도가 threshold 이하로 stableDuration초 연속 유지될 때까지 대기.
+    /// maxWait 초과하면 그대로 진행 (영구 대기 방지).
+    /// </summary>
+    IEnumerator WaitForVpsStable(float maxWait, float accuracyThreshold, float stableDuration)
+    {
+#if UNITY_EDITOR
+        yield return new WaitForSeconds(0.2f);
+        yield break;
+#else
+        AREarthManager earthMgr = FindFirstObjectByType<AREarthManager>();
+        float waited = 0f;
+        float stableSince = -1f;
+        const float TICK = 0.25f;
+
+        while (waited < maxWait)
+        {
+            if (earthMgr == null)
+            {
+                earthMgr = FindFirstObjectByType<AREarthManager>();
+            }
+
+            bool sessionTracking = ARSession.state == ARSessionState.SessionTracking;
+            bool earthTracking = earthMgr != null && earthMgr.EarthTrackingState == TrackingState.Tracking;
+
+            double horizAcc = double.MaxValue;
+            if (earthTracking)
+            {
+                var pose = earthMgr.CameraGeospatialPose;
+                horizAcc = pose.HorizontalAccuracy;
+            }
+
+            bool stableNow = sessionTracking && earthTracking && horizAcc <= accuracyThreshold;
+
+            if (stableNow)
+            {
+                if (stableSince < 0f) stableSince = waited;
+                if (waited - stableSince >= stableDuration)
+                {
+                    Debug.Log($"[BG-iOS-DBG] WaitForVpsStable 안정 도달 (waited={waited:F1}s, horizAcc={horizAcc:F2}m)");
+                    yield break;
+                }
+            }
+            else
+            {
+                stableSince = -1f;
+            }
+
+            waited += TICK;
+            yield return new WaitForSeconds(TICK);
+        }
+        Debug.LogWarning($"[BG-iOS-DBG] WaitForVpsStable 타임아웃 ({maxWait}s) — 그대로 진행");
+#endif
     }
 
     void Update()

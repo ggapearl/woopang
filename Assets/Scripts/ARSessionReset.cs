@@ -16,7 +16,19 @@ public class AutoARSessionReset : MonoBehaviour
             arSession = FindFirstObjectByType<ARSession>(); // ARSession 자동 탐색
         }
 
-        autoResetCoroutine = StartCoroutine(AutoResetARSession());
+        // 5초 주기 자동 Reset은 anchor 깨뜨리는 부작용이 커서 비활성화.
+        // ARSession.Reset은 LoadingManager.HandleSlowdownRefresh / HandleBackgroundRecovery
+        // 같은 명시적 트리거에서만 호출.
+        // autoResetCoroutine = StartCoroutine(AutoResetARSession());
+    }
+
+    /// <summary>
+    /// 외부에서 명시적으로 호출하는 ARSession 재시작.
+    /// (SlowdownRefresh / BG 복구에서 drift 누적 제거 목적)
+    /// </summary>
+    public void ResetNow()
+    {
+        if (arSession != null) arSession.Reset();
     }
 
     void OnDestroy()

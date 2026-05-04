@@ -1200,22 +1200,21 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 감속 시 백그라운드 복귀와 동일한 경량 리프레쉬 수행
-    /// — Light 캐시 재요청 + 위치 체크 재시작 + FilterManager 재배분
-    /// — LoadingManager가 복구 중이면 중복 방지 위해 스킵
+    /// 감속 시 LoadingManager의 SlowdownRefresh 코루틴 호출
+    /// — fallback ON (화살표) + ARSession.Reset (drift 제거) + VPS 안정 대기 + anchor 재생성 + fallback OFF
+    /// — LoadingManager가 BG 복구 중이거나 SlowdownRefresh 진행 중이면 중복 방지 스킵
     /// </summary>
     private void TriggerSlowdownRefresh()
     {
         LoadingManager loadingMgr = UnityEngine.Object.FindFirstObjectByType<LoadingManager>();
-        if (loadingMgr != null)
-        {
-            if (loadingMgr.IsBackgroundRecovering) return;
-            // 백그라운드 복귀 직후 30초 이내면 스킵 — 복귀 중 GPS 노이즈가 가짜 감속을 유발하는 문제 방지
-            if (loadingMgr.TimeSinceLastBackgroundRecovery < 30f) return;
-        }
+        if (loadingMgr == null) return;
 
-        DataManager dm = UnityEngine.Object.FindFirstObjectByType<DataManager>(FindObjectsInactive.Include);
-        if (dm != null) dm.RestartFetchingAfterResume();
+        if (loadingMgr.IsBackgroundRecovering) return;
+        if (loadingMgr.IsSlowdownRefreshing) return;
+        // 백그라운드 복귀 직후 30초 이내면 스킵 — 복귀 중 GPS 노이즈가 가짜 감속을 유발하는 문제 방지
+        if (loadingMgr.TimeSinceLastBackgroundRecovery < 30f) return;
+
+        loadingMgr.StartSlowdownRefresh();
     }
 
     /// <summary>
