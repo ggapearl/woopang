@@ -25,9 +25,6 @@ public class DebugLogCaptureUI : MonoBehaviour
     [Tooltip("이 prefix를 포함한 로그만 캡처. 비워두면 모든 로그 캡처")]
     [SerializeField] private string logPrefixFilter = "[BG-iOS-DBG]";
 
-    [Tooltip("필터 무시하고 모든 로그 캡처 (디버깅용)")]
-    [SerializeField] private bool captureAllLogs = false;
-
     [Tooltip("최대 캡처 라인 수 — 초과 시 가장 오래된 항목 제거")]
     [SerializeField] private int maxCapturedLines = 5000;
 
@@ -87,7 +84,7 @@ public class DebugLogCaptureUI : MonoBehaviour
         _filteredOutCount = 0;
         Application.logMessageReceivedThreaded += HandleLog;
         _isCapturing = true;
-        Debug.Log($"[LogCapUI] StartCapture 시작. filter='{logPrefixFilter}' captureAll={captureAllLogs}");
+        Debug.Log($"[LogCapUI] StartCapture 시작. filter='{logPrefixFilter}'");
         UpdateUI();
     }
 
@@ -119,8 +116,7 @@ public class DebugLogCaptureUI : MonoBehaviour
     {
         System.Threading.Interlocked.Increment(ref _totalLogsSeen);
 
-        bool useFilter = !captureAllLogs && !string.IsNullOrEmpty(logPrefixFilter);
-        if (useFilter && !condition.Contains(logPrefixFilter))
+        if (!string.IsNullOrEmpty(logPrefixFilter) && !condition.Contains(logPrefixFilter))
         {
             System.Threading.Interlocked.Increment(ref _filteredOutCount);
             return;
