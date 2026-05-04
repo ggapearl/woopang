@@ -46,6 +46,19 @@ public class UploadInputMirror : MonoBehaviour
     {
         TryInitialize();
         HideMirror();
+
+        Debug.Log($"[UpInputMirror] OnEnable - mirrorPanel={(mirrorPanel != null ? mirrorPanel.name : "<null>")}, " +
+                  $"mirrorInput={(mirrorInput != null ? mirrorInput.name : "<null>")}, " +
+                  $"closeButton={(closeButton != null ? closeButton.name : "<null>")}, " +
+                  $"sourceInputs={(sourceInputs != null ? sourceInputs.Length : 0)}");
+        if (sourceInputs != null)
+        {
+            for (int i = 0; i < sourceInputs.Length; i++)
+            {
+                var s = sourceInputs[i];
+                Debug.Log($"[UpInputMirror]   source[{i}] {(s != null ? s.name : "<null>")} hideMobileInput={(s != null ? s.shouldHideMobileInput.ToString() : "?")}");
+            }
+        }
     }
 
     void OnDisable()
@@ -76,6 +89,16 @@ public class UploadInputMirror : MonoBehaviour
         {
             closeButton.onClick.RemoveListener(OnCloseClicked);
             closeButton.onClick.AddListener(OnCloseClicked);
+        }
+
+        // source InputField에 native 박스 표시 차단 — 미러만 보이도록
+        if (sourceInputs != null)
+        {
+            for (int i = 0; i < sourceInputs.Length; i++)
+            {
+                if (sourceInputs[i] != null)
+                    sourceInputs[i].shouldHideMobileInput = true;
+            }
         }
 
         initialized = true;
@@ -116,6 +139,8 @@ public class UploadInputMirror : MonoBehaviour
     private void ActivateMirrorFor(InputField source)
     {
         activeSource = source;
+
+        Debug.Log($"[UpInputMirror] ActivateMirrorFor - source={source.name}, mirrorPanel.active={(mirrorPanel != null ? mirrorPanel.activeSelf.ToString() : "<null>")}");
 
         if (mirrorPanel != null) mirrorPanel.SetActive(true);
 
