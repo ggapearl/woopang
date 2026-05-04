@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 // ============================================================
@@ -9,7 +10,7 @@ using UnityEngine.UI;
 // - Copy Log 버튼: 수집한 로그를 GUIUtility.systemCopyBuffer로 복사
 // - 화면 중앙 하단에 부착 (위치/사이즈는 Inspector에서 조정 가능)
 // ============================================================
-public class DebugLogCaptureUI : MonoBehaviour
+public class DebugLogCaptureUI : MonoBehaviour, IPointerDownHandler, IPointerClickHandler
 {
     [Header("UI 참조 (에디터 스크립트가 자동 연결)")]
     [SerializeField] private Button startStopButton;
@@ -39,6 +40,7 @@ public class DebugLogCaptureUI : MonoBehaviour
 
     void Awake()
     {
+        Debug.Log($"[LogCapUI] Awake. startStopButton={(startStopButton!=null)}, copyButton={(copyButton!=null)}, statusLabel={(statusLabel!=null)}, bg={(startStopButtonBg!=null)}, label={(startStopButtonLabel!=null)}");
         WireListeners();
         if (autoStartOnAwake) StartCapture();
         UpdateUI();
@@ -46,8 +48,23 @@ public class DebugLogCaptureUI : MonoBehaviour
 
     void OnEnable()
     {
+        Debug.Log("[LogCapUI] OnEnable");
         WireListeners();
         UpdateUI();
+    }
+
+    void Start()
+    {
+        // Canvas/EventSystem/Raycaster 환경 진단
+        var es = EventSystem.current;
+        var canvas = GetComponentInParent<Canvas>();
+        var gr = canvas != null ? canvas.GetComponent<GraphicRaycaster>() : null;
+        Debug.Log($"[LogCapUI] Start env. EventSystem={(es!=null)}, Canvas={(canvas!=null?canvas.name:"null")}, GraphicRaycaster={(gr!=null)}");
+        if (startStopButton != null)
+        {
+            var img = startStopButton.GetComponent<Image>();
+            Debug.Log($"[LogCapUI] btn state. interactable={startStopButton.interactable}, image.raycastTarget={(img!=null && img.raycastTarget)}, listenerCount={startStopButton.onClick.GetPersistentEventCount()}");
+        }
     }
 
     private void WireListeners()
@@ -55,12 +72,49 @@ public class DebugLogCaptureUI : MonoBehaviour
         if (startStopButton != null)
         {
             startStopButton.onClick.RemoveAllListeners();
-            startStopButton.onClick.AddListener(ToggleCapture);
+            startStopButton.onClick.AddListener(OnStartButtonClicked);
+            Debug.Log("[LogCapUI] startStopButton onClick AddListener 완료");
+        }
+        else
+        {
+            Debug.LogWarning("[LogCapUI] startStopButton == null — 씬 슬롯 비어있음!");
         }
         if (copyButton != null)
         {
             copyButton.onClick.RemoveAllListeners();
-            copyButton.onClick.AddListener(CopyLogsToClipboard);
+            copyButton.onClick.AddListener(OnCopyButtonClicked);
+        }
+    }
+
+    private void OnStartButtonClicked()
+    {
+        Debug.Log("[LogCapUI] onClick(StartStop) 발화됨");
+        ToggleCapture();
+    }
+
+    private void OnCopyButtonClicked()
+    {
+        Debug.Log("[LogCapUI] onClick(Copy) 발화됨");
+        CopyLogsToClipboard();
+    }
+
+    // 패널 어디든 터치/클릭 들어오는지 진단 — Button 우회 안전망
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        Debug.Log($"[LogCapUI] OnPointerDown 패널수신. target={(eventData.pointerCurrentRaycast.gameObject!=null?eventData.pointerCurrentRaycast.gameObject.name:"null")}");
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        Debug.Log($"[LogCapUI] OnPointerClick 패널수신. target={(eventData.pointerCurrentRaycast.gameObject!=null?eventData.pointerCurrentRaycast.gameObject.name:"null")}");
+        // 안전망: 버튼 onClick이 안 와도 패널에 클릭이 들어오면 토글
+        if (eventData.pointerCurrentRaycast.gameObject != null &&
+            (eventData.pointerCurrentRaycast.gameObject.name == "StartStopButton" ||
+             eventData.pointerCurrentRaycast.gameObject.transform.parent != null &&
+             eventData.pointerCurrentRaycast.gameObject.transform.parent.name == "StartStopButton"))
+        {
+            Debug.Log("[LogCapUI] 안전망: StartStopButton 클릭 감지 → ToggleCapture");
+            ToggleCapture();
         }
     }
 
