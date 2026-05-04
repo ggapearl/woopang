@@ -10,22 +10,10 @@ using UnityEngine.SceneManagement;
 // instagramIDInput을 monitoredInputs에 자동 연결.
 // CLAUDE.md 2.3 (완전한 작업 수행) 준수.
 // ============================================================
-[InitializeOnLoad]
+// 자동 트리거 비활성: UploadInputMirror로 대체됨. 수동 메뉴만 유지.
 public static class UploadInputKeyboardShiftSetup
 {
-    static UploadInputKeyboardShiftSetup()
-    {
-        EditorSceneManager.sceneOpened += (s, m) => EditorApplication.delayCall += SetupIfPossible;
-        EditorApplication.delayCall += SetupIfPossible;
-    }
-
-    [UnityEditor.Callbacks.DidReloadScripts]
-    private static void OnScriptsReloaded()
-    {
-        EditorApplication.delayCall += SetupIfPossible;
-    }
-
-    [MenuItem("WOOPANG/Upload/Setup Keyboard Shift (manual)")]
+    [MenuItem("WOOPANG/Upload/Setup Keyboard Shift (deprecated - manual only)")]
     public static void ManualSetup()
     {
         SetupIfPossible();

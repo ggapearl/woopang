@@ -2,13 +2,14 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // ============================================================
-// 업로드 페이지 InputField가 모바일 키보드와 겹치지 않도록
-// contentRoot를 위로 shift. focused InputField의 bottom edge가
-// 키보드 top과 딱 붙게 이동. DM 채팅용 MobileKeyboardHandler의
-// 업로드 전용 경량 버전 (확장/스크롤 없음, 단순 수직 이동만).
+// [DEPRECATED] UploadInputMirror로 대체됨.
+// iOS native input toolbar와 키보드 사이 갭 해결을 contentRoot shift로
+// 시도했으나, 시각적 일관성을 위해 DM 스타일 미러 입력바로 전환.
+// 컴포넌트가 씬에 남아있어도 동작하지 않도록 OnEnable에서 자체 비활성.
 // ============================================================
 public class UploadInputKeyboardShift : MonoBehaviour
 {
+    void Awake() { enabled = false; }
     [Header("대상 설정")]
     [Tooltip("위로 shift할 컨텐츠 루트 (null이면 이 GameObject의 RectTransform 사용)")]
     [SerializeField] private RectTransform contentRoot;
@@ -83,17 +84,6 @@ public class UploadInputKeyboardShift : MonoBehaviour
 
         if (monitoredInputs == null || monitoredInputs.Length == 0)
             monitoredInputs = contentRoot.GetComponentsInChildren<InputField>(true);
-
-        // iOS: native 입력 toolbar(완료/취소 박스) 숨김 — 키보드만 뜨고 입력은 InputField에 직접
-        // toolbar/키보드 사이 갭으로 AR 카메라가 비치는 문제 해결
-        if (monitoredInputs != null)
-        {
-            for (int i = 0; i < monitoredInputs.Length; i++)
-            {
-                if (monitoredInputs[i] != null)
-                    monitoredInputs[i].shouldHideMobileInput = true;
-            }
-        }
 
         initialized = true;
     }
