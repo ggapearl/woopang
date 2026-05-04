@@ -82,11 +82,11 @@ public class DebugLogCaptureUISetup
         LayoutElement buttonRowLE = buttonRow.AddComponent<LayoutElement>();
         buttonRowLE.preferredHeight = 80f;
 
-        // 3. Start/Stop 버튼
-        Button startBtn = CreateButton(buttonRow.transform, "StartStopButton", "Start Log", new Color(0.2f, 0.6f, 0.2f, 1f), font, out Text startBtnLabel);
+        // 3. Start/Stop 버튼 (REC 토글)
+        Button startBtn = CreateButton(buttonRow.transform, "StartStopButton", "● REC", new Color(0.2f, 0.6f, 0.2f, 1f), font, out Text startBtnLabel, out Image startBtnBg);
 
         // 4. Copy 버튼
-        Button copyBtn = CreateButton(buttonRow.transform, "CopyButton", "Copy Log", new Color(0.2f, 0.4f, 0.7f, 1f), font, out Text copyBtnLabel);
+        Button copyBtn = CreateButton(buttonRow.transform, "CopyButton", "Copy Log", new Color(0.2f, 0.4f, 0.7f, 1f), font, out Text copyBtnLabel, out _);
 
         // 5. 상태 라벨
         GameObject statusGO = new GameObject("StatusLabel", typeof(RectTransform));
@@ -106,6 +106,7 @@ public class DebugLogCaptureUISetup
         SerializedObject so = new SerializedObject(ui);
         so.FindProperty("startStopButton").objectReferenceValue = startBtn;
         so.FindProperty("startStopButtonLabel").objectReferenceValue = startBtnLabel;
+        so.FindProperty("startStopButtonBg").objectReferenceValue = startBtnBg;
         so.FindProperty("copyButton").objectReferenceValue = copyBtn;
         so.FindProperty("statusLabel").objectReferenceValue = statusText;
         so.ApplyModifiedProperties();
@@ -117,7 +118,7 @@ public class DebugLogCaptureUISetup
         Debug.Log($"[DebugLogCaptureUISetup] 생성 완료. Canvas={targetCanvas.name}, 위치/사이즈는 Inspector에서 조정 가능.");
     }
 
-    private static Button CreateButton(Transform parent, string name, string label, Color bgColor, Font font, out Text labelText)
+    private static Button CreateButton(Transform parent, string name, string label, Color bgColor, Font font, out Text labelText, out Image bgImage)
     {
         GameObject btnGO = new GameObject(name, typeof(RectTransform));
         btnGO.transform.SetParent(parent, false);
@@ -125,6 +126,7 @@ public class DebugLogCaptureUISetup
         Image btnBg = btnGO.AddComponent<Image>();
         btnBg.color = bgColor;
         btnBg.raycastTarget = true;
+        bgImage = btnBg;
 
         Button btn = btnGO.AddComponent<Button>();
         btn.targetGraphic = btnBg;

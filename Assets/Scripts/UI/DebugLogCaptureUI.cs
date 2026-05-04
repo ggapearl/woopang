@@ -14,8 +14,12 @@ public class DebugLogCaptureUI : MonoBehaviour
     [Header("UI 참조 (에디터 스크립트가 자동 연결)")]
     [SerializeField] private Button startStopButton;
     [SerializeField] private Text startStopButtonLabel;
+    [SerializeField] private Image startStopButtonBg;
     [SerializeField] private Button copyButton;
     [SerializeField] private Text statusLabel;
+
+    private static readonly Color ColorIdle = new Color(0.2f, 0.6f, 0.2f, 1f);
+    private static readonly Color ColorRec = new Color(0.85f, 0.15f, 0.15f, 1f);
 
     [Header("필터 설정")]
     [Tooltip("이 prefix를 포함한 로그만 캡처. 비워두면 모든 로그 캡처")]
@@ -33,11 +37,18 @@ public class DebugLogCaptureUI : MonoBehaviour
 
     void Awake()
     {
+        WireListeners();
         if (autoStartOnAwake) StartCapture();
         UpdateUI();
     }
 
     void OnEnable()
+    {
+        WireListeners();
+        UpdateUI();
+    }
+
+    private void WireListeners()
     {
         if (startStopButton != null)
         {
@@ -111,18 +122,29 @@ public class DebugLogCaptureUI : MonoBehaviour
     {
         if (_isCapturing && statusLabel != null)
         {
-            // 캡처 중일 때만 라인 카운트 갱신 (매 프레임)
-            statusLabel.text = $"Capturing... {_capturedLogs.Count} lines";
+            // 캡처 중일 때만 라인 카운트 + REC 깜빡임
+            bool blink = (Time.unscaledTime % 1f) < 0.5f;
+            string dot = blink ? "<color=#FF3030>●</color> " : "  ";
+            statusLabel.text = $"{dot}REC  {_capturedLogs.Count} lines";
+            statusLabel.supportRichText = true;
         }
     }
 
     private void UpdateUI()
     {
         if (startStopButtonLabel != null)
-            startStopButtonLabel.text = _isCapturing ? "Stop Log" : "Start Log";
+            startStopButtonLabel.text = _isCapturing ? "■ STOP" : "● REC";
+
+        if (startStopButtonBg != null)
+            startStopButtonBg.color = _isCapturing ? ColorRec : ColorIdle;
 
         if (statusLabel != null)
-            statusLabel.text = _isCapturing ? $"Capturing... {_capturedLogs.Count} lines" : $"Stopped ({_capturedLogs.Count} lines)";
+        {
+            statusLabel.supportRichText = true;
+            statusLabel.text = _isCapturing
+                ? $"<color=#FF3030>●</color> REC  {_capturedLogs.Count} lines"
+                : $"Stopped ({_capturedLogs.Count} lines)";
+        }
 
         if (copyButton != null)
             copyButton.interactable = _capturedLogs.Count > 0;
