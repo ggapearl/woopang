@@ -150,6 +150,7 @@ public class UploadInputKeyboardShift : MonoBehaviour
         return null;
     }
 
+    private float _lastShiftDiagTime = -1f;
     private float ComputeRequiredShift(InputField inp, float keyboardCanvasHeight)
     {
         if (canvasRect == null) return 0f;
@@ -164,7 +165,20 @@ public class UploadInputKeyboardShift : MonoBehaviour
         float inputBottomY = localBottomLeft.y + canvasRect.rect.height * canvasRect.pivot.y;
 
         float keyboardTopY = keyboardCanvasHeight;
-        return (keyboardTopY + bottomGap) - inputBottomY;
+        float result = (keyboardTopY + bottomGap) - inputBottomY;
+
+        // 진단: 1초 간격으로 좌표 변환 결과 출력
+        if (Time.unscaledTime - _lastShiftDiagTime > 1f)
+        {
+            Debug.Log($"[UpKbShift-Calc] {inp.name}: worldBL=({corners[0].x:0},{corners[0].y:0}) " +
+                      $"localBL=({localBottomLeft.x:0},{localBottomLeft.y:0}) " +
+                      $"inputBottomY={inputBottomY:0} kbTopY={keyboardTopY:0} " +
+                      $"canvasH={canvasRect.rect.height:0} pivotY={canvasRect.pivot.y:0.00} " +
+                      $"raw={result:0}");
+            _lastShiftDiagTime = Time.unscaledTime;
+        }
+
+        return result;
     }
 
     private float GetKeyboardHeightCanvas()
