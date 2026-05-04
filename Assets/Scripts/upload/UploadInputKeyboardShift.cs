@@ -105,11 +105,8 @@ public class UploadInputKeyboardShift : MonoBehaviour
         if (kbH > 0f && focused != null)
         {
             float required = ComputeRequiredShift(focused, kbH);
-            // 양수: 입력이 키보드에 가려짐 → 위로 올림 (maxShiftPx로 제한)
-            // 음수: 입력이 키보드와 떨어짐 → 아래로 끌어내려 toolbar에 붙임
-            if (required > 0f && maxShiftPx > 0f)
-                required = Mathf.Min(required, maxShiftPx);
-            targetShift = required;
+            if (maxShiftPx > 0f) required = Mathf.Min(required, maxShiftPx);
+            targetShift = Mathf.Max(0f, required);
         }
         else
         {
