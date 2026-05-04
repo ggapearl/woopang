@@ -84,6 +84,17 @@ public class UploadInputKeyboardShift : MonoBehaviour
         if (monitoredInputs == null || monitoredInputs.Length == 0)
             monitoredInputs = contentRoot.GetComponentsInChildren<InputField>(true);
 
+        // iOS: native 입력 toolbar(완료/취소 박스) 숨김 — 키보드만 뜨고 입력은 InputField에 직접
+        // toolbar/키보드 사이 갭으로 AR 카메라가 비치는 문제 해결
+        if (monitoredInputs != null)
+        {
+            for (int i = 0; i < monitoredInputs.Length; i++)
+            {
+                if (monitoredInputs[i] != null)
+                    monitoredInputs[i].shouldHideMobileInput = true;
+            }
+        }
+
         initialized = true;
     }
 
