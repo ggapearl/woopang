@@ -23,12 +23,6 @@ public class UploadInputKeyboardShift : MonoBehaviour
     [Tooltip("iOS 키보드 위 시스템 toolbar(완료/취소 자동 표시 영역) 보정 (px). area.y 기반 계산으로 자동 처리되지만, 디바이스별 미세조정 필요시 사용")]
     [SerializeField] private float iosToolbarCompensation = 0f;
 
-    [Header("Editor 시뮬레이션 (iOS 키보드 미리보기)")]
-    [Tooltip("Editor에서 InputField가 포커스되면 이 값만큼 가짜 키보드 높이로 시뮬레이션 (실제 빌드는 무시)")]
-    [SerializeField] private float editorSimKeyboardHeight = 0f;
-    [Tooltip("Editor에서 항상 시뮬레이션 활성화 (포커스 없어도). 빠른 미리보기용.")]
-    [SerializeField] private bool editorSimAlways = false;
-
     [Tooltip("shift 애니메이션 속도 (클수록 빠름)")]
     [SerializeField] private float lerpSpeed = 12f;
 
@@ -44,11 +38,30 @@ public class UploadInputKeyboardShift : MonoBehaviour
     private int baselineVisibleBottom = -1;
     private float lastJniErrorTime;
 
+    // ─── 진단 로그 상태 (변화 감지용) ───
+    private string _lastFocusedName = "<none>";
+    private float _lastLoggedKbHeight = -1f;
+    private float _lastLoggedShift = -1f;
+    private float _lastPeriodicLogTime = -1f;
+
     void OnEnable()
     {
         TryInitialize();
         targetShift = 0f;
         if (initialized) contentRoot.anchoredPosition = origAnchoredPos;
+
+        Debug.Log($"[UpKbShift] OnEnable - contentRoot={(contentRoot != null ? contentRoot.name : "<null>")}, " +
+                  $"canvasRect={(canvasRect != null ? canvasRect.name : "<null>")}, " +
+                  $"monitoredInputs={(monitoredInputs != null ? monitoredInputs.Length : 0)}, " +
+                  $"Screen={Screen.width}x{Screen.height}");
+        if (monitoredInputs != null)
+        {
+            for (int i = 0; i < monitoredInputs.Length; i++)
+            {
+                var inp = monitoredInputs[i];
+                Debug.Log($"[UpKbShift]   [{i}] {(inp != null ? inp.name : "<null>")} active={(inp != null && inp.gameObject.activeInHierarchy)}");
+            }
+        }
     }
 
     void OnDisable()
@@ -81,6 +94,14 @@ public class UploadInputKeyboardShift : MonoBehaviour
         float kbH = GetKeyboardHeightCanvas();
         InputField focused = GetFocusedMonitoredInput();
 
+        // ─── 진단: 포커스 변화 감지 ───
+        string focusedName = focused != null ? focused.name : "<none>";
+        if (focusedName != _lastFocusedName)
+        {
+            Debug.Log($"[UpKbShift] FOCUS 변화: {_lastFocusedName} → {focusedName}, kbH(canvas)={kbH:0.0}");
+            _lastFocusedName = focusedName;
+        }
+
         if (kbH > 0f && focused != null)
         {
             float required = ComputeRequiredShift(focused, kbH);
@@ -95,6 +116,27 @@ public class UploadInputKeyboardShift : MonoBehaviour
         float current = contentRoot.anchoredPosition.y - origAnchoredPos.y;
         float next = Mathf.Lerp(current, targetShift, Time.unscaledDeltaTime * lerpSpeed);
         contentRoot.anchoredPosition = new Vector2(origAnchoredPos.x, origAnchoredPos.y + next);
+
+        // ─── 진단: 키보드 높이 또는 shift가 5px 이상 변하면 로그 ───
+        if (Mathf.Abs(kbH - _lastLoggedKbHeight) > 5f || Mathf.Abs(targetShift - _lastLoggedShift) > 5f)
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            Rect area = TouchScreenKeyboard.area;
+            Debug.Log($"[UpKbShift-iOS] kbH(canvas)={kbH:0.0} target={targetShift:0.0} current={next:0.0} | " +
+                      $"area=({area.x:0},{area.y:0},{area.width:0},{area.height:0}) Screen.h={Screen.height} | focused={focusedName}");
+#else
+            Debug.Log($"[UpKbShift] kbH(canvas)={kbH:0.0} target={targetShift:0.0} current={next:0.0} | focused={focusedName}");
+#endif
+            _lastLoggedKbHeight = kbH;
+            _lastLoggedShift = targetShift;
+        }
+
+        // ─── 진단: 키보드가 활성인데 shift가 0이면 매 2초마다 경고 (보정 실패 의심) ───
+        if (kbH > 0f && targetShift <= 0.1f && focused == null && Time.unscaledTime - _lastPeriodicLogTime > 2f)
+        {
+            Debug.LogWarning($"[UpKbShift] 키보드 감지됐지만 monitoredInputs 중 포커스된 입력 없음 — 누락된 InputField 확인 필요");
+            _lastPeriodicLogTime = Time.unscaledTime;
+        }
     }
 
     private InputField GetFocusedMonitoredInput()
@@ -140,13 +182,6 @@ public class UploadInputKeyboardShift : MonoBehaviour
     private float GetNativeKeyboardHeight()
     {
 #if UNITY_EDITOR
-        // Editor 시뮬레이션 — Inspector에서 editorSimKeyboardHeight 설정 시 가짜 키보드 표시
-        if (editorSimKeyboardHeight > 0f)
-        {
-            if (editorSimAlways) return editorSimKeyboardHeight;
-            // 포커스된 InputField가 있을 때만 시뮬레이션 (실제 동작에 가깝게)
-            if (GetFocusedMonitoredInput() != null) return editorSimKeyboardHeight;
-        }
         return 0f;
 #elif UNITY_IOS
         // iOS: TouchScreenKeyboard.area의 좌표는 좌하단 원점.
