@@ -13,21 +13,50 @@ public class EditorVirtualKeyboard : MonoBehaviour
     public static EditorVirtualKeyboard Instance { get; private set; }
 
     [Header("키보드 설정")]
-    [SerializeField] private float keyboardHeight = 300f;
+    [Tooltip("Android 키보드 높이 = 화면 높이 × 이 비율 (실제 디바이스 ~38%)")]
+    [SerializeField, Range(0.2f, 0.6f)] private float androidHeightRatio = 0.40f;
+    [Tooltip("iOS 키보드 높이 = 화면 높이 × 이 비율 (실제 디바이스 ~42%)")]
+    [SerializeField, Range(0.2f, 0.6f)] private float iosHeightRatio = 0.43f;
+    [Tooltip("자동 감지 모드(InputField 포커스) 시 사용. None일 때 fallback")]
+    [SerializeField, Range(0.2f, 0.6f)] private float defaultHeightRatio = 0.40f;
     [SerializeField] private Color backgroundColor = new Color(0.15f, 0.15f, 0.18f, 0.98f);
     [SerializeField] private Color keyColor = new Color(0.25f, 0.25f, 0.28f, 1f);
     [SerializeField] private Color keyTextColor = Color.white;
     [SerializeField] private Color specialKeyColor = new Color(0.35f, 0.35f, 0.38f, 1f);
 
+    private float keyboardHeight = 300f;
+
     [Header("폰트 설정")]
     [SerializeField] private Font keyFont;
     [SerializeField] private int keyFontSize = 24;
 
+    public enum SimulatedPlatform { None, Android, iOS }
+    private SimulatedPlatform simulatedPlatform = SimulatedPlatform.None;
+
     private GameObject keyboardPanel;
+    private RectTransform keyboardPanelRect;
     private InputField currentInputField;
     private bool isShiftActive = false;
     private bool isKoreanMode = true;
     private Canvas parentCanvas;
+
+    private const float SLIDE_DURATION = 0.25f;
+    private float slideStartTime = -1f;
+    private float slideFrom;
+    private float slideTo;
+    private float currentY;
+
+    public static float CurrentVisibleHeight
+    {
+        get
+        {
+            if (Instance == null || Instance.keyboardPanel == null) return 0f;
+            float kh = Instance.keyboardHeight;
+            float bottomY = Instance.currentY;
+            float visible = Mathf.Clamp(kh + bottomY, 0f, kh);
+            return visible;
+        }
+    }
 
     // 한글 자모
     private static readonly string[] koreanConsonants = { "ㅂ", "ㅈ", "ㄷ", "ㄱ", "ㅅ", "ㅛ", "ㅕ", "ㅑ", "ㅐ", "ㅔ",
@@ -90,22 +119,38 @@ public class EditorVirtualKeyboard : MonoBehaviour
     void Update()
     {
 #if UNITY_EDITOR
-        // 현재 선택된 오브젝트가 InputField인지 확인
-        GameObject selected = EventSystem.current?.currentSelectedGameObject;
-        if (selected != null)
+        // 수동 토글 모드(Android/iOS 버튼) 활성화 시 자동 감지 비활성
+        if (simulatedPlatform == SimulatedPlatform.None)
         {
-            InputField inputField = selected.GetComponent<InputField>();
-            if (inputField != null && inputField != currentInputField)
+            GameObject selected = EventSystem.current?.currentSelectedGameObject;
+            if (selected != null)
             {
-                ShowKeyboard(inputField);
+                InputField inputField = selected.GetComponent<InputField>();
+                if (inputField != null && inputField != currentInputField)
+                {
+                    ShowKeyboard(inputField);
+                }
+                else if (inputField == null && !IsKeyboardElement(selected) && currentInputField != null)
+                {
+                    HideKeyboard();
+                }
+            }
+            else if (currentInputField != null)
+            {
+                HideKeyboard();
             }
         }
-        else if (currentInputField != null && keyboardPanel != null)
+
+        if (slideStartTime >= 0f && keyboardPanelRect != null)
         {
-            // 포커스 해제되면 키보드 숨김 (키보드 자체 클릭 제외)
-            if (selected == null || !IsKeyboardElement(selected))
+            float t = Mathf.Clamp01((Time.unscaledTime - slideStartTime) / SLIDE_DURATION);
+            currentY = Mathf.Lerp(slideFrom, slideTo, t);
+            keyboardPanelRect.anchoredPosition = new Vector2(0f, currentY);
+            if (t >= 1f)
             {
-                // 딜레이를 두고 숨김 (키 클릭 후 포커스 복원 시간 확보)
+                slideStartTime = -1f;
+                if (Mathf.Approximately(currentY, -keyboardHeight) && keyboardPanel.activeSelf)
+                    keyboardPanel.SetActive(false);
             }
         }
 #endif
@@ -124,13 +169,93 @@ public class EditorVirtualKeyboard : MonoBehaviour
     {
         currentInputField = inputField;
 
+        // 플랫폼별 높이 결정 — 화면 높이 비율 기반 (실제 디바이스 비율과 유사)
+        float canvasH = GetCanvasHeight();
+        float ratio = simulatedPlatform == SimulatedPlatform.Android ? androidHeightRatio
+                    : simulatedPlatform == SimulatedPlatform.iOS ? iosHeightRatio
+                    : defaultHeightRatio;
+        keyboardHeight = canvasH * ratio;
+
         if (keyboardPanel == null)
         {
             CreateKeyboardPanel();
         }
+        else
+        {
+            ResizeKeyboardPanel();
+        }
 
         keyboardPanel.SetActive(true);
         UpdateKeyLabels();
+        ApplyPlatformAppearance();
+
+        slideFrom = currentY;
+        slideTo = 0f;
+        slideStartTime = Time.unscaledTime;
+    }
+
+    private float GetCanvasHeight()
+    {
+        if (parentCanvas != null)
+        {
+            var rt = parentCanvas.GetComponent<RectTransform>();
+            if (rt != null && rt.rect.height > 0f) return rt.rect.height;
+        }
+        return Screen.height;
+    }
+
+    private void ResizeKeyboardPanel()
+    {
+        if (keyboardPanelRect == null) return;
+        keyboardPanelRect.sizeDelta = new Vector2(0, keyboardHeight);
+
+        // 모든 키 라벨 폰트 크기 갱신
+        int fs = ComputeKeyFontSize();
+        var texts = keyboardPanel.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < texts.Length; i++) texts[i].fontSize = fs;
+
+        if (!keyboardPanel.activeSelf || Mathf.Approximately(slideTo, -keyboardHeight))
+        {
+            currentY = -keyboardHeight;
+            keyboardPanelRect.anchoredPosition = new Vector2(0f, currentY);
+        }
+    }
+
+    /// <summary>
+    /// 인스펙터 버튼용: 플랫폼별 가상 키보드 토글.
+    /// 같은 플랫폼 다시 누르면 닫힘, 다른 플랫폼 누르면 색만 바꾸고 표시 유지.
+    /// </summary>
+    public void TogglePlatformKeyboard(SimulatedPlatform platform)
+    {
+        bool isShown = keyboardPanel != null && keyboardPanel.activeSelf && Mathf.Approximately(slideTo, 0f);
+        if (isShown && simulatedPlatform == platform)
+        {
+            simulatedPlatform = SimulatedPlatform.None;
+            HideKeyboard();
+            return;
+        }
+
+        simulatedPlatform = platform;
+        ShowKeyboard(null);
+    }
+
+    private void ApplyPlatformAppearance()
+    {
+        if (keyboardPanel == null) return;
+        Image bg = keyboardPanel.GetComponent<Image>();
+        if (bg == null) return;
+        switch (simulatedPlatform)
+        {
+            case SimulatedPlatform.Android:
+                bg.color = new Color(0.10f, 0.10f, 0.12f, 0.98f);
+                break;
+            case SimulatedPlatform.iOS:
+                bg.color = new Color(0.82f, 0.83f, 0.86f, 0.98f);
+                break;
+            default:
+                bg.color = backgroundColor;
+                break;
+        }
     }
 
     /// <summary>
@@ -138,10 +263,11 @@ public class EditorVirtualKeyboard : MonoBehaviour
     /// </summary>
     public void HideKeyboard()
     {
-        if (keyboardPanel != null)
-            keyboardPanel.SetActive(false);
-
         currentInputField = null;
+        if (keyboardPanel == null) return;
+        slideFrom = currentY;
+        slideTo = -keyboardHeight;
+        slideStartTime = Time.unscaledTime;
     }
 
     private void CreateKeyboardPanel()
@@ -156,8 +282,10 @@ public class EditorVirtualKeyboard : MonoBehaviour
         panelRect.anchorMin = new Vector2(0, 0);
         panelRect.anchorMax = new Vector2(1, 0);
         panelRect.pivot = new Vector2(0.5f, 0);
-        panelRect.anchoredPosition = Vector2.zero;
+        panelRect.anchoredPosition = new Vector2(0, -keyboardHeight);
         panelRect.sizeDelta = new Vector2(0, keyboardHeight);
+        keyboardPanelRect = panelRect;
+        currentY = -keyboardHeight;
 
         // 배경
         Image bg = keyboardPanel.AddComponent<Image>();
@@ -304,9 +432,16 @@ public class EditorVirtualKeyboard : MonoBehaviour
         Text text = textObj.AddComponent<Text>();
         text.text = keyLabel;
         text.font = keyFont;
-        text.fontSize = keyFontSize;
+        text.fontSize = ComputeKeyFontSize();
         text.color = keyTextColor;
         text.alignment = TextAnchor.MiddleCenter;
+    }
+
+    private int ComputeKeyFontSize()
+    {
+        // 키보드 높이의 약 1/14 정도가 적당 (5행 × 키 높이 → 키 높이의 절반 정도)
+        int dynamic = Mathf.RoundToInt(keyboardHeight / 14f);
+        return Mathf.Clamp(dynamic, keyFontSize, 64);
     }
 
     private void CreateSpecialKey(Transform parent, string label, Action onClick, float widthMultiplier = 1f)
@@ -342,7 +477,7 @@ public class EditorVirtualKeyboard : MonoBehaviour
         Text text = textObj.AddComponent<Text>();
         text.text = label;
         text.font = keyFont;
-        text.fontSize = keyFontSize - 2;
+        text.fontSize = Mathf.Max(8, ComputeKeyFontSize() - 2);
         text.color = keyTextColor;
         text.alignment = TextAnchor.MiddleCenter;
     }
