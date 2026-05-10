@@ -73,6 +73,34 @@ Unity 에디터 버전을 올리거나, 다른 머신(Mac/Windows)에서 프로�
 | `com.yasirkula.nativefilepicker` | 동상 | [link](Packages/com.yasirkula.nativefilepicker/PATCH_NOTES.md) |
 | `com.yasirkula.simplefilebrowser` | 동상 | [link](Packages/com.yasirkula.simplefilebrowser/PATCH_NOTES.md) |
 
+### Unity 에디터 버전 업데이트 시 AI 워크플로우 (필독)
+
+사용자가 새 Unity 버전(예: 6000.4.6f1 → 6000.5.x, 6000.4.6f1 → 6001.x)을 설치하고 프로젝트를 열 때 발생하는 컴파일/빌드 에러는 대부분 외부 패키지의 새 컴파일러 / AGP / Gradle 호환성 누락이 원인. **사용자가 "Unity 업데이트했어"라고 고지하면 AI는 다음 절차를 자동으로 수행:**
+
+1. **현재 버전 확인**: `ProjectSettings/ProjectVersion.txt` 읽어 새 버전 확인 후 CLAUDE.md 1번 섹션의 Unity 버전 표기 업데이트
+2. **첫 빌드 시도 권장**: 사용자에게 안드로이드 빌드 1회 시도 요청 → 로그 받기
+3. **로그 분석 + 외부 검색**: 각 에러를 분류:
+   - **컴파일 에러** (예: `error CS0592 Attribute 'SerializeField' is not valid`): 외부 패키지 코드가 새 컴파일러에 부적합 → 해당 패키지를 embed하고 패치
+   - **Gradle/AGP 에러** (예: `Minimum supported Gradle version`, `Namespace 'X' is used in multiple modules`): Unity Preferences External Tools 점검 + .aar manifest namespace 분리
+   - **Manifest merger 충돌**: 패키지 자체의 AndroidManifest.xml 또는 Unity 자동 생성 mainTemplate/launcherTemplate 검토
+4. **패치 적용**:
+   - 패키지를 `Packages/` 안에 embed (git URL/registry → `file:패키지명`)
+   - `manifest.json`, `packages-lock.json` 동기화
+   - 해당 패키지에 `PATCH_NOTES.md` 추가 (원본 해시 / 패치 사유 / 공식 fix 시 복원 절차 / .aar 재압축은 Python zipfile + forward-slash 필수)
+   - CLAUDE.md "embed된 패키지" 표에 행 추가
+5. **빌드 재시도 후 통과 시 git 커밋·푸시** (사용자 명시적 승인 필요)
+6. **공식 fix 모니터링**: PATCH_NOTES에 복원 절차 명시했으니 추후 패키지 제작자가 해당 Unity 버전 호환 패치 내면 embed 폴더 삭제 + manifest 원복
+
+### 자주 발생하는 패턴 (참고)
+
+| 증상 | 원인 | 해결 패턴 |
+|------|------|-----------|
+| `[SerializeField] is not valid on this declaration type` | 새 Roslyn 컴파일러가 auto-property attribute 위치 거부 | `[SerializeField]` → `[field: SerializeField]` |
+| `Minimum supported Gradle version is X.Y.Z` | Unity Preferences가 외부 구버전 Gradle 가리킴 | Preferences > External Tools > "Use Gradle Installed with Unity" |
+| `Namespace 'X' is used in multiple modules` | AGP 9+의 namespace 검증 강화 | 충돌 .aar 풀어서 AndroidManifest의 `package=` 속성 분리 후 재압축 |
+| `EPERM: operation not permitted ... PackageCache` | Defender 실시간 보호가 rename 차단 | Defender 제외 폴더에 프로젝트 경로 추가 + Library 통삭 |
+| `Reference 'UnityEditor.iOS.Extensions.Xcode' missing` | 안드로이드 모드에서 iOS dll의 reference 검증 실패 | `.dll.meta`에서 `validateReferences: 0` |
+
 ### Android Native 라이브러리 패치 시 주의 (.aar 재압축)
 
 .aar 안의 AndroidManifest.xml을 수정 후 재압축할 때 **PowerShell의 `Compress-Archive`/`ZipFile.CreateFromDirectory`는 Windows 경로 구분자(`\`)를 그대로 넣어 Android 빌드가 못 읽음**. 반드시 Python `zipfile` 모듈 또는 zip CLI 사용:
@@ -89,4 +117,4 @@ with zipfile.ZipFile(dst_aar, 'w', zipfile.ZIP_DEFLATED) as zf:
 
 ---
 
-*최종 업데이트: 2026-05-11 (Unity 6000.4.6f1 AGP 9 namespace 패치 + embed 패키지 5개 추가)*
+*최종 업데이트: 2026-05-11 (Unity 업데이트 AI 워크플로우 + 자주 발생 패턴 표 추가)*
