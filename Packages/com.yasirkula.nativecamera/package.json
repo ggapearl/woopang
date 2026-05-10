@@ -1,0 +1,10 @@
+{
+  "name": "com.yasirkula.nativecamera",
+  "displayName": "Native Camera",
+  "version": "1.5.0",
+  "documentationUrl": "https://github.com/yasirkula/UnityNativeCamera",
+  "changelogUrl": "https://github.com/yasirkula/UnityNativeCamera/releases",
+  "licensesUrl": "https://github.com/yasirkula/UnityNativeCamera/blob/master/LICENSE.txt",
+  "description": "This plugin helps you take pictures/record videos natively with your device's camera on Android and iOS. It has built-in support for runtime permissions, as well.",
+  "_fingerprint": "72f5ebba26c219b4c4cda202bff2f59bfdaa47f8"
+}

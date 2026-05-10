@@ -45,11 +45,11 @@ android {
     buildTypes {
         debug {
             minifyEnabled **MINIFY_DEBUG**
-            proguardFiles getDefaultProguardFile('proguard-android.txt')**SIGNCONFIG**
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')**SIGNCONFIG**
         }
         release {
             minifyEnabled **MINIFY_RELEASE**
-            proguardFiles getDefaultProguardFile('proguard-android.txt')**SIGNCONFIG**
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')**SIGNCONFIG**
         }
     }
 }

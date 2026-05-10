@@ -1,7 +1,7 @@
 # WOOPANG 프로젝트 작업 가이드
 
 ## 1. 프로젝트 개요
-- **프로젝트**: WOOPANG - AR 기반 SNS 앱 (Unity 6000.3.13f1)
+- **프로젝트**: WOOPANG - AR 기반 SNS 앱 (Unity 6000.4.6f1)
 - **회사명**: 쾌엔터테인먼트 (QUE. ENT)
 - **타겟**: 100만~1000만 사용자 규모, 모바일 (iOS/Android)
 - **상태**: 개발 중 (앱서비스 활성화 전)
@@ -44,6 +44,7 @@
 | 마케팅/캠페인/광고 | [docs/claude/marketing.md](docs/claude/marketing.md) |
 | 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) |
 | 기획안/제안서 HTML | [docs/claude/proposals.md](docs/claude/proposals.md) |
+| **앳하트(AtHeart) 콘텐츠 / 촬영구성안 / 멤버 분석** | **[docs/claude/atheart-contents.md](docs/claude/atheart-contents.md)** |
 | 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
 | MCP Unity (Claude ↔ Unity Editor) | [docs/claude/mcp-unity.md](docs/claude/mcp-unity.md) |
 
@@ -51,4 +52,41 @@
 
 ---
 
-*최종 업데이트: 2026-05-01 (슬림화 — UI/디자인/코드스타일/MCP는 docs/claude/로 이동)*
+## 4. Unity 버전 업그레이드 / 새 머신 셋업 체크리스트
+
+Unity 에디터 버전을 올리거나, 다른 머신(Mac/Windows)에서 프로젝트 처음 열 때:
+
+1. `Library/`, `Temp/`, `obj/`, `Logs/` 폴더는 캐시 — 문제 발생 시 통삭 가능 (`Assets/`, `ProjectSettings/`, `Packages/`는 절대 삭제 금지)
+2. Windows Defender 실시간 보호가 `PackageCache` rename을 막을 수 있음 → `C:\woopang` 폴더를 Defender 제외 경로로 등록
+3. Unity Preferences > External Tools > Gradle은 **"Gradle Installed with Unity"** 사용 (외부 Gradle 경로 비우기). Unity 6000.4.6f1은 Gradle 9.1.0 / AGP 9 사용.
+
+### embed된 패키지 (Unity 6000.4.6f1 + AGP 9 호환 패치)
+
+이 패키지들은 원래 registry/git URL로 잡혀있었으나 namespace/문법 충돌로 빌드 실패해서 `Packages/`에 embed해 패치 중. **절대 원래 URL로 되돌리지 말 것**. 공식 fix 나오면 각 PATCH_NOTES 참고해서 복원.
+
+| 패키지 | 패치 사유 | PATCH_NOTES |
+|--------|-----------|-------------|
+| `com.google.ar.core.arfoundation.extensions` | Unity 6 컴파일러에서 `[SerializeField]` on property 거부 | [link](Packages/com.google.ar.core.arfoundation.extensions/PATCH_NOTES.md) |
+| `com.unity.xr.arcore` | AGP 9에서 `unityandroidpermissions.aar`의 namespace가 `arcore_client.aar`와 충돌 | [link](Packages/com.unity.xr.arcore/PATCH_NOTES.md) |
+| `com.yasirkula.nativecamera` | AGP 9 namespace 충돌 (4개 yasirkula 패키지 동일 namespace) | [link](Packages/com.yasirkula.nativecamera/PATCH_NOTES.md) |
+| `com.yasirkula.nativegallery` | 동상 | [link](Packages/com.yasirkula.nativegallery/PATCH_NOTES.md) |
+| `com.yasirkula.nativefilepicker` | 동상 | [link](Packages/com.yasirkula.nativefilepicker/PATCH_NOTES.md) |
+| `com.yasirkula.simplefilebrowser` | 동상 | [link](Packages/com.yasirkula.simplefilebrowser/PATCH_NOTES.md) |
+
+### Android Native 라이브러리 패치 시 주의 (.aar 재압축)
+
+.aar 안의 AndroidManifest.xml을 수정 후 재압축할 때 **PowerShell의 `Compress-Archive`/`ZipFile.CreateFromDirectory`는 Windows 경로 구분자(`\`)를 그대로 넣어 Android 빌드가 못 읽음**. 반드시 Python `zipfile` 모듈 또는 zip CLI 사용:
+
+```python
+import zipfile, os
+with zipfile.ZipFile(dst_aar, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for root, _, files in os.walk(src_dir):
+        for f in files:
+            full = os.path.join(root, f)
+            arc = os.path.relpath(full, src_dir).replace(os.sep, '/')
+            zf.write(full, arc)
+```
+
+---
+
+*최종 업데이트: 2026-05-11 (Unity 6000.4.6f1 AGP 9 namespace 패치 + embed 패키지 5개 추가)*
