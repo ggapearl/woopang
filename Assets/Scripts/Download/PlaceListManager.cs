@@ -31,7 +31,22 @@ public class PlaceListManager : MonoBehaviour
     private float maxDisplayDistance;
 
     private List<(object place, float distance, string id, string displayText, string colorHex)> combinedPlaces = new List<(object, float, string, string, string)>();
-    
+
+    // 매 프레임 거리/정렬만 갱신용 — 풀빌드 시 채우고 Update()에서 GPS 변동분만 반영
+    private struct LiveEntry
+    {
+        public string id;
+        public string baseLabel;     // 거리 빼고 표시명만 (예: "스타벅스" 또는 "👤 user")
+        public string colorHex;
+        public float baseLat;
+        public float baseLon;
+    }
+    private List<LiveEntry> liveEntries = new List<LiveEntry>();
+    private System.Text.StringBuilder liveBuilder = new System.Text.StringBuilder(2048);
+    private float lastGpsLat;
+    private float lastGpsLon;
+    private bool hasLiveSnapshot = false;
+
     // Stats
     private int woopangCount;
     private int tourAPICount;
@@ -182,6 +197,8 @@ public class PlaceListManager : MonoBehaviour
 #endif
 
         combinedPlaces.Clear();
+        liveEntries.Clear();
+        lastGpsLat = lat; lastGpsLon = lon;
         woopangCount = 0; tourAPICount = 0; publicTransportCount = 0; p2pUserCount = 0;
 
         bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
@@ -239,6 +256,7 @@ public class PlaceListManager : MonoBehaviour
                         CATEGORY_COLORS.TryGetValue(cat, out colorHex);
                     string displayName = cached.displayName;
                     combinedPlaces.Add((cached, d, id.ToString(), $"{displayName} - {Mathf.FloorToInt(d)}m", colorHex));
+                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude });
                     addedIds.Add(id);
                 }
             }
@@ -271,6 +289,7 @@ public class PlaceListManager : MonoBehaviour
                     if (string.IsNullOrEmpty(pColor) && !string.IsNullOrEmpty(p.category))
                         CATEGORY_COLORS.TryGetValue(p.category, out pColor);
                     combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", pColor));
+                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude });
                 }
             }
         }
@@ -282,6 +301,7 @@ public class PlaceListManager : MonoBehaviour
                 if (d <= maxDisplayDistance) {
                     tourAPICount++;
                     combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
+                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx });
                 }
             }
         }
@@ -306,13 +326,59 @@ public class PlaceListManager : MonoBehaviour
             sb.Append($"<color=#{color}>{item.displayText}</color>\n");
         }
 
-        sb.Append($"\n{GetLocalizedText("woopangData")}: {woopangCount}");
-        sb.Append($"\n{GetLocalizedText("tourApiData")}: {tourAPICount}");
-        sb.Append($"\n{GetLocalizedText("transportData")}: {publicTransportCount}");
-        sb.Append($"\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}");
+        cachedFooter = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
+        sb.Append(cachedFooter);
 
         if (listText != null) listText.text = sb.ToString();
+        hasLiveSnapshot = liveEntries.Count > 0;
         yield return null;
+    }
+
+    private string cachedFooter = "";
+
+    void Update()
+    {
+        if (!hasLiveSnapshot || listText == null) return;
+        if (listPanel == null || !listPanel.activeInHierarchy) return;
+
+        float lat = lastGpsLat;
+        float lon = lastGpsLon;
+#if UNITY_EDITOR
+        if (VirtualLocation.Instance != null)
+        {
+            lat = VirtualLocation.Instance.Latitude;
+            lon = VirtualLocation.Instance.Longitude;
+        }
+#else
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
+#endif
+
+        int count = liveEntries.Count;
+        var ordered = new (float d, int idx)[count];
+        for (int i = 0; i < count; i++)
+        {
+            var e = liveEntries[i];
+            ordered[i] = (CalculateDistance(lat, lon, e.baseLat, e.baseLon), i);
+        }
+        Array.Sort(ordered, (a, b) => a.d.CompareTo(b.d));
+
+        liveBuilder.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            var pair = ordered[i];
+            if (maxDisplayDistance > 0f && pair.d > maxDisplayDistance) continue;
+            var e = liveEntries[pair.idx];
+            string color = string.IsNullOrEmpty(e.colorHex) ? "FFFFFF" : e.colorHex;
+            liveBuilder.Append("<color=#").Append(color).Append('>')
+                       .Append(e.baseLabel).Append(" - ")
+                       .Append(Mathf.FloorToInt(pair.d)).Append("m</color>\n");
+        }
+        liveBuilder.Append(cachedFooter);
+        listText.text = liveBuilder.ToString();
     }
 
     /// <summary>
@@ -337,6 +403,7 @@ public class PlaceListManager : MonoBehaviour
                 p2pUserCount++;
                 string displayText = $"👤 {user.username} - {Mathf.FloorToInt(user.distance)}m";
                 combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
+                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"👤 {user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude });
             }
         }
     }
@@ -369,6 +436,7 @@ public class PlaceListManager : MonoBehaviour
             if (d <= maxDisplayDistance) {
                 count++;
                 combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", colorHex));
+                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon });
             }
         }
     }
