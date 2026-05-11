@@ -252,8 +252,36 @@ namespace Editor
                 // notificationservice 타겟이 없으면 무시
             }
 
+            // === visionOS 호환 비활성 ===
+            // App Store Connect 경고: "UIRequiredDeviceCapabilities [arkit] not supported in visionOS"
+            // ARKit 필수 앱이라 arkit capability 유지하면서 Vision Pro 호환만 끔
+            project.SetBuildProperty(mainTargetGuid, "SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD", "NO");
+            project.SetBuildProperty(unityFrameworkGuid, "SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD", "NO");
+
+            // === dSYM 생성 강제 ===
+            // App Store Connect 경고: "Upload Symbols Failed — dSYM for UnityRuntime.framework missing"
+            // 크래시 리포트 심볼화 + Apple 자동 분석에 필수. Release 빌드에서 archive 시 dSYM 폴더 동봉
+            project.SetBuildProperty(mainTargetGuid, "DEBUG_INFORMATION_FORMAT", "dwarf-with-dsym");
+            project.SetBuildProperty(unityFrameworkGuid, "DEBUG_INFORMATION_FORMAT", "dwarf-with-dsym");
+            project.SetBuildProperty(unityFrameworkGuid, "DEPLOYMENT_POSTPROCESSING", "YES");
+            project.SetBuildProperty(unityFrameworkGuid, "STRIP_INSTALLED_PRODUCT", "NO");
+            project.SetBuildProperty(unityFrameworkGuid, "COPY_PHASE_STRIP", "NO");
+            try
+            {
+                string notificationServiceGuid = project.TargetGuidByName("notificationservice");
+                if (!string.IsNullOrEmpty(notificationServiceGuid))
+                {
+                    project.SetBuildProperty(notificationServiceGuid, "SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD", "NO");
+                    project.SetBuildProperty(notificationServiceGuid, "DEBUG_INFORMATION_FORMAT", "dwarf-with-dsym");
+                }
+            }
+            catch
+            {
+                // notificationservice 타겟이 없으면 무시
+            }
+
             project.WriteToFile(projectPath);
-            UnityEngine.Debug.Log("[WOOPANG] Xcode 프로젝트 설정 완료 (팀: DDX8R79VU2, 디바이스: iPhone만, iOS 15.0+)");
+            UnityEngine.Debug.Log("[WOOPANG] Xcode 프로젝트 설정 완료 (팀: DDX8R79VU2, 디바이스: iPhone만, iOS 15.0+, visionOS off, dSYM 강제)");
         }
 
         // ============================================================
