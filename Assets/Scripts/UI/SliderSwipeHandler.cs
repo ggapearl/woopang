@@ -41,6 +41,12 @@ public class SliderSwipeHandler : MonoBehaviour, IPointerDownHandler, IDragHandl
     [Tooltip("배경 색상 변화 애니메이션 속도")]
     [SerializeField] private float bgColorAnimSpeed = 8f;
 
+    [Header("UIFeedbackManager Integration (다른 버튼과 동일한 사운드/햅틱)")]
+    [Tooltip("터치 시작 시 UIFeedbackManager에 전달할 커스텀 사운드. null이면 기본 사운드 사용")]
+    [SerializeField] private AudioClip touchSound;
+    [Tooltip("UIFeedbackManager 피드백 호출 여부 (다른 버튼 UITouchForwarder와 동일 효과)")]
+    [SerializeField] private bool emitUIFeedback = true;
+
     // 핸들 스케일 애니메이션
     private Vector3 handleOriginalScale;
     private Vector3 handleTargetScale;
@@ -144,6 +150,7 @@ public class SliderSwipeHandler : MonoBehaviour, IPointerDownHandler, IDragHandl
                         dragStartValue = slider.value;
                         isDragging = true;
                         SetDragVisuals(true);
+                        EmitTouchFeedback();
                     }
                 }
                 else if (touch.phase == TouchPhase.Moved && isDragging)
@@ -181,6 +188,7 @@ public class SliderSwipeHandler : MonoBehaviour, IPointerDownHandler, IDragHandl
         isDragging = true;
         pointerDriven = true;
         SetDragVisuals(true);
+        EmitTouchFeedback();
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -196,6 +204,14 @@ public class SliderSwipeHandler : MonoBehaviour, IPointerDownHandler, IDragHandl
         isDragging = false;
         pointerDriven = false;
         SetDragVisuals(false);
+    }
+
+    // UIFeedbackManager 통합 — 다른 버튼의 UITouchForwarder와 동일 사운드/햅틱 효과
+    private void EmitTouchFeedback()
+    {
+        if (!emitUIFeedback) return;
+        if (UIFeedbackManager.Instance != null)
+            UIFeedbackManager.Instance.HandleTouchFeedbackDirect(touchSound);
     }
 
     // ===== Hit 영역 자동 생성 — 시각 변경 없이 터치 영역만 확장 =====
