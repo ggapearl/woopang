@@ -46,6 +46,7 @@ public class Target : MonoBehaviour
     [Tooltip("Name of the place, set by DataManager")]
     [SerializeField] private string placeName = "";
 
+    [HideInInspector] public string placeId = "";
     [HideInInspector] public float gpsLatitude;
     [HideInInspector] public float gpsLongitude;
 

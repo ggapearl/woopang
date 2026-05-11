@@ -1167,6 +1167,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
         target.TargetColor = placeColor;
         target.PlaceName = place.name;
+        target.placeId = place.id.ToString();
         target.gpsLatitude = place.latitude;
         target.gpsLongitude = place.longitude;
     }
@@ -1923,6 +1924,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         if (target != null)
         {
             target.PlaceName = cached.displayName;
+            target.placeId = id.ToString();
             target.gpsLatitude = cached.latitude;
             target.gpsLongitude = cached.longitude;
 

@@ -603,6 +603,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             target.PlaceName = place.title;
             LogDebug($"[TourAPIManager] ID {place.contentid} 오브젝트에 장소 이름 설정: {place.title}");
         }
+        target.placeId = place.contentid;
         LogDebug($"[TourAPIManager] SetupObjectComponents 완료: ID={place.contentid}");
         return true;
     }
@@ -1101,6 +1102,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         if (target != null)
         {
             target.PlaceName = cached.displayName;
+            target.placeId = cached.rawId;
             target.gpsLatitude = cached.latitude;
             target.gpsLongitude = cached.longitude;
             Color tourColor;

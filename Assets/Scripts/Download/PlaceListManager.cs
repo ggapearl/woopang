@@ -25,6 +25,10 @@ public class PlaceListManager : MonoBehaviour
     [SerializeField] private PlaceListSkeletonLoader skeletonLoader;
     [SerializeField] private float updateInterval = 10f;
 
+    [Header("List Size Limits")]
+    [Tooltip("리스트에 표시할 최대 항목 수 (거리 가까운 순). 성능 보호용 상한 — DB가 커져도 이 값 이상은 안 만짐")]
+    [SerializeField] private int maxListEntries = 1000;
+
     [Header("Distance Control")]
     [SerializeField] private Slider distanceSlider;
     [SerializeField] private Text distanceValueText;
@@ -33,19 +37,26 @@ public class PlaceListManager : MonoBehaviour
     private List<(object place, float distance, string id, string displayText, string colorHex)> combinedPlaces = new List<(object, float, string, string, string)>();
 
     // 매 프레임 거리/정렬만 갱신용 — 풀빌드 시 채우고 Update()에서 GPS 변동분만 반영
-    private struct LiveEntry
+    // targetTf가 살아있으면 카메라 transform 기준 (OffScreenIndicator와 동일 — 매끄러움 GPS udpate freq 무관)
+    // 비어있으면 GPS baseLat/baseLon fallback (먼 POI, 스폰 안 된 것)
+    private class LiveEntry
     {
         public string id;
         public string baseLabel;     // 거리 빼고 표시명만 (예: "스타벅스" 또는 "👤 user")
         public string colorHex;
         public float baseLat;
         public float baseLon;
+        public Transform targetTf;   // 스폰된 GameObject가 있으면 카메라 거리 우선
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
     private System.Text.StringBuilder liveBuilder = new System.Text.StringBuilder(2048);
+    private (float d, int idx)[] orderedBuffer = new (float, int)[64];
     private float lastGpsLat;
     private float lastGpsLon;
     private bool hasLiveSnapshot = false;
+    private Camera arCameraCache;
+    private string lastDisplayedText = null;       // UI Text mesh rebuild 방지 — 변경 시에만 set
+    private bool wasListPanelActive = false;       // listPanel 활성 전환 감지 → 즉시 풀빌드
 
     // Stats
     private int woopangCount;
@@ -121,19 +132,20 @@ public class PlaceListManager : MonoBehaviour
 
     void Start()
     {
+        // 슬라이더 유무와 무관하게 기본값 보장 — 슬라이더 없으면 maxDisplayDistance=0이 되어 모든 POI 걸리는 버그 방지
+        maxDisplayDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+
         if (distanceSlider != null)
         {
             distanceSlider.minValue = 100f;
             distanceSlider.maxValue = 10000f;
-            float savedDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
-            maxDisplayDistance = savedDistance;
-            distanceSlider.value = savedDistance;
+            distanceSlider.value = maxDisplayDistance;
             distanceSlider.onValueChanged.AddListener(OnDistanceSliderChanged);
             UpdateDistanceValueText();
 
             // FilterManager IndicatorOnly 반경 초기 동기화 (FilterManager가 비활성일 수 있으므로 Include)
             FilterManager filterMgr = UnityEngine.Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
-            if (filterMgr != null) filterMgr.SetIndicatorRadius(savedDistance);
+            if (filterMgr != null) filterMgr.SetIndicatorRadius(maxDisplayDistance);
         }
 
         StartCoroutine(InitializeAndUpdateUI());
@@ -318,7 +330,16 @@ public class PlaceListManager : MonoBehaviour
             AddP2PUserData(lat, lon);
         }
 
-        combinedPlaces = combinedPlaces.OrderBy(x => x.distance).ToList();
+        // 거리순 정렬 + 상위 maxListEntries개만 (DB 커져도 이 값 이상은 안 만짐)
+        combinedPlaces = combinedPlaces.OrderBy(x => x.distance).Take(maxListEntries).ToList();
+
+        // liveEntries도 combinedPlaces id 기준으로 잘라 동기화 — 매 프레임 갱신 대상도 같이 줄임
+        if (liveEntries.Count > combinedPlaces.Count)
+        {
+            var keepIds = new HashSet<string>(combinedPlaces.Count);
+            foreach (var c in combinedPlaces) keepIds.Add(c.id);
+            liveEntries.RemoveAll(e => !keepIds.Contains(e.id));
+        }
 
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
         foreach (var item in combinedPlaces) {
@@ -329,8 +350,35 @@ public class PlaceListManager : MonoBehaviour
         cachedFooter = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
         sb.Append(cachedFooter);
 
-        if (listText != null) listText.text = sb.ToString();
+        if (listText != null)
+        {
+            string newText = sb.ToString();
+            listText.text = newText;
+            lastDisplayedText = newText;
+        }
+
+        // 활성 Target들을 placeId 기준으로 liveEntries에 매핑 (스폰된 POI는 카메라 거리 우선 사용)
+        Target[] activeTargets = UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        if (activeTargets != null && activeTargets.Length > 0)
+        {
+            var byId = new Dictionary<string, Transform>(activeTargets.Length);
+            var byName = new Dictionary<string, Transform>(activeTargets.Length);
+            foreach (var t in activeTargets)
+            {
+                if (t == null) continue;
+                if (!string.IsNullOrEmpty(t.placeId) && !byId.ContainsKey(t.placeId)) byId[t.placeId] = t.transform;
+                if (!string.IsNullOrEmpty(t.PlaceName) && !byName.ContainsKey(t.PlaceName)) byName[t.PlaceName] = t.transform;
+            }
+            for (int i = 0; i < liveEntries.Count; i++)
+            {
+                var e = liveEntries[i];
+                Transform tf = null;
+                if (!string.IsNullOrEmpty(e.id) && byId.TryGetValue(e.id, out tf)) { e.targetTf = tf; continue; }
+                if (!string.IsNullOrEmpty(e.baseLabel) && byName.TryGetValue(e.baseLabel, out tf)) e.targetTf = tf;
+            }
+        }
         hasLiveSnapshot = liveEntries.Count > 0;
+        if (arCameraCache == null) arCameraCache = Camera.main;
         yield return null;
     }
 
@@ -338,8 +386,19 @@ public class PlaceListManager : MonoBehaviour
 
     void Update()
     {
-        if (!hasLiveSnapshot || listText == null) return;
-        if (listPanel == null || !listPanel.activeInHierarchy) return;
+        if (listText == null) return;
+
+        // listPanel 활성 전환 감지 — 비활성→활성 전환 시 즉시 풀빌드 (10초 대기 안 함)
+        bool nowActive = listPanel != null && listPanel.activeInHierarchy;
+        if (nowActive && !wasListPanelActive)
+        {
+            wasListPanelActive = true;
+            UpdateUI();
+            return;
+        }
+        wasListPanelActive = nowActive;
+
+        if (!hasLiveSnapshot || !nowActive) return;
 
         float lat = lastGpsLat;
         float lon = lastGpsLon;
@@ -357,19 +416,38 @@ public class PlaceListManager : MonoBehaviour
         }
 #endif
 
+        // 카메라 위치 (스폰된 POI 거리 계산용 — OffScreenIndicator와 동일 방식)
+        if (arCameraCache == null) arCameraCache = Camera.main;
+        Vector3 camPos = arCameraCache != null ? arCameraCache.transform.position : Vector3.zero;
+        bool hasCam = arCameraCache != null;
+
+        // GPS fallback용 평면 근사 상수 (프레임당 1회 cos 계산 — Update 안에서 Haversine trig 누적 비용 제거)
+        float cosLat = Mathf.Cos(Mathf.Deg2Rad * lat);
+
         int count = liveEntries.Count;
-        var ordered = new (float d, int idx)[count];
+        if (orderedBuffer.Length < count) Array.Resize(ref orderedBuffer, Mathf.NextPowerOfTwo(count));
         for (int i = 0; i < count; i++)
         {
             var e = liveEntries[i];
-            ordered[i] = (CalculateDistance(lat, lon, e.baseLat, e.baseLon), i);
+            // 1순위: 스폰된 Target transform이 살아있으면 카메라 거리 (1cm 단위로 매끄럽게 갱신)
+            if (hasCam && e.targetTf != null)
+            {
+                orderedBuffer[i] = (Vector3.Distance(camPos, e.targetTf.position), i);
+            }
+            else
+            {
+                // 2순위: GPS 거리 fallback — 평면 근사 (한국 위도/5km 이내 오차 0.5% 미만, 매 프레임 trig 회피)
+                float dLatM = (e.baseLat - lat) * 111320f;
+                float dLonM = (e.baseLon - lon) * 111320f * cosLat;
+                orderedBuffer[i] = (Mathf.Sqrt(dLatM * dLatM + dLonM * dLonM), i);
+            }
         }
-        Array.Sort(ordered, (a, b) => a.d.CompareTo(b.d));
+        Array.Sort(orderedBuffer, 0, count, OrderedComparer.Instance);
 
         liveBuilder.Clear();
         for (int i = 0; i < count; i++)
         {
-            var pair = ordered[i];
+            var pair = orderedBuffer[i];
             if (maxDisplayDistance > 0f && pair.d > maxDisplayDistance) continue;
             var e = liveEntries[pair.idx];
             string color = string.IsNullOrEmpty(e.colorHex) ? "FFFFFF" : e.colorHex;
@@ -378,7 +456,14 @@ public class PlaceListManager : MonoBehaviour
                        .Append(Mathf.FloorToInt(pair.d)).Append("m</color>\n");
         }
         liveBuilder.Append(cachedFooter);
-        listText.text = liveBuilder.ToString();
+
+        // 텍스트가 실제로 바뀌었을 때만 set — UI Text mesh rebuild 비용 회피 (모바일에서 큼)
+        string newText = liveBuilder.ToString();
+        if (newText != lastDisplayedText)
+        {
+            listText.text = newText;
+            lastDisplayedText = newText;
+        }
     }
 
     /// <summary>
@@ -472,7 +557,11 @@ public class PlaceListManager : MonoBehaviour
             lon = VirtualLocation.Instance.Longitude;
         }
 #else
-        lat = Input.location.lastData.latitude; lon = Input.location.lastData.longitude;
+        // GPS 미초기화/권한거부 시 (0,0) 같은 잘못된 좌표 전파 방지
+        if (Input.location.status == LocationServiceStatus.Running) {
+            lat = Input.location.lastData.latitude;
+            lon = Input.location.lastData.longitude;
+        }
 #endif
         if (dataManager != null) dataManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (tourAPIManager != null) tourAPIManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
@@ -493,5 +582,12 @@ public class PlaceListManager : MonoBehaviour
     private void UpdateDistanceValueText() {
         if (distanceValueText != null)
             distanceValueText.text = maxDisplayDistance >= 1000f ? $"{(maxDisplayDistance / 1000f):F1}km" : $"{Mathf.RoundToInt(maxDisplayDistance)}m";
+    }
+
+    // 캐시된 비교자 — Array.Sort lambda boxing 방지
+    private sealed class OrderedComparer : IComparer<(float d, int idx)>
+    {
+        public static readonly OrderedComparer Instance = new OrderedComparer();
+        public int Compare((float d, int idx) a, (float d, int idx) b) => a.d.CompareTo(b.d);
     }
 }

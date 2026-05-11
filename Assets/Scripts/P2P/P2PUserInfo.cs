@@ -113,6 +113,7 @@ public class P2PUserInfo : MonoBehaviour
         if (targetComponent != null)
         {
             targetComponent.PlaceName = username;
+            targetComponent.placeId = userId;
             targetComponent.TargetColor = indicatorColor;
             targetComponent.OnIndicatorTapped = () =>
             {
@@ -371,6 +372,7 @@ public class P2PUserInfo : MonoBehaviour
         indicatorColor = new Color(0.914f, 0.325f, 0.514f, 1f); // #E95383
         targetComponent.TargetColor = indicatorColor;
         targetComponent.PlaceName = username;
+        targetComponent.placeId = userId;
 
         targetComponent.NeedBoxIndicator = true;
         targetComponent.NeedArrowIndicator = true;
