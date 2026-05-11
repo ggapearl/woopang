@@ -7,16 +7,27 @@ using UnityEngine;
 namespace Editor
 {
     /// <summary>
-    /// 빌드 직전 buildNumber/bundleVersionCode를 YYMMDD+순번 형식으로 자동 증가.
+    /// 빌드 직전 buildNumber/bundleVersionCode를 YYMMDD+순번 형식으로 자동 관리.
     /// 형식: YYMMDDsss (예: 260511001 = 26년 5월 11일 첫 빌드)
-    /// - 같은 날짜 빌드: 순번 +1
-    /// - 새 날짜 빌드: 순번 001로 리셋
-    /// AssetDatabase.SaveAssets로 ProjectSettings.asset 디스크 저장 강제 →
-    /// 사용자 수동 입력 후 디스크에 저장 안 되던 문제 해결.
+    ///
+    /// 동작 규칙:
+    /// 1. 사용자가 PlayerSettings에서 직접 수정한 경우 → 그 값 그대로 빌드 사용 (사용자 의도 우선)
+    /// 2. 사용자가 손 안 대고 자동 흐름으로 진행한 경우 → 같은 날짜면 +1, 새 날짜면 001 리셋
+    ///
+    /// 수동/자동 구분 방법: EditorPrefs에 마지막 자동 세팅 값을 기억해두고
+    /// 빌드 시점 값이 그것과 다르면 → 사용자가 손댄 거라 그대로 사용
+    ///
+    /// 사용 예:
+    /// - PlayerSettings에 "260511003" 입력 후 빌드 → 260511003 그대로 빌드
+    /// - 그 다음 빌드 (수동 입력 없음) → 자동 +1 = 260511004
+    /// - 새 날짜 빌드 → 260512001 자동 리셋
     /// </summary>
     public class BuildNumberAutoIncrement : IPreprocessBuildWithReport
     {
-        public int callbackOrder => 0; // 다른 preprocess가 buildNumber 읽기 전에 먼저 실행
+        public int callbackOrder => 0;
+
+        private const string PREF_IOS_LAST_AUTO = "WOOPANG.BuildNumber.iOS.LastAutoSet";
+        private const string PREF_ANDROID_LAST_AUTO = "WOOPANG.BuildNumber.Android.LastAutoSet";
 
         public void OnPreprocessBuild(BuildReport report)
         {
@@ -25,36 +36,55 @@ namespace Editor
 
             if (target == BuildTarget.iOS)
             {
-                string oldNumber = PlayerSettings.iOS.buildNumber ?? "0";
-                int nextSerial = ComputeNextSerial(oldNumber, datePrefix);
-                string newNumber = $"{datePrefix}{nextSerial:D3}";
-                PlayerSettings.iOS.buildNumber = newNumber;
+                string current = PlayerSettings.iOS.buildNumber ?? "0";
+                string lastAuto = EditorPrefs.GetString(PREF_IOS_LAST_AUTO, "");
+                string resolved = ResolveBuildNumber(current, lastAuto, datePrefix);
+
+                PlayerSettings.iOS.buildNumber = resolved;
+                EditorPrefs.SetString(PREF_IOS_LAST_AUTO, resolved);
                 AssetDatabase.SaveAssets();
-                Debug.Log($"[WOOPANG] iOS buildNumber: {oldNumber} → {newNumber}");
+                Debug.Log($"[WOOPANG] iOS buildNumber: {current} → {resolved}");
             }
             else if (target == BuildTarget.Android)
             {
-                int oldCode = PlayerSettings.Android.bundleVersionCode;
-                int nextSerial = ComputeNextSerial(oldCode.ToString(), datePrefix);
-                int newCode = int.Parse($"{datePrefix}{nextSerial:D3}");
+                int currentCode = PlayerSettings.Android.bundleVersionCode;
+                string current = currentCode.ToString();
+                string lastAuto = EditorPrefs.GetString(PREF_ANDROID_LAST_AUTO, "");
+                string resolved = ResolveBuildNumber(current, lastAuto, datePrefix);
+
+                int newCode = int.Parse(resolved);
                 PlayerSettings.Android.bundleVersionCode = newCode;
+                EditorPrefs.SetString(PREF_ANDROID_LAST_AUTO, resolved);
                 AssetDatabase.SaveAssets();
-                Debug.Log($"[WOOPANG] Android bundleVersionCode: {oldCode} → {newCode}");
+                Debug.Log($"[WOOPANG] Android bundleVersionCode: {currentCode} → {newCode}");
             }
         }
 
-        // 현재 값이 같은 날짜 prefix면 순번 +1, 아니면 1로 리셋
-        private int ComputeNextSerial(string current, string datePrefix)
+        /// <summary>
+        /// 우선순위:
+        /// 1. current가 오늘 prefix인데 lastAuto와 다르면 → 사용자 수동 수정, 그대로 사용
+        /// 2. current가 오늘 prefix이고 lastAuto와 같으면 → 자동 +1
+        /// 3. 그 외 (다른 날짜, 0, 빈 값) → 오늘 001로 리셋
+        /// </summary>
+        private string ResolveBuildNumber(string current, string lastAuto, string datePrefix)
         {
-            if (!string.IsNullOrEmpty(current) && current.StartsWith(datePrefix) && current.Length >= datePrefix.Length + 1)
+            bool sameDate = !string.IsNullOrEmpty(current) && current.StartsWith(datePrefix);
+
+            if (sameDate)
             {
+                if (current != lastAuto)
+                {
+                    return current;
+                }
+
                 string serialPart = current.Substring(datePrefix.Length);
                 if (int.TryParse(serialPart, out int serial))
                 {
-                    return serial + 1;
+                    return $"{datePrefix}{(serial + 1):D3}";
                 }
             }
-            return 1;
+
+            return $"{datePrefix}001";
         }
     }
 }
