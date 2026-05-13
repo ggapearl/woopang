@@ -5,8 +5,16 @@ using System.Collections.Generic;
 public class ARSessionRecovery : MonoBehaviour
 {
     [SerializeField] private ARSession arSession;
-    private List<GameObject> spawnedObjects = new List<GameObject>(); // ������ ������Ʈ ���
-    private Vector2 lastKnownLocation; // ���� ��ġ ����
+    private List<GameObject> spawnedObjects = new List<GameObject>(); // 스폰된 오브젝트 목록
+    private Vector2 lastKnownLocation; // 마지막 위치 저장
+
+    [Header("GPS Recovery")]
+    [Tooltip("GPS 신호 못 잡을 때 재시도 횟수")]
+    [SerializeField] private int maxGpsRetries = 3;
+    [Tooltip("재시도 사이 대기 시간 (초)")]
+    [SerializeField] private float retryInterval = 2f;
+    [Tooltip("각 재시도의 GPS Start 타임아웃 (초)")]
+    [SerializeField] private float gpsStartTimeout = 5f;
 
     void OnEnable()
     {
@@ -38,23 +46,48 @@ public class ARSessionRecovery : MonoBehaviour
 
     System.Collections.IEnumerator UpdateLocationAndObjects()
     {
-        // ��ġ ���� �ʱ�ȭ
-        if (Input.location.status != LocationServiceStatus.Running)
+        // GPS 신호 못 잡으면 maxGpsRetries회 재시도. 각 시도 사이 안내 Toast 표시.
+        for (int attempt = 1; attempt <= maxGpsRetries; attempt++)
         {
-            Input.location.Start();
-            float timeout = Time.unscaledTime + 5f;
-            yield return new WaitUntil(() => Input.location.status == LocationServiceStatus.Running || Time.unscaledTime >= timeout);
+            if (Input.location.status != LocationServiceStatus.Running)
+            {
+                Input.location.Start();
+                float timeout = Time.unscaledTime + gpsStartTimeout;
+                yield return new WaitUntil(() => Input.location.status == LocationServiceStatus.Running || Time.unscaledTime >= timeout);
+            }
+
+            if (Input.location.status == LocationServiceStatus.Running)
+            {
+                lastKnownLocation = new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
+                UpdateARObjects();
+                yield break; // 성공
+            }
+
+            // 실패 — 마지막 시도가 아니면 안내 후 재시도
+            if (attempt < maxGpsRetries)
+            {
+                if (ToastManager.Instance != null)
+                {
+                    bool isKo = Application.systemLanguage == SystemLanguage.Korean;
+                    string msg = isKo
+                        ? $"AR 세션 복구 중... ({attempt}/{maxGpsRetries})"
+                        : $"Recovering AR session... ({attempt}/{maxGpsRetries})";
+                    ToastManager.Instance.ShowWarning(msg);
+                }
+                yield return new WaitForSeconds(retryInterval);
+            }
         }
 
-        if (Input.location.status == LocationServiceStatus.Running)
+        // maxGpsRetries회 모두 실패 — 최종 안내 (실외 이동 권장)
+        if (ToastManager.Instance != null)
         {
-            lastKnownLocation = new Vector2(Input.location.lastData.latitude, Input.location.lastData.longitude);
-            UpdateARObjects();
+            bool isKo = Application.systemLanguage == SystemLanguage.Korean;
+            string msg = isKo
+                ? "GPS 신호를 찾지 못하였습니다.\n실외 또는 신호가 잡히는 곳으로 이동해주세요."
+                : "GPS signal not found.\nPlease move outdoors or to an area with signal.";
+            ToastManager.Instance.ShowError(msg);
         }
-        else
-        {
-            ShowErrorMessage("��ġ ������ ������ �� �����ϴ�. �ٽ� �õ��ϼ���.");
-        }
+        ShowErrorMessage("GPS signal not found after retries.");
     }
 
     void UpdateARObjects()

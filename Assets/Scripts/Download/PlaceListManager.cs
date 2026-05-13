@@ -57,6 +57,8 @@ public class PlaceListManager : MonoBehaviour
     private Camera arCameraCache;
     private string lastDisplayedText = null;       // UI Text mesh rebuild 방지 — 변경 시에만 set
     private bool wasListPanelActive = false;       // listPanel 활성 전환 감지 → 즉시 풀빌드
+    private int dataLoadRetryAttempts = 0;         // 데이터 비어있을 때 재시도 카운터
+    private const int MAX_DATA_LOAD_RETRIES = 3;   // 최대 3회 (총 3초)
 
     // Stats
     private int woopangCount;
@@ -106,12 +108,14 @@ public class PlaceListManager : MonoBehaviour
         { "en", new Dictionary<string, string> {
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
             { "woopangData", "WOOPANG DATA" }, { "tourApiData", "Public Data" },
-            { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" }
+            { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" },
+            { "noNearbyData", "No nearby data found.\nTry adjusting the distance slider or moving to a different area." }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
             { "woopangData", "우팡 데이터" }, { "tourApiData", "공공데이터" },
-            { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" }
+            { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" },
+            { "noNearbyData", "주변에 데이터가 없습니다.\n거리 슬라이더를 조정하거나 다른 위치로 이동해보세요." }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
@@ -349,6 +353,32 @@ public class PlaceListManager : MonoBehaviour
 
         cachedFooter = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
         sb.Append(cachedFooter);
+
+        // 데이터 비어있고 panel 열려있으면 자동 재시도 (데이터 로드 race condition 대응)
+        if (combinedPlaces.Count == 0 && listPanel != null && listPanel.activeInHierarchy)
+        {
+            if (dataLoadRetryAttempts < MAX_DATA_LOAD_RETRIES)
+            {
+                dataLoadRetryAttempts++;
+                yield return new WaitForSeconds(1f);
+                UpdateUI();
+                yield break;
+            }
+            else
+            {
+                // 5회 시도 후에도 빈 결과 → 안내 표시
+                if (listText != null)
+                {
+                    string emptyMsg = GetLocalizedText("noNearbyData");
+                    listText.text = emptyMsg;
+                    lastDisplayedText = emptyMsg;
+                }
+                hasLiveSnapshot = false;
+                yield break;
+            }
+        }
+
+        dataLoadRetryAttempts = 0; // 데이터 들어왔으면 카운터 리셋
 
         if (listText != null)
         {

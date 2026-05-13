@@ -51,6 +51,14 @@ public class OffScreenIndicator : MonoBehaviour
     public bool IsFallbackMode => isFallbackMode;
     public int GetActiveTargetCount() => targets.Count;
 
+    // Fallback 진입 안내 — UX 개선 (지하철 이동 중 갑자기 오브젝트 사라지는 현상 안내)
+    [Header("Fallback Notification")]
+    [Tooltip("Fallback 진입 시 Toast 안내 사이 최소 간격 (초). 짧은 간격 반복 진입 시 toast 폭주 방지")]
+    [SerializeField] private float fallbackToastCooldown = 30f;
+    [Tooltip("Fallback 진입 시 Toast 안내 활성화")]
+    [SerializeField] private bool emitFallbackToast = true;
+    private float lastFallbackToastTime = -100f;
+
     // fallback 진입 전 일반 모드 인디케이터 억제 (앱 시작 시 화살표 뭉침 방지)
     private bool suppressNormalIndicators = false;
     private Dictionary<Target, FallbackData> fallbackDataMap = new Dictionary<Target, FallbackData>();
@@ -695,6 +703,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackStartTime = Time.realtimeSinceStartup;
             fallbackStartTimeScaled = Time.time;
             AssignFallbackPositions();
+            NotifyFallbackEntered(reason);
             if (autoDisable)
             {
                 autoDisableCoroutine = StartCoroutine(AutoDisableFallback(fallbackMinDuration));
@@ -736,6 +745,25 @@ public class OffScreenIndicator : MonoBehaviour
             }
 
             StartFallbackTransition();
+        }
+    }
+
+    /// <summary>
+    /// Fallback 진입 시 사용자에게 Toast로 상황 안내.
+    /// 짧은 간격 반복 진입 시 toast 폭주 방지 — fallbackToastCooldown 이내면 skip.
+    /// 지하철·터널 등 GPS/AR 트래킹 끊김 환경에서 오브젝트·인디케이터가 갑자기 사라지는 UX 개선.
+    /// </summary>
+    private void NotifyFallbackEntered(string reason)
+    {
+        if (!emitFallbackToast) return;
+        if (Time.realtimeSinceStartup - lastFallbackToastTime < fallbackToastCooldown) return;
+        lastFallbackToastTime = Time.realtimeSinceStartup;
+
+        if (ToastManager.Instance != null)
+        {
+            bool isKo = Application.systemLanguage == SystemLanguage.Korean;
+            string msg = isKo ? "AR 세션 복구 중..." : "Recovering AR session...";
+            ToastManager.Instance.ShowWarning(msg);
         }
     }
 
