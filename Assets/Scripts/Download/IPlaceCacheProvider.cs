@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 /// <summary>
@@ -45,4 +46,10 @@ public interface IPlaceCacheProvider
 
     /// <summary>캐시 데이터가 준비되었는지 여부</summary>
     bool IsCacheReady { get; }
+
+    /// <summary>
+    /// 캐시가 비어있다가 준비 완료된 시점에 발행. FilterManager가 구독해서 즉시 재배분.
+    /// 매 갱신마다 발행하지 말 것 — false→true 전환 1회만.
+    /// </summary>
+    event Action CacheBecameReady;
 }

@@ -70,6 +70,15 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
     private bool isCacheReady = false;
+    public event System.Action CacheBecameReady;
+    private bool cacheReadyEventFired = false;
+    private void MarkCacheReady()
+    {
+        isCacheReady = true;
+        if (cacheReadyEventFired) return;
+        cacheReadyEventFired = true;
+        CacheBecameReady?.Invoke();
+    }
 
     [Header("IndicatorOnly (FilterManager 배분 전용)")]
     [Tooltip("IndicatorOnly 프리팹 — FilterManager가 중앙 배분")]
@@ -201,7 +210,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
         if (facilities == null || facilities.Count == 0)
         {
             lightCache.Clear();
-            isCacheReady = true;
+            MarkCacheReady();
             yield break;
         }
 
@@ -226,7 +235,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
             });
         }
         if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
-        isCacheReady = true;
+        MarkCacheReady();
 
         foreach (var data in facilities)
         {

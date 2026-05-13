@@ -86,6 +86,15 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
     // Light Cache (FilterManager 중앙 배분용)
     private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
     private bool isCacheReady = false;
+    public event System.Action CacheBecameReady;
+    private bool cacheReadyEventFired = false;
+    private void MarkCacheReady()
+    {
+        isCacheReady = true;
+        if (cacheReadyEventFired) return;
+        cacheReadyEventFired = true;
+        CacheBecameReady?.Invoke();
+    }
 
     private static readonly WaitForSeconds waitOneSecond = new WaitForSeconds(1f);
     private static readonly WaitForSeconds waitFiveSeconds = new WaitForSeconds(5f);
@@ -297,7 +306,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         {
             LogDebug("[TourAPIManager] TourAPI에서 반환된 장소 데이터가 없음");
             lightCache.Clear();
-            isCacheReady = true;
+            MarkCacheReady();
             yield break;
         }
 
@@ -321,7 +330,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             });
         }
         if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
-        isCacheReady = true;
+        MarkCacheReady();
 
         // Sort places by distance without LINQ
         for (int i = 0; i < places.Count - 1; i++)

@@ -71,6 +71,15 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
     // Light Cache (FilterManager 중앙 배분용)
     private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
     private bool isCacheReady = false;
+    public event System.Action CacheBecameReady;
+    private bool cacheReadyEventFired = false;
+    private void MarkCacheReady()
+    {
+        isCacheReady = true;
+        if (cacheReadyEventFired) return;
+        cacheReadyEventFired = true;
+        CacheBecameReady?.Invoke();
+    }
     [Header("IndicatorOnly (FilterManager 배분 전용)")]
     [Tooltip("IndicatorOnly 프리팹 — FilterManager가 중앙 배분")]
     [SerializeField] private GameObject indicatorOnlyPrefab;
@@ -195,7 +204,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
         {
             // 빈 결과여도 캐시 준비 완료로 표시 (로딩 중 vs 0개 구분)
             lightCache.Clear();
-            isCacheReady = true;
+            MarkCacheReady();
             yield break;
         }
 
@@ -221,7 +230,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
         }
         // 최대 100개로 제한 (거리순 정렬 상태)
         if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
-        isCacheReady = true;
+        MarkCacheReady();
 
         foreach (var data in facilities)
         {

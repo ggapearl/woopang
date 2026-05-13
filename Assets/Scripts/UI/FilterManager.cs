@@ -1030,8 +1030,26 @@ public class FilterManager : MonoBehaviour
         {
             cacheProviders.Add(provider);
 
+            // 캐시 준비 완료 이벤트 구독 — 도착 즉시 재배분 (AllocationLoop의 2초 대기 + interval 회피)
+            // false→true 1회만 발행되므로 중복 호출 걱정 없음
+            provider.CacheBecameReady += OnProviderCacheReady;
+
             // 활성 상태이면 즉시 시작 시도 (비활성이면 OnEnable에서 나중에 시작)
             EnsureAllocationLoopStarted();
+        }
+    }
+
+    /// <summary>
+    /// 어느 provider든 캐시가 준비되면 즉시 재배분 트리거.
+    /// AllocationLoop가 다음 tick을 기다리지 않게 해서 "리스트 빈 표시 / IndicatorOnly 미발생" 회피.
+    /// </summary>
+    private void OnProviderCacheReady()
+    {
+        Vector2 gps = GetCurrentGPS();
+        if (gps.x != 0f || gps.y != 0f)
+        {
+            AllocateObjects(gps.x, gps.y);
+            lastAllocationPosition = gps;
         }
     }
 

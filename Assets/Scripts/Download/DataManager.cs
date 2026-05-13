@@ -109,6 +109,15 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     // ============================================================
     private List<CachedPlaceData> lightCache = new List<CachedPlaceData>();
     private bool isCacheReady = false;
+    public event System.Action CacheBecameReady;
+    private bool cacheReadyEventFired = false;
+    private void MarkCacheReady()
+    {
+        isCacheReady = true;
+        if (cacheReadyEventFired) return;
+        cacheReadyEventFired = true;
+        CacheBecameReady?.Invoke();
+    }
     private HashSet<int> pendingDetailFetchIds = new HashSet<int>();
     private Coroutine batchDetailCoroutine;
 
@@ -512,7 +521,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
                                 filterKey = FilterManager.PublicDataCategories.Contains(cat) ? "publicData" : ""
                             });
                         }
-                        isCacheReady = true;
+                        MarkCacheReady();
                     }
                 }
                 catch (System.Exception e)
