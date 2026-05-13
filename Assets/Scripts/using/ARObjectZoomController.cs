@@ -23,6 +23,9 @@ public class ARObjectZoomController : MonoBehaviour
     [Header("AR Object Managers")]
     [SerializeField] private DataManager dataManager; // 우팡 데이터 매니저
     [SerializeField] private TourAPIManager tourAPIManager; // 공공데이터 매니저
+    [SerializeField] private SubwayManager subwayManager; // 지하철
+    [SerializeField] private TerminalManager terminalManager; // 버스 터미널
+    [SerializeField] private TrainStationManager trainStationManager; // 기차역
 
     private float currentZoom = 1f;
     private float previousTouchDistance = 0f;
@@ -59,6 +62,11 @@ public class ARObjectZoomController : MonoBehaviour
                 Debug.LogWarning("[ARObjectZoomController] TourAPIManager를 찾을 수 없습니다.");
             }
         }
+
+        // 공공교통 매니저들도 Singleton에서 자동 fallback
+        if (subwayManager == null) subwayManager = SubwayManager.Instance;
+        if (terminalManager == null) terminalManager = TerminalManager.Instance;
+        if (trainStationManager == null) trainStationManager = TrainStationManager.Instance;
 
         // ZoomIndicator 연결 로직 개선
         if (zoomIndicatorObject != null)
@@ -187,6 +195,24 @@ public class ARObjectZoomController : MonoBehaviour
                         obj.transform.localScale = Vector3.one * currentZoom;
                     }
                 }
+            }
+        }
+
+        // 공공교통 (지하철·기차역·터미널) — 이전엔 빠져있어 zoom 안 됐음
+        ApplyZoomToManager(subwayManager?.GetSpawnedObjects());
+        ApplyZoomToManager(trainStationManager?.GetSpawnedObjects());
+        ApplyZoomToManager(terminalManager?.GetSpawnedObjects());
+    }
+
+    private void ApplyZoomToManager(Dictionary<string, GameObject> spawned)
+    {
+        if (spawned == null) return;
+        foreach (var kvp in spawned)
+        {
+            GameObject obj = kvp.Value;
+            if (obj != null && obj.activeSelf)
+            {
+                obj.transform.localScale = Vector3.one * currentZoom;
             }
         }
     }

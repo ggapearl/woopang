@@ -292,11 +292,41 @@ public class UploadInputMirror : MonoBehaviour
 
     private void OnCloseClicked()
     {
+        // Close 직전 명시적 동기화 — onValueChanged가 일부 native 키보드 경로에서 누락되는 케이스 안전망
+        // 특히 source.enabled=false에서 setter 내부 갱신이 일부 InputField 케이스에서 누락되는 문제 보완
+        SyncMirrorToSource();
+
         if (mirrorInput != null && mirrorInput.isFocused)
             mirrorInput.DeactivateInputField();
         if (EventSystem.current != null)
             EventSystem.current.SetSelectedGameObject(null);
         HideMirror();
+    }
+
+    /// <summary>
+    /// mirrorInput.text를 activeSource에 강제 반영.
+    /// source.enabled=false 상태에서 텍스트가 안 들어가던 문제(InstagramAccountInput 등) 해결:
+    /// - 일시적으로 enabled=true로 풀어 setter가 정상 동작하게 함
+    /// - ForceLabelUpdate로 라벨 즉시 갱신
+    /// - 외부 구독자(저장 버튼 등) 알림 위해 onEndEdit 명시 호출
+    /// </summary>
+    private void SyncMirrorToSource()
+    {
+        if (activeSource == null || mirrorInput == null) return;
+
+        string finalText = mirrorInput.text ?? "";
+        syncing = true;
+        bool wasEnabled = activeSource.enabled;
+        if (!wasEnabled) activeSource.enabled = true;
+
+        activeSource.text = finalText;
+        activeSource.ForceLabelUpdate();
+
+        if (!wasEnabled) activeSource.enabled = false;
+        syncing = false;
+
+        // 외부 코드가 onEndEdit을 구독했을 경우 알림 (예: 업로드 매니저 저장 흐름)
+        activeSource.onEndEdit?.Invoke(finalText);
     }
 
     private void HideMirror()
