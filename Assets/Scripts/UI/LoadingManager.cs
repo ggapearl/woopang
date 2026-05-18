@@ -571,6 +571,9 @@ public class LoadingManager : MonoBehaviour
             // 매 프레임: 트래킹 상태 변화 즉시 감지 (오브젝트 뭉침/복구)
             CheckTrackingStateChange();
 
+            // 매 프레임: Earth tracking 손실 감지 (이동 중 신호 손실 → fallback+안내)
+            CheckEarthTrackingChange();
+
             // 2초 간격: 환경 분석 (어둡다/특징점 부족 등)
             if (Time.realtimeSinceStartup - lastEnvironmentCheckTime >= environmentCheckInterval)
             {
@@ -589,11 +592,21 @@ public class LoadingManager : MonoBehaviour
     private float trackingDropStartTime = -1f;     // Limited/None 진입 시각 (디바운스 기준)
     private bool pendingFallbackEntry = false;     // 디바운스 대기 중 플래그
 
+    // Earth tracking 손실 감지 상태 (이동 중 신호 손실 → fallback+안내)
+    private AREarthManager cachedEarthManager;
+    private float earthDropStartTime = -1f;     // Earth tracking 손실 디바운스 시작 시각
+    private float earthRecoverStartTime = -1f;  // Earth tracking 복귀 디바운스 시작 시각
+    private bool earthFallbackActive = false;   // Earth 손실로 fallback이 켜진 상태인지
+
     [Header("=== Tracking Fallback 디바운스 ===")]
     [Tooltip("트래킹 손실 후 fallback 활성화까지 대기 시간 (초) — 순간 글리치 무시")]
     public float trackingLossDebounceTime = 2.0f;
     [Tooltip("차량 이동 판정 속도 (km/h) — 이 이상 시 fallback 완전 차단")]
     public float vehicleSpeedThreshold = 15f;
+    [Tooltip("Earth tracking 손실 후 fallback 활성화까지 대기 (초)")]
+    public float earthLossDebounce = 3f;
+    [Tooltip("Earth tracking 복귀 후 fallback 해제까지 대기 (초)")]
+    public float earthRecoverDebounce = 1.5f;
 
     void CheckTrackingStateChange()
     {
@@ -668,6 +681,88 @@ public class LoadingManager : MonoBehaviour
                 if (osi != null && osi.IsFallbackMode)
                 {
                     osi.EnableFallbackMode(false, forceDisable: true, reason: "TrackRecovered");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Earth tracking(ARCore Geospatial) 손실 감지 — 이동 중 신호 손실 시 fallback+안내.
+    /// VIO trackingState(CheckTrackingStateChange)와 별개로 동작:
+    /// 차량 이동 중 VIO Limited는 정상이지만, EarthTrackingState 손실은 오브젝트 배치
+    /// 자체가 불가능한 진짜 신호 손실이므로 속도와 무관하게 fallback로 안내한다.
+    /// 지하철·터널 등 GPS 음영 구간도 이 경로로 커버.
+    /// </summary>
+    void CheckEarthTrackingChange()
+    {
+        // 다른 복구 흐름이 fallback을 제어 중이면 간섭하지 않음
+        if (isBackgroundRecovering || isSlowdownRefreshing) return;
+
+        if (cachedEarthManager == null)
+            cachedEarthManager = FindFirstObjectByType<AREarthManager>();
+        if (cachedEarthManager == null) return;
+
+        OffScreenIndicator osi = GetCachedOSI();
+
+        // 상태 동기화 — 우리가 켰다고 기록했지만 실제 fallback이 꺼져 있으면
+        // (SlowdownRefresh 등 다른 흐름이 끈 경우) 플래그를 내려 손실 재감지를 허용
+        if (earthFallbackActive && osi != null && !osi.IsFallbackMode)
+            earthFallbackActive = false;
+
+        TrackingState earth = cachedEarthManager.EarthTrackingState;
+        float now = Time.realtimeSinceStartup;
+
+        if (earth == TrackingState.Tracking)
+        {
+            earthDropStartTime = -1f; // 손실 디바운스 취소
+
+            if (earthFallbackActive)
+            {
+                // 복귀 디바운스 — earthRecoverDebounce 지속 시 fallback 해제 + 앵커 재시도
+                if (earthRecoverStartTime < 0f)
+                {
+                    earthRecoverStartTime = now;
+                }
+                else if (now - earthRecoverStartTime >= earthRecoverDebounce)
+                {
+                    RestoreAllManagerObjects();
+                    SetAllManagerRenderersVisible(true);
+                    ForceRetryAllAnchors();
+
+                    if (osi != null && osi.IsFallbackMode)
+                        osi.EnableFallbackMode(false, forceDisable: true, reason: "EarthRecovered");
+
+                    earthFallbackActive = false;
+                    earthRecoverStartTime = -1f;
+#if !UNITY_EDITOR
+                    Debug.Log("[EARTH-DBG] Earth tracking 복귀 → fallback 해제 + 앵커 재시도");
+#endif
+                }
+            }
+        }
+        else // Limited / None — 신호 손실
+        {
+            earthRecoverStartTime = -1f; // 복귀 디바운스 취소
+
+            if (!earthFallbackActive)
+            {
+                // 손실 디바운스 — earthLossDebounce 지속 시 fallback 활성화
+                if (earthDropStartTime < 0f)
+                {
+                    earthDropStartTime = now;
+                }
+                else if (now - earthDropStartTime >= earthLossDebounce)
+                {
+                    if (osi != null && !osi.IsFallbackMode)
+                    {
+                        SetAllManagerRenderersVisible(false);
+                        osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"EarthLost_{earth}");
+                    }
+                    earthFallbackActive = true;
+                    earthDropStartTime = -1f;
+#if !UNITY_EDITOR
+                    Debug.Log($"[EARTH-DBG] Earth tracking 손실({earth}) → fallback ON + 안내");
+#endif
                 }
             }
         }

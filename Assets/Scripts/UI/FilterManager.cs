@@ -982,18 +982,20 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private float cacheRefreshDistance = 1000f;
 
     [Header("Speed Tracking — LoadingManager fallback 판정용")]
-    [Tooltip("속도 계산 이동 평균 윈도우 (초) — 길수록 GPS 노이즈에 덜 민감, 짧을수록 반응 빠름")]
-    [SerializeField] private float speedAverageWindow = 15f;
+    [Tooltip("속도 샘플링 주기 (초) — 3초 권장. 1~2초는 GPS 노이즈 필터(8m) 때문에 중속 구간이 노이즈로 먹힘")]
+    [SerializeField] private float speedSampleInterval = 3f;
+    [Tooltip("속도 계산 이동 평균 윈도우 (초) — 길수록 GPS 노이즈에 덜 민감, 짧을수록 감속 반응 빠름")]
+    [SerializeField] private float speedAverageWindow = 6f;
     [Tooltip("GPS 노이즈 필터 — 이 거리(m) 미만 변화는 무시 (정지/도보 시 좌표 떨림 제거)")]
     [SerializeField] private float gpsNoiseThresholdMeters = 8f;
-    [Tooltip("Peak 속도 자동 감쇠율 (per second) — 이동 멈추면 peak가 점진적으로 줄어듦")]
-    [SerializeField] private float peakSpeedDecayPerSec = 2f;
 
     [Header("Slow-down Refresh — 감속 시 위치 재검토")]
     [Tooltip("이 속도(km/h) 미만으로 감속 시 한 번 리프레쉬 (차량/지하철 하차 후 정확한 위치 재동기화)")]
     [SerializeField] private float slowRefreshThresholdKmh = 5f;
     [Tooltip("리프레쉬를 트리거하기 위해 필요한 직전 최고 속도 (km/h) — 이보다 빨랐어야 감속으로 인정")]
     [SerializeField] private float slowRefreshRequiredPeakKmh = 25f;
+    [Tooltip("'직전에 빨랐다' 인정 시간 (초) — 이 시간 안에 고속이었어야 감속 리프레쉬 트리거")]
+    [SerializeField] private float recentFastWindow = 60f;
     [Tooltip("감속 리프레쉬 쿨다운 (초) — 이 시간 이내 재트리거 방지")]
     [SerializeField] private float slowRefreshCooldown = 30f;
 
@@ -1004,9 +1006,8 @@ public class FilterManager : MonoBehaviour
     public float CurrentSpeedKmh => cachedSpeedKmh;
 
     // 감속 리프레쉬 상태
-    private float peakSpeedKmh = 0f;            // 최근 관측된 피크 속도 (감속 판정 기준)
+    private float lastFastTime = -999f;         // 마지막으로 slowRefreshRequiredPeakKmh 이상이었던 시각
     private float lastSlowRefreshTime = -999f;  // 마지막 감속 리프레쉬 시각
-    private float lastPeakUpdateTime = -1f;     // peak 마지막 갱신 시각 (감쇠 계산용)
     private Vector2 lastValidGpsPosition = Vector2.zero; // GPS 노이즈 필터용 마지막 유효 위치
 
     private List<IPlaceCacheProvider> cacheProviders = new List<IPlaceCacheProvider>();
@@ -1060,6 +1061,7 @@ public class FilterManager : MonoBehaviour
         {
             allocationStarted = true;
             allocationCoroutine = StartCoroutine(AllocationLoop());
+            StartCoroutine(SpeedTrackingLoop());
         }
     }
 
@@ -1072,6 +1074,7 @@ public class FilterManager : MonoBehaviour
         {
             allocationStarted = true;
             allocationCoroutine = StartCoroutine(AllocationLoop());
+            StartCoroutine(SpeedTrackingLoop());
         }
     }
 
@@ -1089,8 +1092,7 @@ public class FilterManager : MonoBehaviour
 
             if (gps.x != 0f || gps.y != 0f)
             {
-                // GPS 샘플 기반 평균 속도 계산 (LoadingManager fallback 판정용)
-                UpdateSpeed(gps);
+                // 속도 계산은 SpeedTrackingLoop(3초 주기)가 전담 — 여기서는 호출 안 함
 
                 // 5km 이상 이동 시 캐시 갱신
                 float movedFromCache = CalculateGPSDistance(lastCacheRefreshPosition.x, lastCacheRefreshPosition.y, gps.x, gps.y);
@@ -1112,6 +1114,27 @@ public class FilterManager : MonoBehaviour
             }
 
             yield return new WaitForSeconds(allocationInterval);
+        }
+    }
+
+    /// <summary>
+    /// 속도 샘플링 전용 루프 — speedSampleInterval(기본 3초)마다 GPS 속도 갱신.
+    /// AllocationLoop(10초)와 분리한 이유: 감속 새로고침 트리거가 제때 발동하려면
+    /// 10초 간격으로는 너무 성겨서 25→5km/h 감속을 놓침.
+    /// </summary>
+    private IEnumerator SpeedTrackingLoop()
+    {
+        // 최초 GPS 준비 대기 (AllocationLoop와 동일)
+        yield return new WaitForSeconds(2f);
+
+        while (true)
+        {
+            Vector2 gps = GetCurrentGPS();
+            if (gps.x != 0f || gps.y != 0f)
+            {
+                UpdateSpeed(gps);
+            }
+            yield return new WaitForSeconds(speedSampleInterval > 0.5f ? speedSampleInterval : 3f);
         }
     }
 
@@ -1139,9 +1162,14 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
-    /// GPS 샘플 기반 평균 속도 계산
+    /// GPS 샘플 기반 평균 속도 계산 (SpeedTrackingLoop가 speedSampleInterval마다 호출)
     /// LoadingManager가 fallback 진입 시 차량 속도 임계값 판정에 사용 (CurrentSpeedKmh 프로퍼티)
     /// 감속 시 (차량/지하철 하차 등) 한 번 리프레쉬 트리거도 여기서 판정
+    ///
+    /// 트리거는 타임스탬프 방식 — 고속(slowRefreshRequiredPeakKmh 이상)이었던 마지막 시각을
+    /// lastFastTime에 기록하고, 현재 저속 + 최근 recentFastWindow 내 고속 + 쿨다운으로 판정.
+    /// (이전 peak 감쇠 모델은 10초 샘플링 + 2km/h/s 감쇠로 인해 한 틱 만에 peak가
+    ///  소멸 → 트리거가 사실상 발동 불가능했던 버그. 감쇠 모델 폐기.)
     /// </summary>
     private void UpdateSpeed(Vector2 gps)
     {
@@ -1185,35 +1213,26 @@ public class FilterManager : MonoBehaviour
         }
         cachedSpeedKmh = speedKmh;
 
-        // === Peak 자동 감쇠 ===
-        // 멈춰있어도 peakSpeedKmh가 영원히 안 줄어드는 문제 해결.
-        // peakSpeedDecayPerSec 만큼 매 초 감소시키되, 현재 속도보다는 안 내려감.
-        if (lastPeakUpdateTime < 0f) lastPeakUpdateTime = now;
-        float dt = now - lastPeakUpdateTime;
-        lastPeakUpdateTime = now;
-        if (peakSpeedKmh > 0f && peakSpeedDecayPerSec > 0f)
+        if (speedKmh < 0f) return; // 샘플 부족 — 감속 판정 불가
+
+        // === 감속 리프레쉬 판정 (타임스탬프 방식) ===
+        // 고속이었던 마지막 시각 기록 → 현재 저속 + 최근 고속 이력 + 쿨다운 경과 시 트리거
+        if (speedKmh >= slowRefreshRequiredPeakKmh)
+            lastFastTime = now;
+
+        bool cooldownPassed = (now - lastSlowRefreshTime) >= slowRefreshCooldown;
+        bool wasRecentlyFast = (now - lastFastTime) <= recentFastWindow;
+        bool nowSlowEnough = speedKmh < slowRefreshThresholdKmh;
+
+#if !UNITY_EDITOR
+        Debug.Log($"[SLOWDOWN-DBG] speed={speedKmh:F1}km/h fastAge={(now - lastFastTime):F0}s slow={nowSlowEnough} recentFast={wasRecentlyFast} cooldown={cooldownPassed}");
+#endif
+
+        if (cooldownPassed && wasRecentlyFast && nowSlowEnough)
         {
-            float decayed = peakSpeedKmh - peakSpeedDecayPerSec * dt;
-            peakSpeedKmh = Mathf.Max(decayed, Mathf.Max(0f, speedKmh));
-        }
-
-        // === 감속 리프레쉬 판정 ===
-        // 조건: 피크가 slowRefreshRequiredPeakKmh 이상 → 현재 slowRefreshThresholdKmh 미만으로 진입
-        //       + 쿨다운 경과 → DataManager.RestartFetchingAfterResume 한 번 호출
-        if (speedKmh >= 0f)
-        {
-            if (speedKmh > peakSpeedKmh) peakSpeedKmh = speedKmh;
-
-            bool cooldownPassed = (now - lastSlowRefreshTime) >= slowRefreshCooldown;
-            bool wasFastEnough = peakSpeedKmh >= slowRefreshRequiredPeakKmh;
-            bool nowSlowEnough = speedKmh < slowRefreshThresholdKmh;
-
-            if (cooldownPassed && wasFastEnough && nowSlowEnough)
-            {
-                TriggerSlowdownRefresh();
-                lastSlowRefreshTime = now;
-                peakSpeedKmh = speedKmh; // 피크 리셋 → 다음 감속 사이클 준비
-            }
+            TriggerSlowdownRefresh();
+            lastSlowRefreshTime = now;
+            lastFastTime = -999f; // 다음 감속 사이클 준비 (즉시 재트리거 방지)
         }
     }
 
@@ -1242,10 +1261,9 @@ public class FilterManager : MonoBehaviour
     public void ResetSpeedTracking()
     {
         gpsSamples.Clear();
-        peakSpeedKmh = 0f;
         cachedSpeedKmh = -1f;
         lastValidGpsPosition = Vector2.zero;
-        lastPeakUpdateTime = -1f;
+        lastFastTime = -999f; // 묵은 "고속" 이력 제거 — 복귀 직후 가짜 감속 트리거 방지
         // 쿨다운도 리셋해서 복귀 직후 정당한 감속이 와도 30초 cooldown 위에 추가로 막진 않음
         // (TriggerSlowdownRefresh의 TimeSinceLastBackgroundRecovery 가드가 우선)
     }

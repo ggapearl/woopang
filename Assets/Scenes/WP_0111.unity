@@ -3736,11 +3736,12 @@ MonoBehaviour:
   indicatorObjectRadius: 5000
   allocationInterval: 3
   cacheRefreshDistance: 5000
+  speedSampleInterval: 3
   speedAverageWindow: 5
   gpsNoiseThresholdMeters: 8
-  peakSpeedDecayPerSec: 2
   slowRefreshThresholdKmh: 5
   slowRefreshRequiredPeakKmh: 25
+  recentFastWindow: 60
   slowRefreshCooldown: 30
 --- !u!4 &223177677
 Transform:
@@ -7859,6 +7860,8 @@ MonoBehaviour:
   additionalBoundOffsetBottom: 100
   additionalBoundOffsetLeft: 0
   additionalBoundOffsetRight: 0
+  fallbackToastCooldown: 30
+  emitFallbackToast: 1
   fallbackMinDuration: 2
   fallbackOpeningDuration: 1
   fallbackTransitionDuration: 0.6
@@ -17676,6 +17679,8 @@ MonoBehaviour:
   fallbackActivationDelay: 0.2
   trackingLossDebounceTime: 2
   vehicleSpeedThreshold: 15
+  earthLossDebounce: 3
+  earthRecoverDebounce: 1.5
 --- !u!1 &1309482254
 GameObject:
   m_ObjectHideFlags: 0
@@ -44063,7 +44068,7 @@ PrefabInstance:
     - target: {fileID: 1601744079313318032, guid: ec6ba3c364befc9499972d881e3e92cf,
         type: 3}
       propertyPath: zoomSpeed
-      value: 0.01
+      value: 0.005
       objectReference: {fileID: 0}
     - target: {fileID: 1601744079313318032, guid: ec6ba3c364befc9499972d881e3e92cf,
         type: 3}
