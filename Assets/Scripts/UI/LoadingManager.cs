@@ -458,17 +458,16 @@ public class LoadingManager : MonoBehaviour
     {
         isSlowdownRefreshing = true;
 
-        // 1. fallback ON — 사용자에게는 화살표만 보임 (loadingPanel 안 띄움 → UX 끊김 없음)
+        // 1. fallback + 다국어 'AR 세션 복구 중' 안내 패널 동시 표시
+        //    (이전엔 패널 미표시로 UX 끊김 없음을 우선했지만, 사용자가
+        //     "지금 뭐 하는 중인지" 모르는 케이스 보강 차원으로 패널을 함께 표시)
         OffScreenIndicator osi = GetCachedOSI();
-        if (osi != null)
-        {
-            osi.SetFallbackMinDuration(0.5f);
+        if (osi != null) osi.SetFallbackMinDuration(0.5f);
 #if UNITY_EDITOR
-            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: true, reason: "SlowdownRefresh_Editor");
+        EnterFallbackWithGuidance(reason: "SlowdownRefresh_Editor", autoDisable: true);
 #else
-            osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: "SlowdownRefresh");
+        EnterFallbackWithGuidance(reason: "SlowdownRefresh");
 #endif
-        }
         // 모든 cube/indicator의 Renderer 숨김 (drift된 위치 표시 방지)
         SetAllManagerRenderersVisible(false);
 
@@ -496,11 +495,8 @@ public class LoadingManager : MonoBehaviour
         // 5. DataManager 갱신
         if (dataManager != null) dataManager.RestartFetchingAfterResume();
 
-        // 6. fallback OFF — cube가 정상 위치에 등장
-        if (osi != null && osi.IsFallbackMode)
-        {
-            osi.EnableFallbackMode(false, reason: "SlowdownRefresh_Complete");
-        }
+        // 6. fallback OFF + 안내 패널 숨김 — cube가 정상 위치에 등장
+        ExitFallbackWithGuidance(reason: "SlowdownRefresh_Complete");
 
         isSlowdownRefreshing = false;
         slowdownRefreshCoroutine = null;
@@ -628,10 +624,10 @@ public class LoadingManager : MonoBehaviour
                 if (speedKmh < vehicleSpeedThreshold)
                 {
                     OffScreenIndicator osi = GetCachedOSI();
-                    if (osi != null && !osi.IsFallbackMode)
+                    if (osi == null || !osi.IsFallbackMode)
                     {
                         SetAllManagerRenderersVisible(false);
-                        osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"TrackLost_Debounced_{reason}");
+                        EnterFallbackWithGuidance(reason: $"TrackLost_Debounced_{reason}");
                     }
                 }
                 pendingFallbackEntry = false;
@@ -677,11 +673,7 @@ public class LoadingManager : MonoBehaviour
                 SetAllManagerRenderersVisible(true);
                 RestoreAllManagerObjects();
                 // 앵커 재생성은 FilterManager.AllocationLoop의 RetryFailedAnchors(매 2초)가 자동 처리
-                OffScreenIndicator osi = GetCachedOSI();
-                if (osi != null && osi.IsFallbackMode)
-                {
-                    osi.EnableFallbackMode(false, forceDisable: true, reason: "TrackRecovered");
-                }
+                ExitFallbackWithGuidance(reason: "TrackRecovered", forceDisable: true);
             }
         }
     }
@@ -729,13 +721,12 @@ public class LoadingManager : MonoBehaviour
                     SetAllManagerRenderersVisible(true);
                     ForceRetryAllAnchors();
 
-                    if (osi != null && osi.IsFallbackMode)
-                        osi.EnableFallbackMode(false, forceDisable: true, reason: "EarthRecovered");
+                    ExitFallbackWithGuidance(reason: "EarthRecovered", forceDisable: true);
 
                     earthFallbackActive = false;
                     earthRecoverStartTime = -1f;
 #if !UNITY_EDITOR
-                    Debug.Log("[EARTH-DBG] Earth tracking 복귀 → fallback 해제 + 앵커 재시도");
+                    Debug.Log("[EARTH-DBG] Earth tracking 복귀 → fallback 해제 + 안내 패널 + 앵커 재시도");
 #endif
                 }
             }
@@ -753,15 +744,15 @@ public class LoadingManager : MonoBehaviour
                 }
                 else if (now - earthDropStartTime >= earthLossDebounce)
                 {
-                    if (osi != null && !osi.IsFallbackMode)
+                    if (osi == null || !osi.IsFallbackMode)
                     {
                         SetAllManagerRenderersVisible(false);
-                        osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"EarthLost_{earth}");
+                        EnterFallbackWithGuidance(reason: $"EarthLost_{earth}");
                     }
                     earthFallbackActive = true;
                     earthDropStartTime = -1f;
 #if !UNITY_EDITOR
-                    Debug.Log($"[EARTH-DBG] Earth tracking 손실({earth}) → fallback ON + 안내");
+                    Debug.Log($"[EARTH-DBG] Earth tracking 손실({earth}) → fallback ON + 다국어 안내 패널");
 #endif
                 }
             }
@@ -1312,50 +1303,50 @@ public class LoadingManager : MonoBehaviour
         hasShownEnvironmentGuidance = true;
         isFallbackWithoutGuidance = false; // 환경안내가 fallback 관리를 인계
 
-        // 환경 이슈 → fallback 모드 진입 (오브젝트 뭉침 방지)
-        // 이미 CheckTrackingStateChange에서 fallback 진입했으면 중복 진입하지 않음
-        // DataLoading은 제외 — 데이터 로드 중에는 오브젝트가 아직 없으므로 뭉침 없음
-        if (issue != AREnvironmentIssue.DataLoading)
-        {
-            OffScreenIndicator osi = GetCachedOSI();
-            if (osi != null && !osi.IsFallbackMode)
-            {
-                osi.EnableFallbackMode(true, GetFallbackConfig(), autoDisable: false, reason: $"EnvIssue_{issue}");
-            }
-        }
-
+        // 즉시 vs 디바운스 분기. 이전엔 fallback ON이 항상 즉시였고 패널만 2.5초 지연됐는데,
+        // 그 사이 "fallback 있는데 안내 없는" 갭이 생겼음. 이제 두 가지를 같은 타이밍에 묶음:
+        // - SessionPreparing: 즉시 fallback + 패널 + 점 애니메이션 (loading 느낌)
+        // - DataLoading + immediate flag: fallback 없이 패널만 (오브젝트 자체가 아직 없음)
+        // - 그 외: 2.5초 디바운스 후 fallback + 패널 동시 (정적 메시지 — 사용자 액션 안내)
         if (issue == AREnvironmentIssue.SessionPreparing)
         {
-            // SessionPreparing: 점 애니메이션 + 즉시 표시
-            string baseMessage = GetEnvironmentGuidanceMessage(issue);
-            if (loadingPanel) loadingPanel.SetActive(true);
-            StartSpinner();
-            StartDotAnimation(baseMessage);
+            string envMsg = GetEnvironmentGuidanceMessage(issue);
+            EnterFallbackWithGuidance(reason: $"EnvIssue_{issue}", customMessage: envMsg, animateDots: true);
             StartCoroutine(AutoRetryEnvironmentCheck(issue));
         }
         else if (issue == AREnvironmentIssue.DataLoading && enableImmediateDataManagerUI)
         {
+            // DataLoading은 fallback 진입 안 함 — 패널만 (ShowAREnvironmentGuidance 자체적으로 AutoRetry 시작)
             string guidanceMessage = GetEnvironmentGuidanceMessage(issue);
             ShowAREnvironmentGuidance(guidanceMessage, issue);
-            StartCoroutine(AutoRetryEnvironmentCheck(issue));
         }
         else
         {
             StartCoroutine(ShowDelayedEnvironmentGuidance(issue));
         }
     }
-    
+
     IEnumerator ShowDelayedEnvironmentGuidance(AREnvironmentIssue issue)
     {
         yield return new WaitForSeconds(2.5f);
-        
+
         AREnvironmentIssue currentIssue = DetermineEnvironmentIssue(
             arSession?.subsystem?.trackingState ?? TrackingState.None);
-        
+
         if (currentIssue == issue && hasShownEnvironmentGuidance)
         {
             string guidanceMessage = GetEnvironmentGuidanceMessage(issue);
-            ShowAREnvironmentGuidance(guidanceMessage, issue);
+            if (issue == AREnvironmentIssue.DataLoading)
+            {
+                // DataLoading은 fallback 없이 패널만
+                ShowAREnvironmentGuidance(guidanceMessage, issue);
+            }
+            else
+            {
+                // fallback + 다국어 안내 패널 동시 진입 (정적 메시지 — 점 애니메이션 없음)
+                EnterFallbackWithGuidance(reason: $"EnvIssue_{issue}", customMessage: guidanceMessage, animateDots: false);
+                StartCoroutine(AutoRetryEnvironmentCheck(issue));
+            }
         }
         else if (currentIssue == AREnvironmentIssue.None)
         {
@@ -1788,13 +1779,68 @@ public class LoadingManager : MonoBehaviour
         if (loadingPanel) loadingPanel.SetActive(true);
         StartSpinner();
     }
-    
+
     void HideLoadingUI()
     {
         if (loadingPanel) loadingPanel.SetActive(false);
         StopSpinner();
         StopDotAnimation();
         // StopAllCoroutines 사용 금지 — HandleBackgroundRecovery, CheckAREnvironment 등이 중단됨
+    }
+
+    /// <summary>
+    /// fallback 모드 진입 + 다국어 안내 패널을 함께 표시.
+    /// 사용자에게 "지금 복구 중"을 명확히 알리기 위한 통합 헬퍼 — 화살표만으로는
+    /// 오브젝트/타겟이 0개일 때 사용자가 헤매는 문제를 방지.
+    ///
+    /// 메시지 기본값은 다국어 'AR 세션 복구 중'. customMessage로 env-issue별
+    /// 구체 안내(예: "어둡습니다, 조명이 있는 곳으로...", "특징점 부족, 카메라를 움직이세요")
+    /// 전달 가능. animateDots=false면 점 애니메이션 없이 정적 메시지(사용자 액션 안내용).
+    ///
+    /// HandleBackgroundRecovery처럼 자체 패널 흐름을 가진 곳은 이 헬퍼 대신 직접
+    /// osi.EnableFallbackMode + 패널을 따로 제어 (BG 복구는 데이터 재로드까지 묶음).
+    /// </summary>
+    private void EnterFallbackWithGuidance(string reason, OffScreenIndicator.FallbackConfig config = null, bool autoDisable = false, string customMessage = null, bool animateDots = true)
+    {
+        OffScreenIndicator osi = GetCachedOSI();
+        if (osi != null)
+        {
+            osi.EnableFallbackMode(true, config ?? GetFallbackConfig(), autoDisable, reason: reason);
+        }
+
+        string baseMessage = customMessage ?? GetSessionRecoveringMessage();
+        if (loadingPanel) loadingPanel.SetActive(true);
+        StartSpinner();
+        if (animateDots)
+        {
+            StartDotAnimation(baseMessage);
+        }
+        else
+        {
+            // 정적 메시지 — 점 애니메이션 정리 후 메시지만 표시 (사용자 액션 안내용)
+            StopDotAnimation();
+            UpdateMessage(baseMessage);
+        }
+    }
+
+    /// <summary>
+    /// EnterFallbackWithGuidance와 쌍 — fallback 해제 + 안내 패널 숨김 동시 처리.
+    /// BG 복구 진행 중이면 패널은 BG 복구가 직접 관리 중이므로 건드리지 않음.
+    /// </summary>
+    private void ExitFallbackWithGuidance(string reason, bool forceDisable = false)
+    {
+        OffScreenIndicator osi = GetCachedOSI();
+        if (osi != null && osi.IsFallbackMode)
+        {
+            osi.EnableFallbackMode(false, forceDisable: forceDisable, reason: reason);
+        }
+
+        // BG 복구 중이면 패널은 BG 복구가 관리 — 끄지 않음
+        if (isBackgroundRecovering) return;
+
+        StopDotAnimation();
+        if (loadingPanel) loadingPanel.SetActive(false);
+        StopSpinner();
     }
     
     void UpdateMessage(string message)
