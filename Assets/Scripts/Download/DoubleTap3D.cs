@@ -842,6 +842,18 @@ public class DoubleTap3D : MonoBehaviour
             return;
         }
 
+        // dance_anim 카테고리는 일반 정보 패널 대신 DanceAnimController(다운로드 패널) 라우팅.
+        // 큐브 = 플레이스홀더, 더블탭 = "다운로드" 버튼 띄우기.
+        if (id > 0 && DataManager.Instance != null && DataManager.Instance.IsAnimCategory(id))
+        {
+            if (DanceAnimController.Instance != null)
+            {
+                string displayName = !string.IsNullOrEmpty(placeName) ? placeName : "3D 콘텐츠";
+                DanceAnimController.Instance.OnAnimCubeDoubleTapped(id, displayName);
+                return;
+            }
+        }
+
         // ★ 상태 일관성 검증: isFullscreen과 실제 GameObject 상태가 다른 경우 수정
         bool actualState = fullscreenCanvasGroup != null && fullscreenCanvasGroup.gameObject.activeSelf;
         if (isFullscreen != actualState)

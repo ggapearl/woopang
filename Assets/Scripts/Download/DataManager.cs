@@ -1115,10 +1115,32 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         else return SetupCubeObject(obj, place);
     }
 
+    // 앱 내장 심볼을 쓰는 공공데이터 카테고리 — 서버 사진 로딩 없이 Resources/PublicIcons/{cat}.png 사용.
+    // 명소/문화/종교(landmark/culture/religious)는 실사진 가치가 커서 제외(서버 사진 유지).
+    private static readonly HashSet<string> inAppIconCategories = new HashSet<string>
+    {
+        "gov", "utility", "edu", "medical", "sport", "welfare", "park", "toilet"
+    };
+
+    /// <summary>공공 심볼 카테고리면 Resources 경로, 아니면 null.</summary>
+    private static string GetInAppIconPath(string category)
+    {
+        if (!string.IsNullOrEmpty(category) && inAppIconCategories.Contains(category))
+            return "PublicIcons/" + category;
+        return null;
+    }
+
     private bool SetupCubeObject(GameObject obj, PlaceData place)
     {
         ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
-        if (display != null && !string.IsNullOrEmpty(place.main_photo)) display.SetBaseMap(place.main_photo);
+        if (display != null)
+        {
+            // 공공 심볼 카테고리는 앱 내장 이미지 우선(서버 로딩 0). 내장 텍스처 없으면 서버 사진 폴백.
+            bool usedInApp = false;
+            string iconPath = GetInAppIconPath(place.category);
+            if (iconPath != null) usedInApp = display.SetBaseMapFromResources(iconPath);
+            if (!usedInApp && !string.IsNullOrEmpty(place.main_photo)) display.SetBaseMap(place.main_photo);
+        }
 
         DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
         if (doubleTap == null) return false;
@@ -1166,15 +1188,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
     private void SetupTargetInfo(Target target, PlaceData place)
     {
-        // 서버의 locations.color (HEX)를 그대로 사용 — 업로드 시점에 카테고리 색이 주입됨
-        Color placeColor = Color.white;
-        if (!string.IsNullOrEmpty(place.color) &&
-            ColorUtility.TryParseHtmlString($"#{place.color}", out Color parsed))
-        {
-            placeColor = parsed;
-        }
-
-        target.TargetColor = placeColor;
+        // 서버 color(HEX) 우선, 비었거나 무효(예: 공공데이터 NULL/'blue')면 카테고리 색으로 폴백.
+        // 이전엔 폴백이 흰색이라 공공데이터·색 미지정 업로드의 인디케이터가 흰색으로 떴음(버그).
+        target.TargetColor = ResolvePlaceColor(place.color, place.category, place.name);
         target.PlaceName = place.name;
         target.placeId = place.id.ToString();
         target.gpsLatitude = place.latitude;
@@ -1310,6 +1326,13 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
             if (glbLoader != null) glbLoader.ClearModel();
         }
+        else // cube
+        {
+            // 진행 중인 서버 이미지/서브포토 로딩 즉시 취소 — 풀 재사용 시 이전 장소 잔여 다운로드가
+            // 새 장소 텍스처를 덮어쓰는 레이스 방지(loadGeneration 증가).
+            ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
+            if (display != null) display.CancelPendingLoads();
+        }
         obj.SetActive(false);
         targetPool.Enqueue(obj);
     }
@@ -1317,6 +1340,41 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     public Dictionary<int, GameObject> GetSpawnedObjects() => spawnedObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
+
+    /// <summary>주어진 id가 dance_anim(category="anim") 항목인지 확인 — DoubleTap3D 라우팅용.</summary>
+    public bool IsAnimCategory(int id)
+    {
+        if (placeDataMap.TryGetValue(id, out var p) && p.category == "anim") return true;
+        var cached = lightCache.Find(c => c.rawId == id.ToString());
+        return cached != null && cached.category == "anim";
+    }
+
+    /// <summary>
+    /// dance_anim 큐브 → GLB 교체 (사용자가 다운로드 패널에서 확인 누른 후).
+    /// 1) 현재 큐브 디스폰 → 풀 반환  2) in-memory에서 model_type="custom"로 전환
+    /// 3) SpawnFullObject 재호출 → glbPrefab + model_url로 GLB 로드 + 애니메이션 자동 재생.
+    /// 같은 id 유지 — FilterManager 배분 시스템과 자연 호환.
+    /// </summary>
+    public bool PromoteCubeToGLB(int id)
+    {
+        if (!placeDataMap.TryGetValue(id, out var place))
+        {
+            Debug.LogWarning($"[DataManager] PromoteCubeToGLB: id={id} placeData 없음 — Detail fetch 후 재시도 필요");
+            return false;
+        }
+        if (place.model_type == "custom") return true; // 이미 GLB
+
+        // 기존 큐브 디스폰
+        if (spawnedObjects.TryGetValue(id, out var obj))
+        {
+            ReturnToPool(obj, "cube");
+            spawnedObjects.Remove(id);
+        }
+
+        // in-memory에서 GLB 모드로 전환 (DB는 그대로)
+        place.model_type = "custom";
+        return SpawnFullObject(id.ToString());
+    }
     public List<CachedPlaceData> GetLightCache() => lightCache;
     public bool IsDataLoaded() => isDataLoaded;
 
@@ -1937,9 +1995,12 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             target.gpsLatitude = cached.latitude;
             target.gpsLongitude = cached.longitude;
 
-            Color catColor = GetCategoryColor(cached.category);
+            // 카테고리(+이름) 색 — full 스폰과 동일 소스. 흰색이면 굳이 덮어쓰지 않음(프리팹 기본 유지)
+            Color catColor = GetCategoryColor(cached.category, cached.displayName);
             if (catColor != Color.white)
                 target.TargetColor = catColor;
+
+            // dance_anim은 큐브로 정상 스폰되어 더블탭으로 라우팅됨 — 인디케이터 훅 불필요
         }
 
         var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
@@ -2013,27 +2074,62 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     }
 
     /// <summary>
-    /// 카테고리별 인디케이터 색상 반환 (FilterManager 색상과 동일)
+    /// 카테고리(+장소명) 기반 색상 — 인디케이터/리스트 공통 단일 소스.
+    ///
+    /// 공공데이터(공공시설)는 카페(핑크)·음식점(주황)과 헷갈리지 않도록 빨강/핑크 계열을
+    /// 제외하고 "푸르스름한 차분한 5색" 으로 통일. 사용자 데이터(shop/food/cafe)는 기존 유지.
+    ///
+    /// 소방서·경찰서 모두 gov 회청색으로 통일(공공데이터는 빨강/노랑 없이 푸르스름 계열만).
+    /// toilet은 별도 토글이라 보라색 그대로. placeName 파라미터는 향후 이름 기반 세분화 여지로 유지.
     /// </summary>
-    public static Color GetCategoryColor(string category)
+    public static Color GetCategoryColor(string category, string placeName = null)
     {
         if (string.IsNullOrEmpty(category)) return Color.white;
         switch (category)
         {
-            case "shop":     return new Color(0.25f, 0.5f, 0.95f);
-            case "food":     return new Color(0.984f, 0.757f, 0.365f);
-            case "cafe":     return new Color(0.91f, 0.33f, 0.63f);
-            case "park":     return new Color(0.3f, 0.85f, 0.5f);
-            case "toilet":   return new Color(0.68f, 0.33f, 0.77f);
-            case "sport":    return new Color(0.2f, 0.75f, 0.75f);
-            case "landmark": return new Color(0.85f, 0.65f, 0.13f);
-            case "culture":  return new Color(0.78f, 0.43f, 0.84f);
-            case "gov":      return new Color(0.53f, 0.6f, 0.67f);
-            case "edu":      return new Color(0.33f, 0.6f, 0.8f);
-            case "medical":  return new Color(1f, 0.4f, 0.4f);
-            case "welfare":  return new Color(0.47f, 0.73f, 0.47f);
+            // --- 사용자 데이터 (기존 유지) ---
+            case "shop":     return new Color(0.25f, 0.5f, 0.95f);     // 파랑 #4080F2
+            case "food":     return new Color(0.984f, 0.757f, 0.365f); // 주황 #FBC15D
+            case "cafe":     return new Color(0.91f, 0.33f, 0.63f);    // 핑크 #E854A1
+
+            // --- 공공데이터(기관/시설, publicData 토글) — 푸르스름/녹색, 흰색 금지 ---
+            case "gov":      return new Color(0.533f, 0.6f, 0.667f);   // 회청 #8899AA (경찰서·소방서 포함)
+            case "utility":  return new Color(0.533f, 0.6f, 0.667f);   // 농협/우체국 → 회청
+            case "religious":return new Color(0.533f, 0.6f, 0.667f);   // 사찰/성당 → 회청
+            case "edu":      return new Color(0.357f, 0.573f, 0.788f); // 하늘 #5B92C9
+            case "culture":  return new Color(0.357f, 0.573f, 0.788f); // 박물관/미술관 → 하늘
+            case "medical":  return new Color(0.239f, 0.643f, 0.62f);  // 청록 #3DA49E (빨강에서 변경)
+            case "welfare":  return new Color(0.306f, 0.62f, 0.471f);  // 청록그린 #4E9E78
+
+            // --- 독립 카테고리(자체 필터 토글 보유) — 고유색 유지, 필터 토글 색과 일치 ---
+            case "park":     return new Color(0.3f, 0.85f, 0.5f);      // 초록 #4DD980
+            case "sport":    return new Color(0.2f, 0.75f, 0.75f);     // 청록 #33BFBF
+            case "landmark": return new Color(0.85f, 0.65f, 0.13f);    // 금색 #D9A621 (공공데이터 아님)
+            case "toilet":   return new Color(0.68f, 0.33f, 0.77f);    // 보라 #AE54C4 (별도 토글)
             default:         return Color.white;
         }
+    }
+
+    /// <summary>
+    /// 서버 color(HEX) 우선, 비었거나 유효하지 않으면 카테고리(+이름) 색으로 폴백.
+    /// 풀 오브젝트·인디케이터·리스트가 모두 이 한 함수를 거쳐 색이 항상 일치하도록 통일.
+    /// 공공데이터의 DB color는 대부분 NULL/이름('blue' 등)이라 자연히 카테고리 팔레트로 귀결됨.
+    /// </summary>
+    public static Color ResolvePlaceColor(string rawColorHex, string category, string placeName = null)
+    {
+        if (!string.IsNullOrEmpty(rawColorHex))
+        {
+            string hex = rawColorHex.StartsWith("#") ? rawColorHex : "#" + rawColorHex;
+            if (ColorUtility.TryParseHtmlString(hex, out Color parsed))
+                return parsed;
+        }
+        return GetCategoryColor(category, placeName);
+    }
+
+    /// <summary>ResolvePlaceColor의 HEX(RRGGBB) 문자열 버전 — 리스트 리치텍스트(&lt;color=#..&gt;)용.</summary>
+    public static string ResolvePlaceColorHex(string rawColorHex, string category, string placeName = null)
+    {
+        return ColorUtility.ToHtmlStringRGB(ResolvePlaceColor(rawColorHex, category, placeName));
     }
 }
 

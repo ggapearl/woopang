@@ -970,6 +970,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private int maxTotalObjects = 16;
     [Tooltip("Full 3D 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
     [SerializeField] private int maxFullObjects = 16;
+    [Tooltip("공공데이터(앱 내장 이미지) 전용 Full 한도 — 메인 예산과 별도(가산). 근처 공공시설을 박스 대신 실제 오브젝트로 보장 표시. ⚠️ 너무 크면 저사양폰 부담(권장 16~24)")]
+    [SerializeField] private int maxPublicFullObjects = 20;
     [Tooltip("IndicatorOnly 경량 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
     [SerializeField] private int maxIndicatorObjects = 16;
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
@@ -1224,10 +1226,6 @@ public class FilterManager : MonoBehaviour
         bool wasRecentlyFast = (now - lastFastTime) <= recentFastWindow;
         bool nowSlowEnough = speedKmh < slowRefreshThresholdKmh;
 
-#if !UNITY_EDITOR
-        Debug.Log($"[SLOWDOWN-DBG] speed={speedKmh:F1}km/h fastAge={(now - lastFastTime):F0}s slow={nowSlowEnough} recentFast={wasRecentlyFast} cooldown={cooldownPassed}");
-#endif
-
         if (cooldownPassed && wasRecentlyFast && nowSlowEnough)
         {
             TriggerSlowdownRefresh();
@@ -1309,17 +1307,41 @@ public class FilterManager : MonoBehaviour
         HashSet<string> newIndicatorSet = new HashSet<string>();
         Dictionary<string, IPlaceCacheProvider> indicatorProviderMap = new Dictionary<string, IPlaceCacheProvider>();
 
+        // 공공데이터 Full은 앱 내장 이미지(서버 로딩 0)라 가볍다 → 메인 예산과 별도(가산) 예산으로
+        // 근처 공공시설을 박스 대신 실제 오브젝트로 보장 표시. 메인 예산(비공공 Full+Indicator)은
+        // 기존대로 maxTotalObjects로 묶음. early-break 대신 끝까지 순회(반경 내 후보만 평가, 저비용).
+        int publicFullCount = 0;
         foreach (var item in allPlaces)
         {
-            // 총 한도 도달 → 종료
-            if (newFullSet.Count + newIndicatorSet.Count >= maxTotalObjects) break;
-
             // 표시 반경 밖은 제외 (PlaceListManager.distanceSlider 동기화)
             if (item.distance > indicatorObjectRadius) continue;
 
-            // fullObjectRadius 이내 + 세부 필터 통과 → Full 후보
-            if (item.distance <= fullObjectRadius
-                && newFullSet.Count < maxFullObjects
+            // dance_anim(category="anim")은 큐브로 정상 스폰 — main_photo(thumb.jpg)를 베이스맵으로
+            // 사용자가 큐브를 더블탭하면 DanceAnimController가 다운로드 패널을 띄움 → GLB로 교체.
+            // 따라서 특수 케이스 없이 일반 큐브 흐름을 그대로 탐.
+
+            bool isPublic = !string.IsNullOrEmpty(item.data.category)
+                            && PublicDataCategories.Contains(item.data.category);
+            bool withinFull = item.distance <= fullObjectRadius;
+            int nonPublicFull = newFullSet.Count - publicFullCount;
+            bool mainBudgetFull = (nonPublicFull + newIndicatorSet.Count) >= maxTotalObjects;
+
+            // 1) 공공데이터 Full — 별도 예산(가산), 메인 total 한도와 무관
+            if (isPublic && withinFull
+                && publicFullCount < maxPublicFullObjects
+                && IsPassingFilter(item.data, filters))
+            {
+                if (newFullSet.Add(item.data.uniqueId))
+                {
+                    fullProviderMap[item.data.uniqueId] = item.provider;
+                    publicFullCount++;
+                }
+                continue;
+            }
+
+            // 2) 비공공 Full — 메인 예산
+            if (!isPublic && withinFull && !mainBudgetFull
+                && nonPublicFull < maxFullObjects
                 && IsPassingFilter(item.data, filters))
             {
                 newFullSet.Add(item.data.uniqueId);
@@ -1327,8 +1349,9 @@ public class FilterManager : MonoBehaviour
                 continue;
             }
 
-            // 그 외 → IndicatorOnly 후보 (매니저 토글만 적용)
-            if (newIndicatorSet.Count < maxIndicatorObjects
+            // 3) IndicatorOnly — Full 못 받은 것 (공공/비공공 공통, 매니저 토글만 적용)
+            if (!mainBudgetFull
+                && newIndicatorSet.Count < maxIndicatorObjects
                 && IsPassingManagerToggle(item.data, filters))
             {
                 newIndicatorSet.Add(item.data.uniqueId);

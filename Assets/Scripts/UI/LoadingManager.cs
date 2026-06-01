@@ -140,7 +140,8 @@ public class LoadingManager : MonoBehaviour
         CameraCovered,     // 카메라 가림
         ExcessiveMotion,   // 과도한 움직임
         DataLoading,       // 데이터 로딩 중 (DataManager 통합)
-        SessionPreparing   // AR 세션 작동 준비 중 (세션 미초기화/완전 실패)
+        SessionPreparing,  // AR 세션 작동 준비 중 (세션 미초기화/완전 실패)
+        GpsLoading         // GPS 신호 미획득 — 위치 기반 오브젝트가 아예 못 뜨는 단계
     }
     
     void Awake()
@@ -725,9 +726,6 @@ public class LoadingManager : MonoBehaviour
 
                     earthFallbackActive = false;
                     earthRecoverStartTime = -1f;
-#if !UNITY_EDITOR
-                    Debug.Log("[EARTH-DBG] Earth tracking 복귀 → fallback 해제 + 안내 패널 + 앵커 재시도");
-#endif
                 }
             }
         }
@@ -751,9 +749,6 @@ public class LoadingManager : MonoBehaviour
                     }
                     earthFallbackActive = true;
                     earthDropStartTime = -1f;
-#if !UNITY_EDITOR
-                    Debug.Log($"[EARTH-DBG] Earth tracking 손실({earth}) → fallback ON + 다국어 안내 패널");
-#endif
                 }
             }
         }
@@ -1132,8 +1127,33 @@ public class LoadingManager : MonoBehaviour
         lastTrackingState = currentTrackingState;
     }
     
+    /// <summary>
+    /// GPS 신호(위치 서비스)가 사용 가능한 상태인지 — 위치 기반 오브젝트 스폰 전제 조건.
+    /// Running이면 준비됨. Initializing/Stopped(아직 잡는 중)이면 미준비 → "GPS 신호 로딩 중" 안내.
+    /// Failed(권한 거부 등)는 준비된 것으로 간주(true)해서 무한 안내를 피하고 다른 경로에 위임.
+    /// </summary>
+    bool IsGpsReady()
+    {
+#if UNITY_EDITOR
+        return true; // 에디터는 GPS 시뮬레이션이 없으므로 항상 준비됨 처리
+#else
+        LocationServiceStatus status = Input.location.status;
+        if (status == LocationServiceStatus.Running) return true;
+        if (status == LocationServiceStatus.Failed) return true; // 권한 거부 등 — GPS 안내 대신 다른 처리에 위임
+        return false; // Initializing / Stopped — 아직 신호 잡는 중
+#endif
+    }
+
     AREnvironmentIssue DetermineEnvironmentIssue(TrackingState trackingState)
     {
+        // 0-1. GPS 신호 미획득 — 최우선. 위치가 없으면 위치 기반 데이터 페치/지오스페이셜
+        //      앵커 자체가 불가능 → 오브젝트가 "아예" 안 뜨는 단계이므로 GPS 안내를 먼저 띄움.
+        //      (권한 거부 등 Failed 상태는 제외 — 무한 안내 방지, 다른 경로가 처리)
+        if (!IsGpsReady())
+        {
+            return AREnvironmentIssue.GpsLoading;
+        }
+
         // 0. ExcessiveMotion(이동 중 흔들림)은 환경 문제가 아니므로 항상 무시
         // 빠른 이동 모드 여부와 무관하게 ExcessiveMotion 시 오브젝트/데이터 로드 유지
         {
@@ -1314,6 +1334,13 @@ public class LoadingManager : MonoBehaviour
             EnterFallbackWithGuidance(reason: $"EnvIssue_{issue}", customMessage: envMsg, animateDots: true);
             StartCoroutine(AutoRetryEnvironmentCheck(issue));
         }
+        else if (issue == AREnvironmentIssue.GpsLoading)
+        {
+            // GPS 미획득 — 오브젝트 자체가 아직 없음. fallback(화살표) 없이 패널 + 점 애니메이션만.
+            // ShowAREnvironmentGuidance가 GpsLoading은 점 애니메이션 + AutoRetry 자체 시작.
+            string guidanceMessage = GetEnvironmentGuidanceMessage(issue);
+            ShowAREnvironmentGuidance(guidanceMessage, issue);
+        }
         else if (issue == AREnvironmentIssue.DataLoading && enableImmediateDataManagerUI)
         {
             // DataLoading은 fallback 진입 안 함 — 패널만 (ShowAREnvironmentGuidance 자체적으로 AutoRetry 시작)
@@ -1414,6 +1441,14 @@ public class LoadingManager : MonoBehaviour
                 ["zh"] = "正在准备AR会话",
                 ["ja"] = "ARセッション準備中",
                 ["es"] = "Preparando sesión AR"
+            },
+            [AREnvironmentIssue.GpsLoading] = new Dictionary<string, string>
+            {
+                ["ko"] = "GPS 신호 로딩 중",
+                ["en"] = "Loading GPS signal",
+                ["zh"] = "正在加载GPS信号",
+                ["ja"] = "GPS信号を読み込み中",
+                ["es"] = "Cargando señal GPS"
             }
         };
         
@@ -1436,8 +1471,9 @@ public class LoadingManager : MonoBehaviour
         if (loadingPanel) loadingPanel.SetActive(true);
         StartSpinner();
 
-        // SessionPreparing/DataLoading은 점 애니메이션 적용
-        if (issue == AREnvironmentIssue.SessionPreparing || issue == AREnvironmentIssue.DataLoading)
+        // SessionPreparing/DataLoading/GpsLoading은 점 애니메이션 적용 (글자 고정, 점만 하나씩)
+        if (issue == AREnvironmentIssue.SessionPreparing || issue == AREnvironmentIssue.DataLoading
+            || issue == AREnvironmentIssue.GpsLoading)
         {
             StartDotAnimation(message);
         }

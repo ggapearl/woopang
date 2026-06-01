@@ -45,8 +45,10 @@
 | 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) |
 | 기획안/제안서 HTML | [docs/claude/proposals.md](docs/claude/proposals.md) |
 | **앳하트(AtHeart) 콘텐츠 / 촬영구성안 / 멤버 분석** | **[docs/claude/atheart-contents.md](docs/claude/atheart-contents.md)** |
+| **3D 콘텐츠(GLB) 생성·자동화 (Blender·Mixamo·Hunyuan3D·리깅·안무)** | **[docs/claude/3d-generation.md](docs/claude/3d-generation.md)** |
 | 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
 | MCP Unity (Claude ↔ Unity Editor) | [docs/claude/mcp-unity.md](docs/claude/mcp-unity.md) |
+| Claude Code 개선점 제보 (GitHub 이슈 자동화 — "제보해줘"/"이슈 올려줘") | [docs/claude/github-issue.md](docs/claude/github-issue.md) |
 
 ⚠️ 해당 작업을 할 때만 관련 파일을 읽을 것. 불필요한 파일은 읽지 않는다.
 
@@ -169,4 +171,16 @@ with zipfile.ZipFile(dst_aar, 'w', zipfile.ZIP_DEFLATED) as zf:
 
 ---
 
-*최종 업데이트: 2026-05-14 (5번 섹션 추가: 데이터 매니저 연결 체크리스트 — 공공교통 zoom 누락 사례 방지)*
+## 6. 서버 보안 · 시크릿 관리 (서버 코드 작업 시 필독)
+
+`C:\woopang\server` 의 Flask 서버 — 메인 `app_improved.py`(포트 443) · 농민.com `nongmin/nongmin_server.py`(포트 6688) — 작업 시:
+
+- **시크릿 하드코딩 절대 금지** — DB 비밀번호·관리자 비밀번호·세션키·API키는 반드시 `os.getenv()` 로 읽고 `.env`(`C:\woopang\server\.env`)에 둔다. 소스·git 에 평문으로 넣지 말 것.
+- 과거 `Dnvkddl011$` 가 DB·관리자 비밀번호로 하드코딩돼 git 에 노출돼 있었음 → 환경변수로 이전함. **재발 금지** (소스에 남은 폴백 기본값도 .env 설정 후 제거 대상).
+- 세션키는 미설정 시 랜덤 폴백하도록 돼 있음. Flask `debug=True` 금지. 세션쿠키는 HttpOnly·SameSite·Secure 적용.
+- DB는 `postgres` 슈퍼유저로 접속 중 → 장기적으로 앱 전용 제한권한 롤 권장. 원격 DB SSL(`sslmode`) 미적용 상태.
+- 농민.com 서버 작업 상세·미완료·보안 조치 항목은 **`server/nongmin/WORK_NOTES.md`**, 개발 로드맵은 **`server/nongmin/ROADMAP.md`**, 웹뷰앱은 **`server/nongmin/APP_BUILD_GUIDE.md`** 참조.
+
+---
+
+*최종 업데이트: 2026-05-31 (3번 테이블에 GitHub 이슈 제보 행 추가 — 상세는 docs/claude/github-issue.md, 7번 섹션은 제거하고 별도 파일로 이동)*

@@ -15,10 +15,15 @@ public class GLBModelLoader : MonoBehaviour
     [SerializeField] private int maxRetryAttempts = 2;
     [SerializeField] private float retryDelay = 2f;
     [SerializeField] private long maxFileSizeBytes = 10 * 1024 * 1024; // 10MB 제한
-    
+
+    [Header("Animation")]
+    [Tooltip("로드 후 첫 애니메이션 클립을 자동 루프 재생. 정적 GLB는 자동 무시")]
+    [SerializeField] private bool enableAnimation = true;
+
     [Header("Cache Management")]
-    [SerializeField] private bool enableFileCache = false; // GLB 파일 캐시 비활성화
-    [SerializeField] private int maxCachedFiles = 5; // 최대 캐시 파일 수
+    [Tooltip("같은 URL을 다시 받으면 RAM 캐시에서 즉시 반환 (dance_anim 재탭 UX). 5개 × ~3MB ≈ 15MB")]
+    [SerializeField] private bool enableFileCache = true;
+    [SerializeField] private int maxCachedFiles = 5;
     
     // 다운로드된 파일 추적
     private static Dictionary<string, byte[]> downloadedFiles = new Dictionary<string, byte[]>();
@@ -372,7 +377,10 @@ public class GLBModelLoader : MonoBehaviour
             
             // 즉시 머티리얼 최적화 실행 (원본 색상 적용)
             OptimizeMaterialsWithOriginalColor(renderers, originalColor);
-            
+
+            // 애니메이션 자동 재생 (dance_anim 카테고리용 — 정적 GLB는 자동 무시)
+            TryPlayAnimation();
+
             // 메시 데이터 분석
             MeshFilter[] meshFilters = loadedModel.GetComponentsInChildren<MeshFilter>();
             
@@ -403,9 +411,30 @@ public class GLBModelLoader : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 로드된 GLB의 첫 애니메이션 클립을 루프 재생.
+    /// GLTFast는 기본적으로 Legacy `Animation` 컴포넌트를 자동 부착함.
+    /// 정적 GLB(애니 클립 0개)는 안전하게 무시. dance_anim 카테고리 자동 재생용.
+    /// </summary>
+    private void TryPlayAnimation()
+    {
+        if (!enableAnimation || loadedModel == null) return;
+
+        Animation anim = loadedModel.GetComponentInChildren<Animation>(true);
+        if (anim == null || anim.GetClipCount() == 0) return;
+
+        AnimationClip first = null;
+        foreach (AnimationState state in anim) { first = state.clip; break; }
+        if (first == null) return;
+
+        first.wrapMode = WrapMode.Loop;
+        anim.wrapMode = WrapMode.Loop;
+        anim.Play(first.name);
+    }
+
     private void AnalyzeGLBMaterials(MeshRenderer[] renderers)
     {
-        
+
         foreach (var renderer in renderers)
         {
             if (renderer.materials != null)

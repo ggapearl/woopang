@@ -56,6 +56,41 @@ public class ImageDisplayController : MonoBehaviour
         currentBaseMapCoroutine = StartCoroutine(LoadBaseMapTexture(imageUrl));
     }
 
+    /// <summary>
+    /// 앱 내장 이미지(Resources)로 베이스맵 즉시 설정 — 서버 다운로드 없음.
+    /// 공공데이터 심볼처럼 종류가 한정된 이미지에 사용. 경로에 텍스처가 없으면 false 반환
+    /// (호출측이 서버 main_photo로 폴백할 수 있게).
+    /// ⚠️ Resources 텍스처는 공유 자산이므로 절대 Destroy 하지 않음 → baseMapTexture에 담지 않음.
+    /// </summary>
+    public bool SetBaseMapFromResources(string resourcePath)
+    {
+        if (!enabled) return false;
+
+        Texture2D tex = Resources.Load<Texture2D>(resourcePath);
+        if (tex == null) return false;
+
+        // 진행 중인 서버 로딩 중단 + 세대 증가(yield 후 돌아온 이전 코루틴 무효화)
+        if (currentBaseMapCoroutine != null)
+        {
+            StopCoroutine(currentBaseMapCoroutine);
+            currentBaseMapCoroutine = null;
+        }
+        loadGeneration++;
+
+        // 이전에 다운로드해 둔 동적 텍스처만 정리. 내장(공유) 텍스처는 소유하지 않으므로 참조만.
+        if (baseMapTexture != null && baseMapTexture != tex) Destroy(baseMapTexture);
+        baseMapTexture = null;
+
+        if (cubeRenderer != null)
+        {
+            if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", tex);
+            else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", tex);
+            ApplyPaddingSettings();
+            cubeRenderer.enabled = true;
+        }
+        return true;
+    }
+
     private IEnumerator LoadBaseMapTexture(string imageUrl)
     {
         int myGeneration = loadGeneration;

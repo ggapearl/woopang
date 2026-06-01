@@ -74,22 +74,8 @@ public class PlaceListManager : MonoBehaviour
     private const string TRAIN_COLOR = "00FF00";
     private const string SUBWAY_COLOR = "3DA29C";
 
-    // 카테고리별 색상 (FilterManager와 동일)
-    private static readonly Dictionary<string, string> CATEGORY_COLORS = new Dictionary<string, string>
-    {
-        { "shop",     "4080F2" }, // 파란색
-        { "food",     "FBC15D" }, // 주황색
-        { "cafe",     "E854A1" }, // 핑크색
-        { "park",     "4DD980" }, // 녹색
-        { "toilet",   "AE54C4" }, // 보라색
-        { "sport",    "33BFBF" }, // 청록색
-        { "landmark", "D9A621" }, // 금색
-        { "culture",  "C76ED7" }, // 문화 (연보라)
-        { "gov",      "8899AA" }, // 정부기관 (회청색)
-        { "edu",      "5599CC" }, // 교육 (하늘색)
-        { "medical",  "FF6666" }, // 의료 (연빨강)
-        { "welfare",  "77BB77" }, // 복지 (연초록)
-    };
+    // 카테고리 색상은 DataManager.GetCategoryColor / ResolvePlaceColorHex 로 단일화
+    // (인디케이터·풀오브젝트·리스트가 같은 소스를 써서 항상 일치)
 
     private Coroutine updatePeriodicCoroutine;
 
@@ -266,11 +252,10 @@ public class PlaceListManager : MonoBehaviour
                         woopangCount++;
                     }
 
-                    // 색상 우선순위: placeDataMap 상세 색상 > 카테고리 색상 > null(기본 흰색)
-                    string colorHex = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
-                    if (string.IsNullOrEmpty(colorHex) && !string.IsNullOrEmpty(cat))
-                        CATEGORY_COLORS.TryGetValue(cat, out colorHex);
+                    // 색상: 서버 color(HEX) 우선 → 카테고리(+이름) 색 폴백 (DataManager 단일 소스)
                     string displayName = cached.displayName;
+                    string rawColor = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
+                    string colorHex = DataManager.ResolvePlaceColorHex(rawColor, cat, displayName);
                     combinedPlaces.Add((cached, d, id.ToString(), $"{displayName} - {Mathf.FloorToInt(d)}m", colorHex));
                     liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude });
                     addedIds.Add(id);
@@ -301,9 +286,7 @@ public class PlaceListManager : MonoBehaviour
                     {
                         woopangCount++;
                     }
-                    string pColor = p.color;
-                    if (string.IsNullOrEmpty(pColor) && !string.IsNullOrEmpty(p.category))
-                        CATEGORY_COLORS.TryGetValue(p.category, out pColor);
+                    string pColor = DataManager.ResolvePlaceColorHex(p.color, p.category, p.name);
                     combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", pColor));
                     liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude });
                 }
