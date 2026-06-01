@@ -61,7 +61,15 @@ public class DanceAnimController : MonoBehaviour
     /// <summary>큐브 플레이스홀더가 더블탭됐을 때 호출 — 다운로드 확인 패널 표시.</summary>
     public void OnAnimCubeDoubleTapped(int placeId, string placeName)
     {
-        if (activeSpawns.ContainsKey(placeId)) return; // 이미 GLB로 교체됨 무시
+        // 이미 GLB로 교체된 게 실제로 spawnedObjects에 살아있을 때만 무시.
+        // 이전 버그: GLB 로드 실패해도 activeSpawns가 set돼서 재탭이 영영 막힘.
+        if (activeSpawns.ContainsKey(placeId) &&
+            DataManager.Instance != null &&
+            DataManager.Instance.GetSpawnedObjects().ContainsKey(placeId))
+            return;
+
+        // 죽은 항목은 정리 — 재탭 허용
+        activeSpawns.Remove(placeId);
         pendingId = placeId;
         pendingName = placeName ?? "3D 콘텐츠";
 

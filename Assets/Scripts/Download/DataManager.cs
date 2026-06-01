@@ -1167,10 +1167,14 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
         GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
         if (glbLoader == null) glbLoader = obj.AddComponent<GLBModelLoader>();
-        
+
         glbLoader.ClearModel();
-        
-        string fullUrl = ApiConfig.MAIN_SERVER + "/" + place.model_url;
+
+        // model_url이 이미 풀 URL(http/https)이면 그대로 사용, 상대 경로면 MAIN_SERVER 붙임.
+        // 이전 버그: 무조건 prepend → "https://...woopang.com/https://..." 형식의 잘못된 URL → 404
+        string fullUrl = place.model_url.StartsWith("http")
+            ? place.model_url
+            : ApiConfig.MAIN_SERVER + "/" + place.model_url.Replace("\\", "/");
         float scale = place.model_scale > 0 ? place.model_scale : 1.0f;
         
         currentlyLoadingGLB.Add(place.id);
