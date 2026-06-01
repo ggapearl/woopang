@@ -53,8 +53,17 @@ public class DanceAnimPanelSetup
         if (Application.isPlaying) return false;
         if (Object.FindAnyObjectByType<DanceAnimController>() != null) return false;
 
-        // Canvas — 기존 것 재사용 우선
-        Canvas canvas = Object.FindAnyObjectByType<Canvas>();
+        // Canvas — ScreenSpaceOverlay 루트 캔버스만 선택 (서브캔버스·WorldSpace 제외)
+        // 이전 버그: FindAnyObjectByType<Canvas>가 ContinueCaptureDialog의 서브캔버스를
+        // 잡아서 패널이 거기 자식으로 박힘 + 스케일 0 부모 때문에 영원히 안 보임.
+        Canvas canvas = null;
+        foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        {
+            if (c.renderMode != RenderMode.ScreenSpaceOverlay) continue;
+            if (c.transform.parent != null) continue; // 루트 캔버스만
+            if (c.gameObject.name == "Canvas") { canvas = c; break; } // 이름 일치 우선
+            if (canvas == null) canvas = c;
+        }
         if (canvas == null)
         {
             var canvasGo = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
