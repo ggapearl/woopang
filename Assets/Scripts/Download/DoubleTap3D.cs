@@ -846,11 +846,16 @@ public class DoubleTap3D : MonoBehaviour
         // 큐브 = 플레이스홀더, 더블탭 = "다운로드" 버튼 띄우기.
         if (id > 0 && DataManager.Instance != null && DataManager.Instance.IsAnimCategory(id))
         {
+            Debug.Log($"[dbg-DoubleTap] anim 카테고리 감지 id={id} → DanceAnimController로 라우팅");
             if (DanceAnimController.Instance != null)
             {
                 string displayName = !string.IsNullOrEmpty(placeName) ? placeName : "3D 콘텐츠";
                 DanceAnimController.Instance.OnAnimCubeDoubleTapped(id, displayName);
                 return;
+            }
+            else
+            {
+                Debug.LogError($"[dbg-DoubleTap] DanceAnimController.Instance NULL — 패널 못 띄움");
             }
         }
 

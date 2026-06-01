@@ -31,6 +31,27 @@ public class GLBModelLoader : MonoBehaviour
     private string currentGLBUrl = "";
     private byte[] currentGLBData = null;
 
+    /// <summary>외부에서 GLB 바이트를 캐시에 미리 주입 (DanceAnimController가 진행률 표시하며
+    /// 직접 다운로드한 후 호출 → 후속 LoadGLB는 네트워크 안 거치고 즉시 사용).</summary>
+    public static void PreloadCache(string url, byte[] data)
+    {
+        if (string.IsNullOrEmpty(url) || data == null || data.Length == 0) return;
+        if (!downloadedFiles.ContainsKey(url))
+        {
+            downloadedFiles[url] = data;
+            downloadOrder.Enqueue(url);
+            const int hardCap = 5;
+            while (downloadOrder.Count > hardCap)
+            {
+                string old = downloadOrder.Dequeue();
+                if (downloadedFiles.ContainsKey(old)) downloadedFiles.Remove(old);
+            }
+        }
+    }
+
+    /// <summary>현재 GLB가 인스턴스화 + 모델 로드까지 완료됐는지.</summary>
+    public bool IsModelLoaded => isModelLoaded;
+
     void Start()
     {
         
@@ -418,10 +439,23 @@ public class GLBModelLoader : MonoBehaviour
     /// </summary>
     private void TryPlayAnimation()
     {
-        if (!enableAnimation || loadedModel == null) return;
+        if (!enableAnimation || loadedModel == null)
+        {
+            Debug.Log($"[dbg-GLB] TryPlayAnimation skip — enabled={enableAnimation} loaded={loadedModel != null}");
+            return;
+        }
 
         Animation anim = loadedModel.GetComponentInChildren<Animation>(true);
-        if (anim == null || anim.GetClipCount() == 0) return;
+        if (anim == null)
+        {
+            Debug.Log($"[dbg-GLB] Animation 컴포넌트 없음 — 정적 GLB");
+            return;
+        }
+        if (anim.GetClipCount() == 0)
+        {
+            Debug.Log($"[dbg-GLB] Animation 클립 0개");
+            return;
+        }
 
         AnimationClip first = null;
         foreach (AnimationState state in anim) { first = state.clip; break; }
@@ -430,6 +464,7 @@ public class GLBModelLoader : MonoBehaviour
         first.wrapMode = WrapMode.Loop;
         anim.wrapMode = WrapMode.Loop;
         anim.Play(first.name);
+        Debug.Log($"[dbg-GLB] 애니메이션 재생 시작: '{first.name}' (length={first.length:F2}s)");
     }
 
     private void AnalyzeGLBMaterials(MeshRenderer[] renderers)

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 /// <summary>
@@ -61,23 +62,69 @@ public class DanceAnimController : MonoBehaviour
     /// <summary>큐브 플레이스홀더가 더블탭됐을 때 호출 — 다운로드 확인 패널 표시.</summary>
     public void OnAnimCubeDoubleTapped(int placeId, string placeName)
     {
-        // 이미 GLB로 교체된 게 실제로 spawnedObjects에 살아있을 때만 무시.
-        // 이전 버그: GLB 로드 실패해도 activeSpawns가 set돼서 재탭이 영영 막힘.
+        Debug.Log($"[dbg-DanceAnim] OnAnimCubeDoubleTapped: id={placeId} name='{placeName}'");
+
         if (activeSpawns.ContainsKey(placeId) &&
             DataManager.Instance != null &&
             DataManager.Instance.GetSpawnedObjects().ContainsKey(placeId))
+        {
+            Debug.Log($"[dbg-DanceAnim] 이미 활성 GLB 스폰됨 — 무시 (id={placeId})");
             return;
+        }
 
-        // 죽은 항목은 정리 — 재탭 허용
         activeSpawns.Remove(placeId);
         pendingId = placeId;
         pendingName = placeName ?? "3D 콘텐츠";
 
+        // 파일 크기 미리 확인 (HEAD 요청, 비동기 업데이트)
+        StartCoroutine(FetchSizeAndUpdateUI(placeId));
+
         if (titleText != null) titleText.text = pendingName;
-        if (sizeText != null) sizeText.text = "3D로 보기 (다운로드 필요 · WiFi 권장)";
+        if (sizeText != null) sizeText.text = "크기 확인 중...";
         if (progressGroup != null) progressGroup.SetActive(false);
         if (confirmButton != null) confirmButton.interactable = true;
         if (confirmPanel != null) confirmPanel.SetActive(true);
+    }
+
+    IEnumerator FetchSizeAndUpdateUI(int id)
+    {
+        DataManager dm = DataManager.Instance;
+        if (dm == null) yield break;
+        if (!dm.GetPlaceDataMap().TryGetValue(id, out var place)) yield break;
+        string url = ResolveUrl(place.model_url);
+        if (string.IsNullOrEmpty(url)) yield break;
+
+        using (var head = UnityWebRequest.Head(url))
+        {
+            head.timeout = 5;
+            yield return head.SendWebRequest();
+            if (head.result == UnityWebRequest.Result.Success)
+            {
+                string lenStr = head.GetResponseHeader("Content-Length");
+                if (long.TryParse(lenStr, out long bytes) && bytes > 0)
+                {
+                    string sizeStr = bytes < 1024 * 1024
+                        ? $"{bytes / 1024f:F1} KB"
+                        : $"{bytes / (1024f * 1024f):F1} MB";
+                    if (id == pendingId && sizeText != null)
+                        sizeText.text = $"3D 보기 ({sizeStr} · WiFi 권장)";
+                    Debug.Log($"[dbg-DanceAnim] HEAD OK: id={id} size={bytes:N0} bytes ({sizeStr})");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[dbg-DanceAnim] HEAD 실패: {head.error}");
+                if (id == pendingId && sizeText != null)
+                    sizeText.text = "3D 보기 (다운로드 필요)";
+            }
+        }
+    }
+
+    static string ResolveUrl(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        if (raw.StartsWith("http")) return raw;
+        return ApiConfig.MAIN_SERVER + "/" + raw.Replace("\\", "/");
     }
 
     /// <summary>구 인터페이스 호환 (인디케이터 탭) — 큐브 더블탭과 동일 처리.</summary>
@@ -98,45 +145,139 @@ public class DanceAnimController : MonoBehaviour
 
     IEnumerator SpawnFlow(int id)
     {
+        Debug.Log($"[dbg-DanceAnim] SpawnFlow START id={id}");
         if (progressGroup != null) progressGroup.SetActive(true);
         if (confirmButton != null) confirmButton.interactable = false;
-        if (progressText != null) progressText.text = "데이터 받는 중...";
+        if (progressText != null) progressText.text = "준비 중...";
 
         DataManager dm = DataManager.Instance;
-        if (dm == null) { HideConfirm(); yield break; }
-
-        // 큐브 → GLB 교체 (PromoteCubeToGLB가 디스폰 후 glbPrefab + model_url로 재스폰).
-        // placeDataMap에 detail 없으면 false 반환 → SpawnFullObject가 batch detail fetch 트리거.
-        bool promoted = dm.PromoteCubeToGLB(id);
-        if (!promoted)
+        if (dm == null)
         {
-            // detail 없음 → fetch 시작됨, 대기
-            dm.SpawnFullObject(id.ToString());
+            Debug.LogError("[dbg-DanceAnim] DataManager.Instance is NULL");
+            HideConfirm();
+            yield break;
         }
 
-        float waited = 0f;
-        while (waited < spawnTimeoutSeconds)
+        // 1) PlaceData 확보 (detail 없으면 SpawnFullObject가 batch fetch 트리거)
+        if (!dm.GetPlaceDataMap().TryGetValue(id, out var place))
         {
-            yield return new WaitForSeconds(0.3f);
-            waited += 0.3f;
-            if (progressText != null)
-                progressText.text = $"3D 받는 중... {waited:F1}s";
-            if (dm.GetSpawnedObjects().ContainsKey(id))
+            Debug.Log($"[dbg-DanceAnim] placeDataMap에 id={id} 없음 — detail fetch 트리거");
+            if (progressText != null) progressText.text = "데이터 받는 중...";
+            dm.SpawnFullObject(id.ToString());
+            float fetchWait = 0f;
+            while (fetchWait < 10f && !dm.GetPlaceDataMap().ContainsKey(id))
             {
-                // promote 재시도 — detail 이제 있으므로 성공
-                if (!promoted) dm.PromoteCubeToGLB(id);
-                break;
+                yield return new WaitForSeconds(0.3f);
+                fetchWait += 0.3f;
+            }
+            if (!dm.GetPlaceDataMap().TryGetValue(id, out place))
+            {
+                Debug.LogError($"[dbg-DanceAnim] detail fetch 실패 id={id}");
+                if (progressText != null) progressText.text = "데이터 받기 실패. 다시 시도해주세요.";
+                yield return new WaitForSeconds(2f);
+                HideConfirm();
+                yield break;
+            }
+        }
+        Debug.Log($"[dbg-DanceAnim] placeData OK: name={place.name} model_url={place.model_url} model_type={place.model_type}");
+
+        // 2) URL 해결 (상대/풀 둘 다 처리)
+        string url = ResolveUrl(place.model_url);
+        if (string.IsNullOrEmpty(url))
+        {
+            Debug.LogError($"[dbg-DanceAnim] model_url empty");
+            if (progressText != null) progressText.text = "URL 없음. DB 확인 필요.";
+            yield return new WaitForSeconds(2f);
+            HideConfirm();
+            yield break;
+        }
+        Debug.Log($"[dbg-DanceAnim] resolved URL: {url}");
+
+        // 3) UnityWebRequest로 직접 다운로드 + 진행률
+        if (progressText != null) progressText.text = "3D 콘텐츠 다운로드 시작...";
+        byte[] glbBytes = null;
+        using (UnityWebRequest req = UnityWebRequest.Get(url))
+        {
+            req.timeout = 30;
+            var op = req.SendWebRequest();
+            long totalBytes = 0;
+            float startT = Time.realtimeSinceStartup;
+            while (!op.isDone)
+            {
+                if (totalBytes == 0)
+                {
+                    string lenStr = req.GetResponseHeader("Content-Length");
+                    long.TryParse(lenStr, out totalBytes);
+                }
+                long down = (long)req.downloadedBytes;
+                if (progressText != null)
+                {
+                    if (totalBytes > 0)
+                    {
+                        float pct = down * 100f / totalBytes;
+                        progressText.text = totalBytes < 1024 * 1024
+                            ? $"3D 다운로드 중... {down / 1024f:F1} / {totalBytes / 1024f:F1} KB ({pct:F0}%)"
+                            : $"3D 다운로드 중... {down / (1024f * 1024f):F2} / {totalBytes / (1024f * 1024f):F2} MB ({pct:F0}%)";
+                    }
+                    else
+                    {
+                        progressText.text = $"3D 다운로드 중... {down / 1024f:F1} KB";
+                    }
+                }
+                yield return null;
+            }
+            float elapsed = Time.realtimeSinceStartup - startT;
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"[dbg-DanceAnim] 다운로드 실패: {req.error} (URL={url})");
+                if (progressText != null) progressText.text = $"다운로드 실패: {req.error}";
+                yield return new WaitForSeconds(3f);
+                HideConfirm();
+                yield break;
+            }
+            glbBytes = req.downloadHandler.data;
+            Debug.Log($"[dbg-DanceAnim] 다운로드 OK: {glbBytes.Length:N0} bytes / {elapsed:F1}s");
+        }
+
+        // 4) GLBModelLoader 캐시에 사전 주입 — Promote가 곧 호출할 때 네트워크 안 거치게
+        GLBModelLoader.PreloadCache(url, glbBytes);
+        Debug.Log($"[dbg-DanceAnim] PreloadCache 주입 완료");
+
+        if (progressText != null) progressText.text = "3D 오브젝트 로딩 중...";
+
+        // 5) 큐브 → GLB 교체 (PromoteCubeToGLB가 디스폰 후 glbPrefab + 캐시된 바이트로 즉시 로드)
+        bool promoted = dm.PromoteCubeToGLB(id);
+        Debug.Log($"[dbg-DanceAnim] PromoteCubeToGLB: {promoted}");
+
+        // 6) 실제 GLB 인스턴스화 + 메시 로드 완료까지 대기
+        float spawnWait = 0f;
+        bool modelReady = false;
+        while (spawnWait < spawnTimeoutSeconds)
+        {
+            yield return new WaitForSeconds(0.2f);
+            spawnWait += 0.2f;
+            if (dm.GetSpawnedObjects().TryGetValue(id, out var glbObj) && glbObj != null)
+            {
+                var loader = glbObj.GetComponentInChildren<GLBModelLoader>(true);
+                if (loader != null && loader.IsModelLoaded)
+                {
+                    modelReady = true;
+                    break;
+                }
+                if (progressText != null) progressText.text = $"3D 오브젝트 로딩 중... {spawnWait:F1}s";
             }
         }
 
-        if (!dm.GetSpawnedObjects().ContainsKey(id))
+        if (!modelReady)
         {
-            if (progressText != null) progressText.text = "실패. 잠시 후 다시 시도해주세요.";
+            Debug.LogWarning($"[dbg-DanceAnim] GLB 로드 타임아웃 id={id} after {spawnWait:F1}s");
+            if (progressText != null) progressText.text = "로딩 시간 초과. 다시 시도해주세요.";
             yield return new WaitForSeconds(2f);
             HideConfirm();
             yield break;
         }
 
+        Debug.Log($"[dbg-DanceAnim] GLB 표시 완료 id={id} (총 {spawnWait:F1}s 대기)");
         activeSpawns[id] = Time.realtimeSinceStartup;
         HideConfirm();
     }

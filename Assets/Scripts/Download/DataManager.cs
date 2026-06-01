@@ -1363,21 +1363,32 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     {
         if (!placeDataMap.TryGetValue(id, out var place))
         {
-            Debug.LogWarning($"[DataManager] PromoteCubeToGLB: id={id} placeData 없음 — Detail fetch 후 재시도 필요");
+            Debug.LogWarning($"[dbg-Promote] id={id} placeData 없음 — Detail fetch 후 재시도 필요");
             return false;
         }
-        if (place.model_type == "custom") return true; // 이미 GLB
+        if (place.model_type == "custom")
+        {
+            Debug.Log($"[dbg-Promote] id={id} 이미 custom — 스킵");
+            return true;
+        }
 
-        // 기존 큐브 디스폰
+        Debug.Log($"[dbg-Promote] START id={id} model_url={place.model_url} scale={place.model_scale}");
+
         if (spawnedObjects.TryGetValue(id, out var obj))
         {
             ReturnToPool(obj, "cube");
             spawnedObjects.Remove(id);
+            Debug.Log($"[dbg-Promote] 큐브 디스폰 완료 id={id}");
+        }
+        else
+        {
+            Debug.LogWarning($"[dbg-Promote] spawnedObjects에 큐브 없음 id={id}");
         }
 
-        // in-memory에서 GLB 모드로 전환 (DB는 그대로)
         place.model_type = "custom";
-        return SpawnFullObject(id.ToString());
+        bool result = SpawnFullObject(id.ToString());
+        Debug.Log($"[dbg-Promote] SpawnFullObject 결과: {result}, spawnedObjects.ContainsKey={spawnedObjects.ContainsKey(id)}");
+        return result;
     }
     public List<CachedPlaceData> GetLightCache() => lightCache;
     public bool IsDataLoaded() => isDataLoaded;
