@@ -404,6 +404,13 @@ public class GLBModelLoader : MonoBehaviour
             // 즉시 머티리얼 최적화 실행 (원본 색상 적용)
             OptimizeMaterialsWithOriginalColor(renderers, originalColor);
 
+            // URP에서 glTFast가 만든 머터리얼이 매직핑크로 뜨는 문제 + 머터리얼별 색 보존
+            FixMaterialsForURPPreservingColors();
+
+            // glTFast가 import한 AnimationClip을 Animation 컴포넌트에 직접 attach
+            // (glTFast 기본 instantiator는 자동 attach 안 함 → 우리 측에서 처리)
+            AttachAnimationClips(gltf);
+
             // 애니메이션 자동 재생 (dance_anim 카테고리용 — 정적 GLB는 자동 무시)
             TryPlayAnimation();
 
@@ -435,6 +442,93 @@ public class GLBModelLoader : MonoBehaviour
             }
             onComplete?.Invoke(false);
         }
+    }
+
+    /// <summary>
+    /// URP 환경에서 glTFast가 만든 Built-In RP 머터리얼이 매직핑크로 뜨는 문제 수정.
+    /// 각 머터리얼의 원래 baseColor를 보존한 채로 URP/Lit 셰이더로 교체.
+    /// </summary>
+    private void FixMaterialsForURPPreservingColors()
+    {
+        if (loadedModel == null) return;
+        bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null &&
+                     UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
+        if (!isURP) return;
+
+        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
+        if (urpLit == null)
+        {
+            Debug.LogError("[dbg-GLB] URP/Lit 셰이더 못 찾음 — 매직핑크 그대로");
+            return;
+        }
+
+        int fixedCount = 0;
+        var renderers = loadedModel.GetComponentsInChildren<Renderer>(true);
+        foreach (var r in renderers)
+        {
+            var mats = r.materials; // instance(공유 아님)
+            for (int i = 0; i < mats.Length; i++)
+            {
+                var m = mats[i];
+                if (m == null) continue;
+                if (m.shader == urpLit) continue; // 이미 URP/Lit이면 스킵
+
+                // 원본 baseColor 추출 (glTFast의 _BaseColor / baseColorFactor / _Color 중 어떤 것이든)
+                Color baseColor = Color.white;
+                if (m.HasProperty("_BaseColor")) baseColor = m.GetColor("_BaseColor");
+                else if (m.HasProperty("baseColorFactor")) baseColor = m.GetColor("baseColorFactor");
+                else if (m.HasProperty("_Color")) baseColor = m.GetColor("_Color");
+
+                // URP/Lit로 교체하면서 baseColor 유지
+                m.shader = urpLit;
+                m.SetColor("_BaseColor", baseColor);
+                m.SetFloat("_Metallic", 0f);
+                m.SetFloat("_Smoothness", 0.4f);
+                m.SetFloat("_Surface", 0); // Opaque
+                fixedCount++;
+            }
+            r.materials = mats;
+        }
+        Debug.Log($"[dbg-GLB] URP 머터리얼 수정 완료: {fixedCount}개 머터리얼 → URP/Lit");
+    }
+
+    /// <summary>
+    /// glTFast가 import한 AnimationClip을 loadedModel의 Animation 컴포넌트에 attach.
+    /// glTFast 기본 instantiator는 자동 attach 안 함 → 수동 처리 필수.
+    /// </summary>
+    private void AttachAnimationClips(GltfImport gltf)
+    {
+        if (loadedModel == null || gltf == null) return;
+
+#if UNITY_ANIMATION
+        AnimationClip[] clips = gltf.GetAnimationClips();
+        if (clips == null || clips.Length == 0)
+        {
+            Debug.Log("[dbg-GLB] gltf.GetAnimationClips() 반환 없음 — 정적 GLB");
+            return;
+        }
+
+        Animation anim = loadedModel.GetComponent<Animation>();
+        if (anim == null) anim = loadedModel.AddComponent<Animation>();
+
+        int attachedCount = 0;
+        foreach (var clip in clips)
+        {
+            if (clip == null) continue;
+            try { clip.legacy = true; } catch { /* 일부 클립은 legacy 변경 불가 */ }
+            clip.wrapMode = WrapMode.Loop;
+            if (anim.GetClip(clip.name) == null) anim.AddClip(clip, clip.name);
+            attachedCount++;
+        }
+        anim.wrapMode = WrapMode.Loop;
+        if (attachedCount > 0 && clips[0] != null)
+        {
+            anim.Play(clips[0].name);
+            Debug.Log($"[dbg-GLB] {attachedCount}개 클립 attach + '{clips[0].name}' 재생 시작 (length={clips[0].length:F2}s)");
+        }
+#else
+        Debug.LogWarning("[dbg-GLB] UNITY_ANIMATION 미정의 — 안무 처리 불가");
+#endif
     }
 
     /// <summary>
