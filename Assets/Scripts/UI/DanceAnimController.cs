@@ -65,7 +65,8 @@ public class DanceAnimController : MonoBehaviour
 
     void Awake()
     {
-        Debug.Log($"[dbg-DanceAnim] Awake on '{gameObject.name}' (active={gameObject.activeInHierarchy}, parent={(transform.parent ? transform.parent.name : \"<root>\")})");
+        string parentName = transform.parent != null ? transform.parent.name : "<root>";
+        Debug.Log($"[dbg-DanceAnim] Awake on '{gameObject.name}' (active={gameObject.activeInHierarchy}, parent={parentName})");
         if (Instance != null && Instance != this)
         {
             Debug.LogWarning($"[dbg-DanceAnim] 중복 인스턴스 발견 — 자기 자신 destroy");
