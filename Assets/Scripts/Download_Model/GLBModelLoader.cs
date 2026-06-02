@@ -36,16 +36,15 @@ public class GLBModelLoader : MonoBehaviour
     public static void PreloadCache(string url, byte[] data)
     {
         if (string.IsNullOrEmpty(url) || data == null || data.Length == 0) return;
-        if (!downloadedFiles.ContainsKey(url))
+        // 같은 URL이라도 항상 덮어쓰기 — 서버 GLB가 갱신된 경우 캐시가 stale하면 안 됨
+        bool wasNew = !downloadedFiles.ContainsKey(url);
+        downloadedFiles[url] = data;
+        if (wasNew) downloadOrder.Enqueue(url);
+        const int hardCap = 5;
+        while (downloadOrder.Count > hardCap)
         {
-            downloadedFiles[url] = data;
-            downloadOrder.Enqueue(url);
-            const int hardCap = 5;
-            while (downloadOrder.Count > hardCap)
-            {
-                string old = downloadOrder.Dequeue();
-                if (downloadedFiles.ContainsKey(old)) downloadedFiles.Remove(old);
-            }
+            string old = downloadOrder.Dequeue();
+            if (downloadedFiles.ContainsKey(old)) downloadedFiles.Remove(old);
         }
     }
 
@@ -88,20 +87,25 @@ public class GLBModelLoader : MonoBehaviour
 
     public IEnumerator LoadGLBModelCoroutine(string url, float scale, System.Action<bool> onComplete)
     {
-        LogDebug($"[GLBModelLoader] GLB 로딩 시작: {url}");
-        
+        Debug.Log($"[dbg-GLB] LoadGLBModelCoroutine START url={url} scale={scale} cacheHas={downloadedFiles.ContainsKey(url)}");
+
         if (string.IsNullOrEmpty(url))
         {
-            LogError("[GLBModelLoader] GLB URL이 비어있음");
+            Debug.LogError("[dbg-GLB] URL 비어있음");
             onComplete?.Invoke(false);
             yield break;
         }
 
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
-            LogError("[GLBModelLoader] 네트워크 연결 없음");
-            onComplete?.Invoke(false);
-            yield break;
+            Debug.LogError($"[dbg-GLB] 네트워크 NotReachable — 캐시도 없으면 실패. cacheHas={downloadedFiles.ContainsKey(url)}");
+            // 캐시에 있으면 네트워크 없어도 진행 가능하므로 ContinueIf 캐시
+            if (!downloadedFiles.ContainsKey(url))
+            {
+                onComplete?.Invoke(false);
+                yield break;
+            }
+            Debug.Log("[dbg-GLB] 캐시 사용 가능 — 네트워크 없어도 진행");
         }
         
         ClearModel();
@@ -167,6 +171,7 @@ public class GLBModelLoader : MonoBehaviour
         if (enableFileCache && downloadedFiles.ContainsKey(url))
         {
             glbData = downloadedFiles[url];
+            Debug.Log($"[dbg-GLB] 캐시 HIT {glbData.Length:N0} bytes — 네트워크 스킵");
         }
         else
         {
