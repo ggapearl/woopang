@@ -406,8 +406,8 @@ public class GLBModelLoader : MonoBehaviour
             // 똑같이 덮어써서 4색 → 1색 단색이 되는 버그가 있음. 비활성화.
             //   if (false) OptimizeMaterialsWithOriginalColor(renderers, originalColor);
 
-            // URP에서 glTFast Built-In 셰이더 매직핑크 → URP/Lit로 교체하면서 머터리얼별 색 보존
-            FixMaterialsForURPPreservingColors();
+            // URP에서 glTFast Built-In 셰이더 InternalErrorShader 폴백 → GLB JSON에서 직접 색 파싱 후 URP/Lit 적용
+            FixMaterialsFromJsonColors(gltf, glbData);
 
             // glTFast가 import한 AnimationClip을 Animation 컴포넌트에 직접 attach
             // (glTFast 기본 instantiator는 자동 attach 안 함 → 우리 측에서 처리)
@@ -447,10 +447,69 @@ public class GLBModelLoader : MonoBehaviour
     }
 
     /// <summary>
-    /// URP 환경에서 glTFast가 만든 Built-In RP 머터리얼이 매직핑크로 뜨는 문제 수정.
-    /// 각 머터리얼의 원래 baseColor를 보존한 채로 URP/Lit 셰이더로 교체.
+    /// GLB JSON에서 materials[].pbrMetallicRoughness.baseColorFactor 직접 파싱.
+    /// glTFast가 URP에서 셰이더 실패로 InternalErrorShader 폴백되면 머터리얼 자체 색을
+    /// 못 읽으므로 JSON에서 원본 직접 추출.
     /// </summary>
-    private void FixMaterialsForURPPreservingColors()
+    private System.Collections.Generic.List<Color> ParseColorsFromGLBJson(byte[] glbData)
+    {
+        var list = new System.Collections.Generic.List<Color>();
+        try
+        {
+            if (glbData == null || glbData.Length < 20) return list;
+            // GLB 헤더: magic(4)+version(4)+length(4) = 12, 그 다음 JSON chunk header(8)
+            int jsonLen = System.BitConverter.ToInt32(glbData, 12);
+            string json = System.Text.Encoding.UTF8.GetString(glbData, 20, jsonLen);
+
+            // "materials":[ 위치 찾기
+            int materialsIdx = json.IndexOf("\"materials\":[");
+            if (materialsIdx < 0) return list;
+            int materialsStart = materialsIdx + "\"materials\":[".Length;
+
+            // 머터리얼 배열 끝 찾기 (괄호 중첩 추적)
+            int depth = 1;
+            int matsEnd = materialsStart;
+            while (matsEnd < json.Length && depth > 0)
+            {
+                if (json[matsEnd] == '[') depth++;
+                else if (json[matsEnd] == ']') depth--;
+                if (depth > 0) matsEnd++;
+            }
+
+            string matsArr = json.Substring(materialsStart, matsEnd - materialsStart);
+            // 각 머터리얼의 baseColorFactor 추출
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                matsArr, "\"baseColorFactor\"\\s*:\\s*\\[([^\\]]+)\\]");
+            foreach (System.Text.RegularExpressions.Match m in matches)
+            {
+                string nums = m.Groups[1].Value;
+                string[] parts = nums.Split(',');
+                if (parts.Length >= 3)
+                {
+                    float r, g, b;
+                    if (float.TryParse(parts[0].Trim(), out r) &&
+                        float.TryParse(parts[1].Trim(), out g) &&
+                        float.TryParse(parts[2].Trim(), out b))
+                    {
+                        float a = 1f;
+                        if (parts.Length > 3) float.TryParse(parts[3].Trim(), out a);
+                        list.Add(new Color(r, g, b, a));
+                    }
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"[dbg-GLB] JSON 색 파싱 예외: {ex.Message}");
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// URP에서 glTFast 머터리얼이 InternalErrorShader로 폴백 → 색 못 읽음 문제 해결.
+    /// JSON에서 직접 추출한 색으로 URP/Lit 적용. gltf.Materials와 인덱스 매칭.
+    /// </summary>
+    private void FixMaterialsFromJsonColors(GltfImport gltf, byte[] glbData)
     {
         if (loadedModel == null) return;
         bool isURP = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null &&
@@ -460,43 +519,51 @@ public class GLBModelLoader : MonoBehaviour
         Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
         if (urpLit == null)
         {
-            Debug.LogError("[dbg-GLB] URP/Lit 셰이더 못 찾음 — 매직핑크 그대로");
+            Debug.LogError("[dbg-GLB] URP/Lit 셰이더 못 찾음");
             return;
         }
 
-        int fixedCount = 0;
-        var renderers = loadedModel.GetComponentsInChildren<Renderer>(true);
-        foreach (var r in renderers)
+        var colorsByIndex = ParseColorsFromGLBJson(glbData);
+        Debug.Log($"[dbg-GLB] JSON에서 {colorsByIndex.Count}개 머터리얼 색 추출");
+
+        // glTFast의 GetMaterial(i) → 인덱스 매핑 (Materials 프로퍼티는 v4.x에 없고 GetMaterial+MaterialCount 사용)
+        var matToIndex = new System.Collections.Generic.Dictionary<Material, int>();
+        for (int i = 0; i < gltf.MaterialCount; i++)
         {
-            var mats = r.materials;
-            for (int i = 0; i < mats.Length; i++)
+            var gm = gltf.GetMaterial(i);
+            if (gm != null) matToIndex[gm] = i;
+        }
+
+        int matched = 0, unmatched = 0;
+        var processed = new System.Collections.Generic.HashSet<Material>();
+        foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true))
+        {
+            var shareds = r.sharedMaterials;
+            for (int i = 0; i < shareds.Length; i++)
             {
-                var m = mats[i];
-                if (m == null) continue;
+                var m = shareds[i];
+                if (m == null || processed.Contains(m)) continue;
+                processed.Add(m);
 
-                // ⚠️ glTFast의 실제 속성명은 baseColorFactor (Built-In RP 셰이더). 이걸 먼저 읽고
-                // 없으면 URP/Lit의 _BaseColor, 최후 fallback으로 legacy _Color.
-                // 이전 순서(_BaseColor 먼저)는 glTFast 머터리얼에서 _BaseColor를 못 찾으면 흰색 폴백 →
-                // 의도와 다른 색 표시.
-                Color baseColor = Color.white;
-                string colorSrc = "default(white)";
-                if (m.HasProperty("baseColorFactor")) { baseColor = m.GetColor("baseColorFactor"); colorSrc = "baseColorFactor"; }
-                else if (m.HasProperty("_BaseColor")) { baseColor = m.GetColor("_BaseColor"); colorSrc = "_BaseColor"; }
-                else if (m.HasProperty("_Color")) { baseColor = m.GetColor("_Color"); colorSrc = "_Color"; }
+                Color color = Color.white;
+                if (matToIndex.TryGetValue(m, out int matIdx) && matIdx < colorsByIndex.Count)
+                {
+                    color = colorsByIndex[matIdx];
+                    matched++;
+                }
+                else
+                {
+                    unmatched++;
+                }
 
-                Debug.Log($"[dbg-GLB] 머터리얼 '{m.name}' src={colorSrc} color=({baseColor.r:F2},{baseColor.g:F2},{baseColor.b:F2})");
-
-                // URP/Lit로 교체 (이미 URP/Lit이면 셰이더 변경 스킵하지만 색은 다시 적용)
-                if (m.shader != urpLit) m.shader = urpLit;
-                m.SetColor("_BaseColor", baseColor);
+                m.shader = urpLit;
+                m.SetColor("_BaseColor", color);
                 m.SetFloat("_Metallic", 0f);
                 m.SetFloat("_Smoothness", 0.4f);
                 m.SetFloat("_Surface", 0);
-                fixedCount++;
             }
-            r.materials = mats;
         }
-        Debug.Log($"[dbg-GLB] URP 머터리얼 수정 완료: {fixedCount}개 머터리얼 → URP/Lit");
+        Debug.Log($"[dbg-GLB] URP/Lit 적용: matched={matched} unmatched={unmatched} (총 {processed.Count}개 머터리얼)");
     }
 
     /// <summary>
