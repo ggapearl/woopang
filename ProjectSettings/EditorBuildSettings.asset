@@ -5,6 +5,9 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/woopang_0529.unity
+    guid: b1810d40ed6fa3f4f8ca0627aa73b31b
   - enabled: 0
     path: Assets/Scenes_2025/WP_1119.unity
     guid: 6ab4d9f386b89c24781ef15605bf8ff9
@@ -17,7 +20,7 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes_2025/WP_1206.unity
     guid: 016f0d2826cdffb40aaa7bda155bf6fb
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/WP_0111.unity
     guid: 5bc939bb6511a514b935391a3cc88557
   - enabled: 0

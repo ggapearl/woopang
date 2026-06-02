@@ -857,6 +857,8 @@ public class DoubleTap3D : MonoBehaviour
             else
             {
                 Debug.LogError($"[dbg-DoubleTap] DanceAnimController 못 찾음 (Instance NULL + 씬에 없음) — 빌드된 씬 확인 필요");
+                // anim 카테고리인데 컨트롤러 없음 → 일반 정보 패널(이미지 없는 검은 화면) 띄우지 말고 종료
+                return;
             }
         }
 
