@@ -232,30 +232,12 @@ public class DanceAnimController : MonoBehaviour
         {
             req.timeout = 30;
             var op = req.SendWebRequest();
-            long totalBytes = 0;
             float startT = Time.realtimeSinceStartup;
             while (!op.isDone)
             {
-                if (totalBytes == 0)
-                {
-                    string lenStr = req.GetResponseHeader("Content-Length");
-                    long.TryParse(lenStr, out totalBytes);
-                }
-                long down = (long)req.downloadedBytes;
+                float pct = req.downloadProgress * 100f; // 0..1 → 0..100
                 if (progressText != null)
-                {
-                    if (totalBytes > 0)
-                    {
-                        float pct = down * 100f / totalBytes;
-                        progressText.text = totalBytes < 1024 * 1024
-                            ? $"3D 다운로드 중... {down / 1024f:F1} / {totalBytes / 1024f:F1} KB ({pct:F0}%)"
-                            : $"3D 다운로드 중... {down / (1024f * 1024f):F2} / {totalBytes / (1024f * 1024f):F2} MB ({pct:F0}%)";
-                    }
-                    else
-                    {
-                        progressText.text = $"3D 다운로드 중... {down / 1024f:F1} KB";
-                    }
-                }
+                    progressText.text = $"3D 다운로드 중... {pct:F0}%";
                 yield return null;
             }
             float elapsed = Time.realtimeSinceStartup - startT;
@@ -282,12 +264,14 @@ public class DanceAnimController : MonoBehaviour
         Debug.Log($"[dbg-DanceAnim] PromoteCubeToGLB: {promoted}");
 
         // 6) 실제 GLB 인스턴스화 + 메시 로드 완료까지 대기
+        // 로드 시간은 모델 크기/디바이스에 따라 1~5초. % 표시는 평균 3s 기준 추정.
         float spawnWait = 0f;
+        const float estimatedLoadSeconds = 3f;
         bool modelReady = false;
         while (spawnWait < spawnTimeoutSeconds)
         {
-            yield return new WaitForSeconds(0.2f);
-            spawnWait += 0.2f;
+            yield return new WaitForSeconds(0.1f);
+            spawnWait += 0.1f;
             if (dm.GetSpawnedObjects().TryGetValue(id, out var glbObj) && glbObj != null)
             {
                 var loader = glbObj.GetComponentInChildren<GLBModelLoader>(true);
@@ -296,7 +280,12 @@ public class DanceAnimController : MonoBehaviour
                     modelReady = true;
                     break;
                 }
-                if (progressText != null) progressText.text = $"3D 오브젝트 로딩 중... {spawnWait:F1}s";
+                if (progressText != null)
+                {
+                    // 시간 기반 추정 %, 실제 완료 전엔 95% 캡 (사용자 기다림 체감 완화)
+                    float loadPct = Mathf.Min((spawnWait / estimatedLoadSeconds) * 100f, 95f);
+                    progressText.text = $"3D 오브젝트 로딩 중... {loadPct:F0}%";
+                }
             }
         }
 
