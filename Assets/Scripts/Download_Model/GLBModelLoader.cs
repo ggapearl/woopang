@@ -450,26 +450,61 @@ public class GLBModelLoader : MonoBehaviour
             return;
         }
 
+        // 1차: Legacy Animation 컴포넌트
         Animation anim = loadedModel.GetComponentInChildren<Animation>(true);
-        if (anim == null)
+        if (anim != null && anim.GetClipCount() > 0)
         {
-            Debug.Log($"[dbg-GLB] Animation 컴포넌트 없음 — 정적 GLB");
-            return;
-        }
-        if (anim.GetClipCount() == 0)
-        {
-            Debug.Log($"[dbg-GLB] Animation 클립 0개");
-            return;
+            AnimationClip first = null;
+            foreach (AnimationState s in anim) { first = s.clip; break; }
+            if (first != null)
+            {
+                first.wrapMode = WrapMode.Loop;
+                anim.wrapMode = WrapMode.Loop;
+                anim.Play(first.name);
+                Debug.Log($"[dbg-GLB] Animation(legacy) 재생: '{first.name}' (length={first.length:F2}s)");
+                return;
+            }
         }
 
-        AnimationClip first = null;
-        foreach (AnimationState state in anim) { first = state.clip; break; }
-        if (first == null) return;
+        // 2차: Animator (Mecanim) — glTFast가 이걸로 import하는 경우 다수
+        Animator animator = loadedModel.GetComponentInChildren<Animator>(true);
+        if (animator != null)
+        {
+            // 클립 직접 탐색 (controller가 비어있는 경우 다수)
+            AnimationClip[] clips = animator.runtimeAnimatorController != null
+                ? animator.runtimeAnimatorController.animationClips
+                : null;
+            if (clips == null || clips.Length == 0)
+            {
+                // GLB 메시 전체에서 클립 직접 찾기
+                var anyAnim = loadedModel.GetComponentInChildren<Animation>(true);
+                if (anyAnim == null)
+                {
+                    // legacy Animation 컴포넌트 추가해서 직접 재생
+                    var found = new System.Collections.Generic.List<AnimationClip>();
+                    foreach (var c in loadedModel.GetComponentsInChildren<AnimationClip>(true)) found.Add(c);
+                    if (found.Count > 0)
+                    {
+                        Debug.Log($"[dbg-GLB] Animator empty controller — AnimationClip {found.Count}개 발견. Animation 컴포넌트 추가해 재생");
+                        var legacyAnim = animator.gameObject.AddComponent<Animation>();
+                        found[0].legacy = true;
+                        legacyAnim.AddClip(found[0], found[0].name);
+                        legacyAnim.wrapMode = WrapMode.Loop;
+                        legacyAnim.Play(found[0].name);
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                // Animator로 첫 클립 재생
+                animator.Play(clips[0].name);
+                Debug.Log($"[dbg-GLB] Animator 재생: '{clips[0].name}' (length={clips[0].length:F2}s)");
+                return;
+            }
+        }
 
-        first.wrapMode = WrapMode.Loop;
-        anim.wrapMode = WrapMode.Loop;
-        anim.Play(first.name);
-        Debug.Log($"[dbg-GLB] 애니메이션 재생 시작: '{first.name}' (length={first.length:F2}s)");
+        Debug.LogWarning($"[dbg-GLB] Animation/Animator/Clip 어느 것도 못 찾음 — 정적 GLB로 표시됨");
     }
 
     private void AnalyzeGLBMaterials(MeshRenderer[] renderers)
