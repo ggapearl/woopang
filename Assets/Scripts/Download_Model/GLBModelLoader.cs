@@ -401,10 +401,12 @@ public class GLBModelLoader : MonoBehaviour
             // 즉시 셰이더 분석 실행
             AnalyzeGLBMaterials(renderers);
             
-            // 즉시 머티리얼 최적화 실행 (원본 색상 적용)
-            OptimizeMaterialsWithOriginalColor(renderers, originalColor);
+            // ⚠️ 순서 중요: 색 보존을 먼저 해야 함.
+            // OptimizeMaterialsWithOriginalColor는 GLB JSON에서 추출한 단일 색을 모든 머터리얼에
+            // 똑같이 덮어써서 4색 → 1색 단색이 되는 버그가 있음. 비활성화.
+            //   if (false) OptimizeMaterialsWithOriginalColor(renderers, originalColor);
 
-            // URP에서 glTFast가 만든 머터리얼이 매직핑크로 뜨는 문제 + 머터리얼별 색 보존
+            // URP에서 glTFast Built-In 셰이더 매직핑크 → URP/Lit로 교체하면서 머터리얼별 색 보존
             FixMaterialsForURPPreservingColors();
 
             // glTFast가 import한 AnimationClip을 Animation 컴포넌트에 직접 attach
@@ -500,11 +502,16 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (loadedModel == null || gltf == null) return;
 
-#if UNITY_ANIMATION
-        AnimationClip[] clips = gltf.GetAnimationClips();
+        // ⚠️ #if UNITY_ANIMATION 가드 제거. UNITY_ANIMATION은 glTFast asmdef 안에서만 정의되고
+        // Assembly-CSharp(우리 코드)에선 미정의이므로 가드를 걸면 항상 false → 안무 코드 죽음.
+        // com.unity.modules.animation 패키지가 있으면 메서드는 컴파일 시점에 존재 → 직접 호출 안전.
+        AnimationClip[] clips = null;
+        try { clips = gltf.GetAnimationClips(); }
+        catch (System.Exception ex) { Debug.LogError($"[dbg-GLB] GetAnimationClips 예외: {ex.Message}"); return; }
+
         if (clips == null || clips.Length == 0)
         {
-            Debug.Log("[dbg-GLB] gltf.GetAnimationClips() 반환 없음 — 정적 GLB");
+            Debug.Log("[dbg-GLB] gltf.GetAnimationClips() 0개 — 정적 GLB");
             return;
         }
 
@@ -526,9 +533,6 @@ public class GLBModelLoader : MonoBehaviour
             anim.Play(clips[0].name);
             Debug.Log($"[dbg-GLB] {attachedCount}개 클립 attach + '{clips[0].name}' 재생 시작 (length={clips[0].length:F2}s)");
         }
-#else
-        Debug.LogWarning("[dbg-GLB] UNITY_ANIMATION 미정의 — 안무 처리 불가");
-#endif
     }
 
     /// <summary>
