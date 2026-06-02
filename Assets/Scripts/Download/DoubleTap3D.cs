@@ -851,13 +851,18 @@ public class DoubleTap3D : MonoBehaviour
             if (ctrl != null)
             {
                 string displayName = !string.IsNullOrEmpty(placeName) ? placeName : "3D 콘텐츠";
-                ctrl.OnAnimCubeDoubleTapped(id, displayName);
-                return;
+                bool handled = ctrl.OnAnimCubeDoubleTapped(id, displayName);
+                if (handled)
+                {
+                    Debug.Log("[dbg-DoubleTap] DanceAnim 다운로드 패널 처리됨 — 일반 정보 패널 스킵");
+                    return;
+                }
+                // handled=false → GLB 이미 떠 있음. fall-through으로 일반 정보 패널 표시.
+                Debug.Log("[dbg-DoubleTap] GLB 이미 스폰됨 → 일반 정보 패널 표시 흐름으로 fall-through");
             }
             else
             {
-                Debug.LogError($"[dbg-DoubleTap] DanceAnimController 못 찾음 (Instance NULL + 씬에 없음) — 빌드된 씬 확인 필요");
-                // anim 카테고리인데 컨트롤러 없음 → 일반 정보 패널(이미지 없는 검은 화면) 띄우지 말고 종료
+                Debug.LogError($"[dbg-DoubleTap] DanceAnimController 못 찾음 — anim인데 컨트롤러 없음, 정지");
                 return;
             }
         }

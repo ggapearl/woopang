@@ -91,8 +91,11 @@ public class DanceAnimController : MonoBehaviour
         StartCoroutine(AutoDespawnLoop());
     }
 
-    /// <summary>큐브 플레이스홀더가 더블탭됐을 때 호출 — 다운로드 확인 패널 표시.</summary>
-    public void OnAnimCubeDoubleTapped(int placeId, string placeName)
+    /// <summary>
+    /// 큐브 플레이스홀더가 더블탭됐을 때 호출 — 다운로드 확인 패널 표시.
+    /// 반환값: true=내가 처리함(다운로드 패널), false=GLB 이미 떠있음 → DoubleTap3D가 일반 정보 패널 띄우게 양보.
+    /// </summary>
+    public bool OnAnimCubeDoubleTapped(int placeId, string placeName)
     {
         Debug.Log($"[dbg-DanceAnim] OnAnimCubeDoubleTapped: id={placeId} name='{placeName}'");
 
@@ -100,8 +103,8 @@ public class DanceAnimController : MonoBehaviour
             DataManager.Instance != null &&
             DataManager.Instance.GetSpawnedObjects().ContainsKey(placeId))
         {
-            Debug.Log($"[dbg-DanceAnim] 이미 활성 GLB 스폰됨 — 무시 (id={placeId})");
-            return;
+            Debug.Log($"[dbg-DanceAnim] 이미 활성 GLB 스폰됨 — 일반 정보 패널 양보 (id={placeId})");
+            return false; // DoubleTap3D가 일반 패널 띄우게 함
         }
 
         activeSpawns.Remove(placeId);
@@ -116,7 +119,12 @@ public class DanceAnimController : MonoBehaviour
         if (progressGroup != null) progressGroup.SetActive(false);
         if (confirmButton != null) confirmButton.interactable = true;
         if (confirmPanel != null) confirmPanel.SetActive(true);
+        return true;
     }
+
+    /// <summary>구 인터페이스 호환 — 반환값 무시.</summary>
+    public void OnIndicatorTapped(int placeId, string placeName)
+        => OnAnimCubeDoubleTapped(placeId, placeName);
 
     IEnumerator FetchSizeAndUpdateUI(int id)
     {
@@ -158,9 +166,6 @@ public class DanceAnimController : MonoBehaviour
         if (raw.StartsWith("http")) return raw;
         return ApiConfig.MAIN_SERVER + "/" + raw.Replace("\\", "/");
     }
-
-    /// <summary>구 인터페이스 호환 (인디케이터 탭) — 큐브 더블탭과 동일 처리.</summary>
-    public void OnIndicatorTapped(int placeId, string placeName) => OnAnimCubeDoubleTapped(placeId, placeName);
 
     public void HideConfirm()
     {

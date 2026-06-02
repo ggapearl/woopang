@@ -468,25 +468,30 @@ public class GLBModelLoader : MonoBehaviour
         var renderers = loadedModel.GetComponentsInChildren<Renderer>(true);
         foreach (var r in renderers)
         {
-            var mats = r.materials; // instance(공유 아님)
+            var mats = r.materials;
             for (int i = 0; i < mats.Length; i++)
             {
                 var m = mats[i];
                 if (m == null) continue;
-                if (m.shader == urpLit) continue; // 이미 URP/Lit이면 스킵
 
-                // 원본 baseColor 추출 (glTFast의 _BaseColor / baseColorFactor / _Color 중 어떤 것이든)
+                // ⚠️ glTFast의 실제 속성명은 baseColorFactor (Built-In RP 셰이더). 이걸 먼저 읽고
+                // 없으면 URP/Lit의 _BaseColor, 최후 fallback으로 legacy _Color.
+                // 이전 순서(_BaseColor 먼저)는 glTFast 머터리얼에서 _BaseColor를 못 찾으면 흰색 폴백 →
+                // 의도와 다른 색 표시.
                 Color baseColor = Color.white;
-                if (m.HasProperty("_BaseColor")) baseColor = m.GetColor("_BaseColor");
-                else if (m.HasProperty("baseColorFactor")) baseColor = m.GetColor("baseColorFactor");
-                else if (m.HasProperty("_Color")) baseColor = m.GetColor("_Color");
+                string colorSrc = "default(white)";
+                if (m.HasProperty("baseColorFactor")) { baseColor = m.GetColor("baseColorFactor"); colorSrc = "baseColorFactor"; }
+                else if (m.HasProperty("_BaseColor")) { baseColor = m.GetColor("_BaseColor"); colorSrc = "_BaseColor"; }
+                else if (m.HasProperty("_Color")) { baseColor = m.GetColor("_Color"); colorSrc = "_Color"; }
 
-                // URP/Lit로 교체하면서 baseColor 유지
-                m.shader = urpLit;
+                Debug.Log($"[dbg-GLB] 머터리얼 '{m.name}' src={colorSrc} color=({baseColor.r:F2},{baseColor.g:F2},{baseColor.b:F2})");
+
+                // URP/Lit로 교체 (이미 URP/Lit이면 셰이더 변경 스킵하지만 색은 다시 적용)
+                if (m.shader != urpLit) m.shader = urpLit;
                 m.SetColor("_BaseColor", baseColor);
                 m.SetFloat("_Metallic", 0f);
                 m.SetFloat("_Smoothness", 0.4f);
-                m.SetFloat("_Surface", 0); // Opaque
+                m.SetFloat("_Surface", 0);
                 fixedCount++;
             }
             r.materials = mats;
