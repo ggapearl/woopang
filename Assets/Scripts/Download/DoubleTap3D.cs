@@ -847,15 +847,16 @@ public class DoubleTap3D : MonoBehaviour
         if (id > 0 && DataManager.Instance != null && DataManager.Instance.IsAnimCategory(id))
         {
             Debug.Log($"[dbg-DoubleTap] anim 카테고리 감지 id={id} → DanceAnimController로 라우팅");
-            if (DanceAnimController.Instance != null)
+            var ctrl = DanceAnimController.Instance ?? DanceAnimController.EnsureInstance();
+            if (ctrl != null)
             {
                 string displayName = !string.IsNullOrEmpty(placeName) ? placeName : "3D 콘텐츠";
-                DanceAnimController.Instance.OnAnimCubeDoubleTapped(id, displayName);
+                ctrl.OnAnimCubeDoubleTapped(id, displayName);
                 return;
             }
             else
             {
-                Debug.LogError($"[dbg-DoubleTap] DanceAnimController.Instance NULL — 패널 못 띄움");
+                Debug.LogError($"[dbg-DoubleTap] DanceAnimController 못 찾음 (Instance NULL + 씬에 없음) — 빌드된 씬 확인 필요");
             }
         }
 

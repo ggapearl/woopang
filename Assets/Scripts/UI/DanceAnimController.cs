@@ -18,6 +18,24 @@ public class DanceAnimController : MonoBehaviour
 {
     public static DanceAnimController Instance { get; private set; }
 
+    /// <summary>
+    /// Instance가 null이면 씬에서 찾아 설정. Awake 타이밍 문제 또는 GameObject가
+    /// 비활성 상태인 경우의 안전망. 발견 못하면 null 반환.
+    /// </summary>
+    public static DanceAnimController EnsureInstance()
+    {
+        if (Instance != null) return Instance;
+        var found = Object.FindAnyObjectByType<DanceAnimController>(FindObjectsInactive.Include);
+        if (found != null)
+        {
+            Instance = found;
+            Debug.LogWarning($"[dbg-DanceAnim] EnsureInstance: 씬에서 발견 ({found.gameObject.name}) — Awake 못 돌았던 듯");
+            return found;
+        }
+        Debug.LogError($"[dbg-DanceAnim] EnsureInstance: 씬에 DanceAnimController 자체가 없음 — 빌드된 씬 확인 필요");
+        return null;
+    }
+
     [Header("Panel UI (DanceAnimPanelSetup 에디터 스크립트가 자동 연결)")]
     public GameObject confirmPanel;
     public Text titleText;
@@ -47,11 +65,24 @@ public class DanceAnimController : MonoBehaviour
 
     void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+        Debug.Log($"[dbg-DanceAnim] Awake on '{gameObject.name}' (active={gameObject.activeInHierarchy}, parent={(transform.parent ? transform.parent.name : \"<root>\")})");
+        if (Instance != null && Instance != this)
+        {
+            Debug.LogWarning($"[dbg-DanceAnim] 중복 인스턴스 발견 — 자기 자신 destroy");
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
+        Debug.Log($"[dbg-DanceAnim] Instance 설정 완료 (id={GetInstanceID()})");
         if (confirmPanel != null) confirmPanel.SetActive(false);
         if (confirmButton != null) confirmButton.onClick.AddListener(OnConfirmPressed);
         if (cancelButton != null) cancelButton.onClick.AddListener(HideConfirm);
+    }
+
+    void OnEnable()
+    {
+        // Awake 못 돌면 OnEnable에서 한 번 더 시도
+        if (Instance == null) Instance = this;
     }
 
     void Start()
