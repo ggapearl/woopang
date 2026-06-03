@@ -543,6 +543,7 @@ public class GLBModelLoader : MonoBehaviour
 
         int byName = 0, byFallback = 0;
         int fallbackIdx = 0;
+        bool firstLogged = false;
         foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true))
         {
             string goName = r.gameObject.name;
@@ -571,6 +572,16 @@ public class GLBModelLoader : MonoBehaviour
                 mats[i].SetFloat("_Metallic", 0f);
                 mats[i].SetFloat("_Smoothness", 0.4f);
                 mats[i].SetFloat("_Surface", 0);
+
+                // 진단: 할당 직후 실제 상태 (첫 렌더러 1회만)
+                if (!firstLogged)
+                {
+                    var afterShader = mats[i].shader != null ? mats[i].shader.name : "<null>";
+                    var afterColor = mats[i].GetColor("_BaseColor");
+                    var kws = mats[i].shaderKeywords != null ? string.Join(",", mats[i].shaderKeywords) : "<null>";
+                    Debug.Log($"[dbg-GLB] AFTER set: go='{goName}' shader='{afterShader}' baseColor={afterColor} kws=[{kws}] isSupported={mats[i].shader.isSupported}");
+                    firstLogged = true;
+                }
             }
         }
         Debug.Log($"[dbg-GLB] URP/Lit 적용: 이름매칭={byName} JSON폴백={byFallback}");
@@ -583,6 +594,19 @@ public class GLBModelLoader : MonoBehaviour
     private void AttachAnimationClips(GltfImport gltf)
     {
         if (loadedModel == null || gltf == null) return;
+
+        // 진단: glTFast가 wrap 했는지, loadedModel이 실제 어떤 노드인지 확인
+        {
+            int cc = loadedModel.transform.childCount;
+            string firstName = cc > 0 ? loadedModel.transform.GetChild(0).name : "<none>";
+            string allChildren = "";
+            for (int i = 0; i < cc; i++)
+            {
+                if (i > 0) allChildren += ",";
+                allChildren += loadedModel.transform.GetChild(i).name;
+            }
+            Debug.Log($"[dbg-GLB] loadedModel='{loadedModel.name}' childCount={cc} firstChild='{firstName}' allChildren=[{allChildren}]");
+        }
 
         // ⚠️ #if UNITY_ANIMATION 가드 제거. UNITY_ANIMATION은 glTFast asmdef 안에서만 정의되고
         // Assembly-CSharp(우리 코드)에선 미정의이므로 가드를 걸면 항상 false → 안무 코드 죽음.
@@ -657,6 +681,7 @@ public class GLBModelLoader : MonoBehaviour
                 anim.wrapMode = WrapMode.Loop;
                 anim.Play(first.name);
                 Debug.Log($"[dbg-GLB] Animation(legacy) 재생: '{first.name}' (length={first.length:F2}s)");
+                StartCoroutine(VerifyAnimRunning(anim, first.name));
                 return;
             }
         }
@@ -700,6 +725,58 @@ public class GLBModelLoader : MonoBehaviour
         }
 
         Debug.LogWarning($"[dbg-GLB] Animation/Animator/Clip 어느 것도 못 찾음 — 정적 GLB로 표시됨");
+    }
+
+    /// <summary>0.5초 후 Animation 컴포넌트가 실제로 재생 중이고 transform이 변하는지 sample 1회 확인.</summary>
+    private IEnumerator VerifyAnimRunning(Animation anim, string clipName)
+    {
+        // 초기 transform 캐시 (loadedModel 자체 + 첫 자식들 일부)
+        Vector3 rootPos0 = loadedModel != null ? loadedModel.transform.localPosition : Vector3.zero;
+        Vector3 rootRot0 = loadedModel != null ? loadedModel.transform.localEulerAngles : Vector3.zero;
+        var childSamples = new System.Collections.Generic.List<(string name, Vector3 pos, Vector3 rot)>();
+        if (loadedModel != null)
+        {
+            int cc = loadedModel.transform.childCount;
+            for (int i = 0; i < cc && i < 4; i++)
+            {
+                var c = loadedModel.transform.GetChild(i);
+                childSamples.Add((c.name, c.localPosition, c.localEulerAngles));
+            }
+        }
+
+        yield return new WaitForSeconds(0.5f);
+
+        if (anim == null || loadedModel == null)
+        {
+            Debug.Log("[dbg-GLB] VerifyAnim 0.5s: anim/loadedModel null");
+            yield break;
+        }
+
+        var state = anim[clipName];
+        float clipTime = state != null ? state.time : -1f;
+        float clipWeight = state != null ? state.weight : -1f;
+        bool stateEnabled = state != null ? state.enabled : false;
+        Vector3 rootPos1 = loadedModel.transform.localPosition;
+        Vector3 rootRot1 = loadedModel.transform.localEulerAngles;
+        bool rootMoved = (rootPos1 - rootPos0).sqrMagnitude > 0.0001f || (rootRot1 - rootRot0).sqrMagnitude > 0.0001f;
+        Debug.Log($"[dbg-GLB] VerifyAnim 0.5s: isPlaying={anim.isPlaying} clipTime={clipTime:F2} weight={clipWeight:F2} enabled={stateEnabled} rootMoved={rootMoved} (pos {rootPos0}->{rootPos1})");
+
+        // 첫 자식들도 비교
+        for (int i = 0; i < childSamples.Count && i < loadedModel.transform.childCount; i++)
+        {
+            var c = loadedModel.transform.GetChild(i);
+            var s0 = childSamples[i];
+            bool childMoved = (c.localPosition - s0.pos).sqrMagnitude > 0.0001f || (c.localEulerAngles - s0.rot).sqrMagnitude > 0.0001f;
+            Debug.Log($"[dbg-GLB] VerifyAnim child[{i}]='{c.name}' moved={childMoved} (pos {s0.pos}->{c.localPosition} rot {s0.rot}->{c.localEulerAngles})");
+        }
+
+        // 등록된 모든 클립의 상태도 보고
+        int idx = 0;
+        foreach (AnimationState s in anim)
+        {
+            Debug.Log($"[dbg-GLB] VerifyAnim state[{idx}]='{s.name}' layer={s.layer} time={s.time:F2} weight={s.weight:F2} enabled={s.enabled}");
+            idx++;
+        }
     }
 
     private void AnalyzeGLBMaterials(MeshRenderer[] renderers)
