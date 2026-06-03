@@ -530,13 +530,21 @@ public class GLBModelLoader : MonoBehaviour
                      UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
         if (!isURP) return;
 
-        // URP/Lit은 라이트가 있어야 색이 보이는데 AR 씬에 directional light가 없어서 검정으로 렌더링됨
-        // (진단 로그로 확정: shader=Lit·baseColor 정상 설정에도 실제는 단색 검정).
-        // → URP/Unlit으로 변경: 라이트 무시하고 _BaseColor 그대로 픽셀에 출력.
-        Shader urpUnlit = Shader.Find("Universal Render Pipeline/Unlit");
-        if (urpUnlit == null)
+        // URP/Lit은 라이트가 있어야 색이 보이는데 AR 씬에 directional light가 없어서 검정.
+        // URP/Unlit은 라이트 무시하지만, 코드에서 어디도 직접 참조 안 하면 빌드 시 stripped됨
+        // (진단 로그로 확정: 빌드에서 "URP/Unlit 셰이더 못 찾음" → magenta fallback).
+        // → fallback chain: Unlit 있으면 그것, 없으면 Lit + Emission으로 라이트 무관하게 강제 발색.
+        Shader targetShader = Shader.Find("Universal Render Pipeline/Unlit");
+        bool useEmission = false;
+        if (targetShader == null || !targetShader.isSupported)
         {
-            Debug.LogError("[dbg-GLB] URP/Unlit 셰이더 못 찾음");
+            targetShader = Shader.Find("Universal Render Pipeline/Lit");
+            useEmission = true;
+            Debug.LogWarning("[dbg-GLB] URP/Unlit 없음 → URP/Lit + Emission으로 fallback");
+        }
+        if (targetShader == null || !targetShader.isSupported)
+        {
+            Debug.LogError("[dbg-GLB] URP/Unlit·URP/Lit 둘 다 못 찾음 또는 미지원");
             return;
         }
 
@@ -570,22 +578,30 @@ public class GLBModelLoader : MonoBehaviour
             for (int i = 0; i < mats.Length; i++)
             {
                 if (mats[i] == null) continue;
-                mats[i].shader = urpUnlit;
+                mats[i].shader = targetShader;
                 mats[i].SetColor("_BaseColor", color);
                 mats[i].SetFloat("_Surface", 0); // Opaque
+                if (useEmission)
+                {
+                    // Lit + Emission: 자체발광으로 라이트 없어도 색 보임
+                    mats[i].SetColor("_EmissionColor", color);
+                    mats[i].EnableKeyword("_EMISSION");
+                    mats[i].globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+                }
 
                 // 진단: 할당 직후 실제 상태 (첫 렌더러 1회만)
                 if (!firstLogged)
                 {
                     var afterShader = mats[i].shader != null ? mats[i].shader.name : "<null>";
                     var afterColor = mats[i].GetColor("_BaseColor");
+                    var emColor = useEmission ? mats[i].GetColor("_EmissionColor") : new Color(0, 0, 0, 0);
                     var kws = mats[i].shaderKeywords != null ? string.Join(",", mats[i].shaderKeywords) : "<null>";
-                    Debug.Log($"[dbg-GLB] AFTER set: go='{goName}' shader='{afterShader}' baseColor={afterColor} kws=[{kws}] isSupported={mats[i].shader.isSupported}");
+                    Debug.Log($"[dbg-GLB] AFTER set: go='{goName}' shader='{afterShader}' baseColor={afterColor} emission={emColor} kws=[{kws}] isSupported={mats[i].shader.isSupported}");
                     firstLogged = true;
                 }
             }
         }
-        Debug.Log($"[dbg-GLB] URP/Unlit 적용: 이름매칭={byName} JSON폴백={byFallback}");
+        Debug.Log($"[dbg-GLB] {(useEmission ? "URP/Lit+Em" : "URP/Unlit")} 적용: 이름매칭={byName} JSON폴백={byFallback}");
     }
 
     /// <summary>
