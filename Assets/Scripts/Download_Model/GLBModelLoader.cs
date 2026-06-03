@@ -505,9 +505,23 @@ public class GLBModelLoader : MonoBehaviour
         return list;
     }
 
+    /// <summary>v4 GLB 머터리얼 색 매핑 (GameObject 이름 → baseColorFactor).</summary>
+    private static readonly System.Collections.Generic.Dictionary<string, Color> V4PartColors =
+        new System.Collections.Generic.Dictionary<string, Color>(System.StringComparer.OrdinalIgnoreCase)
+        {
+            {"BodyMesh",   new Color(0.42f, 0.24f, 0.10f)}, // Fur
+            {"HeadMesh",   new Color(0.42f, 0.24f, 0.10f)}, // Fur
+            {"ChestMesh",  new Color(0.88f, 0.78f, 0.65f)}, // Chest
+            {"BlackMesh",  new Color(0.05f, 0.04f, 0.04f)}, // Black
+            {"TongueMesh", new Color(0.85f, 0.45f, 0.45f)}, // Pink
+            {"TailMesh1",  new Color(0.42f, 0.24f, 0.10f)}, // Fur
+            {"TailMesh2",  new Color(0.42f, 0.24f, 0.10f)}, // Fur
+        };
+
     /// <summary>
-    /// URP에서 glTFast 머터리얼이 InternalErrorShader로 폴백 → 색 못 읽음 문제 해결.
-    /// JSON에서 직접 추출한 색으로 URP/Lit 적용. gltf.Materials와 인덱스 매칭.
+    /// URP에서 glTFast가 머터리얼을 InternalErrorShader로 폴백 + 렌더러마다 클론해서 참조 매칭이
+    /// 안 됨. GameObject 이름 기반 색 매핑(v4 GLB 전용)으로 정확히 적용 + JSON 색을 fallback으로
+    /// 모든 렌더러에 강제 URP/Lit 변환.
     /// </summary>
     private void FixMaterialsFromJsonColors(GltfImport gltf, byte[] glbData)
     {
@@ -523,47 +537,43 @@ public class GLBModelLoader : MonoBehaviour
             return;
         }
 
-        var colorsByIndex = ParseColorsFromGLBJson(glbData);
-        Debug.Log($"[dbg-GLB] JSON에서 {colorsByIndex.Count}개 머터리얼 색 추출");
+        // JSON에서 색 4개 추출 (이름 기반 매핑 못 찾을 때 fallback, 0번부터 순환)
+        var jsonColors = ParseColorsFromGLBJson(glbData);
+        Debug.Log($"[dbg-GLB] JSON에서 {jsonColors.Count}개 머터리얼 색 추출");
 
-        // glTFast의 GetMaterial(i) → 인덱스 매핑 (Materials 프로퍼티는 v4.x에 없고 GetMaterial+MaterialCount 사용)
-        var matToIndex = new System.Collections.Generic.Dictionary<Material, int>();
-        for (int i = 0; i < gltf.MaterialCount; i++)
-        {
-            var gm = gltf.GetMaterial(i);
-            if (gm != null) matToIndex[gm] = i;
-        }
-
-        int matched = 0, unmatched = 0;
-        var processed = new System.Collections.Generic.HashSet<Material>();
+        int byName = 0, byFallback = 0;
+        int fallbackIdx = 0;
         foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true))
         {
-            var shareds = r.sharedMaterials;
-            for (int i = 0; i < shareds.Length; i++)
+            string goName = r.gameObject.name;
+            Color color;
+            if (V4PartColors.TryGetValue(goName, out color))
             {
-                var m = shareds[i];
-                if (m == null || processed.Contains(m)) continue;
-                processed.Add(m);
+                byName++;
+            }
+            else if (jsonColors.Count > 0)
+            {
+                color = jsonColors[fallbackIdx % jsonColors.Count];
+                fallbackIdx++;
+                byFallback++;
+            }
+            else
+            {
+                color = Color.white;
+            }
 
-                Color color = Color.white;
-                if (matToIndex.TryGetValue(m, out int matIdx) && matIdx < colorsByIndex.Count)
-                {
-                    color = colorsByIndex[matIdx];
-                    matched++;
-                }
-                else
-                {
-                    unmatched++;
-                }
-
-                m.shader = urpLit;
-                m.SetColor("_BaseColor", color);
-                m.SetFloat("_Metallic", 0f);
-                m.SetFloat("_Smoothness", 0.4f);
-                m.SetFloat("_Surface", 0);
+            var mats = r.sharedMaterials;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                if (mats[i] == null) continue;
+                mats[i].shader = urpLit;
+                mats[i].SetColor("_BaseColor", color);
+                mats[i].SetFloat("_Metallic", 0f);
+                mats[i].SetFloat("_Smoothness", 0.4f);
+                mats[i].SetFloat("_Surface", 0);
             }
         }
-        Debug.Log($"[dbg-GLB] URP/Lit 적용: matched={matched} unmatched={unmatched} (총 {processed.Count}개 머터리얼)");
+        Debug.Log($"[dbg-GLB] URP/Lit 적용: 이름매칭={byName} JSON폴백={byFallback}");
     }
 
     /// <summary>
@@ -589,6 +599,7 @@ public class GLBModelLoader : MonoBehaviour
 
         Animation anim = loadedModel.GetComponent<Animation>();
         if (anim == null) anim = loadedModel.AddComponent<Animation>();
+        anim.wrapMode = WrapMode.Loop;
 
         int attachedCount = 0;
         foreach (var clip in clips)
@@ -599,12 +610,26 @@ public class GLBModelLoader : MonoBehaviour
             if (anim.GetClip(clip.name) == null) anim.AddClip(clip, clip.name);
             attachedCount++;
         }
-        anim.wrapMode = WrapMode.Loop;
-        if (attachedCount > 0 && clips[0] != null)
+
+        // glTFast가 1개 GLB 안무를 노드별로 쪼개서 N개 클립 만드는 경우 다수 → 모두 동시 재생.
+        // Animation 컴포넌트는 같은 layer에 있는 클립 중 하나만 재생하므로, 각 클립을 다른 layer에 두고
+        // Play(name, StopSameLayer)로 호출 → 각 layer가 자기 클립 독립 재생.
+        int layer = 0;
+        foreach (var clip in clips)
         {
-            anim.Play(clips[0].name);
-            Debug.Log($"[dbg-GLB] {attachedCount}개 클립 attach + '{clips[0].name}' 재생 시작 (length={clips[0].length:F2}s)");
+            if (clip == null) continue;
+            var state = anim[clip.name];
+            if (state != null)
+            {
+                state.layer = layer;
+                state.weight = 1f;
+                state.wrapMode = WrapMode.Loop;
+                state.enabled = true;
+            }
+            anim.Play(clip.name, PlayMode.StopSameLayer);
+            layer++;
         }
+        Debug.Log($"[dbg-GLB] {attachedCount}개 클립 attach + {layer}개 layer로 동시 재생");
     }
 
     /// <summary>
