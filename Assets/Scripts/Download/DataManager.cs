@@ -1388,44 +1388,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         place.model_type = "custom";
         bool result = SpawnFullObject(id.ToString());
         Debug.Log($"[dbg-Promote] SpawnFullObject 결과: {result}, spawnedObjects.ContainsKey={spawnedObjects.ContainsKey(id)}");
-
-        // 안전망: 큐브 → GLB 교체 과정에서 OSI가 다른 타겟들의 인디케이터를 잃었다면
-        // 한 프레임 뒤에 모든 스폰된 오브젝트의 Target을 재활성화해 OnEnable 재발화 유도.
-        StartCoroutine(RefreshAllTargetsNextFrame());
         return result;
-    }
-
-    /// <summary>1프레임 뒤 모든 스폰된 오브젝트의 Target을 잠시 비활성→활성해 OSI 재등록 유도.</summary>
-    private IEnumerator RefreshAllTargetsNextFrame()
-    {
-        yield return null; // 1 프레임 대기
-        int refreshed = 0;
-        foreach (var kv in spawnedObjects)
-        {
-            if (kv.Value == null) continue;
-            var t = kv.Value.GetComponentInChildren<Target>(true);
-            if (t == null) continue;
-            if (t.gameObject.activeInHierarchy && t.enabled)
-            {
-                // 토글로 OnEnable 재발화
-                t.enabled = false;
-                t.enabled = true;
-                refreshed++;
-            }
-        }
-        foreach (var kv in indicatorOnlyObjects)
-        {
-            if (kv.Value == null) continue;
-            var t = kv.Value.GetComponentInChildren<Target>(true);
-            if (t == null) continue;
-            if (t.gameObject.activeInHierarchy && t.enabled)
-            {
-                t.enabled = false;
-                t.enabled = true;
-                refreshed++;
-            }
-        }
-        Debug.Log($"[dbg-Promote] Target 재등록 toggle 완료: {refreshed}개");
     }
     public List<CachedPlaceData> GetLightCache() => lightCache;
     public bool IsDataLoaded() => isDataLoaded;

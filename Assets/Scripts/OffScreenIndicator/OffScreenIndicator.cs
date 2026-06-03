@@ -140,7 +140,7 @@ public class OffScreenIndicator : MonoBehaviour
         public float marginBottom = 0.05f;             // 하단 마진
         public float marginLeft = 0.05f;               // 좌측 마진
         public float marginRight = 0.05f;              // 우측 마진
-        public int maxIndicatorCount = 10;             // 최대 화살표 표시 개수
+        public int maxIndicatorCount = 30;             // 최대 화살표 표시 개수 — 기본 10이었으나 우리 데이터는 18+ 타겟이라 부족
     }
 
     private class FallbackData
