@@ -530,10 +530,13 @@ public class GLBModelLoader : MonoBehaviour
                      UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
         if (!isURP) return;
 
-        Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
-        if (urpLit == null)
+        // URP/Lit은 라이트가 있어야 색이 보이는데 AR 씬에 directional light가 없어서 검정으로 렌더링됨
+        // (진단 로그로 확정: shader=Lit·baseColor 정상 설정에도 실제는 단색 검정).
+        // → URP/Unlit으로 변경: 라이트 무시하고 _BaseColor 그대로 픽셀에 출력.
+        Shader urpUnlit = Shader.Find("Universal Render Pipeline/Unlit");
+        if (urpUnlit == null)
         {
-            Debug.LogError("[dbg-GLB] URP/Lit 셰이더 못 찾음");
+            Debug.LogError("[dbg-GLB] URP/Unlit 셰이더 못 찾음");
             return;
         }
 
@@ -567,11 +570,9 @@ public class GLBModelLoader : MonoBehaviour
             for (int i = 0; i < mats.Length; i++)
             {
                 if (mats[i] == null) continue;
-                mats[i].shader = urpLit;
+                mats[i].shader = urpUnlit;
                 mats[i].SetColor("_BaseColor", color);
-                mats[i].SetFloat("_Metallic", 0f);
-                mats[i].SetFloat("_Smoothness", 0.4f);
-                mats[i].SetFloat("_Surface", 0);
+                mats[i].SetFloat("_Surface", 0); // Opaque
 
                 // 진단: 할당 직후 실제 상태 (첫 렌더러 1회만)
                 if (!firstLogged)
@@ -584,7 +585,7 @@ public class GLBModelLoader : MonoBehaviour
                 }
             }
         }
-        Debug.Log($"[dbg-GLB] URP/Lit 적용: 이름매칭={byName} JSON폴백={byFallback}");
+        Debug.Log($"[dbg-GLB] URP/Unlit 적용: 이름매칭={byName} JSON폴백={byFallback}");
     }
 
     /// <summary>
@@ -621,8 +622,12 @@ public class GLBModelLoader : MonoBehaviour
             return;
         }
 
-        Animation anim = loadedModel.GetComponent<Animation>();
-        if (anim == null) anim = loadedModel.AddComponent<Animation>();
+        // ⚠️ 핵심: glTFast의 CreateAnimationPath는 노드 path를 루트까지 "/"로 이어 만듦
+        // (예: HeadMesh → "Root/HeadMesh"). loadedModel 자신이 "Root"이므로 Animation을
+        // loadedModel에 붙이면 "Root"를 자기 자식에서 찾아 못 찾음 → 모든 클립 path 미해결.
+        // → Animation을 glbContainer(loadedModel의 부모)에 부착해야 path가 매칭됨.
+        Animation anim = glbContainer.GetComponent<Animation>();
+        if (anim == null) anim = glbContainer.gameObject.AddComponent<Animation>();
         anim.wrapMode = WrapMode.Loop;
 
         int attachedCount = 0;
@@ -669,8 +674,9 @@ public class GLBModelLoader : MonoBehaviour
             return;
         }
 
-        // 1차: Legacy Animation 컴포넌트
-        Animation anim = loadedModel.GetComponentInChildren<Animation>(true);
+        // 1차: Legacy Animation 컴포넌트 — AttachAnimationClips가 glbContainer에 부착했으므로 거기부터 확인
+        Animation anim = glbContainer.GetComponent<Animation>();
+        if (anim == null) anim = loadedModel.GetComponentInChildren<Animation>(true);
         if (anim != null && anim.GetClipCount() > 0)
         {
             AnimationClip first = null;
