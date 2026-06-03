@@ -1161,11 +1161,16 @@ public class OffScreenIndicator : MonoBehaviour
 
     private void HandleTargetStateChanged(Target target, bool active)
     {
+        string tn = target != null ? target.PlaceName : "<null>";
+        int beforeTargets = targets.Count;
+        int beforeFb = disabledFallbackTargets.Count;
+
         if (active)
         {
             if (!targets.Contains(target))
                 targets.Add(target);
             disabledFallbackTargets.Remove(target);
+            Debug.Log($"[dbg-OSI] +ADD '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
         }
         else
         {
@@ -1174,6 +1179,7 @@ public class OffScreenIndicator : MonoBehaviour
             {
                 targets.Remove(target);
                 disabledFallbackTargets.Add(target);
+                Debug.Log($"[dbg-OSI] →FB '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count}");
                 return;
             }
 
@@ -1189,6 +1195,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackDataMap.Remove(target);
             transitionDataMap.Remove(target);
             fadeOutTargets.Remove(target);
+            Debug.Log($"[dbg-OSI] -REM '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
         }
     }
 
