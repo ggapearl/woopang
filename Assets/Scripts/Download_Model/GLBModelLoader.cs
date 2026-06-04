@@ -554,7 +554,6 @@ public class GLBModelLoader : MonoBehaviour
 
         int byName = 0, byFallback = 0;
         int fallbackIdx = 0;
-        bool firstLogged = false;
         foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true))
         {
             string goName = r.gameObject.name;
@@ -574,7 +573,10 @@ public class GLBModelLoader : MonoBehaviour
                 color = Color.white;
             }
 
-            var mats = r.sharedMaterials;
+            // 머터리얼 공유 방지: r.materials (clone 인스턴스 배열)을 사용해 렌더러마다 고유 머터리얼 강제.
+            // sharedMaterials면 BodyMesh·HeadMesh·Tail* 가 같은 Fur 머터리얼을 가리켜 마지막 SetColor에
+            // 덮어씌워짐. r.materials는 각 렌더러용 클론 생성 + 자동 할당.
+            var mats = r.materials;
             for (int i = 0; i < mats.Length; i++)
             {
                 if (mats[i] == null) continue;
@@ -583,25 +585,31 @@ public class GLBModelLoader : MonoBehaviour
                 mats[i].SetFloat("_Surface", 0); // Opaque
                 if (useEmission)
                 {
-                    // Lit + Emission: 자체발광으로 라이트 없어도 색 보임
-                    mats[i].SetColor("_EmissionColor", color);
+                    // URP/Lit + Emission HDR 증폭: 어두운 색(0.05, 0.04, 0.04)은 1배로는 라이트 없을 때
+                    // 거의 안 보임 → 3배 boost로 baseColor 그대로 보이게 함.
+                    Color emColor = color * 3f;
+                    emColor.a = 1f;
+                    mats[i].SetColor("_EmissionColor", emColor);
                     mats[i].EnableKeyword("_EMISSION");
                     mats[i].globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
                 }
+                r.materials = mats; // 강제 인스턴스 적용
+            }
 
-                // 진단: 할당 직후 실제 상태 (첫 렌더러 1회만)
-                if (!firstLogged)
+            // 진단: 7개 렌더러 모두 출력 (머터리얼 인스턴스 ID로 공유 여부 확정 가능)
+            var finalMats = r.materials;
+            for (int i = 0; i < finalMats.Length; i++)
+            {
+                if (finalMats[i] == null) continue;
+                bool hasEmKw = false;
+                if (finalMats[i].shaderKeywords != null)
                 {
-                    var afterShader = mats[i].shader != null ? mats[i].shader.name : "<null>";
-                    var afterColor = mats[i].GetColor("_BaseColor");
-                    var emColor = useEmission ? mats[i].GetColor("_EmissionColor") : new Color(0, 0, 0, 0);
-                    var kws = mats[i].shaderKeywords != null ? string.Join(",", mats[i].shaderKeywords) : "<null>";
-                    Debug.Log($"[dbg-GLB] AFTER set: go='{goName}' shader='{afterShader}' baseColor={afterColor} emission={emColor} kws=[{kws}] isSupported={mats[i].shader.isSupported}");
-                    firstLogged = true;
+                    foreach (var k in finalMats[i].shaderKeywords) { if (k == "_EMISSION") { hasEmKw = true; break; } }
                 }
+                Debug.Log($"[dbg-GLB-mat] r='{goName}' matID={finalMats[i].GetInstanceID()} name='{finalMats[i].name}' shader='{finalMats[i].shader.name}' base={finalMats[i].GetColor("_BaseColor")} em={finalMats[i].GetColor("_EmissionColor")} hasEmKw={hasEmKw}");
             }
         }
-        Debug.Log($"[dbg-GLB] {(useEmission ? "URP/Lit+Em" : "URP/Unlit")} 적용: 이름매칭={byName} JSON폴백={byFallback}");
+        Debug.Log($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 이름매칭={byName} JSON폴백={byFallback}");
     }
 
     /// <summary>
