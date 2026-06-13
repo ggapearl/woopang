@@ -321,6 +321,15 @@ print(f'INSERT id={new_id}')
 7. **저작권**: K-pop 안무는 한국 저작권법상 보호 — MVNT처럼 IP 클리어된 솔루션 권장.
 8. **사용자 UGC 향후**: 서버 GPU + 큐 + 모더레이션 시스템 — 별도 큰 작업.
 
+### 10-1. Unity 실기기 빌드 GLB 렌더링 함정 (2026-06 디버깅으로 확정 — 커밋 0f47742 · 7645866 · 6cd8bf8)
+
+에디터에서는 멀쩡한데 실기기 빌드에서 GLB가 **검정/마젠타로 보이거나 안무가 안 도는** 문제의 root cause 4가지. GLBModelLoader 쪽 수정 시 회귀 주의:
+
+1. **셰이더 stripping** — 코드에서 직접 참조 안 한 셰이더는 빌드에서 제거됨. `Shader.Find("URP/Unlit")`이 빌드에서 실패 → glTFast가 InternalErrorShader로 폴백 → **마젠타**. 해결: 셰이더 체인 (URP/Unlit 우선 → 실패 시 URP/Lit + `_EmissionColor` fallback).
+2. **무광원 AR 씬** — AR 씬에 directional light가 없어 URP/Lit은 baseColor가 정상이어도 **검정** 렌더링. URP/Unlit 또는 Emission(HDR boost, `color * 3` 수준)으로 라이트 없이 픽셀에 색 입혀야 함.
+3. **Animation 부착 위치** — glTFast의 애니메이션 path는 `"Root/HeadMesh"`처럼 루트명 포함. loadedModel 자체가 "Root"이므로 Animation을 loadedModel에 붙이면 path 미해결 → isPlaying=true인데 **transform 무변동**. 반드시 **glbContainer(loadedModel의 부모)에 부착**.
+4. **머터리얼 공유** — 여러 렌더러(Body/Head/Tail 등)가 같은 머터리얼을 공유할 수 있음. `sharedMaterials`로 SetColor하면 마지막 렌더러 색이 공유 인스턴스 전체를 덮어씀. 렌더러별 색이 필요하면 `r.materials`(클론 자동 생성) 사용.
+
 ---
 
 ## 11. 우리 앱 코드 참조 (이미 작업한 부분)
@@ -335,4 +344,4 @@ print(f'INSERT id={new_id}')
 
 ---
 
-*최종 업데이트: 2026-06-01 (Hunyuan3D 2.1 로컬 설치 진행 중)*
+*최종 업데이트: 2026-06-12 (10-1 Unity 빌드 GLB 렌더링 함정 4종 추가 — 셰이더 stripping·무광원·Animation 부착 위치·머터리얼 공유)*

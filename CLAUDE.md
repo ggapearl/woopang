@@ -40,6 +40,8 @@
 |-----------|-----------|
 | Unity 앱 개발 (UI/에디터/프리팹/매니저/스타일) | [docs/claude/unity-app.md](docs/claude/unity-app.md) |
 | **AR 오브젝트 스폰 / 백그라운드 복귀 / 가시성 (필독)** | **[docs/claude/ar-object-spawn.md](docs/claude/ar-object-spawn.md)** |
+| **데이터 매니저 추가·수정 (연결 체크리스트 — 필독)** | **[docs/claude/data-managers.md](docs/claude/data-managers.md)** |
+| **Unity 버전 업그레이드 / 새 머신 셋업 / 빌드 에러 / embed 패키지 패치 (필독)** | **[docs/claude/unity-upgrade.md](docs/claude/unity-upgrade.md)** |
 | Git 커밋/푸시 | [docs/claude/git-rules.md](docs/claude/git-rules.md) |
 | 마케팅/캠페인/광고 | [docs/claude/marketing.md](docs/claude/marketing.md) |
 | 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) |
@@ -54,120 +56,22 @@
 
 ---
 
-## 4. Unity 버전 업그레이드 / 새 머신 셋업 체크리스트
+## 4. Unity 버전 업그레이드 / 새 머신 셋업 / embed 패키지 (요약)
 
-Unity 에디터 버전을 올리거나, 다른 머신(Mac/Windows)에서 프로젝트 처음 열 때:
+상세 절차·에러 패턴·.aar 재압축 방법은 **[docs/claude/unity-upgrade.md](docs/claude/unity-upgrade.md)** 참조 (해당 작업 시 필독). 항상 기억할 핵심만:
 
-1. `Library/`, `Temp/`, `obj/`, `Logs/` 폴더는 캐시 — 문제 발생 시 통삭 가능 (`Assets/`, `ProjectSettings/`, `Packages/`는 절대 삭제 금지)
-2. Windows Defender 실시간 보호가 `PackageCache` rename을 막을 수 있음 → `C:\woopang` 폴더를 Defender 제외 경로로 등록
-3. Unity Preferences > External Tools > Gradle은 **"Gradle Installed with Unity"** 사용 (외부 Gradle 경로 비우기). Unity 6000.4.6f1은 Gradle 9.1.0 / AGP 9 사용.
-
-### embed된 패키지 (Unity 6000.4.6f1 + AGP 9 호환 패치)
-
-이 패키지들은 원래 registry/git URL로 잡혀있었으나 namespace/문법 충돌로 빌드 실패해서 `Packages/`에 embed해 패치 중. **절대 원래 URL로 되돌리지 말 것**. 공식 fix 나오면 각 PATCH_NOTES 참고해서 복원.
-
-| 패키지 | 패치 사유 | PATCH_NOTES |
-|--------|-----------|-------------|
-| `com.google.ar.core.arfoundation.extensions` | Unity 6 컴파일러에서 `[SerializeField]` on property 거부 | [link](Packages/com.google.ar.core.arfoundation.extensions/PATCH_NOTES.md) |
-| `com.unity.xr.arcore` | AGP 9에서 `unityandroidpermissions.aar`의 namespace가 `arcore_client.aar`와 충돌 | [link](Packages/com.unity.xr.arcore/PATCH_NOTES.md) |
-| `com.yasirkula.nativecamera` | AGP 9 namespace 충돌 (4개 yasirkula 패키지 동일 namespace) | [link](Packages/com.yasirkula.nativecamera/PATCH_NOTES.md) |
-| `com.yasirkula.nativegallery` | 동상 | [link](Packages/com.yasirkula.nativegallery/PATCH_NOTES.md) |
-| `com.yasirkula.nativefilepicker` | 동상 | [link](Packages/com.yasirkula.nativefilepicker/PATCH_NOTES.md) |
-| `com.yasirkula.simplefilebrowser` | 동상 | [link](Packages/com.yasirkula.simplefilebrowser/PATCH_NOTES.md) |
-
-### Unity 에디터 버전 업데이트 시 AI 워크플로우 (필독)
-
-사용자가 새 Unity 버전(예: 6000.4.6f1 → 6000.5.x, 6000.4.6f1 → 6001.x)을 설치하고 프로젝트를 열 때 발생하는 컴파일/빌드 에러는 대부분 외부 패키지의 새 컴파일러 / AGP / Gradle 호환성 누락이 원인. **사용자가 "Unity 업데이트했어"라고 고지하면 AI는 다음 절차를 자동으로 수행:**
-
-1. **현재 버전 확인**: `ProjectSettings/ProjectVersion.txt` 읽어 새 버전 확인 후 CLAUDE.md 1번 섹션의 Unity 버전 표기 업데이트
-2. **첫 빌드 시도 권장**: 사용자에게 안드로이드 빌드 1회 시도 요청 → 로그 받기
-3. **로그 분석 + 외부 검색**: 각 에러를 분류:
-   - **컴파일 에러** (예: `error CS0592 Attribute 'SerializeField' is not valid`): 외부 패키지 코드가 새 컴파일러에 부적합 → 해당 패키지를 embed하고 패치
-   - **Gradle/AGP 에러** (예: `Minimum supported Gradle version`, `Namespace 'X' is used in multiple modules`): Unity Preferences External Tools 점검 + .aar manifest namespace 분리
-   - **Manifest merger 충돌**: 패키지 자체의 AndroidManifest.xml 또는 Unity 자동 생성 mainTemplate/launcherTemplate 검토
-4. **패치 적용**:
-   - 패키지를 `Packages/` 안에 embed (git URL/registry → `file:패키지명`)
-   - `manifest.json`, `packages-lock.json` 동기화
-   - 해당 패키지에 `PATCH_NOTES.md` 추가 (원본 해시 / 패치 사유 / 공식 fix 시 복원 절차 / .aar 재압축은 Python zipfile + forward-slash 필수)
-   - CLAUDE.md "embed된 패키지" 표에 행 추가
-5. **빌드 재시도 후 통과 시 git 커밋·푸시** (사용자 명시적 승인 필요)
-6. **공식 fix 모니터링**: PATCH_NOTES에 복원 절차 명시했으니 추후 패키지 제작자가 해당 Unity 버전 호환 패치 내면 embed 폴더 삭제 + manifest 원복
-
-### 자주 발생하는 패턴 (참고)
-
-| 증상 | 원인 | 해결 패턴 |
-|------|------|-----------|
-| `[SerializeField] is not valid on this declaration type` | 새 Roslyn 컴파일러가 auto-property attribute 위치 거부 | `[SerializeField]` → `[field: SerializeField]` |
-| `Minimum supported Gradle version is X.Y.Z` | Unity Preferences가 외부 구버전 Gradle 가리킴 | Preferences > External Tools > "Use Gradle Installed with Unity" |
-| `Namespace 'X' is used in multiple modules` | AGP 9+의 namespace 검증 강화 | 충돌 .aar 풀어서 AndroidManifest의 `package=` 속성 분리 후 재압축 |
-| `EPERM: operation not permitted ... PackageCache` | Defender 실시간 보호가 rename 차단 | Defender 제외 폴더에 프로젝트 경로 추가 + Library 통삭 |
-| `Reference 'UnityEditor.iOS.Extensions.Xcode' missing` | 안드로이드 모드에서 iOS dll의 reference 검증 실패 | `.dll.meta`에서 `validateReferences: 0` |
-
-### Android Native 라이브러리 패치 시 주의 (.aar 재압축)
-
-.aar 안의 AndroidManifest.xml을 수정 후 재압축할 때 **PowerShell의 `Compress-Archive`/`ZipFile.CreateFromDirectory`는 Windows 경로 구분자(`\`)를 그대로 넣어 Android 빌드가 못 읽음**. 반드시 Python `zipfile` 모듈 또는 zip CLI 사용:
-
-```python
-import zipfile, os
-with zipfile.ZipFile(dst_aar, 'w', zipfile.ZIP_DEFLATED) as zf:
-    for root, _, files in os.walk(src_dir):
-        for f in files:
-            full = os.path.join(root, f)
-            arc = os.path.relpath(full, src_dir).replace(os.sep, '/')
-            zf.write(full, arc)
-```
+- `Packages/`에 **embed된 패키지 6종** 존재 (`com.google.ar.core.arfoundation.extensions`, `com.unity.xr.arcore`, yasirkula 4종) — Unity 6 + AGP 9 호환 패치 중. **절대 원래 registry/git URL로 되돌리지 말 것** (각 패키지의 PATCH_NOTES.md 참조)
+- 사용자가 "Unity 업데이트했어"라고 고지하면 → unity-upgrade.md의 AI 워크플로우를 자동 수행
+- `Library/`, `Temp/`, `obj/`, `Logs/`는 캐시 (통삭 가능) / `Assets/`, `ProjectSettings/`, `Packages/`는 절대 삭제 금지
 
 ---
 
-## 5. 데이터 매니저 추가·수정 시 연결 체크리스트 (필독)
+## 5. 데이터 매니저 (AR 오브젝트 스폰) — 요약
 
-우팡 앱은 **5개 데이터 매니저**가 AR 오브젝트를 스폰. 새 매니저 추가 또는 기존 매니저 수정 시 **아래 시스템들 모두에 연결돼 있는지 반드시 점검**. 한 곳이라도 빠지면 그 매니저 데이터만 기능 누락 (이전에 공공교통 3개 매니저가 zoom에서 빠져있던 사례).
+우팡 앱은 **5개 데이터 매니저**가 AR 오브젝트를 스폰: `DataManager`(자체 DB) · `TourAPIManager`(공공데이터) · `SubwayManager`/`TrainStationManager`/`TerminalManager`(공공교통). 모두 [Assets/Scripts/Download/](Assets/Scripts/Download/)에 위치.
 
-### 5개 매니저
-| 매니저 | 데이터 카테고리 | 위치 |
-|--------|----------------|------|
-| `DataManager` | 우팡 자체 DB (사용자 업로드 AR 오브젝트) | [Assets/Scripts/Download/DataManager.cs](Assets/Scripts/Download/DataManager.cs) |
-| `TourAPIManager` | 공공데이터 (관광공사 API — 관광지·맛집 등) | [Assets/Scripts/Download/TourAPIManager.cs](Assets/Scripts/Download/TourAPIManager.cs) |
-| `SubwayManager` | 공공교통 (지하철역) | [Assets/Scripts/Download/SubwayManager.cs](Assets/Scripts/Download/SubwayManager.cs) |
-| `TrainStationManager` | 공공교통 (기차역) | [Assets/Scripts/Download/TrainStationManager.cs](Assets/Scripts/Download/TrainStationManager.cs) |
-| `TerminalManager` | 공공교통 (버스 터미널) | [Assets/Scripts/Download/TerminalManager.cs](Assets/Scripts/Download/TerminalManager.cs) |
-
-⚠️ "공공데이터(TourAPI)" ≠ "공공교통(Subway/Train/Terminal)" — 별도 카테고리. 한국어로 둘 다 "공공"이라 헷갈리기 쉬우니 작업 시 명확히 구분할 것.
-
-### 매니저 추가·수정 시 점검할 연결 지점
-
-| # | 시스템 | 연결 방법 | 빠뜨리면 발생하는 증상 |
-|---|--------|---------|----------------------|
-| 1 | `IPlaceCacheProvider` 인터페이스 구현 | `class X : MonoBehaviour, IPlaceCacheProvider` + 모든 멤버 구현 | 컴파일 에러 |
-| 2 | `FilterManager.RegisterCacheProvider(this)` 호출 | `Start()` 또는 적절한 초기화 시점 | 중앙 배분 시스템 무시 → 오브젝트 스폰 안 됨 |
-| 3 | `MarkCacheReady()` 헬퍼 + `CacheBecameReady` 이벤트 발행 | 캐시 채워질 때 `isCacheReady=true` 대신 `MarkCacheReady()` 호출 | 캐시 늦게 도착 시 다음 AllocationLoop tick까지 무시 → 리스트 빈 표시 |
-| 4 | `PlaceListManager` Inspector 필드 + `AddTransportData` 또는 별도 추가 흐름 | PlaceListManager에 필드 추가 + `UpdateUIWithFadeIn`에 데이터 수집 분기 | 주변 리스트에서 이 매니저 항목 누락 |
-| 5 | `ARObjectZoomController` Inspector 필드 + `ApplyZoomToARObjects` 호출 | Singleton fallback + `ApplyZoomToManager(thisManager.GetSpawnedObjects())` 호출 | 핀치 zoom 시 이 매니저 오브젝트만 스케일 안 변경 |
-| 6 | `LoadingManager`의 visibility 토글 (예: `SetAllObjectsVisible`, `SetAllRenderersVisible`) | 해당 함수 안에서 `thisManager.Instance.SetAllObjectsVisible(...)` 호출 | AR 세션 fallback 등에서 이 매니저 오브젝트만 안 숨겨짐 |
-| 7 | `Target` 컴포넌트 세팅 (`PlaceName`, `placeId`, `gpsLatitude`, `gpsLongitude`, `TargetColor`) | Full/IndicatorOnly 스폰 시점에 자식 Target 컴포넌트에 세팅 | OffScreenIndicator/PlaceListManager 매칭 실패 (인디케이터 표시 누락 또는 이름 매칭 부정확) |
-| 8 | `GetSpawnedObjects()` / `GetSpawnedFullIds()` / `GetSpawnedIndicatorIds()` public 메서드 제공 | 외부에서 접근 가능한 Dictionary 반환 | zoom·visibility 등 외부 시스템 연결 불가 |
-| 9 | `Singleton.Instance` 패턴 (`public static X Instance`) | 다른 매니저들과 동일 패턴 | 다른 시스템에서 Singleton fallback 못 함 → Inspector 누락 시 NullReference |
-
-### 새 매니저 추가 워크플로우
-
-1. **`IPlaceCacheProvider` 구현** — 인터페이스 멤버 모두 구현 (caches, spawn/despawn, IsCacheReady 등)
-2. **`MarkCacheReady()` 헬퍼 추가** — 다른 4개 매니저 동일 패턴 복사
-3. **Singleton 패턴** — `public static X Instance` 추가
-4. **`Start()`에서 `FilterManager.RegisterCacheProvider(this)` 호출**
-5. **Inspector에서 prefab 연결** — IndicatorOnly prefab + Full prefab
-6. **외부 시스템들에 추가** (체크리스트 4·5·6번):
-   - `PlaceListManager` 필드 + 데이터 수집 흐름
-   - `ARObjectZoomController` 필드 + `ApplyZoomToManager` 호출
-   - `LoadingManager`의 visibility 토글 함수들
-7. **`Target` 컴포넌트 세팅 누락 점검** (`placeId` 포함)
-8. **빌드 + 실기기 테스트** — 핀치 zoom, list panel, fallback 모드 모두 검증
-
-### "공공교통 zoom 누락" 같은 실수 방지
-
-원인: 새 매니저(Subway/Train/Terminal) 추가 시 zoom 컨트롤러 측 업데이트 누락. 이런 누락 방지하려면:
-- 새 매니저 추가 시 **이 체크리스트 6개 시스템 모두 grep**으로 다른 매니저(예: DataManager) 참조 위치 다 찾고, 같은 위치에 새 매니저 참조 추가
-- 예: `grep -rn "DataManager" Assets/Scripts/` 결과를 보고 각 위치에서 새 매니저도 같이 처리해야 하는지 판단
-- 또는 **공공교통 매니저 3개를 묶어서 `ITransportManager` 같은 추상화** (장기적 리팩토링)
+- ⚠️ "공공데이터(TourAPI)" ≠ "공공교통(Subway/Train/Terminal)" — 별도 카테고리. 한국어로 둘 다 "공공"이라 헷갈리기 쉬우니 명확히 구분할 것.
+- 매니저 추가·수정 시 zoom·리스트·visibility 등 **6개 연결 시스템 체크리스트**를 반드시 점검 → **[docs/claude/data-managers.md](docs/claude/data-managers.md)** (필독). 한 곳이라도 빠지면 그 매니저 데이터만 기능 누락 (공공교통 zoom 누락 사례).
 
 ---
 
@@ -183,4 +87,4 @@ with zipfile.ZipFile(dst_aar, 'w', zipfile.ZIP_DEFLATED) as zf:
 
 ---
 
-*최종 업데이트: 2026-05-31 (3번 테이블에 GitHub 이슈 제보 행 추가 — 상세는 docs/claude/github-issue.md, 7번 섹션은 제거하고 별도 파일로 이동)*
+*최종 업데이트: 2026-06-12 (4·5번 섹션 상세를 docs/claude/unity-upgrade.md · data-managers.md 로 분리하고 요약만 유지 — 섹션 번호는 기존 참조 호환 위해 유지)*
