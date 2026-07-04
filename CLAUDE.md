@@ -96,4 +96,4 @@ woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사
 
 ---
 
-*최종 업데이트: 2026-07-04 (6번 서버보안 섹션 갱신: DB 비밀번호 공개노출·5432 인터넷개방 P0 명시, /admin·/dbadmin 공개폴백 제거 완료. tire·vrompt 라우팅 전면 삭제, 자동복구 몰살버그 수정 — 상세 docs/claude/server-infra.md)*
+*최종 업데이트: 2026-07-04 (6번 서버보안 섹션 갱신: DB 비밀번호 공개노출·5432 인터넷개방 P0 명시, /admin·/dbadmin 공개폴백 제거 완료. tire·vrompt 라우팅 전면 삭제, 자동복구 몰살버그 수정 — 상세 docs/claude/server-infra.md. 루트에 흩어져 있던 구식 스크래치 md 68개를 `docs/archive/` 로 이관해 정리 — 현행 가이드는 이 파일과 docs/claude/ 만 참조)*

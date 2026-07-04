@@ -10,12 +10,19 @@
 
 [Nginx - 리버스 프록시] 포트 443 (HTTPS)
 ├── /                → 127.0.0.1:8080  (메인 서버, Waitress)
+├── /cloud           → 127.0.0.1:8080  (쾌클라우드 파일서버 — 메인의 프록시 경유 → 5010)
 ├── /preview/        → 127.0.0.1:5555  (Preview 영상분석 서버)
 ├── /nongmin         → 127.0.0.1:6688  (농민.com 농산물 직거래)
 ├── /api/p2p/        → 127.0.0.1:4395  (P2P 실시간 위치 서버)
 ├── /live            → 127.0.0.1:7000  (라이브커머스 웹앱 - FastAPI)
 ├── /live/rtc        → 127.0.0.1:7880  (LiveKit 시그널링 WebSocket)
 └── SSL 인증서: C:/woopang/server/woopang.com-fullchain.pem
+
+※ 2026-07 경로 개편: 기존 /dongdong → **/cloud** 로 변경. nginx가 /dongdong·/clouds 를
+  /cloud 로 301 영구 리다이렉트(기존 공유 링크·북마크 보존). /cloud 는 대용량 촬영본
+  업·다운 위해 client_max_body_size 50G + proxy_buffering off 등 스트리밍 튜닝 적용.
+  ⚠ /cloud 도 메인(8080) 경유라 영상 스트리밍이 메인 Waitress 스레드(20개)를 점유함 —
+    동시 시청 급증 시 nginx→5010 직결(메인 우회)로 최적화 여지 있음.
 
 [메인 서버] app_improved.py → Waitress 포트 8080
 - .env에 USE_NGINX=true 필수 (없으면 Flask가 443 직접 점유 → Nginx와 충돌)
@@ -38,7 +45,7 @@
 
 > 포트 단독 기록 (점유 현황):
 > 443 nginx · 8080 메인 · 5555 preview · 6688 nongmin · 4395 p2p · 5002 apple(구수한농장, Node)
-> · 5010 dongdong(쾌클라우드) · 5020 board-monitor · 7788 portpolio · 5001 sogogi
+> · 5010 쾌클라우드(구 dongdong, 웹경로는 /cloud) · 5020 board-monitor · 7788 portpolio · 5001 sogogi
 > · 7000 livecommerce(FastAPI) · 7880 livekit-signal · 7881·7882 livekit-RTC(미디어, 방화벽 인바운드 개방 필요)
 > 라이브커머스: livecommerce/start.bat 또는 Startup의 nongmin_server.bat 가 함께 기동 (LiveKit + FastAPI)
 >
