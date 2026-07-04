@@ -52,8 +52,8 @@ woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사
 | 마케팅/캠페인/광고 | [docs/claude/marketing.md](docs/claude/marketing.md) |
 | 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) |
 | 기획안/제안서 HTML | [docs/claude/proposals.md](docs/claude/proposals.md) |
-| **앳하트(AtHeart) 콘텐츠 / 촬영구성안 / 멤버 분석** | **[docs/claude/atheart-contents.md](docs/claude/atheart-contents.md)** |
-| **앳하트 말자막 자동화 (MOGRT 자동자막 / AtHeartAutoSub 패널 / 화자별 재배치)** | **[docs/claude/atheart-subtitle.md](docs/claude/atheart-subtitle.md)** |
+| **콘텐츠 파트너 자료 (촬영구성안 / 멤버 분석) — ⚠️ 로컬 전용** | **`docs/private/` (git 미추적 · 민감자료라 커밋 금지)** |
+| **콘텐츠 파트너 말자막 자동화 (MOGRT 자동자막 / 자막 패널 / 화자별 재배치) — 로컬 전용** | **`docs/private/`** |
 | **3D 콘텐츠(GLB) 생성·자동화 (Blender·Mixamo·Hunyuan3D·리깅·안무)** | **[docs/claude/3d-generation.md](docs/claude/3d-generation.md)** |
 | 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
 | **웹앱 전체 기능 테스트 ("전부 테스트해줘"/"잘 작동하는지 검토") — E2E·실브라우저** | **[docs/claude/web-testing.md](docs/claude/web-testing.md)** |
@@ -96,4 +96,6 @@ woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사
 
 ---
 
-*최종 업데이트: 2026-07-04 (6번 서버보안 섹션 갱신: DB 비밀번호 공개노출·5432 인터넷개방 P0 명시, /admin·/dbadmin 공개폴백 제거 완료. tire·vrompt 라우팅 전면 삭제, 자동복구 몰살버그 수정 — 상세 docs/claude/server-infra.md. 루트에 흩어져 있던 구식 스크래치 md 68개를 `docs/archive/` 로 이관해 정리 — 현행 가이드는 이 파일과 docs/claude/ 만 참조)*
+> ⚠️ **콘텐츠 파트너(연예/아티스트) 자료는 git 추적 금지.** 촬영구성안·멤버 분석·자막자동화 등 민감 자료는 `docs/private/`(=`/docs/*` 규칙으로 자동 제외, 파일명도 비노출)에만 둔다. 공개 저장소(추적 파일·문서·주석)에 파트너 실명이나 멤버 신상 정보를 적지 말 것. pre-commit 훅이 관련 문구·파일을 자동 차단한다.
+
+*최종 업데이트: 2026-07-04 (6번 서버보안 섹션 갱신: DB 비밀번호 공개노출·5432 인터넷개방 P0 명시, /admin·/dbadmin 공개폴백 제거 완료. tire·vrompt 라우팅 전면 삭제, 자동복구 몰살버그 수정 — 상세 docs/claude/server-infra.md. 루트 구식 스크래치 md 68개를 `docs/archive/` 로 이관. 콘텐츠 파트너 민감자료를 `docs/private/` 로 격리하고 공개 추적 파일에서 실명 스크럽 — 현행 가이드는 이 파일과 docs/claude/ 만 참조)*

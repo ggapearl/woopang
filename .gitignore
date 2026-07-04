@@ -79,8 +79,7 @@ Assets/Firebase/Plugins/x86_64/FirebaseCppApp-*.dll
 # — CLAUDE.md 3번 테이블이 참조하는 필독 문서들이므로 머신 간 동기화 필수
 /docs/*
 !/docs/claude/
-# 단, 앳하트 자료집은 멤버 신상 정보 포함 — 로컬 전용 (커밋 금지)
-/docs/claude/atheart-contents.md
+# 민감·파트너 자료는 docs/private/ 에 두면 /docs/* 규칙으로 자동 제외됨 (파일명 비노출·커밋 안 됨)
 
 # External Dependency Manager (ARCore Extensions에 번들된 EDM4U와 중복 방지)
 Assets/ExternalDependencyManager/

@@ -166,10 +166,43 @@ plan_index.html 카드 추가 위치:
 - /plan/yumddajudge      → yumdda_proposal.html (염따대왕)
 - /plan/works            → works_proposal.html (AI Works 투자유치)
 - /plan/younghero        → younghero_proposal.html (영웅 프로젝트)
-- /plan/atheart_contents → atheart_contents_proposal.html (AtHeart 콘텐츠)
+- /plan/<파트너>_contents → 콘텐츠 파트너 제안서 (슬러그·상세는 로컬 전용 docs/private/)
 - /plan/twentyclass      → twentyclass_proposal.html (Twenty Class)
+- /plan/angrylawyer      → angrylawyer_proposal.html (성난 변호사)
+- /plan/nongmin          → nongmin_proposal.html (농민닷컴 — 농어민 1% 직거래·라이브커머스)
+- /plan/nongmin_pitch    → nongmin_pitch_proposal.html (농민닷컴 IR 피치덱 — Seed 라운드 10페이지)
 - /polar_marathon        → polar_marathon_proposal.html  (출연자 섭외용 — 명시 라우트)
 - /north_marathon        → north_marathon_proposal.html  (후원사 섭외용 — 명시 라우트)
+```
+
+---
+
+## ⚠️ 흔한 실수 (재발 방지)
+
+```
+❌ 절대 하지 말 것:
+- 기획안 HTML을 C:\woopang\guide\ 하위에 만들기 (라우팅 안 됨)
+- "기획안 대잔치" 라는 폴더를 새로 만들기 ("기획안 대잔치"는 폴더가 아니라 /plan 페이지의 타이틀)
+- plan_index.html 카드 추가 없이 documents/ 에 파일만 두기 (목록 노출 안 됨)
+
+✅ 올바른 위치 단 하나:
+- HTML / 파비콘 / 이미지 모두 → C:\woopang\documents\ (또는 documents/img/)
+
+✅ 신규 기획안 추가 시 체크리스트 (이 순서대로):
+[ ] 1. C:\woopang\documents\{name}_proposal.html  생성 (모바일 가로스크롤 가드 포함)
+[ ] 2. C:\woopang\documents\{name}_favicon.svg    생성 (해당 기획안 톤에 맞는 디자인)
+[ ] 3. plan_index.html <style> 에 .card-{name} CSS 추가 (accent·hover·badge·title 4개)
+[ ] 4. plan_index.html <section class="cards"> 맨 아래 또는 적절한 위치에 카드 추가
+       (5개 언어 라벨 모두 — KO/EN/JA/ZH/ES)
+[ ] 5. (선택) server/bookmark/bookmark.html planFavicons 에 '{name}': '/plan/{name}_favicon.svg' 추가
+[ ] 6. 서버 재시작 불필요 — catch-all 라우트가 자동 서빙
+       (단, app_improved.py 에 명시 라우트를 새로 추가했다면 재시작 필수)
+
+서버 재시작이 필요한 경우 / 불필요한 경우:
+- 정적 HTML/SVG/이미지 파일 추가·수정 → ❌ 재시작 불필요
+- plan_index.html 카드 추가 → ❌ 재시작 불필요
+- app_improved.py 에 새 @app.route 추가 → ✅ 재시작 필수
+- app_improved.py 기존 라우트 로직 변경 → ✅ 재시작 필수
 ```
 
 ---
