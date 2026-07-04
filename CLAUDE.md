@@ -32,6 +32,12 @@
 - 지향: 깔끔한 코드, 필수 에러 로그만, 재사용 가능 구조
 - 폰트: `AppleSDGothicNeoM.ttf` (모든 UI)
 
+### 2.4 웹페이지 서빙(라우팅) 시 — 파비콘·북마크 기본 처리 (요청 없어도 자동)
+woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사용자가 따로 말하지 않아도 기본으로 함께 처리한다:
+1. 레이아웃 팔레트에 맞는 **파비콘 세트**(`favicon.svg`+`.ico`+png 16/32/180/192/512+`site.webmanifest`)와 적절한 `<title>`·`theme-color`·OG 메타를 주입.
+2. **`/bookmark` 대시보드 연동** — `server/bookmark/bookmark.html` 의 `faviconPaths` 에 `'<service>': '/<경로>/favicon.svg'` 한 줄 등록(없으면 기본 아이콘으로 뜸).
+3. 상세 절차·체크리스트: **[server/bookmark/README.md](server/bookmark/README.md)** · 예시 [server/jetcity/README.md](server/jetcity/README.md)
+
 ---
 
 ## 3. 작업별 상세 가이드 (해당 작업 시 반드시 읽을 것)
@@ -47,8 +53,10 @@
 | 공공데이터 DB INSERT | [docs/claude/public-data.md](docs/claude/public-data.md) |
 | 기획안/제안서 HTML | [docs/claude/proposals.md](docs/claude/proposals.md) |
 | **앳하트(AtHeart) 콘텐츠 / 촬영구성안 / 멤버 분석** | **[docs/claude/atheart-contents.md](docs/claude/atheart-contents.md)** |
+| **앳하트 말자막 자동화 (MOGRT 자동자막 / AtHeartAutoSub 패널 / 화자별 재배치)** | **[docs/claude/atheart-subtitle.md](docs/claude/atheart-subtitle.md)** |
 | **3D 콘텐츠(GLB) 생성·자동화 (Blender·Mixamo·Hunyuan3D·리깅·안무)** | **[docs/claude/3d-generation.md](docs/claude/3d-generation.md)** |
 | 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
+| **웹앱 전체 기능 테스트 ("전부 테스트해줘"/"잘 작동하는지 검토") — E2E·실브라우저** | **[docs/claude/web-testing.md](docs/claude/web-testing.md)** |
 | MCP Unity (Claude ↔ Unity Editor) | [docs/claude/mcp-unity.md](docs/claude/mcp-unity.md) |
 | Claude Code 개선점 제보 (GitHub 이슈 자동화 — "제보해줘"/"이슈 올려줘") | [docs/claude/github-issue.md](docs/claude/github-issue.md) |
 
@@ -77,14 +85,15 @@
 
 ## 6. 서버 보안 · 시크릿 관리 (서버 코드 작업 시 필독)
 
-`C:\woopang\server` 의 Flask 서버 — 메인 `app_improved.py`(포트 443) · 농민.com `nongmin/nongmin_server.py`(포트 6688) — 작업 시:
+`C:\woopang\server` 의 Flask 서버 — 메인 `app_improved.py`(Waitress 8080, nginx(443) 뒤) · 농민.com `nongmin/nongmin_server.py`(포트 6688) — 작업 시:
 
 - **시크릿 하드코딩 절대 금지** — DB 비밀번호·관리자 비밀번호·세션키·API키는 반드시 `os.getenv()` 로 읽고 `.env`(`C:\woopang\server\.env`)에 둔다. 소스·git 에 평문으로 넣지 말 것.
-- 과거 `Dnvkddl011$` 가 DB·관리자 비밀번호로 하드코딩돼 git 에 노출돼 있었음 → 환경변수로 이전함. **재발 금지** (소스에 남은 폴백 기본값도 .env 설정 후 제거 대상).
+- 🔴 **미완료 P0 (2026-07 발견):** 과거 소스에 하드코딩됐던 DB/관리자 비밀번호(구 11자 값)가 **아직 실서버 DB 비밀번호(`DB_PASSWORD`)로 그대로 사용 중**이고, 이 값이 **public GitHub(`ggapearl/woopang`)의 `app_improved.py` 및 과거 커밋에 노출**돼 있었음. 게다가 PostgreSQL 이 **`0.0.0.0:5432`(공인 IP 210.105.65.145)로 인터넷에 열려** 있어 슈퍼유저 접속 위험. → **PostgreSQL 비밀번호 즉시 교체 + 5432 외부 차단(listen_addresses/방화벽) + git 히스토리 세탁** 필요. (대표 승인·DB 재시작 타이밍 필요해 코드로 자동 처리 안 함.) ⚠ 이 문서에도 비번 실값을 절대 다시 적지 말 것.
+- ✅ **2026-07 조치 완료:** `app_improved.py` 를 git 추적 해제(`/server/` 이미 ignore) → GitHub HEAD 에서 서버 소스·하드코딩 시크릿 제거. `/admin`·`/dbadmin` 의 공개 하드코딩 폴백 제거 → `.env` 의 `WOOPANG_ADMIN_PW` 전용(미설정 시 fail-closed). admin_server.py DB 설정도 env 화. **재발 금지.**
 - 세션키는 미설정 시 랜덤 폴백하도록 돼 있음. Flask `debug=True` 금지. 세션쿠키는 HttpOnly·SameSite·Secure 적용.
 - DB는 `postgres` 슈퍼유저로 접속 중 → 장기적으로 앱 전용 제한권한 롤 권장. 원격 DB SSL(`sslmode`) 미적용 상태.
 - 농민.com 서버 작업 상세·미완료·보안 조치 항목은 **`server/nongmin/WORK_NOTES.md`**, 개발 로드맵은 **`server/nongmin/ROADMAP.md`**, 웹뷰앱은 **`server/nongmin/APP_BUILD_GUIDE.md`** 참조.
 
 ---
 
-*최종 업데이트: 2026-06-12 (4·5번 섹션 상세를 docs/claude/unity-upgrade.md · data-managers.md 로 분리하고 요약만 유지 — 섹션 번호는 기존 참조 호환 위해 유지)*
+*최종 업데이트: 2026-07-04 (6번 서버보안 섹션 갱신: DB 비밀번호 공개노출·5432 인터넷개방 P0 명시, /admin·/dbadmin 공개폴백 제거 완료. tire·vrompt 라우팅 전면 삭제, 자동복구 몰살버그 수정 — 상세 docs/claude/server-infra.md)*

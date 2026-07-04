@@ -11,7 +11,6 @@
 [Nginx - 리버스 프록시] 포트 443 (HTTPS)
 ├── /                → 127.0.0.1:8080  (메인 서버, Waitress)
 ├── /preview/        → 127.0.0.1:5555  (Preview 영상분석 서버)
-├── /tire            → 127.0.0.1:2684  (타이어 거래소 / 오복상사)
 ├── /nongmin         → 127.0.0.1:6688  (농민.com 농산물 직거래)
 ├── /api/p2p/        → 127.0.0.1:4395  (P2P 실시간 위치 서버)
 ├── /live            → 127.0.0.1:7000  (라이브커머스 웹앱 - FastAPI)
@@ -30,8 +29,6 @@
 [P2P 서버] 포트 4395
 - 실시간 위치 추적 + SpeechBubble
 
-[타이어 거래소] tire_server.py → 포트 2684
-
 [농민.com] nongmin_server.py → 포트 6688
 - 농산물 직거래 플랫폼 (판매자 상품 등록 / 구매자 주문)
 - 자동시작: Startup 폴더 nongmin_server.bat (waitress, Windows Terminal 탭)
@@ -40,9 +37,14 @@
 ```
 
 > 포트 단독 기록 (점유 현황):
-> 443 nginx · 8080 메인 · 5555 preview · 2684 tire · 6688 nongmin · 4395 p2p · 5002 apple(구수한농장, Node)
+> 443 nginx · 8080 메인 · 5555 preview · 6688 nongmin · 4395 p2p · 5002 apple(구수한농장, Node)
+> · 5010 dongdong(쾌클라우드) · 5020 board-monitor · 7788 portpolio · 5001 sogogi
 > · 7000 livecommerce(FastAPI) · 7880 livekit-signal · 7881·7882 livekit-RTC(미디어, 방화벽 인바운드 개방 필요)
 > 라이브커머스: livecommerce/start.bat 또는 Startup의 nongmin_server.bat 가 함께 기동 (LiveKit + FastAPI)
+>
+> ⚠️ 2026-07 제거: `tire`(타이어 거래소, 포트 2684)·`vrompt`(포트 8976) 서비스는 미사용으로
+>    라우팅 전면 삭제 (app_improved.py 라우트 + nginx location + bookmark 등록 모두 제거).
+>    `/api/<path>` vrompt catch-all 프록시도 함께 삭제됨. `vdown`(5005)은 계속 사용 중.
 
 ---
 
@@ -112,6 +114,33 @@ Claude의 역할:
 서버 껐다 켜는 로직을 가장 잘 아는 AI worker: 박광태 (기획팀)
 ```
 
+### ⚠️ 자동복구 동작 수정 (2026-07)
+```
+[FIXED] single_server_restart.py 의 kill_all_servers() 가 과거 `taskkill /IM python.exe`
+        로 머신의 모든 파이썬 서버(nongmin·preview·dongdong·p2p·worker)를 몰살시켜,
+        메인서버 자동복구 1회에 다른 서비스가 전부 죽고 되살아나지 않는 장애가 있었음.
+        → cmdline 에 app_improved.py 가 있는 프로세스만 psutil 로 정확히 종료하도록 변경
+          (다른 파이썬 서버와 nginx(443) 은 보존).
+
+[미해결 - 별도 검토 필요] single_server_restart.py 는 아직 구(舊) '443 단독 SSL' 아키텍처
+        가정으로 작성돼 있음(main_port=443, is_port_healthy(443)). 현재는 nginx(443)+Waitress(8080)
+        구조라, start_main_server() 의 kill_port_processes(443) 이 nginx 를 죽일 수 있음.
+        모니터를 현재 구조(8080 헬스체크)에 맞추는 리팩터링은 별도 작업으로 진행 권장.
+```
+
+### 🎥 dongdong(쾌클라우드) 영상 스트리밍 라우팅 — 개선 권고 (미적용)
+```
+현재: 클라이언트 → nginx(443) /dongdong → 메인 app_improved.py(8080) 프록시 → dongdong.py(5010) → 디스크
+문제: 영상 바이트가 메인서버를 한 번 더 경유하며, 재생 내내 메인 Waitress 스레드(20개)를
+      1개씩 점유 → 동시 시청 늘면 우팡 앱 본체(위치·DM·로그인)까지 스레드 고갈로 느려짐.
+권고(택1):
+ (a) nginx location /dongdong 을 8080 대신 5010 직결 (nongmin·preview 처럼). 단, dongdong.py
+     라우트가 /dongdong 프리픽스를 기대하지 않으므로 `proxy_pass http://127.0.0.1:5010/;`
+     (trailing slash) 로 프리픽스 스트립 + `proxy_buffering off; client_max_body_size 10G;` 필요.
+     ⚠ 실브라우저 재생/업로드/리다이렉트 검증 후 반영할 것 (server-infra 절대금지 규칙 관련).
+ (b) 다운로드(재생)는 nginx alias 로 저장폴더 직접 서빙(sendfile+Range) → Python 완전 우회.
+```
+
 ---
 
 ## 환경변수 (.env)
@@ -124,4 +153,34 @@ Preview 서버: C:\woopang\server\preview\.env
   - GEMINI_API_KEY, GEMINI_MODEL (gemini-3-pro-preview)
   - CLAUDE_API_KEY, CLAUDE_MODEL
   - DB_PASSWORD
+```
+
+---
+
+## 🚀 부팅 자동시작 bat (Startup 폴더)
+
+```
+위치: C:\Users\pdnom\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\
+⚠️ git 추적 안 됨 (사용자 프로필 안). 수정 전 .bak 백업 권장.
+```
+
+부팅 시 **4개 런처 bat**이 각자 서버를 띄운다. 각 bat은 "런처 창"이고, 실제
+서버는 별도 `wt.exe` 탭 / `cmd /k` 자식창에서 돈다 → **런처 창을 닫아도
+서버는 계속 실행**된다 (자식 프로세스 분리).
+
+| bat 파일 | 띄우는 서버 | 권한 | 서버 실행 위치 |
+|----------|-------------|------|----------------|
+| `woopang_server.bat` | nginx(443) + Waitress(8080) + smart_monitoring | (직접) | `start` 별도 창 + nginx.exe |
+| `woopang_sub.bat` | Sogogi · Apple · Portfolio(7788) · DongDong(5010) · Board Monitor(5020) | 관리자(UAC) | wt.exe 5개 탭 |
+| `nongmin_server.bat` | 농민(6688) · LiveKit(7880~7882) · LiveCommerce(7000) | (직접, 포트≥1024) | wt.exe 3개 탭 |
+| `preview_server.bat` | Preview(5555) + Worker ×4 | 관리자(UAC) | wt.exe 5개 탭 |
+
+### 런처 창 자동닫힘 (2026-06 적용)
+- 부팅 후 4개 런처 창은 서버 기동 후 **5초 뒤 자동으로 닫힌다** (`timeout /t 5 → exit`). 사용자가 직접 닫을 필요 없음.
+- **예외**: `woopang_server.bat`은 nginx/Waitress **기동 실패 시**(`:manual_help`) 창이 닫히지 않고 `pause`로 멈춰 원인을 보여줌. 성공 시에만 자동닫힘.
+- 서버 창(wt 탭 / cmd /k)은 그대로 유지 — **닫으면 서버가 죽으므로 닫지 말 것.**
+
+### ⚠️ 알려진 미해결 이슈 — `%1=="startup"` 부팅 대기 미작동
+- 4개 bat에 `if "%1"=="startup" ( timeout 10~12초 )` 부팅 대기 + `if NOT "%1"=="startup" pause` 분기가 설계돼 있으나, **Startup 폴더는 bat을 인자 없이 실행**해서 `%1`이 비어 있음 → 부팅 대기 로직이 트리거되지 않는다.
+- 자동닫힘은 위 분기와 무관하게 무조건 닫히도록 고쳤으므로 영향 없음. 다만 부팅 직후 서비스 기동 순서/타이밍 문제가 생기면 이 대기 로직을 살리는 작업이 필요 (Startup에 인자 전달하려면 .lnk 바로가기 또는 오케스트레이터 bat 필요).
 ```
