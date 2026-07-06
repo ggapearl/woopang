@@ -1390,6 +1390,23 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         Debug.Log($"[dbg-Promote] SpawnFullObject 결과: {result}, spawnedObjects.ContainsKey={spawnedObjects.ContainsKey(id)}");
         return result;
     }
+
+    /// <summary>
+    /// PromoteCubeToGLB의 역방향 — anim GLB 자동 디스폰 후 model_type을 "cube"로 복원.
+    /// 이걸 안 하면 FilterManager 배분 루프의 복구 스폰이 model_type="custom"을 보고
+    /// 사용자 동의 없이 GLB를 다시 띄워버려 자동 디스폰(100m/3분)이 무력화됨.
+    /// 복원 후엔 배분 루프가 큐브 플레이스홀더로 재스폰 → 더블탭+다운로드 opt-in 흐름 유지.
+    /// GLB 바이트는 RAM 캐시에 남아 있어 재다운로드 없이 즉시 재승격 가능.
+    /// </summary>
+    public void DemoteAnimToCube(int id)
+    {
+        if (placeDataMap.TryGetValue(id, out var place) &&
+            place.category == "anim" && place.model_type == "custom")
+        {
+            place.model_type = "cube";
+            Debug.Log($"[dbg-Promote] DemoteAnimToCube: id={id} → model_type=cube 복원");
+        }
+    }
     public List<CachedPlaceData> GetLightCache() => lightCache;
     public bool IsDataLoaded() => isDataLoaded;
 

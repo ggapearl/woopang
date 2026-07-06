@@ -267,6 +267,14 @@ public class DanceAnimController : MonoBehaviour
         // 5) 큐브 → GLB 교체 (PromoteCubeToGLB가 디스폰 후 glbPrefab + 캐시된 바이트로 즉시 로드)
         bool promoted = dm.PromoteCubeToGLB(id);
         Debug.Log($"[dbg-DanceAnim] PromoteCubeToGLB: {promoted}");
+        if (!promoted)
+        {
+            // 실패면 20초 로딩 대기 자체가 무의미 — 즉시 안내 후 종료
+            if (progressText != null) progressText.text = "3D 교체 실패. 다시 시도해주세요.";
+            yield return new WaitForSeconds(2f);
+            HideConfirm();
+            yield break;
+        }
 
         // 6) 실제 GLB 인스턴스화 + 메시 로드 완료까지 대기
         // 로드 시간은 모델 크기/디바이스에 따라 1~5초. % 표시는 평균 3s 기준 추정.
@@ -342,8 +350,12 @@ public class DanceAnimController : MonoBehaviour
 
             foreach (int id in toRemove)
             {
+                // 순서 중요: Despawn이 model_type="custom" 기준으로 GLB 풀에 반환 → 그 다음 cube로 강등.
+                // 강등해야 FilterManager 복구 스폰이 GLB 대신 큐브 플레이스홀더를 띄움 (opt-in 유지).
                 dm.DespawnFullObject(id.ToString());
+                dm.DemoteAnimToCube(id);
                 activeSpawns.Remove(id);
+                Debug.Log($"[dbg-DanceAnim] 자동 디스폰 완료 id={id} → 큐브로 복원 대기");
             }
         }
     }

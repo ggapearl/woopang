@@ -980,6 +980,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private float indicatorObjectRadius = 5000f;
     [Tooltip("배분 갱신 주기 (초) — 도보 1.1m/s 기준 10초 = 11m 이동, 충분한 정밀도")]
     [SerializeField] private float allocationInterval = 10f;
+    [Tooltip("배분 히스테리시스 (m) — 이미 표시 중인 오브젝트는 거리를 이만큼 깎아 우대. 예산 경계에서 GPS 노이즈로 매 사이클 디스폰/재스폰 진동(화살표 깜빡임·GLB 재로드 끊김) 방지")]
+    [SerializeField] private float allocationHysteresisMeters = 20f;
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
     [SerializeField] private float cacheRefreshDistance = 1000f;
 
@@ -1286,6 +1288,13 @@ public class FilterManager : MonoBehaviour
             foreach (var place in provider.GetCachedPlaces())
             {
                 float dist = CalculateGPSDistance(lat, lon, place.latitude, place.longitude);
+                // 히스테리시스: 이미 표시 중인 오브젝트는 거리 우대 → 예산 경계 진동 방지
+                if (allocationHysteresisMeters > 0f &&
+                    (currentFullAllocations.Contains(place.uniqueId) ||
+                     currentIndicatorAllocations.Contains(place.uniqueId)))
+                {
+                    dist = Mathf.Max(0f, dist - allocationHysteresisMeters);
+                }
                 allPlaces.Add((place, provider, dist));
             }
         }
