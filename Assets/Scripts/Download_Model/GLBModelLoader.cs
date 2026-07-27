@@ -447,13 +447,15 @@ public class GLBModelLoader : MonoBehaviour
     }
 
     /// <summary>
-    /// GLB JSON에서 materials[].pbrMetallicRoughness.baseColorFactor 직접 파싱.
-    /// glTFast가 URP에서 셰이더 실패로 InternalErrorShader 폴백되면 머터리얼 자체 색을
-    /// 못 읽으므로 JSON에서 원본 직접 추출.
+    /// GLB JSON에서 materials[]의 name + pbrMetallicRoughness.baseColorFactor를 (이름, 색) 쌍으로
+    /// glTF 배열 순서 그대로 파싱. glTFast가 URP에서 InternalErrorShader로 폴백하면 머터리얼
+    /// 자체 색을 못 읽으므로 JSON에서 원본 직접 추출.
+    /// 이름까지 같이 뽑는 이유: glTFast는 Unity Material.name을 gltfMaterial.name 그대로 설정
+    /// (BuiltInMaterialGenerator.cs:220) → 이름 매칭이 위치 기반보다 훨씬 안정적.
     /// </summary>
-    private System.Collections.Generic.List<Color> ParseColorsFromGLBJson(byte[] glbData)
+    private System.Collections.Generic.List<(string name, Color color)> ParseColorsFromGLBJson(byte[] glbData)
     {
-        var list = new System.Collections.Generic.List<Color>();
+        var list = new System.Collections.Generic.List<(string, Color)>();
         try
         {
             if (glbData == null || glbData.Length < 20) return list;
@@ -466,7 +468,7 @@ public class GLBModelLoader : MonoBehaviour
             if (materialsIdx < 0) return list;
             int materialsStart = materialsIdx + "\"materials\":[".Length;
 
-            // 머터리얼 배열 끝 찾기 (괄호 중첩 추적)
+            // 머터리얼 배열 끝 찾기 (대괄호 중첩 추적)
             int depth = 1;
             int matsEnd = materialsStart;
             while (matsEnd < json.Length && depth > 0)
@@ -475,27 +477,46 @@ public class GLBModelLoader : MonoBehaviour
                 else if (json[matsEnd] == ']') depth--;
                 if (depth > 0) matsEnd++;
             }
-
             string matsArr = json.Substring(materialsStart, matsEnd - materialsStart);
-            // 각 머터리얼의 baseColorFactor 추출
-            var matches = System.Text.RegularExpressions.Regex.Matches(
-                matsArr, "\"baseColorFactor\"\\s*:\\s*\\[([^\\]]+)\\]");
-            foreach (System.Text.RegularExpressions.Match m in matches)
+
+            // 개별 머터리얼 객체 단위로 분리 (중괄호 중첩 추적) — name과 baseColorFactor를
+            // 같은 객체 범위 안에서 짝지어야 순서가 어긋나지 않음.
+            int i = 0;
+            while (i < matsArr.Length)
             {
-                string nums = m.Groups[1].Value;
-                string[] parts = nums.Split(',');
-                if (parts.Length >= 3)
+                if (matsArr[i] != '{') { i++; continue; }
+                int objStart = i;
+                int objDepth = 1;
+                i++;
+                while (i < matsArr.Length && objDepth > 0)
                 {
-                    float r, g, b;
-                    if (float.TryParse(parts[0].Trim(), out r) &&
-                        float.TryParse(parts[1].Trim(), out g) &&
-                        float.TryParse(parts[2].Trim(), out b))
+                    if (matsArr[i] == '{') objDepth++;
+                    else if (matsArr[i] == '}') objDepth--;
+                    i++;
+                }
+                string obj = matsArr.Substring(objStart, i - objStart);
+
+                string matName = null;
+                var nameMatch = System.Text.RegularExpressions.Regex.Match(obj, "\"name\"\\s*:\\s*\"([^\"]*)\"");
+                if (nameMatch.Success) matName = nameMatch.Groups[1].Value;
+
+                var colorMatch = System.Text.RegularExpressions.Regex.Match(
+                    obj, "\"baseColorFactor\"\\s*:\\s*\\[([^\\]]+)\\]");
+                Color color = new Color(1f, 1f, 1f, 1f); // glTF 기본값(미지정 시 흰색)
+                if (colorMatch.Success)
+                {
+                    string[] parts = colorMatch.Groups[1].Value.Split(',');
+                    if (parts.Length >= 3 &&
+                        float.TryParse(parts[0].Trim(), out float r) &&
+                        float.TryParse(parts[1].Trim(), out float g) &&
+                        float.TryParse(parts[2].Trim(), out float b))
                     {
                         float a = 1f;
                         if (parts.Length > 3) float.TryParse(parts[3].Trim(), out a);
-                        list.Add(new Color(r, g, b, a));
+                        color = new Color(r, g, b, a);
                     }
                 }
+                list.Add((matName, color));
             }
         }
         catch (System.Exception ex)
@@ -548,55 +569,71 @@ public class GLBModelLoader : MonoBehaviour
             return;
         }
 
-        // JSON에서 색 4개 추출 (이름 기반 매핑 못 찾을 때 fallback, 0번부터 순환)
-        var jsonColors = ParseColorsFromGLBJson(glbData);
-        Debug.Log($"[dbg-GLB] JSON에서 {jsonColors.Count}개 머터리얼 색 추출");
+        // JSON에서 (머터리얼이름, 색) 쌍 추출 — glTF 배열 순서 보존
+        var jsonColorList = ParseColorsFromGLBJson(glbData);
+        Debug.Log($"[dbg-GLB] JSON에서 {jsonColorList.Count}개 머터리얼 (이름,색) 추출");
+        var jsonColorsByName = new System.Collections.Generic.Dictionary<string, Color>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in jsonColorList)
+        {
+            if (!string.IsNullOrEmpty(pair.name) && !jsonColorsByName.ContainsKey(pair.name))
+                jsonColorsByName[pair.name] = pair.color;
+        }
 
-        int byName = 0, byFallback = 0;
-        int fallbackIdx = 0;
+        int byMatName = 0, byGoName = 0, byPosition = 0;
         foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true))
         {
             string goName = r.gameObject.name;
-            Color color;
-            if (V4PartColors.TryGetValue(goName, out color))
-            {
-                byName++;
-            }
-            else if (jsonColors.Count > 0)
-            {
-                color = jsonColors[fallbackIdx % jsonColors.Count];
-                fallbackIdx++;
-                byFallback++;
-            }
-            else
-            {
-                color = Color.white;
-            }
 
             // 머터리얼 공유 방지: r.materials (clone 인스턴스 배열)을 사용해 렌더러마다 고유 머터리얼 강제.
-            // sharedMaterials면 BodyMesh·HeadMesh·Tail* 가 같은 Fur 머터리얼을 가리켜 마지막 SetColor에
-            // 덮어씌워짐. r.materials는 각 렌더러용 클론 생성 + 자동 할당.
+            // sharedMaterials면 같은 머터리얼을 참조하는 여러 렌더러가 서로의 SetColor를 덮어씀.
             var mats = r.materials;
             for (int i = 0; i < mats.Length; i++)
             {
                 if (mats[i] == null) continue;
+
+                // 색 결정은 렌더러가 아니라 "머터리얼 슬롯" 단위 — 렌더러 1개가 여러 머터리얼을
+                // 갖는 일반적인 glTF(외부 제작 캐릭터 에셋 등)에서 슬롯 전체가 단색으로 덮이는 것 방지.
+                Color color;
+                // 1순위: glTF 머터리얼 이름 매칭. glTFast는 Material.name = gltfMaterial.name으로
+                // 설정(BuiltInMaterialGenerator.cs:220) → 원본 이름 그대로 살아있어 가장 신뢰도 높음.
+                string baseMatName = mats[i].name.Replace(" (Instance)", "");
+                if (jsonColorsByName.TryGetValue(baseMatName, out color))
+                {
+                    byMatName++;
+                }
+                // 2순위: GameObject 이름 매핑 — v4 절차적 GLB 전용 안전망 (렌더러당 머터리얼 1개 구조에서만 유효)
+                else if (V4PartColors.TryGetValue(goName, out color))
+                {
+                    byGoName++;
+                }
+                // 3순위: 슬롯 위치 기반 — 머터리얼 이름 정보가 없는 GLB용 최후 수단
+                else if (jsonColorList.Count > 0)
+                {
+                    color = jsonColorList[i % jsonColorList.Count].color;
+                    byPosition++;
+                }
+                else
+                {
+                    color = Color.white;
+                }
+
                 mats[i].shader = targetShader;
                 mats[i].SetColor("_BaseColor", color);
                 mats[i].SetFloat("_Surface", 0); // Opaque
                 if (useEmission)
                 {
-                    // URP/Lit + Emission HDR 증폭: 어두운 색(0.05, 0.04, 0.04)은 1배로는 라이트 없을 때
-                    // 거의 안 보임 → 3배 boost로 baseColor 그대로 보이게 함.
+                    // URP/Lit + Emission HDR 증폭: 어두운 색은 1배로는 라이트 없을 때 거의 안 보임
+                    // → 3배 boost로 baseColor 그대로 보이게 함.
                     Color emColor = color * 3f;
                     emColor.a = 1f;
                     mats[i].SetColor("_EmissionColor", emColor);
                     mats[i].EnableKeyword("_EMISSION");
                     mats[i].globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
                 }
-                r.materials = mats; // 강제 인스턴스 적용
             }
+            r.materials = mats; // 강제 인스턴스 적용 (슬롯 전부 처리 후 1회)
 
-            // 진단: 7개 렌더러 모두 출력 (머터리얼 인스턴스 ID로 공유 여부 확정 가능)
+            // 진단: 렌더러의 전체 슬롯 출력 (머터리얼 인스턴스 ID로 공유 여부 확정 가능)
             var finalMats = r.materials;
             for (int i = 0; i < finalMats.Length; i++)
             {
@@ -606,10 +643,10 @@ public class GLBModelLoader : MonoBehaviour
                 {
                     foreach (var k in finalMats[i].shaderKeywords) { if (k == "_EMISSION") { hasEmKw = true; break; } }
                 }
-                Debug.Log($"[dbg-GLB-mat] r='{goName}' matID={finalMats[i].GetInstanceID()} name='{finalMats[i].name}' shader='{finalMats[i].shader.name}' base={finalMats[i].GetColor("_BaseColor")} em={finalMats[i].GetColor("_EmissionColor")} hasEmKw={hasEmKw}");
+                Debug.Log($"[dbg-GLB-mat] r='{goName}' slot={i} matID={finalMats[i].GetInstanceID()} name='{finalMats[i].name}' shader='{finalMats[i].shader.name}' base={finalMats[i].GetColor("_BaseColor")} em={finalMats[i].GetColor("_EmissionColor")} hasEmKw={hasEmKw}");
             }
         }
-        Debug.Log($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 이름매칭={byName} JSON폴백={byFallback}");
+        Debug.Log($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 재질이름매칭={byMatName} GO이름매칭={byGoName} 위치폴백={byPosition}");
     }
 
     /// <summary>
@@ -664,25 +701,74 @@ public class GLBModelLoader : MonoBehaviour
             attachedCount++;
         }
 
-        // glTFast가 1개 GLB 안무를 노드별로 쪼개서 N개 클립 만드는 경우 다수 → 모두 동시 재생.
-        // Animation 컴포넌트는 같은 layer에 있는 클립 중 하나만 재생하므로, 각 클립을 다른 layer에 두고
-        // Play(name, StopSameLayer)로 호출 → 각 layer가 자기 클립 독립 재생.
-        int layer = 0;
+        // ⚠️ 클립 패턴 2종 구분 — 전부 동시 레이어 재생하면 안 되는 경우가 있음:
+        //  A) 파츠 분할형 (우리 절차적 v4 GLB): glTFast가 하나의 안무를 노드별로 쪼개 클립명이
+        //     실제 GameObject 이름과 1:1 일치(Root/HeadMesh/TailMesh1/TailMesh2). 각 클립이 서로
+        //     다른 파츠만 움직이므로 레이어별 동시 재생이 정확히 의도대로 합쳐짐.
+        //  B) 완제 스켈레톤형 (Quaternius 등 외부 리깅 애셋): 클립명이 의미적 동작 이름(Walk/Attack/
+        //     Idle)이고 각 클립이 스켈레톤 전체(조인트 다수)를 움직임. 이런 클립을 전부 같은 스켈레톤에
+        //     동시 재생하면 Animation(legacy)은 weight=1 여러 layer 중 마지막 layer만 사실상 승리해
+        //     화면엔 한 클립만 보이면서 CPU는 N배로 낭비됨(화면 끊김 원인). → 이 경우 클립 1개만 선택 재생.
+        var nodeNames = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var t in loadedModel.GetComponentsInChildren<Transform>(true)) nodeNames.Add(t.name);
+        bool isPartSplitPattern = true;
         foreach (var clip in clips)
         {
             if (clip == null) continue;
-            var state = anim[clip.name];
-            if (state != null)
-            {
-                state.layer = layer;
-                state.weight = 1f;
-                state.wrapMode = WrapMode.Loop;
-                state.enabled = true;
-            }
-            anim.Play(clip.name, PlayMode.StopSameLayer);
-            layer++;
+            if (!nodeNames.Contains(clip.name)) { isPartSplitPattern = false; break; }
         }
-        Debug.Log($"[dbg-GLB] {attachedCount}개 클립 attach + {layer}개 layer로 동시 재생");
+
+        if (isPartSplitPattern)
+        {
+            // A) 파츠 분할형 — 전부 다른 layer에 동시 재생
+            int layer = 0;
+            foreach (var clip in clips)
+            {
+                if (clip == null) continue;
+                var state = anim[clip.name];
+                if (state != null)
+                {
+                    state.layer = layer;
+                    state.weight = 1f;
+                    state.wrapMode = WrapMode.Loop;
+                    state.enabled = true;
+                }
+                anim.Play(clip.name, PlayMode.StopSameLayer);
+                layer++;
+            }
+            Debug.Log($"[dbg-GLB] 파츠분할형 감지 — {attachedCount}개 클립 attach + {layer}개 layer로 동시 재생");
+        }
+        else
+        {
+            // B) 완제 스켈레톤형 — 자연스러운 동작 1개만 우선순위대로 선택 재생.
+            // 공격/죽음처럼 어색한 클립은 기본 표시로 부적절 → 걷기/뛰기/평온 동작 우선.
+            string[] preferredNames = { "Walk", "Gallop", "Dance", "Run", "Idle_2", "Idle" };
+            AnimationClip chosen = null;
+            foreach (var pref in preferredNames)
+            {
+                foreach (var clip in clips)
+                {
+                    if (clip != null && clip.name.IndexOf(pref, System.StringComparison.OrdinalIgnoreCase) >= 0
+                        && clip.name.IndexOf('|') < 0) // "Armature|Walk" 같은 중복본 제외, 순수 이름 우선
+                    {
+                        chosen = clip;
+                        break;
+                    }
+                }
+                if (chosen != null) break;
+            }
+            if (chosen == null)
+            {
+                foreach (var clip in clips) { if (clip != null) { chosen = clip; break; } }
+            }
+            if (chosen != null)
+            {
+                var state = anim[chosen.name];
+                if (state != null) { state.layer = 0; state.weight = 1f; state.wrapMode = WrapMode.Loop; state.enabled = true; }
+                anim.Play(chosen.name, PlayMode.StopAll);
+            }
+            Debug.Log($"[dbg-GLB] 완제스켈레톤형 감지 — {attachedCount}개 클립 중 '{chosen?.name}' 1개만 선택 재생");
+        }
     }
 
     /// <summary>
@@ -703,6 +789,18 @@ public class GLBModelLoader : MonoBehaviour
         if (anim == null) anim = loadedModel.GetComponentInChildren<Animation>(true);
         if (anim != null && anim.GetClipCount() > 0)
         {
+            // ⚠️ AttachAnimationClips가 이미 올바른 클립을 골라 재생 중일 수 있음 (완제 스켈레톤형은
+            // Walk/Gallop 등을 우선순위로 선택). 여기서 무조건 "첫 attach 클립"을 재생하면 그 선택을
+            // 덮어써 Attack처럼 부적절한 클립으로 되돌아감 → 이미 재생 중이면 재트리거하지 않음.
+            if (anim.isPlaying)
+            {
+                string playingName = null;
+                foreach (AnimationState s in anim) { if (anim.IsPlaying(s.name)) { playingName = s.name; break; } }
+                Debug.Log($"[dbg-GLB] Animation(legacy) 이미 재생 중: '{playingName}' — 재트리거 스킵");
+                StartCoroutine(VerifyAnimRunning(anim, playingName ?? ""));
+                return;
+            }
+
             AnimationClip first = null;
             foreach (AnimationState s in anim) { first = s.clip; break; }
             if (first != null)
