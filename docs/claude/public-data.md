@@ -309,6 +309,25 @@ WHERE category = ANY(ARRAY['gov','edu','park','utility','landmark','culture',
 3. 체크포인트 기준으로 UPDATE → 건수·분포 검증
 4. 실기기 확인
 
+#### ✅ 2026-07-28 실제 수행 기록
+| 항목 | 결과 |
+|------|------|
+| 백업 | `locations_altitude_backup_20260728` (32,811건 전체) |
+| 조회 | Open-Elevation 27,164건 전부 성공 (배치 100건, 504 오류 2회는 재시도로 복구) |
+| 제외 | 음수 표고 58건(데이터 오류) |
+| **UPDATE** | **27,106건 실행 → 실제 변경 26,733건** (나머지 373건은 해안·수면이라 조회값도 0m) |
+| 검증 | 사용자 업로드 변경 **0건** / 기존 수기값 덮어쓰기 **0건** / 1950m 초과 이상치 **0건** |
+
+갱신 후 카테고리별 평균 고도 — 지형과 부합함을 확인:
+`park 176.6m` · `religious 183.3m`(산중 사찰) · `landmark 89.9m` ·
+`sport 77.5m` · `culture 67.9m` · `medical 67.5m` · `edu 60.8m` · `gov 56.8m` · `utility 57.2m`
+
+원복이 필요하면:
+```sql
+UPDATE locations l SET altitude = b.altitude
+FROM locations_altitude_backup_20260728 b WHERE l.id = b.id;
+```
+
 ### 기존 수기 입력값은 덮어쓰지 말 것
 2026-07 이전 작업분 중 gov(90%)·medical(59%)·toilet(100%)·public_facilities는
 **사람이 장소별로 추정해 넣은 값**이 이미 있다(5, 20, 40, 140, 200처럼 딱 떨어지는 숫자가 특징).
