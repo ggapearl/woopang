@@ -245,3 +245,90 @@ DELETE 순서 (반드시 이 순서대로):
 6. locations      (WHERE id = %s)
 ```
 
+---
+
+## 고도(altitude) 처리 — 필독 (2026-07-28 정립)
+
+### 왜 중요한가
+앱은 고도를 **MSL(해발) 기준**으로 사용한다. iOS는 WGS84 타원체 고도를 주므로
+[GeoidHelper.cs](../../Assets/Scripts/Utils/GeoidHelper.cs)가 지역별 오프셋(한국 ~30m)을 더해
+Android(MSL)와 기준을 통일한다. 최종적으로 이 값이 그대로
+`CustomARGeospatialCreatorAnchor.SetCoordinatesAndCreateAnchor()` → `anchorManager.AddAnchor(lat, lon, alt, ...)`로 전달된다.
+
+⚠️ **ARCore의 지형 자동 안착 기능(`ResolveAnchorOnTerrain` / `ResolveAnchorOnRooftop`)은 이 프로젝트에서 사용하지 않는다.**
+따라서 **altitude 값이 곧 오브젝트가 떠 있는 절대 높이**이며, 자동 보정은 일어나지 않는다.
+`altitude=0`은 "지면"이 아니라 **"해발 0m = 바닷물 높이"** 를 의미하므로,
+내륙(지면 해발 30~50m)에서는 오브젝트가 **땅속에 묻힌다.**
+
+### 고도 입력 규칙 (신규 INSERT 시 필수)
+```
+❌ 금지: altitude = 0  으로 넣고 넘어가기
+✅ 필수: INSERT 전에 좌표로 표고를 조회해서 채울 것
+```
+표고 조회는 **Open-Elevation**(오픈소스·무료·인증키 불필요) 사용:
+```python
+# 여러 좌표 일괄 조회 (POST, 배치 100건 권장)
+import json, urllib.request
+payload = json.dumps({"locations": [{"latitude": lat, "longitude": lon}, ...]}).encode()
+req = urllib.request.Request("https://api.open-elevation.com/api/v1/lookup",
+                             data=payload, headers={"Content-Type": "application/json"})
+res = json.loads(urllib.request.urlopen(req, timeout=90).read())
+elevations = [r["elevation"] for r in res["results"]]   # MSL 기준 — 앱 기준과 일치
+```
+- 반환값이 이미 **해발(MSL)** 이라 앱 기준과 그대로 맞는다. 별도 변환 불필요.
+- ⚠️ **런타임(앱)에서 호출 금지.** 공개 서버는 rate limit이 있고, 스폰마다 네트워크 왕복이
+  생겨 화면 끊김이 악화된다. 반드시 **INSERT 시점에 DB에 채워 넣는 방식**으로 처리한다.
+
+### ⚠️ 공공데이터 vs 사용자 업로드 구분 (일괄 작업 시 생명줄)
+고도 일괄 갱신 같은 대량 UPDATE는 **반드시 공공데이터만** 대상으로 한다.
+사용자 업로드분은 앱에서 등록할 때 **폰 GPS 실측 고도**가 들어가 있어 이미 정상이며,
+덮어쓰면 오히려 망가진다.
+
+| 구분 | category | username | 건수(2026-07 기준) |
+|------|----------|----------|--------------------|
+| **공공데이터** | `gov` `edu` `park` `utility` `landmark` `culture` `religious` `medical` `welfare` `sport` `toilet` | 기관 도메인 (`GOV.KR`, `EDU.GO.KR`, `SEOUL.GO.KR` 등) | 32,710 |
+| **사용자 업로드** | `food` `cafe` `shop` 또는 **빈 문자열 `''`** | 계정명(`pdnom`, `sigorpd`) 또는 **장소명 그대로**(`우팡이쉼터`, `홍대정문` 등) | 101 |
+
+두 기준(category / username)이 서로 교차 오염 없이 일치함을 검증 완료.
+**`category = ANY(공공 11종)` 조건만으로 안전하게 분리된다.**
+
+```sql
+-- 안전한 대상 선택
+WHERE category = ANY(ARRAY['gov','edu','park','utility','landmark','culture',
+                           'religious','medical','welfare','sport','toilet'])
+```
+
+⚠️ 지하철·기차역·터미널·공항은 **`public_facilities` 테이블**로 완전히 분리되어 있어
+사용자 데이터가 섞일 여지가 없다 (고도도 대부분 이미 입력됨).
+
+### 일괄 갱신 절차 (대량 작업 시)
+1. **백업 먼저.** `CREATE TABLE locations_altitude_backup_YYYYMMDD AS SELECT id, altitude, ... FROM locations;`
+   (2026-07-28 백업본: `locations_altitude_backup_20260728`, 32,811건)
+2. 대상 조회 → Open-Elevation 배치 호출 → **체크포인트 JSON에 중간 저장**
+   (수만 건이면 수십 분 소요. 중단돼도 이어서 실행 가능하게 할 것)
+3. 체크포인트 기준으로 UPDATE → 건수·분포 검증
+4. 실기기 확인
+
+### 기존 수기 입력값은 덮어쓰지 말 것
+2026-07 이전 작업분 중 gov(90%)·medical(59%)·toilet(100%)·public_facilities는
+**사람이 장소별로 추정해 넣은 값**이 이미 있다(5, 20, 40, 140, 200처럼 딱 떨어지는 숫자가 특징).
+100건 표본 비교 결과 API와 중앙값 +4m 차이로 대체로 일치하지만, **15%는 50m 이상 벌어진다.**
+차이가 큰 쪽은 대개 수기값이 더 정확하므로(예: 예당호 출렁다리 수기 40m vs API 135m),
+**`altitude = 0 OR altitude IS NULL` 인 행만 채우고 기존 값은 보존한다.**
+
+### 🔴 미해결 과제 — 좌표 정밀도
+고도와 별개로 더 심각한 문제가 있다. `locations` 좌표 정밀도 분포:
+
+| 소수점 자릿수 | 건수 | 실제 위치 오차 |
+|---|---|---|
+| 0~1자리 | 149 | 11km ~ 111km |
+| 2자리 | 1,795 | 약 1.1km |
+| 3자리 | 3,193 | 약 110m |
+| 6~7자리(정상) | 약 26,000 | 1m 미만 |
+
+약 **5,100건이 좌표 자체가 뭉개져 있어**, 고도를 고쳐도 AR 오브젝트가 실제 건물에서
+수백 m~1km 떨어진 곳에 뜬다. 주로 `GOV.KR` 출처의 면 단위 행정복지센터.
+→ 해결하려면 **주소 기반 지오코딩으로 좌표 재작성** 필요
+   (VWorld 지오코더 — vworld.kr 회원가입 후 [오픈API > 인증키 > 인증키 발급], data.go.kr 키와 별개.
+    일 40,000건 무료. 단 "결과 DB 저장 금지" 약관 조항 확인 필요).
+
