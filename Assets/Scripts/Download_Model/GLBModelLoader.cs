@@ -20,6 +20,11 @@ public class GLBModelLoader : MonoBehaviour
     [Tooltip("로드 후 첫 애니메이션 클립을 자동 루프 재생. 정적 GLB는 자동 무시")]
     [SerializeField] private bool enableAnimation = true;
 
+    [Header("Spawn Effect")]
+    [Tooltip("로딩 스피너 → 디졸브 등장 연출. 끄면 로드 완료 시 즉시 표시")]
+    [SerializeField] private bool enableSpawnEffect = true;
+    private GLBSpawnEffect spawnEffect;
+
     [Header("Cache Management")]
     [Tooltip("같은 URL을 다시 받으면 RAM 캐시에서 즉시 반환 (dance_anim 재탭 UX). 5개 × ~3MB ≈ 15MB")]
     [SerializeField] private bool enableFileCache = true;
@@ -88,6 +93,14 @@ public class GLBModelLoader : MonoBehaviour
     public IEnumerator LoadGLBModelCoroutine(string url, float scale, System.Action<bool> onComplete)
     {
         Debug.Log($"[dbg-GLB] LoadGLBModelCoroutine START url={url} scale={scale} cacheHas={downloadedFiles.ContainsKey(url)}");
+
+        // 로딩 연출 시작 — 모델이 준비될 때까지 스피너가 자리를 지킨다
+        if (enableSpawnEffect)
+        {
+            if (spawnEffect == null)
+                spawnEffect = GetComponent<GLBSpawnEffect>() ?? gameObject.AddComponent<GLBSpawnEffect>();
+            spawnEffect.BeginLoading(glbContainer != null ? glbContainer : transform);
+        }
 
         if (string.IsNullOrEmpty(url))
         {
@@ -427,6 +440,10 @@ public class GLBModelLoader : MonoBehaviour
             
             // 로딩 후 메모리 정리
             MemoryOptimizationAfterLoading();
+
+            // 스피너를 걷어내며 모델을 서서히 드러낸다 (머터리얼 확정 후 실행)
+            if (enableSpawnEffect && spawnEffect != null)
+                spawnEffect.RevealModel(loadedModel);
             
             onComplete?.Invoke(true);
         }
