@@ -551,23 +551,44 @@ public class GLBModelLoader : MonoBehaviour
                      UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline.GetType().Name.Contains("Universal");
         if (!isURP) return;
 
-        // URP/Lit은 라이트가 있어야 색이 보이는데 AR 씬에 directional light가 없어서 검정.
-        // URP/Unlit은 라이트 무시하지만, 코드에서 어디도 직접 참조 안 하면 빌드 시 stripped됨
-        // (진단 로그로 확정: 빌드에서 "URP/Unlit 셰이더 못 찾음" → magenta fallback).
-        // → fallback chain: Unlit 있으면 그것, 없으면 Lit + Emission으로 라이트 무관하게 강제 발색.
-        Shader targetShader = Shader.Find("Universal Render Pipeline/Unlit");
+        // ⚠️ 셰이더 확보는 Shader.Find에 의존하면 안 된다. 코드에서만 참조하는 셰이더는 빌드에서
+        // stripped되어 Find가 null을 반환 → 원본 머터리얼(Built-In glTF 셰이더)이 그대로 남아 magenta.
+        // 가장 확실한 방법은 Resources 폴더의 머터리얼 에셋을 경유하는 것 —
+        // Resources 하위 에셋은 무조건 빌드에 포함되므로 그 셰이더도 함께 살아남는다.
+        //   1순위: Resources/GLBFallbackUnlit.mat 의 셰이더 (URP/Unlit)
+        //   2~4순위: Shader.Find 체인 (에디터/구버전 대비)
+        // 라이트 없는 AR 씬이므로 Unlit이 기본. Lit로 떨어지면 Emission으로 발색을 보정한다.
+        Shader targetShader = null;
         bool useEmission = false;
-        if (targetShader == null || !targetShader.isSupported)
+
+        var tmplMat = Resources.Load<Material>("GLBFallbackUnlit");
+        if (tmplMat != null && tmplMat.shader != null && tmplMat.shader.isSupported)
         {
-            targetShader = Shader.Find("Universal Render Pipeline/Lit");
-            useEmission = true;
-            Debug.LogWarning("[dbg-GLB] URP/Unlit 없음 → URP/Lit + Emission으로 fallback");
+            targetShader = tmplMat.shader;
         }
-        if (targetShader == null || !targetShader.isSupported)
+        else
         {
-            Debug.LogError("[dbg-GLB] URP/Unlit·URP/Lit 둘 다 못 찾음 또는 미지원");
+            Debug.LogWarning("[dbg-GLB] Resources/GLBFallbackUnlit 로드 실패 → Shader.Find 체인 사용");
+            foreach (var candidate in new[] { "Universal Render Pipeline/Unlit",
+                                              "Universal Render Pipeline/Lit",
+                                              "Unlit/Color", "Sprites/Default" })
+            {
+                var s = Shader.Find(candidate);
+                if (s != null && s.isSupported)
+                {
+                    targetShader = s;
+                    useEmission = candidate.EndsWith("/Lit");
+                    Debug.LogWarning($"[dbg-GLB] 폴백 셰이더 채택: {candidate}");
+                    break;
+                }
+            }
+        }
+        if (targetShader == null)
+        {
+            Debug.LogError("[dbg-GLB] 사용 가능한 셰이더를 하나도 못 찾음 — 원본 머터리얼 유지(magenta 가능)");
             return;
         }
+        Debug.Log($"[dbg-GLB] 셰이더 확보: '{targetShader.name}' (emission보정={useEmission})");
 
         // JSON에서 (머터리얼이름, 색) 쌍 추출 — glTF 배열 순서 보존
         var jsonColorList = ParseColorsFromGLBJson(glbData);
