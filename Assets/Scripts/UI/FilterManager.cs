@@ -74,7 +74,12 @@ public class FilterManager : MonoBehaviour
     public static readonly HashSet<string> PublicDataCategories = new HashSet<string>
     {
         "gov", "edu", "utility", "landmark", "medical",
-        "culture", "sport", "religious", "welfare", "park"
+        "culture", "sport", "religious", "welfare", "park",
+        // toilet은 2026-09 전국 데이터(5.2만건) 구축 후 추가.
+        // 빠져 있으면 ① publicData 토글로 끌 수 없어 항상 표시되고
+        // ② isPublic=false로 분류돼 공공 별도예산이 아닌 메인예산(maxTotalObjects)에서
+        //    사용자 업로드 장소와 경쟁해 도심에서 이들을 밀어낸다.
+        "toilet"
     };
 
     private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
