@@ -481,9 +481,13 @@ public class GLBModelLoader : MonoBehaviour
             string json = System.Text.Encoding.UTF8.GetString(glbData, 20, jsonLen);
 
             // "materials":[ 위치 찾기
-            int materialsIdx = json.IndexOf("\"materials\":[");
-            if (materialsIdx < 0) return list;
-            int materialsStart = materialsIdx + "\"materials\":[".Length;
+            // ⚠️ 리터럴 "\"materials\":[" 로 찾으면 안 된다.
+            // glTF exporter마다 공백 스타일이 다르다 — Blender 압축 출력은 공백이 없지만
+            // FBX 경유로 만들어진 GLB는 "\"materials\": [" 처럼 pretty-print라 매칭에 실패하고,
+            // 그러면 색 추출이 0건이 되어 모델 전체가 흰색으로 렌더링된다.
+            var matsKey = System.Text.RegularExpressions.Regex.Match(json, "\"materials\"\\s*:\\s*\\[");
+            if (!matsKey.Success) return list;
+            int materialsStart = matsKey.Index + matsKey.Length;
 
             // 머터리얼 배열 끝 찾기 (대괄호 중첩 추적)
             int depth = 1;
