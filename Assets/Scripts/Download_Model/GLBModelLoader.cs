@@ -437,6 +437,10 @@ public class GLBModelLoader : MonoBehaviour
             
             // DoubleTap3D 연결 설정
             SetupDoubleTap3DIntegration();
+
+            // 큐브와 동일한 스와이프 회전 — 콜라이더가 준비된 뒤에 붙여야 한다
+            // (CubeTouchRotator는 Awake에서 GetComponent<Collider>()로 자기 콜라이더를 잡는다)
+            SetupTouchRotator();
             
             // 로딩 후 메모리 정리
             MemoryOptimizationAfterLoading();
@@ -1698,8 +1702,44 @@ public class GLBModelLoader : MonoBehaviour
         
     }
 
+
+    /// <summary>
+    /// 큐브(0000_Cube.prefab)와 동일한 드래그 회전을 GLB에도 적용.
+    /// glbContainer에 붙이는 이유: CubeTouchRotator가 hit.collider == myCollider 로
+    /// 자기 것인지 판별하므로, DoubleTap3D가 쓰는 BoxCollider와 같은 GameObject여야 한다.
+    /// 풀에서 재사용될 때 중복 부착되지 않도록 존재 여부를 먼저 확인한다.
+    /// </summary>
+    private void SetupTouchRotator()
+    {
+        if (glbContainer == null) return;
+
+        // 콜라이더가 없으면 회전 판정이 불가능하므로 부착하지 않는다
+        if (glbContainer.GetComponent<Collider>() == null)
+        {
+            Debug.LogWarning("[dbg-GLB] glbContainer에 Collider 없음 — 스와이프 회전 미적용");
+            return;
+        }
+
+        var rotator = glbContainer.GetComponent<CubeTouchRotator>();
+        if (rotator == null)
+        {
+            glbContainer.gameObject.AddComponent<CubeTouchRotator>();
+            Debug.Log("[dbg-GLB] 스와이프 회전 부착 완료 (glbContainer)");
+        }
+        else
+        {
+            rotator.enabled = true;
+        }
+    }
+
     public void ClearModel()
     {
+        // 풀에서 재사용될 때 이전 오브젝트의 회전이 남아 새 장소가 비뚤어져 보이는 것 방지
+        if (glbContainer != null)
+        {
+            glbContainer.localRotation = Quaternion.identity;
+        }
+
         if (loadedModel != null)
         {
             

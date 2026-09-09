@@ -47,6 +47,43 @@ public class DanceAnimPanelSetup
         EnsurePanel();
     }
 
+    /// <summary>
+    /// 기존 패널·컨트롤러를 지우고 현재 코드 수치로 다시 만든다.
+    /// EnsurePanel()은 이미 존재하면 skip하므로, 레이아웃을 바꾼 뒤에는 이 메뉴로 재생성해야 한다.
+    /// </summary>
+    [MenuItem("WOOPANG/dance_anim 패널 재생성", priority = 30)]
+    public static void ForceRebuild()
+    {
+        if (Application.isPlaying)
+        {
+            EditorUtility.DisplayDialog("재생성 불가", "플레이 모드를 끄고 실행하세요.", "확인");
+            return;
+        }
+
+        int removed = 0;
+        foreach (var c in Object.FindObjectsByType<DanceAnimController>(FindObjectsSortMode.None))
+        {
+            if (c.confirmPanel != null) { Object.DestroyImmediate(c.confirmPanel); removed++; }
+            Object.DestroyImmediate(c.gameObject); removed++;
+        }
+        // 컨트롤러 없이 남은 고아 패널도 정리
+        foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None))
+        {
+            if (go.name == PANEL_GO_NAME) { Object.DestroyImmediate(go); removed++; }
+        }
+
+        bool made = EnsurePanel();
+        string msg = $"기존 오브젝트 {removed}개 제거 후 " + (made ? "재생성 완료." : "재생성 실패 — 콘솔 확인.");
+        Debug.Log("[DanceAnimPanelSetup] " + msg);
+
+        if (made)
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+                UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+        }
+        EditorUtility.DisplayDialog("dance_anim 패널", msg + "\n\n씬을 저장하세요 (Ctrl+S).", "확인");
+    }
+
     /// <returns>새로 생성했으면 true, 이미 있으면 false</returns>
     private static bool EnsurePanel()
     {
@@ -79,20 +116,20 @@ public class DanceAnimPanelSetup
         panel.transform.SetParent(canvas.transform, false);
         var pRt = panel.GetComponent<RectTransform>();
         pRt.anchorMin = pRt.anchorMax = pRt.pivot = new Vector2(0.5f, 0.5f);
-        pRt.sizeDelta = new Vector2(640, 380);
+        pRt.sizeDelta = new Vector2(960, 570);
         panel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.05f, 0.94f);
 
         // 타이틀
         Text titleText = CreateText(panel.transform, "Title", "타이틀",
-            new Vector2(0, -40), new Vector2(-40, 70),
+            new Vector2(0, -60), new Vector2(-60, 105),
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f),
-            36, Color.white, font, TextAnchor.MiddleCenter);
+            54, Color.white, font, TextAnchor.MiddleCenter);
 
         // 사이즈/안내 텍스트
         Text sizeText = CreateText(panel.transform, "SizeInfo", "3D 보기 (다운로드 필요)",
-            new Vector2(0, -125), new Vector2(-40, 40),
+            new Vector2(0, -188), new Vector2(-60, 60),
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f),
-            22, new Color(0.75f, 0.75f, 0.75f), font, TextAnchor.MiddleCenter);
+            33, new Color(0.75f, 0.75f, 0.75f), font, TextAnchor.MiddleCenter);
 
         // 진행 그룹 (확인 버튼 누른 후 표시)
         var progressGroup = new GameObject("ProgressGroup", typeof(RectTransform));
@@ -100,23 +137,23 @@ public class DanceAnimPanelSetup
         var grRt = progressGroup.GetComponent<RectTransform>();
         grRt.anchorMin = new Vector2(0, 1); grRt.anchorMax = new Vector2(1, 1);
         grRt.pivot = new Vector2(0.5f, 1f);
-        grRt.anchoredPosition = new Vector2(0, -195);
-        grRt.sizeDelta = new Vector2(-40, 60);
+        grRt.anchoredPosition = new Vector2(0, -292);
+        grRt.sizeDelta = new Vector2(-60, 90);
         progressGroup.SetActive(false);
 
         Text progressText = CreateText(progressGroup.transform, "ProgressText", "준비 중...",
             Vector2.zero, Vector2.zero,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
-            24, Color.white, font, TextAnchor.MiddleCenter);
+            36, Color.white, font, TextAnchor.MiddleCenter);
         var ptRt = progressText.GetComponent<RectTransform>();
         ptRt.offsetMin = Vector2.zero; ptRt.offsetMax = Vector2.zero;
 
         // 확인 / 취소 버튼
         Button confirmBtn = CreateButton(panel.transform, "ConfirmButton", "3D 보기",
-            new Vector2(-110, -285), new Vector2(200, 76),
+            new Vector2(-165, -428), new Vector2(300, 114),
             new Color(0.21f, 0.58f, 0.91f), font);
         Button cancelBtn = CreateButton(panel.transform, "CancelButton", "취소",
-            new Vector2(110, -285), new Vector2(200, 76),
+            new Vector2(165, -428), new Vector2(300, 114),
             new Color(0.4f, 0.4f, 0.4f), font);
 
         panel.SetActive(false);
@@ -181,7 +218,7 @@ public class DanceAnimPanelSetup
         t.text = label;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = Color.white;
-        t.fontSize = 28;
+        t.fontSize = 42;
         t.font = font;
         return go.GetComponent<Button>();
     }
