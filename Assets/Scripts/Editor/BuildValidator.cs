@@ -30,7 +30,37 @@ namespace Editor
             "GLBFallbackUnlit",
         };
 
+        /// <summary>
+        /// Google Play가 요구하는 최소 targetSdk.
+        /// 2026-08-31부터 Android 16(API 36) 미만은 업데이트 업로드가 거부된다.
+        /// (규칙: 최신 Android 출시로부터 1년 이내. 다음 상향 시 이 값만 올리면 된다)
+        /// </summary>
+        private const int RequiredAndroidTargetSdk = 36;
+
         private const string ExpectedMainScene = "Assets/Scenes/woopang_0529.unity";
+
+        /// <summary>
+        /// targetSdk를 요구치로 올린다. Play 요구사항은 매년 상향되므로 수동 조작 대신 메뉴로 둔다.
+        /// PlayerSettings 경유로 설정해야 에디터가 열려 있어도 값이 안전하게 반영된다.
+        /// </summary>
+        [MenuItem("WOOPANG/Android targetSdk 요구치로 설정", priority = 11)]
+        public static void FixAndroidTargetSdk()
+        {
+            int before = (int)PlayerSettings.Android.targetSdkVersion;
+            if (before >= RequiredAndroidTargetSdk && before != 0)
+            {
+                EditorUtility.DisplayDialog("targetSdk",
+                    $"이미 {before} 입니다. 변경하지 않았습니다.", "확인");
+                return;
+            }
+
+            PlayerSettings.Android.targetSdkVersion = (AndroidSdkVersions)RequiredAndroidTargetSdk;
+            AssetDatabase.SaveAssets();
+
+            string msg = $"targetSdk {(before == 0 ? "Automatic" : before.ToString())} → {RequiredAndroidTargetSdk}";
+            Debug.Log("[BuildValidator] " + msg);
+            EditorUtility.DisplayDialog("targetSdk 변경", msg, "확인");
+        }
 
         [MenuItem("WOOPANG/빌드 검증", priority = 10)]
         public static void ValidateMenu()
@@ -71,6 +101,7 @@ namespace Editor
             CheckResources(issues);
             CheckBuildScenes(issues);
             CheckFirebaseConfig(issues);
+            CheckAndroidTargetSdk(issues);
             return issues;
         }
 
@@ -155,6 +186,31 @@ namespace Editor
 
             if (!File.Exists("Assets/GoogleService-Info.plist"))
                 issues.Add("[Firebase] Assets/GoogleService-Info.plist 없음 — iOS 푸시가 동작하지 않습니다.");
+        }
+
+        // -- Google Play target API 요구사항 --------------------
+        private static void CheckAndroidTargetSdk(List<string> issues)
+        {
+            int target = (int)PlayerSettings.Android.targetSdkVersion;
+
+            // 0 = Automatic(설치된 최신). 무엇이 들어갈지 빌드 전에 알 수 없어 명시값을 요구한다.
+            if (target == 0)
+            {
+                issues.Add(
+                    "[targetSdk 자동] Player Settings의 Target API Level이 'Automatic'입니다.\n" +
+                    "  → 설치된 SDK에 따라 값이 달라져 Play 심사 결과를 예측할 수 없습니다.\n" +
+                    $"  → API {RequiredAndroidTargetSdk} 이상으로 명시하세요.");
+                return;
+            }
+
+            if (target < RequiredAndroidTargetSdk)
+            {
+                issues.Add(
+                    $"[targetSdk 미달] 현재 {target} — Google Play 최소 요구치는 {RequiredAndroidTargetSdk}입니다.\n" +
+                    "  → 2026-08-31부터 이보다 낮으면 업데이트 업로드가 거부됩니다.\n" +
+                    "     (기존 설치본은 유지되지만 새 버전을 올릴 수 없습니다)\n" +
+                    "  → Player Settings ▸ Android ▸ Target API Level 을 올리세요.");
+            }
         }
     }
 }
