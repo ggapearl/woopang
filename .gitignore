@@ -155,3 +155,7 @@ guide/
 
 server/
 
+
+# Unity가 gradle 템플릿을 갱신할 때마다 남기는 사본 (빌드마다 늘어남)
+Assets/Plugins/Android/*.gradle.backup*
+Assets/Plugins/Android/*.gradle.backup*.meta
