@@ -66,9 +66,26 @@ namespace Editor
         // ============================================================
         // 백업 파일 자동 복사 설정
         // ============================================================
-        private const bool AUTO_COPY_BACKUP_FILES = true; // 자동 복사 활성화/비활성화
-        private const string BACKUP_INFO_PLIST_PATH = "/Users/pdnom/Desktop/Info.plist";
-        private const string BACKUP_UNITY_APP_CONTROLLER_PATH = "/Users/pdnom/Desktop/UnityAppController.mm";
+        // Info.plist 는 더 이상 파일로 덮어쓰지 않는다 — 필요한 키를 전부 코드로 넣는다(아래 ConfigureInfoPlist).
+        // UnityAppController.mm 은 APNs 토큰 처리 등 커스터마이징이 있어 여전히 복사한다.
+        private const bool AUTO_COPY_INFO_PLIST = false;
+        private const bool AUTO_COPY_UNITY_APP_CONTROLLER = true;
+        // 빌드 맥마다 홈 디렉터리 이름이 달라 경로를 하드코딩하면 파일을 못 찾는다.
+        // (못 찾아도 경고만 남기고 빌드가 계속되므로 권한 문구·푸시 처리가 조용히 빠진다)
+        // 기존 경로를 먼저 확인하고, 없으면 현재 사용자 데스크탑에서 찾는다.
+        private static readonly string BACKUP_INFO_PLIST_PATH = ResolveBackupPath("Info.plist");
+        private static readonly string BACKUP_UNITY_APP_CONTROLLER_PATH = ResolveBackupPath("UnityAppController.mm");
+
+        private static string ResolveBackupPath(string fileName)
+        {
+            string legacyPath = "/Users/pdnom/Desktop/" + fileName;
+            if (File.Exists(legacyPath))
+            {
+                return legacyPath;
+            }
+            string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+            return Path.Combine(home, "Desktop", fileName);
+        }
 
         [PostProcessBuild(999)]
         public static void OnPostProcessBuild(BuildTarget buildTarget, string path)
@@ -86,7 +103,7 @@ namespace Editor
             SetupPushNotificationEntitlements(path);
 
             // 2. 파일 복사/수정 작업
-            if (AUTO_COPY_BACKUP_FILES)
+            if (AUTO_COPY_INFO_PLIST || AUTO_COPY_UNITY_APP_CONTROLLER)
             {
                 CopyBackupFiles(path);
             }
@@ -105,7 +122,7 @@ namespace Editor
             bool unityAppControllerCopied = false;
 
             // Info.plist 복사
-            if (File.Exists(BACKUP_INFO_PLIST_PATH))
+            if (AUTO_COPY_INFO_PLIST && File.Exists(BACKUP_INFO_PLIST_PATH))
             {
                 string targetInfoPlistPath = Path.Combine(buildPath, "Info.plist");
                 try
@@ -125,7 +142,7 @@ namespace Editor
             }
 
             // UnityAppController.mm 복사
-            if (File.Exists(BACKUP_UNITY_APP_CONTROLLER_PATH))
+            if (AUTO_COPY_UNITY_APP_CONTROLLER && File.Exists(BACKUP_UNITY_APP_CONTROLLER_PATH))
             {
                 string targetUnityAppControllerPath = Path.Combine(buildPath, "Classes", "UnityAppController.mm");
                 try
@@ -383,6 +400,90 @@ namespace Editor
             AddUniqueToArray(bgModes, "remote-notification");
             AddUniqueToArray(bgModes, "location");
             AddUniqueToArray(bgModes, "fetch");
+
+            // ============================================================
+            // 아래는 예전에 데스크탑 Info.plist 를 통째로 덮어써서 넣던 값들이다.
+            // 파일 의존을 없애려고 여기로 옮겼다. (2026-09-14)
+            // 실측 비교(오버라이드 O/X 두 번 빌드)로 확인한 차이만 반영한 것이며,
+            // 값이 이미 있어도 덮어써야 하므로 SetIfNotExists 가 아니라 Set 을 쓴다.
+            // ============================================================
+
+            // --- Firebase (푸시) ---
+            rootDict.SetBoolean("FirebaseAppDelegateProxyEnabled", true);
+            rootDict.SetBoolean("FirebaseMessagingAutoInitEnabled", true);
+            rootDict.SetString("FirebaseMessagingAPNSTokenType", "auto");
+
+            // --- Unity 원격 알림 (기본값이 꺼져 있어 강제) ---
+            rootDict.SetBoolean("UnityAddRemoteNotificationCapability", true);
+            rootDict.SetBoolean("UnityNotificationRequestAuthorizationForRemoteNotificationsOnAppLaunch", true);
+            rootDict.SetInteger("UnityRemoteNotificationForegroundPresentationOptions", 7);
+
+            // --- 3D 모델 파일 열기/공유 ---
+            rootDict.SetBoolean("UIFileSharingEnabled", true);
+            rootDict.SetBoolean("LSSupportsOpeningDocumentsInPlace", true);
+            rootDict.SetString("NSDocumentInteractionControllerUsageDescription",
+                "File access is required to select 3D model files for upload.");
+            rootDict.SetString("NSUserNotificationsUsageDescription",
+                "This app uses notifications to send location-based alerts and updates.");
+
+            // 3D 모델 UTI (glb/gltf/fbx/obj)
+            if (!rootDict.values.ContainsKey("UTExportedTypeDeclarations"))
+            {
+                PlistElementArray utis = rootDict.CreateArray("UTExportedTypeDeclarations");
+                PlistElementDict uti = utis.AddDict();
+                uti.SetString("UTTypeIdentifier", "com.woopang.model");
+                uti.SetString("UTTypeDescription", "3D Model Files");
+                PlistElementArray conforms = uti.CreateArray("UTTypeConformsTo");
+                conforms.AddString("public.data");
+                PlistElementDict tagSpec = uti.CreateDict("UTTypeTagSpecification");
+                PlistElementArray exts = tagSpec.CreateArray("public.filename-extension");
+                exts.AddString("glb");
+                exts.AddString("gltf");
+                exts.AddString("fbx");
+                exts.AddString("obj");
+            }
+
+            // --- 화면 회전 (Unity 기본은 Portrait 만) ---
+            PlistElementArray orientations = rootDict.CreateArray("UISupportedInterfaceOrientations");
+            orientations.AddString("UIInterfaceOrientationPortrait");
+            orientations.AddString("UIInterfaceOrientationPortraitUpsideDown");
+            orientations.AddString("UIInterfaceOrientationLandscapeRight");
+            orientations.AddString("UIInterfaceOrientationLandscapeLeft");
+
+            // --- 표시 이름 ---
+            rootDict.SetString("CFBundleDisplayName", "woopang");
+
+            // --- 권한 문구 (Unity 기본값이 "For Geospatial" 같이 모호해 심사 반려 위험) ---
+            rootDict.SetString("NSLocationWhenInUseUsageDescription",
+                "Location used to show AR objects based on proximity to coordinates.");
+            rootDict.SetString("NSPhotoLibraryUsageDescription",
+                "Photos used for AR object placement and capturing photos for upload.");
+            rootDict.SetString("NSPhotoLibraryAddUsageDescription",
+                "Photos used for AR object placement and capturing photos for upload.");
+
+            // --- 마이크 권한 (Unity 기본 영문 대신 기존 문구 유지) ---
+            rootDict.SetString("NSMicrophoneUsageDescription",
+                "WOOPANG에서 영상 촬영 시 마이크 접근이 필요합니다.");
+
+            // --- 수출규정 (없으면 업로드 후 TestFlight 가 MISSING_EXPORT_COMPLIANCE 로 막힌다) ---
+            rootDict.SetBoolean("ITSAppUsesNonExemptEncryption", false);
+
+            // --- ⚠️ UIScene 생명주기 비활성화 (제거하지 말 것) ---
+            // 예전에 데스크탑 Info.plist 를 통째로 덮어쓰면서 Unity 가 만든
+            // UIApplicationSceneManifest 가 같이 지워지고 있었다. 그 덕분에 앱이
+            // 구식(AppDelegate) 경로로 떠서 동작해 왔다.
+            //
+            // 이 키가 있으면 Classes/UI/UnityScene.mm 이 [appController initUnityWithScene:] 를
+            // 호출하는데, 데스크탑 UnityAppController.mm 오버라이드에는 그 메서드가 없어
+            // unrecognized selector 로 **실행 즉시 크래시**한다.
+            //
+            // 근본 해결은 UnityAppController.mm 전체 교체를 그만두고
+            // IMPL_APP_CONTROLLER_SUBCLASS 서브클래스로 바꾸는 것. 그 전까지는 이 키를 지운다.
+            if (rootDict.values.ContainsKey("UIApplicationSceneManifest"))
+            {
+                rootDict.values.Remove("UIApplicationSceneManifest");
+                UnityEngine.Debug.Log("[WOOPANG] UIApplicationSceneManifest 제거 (구 AppController 호환)");
+            }
 
             plist.WriteToFile(plistPath);
             UnityEngine.Debug.Log("[WOOPANG] iOS Info.plist 설정 완료 (권한, ATS, 백그라운드 모드)");
