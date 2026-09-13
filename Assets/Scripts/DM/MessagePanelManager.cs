@@ -1781,31 +1781,58 @@ public class MessagePanelManager : MonoBehaviour
         Image itemBg = item.AddComponent<Image>();
         itemBg.color = skeletonBgColor;
 
-        // 아바타 플레이스홀더 (둥근 원)
+        // 아바타 플레이스홀더 (원형)
         float avatarSize = itemHeight * 0.65f;
-        GameObject avatar = CreateSkeletonBlock(item.transform, "Avatar",
-            new Vector2(16f + avatarSize * 0.5f, 0f),
+        float padding = 16f;
+        CreateSkeletonBlock(item.transform, "Avatar",
+            new Vector2(padding + avatarSize * 0.5f, 0f),
             new Vector2(avatarSize, avatarSize),
             skeletonContentColor, true);
 
-        // 이름 플레이스홀더 (상단 바)
-        float textStartX = 16f + avatarSize + 16f;
-        float availableWidth = 600f; // 대략적인 사용 가능 너비
-        GameObject nameLine = CreateSkeletonBlock(item.transform, "NameLine",
-            new Vector2(textStartX + availableWidth * 0.2f, itemHeight * 0.18f),
-            new Vector2(availableWidth * 0.4f, 20f),
-            skeletonContentColor, false);
+        // 이름/메시지 바는 앵커로 늘린다.
+        // 예전엔 availableWidth=600f 로 너비를 가정했는데, 실제 행 너비는
+        // 레이아웃이 정하므로 기기 폭이 다르면 바가 넘치거나 짧게 보였다.
+        float textStartX = padding + avatarSize + padding;
 
-        // 메시지 플레이스홀더 (하단 바, 더 넓고 옅게)
-        GameObject msgLine = CreateSkeletonBlock(item.transform, "MsgLine",
-            new Vector2(textStartX + availableWidth * 0.35f, -itemHeight * 0.15f),
-            new Vector2(availableWidth * 0.7f, 16f),
-            new Color(skeletonContentColor.r, skeletonContentColor.g, skeletonContentColor.b, 0.05f), false);
+        CreateSkeletonBar(item.transform, "NameLine",
+            textStartX, 0.55f, itemHeight * 0.18f, 20f,
+            skeletonContentColor);
+
+        CreateSkeletonBar(item.transform, "MsgLine",
+            textStartX, 0.86f, -itemHeight * 0.15f, 16f,
+            new Color(skeletonContentColor.r, skeletonContentColor.g,
+                      skeletonContentColor.b, skeletonContentColor.a * 0.6f));
 
         // 쉬머 효과 적용
         item.AddComponent<ShimmerEffect>();
 
         return item;
+    }
+
+    /// <summary>
+    /// 가로로 늘어나는 스켈레톤 바.
+    /// leftInset 부터 시작해 행 너비의 widthRatio 만큼 차지한다(고정 px 아님).
+    /// </summary>
+    private GameObject CreateSkeletonBar(Transform parent, string name,
+        float leftInset, float widthRatio, float y, float height, Color color)
+    {
+        GameObject bar = new GameObject(name);
+        bar.transform.SetParent(parent, false);
+
+        RectTransform rect = bar.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(Mathf.Clamp01(widthRatio), 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.offsetMin = new Vector2(leftInset, y - height * 0.5f);
+        rect.offsetMax = new Vector2(0f, y + height * 0.5f);
+
+        Image img = bar.AddComponent<Image>();
+        img.color = color;
+        img.raycastTarget = false;
+        img.sprite = SkeletonSprites.Rounded;
+        img.type = Image.Type.Sliced;
+
+        return bar;
     }
 
     /// <summary>
@@ -1827,10 +1854,16 @@ public class MessagePanelManager : MonoBehaviour
         img.color = color;
         img.raycastTarget = false;
 
-        // 둥근 모서리 (원형 마스크 대용 — 모서리 둥글게)
+        // 예전엔 sprite 를 지정하지 않은 채 Type.Sliced 만 걸어서
+        // 원형이라는 주석과 달리 실제로는 각진 사각형이 나왔다.
         if (circle)
         {
-            // 원형: 기본 UI Sprite를 사용 (Unity 내장)
+            img.sprite = SkeletonSprites.Circle;
+            img.type = Image.Type.Simple;
+        }
+        else
+        {
+            img.sprite = SkeletonSprites.Rounded;
             img.type = Image.Type.Sliced;
         }
 

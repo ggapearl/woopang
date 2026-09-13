@@ -2,162 +2,143 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// UI 요소에 좌우로 흐르는 쉬머 효과를 적용 (Mask 기반)
+/// 스켈레톤 로딩용 쉬머(빛 흐름) 효과.
+///
+/// 이전 구현의 어색했던 점과 수정 내용:
+///  1) Mathf.Repeat 로 끝나자마자 왼쪽으로 순간이동해 다시 시작 → 끊기는 느낌.
+///     쓸고 지나간 뒤 잠깐 쉬는 구간(dwell)을 두고, 그 동안에는 숨긴다.
+///  2) 모든 행이 Time.time 만 보고 움직여 15개가 완전히 같은 위상으로 행진.
+///     형제 인덱스로 위상을 어긋나게 해 물결처럼 내려가게 한다.
+///  3) 선형 Lerp 라 속도가 일정 → 기계적. SmoothStep 으로 가감속을 준다.
+///  4) 행마다 512x1 텍스처와 Sprite 를 새로 만들고 Mask(스텐실)까지 붙어
+///     15행이면 텍스처 15장 + 드로우콜 증가. 텍스처는 정적으로 공유하고
+///     Mask 대신 RectMask2D(스텐실 불필요)를 쓴다.
 /// </summary>
 public class ShimmerEffect : MonoBehaviour
 {
     [Header("Shimmer Settings")]
-    [Tooltip("쉬머 효과 속도")]
-    [Range(0.1f, 3f)]
-    [SerializeField] private float shimmerSpeed = 0.5f;
+    [Tooltip("한 번 쓸고 지나가는 데 걸리는 시간(초)")]
+    [Range(0.4f, 3f)]
+    [SerializeField] private float sweepDuration = 1.15f;
 
-    [Tooltip("쉬머 효과 너비")]
-    [Range(50f, 400f)]
-    [SerializeField] private float shimmerWidth = 150f;
-
-    [Tooltip("쉬머 효과 강도 (밝기)")]
+    [Tooltip("쓸고 난 뒤 쉬는 시간(초). 0이면 쉼 없이 계속 흐른다")]
     [Range(0f, 2f)]
-    [SerializeField] private float shimmerIntensity = 0.8f;
+    [SerializeField] private float dwellDuration = 0.45f;
+
+    [Tooltip("쉬머 띠 너비")]
+    [Range(50f, 400f)]
+    [SerializeField] private float shimmerWidth = 170f;
+
+    [Tooltip("쉬머 밝기")]
+    [Range(0f, 1f)]
+    [SerializeField] private float shimmerIntensity = 0.35f;
 
     [Tooltip("쉬머 색상")]
-    [SerializeField] private Color shimmerColor = new Color(1f, 1f, 1f, 1f);
+    [SerializeField] private Color shimmerColor = Color.white;
 
-    [Tooltip("쉬머 각도 (도)")]
+    [Tooltip("쉬머 기울기(도)")]
     [Range(-45f, 45f)]
-    [SerializeField] private float shimmerAngle = 15f;
+    [SerializeField] private float shimmerAngle = 14f;
 
-    [Tooltip("그라디언트 부드러움 (높을수록 부드러움)")]
-    [Range(1f, 5f)]
-    [SerializeField] private float gradientSmoothness = 2f;
+    [Tooltip("행마다 어긋나는 정도(초). 0이면 모두 동시에 움직인다")]
+    [Range(0f, 0.5f)]
+    [SerializeField] private float perRowStagger = 0.09f;
 
-    private Image shimmerImage;
-    private RectTransform shimmerRect;
+    // 512x1 그라디언트는 모양이 항상 같다 — 행마다 만들 이유가 없어 공유한다
+    private static Sprite sharedGradient;
+
     private RectTransform parentRect;
-    private Material shimmerMaterial;
+    private RectTransform shimmerRect;
+    private Image shimmerImage;
+    private float phaseOffset;
 
     void Awake()
     {
         parentRect = GetComponent<RectTransform>();
-        CreateShimmerOverlay();
+        BuildOverlay();
     }
 
-    void CreateShimmerOverlay()
+    private void BuildOverlay()
     {
-        // 부모의 Image 컴포넌트 확인
-        Image parentImage = GetComponent<Image>();
-        if (parentImage == null)
+        if (GetComponent<Image>() == null)
         {
-            Debug.LogWarning("[ShimmerEffect] 부모 오브젝트에 Image 컴포넌트가 없습니다!");
+            Debug.LogWarning("[ShimmerEffect] Image 컴포넌트가 없어 쉬머를 적용할 수 없습니다");
+            enabled = false;
             return;
         }
 
-        // 실제 쉬머 이미지 생성 (부모 직속 자식)
-        GameObject shimmerChildObj = new GameObject("ShimmerGradient");
-        shimmerChildObj.transform.SetParent(transform, false);
-        shimmerChildObj.transform.SetAsLastSibling(); // 맨 위에 표시
+        // 형제 순서만큼 위상을 밀어 물결처럼 보이게 한다
+        phaseOffset = transform.GetSiblingIndex() * perRowStagger;
 
-        RectTransform childRect = shimmerChildObj.AddComponent<RectTransform>();
-        childRect.anchorMin = new Vector2(0, 0);
-        childRect.anchorMax = new Vector2(0, 1);
-        childRect.pivot = new Vector2(0.5f, 0.5f);
-        childRect.sizeDelta = new Vector2(shimmerWidth, 0);
-        childRect.localRotation = Quaternion.Euler(0, 0, shimmerAngle);
+        var go = new GameObject("ShimmerGradient");
+        go.transform.SetParent(transform, false);
+        go.transform.SetAsLastSibling();
 
-        shimmerImage = shimmerChildObj.AddComponent<Image>();
+        shimmerRect = go.AddComponent<RectTransform>();
+        shimmerRect.anchorMin = new Vector2(0f, 0f);
+        shimmerRect.anchorMax = new Vector2(0f, 1f);
+        shimmerRect.pivot = new Vector2(0.5f, 0.5f);
+        shimmerRect.sizeDelta = new Vector2(shimmerWidth, 0f);
+        shimmerRect.localRotation = Quaternion.Euler(0f, 0f, shimmerAngle);
+
+        shimmerImage = go.AddComponent<Image>();
         shimmerImage.raycastTarget = false;
+        shimmerImage.sprite = GetSharedGradient();
+        shimmerImage.color = new Color(shimmerColor.r, shimmerColor.g, shimmerColor.b, shimmerIntensity);
 
-        // 부모와 동일한 sprite 사용 (Mask 효과)
-        shimmerImage.type = Image.Type.Filled;
-        shimmerImage.fillMethod = Image.FillMethod.Horizontal;
-        shimmerImage.fillOrigin = 0;
-        shimmerImage.fillAmount = 1f;
-
-        // 그라디언트 텍스처 생성
-        CreateGradientTexture();
-
-        // Mask 컴포넌트를 부모에 추가
-        Mask mask = GetComponent<Mask>();
-        if (mask == null)
-        {
-            mask = gameObject.AddComponent<Mask>();
-        }
-        mask.showMaskGraphic = true; // 부모 그래픽도 보이도록
+        // Mask(스텐실 2패스) 대신 RectMask2D — 사각형 클리핑이면 이쪽이 싸다
+        if (GetComponent<Mask>() == null && GetComponent<RectMask2D>() == null)
+            gameObject.AddComponent<RectMask2D>();
     }
 
-    void CreateGradientTexture()
+    private static Sprite GetSharedGradient()
     {
-        // 부드러운 그라디언트 텍스처 생성
-        int width = 512;
-        int height = 1;
-        Texture2D gradientTexture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        if (sharedGradient != null) return sharedGradient;
+
+        const int width = 512;
+        var tex = new Texture2D(width, 1, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        tex.hideFlags = HideFlags.HideAndDontSave;
 
         for (int x = 0; x < width; x++)
         {
-            float t = (float)x / width;
-
-            // 더 부드러운 곡선 (가우시안 비슷한 곡선)
-            float centerDist = Mathf.Abs(t - 0.5f) * 2f; // 0~1
-            float alpha = Mathf.Pow(1f - centerDist, gradientSmoothness) * shimmerIntensity;
-
-            Color color = shimmerColor;
-            color.a = Mathf.Clamp01(alpha);
-            gradientTexture.SetPixel(x, 0, color);
+            float t = (float)x / (width - 1);
+            // 가운데가 가장 밝은 부드러운 띠
+            float d = Mathf.Abs(t - 0.5f) * 2f;
+            float a = Mathf.SmoothStep(1f, 0f, d);
+            tex.SetPixel(x, 0, new Color(1f, 1f, 1f, a * a));
         }
+        tex.Apply();
 
-        gradientTexture.Apply();
-        gradientTexture.wrapMode = TextureWrapMode.Clamp;
-        gradientTexture.filterMode = FilterMode.Bilinear;
-
-        // Sprite 생성 및 적용
-        Sprite gradientSprite = Sprite.Create(
-            gradientTexture,
-            new Rect(0, 0, width, height),
-            new Vector2(0.5f, 0.5f)
-        );
-
-        shimmerImage.sprite = gradientSprite;
+        sharedGradient = Sprite.Create(tex, new Rect(0, 0, width, 1), new Vector2(0.5f, 0.5f));
+        sharedGradient.hideFlags = HideFlags.HideAndDontSave;
+        return sharedGradient;
     }
 
     void Update()
     {
-        ApplyShimmer();
-    }
-
-    void ApplyShimmer()
-    {
         if (shimmerImage == null || parentRect == null) return;
 
-        RectTransform childRect = shimmerImage.GetComponent<RectTransform>();
-        if (childRect == null) return;
+        float cycle = sweepDuration + dwellDuration;
+        if (cycle <= 0f) return;
 
-        // 시간에 따라 좌우로 이동
-        float time = Time.time * shimmerSpeed;
-        float parentWidth = parentRect.rect.width;
+        float t = Mathf.Repeat(Time.time + phaseOffset, cycle);
 
-        // 완전히 왼쪽 밖에서 오른쪽 밖으로 이동
-        float totalDistance = parentWidth + shimmerWidth * 2;
-        float normalizedTime = Mathf.Repeat(time, 1f);
-        float xPos = Mathf.Lerp(-shimmerWidth, parentWidth + shimmerWidth, normalizedTime);
+        // 쉬는 구간에는 아예 숨긴다 — 예전엔 여기서 순간이동해 튀어 보였다
+        if (t > sweepDuration)
+        {
+            if (shimmerImage.enabled) shimmerImage.enabled = false;
+            return;
+        }
+        if (!shimmerImage.enabled) shimmerImage.enabled = true;
 
-        childRect.anchoredPosition = new Vector2(xPos, 0);
+        float u = Mathf.SmoothStep(0f, 1f, t / sweepDuration);   // 가감속
+        float w = parentRect.rect.width;
+        float x = Mathf.Lerp(-shimmerWidth, w + shimmerWidth, u);
+
+        shimmerRect.anchoredPosition = new Vector2(x, 0f);
     }
 
-    void OnDestroy()
-    {
-        // 텍스처 정리
-        if (shimmerImage != null && shimmerImage.sprite != null)
-        {
-            Texture2D texture = shimmerImage.sprite.texture;
-            Destroy(shimmerImage.sprite);
-            if (texture != null)
-            {
-                Destroy(texture);
-            }
-        }
-
-        if (shimmerMaterial != null)
-        {
-            Destroy(shimmerMaterial);
-        }
-    }
+    // 공유 스프라이트는 파괴하지 않는다 — 다른 스켈레톤 행이 계속 쓴다
 }
