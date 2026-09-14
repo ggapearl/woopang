@@ -68,6 +68,11 @@ namespace Editor
         // ============================================================
         // Info.plist 는 더 이상 파일로 덮어쓰지 않는다 — 필요한 키를 전부 코드로 넣는다(아래 ConfigureInfoPlist).
         // UnityAppController.mm 은 APNs 토큰 처리 등 커스터마이징이 있어 여전히 복사한다.
+        // APNs 환경. TestFlight/App Store 로만 배포하므로 항상 production 이다.
+        // Xcode 에서 손으로 고치던 값이라 클린 빌드 때마다 development 로 되돌아갔다.
+        // development 로 나가면 프로덕션 기기가 샌드박스 토큰을 받아 푸시가 조용히 죽는다.
+        private const string APS_ENVIRONMENT = "production";
+
         private const bool AUTO_COPY_INFO_PLIST = false;
         private const bool AUTO_COPY_UNITY_APP_CONTROLLER = true;
         // 빌드 맥마다 홈 디렉터리 이름이 달라 경로를 하드코딩하면 파일을 못 찾는다.
@@ -521,18 +526,31 @@ namespace Editor
             string relativeEntitlementsPath = "Unity-iPhone/Unity-iPhone.entitlements";
             string entitlementsPath = Path.Combine(path, relativeEntitlementsPath);
 
-            // Entitlements 파일 먼저 생성 (AddCapability보다 먼저 있어야 함)
-            if (!File.Exists(entitlementsPath))
-            {
-                // 디렉토리 확인
-                string entitlementsDir = Path.GetDirectoryName(entitlementsPath);
-                if (!Directory.Exists(entitlementsDir))
-                    Directory.CreateDirectory(entitlementsDir);
+            // Entitlements 는 AddCapability 보다 먼저 존재해야 한다.
+            // 예전엔 파일이 없을 때만 만들어서, 같은 폴더에 덮어 빌드하면 손으로 고친 값이
+            // 남고 새 폴더로 클린 빌드하면 development 로 돌아갔다. 이제 매 빌드 강제한다.
+            string entitlementsDir = Path.GetDirectoryName(entitlementsPath);
+            if (!Directory.Exists(entitlementsDir))
+                Directory.CreateDirectory(entitlementsDir);
 
-                var entitlements = new PlistDocument();
-                entitlements.root.SetString("aps-environment", "development");
-                entitlements.WriteToFile(entitlementsPath);
+            var entitlements = new PlistDocument();
+            if (File.Exists(entitlementsPath))
+            {
+                // 이미 있으면 읽어서 다른 키(app group, keychain 등)는 보존한다.
+                // 남은 파일이 깨져 있어도 빌드를 세우지 않고 새로 만든다 — 이 키가 빠지는 것보다 낫다.
+                try
+                {
+                    entitlements.ReadFromFile(entitlementsPath);
+                }
+                catch (System.Exception e)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        "[WOOPANG] 기존 entitlements 를 읽지 못해 새로 생성합니다: " + e.Message);
+                    entitlements = new PlistDocument();
+                }
             }
+            entitlements.root.SetString("aps-environment", APS_ENVIRONMENT);
+            entitlements.WriteToFile(entitlementsPath);
 
             // Entitlements 파일 경로와 함께 Capability 추가
             project.AddCapability(mainTargetGuid, PBXCapabilityType.PushNotifications, relativeEntitlementsPath);
@@ -542,7 +560,7 @@ namespace Editor
             project.SetBuildProperty(mainTargetGuid, "CODE_SIGN_ENTITLEMENTS", relativeEntitlementsPath);
             project.WriteToFile(projectPath);
 
-            UnityEngine.Debug.Log("[WOOPANG] iOS Push Notification Entitlements 설정 완료");
+            UnityEngine.Debug.Log($"[WOOPANG] iOS Push Entitlements 설정 완료 — aps-environment={APS_ENVIRONMENT}");
         }
 
         // ============================================================
