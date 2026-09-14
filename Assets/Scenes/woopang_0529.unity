@@ -12452,7 +12452,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 42
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -15275,7 +15275,7 @@ MonoBehaviour:
   conversationItemHeight: 140
   conversationListSpacing: 2
   skeletonItemCount: 15
-  skeletonMinDuration: 1
+  skeletonMinDuration: 0.5
   skeletonBgColor: {r: 0.15, g: 0.15, b: 0.18, a: 1}
   skeletonContentColor: {r: 0.22, g: 0.22, b: 0.26, a: 1}
   chatReceiveSfx: {fileID: 8300000, guid: 462d31d76cc528c4fbe28ecfdbd0a117, type: 3}
@@ -16041,7 +16041,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 54
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
@@ -16404,7 +16404,7 @@ MonoBehaviour:
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 42
     m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
