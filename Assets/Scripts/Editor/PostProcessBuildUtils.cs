@@ -74,7 +74,7 @@ namespace Editor
         private const string APS_ENVIRONMENT = "production";
 
         private const bool AUTO_COPY_INFO_PLIST = false;
-        private const bool AUTO_COPY_UNITY_APP_CONTROLLER = true;
+        private const bool AUTO_COPY_UNITY_APP_CONTROLLER = false;
         // 빌드 맥마다 홈 디렉터리 이름이 달라 경로를 하드코딩하면 파일을 못 찾는다.
         // (못 찾아도 경고만 남기고 빌드가 계속되므로 권한 문구·푸시 처리가 조용히 빠진다)
         // 기존 경로를 먼저 확인하고, 없으면 현재 사용자 데스크탑에서 찾는다.
