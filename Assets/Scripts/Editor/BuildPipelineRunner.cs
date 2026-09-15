@@ -27,7 +27,10 @@ namespace Editor
     /// </summary>
     public static class BuildPipelineRunner
     {
-        private const string DefaultOutputDir = "Builds";
+        // 기본 빌드 출력 폴더: 바탕화면/woopang_build (2026-09-15 대표님 지시)
+        // Environment.SpecialFolder.DesktopDirectory 라 Windows/맥 양쪽 바탕화면을 가리킨다.
+        private static string DefaultOutputDir =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "woopang_build");
 
         [MenuItem("WOOPANG/빌드 ▸ Android (검증 포함)", priority = 20)]
         public static void BuildAndroidMenu() => RunAndroid(interactive: true);
@@ -136,7 +139,8 @@ namespace Editor
             if (target == BuildTarget.Android)
             {
                 Directory.CreateDirectory(DefaultOutputDir);
-                return Path.Combine(DefaultOutputDir, $"woopang_{ver}_{stamp}.apk");
+                string ext = EditorUserBuildSettings.buildAppBundle ? "aab" : "apk";
+                return Path.Combine(DefaultOutputDir, $"woopang_{ver}_{stamp}.{ext}");
             }
 
             // iOS는 폴더(Xcode 프로젝트)로 나온다
