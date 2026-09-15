@@ -104,6 +104,15 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("이 거리(m) 이상의 오브젝트는 인디케이터 표시 안함 (0이면 제한 없음)")]
     [SerializeField] private float maxIndicatorDistance = 0f;
 
+    [Header("화살표 거리별 투명도")]
+    [Tooltip("이 거리(m) 이하의 화살표는 완전 불투명")]
+    [SerializeField] private float arrowFadeNearDistance = 50f;
+    [Tooltip("이 거리(m) 이상의 화살표는 arrowFarAlpha 까지 흐려짐")]
+    [SerializeField] private float arrowFadeFarDistance = 300f;
+    [Tooltip("먼 거리 화살표의 최소 투명도(0=완전투명, 1=불투명)")]
+    [Range(0f, 1f)]
+    [SerializeField] private float arrowFarAlpha = 0.4f;
+
     [Header("=== 일반 모드 인디케이터 개수 제한 ===")]
     [Tooltip("일반 모드에서 화살표 최대 표시 개수 (0이면 제한 없음, 가까운 순)")]
     [SerializeField] private int maxNormalIndicatorCount = 12;
@@ -476,6 +485,19 @@ public class OffScreenIndicator : MonoBehaviour
             if (indicator)
             {
                 indicator.SetImageColor(target.TargetColor);
+
+                // 화살표(오브젝트가 화면 밖)만 거리에 따라 투명하게 — 멀리 있어 offscreen 표시만
+                // 남는 경우 너무 튀지 않도록. 박스(화면 안)는 항상 불투명.
+                if (info.isArrow)
+                {
+                    float fadeT = Mathf.InverseLerp(arrowFadeNearDistance, arrowFadeFarDistance, info.distanceFromCamera);
+                    indicator.SetDistanceAlpha(Mathf.Lerp(1f, arrowFarAlpha, fadeT));
+                }
+                else
+                {
+                    indicator.SetDistanceAlpha(1f);
+                }
+
                 if (target.NeedDistanceText)
                 {
                     indicator.SetDistanceText(info.distanceFromCamera, target.DistanceTextColor, target.PlaceName);

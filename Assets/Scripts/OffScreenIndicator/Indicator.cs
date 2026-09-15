@@ -20,6 +20,10 @@ public class Indicator : MonoBehaviour
     public float arrowFadeDuration = 0.3f;
 
     private CanvasGroup canvasGroup;
+
+    // 거리에 따른 목표 투명도(1=불투명). OffScreenIndicator 가 화살표일 때 매 프레임 설정한다.
+    // 페이드인과 곱해져, 등장은 0→distanceAlpha 로 자연스럽게 이어진다.
+    private float distanceAlpha = 1f;
     private Coroutine fadeCoroutine;
     private bool isFirstActivation = true;
 
@@ -173,10 +177,10 @@ public class Indicator : MonoBehaviour
         }
         else if (value && !isFirstActivation && !wasActive)
         {
-            // 재활성화 시에는 페이드인 없이 즉시 표시
+            // 재활성화 시에는 페이드인 없이 즉시 표시 (거리 기반 투명도 반영)
             if (canvasGroup != null)
             {
-                canvasGroup.alpha = 1f;
+                canvasGroup.alpha = distanceAlpha;
             }
         }
         else if (!value)
@@ -223,13 +227,13 @@ public class Indicator : MonoBehaviour
             float t = elapsed / duration;
 
             // 페이드인
-            canvasGroup.alpha = Mathf.Lerp(0f, 1f, t);
+            canvasGroup.alpha = Mathf.Lerp(0f, distanceAlpha, t);
 
             yield return null;
         }
 
-        // 최종 알파값 1
-        canvasGroup.alpha = 1f;
+        // 최종 알파값 = 거리 기반 목표
+        canvasGroup.alpha = distanceAlpha;
         fadeCoroutine = null;
     }
 
@@ -257,6 +261,19 @@ public class Indicator : MonoBehaviour
         if (canvasGroup != null)
         {
             canvasGroup.alpha = alpha;
+        }
+    }
+
+    /// <summary>
+    /// 거리 기반 목표 투명도를 설정한다. 페이드인 중이 아니면 즉시 반영하고,
+    /// 페이드인 중이면 값만 갱신해 코루틴이 이 값을 향해 진행한다(깜빡임 방지).
+    /// </summary>
+    public void SetDistanceAlpha(float alpha)
+    {
+        distanceAlpha = Mathf.Clamp01(alpha);
+        if (canvasGroup != null && fadeCoroutine == null)
+        {
+            canvasGroup.alpha = distanceAlpha;
         }
     }
 
