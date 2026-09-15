@@ -1,0 +1,9 @@
+{
+  "_readme": "버전별 스토어 출시노트(What's New). 키 = ProjectSettings 의 bundleVersion. 빌드 자동화(iOS 맥 세션)는 현재 bundleVersion 으로 이 맵을 조회해 ko/en 노트를 App Store Connect / Play Console 의 What's New 에 넣는다. 새 버전 빌드 전 항목을 추가할 것.",
+  "versions": {
+    "1.2.51": {
+      "ko": "• 3D 캐릭터가 제대로 표시됩니다 — 색상이 올바르게 나오고, 화면을 쓸어 돌려볼 수 있습니다.\n• 화면 밖 장소 표시(화살표)가 거리에 따라 자연스럽게 흐려집니다.\n• 메시지함 로딩이 더 부드러워졌습니다.\n• 공중화장실 전국 약 5만 곳이 추가됐습니다.\n• 카카오·구글·애플 로그인이 안정화됐습니다 — 다시 로그인해도 같은 계정으로 들어옵니다.\n• 이동 후 멈추면 주변 장소를 다시 불러오고, 신호가 약할 때 안내를 표시합니다.\n• 보안 및 안정성 개선.",
+      "en": "• 3D characters now display correctly — proper colors, and you can swipe to rotate them.\n• Off-screen place arrows now fade smoothly with distance.\n• Smoother message inbox loading.\n• Around 50,000 public restrooms nationwide have been added.\n• Kakao / Google / Apple sign-in stabilized — you now return to the same account.\n• Nearby places reload after you stop moving, with a notice when the signal is weak.\n• Security and stability improvements."
+    }
+  }
+}
