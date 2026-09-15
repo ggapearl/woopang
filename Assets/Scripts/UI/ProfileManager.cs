@@ -902,6 +902,7 @@ public class ProfileManager : MonoBehaviour
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 
@@ -931,6 +932,7 @@ public class ProfileManager : MonoBehaviour
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 
@@ -1598,6 +1600,7 @@ public class ProfileManager : MonoBehaviour
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 
@@ -1638,6 +1641,7 @@ public class ProfileManager : MonoBehaviour
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 

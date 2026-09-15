@@ -1052,9 +1052,7 @@ public class FollowManager : MonoBehaviour
         {
             request.certificateHandler = new BypassCertificateHandler();
 
-            string token = PlayerPrefs.GetString("auth_token", "");
-            if (!string.IsNullOrEmpty(token))
-                request.SetRequestHeader("Authorization", $"Bearer {token}");
+            LoginManager.ApplyAuth(request);
 
             request.downloadHandler = new DownloadHandlerBuffer();
             yield return request.SendWebRequest();
@@ -1081,9 +1079,7 @@ public class FollowManager : MonoBehaviour
         {
             request.certificateHandler = new BypassCertificateHandler();
 
-            string token = PlayerPrefs.GetString("auth_token", "");
-            if (!string.IsNullOrEmpty(token))
-                request.SetRequestHeader("Authorization", $"Bearer {token}");
+            LoginManager.ApplyAuth(request);
 
             request.downloadHandler = new DownloadHandlerBuffer();
             yield return request.SendWebRequest();
@@ -1312,9 +1308,7 @@ public class FollowManager : MonoBehaviour
         {
             request.certificateHandler = new BypassCertificateHandler();
 
-            string token = PlayerPrefs.GetString("auth_token", "");
-            if (!string.IsNullOrEmpty(token))
-                request.SetRequestHeader("Authorization", $"Bearer {token}");
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 
@@ -1362,9 +1356,7 @@ public class FollowManager : MonoBehaviour
         {
             request.certificateHandler = new BypassCertificateHandler();
 
-            string token = PlayerPrefs.GetString("auth_token", "");
-            if (!string.IsNullOrEmpty(token))
-                request.SetRequestHeader("Authorization", $"Bearer {token}");
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 

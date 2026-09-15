@@ -1571,6 +1571,7 @@ public class MessagePanelManager : MonoBehaviour
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -2509,6 +2510,7 @@ public class MessagePanelManager : MonoBehaviour
         using (UnityWebRequest request = UnityWebRequest.Delete(url))
         {
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
 
@@ -3056,6 +3058,7 @@ public class MessagePanelManager : MonoBehaviour
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
             // 스피너 최소 표시 시간 보장
@@ -3652,6 +3655,7 @@ public class MessagePanelManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
             yield return request.SendWebRequest();
@@ -3714,6 +3718,7 @@ public class MessagePanelManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
             yield return request.SendWebRequest();
@@ -3743,6 +3748,7 @@ public class MessagePanelManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
             yield return request.SendWebRequest();
@@ -4187,6 +4193,7 @@ public class MessagePanelManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
             yield return request.SendWebRequest();
@@ -4234,6 +4241,7 @@ public class MessagePanelManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
             yield return request.SendWebRequest();
@@ -4890,6 +4898,7 @@ public class MessagePanelManager : MonoBehaviour
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             request.certificateHandler = new BypassCertificateHandler();
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)

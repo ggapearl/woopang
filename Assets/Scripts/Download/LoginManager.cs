@@ -8,6 +8,25 @@ public class LoginManager : MonoBehaviour
 {
     public static LoginManager Instance { get; private set; }
 
+    /// <summary>
+    /// 로그인 토큰이 저장되는 PlayerPrefs 키. 이 이름 하나로 통일한다.
+    /// (예전엔 일부 코드가 "auth_token"(소문자)을 읽어 항상 빈 값이었다 — FollowManager 등)
+    /// </summary>
+    public const string AUTH_TOKEN_KEY = "AuthToken";
+
+    /// <summary>
+    /// 민감 API 요청에 Authorization: Bearer 토큰을 붙인다.
+    /// 서버가 이 토큰에서 신원을 확정하므로, 요청에 실은 user_id 를 위조해도 무력화된다.
+    /// 토큰이 없으면(비로그인) 아무것도 하지 않는다 — 서버가 판단한다.
+    /// </summary>
+    public static void ApplyAuth(UnityEngine.Networking.UnityWebRequest request)
+    {
+        if (request == null) return;
+        string stored = PlayerPrefs.GetString(AUTH_TOKEN_KEY, "");
+        if (!string.IsNullOrEmpty(stored))
+            request.SetRequestHeader("Authorization", "Bearer " + stored);
+    }
+
     public event Action<bool> OnLoginStateChanged;
 
     [Header("Login Prompt Popup")]
@@ -329,7 +348,7 @@ public class LoginManager : MonoBehaviour
                         };
                         IsGuest = false;
 
-                        PlayerPrefs.SetString("AuthToken", jwtToken);
+                        PlayerPrefs.SetString(AUTH_TOKEN_KEY, jwtToken);
                         PlayerPrefs.SetString("SavedUserId", response.data.id.ToString());
                         PlayerPrefs.SetString("SavedUsername", response.data.username);
                         PlayerPrefs.SetString("LoginProvider", response.data.provider);
@@ -364,7 +383,7 @@ public class LoginManager : MonoBehaviour
         CurrentUser = null;
         IsGuest = false;
 
-        PlayerPrefs.DeleteKey("AuthToken");
+        PlayerPrefs.DeleteKey(AUTH_TOKEN_KEY);
         PlayerPrefs.DeleteKey("SavedUserId");
         PlayerPrefs.DeleteKey("SavedUsername");
         PlayerPrefs.DeleteKey("LoginProvider");
