@@ -105,13 +105,16 @@ public class OffScreenIndicator : MonoBehaviour
     [SerializeField] private float maxIndicatorDistance = 0f;
 
     [Header("거리별 투명도 (화살표+박스 공통)")]
-    [Tooltip("이 거리(m) 이하의 인디케이터는 완전 불투명")]
+    [Tooltip("이 거리(m) 이하는 완전 불투명 (오브젝트가 보이는 가까운 구간)")]
     [SerializeField] private float indicatorFadeNearDistance = 50f;
-    [Tooltip("이 거리(m) 이상의 인디케이터는 indicatorFarAlpha 까지 흐려짐")]
+    [Tooltip("이 거리(m) 이상은 indicatorFarAlpha (가장 멀리 = 가장 흐림)")]
     [SerializeField] private float indicatorFadeFarDistance = 300f;
-    [Tooltip("먼 거리 인디케이터의 최소 투명도(0=완전투명, 1=불투명)")]
+    [Tooltip("near 를 막 넘어선 지점(화살표 시작)의 투명도")]
     [Range(0f, 1f)]
-    [SerializeField] private float indicatorFarAlpha = 0.4f;
+    [SerializeField] private float indicatorFadeStartAlpha = 0.6f;
+    [Tooltip("far 이상(최대거리)의 투명도")]
+    [Range(0f, 1f)]
+    [SerializeField] private float indicatorFarAlpha = 0.3f;
     [Tooltip("박스(화면 안 오브젝트)에도 거리 투명도를 적용할지")]
     [SerializeField] private bool fadeBoxToo = true;
 
@@ -492,8 +495,7 @@ public class OffScreenIndicator : MonoBehaviour
                 // 박스(화면 안)는 fadeBoxToo 가 켜져 있을 때만 적용.
                 if (info.isArrow || fadeBoxToo)
                 {
-                    float fadeT = Mathf.InverseLerp(indicatorFadeNearDistance, indicatorFadeFarDistance, info.distanceFromCamera);
-                    indicator.SetDistanceAlpha(Mathf.Lerp(1f, indicatorFarAlpha, fadeT));
+                    indicator.SetDistanceAlpha(ComputeDistanceAlpha(info.distanceFromCamera));
                 }
                 else
                 {
@@ -1221,6 +1223,22 @@ public class OffScreenIndicator : MonoBehaviour
             fadeOutTargets.Remove(target);
             Debug.Log($"[dbg-OSI] -REM '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
         }
+    }
+
+    /// <summary>
+    /// 거리 → 투명도 곡선.
+    ///   near 이하           : 1.0 (오브젝트가 보이는 가까운 구간, 선명)
+    ///   near ~ far          : fadeStartAlpha(0.6) → farAlpha(0.3) 선형 보간
+    ///   far 이상(최대거리)  : farAlpha (가장 흐림)
+    /// near 를 넘는 순간(오브젝트가 화면 밖으로 나가 화살표만 남는 지점)부터
+    /// 0.6 에서 시작해 멀어질수록 0.3 까지 떨어진다.
+    /// </summary>
+    private float ComputeDistanceAlpha(float distance)
+    {
+        if (distance <= indicatorFadeNearDistance)
+            return 1f;
+        float t = Mathf.InverseLerp(indicatorFadeNearDistance, indicatorFadeFarDistance, distance);
+        return Mathf.Lerp(indicatorFadeStartAlpha, indicatorFarAlpha, t);
     }
 
     private Indicator GetIndicator(ref Indicator indicator, IndicatorType type, Target target, Vector3 finalScreenPosition)
