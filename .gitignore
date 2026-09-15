@@ -162,3 +162,11 @@ Assets/Plugins/Android/*.gradle.backup*.meta
 
 # DevViewCapture 트리거 (로컬 전용)
 .woopang_capture_trigger
+
+# 로컬 잡파일 (자동 생성 — 커밋 대상 아님)
+_cprof/
+/*_report.txt
+/output_*.txt
+/result.json
+/screenshot*.png
+/*.7z
