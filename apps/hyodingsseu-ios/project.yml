@@ -1,0 +1,34 @@
+# 효딩쓰 iOS — XcodeGen 설정. Mac 에서 `xcodegen generate` 로 Hyodingsseu.xcodeproj 를 만든다.
+# .xcodeproj 는 커밋하지 않는다(이 파일이 정본).
+name: Hyodingsseu
+options:
+  bundleIdPrefix: com.que
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: DDX8R79VU2
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Hyodingsseu:
+    type: application
+    platform: iOS
+    sources:
+      - path: Hyodingsseu
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.que.hyodingsseu
+        PRODUCT_NAME: Hyodingsseu
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 효딩쓰
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: 효딩쓰에게 말로 시키려면 마이크가 필요합니다. 녹음은 대표님 PC 로만 보내 받아적고, 저장하지 않습니다.
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
