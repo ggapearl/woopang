@@ -1518,6 +1518,7 @@ public class CubeUploadManager : MonoBehaviour
 
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
+            LoginManager.ApplyAuth(www);
             www.timeout = 10;
             yield return www.SendWebRequest();
 

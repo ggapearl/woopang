@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -102,6 +103,9 @@ namespace Editor
             CheckBuildScenes(issues);
             CheckFirebaseConfig(issues);
             CheckAndroidTargetSdk(issues);
+            CheckPreloadedAssets(issues);
+            CheckNoCertificateBypass(issues);
+            CheckReleaseNotes(issues);
             return issues;
         }
 
@@ -210,6 +214,86 @@ namespace Editor
                     "  → 2026-08-31부터 이보다 낮으면 업데이트 업로드가 거부됩니다.\n" +
                     "     (기존 설치본은 유지되지만 새 버전을 올릴 수 없습니다)\n" +
                     "  → Player Settings ▸ Android ▸ Target API Level 을 올리세요.");
+            }
+        }
+
+        // ── Preloaded Assets (AR 초기화) ──────────────────────────
+        // 에디터가 ProjectSettings 를 다시 저장하면서 4개 중 3개가 빠진 적이 있다(2026-09).
+        // 빠지면 AR 카메라 배경이 검게 나오거나 XR 이 아예 초기화되지 않는다.
+        private static readonly (string guid, string what)[] RequiredPreloaded =
+        {
+            ("a71b000f0c8914c2a8307235f6bf3624", "Assets/XR/XRGeneralSettingsPerBuildTarget.asset"),
+            ("f1d66e5450418a245a006782a2a5e5f3", "Assets/ExtensionsAssets/Runtime/RuntimeConfig.asset"),
+            ("c9f956787b1d945e7b36e0516201fc76", "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
+            ("0945859e5a1034c2cb6dce53cb4fb899", "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
+        };
+
+        private static void CheckPreloadedAssets(List<string> issues)
+        {
+            var present = new HashSet<string>();
+            foreach (var obj in PlayerSettings.GetPreloadedAssets())
+            {
+                if (obj != null && AssetDatabase.TryGetGUIDAndLocalFileIdentifier(obj, out string guid, out long _))
+                    present.Add(guid);
+            }
+
+            var missing = RequiredPreloaded.Where(r => !present.Contains(r.guid)).Select(r => r.what).ToList();
+            if (missing.Count > 0)
+            {
+                issues.Add(
+                    "[Preloaded Assets 누락] Player Settings ▸ Other ▸ Preloaded Assets 에서 빠졌습니다:\n  - " +
+                    string.Join("\n  - ", missing) + "\n" +
+                    "  → 빠지면 AR 카메라 배경이 검게 나오거나 XR 이 초기화되지 않습니다.\n" +
+                    "  → git 의 ProjectSettings/ProjectSettings.asset 에서 preloadedAssets 4줄을 되살리세요.");
+            }
+        }
+
+        // ── 인증서 검증 우회 금지 ───────────────────────────────────
+        // 예전엔 무조건 true 를 돌려주는 핸들러가 요청 29곳에 붙어 있어
+        // 중간자가 로그인 토큰·DM 을 가로챌 수 있었다(2026-09-26 삭제).
+        // 문자열을 쪼개 둔 건 이 파일 자신이 검사에 걸리지 않게 하려는 것
+        private static readonly string[] ForbiddenTlsPatterns =
+        {
+            "override bool " + "ValidateCertificate",
+            "ServerCertificate" + "ValidationCallback",
+        };
+
+        private static void CheckNoCertificateBypass(List<string> issues)
+        {
+            foreach (var path in Directory.GetFiles("Assets", "*.cs", SearchOption.AllDirectories))
+            {
+                string src = File.ReadAllText(path);
+                foreach (var pat in ForbiddenTlsPatterns)
+                {
+                    if (!src.Contains(pat)) continue;
+                    issues.Add(
+                        $"[인증서 검증 우회] {path.Replace('\\', '/')} 에 '{pat}' 가 있습니다.\n" +
+                        "  → TLS 검증을 끄면 같은 와이파이의 누구나 로그인 토큰·메시지를 가로챌 수 있습니다.\n" +
+                        "  → 서버 인증서는 정상이므로 기본 검증을 그대로 쓰세요.");
+                }
+            }
+        }
+
+        // ── 출시노트 ──────────────────────────────────────────────
+        // iOS 맥 세션의 자동 출시가 이 파일에서 What's New 를 읽는다. 항목이 없으면 빈 노트로 올라간다.
+        private const string ReleaseNotesPath = "release_notes.json";
+
+        private static void CheckReleaseNotes(List<string> issues)
+        {
+            string version = BuildNumberAutoIncrement.PredictBundleVersion();
+            string hint = $"  → {ReleaseNotesPath} 의 versions 에 \"{version}\": {{ \"ko\": \"…\", \"en\": \"…\" }} 를 추가하세요.";
+
+            if (!File.Exists(ReleaseNotesPath))
+            {
+                issues.Add($"[출시노트 없음] {ReleaseNotesPath} 파일이 없습니다.\n" + hint);
+                return;
+            }
+
+            string json = File.ReadAllText(ReleaseNotesPath);
+            var entry = Regex.Match(json, "\"" + Regex.Escape(version) + "\"\\s*:\\s*\\{([^}]*)\\}");
+            if (!entry.Success || !entry.Groups[1].Value.Contains("\"ko\"") || !entry.Groups[1].Value.Contains("\"en\""))
+            {
+                issues.Add($"[출시노트 누락] 이번 빌드 버전 {version} 의 ko/en 출시노트가 없습니다.\n" + hint);
             }
         }
     }

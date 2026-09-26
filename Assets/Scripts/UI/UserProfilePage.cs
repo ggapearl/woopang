@@ -55,6 +55,7 @@ public class UserProfilePage : MonoBehaviour {
             www.uploadHandler = new UploadHandlerRaw(bodyRaw);
             www.downloadHandler = new DownloadHandlerBuffer();
             www.SetRequestHeader("Content-Type", "application/json");
+            LoginManager.ApplyAuth(www);
             yield return www.SendWebRequest();
 
             if (www.result == UnityWebRequest.Result.Success) {

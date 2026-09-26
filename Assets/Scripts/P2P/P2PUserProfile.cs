@@ -333,9 +333,16 @@ public class P2PUserProfile : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
 
-        // 신고 사유 선택 UI 표시 (향후 구현)
-
-        // TODO: 신고 UI 표시
+        // 예전엔 아무 동작도 하지 않았다
+        StartCoroutine(ReportService.Send("user", currentUserId, "inappropriate", "", ok =>
+        {
+            string msg = ReportService.ResultMessage(ok);
+            if (ToastManager.Instance != null)
+            {
+                if (ok) ToastManager.Instance.ShowSuccess(msg);
+                else ToastManager.Instance.ShowError(msg);
+            }
+        }));
     }
 
     void Update()

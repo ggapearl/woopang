@@ -1302,7 +1302,6 @@ public class FirebaseNotification : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             request.timeout = 10;
             yield return request.SendWebRequest();
 

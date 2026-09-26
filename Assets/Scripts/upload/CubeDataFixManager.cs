@@ -1127,6 +1127,7 @@ public class CubeDataFixManager : MonoBehaviour
 
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
+            LoginManager.ApplyAuth(www);
             www.timeout = Mathf.RoundToInt(uploadTimeoutSeconds);
             yield return www.SendWebRequest();
 

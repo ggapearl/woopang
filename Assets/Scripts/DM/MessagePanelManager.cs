@@ -7,17 +7,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 
-/// <summary>
-/// SSL 인증서 검증 우회 (개발/테스트 환경용)
-/// 프로덕션에서는 서버 인증서가 유효하면 자동으로 통과
-/// </summary>
-public class BypassCertificateHandler : CertificateHandler
-{
-    protected override bool ValidateCertificate(byte[] certificateData)
-    {
-        return true;
-    }
-}
+// TLS 인증서 검증을 끄던 BypassCertificateHandler 는 삭제했다(2026-09-26).
+// 무조건 true 를 돌려줘 중간자가 로그인 토큰·DM 을 가로챌 수 있었다. 다시 만들지 말 것.
 
 /// <summary>
 /// 메시지 패널 매니저 - 대화 목록, 검색, 스와이프 삭제 등
@@ -1570,7 +1561,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
@@ -2058,7 +2048,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -2509,7 +2498,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Delete(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
@@ -2949,7 +2937,6 @@ public class MessagePanelManager : MonoBehaviour
 
             using (UnityWebRequest adminRequest = UnityWebRequest.Get(adminUrl))
             {
-                adminRequest.certificateHandler = new BypassCertificateHandler();
                 adminRequest.timeout = 10;
                 yield return adminRequest.SendWebRequest();
 
@@ -3057,7 +3044,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
@@ -3654,7 +3640,6 @@ public class MessagePanelManager : MonoBehaviour
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
@@ -3717,7 +3702,6 @@ public class MessagePanelManager : MonoBehaviour
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
@@ -3747,7 +3731,6 @@ public class MessagePanelManager : MonoBehaviour
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
@@ -3976,7 +3959,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -4192,7 +4174,6 @@ public class MessagePanelManager : MonoBehaviour
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
@@ -4240,7 +4221,6 @@ public class MessagePanelManager : MonoBehaviour
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             request.SetRequestHeader("Content-Type", "application/json");
 
@@ -4709,7 +4689,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -4897,7 +4876,6 @@ public class MessagePanelManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 

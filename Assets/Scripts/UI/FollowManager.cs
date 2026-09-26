@@ -1050,7 +1050,6 @@ public class FollowManager : MonoBehaviour
 
         using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
         {
-            request.certificateHandler = new BypassCertificateHandler();
 
             LoginManager.ApplyAuth(request);
 
@@ -1077,7 +1076,6 @@ public class FollowManager : MonoBehaviour
 
         using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
         {
-            request.certificateHandler = new BypassCertificateHandler();
 
             LoginManager.ApplyAuth(request);
 
@@ -1275,7 +1273,6 @@ public class FollowManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -1306,7 +1303,6 @@ public class FollowManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
 
             LoginManager.ApplyAuth(request);
 
@@ -1354,7 +1350,6 @@ public class FollowManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
 
             LoginManager.ApplyAuth(request);
 

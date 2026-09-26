@@ -286,10 +286,9 @@ public class P2PProfilePanel : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentUserId)) return;
 
-        // TODO: Open report dialog with reason selection
-        // For now, just show confirmation
-
-        ShowTemporaryMessage("Report submitted");
+        // 예전엔 서버 호출 없이 "Report submitted" 만 띄우는 가짜 버튼이었다
+        StartCoroutine(ReportService.Send("user", currentUserId, "inappropriate", "", ok =>
+            ShowTemporaryMessage(ReportService.ResultMessage(ok))));
     }
 
     /// <summary>

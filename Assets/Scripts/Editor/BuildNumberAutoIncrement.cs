@@ -107,11 +107,25 @@ namespace Editor
         }
 
         /// <summary>
+        /// 이번 빌드에 실제로 들어갈 bundleVersion. 값은 바꾸지 않는다.
+        /// 빌드 전 검증(출시노트 확인)은 자동 증가보다 먼저 돌기 때문에 필요하다.
+        /// </summary>
+        public static string PredictBundleVersion()
+        {
+            string current = PlayerSettings.bundleVersion ?? "";
+            string lastAuto = EditorPrefs.GetString(PREF_VERSION_LAST_AUTO, "");
+            string lastDate = EditorPrefs.GetString(PREF_VERSION_LAST_DATE, "");
+            if (current != lastAuto || lastDate == DateTime.Now.ToString("yyyyMMdd"))
+                return current;
+            return BumpPatch(current);
+        }
+
+        /// <summary>
         /// "1.2.50" → "1.2.51". patch(마지막)가 99를 넘으면 minor +1 하고 patch 는 00 으로.
         /// 예: 1.2.99 → 1.3.00, 1.3.99 → 1.4.00. patch 는 항상 두 자리(00~99).
         /// major.minor.patch 3조각 정수 형식이 아니면 원본을 그대로 둔다.
         /// </summary>
-        private string BumpPatch(string version)
+        private static string BumpPatch(string version)
         {
             if (string.IsNullOrEmpty(version)) return version;
             string[] parts = version.Split('.');

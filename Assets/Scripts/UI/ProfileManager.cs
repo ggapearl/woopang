@@ -901,7 +901,6 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
@@ -931,7 +930,6 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
@@ -956,7 +954,6 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             bool isFollowing = false;
@@ -1217,7 +1214,6 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -1242,7 +1238,6 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -1599,7 +1594,6 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
@@ -1640,7 +1634,6 @@ public class ProfileManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
-            request.certificateHandler = new BypassCertificateHandler();
             LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
@@ -1739,7 +1732,6 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             ProfileData profile = null;
@@ -1813,7 +1805,6 @@ public class ProfileManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -1982,7 +1973,6 @@ public class ProfileManager : MonoBehaviour
         // 6. 다운로드
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
-            request.certificateHandler = new BypassCertificateHandler();
             yield return request.SendWebRequest();
 
             // 7. 버전 체크 (stale 방지)
@@ -2806,16 +2796,43 @@ public class ProfileManager : MonoBehaviour
     {
         if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null) return;
 
-        string userId = LoginManager.Instance.CurrentUser.id;
+        StartCoroutine(OpenEditProfileWithCode());
+    }
+
+    /// <summary>
+    /// 편집 페이지는 서버가 발급한 일회용 코드(5분·1회용)로만 연다.
+    /// 예전엔 ?token=<회원번호> 라 번호만 바꾸면 남의 프로필을 열어 수정·탈퇴까지 할 수 있었다.
+    /// </summary>
+    private IEnumerator OpenEditProfileWithCode()
+    {
         string lang = GetCurrentLanguageCode();
+        using (UnityWebRequest req = new UnityWebRequest($"{BASE_URL}/api/profile/edit-link", "POST"))
+        {
+            req.downloadHandler = new DownloadHandlerBuffer();
+            LoginManager.ApplyAuth(req);
+            yield return req.SendWebRequest();
 
-        // URL with token (user_id) and language
-        string editUrl = $"{BASE_URL}/profile/edit?token={userId}&lang={lang}";
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning($"[ProfileManager] 편집 링크 발급 실패: {req.responseCode}");
+                ToastManager.Instance?.ShowError(lang == "ko" ? "다시 로그인한 뒤 시도해주세요" : "Please sign in again and retry");
+                yield break;
+            }
 
-        // 프로필 편집 페이지를 열었음을 표시 (돌아올 때 새로고침하기 위해)
-        openedProfileEdit = true;
+            EditLinkResponse res = JsonUtility.FromJson<EditLinkResponse>(req.downloadHandler.text);
+            if (res == null || !res.success || string.IsNullOrEmpty(res.code)) yield break;
 
-        Application.OpenURL(editUrl);
+            // 프로필 편집 페이지를 열었음을 표시 (돌아올 때 새로고침하기 위해)
+            openedProfileEdit = true;
+            Application.OpenURL($"{BASE_URL}/profile/edit?code={res.code}&lang={lang}");
+        }
+    }
+
+    [Serializable]
+    private class EditLinkResponse
+    {
+        public bool success;
+        public string code;
     }
 
     /// <summary>

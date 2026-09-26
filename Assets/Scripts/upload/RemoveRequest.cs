@@ -203,6 +203,7 @@ public class RemoveRequest : MonoBehaviour
 
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
+            LoginManager.ApplyAuth(www);
             www.timeout = 20;
             yield return www.SendWebRequest();
 
