@@ -95,6 +95,19 @@ struct AIMessage: View {
                         .background(Palette.navySoft)
                         .clipShape(Capsule())
                 }
+                Spacer(minLength: 0)
+                if !streaming && !text.isEmpty {
+                    Button { store.readAloud(text) } label: {
+                        Label("읽기", systemImage: "speaker.wave.2")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Palette.ink2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .overlay(Capsule().stroke(Palette.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("이 답을 소리로 읽기")
+                }
             }
             if streaming {
                 Text(text + " ▍")

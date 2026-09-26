@@ -10,10 +10,9 @@ struct OrbView: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(RadialGradient(colors: [Color(hex: "#FFB3CD"), Color(hex: "#F2487F"),
-                                              Color(hex: "#C2185B"), Color(hex: "#8E0F42")],
-                                     center: UnitPoint(x: 0.34, y: 0.3), startRadius: 0, endRadius: size * 0.72))
+            Image("Cat")                       // 효딩쓰 얼굴 — 빨간 고양이 (2026-09-26)
+                .resizable()
+                .scaledToFit()
                 .frame(width: size, height: size)
                 .shadow(color: Color(hex: "#FF5C93").opacity(0.3 + level * 0.55), radius: 3 + level * 14)
                 .scaleEffect(scale)

@@ -267,8 +267,17 @@ final class DeskStore: ObservableObject {
         speakReply(lastAIText)
     }
 
-    private func speakReply(_ text: String) {
-        let clean = SpeechText.clean(text)
+    /// 답 옆 「읽기」 — 끝까지 읽는다. 읽는 중에 누르면 멈춘다.
+    func readAloud(_ text: String) {
+        if speaker.speaking {
+            speaker.stop()
+        } else {
+            speakReply(text, full: true)
+        }
+    }
+
+    private func speakReply(_ text: String, full: Bool = false) {
+        let clean = SpeechText.clean(text, limit: full ? 6000 : 300)
         guard !clean.isEmpty else { return }
         switch voiceEngine {
         case .iphone:
