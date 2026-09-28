@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <!-- DayNight: 웹뷰의 prefers-color-scheme 가 폰의 다크 모드를 따르게 한다(Light 로 두면 늘 라이트).
+         상단은 늘 남색 막대라 상태바 글자는 흰색. 화면에서 라이트/다크를 따로 고르면 DeskNative.setBars 로 다시 칠한다. -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/hy_ground</item>
+        <item name="android:statusBarColor">@color/hy_bar</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/hy_surface</item>
+    </style>
+
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/hy_icon_bg</item>
+        <item name="android:statusBarColor">@color/hy_icon_bg</item>
+        <item name="android:navigationBarColor">@color/hy_icon_bg</item>
+    </style>
+</resources>

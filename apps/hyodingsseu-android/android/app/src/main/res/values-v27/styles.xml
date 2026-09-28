@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 안드로이드 8.1+ : 라이트 테마에선 흰 내비게이션 막대에 어두운 아이콘 -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/hy_ground</item>
+        <item name="android:statusBarColor">@color/hy_bar</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/hy_surface</item>
+        <item name="android:windowLightNavigationBar">@bool/hy_light_nav</item>
+    </style>
+</resources>

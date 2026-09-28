@@ -51,10 +51,20 @@ struct ChatItem: Identifiable, Equatable {
 
     let id = UUID()
     var kind: Kind
+    /// 휴대폰으로 나간 그림·파일, 대표님이 보낸 사진 — PC 효딩쓰가 서명한 링크(사파리에서 바로 열린다, 2026-09-28)
+    var images: [URL] = []
+    var files: [FileLink] = []
 
-    init(_ kind: Kind) {
+    init(_ kind: Kind, images: [URL] = [], files: [FileLink] = []) {
         self.kind = kind
+        self.images = images
+        self.files = files
     }
+}
+
+struct FileLink: Hashable {
+    let name: String
+    let url: URL
 }
 
 // MARK: - AI Office

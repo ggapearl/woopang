@@ -1,0 +1,14 @@
+{
+  "appId": "com.que.hyodingsseu",
+  "appName": "효딩쓰",
+  "webDir": "www",
+  "server": {
+    "url": "https://woopang.com/AI/desk-app/",
+    "errorPath": "offline.html",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#1B2A6B"
+  }
+}

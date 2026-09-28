@@ -6,7 +6,7 @@ struct ChatItemView: View {
     var body: some View {
         switch item.kind {
         case .user(let text, let origin):
-            UserBubble(text: text, origin: origin)
+            UserBubble(text: text, origin: origin, images: item.images)
         case .ai(let text, let streaming, let local, let meta):
             AIMessage(text: text, streaming: streaming, local: local, meta: meta)
         case .tools(let list):
@@ -18,7 +18,7 @@ struct ChatItemView: View {
         case .question(let card):
             QuestionCardView(card: card)
         case .incoming(let source, let text, let auto):
-            InboxBubble(source: source, text: text, auto: auto)
+            InboxBubble(source: source, text: text, auto: auto, images: item.images, files: item.files)
         case .note(let text):
             Text(text)
                 .font(.caption)
@@ -41,6 +41,7 @@ struct ChatItemView: View {
 struct UserBubble: View {
     let text: String
     let origin: String
+    var images: [URL] = []
 
     var body: some View {
         HStack {
@@ -53,6 +54,7 @@ struct UserBubble: View {
                 }
                 Text(text)
                     .textSelection(.enabled)
+                AttachmentStrip(images: images, files: [])     // 대표님이 휴대폰(텔레그램)으로 보낸 사진
             }
             .foregroundStyle(Palette.onNavy)
             .padding(.horizontal, 14)
@@ -146,17 +148,79 @@ struct MarkdownText: View {
                 lines.append(raw)
                 continue
             }
+            let line: String
             if let r = raw.range(of: "^#{1,4}\\s+", options: .regularExpression) {
-                lines.append("**" + String(raw[r.upperBound...]) + "**")
+                line = "**" + String(raw[r.upperBound...]) + "**"
             } else if let r = raw.range(of: "^\\s*[-*+]\\s+", options: .regularExpression) {
-                lines.append("• " + String(raw[r.upperBound...]))
+                line = "• " + String(raw[r.upperBound...])
             } else {
-                lines.append(raw)
+                line = raw
             }
+            lines.append(DocLinks.linkify(line))
         }
         let md = lines.joined(separator: "\n")
         let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return (try? AttributedString(markdown: md, options: opts)) ?? AttributedString(source)
+    }
+}
+
+/// 답 속 PC 문서 경로(C:\que-desk\…) → 누를 수 있는 hyodoc:// 링크 (2026-09-28).
+/// 누르면 DeskStore.handleLink 가 PC 에 서명 링크(30일)를 받아 사파리로 연다 — 안드로이드 앱과 같은 동작.
+enum DocLinks {
+    static let scheme = "hyodoc"
+    private static let pattern = try! NSRegularExpression(pattern: #"`?([Cc]:[\\/]+que-desk(?:[\\/][^\s`'"<>|*?\])]*)?)`?"#)
+
+    static func linkify(_ line: String) -> String {
+        let ns = line as NSString
+        var out = line
+        for m in pattern.matches(in: line, range: NSRange(location: 0, length: ns.length)).reversed() {
+            let path = ns.substring(with: m.range(at: 1))
+            var comps = URLComponents()
+            comps.scheme = scheme
+            comps.host = "open"
+            comps.queryItems = [URLQueryItem(name: "p", value: path)]
+            guard let url = comps.url?.absoluteString, let r = Range(m.range, in: out) else { continue }
+            // 마크다운 글자 안의 \ 는 \\ 로 써야 그대로 보인다
+            out.replaceSubrange(r, with: "[" + path.replacingOccurrences(of: "\\", with: "\\\\") + "](" + url + ")")
+        }
+        return out
+    }
+}
+
+/// 휴대폰으로 보낸 그림·파일, 대표님이 보낸 사진 — 누르면 사파리에서 (PC 가 서명한 30일 링크)
+struct AttachmentStrip: View {
+    let images: [URL]
+    let files: [FileLink]
+
+    var body: some View {
+        if !images.isEmpty || !files.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                if !images.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(images, id: \.self) { u in
+                                Link(destination: u) {
+                                    AsyncImage(url: u) { phase in
+                                        if let img = phase.image {
+                                            img.resizable().scaledToFill()
+                                        } else {
+                                            Palette.line
+                                        }
+                                    }
+                                    .frame(width: 84, height: 84)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                            }
+                        }
+                    }
+                }
+                ForEach(files, id: \.self) { f in
+                    Link("📄 " + f.name, destination: f.url)
+                        .font(.caption)
+                }
+            }
+            .padding(.top, 4)
+        }
     }
 }
 
@@ -196,15 +260,20 @@ struct InboxBubble: View {
     let source: String
     let text: String
     let auto: Bool
+    var images: [URL] = []
+    var files: [FileLink] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(source)
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(auto ? Palette.pinkDeep : Palette.navy)
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(Palette.ink)
+            if !text.isEmpty {
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.ink)
+            }
+            AttachmentStrip(images: images, files: files)       // 「📱 휴대폰으로 보냄」의 카드뉴스 그림·파일
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

@@ -8,6 +8,8 @@ struct HyodingsseuApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                // 답 속 PC 문서 경로(hyodoc://)는 PC 에 서명 링크를 받아 사파리로, 보통 링크는 그대로 (2026-09-28)
+                .environment(\.openURL, OpenURLAction { [store] url in store.handleLink(url) })
         }
     }
 }

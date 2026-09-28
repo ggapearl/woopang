@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 효딩쓰 TestFlight 업로드 설정 — TESTFLIGHT.md 의 xcodebuild -exportArchive 가 쓴다.
+     testFlightInternalTestingOnly: 내부 테스트 전용 빌드(외부 테스터·앱스토어 심사로는 못 넘어간다 — 대표님 개인용). -->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>teamID</key>
+	<string>DDX8R79VU2</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>testFlightInternalTestingOnly</key>
+	<true/>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

@@ -101,6 +101,7 @@ final class DeskStore: ObservableObject {
                 if boot.isEmpty {
                     if case .online = link {} else { link = .connecting }
                     ingestState(try await api.get("state"))
+                    link = .online            // 지금까지를 받았으면 연결된 것 — 첫 긴 폴링(최대 25초)을 기다리지 않는다
                     if workers.isEmpty { await refreshWorkers() }
                 }
                 let r = try await api.get("events", query: ["since": String(seq), "boot": boot, "wait": "25"], timeout: 40)
@@ -311,6 +312,45 @@ final class DeskStore: ObservableObject {
         try await api.post("office/chat", ["id": id, "text": text])
     }
 
+    // MARK: - PC 문서 링크 (2026-09-28)
+
+    /// 답 속 `C:\que-desk\…` 경로(MarkdownText 가 hyodoc:// 링크로 바꾼 것)를 누르면 — PC 가 서명한 링크를 받아 사파리로.
+    /// 보통 링크(https)는 그대로 시스템이 연다.
+    /// nonisolated — OpenURLAction 이 어느 맥락에서 불러도 되게. 문서 열기는 메인 액터에서(openDoc).
+    nonisolated func handleLink(_ url: URL) -> OpenURLAction.Result {
+        guard url.scheme == DocLinks.scheme else { return .systemAction }
+        if let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "p" })?.value {
+            Task { await self.openDoc(path) }
+        }
+        return .handled
+    }
+
+    func openDoc(_ path: String) async {
+        do {
+            let r = try await api.get("doc", query: ["path": path])
+            guard let s = r["url"]?.string, let u = URL(string: s) else {
+                throw DeskError(status: 0, message: "링크를 받지 못했어요.")
+            }
+            _ = await UIApplication.shared.open(u)
+        } catch {
+            show(error)
+        }
+    }
+
+    /// 사건의 images(서명 링크 배열)·files([{name, url}])
+    private static func attachments(_ e: JSON) -> ([URL], [FileLink]) {
+        let imgs = (e["images"]?.array ?? []).compactMap { j -> URL? in
+            guard let s = j.string else { return nil }
+            return URL(string: s)
+        }
+        let files = (e["files"]?.array ?? []).compactMap { f -> FileLink? in
+            guard let s = f["url"]?.string, let u = URL(string: s) else { return nil }
+            return FileLink(name: f["name"]?.string ?? u.lastPathComponent, url: u)
+        }
+        return (imgs, files)
+    }
+
     // MARK: - 알림
 
     func showToast(_ text: String) {
@@ -366,7 +406,8 @@ final class DeskStore: ObservableObject {
         switch type {
         case "user":
             let origin = e["origin"]?.string ?? "typed"
-            append(.user(text: e["text"]?.string ?? "", origin: origin))
+            let (imgs, files) = Self.attachments(e)
+            append(ChatItem(.user(text: e["text"]?.string ?? "", origin: origin), images: imgs, files: files))
             lastAI = nil
             lastAIText = ""
             lastUserOrigin = origin
@@ -475,10 +516,12 @@ final class DeskStore: ObservableObject {
         case "incoming":
             let kind = e["kind"]?.string ?? ""
             let names = ["peer": "다른 세션", "task-notification": "작업 알림", "channel": "채널",
-                         "auto": "자율 점검", "system": "시스템"]
+                         "auto": "자율 점검", "system": "시스템", "phone_out": "📱 휴대폰으로 보냄"]
             var source = names[kind] ?? kind
             if let from = e["from"]?.string, !from.isEmpty { source += " · " + from }
-            append(.incoming(source: source, text: e["text"]?.string ?? "", auto: kind == "auto" || kind == "system"))
+            let (imgs, files) = Self.attachments(e)
+            append(ChatItem(.incoming(source: source, text: e["text"]?.string ?? "", auto: kind == "auto" || kind == "system"),
+                            images: imgs, files: files))
             lastAI = nil
 
         case "note":

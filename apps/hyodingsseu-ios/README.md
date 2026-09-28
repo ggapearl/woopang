@@ -1,6 +1,8 @@
 # 효딩쓰 iOS
 
-대표님 PC 의 데스크 비서 「효딩쓰」를 아이폰에서 쓰는 앱. **대표님 개인용 — 앱스토어·TestFlight 배포 안 함.**
+대표님 PC 의 데스크 비서 「효딩쓰」를 아이폰에서 쓰는 앱. **대표님 개인용 — 앱스토어 심사·외부 배포 안 함.**
+대표님 아이폰에는 **TestFlight 내부 테스트**(테스터는 대표님 한 명)로 받는다 — 2026-09-28 결정, 순서는 **[TESTFLIGHT.md](TESTFLIGHT.md)**.
+안드로이드 앱은 `apps/hyodingsseu-android`(같은 API · 같은 기능).
 PC 창과 **같은 대화**가 보이고, 글·말로 시키고, 허락 카드에 답하고, AI Office 직원 15명과 따로 대화한다.
 
 ## 구조
@@ -35,6 +37,8 @@ xcodebuild -project Hyodingsseu.xcodeproj -scheme Hyodingsseu \
 open Hyodingsseu.xcodeproj      # 기기 선택 → ▶ Run
 ```
 
+- **TestFlight 로 올리기(대표님이 쓰시는 방법)**: [TESTFLIGHT.md](TESTFLIGHT.md) — archive → `ExportOptions.plist` 로 업로드 → 내부 테스트.
+  아래 「Run」 은 케이블로 바로 깔아 볼 때(개발 설치)만.
 - 서명: Automatic, 팀 `DDX8R79VU2`, 번들 ID `com.que.hyodingsseu` (처음 Run 때 Xcode 가 App ID·프로파일을 알아서 만든다).
 - 아이폰에서 처음 열 때 「신뢰하지 않는 개발자」가 뜨면: 설정 › 일반 › VPN 및 기기 관리 › 개발자 앱 › 신뢰.
 - 개발 설치는 유료 개발자 계정이라 1년 유지된다. 만료되면 다시 Run.
@@ -68,5 +72,7 @@ open Hyodingsseu.xcodeproj      # 기기 선택 → ▶ Run
 | `POST answer` `{id, answers}` | 선택 카드 답 |
 | `POST stop` · `new` · `model {key}` · `speed {speed}` · `unpair` | 멈추기 · 새 대화 · 깊이 · 말 빠르기 · 이 기기 열쇠 지우기 |
 | `GET office/workers` · `GET office/history?id=` · `POST office/chat {id, text}` | AI Office 직원 명단 · 기록 · 지시 |
+| `GET doc?path=` | 답 속 PC 문서 경로 → 폰에서 열리는 서명 링크 `{url}` (30일, 2026-09-28) |
 
 사건 모양은 PC 창(`ui.html`)이 받는 것과 같다: `user · text_start · delta · text · tool · tool_done · permission · question · permission_closed · incoming · note · error · result · state · model · office · cleared`.
+`user`·`incoming` 에는 `images`(서명 링크 배열)·`files`([{name,url}]) 가 붙을 수 있다 — 텔레그램으로 나간 것은 `incoming` kind `phone_out`(2026-09-28).

@@ -18,7 +18,7 @@ struct PairView: View {
                 Text("효딩쓰와 연결")
                     .font(.title2.weight(.bold))
                     .foregroundStyle(Palette.ink)
-                Text("PC 효딩쓰 창의 ☰ → 아이폰 앱 →\n「연결 코드 받기」를 누르고 6자리 숫자를 넣어 주세요.")
+                Text("PC 효딩쓰 창의 ☰ → 휴대폰 앱 →\n「연결 코드 받기」를 누르고 6자리 숫자를 넣어 주세요.")
                     .font(.subheadline)
                     .foregroundStyle(Palette.ink2)
                     .multilineTextAlignment(.center)

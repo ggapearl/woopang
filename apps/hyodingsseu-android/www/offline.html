@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>효딩쓰</title>
+<style>
+  :root{--ground:#FAF5F8;--surface:#fff;--ink:#1A2142;--ink2:#5A6184;--navy:#2E4FCB;--on:#fff;--line:#EBDDE5}
+  @media (prefers-color-scheme:dark){:root{--ground:#0D1330;--surface:#141B3D;--ink:#EDEFFA;--ink2:#A9B0D6;--navy:#7B93FF;--on:#0D1330;--line:#27315F}}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--ground);color:var(--ink);font:16px/1.6 -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 24px;text-align:center}
+  img{width:78px;height:78px;filter:saturate(0);opacity:.6}
+  h1{margin:0;font-size:20px}
+  p{margin:0;font-size:14px;color:var(--ink2)}
+  button{margin-top:10px;width:100%;max-width:320px;border:0;border-radius:11px;padding:13px;font:inherit;font-weight:600;background:var(--navy);color:var(--on)}
+  small{font-size:12px;color:var(--ink2)}
+</style>
+</head>
+<body>
+  <img src="cat.png" alt="">
+  <h1>서버에 닿지 않아요</h1>
+  <p>인터넷이 끊겼거나, woopang.com 이 잠시 멈췄을 수 있어요.<br>연결이 돌아오면 저절로 다시 엽니다.</p>
+  <button type="button" onclick="retry()">다시 시도</button>
+  <small id="n"></small>
+<script>
+  var HOME = 'https://woopang.com/AI/desk-app/';
+  function retry() { location.replace(HOME); }
+  window.addEventListener('online', retry);
+  var left = 20;
+  setInterval(function () {
+    left -= 1;
+    document.getElementById('n').textContent = left > 0 ? left + '초 뒤에 다시 해 봐요' : '';
+    if (left <= 0) { left = 30; if (navigator.onLine !== false) retry(); }
+  }, 1000);
+</script>
+</body>
+</html>

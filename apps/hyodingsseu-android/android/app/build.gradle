@@ -1,0 +1,98 @@
+apply plugin: 'com.android.application'
+
+// ── 버전 ───────────────────────────────────────────────────────────
+// 아이폰 앱(apps/hyodingsseu-ios)과 같은 번호를 쓴다. versionCode 는 1.0.1 → 10001.
+// 화면(web/)은 woopang.com/AI/desk-app/ 에서 받아 오므로, 화면만 고쳤을 땐 올릴 필요가 없다.
+def appVersion = "1.0.1"
+def appVersionCode = appVersion.tokenize('.').collect { it as int }.with { it[0] * 10000 + it[1] * 100 + it[2] }
+
+// ── 서명 ───────────────────────────────────────────────────────────
+// 서명 키는 저장소 밖에 둔다 (woopang 저장소는 public). 농민닷컴 키와 따로다.
+//   기본: %USERPROFILE%\.android-signing\hyodingsseu\signing.properties
+//   (storeFile / storePassword / keyAlias / keyPassword — storeFile 은 절대경로)
+// 다른 곳에 두면 환경 변수 HYODING_SIGNING 에 그 properties 파일 경로를 넣는다.
+def signingPropsFile = new File(System.getenv('HYODING_SIGNING') ?:
+        "${System.getProperty('user.home')}/.android-signing/hyodingsseu/signing.properties")
+def signingProps = new Properties()
+if (signingPropsFile.exists()) {
+    signingPropsFile.withInputStream { signingProps.load(it) }
+}
+
+android {
+    namespace "com.que.hyodingsseu"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.que.hyodingsseu"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (signingPropsFile.exists()) {
+                storeFile file(signingProps['storeFile'])
+                storePassword signingProps['storePassword']
+                keyAlias signingProps['keyAlias']
+                keyPassword signingProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (signingPropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// ── 서명한 APK 를 바탕화면/woopang_build 로 ──────────────────────────
+// 결과: %USERPROFILE%\Desktop\woopang_build\hyodingsseu-1.0.1.apk (폰으로 옮겨 설치)
+tasks.whenTaskAdded { task ->
+    if (task.name == "assembleRelease") {
+        task.doFirst {
+            if (!signingPropsFile.exists()) {
+                throw new GradleException("서명 설정이 없습니다: ${signingPropsFile} — README.md 의 「서명 키」 참고")
+            }
+        }
+        task.doLast {
+            def src = file("$buildDir/outputs/apk/release/app-release.apk")
+            if (src.exists()) {
+                def destDir = new File("${System.getProperty('user.home')}/Desktop/woopang_build")
+                destDir.mkdirs()
+                def dest = new File(destDir, "hyodingsseu-${appVersion}.apk")
+                dest.bytes = src.bytes
+                println ">> APK: ${dest.absolutePath}"
+            }
+        }
+    }
+}

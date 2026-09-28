@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PC 효딩쓰 창·아이폰 앱과 같은 색 (apps/hyodingsseu-ios/Hyodingsseu/UI/Theme.swift 의 Palette) -->
+<resources>
+    <color name="hy_ground">#FAF5F8</color>
+    <color name="hy_surface">#FFFFFF</color>
+    <color name="hy_bar">#1B2A6B</color>
+    <color name="hy_icon_bg">#1B2A6B</color>
+    <color name="colorPrimary">#1B2A6B</color>
+    <color name="colorPrimaryDark">#1B2A6B</color>
+    <color name="colorAccent">#E91E63</color>
+</resources>

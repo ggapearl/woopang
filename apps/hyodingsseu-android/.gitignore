@@ -1,0 +1,18 @@
+node_modules/
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+# 서명 키는 저장소 밖(%USERPROFILE%\.android-signing\hyodingsseu)에 둔다 — 혹시 들어와도 커밋 금지
+*.jks
+*.keystore
+signing.properties
+keystore.properties
+*.apk
+*.aab
+test/shots/

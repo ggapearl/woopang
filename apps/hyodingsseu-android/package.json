@@ -1,0 +1,12 @@
+{
+  "name": "hyodingsseu-android",
+  "version": "1.0.1",
+  "private": true,
+  "description": "효딩쓰 안드로이드 — PC 효딩쓰를 휴대폰에서 (대표님 개인용, 스토어 배포 안 함)",
+  "dependencies": {
+    "@capacitor/android": "6.2.1",
+    "@capacitor/app": "6.0.3",
+    "@capacitor/cli": "6.2.1",
+    "@capacitor/core": "6.2.1"
+  }
+}

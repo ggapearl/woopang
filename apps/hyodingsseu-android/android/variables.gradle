@@ -1,0 +1,18 @@
+ext {
+    minSdkVersion = 26
+    compileSdkVersion = 35
+    // 스토어에 올리지 않는 개인용 앱이라 Play 의 타깃 요구를 따르지 않는다.
+    // 34 로 두면 안드로이드 15+ 의 강제 엣지투엣지가 적용되지 않아 상태바·키보드가 예전처럼 동작한다.
+    targetSdkVersion = 34
+    androidxActivityVersion = '1.8.0'
+    androidxAppCompatVersion = '1.6.1'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.12.0'
+    androidxFragmentVersion = '1.6.2'
+    coreSplashScreenVersion = '1.0.1'
+    androidxWebkitVersion = '1.9.0'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.1.5'
+    androidxEspressoCoreVersion = '3.5.1'
+    cordovaAndroidVersion = '10.1.1'
+}

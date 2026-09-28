@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 효딩쓰 — 빨간 고양이, 큰 눈망울 (2026-09-26) -->
+  <defs>
+    <radialGradient id="fur" cx="42%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#FF6B6B"/>
+      <stop offset=".55" stop-color="#E5323B"/>
+      <stop offset="1" stop-color="#B3172A"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="45%" cy="40%" r="62%">
+      <stop offset="0" stop-color="#3B4FA8"/>
+      <stop offset=".6" stop-color="#1B2A6B"/>
+      <stop offset="1" stop-color="#0B1238"/>
+    </radialGradient>
+    <linearGradient id="ear" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB3BC"/>
+      <stop offset="1" stop-color="#FF7F8E"/>
+    </linearGradient>
+  </defs>
+  <!-- 머리 + 귀 -->
+  <path d="M96 196 L112 58 Q116 40 132 50 L214 118 Q256 108 298 118 L380 50 Q396 40 400 58 L416 196
+           Q448 250 440 306 Q428 410 256 432 Q84 410 72 306 Q64 250 96 196 Z" fill="url(#fur)"/>
+  <path d="M130 86 L144 170 L196 128 Z" fill="url(#ear)" opacity=".9"/>
+  <path d="M382 86 L368 170 L316 128 Z" fill="url(#ear)" opacity=".9"/>
+  <!-- 볼 -->
+  <ellipse cx="150" cy="330" rx="38" ry="24" fill="#FF9AA8" opacity=".55"/>
+  <ellipse cx="362" cy="330" rx="38" ry="24" fill="#FF9AA8" opacity=".55"/>
+  <!-- 큰 눈망울 -->
+  <g>
+    <ellipse cx="180" cy="258" rx="58" ry="66" fill="#FFF7F4"/>
+    <ellipse cx="184" cy="264" rx="48" ry="56" fill="url(#iris)"/>
+    <ellipse cx="200" cy="238" rx="20" ry="22" fill="#FFFFFF"/>
+    <circle cx="166" cy="290" r="9" fill="#FFFFFF" opacity=".9"/>
+  </g>
+  <g>
+    <ellipse cx="332" cy="258" rx="58" ry="66" fill="#FFF7F4"/>
+    <ellipse cx="328" cy="264" rx="48" ry="56" fill="url(#iris)"/>
+    <ellipse cx="344" cy="238" rx="20" ry="22" fill="#FFFFFF"/>
+    <circle cx="310" cy="290" r="9" fill="#FFFFFF" opacity=".9"/>
+  </g>
+  <!-- 코 · 입 -->
+  <path d="M242 330 Q256 322 270 330 Q264 344 256 348 Q248 344 242 330 Z" fill="#FFD9DE"/>
+  <path d="M256 348 Q256 362 240 366 M256 348 Q256 362 272 366" fill="none" stroke="#7A0F1E" stroke-width="7" stroke-linecap="round"/>
+  <!-- 수염 -->
+  <g stroke="#FFE4E6" stroke-width="5" stroke-linecap="round" opacity=".85">
+    <path d="M118 312 L56 300"/><path d="M120 336 L58 344"/>
+    <path d="M394 312 L456 300"/><path d="M392 336 L454 344"/>
+  </g>
+</svg>
