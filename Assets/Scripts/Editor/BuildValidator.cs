@@ -38,7 +38,8 @@ namespace Editor
         /// </summary>
         private const int RequiredAndroidTargetSdk = 36;
 
-        private const string ExpectedMainScene = "Assets/Scenes/woopang_0529.unity";
+        // 2026-09-29 대표님 지시: 출시 씬을 0926(새 디자인 — 0529 를 복사해 모든 매니저를 그대로 가진 씬)으로 전환
+        private const string ExpectedMainScene = "Assets/Scenes/woopang_0926.unity";
 
         /// <summary>
         /// targetSdk를 요구치로 올린다. Play 요구사항은 매년 상향되므로 수동 조작 대신 메뉴로 둔다.

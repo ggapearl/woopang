@@ -374,8 +374,16 @@ public class CommentManager : MonoBehaviour
         placeholderText.text = localizedText;
     }
 
+    private bool? backByHandler;
+
     void Update()
     {
+        // 댓글 창에 ClickButtonOnBack 이 달려 있으면 BackButtonHandler 가 맡는다 —
+        // 여기서도 받으면 한 번 누른 뒤로가기에 댓글과 그 아래 창(사진 보기)이 함께 닫혔다
+        if (backByHandler == null)
+            backByHandler = commentPanel != null && commentPanel.GetComponentInChildren<ClickButtonOnBack>(true) != null;
+        if (backByHandler == true) return;
+
         // Android Back Button support (New Input System)
         if (IsPanelOpen && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {

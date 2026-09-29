@@ -13,6 +13,10 @@ using UnityEngine.SceneManagement;
 
 public class DataManager : MonoBehaviour, IPlaceCacheProvider
 {
+    // 개발용 진단 로그 — WOOPANG_DEBUG 가 정의된 빌드에서만 호출이 남는다 (출시 빌드에서는 호출 자체가 빠짐)
+    [System.Diagnostics.Conditional("WOOPANG_DEBUG")]
+    private static void DbgLog(object message) => UnityEngine.Debug.Log(message);
+
     /// <summary>
     /// 위치 권한이 허용되었을 때 발행되는 이벤트
     /// TourAPIManager, TerminalManager, TrainStationManager, P2PManager가 구독하여 데이터 로드 시작
@@ -1017,6 +1021,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
     private void CreateObjectFromData(PlaceData place)
     {
+        if (HiddenPlaces.IsHidden("dm_" + place.id)) return;   // 이 기기에서 X 로 숨긴 장소
+
         // 서버 원본 model_type 보존 (필터용 - GLB 실패 시 cube로 바뀌어도 원본 유지)
         if (string.IsNullOrEmpty(place.original_model_type))
             place.original_model_type = place.model_type;
@@ -1342,6 +1348,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     }
 
     public Dictionary<int, GameObject> GetSpawnedObjects() => spawnedObjects;
+    public Dictionary<int, GameObject> GetIndicatorOnlyObjects() => indicatorOnlyObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
 
@@ -1363,31 +1370,31 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     {
         if (!placeDataMap.TryGetValue(id, out var place))
         {
-            Debug.LogWarning($"[dbg-Promote] id={id} placeData 없음 — Detail fetch 후 재시도 필요");
+            Debug.LogWarning($"[DataManager] id={id} placeData 없음 — Detail fetch 후 재시도 필요");
             return false;
         }
         if (place.model_type == "custom")
         {
-            Debug.Log($"[dbg-Promote] id={id} 이미 custom — 스킵");
+            DbgLog($"[dbg-Promote] id={id} 이미 custom — 스킵");
             return true;
         }
 
-        Debug.Log($"[dbg-Promote] START id={id} model_url={place.model_url} scale={place.model_scale}");
+        DbgLog($"[dbg-Promote] START id={id} model_url={place.model_url} scale={place.model_scale}");
 
         if (spawnedObjects.TryGetValue(id, out var obj))
         {
             ReturnToPool(obj, "cube");
             spawnedObjects.Remove(id);
-            Debug.Log($"[dbg-Promote] 큐브 디스폰 완료 id={id}");
+            DbgLog($"[dbg-Promote] 큐브 디스폰 완료 id={id}");
         }
         else
         {
-            Debug.LogWarning($"[dbg-Promote] spawnedObjects에 큐브 없음 id={id}");
+            Debug.LogWarning($"[DataManager] spawnedObjects에 큐브 없음 id={id}");
         }
 
         place.model_type = "custom";
         bool result = SpawnFullObject(id.ToString());
-        Debug.Log($"[dbg-Promote] SpawnFullObject 결과: {result}, spawnedObjects.ContainsKey={spawnedObjects.ContainsKey(id)}");
+        DbgLog($"[dbg-Promote] SpawnFullObject 결과: {result}, spawnedObjects.ContainsKey={spawnedObjects.ContainsKey(id)}");
         return result;
     }
 
@@ -1404,7 +1411,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
             place.category == "anim" && place.model_type == "custom")
         {
             place.model_type = "cube";
-            Debug.Log($"[dbg-Promote] DemoteAnimToCube: id={id} → model_type=cube 복원");
+            DbgLog($"[dbg-Promote] DemoteAnimToCube: id={id} → model_type=cube 복원");
         }
     }
     public List<CachedPlaceData> GetLightCache() => lightCache;
@@ -1978,6 +1985,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     public bool SpawnFullObject(string rawId)
     {
         if (!int.TryParse(rawId, out int id)) return false;
+        if (HiddenPlaces.IsHidden("dm_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (spawnedObjects.ContainsKey(id)) return true; // 이미 스폰됨
 
         // placeDataMap에 상세 데이터가 있으면 즉시 스폰
@@ -2006,6 +2014,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     public bool SpawnIndicatorOnly(string rawId)
     {
         if (!int.TryParse(rawId, out int id)) return false;
+        if (HiddenPlaces.IsHidden("dm_" + rawId)) return false;
         if (indicatorOnlyObjects.ContainsKey(id)) return true;
 
         CachedPlaceData cached = lightCache.Find(c => c.rawId == rawId);

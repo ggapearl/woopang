@@ -27,7 +27,7 @@ public class LocationManager : MonoBehaviour
 
     void Start()
     {
-        currentLanguage = CultureInfo.CurrentCulture.TwoLetterISOLanguageName.ToLower();
+        currentLanguage = AppLanguage.Code;
         DisplayInitializingMessage();
         StartCoroutine(CheckLocationService());
     }

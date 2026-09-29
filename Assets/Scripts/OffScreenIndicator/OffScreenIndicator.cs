@@ -8,6 +8,10 @@ using UnityEngine.XR.ARFoundation;
 [DefaultExecutionOrder(-1)]
 public class OffScreenIndicator : MonoBehaviour
 {
+    // 개발용 진단 로그 — WOOPANG_DEBUG 가 정의된 빌드에서만 호출이 남는다 (출시 빌드에서는 호출 자체가 빠짐)
+    [System.Diagnostics.Conditional("WOOPANG_DEBUG")]
+    private static void DbgLog(object message) => UnityEngine.Debug.Log(message);
+
     [Range(0.1f, 0.9f)]
     [Tooltip("Horizontal distance offset of the indicators from the center of the screen")]
     [SerializeField] private float screenBoundOffsetX = 0.9f;
@@ -1196,7 +1200,7 @@ public class OffScreenIndicator : MonoBehaviour
             if (!targets.Contains(target))
                 targets.Add(target);
             disabledFallbackTargets.Remove(target);
-            Debug.Log($"[dbg-OSI] +ADD '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
+            DbgLog($"[dbg-OSI] +ADD '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
         }
         else
         {
@@ -1205,7 +1209,7 @@ public class OffScreenIndicator : MonoBehaviour
             {
                 targets.Remove(target);
                 disabledFallbackTargets.Add(target);
-                Debug.Log($"[dbg-OSI] →FB '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count}");
+                DbgLog($"[dbg-OSI] →FB '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count}");
                 return;
             }
 
@@ -1221,7 +1225,7 @@ public class OffScreenIndicator : MonoBehaviour
             fallbackDataMap.Remove(target);
             transitionDataMap.Remove(target);
             fadeOutTargets.Remove(target);
-            Debug.Log($"[dbg-OSI] -REM '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
+            DbgLog($"[dbg-OSI] -REM '{tn}' targets={targets.Count}(was {beforeTargets}) fb={disabledFallbackTargets.Count} fallbackMode={isFallbackMode}");
         }
     }
 

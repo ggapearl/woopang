@@ -36,7 +36,7 @@ public class AutoUpdateChecker : MonoBehaviour
             cancelButton = "Later",
             
             // 강제 업데이트 (기분좋은 메시지)
-            forceUpdateTitle = "🎉 Better Service Update! 🎉",
+            forceUpdateTitle = "Better Service Update!",
             forceUpdateMessage = "We've prepared an amazing update ({0}) for a better experience!\n\nRedirecting to store in {1} seconds...",
             forceUpdateMessageNoCountdown = "We've prepared an amazing update ({0}) for a better experience!\n\nTaking you to the store now..."
         },
@@ -48,7 +48,7 @@ public class AutoUpdateChecker : MonoBehaviour
             cancelButton = "나중에",
             
             // 강제 업데이트 (기분좋은 메시지)
-            forceUpdateTitle = "🎉 더 나은 서비스를 위한 업데이트! 🎉",
+            forceUpdateTitle = "더 나은 서비스를 위한 업데이트!",
             forceUpdateMessage = "더욱 좋아진 우팡({0})을 준비했습니다!\n\n{1}초 후 스토어로 이동합니다...",
             forceUpdateMessageNoCountdown = "더욱 좋아진 우팡({0})을 준비했습니다!\n\n스토어로 이동합니다..."
         },
@@ -60,7 +60,7 @@ public class AutoUpdateChecker : MonoBehaviour
             cancelButton = "後で",
             
             // 강제 업데이트
-            forceUpdateTitle = "🎉 より良いサービスのためのアップデート! 🎉",
+            forceUpdateTitle = "より良いサービスのためのアップデート!",
             forceUpdateMessage = "より良いエクスペリエンスのために素晴らしいアップデート({0})を準備しました！\n\n{1}秒後にストアに移動します...",
             forceUpdateMessageNoCountdown = "より良いエクスペリエンスのために素晴らしいアップデート({0})を準備しました！\n\nストアに移動します..."
         },
@@ -72,7 +72,7 @@ public class AutoUpdateChecker : MonoBehaviour
             cancelButton = "稍后",
             
             // 강제 업데이트
-            forceUpdateTitle = "🎉 为了更好的服务更新! 🎉",
+            forceUpdateTitle = "为了更好的服务更新!",
             forceUpdateMessage = "我们为您准备了精彩的更新({0})以获得更好的体验！\n\n{1}秒后跳转到商店...",
             forceUpdateMessageNoCountdown = "我们为您准备了精彩的更新({0})以获得更好的体验！\n\n正在跳转到商店..."
         },
@@ -84,7 +84,7 @@ public class AutoUpdateChecker : MonoBehaviour
             cancelButton = "Más Tarde",
             
             // 강제 업데이트
-            forceUpdateTitle = "🎉 ¡Actualización para un Mejor Servicio! 🎉",
+            forceUpdateTitle = "¡Actualización para un Mejor Servicio!",
             forceUpdateMessage = "¡Hemos preparado una actualización increíble ({0}) para una mejor experiencia!\n\nRedirigiendo a la tienda en {1} segundos...",
             forceUpdateMessageNoCountdown = "¡Hemos preparado una actualización increíble ({0}) para una mejor experiencia!\n\nLlevándote a la tienda ahora..."
         }

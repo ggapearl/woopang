@@ -253,7 +253,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
                 if (shouldShow && !existing.activeSelf) existing.SetActive(true);
                 else if (!shouldShow && existing.activeSelf) existing.SetActive(false);
             }
-            else if (dist <= objectSpawnRadius)
+            else if (dist <= objectSpawnRadius && !HiddenPlaces.IsHidden("subway_" + uniqueId))
             {
                 // objectSpawnRadius 이내만 3D 오브젝트 생성
                 GameObject newObj = GetFromPool();
@@ -419,6 +419,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
     public Dictionary<string, FacilityData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
     public Dictionary<string, GameObject> GetSpawnedObjects() => spawnedObjects;
+    public Dictionary<string, GameObject> GetIndicatorOnlyObjects() => indicatorOnlyObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
 
     public int GetVisibleObjectCount()
@@ -482,6 +483,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
 
     public bool SpawnFullObject(string rawId)
     {
+        if (HiddenPlaces.IsHidden("subway_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (spawnedObjects.ContainsKey(rawId)) return true;
         if (!placeDataMap.ContainsKey(rawId)) return false;
 
@@ -497,6 +499,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider
 
     public bool SpawnIndicatorOnly(string rawId)
     {
+        if (HiddenPlaces.IsHidden("subway_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (indicatorOnlyObjects.ContainsKey(rawId)) return true;
         if (indicatorOnlyPrefab == null) return false;
 

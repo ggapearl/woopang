@@ -803,25 +803,7 @@ public class LoadingManager : MonoBehaviour
     
     void InitializeLanguage()
     {
-        switch (Application.systemLanguage)
-        {
-            case SystemLanguage.Korean:
-                currentLanguage = "ko";
-                break;
-            case SystemLanguage.Chinese:
-            case SystemLanguage.ChineseSimplified:
-                currentLanguage = "zh";
-                break;
-            case SystemLanguage.Japanese:
-                currentLanguage = "ja";
-                break;
-            case SystemLanguage.Spanish:
-                currentLanguage = "es";
-                break;
-            default:
-                currentLanguage = "en";
-                break;
-        }
+        currentLanguage = AppLanguage.Code;
         
     }
 
@@ -1977,7 +1959,7 @@ public class LoadingManager : MonoBehaviour
     
     string GetCurrentLanguageName()
     {
-        SystemLanguage lang = Application.systemLanguage;
+        SystemLanguage lang = AppLanguage.AsSystemLanguage();
         switch (lang)
         {
             case SystemLanguage.Korean: return "한국어";
@@ -2031,7 +2013,8 @@ public class LoadingManager : MonoBehaviour
     
     string[] GetMessages(string category)
     {
-        SystemLanguage currentLanguage = Application.systemLanguage;
+        // 중국어 기기는 ChineseSimplified 로 오는데 표는 Chinese 키라 영어가 나오던 문제 → AppLanguage 로 통일
+        SystemLanguage currentLanguage = AppLanguage.AsSystemLanguage();
         
         if (!allMessages.ContainsKey(category))
         {

@@ -1,33 +1,11 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
-using System.IO;
 
 public class CaptureAndTranslate : MonoBehaviour
 {
     public Image flashImage;
     public RectTransform captureArea;
-
-    void Start()
-    {
-        #if UNITY_ANDROID && !UNITY_EDITOR
-        RequestStoragePermission();
-        #endif
-    }
-
-    #if UNITY_ANDROID && !UNITY_EDITOR
-    private void RequestStoragePermission()
-    {
-        if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission("android.permission.WRITE_EXTERNAL_STORAGE"))
-        {
-            UnityEngine.Android.Permission.RequestUserPermission("android.permission.WRITE_EXTERNAL_STORAGE");
-        }
-        if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission("android.permission.READ_EXTERNAL_STORAGE"))
-        {
-            UnityEngine.Android.Permission.RequestUserPermission("android.permission.READ_EXTERNAL_STORAGE");
-        }
-    }
-    #endif
 
     public void OnTranslateButtonClick()
     {
@@ -36,7 +14,7 @@ public class CaptureAndTranslate : MonoBehaviour
 
     private IEnumerator CaptureWithZoomAndFlash()
     {
-        // 1. ȭ�� ��¦ Ȯ�� �ִϸ��̼�
+        // 1. 화면 살짝 확대 애니메이션
         if (captureArea != null)
         {
             Vector3 originalScale = captureArea.localScale;
@@ -59,7 +37,7 @@ public class CaptureAndTranslate : MonoBehaviour
             captureArea.localScale = originalScale;
         }
 
-        // 2. �÷��� ȿ��
+        // 2. 플래시 효과
         if (flashImage != null)
         {
             flashImage.gameObject.SetActive(true);
@@ -68,7 +46,7 @@ public class CaptureAndTranslate : MonoBehaviour
             flashImage.color = new Color(1, 1, 1, 0);
         }
 
-        // 3. ȭ�� ĸó
+        // 3. 화면 캡처
         yield return new WaitForEndOfFrame();
         Texture2D screenImage;
         Rect captureRect;
@@ -99,56 +77,38 @@ public class CaptureAndTranslate : MonoBehaviour
         screenImage.ReadPixels(captureRect, 0, 0);
         screenImage.Apply();
 
-        // 4. ������ Pictures ������ ����
-        string fileName = "CapturedImage_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png";
-        string galleryPath;
-
-        #if UNITY_ANDROID && !UNITY_EDITOR
-        galleryPath = Path.Combine("/storage/emulated/0/Pictures", fileName);
-        #else
-        galleryPath = Path.Combine(Application.persistentDataPath, fileName);
-        #endif
-
+        // 4. 사진첩에 저장 — NativeGallery 가 안드로이드 10+ 저장 방식·iOS 사진 권한을 처리한다
+        //    (예전엔 안드로이드는 /storage/emulated/0/Pictures 에 직접 쓰고, iOS 는 앱 내부 폴더에 저장해
+        //     번역 앱에서 사진을 고를 수 없었다)
+        string fileName = "Woopang_" + System.DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".png";
         byte[] bytes = screenImage.EncodeToPNG();
+        Destroy(screenImage);
+        bool done = false;
+        NativeGallery.SaveImageToGallery(bytes, "WOOPANG", fileName, (success, path) => done = true);
+        float wait = 0f;
+        while (!done && wait < 3f) { wait += Time.unscaledDeltaTime; yield return null; }
 
-        try
-        {
-            string directory = Path.GetDirectoryName(galleryPath);
-            if (!Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllBytes(galleryPath, bytes);
-
-            // 5. ������ ���ΰ�ħ
-            #if UNITY_ANDROID && !UNITY_EDITOR
-            try
-            {
-                using (AndroidJavaObject context = new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity"))
-                {
-                    using (AndroidJavaClass mediaScanner = new AndroidJavaClass("android.media.MediaScannerConnection"))
-                    {
-                        mediaScanner.CallStatic("scanFile", context, new string[] { galleryPath }, new string[] { "image/png" }, null);
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError("������ ���ΰ�ħ ����: " + e.Message);
-            }
-            #endif
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError("������ ���� ����: " + e.Message);
-            string fallbackPath = Path.Combine(Application.persistentDataPath, fileName);
-            File.WriteAllBytes(fallbackPath, bytes);
-            yield break;
-        }
-
-        // 6. ���� ���� �������� �̵�
-        string url = "https://translate.google.com/?sl=auto&tl=ko&op=images";
+        // 5. 구글 번역 이미지 모드 — 기기 언어로 번역 (저장에 실패해도 번역 화면의 카메라로 쓸 수 있게 연다)
+        string url = "https://translate.google.com/?sl=auto&tl=" + TargetLanguage() + "&op=images";
         Application.OpenURL(url);
+    }
+
+    private static string TargetLanguage()
+    {
+        switch (Application.systemLanguage)
+        {
+            case SystemLanguage.Korean: return "ko";
+            case SystemLanguage.Japanese: return "ja";
+            case SystemLanguage.Chinese:
+            case SystemLanguage.ChineseSimplified: return "zh-CN";
+            case SystemLanguage.ChineseTraditional: return "zh-TW";
+            case SystemLanguage.Spanish: return "es";
+            case SystemLanguage.French: return "fr";
+            case SystemLanguage.German: return "de";
+            case SystemLanguage.Vietnamese: return "vi";
+            case SystemLanguage.Thai: return "th";
+            case SystemLanguage.Indonesian: return "id";
+            default: return "en";
+        }
     }
 }

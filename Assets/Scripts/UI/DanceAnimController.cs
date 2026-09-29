@@ -16,6 +16,10 @@ using UnityEngine.UI;
 /// </summary>
 public class DanceAnimController : MonoBehaviour
 {
+    // 개발용 진단 로그 — WOOPANG_DEBUG 가 정의된 빌드에서만 호출이 남는다 (출시 빌드에서는 호출 자체가 빠짐)
+    [System.Diagnostics.Conditional("WOOPANG_DEBUG")]
+    private static void DbgLog(object message) => UnityEngine.Debug.Log(message);
+
     public static DanceAnimController Instance { get; private set; }
 
     /// <summary>
@@ -29,10 +33,10 @@ public class DanceAnimController : MonoBehaviour
         if (found != null)
         {
             Instance = found;
-            Debug.LogWarning($"[dbg-DanceAnim] EnsureInstance: 씬에서 발견 ({found.gameObject.name}) — Awake 못 돌았던 듯");
+            Debug.LogWarning($"[DanceAnimController] EnsureInstance: 씬에서 발견 ({found.gameObject.name}) — Awake 못 돌았던 듯");
             return found;
         }
-        Debug.LogError($"[dbg-DanceAnim] EnsureInstance: 씬에 DanceAnimController 자체가 없음 — 빌드된 씬 확인 필요");
+        Debug.LogError($"[DanceAnimController] EnsureInstance: 씬에 DanceAnimController 자체가 없음 — 빌드된 씬 확인 필요");
         return null;
     }
 
@@ -66,15 +70,15 @@ public class DanceAnimController : MonoBehaviour
     void Awake()
     {
         string parentName = transform.parent != null ? transform.parent.name : "<root>";
-        Debug.Log($"[dbg-DanceAnim] Awake on '{gameObject.name}' (active={gameObject.activeInHierarchy}, parent={parentName})");
+        DbgLog($"[dbg-DanceAnim] Awake on '{gameObject.name}' (active={gameObject.activeInHierarchy}, parent={parentName})");
         if (Instance != null && Instance != this)
         {
-            Debug.LogWarning($"[dbg-DanceAnim] 중복 인스턴스 발견 — 자기 자신 destroy");
+            Debug.LogWarning($"[DanceAnimController] 중복 인스턴스 발견 — 자기 자신 destroy");
             Destroy(gameObject);
             return;
         }
         Instance = this;
-        Debug.Log($"[dbg-DanceAnim] Instance 설정 완료 (id={GetInstanceID()})");
+        DbgLog($"[dbg-DanceAnim] Instance 설정 완료 (id={GetInstanceID()})");
         if (confirmPanel != null) confirmPanel.SetActive(false);
         if (confirmButton != null) confirmButton.onClick.AddListener(OnConfirmPressed);
         if (cancelButton != null) cancelButton.onClick.AddListener(HideConfirm);
@@ -97,13 +101,13 @@ public class DanceAnimController : MonoBehaviour
     /// </summary>
     public bool OnAnimCubeDoubleTapped(int placeId, string placeName)
     {
-        Debug.Log($"[dbg-DanceAnim] OnAnimCubeDoubleTapped: id={placeId} name='{placeName}'");
+        DbgLog($"[dbg-DanceAnim] OnAnimCubeDoubleTapped: id={placeId} name='{placeName}'");
 
         if (activeSpawns.ContainsKey(placeId) &&
             DataManager.Instance != null &&
             DataManager.Instance.GetSpawnedObjects().ContainsKey(placeId))
         {
-            Debug.Log($"[dbg-DanceAnim] 이미 활성 GLB 스폰됨 — 일반 정보 패널 양보 (id={placeId})");
+            DbgLog($"[dbg-DanceAnim] 이미 활성 GLB 스폰됨 — 일반 정보 패널 양보 (id={placeId})");
             return false; // DoubleTap3D가 일반 패널 띄우게 함
         }
 
@@ -148,12 +152,12 @@ public class DanceAnimController : MonoBehaviour
                         : $"{bytes / (1024f * 1024f):F1} MB";
                     if (id == pendingId && sizeText != null)
                         sizeText.text = $"3D 보기 ({sizeStr} · WiFi 권장)";
-                    Debug.Log($"[dbg-DanceAnim] HEAD OK: id={id} size={bytes:N0} bytes ({sizeStr})");
+                    DbgLog($"[dbg-DanceAnim] HEAD OK: id={id} size={bytes:N0} bytes ({sizeStr})");
                 }
             }
             else
             {
-                Debug.LogWarning($"[dbg-DanceAnim] HEAD 실패: {head.error}");
+                Debug.LogWarning($"[DanceAnimController] HEAD 실패: {head.error}");
                 if (id == pendingId && sizeText != null)
                     sizeText.text = "3D 보기 (다운로드 필요)";
             }
@@ -182,7 +186,7 @@ public class DanceAnimController : MonoBehaviour
 
     IEnumerator SpawnFlow(int id)
     {
-        Debug.Log($"[dbg-DanceAnim] SpawnFlow START id={id}");
+        DbgLog($"[dbg-DanceAnim] SpawnFlow START id={id}");
         if (progressGroup != null) progressGroup.SetActive(true);
         if (confirmButton != null) confirmButton.interactable = false;
         if (progressText != null) progressText.text = "준비 중...";
@@ -190,7 +194,7 @@ public class DanceAnimController : MonoBehaviour
         DataManager dm = DataManager.Instance;
         if (dm == null)
         {
-            Debug.LogError("[dbg-DanceAnim] DataManager.Instance is NULL");
+            Debug.LogError("[DanceAnimController] DataManager.Instance is NULL");
             HideConfirm();
             yield break;
         }
@@ -198,7 +202,7 @@ public class DanceAnimController : MonoBehaviour
         // 1) PlaceData 확보 (detail 없으면 SpawnFullObject가 batch fetch 트리거)
         if (!dm.GetPlaceDataMap().TryGetValue(id, out var place))
         {
-            Debug.Log($"[dbg-DanceAnim] placeDataMap에 id={id} 없음 — detail fetch 트리거");
+            DbgLog($"[dbg-DanceAnim] placeDataMap에 id={id} 없음 — detail fetch 트리거");
             if (progressText != null) progressText.text = "데이터 받는 중...";
             dm.SpawnFullObject(id.ToString());
             float fetchWait = 0f;
@@ -209,26 +213,26 @@ public class DanceAnimController : MonoBehaviour
             }
             if (!dm.GetPlaceDataMap().TryGetValue(id, out place))
             {
-                Debug.LogError($"[dbg-DanceAnim] detail fetch 실패 id={id}");
+                Debug.LogError($"[DanceAnimController] detail fetch 실패 id={id}");
                 if (progressText != null) progressText.text = "데이터 받기 실패. 다시 시도해주세요.";
                 yield return new WaitForSeconds(2f);
                 HideConfirm();
                 yield break;
             }
         }
-        Debug.Log($"[dbg-DanceAnim] placeData OK: name={place.name} model_url={place.model_url} model_type={place.model_type}");
+        DbgLog($"[dbg-DanceAnim] placeData OK: name={place.name} model_url={place.model_url} model_type={place.model_type}");
 
         // 2) URL 해결 (상대/풀 둘 다 처리)
         string url = ResolveUrl(place.model_url);
         if (string.IsNullOrEmpty(url))
         {
-            Debug.LogError($"[dbg-DanceAnim] model_url empty");
+            Debug.LogError($"[DanceAnimController] model_url empty");
             if (progressText != null) progressText.text = "URL 없음. DB 확인 필요.";
             yield return new WaitForSeconds(2f);
             HideConfirm();
             yield break;
         }
-        Debug.Log($"[dbg-DanceAnim] resolved URL: {url}");
+        DbgLog($"[dbg-DanceAnim] resolved URL: {url}");
 
         // 3) UnityWebRequest로 직접 다운로드 + 진행률
         if (progressText != null) progressText.text = "3D 콘텐츠 다운로드 시작...";
@@ -248,25 +252,25 @@ public class DanceAnimController : MonoBehaviour
             float elapsed = Time.realtimeSinceStartup - startT;
             if (req.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"[dbg-DanceAnim] 다운로드 실패: {req.error} (URL={url})");
+                Debug.LogError($"[DanceAnimController] 다운로드 실패: {req.error} (URL={url})");
                 if (progressText != null) progressText.text = $"다운로드 실패: {req.error}";
                 yield return new WaitForSeconds(3f);
                 HideConfirm();
                 yield break;
             }
             glbBytes = req.downloadHandler.data;
-            Debug.Log($"[dbg-DanceAnim] 다운로드 OK: {glbBytes.Length:N0} bytes / {elapsed:F1}s");
+            DbgLog($"[dbg-DanceAnim] 다운로드 OK: {glbBytes.Length:N0} bytes / {elapsed:F1}s");
         }
 
         // 4) GLBModelLoader 캐시에 사전 주입 — Promote가 곧 호출할 때 네트워크 안 거치게
         GLBModelLoader.PreloadCache(url, glbBytes);
-        Debug.Log($"[dbg-DanceAnim] PreloadCache 주입 완료");
+        DbgLog($"[dbg-DanceAnim] PreloadCache 주입 완료");
 
         if (progressText != null) progressText.text = "3D 오브젝트 로딩 중...";
 
         // 5) 큐브 → GLB 교체 (PromoteCubeToGLB가 디스폰 후 glbPrefab + 캐시된 바이트로 즉시 로드)
         bool promoted = dm.PromoteCubeToGLB(id);
-        Debug.Log($"[dbg-DanceAnim] PromoteCubeToGLB: {promoted}");
+        DbgLog($"[dbg-DanceAnim] PromoteCubeToGLB: {promoted}");
         if (!promoted)
         {
             // 실패면 20초 로딩 대기 자체가 무의미 — 즉시 안내 후 종료
@@ -304,14 +308,14 @@ public class DanceAnimController : MonoBehaviour
 
         if (!modelReady)
         {
-            Debug.LogWarning($"[dbg-DanceAnim] GLB 로드 타임아웃 id={id} after {spawnWait:F1}s");
+            Debug.LogWarning($"[DanceAnimController] GLB 로드 타임아웃 id={id} after {spawnWait:F1}s");
             if (progressText != null) progressText.text = "로딩 시간 초과. 다시 시도해주세요.";
             yield return new WaitForSeconds(2f);
             HideConfirm();
             yield break;
         }
 
-        Debug.Log($"[dbg-DanceAnim] GLB 표시 완료 id={id} (총 {spawnWait:F1}s 대기)");
+        DbgLog($"[dbg-DanceAnim] GLB 표시 완료 id={id} (총 {spawnWait:F1}s 대기)");
         activeSpawns[id] = Time.realtimeSinceStartup;
         HideConfirm();
     }
@@ -355,7 +359,7 @@ public class DanceAnimController : MonoBehaviour
                 dm.DespawnFullObject(id.ToString());
                 dm.DemoteAnimToCube(id);
                 activeSpawns.Remove(id);
-                Debug.Log($"[dbg-DanceAnim] 자동 디스폰 완료 id={id} → 큐브로 복원 대기");
+                DbgLog($"[dbg-DanceAnim] 자동 디스폰 완료 id={id} → 큐브로 복원 대기");
             }
         }
     }

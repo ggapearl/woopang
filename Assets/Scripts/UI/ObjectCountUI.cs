@@ -194,6 +194,7 @@ public class ObjectCountUI : MonoBehaviour
             countText.text = noDataText;
         }
 
+        while (BootOverlay.Showing) yield return null;
         yield return new WaitForSeconds(3f);
 
         if (fadeOutCoroutine != null) StopCoroutine(fadeOutCoroutine);
@@ -203,6 +204,9 @@ public class ObjectCountUI : MonoBehaviour
     private IEnumerator FadeOutAfterDelay(float delay = -1f)
     {
         float waitTime = (delay < 0) ? displayDuration : delay;
+
+        // 시작 화면에 가려진 채로 사라지지 않게 — 시작 화면이 걷힌 뒤부터 센다
+        while (BootOverlay.Showing) yield return null;
 
         if (waitTime > 0)
         {

@@ -33,6 +33,15 @@ public class Indicator : MonoBehaviour
     /// </summary>
     [HideInInspector] public int lastUpdatedFrame;
 
+    // ── 닫기(X) — 박스 오른쪽 아래 끝(위쪽은 장소 이름을 가려서). 누르면 이 기기에서 그 장소를 숨긴다(HiddenPlaces: 3D·박스·화살표).
+    //    씬이 켜 줄 때만 생긴다(R0926IndicatorClose). 장소가 아닌 대상(P2P 사용자 등)에는 붙지 않는다.
+    public static bool CloseButtonEnabled;
+    public static Sprite CloseIcon;
+    public static Sprite CloseBackground;
+    public static float CloseButtonSize = 96f;   // 캔버스 단위 — 박스가 거리에 따라 커지고 작아져도 이 크기 유지
+    private RectTransform closeButton;
+    private Target closeFor;
+
     public bool Active
     {
         get
@@ -235,6 +244,73 @@ public class Indicator : MonoBehaviour
         // 최종 알파값 = 거리 기반 목표
         canvasGroup.alpha = distanceAlpha;
         fadeCoroutine = null;
+    }
+
+    private void LateUpdate()
+    {
+        if (indicatorType != IndicatorType.BOX) return;
+        if (!CloseButtonEnabled)
+        {
+            if (closeButton != null && closeButton.gameObject.activeSelf) closeButton.gameObject.SetActive(false);
+            return;
+        }
+        if (ownerTarget != closeFor)
+        {
+            closeFor = ownerTarget;
+            bool isPlace = ownerTarget != null && HiddenPlaces.ResolveUniqueId(ownerTarget) != null;
+            if (isPlace) EnsureCloseButton();
+            if (closeButton != null) closeButton.gameObject.SetActive(isPlace);
+        }
+        if (closeButton != null && closeButton.gameObject.activeSelf)
+        {
+            float s = transform.localScale.x;
+            if (s > 0.0001f)
+            {
+                closeButton.localScale = Vector3.one / s;
+                // 모서리에서 살짝 오른쪽·위로 — 박스 아래 거리 글자(1778m 등)와 겹치지 않게. 박스 크기와 상관없이 같은 간격
+                closeButton.anchoredPosition = new Vector2(0.3f, 0.3f) * (CloseButtonSize / s);
+            }
+        }
+    }
+
+    private void EnsureCloseButton()
+    {
+        if (closeButton != null) return;
+        var go = new GameObject("Close0926", typeof(RectTransform), typeof(Image), typeof(Button));
+        closeButton = (RectTransform)go.transform;
+        closeButton.SetParent(transform, false);
+        closeButton.anchorMin = closeButton.anchorMax = new Vector2(1f, 0f);
+        closeButton.pivot = new Vector2(0.5f, 0.5f);
+        closeButton.anchoredPosition = Vector2.zero;
+        closeButton.sizeDelta = Vector2.one * (CloseButtonSize * 1.9f);   // 누르는 영역은 보이는 원보다 넉넉히
+        go.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+
+        var bg = new GameObject("Bg", typeof(RectTransform), typeof(Image));
+        var bgRt = (RectTransform)bg.transform;
+        bgRt.SetParent(closeButton, false);
+        bgRt.sizeDelta = Vector2.one * CloseButtonSize;
+        var bgImg = bg.GetComponent<Image>();
+        bgImg.sprite = CloseBackground;
+        bgImg.color = new Color(0.06f, 0.07f, 0.1f, 0.78f);
+        bgImg.raycastTarget = false;
+
+        var icon = new GameObject("X", typeof(RectTransform), typeof(Image));
+        var icRt = (RectTransform)icon.transform;
+        icRt.SetParent(closeButton, false);
+        icRt.sizeDelta = Vector2.one * (CloseButtonSize * 0.46f);
+        var icImg = icon.GetComponent<Image>();
+        icImg.sprite = CloseIcon;
+        icImg.color = Color.white;
+        icImg.raycastTarget = false;
+
+        var btn = go.GetComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        btn.onClick.AddListener(OnCloseClicked);
+    }
+
+    private void OnCloseClicked()
+    {
+        if (ownerTarget != null) HiddenPlaces.HideTarget(ownerTarget);
     }
 
     /// <summary>

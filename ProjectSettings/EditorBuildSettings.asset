@@ -6,8 +6,8 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/woopang_0529.unity
-    guid: b1810d40ed6fa3f4f8ca0627aa73b31b
+    path: Assets/Scenes/woopang_0926.unity
+    guid: 6186be96ae902064899153d3e8e139ae
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: c84e9f04bfb5140ffb4e02ebf9bbcd6e,
       type: 2}

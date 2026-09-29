@@ -198,6 +198,7 @@ public class SpeechBubbleManager : MonoBehaviour
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
         UnityWebRequest request = new UnityWebRequest($"{serverUrl}/api/p2p/speech_bubble", "POST");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -230,6 +231,7 @@ public class SpeechBubbleManager : MonoBehaviour
     private IEnumerator LoadSpeechBubble(string bubbleId)
     {
         UnityWebRequest request = UnityWebRequest.Get($"{serverUrl}/api/p2p/speech_bubble/{bubbleId}");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         yield return request.SendWebRequest();
 
         if (request.result == UnityWebRequest.Result.Success)
@@ -358,6 +360,7 @@ public class SpeechBubbleManager : MonoBehaviour
     public IEnumerator LoadBubblesForTarget(string targetType, string targetId)
     {
         UnityWebRequest request = UnityWebRequest.Get($"{serverUrl}/api/p2p/speech_bubbles?target_type={targetType}&target_id={targetId}");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         yield return request.SendWebRequest();
 
         if (request.result == UnityWebRequest.Result.Success)

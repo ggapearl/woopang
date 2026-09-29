@@ -8200,6 +8200,11 @@ MonoBehaviour:
   fallbackFadeOutDuration: 0.4
   arrowMinSpacing: 80
   maxIndicatorDistance: 0
+  indicatorFadeNearDistance: 50
+  indicatorFadeFarDistance: 300
+  indicatorFadeStartAlpha: 0.6
+  indicatorFarAlpha: 0.2
+  fadeBoxToo: 1
   maxNormalIndicatorCount: 16
   arrowSmoothSpeed: 8
 --- !u!114 &547149855

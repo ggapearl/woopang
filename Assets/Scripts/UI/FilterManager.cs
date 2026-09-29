@@ -248,6 +248,7 @@ public class FilterManager : MonoBehaviour
     void Start()
     {
         AutoConnectFields();
+        HiddenPlaces.Hidden += OnPlaceHidden;   // 패널이 닫혀 있어도 받도록 OnEnable 이 아닌 여기서
 
         // Inspector에 연결되지 않은 매니저는 자동으로 찾기
         if (terminalManager == null) terminalManager = Object.FindFirstObjectByType<TerminalManager>();
@@ -322,16 +323,7 @@ public class FilterManager : MonoBehaviour
 
     private void UpdateLanguage()
     {
-        currentLangCode = "en";
-        switch (Application.systemLanguage)
-        {
-            case SystemLanguage.Korean: currentLangCode = "ko"; break;
-            case SystemLanguage.Japanese: currentLangCode = "ja"; break;
-            case SystemLanguage.Chinese:
-            case SystemLanguage.ChineseSimplified:
-            case SystemLanguage.ChineseTraditional: currentLangCode = "zh"; break;
-            case SystemLanguage.Spanish: currentLangCode = "es"; break;
-        }
+        currentLangCode = AppLanguage.Code;
 
         if (!localizedFilterNames.ContainsKey(currentLangCode)) currentLangCode = "en";
         var texts = localizedFilterNames[currentLangCode];
@@ -981,6 +973,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private int maxIndicatorObjects = 16;
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
     [SerializeField] private float fullObjectRadius = 500f;
+    /// <summary>3D 오브젝트가 실제로 생기는 최대 거리 (m) — 이 밖은 화살표·박스만</summary>
+    public float FullObjectRadius => fullObjectRadius;
     [Tooltip("IndicatorOnly 생성 반경 (m) — PlaceListManager.distanceSlider로 런타임 동기화됨")]
     [SerializeField] private float indicatorObjectRadius = 5000f;
     [Tooltip("배분 갱신 주기 (초) — 도보 1.1m/s 기준 10초 = 11m 이동, 충분한 정밀도")]
@@ -1157,6 +1151,28 @@ public class FilterManager : MonoBehaviour
         TriggerReallocation();
     }
 
+    private void OnDestroy()
+    {
+        HiddenPlaces.Hidden -= OnPlaceHidden;
+    }
+
+    /// <summary>
+    /// 인디케이터 X 로 숨긴 장소 — 바로 치우고(3D·박스·화살표), 빈자리는 다음 장소로 채운다
+    /// </summary>
+    private void OnPlaceHidden(string uniqueId)
+    {
+        string raw = ExtractRawId(uniqueId);
+        foreach (var provider in cacheProviders)
+        {
+            if (provider.GetSpawnedFullIds().Contains(uniqueId)) provider.DespawnFullObject(raw);
+            if (provider.GetSpawnedIndicatorIds().Contains(uniqueId)) provider.DespawnIndicatorOnly(raw);
+        }
+        currentFullAllocations.Remove(uniqueId);
+        currentIndicatorAllocations.Remove(uniqueId);
+        detailPendingIds.Remove(uniqueId);
+        TriggerReallocation();
+    }
+
     /// <summary>
     /// 필터 변경 시 즉시 재배분 트리거
     /// </summary>
@@ -1292,6 +1308,7 @@ public class FilterManager : MonoBehaviour
 
             foreach (var place in provider.GetCachedPlaces())
             {
+                if (HiddenPlaces.IsHidden(place.uniqueId)) continue;   // 이 기기에서 X 로 숨긴 장소 — 예산도 다음 장소에게
                 float dist = CalculateGPSDistance(lat, lon, place.latitude, place.longitude);
                 // 히스테리시스: 이미 표시 중인 오브젝트는 거리 우대 → 예산 경계 진동 방지
                 if (allocationHysteresisMeters > 0f &&
@@ -1374,6 +1391,21 @@ public class FilterManager : MonoBehaviour
         }
 
         // 4) Diff: 디스폰 → 스폰 순서로 처리
+        // 매니저의 GetSpawned*Ids() 는 부를 때마다 HashSet 과 "dm_"+id 문자열을 새로 만든다 → id 마다 부르면
+        // 10초마다 수백 개 할당(저사양폰 GC 끊김). 한 사이클 안에서는 재사용하고, 스폰/디스폰한 매니저만 버린다.
+        var fullIdsMemo = new Dictionary<IPlaceCacheProvider, HashSet<string>>();
+        var indIdsMemo = new Dictionary<IPlaceCacheProvider, HashSet<string>>();
+        HashSet<string> FullIds(IPlaceCacheProvider p)
+        {
+            if (!fullIdsMemo.TryGetValue(p, out var set)) { set = p.GetSpawnedFullIds(); fullIdsMemo[p] = set; }
+            return set;
+        }
+        HashSet<string> IndIds(IPlaceCacheProvider p)
+        {
+            if (!indIdsMemo.TryGetValue(p, out var set)) { set = p.GetSpawnedIndicatorIds(); indIdsMemo[p] = set; }
+            return set;
+        }
+        void Touched(IPlaceCacheProvider p) { fullIdsMemo.Remove(p); indIdsMemo.Remove(p); }
 
         // Full 디스폰 (이전에 있었지만 새 배분에 없는 것)
         foreach (string id in currentFullAllocations)
@@ -1383,15 +1415,17 @@ public class FilterManager : MonoBehaviour
                 detailPendingIds.Remove(id);
                 foreach (var provider in cacheProviders)
                 {
-                    if (provider.GetSpawnedFullIds().Contains(id))
+                    if (FullIds(provider).Contains(id))
                     {
                         provider.DespawnFullObject(ExtractRawId(id));
+                        Touched(provider);
                         break;
                     }
                     // Detail 대기 중 임시 IndicatorOnly도 함께 디스폰
-                    if (provider.GetSpawnedIndicatorIds().Contains(id))
+                    if (IndIds(provider).Contains(id))
                     {
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        Touched(provider);
                         break;
                     }
                 }
@@ -1405,9 +1439,10 @@ public class FilterManager : MonoBehaviour
             {
                 foreach (var provider in cacheProviders)
                 {
-                    if (provider.GetSpawnedIndicatorIds().Contains(id))
+                    if (IndIds(provider).Contains(id))
                     {
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        Touched(provider);
                         break;
                     }
                 }
@@ -1424,7 +1459,7 @@ public class FilterManager : MonoBehaviour
         List<string> pendingToRemove = new List<string>();
         foreach (var kv in detailPendingIds)
         {
-            bool fullSpawned = fullProviderMap.TryGetValue(kv.Key, out var pp) && pp.GetSpawnedFullIds().Contains(kv.Key);
+            bool fullSpawned = fullProviderMap.TryGetValue(kv.Key, out var pp) && FullIds(pp).Contains(kv.Key);
             bool timedOut = (nowTime - kv.Value) >= DETAIL_PENDING_TIMEOUT;
             if (fullSpawned || timedOut)
                 pendingToRemove.Add(kv.Key);
@@ -1439,17 +1474,20 @@ public class FilterManager : MonoBehaviour
                 if (fullProviderMap.TryGetValue(id, out var provider))
                 {
                     // IndicatorOnly에서 승격 또는 임시 IndicatorOnly가 남아있는 경우 먼저 디스폰
-                    if (currentIndicatorAllocations.Contains(id) || provider.GetSpawnedIndicatorIds().Contains(id))
+                    if (currentIndicatorAllocations.Contains(id) || IndIds(provider).Contains(id))
                     {
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        Touched(provider);
                     }
                     bool spawned = provider.SpawnFullObject(ExtractRawId(id));
+                    Touched(provider);
                     if (!spawned)
                     {
                         // Detail API 대기 중 → 임시 IndicatorOnly 표시 (최초 1회만)
                         pendingFullIds.Add(id);
                         detailPendingIds[id] = nowTime;
                         provider.SpawnIndicatorOnly(ExtractRawId(id));
+                        Touched(provider);
                     }
                 }
             }
@@ -1457,24 +1495,27 @@ public class FilterManager : MonoBehaviour
             {
                 if (fullProviderMap.TryGetValue(id, out var provider))
                 {
-                    bool hasFullSpawn = provider.GetSpawnedFullIds().Contains(id);
-                    bool hasIndicator = provider.GetSpawnedIndicatorIds().Contains(id);
+                    bool hasFullSpawn = FullIds(provider).Contains(id);
+                    bool hasIndicator = IndIds(provider).Contains(id);
 
                     if (hasFullSpawn && hasIndicator)
                     {
                         // Full 스폰 완료 후 임시 IndicatorOnly가 남아있으면 제거
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
+                        Touched(provider);
                         detailPendingIds.Remove(id);
                     }
                     else if (!hasFullSpawn && !hasIndicator && !detailPendingIds.ContainsKey(id))
                     {
                         // Detail API 대기 중이 아닌데 Full도 Indicator도 없으면 복구 시도
                         bool spawned = provider.SpawnFullObject(ExtractRawId(id));
+                        Touched(provider);
                         if (!spawned)
                         {
                             pendingFullIds.Add(id);
                             detailPendingIds[id] = nowTime;
                             provider.SpawnIndicatorOnly(ExtractRawId(id));
+                            Touched(provider);
                         }
                     }
                     // ★ Detail 타임아웃 후 IndicatorOnly만 남아 고착된 상태 — Full 재승격 시도
@@ -1482,9 +1523,11 @@ public class FilterManager : MonoBehaviour
                     else if (!hasFullSpawn && hasIndicator && !detailPendingIds.ContainsKey(id))
                     {
                         bool spawned = provider.SpawnFullObject(ExtractRawId(id));
+                        Touched(provider);
                         if (spawned)
                         {
                             provider.DespawnIndicatorOnly(ExtractRawId(id));
+                            Touched(provider);
                         }
                         else
                         {
@@ -1506,11 +1549,12 @@ public class FilterManager : MonoBehaviour
             if (!indicatorProviderMap.TryGetValue(id, out var provider)) continue;
 
             bool inAllocSet = currentIndicatorAllocations.Contains(id);
-            bool actuallySpawned = provider.GetSpawnedIndicatorIds().Contains(id);
+            bool actuallySpawned = IndIds(provider).Contains(id);
 
             if (!inAllocSet || !actuallySpawned)
             {
                 provider.SpawnIndicatorOnly(ExtractRawId(id));
+                Touched(provider);
             }
         }
 

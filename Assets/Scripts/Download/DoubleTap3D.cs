@@ -12,6 +12,10 @@ using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 public class DoubleTap3D : MonoBehaviour
 {
+    // 개발용 진단 로그 — WOOPANG_DEBUG 가 정의된 빌드에서만 호출이 남는다 (출시 빌드에서는 호출 자체가 빠짐)
+    [System.Diagnostics.Conditional("WOOPANG_DEBUG")]
+    private static void DbgLog(object message) => UnityEngine.Debug.Log(message);
+
     public CanvasGroup fullscreenCanvasGroup;
     public GameObject guidePanel;
     public Image fullscreenImage;
@@ -846,7 +850,7 @@ public class DoubleTap3D : MonoBehaviour
         // 큐브 = 플레이스홀더, 더블탭 = "다운로드" 버튼 띄우기.
         if (id > 0 && DataManager.Instance != null && DataManager.Instance.IsAnimCategory(id))
         {
-            Debug.Log($"[dbg-DoubleTap] anim 카테고리 감지 id={id} → DanceAnimController로 라우팅");
+            DbgLog($"[dbg-DoubleTap] anim 카테고리 감지 id={id} → DanceAnimController로 라우팅");
             var ctrl = DanceAnimController.Instance ?? DanceAnimController.EnsureInstance();
             if (ctrl != null)
             {
@@ -854,15 +858,15 @@ public class DoubleTap3D : MonoBehaviour
                 bool handled = ctrl.OnAnimCubeDoubleTapped(id, displayName);
                 if (handled)
                 {
-                    Debug.Log("[dbg-DoubleTap] DanceAnim 다운로드 패널 처리됨 — 일반 정보 패널 스킵");
+                    DbgLog("[dbg-DoubleTap] DanceAnim 다운로드 패널 처리됨 — 일반 정보 패널 스킵");
                     return;
                 }
                 // handled=false → GLB 이미 떠 있음. fall-through으로 일반 정보 패널 표시.
-                Debug.Log("[dbg-DoubleTap] GLB 이미 스폰됨 → 일반 정보 패널 표시 흐름으로 fall-through");
+                DbgLog("[dbg-DoubleTap] GLB 이미 스폰됨 → 일반 정보 패널 표시 흐름으로 fall-through");
             }
             else
             {
-                Debug.LogError($"[dbg-DoubleTap] DanceAnimController 못 찾음 — anim인데 컨트롤러 없음, 정지");
+                Debug.LogError($"[DoubleTap3D] DanceAnimController 못 찾음 — anim인데 컨트롤러 없음, 정지");
                 return;
             }
         }

@@ -42,7 +42,7 @@ public class PlaceListManager : MonoBehaviour
     private class LiveEntry
     {
         public string id;
-        public string baseLabel;     // 거리 빼고 표시명만 (예: "스타벅스" 또는 "👤 user")
+        public string baseLabel;     // 거리 빼고 표시명만 (예: "스타벅스" 또는 "@user")
         public string colorHex;
         public float baseLat;
         public float baseLon;
@@ -122,6 +122,7 @@ public class PlaceListManager : MonoBehaviour
 
     void Start()
     {
+        HiddenPlaces.Hidden += OnPlaceHidden;
         // 슬라이더 유무와 무관하게 기본값 보장 — 슬라이더 없으면 maxDisplayDistance=0이 되어 모든 POI 걸리는 버그 방지
         maxDisplayDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
 
@@ -143,8 +144,10 @@ public class PlaceListManager : MonoBehaviour
 
     private string GetLocalizedText(string key)
     {
-        string lang = Application.systemLanguage == SystemLanguage.Korean ? "ko" : "en";
-        return languageTexts[lang].ContainsKey(key) ? languageTexts[lang][key] : key;
+        // 예전엔 한국어가 아니면 전부 영어였다 — 일본어·중국어·스페인어 표도 쓰고, 없는 문구만 영어로
+        string lang = AppLanguage.Code;
+        if (languageTexts.TryGetValue(lang, out var t) && t.TryGetValue(key, out var v)) return v;
+        return languageTexts["en"].TryGetValue(key, out var en) ? en : key;
     }
 
     private IEnumerator InitializeAndUpdateUI()
@@ -170,8 +173,15 @@ public class PlaceListManager : MonoBehaviour
 
     private Coroutine updateUICoroutine;
 
+    // 인디케이터 X 로 숨긴 장소는 목록에서도 뺀다 (HiddenPlaces — 앱을 다시 켜면 초기화)
+    private void OnPlaceHidden(string uniqueId)
+    {
+        if (isActiveAndEnabled) UpdateUI();
+    }
+
     private void OnDestroy()
     {
+        HiddenPlaces.Hidden -= OnPlaceHidden;
         if (updatePeriodicCoroutine != null) StopCoroutine(updatePeriodicCoroutine);
         if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
         if (distanceSlider != null) distanceSlider.onValueChanged.RemoveListener(OnDistanceSliderChanged);
@@ -227,6 +237,7 @@ public class PlaceListManager : MonoBehaviour
             // 1a. lightCache에서 전체 목록 빌드
             foreach (var cached in dataManager.GetLightCache()) {
                 if (!int.TryParse(cached.rawId, out int id)) continue;
+                if (HiddenPlaces.IsHidden("dm_" + cached.rawId)) continue;
                 string cat = cached.category ?? "";
                 string modelType = cached.modelType ?? "cube";
 
@@ -265,6 +276,7 @@ public class PlaceListManager : MonoBehaviour
             // 1b. placeDataMap에만 있고 lightCache에 없는 데이터 (Detail API로 가져온 것)
             foreach (var p in placeDataMap.Values) {
                 if (addedIds.Contains(p.id)) continue;
+                if (HiddenPlaces.IsHidden("dm_" + p.id)) continue;
                 string origType = p.original_model_type ?? p.model_type;
                 if (!showObject3D && origType == "custom") continue;
                 if (petFriendlyOnly && !p.pet_friendly) continue;
@@ -296,6 +308,7 @@ public class PlaceListManager : MonoBehaviour
         // 2. TourAPI
         if (showPublic && tourAPIManager != null) {
             foreach(var p in tourAPIManager.GetPlaceDataMap().Values) {
+                if (HiddenPlaces.IsHidden("tour_" + p.contentid)) continue;
                 float d = CalculateDistance(lat, lon, p.mapy, p.mapx);
                 if (d <= maxDisplayDistance) {
                     tourAPICount++;
@@ -306,9 +319,9 @@ public class PlaceListManager : MonoBehaviour
         }
 
         // 3. New Public Transport Managers
-        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR);
-        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon, TRAIN_COLOR);
-        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR);
+        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_");
+        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_");
+        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_");
 
         // 4. P2P Users (근처 사용자)
         bool showP2PUsers = activeFilters.GetValueOrDefault("p2pUsers", true);
@@ -499,14 +512,14 @@ public class PlaceListManager : MonoBehaviour
             if (user.distance <= maxDisplayDistance)
             {
                 p2pUserCount++;
-                string displayText = $"👤 {user.username} - {Mathf.FloorToInt(user.distance)}m";
+                string displayText = $"@{user.username} - {Mathf.FloorToInt(user.distance)}m";   // 이모지는 앱 글꼴에 없어 □로 보였다
                 combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
-                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"👤 {user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude });
+                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude });
             }
         }
     }
 
-    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00") where T : MonoBehaviour
+    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null) where T : MonoBehaviour
     {
         if (!filter || manager == null) return;
 
@@ -524,9 +537,12 @@ public class PlaceListManager : MonoBehaviour
 
             if (latProp == null || lonProp == null || nameProp == null) continue;
 
-            float pLat = Convert.ToSingle(latProp.GetValue(val));
-            float pLon = Convert.ToSingle(lonProp.GetValue(val));
+            object rawLat = latProp.GetValue(val);
+            object rawLon = lonProp.GetValue(val);
             string pName = (string)nameProp.GetValue(val);
+            if (hiddenPrefix != null && HiddenPlaces.IsHidden(hiddenPrefix + pName + "_" + rawLat + "_" + rawLon)) continue;
+            float pLat = Convert.ToSingle(rawLat);
+            float pLon = Convert.ToSingle(rawLon);
             string pType = typeProp != null ? (string)typeProp.GetValue(val) : "unknown";
             string pId = $"{pType}_{pName}";
 

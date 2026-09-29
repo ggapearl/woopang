@@ -245,7 +245,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
             float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
 
-            if (!spawnedObjects.ContainsKey(uniqueId))
+            if (!spawnedObjects.ContainsKey(uniqueId) && !HiddenPlaces.IsHidden("terminal_" + uniqueId))
             {
                 // objectSpawnRadius 이내만 오브젝트 생성
                 if (dist <= objectSpawnRadius)
@@ -418,6 +418,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     public Dictionary<string, FacilityData> GetPlaceDataMap() => placeDataMap;
     public bool IsDataLoaded() => isDataLoaded;
     public Dictionary<string, GameObject> GetSpawnedObjects() => spawnedObjects;
+    public Dictionary<string, GameObject> GetIndicatorOnlyObjects() => indicatorOnlyObjects;
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
 
     public int GetVisibleObjectCount()
@@ -481,6 +482,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     public bool SpawnFullObject(string rawId)
     {
+        if (HiddenPlaces.IsHidden("terminal_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (spawnedObjects.ContainsKey(rawId)) return true;
         if (!placeDataMap.ContainsKey(rawId)) return false;
 
@@ -496,6 +498,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
 
     public bool SpawnIndicatorOnly(string rawId)
     {
+        if (HiddenPlaces.IsHidden("terminal_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (indicatorOnlyObjects.ContainsKey(rawId)) return true;
         if (indicatorOnlyPrefab == null) return false;
 

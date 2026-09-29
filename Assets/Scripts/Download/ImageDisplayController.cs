@@ -96,6 +96,34 @@ public class ImageDisplayController : MonoBehaviour
         int myGeneration = loadGeneration;
         string fullUrl = imageUrl.StartsWith("http") ? imageUrl : ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
 
+        // 큐브는 화면에서 작게 보이므로 우팡 서버 사진은 512px 썸네일로 받는다 (원본 최대 2048px → 약 1/20 크기).
+        // 썸네일이 실패하면 원본으로 한 번 더 받는다. 외부 사진(관광공사 등 http)은 원본 그대로.
+        if (!imageUrl.StartsWith("http"))
+        {
+            string thumbUrl = ApiConfig.MAIN_SERVER + "/thumb/512/" + imageUrl.Replace("\\", "/").TrimStart('/');
+            bool thumbOk = false;
+            using (UnityWebRequest tr = UnityWebRequestTexture.GetTexture(thumbUrl))
+            {
+                tr.timeout = 20;
+                yield return tr.SendWebRequest();
+                if (myGeneration != loadGeneration) yield break;
+                if (tr.result == UnityWebRequest.Result.Success)
+                {
+                    Texture2D t = ((DownloadHandlerTexture)tr.downloadHandler).texture;
+                    if (t != null)
+                    {
+                        thumbOk = true;
+                        ApplyBaseMap(t);
+                    }
+                }
+            }
+            if (thumbOk)
+            {
+                currentBaseMapCoroutine = null;
+                yield break;
+            }
+        }
+
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {
             request.timeout = 20;
@@ -108,23 +136,7 @@ public class ImageDisplayController : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
-                if (newTexture != null)
-                {
-                    if (baseMapTexture != null) Destroy(baseMapTexture);
-                    baseMapTexture = newTexture;
-
-                    if (cubeRenderer != null)
-                    {
-                        if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
-                        else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
-
-                        // 패딩 설정 적용
-                        ApplyPaddingSettings();
-
-                        // 큐브 표시
-                        cubeRenderer.enabled = true;
-                    }
-                }
+                if (newTexture != null) ApplyBaseMap(newTexture);
             }
             else
             {
@@ -138,6 +150,22 @@ public class ImageDisplayController : MonoBehaviour
             }
         }
         currentBaseMapCoroutine = null;
+    }
+
+    private void ApplyBaseMap(Texture2D newTexture)
+    {
+        if (baseMapTexture != null) Destroy(baseMapTexture);
+        baseMapTexture = newTexture;
+        if (cubeRenderer == null) return;
+
+        if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
+        else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", baseMapTexture);
+
+        // 패딩 설정 적용
+        ApplyPaddingSettings();
+
+        // 큐브 표시
+        cubeRenderer.enabled = true;
     }
 
     // 서브 사진 설정

@@ -6,6 +6,10 @@ using System;
 
 public class GLBModelLoader : MonoBehaviour
 {
+    // 개발용 진단 로그 — WOOPANG_DEBUG 가 정의된 빌드에서만 호출이 남는다 (출시 빌드에서는 호출 자체가 빠짐)
+    [System.Diagnostics.Conditional("WOOPANG_DEBUG")]
+    private static void DbgLog(object message) => UnityEngine.Debug.Log(message);
+
     [SerializeField] private Transform glbContainer;
     private GameObject loadedModel;
     private bool isModelLoaded = false;
@@ -92,7 +96,7 @@ public class GLBModelLoader : MonoBehaviour
 
     public IEnumerator LoadGLBModelCoroutine(string url, float scale, System.Action<bool> onComplete)
     {
-        Debug.Log($"[dbg-GLB] LoadGLBModelCoroutine START url={url} scale={scale} cacheHas={downloadedFiles.ContainsKey(url)}");
+        DbgLog($"[dbg-GLB] LoadGLBModelCoroutine START url={url} scale={scale} cacheHas={downloadedFiles.ContainsKey(url)}");
 
         // 로딩 연출 시작 — 모델이 준비될 때까지 스피너가 자리를 지킨다
         if (enableSpawnEffect)
@@ -104,21 +108,21 @@ public class GLBModelLoader : MonoBehaviour
 
         if (string.IsNullOrEmpty(url))
         {
-            Debug.LogError("[dbg-GLB] URL 비어있음");
+            Debug.LogError("[GLBModelLoader] URL 비어있음");
             onComplete?.Invoke(false);
             yield break;
         }
 
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
-            Debug.LogError($"[dbg-GLB] 네트워크 NotReachable — 캐시도 없으면 실패. cacheHas={downloadedFiles.ContainsKey(url)}");
+            Debug.LogWarning($"[GLBModelLoader] 네트워크 NotReachable — 캐시도 없으면 실패. cacheHas={downloadedFiles.ContainsKey(url)}");
             // 캐시에 있으면 네트워크 없어도 진행 가능하므로 ContinueIf 캐시
             if (!downloadedFiles.ContainsKey(url))
             {
                 onComplete?.Invoke(false);
                 yield break;
             }
-            Debug.Log("[dbg-GLB] 캐시 사용 가능 — 네트워크 없어도 진행");
+            DbgLog("[dbg-GLB] 캐시 사용 가능 — 네트워크 없어도 진행");
         }
         
         ClearModel();
@@ -184,7 +188,7 @@ public class GLBModelLoader : MonoBehaviour
         if (enableFileCache && downloadedFiles.ContainsKey(url))
         {
             glbData = downloadedFiles[url];
-            Debug.Log($"[dbg-GLB] 캐시 HIT {glbData.Length:N0} bytes — 네트워크 스킵");
+            DbgLog($"[dbg-GLB] 캐시 HIT {glbData.Length:N0} bytes — 네트워크 스킵");
         }
         else
         {
@@ -546,7 +550,7 @@ public class GLBModelLoader : MonoBehaviour
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning($"[dbg-GLB] JSON 색 파싱 예외: {ex.Message}");
+            Debug.LogWarning($"[GLBModelLoader] JSON 색 파싱 예외: {ex.Message}");
         }
         return list;
     }
@@ -593,7 +597,7 @@ public class GLBModelLoader : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[dbg-GLB] Resources/GLBFallbackUnlit 로드 실패 → Shader.Find 체인 사용");
+            Debug.LogWarning("[GLBModelLoader] Resources/GLBFallbackUnlit 로드 실패 → Shader.Find 체인 사용");
             foreach (var candidate in new[] { "Universal Render Pipeline/Unlit",
                                               "Universal Render Pipeline/Lit",
                                               "Unlit/Color", "Sprites/Default" })
@@ -603,21 +607,21 @@ public class GLBModelLoader : MonoBehaviour
                 {
                     targetShader = s;
                     useEmission = candidate.EndsWith("/Lit");
-                    Debug.LogWarning($"[dbg-GLB] 폴백 셰이더 채택: {candidate}");
+                    Debug.LogWarning($"[GLBModelLoader] 폴백 셰이더 채택: {candidate}");
                     break;
                 }
             }
         }
         if (targetShader == null)
         {
-            Debug.LogError("[dbg-GLB] 사용 가능한 셰이더를 하나도 못 찾음 — 원본 머터리얼 유지(magenta 가능)");
+            Debug.LogError("[GLBModelLoader] 사용 가능한 셰이더를 하나도 못 찾음 — 원본 머터리얼 유지(magenta 가능)");
             return;
         }
-        Debug.Log($"[dbg-GLB] 셰이더 확보: '{targetShader.name}' (emission보정={useEmission})");
+        DbgLog($"[dbg-GLB] 셰이더 확보: '{targetShader.name}' (emission보정={useEmission})");
 
         // JSON에서 (머터리얼이름, 색) 쌍 추출 — glTF 배열 순서 보존
         var jsonColorList = ParseColorsFromGLBJson(glbData);
-        Debug.Log($"[dbg-GLB] JSON에서 {jsonColorList.Count}개 머터리얼 (이름,색) 추출");
+        DbgLog($"[dbg-GLB] JSON에서 {jsonColorList.Count}개 머터리얼 (이름,색) 추출");
         var jsonColorsByName = new System.Collections.Generic.Dictionary<string, Color>(System.StringComparer.OrdinalIgnoreCase);
         foreach (var pair in jsonColorList)
         {
@@ -689,10 +693,10 @@ public class GLBModelLoader : MonoBehaviour
                 {
                     foreach (var k in finalMats[i].shaderKeywords) { if (k == "_EMISSION") { hasEmKw = true; break; } }
                 }
-                Debug.Log($"[dbg-GLB-mat] r='{goName}' slot={i} matID={finalMats[i].GetInstanceID()} name='{finalMats[i].name}' shader='{finalMats[i].shader.name}' base={finalMats[i].GetColor("_BaseColor")} em={finalMats[i].GetColor("_EmissionColor")} hasEmKw={hasEmKw}");
+                DbgLog($"[dbg-GLB-mat] r='{goName}' slot={i} matID={finalMats[i].GetInstanceID()} name='{finalMats[i].name}' shader='{finalMats[i].shader.name}' base={finalMats[i].GetColor("_BaseColor")} em={finalMats[i].GetColor("_EmissionColor")} hasEmKw={hasEmKw}");
             }
         }
-        Debug.Log($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 재질이름매칭={byMatName} GO이름매칭={byGoName} 위치폴백={byPosition}");
+        DbgLog($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 재질이름매칭={byMatName} GO이름매칭={byGoName} 위치폴백={byPosition}");
     }
 
     /// <summary>
@@ -713,7 +717,7 @@ public class GLBModelLoader : MonoBehaviour
                 if (i > 0) allChildren += ",";
                 allChildren += loadedModel.transform.GetChild(i).name;
             }
-            Debug.Log($"[dbg-GLB] loadedModel='{loadedModel.name}' childCount={cc} firstChild='{firstName}' allChildren=[{allChildren}]");
+            DbgLog($"[dbg-GLB] loadedModel='{loadedModel.name}' childCount={cc} firstChild='{firstName}' allChildren=[{allChildren}]");
         }
 
         // ⚠️ #if UNITY_ANIMATION 가드 제거. UNITY_ANIMATION은 glTFast asmdef 안에서만 정의되고
@@ -721,11 +725,11 @@ public class GLBModelLoader : MonoBehaviour
         // com.unity.modules.animation 패키지가 있으면 메서드는 컴파일 시점에 존재 → 직접 호출 안전.
         AnimationClip[] clips = null;
         try { clips = gltf.GetAnimationClips(); }
-        catch (System.Exception ex) { Debug.LogError($"[dbg-GLB] GetAnimationClips 예외: {ex.Message}"); return; }
+        catch (System.Exception ex) { Debug.LogError($"[GLBModelLoader] GetAnimationClips 예외: {ex.Message}"); return; }
 
         if (clips == null || clips.Length == 0)
         {
-            Debug.Log("[dbg-GLB] gltf.GetAnimationClips() 0개 — 정적 GLB");
+            DbgLog("[dbg-GLB] gltf.GetAnimationClips() 0개 — 정적 GLB");
             return;
         }
 
@@ -782,7 +786,7 @@ public class GLBModelLoader : MonoBehaviour
                 anim.Play(clip.name, PlayMode.StopSameLayer);
                 layer++;
             }
-            Debug.Log($"[dbg-GLB] 파츠분할형 감지 — {attachedCount}개 클립 attach + {layer}개 layer로 동시 재생");
+            DbgLog($"[dbg-GLB] 파츠분할형 감지 — {attachedCount}개 클립 attach + {layer}개 layer로 동시 재생");
         }
         else
         {
@@ -813,7 +817,7 @@ public class GLBModelLoader : MonoBehaviour
                 if (state != null) { state.layer = 0; state.weight = 1f; state.wrapMode = WrapMode.Loop; state.enabled = true; }
                 anim.Play(chosen.name, PlayMode.StopAll);
             }
-            Debug.Log($"[dbg-GLB] 완제스켈레톤형 감지 — {attachedCount}개 클립 중 '{chosen?.name}' 1개만 선택 재생");
+            DbgLog($"[dbg-GLB] 완제스켈레톤형 감지 — {attachedCount}개 클립 중 '{chosen?.name}' 1개만 선택 재생");
         }
     }
 
@@ -826,7 +830,7 @@ public class GLBModelLoader : MonoBehaviour
     {
         if (!enableAnimation || loadedModel == null)
         {
-            Debug.Log($"[dbg-GLB] TryPlayAnimation skip — enabled={enableAnimation} loaded={loadedModel != null}");
+            DbgLog($"[dbg-GLB] TryPlayAnimation skip — enabled={enableAnimation} loaded={loadedModel != null}");
             return;
         }
 
@@ -842,7 +846,7 @@ public class GLBModelLoader : MonoBehaviour
             {
                 string playingName = null;
                 foreach (AnimationState s in anim) { if (anim.IsPlaying(s.name)) { playingName = s.name; break; } }
-                Debug.Log($"[dbg-GLB] Animation(legacy) 이미 재생 중: '{playingName}' — 재트리거 스킵");
+                DbgLog($"[dbg-GLB] Animation(legacy) 이미 재생 중: '{playingName}' — 재트리거 스킵");
                 StartCoroutine(VerifyAnimRunning(anim, playingName ?? ""));
                 return;
             }
@@ -854,7 +858,7 @@ public class GLBModelLoader : MonoBehaviour
                 first.wrapMode = WrapMode.Loop;
                 anim.wrapMode = WrapMode.Loop;
                 anim.Play(first.name);
-                Debug.Log($"[dbg-GLB] Animation(legacy) 재생: '{first.name}' (length={first.length:F2}s)");
+                DbgLog($"[dbg-GLB] Animation(legacy) 재생: '{first.name}' (length={first.length:F2}s)");
                 StartCoroutine(VerifyAnimRunning(anim, first.name));
                 return;
             }
@@ -879,7 +883,7 @@ public class GLBModelLoader : MonoBehaviour
                     foreach (var c in loadedModel.GetComponentsInChildren<AnimationClip>(true)) found.Add(c);
                     if (found.Count > 0)
                     {
-                        Debug.Log($"[dbg-GLB] Animator empty controller — AnimationClip {found.Count}개 발견. Animation 컴포넌트 추가해 재생");
+                        DbgLog($"[dbg-GLB] Animator empty controller — AnimationClip {found.Count}개 발견. Animation 컴포넌트 추가해 재생");
                         var legacyAnim = animator.gameObject.AddComponent<Animation>();
                         found[0].legacy = true;
                         legacyAnim.AddClip(found[0], found[0].name);
@@ -893,12 +897,12 @@ public class GLBModelLoader : MonoBehaviour
             {
                 // Animator로 첫 클립 재생
                 animator.Play(clips[0].name);
-                Debug.Log($"[dbg-GLB] Animator 재생: '{clips[0].name}' (length={clips[0].length:F2}s)");
+                DbgLog($"[dbg-GLB] Animator 재생: '{clips[0].name}' (length={clips[0].length:F2}s)");
                 return;
             }
         }
 
-        Debug.LogWarning($"[dbg-GLB] Animation/Animator/Clip 어느 것도 못 찾음 — 정적 GLB로 표시됨");
+        Debug.LogWarning($"[GLBModelLoader] Animation/Animator/Clip 어느 것도 못 찾음 — 정적 GLB로 표시됨");
     }
 
     /// <summary>0.5초 후 Animation 컴포넌트가 실제로 재생 중이고 transform이 변하는지 sample 1회 확인.</summary>
@@ -922,7 +926,7 @@ public class GLBModelLoader : MonoBehaviour
 
         if (anim == null || loadedModel == null)
         {
-            Debug.Log("[dbg-GLB] VerifyAnim 0.5s: anim/loadedModel null");
+            DbgLog("[dbg-GLB] VerifyAnim 0.5s: anim/loadedModel null");
             yield break;
         }
 
@@ -933,7 +937,7 @@ public class GLBModelLoader : MonoBehaviour
         Vector3 rootPos1 = loadedModel.transform.localPosition;
         Vector3 rootRot1 = loadedModel.transform.localEulerAngles;
         bool rootMoved = (rootPos1 - rootPos0).sqrMagnitude > 0.0001f || (rootRot1 - rootRot0).sqrMagnitude > 0.0001f;
-        Debug.Log($"[dbg-GLB] VerifyAnim 0.5s: isPlaying={anim.isPlaying} clipTime={clipTime:F2} weight={clipWeight:F2} enabled={stateEnabled} rootMoved={rootMoved} (pos {rootPos0}->{rootPos1})");
+        DbgLog($"[dbg-GLB] VerifyAnim 0.5s: isPlaying={anim.isPlaying} clipTime={clipTime:F2} weight={clipWeight:F2} enabled={stateEnabled} rootMoved={rootMoved} (pos {rootPos0}->{rootPos1})");
 
         // 첫 자식들도 비교
         for (int i = 0; i < childSamples.Count && i < loadedModel.transform.childCount; i++)
@@ -941,14 +945,14 @@ public class GLBModelLoader : MonoBehaviour
             var c = loadedModel.transform.GetChild(i);
             var s0 = childSamples[i];
             bool childMoved = (c.localPosition - s0.pos).sqrMagnitude > 0.0001f || (c.localEulerAngles - s0.rot).sqrMagnitude > 0.0001f;
-            Debug.Log($"[dbg-GLB] VerifyAnim child[{i}]='{c.name}' moved={childMoved} (pos {s0.pos}->{c.localPosition} rot {s0.rot}->{c.localEulerAngles})");
+            DbgLog($"[dbg-GLB] VerifyAnim child[{i}]='{c.name}' moved={childMoved} (pos {s0.pos}->{c.localPosition} rot {s0.rot}->{c.localEulerAngles})");
         }
 
         // 등록된 모든 클립의 상태도 보고
         int idx = 0;
         foreach (AnimationState s in anim)
         {
-            Debug.Log($"[dbg-GLB] VerifyAnim state[{idx}]='{s.name}' layer={s.layer} time={s.time:F2} weight={s.weight:F2} enabled={s.enabled}");
+            DbgLog($"[dbg-GLB] VerifyAnim state[{idx}]='{s.name}' layer={s.layer} time={s.time:F2} weight={s.weight:F2} enabled={s.enabled}");
             idx++;
         }
     }
@@ -1716,7 +1720,7 @@ public class GLBModelLoader : MonoBehaviour
         // 콜라이더가 없으면 회전 판정이 불가능하므로 부착하지 않는다
         if (glbContainer.GetComponent<Collider>() == null)
         {
-            Debug.LogWarning("[dbg-GLB] glbContainer에 Collider 없음 — 스와이프 회전 미적용");
+            Debug.LogWarning("[GLBModelLoader] glbContainer에 Collider 없음 — 스와이프 회전 미적용");
             return;
         }
 
@@ -1724,7 +1728,7 @@ public class GLBModelLoader : MonoBehaviour
         if (rotator == null)
         {
             glbContainer.gameObject.AddComponent<CubeTouchRotator>();
-            Debug.Log("[dbg-GLB] 스와이프 회전 부착 완료 (glbContainer)");
+            DbgLog("[dbg-GLB] 스와이프 회전 부착 완료 (glbContainer)");
         }
         else
         {

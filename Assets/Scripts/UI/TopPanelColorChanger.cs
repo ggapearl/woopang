@@ -19,6 +19,8 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
 
     [Header("Settings")]
     [SerializeField] private int currentColorIndex = 0;
+    [Tooltip("켜면 저장된 색 테마를 쓰지 않고 씬 원본(상단 그늘)만 쓴다 — 로고가 없는 0926 화면용")]
+    [SerializeField] private bool sceneColorOnly = false;
 
     private const string PREF_COLOR_INDEX = "TopPanel_ColorIndex";
 
@@ -149,6 +151,7 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
 
     private void LoadSavedColorIndex()
     {
+        if (sceneColorOnly) { currentColorIndex = 0; return; }
         currentColorIndex = PlayerPrefs.GetInt(PREF_COLOR_INDEX, 0);
         if (currentColorIndex < 0 || currentColorIndex >= colorPairs.Length)
             currentColorIndex = 0;
@@ -342,6 +345,7 @@ public class TopPanelColorChanger : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
+        if (sceneColorOnly) return;
         NextColor();
     }
 

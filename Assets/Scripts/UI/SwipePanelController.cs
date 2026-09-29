@@ -80,6 +80,9 @@ public class SwipePanelController : MonoBehaviour
 
     void Update()
     {
+        // 업로드 화면이 닫혀 있을 땐 다른 화면의 가로 끌기(지도·분류 칩 등)를 받지 않는다
+        if (panel1 == null || !panel1.gameObject.activeInHierarchy) { isDragging = false; return; }
+
         // 입력 처리는 Update에서 수행
         if (Touch.activeTouches.Count > 0)
         {
@@ -112,6 +115,8 @@ public class SwipePanelController : MonoBehaviour
 
     void LateUpdate()
     {
+        if (panel1 == null || !panel1.gameObject.activeInHierarchy) return;   // 닫혀 있는 동안은 계산하지 않는다
+
         // 실시간 거리 갱신 (화면 회전이나 크기 변경 대응)
         CalculateDimensions();
 

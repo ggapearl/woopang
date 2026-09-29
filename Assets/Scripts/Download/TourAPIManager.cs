@@ -103,14 +103,14 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
     {
         { SystemLanguage.Korean, "(한국관광공사에서 제공한 정보입니다)" },
         { SystemLanguage.English, "(Provided by Korea Tourism Organization)" },
-        { SystemLanguage.Japanese, "(韓国観光公社가 제공한情報입니다)" },
+        { SystemLanguage.Japanese, "(韓国観光公社提供の情報です)" },
         { SystemLanguage.ChineseSimplified, "(韩国观光公社提供的信息)" },
         { SystemLanguage.Spanish, "(Por Korea Tourism Organization)" }
     };
 
     private string GetSourceInfoMessage()
     {
-        SystemLanguage lang = Application.systemLanguage;
+        SystemLanguage lang = AppLanguage.AsSystemLanguage(chineseSimplified: true);
         return SourceInfoMessages.ContainsKey(lang) ? SourceInfoMessages[lang] : SourceInfoMessages[SystemLanguage.English];
     }
 
@@ -442,6 +442,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 
     private GameObject CreateObjectFromData(TourPlaceData place)
     {
+        if (HiddenPlaces.IsHidden("tour_" + place.contentid)) return null;   // 이 기기에서 X 로 숨긴 장소
         if (samplePrefab == null)
         {
             LogDebug("[TourAPIManager] samplePrefab이 설정되지 않음! 오브젝트 생성 실패");
@@ -889,6 +890,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         return spawnedObjects;
     }
 
+    public Dictionary<string, GameObject> GetIndicatorOnlyObjects() => indicatorOnlyObjects;
+
     public bool IsDataLoaded()
     {
         LogDebug($"[TourAPIManager] IsDataLoaded 호출, 데이터 로드 상태: {isDataLoaded}");
@@ -1079,6 +1082,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 
     public bool SpawnFullObject(string rawId)
     {
+        if (HiddenPlaces.IsHidden("tour_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (spawnedObjects.ContainsKey(rawId)) return true;
         if (!placeDataMap.ContainsKey(rawId)) return false;
 
@@ -1097,6 +1101,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 
     public bool SpawnIndicatorOnly(string rawId)
     {
+        if (HiddenPlaces.IsHidden("tour_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (indicatorOnlyObjects.ContainsKey(rawId)) return true;
         if (indicatorOnlyPrefab == null) return false;
 
@@ -1183,13 +1188,13 @@ public class TourPlaceData
 
     public TourPlaceData()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage(chineseSimplified: true))
         {
             case SystemLanguage.Korean:
                 description = "(한국관광공사에서 제공한 정보입니다)";
                 break;
             case SystemLanguage.Japanese:
-                description = "(韓国観光公社가 제공한情報입니다)";
+                description = "(韓国観光公社提供の情報です)";
                 break;
             case SystemLanguage.ChineseSimplified:
                 description = "(韩国观光公社提供的信息)";

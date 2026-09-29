@@ -121,6 +121,13 @@ public class MessagePanelManager : MonoBehaviour
     public float pollIntervalBackground = 60f;
     private Coroutine pollingCoroutine;
     private bool isAppFocused = true;
+    [Tooltip("채팅방이 열려 있는 동안 새 메시지 확인 간격 (초) — 화면을 다시 그리지 않고 새 것만 붙인다")]
+    public float chatPollInterval = 4f;
+    private int chatLoadVersion;       // 불러오기가 겹치면 늦게 끝난 옛 요청은 버린다 (예전엔 말풍선이 두 번씩 붙었다)
+    private bool chatLoading;
+    private int lastChatMessageId;
+    private readonly HashSet<int> renderedMessageIds = new HashSet<int>();
+    private Coroutine chatPollCoroutine;
 
     [Header("=== 폰트 설정 ===")]
     [Tooltip("채팅용 커스텀 폰트 (AppleSDGothicNeoM) - 프리팹에 폰트 없을 때 사용")]
@@ -627,10 +634,11 @@ public class MessagePanelManager : MonoBehaviour
                     StartCoroutine(LoadConversationList());
                 }
 
-                // chatRoomPanel이 열려있으면 채팅방도 새로고침
+                // chatRoomPanel이 열려있으면 채팅방도 새로고침 (일반 DM 은 새 메시지만 붙인다 — 깜빡임 없음)
                 if (chatRoomPanel != null && chatRoomPanel.activeInHierarchy && !string.IsNullOrEmpty(currentChatUserId))
                 {
-                    StartCoroutine(LoadChatMessages(currentChatUserId, isAdminChat));
+                    if (isAdminChat) StartCoroutine(LoadChatMessages(currentChatUserId, true));
+                    else StartCoroutine(AppendNewChatMessages(currentChatUserId));
                 }
 
                 // 안읽음 카운트 갱신 (뱃지)
@@ -679,7 +687,8 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (chatRoomPanel != null && chatRoomPanel.activeInHierarchy && currentChatUserId == userId)
         {
-            StartCoroutine(LoadChatMessages(userId, isAdminChat));
+            if (isAdminChat) StartCoroutine(LoadChatMessages(userId, true));
+            else StartCoroutine(AppendNewChatMessages(userId));
 
             // 관리자 채팅방이 열려있으면 읽음 시간 갱신 (unread 0 유지)
             if (isAdminChat)
@@ -898,9 +907,8 @@ public class MessagePanelManager : MonoBehaviour
             }
             else
             {
-                // 일반 DM: 서버에서 재조회 + 효과음
-                StartCoroutine(LoadChatMessages(senderId, false));
-                PlayChatReceiveSfx();
+                // 일반 DM: 새 메시지만 받아 아래에 붙인다 (효과음도 거기서 — 폴링과 겹쳐도 한 번만)
+                StartCoroutine(AppendNewChatMessages(senderId));
             }
         }
 
@@ -1178,6 +1186,8 @@ public class MessagePanelManager : MonoBehaviour
         SetChatInputEnabled(!isAdmin);
 
         StartCoroutine(LoadChatMessages(userId, isAdmin));
+        if (chatPollCoroutine != null) { StopCoroutine(chatPollCoroutine); chatPollCoroutine = null; }
+        if (!isAdmin) chatPollCoroutine = StartCoroutine(ChatPollLoop(userId));
 
         // 읽음 처리 (WOOPANG 관리자 채팅방 포함)
         {
@@ -1382,6 +1392,8 @@ public class MessagePanelManager : MonoBehaviour
 
         if (chatRoomPanel != null)
             chatRoomPanel.SetActive(false);
+        if (chatPollCoroutine != null) { StopCoroutine(chatPollCoroutine); chatPollCoroutine = null; }
+        chatLoadVersion++;   // 진행 중이던 불러오기 결과는 버린다
 
         // 채팅방 닫을 때 아바타 핸들러 정리
         if (chatRoomAvatar != null)
@@ -2920,6 +2932,10 @@ public class MessagePanelManager : MonoBehaviour
 
     private IEnumerator LoadChatMessages(string otherUserId, bool isAdmin)
     {
+        int ver = ++chatLoadVersion;
+        chatLoading = true;
+        renderedMessageIds.Clear();
+        lastChatMessageId = 0;
         ClearContent(chatMessageContent);
         ShowChatEmptyState(false); // 기존 빈 상태 제거
         ResetDateSeparatorTracking(); // 날짜 구분선 추적 초기화
@@ -2946,6 +2962,7 @@ public class MessagePanelManager : MonoBehaviour
                 if (adminElapsed < minDur)
                     yield return new WaitForSeconds(minDur - adminElapsed);
                 if (loadingSpinner != null) { Destroy(loadingSpinner); loadingSpinner = null; }
+                if (ver != chatLoadVersion) yield break;   // 그 사이 다른 불러오기가 시작됐다
 
                 if (adminRequest.result == UnityWebRequest.Result.Success)
                 {
@@ -3017,6 +3034,7 @@ public class MessagePanelManager : MonoBehaviour
             }
 
             // 관리자 채팅방도 최신이 하단이므로 스크롤을 맨 아래로
+            chatLoading = false;
             yield return null;
             ScrollToBottom();
 
@@ -3034,6 +3052,7 @@ public class MessagePanelManager : MonoBehaviour
         {
             if (loadingSpinner != null) { Destroy(loadingSpinner); loadingSpinner = null; }
             ShowChatEmptyState(true);
+            chatLoading = false;
             yield break;
         }
 
@@ -3053,6 +3072,7 @@ public class MessagePanelManager : MonoBehaviour
             if (dmElapsed < dmMinDur)
                 yield return new WaitForSeconds(dmMinDur - dmElapsed);
             if (loadingSpinner != null) { Destroy(loadingSpinner); loadingSpinner = null; }
+            if (ver != chatLoadVersion) yield break;   // 그 사이 다른 불러오기가 시작됐다 — 옛 결과는 버린다
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -3068,20 +3088,85 @@ public class MessagePanelManager : MonoBehaviour
 
                         bool isMine = msg.sender_id == userId || msg.is_mine;
                         CreateMessageBubble(msg, isMine);
+                        renderedMessageIds.Add(msg.id);
+                        if (msg.id > lastChatMessageId) lastChatMessageId = msg.id;
                     }
                 }
+                chatLoading = false;
 
                 // 스크롤 맨 아래로
                 yield return null;
                 ScrollToBottom();
             }
         }
+        if (ver == chatLoadVersion) chatLoading = false;   // 실패해도 이어서 새 메시지 확인은 되게
 
         // 메시지가 없으면 빈 상태 표시
         if (!hasMessages)
         {
             ShowChatEmptyState(true);
         }
+    }
+
+    /// <summary>
+    /// 열린 채팅방에 새 메시지만 붙인다 — 화면을 지우지 않아 깜빡임·스피너·스크롤 튐이 없다.
+    /// 위로 올려 옛 메시지를 읽는 중이면 스크롤을 끌어내리지 않는다.
+    /// </summary>
+    private IEnumerator AppendNewChatMessages(string otherUserId)
+    {
+        if (chatLoading || isAdminChat || string.IsNullOrEmpty(otherUserId) || chatMessageContent == null) yield break;
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn) yield break;
+
+        int ver = chatLoadVersion;
+        string userId = LoginManager.Instance.CurrentUser.id;
+        string url = $"{ApiConfig.DM_CONVERSATION}?user_id={userId}&other_id={otherUserId}&after_id={lastChatMessageId}&limit=100";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            LoginManager.ApplyAuth(request);
+            request.timeout = 8;
+            yield return request.SendWebRequest();
+            if (ver != chatLoadVersion || chatLoading || currentChatUserId != otherUserId) yield break;
+            if (request.result != UnityWebRequest.Result.Success) yield break;
+
+            var response = JsonUtility.FromJson<DMConversationResponse>(request.downloadHandler.text);
+            if (response == null || response.messages == null || response.messages.Count == 0) yield break;
+
+            ScrollRect sr = chatMessageContent.GetComponentInParent<ScrollRect>();
+            bool atBottom = sr == null || sr.verticalNormalizedPosition < 0.05f;
+            bool added = false, fromOther = false;
+            foreach (var msg in response.messages)
+            {
+                if (msg.id > lastChatMessageId) lastChatMessageId = msg.id;
+                if (!renderedMessageIds.Add(msg.id)) continue;   // 이미 그린 것 (내가 방금 보낸 것 포함)
+                bool isMine = msg.sender_id == userId || msg.is_mine;
+                CheckAndCreateDateSeparator(msg.created_at);
+                CreateMessageBubble(msg, isMine);
+                added = true;
+                if (!isMine) fromOther = true;
+            }
+            if (!added) yield break;
+
+            ShowChatEmptyState(false);
+            yield return null;
+            if (atBottom) ScrollToBottom();
+            if (fromOther)
+            {
+                PlayChatReceiveSfx();
+                StartCoroutine(MarkMessagesAsRead(otherUserId));
+            }
+        }
+    }
+
+    private IEnumerator ChatPollLoop(string otherUserId)
+    {
+        while (chatRoomPanel != null && currentChatUserId == otherUserId && !isAdminChat)
+        {
+            yield return new WaitForSeconds(chatPollInterval);
+            if (isAppFocused && chatRoomPanel.activeInHierarchy)
+                yield return AppendNewChatMessages(otherUserId);
+        }
+        chatPollCoroutine = null;
     }
 
     private void CreateMessageBubble(DMMessage msg, bool isMine)
@@ -3647,6 +3732,15 @@ public class MessagePanelManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                // 서버가 붙인 번호를 기억해 새 메시지 확인 때 같은 말풍선이 또 붙지 않게.
+                // (마지막 번호는 올리지 않는다 — 그 사이 상대가 보낸 더 작은 번호를 놓치면 안 된다)
+                try
+                {
+                    var sent = JsonUtility.FromJson<DMSendResult>(request.downloadHandler.text);
+                    if (sent != null && sent.message_id > 0) renderedMessageIds.Add(sent.message_id);
+                }
+                catch (Exception) { }
+
                 // 선처리 버블이 이미 표시되어 있으므로 전체 새로고침 불필요
                 // 읽음 표시만 업데이트 (서버에서 받은 실제 ID 반영)
                 if (optimisticBubble != null)
@@ -4878,6 +4972,7 @@ public class MessagePanelManager : MonoBehaviour
         {
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
+            ServerHealth.Report(request);   // 10초 주기 요청이라 서버 상태 판단에 같이 쓴다 (추가 요청 없음)
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -4905,7 +5000,18 @@ public class MessagePanelManager : MonoBehaviour
         bool shouldShow = totalUnread > 0;
 
         if (globalUnreadIndicator != null)
+        {
             globalUnreadIndicator.SetActive(shouldShow);
+            // 숫자 칸(Count)이 있으면 개수까지 보인다 — 없으면 예전처럼 점만
+            Text countText = globalUnreadIndicator.transform.Find("Count")?.GetComponent<Text>();
+            if (countText != null && shouldShow)
+            {
+                countText.text = totalUnread > 99 ? "99+" : totalUnread.ToString();
+                var rt = (RectTransform)globalUnreadIndicator.transform;
+                float h = rt.sizeDelta.y;   // 높이는 씬에 정한 값 그대로, 자릿수만큼 옆으로 늘린다
+                rt.sizeDelta = new Vector2(h * (totalUnread > 99 ? 1.62f : totalUnread > 9 ? 1.33f : 1f), h);
+            }
+        }
 
         // iOS 앱 배지 업데이트
         UpdateAppBadgeCount(totalUnread);
@@ -5146,6 +5252,13 @@ public class DMInboxResponse
     public List<DMMessage> messages;
     public int unread_count;
     public int count;
+}
+
+[Serializable]
+public class DMSendResult
+{
+    public bool success;
+    public int message_id;
 }
 
 [Serializable]

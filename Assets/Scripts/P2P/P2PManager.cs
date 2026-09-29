@@ -132,6 +132,8 @@ public class P2PManager : MonoBehaviour
             return;
         }
 
+        locationVisibilityMode = LoadVisibility();
+
         // Initialize pool
         InitializeAvatarPool();
     }
@@ -305,6 +307,7 @@ public class P2PManager : MonoBehaviour
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
         UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_REGISTER, "POST");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -394,11 +397,13 @@ public class P2PManager : MonoBehaviour
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
         UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UPDATE_POSITION, "POST");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
 
         yield return request.SendWebRequest();
+        ServerHealth.Report(request);   // 5초 주기 요청 — 서버 응답 여부 판단에 같이 쓴다
 
         if (request.result == UnityWebRequest.Result.Success)
         {
@@ -673,6 +678,7 @@ public class P2PManager : MonoBehaviour
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
         UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_SEND_GESTURE, "POST");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -711,8 +717,15 @@ public class P2PManager : MonoBehaviour
         StartCoroutine(SendPrivacyUpdate(visibilityMode, shareRadius));
     }
 
-    // 현재 위치 공개 모드
-    private LocationVisibilityMode locationVisibilityMode = LocationVisibilityMode.Public;
+    // 현재 위치 공개 모드 — 저장해 둔다. 예전엔 앱을 다시 켜면 '비공개'로 둔 사람도 전체공개로 돌아갔다.
+    private const string VisibilityPrefKey = "P2P_LocationVisibility";
+    private LocationVisibilityMode locationVisibilityMode = LocationVisibilityMode.Public;   // Awake 에서 저장값으로 교체
+
+    private static LocationVisibilityMode LoadVisibility()
+    {
+        int v = PlayerPrefs.GetInt(VisibilityPrefKey, (int)LocationVisibilityMode.Public);
+        return Enum.IsDefined(typeof(LocationVisibilityMode), v) ? (LocationVisibilityMode)v : LocationVisibilityMode.Public;
+    }
 
     /// <summary>
     /// 내 위치 공개 모드 설정 (P2POpenFilterPanel에서 호출)
@@ -720,6 +733,8 @@ public class P2PManager : MonoBehaviour
     public void SetLocationVisibility(LocationVisibilityMode mode)
     {
         locationVisibilityMode = mode;
+        PlayerPrefs.SetInt(VisibilityPrefKey, (int)mode);
+        PlayerPrefs.Save();
         Log($"Location visibility set to: {mode}");
 
         // 서버에 공개 설정 전송
@@ -766,6 +781,7 @@ public class P2PManager : MonoBehaviour
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
         UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UNREGISTER, "POST");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -797,6 +813,7 @@ public class P2PManager : MonoBehaviour
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
         UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UPDATE_PRIVACY, "POST");
+        LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
@@ -1014,6 +1031,7 @@ public class P2PManager : MonoBehaviour
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)

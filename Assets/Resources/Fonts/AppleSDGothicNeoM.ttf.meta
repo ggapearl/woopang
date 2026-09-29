@@ -10,6 +10,17 @@ TrueTypeFontImporter:
   includeFontData: 1
   fontNames:
   - AppleSDGothicNeoM00
+  - Apple SD Gothic Neo
+  - PingFang SC
+  - PingFang TC
+  - Hiragino Sans
+  - Helvetica Neue
+  - Noto Sans CJK KR
+  - Noto Sans CJK SC
+  - Noto Sans CJK JP
+  - NotoSansCJK-Regular
+  - Roboto
+  - Droid Sans Fallback
   fallbackFontReferences: []
   customCharacters: 
   fontRenderingMode: 0
