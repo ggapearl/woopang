@@ -338,6 +338,11 @@ final class DeskStore: ObservableObject {
         }
     }
 
+    /// 사건의 ts(유닉스 초) → 받은 시각. 예전 PC 코드는 ts 를 안 붙인다 — 그땐 nil (시각을 안 그린다)
+    private static func time(_ e: JSON) -> Date? {
+        e["ts"]?.double.map { Date(timeIntervalSince1970: $0) }
+    }
+
     /// 사건의 images(서명 링크 배열)·files([{name, url}])
     private static func attachments(_ e: JSON) -> ([URL], [FileLink]) {
         let imgs = (e["images"]?.array ?? []).compactMap { j -> URL? in
@@ -407,7 +412,7 @@ final class DeskStore: ObservableObject {
         case "user":
             let origin = e["origin"]?.string ?? "typed"
             let (imgs, files) = Self.attachments(e)
-            append(ChatItem(.user(text: e["text"]?.string ?? "", origin: origin), images: imgs, files: files))
+            append(ChatItem(.user(text: e["text"]?.string ?? "", origin: origin), images: imgs, files: files, time: Self.time(e)))
             lastAI = nil
             lastAIText = ""
             lastUserOrigin = origin
@@ -435,12 +440,16 @@ final class DeskStore: ObservableObject {
         case "text":
             let text = e["text"]?.string ?? ""
             let local = e["local"]?.bool ?? false
+            let at = Self.time(e)
             if !openAI.isEmpty {
                 let id = openAI.removeFirst()
-                update(id) { $0.kind = .ai(text: text, streaming: false, local: local, meta: nil) }
+                update(id) { item in
+                    item.kind = .ai(text: text, streaming: false, local: local, meta: nil)
+                    item.time = at
+                }
                 lastAI = id
             } else {
-                let item = ChatItem(.ai(text: text, streaming: false, local: local, meta: nil))
+                let item = ChatItem(.ai(text: text, streaming: false, local: local, meta: nil), time: at)
                 append(item)
                 lastAI = item.id
             }
@@ -521,7 +530,7 @@ final class DeskStore: ObservableObject {
             if let from = e["from"]?.string, !from.isEmpty { source += " · " + from }
             let (imgs, files) = Self.attachments(e)
             append(ChatItem(.incoming(source: source, text: e["text"]?.string ?? "", auto: kind == "auto" || kind == "system"),
-                            images: imgs, files: files))
+                            images: imgs, files: files, time: Self.time(e)))
             lastAI = nil
 
         case "note":

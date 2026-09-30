@@ -2,7 +2,25 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
-## 1.0.2 (3) — 2026-09-28 · **TestFlight 첫 빌드** (올리는 법: `TESTFLIGHT.md`)
+## 1.0.3 (4) — 2026-09-30 · **TestFlight 첫 업로드** (올리는 법: `TESTFLIGHT.md`)
+
+1.0.2 (3) 는 준비만 하고 올린 기록이 없다 → **이번이 첫 업로드**라 `TESTFLIGHT.md` 1절(App Store Connect 앱 기록 · 내부 테스트 그룹)이 필요하다.
+1.0.2 (3) 의 바뀐 것(아래 덩어리)도 이번 빌드에 모두 들어 있다.
+
+2026-09-30 Windows 세션이 고침:
+- **말풍선마다 받은 시각** — 텔레그램처럼 작게: 오늘이면 「오후 10:51」, 아니면 「9/28 오후 10:51」(`StampText`).
+  PC 가 사건(`user`·`text`·`incoming`)마다 붙여 주는 `ts`(유닉스 초)를 `ChatItem.time` 에 담는다(`DeskStore.time`). `ts` 가 없는 예전 사건은 시각을 안 그린다.
+  대표님 말은 말풍선 오른쪽 아래(흰색 66%), 효딩쓰 답은 이름 옆, 알림 말풍선은 오른쪽 아래. 「읽기」(소리)에는 안 들어간다(본문만 읽음).
+  PC 창·안드로이드 앱은 이미 같은 모양으로 나간다(서버 쪽 반영 끝).
+
+**이번에 확인할 것**:
+1. 컴파일 — Windows 에서 컴파일하지 못했다. 새로 쓴 곳: `StampText`(View · `if let` 본문 · DateFormatter `a h:mm`)·
+   `ChatItem.time`/`init(time:)`·`DeskStore.time(_:)`·`text` 사건의 `update` 클로저(`item.time = at`)·
+   `UserBubble`/`AIMessage`/`InboxBubble` 의 `time` 인자(기본값 nil 이라 다른 호출은 그대로)
+2. 1.0.2 (3) 의 「이번에 확인할 것」 1~4 도 같이 (아래)
+3. TestFlight 업로드 → 대표님 아이폰에서 설치 → 말풍선에 시각이 보이는지
+
+## 1.0.2 (3) — 2026-09-28 · TestFlight 준비 (올리지 않음 — 1.0.3 (4) 로 올린다)
 
 2026-09-28 Windows 세션이 고침 — 안드로이드 앱(`apps/hyodingsseu-android`)과 기능을 맞췄다. 서버 쪽은 이미 반영돼 있다.
 

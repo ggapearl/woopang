@@ -6,9 +6,9 @@ struct ChatItemView: View {
     var body: some View {
         switch item.kind {
         case .user(let text, let origin):
-            UserBubble(text: text, origin: origin, images: item.images)
+            UserBubble(text: text, origin: origin, images: item.images, time: item.time)
         case .ai(let text, let streaming, let local, let meta):
-            AIMessage(text: text, streaming: streaming, local: local, meta: meta)
+            AIMessage(text: text, streaming: streaming, local: local, meta: meta, time: item.time)
         case .tools(let list):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(list) { t in ToolRow(tool: t) }
@@ -18,7 +18,7 @@ struct ChatItemView: View {
         case .question(let card):
             QuestionCardView(card: card)
         case .incoming(let source, let text, let auto):
-            InboxBubble(source: source, text: text, auto: auto, images: item.images, files: item.files)
+            InboxBubble(source: source, text: text, auto: auto, images: item.images, files: item.files, time: item.time)
         case .note(let text):
             Text(text)
                 .font(.caption)
@@ -38,10 +38,34 @@ struct ChatItemView: View {
     }
 }
 
+/// 받은 시각 — 텔레그램처럼 작게. 오늘이면 「오후 10:51」, 아니면 「9/28 오후 10:51」. 소리로 읽지 않는다 (2026-09-30)
+struct StampText: View {
+    let time: Date?
+    var color: Color = Palette.ink3
+
+    var body: some View {
+        if let time {
+            Text(Self.label(time))
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .accessibilityHidden(true)
+        }
+    }
+
+    static func label(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = Calendar.current.isDateInToday(d) ? "a h:mm" : "M/d a h:mm"
+        return f.string(from: d)
+    }
+}
+
 struct UserBubble: View {
     let text: String
     let origin: String
     var images: [URL] = []
+    var time: Date? = nil
 
     var body: some View {
         HStack {
@@ -55,6 +79,7 @@ struct UserBubble: View {
                 Text(text)
                     .textSelection(.enabled)
                 AttachmentStrip(images: images, files: [])     // 대표님이 휴대폰(텔레그램)으로 보낸 사진
+                StampText(time: time, color: Palette.onNavy.opacity(0.66))
             }
             .foregroundStyle(Palette.onNavy)
             .padding(.horizontal, 14)
@@ -82,12 +107,14 @@ struct AIMessage: View {
     let streaming: Bool
     let local: Bool
     let meta: String?
+    var time: Date? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Circle().fill(Palette.pink).frame(width: 7, height: 7)
                 Text(store.name).font(.caption).foregroundStyle(Palette.ink3)
+                if !streaming { StampText(time: time) }
                 if local {
                     Text("로컬 LLM")
                         .font(.caption2)
@@ -262,6 +289,7 @@ struct InboxBubble: View {
     let auto: Bool
     var images: [URL] = []
     var files: [FileLink] = []
+    var time: Date? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -274,6 +302,8 @@ struct InboxBubble: View {
                     .foregroundStyle(Palette.ink)
             }
             AttachmentStrip(images: images, files: files)       // 「📱 휴대폰으로 보냄」의 카드뉴스 그림·파일
+            StampText(time: time)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

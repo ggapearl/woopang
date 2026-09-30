@@ -85,7 +85,7 @@ xcodebuild -exportArchive -archivePath build/Hyodingsseu.xcarchive \
    - 예전에 Xcode 로 깐 효딩쓰가 있으면 덮어쓴다. 연결(토큰)은 같은 팀 Keychain 이라 대개 그대로 남는다 — 끊겼으면 PC 창 ☰ → 휴대폰 앱 → 새 코드.
    - TestFlight 빌드는 **90일** 뒤 만료된다 → 그 전에 빌드 번호만 올려 다시 올린다.
 4. `CHANGELOG.md` 맨 위 덩어리에 결과(업로드 성공·빌드 번호·설치 여부·이상한 점)를 적고
-   `git pull --rebase` → 커밋(`build(ios): 1.0.2 (3) TestFlight 업로드` 처럼) → `git push`. **이 폴더의 파일만** 스테이징.
+   `git pull --rebase` → 커밋(`build(ios): 1.0.3 (4) TestFlight 업로드` 처럼) → `git push`. **이 폴더의 파일만** 스테이징.
 
 ## 4. 막히면
 

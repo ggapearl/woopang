@@ -606,7 +606,7 @@
     switch (type) {
       case 'user': {
         const origin = e.origin || 'typed';
-        append({ kind: 'user', text: e.text || '', origin, images: e.images || [], files: e.files || [] });
+        append({ kind: 'user', text: e.text || '', origin, images: e.images || [], files: e.files || [], ts: e.ts });
         lastAI = null;
         lastAIText = '';
         lastUserOrigin = origin;
@@ -629,10 +629,10 @@
         const loc = !!e.local;
         if (openAI.length) {
           const id = openAI.shift();
-          update(id, it => { it.kind = 'ai'; it.text = text; it.streaming = false; it.local = loc; it.meta = null; });
+          update(id, it => { it.kind = 'ai'; it.text = text; it.streaming = false; it.local = loc; it.meta = null; it.ts = e.ts; });
           lastAI = id;
         } else {
-          lastAI = append({ kind: 'ai', text, streaming: false, local: loc, meta: null }).id;
+          lastAI = append({ kind: 'ai', text, streaming: false, local: loc, meta: null, ts: e.ts }).id;
         }
         lastAIText = text;
         return false;
@@ -690,7 +690,7 @@
         let source = INCOMING[kind] || kind;
         if (e.from) source += ' · ' + e.from;
         append({ kind: 'incoming', source, text: e.text || '', auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
-          images: e.images || [], files: e.files || [] });
+          images: e.images || [], files: e.files || [], ts: e.ts });
         lastAI = null;
         return false;
       }
@@ -899,7 +899,7 @@
       case 'question': return questionCard(it.card);
       case 'incoming':
         return h('div', { class: 'inbox' + (it.auto ? ' auto' : '') + (it.out ? ' out' : '') },
-          h('b', { text: it.source }), it.text ? h('div', { text: it.text }) : null, attachments(it));
+          h('b', { text: it.source }), it.text ? h('div', { text: it.text }) : null, attachments(it), stamp(it));
       case 'note': return h('div', { class: 'note', text: it.text });
       case 'error': return h('div', { class: 'err', text: it.text });
       default: return h('div');
@@ -910,7 +910,17 @@
     // 이 폰(앱)에서 보낸 건 표시하지 않고, 다른 곳에서 온 것만 어디서인지 붙인다
     const via = { typed: ['PC 에서', 'pc'], voice: ['PC 에서 말로', 'micSm'], phone: ['텔레그램', 'phone'] }[it.origin];
     return h('div', { class: 'u-row' },
-      h('div', { class: 'u-bubble' }, via ? h('div', { class: 'via' }, svg(via[1]), via[0]) : null, document.createTextNode(it.text), attachments(it)));
+      h('div', { class: 'u-bubble' }, via ? h('div', { class: 'via' }, svg(via[1]), via[0]) : null, document.createTextNode(it.text), attachments(it), stamp(it)));
+  }
+
+  /** 받은 시각 — 텔레그램처럼 작게. 읽기(소리)에는 들어가지 않는다(본문 it.text 만 읽음). PC 가 사건에 붙여 준 시각(ts). */
+  function hhmm(ts) {
+    const d = ts ? new Date(ts * 1000) : new Date(), now = new Date();
+    const t = d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+    return d.toDateString() === now.toDateString() ? t : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + t;
+  }
+  function stamp(it) {
+    return it.ts ? h('span', { class: 'ts', text: hhmm(it.ts), 'aria-hidden': 'true' }) : null;
   }
 
   /** 휴대폰으로 보낸 카드뉴스·대표님이 보낸 사진 — 서명 링크(PC 효딩쓰가 만든 것)라 폰에서 바로 열린다 */
@@ -925,7 +935,7 @@
   function aiMessage(it) {
     const reading = speaker.itemId === it.id;
     const head = h('div', { class: 'ai-head' },
-      h('i', { class: 'dot' }), h('span', { class: 'nm', text: S.name }),
+      h('i', { class: 'dot' }), h('span', { class: 'nm', text: S.name }), it.streaming ? null : stamp(it),
       it.local ? h('span', { class: 'badge', text: '로컬 LLM' }) : null,
       h('span', { class: 'grow' }),
       !it.streaming && it.text ? h('button', {

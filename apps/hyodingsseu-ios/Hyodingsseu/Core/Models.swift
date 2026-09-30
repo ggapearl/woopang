@@ -54,11 +54,14 @@ struct ChatItem: Identifiable, Equatable {
     /// 휴대폰으로 나간 그림·파일, 대표님이 보낸 사진 — PC 효딩쓰가 서명한 링크(사파리에서 바로 열린다, 2026-09-28)
     var images: [URL] = []
     var files: [FileLink] = []
+    /// 받은 시각 — PC 가 사건마다 붙이는 ts(유닉스 초). 말풍선에 작게(텔레그램처럼), 읽기(소리)에는 안 들어간다 (2026-09-30)
+    var time: Date? = nil
 
-    init(_ kind: Kind, images: [URL] = [], files: [FileLink] = []) {
+    init(_ kind: Kind, images: [URL] = [], files: [FileLink] = [], time: Date? = nil) {
         self.kind = kind
         self.images = images
         self.files = files
+        self.time = time
     }
 }
 
