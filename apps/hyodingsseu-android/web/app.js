@@ -155,6 +155,19 @@
     if (pollCtl || !S.paired) return;
     pollCtl = new AbortController();
     pollLoop(pollCtl);
+    registerPush();
+  }
+
+  // 아이폰 앱 알림 (2026-10-01) — 포장지(2.0.1+)가 pushRegister 를 주면 알림 허락을 받고 기기 토큰을 PC 에 맡긴다
+  // (PC 가 애플에 직접 보낸다). 안드로이드·브라우저·예전 포장지엔 없어서 그냥 지나간다. 켤 때마다 한 번 — 토큰이 바뀌어도 따라간다.
+  let pushAsked = false;
+  async function registerPush() {
+    if (pushAsked || !Native || typeof Native.pushRegister !== 'function') return;
+    pushAsked = true;
+    try {
+      const r = await Native.pushRegister();
+      if (r && r.token) await api.post('push', { token: r.token, platform: r.platform || 'ios' });
+    } catch (e) { /* 알림이 없어도 앱은 그대로 */ }
   }
 
   function stopPolling() {
