@@ -13,6 +13,8 @@ public class R0926SafeInset : MonoBehaviour
 
     [SerializeField] private Edge edge = Edge.Top;
     [SerializeField] private Mode mode = Mode.Move;
+    [Tooltip("인셋에서 이만큼 덜 민다(캔버스 단위) — 도크를 아이폰 홈 막대 쪽으로 조금 내릴 때. 인셋이 작은 폰은 0 까지만")]
+    [SerializeField] private float trim = 0f;
 
     private RectTransform rt;
     private Canvas root;
@@ -26,6 +28,8 @@ public class R0926SafeInset : MonoBehaviour
         edge = e;
         mode = m;
     }
+
+    public Edge CurrentEdge => edge;
 
     /// <summary>배치를 통째로 바꾼 뒤(가로/세로 전환) 인셋을 처음부터 다시 더한다.</summary>
     public void Reapply(Edge e)
@@ -70,7 +74,9 @@ public class R0926SafeInset : MonoBehaviour
             case Edge.Left: inset = Mathf.Max(0f, lastSafe.xMin - corners[0].x); break;
             default: inset = Mathf.Max(0f, corners[2].x - lastSafe.xMax); break;
         }
-        float d = inset / scale;
+        // 덜 밀기는 아이폰만 — 홈 막대 영역이 넉넉하다. 갤럭시는 지금 자리가 맞다 하셨다 (2026-09-30)
+        float t = Application.platform == RuntimePlatform.IPhonePlayer ? trim : 0f;
+        float d = Mathf.Max(0f, inset / scale - t);
         float delta = d - applied;
         if (Mathf.Approximately(delta, 0f)) return;
         applied = d;

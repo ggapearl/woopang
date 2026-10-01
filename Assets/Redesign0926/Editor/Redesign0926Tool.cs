@@ -94,10 +94,7 @@ namespace Redesign0926
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             EditorUserBuildSettings.buildAppBundle = true;   // Play 스토어는 .aab
 
-            string ver = global::Editor.BuildNumberAutoIncrement.PredictBundleVersion();
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "woopang_build");
-            Directory.CreateDirectory(dir);
-            string output = Path.Combine(dir, $"woopang_{ver}_{DateTime.Now:yyyyMMdd_HHmm}.aab");
+            string output = global::Editor.BuildPipelineRunner.AndroidOutputPath("aab");   // D:\##WP_backup\apk_2026\<MMDD>\<HHmm>.aab
             var scenes = new List<string>();
             foreach (var s in EditorBuildSettings.scenes) if (s.enabled) scenes.Add(s.path);
 

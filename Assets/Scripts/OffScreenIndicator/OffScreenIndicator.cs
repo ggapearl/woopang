@@ -24,6 +24,10 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("Additional top boundary offset in pixels")]
     [SerializeField] private float additionalBoundOffsetTop = 0f;
 
+    /// <summary>위쪽 한계를 기기에 맞춰 바꿀 때 (0926: 노치 바로 아래까지 — R0926IndicatorBounds)</summary>
+    public float AdditionalBoundOffsetTop { get => additionalBoundOffsetTop; set => additionalBoundOffsetTop = value; }
+    public float ScreenBoundOffsetY => screenBoundOffsetY;
+
     [Tooltip("Additional bottom boundary offset in pixels")]
     [SerializeField] private float additionalBoundOffsetBottom = 0f;
 

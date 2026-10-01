@@ -49,7 +49,9 @@ namespace Redesign0926
             InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
             InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
             steps.Clear();
-            Plan();
+            var lines = File.ReadAllLines(PlanPath);
+            string mode = lines.Length > 1 ? lines[1].Trim() : "";
+            if (mode == "upload") PlanUpload(); else if (mode == "look") PlanLook(); else if (mode == "look2") PlanLook2(); else Plan();
             running = true;
         }
 
@@ -117,12 +119,220 @@ namespace Redesign0926
             Shot("main_after_back");
         }
 
+        // 추가 화면 카드 배치 확인 — 카드 크기·위치와 SwipePanelController 값
+        private static void PlanUpload()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Shot("upload_open");
+            Do(() =>
+            {
+                foreach (var n in new[] { "UploadPage/UploadSheet0926", "UploadPage/UploadSheet0926/CubeUploadPage", "UploadPage/UploadSheet0926/ModelUploadPage" })
+                {
+                    var rt = Find(n) as RectTransform;
+                    if (rt == null) { log.Add("  없음 " + n); continue; }
+                    log.Add($"  {n}: w={rt.rect.width:0} pos={rt.anchoredPosition} size={rt.sizeDelta} aMin={rt.anchorMin} aMax={rt.anchorMax} active={rt.gameObject.activeInHierarchy}");
+                }
+                var sp = UnityEngine.Object.FindAnyObjectByType<SwipePanelController>();
+                if (sp != null)
+                    foreach (var f in new[] { "panelWidth", "panelDistance", "currentAnchoredX", "currentPanel" })
+                    {
+                        var fi = typeof(SwipePanelController).GetField(f, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        log.Add($"  swipe.{f} = {fi?.GetValue(sp)}");
+                    }
+                log.Add($"  screen={Screen.width}x{Screen.height} canvasScale={CanvasRoot()?.GetComponent<Canvas>()?.scaleFactor}");
+            });
+        }
+
+        // 0930 시안 둘러보기 — 창마다 열어 찍는다 (칩 상태·탭 넘김·페이드·안내·상태 알약)
+        private static void PlanLook()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(0.3f);
+            Shot("main_status");
+            Sleep(2.0f);
+            Shot("main");
+
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(0.12f);
+            Shot("list_rising");
+            Sleep(1.0f);
+            Shot("list");
+            Do(() => ClickToggle("PetFriendlyToggle"));
+            Sleep(0.5f);
+            Shot("list_pet_required");
+            Do(() => ClickToggle("PetFriendlyToggle"));
+            Sleep(0.4f);
+            Shot("list_pet_excluded");
+            Do(() => ClickToggle("PetFriendlyToggle"));
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.4f);
+            Shot("list_category_shop");
+            for (int i = 0; i < 7; i++) Do(() => ClickToggle("CategoryToggle"));   // 한 바퀴 돌아 '전체'로
+            Do(() => Modes()?.Show(1));
+            Sleep(0.15f);
+            Shot("tab_sliding");
+            Sleep(0.8f);
+            Shot("map");
+            Do(() => Modes()?.Show(2));
+            Sleep(0.9f);
+            Shot("settings");
+            Do(() => Modes()?.Show(0));
+            Sleep(0.8f);
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(0.12f);
+            Shot("list_closing");
+            Sleep(1.0f);
+
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Shot("add");
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+
+            Do(() => Click("Dock0926/Message_Button"));
+            Sleep(1.2f);
+            Shot("msg");
+            Back();
+            Sleep(1.0f);
+
+            Do(() => Click("Dock0926/MiniProfile"));
+            Sleep(0.1f);
+            Shot("profile_fading");
+            Sleep(0.8f);
+            Shot("profile");
+            Do(() => log.Add("  열린 창: " + OpenPanels()));
+            Do(() => Click("FullProfilePanel/DockMirror0926/ProfileToggle0926"));
+            Sleep(0.1f);
+            Shot("profile_fading_out");
+            Sleep(0.6f);
+            Check(() => !Active("FullProfilePanel"), "프로필: 도크 프로필 칸을 다시 누르면 닫힘");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
+            Sleep(0.6f);
+
+            Do(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                if (cm != null && cm.commentPanel != null) cm.commentPanel.SetActive(true);
+            });
+            Sleep(1.2f);
+            Shot("comment");
+            Do(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                if (cm != null && cm.commentInputField != null) cm.commentInputField.text = "여기 연못 예뻐요";
+            });
+            Sleep(0.5f);
+            Shot("comment_typed");
+            Do(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                if (cm != null) { if (cm.commentInputField != null) cm.commentInputField.text = ""; cm.commentPanel.SetActive(false); }
+            });
+            Sleep(0.5f);
+
+            Do(() =>
+            {
+                var lm = UnityEngine.Object.FindAnyObjectByType<LoadingManager>(FindObjectsInactive.Include);
+                if (lm != null && lm.loadingPanel != null) { lm.loadingPanel.SetActive(true); if (lm.loadingText != null) lm.loadingText.text = "GPS 로딩중..."; }
+            });
+            Sleep(0.6f);
+            Shot("loading_gps");
+            Do(() =>
+            {
+                var lm = UnityEngine.Object.FindAnyObjectByType<LoadingManager>(FindObjectsInactive.Include);
+                if (lm != null && lm.loadingPanel != null) lm.loadingPanel.SetActive(false);
+            });
+
+            Do(() => UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include)?.ForceShowGuide());
+            Sleep(1.8f);
+            Shot("guide1");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Next());
+            Sleep(1.2f);
+            Shot("guide2");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Next());
+            Sleep(1.2f);
+            Shot("guide3");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip());
+            Sleep(1.0f);
+            Check(() => !Active("FirstTimeGuidePanel"), "안내: 건너뛰기로 닫힘");
+            Do(() => { PlayerPrefs.SetInt("IsFirstTime", 1); PlayerPrefs.Save(); });
+        }
+
+        // 분류 칩 순환 · 댓글 입력줄 · 인디케이터 X 두 번 누르기
+        private static void PlanLook2()
+        {
+            Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.0f);
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.5f);
+            Do(() => log.Add("  분류 = " + UnityEngine.Object.FindAnyObjectByType<FilterManager>()?.CategoryState));
+            Shot("cat_1");
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.5f);
+            Do(() => log.Add("  분류 = " + UnityEngine.Object.FindAnyObjectByType<FilterManager>()?.CategoryState));
+            Shot("cat_2");
+            for (int i = 0; i < 6; i++) Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.5f);
+            Do(() => log.Add("  분류(한 바퀴 뒤) = " + UnityEngine.Object.FindAnyObjectByType<FilterManager>()?.CategoryState));
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(1.0f);
+
+            Do(() => UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include)?.OpenCommentPanel(1, "시험"));
+            Sleep(1.5f);
+            Shot("comment");
+            Do(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                var bar = UnityEngine.Object.FindAnyObjectByType<R0926CommentBar>(FindObjectsInactive.Include);
+                if (bar != null) bar.React("❤️");
+                log.Add("  입력칸 = " + (cm != null && cm.commentInputField != null ? cm.commentInputField.text : "-"));
+            });
+            Sleep(0.6f);
+            Shot("comment_react");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include)?.ClosePanel());
+            Sleep(1.0f);
+
+            // 인디케이터 X — 첫 번째는 '삭제'로 바뀌기만, 두 번째에 숨김
+            Do(() =>
+            {
+                closeBtn = null;
+                foreach (var b in UnityEngine.Object.FindObjectsByType<Button>())
+                    if (b.name == "Close0926" && b.gameObject.activeInHierarchy) { closeBtn = b; break; }
+                log.Add("  인디케이터 X: " + (closeBtn != null ? "있음" : "없음"));
+                if (closeBtn != null) closeBtn.onClick.Invoke();
+            });
+            Sleep(0.4f);
+            Shot("x_armed");
+            Check(() => closeBtn == null || closeBtn.gameObject.activeInHierarchy, "X 첫 번째: 숨기지 않고 '삭제'로");
+            Do(() => { if (closeBtn != null) closeBtn.onClick.Invoke(); });
+            Sleep(0.6f);
+            Check(() => closeBtn == null || !closeBtn.gameObject.activeInHierarchy, "X 두 번째: 숨김");
+            Shot("x_hidden");
+        }
+        private static Button closeBtn;
+
+        private static R0926SheetModes Modes() => UnityEngine.Object.FindAnyObjectByType<R0926SheetModes>(FindObjectsInactive.Include);
+        private static void ClickToggle(string name)
+        {
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Toggle>(FindObjectsInactive.Include))
+                if (t.name == name && t.transform.parent != null && t.transform.parent.name == "FilterButtonPanel") { t.isOn = !t.isOn; return; }   // 장소 추가 카드에도 같은 이름이 있다
+            log.Add("  토글 없음 " + name);
+        }
+
         // ── 단계 도우미 ──────────────────────────────────────────
         private static void Do(Action a) => steps.Enqueue(() => { a(); return true; });
+        // 실제 시간과 함께 게임 프레임 수도 채울 때까지 — 에디터가 뒤에 있으면 프레임이 드물게 돌아 캡처가 앞 장면에 머물렀다
+        private static int waitFrame = -1;
         private static void Sleep(float s) => steps.Enqueue(() =>
         {
-            if (waitUntil < 0) waitUntil = EditorApplication.timeSinceStartup + s;
-            if (EditorApplication.timeSinceStartup < waitUntil) return false;
+            if (waitUntil < 0) { waitUntil = EditorApplication.timeSinceStartup + s; waitFrame = Time.frameCount + Mathf.CeilToInt(s * 30f); }
+            if (EditorApplication.timeSinceStartup < waitUntil || Time.frameCount < waitFrame) return false;
             waitUntil = -1;
             return true;
         });
@@ -138,7 +348,18 @@ namespace Redesign0926
             });
         }
         private static void Check(Func<bool> ok, string what) => Do(() => log.Add((ok() ? "PASS " : "FAIL ") + what));
-        private static void Shot(string name) => Do(() => ScreenCapture.CaptureScreenshot(Path.Combine(dir, "test_" + name + ".png")));
+        // 찍고 나서 두 프레임 더 기다린다 — 캡처는 그 프레임 끝에 저장되므로 다음 단계가 화면을 먼저 바꾸지 않게
+        private static void Shot(string name)
+        {
+            int f = -1;
+            steps.Enqueue(() =>
+            {
+                if (f < 0) { ScreenCapture.CaptureScreenshot(Path.Combine(dir, "test_" + name + ".png")); f = Time.frameCount; }
+                if (Time.frameCount < f + 2) return false;
+                f = -1;
+                return true;
+            });
+        }
 
         private static void Back()
         {
@@ -220,7 +441,15 @@ namespace Redesign0926
                 if (r.name == "Canvas") return r.transform;
             return null;
         }
-        private static Transform Find(string path) { var c = CanvasRoot(); return c != null ? c.Find(path) : null; }
+        // 0930: 시트가 도크 윗선 틀(Clip0926) 안에 들어갔다 — 예전 경로로도 찾게
+        private static Transform Find(string path)
+        {
+            var c = CanvasRoot();
+            if (c == null) return null;
+            var t = c.Find(path);
+            int k = path.IndexOf('/');
+            return t != null || k <= 0 ? t : c.Find(path.Substring(0, k) + "/Clip0926" + path.Substring(k));
+        }
         private static bool Active(string path) { var t = Find(path); return t != null && t.gameObject.activeInHierarchy; }
         private static void Click(string path)
         {

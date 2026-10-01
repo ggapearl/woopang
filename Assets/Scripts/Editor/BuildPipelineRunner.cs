@@ -137,16 +137,30 @@ namespace Editor
             string ver = PlayerSettings.bundleVersion;
 
             if (target == BuildTarget.Android)
-            {
-                Directory.CreateDirectory(DefaultOutputDir);
-                string ext = EditorUserBuildSettings.buildAppBundle ? "aab" : "apk";
-                return Path.Combine(DefaultOutputDir, $"woopang_{ver}_{stamp}.{ext}");
-            }
+                return AndroidOutputPath(EditorUserBuildSettings.buildAppBundle ? "aab" : "apk");
 
             // iOS는 폴더(Xcode 프로젝트)로 나온다
             string dir = Path.Combine(DefaultOutputDir, $"iOS_{ver}_{stamp}");
             Directory.CreateDirectory(dir);
             return dir;
+        }
+
+        /// <summary>
+        /// 안드로이드 결과물 경로: D:\##WP_backup\apk_2026\&lt;MMDD&gt;\&lt;HHmm&gt;.aab (2026-09-29 대표님 지시 — 날짜 폴더 · 빌드 시각 이름).
+        /// 그 드라이브가 없는 PC(맥 등)는 예전처럼 바탕화면/woopang_build.
+        /// </summary>
+        public static string AndroidOutputPath(string ext)
+        {
+            var now = DateTime.Now;
+            const string backupRoot = @"D:\##WP_backup";
+            if (Directory.Exists(backupRoot))
+            {
+                string dir = Path.Combine(backupRoot, "apk_" + now.Year, now.ToString("MMdd"));
+                Directory.CreateDirectory(dir);
+                return Path.Combine(dir, now.ToString("HHmm") + "." + ext);
+            }
+            Directory.CreateDirectory(DefaultOutputDir);
+            return Path.Combine(DefaultOutputDir, $"woopang_{PlayerSettings.bundleVersion}_{now:yyyyMMdd_HHmm}.{ext}");
         }
 
         // ── 커맨드라인 인자 ────────────────────────────────────────

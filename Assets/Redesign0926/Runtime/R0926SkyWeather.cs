@@ -20,6 +20,13 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private Text tempText;
     [SerializeField] private Text condText;
     [SerializeField] private Text detailText;
+    [SerializeField] private R0926WeatherIcon icon;       // 기온 왼쪽의 날씨 그림
+
+    [Header("3시간 후 · 6시간 후 · 내일")]
+    [SerializeField] private GameObject forecast;
+    [SerializeField] private Text[] fcLabels;
+    [SerializeField] private R0926WeatherIcon[] fcIcons;
+    [SerializeField] private Text[] fcTemps;
 
     [Header("위쪽 작은 칩 — 판이 떠 있으면 '접기', 접혔거나 오브젝트 우선이면 날씨 + '펼치기'")]
     [SerializeField] private CanvasGroup chipGroup;
@@ -54,7 +61,15 @@ public class R0926SkyWeather : MonoBehaviour
         public float precip_prob = -1;
         public string sunrise;
         public string sunset;
-        public float tomorrow_min;
+        public float tomorrow_min = -99;
+        public float tomorrow_max = -99;
+        public int tomorrow_code = -1;
+        public float h3_temp = -99;
+        public int h3_code = -1;
+        public bool h3_day = true;
+        public float h6_temp = -99;
+        public int h6_code = -1;
+        public bool h6_day = true;
         public float pm10 = -1;
         public float moon;
     }
@@ -225,20 +240,55 @@ public class R0926SkyWeather : MonoBehaviour
         bool rain = w.code >= 51 && w.code <= 67 || w.code >= 80 && w.code <= 82 || w.code >= 95;
         string cond = Condition(w.code, w.is_day, lang);
         tempText.text = t + "°";
-        condText.text = rain && w.precip_prob >= 0 ? cond + " · " + L(lang, "강수", "rain", "降水", "降水", "lluvia") + " " + Mathf.RoundToInt(w.precip_prob) + "%" : cond;
+        if (icon != null)
+        {
+            // 그림과 기온을 한 묶음으로 가운데에
+            var irt = (RectTransform)icon.transform;
+            float iw = irt.sizeDelta.x, tw = tempText.preferredWidth, gap = 26f;
+            float total = iw + gap + tw;
+            irt.anchoredPosition = new Vector2(-total / 2f + iw / 2f, irt.anchoredPosition.y);
+            tempText.rectTransform.anchoredPosition = new Vector2(total / 2f - tw / 2f, tempText.rectTransform.anchoredPosition.y);
+            icon.Set(w.code, w.is_day);
+        }
 
-        string detail;
+        // 1줄: 상태 · (비 오면 강수 확률, 아니면 미세먼지)
+        string extra = rain && w.precip_prob >= 0 ? L(lang, "강수", "rain", "降水", "降水", "lluvia") + " " + Mathf.RoundToInt(w.precip_prob) + "%"
+                     : w.pm10 >= 0 ? L(lang, "미세먼지", "Air", "PM10", "PM10", "Aire") + " " + Pm(w.pm10, lang) : null;
+        condText.text = extra == null ? cond : cond + " · " + extra;
+
+        // 2줄: 비 → 우산 · 바람 / 밤 → 달 · 일출 / 낮 → 일몰 · 바람
+        string wind = L(lang, "바람", "Wind", "風", "风", "Viento") + " " + w.wind.ToString("0.#") + "m/s";
         if (rain)
-            detail = L(lang, "우산 챙기세요", "Take an umbrella", "傘を持って出かけましょう", "记得带伞", "Lleva paraguas");
+            detailText.text = L(lang, "우산 챙기세요", "Take an umbrella", "傘を持って出かけましょう", "记得带伞", "Lleva paraguas") + " · " + wind;
         else if (!w.is_day)
-            detail = L(lang, "달", "Moon", "月", "月亮", "Luna") + " " + Mathf.RoundToInt(w.moon * 100) + "% · "
-                   + L(lang, "내일 아침", "Tomorrow low", "明朝", "明早", "Mañana") + " " + Mathf.RoundToInt(w.tomorrow_min) + "°"
-                   + (string.IsNullOrEmpty(w.sunrise) ? "" : " · " + L(lang, "일출", "Sunrise", "日の出", "日出", "Amanecer") + " " + Clock(w.sunrise));
+            detailText.text = L(lang, "달", "Moon", "月", "月亮", "Luna") + " " + Mathf.RoundToInt(w.moon * 100) + "%"
+                            + (string.IsNullOrEmpty(w.sunrise) ? "" : " · " + L(lang, "일출", "Sunrise", "日の出", "日出", "Amanecer") + " " + Clock(w.sunrise));
         else
-            detail = (w.pm10 >= 0 ? L(lang, "미세먼지", "Air", "PM10", "PM10", "Aire") + " " + Pm(w.pm10, lang) + " · " : "")
-                   + (string.IsNullOrEmpty(w.sunset) ? "" : L(lang, "일몰", "Sunset", "日没", "日落", "Atardecer") + " " + Clock(w.sunset) + " · ")
-                   + L(lang, "바람", "Wind", "風", "风", "Viento") + " " + w.wind.ToString("0.#") + "m/s";
-        detailText.text = detail;
+            detailText.text = (string.IsNullOrEmpty(w.sunset) ? "" : L(lang, "일몰", "Sunset", "日没", "日落", "Atardecer") + " " + Clock(w.sunset) + " · ") + wind;
+
+        bool hasFc = w.h3_temp > -90f && fcTemps != null && fcTemps.Length >= 3;
+        if (forecast != null && forecast.activeSelf != hasFc) forecast.SetActive(hasFc);
+        if (hasFc)
+        {
+            string[] names =
+            {
+                L(lang, "3시간 후", "In 3h", "3時間後", "3小时后", "En 3 h"),
+                L(lang, "6시간 후", "In 6h", "6時間後", "6小时后", "En 6 h"),
+                L(lang, "내일", "Tomorrow", "明日", "明天", "Mañana"),
+            };
+            for (int i = 0; i < 3; i++) if (fcLabels != null && i < fcLabels.Length && fcLabels[i] != null) fcLabels[i].text = names[i];
+            fcTemps[0].text = Mathf.RoundToInt(w.h3_temp) + "°";
+            fcTemps[1].text = w.h6_temp > -90f ? Mathf.RoundToInt(w.h6_temp) + "°" : "–";
+            fcTemps[2].text = w.tomorrow_max > -90f
+                ? Mathf.RoundToInt(w.tomorrow_max) + "°<size=" + Mathf.RoundToInt(fcTemps[2].fontSize * 0.8f) + "><color=#FFFFFFB3> / " + Mathf.RoundToInt(w.tomorrow_min) + "°</color></size>"
+                : "–";
+            if (fcIcons != null && fcIcons.Length >= 3)
+            {
+                if (fcIcons[0] != null) fcIcons[0].Set(w.h3_code >= 0 ? w.h3_code : w.code, w.h3_day);
+                if (fcIcons[1] != null) fcIcons[1].Set(w.h6_code >= 0 ? w.h6_code : w.code, w.h6_day);
+                if (fcIcons[2] != null) fcIcons[2].Set(w.tomorrow_code >= 0 ? w.tomorrow_code : w.code, true);
+            }
+        }
         weatherChip = cond + " " + t + "°";
         lastChip = null;   // 다음 프레임에 칩 글자 갱신
     }

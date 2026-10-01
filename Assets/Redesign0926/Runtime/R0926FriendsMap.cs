@@ -537,7 +537,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     public void OnDrag(PointerEventData e)
     {
-        if (Input.touchCount >= 2) return;
+        if (Touches(out _, out _) >= 2) return;   // 두 손가락이면 확대·축소 쪽
         origin += new Vector2(e.delta.x, -e.delta.y) / Scale;
         Clamp();
         Layout();
@@ -557,18 +557,33 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     private void Pinch()
     {
-        if (Input.touchCount != 2) { prevPinch = -1f; return; }
-        Touch a = Input.GetTouch(0), b = Input.GetTouch(1);
+        // 새 입력 시스템만 켜져 있다 — 예전 Input.touchCount 는 기기에서 예외가 나 끌기·확대가 통째로 안 됐다
+        if (Touches(out Vector2 a, out Vector2 b) != 2) { prevPinch = -1f; return; }
         Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
-        if (prevPinch < 0f && !RectTransformUtility.RectangleContainsScreenPoint(viewport, (a.position + b.position) / 2f, cam)) return;
-        float d = Vector2.Distance(a.position, b.position);
-        Vector2 mid = LocalTopLeft((a.position + b.position) / 2f);
+        if (prevPinch < 0f && !RectTransformUtility.RectangleContainsScreenPoint(viewport, (a + b) / 2f, cam)) return;
+        float d = Vector2.Distance(a, b);
+        Vector2 mid = LocalTopLeft((a + b) / 2f);
         if (prevPinch > 0f && d > 1f)
         {
             if (anim != null) { StopCoroutine(anim); anim = null; }
             ZoomAt(mid, d / prevPinch);
         }
         prevPinch = d;
+    }
+
+    private static int Touches(out Vector2 a, out Vector2 b)
+    {
+        a = b = default;
+        var ts = UnityEngine.InputSystem.Touchscreen.current;
+        if (ts == null) return 0;
+        int n = 0;
+        foreach (var t in ts.touches)
+        {
+            if (!t.isInProgress) continue;
+            if (n == 0) a = t.position.ReadValue(); else if (n == 1) b = t.position.ReadValue();
+            n++;
+        }
+        return n;
     }
 
     // ── 도우미 ───────────────────────────────────────────────

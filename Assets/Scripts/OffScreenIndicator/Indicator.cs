@@ -39,8 +39,19 @@ public class Indicator : MonoBehaviour
     public static Sprite CloseIcon;
     public static Sprite CloseBackground;
     public static float CloseButtonSize = 96f;   // 캔버스 단위 — 박스가 거리에 따라 커지고 작아져도 이 크기 유지
+    // 두 번 눌러야 숨긴다 — 오브젝트를 두 번 누르려다 X 를 잘못 눌러도 바로 사라지지 않게.
+    // 첫 번째: X 가 '삭제' 알약으로 부드럽게 바뀜 · 두 번째(3초 안): 숨김 · 3초 지나면 X 로 돌아감
+    public static Sprite ClosePill;              // 가운데가 늘어나는 알약 (정사각이면 원)
+    public static string CloseConfirmLabel = "삭제";
+    private const float CloseConfirmWindow = 3f;
     private RectTransform closeButton;
     private Target closeFor;
+    private RectTransform closeBg;
+    private Image closeBgImg, closeIconImg;
+    private Text closeLabel;
+    private float closeArmedAt = -1f, closeK;
+    private bool closeRest;
+    private CanvasGroup closeGroup;
 
     public bool Active
     {
@@ -260,6 +271,9 @@ public class Indicator : MonoBehaviour
             bool isPlace = ownerTarget != null && HiddenPlaces.ResolveUniqueId(ownerTarget) != null;
             if (isPlace) EnsureCloseButton();
             if (closeButton != null) closeButton.gameObject.SetActive(isPlace);
+            closeArmedAt = -1f;
+            closeK = 0f;
+            closeRest = false;   // 다른 장소로 재사용된 박스 — 곧바로 X 로
         }
         if (closeButton != null && closeButton.gameObject.activeSelf)
         {
@@ -270,6 +284,40 @@ public class Indicator : MonoBehaviour
                 // 모서리에서 살짝 오른쪽·위로 — 박스 아래 거리 글자(1778m 등)와 겹치지 않게. 박스 크기와 상관없이 같은 간격
                 closeButton.anchoredPosition = new Vector2(0.3f, 0.3f) * (CloseButtonSize / s);
             }
+            AnimateCloseConfirm();
+        }
+    }
+
+    private void AnimateCloseConfirm()
+    {
+        if (closeBg == null) return;
+        if (closeArmedAt >= 0f && Time.unscaledTime - closeArmedAt > CloseConfirmWindow) closeArmedAt = -1f;
+        float target = closeArmedAt >= 0f ? 1f : 0f;
+        if (closeK == 0f && target == 0f && closeRest) return;
+        closeK = Mathf.MoveTowards(closeK, target, Time.unscaledDeltaTime / 0.22f);
+        closeRest = closeK == 0f;
+        float k = closeK * closeK * (3f - 2f * closeK);
+        // '삭제'일 때는 박스 모서리 선 위에, 거리 흐림과 상관없이 또렷하게
+        if (closeK > 0f && closeButton.GetSiblingIndex() != closeButton.parent.childCount - 1) closeButton.SetAsLastSibling();
+        if (closeGroup != null) closeGroup.ignoreParentGroups = closeK > 0.01f;
+
+        float size = CloseButtonSize;
+        if (closeLabel != null && closeLabel.text != CloseConfirmLabel) closeLabel.text = CloseConfirmLabel;
+        float w = Mathf.Max(size, (closeLabel != null ? closeLabel.preferredWidth : 0f) + size * 0.72f);
+        float cw = Mathf.Lerp(size, w, k);
+        // 오른쪽 끝은 그대로 두고 왼쪽으로 늘어난다 — 화면 오른쪽 끝의 박스에서도 글자가 잘리지 않게
+        closeBg.sizeDelta = new Vector2(cw, size);
+        closeBg.anchoredPosition = new Vector2(-(cw - size) / 2f, 0f);
+        closeBgImg.color = Color.Lerp(new Color(0.06f, 0.07f, 0.1f, 0.78f), new Color(0.91f, 0.27f, 0.33f, 0.95f), k);
+        closeIconImg.color = new Color(1f, 1f, 1f, 1f - k);
+        closeIconImg.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f * k);
+        closeIconImg.rectTransform.localScale = Vector3.one * (1f - 0.5f * k);
+        if (closeLabel != null)
+        {
+            closeLabel.enabled = k > 0.001f;
+            closeLabel.color = new Color(1f, 1f, 1f, Mathf.Clamp01(k * 1.6f - 0.4f));
+            closeLabel.rectTransform.anchoredPosition = closeBg.anchoredPosition;
+            closeLabel.rectTransform.sizeDelta = new Vector2(w, size);
         }
     }
 
@@ -284,15 +332,24 @@ public class Indicator : MonoBehaviour
         closeButton.anchoredPosition = Vector2.zero;
         closeButton.sizeDelta = Vector2.one * (CloseButtonSize * 1.9f);   // 누르는 영역은 보이는 원보다 넉넉히
         go.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+        closeGroup = go.AddComponent<CanvasGroup>();
 
         var bg = new GameObject("Bg", typeof(RectTransform), typeof(Image));
         var bgRt = (RectTransform)bg.transform;
         bgRt.SetParent(closeButton, false);
         bgRt.sizeDelta = Vector2.one * CloseButtonSize;
         var bgImg = bg.GetComponent<Image>();
-        bgImg.sprite = CloseBackground;
+        if (ClosePill != null)
+        {
+            bgImg.sprite = ClosePill;
+            bgImg.type = Image.Type.Sliced;
+            bgImg.pixelsPerUnitMultiplier = ClosePill.border.y / (CloseButtonSize / 2f);   // 모서리 반지름 = 높이의 절반 → 정사각이면 원
+        }
+        else bgImg.sprite = CloseBackground;
         bgImg.color = new Color(0.06f, 0.07f, 0.1f, 0.78f);
-        bgImg.raycastTarget = false;
+        bgImg.raycastTarget = true;   // '삭제'로 늘어난 알약도 누를 수 있게
+        closeBg = bgRt;
+        closeBgImg = bgImg;
 
         var icon = new GameObject("X", typeof(RectTransform), typeof(Image));
         var icRt = (RectTransform)icon.transform;
@@ -302,6 +359,25 @@ public class Indicator : MonoBehaviour
         icImg.sprite = CloseIcon;
         icImg.color = Color.white;
         icImg.raycastTarget = false;
+        closeIconImg = icImg;
+
+        Font font = nameText != null ? nameText.font : distanceText != null ? distanceText.font : null;
+        if (font != null)
+        {
+            var lab = new GameObject("Confirm", typeof(RectTransform), typeof(Text));
+            var labRt = (RectTransform)lab.transform;
+            labRt.SetParent(closeButton, false);
+            closeLabel = lab.GetComponent<Text>();
+            closeLabel.font = font;
+            closeLabel.fontSize = Mathf.RoundToInt(CloseButtonSize * 0.38f);
+            closeLabel.fontStyle = FontStyle.Bold;
+            closeLabel.alignment = TextAnchor.MiddleCenter;
+            closeLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            closeLabel.verticalOverflow = VerticalWrapMode.Overflow;
+            closeLabel.raycastTarget = false;
+            closeLabel.text = CloseConfirmLabel;
+            closeLabel.enabled = false;
+        }
 
         var btn = go.GetComponent<Button>();
         btn.transition = Selectable.Transition.None;
@@ -310,7 +386,15 @@ public class Indicator : MonoBehaviour
 
     private void OnCloseClicked()
     {
-        if (ownerTarget != null) HiddenPlaces.HideTarget(ownerTarget);
+        if (ownerTarget == null) return;
+        if (closeArmedAt < 0f || Time.unscaledTime - closeArmedAt > CloseConfirmWindow)
+        {
+            closeArmedAt = Time.unscaledTime;   // 첫 번째 — '삭제'로 바뀌기만
+            return;
+        }
+        closeArmedAt = -1f;
+        closeK = 0f;
+        HiddenPlaces.HideTarget(ownerTarget);
     }
 
     /// <summary>

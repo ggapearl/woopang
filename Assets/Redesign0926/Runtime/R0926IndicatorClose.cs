@@ -9,6 +9,8 @@ public class R0926IndicatorClose : MonoBehaviour
 {
     [SerializeField] private Sprite icon;
     [SerializeField] private Sprite background;
+    [Tooltip("X → '삭제' 로 늘어나는 알약 (9-slice)")]
+    [SerializeField] private Sprite pill;
     [Tooltip("보이는 원 크기 (캔버스 단위, 1440 기준). 누르는 영역은 1.9배")]
     [SerializeField] private float size = 96f;
     [SerializeField] private bool showToast = true;
@@ -17,9 +19,16 @@ public class R0926IndicatorClose : MonoBehaviour
     {
         Indicator.CloseIcon = icon;
         Indicator.CloseBackground = background;
+        Indicator.ClosePill = pill;
         Indicator.CloseButtonSize = size;
         Indicator.CloseButtonEnabled = true;
         HiddenPlaces.Hidden += OnHidden;
+    }
+
+    private void Update()
+    {
+        // 앱 안에서 언어를 바꿔도 곧바로 맞게
+        Indicator.CloseConfirmLabel = L("삭제", "Remove", "削除", "删除", "Quitar");
     }
 
     private void OnDestroy()

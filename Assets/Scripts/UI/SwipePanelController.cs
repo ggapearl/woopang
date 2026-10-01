@@ -24,6 +24,9 @@ public class SwipePanelController : MonoBehaviour
     [Tooltip("다음 패널 미리보기 간격 (픽셀 단위).")]
     public float panelPreviewAmount = 80f;
 
+    [Tooltip("두 카드를 함께 옆으로 미는 기본 위치 — 첫 카드를 왼쪽에 붙이고 오른쪽 끝에 다음 카드를 살짝 보이게 할 때")]
+    public float baseOffsetX = 0f;
+
     void OnEnable()
     {
         EnhancedTouchSupport.Enable();
@@ -39,7 +42,7 @@ public class SwipePanelController : MonoBehaviour
     {
         currentPanel = 0;
         currentAnchoredX = 0;
-        if (panel1 != null) panel1.anchoredPosition = new Vector2(0, 0);
+        if (panel1 != null) panel1.anchoredPosition = new Vector2(baseOffsetX, 0);
 
         yield return null;
         ResetToFirstPanel();
@@ -50,7 +53,7 @@ public class SwipePanelController : MonoBehaviour
         currentPanel = 0;
         CalculateDimensions();
         currentAnchoredX = 0;
-        if (panel1 != null) panel1.anchoredPosition = new Vector2(0, 0);
+        if (panel1 != null) panel1.anchoredPosition = new Vector2(baseOffsetX, 0);
         UpdatePanelPositions();
     }
 
@@ -137,12 +140,12 @@ public class SwipePanelController : MonoBehaviour
     {
         if (panel1 != null)
         {
-            panel1.anchoredPosition = new Vector2(currentAnchoredX, 0);
+            panel1.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX, 0);
             
             if (panel2 != null)
             {
                 // panel2는 항상 panel1 기준의 상대 위치를 유지 (동기화)
-                panel2.anchoredPosition = new Vector2(currentAnchoredX + panelDistance, 0);
+                panel2.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX + panelDistance, 0);
             }
         }
     }

@@ -83,6 +83,9 @@ public class FilterManager : MonoBehaviour
     };
 
     private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
+    public PetFriendlyFilterState PetState => petFriendlyState;
+    public P2PFilterState P2PState => p2pFilterState;
+    public CategoryFilterState CategoryState => categoryState;
     private P2PFilterState p2pFilterState = P2PFilterState.FollowingOnly;  // 기본값: 팔로잉
     private CategoryFilterState categoryState = CategoryFilterState.All;  // 기본값: 전체
     private bool filterPublicData = true;
@@ -603,17 +606,17 @@ public class FilterManager : MonoBehaviour
     {
         if (isUpdatingToggles) return;
 
-        // 3단계 순환: 필수(노란색) -> 포함(흰색) -> 제외(회색)
+        // 3단계 순환: 포함 -> 필수(노란색) -> 제외(회색) -> 포함 (2026-09-30 확정 시안 순서)
         switch (petFriendlyState)
         {
-            case PetFriendlyFilterState.OnlyPetFriendly:
-                petFriendlyState = PetFriendlyFilterState.All;
-                break;
             case PetFriendlyFilterState.All:
+                petFriendlyState = PetFriendlyFilterState.OnlyPetFriendly;
+                break;
+            case PetFriendlyFilterState.OnlyPetFriendly:
                 petFriendlyState = PetFriendlyFilterState.NoPetFriendly;
                 break;
             case PetFriendlyFilterState.NoPetFriendly:
-                petFriendlyState = PetFriendlyFilterState.OnlyPetFriendly;
+                petFriendlyState = PetFriendlyFilterState.All;
                 break;
         }
 
@@ -1091,6 +1094,9 @@ public class FilterManager : MonoBehaviour
 
         while (true)
         {
+            // 시작화면이 떠 있는 동안엔 3D 생성·GLB 읽기를 미룬다 — 그 순간의 멈칫이 시작화면을 뚝뚝 끊기게 했다
+            while (BootOverlay.Showing) yield return null;
+
             Vector2 gps = GetCurrentGPS();
 
             if (gps.x != 0f || gps.y != 0f)
@@ -1179,6 +1185,7 @@ public class FilterManager : MonoBehaviour
     public void TriggerReallocation()
     {
         if (cacheProviders.Count == 0) return;
+        if (BootOverlay.Showing) return;   // 시작화면이 걷히면 AllocationLoop 가 바로 이어서 한다
         Vector2 gps = GetCurrentGPS();
         if (gps.x != 0f || gps.y != 0f)
         {
