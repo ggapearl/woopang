@@ -20,6 +20,22 @@
 2. 1.0.2 (3) 의 「이번에 확인할 것」 1~4 도 같이 (아래)
 3. TestFlight 업로드 → 대표님 아이폰에서 설치 → 말풍선에 시각이 보이는지
 
+**결과** — 2026-10-01 Mac 빌드 세션 (Xcode 26.3 · iOS 26.2 SDK · xcodegen 2.46.0):
+- **컴파일 성공, 고친 파일 없음.** 서명 없이 build 한 번에 통과 — 이 앱 소스에서 오류 0 · 경고 0.
+  위 확인 대상(`StampText` · `ChatItem.time`/`init(time:)` · `DeskStore.time(_:)` · `text` 사건 `update` 클로저 ·
+  `UserBubble`/`AIMessage`/`InboxBubble` 의 `time` 인자)과 1.0.2 (3) 의 `DocLinks` · `AttachmentStrip` · `handleLink`(nonisolated) · `FileLink` 모두 그대로.
+- `PrivacyInfo.xcprivacy` 가 `.app` 안에 들어감 (UserDefaults · CA92.1). 아이콘 1024 · 알파 없음.
+- **TestFlight 업로드 성공** — 1.0.3 (4), 2026-10-01 08:20 KST. 처리 끝(VALID) · 수출 규정 질문 없음(자동 면제).
+- 내부 테스트 그룹 **「대표님」**: 자동 배포 켬 · 공개 링크 꺼짐 · 테스터 `ggapearl@gmail.com`(계정 소유자, 초대 메일 나감) · 이 빌드 들어감(`IN_BETA_TESTING`).
+  외부 그룹 없음 · 외부 상태 `NOT_APPLICABLE`(내부 테스트 전용 업로드라 외부로 못 넘김) · 심사 제출 안 함.
+- 첫 업로드라 생긴 일 (`TESTFLIGHT.md` 1절):
+  - 이 앱은 capability(푸시 등)가 없어 archive 가 **와일드카드(`*`) 팀 프로파일**로 서명됐고, 그래서 1-1 의 전제와 달리
+    App ID 가 자동 등록되지 않았다 → App Store Connect API 로 `com.que.hyodingsseu` 를 직접 등록.
+  - 앱 기록은 API 로 만들 수 없어 대표님이 브라우저에서 만듦(효딩쓰 · SKU `hyodingsseu`).
+    앱 기록 없이 2-4 를 돌리면 `Error Downloading App Information`(`missingApp`)으로 실패한다.
+  - 그룹·테스터·자동 배포는 브라우저 대신 API 로 만들었다.
+- 대표님 확인 남음: 아이폰 TestFlight 에서 설치 · 말풍선에 시각이 보이는지 · 1.0.2 (3) 「이번에 확인할 것」 4번.
+
 ## 1.0.2 (3) — 2026-09-28 · TestFlight 준비 (올리지 않음 — 1.0.3 (4) 로 올린다)
 
 2026-09-28 Windows 세션이 고침 — 안드로이드 앱(`apps/hyodingsseu-android`)과 기능을 맞췄다. 서버 쪽은 이미 반영돼 있다.
