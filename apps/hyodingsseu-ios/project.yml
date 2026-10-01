@@ -13,8 +13,8 @@ settings:
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     # TestFlight 에 올릴 때마다 CURRENT_PROJECT_VERSION 을 1 씩 올린다 (같은 번호는 App Store Connect 가 거절)
-    MARKETING_VERSION: "2.0.0"
-    CURRENT_PROJECT_VERSION: "5"
+    MARKETING_VERSION: "2.0.1"
+    CURRENT_PROJECT_VERSION: "6"
 targets:
   Hyodingsseu:
     type: application
@@ -26,6 +26,13 @@ targets:
       # 개인정보 매니페스트 — UserDefaults 사용 사유(CA92.1). 없으면 App Store Connect 가 업로드를 거절할 수 있다
       - path: Hyodingsseu/PrivacyInfo.xcprivacy
         buildPhase: resources
+    # 알림(APNs, 2.0.1) — xcodegen 이 이 내용으로 파일을 쓰고 CODE_SIGN_ENTITLEMENTS 를 건다.
+    # development 로 두면 TestFlight 로 내보낼 때(ExportOptions 의 app-store-connect) Xcode 가 production 으로 바꿔 서명한다.
+    # App ID com.que.hyodingsseu 에 Push Notifications capability 가 있어야 서명된다(자동 서명 + -allowProvisioningUpdates 가 켠다).
+    entitlements:
+      path: Hyodingsseu/Hyodingsseu.entitlements
+      properties:
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.que.hyodingsseu

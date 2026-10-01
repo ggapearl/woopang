@@ -10,7 +10,7 @@
 - **화면은 웹이다**: `https://woopang.com/hyodingsseu/` — 안드로이드 앱(`apps/hyodingsseu-android`)과 **같은 화면**(저장소 `apps/hyodingsseu-android/web`).
   Windows PC 에서 그 폴더를 고치면 **아이폰·안드로이드 둘 다 그 자리에서 바뀐다.** 앱을 다시 빌드하지 않는다.
 - **앱(이 폴더)이 하는 일은 폰 기능만**: 화면을 꽉 채운 WKWebView + 폰 기능 다리 `DeskNative`
-  (아이폰 목소리로 읽기 · 진동 · 바깥 링크 열기 · 기기 이름) + 마이크 허락 + 인터넷 안 될 때 안내 화면.
+  (아이폰 목소리로 읽기 · 진동 · 바깥 링크 열기 · 기기 이름 · 알림 등록) + 마이크 허락 + 인터넷 안 될 때 안내 화면.
   다리 이름은 안드로이드 Capacitor 플러그인과 같다(`window.Capacitor.Plugins.DeskNative`) — 웹 코드는 폰을 가리지 않는다.
 - **다시 빌드할 때**: ① 폰 기능을 더하거나 바꿀 때(`Shell/DeskNative.swift` · `ShellPages.bridgeJS`) ② TestFlight 90일 만료 전(빌드 번호만 올려서).
 - 1.x 의 SwiftUI 화면(DeskStore·MainView 등 — 화면을 고칠 때마다 빌드해야 했다)은 커밋 `d4a47df` 에 있다.
@@ -18,7 +18,8 @@
 ```
 아이폰 앱(포장지) ── WKWebView ──▶ https://woopang.com/hyodingsseu/   (nginx → AI Office 8000 의 /AI/desk-app/ = 웹 화면 파일)
         │                              └─ 화면이 부르는 API: https://woopang.com/AI/api/desk/<주소>
-        └─ DeskNative (목소리·진동·링크·기기 이름)              (nginx → AI Office 8000 → PC 효딩쓰 127.0.0.1:47834 창 / 47835 뒤의 두뇌)
+        └─ DeskNative (목소리·진동·링크·기기 이름·알림 등록)    (nginx → AI Office 8000 → PC 효딩쓰 127.0.0.1:47834 창 / 47835 뒤의 두뇌)
+아이폰 알림 ◀── APNs ◀── PC 효딩쓰 (팀 키 .p8 로 직접 — Firebase 없음, 아래 「알림(푸시)」)
 ```
 
 - 서버 쪽 코드는 **이 저장소에 없다** (`server/` 는 Windows 개발 PC 에만 있는 로컬 전용). Mac 에서 손댈 서버는 없다.
@@ -30,10 +31,32 @@
 
 | 파일 | 하는 일 |
 |---|---|
-| `Hyodingsseu/App/HyodingsseuApp.swift` | 앱 시작 · 소리 설정(무음 스위치와 상관없이 스피커, 마이크 함께) · 화면 꽉 채우기(키보드는 비켜 감) |
-| `Hyodingsseu/Shell/WebShell.swift` | WKWebView · 바깥 주소는 사파리로 · 마이크 허락 · 인터넷 안 될 때 안내 · 웹 프로세스 죽으면 다시 |
-| `Hyodingsseu/Shell/DeskNative.swift` | 폰 기능 다리 — `haptic` · `openExternal` · `deviceName` · `speak`/`stop`(+`speechDone` 사건) · `setBars` |
+| `Hyodingsseu/App/HyodingsseuApp.swift` | 앱 시작 · 소리 설정(무음 스위치와 상관없이 스피커, 마이크 함께) · 화면 꽉 채우기(키보드는 비켜 감) · `AppDelegate`(알림 기기 토큰 받기 · 앱을 보는 중엔 알림 안 띄우기) |
+| `Hyodingsseu/Shell/WebShell.swift` | WKWebView · 바깥 주소는 사파리로 · 마이크 허락 · 인터넷 안 될 때 안내 · 웹 프로세스 죽으면 다시 · 앱으로 돌아오면 알림 숫자 지우기 |
+| `Hyodingsseu/Shell/DeskNative.swift` | 폰 기능 다리 — `haptic` · `openExternal` · `deviceName` · `speak`/`stop`(+`speechDone` 사건) · `setBars` · `pushRegister` |
 | `Hyodingsseu/Shell/ShellPages.swift` | 웹에 넣는 다리 JS(`bridgeJS`) · 안내 화면 HTML |
+| `Hyodingsseu/Shell/Push.swift` | 알림(APNs) — 허락 묻기 · 기기 토큰(10초 기다림) · 배지 지우기 |
+| `Hyodingsseu/Hyodingsseu.entitlements` | `aps-environment` — **정본은 `project.yml` 의 `entitlements`**(xcodegen 이 이 파일을 쓴다) |
+
+## 알림(푸시) — 2.0.1 부터
+
+Firebase 없이 Apple(APNs)에 직접. 대표님 개인 앱이라 PC 가 팀 키로 바로 보낸다.
+
+1. 웹이 `DeskNative.pushRegister()` 를 부른다(짝 지은 뒤) → 앱이 알림 허락을 묻는다(처음 한 번 — 그 뒤엔 묻지 않고 지금 상태만 돌려준다)
+   → 허락하면 APNs 기기 토큰을 받아(10초 기다림) 돌려준다.
+   허락 `{granted: true, token: "<소문자 16진수>", platform: "ios"}` · 거절 `{granted: false, platform: "ios"}` ·
+   토큰 실패·10초 넘김 `{granted: true, platform: "ios", error}`. 거절해도 Promise 는 깨지지 않는다.
+2. 웹이 토큰을 PC 데스크 API `push` 로 보낸다(PC 가 기억).
+3. PC 가 알릴 일이 생기면 팀 `DDX8R79VU2` 의 APNs 키(.p8, 토큰 방식)로 topic `com.que.hyodingsseu` 에 **직접** 보낸다 —
+   `api.push.apple.com`(TestFlight = production) 먼저, 안 되면 sandbox(Xcode 로 바로 깐 개발 빌드).
+
+- **앱을 보고 있을 때 온 알림은 띄우지 않는다** — 대화가 이미 화면에 있다. 알림을 누르면 앱이 열리고 늘 대화 화면이다.
+- 앱을 열면(돌아오면) 아이콘의 빨간 숫자(배지)를 지운다.
+- 토큰은 앱을 다시 깔거나 백업에서 되살리면 바뀔 수 있다 → 웹은 앱을 열 때마다 불러도 된다(허락은 다시 묻지 않는다).
+- 대표님이 설정 › 알림 › 효딩쓰 에서 끄면 `granted: false` — 다시 켜는 건 설정에서만 된다.
+- 서명에 `aps-environment` 가 들어가므로 App ID 에 **Push Notifications capability** 가 있어야 한다(자동 서명이 켠다 — 안 되면 `TESTFLIGHT.md` 4절).
+  APNs 인증서(.p12)는 쓰지 않는다.
+- 안드로이드 앱(`DeskNativePlugin`)에는 `pushRegister` 가 없다 — 웹은 아이폰에서만 부른다.
 
 ## Mac 에서 빌드 (빌드 세션용)
 

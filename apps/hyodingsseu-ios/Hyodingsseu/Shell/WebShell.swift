@@ -62,8 +62,9 @@ struct WebShell: UIViewRepresentable {
             native.webView = wv
         }
 
-        /// 앱으로 돌아왔는데 안내 화면(오프라인)이 떠 있으면 다시 불러온다
+        /// 앱으로 돌아오면 아이콘의 알림 숫자를 지우고, 안내 화면(오프라인)이 떠 있으면 다시 불러온다
         @objc private func becameActive() {
+            Push.shared.clearBadge()
             guard let wv = webView else { return }
             if wv.url == nil || wv.url?.scheme == "about" { wv.load(URLRequest(url: start)) }
         }

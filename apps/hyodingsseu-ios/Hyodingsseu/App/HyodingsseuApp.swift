@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UserNotifications
 
 /// 효딩쓰 iOS — 「포장지」 앱 (2.0, 2026-10-01).
 ///
@@ -9,6 +10,9 @@ import SwiftUI
 /// 1.x 의 SwiftUI 화면(DeskStore·MainView 등)은 커밋 d4a47df 에 있다.
 @main
 struct HyodingsseuApp: App {
+    // 알림(APNs) 기기 토큰·알림 처리 — Push.swift
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // PC 목소리(m4a)·아이폰 목소리는 무음 스위치와 상관없이 스피커로, 마이크도 함께 — 1.x 와 같은 설정
         try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default,
@@ -23,5 +27,35 @@ struct HyodingsseuApp: App {
                 .ignoresSafeArea(.container)
                 .background(Color(red: 0x1B / 255.0, green: 0x2A / 255.0, blue: 0x6B / 255.0))   // 불러오는 동안 — 머리 막대 남색
         }
+    }
+}
+
+/// 알림(APNs) — 기기 토큰을 받아 `Push` 에 넘기고, 알림이 왔을 때 어떻게 보일지 정한다.
+@MainActor
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Push.shared.didRegister(deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        Push.shared.didFail(error)
+    }
+
+    // 앱을 보고 있을 때 온 알림 — 대화가 이미 화면에 있으니 배너·소리를 띄우지 않는다
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([])
+    }
+
+    // 알림을 눌러 들어옴 — 앱은 열리면 늘 대화 화면이라 따로 할 일이 없다
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        completionHandler()
     }
 }

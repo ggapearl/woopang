@@ -21,6 +21,7 @@ enum ShellPages {
           speak: function (a) { return call('speak', a); },
           stop: function () { return call('stop'); },
           setBars: function (a) { return call('setBars', a); },
+          pushRegister: function () { return call('pushRegister'); },
           addListener: function (ev, cb) {
             (listeners[ev] = listeners[ev] || []).push(cb);
             return Promise.resolve({ remove: function () {

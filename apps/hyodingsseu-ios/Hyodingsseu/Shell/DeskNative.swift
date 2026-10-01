@@ -6,6 +6,7 @@ import WebKit
 /// 웹(app.js)은 `window.Capacitor.Plugins.DeskNative` 로 부른다 — `ShellPages.bridgeJS` 가 그 이름을 만들어
 /// `webkit.messageHandlers.deskNative` 로 넘긴다. 돌려준 값은 JS 의 Promise 결과가 된다.
 ///   haptic({kind: 'tap'|'alert'}) · openExternal({url}) · deviceName() → {name} · speak({text, rate}) · stop() · setBars()
+///   pushRegister() → {granted, token?, platform: 'ios', error?} (아이폰만 — 알림 허락 + APNs 기기 토큰, `Push.swift`)
 ///   다 읽으면 'speechDone' 사건 (addListener)
 /// 폰 기능을 더하려면 여기와 bridgeJS 에 같은 이름으로 넣고(앱 빌드 필요), 안드로이드 DeskNativePlugin.java 에도 같은 것을.
 @MainActor
@@ -44,6 +45,8 @@ final class DeskNative: NSObject, WKScriptMessageHandlerWithReply, AVSpeechSynth
             return ([String: Any](), nil)
         case "setBars":
             return ([String: Any](), nil)      // 아이폰은 상태 표시줄 밑을 화면(웹)이 칠한다 — 할 일 없음
+        case "pushRegister":                   // 알림 허락 + 기기 토큰 — Push.swift
+            return (await Push.shared.register(), nil)
         default:
             return (nil, "모르는 기능: \(method)")
         }

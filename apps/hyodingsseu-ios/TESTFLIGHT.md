@@ -95,6 +95,7 @@ xcodebuild -exportArchive -archivePath build/Hyodingsseu.xcarchive \
 |---|---|
 | `No profiles for 'com.que.hyodingsseu'` · 서명 오류 | Xcode › Settings › Accounts 에 로그인됐는지, 팀이 `DDX8R79VU2` 인지. 2-3 에 `-allowProvisioningUpdates` 가 있는지 |
 | `No suitable application records were found` | 1절(App Store Connect 에 앱 만들기)을 안 한 것 |
+| (2.0.1 부터) archive·export 가 `aps-environment` · `... doesn't include the Push Notifications capability` · `... doesn't support the Push Notifications capability` 로 실패 | App ID `com.que.hyodingsseu` 에 **Push Notifications** 를 켠다 — 개발자 사이트(Certificates, IDs & Profiles › Identifiers › `com.que.hyodingsseu` › Push Notifications 체크) 또는 App Store Connect API `POST /v1/bundleIdCapabilities`(`capabilityType: PUSH_NOTIFICATIONS`). 켠 뒤 2-3 부터 다시(`-allowProvisioningUpdates` 가 프로파일을 새로 만든다). APNs 인증서(.p12)는 만들지 않는다 — PC 는 팀 키(.p8)로 보낸다 |
 | `The bundle version must be higher than the previously uploaded version` | `project.yml` 의 `CURRENT_PROJECT_VERSION` 을 올리고 `xcodegen generate` 부터 다시. 올린 번호는 커밋 |
 | ITMS-91053 `Missing API declaration` 메일·거절 | 2-2 로 PrivacyInfo.xcprivacy 가 .app 에 들었는지. 메일에 적힌 API 분류를 `PrivacyInfo.xcprivacy` 에 사유와 함께 더한다 |
 | 앱 이름이 이미 있다 | `효딩쓰 QUE` 처럼 바꿔 만든다(홈 화면 이름은 앱 안의 `효딩쓰` 그대로) |
