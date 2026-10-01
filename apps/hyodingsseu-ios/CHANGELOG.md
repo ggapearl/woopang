@@ -2,7 +2,27 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
-## 1.0.3 (4) — 2026-09-30 · **TestFlight 첫 업로드** (올리는 법: `TESTFLIGHT.md`)
+## 2.0.0 (5) — 2026-10-01 · **「포장지」 앱으로 바꿈** (올리는 법: `TESTFLIGHT.md`)
+
+대표님 결정: 「농민닷컴처럼 포장지를 만들어 놓고 실제 개발은 웹으로 — 매번 새로 빌드하지 않게(폰 기능 개발할 때만 빼고)」.
+- 화면은 **웹** `https://woopang.com/hyodingsseu/` — 안드로이드 앱과 같은 화면(`apps/hyodingsseu-android/web`). 화면을 고쳐도 다시 빌드하지 않는다.
+- 이 앱은 WKWebView + 폰 기능 다리 `DeskNative`(아이폰 목소리 읽기·진동·바깥 링크·기기 이름) + 마이크 허락 + 오프라인 안내 화면만 (README 「파일」).
+- 1.x 의 SwiftUI 화면 코드는 지웠다(커밋 `d4a47df` 에 있다). 번들 ID 그대로 → TestFlight 에서 업데이트로 덮어쓴다.
+- 상태 표시줄 글자는 늘 흰색(화면 맨 위 막대가 남색) — `UIStatusBarStyleLightContent`.
+- ⚠ 1.x 의 연결(Keychain)은 넘어오지 않는다 → 처음 한 번 PC 창 ☰ → 휴대폰 앱 → 새 코드로 다시 연결.
+- 1.0.3 (4) 가 아직 안 올라갔으면 **1.0.3 은 건너뛰고 이것만 올린다**(이게 TestFlight 첫 업로드가 되면 `TESTFLIGHT.md` 1절 필요).
+
+Windows 에서 미리 확인한 것: 다리 JS(`ShellPages.bridgeJS`)를 실제 `woopang.com/hyodingsseu/` 에 넣고 아이폰 크기(390×844) Edge 로 열어 —
+웹이 폰 기능을 알아보고(`getPlatform()=ios`, 시작하자마자 `setBars` 를 다리로 부름) 연결 화면이 오류·가로 넘침 없이 뜸. Swift 는 컴파일 못 함.
+
+**이번에 확인할 것**:
+1. 컴파일 — 새로 쓴 곳: `WebShell`(UIViewRepresentable · `@MainActor` Coordinator · async `decidePolicyFor` · async `requestMediaCapturePermissionFor`)·
+   `DeskNative`(`WKScriptMessageHandlerWithReply` 의 async `userContentController(_:didReceive:)` · `AVSpeechSynthesizerDelegate` nonisolated)·`ShellPages`
+2. TestFlight 업로드 → 대표님 아이폰에서 설치(1.x 위에 덮어쓰기)
+3. 대표님이 쓰시면서: 연결 코드로 짝 짓기 · 마이크로 말해서 시키기(처음에 마이크 허락 한 번) · 답 「읽기」(아이폰 목소리) ·
+   답 속 문서 경로·기사 링크가 사파리로 열리는지 · 키보드가 입력칸을 가리지 않는지 · 비행기 모드에서 안내 화면 → 다시 시도
+
+## 1.0.3 (4) — 2026-09-30 · TestFlight 업로드용 (2.0.0 이 대신하면 올리지 않아도 된다)
 
 1.0.2 (3) 는 준비만 하고 올린 기록이 없다 → **이번이 첫 업로드**라 `TESTFLIGHT.md` 1절(App Store Connect 앱 기록 · 내부 테스트 그룹)이 필요하다.
 1.0.2 (3) 의 바뀐 것(아래 덩어리)도 이번 빌드에 모두 들어 있다.
