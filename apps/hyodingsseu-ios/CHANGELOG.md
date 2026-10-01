@@ -2,6 +2,44 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
+## 2.0.1 (6) — 2026-10-01 · 알림(푸시)
+
+대표님: 「아이폰 설정 › 알림 에 효딩쓰가 없다」 — 앱이 알림 허락을 한 번도 묻지 않고 APNs 에 등록하지도 않아서였다.
+- 새 폰 기능 **`pushRegister()`** — 알림 허락을 묻고(처음 한 번) → 허락하면 APNs 기기 토큰을 웹에 돌려준다(`Shell/Push.swift`).
+  웹이 그 토큰을 PC 데스크 API `push` 로 보내고, PC 가 팀 키(.p8)로 APNs 에 **직접** 보낸다. Firebase·다른 SDK 없음.
+- 앱을 보고 있을 때 온 알림은 띄우지 않는다(대화가 이미 화면에 있다). 알림을 누르면 앱이 대화 화면으로 열린다. 앱을 열면 아이콘 숫자(배지)를 지운다.
+- 서명에 알림 권한 `aps-environment` 가 들어간다(`Hyodingsseu/Hyodingsseu.entitlements` — 정본은 `project.yml` 의 `entitlements`) → App ID 에 Push Notifications capability 가 필요하다(아래 2번).
+- 화면(웹)·서버 주소는 그대로. 웹 쪽(허락을 묻는 시점·토큰 보내기)과 PC 쪽(APNs 보내기)은 Windows PC 세션이 아래 약속대로 고친다.
+
+약속 (웹·PC 와 맞춘 모양 — 바꾸지 말 것): `pushRegister()` →
+허락 `{granted: true, token: "<소문자 16진수>", platform: "ios"}` · 거절 `{granted: false, platform: "ios"}` ·
+허락했지만 토큰 실패·10초 넘김 `{granted: true, platform: "ios", error: "<이유>"}`. **거절해도 Promise 는 깨지지 않는다.**
+
+Windows 에서 미리 확인한 것: 다리 JS 를 node 로 돌려 `pushRegister()` 가 `{m: 'pushRegister', a: {}}` 로 넘어가고 답이 그대로 Promise 결과가 되는 것 ·
+`project.yml`(YAML) · `Hyodingsseu.entitlements`(plist) 파싱. Swift 는 컴파일 못 함.
+
+**이번에 확인할 것**:
+1. 컴파일 — 새로 쓴 곳: `Shell/Push.swift`(`@MainActor final class Push` · `static let shared` · `register() async -> [String: Any]` ·
+   `requestAuthorization(options:)` async · `withCheckedContinuation` + `Task.sleep(for: .seconds(10))` 시간 제한 · `didRegister(_:)`/`didFail(_:)` · `clearBadge()` 의 `setBadgeCount(0, withCompletionHandler: nil)` · `PushError: LocalizedError`)·
+   `App/HyodingsseuApp.swift` 의 `@UIApplicationDelegateAdaptor(AppDelegate.self)` 와 `@MainActor final class AppDelegate`(`didFinishLaunchingWithOptions` ·
+   `didRegisterForRemoteNotificationsWithDeviceToken` · `didFailToRegisterForRemoteNotificationsWithError` ·
+   nonisolated `userNotificationCenter(_:willPresent:withCompletionHandler:)` · nonisolated `userNotificationCenter(_:didReceive:withCompletionHandler:)`)·
+   `DeskNative` 의 `case "pushRegister"` · `WebShell.Coordinator.becameActive()` 의 `Push.shared.clearBadge()` · `ShellPages.bridgeJS` 의 `pushRegister`.
+   ⚠ `UNUserNotificationCenterDelegate` 두 함수에 "nearly matches" 경고가 나면 **불리지 않는다는 뜻**이다(2.0.0 의 마이크 함수와 같은 일) — 이름표만 SDK 에 맞춘다.
+   `xcodegen generate` 뒤 빌드 설정에 `CODE_SIGN_ENTITLEMENTS = Hyodingsseu/Hyodingsseu.entitlements` 가 들어갔는지도.
+2. 서명 — App ID `com.que.hyodingsseu` 에 이제 **Push Notifications capability** 가 필요하다
+   (지금까지는 capability 가 없어 와일드카드(`*`) 팀 프로파일로 서명됐다 — 1.0.3 (4) 결과 참고. 이번엔 이 앱 전용 프로파일이 새로 생긴다).
+   자동 서명 + `-allowProvisioningUpdates` 면 Xcode 가 App ID 에 켜고 프로파일을 만든다.
+   archive/export 가 `aps-environment` · 프로비저닝 프로파일 오류로 실패하면 개발자 사이트(Certificates, IDs & Profiles › Identifiers ›
+   `com.que.hyodingsseu` › Push Notifications 체크) 또는 App Store Connect API(`POST /v1/bundleIdCapabilities`, `capabilityType: PUSH_NOTIFICATIONS`)로 켠 뒤
+   `TESTFLIGHT.md` 2-3 부터 다시. APNs 인증서(.p12)는 만들지 않는다 — PC 는 팀 키(.p8) 토큰 방식으로 보낸다.
+   확인: 2-4 뒤 `build/export/DistributionSummary.plist` 의 entitlements 에 `aps-environment = production` 이 들었는지 — archive 는 development, TestFlight 용 export 에서 production 으로 바뀐다
+   (PC 는 production(`api.push.apple.com`)부터 보낸다).
+3. TestFlight 업로드 — **업데이트**로 2.0.1 (6). `TESTFLIGHT.md` 1절(앱 기록·내부 테스트 그룹)은 이미 했다 → 건너뛰고 2절·3절만.
+4. 대표님 아이폰에서: TestFlight 「업데이트」 → 짝 지은 뒤 앱이 알림 허락을 **한 번** 묻는다 → 허락 → 설정 › 알림 에 「효딩쓰」가 보인다.
+   PC 가 보낸 알림이 잠금 화면에 뜨는지 · 앱을 보고 있을 땐 배너가 안 뜨는지 · 알림을 누르면 대화 화면으로 열리는지 · 열면 아이콘 숫자가 지워지는지.
+   (허락을 묻는 시점은 웹이 정한다 — 웹이 아직 `pushRegister()` 를 안 부르면 묻지 않는다. 그건 앱 문제가 아니다.)
+
 ## 2.0.0 (5) — 2026-10-01 · **「포장지」 앱으로 바꿈** (올리는 법: `TESTFLIGHT.md`)
 
 대표님 결정: 「농민닷컴처럼 포장지를 만들어 놓고 실제 개발은 웹으로 — 매번 새로 빌드하지 않게(폰 기능 개발할 때만 빼고)」.
