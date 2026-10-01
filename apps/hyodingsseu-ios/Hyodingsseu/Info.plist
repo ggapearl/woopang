@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  project.yml 의 INFOPLIST_KEY_* 로 만들 수 없는 키만 둔다. 나머지는 GENERATE_INFOPLIST_FILE 이 만들고
+  빌드 때 Xcode 가 이 파일과 합친다.
+  UIViewControllerBasedStatusBarAppearance — Xcode 가 INFOPLIST_KEY_ 자동 생성을 지원하지 않는 키라
+  project.yml 에 적으면 조용히 빠진다(Xcode 26 확인). 빠지면 UIStatusBarStyleLightContent 가 무시돼
+  라이트 모드에서 남색 머리 막대 위 시계·배터리가 검게 나온다.
+-->
+<plist version="1.0">
+<dict>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+</dict>
+</plist>

@@ -32,6 +32,8 @@ targets:
         PRODUCT_NAME: Hyodingsseu
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
+        # INFOPLIST_KEY_ 로 만들 수 없는 키만 담은 파일 — Xcode 가 빌드 때 자동 생성분과 합친다
+        INFOPLIST_FILE: Hyodingsseu/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: 효딩쓰
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 효딩쓰에게 말로 시키려면 마이크가 필요합니다. 녹음은 대표님 PC 로만 보내 받아적고, 저장하지 않습니다.
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -39,7 +41,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
         # 화면 맨 위 막대가 밝은·어두운 테마 모두 남색 → 상태 표시줄 글자는 늘 흰색
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
-        INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance: NO
+        # UIViewControllerBasedStatusBarAppearance = NO 는 Hyodingsseu/Info.plist 에 있다
+        # (INFOPLIST_KEY_ 로 적으면 Xcode 가 지원하지 않아 조용히 빠진다 — 2026-10-01 Xcode 26 확인)
         # 표준 HTTPS 만 쓴다 → 수출 규정 질문 없이 TestFlight 에 바로 올라간다
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

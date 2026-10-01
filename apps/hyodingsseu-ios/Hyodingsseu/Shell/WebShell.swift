@@ -84,8 +84,11 @@ struct WebShell: UIViewRepresentable {
         }
 
         // 마이크 — 앱이 이미 허락받았으니(Info.plist) 웹이 한 번 더 묻지 않게
-        func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
-                     initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType) async -> WKPermissionDecision {
+        // async 판의 Swift 이름은 decideMediaCapturePermissionsFor:initiatedBy: 다(SDK 의 WK_SWIFT_ASYNC_NAME).
+        // 콜백 판 이름표(requestMediaCapturePermissionFor:initiatedByFrame:)를 쓰면 WebKit 이 이 함수를 부르지 않아
+        // 매번 웹이 마이크를 다시 묻는다(구현 안 한 것과 같음).
+        func webView(_ webView: WKWebView, decideMediaCapturePermissionsFor origin: WKSecurityOrigin,
+                     initiatedBy frame: WKFrameInfo, type: WKMediaCaptureType) async -> WKPermissionDecision {
             origin.host == "woopang.com" || origin.host == "www.woopang.com" ? .grant : .deny
         }
 

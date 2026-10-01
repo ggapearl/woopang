@@ -23,6 +23,27 @@ Windows 에서 미리 확인한 것: 다리 JS(`ShellPages.bridgeJS`)를 실제 
 3. 대표님이 쓰시면서: 연결 코드로 짝 짓기 · 마이크로 말해서 시키기(처음에 마이크 허락 한 번) · 답 「읽기」(아이폰 목소리) ·
    답 속 문서 경로·기사 링크가 사파리로 열리는지 · 키보드가 입력칸을 가리지 않는지 · 비행기 모드에서 안내 화면 → 다시 시도
 
+**결과** — 2026-10-01 Mac 빌드 세션 (Xcode 26.3 · iOS 26.2 SDK · xcodegen 2.46.0):
+- **컴파일 성공** — 오류 0. 처음 빌드에서 경고 1건이 **마이크 허락 함수가 불리지 않는다**는 뜻이라 고쳤다(아래). 고친 뒤 경고 0.
+  `decidePolicyFor`·`createWebViewWith`·`DeskNative` 의 async `didReceive`·nonisolated `didFinish`·`ShellPages`·`.ignoresSafeArea(.container)` 는 그대로 통과
+  (바이너리에 ObjC 셀렉터가 들어간 것까지 확인).
+- `PrivacyInfo.xcprivacy` 가 `.app` 안에 들어감.
+- **TestFlight 업로드 성공** — 2.0.0 (5), 2026-10-01 18:56 KST. 처리 끝(VALID) · 수출 규정 자동 면제 ·
+  자동 배포로 그룹 「대표님」 에 들어감(`IN_BETA_TESTING`) · 외부 상태 `NOT_APPLICABLE` · 그룹은 「대표님」(내부) 하나 · 심사 제출 안 함.
+- **고친 파일 2곳** (뜻은 그대로, 적어 둔 의도대로 실제 동작하게):
+  1. `Shell/WebShell.swift` — 마이크 허락 함수의 이름표.
+     async 판 Swift 이름은 `webView(_:decideMediaCapturePermissionsFor:initiatedBy:type:)` 인데(SDK 의 `WK_SWIFT_ASYNC_NAME`, iOS 15+),
+     콜백 판 이름표(`requestMediaCapturePermissionFor:initiatedByFrame:`)로 적혀 있어 컴파일러가 "nearly matches" 경고를 냈다.
+     이대로면 WebKit 이 이 함수를 **부르지 않아** 「구현 안 함 = 매번 묻기(Prompt)」가 된다 → 주석의 의도(웹이 한 번 더 묻지 않게)와 반대.
+     이름표 두 개만 바꿨다. 본문(woopang.com 만 `.grant`, 그 밖은 `.deny`)은 그대로.
+  2. `project.yml` + 새 파일 `Hyodingsseu/Info.plist` — 상태 표시줄 흰 글자.
+     `INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance: NO` 는 Xcode 가 자동 생성을 **지원하지 않는 키**라
+     (Xcode 26 의 `CoreBuildSystem.xcspec` 에는 `UIStatusBarHidden`·`UIStatusBarStyle` 만 있다) 앱 Info.plist 에서 **조용히 빠졌다.**
+     빠지면 `UIStatusBarStyleLightContent` 가 무시되고, `setBars` 는 아이폰에서 아무 일도 안 하므로 라이트 모드에서 남색 막대 위 시계·배터리가 검게 나온다.
+     → 그 키 하나만 담은 `Hyodingsseu/Info.plist` 를 두고 `INFOPLIST_FILE` 로 연결(`GENERATE_INFOPLIST_FILE: YES` 는 그대로 — Xcode 가 빌드 때 합친다).
+     합친 결과에 자동 생성 키(이름·버전·마이크 문구·실행 화면·씬·세로 고정·수출 규정)가 모두 남아 있는 것 확인. 앞으로 INFOPLIST_KEY_ 로 안 되는 키는 이 파일에.
+- 대표님 확인 남음: TestFlight 에서 「업데이트」 → 위 「이번에 확인할 것」 3번 + 상태 표시줄 글자가 라이트·다크 모두 흰색인지 · 마이크 첫 사용 때 허락을 한 번만 묻는지.
+
 ## 1.0.3 (4) — 2026-09-30 · **TestFlight 첫 업로드** (2026-10-01 08:20 올라감 — 1.x 마지막 SwiftUI 판)
 
 1.0.2 (3) 는 준비만 하고 올린 기록이 없다 → **이번이 첫 업로드**라 `TESTFLIGHT.md` 1절(App Store Connect 앱 기록 · 내부 테스트 그룹)이 필요하다.
