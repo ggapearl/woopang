@@ -40,6 +40,26 @@ Windows 에서 미리 확인한 것: 다리 JS 를 node 로 돌려 `pushRegister
    PC 가 보낸 알림이 잠금 화면에 뜨는지 · 앱을 보고 있을 땐 배너가 안 뜨는지 · 알림을 누르면 대화 화면으로 열리는지 · 열면 아이콘 숫자가 지워지는지.
    (허락을 묻는 시점은 웹이 정한다 — 웹이 아직 `pushRegister()` 를 안 부르면 묻지 않는다. 그건 앱 문제가 아니다.)
 
+**결과** — 2026-10-01 Mac 빌드 세션 (Xcode 26.3 · iOS 26.2 SDK · xcodegen 2.46.0):
+- **컴파일 성공, 고친 파일 없음** — 오류 0 · 경고 0. "nearly matches" 경고 없음.
+  경고는 이름이 *비슷할 때만* 나와서, 바이너리에 ObjC 셀렉터가 들어갔는지 따로 확인했다 — 모두 있음:
+  `userNotificationCenter:willPresentNotification:withCompletionHandler:` · `userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:` ·
+  `application:didRegisterForRemoteNotificationsWithDeviceToken:` · `application:didFailToRegisterForRemoteNotificationsWithError:` ·
+  `application:didFinishLaunchingWithOptions:`(여기서 `UNUserNotificationCenter.current().delegate = self`) · 마이크 · 다리(`didReceiveScriptMessage:replyHandler:`).
+- `xcodegen generate` → `CODE_SIGN_ENTITLEMENTS = Hyodingsseu/Hyodingsseu.entitlements` (Debug·Release 둘 다). entitlements 파일은 커밋된 내용 그대로.
+- **서명 · capability**: 자동 서명 + `-allowProvisioningUpdates` 가 App ID 에 **Push Notifications 를 켰다**
+  (빌드 전 `IN_APP_PURCHASE` 만 → 뒤 `IN_APP_PURCHASE, PUSH_NOTIFICATIONS`). API·개발자 사이트 손댈 필요 없었다. APNs 인증서(.p12) 안 만듦.
+  이번부터 와일드카드 대신 이 앱 전용 프로파일: 개발 `iOS Team Provisioning Profile: com.que.hyodingsseu`, 배포 `iOS Team Store Provisioning Profile: com.que.hyodingsseu`
+  (capability 가 바뀌며 예전 배포 프로파일이 INVALID 가 됐고 export 때 새로 만들어져 ACTIVE).
+  archive 는 `aps-environment = development`, TestFlight 용 export 는 **`production`**.
+- ⚠ `build/export/DistributionSummary.plist` — Xcode 26 은 `ExportOptions.plist` 가 `destination: upload` 면 `-exportPath` 폴더를 **만들지 않는다**(업로드만 함).
+  그래서 같은 아카이브를 `destination: export` 로 바꾼 임시 설정으로 **로컬 export 만 한 번 더**(업로드 안 함, 원본 `ExportOptions.plist` 는 그대로) 해서 확인:
+  `DistributionSummary.plist` 와 IPA 서명 모두 `aps-environment = production` · Apple Distribution · `get-task-allow = 0`.
+  다음부터 이 확인이 필요하면 같은 방법으로.
+- **TestFlight 업로드 성공** — 2.0.1 (6), 2026-10-01 23:19 KST. 처리 끝(VALID) · 수출 규정 자동 면제 ·
+  자동 배포로 그룹 「대표님」 에 들어감(`IN_BETA_TESTING`) · 외부 상태 `NOT_APPLICABLE` · 그룹은 「대표님」(내부) 하나 · 심사 제출 안 함.
+- 대표님 확인 남음: 위 4번 (TestFlight 「업데이트」 → 알림 허락 → 설정 › 알림 에 효딩쓰 · 잠금 화면 알림 · 앱 보는 중 배너 없음 · 탭하면 대화 화면 · 배지 지워짐).
+
 ## 2.0.0 (5) — 2026-10-01 · **「포장지」 앱으로 바꿈** (올리는 법: `TESTFLIGHT.md`)
 
 대표님 결정: 「농민닷컴처럼 포장지를 만들어 놓고 실제 개발은 웹으로 — 매번 새로 빌드하지 않게(폰 기능 개발할 때만 빼고)」.
