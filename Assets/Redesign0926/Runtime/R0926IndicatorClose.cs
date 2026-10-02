@@ -1,40 +1,42 @@
 using UnityEngine;
 
 /// <summary>
-/// 인디케이터 박스 오른쪽 아래의 X — 이 씬(0926)에서만 켠다.
-/// 누르면 그 장소의 3D 오브젝트·박스·화살표가 이 기기에서 사라지고(HiddenPlaces),
-/// 백그라운드에 다녀와도 유지, 앱을 완전히 껐다 켜면 다시 보인다.
+/// 0926 인디케이터 박스 — 이 씬에서만 켠다.
+///  · 거리는 박스 위, 이름은 아래
+///  · 장소 박스 오른쪽 위 꺾쇠 자리에 박스 색 X → 누르면 '삭제'(언어별 짧게), 3초 안에 한 번 더 누르면 이 기기에서 숨김(HiddenPlaces)
+///    백그라운드에 다녀와도 유지, 앱을 완전히 껐다 켜면 다시 보인다
+///  · 설정 '오브젝트 삭제 기능'(R0926PlaceSettings)을 끄면 X 없이 꺾쇠 넷 그대로
 /// </summary>
 public class R0926IndicatorClose : MonoBehaviour
 {
-    [SerializeField] private Sprite icon;
-    [SerializeField] private Sprite background;
-    [Tooltip("X → '삭제' 로 늘어나는 알약 (9-slice)")]
+    [SerializeField] private Sprite icon;      // 흰 X
+    [SerializeField] private Sprite boxCut;    // 오른쪽 위 꺾쇠를 뺀 박스
+    [Tooltip("'삭제' 알약 (9-slice)")]
     [SerializeField] private Sprite pill;
-    [Tooltip("보이는 원 크기 (캔버스 단위, 1440 기준). 누르는 영역은 1.9배")]
-    [SerializeField] private float size = 96f;
     [SerializeField] private bool showToast = true;
 
     private void Awake()
     {
         Indicator.CloseIcon = icon;
-        Indicator.CloseBackground = background;
+        Indicator.CornerCutBox = boxCut;
         Indicator.ClosePill = pill;
-        Indicator.CloseButtonSize = size;
-        Indicator.CloseButtonEnabled = true;
+        Indicator.LabelsSwapped = true;
+        Indicator.CloseButtonEnabled = R0926PlaceSettings.RemoveButton;
         HiddenPlaces.Hidden += OnHidden;
-    }
-
-    private void Update()
-    {
-        // 앱 안에서 언어를 바꿔도 곧바로 맞게
-        Indicator.CloseConfirmLabel = L("삭제", "Remove", "削除", "删除", "Quitar");
     }
 
     private void OnDestroy()
     {
         Indicator.CloseButtonEnabled = false;
+        Indicator.LabelsSwapped = false;
         HiddenPlaces.Hidden -= OnHidden;
+    }
+
+    private void Update()
+    {
+        // 설정을 바꾸거나 앱 안에서 언어를 바꿔도 곧바로 맞게
+        Indicator.CloseButtonEnabled = R0926PlaceSettings.RemoveButton;
+        Indicator.CloseConfirmLabel = L("삭제", "DEL", "削除", "删除", "SUPR");
     }
 
     private void OnHidden(string uniqueId)

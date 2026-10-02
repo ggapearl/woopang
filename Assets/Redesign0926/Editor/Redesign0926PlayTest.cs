@@ -31,6 +31,7 @@ namespace Redesign0926
         private static string dir;
         private static InputSettings.EditorInputBehaviorInPlayMode savedBehavior;
         private static InputSettings.BackgroundBehavior savedBackground;
+        private static bool savedRunInBackground;
 
         static Redesign0926PlayTest()
         {
@@ -48,6 +49,8 @@ namespace Redesign0926
             savedBackground = InputSystem.settings.backgroundBehavior;
             InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
             InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            savedRunInBackground = Application.runInBackground;
+            Application.runInBackground = true;   // 대표님이 다른 창을 쓰고 있어도 시험이 멈추지 않게 (창을 빼앗지 않는다)
             steps.Clear();
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
@@ -314,8 +317,25 @@ namespace Redesign0926
             Sleep(0.6f);
             Check(() => closeBtn == null || !closeBtn.gameObject.activeInHierarchy, "X 두 번째: 숨김");
             Shot("x_hidden");
+
+            // 설정 '오브젝트 삭제 기능' 끄기 → X 없음 · 꺾쇠 넷 / 다시 켜기 → X
+            Do(() => R0926PlaceSettings.RemoveButton = false);
+            Sleep(0.6f);
+            Check(() => CountActive("Close0926") == 0, "삭제 기능 끄면 X 가 사라짐");
+            Shot("x_off");
+            Do(() => R0926PlaceSettings.RemoveButton = true);
+            Sleep(0.6f);
+            Check(() => CountActive("Close0926") > 0, "삭제 기능 다시 켜면 X");
+            Shot("x_on");
         }
         private static Button closeBtn;
+        private static int CountActive(string name)
+        {
+            int n = 0;
+            foreach (var b in UnityEngine.Object.FindObjectsByType<Button>())
+                if (b.name == name && b.gameObject.activeInHierarchy) n++;
+            return n;
+        }
 
         private static R0926SheetModes Modes() => UnityEngine.Object.FindAnyObjectByType<R0926SheetModes>(FindObjectsInactive.Include);
         private static void ClickToggle(string name)
@@ -495,6 +515,7 @@ namespace Redesign0926
             running = false;
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;
             InputSystem.settings.backgroundBehavior = savedBackground;
+            Application.runInBackground = savedRunInBackground;
             try { File.Delete(PlanPath); } catch (Exception e) { log.Add("plan 삭제 실패 " + e.Message); }
             File.WriteAllLines(ResultPath, log);
             EditorApplication.delayCall += () => EditorApplication.isPlaying = false;   // 마지막 캡처가 저장될 틈을 둔다

@@ -2,14 +2,18 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Networking;
 using UnityEngine.UI;
+using UnityEngine.XR.ARFoundation;
 
 /// <summary>
 /// 하늘 날씨 — 휴대폰을 하늘로 들면 하늘 먼 곳(약 600m)에 날씨가 걸린다.
 ///  · 조건: 위로 25° 이상 + 화면 가운데 부근에 60m 안쪽 AR 오브젝트가 없을 것
 ///  · 가까운 오브젝트가 있으면 오브젝트가 먼저 → 날씨는 위쪽 작은 칩으로 줄어든다
 ///  · 하늘의 날씨판은 한 번 걸리면 그 방향에 머물러, 휴대폰을 움직이면 하늘에 붙은 것처럼 흘러간다
+///  · 밤하늘·천장처럼 특징이 없어 AR 추적이 안 잡히면 카메라 방향이 멈춘다 — 그때는 휴대폰 중력 센서로 기울기를 읽고
+///    날씨판은 화면 앞에 붙여 보여 준다 (예전엔 밤·실내에서 하늘을 비춰도 날씨가 안 떴다)
 /// 데이터: 우팡 서버 /api/weather (10분 캐시). 스폰 시스템과 따로 돌아 기존 오브젝트 로직을 건드리지 않는다.
 /// </summary>
 public class R0926SkyWeather : MonoBehaviour
@@ -107,13 +111,22 @@ public class R0926SkyWeather : MonoBehaviour
         if (cam == null) cam = Camera.main;
         if (cam == null || skyBoard == null) return;
 
+        // AR 이 자리를 잡았을 때만 카메라 방향·위치를 믿는다
+        bool tracking = ARSession.state == ARSessionState.SessionTracking;
         Vector3 fwd = cam.transform.forward;
-        float pitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
+        float camPitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
+        float pitch = SensorPitch() ?? camPitch;
         bool up = pitch > R0926SkySettings.MinPitch;
         lookUpSince = up ? (lookUpSince < 0f ? Time.unscaledTime : lookUpSince) : -1f;
         bool settled = up && Time.unscaledTime - lookUpSince > 0.6f;   // 잠깐 스친 건 무시
-        UpdateLying(pitch);
-        bool near = settled && NearObjectInView();
+        if (tracking) UpdateLying(pitch);
+        else
+        {
+            // 추적이 안 되면 카메라 위치가 멈춰 '안 움직인다 = 누워 있다'로 잘못 봤다 — 이때는 누움 판정을 하지 않는다
+            highSince = -1f;
+            if (pitch < 30f) { lying = false; lyingOverride = false; }
+        }
+        bool near = tracking && settled && NearObjectInView();
         bool lyingHide = lying && !lyingOverride && R0926SkySettings.HideWhenLying;
 
         bool showSky = allowed && hasData && settled && !near && !collapsed && !lyingHide;
@@ -121,13 +134,19 @@ public class R0926SkyWeather : MonoBehaviour
         boardShowing = showSky;
         UpdateChip(showSky);
 
-        if (showSky && !anchored) Anchor(fwd, pitch);
+        if (!tracking)
+        {
+            // 화면 앞에 붙인다 — 카메라가 멈춰 있어도 늘 화면 가운데 보인다
+            anchored = false;
+            if (showSky || skyBoard.gameObject.activeSelf) PinToCamera();
+        }
+        else if (showSky && !anchored) Anchor(fwd, camPitch);
         if (!up) anchored = false;
-        if (anchored)
+        if (tracking && anchored)
         {
             // 너무 옆으로 돌아서면(70° 이상) 새 방향으로 다시 건다
             Vector3 toBoard = (skyBoard.position - cam.transform.position).normalized;
-            if (Vector3.Angle(Flat(toBoard), Flat(fwd)) > 70f) Anchor(fwd, pitch);
+            if (Vector3.Angle(Flat(toBoard), Flat(fwd)) > 70f) Anchor(fwd, camPitch);
             skyBoard.rotation = Quaternion.LookRotation(skyBoard.position - cam.transform.position);
         }
 
@@ -178,6 +197,43 @@ public class R0926SkyWeather : MonoBehaviour
     }
 
     private static Vector3 Flat(Vector3 v) { v.y = 0f; return v.normalized; }
+
+    private void PinToCamera()
+    {
+        float d = Mathf.Min(boardDistance, cam.farClipPlane * 0.7f);
+        skyBoard.position = cam.transform.position + cam.transform.forward * d;
+        skyBoard.rotation = Quaternion.LookRotation(cam.transform.forward);
+        float k = 2f * d * Mathf.Tan(boardFov * 0.5f * Mathf.Deg2Rad) / 1000f;
+        skyBoard.localScale = new Vector3(k, k, k);
+    }
+
+    /// <summary>
+    /// 휴대폰 기울기(카메라가 수평보다 몇 도 위를 보는지) — 중력 센서(없으면 가속도계). AR 추적과 상관없이 늘 맞다.
+    /// 기기 좌표에서 z 는 화면 밖(사용자 쪽), 뒤 카메라는 -z 를 본다 → 위를 볼수록 중력의 z 가 +1 에 가깝다
+    /// </summary>
+    private Vector3 smoothedAcc;
+    private float? SensorPitch()
+    {
+        Vector3 g = Vector3.zero;
+        var gs = GravitySensor.current;
+        if (gs != null)
+        {
+            if (!gs.enabled) InputSystem.EnableDevice(gs);
+            g = gs.gravity.ReadValue();
+        }
+        if (g.sqrMagnitude < 0.01f)
+        {
+            var acc = Accelerometer.current;
+            if (acc != null)
+            {
+                if (!acc.enabled) InputSystem.EnableDevice(acc);
+                smoothedAcc = Vector3.Lerp(smoothedAcc, acc.acceleration.ReadValue(), 0.15f);   // 손떨림을 걸러 중력만
+                g = smoothedAcc;
+            }
+        }
+        if (g.sqrMagnitude < 0.01f) return null;
+        return Mathf.Asin(Mathf.Clamp(g.normalized.z, -1f, 1f)) * Mathf.Rad2Deg;
+    }
 
     private static void Fade(CanvasGroup g, bool show, float speed)
     {

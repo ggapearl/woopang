@@ -520,6 +520,14 @@ namespace Redesign0926
             if (chip != null) { RT(chip).anchoredPosition = new Vector2(0, -8); EditorUtility.SetDirty(RT(chip)); }
             var marker = Find(root, "Redesign0926Marker");
             var osi = FindInScene<OffScreenIndicator>(root.gameObject);
+            // 누움 판정은 거의 똑바로 위(75° 이상)일 때만 — 서서 하늘을 6초 넘게 보고 있으면 누운 걸로 봐서 날씨를 접었다
+            var skyW = marker != null ? marker.GetComponent<R0926SkyWeather>() : null;
+            if (skyW != null)
+            {
+                var wso = new SerializedObject(skyW);
+                wso.FindProperty("lyingPitch").floatValue = 75f;
+                wso.ApplyModifiedPropertiesWithoutUndo();
+            }
             if (marker != null && osi != null)
             {
                 var b = Ensure<R0926IndicatorBounds>(marker);

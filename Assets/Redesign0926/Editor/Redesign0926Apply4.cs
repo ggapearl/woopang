@@ -31,8 +31,8 @@ namespace Redesign0926
             {
                 var close = Ensure<R0926IndicatorClose>(marker);
                 var closeSo = new SerializedObject(close);
-                closeSo.FindProperty("icon").objectReferenceValue = Spr("r0926_i_close");
-                closeSo.FindProperty("background").objectReferenceValue = Spr("r0926_circle");
+                closeSo.FindProperty("icon").objectReferenceValue = Spr("r0926_x_glyph");     // 박스 색으로 칠하는 흰 X
+                closeSo.FindProperty("boxCut").objectReferenceValue = Spr("r0926_box_cut");   // 오른쪽 위 꺾쇠를 뺀 박스
                 closeSo.ApplyModifiedPropertiesWithoutUndo();
             }
             // 씬 안개 켜기 — RenderSettings 는 '활성 씬' 것만 바뀌므로 0926 을 잠깐 활성으로 (빌드 때 안개 변형이 남도록)
