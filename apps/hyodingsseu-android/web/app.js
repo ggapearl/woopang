@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-09-28';
+  const WEB_VERSION = '2026-10-02';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -430,6 +430,28 @@
   }
 
   // ── 답을 소리로 (Speaker) ───────────────
+  // 폰 목소리 빠르기를 PC 목소리에 맞춘다 (2026-10-02) — 목소리마다 1배속 빠르기가 달라 같은 「1.1배」라도
+  // 아이폰 목소리가 PC 소희보다 두 배쯤 빨랐다. PC 가 알려 준 제 빠르기(초당 음절)에 맞춰 배속을 고르고,
+  // 끝까지 읽을 때마다 실제로 걸린 시간을 재서 이 폰 목소리의 빠르기를 바로잡는다(음절이 적은 짧은 말은 안 잰다).
+  const pace = { pc: 0, phone: parseFloat(local.get('phonePace', '0')) || 0, run: null };
+  const syllables = (t) => (String(t).match(/[가-힣]/g) || []).length;
+
+  function phoneRate(speed) {
+    const r = pace.pc && pace.phone ? speed * pace.pc / pace.phone : speed;
+    return Math.max(0.5, Math.min(1.6, r));               // 안드로이드 TTS 가 0.5 아래는 받지 않는다
+  }
+
+  function paceDone() {
+    const run = pace.run;
+    pace.run = null;
+    if (!run) return;
+    const secs = (Date.now() - run.t0) / 1000;
+    if (run.syl < 12 || secs < 2.5) return;
+    const natural = run.syl / secs / run.rate;             // 이 폰 목소리의 1배속 빠르기
+    pace.phone = pace.phone ? pace.phone * 0.6 + natural * 0.4 : natural;
+    local.set('phonePace', pace.phone.toFixed(3));
+  }
+
   const speaker = {
     speaking: false, via: null, audio: null, url: null, itemId: null, gen: 0,
 
@@ -442,16 +464,20 @@
     },
 
     async phone(text, speed) {
+      const rate = phoneRate(speed);
       if (Native) {
-        await Native.speak({ text, rate: Math.max(0.7, Math.min(1.6, speed)) });
+        pace.run = { t0: Date.now(), syl: syllables(text), rate };
+        await Native.speak({ text, rate });
         this.set(true, 'native');
         return;
       }
       if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
         const u = new SpeechSynthesisUtterance(text);
         u.lang = 'ko-KR';
-        u.rate = speed;
-        u.onend = u.onerror = () => { if (this.via === 'web') this.set(false); };
+        u.rate = rate;
+        u.onstart = () => { pace.run = { t0: Date.now(), syl: syllables(text), rate }; };
+        u.onend = () => { if (this.via === 'web') { paceDone(); this.set(false); } };
+        u.onerror = () => { pace.run = null; if (this.via === 'web') this.set(false); };
         speechSynthesis.cancel();
         speechSynthesis.speak(u);
         this.set(true, 'web');
@@ -472,6 +498,7 @@
     /** 읽던 것·준비하던 것(PC 목소리 받는 중) 모두 멈춘다 */
     stop() {
       this.gen++;
+      pace.run = null;                                      // 멈춘 건 빠르기 재기에서 뺀다
       if (this.via === 'native' && Native) Native.stop().catch(() => {});
       if (this.via === 'web' && window.speechSynthesis) speechSynthesis.cancel();
       if (this.audio) { this.audio.onended = this.audio.onerror = null; this.audio.pause(); this.audio = null; }
@@ -479,7 +506,7 @@
       if (this.speaking || this.itemId != null) this.set(false);
     },
   };
-  if (Native) Native.addListener('speechDone', () => { if (speaker.via === 'native') speaker.set(false); });
+  if (Native) Native.addListener('speechDone', () => { if (speaker.via === 'native') { paceDone(); speaker.set(false); } });
 
   function testVoice() { speakReply('대표님, 이 목소리로 말씀드릴게요.'); }
 
@@ -594,6 +621,7 @@
     const ms = (st.models || []).filter(m => m && m.key && m.label).map(m => ({ key: m.key, label: m.label }));
     if (ms.length) S.models = ms;
     if (typeof st.speed === 'number') S.speed = st.speed;
+    if (typeof st.pace === 'number') pace.pc = st.pace;
     S.agentState = st.state || 'idle';
     const ws = (st.office || []).map(worker).filter(Boolean);
     if (ws.length) S.workers = ws;
