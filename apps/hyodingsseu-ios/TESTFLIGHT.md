@@ -42,8 +42,6 @@ Xcode Organizer 의 업로드 화면(Distribute App)이 **앱 기록 만들기�
 
 ## 앞으로 새 빌드를 올릴 때 (꾸준히 — 2026-09-28 대표님 결정: 개발 설치 말고 TestFlight 로만)
 
-> 2.0 부터는 화면이 웹이라 **화면을 고쳤다고 빌드하지 않는다.** 빌드는 폰 기능(`DeskNative`)을 바꿨을 때와 90일 만료 전에만.
-
 1. `project.yml` 의 `CURRENT_PROJECT_VERSION` 을 1 올린다(기능이 바뀌었으면 `MARKETING_VERSION` 도). `CHANGELOG.md` 맨 위에 새 덩어리.
 2. 아래 2절 전체(xcodegen → 컴파일 확인 → archive → 업로드) → 3절(처리 확인·그룹) → 결과 기록·커밋·푸시.
 3. 대표님 아이폰은 TestFlight 앱에서 「업데이트」만 누르면 된다. 1절은 다시 하지 않는다.
@@ -87,7 +85,7 @@ xcodebuild -exportArchive -archivePath build/Hyodingsseu.xcarchive \
    - 예전에 Xcode 로 깐 효딩쓰가 있으면 덮어쓴다. 연결(토큰)은 같은 팀 Keychain 이라 대개 그대로 남는다 — 끊겼으면 PC 창 ☰ → 휴대폰 앱 → 새 코드.
    - TestFlight 빌드는 **90일** 뒤 만료된다 → 그 전에 빌드 번호만 올려 다시 올린다.
 4. `CHANGELOG.md` 맨 위 덩어리에 결과(업로드 성공·빌드 번호·설치 여부·이상한 점)를 적고
-   `git pull --rebase` → 커밋(`build(ios): 2.0.0 (5) TestFlight 업로드` 처럼) → `git push`. **이 폴더의 파일만** 스테이징.
+   `git pull --rebase` → 커밋(`build(ios): 1.0.3 (4) TestFlight 업로드` 처럼) → `git push`. **이 폴더의 파일만** 스테이징.
 
 ## 4. 막히면
 

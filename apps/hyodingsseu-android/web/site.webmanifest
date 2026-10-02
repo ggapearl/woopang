@@ -1,8 +1,8 @@
 {
   "name": "효딩쓰",
   "short_name": "효딩쓰",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/AI/desk-app/",
+  "scope": "/AI/desk-app/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1B2A6B",
