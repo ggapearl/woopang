@@ -65,6 +65,7 @@ namespace Editor
             // 1) 검증 — 실패하면 빌드 자체를 시작하지 않는다
             if (!HasArg("-woopangSkipValidate"))
             {
+                BuildValidator.RestorePreloadedAssets();   // 빌드 뒤 저장 때 빠지곤 하는 AR 필수 항목부터 되살린다
                 var issues = BuildValidator.Validate();
                 if (issues.Count > 0)
                 {

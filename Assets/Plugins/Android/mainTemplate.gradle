@@ -21,7 +21,7 @@ dependencies {
 
 
 // Android Resolver Exclusions Start
-// (2026-09-29) packagingOptions -> packaging 로 옮김 — 빌드 때마다 뜨던 'mainTemplate.gradle needs to be updated' 창 방지.
+// (2026-09-29) packaging -> packaging 로 옮김 — 빌드 때마다 뜨던 'mainTemplate.gradle needs to be updated' 창 방지.
 //  예전 exclude 는 자바 리소스·네이티브 라이브러리 둘 다에 걸렸으므로 두 곳에 같은 패턴을 둔다. (abiFilters 가 이미 arm 만 남긴다)
 android {
   packaging {

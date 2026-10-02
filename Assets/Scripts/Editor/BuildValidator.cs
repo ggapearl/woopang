@@ -221,13 +221,47 @@ namespace Editor
         // ── Preloaded Assets (AR 초기화) ──────────────────────────
         // 에디터가 ProjectSettings 를 다시 저장하면서 4개 중 3개가 빠진 적이 있다(2026-09).
         // 빠지면 AR 카메라 배경이 검게 나오거나 XR 이 아예 초기화되지 않는다.
-        private static readonly (string guid, string what)[] RequiredPreloaded =
+        // 1.2.52 빌드 직후에도 3개가 빠진 채 저장·커밋됐다(e09b85e) — 빌드 진입점은 RestorePreloadedAssets 로 먼저 되살린다.
+        private static readonly (string guid, long localId, string what)[] RequiredPreloaded =
         {
-            ("a71b000f0c8914c2a8307235f6bf3624", "Assets/XR/XRGeneralSettingsPerBuildTarget.asset"),
-            ("f1d66e5450418a245a006782a2a5e5f3", "Assets/ExtensionsAssets/Runtime/RuntimeConfig.asset"),
-            ("c9f956787b1d945e7b36e0516201fc76", "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
-            ("0945859e5a1034c2cb6dce53cb4fb899", "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
+            ("a71b000f0c8914c2a8307235f6bf3624", 11400000, "Assets/XR/XRGeneralSettingsPerBuildTarget.asset"),
+            ("f1d66e5450418a245a006782a2a5e5f3", 3642298788346208260, "Assets/ExtensionsAssets/Runtime/RuntimeConfig.asset"),
+            ("c9f956787b1d945e7b36e0516201fc76", 4800000, "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
+            ("0945859e5a1034c2cb6dce53cb4fb899", 4800000, "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
         };
+
+        /// <summary>
+        /// 빠진 AR 필수 Preloaded Assets 를 git 에 있던 값(같은 GUID·같은 오브젝트)으로 되살린다. 되살린 개수를 돌려준다.
+        /// 에셋 자체가 없으면 건드리지 않는다 — 그때는 CheckPreloadedAssets 가 빌드를 막는다.
+        /// </summary>
+        public static int RestorePreloadedAssets()
+        {
+            var list = PlayerSettings.GetPreloadedAssets().Where(o => o != null).ToList();
+            var present = new HashSet<string>();
+            foreach (var o in list)
+                if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(o, out string g, out long _)) present.Add(g);
+            int added = 0;
+            foreach (var r in RequiredPreloaded)
+            {
+                if (present.Contains(r.guid)) continue;
+                string path = AssetDatabase.GUIDToAssetPath(r.guid);
+                if (string.IsNullOrEmpty(path)) continue;
+                Object pick = null;
+                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(path))
+                    if (o != null && AssetDatabase.TryGetGUIDAndLocalFileIdentifier(o, out string _, out long id) && id == r.localId) { pick = o; break; }
+                if (pick == null) pick = AssetDatabase.LoadMainAssetAtPath(path);
+                if (pick == null) continue;
+                list.Add(pick);
+                added++;
+                Debug.Log("[BuildValidator] Preloaded Assets 되살림: " + r.what);
+            }
+            if (added > 0)
+            {
+                PlayerSettings.SetPreloadedAssets(list.ToArray());
+                AssetDatabase.SaveAssets();
+            }
+            return added;
+        }
 
         private static void CheckPreloadedAssets(List<string> issues)
         {

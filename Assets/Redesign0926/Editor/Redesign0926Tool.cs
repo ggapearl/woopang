@@ -72,6 +72,8 @@ namespace Redesign0926
         // ANDROID_KEYSTORE_PASS / ANDROID_KEYALIAS_PASS 에서만 읽고, 없으면 빌드하지 않는다 (CLAUDE.md 6.1).
         private static void BuildAndroidRelease(List<string> log)
         {
+            int restored = global::Editor.BuildValidator.RestorePreloadedAssets();   // 빌드 뒤 저장 때 빠지곤 하는 AR 필수 항목
+            if (restored > 0) log.Add("Preloaded Assets " + restored + "개 되살림");
             var issues = global::Editor.BuildValidator.Validate();
             if (issues.Count > 0)
             {
