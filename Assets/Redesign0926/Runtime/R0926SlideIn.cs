@@ -23,7 +23,8 @@ public class R0926SlideIn : MonoBehaviour
     private void Awake()
     {
         rt = (RectTransform)transform;
-        group = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+        group = GetComponent<CanvasGroup>();
+        if (group == null) group = gameObject.AddComponent<CanvasGroup>();
     }
 
     private void OnEnable()

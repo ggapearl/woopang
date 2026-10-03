@@ -125,7 +125,7 @@ public class R0926GuideOverlay : MonoBehaviour
             }
             Place(next, new Vector2(0f, nextY + next.sizeDelta.y / 2f), next.sizeDelta);
         }
-        float textBottom = nextY + (next != null ? next.sizeDelta.y : 0f) + 50f;
+        float textBottom = nextY + (next != null ? next.sizeDelta.y : 0f) + 64f;
         if (text != null)
         {
             var trt = text.rectTransform;
@@ -133,7 +133,9 @@ public class R0926GuideOverlay : MonoBehaviour
             trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0.5f);
             trt.pivot = new Vector2(0.5f, 0f);
             trt.sizeDelta = new Vector2(W - 140f, th + 10f);
-            trt.localPosition = new Vector3(0f, textBottom - H / 2f, 0f);
+            // 글자는 안내 패널의 자식이고 패널은 화면보다 작고 아래로 치우쳐 있다 — 덮개(화면) 기준 자리로 옮겨 놓는다.
+            // 예전엔 패널 기준으로 놓아 글자가 50 쯤 내려가 '다음' 버튼과 겹쳤다
+            trt.position = container.TransformPoint(new Vector3(0f, textBottom - H / 2f, 0f));
             if (dots != null)
             {
                 dots.anchorMin = dots.anchorMax = new Vector2(0.5f, 0.5f);

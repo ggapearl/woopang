@@ -49,6 +49,7 @@ namespace Redesign0926
             SkyTop(root, log);
             WeatherBoard(root, log);
             CommentBar(root, log);
+            Apply1004(root, log);   // 10-04 아이폰 확인 뒤 — 도크 칸 · 손잡이 · 프로필 카드 · 입력줄 · 날씨 크기
             var marker = Find(root, "Redesign0926Marker");
             var close = marker != null ? marker.GetComponent<R0926IndicatorClose>() : null;
             if (close != null)

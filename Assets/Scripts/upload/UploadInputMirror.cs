@@ -55,6 +55,12 @@ public class UploadInputMirror : MonoBehaviour
     private int baselineVisibleBottom = -1;
     private float lastJniErrorTime;
 
+    // 키보드 높이를 알기 전에는 보이지 않는다 — 예전엔 입력줄이 지난 자리(화면 아래)에 먼저 뜨고
+    // 키보드가 올라온 뒤에야 따라 올라갔다 (2026-10-04). 알게 되면 그 자리에 바로 놓고 살짝 나타난다.
+    private CanvasGroup mirrorGroup;
+    private bool placed;                    // 키보드 위에 처음 놓았는지
+    private const float SHOW_FALLBACK = 0.5f;   // 키보드 높이를 못 읽는 기기 — 이만큼 지나면 그냥 보인다
+
     void OnEnable()
     {
         TryInitialize();
@@ -246,6 +252,14 @@ public class UploadInputMirror : MonoBehaviour
         {
             mirrorPanel.SetActive(true);
             mirrorPanel.transform.SetAsLastSibling();
+            if (mirrorGroup == null)
+            {
+                // ?? 는 유니티의 가짜 null 을 못 거른다 — 명시적으로 확인
+                mirrorGroup = mirrorPanel.GetComponent<CanvasGroup>();
+                if (mirrorGroup == null) mirrorGroup = mirrorPanel.AddComponent<CanvasGroup>();
+            }
+            mirrorGroup.alpha = 0f;   // 키보드 위에 놓일 때까지 숨긴다
+            placed = false;
         }
 
         // SwipePanelController는 EventSystem을 거치지 않고 Touch.activeTouches를 직접 폴링하므로
@@ -396,6 +410,12 @@ public class UploadInputMirror : MonoBehaviour
 
         UpdateMirrorPosition();
         UpdateBackdropRect();
+        if (mirrorGroup != null)
+        {
+            bool late = mirrorActivatedAt > 0f && Time.unscaledTime - mirrorActivatedAt > SHOW_FALLBACK;
+            float want = placed || late ? 1f : 0f;
+            if (mirrorGroup.alpha != want) mirrorGroup.alpha = Mathf.MoveTowards(mirrorGroup.alpha, want, Time.unscaledDeltaTime / 0.12f);
+        }
 
         bool inGrace = mirrorActivatedAt > 0f && (Time.unscaledTime - mirrorActivatedAt) < KEYBOARD_GRACE;
 
@@ -422,6 +442,14 @@ public class UploadInputMirror : MonoBehaviour
         Vector2 targetMin = new Vector2(0f, anchor);
         Vector2 targetMax = new Vector2(1f, anchor);
 
+        if (!placed)
+        {
+            // 처음엔 바로 그 자리 — 아래에서 따라 올라오지 않게
+            mirrorRect.anchorMin = targetMin;
+            mirrorRect.anchorMax = targetMax;
+            placed = true;
+            return;
+        }
         float t = Time.unscaledDeltaTime * lerpSpeed;
         mirrorRect.anchorMin = Vector2.Lerp(mirrorRect.anchorMin, targetMin, t);
         mirrorRect.anchorMax = Vector2.Lerp(mirrorRect.anchorMax, targetMax, t);

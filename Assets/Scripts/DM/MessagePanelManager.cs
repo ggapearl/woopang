@@ -515,7 +515,8 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (chatRoomPanel == null) return;
 
-        Transform bgTransform = chatRoomPanel.transform.Find("Background");
+        Transform bgTransform = chatRoomPanel.transform.Find("Background")
+                                ?? chatRoomPanel.transform.Find("Clip0926/Background");
         if (bgTransform == null) return;
 
         MobileKeyboardHandler handler = chatRoomPanel.GetComponent<MobileKeyboardHandler>();
@@ -926,20 +927,9 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (conversationListContent == null) return;
 
-        SortConversationsByTime();
-
-        // 모든 기존 아이템 삭제
+        // 모든 기존 아이템 삭제 후 한 번만 그린다
         ClearContent(conversationListContent);
-
-        // 대화 목록 통합 렌더링 (DM + 시스템 알림 + 관리자 공지, 시간순)
-        foreach (var conv in conversations)
-        {
-            CreateConversationItem(conv);
-        }
-
-        // 빈 상태 체크
-        bool isEmpty = conversations.Count == 0;
-        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
+        RenderConversationList();
     }
 
     /// <summary>
@@ -1524,136 +1514,125 @@ public class MessagePanelManager : MonoBehaviour
 
     #region Conversation List
 
+    // 대화 목록 불러오기는 여러 곳(창 열기 · 안 읽음 수 변화 · 앱 복귀 · 푸시)에서 동시에 시작될 수 있다.
+    // 예전엔 각자 끝날 때 목록 전체를 그려 같은 대화가 두 번씩 보였다 — 가장 마지막에 시작한 것만 그린다.
+    private int convLoadVersion;
+    private bool conversationsLoadedOnce;
+
     private IEnumerator LoadConversationList()
     {
-        ClearContent(conversationListContent);
+        int myVersion = ++convLoadVersion;
 
-        // Inspector에서 이전 값(4)이 남아 있을 수 있으므로 최소 12개 보장
-        if (skeletonItemCount < 12) skeletonItemCount = 12;
-
-        // 스켈레톤 로딩 표시
-        float skeletonStartTime = Time.time;
+        // 받아 둔 목록이 있으면 곧바로 보여 주고 뒤에서 새로 고친다 (스켈레톤은 처음 한 번만)
         List<GameObject> skeletonItems = new List<GameObject>();
-        for (int i = 0; i < skeletonItemCount; i++)
+        float skeletonStartTime = Time.time;
+        bool showSkeleton = !conversationsLoadedOnce || conversations.Count == 0;
+        ClearContent(conversationListContent);
+        if (showSkeleton)
         {
-            GameObject skeleton = CreateSkeletonItem(conversationListContent);
-            skeletonItems.Add(skeleton);
+            int n = Mathf.Clamp(skeletonItemCount, 6, 9);   // 한 화면에 보이는 만큼
+            for (int i = 0; i < n; i++)
+                skeletonItems.Add(CreateSkeletonItem(conversationListContent, i));
+        }
+        else
+        {
+            RenderConversationList();
         }
         ForceLayoutUpdate();
 
         // 1. 관리자 공지 로드
         yield return StartCoroutine(LoadAdminBroadcasts());
+        if (myVersion != convLoadVersion) { RemoveSkeletonItems(skeletonItems); yield break; }
 
         // 관리자 공지를 conversations에 통합 (기존 항목 제거 후 재추가)
         MergeAdminBroadcastsIntoConversations();
 
-        // 2. 로그인 안 된 경우: 기존 대화 시간순 렌더링 후 종료
-        if (!CheckLogin())
+        if (CheckLogin())
         {
-            // 스켈레톤 최소 표시 시간 보장
-            float elapsed = Time.time - skeletonStartTime;
-            if (elapsed < skeletonMinDuration)
-                yield return new WaitForSeconds(skeletonMinDuration - elapsed);
-            RemoveSkeletonItems(skeletonItems);
+            string userId = LoginManager.Instance.CurrentUser.id;
+            string url = $"{ApiConfig.DM_CONVERSATIONS}?user_id={userId}";
 
-            SortConversationsByTime();
-            foreach (var conv in conversations)
+            using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
-                CreateConversationItem(conv);
-            }
+                LoginManager.ApplyAuth(request);
+                yield return request.SendWebRequest();
+                if (myVersion != convLoadVersion) { RemoveSkeletonItems(skeletonItems); yield break; }
 
-            bool isEmpty = conversations.Count == 0;
-            ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
-            ForceLayoutUpdate();
-            yield break;
-        }
-
-        string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.DM_CONVERSATIONS}?user_id={userId}";
-
-        using (UnityWebRequest request = UnityWebRequest.Get(url))
-        {
-            LoginManager.ApplyAuth(request);
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                var response = JsonUtility.FromJson<DMConversationsResponse>(request.downloadHandler.text);
-
-                // 서버 응답에 있는 userId 목록 수집
-                var serverUserIds = new HashSet<string>();
-                if (response.conversations != null)
+                if (request.result == UnityWebRequest.Result.Success)
                 {
-                    foreach (var conv in response.conversations)
+                    var response = JsonUtility.FromJson<DMConversationsResponse>(request.downloadHandler.text);
+
+                    // 서버 응답에 있는 userId 목록 수집
+                    var serverUserIds = new HashSet<string>();
+                    if (response.conversations != null)
+                        foreach (var conv in response.conversations)
+                            serverUserIds.Add(conv.partner_id);
+
+                    // 서버에 있는 DM만 제거 (로컬 전용 DM, 시스템 알림, 관리자 공지는 유지)
+                    conversations.RemoveAll(c => !c.isSystemMessage && !c.isAdminBroadcast && serverUserIds.Contains(c.userId));
+
+                    // 서버 대화 추가 — 같은 상대가 두 번 오면 하나만
+                    int adjustedTotalUnread = 0;
+                    if (response.conversations != null)
                     {
-                        serverUserIds.Add(conv.partner_id);
-                    }
-                }
-
-                // 서버에 있는 DM만 제거 (로컬 전용 DM, 시스템 알림, 관리자 공지는 유지)
-                conversations.RemoveAll(c => !c.isSystemMessage && !c.isAdminBroadcast && serverUserIds.Contains(c.userId));
-
-                // 서버 대화 추가
-                int adjustedTotalUnread = 0;
-                if (response.conversations != null)
-                {
-                    foreach (var conv in response.conversations)
-                    {
-                        int unread = conv.unread_count;
-
-                        // 최근 읽음 처리한 유저는 로컬에서 강제 0 유지 (서버 반영 지연 대응)
-                        if (recentlyMarkedReadUserIds.Contains(conv.partner_id))
+                        foreach (var conv in response.conversations)
                         {
-                            unread = 0;
+                            if (conversations.Exists(c => c.userId == conv.partner_id)) continue;
+                            int unread = conv.unread_count;
+
+                            // 최근 읽음 처리한 유저는 로컬에서 강제 0 유지 (서버 반영 지연 대응)
+                            if (recentlyMarkedReadUserIds.Contains(conv.partner_id))
+                                unread = 0;
+
+                            conversations.Add(new ConversationSummary
+                            {
+                                userId = conv.partner_id,
+                                username = conv.partner_username,
+                                avatarUrl = conv.partner_avatar_url,
+                                lastMessage = conv.last_message,
+                                lastMessageTime = conv.last_message_time,
+                                unreadCount = unread
+                            });
+                            adjustedTotalUnread += unread;
                         }
-
-                        var summary = new ConversationSummary
-                        {
-                            userId = conv.partner_id,
-                            username = conv.partner_username,
-                            avatarUrl = conv.partner_avatar_url,
-                            lastMessage = conv.last_message,
-                            lastMessageTime = conv.last_message_time,
-                            unreadCount = unread
-                        };
-
-                        adjustedTotalUnread += unread;
-                        conversations.Add(summary);
                     }
-                }
 
-                // 전체 안 읽음 수 업데이트 (로컬 강제 0 반영)
-                if (recentlyMarkedReadUserIds.Count > 0)
-                {
-                    totalUnreadCount = adjustedTotalUnread;
+                    // 전체 안 읽음 수 업데이트 (로컬 강제 0 반영)
+                    totalUnreadCount = recentlyMarkedReadUserIds.Count > 0 ? adjustedTotalUnread : response.total_unread;
+                    UpdateUnreadUI();
+                    conversationsLoadedOnce = true;
                 }
-                else
-                {
-                    totalUnreadCount = response.total_unread;
-                }
-                UpdateUnreadUI();
             }
-
-            // 스켈레톤 최소 표시 시간 보장
-            float elapsed = Time.time - skeletonStartTime;
-            if (elapsed < skeletonMinDuration)
-                yield return new WaitForSeconds(skeletonMinDuration - elapsed);
-            RemoveSkeletonItems(skeletonItems);
-
-            // 시간순 정렬 후 모든 대화 (DM + 시스템 알림 + 관리자 공지) 통합 렌더링
-            SortConversationsByTime();
-            foreach (var conv in conversations)
-            {
-                CreateConversationItem(conv);
-            }
-
-            // 전체 콘텐츠가 없을 때만 빈 상태 표시
-            bool isEmpty = conversations.Count == 0;
-            ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
         }
 
-        // 레이아웃 강제 업데이트
+        // 스켈레톤이 너무 짧게 깜빡이지 않게만 (처음 한 번)
+        if (showSkeleton)
+        {
+            float minShow = Mathf.Min(skeletonMinDuration, 0.4f);   // 예전 1초는 창이 느리게 느껴졌다
+            float elapsed = Time.time - skeletonStartTime;
+            if (elapsed < minShow)
+                yield return new WaitForSeconds(minShow - elapsed);
+            if (myVersion != convLoadVersion) { RemoveSkeletonItems(skeletonItems); yield break; }
+        }
+
+        RemoveSkeletonItems(skeletonItems);
+        ClearContent(conversationListContent);   // 그 사이 그려진 것(푸시 등)을 지우고 한 번만 그린다
+        RenderConversationList();
         ForceLayoutUpdate();
+    }
+
+    /// <summary>시간순 정렬 후 DM + 시스템 알림 + 관리자 공지를 한 목록으로 그린다</summary>
+    private void RenderConversationList()
+    {
+        SortConversationsByTime();
+        var seen = new HashSet<string>();
+        foreach (var conv in conversations)
+        {
+            string key = string.IsNullOrEmpty(conv.notificationId) ? "u:" + conv.userId : "n:" + conv.notificationId;
+            if (!seen.Add(key)) continue;   // 같은 대화가 목록에 두 번 들어가 있어도 한 줄만
+            CreateConversationItem(conv);
+        }
+        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), conversations.Count == 0);
     }
 
     /// <summary>
@@ -1766,7 +1745,10 @@ public class MessagePanelManager : MonoBehaviour
     /// <summary>
     /// 대화 목록 스켈레톤 아이템 생성 (쉬머 효과 포함)
     /// </summary>
-    private GameObject CreateSkeletonItem(Transform parent)
+    private static readonly float[] SkeletonNameW = { 0.34f, 0.46f, 0.28f, 0.40f, 0.52f, 0.31f, 0.44f, 0.37f, 0.49f };
+    private static readonly float[] SkeletonMsgW = { 0.72f, 0.58f, 0.80f, 0.64f, 0.69f, 0.76f, 0.55f, 0.82f, 0.61f };
+
+    private GameObject CreateSkeletonItem(Transform parent, int index = 0)
     {
         float itemHeight = conversationItemHeight > 0 ? conversationItemHeight : 140f;
 
@@ -1783,30 +1765,38 @@ public class MessagePanelManager : MonoBehaviour
 
         Image itemBg = item.AddComponent<Image>();
         itemBg.color = skeletonBgColor;
+        itemBg.raycastTarget = false;
 
         // 아바타 플레이스홀더 (원형)
-        float avatarSize = itemHeight * 0.65f;
-        float padding = 16f;
+        float avatarSize = itemHeight * 0.62f;
+        float padding = 20f;
         CreateSkeletonBlock(item.transform, "Avatar",
             new Vector2(padding + avatarSize * 0.5f, 0f),
             new Vector2(avatarSize, avatarSize),
             skeletonContentColor, true);
 
-        // 이름/메시지 바는 앵커로 늘린다.
-        // 예전엔 availableWidth=600f 로 너비를 가정했는데, 실제 행 너비는
-        // 레이아웃이 정하므로 기기 폭이 다르면 바가 넘치거나 짧게 보였다.
+        // 이름/메시지 바는 앵커로 늘린다 (기기 폭과 상관없이). 줄마다 길이를 달리해 실제 목록처럼
         float textStartX = padding + avatarSize + padding;
-
+        int k = Mathf.Abs(index) % SkeletonNameW.Length;
         CreateSkeletonBar(item.transform, "NameLine",
-            textStartX, 0.55f, itemHeight * 0.18f, 20f,
+            textStartX, SkeletonNameW[k], itemHeight * 0.16f, 22f,
             skeletonContentColor);
 
         CreateSkeletonBar(item.transform, "MsgLine",
-            textStartX, 0.86f, -itemHeight * 0.15f, 16f,
+            textStartX, SkeletonMsgW[k], -itemHeight * 0.15f, 18f,
             new Color(skeletonContentColor.r, skeletonContentColor.g,
                       skeletonContentColor.b, skeletonContentColor.a * 0.6f));
 
-        // 쉬머 효과 적용
+        // 오른쪽 시간 자리
+        GameObject time = CreateSkeletonBar(item.transform, "TimeLine", 0f, 1f, itemHeight * 0.16f, 16f,
+            new Color(skeletonContentColor.r, skeletonContentColor.g, skeletonContentColor.b, skeletonContentColor.a * 0.5f));
+        var trt = (RectTransform)time.transform;
+        trt.anchorMin = trt.anchorMax = new Vector2(1f, 0.5f);
+        trt.pivot = new Vector2(1f, 0.5f);
+        trt.sizeDelta = new Vector2(90f, 16f);
+        trt.anchoredPosition = new Vector2(-padding, itemHeight * 0.16f);
+
+        // 쉬머 효과 (줄마다 위상이 어긋나 물결처럼 내려간다 — ShimmerEffect)
         item.AddComponent<ShimmerEffect>();
 
         return item;

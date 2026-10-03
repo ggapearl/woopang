@@ -54,7 +54,7 @@ namespace Redesign0926
             steps.Clear();
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
-            if (mode == "upload") PlanUpload(); else if (mode == "look") PlanLook(); else if (mode == "look2") PlanLook2(); else Plan();
+            if (mode == "upload") PlanUpload(); else if (mode == "look") PlanLook(); else if (mode == "look2") PlanLook2(); else if (mode == "look3") PlanLook3(); else Plan();
             running = true;
         }
 
@@ -329,6 +329,158 @@ namespace Redesign0926
             Shot("x_on");
         }
         private static Button closeBtn;
+
+        // 10-04 수정 확인 — 채팅방이 화면 안에 열리는지 · 도크 메시지 칸 · 키보드 위 입력줄 · 프로필 · 장소 추가 · 첫 안내
+        private static void PlanLook3()
+        {
+            Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
+            Sleep(1.0f);
+
+            // 장소 추가 + 키보드 위 입력줄 (이름 칸을 누른 것처럼)
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.4f);
+            Shot("add");
+            Do(() =>
+            {
+                var mirror = WiredMirror();
+                InputField nameInput = null;
+                foreach (var f in UnityEngine.Object.FindObjectsByType<InputField>(FindObjectsInactive.Exclude))
+                    if (f.name == "NameInput" && f.gameObject.activeInHierarchy && f.transform.parent.parent.name == "CubeUploadPage") { nameInput = f; break; }
+                var m = typeof(UploadInputMirror).GetMethod("ActivateMirrorFor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                log.Add("  입력줄: " + (mirror != null ? "있음" : "없음") + " · 이름칸 " + (nameInput != null ? "있음" : "없음"));
+                if (mirror != null && nameInput != null && m != null) m.Invoke(mirror, new object[] { nameInput });
+            });
+            Sleep(0.05f);
+            Do(() => log.Add("  입력줄 처음 투명도 = " + MirrorAlpha()));
+            Sleep(0.8f);
+            Do(() => log.Add("  0.8초 뒤 투명도 = " + MirrorAlpha()));
+            Do(() =>
+            {
+                var mirror = WiredMirror();
+                var mi = mirror != null ? typeof(UploadInputMirror).GetField("mirrorInput", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(mirror) as InputField : null;
+                var src = Find("UploadPage/Clip0926/UploadSheet0926/CubeUploadPage/Panel/NameInput")?.GetComponent<InputField>();
+                log.Add("  입력줄 안내 글 = '" + ((mi?.placeholder as Text)?.text ?? "-") + "' · 장소 이름칸 안내 글 = '" + ((src?.placeholder as Text)?.text ?? "-") + "'");
+            });
+            Shot("mirror");
+            Do(() =>
+            {
+                var mirror = WiredMirror();
+                var m = typeof(UploadInputMirror).GetMethod("OnCloseClicked", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (mirror != null && m != null) m.Invoke(mirror, null);
+            });
+            Sleep(0.4f);
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+
+            // 장소 수정 화면 — 키보드 위 입력줄 (10-04 연결. 예전엔 연결이 통째로 비어 있었다)
+            Do(() => { var fp = Find("Fixpage"); if (fp != null) fp.gameObject.SetActive(true); });
+            Sleep(0.8f);
+            Shot("fix");
+            Do(() =>
+            {
+                var fp = Find("Fixpage");
+                var m = fp != null ? fp.GetComponent<UploadInputMirror>() : null;
+                var src = Find("Fixpage/FixUploadPage/Panel/NameInput")?.GetComponent<InputField>();
+                var act = typeof(UploadInputMirror).GetMethod("ActivateMirrorFor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                log.Add("  장소 수정 입력줄: " + (m != null ? "있음" : "없음") + " · 이름칸 " + (src != null ? "있음" : "없음"));
+                if (m != null && src != null && act != null) act.Invoke(m, new object[] { src });
+            });
+            Sleep(0.8f);
+            Shot("fix_mirror");
+            Do(() =>
+            {
+                var fp = Find("Fixpage");
+                var m = fp != null ? fp.GetComponent<UploadInputMirror>() : null;
+                var mi = m != null ? typeof(UploadInputMirror).GetField("mirrorInput", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(m) as InputField : null;
+                if (mi != null) mi.text = "테스트 이름";
+                var close = typeof(UploadInputMirror).GetMethod("OnCloseClicked", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (m != null && close != null) close.Invoke(m, null);
+                var src = Find("Fixpage/FixUploadPage/Panel/NameInput")?.GetComponent<InputField>();
+                log.Add("  닫은 뒤 장소 수정 이름칸 = '" + (src != null ? src.text : "-") + "'");
+                if (src != null) src.text = "";
+            });
+            Sleep(0.3f);
+            Do(() => { var fp = Find("Fixpage"); if (fp != null) fp.gameObject.SetActive(false); });
+            Sleep(0.5f);
+
+            // 메시지 창 → 채팅방 (관리자 WOOPANG 방은 로그인 없이도 열 수 있다)
+            Do(() =>
+            {
+                var mpm = UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include);
+                if (mpm != null && mpm.messagePanel != null) mpm.messagePanel.SetActive(true);
+            });
+            Sleep(1.0f);
+            Shot("msg");
+            Do(() =>
+            {
+                var mpm = UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include);
+                if (mpm != null) mpm.OpenChatRoom("3", "WOOPANG", null, true);
+            });
+            Sleep(0.15f);
+            Shot("chat_rising");
+            Sleep(1.2f);
+            Shot("chat");
+            Check(() => Active("ChatRoomPanel"), "채팅방: 열려 있음");
+            Check(() => OnScreen("ChatRoomPanel/Clip0926/Background"), "채팅방: 대화창이 화면 안에 보임");
+            Do(() => log.Add("  메시지 칸 투명도 = " + (Find("Dock0926/Message_Button")?.GetComponent<CanvasGroup>()?.alpha.ToString() ?? "-")));
+            Do(() => Click("ChatRoomPanel/Clip0926/Background/Header/BackButton/ClosePx0926"));
+            Sleep(1.0f);
+            Do(() => log.Add("  닫은 뒤 열린 창: " + OpenPanels()));
+            Do(() =>
+            {
+                var mpm = UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include);
+                if (mpm != null) { mpm.messagePanel.SetActive(false); mpm.chatRoomPanel.SetActive(false); }
+            });
+            Sleep(0.6f);
+
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Sleep(0.4f);
+            // 프로필 (WOOPANG 계정 — 남의 프로필 모양)
+            Do(() => ProfileManager.Instance?.ShowProfile("3"));
+            Sleep(2.5f);
+            Shot("profile");
+            Do(() => { var p = Find("FullProfilePanel"); if (p != null) p.gameObject.SetActive(false); });
+            Sleep(0.5f);
+
+            // 첫 안내
+            Do(() => UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include)?.ForceShowGuide());
+            Sleep(1.8f);
+            Shot("guide1");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip());
+            Sleep(0.8f);
+            Do(() => { PlayerPrefs.SetInt("IsFirstTime", 1); PlayerPrefs.Save(); });
+        }
+
+        // 장소 수정 화면(Fixpage)에도 하나 붙어 있는데 연결이 비어 있다 — 입력줄이 연결된 것만
+        private static UploadInputMirror WiredMirror()
+        {
+            var f = typeof(UploadInputMirror).GetField("mirrorPanel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            foreach (var m in UnityEngine.Object.FindObjectsByType<UploadInputMirror>(FindObjectsInactive.Exclude))
+                if (f != null && f.GetValue(m) as GameObject != null) return m;
+            return null;
+        }
+
+        private static string MirrorAlpha()
+        {
+            var m = WiredMirror();
+            if (m == null) return "-";
+            var f = typeof(UploadInputMirror).GetField("mirrorPanel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var go = f?.GetValue(m) as GameObject;
+            if (go == null) return "패널 없음";
+            var cg = go.GetComponent<CanvasGroup>();
+            return (go.activeSelf ? "켜짐 " : "꺼짐 ") + (cg != null ? cg.alpha.ToString("0.00") : "cg 없음");
+        }
+
+        private static bool OnScreen(string path)
+        {
+            var rt = Find(path) as RectTransform;
+            if (rt == null || !rt.gameObject.activeInHierarchy) return false;
+            var c = new Vector3[4];
+            rt.GetWorldCorners(c);
+            float visibleTop = Mathf.Min(c[1].y, Screen.height), visibleBottom = Mathf.Max(c[0].y, 0f);
+            log.Add($"  대화창 화면 위치: 아래 {c[0].y:0} · 위 {c[1].y:0} (화면 높이 {Screen.height})");
+            return visibleTop - visibleBottom > Screen.height * 0.3f;
+        }
         private static int CountActive(string name)
         {
             int n = 0;
@@ -508,7 +660,7 @@ namespace Redesign0926
             }
             catch (Exception e)
             {
-                log.Add("ERROR " + e.Message);
+                log.Add("ERROR " + e.Message + (e.InnerException != null ? " ← " + e.InnerException.GetType().Name + ": " + e.InnerException.Message + " @ " + e.InnerException.StackTrace?.Split((char)10)[0] : ""));
                 steps.Clear();
             }
             if (steps.Count > 0) return;

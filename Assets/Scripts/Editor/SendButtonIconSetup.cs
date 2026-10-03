@@ -70,6 +70,7 @@ public class SendButtonIconSetup
         if (sendBtn == null) return false;
         // 0930 댓글 입력줄 — 바탕은 둥근 버튼, 화살표는 자식이 그린다 (여기서 삼각 화살표를 씌우면 버튼이 삼각형이 됐다)
         if (sendBtn.GetComponentInParent<R0926CommentBar>(true) != null) return false;
+        if (sendBtn.GetComponentInParent<R0926InputBar>(true) != null) return false;   // 채팅 입력줄도 0930 디자인
 
         // 이미 sendButtonIconSprite가 설정되어 있으면 그것을 사용
         Sprite arrowSprite = null;
