@@ -25,11 +25,27 @@ public class R0926CoordLine : MonoBehaviour
             var d = Input.location.lastData;
             s = d.latitude.ToString("F5") + ",  " + d.longitude.ToString("F5");
         }
-        else if (source != null && !string.IsNullOrEmpty(source.text) && !source.text.StartsWith("Lat"))
-            s = source.text;   // '위치 확인 중' · '위치 정보 없음' 같은 안내
+#if UNITY_EDITOR
+        else if (VirtualLocation.Instance != null)
+            s = VirtualLocation.Instance.Latitude.ToString("F5") + ",  " + VirtualLocation.Instance.Longitude.ToString("F5");
+#endif
+        else if (source != null && !string.IsNullOrEmpty(source.text))
+            s = source.text.StartsWith("Lat") ? FromSource(source.text) : source.text;   // 이미 받은 좌표 · '위치 확인 중' 같은 안내
         else
             s = L("위치 확인 중…", "Getting location…", "位置を確認中…", "正在获取位置…", "Obteniendo ubicación…");
         if (text.text != s) text.text = s;
+    }
+
+    // 업로드 매니저의 "Lat:36.6361,Lon:126.8280,Alt:0.00" → "36.6361,  126.8280"
+    private static string FromSource(string t)
+    {
+        string lat = null, lon = null;
+        foreach (var part in t.Split(','))
+        {
+            if (part.StartsWith("Lat:")) lat = part.Substring(4);
+            else if (part.StartsWith("Lon:")) lon = part.Substring(4);
+        }
+        return lat != null && lon != null ? lat + ",  " + lon : t;
     }
 
     private static string L(string ko, string en, string ja, string zh, string es)

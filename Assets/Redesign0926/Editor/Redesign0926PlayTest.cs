@@ -54,7 +54,20 @@ namespace Redesign0926
             steps.Clear();
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
-            if (mode == "upload") PlanUpload(); else if (mode == "look") PlanLook(); else if (mode == "look2") PlanLook2(); else if (mode == "look3") PlanLook3(); else Plan();
+            if (mode == "store2")
+            {
+                // 스토어 캡처 2 — 원래 자리(3D 오브젝트가 있는 곳)에서 시작화면 · 8방향 · 하늘 날씨
+                storeSrc = lines.Length > 2 ? lines[2].Trim() : "";
+                PlanStore2();
+            }
+            else if (mode == "store")
+            {
+                // 스토어 캡처 — 광화문 근처로 옮기고, 검은 카메라 화면 대신 흐린 배경을 3D 오브젝트 뒤에 깐다
+                storeSrc = lines.Length > 2 ? lines[2].Trim() : "";
+                VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f);
+                PlanStore();
+            }
+            else if (mode == "upload") PlanUpload(); else if (mode == "look") PlanLook(); else if (mode == "look2") PlanLook2(); else if (mode == "look3") PlanLook3(); else Plan();
             running = true;
         }
 
@@ -449,6 +462,120 @@ namespace Redesign0926
             Do(() => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip());
             Sleep(0.8f);
             Do(() => { PlayerPrefs.SetInt("IsFirstTime", 1); PlayerPrefs.Save(); });
+        }
+
+        private static string storeSrc;
+        private static RawImage backdrop;
+
+        private static void PlanStore()
+        {
+            Do(() => Backdrop("bg_city.png"));
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(7f);   // 주변 장소를 받아 올 틈
+            Shot("s1_main");
+
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.6f);
+            Shot("s3_list");
+            Do(() => Modes()?.Show(1));
+            Sleep(3.0f);
+            Shot("s4_map");
+            Do(() => Modes()?.Show(0));
+            Sleep(0.6f);
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(1.0f);
+
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.4f);
+            Shot("s5_add");
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+
+            Do(() => ProfileManager.Instance?.ShowProfile("3"));
+            Sleep(2.5f);
+            Shot("s6_profile");
+            Do(() => { var p = Find("FullProfilePanel"); if (p != null) p.gameObject.SetActive(false); });
+            Sleep(0.6f);
+
+            // 하늘 — 카메라를 위로 들면 날씨판이 뜬다
+            Do(() =>
+            {
+                Backdrop("bg_sky.png");
+                var cam = Camera.main;
+                if (cam == null) return;
+                foreach (var bh in cam.GetComponents<Behaviour>()) if (bh.GetType().Name.Contains("PoseDriver")) bh.enabled = false;
+                cam.transform.rotation = Quaternion.Euler(-62f, cam.transform.eulerAngles.y, 0f);
+            });
+            Sleep(4.5f);
+            Shot("s2_sky");
+        }
+
+        private static void PlanStore2()
+        {
+            Do(() => Backdrop("bg_city.png"));
+            Sleep(1.3f);
+            Shot("s0_splash_a");
+            Sleep(1.4f);
+            Shot("s0_splash_b");
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(6f);
+            for (int yaw = 0; yaw < 360; yaw += 45)
+            {
+                int y = yaw;
+                Do(() => AimCamera(-4f, y));
+                Sleep(1.6f);
+                Shot("s1_yaw" + y.ToString("000"));
+            }
+            Do(() =>
+            {
+                var sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+                if (sky == null) { log.Add("  날씨판 없음"); return; }
+                string json;
+                using (var wc = new System.Net.WebClient()) { wc.Encoding = System.Text.Encoding.UTF8; json = wc.DownloadString(ApiConfig.MAIN_SERVER + "/api/weather?lat=37.5759&lon=126.9768"); }
+                const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var wt = typeof(R0926SkyWeather).GetNestedType("Weather", System.Reflection.BindingFlags.NonPublic);
+                var w = JsonUtility.FromJson(json, wt);
+                typeof(R0926SkyWeather).GetMethod("Show", F).Invoke(sky, new[] { w });
+                typeof(R0926SkyWeather).GetField("hasData", F).SetValue(sky, true);
+                typeof(R0926SkyWeather).GetField("nextFetch", F).SetValue(sky, float.MaxValue);
+                log.Add("  날씨 넣음: " + json.Substring(0, Math.Min(120, json.Length)));
+                Backdrop("bg_sky.png");
+                AimCamera(-62f, 0f);
+            });
+            Sleep(4.5f);
+            Shot("s2_sky");
+        }
+
+        private static void AimCamera(float pitch, float yaw)
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            foreach (var bh in cam.GetComponents<Behaviour>()) if (bh.GetType().Name.Contains("PoseDriver")) bh.enabled = false;
+            cam.transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
+        }
+
+        private static void Backdrop(string file)
+        {
+            var cam = Camera.main;
+            if (cam == null || string.IsNullOrEmpty(storeSrc)) { log.Add("  배경 못 깖"); return; }
+            if (backdrop == null)
+            {
+                var go = new GameObject("StoreBackdrop0926", typeof(RectTransform), typeof(Canvas));
+                var c = go.GetComponent<Canvas>();
+                c.renderMode = RenderMode.ScreenSpaceCamera;
+                c.worldCamera = cam;
+                c.planeDistance = cam.farClipPlane * 0.9f;
+                c.sortingOrder = -1000;
+                var img = new GameObject("Image", typeof(RectTransform), typeof(RawImage));
+                img.transform.SetParent(go.transform, false);
+                var rt = (RectTransform)img.transform;
+                rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+                backdrop = img.GetComponent<RawImage>();
+                backdrop.raycastTarget = false;
+            }
+            var tex = new Texture2D(2, 2);
+            tex.LoadImage(File.ReadAllBytes(Path.Combine(storeSrc, file)));
+            backdrop.texture = tex;
         }
 
         // 장소 수정 화면(Fixpage)에도 하나 붙어 있는데 연결이 비어 있다 — 입력줄이 연결된 것만
