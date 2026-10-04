@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-05b';
+  const WEB_VERSION = '2026-10-05c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1907,7 +1907,7 @@
         row('서버', h('span', { class: 'v', style: 'font-size:12px', text: api.base })),
         h('div', { class: 'frow' }, h('button', { class: 'link danger', text: '이 폰 연결 끊기', onclick: confirmUnpair })),
       ], '끊으면 이 폰의 열쇠가 PC 에서도 지워집니다. 다시 쓰려면 PC 창 ☰ 에서 새 코드를 받으세요.'),
-      section(null, [h('div', { class: 'frow' }, h('span', { class: 'k', style: 'font-size:13px;color:var(--ink-3)', text: '효딩쓰 ' + (appVersion || '') + (Native ? ' · 안드로이드' : ' · 웹') + ' · 화면 ' + WEB_VERSION + ' · QUE. ENT · 대표님 개인용' }))], null)));
+      section(null, [h('div', { class: 'frow' }, h('span', { class: 'k', style: 'font-size:13px;color:var(--ink-3)', text: appVersion ? '버전 ' + appVersion + ' (' + WEB_VERSION + ')' : '버전 ' + WEB_VERSION }))], null)));
     pushPage('설정', content);
   }
 
