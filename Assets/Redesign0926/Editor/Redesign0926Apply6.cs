@@ -325,6 +325,10 @@ namespace Redesign0926
 
             SectionLabel(content.transform, "SecPlaces", new[] { "장소", "Places", "場所", "地点", "Lugares" });
             var g3 = Group(content.transform, "GroupHidden");
+            // 오브젝트 삭제 기능 — 기본 켜짐. 끄면 장소 박스에 X 가 없다 (거리 위·이름 아래는 그대로)
+            var removeX = SettingRow(g3.transform, "RowRemoveX", new[] { "오브젝트 삭제 기능", "Remove button (X)", "削除ボタン (X)", "删除按钮 (X)", "Botón de borrar (X)" },
+                new[] { "장소 박스 오른쪽 위 X 로 이 기기에서 숨겨요", "Hide a place on this device with the X on its box", "マーカー右上のXでこの端末から隠せます", "点标记右上角的 X 可在本机隐藏", "Oculta un lugar con la X de su marcador" }, false);
+            removeX.transform.parent.SetSiblingIndex(0);
             var hidden = FindOrCreate(g3.transform, "HiddenText");
             Ensure<LayoutElement>(hidden).preferredHeight = 104;
             var ht = Txt(hidden, "숨긴 장소 없음", 30, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
@@ -343,6 +347,7 @@ namespace Redesign0926
             SetArray(so.FindProperty("angleTabs"), angleTabs);
             SetArray(so.FindProperty("angleLabels"), angleLabels);
             so.FindProperty("hiddenText").objectReferenceValue = ht;
+            so.FindProperty("removeSwitch").objectReferenceValue = removeX;
             so.FindProperty("switchOn").objectReferenceValue = Spr("r0926_sw_on");
             so.FindProperty("switchOff").objectReferenceValue = Spr("r0926_sw_off");
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -354,6 +359,7 @@ namespace Redesign0926
             Wire(ads.transform.parent.GetComponent<Button>(), panel.ToggleAds);
             Wire(lying.transform.parent.GetComponent<Button>(), panel.ToggleLying);
             Wire(collapsed.transform.parent.GetComponent<Button>(), panel.ToggleCollapsed);
+            Wire(removeX.transform.parent.GetComponent<Button>(), panel.ToggleRemove);
             for (int i = 0; i < angleTabs.Length; i++)
             {
                 var b = angleTabs[i].GetComponent<Button>();

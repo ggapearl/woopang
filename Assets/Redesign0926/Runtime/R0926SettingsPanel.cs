@@ -20,6 +20,7 @@ public class R0926SettingsPanel : MonoBehaviour
     [SerializeField] private CanvasGroup channelGroup;   // 전체를 끄면 아래 항목이 흐려진다
     [SerializeField] private Image[] angleTabs;
     [SerializeField] private Text[] angleLabels;
+    [SerializeField] private Image removeSwitch;          // 오브젝트 삭제 기능 (장소 박스 X)
     [SerializeField] private Text hiddenText;
     [SerializeField] private Sprite switchOn;
     [SerializeField] private Sprite switchOff;
@@ -34,6 +35,7 @@ public class R0926SettingsPanel : MonoBehaviour
     public void ToggleLying() { R0926SkySettings.HideWhenLying = !R0926SkySettings.HideWhenLying; Refresh(); }
     public void ToggleCollapsed() { R0926SkySettings.StartCollapsed = !R0926SkySettings.StartCollapsed; Refresh(); }
     public void SetAngle(int step) { R0926SkySettings.Angle = step; Refresh(); }
+    public void ToggleRemove() { R0926PlaceSettings.RemoveButton = !R0926PlaceSettings.RemoveButton; Refresh(); }
 
     private void Refresh()
     {
@@ -44,6 +46,7 @@ public class R0926SettingsPanel : MonoBehaviour
         Sw(adsSwitch, R0926SkySettings.Ads);
         Sw(lyingSwitch, R0926SkySettings.HideWhenLying);
         Sw(collapsedSwitch, R0926SkySettings.StartCollapsed);
+        Sw(removeSwitch, R0926PlaceSettings.RemoveButton);
         if (channelGroup != null)
         {
             channelGroup.alpha = R0926SkySettings.Enabled ? 1f : 0.4f;

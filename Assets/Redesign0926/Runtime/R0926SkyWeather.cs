@@ -2,14 +2,18 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Networking;
 using UnityEngine.UI;
+using UnityEngine.XR.ARFoundation;
 
 /// <summary>
 /// 하늘 날씨 — 휴대폰을 하늘로 들면 하늘 먼 곳(약 600m)에 날씨가 걸린다.
 ///  · 조건: 위로 25° 이상 + 화면 가운데 부근에 60m 안쪽 AR 오브젝트가 없을 것
 ///  · 가까운 오브젝트가 있으면 오브젝트가 먼저 → 날씨는 위쪽 작은 칩으로 줄어든다
 ///  · 하늘의 날씨판은 한 번 걸리면 그 방향에 머물러, 휴대폰을 움직이면 하늘에 붙은 것처럼 흘러간다
+///  · 밤하늘·천장처럼 특징이 없어 AR 추적이 안 잡히면 카메라 방향이 멈춘다 — 그때는 휴대폰 중력 센서로 기울기를 읽고
+///    날씨판은 화면 앞에 붙여 보여 준다 (예전엔 밤·실내에서 하늘을 비춰도 날씨가 안 떴다)
 /// 데이터: 우팡 서버 /api/weather (10분 캐시). 스폰 시스템과 따로 돌아 기존 오브젝트 로직을 건드리지 않는다.
 /// </summary>
 public class R0926SkyWeather : MonoBehaviour
@@ -20,6 +24,13 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private Text tempText;
     [SerializeField] private Text condText;
     [SerializeField] private Text detailText;
+    [SerializeField] private R0926WeatherIcon icon;       // 기온 왼쪽의 날씨 그림
+
+    [Header("3시간 후 · 6시간 후 · 내일")]
+    [SerializeField] private GameObject forecast;
+    [SerializeField] private Text[] fcLabels;
+    [SerializeField] private R0926WeatherIcon[] fcIcons;
+    [SerializeField] private Text[] fcTemps;
 
     [Header("위쪽 작은 칩 — 판이 떠 있으면 '접기', 접혔거나 오브젝트 우선이면 날씨 + '펼치기'")]
     [SerializeField] private CanvasGroup chipGroup;
@@ -41,6 +52,10 @@ public class R0926SkyWeather : MonoBehaviour
     private bool hasData;
     private bool anchored;
     private float nextFetch;
+    private bool fetching;
+    // 마지막으로 받은 날씨와 자리 — 앱을 켜자마자 하늘을 비춰도 바로 보이게 (예전엔 GPS 가 잡히기 전 첫 시도를 버리고 30초 뒤에야 다시 받았다)
+    private const string CacheJson = "SkyWeather_json", CacheAt = "SkyWeather_at", CacheLat = "SkyWeather_lat", CacheLon = "SkyWeather_lon";
+    private const double CacheHours = 2.0;
     private float lookUpSince = -1f;
     private readonly List<GameObject> scratch = new List<GameObject>(64);
 
@@ -54,7 +69,15 @@ public class R0926SkyWeather : MonoBehaviour
         public float precip_prob = -1;
         public string sunrise;
         public string sunset;
-        public float tomorrow_min;
+        public float tomorrow_min = -99;
+        public float tomorrow_max = -99;
+        public int tomorrow_code = -1;
+        public float h3_temp = -99;
+        public int h3_code = -1;
+        public bool h3_day = true;
+        public float h6_temp = -99;
+        public int h6_code = -1;
+        public bool h6_day = true;
         public float pm10 = -1;
         public float moon;
     }
@@ -72,6 +95,23 @@ public class R0926SkyWeather : MonoBehaviour
         if (skyGroup != null) skyGroup.alpha = 0f;
         if (chipGroup != null) chipGroup.alpha = 0f;
         if (skyBoard != null) skyBoard.gameObject.SetActive(false);
+        LoadCache();
+    }
+
+    private void LoadCache()
+    {
+        string json = PlayerPrefs.GetString(CacheJson, "");
+        if (string.IsNullOrEmpty(json)) return;
+        if (!long.TryParse(PlayerPrefs.GetString(CacheAt, "0"), out long at)) return;
+        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - at > CacheHours * 3600) return;
+        try
+        {
+            var w = JsonUtility.FromJson<Weather>(json);
+            if (w == null) return;
+            Show(w);
+            hasData = true;
+        }
+        catch (Exception) { }
     }
 
     /// <summary>위쪽 칩을 누르면 — 판이 떠 있으면 접고, 접혀 있으면 편다</summary>
@@ -88,17 +128,26 @@ public class R0926SkyWeather : MonoBehaviour
     private void Update()
     {
         bool allowed = R0926SkySettings.Enabled && R0926SkySettings.Weather;
-        if (allowed && Time.unscaledTime >= nextFetch) { nextFetch = Time.unscaledTime + 30f; StartCoroutine(Fetch()); }
+        if (allowed && !fetching && Time.unscaledTime >= nextFetch) StartCoroutine(Fetch());
         if (cam == null) cam = Camera.main;
         if (cam == null || skyBoard == null) return;
 
+        // AR 이 자리를 잡았을 때만 카메라 방향·위치를 믿는다
+        bool tracking = ARSession.state == ARSessionState.SessionTracking;
         Vector3 fwd = cam.transform.forward;
-        float pitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
+        float camPitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
+        float pitch = SensorPitch() ?? camPitch;
         bool up = pitch > R0926SkySettings.MinPitch;
         lookUpSince = up ? (lookUpSince < 0f ? Time.unscaledTime : lookUpSince) : -1f;
         bool settled = up && Time.unscaledTime - lookUpSince > 0.6f;   // 잠깐 스친 건 무시
-        UpdateLying(pitch);
-        bool near = settled && NearObjectInView();
+        if (tracking) UpdateLying(pitch);
+        else
+        {
+            // 추적이 안 되면 카메라 위치가 멈춰 '안 움직인다 = 누워 있다'로 잘못 봤다 — 이때는 누움 판정을 하지 않는다
+            highSince = -1f;
+            if (pitch < 30f) { lying = false; lyingOverride = false; }
+        }
+        bool near = tracking && settled && NearObjectInView();
         bool lyingHide = lying && !lyingOverride && R0926SkySettings.HideWhenLying;
 
         bool showSky = allowed && hasData && settled && !near && !collapsed && !lyingHide;
@@ -106,13 +155,19 @@ public class R0926SkyWeather : MonoBehaviour
         boardShowing = showSky;
         UpdateChip(showSky);
 
-        if (showSky && !anchored) Anchor(fwd, pitch);
+        if (!tracking)
+        {
+            // 화면 앞에 붙인다 — 카메라가 멈춰 있어도 늘 화면 가운데 보인다
+            anchored = false;
+            if (showSky || skyBoard.gameObject.activeSelf) PinToCamera();
+        }
+        else if (showSky && !anchored) Anchor(fwd, camPitch);
         if (!up) anchored = false;
-        if (anchored)
+        if (tracking && anchored)
         {
             // 너무 옆으로 돌아서면(70° 이상) 새 방향으로 다시 건다
             Vector3 toBoard = (skyBoard.position - cam.transform.position).normalized;
-            if (Vector3.Angle(Flat(toBoard), Flat(fwd)) > 70f) Anchor(fwd, pitch);
+            if (Vector3.Angle(Flat(toBoard), Flat(fwd)) > 70f) Anchor(fwd, camPitch);
             skyBoard.rotation = Quaternion.LookRotation(skyBoard.position - cam.transform.position);
         }
 
@@ -164,6 +219,43 @@ public class R0926SkyWeather : MonoBehaviour
 
     private static Vector3 Flat(Vector3 v) { v.y = 0f; return v.normalized; }
 
+    private void PinToCamera()
+    {
+        float d = Mathf.Min(boardDistance, cam.farClipPlane * 0.7f);
+        skyBoard.position = cam.transform.position + cam.transform.forward * d;
+        skyBoard.rotation = Quaternion.LookRotation(cam.transform.forward);
+        float k = 2f * d * Mathf.Tan(boardFov * 0.5f * Mathf.Deg2Rad) / 1000f;
+        skyBoard.localScale = new Vector3(k, k, k);
+    }
+
+    /// <summary>
+    /// 휴대폰 기울기(카메라가 수평보다 몇 도 위를 보는지) — 중력 센서(없으면 가속도계). AR 추적과 상관없이 늘 맞다.
+    /// 기기 좌표에서 z 는 화면 밖(사용자 쪽), 뒤 카메라는 -z 를 본다 → 위를 볼수록 중력의 z 가 +1 에 가깝다
+    /// </summary>
+    private Vector3 smoothedAcc;
+    private float? SensorPitch()
+    {
+        Vector3 g = Vector3.zero;
+        var gs = GravitySensor.current;
+        if (gs != null)
+        {
+            if (!gs.enabled) InputSystem.EnableDevice(gs);
+            g = gs.gravity.ReadValue();
+        }
+        if (g.sqrMagnitude < 0.01f)
+        {
+            var acc = Accelerometer.current;
+            if (acc != null)
+            {
+                if (!acc.enabled) InputSystem.EnableDevice(acc);
+                smoothedAcc = Vector3.Lerp(smoothedAcc, acc.acceleration.ReadValue(), 0.15f);   // 손떨림을 걸러 중력만
+                g = smoothedAcc;
+            }
+        }
+        if (g.sqrMagnitude < 0.01f) return null;
+        return Mathf.Asin(Mathf.Clamp(g.normalized.z, -1f, 1f)) * Mathf.Rad2Deg;
+    }
+
     private static void Fade(CanvasGroup g, bool show, float speed)
     {
         if (g == null) return;
@@ -199,22 +291,59 @@ public class R0926SkyWeather : MonoBehaviour
 
     private IEnumerator Fetch()
     {
-        if (Input.location.status != LocationServiceStatus.Running) yield break;
-        var ld = Input.location.lastData;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/weather?lat={ld.latitude:F4}&lon={ld.longitude:F4}";
+        fetching = true;
+        float lat, lon;
+        bool fromGps = false;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            var ld = Input.location.lastData;
+            lat = ld.latitude; lon = ld.longitude; fromGps = true;
+        }
+#if UNITY_EDITOR
+        else if (VirtualLocation.Instance != null)
+        {
+            lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; fromGps = true;
+        }
+#endif
+        else if (PlayerPrefs.HasKey(CacheLat))
+        {
+            // GPS 가 아직이면 지난번 자리로 먼저 받는다 (자리가 잡히면 곧 다시)
+            lat = PlayerPrefs.GetFloat(CacheLat); lon = PlayerPrefs.GetFloat(CacheLon);
+        }
+        else
+        {
+            nextFetch = Time.unscaledTime + 1.5f;
+            fetching = false;
+            yield break;
+        }
+
+        // 소수점은 문화권과 무관하게 '.' — 스페인어 기기에선 '37,5759' 로 찍혀 주소가 깨졌다
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string url = ApiConfig.MAIN_SERVER + "/api/weather?lat=" + lat.ToString("F4", inv) + "&lon=" + lon.ToString("F4", inv);
         using (var req = UnityWebRequest.Get(url))
         {
             req.timeout = 10;
             yield return req.SendWebRequest();
-            if (req.result != UnityWebRequest.Result.Success) yield break;
-            Weather w;
-            try { w = JsonUtility.FromJson<Weather>(req.downloadHandler.text); }
-            catch (Exception) { yield break; }
-            if (w == null) yield break;
+            Weather w = null;
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                try { w = JsonUtility.FromJson<Weather>(req.downloadHandler.text); }
+                catch (Exception) { w = null; }
+            }
+            if (w == null)
+            {
+                nextFetch = Time.unscaledTime + (hasData ? 60f : 4f);   // 아직 아무것도 없으면 금방 다시
+                fetching = false;
+                yield break;
+            }
             Show(w);
             hasData = true;
-            nextFetch = Time.unscaledTime + refreshMinutes * 60f;
+            PlayerPrefs.SetString(CacheJson, req.downloadHandler.text);
+            PlayerPrefs.SetString(CacheAt, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+            if (fromGps) { PlayerPrefs.SetFloat(CacheLat, lat); PlayerPrefs.SetFloat(CacheLon, lon); }
+            nextFetch = Time.unscaledTime + (fromGps ? refreshMinutes * 60f : 3f);   // 지난번 자리로 받았으면 GPS 가 잡히는 대로 다시
         }
+        fetching = false;
     }
 
     // ── 문구 ────────────────────────────────────────────────
@@ -225,20 +354,55 @@ public class R0926SkyWeather : MonoBehaviour
         bool rain = w.code >= 51 && w.code <= 67 || w.code >= 80 && w.code <= 82 || w.code >= 95;
         string cond = Condition(w.code, w.is_day, lang);
         tempText.text = t + "°";
-        condText.text = rain && w.precip_prob >= 0 ? cond + " · " + L(lang, "강수", "rain", "降水", "降水", "lluvia") + " " + Mathf.RoundToInt(w.precip_prob) + "%" : cond;
+        if (icon != null)
+        {
+            // 그림과 기온을 한 묶음으로 가운데에
+            var irt = (RectTransform)icon.transform;
+            float iw = irt.sizeDelta.x, tw = tempText.preferredWidth, gap = 26f;
+            float total = iw + gap + tw;
+            irt.anchoredPosition = new Vector2(-total / 2f + iw / 2f, irt.anchoredPosition.y);
+            tempText.rectTransform.anchoredPosition = new Vector2(total / 2f - tw / 2f, tempText.rectTransform.anchoredPosition.y);
+            icon.Set(w.code, w.is_day);
+        }
 
-        string detail;
+        // 1줄: 상태 · (비 오면 강수 확률, 아니면 미세먼지)
+        string extra = rain && w.precip_prob >= 0 ? L(lang, "강수", "rain", "降水", "降水", "lluvia") + " " + Mathf.RoundToInt(w.precip_prob) + "%"
+                     : w.pm10 >= 0 ? L(lang, "미세먼지", "Air", "PM10", "PM10", "Aire") + " " + Pm(w.pm10, lang) : null;
+        condText.text = extra == null ? cond : cond + " · " + extra;
+
+        // 2줄: 비 → 우산 · 바람 / 밤 → 달 · 일출 / 낮 → 일몰 · 바람
+        string wind = L(lang, "바람", "Wind", "風", "风", "Viento") + " " + w.wind.ToString("0.#") + "m/s";
         if (rain)
-            detail = L(lang, "우산 챙기세요", "Take an umbrella", "傘を持って出かけましょう", "记得带伞", "Lleva paraguas");
+            detailText.text = L(lang, "우산 챙기세요", "Take an umbrella", "傘を持って出かけましょう", "记得带伞", "Lleva paraguas") + " · " + wind;
         else if (!w.is_day)
-            detail = L(lang, "달", "Moon", "月", "月亮", "Luna") + " " + Mathf.RoundToInt(w.moon * 100) + "% · "
-                   + L(lang, "내일 아침", "Tomorrow low", "明朝", "明早", "Mañana") + " " + Mathf.RoundToInt(w.tomorrow_min) + "°"
-                   + (string.IsNullOrEmpty(w.sunrise) ? "" : " · " + L(lang, "일출", "Sunrise", "日の出", "日出", "Amanecer") + " " + Clock(w.sunrise));
+            detailText.text = L(lang, "달", "Moon", "月", "月亮", "Luna") + " " + Mathf.RoundToInt(w.moon * 100) + "%"
+                            + (string.IsNullOrEmpty(w.sunrise) ? "" : " · " + L(lang, "일출", "Sunrise", "日の出", "日出", "Amanecer") + " " + Clock(w.sunrise));
         else
-            detail = (w.pm10 >= 0 ? L(lang, "미세먼지", "Air", "PM10", "PM10", "Aire") + " " + Pm(w.pm10, lang) + " · " : "")
-                   + (string.IsNullOrEmpty(w.sunset) ? "" : L(lang, "일몰", "Sunset", "日没", "日落", "Atardecer") + " " + Clock(w.sunset) + " · ")
-                   + L(lang, "바람", "Wind", "風", "风", "Viento") + " " + w.wind.ToString("0.#") + "m/s";
-        detailText.text = detail;
+            detailText.text = (string.IsNullOrEmpty(w.sunset) ? "" : L(lang, "일몰", "Sunset", "日没", "日落", "Atardecer") + " " + Clock(w.sunset) + " · ") + wind;
+
+        bool hasFc = w.h3_temp > -90f && fcTemps != null && fcTemps.Length >= 3;
+        if (forecast != null && forecast.activeSelf != hasFc) forecast.SetActive(hasFc);
+        if (hasFc)
+        {
+            string[] names =
+            {
+                L(lang, "3시간 후", "In 3h", "3時間後", "3小时后", "En 3 h"),
+                L(lang, "6시간 후", "In 6h", "6時間後", "6小时后", "En 6 h"),
+                L(lang, "내일", "Tomorrow", "明日", "明天", "Mañana"),
+            };
+            for (int i = 0; i < 3; i++) if (fcLabels != null && i < fcLabels.Length && fcLabels[i] != null) fcLabels[i].text = names[i];
+            fcTemps[0].text = Mathf.RoundToInt(w.h3_temp) + "°";
+            fcTemps[1].text = w.h6_temp > -90f ? Mathf.RoundToInt(w.h6_temp) + "°" : "–";
+            fcTemps[2].text = w.tomorrow_max > -90f
+                ? Mathf.RoundToInt(w.tomorrow_max) + "°<size=" + Mathf.RoundToInt(fcTemps[2].fontSize * 0.8f) + "><color=#FFFFFFB3> / " + Mathf.RoundToInt(w.tomorrow_min) + "°</color></size>"
+                : "–";
+            if (fcIcons != null && fcIcons.Length >= 3)
+            {
+                if (fcIcons[0] != null) fcIcons[0].Set(w.h3_code >= 0 ? w.h3_code : w.code, w.h3_day);
+                if (fcIcons[1] != null) fcIcons[1].Set(w.h6_code >= 0 ? w.h6_code : w.code, w.h6_day);
+                if (fcIcons[2] != null) fcIcons[2].Set(w.tomorrow_code >= 0 ? w.tomorrow_code : w.code, true);
+            }
+        }
         weatherChip = cond + " " + t + "°";
         lastChip = null;   // 다음 프레임에 칩 글자 갱신
     }

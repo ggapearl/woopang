@@ -453,19 +453,19 @@ public class LocalizationManager : MonoBehaviour
             // Object Count UI
             ["searching_objects"] = new Dictionary<string, string>()
             {
-                ["en"] = "Searching for nearby objects...",
-                ["ko"] = "주변의 오브젝트를 찾고 있습니다",
-                ["zh"] = "正在搜索附近的物体...",
-                ["ja"] = "近くのオブジェクトを検索中...",
-                ["es"] = "Buscando objetos cercanos..."
+                ["en"] = "Loading nearby places",
+                ["ko"] = "주변 장소 불러오는 중",
+                ["zh"] = "正在加载附近地点",
+                ["ja"] = "近くの場所を読み込み中",
+                ["es"] = "Cargando lugares cercanos"
             },
             ["found_objects"] = new Dictionary<string, string>()
             {
-                ["en"] = "Found {0} objects nearby",
-                ["ko"] = "주변에서 {0}개의 오브젝트를 발견하였습니다",
-                ["zh"] = "找到了{0}个附近的物体",
-                ["ja"] = "近くの{0}個のオブジェクトを見つけました",
-                ["es"] = "Se encontraron {0} objetos cercanos"
+                ["en"] = "Found <color=#F07AA0>{0}</color> places nearby",
+                ["ko"] = "주변에서 <color=#F07AA0>{0}</color>곳을 찾았어요",
+                ["zh"] = "在附近找到了 <color=#F07AA0>{0}</color> 个地点",
+                ["ja"] = "近くで<color=#F07AA0>{0}</color>か所見つかりました",
+                ["es"] = "<color=#F07AA0>{0}</color> lugares cerca"
             },
 
             // AR Preview 확인 메시지

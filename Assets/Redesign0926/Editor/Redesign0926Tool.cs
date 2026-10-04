@@ -72,6 +72,8 @@ namespace Redesign0926
         // ANDROID_KEYSTORE_PASS / ANDROID_KEYALIAS_PASS 에서만 읽고, 없으면 빌드하지 않는다 (CLAUDE.md 6.1).
         private static void BuildAndroidRelease(List<string> log)
         {
+            int restored = global::Editor.BuildValidator.RestorePreloadedAssets();   // 빌드 뒤 저장 때 빠지곤 하는 AR 필수 항목
+            if (restored > 0) log.Add("Preloaded Assets " + restored + "개 되살림");
             var issues = global::Editor.BuildValidator.Validate();
             if (issues.Count > 0)
             {
@@ -94,10 +96,7 @@ namespace Redesign0926
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             EditorUserBuildSettings.buildAppBundle = true;   // Play 스토어는 .aab
 
-            string ver = global::Editor.BuildNumberAutoIncrement.PredictBundleVersion();
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "woopang_build");
-            Directory.CreateDirectory(dir);
-            string output = Path.Combine(dir, $"woopang_{ver}_{DateTime.Now:yyyyMMdd_HHmm}.aab");
+            string output = global::Editor.BuildPipelineRunner.AndroidOutputPath("aab");   // D:\##WP_backup\apk_2026\<MMDD>\<HHmm>.aab
             var scenes = new List<string>();
             foreach (var s in EditorBuildSettings.scenes) if (s.enabled) scenes.Add(s.path);
 
@@ -223,6 +222,76 @@ namespace Redesign0926
                         var target = Redesign0926Capture.FindInCanvas(Redesign0926Capture.FindMainCanvas(scene).transform, cmd.Substring(5));
                         if (target == null) log.Add("dump: 없음 " + cmd.Substring(5));
                         else DumpRect(target.transform, 0, 3, log);
+                    }
+                    else if (cmd == "order")
+                    {
+                        // 메인 캔버스 자식 순서 · 켜짐 · 따로 그리는 순서(override sorting) · 바탕이 터치를 받는지
+                        var canvasT = Redesign0926Capture.FindMainCanvas(scene).transform;
+                        for (int i = 0; i < canvasT.childCount; i++)
+                        {
+                            var ch = canvasT.GetChild(i);
+                            var cv = ch.GetComponent<Canvas>();
+                            var g = ch.GetComponent<Graphic>();
+                            log.Add(i + " " + ch.name + (ch.gameObject.activeSelf ? "" : " (off)")
+                                    + (cv != null && cv.overrideSorting ? " sort=" + cv.sortingOrder : "")
+                                    + (g != null && g.raycastTarget ? " [touch]" : ""));
+                        }
+                    }
+                    else if (cmd.StartsWith("listeners:"))
+                    {
+                        // listeners:<이름> — 그 버튼(들)이 눌리면 무엇을 하는지 (저장된 호출 + 코드에서 붙인 수)
+                        var canvasT = Redesign0926Capture.FindMainCanvas(scene).transform;
+                        foreach (var name in cmd.Substring(10).Split(','))
+                            foreach (var b in canvasT.GetComponentsInChildren<Button>(true))
+                            {
+                                if (b.name != name.Trim()) continue;
+                                log.Add(AnimationUtility.CalculateTransformPath(b.transform, canvasT) + " (" + b.onClick.GetPersistentEventCount() + ")");
+                                for (int i = 0; i < b.onClick.GetPersistentEventCount(); i++)
+                                {
+                                    var tgt = b.onClick.GetPersistentTarget(i);
+                                    string tn = tgt is Component c ? AnimationUtility.CalculateTransformPath(c.transform, canvasT) + ":" + c.GetType().Name
+                                              : tgt is GameObject g ? AnimationUtility.CalculateTransformPath(g.transform, canvasT) : (tgt != null ? tgt.name : "null");
+                                    var so = new SerializedObject(b);
+                                    var call = so.FindProperty("m_OnClick.m_PersistentCalls.m_Calls").GetArrayElementAtIndex(i);
+                                    var args = call.FindPropertyRelative("m_Arguments");
+                                    string arg = args.FindPropertyRelative("m_BoolArgument").boolValue + "/" + args.FindPropertyRelative("m_IntArgument").intValue + "/" + args.FindPropertyRelative("m_StringArgument").stringValue;
+                                    log.Add("  " + i + " " + tn + " . " + b.onClick.GetPersistentMethodName(i) + " (" + arg + ")");
+                                }
+                            }
+                    }
+                    else if (cmd == "inputs")
+                    {
+                        // 입력칸 전수 — 경로 · 자리표시 글이 어디 붙어 있는지 · 그 글 (다른 칸의 글을 가리키는 연결을 찾는다)
+                        var canvasT = Redesign0926Capture.FindMainCanvas(scene).transform;
+                        foreach (var f in canvasT.GetComponentsInChildren<UnityEngine.UI.InputField>(true))
+                        {
+                            var ph = f.placeholder;
+                            string phPath = ph == null ? "-" : (ph.transform.IsChildOf(f.transform) ? "own" : "FOREIGN " + AnimationUtility.CalculateTransformPath(ph.transform, canvasT));
+                            var loc = ph != null ? ph.GetComponent<R0926LocalizedText>() : null;
+                            string txt = ph is UnityEngine.UI.Text t ? t.text : "";
+                            log.Add(AnimationUtility.CalculateTransformPath(f.transform, canvasT) + " | ph " + phPath + " '" + txt + "'" + (loc != null ? " loc=" + loc.ko : ""));
+                        }
+                        foreach (var m in canvasT.GetComponentsInChildren<UploadInputMirror>(true))
+                        {
+                            log.Add("mirror @ " + AnimationUtility.CalculateTransformPath(m.transform, canvasT));
+                            var so = new SerializedObject(m);
+                            var it = so.GetIterator();
+                            for (bool enter = true; it.NextVisible(enter); enter = false)
+                            {
+                                if (it.propertyType == SerializedPropertyType.ObjectReference)
+                                {
+                                    var o = it.objectReferenceValue;
+                                    var tr = o is Component c ? c.transform : o is GameObject g ? g.transform : null;
+                                    log.Add("  " + it.name + " = " + (tr != null ? AnimationUtility.CalculateTransformPath(tr, canvasT) : (o != null ? o.name : "null")));
+                                }
+                                else if (it.isArray && it.name == "sourceInputs")
+                                    for (int i = 0; i < it.arraySize; i++)
+                                    {
+                                        var o = it.GetArrayElementAtIndex(i).objectReferenceValue as Component;
+                                        log.Add("  sourceInputs[" + i + "] = " + (o != null ? AnimationUtility.CalculateTransformPath(o.transform, canvasT) : "null"));
+                                    }
+                            }
+                        }
                     }
                     else if (cmd.StartsWith("capture:"))
                     {

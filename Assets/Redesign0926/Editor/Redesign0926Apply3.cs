@@ -13,6 +13,8 @@ namespace Redesign0926
     public static partial class Redesign0926Apply
     {
         private const float UP = 56f;          // 카드 안쪽 여백
+        private const float ChipRowH = 112f;   // 분류 칩 한 줄 (2026-10-04 키움 — 아래 빈 공간이 남았다)
+        private const float SwitchH = 172f;    // 스위치 한 줄 (인스타 ID 칸이 켜질 128 은 남긴다)
         private const float UploadMargin = 52f; // 카드 좌우 — 옆 카드가 살짝 보이되 겹치지 않는 폭 (SwipePanelController 미리보기 80 기준)
 
         private static readonly Color InputBg = new Color(0.09f, 0.106f, 0.118f, 1f);
@@ -72,7 +74,7 @@ namespace Redesign0926
             Row(seg, -144, 96);
             var tabs = new Image[2];
             var tabLabels = new Text[2];
-            string[][] tabWords = { new[] { "장소", "Place", "場所", "地点", "Lugar" }, new[] { "3D 모델", "3D model", "3Dモデル", "3D模型", "Modelo 3D" } };
+            string[][] tabWords = { new[] { "장소", "Place", "場所", "地点", "Lugar" }, new[] { "3D모델", "3D model", "3Dモデル", "3D模型", "Modelo 3D" } };
             for (int i = 0; i < 2; i++)
             {
                 var tab = FindOrCreate(seg.transform, "Tab" + i);
@@ -105,7 +107,7 @@ namespace Redesign0926
             Transform P(string n) => panel.Find(n);
 
             // ── 사진 ──
-            const float photoY = -350f, tile = 380f, sub = 178f, gap = 24f;
+            const float photoY = -362f, tile = 430f, sub = 203f, gap = 24f;
             SectionLabel(isModel ? P("Add_File") : P("Add_Logo"), UP, -276, 400);
             SectionLabel(P("Add_Imgs"), UP + tile + gap, -276, 700);
             var cap = P("glb_gltf_fbx_obj");
@@ -113,7 +115,7 @@ namespace Redesign0926
             {
                 var ct = Txt(cap.gameObject, null, 26, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
                 ct.horizontalOverflow = HorizontalWrapMode.Overflow;
-                At(cap.gameObject, UP, photoY - tile + 70, tile, 50);
+                At(cap.gameObject, UP, photoY - tile + 76, tile, 54);
                 cap.SetAsLastSibling();
             }
 
@@ -121,7 +123,7 @@ namespace Redesign0926
             {
                 var b = P(n);
                 if (b == null) continue;
-                Tile(b.gameObject, UP, photoY, tile, tile, n == "Selected_File_Button" ? "r0926_i_check" : isModel ? "r0926_i_file" : "r0926_i_cam", 110);
+                Tile(b.gameObject, UP, photoY, tile, tile, n == "Selected_File_Button" ? "r0926_i_check" : isModel ? "r0926_i_file" : "r0926_i_cam", 124);
             }
             var display = P("MainPhotoDisplay");
             if (display != null)
@@ -130,9 +132,9 @@ namespace Redesign0926
                 var di = display.GetComponent<Image>(); di.preserveAspect = false; di.type = Image.Type.Simple;
             }
             var subBtn = P("SubPhoto_Button");
-            if (subBtn != null) Tile(subBtn.gameObject, UP + tile + gap, photoY, sub, sub, "r0926_i_plus", 72);
+            if (subBtn != null) Tile(subBtn.gameObject, UP + tile + gap, photoY, sub, sub, "r0926_i_plus", 80);
             var reset = P("SubPhoto_Reset");
-            if (reset != null) Tile(reset.gameObject, UP + tile + gap, photoY - sub - gap, sub, sub, "r0926_i_reset", 64);
+            if (reset != null) Tile(reset.gameObject, UP + tile + gap, photoY - sub - gap, sub, sub, "r0926_i_reset", 72);
             var subs = P("SubPhotoContainer");
             if (subs != null)
             {
@@ -153,31 +155,47 @@ namespace Redesign0926
             }
 
             // ── 이름 ──
-            const float nameY = photoY - tile - 56;   // -786
+            const float nameY = photoY - tile - 62;   // -854
             SectionLabel(P("Name"), UP, nameY, 600);
             var name = P("NameInput");
             if (name != null)
             {
-                Img(name.gameObject, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 32f);
-                Row(name.gameObject, nameY - 60, 124, UP);
-                StyleInputTexts(name.gameObject, 44, 40);
+                Img(name.gameObject, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 34f);
+                Row(name.gameObject, nameY - 66, 140, UP);
+                StyleInputTexts(name.gameObject, 48, 44);
+                // 안내 글 — 예전엔 'Enter text' (키보드 위 입력줄에도 이 글이 그대로 뜬다)
+                var nf = name.GetComponent<InputField>();
+                if (nf != null && nf.placeholder != null)
+                    Loc(nf.placeholder.gameObject, isModel ? "모델 이름" : "장소 이름", isModel ? "Model name" : "Place name",
+                        isModel ? "モデル名" : "場所の名前", isModel ? "模型名称" : "地点名称", isModel ? "Nombre del modelo" : "Nombre del lugar");
             }
 
             // ── 위치 ──
-            const float locY = nameY - 210;   // -996
+            const float locY = nameY - 250;   // -1094
             SectionLabel(P("Coordinate"), UP, locY, 600);
             var loc = P("LocationInput");
             if (loc != null)
             {
                 var cardBg = FindOrCreate(panel, "LocCard0926");
                 cardBg.transform.SetSiblingIndex(loc.GetSiblingIndex());
-                Img(cardBg, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 32f).raycastTarget = false;
-                Row(cardBg, locY - 60, 124, UP);
+                Img(cardBg, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 34f).raycastTarget = false;
+                Row(cardBg, locY - 66, 140, UP);
                 var pin = FindOrCreate(cardBg.transform, "Icon0926");
                 Img(pin, Spr("r0926_i_pin"), new Color(0.384f, 0.827f, 0.616f, 1f), Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(pin), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(64, 0), new Vector2(58, 58));
+                SetRect(RT(pin), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(66, 0), new Vector2(62, 62));
+                var coord = FindOrCreate(cardBg.transform, "Coord0926");
+                var cTxt = Txt(coord, "", 44, new Color(1f, 1f, 1f, 0.62f), TextAnchor.MiddleLeft, FontStyle.Normal);
+                cTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
+                var crt0 = RT(coord); crt0.anchorMin = Vector2.zero; crt0.anchorMax = Vector2.one; crt0.offsetMin = new Vector2(120, 0); crt0.offsetMax = new Vector2(-36, 0);
+                var cl = Ensure<R0926CoordLine>(cardBg);
+                var clso = new SerializedObject(cl);
+                clso.FindProperty("text").objectReferenceValue = cTxt;
+                clso.FindProperty("source").objectReferenceValue = loc.GetComponent<InputField>();
+                clso.ApplyModifiedPropertiesWithoutUndo();
+                var lcg = Ensure<CanvasGroup>(loc.gameObject);   // 원래 칸: 값은 계속 채워지되 보이지도 눌리지도 않게
+                lcg.alpha = 0f; lcg.blocksRaycasts = false; lcg.interactable = false;
 
-                Row(loc.gameObject, locY - 60, 124, UP);
+                Row(loc.gameObject, locY - 66, 140, UP);
                 loc.GetComponent<Image>().color = new Color(1, 1, 1, 0);
                 foreach (var t in loc.GetComponentsInChildren<Text>(true))
                 {
@@ -191,7 +209,7 @@ namespace Redesign0926
             }
 
             // ── 분류 칩 ──
-            const float catY = locY - 210;   // -1206
+            const float catY = locY - 250;   // -1334
             var catLabel = FindOrCreate(panel, "CatLabel0926");
             SectionLabelNew(catLabel, UP, catY, new[] { "분류", "Category", "分類", "分类", "Categoría" });
             var catToggle = P("CategoryToggle");
@@ -202,17 +220,17 @@ namespace Redesign0926
                 // 원래 순환 토글은 숨기고(동작은 칩이 대신 누른다) 칩으로 바로 고른다
                 var tcg = Ensure<CanvasGroup>(catToggle.gameObject);
                 tcg.alpha = 0f; tcg.blocksRaycasts = false; tcg.interactable = false;
-                BuildChips(panel, catToggle.GetComponent<Toggle>(), FindUploadManager(card, isModel), values, catY - 60);
+                BuildChips(panel, catToggle.GetComponent<Toggle>(), FindUploadManager(card, isModel), values, catY - 66);
             }
 
             // ── 스위치 줄 ──
-            float y = catY - 60 - (84 * (values.Length > 6 ? 2 : 2) + 14) - 40;   // 칩 2줄 아래
+            float y = catY - 66 - (ChipRowH * 2 + 16) - 40;   // 칩 2줄 아래
             foreach (var n in new[] { "PetFriendlyToggle", "SeparateRestroomsToggle", "InstagramToggle" })
             {
                 var tg = P(n);
                 if (tg == null) continue;
                 SwitchRow(tg.gameObject, y);
-                y -= 120;
+                y -= SwitchH;
             }
             var insta = P("InstagramToggle");
             var instaInput = insta != null ? Find(insta, "InstagramAccountInput") : null;
@@ -221,8 +239,11 @@ namespace Redesign0926
                 Img(instaInput, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 30f);
                 var irt = RT(instaInput);
                 irt.anchorMin = new Vector2(0, 1); irt.anchorMax = new Vector2(1, 1); irt.pivot = new Vector2(0.5f, 1);
-                irt.anchoredPosition = new Vector2(0, -130); irt.sizeDelta = new Vector2(0, 110);
-                StyleInputTexts(instaInput, 38, 36);
+                irt.anchoredPosition = new Vector2(0, -SwitchH - 8); irt.sizeDelta = new Vector2(0, 120);
+                StyleInputTexts(instaInput, 42, 40);
+                var inf = instaInput.GetComponent<InputField>();
+                if (inf != null && inf.placeholder != null)
+                    Loc(inf.placeholder.gameObject, "인스타그램 ID", "Instagram ID", "インスタグラム ID", "Instagram ID", "ID de Instagram");
             }
 
             // ── 등록 ──
@@ -232,7 +253,7 @@ namespace Redesign0926
                 PillButton(submit.gameObject, true);
                 var srt = RT(submit.gameObject);
                 srt.anchorMin = new Vector2(0, 0); srt.anchorMax = new Vector2(1, 0); srt.pivot = new Vector2(0.5f, 0);
-                srt.anchoredPosition = new Vector2(0, 48); srt.sizeDelta = new Vector2(-UP * 2, 132);
+                srt.anchoredPosition = new Vector2(0, 48); srt.sizeDelta = new Vector2(-UP * 2, 150);
                 ButtonLabel(submit.gameObject, new[] { "등록하기", "Submit", "登録する", "提交", "Enviar" }, Dark);
                 submit.SetAsLastSibling();
             }
@@ -249,9 +270,10 @@ namespace Redesign0926
             var box = FindOrCreate(panel, "Chips0926");
             var brt = RT(box);
             brt.anchorMin = new Vector2(0, 1); brt.anchorMax = new Vector2(1, 1); brt.pivot = new Vector2(0.5f, 1);
-            brt.anchoredPosition = new Vector2(0, top); brt.sizeDelta = new Vector2(-UP * 2, 84 * 2 + 14);
+            brt.anchoredPosition = new Vector2(0, top); brt.sizeDelta = new Vector2(-UP * 2, ChipRowH * 2 + 16);
             var grid = Ensure<GridLayoutGroup>(box);
-            grid.cellSize = new Vector2(290, 84); grid.spacing = new Vector2(14, 14);
+            grid.cellSize = new Vector2(290, ChipRowH); grid.spacing = new Vector2(16, 16);
+            Ensure<R0926GridFit>(box);   // 네 칸이 카드 폭에 꼭 맞게
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount; grid.constraintCount = 4;
             grid.childAlignment = TextAnchor.UpperLeft;
 
@@ -276,15 +298,15 @@ namespace Redesign0926
             {
                 var w = words[values[i]];
                 var chip = NewUI("Chip_" + values[i], box.transform);
-                var body = Img(chip, Spr("r0926_pill"), new Color(1, 1, 1, 0.07f), Image.Type.Sliced, 64f / 42f);
+                var body = Img(chip, Spr("r0926_pill"), new Color(1, 1, 1, 0.07f), Image.Type.Sliced, 64f / (ChipRowH / 2f));
                 body.raycastTarget = true;
                 var dot = NewUI("Dot", chip.transform);
                 Img(dot, Spr("r0926_circle"), DataManager.GetCategoryColor(values[i]), Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(40, 0), new Vector2(22, 22));
+                SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(42, 0), new Vector2(24, 24));
                 var lb = NewUI("Label0926", chip.transform);
-                var t = Txt(lb, w[0], 32, Soft, TextAnchor.MiddleLeft, FontStyle.Bold);
-                t.resizeTextForBestFit = true; t.resizeTextMinSize = 20; t.resizeTextMaxSize = 32;
-                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = new Vector2(66, 0); lrt.offsetMax = new Vector2(-12, 0);
+                var t = Txt(lb, w[0], 44, Soft, TextAnchor.MiddleLeft, FontStyle.Bold);
+                t.resizeTextForBestFit = true; t.resizeTextMinSize = 24; t.resizeTextMaxSize = 40;
+                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = new Vector2(70, 0); lrt.offsetMax = new Vector2(-12, 0);
                 Loc(lb, w[0], w[1], w[2], w[3], w[4]);
                 var b = Ensure<Button>(chip);
                 b.targetGraphic = body;
@@ -308,7 +330,7 @@ namespace Redesign0926
             foreach (var t in toggle.GetComponentsInChildren<Transform>(true)) t.localScale = Vector3.one;
             var rt = RT(toggle);
             rt.anchorMin = new Vector2(0, 1); rt.anchorMax = new Vector2(1, 1); rt.pivot = new Vector2(0.5f, 1);
-            rt.anchoredPosition = new Vector2(0, y); rt.sizeDelta = new Vector2(-UP * 2, 120);
+            rt.anchoredPosition = new Vector2(0, y); rt.sizeDelta = new Vector2(-UP * 2, SwitchH);
 
             var line = FindOrCreate(toggle.transform, "Line0926");
             line.transform.SetSiblingIndex(0);
@@ -319,7 +341,7 @@ namespace Redesign0926
             if (bg != null)
             {
                 Img(bg.gameObject, Spr("r0926_sw_off"), Color.white, Image.Type.Simple).raycastTarget = true;
-                SetRect(RT(bg.gameObject), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(0, -60), new Vector2(120, 72));
+                SetRect(RT(bg.gameObject), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(0, -SwitchH / 2f), new Vector2(132, 80));
                 var ck = bg.Find("Checkmark");
                 if (ck != null)
                 {
@@ -331,13 +353,13 @@ namespace Redesign0926
             if (label != null)
             {
                 var t = label.GetComponent<Text>();
-                t.fontSize = 40; t.color = Ink; t.alignment = TextAnchor.MiddleLeft; t.fontStyle = FontStyle.Normal;
+                t.fontSize = 50; t.color = Ink; t.alignment = TextAnchor.MiddleLeft; t.fontStyle = FontStyle.Normal;
                 t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
                 t.raycastTarget = true;   // 글자를 눌러도 켜지게 (누름 영역 확대)
                 if (font != null) t.font = font;
                 var lrt = t.rectTransform;
                 lrt.anchorMin = new Vector2(0, 1); lrt.anchorMax = new Vector2(1, 1); lrt.pivot = new Vector2(0.5f, 1);
-                lrt.anchoredPosition = new Vector2(-80, 0); lrt.sizeDelta = new Vector2(-160, 120);
+                lrt.anchoredPosition = new Vector2(-80, 0); lrt.sizeDelta = new Vector2(-160, SwitchH);
                 EditorUtility.SetDirty(t);
             }
         }
@@ -374,16 +396,16 @@ namespace Redesign0926
         private static void SectionLabel(Transform label, float x, float y, float w)
         {
             if (label == null) return;
-            var t = Txt(label.gameObject, null, 34, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var t = Txt(label.gameObject, null, 44, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
-            At(label.gameObject, x, y, w, 52);
+            At(label.gameObject, x, y, w, 60);
         }
 
         private static void SectionLabelNew(GameObject go, float x, float y, string[] words)
         {
-            var t = Txt(go, words[0], 34, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var t = Txt(go, words[0], 44, Muted, TextAnchor.MiddleLeft, FontStyle.Bold);
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
-            At(go, x, y, 600, 52);
+            At(go, x, y, 600, 60);
             Loc(go, words[0], words[1], words[2], words[3], words[4]);
         }
 

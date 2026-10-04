@@ -37,11 +37,11 @@ namespace Redesign0926
                 "UpdateChecker/Box0926/Buttons0926/Update_NO",          // 강제 업데이트 땐 이 버튼이 숨겨져 등록되지 않는다
                 "PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton",
                 "ContinueCaptureDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/NoButton",   // 바깥을 눌렀을 때와 같은 '아니오'
-                "Fixpage/XButton_Panel/XButton_FixUpload",
+                "Fixpage/FixUploadPage/XButton_FixUpload",               // 10-04 카드 오른쪽 위로 옮김 (처음 적용 땐 FixPageCard 가 등록)
                 "LocationPermissionPanel/Box/Buttons/Btn_Close",
                 "FirstTimeGuidePanel/check",
             })
-                BackCloses(root.Find(p), p, log);
+                BackCloses(FindP(root, p), p, log);
 
             // 댓글 창 — 보이는 닫기 버튼이 없다(끌어내리기·바깥 누르기로 닫는다). 뒤로가기 등록용 보이지 않는 버튼을 단다.
             // 등록돼 있으면 CommentManager 는 자체 Esc 처리를 멈춘다 (둘 다 받으면 아래 사진 창까지 닫혔다)
@@ -62,7 +62,8 @@ namespace Redesign0926
             foreach (var (panel, sheet) in new[] { ("ListPanel", "Sheet0926"), ("MessagePanel", "Background"), ("ChatRoomPanel", "Background") })
             {
                 var mirror = root.Find(panel + "/DockMirror0926");
-                var s = root.Find(panel + "/" + sheet);
+                var s = FindP(root, panel + "/" + sheet);
+                if (s != null && s.parent != null && s.parent.name == ClipName) s = s.parent;   // 0930: 시트는 도크 윗선 틀 안에
                 if (mirror != null && s != null && mirror.GetSiblingIndex() > s.GetSiblingIndex())
                     mirror.SetSiblingIndex(s.GetSiblingIndex());
             }
@@ -97,11 +98,22 @@ namespace Redesign0926
             // 닫기 버튼·뒤로가기·바깥 누르기도 아래로 미끄러져 사라지게 — 뒤로가기 등록을 다 옮긴 뒤 맨 마지막에
             foreach (var d in Sheets)
             {
-                var sd = root.Find(d.sheet)?.GetComponent<R0926SwipeDismiss>();
+                var sd = FindP(root, d.sheet)?.GetComponent<R0926SwipeDismiss>();
                 if (sd == null) continue;
                 foreach (var b in d.buttons) Proxy(root, sd, b, log);
             }
             log.Add("sheet closing ok");
+        }
+
+        private const string ClipName = "Clip0926";
+
+        /// <summary>경로로 찾되, 0930 부터 시트가 들어간 도크 윗선 틀(Clip0926)도 거쳐 본다 — "ListPanel/Sheet0926" → "ListPanel/Clip0926/Sheet0926"</summary>
+        private static Transform FindP(Transform root, string path)
+        {
+            var t = root.Find(path);
+            if (t != null) return t;
+            int k = path.IndexOf('/');
+            return k > 0 ? root.Find(path.Substring(0, k) + "/" + ClipName + path.Substring(k)) : null;
         }
 
         private struct SheetDef { public string sheet, swipeClose; public string[] buttons, followers; }
@@ -115,7 +127,6 @@ namespace Redesign0926
             // ← 와 같게: 목록으로. 도크 X 는 정리 후 메인으로 (둘 다 내려간 뒤)
             S("ChatRoomPanel/Background", "ChatRoomPanel/Background/Header/BackButton",
               new[] { "ChatRoomPanel/Background/Header/BackButton", "ChatRoomPanel/DockMirror0926/CloseButton" }),
-            S("FullProfilePanel/Content", "FullProfilePanel/Content/CloseButton", new[] { "FullProfilePanel/Content/CloseButton" }),
             S("AskAISheet0926/Card0926", "AskAISheet0926/Cancel0926", new[] { "AskAISheet0926/Cancel0926" }, new[] { "AskAISheet0926/Cancel0926" }),
             S("FullScreenPanel/ReportSheet0926/Card0926", "FullScreenPanel/ReportSheet0926/Cancel0926",
               new[] { "FullScreenPanel/ReportSheet0926/Cancel0926" }, new[] { "FullScreenPanel/ReportSheet0926/Cancel0926" }),
@@ -129,9 +140,9 @@ namespace Redesign0926
 
         // 원래 닫기 버튼 위에 투명한 누름 영역을 덮는다 — 누르면 시트가 내려간 뒤 원래 버튼을 누른다.
         // 뒤로가기 등록(ClickButtonOnBack)과 바깥 누르기(R0926TapToClose)도 이 덮개로 옮긴다
-        private static void Proxy(Transform root, R0926SwipeDismiss sd, string realPath, List<string> log)
+        private static void Proxy(Transform root, R0926Closer sd, string realPath, List<string> log)
         {
-            var t = root.Find(realPath);
+            var t = FindP(root, realPath);
             var real = t != null ? t.GetComponent<Button>() : null;
             if (real == null) { log.Add("닫기 덮개: 버튼 없음 " + realPath); return; }
             var px = FindOrCreate(t, "ClosePx0926");
@@ -154,6 +165,17 @@ namespace Redesign0926
 
             var back = t.GetComponent<ClickButtonOnBack>();
             if (back != null) { Object.DestroyImmediate(back); Ensure<ClickButtonOnBack>(px); }
+
+            // 누름 소리 — 덮개가 터치를 받아 원래 버튼의 UITouchForwarder 까지 가지 않았다
+            // ('추가' X 만 덮개가 없어 닫을 때 소리가 났고, 목록·메시지·대화 X 는 조용했다)
+            var fw = Ensure<UITouchForwarder>(px);
+            var realFw = t.GetComponent<UITouchForwarder>();
+            if (realFw != null)
+            {
+                var fso = new SerializedObject(fw);
+                fso.FindProperty("customSound").objectReferenceValue = new SerializedObject(realFw).FindProperty("customSound").objectReferenceValue;
+                fso.ApplyModifiedPropertiesWithoutUndo();
+            }
             foreach (var tap in root.GetComponentsInChildren<R0926TapToClose>(true))
             {
                 var tso = new SerializedObject(tap);
@@ -175,8 +197,8 @@ namespace Redesign0926
 
         private static void Swipe(Transform root, string sheetPath, string closePath, string[] followerPaths, List<string> log)
         {
-            var sheet = root.Find(sheetPath);
-            var close = root.Find(closePath);
+            var sheet = FindP(root, sheetPath);
+            var close = FindP(root, closePath);
             var btn = close != null ? close.GetComponent<Button>() : null;
             if (sheet == null || btn == null) { log.Add("끌어 닫기: 없음 " + (sheet == null ? sheetPath : closePath)); return; }
             var sd = Ensure<R0926SwipeDismiss>(sheet.gameObject);
@@ -184,7 +206,7 @@ namespace Redesign0926
             so.FindProperty("closeButton").objectReferenceValue = btn;
             var fol = so.FindProperty("followers");
             fol.arraySize = followerPaths != null ? followerPaths.Length : 0;
-            for (int i = 0; i < fol.arraySize; i++) fol.GetArrayElementAtIndex(i).objectReferenceValue = root.Find(followerPaths[i]) as RectTransform;
+            for (int i = 0; i < fol.arraySize; i++) fol.GetArrayElementAtIndex(i).objectReferenceValue = FindP(root, followerPaths[i]) as RectTransform;
             // 창 뒤 어두운 바탕 — 시트의 부모가 반투명 그늘일 때만 (내려가는 만큼 옅어진다)
             Graphic dim = null;
             if (sheet.parent != root)

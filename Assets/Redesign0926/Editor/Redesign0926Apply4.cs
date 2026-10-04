@@ -31,8 +31,8 @@ namespace Redesign0926
             {
                 var close = Ensure<R0926IndicatorClose>(marker);
                 var closeSo = new SerializedObject(close);
-                closeSo.FindProperty("icon").objectReferenceValue = Spr("r0926_i_close");
-                closeSo.FindProperty("background").objectReferenceValue = Spr("r0926_circle");
+                closeSo.FindProperty("icon").objectReferenceValue = Spr("r0926_x_glyph");     // 박스 색으로 칠하는 흰 X
+                closeSo.FindProperty("boxCut").objectReferenceValue = Spr("r0926_box_cut");   // 오른쪽 위 꺾쇠를 뺀 박스
                 closeSo.ApplyModifiedPropertiesWithoutUndo();
             }
             // 씬 안개 켜기 — RenderSettings 는 '활성 씬' 것만 바뀌므로 0926 을 잠깐 활성으로 (빌드 때 안개 변형이 남도록)
@@ -89,6 +89,7 @@ namespace Redesign0926
                 ("MessagePanel", "CloseButton", SlotMsg),
                 ("ChatRoomPanel", "CloseButton", SlotMsg),
                 ("UploadPage", "XButton_Upload", SlotAdd),
+                ("FullProfilePanel", "ProfileToggle0926", SlotProfile),
             })
             {
                 var panel = Find(root, panelName);
@@ -109,8 +110,15 @@ namespace Redesign0926
             foreach (var n in new[] { "MessagePanel", "ChatRoomPanel" })
             {
                 var p = Find(root, n);
-                var bg = p != null ? p.transform.Find("Background") : null;
+                var bg = p != null ? (p.transform.Find("Background") ?? p.transform.Find("Clip0926/Background")) : null;
                 if (bg != null) Add(bg.gameObject, LeftCard(), 0, R0926SafeInset.Edge.Bottom, R0926SafeInset.Edge.Left);
+            }
+            // 0930 도크 윗선 틀 — 가로에서는 도크가 오른쪽 막대라 아래를 비워 둘 필요가 없다
+            foreach (var n in new[] { "ListPanel", "MessagePanel", "ChatRoomPanel", "UploadPage" })
+            {
+                var p = Find(root, n);
+                var clip = p != null ? p.transform.Find("Clip0926") : null;
+                if (clip != null) Add(clip.gameObject, S(Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(0, 20), new Vector2(0, -40)));
             }
             // 프로필 카드 — 가운데 그대로, 높이에 맞춰 축소
             var prof = Find(root, "FullProfilePanel");

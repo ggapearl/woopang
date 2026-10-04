@@ -51,7 +51,7 @@ public class TourAPIImageController : MonoBehaviour
                     Texture2D texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
                     if (texture != null)
                     {
-                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                         spriteList.Add(sprite);
                         loadedSprites.Add(sprite);
                         spriteCache[url] = sprite;

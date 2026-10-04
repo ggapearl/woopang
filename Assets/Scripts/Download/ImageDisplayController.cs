@@ -192,7 +192,7 @@ public class ImageDisplayController : MonoBehaviour
                 for (int i = 0; i < 16; i++) pixels[i] = Color.black;
                 fallbackTex.SetPixels(pixels);
                 fallbackTex.Apply();
-                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                 doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
                 loadedSprites.Add(defaultSprite);
             }
@@ -207,6 +207,10 @@ public class ImageDisplayController : MonoBehaviour
     {
         int myGeneration = loadGeneration;
         ClearSubPhotos();
+
+        // 시작화면이 도는 동안엔 내려받지 않는다 — 큰 사진 처리가 시작화면을 멈칫하게 했다
+        while (BootOverlay.Showing) yield return null;
+        if (myGeneration != loadGeneration) yield break;
 
         List<Sprite> spriteList = new List<Sprite>();
 
@@ -234,7 +238,7 @@ public class ImageDisplayController : MonoBehaviour
                     Texture2D texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
                     if (texture != null)
                     {
-                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                         if (sprite != null)
                         {
                             spriteList.Add(sprite);
@@ -261,7 +265,7 @@ public class ImageDisplayController : MonoBehaviour
                 for (int i = 0; i < 16; i++) pixels[i] = Color.black;
                 fallbackTex.SetPixels(pixels);
                 fallbackTex.Apply();
-                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                 doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
                 loadedSprites.Add(defaultSprite);
             }

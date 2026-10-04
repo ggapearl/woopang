@@ -58,7 +58,7 @@ public class SplashImagePlayer_V2 : MonoBehaviour
                 splashTexture,
                 new Rect(0, 0, splashTexture.width, splashTexture.height),
                 new Vector2(0.5f, 0.5f)
-            );
+            , 100f, 0, SpriteMeshType.FullRect);
         }
 
         if (finalSprite == null)

@@ -111,7 +111,7 @@ public class ShimmerEffect : MonoBehaviour
         }
         tex.Apply();
 
-        sharedGradient = Sprite.Create(tex, new Rect(0, 0, width, 1), new Vector2(0.5f, 0.5f));
+        sharedGradient = Sprite.Create(tex, new Rect(0, 0, width, 1), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
         sharedGradient.hideFlags = HideFlags.HideAndDontSave;
         return sharedGradient;
     }

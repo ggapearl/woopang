@@ -470,7 +470,9 @@ namespace Redesign0926
             if (content != null)
             {
                 Img(content, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Image.Type.Sliced, 64f / CardRadius);
-                Slide(content, 240f);
+                // 0930: 프로필은 아래에서 올라오지 않고 제자리에서 옅게 나타난다 (R0926FadePanel — Apply9)
+                var slide = content.GetComponent<R0926SlideIn>();
+                if (slide != null) Object.DestroyImmediate(slide);
 
                 // 색 테마 버튼은 뺀다 — 테마가 칠하던 상단 띠·로고가 0926 에는 없다 (ApplyTop 참고)
                 var theme = content.transform.Find("Theme0926");
@@ -510,24 +512,11 @@ namespace Redesign0926
                 img.sprite = null; img.color = new Color(1, 1, 1, 0);
                 foreach (var t in logout.GetComponentsInChildren<Text>(true))
                     if (t.name != "Label0926") { t.color = Soft; t.fontSize = 40; t.fontStyle = FontStyle.Bold; }
-                RT(logout).anchoredPosition = new Vector2(-170, RT(logout).anchoredPosition.y);
+                RT(logout).anchoredPosition = new Vector2(0, RT(logout).anchoredPosition.y);
 
-                // 계정 삭제 — 로그아웃 버튼의 자식이라 보이고 숨는 시점이 같다. 누르면 편집 웹페이지(삭제 버튼 있음)
-                var del = FindOrCreate(logout.transform, "DeleteAccount0926");
-                Img(del, null, new Color(1, 1, 1, 0), Image.Type.Simple).raycastTarget = true;
-                SetRect(RT(del), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(340, 0), new Vector2(300, 80));
-                var lb = FindOrCreate(del.transform, "Label0926");
-                Txt(lb, "계정 삭제", 40, Danger, TextAnchor.MiddleCenter, FontStyle.Bold);
-                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
-                Loc(lb, "계정 삭제", "Delete account", "アカウント削除", "删除账号", "Eliminar cuenta");
-                var press = Ensure<R0926PressButton>(del);
-                var pso = new SerializedObject(press);
-                pso.FindProperty("target").objectReferenceValue = edit != null ? edit.GetComponent<Button>() : null;
-                pso.ApplyModifiedPropertiesWithoutUndo();
-                var db = Ensure<Button>(del);
-                db.targetGraphic = lb.GetComponent<Text>();
-                ResetListeners(db);
-                UnityEventTools.AddPersistentListener(db.onClick, press.Press);
+                // 0930: 계정 삭제는 카드에서 뺀다 — 프로필 편집(웹)에 있다
+                var del = logout.transform.Find("DeleteAccount0926");
+                if (del != null) Object.DestroyImmediate(del.gameObject);
             }
             log.Add("profile ok");
         }

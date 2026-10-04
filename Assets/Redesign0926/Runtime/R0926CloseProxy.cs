@@ -8,7 +8,7 @@ using UnityEngine.UI;
 /// </summary>
 public class R0926CloseProxy : MonoBehaviour
 {
-    [SerializeField] private R0926SwipeDismiss sheet;
+    [SerializeField] private R0926Closer sheet;   // 아래로 미끄러지는 시트 또는 옅어지는 창
     [SerializeField] private Button real;
 
     public void Run()

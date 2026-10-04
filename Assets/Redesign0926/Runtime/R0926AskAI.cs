@@ -72,9 +72,12 @@ public class R0926AskAI : MonoBehaviour
     private string Area()
     {
         if (areaSource == null || string.IsNullOrEmpty(areaSource.text)) return L("이 근처", "here", "この辺り", "这附近", "aquí");
-        // 위치 칩: 1줄 좌표, 2줄 주소 → 주소만 (좌표는 넘기지 않는다)
-        string[] lines = areaSource.text.Split('\n');
-        return lines.Length > 1 ? lines[1].Trim() : L("이 근처", "here", "この辺り", "这附近", "aquí");
+        // 위치 칩: 한 줄 "동네  ·  좌표" 또는 예전 두 줄(1줄 좌표, 2줄 주소) → 주소만 (좌표는 넘기지 않는다)
+        string s = areaSource.text;
+        string[] lines = s.Split('\n');
+        if (lines.Length > 1) return lines[1].Trim();
+        int k = s.IndexOf("  ·  ", StringComparison.Ordinal);
+        return k > 0 ? s.Substring(0, k).Trim() : L("이 근처", "here", "この辺り", "这附近", "aquí");
     }
 
     private static string L(string ko, string en, string ja, string zh, string es)

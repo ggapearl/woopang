@@ -16,6 +16,7 @@ public class AutoUpdateChecker : MonoBehaviour
     [SerializeField] private Button updateButton;
     [SerializeField] private Button cancelButton;
     [SerializeField] private Text updateMessageText; // 기존 텍스트 공통 사용
+    [SerializeField] private R0926UpdateCard card;     // 새 디자인 카드 — 있으면 글·버전·남은 시간을 여기서 그린다
     
     [Header("강제 업데이트 설정")]
     [SerializeField] private float redirectDelay = 3f; // 리디렉션 지연시간
@@ -23,6 +24,11 @@ public class AutoUpdateChecker : MonoBehaviour
 
     private string latestVersion;
     private bool forceUpdate;
+
+    // 강제로 스토어에 보낸 기록 — 스토어에 아직 새 버전이 없으면 같은 안내가 되풀이돼 앱을 못 썼다 (2026-10-04)
+    private const string RedirVerKey = "UpdRedirVer", RedirFromKey = "UpdRedirFrom", RedirAtKey = "UpdRedirAt";
+    private const double PendingHours = 6;
+    private bool redirectedThisRun;
     private string currentLanguage;
 
     // 강화된 다국어 메시지
@@ -120,6 +126,8 @@ public class AutoUpdateChecker : MonoBehaviour
 #else
         serverVersionUrl = ApiConfig.VERSION;
 #endif
+        // 서버가 내 버전을 보고 정확히 가른다 (출시 관문 — server/release_gate.py)
+        serverVersionUrl += (serverVersionUrl.Contains("?") ? "&" : "?") + "v=" + UnityWebRequest.EscapeURL(Application.version);
     }
 
     void DetectDeviceLanguage()
@@ -176,7 +184,8 @@ public class AutoUpdateChecker : MonoBehaviour
                     {
                         if (forceUpdate)
                         {
-                            StartCoroutine(ShowForceUpdateAndRedirect());
+                            if (RecentlyRedirected()) ShowPendingPanel();   // 방금 스토어에 다녀왔는데 그대로 — 아직 반영 전
+                            else StartCoroutine(ShowForceUpdateAndRedirect());
                         }
                         else
                         {
@@ -214,6 +223,7 @@ public class AutoUpdateChecker : MonoBehaviour
         // 버튼들 표시
         if (updateButton != null) updateButton.gameObject.SetActive(true);
         if (cancelButton != null) cancelButton.gameObject.SetActive(true);
+        if (card != null) card.ShowNormal(currentVersion, latestVersion);
         
         if (updatePanel != null)
         {
@@ -263,6 +273,7 @@ public class AutoUpdateChecker : MonoBehaviour
                         string.Format(texts.forceUpdateMessage, latestVersion, countdownNumber));
                     updateMessageText.text = titleMessage;
                 }
+                if (card != null) card.ShowForce(currentVersion, latestVersion, remainingTime / redirectDelay);
                 
                 remainingTime -= Time.unscaledDeltaTime; // unscaledDeltaTime 사용 (timeScale 영향 받지 않음)
                 yield return null;
@@ -278,13 +289,53 @@ public class AutoUpdateChecker : MonoBehaviour
                     string.Format(texts.forceUpdateMessageNoCountdown, latestVersion));
                 updateMessageText.text = titleMessage;
             }
+            if (card != null) card.ShowForce(currentVersion, latestVersion, 0f);
             
             // 잠깐 대기 (메시지 읽을 시간)
             yield return new WaitForSecondsRealtime(1.5f);
         }
 
         // 스토어로 리디렉션
+        RememberRedirect();
+        redirectedThisRun = true;
         RedirectToStore();
+    }
+
+    // 스토어에서 업데이트 없이 돌아왔다(업데이트됐다면 앱이 새로 켜진다) — 강제 안내에 갇히지 않게
+    void OnApplicationPause(bool paused)
+    {
+        if (!paused && redirectedThisRun && updatePanel != null && updatePanel.activeSelf) ShowPendingPanel();
+    }
+
+    void OnApplicationFocus(bool focused)
+    {
+        if (focused && redirectedThisRun && updatePanel != null && updatePanel.activeSelf) ShowPendingPanel();
+    }
+
+    void ShowPendingPanel()
+    {
+        if (!localizedTexts.ContainsKey(currentLanguage)) currentLanguage = "en";
+        if (updateMessageText != null) updateMessageText.text = string.Format(localizedTexts[currentLanguage].message, latestVersion);
+        if (updateButton != null) updateButton.gameObject.SetActive(true);
+        if (cancelButton != null) cancelButton.gameObject.SetActive(true);
+        if (card != null) card.ShowPending(currentVersion, latestVersion);
+        if (updatePanel != null) updatePanel.SetActive(true);
+    }
+
+    bool RecentlyRedirected()
+    {
+        if (PlayerPrefs.GetString(RedirVerKey, "") != latestVersion) return false;
+        if (PlayerPrefs.GetString(RedirFromKey, "") != currentVersion) return false;
+        if (!long.TryParse(PlayerPrefs.GetString(RedirAtKey, "0"), out long at)) return false;
+        return DateTimeOffset.UtcNow.ToUnixTimeSeconds() - at < PendingHours * 3600;
+    }
+
+    void RememberRedirect()
+    {
+        PlayerPrefs.SetString(RedirVerKey, latestVersion ?? "");
+        PlayerPrefs.SetString(RedirFromKey, currentVersion ?? "");
+        PlayerPrefs.SetString(RedirAtKey, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+        PlayerPrefs.Save();
     }
 
     void RedirectToStore()

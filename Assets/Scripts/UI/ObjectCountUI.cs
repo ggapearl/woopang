@@ -38,6 +38,9 @@ public class ObjectCountUI : MonoBehaviour
     private bool pendingIsFinal = false;
     private bool hasPendingUpdate = false;
 
+    public int CurrentCount => currentCount;
+    public bool ShowingNoData { get; private set; }
+
     void Awake()
     {
         canvasGroup = GetComponent<CanvasGroup>();
@@ -128,6 +131,7 @@ public class ObjectCountUI : MonoBehaviour
         currentCount = count;
         isFinalCount = isFinal;
         lastUpdateTime = Time.time;
+        ShowingNoData = false;
 
         // 데이터가 1개라도 들어오면 타임아웃 중단
         if (count > 0 && timeoutCoroutine != null)
@@ -193,6 +197,7 @@ public class ObjectCountUI : MonoBehaviour
         {
             countText.text = noDataText;
         }
+        ShowingNoData = true;
 
         while (BootOverlay.Showing) yield return null;
         yield return new WaitForSeconds(3f);
@@ -260,6 +265,7 @@ public class ObjectCountUI : MonoBehaviour
         currentCount = 0;
         isFinalCount = false;
         lastUpdateTime = 0f;
+        ShowingNoData = false;
         UpdateText(0, false);
 
         if (canvasGroup != null)

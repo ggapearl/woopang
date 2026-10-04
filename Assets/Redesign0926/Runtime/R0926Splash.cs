@@ -33,6 +33,9 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [SerializeField] private bool perLanguage = false;
     [SerializeField] private float endAt = 3.7f;
     [SerializeField] private float fadeOut = 0.45f;
+    [Tooltip("마지막 장면에서 화면이 고르게 돌 때까지 기다리는 최대 시간 — 로딩 멈칫 중에 사라지면 뚝 끊겨 보였다")]
+    [SerializeField] private float maxWait = 4f;
+    [SerializeField] private Image nebula;            // 숨쉬듯 밝아졌다 어두워지는 성운 (별은 R0926StarField 가 스스로)
 
     private struct Variant { public string key, accent, bg, text; public float dim, faint; }
 
@@ -56,6 +59,12 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     private float t;
     private bool skipping;
     private float skipFrom;
+    private float fadeStart = -1f;   // 사라지기 시작한 시각 (-1 = 아직)
+    private int smoothFrames;
+    private float waited;
+    private bool started;
+    private int calmFrames;
+    private float waitedStart;
 
     private void OnEnable()
     {
@@ -63,6 +72,12 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         Setup(perLanguage ? R0926LocalizedText.Lang() : "en");
         t = 0f;
         skipping = false;
+        fadeStart = -1f;
+        smoothFrames = 0;
+        waited = 0f;
+        started = false;
+        calmFrames = 0;
+        waitedStart = 0f;
         Pose(0f);
     }
 
@@ -70,10 +85,30 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
 
     private void Update()
     {
-        t += Mathf.Min(Time.unscaledDeltaTime, 0.05f);   // 첫 프레임 로딩 멈춤이 애니메이션을 건너뛰지 않게
+        float dt = Time.unscaledDeltaTime;
+        if (!started)
+        {
+            // 앱이 막 켜진 몇 프레임은 초기화(파이어베이스·장소 캐시 읽기)로 무겁다 — 그동안은 우주 배경과 별만 두고,
+            // 화면이 고르게 돌기 시작하면(또는 1.2초가 지나면) 렌즈를 움직인다. 예전엔 그 멈칫에 렌즈가 끊겨 보였다
+            waitedStart += dt;
+            calmFrames = dt < 0.034f ? calmFrames + 1 : 0;
+            if (calmFrames < 4 && waitedStart < 1.2f) { Pose(0f); return; }
+            started = true;
+        }
+        t += Mathf.Min(dt, 0.05f);   // 첫 프레임 로딩 멈춤이 애니메이션을 건너뛰지 않게
+        if (fadeStart < 0f)
+        {
+            if (skipping) fadeStart = t;
+            else if (t >= endAt)
+            {
+                // 마지막 장면에서 프레임이 고르게(0.045초 안쪽) 12번 이어질 때 사라지기 시작한다
+                smoothFrames = dt < 0.045f ? smoothFrames + 1 : 0;
+                waited += dt;
+                if (smoothFrames >= 12 || waited >= maxWait) fadeStart = t;
+            }
+        }
         Pose(t);
-        float end = skipping ? skipFrom + fadeOut : endAt + fadeOut;
-        if (t >= end) Finish();
+        if (fadeStart >= 0f && t >= fadeStart + fadeOut) Finish();
     }
 
     public void OnPointerClick(PointerEventData e)
@@ -146,19 +181,28 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             ring.color = c;
         }
 
-        // 문양은 화면에 붙어 있다 — 렌즈가 움직여도 제자리 (화면을 꽉 채우게)
+        // 문양은 화면에 붙어 있고(렌즈가 움직여도 제자리) 아주 천천히 떠다닌다 — 확대·이동
         float coverH = Mathf.Max(h, w / motifAspect);
-        var coverSize = new Vector2(coverH * motifAspect, coverH);
+        float ks = 1.07f + 0.025f * Mathf.Sin(time * 0.35f);
+        var coverSize = new Vector2(coverH * motifAspect, coverH) * ks;
+        Vector3 drift = rt.TransformVector(new Vector3(37f * Mathf.Sin(time * 0.21f), 26f * Mathf.Cos(time * 0.17f), 0f));
         if (motif != null)
         {
             motif.rectTransform.sizeDelta = coverSize;
-            motif.rectTransform.position = rt.position;
+            motif.rectTransform.position = rt.position + drift;
+        }
+        if (nebula != null)
+        {
+            var nc = nebula.color;
+            nc.a = 0.28f + 0.3f * (0.5f + 0.5f * Mathf.Sin(time * 0.9f));
+            nebula.color = nc;
+            nebula.rectTransform.localScale = Vector3.one * (1f + 0.05f * Mathf.Sin(time * 0.45f));
         }
         if (motifFaint != null)
         {
             // 렌즈 밖도 완전한 검정이 아니라 문양이 옅게 — 첫 순간은 어둡게 두고 곧 스며 나온다
             motifFaint.rectTransform.sizeDelta = coverSize;
-            motifFaint.rectTransform.position = rt.position;
+            motifFaint.rectTransform.position = rt.position + drift;
             var fc = motifFaint.color;
             fc.a = v.faint * Ease(Mathf.InverseLerp(0.05f, 0.5f, time));
             motifFaint.color = fc;
@@ -185,8 +229,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
 
         if (root != null)
         {
-            float outStart = skipping ? skipFrom : endAt;
-            root.alpha = 1f - Ease(Mathf.InverseLerp(outStart, outStart + fadeOut, time));
+            root.alpha = fadeStart < 0f ? 1f : 1f - Ease(Mathf.InverseLerp(fadeStart, fadeStart + fadeOut, time));
             root.blocksRaycasts = true;
         }
     }

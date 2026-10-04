@@ -15,6 +15,12 @@ using UnityEngine.InputSystem;
 /// 3. 네이티브 키보드 dismiss 버튼으로만 키보드 닫기 허용
 /// 4. 패널 비활성화(OnDisable) 시 즉시 원상 복구
 ///
+/// ⚠ 키보드가 없을 때는 패널 위치를 건드리지 않는다 (2026-10-04).
+///   예전엔 켜질 때 기억한 자리로 매 프레임 끌어당겨, 아래에서 올라오는 창(R0926SlideIn)이
+///   화면 밖에 있던 순간을 '원래 자리'로 기억하면 그대로 화면 밖에 붙잡혔다 — 채팅방이 안 보이던 원인.
+///   이제 키보드가 실제로 올라온 순간의 자리를 원래 자리로 기억하고, 키보드가 있는 동안·내려가는 동안만 움직인다.
+/// ⚠ 키보드 위 위치는 패널의 부모 기준으로 바꿔 계산한다 — 0926 부터 대화창이 도크 윗선 틀(Clip0926) 안에 있다.
+///
 /// 상태 머신:
 /// - keyboardLogicallyActive = true: 키보드가 열려있어야 하는 상태
 ///   → 패널 확장 유지, 포커스 손실 시 자동 재포커스
@@ -113,6 +119,15 @@ public class MobileKeyboardHandler : MonoBehaviour
     private Canvas parentCanvas;
     private RectTransform canvasRect;
 
+    /// <summary>패널 위치를 이 처리기가 움직이는 중 (키보드가 있거나 원래 자리로 돌아가는 중)</summary>
+    private bool driving;
+    /// <summary>원래 자리(orig*)를 이번에 기억했는지 — 키보드가 처음 올라올 때 잡는다</summary>
+    private bool captured;
+    /// <summary>키보드가 떠 있는 동안 꺼 두는 부모의 잘림 (도크 윗선 틀)</summary>
+    private RectMask2D parentClip;
+    private bool parentClipWasOn;
+    private static readonly Vector3[] corners4 = new Vector3[4];
+
     // ============================================================
     // Keyboard State Machine
     // ============================================================
@@ -167,25 +182,12 @@ public class MobileKeyboardHandler : MonoBehaviour
 #endif
 
         expandLogCount = 0;
-
-        if (initialized && backgroundRect != null)
-        {
-            // 이미 초기화된 상태에서 re-enable — 현재 위치 기준으로 원본값 재캡처
-            // (SlidePanel 완료 후 re-enable되므로 올바른 위치)
-            origBgAnchorMin = backgroundRect.anchorMin;
-            origBgAnchorMax = backgroundRect.anchorMax;
-            origBgOffsetMin = backgroundRect.offsetMin;
-            origBgOffsetMax = backgroundRect.offsetMax;
-            SetCollapsedTargets();
-        }
-        else
-        {
-            TryInitialize();
-        }
-
-        if (initialized)
-        {
-        }
+        keyboardLogicallyActive = false;
+        driving = false;
+        captured = false;
+        kbGoneStartTime = 0;
+        needsScrollToBottom = false;
+        TryInitialize();
     }
 
     void OnDisable()
@@ -198,27 +200,75 @@ public class MobileKeyboardHandler : MonoBehaviour
         kbGoneStartTime = 0;
         needsScrollToBottom = false;
 
-        // ★ 애니메이션 타겟도 원상 복구 (다음 OnEnable 시 확장된 채 시작 방지)
-        SetCollapsedTargets();
+        // 키보드 때문에 움직인 적이 있을 때만 원래 자리로 (아니면 다른 애니메이션의 자리를 건드리지 않는다)
+        if (captured)
+        {
+            SetCollapsedTargets();
+            backgroundRect.anchorMin = origBgAnchorMin;
+            backgroundRect.anchorMax = origBgAnchorMax;
+            backgroundRect.offsetMin = origBgOffsetMin;
+            backgroundRect.offsetMax = origBgOffsetMax;
 
-        backgroundRect.anchorMin = origBgAnchorMin;
-        backgroundRect.anchorMax = origBgAnchorMax;
-        backgroundRect.offsetMin = origBgOffsetMin;
-        backgroundRect.offsetMax = origBgOffsetMax;
+            if (viewportRect != null)
+            {
+                viewportRect.offsetMin = origViewportOffsetMin;
+                viewportRect.offsetMax = origViewportOffsetMax;
+            }
 
+            if (inputAreaRect != null)
+            {
+                // X만 복원 — Y는 AutoExpandInputField가 제어
+                inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
+                inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
+            }
+        }
+        RestoreParentClip();
+        driving = false;
+        captured = false;
+    }
+
+    /// <summary>지금 자리를 '원래 자리'로 기억한다 — 키보드가 처음 올라오는 순간(창이 다 열린 뒤)</summary>
+    private void CaptureOrig()
+    {
+        origBgAnchorMin = backgroundRect.anchorMin;
+        origBgAnchorMax = backgroundRect.anchorMax;
+        origBgOffsetMin = backgroundRect.offsetMin;
+        origBgOffsetMax = backgroundRect.offsetMax;
         if (viewportRect != null)
         {
-            viewportRect.offsetMin = origViewportOffsetMin;
-            viewportRect.offsetMax = origViewportOffsetMax;
+            origViewportOffsetMin = viewportRect.offsetMin;
+            origViewportOffsetMax = viewportRect.offsetMax;
         }
-
         if (inputAreaRect != null)
         {
-            // X만 복원 — Y는 AutoExpandInputField가 제어
-            inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
-            inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
+            origInputAreaOffsetMin = inputAreaRect.offsetMin;
+            origInputAreaOffsetMax = inputAreaRect.offsetMax;
         }
+        captured = true;
 
+        // 부모가 잘림 틀이면 키보드가 떠 있는 동안 끈다 (넓어진 창이 틀 밖으로 나가도 보이게)
+        parentClip = backgroundRect.parent != null ? backgroundRect.parent.GetComponent<RectMask2D>() : null;
+        parentClipWasOn = parentClip != null && parentClip.enabled;
+        if (parentClipWasOn) parentClip.enabled = false;
+    }
+
+    private void RestoreParentClip()
+    {
+        if (parentClip != null && parentClipWasOn) parentClip.enabled = true;
+        parentClip = null;
+        parentClipWasOn = false;
+    }
+
+    /// <summary>캔버스 아래에서 잰 높이(캔버스 단위) → 패널 부모 기준 앵커 값</summary>
+    private float ParentAnchorY(float canvasY)
+    {
+        float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
+        var parent = backgroundRect.parent as RectTransform;
+        if (parent == null || canvasRect == null) return canvasY / Mathf.Max(1f, canvasHeight);
+        parent.GetWorldCorners(corners4);
+        float bottom = canvasRect.InverseTransformPoint(corners4[0]).y - canvasRect.rect.yMin;
+        float top = canvasRect.InverseTransformPoint(corners4[1]).y - canvasRect.rect.yMin;
+        return (canvasY - bottom) / Mathf.Max(1f, top - bottom);
     }
 
     // ============================================================
@@ -410,10 +460,12 @@ public class MobileKeyboardHandler : MonoBehaviour
 
             if (!keyboardLogicallyActive)
             {
+                if (!captured) CaptureOrig();
                 keyboardLogicallyActive = true;
                 needsScrollToBottom = true;
                 if (persistentInput != null) persistentInput.lockFocus = true;
             }
+            driving = true;
 
             SetExpandedTargets(kbH);
             return;
@@ -505,12 +557,15 @@ public class MobileKeyboardHandler : MonoBehaviour
         else
         {
             // 패널은 확장 유지하되, 키보드 영역만 제거 — bottom anchor를 0으로
-            if (expandPanelOnKeyboard)
+            if (expandPanelOnKeyboard && backgroundRect != null)
             {
+                if (!captured) CaptureOrig();
+                float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
                 targetAnchorMin = new Vector2(0, 0);
-                targetAnchorMax = new Vector2(1, expandedTopAnchorY);
+                targetAnchorMax = new Vector2(1, ParentAnchorY(expandedTopAnchorY * canvasHeight));
                 targetOffsetMin = new Vector2(expandedSideOffset, 0);
                 targetOffsetMax = new Vector2(-expandedSideOffset, expandedTopOffset);
+                driving = true;
             }
         }
     }
@@ -526,15 +581,11 @@ public class MobileKeyboardHandler : MonoBehaviour
         if (!expandPanelOnKeyboard) return;
 
         float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
-        float bottomAnchor = (kbH + keyboardTopPadding) / canvasHeight;
-
-        if (expandLogCount < 3)
-        {
-            expandLogCount++;
-        }
+        float bottomAnchor = ParentAnchorY(kbH + keyboardTopPadding);
+        float topAnchor = ParentAnchorY(expandedTopAnchorY * canvasHeight);
 
         targetAnchorMin = new Vector2(0, bottomAnchor);
-        targetAnchorMax = new Vector2(1, expandedTopAnchorY);
+        targetAnchorMax = new Vector2(1, topAnchor);
         targetOffsetMin = new Vector2(expandedSideOffset, 0);
         targetOffsetMax = new Vector2(-expandedSideOffset, expandedTopOffset);
 
@@ -577,7 +628,37 @@ public class MobileKeyboardHandler : MonoBehaviour
 
     private void AnimatePanel()
     {
-        if (backgroundRect == null) return;
+        if (backgroundRect == null || !driving) return;
+
+        // 키보드가 내려가 원래 자리에 거의 닿으면 정확히 맞추고 손을 뗀다
+        if (!keyboardLogicallyActive && captured &&
+            (backgroundRect.offsetMin - targetOffsetMin).sqrMagnitude < 1f &&
+            (backgroundRect.offsetMax - targetOffsetMax).sqrMagnitude < 1f &&
+            (backgroundRect.anchorMin - targetAnchorMin).sqrMagnitude < 1e-6f &&
+            (backgroundRect.anchorMax - targetAnchorMax).sqrMagnitude < 1e-6f)
+        {
+            backgroundRect.anchorMin = targetAnchorMin;
+            backgroundRect.anchorMax = targetAnchorMax;
+            backgroundRect.offsetMin = targetOffsetMin;
+            backgroundRect.offsetMax = targetOffsetMax;
+            if (targetAnchorMin == origBgAnchorMin && targetOffsetMin == origBgOffsetMin)
+            {
+                if (viewportRect != null)
+                {
+                    viewportRect.offsetMin = origViewportOffsetMin;
+                    viewportRect.offsetMax = origViewportOffsetMax;
+                }
+                if (inputAreaRect != null)
+                {
+                    inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
+                    inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
+                }
+                driving = false;
+                captured = false;   // 다음 키보드 때 그때 자리로 다시 잡는다
+                RestoreParentClip();
+            }
+            return;
+        }
 
         float dt = Time.deltaTime * lerpSpeed;
 

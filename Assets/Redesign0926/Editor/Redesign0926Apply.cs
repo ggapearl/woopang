@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 13;  // v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
+        public const int Version = 17;  // v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
 
         private const string SpriteDir = "Assets/Redesign0926/Sprites/";
 
@@ -31,12 +31,12 @@ namespace Redesign0926
         private const float Side = 60f;          // 좌우 여백 16pt
         private const float TopGap = 36f;        // 상태바 아래 여백
         private const float TopButton = 148f;    // 로고·프로필 원 40pt
-        private const float DockHeight = 260f;   // 70pt — 2026-09-29 버튼이 작아 보인다 하셔서 64→70pt
+        private const float DockHeight = 224f;   // 60pt — 2026-09-30 위아래 여백을 줄여 달라 하셔서 (아이콘 크기는 그대로)
         private const float DockBottom = 30f;    // 홈 인디케이터 위 8pt
         private const float PlusSize = 196f;     // 52pt
         private const float DockIcon = 106f;     // 29pt (예전 25pt)
         private const float DockLabel = 44f;     // 12pt (예전 10pt)
-        private const float DockIconY = 30f, DockLabelY = -68f, DockLabelBox = 60f, AddGlyph = 76f;
+        private const float DockIconY = 26f, DockLabelY = -58f, DockLabelBox = 60f, AddGlyph = 76f;
 
         private static Font font;
 
@@ -58,6 +58,7 @@ namespace Redesign0926
             var canvas = Redesign0926Capture.FindMainCanvas(scene);
             if (canvas == null) { log.Add("Canvas 없음"); return; }
             Transform root = canvas.transform;
+            Unwrap0930(root);                   // 지난번 틀(Clip0926·ListPage0926)을 벗기고 — 아래 단계들은 패널 기준으로 다시 잡는다
 
             ApplyTop(root, log);
             ApplyDock(root, log);
@@ -73,9 +74,10 @@ namespace Redesign0926
             ApplyGuideNetRoman(root, log);
             ApplySkyAndAI(root, log);
             ApplyFriendsMap(root, log);
-            ApplyFadeAndLandscape(root, log);   // 가로 배치는 세로 값이 다 정해진 뒤에
             ApplySheetClosing(root, log);       // 끌어 닫기 · 뒤로가기 — 시트·버튼이 다 자리잡은 뒤
             ApplySplash(root, log);             // 시작화면은 맨 위 — 마지막에
+            Apply0930(root, log);               // 0930 시안 — 틀을 다시 씌우고 새 모양 (시작화면 별 포함)
+            ApplyFadeAndLandscape(root, log);   // 가로 배치는 세로 값이 다 정해진 뒤에 (0930 틀 포함 — 맨 마지막)
 
             var marker = root.GetComponentInChildren<R0926Marker>(true);
             if (marker == null)
@@ -130,6 +132,7 @@ namespace Redesign0926
         // 도크 칸 위치 (도크 너비 기준 0~1)
         private const float SlotList = 0.125f, SlotAdd = 0.375f, SlotMsg = 0.625f, SlotProfile = 0.875f;
         private const float AddTile = 106f;
+        private const float MiniAvatar = 92f;   // 도크 프로필 사진 — 테두리까지 다른 아이콘과 비슷한 크기
 
         private static void ApplyDock(Transform root, List<string> log)
         {
@@ -160,15 +163,17 @@ namespace Redesign0926
                 var u = unread.GetComponent<Image>();
                 u.sprite = Spr("r0926_pill");   // 숫자가 두 자리가 되면 옆으로 늘어나는 알약 모양
                 u.type = Image.Type.Sliced;
-                u.pixelsPerUnitMultiplier = 64f / 21f;
+                u.pixelsPerUnitMultiplier = 64f / 29f;
                 u.color = Pink;
                 u.raycastTarget = false;
                 SetRect(RT(unread), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(52, DockIconY + 38), new Vector2(46, 46));   // 아이콘 오른쪽 위 모서리
+                    new Vector2(58, DockIconY + 42), new Vector2(60, 60));   // 아이콘 오른쪽 위 모서리
+                // 검은 테두리 없이 (예전 버튼에서 따라온 Outline·Shadow)
+                foreach (var fx in unread.GetComponentsInChildren<Shadow>(true)) Object.DestroyImmediate(fx);
                 unread.transform.SetAsLastSibling();
                 var cnt = FindOrCreate(unread.transform, "Count");   // MessagePanelManager 가 개수를 적는다
                 var crt2 = RT(cnt); crt2.anchorMin = Vector2.zero; crt2.anchorMax = Vector2.one; crt2.offsetMin = Vector2.zero; crt2.offsetMax = Vector2.zero;
-                var ctx = Txt(cnt, "3", 27, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+                var ctx = Txt(cnt, "3", 34, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
                 ctx.horizontalOverflow = HorizontalWrapMode.Overflow;
             }
 
@@ -185,10 +190,32 @@ namespace Redesign0926
                 SetRect(mrt, new Vector2(SlotProfile, 0.5f), new Vector2(SlotProfile, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
                 var mImg = mini.GetComponent<Image>();
                 if (mImg != null) { mImg.color = new Color(0, 0, 0, 0); mImg.raycastTarget = true; }
-                var ring = Find(mini.transform, "AvatarOutline");
-                if (ring != null) SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(DockIcon + 6, DockIcon + 6));
                 var mask = Find(mini.transform, "AvatarMask");
-                if (mask != null) SetRect(RT(mask), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(DockIcon - 8, DockIcon - 8));
+                if (mask != null) SetRect(RT(mask), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(MiniAvatar, MiniAvatar));
+                // 테두리는 사진 위에 — 안쪽 가장자리가 사진 가장자리를 살짝 덮어 계단을 가린다 (r0926_ring_mini: 안 0.68 · 진함 ~0.86 · 바깥으로 옅게)
+                var ring = Find(mini.transform, "AvatarOutline");
+                if (ring != null)
+                {
+                    float rs = (MiniAvatar / 2f - 3f) / 0.68f * 2f;
+                    SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(rs, rs));
+                    var ri = ring.GetComponent<Image>();
+                    ri.sprite = Spr("r0926_ring_mini"); ri.type = Image.Type.Simple; ri.raycastTarget = false; ri.preserveAspect = true;
+                    EditorUtility.SetDirty(ri);
+                    if (mask != null) ring.transform.SetSiblingIndex(mask.transform.GetSiblingIndex() + 1);
+                    // 전체공개면 은은하게 숨쉬고 4초마다 물결 한 번
+                    var rip = FindOrCreate(mini.transform, "Ripple0926");
+                    rip.transform.SetSiblingIndex(ring.transform.GetSiblingIndex());
+                    SetRect(RT(rip), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(rs * 0.86f, rs * 0.86f));
+                    var ripImg = Img(rip, Spr("r0926_ring_big"), new Color(Pink.r, Pink.g, Pink.b, 0f), Image.Type.Simple);
+                    ripImg.raycastTarget = false;
+                    ripImg.enabled = false;
+                    var pulse = Ensure<R0926AvatarPulse>(mini);
+                    var pso = new SerializedObject(pulse);
+                    pso.FindProperty("outline").objectReferenceValue = ri;
+                    pso.FindProperty("ripple").objectReferenceValue = ripImg;
+                    pso.FindProperty("breathScale").floatValue = 0.035f;
+                    pso.ApplyModifiedPropertiesWithoutUndo();
+                }
                 var uname = Find(mini.transform, "Username");
                 if (uname != null) uname.GetComponent<Text>().enabled = false;   // ProfileManager 는 계속 쓴다 — 보이지만 않게
                 var lb = FindOrCreate(mini.transform, "Label0926");
@@ -212,14 +239,15 @@ namespace Redesign0926
             foreach (var t in btn.GetComponentsInChildren<Text>(true))
                 if (t.name != "Label0926") t.enabled = false;
 
+            // 0930: 채운 흰 타일 대신 흰 테두리 네모 + 흰 + (닫기는 다른 칸처럼 흰 X) — 아이콘 크기는 다른 칸과 같게
             var tile = FindOrCreate(btn.transform, "Icon0926");
             tile.transform.SetSiblingIndex(0);
-            var tImg = Img(tile, Spr("r0926_pill"), Color.white, Image.Type.Sliced, 64f / 26f);
+            var tImg = Img(tile, Spr(glyph == "r0926_i_plus" ? "r0926_i_addbox" : glyph), Ink, Image.Type.Simple);
             tImg.raycastTarget = false;
-            SetRect(RT(tile), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(AddTile, AddTile));
-            var g = FindOrCreate(tile.transform, "Glyph0926");
+            SetRect(RT(tile), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockIconY), new Vector2(DockIcon, DockIcon));
+            var g = FindOrCreate(tile.transform, "Glyph0926");   // 예전 타일 속 글리프 — 남겨 두되 보이지 않게
             Img(g, Spr(glyph), Dark, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(g), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(AddGlyph, AddGlyph));
+            g.GetComponent<Image>().enabled = false;
 
             var lb = FindOrCreate(btn.transform, "Label0926");
             Txt(lb, words[0], DockLabel, Soft, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -272,12 +300,12 @@ namespace Redesign0926
 
             Img(panel, Spr("r0926_pill"), Glass, Image.Type.Sliced, 64f / 50f).raycastTarget = false;
             SetRect(RT(panel), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-                new Vector2(0, DockBottom + DockHeight + 30), new Vector2(600, 100));
+                new Vector2(0, DockBottom + DockHeight + 24), new Vector2(600, 84));
             Ensure<R0926SafeInset>(panel).SetEdge(R0926SafeInset.Edge.Bottom);
 
             var hlg = Ensure<HorizontalLayoutGroup>(panel);
-            hlg.padding = new RectOffset(34, 42, 20, 20);
-            hlg.spacing = 16;
+            hlg.padding = new RectOffset(28, 38, 14, 14);
+            hlg.spacing = 14;
             hlg.childAlignment = TextAnchor.MiddleLeft;
             hlg.childControlWidth = true;
             hlg.childControlHeight = true;
@@ -291,16 +319,17 @@ namespace Redesign0926
             if (status != null)
             {
                 var le = Ensure<LayoutElement>(status);
-                le.preferredWidth = 44; le.preferredHeight = 44;
+                le.preferredWidth = 38; le.preferredHeight = 38;
                 status.GetComponent<Image>().preserveAspect = true;
             }
             var text = Find(panel.transform, "LocationText");
             if (text != null)
             {
                 var t = text.GetComponent<Text>();
-                t.fontSize = 30;
+                t.fontSize = 36;
                 t.lineSpacing = 1.05f;
-                t.color = Ink;
+                t.color = Soft;
+                t.supportRichText = true;   // 좌표는 옅게
                 t.alignment = TextAnchor.MiddleLeft;
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 t.verticalOverflow = VerticalWrapMode.Overflow;
@@ -309,10 +338,18 @@ namespace Redesign0926
             }
             // 상세·목록·메시지 등이 열려 있으면 숨긴다 (특히 상세 화면은 칩보다 아래에 그려져 겹친다)
             Ensure<CanvasGroup>(panel);
+            // 주소·좌표 한 줄 (LocationManager)
+            var lm = FindInScene<LocationManager>(panel);
+            if (lm != null)
+            {
+                var lso = new SerializedObject(lm);
+                var sl = lso.FindProperty("singleLine");
+                if (sl != null) { sl.boolValue = true; lso.ApplyModifiedPropertiesWithoutUndo(); }
+            }
             var hide = Ensure<R0926HideWhile>(panel);
             var hso = new SerializedObject(hide);
             var arr = hso.FindProperty("panels");
-            string[] watch = { "FullScreenPanel", "ListPanel", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "UploadPage", "Fixpage" };
+            string[] watch = { "FullScreenPanel", "ListPanel", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "UploadPage", "Fixpage", "FirstTimeGuidePanel" };
             arr.arraySize = watch.Length;
             for (int i = 0; i < watch.Length; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = Find(root, watch[i]);
             hso.ApplyModifiedPropertiesWithoutUndo();
@@ -326,12 +363,12 @@ namespace Redesign0926
         private const float HeaderY = -40f;
         private const float SliderBlock = 140f;   // 제목줄(72) + 슬라이더(56) + 틈
         private const float ChipsY = HeaderY - SliderBlock - 20f;   // -200
-        private const float ChipH = 76f;
-        private const float ChipGap = 12f;
+        private const float ChipH = 112f;   // 0930: 글자를 키운 칩 (예전 76)
+        private const float ChipGap = 18f;
         private const float SummaryY = ChipsY - (ChipH * 2 + ChipGap) - 22f;   // -392
         private const float ListTop = SummaryY - 50f;                          // -442
         private const float FooterH = 64f;
-        private const float RowH = 84f;
+        private const float RowH = 66f;    // 0930: 촘촘하게 (예전 84)
         private const float CloseSize = 72f;
 
         private static void ApplyListSheet(Transform root, List<string> log)
@@ -344,7 +381,7 @@ namespace Redesign0926
             var sheet = Find(panel.transform, "Sheet0926");
             if (sheet == null) { sheet = NewUI("Sheet0926", panel.transform); }
             sheet.transform.SetSiblingIndex(0);
-            CardAboveDock(sheet, 0.74f);
+            CardAboveDock(sheet, 0.92f);   // 0930: 장소 추가 창과 같은 높이
             Slide(sheet, 240f);
 
             var grab = FindOrCreate(sheet.transform, "Grab0926");
@@ -438,6 +475,7 @@ namespace Redesign0926
                 grid.startAxis = GridLayoutGroup.Axis.Horizontal;
                 grid.childAlignment = TextAnchor.UpperLeft;
                 grid.cellSize = new Vector2(318, ChipH);
+                Ensure<R0926GridFit>(filters);   // 칸 너비는 실제 폭에 맞춘다
                 SetRect(RT(filters), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, ChipsY), new Vector2(0, ChipH * 2 + ChipGap));
                 RT(filters).offsetMin = new Vector2(SheetPad, RT(filters).offsetMin.y);
                 RT(filters).offsetMax = new Vector2(-SheetPad, RT(filters).offsetMax.y);
@@ -523,10 +561,10 @@ namespace Redesign0926
             if (close != null)
             {
                 DockSlotClose(close, panel.transform, SlotList);
-                var tap = Ensure<R0926TapToClose>(panel);
-                var tso = new SerializedObject(tap);
-                tso.FindProperty("closeButton").objectReferenceValue = close.GetComponent<Button>();
-                tso.ApplyModifiedPropertiesWithoutUndo();
+                // 바깥 누르기로는 닫지 않는다 (2026-10-04 대표님: X · 아래로 밀기로만) — 목록이 도크를 덮고 있어
+                // 다른 도크 버튼 자리를 누르면 그 터치가 '바깥'으로 잡혀 목록이 닫혔다
+                var tap = panel.GetComponent<R0926TapToClose>();
+                if (tap != null) Object.DestroyImmediate(tap);
                 if (pImg != null) pImg.raycastTarget = true;
             }
 
@@ -563,6 +601,19 @@ namespace Redesign0926
             log.Add("list sheet ok");
         }
 
+        // (토글 이름, 종류, 색, 짧은 이름 ko/en/ja/zh/es)
+        private static readonly (string name, R0926FilterChip.Kind kind, string hex, string[] words)[] ChipDefs =
+        {
+            ("CategoryToggle", R0926FilterChip.Kind.Category, "#E8EDF1", null),
+            ("PetFriendlyToggle", R0926FilterChip.Kind.Pet, "#F5A623", new[] { "반려견", "Pets", "ペット", "宠物", "Mascotas" }),
+            ("PublicDataToggle", R0926FilterChip.Kind.Simple, "#59B7FF", new[] { "공공", "Public", "公共", "公共", "Público" }),
+            ("MetroToggle", R0926FilterChip.Kind.Simple, "#3FC1B0", new[] { "지하철", "Subway", "地下鉄", "地铁", "Metro" }),
+            ("TerminalToggle", R0926FilterChip.Kind.Simple, "#7DDC54", new[] { "터미널", "Terminal", "ターミナル", "客运站", "Terminal" }),
+            ("TrainStationToggle", R0926FilterChip.Kind.Simple, "#9BE15D", new[] { "기차역", "Train", "駅", "火车站", "Tren" }),
+            ("3DObjectToggle", R0926FilterChip.Kind.Simple, "#FFFFFF", new[] { "3D", "3D", "3D", "3D", "3D" }),
+            ("P2PUserToggle", R0926FilterChip.Kind.P2P, "#E95383", null),
+        };
+
         private static void StyleChip(GameObject chip)
         {
             chip.transform.localScale = Vector3.one;
@@ -573,41 +624,70 @@ namespace Redesign0926
             if (body == null) body = chip.AddComponent<Image>();
             body.sprite = Spr("r0926_pill");
             body.type = Image.Type.Sliced;
-            body.pixelsPerUnitMultiplier = 64f / (ChipH / 2);
+            body.pixelsPerUnitMultiplier = 64f / 34f;   // 둥근 네모 (알약 아님)
             body.color = new Color(1, 1, 1, 0.07f);
             body.raycastTarget = true;
 
+            // 체크 동그라미는 쓰지 않는다 — 칸 자체가 밝아지고 어두워진다 (토글의 graphic 참조는 그대로)
             var bg = Find(chip.transform, "Background");
-            if (bg != null)
-            {
-                var bImg = bg.GetComponent<Image>();
-                bImg.sprite = Spr("r0926_circle");
-                bImg.type = Image.Type.Simple;
-                SetRect(RT(bg), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(40, 0), new Vector2(34, 34));
-                var ck = Find(bg.transform, "Checkmark");
-                if (ck != null)
-                {
-                    var cImg = ck.GetComponent<Image>();
-                    cImg.sprite = Spr("r0926_i_check");
-                    SetRect(RT(ck), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(28, 28));
-                }
-            }
+            if (bg != null && bg.activeSelf) bg.SetActive(false);
+
+            var dot = FindOrCreate(chip.transform, "Dot0926");
+            var dImg = Img(dot, Spr("r0926_circle"), Color.white, Image.Type.Simple);
+            dImg.raycastTarget = false;
+            SetRect(RT(dot), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(22, 22));
+
+            Text t = null;
             var label = Find(chip.transform, "Label");
             if (label != null)
             {
-                var t = label.GetComponent<Text>();
-                t.fontSize = 28;
-                t.alignment = TextAnchor.MiddleLeft;
-                t.resizeTextForBestFit = true;
-                t.resizeTextMinSize = 18;
-                t.resizeTextMaxSize = 28;
-                t.horizontalOverflow = HorizontalWrapMode.Wrap;
+                t = label.GetComponent<Text>();
+                t.fontSize = 44;
+                t.fontStyle = FontStyle.Bold;
+                t.alignment = TextAnchor.MiddleCenter;
+                t.resizeTextForBestFit = false;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.verticalOverflow = VerticalWrapMode.Overflow;
+                t.supportRichText = true;
                 if (font != null) t.font = font;
                 var lrt = RT(label);
                 lrt.anchorMin = new Vector2(0, 0); lrt.anchorMax = new Vector2(1, 1); lrt.pivot = new Vector2(0.5f, 0.5f);
-                lrt.offsetMin = new Vector2(68, 0); lrt.offsetMax = new Vector2(-14, 0);
+                lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
                 EditorUtility.SetDirty(t);
             }
+
+            var strike = FindOrCreate(chip.transform, "Strike0926");
+            var sImg = Img(strike, null, new Color(1, 1, 1, 0.35f), Image.Type.Simple);
+            sImg.raycastTarget = false;
+            sImg.enabled = false;
+            SetRect(RT(strike), new Vector2(0.18f, 0.5f), new Vector2(0.82f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0, 4));
+            RT(strike).localEulerAngles = new Vector3(0, 0, 8);
+
+            var def = System.Array.Find(ChipDefs, d => d.name == chip.name);
+            if (def.name == null) return;
+            Image cyc = null;
+            if (def.kind == R0926FilterChip.Kind.Category)
+            {
+                var c = FindOrCreate(chip.transform, "Cycle0926");
+                cyc = Img(c, Spr("r0926_i_cycle"), new Color(1, 1, 1, 0.6f), Image.Type.Simple);
+                cyc.raycastTarget = false;
+                SetRect(RT(c), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34));
+            }
+            var fc = Ensure<R0926FilterChip>(chip);
+            var so = new SerializedObject(fc);
+            so.FindProperty("kind").enumValueIndex = (int)def.kind;
+            ColorUtility.TryParseHtmlString(def.hex, out var col);
+            so.FindProperty("color").colorValue = col;
+            var arr = so.FindProperty("names");
+            arr.arraySize = def.words != null ? def.words.Length : 0;
+            for (int i = 0; i < arr.arraySize; i++) arr.GetArrayElementAtIndex(i).stringValue = def.words[i];
+            so.FindProperty("toggle").objectReferenceValue = chip.GetComponent<Toggle>();
+            so.FindProperty("body").objectReferenceValue = body;
+            so.FindProperty("label").objectReferenceValue = t;
+            so.FindProperty("dot").objectReferenceValue = dImg;
+            so.FindProperty("strike").objectReferenceValue = sImg;
+            so.FindProperty("cycle").objectReferenceValue = cyc;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static GameObject BuildRowTemplate(Transform content)
@@ -624,18 +704,18 @@ namespace Redesign0926
 
             var dot = FindOrCreate(tpl.transform, "Dot");
             Img(dot, Spr("r0926_circle"), Color.white, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(22, 0), new Vector2(26, 26));
+            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(20, 0), new Vector2(22, 22));
 
             var name = FindOrCreate(tpl.transform, "Name");
-            var nt = Txt(name, "장소", 40, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var nt = Txt(name, "장소", 38, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
             nt.horizontalOverflow = HorizontalWrapMode.Wrap;
             nt.verticalOverflow = VerticalWrapMode.Truncate;
             var nrt = RT(name);
             nrt.anchorMin = new Vector2(0, 0); nrt.anchorMax = new Vector2(1, 1); nrt.pivot = new Vector2(0.5f, 0.5f);
-            nrt.offsetMin = new Vector2(62, 0); nrt.offsetMax = new Vector2(-200, 0);
+            nrt.offsetMin = new Vector2(52, 0); nrt.offsetMax = new Vector2(-200, 0);
 
             var dist = FindOrCreate(tpl.transform, "Dist");
-            Txt(dist, "0m", 36, Soft, TextAnchor.MiddleRight, FontStyle.Normal);
+            Txt(dist, "0m", 33, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
             SetRect(RT(dist), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-6, 0), new Vector2(190, RowH));
             return tpl;
         }

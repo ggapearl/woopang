@@ -16,13 +16,21 @@ public class SwipePanelController : MonoBehaviour
     private float moveSpeed = 15f;
 
     private int currentPanel = 0;
+    private bool dirDecided, horizontal;
     private float panelWidth;
+
+    /// <summary>키보드 위 입력줄이 떠 있는 동안 밀기만 막는다 (컴포넌트를 끄고 켜면 OnEnable 이 첫 카드로 되돌려
+    /// 3D모델에 이름을 쓰고 나면 '장소' 탭으로 넘어갔다)</summary>
+    [System.NonSerialized] public bool locked;
     private float panelDistance;
     private float currentAnchoredX;
 
     [Header("Settings")]
     [Tooltip("다음 패널 미리보기 간격 (픽셀 단위).")]
     public float panelPreviewAmount = 80f;
+
+    [Tooltip("두 카드를 함께 옆으로 미는 기본 위치 — 첫 카드를 왼쪽에 붙이고 오른쪽 끝에 다음 카드를 살짝 보이게 할 때")]
+    public float baseOffsetX = 0f;
 
     void OnEnable()
     {
@@ -39,7 +47,7 @@ public class SwipePanelController : MonoBehaviour
     {
         currentPanel = 0;
         currentAnchoredX = 0;
-        if (panel1 != null) panel1.anchoredPosition = new Vector2(0, 0);
+        if (panel1 != null) panel1.anchoredPosition = new Vector2(baseOffsetX, 0);
 
         yield return null;
         ResetToFirstPanel();
@@ -50,7 +58,7 @@ public class SwipePanelController : MonoBehaviour
         currentPanel = 0;
         CalculateDimensions();
         currentAnchoredX = 0;
-        if (panel1 != null) panel1.anchoredPosition = new Vector2(0, 0);
+        if (panel1 != null) panel1.anchoredPosition = new Vector2(baseOffsetX, 0);
         UpdatePanelPositions();
     }
 
@@ -81,7 +89,7 @@ public class SwipePanelController : MonoBehaviour
     void Update()
     {
         // 업로드 화면이 닫혀 있을 땐 다른 화면의 가로 끌기(지도·분류 칩 등)를 받지 않는다
-        if (panel1 == null || !panel1.gameObject.activeInHierarchy) { isDragging = false; return; }
+        if (panel1 == null || !panel1.gameObject.activeInHierarchy || locked) { isDragging = false; return; }
 
         // 입력 처리는 Update에서 수행
         if (Touch.activeTouches.Count > 0)
@@ -93,15 +101,25 @@ public class SwipePanelController : MonoBehaviour
                 startPos = touch.screenPosition;
                 dragStartPosX = currentAnchoredX;
                 isDragging = true;
+                dirDecided = false;
             }
             else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Moved && isDragging)
             {
-                float deltaX = touch.screenPosition.x - startPos.x;
-                currentAnchoredX = dragStartPosX + deltaX;
+                Vector2 d = touch.screenPosition - startPos;
+                if (!dirDecided)
+                {
+                    // 확실히 옆으로 움직일 때만 카드를 민다 — 위아래로 움직이는 손가락에 카드가 같이 흔들리지 않게
+                    if (Mathf.Abs(d.x) < 24f && Mathf.Abs(d.y) < 24f) return;
+                    dirDecided = true;
+                    horizontal = Mathf.Abs(d.x) > Mathf.Abs(d.y) * 1.2f;
+                    if (!horizontal) { isDragging = false; return; }
+                }
+                currentAnchoredX = dragStartPosX + d.x;
             }
             else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Ended && isDragging)
             {
                 isDragging = false;
+                if (!dirDecided || !horizontal) return;
                 float swipeDistance = touch.screenPosition.x - startPos.x;
 
                 if (Mathf.Abs(swipeDistance) > swipeThreshold)
@@ -137,12 +155,12 @@ public class SwipePanelController : MonoBehaviour
     {
         if (panel1 != null)
         {
-            panel1.anchoredPosition = new Vector2(currentAnchoredX, 0);
+            panel1.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX, 0);
             
             if (panel2 != null)
             {
                 // panel2는 항상 panel1 기준의 상대 위치를 유지 (동기화)
-                panel2.anchoredPosition = new Vector2(currentAnchoredX + panelDistance, 0);
+                panel2.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX + panelDistance, 0);
             }
         }
     }

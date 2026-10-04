@@ -12,6 +12,8 @@ public class LocationManager : MonoBehaviour
     [SerializeField] private Sprite successSprite;
     [SerializeField] private Sprite failSprite;
     [SerializeField] private Text infoText;
+    [Tooltip("켜면 주소·좌표를 한 줄로 (0926 도크 위 칩)")]
+    [SerializeField] private bool singleLine = false;
     [SerializeField] private float refreshInterval = 30f;
 
     private string currentLanguage;
@@ -152,6 +154,18 @@ public class LocationManager : MonoBehaviour
                     string jsonResponse = request.downloadHandler.text;
                     JSONNode data = JSON.Parse(jsonResponse);
 
+                    if (singleLine)
+                    {
+                        // 도크 바로 위 한 줄: "지곡리, 예산군 · 36.6361, 126.8280"
+                        textBuilder.Clear();
+                        string[] parts = (data["display_name"].Value ?? "").Split(',');
+                        if (parts.Length >= 2) textBuilder.Append(parts[0].Trim()).Append(", ").Append(parts[1].Trim()).Append("  ·  ");
+                        else if (parts.Length == 1 && parts[0].Trim().Length > 0) textBuilder.Append(parts[0].Trim()).Append("  ·  ");
+                        AppendCoords(latitude, longitude);
+                        infoText.text = textBuilder.ToString();
+                        yield break;
+                    }
+
                     textBuilder.Clear();
                     textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
                     textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
@@ -183,8 +197,7 @@ public class LocationManager : MonoBehaviour
                 {
                     Debug.LogError($"[LocationManager] JSON 파싱 에러: {e.Message}");
                     textBuilder.Clear();
-                    textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
-                    textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
+                    AppendCoords(latitude, longitude);
                     infoText.text = textBuilder.ToString();
                 }
             }
@@ -194,11 +207,16 @@ public class LocationManager : MonoBehaviour
 
                 // 좌표만이라도 표시
                 textBuilder.Clear();
-                textBuilder.Append("Lat: ").Append(latitude.ToString("F4"));
-                textBuilder.Append(", Lon: ").Append(longitude.ToString("F4"));
+                AppendCoords(latitude, longitude);
                 infoText.text = textBuilder.ToString();
             }
         }
+    }
+
+    private void AppendCoords(double latitude, double longitude)
+    {
+        if (singleLine) textBuilder.Append("<color=#8C959D>").Append(latitude.ToString("F4")).Append(", ").Append(longitude.ToString("F4")).Append("</color>");
+        else textBuilder.Append("Lat: ").Append(latitude.ToString("F4")).Append(", Lon: ").Append(longitude.ToString("F4"));
     }
 
     IEnumerator RefreshLocationPeriodically()

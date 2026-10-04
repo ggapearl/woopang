@@ -15,7 +15,7 @@ using UnityEngine.UI;
 /// 닫기 버튼·뒤로가기·바깥 누르기로 닫을 때도 R0926CloseProxy 가 AnimateClose 를 불러 아래로 미끄러져 사라진다.
 /// 위치는 증분으로만 더하고 빼서 R0926SlideIn·R0926SafeInset 과 겹쳐도 자리가 틀어지지 않는다.
 /// </summary>
-public class R0926SwipeDismiss : MonoBehaviour
+public class R0926SwipeDismiss : R0926Closer
 {
     [SerializeField] private Button closeButton;
     [SerializeField] private float dismissFraction = 0.25f;   // 시트 높이 대비
@@ -58,7 +58,7 @@ public class R0926SwipeDismiss : MonoBehaviour
     }
 
     /// <summary>시트를 아래로 내려 보낸 뒤 then(없으면 closeButton)을 누른다. 이미 닫는 중이면 무시.</summary>
-    public void AnimateClose(Button then)
+    public override void AnimateClose(Button then)
     {
         if (!isActiveAndEnabled) { if (then != null) then.onClick.Invoke(); return; }
         if (closing) return;

@@ -61,7 +61,8 @@ public class R0926PlaceRows : MonoBehaviour
         {
             // 원본은 보이지 않게만 — PlaceListManager·스켈레톤이 계속 참조한다
             source.enabled = false;
-            var le = source.GetComponent<LayoutElement>() ?? source.gameObject.AddComponent<LayoutElement>();
+            var le = source.GetComponent<LayoutElement>();
+            if (le == null) le = source.gameObject.AddComponent<LayoutElement>();
             le.ignoreLayout = true;
         }
         if (rowTemplate != null) rowTemplate.SetActive(false);

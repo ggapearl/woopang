@@ -257,7 +257,7 @@ public class WoopangSplash : MonoBehaviour
         texture.Apply();
         texture.wrapMode = TextureWrapMode.Clamp;
 
-        return Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
+        return Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
     }
 
     /// <summary>

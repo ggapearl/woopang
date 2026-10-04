@@ -36,7 +36,7 @@ public class ModelUploadLocalizer : MonoBehaviour
         },
         ["ko"] = new LocalizedModelUploadTexts
         {
-            addModelTitle = "3D 모델 추가",
+            addModelTitle = "3D모델 추가",
             nameLabel = "이름",
             coordinateLabel = "좌표",
             coordinateSubtext = "위치 서비스를 활성화해야 합니다",

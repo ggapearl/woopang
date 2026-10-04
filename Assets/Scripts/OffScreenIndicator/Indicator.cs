@@ -33,14 +33,32 @@ public class Indicator : MonoBehaviour
     /// </summary>
     [HideInInspector] public int lastUpdatedFrame;
 
-    // ── 닫기(X) — 박스 오른쪽 아래 끝(위쪽은 장소 이름을 가려서). 누르면 이 기기에서 그 장소를 숨긴다(HiddenPlaces: 3D·박스·화살표).
-    //    씬이 켜 줄 때만 생긴다(R0926IndicatorClose). 장소가 아닌 대상(P2P 사용자 등)에는 붙지 않는다.
-    public static bool CloseButtonEnabled;
-    public static Sprite CloseIcon;
-    public static Sprite CloseBackground;
-    public static float CloseButtonSize = 96f;   // 캔버스 단위 — 박스가 거리에 따라 커지고 작아져도 이 크기 유지
+    // ── 0926 박스 (R0926IndicatorClose 가 켠다) — 거리는 위·이름은 아래, 장소 박스는 오른쪽 위 꺾쇠 자리에 박스 색 X.
+    //    X 를 누르면 그 자리에서 '삭제' 알약으로 펼쳐지고, 3초 안에 한 번 더 누르면 이 기기에서 숨긴다(HiddenPlaces: 3D·박스·화살표).
+    //    오브젝트를 두 번 누르려다 X 를 잘못 눌러도 바로 사라지지 않게. 장소가 아닌 대상(P2P 사용자 등)에는 X 가 없다.
+    public static bool LabelsSwapped;            // 거리 위 · 이름 아래
+    public static bool CloseButtonEnabled;       // 설정 '오브젝트 삭제 기능' — 끄면 X 없이 꺾쇠 넷
+    public static Sprite CloseIcon;              // 흰 X (박스 색으로 칠한다)
+    public static Sprite CornerCutBox;           // 오른쪽 위 꺾쇠를 뺀 박스
+    public static Sprite ClosePill;              // '삭제' 알약 (9-slice)
+    public static string CloseConfirmLabel = "삭제";
+    private const float CloseConfirmWindow = 3f;
+    private const float XMin = 44f, XMax = 88f;  // X 크기 (캔버스 단위 ≈ 12~24pt) — 모서리 꺾쇠 길이의 75%
+    private const float HitSize = 160f;          // 누르는 영역 (≈ 44pt)
+    private const float PillH = 84f;             // '삭제' 알약 높이 (≈ 23pt)
     private RectTransform closeButton;
     private Target closeFor;
+    private bool closePlace, closeOn;
+    private Sprite boxSprite;                    // 프리팹의 원래 박스 (꺾쇠 넷)
+    private Vector2 namePos, distPos;            // 원래 글자 자리
+    private bool labelsSwapped;
+    private RectTransform closePill, closeDrain;
+    private Image closePillImg, closeXImg;
+    private Text closeLabel;
+    private float closeArmedAt = -1f, closeK;
+    private bool closeRest;
+    private CanvasGroup closeGroup;
+    private Vector2 closeXCenter;                // 누르는 영역 안에서 X 가운데 (캔버스 단위)
 
     public bool Active
     {
@@ -73,6 +91,9 @@ public class Indicator : MonoBehaviour
         {
             distanceText = transform.GetComponentInChildren<Text>();
         }
+        boxSprite = indicatorImage.sprite;
+        if (nameText != null) namePos = nameText.rectTransform.anchoredPosition;
+        if (distanceText != null) distPos = distanceText.rectTransform.anchoredPosition;
 
         // 터치 가능하도록 Button 추가
         Button btn = GetComponent<Button>();
@@ -249,28 +270,92 @@ public class Indicator : MonoBehaviour
     private void LateUpdate()
     {
         if (indicatorType != IndicatorType.BOX) return;
-        if (!CloseButtonEnabled)
-        {
-            if (closeButton != null && closeButton.gameObject.activeSelf) closeButton.gameObject.SetActive(false);
-            return;
-        }
+        SwapLabels(LabelsSwapped);
+
         if (ownerTarget != closeFor)
         {
             closeFor = ownerTarget;
-            bool isPlace = ownerTarget != null && HiddenPlaces.ResolveUniqueId(ownerTarget) != null;
-            if (isPlace) EnsureCloseButton();
-            if (closeButton != null) closeButton.gameObject.SetActive(isPlace);
+            closePlace = ownerTarget != null && HiddenPlaces.ResolveUniqueId(ownerTarget) != null;
+            ResetConfirm();   // 다른 장소로 재사용된 박스 — 곧바로 X 로
         }
-        if (closeButton != null && closeButton.gameObject.activeSelf)
+        bool want = CloseButtonEnabled && closePlace;
+        if (want != closeOn)
         {
-            float s = transform.localScale.x;
-            if (s > 0.0001f)
-            {
-                closeButton.localScale = Vector3.one / s;
-                // 모서리에서 살짝 오른쪽·위로 — 박스 아래 거리 글자(1778m 등)와 겹치지 않게. 박스 크기와 상관없이 같은 간격
-                closeButton.anchoredPosition = new Vector2(0.3f, 0.3f) * (CloseButtonSize / s);
-            }
+            closeOn = want;
+            if (want) EnsureCloseButton();
+            if (closeButton != null) closeButton.gameObject.SetActive(want);
+            // X 가 있으면 오른쪽 위 꺾쇠를 뺀 박스, 없으면 원래 박스(꺾쇠 넷)
+            if (CornerCutBox != null && boxSprite != null) indicatorImage.sprite = want ? CornerCutBox : boxSprite;
+            ResetConfirm();
         }
+        if (!closeOn) return;
+
+        float s = transform.localScale.x;
+        if (s <= 0.0001f) return;
+        // 오른쪽 위 꼭짓점 안쪽 c×c 자리 — X 의 바깥선이 박스 윗변·오른쪽 변과 맞는다. 박스가 커지고 작아져도 늘 그 자리
+        float side = ((RectTransform)transform).rect.width * s;
+        float c = Mathf.Clamp(side * 0.3f * 0.75f, XMin, XMax);
+        // 누르는 영역은 박스 바깥(오른쪽 위)으로 넉넉히, 안쪽은 X 바로 옆까지만 —
+        // 가운데에 두면 작은 박스에선 박스 한가운데(오브젝트)까지 덮어, 오브젝트를 누르려다 X 가 눌렸다
+        float edge = c + 12f;
+        Vector2 hitCenter = new Vector2(HitSize / 2f - edge, HitSize / 2f - edge);   // 꼭짓점 기준
+        closeButton.localScale = Vector3.one / s;
+        closeButton.anchoredPosition = hitCenter / s;
+        closeXCenter = new Vector2(-c / 2f, -c / 2f) - hitCenter;
+        closeXImg.rectTransform.anchoredPosition = closeXCenter;
+        closeXImg.rectTransform.sizeDelta = new Vector2(c, c);
+        var bc = indicatorImage.color;   // 박스 색 그대로 (분류 색)
+        closeXImg.color = new Color(bc.r, bc.g, bc.b, bc.a * (1f - Smooth(closeK)));
+        AnimateCloseConfirm(c);
+    }
+
+    private void SwapLabels(bool on)
+    {
+        if (on == labelsSwapped || nameText == null || distanceText == null || nameText == distanceText) return;
+        labelsSwapped = on;
+        nameText.rectTransform.anchoredPosition = on ? distPos : namePos;
+        distanceText.rectTransform.anchoredPosition = on ? namePos : distPos;
+    }
+
+    private void ResetConfirm()
+    {
+        closeArmedAt = -1f;
+        closeK = 0f;
+        closeRest = false;
+        if (distanceText != null) distanceText.canvasRenderer.SetAlpha(1f);
+    }
+
+    private static float Smooth(float x) => x * x * (3f - 2f * x);
+
+    private void AnimateCloseConfirm(float c)
+    {
+        if (closePill == null) return;
+        if (closeArmedAt >= 0f && Time.unscaledTime - closeArmedAt > CloseConfirmWindow) closeArmedAt = -1f;
+        float target = closeArmedAt >= 0f ? 1f : 0f;
+        if (closeK == 0f && target == 0f && closeRest) return;
+        closeK = Mathf.MoveTowards(closeK, target, Time.unscaledDeltaTime / 0.22f);
+        closeRest = closeK == 0f;
+        float k = Smooth(closeK);
+        // '삭제'일 때는 박스 선 위에, 거리 흐림과 상관없이 또렷하게
+        if (closeK > 0f && closeButton.GetSiblingIndex() != closeButton.parent.childCount - 1) closeButton.SetAsLastSibling();
+        if (closeGroup != null) closeGroup.ignoreParentGroups = closeK > 0.01f;
+
+        // X 는 돌며 작아지고, 그 자리에서 빨간 알약이 왼쪽으로 펼쳐진다 (오른쪽 끝 = X 오른쪽 끝 조금 바깥)
+        closeXImg.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f * k);
+        closeXImg.rectTransform.localScale = Vector3.one * (1f - 0.6f * k);
+        if (closeLabel != null && closeLabel.text != CloseConfirmLabel) closeLabel.text = CloseConfirmLabel;
+        float w = (closeLabel != null ? closeLabel.preferredWidth : 0f) + 72f;
+        closePill.sizeDelta = new Vector2(w, PillH);
+        closePill.anchoredPosition = closeXCenter + new Vector2(c / 2f + 8f, 0f);
+        closePill.localScale = new Vector3(Mathf.Lerp(0.2f, 1f, k), 1f, 1f);
+        closePill.gameObject.SetActive(closeK > 0.001f);
+        closePillImg.color = new Color(0.91f, 0.263f, 0.353f, 0.97f * Mathf.Clamp01(k * 1.5f));
+        if (closeLabel != null) closeLabel.color = new Color(1f, 1f, 1f, Mathf.Clamp01(k * 1.6f - 0.4f));
+        // 아래 흰 줄이 3초 동안 줄어든다 — 다 줄면 다시 X
+        float left = closeArmedAt >= 0f ? 1f - (Time.unscaledTime - closeArmedAt) / CloseConfirmWindow : 0f;
+        closeDrain.sizeDelta = new Vector2((w - 40f) * Mathf.Clamp01(left), 5f);
+        // 그동안 위의 거리 글자는 옅게
+        if (distanceText != null) distanceText.canvasRenderer.SetAlpha(1f - 0.78f * k);
     }
 
     private void EnsureCloseButton()
@@ -279,29 +364,62 @@ public class Indicator : MonoBehaviour
         var go = new GameObject("Close0926", typeof(RectTransform), typeof(Image), typeof(Button));
         closeButton = (RectTransform)go.transform;
         closeButton.SetParent(transform, false);
-        closeButton.anchorMin = closeButton.anchorMax = new Vector2(1f, 0f);
+        closeButton.anchorMin = closeButton.anchorMax = new Vector2(1f, 1f);
         closeButton.pivot = new Vector2(0.5f, 0.5f);
-        closeButton.anchoredPosition = Vector2.zero;
-        closeButton.sizeDelta = Vector2.one * (CloseButtonSize * 1.9f);   // 누르는 영역은 보이는 원보다 넉넉히
+        closeButton.sizeDelta = Vector2.one * HitSize;   // 누르는 영역은 보이는 X 보다 넉넉히
         go.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+        closeGroup = go.AddComponent<CanvasGroup>();
 
-        var bg = new GameObject("Bg", typeof(RectTransform), typeof(Image));
-        var bgRt = (RectTransform)bg.transform;
-        bgRt.SetParent(closeButton, false);
-        bgRt.sizeDelta = Vector2.one * CloseButtonSize;
-        var bgImg = bg.GetComponent<Image>();
-        bgImg.sprite = CloseBackground;
-        bgImg.color = new Color(0.06f, 0.07f, 0.1f, 0.78f);
-        bgImg.raycastTarget = false;
+        var x = new GameObject("X", typeof(RectTransform), typeof(Image));
+        ((RectTransform)x.transform).SetParent(closeButton, false);
+        closeXImg = x.GetComponent<Image>();
+        closeXImg.sprite = CloseIcon;
+        closeXImg.preserveAspect = true;
+        closeXImg.raycastTarget = false;
 
-        var icon = new GameObject("X", typeof(RectTransform), typeof(Image));
-        var icRt = (RectTransform)icon.transform;
-        icRt.SetParent(closeButton, false);
-        icRt.sizeDelta = Vector2.one * (CloseButtonSize * 0.46f);
-        var icImg = icon.GetComponent<Image>();
-        icImg.sprite = CloseIcon;
-        icImg.color = Color.white;
-        icImg.raycastTarget = false;
+        var pill = new GameObject("Confirm", typeof(RectTransform), typeof(Image));
+        closePill = (RectTransform)pill.transform;
+        closePill.SetParent(closeButton, false);
+        closePill.anchorMin = closePill.anchorMax = new Vector2(0.5f, 0.5f);
+        closePill.pivot = new Vector2(1f, 0.5f);   // 오른쪽 끝에서 왼쪽으로 펼쳐진다
+        closePillImg = pill.GetComponent<Image>();
+        if (ClosePill != null)
+        {
+            closePillImg.sprite = ClosePill;
+            closePillImg.type = Image.Type.Sliced;
+            closePillImg.pixelsPerUnitMultiplier = ClosePill.border.y / (PillH / 2f);
+        }
+        closePillImg.raycastTarget = true;   // '삭제' 알약을 눌러도 된다
+        pill.SetActive(false);
+
+        Font font = nameText != null ? nameText.font : distanceText != null ? distanceText.font : null;
+        if (font != null)
+        {
+            var lab = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            var labRt = (RectTransform)lab.transform;
+            labRt.SetParent(closePill, false);
+            labRt.anchorMin = Vector2.zero; labRt.anchorMax = Vector2.one;
+            labRt.offsetMin = Vector2.zero; labRt.offsetMax = new Vector2(0f, 2f);
+            closeLabel = lab.GetComponent<Text>();
+            closeLabel.font = font;
+            closeLabel.fontSize = 46;
+            closeLabel.fontStyle = FontStyle.Bold;
+            closeLabel.alignment = TextAnchor.MiddleCenter;
+            closeLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            closeLabel.verticalOverflow = VerticalWrapMode.Overflow;
+            closeLabel.raycastTarget = false;
+            closeLabel.text = CloseConfirmLabel;
+        }
+
+        var drain = new GameObject("Drain", typeof(RectTransform), typeof(Image));
+        closeDrain = (RectTransform)drain.transform;
+        closeDrain.SetParent(closePill, false);
+        closeDrain.anchorMin = closeDrain.anchorMax = new Vector2(0f, 0f);
+        closeDrain.pivot = new Vector2(0f, 0f);
+        closeDrain.anchoredPosition = new Vector2(20f, 8f);
+        var dImg = drain.GetComponent<Image>();
+        dImg.color = new Color(1f, 1f, 1f, 0.55f);
+        dImg.raycastTarget = false;
 
         var btn = go.GetComponent<Button>();
         btn.transition = Selectable.Transition.None;
@@ -310,7 +428,15 @@ public class Indicator : MonoBehaviour
 
     private void OnCloseClicked()
     {
-        if (ownerTarget != null) HiddenPlaces.HideTarget(ownerTarget);
+        if (ownerTarget == null) return;
+        if (closeArmedAt < 0f || Time.unscaledTime - closeArmedAt > CloseConfirmWindow)
+        {
+            closeArmedAt = Time.unscaledTime;   // 첫 번째 — '삭제'로 바뀌기만
+            closeRest = false;
+            return;
+        }
+        ResetConfirm();
+        HiddenPlaces.HideTarget(ownerTarget);
     }
 
     /// <summary>
