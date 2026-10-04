@@ -230,6 +230,7 @@ svg{display:block}
 .drow .tx{flex:1;min-width:0}
 .drow .tx b{display:block;font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .drow .tx small{display:block;font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsep{height:1px;background:var(--line);margin:8px 12px}
 .drow .chev{width:12px;height:12px;color:var(--ink-3);flex:none}
 .dnote{font-size:13px;color:var(--ink-3);padding:6px 12px}
 .drawer footer{display:flex;align-items:center;gap:6px;padding:12px 20px calc(12px + env(safe-area-inset-bottom));font-size:12px;color:var(--ink-3)}
@@ -325,7 +326,8 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .inbox.out b{color:var(--ink-2)}
 .att{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .att img{width:84px;height:84px;object-fit:cover;border-radius:8px;display:block;background:var(--line)}
-.att a.file{font-size:12px;color:inherit;text-decoration:underline}
+.att .att-img{display:block;border-radius:8px}
+.att .file{font-size:12px;color:inherit;text-decoration:underline;text-align:left;overflow-wrap:anywhere}
 
 /* 받은 시각 (2026-09-29) — 텔레그램처럼 작게 */
 .ts{font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:400}
@@ -352,13 +354,17 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .doc-total{font-size:12px;color:var(--ink-3)}
 .doc-head input[type=search]{border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:9px 12px;font-size:14px;outline:none;-webkit-appearance:none}
 .doc-head input[type=search]:focus{border-color:var(--navy)}
-.doc-chips{display:flex;gap:6px;overflow-x:auto;padding:4px 16px 10px;scrollbar-width:none}
+/* 분류 버튼 (2026-10-04) — 목록이 길면 flex 가 줄을 눌러 얇은 막대만 남던 것: 머리·버튼 줄은 줄어들지 않게 */
+.doc-content>*{flex:none}
+.doc-chips{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;min-height:48px;overflow-x:auto;overflow-y:hidden;
+  padding:4px 16px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
 .doc-chips::-webkit-scrollbar{display:none}
-.dchip{flex:none;font-size:13px;color:var(--ink-2);padding:6px 13px;border-radius:999px;background:var(--surface-2);border:1px solid transparent}
-.dchip.on{background:var(--navy);color:var(--on-navy);font-weight:600}
+.dchip{flex:none;display:inline-flex;align-items:center;height:34px;padding:0 14px;line-height:20px;font-size:14px;font-weight:500;
+  white-space:nowrap;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;-webkit-appearance:none;appearance:none}
+.dchip:active{border-color:var(--navy)}
+.dchip.on{background:var(--navy);border-color:var(--navy);color:var(--on-navy);font-weight:600}
 .doc-list{padding:0 8px 24px;display:flex;flex-direction:column}
 .doc-day{font-size:12px;font-weight:700;color:var(--ink-3);padding:14px 10px 4px}
-.drow2-wrap{display:flex;flex-direction:column}
 .drow2{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:12px}
 .drow2:active{background:var(--surface-2)}
 .dthumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:var(--surface-2)}
@@ -367,8 +373,36 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .dtx b{font-size:15px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dtx small{font-size:12px;color:var(--ink-3)}
 .drow2 .chev{width:12px;height:12px;color:var(--ink-3);flex:none}
-.dfiles{display:flex;flex-direction:column;gap:4px;padding:2px 10px 10px 65px}
-.dfile{text-align:left;font-size:13px;color:var(--navy);padding:4px 0}
 .doc-more{align-self:center;margin:14px 0;font-size:13px;color:var(--navy);padding:8px 16px;border-radius:999px;background:var(--navy-soft)}
 .doc-more:disabled{opacity:.6}
 .doc-empty{font-size:13px;color:var(--ink-3);text-align:center;padding:40px 24px;line-height:1.6}
+
+/* 사진·영상 보기 (2026-10-04) — 사진이 잘 보이게 늘 검은 바탕 */
+.viewer{position:absolute;top:0;right:0;bottom:0;left:0;z-index:38;background:#000;color:#fff;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.vw-top{flex:none;height:52px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 6px}
+.vw-btn{min-width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:#fff}
+.vw-btn svg{width:22px;height:22px}
+.vw-btn.text{padding:0 12px;font-size:15px;font-weight:600}
+.vw-btn:active{background:rgba(255,255,255,.14)}
+.vw-count{flex:1;text-align:center;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.vw-stage{flex:1;min-height:0;position:relative}
+.vw-track{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.vw-track::-webkit-scrollbar{display:none}
+.vw-slide{flex:none;width:100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.vw-slide img,.vw-slide video{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;background:#000}
+.vw-audio{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;padding:0 20px}
+.vw-audio audio{width:100%;max-width:400px}
+.vw-msg{font-size:15px;color:rgba(255,255,255,.8);text-align:center;padding:0 20px;overflow-wrap:anywhere}
+.vw-doc{width:100%;height:100%;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff}
+.vw-doc iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.vw-arrow{position:absolute;top:50%;width:38px;height:38px;margin-top:-19px;border-radius:50%;display:grid;place-items:center;
+  color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);z-index:1}
+.vw-arrow svg{width:18px;height:18px}
+.vw-arrow.prev{left:8px}
+.vw-arrow.next{right:8px}
+.vw-arrow.next svg{transform:scaleX(-1)}
+.vw-foot{flex:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px 6px}
+.vw-name{flex:1;min-width:0;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vw-open{flex:none;font-size:12px;color:rgba(255,255,255,.85);text-decoration:underline;text-underline-offset:2px;padding:6px 0}

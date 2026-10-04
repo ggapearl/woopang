@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-02b';
+  const WEB_VERSION = '2026-10-04';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1078,13 +1078,15 @@
   }
   const timeOnly = ts => (ts ? new Date(ts * 1000) : new Date()).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
 
-  /** 휴대폰으로 보낸 카드뉴스·대표님이 보낸 사진 — 서명 링크(PC 효딩쓰가 만든 것)라 폰에서 바로 열린다 */
+  /** 휴대폰으로 보낸 카드뉴스·대표님이 보낸 사진 — 서명 링크(PC 효딩쓰가 만든 것). 누르면 앱 안 보기 화면으로 (2026-10-04) */
   function attachments(it) {
     const imgs = it.images || [], files = it.files || [];
     if (!imgs.length && !files.length) return null;
+    const photos = imgs.map(u => ({ url: u, name: '', kind: 'image' }));
     return h('div', { class: 'att' },
-      imgs.map(u => h('a', { href: u }, h('img', { src: u, alt: '', loading: 'lazy' }))),
-      files.map(f => h('a', { href: f.url, class: 'file', text: '📄 ' + f.name })));
+      imgs.map((u, i) => h('button', { class: 'att-img', 'aria-label': '사진 크게 보기', onclick: () => openViewer(photos, i, '') },
+        h('img', { src: u, alt: '', loading: 'lazy' }))),
+      files.map(f => h('button', { class: 'file', text: '📄 ' + f.name, onclick: () => openViewer([{ url: f.url, name: f.name }], 0, f.name) })));
   }
 
   /** 알림에 달린 버튼(제안 승인·메일 보내기 등) — 누르면 그 항목의 버튼을 모두 잠근다 */
@@ -1471,13 +1473,14 @@
     d.textContent = '';
     const close = d.close;
     const scroll = h('div', { class: 'scroll' },
+      drawerRow('문서함', '영상 · 사진 · 문서 · 음성', false, h('span', { class: 'badge-ic' }, svg('folder')), () => { close(); openDocs(); }),
+      drawerRow('설정', '목소리 · 말 빠르기 · 화면 · 연결', false, h('span', { class: 'badge-ic' }, svg('gear')), () => { close(); openSettings(); }),
+      h('div', { class: 'dsep' }),
       drawerRow(S.name, '비서실장 · 지금 이 대화', true, orb('idle', 26), close),
       h('div', { class: 'sec', text: 'AI OFFICE 직원' }),
       S.workers.length ? null : h('div', { class: 'dnote', text: '명단을 불러오는 중이거나 AI Office 가 꺼져 있어요.' }),
       S.workers.map(w => drawerRow(w.role ? w.name + ' · ' + w.role : w.name, w.statusLine, false, avatar(w, 32), () => { close(); openWorker(w); })),
       h('div', { class: 'sec', text: '더 보기' }),
-      drawerRow('문서함', '영상 · 사진 · 문서 · 음성', false, h('span', { class: 'badge-ic' }, svg('folder')), () => { close(); openDocs(); }),
-      drawerRow('설정', '목소리 · 말 빠르기 · 화면 · 연결', false, h('span', { class: 'badge-ic' }, svg('gear')), () => { close(); openSettings(); }),
       drawerRow('새 대화', '효딩쓰와 처음부터 다시', false, h('span', { class: 'badge-ic' }, svg('pencil')), () => { newChat(); close(); }));
     d.append(
       h('header', null, h('h2', { text: '대화 상대' }), h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close })),
@@ -1639,7 +1642,6 @@
 
   function openDocs() {
     let kind = '', q = '', items = [], more = false, total = 0, loading = false, loadedOnce = false, alive = true, searchTimer = 0;
-    const expanded = {};
 
     const totalEl = h('div', { class: 'doc-total' });
     const chipsEl = h('div', { class: 'doc-chips' });
@@ -1668,24 +1670,19 @@
 
     function docRow(it) {
       const files = it.files || [];
-      const wrap = h('div', { class: 'drow2-wrap' },
-        h('div', { class: 'drow2', onclick: () => rowTap(it) },
-          it.thumb ? h('img', { class: 'dthumb', src: it.thumb, alt: '', loading: 'lazy' }) : h('div', { class: 'dthumb ic', text: DOC_ICON[it.kind] || '📄' }),
-          h('div', { class: 'dtx' },
-            h('b', { text: it.title || '(제목 없음)' }),
-            h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
-          files.length > 1 ? svg('chev') : null));
-      if (expanded[it.id]) {
-        wrap.append(h('div', { class: 'dfiles' }, files.map(f => h('button', { class: 'dfile', text: '📄 ' + f.name, onclick: () => openLink(f.url) }))));
-      }
-      return wrap;
+      return h('div', { class: 'drow2', onclick: () => rowTap(it) },
+        it.thumb ? h('img', { class: 'dthumb', src: it.thumb, alt: '', loading: 'lazy' }) : h('div', { class: 'dthumb ic', text: DOC_ICON[it.kind] || '📄' }),
+        h('div', { class: 'dtx' },
+          h('b', { text: it.title || '(제목 없음)' }),
+          h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
+        files.length > 1 ? svg('chev') : null);
     }
 
+    /** 항목의 파일 전부를 앱 안 보기 화면으로 — 첫 장부터 */
     function rowTap(it) {
-      const files = it.files || [];
-      if (files.length <= 1) { if (files.length === 1) openLink(files[0].url); return; }
-      expanded[it.id] = !expanded[it.id];
-      draw();
+      const files = (it.files || []).filter(f => f && f.url);
+      if (!files.length) return;
+      openViewer(files.map(f => ({ url: f.url, name: f.name || '', kind: fileKind(f.name, f.url, it.kind) })), 0, it.title || '');
     }
 
     function draw() {
@@ -1726,7 +1723,6 @@
     function reload() {
       items = [];
       more = false;
-      for (const k in expanded) delete expanded[k];
       load();
     }
 
@@ -1737,6 +1733,117 @@
 
     pushPage('문서함', content, () => { alive = false; }, { close: true });
     load();
+  }
+
+  // ── 사진·영상 보기 (앱 안에서 — 2026-10-04) ──
+  const EXT_KIND = [['image', /\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)$/i], ['video', /\.(mp4|m4v|mov|webm|mkv)$/i],
+    ['audio', /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i], ['doc', /\.(html?|md|markdown|pdf|txt|csv|json)$/i]];
+
+  /** 파일 이름(없으면 주소)의 확장자로 종류를 고른다 — 모르면 문서함 항목의 종류 */
+  function fileKind(name, url, fallback) {
+    let path = '';
+    try { path = decodeURIComponent(new URL(url, location.href).pathname); } catch (e) { path = String(url || '').split(/[?#]/)[0]; }
+    for (const s of [String(name || ''), path]) {
+      const hit = EXT_KIND.find(([, re]) => re.test(s));
+      if (hit) return hit[0] === 'video' && /\.webm$/i.test(s) && fallback === 'audio' ? 'audio' : hit[0];
+    }
+    return fallback || 'doc';
+  }
+
+  function viewerSlide(e) {
+    const kind = e.kind || fileKind(e.name, e.url, '');
+    if (kind === 'image') {
+      const img = h('img', { src: e.url, alt: e.name || '', loading: 'lazy', draggable: 'false' });
+      img.addEventListener('error', () => img.replaceWith(h('div', { class: 'vw-msg', text: '사진을 불러오지 못했어요' })));
+      return h('div', { class: 'vw-slide' }, img);
+    }
+    if (kind === 'video') return h('div', { class: 'vw-slide' }, h('video', { src: e.url, controls: true, playsinline: true, 'webkit-playsinline': true, preload: 'metadata' }));
+    if (kind === 'audio') {
+      return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-audio' },
+        h('div', { class: 'vw-msg', text: '🔊 ' + (e.name || '음성') }), h('audio', { src: e.url, controls: true, preload: 'metadata' })));
+    }
+    // 문서 — 처음 볼 때 주소를 넣는다(넘기지 않은 문서는 받지 않음)
+    return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-doc' }, h('iframe', { 'data-src': e.url, title: e.name || '문서', referrerpolicy: 'no-referrer' })));
+  }
+
+  /** 전체 화면 보기 — entries: [{url, name, kind}], start: 처음 보일 장 */
+  function openViewer(entries, start, title) {
+    const list = (entries || []).filter(e => e && e.url);
+    if (!list.length) return;
+    let idx = Math.max(0, Math.min(start || 0, list.length - 1)), raf = 0;
+    const many = list.length > 1;
+
+    const counter = h('div', { class: 'vw-count', 'aria-live': 'polite' });
+    const nameEl = h('span', { class: 'vw-name' });
+    const track = h('div', { class: 'vw-track' }, list.map(viewerSlide));
+    const prev = many ? h('button', { class: 'vw-arrow prev', 'aria-label': '앞 장', html: ICON.back, onclick: () => go(idx - 1) }) : null;
+    const next = many ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
+    const el = h('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '보기' },
+      h('div', { class: 'vw-top' },
+        h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
+        counter,
+        h('button', { class: 'vw-btn text', text: '공유', onclick: share })),
+      h('div', { class: 'vw-stage' }, track, prev, next),
+      h('div', { class: 'vw-foot' }, nameEl, h('button', { class: 'vw-open', text: '브라우저로 열기', onclick: () => openLink(list[idx].url) })));
+
+    function sync() {
+      counter.textContent = many ? (idx + 1) + ' / ' + list.length : '';
+      nameEl.textContent = list[idx].name || title || '';
+      if (prev) prev.hidden = idx === 0;
+      if (next) next.hidden = idx === list.length - 1;
+      Array.from(track.children).forEach((s, i) => {
+        if (i !== idx) s.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
+        const f = s.querySelector('iframe[data-src]');
+        if (f && i === idx) { f.src = f.dataset.src; f.removeAttribute('data-src'); }
+      });
+    }
+
+    function go(i) {
+      i = Math.max(0, Math.min(i, list.length - 1));
+      track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+    }
+
+    function jump() {
+      track.scrollLeft = idx * track.clientWidth;
+    }
+
+    track.addEventListener('scroll', () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const w = track.clientWidth || 1;
+        const i = Math.max(0, Math.min(Math.round(track.scrollLeft / w), list.length - 1));
+        if (i !== idx) { idx = i; sync(); }
+      });
+    }, { passive: true });
+
+    async function share() {
+      const e = list[idx];
+      const data = { url: e.url, title: e.name || title || '효딩쓰' };
+      if (navigator.share) {
+        try { await navigator.share(data); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+      }
+      openLink(e.url);
+    }
+
+    const onKey = ev => {
+      if (ev.key === 'Escape') close();
+      else if (ev.key === 'ArrowLeft') go(idx - 1);
+      else if (ev.key === 'ArrowRight') go(idx + 1);
+    };
+    const close = layer(() => {
+      document.removeEventListener('keydown', onKey);
+      removeEventListener('resize', jump);
+      cancelAnimationFrame(raf);
+      el.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
+      el.remove();
+    });
+    document.addEventListener('keydown', onKey);
+    addEventListener('resize', jump);                      // 가로·세로 돌려도 보던 장 그대로
+    $('#app').append(el);
+    sync();
+    jump();
+    requestAnimationFrame(jump);
+    return el;
   }
 
   // ── 설정 (SettingsView) ────────────────
