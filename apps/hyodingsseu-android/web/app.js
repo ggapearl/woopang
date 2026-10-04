@@ -1763,7 +1763,9 @@
         h('div', { class: 'vw-msg', text: '🔊 ' + (e.name || '음성') }), h('audio', { src: e.url, controls: true, preload: 'metadata' })));
     }
     // 문서 — 처음 볼 때 주소를 넣는다(넘기지 않은 문서는 받지 않음)
-    return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-doc' }, h('iframe', { 'data-src': e.url, title: e.name || '문서', referrerpolicy: 'no-referrer' })));
+    // sandbox — 같은 woopang.com 이라도 문서 속 스크립트가 앱의 기기 토큰(localStorage)에 못 닿게 allow-same-origin 은 뺀다(10/4)
+    return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-doc' }, h('iframe', { 'data-src': e.url, title: e.name || '문서', referrerpolicy: 'no-referrer',
+      sandbox: 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads' })));
   }
 
   /** 전체 화면 보기 — entries: [{url, name, kind}], start: 처음 보일 장 */
