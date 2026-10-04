@@ -55,6 +55,13 @@ namespace Redesign0926
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
             if (mode == "splashprof") PlanSplashProf();
+            else if (mode == "profile")
+            {
+                Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+                Do(() => { if (Active("LoginPromptPanel")) BackNow(); ProfileManager.Instance?.ShowProfile("3"); });
+                Sleep(3.5f);
+                Shot("profile");
+            }
             else if (mode == "skyfast") PlanSkyFast();
             else if (mode == "inputsync") PlanInputSync();
             else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }

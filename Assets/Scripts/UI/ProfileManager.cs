@@ -1803,7 +1803,7 @@ public class ProfileManager : MonoBehaviour
             yield break;
         }
 
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
+        using (UnityWebRequest request = AvatarRequest(fullUrl))
         {
             yield return request.SendWebRequest();
 
@@ -1895,6 +1895,17 @@ public class ProfileManager : MonoBehaviour
             new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
     }
 
+    /// <summary>
+    /// 아바타를 밉맵과 함께 받는다 — 큰 사진을 프로필 원(333)처럼 작게 그릴 때 밉맵이 없으면 자글자글하게 깨져 보였다
+    /// </summary>
+    private static UnityWebRequest AvatarRequest(string url)
+    {
+        var p = DownloadedTextureParams.Default;
+        p.mipmapChain = true;
+        p.readable = false;
+        return new UnityWebRequest(url, UnityWebRequest.kHttpVerbGET, new DownloadHandlerTexture(p), null);
+    }
+
     // ============================================================
     // Internal Implementation
     // ============================================================
@@ -1971,7 +1982,7 @@ public class ProfileManager : MonoBehaviour
         StartShimmer(imageId, targetImage);
 
         // 6. 다운로드
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
+        using (UnityWebRequest request = AvatarRequest(fullUrl))
         {
             yield return request.SendWebRequest();
 

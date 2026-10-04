@@ -436,8 +436,16 @@ namespace Redesign0926
             }
 
             // 사진 — 90pt 사진 + 매끈한 테두리
-            if (mask != null) RT(mask.gameObject).sizeDelta = new Vector2(333, 333);
-            float ringSize = (333f / 2f - 4f) / 0.82f * 2f;
+            if (mask != null)
+            {
+                RT(mask.gameObject).sizeDelta = new Vector2(333, 333);
+                // 자르는 원: 유니티 기본 Knob(32px, 안쪽 여백) → 우팡 원(256px, 가장자리까지 꽉).
+                // 작은 원을 늘려 자르면 가장자리가 계단처럼 깨지고, 여백만큼 사진이 작게 잘려 분홍 테두리와 틈이 보였다
+                var mImg = mask.GetComponent<Image>();
+                if (mImg != null) { mImg.sprite = Spr("r0926_circle"); mImg.type = Image.Type.Simple; mImg.preserveAspect = false; EditorUtility.SetDirty(mImg); }
+            }
+            // 테두리 안쪽 가장자리(그림의 0.82)가 사진 가장자리를 6 덮게 — 자른 자리의 계단을 테두리가 가린다
+            float ringSize = (333f / 2f - 6f) / 0.82f * 2f;
             if (outline != null) RT(outline.gameObject).sizeDelta = new Vector2(ringSize, ringSize);
 
             // 공개 상태 — 글자 색 그대로 옅은 알약 + 점
