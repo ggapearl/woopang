@@ -54,7 +54,8 @@ namespace Redesign0926
             steps.Clear();
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
-            if (mode == "store2")
+            if (mode == "update") PlanUpdate();
+            else if (mode == "store2")
             {
                 // 스토어 캡처 2 — 원래 자리(3D 오브젝트가 있는 곳)에서 시작화면 · 8방향 · 하늘 날씨
                 storeSrc = lines.Length > 2 ? lines[2].Trim() : "";
@@ -508,6 +509,35 @@ namespace Redesign0926
             });
             Sleep(4.5f);
             Shot("s2_sky");
+        }
+
+        // 업데이트 안내 — 일반 · 강제 (강제는 스토어로 넘어가지 않게 카드만 그린다)
+        private static void PlanUpdate()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1f);
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            Do(() =>
+            {
+                var c = UnityEngine.Object.FindAnyObjectByType<AutoUpdateChecker>(FindObjectsInactive.Include);
+                if (c == null) { log.Add("  검사기 없음"); return; }
+                c.StopAllCoroutines();   // 15초 뒤 실제 확인이 끼어들지 않게
+                typeof(AutoUpdateChecker).GetField("latestVersion", F).SetValue(c, "1.2.54");
+                typeof(AutoUpdateChecker).GetMethod("ShowNormalUpdatePanel", F).Invoke(c, null);
+            });
+            Sleep(0.8f);
+            Shot("upd_normal");
+            Do(() =>
+            {
+                var c = UnityEngine.Object.FindAnyObjectByType<AutoUpdateChecker>(FindObjectsInactive.Include);
+                var card = UnityEngine.Object.FindAnyObjectByType<R0926UpdateCard>(FindObjectsInactive.Include);
+                if (c == null || card == null) { log.Add("  카드 없음"); return; }
+                foreach (var n in new[] { "updateButton", "cancelButton" })
+                    (typeof(AutoUpdateChecker).GetField(n, F).GetValue(c) as Button)?.gameObject.SetActive(false);
+                card.ShowForce(Application.version, "1.2.54", 0.6f);
+            });
+            Sleep(0.6f);
+            Shot("upd_force");
         }
 
         private static void PlanStore2()

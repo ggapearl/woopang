@@ -37,7 +37,7 @@ namespace Redesign0926
                 "UpdateChecker/Box0926/Buttons0926/Update_NO",          // 강제 업데이트 땐 이 버튼이 숨겨져 등록되지 않는다
                 "PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton",
                 "ContinueCaptureDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/NoButton",   // 바깥을 눌렀을 때와 같은 '아니오'
-                "Fixpage/XButton_Panel/XButton_FixUpload",
+                "Fixpage/FixUploadPage/XButton_FixUpload",               // 10-04 카드 오른쪽 위로 옮김 (처음 적용 땐 FixPageCard 가 등록)
                 "LocationPermissionPanel/Box/Buttons/Btn_Close",
                 "FirstTimeGuidePanel/check",
             })

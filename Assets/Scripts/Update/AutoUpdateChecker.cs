@@ -16,6 +16,7 @@ public class AutoUpdateChecker : MonoBehaviour
     [SerializeField] private Button updateButton;
     [SerializeField] private Button cancelButton;
     [SerializeField] private Text updateMessageText; // 기존 텍스트 공통 사용
+    [SerializeField] private R0926UpdateCard card;     // 새 디자인 카드 — 있으면 글·버전·남은 시간을 여기서 그린다
     
     [Header("강제 업데이트 설정")]
     [SerializeField] private float redirectDelay = 3f; // 리디렉션 지연시간
@@ -214,6 +215,7 @@ public class AutoUpdateChecker : MonoBehaviour
         // 버튼들 표시
         if (updateButton != null) updateButton.gameObject.SetActive(true);
         if (cancelButton != null) cancelButton.gameObject.SetActive(true);
+        if (card != null) card.ShowNormal(currentVersion, latestVersion);
         
         if (updatePanel != null)
         {
@@ -263,6 +265,7 @@ public class AutoUpdateChecker : MonoBehaviour
                         string.Format(texts.forceUpdateMessage, latestVersion, countdownNumber));
                     updateMessageText.text = titleMessage;
                 }
+                if (card != null) card.ShowForce(currentVersion, latestVersion, remainingTime / redirectDelay);
                 
                 remainingTime -= Time.unscaledDeltaTime; // unscaledDeltaTime 사용 (timeScale 영향 받지 않음)
                 yield return null;
@@ -278,6 +281,7 @@ public class AutoUpdateChecker : MonoBehaviour
                     string.Format(texts.forceUpdateMessageNoCountdown, latestVersion));
                 updateMessageText.text = titleMessage;
             }
+            if (card != null) card.ShowForce(currentVersion, latestVersion, 0f);
             
             // 잠깐 대기 (메시지 읽을 시간)
             yield return new WaitForSecondsRealtime(1.5f);

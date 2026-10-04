@@ -29,7 +29,132 @@ namespace Redesign0926
             MessageSearch(root, log);
             WeatherSizes(root, log);
             FixPageCard(root, log);
+            UpdateCard(root, log);
             log.Add("1004 ok");
+        }
+
+        // ── 업데이트 안내 — 프로필 카드와 같은 모양 ─────────────────
+        // 예전: 가운데 작은 대화상자에 글 한 덩어리. 강제일 땐 '제목\n\n…N초 후 이동' 을 한 칸에 몰아 썼다.
+        // 판단·이동은 AutoUpdateChecker 그대로 — 카드(R0926UpdateCard)는 글과 모양만.
+        private static void UpdateCard(Transform root, List<string> log)
+        {
+            var upd = Find(root, "UpdateChecker");
+            var box = upd != null ? upd.transform.Find("Box0926") : null;
+            if (box == null) { log.Add("업데이트 안내 없음"); return; }
+            AutoUpdateChecker checker = null;
+            foreach (var r in root.gameObject.scene.GetRootGameObjects())
+            {
+                checker = r.GetComponentInChildren<AutoUpdateChecker>(true);
+                if (checker != null) break;
+            }
+
+            var dim = upd.GetComponent<Image>();
+            if (dim != null) { dim.color = new Color(0.016f, 0.024f, 0.031f, 0.72f); EditorUtility.SetDirty(dim); }
+            const float W = 1160f, Inner = 1052f;
+            Img(box.gameObject, Spr("r0926_pill"), CardBg, Image.Type.Sliced, 64f / 104f).raycastTarget = true;
+            var brt = RT(box.gameObject);
+            brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0.5f, 0.5f);
+            brt.anchoredPosition = Vector2.zero; brt.sizeDelta = new Vector2(W, 900);
+
+            // 강아지 마크 — 분홍 테두리 원 (프로필 사진 자리와 같은 느낌)
+            var emblem = FindOrCreate(box, "Emblem0926");
+            Img(emblem, Spr("r0926_circle"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Simple).raycastTarget = false;
+            RT(emblem).sizeDelta = new Vector2(210, 210);
+            var ring = FindOrCreate(emblem.transform, "Ring0926");
+            Img(ring, Spr("r0926_ring"), Pink, Image.Type.Simple).raycastTarget = false;
+            SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(210, 210));
+            var mark = FindOrCreate(emblem.transform, "Mark0926");
+            var mImg = Img(mark, Spr("r0926_emblem"), Color.white, Image.Type.Simple);
+            mImg.raycastTarget = false; mImg.preserveAspect = true;
+            SetRect(RT(mark), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(124, 124));
+
+            var title = FindOrCreate(box, "Title0926");
+            var tTxt = Txt(title, "새 버전이 나왔어요", 62, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            tTxt.horizontalOverflow = HorizontalWrapMode.Overflow; tTxt.raycastTarget = false;
+            RT(title).sizeDelta = new Vector2(Inner, 90);
+
+            var body = Find(box, "Text (Legacy)");
+            Text bTxt = null;
+            if (body != null)
+            {
+                bTxt = body.GetComponent<Text>();
+                bTxt.fontSize = 44; bTxt.color = Soft; bTxt.alignment = TextAnchor.MiddleCenter; bTxt.fontStyle = FontStyle.Normal;
+                bTxt.lineSpacing = 1.15f; bTxt.raycastTarget = false;
+                bTxt.horizontalOverflow = HorizontalWrapMode.Wrap; bTxt.verticalOverflow = VerticalWrapMode.Overflow;
+                if (font != null) bTxt.font = font;
+                EditorUtility.SetDirty(bTxt);
+                RT(body).sizeDelta = new Vector2(Inner, 124);
+            }
+
+            var vPill = FindOrCreate(box, "Version0926");
+            Img(vPill, Spr("r0926_pill"), new Color(1, 1, 1, 0.07f), Image.Type.Sliced, 64f / 38f).raycastTarget = false;
+            RT(vPill).sizeDelta = new Vector2(420, 76);
+            var vText = FindOrCreate(vPill.transform, "Label0926");
+            var vTxt = Txt(vText, "1.2.52   →   1.2.54", 38, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            vTxt.horizontalOverflow = HorizontalWrapMode.Overflow; vTxt.raycastTarget = false;
+            var vrt = RT(vText); vrt.anchorMin = Vector2.zero; vrt.anchorMax = Vector2.one; vrt.offsetMin = Vector2.zero; vrt.offsetMax = Vector2.zero;
+
+            // 강제일 때 — 스토어로 넘어가기까지 줄어드는 분홍 막대
+            var cd = FindOrCreate(box, "Countdown0926");
+            Img(cd, Spr("r0926_pill"), new Color(1, 1, 1, 0.08f), Image.Type.Sliced, 64f / 5f).raycastTarget = false;
+            RT(cd).sizeDelta = new Vector2(560, 10);
+            var fill = FindOrCreate(cd.transform, "Fill0926");
+            Img(fill, Spr("r0926_pill"), Pink, Image.Type.Sliced, 64f / 5f).raycastTarget = false;
+            var frt = RT(fill); frt.anchorMin = Vector2.zero; frt.anchorMax = Vector2.one; frt.pivot = new Vector2(0, 0.5f); frt.offsetMin = Vector2.zero; frt.offsetMax = Vector2.zero;
+            cd.SetActive(false);
+
+            // 버튼 — 업데이트(흰 알약, 꽉 차게) · 나중에(글자만)
+            var yes = Find(upd.transform, "Update_YES");
+            var no = Find(upd.transform, "Update_NO");
+            if (yes != null)
+            {
+                yes.transform.SetParent(box, false);
+                PillButton(yes, true);
+                ButtonLabel(yes, new[] { "업데이트", "Update", "アップデート", "更新", "Actualizar" }, Dark);
+                RT(yes).sizeDelta = new Vector2(Inner, 150);
+            }
+            if (no != null)
+            {
+                no.transform.SetParent(box, false);
+                var nImg = Img(no, null, new Color(1, 1, 1, 0), Image.Type.Simple);
+                nImg.raycastTarget = true;
+                foreach (var t in no.GetComponentsInChildren<Text>(true)) if (t.name != "Label0926") t.enabled = false;
+                ButtonLabel(no, new[] { "나중에", "Later", "後で", "稍后", "Más tarde" }, Muted);
+                RT(no).sizeDelta = new Vector2(420, 96);
+                BackCloses(no.transform, "업데이트 나중에", log);
+            }
+            var oldButtons = box.Find("Buttons0926");
+            if (oldButtons != null) oldButtons.gameObject.SetActive(false);
+
+            var card = Ensure<R0926UpdateCard>(upd);
+            var so = new SerializedObject(card);
+            so.FindProperty("card").objectReferenceValue = brt;
+            var items = new List<RectTransform> { RT(emblem), RT(title) };
+            var gaps = new List<float> { 0f, 40f };
+            if (body != null) { items.Add(RT(body)); gaps.Add(10f); }
+            items.Add(RT(vPill)); gaps.Add(26f);
+            items.Add(RT(cd)); gaps.Add(44f);
+            if (yes != null) { items.Add(RT(yes)); gaps.Add(48f); }
+            if (no != null) { items.Add(RT(no)); gaps.Add(12f); }
+            var st = so.FindProperty("stack"); st.arraySize = items.Count;
+            for (int i = 0; i < items.Count; i++) st.GetArrayElementAtIndex(i).objectReferenceValue = items[i];
+            var gp = so.FindProperty("gaps"); gp.arraySize = gaps.Count;
+            for (int i = 0; i < gaps.Count; i++) gp.GetArrayElementAtIndex(i).floatValue = gaps[i];
+            so.FindProperty("title").objectReferenceValue = tTxt;
+            so.FindProperty("body").objectReferenceValue = bTxt;
+            so.FindProperty("version").objectReferenceValue = vTxt;
+            so.FindProperty("versionPill").objectReferenceValue = RT(vPill);
+            so.FindProperty("countdown").objectReferenceValue = cd;
+            so.FindProperty("countdownFill").objectReferenceValue = frt;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            if (checker != null)
+            {
+                var cso = new SerializedObject(checker);
+                cso.FindProperty("card").objectReferenceValue = card;
+                cso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            log.Add("update card ok" + (checker == null ? " (검사기 없음)" : ""));
         }
 
         // ── 장소 수정 — 장소 추가 카드와 같은 모양으로 ───────────────
@@ -78,6 +203,7 @@ namespace Redesign0926
                 SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(48, 48));
                 var xp = page.transform.Find("XButton_Panel");
                 if (xp != null) { var xi = xp.GetComponent<Graphic>(); if (xi != null) xi.enabled = false; }
+                BackCloses(x.transform, "장소 수정 X", log);
             }
 
             // 이름 · 설명
