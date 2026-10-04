@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-02';
+  const WEB_VERSION = '2026-10-02b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -89,7 +89,7 @@
       } catch (e) {
         throw new DeskError(0, '서버 주소가 올바르지 않아요.');
       }
-      if (o.query) Object.keys(o.query).forEach(k => url.searchParams.set(k, String(o.query[k])));
+      if (o.query) Object.keys(o.query).forEach(k => { const v = o.query[k]; if (v != null) url.searchParams.set(k, String(v)); });
       const headers = { Accept: 'application/json' };
       if (o.body != null) headers['Content-Type'] = o.contentType || 'application/json';
       const t = this.token;
@@ -248,6 +248,8 @@
       S.pairMessage = null;
       S.items = [];
       S.paired = true;
+      historyState = 'idle';
+      historyAutoTried = false;
       showMain();
       startPolling();
       return null;
@@ -266,6 +268,8 @@
     S.items = [];
     boot = '';
     seq = 0;
+    historyState = 'idle';
+    historyAutoTried = false;
     S.pairMessage = message || null;
     showPair();
   }
@@ -639,6 +643,10 @@
     renderStatus();
     renderDrawer();
     scrollToBottom(false);
+    if (!historyAutoTried) {
+      historyAutoTried = true;
+      if (S.items.length < 20) loadMoreHistory();
+    }
   }
 
   /** 사건 하나를 반영한다. 꼭 보여야 하는 것(카드·내 말)이면 true — 맨 아래로 내린다. */
@@ -730,8 +738,9 @@
         const kind = e.kind || '';
         let source = INCOMING[kind] || kind;
         if (e.from) source += ' · ' + e.from;
+        const buttons = e.buttons || null;
         append({ kind: 'incoming', source, text: e.text || '', auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
-          images: e.images || [], files: e.files || [], ts: e.ts });
+          images: e.images || [], files: e.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts: e.ts });
         lastAI = null;
         return false;
       }
@@ -756,7 +765,8 @@
         toolOwner = {};
         cardOwner = {};
         lastAI = null;
-        if (!replaying) renderAllItems();
+        historyState = 'idle';
+        if (!replaying) { renderAllItems(); renderHistoryBtn(); }
         return false;
       case 'model':
         S.model = e.key || S.model;
@@ -796,6 +806,98 @@
     if (!it) return;
     change(it);
     if (!replaying) paint(it);
+  }
+
+  // ── 지난 대화 보기 (history) ────────────
+  let historyState = 'idle';             // idle | loading | done
+  let historyAutoTried = false;
+  let historyBtnEl = null;
+
+  const INCOMING_SOURCE = (kind, from) => {
+    let source = INCOMING[kind] || kind;
+    if (from) source += ' · ' + from;
+    return source;
+  };
+
+  /** PC 기록 한 항목 → 지금 렌더러가 쓰는 항목 모양 */
+  function historyToItem(raw) {
+    if (!raw || typeof raw.ts !== 'number') return null;
+    const ts = raw.ts;
+    switch (raw.type) {
+      case 'user':
+        return { kind: 'user', text: raw.text || '', origin: raw.origin || 'typed', images: raw.images || [], files: raw.files || [], ts };
+      case 'text':
+        return { kind: 'ai', text: raw.text || '', streaming: false, local: false, meta: null, ts };
+      case 'incoming': {
+        const kind = raw.kind || '';
+        const buttons = raw.buttons || null;
+        return { kind: 'incoming', source: INCOMING_SOURCE(kind, raw.from), text: raw.text || '',
+          auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
+          images: raw.images || [], files: raw.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts };
+      }
+      case 'note':
+        return { kind: 'note', text: raw.text || '', ts };
+      case 'error':
+        return { kind: 'error', text: raw.text || '', ts };
+      default:
+        return null;
+    }
+  }
+
+  /** 지금 화면의 가장 오래된 항목 시각(없으면 지금) — 다음 history 쪽 넘기기 기준 */
+  function earliestTs() {
+    for (let i = 0; i < S.items.length; i++) if (S.items[i].ts) return S.items[i].ts;
+    return Math.floor(Date.now() / 1000);
+  }
+
+  /** history 로 받은 항목(새것부터)을 대화 맨 위에 붙인다 — 스크롤 위치는 그대로 */
+  function prependHistoryItems(itemsDesc) {
+    const asc = itemsDesc.slice().reverse();
+    if (!listEl) { S.items = asc.concat(S.items); return; }
+    const prevHeight = chatEl.scrollHeight;
+    const prevTop = chatEl.scrollTop;
+    const frag = document.createDocumentFragment();
+    asc.forEach(it => {
+      it.id = nextId++;
+      it.el = itemView(it);
+      frag.append(it.el);
+    });
+    S.items = asc.concat(S.items);
+    listEl.insertBefore(frag, listEl.firstChild);
+    renderHello();
+    requestAnimationFrame(() => { chatEl.scrollTop = prevTop + (chatEl.scrollHeight - prevHeight); });
+  }
+
+  function renderHistoryBtn() {
+    if (!historyBtnEl) return;
+    historyBtnEl.textContent = '';
+    if (historyState === 'done') {
+      historyBtnEl.textContent = '처음입니다';
+      historyBtnEl.disabled = true;
+    } else if (historyState === 'loading') {
+      historyBtnEl.append(h('i', { class: 'spinner' }), document.createTextNode(' 불러오는 중'));
+      historyBtnEl.disabled = true;
+    } else {
+      historyBtnEl.textContent = '지난 대화 보기';
+      historyBtnEl.disabled = false;
+    }
+  }
+
+  async function loadMoreHistory() {
+    if (!S.paired || historyState === 'loading' || historyState === 'done') return;
+    historyState = 'loading';
+    renderHistoryBtn();
+    try {
+      const before = earliestTs();
+      const r = await api.get('history', { before, n: 50 });
+      const items = (r.items || []).map(historyToItem).filter(Boolean);
+      if (items.length) prependHistoryItems(items);
+      historyState = (!r.more || !items.length) ? 'done' : 'idle';
+    } catch (e) {
+      historyState = 'idle';
+      show(e);
+    }
+    renderHistoryBtn();
   }
 
   // ── 화면 도구 ──────────────────────────
@@ -840,6 +942,7 @@
     phone: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2.5" width="8" height="15" rx="2"/><path d="M9 14.5h2"/></svg>',
     pc: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/></svg>',
     micSm: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5v3"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>',
   };
   const svg = name => { const t = document.createElement('template'); t.innerHTML = ICON[name]; return t.content.firstChild; };
 
@@ -940,7 +1043,7 @@
       case 'question': return questionCard(it.card);
       case 'incoming':
         return h('div', { class: 'inbox' + (it.auto ? ' auto' : '') + (it.out ? ' out' : '') },
-          h('b', { text: it.source }), it.text ? h('div', { text: it.text }) : null, attachments(it), stamp(it));
+          h('b', { text: it.source }), it.text ? h('div', { text: it.text }) : null, attachments(it), stamp(it), buttonRow(it));
       case 'note': return h('div', { class: 'note', text: it.text });
       case 'error': return h('div', { class: 'err', text: it.text });
       default: return h('div');
@@ -964,6 +1067,17 @@
     return it.ts ? h('span', { class: 'ts', text: hhmm(it.ts), 'aria-hidden': 'true' }) : null;
   }
 
+  /** 문서함 — 날짜 묶음 제목과 줄 시각 */
+  function dayLabel(ts) {
+    const d = ts ? new Date(ts * 1000) : new Date(), now = new Date();
+    const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((startOf(now) - startOf(d)) / 86400000);
+    if (diff === 0) return '오늘';
+    if (diff === 1) return '어제';
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
+  }
+  const timeOnly = ts => (ts ? new Date(ts * 1000) : new Date()).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+
   /** 휴대폰으로 보낸 카드뉴스·대표님이 보낸 사진 — 서명 링크(PC 효딩쓰가 만든 것)라 폰에서 바로 열린다 */
   function attachments(it) {
     const imgs = it.images || [], files = it.files || [];
@@ -971,6 +1085,37 @@
     return h('div', { class: 'att' },
       imgs.map(u => h('a', { href: u }, h('img', { src: u, alt: '', loading: 'lazy' }))),
       files.map(f => h('a', { href: f.url, class: 'file', text: '📄 ' + f.name })));
+  }
+
+  /** 알림에 달린 버튼(제안 승인·메일 보내기 등) — 누르면 그 항목의 버튼을 모두 잠근다 */
+  function buttonRow(it) {
+    if (!it.buttons || !it.buttons.length) return null;
+    const st = it.btnState;
+    return h('div', { class: 'nbtns' }, it.buttons.map(([label, data], i) => {
+      const done = st.doneIndex === i;
+      return h('button', {
+        class: 'nbtn' + (done ? ' done' : ''),
+        disabled: st.busy || st.doneIndex != null,
+        text: done ? '✓ 눌렀어요' : label,
+        onclick: () => pressButton(it, i, data),
+      });
+    }));
+  }
+
+  async function pressButton(it, i, data) {
+    const st = it.btnState;
+    if (!st || st.busy || st.doneIndex != null) return;
+    st.busy = true;
+    paint(it);
+    try {
+      await api.post('button', data);
+      st.doneIndex = i;
+    } catch (e) {
+      show(e);
+    } finally {
+      st.busy = false;
+      paint(it);
+    }
   }
 
   function aiMessage(it) {
@@ -1184,7 +1329,7 @@
         h('details', null, h('summary', { text: '서버 주소' }), server))),
       h('div', { class: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite' }));
     setTimeout(() => code.focus(), 300);
-    chatEl = listEl = helloEl = jumpEl = null;
+    chatEl = listEl = helloEl = jumpEl = historyBtnEl = null;
   }
 
   // ── 화면: 대화 ─────────────────────────
@@ -1209,11 +1354,16 @@
     });
     const mic = h('button', { class: 'round mic', onclick: toggleRecording });
 
-    chatEl = h('div', { class: 'chat', onscroll: () => { if (nearBottom() && jumpEl) jumpEl.hidden = true; } });
+    chatEl = h('div', { class: 'chat', onscroll: () => {
+      if (nearBottom() && jumpEl) jumpEl.hidden = true;
+      if (chatEl.scrollTop <= 24) loadMoreHistory();
+    } });
     listEl = h('div', { class: 'items' });
     helloEl = helloView();
+    historyBtnEl = h('button', { class: 'hist-btn', onclick: loadMoreHistory, text: '지난 대화 보기' });
+    renderHistoryBtn();
     const pullEl = h('div', { class: 'pull' });
-    chatEl.append(pullEl, h('div', { class: 'chat-inner' }, helloEl, listEl));
+    chatEl.append(pullEl, h('div', { class: 'chat-inner' }, historyBtnEl, helloEl, listEl));
     jumpEl = h('button', { class: 'jump', hidden: true, 'aria-label': '맨 아래로', onclick: () => scrollToBottom(true) }, svg('down'));
     pullToRefresh(chatEl, pullEl);
 
@@ -1326,6 +1476,7 @@
       S.workers.length ? null : h('div', { class: 'dnote', text: '명단을 불러오는 중이거나 AI Office 가 꺼져 있어요.' }),
       S.workers.map(w => drawerRow(w.role ? w.name + ' · ' + w.role : w.name, w.statusLine, false, avatar(w, 32), () => { close(); openWorker(w); })),
       h('div', { class: 'sec', text: '더 보기' }),
+      drawerRow('문서함', '영상 · 사진 · 문서 · 음성', false, h('span', { class: 'badge-ic' }, svg('folder')), () => { close(); openDocs(); }),
       drawerRow('설정', '목소리 · 말 빠르기 · 화면 · 연결', false, h('span', { class: 'badge-ic' }, svg('gear')), () => { close(); openSettings(); }),
       drawerRow('새 대화', '효딩쓰와 처음부터 다시', false, h('span', { class: 'badge-ic' }, svg('pencil')), () => { newChat(); close(); }));
     d.append(
@@ -1363,10 +1514,11 @@
     return close;
   }
 
-  function pushPage(title, content, onClose) {
+  function pushPage(title, content, onClose, opts) {
+    opts = opts || {};
     const page = h('div', { class: 'screen page' },
       h('div', { class: 'bar sub' },
-        h('button', { class: 'icon', 'aria-label': '뒤로', onclick: () => popPage(), html: ICON.back }),
+        h('button', { class: 'icon', 'aria-label': opts.close ? '닫기' : '뒤로', onclick: () => popPage(), html: opts.close ? ICON.close : ICON.back }),
         h('div', { class: 'who' }, h('b', { text: title })),
         h('span', { class: 'spacer' })),
       content);
@@ -1478,6 +1630,113 @@
       h('div', { class: 'col' },
         h('div', { class: 'who2' }, m.name || w.name, m.time ? h('span', { text: m.time }) : null),
         h('div', { class: 'o-bubble md', html: markdown(m.content) })));
+  }
+
+  // ── 문서함 (DocsView) ───────────────────
+  const DOC_KINDS = [['', '전체'], ['video', '영상'], ['image', '사진'], ['doc', '문서'], ['audio', '음성']];
+  const DOC_ICON = { video: '🎬', image: '🖼', doc: '📄', audio: '🔊' };
+  const DOC_WORD = { video: '영상', image: '사진', audio: '음성' };
+
+  function openDocs() {
+    let kind = '', q = '', items = [], more = false, total = 0, loading = false, loadedOnce = false, alive = true, searchTimer = 0;
+    const expanded = {};
+
+    const totalEl = h('div', { class: 'doc-total' });
+    const chipsEl = h('div', { class: 'doc-chips' });
+    const searchEl = h('input', {
+      type: 'search', placeholder: '제목으로 찾기', 'aria-label': '문서함 검색', inputmode: 'search',
+      oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { q = searchEl.value.trim(); reload(); }, 400); },
+    });
+    const listEl2 = h('div', { class: 'doc-list' });
+    const content = h('div', { class: 'content doc-content' }, h('div', { class: 'doc-head' }, totalEl, searchEl), chipsEl, listEl2);
+
+    function drawChips() {
+      chipsEl.textContent = '';
+      DOC_KINDS.forEach(([k, label]) => chipsEl.append(h('button', {
+        class: 'dchip' + (kind === k ? ' on' : ''), text: label,
+        onclick: () => { if (kind === k) return; kind = k; drawChips(); reload(); },
+      })));
+    }
+    drawChips();
+
+    function countLabel(it) {
+      const n = (it.files || []).length;
+      if (n <= 1) return '';
+      const word = DOC_WORD[it.kind] || '파일';
+      return word + ' ' + n + (it.kind === 'image' ? '장' : '개');
+    }
+
+    function docRow(it) {
+      const files = it.files || [];
+      const wrap = h('div', { class: 'drow2-wrap' },
+        h('div', { class: 'drow2', onclick: () => rowTap(it) },
+          it.thumb ? h('img', { class: 'dthumb', src: it.thumb, alt: '', loading: 'lazy' }) : h('div', { class: 'dthumb ic', text: DOC_ICON[it.kind] || '📄' }),
+          h('div', { class: 'dtx' },
+            h('b', { text: it.title || '(제목 없음)' }),
+            h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
+          files.length > 1 ? svg('chev') : null));
+      if (expanded[it.id]) {
+        wrap.append(h('div', { class: 'dfiles' }, files.map(f => h('button', { class: 'dfile', text: '📄 ' + f.name, onclick: () => openLink(f.url) }))));
+      }
+      return wrap;
+    }
+
+    function rowTap(it) {
+      const files = it.files || [];
+      if (files.length <= 1) { if (files.length === 1) openLink(files[0].url); return; }
+      expanded[it.id] = !expanded[it.id];
+      draw();
+    }
+
+    function draw() {
+      totalEl.textContent = loadedOnce ? '전체 ' + total + '개' : '';
+      listEl2.textContent = '';
+      if (loading && !items.length) { listEl2.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
+      if (!items.length) { listEl2.append(h('div', { class: 'doc-empty', text: '아직 자료가 없어요 — 효딩쓰가 만든 영상·카드뉴스·캡처가 여기 모입니다' })); return; }
+      let lastDay = null;
+      items.forEach(it => {
+        const day = dayLabel(it.ts);
+        if (day !== lastDay) { listEl2.append(h('div', { class: 'doc-day', text: day })); lastDay = day; }
+        listEl2.append(docRow(it));
+      });
+      if (more) listEl2.append(h('button', { class: 'doc-more', disabled: loading, text: loading ? '불러오는 중' : '더 보기', onclick: loadMore }));
+    }
+
+    async function load(before) {
+      loading = true;
+      draw();
+      try {
+        const query = { kind, q, n: 30 };
+        if (before) query.before = before;
+        const r = await api.get('docs', query);
+        if (!alive) return;
+        const got = r.items || [];
+        items = before ? items.concat(got) : got;
+        more = !!r.more;
+        total = typeof r.total === 'number' ? r.total : items.length;
+        loadedOnce = true;
+      } catch (e) {
+        if (alive) show(e);
+      } finally {
+        loading = false;
+        if (alive) draw();
+      }
+    }
+
+    function reload() {
+      items = [];
+      more = false;
+      for (const k in expanded) delete expanded[k];
+      load();
+    }
+
+    function loadMore() {
+      if (!items.length || loading) return;
+      load(items[items.length - 1].ts);
+    }
+
+    pushPage('문서함', content, () => { alive = false; }, { close: true });
+    load();
   }
 
   // ── 설정 (SettingsView) ────────────────
