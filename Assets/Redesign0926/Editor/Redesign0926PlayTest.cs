@@ -55,6 +55,7 @@ namespace Redesign0926
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
             if (mode == "splashprof") PlanSplashProf();
+            else if (mode == "inputsync") PlanInputSync();
             else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }
             else if (mode == "sky") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSky(); }
             else if (mode == "ar") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanAr(); }
@@ -540,6 +541,68 @@ namespace Redesign0926
             Do(() => AimCamera(-58f, 0f));
             Sleep(2.0f);
             Shot("sky58");
+        }
+
+        // 키보드 위 입력줄 → 원래 칸 — 쓰는 동안 · 닫은 뒤 원래 칸에 '보이는' 글자까지 확인 (모든 입력칸)
+        private static void PlanInputSync()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(0.5f);
+            Do(() => { var up = Find("UploadPage"); if (up != null) up.gameObject.SetActive(true); var fp = Find("Fixpage"); if (fp != null) fp.gameObject.SetActive(true); });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var t = typeof(UploadInputMirror);
+                foreach (var m in UnityEngine.Object.FindObjectsByType<UploadInputMirror>(FindObjectsInactive.Include))
+                {
+                    var mi = t.GetField("mirrorInput", F).GetValue(m) as InputField;
+                    var srcs = t.GetField("sourceInputs", F).GetValue(m) as InputField[];
+                    if (mi == null || srcs == null) { log.Add("  " + m.name + ": 연결 없음"); continue; }
+                    foreach (var src in srcs)
+                    {
+                        if (src == null) continue;
+                        bool wasActive = src.gameObject.activeSelf;
+                        if (!wasActive) src.gameObject.SetActive(true);   // 인스타그램 칸은 스위치를 켜야 보인다
+                        src.text = "";
+                        t.GetMethod("ActivateMirrorFor", F).Invoke(m, new object[] { src });
+                        mi.text = "우팡 테스트";
+                        string live = src.textComponent != null ? src.textComponent.text : "-";
+                        t.GetMethod("OnCloseClicked", F).Invoke(m, null);
+                        string after = src.textComponent != null ? src.textComponent.text : "-";
+                        bool ok = src.text == "우팡 테스트" && after == "우팡 테스트";
+                        log.Add((ok && live == "우팡 테스트" ? "PASS " : "FAIL ") + m.name + "/" + src.transform.parent.parent.name + "/" + src.name
+                                + " · 쓰는 중 보임='" + live + "' · 닫은 뒤 값='" + src.text + "' 보임='" + after + "'");
+                        src.text = "";
+                        if (!wasActive) src.gameObject.SetActive(false);
+                    }
+                }
+            });
+            Do(() => { var fp = Find("Fixpage"); if (fp != null) fp.gameObject.SetActive(false); });
+            // 3D모델 탭에서 이름을 쓰고 닫아도 3D모델 탭에 머무는지 (예전엔 '장소'로 넘어갔다)
+            Do(() =>
+            {
+                var sw = UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude);
+                if (sw == null) { log.Add("  넘기기 없음"); return; }
+                sw.SwitchToPanel(1);
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var t = typeof(UploadInputMirror);
+                var up = Find("UploadPage");
+                var m = up != null ? up.GetComponent<UploadInputMirror>() : null;
+                var src = Find("UploadPage/Clip0926/UploadSheet0926/ModelUploadPage/Panel/NameInput")?.GetComponent<InputField>();
+                var mi = m != null ? t.GetField("mirrorInput", F).GetValue(m) as InputField : null;
+                if (m == null || src == null || mi == null) { log.Add("  3D 이름칸 없음"); return; }
+                t.GetMethod("ActivateMirrorFor", F).Invoke(m, new object[] { src });
+                mi.text = "강아지";
+                t.GetMethod("OnCloseClicked", F).Invoke(m, null);
+            });
+            Sleep(0.8f);
+            Check(() => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude)?.GetCurrentPanel() == 1, "3D모델에 이름을 쓰고 닫아도 3D모델 탭에 머문다");
+            Do(() => { var src = Find("UploadPage/Clip0926/UploadSheet0926/ModelUploadPage/Panel/NameInput")?.GetComponent<InputField>(); if (src != null) src.text = ""; });
         }
 
         // 시작화면이 도는 동안 무거운 프레임과 그 원인 (프로파일러는 플레이 직전에 켜 둠)

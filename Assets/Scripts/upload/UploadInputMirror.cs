@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -43,6 +44,8 @@ public class UploadInputMirror : MonoBehaviour
     private InputField activeSource;
     private bool initialized;
     private bool syncing;
+    private bool closing;              // 닫는 중 — 키보드가 내려가며 되돌린 글은 원래 칸에 옮기지 않는다
+    private string lastTyped = "";     // 키보드가 떠 있는 동안 마지막으로 쓴 글
 
     private GameObject backdrop;
     private bool keyboardActive;
@@ -287,6 +290,8 @@ public class UploadInputMirror : MonoBehaviour
 
         keyboardActive = false;
         mirrorActivatedAt = Time.unscaledTime;
+        lastTyped = source.text ?? "";
+        closing = false;
     }
 
     private static string ExtractPlaceholderText(InputField src)
@@ -298,18 +303,50 @@ public class UploadInputMirror : MonoBehaviour
 
     private void OnMirrorTextChanged(string value)
     {
-        if (syncing || activeSource == null) return;
+        if (syncing || closing || activeSource == null) return;
+        // 키보드가 닫히면서 입력칸이 처음 글로 되돌리는 것은 옮기지 않는다 (그 빈 글이 원래 칸을 덮어썼다)
+        var kb = mirrorInput != null ? mirrorInput.touchScreenKeyboard : null;
+        if (kb != null && kb.status != TouchScreenKeyboard.Status.Visible) return;
+        lastTyped = value ?? "";
         syncing = true;
-        activeSource.text = value;
+        activeSource.text = lastTyped;
         syncing = false;
     }
 
     private void OnCloseClicked()
     {
-        // Close 직전 명시적 동기화 — onValueChanged가 일부 native 키보드 경로에서 누락되는 케이스 안전망
-        // 특히 source.enabled=false에서 setter 내부 갱신이 일부 InputField 케이스에서 누락되는 문제 보완
-        SyncMirrorToSource();
+        if (closing || activeSource == null) return;
+        if (!isActiveAndEnabled) { CloseNow(FinalText(null)); return; }
+        StartCoroutine(CloseRoutine());
+    }
 
+    // 한글은 마지막 글자가 '조합 중'이면 아직 입력칸에 안 들어와 있다 — 키보드를 먼저 내리면 그때 확정되므로
+    // 두 프레임 기다렸다가 키보드에 남은 글을 다시 읽는다
+    private IEnumerator CloseRoutine()
+    {
+        closing = true;
+        var kb = mirrorInput != null ? mirrorInput.touchScreenKeyboard : null;
+        string final = FinalText(kb);
+        if (mirrorInput != null && mirrorInput.isFocused) mirrorInput.DeactivateInputField();
+        if (kb != null)
+        {
+            yield return null;
+            yield return null;
+            if (kb.text != null && kb.status != TouchScreenKeyboard.Status.Canceled) final = kb.text;
+        }
+        closing = false;
+        CloseNow(final);
+    }
+
+    private string FinalText(TouchScreenKeyboard kb)
+    {
+        if (kb != null && kb.status == TouchScreenKeyboard.Status.Visible && kb.text != null) return kb.text;
+        return lastTyped ?? "";
+    }
+
+    private void CloseNow(string final)
+    {
+        SyncMirrorToSource(final);
         if (mirrorInput != null && mirrorInput.isFocused)
             mirrorInput.DeactivateInputField();
         if (EventSystem.current != null)
@@ -318,17 +355,18 @@ public class UploadInputMirror : MonoBehaviour
     }
 
     /// <summary>
-    /// mirrorInput.text를 activeSource에 강제 반영.
+    /// 마지막 글을 activeSource에 강제 반영.
     /// source.enabled=false 상태에서 텍스트가 안 들어가던 문제(InstagramAccountInput 등) 해결:
     /// - 일시적으로 enabled=true로 풀어 setter가 정상 동작하게 함
     /// - ForceLabelUpdate로 라벨 즉시 갱신
     /// - 외부 구독자(저장 버튼 등) 알림 위해 onEndEdit 명시 호출
     /// </summary>
-    private void SyncMirrorToSource()
+    private void SyncMirrorToSource(string finalText)
     {
-        if (activeSource == null || mirrorInput == null) return;
-
-        string finalText = mirrorInput.text ?? "";
+        if (activeSource == null) return;
+        finalText = finalText ?? "";
+        if (activeSource.characterLimit > 0 && finalText.Length > activeSource.characterLimit)
+            finalText = finalText.Substring(0, activeSource.characterLimit);
         syncing = true;
         bool wasEnabled = activeSource.enabled;
         if (!wasEnabled) activeSource.enabled = true;
@@ -362,7 +400,7 @@ public class UploadInputMirror : MonoBehaviour
         if (cachedSwipeControllers == null) return;
         for (int i = 0; i < cachedSwipeControllers.Length; i++)
         {
-            if (cachedSwipeControllers[i] != null) cachedSwipeControllers[i].enabled = false;
+            if (cachedSwipeControllers[i] != null) cachedSwipeControllers[i].locked = true;   // 끄면 다시 켤 때 첫 카드('장소')로 돌아간다
         }
     }
 
@@ -371,7 +409,7 @@ public class UploadInputMirror : MonoBehaviour
         if (cachedSwipeControllers == null) return;
         for (int i = 0; i < cachedSwipeControllers.Length; i++)
         {
-            if (cachedSwipeControllers[i] != null) cachedSwipeControllers[i].enabled = true;
+            if (cachedSwipeControllers[i] != null) cachedSwipeControllers[i].locked = false;
         }
     }
 
@@ -403,8 +441,8 @@ public class UploadInputMirror : MonoBehaviour
         {
             for (int i = 0; i < cachedSwipeControllers.Length; i++)
             {
-                if (cachedSwipeControllers[i] != null && cachedSwipeControllers[i].enabled)
-                    cachedSwipeControllers[i].enabled = false;
+                if (cachedSwipeControllers[i] != null && !cachedSwipeControllers[i].locked)
+                    cachedSwipeControllers[i].locked = true;
             }
         }
 

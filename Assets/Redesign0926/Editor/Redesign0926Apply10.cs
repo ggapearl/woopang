@@ -383,10 +383,17 @@ namespace Redesign0926
                 if (t == null) { log.Add("손잡이: 없음 " + p); continue; }
                 Grab(t.gameObject); n++;
             }
-            foreach (var name in new[] { "MoreSheet0926", "CubeUploadPage", "ModelUploadPage" })   // 이름으로 (틀 안으로 옮겨져 경로가 바뀐다)
+            foreach (var name in new[] { "MoreSheet0926" })   // 이름으로 (틀 안으로 옮겨져 경로가 바뀐다)
             {
                 var g = Find(root, name);
                 if (g != null) { Grab(g); n++; }
+            }
+            // 추가 카드는 끌어내려 닫지 않는다 (도크 버튼으로만 — 좌우 넘기기와 부딪혔다) → 끌 수 있어 보이는 손잡이는 뺀다
+            foreach (var name in new[] { "CubeUploadPage", "ModelUploadPage" })
+            {
+                var g = Find(root, name);
+                var old = g != null ? g.transform.Find("Grab0926") : null;
+                if (old != null) Object.DestroyImmediate(old.gameObject);
             }
             log.Add("grabs " + n);
         }
