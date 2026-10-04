@@ -52,6 +52,10 @@ public class R0926SkyWeather : MonoBehaviour
     private bool hasData;
     private bool anchored;
     private float nextFetch;
+    private bool fetching;
+    // 마지막으로 받은 날씨와 자리 — 앱을 켜자마자 하늘을 비춰도 바로 보이게 (예전엔 GPS 가 잡히기 전 첫 시도를 버리고 30초 뒤에야 다시 받았다)
+    private const string CacheJson = "SkyWeather_json", CacheAt = "SkyWeather_at", CacheLat = "SkyWeather_lat", CacheLon = "SkyWeather_lon";
+    private const double CacheHours = 2.0;
     private float lookUpSince = -1f;
     private readonly List<GameObject> scratch = new List<GameObject>(64);
 
@@ -91,6 +95,23 @@ public class R0926SkyWeather : MonoBehaviour
         if (skyGroup != null) skyGroup.alpha = 0f;
         if (chipGroup != null) chipGroup.alpha = 0f;
         if (skyBoard != null) skyBoard.gameObject.SetActive(false);
+        LoadCache();
+    }
+
+    private void LoadCache()
+    {
+        string json = PlayerPrefs.GetString(CacheJson, "");
+        if (string.IsNullOrEmpty(json)) return;
+        if (!long.TryParse(PlayerPrefs.GetString(CacheAt, "0"), out long at)) return;
+        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - at > CacheHours * 3600) return;
+        try
+        {
+            var w = JsonUtility.FromJson<Weather>(json);
+            if (w == null) return;
+            Show(w);
+            hasData = true;
+        }
+        catch (Exception) { }
     }
 
     /// <summary>위쪽 칩을 누르면 — 판이 떠 있으면 접고, 접혀 있으면 편다</summary>
@@ -107,7 +128,7 @@ public class R0926SkyWeather : MonoBehaviour
     private void Update()
     {
         bool allowed = R0926SkySettings.Enabled && R0926SkySettings.Weather;
-        if (allowed && Time.unscaledTime >= nextFetch) { nextFetch = Time.unscaledTime + 30f; StartCoroutine(Fetch()); }
+        if (allowed && !fetching && Time.unscaledTime >= nextFetch) StartCoroutine(Fetch());
         if (cam == null) cam = Camera.main;
         if (cam == null || skyBoard == null) return;
 
@@ -270,22 +291,59 @@ public class R0926SkyWeather : MonoBehaviour
 
     private IEnumerator Fetch()
     {
-        if (Input.location.status != LocationServiceStatus.Running) yield break;
-        var ld = Input.location.lastData;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/weather?lat={ld.latitude:F4}&lon={ld.longitude:F4}";
+        fetching = true;
+        float lat, lon;
+        bool fromGps = false;
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            var ld = Input.location.lastData;
+            lat = ld.latitude; lon = ld.longitude; fromGps = true;
+        }
+#if UNITY_EDITOR
+        else if (VirtualLocation.Instance != null)
+        {
+            lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; fromGps = true;
+        }
+#endif
+        else if (PlayerPrefs.HasKey(CacheLat))
+        {
+            // GPS 가 아직이면 지난번 자리로 먼저 받는다 (자리가 잡히면 곧 다시)
+            lat = PlayerPrefs.GetFloat(CacheLat); lon = PlayerPrefs.GetFloat(CacheLon);
+        }
+        else
+        {
+            nextFetch = Time.unscaledTime + 1.5f;
+            fetching = false;
+            yield break;
+        }
+
+        // 소수점은 문화권과 무관하게 '.' — 스페인어 기기에선 '37,5759' 로 찍혀 주소가 깨졌다
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string url = ApiConfig.MAIN_SERVER + "/api/weather?lat=" + lat.ToString("F4", inv) + "&lon=" + lon.ToString("F4", inv);
         using (var req = UnityWebRequest.Get(url))
         {
             req.timeout = 10;
             yield return req.SendWebRequest();
-            if (req.result != UnityWebRequest.Result.Success) yield break;
-            Weather w;
-            try { w = JsonUtility.FromJson<Weather>(req.downloadHandler.text); }
-            catch (Exception) { yield break; }
-            if (w == null) yield break;
+            Weather w = null;
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                try { w = JsonUtility.FromJson<Weather>(req.downloadHandler.text); }
+                catch (Exception) { w = null; }
+            }
+            if (w == null)
+            {
+                nextFetch = Time.unscaledTime + (hasData ? 60f : 4f);   // 아직 아무것도 없으면 금방 다시
+                fetching = false;
+                yield break;
+            }
             Show(w);
             hasData = true;
-            nextFetch = Time.unscaledTime + refreshMinutes * 60f;
+            PlayerPrefs.SetString(CacheJson, req.downloadHandler.text);
+            PlayerPrefs.SetString(CacheAt, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
+            if (fromGps) { PlayerPrefs.SetFloat(CacheLat, lat); PlayerPrefs.SetFloat(CacheLon, lon); }
+            nextFetch = Time.unscaledTime + (fromGps ? refreshMinutes * 60f : 3f);   // 지난번 자리로 받았으면 GPS 가 잡히는 대로 다시
         }
+        fetching = false;
     }
 
     // ── 문구 ────────────────────────────────────────────────

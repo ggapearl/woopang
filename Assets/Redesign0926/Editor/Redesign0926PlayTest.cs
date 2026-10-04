@@ -55,6 +55,7 @@ namespace Redesign0926
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
             if (mode == "splashprof") PlanSplashProf();
+            else if (mode == "skyfast") PlanSkyFast();
             else if (mode == "inputsync") PlanInputSync();
             else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }
             else if (mode == "sky") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSky(); }
@@ -541,6 +542,28 @@ namespace Redesign0926
             Do(() => AimCamera(-58f, 0f));
             Sleep(2.0f);
             Shot("sky58");
+        }
+
+        // 앱을 켜고 시작화면이 걷히자마자 하늘을 비추면 날씨판이 몇 초 만에 뜨는지 (저장된 날씨 없이 — 처음 설치한 것처럼)
+        private static void PlanSkyFast()
+        {
+            double t0 = 0, tSplash = 0;
+            Do(() =>
+            {
+                t0 = EditorApplication.timeSinceStartup;
+                foreach (var k in new[] { "SkyWeather_json", "SkyWeather_at", "SkyWeather_lat", "SkyWeather_lon" }) PlayerPrefs.DeleteKey(k);
+            });
+            Wait(() => !BootOverlay.Showing, 30f, "시작화면 끝");
+            Do(() => { tSplash = EditorApplication.timeSinceStartup; AimCamera(-45f, 0f); });
+            Wait(() =>
+            {
+                var sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+                var f = typeof(R0926SkyWeather).GetField("boardShowing", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                return sky != null && f != null && (bool)f.GetValue(sky);
+            }, 40f, "날씨판 뜸");
+            Do(() => log.Add("  시작화면 끝에서 " + (EditorApplication.timeSinceStartup - tSplash).ToString("0.0") + "초 · 플레이 시작에서 " + (EditorApplication.timeSinceStartup - t0).ToString("0.0") + "초"));
+            Sleep(1.2f);
+            Shot("skyfast");
         }
 
         // 키보드 위 입력줄 → 원래 칸 — 쓰는 동안 · 닫은 뒤 원래 칸에 '보이는' 글자까지 확인 (모든 입력칸)
