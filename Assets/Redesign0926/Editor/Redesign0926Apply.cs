@@ -561,10 +561,10 @@ namespace Redesign0926
             if (close != null)
             {
                 DockSlotClose(close, panel.transform, SlotList);
-                var tap = Ensure<R0926TapToClose>(panel);
-                var tso = new SerializedObject(tap);
-                tso.FindProperty("closeButton").objectReferenceValue = close.GetComponent<Button>();
-                tso.ApplyModifiedPropertiesWithoutUndo();
+                // 바깥 누르기로는 닫지 않는다 (2026-10-04 대표님: X · 아래로 밀기로만) — 목록이 도크를 덮고 있어
+                // 다른 도크 버튼 자리를 누르면 그 터치가 '바깥'으로 잡혀 목록이 닫혔다
+                var tap = panel.GetComponent<R0926TapToClose>();
+                if (tap != null) Object.DestroyImmediate(tap);
                 if (pImg != null) pImg.raycastTarget = true;
             }
 

@@ -1120,10 +1120,11 @@ public class MessagePanelManager : MonoBehaviour
         currentChatAvatarUrl = avatarUrl;
         isAdminChat = isAdmin;
 
-        // 메시지 패널에서 채팅룸으로 이동 시 메시지 패널 닫기
+        // 메시지 패널에서 채팅룸으로 이동 시 메시지 패널 닫기 — 목록에서 들어갈 땐 옆으로 넘긴 뒤에 닫는다 (R0926ChatNav)
         if (messagePanel != null && messagePanel.activeSelf)
         {
-            messagePanel.SetActive(false);
+            if (R0926ChatNav.Instance == null || !R0926ChatNav.Instance.TryPushFromList())
+                messagePanel.SetActive(false);
         }
 
         ActivateChatRoomPanel();

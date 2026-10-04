@@ -19,6 +19,11 @@ public class R0926SlideIn : MonoBehaviour
     private float applied;   // 지금 더해 둔 아래쪽 오프셋 (음수)
     private float t;
     private bool running;
+    private bool skipNext;
+
+    /// <summary>다음에 켜질 때 한 번은 올라오지 않고 제자리에 바로 선다 — 메시지 목록 ↔ 대화방은 옆으로 넘어가서</summary>
+    public void SkipNext() => skipNext = true;
+    public void ClearSkip() => skipNext = false;
 
     private void Awake()
     {
@@ -29,6 +34,14 @@ public class R0926SlideIn : MonoBehaviour
 
     private void OnEnable()
     {
+        if (skipNext)
+        {
+            skipNext = false;
+            running = false;
+            Set(0f);
+            if (group != null) group.alpha = 1f;
+            return;
+        }
         if (fullHeight && rt != null) distance = rt.rect.height + 60f;
         t = 0f;
         running = true;

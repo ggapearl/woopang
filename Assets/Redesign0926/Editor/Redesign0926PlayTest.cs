@@ -55,6 +55,7 @@ namespace Redesign0926
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
             if (mode == "splashprof") PlanSplashProf();
+            else if (mode == "chatnav") PlanChatNav();
             else if (mode == "profile")
             {
                 Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
@@ -549,6 +550,40 @@ namespace Redesign0926
             Do(() => AimCamera(-58f, 0f));
             Sleep(2.0f);
             Shot("sky58");
+        }
+
+        // 메시지 목록 → 대화방 → ← : 옆으로 넘어가는지, 돌아온 목록이 제자리인지 (아래에서 다시 올라오지 않는지)
+        private static void PlanChatNav()
+        {
+            Vector2 msgPos = Vector2.zero;
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var mpm = UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include);
+                if (mpm != null && mpm.messagePanel != null) mpm.messagePanel.SetActive(true);
+            });
+            Sleep(1.0f);
+            Do(() => { var rt = Find("MessagePanel/Clip0926/Background") as RectTransform; if (rt != null) msgPos = rt.anchoredPosition; });
+            Do(() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.OpenChatRoom("3", "WOOPANG", null, true));
+            Sleep(0.12f);
+            Shot("nav_push_mid");
+            Sleep(0.6f);
+            Shot("nav_chat");
+            Check(() => Active("ChatRoomPanel") && !Active("MessagePanel"), "넘긴 뒤: 대화방만 켜짐");
+            Check(() => OnScreen("ChatRoomPanel/Clip0926/Background"), "대화방이 화면 안");
+            Do(() => Click("ChatRoomPanel/Clip0926/Background/Header/BackButton/ClosePx0926"));
+            Sleep(0.12f);
+            Shot("nav_pop_mid");
+            Sleep(0.8f);
+            Shot("nav_back");
+            Check(() => Active("MessagePanel") && !Active("ChatRoomPanel"), "돌아온 뒤: 목록만 켜짐");
+            Do(() =>
+            {
+                var rt = Find("MessagePanel/Clip0926/Background") as RectTransform;
+                log.Add("  목록 자리: 처음 " + msgPos + " · 돌아온 뒤 " + (rt != null ? rt.anchoredPosition.ToString() : "-"));
+            });
+            Check(() => { var rt = Find("MessagePanel/Clip0926/Background") as RectTransform; return rt != null && Vector2.Distance(rt.anchoredPosition, msgPos) < 1f; }, "목록이 제자리 (가로·세로)");
+            Do(() => log.Add("  열린 창: " + OpenPanels()));
         }
 
         // 앱을 켜고 시작화면이 걷히자마자 하늘을 비추면 날씨판이 몇 초 만에 뜨는지 (저장된 날씨 없이 — 처음 설치한 것처럼)

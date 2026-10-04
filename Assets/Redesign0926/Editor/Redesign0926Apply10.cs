@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -30,7 +31,57 @@ namespace Redesign0926
             WeatherSizes(root, log);
             FixPageCard(root, log);
             UpdateCard(root, log);
+            ChatNavWire(root, log);
             log.Add("1004 ok");
+        }
+
+        // ── 메시지 목록 ↔ 대화방을 옆으로 넘기기 ─────────────────────────
+        // ← · 뒤로가기는 대화방을 아래로 내리는 대신 옆으로 빼고 목록으로 (R0926ChatNav),
+        // 대화방을 아래로 밀면 메시지 전체를 닫는다(도크 X 와 같게) — 목록이 아래에서 다시 올라오지 않게
+        private static void ChatNavWire(Transform root, List<string> log)
+        {
+            var mpm = FindInScene<MessagePanelManager>(root.gameObject);
+            var msg = root.Find("MessagePanel");
+            var chat = root.Find("ChatRoomPanel");
+            var msgSheet = root.Find("MessagePanel/Clip0926/Background") as RectTransform;
+            var chatSheet = root.Find("ChatRoomPanel/Clip0926/Background") as RectTransform;
+            var back = root.Find("ChatRoomPanel/Clip0926/Background/Header/BackButton");
+            var dockX = root.Find("ChatRoomPanel/DockMirror0926/CloseButton");
+            if (mpm == null || msg == null || chat == null || msgSheet == null || chatSheet == null || back == null)
+            {
+                log.Add("대화 넘기기: 대상 없음");
+                return;
+            }
+            var nav = Ensure<R0926ChatNav>(mpm.gameObject);
+            var so = new SerializedObject(nav);
+            so.FindProperty("messagePanel").objectReferenceValue = msg.gameObject;
+            so.FindProperty("chatPanel").objectReferenceValue = chat.gameObject;
+            so.FindProperty("messageSheet").objectReferenceValue = msgSheet;
+            so.FindProperty("chatSheet").objectReferenceValue = chatSheet;
+            so.FindProperty("messageSlide").objectReferenceValue = msgSheet.GetComponent<R0926SlideIn>();
+            so.FindProperty("chatSlide").objectReferenceValue = chatSheet.GetComponent<R0926SlideIn>();
+            so.FindProperty("backButton").objectReferenceValue = back.GetComponent<Button>();
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            var px = back.Find("ClosePx0926");
+            var pb = px != null ? px.GetComponent<Button>() : null;
+            if (pb != null)
+            {
+                ResetListeners(pb);
+                UnityEventTools.AddPersistentListener(pb.onClick, nav.Back);
+                EditorUtility.SetDirty(pb);
+            }
+            else log.Add("대화 넘기기: ← 덮개 없음");
+
+            var sd = chatSheet.GetComponent<R0926SwipeDismiss>();
+            var xb = dockX != null ? dockX.GetComponent<Button>() : null;
+            if (sd != null && xb != null)
+            {
+                var sso = new SerializedObject(sd);
+                sso.FindProperty("closeButton").objectReferenceValue = xb;
+                sso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            log.Add("chat nav ok" + (mpm.gameObject.activeInHierarchy ? "" : " (매니저 꺼짐!)"));
         }
 
         // ── 업데이트 안내 — 프로필 카드와 같은 모양 ─────────────────

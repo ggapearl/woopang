@@ -165,6 +165,17 @@ namespace Redesign0926
 
             var back = t.GetComponent<ClickButtonOnBack>();
             if (back != null) { Object.DestroyImmediate(back); Ensure<ClickButtonOnBack>(px); }
+
+            // 누름 소리 — 덮개가 터치를 받아 원래 버튼의 UITouchForwarder 까지 가지 않았다
+            // ('추가' X 만 덮개가 없어 닫을 때 소리가 났고, 목록·메시지·대화 X 는 조용했다)
+            var fw = Ensure<UITouchForwarder>(px);
+            var realFw = t.GetComponent<UITouchForwarder>();
+            if (realFw != null)
+            {
+                var fso = new SerializedObject(fw);
+                fso.FindProperty("customSound").objectReferenceValue = new SerializedObject(realFw).FindProperty("customSound").objectReferenceValue;
+                fso.ApplyModifiedPropertiesWithoutUndo();
+            }
             foreach (var tap in root.GetComponentsInChildren<R0926TapToClose>(true))
             {
                 var tso = new SerializedObject(tap);

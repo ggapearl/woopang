@@ -223,6 +223,42 @@ namespace Redesign0926
                         if (target == null) log.Add("dump: 없음 " + cmd.Substring(5));
                         else DumpRect(target.transform, 0, 3, log);
                     }
+                    else if (cmd == "order")
+                    {
+                        // 메인 캔버스 자식 순서 · 켜짐 · 따로 그리는 순서(override sorting) · 바탕이 터치를 받는지
+                        var canvasT = Redesign0926Capture.FindMainCanvas(scene).transform;
+                        for (int i = 0; i < canvasT.childCount; i++)
+                        {
+                            var ch = canvasT.GetChild(i);
+                            var cv = ch.GetComponent<Canvas>();
+                            var g = ch.GetComponent<Graphic>();
+                            log.Add(i + " " + ch.name + (ch.gameObject.activeSelf ? "" : " (off)")
+                                    + (cv != null && cv.overrideSorting ? " sort=" + cv.sortingOrder : "")
+                                    + (g != null && g.raycastTarget ? " [touch]" : ""));
+                        }
+                    }
+                    else if (cmd.StartsWith("listeners:"))
+                    {
+                        // listeners:<이름> — 그 버튼(들)이 눌리면 무엇을 하는지 (저장된 호출 + 코드에서 붙인 수)
+                        var canvasT = Redesign0926Capture.FindMainCanvas(scene).transform;
+                        foreach (var name in cmd.Substring(10).Split(','))
+                            foreach (var b in canvasT.GetComponentsInChildren<Button>(true))
+                            {
+                                if (b.name != name.Trim()) continue;
+                                log.Add(AnimationUtility.CalculateTransformPath(b.transform, canvasT) + " (" + b.onClick.GetPersistentEventCount() + ")");
+                                for (int i = 0; i < b.onClick.GetPersistentEventCount(); i++)
+                                {
+                                    var tgt = b.onClick.GetPersistentTarget(i);
+                                    string tn = tgt is Component c ? AnimationUtility.CalculateTransformPath(c.transform, canvasT) + ":" + c.GetType().Name
+                                              : tgt is GameObject g ? AnimationUtility.CalculateTransformPath(g.transform, canvasT) : (tgt != null ? tgt.name : "null");
+                                    var so = new SerializedObject(b);
+                                    var call = so.FindProperty("m_OnClick.m_PersistentCalls.m_Calls").GetArrayElementAtIndex(i);
+                                    var args = call.FindPropertyRelative("m_Arguments");
+                                    string arg = args.FindPropertyRelative("m_BoolArgument").boolValue + "/" + args.FindPropertyRelative("m_IntArgument").intValue + "/" + args.FindPropertyRelative("m_StringArgument").stringValue;
+                                    log.Add("  " + i + " " + tn + " . " + b.onClick.GetPersistentMethodName(i) + " (" + arg + ")");
+                                }
+                            }
+                    }
                     else if (cmd == "inputs")
                     {
                         // 입력칸 전수 — 경로 · 자리표시 글이 어디 붙어 있는지 · 그 글 (다른 칸의 글을 가리키는 연결을 찾는다)
