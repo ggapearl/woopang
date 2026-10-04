@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-04';
+  const WEB_VERSION = '2026-10-05';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1043,12 +1043,35 @@
       case 'question': return questionCard(it.card);
       case 'incoming':
         return h('div', { class: 'inbox' + (it.auto ? ' auto' : '') + (it.out ? ' out' : '') },
-          h('b', { text: it.source }), it.text ? h('div', { text: it.text }) : null, attachments(it), stamp(it), buttonRow(it));
+          h('b', { text: it.source }), it.text ? h('div', null, linkified(it.text)) : null, attachments(it), stamp(it), buttonRow(it));
       case 'note': return h('div', { class: 'note', text: it.text });
       case 'error': return h('div', { class: 'err', text: it.text });
       default: return h('div');
     }
   }
+
+  /** 알림 글 → [텍스트, {text, url}, …]. [제목](주소)(제목 안 대괄호 한 겹 허용)와 맨 주소만 링크, http/https 만. */
+  const LINK_RE = /\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"'\])\u3131-\uD7A3]+)/g;
+  function splitLinks(text) {
+    const out = [];
+    let at = 0, m;
+    LINK_RE.lastIndex = 0;
+    while ((m = LINK_RE.exec(text))) {
+      let url = m[2] || m[3], label = m[1], end = LINK_RE.lastIndex;
+      if (!label) {
+        const tail = url.match(/[.,!?;:]+$/);                        // 문장 끝 문장부호는 주소가 아니다
+        if (tail) { url = url.slice(0, -tail[0].length); end -= tail[0].length; LINK_RE.lastIndex = end; }
+        if (!/^https?:\/\/[^/?#]/.test(url)) continue;
+      }
+      if (m.index > at) out.push(text.slice(at, m.index));
+      out.push({ text: label || url, url });
+      at = end;
+    }
+    if (at < text.length) out.push(text.slice(at));
+    return out;
+  }
+  // 누르면 맨 아래 문서 클릭 처리기가 openLink(href) 로 연다
+  const linkified = text => splitLinks(text).map(p => typeof p === 'string' ? document.createTextNode(p) : h('a', { href: p.url, class: 'lnk', text: p.text }));
 
   function userBubble(it) {
     // 이 폰(앱)에서 보낸 건 표시하지 않고, 다른 곳에서 온 것만 어디서인지 붙인다
