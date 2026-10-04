@@ -633,9 +633,20 @@ namespace Redesign0926
         // ============================================================
         // 첫 실행 안내 · 인터넷 끊김 안내 · 상세 로마자
         // ============================================================
+        // 첫 안내 — 보이는 순서대로 (쪽 오브젝트, 비출 도크 버튼). 쪽 오브젝트는 01=추가 · 02=목록 · 03=메시지
+        private static readonly (string page, string slot)[] GuideOrder =
+            { ("02", "List_Button"), ("01", "PlusButton"), ("03", "Message_Button") };
+
+        private static GameObject[] GuideOrderPages(Transform panel)
+        {
+            var r = new GameObject[GuideOrder.Length];
+            for (int i = 0; i < r.Length; i++) r[i] = Find(panel, GuideOrder[i].page);
+            return r;
+        }
+
         private static void ApplyGuideNetRoman(Transform root, List<string> log)
         {
-            // 첫 실행 안내 1~3장 — 화살표 그림을 도크 칸 기준으로, 문구는 '아래 추가/목록/메시지'
+            // 첫 실행 안내 1~3장 — 화살표 그림을 도크 칸 기준으로, 문구는 '아래 추가/목록/메세지'
             var guide = FindInScene<FirstTimeGuide>(root.gameObject);
             var panel = Find(root, "FirstTimeGuidePanel");
             if (guide != null && panel != null)
@@ -654,13 +665,26 @@ namespace Redesign0926
                 var gt = Ensure<R0926GuideText>(panel);
                 var so = new SerializedObject(gt);
                 so.FindProperty("guideText").objectReferenceValue = gText;
-                SetArray(so.FindProperty("pages"), pageObjs);
+                SetArray(so.FindProperty("pages"), pageObjs);   // 문구 짝 — 01·02·03 그대로 (보이는 순서와 무관)
                 so.ApplyModifiedPropertiesWithoutUndo();
 
                 // 안내를 3장으로 — FirstTimeGuide 는 guidePages 길이로 쪽수·점·확인 버튼을 정한다
+                // 보이는 순서: 목록 → 추가 → 메시지 (GuideOrder). 펄스 대상의 pageIndex 도 그림이 든 쪽의 새 자리로
                 if (System.Array.TrueForAll(pageObjs, p => p != null))
                 {
-                    SetArray(gso.FindProperty("guidePages"), pageObjs);
+                    var ordered = GuideOrderPages(panel.transform);
+                    SetArray(gso.FindProperty("guidePages"), ordered);
+                    var order = gso.FindProperty("pageOrder");
+                    order.arraySize = GuideOrder.Length;
+                    for (int i = 0; i < GuideOrder.Length; i++) order.GetArrayElementAtIndex(i).stringValue = GuideOrder[i].page;
+                    var hl = gso.FindProperty("pageHighlights");
+                    for (int i = 0; i < hl.arraySize; i++)
+                    {
+                        var e = hl.GetArrayElementAtIndex(i);
+                        var g = e.FindPropertyRelative("targetGraphic").objectReferenceValue as Component;
+                        int k = g == null ? -1 : System.Array.FindIndex(ordered, p => p != null && g.transform.IsChildOf(p.transform));
+                        if (k >= 0) e.FindPropertyRelative("pageIndex").intValue = k;
+                    }
                     gso.ApplyModifiedPropertiesWithoutUndo();
                     foreach (var extra in new[] { "04", "05", "06" })
                     {

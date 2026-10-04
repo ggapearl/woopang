@@ -6,7 +6,8 @@ public class ARCameraOptimizer : MonoBehaviour
     [Header("AR Camera 최적화 설정")]
     [SerializeField] private ARCameraManager arCameraManager;
     [SerializeField] private bool enableOptimization = true;
-    [SerializeField] private int targetFrameRate = 60;
+    [Tooltip("AR 화면 프레임레이트 — 30 (배터리·발열). AR 추적은 카메라 속도 그대로")]
+    [SerializeField] private int targetFrameRate = 30;
 
     private float lastFrameTime;
     private const float FRAME_INTERVAL = 1f / 60f;
@@ -21,7 +22,10 @@ public class ARCameraOptimizer : MonoBehaviour
             OptimizeARCamera();
         }
 
-        // 프레임레이트 제한
+        // 프레임레이트 제한 — ARSession 의 Match Frame Rate 가 켜져 있으면 매 프레임
+        // 카메라 속도(아이폰 60)로 덮어쓰므로 먼저 끈다 (끈 값은 세션 재시작에도 유지됨)
+        ARSession session = FindFirstObjectByType<ARSession>(FindObjectsInactive.Include);
+        if (session != null) session.matchFrameRateRequested = false;
         Application.targetFrameRate = targetFrameRate;
     }
     

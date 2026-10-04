@@ -56,6 +56,7 @@ woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사
 | **콘텐츠 파트너 말자막 자동화 (MOGRT 자동자막 / 자막 패널 / 화자별 재배치) — 로컬 전용** | **`docs/private/`** |
 | **3D 콘텐츠(GLB) 생성·자동화 (Blender·Mixamo·Hunyuan3D·리깅·안무)** | **[docs/claude/3d-generation.md](docs/claude/3d-generation.md)** |
 | 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
+| 하늘 날씨 서버 `/api/weather` — 기상청 초단기실황 연동 | [docs/claude/weather_kma.py](docs/claude/weather_kma.py) (파일 머리 주석에 붙이는 법) |
 | **웹앱 전체 기능 테스트 ("전부 테스트해줘"/"잘 작동하는지 검토") — E2E·실브라우저** | **[docs/claude/web-testing.md](docs/claude/web-testing.md)** |
 | MCP Unity (Claude ↔ Unity Editor) | [docs/claude/mcp-unity.md](docs/claude/mcp-unity.md) |
 | Claude Code 개선점 제보 (GitHub 이슈 자동화 — "제보해줘"/"이슈 올려줘") | [docs/claude/github-issue.md](docs/claude/github-issue.md) |

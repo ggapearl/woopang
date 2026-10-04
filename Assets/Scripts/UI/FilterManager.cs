@@ -972,6 +972,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private int maxFullObjects = 16;
     [Tooltip("공공데이터(앱 내장 이미지) 전용 Full 한도 — 메인 예산과 별도(가산). 근처 공공시설을 박스 대신 실제 오브젝트로 보장 표시. ⚠️ 너무 크면 저사양폰 부담(권장 16~24)")]
     [SerializeField] private int maxPublicFullObjects = 20;
+    [Tooltip("공공데이터 Full 중 공중화장실 최대 수 — 화장실이 공공데이터의 대부분이라 도심에선 공공 Full 이 화장실로만 찰 수 있다. 넘는 화장실은 일반 IndicatorOnly 로")]
+    [SerializeField] private int maxToiletFullObjects = 3;
     [Tooltip("IndicatorOnly 경량 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
     [SerializeField] private int maxIndicatorObjects = 16;
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
@@ -986,6 +988,10 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private float allocationHysteresisMeters = 20f;
     [Tooltip("캐시 갱신 거리 (m) — 이만큼 이동 시 전체 캐시 새로고침")]
     [SerializeField] private float cacheRefreshDistance = 1000f;
+    [Tooltip("장소 목록을 아직 못 받은 매니저(인터넷 끊김·서버 응답 없음)를 다시 요청하는 간격 (초). 인터넷·서버가 다시 이어지면 기다리지 않고 바로 요청")]
+    [SerializeField] private float unreadyCacheRetryInterval = 20f;
+    [Tooltip("계속 실패하면 다시 요청하는 간격을 두 배씩 늘리는 최대치 (초) — 서버 장애 때 모든 기기가 같은 간격으로 몰리지 않게. 간격 이하로 두면 늘리지 않는다")]
+    [SerializeField] private float unreadyCacheRetryMaxInterval = 160f;
 
     [Header("Speed Tracking — LoadingManager fallback 판정용")]
     [Tooltip("속도 샘플링 주기 (초) — 3초 권장. 1~2초는 GPS 노이즈 필터(8m) 때문에 중속 구간이 노이즈로 먹힘")]
@@ -1026,6 +1032,9 @@ public class FilterManager : MonoBehaviour
     private Vector2 lastCacheRefreshPosition;
     private bool allocationStarted = false;
     private Coroutine allocationCoroutine;
+    // 목록을 못 받은 매니저 다시 받기 — 매니저별 마지막 요청 시각 · 연속 재요청 횟수
+    private readonly Dictionary<IPlaceCacheProvider, float> lastCacheRequestTime = new Dictionary<IPlaceCacheProvider, float>();
+    private readonly Dictionary<IPlaceCacheProvider, int> cacheRetryCount = new Dictionary<IPlaceCacheProvider, int>();
 
     /// <summary>
     /// IPlaceCacheProvider를 등록 (각 매니저가 Start에서 호출)
@@ -1068,6 +1077,7 @@ public class FilterManager : MonoBehaviour
             allocationStarted = true;
             allocationCoroutine = StartCoroutine(AllocationLoop());
             StartCoroutine(SpeedTrackingLoop());
+            StartCoroutine(UnreadyCacheRetryLoop());
         }
     }
 
@@ -1081,6 +1091,7 @@ public class FilterManager : MonoBehaviour
             allocationStarted = true;
             allocationCoroutine = StartCoroutine(AllocationLoop());
             StartCoroutine(SpeedTrackingLoop());
+            StartCoroutine(UnreadyCacheRetryLoop());
         }
     }
 
@@ -1103,7 +1114,7 @@ public class FilterManager : MonoBehaviour
             {
                 // 속도 계산은 SpeedTrackingLoop(3초 주기)가 전담 — 여기서는 호출 안 함
 
-                // 5km 이상 이동 시 캐시 갱신
+                // cacheRefreshDistance(기본 1km) 이상 이동 시 캐시 갱신
                 float movedFromCache = CalculateGPSDistance(lastCacheRefreshPosition.x, lastCacheRefreshPosition.y, gps.x, gps.y);
                 if (lastCacheRefreshPosition == Vector2.zero || movedFromCache >= cacheRefreshDistance)
                 {
@@ -1349,6 +1360,7 @@ public class FilterManager : MonoBehaviour
         // 근처 공공시설을 박스 대신 실제 오브젝트로 보장 표시. 메인 예산(비공공 Full+Indicator)은
         // 기존대로 maxTotalObjects로 묶음. early-break 대신 끝까지 순회(반경 내 후보만 평가, 저비용).
         int publicFullCount = 0;
+        int toiletFullCount = 0;
         foreach (var item in allPlaces)
         {
             // 표시 반경 밖은 제외 (PlaceListManager.distanceSlider 동기화)
@@ -1365,14 +1377,18 @@ public class FilterManager : MonoBehaviour
             bool mainBudgetFull = (nonPublicFull + newIndicatorSet.Count) >= maxTotalObjects;
 
             // 1) 공공데이터 Full — 별도 예산(가산), 메인 total 한도와 무관
+            //    화장실은 maxToiletFullObjects 까지만 — 넘는 화장실은 아래 IndicatorOnly 로
+            bool isToilet = item.data.category == "toilet";
             if (isPublic && withinFull
                 && publicFullCount < maxPublicFullObjects
+                && (!isToilet || toiletFullCount < maxToiletFullObjects)
                 && IsPassingFilter(item.data, filters))
             {
                 if (newFullSet.Add(item.data.uniqueId))
                 {
                     fullProviderMap[item.data.uniqueId] = item.provider;
                     publicFullCount++;
+                    if (isToilet) toiletFullCount++;
                 }
                 continue;
             }
@@ -1655,19 +1671,75 @@ public class FilterManager : MonoBehaviour
     /// <summary>
     /// 모든 프로바이더 캐시 갱신
     /// - 최초 호출(hasInitiatedCacheOnce=false): isCacheReady=false인 provider만 호출 (중복 페치 방지)
-    /// - 이후 호출(5km 이동): 모든 provider 호출
+    /// - 이후 호출(cacheRefreshDistance 이동): 모든 provider 호출
     /// </summary>
     private bool hasInitiatedCacheOnce = false;
     private void RefreshAllCaches(float lat, float lon)
     {
         detailPendingIds.Clear();
+        float now = Time.realtimeSinceStartup;
         foreach (var provider in cacheProviders)
         {
             // 최초 호출 시 이미 준비된 provider는 건너뜀 (자체 Start 로드와 중복 방지)
             if (!hasInitiatedCacheOnce && provider.IsCacheReady) continue;
+            lastCacheRequestTime[provider] = now;
+            cacheRetryCount[provider] = 0;
             provider.RefreshCache(lat, lon);
         }
         hasInitiatedCacheOnce = true;
+    }
+
+    // ============================================================
+    // 목록을 못 받은 매니저 다시 받기 — 처음 켤 때 인터넷이 끊겨 있었으면 1km 이동이나 백그라운드 복귀 전까지
+    // 다시 받지 않아, 끊김 안내의 '다시 이어지면 저절로 불러와요' 가 지켜지지 않았다.
+    // 한 번이라도 받은 매니저(IsCacheReady)는 건드리지 않는다.
+    // ============================================================
+
+    private static bool IsOnline()
+        => Application.internetReachability != NetworkReachability.NotReachable && !ServerHealth.Down;
+
+    private IEnumerator UnreadyCacheRetryLoop()
+    {
+        var wait = new WaitForSeconds(1f);
+        bool wasOnline = IsOnline();
+        while (true)
+        {
+            yield return wait;
+            bool online = IsOnline();
+            bool cameBack = online && !wasOnline;   // 인터넷이 다시 이어졌거나 우팡 서버가 다시 응답 — 바로 받는다
+            wasOnline = online;
+            if (!hasInitiatedCacheOnce) continue;   // 첫 요청은 AllocationLoop(RefreshAllCaches) 몫
+            RetryUnreadyCaches(cameBack);
+        }
+    }
+
+    private void RetryUnreadyCaches(bool immediate)
+    {
+        // 기기가 오프라인이면 보내지 않는다 (서버만 안 될 때는 간격을 두고 계속 시도 — 그 응답이 서버 복구 신호)
+        if (Application.internetReachability == NetworkReachability.NotReachable) return;
+        Vector2 gps = GetCurrentGPS();
+        if (gps.x == 0f && gps.y == 0f) return;
+
+        float now = Time.realtimeSinceStartup;
+        foreach (var provider in cacheProviders)
+        {
+            if (provider == null || provider.IsCacheReady) continue;
+            cacheRetryCount.TryGetValue(provider, out int tries);
+            if (immediate) tries = 0;
+            else if (lastCacheRequestTime.TryGetValue(provider, out float last))
+            {
+                float interval = unreadyCacheRetryInterval * Mathf.Pow(2f, Mathf.Min(tries, 10));
+                if (unreadyCacheRetryMaxInterval > unreadyCacheRetryInterval)
+                    interval = Mathf.Min(interval, unreadyCacheRetryMaxInterval);
+                else
+                    interval = unreadyCacheRetryInterval;
+                if (now - last < interval) continue;
+                tries++;
+            }
+            lastCacheRequestTime[provider] = now;
+            cacheRetryCount[provider] = tries;
+            provider.RefreshCache(gps.x, gps.y);
+        }
     }
 
     /// <summary>

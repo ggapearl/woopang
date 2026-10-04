@@ -52,7 +52,7 @@ public class Indicator : MonoBehaviour
     private Sprite boxSprite;                    // 프리팹의 원래 박스 (꺾쇠 넷)
     private Vector2 namePos, distPos;            // 원래 글자 자리
     private bool labelsSwapped;
-    private RectTransform closePill, closeDrain;
+    private RectTransform closePill;
     private Image closePillImg, closeXImg;
     private Text closeLabel;
     private float closeArmedAt = -1f, closeK;
@@ -351,9 +351,6 @@ public class Indicator : MonoBehaviour
         closePill.gameObject.SetActive(closeK > 0.001f);
         closePillImg.color = new Color(0.91f, 0.263f, 0.353f, 0.97f * Mathf.Clamp01(k * 1.5f));
         if (closeLabel != null) closeLabel.color = new Color(1f, 1f, 1f, Mathf.Clamp01(k * 1.6f - 0.4f));
-        // 아래 흰 줄이 3초 동안 줄어든다 — 다 줄면 다시 X
-        float left = closeArmedAt >= 0f ? 1f - (Time.unscaledTime - closeArmedAt) / CloseConfirmWindow : 0f;
-        closeDrain.sizeDelta = new Vector2((w - 40f) * Mathf.Clamp01(left), 5f);
         // 그동안 위의 거리 글자는 옅게
         if (distanceText != null) distanceText.canvasRenderer.SetAlpha(1f - 0.78f * k);
     }
@@ -410,16 +407,6 @@ public class Indicator : MonoBehaviour
             closeLabel.raycastTarget = false;
             closeLabel.text = CloseConfirmLabel;
         }
-
-        var drain = new GameObject("Drain", typeof(RectTransform), typeof(Image));
-        closeDrain = (RectTransform)drain.transform;
-        closeDrain.SetParent(closePill, false);
-        closeDrain.anchorMin = closeDrain.anchorMax = new Vector2(0f, 0f);
-        closeDrain.pivot = new Vector2(0f, 0f);
-        closeDrain.anchoredPosition = new Vector2(20f, 8f);
-        var dImg = drain.GetComponent<Image>();
-        dImg.color = new Color(1f, 1f, 1f, 0.55f);
-        dImg.raycastTarget = false;
 
         var btn = go.GetComponent<Button>();
         btn.transition = Selectable.Transition.None;

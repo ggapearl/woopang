@@ -39,3 +39,20 @@
 3. (로컬, 대표님 결정) 서버 `.env` 의 Android 최신 버전 값 올리기 — 강제 업데이트가 켜져 있어 사용자 전원에게 업데이트가 강제된다
 4. 기기 확인이 필요한 것: 아이폰 홈 막대 쪽으로 내린 도크 위치(`R0926SafeInset.trim`, 아이폰만), 하늘 날씨 예보 줄(에디터에선 위치·카메라가 없어 못 봄)
 5. 보류: 상점·결제 / 게임·관리자 이벤트 / 성장 오브젝트·투자 (대표님 지시로 계속 보류)
+
+## 클라우드 세션 2026-10-04 — 사용자 요청분 (브랜치 `claude/brave-allen-0l87zf`, 이 브랜치 위에 얹음)
+코드만 고쳤다. **로컬에서 할 일**: 컴파일 확인 → `woopang_0926` 열기(Version 18 이라 apply 자동) → 저장 → EDM Android Resolver ▸ Resolve → 플레이·기기 확인.
+- 업데이트 안내: **스토어에 실제로 올라왔을 때만** 카드 (안드로이드 Play 인앱 업데이트 API `com.google.android.play:app-update:2.1.0`, iOS 앱스토어 조회). '스토어에 아직 반영 중' 상태 삭제. 서버 `/version` 은 강제 여부만 — 다만 **예전 앱은 서버 값만 보므로 서버 최신 버전 값은 계속 스토어 출시 뒤에 올릴 것**
+- 첫 안내: 목록 → 추가 → 메세지 순서 (`FirstTimeGuide.pageOrder`, `Apply3.GuideOrder`), 다음·시작하기에 큐브 터치음·진동. 도크 라벨 '메세지'
+- 인디케이터 '삭제' 알약 아래 줄어드는 바 제거 (3초 그대로). 숨긴 뒤 '되돌리기' 알림(Undo0926) · 설정 ▸ 장소 '모두 다시 보이기'
+- 하늘 날씨: 습도(습도 · 달 · 일출) · 판 위 지역 이름('예산군 대흥면', `LocationManager.ShortRegion`) · 기상청 실황(pty·rn1)이 오면 '지금' 날씨는 그쪽 우선 · 캐시 30분
+- 목록 줄 누르기 → AR 에 있으면 시트 내리고 박스·화살표 4초 강조, 없으면 그 줄에 '아직 AR에 없어요' · 거리 옆 방향(앞/오른쪽/뒤/왼쪽)
+- 인터넷 끊긴 채 켜도 연결되면 바로 목록 다시 받음 · (0,0) 으로 받지 않음 · '주변에 표시할 장소가 없어요'는 실제로 받고 0곳일 때만
+- 장소 올리기: 보낸 순간부터 60초 · 진행률 % · 시간 초과 시 실제 취소 · `upload_id`(중복 방지 키) 전송
+- 안드로이드 알림 권한은 로그인 뒤 한 번 · 위치 거부 시 몇 초 안에 안내 · AR 30fps(ARSession Match Frame Rate 런타임에서 끔) · 춤 캐릭터 문구 5개 언어 · 3D 화장실 최대 3개
+
+### 서버에서 할 일 (`C:\woopang\server`, git 미추적)
+1. **기상청 실황으로 '지금 날씨'** — `docs/claude/weather_kma.py` 를 server/ 에 복사, `.env` 에 `KMA_SERVICE_KEY`(공공데이터포털 '기상청_단기예보 조회서비스' 활용신청한 일반 인증키), `/api/weather` 응답을 돌려주기 직전에 `apply_kma_now(out, lat, lon)`. 지금은 Open-Meteo 모델 값이라 국지적인 비를 놓친다(비 오는데 '맑음')
+2. `/api/weather` 에 `humidity`(정수 %) — 기상청 연동하면 REH 로 자동. 연동 전이면 Open-Meteo `current=...,relative_humidity_2m` → `out['humidity']`. null 로 보내지 말 것
+3. `/upload`·`/create-location-with-model` 이 `upload_id` 를 받아 같은 값이 다시 오면 저장하지 말고 처음과 같은 성공 응답 (UNIQUE 컬럼/테이블 권장)
+4. (보안, 기존 문제) `TourAPIManager.SERVICE_KEY` 가 앱 코드에 평문 — 서버 `/proxy` 가 키를 붙이도록 옮기고 키 재발급 권장 (CLAUDE.md 6)

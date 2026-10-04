@@ -48,6 +48,10 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private Text loadingText;
     [SerializeField] private Image loadingSpinner;
 
+    [Header("업로드")]
+    [Tooltip("요청을 보낸 순간부터 잰다(사진 줄이기·인코딩 시간 제외). 넘으면 요청을 끊고 '시간 초과'")]
+    [SerializeField] private float uploadTimeoutSeconds = 60f;
+
     [Header("ARCore Geospatial")]
     [SerializeField] private AREarthManager earthManager; // AREarthManager 컴포넌트 참조
     [SerializeField] private bool useGeospatialAPI = true; // Inspector에서 ON/OFF 가능
@@ -76,7 +80,8 @@ public class CubeUploadManager : MonoBehaviour
     private string locationText;
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
-    private float elapsedTime = 0f;
+    // 중복 방지 키 — 같은 입력을 다시 보내면(실패·시간 초과 뒤) 같은 값, 성공·초기화 때 새로 만든다
+    private string uploadId;
 
     // 스와이프 패널 상태 저장용
     private SwipePanelController swipePanelController;
@@ -1378,13 +1383,10 @@ public class CubeUploadManager : MonoBehaviour
             yield break;
         }
 
-        // 검증 통과 → 바로 업로드 진행
-        Coroutine countdownCoroutine = StartCoroutine(ShowCountdownWarning(10));
-        yield return StartCoroutine(SendWithTimeout(
-            ProcessAndUploadImages(
-                this, userName, instagramID, showInstagram, gpsData, locationText,
-                petFriendlyToggle?.isOn ?? false, separateRestroomToggle?.isOn ?? false,
-                countdownCoroutine)));
+        // 검증 통과 → 업로드 (시간 제한은 요청을 보낸 뒤부터)
+        yield return StartCoroutine(ProcessAndUploadImages(
+            this, userName, instagramID, showInstagram, gpsData, locationText,
+            petFriendlyToggle?.isOn ?? false, separateRestroomToggle?.isOn ?? false));
 
         if (!isProcessing)
         {
@@ -1393,50 +1395,51 @@ public class CubeUploadManager : MonoBehaviour
         isProcessing = false;
     }
 
-    private IEnumerator ShowCountdownWarning(int seconds)
+    /// <summary>
+    /// 요청을 보내고 끝날 때까지 기다린다. 시간은 보낸 순간부터 재고, 넘으면 Abort 로 요청을 실제로 끊는다
+    /// (코루틴만 멈추면 요청은 계속 가서 장소가 올라간 채 '시간 초과'가 뜨고, 다시 누르면 중복 장소가 생긴다).
+    /// onProgress: 보낸 비율 0~99(%) — 다 보낸 뒤 서버 처리 중엔 99 에 머물고 1초마다 다시 알린다. onDone(시간 초과 여부).
+    /// </summary>
+    public static IEnumerator SendRequestWithTimeout(UnityWebRequest www, float timeoutSeconds, Action<int> onProgress, Action<bool> onDone)
     {
-        for (int i = seconds; i >= 1; i--)
+        float limit = Mathf.Max(5f, timeoutSeconds);
+        www.timeout = Mathf.CeilToInt(limit) + 5;   // 코루틴이 끊겨도 요청이 남지 않게 (보통은 아래 Abort 가 먼저)
+        www.SendWebRequest();
+
+        float sentAt = Time.realtimeSinceStartup;
+        float shownAt = 0f;
+        int shown = -1;
+        while (!www.isDone)
         {
-            ShowWarning(LocalizationManager.Instance.GetText("submitting_countdown").Replace("{0}", i.ToString()));
-            yield return new WaitForSeconds(1f);
-        }
-    }
+            float now = Time.realtimeSinceStartup;
+            if (now - sentAt >= limit)
+            {
+                www.Abort();
+                onDone?.Invoke(true);
+                yield break;
+            }
 
-    private IEnumerator SendWithTimeout(IEnumerator routine)
-    {
-        float timeout = 10f;
-        elapsedTime = 0f;
-        bool isCompleted = false;
-
-        Coroutine co = StartCoroutine(routine);
-        yield return StartCoroutine(WaitForRoutine(co, timeout, () => isCompleted));
-
-        if (!isProcessing)
-        {
-            isCompleted = true;
-        }
-    }
-
-    private IEnumerator WaitForRoutine(Coroutine routine, float timeout, Func<bool> isCompleted)
-    {
-        while (routine != null && elapsedTime < timeout && !isCompleted() && isProcessing)
-        {
-            elapsedTime += Time.deltaTime;
+            int pct = Mathf.Clamp(Mathf.FloorToInt(www.uploadProgress * 100f), 0, 99);
+            if (pct != shown || now - shownAt >= 1f)
+            {
+                shown = pct;
+                shownAt = now;
+                onProgress?.Invoke(pct);
+            }
             yield return null;
         }
+        // 앱이 멈춰 있던 사이 Unity 쪽 timeout 이 먼저 끊은 경우도 '시간 초과'로
+        onDone?.Invoke(www.result != UnityWebRequest.Result.Success && Time.realtimeSinceStartup - sentAt >= limit);
+    }
 
-        if (routine != null && !isCompleted() && elapsedTime >= timeout)
-        {
-            StopCoroutine(routine);
-            isProcessing = true;
-            ShowWarning(LocalizationManager.Instance.GetText("request_timeout"));
-        }
+    private void ShowUploadProgress(int percent)
+    {
+        ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
     }
 
     private IEnumerator ProcessAndUploadImages(
         CubeUploadManager form, string placeName, string instagramID, bool showInstagram,
-        Vector3 gpsData, string locationText, bool petFriendly, bool separateRestroom,
-        Coroutine countdownCoroutine)
+        Vector3 gpsData, string locationText, bool petFriendly, bool separateRestroom)
     {
         ShowSpinner(LocalizationManager.Instance.GetText("uploading_object"));
 
@@ -1470,6 +1473,10 @@ public class CubeUploadManager : MonoBehaviour
 
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
+
+        // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다
+        if (string.IsNullOrEmpty(uploadId)) uploadId = Guid.NewGuid().ToString("N");
+        formData.AddField("upload_id", uploadId);
 
         // 폴더명: 날짜_시간_사용자명 (로그인 안됐으면 장소명 사용)
         string folderName = !string.IsNullOrEmpty(loggedInUsername) ? loggedInUsername : placeName;
@@ -1519,10 +1526,19 @@ public class CubeUploadManager : MonoBehaviour
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
             LoginManager.ApplyAuth(www);
-            www.timeout = 10;
-            yield return www.SendWebRequest();
+            bool timedOut = false;
+            yield return StartCoroutine(SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
 
             HideSpinner();
+
+            if (timedOut)
+            {
+                // 입력·uploadId 는 그대로 — 다시 누르면 같은 키로 보내 서버가 중복을 거른다
+                Debug.LogWarning($"[CubeUploadManager] 업로드 시간 초과 ({uploadTimeoutSeconds}s) — 요청 중단");
+                isProcessing = true;
+                ShowWarning(GetLocalizedText("request_timeout"));
+                yield break;
+            }
 
             if (www.result == UnityWebRequest.Result.Success)
             {
@@ -1531,7 +1547,6 @@ public class CubeUploadManager : MonoBehaviour
                 if (responseText.Contains("Upload Succeeded!") || www.responseCode == 200)
                 {
                     isProcessing = false;
-                    StopCoroutine(countdownCoroutine);
                     ShowWarning(LocalizationManager.Instance.GetText("upload_success"));
 
                     // FullReset 먼저 수행 (StopAllCoroutines + uploadPage.SetActive(false) 포함)
@@ -1778,7 +1793,7 @@ public class CubeUploadManager : MonoBehaviour
         instagramID = "";
         gpsData = Vector3.zero;
         isProcessing = false;
-        elapsedTime = 0f;
+        uploadId = null;
     }
 
     private Texture2D ResizeTextureWithRenderTexture(Texture2D source, int targetWidth, int targetHeight)
@@ -2122,12 +2137,12 @@ public class CubeUploadManager : MonoBehaviour
             case "submitting_countdown":
                 switch (lang)
                 {
-                    case SystemLanguage.Korean: return "제출 중... {0}초 남음";
-                    case SystemLanguage.Japanese: return "送信中... {0}秒残り";
-                    case SystemLanguage.Chinese: return "提交中... 剩余{0}秒";
-                    case SystemLanguage.ChineseSimplified: return "提交中... 剩余{0}秒";
-                    case SystemLanguage.Spanish: return "Enviando... {0} segundos restantes";
-                    default: return "Submitting... {0} seconds remaining";
+                    case SystemLanguage.Korean: return "제출 중... {0}";
+                    case SystemLanguage.Japanese: return "送信中... {0}";
+                    case SystemLanguage.Chinese: return "提交中... {0}";
+                    case SystemLanguage.ChineseSimplified: return "提交中... {0}";
+                    case SystemLanguage.Spanish: return "Enviando... {0}";
+                    default: return "Submitting... {0}";
                 }
 
             case "permission_denied":

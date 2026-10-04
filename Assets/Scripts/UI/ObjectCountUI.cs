@@ -25,7 +25,13 @@ public class ObjectCountUI : MonoBehaviour
     [Tooltip("데이터 없음 타임아웃 시간 (초)")]
     public float noDataTimeout = 10f;
 
+    [Tooltip("장소 목록을 아직 못 받았을 때(인터넷 끊김·서버 응답 없음) '불러오는 중' 을 조용히 거두는 시간 (초, 표시 시작부터) — '주변에 없다' 고 하지 않는다")]
+    public float notLoadedHideTimeout = 30f;
+
     private CanvasGroup canvasGroup;
+    private DataManager dataManager;
+    private float shownAt;
+    private bool hiddenNotLoaded;   // 목록을 못 받아 조용히 거둔 상태 — 나중에 받아지면 'N곳을 찾았어요' 를 다시 보여 준다
     private int currentCount = 0;
     private bool isFinalCount = false;
     private Coroutine fadeOutCoroutine;
@@ -145,6 +151,11 @@ public class ObjectCountUI : MonoBehaviour
         // 최종 완료 시 페이드아웃 시작 (데이터가 있는 경우)
         if (isFinal && count > 0)
         {
+            if (hiddenNotLoaded)
+            {
+                hiddenNotLoaded = false;
+                canvasGroup.alpha = 1f;
+            }
             if (fadeOutCoroutine != null)
             {
                 StopCoroutine(fadeOutCoroutine);
@@ -187,11 +198,29 @@ public class ObjectCountUI : MonoBehaviour
 
     private IEnumerator HandleNoData()
     {
-        string noDataText = "주변에 AR데이터가 없습니다";
-        if (Application.systemLanguage != SystemLanguage.Korean)
+        // 장소 목록을 아직 못 받았거나 지금 연결이 끊겨 있으면 '주변에 없다' 고 하지 않는다 (끊김 안내는 R0926NetworkBanner).
+        // 받을 때까지 기다리다가 notLoadedHideTimeout 이 지나면 '불러오는 중' 만 조용히 거둔다.
+        bool waitedForLoad = false;
+        while (!IsPlaceListLoaded() || IsOffline())
         {
-            noDataText = "No AR data found nearby";
+            if (currentCount > 0) yield break;   // 그 사이 다른 경로로 찾았다
+            if (Time.time - shownAt >= notLoadedHideTimeout)
+            {
+                hiddenNotLoaded = canvasGroup.alpha > 0f;   // 보이던 '불러오는 중' 을 거둔 경우만
+                if (fadeOutCoroutine != null) StopCoroutine(fadeOutCoroutine);
+                fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay(0f));
+                yield break;
+            }
+            waitedForLoad = true;
+            yield return new WaitForSeconds(0.5f);
         }
+        // 막 받았으면 배분·스폰할 시간을 준다
+        if (waitedForLoad) yield return new WaitForSeconds(noDataTimeout);
+        if (currentCount > 0) yield break;
+
+        string noDataText = LocalizationManager.Instance != null
+            ? LocalizationManager.Instance.GetText("no_objects_nearby")
+            : "No places to show nearby";
 
         if (countText != null)
         {
@@ -201,10 +230,20 @@ public class ObjectCountUI : MonoBehaviour
 
         while (BootOverlay.Showing) yield return null;
         yield return new WaitForSeconds(3f);
+        if (currentCount > 0 && isFinalCount) yield break;   // 그 사이 'N곳을 찾았어요' 로 바뀌었다 — 그쪽 페이드에 맡긴다
 
         if (fadeOutCoroutine != null) StopCoroutine(fadeOutCoroutine);
         fadeOutCoroutine = StartCoroutine(FadeOutAfterDelay(0f));
     }
+
+    private bool IsPlaceListLoaded()
+    {
+        if (dataManager == null) dataManager = FindFirstObjectByType<DataManager>();
+        return dataManager != null && dataManager.IsCacheReady;
+    }
+
+    private static bool IsOffline()
+        => Application.internetReachability == NetworkReachability.NotReachable || ServerHealth.Down;
 
     private IEnumerator FadeOutAfterDelay(float delay = -1f)
     {
@@ -266,6 +305,8 @@ public class ObjectCountUI : MonoBehaviour
         isFinalCount = false;
         lastUpdateTime = 0f;
         ShowingNoData = false;
+        hiddenNotLoaded = false;
+        shownAt = Time.time;
         UpdateText(0, false);
 
         if (canvasGroup != null)

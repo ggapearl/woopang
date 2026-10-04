@@ -8,6 +8,7 @@ dependencies {
 // Android Resolver Dependencies Start
     implementation 'com.google.android.gms:play-services-base:18.10.0' // Assets/Firebase/Editor/AppDependencies.xml:23
     implementation 'com.google.android.gms:play-services-location:17+' // Google.XR.ARCoreExtensions.Editor.Internal.ExternalDependencyResolverHelper.RegisterAndroidDependencies
+    implementation 'com.google.android.play:app-update:2.1.0' // Assets/Scripts/Editor/WoopangAndroidDependencies.xml:5
     implementation 'com.google.firebase:firebase-analytics:23.0.0' // Assets/Firebase/Editor/MessagingDependencies.xml:21
     implementation 'com.google.firebase:firebase-app-unity:13.7.0' // Assets/Firebase/Editor/AppDependencies.xml:28
     implementation 'com.google.firebase:firebase-common:22.0.1' // Assets/Firebase/Editor/AppDependencies.xml:19

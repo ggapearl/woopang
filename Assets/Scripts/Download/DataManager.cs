@@ -125,6 +125,21 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     private HashSet<int> pendingDetailFetchIds = new HashSet<int>();
     private Coroutine batchDetailCoroutine;
 
+    [Header("주변 장소 목록 요청")]
+    [Tooltip("장소 목록 요청 제한 시간 (초) — 응답이 없으면 실패로 끝내야 FilterManager 가 다시 요청한다")]
+    [SerializeField] private int lightCacheTimeout = 15;
+    private float lightCacheBusyUntil;   // 이 시각 전까지는 목록 요청이 진행 중 (RefreshCache 중복 요청 방지)
+    private Vector2 lightCacheBusyPos;   // 진행 중인 요청의 위치
+    private int lightCacheRequestSeq;
+
+    [Header("위치 권한 안내")]
+    [Tooltip("안드로이드: 시작 후 이 시간(초)이 지나고, 권한 창이 닫힌 채로 위치 권한이 없으면 바로 안내 패널을 띄운다")]
+    public float androidLocationDeniedGrace = 3f;
+    [Tooltip("iOS: 위치 권한 창에 답할 시간 (초, 창이 떠 있는 동안은 세지 않는다) — 지나도 위치가 꺼져 있으면 안내 패널")]
+    public float iosLocationPromptGrace = 5f;
+    [Tooltip("위치가 꺼져 있을 때 안내 패널을 띄우기 전 최대 대기 시간 (초)")]
+    public float locationPermissionMaxWait = 30f;
+
     [Header("AR 준비 상태 가이드")]
     [SerializeField] private int arGuideFontSize = 22;
 
@@ -276,18 +291,32 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         checkPositionCoroutine = StartCoroutine(CheckPositionAndFetchData());
         yield break;
 #else
-        // 위치 권한이 아직 없으면 최대 30초 대기 (첫 설치 시 권한 요청 팝업 뜨는 시간)
+        // 위치 권한이 아직 없으면 권한 창에 답할 시간만큼 기다린다 (첫 설치 시 권한 요청 팝업).
+        // 거부가 분명해지면 바로 안내한다 — 예전엔 30초를 말없이 기다렸다.
         if (!Input.location.isEnabledByUser)
         {
             float waited = 0f;
-            while (!Input.location.isEnabledByUser && waited < 30f)
+            float settled = 0f;   // 권한 창 없이(앱에 포커스) 위치가 꺼진 상태가 이어진 시간
+            while (!Input.location.isEnabledByUser && waited < locationPermissionMaxWait)
             {
                 yield return new WaitForSeconds(0.5f);
                 waited += 0.5f;
+#if UNITY_ANDROID
+                // ARCore 는 카메라 허용 뒤에 위치를 묻는다 — 카메라가 허용됐고 권한 창이 닫혔는데도 위치 권한이 없으면 거부
+                bool denied = Application.isFocused
+                    && UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera)
+                    && !UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.FineLocation);
+                settled = denied ? settled + 0.5f : 0f;
+                if (waited >= androidLocationDeniedGrace && settled >= 2f) break;
+#elif UNITY_IOS
+                // 시스템 권한 창이 떠 있는 동안(포커스 없음)은 세지 않는다
+                if (Application.isFocused) settled += 0.5f;
+                if (settled >= iosLocationPromptGrace) break;
+#endif
             }
         }
 
-        // 30초 대기 후에도 권한 없으면 → 설정 안내 패널 표시 후 대기
+        // 기다린 뒤에도 위치가 꺼져 있으면 → 설정 안내 패널 표시 후 대기
         if (!Input.location.isEnabledByUser)
         {
             if (LocationPermissionManager.Instance != null)
@@ -435,10 +464,11 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
         if (lat != 0f || lon != 0f)
         {
             lastPosition = new Vector2(lat, lon);
+            // Light API로 캐시 수집 (11-tier → 단일 요청)
+            yield return StartCoroutine(FetchLightCache(lat, lon));
         }
-
-        // Light API로 캐시 수집 (11-tier → 단일 요청)
-        yield return StartCoroutine(FetchLightCache(lat, lon));
+        // 위치를 아직 모르면 (0,0) 으로 받지 않는다 — 엉뚱한 곳의 빈 목록이 '받음'으로 굳어 1km 이동 전까지 장소가 안 떴다.
+        // GPS 가 잡히면 FilterManager 가 받는다 (RefreshAllCaches · 못 받은 목록 다시 받기)
 
         // fallback 활성화 알림 → LoadingManager가 fallback UI 시작
         if (lightCache.Count > 0)
@@ -495,10 +525,17 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     private IEnumerator FetchLightCache(float lat, float lon)
     {
         string url = string.Format("{0}?lat={1}&lon={2}&radius=10000&limit=500", ApiConfig.LOCATIONS_LIGHT, lat, lon);
+        int timeout = lightCacheTimeout > 0 ? lightCacheTimeout : 15;
+        int seq = ++lightCacheRequestSeq;
+        lightCacheBusyUntil = Time.realtimeSinceStartup + timeout + 1f;
+        lightCacheBusyPos = new Vector2(lat, lon);
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            request.timeout = timeout;
             yield return request.SendWebRequest();
+            if (seq == lightCacheRequestSeq) lightCacheBusyUntil = 0f;
+            ServerHealth.Report(request);
             if (request.result == UnityWebRequest.Result.Success)
             {
                 try
@@ -2111,6 +2148,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
 
     public void RefreshCache(float lat, float lon)
     {
+        // 같은 자리(200m 안)를 이미 받는 중이면 그 결과를 쓴다
+        if (Time.realtimeSinceStartup < lightCacheBusyUntil
+            && CalculateDistance(lightCacheBusyPos.x, lightCacheBusyPos.y, lat, lon) < 200f) return;
         StartCoroutine(FetchLightCache(lat, lon));
     }
 

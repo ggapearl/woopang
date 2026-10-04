@@ -2,14 +2,15 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 첫 실행 안내 1~3장 문구를 도크 배치(아래 '추가'·'목록'·'메시지')에 맞게 바꿔 보여 준다.
+/// 첫 실행 안내 1~3장 문구를 도크 배치(아래 '추가'·'목록'·'메세지')에 맞게 바꿔 보여 준다.
+/// 문구는 쪽 오브젝트를 따라간다 (pages 와 Lines 가 짝) — 보이는 순서(목록 → 추가 → 메세지)는 FirstTimeGuide 가 정한다.
 /// FirstTimeGuide 의 옛 문구('상단 + 버튼', '좌측하단', '우측하단')는 그대로 두고, 해당 페이지가 보일 때만 덮어쓴다.
 /// 두 줄 안내 + 옅은 한 줄 — 자리는 R0926GuideOverlay 가 잡는다.
 /// </summary>
 public class R0926GuideText : MonoBehaviour
 {
     [SerializeField] private Text guideText;
-    [Tooltip("안내 1·2·3장 오브젝트 (01, 02, 03)")]
+    [Tooltip("안내 쪽 오브젝트 01(추가) · 02(목록) · 03(메세지) — Lines 와 같은 순서 (보이는 순서와는 무관)")]
     [SerializeField] private GameObject[] pages;
 
     private const string Sub = "\n<size=42><color=#C9CED3>";
@@ -31,7 +32,7 @@ public class R0926GuideText : MonoBehaviour
             "点击下方“列表”\n查看附近地点" + Sub + "按距离或分类筛选，还能在地图上看到朋友" + SubEnd,
             "Toca ‘Lista’ abajo\npara ver lugares cercanos" + Sub + "Filtra por distancia o tipo y ve a tus amigos en el mapa" + SubEnd },
         new[] {
-            "‘메시지’에서\n친구와 이야기를 나눠요" + Sub + "새 메시지가 오면 숫자로 알려 드려요" + SubEnd,
+            "‘메세지’에서\n친구와 이야기를 나눠요" + Sub + "새 메시지가 오면 숫자로 알려 드려요" + SubEnd,
             "Chat with friends\nin ‘Messages’" + Sub + "New messages show up as a number" + SubEnd,
             "「メッセージ」で\n友だちと話せます" + Sub + "新着メッセージは数字でお知らせします" + SubEnd,
             "在“消息”中\n和朋友聊天" + Sub + "有新消息时会以数字提醒" + SubEnd,

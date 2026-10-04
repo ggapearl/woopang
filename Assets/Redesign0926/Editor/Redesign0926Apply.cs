@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 17;  // v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
+        public const int Version = 18;  // v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
 
         private const string SpriteDir = "Assets/Redesign0926/Sprites/";
 
@@ -154,7 +154,7 @@ namespace Redesign0926
             Ensure<R0926SafeInset>(dock).SetEdge(R0926SafeInset.Edge.Bottom);
 
             DockButton(listBtn, dock.transform, SlotList, "r0926_i_list", "목록", "List", "リスト", "列表", "Lista");
-            DockButton(msgBtn, dock.transform, SlotMsg, "r0926_i_mail", "메시지", "Messages", "メッセージ", "消息", "Mensajes");
+            DockButton(msgBtn, dock.transform, SlotMsg, "r0926_i_mail", "메세지", "Messages", "メッセージ", "消息", "Mensajes");   // 한국어는 '메세지' (2026-10 요청)
 
             // 안 읽음 표시 — 이름·부모 그대로 (MessagePanelManager 가 이름으로 찾는다)
             var unread = Find(msgBtn.transform, "UnreadMessageButtonImage");

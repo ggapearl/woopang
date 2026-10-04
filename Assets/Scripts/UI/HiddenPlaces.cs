@@ -6,6 +6,7 @@ using UnityEngine;
 /// 이 기기에서 사용자가 인디케이터의 X 로 숨긴 장소.
 /// 메모리에만 둔다 — 백그라운드에 다녀와도 유지되고, 앱을 완전히 껐다 켜면 초기화된다.
 /// 숨긴 장소는 FilterManager 배분과 각 매니저의 직접 스폰에서 모두 빠진다(3D 오브젝트·박스·화살표 전부).
+/// 숨긴 뒤 알림의 '되돌리기'(Unhide) · 설정 '모두 다시 보이기'(ShowAll)로 앱을 다시 켜지 않아도 되살린다.
 /// </summary>
 public static class HiddenPlaces
 {
@@ -13,6 +14,9 @@ public static class HiddenPlaces
 
     /// <summary>새로 숨겨졌을 때 (매니저 고유 ID: "dm_12", "tour_345", "subway_…")</summary>
     public static event Action<string> Hidden;
+
+    /// <summary>숨긴 장소가 다시 보이게 됐을 때 (되돌리기 · 모두 다시 보이기)</summary>
+    public static event Action Restored;
 
     public static int Count => ids.Count;
 
@@ -23,6 +27,34 @@ public static class HiddenPlaces
         if (string.IsNullOrEmpty(uniqueId) || !ids.Add(uniqueId)) return false;
         Hidden?.Invoke(uniqueId);
         return true;
+    }
+
+    /// <summary>숨긴 장소 하나를 다시 보이게 한다 (숨긴 뒤 알림의 '되돌리기')</summary>
+    public static bool Unhide(string uniqueId)
+    {
+        if (string.IsNullOrEmpty(uniqueId) || !ids.Remove(uniqueId)) return false;
+        OnRestored();
+        return true;
+    }
+
+    /// <summary>숨긴 장소를 모두 다시 보이게 한다 (설정 '모두 다시 보이기'). 되살린 수를 돌려준다</summary>
+    public static int ShowAll()
+    {
+        int n = ids.Count;
+        if (n == 0) return 0;
+        ids.Clear();
+        OnRestored();
+        return n;
+    }
+
+    // 숨길 땐 FilterManager·목록이 Hidden 을 받아 치운다 — 되살릴 땐 다음 배분 주기를 기다리지 않고 바로 다시 배분·목록 갱신
+    private static void OnRestored()
+    {
+        var filter = UnityEngine.Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filter != null) filter.TriggerReallocation();
+        var list = UnityEngine.Object.FindFirstObjectByType<PlaceListManager>(FindObjectsInactive.Include);
+        if (list != null && list.isActiveAndEnabled) list.UpdateUI();
+        Restored?.Invoke();
     }
 
     /// <summary>인디케이터가 가리키는 Target 을 숨긴다. 장소가 아니면(P2P 사용자 등) false.</summary>
@@ -64,5 +96,6 @@ public static class HiddenPlaces
     {
         ids.Clear();
         Hidden = null;
+        Restored = null;
     }
 }

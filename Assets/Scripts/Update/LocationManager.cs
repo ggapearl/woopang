@@ -16,6 +16,10 @@ public class LocationManager : MonoBehaviour
     [SerializeField] private bool singleLine = false;
     [SerializeField] private float refreshInterval = 30f;
 
+    /// <summary>날씨판 위에 쓰는 짧은 지역 이름 — '예산군 대흥면' (시·군·구 + 읍·면·동, 나라·광역 단위는 뺀다)</summary>
+    public static string ShortRegion { get; private set; }
+    public static event System.Action<string> ShortRegionChanged;
+
     private string currentLanguage;
     private bool isRefreshing = false;
     private WaitForSeconds waitOneSecond = new WaitForSeconds(1f);
@@ -153,6 +157,7 @@ public class LocationManager : MonoBehaviour
                 {
                     string jsonResponse = request.downloadHandler.text;
                     JSONNode data = JSON.Parse(jsonResponse);
+                    SetShortRegion(BuildShortRegion(data["address"]));
 
                     if (singleLine)
                     {
@@ -211,6 +216,59 @@ public class LocationManager : MonoBehaviour
                 infoText.text = textBuilder.ToString();
             }
         }
+    }
+
+    private static void SetShortRegion(string region)
+    {
+        if (string.IsNullOrEmpty(region) || region == ShortRegion) return;
+        ShortRegion = region;
+        ShortRegionChanged?.Invoke(region);
+    }
+
+    // OSM 주소 키 — 작은 단위가 뒤에 오도록. 한국은 지역마다 '면'이 town/village 등 다른 키로 와서 이름 끝 글자로 단계를 가른다
+    private static readonly string[] RegionKeys = { "borough", "city_district", "county", "city", "municipality", "town", "village", "suburb", "quarter", "neighbourhood" };
+
+    /// <summary>
+    /// 시·군·구 + 읍·면·동. 예: 예산군 대흥면 · 종로구 청운효자동 · 영통구 매탄동.
+    /// 특별시·광역시·도·나라는 뺀다. 한국 이름이 아니면(외국·로마자) 작은 단위 + 시 이름.
+    /// </summary>
+    private static string BuildShortRegion(JSONNode addr)
+    {
+        if (addr == null) return null;
+        string sgg = null, emd = null;
+        foreach (string key in RegionKeys)
+        {
+            string v = addr[key].Value;
+            if (string.IsNullOrEmpty(v)) continue;
+            v = v.Trim();
+            if (sgg == null && IsSigungu(v)) sgg = v;
+            else if (emd == null && IsEupMyeonDong(v)) emd = v;
+        }
+        if (sgg != null || emd != null) return sgg != null && emd != null ? sgg + " " + emd : (sgg ?? emd);
+
+        // 한국식 이름이 아니다 — 동네 + 도시 (예: Shibuya, Tokyo)
+        string small = null, big = null;
+        foreach (string key in new[] { "suburb", "quarter", "neighbourhood", "village", "town" })
+            if (small == null && !string.IsNullOrEmpty(addr[key].Value)) small = addr[key].Value.Trim();
+        foreach (string key in new[] { "city", "town", "county", "city_district", "borough" })
+            if (big == null && !string.IsNullOrEmpty(addr[key].Value) && addr[key].Value.Trim() != small) big = addr[key].Value.Trim();
+        if (small != null && big != null) return small + ", " + big;
+        return small ?? big;
+    }
+
+    private static bool IsSigungu(string v)
+    {
+        if (v.EndsWith("특별시") || v.EndsWith("광역시")) return false;
+        if (v.EndsWith("구") || v.EndsWith("군") || v.EndsWith("시")) return true;
+        string l = v.ToLowerInvariant();   // 로마자 (영어 등)
+        return l.EndsWith("-gu") || l.EndsWith("-gun") || l.EndsWith("-si");
+    }
+
+    private static bool IsEupMyeonDong(string v)
+    {
+        if (v.EndsWith("읍") || v.EndsWith("면") || v.EndsWith("동") || v.EndsWith("가")) return true;
+        string l = v.ToLowerInvariant();
+        return l.EndsWith("-eup") || l.EndsWith("-myeon") || l.EndsWith("-dong") || l.EndsWith("-ga");
     }
 
     private void AppendCoords(double latitude, double longitude)

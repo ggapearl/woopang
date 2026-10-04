@@ -56,8 +56,8 @@ public class ModelUploadManager : MonoBehaviour
     [SerializeField] private bool useGeospatialAPI = true;
 
     [Header("Upload Settings")]
+    [Tooltip("요청을 보낸 순간부터 잰다. 넘으면 요청을 끊고 '시간 초과'")]
     [SerializeField] private float uploadTimeoutSeconds = 30f;
-    [SerializeField] private int countdownSeconds = 30;
 
     private string selectedFilePath;
     private byte[] selectedFileData;
@@ -74,7 +74,8 @@ public class ModelUploadManager : MonoBehaviour
     private string selectedCategory = "";
 
     private bool isProcessing = false;
-    private float elapsedTime = 0f;
+    // 중복 방지 키 — 같은 입력을 다시 보내면(실패·시간 초과 뒤) 같은 값, 성공·초기화 때 새로 만든다
+    private string uploadId;
     private const int MAX_SUB_PHOTOS = 10;
     private bool canUploadToday = true; // 하루 1회 업로드 제한
 
@@ -1015,8 +1016,8 @@ public class ModelUploadManager : MonoBehaviour
             yield break;
         }
 
-        Coroutine countdownCoroutine = StartCoroutine(ShowCountdownWarning(countdownSeconds));
-        yield return StartCoroutine(SendWithTimeout(ProcessAndUploadModel(), countdownCoroutine));
+        // 시간 제한은 요청을 보낸 뒤부터 (CubeUploadManager.SendRequestWithTimeout)
+        yield return StartCoroutine(ProcessAndUploadModel());
 
         if (!isProcessing)
         {
@@ -1026,46 +1027,9 @@ public class ModelUploadManager : MonoBehaviour
         isProcessing = false;
     }
 
-    private IEnumerator ShowCountdownWarning(int seconds)
+    private void ShowUploadProgress(int percent)
     {
-        for (int i = seconds; i >= 1; i--)
-        {
-            string message = GetLocalizedText("submitting_countdown").Replace("{0}", i.ToString());
-            ShowWarning(message);
-            yield return new WaitForSeconds(1f);
-        }
-    }
-
-    private IEnumerator SendWithTimeout(IEnumerator routine, Coroutine countdownCoroutine)
-    {
-        float timeout = uploadTimeoutSeconds; // Inspector에서 설정 가능한 타임아웃 사용
-        elapsedTime = 0f;
-        bool isCompleted = false;
-
-        Coroutine co = StartCoroutine(routine);
-        yield return StartCoroutine(WaitForRoutine(co, timeout, () => isCompleted));
-
-        if (!isProcessing)
-        {
-            isCompleted = true;
-            StopCoroutine(countdownCoroutine);
-        }
-    }
-
-    private IEnumerator WaitForRoutine(Coroutine routine, float timeout, Func<bool> isCompleted)
-    {
-        while (routine != null && elapsedTime < timeout && !isCompleted() && isProcessing)
-        {
-            elapsedTime += Time.deltaTime;
-            yield return null;
-        }
-
-        if (routine != null && !isCompleted() && elapsedTime >= timeout)
-        {
-            StopCoroutine(routine);
-            isProcessing = true;
-            ShowWarning(GetLocalizedText("request_timeout"));
-        }
+        ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
     }
 
     private IEnumerator ProcessAndUploadModel()
@@ -1097,6 +1061,10 @@ public class ModelUploadManager : MonoBehaviour
         formData.AddField("animation_loop", "on");
         formData.AddField("animation_auto_play", "on");
 
+        // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다
+        if (string.IsNullOrEmpty(uploadId)) uploadId = Guid.NewGuid().ToString("N");
+        formData.AddField("upload_id", uploadId);
+
         string folder = $"{DateTime.Now:yyyyMMdd_HHmmss}_{modelName}";
         formData.AddField("folder", folder);
 
@@ -1124,10 +1092,19 @@ public class ModelUploadManager : MonoBehaviour
 
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
-            www.timeout = Mathf.RoundToInt(uploadTimeoutSeconds); // Inspector에서 설정 가능한 타임아웃 사용
-            yield return www.SendWebRequest();
+            bool timedOut = false;
+            yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
 
             HideSpinner();
+
+            if (timedOut)
+            {
+                // 입력·uploadId 는 그대로 — 다시 누르면 같은 키로 보내 서버가 중복을 거른다
+                Debug.LogWarning($"[ModelUploadManager] 업로드 시간 초과 ({uploadTimeoutSeconds}s) — 요청 중단");
+                isProcessing = true;
+                ShowWarning(GetLocalizedText("request_timeout"));
+                yield break;
+            }
 
             if (www.result == UnityWebRequest.Result.Success)
             {
@@ -1290,7 +1267,7 @@ public class ModelUploadManager : MonoBehaviour
 
         gpsData = Vector3.zero;
         isProcessing = false;
-        elapsedTime = 0f;
+        uploadId = null;
         instagramID = "";
     }
 
@@ -1498,12 +1475,12 @@ public class ModelUploadManager : MonoBehaviour
             case "submitting_countdown":
                 switch (lang)
                 {
-                    case SystemLanguage.Korean: return "제출 중... {0}초 남음";
-                    case SystemLanguage.Japanese: return "送信中... {0}秒残り";
-                    case SystemLanguage.Chinese: return "提交中... 剩余{0}秒";
-                    case SystemLanguage.ChineseSimplified: return "提交中... 剩余{0}秒";
-                    case SystemLanguage.Spanish: return "Enviando... {0} segundos restantes";
-                    default: return "Submitting... {0} seconds remaining";
+                    case SystemLanguage.Korean: return "제출 중... {0}";
+                    case SystemLanguage.Japanese: return "送信中... {0}";
+                    case SystemLanguage.Chinese: return "提交中... {0}";
+                    case SystemLanguage.ChineseSimplified: return "提交中... {0}";
+                    case SystemLanguage.Spanish: return "Enviando... {0}";
+                    default: return "Submitting... {0}";
                 }
 
             case "permission_denied":
