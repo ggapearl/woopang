@@ -786,7 +786,7 @@ namespace Redesign0926
             log.Add("  날씨 넣음: " + json.Substring(0, Math.Min(160, json.Length)));
         }
 
-        // 업데이트 안내 — 일반 · 강제 (강제는 스토어로 넘어가지 않게 카드만 그린다)
+        // 업데이트 안내 — 일반 · 강제 · 버전 모를 때(안드로이드) (강제는 스토어로 넘어가지 않게 카드만 그린다)
         private static void PlanUpdate()
         {
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
@@ -813,21 +813,27 @@ namespace Redesign0926
             });
             Sleep(0.6f);
             Shot("upd_force");
-            // 스토어에 다녀와도 그대로일 때 — '아직 반영 중 · 계속 쓰기'
+            // 안드로이드 — Play 는 새 버전 이름을 주지 않는다: 버전 알약 없이 글만
             Do(() =>
             {
                 var c = UnityEngine.Object.FindAnyObjectByType<AutoUpdateChecker>(FindObjectsInactive.Include);
-                if (c != null) typeof(AutoUpdateChecker).GetMethod("ShowPendingPanel", F).Invoke(c, null);
+                if (c == null) return;
+                typeof(AutoUpdateChecker).GetField("latestVersion", F).SetValue(c, null);
+                typeof(AutoUpdateChecker).GetMethod("ShowNormalUpdatePanel", F).Invoke(c, null);
             });
             Sleep(0.6f);
-            Shot("upd_pending");
+            Shot("upd_noversion");
             Check(() =>
             {
                 var c = UnityEngine.Object.FindAnyObjectByType<AutoUpdateChecker>(FindObjectsInactive.Include);
+                var card = UnityEngine.Object.FindAnyObjectByType<R0926UpdateCard>(FindObjectsInactive.Include);
+                if (c == null || card == null) return false;
+                var pill = typeof(R0926UpdateCard).GetField("versionPill", F).GetValue(card) as RectTransform;
                 var b1 = typeof(AutoUpdateChecker).GetField("updateButton", F).GetValue(c) as Button;
                 var b2 = typeof(AutoUpdateChecker).GetField("cancelButton", F).GetValue(c) as Button;
-                return b1 != null && b1.gameObject.activeSelf && b2 != null && b2.gameObject.activeSelf;
-            }, "아직 반영 중: '스토어 열기 · 계속 쓰기' 둘 다 보임");
+                return pill != null && !pill.gameObject.activeSelf
+                       && b1 != null && b1.gameObject.activeSelf && b2 != null && b2.gameObject.activeSelf;
+            }, "버전 모를 때(안드로이드): 버전 알약 없이 '업데이트 · 나중에'");
         }
 
         private static void PlanStore2()

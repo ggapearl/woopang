@@ -5,6 +5,8 @@ using UnityEngine.UI;
 /// 첫 사용 안내의 모양 — 화면 전체를 어둡게 하고 해당 도크 버튼만 동그랗게 비춘다.
 /// 버튼 바로 위에 짧은 화살표가 까딱이고, 그 위에 '다음', 안내 문구, 쪽 점이 차례로 선다. '건너뛰기'는 오른쪽 위.
 /// 쪽 넘기기·닫기·첫 실행 판정은 FirstTimeGuide 그대로 (다음 = 왼쪽으로 민 것과 같다, 시작하기·건너뛰기 = 확인 버튼).
+/// 보이는 순서는 FirstTimeGuide 가 정하고, pages·targets 는 쪽 오브젝트와 비출 칸의 짝이다.
+/// 다음·시작하기는 AR 오브젝트를 터치할 때와 같은 소리·진동을 낸다 (건너뛰기·뒤로가기는 조용히).
 /// </summary>
 public class R0926GuideOverlay : MonoBehaviour
 {
@@ -23,6 +25,10 @@ public class R0926GuideOverlay : MonoBehaviour
     [SerializeField] private RectTransform[] targets;    // 쪽마다 비출 도크 칸
     [SerializeField] private float holeSize = 300f;
     [SerializeField] private float dimAlpha = 0.74f;
+    [Tooltip("다음·시작하기 누름 소리 — 비우면 UIFeedbackManager 기본 소리(Touch, AR 오브젝트 터치와 같은 소리)")]
+    [SerializeField] private AudioClip tapSound;
+    [Tooltip("누름 진동 세기 — AR 오브젝트(큐브) 터치와 같게")]
+    [SerializeField, Range(0f, 1f)] private float tapHaptic = 0.3f;
 
     private Canvas root;
     private RectTransform dots;
@@ -34,8 +40,8 @@ public class R0926GuideOverlay : MonoBehaviour
 
     public void Next()
     {
-        int p = Current();
-        if (pages != null && p >= pages.Length - 1) { if (confirm != null) confirm.onClick.Invoke(); }
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HandleTouchFeedbackDirect(tapHaptic, tapSound);
+        if (IsLast()) { if (confirm != null) confirm.onClick.Invoke(); }
         else if (guide != null) guide.OnSwipe(-10000f);   // 왼쪽으로 민 것과 같다
     }
 
@@ -49,6 +55,13 @@ public class R0926GuideOverlay : MonoBehaviour
         if (pages == null) return 0;
         for (int i = 0; i < pages.Length; i++) if (pages[i] != null && pages[i].activeInHierarchy) return i;
         return 0;
+    }
+
+    // 마지막 쪽인가 — 순서는 FirstTimeGuide 기준 (pages 배열 순서와 달라도 맞게)
+    private bool IsLast()
+    {
+        if (guide != null && guide.PageCount > 0) return guide.CurrentPage >= guide.PageCount - 1;
+        return pages != null && Current() >= pages.Length - 1;
     }
 
     private void LateUpdate()
@@ -118,7 +131,7 @@ public class R0926GuideOverlay : MonoBehaviour
         {
             if (nextLabel != null)
             {
-                bool last = pages != null && p >= pages.Length - 1;
+                bool last = IsLast();
                 string lab = last ? L("시작하기", "Get started", "はじめる", "开始", "Empezar") : L("다음", "Next", "次へ", "下一步", "Siguiente");
                 if (nextLabel.text != lab) nextLabel.text = lab;
                 next.sizeDelta = new Vector2(nextLabel.preferredWidth + 150f, next.sizeDelta.y);

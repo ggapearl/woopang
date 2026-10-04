@@ -130,6 +130,10 @@ public class FirebaseNotification : MonoBehaviour
     public float bannerDisplayDuration = 4f;
     public float bannerSlideSpeed = 800f;
 
+    [Header("알림 권한 (안드로이드)")]
+    [Tooltip("로그인 뒤 알림 권한을 묻기까지 기다리는 시간 (초) — 로그인 직후 화면 전환과 겹치지 않게")]
+    public float notificationAskDelay = 2f;
+
     private RectTransform bannerRectTransform;
 
     // Cached font to avoid repeated Resources.Load calls
@@ -188,7 +192,7 @@ public class FirebaseNotification : MonoBehaviour
         InitializeBannerRect();
 
 #if UNITY_ANDROID
-        RequestNotificationPermission();
+        StartCoroutine(RequestNotificationPermissionWhenLoggedIn());
         InitializeAndroidNotificationChannel();
         StartNotificationCleanup();
 
@@ -611,6 +615,27 @@ public class FirebaseNotification : MonoBehaviour
     }
 
 #if UNITY_ANDROID
+    private const string NotificationPermissionAskedKey = "NotificationPermissionAsked_V1";
+
+    /// <summary>
+    /// 알림 권한은 메시지를 받을 수 있게 된 뒤(로그인)에 한 번만 묻는다 —
+    /// 첫 실행 때 카메라·위치 권한 창과 겹쳐 뜨지 않게.
+    /// </summary>
+    private IEnumerator RequestNotificationPermissionWhenLoggedIn()
+    {
+        if (PlayerPrefs.GetInt(NotificationPermissionAskedKey, 0) == 1) yield break;
+        if (Permission.HasUserAuthorizedPermission("android.permission.POST_NOTIFICATIONS")) yield break;
+
+        var wait = new WaitForSeconds(1f);
+        while (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn || !Application.isFocused)
+            yield return wait;
+        yield return new WaitForSeconds(notificationAskDelay);
+
+        PlayerPrefs.SetInt(NotificationPermissionAskedKey, 1);
+        PlayerPrefs.Save();
+        RequestNotificationPermission();
+    }
+
     void RequestNotificationPermission()
     {
         if (!Permission.HasUserAuthorizedPermission("android.permission.POST_NOTIFICATIONS"))

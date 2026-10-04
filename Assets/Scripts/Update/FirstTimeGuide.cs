@@ -14,6 +14,8 @@ public class FirstTimeGuide : MonoBehaviour
     [Header("UI 연결")]
     [SerializeField] private GameObject guidePanel;
     [SerializeField] private GameObject[] guidePages;   // 6개 페이지 (01~06)
+    [Tooltip("보여 줄 순서 — 페이지 오브젝트 이름 (01=추가 · 02=목록 · 03=메시지). 여기 없는 페이지는 원래 순서대로 뒤에")]
+    [SerializeField] private string[] pageOrder = { "02", "01", "03" };
     [SerializeField] private Text guideText;
     [SerializeField] private Button nextButton;         // 기존 right — 비활성 처리
     [SerializeField] private Button previousButton;     // 기존 left — 비활성 처리
@@ -109,6 +111,10 @@ public class FirstTimeGuide : MonoBehaviour
     private int pageCount;
     private float delayBeforeGuide = 6f;
 
+    // 지금 보이는 쪽 · 쪽 수 (R0926GuideOverlay 가 마지막 쪽 판정에 쓴다)
+    public int CurrentPage => currentPage;
+    public int PageCount => pageCount;
+
     // 전환 상태
     private bool isTransitioning = false;
 
@@ -194,6 +200,7 @@ public class FirstTimeGuide : MonoBehaviour
             return;
         }
 
+        ApplyPageOrder();
         pageCount = guidePages.Length;
 
         // 기존 이전/다음 버튼 비활성
@@ -214,6 +221,41 @@ public class FirstTimeGuide : MonoBehaviour
         CreateSwipeHint();
 
         StartCoroutine(StartGuideSequence());
+    }
+
+    // ============================================================
+    // 보여 줄 순서 — pageOrder 대로 guidePages 를 다시 줄 세운다 (씬을 다시 적용하기 전에도 순서가 맞게).
+    // pageHighlights 의 pageIndex 도 같은 페이지를 가리키게 옮긴다. 이미 그 순서면 바뀌는 것이 없다
+    // ============================================================
+    private void ApplyPageOrder()
+    {
+        if (pageOrder == null || pageOrder.Length == 0 || guidePages == null) return;
+        int n = guidePages.Length;
+        var order = new List<int>(n);
+        foreach (var id in pageOrder)
+            for (int i = 0; i < n; i++)
+                if (guidePages[i] != null && guidePages[i].name == id && !order.Contains(i)) { order.Add(i); break; }
+        for (int i = 0; i < n; i++)
+            if (!order.Contains(i)) order.Add(i);
+
+        var pages = new GameObject[n];
+        var moved = new int[n];   // 옛 자리 → 새 자리
+        for (int k = 0; k < n; k++) { pages[k] = guidePages[order[k]]; moved[order[k]] = k; }
+        guidePages = pages;
+
+        if (pageHighlights == null) return;
+        foreach (var t in pageHighlights)
+            if (t != null && t.pageIndex >= 0 && t.pageIndex < n) t.pageIndex = moved[t.pageIndex];
+    }
+
+    // 페이지 문구 — 페이지 오브젝트 이름(01~06) 번호의 문구 (순서를 바꿔도 그림과 짝이 맞게)
+    private string PageText(int page)
+    {
+        if (!guideTemplates.TryGetValue(GetLanguageCode(), out var lines)) lines = guideTemplates["en"];
+        int k = page;
+        if (page >= 0 && page < guidePages.Length && guidePages[page] != null
+            && int.TryParse(guidePages[page].name, out int no) && no >= 1 && no <= lines.Length) k = no - 1;
+        return k >= 0 && k < lines.Length ? lines[k] : "";
     }
 
     // ============================================================
@@ -567,11 +609,7 @@ public class FirstTimeGuide : MonoBehaviour
         }
 
         // 초기 진입 시 첫 페이지 텍스트 세팅
-        string lang = GetLanguageCode();
-        if (guideTemplates.ContainsKey(lang))
-            guideText.text = guideTemplates[lang][currentPage];
-        else
-            guideText.text = guideTemplates["en"][currentPage];
+        guideText.text = PageText(currentPage);
 
         UpdateDots();
         UpdateConfirmButton();
@@ -647,8 +685,7 @@ public class FirstTimeGuide : MonoBehaviour
         currentPage = toPage;
 
         // 텍스트 + 도트 업데이트
-        string lang = GetLanguageCode();
-        guideText.text = guideTemplates[lang][currentPage];
+        guideText.text = PageText(currentPage);
 
         UpdateDots();
         UpdateConfirmButton();
@@ -1066,6 +1103,7 @@ public class FirstTimeGuide : MonoBehaviour
         // Start가 아직 실행 안 됐으면 기본 세팅 수행
         if (pageCanvasGroups == null || pageCanvasGroups.Length == 0)
         {
+            ApplyPageOrder();
             pageCount = guidePages.Length;
             SetupSwipeArea();
             SetupCanvasGroups();

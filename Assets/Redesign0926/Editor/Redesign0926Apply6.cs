@@ -245,10 +245,14 @@ namespace Redesign0926
             mp.SetActive(false);   // 처음엔 목록
             settings.SetActive(false);
             ApplySkyChipToggle(root);
+            ApplyHiddenUndo(root, log);
             log.Add("friends map + settings ok");
         }
 
         private const float SegTabW = 132f;
+        private const float ShowAllRowH = 120f, ShowAllBtnH = 88f;   // 설정 '모두 다시 보이기' 줄 · 알약
+        private const float UndoBarH = 132f, UndoBtnH = 104f;        // 숨긴 뒤 '되돌리기' 알림 · 버튼 (≈ 36pt · 28pt)
+        private const float UndoBarY = DockBottom + DockHeight + 24f + 84f + 24f;   // 위치 칩(84) 바로 위
 
         private static void SetArray(SerializedProperty arr, params Object[] items)
         {
@@ -275,6 +279,50 @@ namespace Redesign0926
             so.FindProperty("chipRect").objectReferenceValue = RT(chip);
             so.ApplyModifiedPropertiesWithoutUndo();
             Wire(b, sky.ToggleCollapse);
+        }
+
+        // ── 인디케이터 X 로 숨긴 뒤 '이 장소를 숨겼어요 · 되돌리기' — 위치 칩 위에 몇 초 (R0926IndicatorClose) ──
+        private static void ApplyHiddenUndo(Transform root, List<string> log)
+        {
+            var marker = Find(root, "Redesign0926Marker");
+            if (marker == null) { log.Add("되돌리기 알림: 마커 없음"); return; }
+            var bar = FindOrCreate(root, "Undo0926");
+            bar.transform.SetAsLastSibling();
+            SetRect(RT(bar), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, UndoBarY), new Vector2(0, UndoBarH));
+            Ensure<R0926SafeInset>(bar).SetEdge(R0926SafeInset.Edge.Bottom);
+            Img(bar, Spr("r0926_pill"), new Color(Card.r, Card.g, Card.b, 0.97f), Image.Type.Sliced, 64f / (UndoBarH / 2f)).raycastTarget = true;
+            OnTop(bar);
+            var cg = Ensure<CanvasGroup>(bar);
+            cg.alpha = 0f; cg.blocksRaycasts = false; cg.interactable = false;
+            var h = Ensure<HorizontalLayoutGroup>(bar);
+            h.padding = new RectOffset(48, 14, 14, 14); h.spacing = 24; h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false;
+            Ensure<ContentSizeFitter>(bar).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var msg = FindOrCreate(bar.transform, "Text0926");
+            var mt = Txt(msg, "이 장소를 숨겼어요", 34, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
+            mt.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+            var btn = FindOrCreate(bar.transform, "UndoButton0926");
+            Img(btn, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / (UndoBtnH / 2f)).raycastTarget = true;
+            var b = Ensure<Button>(btn); b.transition = Selectable.Transition.None;
+            var bh = Ensure<HorizontalLayoutGroup>(btn);
+            bh.padding = new RectOffset(36, 36, 0, 0); bh.childAlignment = TextAnchor.MiddleCenter;
+            bh.childControlWidth = true; bh.childControlHeight = true; bh.childForceExpandWidth = false; bh.childForceExpandHeight = true;
+            var ble = Ensure<LayoutElement>(btn); ble.minHeight = UndoBtnH; ble.preferredHeight = UndoBtnH;
+            var lab = FindOrCreate(btn.transform, "Label");
+            var lt = Txt(lab, "되돌리기", 34, Pink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            lt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            bar.SetActive(false);   // 숨길 때만 R0926IndicatorClose 가 켠다
+
+            var close = Ensure<R0926IndicatorClose>(marker);
+            var so = new SerializedObject(close);
+            so.FindProperty("undoBar").objectReferenceValue = cg;
+            so.FindProperty("undoText").objectReferenceValue = mt;
+            so.FindProperty("undoLabel").objectReferenceValue = lt;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            Wire(b, close.UndoHide);
+            log.Add("hidden undo ok");
         }
 
         // ── 설정 탭: 하늘 화면 ─────────────────────────────────────
@@ -333,6 +381,22 @@ namespace Redesign0926
             Ensure<LayoutElement>(hidden).preferredHeight = 104;
             var ht = Txt(hidden, "숨긴 장소 없음", 30, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
             ht.horizontalOverflow = HorizontalWrapMode.Wrap;
+            // 숨긴 장소 모두 다시 보이기 — 숨긴 게 있을 때만 보인다 (R0926SettingsPanel.Refresh)
+            var showAll = FindOrCreate(g3.transform, "RowShowAll");
+            showAll.transform.SetSiblingIndex(hidden.transform.GetSiblingIndex() + 1);
+            Ensure<LayoutElement>(showAll).preferredHeight = ShowAllRowH;
+            var showBtn = FindOrCreate(showAll.transform, "Button");
+            SetRect(RT(showBtn), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(0, ShowAllBtnH));
+            Img(showBtn, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / (ShowAllBtnH / 2f)).raycastTarget = true;
+            Ensure<Button>(showBtn).transition = Selectable.Transition.None;
+            var sbh = Ensure<HorizontalLayoutGroup>(showBtn);
+            sbh.padding = new RectOffset(34, 34, 0, 0); sbh.childAlignment = TextAnchor.MiddleCenter;
+            sbh.childControlWidth = true; sbh.childControlHeight = true; sbh.childForceExpandWidth = false; sbh.childForceExpandHeight = true;
+            Ensure<ContentSizeFitter>(showBtn).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var showLabel = FindOrCreate(showBtn.transform, "Text");
+            Txt(showLabel, "모두 다시 보이기", 30, Pink, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Loc(showLabel, "모두 다시 보이기", "Show all again", "すべて再表示", "全部重新显示", "Mostrar todos");
+            showAll.SetActive(false);   // 앱을 켠 직후엔 숨긴 장소가 없다
 
             var panel = Ensure<R0926SettingsPanel>(sp);
             var so = new SerializedObject(panel);
@@ -347,6 +411,7 @@ namespace Redesign0926
             SetArray(so.FindProperty("angleTabs"), angleTabs);
             SetArray(so.FindProperty("angleLabels"), angleLabels);
             so.FindProperty("hiddenText").objectReferenceValue = ht;
+            so.FindProperty("showAllRow").objectReferenceValue = showAll;
             so.FindProperty("removeSwitch").objectReferenceValue = removeX;
             so.FindProperty("switchOn").objectReferenceValue = Spr("r0926_sw_on");
             so.FindProperty("switchOff").objectReferenceValue = Spr("r0926_sw_off");
@@ -360,6 +425,7 @@ namespace Redesign0926
             Wire(lying.transform.parent.GetComponent<Button>(), panel.ToggleLying);
             Wire(collapsed.transform.parent.GetComponent<Button>(), panel.ToggleCollapsed);
             Wire(removeX.transform.parent.GetComponent<Button>(), panel.ToggleRemove);
+            Wire(showBtn.GetComponent<Button>(), panel.ShowAllHidden);
             for (int i = 0; i < angleTabs.Length; i++)
             {
                 var b = angleTabs[i].GetComponent<Button>();

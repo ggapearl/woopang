@@ -212,10 +212,18 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 #endif
     }
 
+    // RefreshCache 중복 방지 — FilterManager 가 못 받은 목록을 다시 요청하므로, 같은 자리를 받는 중이면 새로 시작하지 않는다.
+    // 코루틴이 중간에 멈춰도 영영 막히지 않게 시작 시각으로 판단한다
+    private const float PROGRESSIVE_FETCH_MAX_SECONDS = 180f;
+    private float progressiveFetchStartedAt = -1000f;
+    private Vector2 progressiveFetchPos;
+
     private IEnumerator FetchDataProgressively(float latitude, float longitude)
     {
         LogDebug("[TourAPIManager] Progressive Loading 시작");
-        
+        progressiveFetchStartedAt = Time.realtimeSinceStartup;
+        progressiveFetchPos = new Vector2(latitude, longitude);
+
         foreach (float radius in loadRadii)
         {
             LogDebug($"[TourAPIManager] {radius}m 반경 데이터 로딩 중...");
@@ -226,6 +234,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 
         LogDebug("[TourAPIManager] Progressive Loading 완료");
         isDataLoaded = true;
+        progressiveFetchStartedAt = -1000f;
     }
 
     // 위치 추적 전용 (DB 재요청/스폰은 FilterManager가 중앙 처리)
@@ -1164,6 +1173,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
 
     public void RefreshCache(float lat, float lon)
     {
+        if (Time.realtimeSinceStartup - progressiveFetchStartedAt < PROGRESSIVE_FETCH_MAX_SECONDS
+            && CalculateDistance(progressiveFetchPos.x, progressiveFetchPos.y, lat, lon) < 200f) return;   // 같은 자리를 받는 중
         StartCoroutine(FetchDataProgressively(lat, lon));
     }
 

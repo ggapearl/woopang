@@ -467,6 +467,14 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "近くで<color=#F07AA0>{0}</color>か所見つかりました",
                 ["es"] = "<color=#F07AA0>{0}</color> lugares cerca"
             },
+            ["no_objects_nearby"] = new Dictionary<string, string>()
+            {
+                ["en"] = "No places to show nearby",
+                ["ko"] = "주변에 표시할 장소가 없어요",
+                ["zh"] = "附近没有可显示的地点",
+                ["ja"] = "近くに表示できる場所がありません",
+                ["es"] = "No hay lugares para mostrar cerca"
+            },
 
             // AR Preview 확인 메시지
             ["confirm_add_object"] = new Dictionary<string, string>()

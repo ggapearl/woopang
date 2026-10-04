@@ -113,13 +113,14 @@ public class DanceAnimController : MonoBehaviour
 
         activeSpawns.Remove(placeId);
         pendingId = placeId;
-        pendingName = placeName ?? "3D 콘텐츠";
+        pendingName = placeName ?? L("3D 콘텐츠", "3D content", "3Dコンテンツ", "3D内容", "Contenido 3D");
 
         // 파일 크기 미리 확인 (HEAD 요청, 비동기 업데이트)
         StartCoroutine(FetchSizeAndUpdateUI(placeId));
 
+        LocalizeButtons();
         if (titleText != null) titleText.text = pendingName;
-        if (sizeText != null) sizeText.text = "크기 확인 중...";
+        if (sizeText != null) sizeText.text = L("크기 확인 중...", "Checking size...", "サイズを確認中...", "正在确认大小...", "Comprobando tamaño...");
         if (progressGroup != null) progressGroup.SetActive(false);
         if (confirmButton != null) confirmButton.interactable = true;
         if (confirmPanel != null) confirmPanel.SetActive(true);
@@ -151,7 +152,8 @@ public class DanceAnimController : MonoBehaviour
                         ? $"{bytes / 1024f:F1} KB"
                         : $"{bytes / (1024f * 1024f):F1} MB";
                     if (id == pendingId && sizeText != null)
-                        sizeText.text = $"3D 보기 ({sizeStr} · WiFi 권장)";
+                        sizeText.text = L($"3D 보기 ({sizeStr} · WiFi 권장)", $"View 3D ({sizeStr} · Wi-Fi recommended)",
+                            $"3Dで見る ({sizeStr} · Wi-Fi推奨)", $"查看3D ({sizeStr} · 建议使用Wi-Fi)", $"Ver en 3D ({sizeStr} · Wi-Fi recomendado)");
                     DbgLog($"[dbg-DanceAnim] HEAD OK: id={id} size={bytes:N0} bytes ({sizeStr})");
                 }
             }
@@ -159,9 +161,36 @@ public class DanceAnimController : MonoBehaviour
             {
                 Debug.LogWarning($"[DanceAnimController] HEAD 실패: {head.error}");
                 if (id == pendingId && sizeText != null)
-                    sizeText.text = "3D 보기 (다운로드 필요)";
+                    sizeText.text = L("3D 보기 (다운로드 필요)", "View 3D (download required)", "3Dで見る (ダウンロードが必要)", "查看3D (需要下载)", "Ver en 3D (requiere descarga)");
             }
         }
+    }
+
+    // 화면 문구 5개 언어 (ko/en/ja/zh/es)
+    static string L(string ko, string en, string ja, string zh, string es)
+    {
+        switch (AppLanguage.Code)
+        {
+            case "ko": return ko;
+            case "ja": return ja;
+            case "zh": return zh;
+            case "es": return es;
+            default: return en;
+        }
+    }
+
+    // 확인·취소 버튼 글자는 씬에 한국어로만 들어 있어 패널을 열 때 언어에 맞춰 쓴다
+    void LocalizeButtons()
+    {
+        SetButtonLabel(confirmButton, L("3D 보기", "View 3D", "3Dで見る", "查看3D", "Ver en 3D"));
+        SetButtonLabel(cancelButton, L("취소", "Cancel", "キャンセル", "取消", "Cancelar"));
+    }
+
+    static void SetButtonLabel(Button button, string label)
+    {
+        if (button == null) return;
+        Text t = button.GetComponentInChildren<Text>(true);
+        if (t != null) t.text = label;
     }
 
     static string ResolveUrl(string raw)
@@ -189,7 +218,7 @@ public class DanceAnimController : MonoBehaviour
         DbgLog($"[dbg-DanceAnim] SpawnFlow START id={id}");
         if (progressGroup != null) progressGroup.SetActive(true);
         if (confirmButton != null) confirmButton.interactable = false;
-        if (progressText != null) progressText.text = "준비 중...";
+        if (progressText != null) progressText.text = L("준비 중...", "Preparing...", "準備中...", "准备中...", "Preparando...");
 
         DataManager dm = DataManager.Instance;
         if (dm == null)
@@ -203,7 +232,7 @@ public class DanceAnimController : MonoBehaviour
         if (!dm.GetPlaceDataMap().TryGetValue(id, out var place))
         {
             DbgLog($"[dbg-DanceAnim] placeDataMap에 id={id} 없음 — detail fetch 트리거");
-            if (progressText != null) progressText.text = "데이터 받는 중...";
+            if (progressText != null) progressText.text = L("데이터 받는 중...", "Receiving data...", "データを受信中...", "正在接收数据...", "Recibiendo datos...");
             dm.SpawnFullObject(id.ToString());
             float fetchWait = 0f;
             while (fetchWait < 10f && !dm.GetPlaceDataMap().ContainsKey(id))
@@ -214,7 +243,8 @@ public class DanceAnimController : MonoBehaviour
             if (!dm.GetPlaceDataMap().TryGetValue(id, out place))
             {
                 Debug.LogError($"[DanceAnimController] detail fetch 실패 id={id}");
-                if (progressText != null) progressText.text = "데이터 받기 실패. 다시 시도해주세요.";
+                if (progressText != null) progressText.text = L("데이터 받기 실패. 다시 시도해주세요.", "Couldn't receive data. Please try again.",
+                    "データを受信できませんでした。もう一度お試しください。", "数据接收失败，请重试。", "Error al recibir datos. Inténtalo de nuevo.");
                 yield return new WaitForSeconds(2f);
                 HideConfirm();
                 yield break;
@@ -227,7 +257,8 @@ public class DanceAnimController : MonoBehaviour
         if (string.IsNullOrEmpty(url))
         {
             Debug.LogError($"[DanceAnimController] model_url empty");
-            if (progressText != null) progressText.text = "URL 없음. DB 확인 필요.";
+            if (progressText != null) progressText.text = L("URL 없음. DB 확인 필요.", "No URL. Please check the DB.",
+                "URLがありません。DBを確認してください。", "没有URL，请检查数据库。", "Sin URL. Revisa la base de datos.");
             yield return new WaitForSeconds(2f);
             HideConfirm();
             yield break;
@@ -235,7 +266,10 @@ public class DanceAnimController : MonoBehaviour
         DbgLog($"[dbg-DanceAnim] resolved URL: {url}");
 
         // 3) UnityWebRequest로 직접 다운로드 + 진행률
-        if (progressText != null) progressText.text = "3D 콘텐츠 다운로드 시작...";
+        if (progressText != null) progressText.text = L("3D 콘텐츠 다운로드 시작...", "Starting 3D download...",
+            "3Dコンテンツのダウンロードを開始...", "开始下载3D内容...", "Iniciando descarga 3D...");
+        // 매 프레임 갱신 — 문구는 한 번만 고르고 %만 붙인다
+        string downloadingLabel = L("3D 다운로드 중...", "Downloading 3D...", "3Dをダウンロード中...", "正在下载3D...", "Descargando 3D...");
         byte[] glbBytes = null;
         using (UnityWebRequest req = UnityWebRequest.Get(url))
         {
@@ -246,14 +280,15 @@ public class DanceAnimController : MonoBehaviour
             {
                 float pct = req.downloadProgress * 100f; // 0..1 → 0..100
                 if (progressText != null)
-                    progressText.text = $"3D 다운로드 중... {pct:F0}%";
+                    progressText.text = $"{downloadingLabel} {pct:F0}%";
                 yield return null;
             }
             float elapsed = Time.realtimeSinceStartup - startT;
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"[DanceAnimController] 다운로드 실패: {req.error} (URL={url})");
-                if (progressText != null) progressText.text = $"다운로드 실패: {req.error}";
+                if (progressText != null)
+                    progressText.text = L("다운로드 실패", "Download failed", "ダウンロード失敗", "下载失败", "Error de descarga") + $": {req.error}";
                 yield return new WaitForSeconds(3f);
                 HideConfirm();
                 yield break;
@@ -266,7 +301,8 @@ public class DanceAnimController : MonoBehaviour
         GLBModelLoader.PreloadCache(url, glbBytes);
         DbgLog($"[dbg-DanceAnim] PreloadCache 주입 완료");
 
-        if (progressText != null) progressText.text = "3D 오브젝트 로딩 중...";
+        string loadingLabel = L("3D 오브젝트 로딩 중...", "Loading 3D object...", "3Dオブジェクトを読み込み中...", "正在加载3D对象...", "Cargando objeto 3D...");
+        if (progressText != null) progressText.text = loadingLabel;
 
         // 5) 큐브 → GLB 교체 (PromoteCubeToGLB가 디스폰 후 glbPrefab + 캐시된 바이트로 즉시 로드)
         bool promoted = dm.PromoteCubeToGLB(id);
@@ -274,7 +310,8 @@ public class DanceAnimController : MonoBehaviour
         if (!promoted)
         {
             // 실패면 20초 로딩 대기 자체가 무의미 — 즉시 안내 후 종료
-            if (progressText != null) progressText.text = "3D 교체 실패. 다시 시도해주세요.";
+            if (progressText != null) progressText.text = L("3D 교체 실패. 다시 시도해주세요.", "Couldn't switch to 3D. Please try again.",
+                "3Dに切り替えられませんでした。もう一度お試しください。", "3D切换失败，请重试。", "No se pudo cambiar a 3D. Inténtalo de nuevo.");
             yield return new WaitForSeconds(2f);
             HideConfirm();
             yield break;
@@ -301,7 +338,7 @@ public class DanceAnimController : MonoBehaviour
                 {
                     // 시간 기반 추정 %, 실제 완료 전엔 95% 캡 (사용자 기다림 체감 완화)
                     float loadPct = Mathf.Min((spawnWait / estimatedLoadSeconds) * 100f, 95f);
-                    progressText.text = $"3D 오브젝트 로딩 중... {loadPct:F0}%";
+                    progressText.text = $"{loadingLabel} {loadPct:F0}%";
                 }
             }
         }
@@ -309,7 +346,8 @@ public class DanceAnimController : MonoBehaviour
         if (!modelReady)
         {
             Debug.LogWarning($"[DanceAnimController] GLB 로드 타임아웃 id={id} after {spawnWait:F1}s");
-            if (progressText != null) progressText.text = "로딩 시간 초과. 다시 시도해주세요.";
+            if (progressText != null) progressText.text = L("로딩 시간 초과. 다시 시도해주세요.", "Loading timed out. Please try again.",
+                "読み込みがタイムアウトしました。もう一度お試しください。", "加载超时，请重试。", "Tiempo de carga agotado. Inténtalo de nuevo.");
             yield return new WaitForSeconds(2f);
             HideConfirm();
             yield break;

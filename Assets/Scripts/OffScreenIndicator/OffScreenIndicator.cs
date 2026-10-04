@@ -134,6 +134,16 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("화살표 위치 보간 속도 (높을수록 빠르게 이동, 0이면 즉시)")]
     [SerializeField] private float arrowSmoothSpeed = 8f;
 
+    [Header("=== 목록에서 고른 장소 강조 ===")]
+    [Tooltip("목록 줄을 누르면 그 장소의 박스·화살표를 이 시간(초) 동안 강조")]
+    [SerializeField] private float focusDuration = 4f;
+    [Tooltip("강조 중 커지는 폭 (0.35 = 최대 35% 크게)")]
+    [SerializeField] private float focusPulse = 0.35f;
+    [Tooltip("강조 중 커졌다 작아지는 빠르기 (초당 횟수)")]
+    [SerializeField] private float focusPulseRate = 1.6f;
+    private Target focusTarget;
+    private float focusUntil = -1f;
+
     // 각 타겟의 이전 프레임 스크린 위치/각도 캐시 (스무딩용)
     private Dictionary<Target, Vector3> previousArrowScreenPositions = new Dictionary<Target, Vector3>();
     private Dictionary<Target, float> previousArrowAngles = new Dictionary<Target, float>();
@@ -209,6 +219,35 @@ public class OffScreenIndicator : MonoBehaviour
     public void SetMaxIndicatorDistance(float distance)
     {
         maxIndicatorDistance = distance;
+    }
+
+    /// <summary>인디케이터 위치 계산에 쓰는 카메라 (AR 카메라)</summary>
+    public Camera ViewCamera => mainCamera;
+
+    /// <summary>
+    /// 목록에서 고른 장소의 인디케이터(화면 안이면 박스, 밖이면 화살표)를 잠깐 강조한다 —
+    /// 두근거리며 커지고, 거리 흐림·개수 제한·거리 제한을 받지 않고, 다른 인디케이터 위에 그린다.
+    /// 지금 제자리에 보여 줄 수 없으면(AR 위치 미확정·화살표 분산 모드·인디케이터를 안 쓰는 대상) false.
+    /// </summary>
+    public bool Focus(Target target)
+    {
+        if (target == null || mainCamera == null || isFallbackMode || suppressNormalIndicators) return false;
+        if (!targets.Contains(target) || !target.IsAnchorReady) return false;
+        Vector3 sp = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
+        if (OffScreenIndicatorCore.IsTargetVisible(sp) ? !target.NeedBoxIndicator : !target.NeedArrowIndicator) return false;
+        focusTarget = target;
+        focusUntil = Time.unscaledTime + focusDuration;
+        return true;
+    }
+
+    private bool IsFocused(Target t) => focusTarget != null && t == focusTarget && Time.unscaledTime < focusUntil;
+
+    // 강조 중 크기 배율 — 두근거리다가 끝에서 잦아든다
+    private float FocusScale()
+    {
+        float left = focusUntil - Time.unscaledTime;
+        float beat = 0.5f - 0.5f * Mathf.Cos((focusDuration - left) * focusPulseRate * 2f * Mathf.PI);
+        return 1f + focusPulse * beat * Mathf.Clamp01(left / 0.6f);
     }
 
     /// <summary>
@@ -315,9 +354,9 @@ public class OffScreenIndicator : MonoBehaviour
             bool isTargetVisible = OffScreenIndicatorCore.IsTargetVisible(screenPosition);
             float distanceFromCamera = target.GetDistanceFromCamera(mainCamera.transform.position);
 
-            // 거리 필터: maxIndicatorDistance 밖의 타겟은 인디케이터 표시 안 함
+            // 거리 필터: maxIndicatorDistance 밖의 타겟은 인디케이터 표시 안 함 (목록에서 고른 장소는 강조 동안 예외)
             // 카메라 거리 + GPS 거리 이중 체크 (트래킹 Lost 시 카메라 거리가 부정확할 수 있음)
-            if (maxIndicatorDistance > 0f)
+            if (maxIndicatorDistance > 0f && !IsFocused(target))
             {
                 bool outOfRange = distanceFromCamera > maxIndicatorDistance;
                 // GPS 거리도 체크 (GPS가 유효한 경우)
@@ -408,11 +447,14 @@ public class OffScreenIndicator : MonoBehaviour
         // ── Pass 1.4: 일반 모드 개수 제한 (가까운 순으로 maxNormalIndicatorCount개만 유지) ──
         if (maxNormalIndicatorCount > 0 && arrowInfos.Count > maxNormalIndicatorCount)
         {
-            // GPS 거리 기준 정렬 (가까운 순), skipThisFrame은 뒤로
+            // GPS 거리 기준 정렬 (가까운 순), skipThisFrame은 뒤로, 목록에서 고른 장소는 맨 앞 (잘리지 않게)
             arrowInfos.Sort((a, b) =>
             {
                 if (a.skipThisFrame != b.skipThisFrame)
                     return a.skipThisFrame ? 1 : -1;
+                bool fa = IsFocused(a.target), fb = IsFocused(b.target);
+                if (fa != fb)
+                    return fa ? -1 : 1;
                 return a.distanceFromCamera.CompareTo(b.distanceFromCamera);
             });
 
@@ -498,10 +540,18 @@ public class OffScreenIndicator : MonoBehaviour
             if (indicator)
             {
                 indicator.SetImageColor(target.TargetColor);
+                bool focused = IsFocused(target);
+                float boost = focused ? FocusScale() : 1f;
 
                 // 거리가 멀수록 인디케이터를 흐리게. 화살표(화면 밖)는 항상 적용,
-                // 박스(화면 안)는 fadeBoxToo 가 켜져 있을 때만 적용.
-                if (info.isArrow || fadeBoxToo)
+                // 박스(화면 안)는 fadeBoxToo 가 켜져 있을 때만 적용. 목록에서 고른 장소는 또렷하게, 다른 인디케이터 위에.
+                if (focused)
+                {
+                    indicator.SetDistanceAlpha(1f);
+                    Transform it = indicator.transform;
+                    if (it.parent != null && it.GetSiblingIndex() < it.parent.childCount - 1) it.SetAsLastSibling();
+                }
+                else if (info.isArrow || fadeBoxToo)
                 {
                     indicator.SetDistanceAlpha(ComputeDistanceAlpha(info.distanceFromCamera));
                 }
@@ -534,6 +584,7 @@ public class OffScreenIndicator : MonoBehaviour
                         float t = (target.MaxDistance - info.distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultBoxSize, target.MaxBoxSize, t);
                     }
+                    size *= boost;
                     indicator.SetScale(new Vector3(size, size, size));
                 }
                 else
@@ -547,6 +598,7 @@ public class OffScreenIndicator : MonoBehaviour
                         float t = (target.MaxDistance - info.distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultArrowSize, target.MaxArrowSize, t);
                     }
+                    size *= boost;
                     indicator.SetScale(new Vector3(size, size, 1f));
                 }
 
@@ -1208,6 +1260,8 @@ public class OffScreenIndicator : MonoBehaviour
         }
         else
         {
+            if (target == focusTarget) focusTarget = null;
+
             // fallback 모드 중(전환 아닌 상태): disabledFallbackTargets에 보관하여 화살표 유지
             if (isFallbackMode && !isTransitioning && fallbackDataMap.ContainsKey(target))
             {

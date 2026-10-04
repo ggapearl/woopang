@@ -47,8 +47,23 @@ public class PlaceListManager : MonoBehaviour
         public float baseLat;
         public float baseLon;
         public Transform targetTf;   // 스폰된 GameObject가 있으면 카메라 거리 우선
+        public Target target;        // 같은 오브젝트의 Target (목록 줄 누르기·방향)
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
+
+    /// <summary>목록 글자의 장소 한 줄 — 글자와 같은 순서·같은 개수 (R0926PlaceRows 가 줄 누르기·방향 표시에 쓴다)</summary>
+    public struct ListEntry
+    {
+        public string id;        // DataManager·TourAPI·P2P id, 공공교통은 "종류_이름"
+        public string name;      // 글자 줄의 이름 그대로 (P2P 는 '@이름')
+        public float distance;   // m
+        public float lat;
+        public float lon;
+        public Target target;    // 목록을 새로 만들 때 찾은 AR 오브젝트 — 없거나 사라졌을 수 있다 (FindTarget 으로 다시 찾는다)
+    }
+    private readonly List<ListEntry> shownEntries = new List<ListEntry>();
+    /// <summary>listText 의 장소 줄과 같은 순서의 장소 정보. 글자는 예전 그대로다 (다른 코드가 글자를 읽는다)</summary>
+    public IReadOnlyList<ListEntry> ShownEntries => shownEntries;
     private System.Text.StringBuilder liveBuilder = new System.Text.StringBuilder(2048);
     private (float d, int idx)[] orderedBuffer = new (float, int)[64];
     private float lastGpsLat;
@@ -331,15 +346,18 @@ public class PlaceListManager : MonoBehaviour
         }
 
         // 거리순 정렬 + 상위 maxListEntries개만 (DB 커져도 이 값 이상은 안 만짐)
-        combinedPlaces = combinedPlaces.OrderBy(x => x.distance).Take(maxListEntries).ToList();
-
-        // liveEntries도 combinedPlaces id 기준으로 잘라 동기화 — 매 프레임 갱신 대상도 같이 줄임
-        if (liveEntries.Count > combinedPlaces.Count)
+        // liveEntries 는 combinedPlaces 와 같은 순서로 하나씩 쌓였다 — 같은 순서로 골라 목록 줄과 1:1 로 맞춘다
+        // (예전 id 기준 자르기는 매니저끼리 id 가 겹치면 어긋났다)
+        var order = Enumerable.Range(0, combinedPlaces.Count).OrderBy(i => combinedPlaces[i].distance).Take(maxListEntries).ToList();
+        var sortedPlaces = new List<(object place, float distance, string id, string displayText, string colorHex)>(order.Count);
+        var sortedLive = new List<LiveEntry>(order.Count);
+        foreach (int i in order)
         {
-            var keepIds = new HashSet<string>(combinedPlaces.Count);
-            foreach (var c in combinedPlaces) keepIds.Add(c.id);
-            liveEntries.RemoveAll(e => !keepIds.Contains(e.id));
+            sortedPlaces.Add(combinedPlaces[i]);
+            if (i < liveEntries.Count) sortedLive.Add(liveEntries[i]);
         }
+        combinedPlaces = sortedPlaces;
+        liveEntries = sortedLive;
 
         System.Text.StringBuilder sb = new System.Text.StringBuilder();
         foreach (var item in combinedPlaces) {
@@ -369,6 +387,7 @@ public class PlaceListManager : MonoBehaviour
                     listText.text = emptyMsg;
                     lastDisplayedText = emptyMsg;
                 }
+                shownEntries.Clear();
                 hasLiveSnapshot = false;
                 yield break;
             }
@@ -387,22 +406,27 @@ public class PlaceListManager : MonoBehaviour
         Target[] activeTargets = UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
         if (activeTargets != null && activeTargets.Length > 0)
         {
-            var byId = new Dictionary<string, Transform>(activeTargets.Length);
-            var byName = new Dictionary<string, Transform>(activeTargets.Length);
+            var byId = new Dictionary<string, Target>(activeTargets.Length);
+            var byName = new Dictionary<string, Target>(activeTargets.Length);
             foreach (var t in activeTargets)
             {
                 if (t == null) continue;
-                if (!string.IsNullOrEmpty(t.placeId) && !byId.ContainsKey(t.placeId)) byId[t.placeId] = t.transform;
-                if (!string.IsNullOrEmpty(t.PlaceName) && !byName.ContainsKey(t.PlaceName)) byName[t.PlaceName] = t.transform;
+                if (!string.IsNullOrEmpty(t.placeId) && !byId.ContainsKey(t.placeId)) byId[t.placeId] = t;
+                if (!string.IsNullOrEmpty(t.PlaceName) && !byName.ContainsKey(t.PlaceName)) byName[t.PlaceName] = t;
             }
             for (int i = 0; i < liveEntries.Count; i++)
             {
                 var e = liveEntries[i];
-                Transform tf = null;
-                if (!string.IsNullOrEmpty(e.id) && byId.TryGetValue(e.id, out tf)) { e.targetTf = tf; continue; }
-                if (!string.IsNullOrEmpty(e.baseLabel) && byName.TryGetValue(e.baseLabel, out tf)) e.targetTf = tf;
+                Target tg;
+                if (!string.IsNullOrEmpty(e.id) && byId.TryGetValue(e.id, out tg)) { e.target = tg; e.targetTf = tg.transform; continue; }
+                if (!string.IsNullOrEmpty(e.baseLabel) && byName.TryGetValue(e.baseLabel, out tg)) { e.target = tg; e.targetTf = tg.transform; }
             }
         }
+
+        // 목록 줄과 같은 순서의 장소 정보 (글자는 위에서 그대로 썼다)
+        shownEntries.Clear();
+        for (int i = 0; i < liveEntries.Count && i < combinedPlaces.Count; i++)
+            shownEntries.Add(ToListEntry(liveEntries[i], combinedPlaces[i].distance));
         hasLiveSnapshot = liveEntries.Count > 0;
         if (arCameraCache == null) arCameraCache = Camera.main;
         yield return null;
@@ -471,6 +495,7 @@ public class PlaceListManager : MonoBehaviour
         Array.Sort(orderedBuffer, 0, count, OrderedComparer.Instance);
 
         liveBuilder.Clear();
+        shownEntries.Clear();
         for (int i = 0; i < count; i++)
         {
             var pair = orderedBuffer[i];
@@ -480,6 +505,7 @@ public class PlaceListManager : MonoBehaviour
             liveBuilder.Append("<color=#").Append(color).Append('>')
                        .Append(e.baseLabel).Append(" - ")
                        .Append(Mathf.FloorToInt(pair.d)).Append("m</color>\n");
+            shownEntries.Add(ToListEntry(e, pair.d));
         }
         liveBuilder.Append(cachedFooter);
 
@@ -490,6 +516,42 @@ public class PlaceListManager : MonoBehaviour
             listText.text = newText;
             lastDisplayedText = newText;
         }
+    }
+
+    private static ListEntry ToListEntry(LiveEntry e, float distance)
+    {
+        return new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = e.baseLat, lon = e.baseLon, target = e.target };
+    }
+
+    /// <summary>
+    /// 목록 장소의 AR 오브젝트(Target) — 지금 떠 있으면, 없으면 null.
+    /// id 와 이름이 둘 다 맞는 것을 먼저 고른다 (매니저끼리 숫자 id 가 겹칠 수 있다). 공공교통은 id 가 없어 이름으로.
+    /// </summary>
+    public Target FindTarget(ListEntry entry)
+    {
+        if (entry.target != null && entry.target.isActiveAndEnabled && SameName(entry.target, entry.name)) return entry.target;
+        Target idOnly = null, nameOnly = null;
+        foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+        {
+            if (t == null) continue;
+            bool nameOk = SameName(t, entry.name);
+            if (!string.IsNullOrEmpty(entry.id) && t.placeId == entry.id)
+            {
+                if (nameOk) return t;
+                if (idOnly == null) idOnly = t;
+            }
+            else if (nameOk && nameOnly == null) nameOnly = t;
+        }
+        return idOnly != null ? idOnly : nameOnly;
+    }
+
+    // 목록 이름과 Target 이름 비교 — P2P 사용자는 목록에 '@이름', Target 에는 '이름'
+    private static bool SameName(Target t, string name)
+    {
+        string p = t.PlaceName;
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(p)) return false;
+        if (p == name) return true;
+        return name.Length == p.Length + 1 && name[0] == '@' && string.CompareOrdinal(name, 1, p, 0, p.Length) == 0;
     }
 
     /// <summary>

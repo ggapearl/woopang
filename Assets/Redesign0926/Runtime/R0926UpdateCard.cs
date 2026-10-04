@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 업데이트 안내 — 프로필 카드와 같은 모양 (강아지 마크 · 제목 · 한 줄 · 버전 알약 · 버튼).
-/// 띄울지·강제인지·스토어로 보내는 것은 AutoUpdateChecker 그대로, 이 카드는 글과 모양만 맡는다.
+/// 띄울지(스토어에 실제로 올라왔을 때만)·강제인지·스토어로 보내는 것은 AutoUpdateChecker, 이 카드는 글과 모양만 맡는다.
 /// 꺼진 줄(강제일 때의 버튼 등)은 건너뛰고 위에서부터 쌓아 카드 높이를 맞춘다.
 /// </summary>
 public class R0926UpdateCard : MonoBehaviour
@@ -21,44 +21,16 @@ public class R0926UpdateCard : MonoBehaviour
     [SerializeField] private RectTransform versionPill;
     [SerializeField] private GameObject countdown;
     [SerializeField] private RectTransform countdownFill;
-    [Tooltip("업데이트 · 나중에 버튼 글 — '아직 반영 중' 일 때만 '스토어 열기 · 계속 쓰기' 로 바꾼다")]
-    [SerializeField] private Text yesLabel;
-    [SerializeField] private Text noLabel;
-
-    private string yesDefault, noDefault;
 
     public void ShowNormal(string current, string latest)
     {
-        RestoreLabels();
         Fill(false, current, latest);
         if (countdown != null) countdown.SetActive(false);
-    }
-
-    /// <summary>강제였지만 스토어에 다녀와도 그대로일 때 — 아직 반영 전이니 그동안은 쓰게 둔다 (같은 안내가 되풀이돼 앱을 못 쓰던 것)</summary>
-    public void ShowPending(string current, string latest)
-    {
-        Fill(false, current, latest);
-        if (title != null) title.text = L("스토어에 아직 반영 중이에요", "Not in the store yet", "ストアに反映中です", "商店仍在更新中", "Aún no está en la tienda");
-        if (body != null) body.text = L("몇 시간 안에 업데이트할 수 있어요\n그동안은 지금 버전을 그대로 쓰셔도 돼요",
-            "It should be available within a few hours\nYou can keep using this version meanwhile",
-            "数時間以内にアップデートできます\nそれまでは今のバージョンをお使いください",
-            "几小时内即可更新\n在此之前可继续使用当前版本",
-            "Estará disponible en unas horas\nMientras tanto puedes seguir usando esta versión");
-        if (countdown != null) countdown.SetActive(false);
-        if (yesLabel != null) { if (yesDefault == null) yesDefault = yesLabel.text; yesLabel.text = L("스토어 열기", "Open store", "ストアを開く", "打开商店", "Abrir tienda"); }
-        if (noLabel != null) { if (noDefault == null) noDefault = noLabel.text; noLabel.text = L("계속 쓰기", "Keep using", "このまま使う", "继续使用", "Seguir usando"); }
-    }
-
-    private void RestoreLabels()
-    {
-        if (yesLabel != null && yesDefault != null) yesLabel.text = yesDefault;
-        if (noLabel != null && noDefault != null) noLabel.text = noDefault;
     }
 
     /// <param name="remain01">스토어로 넘어가기까지 남은 비율 (1 → 0)</param>
     public void ShowForce(string current, string latest, float remain01)
     {
-        RestoreLabels();
         Fill(true, current, latest);
         if (countdown != null) countdown.SetActive(true);
         if (countdownFill != null) countdownFill.anchorMax = new Vector2(Mathf.Clamp01(remain01), 1f);
@@ -75,7 +47,11 @@ public class R0926UpdateCard : MonoBehaviour
                 ? L("더 좋아진 우팡으로 바꿔 주세요\n잠시 후 스토어로 이동해요", "Please update to the latest WOOPANG\nTaking you to the store…",
                     "新しいWOOPANGに更新してください\nまもなくストアへ移動します", "请更新到最新版 WOOPANG\n即将前往商店", "Actualiza al nuevo WOOPANG\nTe llevamos a la tienda…")
                 : L("더 편해진 우팡을 만나 보세요", "Update to get the latest WOOPANG", "もっと便利になったWOOPANGをどうぞ", "体验更好用的 WOOPANG", "Descubre el WOOPANG mejorado");
-        if (version != null)
+        // 새 버전 이름을 모르면(안드로이드 Play 는 주지 않는다) 버전 알약을 빼고 글만 — 꺼진 줄은 쌓기에서 건너뛴다
+        bool known = !string.IsNullOrEmpty(latest);
+        var pill = versionPill != null ? versionPill.gameObject : version != null ? version.gameObject : null;
+        if (pill != null && pill.activeSelf != known) pill.SetActive(known);
+        if (known && version != null)
         {
             string v = (string.IsNullOrEmpty(current) ? "" : current + "   →   ") + latest;
             if (version.text != v) version.text = v;

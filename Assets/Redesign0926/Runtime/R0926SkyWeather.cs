@@ -24,7 +24,11 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private Text tempText;
     [SerializeField] private Text condText;
     [SerializeField] private Text detailText;
+    [Tooltip("2줄이 한 줄에 안 들어가면 이 크기까지 줄인다 (넘치면 뒷부분이 잘려 안 보인다)")]
+    [SerializeField] private int detailMinFont = 34;
     [SerializeField] private R0926WeatherIcon icon;       // 기온 왼쪽의 날씨 그림
+    [Tooltip("판 위의 지역 이름 — '예산군 대흥면' (LocationManager.ShortRegion)")]
+    [SerializeField] private Text regionText;
 
     [Header("3시간 후 · 6시간 후 · 내일")]
     [SerializeField] private GameObject forecast;
@@ -55,7 +59,7 @@ public class R0926SkyWeather : MonoBehaviour
     private bool fetching;
     // 마지막으로 받은 날씨와 자리 — 앱을 켜자마자 하늘을 비춰도 바로 보이게 (예전엔 GPS 가 잡히기 전 첫 시도를 버리고 30초 뒤에야 다시 받았다)
     private const string CacheJson = "SkyWeather_json", CacheAt = "SkyWeather_at", CacheLat = "SkyWeather_lat", CacheLon = "SkyWeather_lon";
-    private const double CacheHours = 2.0;
+    private const double CacheHours = 0.5;   // 오래된 날씨(예: 비 오기 전 '맑음')를 켜자마자 보여 주지 않게 30분까지만
     private float lookUpSince = -1f;
     private readonly List<GameObject> scratch = new List<GameObject>(64);
 
@@ -80,6 +84,10 @@ public class R0926SkyWeather : MonoBehaviour
         public bool h6_day = true;
         public float pm10 = -1;
         public float moon;
+        // 기상청 초단기실황 (서버가 보내면 '지금' 날씨는 이쪽을 따른다 — 예보 모델은 국지적인 비를 놓친다)
+        public int pty = -1;      // 강수형태 0 없음 · 1 비 · 2 비/눈 · 3 눈 · 5 빗방울 · 6 빗방울눈날림 · 7 눈날림
+        public float rn1 = -1;    // 1시간 강수량 (mm)
+        public float humidity = -1;   // 상대습도 % — 서버가 아직 안 주면 -1 (줄에서 뺀다)
     }
 
     private bool collapsed;          // 사용자가 '접기' — 앱을 켜는 동안 유지 (처음 상태는 설정)
@@ -92,10 +100,39 @@ public class R0926SkyWeather : MonoBehaviour
     private void Start()
     {
         collapsed = R0926SkySettings.StartCollapsed;
+        ShowRegion(LocationManager.ShortRegion);
         if (skyGroup != null) skyGroup.alpha = 0f;
         if (chipGroup != null) chipGroup.alpha = 0f;
         if (skyBoard != null) skyBoard.gameObject.SetActive(false);
         LoadCache();
+    }
+
+    private void OnEnable() { LocationManager.ShortRegionChanged += ShowRegion; }
+    private void OnDisable() { LocationManager.ShortRegionChanged -= ShowRegion; }
+
+    private void ShowRegion(string region)
+    {
+        if (regionText == null) return;
+        regionText.text = region ?? "";
+        regionText.enabled = !string.IsNullOrEmpty(region);
+    }
+
+    /// <summary>
+    /// '지금' 날씨 코드 — 기상청 실황 강수형태(PTY)가 오면 그걸 따른다.
+    /// 실황이 '강수 없음'이면 모델이 비라고 해도 흐림으로, 실황이 비면 모델이 맑음이라도 비로.
+    /// </summary>
+    private static int NowCode(Weather w)
+    {
+        bool wet = w.code >= 51 && w.code <= 67 || w.code >= 71 && w.code <= 82 || w.code >= 85;
+        switch (w.pty)
+        {
+            case 0: return wet ? 3 : w.code;
+            case 1: return w.code >= 61 && w.code <= 65 || w.code >= 80 && w.code <= 82 || w.code >= 95 ? w.code : 61;
+            case 2: case 6: return 66;
+            case 3: case 7: return 71;
+            case 5: return 51;
+            default: return w.code;   // 서버가 실황을 안 보냄
+        }
     }
 
     private void LoadCache()
@@ -351,8 +388,9 @@ public class R0926SkyWeather : MonoBehaviour
     {
         string lang = R0926LocalizedText.Lang();
         int t = Mathf.RoundToInt(w.temp);
-        bool rain = w.code >= 51 && w.code <= 67 || w.code >= 80 && w.code <= 82 || w.code >= 95;
-        string cond = Condition(w.code, w.is_day, lang);
+        int code = NowCode(w);
+        bool rain = code >= 51 && code <= 67 || code >= 80 && code <= 82 || code >= 95;
+        string cond = Condition(code, w.is_day, lang);
         tempText.text = t + "°";
         if (icon != null)
         {
@@ -362,23 +400,26 @@ public class R0926SkyWeather : MonoBehaviour
             float total = iw + gap + tw;
             irt.anchoredPosition = new Vector2(-total / 2f + iw / 2f, irt.anchoredPosition.y);
             tempText.rectTransform.anchoredPosition = new Vector2(total / 2f - tw / 2f, tempText.rectTransform.anchoredPosition.y);
-            icon.Set(w.code, w.is_day);
+            icon.Set(code, w.is_day);
         }
 
         // 1줄: 상태 · (비 오면 강수 확률, 아니면 미세먼지)
-        string extra = rain && w.precip_prob >= 0 ? L(lang, "강수", "rain", "降水", "降水", "lluvia") + " " + Mathf.RoundToInt(w.precip_prob) + "%"
+        // 기상청 실황 1시간 강수량이 있으면 그걸, 없으면 강수 확률
+        string extra = rain && w.rn1 > 0f ? L(lang, "1시간", "1h", "1時間", "1小时", "1 h") + " " + w.rn1.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "mm"
+                     : rain && w.precip_prob >= 0 ? L(lang, "강수", "rain", "降水", "降水", "lluvia") + " " + Mathf.RoundToInt(w.precip_prob) + "%"
                      : w.pm10 >= 0 ? L(lang, "미세먼지", "Air", "PM10", "PM10", "Aire") + " " + Pm(w.pm10, lang) : null;
         condText.text = extra == null ? cond : cond + " · " + extra;
 
-        // 2줄: 비 → 우산 · 바람 / 밤 → 달 · 일출 / 낮 → 일몰 · 바람
+        // 2줄: 비 → 우산 · 습도 · 바람 / 밤 → 습도 · 달 · 일출 / 낮 → 습도 · 일몰 · 바람 (습도는 서버가 줄 때만)
         string wind = L(lang, "바람", "Wind", "風", "风", "Viento") + " " + w.wind.ToString("0.#") + "m/s";
+        string humid = w.humidity >= 0f ? L(lang, "습도", "Humidity", "湿度", "湿度", "Humedad") + " " + Mathf.RoundToInt(w.humidity) + "% · " : "";
         if (rain)
-            detailText.text = L(lang, "우산 챙기세요", "Take an umbrella", "傘を持って出かけましょう", "记得带伞", "Lleva paraguas") + " · " + wind;
+            SetDetail(L(lang, "우산 챙기세요", "Take an umbrella", "傘を持って出かけましょう", "记得带伞", "Lleva paraguas") + " · " + humid + wind);
         else if (!w.is_day)
-            detailText.text = L(lang, "달", "Moon", "月", "月亮", "Luna") + " " + Mathf.RoundToInt(w.moon * 100) + "%"
-                            + (string.IsNullOrEmpty(w.sunrise) ? "" : " · " + L(lang, "일출", "Sunrise", "日の出", "日出", "Amanecer") + " " + Clock(w.sunrise));
+            SetDetail(humid + L(lang, "달", "Moon", "月", "月亮", "Luna") + " " + Mathf.RoundToInt(w.moon * 100) + "%"
+                      + (string.IsNullOrEmpty(w.sunrise) ? "" : " · " + L(lang, "일출", "Sunrise", "日の出", "日出", "Amanecer") + " " + Clock(w.sunrise)));
         else
-            detailText.text = (string.IsNullOrEmpty(w.sunset) ? "" : L(lang, "일몰", "Sunset", "日没", "日落", "Atardecer") + " " + Clock(w.sunset) + " · ") + wind;
+            SetDetail(humid + (string.IsNullOrEmpty(w.sunset) ? "" : L(lang, "일몰", "Sunset", "日没", "日落", "Atardecer") + " " + Clock(w.sunset) + " · ") + wind);
 
         bool hasFc = w.h3_temp > -90f && fcTemps != null && fcTemps.Length >= 3;
         if (forecast != null && forecast.activeSelf != hasFc) forecast.SetActive(hasFc);
@@ -398,13 +439,26 @@ public class R0926SkyWeather : MonoBehaviour
                 : "–";
             if (fcIcons != null && fcIcons.Length >= 3)
             {
-                if (fcIcons[0] != null) fcIcons[0].Set(w.h3_code >= 0 ? w.h3_code : w.code, w.h3_day);
-                if (fcIcons[1] != null) fcIcons[1].Set(w.h6_code >= 0 ? w.h6_code : w.code, w.h6_day);
-                if (fcIcons[2] != null) fcIcons[2].Set(w.tomorrow_code >= 0 ? w.tomorrow_code : w.code, true);
+                if (fcIcons[0] != null) fcIcons[0].Set(w.h3_code >= 0 ? w.h3_code : code, w.h3_day);
+                if (fcIcons[1] != null) fcIcons[1].Set(w.h6_code >= 0 ? w.h6_code : code, w.h6_day);
+                if (fcIcons[2] != null) fcIcons[2].Set(w.tomorrow_code >= 0 ? w.tomorrow_code : code, true);
             }
         }
         weatherChip = cond + " " + t + "°";
         lastChip = null;   // 다음 프레임에 칩 글자 갱신
+    }
+
+    // 2줄은 높이가 한 줄뿐이라 줄바꿈되면 뒷부분이 잘린다 — 길어진 줄(습도 추가 · 일본어 비 등)만 글자를 줄여 한 줄에 맞춘다
+    private int detailFont;
+    private void SetDetail(string line)
+    {
+        if (detailText == null) return;
+        if (detailFont <= 0) detailFont = detailText.fontSize;
+        int size = detailFont;
+        detailText.fontSize = size;
+        detailText.text = line;
+        float w = detailText.rectTransform.rect.width;
+        while (w > 0f && size > detailMinFont && detailText.preferredWidth > w) detailText.fontSize = --size;
     }
 
     private static string Clock(string iso)

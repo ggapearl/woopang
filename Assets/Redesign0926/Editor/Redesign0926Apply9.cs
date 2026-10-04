@@ -425,12 +425,9 @@ namespace Redesign0926
             var bgImage = gso.FindProperty("backgroundImage").objectReferenceValue as Image;
             if (bgImage != null) { bgImage.enabled = false; EditorUtility.SetDirty(bgImage); }
 
-            string[] pageNames = { "01", "02", "03" };
-            var pages = new GameObject[3];
-            for (int i = 0; i < 3; i++)
+            foreach (var pn in new[] { "01", "02", "03" })
             {
-                pages[i] = Find(panel.transform, pageNames[i]);
-                var img = Find(panel.transform, "Image_" + pageNames[i]);
+                var img = Find(panel.transform, "Image_" + pn);
                 if (img != null) { var im = img.GetComponent<Image>(); im.enabled = false; EditorUtility.SetDirty(im); }
             }
             if (text != null)
@@ -501,10 +498,21 @@ namespace Redesign0926
             so.FindProperty("next").objectReferenceValue = RT(next);
             so.FindProperty("nextLabel").objectReferenceValue = nlt;
             so.FindProperty("confirm").objectReferenceValue = confirm;
-            SetArray(so.FindProperty("pages"), pages[0], pages[1], pages[2]);
-            // 쪽 순서: 추가 · 목록 · 메시지 (R0926GuideText 와 같다)
-            var tAdd = Find(root, "PlusButton"); var tList = Find(root, "List_Button"); var tMsg = Find(root, "Message_Button");
-            SetArray(so.FindProperty("targets"), tAdd != null ? RT(tAdd) : null, tList != null ? RT(tList) : null, tMsg != null ? RT(tMsg) : null);
+            // 쪽 순서: 목록 · 추가 · 메시지 (GuideOrder — FirstTimeGuide.guidePages 와 같다). 쪽마다 비출 도크 버튼이 짝
+            var targets = new Object[GuideOrder.Length];
+            for (int i = 0; i < targets.Length; i++) { var slot = Find(root, GuideOrder[i].slot); targets[i] = slot != null ? RT(slot) : null; }
+            SetArray(so.FindProperty("pages"), GuideOrderPages(panel.transform));
+            SetArray(so.FindProperty("targets"), targets);
+            // 다음·시작하기 누름 — AR 오브젝트(큐브)를 터치할 때와 같은 소리·진동
+            var dm = FindInScene<DataManager>(root.gameObject);
+            var touch = dm != null && dm.cubePrefab != null ? dm.cubePrefab.GetComponentInChildren<Object3DTouchHaptic>(true) : null;
+            if (touch != null)
+            {
+                var tso = new SerializedObject(touch);
+                so.FindProperty("tapSound").objectReferenceValue = tso.FindProperty("touchSound").objectReferenceValue;
+                so.FindProperty("tapHaptic").floatValue = tso.FindProperty("hapticIntensity").floatValue;
+            }
+            else log.Add("안내: 큐브 터치 소리 못 찾음 — 기본 소리");
             so.ApplyModifiedPropertiesWithoutUndo();
 
             var nb = Ensure<Button>(next); ResetListeners(nb); UnityEventTools.AddPersistentListener(nb.onClick, ov.Next);
@@ -556,6 +564,14 @@ namespace Redesign0926
             var det = board.transform.Find("Detail0926");
             if (det != null) SetRect(RT(det.gameObject), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -452), new Vector2(1000, 70));
 
+            // 지역 — '예산군 대흥면' (시·군·구 + 읍·면·동). 판 위쪽 바깥에, 이름이 오기 전엔 숨는다 (R0926SkyWeather.ShowRegion)
+            var region = FindOrCreate(board.transform, "Region0926");
+            var rgt = Txt(region, "예산군 대흥면", 52, new Color(1, 1, 1, 0.85f), TextAnchor.LowerCenter, FontStyle.Bold);
+            rgt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            rgt.raycastTarget = false;
+            SetRect(RT(region), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0), new Vector2(0, 12), new Vector2(1000, 76));
+            AddShadow(region);
+
             var fc = FindOrCreate(board.transform, "Forecast0926");
             SetRect(RT(fc), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -560), new Vector2(780, 280));
             Img(fc, Spr("r0926_pill"), new Color(0.094f, 0.118f, 0.149f, 0.3f), Image.Type.Sliced, 63f / 64f).raycastTarget = false;
@@ -587,6 +603,7 @@ namespace Redesign0926
 
             var so = new SerializedObject(sky);
             so.FindProperty("icon").objectReferenceValue = icon;
+            so.FindProperty("regionText").objectReferenceValue = rgt;
             so.FindProperty("forecast").objectReferenceValue = fc;
             SetArray(so.FindProperty("fcLabels"), labels[0], labels[1], labels[2]);
             SetArray(so.FindProperty("fcIcons"), icons[0], icons[1], icons[2]);

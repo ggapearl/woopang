@@ -1,0 +1,11 @@
+<!-- 우팡 자체 안드로이드 의존성 (External Dependency Manager 가 mainTemplate.gradle 에 넣는다).
+     app-update: AutoUpdateChecker 가 Play 스토어에 새 버전이 실제로 올라왔는지 기기에서 확인하는 데 쓴다. -->
+<dependencies>
+  <androidPackages>
+    <androidPackage spec="com.google.android.play:app-update:2.1.0">
+      <repositories>
+        <repository>https://maven.google.com</repository>
+      </repositories>
+    </androidPackage>
+  </androidPackages>
+</dependencies>

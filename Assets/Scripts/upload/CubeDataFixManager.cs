@@ -49,8 +49,8 @@ public class CubeDataFixManager : MonoBehaviour
 
     [Header("Upload Settings")]
     private string serverUrl => ApiConfig.FIX_UPLOAD;
+    [Tooltip("요청을 보낸 순간부터 잰다. 넘으면 요청을 끊고 '시간 초과'")]
     [SerializeField] private float uploadTimeoutSeconds = 20f;
-    [SerializeField] private int countdownSeconds = 20;
 
     // HEIC 처리용 변수들
     private readonly string[] iOSImageFormats = {
@@ -64,7 +64,6 @@ public class CubeDataFixManager : MonoBehaviour
     private bool showInstagram;
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
-    private float elapsedTime = 0f;
 
     // 카테고리 순환 (none → shop → food → cafe → park → toilet → sport → landmark → etc → none)
     private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
@@ -1009,11 +1008,10 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        Coroutine countdownCoroutine = StartCoroutine(ShowCountdownWarning(countdownSeconds));
-        yield return StartCoroutine(SendWithTimeout(
-            ProcessAndUploadData(
-                this, id, petFriendly, separateRestroom, instagramID, showInstagram, description, name,
-                selectedCategory, countdownCoroutine)));
+        // 시간 제한은 요청을 보낸 뒤부터 (CubeUploadManager.SendRequestWithTimeout)
+        yield return StartCoroutine(ProcessAndUploadData(
+            this, id, petFriendly, separateRestroom, instagramID, showInstagram, description, name,
+            selectedCategory));
 
         if (!isProcessing)
         {
@@ -1024,49 +1022,15 @@ public class CubeDataFixManager : MonoBehaviour
         isProcessing = false;
     }
 
-    private IEnumerator ShowCountdownWarning(int seconds)
+    private void ShowUploadProgress(int percent)
     {
-        for (int i = seconds; i >= 1; i--)
-        {
-            ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", i.ToString()));
-            yield return new WaitForSeconds(1f);
-        }
-    }
-
-    private IEnumerator SendWithTimeout(IEnumerator routine)
-    {
-        elapsedTime = 0f;
-        bool isCompleted = false;
-
-        Coroutine co = StartCoroutine(routine);
-        yield return StartCoroutine(WaitForRoutine(co, uploadTimeoutSeconds, () => isCompleted));
-
-        if (!isProcessing)
-        {
-            isCompleted = true;
-        }
-    }
-
-    private IEnumerator WaitForRoutine(Coroutine routine, float timeout, Func<bool> isCompleted)
-    {
-        while (routine != null && elapsedTime < timeout && !isCompleted() && isProcessing)
-        {
-            elapsedTime += Time.deltaTime;
-            yield return null;
-        }
-
-        if (routine != null && !isCompleted() && elapsedTime >= timeout)
-        {
-            StopCoroutine(routine);
-            isProcessing = true;
-            ShowWarning(GetLocalizedText("request_timeout"));
-        }
+        ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
     }
 
     private IEnumerator ProcessAndUploadData(
         CubeDataFixManager form, int id, bool petFriendly, bool separateRestroom,
         string instagramID, bool showInstagram, string description, string name,
-        string category, Coroutine countdownCoroutine)
+        string category)
     {
         WWWForm formData = new WWWForm();
 
@@ -1128,8 +1092,17 @@ public class CubeDataFixManager : MonoBehaviour
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
             LoginManager.ApplyAuth(www);
-            www.timeout = Mathf.RoundToInt(uploadTimeoutSeconds);
-            yield return www.SendWebRequest();
+            bool timedOut = false;
+            yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
+
+            if (timedOut)
+            {
+                // 입력은 그대로 — 다시 누를 수 있다
+                Debug.LogWarning($"[CubeDataFixManager] 수정 요청 시간 초과 ({uploadTimeoutSeconds}s) — 요청 중단");
+                isProcessing = true;
+                ShowWarning(GetLocalizedText("request_timeout"));
+                yield break;
+            }
 
             if (www.result == UnityWebRequest.Result.Success)
             {
@@ -1138,7 +1111,6 @@ public class CubeDataFixManager : MonoBehaviour
                 if (responseText.Contains("Fix Upload Succeeded!") || www.responseCode == 200)
                 {
                     isProcessing = false;
-                    StopCoroutine(countdownCoroutine);
                     ShowWarning(GetLocalizedText("fix_success"));
 
                     SetUIActive(fixUIPanel, false);
@@ -1414,12 +1386,12 @@ public class CubeDataFixManager : MonoBehaviour
             case "submitting_countdown":
                 switch (lang)
                 {
-                    case SystemLanguage.Korean: return "제출 중... {0}초 남음";
-                    case SystemLanguage.Japanese: return "送信中... {0}秒残り";
-                    case SystemLanguage.Chinese: 
-                    case SystemLanguage.ChineseSimplified: return "提交中... 还剩{0}秒";
-                    case SystemLanguage.Spanish: return "Enviando... {0} segundos restantes";
-                    default: return "Submitting... {0} seconds remaining";
+                    case SystemLanguage.Korean: return "제출 중... {0}";
+                    case SystemLanguage.Japanese: return "送信中... {0}";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "提交中... {0}";
+                    case SystemLanguage.Spanish: return "Enviando... {0}";
+                    default: return "Submitting... {0}";
                 }
 
             case "request_timeout":
@@ -1601,7 +1573,6 @@ public class CubeDataFixManager : MonoBehaviour
         UpdateCategoryToggleUI();
 
         isProcessing = false;
-        elapsedTime = 0f;
     }
     #endregion
 
