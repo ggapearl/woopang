@@ -21,16 +21,44 @@ public class R0926UpdateCard : MonoBehaviour
     [SerializeField] private RectTransform versionPill;
     [SerializeField] private GameObject countdown;
     [SerializeField] private RectTransform countdownFill;
+    [Tooltip("업데이트 · 나중에 버튼 글 — '아직 반영 중' 일 때만 '스토어 열기 · 계속 쓰기' 로 바꾼다")]
+    [SerializeField] private Text yesLabel;
+    [SerializeField] private Text noLabel;
+
+    private string yesDefault, noDefault;
 
     public void ShowNormal(string current, string latest)
     {
+        RestoreLabels();
         Fill(false, current, latest);
         if (countdown != null) countdown.SetActive(false);
+    }
+
+    /// <summary>강제였지만 스토어에 다녀와도 그대로일 때 — 아직 반영 전이니 그동안은 쓰게 둔다 (같은 안내가 되풀이돼 앱을 못 쓰던 것)</summary>
+    public void ShowPending(string current, string latest)
+    {
+        Fill(false, current, latest);
+        if (title != null) title.text = L("스토어에 아직 반영 중이에요", "Not in the store yet", "ストアに反映中です", "商店仍在更新中", "Aún no está en la tienda");
+        if (body != null) body.text = L("몇 시간 안에 업데이트할 수 있어요\n그동안은 지금 버전을 그대로 쓰셔도 돼요",
+            "It should be available within a few hours\nYou can keep using this version meanwhile",
+            "数時間以内にアップデートできます\nそれまでは今のバージョンをお使いください",
+            "几小时内即可更新\n在此之前可继续使用当前版本",
+            "Estará disponible en unas horas\nMientras tanto puedes seguir usando esta versión");
+        if (countdown != null) countdown.SetActive(false);
+        if (yesLabel != null) { if (yesDefault == null) yesDefault = yesLabel.text; yesLabel.text = L("스토어 열기", "Open store", "ストアを開く", "打开商店", "Abrir tienda"); }
+        if (noLabel != null) { if (noDefault == null) noDefault = noLabel.text; noLabel.text = L("계속 쓰기", "Keep using", "このまま使う", "继续使用", "Seguir usando"); }
+    }
+
+    private void RestoreLabels()
+    {
+        if (yesLabel != null && yesDefault != null) yesLabel.text = yesDefault;
+        if (noLabel != null && noDefault != null) noLabel.text = noDefault;
     }
 
     /// <param name="remain01">스토어로 넘어가기까지 남은 비율 (1 → 0)</param>
     public void ShowForce(string current, string latest, float remain01)
     {
+        RestoreLabels();
         Fill(true, current, latest);
         if (countdown != null) countdown.SetActive(true);
         if (countdownFill != null) countdownFill.anchorMax = new Vector2(Mathf.Clamp01(remain01), 1f);

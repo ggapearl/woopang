@@ -197,6 +197,13 @@ namespace Redesign0926
             so.FindProperty("versionPill").objectReferenceValue = RT(vPill);
             so.FindProperty("countdown").objectReferenceValue = cd;
             so.FindProperty("countdownFill").objectReferenceValue = frt;
+            Text yl = null, nl = null;
+            var ylt = yes != null ? yes.transform.Find("Label0926") : null;
+            var nlt = no != null ? no.transform.Find("Label0926") : null;
+            if (ylt != null) yl = ylt.GetComponent<Text>();
+            if (nlt != null) nl = nlt.GetComponent<Text>();
+            so.FindProperty("yesLabel").objectReferenceValue = yl;
+            so.FindProperty("noLabel").objectReferenceValue = nl;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             if (checker != null)

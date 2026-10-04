@@ -813,6 +813,21 @@ namespace Redesign0926
             });
             Sleep(0.6f);
             Shot("upd_force");
+            // 스토어에 다녀와도 그대로일 때 — '아직 반영 중 · 계속 쓰기'
+            Do(() =>
+            {
+                var c = UnityEngine.Object.FindAnyObjectByType<AutoUpdateChecker>(FindObjectsInactive.Include);
+                if (c != null) typeof(AutoUpdateChecker).GetMethod("ShowPendingPanel", F).Invoke(c, null);
+            });
+            Sleep(0.6f);
+            Shot("upd_pending");
+            Check(() =>
+            {
+                var c = UnityEngine.Object.FindAnyObjectByType<AutoUpdateChecker>(FindObjectsInactive.Include);
+                var b1 = typeof(AutoUpdateChecker).GetField("updateButton", F).GetValue(c) as Button;
+                var b2 = typeof(AutoUpdateChecker).GetField("cancelButton", F).GetValue(c) as Button;
+                return b1 != null && b1.gameObject.activeSelf && b2 != null && b2.gameObject.activeSelf;
+            }, "아직 반영 중: '스토어 열기 · 계속 쓰기' 둘 다 보임");
         }
 
         private static void PlanStore2()
