@@ -33,7 +33,7 @@
   const CLOSED = { allow: '허락했습니다', always: '이번 대화에선 계속 허락했습니다', deny: '거절했습니다',
     timeout: '답이 없어 하지 않았습니다', answer: '답했습니다' };
   const INCOMING = { peer: '다른 세션', 'task-notification': '작업 알림', channel: '채널', auto: '자율 점검', system: '시스템',
-    phone_out: '📱 휴대폰으로 보냄' };
+    phone_out: '🔔 알림' };   // 휴대폰에서 보면 「휴대폰으로 보냄」이 어색하다 — 서버 알림·AI Office 알림도 여기로 온다(2026-10-04)
 
   function worker(j) {
     if (!j || typeof j.id !== 'string') return null;
@@ -1108,7 +1108,7 @@
     st.busy = true;
     paint(it);
     try {
-      await api.post('button', data);
+      await api.post('button', { data });      // 서버는 {data: '…'} 를 받는다
       st.doneIndex = i;
     } catch (e) {
       show(e);
