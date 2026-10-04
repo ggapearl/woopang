@@ -1814,7 +1814,7 @@ public class ProfileManager : MonoBehaviour
                 {
                     Sprite sprite = Sprite.Create(texture,
                         new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f));
+                        new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
 
                     avatarCache[fullUrl] = sprite;
                     targetImage.sprite = sprite;
@@ -1892,7 +1892,7 @@ public class ProfileManager : MonoBehaviour
         Texture2D tex = GenerateAvatarTextureInternal(username, size);
         return Sprite.Create(tex,
             new Rect(0, 0, tex.width, tex.height),
-            new Vector2(0.5f, 0.5f));
+            new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
     }
 
     // ============================================================
@@ -1989,7 +1989,7 @@ public class ProfileManager : MonoBehaviour
                 {
                     Sprite sprite = Sprite.Create(texture,
                         new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f));
+                        new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
 
                     avatarCache[fullUrl] = sprite;
                     if (!string.IsNullOrEmpty(userId))

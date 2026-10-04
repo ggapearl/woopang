@@ -62,6 +62,9 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     private float fadeStart = -1f;   // 사라지기 시작한 시각 (-1 = 아직)
     private int smoothFrames;
     private float waited;
+    private bool started;
+    private int calmFrames;
+    private float waitedStart;
 
     private void OnEnable()
     {
@@ -72,6 +75,9 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         fadeStart = -1f;
         smoothFrames = 0;
         waited = 0f;
+        started = false;
+        calmFrames = 0;
+        waitedStart = 0f;
         Pose(0f);
     }
 
@@ -80,6 +86,15 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     private void Update()
     {
         float dt = Time.unscaledDeltaTime;
+        if (!started)
+        {
+            // 앱이 막 켜진 몇 프레임은 초기화(파이어베이스·장소 캐시 읽기)로 무겁다 — 그동안은 우주 배경과 별만 두고,
+            // 화면이 고르게 돌기 시작하면(또는 1.2초가 지나면) 렌즈를 움직인다. 예전엔 그 멈칫에 렌즈가 끊겨 보였다
+            waitedStart += dt;
+            calmFrames = dt < 0.034f ? calmFrames + 1 : 0;
+            if (calmFrames < 4 && waitedStart < 1.2f) { Pose(0f); return; }
+            started = true;
+        }
         t += Mathf.Min(dt, 0.05f);   // 첫 프레임 로딩 멈춤이 애니메이션을 건너뛰지 않게
         if (fadeStart < 0f)
         {

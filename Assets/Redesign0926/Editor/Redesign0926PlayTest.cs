@@ -54,7 +54,11 @@ namespace Redesign0926
             steps.Clear();
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
-            if (mode == "update") PlanUpdate();
+            if (mode == "splashprof") PlanSplashProf();
+            else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }
+            else if (mode == "sky") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSky(); }
+            else if (mode == "ar") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanAr(); }
+            else if (mode == "update") PlanUpdate();
             else if (mode == "store2")
             {
                 // 스토어 캡처 2 — 원래 자리(3D 오브젝트가 있는 곳)에서 시작화면 · 8방향 · 하늘 날씨
@@ -511,6 +515,149 @@ namespace Redesign0926
             Shot("s2_sky");
         }
 
+        // 스토어 캡처 3 — 아이폰과 같은 시야각으로 (에디터 카메라는 훨씬 넓어 날씨판·오브젝트가 작게 찍혔다)
+        private static void PlanStore3()
+        {
+            Do(() => { Backdrop("bg_city.png"); DeviceFov(); });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(6f);
+            Do(() => { HidePrivatePlaces(); LogTargets(); DeviceFov(); });
+            for (int yaw = 0; yaw < 360; yaw += 30)
+            {
+                int y = yaw;
+                Do(() => AimCamera(-3f, y));
+                Sleep(1.4f);
+                Shot("ar_yaw" + y.ToString("000"));
+            }
+            Do(() =>
+            {
+                InjectWeather();
+                Backdrop("bg_sky.png");
+                AimCamera(-45f, 0f);
+            });
+            Sleep(4.5f);
+            Shot("sky45");
+            Do(() => AimCamera(-58f, 0f));
+            Sleep(2.0f);
+            Shot("sky58");
+        }
+
+        // 시작화면이 도는 동안 무거운 프레임과 그 원인 (프로파일러는 플레이 직전에 켜 둠)
+        private static void PlanSplashProf()
+        {
+            Wait(() => { Redesign0926SplashProf.Analyze(); return !BootOverlay.Showing; }, 30f, "시작화면 끝");
+            Sleep(0.5f);
+            Do(() => { Redesign0926SplashProf.Analyze(); Redesign0926SplashProf.Stop(); Redesign0926SplashProf.Report(log); });
+        }
+
+        // 스토어용 하늘 날씨 — 날씨판만 또렷하게 (인디케이터·주소줄은 숨김: 주소줄엔 에디터 위치의 정확한 좌표가 찍힌다)
+        private static void PlanSky()
+        {
+            Do(() => { Backdrop("bg_sky.png"); DeviceFov(); });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(4f);
+            Do(() =>
+            {
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude)) t.gameObject.SetActive(false);
+                HideAddressLine();
+                InjectWeather();
+                AimCamera(-45f, 0f);
+            });
+            Sleep(4.5f);
+            Shot("sky45c");
+            Do(() => AimCamera(-52f, 0f));
+            Sleep(2.0f);
+            Shot("sky52c");
+        }
+
+        // 스토어용 카메라 화면 — 장소 박스가 모인 쪽을 겨눈다 (개인 장소·주소줄은 숨김)
+        private static void PlanAr()
+        {
+            Do(() => { Backdrop("bg_city.png"); DeviceFov(); });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(6f);
+            Do(() => { HidePrivatePlaces(); HideAddressLine(); });
+            Do(() => AimAt(new[] { "구수한농장", "뒷산고봉", "뒷산고봉무덤" }, 0f));
+            Sleep(1.5f);
+            Shot("ar_west");
+            Do(() => AimAt(new[] { "구수한농장", "우팡이연못", "뒷산고봉" }, -4f));
+            Sleep(1.5f);
+            Shot("ar_west2");
+            Do(() => AimAt(new[] { "충청남도교육청기록원", "시바견 (Quaternius)" }, 0f));
+            Sleep(1.5f);
+            Shot("ar_north");
+        }
+
+        private static void AimAt(string[] names, float pitchOffset)
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude))
+                if (Array.IndexOf(names, t.PlaceName) >= 0) { sum += (t.transform.position - cam.transform.position).normalized; n++; }
+            if (n == 0) { log.Add("  대상 없음 " + string.Join(",", names)); return; }
+            foreach (var bh in cam.GetComponents<Behaviour>()) if (bh.GetType().Name.Contains("PoseDriver")) bh.enabled = false;
+            var rot = Quaternion.LookRotation((sum / n).normalized, Vector3.up);
+            cam.transform.rotation = rot * Quaternion.Euler(pitchOffset, 0f, 0f);
+            log.Add("  겨눔 " + n + "곳 (" + string.Join(", ", names) + ")");
+        }
+
+        private static void HideAddressLine()
+        {
+            var p = Find("LocationManagerPanel");
+            if (p == null) { log.Add("  주소줄 없음"); return; }
+            p.gameObject.SetActive(false);   // 투명도는 '창이 열리면 숨기는' 장치가 매 프레임 되돌린다 — 촬영 때만 끈다
+        }
+
+        private static void DeviceFov()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            log.Add("  카메라 시야각 " + cam.fieldOfView.ToString("0.0") + " → 66 (아이폰 세로 AR)");
+            cam.fieldOfView = 66f;
+        }
+
+        // 스토어 화면에 개인 장소 이름이 찍히지 않게 — 촬영 때만 끈다
+        private static void HidePrivatePlaces()
+        {
+            var hide = new HashSet<string> { "집", "엄빠집", "우팡이똥샷", "우팡이똥꼬샷" };
+            int n = 0;
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude))
+                if (hide.Contains(t.PlaceName?.Trim() ?? "")) { t.gameObject.SetActive(false); n++; }
+            log.Add("  개인 장소 숨김 " + n);
+        }
+
+        private static void LogTargets()
+        {
+            var cam = Camera.main;
+            if (cam == null) return;
+            var list = new List<(float d, string s)>();
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude))
+            {
+                Vector3 v = t.transform.position - cam.transform.position;
+                float bearing = Mathf.Repeat(Mathf.Atan2(v.x, v.z) * Mathf.Rad2Deg, 360f);
+                list.Add((v.magnitude, t.PlaceName + " " + v.magnitude.ToString("0") + "m @" + bearing.ToString("0") + "°"));
+            }
+            list.Sort((x, y) => x.d.CompareTo(y.d));
+            for (int i = 0; i < Mathf.Min(14, list.Count); i++) log.Add("  · " + list[i].s);
+        }
+
+        private static void InjectWeather()
+        {
+            var sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+            if (sky == null) { log.Add("  날씨판 없음"); return; }
+            string json;
+            using (var wc = new System.Net.WebClient()) { wc.Encoding = System.Text.Encoding.UTF8; json = wc.DownloadString(ApiConfig.MAIN_SERVER + "/api/weather?lat=37.5759&lon=126.9768"); }
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var wt = typeof(R0926SkyWeather).GetNestedType("Weather", System.Reflection.BindingFlags.NonPublic);
+            var w = JsonUtility.FromJson(json, wt);
+            typeof(R0926SkyWeather).GetMethod("Show", F).Invoke(sky, new[] { w });
+            typeof(R0926SkyWeather).GetField("hasData", F).SetValue(sky, true);
+            typeof(R0926SkyWeather).GetField("nextFetch", F).SetValue(sky, float.MaxValue);
+            log.Add("  날씨 넣음: " + json.Substring(0, Math.Min(160, json.Length)));
+        }
+
         // 업데이트 안내 — 일반 · 강제 (강제는 스토어로 넘어가지 않게 카드만 그린다)
         private static void PlanUpdate()
         {
@@ -807,7 +954,12 @@ namespace Redesign0926
                 nextPoll = EditorApplication.timeSinceStartup + 3.0;
                 if (File.Exists(PlanPath) && !File.Exists(ResultPath + ".lock") && !EditorApplication.isCompiling
                     && !EditorApplication.isUpdating && !EditorApplication.isPlayingOrWillChangePlaymode)
+                {
+                    // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
+                    var pl = File.ReadAllLines(PlanPath);
+                    if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
                     EditorApplication.isPlaying = true;
+                }
                 return;
             }
             if (!running) return;

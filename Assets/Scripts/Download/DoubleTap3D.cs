@@ -465,7 +465,7 @@ public class DoubleTap3D : MonoBehaviour
                     restoredTexture,
                     new Rect(0, 0, cached.width, cached.height),
                     new Vector2(0.5f, 0.5f)
-                );
+                , 100f, 0, SpriteMeshType.FullRect);
 
                 restoredSprites.Add(restoredSprite);
             }
@@ -1691,7 +1691,7 @@ public class DoubleTap3D : MonoBehaviour
                     Texture2D texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
                     if (texture != null)
                     {
-                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                         if (sprite != null)
                         {
                             newSprites.Add(sprite);

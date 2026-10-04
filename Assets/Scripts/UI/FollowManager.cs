@@ -1211,7 +1211,7 @@ public class FollowManager : MonoBehaviour
         Texture2D tex = GenerateAvatarTexture(username, 128);
         Sprite sprite = Sprite.Create(tex,
             new Rect(0, 0, tex.width, tex.height),
-            new Vector2(0.5f, 0.5f));
+            new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
         targetImage.sprite = sprite;
         targetImage.color = Color.white;
     }
@@ -1282,7 +1282,7 @@ public class FollowManager : MonoBehaviour
                 {
                     Sprite sprite = Sprite.Create(texture,
                         new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f));
+                        new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                     targetImage.sprite = sprite;
                     targetImage.color = Color.white;
                 }

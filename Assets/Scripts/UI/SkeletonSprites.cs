@@ -37,7 +37,7 @@ public static class SkeletonSprites
             }
             tex.Apply();
 
-            circle = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+            circle = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
             circle.hideFlags = HideFlags.HideAndDontSave;
             return circle;
         }
