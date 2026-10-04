@@ -4,6 +4,7 @@
   --ground:#FAF5F8; --surface:#FFFFFF; --surface-2:#F5EDF2; --line:#EBDDE5;
   --ink:#1A2142; --ink-2:#5A6184; --ink-3:#8D92AE;
   --navy:#2E4FCB; --navy-soft:#E9EDFC; --on-navy:#FFFFFF;
+  --link:#1558D6;
   --bar:#1B2A6B; --bar-ink:#F3F4FF; --bar-ink-2:#AEB8E8;
   --pink:#E91E63; --pink-deep:#C2185B; --pink-soft:#FFE8F0; --pink-line:#F7B8CE;
   --ok:#1F8A5B;
@@ -16,6 +17,7 @@
     --ground:#0D1330; --surface:#141B3D; --surface-2:#1A2350; --line:#27315F;
     --ink:#EDEFFA; --ink-2:#A9B0D6; --ink-3:#7880A8;
     --navy:#7B93FF; --navy-soft:#1E2A62; --on-navy:#0D1330;
+    --link:#8AB4F8;
     --bar:#0A0F27; --bar-ink:#EDEFFA; --bar-ink-2:#8F99CC;
     --pink:#FF5C93; --pink-deep:#FF8AB0; --pink-soft:#35162F; --pink-line:#6B2A4F;
     --ok:#5ED3A0;
@@ -28,6 +30,7 @@
   --ground:#0D1330; --surface:#141B3D; --surface-2:#1A2350; --line:#27315F;
   --ink:#EDEFFA; --ink-2:#A9B0D6; --ink-3:#7880A8;
   --navy:#7B93FF; --navy-soft:#1E2A62; --on-navy:#0D1330;
+  --link:#8AB4F8;
   --bar:#0A0F27; --bar-ink:#EDEFFA; --bar-ink-2:#8F99CC;
   --pink:#FF5C93; --pink-deep:#FF8AB0; --pink-soft:#35162F; --pink-line:#6B2A4F;
   --ok:#5ED3A0;
@@ -136,7 +139,7 @@ svg{display:block}
 .meta{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
 
 .md{white-space:pre-wrap}
-.md a{color:var(--navy);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+.md a{color:var(--link);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
 .md code{font-family:"Cascadia Mono","D2Coding",ui-monospace,monospace;font-size:.88em;background:var(--surface-2);padding:1px 5px;border-radius:5px}
 .md pre{margin:4px 0;padding:10px 12px;background:var(--surface-2);border-radius:10px;overflow-x:auto;white-space:pre;
   font:12.5px/1.5 "Cascadia Mono","D2Coding",ui-monospace,monospace}
@@ -157,8 +160,8 @@ svg{display:block}
 .inbox b{display:block;font-size:11px;font-weight:700;color:var(--navy)}
 .inbox.auto b{color:var(--pink-deep)}
 .inbox div{font-size:15px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
-.inbox a.lnk{color:var(--navy);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
-.inbox.auto a.lnk{color:var(--pink-deep)}
+.inbox a.lnk{color:var(--link);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.inbox.auto a.lnk{color:var(--link)}
 .note{font-size:12px;color:var(--ink-3);text-align:center;white-space:pre-wrap}
 .err{font-size:15px;color:var(--pink-deep);background:var(--pink-soft);padding:8px 12px;border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere}
 
