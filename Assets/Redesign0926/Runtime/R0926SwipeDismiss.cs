@@ -30,6 +30,9 @@ public class R0926SwipeDismiss : R0926Closer
     [SerializeField] private bool offScreen;
     [Tooltip("옆으로 넘기는 카드(장소 추가) — 키보드 위 입력줄이 떠 있는 동안(locked)엔 밀어 닫지 않는다")]
     [SerializeField] private SwipePanelController pager;
+    [Tooltip("끄는 동안 시트 안 버튼이 손을 뗄 때 눌리지 않게 — 끌기를 받는 목록(ScrollRect)이 없는 카드(장소 추가·프로필).\n" +
+             "없으면 '등록하기'·'팔로우'·'로그아웃' 위에서 끌어 내려도 손을 떼는 순간 그 버튼이 눌렸다")]
+    [SerializeField] private bool cancelClicks;
 
     private const float DecidePx = 14f;   // 이만큼 움직여야 방향을 정한다 (화면 픽셀)
 
@@ -51,6 +54,9 @@ public class R0926SwipeDismiss : R0926Closer
     private bool animating, closing;
     private Button pending;             // 다 내려간 뒤 누를 버튼
     private float backdropAlpha = -1f;
+    private CanvasGroup clickGuard;     // cancelClicks — 끄는 동안 누름을 받지 않게
+    private bool guardBlocks;           // 막기 전 blocksRaycasts
+    private int guardUntil = -1;        // 이 프레임부터 되돌린다 (-1 = 막지 않음, MaxValue = 손을 뗄 때까지)
 
     private static readonly List<RaycastResult> hits = new List<RaycastResult>();
     private static R0926SwipeDismiss dragging;
@@ -73,6 +79,7 @@ public class R0926SwipeDismiss : R0926Closer
         if (closing) return;
         pending = then != null ? then : closeButton;
         Unfreeze();
+        if (guardUntil == int.MaxValue) guardUntil = Time.frameCount + 2;   // 끄는 도중 닫혔다
         phase = Phase.Idle;
         closing = true;
         target = CloseDistance();
@@ -82,6 +89,7 @@ public class R0926SwipeDismiss : R0926Closer
     private void OnDisable()
     {
         Set(0f);
+        Unguard();
         Unfreeze();
         phase = Phase.Idle;
         animating = closing = false;
@@ -90,6 +98,7 @@ public class R0926SwipeDismiss : R0926Closer
     private void Update()
     {
         if (frozen != null && Time.frameCount >= unfreezeFrame && phase != Phase.Dragging) Unfreeze();
+        if (guardUntil >= 0 && Time.frameCount >= guardUntil) Unguard();
 
         if (animating)
         {
@@ -192,6 +201,7 @@ public class R0926SwipeDismiss : R0926Closer
         animating = false;
         phase = Phase.Dragging;
         dragging = this;
+        if (cancelClicks) Guard();
         startPos = pos;              // 여기서부터 따라 내려온다 (판단 거리만큼 튀지 않게)
         lastPos = pos;
     }
@@ -210,6 +220,7 @@ public class R0926SwipeDismiss : R0926Closer
     private void Release()
     {
         unfreezeFrame = Time.frameCount + 1;
+        if (guardUntil == int.MaxValue) guardUntil = Time.frameCount + 2;   // UI 가 손 뗌을 처리한 뒤에 (Update 순서는 정해져 있지 않다)
         float h = rt.rect.height;
         bool dismiss = applied > Mathf.Max(minDismiss, h * dismissFraction) || (velocity > flickSpeed && applied > 40f);
         closing = dismiss && closeButton != null;
@@ -238,6 +249,26 @@ public class R0926SwipeDismiss : R0926Closer
         pending = null;
         if (b != null) b.onClick.Invoke();
         if (isActiveAndEnabled) Set(0f);   // 버튼이 이 시트를 끄지 않았으면 제자리로
+    }
+
+    // 끄는 동안 시트가 누름을 받지 않는다 — 손을 떼는 순간 손가락 밑 버튼(누를 때 잡힌 것)과 맞지 않아 클릭이 나지 않는다
+    private void Guard()
+    {
+        if (clickGuard == null)
+        {
+            clickGuard = GetComponent<CanvasGroup>();
+            if (clickGuard == null) clickGuard = gameObject.AddComponent<CanvasGroup>();
+        }
+        if (guardUntil < 0) guardBlocks = clickGuard.blocksRaycasts;
+        clickGuard.blocksRaycasts = false;
+        guardUntil = int.MaxValue;
+    }
+
+    private void Unguard()
+    {
+        if (guardUntil < 0) return;
+        guardUntil = -1;
+        if (clickGuard != null) clickGuard.blocksRaycasts = guardBlocks;
     }
 
     private void Unfreeze()

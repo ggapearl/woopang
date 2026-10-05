@@ -152,7 +152,8 @@ namespace Redesign0926
             if (real != null)
             {
                 var mirror = FindOrCreate(panel.transform, "DockMirror0926");
-                mirror.transform.SetAsLastSibling();
+                // 카드보다 먼저(아래에) 그린다 — 카드를 밀어 내릴 때 X '닫기' 가 카드 위로 비치지 않게 (평소엔 둘이 겹치지 않는다)
+                if (mirror.transform.GetSiblingIndex() > content.GetSiblingIndex()) mirror.transform.SetSiblingIndex(content.GetSiblingIndex());
                 SetRect(RT(mirror), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, DockBottom), new Vector2(-Side * 2, DockHeight));
                 Ensure<R0926SafeInset>(mirror).SetEdge(R0926SafeInset.Edge.Bottom);
                 // 창이 옅어지는 동안에도 칸은 그대로 — 사진 칸이 꺼지는 순간 X 가 바로 그 자리에 있게 (다른 칸들처럼)
@@ -177,6 +178,7 @@ namespace Redesign0926
                 var sso = new SerializedObject(sd);
                 sso.FindProperty("closeButton").objectReferenceValue = real;
                 sso.FindProperty("offScreen").boolValue = true;
+                sso.FindProperty("cancelClicks").boolValue = true;   // 팔로우·로그아웃 위에서 끌어도 눌리지 않게
                 sso.FindProperty("followers").arraySize = 0;
                 sso.FindProperty("backdrop").objectReferenceValue = panel.GetComponent<Image>();
                 sso.ApplyModifiedPropertiesWithoutUndo();
@@ -237,15 +239,20 @@ namespace Redesign0926
                 so.FindProperty("baseOffsetX").floatValue = -53f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
-            // 아래로 밀어 닫기 — 키보드 위 입력줄이 떠 있는 동안(넘기기 잠김)엔 쉰다
+            // 아래로 밀어 닫기 — 키보드 위 입력줄이 떠 있는 동안(넘기기 잠김)엔 쉰다 · 등록하기·사진 칸 위에서 끌어도 눌리지 않게
             var sd = Find(page.transform, "UploadSheet0926")?.GetComponent<R0926SwipeDismiss>();
             if (sd != null)
             {
                 var dso = new SerializedObject(sd);
                 dso.FindProperty("pager").objectReferenceValue = swipe;
+                dso.FindProperty("cancelClicks").boolValue = true;
                 dso.ApplyModifiedPropertiesWithoutUndo();
             }
             else log.Add("추가: 밀어 닫기 없음");
+            // 카드 위쪽 130 을 덮던 투명 누름 영역(예전 X 자리) — 손잡이·제목에서 끌어도 시트에 닿지 않았다.
+            // + 버튼이 열 때마다 이 오브젝트를 켜므로 그림만 끈다 (장소 수정 쪽은 Apply10 FixPageCard 가 같은 식으로)
+            var xp = page.transform.Find("XButton_Panel");
+            if (xp != null) { var xi = xp.GetComponent<Graphic>(); if (xi != null) xi.enabled = false; }
             foreach (var n in new[] { "CubeUploadPage", "ModelUploadPage" })
             {
                 var c = Find(page.transform, n);

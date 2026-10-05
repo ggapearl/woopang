@@ -53,7 +53,7 @@
 
 ### 서버에서 할 일 (`C:\woopang\server`, git 미추적)
 1. **기상청 실황으로 '지금 날씨'** — `docs/claude/weather_kma.py` 를 server/ 에 복사, `.env` 에 `KMA_SERVICE_KEY`(공공데이터포털 '기상청_단기예보 조회서비스' 활용신청한 일반 인증키), `/api/weather` 응답을 돌려주기 직전에 `apply_kma_now(out, lat, lon)`. 지금은 Open-Meteo 모델 값이라 국지적인 비를 놓친다(비 오는데 '맑음')
-2. `/api/weather` 에 `humidity`(정수 %) — 기상청 연동하면 REH 로 자동. 연동 전이면 Open-Meteo `current=...,relative_humidity_2m` → `out['humidity']`. null 로 보내지 말 것
+2. `/api/weather` 에 `humidity`(정수 %) — 기상청 연동과 상관없이 늘 Open-Meteo `current=...,relative_humidity_2m` → `out['humidity']`(기상청이 되면 REH 로 덮는다 · 한국 밖·기상청 장애 때도 남게). null 로 보내지 말 것 (10-05 고침 — server-spec-1005.md)
 3. `/upload`·`/create-location-with-model` 이 `upload_id` 를 받아 같은 값이 다시 오면 저장하지 말고 처음과 같은 성공 응답 (UNIQUE 컬럼/테이블 권장)
 4. (보안, 기존 문제) `TourAPIManager.SERVICE_KEY` 가 앱 코드에 평문 — 서버 `/proxy` 가 키를 붙이도록 옮기고 키 재발급 권장 (CLAUDE.md 6)
 
@@ -72,7 +72,7 @@ Unity 컴파일러 없이 코드만 고쳤고 컴파일 오류는 검토에서 �
 
 ## 클라우드 세션 2026-10-05 — 보물찾기를 뺀 앱 전반 (Version 19, 브랜치 `claude/peaceful-fermat-1zohbs`)
 보물찾기 세션 몫(메세지 시트·대화방·`Runtime/Hunt/`·`ApplyHunt*`·`hunt_` 알림·설정 '보물찾기' 묶음·`/api/hunts`)은 건드리지 않았다.
-**로컬에서 할 일**: 컴파일 → `woopang_0926` 열기(v19 apply 자동) → 저장 → 플레이 시험(기본 계획에 추가·프로필 밀어 닫기 단계 추가) → 기기 확인.
+**로컬에서 할 일**: 컴파일 → `woopang_0926` 열기(v20 apply 자동 — 검토 뒤 고친 것 포함) → 저장 → 플레이 시험(기본 계획에 추가·프로필 밀어 닫기 단계 추가) → 기기 확인.
 서버 명세는 **[server-spec-1005.md](server-spec-1005.md)** — 특히 TourAPI 는 **서버 먼저** 배포.
 
 - 창 닫기 통일: 추가 탭도 위에서 아래로 밀면 닫힘(`Apply8 Sheets`) · 장소/3D모델 넘기기는 목록과 같은 방향 잠금(14px·1.3배, `SwipePanelController` ↔ `R0926SwipeDismiss.AnyDragging`) · 입력줄이 떠 있는 동안(넘기기 잠김)엔 밀어 닫기도 쉼 · 추가 카드 손잡이 다시(`Apply10 Grabs`)
@@ -86,6 +86,15 @@ Unity 컴파일러 없이 코드만 고쳤고 컴파일 오류는 검토에서 �
 - 알림 권한(안드로이드 13+): 로그인 사용자는 그대로 로그인 뒤. 로그인하지 않은 사용자는 두 번째 실행부터, 또는 첫 실행에서 3분 쓴 뒤 — 시작화면·첫 안내·시스템 권한 창과 겹치지 않을 때 한 번
 - `weather_kma.py`: 하늘상태(초단기예보)만 실패하면 `code` 를 덮지 않음(Open-Meteo 그대로, 단 Open-Meteo 비·눈 + 실황 없음이면 흐림) · 부분 결과는 2분 캐시
 - TourAPI 키: 앱 코드에서 삭제(관광공사 URL 에 `serviceKey` 안 붙임 · 공공교통 매니저 3곳의 안 쓰던 같은 키 상수도 삭제). 서버 `/proxy` 가 `.env TOUR_API_KEY` 를 붙인다
+
+### 검토 뒤 고친 것 (Version 20 — 같은 브랜치 두 번째 커밋)
+4방향 검토(컴파일·화면 동작·데이터·빠진 것) + 반박 확인을 돌렸다. 컴파일 오류는 못 찾음. 확인된 문제를 고쳤다:
+- 추가·프로필 카드를 버튼 위에서 끌어 내리면 손을 뗄 때 그 버튼(등록하기·사진·팔로우·로그아웃)이 눌리던 것 → 끄는 동안 시트가 누름을 받지 않게(`R0926SwipeDismiss.cancelClicks`)
+- 추가 시트 위쪽 130 을 투명 `UploadPage/XButton_Panel` 이 덮어 손잡이·제목에서 끌어도 안 내려가던 것(플레이 시험도 실패했을 것) → 그림을 끔(장소 수정 쪽과 같은 방식)
+- 프로필 카드를 내릴 때 도크 칸 X '닫기' 가 카드 위로 비치던 것 → 거울 틀을 카드 아래로
+- (예전부터) 가로 화면에서 프로필 카드 축소가 페이드에 덮여 잘리던 것 → `R0926FadePanel` 이 크기를 덮어쓰지 않고 곱함
+- 목록 빈 화면: 받아 둔 장소가 있는데 거리·분류로 0곳이면 오프라인이어도 '없음' (받은 게 없을 때만 '인터넷 연결이 없어요')
+- 서버 명세: 습도는 늘 Open-Meteo 로 채우고 기상청이 덮게 · upload_id 처리 중 줄이 안 풀려 409 가 계속되던 것(3분 지나면 다시 잡기·성공 응답 같은 트랜잭션 commit·try/finally 정리) · `/proxy` 예외 글에 키가 찍히지 않게
 
 ### Windows 에서 확인할 것
 - 컴파일 (Unity 없이 고쳤다 — 특히 `UploadKey`·`SwipePanelController`·`FirebaseNotification`·`Apply9/10/11`)

@@ -391,12 +391,15 @@ public class PlaceListManager : MonoBehaviour
             }
             else
             {
-                // 재시도 후에도 빈 결과 → 안내 표시. 못 받은 것을 '주변에 없다' 고 하지 않는다 —
+                // 재시도 후에도 빈 결과 → 안내 표시. 받아 둔 장소가 하나도 없을 때만 못 받은 까닭을 말한다 —
                 // 인터넷이 끊겼으면 바로 '인터넷 연결이 없어요', 서버가 응답 없거나 아직 못 받았으면 '아직 받지 못했어요'.
-                // 연결되어 목록을 받으면 다음 주기 갱신(updateInterval)이 줄로 바꾼다
+                // 받아 둔 게 있는데 비었으면 거리·분류 때문이니 '없음'. 연결되어 받으면 다음 주기 갱신(updateInterval)이 줄로 바꾼다
                 if (listText != null)
                 {
-                    string emptyMsg = GetLocalizedText(noInternet ? "noInternet"
+                    bool nothingCached = (dataManager == null || dataManager.GetLightCache().Count == 0)
+                                         && (tourAPIManager == null || tourAPIManager.GetPlaceDataMap().Count == 0);
+                    string emptyMsg = GetLocalizedText(!nothingCached ? "noNearbyData"
+                        : noInternet ? "noInternet"
                         : ServerHealth.Down || dataManager == null || !dataManager.IsCacheReady ? "listNotLoaded"
                         : "noNearbyData");
                     listText.text = emptyMsg;

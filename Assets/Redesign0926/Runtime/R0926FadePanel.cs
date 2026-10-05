@@ -17,6 +17,7 @@ public class R0926FadePanel : R0926Closer
     private float shown;      // 0 = 안 보임, 1 = 다 보임
     private int dir;          // +1 나타나는 중, -1 사라지는 중
     private Button pending;
+    private float pop = 1f;   // 카드에 지금 곱해 둔 커지는 비율 — 가로 화면 축소(R0926Orientation 의 localScale)를 덮어쓰지 않게 나눴다 곱한다
 
     private void Awake() => group = GetComponent<CanvasGroup>();
 
@@ -68,6 +69,11 @@ public class R0926FadePanel : R0926Closer
         float e = shown * shown * (3f - 2f * shown);
         group.alpha = e;
         group.blocksRaycasts = dir >= 0;
-        if (card != null) card.localScale = Vector3.one * Mathf.Lerp(fromScale, 1f, e);
+        if (card != null)
+        {
+            float next = Mathf.Lerp(fromScale, 1f, e);
+            card.localScale = card.localScale / pop * next;
+            pop = next;
+        }
     }
 }

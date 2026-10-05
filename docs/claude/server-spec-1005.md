@@ -28,13 +28,20 @@
 ## 2. `/api/weather` 습도
 
 - 응답에 `humidity`(정수 %, 0~100). **null 로 보내지 말 것** — 값이 없으면 키를 빼면 앱이 줄을 숨긴다.
-- 기상청 연동(1)을 하면 `REH` 로 자동으로 채워진다. 연동 전이면 Open-Meteo 요청의 `current=` 에 `relative_humidity_2m` 를 더해 `out['humidity'] = round(current['relative_humidity_2m'])`.
+- **기상청 연동과 상관없이 늘** Open-Meteo 요청의 `current=` 에 `relative_humidity_2m` 를 더해 채운다
+  ```python
+  h = current.get('relative_humidity_2m')
+  if h is not None:
+      out['humidity'] = round(h)
+  ```
+  기상청(1)은 그 뒤에 돌아 한국 안에서 받으면 `REH` 로 덮는다. 기상청을 못 받거나(키 없음·장애) 한국 밖이면 Open-Meteo 값이 남는다
+  (기상청만 믿으면 해외 사용자·기상청 장애 때 습도 줄이 사라진다).
 
 ## 3. `upload_id` 중복 거르기 — `/upload` · `/create-location-with-model`
 
 앱(v19)이 보내는 `upload_id`(32자 hex):
 - 같은 내용(이름·분류·대표 사진/모델 파일 등)을 **다시** 보내면 같은 값 — 시간 초과·실패 뒤 '등록하기'를 다시 누른 경우. 앞 요청이 실제로는 저장됐을 수 있다.
-- 내용이 바뀌거나(다른 장소) 성공·입력 초기화 뒤엔 새 값. (v18 은 실패 뒤 다른 장소에도 같은 값을 보냈다 — v19 에서 고침)
+- 내용이 바뀌거나(다른 장소) 성공·입력 초기화·앱 재시작 뒤엔 새 값. (v18 은 실패 뒤 다른 장소에도 같은 값을 보냈다 — v19 에서 고침)
 - 예전 앱은 `upload_id` 를 안 보낸다 → 없으면 지금처럼 그냥 저장.
 
 서버가 할 일:
@@ -43,29 +50,56 @@
    CREATE TABLE IF NOT EXISTS upload_dedup (
        upload_id   VARCHAR(64) PRIMARY KEY,
        location_id INTEGER,                 -- 저장이 끝나면 채운다
-       response    TEXT,                    -- 처음 성공 응답 본문 그대로
+       response    TEXT,                    -- 처음 성공 응답 본문 그대로 (NULL = 처리 중)
        created_at  TIMESTAMPTZ DEFAULT now()
    );
    ```
-2. 요청 처리 (두 경로 같은 방식)
+2. 요청 처리 (두 경로 같은 방식). 핵심 네 가지:
+   - **자리 잡기**: 같은 키가 없거나, 있어도 처리 중(NULL)인 채 **3분 넘게** 묵었으면(서버가 죽었거나 정리를 못 한 것) 새로 잡는다.
+     3분 = 앱 제한시간 60초 + 서버 처리 여유. 묵은 줄을 못 풀면 그 내용은 앱을 다시 켤 때까지 영영 409 가 된다.
+   - **성공 응답 저장은 장소 저장과 같은 트랜잭션에서 commit** — 따로 두고 commit 을 빠뜨리면 다시 보낸 요청이 200 대신 409 를 받는다.
+   - **성공이 아닌 모든 끝(예외·검증 4xx·하루 제한 등)에서 자리를 푼다** — `try/finally`.
+   - 조회 결과가 없으면(그 사이 풀렸다) 빈 자리로 보고 다시 잡는다.
    ```python
+   def claim_upload(cur, uid):
+       """True = 이 요청이 저장한다 · str = 처음 성공 응답(그대로 돌려줄 것) · None = 다른 요청이 처리 중"""
+       for _ in range(2):
+           cur.execute("""
+               INSERT INTO upload_dedup (upload_id) VALUES (%s)
+               ON CONFLICT (upload_id) DO UPDATE SET created_at = now()
+                   WHERE upload_dedup.response IS NULL AND upload_dedup.created_at < now() - interval '3 minutes'
+               RETURNING upload_id""", (uid,))
+           if cur.fetchone():
+               return True
+           cur.execute("SELECT response FROM upload_dedup WHERE upload_id=%s", (uid,))
+           row = cur.fetchone()
+           if row is None:
+               continue                     # 그 사이 풀렸다 → 다시 잡기
+           return row[0]                    # 성공 응답 또는 None(처리 중)
+       return None
+
    uid = (request.form.get('upload_id') or '').strip()[:64]
    if uid:
-       cur.execute("INSERT INTO upload_dedup (upload_id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING upload_id", (uid,))
-       if cur.fetchone() is None:                      # 이미 받은 키
-           cur.execute("SELECT response FROM upload_dedup WHERE upload_id=%s", (uid,))
-           prev = cur.fetchone()[0]
-           conn.commit()
-           if prev:                                    # 처음 것이 성공했다 → 같은 성공 응답 (새로 저장하지 않음)
-               return prev, 200
-           return jsonify(error='in_progress'), 409    # 처음 것이 아직 처리 중 (같은 순간 두 번) — 앱은 실패로 보고 다시 누를 수 있다
+       got = claim_upload(cur, uid)
        conn.commit()
-   # ... 지금 저장 로직 그대로 ...
-   # 성공 응답을 만든 뒤:
-   if uid:
-       cur.execute("UPDATE upload_dedup SET location_id=%s, response=%s WHERE upload_id=%s", (new_id, body, uid))
-   # 저장이 실패(예외)하면 그 키 줄을 지운다 → 같은 키로 다시 보내면 새로 저장된다
-   #   cur.execute("DELETE FROM upload_dedup WHERE upload_id=%s AND response IS NULL", (uid,))
+       if isinstance(got, str):
+           return got, 200                  # 처음 것이 성공했다 → 같은 성공 응답 (새로 저장하지 않음)
+       if got is None:
+           return jsonify(error='in_progress'), 409   # 같은 순간 두 번 — 앱은 실패로 보이고 다시 누를 수 있다
+   saved = False
+   try:
+       # ... 지금 저장 로직 그대로 (중간의 검증 실패·제한 return 도 그대로 둬도 된다 — finally 가 자리를 푼다) ...
+       # 성공 응답 본문(body)을 만든 뒤, 장소 INSERT 와 같은 트랜잭션에서:
+       if uid:
+           cur.execute("UPDATE upload_dedup SET location_id=%s, response=%s WHERE upload_id=%s", (new_id, body, uid))
+       conn.commit()
+       saved = True
+       return body, 200
+   finally:
+       if uid and not saved:
+           conn.rollback()
+           cur.execute("DELETE FROM upload_dedup WHERE upload_id=%s AND response IS NULL", (uid,))
+           conn.commit()
    ```
    - 성공 응답은 지금과 **똑같은 본문·200** — 앱은 `"Upload Succeeded!"` 또는 200 을 성공으로 본다.
    - 오래된 줄 정리(선택): 30일 지난 줄 삭제 (`created_at < now() - interval '30 days'`).
@@ -90,9 +124,14 @@ v19 앱: **`serviceKey` 를 보내지 않는다**. 지하철·기차·터미널 
            return jsonify(error='server not configured'), 503
        params = {k: v for k, v in request.args.items() if k.lower() != 'servicekey'}
        params['serviceKey'] = key                       # requests 가 알맞게 인코딩한다 (Decoding 키를 넣을 것)
-       r = requests.get(f'{TOUR_BASE}/{endpoint}', params=params, timeout=8)   # TOUR_BASE = 지금 /proxy 가 쓰는 관광공사 주소 그대로
+       try:
+           r = requests.get(f'{TOUR_BASE}/{endpoint}', params=params, timeout=8)   # TOUR_BASE = 지금 /proxy 가 쓰는 관광공사 주소 그대로
+       except requests.RequestException:
+           # 예외 글(str(e))에 키가 들어간 주소가 그대로 찍힌다 — 그대로 올리거나 로그에 남기지 말 것
+           return jsonify(error='upstream'), 502
        return Response(r.content, status=r.status_code, content_type=r.headers.get('Content-Type', 'application/json'))
    ```
+   - 로그: 관광공사로 보낸 주소(`r.url`)·예외 글을 남기려면 `re.sub(r'serviceKey=[^&\s]+', 'serviceKey=***', msg)` 로 가린 뒤에만.
    - 지금 `/proxy` 가 엔드포인트 이름을 바꿔 부르고 있으면(예: `…2` 접미사) 그 부분은 그대로 둔다 — 바꾸는 건 **키를 어디서 붙이느냐**뿐.
    - 예전 앱은 계속 옛 키를 붙여 오지만 서버가 지우고 새 키를 쓰므로 **키를 재발급해도 예전 앱이 계속 동작**한다.
 3. (권장) 같은 쿼리 10분 캐시 · 기기당 분당 호출 제한 — 키 한도(일 호출 수) 보호
