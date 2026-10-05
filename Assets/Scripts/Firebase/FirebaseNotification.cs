@@ -133,6 +133,8 @@ public class FirebaseNotification : MonoBehaviour
     [Header("알림 권한 (안드로이드)")]
     [Tooltip("로그인 뒤 알림 권한을 묻기까지 기다리는 시간 (초) — 로그인 직후 화면 전환과 겹치지 않게")]
     public float notificationAskDelay = 2f;
+    [Tooltip("로그인하지 않은 사용자: 첫 실행에서는 이만큼(초) 쓰고 난 뒤 알림 권한을 묻는다 (두 번째 실행부터는 시작화면·첫 안내가 끝나면)")]
+    public float guestNotificationAskAfter = 180f;
 
     private RectTransform bannerRectTransform;
 
@@ -192,7 +194,7 @@ public class FirebaseNotification : MonoBehaviour
         InitializeBannerRect();
 
 #if UNITY_ANDROID
-        StartCoroutine(RequestNotificationPermissionWhenLoggedIn());
+        StartCoroutine(RequestNotificationPermissionWhenReady());
         InitializeAndroidNotificationChannel();
         StartNotificationCleanup();
 
@@ -616,24 +618,48 @@ public class FirebaseNotification : MonoBehaviour
 
 #if UNITY_ANDROID
     private const string NotificationPermissionAskedKey = "NotificationPermissionAsked_V1";
+    private const string NotificationAskLaunchesKey = "NotificationAskLaunches_V1";
+    private FirstTimeGuide firstTimeGuide;
 
     /// <summary>
-    /// 알림 권한은 메시지를 받을 수 있게 된 뒤(로그인)에 한 번만 묻는다 —
-    /// 첫 실행 때 카메라·위치 권한 창과 겹쳐 뜨지 않게.
+    /// 알림 권한은 한 번만, 첫 실행의 카메라·위치 권한 창·시작화면·첫 안내와 겹치지 않을 때 묻는다.
+    ///  · 로그인한 사용자: 로그인 뒤 (메시지를 받을 수 있게 된 뒤)
+    ///  · 로그인하지 않은 사용자: 두 번째 실행부터, 또는 첫 실행에서 guestNotificationAskAfter 초 쓴 뒤 —
+    ///    관리자 알림·근처 새 장소 알림은 로그인 없이도 온다. 예전엔 로그인할 때까지 기다려 한 번도 묻지 않았다
     /// </summary>
-    private IEnumerator RequestNotificationPermissionWhenLoggedIn()
+    private IEnumerator RequestNotificationPermissionWhenReady()
     {
         if (PlayerPrefs.GetInt(NotificationPermissionAskedKey, 0) == 1) yield break;
         if (Permission.HasUserAuthorizedPermission("android.permission.POST_NOTIFICATIONS")) yield break;
 
+        int launches = PlayerPrefs.GetInt(NotificationAskLaunchesKey, 0) + 1;
+        PlayerPrefs.SetInt(NotificationAskLaunchesKey, launches);
+        PlayerPrefs.Save();
+
         var wait = new WaitForSeconds(1f);
-        while (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn || !Application.isFocused)
-            yield return wait;
+        while (!ReadyToAskNotification(launches)) yield return wait;
         yield return new WaitForSeconds(notificationAskDelay);
+        while (!Application.isFocused || BootOverlay.Showing || FirstGuideShowing()) yield return wait;   // 기다리는 사이 안내가 떴으면
 
         PlayerPrefs.SetInt(NotificationPermissionAskedKey, 1);
         PlayerPrefs.Save();
         RequestNotificationPermission();
+    }
+
+    private bool ReadyToAskNotification(int launches)
+    {
+        // 시스템 권한 창(카메라·위치)이 떠 있으면 앱이 포커스를 잃는다
+        if (!Application.isFocused || BootOverlay.Showing || FirstGuideShowing()) return false;
+        if (LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn) return true;
+        return launches >= 2 || Time.realtimeSinceStartup >= guestNotificationAskAfter;
+    }
+
+    // 첫 안내가 아직 시작 전이거나 떠 있는 동안 (안내가 없거나 꺼져 있으면 기다리지 않는다)
+    private bool FirstGuideShowing()
+    {
+        if (firstTimeGuide == null) firstTimeGuide = FindFirstObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+        if (firstTimeGuide == null || !firstTimeGuide.isActiveAndEnabled) return false;
+        return firstTimeGuide.Showing || PlayerPrefs.GetInt(FirstTimeGuide.FirstTimeKey, 0) == 0;
     }
 
     void RequestNotificationPermission()

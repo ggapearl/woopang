@@ -9,7 +9,7 @@ namespace Redesign0926
     /// <summary>
     /// v15 (2026-10-04 아이폰 1.2.53 확인 후):
     ///  · 도크 — 창이 열려 있으면 그 칸 버튼(봉투·'메시지')은 감추고 창 쪽 X '닫기'만 (겹쳐 '메닫기'로 보였다)
-    ///  · 창 위 손잡이 바 — 목록처럼 메시지·대화·장소 추가·3D모델·팔로우·AI·신고·더보기에도 (프로필 제외)
+    ///  · 창 위 손잡이 바 — 목록처럼 메시지·대화·장소 추가·3D모델·팔로우·AI·신고·더보기에도 (프로필 제외 · 추가는 10-04 에 뺐다가 v19 에 다시)
     ///  · 프로필 카드 — 시안대로 촘촘하게 (보이는 것만 차례로 쌓기 · 공개 상태 알약 · 숫자 크게)
     ///  · 채팅·키보드 위 입력줄 — 댓글 입력줄과 같은 둥근 유리 칸 + 분홍 보내기
     ///  · 메시지 검색칸 — 같은 유리 칸
@@ -402,6 +402,7 @@ namespace Redesign0926
                 ("Message_Button", new[] { "MessagePanel", "ChatRoomPanel" }),
                 ("List_Button", new[] { "ListPanel" }),
                 ("PlusButton", new[] { "UploadPage" }),
+                ("MiniProfile", new[] { "FullProfilePanel" }),   // v19: 프로필 칸도 열리면 X '닫기' 만
             };
             var swap = Ensure<R0926DockSlotSwap>(dock);
             var so = new SerializedObject(swap);
@@ -434,17 +435,11 @@ namespace Redesign0926
                 if (t == null) { log.Add("손잡이: 없음 " + p); continue; }
                 Grab(t.gameObject); n++;
             }
-            foreach (var name in new[] { "MoreSheet0926" })   // 이름으로 (틀 안으로 옮겨져 경로가 바뀐다)
+            // 추가 카드 — v19 부터 아래로 밀어 닫는다 (좌우 넘기기와는 같은 방향 잠금) → 손잡이 다시
+            foreach (var name in new[] { "MoreSheet0926", "CubeUploadPage", "ModelUploadPage" })   // 이름으로 (틀 안으로 옮겨져 경로가 바뀐다)
             {
                 var g = Find(root, name);
                 if (g != null) { Grab(g); n++; }
-            }
-            // 추가 카드는 끌어내려 닫지 않는다 (도크 버튼으로만 — 좌우 넘기기와 부딪혔다) → 끌 수 있어 보이는 손잡이는 뺀다
-            foreach (var name in new[] { "CubeUploadPage", "ModelUploadPage" })
-            {
-                var g = Find(root, name);
-                var old = g != null ? g.transform.Find("Grab0926") : null;
-                if (old != null) Object.DestroyImmediate(old.gameObject);
             }
             log.Add("grabs " + n);
         }

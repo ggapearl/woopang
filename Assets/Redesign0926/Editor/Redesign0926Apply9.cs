@@ -50,6 +50,7 @@ namespace Redesign0926
             WeatherBoard(root, log);
             CommentBar(root, log);
             Apply1004(root, log);   // 10-04 아이폰 확인 뒤 — 도크 칸 · 손잡이 · 프로필 카드 · 입력줄 · 날씨 크기
+            Apply1005(root, log);   // 10-05 — 업로드 제한시간 60초 (창 닫기 통일은 각 단계 안에서)
             var marker = Find(root, "Redesign0926Marker");
             var close = marker != null ? marker.GetComponent<R0926IndicatorClose>() : null;
             if (close != null)
@@ -134,8 +135,6 @@ namespace Redesign0926
             var content = panel != null ? panel.transform.Find("Content") : null;
             if (content == null) { log.Add("프로필 없음"); return; }
 
-            var sd = content.GetComponent<R0926SwipeDismiss>();
-            if (sd != null) Object.DestroyImmediate(sd);
             var slide = content.GetComponent<R0926SlideIn>();
             if (slide != null) Object.DestroyImmediate(slide);
             var cg = content.GetComponent<CanvasGroup>();
@@ -147,7 +146,8 @@ namespace Redesign0926
             fso.ApplyModifiedPropertiesWithoutUndo();
             Proxy(root, fade, "FullProfilePanel/Content/CloseButton", log);
 
-            // 도크의 프로필 칸을 다시 누르면 닫힌다 — 프로필 창이 도크보다 위라, 창 안에 도크와 똑같은 틀을 두고 그 칸에 투명 버튼
+            // 도크의 프로필 칸을 다시 누르면 닫힌다 — 프로필 창이 도크보다 위라, 창 안에 도크와 똑같은 틀을 두고 그 칸에 버튼.
+            // v19: 다른 칸처럼 X '닫기' 를 보인다 (도크의 사진 칸은 R0926DockSlotSwap 이 감춘다)
             var real = content.Find("CloseButton")?.GetComponent<Button>();
             if (real != null)
             {
@@ -155,11 +155,14 @@ namespace Redesign0926
                 mirror.transform.SetAsLastSibling();
                 SetRect(RT(mirror), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, DockBottom), new Vector2(-Side * 2, DockHeight));
                 Ensure<R0926SafeInset>(mirror).SetEdge(R0926SafeInset.Edge.Bottom);
+                // 창이 옅어지는 동안에도 칸은 그대로 — 사진 칸이 꺼지는 순간 X 가 바로 그 자리에 있게 (다른 칸들처럼)
+                Ensure<CanvasGroup>(mirror).ignoreParentGroups = true;
                 var tog = FindOrCreate(mirror.transform, "ProfileToggle0926");
                 SetRect(RT(tog), new Vector2(SlotProfile, 0.5f), new Vector2(SlotProfile, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
                 Img(tog, null, new Color(1, 1, 1, 0), Image.Type.Simple).raycastTarget = true;
                 var gb = Ensure<Button>(tog);
                 gb.transition = Selectable.Transition.None;
+                DockCloseLook(tog);
                 var cp = Ensure<R0926CloseProxy>(tog);
                 var cso = new SerializedObject(cp);
                 cso.FindProperty("sheet").objectReferenceValue = fade;
@@ -167,6 +170,16 @@ namespace Redesign0926
                 cso.ApplyModifiedPropertiesWithoutUndo();
                 ResetListeners(gb);
                 UnityEventTools.AddPersistentListener(gb.onClick, cp.Run);
+
+                // 카드를 아래로 밀면 닫힌다 (2026-10-05) — 가운데 떠 있어 화면 아래 끝 밖까지 내려 보낸 뒤 원래 닫기를 누른다.
+                // 오른쪽 위 X · 뒤로가기 · 도크 칸은 그대로 옅어지며 닫힌다
+                var sd = Ensure<R0926SwipeDismiss>(content.gameObject);
+                var sso = new SerializedObject(sd);
+                sso.FindProperty("closeButton").objectReferenceValue = real;
+                sso.FindProperty("offScreen").boolValue = true;
+                sso.FindProperty("followers").arraySize = 0;
+                sso.FindProperty("backdrop").objectReferenceValue = panel.GetComponent<Image>();
+                sso.ApplyModifiedPropertiesWithoutUndo();
             }
 
             // 큰 사진 테두리 — 사진 위에 매끈한 고리 (스텐실 마스크의 계단진 가장자리를 덮는다)
@@ -224,6 +237,15 @@ namespace Redesign0926
                 so.FindProperty("baseOffsetX").floatValue = -53f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
+            // 아래로 밀어 닫기 — 키보드 위 입력줄이 떠 있는 동안(넘기기 잠김)엔 쉰다
+            var sd = Find(page.transform, "UploadSheet0926")?.GetComponent<R0926SwipeDismiss>();
+            if (sd != null)
+            {
+                var dso = new SerializedObject(sd);
+                dso.FindProperty("pager").objectReferenceValue = swipe;
+                dso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            else log.Add("추가: 밀어 닫기 없음");
             foreach (var n in new[] { "CubeUploadPage", "ModelUploadPage" })
             {
                 var c = Find(page.transform, n);

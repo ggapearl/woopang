@@ -36,7 +36,6 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider
     }
 
     private string BASE_URL => ApiConfig.NEARBY_FACILITIES;
-    private const string SERVICE_KEY = "teLNDctkJ9YFlMFaPWTqqwgtgxvewuaqm53dhSOiNpfOV1Q4z8NxyhhvpW4ifx3eKhI8RgodlQ05pxVHAeh1sA==";
     private readonly string apiUrlTemplate = "{0}?lat={1}&lon={2}&radius={3}&type=train";
 
     public GameObject samplePrefab;

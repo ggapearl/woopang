@@ -229,7 +229,7 @@ public class LocationManager : MonoBehaviour
     private static readonly string[] RegionKeys = { "borough", "city_district", "county", "city", "municipality", "town", "village", "suburb", "quarter", "neighbourhood" };
 
     /// <summary>
-    /// 시·군·구 + 읍·면·동. 예: 예산군 대흥면 · 종로구 청운효자동 · 영통구 매탄동.
+    /// 시·군·구 + 읍·면·동. 예: 예산군 대흥면 · 종로구 청운효자동 · 영통구 매탄동 · 세종시 보람동.
     /// 특별시·광역시·도·나라는 뺀다. 한국 이름이 아니면(외국·로마자) 작은 단위 + 시 이름.
     /// </summary>
     private static string BuildShortRegion(JSONNode addr)
@@ -241,7 +241,7 @@ public class LocationManager : MonoBehaviour
             string v = addr[key].Value;
             if (string.IsNullOrEmpty(v)) continue;
             v = v.Trim();
-            if (sgg == null && IsSigungu(v)) sgg = v;
+            if (sgg == null && IsSigungu(v)) sgg = ShortSigungu(v);
             else if (emd == null && IsEupMyeonDong(v)) emd = v;
         }
         if (sgg != null || emd != null) return sgg != null && emd != null ? sgg + " " + emd : (sgg ?? emd);
@@ -262,6 +262,13 @@ public class LocationManager : MonoBehaviour
         if (v.EndsWith("구") || v.EndsWith("군") || v.EndsWith("시")) return true;
         string l = v.ToLowerInvariant();   // 로마자 (영어 등)
         return l.EndsWith("-gu") || l.EndsWith("-gun") || l.EndsWith("-si");
+    }
+
+    // 세종은 시·군·구 없이 '세종특별자치시 ○○동' 으로 와서 판에 길게 찍혔다 → '세종시 ○○동'
+    private static string ShortSigungu(string v)
+    {
+        const string SpecialCity = "특별자치시";
+        return v.EndsWith(SpecialCity) ? v.Substring(0, v.Length - SpecialCity.Length) + "시" : v;
     }
 
     private static bool IsEupMyeonDong(string v)

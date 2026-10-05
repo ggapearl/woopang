@@ -110,28 +110,38 @@ public class PlaceListManager : MonoBehaviour
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
             { "woopangData", "WOOPANG DATA" }, { "tourApiData", "Public Data" },
             { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" },
-            { "noNearbyData", "No nearby data found.\nTry adjusting the distance slider or moving to a different area." }
+            { "noNearbyData", "No nearby data found.\nTry adjusting the distance slider or moving to a different area." },
+            { "noInternet", "No internet connection.\nNearby places will load automatically once you're back online." },
+            { "listNotLoaded", "Couldn't load nearby places yet.\nWe'll try again automatically." }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
             { "woopangData", "우팡 데이터" }, { "tourApiData", "공공데이터" },
             { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" },
-            { "noNearbyData", "주변에 데이터가 없습니다.\n거리 슬라이더를 조정하거나 다른 위치로 이동해보세요." }
+            { "noNearbyData", "주변에 데이터가 없습니다.\n거리 슬라이더를 조정하거나 다른 위치로 이동해보세요." },
+            { "noInternet", "인터넷 연결이 없어요.\n연결되면 주변 장소를 저절로 불러와요." },
+            { "listNotLoaded", "주변 장소를 아직 받지 못했어요.\n잠시 뒤 저절로 다시 불러와요." }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
             { "woopangData", "WOOPANGデータ" }, { "tourApiData", "公共データ" },
-            { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" }
+            { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" },
+            { "noInternet", "インターネットに接続されていません。\n接続すると周辺の場所を自動で読み込みます。" },
+            { "listNotLoaded", "周辺の場所をまだ読み込めていません。\nしばらくすると自動で再読み込みします。" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendly", "[宠物友好]" }, { "noImage", "[无图片]" },
             { "woopangData", "WOOPANG数据" }, { "tourApiData", "公共数据" },
-            { "transportData", "交通数据" }, { "p2pUserData", "附近用户" }
+            { "transportData", "交通数据" }, { "p2pUserData", "附近用户" },
+            { "noInternet", "没有网络连接。\n连接后会自动加载附近地点。" },
+            { "listNotLoaded", "暂时无法加载附近地点。\n稍后会自动重试。" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendly", "[Mascotas]" }, { "noImage", "[Sin imagen]" },
             { "woopangData", "Datos WOOPANG" }, { "tourApiData", "Datos Públicos" },
-            { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" }
+            { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" },
+            { "noInternet", "Sin conexión a internet.\nLos lugares cercanos se cargarán automáticamente al reconectar." },
+            { "listNotLoaded", "Aún no se pudieron cargar los lugares cercanos.\nLo intentaremos de nuevo automáticamente." }
         }}
     };
 
@@ -371,7 +381,8 @@ public class PlaceListManager : MonoBehaviour
         // 데이터 비어있고 panel 열려있으면 자동 재시도 (데이터 로드 race condition 대응)
         if (combinedPlaces.Count == 0 && listPanel != null && listPanel.activeInHierarchy)
         {
-            if (dataLoadRetryAttempts < MAX_DATA_LOAD_RETRIES)
+            bool noInternet = Application.internetReachability == NetworkReachability.NotReachable;
+            if (!noInternet && dataLoadRetryAttempts < MAX_DATA_LOAD_RETRIES)
             {
                 dataLoadRetryAttempts++;
                 yield return new WaitForSeconds(1f);
@@ -380,10 +391,14 @@ public class PlaceListManager : MonoBehaviour
             }
             else
             {
-                // 5회 시도 후에도 빈 결과 → 안내 표시
+                // 재시도 후에도 빈 결과 → 안내 표시. 못 받은 것을 '주변에 없다' 고 하지 않는다 —
+                // 인터넷이 끊겼으면 바로 '인터넷 연결이 없어요', 서버가 응답 없거나 아직 못 받았으면 '아직 받지 못했어요'.
+                // 연결되어 목록을 받으면 다음 주기 갱신(updateInterval)이 줄로 바꾼다
                 if (listText != null)
                 {
-                    string emptyMsg = GetLocalizedText("noNearbyData");
+                    string emptyMsg = GetLocalizedText(noInternet ? "noInternet"
+                        : ServerHealth.Down || dataManager == null || !dataManager.IsCacheReady ? "listNotLoaded"
+                        : "noNearbyData");
                     listText.text = emptyMsg;
                     lastDisplayedText = emptyMsg;
                 }

@@ -14,7 +14,8 @@ namespace Redesign0926
     /// 플레이 모드 동작 시험 (에디터 전용). .redesign0926_playtest 파일(1줄: 캡처 폴더)이 생기면 플레이를 켜고
     /// 가상 마우스·뒤로가기(Esc)로 창을 열고 닫아 본 뒤 결과를 .redesign0926_playtest_result 에 적고 플레이를 끈다.
     ///  · 목록: 크게 끌어내리면 닫힘 / 조금 끌면 제자리 / 뒤로가기로 닫힘
-    ///  · 프로필(또는 로그인 안내): 뒤로가기로 닫힘
+    ///  · 추가: 크게 끌어내리면 닫힘 (v19)
+    ///  · 프로필(또는 로그인 안내): 뒤로가기로 닫힘 · 열린 동안 도크 칸은 X · 크게 끌어내리면 닫힘 (v19)
     ///  · 메시지(또는 로그인 안내): 크게 끌어내리면 닫힘
     /// </summary>
     [InitializeOnLoad]
@@ -124,6 +125,13 @@ namespace Redesign0926
             Sleep(0.8f);
             Check(() => !Active("ListPanel"), "목록: X 누르면 내려간 뒤 닫힘");
 
+            // 추가 — 크게 끌어내리기 (v19: 도크 X 말고도 밀어서 닫힌다)
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Drag("UploadPage/UploadSheet0926", 0.45f, "upload_drag");
+            Sleep(1.0f);
+            Check(() => !Active("UploadPage") && Active("Dock0926/PlusButton"), "추가: 크게 끌어내리면 닫힘 (도크 + 다시 보임)");
+
             // 프로필 (로그인 안 돼 있으면 로그인 안내)
             Do(() => Click("Dock0926/MiniProfile"));
             Sleep(1.0f);
@@ -132,6 +140,22 @@ namespace Redesign0926
             Back();
             Sleep(0.6f);
             Check(() => OpenPanels() == "-", "프로필/로그인 안내: 뒤로가기로 닫힘");
+
+            // 프로필 — 열린 동안 도크 칸은 X '닫기' · 카드를 크게 끌어내리면 닫힘 (v19, 로그인돼 있을 때만)
+            Do(() => Click("Dock0926/MiniProfile"));
+            Sleep(1.0f);
+            Check(() =>
+            {
+                if (!Active("FullProfilePanel")) return true;   // 로그인 안내였다
+                var t = Find("Dock0926/MiniProfile");
+                var cg = t != null ? t.GetComponent<CanvasGroup>() : null;
+                return cg != null && cg.alpha < 0.01f && Active("FullProfilePanel/DockMirror0926/ProfileToggle0926/Icon0926");
+            }, "프로필: 열린 동안 도크 사진 칸 대신 X '닫기'");
+            Drag("FullProfilePanel/Content", 0.45f, "profile_drag", () => Active("FullProfilePanel"));
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
+            Sleep(1.0f);
+            Check(() => OpenPanels() == "-", "프로필(또는 로그인 안내): 크게 끌어내리면 닫힘");
 
             // 메시지 (로그인 안 돼 있으면 로그인 안내)
             Do(() => Click("Dock0926/Message_Button"));

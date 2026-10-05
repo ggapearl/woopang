@@ -108,10 +108,11 @@ public class SwipePanelController : MonoBehaviour
                 Vector2 d = touch.screenPosition - startPos;
                 if (!dirDecided)
                 {
-                    // 확실히 옆으로 움직일 때만 카드를 민다 — 위아래로 움직이는 손가락에 카드가 같이 흔들리지 않게
-                    if (Mathf.Abs(d.x) < 24f && Mathf.Abs(d.y) < 24f) return;
+                    // 목록 '목록|지도|설정'(R0926SheetModes)과 같은 방향 잠금 — 14px 움직이면 정하고, 옆으로 1.3배 넘게 갈 때만 카드를 민다.
+                    // 아래로 끄는 손가락은 시트 밀어 닫기(R0926SwipeDismiss) 몫 — 같은 순간 같은 기준으로 정해 둘이 함께 움직이지 않는다
+                    if (d.magnitude < 14f) return;
                     dirDecided = true;
-                    horizontal = Mathf.Abs(d.x) > Mathf.Abs(d.y) * 1.2f;
+                    horizontal = Mathf.Abs(d.x) >= Mathf.Abs(d.y) * 1.3f && !R0926SwipeDismiss.AnyDragging;
                     if (!horizontal) { isDragging = false; return; }
                 }
                 currentAnchoredX = dragStartPosX + d.x;

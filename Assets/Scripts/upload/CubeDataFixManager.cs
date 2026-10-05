@@ -50,7 +50,7 @@ public class CubeDataFixManager : MonoBehaviour
     [Header("Upload Settings")]
     private string serverUrl => ApiConfig.FIX_UPLOAD;
     [Tooltip("요청을 보낸 순간부터 잰다. 넘으면 요청을 끊고 '시간 초과'")]
-    [SerializeField] private float uploadTimeoutSeconds = 20f;
+    [SerializeField] private float uploadTimeoutSeconds = 60f;
 
     // HEIC 처리용 변수들
     private readonly string[] iOSImageFormats = {

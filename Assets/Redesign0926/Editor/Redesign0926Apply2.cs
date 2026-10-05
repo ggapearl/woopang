@@ -54,7 +54,12 @@ namespace Redesign0926
             img.sprite = null; img.color = new Color(1, 1, 1, 0); img.raycastTarget = true;
             foreach (var t in btn.GetComponentsInChildren<Text>(true))
                 if (t.name != "Label0926") t.enabled = false;   // 예전 "X" 글자
+            DockCloseLook(btn);
+        }
 
+        /// <summary>도크 칸 자리의 X 아이콘 + '닫기' (목록·메시지·프로필 칸 공통)</summary>
+        private static void DockCloseLook(GameObject btn)
+        {
             var ic = FindOrCreate(btn.transform, "Icon0926");
             var icImg = Img(ic, Spr("r0926_i_close"), Ink, Image.Type.Simple);
             icImg.raycastTarget = false;

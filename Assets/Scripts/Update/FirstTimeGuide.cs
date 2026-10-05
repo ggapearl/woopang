@@ -107,12 +107,16 @@ public class FirstTimeGuide : MonoBehaviour
     }
 
     private const string FIRST_TIME_KEY = "IsFirstTime";
+    /// <summary>안내를 한 번 띄웠으면 1 (띄우는 순간 기록 — 다 보기 전에도 1)</summary>
+    public const string FirstTimeKey = FIRST_TIME_KEY;
     private int currentPage = 0;
     private int pageCount;
     private float delayBeforeGuide = 6f;
 
     // 지금 보이는 쪽 · 쪽 수 (R0926GuideOverlay 가 마지막 쪽 판정에 쓴다)
     public int CurrentPage => currentPage;
+    /// <summary>첫 안내가 화면에 떠 있다 (알림 권한 창 등을 겹쳐 띄우지 않게)</summary>
+    public bool Showing => guidePanel != null && guidePanel.activeInHierarchy;
     public int PageCount => pageCount;
 
     // 전환 상태

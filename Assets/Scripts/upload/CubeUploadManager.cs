@@ -80,8 +80,8 @@ public class CubeUploadManager : MonoBehaviour
     private string locationText;
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
-    // 중복 방지 키 — 같은 입력을 다시 보내면(실패·시간 초과 뒤) 같은 값, 성공·초기화 때 새로 만든다
-    private string uploadId;
+    // 중복 방지 키 — 같은 내용을 다시 보내면(실패·시간 초과 뒤) 같은 값, 내용이 바뀌거나 성공·초기화 뒤엔 새 값
+    private readonly UploadKey uploadKey = new UploadKey();
 
     // 스와이프 패널 상태 저장용
     private SwipePanelController swipePanelController;
@@ -1474,10 +1474,6 @@ public class CubeUploadManager : MonoBehaviour
         formData.AddField("timezone", GetTimezone());
         formData.AddField("timezone_offset", GetTimezoneOffset());
 
-        // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다
-        if (string.IsNullOrEmpty(uploadId)) uploadId = Guid.NewGuid().ToString("N");
-        formData.AddField("upload_id", uploadId);
-
         // 폴더명: 날짜_시간_사용자명 (로그인 안됐으면 장소명 사용)
         string folderName = !string.IsNullOrEmpty(loggedInUsername) ? loggedInUsername : placeName;
         string folder = $"{DateTime.Now:yyyyMMdd_HHmmss}_{folderName}";
@@ -1497,6 +1493,12 @@ public class CubeUploadManager : MonoBehaviour
             string mainPath = "main.jpg";
             formData.AddBinaryData("main_photo", mainPhotoBytes, mainPath, "image/jpeg");
             Destroy(resizedMainPhoto);
+
+            // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다.
+            // 이름·분류·대표 사진 등이 바뀌면(다른 장소) 새 키 (위치는 다시 잡을 때마다 조금씩 달라 넣지 않는다)
+            ulong content = UploadKey.Mix(UploadKey.Seed, string.Join("|", placeName, selectedCategory, petFriendly, separateRestroom,
+                showInstagram ? instagramID : "", GetSubPhotos().Count));
+            formData.AddField("upload_id", uploadKey.For(UploadKey.Mix(content, mainPhotoBytes)));
         }
         else
         {
@@ -1533,7 +1535,7 @@ public class CubeUploadManager : MonoBehaviour
 
             if (timedOut)
             {
-                // 입력·uploadId 는 그대로 — 다시 누르면 같은 키로 보내 서버가 중복을 거른다
+                // 입력은 그대로 — 그대로 다시 누르면 같은 키로 보내 서버가 중복을 거른다
                 Debug.LogWarning($"[CubeUploadManager] 업로드 시간 초과 ({uploadTimeoutSeconds}s) — 요청 중단");
                 isProcessing = true;
                 ShowWarning(GetLocalizedText("request_timeout"));
@@ -1793,7 +1795,7 @@ public class CubeUploadManager : MonoBehaviour
         instagramID = "";
         gpsData = Vector3.zero;
         isProcessing = false;
-        uploadId = null;
+        uploadKey.Reset();
     }
 
     private Texture2D ResizeTextureWithRenderTexture(Texture2D source, int targetWidth, int targetHeight)

@@ -57,7 +57,7 @@ public class ModelUploadManager : MonoBehaviour
 
     [Header("Upload Settings")]
     [Tooltip("요청을 보낸 순간부터 잰다. 넘으면 요청을 끊고 '시간 초과'")]
-    [SerializeField] private float uploadTimeoutSeconds = 30f;
+    [SerializeField] private float uploadTimeoutSeconds = 60f;
 
     private string selectedFilePath;
     private byte[] selectedFileData;
@@ -74,8 +74,8 @@ public class ModelUploadManager : MonoBehaviour
     private string selectedCategory = "";
 
     private bool isProcessing = false;
-    // 중복 방지 키 — 같은 입력을 다시 보내면(실패·시간 초과 뒤) 같은 값, 성공·초기화 때 새로 만든다
-    private string uploadId;
+    // 중복 방지 키 — 같은 내용을 다시 보내면(실패·시간 초과 뒤) 같은 값, 내용이 바뀌거나 성공·초기화 뒤엔 새 값
+    private readonly UploadKey uploadKey = new UploadKey();
     private const int MAX_SUB_PHOTOS = 10;
     private bool canUploadToday = true; // 하루 1회 업로드 제한
 
@@ -1061,9 +1061,11 @@ public class ModelUploadManager : MonoBehaviour
         formData.AddField("animation_loop", "on");
         formData.AddField("animation_auto_play", "on");
 
-        // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다
-        if (string.IsNullOrEmpty(uploadId)) uploadId = Guid.NewGuid().ToString("N");
-        formData.AddField("upload_id", uploadId);
+        // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다.
+        // 이름·분류·모델 파일 등이 바뀌면(다른 장소) 새 키 (위치는 다시 잡을 때마다 조금씩 달라 넣지 않는다)
+        formData.AddField("upload_id", uploadKey.For(UploadKey.Mix(UploadKey.Seed, string.Join("|", modelName, selectedCategory,
+            petFriendlyToggle != null && petFriendlyToggle.isOn, separateRestroomToggle != null && separateRestroomToggle.isOn,
+            showInstagram ? instagramID : "", selectedFilePath, selectedFileData != null ? selectedFileData.Length : 0, subPhotos.Count))));
 
         string folder = $"{DateTime.Now:yyyyMMdd_HHmmss}_{modelName}";
         formData.AddField("folder", folder);
@@ -1099,7 +1101,7 @@ public class ModelUploadManager : MonoBehaviour
 
             if (timedOut)
             {
-                // 입력·uploadId 는 그대로 — 다시 누르면 같은 키로 보내 서버가 중복을 거른다
+                // 입력은 그대로 — 그대로 다시 누르면 같은 키로 보내 서버가 중복을 거른다
                 Debug.LogWarning($"[ModelUploadManager] 업로드 시간 초과 ({uploadTimeoutSeconds}s) — 요청 중단");
                 isProcessing = true;
                 ShowWarning(GetLocalizedText("request_timeout"));
@@ -1267,7 +1269,7 @@ public class ModelUploadManager : MonoBehaviour
 
         gpsData = Vector3.zero;
         isProcessing = false;
-        uploadId = null;
+        uploadKey.Reset();
         instagramID = "";
     }
 

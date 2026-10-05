@@ -281,6 +281,13 @@ namespace Redesign0926
             Wire(b, sky.ToggleCollapse);
         }
 
+        private static readonly string[] UndoCoveredBy =
+        {
+            "FullScreenPanel", "ListPanel", "UploadPage", "Fixpage", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "FollowPanel",
+            "CommentPanel_HQ", "LoginPromptPanel", "FirstTimeGuidePanel", "UpdateChecker", "RemoveRequestPanel", "ARPreviewPanel",
+            "DanceAnimPanel", "AskAISheet0926",
+        };
+
         // ── 인디케이터 X 로 숨긴 뒤 '이 장소를 숨겼어요 · 되돌리기' — 위치 칩 위에 몇 초 (R0926IndicatorClose) ──
         private static void ApplyHiddenUndo(Transform root, List<string> log)
         {
@@ -320,6 +327,14 @@ namespace Redesign0926
             so.FindProperty("undoBar").objectReferenceValue = cg;
             so.FindProperty("undoText").objectReferenceValue = mt;
             so.FindProperty("undoLabel").objectReferenceValue = lt;
+            // 창이 열리면 알림을 바로 거둔다 (v19 — 목록·상세 창 위에 남아 누름을 막았다). 평소 꺼져 있다가 열릴 때 켜지는 창만
+            var windows = new List<Object>();
+            foreach (var n in UndoCoveredBy)
+            {
+                var w = Find(root, n);
+                if (w != null) windows.Add(w); else log.Add("되돌리기 알림: 창 없음 " + n);
+            }
+            SetArray(so.FindProperty("coveredBy"), windows.ToArray());
             so.ApplyModifiedPropertiesWithoutUndo();
             Wire(b, close.UndoHide);
             log.Add("hidden undo ok");

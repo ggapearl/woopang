@@ -6,7 +6,8 @@ using UnityEngine.UI;
 ///  · 거리는 박스 위, 이름은 아래
 ///  · 장소 박스 오른쪽 위 꺾쇠 자리에 박스 색 X → 누르면 '삭제'(언어별 짧게), 3초 안에 한 번 더 누르면 이 기기에서 숨김(HiddenPlaces)
 ///    백그라운드에 다녀와도 유지, 앱을 완전히 껐다 켜면 다시 보인다
-///  · 숨긴 뒤 위치 칩 위에 '이 장소를 숨겼어요 · 되돌리기' 가 몇 초 떠 있다 (설정 '모두 다시 보이기'로도 되살린다)
+///  · 숨긴 뒤 위치 칩 위에 '이 장소를 숨겼어요 · 되돌리기' 가 몇 초 떠 있다 (설정 '모두 다시 보이기'로도 되살린다).
+///    목록·상세 같은 창이 열리면 바로 거둔다 — 맨 위에 남아 창의 누름을 막았다
 ///  · 설정 '오브젝트 삭제 기능'(R0926PlaceSettings)을 끄면 X 없이 꺾쇠 넷 그대로
 /// </summary>
 public class R0926IndicatorClose : MonoBehaviour
@@ -24,6 +25,8 @@ public class R0926IndicatorClose : MonoBehaviour
     [Tooltip("'되돌리기'를 누를 수 있는 시간(초)")]
     [SerializeField] private float undoSeconds = 4f;
     [SerializeField] private float undoFade = 0.2f;
+    [Tooltip("이 창들 중 하나라도 열리면 '되돌리기' 알림을 바로 거둔다 (켜고 끄는 창만 — 늘 켜져 있는 틀은 넣지 말 것)")]
+    [SerializeField] private GameObject[] coveredBy;
 
     private string undoId;
     private float undoUntil;
@@ -64,11 +67,24 @@ public class R0926IndicatorClose : MonoBehaviour
     {
         if (undoBar == null || !undoBar.gameObject.activeSelf) return;
         if (undoId != null && Time.unscaledTime >= undoUntil) undoId = null;
+        if (undoId != null && Covered())
+        {
+            undoId = null;
+            undoBar.alpha = 0f;   // 창 위에서 옅어지는 동안에도 보이지 않게 — 바로
+        }
         bool show = undoId != null;
         undoBar.blocksRaycasts = show;
         undoBar.interactable = show;
         undoBar.alpha = Mathf.MoveTowards(undoBar.alpha, show ? 1f : 0f, Time.unscaledDeltaTime / Mathf.Max(0.01f, undoFade));
         if (!show && undoBar.alpha <= 0f) undoBar.gameObject.SetActive(false);
+    }
+
+    private bool Covered()
+    {
+        if (coveredBy == null) return false;
+        foreach (var w in coveredBy)
+            if (w != null && w.activeInHierarchy) return true;
+        return false;
     }
 
     /// <summary>알림의 '되돌리기' — 방금 숨긴 장소를 다시 보이게 한다</summary>

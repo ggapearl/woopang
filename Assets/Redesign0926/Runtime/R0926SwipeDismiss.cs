@@ -14,6 +14,7 @@ using UnityEngine.UI;
 ///   · 지도·슬라이더·입력창처럼 스스로 끄는 것 위에서 시작 → 건드리지 않는다
 /// 닫기 버튼·뒤로가기·바깥 누르기로 닫을 때도 R0926CloseProxy 가 AnimateClose 를 불러 아래로 미끄러져 사라진다.
 /// 위치는 증분으로만 더하고 빼서 R0926SlideIn·R0926SafeInset 과 겹쳐도 자리가 틀어지지 않는다.
+/// 방향은 14px 움직였을 때 정한다 — 옆으로 넘기기(R0926SheetModes·SwipePanelController)도 같은 순간 같은 기준이라 둘이 함께 움직이지 않는다.
 /// </summary>
 public class R0926SwipeDismiss : R0926Closer
 {
@@ -25,6 +26,10 @@ public class R0926SwipeDismiss : R0926Closer
     [SerializeField] private RectTransform[] followers;
     [Tooltip("내려가는 만큼 옅어질 어두운 바탕 (창 뒤 그늘)")]
     [SerializeField] private Graphic backdrop;
+    [Tooltip("가운데 떠 있는 카드(프로필) — 닫을 때 화면 아래 끝 밖까지 내려 보낸다 (도크 윗선 틀 안의 시트는 자기 높이면 충분)")]
+    [SerializeField] private bool offScreen;
+    [Tooltip("옆으로 넘기는 카드(장소 추가) — 키보드 위 입력줄이 떠 있는 동안(locked)엔 밀어 닫지 않는다")]
+    [SerializeField] private SwipePanelController pager;
 
     private const float DecidePx = 14f;   // 이만큼 움직여야 방향을 정한다 (화면 픽셀)
 
@@ -48,6 +53,10 @@ public class R0926SwipeDismiss : R0926Closer
     private float backdropAlpha = -1f;
 
     private static readonly List<RaycastResult> hits = new List<RaycastResult>();
+    private static R0926SwipeDismiss dragging;
+
+    /// <summary>지금 손가락을 따라 아래로 끌리는 시트가 있다 — 옆으로 넘기기는 이 손가락을 놓아준다</summary>
+    public static bool AnyDragging => dragging != null && dragging.phase == Phase.Dragging;
 
     private void Awake()
     {
@@ -66,7 +75,7 @@ public class R0926SwipeDismiss : R0926Closer
         Unfreeze();
         phase = Phase.Idle;
         closing = true;
-        target = rt.rect.height + 400f;
+        target = CloseDistance();
         animating = true;
     }
 
@@ -141,6 +150,7 @@ public class R0926SwipeDismiss : R0926Closer
     private void Begin(Vector2 pos)
     {
         phase = Phase.Ignored;
+        if (pager != null && pager.locked) return;
         var es = EventSystem.current;
         if (es == null) return;
         hits.Clear();
@@ -181,6 +191,7 @@ public class R0926SwipeDismiss : R0926Closer
         }
         animating = false;
         phase = Phase.Dragging;
+        dragging = this;
         startPos = pos;              // 여기서부터 따라 내려온다 (판단 거리만큼 튀지 않게)
         lastPos = pos;
     }
@@ -203,8 +214,20 @@ public class R0926SwipeDismiss : R0926Closer
         bool dismiss = applied > Mathf.Max(minDismiss, h * dismissFraction) || (velocity > flickSpeed && applied > 40f);
         closing = dismiss && closeButton != null;
         pending = closeButton;
-        target = closing ? h + 400f : 0f;
+        target = closing ? CloseDistance() : 0f;
         animating = true;
+    }
+
+    // 다 내려갈 거리 — 시트는 자기 높이 + 여유, 가운데 카드는 윗변이 화면 아래 끝을 넘을 때까지
+    private float CloseDistance()
+    {
+        float d = rt.rect.height + 400f;
+        if (!offScreen || root == null) return d;
+        var c = new Vector3[4];
+        rt.GetWorldCorners(c);
+        var canvasRt = (RectTransform)root.transform;
+        float top = canvasRt.InverseTransformPoint(c[1]).y;   // 지금 윗변 (캔버스 단위 — 이미 내린 만큼 포함)
+        return Mathf.Max(d, applied + top - canvasRt.rect.yMin + 80f);
     }
 
     private void Close()

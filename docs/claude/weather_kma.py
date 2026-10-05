@@ -20,7 +20,9 @@
   wind      ← WSD 풍속 (m/s)
   pty       ← PTY 강수형태 0 없음 · 1 비 · 2 비/눈 · 3 눈 · 5 빗방울 · 6 빗방울눈날림 · 7 눈날림
   rn1       ← RN1 1시간 강수량 (mm, '강수없음' → 0)
-  code      ← PTY(+초단기예보 SKY·낙뢰)로 만든 WMO 코드 — 앱 그림·'비/맑음' 글자가 이걸 쓴다
+  code      ← PTY(+초단기예보 SKY·낙뢰)로 만든 WMO 코드 — 앱 그림·'비/맑음' 글자가 이걸 쓴다.
+              하늘상태(초단기예보)만 못 받았고 비·눈도 없으면 code 는 Open-Meteo 값 그대로 둔다
+              (예전엔 '흐림'으로 덮어 맑은 날도 흐림). 단 Open-Meteo 가 비·눈인데 실황이 '없음'이면 흐림(3)으로
 """
 
 import json
@@ -35,6 +37,7 @@ from datetime import datetime, timedelta, timezone
 KST = timezone(timedelta(hours=9))
 BASE = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
 CACHE_SECONDS = 600          # 같은 격자(5km)는 10분 동안 다시 묻지 않는다
+PARTIAL_CACHE_SECONDS = 120  # 하늘상태(초단기예보)를 못 받았을 땐 2분 뒤 다시
 TIMEOUT = 4                  # 기상청이 느려도 /api/weather 가 오래 막히지 않게
 
 _cache = {}
@@ -114,12 +117,24 @@ def _num(v, default=None):
 
 
 def pty_to_wmo(pty, sky, lightning):
-    """PTY/SKY → Open-Meteo WMO 코드 (앱 R0926WeatherIcon·Condition 이 읽는 값)"""
+    """PTY/SKY → Open-Meteo WMO 코드 (앱 R0926WeatherIcon·Condition 이 읽는 값).
+    비·눈이 없고 하늘상태를 모르면 None — 덮지 않는다 (apply_kma_now 가 Open-Meteo 값을 남긴다)"""
     if pty in (1, 2, 5, 6) and lightning:
         return 95
     if pty:
         return {1: 61, 2: 66, 3: 71, 4: 80, 5: 51, 6: 66, 7: 71}.get(pty, 61)
+    if sky is None:
+        return None
     return {1: 0, 3: 2, 4: 3}.get(sky, 3)
+
+
+def is_precip_wmo(code):
+    """WMO 코드가 비·눈·소나기·뇌우인가"""
+    try:
+        c = int(code)
+    except (TypeError, ValueError):
+        return False
+    return 51 <= c <= 67 or 71 <= c <= 77 or 80 <= c <= 86 or c >= 95
 
 
 def fetch_kma_now(lat, lon, key=None):
@@ -134,7 +149,7 @@ def fetch_kma_now(lat, lon, key=None):
     ck = (nx, ny)
     with _lock:
         hit = _cache.get(ck)
-        if hit and time.time() - hit[0] < CACHE_SECONDS:
+        if hit and time.time() - hit[0] < hit[2]:
             return hit[1]
 
     try:
@@ -143,7 +158,7 @@ def fetch_kma_now(lat, lon, key=None):
     except Exception:
         return None
 
-    sky, lgt = None, 0
+    sky, lgt, sky_ok = None, 0, False
     try:
         d2, t2 = fcst_base()
         items = _get("getUltraSrtFcst", key, d2, t2, nx, ny, 60)
@@ -155,8 +170,9 @@ def fetch_kma_now(lat, lon, key=None):
                 sky = int(_num(i["fcstValue"], 3))
             elif i["category"] == "LGT":
                 lgt = _num(i["fcstValue"], 0) or 0
+        sky_ok = sky is not None
     except Exception:
-        pass   # 하늘상태만 못 받음 — 강수 여부는 실황으로 충분
+        pass   # 하늘상태만 못 받음 — 강수 여부는 실황으로 충분 (code 는 pty_to_wmo 가 None 으로 — 덮지 않는다)
 
     pty = int(_num(obs.get("PTY"), 0))
     now = {
@@ -169,7 +185,7 @@ def fetch_kma_now(lat, lon, key=None):
         "kma_grid": [nx, ny],
     }
     with _lock:
-        _cache[ck] = (time.time(), now)
+        _cache[ck] = (time.time(), now, CACHE_SECONDS if sky_ok else PARTIAL_CACHE_SECONDS)
     return now
 
 
@@ -181,6 +197,9 @@ def apply_kma_now(out, lat, lon):
     for k, v in now.items():
         if v is not None:
             out[k] = v
+    # 하늘상태를 몰라 code 를 덮지 않았는데 Open-Meteo 는 비·눈 — 실황(관측)이 '없음'이니 흐림으로
+    if now.get("code") is None and now.get("pty") == 0 and is_precip_wmo(out.get("code")):
+        out["code"] = 3
     return out
 
 
@@ -188,4 +207,12 @@ if __name__ == "__main__":
     # 격자 변환 확인 (기상청 동네예보 격자표 기준값)
     assert latlon_to_grid(37.5665, 126.9780) == (60, 127), latlon_to_grid(37.5665, 126.9780)   # 서울시청
     assert latlon_to_grid(35.1796, 129.0756) == (98, 76), latlon_to_grid(35.1796, 129.0756)    # 부산시청
+    # 하늘상태를 못 받으면 맑은 날을 흐림으로 덮지 않는다
+    assert pty_to_wmo(0, None, False) is None
+    assert pty_to_wmo(0, 1, False) == 0 and pty_to_wmo(1, None, False) == 61
+    o = {"code": 0}
+    for k, v in {"pty": 0, "code": pty_to_wmo(0, None, False)}.items():
+        if v is not None:
+            o[k] = v
+    assert o["code"] == 0
     print("ok", latlon_to_grid(36.6361, 126.8280))

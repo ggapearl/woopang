@@ -972,7 +972,7 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private int maxFullObjects = 16;
     [Tooltip("공공데이터(앱 내장 이미지) 전용 Full 한도 — 메인 예산과 별도(가산). 근처 공공시설을 박스 대신 실제 오브젝트로 보장 표시. ⚠️ 너무 크면 저사양폰 부담(권장 16~24)")]
     [SerializeField] private int maxPublicFullObjects = 20;
-    [Tooltip("공공데이터 Full 중 공중화장실 최대 수 — 화장실이 공공데이터의 대부분이라 도심에선 공공 Full 이 화장실로만 찰 수 있다. 넘는 화장실은 일반 IndicatorOnly 로")]
+    [Tooltip("공중화장실은 가까운 이 수만큼만 (3D·화살표 합쳐) — 화장실이 공공데이터의 대부분이라 도심에선 화장실로만 찰 수 있다. 넘는 화장실은 예산을 쓰지 않고 건너뛴다 ('화장실' 분류 칩을 고른 동안은 넘는 것도 화살표로)")]
     [SerializeField] private int maxToiletFullObjects = 3;
     [Tooltip("IndicatorOnly 경량 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
     [SerializeField] private int maxIndicatorObjects = 16;
@@ -1361,6 +1361,12 @@ public class FilterManager : MonoBehaviour
         // 기존대로 maxTotalObjects로 묶음. early-break 대신 끝까지 순회(반경 내 후보만 평가, 저비용).
         int publicFullCount = 0;
         int toiletFullCount = 0;
+        // 화장실은 가까운 maxToiletFullObjects 곳까지만 (3D·화살표 합쳐). 넘는 화장실이 화살표·박스로 메인 예산을 차지해
+        // 화장실 많은 도심에서 사용자 업로드 장소가 밀려났다 → 넘는 화장실은 건너뛰고 다음 장소가 그 자리를 채운다.
+        // 건너뛴 화장실은 배분되지 않아 히스테리시스(20m 우대)를 받지 못하므로 3번째 경계에서 깜빡이지 않는다.
+        // '화장실' 분류 칩을 고른 동안은 화장실을 찾는 중이라 넘는 화장실도 예전처럼 화살표로 둔다
+        bool toiletFocus = GetActiveCategoryFilter() == "toilet";
+        int toiletShown = 0;
         foreach (var item in allPlaces)
         {
             // 표시 반경 밖은 제외 (PlaceListManager.distanceSlider 동기화)
@@ -1376,9 +1382,11 @@ public class FilterManager : MonoBehaviour
             int nonPublicFull = newFullSet.Count - publicFullCount;
             bool mainBudgetFull = (nonPublicFull + newIndicatorSet.Count) >= maxTotalObjects;
 
-            // 1) 공공데이터 Full — 별도 예산(가산), 메인 total 한도와 무관
-            //    화장실은 maxToiletFullObjects 까지만 — 넘는 화장실은 아래 IndicatorOnly 로
             bool isToilet = item.data.category == "toilet";
+            if (isToilet && !toiletFocus && toiletShown >= maxToiletFullObjects) continue;
+
+            // 1) 공공데이터 Full — 별도 예산(가산), 메인 total 한도와 무관
+            //    화장실 Full 은 maxToiletFullObjects 까지만
             if (isPublic && withinFull
                 && publicFullCount < maxPublicFullObjects
                 && (!isToilet || toiletFullCount < maxToiletFullObjects)
@@ -1388,7 +1396,7 @@ public class FilterManager : MonoBehaviour
                 {
                     fullProviderMap[item.data.uniqueId] = item.provider;
                     publicFullCount++;
-                    if (isToilet) toiletFullCount++;
+                    if (isToilet) { toiletFullCount++; toiletShown++; }
                 }
                 continue;
             }
@@ -1408,7 +1416,7 @@ public class FilterManager : MonoBehaviour
                 && newIndicatorSet.Count < maxIndicatorObjects
                 && IsPassingManagerToggle(item.data, filters))
             {
-                newIndicatorSet.Add(item.data.uniqueId);
+                if (newIndicatorSet.Add(item.data.uniqueId) && isToilet) toiletShown++;
                 indicatorProviderMap[item.data.uniqueId] = item.provider;
             }
         }

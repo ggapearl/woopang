@@ -8,7 +8,7 @@ namespace Redesign0926
 {
     /// <summary>
     /// v12: 창이 뜨고 닫히는 길 정리.
-    ///  · 아래로 끌어 닫기(R0926SwipeDismiss) — 목록·메시지·대화방·프로필·AI·신고·더보기·팔로우·춤·사진 고르기
+    ///  · 아래로 끌어 닫기(R0926SwipeDismiss) — 목록·추가(v19)·메시지·대화방·AI·신고·더보기·팔로우·춤·사진 고르기 (프로필은 ProfileFade)
     ///  · 안드로이드 뒤로가기(ClickButtonOnBack) — 뒤로가기로 안 닫히던 창들에 닫기 버튼 등록.
     ///    열린 창이 없으면 BackButtonHandler 가 앱을 뒤로 보낸다(moveTaskToBack)
     ///  · 대화방 도크 X — 정리(CloseChatRoom) 없이 끄고 자기 자신까지 꺼 두 번째부터 안 보이던 것 → 정리 후 메인으로
@@ -123,6 +123,8 @@ namespace Redesign0926
         private static readonly SheetDef[] Sheets =
         {
             S("ListPanel/Sheet0926", "ListPanel/DockMirror0926/XButton_List", new[] { "ListPanel/DockMirror0926/XButton_List" }),
+            // 추가 — 두 카드를 감싼 틀째 내려간다 (좌우 넘기기와는 같은 방향 잠금 · 2026-10-05)
+            S("UploadPage/UploadSheet0926", "UploadPage/DockMirror0926/XButton_Upload", new[] { "UploadPage/DockMirror0926/XButton_Upload" }),
             S("MessagePanel/Background", "MessagePanel/DockMirror0926/CloseButton", new[] { "MessagePanel/DockMirror0926/CloseButton" }),
             // ← 와 같게: 목록으로. 도크 X 는 정리 후 메인으로 (둘 다 내려간 뒤)
             S("ChatRoomPanel/Background", "ChatRoomPanel/Background/Header/BackButton",

@@ -42,12 +42,13 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         instance = this;
     }
 
+    // 관광공사 API 는 우팡 서버(/proxy)가 대신 부른다 — 인증키는 서버 .env 에만 있고 서버가 붙인다 (앱에 키를 넣지 말 것 · CLAUDE.md 6).
+    // 명세: docs/claude/server-spec-1005.md
     private string BASE_URL => ApiConfig.TOUR_API_PROXY;
-    private const string SERVICE_KEY = "teLNDctkJ9YFlMFaPWTqqwgtgxvewuaqm53dhSOiNpfOV1Q4z8NxyhhvpW4ifx3eKhI8RgodlQ05pxVHAeh1sA==";
-    private readonly string tourApiUrlTemplate = "{0}/locationBasedList?serviceKey={1}&pageNo=1&numOfRows=100&mapX={2}&mapY={3}&radius={4}&listYN=Y&arrange=A&MobileOS=ETC&MobileApp=AppTest&_type=json";
-    private readonly string detailImageUrlTemplate = "{0}/detailImage?serviceKey={1}&contentId={2}&imageYN=Y&numOfRows=10&MobileOS=ETC&MobileApp=AppTest&_type=json";
-    private readonly string detailCommonUrlTemplate = "{0}/detailCommon?serviceKey={1}&contentId={2}&defaultYN=Y&addrinfoYN=Y&overviewYN=Y&MobileOS=ETC&MobileApp=AppTest&_type=json&lang=KO";
-    private readonly string detailPetTourUrlTemplate = "{0}/detailPetTour?serviceKey={1}&contentId={2}&MobileOS=ETC&MobileApp=AppTest&_type=json";
+    private readonly string tourApiUrlTemplate = "{0}/locationBasedList?pageNo=1&numOfRows=100&mapX={1}&mapY={2}&radius={3}&listYN=Y&arrange=A&MobileOS=ETC&MobileApp=AppTest&_type=json";
+    private readonly string detailImageUrlTemplate = "{0}/detailImage?contentId={1}&imageYN=Y&numOfRows=10&MobileOS=ETC&MobileApp=AppTest&_type=json";
+    private readonly string detailCommonUrlTemplate = "{0}/detailCommon?contentId={1}&defaultYN=Y&addrinfoYN=Y&overviewYN=Y&MobileOS=ETC&MobileApp=AppTest&_type=json&lang=KO";
+    private readonly string detailPetTourUrlTemplate = "{0}/detailPetTour?contentId={1}&MobileOS=ETC&MobileApp=AppTest&_type=json";
 
     public GameObject samplePrefab;
 
@@ -227,7 +228,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
         foreach (float radius in loadRadii)
         {
             LogDebug($"[TourAPIManager] {radius}m 반경 데이터 로딩 중...");
-            string tourApiUrl = string.Format(tourApiUrlTemplate, BASE_URL, SERVICE_KEY, longitude, latitude, radius);
+            string tourApiUrl = string.Format(tourApiUrlTemplate, BASE_URL, longitude, latitude, radius);
             yield return StartCoroutine(FetchDataFromTourAPI(tourApiUrl, latitude, longitude));
             if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
@@ -681,7 +682,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             yield break;
         }
 
-        string url = string.Format(detailImageUrlTemplate, BASE_URL, SERVICE_KEY, place.contentid);
+        string url = string.Format(detailImageUrlTemplate, BASE_URL, place.contentid);
         LogDebug($"[TourAPIManager] detailImage 요청: {url}");
         int retryCount = 3;
         for (int i = 0; i < retryCount; i++)
@@ -741,7 +742,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             yield break;
         }
 
-        string url = string.Format(detailCommonUrlTemplate, BASE_URL, SERVICE_KEY, place.contentid);
+        string url = string.Format(detailCommonUrlTemplate, BASE_URL, place.contentid);
         LogDebug($"[TourAPIManager] detailCommon 요청 (국문): {url}");
         int retryCount = 3;
         UnityWebRequest request = null;
@@ -801,7 +802,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
             yield break;
         }
 
-        string url = string.Format(detailPetTourUrlTemplate, BASE_URL, SERVICE_KEY, place.contentid);
+        string url = string.Format(detailPetTourUrlTemplate, BASE_URL, place.contentid);
         LogDebug($"[TourAPIManager] detailPetTour 요청: {url}");
         int retryCount = 3;
         UnityWebRequest request = null;
