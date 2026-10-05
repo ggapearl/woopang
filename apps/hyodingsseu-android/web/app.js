@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-05d';
+  const WEB_VERSION = '2026-10-06a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -54,7 +54,7 @@
   // ── 상태 (DeskStore) ───────────────────
   const S = {
     items: [], agentState: 'idle', link: { k: 'connecting' }, name: '효딩쓰', host: 'gui', model: 'normal',
-    models: MODEL_DEFAULTS, workers: [], uploadingVoice: false, paired: false, pairMessage: null,
+    models: MODEL_DEFAULTS, workers: [], uploadingVoice: false, paired: false, pairMessage: null, quick: null,
     speed: parseFloat(local.get('speed', '1.2')) || 1.2,
     replyVoice: local.get('replyVoice', 'voiceOnly'),
     voiceEngine: local.get('voiceEngine', 'phone'),
@@ -127,6 +127,68 @@
 
   // ── 폰 기능 ────────────────────────────
   const haptic = kind => { if (Native) Native.haptic({ kind }).catch(() => {}); };
+
+  // 버튼 효과음 (2026-10-06) — 파일 없이 짧은 음 몇 개. 설정 › 화면 › 버튼 효과음 으로 끈다. [주파수, 시작(초), 길이, 크기]
+  const SFX = {
+    tap: [[1150, 0, 0.035, 0.045]],
+    start: [[660, 0, 0.07, 0.08], [990, 0.08, 0.09, 0.08]],
+    stop: [[990, 0, 0.07, 0.07], [660, 0.08, 0.1, 0.07]],
+    send: [[740, 0, 0.05, 0.06], [1180, 0.05, 0.08, 0.05]],
+    menu: [[880, 0, 0.03, 0.035]],
+    del: [[520, 0, 0.06, 0.05], [390, 0.06, 0.08, 0.045]],
+    error: [[220, 0, 0.16, 0.06]],
+  };
+  const sfx = {
+    ctx: null,
+    play(kind) {
+      if (local.get('sfx', '1') !== '1') return;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        if (!this.ctx) this.ctx = new AC();
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        const t0 = this.ctx.currentTime + 0.01;
+        (SFX[kind] || SFX.tap).forEach(([f, at, dur, vol]) => {
+          const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+          o.type = 'sine';
+          o.frequency.value = f;
+          g.gain.setValueAtTime(0.0001, t0 + at);
+          g.gain.exponentialRampToValueAtTime(vol, t0 + at + 0.008);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+          o.connect(g).connect(this.ctx.destination);
+          o.start(t0 + at);
+          o.stop(t0 + at + dur + 0.02);
+        });
+      } catch (e) { /* 소리가 안 나도 버튼은 그대로 */ }
+    },
+  };
+
+  // 이 폰 안 보관함(IndexedDB) — 보내지 못한 녹음을 앱을 다시 열어도 남겨 둔다 (2026-10-06)
+  const idb = {
+    db: null,
+    open() {
+      if (this.db) return Promise.resolve(this.db);
+      return new Promise((res, rej) => {
+        const r = indexedDB.open('hyodingsseu', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => { this.db = r.result; res(r.result); };
+        r.onerror = () => rej(r.error);
+      });
+    },
+    async run(mode, fn) {
+      try {
+        const db = await this.open();
+        return await new Promise((res, rej) => {
+          const tx = db.transaction('kv', mode), q = fn(tx.objectStore('kv'));
+          tx.oncomplete = () => res(q && q.result);
+          tx.onerror = () => rej(tx.error);
+        });
+      } catch (e) { return undefined; }
+    },
+    get(k) { return this.run('readonly', s => s.get(k)); },
+    put(k, v) { return this.run('readwrite', s => s.put(v, k)); },
+    del(k) { return this.run('readwrite', s => s.delete(k)); },
+  };
 
   /** PC 문서 경로 → PC 효딩쓰가 서명한 링크(30일)를 받아 앱 밖(브라우저)에서 연다 */
   async function openDoc(path) {
@@ -206,6 +268,7 @@
         });
         if (typeof r.seq === 'number') seq = Math.max(seq, r.seq);
         if (typeof r.state === 'string') S.agentState = r.state;
+        takeQuick(r.quick);
         renderStatus();
         afterChange(stick || force, (r.events || []).length > 0);
       } catch (e) {
@@ -229,7 +292,7 @@
       if (S.paired) startPolling();
     } else {
       stopPolling();                                    // 45초 넘게 안 보이면 PC 가 텔레그램으로도 보낸다
-      if (recorder.recording) { recorder.cancel(); renderStatus(); }
+      if (recorder.recording) interruptRecording();     // 버리지 않고 남겨 둔다 — 돌아와서 보내기 (10/6)
     }
   }
 
@@ -400,37 +463,98 @@
     },
   };
 
+  // 녹음 (2026-10-06) — 녹음 중엔 입력칸 자리에 붉은 띠(● 시간·소리 막대·✕). 마이크나 보내기를 누르면 보낸다.
+  // 앱이 뒤로 가거나(잠금·앱 바꾸기) 올리다 끊기면 녹음을 이 폰에 남겨 두고, 보내기를 누르면 다시 보낸다(앱을 다시 열어도).
+  const voice = { pending: null, startedAt: 0, tick: 0 };
+  const clock = ms => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+  function startTick() {
+    clearInterval(voice.tick);
+    voice.tick = setInterval(renderRecStrip, 500);
+  }
+  function stopTick() { clearInterval(voice.tick); voice.tick = 0; }
+
   async function toggleRecording() {
     if (recorder.recording) { finishRecording(); return; }
+    if (S.uploadingVoice) return;
+    if (voice.pending) { toast('보내지 못한 녹음이 있어요 — 보내기를 누르거나 ✕ 로 버려 주세요.'); return; }
     speaker.stop();
+    sfx.play('start');
+    await sleep(180);                                       // 시작음이 녹음에 섞이지 않게
     if (await recorder.start()) {
       haptic('tap');
+      voice.startedAt = Date.now();
+      startTick();
     } else {
+      sfx.play('error');
       toast('마이크를 쓸 수 없어요 — 설정 › 애플리케이션 › 효딩쓰 › 권한 › 마이크를 켜 주세요.');
     }
     renderStatus();
   }
 
+  /** 녹음을 끝낸다 — 짧으면 버리고, 아니면 녹음본(보관할 것)을 돌려준다 */
+  async function stopRecording() {
+    const ms = Date.now() - voice.startedAt;
+    const blob = await recorder.stop();
+    stopTick();
+    renderStatus();
+    if (!blob || blob.size <= 3000) return null;
+    return { blob, ms, ts: Date.now() };
+  }
+
   async function finishRecording() {
     if (!recorder.recording) return;
-    const blob = await recorder.stop();
-    renderStatus();
-    if (!blob || blob.size <= 3000) {
-      toast('너무 짧아요. 누르고 말씀한 뒤 다시 누르세요.');
-      return;
-    }
+    sfx.play('stop');
+    const v = await stopRecording();
+    if (!v) { toast('너무 짧아요. 누르고 말씀한 뒤 다시 누르세요.'); return; }
+    await uploadVoice(v);
+  }
+
+  async function uploadVoice(v) {
+    if (S.uploadingVoice) return;
+    voice.pending = v;
+    idb.put('voice', v);                                    // 올리는 사이 앱이 닫혀도 남게
     S.uploadingVoice = true;
     renderStatus();
     try {
-      const r = await api.request('voice', { method: 'POST', body: blob, contentType: blob.type || 'audio/webm', timeout: 100000 });
+      const r = await api.request('voice', { method: 'POST', body: v.blob, contentType: v.blob.type || 'audio/webm', timeout: 100000 });
+      voice.pending = null;
+      idb.del('voice');
       if (!String(r.text || '').trim()) toast('잘 들리지 않았어요. 다시 말씀해 주세요.');
-      else speakNext = true;
+      else { speakNext = true; sfx.play('send'); }
     } catch (e) {
-      show(e);
+      sfx.play('error');
+      if (e && e.status === 401) { show(e); return; }
+      toast('녹음을 보내지 못했어요 — 보내기를 누르면 다시 보내요.');
     } finally {
       S.uploadingVoice = false;
       renderStatus();
     }
+  }
+
+  async function interruptRecording() {
+    const v = await stopRecording();
+    if (v) { voice.pending = v; idb.put('voice', v); }
+    renderStatus();
+  }
+
+  function cancelRecording() {
+    recorder.cancel();
+    stopTick();
+    sfx.play('del');
+    renderStatus();
+  }
+
+  function discardVoice() {
+    voice.pending = null;
+    idb.del('voice');
+    sfx.play('del');
+    renderStatus();
+  }
+
+  async function loadPendingVoice() {
+    const v = await idb.get('voice');
+    if (v && v.blob && !voice.pending && !recorder.recording) { voice.pending = v; renderStatus(); }
   }
 
   // ── 답을 소리로 (Speaker) ───────────────
@@ -629,6 +753,7 @@
     S.agentState = st.state || 'idle';
     const ws = (st.office || []).map(worker).filter(Boolean);
     if (ws.length) S.workers = ws;
+    takeQuick(st.quick);
 
     S.items = [];
     openAI = [];
@@ -1319,6 +1444,7 @@
     if (!it || document.querySelector('.msg-menu')) return false;
     pressOpenedAt = Date.now();
     haptic('tap');
+    sfx.play('menu');
     el.classList.add('pressed');
     const peek = plainText(it).replace(/\s+/g, ' ').trim() || ((it.images || []).length ? '사진' : (it.files || []).length ? '파일' : '');
     const row = (icon, label, fn, cls) => h('button', { class: 'mrow' + (cls ? ' ' + cls : ''), onclick: () => { close(); fn(); } }, svg(icon), label);
@@ -1350,6 +1476,7 @@
       try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
       ta.remove();
     }
+    if (ok) sfx.play('tap');
     toast(ok ? '복사했어요' : '복사하지 못했어요');
   }
 
@@ -1371,6 +1498,7 @@
     try {
       await api.post('chat/delete', { mid: it.mid });
       removeItem(it);
+      sfx.play('del');
       toast('지웠어요');
     } catch (e) {
       if (it.el) it.el.classList.remove('pressed');
@@ -1393,6 +1521,7 @@
     try {
       await api.post('chat/wipe', {});
       apply({ type: 'wiped' });
+      sfx.play('del');
       toast('대화를 모두 지웠어요');
     } catch (e) {
       show(e);
@@ -1408,8 +1537,9 @@
   }
 
   function statusText() {
-    if (recorder.recording) return '듣고 있어요 — 다시 누르면 보내요';
+    if (recorder.recording) return '녹음 중 — 마이크나 보내기를 누르면 보내요';
     if (S.uploadingVoice) return '받아적는 중';
+    if (voice.pending) return '보내지 못한 녹음이 있어요';
     if (speaker.speaking) return '말하는 중';
     const st = { thinking: '생각하는 중', working: '일하는 중', waiting: '대표님 허락을 기다려요' }[S.agentState];
     if (st) return st;
@@ -1418,6 +1548,7 @@
   }
 
   const modelLabel = () => (S.models.find(m => m.key === S.model) || {}).label || '보통';
+  const modelPill = () => modelLabel().replace(/^SONNET 5\.5 /i, 'S5.5 ');    // 제목줄은 좁다 — 고르는 메뉴엔 전체 이름
 
   function renderStatus() {
     const main = $('#main');
@@ -1425,7 +1556,7 @@
     main.querySelector('.bar .orb').dataset.state = orbState();
     main.querySelector('.who b').textContent = S.name;
     main.querySelector('.who small').textContent = statusText();
-    main.querySelector('.pill').textContent = modelLabel();
+    main.querySelector('.pill').textContent = modelPill();
     const banner = main.querySelector('.banner');
     const off = offlineMessage();
     banner.hidden = !off;
@@ -1436,13 +1567,42 @@
     mic.innerHTML = '';
     mic.append(S.uploadingVoice ? h('i', { class: 'spinner' }) : svg(recorder.recording ? 'stop' : 'mic'));
     mic.setAttribute('aria-label', recorder.recording ? '녹음 끝내고 보내기' : '말로 시키기');
+    renderRecStrip();
     renderSend();
     renderDrawerFooter();
   }
 
+  /** 녹음 띠 — 녹음 중(● 시간·소리 막대·✕) · 받아적는 중 · 보내지 못한 녹음(✕ 버리기). 띠가 있으면 입력칸을 감춘다. */
+  function renderRecStrip() {
+    const main = $('#main');
+    const strip = main && main.querySelector('.rec-strip');
+    if (!strip) return;
+    const mode = recorder.recording ? 'rec' : S.uploadingVoice ? 'up' : voice.pending ? 'pend' : '';
+    main.querySelector('.row textarea').hidden = !!mode;
+    strip.hidden = !mode;
+    if (strip.dataset.mode === mode && mode !== 'rec') return;
+    if (mode === 'rec' && strip.dataset.mode === 'rec') {                 // 0.5초마다 — 시간만 바꾼다
+      strip.querySelector('b').textContent = '녹음 중 ' + clock(Date.now() - voice.startedAt);
+      return;
+    }
+    strip.dataset.mode = mode;
+    strip.className = 'rec-strip ' + mode;
+    strip.textContent = '';
+    if (mode === 'rec') {
+      strip.append(h('i', { class: 'rdot' }), h('b', { text: '녹음 중 ' + clock(Date.now() - voice.startedAt) }),
+        h('span', { class: 'lv', 'aria-hidden': 'true' }, [0.7, 1.15, 1.5, 1.05, 0.8].map(k => h('i', { style: '--k:' + k }))),
+        h('button', { class: 'x', 'aria-label': '녹음 버리기', onclick: cancelRecording, html: ICON.close }));
+    } else if (mode === 'up') {
+      strip.append(h('i', { class: 'spinner' }), h('b', { text: '받아적는 중' }), h('small', { text: voice.pending ? clock(voice.pending.ms) : '' }));
+    } else if (mode === 'pend') {
+      strip.append(svg('micSm'), h('b', { text: '녹음 ' + clock(voice.pending.ms) }), h('small', { text: '보내지 못했어요 — 보내기 ▶' }),
+        h('button', { class: 'x', 'aria-label': '녹음 버리기', onclick: discardVoice, html: ICON.close }));
+    }
+  }
+
   function renderLevel() {
     const lvl = String(recorder.level.toFixed(3));
-    document.querySelectorAll('.bar .orb, .mic').forEach(el => el.style.setProperty('--lvl', lvl));
+    document.querySelectorAll('.bar .orb, .mic, .rec-strip').forEach(el => el.style.setProperty('--lvl', lvl));
   }
 
   function renderSend() {
@@ -1451,12 +1611,35 @@
     const ta = main.querySelector('textarea');
     const btn = main.querySelector('.send');
     const empty = !ta.value.trim();
-    const stopMode = busy() && empty;
-    btn.className = 'round send' + (stopMode ? ' stop' : '');
-    btn.disabled = !stopMode && empty;
+    const voiceMode = recorder.recording || (!!voice.pending && !S.uploadingVoice);   // 녹음을 보낼 수 있다
+    const stopMode = !voiceMode && busy() && empty;
+    btn.className = 'round send' + (stopMode ? ' stop' : '') + (voiceMode ? ' voice' : '');
+    btn.disabled = S.uploadingVoice || (!voiceMode && !stopMode && empty);
     btn.innerHTML = '';
     btn.append(svg(stopMode ? 'stop' : 'up'));
-    btn.setAttribute('aria-label', stopMode ? '멈추기' : '보내기');
+    btn.setAttribute('aria-label', voiceMode ? '녹음 보내기' : stopMode ? '멈추기' : '보내기');
+  }
+
+  /** 바로 누르기 — PC 효딩쓰가 지금 하는 일에 맞춰 고른 것(없으면 늘 쓰는 것), 두 줄로 (2026-10-06) */
+  function renderChips() {
+    const box = $('#main .chips');
+    if (!box) return;
+    const list = (S.quick && S.quick.length ? S.quick.map(q => [q.label, q.say]) : QUICK).slice(0, 8);
+    const key = JSON.stringify(list);
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    const half = Math.ceil(list.length / 2);
+    const chip = ([t, say]) => h('button', { class: 'chip', text: t, onclick: () => { sfx.play('tap'); send(say); } });
+    box.textContent = '';
+    box.append(h('div', { class: 'chips-in' },
+      h('div', { class: 'chip-row' }, list.slice(0, half).map(chip)),
+      list.length > half ? h('div', { class: 'chip-row' }, list.slice(half).map(chip)) : null));
+  }
+
+  function takeQuick(q) {
+    if (!Array.isArray(q)) return;
+    const ok = q.filter(x => x && typeof x.label === 'string' && typeof x.say === 'string' && x.label && x.say);
+    if (ok.length) { S.quick = ok; renderChips(); }
   }
 
   // ── 화면: 연결 ─────────────────────────
@@ -1524,7 +1707,10 @@
     const sendBtn = h('button', {
       class: 'round send',
       onclick: () => {
+        if (recorder.recording) { finishRecording(); return; }               // 녹음 중 — 끝내고 보낸다
+        if (voice.pending && !S.uploadingVoice) { uploadVoice(voice.pending); return; }   // 끊겼던 녹음을 다시 보낸다
         if (busy() && !ta.value.trim()) { stop(); return; }
+        if (ta.value.trim()) sfx.play('send');
         send(ta.value);
         ta.value = '';
         grow(ta);
@@ -1558,13 +1744,15 @@
       h('div', { class: 'banner', hidden: true }, h('i', { class: 'spinner' }), h('span')),
       h('div', { class: 'chat-wrap' }, chatEl, jumpEl),
       h('div', { class: 'composer' },
-        h('div', { class: 'chips' }, QUICK.map(([t, say]) => h('button', { class: 'chip', text: t, onclick: () => send(say) }))),
-        h('div', { class: 'row' }, ta, mic, sendBtn))),
+        h('div', { class: 'chips' }),
+        h('div', { class: 'row' }, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn))),
       h('div', { class: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite' }));
 
     renderAllItems();
+    renderChips();
     renderStatus();
     scrollToBottom(false);
+    loadPendingVoice();
   }
 
   function helloView() {
@@ -1605,9 +1793,10 @@
   function modelMenu(anchor) {
     const r = anchor.getBoundingClientRect();
     const menu = h('div', { class: 'menu', role: 'menu', style: 'top:' + (r.bottom + 6) + 'px;right:' + Math.max(8, innerWidth - r.right) + 'px' },
-      h('h4', { text: '생각의 깊이' }),
-      S.models.map(m => h('button', { role: 'menuitemradio', 'aria-checked': m.key === S.model ? 'true' : 'false', onclick: () => { close(); setModel(m.key); } },
-        h('i', { text: m.key === S.model ? '✓' : '' }), m.label)));
+      h('h4', { text: '모델' }),
+      S.models.map(m => h('button', { role: 'menuitemradio', 'aria-checked': m.key === S.model ? 'true' : 'false', onclick: () => { close(); sfx.play('tap'); setModel(m.key); } },
+        h('i', { text: m.key === S.model ? '✓' : '' }),
+        h('span', { class: 'ml' }, m.label, /ultracode/i.test(m.label) ? h('small', { text: '여러 에이전트로 꼼꼼히 · 사용량 많음' }) : null))));
     const scrim = h('div', { class: 'menu-scrim', onclick: () => close() });
     const close = layer(() => { scrim.remove(); menu.remove(); });
     $('#app').append(scrim, menu);
@@ -2054,9 +2243,10 @@
         h('div', { class: 'frow col' }, h('div', { class: 'top' }, '말 빠르기', speedVal), slider),
         h('div', { class: 'frow' }, h('button', { class: 'link', text: '들어 보기', onclick: testVoice })),
       ], '말 빠르기는 PC 스피커·텔레그램 음성 메시지의 소희 목소리에도 함께 적용돼요.'),
-      section('효딩쓰', [row('생각의 깊이', sel(S.models.map(m => [m.key, m.label]), S.model, setModel, '생각의 깊이'))],
-        '모델은 PC 효딩쓰에서 정합니다. 깊게 생각할수록 구독 사용량을 많이 씁니다.'),
-      section('화면', [h('div', { class: 'frow col' }, themeSeg)], null),
+      section('효딩쓰', [row('모델', sel(S.models.map(m => [m.key, m.label]), S.model, setModel, '모델'))],
+        'SONNET 5.5 HIGH 가 기본이에요. ULTRACODE 는 여러 에이전트를 묶어 더 꼼꼼히 하지만 구독 사용량을 훨씬 많이 씁니다.'),
+      section('화면', [h('div', { class: 'frow col' }, themeSeg),
+        row('버튼 효과음', sel([['1', '켜기'], ['0', '끄기']], local.get('sfx', '1'), v => { local.set('sfx', v); sfx.play('tap'); }, '버튼 효과음'))], null),
       section('연결', [
         row('붙은 곳', h('span', { class: 'v', text: S.host === 'brain' ? 'PC 뒤의 두뇌' : 'PC 효딩쓰 창' })),
         row('서버', h('span', { class: 'v', style: 'font-size:12px', text: api.base })),

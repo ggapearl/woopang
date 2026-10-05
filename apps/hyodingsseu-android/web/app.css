@@ -424,3 +424,34 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .mrow:active{background:var(--surface-2)}
 .mrow.danger,.mrow.danger svg{color:var(--pink-deep)}
 .msg-menu .btn{margin-top:6px}
+/* 바로 누르기 두 줄 (2026-10-06) — PC 효딩쓰가 지금 하는 일에 맞춰 고른다. 두 줄이 함께 옆으로 밀린다(안쪽 가로 레일) */
+.chips{display:block}
+.chips-in{display:flex;flex-direction:column;gap:6px;width:max-content}
+.chip-row{display:flex;gap:6px}
+/* 모델 고르기 — ULTRACODE 아래 작은 안내 */
+.menu .ml{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0}
+.menu .ml small{font-size:11px;color:var(--ink-3)}
+/* 녹음 (2026-10-06) — 녹음 중인지 한눈에: 붉은 띠(● 시간·소리 막대·✕), 마이크 둘레가 숨 쉬듯 퍼지고, 보내기도 붉게 */
+.row textarea[hidden]{display:none}
+.rec-strip{flex:1;min-width:0;height:44px;display:flex;align-items:center;gap:8px;padding:0 4px 0 14px;border-radius:22px;
+  background:var(--pink-soft);border:1.5px solid var(--pink);color:var(--pink-deep);font-size:15px;--lvl:0}
+.rec-strip[hidden]{display:none}
+.rec-strip b{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rec-strip small{flex:1;min-width:0;font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-strip > svg{width:18px;height:18px;flex:none}
+.rec-strip .spinner{width:16px;height:16px;flex:none}
+.rec-strip .rdot{width:10px;height:10px;flex:none;border-radius:50%;background:#E91E63;animation:blink .7s ease-in-out infinite alternate}
+.rec-strip .lv{flex:1;min-width:0;display:flex;align-items:center;gap:3px;height:22px}
+.rec-strip .lv i{width:3px;height:100%;border-radius:2px;background:currentColor;transform-origin:center;
+  transform:scaleY(calc(.32 + var(--lvl) * var(--k)));transition:transform .08s ease-out}
+.rec-strip .x{width:34px;height:34px;flex:none;margin-left:auto;border-radius:50%;display:grid;place-items:center;color:var(--ink-2)}
+.rec-strip .x svg{width:16px;height:16px}
+.rec-strip .x:active{background:rgba(0,0,0,.06)}
+.rec-strip.up,.rec-strip.pend{background:var(--surface-2);border-color:var(--line);color:var(--ink)}
+.rec-strip.pend{border-color:var(--pink)}
+.mic.rec::after{content:"";position:absolute;top:-5px;right:-5px;bottom:-5px;left:-5px;border-radius:50%;
+  border:2px solid rgba(233,30,99,.65);animation:recPulse 1.3s ease-out infinite;pointer-events:none}
+@keyframes recPulse{from{transform:scale(.88);opacity:.95}to{transform:scale(1.5);opacity:0}}
+.send.voice{background:var(--pink);color:#fff;animation:sendNudge 1.6s ease-in-out infinite}
+@keyframes sendNudge{0%,100%{box-shadow:0 0 0 0 rgba(233,30,99,.45)}50%{box-shadow:0 0 0 7px rgba(233,30,99,0)}}
+@media (prefers-reduced-motion:reduce){.mic.rec::after,.send.voice,.rec-strip .rdot{animation:none}}
