@@ -1700,7 +1700,8 @@ public class FilterManager : MonoBehaviour
     // ============================================================
     // 목록을 못 받은 매니저 다시 받기 — 처음 켤 때 인터넷이 끊겨 있었으면 1km 이동이나 백그라운드 복귀 전까지
     // 다시 받지 않아, 끊김 안내의 '다시 이어지면 저절로 불러와요' 가 지켜지지 않았다.
-    // 한 번이라도 받은 매니저(IsCacheReady)는 건드리지 않는다.
+    // 1km 이동 뒤 다시 받기가 실패한 매니저(IPlaceCacheLoadTime — 보낸 뒤로 받은 적 없음)도 같은 간격으로 다시 받는다
+    // (예전엔 다음 1km 를 갈 때까지 옛 자리 목록 그대로). 잘 받고 있는 매니저는 건드리지 않는다.
     // ============================================================
 
     private static bool IsOnline()
@@ -1731,7 +1732,7 @@ public class FilterManager : MonoBehaviour
         float now = Time.realtimeSinceStartup;
         foreach (var provider in cacheProviders)
         {
-            if (provider == null || provider.IsCacheReady) continue;
+            if (provider == null || (provider.IsCacheReady && !RefreshFailed(provider))) continue;
             cacheRetryCount.TryGetValue(provider, out int tries);
             if (immediate) tries = 0;
             else if (lastCacheRequestTime.TryGetValue(provider, out float last))
@@ -1749,6 +1750,10 @@ public class FilterManager : MonoBehaviour
             provider.RefreshCache(gps.x, gps.y);
         }
     }
+
+    // 다시 받기를 보낸 뒤로 한 번도 받지 못했다 — 받는 중일 수도 있어 위 간격(처음 20초)이 지난 뒤에만 다시 보낸다
+    private bool RefreshFailed(IPlaceCacheProvider provider)
+        => provider is IPlaceCacheLoadTime lt && lastCacheRequestTime.TryGetValue(provider, out float asked) && lt.LastLoadedAt < asked;
 
     /// <summary>
     /// uniqueId에서 rawId 추출 ("dm_123" → "123", "subway_강남역" → "강남역")

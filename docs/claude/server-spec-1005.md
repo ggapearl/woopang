@@ -9,6 +9,7 @@
 | 2 | `/api/weather` 에 `humidity` | 이미 읽음 | 언제든 |
 | 3 | `upload_id` 중복 거르기 | v19 부터 '같은 내용 = 같은 키, 다른 장소 = 새 키' | 언제든 (먼저 켜도 예전 앱은 안 보냄) |
 | 4 | TourAPI 키를 서버가 붙이기 (`/proxy`) | **v19 앱은 키를 안 보낸다** | **서버 먼저 → 그다음 앱 출시** |
+| 5 | 친구 지도 타일 (`/api/map/tiles/…`) | v21 부터 읽음 — 없으면 예전 그림만 (200배에서 멈추고 흐림) | 언제든 (켜는 순간 동네 수준 확대) |
 
 ---
 
@@ -138,3 +139,54 @@ v19 앱: **`serviceKey` 를 보내지 않는다**. 지하철·기차·터미널 
 4. **배포 순서: 서버 먼저.** 서버가 키를 붙이기 전에 v19 앱이 나가면 공공데이터(관광지) 오브젝트가 안 뜬다.
    확인: 브라우저로 `https://<서버>/proxy/locationBasedList?pageNo=1&numOfRows=5&mapX=126.978&mapY=37.5665&radius=1000&listYN=Y&arrange=A&MobileOS=ETC&MobileApp=AppTest&_type=json` (키 없이) → 관광지 JSON 이 오면 됨
 5. 다 바뀐 뒤 공공데이터포털에서 **옛 키 폐기/재발급** (대표님 확인 후)
+
+## 5. 친구 지도 깊은 확대 — 지도 타일 (`/api/map/tiles/…`)
+
+앱의 친구 지도(목록 시트 ▸ 지도)는 앱에 든 세계 그림 두 장뿐이라 한반도 크기에서 더 확대가 안 됐다. v21 앱은 **우팡 서버만** 불러 지도 타일을 겹친다
+(지도 회사 키·캐시는 서버 몫 — 앱이 지도 회사를 직접 부르지 않는다). 서버가 아직 없으면 앱은 타일을 안 받고 예전 그림으로 200배까지만.
+
+1. `GET /api/map/tiles/info` → JSON (앱은 지도를 처음 열 때 한 번, 실패하면 10분 뒤 다시)
+   ```json
+   {"enabled": true, "max_zoom": 16, "attribution": "© MapTiler © OpenStreetMap contributors"}
+   ```
+   - `enabled` 가 true 일 때만 앱이 타일을 받는다. 키가 없거나 끄고 싶으면 `{"enabled": false}` 또는 404.
+   - `max_zoom`: 앱은 최대 16 까지만 쓴다(화면 폭 약 2km — 친구 위치가 약 1km 단위라 충분). `attribution`: 지도 회사가 요구하는 출처 글 — 타일이 보일 때 지도 왼쪽 아래에 나온다.
+2. `GET /api/map/tiles/{z}/{x}/{y}.png` → 256x256 타일 (웹 메르카토르 XYZ — OSM 과 같은 번호, y 는 위에서 아래로)
+   - 앱은 z 5~16 만 요청. **z·x·y 를 정수로 검사**하고 `0 ≤ z ≤ max_zoom`, `0 ≤ x,y < 2^z` 가 아니면 404 (아무 주소나 받아 지도 회사로 넘기지 않게)
+   - 지도 회사 주소는 `.env` 의 `MAP_TILE_URL`(키 포함 템플릿) — 코드·git 에 키를 쓰지 말 것. 어두운 바탕(앱 바다색 #0E1215 비슷)
+     후보: MapTiler `dataviz-dark`(전 세계, 유료 등급) · 브이월드 `midnight`(국내 상세, 무료 키 — 주소의 x/y 순서가 다르고 국내만) · Stadia `alidade_smooth_dark`.
+     ⚠ `tile.openstreetmap.org` 를 직접 끌어 쓰는 건 OSM 사용 정책 위반(앱 규모 사용 금지) — 쓰지 말 것. 어느 회사로 할지는 대표님 결정
+   - **디스크 캐시** `server/cache/tiles/{z}/{x}/{y}.png` (있으면 바로 돌려줌) + `Cache-Control: public, max-age=2592000` — 타일은 거의 안 바뀐다. nginx 가 캐시 폴더를 직접 내줘도 된다
+   - 지도 회사 호출 예외(`requests.RequestException`)는 잡아서 502 — 예외 글에 키 든 주소가 찍히니 로그에 그대로 남기지 말 것 (4 와 같음)
+   - (권장) IP·로그인 토큰 기준 분당 제한 — 앱은 로그인돼 있으면 `Authorization: Bearer` 를 붙인다
+   ```python
+   @app.route('/api/map/tiles/info')
+   def map_tiles_info():
+       if not os.getenv('MAP_TILE_URL'):
+           return jsonify(enabled=False)
+       return jsonify(enabled=True, max_zoom=int(os.getenv('MAP_TILE_MAX_ZOOM', '16')), attribution=os.getenv('MAP_TILE_ATTRIBUTION', ''))
+
+   @app.route('/api/map/tiles/<int:z>/<int:x>/<int:y>.png')
+   def map_tile(z, x, y):
+       tpl = os.getenv('MAP_TILE_URL')
+       max_z = int(os.getenv('MAP_TILE_MAX_ZOOM', '16'))
+       if not tpl or not (0 <= z <= max_z and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
+           return '', 404
+       path = os.path.join(TILE_CACHE_DIR, str(z), str(x), f'{y}.png')
+       if not os.path.exists(path):
+           try:
+               r = requests.get(tpl.format(z=z, x=x, y=y), timeout=8)
+           except requests.RequestException:
+               return '', 502                      # 예외 글에 키가 든 주소가 있다 — 남기지 않는다
+           if r.status_code != 200:
+               return '', 404 if r.status_code == 404 else 502
+           os.makedirs(os.path.dirname(path), exist_ok=True)
+           tmp = path + '.tmp'
+           with open(tmp, 'wb') as f:
+               f.write(r.content)
+           os.replace(tmp, path)                   # 받는 도중 다른 요청이 반쪽 파일을 읽지 않게
+       resp = send_file(path, mimetype='image/png')
+       resp.headers['Cache-Control'] = 'public, max-age=2592000'
+       return resp
+   ```
+   - 확인: `/api/map/tiles/info` → enabled true · `/api/map/tiles/12/3492/1586.png` (서울시청) → 그림 · `/api/map/tiles/12/99999/1.png` → 404

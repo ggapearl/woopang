@@ -10,6 +10,7 @@ using UnityEngine.UI;
 /// 목록 시트의 '지도' — 맞팔 친구의 대략적인 위치(약 1km)를 세계 지도에.
 ///  · 서버: /api/p2p/friends_map · /api/p2p/map_share (토큰 필수, 규칙은 서버가 지킨다)
 ///  · 지도: Natural Earth 세계 지도 한 장 + 동아시아 정밀 지도를 겹친 메르카토르 (외부 지도 서버 호출 없음)
+///    + 깊이 확대하면 우팡 서버의 지도 타일(R0926MapTiles — 서버가 켜 둔 경우만)
 ///  · 한 손가락 이동 · 두 손가락 확대 · 두 번 탭 확대 · +/− · 내 위치 · 가까운 친구는 숫자로 묶음
 /// 이 컴포넌트는 지도 영역(viewport)에 붙는다 — 끌기·휠 이벤트를 직접 받는다.
 /// </summary>
@@ -33,8 +34,11 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [SerializeField] private Image mePulse;
     [SerializeField] private Text chipText;
     [SerializeField] private float mapAspect = 4096f / 2283f;
-    [SerializeField] private float maxZoom = 40f;
-    [SerializeField] private float clusterRadius = 96f;
+    [Tooltip("타일이 없을 때 최대 확대 (세계 지도 폭의 배수) — 앱에 든 그림만으론 이 이상은 뭉개진다")]
+    [SerializeField] private float maxZoom = 200f;
+    [Tooltip("깊은 확대용 서버 지도 타일 — 서버가 켜 두면 동네 수준(화면 폭 약 2km)까지")]
+    [SerializeField] private R0926MapTiles tiles;
+    [SerializeField] private float clusterRadius = 120f;
 
     [Header("동의 · 안내 카드")]
     [SerializeField] private GameObject dim;
@@ -332,6 +336,15 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private static float MercY(float lat) => Mathf.Log(Mathf.Tan(Mathf.PI / 4f + Mathf.Clamp(lat, -85f, 85f) * Mathf.Deg2Rad / 2f));
     private static readonly float YTop = MercY(LatTop), YBot = MercY(LatBottom);
 
+    /// <summary>웹 메르카토르 세로 좌표(0 = 북위 85.05°, 1 = 남위 85.05° — 지도 타일 줄) → 이 지도의 정규 세로 좌표 (둘은 1차식 관계)</summary>
+    public static float WebToNormY(float webY) => (YTop - Mathf.PI + 2f * Mathf.PI * webY) / (YTop - YBot);
+
+    private bool Tiled => tiles != null && tiles.Available;
+    /// <summary>최대 확대 — 타일이 있으면 그 최대 단계까지, 없으면 maxZoom</summary>
+    private float MaxZoom => Tiled ? Mathf.Max(maxZoom, tiles.ZoomForLevel(tiles.MaxLevel + 0.25f, viewport.rect.width, Scale)) : maxZoom;
+    /// <summary>친구·내 위치를 눌렀을 때 확대 — 타일이 있으면 시내 수준(13 단계 · 화면 폭 약 15km)</summary>
+    private float FocusZoom => Tiled ? Mathf.Min(MaxZoom, tiles.ZoomForLevel(13f, viewport.rect.width, Scale)) : 16f;
+
     /// <summary>위경도 → 지도 정규 좌표 (0,0 = 왼쪽 위, 1,1 = 오른쪽 아래)</summary>
     public static Vector2 Norm(float lat, float lon) => new Vector2((lon + 180f) / 360f, (YTop - MercY(lat)) / (YTop - YBot));
 
@@ -354,7 +367,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     private void ZoomAt(Vector2 viewPoint, float factor)
     {
-        float nz = Mathf.Clamp(zoom * factor, 1f, maxZoom);
+        float nz = Mathf.Clamp(zoom * factor, 1f, MaxZoom);
         Vector2 n = Vector2.Scale(viewPoint - origin, new Vector2(1f / MapSize.x, 1f / MapSize.y));
         zoom = nz;
         origin = viewPoint - Vector2.Scale(n, MapSize);
@@ -379,15 +392,17 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         Vector2 min = pts[0], max = pts[0];
         foreach (var p in pts) { min = Vector2.Min(min, p); max = Vector2.Max(max, p); }
         Vector2 v = viewport.rect.size;
-        float bw = Mathf.Max(max.x - min.x, 0.004f), bh = Mathf.Max(max.y - min.y, 0.004f);
+        float minBox = Tiled ? 0.00005f : 0.004f;   // 친구들이 한 동네에 모여 있어도 지나치게 확대하지 않게 (타일 있으면 약 2km)
+        float bw = Mathf.Max(max.x - min.x, minBox), bh = Mathf.Max(max.y - min.y, minBox);
         float z = Mathf.Min(1f / (bw * 1.4f), v.y * mapAspect / (bh * 1.4f * v.x));
-        zoom = Mathf.Clamp(z, 1f, pts.Count == 1 ? 14f : maxZoom * 0.5f);
+        zoom = Mathf.Clamp(z, 1f, pts.Count == 1 ? Mathf.Max(14f, FocusZoom * 0.1f) : MaxZoom * 0.5f);
         CenterOn((min + max) / 2f);
     }
 
     // ── 핀 ───────────────────────────────────────────────────
     private void Layout(bool force = false)
     {
+        if (tiles != null) tiles.UpdateView(origin, MapSize, viewport.rect.size, Scale);
         if (pinLayer == null) return;
         Vector2 me = MyLatLon();
         if (meDot != null)
@@ -477,7 +492,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             if (sel != null) sel.gameObject.SetActive(r.name == "Friend_" + f.user_id);
         }
         Vector2 target = Norm(f.lat, f.lon);
-        StartAnim(target, Mathf.Max(zoom, 16f));
+        StartAnim(target, Mathf.Max(zoom, FocusZoom));
     }
 
     public void ZoomIn() => Animate(viewport.rect.size / 2f, 2f);
@@ -487,13 +502,13 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         Vector2 me = MyLatLon();
         if (me == Vector2.zero) return;
-        StartAnim(Norm(me.x, me.y), Mathf.Max(zoom, 16f));
+        StartAnim(Norm(me.x, me.y), Mathf.Max(zoom, FocusZoom));
     }
 
     private void Animate(Vector2 viewPoint, float factor)
     {
         Vector2 n = Vector2.Scale(viewPoint - origin, new Vector2(1f / MapSize.x, 1f / MapSize.y));
-        StartAnim(n, Mathf.Clamp(zoom * factor, 1f, maxZoom), keepPoint: factor != 3f ? viewPoint : (Vector2?)null);
+        StartAnim(n, Mathf.Clamp(zoom * factor, 1f, MaxZoom), keepPoint: factor != 3f ? viewPoint : (Vector2?)null);
     }
 
     private void StartAnim(Vector2 n, float targetZoom, Vector2? keepPoint = null)

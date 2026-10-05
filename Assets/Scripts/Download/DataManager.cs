@@ -11,7 +11,7 @@ using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using UnityEngine.SceneManagement;
 
-public class DataManager : MonoBehaviour, IPlaceCacheProvider
+public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTime
 {
     // 개발용 진단 로그 — WOOPANG_DEBUG 가 정의된 빌드에서만 호출이 남는다 (출시 빌드에서는 호출 자체가 빠짐)
     [System.Diagnostics.Conditional("WOOPANG_DEBUG")]
@@ -118,6 +118,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     private void MarkCacheReady()
     {
         isCacheReady = true;
+        LastLoadedAt = Time.realtimeSinceStartup;
         if (cacheReadyEventFired) return;
         cacheReadyEventFired = true;
         CacheBecameReady?.Invoke();
@@ -2013,6 +2014,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider
     public string FilterKey => "publicData";
     public int MaxCacheSize => 100;
     public bool IsCacheReady => isCacheReady;
+    public float LastLoadedAt { get; private set; } = -1f;
 
     public List<CachedPlaceData> GetCachedPlaces()
     {

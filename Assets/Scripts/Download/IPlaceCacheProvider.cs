@@ -53,3 +53,13 @@ public interface IPlaceCacheProvider
     /// </summary>
     event Action CacheBecameReady;
 }
+
+/// <summary>
+/// 장소 목록을 마지막으로 받은 때 (Time.realtimeSinceStartup, 못 받았으면 -1). 1km 이동 뒤 다시 받기가 실패해
+/// 옛 목록에 머물러 있는지 FilterManager 가 보고 다시 받는다. IPlaceCacheProvider 와 따로 둔다 —
+/// 다른 매니저(새로 붙는 것)가 이걸 구현하지 않아도 컴파일이 깨지지 않고, 그 매니저는 다시 받기만 안 한다.
+/// </summary>
+public interface IPlaceCacheLoadTime
+{
+    float LastLoadedAt { get; }
+}

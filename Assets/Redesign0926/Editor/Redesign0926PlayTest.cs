@@ -55,6 +55,8 @@ namespace Redesign0926
             steps.Clear();
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
+            // 스토어 캡처는 날씨를 광화문 좌표로 넣는다 — 판의 지역 이름도 그 자리로 (에디터 위치의 지역이 찍혔다)
+            R0926SkyWeather.EditorRegionOverride = mode == "store" || mode == "store2" || mode == "store3" || mode == "sky" || mode == "ar" ? StoreRegion : null;
             if (mode == "splashprof") PlanSplashProf();
             else if (mode == "chatnav") PlanChatNav();
             else if (mode == "profile")
@@ -504,6 +506,7 @@ namespace Redesign0926
         }
 
         private static string storeSrc;
+        private const string StoreRegion = "종로구 세종로";   // 스토어 캡처 날씨 좌표(광화문 37.5759, 126.9768)의 지역
         private static RawImage backdrop;
 
         private static void PlanStore()
@@ -807,6 +810,7 @@ namespace Redesign0926
             typeof(R0926SkyWeather).GetMethod("Show", F).Invoke(sky, new[] { w });
             typeof(R0926SkyWeather).GetField("hasData", F).SetValue(sky, true);
             typeof(R0926SkyWeather).GetField("nextFetch", F).SetValue(sky, float.MaxValue);
+            sky.EditorRefreshRegion();
             log.Add("  날씨 넣음: " + json.Substring(0, Math.Min(160, json.Length)));
         }
 
@@ -888,6 +892,7 @@ namespace Redesign0926
                 typeof(R0926SkyWeather).GetMethod("Show", F).Invoke(sky, new[] { w });
                 typeof(R0926SkyWeather).GetField("hasData", F).SetValue(sky, true);
                 typeof(R0926SkyWeather).GetField("nextFetch", F).SetValue(sky, float.MaxValue);
+                sky.EditorRefreshRegion();
                 log.Add("  날씨 넣음: " + json.Substring(0, Math.Min(120, json.Length)));
                 Backdrop("bg_sky.png");
                 AimCamera(-62f, 0f);
@@ -1147,6 +1152,7 @@ namespace Redesign0926
             }
             if (steps.Count > 0) return;
             running = false;
+            R0926SkyWeather.EditorRegionOverride = null;
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;
             InputSystem.settings.backgroundBehavior = savedBackground;
             Application.runInBackground = savedRunInBackground;

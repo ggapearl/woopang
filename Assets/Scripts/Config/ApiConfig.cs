@@ -78,6 +78,10 @@ public static class ApiConfig
     // 시설 정보
     public const string NEARBY_FACILITIES = MAIN_SERVER + "/api/nearby-facilities";
 
+    // 친구 지도 깊은 확대용 지도 타일 — 서버가 지도 회사 키를 붙이고 캐시한다 (앱은 우팡 서버만 부른다)
+    public const string MAP_TILES_INFO = MAIN_SERVER + "/api/map/tiles/info";
+    public const string MAP_TILES = MAIN_SERVER + "/api/map/tiles/{z}/{x}/{y}.png";
+
     // 디바이스 추적
     public const string DEVICE_LOCATION = MAIN_SERVER + "/device-location";
     public const string DEVICE_LOCATIONS = MAIN_SERVER + "/device-locations";

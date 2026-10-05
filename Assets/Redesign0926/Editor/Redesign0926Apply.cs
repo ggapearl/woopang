@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 20;  // v20: v19 검토분 — 밀어 닫을 때 시작한 버튼(등록하기·팔로우·로그아웃)이 눌리던 것 · 추가 시트 위쪽을 덮던 투명 누름 영역(XButton_Panel) · 프로필 내릴 때 도크 X 가 카드 위로 비치던 것 · v19: 창 닫기 통일 — 추가·프로필도 아래로 밀어 닫기(추가는 장소/3D모델 넘기기와 같은 방향 잠금) · 추가 카드 손잡이 · 프로필 열리면 도크 칸 X '닫기' · '되돌리기' 알림은 창이 열리면 거둠·가로 자리 · 업로드 제한시간 60초(3D 모델·정보 수정) · v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
+        public const int Version = 21;  // v21: 목록 시트 제목·'목록|지도|설정' 글자 키움 · 지도·설정 탭 글자·줄 키움 · 지도 깊은 확대(서버 타일 · 없으면 200배) · 장소 수정 카드도 밀어 닫기 · v20: v19 검토분 — 밀어 닫을 때 시작한 버튼(등록하기·팔로우·로그아웃)이 눌리던 것 · 추가 시트 위쪽을 덮던 투명 누름 영역(XButton_Panel) · 프로필 내릴 때 도크 X 가 카드 위로 비치던 것 · v19: 창 닫기 통일 — 추가·프로필도 아래로 밀어 닫기(추가는 장소/3D모델 넘기기와 같은 방향 잠금) · 추가 카드 손잡이 · 프로필 열리면 도크 칸 X '닫기' · '되돌리기' 알림은 창이 열리면 거둠·가로 자리 · 업로드 제한시간 60초(3D 모델·정보 수정) · v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
 
         private const string SpriteDir = "Assets/Redesign0926/Sprites/";
 
@@ -361,7 +361,8 @@ namespace Redesign0926
         // ============================================================
         private const float SheetPad = 48f;
         private const float HeaderY = -40f;
-        private const float SliderBlock = 140f;   // 제목줄(72) + 슬라이더(56) + 틈
+        private const float HeaderH = 84f;        // 제목줄 — 2026-10-05 '근처 장소'·'목록|지도|설정' 글자를 키우며 (예전 72)
+        private const float SliderBlock = HeaderH + 56f + 12f;   // 제목줄 + 슬라이더(56) + 틈
         private const float ChipsY = HeaderY - SliderBlock - 20f;   // -200
         private const float ChipH = 112f;   // 0930: 글자를 키운 칩 (예전 76)
         private const float ChipGap = 18f;
@@ -390,7 +391,7 @@ namespace Redesign0926
 
             // 제목줄: "근처 장소 24" (기존 "ACTIVE LIST" 텍스트를 옮겨 쓴다)
             var header = FindOrCreate(sheet.transform, "Header0926");
-            SetRect(RT(header), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(SheetPad, HeaderY), new Vector2(600, 72));
+            SetRect(RT(header), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(SheetPad, HeaderY), new Vector2(700, HeaderH));
             var hl = Ensure<HorizontalLayoutGroup>(header);
             hl.spacing = 14; hl.childAlignment = TextAnchor.MiddleLeft;
             hl.childControlWidth = true; hl.childControlHeight = true;
@@ -402,13 +403,13 @@ namespace Redesign0926
             if (title != null)
             {
                 title.transform.SetSiblingIndex(0);
-                var t = Txt(title, "근처 장소", 52, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+                var t = Txt(title, "근처 장소", 60, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 Loc(title, "근처 장소", "Nearby", "近くの場所", "附近地点", "Cerca");
             }
             var count = FindOrCreate(header.transform, "Count0926");
             count.transform.SetSiblingIndex(1);
-            var ct = Txt(count, "", 52, Pink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var ct = Txt(count, "", 60, Pink, TextAnchor.MiddleLeft, FontStyle.Bold);
             ct.horizontalOverflow = HorizontalWrapMode.Overflow;
 
             // 거리 슬라이더

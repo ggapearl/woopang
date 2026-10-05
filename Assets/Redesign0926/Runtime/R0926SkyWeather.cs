@@ -110,8 +110,17 @@ public class R0926SkyWeather : MonoBehaviour
     private void OnEnable() { LocationManager.ShortRegionChanged += ShowRegion; }
     private void OnDisable() { LocationManager.ShortRegionChanged -= ShowRegion; }
 
+#if UNITY_EDITOR
+    /// <summary>스토어 캡처(Redesign0926PlayTest)용 — 판의 지역 이름을 이 글로 고정 (에디터 위치가 찍히지 않게). null 이면 실제 지역</summary>
+    public static string EditorRegionOverride;
+    public void EditorRefreshRegion() => ShowRegion(LocationManager.ShortRegion);
+#endif
+
     private void ShowRegion(string region)
     {
+#if UNITY_EDITOR
+        if (EditorRegionOverride != null) region = EditorRegionOverride;
+#endif
         if (regionText == null) return;
         regionText.text = region ?? "";
         regionText.enabled = !string.IsNullOrEmpty(region);

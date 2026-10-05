@@ -10,7 +10,7 @@ using System.Text;
 using System.Linq;
 using UnityEngine.XR.ARFoundation;
 
-public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
+public class TerminalManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTime
 {
     private static TerminalManager instance;
     public static TerminalManager Instance
@@ -74,6 +74,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     private void MarkCacheReady()
     {
         isCacheReady = true;
+        LastLoadedAt = Time.realtimeSinceStartup;
         if (cacheReadyEventFired) return;
         cacheReadyEventFired = true;
         CacheBecameReady?.Invoke();
@@ -476,6 +477,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider
     public string FilterKey => "terminal";
     public int MaxCacheSize => 20;
     public bool IsCacheReady => isCacheReady;
+    public float LastLoadedAt { get; private set; } = -1f;
 
     public List<CachedPlaceData> GetCachedPlaces() => lightCache;
 

@@ -10,7 +10,7 @@ using System.Text;
 using System.Linq;
 using UnityEngine.XR.ARFoundation;
 
-public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider
+public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTime
 {
     private static TrainStationManager instance;
     public static TrainStationManager Instance
@@ -74,6 +74,7 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider
     private void MarkCacheReady()
     {
         isCacheReady = true;
+        LastLoadedAt = Time.realtimeSinceStartup;
         if (cacheReadyEventFired) return;
         cacheReadyEventFired = true;
         CacheBecameReady?.Invoke();
@@ -473,6 +474,7 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider
     public string FilterKey => "train";
     public int MaxCacheSize => 20;
     public bool IsCacheReady => isCacheReady;
+    public float LastLoadedAt { get; private set; } = -1f;
 
     public List<CachedPlaceData> GetCachedPlaces() => lightCache;
 

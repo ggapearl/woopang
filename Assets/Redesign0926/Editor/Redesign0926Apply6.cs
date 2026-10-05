@@ -15,7 +15,10 @@ namespace Redesign0926
         private const string MapDir = "Assets/Redesign0926/Resources/Maps0926/";
         private static readonly Color SeaColor = new Color(0.055f, 0.071f, 0.082f, 1f);   // 지도 바다색과 같게
         private static readonly Color Green = new Color(0.384f, 0.827f, 0.616f, 1f);
-        private const float ShareRowH = 116f;
+        private const float ShareRowH = 140f;
+        // 2026-10-05 지도·설정 글자가 너무 작다 하셔서 키움 (예전 스위치 104x60 · 지도 버튼 96)
+        private const float SwitchW = 130f, SwitchHgt = 76f;
+        private const float CtrlSize = 124f;
         private const float MapSplit = 0.42f;   // 패널 아래 42% 는 친구 목록
 
         private static void ApplyFriendsMap(Transform root, List<string> log)
@@ -40,7 +43,7 @@ namespace Redesign0926
             mp.transform.SetAsLastSibling();
             var mrt = RT(mp);
             mrt.anchorMin = Vector2.zero; mrt.anchorMax = Vector2.one; mrt.pivot = new Vector2(0.5f, 0.5f);
-            mrt.offsetMin = Vector2.zero; mrt.offsetMax = new Vector2(0, HeaderY - 72 - 4);   // 거리 슬라이더 줄까지 덮는다 (손잡이가 삐져나왔다)
+            mrt.offsetMin = Vector2.zero; mrt.offsetMax = new Vector2(0, HeaderY - HeaderH - 4);   // 거리 슬라이더 줄까지 덮는다 (손잡이가 삐져나왔다)
             Img(mp, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Image.Type.Sliced, 64f / CardRadius).raycastTarget = true;
 
             // 지도 창 (둥근 마스크)
@@ -70,37 +73,53 @@ namespace Redesign0926
 
             // 내 위치
             var me = FindOrCreate(pins.transform, "Me0926");
-            SetRect(RT(me), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(48, 48));
+            SetRect(RT(me), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(58, 58));
             var pulse = FindOrCreate(me.transform, "Pulse");
-            SetRect(RT(pulse), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 64));
+            SetRect(RT(pulse), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(78, 78));
             var pulseImg = Img(pulse, Spr("r0926_circle"), new Color(Pink.r, Pink.g, Pink.b, 0.35f), Image.Type.Simple); pulseImg.raycastTarget = false;
             var ring = FindOrCreate(me.transform, "Ring");
-            SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(46, 46));
+            SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56, 56));
             Img(ring, Spr("r0926_circle"), Color.white, Image.Type.Simple).raycastTarget = false;
             var dot = FindOrCreate(me.transform, "Dot");
-            SetRect(RT(dot), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34));
+            SetRect(RT(dot), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(42, 42));
             Img(dot, Spr("r0926_circle"), Pink, Image.Type.Simple).raycastTarget = false;
 
             var pinTpl = BuildPinTemplate(pins.transform);
             var clusterTpl = BuildClusterTemplate(pins.transform);
 
+            // 깊은 확대용 서버 지도 타일 — 세계 그림 위 · 핀 아래 (서버가 켜 두지 않으면 비어 있다) + 지도 출처 한 줄
+            var tilesLayer = FindOrCreate(view.transform, "Tiles0926");
+            Stretch(RT(tilesLayer));
+            tilesLayer.transform.SetSiblingIndex(content.transform.GetSiblingIndex() + 1);
+            var attr = FindOrCreate(view.transform, "Attribution0926");
+            attr.transform.SetSiblingIndex(pins.transform.GetSiblingIndex() + 1);
+            SetRect(RT(attr), Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(28, 20), new Vector2(900, 40));
+            var attrT = Txt(attr, "", 24, new Color(Ink.r, Ink.g, Ink.b, 0.6f), TextAnchor.LowerLeft, FontStyle.Normal);
+            attrT.horizontalOverflow = HorizontalWrapMode.Overflow;
+            attrT.enabled = false;   // 타일이 보일 때만 R0926MapTiles 가 켠다
+            var mapTiles = Ensure<R0926MapTiles>(view);
+            var tso = new SerializedObject(mapTiles);
+            tso.FindProperty("layer").objectReferenceValue = RT(tilesLayer);
+            tso.FindProperty("attribution").objectReferenceValue = attrT;
+            tso.ApplyModifiedPropertiesWithoutUndo();
+
             // 공유 수 칩
             var chip = FindOrCreate(view.transform, "Chip0926");
-            SetRect(RT(chip), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(26, -26), new Vector2(560, 66));
-            var chipBg = Img(chip, Spr("r0926_pill"), new Color(0.055f, 0.067f, 0.078f, 0.86f), Image.Type.Sliced, 64f / 33f); chipBg.raycastTarget = false;
+            SetRect(RT(chip), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(30, -30), new Vector2(640, 84));
+            var chipBg = Img(chip, Spr("r0926_pill"), new Color(0.055f, 0.067f, 0.078f, 0.86f), Image.Type.Sliced, 64f / 42f); chipBg.raycastTarget = false;
             var chipH = Ensure<HorizontalLayoutGroup>(chip);
-            chipH.padding = new RectOffset(26, 26, 0, 0); chipH.childAlignment = TextAnchor.MiddleCenter;
+            chipH.padding = new RectOffset(32, 32, 0, 0); chipH.childAlignment = TextAnchor.MiddleCenter;
             chipH.childControlWidth = true; chipH.childControlHeight = true; chipH.childForceExpandWidth = false; chipH.childForceExpandHeight = true;
             Ensure<ContentSizeFitter>(chip).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             var chipTxt = FindOrCreate(chip.transform, "Text");
-            var chipT = Txt(chipTxt, "", 30, Soft, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var chipT = Txt(chipTxt, "", 40, Soft, TextAnchor.MiddleCenter, FontStyle.Bold);
             chipT.horizontalOverflow = HorizontalWrapMode.Overflow;
 
             // +, −, 내 위치
             var ctrls = FindOrCreate(view.transform, "Ctrls0926");
-            SetRect(RT(ctrls), new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0), new Vector2(-26, 26), new Vector2(96, 96 * 3 + 16 * 2));
+            SetRect(RT(ctrls), new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0), new Vector2(-30, 30), new Vector2(CtrlSize, CtrlSize * 3 + 18 * 2));
             var cv = Ensure<VerticalLayoutGroup>(ctrls);
-            cv.spacing = 16; cv.childControlWidth = true; cv.childControlHeight = true; cv.childForceExpandWidth = true; cv.childForceExpandHeight = true;
+            cv.spacing = 18; cv.childControlWidth = true; cv.childControlHeight = true; cv.childForceExpandWidth = true; cv.childForceExpandHeight = true;
             var zin = CtrlButton(ctrls.transform, "ZoomIn", "+", null);
             var zout = CtrlButton(ctrls.transform, "ZoomOut", "−", null);
             var loc = CtrlButton(ctrls.transform, "Locate", null, "r0926_i_pin");
@@ -113,33 +132,33 @@ namespace Redesign0926
             SetRect(RT(card), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-64, 0));
             Img(card, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 48f).raycastTarget = true;
             var cvl = Ensure<VerticalLayoutGroup>(card);
-            cvl.padding = new RectOffset(44, 44, 44, 40); cvl.spacing = 22;
+            cvl.padding = new RectOffset(52, 52, 52, 48); cvl.spacing = 26;
             cvl.childControlWidth = true; cvl.childControlHeight = true; cvl.childForceExpandWidth = true; cvl.childForceExpandHeight = false;
             Ensure<ContentSizeFitter>(card).verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var ic = FindOrCreate(card.transform, "Icon");
-            var icLe = Ensure<LayoutElement>(ic); icLe.preferredHeight = 88; icLe.preferredWidth = 88;
+            var icLe = Ensure<LayoutElement>(ic); icLe.preferredHeight = 104; icLe.preferredWidth = 104;
             var icBox = FindOrCreate(ic.transform, "Box");
-            SetRect(RT(icBox), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(88, 88));
-            Img(icBox, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 28f).raycastTarget = false;
+            SetRect(RT(icBox), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(104, 104));
+            Img(icBox, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 34f).raycastTarget = false;
             var icG = FindOrCreate(icBox.transform, "Glyph");
-            SetRect(RT(icG), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(48, 48));
+            SetRect(RT(icG), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(58, 58));
             Img(icG, Spr("r0926_i_pin"), Pink, Image.Type.Simple).raycastTarget = false;
             var ctitle = FindOrCreate(card.transform, "Title");
-            Txt(ctitle, "친구 지도", 42, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Txt(ctitle, "친구 지도", 54, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             var cbody = FindOrCreate(card.transform, "Body");
-            var cbT = Txt(cbody, "", 32, Soft, TextAnchor.UpperLeft, FontStyle.Normal); cbT.lineSpacing = 1.15f; cbT.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var cbT = Txt(cbody, "", 42, Soft, TextAnchor.UpperLeft, FontStyle.Normal); cbT.lineSpacing = 1.15f; cbT.horizontalOverflow = HorizontalWrapMode.Wrap;
             var srow = FindOrCreate(card.transform, "SwitchRow");
-            Ensure<LayoutElement>(srow).preferredHeight = 76;
+            Ensure<LayoutElement>(srow).preferredHeight = 96;
             var srowLabel = FindOrCreate(srow.transform, "Label");
-            SetRect(RT(srowLabel), new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), Vector2.zero, new Vector2(-130, 0));
-            Txt(srowLabel, "내 위치 공유", 34, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetRect(RT(srowLabel), new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), Vector2.zero, new Vector2(-SwitchW - 30, 0));
+            Txt(srowLabel, "내 위치 공유", 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             Loc(srowLabel, "내 위치 공유", "Share my location", "位置を共有", "共享我的位置", "Compartir ubicación");
             var sw = FindOrCreate(srow.transform, "Switch");
-            SetRect(RT(sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(104, 60));
+            SetRect(RT(sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(SwitchW, SwitchHgt));
             var swImg = Img(sw, Spr("r0926_sw_off"), Color.white, Image.Type.Simple); swImg.raycastTarget = true;
             var swBtn = Ensure<Button>(sw); swBtn.transition = Selectable.Transition.None;
             var note = FindOrCreate(card.transform, "Note");
-            var noteT = Txt(note, "", 27, Muted, TextAnchor.UpperLeft, FontStyle.Normal); noteT.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var noteT = Txt(note, "", 35, Muted, TextAnchor.UpperLeft, FontStyle.Normal); noteT.horizontalOverflow = HorizontalWrapMode.Wrap;
 
             // ── 친구 목록 ──
             var fl = FindOrCreate(mp.transform, "FriendList0926");
@@ -164,8 +183,8 @@ namespace Redesign0926
             var hint = Find(fl.transform, "Hint0926") ?? NewUI("Hint0926", flContent.transform);
             if (hint.transform.parent != flContent.transform) hint.transform.SetParent(flContent.transform, false);
             hint.transform.SetAsFirstSibling();
-            Ensure<LayoutElement>(hint).preferredHeight = 64;
-            Txt(hint, "", 30, Muted, TextAnchor.MiddleLeft, FontStyle.Normal).horizontalOverflow = HorizontalWrapMode.Wrap;
+            Ensure<LayoutElement>(hint).preferredHeight = 80;
+            Txt(hint, "", 38, Muted, TextAnchor.MiddleLeft, FontStyle.Normal).horizontalOverflow = HorizontalWrapMode.Wrap;
             var ad = BuildAdSlot(flContent.transform, "friends_map");
 
             // ── 공유 줄 ──
@@ -175,10 +194,10 @@ namespace Redesign0926
             SetRect(RT(line), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(-SheetPad * 2, 2));
             Img(line, null, new Color(1, 1, 1, 0.07f), Image.Type.Simple).raycastTarget = false;
             var shareLabel = FindOrCreate(share.transform, "Label");
-            SetRect(RT(shareLabel), new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(SheetPad, 0), new Vector2(-SheetPad * 2 - 140, 0));
-            Txt(shareLabel, "", 31, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
+            SetRect(RT(shareLabel), new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(SheetPad, 0), new Vector2(-SheetPad * 2 - SwitchW - 36, 0));
+            Txt(shareLabel, "", 40, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
             var ssw = FindOrCreate(share.transform, "Switch");
-            SetRect(RT(ssw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-SheetPad, 0), new Vector2(104, 60));
+            SetRect(RT(ssw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-SheetPad, 0), new Vector2(SwitchW, SwitchHgt));
             var sswImg = Img(ssw, Spr("r0926_sw_off"), Color.white, Image.Type.Simple); sswImg.raycastTarget = true;
             var sswBtn = Ensure<Button>(ssw); sswBtn.transition = Selectable.Transition.None;
 
@@ -187,8 +206,8 @@ namespace Redesign0926
 
             // ── 제목줄 오른쪽 '목록 | 지도 | 설정' ──
             var seg = FindOrCreate(sheet.transform, "ModeSeg0926");
-            SetRect(RT(seg), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-SheetPad, HeaderY), new Vector2(12 + SegTabW * 3, 72));
-            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 36f).raycastTarget = true;
+            SetRect(RT(seg), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-SheetPad, HeaderY), new Vector2(12 + SegTabW * 3, HeaderH));
+            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / (HeaderH / 2f)).raycastTarget = true;
             var tabList = SegTab(seg.transform, "TabList", 0, "목록", new[] { "목록", "List", "リスト", "列表", "Lista" });
             var tabMap = SegTab(seg.transform, "TabMap", 1, "지도", new[] { "지도", "Map", "地図", "地图", "Mapa" });
             var tabSet = SegTab(seg.transform, "TabSettings", 2, "설정", new[] { "설정", "Settings", "設定", "设置", "Ajustes" });
@@ -234,6 +253,9 @@ namespace Redesign0926
             so.FindProperty("shareSwitch").objectReferenceValue = sswImg;
             so.FindProperty("switchOn").objectReferenceValue = Spr("r0926_sw_on");
             so.FindProperty("switchOff").objectReferenceValue = Spr("r0926_sw_off");
+            so.FindProperty("tiles").objectReferenceValue = mapTiles;
+            so.FindProperty("maxZoom").floatValue = 200f;        // 타일 없을 때 (예전 40 — 한반도 정도에서 멈췄다)
+            so.FindProperty("clusterRadius").floatValue = 120f;  // 핀을 키운 만큼
             so.ApplyModifiedPropertiesWithoutUndo();
 
             Wire(zin.GetComponent<Button>(), fm.ZoomIn);
@@ -249,8 +271,8 @@ namespace Redesign0926
             log.Add("friends map + settings ok");
         }
 
-        private const float SegTabW = 132f;
-        private const float ShowAllRowH = 120f, ShowAllBtnH = 88f;   // 설정 '모두 다시 보이기' 줄 · 알약
+        private const float SegTabW = 176f;   // 10-05 글자 키움 (예전 132 · 글자 30) — 'Settings' 가 들어가는 폭
+        private const float ShowAllRowH = 148f, ShowAllBtnH = 108f;   // 설정 '모두 다시 보이기' 줄 · 알약
         private const float UndoBarH = 132f, UndoBtnH = 104f;        // 숨긴 뒤 '되돌리기' 알림 · 버튼 (≈ 36pt · 28pt)
         private const float UndoBarY = DockBottom + DockHeight + 24f + 84f + 24f;   // 위치 칩(84) 바로 위
 
@@ -347,7 +369,7 @@ namespace Redesign0926
             sp.transform.SetAsLastSibling();
             var srt = RT(sp);
             srt.anchorMin = Vector2.zero; srt.anchorMax = Vector2.one; srt.pivot = new Vector2(0.5f, 0.5f);
-            srt.offsetMin = Vector2.zero; srt.offsetMax = new Vector2(0, HeaderY - 72 - 4);
+            srt.offsetMin = Vector2.zero; srt.offsetMax = new Vector2(0, HeaderY - HeaderH - 4);
             Img(sp, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Image.Type.Sliced, 64f / CardRadius).raycastTarget = true;
 
             var sr = Ensure<ScrollRect>(sp);
@@ -360,7 +382,7 @@ namespace Redesign0926
             var content = FindOrCreate(vp.transform, "Content");
             SetRect(RT(content), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, Vector2.zero);
             var vl = Ensure<VerticalLayoutGroup>(content);
-            vl.padding = new RectOffset((int)SheetPad - 8, (int)SheetPad - 8, 8, 40); vl.spacing = 18;
+            vl.padding = new RectOffset((int)SheetPad - 8, (int)SheetPad - 8, 8, 48); vl.spacing = 22;
             vl.childControlWidth = true; vl.childControlHeight = true; vl.childForceExpandWidth = true; vl.childForceExpandHeight = false;
             Ensure<ContentSizeFitter>(content).verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.viewport = RT(vp); sr.content = RT(content);
@@ -393,8 +415,8 @@ namespace Redesign0926
                 new[] { "장소 박스 오른쪽 위 X 로 이 기기에서 숨겨요", "Hide a place on this device with the X on its box", "マーカー右上のXでこの端末から隠せます", "点标记右上角的 X 可在本机隐藏", "Oculta un lugar con la X de su marcador" }, false);
             removeX.transform.parent.SetSiblingIndex(0);
             var hidden = FindOrCreate(g3.transform, "HiddenText");
-            Ensure<LayoutElement>(hidden).preferredHeight = 104;
-            var ht = Txt(hidden, "숨긴 장소 없음", 30, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
+            Ensure<LayoutElement>(hidden).preferredHeight = 132;
+            var ht = Txt(hidden, "숨긴 장소 없음", 38, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
             ht.horizontalOverflow = HorizontalWrapMode.Wrap;
             // 숨긴 장소 모두 다시 보이기 — 숨긴 게 있을 때만 보인다 (R0926SettingsPanel.Refresh)
             var showAll = FindOrCreate(g3.transform, "RowShowAll");
@@ -405,11 +427,11 @@ namespace Redesign0926
             Img(showBtn, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / (ShowAllBtnH / 2f)).raycastTarget = true;
             Ensure<Button>(showBtn).transition = Selectable.Transition.None;
             var sbh = Ensure<HorizontalLayoutGroup>(showBtn);
-            sbh.padding = new RectOffset(34, 34, 0, 0); sbh.childAlignment = TextAnchor.MiddleCenter;
+            sbh.padding = new RectOffset(40, 40, 0, 0); sbh.childAlignment = TextAnchor.MiddleCenter;
             sbh.childControlWidth = true; sbh.childControlHeight = true; sbh.childForceExpandWidth = false; sbh.childForceExpandHeight = true;
             Ensure<ContentSizeFitter>(showBtn).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             var showLabel = FindOrCreate(showBtn.transform, "Text");
-            Txt(showLabel, "모두 다시 보이기", 30, Pink, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Txt(showLabel, "모두 다시 보이기", 38, Pink, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             Loc(showLabel, "모두 다시 보이기", "Show all again", "すべて再表示", "全部重新显示", "Mostrar todos");
             showAll.SetActive(false);   // 앱을 켠 직후엔 숨긴 장소가 없다
 
@@ -454,17 +476,17 @@ namespace Redesign0926
         private static void SectionLabel(Transform parent, string name, string[] words)
         {
             var l = FindOrCreate(parent, name);
-            Ensure<LayoutElement>(l).preferredHeight = 56;
-            Txt(l, words[0], 28, Muted, TextAnchor.LowerLeft, FontStyle.Bold);
+            Ensure<LayoutElement>(l).preferredHeight = 72;
+            Txt(l, words[0], 36, Muted, TextAnchor.LowerLeft, FontStyle.Bold);
             Loc(l, words[0], words[1], words[2], words[3], words[4]);
         }
 
         private static GameObject Group(Transform parent, string name)
         {
             var g = FindOrCreate(parent, name);
-            Img(g, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 40f).raycastTarget = false;
+            Img(g, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 46f).raycastTarget = false;
             var v = Ensure<VerticalLayoutGroup>(g);
-            v.padding = new RectOffset(30, 30, 6, 6); v.spacing = 0;
+            v.padding = new RectOffset(36, 36, 8, 8); v.spacing = 0;
             v.childControlWidth = true; v.childControlHeight = true; v.childForceExpandWidth = true; v.childForceExpandHeight = false;
             Ensure<ContentSizeFitter>(g).verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             return g;
@@ -474,33 +496,33 @@ namespace Redesign0926
         private static Image SettingRow(Transform parent, string name, string[] title, string[] sub, bool soon)
         {
             var row = FindOrCreate(parent, name);
-            Ensure<LayoutElement>(row).preferredHeight = 136;
+            Ensure<LayoutElement>(row).preferredHeight = 176;
             Img(row, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
             Ensure<Button>(row).transition = Selectable.Transition.None;
             var t = FindOrCreate(row.transform, "Title");
-            SetRect(RT(t), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(0, 4), new Vector2(-150, 48));
-            var tt = Txt(t, title[0], 34, Ink, TextAnchor.LowerLeft, FontStyle.Bold);
+            SetRect(RT(t), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(0, 5), new Vector2(-SwitchW - 50, 60));
+            var tt = Txt(t, title[0], 44, Ink, TextAnchor.LowerLeft, FontStyle.Bold);
             tt.horizontalOverflow = HorizontalWrapMode.Overflow;
             Loc(t, title[0], title[1], title[2], title[3], title[4]);
             var s = FindOrCreate(row.transform, "Sub");
-            SetRect(RT(s), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(0, -2), new Vector2(-150, 42));
-            var st = Txt(s, sub[0], 27, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
+            SetRect(RT(s), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(0, -3), new Vector2(-SwitchW - 50, 52));
+            var st = Txt(s, sub[0], 34, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
             st.horizontalOverflow = HorizontalWrapMode.Wrap; st.verticalOverflow = VerticalWrapMode.Truncate;
             Loc(s, sub[0], sub[1], sub[2], sub[3], sub[4]);
             var soonTag = row.transform.Find("Soon");
             if (soon)
             {
                 var b = soonTag != null ? soonTag.gameObject : NewUI("Soon", row.transform);
-                SetRect(RT(b), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-122, 0), new Vector2(66, 38));
-                Img(b, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 19f).raycastTarget = false;
+                SetRect(RT(b), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-SwitchW - 18, 0), new Vector2(84, 48));
+                Img(b, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 24f).raycastTarget = false;
                 var bt = FindOrCreate(b.transform, "Text");
                 Stretch(RT(bt));
-                Txt(bt, "곧", 23, Pink, TextAnchor.MiddleCenter, FontStyle.Bold);
+                Txt(bt, "곧", 29, Pink, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
                 Loc(bt, "곧", "Soon", "近日", "即将", "Pronto");
             }
             else if (soonTag != null) Object.DestroyImmediate(soonTag.gameObject);
             var sw = FindOrCreate(row.transform, "Switch");
-            SetRect(RT(sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(104, 60));
+            SetRect(RT(sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(SwitchW, SwitchHgt));
             var img = Img(sw, Spr("r0926_sw_on"), Color.white, Image.Type.Simple);
             img.raycastTarget = false;   // 줄 전체가 버튼
             return img;
@@ -509,18 +531,18 @@ namespace Redesign0926
         private static GameObject AngleRow(Transform parent, out Image[] tabs, out Text[] labels)
         {
             var row = FindOrCreate(parent, "RowAngle");
-            Ensure<LayoutElement>(row).preferredHeight = 210;
+            Ensure<LayoutElement>(row).preferredHeight = 270;
             var t = FindOrCreate(row.transform, "Title");
-            SetRect(RT(t), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -22), new Vector2(0, 48));
-            Txt(t, "보이는 각도", 34, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetRect(RT(t), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -26), new Vector2(0, 60));
+            Txt(t, "보이는 각도", 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             Loc(t, "보이는 각도", "When to show", "表示する角度", "显示角度", "Cuándo mostrar");
             var s = FindOrCreate(row.transform, "Sub");
-            SetRect(RT(s), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -70), new Vector2(0, 40));
-            Txt(s, "휴대폰을 얼마나 들어야 하늘 화면이 뜰지", 27, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            SetRect(RT(s), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -88), new Vector2(0, 50));
+            Txt(s, "휴대폰을 얼마나 들어야 하늘 화면이 뜰지", 34, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
             Loc(s, "휴대폰을 얼마나 들어야 하늘 화면이 뜰지", "How far to tilt your phone up", "どれだけ上に向けたら表示するか", "手机抬高多少时显示", "Cuánto inclinar el móvil");
             var seg = FindOrCreate(row.transform, "Seg");
-            SetRect(RT(seg), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 22), new Vector2(0, 72));
-            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 36f).raycastTarget = true;
+            SetRect(RT(seg), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 26), new Vector2(0, 92));
+            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 46f).raycastTarget = true;
             var h = Ensure<HorizontalLayoutGroup>(seg);
             h.padding = new RectOffset(6, 6, 6, 6); h.spacing = 4;
             h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
@@ -534,12 +556,12 @@ namespace Redesign0926
             for (int i = 0; i < 3; i++)
             {
                 var tab = FindOrCreate(seg.transform, "Step" + i);
-                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, i == 1 ? 0.14f : 0f), Image.Type.Sliced, 64f / 30f);
+                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, i == 1 ? 0.14f : 0f), Image.Type.Sliced, 64f / 40f);
                 tabs[i].raycastTarget = true;
                 Ensure<Button>(tab).transition = Selectable.Transition.None;
                 var lt = FindOrCreate(tab.transform, "Text");
                 Stretch(RT(lt));
-                labels[i] = Txt(lt, words[i][0], 28, i == 1 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                labels[i] = Txt(lt, words[i][0], 36, i == 1 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 Loc(lt, words[i][0], words[i][1], words[i][2], words[i][3], words[i][4]);
             }
             return row;
@@ -563,12 +585,13 @@ namespace Redesign0926
         private static GameObject SegTab(Transform seg, string name, int index, string label, string[] words)
         {
             var tab = FindOrCreate(seg, name);
-            SetRect(RT(tab), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(6 + index * SegTabW, 0), new Vector2(SegTabW, 60));
-            Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, index == 0 ? 0.14f : 0f), Image.Type.Sliced, 64f / 30f).raycastTarget = true;
+            SetRect(RT(tab), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(6 + index * SegTabW, 0), new Vector2(SegTabW, HeaderH - 12));
+            Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, index == 0 ? 0.14f : 0f), Image.Type.Sliced, 64f / ((HeaderH - 12) / 2f)).raycastTarget = true;
             Ensure<Button>(tab).transition = Selectable.Transition.None;
             var t = FindOrCreate(tab.transform, "Text");
             Stretch(RT(t));
-            Txt(t, label, 30, index == 0 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var tt = Txt(t, label, 40, index == 0 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            tt.horizontalOverflow = HorizontalWrapMode.Overflow;   // 긴 언어(Settings·Ajustes)도 줄바꿈 없이
             Loc(t, words[0], words[1], words[2], words[3], words[4]);
             return tab;
         }
@@ -581,13 +604,13 @@ namespace Redesign0926
             var g = FindOrCreate(b.transform, "Glyph");
             if (icon != null)
             {
-                SetRect(RT(g), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(44, 44));
+                SetRect(RT(g), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56, 56));
                 Img(g, Spr(icon), Ink, Image.Type.Simple).raycastTarget = false;
             }
             else
             {
                 Stretch(RT(g));
-                Txt(g, glyph, 48, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
+                Txt(g, glyph, 60, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
             }
             return b;
         }
@@ -627,20 +650,20 @@ namespace Redesign0926
         private static GameObject BuildPinTemplate(Transform pins)
         {
             var pin = FindOrCreate(pins, "PinTemplate0926");
-            SetRect(RT(pin), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.66f), Vector2.zero, new Vector2(200, 150));
+            SetRect(RT(pin), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.66f), Vector2.zero, new Vector2(240, 184));
             Img(pin, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
             Ensure<Button>(pin).transition = Selectable.Transition.None;
-            var av = BuildAvatar(pin.transform, 84, true);
-            SetRect(RT(av), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -6), new Vector2(94, 94));
+            var av = BuildAvatar(pin.transform, 104, true);
+            SetRect(RT(av), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -6), new Vector2(116, 116));
             var name = FindOrCreate(pin.transform, "Name");
-            SetRect(RT(name), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 0), new Vector2(120, 42));
-            Img(name, Spr("r0926_pill"), new Color(0.055f, 0.067f, 0.078f, 0.88f), Image.Type.Sliced, 64f / 21f).raycastTarget = false;
+            SetRect(RT(name), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 0), new Vector2(150, 52));
+            Img(name, Spr("r0926_pill"), new Color(0.055f, 0.067f, 0.078f, 0.88f), Image.Type.Sliced, 64f / 26f).raycastTarget = false;
             var nh = Ensure<HorizontalLayoutGroup>(name);
-            nh.padding = new RectOffset(16, 16, 0, 0); nh.childAlignment = TextAnchor.MiddleCenter;
+            nh.padding = new RectOffset(20, 20, 0, 0); nh.childAlignment = TextAnchor.MiddleCenter;
             nh.childControlWidth = true; nh.childControlHeight = true; nh.childForceExpandWidth = false; nh.childForceExpandHeight = true;
             Ensure<ContentSizeFitter>(name).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             var nt = FindOrCreate(name.transform, "Text");
-            Txt(nt, "name", 26, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Txt(nt, "name", 34, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             pin.SetActive(false);
             return pin;
         }
@@ -648,15 +671,15 @@ namespace Redesign0926
         private static GameObject BuildClusterTemplate(Transform pins)
         {
             var c = FindOrCreate(pins, "ClusterTemplate0926");
-            SetRect(RT(c), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(132, 132));
+            SetRect(RT(c), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(156, 156));
             Img(c, Spr("r0926_circle"), new Color(Ink.r, Ink.g, Ink.b, 0.16f), Image.Type.Simple).raycastTarget = true;
             Ensure<Button>(c).transition = Selectable.Transition.None;
             var inner = FindOrCreate(c.transform, "Inner");
-            SetRect(RT(inner), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(98, 98));
+            SetRect(RT(inner), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(116, 116));
             Img(inner, Spr("r0926_circle"), Ink, Image.Type.Simple).raycastTarget = false;
             var t = FindOrCreate(inner.transform, "Text");
             Stretch(RT(t));
-            Txt(t, "3", 42, Dark, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Txt(t, "3", 50, Dark, TextAnchor.MiddleCenter, FontStyle.Bold);
             c.SetActive(false);
             return c;
         }
@@ -664,21 +687,21 @@ namespace Redesign0926
         private static GameObject BuildFriendRowTemplate(Transform content)
         {
             var row = FindOrCreate(content, "RowTemplate0926");
-            Ensure<LayoutElement>(row).preferredHeight = 118;
+            Ensure<LayoutElement>(row).preferredHeight = 150;
             Img(row, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
             Ensure<Button>(row).transition = Selectable.Transition.None;
             var sel = FindOrCreate(row.transform, "Sel");
             Stretch(RT(sel));
             Img(sel, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 36f).raycastTarget = false;
             sel.SetActive(false);
-            var av = BuildAvatar(row.transform, 84, false);
-            SetRect(RT(av), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(18, 0), new Vector2(84, 84));
+            var av = BuildAvatar(row.transform, 104, false);
+            SetRect(RT(av), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(18, 0), new Vector2(104, 104));
             var name = FindOrCreate(row.transform, "Name");
-            SetRect(RT(name), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(132, 2), new Vector2(-150, 48));
-            Txt(name, "@name", 36, Ink, TextAnchor.LowerLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            SetRect(RT(name), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(156, 2), new Vector2(-176, 58));
+            Txt(name, "@name", 46, Ink, TextAnchor.LowerLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             var sub = FindOrCreate(row.transform, "Sub");
-            SetRect(RT(sub), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(132, -4), new Vector2(-150, 40));
-            Txt(sub, "", 29, Muted, TextAnchor.UpperLeft, FontStyle.Normal).horizontalOverflow = HorizontalWrapMode.Overflow;
+            SetRect(RT(sub), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(156, -4), new Vector2(-176, 50));
+            Txt(sub, "", 37, Muted, TextAnchor.UpperLeft, FontStyle.Normal).horizontalOverflow = HorizontalWrapMode.Overflow;
             row.SetActive(false);
             return row;
         }
@@ -687,44 +710,44 @@ namespace Redesign0926
         private static GameObject BuildAdSlot(Transform parent, string placement)
         {
             var card = FindOrCreate(parent, "AdSlot0926");
-            Ensure<LayoutElement>(card).preferredHeight = 184;
+            Ensure<LayoutElement>(card).preferredHeight = 216;
             Img(card, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 40f).raycastTarget = true;
             Ensure<Button>(card).transition = Selectable.Transition.None;
 
             var thumb = FindOrCreate(card.transform, "Thumb");
-            SetRect(RT(thumb), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(128, 128));
+            SetRect(RT(thumb), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(150, 150));
             Img(thumb, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 32f).raycastTarget = false;
             Ensure<Mask>(thumb).showMaskGraphic = true;
             var photo = FindOrCreate(thumb.transform, "Photo");
             Stretch(RT(photo));
             var ph = Ensure<RawImage>(photo); ph.raycastTarget = false; ph.enabled = false;
             var icon = FindOrCreate(thumb.transform, "Icon");
-            SetRect(RT(icon), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 64));
+            SetRect(RT(icon), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(76, 76));
             Img(icon, Spr("r0926_i_megaphone"), Pink, Image.Type.Simple).raycastTarget = false;
 
             var badge = FindOrCreate(card.transform, "Badge");
-            SetRect(RT(badge), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(178, -30), new Vector2(76, 38));
-            Img(badge, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 64f / 19f).raycastTarget = false;
+            SetRect(RT(badge), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(204, -34), new Vector2(92, 46));
+            Img(badge, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 64f / 23f).raycastTarget = false;
             var bt = FindOrCreate(badge.transform, "Text");
             Stretch(RT(bt));
-            Txt(bt, "광고", 23, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Txt(bt, "광고", 29, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
             Loc(bt, "광고", "Ad", "広告", "广告", "Anuncio");
 
             var title = FindOrCreate(card.transform, "Title");
-            SetRect(RT(title), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(266, -24), new Vector2(-266 - 230, 50));
-            var tt = Txt(title, "이 자리에 가게를 알려 보세요", 33, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            SetRect(RT(title), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(318, -28), new Vector2(-318 - 262, 60));
+            var tt = Txt(title, "이 자리에 가게를 알려 보세요", 41, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             tt.horizontalOverflow = HorizontalWrapMode.Wrap; tt.verticalOverflow = VerticalWrapMode.Truncate;
             var body = FindOrCreate(card.transform, "Body");
-            SetRect(RT(body), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(178, -80), new Vector2(-178 - 230, 80));
-            var bdy = Txt(body, "동네 반경 안의 우팡 사용자에게만 보여요", 28, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
+            SetRect(RT(body), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(204, -94), new Vector2(-204 - 262, 96));
+            var bdy = Txt(body, "동네 반경 안의 우팡 사용자에게만 보여요", 35, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
             bdy.horizontalOverflow = HorizontalWrapMode.Wrap; bdy.verticalOverflow = VerticalWrapMode.Truncate; bdy.lineSpacing = 1.05f;
 
             var ctaBox = FindOrCreate(card.transform, "Cta");
-            SetRect(RT(ctaBox), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-26, 0), new Vector2(186, 68));
-            Img(ctaBox, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 34f).raycastTarget = false;
+            SetRect(RT(ctaBox), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-26, 0), new Vector2(216, 82));
+            Img(ctaBox, Spr("r0926_pill"), new Color(Pink.r, Pink.g, Pink.b, 0.16f), Image.Type.Sliced, 64f / 41f).raycastTarget = false;
             var ct = FindOrCreate(ctaBox.transform, "Text");
             Stretch(RT(ct));
-            Txt(ct, "광고 문의", 28, Pink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Txt(ct, "광고 문의", 35, Pink, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             var slot = Ensure<R0926AdSlot>(card);
             var so = new SerializedObject(slot);

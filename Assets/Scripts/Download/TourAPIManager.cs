@@ -10,7 +10,7 @@ using System.Text;
 using System.Linq;
 using UnityEngine.XR.ARFoundation;
 
-public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
+public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTime
 {
     // Singleton pattern
     private static TourAPIManager instance;
@@ -92,6 +92,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
     private void MarkCacheReady()
     {
         isCacheReady = true;
+        LastLoadedAt = Time.realtimeSinceStartup;
         if (cacheReadyEventFired) return;
         cacheReadyEventFired = true;
         CacheBecameReady?.Invoke();
@@ -1087,6 +1088,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider
     public string FilterKey => "";
     public int MaxCacheSize => 100;
     public bool IsCacheReady => isCacheReady;
+    public float LastLoadedAt { get; private set; } = -1f;
 
     public List<CachedPlaceData> GetCachedPlaces() => lightCache;
 
