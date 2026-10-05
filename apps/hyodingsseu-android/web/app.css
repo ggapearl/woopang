@@ -411,3 +411,16 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .vw-foot{flex:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px 6px}
 .vw-name{flex:1;min-width:0;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vw-open{flex:none;font-size:12px;color:rgba(255,255,255,.85);text-decoration:underline;text-underline-offset:2px;padding:6px 0}
+/* 꾹 눌러 메뉴 — 카카오톡처럼 (2026-10-05). 말풍선은 길게 눌러도 글 선택·폰 기본 메뉴가 뜨지 않게, 복사는 메뉴로 */
+.items [data-iid]{-webkit-touch-callout:none}
+.u-bubble,.ai-body,.inbox,.note,.err{user-select:none;-webkit-user-select:none}
+.items .pressed{opacity:.55;transition:opacity .12s}
+.sheet.msg-menu{gap:2px;padding:10px 10px 12px}
+.msg-menu .peek{margin:0 0 6px;padding:6px 8px 10px;font-size:13px;line-height:1.45;color:var(--ink-3);text-align:left;
+  overflow-wrap:anywhere;border-bottom:1px solid var(--line)}
+.mrow{display:flex;align-items:center;gap:12px;width:100%;min-height:50px;padding:0 12px;border-radius:10px;font-size:16px;
+  color:var(--ink);text-align:left}
+.mrow svg{width:20px;height:20px;flex:none;color:var(--ink-2)}
+.mrow:active{background:var(--surface-2)}
+.mrow.danger,.mrow.danger svg{color:var(--pink-deep)}
+.msg-menu .btn{margin-top:6px}

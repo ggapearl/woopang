@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-05c';
+  const WEB_VERSION = '2026-10-05d';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -639,6 +639,7 @@
     (st.events || []).forEach(apply);
     replaying = false;
     if (S.agentState === 'idle') finishOpen();
+    S.items = S.items.filter(it => it.kind !== 'ai' || it.streaming || it.text);   // 답을 지웠으면 빈 말풍선이 남지 않게
     renderAllItems();
     renderStatus();
     renderDrawer();
@@ -655,7 +656,7 @@
     switch (type) {
       case 'user': {
         const origin = e.origin || 'typed';
-        append({ kind: 'user', text: e.text || '', origin, images: e.images || [], files: e.files || [], ts: e.ts });
+        append({ kind: 'user', text: e.text || '', origin, images: e.images || [], files: e.files || [], ts: e.ts, mid: e.mid });
         lastAI = null;
         lastAIText = '';
         lastUserOrigin = origin;
@@ -678,10 +679,10 @@
         const loc = !!e.local;
         if (openAI.length) {
           const id = openAI.shift();
-          update(id, it => { it.kind = 'ai'; it.text = text; it.streaming = false; it.local = loc; it.meta = null; it.ts = e.ts; });
+          update(id, it => { it.kind = 'ai'; it.text = text; it.streaming = false; it.local = loc; it.meta = null; it.ts = e.ts; it.mid = e.mid; });
           lastAI = id;
         } else {
-          lastAI = append({ kind: 'ai', text, streaming: false, local: loc, meta: null, ts: e.ts }).id;
+          lastAI = append({ kind: 'ai', text, streaming: false, local: loc, meta: null, ts: e.ts, mid: e.mid }).id;
         }
         lastAIText = text;
         return false;
@@ -740,15 +741,18 @@
         if (e.from) source += ' · ' + e.from;
         const buttons = e.buttons || null;
         append({ kind: 'incoming', source, text: e.text || '', auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
-          images: e.images || [], files: e.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts: e.ts });
+          images: e.images || [], files: e.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts: e.ts, mid: e.mid });
         lastAI = null;
         return false;
       }
       case 'note':
-        append({ kind: 'note', text: e.text || '' });
+        append({ kind: 'note', text: e.text || '', ts: e.ts, mid: e.mid });
         return false;
       case 'error':
-        append({ kind: 'error', text: e.text || '' });
+        append({ kind: 'error', text: e.text || '', ts: e.ts, mid: e.mid });
+        return false;
+      case 'deleted':                      // 꾹 눌러 지운 말 — 다른 폰·창에서 지운 것도 (10/5)
+        removeByMid(e.mid);
         return false;
       case 'result': {
         if (lastAI && typeof e.ms === 'number') {
@@ -760,6 +764,7 @@
         return false;
       }
       case 'cleared':
+      case 'wiped':                        // 대화 전체 삭제 (10/5)
         S.items = [];
         openAI = [];
         toolOwner = {};
@@ -822,23 +827,23 @@
   /** PC 기록 한 항목 → 지금 렌더러가 쓰는 항목 모양 */
   function historyToItem(raw) {
     if (!raw || typeof raw.ts !== 'number') return null;
-    const ts = raw.ts;
+    const ts = raw.ts, mid = raw.mid;
     switch (raw.type) {
       case 'user':
-        return { kind: 'user', text: raw.text || '', origin: raw.origin || 'typed', images: raw.images || [], files: raw.files || [], ts };
+        return { kind: 'user', text: raw.text || '', origin: raw.origin || 'typed', images: raw.images || [], files: raw.files || [], ts, mid };
       case 'text':
-        return { kind: 'ai', text: raw.text || '', streaming: false, local: false, meta: null, ts };
+        return { kind: 'ai', text: raw.text || '', streaming: false, local: false, meta: null, ts, mid };
       case 'incoming': {
         const kind = raw.kind || '';
         const buttons = raw.buttons || null;
         return { kind: 'incoming', source: INCOMING_SOURCE(kind, raw.from), text: raw.text || '',
           auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
-          images: raw.images || [], files: raw.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts };
+          images: raw.images || [], files: raw.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts, mid };
       }
       case 'note':
-        return { kind: 'note', text: raw.text || '', ts };
+        return { kind: 'note', text: raw.text || '', ts, mid };
       case 'error':
-        return { kind: 'error', text: raw.text || '', ts };
+        return { kind: 'error', text: raw.text || '', ts, mid };
       default:
         return null;
     }
@@ -943,6 +948,8 @@
     pc: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/></svg>',
     micSm: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5v3"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
   };
   const svg = name => { const t = document.createElement('template'); t.innerHTML = ICON[name]; return t.content.firstChild; };
 
@@ -1035,6 +1042,12 @@
   }
 
   function itemView(it) {
+    const el = itemBody(it);
+    if (MSG_KINDS[it.kind]) el.dataset.iid = it.id;        // 꾹 누르면 이 번호로 항목을 찾는다
+    return el;
+  }
+
+  function itemBody(it) {
     switch (it.kind) {
       case 'user': return userBubble(it);
       case 'ai': return aiMessage(it);
@@ -1245,6 +1258,147 @@
     else if (changed && jumpEl) jumpEl.hidden = false;
   }
 
+  // ── 꾹 눌러 메뉴 — 카카오톡처럼 복사 · 이 메시지 삭제 · 대화 전체 삭제 (2026-10-05) ──
+  // 지운 말은 PC 효딩쓰에도 지운 표시가 남아, 다시 열어도·지난 대화에서도 나오지 않는다(remote_api chat/delete·chat/wipe).
+  const MSG_KINDS = { user: 1, ai: 1, incoming: 1, note: 1, error: 1 };
+  const PRESS_MS = 480;
+  let pressOpenedAt = 0, pressHeld = false, swallowUntil = 0, heldTimer = 0;
+
+  function bindLongPress(root) {
+    let timer = 0, x0 = 0, y0 = 0, target = null;
+    const cancel = () => { clearTimeout(timer); timer = 0; target = null; };
+    root.addEventListener('pointerdown', ev => {
+      if (ev.button > 0) return;                                   // 마우스 오른쪽은 contextmenu 로
+      const el = ev.target.closest('[data-iid]');
+      if (!el || (el.classList.contains('u-row') && !ev.target.closest('.u-bubble'))) return;
+      target = el; x0 = ev.clientX; y0 = ev.clientY;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const t = target;
+        cancel();
+        if (t && openMsgMenu(t)) {                                 // 손가락을 뗄 때까지 클릭은 받지 않는다
+          pressHeld = true;
+          clearTimeout(heldTimer);
+          heldTimer = setTimeout(() => { pressHeld = false; }, 4000);   // 뗀 소식을 못 받아도 화면이 굳지 않게
+        }
+      }, PRESS_MS);
+    });
+    root.addEventListener('pointermove', ev => { if (timer && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancel(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => root.addEventListener(n, cancel));
+    if (chatEl) chatEl.addEventListener('scroll', cancel, { passive: true });
+    root.addEventListener('contextmenu', ev => {                  // 안드로이드 꾹 누르기 · PC 오른쪽 단추
+      const el = ev.target.closest('[data-iid]');
+      if (!el) return;
+      ev.preventDefault();
+      if (!pressHeld && Date.now() - pressOpenedAt > 800) openMsgMenu(el);
+    });
+  }
+
+  // 메뉴를 연 손가락을 뗄 때 생기는 클릭 — 손가락 밑에 깔린 메뉴 바탕(닫기)·링크·메뉴 줄을 누르지 않게 화면 전체에서 한 번 버린다
+  const releasePress = () => { if (pressHeld) { pressHeld = false; clearTimeout(heldTimer); swallowUntil = Date.now() + 450; } };
+  document.addEventListener('pointerup', releasePress, true);
+  document.addEventListener('pointercancel', releasePress, true);
+  document.addEventListener('click', ev => {
+    if (pressHeld || Date.now() < swallowUntil) { ev.preventDefault(); ev.stopPropagation(); }
+  }, true);
+
+  function itemOf(el) {
+    const it = el && find(Number(el.dataset.iid));
+    return it && MSG_KINDS[it.kind] && !it.streaming ? it : null;
+  }
+
+  /** 복사할 글 — [제목](주소)는 「제목 주소」로, 굵게·코드 표시는 뺀다 */
+  function plainText(it) {
+    return (it.text || '')
+      .replace(/\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]\((https?:\/\/[^\s)]+)\)/g, '$1 $2')
+      .replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/`([^`\n]+)`/g, '$1').replace(/^#{1,6}\s+/gm, '');
+  }
+
+  function openMsgMenu(el) {
+    const it = itemOf(el);
+    if (!it || document.querySelector('.msg-menu')) return false;
+    pressOpenedAt = Date.now();
+    haptic('tap');
+    el.classList.add('pressed');
+    const peek = plainText(it).replace(/\s+/g, ' ').trim() || ((it.images || []).length ? '사진' : (it.files || []).length ? '파일' : '');
+    const row = (icon, label, fn, cls) => h('button', { class: 'mrow' + (cls ? ' ' + cls : ''), onclick: () => { close(); fn(); } }, svg(icon), label);
+    const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (ev.target === scrim) close(); } },
+      h('div', { class: 'sheet msg-menu', role: 'dialog', 'aria-modal': 'true', 'aria-label': '메시지 메뉴' },
+        peek ? h('p', { class: 'peek', text: peek.length > 90 ? peek.slice(0, 90) + '…' : peek }) : null,
+        row('copy', '복사', () => copyMsg(it)),
+        row('trash', '이 메시지 삭제', () => deleteMsg(it)),
+        row('trash', '대화 전체 삭제', confirmWipe, 'danger'),
+        h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() })));
+    const close = layer(() => { scrim.remove(); el.classList.remove('pressed'); });
+    $('#app').append(scrim);
+    return true;
+  }
+
+  async function copyMsg(it) {
+    const text = plainText(it);
+    if (!text) { toast('복사할 글이 없어요'); return; }
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; }
+    } catch (e) { /* 웹뷰가 막으면 아래 방법으로 */ }
+    if (!ok) {
+      const ta = h('textarea', { readonly: true, style: 'position:fixed;top:-200px;left:0;opacity:0;user-select:text;-webkit-user-select:text' });
+      ta.value = text;
+      document.body.append(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      ta.remove();
+    }
+    toast(ok ? '복사했어요' : '복사하지 못했어요');
+  }
+
+  function removeItem(it) {
+    S.items = S.items.filter(x => x !== it);
+    if (it.el) it.el.remove();
+    if (lastAI === it.id) lastAI = null;
+    renderHello();
+  }
+
+  function removeByMid(mid) {
+    if (!mid) return;
+    S.items.filter(x => x.mid === mid).forEach(removeItem);
+  }
+
+  async function deleteMsg(it) {
+    if (!it.mid) { removeItem(it); toast('화면에서만 지웠어요'); return; }
+    if (it.el) it.el.classList.add('pressed');
+    try {
+      await api.post('chat/delete', { mid: it.mid });
+      removeItem(it);
+      toast('지웠어요');
+    } catch (e) {
+      if (it.el) it.el.classList.remove('pressed');
+      show(e);
+    }
+  }
+
+  function confirmWipe() {
+    const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (ev.target === scrim) close(); } },
+      h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' },
+        h('h3', { text: '정말 지울까요?' }),
+        h('p', { text: '대화가 모두 지워지고, 지난 대화 보기에서도 나오지 않아요.' }),
+        h('button', { class: 'btn danger wide', text: '모두 지우기', onclick: () => { close(); wipeAll(); } }),
+        h('button', { class: 'btn ghost wide', text: '그대로 두기', onclick: () => close() })));
+    const close = layer(() => scrim.remove());
+    $('#app').append(scrim);
+  }
+
+  async function wipeAll() {
+    try {
+      await api.post('chat/wipe', {});
+      apply({ type: 'wiped' });
+      toast('대화를 모두 지웠어요');
+    } catch (e) {
+      show(e);
+    }
+  }
+
   // ── 제목줄 · 상태 ──────────────────────
   function orbState() {
     if (recorder.recording) return 'recording';
@@ -1391,6 +1545,7 @@
     chatEl.append(pullEl, h('div', { class: 'chat-inner' }, historyBtnEl, helloEl, listEl));
     jumpEl = h('button', { class: 'jump', hidden: true, 'aria-label': '맨 아래로', onclick: () => scrollToBottom(true) }, svg('down'));
     pullToRefresh(chatEl, pullEl);
+    bindLongPress(listEl);
 
     const bar = h('div', { class: 'bar' },
       h('button', { class: 'icon', 'aria-label': '메뉴 — 대화 상대 고르기', onclick: openDrawer, html: ICON.menu }),
