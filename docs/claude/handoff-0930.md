@@ -56,3 +56,16 @@
 2. `/api/weather` 에 `humidity`(정수 %) — 기상청 연동하면 REH 로 자동. 연동 전이면 Open-Meteo `current=...,relative_humidity_2m` → `out['humidity']`. null 로 보내지 말 것
 3. `/upload`·`/create-location-with-model` 이 `upload_id` 를 받아 같은 값이 다시 오면 저장하지 말고 처음과 같은 성공 응답 (UNIQUE 컬럼/테이블 권장)
 4. (보안, 기존 문제) `TourAPIManager.SERVICE_KEY` 가 앱 코드에 평문 — 서버 `/proxy` 가 키를 붙이도록 옮기고 키 재발급 권장 (CLAUDE.md 6)
+
+### 검토에서 나온 남은 문제 (2026-10-05, 고치지 않고 멈춤 — Windows 세션이 이어서)
+Unity 컴파일러 없이 코드만 고쳤고 컴파일 오류는 검토에서 발견되지 않았다. 아래는 검증(반박 확인) 전 지적이다.
+- **[중요] 화장실 상한**: 4번째부터의 화장실이 화살표·박스(IndicatorOnly)로 넘어가면서 **메인 예산**(maxTotalObjects 16)을 써서, 화장실 많은 도심에서 사용자 업로드 장소가 밀려난다. `FilterManager.AllocateObjects` 에서 반경 안 초과 화장실은 `continue` 로 빼거나 별도 소량 할당으로. 3번째 경계 히스테리시스도 없음(깜빡임)
+- **[중요] '주변에 없음' 문구**: 상태 알약만 고쳤고, 목록 시트(PlaceListManager)는 오프라인일 때 여전히 '데이터 없음'처럼 보일 수 있다
+- 다시 받기: '한 번도 못 받은' 매니저만 재시도 — 1km 이동 갱신이 실패한 경우는 다음 1km 까지 옛 목록
+- `upload_id`: 실패·시간 초과 뒤 X 로 닫고 **다른 장소**를 올려도 같은 키 → 서버 중복 거르기를 켜면 새 장소가 저장 안 될 수 있음. `ShowUploadPage`/입력 변경 때 새 키로
+- 업로드 제한: 장소 추가만 60초, 3D 모델 30초·정보 수정 20초 그대로(씬 값)
+- 지역 이름: Nominatim URL 이 쉼표 소수점 언어에서 깨짐(`ToString("F4", CultureInfo.InvariantCulture)` 필요) · 세종은 '세종특별자치시 ○○동'으로 나옴
+- 되돌리기 알림(Undo0926): 목록·상세 창이 열려도 위에 남고 누름을 막음, 가로 화면 위치 미조정
+- 알림 권한: 로그인 안 하는 사용자는 안드로이드 13+ 에서 알림 권한을 영영 안 물음
+- `weather_kma.py`: 초단기예보(하늘상태) 호출만 실패하면 맑은 날도 '흐림' — 실패 시 code 는 덮지 말 것
+- PlayTest 스토어 캡처에 지역 이름(에디터 위치)이 찍힘
