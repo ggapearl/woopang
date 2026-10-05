@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Redesign0926
 {
@@ -42,6 +44,17 @@ namespace Redesign0926
             so.ApplyModifiedPropertiesWithoutUndo();
             Proxy(root, sd, ClosePath, log);
             Grab(card.gameObject);
+
+            // X 가 누르면 자기 자신도 끄고 있었다 — 장소 수정을 다시 열 때 켜 주는 곳이 없어 두 번째부터 X·뒤로가기(덮개가 X 안에 있다)가 사라졌다.
+            // 창(Fixpage)을 끄면 X 도 함께 안 보이니 자기 끄기만 뺀다
+            var xb = root.Find(ClosePath).GetComponent<Button>();
+            if (xb != null)
+                for (int i = xb.onClick.GetPersistentEventCount() - 1; i >= 0; i--)
+                    if (xb.onClick.GetPersistentTarget(i) == xb.gameObject && xb.onClick.GetPersistentMethodName(i) == "SetActive")
+                    {
+                        UnityEventTools.RemovePersistentListener(xb.onClick, i);
+                        EditorUtility.SetDirty(xb);
+                    }
         }
 
         // 3D 모델 30초 · 정보 수정 20초가 장면에 저장돼 있었다 → 장소 추가와 같은 60초

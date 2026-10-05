@@ -154,7 +154,7 @@ namespace Redesign0926
             prt.offsetMin = Vector2.zero; prt.offsetMax = Vector2.zero;
             prt.localScale = Vector3.one;
             var img = Ensure<Image>(px);
-            img.sprite = null; img.color = new Color(1f, 1f, 1f, 0f); img.raycastTarget = true;
+            img.sprite = null; img.color = new Color(1f, 1f, 1f, 0f); img.raycastTarget = true; img.enabled = true;   // 다른 단계가 꺼 뒀어도 다시
             var b = Ensure<Button>(px);
             b.transition = real.transition; b.colors = real.colors; b.targetGraphic = real.targetGraphic;
             var cp = Ensure<R0926CloseProxy>(px);

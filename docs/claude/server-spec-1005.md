@@ -158,8 +158,14 @@ v19 앱: **`serviceKey` 를 보내지 않는다**. 지하철·기차·터미널 
      ⚠ `tile.openstreetmap.org` 를 직접 끌어 쓰는 건 OSM 사용 정책 위반(앱 규모 사용 금지) — 쓰지 말 것. 어느 회사로 할지는 대표님 결정
    - **디스크 캐시** `server/cache/tiles/{z}/{x}/{y}.png` (있으면 바로 돌려줌) + `Cache-Control: public, max-age=2592000` — 타일은 거의 안 바뀐다. nginx 가 캐시 폴더를 직접 내줘도 된다
    - 지도 회사 호출 예외(`requests.RequestException`)는 잡아서 502 — 예외 글에 키 든 주소가 찍히니 로그에 그대로 남기지 말 것 (4 와 같음)
-   - (권장) IP·로그인 토큰 기준 분당 제한 — 앱은 로그인돼 있으면 `Authorization: Bearer` 를 붙인다
+   - **(필수) 남용 막기** — 이 주소는 로그인 없이 열려 있고 캐시에 없는 칸마다 유료 지도 회사를 부른다 (가능한 칸이 수십억 개라 캐시로는 못 막는다):
+     - 캐시에 없는 요청만 IP(로그인 토큰이 있으면 토큰)당 분당 약 120개 — 넘으면 429 (앱은 실패한 칸을 30초 뒤에, 여러 번 실패하면 1분 쉬었다 다시)
+     - 하루 지도 회사 호출 상한(`MAP_TILE_DAILY_BUDGET`) — 넘으면 503 (그날은 캐시에 있는 칸만)
+     - 캐시 폴더 크기 상한(예: 5GB) — 하루 한 번 오래 안 쓴 파일(mtime)부터 지운다
+     - 앱은 로그인돼 있으면 `Authorization: Bearer` 를 붙인다
    ```python
+   TILE_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache', 'tiles')   # 반드시 절대 경로 (send_file 은 상대 경로를 앱 폴더 기준으로 본다)
+
    @app.route('/api/map/tiles/info')
    def map_tiles_info():
        if not os.getenv('MAP_TILE_URL'):
@@ -173,19 +179,33 @@ v19 앱: **`serviceKey` 를 보내지 않는다**. 지하철·기차·터미널 
        if not tpl or not (0 <= z <= max_z and 0 <= x < 2 ** z and 0 <= y < 2 ** z):
            return '', 404
        path = os.path.join(TILE_CACHE_DIR, str(z), str(x), f'{y}.png')
-       if not os.path.exists(path):
+       if os.path.exists(path):
+           resp = send_file(path, mimetype='image/png')
+           resp.headers['Cache-Control'] = 'public, max-age=2592000'
+           return resp
+       if not tile_miss_allowed(request):          # 위 '남용 막기' — IP/토큰 분당 제한 + 하루 상한 (False 면 429/503 을 돌려줄 것)
+           return '', 429
+       try:
+           r = requests.get(tpl.format(z=z, x=x, y=y), timeout=8)
+       except requests.RequestException:
+           return '', 502                          # 예외 글에 키가 든 주소가 있다 — 남기지 않는다
+       if r.status_code != 200:
+           return '', 404 if r.status_code == 404 else 502
+       ctype = r.headers.get('Content-Type', '')
+       if not r.content or not ctype.startswith(('image/png', 'image/jpeg')):
+           return '', 502                          # 오류 글·빈 응답·webp 를 30일 동안 캐시하지 않게 (앱은 png·jpeg 만 읽는다)
+       os.makedirs(os.path.dirname(path), exist_ok=True)
+       fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')   # 같은 칸을 동시에 받아도 서로 덮지 않게 — 임시 파일 이름을 따로
+       with os.fdopen(fd, 'wb') as f:
+           f.write(r.content)
+       try:
+           os.replace(tmp, path)
+       except OSError:                             # 윈도우: 다른 요청이 그 파일을 보내는 중 — 이번엔 캐시 없이 돌려준다
            try:
-               r = requests.get(tpl.format(z=z, x=x, y=y), timeout=8)
-           except requests.RequestException:
-               return '', 502                      # 예외 글에 키가 든 주소가 있다 — 남기지 않는다
-           if r.status_code != 200:
-               return '', 404 if r.status_code == 404 else 502
-           os.makedirs(os.path.dirname(path), exist_ok=True)
-           tmp = path + '.tmp'
-           with open(tmp, 'wb') as f:
-               f.write(r.content)
-           os.replace(tmp, path)                   # 받는 도중 다른 요청이 반쪽 파일을 읽지 않게
-       resp = send_file(path, mimetype='image/png')
+               os.remove(tmp)
+           except OSError:
+               pass
+       resp = Response(r.content, mimetype=ctype.split(';')[0])
        resp.headers['Cache-Control'] = 'public, max-age=2592000'
        return resp
    ```

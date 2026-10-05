@@ -88,6 +88,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private float nextRefresh;
     private float prevPinch = -1f;
     private Vector2 lastSize;
+    private Vector2 dragRest;        // 깊이 확대하면 지도 좌표가 커서 float 가 작은 움직임을 못 담는다 — 못 담은 끝자리는 다음 끌기에
     private Coroutine anim;
 
     // ── 시작 ─────────────────────────────────────────────────
@@ -548,12 +549,15 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     private float Scale => canvas != null ? canvas.scaleFactor : 1f;
 
-    public void OnBeginDrag(PointerEventData e) { if (anim != null) { StopCoroutine(anim); anim = null; } }
+    public void OnBeginDrag(PointerEventData e) { if (anim != null) { StopCoroutine(anim); anim = null; } dragRest = Vector2.zero; }
 
     public void OnDrag(PointerEventData e)
     {
         if (Touches(out _, out _) >= 2) return;   // 두 손가락이면 확대·축소 쪽
-        origin += new Vector2(e.delta.x, -e.delta.y) / Scale;
+        dragRest += new Vector2(e.delta.x, -e.delta.y) / Scale;
+        Vector2 before = origin;
+        origin += dragRest;
+        dragRest -= origin - before;
         Clamp();
         Layout();
     }

@@ -60,7 +60,7 @@ public class R0926MapTiles : MonoBehaviour
 
     private void OnEnable()
     {
-        if (info == null && infoReq == null && Time.realtimeSinceStartup >= infoRetryAt)
+        if (!Available && infoReq == null && Time.realtimeSinceStartup >= infoRetryAt)
         {
             infoReq = UnityWebRequest.Get(ApiConfig.MAP_TILES_INFO);
             infoReq.timeout = 8;
@@ -79,6 +79,8 @@ public class R0926MapTiles : MonoBehaviour
         inUse.Clear();
         foreach (var img in pool) if (img != null) { img.texture = null; img.enabled = false; }
         if (attribution != null) attribution.enabled = false;
+        wanted.Clear();
+        inUse.Clear();
         hasView = false;
     }
 
@@ -93,17 +95,23 @@ public class R0926MapTiles : MonoBehaviour
         if (Available && layer != null && map.x > 1f && map.y > 1f)
         {
             float lv = Mathf.Log(map.x * scale / tilePixels, 2f);
-            int z = Mathf.Clamp(Mathf.RoundToInt(lv), 0, MaxLevel);
+            float a = R0926FriendsMap.WebToNormY(0f), b = R0926FriendsMap.WebToNormY(1f) - a;
+            float baseY = origin.y + map.y * a;
+            // 화면이 커서(태블릿·가로) 칸이 너무 많으면 한 단계 덜 자세한 타일로
+            int z = Mathf.Clamp(Mathf.RoundToInt(lv), 0, MaxLevel), n = 1, x0 = 0, x1 = -1, y0 = 0, y1 = -1;
+            float tw = 0f, th = 0f;
+            for (; z >= minLevel; z--)
+            {
+                n = 1 << z;
+                tw = map.x / n;
+                th = map.y * b / n;
+                x0 = Mathf.Max(0, Mathf.FloorToInt(-origin.x / tw)); x1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.x - origin.x) / tw));
+                y0 = Mathf.Max(0, Mathf.FloorToInt(-baseY / th)); y1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.y - baseY) / th));
+                if ((x1 - x0 + 1) * (y1 - y0 + 1) <= MaxVisible) break;
+            }
             if (z >= minLevel)
             {
-                int n = 1 << z;
-                float tw = map.x / n;
-                float a = R0926FriendsMap.WebToNormY(0f);
-                float th = map.y * (R0926FriendsMap.WebToNormY(1f) - a) / n;
-                float baseY = origin.y + map.y * a;
-                int x0 = Mathf.Max(0, Mathf.FloorToInt(-origin.x / tw)), x1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.x - origin.x) / tw));
-                int y0 = Mathf.Max(0, Mathf.FloorToInt(-baseY / th)), y1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.y - baseY) / th));
-                if (x1 >= x0 && y1 >= y0 && (x1 - x0 + 1) * (y1 - y0 + 1) <= MaxVisible)
+                if (x1 >= x0 && y1 >= y0)
                 {
                     // 큰 수끼리의 뺄셈은 첫 칸에서 한 번만 — 나머지는 작은 수로 더해 칸 사이에 틈이 생기지 않게
                     float px0 = origin.x + x0 * tw, py0 = baseY + y0 * th;
@@ -185,7 +193,7 @@ public class R0926MapTiles : MonoBehaviour
             infoReq.Dispose();
             infoReq = null;
             if (got != null) info = got;
-            else infoRetryAt = Time.realtimeSinceStartup + 600f;   // 서버가 아직 타일을 안 준다 — 10분 뒤 다시
+            if (!Available) infoRetryAt = Time.realtimeSinceStartup + 600f;   // 서버가 아직 타일을 안 준다(없음·꺼짐) — 10분 뒤 다시
             if (Available && hasView) UpdateView(lastOrigin, lastMap, lastView, lastScale);
         }
         if (!Available) return;

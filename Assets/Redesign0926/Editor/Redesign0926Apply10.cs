@@ -248,7 +248,7 @@ namespace Redesign0926
                 var own = x.GetComponent<Graphic>();
                 if (own is RawImage raw) { raw.texture = null; raw.color = new Color(1, 1, 1, 0.12f); }
                 else Img(x, Spr("r0926_circle"), new Color(1, 1, 1, 0.12f), Image.Type.Simple).raycastTarget = true;
-                foreach (var g in x.GetComponentsInChildren<Graphic>(true)) if (g.gameObject != x && g.name != "Icon0926") g.enabled = false;
+                foreach (var g in x.GetComponentsInChildren<Graphic>(true)) if (g.gameObject != x && g.name != "Icon0926" && g.name != "ClosePx0926") g.enabled = false;   // 밀어 닫기 덮개(v21)는 남긴다
                 var ic = FindOrCreate(x.transform, "Icon0926");
                 Img(ic, Spr("r0926_i_close"), Ink, Image.Type.Simple).raycastTarget = false;
                 SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(48, 48));

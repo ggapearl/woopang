@@ -698,10 +698,12 @@ namespace Redesign0926
             SetRect(RT(av), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(18, 0), new Vector2(104, 104));
             var name = FindOrCreate(row.transform, "Name");
             SetRect(RT(name), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(156, 2), new Vector2(-176, 58));
-            Txt(name, "@name", 46, Ink, TextAnchor.LowerLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            var nameT = Txt(name, "@name", 46, Ink, TextAnchor.LowerLeft, FontStyle.Bold);
+            nameT.horizontalOverflow = HorizontalWrapMode.Overflow; nameT.verticalOverflow = VerticalWrapMode.Overflow;   // 한 줄 — 글자 줄높이(1.3배)가 칸보다 커도 사라지지 않게
             var sub = FindOrCreate(row.transform, "Sub");
             SetRect(RT(sub), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(156, -4), new Vector2(-176, 50));
-            Txt(sub, "", 37, Muted, TextAnchor.UpperLeft, FontStyle.Normal).horizontalOverflow = HorizontalWrapMode.Overflow;
+            var subT = Txt(sub, "", 37, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
+            subT.horizontalOverflow = HorizontalWrapMode.Overflow; subT.verticalOverflow = VerticalWrapMode.Overflow;
             row.SetActive(false);
             return row;
         }
@@ -730,7 +732,8 @@ namespace Redesign0926
             Img(badge, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 64f / 23f).raycastTarget = false;
             var bt = FindOrCreate(badge.transform, "Text");
             Stretch(RT(bt));
-            Txt(bt, "광고", 29, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var btT = Txt(bt, "광고", 29, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            btT.resizeTextForBestFit = true; btT.resizeTextMinSize = 20; btT.resizeTextMaxSize = 29;   // 'Anuncio' 같은 긴 말만 줄여 알약 안에
             Loc(bt, "광고", "Ad", "広告", "广告", "Anuncio");
 
             var title = FindOrCreate(card.transform, "Title");
@@ -738,7 +741,7 @@ namespace Redesign0926
             var tt = Txt(title, "이 자리에 가게를 알려 보세요", 41, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             tt.horizontalOverflow = HorizontalWrapMode.Wrap; tt.verticalOverflow = VerticalWrapMode.Truncate;
             var body = FindOrCreate(card.transform, "Body");
-            SetRect(RT(body), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(204, -94), new Vector2(-204 - 262, 96));
+            SetRect(RT(body), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(204, -94), new Vector2(-204 - 262, 104));   // 두 줄(35 · 줄간격 1.05)이 꼭 맞게
             var bdy = Txt(body, "동네 반경 안의 우팡 사용자에게만 보여요", 35, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
             bdy.horizontalOverflow = HorizontalWrapMode.Wrap; bdy.verticalOverflow = VerticalWrapMode.Truncate; bdy.lineSpacing = 1.05f;
 

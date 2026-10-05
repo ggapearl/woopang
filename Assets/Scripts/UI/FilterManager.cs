@@ -1734,6 +1734,8 @@ public class FilterManager : MonoBehaviour
         {
             if (provider == null || (provider.IsCacheReady && !RefreshFailed(provider))) continue;
             cacheRetryCount.TryGetValue(provider, out int tries);
+            // 다시 이어졌을 때 바로 보내되, 방금 보낸 다시 받기(1km 이동)가 아직 오는 중이면 겹쳐 보내지 않는다
+            if (immediate && provider.IsCacheReady && lastCacheRequestTime.TryGetValue(provider, out float sent) && now - sent < 10f) continue;
             if (immediate) tries = 0;
             else if (lastCacheRequestTime.TryGetValue(provider, out float last))
             {

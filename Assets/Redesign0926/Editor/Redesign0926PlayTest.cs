@@ -558,7 +558,7 @@ namespace Redesign0926
             Do(() => { Backdrop("bg_city.png"); DeviceFov(); });
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Sleep(6f);
-            Do(() => { HidePrivatePlaces(); LogTargets(); DeviceFov(); });
+            Do(() => { HidePrivatePlaces(); HideAddressLine(); LogTargets(); DeviceFov(); });   // 주소줄엔 에디터 위치가 찍힌다
             for (int yaw = 0; yaw < 360; yaw += 30)
             {
                 int y = yaw;
@@ -873,6 +873,7 @@ namespace Redesign0926
             Shot("s0_splash_b");
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Sleep(6f);
+            Do(() => { HidePrivatePlaces(); HideAddressLine(); });   // 주소줄엔 에디터 위치가 찍힌다
             for (int yaw = 0; yaw < 360; yaw += 45)
             {
                 int y = yaw;
@@ -1127,6 +1128,7 @@ namespace Redesign0926
         {
             if (!EditorApplication.isPlaying)
             {
+                if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 running = false;
                 if (EditorApplication.timeSinceStartup < nextPoll) return;
                 nextPoll = EditorApplication.timeSinceStartup + 3.0;
