@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-06a';
+  const WEB_VERSION = '2026-10-10a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -900,6 +900,7 @@
         return false;
       case 'model':
         S.model = e.key || S.model;
+        if (!replaying) renderStatus();
         return false;
       case 'office': {
         const ws = (e.workers || []).map(worker).filter(Boolean);
@@ -1181,7 +1182,8 @@
       case 'question': return questionCard(it.card);
       case 'incoming':
         return h('div', { class: 'inbox' + (it.auto ? ' auto' : '') + (it.out ? ' out' : '') },
-          h('b', { text: it.source }), it.text ? h('div', null, linkified(it.text)) : null, attachments(it), stamp(it), buttonRow(it));
+          h('b', { text: it.source }), it.text ? h('div', { class: foldCls(it) || null }, linkified(it.text)) : null, foldBtn(it),
+          attachments(it), stamp(it), buttonRow(it));
       case 'note': return h('div', { class: 'note', text: it.text });
       case 'error': return h('div', { class: 'err', text: it.text });
       default: return h('div');
@@ -1211,11 +1213,30 @@
   // 누르면 맨 아래 문서 클릭 처리기가 openLink(href) 로 연다
   const linkified = text => splitLinks(text).map(p => typeof p === 'string' ? document.createTextNode(p) : h('a', { href: p.url, class: 'lnk', text: p.text }));
 
+  // 긴 글은 접어 두고 「전체보기」로 편다 (2026-10-10 대표님 — 자율 작업 글이 길어 끝이 안 보였다)
+  const LONG_CHARS = 600, LONG_LINES = 12;
+  const isLong = it => !it.streaming && !!it.text && (it.text.length > LONG_CHARS || it.text.split('\n').length > LONG_LINES);
+  const foldCls = it => isLong(it) ? (it.expanded ? 'fold' : 'fold folded') : '';
+  function foldBtn(it) {
+    if (!isLong(it)) return null;
+    return h('button', {
+      class: 'more', 'aria-expanded': it.expanded ? 'true' : 'false', text: it.expanded ? '접기' : '전체보기',
+      onclick: ev => {
+        ev.stopPropagation();
+        it.expanded = !it.expanded;
+        sfx.play('tap');
+        paint(it);
+        if (!it.expanded && it.el) it.el.scrollIntoView({ block: 'nearest' });
+      },
+    });
+  }
+
   function userBubble(it) {
     // 이 폰(앱)에서 보낸 건 표시하지 않고, 다른 곳에서 온 것만 어디서인지 붙인다
     const via = { typed: ['PC 에서', 'pc'], voice: ['PC 에서 말로', 'micSm'], phone: ['텔레그램', 'phone'] }[it.origin];
     return h('div', { class: 'u-row' },
-      h('div', { class: 'u-bubble' }, via ? h('div', { class: 'via' }, svg(via[1]), via[0]) : null, document.createTextNode(it.text), attachments(it), stamp(it)));
+      h('div', { class: 'u-bubble' }, via ? h('div', { class: 'via' }, svg(via[1]), via[0]) : null,
+        isLong(it) ? h('div', { class: foldCls(it), text: it.text }) : document.createTextNode(it.text), foldBtn(it), attachments(it), stamp(it)));
   }
 
   /** 받은 시각 — 텔레그램처럼 작게. 읽기(소리)에는 들어가지 않는다(본문 it.text 만 읽음). PC 가 사건에 붙여 준 시각(ts). */
@@ -1291,8 +1312,9 @@
         class: 'read' + (reading ? ' on' : ''), 'data-read': it.id, 'aria-label': reading ? '읽기 멈추기' : '이 답을 소리로 읽기',
         onclick: () => readAloud(it),
       }, reading ? svg('stop') : svg('speaker'), reading ? '멈춤' : '읽기') : null);
-    const body = it.streaming ? h('div', { class: 'ai-body stream', text: it.text + ' ▍' }) : h('div', { class: 'ai-body md', html: markdown(it.text) });
-    return h('div', { class: 'ai' }, head, body, it.meta ? h('div', { class: 'meta', text: it.meta }) : null);
+    const body = it.streaming ? h('div', { class: 'ai-body stream', text: it.text + ' ▍' })
+      : h('div', { class: 'ai-body md' + (isLong(it) ? ' ' + foldCls(it) : ''), html: markdown(it.text) });
+    return h('div', { class: 'ai' }, head, body, foldBtn(it), it.meta ? h('div', { class: 'meta', text: it.meta }) : null);
   }
 
   function renderReadButtons() {
@@ -1548,7 +1570,7 @@
   }
 
   const modelLabel = () => (S.models.find(m => m.key === S.model) || {}).label || '보통';
-  const modelPill = () => modelLabel().replace(/^SONNET 5\.5 /i, 'S5.5 ');    // 제목줄은 좁다 — 고르는 메뉴엔 전체 이름
+  const modelPill = () => modelLabel().replace(/^SONNET 5\.5 /i, 'S5.5 ').replace(/^OPUS 5\.5 /i, 'O5.5 ');    // 제목줄은 좁다 — 고르는 메뉴엔 전체 이름
 
   function renderStatus() {
     const main = $('#main');
@@ -1790,13 +1812,15 @@
     });
   }
 
+  const modelNote = l => /^opus/i.test(l) ? '가장 깊이 생각 · 사용량 가장 많음' : /ultracode/i.test(l) ? '여러 에이전트로 꼼꼼히 · 사용량 많음' : '';
+
   function modelMenu(anchor) {
     const r = anchor.getBoundingClientRect();
     const menu = h('div', { class: 'menu', role: 'menu', style: 'top:' + (r.bottom + 6) + 'px;right:' + Math.max(8, innerWidth - r.right) + 'px' },
       h('h4', { text: '모델' }),
       S.models.map(m => h('button', { role: 'menuitemradio', 'aria-checked': m.key === S.model ? 'true' : 'false', onclick: () => { close(); sfx.play('tap'); setModel(m.key); } },
         h('i', { text: m.key === S.model ? '✓' : '' }),
-        h('span', { class: 'ml' }, m.label, /ultracode/i.test(m.label) ? h('small', { text: '여러 에이전트로 꼼꼼히 · 사용량 많음' }) : null))));
+        h('span', { class: 'ml' }, m.label, modelNote(m.label) ? h('small', { text: modelNote(m.label) }) : null))));
     const scrim = h('div', { class: 'menu-scrim', onclick: () => close() });
     const close = layer(() => { scrim.remove(); menu.remove(); });
     $('#app').append(scrim, menu);
@@ -2135,6 +2159,48 @@
       sandbox: 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads' })));
   }
 
+  /** 문서 한 장을 그린다. woopang.com 은 X-Frame-Options DENY 라 iframe 에 주소를 넣으면 앱 안에서는 빈 화면이었다
+      (브라우저로 열면 보임 — 10/6 「우팡앱 제휴」). 같은 사이트 문서는 글을 받아 srcdoc 으로 그린다 — <base> 로 그림·상대 주소를 살리고,
+      sandbox(allow-same-origin 없음)는 그대로라 문서 속 스크립트는 앱 저장소에 못 닿는다. 링크는 앱이 브라우저로 연다(DOC_LINK). */
+  const DOC_LINK = '<script>document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a)return;'
+    + 'var raw=a.getAttribute("href")||"";if(raw.charAt(0)==="#"){var id=decodeURIComponent(raw.slice(1)),t=document.getElementById(id)||document.getElementsByName(id)[0];'
+    + 'e.preventDefault();if(t)t.scrollIntoView();return;}if(!/^https?:/i.test(a.href))return;e.preventDefault();parent.postMessage({hyoDocOpen:a.href},"*");},true);<\/script>';
+  const DOC_PAGE = body => '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<style>body{margin:0;padding:18px 16px 48px;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;color:#1b1f2a;background:#fff;'
+    + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
+    + 'img{max-width:100%}@media (prefers-color-scheme:dark){body{background:#14161c;color:#e8eaf0}td,th{border-color:#333}}</style></head><body>' + body + '</body></html>';
+
+  async function loadDoc(f) {
+    const url = f.dataset.src;
+    f.removeAttribute('data-src');
+    let abs = null;
+    try { abs = new URL(url, location.href); } catch (e) { /* 아래 주소로 */ }
+    if (abs && abs.origin === location.origin) {
+      try {
+        const r = await fetch(abs.href, { cache: 'no-store' });
+        const type = (r.headers.get('content-type') || '').toLowerCase();
+        if (r.ok && type.includes('text/html')) {
+          const page = await r.text();
+          const head = '<base href="' + esc(abs.href) + '">' + DOC_LINK;
+          f.srcdoc = /<head[^>]*>/i.test(page) ? page.replace(/<head[^>]*>/i, m => m + head) : head + page;
+          return;
+        }
+        if (r.ok && /^text\/(markdown|x-markdown)/.test(type)) { f.srcdoc = DOC_PAGE(markdown(await r.text()) + DOC_LINK); return; }
+        if (r.ok && /^text\/|json/.test(type)) { f.srcdoc = DOC_PAGE('<pre>' + esc(await r.text()) + '</pre>'); return; }
+      } catch (e) { /* 아래 주소로 */ }
+    }
+    f.src = url;                                            // PDF·다른 사이트 — 예전처럼 주소로
+  }
+
+  let docOpenAt = 0;
+  window.addEventListener('message', ev => {
+    const u = ev.data && ev.data.hyoDocOpen;
+    if (typeof u !== 'string' || !/^https?:\/\//i.test(u) || Date.now() - docOpenAt < 800) return;
+    if (!Array.from(document.querySelectorAll('.vw-doc iframe')).some(fr => fr.contentWindow === ev.source)) return;
+    docOpenAt = Date.now();
+    openLink(u);
+  });
+
   /** 전체 화면 보기 — entries: [{url, name, kind}], start: 처음 보일 장 */
   function openViewer(entries, start, title) {
     const list = (entries || []).filter(e => e && e.url);
@@ -2163,7 +2229,7 @@
       Array.from(track.children).forEach((s, i) => {
         if (i !== idx) s.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
         const f = s.querySelector('iframe[data-src]');
-        if (f && i === idx) { f.src = f.dataset.src; f.removeAttribute('data-src'); }
+        if (f && i === idx) loadDoc(f);
       });
     }
 
@@ -2244,7 +2310,8 @@
         h('div', { class: 'frow' }, h('button', { class: 'link', text: '들어 보기', onclick: testVoice })),
       ], '말 빠르기는 PC 스피커·텔레그램 음성 메시지의 소희 목소리에도 함께 적용돼요.'),
       section('효딩쓰', [row('모델', sel(S.models.map(m => [m.key, m.label]), S.model, setModel, '모델'))],
-        'SONNET 5.5 HIGH 가 기본이에요. ULTRACODE 는 여러 에이전트를 묶어 더 꼼꼼히 하지만 구독 사용량을 훨씬 많이 씁니다.'),
+        'SONNET 5.5 HIGH 가 기본이에요. ULTRACODE 는 여러 에이전트를 묶어 더 꼼꼼히 하지만 구독 사용량을 훨씬 많이 씁니다. '
+        + 'OPUS 는 SONNET 보다 깊이 생각하는 대신 사용량이 더 듭니다.'),
       section('화면', [h('div', { class: 'frow col' }, themeSeg),
         row('버튼 효과음', sel([['1', '켜기'], ['0', '끄기']], local.get('sfx', '1'), v => { local.set('sfx', v); sfx.play('tap'); }, '버튼 효과음'))], null),
       section('연결', [
