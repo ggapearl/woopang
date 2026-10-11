@@ -387,6 +387,32 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .doc-more:disabled{opacity:.6}
 .doc-empty{font-size:13px;color:var(--ink-3);text-align:center;padding:40px 24px;line-height:1.6}
 
+/* 승인함 (2026-10-12) — 문서함 틀에 펼쳐 읽기 · 그 자리에서 승인·보류·거절 */
+.bar .appr{position:relative}
+.nbadge{position:absolute;top:4px;right:3px;min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--pink);color:#fff;
+  font-size:10.5px;font-weight:700;line-height:17px;text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px var(--bar);pointer-events:none}
+.badge-ic.appr{background:var(--pink-soft);color:var(--pink-deep)}
+.pitem{border-radius:12px}
+.pitem.open{background:var(--surface);box-shadow:0 0 0 1px var(--line);margin:2px 0 8px}
+.prow{width:100%;text-align:left}
+.prow .chev{transition:transform .15s}
+.pitem.open .prow .chev{transform:rotate(90deg)}
+.pitem.open .dtx b{white-space:normal;overflow-wrap:anywhere}
+.dthumb.ph{font-size:12px;font-weight:700;letter-spacing:-.02em;color:var(--pink-deep);background:var(--pink-soft)}
+.pitem.hold .dthumb.ph{color:var(--ink-2);background:var(--surface-2)}
+.pitem.approved .dthumb.ph{color:var(--navy);background:var(--navy-soft)}
+.pitem.rejected .dthumb.ph{color:var(--ink-3);background:var(--surface-2)}
+.pst{font-weight:700;color:var(--pink-deep)}
+.pitem.hold .pst{color:var(--ink-2)}
+.pitem.approved .pst{color:var(--navy)}
+.pitem.rejected .pst{color:var(--ink-3)}
+.pbody{padding:0 14px 14px}
+.pbody h4{margin:12px 0 3px;font-size:12px;font-weight:700;color:var(--ink-3)}
+.pbody p{margin:0;font-size:15px;line-height:1.6;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
+.pact{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;margin-top:16px}
+.pact .btn{min-height:44px}
+.pdone{margin-top:10px;font-size:12px;color:var(--ink-3)}
+
 /* 사진·영상 보기 (2026-10-04) — 사진이 잘 보이게 늘 검은 바탕 */
 .viewer{position:absolute;top:0;right:0;bottom:0;left:0;z-index:38;background:#000;color:#fff;display:flex;flex-direction:column;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}

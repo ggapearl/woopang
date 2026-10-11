@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-10a';
+  const WEB_VERSION = '2026-10-12a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -55,6 +55,7 @@
   const S = {
     items: [], agentState: 'idle', link: { k: 'connecting' }, name: '효딩쓰', host: 'gui', model: 'normal',
     models: MODEL_DEFAULTS, workers: [], uploadingVoice: false, paired: false, pairMessage: null, quick: null,
+    appr: null,                              // 승인함에서 기다리는 제안 수 — PC 가 state·events 에 붙여 준다(모르면 null)
     speed: parseFloat(local.get('speed', '1.2')) || 1.2,
     replyVoice: local.get('replyVoice', 'voiceOnly'),
     voiceEngine: local.get('voiceEngine', 'phone'),
@@ -269,6 +270,7 @@
         if (typeof r.seq === 'number') seq = Math.max(seq, r.seq);
         if (typeof r.state === 'string') S.agentState = r.state;
         takeQuick(r.quick);
+        takeAppr(r.appr);
         renderStatus();
         afterChange(stick || force, (r.events || []).length > 0);
       } catch (e) {
@@ -754,6 +756,7 @@
     const ws = (st.office || []).map(worker).filter(Boolean);
     if (ws.length) S.workers = ws;
     takeQuick(st.quick);
+    takeAppr(st.appr);
 
     S.items = [];
     openAI = [];
@@ -1074,6 +1077,7 @@
     pc: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/></svg>',
     micSm: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5v3"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>',
+    inbox: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5l1.8-6.2A1.5 1.5 0 0 1 6.2 4.2h7.6a1.5 1.5 0 0 1 1.4 1.1L17 11.5V15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15z"/><path d="M3 11.5h4l1 2h4l1-2h4"/><path d="M7.8 7.7l1.6 1.6 2.9-2.9"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
   };
@@ -1664,6 +1668,25 @@
     if (ok.length) { S.quick = ok; renderChips(); }
   }
 
+  /** 승인함 숫자 — 예전 PC(숫자를 안 주는)면 그대로 둔다 */
+  function takeAppr(n) {
+    if (typeof n !== 'number' || n === S.appr) return;
+    S.appr = n;
+    renderApprBadge();
+    if (drawerEl) renderDrawer();
+  }
+
+  const apprSub = () => (S.appr ? '기다리는 제안 ' + S.appr + '건' : '효딩쓰가 올린 제안 · 승인 · 보류');
+
+  function renderApprBadge() {
+    const btn = $('#main .bar .appr');
+    if (!btn) return;
+    const n = S.appr || 0, b = btn.querySelector('.nbadge');
+    b.hidden = !n;
+    b.textContent = n > 99 ? '99+' : String(n);
+    btn.setAttribute('aria-label', '승인함' + (n ? ' — 기다리는 제안 ' + n + '건' : ''));
+  }
+
   // ── 화면: 연결 ─────────────────────────
   function showPair() {
     closeAllLayers();
@@ -1759,6 +1782,8 @@
       h('button', { class: 'icon', 'aria-label': '메뉴 — 대화 상대 고르기', onclick: openDrawer, html: ICON.menu }),
       orb(orbState(), 26),
       h('div', { class: 'who' }, h('b'), h('small')),
+      h('button', { class: 'icon appr', 'aria-label': '승인함', onclick: () => { sfx.play('tap'); openAppr(); } },
+        svg('inbox'), h('span', { class: 'nbadge', hidden: true })),
       h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) }));
 
     app.append(h('div', { class: 'screen', id: 'main' },
@@ -1773,6 +1798,7 @@
     renderAllItems();
     renderChips();
     renderStatus();
+    renderApprBadge();
     scrollToBottom(false);
     loadPendingVoice();
   }
@@ -1864,6 +1890,7 @@
     d.textContent = '';
     const close = d.close;
     const scroll = h('div', { class: 'scroll' },
+      drawerRow('승인함', apprSub(), false, h('span', { class: 'badge-ic appr' }, svg('inbox')), () => { close(); openAppr(); }),
       drawerRow('문서함', '영상 · 사진 · 문서 · 음성', false, h('span', { class: 'badge-ic' }, svg('folder')), () => { close(); openDocs(); }),
       drawerRow('설정', '목소리 · 말 빠르기 · 화면 · 연결', false, h('span', { class: 'badge-ic' }, svg('gear')), () => { close(); openSettings(); }),
       h('div', { class: 'dsep' }),
@@ -2123,6 +2150,125 @@
     }
 
     pushPage('문서함', content, () => { alive = false; }, { close: true });
+    load();
+  }
+
+  // ── 승인함 (ApprView — 2026-10-12, PC 창 승인함과 같은 틀. 제안을 펼쳐 읽고 그 자리에서 결정) ──
+  const APPR_ST = [['pending', '대기'], ['hold', '보류'], ['approved', '승인'], ['rejected', '거절'], ['all', '전체']];
+  const APPR_WORD = { pending: '대기', hold: '보류', approved: '승인', rejected: '거절' };
+  const APPR_DONE = { approved: '승인했어요 — 할 일 보드에 올리고 효딩쓰가 대화에서 바로 시작합니다',
+    hold: '보류해 두었어요 — 「보류」에서 다시 볼 수 있어요', rejected: '거절했어요' };
+
+  function openAppr() {
+    let status = 'pending', q = '', items = [], counts = {}, total = 0, open = '', loading = false, loaded = false, alive = true, seqN = 0, searchTimer = 0;
+
+    const totalEl = h('div', { class: 'doc-total' });
+    const chipsEl = h('div', { class: 'doc-chips' });
+    const searchEl = h('input', {
+      type: 'search', placeholder: '제목·내용으로 찾기', 'aria-label': '승인함 검색', inputmode: 'search',
+      oninput: () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { const v = searchEl.value.trim(); if (v !== q) { q = v; open = ''; load(); } }, 400);
+      },
+    });
+    const listEl2 = h('div', { class: 'doc-list' });
+    const content = h('div', { class: 'content doc-content' }, h('div', { class: 'doc-head' }, totalEl, searchEl), chipsEl, listEl2);
+
+    function drawChips() {
+      chipsEl.textContent = '';
+      APPR_ST.forEach(([k, label]) => {
+        const n = k === 'all' ? total : (counts[k] || 0);
+        chipsEl.append(h('button', {
+          class: 'dchip' + (status === k ? ' on' : ''), text: label + (loaded && n ? ' ' + n : ''), 'aria-pressed': status === k ? 'true' : 'false',
+          onclick: () => { if (status === k) return; status = k; open = ''; load(); },
+        }));
+      });
+    }
+
+    function row(it) {
+      const st = it.status || 'pending', isOpen = open === it.id;
+      const head = h('button', { class: 'drow2 prow', 'aria-expanded': isOpen ? 'true' : 'false', onclick: () => { open = isOpen ? '' : it.id; draw(); } },
+        h('div', { class: 'dthumb ic ph', text: (it.horizon || '').slice(0, 2) || '제안' }),
+        h('div', { class: 'dtx' },
+          h('b', { text: it.title || '(제목 없음)' }),
+          h('small', null, h('span', { class: 'pst', text: APPR_WORD[st] || st }), ' · ' + timeOnly(it.ts) + (it.horizon ? ' · ' + it.horizon + ' 단위' : ''))),
+        svg('chev'));
+      const wrap = h('div', { class: 'pitem ' + st + (isOpen ? ' open' : '') }, head);
+      if (!isOpen) return wrap;
+      const body = h('div', { class: 'pbody' });
+      [['왜 (근거)', it.why], ['무엇을', it.how], ['대표님이 하실 것', it.needs], ['메모', it.note]].forEach(([t, v]) => {
+        if (v) body.append(h('h4', { text: t }), h('p', { text: String(v) }));
+      });
+      if (st === 'pending' || st === 'hold') {
+        const act = h('div', { class: 'pact' });
+        [['ok', '승인', 'btn'], ['hold', '보류', 'btn ghost'], ['no', '거절', 'btn no']].forEach(([dec, label, cls]) => {
+          if (st === 'hold' && dec === 'hold') return;
+          act.append(h('button', { class: cls, text: label, onclick: () => decide(it, dec, act) }));
+        });
+        body.append(act);
+      } else {
+        body.append(h('div', { class: 'pdone', text: (APPR_WORD[st] || st) + '했습니다' + (it.decided ? ' · ' + dayLabel(it.decided) + ' ' + timeOnly(it.decided) : '')
+          + (st === 'approved' ? ' — 할 일 보드에 올라 있어요' : '') }));
+      }
+      body.append(h('div', { class: 'pdone', text: '제안 번호 ' + it.id }));
+      wrap.append(body);
+      return wrap;
+    }
+
+    function draw() {
+      totalEl.textContent = loaded ? '대기 ' + (counts.pending || 0) + '건 · 전체 ' + total + '건' : '';
+      listEl2.textContent = '';
+      if (loading && !items.length) { listEl2.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
+      if (!items.length) {
+        listEl2.append(h('div', { class: 'doc-empty', text: q || status !== 'pending' ? '찾는 제안이 없어요' : '기다리는 제안이 없어요 — 효딩쓰가 승인이 필요한 일을 올리면 여기 모입니다' }));
+        return;
+      }
+      let lastDay = null;
+      items.forEach(it => {
+        const day = dayLabel(it.ts);
+        if (day !== lastDay) { listEl2.append(h('div', { class: 'doc-day', text: day })); lastDay = day; }
+        listEl2.append(row(it));
+      });
+    }
+
+    async function load() {
+      const my = ++seqN;
+      loading = true;
+      drawChips();
+      draw();
+      try {
+        const r = await api.get('proposals', { status, q });
+        if (!alive || my !== seqN) return;
+        items = r.items || [];
+        counts = r.counts || {};
+        total = typeof r.total === 'number' ? r.total : items.length;
+        loaded = true;
+        takeAppr(counts.pending || 0);
+      } catch (e) {
+        if (alive && my === seqN) show(e);
+      } finally {
+        if (alive && my === seqN) { loading = false; drawChips(); draw(); }
+      }
+    }
+
+    /** 승인·보류·거절 — 알림 버튼과 같은 결정. 승인이면 PC 효딩쓰가 대화에서 바로 시작한다 */
+    async function decide(it, dec, act) {
+      act.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      haptic('tap');
+      try {
+        const r = await api.post('proposals/decide', { id: it.id, dec });
+        if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(r.counts.pending);
+        toast(APPR_DONE[r && r.status] || '저장했어요');
+        open = '';
+      } catch (e) {
+        show(e);
+        act.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        return;
+      }
+      if (alive) load();
+    }
+
+    pushPage('승인함', content, () => { alive = false; }, { close: true });
     load();
   }
 
