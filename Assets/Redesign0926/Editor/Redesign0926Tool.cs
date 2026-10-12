@@ -135,6 +135,30 @@ namespace Redesign0926
             foreach (Transform c in t) DumpRect(c, depth + 1, maxDepth, log);
         }
 
+        // pdump/dump+ 용 — 배치값에 더해 그림·글자·배치 부품 값까지 (프리팹 다시 꾸밀 때)
+        private static void DumpDeep(Transform t, int depth, int maxDepth, List<string> log)
+        {
+            DumpRect(t, depth, 0, log);
+            string pad = new string(' ', depth * 2 + 4);
+            foreach (var c in t.GetComponents<Component>())
+            {
+                switch (c)
+                {
+                    case RectTransform _: break;
+                    case Image im: log.Add(pad + $"Image {(im.sprite != null ? im.sprite.name : "-")} {im.type} col{im.color} ray{im.raycastTarget} ppu{im.pixelsPerUnitMultiplier}"); break;
+                    case Text tx: log.Add(pad + $"Text '{(tx.text.Length > 30 ? tx.text.Substring(0, 30) : tx.text)}' {(tx.font != null ? tx.font.name : "-")} fs{tx.fontSize} {tx.fontStyle} {tx.alignment} col{tx.color} best{tx.resizeTextForBestFit} ls{tx.lineSpacing}"); break;
+                    case HorizontalOrVerticalLayoutGroup lg: log.Add(pad + $"{lg.GetType().Name} pad({lg.padding.left},{lg.padding.right},{lg.padding.top},{lg.padding.bottom}) sp{lg.spacing} {lg.childAlignment} ctrl{lg.childControlWidth}/{lg.childControlHeight} exp{lg.childForceExpandWidth}/{lg.childForceExpandHeight}"); break;
+                    case LayoutElement le: log.Add(pad + $"LayoutElement min{le.minWidth}/{le.minHeight} pref{le.preferredWidth}/{le.preferredHeight} flex{le.flexibleWidth}/{le.flexibleHeight} ignore{le.ignoreLayout}"); break;
+                    case ContentSizeFitter f: log.Add(pad + $"Fitter {f.horizontalFit}/{f.verticalFit}"); break;
+                    case Shadow sh: log.Add(pad + $"{sh.GetType().Name} col{sh.effectColor} d{sh.effectDistance}"); break;
+                    case InputField inf: log.Add(pad + $"InputField fs{(inf.textComponent != null ? inf.textComponent.fontSize : 0)}"); break;
+                    default: log.Add(pad + c.GetType().Name); break;
+                }
+            }
+            if (depth >= maxDepth) return;
+            foreach (Transform ch in t) DumpDeep(ch, depth + 1, maxDepth, log);
+        }
+
         private static void RunTrigger()
         {
             if (!File.Exists(TriggerPath)) return;
@@ -208,6 +232,12 @@ namespace Redesign0926
                         AssetDatabase.SaveAssets();
                         log.Add("build scene → " + DstScene);
                     }
+                    else if (cmd == "validate")
+                    {
+                        // 빌드 검증만 (메뉴는 대화상자를 띄워 에디터를 붙잡는다)
+                        var issues = global::Editor.BuildValidator.Validate();
+                        log.Add(issues.Count == 0 ? "빌드 검증 통과" : "빌드 검증 실패\n" + string.Join("\n", issues));
+                    }
                     else if (cmd == "openscene")
                     {
                         // 끝나면 에디터에 0926 을 열어 둔다 (아래 finally 에서)
@@ -222,6 +252,20 @@ namespace Redesign0926
                         var target = Redesign0926Capture.FindInCanvas(Redesign0926Capture.FindMainCanvas(scene).transform, cmd.Substring(5));
                         if (target == null) log.Add("dump: 없음 " + cmd.Substring(5));
                         else DumpRect(target.transform, 0, 3, log);
+                    }
+                    else if (cmd.StartsWith("dump+:"))
+                    {
+                        // dump+:<이름> — 부품 값까지 깊게
+                        var target = Redesign0926Capture.FindInCanvas(Redesign0926Capture.FindMainCanvas(scene).transform, cmd.Substring(6));
+                        if (target == null) log.Add("dump+: 없음 " + cmd.Substring(6));
+                        else DumpDeep(target.transform, 0, 8, log);
+                    }
+                    else if (cmd.StartsWith("pdump:"))
+                    {
+                        // pdump:<Assets/…prefab> — 프리팹 에셋 안을 부품 값까지
+                        var go = AssetDatabase.LoadAssetAtPath<GameObject>(cmd.Substring(6));
+                        if (go == null) log.Add("pdump: 없음 " + cmd.Substring(6));
+                        else DumpDeep(go.transform, 0, 8, log);
                     }
                     else if (cmd == "order")
                     {

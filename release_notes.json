@@ -12,6 +12,10 @@
     "1.2.53": {
       "ko": "• 아래 메뉴를 낮고 깔끔하게 — 목록·추가·메시지·프로필 아이콘 크기를 맞췄어요.\n• 창이 메뉴 바로 위에서 올라오고 내려가요. 프로필은 제자리에서 부드럽게 열리고, 프로필 칸을 다시 누르면 닫혀요.\n• 목록: 필터 칩을 크게 — 반려견은 포함·필수·제외, 분류는 누를 때마다 바뀌어요. 목록·지도·설정은 옆으로 밀어 넘겨요.\n• 시작화면에 반짝이는 별과 별똥별.\n• 새 첫 사용 안내, '주변에서 N곳을 찾았어요' 알림.\n• 하늘 날씨에 3시간 후·6시간 후·내일 예보.\n• 댓글 입력창 새 디자인과 빠른 반응.\n• 장소 박스: 위에 거리, 아래에 이름. 오른쪽 위 X → '삭제'를 한 번 더 눌러야 숨겨져요 (설정에서 끌 수 있어요).",
       "en": "• Cleaner bottom bar with matching icons.\n• Panels slide up from the bar; Profile fades in, tap it again to close.\n• Bigger list filters (Pets: Include / Only / Exclude). Swipe between List, Map and Settings.\n• Twinkling stars on the opening screen.\n• New first-run guide and 'Found N places' notice.\n• Sky weather: 3 h, 6 h and tomorrow forecast.\n• New comment bar with quick reactions.\n• Place boxes: distance above, name below. Tap X, then DEL to hide (can be turned off in Settings)."
+    },
+    "1.2.54": {
+      "ko": "• 보물찾기 — 지금 있는 자리에 보물을 숨기고 근처 사람들과 찾기 게임을 열어요. 가까이 가면 AR 금빛 상자가 나타나요.\n• 지도를 더 가까이 확대할 수 있고, 목록·지도·설정 글자가 커졌어요.\n• 하늘 날씨에 지금 있는 지역과 습도를 함께 보여 줘요.\n• 메시지와 대화방을 옆으로 밀어 오가요.\n• 알림을 누르면 해당 화면이 바로 열려요.\n• 창 닫기 동작을 통일하고 시작화면 끊김을 줄였어요.\n• 안정성 개선.",
+      "en": "• Treasure Hunt — hide a treasure where you stand and host a hunt nearby; get close and a golden box appears in AR.\n• Zoom in further on the map; larger text in List, Map and Settings.\n• Sky weather shows your area and humidity.\n• Swipe between Messages and a chat.\n• Tapping a notification opens the right screen.\n• Consistent panel closing and a smoother start screen.\n• Stability improvements."
     }
   }
 }

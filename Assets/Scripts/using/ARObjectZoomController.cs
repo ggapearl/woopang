@@ -202,6 +202,7 @@ public class ARObjectZoomController : MonoBehaviour
         ApplyZoomToManager(subwayManager?.GetSpawnedObjects());
         ApplyZoomToManager(trainStationManager?.GetSpawnedObjects());
         ApplyZoomToManager(terminalManager?.GetSpawnedObjects());
+        ApplyZoomToManager(R0926HuntTreasure.SpawnedObjects);   // 보물찾기 AR 보물
     }
 
     private void ApplyZoomToManager(Dictionary<string, GameObject> spawned)

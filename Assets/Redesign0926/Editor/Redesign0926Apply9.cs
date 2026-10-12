@@ -51,6 +51,10 @@ namespace Redesign0926
             CommentBar(root, log);
             Apply1004(root, log);   // 10-04 아이폰 확인 뒤 — 도크 칸 · 손잡이 · 프로필 카드 · 입력줄 · 날씨 크기
             Apply1005(root, log);   // 10-05 — 업로드 제한시간 60초 (창 닫기 통일은 각 단계 안에서)
+            ApplyHunt(root, log);   // 보물찾기 — 추가 창 세 번째 카드 (Redesign0926ApplyHunt)
+            ApplyHuntTreasure(root, log);   // 보물찾기 — AR 보물(금빛 상자) · 상태 알약 아래 알림 (Redesign0926ApplyHuntTreasure)
+            ApplyHuntProfile(root, log);   // 보물찾기 — 프로필 카드의 '주최' 칸과 펼침 (ProfileCard 다음이어야 한다)
+            ApplyChatLook(root, log);   // 대화창 말풍선·날짜·제목줄 (Redesign0926ApplyChat)
             var marker = Find(root, "Redesign0926Marker");
             var close = marker != null ? marker.GetComponent<R0926IndicatorClose>() : null;
             if (close != null)
@@ -382,6 +386,12 @@ namespace Redesign0926
             {
                 var lImg = lp.GetComponent<Image>();
                 if (lImg != null) { lImg.color = new Color(0, 0, 0, 0.28f); lImg.sprite = null; EditorUtility.SetDirty(lImg); }
+                // 위치 칩·도크·창들보다 아래로 — AR 복구 중·특징점 찾는 중에도 도크를 누를 수 있게 (2026-10-06 대표님).
+                // 막은 AR 화면(장소 박스·화살표)만 가리고 그 터치만 막는다. 예전엔 도크 위에 있어 복구가 끝날 때까지 아무것도 못 눌렀다
+                var locChip = Find(root, "LocationManagerPanel");
+                if (locChip != null && locChip.transform.parent == lp.transform.parent
+                    && lp.transform.GetSiblingIndex() > locChip.transform.GetSiblingIndex())
+                    lp.transform.SetSiblingIndex(locChip.transform.GetSiblingIndex());
                 var text = Find(lp.transform, "LoadingText ")?.GetComponent<Text>();
                 var spinT = Find(lp.transform, "LoadingSpinner ");
                 if (text != null && spinT != null)
@@ -532,16 +542,16 @@ namespace Redesign0926
             for (int i = 0; i < targets.Length; i++) { var slot = Find(root, GuideOrder[i].slot); targets[i] = slot != null ? RT(slot) : null; }
             SetArray(so.FindProperty("pages"), GuideOrderPages(panel.transform));
             SetArray(so.FindProperty("targets"), targets);
-            // 다음·시작하기 누름 — AR 오브젝트(큐브)를 터치할 때와 같은 소리·진동
+            // 다음·시작하기·건너뛰기 누름 — 하단 메뉴(도크) 버튼과 같은 소리 (2026-10-06 대표님: '하단메뉴 버튼 효과음으로').
+            // 진동 세기는 AR 오브젝트(큐브) 터치와 같게
+            var dockList = Find(root, "Dock0926")?.transform.Find("List_Button");
+            var dockFw = dockList != null ? dockList.GetComponent<UITouchForwarder>() : null;
+            var dockClip = dockFw != null ? new SerializedObject(dockFw).FindProperty("customSound").objectReferenceValue : null;
+            if (dockClip != null) so.FindProperty("tapSound").objectReferenceValue = dockClip;
+            else log.Add("안내: 도크 버튼 소리 못 찾음 — 기본 소리");
             var dm = FindInScene<DataManager>(root.gameObject);
             var touch = dm != null && dm.cubePrefab != null ? dm.cubePrefab.GetComponentInChildren<Object3DTouchHaptic>(true) : null;
-            if (touch != null)
-            {
-                var tso = new SerializedObject(touch);
-                so.FindProperty("tapSound").objectReferenceValue = tso.FindProperty("touchSound").objectReferenceValue;
-                so.FindProperty("tapHaptic").floatValue = tso.FindProperty("hapticIntensity").floatValue;
-            }
-            else log.Add("안내: 큐브 터치 소리 못 찾음 — 기본 소리");
+            if (touch != null) so.FindProperty("tapHaptic").floatValue = new SerializedObject(touch).FindProperty("hapticIntensity").floatValue;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             var nb = Ensure<Button>(next); ResetListeners(nb); UnityEventTools.AddPersistentListener(nb.onClick, ov.Next);
@@ -593,13 +603,31 @@ namespace Redesign0926
             var det = board.transform.Find("Detail0926");
             if (det != null) SetRect(RT(det.gameObject), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -452), new Vector2(1000, 70));
 
-            // 지역 — '예산군 대흥면' (시·군·구 + 읍·면·동). 판 위쪽 바깥에, 이름이 오기 전엔 숨는다 (R0926SkyWeather.ShowRegion)
+            // 지역 — '예산군 대흥면' (시·군·구 + 읍·면·동). 이름이 오기 전엔 숨는다 (R0926SkyWeather.ShowRegion)
+            // 2026-10-12 대표님: 판 위쪽 바깥에 글자만 떠 따로 노는 느낌 → 기온 바로 위로 내리고 예보 줄과 같은 유리 알약(핀 + 이름) 바탕
+            const float RegionH = 80f, RegionBottom = -30f, PinBox = 48f, PadL = 24f, PinGap = 8f, PadR = 34f;   // 핀 그림은 상자보다 좁아 왼쪽이 덜 비어 보이게 PadL 을 작게
             var region = FindOrCreate(board.transform, "Region0926");
-            var rgt = Txt(region, "예산군 대흥면", 52, new Color(1, 1, 1, 0.85f), TextAnchor.LowerCenter, FontStyle.Bold);
+            var oldText = region.GetComponent<Text>();   // 예전엔 이 자리가 글자 하나 — 그림 바탕을 달려면 글자를 안쪽으로 옮긴다
+            if (oldText != null)
+            {
+                var oldShadow = region.GetComponent<Shadow>();
+                if (oldShadow != null) UnityEngine.Object.DestroyImmediate(oldShadow);
+                UnityEngine.Object.DestroyImmediate(oldText);
+            }
+            Img(region, Spr("r0926_pill"), new Color(0.094f, 0.118f, 0.149f, 0.34f), Image.Type.Sliced, 64f / (RegionH / 2f)).raycastTarget = false;
+            SetRect(RT(region), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, RegionBottom + RegionH / 2f), new Vector2(400, RegionH));
+            var pin = FindOrCreate(region.transform, "Pin");
+            var pinImg = Img(pin, Spr("r0926_i_pin"), new Color(1f, 0.82f, 0.48f, 1f), Image.Type.Simple);   // 위쪽 하늘 칩의 노란 점과 같은 색
+            pinImg.raycastTarget = false; pinImg.preserveAspect = true;
+            SetRect(RT(pin), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(PadL + PinBox / 2f, 0), new Vector2(PinBox, PinBox));
+            var label = FindOrCreate(region.transform, "Label");
+            var rgt = Txt(label, "예산군 대흥면", 44, new Color(1, 1, 1, 0.95f), TextAnchor.MiddleLeft, FontStyle.Bold);
             rgt.horizontalOverflow = HorizontalWrapMode.Overflow;
             rgt.raycastTarget = false;
-            SetRect(RT(region), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0), new Vector2(0, 12), new Vector2(1000, 76));
-            AddShadow(region);
+            var lrt = RT(label);
+            lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.pivot = new Vector2(0.5f, 0.5f);
+            lrt.offsetMin = new Vector2(PadL + PinBox + PinGap, 0); lrt.offsetMax = new Vector2(-PadR, 0);
+            EditorUtility.SetDirty(lrt);
 
             var fc = FindOrCreate(board.transform, "Forecast0926");
             SetRect(RT(fc), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -560), new Vector2(780, 280));
@@ -633,6 +661,7 @@ namespace Redesign0926
             var so = new SerializedObject(sky);
             so.FindProperty("icon").objectReferenceValue = icon;
             so.FindProperty("regionText").objectReferenceValue = rgt;
+            so.FindProperty("regionPill").objectReferenceValue = RT(region);
             so.FindProperty("forecast").objectReferenceValue = fc;
             SetArray(so.FindProperty("fcLabels"), labels[0], labels[1], labels[2]);
             SetArray(so.FindProperty("fcIcons"), icons[0], icons[1], icons[2]);

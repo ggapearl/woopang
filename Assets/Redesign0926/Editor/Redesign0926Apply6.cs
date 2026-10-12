@@ -85,6 +85,7 @@ namespace Redesign0926
             Img(dot, Spr("r0926_circle"), Pink, Image.Type.Simple).raycastTarget = false;
 
             var pinTpl = BuildPinTemplate(pins.transform);
+            var areaTpl = BuildAreaTemplate(pins.transform);
             var clusterTpl = BuildClusterTemplate(pins.transform);
 
             // 깊은 확대용 서버 지도 타일 — 세계 그림 위 · 핀 아래 (서버가 켜 두지 않으면 비어 있다) + 지도 출처 한 줄
@@ -235,6 +236,7 @@ namespace Redesign0926
             so.FindProperty("pinLayer").objectReferenceValue = RT(pins);
             so.FindProperty("pinTemplate").objectReferenceValue = pinTpl;
             so.FindProperty("clusterTemplate").objectReferenceValue = clusterTpl;
+            so.FindProperty("areaTemplate").objectReferenceValue = areaTpl;
             so.FindProperty("meDot").objectReferenceValue = RT(me);
             so.FindProperty("mePulse").objectReferenceValue = pulseImg;
             so.FindProperty("chipText").objectReferenceValue = chipT;
@@ -435,6 +437,65 @@ namespace Redesign0926
             Loc(showLabel, "모두 다시 보이기", "Show all again", "すべて再表示", "全部重新显示", "Mostrar todos");
             showAll.SetActive(false);   // 앱을 켠 직후엔 숨긴 장소가 없다
 
+            // 보물찾기 — 계정 설정이라 서버에 있다(R0926SettingsPanel · /api/hunts/prefs). 참여를 끄면 알림 칸이 흐려진다 (2026-10-12)
+            SectionLabel(content.transform, "SecHunt", new[] { "보물찾기", "Treasure hunts", "宝探し", "寻宝", "Búsqueda del tesoro" });
+            var gh = Group(content.transform, "GroupHunt");
+            var huntCg = Ensure<CanvasGroup>(gh);
+            var hunt = SettingRow(gh.transform, "RowHunt", new[] { "보물찾기 참여", "Join treasure hunts", "宝探しに参加", "参与寻宝", "Participar" },
+                new[] { "끄면 근처 게임·알림이 모두 멈춰요", "Off stops nearby games and all hunt alerts", "オフで近くのゲームと通知が止まります", "关闭后不显示附近游戏和通知", "Desactívalo para pausar juegos y avisos" }, false);
+            var gha = Group(content.transform, "GroupHuntAlerts");
+            var huntAlertCg = Ensure<CanvasGroup>(gha);
+            var huntNew = SettingRow(gha.transform, "RowHuntNew", new[] { "새 게임 알림", "New game alerts", "新しいゲームの通知", "新游戏通知", "Avisos de juegos nuevos" },
+                new[] { "근처에 보물이 숨겨지면 알려요", "When a treasure is hidden nearby", "近くに宝が隠されたら通知します", "附近有人藏宝时通知", "Cuando esconden un tesoro cerca" }, false);
+            var huntNear = SettingRow(gha.transform, "RowHuntNear", new[] { "가까워지면 진동", "Vibrate when close", "近づくと振動", "靠近时振动", "Vibrar al acercarte" },
+                new[] { "참가한 게임의 보물에 다가갈 때마다", "As you near a joined game's treasure", "参加中の宝に近づくたびに", "每次接近已参加游戏的宝藏", "Al acercarte al tesoro de tu juego" }, false);
+            var huntNoteGo = FindOrCreate(content.transform, "HuntNote");
+            Ensure<LayoutElement>(huntNoteGo).preferredHeight = 64;
+            var huntNote = Txt(huntNoteGo, "로그인하면 보물찾기 설정을 바꿀 수 있어요", 34, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
+            huntNote.horizontalOverflow = HorizontalWrapMode.Wrap;
+            huntNote.raycastTarget = false;
+            huntNoteGo.SetActive(false);   // 로그인 전·못 불러왔을 때만 (R0926SettingsPanel.RefreshHunt)
+
+            // 화면 — 30 / 60 FPS (2026-10-06 대표님: 기본 30)
+            SectionLabel(content.transform, "SecDisplay", new[] { "화면", "Display", "画面", "画面", "Pantalla" });
+            var g5 = Group(content.transform, "GroupDisplay");
+            SegRow(g5.transform, "RowFps", new[] { "화면 프레임", "Frame rate", "フレームレート", "帧率", "Fotogramas" },
+                new[] { "60 은 더 부드럽고, 30 은 배터리·발열이 덜해요", "60 is smoother, 30 saves battery and heat", "60はなめらか、30は電池と発熱を抑えます", "60 更流畅，30 更省电、发热更少", "60 es más fluido, 30 ahorra batería" },
+                new[] { new[] { "30 FPS", "30 FPS", "30 FPS", "30 FPS", "30 FPS" }, new[] { "60 FPS", "60 FPS", "60 FPS", "60 FPS", "60 FPS" } },
+                0, out var fpsTabs, out var fpsLabels);
+
+            // 앱 정보 —목록 맨 아래 '버전'을 펼치면 나오던 문의·개인정보처리방침·데이터 출처를 여기로 (2026-10-06)
+            SectionLabel(content.transform, "SecInfo", new[] { "앱 정보", "About", "アプリ情報", "应用信息", "Acerca de" });
+            var g4 = Group(content.transform, "GroupInfo");
+            var appInfo = Ensure<R0926AppInfo>(g4);
+            var rMail = InfoRow(g4.transform, "RowContact", new[] { "문의", "Contact", "お問い合わせ", "联系我们", "Contacto" },
+                new[] { R0926AppInfo.ContactMail }, true);
+            var rInsta = InfoRow(g4.transform, "RowInstagram", new[] { "인스타그램", "Instagram", "Instagram", "Instagram", "Instagram" },
+                new[] { "@" + R0926AppInfo.Instagram }, true);
+            var rPriv = InfoRow(g4.transform, "RowPrivacy", new[] { "개인정보처리방침", "Privacy policy", "プライバシーポリシー", "隐私政策", "Política de privacidad" },
+                new[] { "woopang.com" }, true);
+            InfoRow(g4.transform, "RowData", new[] { "관광 정보 출처", "Tourism data", "観光情報の出典", "旅游信息来源", "Datos turísticos" },
+                new[] { "한국관광공사", "Korea Tourism Organization", "韓国観光公社", "韩国观光公社", "Organización de Turismo de Corea" }, false);
+            // 버전은 줄이 아니라 탭 맨 아래에 작게 (2026-10-06 대표님)
+            var oldVer = g4.transform.Find("RowVersion");
+            if (oldVer != null) Object.DestroyImmediate(oldVer.gameObject);
+            var verFoot = FindOrCreate(content.transform, "VersionFooter");
+            Ensure<LayoutElement>(verFoot).preferredHeight = 96;
+            var verText = Txt(verFoot, "Version", 30, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            var aso = new SerializedObject(appInfo);
+            aso.FindProperty("versionText").objectReferenceValue = verText;
+            aso.ApplyModifiedPropertiesWithoutUndo();
+            Wire(rMail.GetComponent<Button>(), appInfo.OpenMail);
+            Wire(rInsta.GetComponent<Button>(), appInfo.OpenInstagram);
+            Wire(rPriv.GetComponent<Button>(), appInfo.OpenPrivacy);
+
+            // 새로 만든 칸은 맨 뒤에 붙으므로 순서를 매번 맞춘다
+            foreach (var n in new[] { "SecSky", "GroupMaster", "GroupChannels", "SecPlaces", "GroupHidden", "SecHunt", "GroupHunt", "GroupHuntAlerts", "HuntNote", "SecDisplay", "GroupDisplay", "SecInfo", "GroupInfo", "VersionFooter" })
+            {
+                var c = content.transform.Find(n);
+                if (c != null) c.SetAsLastSibling();
+            }
+
             var panel = Ensure<R0926SettingsPanel>(sp);
             var so = new SerializedObject(panel);
             so.FindProperty("masterSwitch").objectReferenceValue = master;
@@ -447,9 +508,17 @@ namespace Redesign0926
             so.FindProperty("channelGroup").objectReferenceValue = cg;
             SetArray(so.FindProperty("angleTabs"), angleTabs);
             SetArray(so.FindProperty("angleLabels"), angleLabels);
+            SetArray(so.FindProperty("fpsTabs"), fpsTabs);
+            SetArray(so.FindProperty("fpsLabels"), fpsLabels);
             so.FindProperty("hiddenText").objectReferenceValue = ht;
             so.FindProperty("showAllRow").objectReferenceValue = showAll;
             so.FindProperty("removeSwitch").objectReferenceValue = removeX;
+            so.FindProperty("huntSwitch").objectReferenceValue = hunt;
+            so.FindProperty("huntNewSwitch").objectReferenceValue = huntNew;
+            so.FindProperty("huntNearSwitch").objectReferenceValue = huntNear;
+            so.FindProperty("huntGroup").objectReferenceValue = huntCg;
+            so.FindProperty("huntAlertGroup").objectReferenceValue = huntAlertCg;
+            so.FindProperty("huntNote").objectReferenceValue = huntNote;
             so.FindProperty("switchOn").objectReferenceValue = Spr("r0926_sw_on");
             so.FindProperty("switchOff").objectReferenceValue = Spr("r0926_sw_off");
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -462,12 +531,22 @@ namespace Redesign0926
             Wire(lying.transform.parent.GetComponent<Button>(), panel.ToggleLying);
             Wire(collapsed.transform.parent.GetComponent<Button>(), panel.ToggleCollapsed);
             Wire(removeX.transform.parent.GetComponent<Button>(), panel.ToggleRemove);
+            Wire(hunt.transform.parent.GetComponent<Button>(), panel.ToggleHunt);
+            Wire(huntNew.transform.parent.GetComponent<Button>(), panel.ToggleHuntNew);
+            Wire(huntNear.transform.parent.GetComponent<Button>(), panel.ToggleHuntNear);
             Wire(showBtn.GetComponent<Button>(), panel.ShowAllHidden);
             for (int i = 0; i < angleTabs.Length; i++)
             {
                 var b = angleTabs[i].GetComponent<Button>();
                 ResetListeners(b);
                 UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetAngle, i);
+                EditorUtility.SetDirty(b);
+            }
+            for (int i = 0; i < fpsTabs.Length; i++)
+            {
+                var b = fpsTabs[i].GetComponent<Button>();
+                ResetListeners(b);
+                UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetFps, i);
                 EditorUtility.SetDirty(b);
             }
             return sp;
@@ -528,40 +607,78 @@ namespace Redesign0926
             return img;
         }
 
+        /// <summary>'앱 정보' 한 줄 — 왼쪽 이름 · 오른쪽 값(누를 수 있으면 › ). value 가 하나면 모든 언어 같은 글</summary>
+        private static GameObject InfoRow(Transform parent, string name, string[] title, string[] value, bool tappable)
+        {
+            var row = FindOrCreate(parent, name);
+            Ensure<LayoutElement>(row).preferredHeight = 132;
+            Img(row, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = tappable;
+            var btn = Ensure<Button>(row);
+            btn.transition = Selectable.Transition.None;
+            btn.enabled = tappable;
+            var t = FindOrCreate(row.transform, "Title");
+            SetRect(RT(t), new Vector2(0, 0), new Vector2(0.5f, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
+            var tt = Txt(t, title[0], 42, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            tt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            Loc(t, title[0], title[1], title[2], title[3], title[4]);
+            var v = FindOrCreate(row.transform, "Value");
+            SetRect(RT(v), new Vector2(0.4f, 0), new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(tappable ? -44 : 0, 0), Vector2.zero);
+            var vt = Txt(v, value[0], 36, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
+            vt.horizontalOverflow = HorizontalWrapMode.Wrap; vt.verticalOverflow = VerticalWrapMode.Truncate;
+            if (value.Length >= 5) Loc(v, value[0], value[1], value[2], value[3], value[4]);
+            var chev = row.transform.Find("Chevron");
+            if (tappable)
+            {
+                var c = chev != null ? chev.gameObject : NewUI("Chevron", row.transform);
+                SetRect(RT(c), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(36, 60));
+                Txt(c, "›", 48, Muted, TextAnchor.MiddleRight, FontStyle.Normal).raycastTarget = false;
+            }
+            else if (chev != null) Object.DestroyImmediate(chev.gameObject);
+            return row;
+        }
+
         private static GameObject AngleRow(Transform parent, out Image[] tabs, out Text[] labels)
         {
-            var row = FindOrCreate(parent, "RowAngle");
+            return SegRow(parent, "RowAngle", new[] { "보이는 각도", "When to show", "表示する角度", "显示角度", "Cuándo mostrar" },
+                new[] { "휴대폰을 얼마나 들어야 하늘 화면이 뜰지", "How far to tilt your phone up", "どれだけ上に向けたら表示するか", "手机抬高多少时显示", "Cuánto inclinar el móvil" },
+                new[]
+                {
+                    new[] { "조금만 들어도", "A little", "少し", "稍微", "Un poco" },
+                    new[] { "보통", "Normal", "ふつう", "一般", "Normal" },
+                    new[] { "똑바로 위", "Straight up", "真上", "正上方", "Hacia arriba" },
+                }, 1, out tabs, out labels);
+        }
+
+        /// <summary>제목 + 설명 + 아래 칸 나눔 고르기(보이는 각도 · 화면 프레임). 고른 칸 표시는 R0926SettingsPanel.Refresh 가 칠한다</summary>
+        private static GameObject SegRow(Transform parent, string name, string[] title, string[] sub, string[][] words, int selected, out Image[] tabs, out Text[] labels)
+        {
+            var row = FindOrCreate(parent, name);
             Ensure<LayoutElement>(row).preferredHeight = 270;
             var t = FindOrCreate(row.transform, "Title");
             SetRect(RT(t), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -26), new Vector2(0, 60));
-            Txt(t, "보이는 각도", 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
-            Loc(t, "보이는 각도", "When to show", "表示する角度", "显示角度", "Cuándo mostrar");
+            Txt(t, title[0], 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Loc(t, title[0], title[1], title[2], title[3], title[4]);
             var s = FindOrCreate(row.transform, "Sub");
             SetRect(RT(s), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -88), new Vector2(0, 50));
-            Txt(s, "휴대폰을 얼마나 들어야 하늘 화면이 뜰지", 34, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
-            Loc(s, "휴대폰을 얼마나 들어야 하늘 화면이 뜰지", "How far to tilt your phone up", "どれだけ上に向けたら表示するか", "手机抬高多少时显示", "Cuánto inclinar el móvil");
+            Txt(s, sub[0], 34, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            Loc(s, sub[0], sub[1], sub[2], sub[3], sub[4]);
             var seg = FindOrCreate(row.transform, "Seg");
             SetRect(RT(seg), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 26), new Vector2(0, 92));
             Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 46f).raycastTarget = true;
             var h = Ensure<HorizontalLayoutGroup>(seg);
             h.padding = new RectOffset(6, 6, 6, 6); h.spacing = 4;
             h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
-            string[][] words =
-            {
-                new[] { "조금만 들어도", "A little", "少し", "稍微", "Un poco" },
-                new[] { "보통", "Normal", "ふつう", "一般", "Normal" },
-                new[] { "똑바로 위", "Straight up", "真上", "正上方", "Hacia arriba" },
-            };
-            tabs = new Image[3]; labels = new Text[3];
-            for (int i = 0; i < 3; i++)
+            int n = words.Length;
+            tabs = new Image[n]; labels = new Text[n];
+            for (int i = 0; i < n; i++)
             {
                 var tab = FindOrCreate(seg.transform, "Step" + i);
-                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, i == 1 ? 0.14f : 0f), Image.Type.Sliced, 64f / 40f);
+                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, i == selected ? 0.14f : 0f), Image.Type.Sliced, 64f / 40f);
                 tabs[i].raycastTarget = true;
                 Ensure<Button>(tab).transition = Selectable.Transition.None;
                 var lt = FindOrCreate(tab.transform, "Text");
                 Stretch(RT(lt));
-                labels[i] = Txt(lt, words[i][0], 36, i == 1 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                labels[i] = Txt(lt, words[i][0], 36, i == selected ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
                 Loc(lt, words[i][0], words[i][1], words[i][2], words[i][3], words[i][4]);
             }
             return row;
@@ -666,6 +783,17 @@ namespace Redesign0926
             Txt(nt, "name", 34, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             pin.SetActive(false);
             return pin;
+        }
+
+        // 깊이 확대했을 때 친구 핀 둘레의 '이 근처' 원 — 크기는 실행 때 지도 배율로 정한다 (R0926FriendsMap.AreaRadius)
+        private static GameObject BuildAreaTemplate(Transform pins)
+        {
+            var area = FindOrCreate(pins, "AreaTemplate0926");
+            area.transform.SetAsFirstSibling();
+            SetRect(RT(area), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(200, 200));
+            Img(area, Spr("r0926_circle"), new Color(Ink.r, Ink.g, Ink.b, 0.025f), Image.Type.Simple).raycastTarget = false;   // 리니어 색 공간 — 어두운 지도 위에선 이 정도가 옅은 회색
+            area.SetActive(false);
+            return area;
         }
 
         private static GameObject BuildClusterTemplate(Transform pins)

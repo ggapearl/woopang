@@ -46,6 +46,47 @@ namespace Redesign0926
             log.Add("upload full ok");
         }
 
+        private static readonly string[][] UploadTabWords =
+        {
+            new[] { "장소", "Place", "場所", "地点", "Lugar" },
+            new[] { "3D모델", "3D model", "3Dモデル", "3D模型", "Modelo 3D" },
+            new[] { "보물찾기", "Treasure", "宝探し", "寻宝", "Tesoro" },
+        };
+
+        /// <summary>추가 창 카드 위쪽 탭 — 세 카드가 같은 탭 줄을 갖고, 지금 카드(index)만 밝다. 누르면 그 카드로 넘긴다</summary>
+        private static void UploadSeg(GameObject card, SwipePanelController swipe, int index)
+        {
+            var seg = FindOrCreate(card.transform, "Seg0926");
+            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 48f).raycastTarget = true;
+            Row(seg, -144, 96);
+            int n = UploadTabWords.Length;
+            var tabs = new Image[n];
+            var tabLabels = new Text[n];
+            for (int i = 0; i < n; i++)
+            {
+                var tab = FindOrCreate(seg.transform, "Tab" + i);
+                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, i == index ? 0.14f : 0f), Image.Type.Sliced, 64f / 42f);
+                tabs[i].raycastTarget = true;
+                var trt = RT(tab);
+                trt.anchorMin = new Vector2(i / (float)n, 0); trt.anchorMax = new Vector2((i + 1) / (float)n, 1); trt.pivot = new Vector2(0.5f, 0.5f);
+                trt.offsetMin = new Vector2(6, 6); trt.offsetMax = new Vector2(-6, -6);
+                var lb = FindOrCreate(tab.transform, "Label0926");
+                tabLabels[i] = Txt(lb, UploadTabWords[i][0], 36, i == index ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
+                Loc(lb, UploadTabWords[i][0], UploadTabWords[i][1], UploadTabWords[i][2], UploadTabWords[i][3], UploadTabWords[i][4]);
+                var b = Ensure<Button>(tab);
+                b.targetGraphic = tabs[i];
+                ResetListeners(b);
+                if (swipe != null) UnityEventTools.AddIntPersistentListener(b.onClick, swipe.SwitchToPanel, i);
+            }
+            var segState = Ensure<R0926SegmentState>(seg);
+            var sso = new SerializedObject(segState);
+            sso.FindProperty("swipe").objectReferenceValue = swipe;
+            SetArray(sso.FindProperty("tabs"), tabs);
+            SetArray(sso.FindProperty("labels"), tabLabels);
+            sso.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         private static void UploadCard(GameObject card, Transform wrap, SwipePanelController swipe, int index, bool isModel, List<string> log)
         {
             card.transform.SetParent(wrap, false);
@@ -68,36 +109,8 @@ namespace Redesign0926
                 Row(title.gameObject, -44, 84);
             }
 
-            // 장소 / 3D 모델 탭
-            var seg = FindOrCreate(card.transform, "Seg0926");
-            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / 48f).raycastTarget = true;
-            Row(seg, -144, 96);
-            var tabs = new Image[2];
-            var tabLabels = new Text[2];
-            string[][] tabWords = { new[] { "장소", "Place", "場所", "地点", "Lugar" }, new[] { "3D모델", "3D model", "3Dモデル", "3D模型", "Modelo 3D" } };
-            for (int i = 0; i < 2; i++)
-            {
-                var tab = FindOrCreate(seg.transform, "Tab" + i);
-                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, i == index ? 0.14f : 0f), Image.Type.Sliced, 64f / 42f);
-                tabs[i].raycastTarget = true;
-                var trt = RT(tab);
-                trt.anchorMin = new Vector2(i * 0.5f, 0); trt.anchorMax = new Vector2(i * 0.5f + 0.5f, 1); trt.pivot = new Vector2(0.5f, 0.5f);
-                trt.offsetMin = new Vector2(6, 6); trt.offsetMax = new Vector2(-6, -6);
-                var lb = FindOrCreate(tab.transform, "Label0926");
-                tabLabels[i] = Txt(lb, tabWords[i][0], 36, i == index ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
-                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
-                Loc(lb, tabWords[i][0], tabWords[i][1], tabWords[i][2], tabWords[i][3], tabWords[i][4]);
-                var b = Ensure<Button>(tab);
-                b.targetGraphic = tabs[i];
-                ResetListeners(b);
-                if (swipe != null) UnityEventTools.AddIntPersistentListener(b.onClick, swipe.SwitchToPanel, i);
-            }
-            var segState = Ensure<R0926SegmentState>(seg);
-            var sso = new SerializedObject(segState);
-            sso.FindProperty("swipe").objectReferenceValue = swipe;
-            SetArray(sso.FindProperty("tabs"), tabs);
-            SetArray(sso.FindProperty("labels"), tabLabels);
-            sso.ApplyModifiedPropertiesWithoutUndo();
+            // 장소 / 3D모델 / 보물찾기 탭 (2026-10-06 — 보물찾기 주최를 추가 창 세 번째 카드에서)
+            UploadSeg(card, swipe, index);
 
             var panel = card.transform.Find("Panel");
             if (panel == null) { log.Add(card.name + ": Panel 없음"); return; }

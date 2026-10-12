@@ -971,7 +971,7 @@ public class ModelUploadManager : MonoBehaviour
         // 2. 위치 서비스 체크
         if (Input.location.status != LocationServiceStatus.Running || gpsData == Vector3.zero)
         {
-            ShowWarning(GetLocalizedText("enable_location_service"));
+            ShowWarning(GetLocalizedText(Input.location.isEnabledByUser ? "location_not_ready" : "enable_location_service"));
             isProcessing = false;
             yield break;
         }
@@ -1406,6 +1406,17 @@ public class ModelUploadManager : MonoBehaviour
                     case SystemLanguage.ChineseSimplified: return "子照片已重置";
                     case SystemLanguage.Spanish: return "Fotos secundarias restablecidas";
                     default: return "Sub photos reset";
+                }
+
+            case "location_not_ready":
+                switch (lang)
+                {
+                    case SystemLanguage.Korean: return "아직 위치를 잡는 중이에요. 잠시 뒤에 다시 눌러 주세요.";
+                    case SystemLanguage.Japanese: return "まだ位置を取得中です。少し待ってからもう一度お試しください。";
+                    case SystemLanguage.Chinese:
+                    case SystemLanguage.ChineseSimplified: return "正在获取位置，请稍后再试。";
+                    case SystemLanguage.Spanish: return "Aún buscando tu ubicación. Inténtalo en un momento.";
+                    default: return "Still finding your location. Try again in a moment.";
                 }
 
             case "enable_location_service":

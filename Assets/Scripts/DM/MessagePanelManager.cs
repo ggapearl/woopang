@@ -1135,9 +1135,7 @@ public class MessagePanelManager : MonoBehaviour
         if (chatRoomTitle != null)
         {
             chatRoomTitle.text = username;
-            chatRoomTitle.color = isAdmin
-                ? new Color(1f, 0.84f, 0f, 1f)
-                : Color.white;
+            R0926ChatTitle.Paint(chatRoomTitle, isAdmin);   // 흰 글 + 공식 방은 체크 배지 (예전 금색 제목)
             Canvas.ForceUpdateCanvases();
         }
 
@@ -1282,7 +1280,7 @@ public class MessagePanelManager : MonoBehaviour
         if (chatRoomTitle != null)
         {
             chatRoomTitle.text = "WOOPANG";
-            chatRoomTitle.color = new Color(1f, 0.84f, 0f, 1f); // 골드색
+            R0926ChatTitle.Paint(chatRoomTitle, true);
         }
         // 입력창 비활성화 (읽기 전용)
         SetChatInputEnabled(false);

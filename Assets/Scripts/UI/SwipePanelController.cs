@@ -8,6 +8,10 @@ public class SwipePanelController : MonoBehaviour
 {
     public RectTransform panel1;
     public RectTransform panel2;
+    [Tooltip("세 번째 카드(보물찾기) — 비어 있으면 두 장")]
+    public RectTransform panel3;
+
+    private int PanelCount => panel3 != null ? 3 : 2;
 
     private Vector2 startPos;
     private float dragStartPosX;
@@ -65,7 +69,7 @@ public class SwipePanelController : MonoBehaviour
     void Start()
     {
         CalculateDimensions();
-        currentAnchoredX = (currentPanel == 0) ? 0 : -panelDistance;
+        currentAnchoredX = -currentPanel * panelDistance;
     }
 
     private void CalculateDimensions()
@@ -125,8 +129,8 @@ public class SwipePanelController : MonoBehaviour
 
                 if (Mathf.Abs(swipeDistance) > swipeThreshold)
                 {
-                    if (swipeDistance < 0 && currentPanel == 0) SwitchToPanel(1);
-                    else if (swipeDistance > 0 && currentPanel == 1) SwitchToPanel(0);
+                    if (swipeDistance < 0 && currentPanel < PanelCount - 1) SwitchToPanel(currentPanel + 1);
+                    else if (swipeDistance > 0 && currentPanel > 0) SwitchToPanel(currentPanel - 1);
                 }
             }
         }
@@ -142,7 +146,7 @@ public class SwipePanelController : MonoBehaviour
         if (!isDragging)
         {
             // 드래그 중이 아닐 때만 목표 위치로 보간
-            float targetX = (currentPanel == 0) ? 0 : -panelDistance;
+            float targetX = -currentPanel * panelDistance;
             currentAnchoredX = Mathf.Lerp(currentAnchoredX, targetX, Time.deltaTime * moveSpeed);
 
             if (Mathf.Abs(currentAnchoredX - targetX) < 0.1f)
@@ -163,12 +167,13 @@ public class SwipePanelController : MonoBehaviour
                 // panel2는 항상 panel1 기준의 상대 위치를 유지 (동기화)
                 panel2.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX + panelDistance, 0);
             }
+            if (panel3 != null) panel3.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX + panelDistance * 2f, 0);
         }
     }
 
     public void SwitchToPanel(int panelIndex)
     {
-        currentPanel = Mathf.Clamp(panelIndex, 0, 1);
+        currentPanel = Mathf.Clamp(panelIndex, 0, PanelCount - 1);
     }
 
     public int GetCurrentPanel()

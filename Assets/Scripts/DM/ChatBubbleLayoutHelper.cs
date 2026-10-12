@@ -23,10 +23,10 @@ public static class ChatBubbleLayoutHelper
     private const float DEFAULT_MIN_BUBBLE_HEIGHT = 0f; // 텍스트 높이에 맞게 자동 조절
 
     // 행 레이아웃 기본값
-    private const float DEFAULT_ROW_SPACING = 8f;
+    private const float DEFAULT_ROW_SPACING = 18f;   // 사진과 말풍선 사이 — 0926 말풍선 프리팹과 같게
     private const int DEFAULT_MY_PADDING_LEFT = 50;
     private const int DEFAULT_MY_PADDING_RIGHT = 14;
-    private const int DEFAULT_OTHER_PADDING_LEFT = 14;
+    private const int DEFAULT_OTHER_PADDING_LEFT = 16;
     private const int DEFAULT_OTHER_PADDING_RIGHT = 50;
     private const int DEFAULT_ROW_PADDING_VERTICAL = 4;
 
@@ -125,7 +125,7 @@ public static class ChatBubbleLayoutHelper
         if (hlg == null)
             hlg = rowObj.AddComponent<HorizontalLayoutGroup>();
 
-        hlg.childAlignment = isMine ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+        hlg.childAlignment = isMine ? TextAnchor.LowerRight : TextAnchor.LowerLeft;   // 사진은 말풍선 아래 끝에 (0926)
         hlg.spacing = ROW_SPACING; // 인스펙터에서 조절 가능
 
         // 패딩 - 인스펙터에서 조절 가능

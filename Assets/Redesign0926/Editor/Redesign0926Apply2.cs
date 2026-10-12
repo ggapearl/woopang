@@ -400,11 +400,12 @@ namespace Redesign0926
             {
                 var menu = Ensure<R0926ChatMenu>(chat);
                 var more = FindOrCreate(header.transform, "MoreButton0926");
-                Img(more, Spr("r0926_circle"), new Color(1, 1, 1, 0.08f), Image.Type.Simple).raycastTarget = true;
-                SetRect(RT(more), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-50, 0), new Vector2(110, 110));
+                // 회색 원 없이 아이콘만 — 왼쪽 ‹ 와 짝 (1010 대화창 정리 · 누르는 자리는 132 그대로)
+                Img(more, Spr("r0926_circle"), new Color(1, 1, 1, 0f), Image.Type.Simple).raycastTarget = true;
+                SetRect(RT(more), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-ChatHeaderEdge, 0), new Vector2(ChatHeaderHit, ChatHeaderHit));
                 var ic = FindOrCreate(more.transform, "Icon0926");
                 Img(ic, Spr("r0926_i_more"), Ink, Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(70, 70));
+                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(68, 68));
                 var mBtn = Ensure<Button>(more);
                 ResetListeners(mBtn);
                 UnityEventTools.AddPersistentListener(mBtn.onClick, menu.TogglePopover);

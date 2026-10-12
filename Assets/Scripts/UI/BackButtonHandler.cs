@@ -56,6 +56,20 @@ public class BackButtonHandler : MonoBehaviour
         }
     }
 
+    /// <summary>지금 뒤로가기로 닫힐 창의 버튼 — 없으면 null (HandleBackPress 가 고르는 것과 같다. 알림을 눌러 다른 화면을 열 때 위에 덮인 창부터 닫는다)</summary>
+    public Button Top
+    {
+        get
+        {
+            for (int i = activeButtons.Count - 1; i >= 0; i--)
+            {
+                var b = activeButtons[i];
+                if (b != null && b.gameObject.activeInHierarchy && b.interactable) return b;
+            }
+            return null;
+        }
+    }
+
     void Update()
     {
         try

@@ -47,6 +47,7 @@ public class R0926GuideOverlay : MonoBehaviour
 
     public void Skip()
     {
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HandleTouchFeedbackDirect(tapHaptic, tapSound);
         if (confirm != null) confirm.onClick.Invoke();
     }
 

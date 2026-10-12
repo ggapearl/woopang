@@ -352,7 +352,7 @@ public class P2PManager : MonoBehaviour
                 positionUpdated = true;
             }
             // GPS fallback (AREarthManager가 작동 안할 때 - 포그라운드/백그라운드 모두)
-            else if (Input.location.status == LocationServiceStatus.Running)
+            else if (Input.location.status == LocationServiceStatus.Running && UsableFix(Input.location.lastData))
             {
                 var loc = Input.location.lastData;
                 currentLatitude = loc.latitude;
@@ -370,6 +370,31 @@ public class P2PManager : MonoBehaviour
             // 포그라운드/백그라운드에 따라 다른 간격 사용
             yield return new WaitForSeconds(currentUpdateInterval);
         }
+    }
+
+    // 앱을 켜거나 돌아온 직후의 GPS 값은 휴대폰에 남아 있던 예전 측정값일 수 있다 — 잠깐 켰다 끄면 그 옛 자리가
+    // '방금'으로 저장돼 친구 지도에 24시간 남았다 (2026-10-11). 새 측정값을 본 뒤부터 보낸다.
+    private const float MaxFixAccuracy = 500f;   // 이보다 흐린 값(대략 위치 권한·기지국 측위, 수 km)은 보내지 않는다
+    private bool fixTrusted;
+    private double fixFirstStamp;
+    private float fixWaitFrom = -1f;
+
+    private void ResetFixGate()
+    {
+        fixTrusted = false;
+        fixWaitFrom = -1f;
+    }
+
+    private bool UsableFix(LocationInfo loc)
+    {
+        if (loc.latitude == 0f && loc.longitude == 0f) return false;   // 첫 측정 전
+        if (loc.horizontalAccuracy <= 0f || loc.horizontalAccuracy > MaxFixAccuracy) return false;
+        if (fixTrusted) return true;
+        if (fixWaitFrom < 0f) { fixWaitFrom = Time.realtimeSinceStartup; fixFirstStamp = loc.timestamp; }
+        double age = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds - loc.timestamp;
+        // 처음 본 뒤 새 측정값이 왔거나 · 2분 안에 잰 값이거나 · 30초를 기다려도 새 값이 없으면(가만히 있어 휴대폰이 새로 안 잰다) 믿는다
+        fixTrusted = loc.timestamp != fixFirstStamp || (age > -60.0 && age < 120.0) || Time.realtimeSinceStartup - fixWaitFrom > 30f;
+        return fixTrusted;
     }
 
     /// <summary>
@@ -1126,6 +1151,7 @@ public class P2PManager : MonoBehaviour
         {
             // 포그라운드 복귀
             Log("Returning to foreground");
+            ResetFixGate();
             if (isRegistered && positionUpdateCoroutine == null &&
                 locationVisibilityMode != LocationVisibilityMode.Private)
             {

@@ -109,6 +109,11 @@ public class LoginManager : MonoBehaviour
     {
         OnDeepLinkActivated(url);
     }
+
+    /// <summary>웹 로그인을 열기 직전 — 에디터가 복사된 '앱으로 돌아가기' 링크를 기다린다 (Editor/EditorLoginWatcher)</summary>
+    public static Action EditorBeforeWebLogin;
+    /// <summary>플레이 시험이 로그인 확인을 시험 서버로 돌릴 때 (비어 있으면 실제 서버)</summary>
+    public static string EditorAuthBase;
 #endif
 
     void Awake()
@@ -254,6 +259,9 @@ public class LoginManager : MonoBehaviour
     public void OpenWebLogin()
     {
         string url = $"{ApiConfig.LOGIN_VIEW}?lang={currentLang}";
+#if UNITY_EDITOR
+        EditorBeforeWebLogin?.Invoke();
+#endif
         Application.OpenURL(url);
         CloseLoginPrompt();
     }
@@ -315,6 +323,9 @@ public class LoginManager : MonoBehaviour
     private IEnumerator VerifyTokenAndLogin(string jwtToken)
     {
         string verifyUrl = $"{ApiConfig.MAIN_SERVER}/api/auth/verify";
+#if UNITY_EDITOR
+        if (!string.IsNullOrEmpty(EditorAuthBase)) verifyUrl = EditorAuthBase + "/api/auth/verify";
+#endif
         string jsonBody = $"{{\"token\":\"{jwtToken}\"}}";
 
         using (UnityWebRequest request = new UnityWebRequest(verifyUrl, "POST"))
@@ -362,11 +373,19 @@ public class LoginManager : MonoBehaviour
                         UpdateProfileUI();
                         CloseLoginPrompt();
                     }
+                    else
+                    {
+                        Debug.LogWarning($"[LoginManager] 로그인 확인 실패: {response?.message}");
+                    }
                 }
                 catch (Exception e)
                 {
                     Debug.LogError($"[LoginManager] 응답 파싱 오류: {e.Message}");
                 }
+            }
+            else
+            {
+                Debug.LogWarning($"[LoginManager] 로그인 확인 요청 실패: {request.error}");
             }
         }
     }

@@ -221,6 +221,15 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "位置サービスを有効にしてください！",
                 ["es"] = "¡Por favor habilita el servicio de ubicación!"
             },
+            // 위치 서비스는 켜져 있는데 아직 좌표를 못 잡았을 때 (AR 복구 중에도 도크를 누를 수 있게 된 뒤 — 2026-10-06)
+            ["location_not_ready"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Still finding your location. Try again in a moment.",
+                ["ko"] = "아직 위치를 잡는 중이에요. 잠시 뒤에 다시 눌러 주세요.",
+                ["zh"] = "正在获取位置，请稍后再试。",
+                ["ja"] = "まだ位置を取得中です。少し待ってからもう一度お試しください。",
+                ["es"] = "Aún buscando tu ubicación. Inténtalo en un momento."
+            },
             ["upload_success"] = new Dictionary<string, string>()
             {
                 ["en"] = "Upload Successful!",

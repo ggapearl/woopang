@@ -30,6 +30,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [SerializeField] private RectTransform pinLayer;
     [SerializeField] private GameObject pinTemplate;
     [SerializeField] private GameObject clusterTemplate;
+    [Tooltip("깊이 확대했을 때 친구 핀 둘레의 '이 근처' 원 (친구 위치는 약 1km 칸으로 온다)")]
+    [SerializeField] private GameObject areaTemplate;
     [SerializeField] private RectTransform meDot;
     [SerializeField] private Image mePulse;
     [SerializeField] private Text chipText;
@@ -77,6 +79,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private readonly List<Friend> friends = new List<Friend>();
     private readonly List<GameObject> pinPool = new List<GameObject>();
     private readonly List<GameObject> clusterPool = new List<GameObject>();
+    private readonly List<GameObject> areaPool = new List<GameObject>();
     private readonly List<GameObject> rows = new List<GameObject>();
     private RectTransform viewport;
     private Canvas canvas;
@@ -98,6 +101,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         canvas = GetComponentInParent<Canvas>();
         if (pinTemplate != null) pinTemplate.SetActive(false);
         if (clusterTemplate != null) clusterTemplate.SetActive(false);
+        if (areaTemplate != null) areaTemplate.SetActive(false);
         if (rowTemplate != null) rowTemplate.SetActive(false);
     }
 
@@ -412,7 +416,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             if (me != Vector2.zero) Place(meDot, ToView(Norm(me.x, me.y)));
         }
 
-        int p = 0, c = 0;
+        int p = 0, c = 0, a = 0;
         if (sharing && loggedIn)
         {
             // 화면 거리 기준으로 가까운 친구를 묶는다 (욕심쟁이 방식 — 친구 수가 적어 충분)
@@ -434,7 +438,15 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             Vector2 v = viewport.rect.size;
             foreach (var g in groups)
             {
-                if (g.pos.x < -120 || g.pos.y < -120 || g.pos.x > v.x + 120 || g.pos.y > v.y + 120) continue;
+                float ar = AreaRadius(g.members[0].lat);
+                float edge = Mathf.Max(120f, ar);
+                if (g.pos.x < -edge || g.pos.y < -edge || g.pos.x > v.x + edge || g.pos.y > v.y + edge) continue;
+                if (ar > 0f)
+                {
+                    var area = Pool(areaPool, areaTemplate, a++, behind: true);
+                    ((RectTransform)area.transform).sizeDelta = new Vector2(ar * 2f, ar * 2f);
+                    Place((RectTransform)area.transform, g.pos);
+                }
                 if (g.members.Count == 1)
                 {
                     var go = Pool(pinPool, pinTemplate, p++);
@@ -463,14 +475,27 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         }
         for (int i = p; i < pinPool.Count; i++) if (pinPool[i].activeSelf) pinPool[i].SetActive(false);
         for (int i = c; i < clusterPool.Count; i++) if (clusterPool[i].activeSelf) clusterPool[i].SetActive(false);
+        for (int i = a; i < areaPool.Count; i++) if (areaPool[i].activeSelf) areaPool[i].SetActive(false);
     }
 
-    private GameObject Pool(List<GameObject> pool, GameObject template, int index)
+    // 친구 위치는 서버가 약 1km 칸(소수 둘째 자리)으로 뭉개 보낸다 — 칸 가운데에서 모서리까지 약 0.7km.
+    // 그 칸이 아바타보다 커 보일 만큼 확대하면 핀이 정확한 건물처럼 보이지 않게 '이 근처' 원을 같이 그린다.
+    private const float ApproxKm = 0.7f;
+
+    private float AreaRadius(float lat)
+    {
+        if (areaTemplate == null) return 0f;
+        float r = ApproxKm * MapSize.x / (40075f * Mathf.Max(0.05f, Mathf.Cos(lat * Mathf.Deg2Rad)));
+        return r >= 64f ? r : 0f;
+    }
+
+    private GameObject Pool(List<GameObject> pool, GameObject template, int index, bool behind = false)
     {
         while (pool.Count <= index)
         {
             var go = Instantiate(template, pinLayer);
             go.name = "_";
+            if (behind) go.transform.SetAsFirstSibling();   // 핀·묶음보다 뒤
             pool.Add(go);
         }
         if (!pool[index].activeSelf) pool[index].SetActive(true);
@@ -636,7 +661,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         rows.Clear();
         foreach (var g in pinPool) Kill(g);
         foreach (var g in clusterPool) Kill(g);
-        pinPool.Clear(); clusterPool.Clear(); friends.Clear();
+        foreach (var g in areaPool) Kill(g);
+        pinPool.Clear(); clusterPool.Clear(); areaPool.Clear(); friends.Clear();
         previewMe = Vector2.zero;
         if (worldImage != null) worldImage.texture = null;
         if (detailImage != null) detailImage.texture = null;

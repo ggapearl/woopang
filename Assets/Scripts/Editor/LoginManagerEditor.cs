@@ -37,9 +37,9 @@ public class LoginManagerEditor : UnityEditor.Editor
         // ============================================================
         EditorGUILayout.LabelField("실제 로그인 (Google/Kakao/Apple)", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "1. 'Web Login' 클릭 → 브라우저에서 Google 로그인\n" +
-            "2. 로그인 완료 후 딥링크 URL 복사\n" +
-            "3. 아래 '딥링크 시뮬레이션'에 붙여넣기 → 'Apply'",
+            "1. 'Web Login' 클릭 (또는 플레이 중 앱의 로그인 버튼) → 브라우저에서 로그인\n" +
+            "2. 끝나면 '앱으로 돌아가기' 버튼 오른쪽 클릭 → 링크 주소 복사\n" +
+            "3. 플레이 중이면 에디터가 10분 안에 복사한 링크를 받아 바로 로그인 (안 되면 아래 붙여넣기 → Apply)",
             MessageType.None);
 
         GUI.backgroundColor = new Color(0.3f, 0.6f, 1f);
@@ -82,6 +82,7 @@ public class LoginManagerEditor : UnityEditor.Editor
         // 에디터 퀵 테스트 (DB 없이 로컬 테스트)
         // ============================================================
         EditorGUILayout.LabelField("퀵 테스트 (로컬 전용)", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox("Test Login 은 서버 토큰 없이 화면만 로그인 상태가 됩니다 — 보물찾기·DM 같은 서버 기능은 '로그인 필요'로 막혀요. 실제로 써 보려면 위 Web Login.", MessageType.None);
 
         EditorGUILayout.BeginHorizontal();
 

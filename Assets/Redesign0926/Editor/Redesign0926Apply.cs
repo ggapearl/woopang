@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 22;  // v22: v21 검토분 — 장소 수정 X 덮개가 다시 적용 때 꺼지던 것 · X 가 자기를 꺼 두 번째부터 사라지던 것 · 친구 이름 글자 잘림 · 'Anuncio' 배지 · v21: 목록 시트 제목·'목록|지도|설정' 글자 키움 · 지도·설정 탭 글자·줄 키움 · 지도 깊은 확대(서버 타일 · 없으면 200배) · 장소 수정 카드도 밀어 닫기 · v20: v19 검토분 — 밀어 닫을 때 시작한 버튼(등록하기·팔로우·로그아웃)이 눌리던 것 · 추가 시트 위쪽을 덮던 투명 누름 영역(XButton_Panel) · 프로필 내릴 때 도크 X 가 카드 위로 비치던 것 · v19: 창 닫기 통일 — 추가·프로필도 아래로 밀어 닫기(추가는 장소/3D모델 넘기기와 같은 방향 잠금) · 추가 카드 손잡이 · 프로필 열리면 도크 칸 X '닫기' · '되돌리기' 알림은 창이 열리면 거둠·가로 자리 · 업로드 제한시간 60초(3D 모델·정보 수정) · v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
+        public const int Version = 24;  // v24: 10-12 추가 — 보물찾기 참가 인원 상한 칩 · 날씨판 지역을 기온 바로 위 유리 알약(핀 + 이름)으로 · 10-06 대표님 요청분 — 대화창을 새 모양으로(내 말 분홍·상대 카드색 둥근 말풍선 · 날짜 알약 · ‹ 와 흰 제목, 우팡 공식 방은 체크 배지 · 좋아요 하트가 안 뜨던 것) · 설정 '화면' 30/60fps(기본 30) · 버전은 설정 맨 아래 작게 · 저작권 자리는 대표님이 씬에서 잡은 그대로 · 목록 글자 키움(이름 48·거리 41) · AR 복구 중에도 도크 누름(불러오는 중 막이 칩·도크 아래로) · v23: 10-06 대표님 대조분 — 첫 안내 다음·시작하기·건너뛰기 소리를 하단 메뉴(물방울)와 같게 · 날씨판 지역은 서버(카카오 행정구역) 우선 · 목록 맨 아래 버전만(접고 펴기 없앰)·저작권 그림 글만 잘라 키움 · 설정 '앱 정보'(문의·개인정보·출처·버전) · 추가 창 세 번째 카드 '보물찾기'(장소|3D모델|보물찾기 탭 · 숨기기·참가·상세) · v22: v21 검토분 — 장소 수정 X 덮개가 다시 적용 때 꺼지던 것 · X 가 자기를 꺼 두 번째부터 사라지던 것 · 친구 이름 글자 잘림 · 'Anuncio' 배지 · v21: 목록 시트 제목·'목록|지도|설정' 글자 키움 · 지도·설정 탭 글자·줄 키움 · 지도 깊은 확대(서버 타일 · 없으면 200배) · 장소 수정 카드도 밀어 닫기 · v20: v19 검토분 — 밀어 닫을 때 시작한 버튼(등록하기·팔로우·로그아웃)이 눌리던 것 · 추가 시트 위쪽을 덮던 투명 누름 영역(XButton_Panel) · 프로필 내릴 때 도크 X 가 카드 위로 비치던 것 · v19: 창 닫기 통일 — 추가·프로필도 아래로 밀어 닫기(추가는 장소/3D모델 넘기기와 같은 방향 잠금) · 추가 카드 손잡이 · 프로필 열리면 도크 칸 X '닫기' · '되돌리기' 알림은 창이 열리면 거둠·가로 자리 · 업로드 제한시간 60초(3D 모델·정보 수정) · v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
 
         private const string SpriteDir = "Assets/Redesign0926/Sprites/";
 
@@ -78,6 +78,7 @@ namespace Redesign0926
             ApplySplash(root, log);             // 시작화면은 맨 위 — 마지막에
             Apply0930(root, log);               // 0930 시안 — 틀을 다시 씌우고 새 모양 (시작화면 별 포함)
             ApplyFadeAndLandscape(root, log);   // 가로 배치는 세로 값이 다 정해진 뒤에 (0930 틀 포함 — 맨 마지막)
+            CloseStartPanels(root, log);
 
             var marker = root.GetComponentInChildren<R0926Marker>(true);
             if (marker == null)
@@ -89,6 +90,21 @@ namespace Redesign0926
             marker.appliedVersion = Version;
             EditorUtility.SetDirty(marker);
             log.Add("apply v" + Version + " 완료");
+        }
+
+        // 앱을 켰을 때 닫혀 있어야 하는 창 — 씬에서 고치느라 켜 둔 채 저장해도 적용 때 다시 끈다 (BuildValidator 도 같은 목록으로 막는다)
+        // 2026-10-11: 저작권 자리를 잡느라 켠 ListPanel 이 켜진 채 저장돼, 앱을 켜자마자 목록이 떠 있고 추가 창까지 덮었다
+        public static readonly string[] StartClosedPanels = { "ListPanel", "UploadPage", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "Fixpage", "FollowPanel", "LoginPromptPanel", "AskAISheet0926", "FullScreenPanel" };
+
+        private static void CloseStartPanels(Transform root, List<string> log)
+        {
+            foreach (var n in StartClosedPanels)
+            {
+                var p = Find(root, n);
+                if (p == null || !p.activeSelf) continue;
+                p.SetActive(false);
+                log.Add("켜진 채 저장돼 있던 창을 끔: " + n);
+            }
         }
 
         // ============================================================
@@ -293,6 +309,9 @@ namespace Redesign0926
         // ============================================================
         // 위치 상태 — 도크 위 작은 유리 칩
         // ============================================================
+        // AR 화면을 덮는 창 — 열려 있으면 위치 칩이 숨고 보물찾기 알림도 걷힌다
+        private static readonly string[] ArCovers = { "FullScreenPanel", "ListPanel", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "UploadPage", "Fixpage", "FirstTimeGuidePanel" };
+
         private static void ApplyLocationChip(Transform root, List<string> log)
         {
             var panel = Find(root, "LocationManagerPanel");
@@ -349,9 +368,8 @@ namespace Redesign0926
             var hide = Ensure<R0926HideWhile>(panel);
             var hso = new SerializedObject(hide);
             var arr = hso.FindProperty("panels");
-            string[] watch = { "FullScreenPanel", "ListPanel", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "UploadPage", "Fixpage", "FirstTimeGuidePanel" };
-            arr.arraySize = watch.Length;
-            for (int i = 0; i < watch.Length; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = Find(root, watch[i]);
+            arr.arraySize = ArCovers.Length;
+            for (int i = 0; i < ArCovers.Length; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = Find(root, ArCovers[i]);
             hso.ApplyModifiedPropertiesWithoutUndo();
             log.Add("location chip ok");
         }
@@ -368,8 +386,8 @@ namespace Redesign0926
         private const float ChipGap = 18f;
         private const float SummaryY = ChipsY - (ChipH * 2 + ChipGap) - 22f;   // -392
         private const float ListTop = SummaryY - 50f;                          // -442
-        private const float FooterH = 64f;
-        private const float RowH = 66f;    // 0930: 촘촘하게 (예전 84)
+        private const float FooterH = 80f;   // 목록 맨 아래 저작권 줄 — 자리는 대표님이 씬에서 잡은 것(바닥 20 · 높이 100, 그림은 가운데 약 61)
+        private const float RowH = 96f;    // 1006: 글자가 작다(대표님) — 이름 38→48 · 거리 33→41 (0930 엔 66 으로 촘촘하게, 예전 84)
         private const float CloseSize = 72f;
 
         private static void ApplyListSheet(Transform root, List<string> log)
@@ -486,9 +504,9 @@ namespace Redesign0926
 
             // 집계 한 줄
             var summary = FindOrCreate(sheet.transform, "Summary0926");
-            var sumT = Txt(summary, "", 30, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            var sumT = Txt(summary, "", 34, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
             sumT.horizontalOverflow = HorizontalWrapMode.Wrap;
-            SetRect(RT(summary), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, SummaryY), new Vector2(-SheetPad * 2, 44));
+            SetRect(RT(summary), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, SummaryY), new Vector2(-SheetPad * 2, 48));
 
             // 목록
             var scroll = Find(panel.transform, "Scroll View");
@@ -546,6 +564,8 @@ namespace Redesign0926
                     so.FindProperty("summaryText").objectReferenceValue = sumT;
                     so.FindProperty("barSprite").objectReferenceValue = Spr("r0926_pill");
                     so.FindProperty("rowHeight").floatValue = RowH;
+                    so.FindProperty("directionWidth").floatValue = 160f;   // 방향 글자('북동')도 거리와 함께 키움
+                    so.FindProperty("directionFontSize").intValue = 33;
                     so.ApplyModifiedPropertiesWithoutUndo();
                 }
                 if (listText != null)
@@ -569,36 +589,27 @@ namespace Redesign0926
                 if (pImg != null) pImg.raycastTarget = true;
             }
 
-            // 예전 카드 배경은 숨기고, 저작권 이미지는 바닥줄로
+            // 예전 카드 배경은 숨기고, 저작권 이미지는 글만 잘라 둔 그림으로 (원본 1920x1080 은 줄 높이에 넣으면 몇 px 로 쪼그라들었다).
+            // 자리·크기는 대표님이 씬에서 직접 잡았다(2026-10-06: 맨 아래 가운데) — 여기서는 그림만 맞추고 위치는 건드리지 않는다
+            var copy = Find(back != null ? back.transform : sheet.transform, "copyright") ?? Find(sheet.transform, "copyright");
             if (back != null)
             {
                 var bImg = back.GetComponent<Image>();
                 if (bImg != null) bImg.enabled = false;
-                var copy = Find(back.transform, "copyright");
-                if (copy != null)
-                {
-                    copy.transform.SetParent(sheet.transform, false);
-                    copy.GetComponent<Image>().preserveAspect = true;
-                    SetRect(RT(copy), new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0), new Vector2(-SheetPad, 12), new Vector2(560, FooterH));
-                    NoInset(copy);
-                }
             }
-            foreach (var vb in new[] { "VersionButton_Close", "VersionButton_Open" })
+            if (copy != null)
             {
-                var v = Find(panel.transform, vb);
-                if (v == null) continue;
-                v.transform.SetParent(sheet.transform, false);
-                SetRect(RT(v), new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0), new Vector2(SheetPad, 12), new Vector2(560, FooterH));
-                NoInset(v);
-                foreach (var t in v.GetComponentsInChildren<Text>(true))
-                {
-                    t.fontSize = 30; t.color = Muted;
-                    var trt = t.rectTransform;
-                    trt.sizeDelta = new Vector2(trt.sizeDelta.x, FooterH);
-                    if (t.name == "version") trt.anchoredPosition = new Vector2(160, 0);
-                    EditorUtility.SetDirty(t);
-                }
+                if (copy.transform.parent != sheet.transform) copy.transform.SetParent(sheet.transform, false);
+                var cImg = copy.GetComponent<Image>();
+                var trimmed = Spr("r0926_copyright");
+                if (trimmed != null) cImg.sprite = trimmed;
+                cImg.preserveAspect = true;
+                cImg.raycastTarget = false;
+                EditorUtility.SetDirty(cImg);
             }
+            // 버전은 목록에서 빼고 설정 탭 맨 아래에 작게 (2026-10-06 대표님 — 목록의 버전 버튼 둘은 대표님이 씬에서 지웠다). Apply6 BuildSettingsPanel
+            var info = panel.transform.Find("Info");
+            if (info != null) info.gameObject.SetActive(false);
             log.Add("list sheet ok");
         }
 
@@ -705,19 +716,19 @@ namespace Redesign0926
 
             var dot = FindOrCreate(tpl.transform, "Dot");
             Img(dot, Spr("r0926_circle"), Color.white, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(20, 0), new Vector2(22, 22));
+            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(22, 0), new Vector2(26, 26));
 
             var name = FindOrCreate(tpl.transform, "Name");
-            var nt = Txt(name, "장소", 38, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
+            var nt = Txt(name, "장소", 48, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
             nt.horizontalOverflow = HorizontalWrapMode.Wrap;
             nt.verticalOverflow = VerticalWrapMode.Truncate;
             var nrt = RT(name);
             nrt.anchorMin = new Vector2(0, 0); nrt.anchorMax = new Vector2(1, 1); nrt.pivot = new Vector2(0.5f, 0.5f);
-            nrt.offsetMin = new Vector2(52, 0); nrt.offsetMax = new Vector2(-200, 0);
+            nrt.offsetMin = new Vector2(60, 0); nrt.offsetMax = new Vector2(-236, 0);
 
             var dist = FindOrCreate(tpl.transform, "Dist");
-            Txt(dist, "0m", 33, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
-            SetRect(RT(dist), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-6, 0), new Vector2(190, RowH));
+            Txt(dist, "0m", 41, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
+            SetRect(RT(dist), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-6, 0), new Vector2(226, RowH));
             return tpl;
         }
 

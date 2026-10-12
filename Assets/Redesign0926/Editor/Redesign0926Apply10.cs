@@ -687,7 +687,8 @@ namespace Redesign0926
             var line = FindOrCreate(area.transform, "Line0926");
             line.transform.SetSiblingIndex(0);
             Img(line, null, Line, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(line), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(0, 2));
+            // 채팅 입력줄은 카드보다 넓어(좌우 15) 줄이 카드 둥근 끝 밖으로 삐져나왔다 → 입력칸 양 끝에 맞춘다
+            SetRect(RT(line), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(isMirror ? 0 : -2 * Pad, 2));
             var art = RT(area);
             art.sizeDelta = new Vector2(art.sizeDelta.x, 150);
 

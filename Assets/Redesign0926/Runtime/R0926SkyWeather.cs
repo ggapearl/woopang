@@ -29,6 +29,8 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private R0926WeatherIcon icon;       // 기온 왼쪽의 날씨 그림
     [Tooltip("판 위의 지역 이름 — '예산군 대흥면' (LocationManager.ShortRegion)")]
     [SerializeField] private Text regionText;
+    [Tooltip("지역 이름의 바탕 알약 — 이름이 없으면 숨고, 폭은 이름 길이에 맞춘다 (regionText 는 이 안에 핀 오른쪽으로 늘어나 있다)")]
+    [SerializeField] private RectTransform regionPill;
 
     [Header("3시간 후 · 6시간 후 · 내일")]
     [SerializeField] private GameObject forecast;
@@ -88,7 +90,10 @@ public class R0926SkyWeather : MonoBehaviour
         public int pty = -1;      // 강수형태 0 없음 · 1 비 · 2 비/눈 · 3 눈 · 5 빗방울 · 6 빗방울눈날림 · 7 눈날림
         public float rn1 = -1;    // 1시간 강수량 (mm)
         public float humidity = -1;   // 상대습도 % — 서버가 아직 안 주면 -1 (줄에서 뺀다)
+        public string region;         // 판 위 지역 이름 — 서버가 카카오 행정구역으로 ('예산군 대흥면'). 한국 밖·예전 서버면 비어 있다
     }
+
+    private string serverRegion;      // 있으면 기기 주소(LocationManager.ShortRegion — OSM, 시골에선 면이 빠진다)보다 먼저
 
     private bool collapsed;          // 사용자가 '접기' — 앱을 켜는 동안 유지 (처음 상태는 설정)
     private bool lying, lyingOverride;
@@ -96,6 +101,8 @@ public class R0926SkyWeather : MonoBehaviour
     private Vector3 highPos;
     private bool boardShowing;
     private string lastChip;
+    private float pillSince = -1f;
+    private const float PillWaitMax = 30f;   // 알약이 이보다 오래 안 걷히면(최종 개수가 안 온 경우 등) 칩이 더 기다리지 않는다
 
     private void Start()
     {
@@ -118,12 +125,19 @@ public class R0926SkyWeather : MonoBehaviour
 
     private void ShowRegion(string region)
     {
+        if (!string.IsNullOrEmpty(serverRegion)) region = serverRegion;
 #if UNITY_EDITOR
         if (EditorRegionOverride != null) region = EditorRegionOverride;
 #endif
         if (regionText == null) return;
+        bool has = !string.IsNullOrEmpty(region);
         regionText.text = region ?? "";
-        regionText.enabled = !string.IsNullOrEmpty(region);
+        regionText.enabled = has;
+        if (regionPill == null) return;
+        if (regionPill.gameObject.activeSelf != has) regionPill.gameObject.SetActive(has);
+        if (!has) return;
+        var lr = regionText.rectTransform;   // 알약 폭 = 핀 쪽 안쪽 여백 + 이름 + 오른쪽 여백
+        regionPill.sizeDelta = new Vector2(lr.offsetMin.x - lr.offsetMax.x + regionText.preferredWidth, regionPill.sizeDelta.y);
     }
 
     /// <summary>
@@ -197,7 +211,10 @@ public class R0926SkyWeather : MonoBehaviour
         bool lyingHide = lying && !lyingOverride && R0926SkySettings.HideWhenLying;
 
         bool showSky = allowed && hasData && settled && !near && !collapsed && !lyingHide;
-        bool showChip = allowed && hasData && settled;
+        // 칩은 노치 아래 상태 알약('N곳을 찾았어요' 등)과 같은 자리 — 알약이 걷힐 때까지 기다린다 (앱을 켜자마자 둘이 겹치던 것)
+        bool pill = R0926StatusPill.AnyShowing;
+        if (!pill) pillSince = -1f; else if (pillSince < 0f) pillSince = Time.unscaledTime;
+        bool showChip = allowed && hasData && settled && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
         boardShowing = showSky;
         UpdateChip(showSky);
 
@@ -318,6 +335,7 @@ public class R0926SkyWeather : MonoBehaviour
         if (Check(SubwayManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
         if (Check(TrainStationManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
         if (Check(TerminalManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
+        if (Check(R0926HuntTreasure.SpawnedObjects.Values, eye)) return true;
         return false;
     }
 
@@ -395,6 +413,8 @@ public class R0926SkyWeather : MonoBehaviour
     // ── 문구 ────────────────────────────────────────────────
     private void Show(Weather w)
     {
+        serverRegion = string.IsNullOrEmpty(w.region) ? null : w.region;
+        ShowRegion(LocationManager.ShortRegion);
         string lang = R0926LocalizedText.Lang();
         int t = Mathf.RoundToInt(w.temp);
         int code = NowCode(w);

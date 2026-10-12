@@ -8,6 +8,7 @@ using UnityEngine.UI;
 /// 예전엔 좌표가 박혀 있어 빈칸이 그대로 남았다. 여기서 매 프레임 끝에 다시 놓아 늘 촘촘하게.
 ///  · 공개 상태: 글자 색(분홍/노랑/회색) 그대로 옅은 알약 + 점
 ///  · 팔로잉·팔로워: "12\n팔로잉" → 숫자는 크고 굵게, 이름은 작고 옅게
+///  · 보물찾기 펼침처럼 길어지는 칸은 카드가 화면(위 안전 영역 ~ 도크 위)을 넘지 않게 그 칸만 줄인다 — 그 안은 스크롤
 /// </summary>
 public class R0926ProfileLayout : MonoBehaviour
 {
@@ -23,6 +24,7 @@ public class R0926ProfileLayout : MonoBehaviour
         public float gapBefore;
         [Tooltip("같은 가운데에 함께 놓을 것 (예: 사진 위 테두리)")]
         public RectTransform companion;
+        [NonSerialized] public float extra;   // 실행 중 더한 높이 (SetExtra)
     }
 
     [SerializeField] private RectTransform card;
@@ -42,6 +44,25 @@ public class R0926ProfileLayout : MonoBehaviour
     [SerializeField] private int countSize = 88;
     [SerializeField] private int labelSize = 46;
 
+    [Header("화면에 맞추기 — 카드가 화면보다 길면 이 항목만 줄인다 (그 안은 스스로 스크롤)")]
+    [SerializeField] private RectTransform shrinkItem;
+    [Tooltip("이 위로만 — 도크 자리 (비우면 화면 아래 끝)")]
+    [SerializeField] private RectTransform floor;
+    [Tooltip("카드 가운데 자리 — 부모 가운데에서 위로")]
+    [SerializeField] private float homeY = 90f;
+    [SerializeField] private float margin = 40f;
+    [SerializeField] private float minShrink = 360f;
+
+    private Canvas rootCanvas;
+    private static readonly Vector3[] corners = new Vector3[4];
+
+    /// <summary>항목 높이에 실행 중 더한다 (0 이면 원래대로) — 숫자 줄에 '주최' 칸이 붙을 때 · 보물찾기 펼침 칸</summary>
+    public void SetExtra(RectTransform rt, float extra)
+    {
+        if (items == null) return;
+        foreach (var it in items) if (it != null && it.rt == rt) it.extra = extra;
+    }
+
     private void LateUpdate()
     {
         if (card == null || items == null) return;
@@ -59,34 +80,78 @@ public class R0926ProfileLayout : MonoBehaviour
         StyleVisibility();
         StyleCounts();
 
-        // 위에서부터 쌓는다 — 카드 위 끝이 0, 아래로 음수
+        // 화면보다 길면 줄일 항목(보물찾기 펼침)에서 넘치는 만큼 덜어 낸다
+        float cut = 0f;
+        float room = Room();
+        if (room > 0f)
+        {
+            float over = Stack(false, 0f) + padBottom - room;
+            foreach (var it in items)
+                if (over > 0f && it != null && it.rt == shrinkItem && Visible(it))
+                    cut = Mathf.Min(over, Mathf.Max(0f, it.height + it.extra - minShrink));
+        }
+        float h = Mathf.Max(minHeight, Stack(true, cut) + padBottom);
+        if (!Mathf.Approximately(card.sizeDelta.y, h)) card.sizeDelta = new Vector2(card.sizeDelta.x, h);
+    }
+
+    // 위에서부터 쌓는다 — 카드 위 끝이 0, 아래로 음수. 쌓은 높이를 돌려준다
+    private float Stack(bool place, float cut)
+    {
         float y = padTop;
         bool first = true;
         foreach (var it in items)
         {
-            if (it == null || it.rt == null) continue;
-            // 부모(TopPanel·BottomPanel)는 늘 켜져 있다 — 자기 자신이 켜졌는지만 본다
-            var gate = it.activeIf != null ? it.activeIf : it.rt.gameObject;
-            if (!gate.activeSelf) continue;
-            // 비어 있는 글(소개 없는 계정)은 자리를 접는다 — 이름과 숫자 사이가 휑하게 비었다
-            var tx = it.rt.GetComponent<Text>();
-            if (tx != null && string.IsNullOrWhiteSpace(tx.text)) continue;
+            if (!Visible(it)) continue;
             if (!first) y += it.gapBefore;
             first = false;
-            float w = it.width > 0f ? it.width : it.rt.sizeDelta.x;
-            Place(it.rt, y, w, it.height);
-            if (it.companion != null)
+            float ih = it.height + it.extra - (it.rt == shrinkItem ? cut : 0f);
+            if (place)
             {
-                // 같은 가운데에 (크기는 그대로)
-                var c = it.companion;
-                c.anchorMin = c.anchorMax = new Vector2(0.5f, 1f);
-                c.pivot = new Vector2(0.5f, 0.5f);
-                c.anchoredPosition = new Vector2(0f, -(y + it.height / 2f));
+                float w = it.width > 0f ? it.width : it.rt.sizeDelta.x;
+                Place(it.rt, y, w, ih);
+                if (it.companion != null)
+                {
+                    // 같은 가운데에 (크기는 그대로)
+                    var c = it.companion;
+                    c.anchorMin = c.anchorMax = new Vector2(0.5f, 1f);
+                    c.pivot = new Vector2(0.5f, 0.5f);
+                    c.anchoredPosition = new Vector2(0f, -(y + ih / 2f));
+                }
             }
-            y += it.height;
+            y += ih;
         }
-        float h = Mathf.Max(minHeight, y + padBottom);
-        if (!Mathf.Approximately(card.sizeDelta.y, h)) card.sizeDelta = new Vector2(card.sizeDelta.x, h);
+        return y;
+    }
+
+    private static bool Visible(Item it)
+    {
+        if (it == null || it.rt == null) return false;
+        // 부모(TopPanel·BottomPanel)는 늘 켜져 있다 — 자기 자신이 켜졌는지만 본다
+        var gate = it.activeIf != null ? it.activeIf : it.rt.gameObject;
+        if (!gate.activeSelf) return false;
+        // 비어 있는 글(소개 없는 계정)은 자리를 접는다 — 이름과 숫자 사이가 휑하게 비었다
+        var tx = it.rt.GetComponent<Text>();
+        return tx == null || !string.IsNullOrWhiteSpace(tx.text);
+    }
+
+    // 카드가 쓸 수 있는 높이 — 가운데 자리(homeY)는 그대로, 위(안전 영역 아래)와 아래(도크 위) 중 가까운 쪽까지 같은 만큼.
+    // 끌어 내려 닫는 동안 카드가 움직여도 바뀌지 않게 카드 위치는 보지 않는다
+    private float Room()
+    {
+        var parent = card.parent as RectTransform;
+        if (shrinkItem == null || parent == null) return 0f;
+        if (rootCanvas == null) { var c = GetComponentInParent<Canvas>(); rootCanvas = c != null ? c.rootCanvas : null; }
+        float scale = rootCanvas != null && rootCanvas.scaleFactor > 0f ? rootCanvas.scaleFactor : 1f;
+        Rect r = parent.rect, safe = Screen.safeArea;
+        float top = r.yMax - (Screen.height - safe.yMax) / scale - margin;
+        float bottom = r.yMin + safe.yMin / scale + margin;
+        if (floor != null && floor.gameObject.activeInHierarchy)
+        {
+            floor.GetWorldCorners(corners);
+            bottom = Mathf.Max(bottom, parent.InverseTransformPoint(corners[1]).y + margin);
+        }
+        float center = r.center.y + homeY;
+        return 2f * Mathf.Min(top - center, center - bottom);
     }
 
     private static void Place(RectTransform rt, float top, float w, float h)

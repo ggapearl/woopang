@@ -1342,7 +1342,7 @@ public class CubeUploadManager : MonoBehaviour
 #else
         if (Input.location.status != LocationServiceStatus.Running || gpsData == Vector3.zero)
         {
-            ShowWarning(LocalizationManager.Instance.GetText("enable_location_service"));
+            ShowWarning(LocalizationManager.Instance.GetText(Input.location.isEnabledByUser ? "location_not_ready" : "enable_location_service"));
             isProcessing = false;
             yield break;
         }

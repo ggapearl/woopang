@@ -151,6 +151,12 @@ public class FirebaseNotification : MonoBehaviour
     private string currentFCMToken = "";
 
     private HashSet<string> processedMessageIds = new HashSet<string>();
+#if UNITY_ANDROID
+    private bool trayOpened;                       // 알림바의 FCM 알림을 눌러 들어온 메시지를 처리하는 중 — 그 알림은 이미 보였으니 다시 띄우지 않는다
+    private int handledHuntIntent = int.MinValue;  // 눌러서 앱을 연 보물찾기 알림 — 인텐트가 남아 돌아올 때마다 다시 보인다 (한 번만 연다)
+#elif UNITY_IOS
+    private string lastRespondedId;                // 마지막으로 누른 알림 — 바뀌었을 때만 본다
+#endif
     private Dictionary<string, DateTime> recentMessageTracker = new Dictionary<string, DateTime>();
     private const int DuplicateMessageTimeWindow = 600;
 
@@ -213,6 +219,9 @@ public class FirebaseNotification : MonoBehaviour
 
         // iOS 앱 실행 시 백그라운드 알림 처리
         var notification = Unity.Notifications.iOS.iOSNotificationCenter.GetLastRespondedNotification();
+        if (notification != null) lastRespondedId = notification.Identifier;
+        if (notification != null && R0926HuntPush.Open(notification.UserInfo)) notification = null;   // 보물찾기 알림을 눌러 켜졌으면 그 게임으로
+        StartCoroutine(WatchRespondedHunt());
         if (notification != null)
         {
             string title = notification.Title;
@@ -779,15 +788,57 @@ public class FirebaseNotification : MonoBehaviour
             return;
         }
 
-        if (Application.isFocused)
+        // 보물찾기 — 알림을 눌러 열렸으면 그 게임으로. 앱을 보는 중에 왔으면(시스템은 앞에 있는 앱의 FCM 알림을 띄우지 않는다) 앱이 띄운다 — 그 게임 상세를 보고 있으면 다시 받기만
+        if (e.Message.Data != null && e.Message.Data.TryGetValue("msg_type", out var huntType) && R0926HuntPush.Is(huntType))
         {
-            HandleForegroundMessage(title, body, serverTimestamp, messageId, e);
+            MarkMessageAsProcessed(messageId, originalTitle, body, serverTimestamp);
+            if (e.Message.NotificationOpened) R0926HuntPush.Open(e.Message.Data);
+            else if (!R0926HuntPush.RefreshShowing(e.Message.Data)) PostHuntNotification(originalTitle, body, e.Message.Data);
+            return;
         }
-        else
+
+        trayOpened = e.Message.NotificationOpened;
+        try
         {
-            // 백그라운드에서는 코루틴이 돌지 않으므로 직접 호출 (void로 변경 예정)
-            HandleBackgroundMessage(title, body, serverTimestamp, messageId, e);
+            if (Application.isFocused)
+            {
+                HandleForegroundMessage(title, body, serverTimestamp, messageId, e);
+            }
+            else
+            {
+                // 백그라운드에서는 코루틴이 돌지 않으므로 직접 호출 (void로 변경 예정)
+                HandleBackgroundMessage(title, body, serverTimestamp, messageId, e);
+            }
         }
+        finally
+        {
+            trayOpened = false;
+        }
+    }
+
+    private void PostLocal(AndroidNotification notification)
+    {
+        if (!trayOpened) AndroidNotificationCenter.SendNotification(notification, "woopang_channel_high");
+    }
+
+    // 누르면 CheckBackgroundNotification 이 IntentData 로 그 게임을 연다
+    private void PostHuntNotification(string title, string body, IDictionary<string, string> data)
+    {
+        data.TryGetValue("hunt_id", out var hunt);
+        data.TryGetValue("host_id", out var host);
+        data.TryGetValue("review", out var review);
+        var notification = new AndroidNotification
+        {
+            Title = title,
+            Text = body,
+            FireTime = DateTime.Now,
+            SmallIcon = "icon_0",
+            LargeIcon = "icon_1",
+            ShouldAutoCancel = true,
+            Group = "woopang_hunt",
+            IntentData = "hunt|" + hunt + "|" + host + "|" + review
+        };
+        AndroidNotificationCenter.SendNotification(notification, "woopang_channel_high");
     }
 #endif
 
@@ -834,7 +885,7 @@ public class FirebaseNotification : MonoBehaviour
                 LargeIcon = "icon_1",
                 ShouldAutoCancel = true
             };
-            AndroidNotificationCenter.SendNotification(uploadNotif, "woopang_channel_high");
+            PostLocal(uploadNotif);
 #endif
 
             return;
@@ -917,7 +968,7 @@ public class FirebaseNotification : MonoBehaviour
                     };
 
                     int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-                    AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
+                    PostLocal(dmNotification);
                     activeNotificationIds.Add(dmNotificationId);
                 }
                 catch (System.Exception ex)
@@ -986,7 +1037,7 @@ public class FirebaseNotification : MonoBehaviour
                     Group = "woopang_admin"
                 };
                 int adminNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-                AndroidNotificationCenter.SendNotification(adminNotif, "woopang_channel_high");
+                PostLocal(adminNotif);
                 activeNotificationIds.Add(adminNotifId);
 #endif
             }
@@ -1043,7 +1094,7 @@ public class FirebaseNotification : MonoBehaviour
         };
 
         int newNotificationId = (int)System.DateTime.Now.Ticks;
-        AndroidNotificationCenter.SendNotification(notification, "woopang_channel_high");
+        PostLocal(notification);
 
         // 활성 알림 ID 추가
         activeNotificationIds.Add(newNotificationId);
@@ -1095,7 +1146,7 @@ public class FirebaseNotification : MonoBehaviour
                 Group = "woopang_system"
             };
             int uploadNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-            AndroidNotificationCenter.SendNotification(uploadNotif, "woopang_channel_high");
+            PostLocal(uploadNotif);
             activeNotificationIds.Add(uploadNotifId);
 #endif
 
@@ -1179,7 +1230,7 @@ public class FirebaseNotification : MonoBehaviour
                     };
 
                     int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
-                    AndroidNotificationCenter.SendNotification(dmNotification, "woopang_channel_high");
+                    PostLocal(dmNotification);
                     activeNotificationIds.Add(dmNotificationId);
                 }
                 catch (System.Exception ex)
@@ -1278,7 +1329,7 @@ public class FirebaseNotification : MonoBehaviour
         };
 
         int newNotificationId = (int)System.DateTime.Now.Ticks;
-        AndroidNotificationCenter.SendNotification(notification, "woopang_channel_high");
+        PostLocal(notification);
 
         // 활성 알림 ID 추가
         activeNotificationIds.Add(newNotificationId);
@@ -1290,6 +1341,21 @@ public class FirebaseNotification : MonoBehaviour
     {
 #if UNITY_ANDROID
         var notificationIntent = AndroidNotificationCenter.GetLastNotificationIntent();
+        // 앱이 띄운 보물찾기 알림을 눌러 들어왔으면 그 게임으로 (알림함에 넣지 않는다)
+        string huntIntent = notificationIntent?.Notification.IntentData;
+        if (huntIntent != null && huntIntent.StartsWith("hunt|"))
+        {
+            if (notificationIntent.Id != handledHuntIntent)
+            {
+                handledHuntIntent = notificationIntent.Id;
+                var p = huntIntent.Split('|');
+                if (p.Length >= 4) R0926HuntPush.Open(p[1], p[2], p[3] == "1");
+            }
+            yield break;
+        }
+#if !UNITY_EDITOR
+        CheckHuntLaunchIntent();
+#endif
         if (notificationIntent != null)
         {
             string title = notificationIntent.Notification.Title ?? "알림";
@@ -1315,9 +1381,55 @@ public class FirebaseNotification : MonoBehaviour
 #elif UNITY_IOS
         // iOS는 시스템 알림 센터가 백그라운드 알림을 자동 처리
         // 앱 활성화 시 FCM OnMessageReceived로 처리됨
+        CheckRespondedHunt();
 #endif
         yield break;
     }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    // 서버 FCM 알림을 알림바에서 눌러 앱이 열리면 그 알림 내용(msg_type·hunt_id …)이 인텐트에 실려 온다 —
+    // FCM 콜백(NotificationOpened)이 늦거나 오지 않아도 그 게임으로 (두 길로 와도 R0926HuntPush 가 한 번만 연다)
+    private static void CheckHuntLaunchIntent()
+    {
+        try
+        {
+            using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (AndroidJavaObject intent = currentActivity.Call<AndroidJavaObject>("getIntent"))
+            {
+                if (intent == null || !R0926HuntPush.Is(intent.Call<string>("getStringExtra", "msg_type"))) return;
+                R0926HuntPush.Open(intent.Call<string>("getStringExtra", "hunt_id"), intent.Call<string>("getStringExtra", "host_id"), intent.Call<string>("getStringExtra", "review") == "1");
+                intent.Call("removeExtra", "msg_type");   // 돌아올 때마다 다시 열지 않게
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[FirebaseNotification] hunt launch intent: {ex.Message}");
+        }
+    }
+#endif
+
+#if UNITY_IOS
+    // 누른 알림이 바뀌었으면 — 보물찾기면 그 게임으로. 앱을 보는 중 뜬 배너를 누른 것도 여기서만 안다
+    // (받는 콜백(OnRemoteNotificationReceived)을 달면 보는 중 배너가 아예 안 뜬다)
+    private void CheckRespondedHunt()
+    {
+        var notification = Unity.Notifications.iOS.iOSNotificationCenter.GetLastRespondedNotification();
+        if (notification == null || notification.Identifier == lastRespondedId) return;
+        lastRespondedId = notification.Identifier;
+        R0926HuntPush.Open(notification.UserInfo);
+    }
+
+    private IEnumerator WatchRespondedHunt()
+    {
+        var wait = new WaitForSecondsRealtime(1.5f);
+        while (true)
+        {
+            yield return wait;
+            if (Application.isFocused) CheckRespondedHunt();
+        }
+    }
+#endif
 
     /// <summary>
     /// 포그라운드 복귀 시 서버에서 놓친 관리자 메시지 복구

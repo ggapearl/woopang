@@ -26,7 +26,17 @@ public class R0926MapTiles : MonoBehaviour
     private const int MaxVisible = 80;
     private const int ParentLevels = 6;
 
-    [System.Serializable] private class Info { public bool enabled; public int max_zoom; public string attribution; }
+    [System.Serializable] private class Info { public bool enabled; public int min_zoom; public int max_zoom; public string attribution; }
+
+#if UNITY_EDITOR
+    /// <summary>플레이 시험이 시험 서버로 돌릴 때 (비어 있으면 실제 서버)</summary>
+    public static string EditorBase;
+    private static string InfoUrl => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAP_TILES_INFO : EditorBase + "/api/map/tiles/info";
+    private static string TileUrl => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAP_TILES : EditorBase + "/api/map/tiles/{z}/{x}/{y}.png";
+#else
+    private static string InfoUrl => ApiConfig.MAP_TILES_INFO;
+    private static string TileUrl => ApiConfig.MAP_TILES;
+#endif
 
     private static Info info;          // 앱이 켜져 있는 동안 한 번 받는다 (못 받으면 10분 뒤 다시)
     private static float infoRetryAt;
@@ -47,7 +57,9 @@ public class R0926MapTiles : MonoBehaviour
     private float lastScale = 1f;
 
     public bool Available => info != null && info.enabled;
-    public int MaxLevel => info != null && info.max_zoom > 0 ? Mathf.Clamp(info.max_zoom, minLevel, HardMaxLevel) : HardMaxLevel;
+    public int MaxLevel => info != null && info.max_zoom > 0 ? Mathf.Clamp(info.max_zoom, MinLevel, HardMaxLevel) : HardMaxLevel;
+    // 지도 회사가 주는 가장 얕은 단계 (브이월드 6) — 그보다 얕은 칸은 묻지 않는다
+    private int MinLevel => info != null ? Mathf.Clamp(info.min_zoom, minLevel, HardMaxLevel) : minLevel;
 
     /// <summary>이 단계 타일이 화면 픽셀과 1:1 이 되는 지도 확대 배율 (R0926FriendsMap 의 zoom 단위)</summary>
     public float ZoomForLevel(float level, float viewWidth, float scale)
@@ -62,7 +74,7 @@ public class R0926MapTiles : MonoBehaviour
     {
         if (!Available && infoReq == null && Time.realtimeSinceStartup >= infoRetryAt)
         {
-            infoReq = UnityWebRequest.Get(ApiConfig.MAP_TILES_INFO);
+            infoReq = UnityWebRequest.Get(InfoUrl);
             infoReq.timeout = 8;
             infoReq.SendWebRequest();
         }
@@ -100,7 +112,7 @@ public class R0926MapTiles : MonoBehaviour
             // 화면이 커서(태블릿·가로) 칸이 너무 많으면 한 단계 덜 자세한 타일로
             int z = Mathf.Clamp(Mathf.RoundToInt(lv), 0, MaxLevel), n = 1, x0 = 0, x1 = -1, y0 = 0, y1 = -1;
             float tw = 0f, th = 0f;
-            for (; z >= minLevel; z--)
+            for (; z >= MinLevel; z--)
             {
                 n = 1 << z;
                 tw = map.x / n;
@@ -109,7 +121,7 @@ public class R0926MapTiles : MonoBehaviour
                 y0 = Mathf.Max(0, Mathf.FloorToInt(-baseY / th)); y1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.y - baseY) / th));
                 if ((x1 - x0 + 1) * (y1 - y0 + 1) <= MaxVisible) break;
             }
-            if (z >= minLevel)
+            if (z >= MinLevel)
             {
                 if (x1 >= x0 && y1 >= y0)
                 {
@@ -148,7 +160,7 @@ public class R0926MapTiles : MonoBehaviour
         else
         {
             int z = KZ(k), tx = KX(k), ty = KY(k);
-            for (int up = 1; up <= ParentLevels && z - up >= minLevel; up++)
+            for (int up = 1; up <= ParentLevels && z - up >= MinLevel; up++)
             {
                 long pk = Key(z - up, tx >> up, ty >> up);
                 if (!cache.TryGetValue(pk, out tex)) continue;
@@ -216,6 +228,8 @@ public class R0926MapTiles : MonoBehaviour
                     changed = true;
                 }
             }
+            else if (req.responseCode == 404)
+                failedUntil[k] = Time.realtimeSinceStartup + 600f;   // 그 칸엔 지도가 없다(국외·바다 밖) — 서버 탓이 아니니 쉬지 않는다
             else
             {
                 failedUntil[k] = Time.realtimeSinceStartup + 30f;
@@ -232,7 +246,7 @@ public class R0926MapTiles : MonoBehaviour
             long k = w.key;
             if (cache.ContainsKey(k) || IsInflight(k)) continue;
             if (failedUntil.TryGetValue(k, out float until) && Time.realtimeSinceStartup < until) continue;
-            string url = ApiConfig.MAP_TILES.Replace("{z}", KZ(k).ToString()).Replace("{x}", KX(k).ToString()).Replace("{y}", KY(k).ToString());
+            string url = TileUrl.Replace("{z}", KZ(k).ToString()).Replace("{x}", KX(k).ToString()).Replace("{y}", KY(k).ToString());
             var req = UnityWebRequestTexture.GetTexture(url, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
             req.timeout = 15;
             LoginManager.ApplyAuth(req);

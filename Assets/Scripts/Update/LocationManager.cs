@@ -244,6 +244,13 @@ public class LocationManager : MonoBehaviour
             if (sgg == null && IsSigungu(v)) sgg = ShortSigungu(v);
             else if (emd == null && IsEupMyeonDong(v)) emd = v;
         }
+        // 시골은 OSM 에 읍·면이 없고 리만 오는 곳이 많다 ('예산군' 만 찍혔다) → '예산군 지곡리'
+        if (sgg != null && emd == null)
+            foreach (string key in new[] { "village", "hamlet", "neighbourhood", "quarter" })
+            {
+                string v = addr[key].Value;
+                if (!string.IsNullOrEmpty(v) && v.Trim().EndsWith("리")) { emd = v.Trim(); break; }
+            }
         if (sgg != null || emd != null) return sgg != null && emd != null ? sgg + " " + emd : (sgg ?? emd);
 
         // 한국식 이름이 아니다 — 동네 + 도시 (예: Shibuya, Tokyo)

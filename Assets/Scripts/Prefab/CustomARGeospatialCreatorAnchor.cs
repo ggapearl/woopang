@@ -312,6 +312,22 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     }
 
     /// <summary>
+    /// 이 오브젝트를 지우기 전에 — 붙어 있던 지오스페이셜 앵커도 함께 지운다 (Destroy 만 하면 앵커 오브젝트가 따로 남는다).
+    /// 월드 위치는 그대로 두고 떼어 낸다. 보물찾기 보물(R0926HuntTreasure)이 치울 때 쓴다.
+    /// </summary>
+    public void ReleaseAnchor()
+    {
+        if (retryCoroutine != null) { StopCoroutine(retryCoroutine); retryCoroutine = null; }
+        if (reattachLerpCoroutine != null) { StopCoroutine(reattachLerpCoroutine); reattachLerpCoroutine = null; }
+        _anchorCreated = false;
+        if (currentAnchor == null) return;
+        if (transform.parent == currentAnchor.transform)
+            transform.SetParent(currentAnchor.transform.parent, true);
+        Destroy(currentAnchor.gameObject);
+        currentAnchor = null;
+    }
+
+    /// <summary>
     /// 자신 + 자식의 모든 Renderer on/off
     /// </summary>
     private void SetVisible(bool visible)

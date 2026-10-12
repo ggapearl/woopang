@@ -102,6 +102,7 @@ namespace Editor
             CheckShaders(issues);
             CheckResources(issues);
             CheckBuildScenes(issues);
+            CheckStartPanelsClosed(issues);
             CheckFirebaseConfig(issues);
             CheckAndroidTargetSdk(issues);
             CheckPreloadedAssets(issues);
@@ -183,6 +184,24 @@ namespace Editor
             }
         }
 
+        // ── 켜진 채 저장된 창 ─────────────────────────────────────
+        // 씬을 고치려고 켠 창이 그대로 저장되면 앱을 켜자마자 그 창이 떠 있다 (2026-10-11 ListPanel — 목록이 추가 창까지 덮었다)
+        private static void CheckStartPanelsClosed(List<string> issues)
+        {
+            if (!File.Exists(ExpectedMainScene)) return;
+            var names = new HashSet<string>(Redesign0926.Redesign0926Apply.StartClosedPanels);
+            foreach (var doc in File.ReadAllText(ExpectedMainScene).Split(new[] { "\n--- !u!" }, System.StringSplitOptions.None))
+            {
+                if (!doc.StartsWith("1 &")) continue;   // GameObject
+                var m = Regex.Match(doc, @"\n  m_Name: (.+?)\r?\n");
+                if (!m.Success || !names.Contains(m.Groups[1].Value)) continue;
+                if (Regex.IsMatch(doc, @"\n  m_IsActive: 1"))
+                    issues.Add(
+                        $"[창이 켜진 채 저장됨] {m.Groups[1].Value} — 앱을 켜자마자 이 창이 떠 있습니다.\n" +
+                        "  → 씬에서 끄고 저장하거나 WOOPANG 0926 적용을 다시 돌리세요.");
+            }
+        }
+
         // ── Firebase 설정 파일 ─────────────────────────────────────
         private static void CheckFirebaseConfig(List<string> issues)
         {
@@ -219,15 +238,18 @@ namespace Editor
         }
 
         // ── Preloaded Assets (AR 초기화) ──────────────────────────
-        // 에디터가 ProjectSettings 를 다시 저장하면서 4개 중 3개가 빠진 적이 있다(2026-09).
         // 빠지면 AR 카메라 배경이 검게 나오거나 XR 이 아예 초기화되지 않는다.
-        // 1.2.52 빌드 직후에도 3개가 빠진 채 저장·커밋됐다(e09b85e) — 빌드 진입점은 RestorePreloadedAssets 로 먼저 되살린다.
-        private static readonly (string guid, long localId, string what)[] RequiredPreloaded =
+        // 저장소의 ProjectSettings 에는 XR 설정 1개만 있는 게 정상이다 — 나머지 3개는 AR 패키지가 빌드마다 넣고 뺀다(2026-10-12 확인):
+        //   · ARCore 배경 셰이더 2개 — ARCorePreprocessBuild 가 안드로이드 빌드 시작에 넣고 끝나면 뺀다(iOS 빌드에선 시작할 때 뺀다)
+        //   · RuntimeConfig — ARCore Extensions 의 RuntimeConfigPreprocessBuild 가 안드로이드·iOS 빌드마다 다시 넣는다
+        // 그래서 4개를 커밋해도 다음 안드로이드 빌드 뒤 또 빠진다(e09b85e 의 '3개 빠짐'이 이것) — 커밋으로 되살리려 하지 말 것.
+        // 검증은 패키지 몫(byPackage)이면 에셋이 있는지만 본다. 빌드 진입점의 RestorePreloadedAssets 는 그대로 둔다('되살림' 로그는 정상).
+        private static readonly (string guid, long localId, string what, bool byPackage)[] RequiredPreloaded =
         {
-            ("a71b000f0c8914c2a8307235f6bf3624", 11400000, "Assets/XR/XRGeneralSettingsPerBuildTarget.asset"),
-            ("f1d66e5450418a245a006782a2a5e5f3", 3642298788346208260, "Assets/ExtensionsAssets/Runtime/RuntimeConfig.asset"),
-            ("c9f956787b1d945e7b36e0516201fc76", 4800000, "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
-            ("0945859e5a1034c2cb6dce53cb4fb899", 4800000, "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)"),
+            ("a71b000f0c8914c2a8307235f6bf3624", 11400000, "Assets/XR/XRGeneralSettingsPerBuildTarget.asset", false),
+            ("f1d66e5450418a245a006782a2a5e5f3", 3642298788346208260, "Assets/ExtensionsAssets/Runtime/RuntimeConfig.asset", true),
+            ("c9f956787b1d945e7b36e0516201fc76", 4800000, "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)", true),
+            ("0945859e5a1034c2cb6dce53cb4fb899", 4800000, "ARCore 배경 셰이더 (ARCoreBackground / AfterOpaques)", true),
         };
 
         /// <summary>
@@ -272,15 +294,24 @@ namespace Editor
                     present.Add(guid);
             }
 
-            var missing = RequiredPreloaded.Where(r => !present.Contains(r.guid)).Select(r => r.what).ToList();
+            var missing = RequiredPreloaded
+                .Where(r => r.byPackage ? !AssetExists(r.guid) : !present.Contains(r.guid))
+                .Select(r => r.what).ToList();
             if (missing.Count > 0)
             {
                 issues.Add(
-                    "[Preloaded Assets 누락] Player Settings ▸ Other ▸ Preloaded Assets 에서 빠졌습니다:\n  - " +
+                    "[Preloaded Assets 누락] AR 필수 항목이 없습니다:\n  - " +
                     string.Join("\n  - ", missing) + "\n" +
                     "  → 빠지면 AR 카메라 배경이 검게 나오거나 XR 이 초기화되지 않습니다.\n" +
-                    "  → git 의 ProjectSettings/ProjectSettings.asset 에서 preloadedAssets 4줄을 되살리세요.");
+                    "  → XR 설정은 Player Settings ▸ Other ▸ Preloaded Assets 에 있어야 하고, " +
+                    "셰이더·RuntimeConfig 는 에셋(com.unity.xr.arcore · ARCore Extensions)만 있으면 패키지가 빌드 때 넣습니다.");
             }
+        }
+
+        private static bool AssetExists(string guid)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            return !string.IsNullOrEmpty(path) && AssetDatabase.LoadMainAssetAtPath(path) != null;
         }
 
         // ── 인증서 검증 우회 금지 ───────────────────────────────────

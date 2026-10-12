@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -23,17 +24,32 @@ public class R0926StatusPill : MonoBehaviour
 
     private int lastCount = -1;
     private float okT = -1f;
+    private string lastRaw;
     private string lastText;
     private bool lastIcon;
+    private CanvasGroup[] groups;
+
+    // 지금 화면에 보이는 알약 — 하늘 칩(R0926SkyWeather)이 같은 자리(노치 아래)라 알약이 걷힐 때까지 칩이 기다린다
+    private static readonly HashSet<R0926StatusPill> showing = new HashSet<R0926StatusPill>();
+    private static readonly System.Predicate<R0926StatusPill> gone = p => p == null;
+    public static bool AnyShowing { get { showing.RemoveWhere(gone); return showing.Count > 0; } }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => showing.Clear();
 
     private void OnEnable()
     {
         lastCount = -1;
+        lastRaw = null;
         lastText = null;
+        groups = null;
     }
+
+    private void OnDisable() => showing.Remove(this);
 
     private void LateUpdate()
     {
+        if (Alpha() > 0.05f) showing.Add(this); else showing.Remove(this);
         if (text == null || pill == null) return;
         int count = source != null ? source.CurrentCount : 0;
         bool noData = source != null && source.ShowingNoData;
@@ -71,15 +87,20 @@ public class R0926StatusPill : MonoBehaviour
         }
 
         bool hasIcon = loading || ok;
-        // 끝의 점(... 이 하나씩 늘어나는 애니메이션)은 빼고 비교 — 점마다 알약이 들썩이지 않게
-        string core = text.text.TrimEnd('.', ' ');
+        string raw = text.text;
+        if (raw == lastRaw && hasIcon == lastIcon) return;
+        lastRaw = raw;
+        // 끝의 점(... 이 하나씩 늘어나는 애니메이션)은 빼고 비교 — 점마다 알약이 들썩이지 않게.
+        // LoadingManager 는 아직 안 나온 점을 투명 색 태그로 감싸 보낸다 → 태그를 걷어야 끝의 점이 떨어진다 (2026-10-06: 점 셋일 때만 알약이 줄던 것)
+        string plain = StripTags(raw);
+        string core = plain.TrimEnd('.', ' ');
         if (core == lastText && hasIcon == lastIcon) return;
         lastText = core;
         lastIcon = hasIcon;
         if (icon != null && icon.gameObject.activeSelf != hasIcon) icon.gameObject.SetActive(hasIcon);
         // 알약 폭을 글자에 맞춘다 — [여백][그림][틈][글자][여백]
         float iw = hasIcon && icon != null ? icon.sizeDelta.x + gap : 0f;
-        bool dots = source == null || core.Length != text.text.Length;
+        bool dots = source == null || core.Length != plain.Length;
         float tw = text.cachedTextGeneratorForLayout.GetPreferredWidth(dots ? core + "..." : core, text.GetGenerationSettings(Vector2.zero)) / text.pixelsPerUnit;
         float left = hasIcon ? padLeft : padRight;
         float total = left + iw + tw + padRight;
@@ -98,6 +119,34 @@ public class R0926StatusPill : MonoBehaviour
             icon.pivot = new Vector2(0.5f, 0.5f);
             icon.anchoredPosition = new Vector2(x0 + padLeft + icon.sizeDelta.x / 2f, y);
         }
+    }
+
+    // 부모 CanvasGroup 까지 곱한 실제 투명도 — ObjectCountUI 는 끄지 않고 alpha 로 숨긴다
+    private float Alpha()
+    {
+        if (groups == null) groups = GetComponentsInParent<CanvasGroup>(true);
+        float a = 1f;
+        foreach (var g in groups)
+        {
+            if (g == null || !g.enabled) continue;
+            a *= g.alpha;
+            if (g.ignoreParentGroups) break;
+        }
+        return a;
+    }
+
+    private static string StripTags(string s)
+    {
+        if (s.IndexOf('<') < 0) return s;
+        var sb = new System.Text.StringBuilder(s.Length);
+        bool inTag = false;
+        foreach (char c in s)
+        {
+            if (c == '<') inTag = true;
+            else if (c == '>' && inTag) inTag = false;
+            else if (!inTag) sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     private static float BackOut(float x)

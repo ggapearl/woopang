@@ -141,6 +141,7 @@ public class ProfileManager : MonoBehaviour
     // 현재 표시 중인 프로필
     private ProfileData currentProfile;
     private bool isMyProfile = false;
+    public string CurrentProfileId => currentProfile != null ? currentProfile.id : null;
 
     // FollowPanel에서 열렸는지 여부
     public static bool openedFromFollowPanel = false;

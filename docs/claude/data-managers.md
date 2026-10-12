@@ -50,3 +50,16 @@
 - 새 매니저 추가 시 **이 체크리스트 6개 시스템 모두 grep**으로 다른 매니저(예: DataManager) 참조 위치 다 찾고, 같은 위치에 새 매니저 참조 추가
 - 예: `grep -rn "DataManager" Assets/Scripts/` 결과를 보고 각 위치에서 새 매니저도 같이 처리해야 하는지 판단
 - 또는 **공공교통 매니저 3개를 묶어서 `ITransportManager` 같은 추상화** (장기적 리팩토링)
+
+### 매니저가 아닌 스폰 — 보물찾기 AR 보물 (`R0926HuntTreasure`, 2026-10-12)
+
+보물찾기 금빛 상자는 데이터 매니저가 아니다(캐시·배분 없이 서버 `/near` 가 준 자리에 하나씩). 그래도 아래 시스템을 고칠 땐 **이 호출도 같이 유지**할 것:
+
+| 시스템 | 보물 쪽 호출 |
+|--------|-------------|
+| 줌 (`ARObjectZoomController.ApplyZoomToARObjects`) | `R0926HuntTreasure.SpawnedObjects` 도 같은 배율 |
+| 백그라운드 복귀·fallback (`LoadingManager`) | `SetObjectsActive` · `SetRenderersVisible` · `RetryFailedAnchors` — 복귀 순서는 ar-object-spawn.md 그대로 |
+| 하늘 날씨 '가까운 오브젝트' (`R0926SkyWeather`) | `SpawnedObjects` 를 함께 센다 |
+| `Target` | `PlaceName`(게임 제목) · `placeId = hunt_<id>` · 금색 · `OnIndicatorTapped` = 판정 |
+
+**일부러 안 넣은 것**: 1~4번(`IPlaceCacheProvider` · `FilterManager` · `PlaceListManager`) — 목록·지도에 뜨면 보물 위치가 드러난다. `HiddenPlaces`(X 숨기기)·`R0926DistanceFade` 도 연결하지 않는다. 상세는 [plans/treasure-hunt.md](plans/treasure-hunt.md) 5절.
