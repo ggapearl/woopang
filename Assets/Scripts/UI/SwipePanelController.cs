@@ -69,8 +69,12 @@ public class SwipePanelController : MonoBehaviour
     void Start()
     {
         CalculateDimensions();
-        currentAnchoredX = -currentPanel * panelDistance;
+        currentAnchoredX = TargetX(currentPanel);
     }
+
+    // 첫 카드는 baseOffsetX 자리(왼쪽에 붙이고 다음 카드를 오른쪽에 살짝), 두 번째부터는 가운데 —
+    // 옆 카드가 양쪽에(마지막 카드는 왼쪽에) 살짝 보인다 (2026-10-13 대표님)
+    private float TargetX(int panel) => -panel * panelDistance - (panel > 0 ? baseOffsetX : 0f);
 
     private void CalculateDimensions()
     {
@@ -146,7 +150,7 @@ public class SwipePanelController : MonoBehaviour
         if (!isDragging)
         {
             // 드래그 중이 아닐 때만 목표 위치로 보간
-            float targetX = -currentPanel * panelDistance;
+            float targetX = TargetX(currentPanel);
             currentAnchoredX = Mathf.Lerp(currentAnchoredX, targetX, Time.deltaTime * moveSpeed);
 
             if (Mathf.Abs(currentAnchoredX - targetX) < 0.1f)

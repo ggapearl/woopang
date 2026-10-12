@@ -82,6 +82,7 @@ namespace Redesign0926
             else if (mode == "chatlook") PlanChatLook();
             else if (mode == "v24") PlanV24();
             else if (mode == "maptiles") PlanMapTiles();
+            else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "store2")
             {
                 // 스토어 캡처 2 — 원래 자리(3D 오브젝트가 있는 곳)에서 시작화면 · 8방향 · 하늘 날씨
@@ -627,6 +628,57 @@ namespace Redesign0926
         // v24 확인 — 목록 글자 · 설정(30/60fps · 맨 아래 버전) · 'AR 세션 복구 중' 알약 폭 · 불러오는 중에도 도크 누름 · 저작권 자리
         private static readonly List<float> pillWidths = new List<float>();
         // 친구 지도 깊은 확대 — 시험 타일 서버(127.0.0.1:5098 → 브이월드)로 단계별 화면 · 최소 단계·출처 확인 (2026-10-11)
+        // 추가 창 카드 자리 (10-13 대표님) — 장소는 왼쪽에 붙이고 3D모델을 오른쪽에 살짝,
+        // 3D모델·보물찾기는 가운데에 두고 옆 카드를 살짝 (3D모델은 양옆 · 보물찾기는 왼쪽)
+        private static readonly float[] addMeasure = new float[12];   // 카드마다 왼쪽 여백 · 오른쪽 여백 · 왼쪽 카드 보이는 폭 · 오른쪽 카드 보이는 폭
+        private static void PlanAddCenter()
+        {
+            SwipePanelController swipe = null;
+            Func<RectTransform, Vector2> edges = rt =>
+            {
+                var wrap = (RectTransform)rt.parent;
+                var c = new Vector3[4];
+                rt.GetWorldCorners(c);
+                return new Vector2(wrap.InverseTransformPoint(c[0]).x - wrap.rect.xMin, wrap.InverseTransformPoint(c[2]).x - wrap.rect.xMin);
+            };
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() => swipe = UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude));
+            Check(() => swipe != null && swipe.panel3 != null, "추가 창 · 카드 세 장");
+            for (int k = 0; k < 3; k++)
+            {
+                int i = k;
+                Do(() => swipe?.SwitchToPanel(i));
+                Sleep(1.2f);
+                Do(() =>
+                {
+                    if (swipe == null || swipe.panel3 == null) return;
+                    var p = new[] { swipe.panel1, swipe.panel2, swipe.panel3 };
+                    float w = ((RectTransform)p[i].parent).rect.width;
+                    var e = edges(p[i]);
+                    float peekL = i > 0 ? Mathf.Max(0f, edges(p[i - 1]).y) : 0f;
+                    float peekR = i < 2 ? Mathf.Max(0f, w - edges(p[i + 1]).x) : 0f;
+                    addMeasure[i * 4] = e.x; addMeasure[i * 4 + 1] = w - e.y; addMeasure[i * 4 + 2] = peekL; addMeasure[i * 4 + 3] = peekR;
+                    log.Add($"  카드 {i + 1}: 왼쪽 여백 {e.x:F0} · 오른쪽 여백 {w - e.y:F0} · 왼쪽 카드 {peekL:F0} · 오른쪽 카드 {peekR:F0} (틀 폭 {w:F0})");
+                });
+                Shot("add_" + (i + 1));
+            }
+            Check(() => Mathf.Abs(addMeasure[0] - 44f) < 3f && Mathf.Abs(addMeasure[3] - 110f) < 3f, "장소: 그대로 — 왼쪽에 붙고 3D모델이 오른쪽에 살짝");
+            Check(() => Mathf.Abs(addMeasure[4] - addMeasure[5]) < 2f && addMeasure[6] > 20f && Mathf.Abs(addMeasure[6] - addMeasure[7]) < 2f, "3D모델: 가운데 · 장소·보물찾기가 양옆에 같은 폭으로 살짝");
+            Check(() => Mathf.Abs(addMeasure[8] - addMeasure[9]) < 2f && addMeasure[10] > 20f, "보물찾기: 가운데 · 3D모델이 왼쪽에 살짝");
+            Do(() => swipe?.SwitchToPanel(0));
+            Sleep(1.0f);
+            Check(() => swipe != null && Mathf.Abs(edges(swipe.panel1).x - 44f) < 3f, "다시 장소로 넘기면 제자리");
+        }
+
         private static void PlanMapTiles()
         {
             const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
