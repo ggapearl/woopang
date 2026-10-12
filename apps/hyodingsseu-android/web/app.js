@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-12a';
+  const WEB_VERSION = '2026-10-12b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -243,9 +243,12 @@
     startPolling();
   }
 
+  // 앱으로 돌아오면 처음부터 다시 받지 않고 멈춘 곳(boot·seq)부터 이어 받는다 — 목록을 통째로 다시 그리면 아이폰이
+  // 맨 아래보다 더 내려간 빈 곳을 보여 줄 때가 있었다(10/12 대표님: 알림을 눌러 들어가면 대화가 안 보이고 위로 올려야 보임).
+  // PC 쪽이 바뀌었거나(다시 켬·창↔두뇌) 놓친 게 너무 많으면 PC 가 reset 을 주고, 그때만 처음부터 받는다.
   async function pollLoop(ctl) {
     let delay = 1;
-    boot = '';
+    let wait = 0;                                       // 이어 받을 때 첫 번은 바로 — 승인함 숫자·바로 누르기를 곧장 맞춘다
     while (!ctl.signal.aborted) {
       try {
         if (!boot) {
@@ -256,10 +259,11 @@
           setLink({ k: 'online' });                     // 지금까지를 받았으면 연결된 것 — 첫 긴 폴링(최대 25초)을 기다리지 않는다
           if (!S.workers.length) refreshWorkers();
         }
-        const r = await api.get('events', { since: seq, boot, wait: 25 }, 40000, ctl.signal);
+        const r = await api.get('events', { since: seq, boot, wait }, 40000, ctl.signal);
         if (ctl.signal.aborted) return;
         setLink({ k: 'online' });
         delay = 1;
+        wait = 25;
         if (r.reset) { boot = ''; continue; }
         const stick = nearBottom();
         let force = false;
@@ -279,7 +283,7 @@
         setLink({ k: 'offline', msg: e.message || 'PC 효딩쓰에 닿지 않아요' });
         await sleep(delay * 1000, ctl.signal);
         delay = Math.min(delay * 2, 20);
-        boot = '';
+        if (e.status > 0) boot = '';                    // PC 가 오류로 답했으면 처음부터 — 인터넷이 잠깐 끊긴 것(0)은 멈춘 곳부터 이어서
       }
     }
   }
@@ -292,6 +296,7 @@
   function appVisible(active) {
     if (active) {
       if (S.paired) startPolling();
+      if (atBottom) settleBottom();                     // 보던 맨 아래 그대로 — 아이폰이 돌아올 때 빈 곳을 보여 주던 것(10/12)
     } else {
       stopPolling();                                    // 45초 넘게 안 보이면 PC 가 텔레그램으로도 보낸다
       if (recorder.recording) interruptRecording();     // 버리지 않고 남겨 둔다 — 돌아와서 보내기 (10/6)
@@ -771,7 +776,7 @@
     renderAllItems();
     renderStatus();
     renderDrawer();
-    scrollToBottom(false);
+    settleBottom();
     if (!historyAutoTried) {
       historyAutoTried = true;
       if (S.items.length < 20) loadMoreHistory();
@@ -1395,13 +1400,37 @@
 
   // 스크롤 — 맨 아래를 보고 있을 때만 따라 내려간다. 위를 읽는 중이면 「↓」 단추.
   const nearBottom = () => !chatEl || chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 90;
+  let atBottom = true;                     // 마지막으로 본 자리가 맨 아래인가 — 칸 크기가 바뀌거나(키보드·띠) 앱으로 돌아올 때 붙여 둔다
+  let touchedAt = 0;
 
   function scrollToBottom(smooth) {
     if (!chatEl) return;
+    atBottom = true;
     requestAnimationFrame(() => {
       chatEl.scrollTo({ top: chatEl.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
       if (jumpEl) jumpEl.hidden = true;
     });
+  }
+
+  /** 지금 바로 맨 아래로. 아이폰(WKWebView)은 목록을 다시 그리거나 앱으로 돌아온 뒤 실제 위치가 화면과 어긋나 맨 아래보다
+   *  더 내려간 빈 곳을 보여 줄 때가 있다(10/12). 같은 값으로 다시 내리면 무시되니 1px 위로 갔다가 맨 아래로 — 위치가 실제로
+   *  바뀌어야 화면 쪽이 따라 맞춘다. */
+  function pinBottom() {
+    if (!chatEl) return;
+    atBottom = true;
+    const max = chatEl.scrollHeight - chatEl.clientHeight;
+    if (max > 1) chatEl.scrollTop = max - 1;
+    chatEl.scrollTop = chatEl.scrollHeight;
+    if (jumpEl) jumpEl.hidden = true;
+  }
+
+  /** 지금 한 번, 화면이 자리 잡은 뒤(다음 프레임·0.35초) 한 번 더 — 그 사이 대표님이 대화를 만지셨으면 그대로 둔다 */
+  function settleBottom() {
+    const t0 = Date.now();
+    pinBottom();
+    const again = () => { if (touchedAt < t0 && atBottom) pinBottom(); };
+    requestAnimationFrame(again);
+    setTimeout(again, 350);
   }
 
   function afterChange(stick, changed) {
@@ -1765,9 +1794,13 @@
     const mic = h('button', { class: 'round mic', onclick: toggleRecording });
 
     chatEl = h('div', { class: 'chat', onscroll: () => {
-      if (nearBottom() && jumpEl) jumpEl.hidden = true;
+      atBottom = nearBottom();
+      if (atBottom && jumpEl) jumpEl.hidden = true;
       if (chatEl.scrollTop <= 24) loadMoreHistory();
     } });
+    ['touchstart', 'pointerdown', 'wheel'].forEach(t => chatEl.addEventListener(t, () => { touchedAt = Date.now(); }, { passive: true }));
+    // 칸 크기가 바뀌면(키보드·입력칸 늘어남·연결 띠) 맨 아래를 보던 중이면 맨 아래에 붙여 둔다
+    if (window.ResizeObserver) new ResizeObserver(() => { if (atBottom) pinBottom(); }).observe(chatEl);
     listEl = h('div', { class: 'items' });
     helloEl = helloView();
     historyBtnEl = h('button', { class: 'hist-btn', onclick: loadMoreHistory, text: '지난 대화 보기' });
