@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-12b';
+  const WEB_VERSION = '2026-10-18a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2230,7 +2230,7 @@
       if (!isOpen) return wrap;
       const body = h('div', { class: 'pbody' });
       [['왜 (근거)', it.why], ['무엇을', it.how], ['대표님이 하실 것', it.needs], ['메모', it.note]].forEach(([t, v]) => {
-        if (v) body.append(h('h4', { text: t }), h('p', { text: String(v) }));
+        if (v) body.append(h('h4', { text: t }), h('p', null, linkified(String(v))));      // 제안 글 속 주소도 눌러 열린다 — 문서 전체 누름 처리기가 openLink 로 연다
       });
       if (st === 'pending' || st === 'hold') {
         const act = h('div', { class: 'pact' });
