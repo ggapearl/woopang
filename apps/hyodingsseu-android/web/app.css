@@ -109,7 +109,18 @@ svg{display:block}
 .jump{position:absolute;right:14px;bottom:10px;width:40px;height:40px;border-radius:50%;background:var(--surface);color:var(--navy);
   border:1px solid var(--line);box-shadow:var(--shadow);display:grid;place-items:center;z-index:2}
 .jump svg{width:18px;height:18px}
+.jump .jn{display:none}
+.jump.has-n{width:auto;padding:0 13px 0 11px;border-radius:999px;display:flex;align-items:center;gap:6px}
+.jump.has-n .jn{display:inline;font-size:13px;font-weight:700;color:var(--pink-deep);font-variant-numeric:tabular-nums}
 .chat-wrap{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+
+/* 읽음 · 안 읽음 (2026-10-18) — 안 읽은 글은 왼쪽 가장자리에 분홍 막대, 읽으면 서서히 사라진다. 첫 안 읽은 글 앞엔 줄 하나. */
+[data-iid]:not(.u-row){position:relative}
+[data-iid]:not(.u-row)::before{content:"";position:absolute;left:-10px;top:3px;bottom:3px;width:3px;border-radius:2px;background:transparent;
+  transition:background .9s ease .15s}
+[data-iid].new::before{background:var(--pink);transition:none}
+.unread-div{display:flex;align-items:center;gap:10px;color:var(--pink-deep);font-size:12px;font-weight:700;letter-spacing:.2px}
+.unread-div::before,.unread-div::after{content:"";flex:1;height:1px;background:var(--pink-line)}
 
 .hello{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding-top:30px}
 .hello h2{margin:0;font-size:20px;font-weight:700;color:var(--ink)}

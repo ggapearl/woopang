@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-18a';
+  const WEB_VERSION = '2026-10-18b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -266,17 +266,20 @@
         wait = 25;
         if (r.reset) { boot = ''; continue; }
         const stick = nearBottom();
+        const land = landAfterAway;
         let force = false;
         (r.events || []).forEach(e => {
           if (apply(e)) force = true;
           if (typeof e.seq === 'number') seq = Math.max(seq, e.seq);
         });
+        awayBatch = false;                              // 앱으로 돌아와 이어 받은 첫 응답만 「자리를 비운 사이」 — 그 뒤는 지금 오는 글
+        landAfterAway = false;
         if (typeof r.seq === 'number') seq = Math.max(seq, r.seq);
         if (typeof r.state === 'string') S.agentState = r.state;
         takeQuick(r.quick);
         takeAppr(r.appr);
         renderStatus();
-        afterChange(stick || force, (r.events || []).length > 0);
+        if (!(land && landUnreadAfterAway())) afterChange(stick || force, (r.events || []).length > 0);
       } catch (e) {
         if (ctl.signal.aborted) return;
         if (e.status === 401) { unpair(e.message, false); return; }
@@ -295,9 +298,12 @@
 
   function appVisible(active) {
     if (active) {
+      onAppShown();                                     // 자리를 비운 사이 쌓인 글이 오면 안 읽은 곳으로 (10/18)
       if (S.paired) startPolling();
       if (atBottom) settleBottom();                     // 보던 맨 아래 그대로 — 아이폰이 돌아올 때 빈 곳을 보여 주던 것(10/12)
+      scanSeen();
     } else {
+      onAppHidden();
       stopPolling();                                    // 45초 넘게 안 보이면 PC 가 텔레그램으로도 보낸다
       if (recorder.recording) interruptRecording();     // 버리지 않고 남겨 둔다 — 돌아와서 보내기 (10/6)
     }
@@ -317,6 +323,8 @@
       api.token = r.token;
       S.pairMessage = null;
       S.items = [];
+      seenTs = 0;                                       // 새로 짝 지으면 읽은 자리도 처음부터 — 첫 화면은 전부 읽은 것으로 시작
+      local.del(SEEN_KEY);
       S.paired = true;
       historyState = 'idle';
       historyAutoTried = false;
@@ -773,10 +781,15 @@
     replaying = false;
     if (S.agentState === 'idle') finishOpen();
     S.items = S.items.filter(it => it.kind !== 'ai' || it.streaming || it.text);   // 답을 지웠으면 빈 말풍선이 남지 않게
+    initSeen();
+    S.items.forEach(flagUnread);
+    awayBatch = false;
+    landAfterAway = false;
     renderAllItems();
     renderStatus();
     renderDrawer();
-    settleBottom();
+    if (!landOnUnread()) settleBottom();               // 안 읽은 글이 있으면 그 첫 글로, 없으면 맨 아래 (10/18)
+    scanSeen();
     if (!historyAutoTried) {
       historyAutoTried = true;
       if (S.items.length < 20) loadMoreHistory();
@@ -812,7 +825,7 @@
         const loc = !!e.local;
         if (openAI.length) {
           const id = openAI.shift();
-          update(id, it => { it.kind = 'ai'; it.text = text; it.streaming = false; it.local = loc; it.meta = null; it.ts = e.ts; it.mid = e.mid; });
+          update(id, it => { it.kind = 'ai'; it.text = text; it.streaming = false; it.local = loc; it.meta = null; it.ts = e.ts; it.mid = e.mid; noteArrival(it); });
           lastAI = id;
         } else {
           lastAI = append({ kind: 'ai', text, streaming: false, local: loc, meta: null, ts: e.ts, mid: e.mid }).id;
@@ -928,6 +941,7 @@
   function append(it) {
     it.id = nextId++;
     S.items.push(it);
+    noteArrival(it);
     if (!replaying) mountItem(it);
     if (S.items.length > 400) {
       S.items.splice(0, S.items.length - 400).forEach(old => { if (old.el) old.el.remove(); });
@@ -992,6 +1006,7 @@
   /** history 로 받은 항목(새것부터)을 대화 맨 위에 붙인다 — 스크롤 위치는 그대로 */
   function prependHistoryItems(itemsDesc) {
     const asc = itemsDesc.slice().reverse();
+    asc.forEach(flagUnread);
     if (!listEl) { S.items = asc.concat(S.items); return; }
     const prevHeight = chatEl.scrollHeight;
     const prevTop = chatEl.scrollTop;
@@ -1147,6 +1162,7 @@
   function renderAllItems() {
     if (!listEl) return;
     listEl.textContent = '';
+    dividerEl = null;                                       // 목록을 비우며 같이 사라졌다
     S.items.forEach(it => { it.el = null; mountItem(it); });
     renderHello();
   }
@@ -1179,6 +1195,7 @@
   function itemView(it) {
     const el = itemBody(it);
     if (MSG_KINDS[it.kind]) el.dataset.iid = it.id;        // 꾹 누르면 이 번호로 항목을 찾는다
+    if (it.unread) el.classList.add('new');                // 안 읽은 글 — 왼쪽에 분홍 막대 (읽으면 서서히 사라진다)
     return el;
   }
 
@@ -1435,7 +1452,164 @@
 
   function afterChange(stick, changed) {
     if (stick) scrollToBottom(true);
-    else if (changed && jumpEl) jumpEl.hidden = false;
+    else if (changed && jumpEl) {
+      jumpEl.hidden = false;
+      if (!dividerEl) placeDivider(true);                 // 위를 읽는 중에 새 글이 오면 어디서부터 새 글인지 줄을 놓아 둔다
+    }
+    scanSeen();
+  }
+
+  // ── 읽음 · 안 읽음 (2026-10-18) ────────────────────────────────
+  // 대표님: 「알림을 누르면 무조건 맨 아래로 간다 — 그 알림으로 가고, 읽은 것과 안 읽은 것을 구분해 달라」.
+  // 푸시에는 항목 번호가 없고 포장지 앱도 알림 탭을 화면에 넘기지 않아서, 화면은 어떤 알림으로 들어왔는지 모른 채 늘 맨 아래로 붙었다.
+  // 그래서 화면이 「여기까지 봤다」(seenTs — PC 가 말마다 붙인 시각)를 이 폰에 적어 두고, 열 때 그 뒤의 첫 글로 앉는다.
+  // 앱을 다시 빌드할 필요가 없다(웹만). 어느 알림을 눌렀는지까지 알려면 포장지가 푸시의 번호를 넘겨야 한다 — 아이폰 앱 다음 빌드.
+  const SEEN_KEY = 'seenTs';
+  const UNREAD_KINDS = { ai: 1, incoming: 1, error: 1 };      // 내 말·도구 줄·가운데 작은 안내(note)는 안 읽음에서 뺀다
+  const SEEN_MS = 800;                                        // 화면에 이만큼 머물러야 읽은 것
+  const AWAY_FRESH_MS = 120000;                               // 이만큼 비웠다 돌아오면 보던 자리 대신 안 읽은 곳으로
+  let seenTs = parseFloat(local.get(SEEN_KEY, '0')) || 0;
+  let seenTimer = 0, scanRaf = 0, dividerEl = null;
+  let hiddenAt = 0, leftAtBottom = true, awayBatch = false, landAfterAway = false;
+
+  const unreadable = it => !!it.ts && !it.streaming && UNREAD_KINDS[it.kind] === 1;
+  const flagUnread = it => { it.unread = unreadable(it) && it.ts > seenTs; };
+  const unreadCount = () => S.items.reduce((n, it) => n + (it.unread ? 1 : 0), 0);
+  const chatCovered = () => pages.length > 0 || layers.length > 0;      // 설정·승인함·서랍이 대화를 덮고 있으면 본 게 아니다
+  const hasOpenCard = () => S.items.some(it => (it.kind === 'permission' || it.kind === 'question') && it.card && !it.card.closed);
+
+  /** 적어 둔 게 없으면(새로 깔거나 짝 지은 폰) 지금까지는 읽은 것으로 — 전부 안 읽음으로 뜨지 않게 */
+  function initSeen() {
+    if (seenTs) return;
+    seenTs = S.items.reduce((m, it) => Math.max(m, it.ts || 0), 0);
+    if (seenTs) local.set(SEEN_KEY, String(seenTs));
+  }
+
+  /** ts 까지는 읽었다 — 그 앞의 안 읽음 표시를 걷는다 */
+  function readUpTo(ts) {
+    if (!(ts > seenTs)) return;
+    seenTs = ts;
+    local.set(SEEN_KEY, String(ts));
+    S.items.forEach(it => {
+      if (it.unread && it.ts <= seenTs) { it.unread = false; if (it.el) it.el.classList.remove('new'); }
+    });
+    renderJump();
+  }
+
+  /** 새 글이 들어왔다 — 안 읽음으로 두되, 켜 둔 화면의 맨 아래를 보던 중에 온 글은 바로 읽은 것으로 */
+  function noteArrival(it) {
+    flagUnread(it);
+    if (it.unread && !replaying && !awayBatch && !document.hidden && atBottom && !chatCovered()) readUpTo(it.ts);
+  }
+
+  function removeDivider() {
+    if (dividerEl) { dividerEl.remove(); dividerEl = null; }
+  }
+
+  /** 안 읽은 첫 글 앞에 「여기부터 안 읽음」 줄을 놓는다. belowTop 이면 그 글이 화면 위쪽 밖에 있을 때는 놓지 않는다(읽던 자리가 밀리지 않게) */
+  function placeDivider(belowTop) {
+    removeDivider();
+    if (!listEl || !chatEl) return null;
+    const first = S.items.find(it => it.unread && it.el && it.el.isConnected);
+    if (!first) return null;
+    if (belowTop && first.el.getBoundingClientRect().top < chatEl.getBoundingClientRect().top) return null;
+    dividerEl = h('div', { class: 'unread-div', role: 'separator' }, h('span', { text: '여기부터 안 읽음' }));
+    first.el.before(dividerEl);
+    return dividerEl;
+  }
+
+  /** 안 읽은 첫 글에 앉는다 — 그 줄이 대화 윗머리에 오게. 안 읽은 게 없으면 false(호출한 쪽이 맨 아래로) */
+  function landOnUnread() {
+    if (!chatEl || !placeDivider(false)) return false;
+    const t0 = Date.now();
+    const go = () => {
+      if (!dividerEl || !dividerEl.isConnected) return;
+      const top = dividerEl.getBoundingClientRect().top - chatEl.getBoundingClientRect().top + chatEl.scrollTop - 10;
+      if (top >= chatEl.scrollHeight - chatEl.clientHeight - 4) { pinBottom(); return; }   // 한 화면이 안 되는 새 글 — 맨 아래와 같다
+      chatEl.scrollTop = Math.max(0, top);
+      atBottom = nearBottom();
+      renderJump();
+    };
+    go();
+    const again = () => { if (touchedAt < t0) go(); };      // 그림·글꼴이 자리 잡은 뒤 한 번 더 — 그 사이 만지셨으면 그대로
+    requestAnimationFrame(again);
+    setTimeout(again, 350);
+    return true;
+  }
+
+  /** 앱을 열었다 — 끊겼던 사이 쌓인 글이 있으면 안 읽은 곳으로. 허락·선택 카드가 열려 있으면 그쪽(맨 아래)이 먼저 */
+  function landUnreadAfterAway() {
+    if (hasOpenCard() || !unreadCount()) return false;
+    const ok = landOnUnread();
+    scanSeen();
+    return ok;
+  }
+
+  function onAppHidden() {
+    hiddenAt = Date.now();
+    leftAtBottom = atBottom;
+    clearTimeout(seenTimer);
+    seenTimer = 0;
+    removeDivider();                                        // 돌아올 때 새로 놓는다
+  }
+
+  function onAppShown() {
+    if (!hiddenAt) return;                                  // 숨은 적 없이 온 두 번째 신호
+    awayBatch = true;                                       // 이어 받는 첫 응답은 자리를 비운 사이 쌓인 글
+    landAfterAway = leftAtBottom || Date.now() - hiddenAt > AWAY_FRESH_MS;
+    hiddenAt = 0;
+  }
+
+  /** 화면에서 읽은 만큼 본 안 읽음 글 — 높이의 60% 이상(긴 글은 화면의 60% 이상)이 보이는 것 */
+  function visibleUnread() {
+    if (!chatEl || document.hidden || chatCovered()) return [];
+    const v = chatEl.getBoundingClientRect();
+    return S.items.filter(it => {
+      if (!it.unread || !it.el || !it.el.isConnected) return false;
+      const r = it.el.getBoundingClientRect();
+      const shown = Math.min(r.bottom, v.bottom) - Math.max(r.top, v.top);
+      return shown > 0 && shown >= Math.min(r.height, v.height) * 0.6;
+    });
+  }
+
+  /** 스크롤·새 글·돌아옴마다 부른다 — 안 읽은 글이 SEEN_MS 동안 계속 보이면 거기까지 읽은 것 */
+  function scanSeen() {
+    if (scanRaf) return;
+    scanRaf = requestAnimationFrame(() => {
+      scanRaf = 0;
+      renderJump();
+      const seen = visibleUnread();
+      if (!seen.length) { clearTimeout(seenTimer); seenTimer = 0; return; }
+      if (seenTimer) return;
+      const ids = new Set(seen.map(it => it.id));
+      seenTimer = setTimeout(() => {
+        seenTimer = 0;
+        const still = visibleUnread().filter(it => ids.has(it.id));
+        if (still.length) readUpTo(Math.max.apply(null, still.map(it => it.ts)));
+        if (visibleUnread().length) scanSeen();
+      }, SEEN_MS);
+    });
+  }
+
+  /** 안 읽은 수를 「↓」 단추에 — 누르면 화면 아래쪽의 다음 안 읽은 글로, 없으면 맨 아래로 */
+  function renderJump() {
+    if (!jumpEl) return;
+    const n = unreadCount();
+    jumpEl.classList.toggle('has-n', n > 0);
+    const jn = jumpEl.querySelector('.jn');
+    if (jn) jn.textContent = n > 99 ? '99+' : n ? String(n) : '';
+    jumpEl.setAttribute('aria-label', n ? '안 읽은 글 ' + n + '개 — 다음 안 읽은 곳으로' : '맨 아래로');
+    if (n > 0 && !nearBottom()) jumpEl.hidden = false;
+  }
+
+  function jumpNext() {
+    if (!chatEl) return;
+    const v = chatEl.getBoundingClientRect();
+    const inView = new Set(visibleUnread().map(it => it.id));       // 이미 눈앞에 있어 곧 읽힐 글은 건너뛴다
+    const next = S.items.find(it => it.unread && !inView.has(it.id) && it.el && it.el.isConnected && it.el.getBoundingClientRect().bottom > v.top + 24);
+    if (!next) { scrollToBottom(true); return; }
+    const top = next.el.getBoundingClientRect().top - v.top + chatEl.scrollTop - 12;
+    chatEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 
   // ── 꾹 눌러 메뉴 — 카카오톡처럼 복사 · 이 메시지 삭제 · 대화 전체 삭제 (2026-10-05) ──
@@ -1797,6 +1971,7 @@
       atBottom = nearBottom();
       if (atBottom && jumpEl) jumpEl.hidden = true;
       if (chatEl.scrollTop <= 24) loadMoreHistory();
+      scanSeen();
     } });
     ['touchstart', 'pointerdown', 'wheel'].forEach(t => chatEl.addEventListener(t, () => { touchedAt = Date.now(); }, { passive: true }));
     // 칸 크기가 바뀌면(키보드·입력칸 늘어남·연결 띠) 맨 아래를 보던 중이면 맨 아래에 붙여 둔다
@@ -1807,7 +1982,7 @@
     renderHistoryBtn();
     const pullEl = h('div', { class: 'pull' });
     chatEl.append(pullEl, h('div', { class: 'chat-inner' }, historyBtnEl, helloEl, listEl));
-    jumpEl = h('button', { class: 'jump', hidden: true, 'aria-label': '맨 아래로', onclick: () => scrollToBottom(true) }, svg('down'));
+    jumpEl = h('button', { class: 'jump', hidden: true, 'aria-label': '맨 아래로', onclick: jumpNext }, svg('down'), h('span', { class: 'jn' }));
     pullToRefresh(chatEl, pullEl);
     bindLongPress(listEl);
 
