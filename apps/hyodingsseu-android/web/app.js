@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-18b';
+  const WEB_VERSION = '2026-10-18c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -296,8 +296,35 @@
     renderStatus();
   }
 
+  // ── 새 화면 받기 (2026-10-18) ──
+  // 알림을 눌러 돌아오는 앱은 껐다 켠 게 아니라 옛 화면 코드를 쥔 채라서, 배포한 새 화면이 안 보였다.
+  // 돌아올 때 서버의 web_version.txt(deploy_hyodingsseu_web.py 가 WEB_VERSION 을 적는다)를 보고 다르면 스스로 새로 고친다.
+  // 쓰던 것(적던 글·녹음·열어 둔 화면)이 있으면 건드리지 않고 다음에 돌아올 때로 미룬다.
+  const UPDATE_KEY = 'webUpdateTry';
+  const UPDATE_RETRY_MS = 120000;
+  let updateChecking = false;
+
+  async function checkWebUpdate() {
+    if (updateChecking) return;
+    updateChecking = true;
+    try {
+      const r = await fetch('web_version.txt?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const v = (await r.text()).trim();
+      if (!/^[\w.+-]{3,40}$/.test(v) || v === WEB_VERSION) return;
+      const ta = document.querySelector('#app .row textarea');
+      if (recorder.recording || voice.pending || pages.length || layers.length || (ta && ta.value.trim())) return;
+      let tried = null;
+      try { tried = JSON.parse(sessionStorage.getItem(UPDATE_KEY) || 'null'); } catch (e) { /* 처음 */ }
+      if (tried && tried.v === v && Date.now() - tried.at < UPDATE_RETRY_MS) return;     // 새로 고쳤는데도 그대로면 되풀이하지 않는다
+      try { sessionStorage.setItem(UPDATE_KEY, JSON.stringify({ v, at: Date.now() })); } catch (e) { /* 못 적어도 한 번은 */ }
+      location.reload();
+    } catch (e) { /* 연결이 없으면 다음에 돌아올 때 */ } finally { updateChecking = false; }
+  }
+
   function appVisible(active) {
     if (active) {
+      checkWebUpdate();
       onAppShown();                                     // 자리를 비운 사이 쌓인 글이 오면 안 읽은 곳으로 (10/18)
       if (S.paired) startPolling();
       if (atBottom) settleBottom();                     // 보던 맨 아래 그대로 — 아이폰이 돌아올 때 빈 곳을 보여 주던 것(10/12)

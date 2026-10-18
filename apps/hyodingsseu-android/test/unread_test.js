@@ -16,7 +16,8 @@ let pass = 0, total = 0;
 const check = (label, ok, extra) => { total++; if (ok) pass++; console.log((ok ? 'PASS ' : 'FAIL ') + label + (ok ? '' : ' — ' + JSON.stringify(extra))); };
 
 // ── 가짜 PC ─────────────────────────────
-const desk = { boot: 'b0', log: [] };
+const WEB_VERSION = (fs.readFileSync(path.join(WEB, 'app.js'), 'utf8').match(/WEB_VERSION\s*=\s*'([^']+)'/) || [])[1];
+const desk = { boot: 'b0', log: [], webver: WEB_VERSION };           // webver: 서버가 알려 주는 화면 버전(배포가 web_version.txt 에 적는 것)
 const reset = events => { desk.boot = 'b' + Date.now(); desk.log = events.map((e, i) => ({ seq: i + 1, evt: e })); };
 const emit = events => events.forEach(e => desk.log.push({ seq: desk.log.length + 1, evt: e }));
 const json = (res, obj, code) => { res.writeHead(code || 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
@@ -30,6 +31,7 @@ const server = http.createServer(async (req, res) => {
     const d = body ? JSON.parse(body) : {};
     if (u.pathname === '/__ctl/reset') reset(d.events || []);
     if (u.pathname === '/__ctl/emit') emit(d.events || []);
+    if (u.pathname === '/__ctl/webver') desk.webver = d.v;
     return json(res, { ok: true, seq: desk.log.length });
   }
   if (u.pathname.startsWith('/AI/api/desk/')) {
@@ -50,6 +52,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, { ok: true });
   }
   let rel = u.pathname.replace(/^\/AI\/desk-app\/?/, '') || 'index.html';
+  if (rel === 'web_version.txt') {
+    if (desk.webver == null) { res.writeHead(404); return res.end('no'); }
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
+    return res.end(desk.webver + '\n');
+  }
   const file = path.join(WEB, rel);
   if (!file.startsWith(WEB) || !fs.existsSync(file)) { res.writeHead(404); return res.end('no'); }
   res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
@@ -263,7 +270,44 @@ async function main() {
     const i14 = await info();
     check('서랍을 연 채로는 seenTs 가 오르지 않는다', i14.seen === before14, { before: before14, after: i14.seen });
 
-    console.log('--- 15. 모양 — 폭 422/390/375/360 · 라이트/다크, 가로 넘침 없음');
+    console.log('--- 15. 새 화면 받기 — 앱으로 돌아올 때 서버의 화면 버전이 다르면 스스로 새로 고침');
+    const webver = v => ctl('webver', { v });
+    const mark = () => ev(`window.__mark = 1; 0`);
+    const marked = () => ev(`window.__mark === 1`);
+    await openApp(READ, LAST_READ);
+    await mark(); await hide(); await show(1000);
+    check('버전이 같으면 새로 고치지 않는다', await marked());
+
+    await webver(null);                                            // web_version.txt 가 아직 없는(배포 전) 서버
+    await hide(); await show(1000);
+    check('버전 파일이 없으면 새로 고치지 않는다', await marked());
+
+    await webver('2099-01-01z');
+    await openApp(READ, LAST_READ);
+    await ev(`document.querySelector('#app .row textarea').value = '쓰던 글'; document.querySelector('#app .row textarea').dispatchEvent(new Event('input')); 0`);
+    await mark(); await hide(); await show(1000);
+    check('적던 글이 있으면 새로 고치지 않는다(글을 지키려고)', await marked());
+
+    await openApp(READ, LAST_READ);
+    await ev(`document.querySelector('.icon[aria-label^="메뉴"]').click(); 0`); await sleep(500);
+    await mark(); await hide(); await show(1000);
+    check('서랍이 열려 있으면 새로 고치지 않는다', await marked());
+
+    // 실제 흐름 — 알림만 눌러 돌아왔는데 그사이 새 화면이 배포됨: 새로 고침 + 안 읽은 첫 글로
+    await openApp(READ, LAST_READ);
+    await mark(); await hide();
+    await ctl('emit', { events: UNREAD.slice(0, 4).map((e, i) => Object.assign({}, e, { ts: T0 + 8000 + i * 10, mid: mid() })) });
+    await show(5000); await sleep(1500);
+    const i16 = await info();
+    check('조용할 때는 스스로 새로 고쳤다', !(await marked()));
+    check('새로 고친 뒤에도 안 읽은 첫 글(U1)에 앉았다', i16.hasDiv && i16.next === 'U1' && i16.nearBottom === false, i16);
+    check('시도한 기록이 남았다(되풀이 막이)', await ev(`!!sessionStorage.getItem('webUpdateTry')`));
+
+    await mark(); await hide(); await show(1000);
+    check('서버가 계속 다른 버전을 말해도 2분 안엔 되풀이하지 않는다', await marked());
+    await webver(WEB_VERSION);
+
+    console.log('--- 16. 모양 — 폭 422/390/375/360 · 라이트/다크, 가로 넘침 없음');
     for (const [w, dark] of [[422, false], [390, false], [375, false], [360, false], [422, true], [360, true]]) {
       await view(w, 800, dark);
       await openApp(READ.concat(UNREAD), LAST_READ);
