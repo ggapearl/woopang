@@ -53,9 +53,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([])
     }
 
-    // 알림을 눌러 들어옴 — 앱은 열리면 늘 대화 화면이라 따로 할 일이 없다
+    // 알림을 눌러 들어옴 — 그 알림의 글과 보낸 시각(PC 가 싣는 at)을 화면(웹)에 넘겨 그 말로 가게 한다 (2.1, 2026-10-19)
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
+        let content = response.notification.request.content
+        let body = content.body
+        let at = (content.userInfo["at"] as? NSNumber)?.doubleValue
         completionHandler()
+        Task { @MainActor in Push.shared.didOpen(body: body, at: at) }
     }
 }

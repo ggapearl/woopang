@@ -41,6 +41,30 @@ final class Push {
         UNUserNotificationCenter.current().setBadgeCount(0, withCompletionHandler: nil)
     }
 
+    // MARK: 알림을 눌러 들어옴 (2.1, 2026-10-19)
+
+    /// 마지막으로 누른 알림 `{at, body, n}` — 웹이 `pushOpened()` 로 가져간다.
+    /// 가져가도 지우지 않는다: 그 사이 화면이 새로 고쳐지면(새 화면 받기) 새 화면이 다시 가져가야 해서. 같은 n 은 웹이 거른다.
+    private var opened: [String: Any] = [:]
+    private var openedAt = Date.distantPast
+    private var openCount = 0
+    /// 알림을 눌렀다고 웹에 알리는 곳 — `DeskNative` 가 단다(이미 떠 있는 화면은 이 신호를 받고 가져간다)
+    var onOpen: (@MainActor () -> Void)?
+
+    func didOpen(body: String, at: Double?) {
+        openCount += 1
+        var p: [String: Any] = ["body": body, "n": openCount]
+        if let at { p["at"] = at }
+        opened = p
+        openedAt = Date()
+        onOpen?()
+    }
+
+    /// 웹의 `pushOpened()` 답 — 1분 안에 누른 알림이면 `{at, body, n}`, 아니면 `{}` (앱을 처음 켤 때는 화면이 뜬 뒤 가져간다)
+    func lastOpened() -> [String: Any] {
+        Date().timeIntervalSince(openedAt) < 60 ? opened : [:]
+    }
+
     // MARK: AppDelegate 가 부른다
 
     func didRegister(_ deviceToken: Data) {

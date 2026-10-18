@@ -31,11 +31,11 @@
 
 | 파일 | 하는 일 |
 |---|---|
-| `Hyodingsseu/App/HyodingsseuApp.swift` | 앱 시작 · 소리 설정(무음 스위치와 상관없이 스피커, 마이크 함께) · 화면 꽉 채우기(키보드는 비켜 감) · `AppDelegate`(알림 기기 토큰 받기 · 앱을 보는 중엔 알림 안 띄우기) |
+| `Hyodingsseu/App/HyodingsseuApp.swift` | 앱 시작 · 소리 설정(무음 스위치와 상관없이 스피커, 마이크 함께) · 화면 꽉 채우기(키보드는 비켜 감) · `AppDelegate`(알림 기기 토큰 받기 · 앱을 보는 중엔 알림 안 띄우기 · 누른 알림을 화면에 넘기기) |
 | `Hyodingsseu/Shell/WebShell.swift` | WKWebView · 바깥 주소는 사파리로 · 마이크 허락 · 인터넷 안 될 때 안내 · 웹 프로세스 죽으면 다시 · 앱으로 돌아오면 알림 숫자 지우기 |
-| `Hyodingsseu/Shell/DeskNative.swift` | 폰 기능 다리 — `haptic` · `openExternal` · `deviceName` · `speak`/`stop`(+`speechDone` 사건) · `setBars` · `pushRegister` |
+| `Hyodingsseu/Shell/DeskNative.swift` | 폰 기능 다리 — `haptic` · `openExternal` · `deviceName` · `speak`/`stop`(+`speechDone` 사건) · `setBars` · `pushRegister` · `pushOpened`(+`pushOpen` 사건) |
 | `Hyodingsseu/Shell/ShellPages.swift` | 웹에 넣는 다리 JS(`bridgeJS`) · 안내 화면 HTML |
-| `Hyodingsseu/Shell/Push.swift` | 알림(APNs) — 허락 묻기 · 기기 토큰(10초 기다림) · 배지 지우기 |
+| `Hyodingsseu/Shell/Push.swift` | 알림(APNs) — 허락 묻기 · 기기 토큰(10초 기다림) · 배지 지우기 · 누른 알림 맡아 두기(2.1) |
 | `Hyodingsseu/Hyodingsseu.entitlements` | `aps-environment` — **정본은 `project.yml` 의 `entitlements`**(xcodegen 이 이 파일을 쓴다) |
 
 ## 알림(푸시) — 2.0.1 부터
@@ -50,13 +50,16 @@ Firebase 없이 Apple(APNs)에 직접. 대표님 개인 앱이라 PC 가 팀 키
 3. PC 가 알릴 일이 생기면 팀 `DDX8R79VU2` 의 APNs 키(.p8, 토큰 방식)로 topic `com.que.hyodingsseu` 에 **직접** 보낸다 —
    `api.push.apple.com`(TestFlight = production) 먼저, 안 되면 sandbox(Xcode 로 바로 깐 개발 빌드).
 
-- **앱을 보고 있을 때 온 알림은 띄우지 않는다** — 대화가 이미 화면에 있다. 알림을 누르면 앱이 열리고 늘 대화 화면이다.
+- **앱을 보고 있을 때 온 알림은 띄우지 않는다** — 대화가 이미 화면에 있다.
+- **알림을 누르면 그 말로 (2.1)** — PC 가 알림마다 보낸 시각 `at`(페이로드 최상위, 초 단위 실수)을 싣는다. 누르면 `AppDelegate` 가 그 알림의 글·`at` 을
+  `Push.didOpen` 에 맡기고, 떠 있는 화면엔 `pushOpen` 사건을 보낸다. 화면은 `DeskNative.pushOpened()` → 누른 지 1분 안이면 `{at, body, n}`(아니면 `{}`)을 받아
+  글 머리가 알림에 든 말 중 그 시각에 가장 가까운 말로 간다(웹 app.js 「누른 알림의 그 말로」). 가져가도 지우지 않는다 — 화면이 새로 고쳐지면 다시 가져가야 해서(같은 n 은 웹이 거른다).
 - 앱을 열면(돌아오면) 아이콘의 빨간 숫자(배지)를 지운다.
 - 토큰은 앱을 다시 깔거나 백업에서 되살리면 바뀔 수 있다 → 웹은 앱을 열 때마다 불러도 된다(허락은 다시 묻지 않는다).
 - 대표님이 설정 › 알림 › 효딩쓰 에서 끄면 `granted: false` — 다시 켜는 건 설정에서만 된다.
 - 서명에 `aps-environment` 가 들어가므로 App ID 에 **Push Notifications capability** 가 있어야 한다(자동 서명이 켠다 — 안 되면 `TESTFLIGHT.md` 4절).
   APNs 인증서(.p12)는 쓰지 않는다.
-- 안드로이드 앱(`DeskNativePlugin`)에는 `pushRegister` 가 없다 — 웹은 아이폰에서만 부른다.
+- 안드로이드 앱(`DeskNativePlugin`)에는 `pushRegister`·`pushOpened` 가 없다 — 웹은 있을 때만 부른다(안드로이드는 OS 알림이 없다).
 
 ## Mac 에서 빌드 (빌드 세션용)
 

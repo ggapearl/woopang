@@ -121,6 +121,10 @@ svg{display:block}
 [data-iid].new::before{background:var(--pink);transition:none}
 .unread-div{display:flex;align-items:center;gap:10px;color:var(--pink-deep);font-size:12px;font-weight:700;letter-spacing:.2px}
 .unread-div::before,.unread-div::after{content:"";flex:1;height:1px;background:var(--pink-line)}
+/* 누른 알림의 그 말 (2026-10-19) — 잠깐 분홍으로 비쳤다가 사라진다 */
+.push-hit{border-radius:12px;animation:pushHit 2.4s ease-out}
+@keyframes pushHit{0%,35%{background:var(--pink-soft);box-shadow:0 0 0 6px var(--pink-soft)}100%{background:transparent;box-shadow:0 0 0 6px transparent}}
+@media (prefers-reduced-motion:reduce){.push-hit{animation:none;background:var(--pink-soft);box-shadow:0 0 0 6px var(--pink-soft)}}
 
 .hello{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding-top:30px}
 .hello h2{margin:0;font-size:20px;font-weight:700;color:var(--ink)}

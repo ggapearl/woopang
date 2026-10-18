@@ -2,6 +2,39 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
+## 2.1.0 (7) — 2026-10-19 · 알림을 누르면 그 말로
+
+대표님: 「알림을 누르면 그 알림의 정확한 화면으로 가기 — 재빌드 해도 되니까 진행해」.
+2.0.1 은 알림을 눌러도 앱이 그냥 열리고, 화면(웹)은 어느 알림을 눌렀는지 몰라 「안 읽은 첫 글」에 앉는다(10-18 웹만으로 한 것).
+- 알림을 누르면 `AppDelegate.userNotificationCenter(_:didReceive:)` 가 그 알림의 글(`content.body`)과 PC 가 싣는 보낸 시각
+  (`userInfo["at"]`, 초 단위 실수)을 `Push.shared.didOpen(body:at:)` 에 맡긴다 → 떠 있는 화면에는 `pushOpen` 사건을 보내고,
+  화면은 새 폰 기능 **`pushOpened()`** 로 가져간다(앱을 처음 켤 때는 화면이 뜬 뒤 가져간다).
+- 화면(웹 2026-10-19a)·PC(`push.py` 가 `at` 싣기)는 이미 고쳐 두었다. 2.0.1 에는 `pushOpened` 가 없어 예전처럼 안 읽은 첫 글로 간다 —
+  이 빌드를 깔아야 「그 말로」가 된다.
+
+약속 (웹·PC 와 맞춘 모양 — 바꾸지 말 것): `pushOpened()` → 누른 지 1분 안이면 `{at: <보낸 시각 초>, body: "<알림 글>", n: <누른 차례 1,2,…>}`,
+아니면 `{}`. **가져가도 지우지 않는다** — 그 사이 화면이 새로 고쳐지면(새 화면 받기) 새 화면이 다시 가져가야 해서. 같은 `n` 은 웹이 거른다.
+사건 `pushOpen`(데이터 `{}`) — 누를 때마다 한 번. APNs 페이로드: `{"aps": {…}, "at": 1760850000.3}`.
+
+Windows 에서 미리 확인한 것: 다리 JS 를 node 로 돌려 `pushOpened()` 가 `{m: 'pushOpened', a: {}}` 로 넘어가고 답이 Promise 결과가 되는 것 ·
+`__deskNativeEmit('pushOpen', {})` 이 `addListener` 로 전달되는 것 · 웹 시험 `apps/hyodingsseu-android/test/push_open_test.js` 26/26
+(가짜 포장지로 — 꺼진 앱·내려 둔 앱·허락 카드·화면에 없는 예전 알림·새 화면 받기·예전 포장지) · `unread_test.js` 51/51 ·
+PC 페이로드(애플에 보내지 않고 가로채서 `at` 확인). Swift 는 컴파일 못 함.
+
+**이번에 확인할 것**:
+1. 컴파일 — 바뀐 곳: `App/HyodingsseuApp.swift` 의 nonisolated `userNotificationCenter(_:didReceive:withCompletionHandler:)`
+   (`content.userInfo["at"] as? NSNumber` · `completionHandler()` 를 먼저 부르고 `Task { @MainActor in Push.shared.didOpen(body:at:) }`) ·
+   `Shell/Push.swift`(`opened`·`openedAt`·`openCount` · `var onOpen: (@MainActor () -> Void)?` · `didOpen(body:at:)` · `lastOpened()`) ·
+   `Shell/DeskNative.swift`(`init` 의 `Push.shared.onOpen = { [weak self] in self?.emit("pushOpen") }` · `case "pushOpened"`) ·
+   `Shell/ShellPages.swift` bridgeJS 의 `pushOpened`.
+   ⚠ `didReceive` 에 "nearly matches" 경고가 나면 불리지 않는다는 뜻 — 이름표만 SDK 에 맞춘다(2.0.1 과 같은 함수, 몸통만 바뀜).
+2. TestFlight 업로드 — **업데이트**로 2.1.0 (7). `TESTFLIGHT.md` 2절·3절만(capability·프로파일은 2.0.1 에서 이미 — 바뀐 것 없음).
+3. 대표님 아이폰에서: TestFlight 「업데이트」 → 앱을 내려 둔 채 PC 쪽에서 알림 두세 개를 보내게 한 뒤
+   (Windows 세션이나 효딩쓰가 `server/que_outbox.py` 의 `send()` 로) **가운데 알림**을 누른다
+   → 앱이 열리며 그 말이 대화 윗머리에 앉고 잠깐 분홍으로 비치는지. 앱을 완전히 끈 상태(앱 전환기에서 위로 밀기)에서 눌러도 같은지.
+   맨 아래나 첫 안 읽은 글로 가면 → Mac 사파리 › 개발 › (아이폰) › 효딩쓰 로 콘솔을 열고
+   `Capacitor.Plugins.DeskNative.pushOpened()` 결과를 적어 보고(앱은 `isInspectable` 이 켜져 있다).
+
 ## 2.0.1 (6) — 2026-10-01 · 알림(푸시)
 
 대표님: 「아이폰 설정 › 알림 에 효딩쓰가 없다」 — 앱이 알림 허락을 한 번도 묻지 않고 APNs 에 등록하지도 않아서였다.

@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-18c';
+  const WEB_VERSION = '2026-10-19a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -279,7 +279,8 @@
         takeQuick(r.quick);
         takeAppr(r.appr);
         renderStatus();
-        if (!(land && landUnreadAfterAway())) afterChange(stick || force, (r.events || []).length > 0);
+        if (pushLand(true)) scanSeen();                 // 누른 알림의 그 말이 이제 왔다 (10/19)
+        else if (!(land && Date.now() > pushHeldUntil && landUnreadAfterAway())) afterChange(stick || force, (r.events || []).length > 0);
       } catch (e) {
         if (ctl.signal.aborted) return;
         if (e.status === 401) { unpair(e.message, false); return; }
@@ -326,6 +327,7 @@
     if (active) {
       checkWebUpdate();
       onAppShown();                                     // 자리를 비운 사이 쌓인 글이 오면 안 읽은 곳으로 (10/18)
+      takePushOpen();                                   // 알림을 눌러 왔으면 그 말로 (10/19)
       if (S.paired) startPolling();
       if (atBottom) settleBottom();                     // 보던 맨 아래 그대로 — 아이폰이 돌아올 때 빈 곳을 보여 주던 것(10/12)
       scanSeen();
@@ -815,7 +817,7 @@
     renderAllItems();
     renderStatus();
     renderDrawer();
-    if (!landOnUnread()) settleBottom();               // 안 읽은 글이 있으면 그 첫 글로, 없으면 맨 아래 (10/18)
+    if (!pushLand(true) && !landOnUnread()) settleBottom();    // 누른 알림의 말 → 안 읽은 첫 글 → 맨 아래 (10/18·10/19)
     scanSeen();
     if (!historyAutoTried) {
       historyAutoTried = true;
@@ -888,7 +890,7 @@
       }
       case 'permission': {
         const card = { id: e.id || '', title: e.title || '허락이 필요합니다', note: e.note || '', body: e.body || '', canAlways: !!e.can_always, closed: null };
-        cardOwner[card.id] = append({ kind: 'permission', card }).id;
+        cardOwner[card.id] = append({ kind: 'permission', card, cardTs: e.ts }).id;     // cardTs — 누른 알림 찾기용(ts 를 달면 시각이 찍힌다)
         if (!replaying) haptic('alert');
         return true;
       }
@@ -898,7 +900,7 @@
           options: (q.options || []).map(o => ({ label: o.label || '', desc: o.description || '' })),
         }));
         const card = { id: e.id || '', questions: qs, closed: null };
-        cardOwner[card.id] = append({ kind: 'question', card }).id;
+        cardOwner[card.id] = append({ kind: 'question', card, cardTs: e.ts }).id;
         if (!replaying) haptic('alert');
         return true;
       }
@@ -1074,6 +1076,7 @@
       const items = (r.items || []).map(historyToItem).filter(Boolean);
       if (items.length) prependHistoryItems(items);
       historyState = (!r.more || !items.length) ? 'done' : 'idle';
+      if (pushLand(true)) scanSeen();                   // 예전 알림을 눌러 왔으면 받아 온 데서 찾는다 (10/19)
     } catch (e) {
       historyState = 'idle';
       show(e);
@@ -1545,13 +1548,12 @@
     return dividerEl;
   }
 
-  /** 안 읽은 첫 글에 앉는다 — 그 줄이 대화 윗머리에 오게. 안 읽은 게 없으면 false(호출한 쪽이 맨 아래로) */
-  function landOnUnread() {
-    if (!chatEl || !placeDivider(false)) return false;
+  /** el 을 대화 윗머리에 앉힌다 */
+  function seatAt(el) {
     const t0 = Date.now();
     const go = () => {
-      if (!dividerEl || !dividerEl.isConnected) return;
-      const top = dividerEl.getBoundingClientRect().top - chatEl.getBoundingClientRect().top + chatEl.scrollTop - 10;
+      if (!el.isConnected) return;
+      const top = el.getBoundingClientRect().top - chatEl.getBoundingClientRect().top + chatEl.scrollTop - 10;
       if (top >= chatEl.scrollHeight - chatEl.clientHeight - 4) { pinBottom(); return; }   // 한 화면이 안 되는 새 글 — 맨 아래와 같다
       chatEl.scrollTop = Math.max(0, top);
       atBottom = nearBottom();
@@ -1561,6 +1563,12 @@
     const again = () => { if (touchedAt < t0) go(); };      // 그림·글꼴이 자리 잡은 뒤 한 번 더 — 그 사이 만지셨으면 그대로
     requestAnimationFrame(again);
     setTimeout(again, 350);
+  }
+
+  /** 안 읽은 첫 글에 앉는다 — 그 줄이 대화 윗머리에 오게. 안 읽은 게 없으면 false(호출한 쪽이 맨 아래로) */
+  function landOnUnread() {
+    if (!chatEl || !placeDivider(false)) return false;
+    seatAt(dividerEl);
     return true;
   }
 
@@ -1637,6 +1645,73 @@
     if (!next) { scrollToBottom(true); return; }
     const top = next.el.getBoundingClientRect().top - v.top + chatEl.scrollTop - 12;
     chatEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
+  // ── 누른 알림의 그 말로 (2026-10-19) ───────────────────────────
+  // 대표님: 「알림을 누르면 그 알림의 정확한 화면으로」 — 위 「안 읽은 곳으로」는 어느 알림을 눌렀는지 몰라 첫 안 읽은 글에 앉았다.
+  // 아이폰 앱(2.1+)이 누른 알림의 글과 보낸 시각(at — PC push.py 가 싣는다)을 넘겨 준다. 말은 PC 가 내보낸 순간의 시각을 달고 있어서,
+  // 글 머리가 알림에 들어 있는 말 중 그 시각에 가장 가까운 것에 앉아 잠깐 비춘다(그런 말이 없으면 2분 안의 가장 가까운 말).
+  // 앱이 잠든 사이 끊긴 긴 폴링을 다시 잇는 중이면 그 말이 아직 없어서, 받아 올 때마다 다시 찾는다(15초까지). 예전 알림이면 지난 대화를 더 받아 온다.
+  // 예전 앱·안드로이드·브라우저엔 pushOpened 가 없어서 그냥 지나간다(안 읽은 곳으로 앉기는 그대로).
+  const PUSH_WAIT_MS = 15000;
+  const PUSH_KINDS = { ai: 1, incoming: 1, error: 1, permission: 1, question: 1 };
+  let pushTarget = null, pushTook = 0, pushHeldUntil = 0;
+
+  /** 알림 미리보기와 같은 꼴로 — PC push._clean 처럼 태그를 빼고 [제목](주소)는 제목만, 빈칸은 하나로 */
+  const pushPlain = s => String(s || '').replace(/<[^>]+>/g, '')
+    .replace(/\[((?:[^[\]\n]|\[[^[\]\n]*\])+)\]\(https?:\/\/[^\s)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
+  const itemHead = it => pushPlain(it.text || (it.card && (it.card.title || ((it.card.questions || [])[0] || {}).question))).slice(0, 16);
+
+  async function takePushOpen() {
+    if (!Native || typeof Native.pushOpened !== 'function') return;
+    let p = null;
+    try { p = await Native.pushOpened(); } catch (e) { return; }
+    if (!p || typeof p.at !== 'number' || p.n === pushTook) return;       // 같은 알림은 한 번만 — 화면이 새로 고쳐지면 새 화면이 다시 가져간다
+    pushTook = p.n;
+    pushTarget = { at: p.at, body: pushPlain(p.body), until: Date.now() + PUSH_WAIT_MS, older: 0 };
+    // 대화를 받기 전·이어 받기 전이면 글 머리가 같은 말만 — 2분 안의 엉뚱한 말에 먼저 앉지 않게. 나머지는 받아 온 뒤 pollLoop·ingestState 가
+    if (pushLand(!!boot && !awayBatch && !hiddenAt)) scanSeen();
+  }
+
+  /** 누른 알림의 말. settled(받을 것을 다 받음)가 아니면 글 머리가 같은 말만 */
+  function pushMatch(t, settled) {
+    let best = null, bestScore = Infinity;
+    S.items.forEach(it => {
+      const ts = it.ts || it.cardTs;
+      if (!ts || !PUSH_KINDS[it.kind] || !it.el || !it.el.isConnected) return;
+      const d = Math.abs(t.at - ts);
+      const head = itemHead(it);
+      const same = head.length >= 4 && t.body.includes(head);
+      if (same ? d > 900 : (!settled || d > 120)) return;
+      const score = d + (same ? 0 : 1000);
+      if (score < bestScore) { bestScore = score; best = it; }
+    });
+    return best;
+  }
+
+  /** 찾았으면 그 말에 앉아 잠깐 비추고 true. 곧이어 오는 「안 읽은 곳으로」는 5초 쉰다 */
+  function pushLand(settled) {
+    const t = pushTarget;
+    if (!t || !chatEl) return false;
+    if (Date.now() > t.until) { pushTarget = null; return false; }
+    const it = pushMatch(t, settled);
+    if (!it) {
+      if (settled && S.items.length && t.at < earliestTs() && t.older < 3 && historyState === 'idle') {
+        t.older += 1;                                       // 지금 화면보다 예전 알림 — 지난 대화를 50개씩 세 번까지 더 받아 와서 찾는다(받으면 loadMoreHistory 가 다시 부른다)
+        t.until = Date.now() + PUSH_WAIT_MS;
+        loadMoreHistory();
+      }
+      return false;
+    }
+    pushTarget = null;
+    pushHeldUntil = Date.now() + 5000;
+    landAfterAway = false;
+    placeDivider(false);
+    seatAt(dividerEl && dividerEl.nextSibling === it.el ? dividerEl : it.el);     // 그 말이 첫 안 읽은 글이면 「여기부터 안 읽음」 줄까지 보이게
+    const el = it.el;
+    el.classList.add('push-hit');
+    setTimeout(() => el.classList.remove('push-hit'), 2400);
+    return true;
   }
 
   // ── 꾹 눌러 메뉴 — 카카오톡처럼 복사 · 이 메시지 삭제 · 대화 전체 삭제 (2026-10-05) ──
@@ -2757,7 +2832,8 @@
     AppPlugin.getInfo().then(i => { appVersion = i.version || ''; }).catch(() => {});
   }
 
+  if (Native) Native.addListener('pushOpen', takePushOpen);        // 떠 있는 화면에서 알림을 눌렀다 (아이폰 2.1+)
   applyTheme();
   S.paired = !!api.token;
-  if (S.paired) { showMain(); startPolling(); } else { showPair(); }
+  if (S.paired) { showMain(); startPolling(); takePushOpen(); } else { showPair(); }
 })();
