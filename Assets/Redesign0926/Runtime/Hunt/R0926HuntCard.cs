@@ -10,7 +10,9 @@ using UnityEngine.UI;
 /// '추가' 창 세 번째 카드 — 보물찾기 (2026-10-06 대표님: 주최는 장소 추가·3D모델 추가 옆에서. 따로 탭은 찾기 어렵다).
 ///  · 처음: 맨 위 '지금 이 자리에 보물 숨기기' · 코드로 참가 · 근처 보물찾기(참가) · 내 게임
 ///  · 숨기기: 처음엔 주최 수칙 동의 → 양식(현장 GPS · 방식 · 인원 · 보이는 거리 · 범위 · 공개 · 대상 · 시작 · 진행 시간)
-///  · 상세: 게임 정보 · 참가/나가기/포기 · 8초마다 근접 단계 · 보이는 거리 안이면 '보물 열기'(판정) · 찾은 사람·주최자 메시지 · 주최자 늘리기/끝내기/위치 공개
+///  · 상세: 게임 정보 · 참가/나가기/포기 · 8초마다 근접 단계 · 찾기는 AR 보물을 두 번 톡톡(R0926HuntTreasure — '보물 열기' 버튼은 10-14 대표님 요청으로 없앰),
+///    코드 게임은 보이는 거리 안에서 코드 칸 · 찾은 사람·주최자 메시지 · 주최자 늘리기(1시간·1일 한 줄)/끝내기/위치 공개
+///  · 한마디·코드 칸은 키보드 위 입력줄의 보내기(엔터)로 바로 보낸다 (UploadInputMirror.SetSubmitAction)
 /// 서버: R0926HuntApi (/api/hunts). UI 틀은 에디터 Redesign0926ApplyHunt 가 만들고, 줄·칩은 여기서 본보기로 찍는다.
 /// </summary>
 public class R0926HuntCard : MonoBehaviour
@@ -68,15 +70,17 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private Text dTitle, dStatus, dInfo, dNear, dMine, feedHead;
     [SerializeField] private Button dHost;
     [SerializeField] private Text dHostText;
-    [SerializeField] private Button openButton;           // 보물 열기 (보이는 거리 안)
-    [SerializeField] private Text openLabel;
     [SerializeField] private GameObject claimCodeBox;
     [SerializeField] private InputField claimCodeInput;
-    [SerializeField] private Button joinButton, leaveButton, giveupButton, extendButton, endButton, revealButton, profileButton;
+    [SerializeField] private Button claimCodeButton;      // 코드 게임 — 넣은 코드로 열기
+    [SerializeField] private Button joinButton, leaveButton, giveupButton, endButton, revealButton, profileButton;
+    [SerializeField] private GameObject extendRow;         // 주최자 — '1시간 연장하기 · 1일 연장하기' 한 줄
+    [SerializeField] private Button extendButton, extendDayButton;
     [SerializeField] private GameObject msgBox;
     [SerializeField] private InputField msgInput;
     [SerializeField] private Button msgSend;
     [SerializeField] private RectTransform feedList;
+    [SerializeField] private UploadInputMirror inputMirror;   // 키보드 위 입력줄 — 보내기(엔터)로 한마디·코드를 바로
 
     [Header("알림")]
     [SerializeField] private Text toast;
@@ -133,14 +137,21 @@ public class R0926HuntCard : MonoBehaviour
         Wire(detailBack, ShowHub);
         Wire(dHost, () => OpenHostProfile(false));
         Wire(profileButton, () => OpenHostProfile(true));   // 별점 남기기 — 프로필의 보물찾기 칸을 펼쳐 남기기까지
-        Wire(openButton, () => StartCoroutine(Claim()));
+        Wire(claimCodeButton, () => StartCoroutine(Claim()));
         Wire(joinButton, () => StartCoroutine(Act("join")));
         Wire(leaveButton, () => StartCoroutine(Act("leave")));
         Wire(giveupButton, () => StartCoroutine(Act("giveup")));
-        Wire(extendButton, () => StartCoroutine(Act("extend")));
+        Wire(extendButton, () => StartCoroutine(Act("extend", 60)));
+        Wire(extendDayButton, () => StartCoroutine(Act("extend", 1440)));
         Wire(endButton, () => StartCoroutine(Act("end")));
         Wire(revealButton, () => StartCoroutine(Act("reveal")));
         Wire(msgSend, () => StartCoroutine(SendMessage()));
+        if (inputMirror != null)
+        {
+            // 입력줄의 보내기(또는 키패드 엔터)를 누르면 글이 칸에 들어간 뒤 바로 보낸다 — 대화창과 같이 (10-14 대표님)
+            inputMirror.SetSubmitAction(msgInput, () => StartCoroutine(SendMessage()));
+            inputMirror.SetSubmitAction(claimCodeInput, () => StartCoroutine(Claim()));
+        }
     }
 
     private static void Wire(Button b, Action a)
@@ -165,6 +176,7 @@ public class R0926HuntCard : MonoBehaviour
     {
         if (LoginManager.Instance != null) LoginManager.Instance.OnLoginStateChanged -= OnLoginChanged;
         NearHuntId = 0;
+        busy = false;   // 보내는 중에 창이 닫히면 코루틴이 멈춘 채 남아 — 다시 열었을 때 버튼이 다 먹통이었다
     }
 
     /// <summary>상세가 근접 확인 중인 게임 (없으면 0) — R0926HuntTreasure 가 같은 게임을 따로 묻지 않는다</summary>
@@ -281,7 +293,9 @@ public class R0926HuntCard : MonoBehaviour
             foreach (JSONNode h in j[key].AsArray)
                 if (seen.Add(h["id"].AsInt)) { AddRow(mineList, h); mine++; }
         if (mineHead != null) mineHead.SetActive(mine > 0);
-        foreach (JSONNode h in j["joined"].AsArray) R0926HuntTreasure.Track(h);   // 참가 중인 게임 — 보물 근처에 가면 AR 로 띄운다
+        // 참가 중인 게임 · 내가 연 게임 — 보물 근처에 가면 AR 로 띄운다 (주최자는 보이기만)
+        foreach (var key in new[] { "hosted", "joined" })
+            foreach (JSONNode h in j[key].AsArray) R0926HuntTreasure.Track(h);
     }
 
     private void ClearRows(params RectTransform[] lists)
@@ -352,11 +366,14 @@ public class R0926HuntCard : MonoBehaviour
         return null;
     }
 
+    // 분은 올림 — 방금 만들거나 늘린 게임이 '1시간 59분'이 아니라 '2시간'으로 보이게. 10시간 안쪽은 분까지
     private static string Span(TimeSpan s)
     {
-        if (s.TotalMinutes < 60) return Mathf.Max(1, Mathf.CeilToInt((float)s.TotalMinutes)) + T("분", "m");
-        if (s.TotalHours < 48) return Mathf.FloorToInt((float)s.TotalHours) + T("시간", "h");
-        return Mathf.FloorToInt((float)s.TotalDays) + T("일", "d");
+        int m = Mathf.Max(1, Mathf.CeilToInt((float)s.TotalMinutes));
+        if (m < 60) return m + T("분", "m");
+        if (m < 600) return m / 60 + T("시간", "h") + (m % 60 > 0 ? " " + m % 60 + T("분", "m") : "");
+        if (m < 2880) return (m + 30) / 60 + T("시간", "h");
+        return m / 1440 + T("일", "d");
     }
 
     private static string TimeText(JSONNode h)
@@ -586,7 +603,7 @@ public class R0926HuntCard : MonoBehaviour
         return true;
     }
 
-    // 보던 자리(스크롤)는 그대로 두고 상태·소식만 다시 그린다 — '보물 열기'는 근접 확인이 정한 대로 남긴다
+    // 보던 자리(스크롤)는 그대로 두고 상태·소식만 다시 그린다 — 코드 칸은 근접 확인이 정한 대로 남긴다
     private IEnumerator ReloadDetail(int id)
     {
         int gen = detailGen;
@@ -595,16 +612,11 @@ public class R0926HuntCard : MonoBehaviour
         yield return R0926HuntApi.Get("/api/hunts/" + id + q, (c, r) => { code = c; j = r; });
         if (code != 200 || gen != detailGen || busy || current == null || current["id"].AsInt != id || !detail.activeInHierarchy) yield break;
         bool wasNear = NearMode(current);
-        bool openOn = openButton != null && openButton.gameObject.activeSelf;
         bool codeOn = claimCodeBox != null && claimCodeBox.activeSelf;
         current = j["hunt"];
         PaintDetail();
         if (!NearMode(current)) yield break;
-        if (wasNear)
-        {
-            if (openButton != null) openButton.gameObject.SetActive(openOn);
-            if (claimCodeBox != null) claimCodeBox.SetActive(codeOn);
-        }
+        if (wasNear) { if (claimCodeBox != null) claimCodeBox.SetActive(codeOn); }
         else { nextNear = Time.unscaledTime + 0.3f; nearRank = -1; }   // 방금 시작했다 — 근접 확인을 바로 (첫 확인은 기준만 잡는다)
     }
 
@@ -639,10 +651,11 @@ public class R0926HuntCard : MonoBehaviour
         lines.Add(T("참가  ", "Players  ") + PlayerCount(h) + T("명", "") + (full ? T(" · 마감", " · full") : ""));
         if (dInfo != null) dInfo.text = string.Join("\n", lines);
         if (dMine != null)
-            dMine.text = host ? T("내가 연 게임이에요", "You're the host")
+            dMine.text = host ? (open ? T("내가 연 게임이에요 — 보물 근처에 가면 내 보물이 보여요", "You're the host — your treasure shows up when you're near it")
+                                      : T("내가 연 게임이에요", "You're the host"))
                        : found ? T(me["rank"].AsInt + "번째로 찾았어요!", "You found it (#" + me["rank"].AsInt + ")")
                        : me["gave_up"].AsBool ? T("못 찾았다고 남겼어요", "You marked it as not found")
-                       : joined ? T("참가 중이에요 — 보물 근처에 가면 '보물 열기'가 켜져요", "Joined — get close and 'Open' lights up")
+                       : joined ? T("참가 중이에요 — 보물 근처에 가면 금빛 상자가 보여요. 두 번 톡톡 눌러 열어요", "Joined — get close, then double-tap the golden box")
                        : open && full ? T("참가 인원이 다 찼어요 — 누가 나가면 자리가 생겨요", "This game is full — a spot opens if someone leaves")
                        : "";
         PaintDistance();
@@ -650,7 +663,7 @@ public class R0926HuntCard : MonoBehaviour
         Set(joinButton, open && !joined && !host && h["audience"] != "code" && !full);
         Set(leaveButton, open && joined && !host && !found);
         Set(giveupButton, status == "live" && joined && !host && !found && !me["gave_up"].AsBool);
-        Set(extendButton, host && open && !h["ends_at"].IsNull);
+        if (extendRow != null) extendRow.SetActive(host && open && !h["ends_at"].IsNull);
         Set(endButton, host && open);
         Set(revealButton, host && !open && h["coord_mode"] != "exact");
         Set(profileButton, !host && me["can_rate"].AsBool);
@@ -660,8 +673,7 @@ public class R0926HuntCard : MonoBehaviour
             if (l != null) l.text = me["my_rating"].AsInt > 0 ? T("주최자 프로필에서 별점 고치기", "Edit your rating on the host's profile") : T("주최자 프로필에서 별점 남기기", "Rate on the host's profile");
         }
         if (msgBox != null) msgBox.SetActive(found || host);
-        // '보물 열기'·코드 칸은 근접 확인(Near)이 참가자에게 보이는 거리 안일 때만 켠다 — 주최자·찾은 사람·끝난 게임엔 없다
-        if (openButton != null) openButton.gameObject.SetActive(false);
+        // 코드 칸은 근접 확인(Near)이 참가자에게 보이는 거리 안일 때만 켠다 — 주최자·찾은 사람·끝난 게임엔 없다
         if (claimCodeBox != null) claimCodeBox.SetActive(false);
 
         // 소식
@@ -749,13 +761,12 @@ public class R0926HuntCard : MonoBehaviour
                         : band == "1km" ? T("1km 안", "Within 1km")
                         : T("아직 멀어요", "Still far");
         if (j.HasKey("distance_m")) bandText += " · " + Dist(j["distance_m"].AsFloat);
+        if (visible) bandText = T("보물이 보이는 거리예요 — 금빛 상자를 두 번 톡톡 눌러 열어요", "In view — double-tap the golden box to open it");
         if (dNear != null) { dNear.text = bandText; dNear.color = visible ? Gold : Ink; }
         // 가까워지면 진동 — 단계가 한 칸이라도 가까워질 때만 (상세를 연 뒤 첫 확인은 기준만 잡는다 · 설정에서 끌 수 있다)
         int rank = visible ? 5 : band == "30m" ? 4 : band == "100m" ? 3 : band == "300m" ? 2 : band == "1km" ? 1 : 0;
         if (nearRank >= 0 && rank > nearRank && R0926HuntPrefs.NotifyNear) Buzz();
         nearRank = rank;
-        if (openButton != null) openButton.gameObject.SetActive(visible);
-        if (openLabel != null) openLabel.text = T("보물 열기", "Open the treasure");
         if (claimCodeBox != null) claimCodeBox.SetActive(visible && current["mode"] == "code");
     }
 
@@ -775,8 +786,10 @@ public class R0926HuntCard : MonoBehaviour
         switch (result)
         {
             case "found":
-                Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt), 4f);
                 if (claimCodeInput != null) claimCodeInput.text = "";
+                R0926HuntTreasure.Untrack(id);
+                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, current["prize"], current["host"]["username"]))
+                    Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt), 4f);
                 StartCoroutine(OpenDetail(id));
                 break;
             case "need_code": Toast(T("코드를 넣어 주세요", "Enter the code") + (string.IsNullOrEmpty(j["question"]) ? "" : " — " + j["question"]), 3.5f); if (claimCodeBox != null) claimCodeBox.SetActive(true); break;
@@ -791,7 +804,7 @@ public class R0926HuntCard : MonoBehaviour
         }
     }
 
-    private IEnumerator Act(string what)
+    private IEnumerator Act(string what, int minutes = 0)
     {
         if (busy || current == null) yield break;
         int id = current["id"].AsInt;
@@ -801,17 +814,45 @@ public class R0926HuntCard : MonoBehaviour
             if (!TryLocation(out float lat, out float lon, out _)) { Toast(R0926HuntApi.ErrorText("location", Lang), 3f); yield break; }
             b["lat"] = lat; b["lon"] = lon;
         }
-        if (what == "extend") b["minutes"] = 30;
+        string prevEnd = null;
+        if (what == "extend")
+        {
+            b["minutes"] = minutes;
+            // 누르자마자 남은 시간을 늘려 그린다 — 서버가 거절하면 되돌린다
+            prevEnd = current["ends_at"];
+            var end = When(current["ends_at"]);
+            if (end.HasValue)
+            {
+                current["ends_at"] = end.Value.AddMinutes(minutes).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+                PaintDetail();
+            }
+        }
         busy = true;
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Post("/api/hunts/" + id + "/" + what, b, (c, r) => { code = c; j = r; });
         busy = false;
+        bool same = current != null && current["id"].AsInt == id;
+        if (what == "extend")
+        {
+            if (code == 200)
+            {
+                if (same && j.HasKey("ends_at")) { current["ends_at"] = j["ends_at"]; PaintDetail(); StartCoroutine(ReloadDetail(id)); }   // 소식 줄('1시간 늘었어요')까지 — 보던 자리는 그대로
+                Toast(minutes % 1440 == 0 ? T(minutes / 1440 + "일 늘렸어요", "Extended by " + minutes / 1440 + (minutes == 1440 ? " day" : " days"))
+                                          : T(minutes / 60 + "시간 늘렸어요", "Extended by " + minutes / 60 + (minutes == 60 ? " hour" : " hours")), 2.5f);
+            }
+            else
+            {
+                if (same && prevEnd != null) { current["ends_at"] = prevEnd; PaintDetail(); }
+                Toast(j["error"] == "duration" ? T("최대 " + j["max_min"].AsInt / 1440 + "일까지만 늘릴 수 있어요", "Up to " + j["max_min"].AsInt / 1440 + " days in total")
+                                               : R0926HuntApi.ErrorText(j["error"], Lang), 3f);
+            }
+            yield break;
+        }
         if (code == 200)
         {
             Toast(what == "join" ? T("참가했어요! 보물 근처에 가 보세요", "Joined! Head to the treasure")
                 : what == "leave" ? T("나왔어요 — 이 게임 알림은 더 오지 않아요", "Left — no more alerts from this game")
                 : what == "giveup" ? T("못 찾았다고 남겼어요", "Marked as not found")
-                : what == "extend" ? T("30분 늘렸어요", "Extended by 30 min")
                 : what == "end" ? T("게임을 마쳤어요", "Game ended")
                 : T("위치를 공개했어요", "Location revealed"), 2.5f);
             if (what == "leave") { R0926HuntTreasure.Untrack(id); ShowHub(); }

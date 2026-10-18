@@ -71,7 +71,7 @@ namespace Redesign0926
                 trt.anchorMin = new Vector2(i / (float)n, 0); trt.anchorMax = new Vector2((i + 1) / (float)n, 1); trt.pivot = new Vector2(0.5f, 0.5f);
                 trt.offsetMin = new Vector2(6, 6); trt.offsetMax = new Vector2(-6, -6);
                 var lb = FindOrCreate(tab.transform, "Label0926");
-                tabLabels[i] = Txt(lb, UploadTabWords[i][0], 36, i == index ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                tabLabels[i] = Txt(lb, UploadTabWords[i][0], 44, i == index ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);   // '분류' 글자와 같은 크기 (10-17 대표님)
                 var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
                 Loc(lb, UploadTabWords[i][0], UploadTabWords[i][1], UploadTabWords[i][2], UploadTabWords[i][3], UploadTabWords[i][4]);
                 var b = Ensure<Button>(tab);

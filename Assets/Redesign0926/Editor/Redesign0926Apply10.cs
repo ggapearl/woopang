@@ -659,6 +659,10 @@ namespace Redesign0926
             so.FindProperty("mirrorInput").objectReferenceValue = input;
             so.FindProperty("mirrorPlaceholder").objectReferenceValue = input != null ? input.placeholder as Text : null;
             so.FindProperty("closeButton").objectReferenceValue = send;
+            // 보내기 칸(보물찾기 한마디)에선 ✓ 대신 보내기 화살표로 바꿔 그린다
+            var icon = send != null ? send.transform.Find("Icon0926") : null;
+            so.FindProperty("closeIcon").objectReferenceValue = icon != null ? icon.GetComponent<Image>() : null;
+            so.FindProperty("sendSprite").objectReferenceValue = Spr("r0926_arrow_short");
             so.FindProperty("mirrorRect").objectReferenceValue = (RectTransform)bar;
             var src = so.FindProperty("sourceInputs");
             bool empty = src.arraySize == 0;

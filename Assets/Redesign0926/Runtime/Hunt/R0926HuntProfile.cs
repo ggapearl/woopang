@@ -695,11 +695,14 @@ public class R0926HuntProfile : MonoBehaviour
         return null;
     }
 
+    // 분은 올림 — 방금 만들거나 늘린 게임이 '1시간 59분'이 아니라 '2시간'으로 보이게. 10시간 안쪽은 분까지
     private static string Span(TimeSpan s)
     {
-        if (s.TotalMinutes < 60) return Mathf.Max(1, Mathf.CeilToInt((float)s.TotalMinutes)) + T("분", "m");
-        if (s.TotalHours < 48) return Mathf.FloorToInt((float)s.TotalHours) + T("시간", "h");
-        return Mathf.FloorToInt((float)s.TotalDays) + T("일", "d");
+        int m = Mathf.Max(1, Mathf.CeilToInt((float)s.TotalMinutes));
+        if (m < 60) return m + T("분", "m");
+        if (m < 600) return m / 60 + T("시간", "h") + (m % 60 > 0 ? " " + m % 60 + T("분", "m") : "");
+        if (m < 2880) return (m + 30) / 60 + T("시간", "h");
+        return m / 1440 + T("일", "d");
     }
 
     // 며칠 전 — 날짜(달력) 기준. ago 면 '전'을 붙인다 ('마지막' 칸은 '3일'만)

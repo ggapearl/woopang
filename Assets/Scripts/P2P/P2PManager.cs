@@ -865,18 +865,19 @@ public class P2PManager : MonoBehaviour
         // 필터 모드가 None이면 모든 아바타 완전히 숨김 (인디케이터 포함)
         if (userFilterMode == UserFilterMode.None)
         {
-            foreach (var avatarObj in activeUserAvatars.Values)
+            // 사본으로 돈다 — 숨기는 중에 아바타가 들어오고 나가면 원본이 바뀌어 'Collection was modified' 로 꺼졌다 (2026-10-17 오류 보고)
+            foreach (var avatarObj in activeUserAvatars.Values.ToList())
             {
-                SetAvatarCompletelyHidden(avatarObj, true);
+                if (avatarObj != null) SetAvatarCompletelyHidden(avatarObj, true);
             }
             Log("P2P filter set to None - all avatars hidden completely");
             return;
         }
 
         // 필터 모드가 None에서 변경된 경우, 완전 숨김 해제 먼저 수행
-        foreach (var avatarObj in activeUserAvatars.Values)
+        foreach (var avatarObj in activeUserAvatars.Values.ToList())
         {
-            SetAvatarCompletelyHidden(avatarObj, false);
+            if (avatarObj != null) SetAvatarCompletelyHidden(avatarObj, false);
         }
 
         // 필터에 맞지 않는 아바타 제거
@@ -890,12 +891,12 @@ public class P2PManager : MonoBehaviour
         }
 
         // 기존 아바타 가시성 업데이트 (3D 렌더러만 - 거리 기준)
-        foreach (var kvp in activeUserAvatars)
+        foreach (var kvp in activeUserAvatars.ToList())
         {
             string userId = kvp.Key;
             GameObject avatarObj = kvp.Value;
 
-            if (nearbyUsersData.ContainsKey(userId))
+            if (avatarObj != null && nearbyUsersData.ContainsKey(userId))
             {
                 NearbyUserData userData = nearbyUsersData[userId];
 
@@ -909,7 +910,7 @@ public class P2PManager : MonoBehaviour
         }
 
         // 필터 모드 변경으로 새로 보여야 할 사용자 추가
-        foreach (var kvp in nearbyUsersData)
+        foreach (var kvp in nearbyUsersData.ToList())
         {
             string userId = kvp.Key;
             NearbyUserData userData = kvp.Value;

@@ -367,6 +367,7 @@ public class MobileKeyboardHandler : MonoBehaviour
         if (!keyboardLogicallyActive) return;
         if (targetInputField == null) return;
         if (refocusCooldown > 0) return;
+        if (OtherInputSelected()) return;   // 다른 입력칸으로 옮겨 갔다 — 다음 Update 에서 놓는다
 
         // 포커스 손실 시 즉시 재포커스 — 키보드 깜빡임 방지
         if (!targetInputField.isFocused)
@@ -451,9 +452,23 @@ public class MobileKeyboardHandler : MonoBehaviour
         float kbH = GetKeyboardHeightInCanvasPixels();
         bool inputFocused = targetInputField != null && targetInputField.isFocused;
 
+        // 다른 입력칸이 키보드를 쓰는 중 (보물찾기·장소 추가 입력줄 등) — 내 칸은 놓는다.
+        // 예전엔 어느 칸의 키보드든 올라오면 내 것으로 알고 0.15초마다 이 칸을 다시 잡아,
+        // 뒤에 열려 있던 대화창이 보물찾기 제목·힌트에 친 글을 가로챘다 (2026-10-14 안드로이드)
+        if (OtherInputSelected())
+        {
+            if (keyboardLogicallyActive) ReleaseToOtherInput();
+            return;
+        }
+
         // ── 키보드 높이 > 0 감지됨 ──
         if (kbH > 0)
         {
+#if UNITY_EDITOR
+            if (!keyboardLogicallyActive && !inputFocused && !editorPreviewActive) return;   // 내 칸이 연 키보드가 아니다
+#else
+            if (!keyboardLogicallyActive && !inputFocused) return;   // 내 칸이 연 키보드가 아니다
+#endif
             lastKbHeight = kbH;
             lastKbHeightTime = Time.time;
             kbGoneStartTime = 0;
@@ -513,6 +528,24 @@ public class MobileKeyboardHandler : MonoBehaviour
     // ============================================================
     // Keyboard Dismiss — 깨끗한 정리
     // ============================================================
+
+    private bool OtherInputSelected()
+    {
+        var es = EventSystem.current;
+        var sel = es != null ? es.currentSelectedGameObject : null;
+        if (sel == null || targetInputField == null || sel == targetInputField.gameObject) return false;
+        return sel.GetComponent<InputField>() != null;
+    }
+
+    private void ReleaseToOtherInput()
+    {
+        if (persistentInput != null) persistentInput.lockFocus = false;
+        keyboardLogicallyActive = false;
+        kbGoneStartTime = 0;
+        needsScrollToBottom = false;
+        if (targetInputField != null && targetInputField.isFocused) targetInputField.DeactivateInputField();
+        SetCollapsedTargets();
+    }
 
     private void DismissKeyboardCleanly()
     {

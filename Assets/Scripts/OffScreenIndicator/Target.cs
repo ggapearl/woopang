@@ -10,6 +10,9 @@ public class Target : MonoBehaviour
     /// </summary>
     [HideInInspector] public Action OnIndicatorTapped;
 
+    /// <summary>인디케이터 둘레에 별빛이 반짝인다 (보물찾기 보물)</summary>
+    [HideInInspector] public bool Sparkle;
+
     [Tooltip("This color will be set by the server data")]
     [SerializeField] private Color targetColor = Color.white;
 

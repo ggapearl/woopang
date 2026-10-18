@@ -174,8 +174,8 @@ MonoBehaviour:
   autoRotate: 1
   rotateSpeedY: 24
   rotateSpeedX: 0
-  enableFloat: 1
-  floatAmplitude: 0.12
+  enableFloat: 0
+  floatAmplitude: 0
   floatSpeed: 1.5
   baseColor: {r: 0.83, g: 0.69, b: 0.22, a: 1}
   glowColor: {r: 1, g: 0.85, b: 0.4, a: 1}
@@ -202,6 +202,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 411060de4483b5e4c9847cd3cbc18554, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Target
+  Sparkle: 0
   targetColor: {r: 0.91, g: 0.749, b: 0.31, a: 1}
   needBoxIndicator: 1
   needArrowIndicator: 1

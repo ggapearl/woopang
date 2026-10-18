@@ -40,12 +40,22 @@ public class UploadInputMirror : MonoBehaviour
     [Header("backdrop (자동 생성) — 미러 영역 밖 터치 차단")]
     [SerializeField] private bool createBackdrop = true;
 
+    [Header("보내기 칸 (보물찾기 한마디 등) — 버튼이 ✓ 대신 보내기")]
+    [SerializeField] private Image closeIcon;
+    [SerializeField] private Sprite sendSprite;
+
     private RectTransform canvasRect;
     private InputField activeSource;
     private bool initialized;
     private bool syncing;
     private bool closing;              // 닫는 중 — 키보드가 내려가며 되돌린 글은 원래 칸에 옮기지 않는다
     private string lastTyped = "";     // 키보드가 떠 있는 동안 마지막으로 쓴 글
+    private bool submitRequested;      // 키보드의 완료·엔터
+    private Sprite checkSprite;
+    private MirrorButtonPress closePress;   // 버튼을 누르는 순간 입력칸이 포커스를 잃어 키보드가 먼저 내려간다 — 그 사이 저절로 닫히지 않게
+    private TouchScreenKeyboard lastKb;
+    private readonly System.Collections.Generic.Dictionary<InputField, System.Action> submitActions =
+        new System.Collections.Generic.Dictionary<InputField, System.Action>();
 
     private GameObject backdrop;
     private bool keyboardActive;
@@ -73,9 +83,22 @@ public class UploadInputMirror : MonoBehaviour
     void OnDisable()
     {
         if (closeButton != null) closeButton.onClick.RemoveListener(OnCloseClicked);
-        if (mirrorInput != null) mirrorInput.onValueChanged.RemoveListener(OnMirrorTextChanged);
+        if (mirrorInput != null)
+        {
+            mirrorInput.onValueChanged.RemoveListener(OnMirrorTextChanged);
+            mirrorInput.onSubmit.RemoveListener(OnMirrorSubmit);
+        }
         DetachSourceTriggers();
         HideMirror();
+        initialized = false;   // 다시 켜지면 듣기·트리거를 다시 단다 (예전엔 끈 뒤로 ✓·입력이 먹지 않았다)
+    }
+
+    /// <summary>이 칸은 입력줄 버튼이 '완료' 가 아니라 '보내기' — 누르면(키보드 엔터도) 글을 옮기고 바로 보낸다. null 이면 해제</summary>
+    public void SetSubmitAction(InputField src, System.Action onSubmit)
+    {
+        if (src == null) return;
+        if (onSubmit == null) submitActions.Remove(src);
+        else submitActions[src] = onSubmit;
     }
 
     private void TryInitialize()
@@ -85,6 +108,7 @@ public class UploadInputMirror : MonoBehaviour
 
         var canvas = GetComponentInParent<Canvas>();
         if (canvas != null) canvasRect = canvas.GetComponent<RectTransform>();
+        if (closeIcon != null && checkSprite == null) checkSprite = closeIcon.sprite;
 
         mirrorInput.interactable = true;
         mirrorInput.readOnly = false;
@@ -92,11 +116,15 @@ public class UploadInputMirror : MonoBehaviour
 
         mirrorInput.onValueChanged.RemoveListener(OnMirrorTextChanged);
         mirrorInput.onValueChanged.AddListener(OnMirrorTextChanged);
+        mirrorInput.onSubmit.RemoveListener(OnMirrorSubmit);
+        mirrorInput.onSubmit.AddListener(OnMirrorSubmit);
 
         if (closeButton != null)
         {
             closeButton.onClick.RemoveListener(OnCloseClicked);
             closeButton.onClick.AddListener(OnCloseClicked);
+            closePress = closeButton.GetComponent<MirrorButtonPress>();
+            if (closePress == null) closePress = closeButton.gameObject.AddComponent<MirrorButtonPress>();
         }
 
         if (createBackdrop) EnsureBackdrop();
@@ -244,7 +272,10 @@ public class UploadInputMirror : MonoBehaviour
 
     private void ActivateMirrorFor(InputField source)
     {
+        ReleaseOtherInput();
         activeSource = source;
+        submitRequested = false;
+        PaintCloseIcon(submitActions.ContainsKey(source));
 
         if (backdrop != null)
         {
@@ -294,6 +325,34 @@ public class UploadInputMirror : MonoBehaviour
         closing = false;
     }
 
+    // 다른 입력칸(뒤에 열린 대화창 등)이 아직 키보드를 쥐고 있으면 먼저 놓게 한다 — 두 칸이 한 키보드를 나눠 쓰면
+    // 친 글이 그쪽으로 가거나 지워졌다 (2026-10-14 안드로이드: 보물찾기 제목·힌트가 안 들어감)
+    private void ReleaseOtherInput()
+    {
+        var es = EventSystem.current;
+        var sel = es != null ? es.currentSelectedGameObject : null;
+        var other = sel != null ? sel.GetComponent<InputField>() : null;
+        if (other == null || other == mirrorInput) return;
+        if (other is KeyboardPersistentInputField kp) kp.lockFocus = false;
+        if (other.isFocused) other.DeactivateInputField();
+    }
+
+    private void PaintCloseIcon(bool send)
+    {
+        if (closeIcon == null) return;
+        bool s = send && sendSprite != null;
+        if (checkSprite == null) checkSprite = closeIcon.sprite;
+        closeIcon.sprite = s ? sendSprite : checkSprite;
+        var rt = closeIcon.rectTransform;
+        rt.localEulerAngles = s ? new Vector3(0, 0, 180) : Vector3.zero;   // 아래 화살표를 뒤집어 보내기(위) — 채팅 입력줄과 같게
+        rt.sizeDelta = s ? new Vector2(50, 62) : new Vector2(58, 58);
+    }
+
+    private void OnMirrorSubmit(string _)
+    {
+        if (activeSource != null && !closing) submitRequested = true;
+    }
+
     private static string ExtractPlaceholderText(InputField src)
     {
         if (src == null || src.placeholder == null) return null;
@@ -313,29 +372,35 @@ public class UploadInputMirror : MonoBehaviour
         syncing = false;
     }
 
-    private void OnCloseClicked()
+    private void OnCloseClicked() => BeginClose(true);
+
+    // pressed = 입력줄 버튼을 눌렀다 (보내기 칸이면 보낸다). 키보드가 그냥 내려가면 false — 그땐 엔터로 닫혔을 때만 보낸다
+    private void BeginClose(bool pressed)
     {
         if (closing || activeSource == null) return;
-        if (!isActiveAndEnabled) { CloseNow(FinalText(null)); return; }
-        StartCoroutine(CloseRoutine());
+        if (!isActiveAndEnabled) { CloseNow(FinalText(null), activeSource, pressed || submitRequested); return; }
+        StartCoroutine(CloseRoutine(pressed));
     }
 
     // 한글은 마지막 글자가 '조합 중'이면 아직 입력칸에 안 들어와 있다 — 키보드를 먼저 내리면 그때 확정되므로
-    // 두 프레임 기다렸다가 키보드에 남은 글을 다시 읽는다
-    private IEnumerator CloseRoutine()
+    // 두 프레임 기다렸다가 키보드에 남은 글을 다시 읽는다. 닫는 사이 칸이 바뀌지 않게 처음 칸을 붙잡아 둔다
+    private IEnumerator CloseRoutine(bool pressed)
     {
         closing = true;
+        var src = activeSource;
         var kb = mirrorInput != null ? mirrorInput.touchScreenKeyboard : null;
+        if (kb == null) kb = lastKb;   // 버튼을 누르는 순간 입력칸이 먼저 놓여 키보드 손잡이가 비어 있다
         string final = FinalText(kb);
         if (mirrorInput != null && mirrorInput.isFocused) mirrorInput.DeactivateInputField();
         if (kb != null)
         {
             yield return null;
             yield return null;
-            if (kb.text != null && kb.status != TouchScreenKeyboard.Status.Canceled) final = kb.text;
+            // 닫힌 키보드의 글을 비워 주는 기기도 있다 — 빈 글로 친 글을 덮지 않는다
+            if (!string.IsNullOrEmpty(kb.text) && kb.status != TouchScreenKeyboard.Status.Canceled) final = kb.text;
         }
         closing = false;
-        CloseNow(final);
+        CloseNow(final, src, pressed || submitRequested);
     }
 
     private string FinalText(TouchScreenKeyboard kb)
@@ -344,14 +409,15 @@ public class UploadInputMirror : MonoBehaviour
         return lastTyped ?? "";
     }
 
-    private void CloseNow(string final)
+    private void CloseNow(string final, InputField src, bool submit)
     {
-        SyncMirrorToSource(final);
+        SyncMirrorToSource(final, src);
         if (mirrorInput != null && mirrorInput.isFocused)
             mirrorInput.DeactivateInputField();
         if (EventSystem.current != null)
             EventSystem.current.SetSelectedGameObject(null);
         HideMirror();
+        if (submit && src != null && submitActions.TryGetValue(src, out var send)) send?.Invoke();
     }
 
     /// <summary>
@@ -361,29 +427,30 @@ public class UploadInputMirror : MonoBehaviour
     /// - ForceLabelUpdate로 라벨 즉시 갱신
     /// - 외부 구독자(저장 버튼 등) 알림 위해 onEndEdit 명시 호출
     /// </summary>
-    private void SyncMirrorToSource(string finalText)
+    private void SyncMirrorToSource(string finalText, InputField src)
     {
-        if (activeSource == null) return;
+        if (src == null) return;
         finalText = finalText ?? "";
-        if (activeSource.characterLimit > 0 && finalText.Length > activeSource.characterLimit)
-            finalText = finalText.Substring(0, activeSource.characterLimit);
+        if (src.characterLimit > 0 && finalText.Length > src.characterLimit)
+            finalText = finalText.Substring(0, src.characterLimit);
         syncing = true;
-        bool wasEnabled = activeSource.enabled;
-        if (!wasEnabled) activeSource.enabled = true;
+        bool wasEnabled = src.enabled;
+        if (!wasEnabled) src.enabled = true;
 
-        activeSource.text = finalText;
-        activeSource.ForceLabelUpdate();
+        src.text = finalText;
+        src.ForceLabelUpdate();
 
-        if (!wasEnabled) activeSource.enabled = false;
+        if (!wasEnabled) src.enabled = false;
         syncing = false;
 
         // 외부 코드가 onEndEdit을 구독했을 경우 알림 (예: 업로드 매니저 저장 흐름)
-        activeSource.onEndEdit?.Invoke(finalText);
+        src.onEndEdit?.Invoke(finalText);
     }
 
     private void HideMirror()
     {
         activeSource = null;
+        lastKb = null;
         keyboardActive = false;
         mirrorActivatedAt = -1f;
         if (mirrorPanel != null) mirrorPanel.SetActive(false);
@@ -435,6 +502,7 @@ public class UploadInputMirror : MonoBehaviour
         }
 
         if (mirrorPanel == null || !mirrorPanel.activeSelf) return;
+        if (mirrorInput.touchScreenKeyboard != null) lastKb = mirrorInput.touchScreenKeyboard;
 
         // 미러 활성 중에는 SwipeController 매 프레임 강제 비활성
         if (cachedSwipeControllers != null)
@@ -461,9 +529,9 @@ public class UploadInputMirror : MonoBehaviour
         bool kbUp = kbCanvas > 0f;
 
         if (kbUp) keyboardActive = true;
-        else if (keyboardActive && !inGrace)
+        else if (keyboardActive && !inGrace && (closePress == null || !closePress.Down))
         {
-            OnCloseClicked();
+            BeginClose(false);
         }
     }
 
@@ -558,6 +626,15 @@ public class UploadInputMirror : MonoBehaviour
         return 0f;
 #endif
     }
+}
+
+/// <summary>입력줄 버튼을 누르고 있는 중인지 — 떼는 순간 클릭이 먼저 오고, 끌어서 벗어나면 그냥 풀린다</summary>
+public class MirrorButtonPress : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
+{
+    public bool Down { get; private set; }
+    public void OnPointerDown(PointerEventData e) { Down = true; }
+    public void OnPointerUp(PointerEventData e) { Down = false; }
+    void OnDisable() { Down = false; }
 }
 
 /// <summary>

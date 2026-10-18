@@ -16,6 +16,8 @@ public class R0926IndicatorClose : MonoBehaviour
     [SerializeField] private Sprite boxCut;    // 오른쪽 위 꺾쇠를 뺀 박스
     [Tooltip("'삭제' 알약 (9-slice)")]
     [SerializeField] private Sprite pill;
+    [Tooltip("보물찾기 보물의 화살표·박스 둘레 별빛 (Target.Sparkle)")]
+    [SerializeField] private Sprite glint;
     [SerializeField] private bool showToast = true;
 
     [Header("숨긴 뒤 '되돌리기' 알림 (Apply 가 만든다 — 비어 있으면 예전 토스트)")]
@@ -36,6 +38,7 @@ public class R0926IndicatorClose : MonoBehaviour
         Indicator.CloseIcon = icon;
         Indicator.CornerCutBox = boxCut;
         Indicator.ClosePill = pill;
+        Indicator.GlintSprite = glint;
         Indicator.LabelsSwapped = true;
         Indicator.CloseButtonEnabled = R0926PlaceSettings.RemoveButton;
         HiddenPlaces.Hidden += OnHidden;

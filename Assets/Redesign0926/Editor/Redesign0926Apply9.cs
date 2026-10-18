@@ -61,6 +61,7 @@ namespace Redesign0926
             {
                 var so = new SerializedObject(close);
                 so.FindProperty("pill").objectReferenceValue = Spr("r0926_pill");
+                so.FindProperty("glint").objectReferenceValue = Spr("r0926_glint");   // 보물찾기 보물 인디케이터 별빛
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             // 아래쪽 안전영역: 아이폰은 홈 막대 쪽으로 조금 내린다 (도크·창·칩이 함께 — 사이 간격 유지)

@@ -60,6 +60,15 @@ public class Indicator : MonoBehaviour
     private CanvasGroup closeGroup;
     private Vector2 closeXCenter;                // 누르는 영역 안에서 X 가운데 (캔버스 단위)
 
+    // ── 반짝임 (Target.Sparkle — 보물찾기 보물) — 화살표·박스 둘레에서 별빛 셋이 엇갈려 반짝인다
+    public static Sprite GlintSprite;            // 네 갈래 흰 별빛 (R0926IndicatorClose 가 넣는다)
+    private static readonly Vector2[] GlintSpots = { new Vector2(0.8f, 0.74f), new Vector2(-0.86f, 0.16f), new Vector2(0.22f, -0.9f) };
+    private static readonly float[] GlintSizes = { 1f, 0.72f, 0.56f };
+    private const float GlintPeriod = 1.4f;
+    private RectTransform[] glints;
+    private Image[] glintImgs;
+    private bool sparkleOn;
+
     public bool Active
     {
         get
@@ -269,6 +278,7 @@ public class Indicator : MonoBehaviour
 
     private void LateUpdate()
     {
+        UpdateSparkle();
         if (indicatorType != IndicatorType.BOX) return;
         SwapLabels(LabelsSwapped);
 
@@ -307,6 +317,55 @@ public class Indicator : MonoBehaviour
         var bc = indicatorImage.color;   // 박스 색 그대로 (분류 색)
         closeXImg.color = new Color(bc.r, bc.g, bc.b, bc.a * (1f - Smooth(closeK)));
         AnimateCloseConfirm(c);
+    }
+
+    private void UpdateSparkle()
+    {
+        bool want = GlintSprite != null && ownerTarget != null && ownerTarget.Sparkle;
+        if (want != sparkleOn) SetSparkle(want);
+        if (!sparkleOn) return;
+
+        float s = transform.localScale.x;
+        if (s <= 0.0001f) return;
+        var rect = ((RectTransform)transform).rect;
+        float half = Mathf.Max(rect.width, rect.height) * 0.5f;            // 자기 단위
+        float size = Mathf.Clamp(half * 2f * s * 0.42f, 52f, 92f);        // 캔버스 단위 (≈ 16~28pt)
+        float t = Time.unscaledTime;
+        for (int i = 0; i < glints.Length; i++)
+        {
+            // 셋이 엇갈려 켜졌다 꺼진다 — 켜지는 동안 살짝 돌며 커진다
+            float ph = Mathf.Repeat(t / GlintPeriod + i / (float)glints.Length, 1f);
+            float k = Mathf.Sin(ph * Mathf.PI);
+            k *= k;
+            var g = glints[i];
+            g.localPosition = GlintSpots[i] * (half + 6f / s);
+            g.sizeDelta = Vector2.one * size * GlintSizes[i];
+            g.localScale = Vector3.one * ((0.35f + 0.65f * k) / s);
+            g.rotation = Quaternion.Euler(0f, 0f, 40f * ph - 20f);         // 화살표가 돌아도 별빛은 똑바로
+            glintImgs[i].color = new Color(1f, 0.94f, 0.7f, k);
+        }
+    }
+
+    private void SetSparkle(bool on)
+    {
+        sparkleOn = on;
+        if (on && glints == null)
+        {
+            glints = new RectTransform[GlintSpots.Length];
+            glintImgs = new Image[GlintSpots.Length];
+            for (int i = 0; i < glints.Length; i++)
+            {
+                var go = new GameObject("Glint" + i, typeof(RectTransform), typeof(Image));
+                glints[i] = (RectTransform)go.transform;
+                glints[i].SetParent(transform, false);
+                glintImgs[i] = go.GetComponent<Image>();
+                glintImgs[i].sprite = GlintSprite;
+                glintImgs[i].raycastTarget = false;
+                glintImgs[i].color = new Color(1f, 0.94f, 0.7f, 0f);
+            }
+        }
+        if (glints == null) return;
+        foreach (var g in glints) g.gameObject.SetActive(on);
     }
 
     private void SwapLabels(bool on)
@@ -473,6 +532,7 @@ public class Indicator : MonoBehaviour
     {
         isFirstActivation = true;
         ownerTarget = null;
+        if (sparkleOn) SetSparkle(false);
 
         // 페이드인 중이었다면 중단
         if (fadeCoroutine != null)

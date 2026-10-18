@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Networking;
-using UnityEngine.InputSystem;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -128,6 +127,10 @@ public class MessagePanelManager : MonoBehaviour
     private int lastChatMessageId;
     private readonly HashSet<int> renderedMessageIds = new HashSet<int>();
     private Coroutine chatPollCoroutine;
+    // 보내는 중인 내 말풍선 — 서버는 저장한 뒤 알림까지 보내고서야 답을 준다. 그 사이 새 메시지 확인이
+    // 같은 말을 먼저 받아 와 말풍선이 둘 그려졌다 (2026-10-17 안드로이드 '내 메세지가 2개'). 그 말이면 있는 말풍선을 쓴다
+    private class PendingSend { public string content; public GameObject bubble; public bool adopted; }
+    private readonly List<PendingSend> pendingSends = new List<PendingSend>();
 
     [Header("=== 폰트 설정 ===")]
     [Tooltip("채팅용 커스텀 폰트 (AppleSDGothicNeoM) - 프리팹에 폰트 없을 때 사용")]
@@ -608,7 +611,9 @@ public class MessagePanelManager : MonoBehaviour
         if (searchInput != null)
         {
             searchInput.onValueChanged.AddListener(OnSearchInputChanged);
-            searchInput.onEndEdit.AddListener(OnSearchSubmit);
+            // 키패드 엔터(완료)로 바로 검색 — 예전 onEndEdit 은 포커스만 잃어도 불려 걸러 냈는데, 휴대폰 엔터도
+            // 키보드가 닫힌 뒤에 와 같이 걸러졌다 → 돋보기를 다시 눌러야 했다 (2026-10-16)
+            searchInput.onSubmit.AddListener(OnSearchSubmit);
         }
     }
 
@@ -1632,6 +1637,16 @@ public class MessagePanelManager : MonoBehaviour
             CreateConversationItem(conv);
         }
         ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), conversations.Count == 0);
+    }
+
+    // 새로 깐 앱은 읽음 시각이 비어 있어 지난 공지 전부(서버가 주는 최대 50개)가 안 읽음으로 잡혔다 (2026-10-17).
+    // 처음 켤 때 일주일 전을 읽은 시각으로 둔다 — 그 뒤에 온 공지만 새 공지로 센다
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void SeedAdminBroadcastReadTime()
+    {
+        if (!string.IsNullOrEmpty(PlayerPrefs.GetString("AdminBroadcastLastReadTime", ""))) return;
+        PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.AddDays(-7).ToString("yyyy-MM-dd HH:mm:ss"));
+        PlayerPrefs.Save();
     }
 
     /// <summary>
@@ -2924,6 +2939,7 @@ public class MessagePanelManager : MonoBehaviour
         int ver = ++chatLoadVersion;
         chatLoading = true;
         renderedMessageIds.Clear();
+        pendingSends.Clear();   // 말풍선을 다 지우고 서버 것으로 다시 그린다
         lastChatMessageId = 0;
         ClearContent(chatMessageContent);
         ShowChatEmptyState(false); // 기존 빈 상태 제거
@@ -3129,6 +3145,7 @@ public class MessagePanelManager : MonoBehaviour
                 if (msg.id > lastChatMessageId) lastChatMessageId = msg.id;
                 if (!renderedMessageIds.Add(msg.id)) continue;   // 이미 그린 것 (내가 방금 보낸 것 포함)
                 bool isMine = msg.sender_id == userId || msg.is_mine;
+                if (isMine && AdoptPendingSend(msg)) continue;   // 아직 답이 안 온 내 말 — 말풍선은 이미 있다
                 CheckAndCreateDateSeparator(msg.created_at);
                 CreateMessageBubble(msg, isMine);
                 added = true;
@@ -3156,6 +3173,20 @@ public class MessagePanelManager : MonoBehaviour
                 yield return AppendNewChatMessages(otherUserId);
         }
         chatPollCoroutine = null;
+    }
+
+    private bool AdoptPendingSend(DMMessage msg)
+    {
+        string content = (msg.content ?? "").Trim();
+        foreach (var p in pendingSends)
+        {
+            if (p.adopted || p.bubble == null || p.content != content) continue;
+            p.adopted = true;
+            var readText = p.bubble.transform.Find("ReadText")?.GetComponent<Text>();
+            if (readText != null) readText.text = "✓";
+            return true;
+        }
+        return false;
     }
 
     private void CreateMessageBubble(DMMessage msg, bool isMine)
@@ -3651,6 +3682,7 @@ public class MessagePanelManager : MonoBehaviour
 
         // 선처리: 즉시 내 메시지 버블 표시
         GameObject optimisticBubble = AddOptimisticMyBubble(content);
+        if (optimisticBubble != null) pendingSends.Add(new PendingSend { content = content, bubble = optimisticBubble });
 
         StartCoroutine(SendMessageCoroutine(currentChatUserId, content, optimisticBubble));
     }
@@ -3719,6 +3751,10 @@ public class MessagePanelManager : MonoBehaviour
 
             yield return request.SendWebRequest();
 
+            int pi = optimisticBubble != null ? pendingSends.FindIndex(p => p.bubble == optimisticBubble) : -1;
+            bool adopted = pi >= 0 && pendingSends[pi].adopted;   // 새 메시지 확인이 먼저 받아 왔다 = 서버엔 저장됐다
+            if (pi >= 0) pendingSends.RemoveAt(pi);
+
             if (request.result == UnityWebRequest.Result.Success)
             {
                 // 서버가 붙인 번호를 기억해 새 메시지 확인 때 같은 말풍선이 또 붙지 않게.
@@ -3743,8 +3779,8 @@ public class MessagePanelManager : MonoBehaviour
             {
                 Debug.LogError($"[MessagePanel] Failed to send: {request.error}");
 
-                // 전송 실패: 선처리 버블 제거
-                if (optimisticBubble != null)
+                // 전송 실패: 선처리 버블 제거 (답만 늦어 끊긴 것이고 이미 저장된 말이면 남긴다)
+                if (optimisticBubble != null && !adopted)
                     Destroy(optimisticBubble);
             }
         }
@@ -4003,16 +4039,10 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private void OnSearchSubmit(string query)
     {
-        // 포커스 손실로 onEndEdit이 호출된 경우 무시 (wasCanceled 또는 텍스트가 비었을 때)
         if (searchInput != null && searchInput.wasCanceled)
             return;
 
-        // InputField가 포커스를 잃었을 때 호출되는 경우 무시
-        // Enter로 submit된 경우에만 서버 검색 실행
-        if (searchInput != null && !searchInput.isFocused &&
-            (Keyboard.current == null || !Keyboard.current.enterKey.wasPressedThisFrame))
-            return;
-
+        query = query?.Trim();
         if (string.IsNullOrEmpty(query))
             return;
 
