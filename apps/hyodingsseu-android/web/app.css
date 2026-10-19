@@ -417,16 +417,28 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .pitem.hold .dthumb.ph{color:var(--ink-2);background:var(--surface-2)}
 .pitem.approved .dthumb.ph{color:var(--navy);background:var(--navy-soft)}
 .pitem.rejected .dthumb.ph{color:var(--ink-3);background:var(--surface-2)}
+.pitem.revised .dthumb.ph{color:var(--ink-3);background:var(--surface-2)}
 .pst{font-weight:700;color:var(--pink-deep)}
 .pitem.hold .pst{color:var(--ink-2)}
 .pitem.approved .pst{color:var(--navy)}
 .pitem.rejected .pst{color:var(--ink-3)}
+.pitem.revised .pst{color:var(--ink-3)}
 .pbody{padding:0 14px 14px}
 .pbody h4{margin:12px 0 3px;font-size:12px;font-weight:700;color:var(--ink-3)}
 .pbody p{margin:0;font-size:15px;line-height:1.6;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
 .pact{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;margin-top:16px}
 .pact .btn{min-height:44px}
 .pdone{margin-top:10px;font-size:12px;color:var(--ink-3)}
+/* 승인함 「의견」 (2026-10-19) — 남긴 의견 · 아래에서 올라오는 입력 창 */
+.pcmt{margin:2px 0 6px;padding:8px 12px;border-radius:12px;background:var(--surface-2);font-size:15px;line-height:1.55;color:var(--ink);
+  white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
+.pcmt small{display:block;font-size:12px;color:var(--ink-3);margin-bottom:1px}
+.sheet p.note-of{font-weight:600;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.note-ta{display:block;width:100%;box-sizing:border-box;min-height:96px;max-height:132px;resize:none;border:1.5px solid var(--line);border-radius:14px;
+  background:var(--ground);color:var(--ink);padding:10px 14px;line-height:22px;outline:none;overflow-y:hidden}
+.note-ta:focus{border-color:var(--navy)}
+.note-ta::placeholder{color:var(--ink-3)}
+.sheet p.note-hint{font-size:12px;color:var(--ink-3)}
 
 /* 사진·영상 보기 (2026-10-04) — 사진이 잘 보이게 늘 검은 바탕 */
 .viewer{position:absolute;top:0;right:0;bottom:0;left:0;z-index:38;background:#000;color:#fff;display:flex;flex-direction:column;

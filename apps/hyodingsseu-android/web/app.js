@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-19b';
+  const WEB_VERSION = '2026-10-19c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2495,12 +2495,14 @@
 
   // ── 승인함 (ApprView — 2026-10-12, PC 창 승인함과 같은 틀. 제안을 펼쳐 읽고 그 자리에서 결정) ──
   const APPR_ST = [['pending', '대기'], ['hold', '보류'], ['approved', '승인'], ['rejected', '거절'], ['all', '전체']];
-  const APPR_WORD = { pending: '대기', hold: '보류', approved: '승인', rejected: '거절' };
+  const APPR_WORD = { pending: '대기', hold: '보류', approved: '승인', rejected: '거절', revised: '수정' };
   const APPR_DONE = { approved: '승인했어요 — 할 일 보드에 올리고 효딩쓰가 대화에서 바로 시작합니다',
-    hold: '보류해 두었어요 — 「보류」에서 다시 볼 수 있어요', rejected: '거절했어요' };
+    hold: '보류해 두었어요 — 「보류」에서 다시 볼 수 있어요', rejected: '거절했어요',
+    revised: '대표님 의견대로 고친 제안으로 바뀌었어요 — 새 제안에서 결정해 주세요' };
 
   function openAppr() {
     let status = 'pending', q = '', items = [], counts = {}, total = 0, open = '', loading = false, loaded = false, alive = true, seqN = 0, searchTimer = 0;
+    const drafts = {};                 // 제안별로 적다 만 의견 — 창을 닫았다 열어도 남게
 
     const totalEl = h('div', { class: 'doc-total' });
     const chipsEl = h('div', { class: 'doc-chips' });
@@ -2539,17 +2541,24 @@
       [['왜 (근거)', it.why], ['무엇을', it.how], ['대표님이 하실 것', it.needs], ['메모', it.note]].forEach(([t, v]) => {
         if (v) body.append(h('h4', { text: t }), h('p', null, linkified(String(v))));      // 제안 글 속 주소도 눌러 열린다 — 문서 전체 누름 처리기가 openLink 로 연다
       });
+      if ((it.comments || []).length) {
+        body.append(h('h4', { text: '대표님 의견' }));
+        it.comments.forEach(c => body.append(h('div', { class: 'pcmt' }, h('small', { text: dayLabel(c.ts) + ' ' + timeOnly(c.ts) }), String(c.text || ''))));
+      }
       if (st === 'pending' || st === 'hold') {
         const act = h('div', { class: 'pact' });
-        [['ok', '승인', 'btn'], ['hold', '보류', 'btn ghost'], ['no', '거절', 'btn no']].forEach(([dec, label, cls]) => {
+        [['ok', '승인', 'btn'], ['note', '의견', 'btn ghost'], ['hold', '보류', 'btn ghost'], ['no', '거절', 'btn no']].forEach(([dec, label, cls]) => {
           if (st === 'hold' && dec === 'hold') return;
-          act.append(h('button', { class: cls, text: label, onclick: () => decide(it, dec, act) }));
+          act.append(h('button', { class: cls, text: label, onclick: () => (dec === 'note' ? noteSheet(it) : decide(it, dec, act)) }));
         });
         body.append(act);
+      } else if (st === 'revised') {
+        body.append(h('div', { class: 'pdone', text: '대표님 의견대로 고친 제안' + (it.revised_to ? ' ' + it.revised_to : '') + ' 로 바뀌었어요 — 새 제안에서 결정해 주세요' }));
       } else {
         body.append(h('div', { class: 'pdone', text: (APPR_WORD[st] || st) + '했습니다' + (it.decided ? ' · ' + dayLabel(it.decided) + ' ' + timeOnly(it.decided) : '')
-          + (st === 'approved' ? ' — 할 일 보드에 올라 있어요' : '') }));
+          + (st === 'approved' ? (it.decided_by === '의견' ? ' — 대표님 의견대로 효딩쓰가 승인 처리, 할 일 보드에 올라 있어요' : ' — 할 일 보드에 올라 있어요') : '') }));
       }
+      if (it.replaces) body.append(h('div', { class: 'pdone', text: '제안 ' + it.replaces + ' 을 대표님 의견대로 고친 제안이에요' }));
       body.append(h('div', { class: 'pdone', text: '제안 번호 ' + it.id }));
       wrap.append(body);
       return wrap;
@@ -2606,6 +2615,50 @@
         return;
       }
       if (alive) load();
+    }
+
+    /** 의견 — 이 제안에 대한 대표님 말을 효딩쓰에게(10-19). 효딩쓰가 읽고 고친 제안을 다시 올리거나 말씀대로 진행한다 */
+    function noteSheet(it) {
+      haptic('tap');
+      const ta = h('textarea', { class: 'note-ta', rows: '3', maxlength: '2000', 'aria-label': '의견',
+        placeholder: '예) 이 부분은 이렇게 바꿔서 다시 올려 줘 / 좋아, 이대로 진행해',
+        oninput: () => { drafts[it.id] = ta.value; sendBtn.disabled = !ta.value.trim(); grow(ta); } });
+      ta.value = drafts[it.id] || '';
+      const sendBtn = h('button', { class: 'btn wide', text: '효딩쓰에게 보내기', onclick: () => submit() });
+      sendBtn.disabled = !ta.value.trim();
+      const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (ev.target === scrim) close(); } },
+        h('div', { class: 'sheet note-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '의견' },
+          h('h3', { text: '의견' }),
+          h('p', { class: 'note-of', text: it.title || '' }),
+          ta,
+          h('p', { class: 'note-hint', text: '효딩쓰가 읽고 고친 제안을 다시 올리거나, 말씀대로 진행합니다' }),
+          sendBtn,
+          h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() })));
+      const close = layer(() => scrim.remove());
+      $('#app').append(scrim);
+      grow(ta);
+      ta.focus();                      // 누른 그 자리에서 — 아이폰은 손가락으로 누른 동안에만 키보드를 띄운다
+
+      async function submit() {
+        const text = ta.value.trim();
+        if (!text) return;
+        sendBtn.disabled = true;
+        ta.disabled = true;
+        haptic('tap');
+        try {
+          const r = await api.post('proposals/comment', { id: it.id, text });
+          if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(r.counts.pending);
+        } catch (e) {
+          show(e);
+          sendBtn.disabled = false;
+          ta.disabled = false;
+          return;
+        }
+        delete drafts[it.id];
+        close();
+        toast('의견을 보냈어요 — 효딩쓰가 대화에서 답합니다');
+        if (alive) load();
+      }
     }
 
     pushPage('승인함', content, () => { alive = false; }, { close: true });
