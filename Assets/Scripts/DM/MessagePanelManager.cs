@@ -930,7 +930,7 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private void RefreshConversationUI()
     {
-        if (conversationListContent == null) return;
+        if (conversationListContent == null || ShowingSearch) return;
 
         // 모든 기존 아이템 삭제 후 한 번만 그린다
         ClearContent(conversationListContent);
@@ -953,13 +953,24 @@ public class MessagePanelManager : MonoBehaviour
         HideAllPanels();
     }
 
+    /// <summary>
+    /// 다른 화면(보물찾기 상세)으로 넘어갈 때 — 대화방·메시지 목록을 움직임 없이 바로 닫는다.
+    /// 뒤로가기로 닫으면 대화방이 옆으로 빠지는 사이 목록이 다시 켜져 상세 위에 남았다 (10-13 대표님).
+    /// 프로필 뒤에 숨겨 둔 대화방도 정리해 프로필이 닫힐 때 되살아나지 않게 한다
+    /// </summary>
+    public void CloseAway()
+    {
+        if (profileOpenedFromChatRoom || (chatRoomPanel != null && chatRoomPanel.activeSelf)) LeaveChatRoom();
+        if (messagePanel != null && messagePanel.activeSelf && closeButton != null) closeButton.onClick.Invoke();   // 도크 X 와 같은 길로 닫는다
+    }
+
     #region System Notification (시스템 알림 - DM과 통합)
 
     /// <summary>
     /// FCM 푸시로 수신된 시스템 알림 추가 (DM 목록에 통합, 로그인 없이도 저장)
     /// </summary>
     public void AddLocationNotificationFromPush(string title, string body, string notificationId,
-        float latitude = 0f, float longitude = 0f, float radius = 0f, string distance = "")
+        float latitude = 0f, float longitude = 0f, float radius = 0f, string distance = "", string followFrom = null)
     {
         if (string.IsNullOrEmpty(notificationId))
         {
@@ -992,7 +1003,8 @@ public class MessagePanelManager : MonoBehaviour
             latitude = latitude,
             longitude = longitude,
             radius = radius,
-            distance = distance
+            distance = distance,
+            followFrom = followFrom
         };
 
         conversations.Insert(0, systemMessage);
@@ -1375,6 +1387,25 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     public void CloseChatRoom()
     {
+        LeaveChatRoom();
+
+        // Message_Button 클릭 트리거 (모든 관련 로직 실행)
+        if (navigationMessageButton != null)
+        {
+            navigationMessageButton.onClick.Invoke();
+        }
+        else
+        {
+            // 폴백: 직접 메시지 패널 열기
+            OpenMessagePanel();
+        }
+    }
+
+    /// <summary>
+    /// 대화방 정리 (읽음 시간 · 폴링 멈춤 · 아바타 · 입력창) — 메시지 목록은 열지 않는다
+    /// </summary>
+    private void LeaveChatRoom()
+    {
         // 관리자 채팅방을 닫을 때 → 현재 시간으로 읽음시간 갱신
         // (서버 broadcast 시간과 푸시 수신 시간의 차이로 인한 false unread 방지)
         if (currentChatUserId == "3" || isAdminChat)
@@ -1415,17 +1446,6 @@ public class MessagePanelManager : MonoBehaviour
         currentChatAvatarUrl = null;
         isAdminChat = false;
         profileOpenedFromChatRoom = false;
-
-        // Message_Button 클릭 트리거 (모든 관련 로직 실행)
-        if (navigationMessageButton != null)
-        {
-            navigationMessageButton.onClick.Invoke();
-        }
-        else
-        {
-            // 폴백: 직접 메시지 패널 열기
-            OpenMessagePanel();
-        }
     }
 
     // ============================================================
@@ -1530,15 +1550,16 @@ public class MessagePanelManager : MonoBehaviour
         // 받아 둔 목록이 있으면 곧바로 보여 주고 뒤에서 새로 고친다 (스켈레톤은 처음 한 번만)
         List<GameObject> skeletonItems = new List<GameObject>();
         float skeletonStartTime = Time.time;
-        bool showSkeleton = !conversationsLoadedOnce || conversations.Count == 0;
-        ClearContent(conversationListContent);
+        bool search = ShowingSearch;
+        bool showSkeleton = !search && (!conversationsLoadedOnce || conversations.Count == 0);
+        if (!search) ClearContent(conversationListContent);
         if (showSkeleton)
         {
             int n = Mathf.Clamp(skeletonItemCount, 6, 9);   // 한 화면에 보이는 만큼
             for (int i = 0; i < n; i++)
                 skeletonItems.Add(CreateSkeletonItem(conversationListContent, i));
         }
-        else
+        else if (!search)
         {
             RenderConversationList();
         }
@@ -1620,6 +1641,7 @@ public class MessagePanelManager : MonoBehaviour
         }
 
         RemoveSkeletonItems(skeletonItems);
+        if (ShowingSearch) yield break;   // 그 사이 검색을 시작했으면 검색 결과를 그대로 둔다 (검색을 끝내면 받아 둔 목록을 그린다)
         ClearContent(conversationListContent);   // 그 사이 그려진 것(푸시 등)을 지우고 한 번만 그린다
         RenderConversationList();
         ForceLayoutUpdate();
@@ -2295,6 +2317,12 @@ public class MessagePanelManager : MonoBehaviour
             {
                 OpenChatRoom("3", "WOOPANG", null, true);
             }
+            else if (!string.IsNullOrEmpty(conv.followFrom))
+            {
+                // 새 팔로워 알림 — 대화창 대신 내 팔로워 탭 (그 사람을 맨 위에)
+                MarkSystemMessageAsRead(conv);
+                R0926HuntPush.OpenFollowers(conv.followFrom, true);
+            }
             else
             {
                 MarkSystemMessageAsRead(conv);
@@ -2386,6 +2414,13 @@ public class MessagePanelManager : MonoBehaviour
             btn.onClick.RemoveAllListeners();
             btn.onClick.AddListener(() =>
             {
+                // 새 팔로워 알림 — 대화창 대신 내 팔로워 탭 (그 사람을 맨 위에)
+                if (!string.IsNullOrEmpty(conv.followFrom))
+                {
+                    MarkSystemMessageAsRead(conv);
+                    R0926HuntPush.OpenFollowers(conv.followFrom, true);
+                    return;
+                }
                 // 시스템 메시지면 isAdmin=true로 전달 (타이틀 색상 및 입력창 처리)
                 OpenChatRoom(conv.userId, conv.username, conv.avatarUrl, conv.isSystemMessage);
             });
@@ -3083,6 +3118,15 @@ public class MessagePanelManager : MonoBehaviour
             {
                 var response = JsonUtility.FromJson<DMConversationResponse>(request.downloadHandler.text);
 
+                // 알림·팔로우 목록처럼 사진 주소 없이 연 방 — 서버가 같이 준 상대 사진으로 머리와 말풍선을 채운다
+                var other = response.other_user;
+                if (other != null && !string.IsNullOrEmpty(other.avatar_url) && other.avatar_url != currentChatAvatarUrl && otherUserId == currentChatUserId)
+                {
+                    currentChatAvatarUrl = other.avatar_url;
+                    if (chatRoomAvatar != null)
+                        ProfileManager.LoadAvatarWithMaskAsync(otherUserId, currentChatAvatarUrl, chatRoomAvatar.transform, currentChatUsername);
+                }
+
                 if (response.messages != null && response.messages.Count > 0)
                 {
                     hasMessages = true;
@@ -3189,6 +3233,41 @@ public class MessagePanelManager : MonoBehaviour
         return false;
     }
 
+    // 보물찾기에서 나온 1:1 메세지 — 서버(hunts_server._hunt_dm)가 첫 줄에 '[보물찾기 · 제목]' 을 붙인다. 그 줄을 금색 머리로 바꿔 누르면 그 게임으로
+    private const string HuntDmTag = "[보물찾기 · ";
+
+    private static string SplitHuntHeader(string content, out string body)
+    {
+        body = content;
+        if (string.IsNullOrEmpty(content) || !content.StartsWith(HuntDmTag)) return null;
+        int nl = content.IndexOf('\n');
+        string head = nl < 0 ? content : content.Substring(0, nl);
+        if (!head.EndsWith("]") || head.Length <= HuntDmTag.Length + 1) return null;
+        body = nl < 0 ? "" : content.Substring(nl + 1);
+        return head.Substring(HuntDmTag.Length, head.Length - HuntDmTag.Length - 1);
+    }
+
+    private static string HuntBubbleText(string title, string body, bool isMine)
+    {
+        string head = "<size=40><b><color=" + (isMine ? "#FFE7A3" : "#FFCF5C") + ">"
+                    + (AppLanguage.Code == "ko" ? "보물찾기" : "Treasure hunt") + " · " + title.Replace("<", "＜") + "  ›</color></b></size>";
+        return string.IsNullOrEmpty(body) ? head : head + "\n" + body;
+    }
+
+    // 그 대화 상대와 함께한(한쪽이 주최·한쪽이 참가) 그 제목의 게임 — 알림을 누른 것과 같은 길로 연다 (대화창·메세지창을 닫고 추가 창 보물찾기 상세)
+    private IEnumerator OpenHuntFromChat(string title)
+    {
+        string with = currentChatUserId;
+        if (string.IsNullOrEmpty(with) || isAdminChat) yield break;
+        long code = 0;
+        SimpleJSON.JSONNode j = null;
+        yield return R0926HuntApi.Get("/api/hunts/lookup?title=" + UnityWebRequest.EscapeURL(title) + "&with=" + UnityWebRequest.EscapeURL(with), (c, r) => { code = c; j = r; });
+        int id = code == 200 && j != null ? j["hunt_id"].AsInt : 0;
+        if (id > 0) R0926HuntPush.OpenHunt(id);
+        else if (ToastManager.Instance != null)
+            ToastManager.Instance.ShowInfo(AppLanguage.Code == "ko" ? "이 보물찾기를 찾을 수 없어요" : "Couldn't find this treasure hunt");
+    }
+
     private void CreateMessageBubble(DMMessage msg, bool isMine)
     {
         GameObject prefab = isMine ? myMessageBubblePrefab : otherMessageBubblePrefab;
@@ -3201,6 +3280,7 @@ public class MessagePanelManager : MonoBehaviour
     private void SetupMessageBubble(GameObject item, DMMessage msg, bool isMine)
     {
         SetLayerRecursively(item, 5);
+        string huntTitle = SplitHuntHeader(msg.content, out string huntBody);
 
         // BubbleContainer 또는 Bubble 찾기
         Transform bubbleContainerTr = item.transform.Find("BubbleContainer");
@@ -3255,7 +3335,7 @@ public class MessagePanelManager : MonoBehaviour
         if (contentText != null)
         {
             // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
-            contentText.text = msg.content;
+            contentText.text = huntTitle != null ? HuntBubbleText(huntTitle, huntBody, isMine) : msg.content;
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
             // 폰트만 설정 (프리팹에 없을 경우)
@@ -3429,6 +3509,8 @@ public class MessagePanelManager : MonoBehaviour
         {
             LikeMessage(messageId, rect);
         });
+        // 보물찾기에서 온 1:1 메세지 — 한 번 누르면 그 게임 상세로
+        likeHandler.SetSingleTap(huntTitle != null ? () => StartCoroutine(OpenHuntFromChat(huntTitle)) : (Action)null);
 
         // 아바타 처리 (상대방 버블: 표시 + 프로필 열기 / 내 버블: 숨김)
         Transform avatarTr = item.transform.Find("AvatarContainer");
@@ -3777,13 +3859,33 @@ public class MessagePanelManager : MonoBehaviour
             }
             else
             {
-                Debug.LogError($"[MessagePanel] Failed to send: {request.error}");
+                Debug.LogError($"[MessagePanel] Failed to send: {request.responseCode} {request.error}");
 
                 // 전송 실패: 선처리 버블 제거 (답만 늦어 끊긴 것이고 이미 저장된 말이면 남긴다)
                 if (optimisticBubble != null && !adopted)
+                {
                     Destroy(optimisticBubble);
+                    // 말풍선만 사라지면 안 간 줄도 모른다 — 이유를 알리고 쓴 말은 입력칸에 되돌린다
+                    if (chatInput != null && string.IsNullOrEmpty(chatInput.text) && recipientId == currentChatUserId)
+                        chatInput.text = content;
+                    if (ToastManager.Instance != null)
+                        ToastManager.Instance.ShowWarning(SendFailReason(request));
+                }
             }
         }
+    }
+
+    private static string SendFailReason(UnityWebRequest request)
+    {
+        bool ko = AppLanguage.Code == "ko";
+        string body = request.downloadHandler != null ? request.downloadHandler.text ?? "" : "";
+        if (request.responseCode == 401)
+            return ko ? "로그인이 풀렸어요. 다시 로그인해 주세요" : "Please sign in again";
+        if (request.responseCode == 403 && body.Contains("blocked"))
+            return ko ? "메시지를 보낼 수 없는 상대예요" : "You can't message this user";
+        if (request.responseCode == 403)
+            return ko ? "팔로우한 사람에게만 메시지를 보낼 수 있어요" : "You can only message people you follow";
+        return ko ? "메시지를 보내지 못했어요. 다시 보내 주세요" : "Message not sent. Please try again";
     }
 
     /// <summary>
@@ -3870,9 +3972,20 @@ public class MessagePanelManager : MonoBehaviour
 
     #region Search
 
+#if UNITY_EDITOR
+    public static string EditorBase;   // 플레이 시험 — 아이디 검색·팔로우를 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
+    private static string SearchBase => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+#else
+    private static string SearchBase => ApiConfig.MAIN_SERVER;
+#endif
+
     private bool isSearchMode = false;
     private bool isServerSearchActive = false; // 서버 검색 결과 표시 중
     private Coroutine serverSearchCoroutine;
+
+    // 검색 결과가 떠 있는 동안 — 새 메시지·알림이 와도 목록을 다시 그리지 않는다 (받은 것은 목록 데이터에만 두고, 검색을 끝내면 그린다).
+    // 예전엔 아이디 검색 중 메시지가 오면 결과가 대화 목록으로 바뀌어 버렸다
+    private bool ShowingSearch => isServerSearchActive || (isSearchMode && searchInput != null && !string.IsNullOrEmpty(searchInput.text));
 
     /// <summary>
     /// 검색 버튼 클릭
@@ -4068,10 +4181,11 @@ public class MessagePanelManager : MonoBehaviour
         ClearContent(conversationListContent);
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/users/search?q={UnityWebRequest.EscapeURL(query)}&user_id={userId}";
+        string url = $"{SearchBase}/api/users/search?q={UnityWebRequest.EscapeURL(query)}&user_id={userId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            LoginManager.ApplyAuth(request);   // 서버가 '나'를 토큰으로 안다 — 나를 차단한 사람을 빼고 팔로우 관계를 준다
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -4085,7 +4199,7 @@ public class MessagePanelManager : MonoBehaviour
                 {
                     foreach (var user in response.users)
                     {
-                        CreateSearchResultItem(user);
+                        CreateSearchResultItem(user, response.relations);
                         displayCount++;
                     }
                 }
@@ -4108,8 +4222,9 @@ public class MessagePanelManager : MonoBehaviour
 
     /// <summary>
     /// 서버 검색 결과를 대화 목록과 동일한 프리팹으로 표시
+    /// 아바타 → 그 사람 프로필 · 오른쪽 끝 팔로우 알약 · 줄의 나머지 → 대화 시작 (2026-10-18 대표님: 대화가 없는 사람도 아이디로 찾아 팔로우)
     /// </summary>
-    private void CreateSearchResultItem(SearchedUser user)
+    private void CreateSearchResultItem(SearchedUser user, bool relations)
     {
         if (conversationItemPrefab == null || conversationListContent == null) return;
 
@@ -4157,10 +4272,43 @@ public class MessagePanelManager : MonoBehaviour
         if (unreadBadge != null)
             unreadBadge.SetActive(false);
 
-        // 아바타
+        // 아바타 — 누르면 그 사람 프로필
         Transform avatarTransform = item.transform.Find("Content/Avatar");
+        Transform pill = item.transform.Find("Content/" + R0926FollowPill.Name);
         if (avatarTransform != null)
+        {
             ProfileManager.LoadAvatarWithMaskAsync(user.id, user.avatar_url, avatarTransform, user.username);
+            Button avatarBtn = avatarTransform.GetComponent<Button>();
+            if (avatarBtn == null)
+                avatarBtn = avatarTransform.gameObject.AddComponent<Button>();
+            avatarBtn.transition = Selectable.Transition.None;
+            if (avatarTransform.GetComponent<UITouchForwarder>() == null)
+                avatarTransform.gameObject.AddComponent<UITouchForwarder>();
+            avatarBtn.onClick.RemoveAllListeners();
+            avatarBtn.onClick.AddListener(() => OpenProfileFromSearch(user, pill));
+        }
+
+        // 오른쪽 끝 팔로우 알약 — 서버가 관계를 알려 줄 때만 (예전 서버면 감춘다) · 내가 차단한 사람은 없음
+        if (pill != null)
+        {
+            bool showPill = relations && !user.blocked_by_me;
+            pill.gameObject.SetActive(showPill);
+            if (showPill)
+            {
+                R0926FollowPill.Paint(pill, user.is_following, user.follows_me);
+                Button pillBtn = pill.GetComponent<Button>();
+                if (pillBtn != null)
+                {
+                    pillBtn.onClick.RemoveAllListeners();
+                    pillBtn.onClick.AddListener(() => OnSearchPillClicked(user, pill));
+                }
+                if (previewText != null)   // 미리보기 글이 알약 밑으로 들어가지 않게
+                {
+                    var pr = (RectTransform)pill;
+                    previewText.rectTransform.offsetMax = new Vector2(pr.anchoredPosition.x - pr.sizeDelta.x - 24f, previewText.rectTransform.offsetMax.y);
+                }
+            }
+        }
 
         // 클릭 이벤트
         Transform contentArea = item.transform.Find("Content");
@@ -4178,6 +4326,86 @@ public class MessagePanelManager : MonoBehaviour
             {
                 OpenChatRoom(user.id, user.username, user.avatar_url);
             });
+        }
+    }
+
+    // 팔로우 → 바로 팔로우 · 팔로잉 → 프로필 (취소는 프로필에서 — 목록에서 잘못 눌러 끊기지 않게)
+    private void OnSearchPillClicked(SearchedUser user, Transform pill)
+    {
+        if (user.is_following) { OpenProfileFromSearch(user, pill); return; }
+        StartCoroutine(FollowFromSearch(user, pill));
+    }
+
+    private IEnumerator FollowFromSearch(SearchedUser user, Transform pill)
+    {
+        string myId = LoginManager.Instance?.CurrentUser?.id;
+        if (string.IsNullOrEmpty(myId) || pill == null) yield break;
+        Button btn = pill.GetComponent<Button>();
+        if (btn != null) btn.interactable = false;   // 보내는 동안 다시 눌리지 않게
+
+        string json = $"{{\"follower_id\":\"{myId}\",\"following_id\":\"{user.id}\"}}";
+        using (UnityWebRequest request = new UnityWebRequest(SearchBase + "/api/follow", "POST"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            LoginManager.ApplyAuth(request);
+            yield return request.SendWebRequest();
+
+            if (pill == null) yield break;
+            if (btn != null) btn.interactable = true;
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                user.is_following = true;
+                R0926FollowPill.Paint(pill, true, user.follows_me);
+            }
+            else if (ToastManager.Instance != null)
+            {
+                bool ko = AppLanguage.Code == "ko";
+                ToastManager.Instance.ShowWarning(request.responseCode == 403
+                    ? (ko ? "팔로우할 수 없는 상대예요" : "You can't follow this user")
+                    : (ko ? "잠시 후 다시 해 주세요" : "Please try again in a moment"));
+            }
+        }
+    }
+
+    // 검색 줄 아바타 → 그 사람 프로필. 프로필은 메세지 창보다 아래 층이라, 프로필이 뜬 뒤에 창을 숨기고
+    // 프로필을 닫으면 검색 결과 그대로 돌아온다 (프로필에서 팔로우·취소했으면 그 줄 알약도 맞춘다)
+    private void OpenProfileFromSearch(SearchedUser user, Transform pill)
+    {
+        var pm = ProfileManager.Instance;
+        if (pm == null || user == null || string.IsNullOrEmpty(user.id)) return;
+        pm.ShowProfile(user.id, shown =>
+        {
+            if (!shown)
+            {
+                if (ToastManager.Instance != null)
+                    ToastManager.Instance.ShowWarning(AppLanguage.Code == "ko" ? "프로필을 불러오지 못했어요" : "Couldn't load the profile");
+                return;
+            }
+            if (messagePanel != null) messagePanel.SetActive(false);
+            pm.SetOnCloseCallback(() =>
+            {
+                if (messagePanel != null) messagePanel.SetActive(true);
+                if (pill != null && pill.gameObject.activeSelf) StartCoroutine(RecheckSearchFollow(user, pill));
+            });
+        });
+    }
+
+    private IEnumerator RecheckSearchFollow(SearchedUser user, Transform pill)
+    {
+        string myId = LoginManager.Instance?.CurrentUser?.id;
+        if (string.IsNullOrEmpty(myId)) yield break;
+        string url = $"{SearchBase}/api/is_following?follower_id={myId}&following_id={user.id}";
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            LoginManager.ApplyAuth(request);
+            yield return request.SendWebRequest();
+            if (pill == null || request.result != UnityWebRequest.Result.Success) yield break;
+            var res = JsonUtility.FromJson<IsFollowingResponse>(request.downloadHandler.text);
+            if (res == null) yield break;
+            user.is_following = res.is_following;
+            R0926FollowPill.Paint(pill, user.is_following, user.follows_me);
         }
     }
 
@@ -5194,6 +5422,8 @@ public class ConversationSummary
     public float longitude;
     public float radius;
     public string distance;
+
+    public string followFrom;       // 새 팔로워 알림 — 누르면 내 팔로워 탭 (이 사람을 맨 위에)
 }
 
 [Serializable]
@@ -5226,6 +5456,8 @@ public class SearchedUser
     public string username;
     public string avatar_url;
     public bool is_following;
+    public bool follows_me;      // 상대가 나를 팔로우 — 알약이 '맞팔로우'
+    public bool blocked_by_me;   // 내가 차단한 사람 — 알약 없음 (나를 차단한 사람은 서버가 아예 빼고 준다)
 }
 
 [Serializable]
@@ -5233,6 +5465,7 @@ public class UserSearchResponse
 {
     public List<SearchedUser> users;
     public int count;
+    public bool relations;       // 서버가 위 관계 값을 채워 줬는지 — 예전 서버는 없다(알약을 감춘다)
 }
 
 [Serializable]

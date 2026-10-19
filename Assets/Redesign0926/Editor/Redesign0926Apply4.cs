@@ -90,6 +90,7 @@ namespace Redesign0926
                 ("ChatRoomPanel", "CloseButton", SlotMsg),
                 ("UploadPage", "XButton_Upload", SlotAdd),
                 ("FullProfilePanel", "ProfileToggle0926", SlotProfile),
+                ("FollowPanel", "DockClose0926", SlotProfile),
             })
             {
                 var panel = Find(root, panelName);
@@ -107,14 +108,14 @@ namespace Redesign0926
 
             // 카드 → 왼쪽 열
             Add(Find(root, "Sheet0926"), LeftCard(), 0, R0926SafeInset.Edge.Bottom, R0926SafeInset.Edge.Left);
-            foreach (var n in new[] { "MessagePanel", "ChatRoomPanel" })
+            foreach (var n in new[] { "MessagePanel", "ChatRoomPanel", "FollowPanel" })
             {
                 var p = Find(root, n);
                 var bg = p != null ? (p.transform.Find("Background") ?? p.transform.Find("Clip0926/Background")) : null;
                 if (bg != null) Add(bg.gameObject, LeftCard(), 0, R0926SafeInset.Edge.Bottom, R0926SafeInset.Edge.Left);
             }
             // 0930 도크 윗선 틀 — 가로에서는 도크가 오른쪽 막대라 아래를 비워 둘 필요가 없다
-            foreach (var n in new[] { "ListPanel", "MessagePanel", "ChatRoomPanel", "UploadPage" })
+            foreach (var n in new[] { "ListPanel", "MessagePanel", "ChatRoomPanel", "UploadPage", "FollowPanel" })
             {
                 var p = Find(root, n);
                 var clip = p != null ? p.transform.Find("Clip0926") : null;

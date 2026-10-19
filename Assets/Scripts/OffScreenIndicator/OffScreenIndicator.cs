@@ -24,10 +24,6 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("Additional top boundary offset in pixels")]
     [SerializeField] private float additionalBoundOffsetTop = 0f;
 
-    /// <summary>위쪽 한계를 기기에 맞춰 바꿀 때 (0926: 노치 바로 아래까지 — R0926IndicatorBounds)</summary>
-    public float AdditionalBoundOffsetTop { get => additionalBoundOffsetTop; set => additionalBoundOffsetTop = value; }
-    public float ScreenBoundOffsetY => screenBoundOffsetY;
-
     [Tooltip("Additional bottom boundary offset in pixels")]
     [SerializeField] private float additionalBoundOffsetBottom = 0f;
 
@@ -37,10 +33,17 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("Additional right boundary offset in pixels")]
     [SerializeField] private float additionalBoundOffsetRight = 0f;
 
+    /// <summary>화살표 구역을 기기·방향에 맞춰 바꿀 때 (0926: 위는 노치 아래 · 아래는 도크 위 · 가로는 오른쪽 도크 왼쪽까지 — R0926IndicatorBounds)</summary>
+    public float AdditionalBoundOffsetTop { get => additionalBoundOffsetTop; set => additionalBoundOffsetTop = value; }
+    public float AdditionalBoundOffsetBottom { get => additionalBoundOffsetBottom; set => additionalBoundOffsetBottom = value; }
+    public float AdditionalBoundOffsetLeft { get => additionalBoundOffsetLeft; set => additionalBoundOffsetLeft = value; }
+    public float AdditionalBoundOffsetRight { get => additionalBoundOffsetRight; set => additionalBoundOffsetRight = value; }
+    public float ScreenBoundOffsetX => screenBoundOffsetX;
+    public float ScreenBoundOffsetY => screenBoundOffsetY;
+
     private Camera mainCamera;
     private Vector3 screenCentre;
-    private Vector3 screenBoundsX;
-    private Vector3 screenBoundsY;
+    private int boundsW, boundsH;   // screenCentre 를 잰 화면 크기 — 가로 ↔ 세로로 바뀌면 다시 잰다
 
     // Canvas 좌표 변환용
     private Canvas parentCanvas;
@@ -73,6 +76,7 @@ public class OffScreenIndicator : MonoBehaviour
     private FallbackConfig currentFallbackConfig;
     private float fallbackStartTime = 0f; // fallback 모드 시작 시간 (realtimeSinceStartup)
     private float fallbackStartTimeScaled = 0f; // fallback 모드 시작 시간 (Time.time)
+    private Vector2 fallbackCanvasSize;          // 분산 자리를 잡을 때의 캔버스 크기 — 화면이 돌면 다시 잡는다
 
     // ============================================================
     // Fallback → 정상 전환 애니메이션
@@ -135,14 +139,10 @@ public class OffScreenIndicator : MonoBehaviour
     [SerializeField] private float arrowSmoothSpeed = 8f;
 
     [Header("=== 목록에서 고른 장소 강조 ===")]
-    [Tooltip("목록 줄을 누르면 그 장소의 박스·화살표를 이 시간(초) 동안 강조")]
+    [Tooltip("목록 줄을 누르면 그 장소의 박스·화살표 글자 뒤에 이 시간(초) 동안 분홍 스티커 (크기는 그대로)")]
     [SerializeField] private float focusDuration = 4f;
-    [Tooltip("강조 중 커지는 폭 (0.35 = 최대 35% 크게)")]
-    [SerializeField] private float focusPulse = 0.35f;
-    [Tooltip("강조 중 커졌다 작아지는 빠르기 (초당 횟수)")]
-    [SerializeField] private float focusPulseRate = 1.6f;
     private Target focusTarget;
-    private float focusUntil = -1f;
+    private float focusFrom = -1f, focusUntil = -1f;
 
     // 각 타겟의 이전 프레임 스크린 위치/각도 캐시 (스무딩용)
     private Dictionary<Target, Vector3> previousArrowScreenPositions = new Dictionary<Target, Vector3>();
@@ -192,9 +192,7 @@ public class OffScreenIndicator : MonoBehaviour
             return;
         }
 
-        screenCentre = new Vector3(Screen.width, Screen.height, 0) / 2;
-        screenBoundsX = screenCentre * screenBoundOffsetX;
-        screenBoundsY = screenCentre * screenBoundOffsetY;
+        RefreshScreenCentre();
 
         // Canvas 좌표 변환을 위해 부모 Canvas 캐싱
         parentCanvas = GetComponentInParent<Canvas>();
@@ -226,28 +224,78 @@ public class OffScreenIndicator : MonoBehaviour
 
     /// <summary>
     /// 목록에서 고른 장소의 인디케이터(화면 안이면 박스, 밖이면 화살표)를 잠깐 강조한다 —
-    /// 두근거리며 커지고, 거리 흐림·개수 제한·거리 제한을 받지 않고, 다른 인디케이터 위에 그린다.
+    /// 글자 뒤에 분홍 스티커를 붙이고(delay 초 뒤부터 — 목록 줄이 잠깐 밝혀지고 목록이 내려가는 동안),
+    /// 거리 흐림·개수 제한·거리 제한을 받지 않고, 다른 인디케이터 위에 그린다.
     /// 지금 제자리에 보여 줄 수 없으면(AR 위치 미확정·화살표 분산 모드·인디케이터를 안 쓰는 대상) false.
     /// </summary>
-    public bool Focus(Target target)
+    public bool Focus(Target target, float delay = 0f)
     {
         if (target == null || mainCamera == null || isFallbackMode || suppressNormalIndicators) return false;
         if (!targets.Contains(target) || !target.IsAnchorReady) return false;
         Vector3 sp = OffScreenIndicatorCore.GetScreenPosition(mainCamera, target.transform.position);
         if (OffScreenIndicatorCore.IsTargetVisible(sp) ? !target.NeedBoxIndicator : !target.NeedArrowIndicator) return false;
         focusTarget = target;
-        focusUntil = Time.unscaledTime + focusDuration;
+        focusFrom = Time.unscaledTime + Mathf.Max(0f, delay);
+        focusUntil = focusFrom + focusDuration;
         return true;
     }
 
     private bool IsFocused(Target t) => focusTarget != null && t == focusTarget && Time.unscaledTime < focusUntil;
 
-    // 강조 중 크기 배율 — 두근거리다가 끝에서 잦아든다
-    private float FocusScale()
+    // 화면 가운데 — 예전엔 Awake 에서 한 번만 재서, 가로로 돌리면 세로 기준 가운데·경계로 화살표를 놓아 대부분 화면 밖에 놓였다
+    private void RefreshScreenCentre()
     {
-        float left = focusUntil - Time.unscaledTime;
-        float beat = 0.5f - 0.5f * Mathf.Cos((focusDuration - left) * focusPulseRate * 2f * Mathf.PI);
-        return 1f + focusPulse * beat * Mathf.Clamp01(left / 0.6f);
+        if (Screen.width == boundsW && Screen.height == boundsH) return;
+        bool rotated = boundsW > 0;
+        boundsW = Screen.width;
+        boundsH = Screen.height;
+        screenCentre = new Vector3(boundsW, boundsH, 0) / 2;
+        if (!rotated) return;
+        previousArrowScreenPositions.Clear();   // 옛 방향 자리에서 미끄러져 오지 않게
+        previousArrowAngles.Clear();
+    }
+
+    /// <summary>화살표가 놓이는 구역 (화면 픽셀, 왼쪽 아래 기준) — 가운데 비율 경계에서 상하좌우 추가값만큼 안쪽</summary>
+    private Rect ArrowBounds()
+    {
+        float cx = screenCentre.x, cy = screenCentre.y;
+        float left = cx * (1f - screenBoundOffsetX) + additionalBoundOffsetLeft;
+        float right = cx * (1f + screenBoundOffsetX) - additionalBoundOffsetRight;
+        float bottom = cy * (1f - screenBoundOffsetY) + additionalBoundOffsetBottom;
+        float top = cy * (1f + screenBoundOffsetY) - additionalBoundOffsetTop;
+        if (right < left) left = right = (left + right) * 0.5f;
+        if (top < bottom) bottom = top = (bottom + top) * 0.5f;
+        return Rect.MinMaxRect(left, bottom, right, top);
+    }
+
+    /// <summary>
+    /// 화면 가운데에서 대상 쪽으로 그은 선이 구역 가장자리와 만나는 곳에 화살표를 둔다 —
+    /// 구역이 가운데에 대해 치우쳐 있어도(노치·도크) 화살표가 대상 방향을 그대로 가리킨다.
+    /// (예전: 가운데 대칭 경계에 놓은 뒤 추가값으로 잘라, 잘린 쪽에선 화살표 자리가 대상 방향에서 벗어났다)
+    /// </summary>
+    private static void PlaceArrow(ref Vector3 screenPosition, out float angle, Vector3 centre, Rect r)
+    {
+        Vector3 d = screenPosition - centre;
+        if (d.z < 0) d *= -1;   // 카메라 뒤 — 화면 투영이 뒤집혀 나온다
+        if (d.x * d.x + d.y * d.y < 1e-4f) d = new Vector3(0f, -1f, 0f);   // 바로 뒤 — 아래로
+        angle = Mathf.Atan2(d.y, d.x);
+        float ox = Mathf.Clamp(centre.x, r.xMin, r.xMax), oy = Mathf.Clamp(centre.y, r.yMin, r.yMax);
+        float tx = d.x > 0f ? (r.xMax - ox) / d.x : d.x < 0f ? (r.xMin - ox) / d.x : float.PositiveInfinity;
+        float ty = d.y > 0f ? (r.yMax - oy) / d.y : d.y < 0f ? (r.yMin - oy) / d.y : float.PositiveInfinity;
+        float t = Mathf.Min(tx, ty);
+        screenPosition = new Vector3(ox + d.x * t, oy + d.y * t, 0f);
+    }
+
+    // 화면 픽셀 → 캔버스 논리 좌표 (가운데 = 0,0)
+    private Vector2 ScreenToCanvasLocal(Vector2 screenPos)
+    {
+        if (canvasRectTransform == null)
+            return screenPos - new Vector2(Screen.width, Screen.height) * 0.5f;
+        Camera cam = null;
+        if (parentCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            cam = parentCanvas.worldCamera ?? mainCamera;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRectTransform, screenPos, cam, out Vector2 local);
+        return local;
     }
 
     /// <summary>
@@ -303,6 +351,7 @@ public class OffScreenIndicator : MonoBehaviour
         CleanupNullTargets();
         if (Time.frameCount % 10 == 0)
             CleanupOrphanIndicators();
+        RefreshScreenCentre();
 
         if (isFallbackMode)
         {
@@ -334,6 +383,7 @@ public class OffScreenIndicator : MonoBehaviour
 
         // ── Pass 1: 각 타겟의 스크린 위치/각도/타입 수집 ──
         List<ArrowInfo> arrowInfos = new List<ArrowInfo>();
+        Rect arrowBounds = ArrowBounds();
 
         foreach (Target target in targets)
         {
@@ -425,16 +475,7 @@ public class OffScreenIndicator : MonoBehaviour
             }
             else if (target.NeedArrowIndicator && !isTargetVisible)
             {
-                float angle = float.MinValue;
-                OffScreenIndicatorCore.GetArrowIndicatorPositionAndAngle(ref screenPosition, ref angle, screenCentre, screenBoundsX);
-
-                float limitX = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetLeft;
-                float limitXRight = screenCentre.x * screenBoundOffsetX - additionalBoundOffsetRight;
-                float limitY = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetBottom;
-                float limitYTop = screenCentre.y * screenBoundOffsetY - additionalBoundOffsetTop;
-
-                screenPosition.x = Mathf.Clamp(screenPosition.x, screenCentre.x - limitX, screenCentre.x + limitXRight);
-                screenPosition.y = Mathf.Clamp(screenPosition.y, screenCentre.y - limitY, screenCentre.y + limitYTop);
+                PlaceArrow(ref screenPosition, out float angle, screenCentre, arrowBounds);
 
                 arrowInfos.Add(new ArrowInfo
                 {
@@ -541,7 +582,7 @@ public class OffScreenIndicator : MonoBehaviour
             {
                 indicator.SetImageColor(target.TargetColor);
                 bool focused = IsFocused(target);
-                float boost = focused ? FocusScale() : 1f;
+                indicator.SetFocus(focused && Time.unscaledTime >= focusFrom);
 
                 // 거리가 멀수록 인디케이터를 흐리게. 화살표(화면 밖)는 항상 적용,
                 // 박스(화면 안)는 fadeBoxToo 가 켜져 있을 때만 적용. 목록에서 고른 장소는 또렷하게, 다른 인디케이터 위에.
@@ -584,7 +625,6 @@ public class OffScreenIndicator : MonoBehaviour
                         float t = (target.MaxDistance - info.distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultBoxSize, target.MaxBoxSize, t);
                     }
-                    size *= boost;
                     indicator.SetScale(new Vector3(size, size, size));
                 }
                 else
@@ -598,7 +638,6 @@ public class OffScreenIndicator : MonoBehaviour
                         float t = (target.MaxDistance - info.distanceFromCamera) / (target.MaxDistance - target.MinDistance);
                         size = Mathf.Lerp(target.DefaultArrowSize, target.MaxArrowSize, t);
                     }
-                    size *= boost;
                     indicator.SetScale(new Vector3(size, size, 1f));
                 }
 
@@ -639,6 +678,8 @@ public class OffScreenIndicator : MonoBehaviour
         if (arrowIndices.Count < 2) return;
 
         float spacingSq = arrowMinSpacing * arrowMinSpacing;
+        Rect bounds = ArrowBounds();
+        float limitLeft = bounds.xMin, limitRight = bounds.xMax, limitBottom = bounds.yMin, limitTop = bounds.yMax;
 
         // 반복적으로 겹침 해소 (최대 3회)
         for (int pass = 0; pass < 3; pass++)
@@ -676,11 +717,6 @@ public class OffScreenIndicator : MonoBehaviour
                         }
 
                         // 화면 가장자리에 가까운 축을 따라 분산
-                        float limitLeft = screenCentre.x - screenCentre.x * screenBoundOffsetX + additionalBoundOffsetLeft;
-                        float limitRight = screenCentre.x + screenCentre.x * screenBoundOffsetX - additionalBoundOffsetRight;
-                        float limitBottom = screenCentre.y - screenCentre.y * screenBoundOffsetY + additionalBoundOffsetBottom;
-                        float limitTop = screenCentre.y + screenCentre.y * screenBoundOffsetY - additionalBoundOffsetTop;
-
                         Vector3 posA = infoA.screenPosition;
                         Vector3 posB = infoB.screenPosition;
 
@@ -1008,6 +1044,14 @@ public class OffScreenIndicator : MonoBehaviour
         float bottom = -ch / 2f + ch * cfg.marginBottom;
         float top    =  ch / 2f - ch * cfg.marginTop;
 
+        // 도크·노치 자리는 피한다 — 일반 화살표와 같은 구역 안으로 (세로: 아래 도크 위 · 가로: 오른쪽 도크 왼쪽)
+        RefreshScreenCentre();
+        Rect ab = ArrowBounds();
+        Vector2 lo = ScreenToCanvasLocal(ab.min), hi = ScreenToCanvasLocal(ab.max);
+        float l2 = Mathf.Max(left, lo.x), r2 = Mathf.Min(right, hi.x), b2 = Mathf.Max(bottom, lo.y), t2 = Mathf.Min(top, hi.y);
+        if (r2 - l2 > 1f && t2 - b2 > 1f) { left = l2; right = r2; bottom = b2; top = t2; }
+        fallbackCanvasSize = canvasSize;
+
         // 4변 둘레를 따라 균등 분배 + 약간의 랜덤 오프셋
         float w = right - left;
         float h = top - bottom;
@@ -1095,7 +1139,7 @@ public class OffScreenIndicator : MonoBehaviour
                 mappedCount++;
         }
         int expectedDisplay = Mathf.Min(totalAvailable, checkCfg.maxIndicatorCount);
-        bool needsReassign = mappedCount < expectedDisplay && targets.Count > 0;
+        bool needsReassign = targets.Count > 0 && (mappedCount < expectedDisplay || GetCanvasSize() != fallbackCanvasSize);
         if (needsReassign)
         {
             AssignFallbackPositions();
@@ -1135,6 +1179,7 @@ public class OffScreenIndicator : MonoBehaviour
             if (indicator)
             {
                 indicator.SetImageColor(target.TargetColor);
+                indicator.SetFocus(false);
 
                 // fallback 모드: GPS 좌표 기반 거리 계산 (활성/비활성 타겟 모두 동일)
                 if (target.NeedDistanceText)

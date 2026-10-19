@@ -136,7 +136,12 @@ public class ProfileManager : MonoBehaviour
     [Header("Settings")]
     public Sprite defaultAvatarSprite;
 
+#if UNITY_EDITOR
+    public static string EditorBase;   // 플레이 시험 — 프로필·팔로우를 내 PC 시험 서버에서 (운영 서버에 시험 아이디로 묻지 않게)
+    private string BASE_URL => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+#else
     private string BASE_URL => ApiConfig.MAIN_SERVER;
+#endif
 
     // 현재 표시 중인 프로필
     private ProfileData currentProfile;
@@ -166,8 +171,12 @@ public class ProfileManager : MonoBehaviour
     [Tooltip("쉬머 베이스 색상")]
     public Color shimmerBaseColor = new Color(0.75f, 0.75f, 0.78f, 1f);
 
-    // userId 기반 캐시 (URL 변경에 관계없이 동일 유저면 캐시 히트)
+    // userId 기반 캐시 — 받아 온 진짜 사진만 (주소 없이 불렸을 때 쓴다)
     private Dictionary<string, Sprite> userAvatarCache = new Dictionary<string, Sprite>();
+    // 이름으로 만든 기본 그림 — 사진 칸과 따로 둔다. 같이 두면 나중에 받은 진짜 사진 주소를 무시했다(대화창 상대 사진 안 뜸)
+    private readonly Dictionary<string, Sprite> defaultAvatarByName = new Dictionary<string, Sprite>();
+    // 받는 중인 사진 주소 → 시작 시각. 같은 사진을 말풍선마다 따로 받아 텍스처가 쌓였다
+    private readonly Dictionary<string, float> avatarDownloading = new Dictionary<string, float>();
     // 요청 버전 카운터: Image 인스턴스 ID → 현재 요청 버전
     private Dictionary<int, int> avatarRequestVersions = new Dictionary<int, int>();
     // 현재 쉬머 중인 Image 추적
@@ -641,6 +650,32 @@ public class ProfileManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 프로필을 받아 연다 — 열렸는지(받기 실패면 false)를 알려 준다.
+    /// 부른 창은 프로필이 뜬 뒤에 자기를 숨긴다 (받기에 실패했을 때 아무 창도 없는 화면이 되지 않게)
+    /// </summary>
+    public void ShowProfile(string userId, Action<bool> onShown)
+    {
+        StartCoroutine(FetchProfile(userId, (profile) =>
+        {
+            if (profile != null)
+                ShowProfilePanel(profile);
+            onShown?.Invoke(profile != null);
+        }));
+    }
+
+    /// <summary>팔로우 목록에서 팔로우·취소하고 돌아왔을 때 — 뒤에 떠 있던 프로필의 팔로워·팔로잉 숫자를 새로 받는다</summary>
+    public void RefreshCurrentProfile()
+    {
+        if (currentProfile == null || string.IsNullOrEmpty(currentProfile.id)) return;
+        string id = currentProfile.id;
+        StartCoroutine(FetchProfile(id, (profile) =>
+        {
+            if (profile != null && currentProfile != null && currentProfile.id == id)
+                ShowProfilePanel(profile);
+        }));
+    }
+
+    /// <summary>
     /// 미니 프로필 클릭 시 (내 프로필 열기)
     /// </summary>
     private void OnMiniProfileClicked()
@@ -775,6 +810,19 @@ public class ProfileManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 다른 화면(보물찾기 상세)으로 넘어갈 때 — 프로필을 닫되 열어 준 곳(팔로우 목록 · 대화창 · 앞 프로필)으로 되돌아가지 않는다
+    /// (예전엔 닫히며 그 창이 되살아나 상세 위에 겹쳤다 — 10-13 대표님)
+    /// </summary>
+    public void CloseAway()
+    {
+        openedFromFollowPanel = false;
+        FollowManager.returnToFollowPanel = false;
+        onCloseCallback = null;
+        profileToReturnTo = null;
+        if (fullProfilePanel != null && fullProfilePanel.activeSelf) CloseFullProfile();
+    }
+
     public void CloseFullProfile()
     {
         if (fullProfilePanel != null)
@@ -820,12 +868,16 @@ public class ProfileManager : MonoBehaviour
         string myId = LoginManager.Instance?.CurrentUser?.id;
         if (string.IsNullOrEmpty(myId)) return;
 
+        // 받는 동안 프로필을 닫거나 다른 사람 프로필로 바꾸면 늦게 온 답은 버린다 (닫힌 뒤엔 currentProfile 이 null)
+        string theirId = currentProfile.id;
         // 내가 상대방을 팔로우하는지 확인
-        StartCoroutine(CheckIsFollowing(myId, currentProfile.id, (iFollowThem) =>
+        StartCoroutine(CheckIsFollowing(myId, theirId, (iFollowThem) =>
         {
+            if (currentProfile == null || currentProfile.id != theirId) return;
             // 상대방이 나를 팔로우하는지도 확인 (맞팔로우 여부)
-            StartCoroutine(CheckIsFollowing(currentProfile.id, myId, (theyFollowMe) =>
+            StartCoroutine(CheckIsFollowing(theirId, myId, (theyFollowMe) =>
             {
+                if (currentProfile == null || currentProfile.id != theirId) return;
                 UpdateFollowButtonUI(iFollowThem, theyFollowMe);
             }));
         }));
@@ -1927,110 +1979,96 @@ public class ProfileManager : MonoBehaviour
             avatarRequestVersions[imageId] = 0;
         int thisVersion = ++avatarRequestVersions[imageId];
 
-        // 2. userId 캐시 확인
+        string fullUrl = ResolveFullUrl(avatarUrl);
         Sprite cached = null;
-        if (!string.IsNullOrEmpty(userId) && userAvatarCache.TryGetValue(userId, out cached))
+
+        // 2. 주소 없이 불렸으면 — 전에 받아 둔 그 사람 사진
+        if (string.IsNullOrEmpty(fullUrl) && !string.IsNullOrEmpty(userId) && userAvatarCache.TryGetValue(userId, out cached) && cached != null)
         {
-            if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
-            {
-                StopShimmer(imageId);
-                targetImage.sprite = cached;
-                targetImage.color = Color.white;
-            }
+            ApplyAvatar(imageId, thisVersion, targetImage, cached);
             yield break;
         }
 
-        // 3. URL 캐시 확인
-        string fullUrl = ResolveFullUrl(avatarUrl);
-        if (!string.IsNullOrEmpty(fullUrl) && avatarCache.TryGetValue(fullUrl, out cached))
+        // 3. URL 캐시 확인 (주소가 있으면 주소가 우선 — 사진을 바꾼 사람)
+        if (!string.IsNullOrEmpty(fullUrl) && avatarCache.TryGetValue(fullUrl, out cached) && cached != null)
         {
             if (!string.IsNullOrEmpty(userId))
                 userAvatarCache[userId] = cached;
-
-            if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
-            {
-                StopShimmer(imageId);
-                targetImage.sprite = cached;
-                targetImage.color = Color.white;
-            }
+            ApplyAvatar(imageId, thisVersion, targetImage, cached);
             yield break;
         }
 
-        // 4. URL이 없으면 기본 아바타 생성
+        // 4. URL이 없으면 기본 아바타 (사진 칸에는 넣지 않는다)
         if (string.IsNullOrEmpty(fullUrl))
         {
-            if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
-            {
-                StopShimmer(imageId);
-                if (!string.IsNullOrEmpty(username))
-                {
-                    Sprite defaultSprite = GenerateDefaultAvatarSprite(username);
-                    targetImage.sprite = defaultSprite;
-                    targetImage.color = Color.white;
-                    if (!string.IsNullOrEmpty(userId))
-                        userAvatarCache[userId] = defaultSprite;
-                }
-                else if (defaultAvatarSprite != null)
-                {
-                    targetImage.sprite = defaultAvatarSprite;
-                    targetImage.color = Color.white;
-                }
-            }
+            ApplyAvatar(imageId, thisVersion, targetImage, DefaultAvatarFor(username));
             yield break;
         }
 
         // 5. 쉬머 시작
         StartShimmer(imageId, targetImage);
 
+        // 같은 사진을 이미 받는 중이면 그걸 기다려 같이 쓴다 (20초 넘게 안 끝나면 따로 받는다)
+        while (avatarDownloading.TryGetValue(fullUrl, out float started) && Time.realtimeSinceStartup - started < 20f)
+            yield return null;
+        if (avatarCache.TryGetValue(fullUrl, out cached) && cached != null)
+        {
+            if (!string.IsNullOrEmpty(userId))
+                userAvatarCache[userId] = cached;
+            ApplyAvatar(imageId, thisVersion, targetImage, cached);
+            yield break;
+        }
+
         // 6. 다운로드
+        avatarDownloading[fullUrl] = Time.realtimeSinceStartup;
         using (UnityWebRequest request = AvatarRequest(fullUrl))
         {
             yield return request.SendWebRequest();
+            avatarDownloading.Remove(fullUrl);
 
-            // 7. 버전 체크 (stale 방지)
-            if (!IsCurrentVersion(imageId, thisVersion) || targetImage == null)
-                yield break;
-
-            // 8. 쉬머 중지
-            StopShimmer(imageId);
-
-            if (request.result == UnityWebRequest.Result.Success)
+            Texture2D texture = request.result == UnityWebRequest.Result.Success ? DownloadHandlerTexture.GetContent(request) : null;
+            if (texture != null)
             {
-                Texture2D texture = DownloadHandlerTexture.GetContent(request);
-                if (texture != null && targetImage != null)
+                // 이 그림이 사라졌거나 다른 요청에 밀렸어도 받은 사진은 캐시에 둔다 (기다리던 다른 칸들이 쓴다)
+                Sprite sprite = Sprite.Create(texture,
+                    new Rect(0, 0, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+
+                avatarCache[fullUrl] = sprite;
+                if (!string.IsNullOrEmpty(userId))
+                    userAvatarCache[userId] = sprite;
+
+                if (IsCurrentVersion(imageId, thisVersion) && targetImage != null)
                 {
-                    Sprite sprite = Sprite.Create(texture,
-                        new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-
-                    avatarCache[fullUrl] = sprite;
-                    if (!string.IsNullOrEmpty(userId))
-                        userAvatarCache[userId] = sprite;
-
+                    StopShimmer(imageId);
                     targetImage.sprite = sprite;
                     targetImage.color = Color.white;
-
                     onTextureLoaded?.Invoke(texture);
                 }
             }
             else
             {
-                if (targetImage != null)
-                {
-                    if (!string.IsNullOrEmpty(username))
-                    {
-                        Sprite defaultSprite = GenerateDefaultAvatarSprite(username);
-                        targetImage.sprite = defaultSprite;
-                        targetImage.color = Color.white;
-                    }
-                    else if (defaultAvatarSprite != null)
-                    {
-                        targetImage.sprite = defaultAvatarSprite;
-                        targetImage.color = Color.white;
-                    }
-                }
+                ApplyAvatar(imageId, thisVersion, targetImage, DefaultAvatarFor(username));
             }
         }
+    }
+
+    private void ApplyAvatar(int imageId, int version, Image targetImage, Sprite sprite)
+    {
+        if (!IsCurrentVersion(imageId, version) || targetImage == null) return;
+        StopShimmer(imageId);
+        if (sprite == null) return;
+        targetImage.sprite = sprite;
+        targetImage.color = Color.white;
+    }
+
+    /// <summary>이름으로 만든 기본 그림 — 이름마다 한 장만 만든다 (부를 때마다 새 텍스처를 만들면 목록을 열 때마다 쌓였다)</summary>
+    private Sprite DefaultAvatarFor(string username)
+    {
+        if (string.IsNullOrEmpty(username)) return defaultAvatarSprite;
+        if (!defaultAvatarByName.TryGetValue(username, out Sprite s) || s == null)
+            defaultAvatarByName[username] = s = GenerateDefaultAvatarSprite(username);
+        return s;
     }
 
     private bool IsCurrentVersion(int imageId, int version)
@@ -2240,12 +2278,12 @@ public class ProfileManager : MonoBehaviour
         else
         {
             // === 다른 사람 프로필 ===
-            // 팔로우 버튼 표시 (게스트가 아닐 때)
-            // followedButton은 UpdateFollowButtonState에서 상태에 따라 토글됨
+            // 팔로우 버튼은 UpdateFollowButtonState 가 팔로우 여부를 받은 뒤에 맞는 쪽만 켠다 (게스트는 계속 숨김)
             if (followButton != null)
             {
-                // 초기에는 followButton만 표시, followedButton은 숨김
-                followButton.gameObject.SetActive(!isGuest);
+                // 받기 전엔 둘 다 숨김 — 예전엔 '팔로우'부터 보여 줘, 이미 팔로우한 사람 프로필도 '팔로우' → '팔로잉'으로 깜빡였고
+                // 그 사이에 누르면 오히려 팔로우가 끊겼다 (누르면 서버 상태를 뒤집는다)
+                followButton.gameObject.SetActive(false);
                 if (followedButton != null)
                     followedButton.gameObject.SetActive(false);
 

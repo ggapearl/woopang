@@ -125,6 +125,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UITouchForwarder
   customSound: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &2233445566778899001
 GameObject:
   m_ObjectHideFlags: 0

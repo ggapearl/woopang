@@ -166,6 +166,9 @@ public class MobileKeyboardHandler : MonoBehaviour
     /// <summary>키보드 없을 때의 visibleFrame.bottom (네비게이션바 offset 제거용)</summary>
     private int baselineVisibleBottom = -1;
 
+    /// <summary>마지막으로 본 화면 방향 (1 = 가로) — 돌면 키보드 기준·원래 자리를 다시 잡는다</summary>
+    private int orientState = -1;
+
     private float lastJniErrorTime;
     private int updateCallCount;
 
@@ -201,30 +204,61 @@ public class MobileKeyboardHandler : MonoBehaviour
         needsScrollToBottom = false;
 
         // 키보드 때문에 움직인 적이 있을 때만 원래 자리로 (아니면 다른 애니메이션의 자리를 건드리지 않는다)
-        if (captured)
-        {
-            SetCollapsedTargets();
-            backgroundRect.anchorMin = origBgAnchorMin;
-            backgroundRect.anchorMax = origBgAnchorMax;
-            backgroundRect.offsetMin = origBgOffsetMin;
-            backgroundRect.offsetMax = origBgOffsetMax;
-
-            if (viewportRect != null)
-            {
-                viewportRect.offsetMin = origViewportOffsetMin;
-                viewportRect.offsetMax = origViewportOffsetMax;
-            }
-
-            if (inputAreaRect != null)
-            {
-                // X만 복원 — Y는 AutoExpandInputField가 제어
-                inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
-                inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
-            }
-        }
+        if (captured) RestoreOrig();
         RestoreParentClip();
         driving = false;
         captured = false;
+    }
+
+    /// <summary>키보드 때문에 움직인 것을 원래 자리로 바로 (애니메이션 없이)</summary>
+    private void RestoreOrig()
+    {
+        SetCollapsedTargets();
+        backgroundRect.anchorMin = origBgAnchorMin;
+        backgroundRect.anchorMax = origBgAnchorMax;
+        backgroundRect.offsetMin = origBgOffsetMin;
+        backgroundRect.offsetMax = origBgOffsetMax;
+
+        if (viewportRect != null)
+        {
+            viewportRect.offsetMin = origViewportOffsetMin;
+            viewportRect.offsetMax = origViewportOffsetMax;
+        }
+
+        if (inputAreaRect != null)
+        {
+            // X만 복원 — Y는 AutoExpandInputField가 제어
+            inputAreaRect.offsetMin = new Vector2(origInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
+            inputAreaRect.offsetMax = new Vector2(origInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
+        }
+        RestoreParentClip();
+    }
+
+    private void CheckRotation()
+    {
+        int land = Screen.width > Screen.height ? 1 : 0;
+        if (land == orientState) return;
+        bool first = orientState < 0;
+        orientState = land;
+        if (!first) OnRotated();
+    }
+
+    /// <summary>
+    /// 화면이 돌았다 (2026-10-18 대표님: 가로에서 대화창이 안 뜨거나 위아래로 들썩임).
+    /// - 안드로이드 키보드 기준(키보드 없을 때의 화면 아래 끝)을 새로 잡는다 — 세로에서 잡은 기준이 가로에서도 남아,
+    ///   키보드가 없어도 화면보다 큰 키보드가 떠 있는 줄 알고 창을 화면 위로 밀어 올렸다.
+    /// - 키보드 때문에 움직여 둔 창은 옛 방향 자리로 되돌린 뒤 새 방향 배치(R0926Orientation)를 얹고 그 자리를 원래 자리로 다시 잡는다
+    ///   — 아니면 키보드가 내려갈 때 옛 방향 자리로 돌아가 가로 배치를 덮었다.
+    /// </summary>
+    private void OnRotated()
+    {
+        baselineVisibleBottom = -1;
+        if (!captured) return;
+        RestoreOrig();
+        R0926Orientation.ReapplyNow();
+        CaptureOrig();
+        if (keyboardLogicallyActive) SetExpandedTargets(lastKbHeight);
+        else SetCollapsedTargets();
     }
 
     /// <summary>지금 자리를 '원래 자리'로 기억한다 — 키보드가 처음 올라오는 순간(창이 다 열린 뒤)</summary>
@@ -339,6 +373,7 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         try
         {
+            CheckRotation();
             TrackTouches();
             HandleKeyboardStateMachine();
             AnimatePanel();
@@ -615,12 +650,25 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
         float bottomAnchor = ParentAnchorY(kbH + keyboardTopPadding);
-        float topAnchor = ParentAnchorY(expandedTopAnchorY * canvasHeight);
+        // 가로에서 왼쪽 열에 놓인 창(대화창) — 열 그대로 두고 아래 끝만 키보드 위로. 세로처럼 양옆 끝까지·위 350 으로 펴면
+        // 오른쪽 도크 막대 밑까지 넓어지고 창은 280 남짓으로 납작해져 말풍선이 제목줄·입력칸을 덮었다 (화면 폭 전체인 댓글 창은 예전대로)
+        bool column = Screen.width > Screen.height && origBgAnchorMax.x - origBgAnchorMin.x < 0.99f;
 
-        targetAnchorMin = new Vector2(0, bottomAnchor);
-        targetAnchorMax = new Vector2(1, topAnchor);
-        targetOffsetMin = new Vector2(expandedSideOffset, 0);
-        targetOffsetMax = new Vector2(-expandedSideOffset, expandedTopOffset);
+        if (column)
+        {
+            targetAnchorMin = new Vector2(origBgAnchorMin.x, bottomAnchor);
+            targetAnchorMax = origBgAnchorMax;
+            targetOffsetMin = new Vector2(origBgOffsetMin.x, 0);
+            targetOffsetMax = origBgOffsetMax;
+        }
+        else
+        {
+            float topAnchor = ParentAnchorY(expandedTopAnchorY * canvasHeight);
+            targetAnchorMin = new Vector2(0, bottomAnchor);
+            targetAnchorMax = new Vector2(1, topAnchor);
+            targetOffsetMin = new Vector2(expandedSideOffset, 0);
+            targetOffsetMax = new Vector2(-expandedSideOffset, expandedTopOffset);
+        }
 
         if (viewportRect != null)
         {
@@ -628,10 +676,11 @@ public class MobileKeyboardHandler : MonoBehaviour
             targetViewportOffsetMax = new Vector2(origViewportOffsetMax.x, -expandedViewportTop);
         }
 
-        if (inputAreaRect != null && inputAreaExpandX > 0)
+        if (inputAreaRect != null)
         {
-            targetInputAreaOffsetMin = new Vector2(origInputAreaOffsetMin.x - inputAreaExpandX, origInputAreaOffsetMin.y);
-            targetInputAreaOffsetMax = new Vector2(origInputAreaOffsetMax.x + inputAreaExpandX, origInputAreaOffsetMax.y);
+            float ex = column ? 0f : Mathf.Max(0f, inputAreaExpandX);   // 열 창은 폭 그대로
+            targetInputAreaOffsetMin = new Vector2(origInputAreaOffsetMin.x - ex, origInputAreaOffsetMin.y);
+            targetInputAreaOffsetMax = new Vector2(origInputAreaOffsetMax.x + ex, origInputAreaOffsetMax.y);
         }
     }
 

@@ -33,6 +33,18 @@ public class R0926Orientation : MonoBehaviour
 
     public static bool IsLandscape { get; private set; }
     private int state = -1;
+    private static R0926Orientation current;
+
+    private void OnEnable() => current = this;
+    private void OnDisable() { if (current == this) current = null; }
+
+    /// <summary>지금 화면 방향의 배치를 바로 다시 얹는다 — 키보드 처리기가 옛 방향 자리로 되돌린 창을 같은 프레임에 새 방향으로 (MobileKeyboardHandler)</summary>
+    public static void ReapplyNow()
+    {
+        if (current == null) return;
+        current.state = -1;
+        current.Update();
+    }
 
     private void Awake()
     {

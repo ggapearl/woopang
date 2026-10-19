@@ -69,6 +69,24 @@ public class Indicator : MonoBehaviour
     private Image[] glintImgs;
     private bool sparkleOn;
 
+    // ── 둘레 그림자 (R0926IndicatorHalo) — 글자 뒤 배경이 밝으면 어둡게, 어두우면 밝게. 배경 밝기는 R0926Backdrop 이 카메라 화면에서 잰다
+    private static readonly Color HaloDark = new Color(0f, 0f, 0f, 0.5f);
+    private static readonly Color HaloLight = new Color(1f, 1f, 1f, 0.36f);
+    private R0926IndicatorHalo[] halos;
+    private bool haloLight;
+    private float haloK, nextLumaAt;
+
+    // ── 목록에서 고른 장소 (OffScreenIndicator.Focus) — 글자 뒤에 흰 테두리 분홍 스티커, 글자는 흰색.
+    //    10-17 대표님: 두근거리며 커지던 것은 정신없고 잘 안 보였다 → 크기는 그대로 두고 스티커만 붙는다
+    private static readonly Color BadgePink = new Color(0.914f, 0.325f, 0.514f, 0.96f);
+    private static readonly Color BadgeRim = new Color(1f, 1f, 1f, 0.95f);
+    private static readonly Color BadgeHalo = new Color(0.42f, 0.04f, 0.18f, 0.5f);   // 스티커 위 흰 글자 둘레 — 짙은 분홍
+    private const float BadgePadX = 18f, BadgePadY = 8f, BadgeRimW = 4f, BadgeRadius = 26f;   // 캔버스 단위
+    private RectTransform badge;
+    private Image badgeRim, badgeFill;
+    private bool focusOn;
+    private float focusK;
+
     public bool Active
     {
         get
@@ -125,6 +143,129 @@ public class Indicator : MonoBehaviour
         canvasGroup.interactable = true;
         canvasGroup.blocksRaycasts = true;
 
+        AddHalos();
+    }
+
+    private void AddHalos()
+    {
+        var list = new System.Collections.Generic.List<R0926IndicatorHalo>(3);
+        foreach (Graphic g in new Graphic[] { indicatorImage, nameText, distanceText })
+        {
+            if (g == null) continue;
+            var h = g.GetComponent<R0926IndicatorHalo>();
+            if (h == null) h = g.gameObject.AddComponent<R0926IndicatorHalo>();
+            if (!list.Contains(h)) list.Add(h);
+        }
+        halos = list.ToArray();
+    }
+
+    // 0.25초마다 글자 자리의 배경 밝기를 보고 고른다 — 경계에서 깜빡이지 않게 밝음 0.55 이상 / 어두움 0.45 이하에서만 바꾸고, 색은 0.25초에 걸쳐
+    private void UpdateHalo()
+    {
+        if (halos == null || halos.Length == 0) return;
+        if (Time.unscaledTime >= nextLumaAt)
+        {
+            nextLumaAt = Time.unscaledTime + 0.25f + Random.value * 0.1f;   // 인디케이터끼리 엇갈려 — 한 프레임에 몰리지 않게
+            float l = R0926Backdrop.Luma(LabelScreenPos());
+            if (l >= 0f)
+            {
+                if (haloLight && l >= 0.55f) haloLight = false;
+                else if (!haloLight && l <= 0.45f) haloLight = true;
+            }
+        }
+        float want = haloLight ? 1f : 0f;
+        if (haloK == want) return;
+        haloK = Mathf.MoveTowards(haloK, want, Time.unscaledDeltaTime / 0.25f);
+        Color c = Color.Lerp(HaloDark, HaloLight, haloK);
+        foreach (var h in halos) h.SetTone(c);
+    }
+
+    /// <summary>목록에서 고른 장소 강조 켜고 끄기 — OffScreenIndicator 가 매 프레임</summary>
+    public void SetFocus(bool on) => focusOn = on;
+
+    // 장소 이름이 쓰인 글자 — 박스는 이름 글자, 화살표는 이름·거리 글자 (SetDistanceText 와 같은 갈래)
+    private Text BadgeLabel() => indicatorType == IndicatorType.BOX && nameText != null ? nameText : distanceText;
+
+    private void UpdateBadge()
+    {
+        float want = focusOn ? 1f : 0f;
+        if (focusK == 0f && want == 0f) return;
+        focusK = Mathf.MoveTowards(focusK, want, Time.unscaledDeltaTime / 0.18f);
+        float a = Smooth(focusK);
+        Text label = BadgeLabel();
+        var halo = label != null ? label.GetComponent<R0926IndicatorHalo>() : null;
+        if (halo != null) halo.SetTone(Color.Lerp(Color.Lerp(HaloDark, HaloLight, haloK), BadgeHalo, a));
+        Rect r = halo != null ? halo.DrawnRect : Rect.zero;
+        if (focusK <= 0f || r.width <= 0f)
+        {
+            if (badge != null && badge.gameObject.activeSelf) badge.gameObject.SetActive(false);
+            return;
+        }
+        EnsureBadge(label);
+
+        // 글자와 같은 자리·회전·크기 — 글자 바로 앞 형제 (화살표·박스 그림 위, 글자 아래)
+        RectTransform lt = label.rectTransform;
+        badge.anchorMin = lt.anchorMin; badge.anchorMax = lt.anchorMax; badge.pivot = lt.pivot;
+        badge.anchoredPosition = lt.anchoredPosition; badge.sizeDelta = lt.sizeDelta;
+        badge.localRotation = lt.localRotation;
+        badge.localScale = lt.localScale * Mathf.Lerp(0.86f, 1f, a);   // 살짝 커지며 붙는다
+        int bi = badge.GetSiblingIndex(), li = lt.GetSiblingIndex();
+        if (bi != li - 1) badge.SetSiblingIndex(bi < li ? li - 1 : li);
+
+        float k = halo.CanvasUnitsPerLocal();
+        Vector2 size = r.size + new Vector2(BadgePadX, BadgePadY) * (2f / k);
+        float radius = Mathf.Min(size.y / 2f, BadgeRadius / k), rim = BadgeRimW / k;
+        PlaceBadgePart(badgeRim, r.center, size + Vector2.one * (rim * 2f), radius + rim);
+        PlaceBadgePart(badgeFill, r.center, size, radius);
+        badgeRim.color = new Color(BadgeRim.r, BadgeRim.g, BadgeRim.b, BadgeRim.a * a);
+        badgeFill.color = new Color(BadgePink.r, BadgePink.g, BadgePink.b, BadgePink.a * a);
+    }
+
+    private void PlaceBadgePart(Image img, Vector2 center, Vector2 size, float radius)
+    {
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = badge.pivot;   // 글자 기준점 — 그린 자리(DrawnRect)가 이 점 기준
+        rt.anchoredPosition = center;
+        rt.sizeDelta = size;
+        if (img.sprite != null && img.sprite.border.y > 0f && radius > 0f) img.pixelsPerUnitMultiplier = img.sprite.border.y / radius;
+    }
+
+    private void EnsureBadge(Text label)
+    {
+        if (badge == null)
+        {
+            var go = new GameObject("FocusBadge0926", typeof(RectTransform));
+            go.layer = gameObject.layer;
+            badge = (RectTransform)go.transform;
+            badge.SetParent(label.rectTransform.parent, false);
+            badgeRim = BadgePart("Rim");
+            badgeFill = BadgePart("Fill");
+        }
+        if (!badge.gameObject.activeSelf) badge.gameObject.SetActive(true);
+    }
+
+    private Image BadgePart(string name)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        go.layer = gameObject.layer;
+        ((RectTransform)go.transform).SetParent(badge, false);
+        var img = go.GetComponent<Image>();
+        img.raycastTarget = false;
+        if (ClosePill != null)
+        {
+            img.sprite = ClosePill;   // 둥근 알약 (9-slice)
+            img.type = Image.Type.Sliced;
+        }
+        return img;
+    }
+
+    // 글자 자리 (화면 픽셀) — 박스는 이름 글자, 화살표는 이름·거리 글자
+    private Vector2 LabelScreenPos()
+    {
+        Graphic g = nameText != null ? nameText : distanceText != null ? (Graphic)distanceText : indicatorImage;
+        Canvas c = g.canvas;
+        Camera cam = c != null && c.rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? c.rootCanvas.worldCamera : null;
+        return RectTransformUtility.WorldToScreenPoint(cam, g.rectTransform.position);
     }
 
     public void SetImageColor(Color color)
@@ -188,6 +329,12 @@ public class Indicator : MonoBehaviour
             }
             distanceText.color = textColor;
         }
+        if (focusK > 0f)
+        {
+            // 분홍 스티커 위 이름은 흰색 — 스티커와 함께 바뀐다 (분홍 글자인 근처 사람도 보이게)
+            Text label = BadgeLabel();
+            if (label != null) label.color = Color.Lerp(label.color, Color.white, Smooth(focusK));
+        }
     }
 
     public void SetTextRotation(Quaternion rotation)
@@ -200,6 +347,7 @@ public class Indicator : MonoBehaviour
         {
             nameText.rectTransform.rotation = rotation;
         }
+        if (badge != null) badge.rotation = rotation;   // 화살표가 돌아도 스티커는 글자처럼 똑바로 (같은 프레임에)
     }
 
     public void Activate(bool value)
@@ -279,6 +427,8 @@ public class Indicator : MonoBehaviour
     private void LateUpdate()
     {
         UpdateSparkle();
+        UpdateHalo();
+        UpdateBadge();
         if (indicatorType != IndicatorType.BOX) return;
         SwapLabels(LabelsSwapped);
 
@@ -533,6 +683,9 @@ public class Indicator : MonoBehaviour
         isFirstActivation = true;
         ownerTarget = null;
         if (sparkleOn) SetSparkle(false);
+        focusOn = false;
+        focusK = 0f;
+        if (badge != null) badge.gameObject.SetActive(false);
 
         // 페이드인 중이었다면 중단
         if (fadeCoroutine != null)

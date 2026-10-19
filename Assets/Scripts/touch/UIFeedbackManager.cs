@@ -83,7 +83,10 @@ public class UIFeedbackManager : MonoBehaviour
         }
     }
 
-    public void HandleTouchFeedbackDirect(AudioClip customSound = null)
+    public void HandleTouchFeedbackDirect(AudioClip customSound = null) => HandleTouchFeedbackDirect(customSound, 1f);
+
+    // volumeScale — 그 버튼만 소리를 줄일 때 (메세지 보내기 0.8)
+    public void HandleTouchFeedbackDirect(AudioClip customSound, float volumeScale)
     {
         AudioClip clipToPlay = customSound ?? cachedButtonSound;
 
@@ -93,7 +96,7 @@ public class UIFeedbackManager : MonoBehaviour
             clipToPlay = cachedButtonSound;
         }
 
-        ExecuteFeedback(hapticIntensity, clipToPlay);
+        ExecuteFeedback(hapticIntensity, clipToPlay, volumeScale);
     }
 
     public void HandleTouchFeedbackDirect(float intensity, AudioClip customSound = null)
@@ -144,9 +147,9 @@ public class UIFeedbackManager : MonoBehaviour
     // 핵심 로직
     // ============================================================
 
-    private void ExecuteFeedback(float intensity, AudioClip clip)
+    private void ExecuteFeedback(float intensity, AudioClip clip, float volumeScale = 1f)
     {
-        PlaySound(clip);
+        PlaySound(clip, volumeScale);
         TriggerHaptic(intensity);
     }
 
@@ -230,12 +233,13 @@ public class UIFeedbackManager : MonoBehaviour
     // 사운드 재생
     // ============================================================
 
-    private void PlaySound(AudioClip clip)
+    private void PlaySound(AudioClip clip, float volumeScale = 1f)
     {
         if (clip == null || audioSource == null) return;
-        if (AudioListener.volume <= 0.01f || soundVolume <= 0.01f) return;
+        float volume = soundVolume * volumeScale;
+        if (AudioListener.volume <= 0.01f || volume <= 0.01f) return;
 
-        audioSource.PlayOneShot(clip, soundVolume);
+        audioSource.PlayOneShot(clip, volume);
     }
 
     // ============================================================

@@ -195,6 +195,9 @@ public class P2PManager : MonoBehaviour
 
         Log($"User info loaded: {currentUsername} ({currentUserId})");
 
+        // 사람 칩이 로그인보다 먼저 '팔로잉'을 정해 두면 그땐 내 아이디가 없어 팔로잉 목록을 못 받았다 — 앱을 켤 때마다 '팔로잉'이 비어 있었다
+        if (userFilterMode == UserFilterMode.FollowingOnly) StartCoroutine(RefreshFollowingList());
+
         // 위치 권한이 없으면 DataManager의 이벤트를 기다린 후 진행
         if (!Input.location.isEnabledByUser)
         {
@@ -366,6 +369,10 @@ public class P2PManager : MonoBehaviour
             {
                 yield return StartCoroutine(UpdatePosition());
             }
+
+            // 팔로잉만 보기 — 그새 팔로우·언팔로우했을 수 있다 (1분마다 다시 받는다)
+            if (userFilterMode == UserFilterMode.FollowingOnly && Time.time - lastFollowingCacheTime > FOLLOWING_CACHE_DURATION)
+                StartCoroutine(RefreshFollowingList());
 
             // 포그라운드/백그라운드에 따라 다른 간격 사용
             yield return new WaitForSeconds(currentUpdateInterval);
@@ -1021,6 +1028,9 @@ public class P2PManager : MonoBehaviour
     private float lastFollowingCacheTime = 0f;
     private const float FOLLOWING_CACHE_DURATION = 60f; // 60초마다 갱신
 
+    /// <summary>사람 필터가 바뀌었거나 팔로잉 목록이 새로 왔다 — 장소 목록(PlaceListManager)이 바로 다시 그린다</summary>
+    public event Action UserFilterChanged;
+
     /// <summary>
     /// 사용자 필터 모드 설정 (ListPanel에서 호출)
     /// </summary>
@@ -1036,6 +1046,7 @@ public class P2PManager : MonoBehaviour
         }
 
         UpdateVisibleAvatars();
+        UserFilterChanged?.Invoke();
     }
 
     /// <summary>
@@ -1052,6 +1063,7 @@ public class P2PManager : MonoBehaviour
     private IEnumerator RefreshFollowingList()
     {
         if (string.IsNullOrEmpty(currentUserId)) yield break;
+        lastFollowingCacheTime = Time.time;   // 실패해도 1분 안엔 다시 묻지 않는다 (위치 보내기 주기마다 묻게 되지 않게)
 
         string url = $"{ApiConfig.FOLLOWING}?user_id={currentUserId}";
 
@@ -1062,6 +1074,7 @@ public class P2PManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                var before = new HashSet<string>(followingUserIds);
                 try
                 {
                     JObject response = JObject.Parse(request.downloadHandler.text);
@@ -1086,6 +1099,12 @@ public class P2PManager : MonoBehaviour
                 catch (Exception e)
                 {
                     LogError($"Failed to parse following list: {e.Message}");
+                }
+                // 팔로잉만 보기 — 목록이 오기 전엔 아무도 안 맞아 비어 있었다. 바뀌었으면 아바타·장소 목록을 다시
+                if (userFilterMode == UserFilterMode.FollowingOnly && !before.SetEquals(followingUserIds))
+                {
+                    UpdateVisibleAvatars();
+                    UserFilterChanged?.Invoke();
                 }
             }
         }

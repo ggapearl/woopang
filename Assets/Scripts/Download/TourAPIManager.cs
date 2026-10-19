@@ -127,9 +127,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         // PlayerPrefs에서 필터 상태 초기화 (DataManager 패턴)
         currentFilters = new Dictionary<string, bool>();
         int petState = PlayerPrefs.GetInt("Filter_PetFriendly_V3", 0);
-        currentFilters["petFriendlyAll"] = (petState == 0);
+        currentFilters["petFriendlyAll"] = (petState != 1);   // 옛 2(애견동반 안 됨)는 없앰 → 전부
         currentFilters["petFriendlyOnly"] = (petState == 1);
-        currentFilters["noPetFriendly"] = (petState == 2);
         currentFilters["publicData"] = PlayerPrefs.GetInt("Filter_PublicData_V2", 1) == 1;
 
         InitializeObjectPool();
@@ -336,8 +335,9 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 category = "tour",
                 sourceManager = "TourAPI",
                 modelType = "cube",
-                petFriendly = false,
-                filterKey = ""
+                petFriendly = true,   // 관광공사 반려동물 여행 자료는 모두 애견동반 (false 라 '반려견 되는 곳만'에서 배분이 빠졌다)
+                // 관광공사 자료 = 공공데이터 칩. 빈 값이면 칩이 꺼져도 배분을 받아 (보이지 않으면서) 사람이 올린 곳의 자리를 차지했다
+                filterKey = "publicData"
             });
         }
         if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
@@ -1085,7 +1085,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     // IPlaceCacheProvider 구현
     // ============================================================
 
-    public string FilterKey => "";
+    public string FilterKey => "publicData";
     public int MaxCacheSize => 100;
     public bool IsCacheReady => isCacheReady;
     public float LastLoadedAt { get; private set; } = -1f;

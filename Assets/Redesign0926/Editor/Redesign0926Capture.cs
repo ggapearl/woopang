@@ -66,7 +66,7 @@ namespace Redesign0926
         // PlaceListManager 가 실제로 쓰는 형식 그대로 (캡처 미리보기용 예시)
         private const string SampleList =
             "<color=#E854A1>연남고집 - 42m</color>\n" +
-            "<color=#E95383>👤 sigorpd - 65m</color>\n" +
+            "<color=#E95383>@sigorpd - 65m</color>\n" +
             "<color=#FBC15D>꼬요 - 118m</color>\n" +
             "<color=#4DD980>경의선숲길 공원 - 180m</color>\n" +
             "<color=#4080F2>소제이 - 260m</color>\n" +

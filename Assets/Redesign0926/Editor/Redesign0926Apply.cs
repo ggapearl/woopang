@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 25;  // v25: 10-13·10-17 대표님 요청분 — 보물찾기 '보물 열기' 버튼을 없애고 AR 금빛 상자를 두 번 톡톡 눌러 열기 · 찾으면 축하 화면(선물 상자·빛줄기·꽃가루 + 상품 안내 + 주최자에게 메세지) · 보물은 제자리(위아래로 안 떠다님) · 화면 밖 금색 박스에 별빛 · 주최자도 자기 보물이 보임 · '1시간 연장하기 / 1일 연장하기' 한 줄·누르자마자 반영 · 한마디·코드 칸도 입력줄 보내기 화살표 · 보물찾기 카드 글자·버튼 키움(돌아가기 알약·주최 수칙 보기) · 추가 창 '장소/3D모델/보물찾기' 탭 글자를 '분류'만큼 · v24: 10-12 추가 — 보물찾기 참가 인원 상한 칩 · 날씨판 지역을 기온 바로 위 유리 알약(핀 + 이름)으로 · 10-06 대표님 요청분 — 대화창을 새 모양으로(내 말 분홍·상대 카드색 둥근 말풍선 · 날짜 알약 · ‹ 와 흰 제목, 우팡 공식 방은 체크 배지 · 좋아요 하트가 안 뜨던 것) · 설정 '화면' 30/60fps(기본 30) · 버전은 설정 맨 아래 작게 · 저작권 자리는 대표님이 씬에서 잡은 그대로 · 목록 글자 키움(이름 48·거리 41) · AR 복구 중에도 도크 누름(불러오는 중 막이 칩·도크 아래로) · v23: 10-06 대표님 대조분 — 첫 안내 다음·시작하기·건너뛰기 소리를 하단 메뉴(물방울)와 같게 · 날씨판 지역은 서버(카카오 행정구역) 우선 · 목록 맨 아래 버전만(접고 펴기 없앰)·저작권 그림 글만 잘라 키움 · 설정 '앱 정보'(문의·개인정보·출처·버전) · 추가 창 세 번째 카드 '보물찾기'(장소|3D모델|보물찾기 탭 · 숨기기·참가·상세) · v22: v21 검토분 — 장소 수정 X 덮개가 다시 적용 때 꺼지던 것 · X 가 자기를 꺼 두 번째부터 사라지던 것 · 친구 이름 글자 잘림 · 'Anuncio' 배지 · v21: 목록 시트 제목·'목록|지도|설정' 글자 키움 · 지도·설정 탭 글자·줄 키움 · 지도 깊은 확대(서버 타일 · 없으면 200배) · 장소 수정 카드도 밀어 닫기 · v20: v19 검토분 — 밀어 닫을 때 시작한 버튼(등록하기·팔로우·로그아웃)이 눌리던 것 · 추가 시트 위쪽을 덮던 투명 누름 영역(XButton_Panel) · 프로필 내릴 때 도크 X 가 카드 위로 비치던 것 · v19: 창 닫기 통일 — 추가·프로필도 아래로 밀어 닫기(추가는 장소/3D모델 넘기기와 같은 방향 잠금) · 추가 카드 손잡이 · 프로필 열리면 도크 칸 X '닫기' · '되돌리기' 알림은 창이 열리면 거둠·가로 자리 · 업로드 제한시간 60초(3D 모델·정보 수정) · v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
+        public const int Version = 26;  // v26: 10-13·10-15·10-17·10-18 대표님 요청분 — 목록 필터: '전체' 칩을 누르면 분류 8개가 칩 아래로 펼쳐져 고름(누를 때마다 다음 분류로 넘어가던 것) · 칩 두 줄 위 4칸(전체·반려견·공공데이터·3D) 아래 3칸(지하철·터미널 / 기차·사람) · 기차역 칩을 터미널과 합침(기차역 칩이 숨은 '주류' 필터로도 이어져 끄면 술 파는 가게까지 숨던 것) · '공공'→'공공데이터'(기관이 올린 장소·관광공사만 — 사람이 '공원'으로 올린 곳은 우팡 데이터) · 켜진 흰 칩(3D·전체·팔로잉)은 꽉 찬 흰색 · 반려견은 두 가지('애견동반 안 됨' 없앰) · '목록|지도|설정' 칸을 필터 칩 높이로 · 'AI에게 묻기' 숨김 · 목록에 참가 중·내가 연 보물찾기 줄(금빛 상자·공개 설정대로 거리 · 누르면 그 게임 상세) · 지도에도 그 보물찾기(정확히 공개는 그 자리 · 대략 공개는 원 · 누르면 그 게임 상세 · 게임이 있으면 위치 공유를 꺼 두어도 지도를 가리지 않음) · 지도 한 단계 더 확대(서버 타일 단계 + 1 · 지도 좌표 double) · 지도는 보던 자리를 기억(다른 창에 다녀오거나 앱을 다시 켜도) · 지도를 꾹 누르면 핀 + 위도·경도 복사 · 돋보기로 좌표 검색(구글 지도 주소·도분초도 · 붙여넣기) → 그 자리에 핀 + 동네 보이게 확대 · 설정의 '라이브 방송'·'광고 · 제휴 소식' 줄 삭제(보낼 내용 없이 기기 저장값만 있던 '곧' 스위치) · 근처 사람은 사람 모양(핑크) · 사람 칩 '팔로잉'이 실제로 걸리게(필터 둘이 따로 돌던 것 · 켤 때 늘 '제외' · 팔로잉 목록을 로그인 전에 받아 비던 것) · 목록·카드 옆으로 밀다 아래로 끌면 맨 위에서도 내려가던 것(R0926ScrollLock) · 메시지 검색에서 바로 팔로우·프로필 · 메시지 창 제목 아래 작은 '(친구찾기)'(도크 칸엔 없음 — 창이 열렸을 때만) · 앱 최소 글자 38 · 토스트 · 입력칸 분홍 테두리·커서·입력줄 위로 스크롤 · 10-13 대표님 겹침 — 보물찾기 상세로 갈 때(알림·말풍선·프로필 게임 줄) 프로필·팔로우 목록·대화방·메시지 목록은 열어 준 곳으로 되돌아가지 않고 바로 닫힘(팔로잉 목록 → 프로필 → 게임 줄 · 대화방 → 말풍선) · 메시지 목록 X 가 자기를 꺼 다른 길로 다시 켜지면 닫히지 않던 것 · 대화창의 '[보물찾기 · 제목]' 말풍선은 금색 머리 줄 · 한 번 누르면 그 게임 상세(두 번은 좋아요) · v25: 10-13·10-17 대표님 요청분 — 보물찾기 '보물 열기' 버튼을 없애고 AR 금빛 상자를 두 번 톡톡 눌러 열기 · 찾으면 축하 화면(선물 상자·빛줄기·꽃가루 + 상품 안내 + 주최자에게 메세지) · 보물은 제자리(위아래로 안 떠다님) · 화면 밖 금색 박스에 별빛 · 주최자도 자기 보물이 보임 · '1시간 연장하기 / 1일 연장하기' 한 줄·누르자마자 반영 · 한마디·코드 칸도 입력줄 보내기 화살표 · 보물찾기 카드 글자·버튼 키움(돌아가기 알약·주최 수칙 보기) · 추가 창 '장소/3D모델/보물찾기' 탭 글자를 '분류'만큼 · v24: 10-12 추가 — 보물찾기 참가 인원 상한 칩 · 날씨판 지역을 기온 바로 위 유리 알약(핀 + 이름)으로 · 10-06 대표님 요청분 — 대화창을 새 모양으로(내 말 분홍·상대 카드색 둥근 말풍선 · 날짜 알약 · ‹ 와 흰 제목, 우팡 공식 방은 체크 배지 · 좋아요 하트가 안 뜨던 것) · 설정 '화면' 30/60fps(기본 30) · 버전은 설정 맨 아래 작게 · 저작권 자리는 대표님이 씬에서 잡은 그대로 · 목록 글자 키움(이름 48·거리 41) · AR 복구 중에도 도크 누름(불러오는 중 막이 칩·도크 아래로) · v23: 10-06 대표님 대조분 — 첫 안내 다음·시작하기·건너뛰기 소리를 하단 메뉴(물방울)와 같게 · 날씨판 지역은 서버(카카오 행정구역) 우선 · 목록 맨 아래 버전만(접고 펴기 없앰)·저작권 그림 글만 잘라 키움 · 설정 '앱 정보'(문의·개인정보·출처·버전) · 추가 창 세 번째 카드 '보물찾기'(장소|3D모델|보물찾기 탭 · 숨기기·참가·상세) · v22: v21 검토분 — 장소 수정 X 덮개가 다시 적용 때 꺼지던 것 · X 가 자기를 꺼 두 번째부터 사라지던 것 · 친구 이름 글자 잘림 · 'Anuncio' 배지 · v21: 목록 시트 제목·'목록|지도|설정' 글자 키움 · 지도·설정 탭 글자·줄 키움 · 지도 깊은 확대(서버 타일 · 없으면 200배) · 장소 수정 카드도 밀어 닫기 · v20: v19 검토분 — 밀어 닫을 때 시작한 버튼(등록하기·팔로우·로그아웃)이 눌리던 것 · 추가 시트 위쪽을 덮던 투명 누름 영역(XButton_Panel) · 프로필 내릴 때 도크 X 가 카드 위로 비치던 것 · v19: 창 닫기 통일 — 추가·프로필도 아래로 밀어 닫기(추가는 장소/3D모델 넘기기와 같은 방향 잠금) · 추가 카드 손잡이 · 프로필 열리면 도크 칸 X '닫기' · '되돌리기' 알림은 창이 열리면 거둠·가로 자리 · 업로드 제한시간 60초(3D 모델·정보 수정) · v18: 첫 안내 목록→추가→메세지 순서·다음/시작하기 터치음 · 도크 '메세지' · 숨김 되돌리기 알림·설정 '모두 다시 보이기' · 날씨판 위 지역 이름 · 업데이트 카드 '반영 중' 상태 제거 · v17: 업데이트 안내를 프로필 카드 모양으로 · v16: 키보드 위 입력줄 연결 바로잡음(장소 칸 글 덮어쓰던 것·장소 수정 쪽 빈 연결)·폭 · 장소 추가 칩·스위치 키움 · v15: 10-04 아이폰 확인 — 채팅방이 안 열리던 것(키보드 처리기) · 대화 목록 두 벌 · 도크 메시지 칸 · 손잡이 · 프로필 카드 · 입력줄 · 장소 추가 크게·좌표 · 날씨 크기 · v14: 0930 시안 — 도크 여백·테두리 추가·한 줄 위치 · 창이 도크 윗선에서 오르내림 · 프로필 페이드 · 칩·목록 촘촘히 · 탭 옆으로 밀기 · 상태 알약 · 안내 스포트라이트 · 날씨 예보 · 댓글 입력 · X 두 번 눌러 삭제 · v13: 시작화면 영어(우주) 하나로 · 도크 버튼 키움 · 닫을 때도 아래로 미끄러짐 · v12: 시작화면 색동·금테 제거 · 렌즈 밖 옅은 문양 · 흰 렌즈 · 워드마크 간격 · 끌어 닫기 · 뒤로가기 정리 · v11: 시작화면을 맨 위 하나로 (예전 시작 이미지 제거 · Panel_Top 정리) · v10: 시작화면 SEE THE UNSEEN (v9: 친구 지도 · v8: 인디케이터 X)   // v6: 거리별 흐림 · 가로 화면 (v5: 장소 추가 개편 · 상태 화면 · 안내 · 끊김 배너 · 로마자)
 
         private const string SpriteDir = "Assets/Redesign0926/Sprites/";
 
@@ -78,6 +78,10 @@ namespace Redesign0926
             ApplySplash(root, log);             // 시작화면은 맨 위 — 마지막에
             Apply0930(root, log);               // 0930 시안 — 틀을 다시 씌우고 새 모양 (시작화면 별 포함)
             ApplyFadeAndLandscape(root, log);   // 가로 배치는 세로 값이 다 정해진 뒤에 (0930 틀 포함 — 맨 마지막)
+            ApplyListKinds(root, log);          // 목록의 사람·보물찾기 줄 그림 · 사람 필터 하나로
+            ApplyListFilters(root, log);        // 목록 필터 — '전체' 고르기 목록 · 'AI에게 묻기' 숨김 (0930 틀 안에)
+            ApplyMapCoord(root, log);           // 지도 꾹 눌러 핀 · 좌표 검색 (입력칸 다듬기보다 먼저)
+            ApplyReadable(root, log);           // 토스트 · 앱 전체 최소 글자 · 입력칸 커서 — 다른 단계가 글자 크기를 다 정한 뒤에
             CloseStartPanels(root, log);
 
             var marker = root.GetComponentInChildren<R0926Marker>(true);
@@ -171,6 +175,9 @@ namespace Redesign0926
 
             DockButton(listBtn, dock.transform, SlotList, "r0926_i_list", "목록", "List", "リスト", "列表", "Lista");
             DockButton(msgBtn, dock.transform, SlotMsg, "r0926_i_mail", "메세지", "Messages", "メッセージ", "消息", "Mensajes");   // 한국어는 '메세지' (2026-10 요청)
+            // '(친구찾기)' 는 도크 칸이 아니라 메시지 창 제목 아래에만 (10-19 대표님 — MessageTitleSub) · 예전에 칸에 붙인 것 지움
+            var oldSub = msgBtn.transform.Find("SubLabel0926");
+            if (oldSub != null) Object.DestroyImmediate(oldSub.gameObject);
 
             // 안 읽음 표시 — 이름·부모 그대로 (MessagePanelManager 가 이름으로 찾는다)
             var unread = Find(msgBtn.transform, "UnreadMessageButtonImage");
@@ -310,7 +317,7 @@ namespace Redesign0926
         // 위치 상태 — 도크 위 작은 유리 칩
         // ============================================================
         // AR 화면을 덮는 창 — 열려 있으면 위치 칩이 숨고 보물찾기 알림도 걷힌다
-        private static readonly string[] ArCovers = { "FullScreenPanel", "ListPanel", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "UploadPage", "Fixpage", "FirstTimeGuidePanel" };
+        private static readonly string[] ArCovers = { "FullScreenPanel", "ListPanel", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "FollowPanel", "UploadPage", "Fixpage", "FirstTimeGuidePanel" };
 
         private static void ApplyLocationChip(Transform root, List<string> log)
         {
@@ -379,7 +386,7 @@ namespace Redesign0926
         // ============================================================
         private const float SheetPad = 48f;
         private const float HeaderY = -40f;
-        private const float HeaderH = 84f;        // 제목줄 — 2026-10-05 '근처 장소'·'목록|지도|설정' 글자를 키우며 (예전 72)
+        private const float HeaderH = 124f;       // 제목줄 — 10-18 대표님 '목록 / 지도 / 설정' 을 필터 칩만큼(칸 112 = 칩 높이) · 10-05 84 · 예전 72
         private const float SliderBlock = HeaderH + 56f + 12f;   // 제목줄 + 슬라이더(56) + 틈
         private const float ChipsY = HeaderY - SliderBlock - 20f;   // -200
         private const float ChipH = 112f;   // 0930: 글자를 키운 칩 (예전 76)
@@ -475,7 +482,7 @@ namespace Redesign0926
                 }
             }
 
-            // 필터 칩 4x2
+            // 필터 칩 두 줄 — 위 4칸 · 아래 3칸 (Redesign0926ApplyFilters)
             var filters = Find(panel.transform, "FilterButtonPanel");
             if (filters != null)
             {
@@ -487,14 +494,7 @@ namespace Redesign0926
                 if (vlg != null) Object.DestroyImmediate(vlg);
                 var csf = filters.GetComponent<ContentSizeFitter>();
                 if (csf != null) Object.DestroyImmediate(csf);
-                var grid = Ensure<GridLayoutGroup>(filters);
-                grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                grid.constraintCount = 4;
-                grid.spacing = new Vector2(ChipGap, ChipGap);
-                grid.startAxis = GridLayoutGroup.Axis.Horizontal;
-                grid.childAlignment = TextAnchor.UpperLeft;
-                grid.cellSize = new Vector2(318, ChipH);
-                Ensure<R0926GridFit>(filters);   // 칸 너비는 실제 폭에 맞춘다
+                ChipGrid0926(filters);   // 터미널 / 기차가 두 칸 · 칸 너비는 실제 폭에 맞춘다
                 SetRect(RT(filters), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, ChipsY), new Vector2(0, ChipH * 2 + ChipGap));
                 RT(filters).offsetMin = new Vector2(SheetPad, RT(filters).offsetMin.y);
                 RT(filters).offsetMax = new Vector2(-SheetPad, RT(filters).offsetMax.y);
@@ -618,10 +618,9 @@ namespace Redesign0926
         {
             ("CategoryToggle", R0926FilterChip.Kind.Category, "#E8EDF1", null),
             ("PetFriendlyToggle", R0926FilterChip.Kind.Pet, "#F5A623", new[] { "반려견", "Pets", "ペット", "宠物", "Mascotas" }),
-            ("PublicDataToggle", R0926FilterChip.Kind.Simple, "#59B7FF", new[] { "공공", "Public", "公共", "公共", "Público" }),
+            ("PublicDataToggle", R0926FilterChip.Kind.Simple, "#59B7FF", new[] { "공공데이터", "Public data", "公共データ", "公共数据", "Público" }),
             ("MetroToggle", R0926FilterChip.Kind.Simple, "#3FC1B0", new[] { "지하철", "Subway", "地下鉄", "地铁", "Metro" }),
-            ("TerminalToggle", R0926FilterChip.Kind.Simple, "#7DDC54", new[] { "터미널", "Terminal", "ターミナル", "客运站", "Terminal" }),
-            ("TrainStationToggle", R0926FilterChip.Kind.Simple, "#9BE15D", new[] { "기차역", "Train", "駅", "火车站", "Tren" }),
+            ("TerminalToggle", R0926FilterChip.Kind.Simple, "#7DDC54", new[] { "터미널 / 기차", "Bus / Train", "ターミナル / 駅", "客运站 / 火车站", "Terminal / Tren" }),
             ("3DObjectToggle", R0926FilterChip.Kind.Simple, "#FFFFFF", new[] { "3D", "3D", "3D", "3D", "3D" }),
             ("P2PUserToggle", R0926FilterChip.Kind.P2P, "#E95383", null),
         };
@@ -668,22 +667,23 @@ namespace Redesign0926
                 EditorUtility.SetDirty(t);
             }
 
-            var strike = FindOrCreate(chip.transform, "Strike0926");
-            var sImg = Img(strike, null, new Color(1, 1, 1, 0.35f), Image.Type.Simple);
-            sImg.raycastTarget = false;
-            sImg.enabled = false;
-            SetRect(RT(strike), new Vector2(0.18f, 0.5f), new Vector2(0.82f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0, 4));
-            RT(strike).localEulerAngles = new Vector3(0, 0, 8);
+            // 반려견 '안 되는 곳만'의 빗금은 없앴다 (10-18 대표님 — 반려견은 두 가지)
+            var strike = chip.transform.Find("Strike0926");
+            if (strike != null) Object.DestroyImmediate(strike.gameObject);
 
             var def = System.Array.Find(ChipDefs, d => d.name == chip.name);
             if (def.name == null) return;
-            Image cyc = null;
+            // 분류 칩 — 누르면 고르기 목록이 펼쳐진다는 ∨ (10-17 대표님: 누를 때마다 다음 분류로 넘어가던 ↻ 대신)
+            var cycle = chip.transform.Find("Cycle0926");
+            if (cycle != null) Object.DestroyImmediate(cycle.gameObject);
+            Image drop = null;
             if (def.kind == R0926FilterChip.Kind.Category)
             {
-                var c = FindOrCreate(chip.transform, "Cycle0926");
-                cyc = Img(c, Spr("r0926_i_cycle"), new Color(1, 1, 1, 0.6f), Image.Type.Simple);
-                cyc.raycastTarget = false;
-                SetRect(RT(c), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34));
+                var c = FindOrCreate(chip.transform, "Drop0926");
+                drop = Img(c, Spr("r0926_i_down"), new Color(1, 1, 1, 0.75f), Image.Type.Simple);
+                drop.raycastTarget = false;
+                drop.preserveAspect = true;
+                SetRect(RT(c), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40));
             }
             var fc = Ensure<R0926FilterChip>(chip);
             var so = new SerializedObject(fc);
@@ -697,8 +697,7 @@ namespace Redesign0926
             so.FindProperty("body").objectReferenceValue = body;
             so.FindProperty("label").objectReferenceValue = t;
             so.FindProperty("dot").objectReferenceValue = dImg;
-            so.FindProperty("strike").objectReferenceValue = sImg;
-            so.FindProperty("cycle").objectReferenceValue = cyc;
+            so.FindProperty("drop").objectReferenceValue = drop;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -743,7 +742,7 @@ namespace Redesign0926
                 var ti = AssetImporter.GetAtPath(path) as TextureImporter;
                 if (ti == null) continue;
                 string file = System.IO.Path.GetFileNameWithoutExtension(path);
-                Vector4 border = file == "r0926_pill" ? new Vector4(63, 63, 63, 63)
+                Vector4 border = file == "r0926_pill" || file == "r0926_pill_ring" ? new Vector4(63, 63, 63, 63)
                                : file == "r0926_sheet" ? new Vector4(63, 1, 63, 63)
                                : Vector4.zero;
                 bool dirty = ti.textureType != TextureImporterType.Sprite || ti.mipmapEnabled

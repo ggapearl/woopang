@@ -4,8 +4,9 @@ using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
-/// 토스트 메시지 매니저
-/// 앱 전체에서 사용자에게 간단한 피드백 메시지 표시
+/// 토스트 메시지 — 화면 위쪽(상태 알약 아래)에 잠깐 떴다 사라지는 어두운 알약.
+/// 2026-10: 예전 ToastManager 는 씬 어디에도 붙어 있지 않아 Instance 가 늘 null 이었다 — 앱 곳곳의 오류·안내가 한 번도 뜨지 않았다.
+/// 이제 Redesign0926 적용이 Canvas 아래 'Toast0926'(창·도크 위에 그림)에 붙이고 견본 알약을 연결한다.
 /// </summary>
 public class ToastManager : MonoBehaviour
 {
@@ -17,77 +18,45 @@ public class ToastManager : MonoBehaviour
     public float fadeOutDuration = 0.3f;
     public int maxToasts = 3;
 
-    [Header("스타일")]
-    public Color successColor = new Color(0.2f, 0.7f, 0.4f, 0.95f);
-    public Color errorColor = new Color(0.85f, 0.3f, 0.3f, 0.95f);
-    public Color warningColor = new Color(0.9f, 0.7f, 0.2f, 0.95f);
-    public Color infoColor = new Color(0.3f, 0.3f, 0.35f, 0.95f);
+    [Header("0926 알약 — 적용(Redesign0926)이 연결한다")]
+    [SerializeField] private RectTransform container;   // 화면 위쪽 · 새 알약이 아래로 쌓인다
+    [SerializeField] private GameObject template;        // 꺼 둔 견본 — Dot(Image) · Text(Text)
 
-    private Canvas toastCanvas;
-    private Transform toastContainer;
-    private Queue<ToastData> pendingToasts = new Queue<ToastData>();
-    private List<GameObject> activeToasts = new List<GameObject>();
+    [Header("종류별 점 색")]
+    public Color successColor = new Color(0.30f, 0.78f, 0.47f, 1f);
+    public Color errorColor = new Color(0.94f, 0.36f, 0.40f, 1f);
+    public Color warningColor = new Color(0.98f, 0.75f, 0.27f, 1f);
+    public Color infoColor = new Color(0.55f, 0.58f, 0.62f, 1f);
 
     public enum ToastType { Success, Error, Warning, Info }
 
-    private struct ToastData
+    private class Live
     {
+        public GameObject go;
+        public CanvasGroup cg;
         public string message;
-        public ToastType type;
-        public float duration;
+        public float until;
+        public bool leaving;
     }
+
+    private readonly List<Live> live = new List<Live>();
 
     void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-            CreateToastUI();
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        if (Instance != null && Instance != this) { Destroy(this); return; }
+        Instance = this;
+        if (template != null) template.SetActive(false);
     }
 
-    private void CreateToastUI()
+    void OnDisable()
     {
-        // Canvas 생성
-        GameObject canvasObj = new GameObject("ToastCanvas");
-        canvasObj.transform.SetParent(transform);
+        foreach (var t in live) if (t.go != null) Destroy(t.go);
+        live.Clear();
+    }
 
-        toastCanvas = canvasObj.AddComponent<Canvas>();
-        toastCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        toastCanvas.sortingOrder = 9500;
-
-        CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1080, 1920);
-        scaler.matchWidthOrHeight = 0.5f;
-
-        canvasObj.AddComponent<GraphicRaycaster>();
-
-        // 컨테이너 (하단 중앙)
-        GameObject containerObj = new GameObject("ToastContainer");
-        containerObj.transform.SetParent(canvasObj.transform, false);
-
-        RectTransform containerRect = containerObj.AddComponent<RectTransform>();
-        containerRect.anchorMin = new Vector2(0.5f, 0);
-        containerRect.anchorMax = new Vector2(0.5f, 0);
-        containerRect.pivot = new Vector2(0.5f, 0);
-        containerRect.anchoredPosition = new Vector2(0, 150);
-        containerRect.sizeDelta = new Vector2(800, 300);
-
-        VerticalLayoutGroup vlg = containerObj.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 10f;
-        vlg.childAlignment = TextAnchor.LowerCenter;
-        vlg.childForceExpandWidth = false;
-        vlg.childForceExpandHeight = false;
-        vlg.childControlWidth = false;
-        vlg.childControlHeight = true;
-
-        toastContainer = containerObj.transform;
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     /// <summary>
@@ -95,22 +64,46 @@ public class ToastManager : MonoBehaviour
     /// </summary>
     public void Show(string message, ToastType type = ToastType.Info, float duration = 0f)
     {
-        if (duration <= 0f) duration = defaultDuration;
-
-        ToastData data = new ToastData
+        if (string.IsNullOrEmpty(message) || !isActiveAndEnabled) return;
+        if (container == null || template == null)
         {
-            message = message,
-            type = type,
-            duration = duration
-        };
+            Debug.LogError("[Toast] 견본 알약이 연결되지 않음 — Redesign0926 적용 필요");
+            return;
+        }
+        if (duration <= 0f) duration = defaultDuration + Mathf.Min(message.Length, 60) * 0.03f;   // 긴 글은 조금 더 오래
 
-        if (activeToasts.Count >= maxToasts)
+        // 같은 말이 떠 있으면 하나 더 띄우지 않고 시간만 늘린다 (같은 오류가 연달아 와도 하나만)
+        foreach (var t in live)
         {
-            pendingToasts.Enqueue(data);
+            if (t.leaving || t.message != message) continue;
+            t.until = Mathf.Max(t.until, Time.unscaledTime + duration);
             return;
         }
 
-        CreateToast(data);
+        // 많으면 가장 오래된 것부터 걷는다 — 새 소식이 기다리지 않게
+        int showing = 0;
+        foreach (var t in live) if (!t.leaving) showing++;
+        for (int i = 0; i < live.Count && showing >= maxToasts; i++)
+        {
+            if (live[i].leaving) continue;
+            live[i].leaving = true;
+            showing--;
+        }
+
+        var go = Instantiate(template, container);
+        go.name = "Toast";
+        var text = go.transform.Find("Text")?.GetComponent<Text>();
+        if (text != null) text.text = message;
+        var dot = go.transform.Find("Dot")?.GetComponent<Image>();
+        if (dot != null) dot.color = ColorOf(type);
+        var cg = go.GetComponent<CanvasGroup>();
+        if (cg == null) cg = go.AddComponent<CanvasGroup>();
+        cg.alpha = 0f;
+        go.SetActive(true);
+
+        var toast = new Live { go = go, cg = cg, message = message, until = Time.unscaledTime + fadeInDuration + duration };
+        live.Add(toast);
+        StartCoroutine(Run(toast));
     }
 
     // 편의 메서드들
@@ -119,115 +112,35 @@ public class ToastManager : MonoBehaviour
     public void ShowWarning(string message) => Show(message, ToastType.Warning);
     public void ShowInfo(string message) => Show(message, ToastType.Info);
 
-    private void CreateToast(ToastData data)
+    private IEnumerator Run(Live t)
     {
-        GameObject toastObj = new GameObject("Toast");
-        toastObj.transform.SetParent(toastContainer, false);
-
-        RectTransform toastRect = toastObj.AddComponent<RectTransform>();
-        toastRect.sizeDelta = new Vector2(600, 50);
-
-        // 배경
-        Image bgImage = toastObj.AddComponent<Image>();
-        bgImage.color = GetColorForType(data.type);
-
-        // 둥근 모서리용 스프라이트가 없으면 기본 배경
-        bgImage.raycastTarget = false;
-
-        // CanvasGroup (페이드용)
-        CanvasGroup cg = toastObj.AddComponent<CanvasGroup>();
-        cg.alpha = 0f;
-
-        // 레이아웃
-        HorizontalLayoutGroup hlg = toastObj.AddComponent<HorizontalLayoutGroup>();
-        hlg.padding = new RectOffset(20, 20, 12, 12);
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-        hlg.childForceExpandWidth = true;
-        hlg.childForceExpandHeight = false;
-        hlg.childControlWidth = true;
-        hlg.childControlHeight = true;
-
-        ContentSizeFitter csf = toastObj.AddComponent<ContentSizeFitter>();
-        csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        // 아이콘 (타입별)
-        GameObject iconObj = new GameObject("Icon");
-        iconObj.transform.SetParent(toastObj.transform, false);
-
-        Text iconText = iconObj.AddComponent<Text>();
-        iconText.text = GetIconForType(data.type);
-        iconText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        iconText.fontSize = 20;
-        iconText.color = Color.white;
-        iconText.alignment = TextAnchor.MiddleCenter;
-
-        LayoutElement iconLE = iconObj.AddComponent<LayoutElement>();
-        iconLE.preferredWidth = 30;
-        iconLE.preferredHeight = 30;
-
-        // 텍스트
-        GameObject textObj = new GameObject("MessageText");
-        textObj.transform.SetParent(toastObj.transform, false);
-
-        Text messageText = textObj.AddComponent<Text>();
-        messageText.text = data.message;
-        messageText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        messageText.fontSize = 16;
-        messageText.color = Color.white;
-        messageText.alignment = TextAnchor.MiddleLeft;
-
-        LayoutElement textLE = textObj.AddComponent<LayoutElement>();
-        textLE.flexibleWidth = 1;
-        textLE.preferredHeight = 26;
-
-        activeToasts.Add(toastObj);
-        StartCoroutine(AnimateToast(toastObj, cg, data.duration));
-    }
-
-    private IEnumerator AnimateToast(GameObject toast, CanvasGroup cg, float duration)
-    {
-        // 페이드 인
-        float elapsed = 0f;
-        while (elapsed < fadeInDuration)
+        var rt = (RectTransform)t.go.transform;
+        for (float e = 0f; e < fadeInDuration; e += Time.unscaledDeltaTime)
         {
-            if (toast == null) yield break;
-            elapsed += Time.deltaTime;
-            cg.alpha = Mathf.Lerp(0f, 1f, elapsed / fadeInDuration);
+            if (t.go == null) yield break;
+            float k = e / fadeInDuration;
+            t.cg.alpha = k;
+            rt.localScale = Vector3.one * Mathf.Lerp(0.96f, 1f, k);
             yield return null;
         }
-        cg.alpha = 1f;
+        if (t.go == null) yield break;
+        t.cg.alpha = 1f;
+        rt.localScale = Vector3.one;
 
-        // 대기
-        yield return new WaitForSeconds(duration);
+        while (!t.leaving && Time.unscaledTime < t.until) yield return null;
+        t.leaving = true;
 
-        // 페이드 아웃
-        elapsed = 0f;
-        while (elapsed < fadeOutDuration)
+        for (float e = 0f; e < fadeOutDuration; e += Time.unscaledDeltaTime)
         {
-            if (toast == null) yield break;
-            elapsed += Time.deltaTime;
-            cg.alpha = Mathf.Lerp(1f, 0f, elapsed / fadeOutDuration);
+            if (t.go == null) break;
+            t.cg.alpha = 1f - e / fadeOutDuration;
             yield return null;
         }
-
-        RemoveToast(toast);
+        live.Remove(t);
+        if (t.go != null) Destroy(t.go);
     }
 
-    private void RemoveToast(GameObject toast)
-    {
-        if (toast == null) return;
-        activeToasts.Remove(toast);
-        Destroy(toast);
-
-        // 대기 중인 토스트 처리
-        if (pendingToasts.Count > 0)
-        {
-            CreateToast(pendingToasts.Dequeue());
-        }
-    }
-
-    private Color GetColorForType(ToastType type)
+    private Color ColorOf(ToastType type)
     {
         switch (type)
         {
@@ -235,17 +148,6 @@ public class ToastManager : MonoBehaviour
             case ToastType.Error: return errorColor;
             case ToastType.Warning: return warningColor;
             default: return infoColor;
-        }
-    }
-
-    private string GetIconForType(ToastType type)
-    {
-        switch (type)
-        {
-            case ToastType.Success: return "O"; // 체크 대신
-            case ToastType.Error: return "X";
-            case ToastType.Warning: return "!";
-            default: return "i";
         }
     }
 }

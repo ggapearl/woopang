@@ -16,6 +16,10 @@
     "1.2.54": {
       "ko": "• 보물찾기 — 지금 있는 자리에 보물을 숨기고 근처 사람들과 찾기 게임을 열어요. 가까이 가면 AR 금빛 상자가 나타나요.\n• 지도를 더 가까이 확대할 수 있고, 목록·지도·설정 글자가 커졌어요.\n• 하늘 날씨에 지금 있는 지역과 습도를 함께 보여 줘요.\n• 메시지와 대화방을 옆으로 밀어 오가요.\n• 알림을 누르면 해당 화면이 바로 열려요.\n• 창 닫기 동작을 통일하고 시작화면 끊김을 줄였어요.\n• 안정성 개선.",
       "en": "• Treasure Hunt — hide a treasure where you stand and host a hunt nearby; get close and a golden box appears in AR.\n• Zoom in further on the map; larger text in List, Map and Settings.\n• Sky weather shows your area and humidity.\n• Swipe between Messages and a chat.\n• Tapping a notification opens the right screen.\n• Consistent panel closing and a smoother start screen.\n• Stability improvements."
+    },
+    "1.2.55": {
+      "ko": "• 보물찾기 — 금빛 상자를 두 번 톡톡 눌러 열고, 찾으면 축하 화면이 떠요. 참여 중인 게임을 목록·지도·프로필에서도 볼 수 있어요.\n• 아이디로 친구를 찾아 바로 팔로우할 수 있어요. 팔로잉·팔로워 화면을 새로 꾸몄어요.\n• 목록 필터 — '전체'를 누르면 분류를 골라요. 터미널·기차는 한 칩으로 합쳤어요.\n• 지도가 보던 자리를 기억해요. 길게 눌러 좌표를 복사하고, 좌표로 찾아갈 수 있어요.\n• 목록에서 장소를 누르면 AR 화면에서 그 장소를 표시해 줘요.\n• 화면 밖 장소 표시가 밝은 곳에서도 잘 보여요.\n• 첫 사용 안내 중에도 아래 버튼을 바로 쓸 수 있어요.\n• 글자 크기·입력칸 표시 개선 및 안정성 개선.",
+      "en": "• Treasure Hunt — double-tap the golden box to open it and celebrate your find. See the hunts you've joined in the list, on the map and on your profile.\n• Find friends by ID and follow them right away. Redesigned Following / Followers.\n• List filters — tap 'All' to choose a category. Terminals and trains now share one chip.\n• The map remembers where you were. Long-press to copy coordinates, or jump to coordinates.\n• Tap a place in the list to have it marked in AR.\n• Off-screen place markers are easier to see on bright backgrounds.\n• Use the bottom buttons right away, even during the first-run guide.\n• Better text sizes and input fields, plus stability improvements."
     }
   }
 }

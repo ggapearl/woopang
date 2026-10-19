@@ -102,6 +102,8 @@ namespace Redesign0926
                 if (sd == null) continue;
                 foreach (var b in d.buttons) Proxy(root, sd, b, log);
             }
+            // 옆으로 시작한 손가락·맨 위에서 아래로 시작한 손가락에 세로 목록이 따라 내려오지 않게 (2026-10-15·16 — 보물찾기·메시지·팔로잉 등 전부)
+            Ensure<R0926ScrollLock>(root.gameObject);
             log.Add("sheet closing ok");
         }
 

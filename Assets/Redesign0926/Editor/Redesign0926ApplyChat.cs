@@ -28,9 +28,11 @@ namespace Redesign0926
             EditPrefab("DateSeparator", DateChip, log);
             EditPrefab("ChatSkeletonLoading", ChatSkeleton, log);
 
+            MessageListArea(root, log);
             var chat = Find(root, "ChatRoomPanel");
             if (chat == null) { log.Add("대화창 없음"); return; }
             ChatHeader(chat.transform, log);
+            ChatArea(chat.transform, log);
 
             // 말풍선 사이 — 예전 40 은 한 사람이 이어 보낸 말도 뚝뚝 떨어져 보였다
             var area = Find(chat.transform, "MessageArea");
@@ -43,7 +45,76 @@ namespace Redesign0926
                 EditorUtility.SetDirty(vlg);
             }
             else log.Add("대화창: 말풍선 목록 없음");
+            ChatSound(root, log);
             log.Add("chat look ok");
+        }
+
+        // 메세지 주고받는 소리 — 대표님 10-13 「너무 크다, 지금의 80%」. 받는 소리 0.2 → 0.16,
+        // 보내기는 다른 버튼과 같은 누름 소리(0.2)라 그 버튼에만 0.8배를 건다 (다른 버튼 소리는 그대로)
+        private const float ChatReceiveVolume = 0.16f, ChatSendVolumeScale = 0.8f;
+        private static void ChatSound(Transform root, List<string> log)
+        {
+            var mpm = FindInScene<MessagePanelManager>(root.gameObject);
+            if (mpm == null) { log.Add("대화 소리: MessagePanelManager 없음"); return; }
+            var so = new SerializedObject(mpm);
+            so.FindProperty("chatReceiveSfxVolume").floatValue = ChatReceiveVolume;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            var fw = mpm.sendButton != null ? mpm.sendButton.GetComponent<UITouchForwarder>() : null;
+            if (fw == null) { log.Add("대화 소리: 보내기 버튼 누름 소리 없음"); return; }
+            var fso = new SerializedObject(fw);
+            fso.FindProperty("volumeScale").floatValue = ChatSendVolumeScale;
+            fso.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // 말풍선 칸 — 제목줄(창 위 50~200) 아래 · 입력칸(창 아래 20~170) 위에 고정 여백으로 (2026-10-18 대표님: 가로에서 말풍선이 제목·입력칸을 가림).
+        // 예전엔 창 높이의 10~90% 비율이라 창이 낮은 가로(1339)에선 위아래로 삐져나가 제목줄·입력칸을 덮었다 — 세로도 짧은 폰은 제목줄에 닿았다.
+        // 제목줄·입력칸은 창 끝에 붙어 다니므로 같은 여백이면 세로·가로·키보드 어느 높이에서도 그 사이에 든다 (입력칸이 커지면 AutoExpandInputField 가 아래 여백을 늘린다)
+        private const float ChatAreaSide = 75f, ChatAreaTop = 216f, ChatAreaBottom = 194f;
+        private static void ChatArea(Transform chat, List<string> log)
+        {
+            var area = Find(chat, "MessageArea");
+            var vp = area != null ? area.transform.Find("Viewport") : null;
+            if (vp == null) { log.Add("대화창: 말풍선 칸 없음"); return; }
+            SetRect(RT(area), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            RT(area).offsetMin = new Vector2(ChatAreaSide, ChatAreaBottom);
+            RT(area).offsetMax = new Vector2(-ChatAreaSide, -ChatAreaTop);
+            SetRect(RT(vp.gameObject), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            // 키보드가 떠도 제목줄·입력칸은 창 끝에 붙어 같이 움직이므로 말풍선 칸 여백을 따로 줄이지 않는다
+            var mkh = chat.GetComponent<MobileKeyboardHandler>();
+            if (mkh != null)
+            {
+                var so = new SerializedObject(mkh);
+                so.FindProperty("expandedViewportTop").floatValue = 0f;
+                so.FindProperty("expandedViewportBottom").floatValue = 0f;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
+
+        // 메시지 목록 — 검색칸(창 위 210~360) 아래에 고정 여백으로. 비율이던 예전 자리는 가로에서 목록 윗줄이 검색칸을 86 덮었다
+        // (세로 값은 대표님 아이폰에서 보이던 그대로: 위 384 · 아래 67 · 양옆 19)
+        private static void MessageListArea(Transform root, List<string> log)
+        {
+            var list = root.Find("MessagePanel/Clip0926/Background/ConversationList");
+            if (list == null) { log.Add("메시지 목록 칸 없음"); return; }
+            SetRect(RT(list.gameObject), Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            RT(list.gameObject).offsetMin = new Vector2(19f, 67f);
+            RT(list.gameObject).offsetMax = new Vector2(-19f, -384f);
+
+            // 목록 자르기 — 옛 둥근 카드 그림(Square_Sero_white)을 마스크로 써서 맨 위·맨 아래 줄 '삭제'의 오른쪽 모서리가
+            // 둥글게 깎였다 (2026-10-17 대표님: 기존 레이아웃의 잔재) → 반듯한 사각 자르기. 바탕 그림은 줄 사이 끌기만 받는다
+            var vp = list.Find("Viewport");
+            if (vp == null) { log.Add("메시지 목록: Viewport 없음"); return; }
+            var mask = vp.GetComponent<Mask>();
+            if (mask != null) UnityEngine.Object.DestroyImmediate(mask);
+            Ensure<RectMask2D>(vp.gameObject);
+            var img = vp.GetComponent<Image>();
+            if (img != null)
+            {
+                img.sprite = null;
+                img.color = new Color(0, 0, 0, 0);
+                img.raycastTarget = true;
+                EditorUtility.SetDirty(img);
+            }
         }
 
         private static void EditPrefab(string name, Action<GameObject> edit, List<string> log)

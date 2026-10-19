@@ -1,7 +1,8 @@
 /**
  * P2PUserFilterPanel.cs
  * P2P 사용자 필터 UI 컨트롤러
- * - FilterButtonPanel.prefab 내 P2PUserToggle 에 부착
+ * - 장면에 하나만 — FilterManager 오브젝트(앱을 켤 때부터 켜져 있다)에 두고 토글은 목록 시트의 P2PUserToggle.
+ *   토글에도 하나 더 붙어 있어 한 번 누르면 둘이 따로 돌았다 (2026-10 정리 — Redesign0926ApplyListKinds)
  * - 하나의 토글로 3가지 상태 순환:
  *   1. P2P(팔로잉) - 핑크색: 팔로잉만 표시 (FollowingOnly)
  *   2. P2P(전체) - 흰색: 모든 사용자 표시 (All)
@@ -55,6 +56,7 @@ public class P2PUserFilterPanel : MonoBehaviour
     // 로그인 관련
     private LoginManager loginManager;
     private bool pendingToggleAction = false;  // 로그인 후 토글 액션 대기
+    private bool categoryLock;   // 분류 칩으로 한 분류만 보는 동안 — 사람은 잠깐 빼고, 고른 모드(저장값)는 그대로 둔다
 
     void Start()
     {
@@ -124,9 +126,9 @@ public class P2PUserFilterPanel : MonoBehaviour
     {
         bool isLoggedIn = IsUserLoggedIn();
 
-        if (!isLoggedIn)
+        if (!isLoggedIn || categoryLock)
         {
-            // 비로그인 시 None 상태로 강제
+            // 비로그인·분류 잠금 동안 None 상태로 강제 (저장은 하지 않는다)
             currentMode = UserFilterMode.None;
         }
     }
@@ -160,24 +162,25 @@ public class P2PUserFilterPanel : MonoBehaviour
     {
         if (isLoggedIn && !loginManager.IsGuest)
         {
-            // 로그인 완료 - 이전에 시도했던 토글 액션 수행
-            if (pendingToggleAction)
+            // 로그인 완료 — 저장해 둔 모드로. 앱을 켤 때 자동 로그인이 Start 보다 늦으면 '제외'로 시작하는데,
+            // 예전엔 여기서 되돌리지 않아 사람이 늘 안 보였다
+            LoadFilterMode();
+            // 로그인 안내를 띄운 칩 누르기 — 누른 대로 '제외' 다음(팔로잉)으로
+            if (pendingToggleAction && currentMode == UserFilterMode.None)
             {
-                pendingToggleAction = false;
-                // 저장된 필터 모드 복원
-                LoadFilterMode();
-                UpdateVisualState();
-                ApplyFilterMode();
+                currentMode = UserFilterMode.FollowingOnly;
+                SaveFilterMode();
             }
+            pendingToggleAction = false;
+            if (categoryLock) currentMode = UserFilterMode.None;
         }
         else
         {
-            // 로그아웃 또는 게스트 - None 상태로 변경
+            // 로그아웃·게스트 — 보이지 않게만 (고른 모드는 저장해 두었다가 다음 로그인 때 그대로)
             currentMode = UserFilterMode.None;
-            SaveFilterMode();
-            UpdateVisualState();
-            ApplyFilterMode();
         }
+        UpdateVisualState();
+        ApplyFilterMode();
     }
 
     private void FindVisualComponents()
@@ -389,6 +392,19 @@ public class P2PUserFilterPanel : MonoBehaviour
         currentMode = mode;
 
         SaveFilterMode();
+        UpdateVisualState();
+        ApplyFilterMode();
+    }
+
+    /// <summary>
+    /// 분류를 고른 동안 사람을 잠깐 뺀다 — 풀면 저장해 둔 모드로 (FilterManager).
+    /// 예전엔 '제외'를 저장해 버려, 분류를 고른 채 앱을 다시 켜면 고른 모드를 잃었다
+    /// </summary>
+    public void SetCategoryLock(bool on)
+    {
+        categoryLock = on;
+        LoadFilterMode();
+        CheckLoginAndSetInitialState();
         UpdateVisualState();
         ApplyFilterMode();
     }

@@ -33,6 +33,9 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
     // 에디터용 마우스 드래그 지원
     private Vector2 pointerDownPosition;
 
+    // 한 번에 하나만 — 다른 줄을 밀면 열려 있던 '삭제'는 닫힌다
+    private static SwipeToDeleteHandler openRow;
+
     // 루트 Button 캐싱 (스와이프 시 비활성화하여 클릭 충돌 방지)
     private Button rootButton;
 
@@ -163,6 +166,7 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
                 if (isHorizontalDrag)
                 {
                     isSwipeActive = true;
+                    if (openRow != null && openRow != this) openRow.ResetPosition();
 
                     // 루트 Button 비활성화 (스와이프 중 클릭 방지)
                     if (rootButton != null)
@@ -231,6 +235,7 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
         {
             // 오버레이 고정 (삭제 버튼 전체 너비로 노출)
             deleteButtonRect.sizeDelta = new Vector2(deleteButtonWidth, 0);
+            openRow = this;
         }
         else
         {
@@ -241,6 +246,8 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
 
     public void ResetPosition()
     {
+        if (openRow == this) openRow = null;
+
         if (deleteButtonRect != null)
             deleteButtonRect.sizeDelta = new Vector2(0, 0);
 

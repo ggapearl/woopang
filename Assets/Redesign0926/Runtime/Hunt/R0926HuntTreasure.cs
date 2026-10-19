@@ -397,7 +397,7 @@ public class R0926HuntTreasure : MonoBehaviour
     private void Press(Vector2 pos, bool overUI)
     {
         pressed = 0;
-        if (overUI) return;   // 화면 위 버튼·창
+        if (overUI || R0926GuideOverlay.BlocksWorld) return;   // 화면 위 버튼·창 · 첫 사용 안내 중
         var cam = Camera.main;
         if (cam == null || !Physics.Raycast(cam.ScreenPointToRay(pos), out var hit, 500f)) return;
         foreach (var t in hunts)

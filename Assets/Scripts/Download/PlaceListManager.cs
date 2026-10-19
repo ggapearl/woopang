@@ -48,18 +48,30 @@ public class PlaceListManager : MonoBehaviour
         public float baseLon;
         public Transform targetTf;   // 스폰된 GameObject가 있으면 카메라 거리 우선
         public Target target;        // 같은 오브젝트의 Target (목록 줄 누르기·방향)
+        public EntryKind kind;
+        public int huntId;
+        public R0926HuntList.Coord huntCoord;
+        public float approxM;
+        public float fixedDistance = -1f;   // 0 이상이면 이 거리 그대로 (비공개 보물찾기 — 자리를 모른다)
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
+
+    /// <summary>목록 줄 앞의 그림 — 장소는 색 점, 사람은 분홍 사람, 보물찾기는 금빛 상자</summary>
+    public enum EntryKind : byte { Place, Person, Hunt }
 
     /// <summary>목록 글자의 장소 한 줄 — 글자와 같은 순서·같은 개수 (R0926PlaceRows 가 줄 누르기·방향 표시에 쓴다)</summary>
     public struct ListEntry
     {
-        public string id;        // DataManager·TourAPI·P2P id, 공공교통은 "종류_이름"
+        public string id;        // DataManager·TourAPI·P2P id, 공공교통은 "종류_이름", 보물찾기는 "hunt:번호"
         public string name;      // 글자 줄의 이름 그대로 (P2P 는 '@이름')
         public float distance;   // m
         public float lat;
         public float lon;
         public Target target;    // 목록을 새로 만들 때 찾은 AR 오브젝트 — 없거나 사라졌을 수 있다 (FindTarget 으로 다시 찾는다)
+        public EntryKind kind;
+        public int huntId;           // 보물찾기 — 누르면 그 게임 상세
+        public string distanceText;  // 거리 칸에 숫자 대신 쓸 말 (보물찾기 대략·비공개) — null 이면 숫자
+        public bool noDirection;     // 방향을 보이지 않는다 (비공개 보물찾기 · 대략 원 안)
     }
     private readonly List<ListEntry> shownEntries = new List<ListEntry>();
     /// <summary>listText 의 장소 줄과 같은 순서의 장소 정보. 글자는 예전 그대로다 (다른 코드가 글자를 읽는다)</summary>
@@ -80,6 +92,8 @@ public class PlaceListManager : MonoBehaviour
     private int tourAPICount;
     private int publicTransportCount;
     private int p2pUserCount;
+    private int huntCount;
+    private P2PManager filterSource;   // 사람 칩(팔로잉·전체·제외)이 바뀌면 바로 다시 그린다
 
     // P2P 사용자 색상 (핑크)
     private const string P2P_USER_COLOR = "E95383";
@@ -109,7 +123,7 @@ public class PlaceListManager : MonoBehaviour
         { "en", new Dictionary<string, string> {
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
             { "woopangData", "WOOPANG DATA" }, { "tourApiData", "Public Data" },
-            { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" },
+            { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" }, { "huntData", "TREASURE HUNTS" },
             { "noNearbyData", "No nearby data found.\nTry adjusting the distance slider or moving to a different area." },
             { "noInternet", "No internet connection.\nNearby places will load automatically once you're back online." },
             { "listNotLoaded", "Couldn't load nearby places yet.\nWe'll try again automatically." }
@@ -117,7 +131,7 @@ public class PlaceListManager : MonoBehaviour
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
             { "woopangData", "우팡 데이터" }, { "tourApiData", "공공데이터" },
-            { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" },
+            { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" }, { "huntData", "보물찾기" },
             { "noNearbyData", "주변에 데이터가 없습니다.\n거리 슬라이더를 조정하거나 다른 위치로 이동해보세요." },
             { "noInternet", "인터넷 연결이 없어요.\n연결되면 주변 장소를 저절로 불러와요." },
             { "listNotLoaded", "주변 장소를 아직 받지 못했어요.\n잠시 뒤 저절로 다시 불러와요." }
@@ -125,21 +139,21 @@ public class PlaceListManager : MonoBehaviour
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
             { "woopangData", "WOOPANGデータ" }, { "tourApiData", "公共データ" },
-            { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" },
+            { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" }, { "huntData", "宝探し" },
             { "noInternet", "インターネットに接続されていません。\n接続すると周辺の場所を自動で読み込みます。" },
             { "listNotLoaded", "周辺の場所をまだ読み込めていません。\nしばらくすると自動で再読み込みします。" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendly", "[宠物友好]" }, { "noImage", "[无图片]" },
             { "woopangData", "WOOPANG数据" }, { "tourApiData", "公共数据" },
-            { "transportData", "交通数据" }, { "p2pUserData", "附近用户" },
+            { "transportData", "交通数据" }, { "p2pUserData", "附近用户" }, { "huntData", "寻宝" },
             { "noInternet", "没有网络连接。\n连接后会自动加载附近地点。" },
             { "listNotLoaded", "暂时无法加载附近地点。\n稍后会自动重试。" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendly", "[Mascotas]" }, { "noImage", "[Sin imagen]" },
             { "woopangData", "Datos WOOPANG" }, { "tourApiData", "Datos Públicos" },
-            { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" },
+            { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" }, { "huntData", "Búsquedas del tesoro" },
             { "noInternet", "Sin conexión a internet.\nLos lugares cercanos se cargarán automáticamente al reconectar." },
             { "listNotLoaded", "Aún no se pudieron cargar los lugares cercanos.\nLo intentaremos de nuevo automáticamente." }
         }}
@@ -148,6 +162,9 @@ public class PlaceListManager : MonoBehaviour
     void Start()
     {
         HiddenPlaces.Hidden += OnPlaceHidden;
+        R0926HuntList.Changed += OnSourceChanged;
+        filterSource = p2pManager != null ? p2pManager : P2PManager.Instance;
+        if (filterSource != null) filterSource.UserFilterChanged += OnSourceChanged;
         // 슬라이더 유무와 무관하게 기본값 보장 — 슬라이더 없으면 maxDisplayDistance=0이 되어 모든 POI 걸리는 버그 방지
         maxDisplayDistance = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
 
@@ -204,9 +221,18 @@ public class PlaceListManager : MonoBehaviour
         if (isActiveAndEnabled) UpdateUI();
     }
 
+    // 사람 칩을 누름 · 팔로잉 목록이 도착함 · 보물찾기 게임 목록이 바뀜 — 열려 있으면 바로 (예전엔 10초 주기를 기다려 '팔로잉'을 눌러도 그대로였다).
+    // 닫혀 있으면 열 때 새로 그린다
+    private void OnSourceChanged()
+    {
+        if (isActiveAndEnabled && listPanel != null && listPanel.activeInHierarchy) UpdateUI();
+    }
+
     private void OnDestroy()
     {
         HiddenPlaces.Hidden -= OnPlaceHidden;
+        R0926HuntList.Changed -= OnSourceChanged;
+        if (filterSource != null) filterSource.UserFilterChanged -= OnSourceChanged;
         if (updatePeriodicCoroutine != null) StopCoroutine(updatePeriodicCoroutine);
         if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
         if (distanceSlider != null) distanceSlider.onValueChanged.RemoveListener(OnDistanceSliderChanged);
@@ -236,11 +262,10 @@ public class PlaceListManager : MonoBehaviour
         combinedPlaces.Clear();
         liveEntries.Clear();
         lastGpsLat = lat; lastGpsLon = lon;
-        woopangCount = 0; tourAPICount = 0; publicTransportCount = 0; p2pUserCount = 0;
+        woopangCount = 0; tourAPICount = 0; publicTransportCount = 0; p2pUserCount = 0; huntCount = 0;
 
         bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
         bool petFriendlyAll = activeFilters.GetValueOrDefault("petFriendlyAll", true);
-        bool noPetFriendly = activeFilters.GetValueOrDefault("noPetFriendly", false);
         bool showPublic = activeFilters.GetValueOrDefault("publicData", true);
         bool showSubway = activeFilters.GetValueOrDefault("subway", true);
         bool showTrain = activeFilters.GetValueOrDefault("train", true);
@@ -268,7 +293,6 @@ public class PlaceListManager : MonoBehaviour
 
                 if (!showObject3D && modelType == "custom") continue;
                 if (petFriendlyOnly && !cached.petFriendly) continue;
-                if (noPetFriendly && cached.petFriendly) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {
                     if (cat != activeCategoryFilter) continue;
@@ -276,7 +300,7 @@ public class PlaceListManager : MonoBehaviour
 
                 float d = CalculateDistance(lat, lon, cached.latitude, cached.longitude);
                 if (d <= maxDisplayDistance) {
-                    bool isPublicData = FilterManager.PublicDataCategories.Contains(cat);
+                    bool isPublicData = cached.filterKey == "publicData";   // 등록자 기준 (카테고리 아님)
                     if (isPublicData)
                     {
                         // 카테고리 필터 활성 시 publicData 토글 무시 (카테고리 매칭이 이미 필터링)
@@ -305,7 +329,6 @@ public class PlaceListManager : MonoBehaviour
                 string origType = p.original_model_type ?? p.model_type;
                 if (!showObject3D && origType == "custom") continue;
                 if (petFriendlyOnly && !p.pet_friendly) continue;
-                if (noPetFriendly && p.pet_friendly) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {
                     if ((p.category ?? "") != activeCategoryFilter) continue;
@@ -313,7 +336,7 @@ public class PlaceListManager : MonoBehaviour
 
                 float d = CalculateDistance(lat, lon, p.latitude, p.longitude);
                 if (d <= maxDisplayDistance) {
-                    bool isPublicData = FilterManager.PublicDataCategories.Contains(p.category ?? "");
+                    bool isPublicData = FilterManager.IsPublicSource(p.is_public, p.category);
                     if (isPublicData)
                     {
                         if (!categoryFilterActive && !showPublic) continue;
@@ -355,6 +378,14 @@ public class PlaceListManager : MonoBehaviour
             AddP2PUserData(lat, lon);
         }
 
+        // 5. 보물찾기 — 내가 연 게임 · 참가 중인 게임 (분류를 고른 동안은 사람처럼 뺀다)
+        if (!categoryFilterActive) AddHuntData(lat, lon);
+        if (listPanel != null && listPanel.activeInHierarchy)
+        {
+            var huntFetch = R0926HuntList.RefreshIfDue();   // 열려 있는 동안 1분에 한 번 — 받으면 Changed 로 다시 그린다
+            if (huntFetch != null) StartCoroutine(huntFetch);
+        }
+
         // 거리순 정렬 + 상위 maxListEntries개만 (DB 커져도 이 값 이상은 안 만짐)
         // liveEntries 는 combinedPlaces 와 같은 순서로 하나씩 쌓였다 — 같은 순서로 골라 목록 줄과 1:1 로 맞춘다
         // (예전 id 기준 자르기는 매니저끼리 id 가 겹치면 어긋났다)
@@ -376,6 +407,7 @@ public class PlaceListManager : MonoBehaviour
         }
 
         cachedFooter = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
+        if (huntCount > 0) cachedFooter += $"\n{GetLocalizedText("huntData")}: {huntCount}";
         sb.Append(cachedFooter);
 
         // 데이터 비어있고 panel 열려있으면 자동 재시도 (데이터 로드 race condition 대응)
@@ -435,6 +467,7 @@ public class PlaceListManager : MonoBehaviour
             for (int i = 0; i < liveEntries.Count; i++)
             {
                 var e = liveEntries[i];
+                if (e.kind == EntryKind.Hunt) continue;   // AR 보물 자리는 목록에 쓰지 않는다 (공개 설정만 — R0926HuntList)
                 Target tg;
                 if (!string.IsNullOrEmpty(e.id) && byId.TryGetValue(e.id, out tg)) { e.target = tg; e.targetTf = tg.transform; continue; }
                 if (!string.IsNullOrEmpty(e.baseLabel) && byName.TryGetValue(e.baseLabel, out tg)) { e.target = tg; e.targetTf = tg.transform; }
@@ -497,6 +530,7 @@ public class PlaceListManager : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             var e = liveEntries[i];
+            if (e.fixedDistance >= 0f) { orderedBuffer[i] = (e.fixedDistance, i); continue; }   // 비공개 보물찾기 — 굵은 거리 그대로
             // 1순위: 스폰된 Target transform이 살아있으면 카메라 거리 (1cm 단위로 매끄럽게 갱신)
             if (hasCam && e.targetTf != null)
             {
@@ -517,8 +551,8 @@ public class PlaceListManager : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             var pair = orderedBuffer[i];
-            if (maxDisplayDistance > 0f && pair.d > maxDisplayDistance) continue;
             var e = liveEntries[pair.idx];
+            if (!InRange(e, pair.d)) continue;
             string color = string.IsNullOrEmpty(e.colorHex) ? "FFFFFF" : e.colorHex;
             liveBuilder.Append("<color=#").Append(color).Append('>')
                        .Append(e.baseLabel).Append(" - ")
@@ -536,9 +570,22 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
+    // 거리 슬라이더 안인지 — 대략 공개 보물찾기는 원 가장자리까지 (비공개는 목록을 만들 때 이미 걸렀다)
+    private bool InRange(LiveEntry e, float d)
+    {
+        if (maxDisplayDistance <= 0f || e.fixedDistance >= 0f) return true;
+        return d - e.approxM <= maxDisplayDistance;
+    }
+
     private static ListEntry ToListEntry(LiveEntry e, float distance)
     {
-        return new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = e.baseLat, lon = e.baseLon, target = e.target };
+        var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = e.baseLat, lon = e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId };
+        if (e.kind == EntryKind.Hunt)
+        {
+            le.distanceText = R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);
+            le.noDirection = R0926HuntList.NoDirection(e.huntCoord, distance, e.approxM);
+        }
+        return le;
     }
 
     /// <summary>
@@ -594,8 +641,37 @@ public class PlaceListManager : MonoBehaviour
                 p2pUserCount++;
                 string displayText = $"@{user.username} - {Mathf.FloorToInt(user.distance)}m";   // 이모지는 앱 글꼴에 없어 □로 보였다
                 combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
-                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude });
+                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude, kind = EntryKind.Person });
             }
+        }
+    }
+
+    /// <summary>
+    /// 보물찾기 — 내가 연 게임 · 참가 중인 게임 (R0926HuntList). 자리는 게임의 공개 설정대로만:
+    /// 정확히 공개·주최자는 그 자리, 대략 공개는 원 가운데(원 가장자리가 슬라이더 안이면 넣는다), 비공개는 굵은 거리의 끝으로 줄을 세운다
+    /// </summary>
+    private void AddHuntData(float lat, float lon)
+    {
+        foreach (var s in R0926HuntList.Spots)
+        {
+            var e = new LiveEntry { id = "hunt:" + s.id, baseLabel = s.title, colorHex = R0926HuntList.ColorHex, kind = EntryKind.Hunt, huntId = s.id, huntCoord = s.coord };
+            float d;
+            if (s.coord == R0926HuntList.Coord.Hidden)
+            {
+                if (s.bandFromM >= maxDisplayDistance) continue;
+                d = e.fixedDistance = s.bandM;
+            }
+            else
+            {
+                e.baseLat = (float)s.lat;
+                e.baseLon = (float)s.lon;
+                e.approxM = s.coord == R0926HuntList.Coord.Approx ? s.approxM : 0f;
+                d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
+                if (d - e.approxM > maxDisplayDistance) continue;
+            }
+            huntCount++;
+            combinedPlaces.Add((s, d, e.id, $"{s.title} - {Mathf.FloorToInt(d)}m", e.colorHex));
+            liveEntries.Add(e);
         }
     }
 

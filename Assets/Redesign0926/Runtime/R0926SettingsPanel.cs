@@ -5,12 +5,12 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 목록 시트 '설정' 탭 — 하늘 화면에 무엇을, 언제 띄울지.
-///  · 하늘 화면 켜기(전체) · 날씨 · 동네 이벤트·게임 · 라이브 방송 · 광고·제휴
+///  · 하늘 화면 켜기(전체) · 날씨 · 동네 이벤트·게임
 ///  · 보이는 각도(조금만 들어도 / 보통 / 똑바로 위) · 누워서 쓸 땐 숨기기 · 처음엔 접어 두기
 ///  · 숨긴 장소 수 (인디케이터 X — 앱을 다시 켜면 다시 보인다) · 숨긴 게 있으면 '모두 다시 보이기'
 ///  · 보물찾기 참여 · 새 게임 알림 · 가까워지면 진동 — 계정 설정이라 서버(/api/hunts/prefs)에 있다. 로그인 전엔 흐리게
 ///  · 화면 프레임 30 / 60 (기본 30)
-/// 이벤트·라이브·광고는 아직 보낼 내용이 없어 '곧' 표시 — 켜고 끄는 값은 지금부터 저장된다.
+/// 이벤트는 아직 보낼 내용이 없어 '곧' 표시 — 켜고 끄는 값은 지금부터 저장된다.
 /// </summary>
 public class R0926SettingsPanel : MonoBehaviour
 {
@@ -25,8 +25,6 @@ public class R0926SettingsPanel : MonoBehaviour
     [SerializeField] private Image masterSwitch;
     [SerializeField] private Image weatherSwitch;
     [SerializeField] private Image eventsSwitch;
-    [SerializeField] private Image liveSwitch;
-    [SerializeField] private Image adsSwitch;
     [SerializeField] private Image lyingSwitch;
     [SerializeField] private Image collapsedSwitch;
     [SerializeField] private CanvasGroup channelGroup;   // 전체를 끄면 아래 항목이 흐려진다
@@ -64,8 +62,6 @@ public class R0926SettingsPanel : MonoBehaviour
     public void ToggleMaster() { R0926SkySettings.Enabled = !R0926SkySettings.Enabled; Refresh(); }
     public void ToggleWeather() { R0926SkySettings.Weather = !R0926SkySettings.Weather; Refresh(); }
     public void ToggleEvents() { R0926SkySettings.Events = !R0926SkySettings.Events; Refresh(); }
-    public void ToggleLive() { R0926SkySettings.Live = !R0926SkySettings.Live; Refresh(); }
-    public void ToggleAds() { R0926SkySettings.Ads = !R0926SkySettings.Ads; Refresh(); }
     public void ToggleLying() { R0926SkySettings.HideWhenLying = !R0926SkySettings.HideWhenLying; Refresh(); }
     public void ToggleCollapsed() { R0926SkySettings.StartCollapsed = !R0926SkySettings.StartCollapsed; Refresh(); }
     public void SetAngle(int step) { R0926SkySettings.Angle = step; Refresh(); }
@@ -146,8 +142,6 @@ public class R0926SettingsPanel : MonoBehaviour
         Sw(masterSwitch, R0926SkySettings.Enabled);
         Sw(weatherSwitch, R0926SkySettings.Weather);
         Sw(eventsSwitch, R0926SkySettings.Events);
-        Sw(liveSwitch, R0926SkySettings.Live);
-        Sw(adsSwitch, R0926SkySettings.Ads);
         Sw(lyingSwitch, R0926SkySettings.HideWhenLying);
         Sw(collapsedSwitch, R0926SkySettings.StartCollapsed);
         Sw(removeSwitch, R0926PlaceSettings.RemoveButton);

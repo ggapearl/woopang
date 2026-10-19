@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 하늘 화면 설정 (목록 시트 '설정' 탭). 기기에 저장된다.
-/// 하늘에는 앞으로 날씨 말고도 동네 이벤트·게임, 제휴사 라이브, 광고가 번갈아 뜬다 — 사람마다 켜고 끌 수 있게.
+/// 하늘에는 앞으로 날씨 말고도 동네 이벤트·게임이 번갈아 뜬다 — 사람마다 켜고 끌 수 있게.
 /// </summary>
 public static class R0926SkySettings
 {
@@ -15,8 +15,6 @@ public static class R0926SkySettings
     public static bool Enabled { get => Get("Sky_Enabled", true); set => Set("Sky_Enabled", value); }
     public static bool Weather { get => Get("Sky_Weather", true); set => Set("Sky_Weather", value); }
     public static bool Events { get => Get("Sky_Events", true); set => Set("Sky_Events", value); }
-    public static bool Live { get => Get("Sky_Live", true); set => Set("Sky_Live", value); }
-    public static bool Ads { get => Get("Sky_Ads", true); set => Set("Sky_Ads", value); }
     /// <summary>누워서 휴대폰을 위로 들고 쓸 때(천장) 하늘 화면을 숨긴다</summary>
     public static bool HideWhenLying { get => Get("Sky_HideLying", true); set => Set("Sky_HideLying", value); }
     /// <summary>앱을 켤 때 하늘 화면을 접힌 채(작은 칩)로 시작</summary>

@@ -10,7 +10,8 @@ using UnityEngine.UI;
 /// <summary>
 /// 프로필 카드의 '주최' 칸과 펼침 — 보물찾기에서 주최자에 관한 건 전부 그 사람 프로필에서 (2026-10-05 대표님 · 시안 우팡_보물찾기_프로필_1005).
 ///  · 숫자 줄(팔로잉·팔로워) 옆 '주최' 칸 — 주최한 적이 있거나 지금 열린 게임이 있는 사람만. 숫자 아래 별점(3명부터), 적으면 '평가 모으는 중'
-///  · 누르면 같은 카드 안에서 펼친다: 주최 기록 · 지금 열린 게임 · 참여자 평가 · 별점 남기기(자격 있는 참가자) · 참여자 리뷰 · 신고/차단
+///    주최한 적은 없고 남의 게임에 참여 중이면 '참여' 칸 (2026-10-13 대표님: 참석자도 내 프로필·남이 본 프로필에 진행 중인 보물찾기)
+///  · 누르면 같은 카드 안에서 펼친다: 주최 기록 · 지금 열린 게임(주최/참여) · 참여자 평가 · 별점 남기기(자격 있는 참가자) · 참여자 리뷰 · 신고/차단
 ///  · 서버 한 번 부르기 GET /api/hunts/profile/&lt;아이디&gt; — 별점 POST /api/hunts/&lt;게임&gt;/rate · 신고 POST /api/hunts/report · 차단은 기존 /api/block
 ///  · 카드가 화면보다 길어지면 R0926ProfileLayout 이 펼침 칸만 줄이고 그 안을 스크롤한다
 ///  · 별점 알림(review=1)·게임 상세의 주최자 줄로 열면 펼친 채로 (ExpandNext)
@@ -93,7 +94,7 @@ public class R0926HuntProfile : MonoBehaviour
     private static readonly Color BoxOn = new Color(0.910f, 0.749f, 0.310f, 0.24f);
     private static readonly Color ChipOn = new Color(0.910f, 0.749f, 0.310f, 0.22f);
     private static readonly Color ChipOff = new Color(1f, 1f, 1f, 0.06f);
-    private const string GoldHex = "#E8BF4F", DimHex = "#E8BF4F4D", MutedHex = "#8C959D";
+    private const string GoldHex = "#E8BF4F", DimHex = "#E8BF4F4D", MutedHex = "#8C959D", TealHex = "#3FC1B0";
     private static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
     // 신고 사유 — 서버가 준 것만, 이 순서로 (서버 JSON 은 이름순으로 온다)
@@ -247,13 +248,22 @@ public class R0926HuntProfile : MonoBehaviour
     {
         var host = data["host"];
         int hosted = host["hosted"].AsInt;
-        bool show = hosted > 0 || host["open"].Count > 0 || data["suspended"].AsBool;
-        SetColumn(show);
-        if (!show) { Expand(false); return; }
-        string line2 = !host["rating"].IsNull ? Stars(host["rating"].AsFloat) + " <b>" + host["rating"].AsFloat.ToString("0.0", CI) + "</b>"
-                     : hosted > 0 ? T("평가 모으는 중", "Collecting ratings") : T("진행 중", "Live now");
-        if (columnMain != null) columnMain.text = "<size=88><b>" + hosted + "</b></size>\n<size=38><color=" + GoldHex + ">" + line2 + "</color></size>";
-        if (columnLabel != null) columnLabel.text = T("주최", "Hosted");
+        int joined = data["joined"].Count;   // 서버가 아직 안 주면 0 — 예전 그대로
+        bool hosts = hosted > 0 || host["open"].Count > 0 || data["suspended"].AsBool;
+        SetColumn(hosts || joined > 0);
+        if (!hosts && joined == 0) { Expand(false); return; }
+        if (hosts)
+        {
+            string line2 = !host["rating"].IsNull ? Stars(host["rating"].AsFloat) + " <b>" + host["rating"].AsFloat.ToString("0.0", CI) + "</b>"
+                         : hosted > 0 ? T("평가 모으는 중", "Collecting ratings") : T("진행 중", "Live now");
+            if (columnMain != null) columnMain.text = "<size=88><b>" + hosted + "</b></size>\n<size=38><color=" + GoldHex + ">" + line2 + "</color></size>";
+            if (columnLabel != null) columnLabel.text = T("주최", "Hosted");
+        }
+        else
+        {
+            if (columnMain != null) columnMain.text = "<size=88><b>" + joined + "</b></size>\n<size=38><color=" + TealHex + ">" + T("진행 중", "Live now") + "</color></size>";
+            if (columnLabel != null) columnLabel.text = T("참여", "Joined");
+        }
         PaintSection();
     }
 
@@ -302,7 +312,10 @@ public class R0926HuntProfile : MonoBehaviour
         var me = data["me"];
         bool mine = me["is_me"].AsBool;
         int hosted = host["hosted"].AsInt;
-        if (headRight != null) headRight.text = mine ? T("내 주최 기록", "My hosting") : T("주최 기록 · 리뷰", "Hosting · reviews");
+        bool hosts = hosted > 0 || host["open"].Count > 0;
+        if (headRight != null)
+            headRight.text = hosts ? (mine ? T("내 주최 기록", "My hosting") : T("주최 기록 · 리뷰", "Hosting · reviews"))
+                                   : (mine ? T("내가 참여 중", "I'm playing") : T("참여 중", "Playing"));
 
         // 주최 정지 — 본인(과 관리자)에게만 온다
         bool suspended = data["suspended"].AsBool;
@@ -320,22 +333,13 @@ public class R0926HuntProfile : MonoBehaviour
             if (recordFoot != null) recordFoot.text = Foot(host);
         }
 
-        // 지금 열린 게임
+        // 지금 열린 게임 — 주최한 것 다음에 참여 중인 것. 줄마다 '주최'·'참여'
         Clear(openList);
         var open = host["open"].AsArray;
-        if (openList != null) openList.gameObject.SetActive(open.Count > 0);
-        foreach (JSONNode h in open)
-        {
-            if (openTemplate == null || openList == null) break;
-            var row = Instantiate(openTemplate, openList);
-            row.SetActive(true);
-            SetText(row, "Title", (h["official"].AsBool ? "★ " : "") + h["title"]);
-            SetText(row, "Sub", OpenSub(h));
-            var dot = row.transform.Find("Dot")?.GetComponent<Image>();
-            if (dot != null) dot.color = h["status"] == "live" ? Teal : Amber;
-            string id = h["id"].AsInt.ToString();
-            Wire(row.GetComponent<Button>(), () => R0926HuntPush.Open(id, null, false));
-        }
+        var joined = data["joined"].AsArray;
+        if (openList != null) openList.gameObject.SetActive(open.Count + joined.Count > 0);
+        foreach (JSONNode h in open) OpenRow(h, false);
+        foreach (JSONNode h in joined) OpenRow(h, true);
 
         // 참여자 평가
         if (rateBox != null) rateBox.SetActive(hosted > 0);
@@ -357,6 +361,21 @@ public class R0926HuntProfile : MonoBehaviour
         PaintForm(me, mine);
         PaintReviews();
         PaintActions();
+    }
+
+    // 열린 게임 한 줄 — 누르면 추가 창 보물찾기 카드의 그 게임 상세 (같은 게임을 다시 눌러도 연다)
+    private void OpenRow(JSONNode h, bool joined)
+    {
+        if (openTemplate == null || openList == null) return;
+        var row = Instantiate(openTemplate, openList);
+        row.SetActive(true);
+        string tag = joined ? "<color=" + TealHex + ">" + T("참여", "Joined") + "</color>  " : "<color=" + GoldHex + ">" + T("주최", "Host") + "</color>  ";
+        SetText(row, "Title", tag + (h["official"].AsBool ? "★ " : "") + ((string)h["title"]).Replace("<", "＜"));
+        SetText(row, "Sub", OpenSub(h));
+        var dot = row.transform.Find("Dot")?.GetComponent<Image>();
+        if (dot != null) dot.color = h["status"] == "live" ? Teal : Amber;
+        int id = h["id"].AsInt;
+        Wire(row.GetComponent<Button>(), () => R0926HuntPush.OpenHunt(id));
     }
 
     private static void Num(Text t, string n, string label)

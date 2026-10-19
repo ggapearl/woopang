@@ -21,8 +21,8 @@ public class R0926MapTiles : MonoBehaviour
     [SerializeField] private int maxRequests = 6;
     [SerializeField] private float tilePixels = 256f;
 
-    // 지도 좌표가 큰 수가 되면 float 오차로 칸이 어긋난다 — 16 단계(화면 폭 약 2km)까지
-    private const int HardMaxLevel = 16;
+    // 서버가 주는 단계까지 (서버 상한 19 — 화면 폭 약 250m). 지도 좌표는 double 로 받아 깊어도 칸이 어긋나지 않는다
+    private const int HardMaxLevel = 19;
     private const int MaxVisible = 80;
     private const int ParentLevels = 6;
 
@@ -53,7 +53,8 @@ public class R0926MapTiles : MonoBehaviour
     private float pausedUntil;
 
     private bool hasView;
-    private Vector2 lastOrigin, lastMap, lastView;
+    private double lastOx, lastOy, lastMapW, lastMapH;
+    private Vector2 lastView;
     private float lastScale = 1f;
 
     public bool Available => info != null && info.enabled;
@@ -62,8 +63,8 @@ public class R0926MapTiles : MonoBehaviour
     private int MinLevel => info != null ? Mathf.Clamp(info.min_zoom, minLevel, HardMaxLevel) : minLevel;
 
     /// <summary>이 단계 타일이 화면 픽셀과 1:1 이 되는 지도 확대 배율 (R0926FriendsMap 의 zoom 단위)</summary>
-    public float ZoomForLevel(float level, float viewWidth, float scale)
-        => tilePixels * Mathf.Pow(2f, level) / Mathf.Max(1f, viewWidth * scale);
+    public double ZoomForLevel(double level, float viewWidth, float scale)
+        => tilePixels * System.Math.Pow(2, level) / Mathf.Max(1f, viewWidth * scale);
 
     private static long Key(int z, int x, int y) => ((long)z << 48) | ((long)x << 24) | (uint)y;
     private static int KZ(long k) => (int)(k >> 48);
@@ -96,47 +97,46 @@ public class R0926MapTiles : MonoBehaviour
         hasView = false;
     }
 
-    /// <summary>지도가 움직일 때마다 R0926FriendsMap 이 부른다 — origin: 지도 왼쪽 위(지도 창 왼쪽 위 기준, 아래가 +), map: 지도 전체 크기</summary>
-    public void UpdateView(Vector2 origin, Vector2 map, Vector2 view, float scale)
+    /// <summary>지도가 움직일 때마다 R0926FriendsMap 이 부른다 — ox, oy: 지도 왼쪽 위(지도 창 왼쪽 위 기준, 아래가 +), mapW, mapH: 지도 전체 크기.
+    /// 깊이 확대하면 지도가 수억 단위라 double 로 받는다 — 칸 자리는 화면 안의 작은 수가 된 뒤에야 float 로</summary>
+    public void UpdateView(double ox, double oy, double mapW, double mapH, Vector2 view, float scale)
     {
         hasView = true;
-        lastOrigin = origin; lastMap = map; lastView = view; lastScale = scale;
+        lastOx = ox; lastOy = oy; lastMapW = mapW; lastMapH = mapH; lastView = view; lastScale = scale;
         wanted.Clear();
         inUse.Clear();
         int shown = 0;
-        if (Available && layer != null && map.x > 1f && map.y > 1f)
+        if (Available && layer != null && mapW > 1 && mapH > 1)
         {
-            float lv = Mathf.Log(map.x * scale / tilePixels, 2f);
-            float a = R0926FriendsMap.WebToNormY(0f), b = R0926FriendsMap.WebToNormY(1f) - a;
-            float baseY = origin.y + map.y * a;
+            double lv = System.Math.Log(mapW * scale / tilePixels, 2);
+            double a = R0926FriendsMap.WebToNormY(0), b = R0926FriendsMap.WebToNormY(1) - a;
+            double baseY = oy + mapH * a;
             // 화면이 커서(태블릿·가로) 칸이 너무 많으면 한 단계 덜 자세한 타일로
-            int z = Mathf.Clamp(Mathf.RoundToInt(lv), 0, MaxLevel), n = 1, x0 = 0, x1 = -1, y0 = 0, y1 = -1;
-            float tw = 0f, th = 0f;
+            int z = Mathf.Clamp((int)System.Math.Round(lv), 0, MaxLevel), n = 1, x0 = 0, x1 = -1, y0 = 0, y1 = -1;
+            double tw = 0, th = 0;
             for (; z >= MinLevel; z--)
             {
                 n = 1 << z;
-                tw = map.x / n;
-                th = map.y * b / n;
-                x0 = Mathf.Max(0, Mathf.FloorToInt(-origin.x / tw)); x1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.x - origin.x) / tw));
-                y0 = Mathf.Max(0, Mathf.FloorToInt(-baseY / th)); y1 = Mathf.Min(n - 1, Mathf.FloorToInt((view.y - baseY) / th));
+                tw = mapW / n;
+                th = mapH * b / n;
+                x0 = Mathf.Max(0, (int)System.Math.Floor(-ox / tw)); x1 = Mathf.Min(n - 1, (int)System.Math.Floor((view.x - ox) / tw));
+                y0 = Mathf.Max(0, (int)System.Math.Floor(-baseY / th)); y1 = Mathf.Min(n - 1, (int)System.Math.Floor((view.y - baseY) / th));
                 if ((x1 - x0 + 1) * (y1 - y0 + 1) <= MaxVisible) break;
             }
             if (z >= MinLevel)
             {
                 if (x1 >= x0 && y1 >= y0)
                 {
-                    // 큰 수끼리의 뺄셈은 첫 칸에서 한 번만 — 나머지는 작은 수로 더해 칸 사이에 틈이 생기지 않게
-                    float px0 = origin.x + x0 * tw, py0 = baseY + y0 * th;
                     Vector2 center = view / 2f;
                     int frame = Time.frameCount;
                     for (int y = y0; y <= y1; y++)
                         for (int x = x0; x <= x1; x++)
                         {
-                            float px = px0 + (x - x0) * tw, py = py0 + (y - y0) * th;
+                            float px = (float)(ox + x * tw), py = (float)(baseY + y * th);
                             long k = Key(z, x, y);
-                            if (Show(shown, k, px, py, tw, th, frame)) shown++;
+                            if (Show(shown, k, px, py, (float)tw, (float)th, frame)) shown++;
                             if (!cache.ContainsKey(k))
-                                wanted.Add(((new Vector2(px + tw / 2f, py + th / 2f) - center).sqrMagnitude, k));
+                                wanted.Add(((new Vector2(px + (float)tw / 2f, py + (float)th / 2f) - center).sqrMagnitude, k));
                         }
                     wanted.Sort((p, q) => p.dist.CompareTo(q.dist));   // 가운데부터 받는다
                 }
@@ -206,7 +206,7 @@ public class R0926MapTiles : MonoBehaviour
             infoReq = null;
             if (got != null) info = got;
             if (!Available) infoRetryAt = Time.realtimeSinceStartup + 600f;   // 서버가 아직 타일을 안 준다(없음·꺼짐) — 10분 뒤 다시
-            if (Available && hasView) UpdateView(lastOrigin, lastMap, lastView, lastScale);
+            if (Available && hasView) UpdateView(lastOx, lastOy, lastMapW, lastMapH, lastView, lastScale);
         }
         if (!Available) return;
 
@@ -237,7 +237,7 @@ public class R0926MapTiles : MonoBehaviour
             }
             req.Dispose();
         }
-        if (changed) { Trim(); if (hasView) UpdateView(lastOrigin, lastMap, lastView, lastScale); }
+        if (changed) { Trim(); if (hasView) UpdateView(lastOx, lastOy, lastMapW, lastMapH, lastView, lastScale); }
 
         if (Time.realtimeSinceStartup < pausedUntil) return;
         foreach (var w in wanted)

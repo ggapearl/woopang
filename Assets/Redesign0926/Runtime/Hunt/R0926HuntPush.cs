@@ -7,9 +7,11 @@ using UnityEngine.UI;
 /// 보물찾기 알림(hunt_new · start · found · message · extend · end)을 누르면 — '추가' 창 보물찾기 카드의 그 게임 상세로.
 /// 끝 알림에 review=1(별점 자격)이 붙어 있으면 주최자 프로필로.
 /// 알림은 시작화면보다 먼저 올 수 있다 — 받아 두었다가 시작화면·첫 안내가 걷히고 로그인이 돌아오면 연다.
-/// 위에 덮인 창(목록·메시지·프로필 …)은 뒤로가기 순서대로 닫고 연다 (추가 창은 그대로 둔다).
+/// 위에 덮인 창은 닫고 연다 — 프로필·팔로우 목록·대화방·메시지 목록은 바로, 나머지(목록 …)는 뒤로가기 순서대로 (추가 창은 그대로 둔다).
+/// 메시지 탭의 보물찾기 말풍선을 눌렀을 때도 같은 길로 연다(OpenHunt).
 /// FirebaseNotification 이 부른다 — 안드로이드: 알림바에서 눌러 열림 · 앱을 보는 중 띄운 알림을 누름 / 아이폰: 눌러 열림 · 보는 중 뜬 배너를 누름.
 /// 추가 창이 켜진 채 연 프로필(카드의 주최자 · 별점 알림)은 추가 창 위로 올린다 — 프로필 창이 캔버스에서 추가 창보다 앞 순서라 뒤에 가려졌다.
+/// 새 팔로워 알림(notification_type=follow)도 같은 길로 — 덮인 창을 추가 창까지 닫고 내 팔로워 탭을 연다. 그 사람은 맨 위에 두고 잠깐 밝힌다 (B8, 10-18).
 /// </summary>
 public class R0926HuntPush : MonoBehaviour
 {
@@ -21,6 +23,8 @@ public class R0926HuntPush : MonoBehaviour
     private static bool pending;
     private static string pendingHunt, pendingHost;
     private static bool pendingProfile;
+    private static bool pendingFollow;      // 보물찾기 대신 내 팔로워 탭으로
+    private static string pendingFollower;  // 맨 위에 둘 새 팔로워 아이디
     private static string lastKey;
     private static float lastAt = -99f;
 
@@ -53,6 +57,38 @@ public class R0926HuntPush : MonoBehaviour
         pendingHunt = huntId;
         pendingHost = hostId;
         pendingProfile = toProfile;
+        pendingFollow = false;
+        pending = true;
+    }
+
+    /// <summary>새 팔로워 알림 데이터(notification_type=follow · from_username)면 내 팔로워 탭으로. 아니면 false</summary>
+    public static bool OpenFollow(IDictionary<string, string> data)
+    {
+        if (data == null || !data.TryGetValue("notification_type", out var type) || type != "follow") return false;
+        data.TryGetValue("from_username", out var from);
+        OpenFollowers(from, false);
+        return true;
+    }
+
+    /// <summary>내 팔로워 탭을 열고 그 사람을 맨 위에. 알림은 두 길로 와도 한 번만 · 메세지 탭의 알림 줄(again)은 누를 때마다</summary>
+    public static void OpenFollowers(string fromUsername, bool again)
+    {
+        string key = "follow|" + fromUsername;
+        if (!again && key == lastKey && Time.realtimeSinceStartup - lastAt < 10f) return;
+        lastKey = key;
+        lastAt = Time.realtimeSinceStartup;
+        pendingFollower = fromUsername;
+        pendingFollow = true;
+        pending = true;
+    }
+
+    /// <summary>메세지 탭의 보물찾기 말풍선을 누름 — 알림과 같은 길로 (덮인 대화창·메세지창을 닫고 그 게임 상세). 같은 게임을 다시 눌러도 연다</summary>
+    public static void OpenHunt(int huntId)
+    {
+        pendingHunt = huntId.ToString();
+        pendingHost = null;
+        pendingProfile = false;
+        pendingFollow = false;
         pending = true;
     }
 
@@ -68,8 +104,8 @@ public class R0926HuntPush : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetOnLaunch()
     {
-        pending = pendingProfile = false;
-        pendingHunt = pendingHost = lastKey = null;
+        pending = pendingProfile = pendingFollow = false;
+        pendingHunt = pendingHost = pendingFollower = lastKey = null;
         lastAt = -99f;
     }
 
@@ -121,10 +157,24 @@ public class R0926HuntPush : MonoBehaviour
     {
         running = true;
         pending = false;
-        string hunt = pendingHunt, host = pendingHost;
-        bool toProfile = pendingProfile;
-        yield return CloseCovering();
-        if (toProfile)
+        string hunt = pendingHunt, host = pendingHost, follower = pendingFollower;
+        bool toProfile = pendingProfile, toFollowers = pendingFollow;
+        pendingFollow = false;
+        // 프로필·팔로우 목록·대화방은 열어 준 곳으로 돌아가지 않고 바로 닫는다 — 팔로우 목록 → 프로필, 대화방 → 메시지 목록이
+        // 닫히며 앞 창을 되살려 상세 위에 겹쳤다 (10-13 대표님). 나머지 창은 뒤로가기 순서대로
+        if (FollowManager.Instance != null) FollowManager.Instance.CloseAway();
+        if (ProfileManager.Instance != null) ProfileManager.Instance.CloseAway();
+        if (MessagePanelManager.Instance != null) MessagePanelManager.Instance.CloseAway();
+        yield return CloseCovering(!toFollowers);   // 팔로워 탭은 추가 창까지 닫고 연다 (닫기를 누르면 메인으로)
+        if (toFollowers)
+        {
+            var me = LoginManager.Instance != null ? LoginManager.Instance.CurrentUser : null;
+#if UNITY_EDITOR
+            if (me == null && !string.IsNullOrEmpty(R0926HuntApi.EditorTestUser)) me = new UserData { id = R0926HuntApi.EditorTestUser, username = R0926HuntApi.EditorTestUser };   // 플레이 시험 — 로그인 없이 시험 아이디로
+#endif
+            if (me != null && FollowManager.Instance != null) FollowManager.Instance.ShowNewFollower(me.id, me.username, follower);
+        }
+        else if (toProfile)
         {
             // 별점 알림 — 주최자 프로필의 보물찾기 칸을 펼쳐 별점 남기기까지 내린다
             R0926HuntProfile.ExpandNext(host, true, hunt);
@@ -143,8 +193,8 @@ public class R0926HuntPush : MonoBehaviour
         running = false;
     }
 
-    // 위에 덮인 창을 한 장씩 닫는다 — 닫히는 움직임이 끝날 때까지 기다리고, 추가 창이나 안 닫히는 창에서 멈춘다
-    private IEnumerator CloseCovering()
+    // 위에 덮인 창을 한 장씩 닫는다 — 닫히는 움직임이 끝날 때까지 기다리고, 추가 창(stopAtUpload)이나 안 닫히는 창에서 멈춘다
+    private IEnumerator CloseCovering(bool stopAtUpload)
     {
         var back = BackButtonHandler.Instance;
         if (back == null) yield break;
@@ -152,7 +202,7 @@ public class R0926HuntPush : MonoBehaviour
         {
             var top = back.Top;
             // 추가 창에서 멈춘다 — 창 자신만이 아니라 도크 X 덮개(ClosePx0926)도 뒤로가기에 올라 있다
-            if (top == null || (uploadPage != null && top.transform.IsChildOf(uploadPage.transform))) yield break;
+            if (top == null || (stopAtUpload && uploadPage != null && top.transform.IsChildOf(uploadPage.transform))) yield break;
             back.HandleBackPress();
             float until = Time.unscaledTime + 1.5f;
             while (back.Top == top && Time.unscaledTime < until) yield return null;

@@ -25,5 +25,7 @@
     </activity>
     <service android:name="com.google.firebase.messaging.MessageForwardingService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true">
     </service>
+    <!-- 앱이 꺼져 있을 때 FCM 알림의 상태바 아이콘 — 없으면 앱 아이콘(흰 바탕 네모)을 써 흰 네모로 보였다. 흰 실루엣은 WoopangNotify.androidlib -->
+    <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_woopang" />
   </application>
 </manifest>

@@ -7,8 +7,9 @@ using UnityEngine.UI;
 /// 쪽 넘기기·닫기·첫 실행 판정은 FirstTimeGuide 그대로 (다음 = 왼쪽으로 민 것과 같다, 시작하기·건너뛰기 = 확인 버튼).
 /// 보이는 순서는 FirstTimeGuide 가 정하고, pages·targets 는 쪽 오브젝트와 비출 칸의 짝이다.
 /// 다음·시작하기는 AR 오브젝트를 터치할 때와 같은 소리·진동을 낸다 (건너뛰기·뒤로가기는 조용히).
+/// 안내 중에도 하단 버튼(도크)은 눌린다 — 누르면 그 버튼 일을 하고 안내는 닫힌다. AR 오브젝트는 안내가 끝난 뒤부터 (10-19 대표님).
 /// </summary>
-public class R0926GuideOverlay : MonoBehaviour
+public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
 {
     [SerializeField] private FirstTimeGuide guide;
     [SerializeField] private RectTransform panel;
@@ -23,6 +24,7 @@ public class R0926GuideOverlay : MonoBehaviour
     [SerializeField] private Button confirm;
     [SerializeField] private GameObject[] pages;
     [SerializeField] private RectTransform[] targets;    // 쪽마다 비출 도크 칸
+    [SerializeField] private RectTransform dock;         // 안내 막이 비켜 주는 자리 (하단 버튼 줄)
     [SerializeField] private float holeSize = 300f;
     [SerializeField] private float dimAlpha = 0.74f;
     [Tooltip("다음·시작하기 누름 소리 — 비우면 UIFeedbackManager 기본 소리(Touch, AR 오브젝트 터치와 같은 소리)")]
@@ -36,7 +38,41 @@ public class R0926GuideOverlay : MonoBehaviour
     private Vector2 holePos;
     private bool placed;
 
-    private void OnEnable() { placed = false; }
+    private Button[] dockButtons;
+    private bool closing;
+
+    /// <summary>첫 사용 안내가 떠 있는 동안 — AR 오브젝트 터치(두 번 톡톡·회전·소리·보물·사람)는 이걸 보고 손을 뗀다</summary>
+    public static bool BlocksWorld { get; private set; }
+
+    private void OnEnable()
+    {
+        placed = false;
+        closing = false;
+        BlocksWorld = true;
+        dockButtons = dock != null ? dock.GetComponentsInChildren<Button>(true) : null;
+        if (dockButtons != null) foreach (var b in dockButtons) b.onClick.AddListener(DockTapped);
+    }
+
+    private void OnDisable()
+    {
+        BlocksWorld = false;
+        if (dockButtons != null) foreach (var b in dockButtons) if (b != null) b.onClick.RemoveListener(DockTapped);
+        dockButtons = null;
+    }
+
+    // 도크 자리에서는 안내 막(어둡게·구멍·끌기 판)이 손가락을 받지 않는다 — 아래 도크 버튼이 그대로 눌린다
+    public bool IsRaycastLocationValid(Vector2 sp, Camera eventCamera)
+    {
+        return dock == null || !dock.gameObject.activeInHierarchy || !RectTransformUtility.RectangleContainsScreenPoint(dock, sp, eventCamera);
+    }
+
+    // 하단 버튼을 눌렀다 — 버튼 일(창 열기)은 버튼이 하고, 안내는 조용히 닫는다 (목록·추가·프로필 창은 안내 막 아래에 열린다)
+    private void DockTapped()
+    {
+        if (closing || confirm == null) return;
+        closing = true;
+        confirm.onClick.Invoke();
+    }
 
     public void Next()
     {

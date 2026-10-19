@@ -239,10 +239,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         currentFilters = new Dictionary<string, bool>();
         
         // FilterManager와 동일한 PlayerPrefs 키를 사용하여 초기값 로드
-        int petState = PlayerPrefs.GetInt("Filter_PetFriendly_V3", 0); // 0:All, 1:Only, 2:No
-        currentFilters["petFriendlyAll"] = (petState == 0);
+        int petState = PlayerPrefs.GetInt("Filter_PetFriendly_V3", 0); // 0:전부, 1:반려견 되는 곳만 (옛 2 '안 되는 곳만'은 없앰 → 전부)
+        currentFilters["petFriendlyAll"] = (petState != 1);
         currentFilters["petFriendlyOnly"] = (petState == 1);
-        currentFilters["noPetFriendly"] = (petState == 2);
         
         currentFilters["object3D"] = PlayerPrefs.GetInt("Filter_Object3D_V2", 1) == 1;
         currentFilters["alcohol"] = PlayerPrefs.GetInt("Filter_Alcohol_V2", 1) == 1;
@@ -560,7 +559,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                                 sourceManager = "DataManager",
                                 modelType = item.model_type ?? "cube",
                                 petFriendly = item.pet_friendly,
-                                filterKey = FilterManager.PublicDataCategories.Contains(cat) ? "publicData" : ""
+                                filterKey = FilterManager.IsPublicSource(item.is_public, cat) ? "publicData" : ""
                             });
                         }
                         MarkCacheReady();
@@ -997,10 +996,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     {
         if (currentFilters == null) return true;
 
-        // 3단계 애견동반 필터 처리
+        // 애견동반 필터 (전부 / 반려견 되는 곳만)
         bool petFriendlyAll = currentFilters.ContainsKey("petFriendlyAll") && currentFilters["petFriendlyAll"];
         bool petFriendlyOnly = currentFilters.ContainsKey("petFriendlyOnly") && currentFilters["petFriendlyOnly"];
-        bool noPetFriendly = currentFilters.ContainsKey("noPetFriendly") && currentFilters["noPetFriendly"];
 
         // alcohol 키가 없으면 기본값 true
         bool showAlcohol = !currentFilters.ContainsKey("alcohol") || currentFilters["alcohol"];
@@ -1018,13 +1016,11 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             return false;
         }
 
-        // 공공데이터 필터: 공공 카테고리(gov, edu 등)인 경우 publicData 토글에 따라 표시/숨김
-        string cat = place.category ?? "";
-        bool isPublicCategory = FilterManager.PublicDataCategories.Contains(cat);
-        if (isPublicCategory)
-        {
-            if (!showPublicData) return false;
-        }
+        // 공공데이터 칩: 기관이 등록한 장소만 숨긴다 (사람이 '공원'으로 올린 곳은 우팡 데이터).
+        // 분류(카테고리)를 고른 동안은 분류가 정한다 — 그때 publicData 는 늘 false 로 온다
+        bool categoryMode = currentFilters.ContainsKey("categoryFilter") && currentFilters["categoryFilter"];
+        if (!categoryMode && !showPublicData && FilterManager.IsPublicSource(place.is_public, place.category))
+            return false;
 
         bool shouldShow = showWoopangData;
 
@@ -1032,10 +1028,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         {
             // 애견동반 필터 적용
             if (petFriendlyOnly && !place.pet_friendly)
-            {
-                shouldShow = false;
-            }
-            else if (noPetFriendly && place.pet_friendly)
             {
                 shouldShow = false;
             }
@@ -1179,9 +1171,10 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
         if (display != null)
         {
-            // 공공 심볼 카테고리는 앱 내장 이미지 우선(서버 로딩 0). 내장 텍스처 없으면 서버 사진 폴백.
+            // 기관이 등록한 공공데이터만 앱 내장 그림 우선(서버 로딩 0). 내장 텍스처 없으면 서버 사진 폴백.
+            // 사람이 찍어 올린 곳은 카테고리가 '공원'이어도 그 사진으로 (10-17 공원 기본 그림으로 뜨던 것)
             bool usedInApp = false;
-            string iconPath = GetInAppIconPath(place.category);
+            string iconPath = FilterManager.IsPublicSource(place.is_public, place.category) ? GetInAppIconPath(place.category) : null;
             if (iconPath != null) usedInApp = display.SetBaseMapFromResources(iconPath);
             if (!usedInApp && !string.IsNullOrEmpty(place.main_photo)) display.SetBaseMap(place.main_photo);
         }
@@ -2231,6 +2224,8 @@ public class LightPlaceData
     public string model_type { get; set; }
     public bool pet_friendly { get; set; }
     public bool separate_restroom { get; set; }
+    /// <summary>기관이 등록한 공공데이터인지 (서버가 등록자로 판별 — 옛 서버면 null)</summary>
+    public bool? is_public { get; set; }
 }
 
 [System.Serializable]
@@ -2254,4 +2249,6 @@ public class PlaceData
     public string model_url { get; set; }
     public float model_scale { get; set; } = 1f;
     public string category { get; set; } = ""; // shop, food, cafe, park, toilet, gov, edu, utility, landmark, medical, culture, sport, religious, welfare
+    /// <summary>기관이 등록한 공공데이터인지 (서버가 등록자로 판별 — 옛 서버면 null)</summary>
+    public bool? is_public { get; set; }
 }

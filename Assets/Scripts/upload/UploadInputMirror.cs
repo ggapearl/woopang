@@ -93,6 +93,12 @@ public class UploadInputMirror : MonoBehaviour
         initialized = false;   // 다시 켜지면 듣기·트리거를 다시 단다 (예전엔 끈 뒤로 ✓·입력이 먹지 않았다)
     }
 
+    /// <summary>지금 입력줄로 쓰고 있는 원래 칸 (닫혀 있거나 닫는 중이면 null) — R0926InputFocus 가 테두리·스크롤에 쓴다</summary>
+    public InputField ActiveSource => mirrorPanel != null && mirrorPanel.activeSelf && !closing ? activeSource : null;
+    /// <summary>키보드 위에 자리 잡은 입력줄 (아직이면 null)</summary>
+    public RectTransform PlacedBar => placed ? mirrorRect : null;
+    public bool IsMirrorInput(InputField f) => f != null && f == mirrorInput;
+
     /// <summary>이 칸은 입력줄 버튼이 '완료' 가 아니라 '보내기' — 누르면(키보드 엔터도) 글을 옮기고 바로 보낸다. null 이면 해제</summary>
     public void SetSubmitAction(InputField src, System.Action onSubmit)
     {

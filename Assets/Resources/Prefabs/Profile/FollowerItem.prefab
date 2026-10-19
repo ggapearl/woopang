@@ -156,7 +156,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 28
+    m_FontSize: 38
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
@@ -181,7 +181,7 @@ GameObject:
   - component: {fileID: 4771098785539561282}
   - component: {fileID: 825078630035299147}
   m_Layer: 0
-  m_Name: FollowListItem
+  m_Name: FollowerItem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

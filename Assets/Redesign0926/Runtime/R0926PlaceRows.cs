@@ -9,8 +9,10 @@ using UnityEngine.UI;
 /// PlaceListManager 가 한 덩어리로 쓰는 목록 글자("&lt;color=#..&gt;이름 - 42m&lt;/color&gt;")를 읽어
 /// 한 줄에 한 장소(색 점 · 이름 · 방향 · 거리)로 다시 그린다. PlaceListManager 의 글자는 건드리지 않는다.
 /// 원본 Text 는 숨긴 채 계속 쓰이게 두고, 바뀔 때만 다시 그린다.
-/// 줄을 누르면 그 장소를 AR 에서 찾게 돕는다 — AR 에 떠 있으면 목록을 내리고 그 박스·화살표를 잠깐 강조,
-/// 아직 없으면 방향·거리를 알려 준다. 줄 ↔ 장소는 PlaceListManager.ShownEntries(글자와 같은 순서)로 잇는다.
+/// 줄을 누르면 그 장소를 AR 에서 찾게 돕는다 — AR 에 떠 있으면 그 줄이 잠깐 분홍으로 밝혀졌다가 목록이 내려가고
+/// AR 의 그 박스·화살표 글자 뒤에 분홍 스티커가 붙는다. 아직 없으면 목록은 그대로, 그 줄이 분홍으로 밝혀지고
+/// 거리 칸에 '아직 AR화면 내에 없음'. 줄 ↔ 장소는 PlaceListManager.ShownEntries(글자와 같은 순서)로 잇는다.
+/// 줄 앞 표시: 장소는 색 점 · 근처 사람은 사람 모양(핑크) · 보물찾기는 금빛 상자 — 보물찾기 줄을 누르면 그 게임 상세가 열린다.
 /// </summary>
 public class R0926PlaceRows : MonoBehaviour
 {
@@ -51,8 +53,22 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private int directionFontSize = 27;
     [Tooltip("방향을 다시 계산하는 간격 (초)")]
     [SerializeField] private float directionInterval = 0.25f;
-    [Tooltip("AR 에 아직 없는 장소를 눌렀을 때 거리 칸에 '아직 AR 에 없어요' 를 보여 주는 시간 (초)")]
+    [Tooltip("AR 에 아직 없는 장소를 눌렀을 때 그 줄을 밝히고 거리 칸에 '아직 AR화면 내에 없음' 을 보여 주는 시간 (초)")]
     [SerializeField] private float notInArNoteDuration = 2.5f;
+    [Tooltip("AR 에 떠 있는 장소를 누르면 그 줄을 이만큼(초) 밝혔다가 목록을 내린다")]
+    [SerializeField] private float tapFlashDuration = 0.35f;
+    private static readonly Color FlashPink = new Color(0.914f, 0.325f, 0.514f, 0.26f);
+    private const float FlashFadeIn = 0.08f, FlashFadeOut = 0.35f;
+    private float flashEnd, closeAt = -1f;
+
+    [Header("줄 앞 표시 — 장소는 템플릿의 색 점")]
+    [SerializeField] private Sprite personSprite;
+    [SerializeField] private Sprite huntSprite;
+    [Tooltip("그림 크기 — 그림마다 둘레 여백이 달라 따로 둔다 (보이는 크기를 이름 글자에 맞춘다)")]
+    [SerializeField] private float personIconSize = 48f;
+    [SerializeField] private float huntIconSize = 44f;
+    [Tooltip("그림 가운데 — 줄 왼쪽 끝에서")]
+    [SerializeField] private float iconCenterX = 26f;
 
     private const float Hysteresis = 10f;        // 경계에서 방향 글자가 깜빡이지 않게 (도)
     private const float GpsMinDistance = 10f;   // GPS 오차 안쪽은 나침반 방향을 쓰지 않는다 (m)
@@ -88,7 +104,13 @@ public class R0926PlaceRows : MonoBehaviour
         public string distLabel;   // "42m"
         public string shownLabel;  // 지금 거리 칸에 쓴 거리
         public int dir = -2;       // 지금 보이는 방향: 0 앞 · 1 오른쪽 · 2 뒤 · 3 왼쪽 · -1 없음 · -2 다시 그리기
-        public float noteUntil;    // 이 시각까지 거리 칸에 '아직 AR 에 없어요'
+        public float noteUntil;    // 이 시각까지 거리 칸에 '아직 AR화면 내에 없음'
+        public Image flash;        // 누른 줄 분홍 바탕
+        public float flashFrom, flashUntil;
+        public bool noDirection;   // 방향을 쓰지 않는 줄 — 비공개 보물찾기 · 대략 공개 원 안
+        public PlaceListManager.EntryKind kind;   // 지금 줄 앞 표시 (템플릿 = 장소)
+        public Sprite dotSprite;   // 템플릿의 색 점 — 장소로 돌아올 때
+        public Vector2 dotPos, dotSize;
     }
 
     private void Awake()
@@ -124,12 +146,20 @@ public class R0926PlaceRows : MonoBehaviour
         openedAt = Time.unscaledTime;
         last = null;   // 다시 열면 한 번 새로 그린다 (스켈레톤 판정 포함)
         nextDirAt = 0f;
+        closeAt = -1f;
+        flashEnd = 0f;
+        foreach (var r in rows)
+        {
+            r.flashUntil = 0f;
+            if (r.flash != null) r.flash.gameObject.SetActive(false);
+        }
     }
 
     private void OnDisable()
     {
         // 목록이 열려 있는 동안만 나침반을 쓴다 (우리가 켠 경우에만 끈다)
         if (compassOwned) { Input.compass.enabled = false; compassOwned = false; }
+        closeAt = -1f;
     }
 
     private void LateUpdate()
@@ -142,6 +172,16 @@ public class R0926PlaceRows : MonoBehaviour
             Rebuild(t);
         }
         else if (Time.unscaledTime >= nextDirAt) RefreshDirections();
+        if (flashEnd > 0f)
+        {
+            UpdateFlashes();
+            if (Time.unscaledTime > flashEnd) flashEnd = 0f;
+        }
+        if (closeAt > 0f && Time.unscaledTime >= closeAt)
+        {
+            closeAt = -1f;
+            if (sheet != null) sheet.AnimateClose(null);   // X 와 같은 길: 시트가 내려간 뒤 닫기 버튼
+        }
         if (loading)
         {
             if (Time.unscaledTime - openedAt > skeletonTimeout) SetSkeleton(false);
@@ -223,15 +263,19 @@ public class R0926PlaceRows : MonoBehaviour
                 int index = used++;
                 Row r = GetRow(index);
                 r.index = index;
-                r.dot.color = ParseHex(m.Groups[1].Value);
                 string key = m.Groups[2].Value;
+                bool known = FindEntry(index, key, out var e);
+                // 근처 사람은 이름이 @아이디 — 장소 정보와 아직 못 맞춘 프레임에도 사람 모양으로
+                var kind = known ? e.kind : key.StartsWith("@") ? PlaceListManager.EntryKind.Person : PlaceListManager.EntryKind.Place;
+                SetIcon(r, kind, ParseHex(m.Groups[1].Value));
                 string label = key;
-                if (label.StartsWith("👤 ")) label = label.Substring(3);   // 근처 사용자 — 색 점(핑크)으로 구분
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움)
                 string roman = korean ? null : R0926Romanizer.Romanize(label);
                 r.name.text = roman == null ? label : label + "  <color=#6F7880>" + roman + "</color>";
-                if (r.key != key) { r.key = key; r.dir = -2; r.noteUntil = 0f; }   // 다른 장소가 이 줄로 왔다 — 방향을 새로
-                r.distLabel = FormatDistance(int.Parse(m.Groups[3].Value));
+                if (r.key != key) { r.key = key; r.dir = -2; r.noteUntil = 0f; r.flashUntil = 0f; }   // 다른 장소가 이 줄로 왔다 — 방향을 새로
+                // 보물찾기는 게임의 공개 설정대로 ('약 300m' · '범위 안' · '1km 이내')
+                r.distLabel = known && e.distanceText != null ? e.distanceText : FormatDistance(int.Parse(m.Groups[3].Value));
+                r.noDirection = known && e.noDirection;
                 entries.Add(new Entry { name = label, distance = r.distLabel });
                 continue;
             }
@@ -291,6 +335,9 @@ public class R0926PlaceRows : MonoBehaviour
                 name = go.transform.Find("Name").GetComponent<Text>(),
                 dist = go.transform.Find("Dist").GetComponent<Text>(),
             };
+            nr.dotSprite = nr.dot.sprite;
+            nr.dotPos = nr.dot.rectTransform.anchoredPosition;
+            nr.dotSize = nr.dot.rectTransform.sizeDelta;
             SetupRow(nr);
             rows.Add(nr);
         }
@@ -327,6 +374,22 @@ public class R0926PlaceRows : MonoBehaviour
         btn.navigation = new Navigation { mode = Navigation.Mode.None };
         btn.onClick.AddListener(() => OnRowTap(row));
 
+        // 누른 줄 분홍 바탕 — 글자 뒤 (첫 자식), 평소엔 꺼 둔다
+        var fl = new GameObject("Flash", typeof(RectTransform), typeof(Image));
+        fl.layer = go.layer;
+        var frt = (RectTransform)fl.transform;
+        frt.SetParent(go.transform, false);
+        frt.SetAsFirstSibling();
+        frt.anchorMin = Vector2.zero; frt.anchorMax = Vector2.one;
+        frt.offsetMin = new Vector2(6f, 6f); frt.offsetMax = new Vector2(-6f, -6f);
+        row.flash = fl.GetComponent<Image>();
+        row.flash.sprite = barSprite;
+        row.flash.type = barSprite != null ? Image.Type.Sliced : Image.Type.Simple;
+        if (barSprite != null) row.flash.pixelsPerUnitMultiplier = barSprite.border.x / 22f;   // 모서리 반지름 ≈ 22
+        row.flash.color = FlashPink;
+        row.flash.raycastTarget = false;
+        fl.SetActive(false);
+
         if (showDirection && directionWidth > 0f)
         {
             // 방향 글자 자리 — 거리 칸(오른쪽 기준)을 왼쪽으로 넓히고 이름 칸은 그만큼 좁힌다. 길어도 거리가 잘리지 않게 한 줄로
@@ -336,32 +399,96 @@ public class R0926PlaceRows : MonoBehaviour
         }
     }
 
+    // 줄 앞 표시 — 장소는 색 점, 사람은 사람 모양(핑크 그대로), 보물찾기는 금빛 상자(그림 색 그대로). 그림이 없으면 색 점
+    private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color)
+    {
+        Sprite s = kind == PlaceListManager.EntryKind.Person ? personSprite
+                 : kind == PlaceListManager.EntryKind.Hunt ? huntSprite : null;
+        if (s == null) kind = PlaceListManager.EntryKind.Place;
+        r.dot.color = kind == PlaceListManager.EntryKind.Hunt ? Color.white : color;
+        if (kind == r.kind) return;
+        r.kind = kind;
+        var rt = r.dot.rectTransform;
+        if (kind == PlaceListManager.EntryKind.Place)
+        {
+            r.dot.sprite = r.dotSprite;
+            r.dot.preserveAspect = false;
+            rt.anchoredPosition = r.dotPos;
+            rt.sizeDelta = r.dotSize;
+            return;
+        }
+        float size = kind == PlaceListManager.EntryKind.Person ? personIconSize : huntIconSize;
+        r.dot.sprite = s;
+        r.dot.preserveAspect = true;
+        rt.anchoredPosition = new Vector2(iconCenterX, r.dotPos.y);
+        rt.sizeDelta = new Vector2(size, size);
+    }
+
     // ── 줄 누르기 ─────────────────────────────────────────
 
     private void OnRowTap(Row r)
     {
         if (places == null || !TryGetEntry(r, out var e)) return;
+        if (e.kind == PlaceListManager.EntryKind.Hunt) { R0926HuntPush.OpenHunt(e.huntId); return; }   // 그 게임 상세 (목록은 뒤로가기 순서대로 닫힌다)
         Target t = places.FindTarget(e);
-        if (t != null && indicators != null && indicators.Focus(t))
+        if (t != null && indicators != null && indicators.Focus(t, tapFlashDuration + 0.1f))
         {
-            // AR 에 떠 있다 — 그 박스·화살표를 잠깐 강조하고 목록을 내린다 (X 와 같은 길: 시트가 내려간 뒤 닫기 버튼)
-            if (sheet != null) sheet.AnimateClose(null);
+            // AR 에 떠 있다 — 그 줄을 잠깐 밝혔다가 목록을 내리고, 내려가는 동안 AR 의 그 박스·화살표 글자 뒤에 분홍 스티커
+            Flash(r, tapFlashDuration);
+            closeAt = Time.unscaledTime + tapFlashDuration;
             return;
         }
-        // 아직 AR 에 없다 (멀거나 불러오는 중) — 그 줄 거리 칸에 잠깐 알려 준다 (방향·거리는 줄에 이미 보인다).
-        // ToastManager 는 0926 씬에 없어 쓰지 않는다
+        // 아직 AR 에 없다 (멀거나 불러오는 중) — 목록은 그대로, 그 줄을 밝히고 거리 칸에 알려 준다 (방향·거리는 줄에 이미 보인다).
+        // 토스트가 아니라 그 줄에 — 어느 장소 얘기인지 바로 보인다
+        Flash(r, notInArNoteDuration);
         r.noteUntil = Time.unscaledTime + notInArNoteDuration;
         r.dir = -2;   // 안내가 끝나면 방향·거리를 다시 그린다
-        r.dist.text = "<size=" + directionFontSize + ">" + L("아직 AR에 없어요", "Not in AR yet", "まだARにありません", "尚未在AR中", "Aún no en AR") + "</size>";
+        r.dist.text = "<size=" + directionFontSize + "><color=#FFFFFF>"
+                    + L("아직 AR화면 내에 없음", "Not in AR view yet", "まだAR画面にありません", "尚未出现在AR画面中", "Aún no está en la vista AR")
+                    + "</color></size>";
     }
 
-    // 줄 → 장소 정보. 보통 순번이 같고, 어긋났으면(목록이 막 바뀐 프레임 등) 이름으로 찾는다
-    private bool TryGetEntry(Row r, out PlaceListManager.ListEntry e)
+    private void Flash(Row r, float hold)
     {
-        var list = places.ShownEntries;
-        if (r.index < list.Count && list[r.index].name == r.key) { e = list[r.index]; return true; }
-        for (int i = 0; i < list.Count; i++)
-            if (list[i].name == r.key) { e = list[i]; return true; }
+        if (r.flash == null) return;
+        r.flashFrom = Time.unscaledTime;
+        r.flashUntil = Time.unscaledTime + hold;
+        flashEnd = Mathf.Max(flashEnd, r.flashUntil + FlashFadeOut);
+        UpdateFlashes();
+    }
+
+    // 분홍 바탕 — 빠르게 켜지고, 시간이 지나면 천천히 꺼진다
+    private void UpdateFlashes()
+    {
+        float now = Time.unscaledTime;
+        foreach (var r in rows)
+        {
+            if (r.flash == null) continue;
+            float a = 0f;
+            if (r.flashUntil > 0f)
+            {
+                float fin = Mathf.Clamp01((now - r.flashFrom) / FlashFadeIn);
+                float fout = 1f - Mathf.Clamp01((now - r.flashUntil) / FlashFadeOut);
+                a = Mathf.Min(Mathf.Max(fin, 0.35f), fout);
+            }
+            bool on = a > 0.001f && r.go.activeSelf;
+            if (r.flash.gameObject.activeSelf != on) r.flash.gameObject.SetActive(on);
+            if (on) r.flash.canvasRenderer.SetAlpha(a);
+        }
+    }
+
+    private bool TryGetEntry(Row r, out PlaceListManager.ListEntry e) => FindEntry(r.index, r.key, out e);
+
+    // 줄 → 장소 정보. 보통 순번이 같고, 어긋났으면(목록이 막 바뀐 프레임 등) 이름으로 찾는다
+    private bool FindEntry(int index, string key, out PlaceListManager.ListEntry e)
+    {
+        if (places != null)
+        {
+            var list = places.ShownEntries;
+            if (index < list.Count && list[index].name == key) { e = list[index]; return true; }
+            for (int i = 0; i < list.Count; i++)
+                if (list[i].name == key) { e = list[i]; return true; }
+        }
         e = default;
         return false;
     }
@@ -378,14 +505,14 @@ public class R0926PlaceRows : MonoBehaviour
             var r = rows[i];
             if (!r.go.activeSelf) continue;
             int dir = -1;
-            if (list != null && r.index < list.Count && list[r.index].name == r.key) dir = Direction(list[r.index], r.dir);
+            if (list != null && !r.noDirection && r.index < list.Count && list[r.index].name == r.key) dir = Direction(list[r.index], r.dir);
             ShowDistance(r, dir);
         }
     }
 
     private void ShowDistance(Row r, int dir)
     {
-        if (Time.unscaledTime < r.noteUntil) return;   // '아직 AR 에 없어요' 를 보여 주는 중
+        if (Time.unscaledTime < r.noteUntil) return;   // '아직 AR화면 내에 없음' 을 보여 주는 중
         if (dir == r.dir && r.distLabel == r.shownLabel) return;
         r.dir = dir;
         r.shownLabel = r.distLabel;

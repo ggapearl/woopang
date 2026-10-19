@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
 /// 목록 시트의 필터 칩 모양 — 체크 동그라미 없이 칸 전체가 켜짐/꺼짐.
-/// 켜짐: 그 분류 색으로 은은하게 · 꺼짐: 어둡게 · 반려견 '필수': 꽉 찬 노랑 + 앞의 점이 흰색으로 반짝 · 반려견 '제외': 어둡게 + 사선.
+/// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(3D·전체·팔로잉)은 꽉 찬 흰색 · 꺼짐: 어둡게 · 반려견 '되는 곳만': 꽉 찬 노랑 + 앞의 점이 흰색으로 반짝.
 /// 필터 로직(FilterManager)은 그대로 두고, 그 상태를 읽어 매 프레임 끝에 모양·이름만 다시 그린다.
-/// 길게 누르면 '이것만' — 같은 줄의 일반 칩(공공·교통·3D) 중 이것만 켠다.
+/// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다.
 /// </summary>
 public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
 {
@@ -20,17 +21,20 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     [SerializeField] private Image body;
     [SerializeField] private Text label;
     [SerializeField] private Image dot;
-    [SerializeField] private Image strike;
-    [Tooltip("분류 칩 — 누를 때마다 다음 분류로 넘어간다는 표시")]
-    [SerializeField] private Image cycle;
+    [Tooltip("분류 칩 — 누르면 고르기 목록이 펼쳐진다는 표시 (∨, 펼쳐지면 ∧)")]
+    [FormerlySerializedAs("cycle")]
+    [SerializeField] private Image drop;
     [SerializeField] private float longPress = 0.55f;
 
     private FilterManager fm;
+    private R0926CategoryMenu menu;
     private string placedFor;
+    private float placedW = -1f;
+    private int baseFont;
     private bool pressing, fired, suppress;
     private float pressAt;
 
-    private static readonly string[][] CatNames =
+    public static readonly string[][] CatNames =
     {
         new[] { "전체", "All", "すべて", "全部", "Todo" },
         new[] { "샵", "Shop", "ショップ", "商店", "Tienda" },
@@ -41,7 +45,7 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         new[] { "스포츠", "Sports", "スポーツ", "运动", "Deporte" },
         new[] { "랜드마크", "Landmark", "名所", "地标", "Lugar" },
     };
-    private static readonly Color[] CatColors =
+    public static readonly Color[] CatColors =
     {
         new Color(0.91f, 0.93f, 0.945f), new Color(0.31f, 0.55f, 1f), new Color(1f, 0.54f, 0.24f), new Color(0.69f, 0.42f, 0.94f),
         new Color(0.22f, 0.85f, 0.54f), new Color(0.61f, 0.48f, 1f), new Color(0.18f, 0.77f, 0.77f), new Color(0.96f, 0.77f, 0.26f),
@@ -49,10 +53,15 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     private static readonly string[] P2PAll = { "사람", "People", "ユーザー", "用户", "Personas" };
     private static readonly string[] P2PFollowing = { "팔로잉", "Following", "フォロー中", "关注", "Siguiendo" };
     private static readonly Color Pink = new Color(0.914f, 0.325f, 0.514f);
+    /// <summary>흰 칩 위 글자·점 — 시트 바탕색</summary>
+    public static readonly Color InkOnWhite = new Color(0.078f, 0.090f, 0.102f);
+    private const int MinFont = 38;   // 앱 최소 글자 (Redesign0926ApplyReadable.MinFont)
 
     private void Awake()
     {
         fm = FindAnyObjectByType<FilterManager>();
+        menu = GetComponent<R0926CategoryMenu>();
+        if (label != null) baseFont = label.fontSize;
     }
 
     public void OnPointerDown(PointerEventData e)
@@ -84,21 +93,19 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         if (toggle == null || body == null || label == null) return;
         if (fm == null) fm = FindAnyObjectByType<FilterManager>();
 
-        int st = toggle.isOn ? 1 : 0;   // 0 꺼짐 · 1 켜짐 · 2 강하게(반려견 필수)
+        int st = toggle.isOn ? 1 : 0;   // 0 꺼짐 · 1 켜짐 · 2 강하게(반려견 되는 곳만)
         Color c = color;
         string text = Pick(names);
-        bool struck = false;
-        bool cycler = false;
+        bool arrow = false;
         switch (kind)
         {
             case Kind.Category:
                 int ci = fm != null ? Mathf.Clamp((int)fm.CategoryState, 0, CatNames.Length - 1) : 0;
-                st = 1; c = CatColors[ci]; text = Pick(CatNames[ci]); cycler = true;
+                st = 1; c = CatColors[ci]; text = Pick(CatNames[ci]); arrow = true;
                 break;
             case Kind.Pet:
                 var ps = fm != null ? fm.PetState : FilterManager.PetFriendlyFilterState.All;
-                st = ps == FilterManager.PetFriendlyFilterState.OnlyPetFriendly ? 2 : ps == FilterManager.PetFriendlyFilterState.All ? 1 : 0;
-                struck = st == 0;
+                st = ps == FilterManager.PetFriendlyFilterState.OnlyPetFriendly ? 2 : 1;
                 break;
             case Kind.P2P:
                 var p2 = fm != null ? fm.P2PState : FilterManager.P2PFilterState.All;
@@ -108,11 +115,15 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
                 break;
         }
         float dim = toggle.interactable || suppress ? 1f : 0.35f;   // 카테고리를 고르면 FilterManager 가 공공·사람 칸을 잠근다
+        // 흰 칩(3D·전체·팔로잉)이 켜지면 꽉 찬 흰색 — 반투명하면 회색으로 보여 켜진 건지 꺼진 건지 몰랐다 (10-17 대표님)
+        bool white = st == 1 && dim >= 1f && c.r > 0.85f && c.g > 0.85f && c.b > 0.85f;
 
-        body.color = st == 2 ? new Color(c.r, c.g, c.b, dim)
+        body.color = white ? new Color(c.r, c.g, c.b, 0.94f)
+                   : st == 2 ? new Color(c.r, c.g, c.b, dim)
                    : st == 1 ? new Color(c.r, c.g, c.b, 0.26f * dim)
                    : new Color(1f, 1f, 1f, 0.035f * dim);
-        label.color = st == 0 ? new Color(1f, 1f, 1f, 0.34f * dim) : new Color(1f, 1f, 1f, dim);
+        label.color = white ? InkOnWhite
+                    : st == 0 ? new Color(1f, 1f, 1f, 0.34f * dim) : new Color(1f, 1f, 1f, dim);
         if (dot != null)
         {
             if (st == 2)
@@ -124,35 +135,49 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
             }
             else
             {
-                dot.color = st == 1 ? new Color(c.r, c.g, c.b, dim) : new Color(1f, 1f, 1f, 0.28f * dim);
+                dot.color = white ? InkOnWhite : st == 1 ? new Color(c.r, c.g, c.b, dim) : new Color(1f, 1f, 1f, 0.28f * dim);
                 dot.rectTransform.localScale = Vector3.one;
             }
         }
-        if (strike != null && strike.enabled != struck) strike.enabled = struck;
-        if (cycle != null)
+        if (drop != null)
         {
-            if (cycle.enabled != cycler) cycle.enabled = cycler;
-            cycle.color = new Color(1f, 1f, 1f, 0.6f * dim);
+            if (drop.enabled != arrow) drop.enabled = arrow;
+            drop.color = white ? new Color(InkOnWhite.r, InkOnWhite.g, InkOnWhite.b, 0.75f) : new Color(1f, 1f, 1f, 0.75f * dim);
+            bool open = menu != null && menu.IsOpen;
+            drop.rectTransform.localEulerAngles = new Vector3(0f, 0f, open ? 180f : 0f);
         }
 
         // FilterManager 가 상태를 바꿀 때 예전 이름('반려견만' 등)을 써 넣는다 — 다르면 다시 짧은 이름으로
         if (label.text != text) label.text = text;
-        if (placedFor != text && dot != null)
+        float w = ((RectTransform)transform).rect.width;
+        if ((placedFor != text || !Mathf.Approximately(placedW, w)) && dot != null)
         {
             placedFor = text;
-            // 점은 글자 바로 앞 — 점과 글자를 한 묶음으로 가운데에
-            float w = label.preferredWidth;
-            float gap = 18f, dw = dot.rectTransform.sizeDelta.x;
-            float cw = cycler && cycle != null ? cycle.rectTransform.sizeDelta.x + 12f : 0f;
-            float total = dw + gap + w + cw;
-            float left = -total / 2f;
-            dot.rectTransform.anchoredPosition = new Vector2(left + dw / 2f, 0f);
-            label.rectTransform.anchoredPosition = new Vector2(left + dw + gap + w / 2f, 0f);
-            if (cycle != null) cycle.rectTransform.anchoredPosition = new Vector2(left + dw + gap + w + 12f + (cw - 12f) / 2f, 0f);
+            placedW = w;
+            Place(arrow, w);
         }
     }
 
-    private static string Pick(string[] arr)
+    /// <summary>점과 글자(분류 칩은 ∨ 까지)를 한 묶음으로 가운데에 — 칸보다 길면(긴 언어) 글자를 앱 최소 크기까지 줄인다</summary>
+    private void Place(bool arrow, float chipW)
+    {
+        float gap = 18f, dw = dot.rectTransform.sizeDelta.x;
+        float aw = arrow && drop != null ? drop.rectTransform.sizeDelta.x + 12f : 0f;
+        if (baseFont > 0)
+        {
+            label.fontSize = baseFont;
+            float room = chipW - 56f - dw - gap - aw;
+            float pw = label.preferredWidth;
+            if (room > 0f && pw > room) label.fontSize = Mathf.Max(MinFont, Mathf.FloorToInt(baseFont * room / pw));
+        }
+        float lw = label.preferredWidth;
+        float left = -(dw + gap + lw + aw) / 2f;
+        dot.rectTransform.anchoredPosition = new Vector2(left + dw / 2f, 0f);
+        label.rectTransform.anchoredPosition = new Vector2(left + dw + gap + lw / 2f, 0f);
+        if (drop != null) drop.rectTransform.anchoredPosition = new Vector2(left + dw + gap + lw + 12f + (aw - 12f) / 2f, 0f);
+    }
+
+    public static string Pick(string[] arr)
     {
         if (arr == null || arr.Length == 0) return "";
         int i;

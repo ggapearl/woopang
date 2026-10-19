@@ -576,6 +576,10 @@ public class DoubleTap3D : MonoBehaviour
         if (CommentManager.Instance != null && CommentManager.Instance.IsPanelOpen)
             return;
 
+        // 첫 사용 안내 중에는 오브젝트를 누르지 않는다 — 안내가 끝난 뒤부터
+        if (R0926GuideOverlay.BlocksWorld)
+            return;
+
 #if UNITY_EDITOR
         // 에디터 마우스 디버깅
         if (UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame && Time.timeSinceLevelLoad > 2f)

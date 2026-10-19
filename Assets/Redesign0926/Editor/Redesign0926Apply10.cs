@@ -28,6 +28,7 @@ namespace Redesign0926
             ProfileCard(root, log);
             InputBars(root, log);
             MessageSearch(root, log);
+            MessageTitleSub(root, log);
             WeatherSizes(root, log);
             FixPageCard(root, log);
             UpdateCard(root, log);
@@ -402,7 +403,7 @@ namespace Redesign0926
                 ("Message_Button", new[] { "MessagePanel", "ChatRoomPanel" }),
                 ("List_Button", new[] { "ListPanel" }),
                 ("PlusButton", new[] { "UploadPage" }),
-                ("MiniProfile", new[] { "FullProfilePanel" }),   // v19: 프로필 칸도 열리면 X '닫기' 만
+                ("MiniProfile", new[] { "FullProfilePanel", "FollowPanel" }),   // v19: 프로필 칸도 열리면 X '닫기' 만 (B7: 팔로우 창도)
             };
             var swap = Ensure<R0926DockSlotSwap>(dock);
             var so = new SerializedObject(swap);
@@ -418,6 +419,10 @@ namespace Redesign0926
                 for (int k = 0; k < defs[i].panels.Length; k++) ps.GetArrayElementAtIndex(k).objectReferenceValue = Find(root, defs[i].panels[k]);
             }
             so.ApplyModifiedPropertiesWithoutUndo();
+
+            // v26: 메시지 목록의 도크 X 가 누르면 자기 자신도 끄고 있었다 — 목록이 OpenMessagePanel 말고 다른 길(대화방 ← 의 옆 넘기기)로
+            // 다시 켜지면 X·뒤로가기(덮개가 X 안에 있다)가 없어 닫히지 않고 보물찾기 상세 위에 남았다 (10-13 대표님)
+            NoSelfOff(FindP(root, "MessagePanel/DockMirror0926/CloseButton"));
             log.Add("dock slots ok");
         }
 
@@ -428,7 +433,7 @@ namespace Redesign0926
             foreach (var p in new[]
             {
                 "MessagePanel/Clip0926/Background", "ChatRoomPanel/Clip0926/Background",
-                "FollowPanel/Background", "AskAISheet0926/Card0926", "FullScreenPanel/ReportSheet0926/Card0926",
+                "FollowPanel/Clip0926/Background", "AskAISheet0926/Card0926", "FullScreenPanel/ReportSheet0926/Card0926",
             })
             {
                 var t = root.Find(p);
@@ -764,6 +769,48 @@ namespace Redesign0926
                 }
             }
             log.Add("message search ok");
+        }
+
+        // ── 메시지 창 제목 아래 작은 '(친구찾기)' ───────────────────────
+        // 이 창의 검색칸에서 아이디로 친구를 찾아 팔로우한다. 도크 칸엔 넣지 않는다 — 창이 열렸을 때만 보이게 (10-19 대표님)
+        // 제목을 18 올리고 그 아래에 작게 · 검색칸과 목록 윗선은 20 내린다 (값은 늘 같은 자리로 — 다시 적용해도 그대로)
+        private const float MsgTitleY = 18f, MsgSubY = -110f, MsgSearchBottom = -380f, MsgListTop = -403.5f;
+
+        private static void MessageTitleSub(Transform root, List<string> log)
+        {
+            var bg = root.Find("MessagePanel/Clip0926/Background");
+            var header = bg != null ? bg.Find("Header") : null;
+            var title = header != null ? header.Find("Title") : null;
+            if (title == null) { log.Add("메시지 제목 없음"); return; }
+            var trt = RT(title.gameObject);
+            trt.anchoredPosition = new Vector2(trt.anchoredPosition.x, MsgTitleY);
+            EditorUtility.SetDirty(trt);
+            Loc(title.gameObject, "메시지", "Messages", "メッセージ", "消息", "Mensajes");
+
+            var sub = FindOrCreate(header, "Sub0926");
+            sub.transform.SetSiblingIndex(title.GetSiblingIndex() + 1);
+            var t = Txt(sub, "(친구찾기)", MinFont, Soft, TextAnchor.MiddleCenter, FontStyle.Normal);
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.resizeTextForBestFit = false;
+            SetRect(RT(sub), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, MsgSubY), new Vector2(600, 52));
+            Loc(sub, "(친구찾기)", "(Find friends)", "(友だち検索)", "(找朋友)", "(Buscar amigos)");
+
+            var area = bg.Find("SearchArea");
+            if (area != null)
+            {
+                var art = RT(area.gameObject);
+                art.anchoredPosition = new Vector2(art.anchoredPosition.x, MsgSearchBottom);
+                EditorUtility.SetDirty(art);
+            }
+            var list = bg.Find("ConversationList");
+            if (list != null)
+            {
+                var lrt = RT(list.gameObject);
+                lrt.offsetMax = new Vector2(lrt.offsetMax.x, MsgListTop);
+                EditorUtility.SetDirty(lrt);
+            }
+            log.Add("message title sub ok");
         }
 
         // ── 하늘 날씨 크기 ─────────────────────────────────────

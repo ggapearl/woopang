@@ -47,14 +47,20 @@ namespace Redesign0926
 
             // X 가 누르면 자기 자신도 끄고 있었다 — 장소 수정을 다시 열 때 켜 주는 곳이 없어 두 번째부터 X·뒤로가기(덮개가 X 안에 있다)가 사라졌다.
             // 창(Fixpage)을 끄면 X 도 함께 안 보이니 자기 끄기만 뺀다
-            var xb = root.Find(ClosePath).GetComponent<Button>();
-            if (xb != null)
-                for (int i = xb.onClick.GetPersistentEventCount() - 1; i >= 0; i--)
-                    if (xb.onClick.GetPersistentTarget(i) == xb.gameObject && xb.onClick.GetPersistentMethodName(i) == "SetActive")
-                    {
-                        UnityEventTools.RemovePersistentListener(xb.onClick, i);
-                        EditorUtility.SetDirty(xb);
-                    }
+            NoSelfOff(root.Find(ClosePath));
+        }
+
+        // 창 안에 있는 X 의 '자기 끄기' 호출을 뺀다 — 창을 끄면 X 도 함께 안 보이고, 다시 켤 때 X 를 켜 주는 길이 하나라도 빠지면 X·뒤로가기가 사라진다
+        private static void NoSelfOff(Transform x)
+        {
+            var xb = x != null ? x.GetComponent<Button>() : null;
+            if (xb == null) return;
+            for (int i = xb.onClick.GetPersistentEventCount() - 1; i >= 0; i--)
+                if (xb.onClick.GetPersistentTarget(i) == xb.gameObject && xb.onClick.GetPersistentMethodName(i) == "SetActive")
+                {
+                    UnityEventTools.RemovePersistentListener(xb.onClick, i);
+                    EditorUtility.SetDirty(xb);
+                }
         }
 
         // 3D 모델 30초 · 정보 수정 20초가 장면에 저장돼 있었다 → 장소 추가와 같은 60초

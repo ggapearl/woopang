@@ -273,7 +273,7 @@ namespace Redesign0926
             log.Add("friends map + settings ok");
         }
 
-        private const float SegTabW = 176f;   // 10-05 글자 키움 (예전 132 · 글자 30) — 'Settings' 가 들어가는 폭
+        private const float SegTabW = 240f;   // 10-18 대표님 '필터 버튼 정도의 사이즈로' — 높이 112·글자 44 = 필터 칩 (10-05 176·40 · 예전 132·30)
         private const float ShowAllRowH = 148f, ShowAllBtnH = 108f;   // 설정 '모두 다시 보이기' 줄 · 알약
         private const float UndoBarH = 132f, UndoBtnH = 104f;        // 숨긴 뒤 '되돌리기' 알림 · 버튼 (≈ 36pt · 28pt)
         private const float UndoBarY = DockBottom + DockHeight + 24f + 84f + 24f;   // 위치 칩(84) 바로 위
@@ -400,10 +400,12 @@ namespace Redesign0926
                 new[] { "기온 · 미세먼지 · 일몰", "Temperature · air · sunset", "気温 · PM10 · 日没", "气温 · 空气 · 日落", "Temperatura · aire · atardecer" }, false);
             var events = SettingRow(g2.transform, "RowEvents", new[] { "동네 이벤트 · 게임", "Local events · games", "イベント · ゲーム", "活动 · 游戏", "Eventos · juegos" },
                 new[] { "보물찾기 · 숨바꼭질 같은 이벤트", "Treasure hunts, hide-and-seek", "宝探し・かくれんぼなど", "寻宝、捉迷藏等活动", "Búsquedas del tesoro y más" }, true);
-            var live = SettingRow(g2.transform, "RowLive", new[] { "라이브 방송", "Live", "ライブ配信", "直播", "En vivo" },
-                new[] { "제휴사 라이브를 하늘 화면에서", "Partner live streams in the sky", "提携先のライブを空で", "合作方直播", "Directos de socios en el cielo" }, true);
-            var ads = SettingRow(g2.transform, "RowAds", new[] { "광고 · 제휴 소식", "Ads · partner news", "広告 · お知らせ", "广告 · 合作消息", "Anuncios · novedades" },
-                new[] { "동네 가게 소식이 날씨 옆에 한 장", "Local shop news next to the weather", "近所のお店情報を天気の横に", "附近店铺消息显示在天气旁", "Novedades de tiendas cercanas" }, true);
+            // 라이브 방송 · 광고 · 제휴 소식 줄은 뺐다 (10-18 대표님 "'라이브 / 광고소식' 로직은 삭제해도 될 것 같은데?") — 이미 만든 씬에서도 지운다
+            foreach (var oldRowName in new[] { "RowLive", "RowAds" })
+            {
+                var oldRow = g2.transform.Find(oldRowName);
+                if (oldRow != null) Object.DestroyImmediate(oldRow.gameObject);
+            }
             var angleRow = AngleRow(g2.transform, out var angleTabs, out var angleLabels);
             var lying = SettingRow(g2.transform, "RowLying", new[] { "누워서 쓸 땐 숨기기", "Hide when lying down", "寝転んで使う時は隠す", "躺着使用时隐藏", "Ocultar al estar acostado" },
                 new[] { "천장을 보고 가만히 있으면 저절로 접어요", "Folds away when you face the ceiling", "天井を向いて静止すると自動でたたみます", "对着天花板静止时自动收起", "Se pliega si miras al techo" }, false);
@@ -501,8 +503,6 @@ namespace Redesign0926
             so.FindProperty("masterSwitch").objectReferenceValue = master;
             so.FindProperty("weatherSwitch").objectReferenceValue = weather;
             so.FindProperty("eventsSwitch").objectReferenceValue = events;
-            so.FindProperty("liveSwitch").objectReferenceValue = live;
-            so.FindProperty("adsSwitch").objectReferenceValue = ads;
             so.FindProperty("lyingSwitch").objectReferenceValue = lying;
             so.FindProperty("collapsedSwitch").objectReferenceValue = collapsed;
             so.FindProperty("channelGroup").objectReferenceValue = cg;
@@ -526,8 +526,6 @@ namespace Redesign0926
             Wire(master.transform.parent.GetComponent<Button>(), panel.ToggleMaster);
             Wire(weather.transform.parent.GetComponent<Button>(), panel.ToggleWeather);
             Wire(events.transform.parent.GetComponent<Button>(), panel.ToggleEvents);
-            Wire(live.transform.parent.GetComponent<Button>(), panel.ToggleLive);
-            Wire(ads.transform.parent.GetComponent<Button>(), panel.ToggleAds);
             Wire(lying.transform.parent.GetComponent<Button>(), panel.ToggleLying);
             Wire(collapsed.transform.parent.GetComponent<Button>(), panel.ToggleCollapsed);
             Wire(removeX.transform.parent.GetComponent<Button>(), panel.ToggleRemove);
@@ -707,7 +705,7 @@ namespace Redesign0926
             Ensure<Button>(tab).transition = Selectable.Transition.None;
             var t = FindOrCreate(tab.transform, "Text");
             Stretch(RT(t));
-            var tt = Txt(t, label, 40, index == 0 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var tt = Txt(t, label, 44, index == 0 ? Ink : Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
             tt.horizontalOverflow = HorizontalWrapMode.Overflow;   // 긴 언어(Settings·Ajustes)도 줄바꿈 없이
             Loc(t, words[0], words[1], words[2], words[3], words[4]);
             return tab;

@@ -282,7 +282,7 @@ public class P2PUserInfo : MonoBehaviour
 
         if (mainCamera == null) mainCamera = Camera.main;
 
-        if (enableTouch)
+        if (enableTouch && !R0926GuideOverlay.BlocksWorld)   // 첫 사용 안내 중에는 누르지 않는다
         {
             HandleTouchInput();
         }

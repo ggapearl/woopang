@@ -55,6 +55,7 @@ namespace Redesign0926
             ApplyHuntTreasure(root, log);   // 보물찾기 — AR 보물(금빛 상자) · 상태 알약 아래 알림 (Redesign0926ApplyHuntTreasure)
             ApplyHuntProfile(root, log);   // 보물찾기 — 프로필 카드의 '주최' 칸과 펼침 (ProfileCard 다음이어야 한다)
             ApplyChatLook(root, log);   // 대화창 말풍선·날짜·제목줄 (Redesign0926ApplyChat)
+            ApplyFollowLook(root, log);   // 팔로잉/팔로워 창 · 줄 프리팹 (Redesign0926ApplyFollow)
             var marker = Find(root, "Redesign0926Marker");
             var close = marker != null ? marker.GetComponent<R0926IndicatorClose>() : null;
             if (close != null)
@@ -86,6 +87,7 @@ namespace Redesign0926
                 ("UploadPage", "UploadSheet0926", SheetGapTall, 0f),
                 ("MessagePanel", "Background", SheetGapMsg, CardSide),
                 ("ChatRoomPanel", "Background", SheetGapMsg, CardSide),
+                ("FollowPanel", "Background", SheetGapMsg, CardSide),   // B7 (10-18) — 메시지 창과 같은 높이
             };
             foreach (var d in defs)
             {
@@ -538,6 +540,8 @@ namespace Redesign0926
             so.FindProperty("next").objectReferenceValue = RT(next);
             so.FindProperty("nextLabel").objectReferenceValue = nlt;
             so.FindProperty("confirm").objectReferenceValue = confirm;
+            var dockGo = Find(root, "Dock0926");
+            so.FindProperty("dock").objectReferenceValue = dockGo != null ? RT(dockGo) : null;   // 안내 중에도 하단 버튼은 눌린다 (10-19)
             // 쪽 순서: 목록 · 추가 · 메시지 (GuideOrder — FirstTimeGuide.guidePages 와 같다). 쪽마다 비출 도크 버튼이 짝
             var targets = new Object[GuideOrder.Length];
             for (int i = 0; i < targets.Length; i++) { var slot = Find(root, GuideOrder[i].slot); targets[i] = slot != null ? RT(slot) : null; }
@@ -582,6 +586,8 @@ namespace Redesign0926
                 var b = Ensure<R0926IndicatorBounds>(marker);
                 var so = new SerializedObject(b);
                 so.FindProperty("indicator").objectReferenceValue = osi;
+                var dockGo = Find(root, "Dock0926");
+                so.FindProperty("dock").objectReferenceValue = dockGo != null ? RT(dockGo) : null;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             log.Add("sky top ok");

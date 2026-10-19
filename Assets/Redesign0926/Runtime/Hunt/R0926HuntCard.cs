@@ -276,6 +276,7 @@ public class R0926HuntCard : MonoBehaviour
         rulesVersion = j["host_rules"]["version"].AsInt > 0 ? j["host_rules"]["version"].AsInt : 1;
         bool enabled = j["prefs"]["enabled"].AsBool || !j["prefs"].HasKey("enabled");
         R0926HuntPrefs.Take(j["prefs"]);
+        R0926HuntList.Take(j);   // 장소 목록의 보물찾기 줄도 같은 응답으로
         if (offBox != null) offBox.SetActive(!enabled);
 
         ClearRows(nearList, mineList);
@@ -497,6 +498,7 @@ public class R0926HuntCard : MonoBehaviour
         if (code == 200 && j["ok"].AsBool)
         {
             foreach (var f in new[] { titleInput, hintInput, codeInput, questionInput, prizeInput }) if (f != null) f.text = "";
+            R0926HuntList.Stale();
             string jc = j["join_code"];
             Toast(string.IsNullOrEmpty(jc) ? T("보물을 숨겼어요!", "Treasure hidden!") : T("보물을 숨겼어요! 참가 코드 " + jc, "Hidden! Join code " + jc), 4f);
             StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt));
@@ -571,7 +573,7 @@ public class R0926HuntCard : MonoBehaviour
         long code = 0; JSONNode j = null;
         var b = new JSONObject(); b["code"] = c6;
         yield return R0926HuntApi.Post("/api/hunts/join_code", b, (c, r) => { code = c; j = r; });
-        if (code == 200) { if (joinCodeInput != null) joinCodeInput.text = ""; Toast(T("참가했어요!", "Joined!"), 2.5f); StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt)); }
+        if (code == 200) { if (joinCodeInput != null) joinCodeInput.text = ""; R0926HuntList.Stale(); Toast(T("참가했어요!", "Joined!"), 2.5f); StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt)); }
         else Toast(R0926HuntApi.ErrorText(j["error"], Lang), 3f);
     }
 
@@ -788,6 +790,7 @@ public class R0926HuntCard : MonoBehaviour
             case "found":
                 if (claimCodeInput != null) claimCodeInput.text = "";
                 R0926HuntTreasure.Untrack(id);
+                R0926HuntList.Stale();
                 if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, current["prize"], current["host"]["username"]))
                     Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt), 4f);
                 StartCoroutine(OpenDetail(id));
@@ -850,6 +853,7 @@ public class R0926HuntCard : MonoBehaviour
         }
         if (code == 200)
         {
+            R0926HuntList.Stale();   // 참가·나가기·포기·마침 — 장소 목록의 보물찾기 줄을 다음에 다시 받는다
             Toast(what == "join" ? T("참가했어요! 보물 근처에 가 보세요", "Joined! Head to the treasure")
                 : what == "leave" ? T("나왔어요 — 이 게임 알림은 더 오지 않아요", "Left — no more alerts from this game")
                 : what == "giveup" ? T("못 찾았다고 남겼어요", "Marked as not found")

@@ -73,6 +73,8 @@ namespace Redesign0926
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // ── AI에게 묻기: 목록 시트의 집계 줄 오른쪽 ──
+            // 10-18 대표님 "'목록' 에 있어서 'AI에게 묻기' 버튼은 우선 주석처리해줘" — 다시 쓸 땐 이 주석을 풀고 ApplyListFilters 의 숨김을 뺀다
+            /*
             var sheet = Find(root, "Sheet0926");
             var rows = root.GetComponentInChildren<R0926PlaceRows>(true);
             if (sheet != null)
@@ -104,7 +106,8 @@ namespace Redesign0926
                 ResetListeners(b);
                 UnityEventTools.AddPersistentListener(b.onClick, ask.Open);
             }
-            log.Add("sky weather + ask AI ok");
+            */
+            log.Add("sky weather ok");
         }
 
         private static GameObject BuildAskSheet(Transform root, R0926AskAI ask)

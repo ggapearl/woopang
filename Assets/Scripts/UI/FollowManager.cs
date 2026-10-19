@@ -43,6 +43,9 @@ public class FollowManager : MonoBehaviour
     [Header("=== Button Colors ===")]
     public Color followButtonColor = new Color(0.35f, 0.45f, 0.95f, 1f);
     public Color followingButtonColor = new Color(0.3f, 0.3f, 0.35f, 1f);
+    public Color followTextColor = new Color(0.082f, 0.094f, 0.106f, 1f);   // 흰 '팔로우' 알약 위 글자
+    public Color followingTextColor = Color.white;
+    public Color newFollowerColor = new Color(1f, 1f, 1f, 0.10f);   // 새 팔로워 알림으로 열었을 때 그 줄을 잠깐 밝히는 색
 
     [Header("=== Font Sizes ===")]
     public int titleFontSize = 60;
@@ -79,6 +82,10 @@ public class FollowManager : MonoBehaviour
     // 데이터
     private List<FollowUserData> followersList = new List<FollowUserData>();
     private List<FollowUserData> followingList = new List<FollowUserData>();
+    private bool tabSliding;     // 탭이 밀려 나가는 동안 받은 목록은 들어올 때 그린다
+    private bool followChanged;  // 여기서 팔로우·취소했으면 뒤의 프로필 숫자를 새로 받는다
+    private string pinUsername;  // 새 팔로워 알림으로 열었을 때 — 그 사람을 맨 위에 (프로필 보고 돌아와도)
+    private bool pinFlash;       // 그 줄을 처음 그릴 때 한 번 밝힌다
 
     // 생성된 아이템들
     private List<GameObject> createdItems = new List<GameObject>();
@@ -92,7 +99,12 @@ public class FollowManager : MonoBehaviour
     private static string savedUserId;
     private static string savedUsername;
 
+#if UNITY_EDITOR
+    public static string EditorBase;   // 플레이 시험 — 목록을 내 PC 시험 서버에서 받는다 (운영 서버에 시험 아이디로 묻지 않게)
+    private string BASE_URL => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+#else
     private string BASE_URL => ApiConfig.MAIN_SERVER;
+#endif
 
     void Awake()
     {
@@ -312,10 +324,12 @@ public class FollowManager : MonoBehaviour
         {
             returnToFollowPanel = false;
 
+            string pin = pinUsername;
             if (wasShowingFollowers)
                 ShowFollowers(savedUserId, savedUsername);
             else
                 ShowFollowing(savedUserId, savedUsername);
+            pinUsername = pin;
         }
     }
 
@@ -441,6 +455,8 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     public void ShowFollowers(string userId, string username)
     {
+        pinUsername = null;
+        pinFlash = false;
         currentUserId = userId;
         currentUsername = username;
         showingFollowers = true;
@@ -474,11 +490,21 @@ public class FollowManager : MonoBehaviour
         LoadData();
     }
 
+    /// <summary>새 팔로워 알림을 누름 — 내 팔로워 탭을 열고 그 사람을 맨 위에 두고 잠깐 밝힌다</summary>
+    public void ShowNewFollower(string userId, string username, string followerUsername)
+    {
+        ShowFollowers(userId, username);
+        pinUsername = string.IsNullOrEmpty(followerUsername) ? null : followerUsername;
+        pinFlash = pinUsername != null;
+    }
+
     /// <summary>
     /// 팔로잉 목록 열기
     /// </summary>
     public void ShowFollowing(string userId, string username)
     {
+        pinUsername = null;
+        pinFlash = false;
         currentUserId = userId;
         currentUsername = username;
         showingFollowers = false;
@@ -547,10 +573,19 @@ public class FollowManager : MonoBehaviour
     private void ReturnToProfile()
     {
         // ProfileManager의 fullProfilePanel 표시
-        if (ProfileManager.Instance != null && ProfileManager.Instance.fullProfilePanel != null)
+        var pm = ProfileManager.Instance;
+        if (pm != null && pm.fullProfilePanel != null)
         {
-            ProfileManager.Instance.fullProfilePanel.SetActive(true);
+            // 알림으로 바로 연 목록 — 뒤에 프로필이 없다(예전엔 지난번 프로필 화면이 그대로 떴다)
+            if (pm.CurrentProfileId != currentUserId)
+                pm.ShowProfile(currentUserId);
+            else
+            {
+                pm.fullProfilePanel.SetActive(true);
+                if (followChanged) pm.RefreshCurrentProfile();
+            }
         }
+        followChanged = false;
     }
 
     /// <summary>
@@ -567,6 +602,9 @@ public class FollowManager : MonoBehaviour
 
         showingFollowers = followers;
         UpdateTabUI();
+
+        // 탭을 바꿀 때마다 새로 받는다 — 예전엔 처음 연 탭만 받아 맞팔한 사람이 '팔로잉'에 안 떴다
+        LoadData();
 
         // 슬라이드 애니메이션과 함께 탭 전환
         StartCoroutine(SwitchTabWithSlide(slideFromLeft));
@@ -592,6 +630,7 @@ public class FollowManager : MonoBehaviour
         float elapsed = 0f;
         Vector2 outTarget = originalPos + new Vector2(slideFromLeft ? slideDistance : -slideDistance, 0);
 
+        tabSliding = true;
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
@@ -602,6 +641,7 @@ public class FollowManager : MonoBehaviour
         }
 
         // 2. 데이터 변경
+        tabSliding = false;
         DisplayCurrentList();
 
         // 3. 반대쪽에서 시작
@@ -629,6 +669,8 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private void OnSearchInputChanged(string query)
     {
+        if (searchClearButton != null)
+            searchClearButton.gameObject.SetActive(!string.IsNullOrEmpty(query));
         currentSearchQuery = query.Trim().ToLower();
         DisplayCurrentList();
     }
@@ -699,6 +741,17 @@ public class FollowManager : MonoBehaviour
         // 2. 정렬 (내가 팔로우하는 유저 우선 → 팔로워 많은 순)
         List<FollowUserData> sortedList = SortList(filteredList);
 
+        // 3. 새 팔로워 알림으로 열었으면 그 사람을 맨 위로
+        int pinAt = showingFollowers && pinUsername != null
+            ? sortedList.FindIndex(u => string.Equals(u.username, pinUsername, StringComparison.OrdinalIgnoreCase))
+            : -1;
+        if (pinAt > 0)
+        {
+            var pinned = sortedList[pinAt];
+            sortedList.RemoveAt(pinAt);
+            sortedList.Insert(0, pinned);
+        }
+
         if (contentParent == null)
         {
             Debug.LogError("[FollowManager] contentParent가 null입니다!");
@@ -722,6 +775,13 @@ public class FollowManager : MonoBehaviour
             // 아이템 설정
             SetupItem(item, user);
             createdItems.Add(item);
+        }
+
+        if (pinAt >= 0 && pinFlash && createdItems.Count > 0)
+        {
+            pinFlash = false;
+            var bg = createdItems[0].GetComponent<Image>();
+            if (bg != null) StartCoroutine(FlashRow(bg));
         }
 
         // 스크롤 맨 위로
@@ -806,6 +866,8 @@ public class FollowManager : MonoBehaviour
                         : GetLocalizedText("follow_btn", "팔로우");
                     if (customFont != null) actionText.font = customFont;
                 }
+                if (actionText != null)
+                    actionText.color = user.isFollowing ? followingTextColor : followTextColor;
                 if (actionBtnImg != null)
                     actionBtnImg.color = user.isFollowing ? followingButtonColor : followButtonColor;
 
@@ -839,6 +901,9 @@ public class FollowManager : MonoBehaviour
                     Image msgImg = msgBtnTr.GetComponent<Image>();
                     if (msgImg != null)
                         actionBtnImg.color = msgImg.color;
+                    Text msgLabel = msgBtnTr.GetComponentInChildren<Text>(true);
+                    if (actionText != null && msgLabel != null)
+                        actionText.color = msgLabel.color;
                 }
 
                 if (actionBtn != null)
@@ -883,6 +948,8 @@ public class FollowManager : MonoBehaviour
             }
         }
 
+        FitUsername(item.transform, actionBtnTr as RectTransform);
+
         // 아이템 클릭 시 프로필 열기
         Button btn = item.GetComponent<Button>();
         if (btn != null)
@@ -891,6 +958,30 @@ public class FollowManager : MonoBehaviour
             string capturedUsername = user.username;
             btn.onClick.AddListener(() => OnItemClicked(capturedUserId, capturedUsername));
         }
+    }
+
+    // 새 팔로워 줄 — 바탕(평소 투명)을 잠깐 밝혔다가 천천히 끈다
+    private IEnumerator FlashRow(Image bg)
+    {
+        Color c = newFollowerColor;
+        const float rise = 0.25f, hold = 1.6f, fall = 1.2f;
+        for (float t = 0f; t < rise + hold + fall; t += Time.unscaledDeltaTime)
+        {
+            if (bg == null) yield break;
+            float k = t < rise ? t / rise : t < rise + hold ? 1f : 1f - (t - rise - hold) / fall;
+            bg.color = new Color(c.r, c.g, c.b, c.a * k);
+            yield return null;
+        }
+        if (bg != null) bg.color = new Color(c.r, c.g, c.b, 0f);
+    }
+
+    // 아이디 칸 오른쪽 끝을 버튼 왼쪽 끝 24 앞으로 — 버튼 밑으로 글자가 들어가지 않게
+    private static void FitUsername(Transform item, RectTransform leftmostButton)
+    {
+        var name = item.Find("Username") as RectTransform;
+        if (name == null || leftmostButton == null || name.anchorMax.x < 1f || leftmostButton.anchorMin.x < 1f) return;
+        float left = leftmostButton.anchoredPosition.x - leftmostButton.pivot.x * leftmostButton.sizeDelta.x;
+        name.offsetMax = new Vector2(left - 24f, name.offsetMax.y);
     }
 
     /// <summary>
@@ -1030,6 +1121,17 @@ public class FollowManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 다른 화면(보물찾기 상세)으로 넘어갈 때 — 목록만 닫고 프로필로 돌아가지 않는다.
+    /// 목록에서 연 프로필이 닫히며 목록이 되살아나는 표시도 지운다 (상세 위에 목록이 겹쳤다 — 10-13 대표님)
+    /// </summary>
+    public void CloseAway()
+    {
+        returnToFollowPanel = false;
+        ProfileManager.openedFromFollowPanel = false;
+        if (panel != null && panel.activeSelf) CloseWithoutReturnToProfile();
+    }
+
+    /// <summary>
     /// 팔로우 패널만 닫기 (프로필 패널로 돌아가지 않음)
     /// DM 버튼 클릭 등 다른 화면으로 이동할 때 사용
     /// </summary>
@@ -1046,25 +1148,7 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private IEnumerator FollowUser(string userId, Button button)
     {
-        string url = $"{BASE_URL}/api/users/{userId}/follow";
-
-        using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
-        {
-
-            LoginManager.ApplyAuth(request);
-
-            request.downloadHandler = new DownloadHandlerBuffer();
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                UpdateFollowButton(button, userId, true);
-            }
-            else
-            {
-                Debug.LogError($"[FollowManager] 팔로우 실패: {request.error}");
-            }
-        }
+        yield return PostFollow(ApiConfig.FOLLOW, userId, button, true);
     }
 
     /// <summary>
@@ -1072,23 +1156,42 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private IEnumerator UnfollowUser(string userId, Button button)
     {
-        string url = $"{BASE_URL}/api/users/{userId}/unfollow";
+        yield return PostFollow(ApiConfig.UNFOLLOW, userId, button, false);
+    }
 
+    /// <summary>
+    /// 팔로우·취소 — 프로필 화면과 같은 주소·본문. (예전엔 서버에 없는 /api/users/{id}/follow 를 불러 늘 실패했다)
+    /// </summary>
+    private IEnumerator PostFollow(string url, string userId, Button button, bool follow)
+    {
+        string myId = LoginManager.Instance?.CurrentUser?.id;
+        if (string.IsNullOrEmpty(myId)) yield break;
+
+        string json = $"{{\"follower_id\":\"{myId}\",\"following_id\":\"{userId}\"}}";
         using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
         {
-
+            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
             LoginManager.ApplyAuth(request);
 
-            request.downloadHandler = new DownloadHandlerBuffer();
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                UpdateFollowButton(button, userId, false);
+                followChanged = true;
+                UpdateFollowButton(button, userId, follow);
             }
             else
             {
-                Debug.LogError($"[FollowManager] 언팔로우 실패: {request.error}");
+                Debug.LogError($"[FollowManager] {(follow ? "팔로우" : "언팔로우")} 실패: {request.responseCode} {request.error}");
+                if (ToastManager.Instance != null)
+                {
+                    bool ko = AppLanguage.Code == "ko";
+                    ToastManager.Instance.ShowWarning(request.responseCode == 403
+                        ? (ko ? "팔로우할 수 없는 상대예요" : "You can't follow this user")
+                        : (ko ? "잠시 후 다시 해 주세요" : "Please try again in a moment"));
+                }
             }
         }
     }
@@ -1108,6 +1211,7 @@ public class FollowManager : MonoBehaviour
             btnText.text = isFollowing
                 ? GetLocalizedText("following_btn", "팔로잉")
                 : GetLocalizedText("follow_btn", "팔로우");
+            btnText.color = isFollowing ? followingTextColor : followTextColor;
         }
 
         if (btnImage != null)
@@ -1115,10 +1219,14 @@ public class FollowManager : MonoBehaviour
             btnImage.color = isFollowing ? followingButtonColor : followButtonColor;
         }
 
-        // 로컬 데이터도 업데이트
+        // 로컬 데이터도 업데이트 (두 목록 모두 — 탭을 바꿔도 같은 상태로 보이게)
         var userData = followersList.Find(u => u.userId == userId);
         if (userData != null)
             userData.isFollowing = isFollowing;
+        var followingData = followingList.Find(u => u.userId == userId);
+        if (followingData != null)
+            followingData.isFollowing = isFollowing;
+        if (userData == null) userData = followingData;
 
         // 버튼 클릭 리스너 업데이트 (OnFollowButtonClicked 경유 → 언팔로우 확인 다이얼로그 보장)
         button.onClick.RemoveAllListeners();
@@ -1141,165 +1249,13 @@ public class FollowManager : MonoBehaviour
         createdItems.Clear();
     }
 
-    /// <summary>
-    /// 아바타를 원형 마스크 구조로 설정하고 이미지를 로드할 Image 컴포넌트 반환
-    /// 프리팹에 설정된 마스크/스프라이트를 존중하고, 없을 때만 fallback 적용
-    /// </summary>
-    private Image SetupCircularAvatarStructure(Transform avatarContainer)
-    {
-        if (avatarContainer == null) return null;
-
-        // 1. 컨테이너 Image - 프리팹에 스프라이트가 설정되어 있으면 그대로 사용
-        Image containerImage = avatarContainer.GetComponent<Image>();
-        if (containerImage != null && containerImage.sprite == null)
-        {
-            // 프리팹에 스프라이트가 없을 때만 Knob fallback 적용
-            containerImage.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
-            containerImage.type = Image.Type.Simple;
-            containerImage.preserveAspect = true;
-        }
-
-        // 2. Mask 컴포넌트 (없으면 추가, 있으면 프리팹 설정 유지)
-        Mask mask = avatarContainer.GetComponent<Mask>();
-        if (mask == null)
-        {
-            mask = avatarContainer.gameObject.AddComponent<Mask>();
-            mask.showMaskGraphic = false;
-        }
-
-        // 3. 자식 AvatarImage 찾기 또는 생성
-        Transform avatarImageTransform = avatarContainer.Find("AvatarImage");
-        if (avatarImageTransform == null)
-        {
-            GameObject avatarImageObj = new GameObject("AvatarImage");
-            avatarImageObj.transform.SetParent(avatarContainer, false);
-            avatarImageObj.layer = 5; // UI Layer
-
-            RectTransform avatarImageRect = avatarImageObj.AddComponent<RectTransform>();
-            avatarImageRect.anchorMin = Vector2.zero;
-            avatarImageRect.anchorMax = Vector2.one;
-            avatarImageRect.offsetMin = Vector2.zero;
-            avatarImageRect.offsetMax = Vector2.zero;
-
-            Image avatarImage = avatarImageObj.AddComponent<Image>();
-            avatarImage.color = Color.white;
-            avatarImage.raycastTarget = false;
-
-            return avatarImage;
-        }
-
-        Image existingImage = avatarImageTransform.GetComponent<Image>();
-        if (existingImage == null)
-        {
-            existingImage = avatarImageTransform.gameObject.AddComponent<Image>();
-            existingImage.raycastTarget = false;
-        }
-
-        return existingImage;
-    }
-
-    /// <summary>
-    /// 아바타 URL이 없을 때 유저네임 기반 원형 그라데이션 아바타 생성
-    /// </summary>
-    private void SetDefaultAvatar(Transform avatarContainer, string username)
-    {
-        if (avatarContainer == null) return;
-
-        Image targetImage = SetupCircularAvatarStructure(avatarContainer);
-        if (targetImage == null) return;
-
-        Texture2D tex = GenerateAvatarTexture(username, 128);
-        Sprite sprite = Sprite.Create(tex,
-            new Rect(0, 0, tex.width, tex.height),
-            new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-        targetImage.sprite = sprite;
-        targetImage.color = Color.white;
-    }
-
-    /// <summary>
-    /// 유저네임 기반 그라데이션 원형 아바타 텍스처 생성
-    /// </summary>
-    private Texture2D GenerateAvatarTexture(string username, int size)
-    {
-        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        tex.filterMode = FilterMode.Bilinear;
-
-        int hash = string.IsNullOrEmpty(username) ? 0 : username.GetHashCode();
-        float hue1 = Mathf.Abs(hash % 360) / 360f;
-        float hue2 = (hue1 + 0.15f) % 1f;
-        Color color1 = Color.HSVToRGB(hue1, 0.5f, 0.9f);
-        Color color2 = Color.HSVToRGB(hue2, 0.4f, 0.75f);
-
-        float center = size / 2f;
-        float radius = size / 2f;
-
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dx = x - center;
-                float dy = y - center;
-                float dist = Mathf.Sqrt(dx * dx + dy * dy);
-
-                if (dist <= radius)
-                {
-                    float t = ((float)x + y) / (size * 2f);
-                    Color c = Color.Lerp(color1, color2, t);
-
-                    if (dist > radius - 1.5f)
-                        c.a = Mathf.Clamp01((radius - dist) / 1.5f);
-
-                    tex.SetPixel(x, y, c);
-                }
-                else
-                {
-                    tex.SetPixel(x, y, Color.clear);
-                }
-            }
-        }
-
-        tex.Apply();
-        return tex;
-    }
-
-    /// <summary>
-    /// 아바타 이미지 로드 (URL 구성 + SSL 우회 + null 체크)
-    /// </summary>
-    private IEnumerator LoadAvatar(string url, Image targetImage)
-    {
-        if (string.IsNullOrEmpty(url) || targetImage == null) yield break;
-
-        string fullUrl = url.StartsWith("http") ? url : ApiConfig.MAIN_SERVER + "/" + url;
-
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
-        {
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                Texture2D texture = DownloadHandlerTexture.GetContent(request);
-                if (texture != null && targetImage != null)
-                {
-                    Sprite sprite = Sprite.Create(texture,
-                        new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                    targetImage.sprite = sprite;
-                    targetImage.color = Color.white;
-                }
-            }
-            else
-            {
-                Debug.LogWarning($"[FollowManager] 아바타 로드 실패: {request.error}");
-            }
-        }
-    }
-
     #region API Calls
 
     private IEnumerator FetchFollowers()
     {
+        string ownerId = currentUserId;
         string requesterId = LoginManager.Instance?.CurrentUser?.id ?? currentUserId;
-        string url = $"{BASE_URL}/api/followers?user_id={currentUserId}&requester_id={requesterId}";
+        string url = $"{BASE_URL}/api/followers?user_id={ownerId}&requester_id={requesterId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -1307,6 +1263,8 @@ public class FollowManager : MonoBehaviour
             LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
+
+            if (ownerId != currentUserId) yield break;   // 그 사이 다른 사람 목록을 열었다
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -1340,13 +1298,16 @@ public class FollowManager : MonoBehaviour
                 Debug.LogError($"[FollowManager] FetchFollowers 실패: {request.error}");
             }
 
-            DisplayCurrentList();
+            if (showingFollowers && !tabSliding) DisplayCurrentList();
         }
     }
 
     private IEnumerator FetchFollowing()
     {
-        string url = $"{BASE_URL}/api/following?user_id={currentUserId}";
+        string ownerId = currentUserId;
+        string requesterId = LoginManager.Instance?.CurrentUser?.id ?? currentUserId;
+        bool mine = ownerId == requesterId;
+        string url = $"{BASE_URL}/api/following?user_id={ownerId}&requester_id={requesterId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -1354,6 +1315,8 @@ public class FollowManager : MonoBehaviour
             LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
+
+            if (ownerId != currentUserId) yield break;   // 그 사이 다른 사람 목록을 열었다
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -1371,7 +1334,7 @@ public class FollowManager : MonoBehaviour
                                 userId = f.user_id,
                                 username = f.username,
                                 avatarUrl = f.avatar_url,
-                                isFollowing = true,
+                                isFollowing = mine || f.is_following,   // 남의 팔로잉 목록이면 내가 팔로우하는 사람만
                                 followerCount = f.follower_count
                             });
                         }
@@ -1387,7 +1350,7 @@ public class FollowManager : MonoBehaviour
                 Debug.LogError($"[FollowManager] FetchFollowing 실패: {request.error}");
             }
 
-            DisplayCurrentList();
+            if (!showingFollowers && !tabSliding) DisplayCurrentList();
         }
     }
 
@@ -1433,6 +1396,7 @@ public class FollowManager : MonoBehaviour
         public string user_id;
         public string username;
         public string avatar_url;
+        public bool is_following; // 요청자가 이 유저를 팔로우하고 있는지
         public int follower_count; // 이 유저의 팔로워 수
     }
 
