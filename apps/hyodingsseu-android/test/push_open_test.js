@@ -261,7 +261,38 @@ async function main() {
     check('안 읽은 첫 글(U1) 앞 줄에 앉았다', i10.hasDiv && i10.next === 'U1' && i10.nearBottom === false, i10);
     check('비침 없음', (await hit()) === '');
 
-    console.log('--- 11. 모양 — 폭 422/390/375/360 · 라이트/다크, 가로 넘침 없음');
+    console.log('--- 11. 누른 알림(U4) 위의 안 읽은 글(U1~U3)은 U4 를 읽어도 막대가 남는다 — 올려서 봐야 읽음 (10-19b)');
+    const marks = () => ev(`[...document.querySelectorAll('[data-iid].new')].map(e => (e.textContent.match(/[URWXHPN]\\d+/) || [''])[0])`);
+    const holesNow = () => ev(`JSON.parse(localStorage.getItem('seenHoles') || '[]').sort((a, b) => a - b)`);
+    const jumpState = () => ev(`(() => { const c = document.querySelector('.chat'), j = document.querySelector('.jump'), top = c.getBoundingClientRect().top + 24;
+      const ahead = [...document.querySelectorAll('[data-iid].new')].filter(e => e.getBoundingClientRect().bottom > top).length;
+      return { jn: j.querySelector('.jn').textContent, ahead }; })()`);
+    const toTop = marker => ev(`(() => { const c = document.querySelector('.chat'); const el = [...document.querySelectorAll('[data-iid]')].find(e => e.textContent.includes('${marker}'));
+      c.scrollTop += el.getBoundingClientRect().top - c.getBoundingClientRect().top - 4; return 0; })()`);
+    await openApp(READ.concat(UNREAD), LAST_READ, { at: T0 + 1040.4, body: pushBody(UNREAD[3].text) });
+    await sleep(1500);                                                       // U4 가 0.8초 넘게 보였다
+    const m11 = await marks(), s11 = parseFloat(await ev(`localStorage.getItem('seenTs')`));
+    check('U4 는 읽음 · 읽은 자리가 U4 까지 올랐다', !m11.includes('U4') && s11 >= T0 + 1040 - 0.01, { m11, s11 });
+    check('위의 U1~U3 는 막대가 그대로', ['U1', 'U2', 'U3'].every(x => m11.includes(x)), m11);
+    const h11 = await holesNow();
+    check('남겨 둔 글 3개(U1~U3 시각)가 폰에 적혔다', JSON.stringify(h11) === JSON.stringify([T0 + 1010, T0 + 1020, T0 + 1030]), h11);
+    const j11 = await jumpState();
+    check('「↓」 단추 수는 위로 지나간 글을 빼고 센다', j11.jn === (j11.ahead ? String(j11.ahead) : ''), j11);
+    await shot('12_holes_after_push_422');
+    await ev(`sessionStorage.removeItem('__push'); 0`);                     // 알림 없이 앱을 다시 켬
+    await send('Page.navigate', { url: base + '/AI/desk-app/' });
+    await sleep(1400);
+    const m11b = await marks(), i11b = await info(), u1Top = await topOf('U1');
+    check('다시 켜도 U1~U3 막대가 남는다', ['U1', 'U2', 'U3'].every(x => m11b.includes(x)), m11b);
+    check('U1 로 끌어올리지 않는다(줄도 U1 앞에 없다)', !(i11b.hasDiv && i11b.next === 'U1') && u1Top < -50, { i11b, u1Top });
+    await toTop('U2'); await sleep(1500);
+    const m11c = await marks();
+    check('올려서 U2 를 보면 U2 는 읽음 · 아직 못 본 U1 은 막대 그대로', !m11c.includes('U2') && m11c.includes('U1'), m11c);
+    await toTop('U1'); await sleep(1500);
+    const m11d = await marks();
+    check('U1~U3 를 다 보면 막대가 없고 적어 둔 것도 비었다', !['U1', 'U2', 'U3'].some(x => m11d.includes(x)) && (await ev(`localStorage.getItem('seenHoles')`)) === null, m11d);
+
+    console.log('--- 12. 모양 — 폭 422/390/375/360 · 라이트/다크, 가로 넘침 없음');
     for (const [w, dark] of [[422, false], [390, false], [375, false], [360, false], [422, true], [360, true]]) {
       await view(w, 800, dark);
       await openApp(READ.concat(UNREAD), LAST_READ, { at: T0 + 1040.4, body: pushBody(UNREAD[3].text) });

@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-19a';
+  const WEB_VERSION = '2026-10-19b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -354,6 +354,8 @@
       S.items = [];
       seenTs = 0;                                       // 새로 짝 지으면 읽은 자리도 처음부터 — 첫 화면은 전부 읽은 것으로 시작
       local.del(SEEN_KEY);
+      holes.clear();
+      local.del(HOLES_KEY);
       S.paired = true;
       historyState = 'idle';
       historyAutoTried = false;
@@ -1495,15 +1497,20 @@
   // 그래서 화면이 「여기까지 봤다」(seenTs — PC 가 말마다 붙인 시각)를 이 폰에 적어 두고, 열 때 그 뒤의 첫 글로 앉는다.
   // 앱을 다시 빌드할 필요가 없다(웹만). 어느 알림을 눌렀는지까지 알려면 포장지가 푸시의 번호를 넘겨야 한다 — 아이폰 앱 다음 빌드.
   const SEEN_KEY = 'seenTs';
+  const HOLES_KEY = 'seenHoles';
   const UNREAD_KINDS = { ai: 1, incoming: 1, error: 1 };      // 내 말·도구 줄·가운데 작은 안내(note)는 안 읽음에서 뺀다
   const SEEN_MS = 800;                                        // 화면에 이만큼 머물러야 읽은 것
   const AWAY_FRESH_MS = 120000;                               // 이만큼 비웠다 돌아오면 보던 자리 대신 안 읽은 곳으로
   let seenTs = parseFloat(local.get(SEEN_KEY, '0')) || 0;
+  // 누른 알림의 말로 건너뛰면 읽은 자리가 그 위의 안 읽은 글을 넘어간다 — 그 글들(시각)은 따로 적어 두고, 화면에 머물 때 지운다(10-19b).
+  // 막대만 남긴다: 다시 열 때 이 글로 끌어올리거나 「여기부터 안 읽음」 줄을 놓지는 않는다(맨 아래까지 읽고 나갔다 오면 맨 아래 그대로).
+  const holes = new Set((() => { try { const a = JSON.parse(local.get(HOLES_KEY, '[]')); return Array.isArray(a) ? a : []; } catch (e) { return []; } })()
+    .filter(x => typeof x === 'number'));
   let seenTimer = 0, scanRaf = 0, dividerEl = null;
   let hiddenAt = 0, leftAtBottom = true, awayBatch = false, landAfterAway = false;
 
   const unreadable = it => !!it.ts && !it.streaming && UNREAD_KINDS[it.kind] === 1;
-  const flagUnread = it => { it.unread = unreadable(it) && it.ts > seenTs; };
+  const flagUnread = it => { it.unread = unreadable(it) && (it.ts > seenTs || holes.has(it.ts)); };
   const unreadCount = () => S.items.reduce((n, it) => n + (it.unread ? 1 : 0), 0);
   const chatCovered = () => pages.length > 0 || layers.length > 0;      // 설정·승인함·서랍이 대화를 덮고 있으면 본 게 아니다
   const hasOpenCard = () => S.items.some(it => (it.kind === 'permission' || it.kind === 'question') && it.card && !it.card.closed);
@@ -1515,15 +1522,36 @@
     if (seenTs) local.set(SEEN_KEY, String(seenTs));
   }
 
-  /** ts 까지는 읽었다 — 그 앞의 안 읽음 표시를 걷는다 */
+  /** ts 까지는 읽었다 — 그 앞의 안 읽음 표시를 걷는다(남겨 둔 글은 빼고) */
   function readUpTo(ts) {
     if (!(ts > seenTs)) return;
     seenTs = ts;
     local.set(SEEN_KEY, String(ts));
     S.items.forEach(it => {
-      if (it.unread && it.ts <= seenTs) { it.unread = false; if (it.el) it.el.classList.remove('new'); }
+      if (it.unread && it.ts <= seenTs && !holes.has(it.ts)) { it.unread = false; if (it.el) it.el.classList.remove('new'); }
     });
     renderJump();
+  }
+
+  function saveHoles() {
+    if (holes.size > 300) [...holes].sort((a, b) => a - b).slice(0, holes.size - 300).forEach(x => holes.delete(x));
+    if (holes.size) local.set(HOLES_KEY, JSON.stringify([...holes])); else local.del(HOLES_KEY);
+  }
+
+  /** 화면에 머문 글들 — 남겨 둔 글이면 지우고, 읽은 자리를 그중 가장 늦은 글까지 올린다 */
+  function markSeen(list) {
+    let gone = false;
+    list.forEach(it => { if (holes.delete(it.ts)) { gone = true; it.unread = false; if (it.el) it.el.classList.remove('new'); } });
+    if (gone) saveHoles();
+    readUpTo(Math.max.apply(null, list.map(it => it.ts)));
+    if (gone) renderJump();
+  }
+
+  /** 누른 알림의 말보다 위에 있던 안 읽은 글은 그 말을 읽어도 안 읽은 채로 둔다 */
+  function holdAbove(target) {
+    const ts = target.ts || target.cardTs, n = holes.size;
+    S.items.forEach(it => { if (it.unread && it.ts < ts) holes.add(it.ts); });
+    if (holes.size !== n) saveHoles();
   }
 
   /** 새 글이 들어왔다 — 안 읽음으로 두되, 켜 둔 화면의 맨 아래를 보던 중에 온 글은 바로 읽은 것으로 */
@@ -1536,11 +1564,11 @@
     if (dividerEl) { dividerEl.remove(); dividerEl = null; }
   }
 
-  /** 안 읽은 첫 글 앞에 「여기부터 안 읽음」 줄을 놓는다. belowTop 이면 그 글이 화면 위쪽 밖에 있을 때는 놓지 않는다(읽던 자리가 밀리지 않게) */
+  /** 안 읽은 첫 글 앞에 「여기부터 안 읽음」 줄을 놓는다(읽은 자리 뒤의 글만 — 남겨 둔 글은 막대로만). belowTop 이면 그 글이 화면 위쪽 밖에 있을 때는 놓지 않는다(읽던 자리가 밀리지 않게) */
   function placeDivider(belowTop) {
     removeDivider();
     if (!listEl || !chatEl) return null;
-    const first = S.items.find(it => it.unread && it.el && it.el.isConnected);
+    const first = S.items.find(it => it.unread && it.ts > seenTs && it.el && it.el.isConnected);
     if (!first) return null;
     if (belowTop && first.el.getBoundingClientRect().top < chatEl.getBoundingClientRect().top) return null;
     dividerEl = h('div', { class: 'unread-div', role: 'separator' }, h('span', { text: '여기부터 안 읽음' }));
@@ -1620,16 +1648,17 @@
       seenTimer = setTimeout(() => {
         seenTimer = 0;
         const still = visibleUnread().filter(it => ids.has(it.id));
-        if (still.length) readUpTo(Math.max.apply(null, still.map(it => it.ts)));
+        if (still.length) markSeen(still);
         if (visibleUnread().length) scanSeen();
       }, SEEN_MS);
     });
   }
 
-  /** 안 읽은 수를 「↓」 단추에 — 누르면 화면 아래쪽의 다음 안 읽은 글로, 없으면 맨 아래로 */
+  /** 안 읽은 수를 「↓」 단추에 — 누르면 화면 아래쪽의 다음 안 읽은 글로, 없으면 맨 아래로. 화면 위로 지나간 남겨 둔 글은 세지 않는다(↓ 로 못 간다) */
   function renderJump() {
     if (!jumpEl) return;
-    const n = unreadCount();
+    const top = holes.size && chatEl ? chatEl.getBoundingClientRect().top + 24 : -Infinity;
+    const n = S.items.reduce((c, it) => c + (it.unread && !(holes.has(it.ts) && it.el && it.el.isConnected && it.el.getBoundingClientRect().bottom <= top) ? 1 : 0), 0);
     jumpEl.classList.toggle('has-n', n > 0);
     const jn = jumpEl.querySelector('.jn');
     if (jn) jn.textContent = n > 99 ? '99+' : n ? String(n) : '';
@@ -1706,6 +1735,7 @@
     pushTarget = null;
     pushHeldUntil = Date.now() + 5000;
     landAfterAway = false;
+    holdAbove(it);
     placeDivider(false);
     seatAt(dividerEl && dividerEl.nextSibling === it.el ? dividerEl : it.el);     // 그 말이 첫 안 읽은 글이면 「여기부터 안 읽음」 줄까지 보이게
     const el = it.el;
