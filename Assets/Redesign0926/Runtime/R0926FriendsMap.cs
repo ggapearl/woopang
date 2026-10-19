@@ -17,7 +17,8 @@ using UnityEngine.UI;
 ///    + 깊이 확대하면 우팡 서버의 지도 타일(R0926MapTiles — 서버가 켜 둔 경우만)
 ///  · 한 손가락 이동 · 두 손가락 확대 · 두 번 탭 확대 · +/− · 내 위치 · 가까운 친구는 숫자로 묶음
 ///  · 보던 자리를 기억한다 — 다른 창에 다녀오거나 앱을 다시 켜도 그 자리 (처음 열 때·공유를 켜고 끌 때만 모두가 보이게 맞춘다)
-///  · 꾹 누르면 그 자리에 핀 + 위도·경도(복사) · 돋보기에 좌표를 넣으면 그 자리에 핀을 꽂고 동네가 보이게 확대
+///  · 꾹 누르면 그 자리에 핀 + 주소(국내) · 위도·경도(복사) · 돋보기에 좌표·주소·장소 이름을 넣으면 그 자리에 핀을 꽂고 동네가 보이게 확대
+///    (주소·장소는 우팡 서버가 브이월드로 찾는다 — R0926Geo · 여럿이면 검색 줄 아래 목록에서 고른다)
 /// 이 컴포넌트는 지도 영역(viewport)에 붙는다 — 끌기·휠 이벤트를 직접 받는다.
 /// 지도 좌표는 double — 깊이 확대하면 지도 전체가 수억 단위라 float 로는 핀·타일이 어긋나고 끌기가 뚝뚝 끊긴다.
 /// </summary>
@@ -59,14 +60,19 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [Tooltip("대략 공개 게임의 '이 안 어딘가' 원")]
     [SerializeField] private GameObject huntAreaTemplate;
 
-    [Header("좌표 — 꾹 눌러 핀 · 좌표 검색")]
-    [Tooltip("꾹 누른 곳·검색한 좌표에 꽂는 핀 (피벗이 핀 끝) — 자식 말풍선에 좌표 · 복사 · 지우기")]
+    [Header("좌표 — 꾹 눌러 핀 · 주소·장소·좌표 검색")]
+    [Tooltip("꾹 누른 곳·검색한 곳에 꽂는 핀 (피벗이 핀 끝) — 자식 말풍선에 주소 · 좌표 · 복사 · 지우기")]
     [SerializeField] private RectTransform dropPin;
     [SerializeField] private RectTransform dropBubble;
     [SerializeField] private Text dropText;
+    [Tooltip("말풍선 위 줄 — 장소 이름이나 그 자리 주소 (국내만 · 우팡 서버가 찾아 준다)")]
+    [SerializeField] private Text dropName;
     [SerializeField] private GameObject searchButton;
     [SerializeField] private GameObject searchBar;
     [SerializeField] private InputField searchInput;
+    [Tooltip("검색 줄 아래 결과 목록 — 이름 · 주소 줄 (누르면 그 자리로)")]
+    [SerializeField] private GameObject searchResults;
+    [SerializeField] private Button[] resultRows;
     [SerializeField] private float longPressSeconds = 0.5f;
 
     [Header("동의 · 안내 카드")]
@@ -132,6 +138,9 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private bool restorePending;
     private bool hasDrop;
     private double dropLat, dropLon;
+    private int dropSeq;                    // 핀을 옮길 때마다 — 늦게 온 옛 자리 주소는 버린다
+    private R0926Geo.Place[] results;       // 검색 결과 목록에 보이는 것
+    private Coroutine searchCo;
     private const int NoPress = int.MinValue;
     private int pressId = NoPress;   // 지도 바탕을 누르고 있는 손가락
     private Vector2 pressPos;
@@ -168,6 +177,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         SaveView();
         mapShown = false;
         pressId = NoPress;
+        searchCo = null;   // 꺼지면 코루틴도 멈춘다 — 다시 켜서 찾을 수 있게
         R0926HuntList.Changed -= OnHuntsChanged;
     }
 
@@ -836,17 +846,42 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.TriggerMediumHaptic();
     }
 
-    private void SetDrop(double lat, double lon)
+    // name — 검색한 장소 이름. 없으면(꾹 누른 자리) 그 자리 주소를 우팡 서버에 물어 위 줄에 (국내만)
+    private void SetDrop(double lat, double lon, string name = null)
     {
         if (dropPin == null) return;
         hasDrop = true;
         dropLat = lat;
         dropLon = lon;
+        int seq = ++dropSeq;
         if (dropText != null) dropText.text = CoordText(lat, lon);
+        SetDropName(name);
         dropPin.gameObject.SetActive(true);
         if (dropBubble != null) LayoutRebuilder.ForceRebuildLayoutImmediate(dropBubble);
         Layout();
+        if (name == null && dropName != null && R0926Geo.InKorea(lat, lon) && isActiveAndEnabled) StartCoroutine(DropAddress(lat, lon, seq));
     }
+
+    private IEnumerator DropAddress(double lat, double lon, int seq)
+    {
+        R0926Geo.Address a = null;
+        yield return R0926Geo.FindAddress(lat, lon, r => a = r);
+        if (a == null || seq != dropSeq || !hasDrop) yield break;
+        SetDropName(!string.IsNullOrEmpty(a.brief) ? a.brief : a.line);
+        if (dropBubble != null) LayoutRebuilder.ForceRebuildLayoutImmediate(dropBubble);
+        if (viewport != null) PlaceDrop(viewport.rect.size);   // 말풍선이 넓어졌다 — 지도 안으로 다시 민다
+    }
+
+    private void SetDropName(string name)
+    {
+        if (dropName == null) return;
+        bool on = !string.IsNullOrEmpty(name);
+        dropName.text = on ? Ellipsis(name, 24) : "";
+        if (dropName.gameObject.activeSelf != on) dropName.gameObject.SetActive(on);
+    }
+
+    // 말풍선·목록 한 줄에 들어가게 — 넘치면 말줄임
+    private static string Ellipsis(string s, int max) => s.Length <= max ? s : s.Substring(0, max - 1).TrimEnd() + "…";
 
     // 꽂은 핀 — 지도와 같이 움직이고 다른 핀 위. 말풍선은 핀 위(지도 위쪽 끝이면 아래), 좌우로는 지도 안에 들게 민다
     private void PlaceDrop(Vector2 v)
@@ -870,6 +905,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     public void ClearDropPin()
     {
         hasDrop = false;
+        dropSeq++;
+        SetDropName(null);
         if (dropPin != null) dropPin.gameObject.SetActive(false);
     }
 
@@ -887,6 +924,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         searchBar.SetActive(true);
         if (searchButton != null) searchButton.SetActive(false);
         if (ChipBox != null) ChipBox.SetActive(false);
+        HideResults();
         if (searchInput == null) return;
         searchInput.text = "";
         searchInput.Select();
@@ -895,10 +933,19 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     public void CloseSearch()
     {
+        StopSearch();
+        HideResults();
         if (searchInput != null) searchInput.DeactivateInputField();
         if (searchBar != null) searchBar.SetActive(false);
         if (searchButton != null) searchButton.SetActive(true);
         if (ChipBox != null) ChipBox.SetActive(loggedIn && sharing);
+    }
+
+    /// <summary>칸의 글을 고치면 지난 결과 목록은 거둔다</summary>
+    public void SearchTyped(string _)
+    {
+        StopSearch();
+        HideResults();
     }
 
     /// <summary>복사해 둔 좌표(카톡으로 받은 좌표·구글 지도 주소 등)를 칸에 넣고 바로 찾는다</summary>
@@ -916,14 +963,17 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         SearchCoord(s);
     }
 
-    /// <summary>좌표를 찾아 그 자리에 핀을 꽂고 동네가 보이게 확대 — 못 알아보면 칸을 그대로 두고 알려 준다</summary>
+    /// <summary>
+    /// 검색 줄에서 찾기 — 좌표면 바로 그 자리, 아니면 주소·장소 이름으로 우팡 서버에 묻는다 (국내 · 한국어 주소).
+    /// 한 곳이면 바로 그 자리로, 여럿이면 검색 줄 아래 목록에서 고른다. 그 자리에 핀을 꽂고 동네가 보이게 확대
+    /// </summary>
     public void SearchCoord(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return;
+        s = s.Trim();
         if (!TryParseCoord(s, out double lat, out double lon))
         {
-            if (ToastManager.Instance != null) ToastManager.Instance.ShowError(L("좌표를 알아보지 못했어요 · 예: 37.5665, 126.9780", "Couldn't read that · e.g. 37.5665, 126.9780",
-                "座標を読み取れません · 例: 37.5665, 126.9780", "无法识别坐标 · 例：37.5665, 126.9780", "No se reconoce · ej.: 37.5665, 126.9780"));
+            SearchPlace(s);
             return;
         }
         if (lat > LatTop || lat < LatBottom)
@@ -934,10 +984,138 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         }
         CloseSearch();
         SetDrop(lat, lon);
-        StartAnim(NormD(lat, lon), Clip(Tiled ? tiles.ZoomForLevel(SearchLevel, viewport.rect.width, Scale) : 64, 1, MaxZoom));
+        FlyTo(lat, lon, SearchLevel);
     }
 
     private const double SearchLevel = 16;   // 화면 폭 약 2km — 그 자리와 둘레 길이 함께 보인다
+
+    private void FlyTo(double lat, double lon, double level)
+    {
+        double z = Tiled ? tiles.ZoomForLevel(level, viewport.rect.width, Scale) : 64 * Math.Pow(2, level - SearchLevel);
+        StartAnim(NormD(lat, lon), Clip(z, 1, MaxZoom));
+    }
+
+    private void SearchPlace(string q)
+    {
+        if (q.Length < 2)
+        {
+            if (ToastManager.Instance != null) ToastManager.Instance.ShowInfo(L("두 글자 이상 넣어 주세요", "Type at least 2 characters", "2文字以上入力してください", "请至少输入2个字", "Escribe al menos 2 caracteres"));
+            return;
+        }
+        StopSearch();
+        ShowResults(null);   // '찾는 중…' 한 줄
+        searchCo = StartCoroutine(SearchPlaceCo(q));
+    }
+
+    private IEnumerator SearchPlaceCo(string q)
+    {
+        R0926Geo.Place[] got = null;
+        bool answered = false;
+        yield return R0926Geo.Search(q, SearchNear(), (r, ok) => { got = r; answered = ok; });
+        searchCo = null;
+        if (!Searching) yield break;   // 그 사이 검색 줄을 닫았다
+        if (!answered || got.Length == 0)
+        {
+            HideResults();
+            if (ToastManager.Instance == null) yield break;
+            if (!answered)
+                ToastManager.Instance.ShowError(L("지금은 주소를 찾을 수 없어요 · 좌표로 찾아 보세요", "Address search is unavailable right now · try coordinates",
+                    "今は住所を検索できません · 座標でお試しください", "暂时无法搜索地址 · 请用坐标查找", "La búsqueda no está disponible · prueba con coordenadas"));
+            else
+                ToastManager.Instance.ShowInfo(L("찾지 못했어요 · 주소나 장소 이름을 바꿔 보세요 (국내만)", "No match · try another address or place (Korea only)",
+                    "見つかりません · 住所や場所名を変えてみてください（韓国のみ）", "未找到 · 请换个地址或地名（仅限韩国）", "Sin resultados · prueba otra dirección o lugar (solo Corea)"));
+            yield break;
+        }
+        if (got.Length == 1) GoToPlace(got[0]);
+        else ShowResults(got);
+    }
+
+    private void StopSearch()
+    {
+        if (searchCo != null) StopCoroutine(searchCo);
+        searchCo = null;
+    }
+
+    // 장소 이름은 지금 보는 곳 둘레부터 — 동네가 보일 만큼(화면 폭 경도 2° 안) 확대해 있으면 화면 가운데, 아니면 내 위치
+    private Vector2? SearchNear()
+    {
+        if (viewport != null && viewport.rect.width > 1f && zoom >= 180)
+        {
+            LatLon(ToNorm(viewport.rect.size / 2f), out double la, out double lo);
+            return new Vector2((float)la, (float)lo);
+        }
+        Vector2 me = MyLatLon();
+        return me == Vector2.zero ? (Vector2?)null : me;
+    }
+
+    private void GoToPlace(R0926Geo.Place p)
+    {
+        CloseSearch();
+        SetDrop(p.lat, p.lon, PinName(p));
+        FlyTo(p.lat, p.lon, PlaceLevel(p));
+    }
+
+    // 핀 위 이름 — 주소·동네는 시·도를 뺀다 ('서울특별시 중구 세종대로 110' → '중구 세종대로 110'). 목록에는 다 보인다
+    private static string PinName(R0926Geo.Place p)
+    {
+        string t = (p.title ?? "").Trim();
+        if (p.kind == "place") return t;
+        int sp = t.IndexOf(' ');
+        if (sp < 0 || t.IndexOf(' ', sp + 1) < 0) return t;   // 두 단계까지는 그대로 ('서울특별시 종로구')
+        string head = t.Substring(0, sp);
+        if (head.StartsWith("세종")) return "세종시" + t.Substring(sp);
+        return head.EndsWith("시") || head.EndsWith("도") ? t.Substring(sp + 1) : t;
+    }
+
+    // 동네 이름이면 그 동네가 다 보이게 — 도 9 · 시·군·구 12 · 읍·면·동 14 · 장소·주소 16
+    private static double PlaceLevel(R0926Geo.Place p)
+    {
+        if (p.kind != "district" || string.IsNullOrEmpty(p.title)) return SearchLevel;
+        string t = p.title.Trim();
+        if (t.IndexOf(' ') < 0 && (t.EndsWith("도") || t.EndsWith("특별시") || t.EndsWith("광역시"))) return 9;
+        return t.EndsWith("시") || t.EndsWith("군") || t.EndsWith("구") ? 12 : 14;
+    }
+
+    // items 가 null 이면 '찾는 중…' 한 줄
+    private void ShowResults(R0926Geo.Place[] items)
+    {
+        results = items;
+        if (searchResults == null || resultRows == null) return;
+        int n = items == null ? 1 : Math.Min(items.Length, resultRows.Length);
+        for (int i = 0; i < resultRows.Length; i++)
+        {
+            var row = resultRows[i];
+            if (row == null) continue;
+            bool on = i < n;
+            if (row.gameObject.activeSelf != on) row.gameObject.SetActive(on);
+            if (!on) continue;
+            row.interactable = items != null;
+            var title = row.transform.Find("Title")?.GetComponent<Text>();
+            var addr = row.transform.Find("Address")?.GetComponent<Text>();
+            string a = items == null ? "" : items[i].address ?? "";
+            if (title != null) title.text = items == null ? L("찾는 중…", "Searching…", "検索中…", "搜索中…", "Buscando…") : Ellipsis(items[i].title ?? "", 26);
+            if (addr != null)
+            {
+                addr.text = Ellipsis(a, 34);
+                if (addr.gameObject.activeSelf != (a.Length > 0)) addr.gameObject.SetActive(a.Length > 0);
+            }
+        }
+        searchResults.SetActive(true);
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)searchResults.transform);
+    }
+
+    private void HideResults()
+    {
+        results = null;
+        if (searchResults != null && searchResults.activeSelf) searchResults.SetActive(false);
+    }
+
+    /// <summary>검색 결과 줄을 누름 — 그 자리에 핀을 꽂고 이동</summary>
+    public void PickResult(int i)
+    {
+        if (results == null || i < 0 || i >= results.Length) return;
+        GoToPlace(results[i]);
+    }
 
     private static string CoordText(double lat, double lon) =>
         lat.ToString("F6", CultureInfo.InvariantCulture) + ", " + lon.ToString("F6", CultureInfo.InvariantCulture);
@@ -981,10 +1159,12 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         // 방위는 글 전체가 한 가지로 쓴다 — 첫 수 앞에 있으면 모두 앞("N 37 E 126"), 아니면 모두 뒤("37N 126E")
         bool usePre = found[0].pre != ' ';
         var all = found.ConvertAll(f => (v: f.v, hemi: usePre ? f.pre : f.post, marked: f.deg || (usePre ? f.pre : f.post) != ' ', dec: f.dec));
-        // 고를 두 수 — 방위나 ° 가 붙은 것 > 소수점이 있는 것(주소 속 확대 단계 '15z' 같은 수를 건너뛴다) > 아무 수
+        // 고를 두 수 — 방위나 ° 가 붙은 것 > 소수점이 있는 것(주소 속 확대 단계 '15z' 같은 수를 건너뛴다) > 아무 수.
+        // 아무 수(정수 둘)는 낱말이 없는 글('37 127')에서만 — '강남대로 123길 45' 같은 주소의 번지를 좌표로 읽지 않게 (주소 검색으로 간다)
         var pick = all.FindAll(f => f.marked);
         if (pick.Count < 2) pick = all.FindAll(f => f.dec);
-        if (pick.Count < 2) pick = all;
+        if (pick.Count < 2 && !Regex.IsMatch(s, @"[가-힣]|[A-Za-z]{2,}")) pick = all;
+        if (pick.Count < 2) return false;
         var a = pick[0];
         var b = pick[1];
         bool swap = a.hemi == 'E' || a.hemi == 'W' || b.hemi == 'N' || b.hemi == 'S'

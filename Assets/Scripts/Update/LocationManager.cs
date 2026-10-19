@@ -26,6 +26,11 @@ public class LocationManager : MonoBehaviour
     private WaitForSeconds waitRefreshInterval;
     private StringBuilder textBuilder = new StringBuilder(200);
 
+    // 방금 보여 준 주소 — 이만큼 안 움직였으면 다시 묻지 않는다 (30초마다 주소 서버를 부르던 것)
+    private const float SameSpotMeters = 25f;
+    private string lastText;
+    private float lastLat, lastLon;
+
     void Awake()
     {
         waitRefreshInterval = new WaitForSeconds(refreshInterval);
@@ -137,6 +142,37 @@ public class LocationManager : MonoBehaviour
         statusImage.sprite = successSprite;
         statusImage.gameObject.SetActive(true);
 
+        if (lastText != null && Meters(latitude, longitude, lastLat, lastLon) < SameSpotMeters)
+        {
+            infoText.text = lastText;
+            yield break;
+        }
+
+        // 한국어 화면 · 국내 — 우팡 서버(브이월드 주소, 도로명·지번이 정확)가 먼저. 안 되면 아래 OSM 으로
+        if (currentLanguage == "ko" && R0926Geo.InKorea(latitude, longitude))
+        {
+            R0926Geo.Address a = null;
+            yield return R0926Geo.FindAddress(latitude, longitude, r => a = r);
+            if (a != null)
+            {
+                SetShortRegion(a.region);
+                textBuilder.Clear();
+                if (singleLine)
+                {
+                    // 도크 바로 위 한 줄: "대흥면 지곡리 · 36.6361, 126.8280"
+                    if (!string.IsNullOrEmpty(a.line)) textBuilder.Append(a.line).Append("  ·  ");
+                    AppendCoords(latitude, longitude);
+                }
+                else
+                {
+                    AppendCoords(latitude, longitude);
+                    textBuilder.Append("\n").Append(string.IsNullOrEmpty(a.road) ? a.parcel : a.road);
+                }
+                Remember(latitude, longitude);
+                yield break;
+            }
+        }
+
         StringBuilder urlBuilder = new StringBuilder(100);
         urlBuilder.Append("https://nominatim.openstreetmap.org/reverse?lat=");
         urlBuilder.Append(latitude.ToString("F4"));
@@ -167,7 +203,7 @@ public class LocationManager : MonoBehaviour
                         if (parts.Length >= 2) textBuilder.Append(parts[0].Trim()).Append(", ").Append(parts[1].Trim()).Append("  ·  ");
                         else if (parts.Length == 1 && parts[0].Trim().Length > 0) textBuilder.Append(parts[0].Trim()).Append("  ·  ");
                         AppendCoords(latitude, longitude);
-                        infoText.text = textBuilder.ToString();
+                        Remember(latitude, longitude);
                         yield break;
                     }
 
@@ -196,7 +232,7 @@ public class LocationManager : MonoBehaviour
                         textBuilder.Append(currentLanguage == "ko" ? "주소 정보 없음" : "No address");
                     }
 
-                    infoText.text = textBuilder.ToString();
+                    Remember(latitude, longitude);
                 }
                 catch (System.Exception e)
                 {
@@ -216,6 +252,22 @@ public class LocationManager : MonoBehaviour
                 infoText.text = textBuilder.ToString();
             }
         }
+    }
+
+    // 주소를 찾은 글만 기억한다 — 좌표만 찍힌 실패는 다음 번에 다시 묻는다
+    private void Remember(float latitude, float longitude)
+    {
+        lastText = textBuilder.ToString();
+        lastLat = latitude;
+        lastLon = longitude;
+        infoText.text = lastText;
+    }
+
+    private static float Meters(float lat1, float lon1, float lat2, float lon2)
+    {
+        float dy = (lat1 - lat2) * 111320f;
+        float dx = (lon1 - lon2) * 111320f * Mathf.Cos(lat1 * Mathf.Deg2Rad);
+        return Mathf.Sqrt(dx * dx + dy * dy);
     }
 
     private static void SetShortRegion(string region)

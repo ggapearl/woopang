@@ -101,6 +101,7 @@ namespace Redesign0926
             else if (mode == "v24") PlanV24();
             else if (mode == "maptiles") PlanMapTiles();
             else if (mode == "mapcoord") PlanMapCoord();
+            else if (mode == "vwshot") PlanVwShot();
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
             else if (mode == "avatar") PlanAvatar();
@@ -1725,6 +1726,21 @@ namespace Redesign0926
             };
             UnityEngine.EventSystems.PointerEventData press = null;
             double zoomBefore = 0;
+            // 떠 있는 토스트 중에 이 글이 든 것
+            Func<string, bool> toastHas = part =>
+            {
+                var tm = ToastManager.Instance;
+                var l = tm != null ? typeof(ToastManager).GetField("live", F)?.GetValue(tm) as System.Collections.IList : null;
+                if (l == null) return false;
+                foreach (var o in l) if ((o.GetType().GetField("message")?.GetValue(o) as string ?? "").Contains(part)) return true;
+                return false;
+            };
+            Func<bool> resultsOn = () => (get("searchResults") as GameObject)?.activeSelf == true;
+            Func<int> rowsOn = () => { int n = 0; foreach (var r in (Button[])get("resultRows")) if (r != null && r.gameObject.activeSelf) n++; return n; };
+            Func<int, string, string> rowText = (i, part) => ((Button[])get("resultRows"))[i].transform.Find(part)?.GetComponent<Text>()?.text ?? "";
+            Func<string> pinName = () => { var t = get("dropName") as Text; return t != null && t.gameObject.activeSelf ? t.text : ""; };
+            Func<bool> barOn = () => (get("searchBar") as GameObject).activeSelf;
+            Action<string> search = q => { var f = get("searchInput") as InputField; f.text = q; f.onSubmit.Invoke(f.text); };
             // 지도 가운데를 손가락으로 누름 — onMap 이 아니면 지도 위의 다른 것(동의 카드 덮개)을 누른 셈
             Action<bool> pressDown = onMap =>
             {
@@ -1751,6 +1767,7 @@ namespace Redesign0926
                 R0926MapTiles.EditorBase = "http://127.0.0.1:9";   // 닫힌 자리 — 타일 정보를 못 받아 타일 없이 돈다
                 typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
                 typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                R0926Geo.EditorBase = "http://127.0.0.1:5099";   // 주소 찾기는 시험 서버의 정해 둔 답 (브이월드를 부르지 않는다)
             });
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Sleep(1.0f);
@@ -1770,10 +1787,11 @@ namespace Redesign0926
                 ("N 37° 33.990' E 126° 58.680'", 37.5665, 126.978), ("37.5665N 126.9780E", 37.5665, 126.978),
                 ("33.8688° S, 151.2093° E", -33.8688, 151.2093), ("E 151.2093 S 33.8688", -33.8688, 151.2093), ("−33.8688, 151.2093", -33.8688, 151.2093),
                 ("40.7128, -74.0060", 40.7128, -74.006), ("여기서 만나요 37.5665, 126.9780 ㅎㅎ", 37.5665, 126.978),
+                ("37 127", 37, 127),
             };
             foreach (var cs in cases)
                 Check(() => R0926FriendsMap.TryParseCoord(cs.text, out double la, out double lo) && Math.Abs(la - cs.lat) < 1e-4 && Math.Abs(lo - cs.lon) < 1e-4, "좌표 해석: " + cs.text);
-            foreach (var bad in new[] { "서울역", "95.1, 200.2", "37.5665", "" })
+            foreach (var bad in new[] { "서울역", "95.1, 200.2", "37.5665", "", "강남대로 123길 45", "종로3가 45-4", "세종대로 110", "인계동 1111-2" })
                 Check(() => !R0926FriendsMap.TryParseCoord(bad, out _, out _), "좌표 아님: '" + bad + "'");
 
             Do(() => Click("Dock0926/List_Button"));
@@ -1797,6 +1815,16 @@ namespace Redesign0926
             Check(() => pinGo() != null && pinGo().activeSelf && dropAt(37.5665, 126.978) && Math.Abs((double)get("zoom") - zoomBefore) < 1e-6,
                 "꾹 누르면 그 자리에 핀 + 위도·경도 · 손을 떼도 확대하지 않음");
             Check(() => System.Text.RegularExpressions.Regex.IsMatch((get("dropText") as Text)?.text ?? "", @"^-?\d{1,2}\.\d{6}, -?\d{1,3}\.\d{6}$"), "말풍선 좌표 — 소수 여섯째 자리 (약 10cm)");
+            Wait(() => pinName() != "", 4f, "꾹 누른 자리 주소");
+            Check(() => pinName() == "중구 세종대로 110", "꾹 누른 자리 — 말풍선 위 줄에 그 자리 주소 (우팡 서버 → 브이월드)");
+            Check(() =>
+            {
+                var b = get("dropBubble") as RectTransform;
+                var bc = new Vector3[4]; b.GetWorldCorners(bc);
+                var vc = new Vector3[4]; ((RectTransform)map.transform).GetWorldCorners(vc);
+                var nc = new Vector3[4]; (get("dropName") as Text).rectTransform.GetWorldCorners(nc);
+                return bc[0].x >= vc[0].x - 0.5f && bc[2].x <= vc[2].x + 0.5f && nc[2].x <= bc[2].x + 0.5f && nc[0].y >= bc[0].y - 0.5f;
+            }, "주소가 들어와 넓어진 말풍선도 지도 안 · 주소 줄이 말풍선 안");
             Shot("coord_pin");
             Do(() => { zoomBefore = (double)get("zoom"); press.clickCount = 2; UnityEngine.EventSystems.ExecuteEvents.Execute(map.gameObject, press, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler); });
             Sleep(0.7f);
@@ -1853,12 +1881,66 @@ namespace Redesign0926
             Check(() => { var c = center(); return Math.Abs(c[0] - 37.5444) < 0.01 && Math.Abs(c[1] - 127.0374) < 0.01 && Math.Abs(c[2] - 64) < 0.5; },
                 "좌표 검색 — 그 자리가 화면 가운데 · 동네 배율 (타일 없을 땐 64배)");
             Shot("coord_search_done");
+            // 주소·장소 이름 — 여럿이면 검색 줄 아래 목록 · 하나면 바로 · 없으면 안내 · 서버가 안 되면 오류 안내
             Do(() => btn("Search0926").onClick.Invoke());
             Sleep(0.2f);
-            Do(() => { var f = get("searchInput") as InputField; f.text = "서울역"; f.onSubmit.Invoke(f.text); });
+            Do(() => search("서울역"));
+            Check(() => barOn() && resultsOn() && rowsOn() == 1 && rowText(0, "Title") == "찾는 중…" && !((Button[])get("resultRows"))[0].interactable,
+                "장소 이름 — 묻는 동안 '찾는 중…' 한 줄 (누를 수 없음)");
+            Wait(() => rowsOn() == 3, 4f, "서울역 결과 세 줄");
+            Check(() => resultsOn() && rowsOn() == 3 && rowText(0, "Title") == "서울역" && rowText(0, "Address") == "서울특별시 용산구 한강대로 405"
+                        && rowText(1, "Title") == "서울역버스환승센터" && barOn() && dropAt(37.5444, 127.0374),
+                "장소 이름(서울역) — 검색 줄 아래 목록 세 줄 (이름 · 주소) · 핀은 아직 그대로");
+            Check(() =>
+            {
+                var bar = (RectTransform)(get("searchBar") as GameObject).transform;
+                var res = (RectTransform)(get("searchResults") as GameObject).transform;
+                var bc = new Vector3[4]; bar.GetWorldCorners(bc);
+                var rc = new Vector3[4]; res.GetWorldCorners(rc);
+                var vc = new Vector3[4]; ((RectTransform)map.transform).GetWorldCorners(vc);
+                return rc[1].y <= bc[0].y + 0.5f && rc[0].y >= vc[0].y && rc[0].x >= vc[0].x && rc[2].x <= vc[2].x && res.rect.height > 3 * 140;
+            }, "결과 목록 — 검색 줄 바로 아래 · 지도 안");
+            Shot("coord_search_results");
+            Do(() => ((Button[])get("resultRows"))[0].onClick.Invoke());
+            Sleep(1.2f);
+            Check(() => !barOn() && !resultsOn() && dropAt(37.55465, 126.97059) && pinName() == "서울역",
+                "목록에서 고름 — 검색 줄·목록 닫히고 그 자리에 핀 · 핀 위에 장소 이름");
+            Check(() => { var c = center(); return Math.Abs(c[0] - 37.55465) < 0.01 && Math.Abs(c[1] - 126.97059) < 0.01; }, "고른 장소가 화면 가운데");
+            Shot("coord_place_pin");
+
+            // 시험 서버가 1.5초 늦게 '세종대로 110' 한 곳을 답한다 — 그 전에 닫으면 핀이 옮겨 가지 않아야
+            Do(() => btn("Search0926").onClick.Invoke());
+            Sleep(0.2f);
+            Do(() => search("느린주소"));
             Sleep(0.3f);
-            Check(() => (get("searchBar") as GameObject).activeSelf && dropAt(37.5444, 127.0374), "못 알아보는 글 — 검색 줄·핀 그대로 (안내 토스트)");
-            Shot("coord_search_bad");
+            Do(() => btn("SearchBar0926/Close").onClick.Invoke());
+            Sleep(2.0f);
+            Check(() => !barOn() && !resultsOn() && dropAt(37.55465, 126.97059) && pinName() == "서울역", "묻는 중에 검색 줄을 닫으면 늦게 온 답은 버림 (핀이 옮겨 가지 않음)");
+
+            Do(() => btn("Search0926").onClick.Invoke());
+            Sleep(0.2f);
+            Do(() => search("세종대로 110"));
+            Wait(() => !barOn(), 4f, "주소 한 곳 → 바로 이동");
+            Sleep(0.8f);
+            Check(() => !resultsOn() && dropAt(37.56637, 126.97792) && pinName() == "중구 세종대로 110 (태평로1가)",
+                "주소(세종대로 110) — 한 곳이면 목록 없이 바로 그 자리 · 핀 위 이름은 시·도를 뺀 주소");
+
+            Do(() => btn("Search0926").onClick.Invoke());
+            Sleep(0.2f);
+            Do(() => search("서울역"));
+            Wait(() => rowsOn() == 3, 4f, "다시 서울역 목록");
+            Do(() => (get("searchInput") as InputField).text = "서울역 1");
+            Sleep(0.1f);
+            Check(() => !resultsOn() && barOn(), "칸의 글을 고치면 지난 목록은 거둠");
+            Do(() => search("없는곳zzqx"));
+            Wait(() => toastHas("찾지 못했어요"), 4f, "못 찾음 안내");
+            Check(() => toastHas("찾지 못했어요") && !resultsOn() && barOn() && dropAt(37.56637, 126.97792), "찾는 게 없음 — '찾지 못했어요' 안내 · 검색 줄·핀 그대로");
+            Shot("coord_search_none");
+            Do(() => search("서버오류"));
+            Wait(() => toastHas("지금은 주소를 찾을 수 없어요"), 4f, "서버 오류 안내");
+            Check(() => toastHas("지금은 주소를 찾을 수 없어요") && !resultsOn() && barOn(), "서버가 안 됨 — 오류 안내 · 검색 줄 그대로 (좌표는 계속 됨)");
+            Do(() => search("서"));
+            Check(() => toastHas("두 글자 이상") && !resultsOn(), "한 글자 — 묻지 않고 '두 글자 이상' 안내");
             Do(() => btn("SearchBar0926/Close").onClick.Invoke());
             Sleep(0.2f);
             Check(() => !(get("searchBar") as GameObject).activeSelf && (get("searchButton") as GameObject).activeSelf, "검색 줄 닫기 — 돋보기 다시 보임");
@@ -1898,6 +1980,101 @@ namespace Redesign0926
             {
                 map?.EditorPreviewClear();
                 R0926MapTiles.EditorBase = null;
+                R0926Geo.EditorBase = null;
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+            });
+        }
+
+        // 브이월드 운영키 신청 '기능화면' (10-19) — 실제 배경지도(시험 타일 서버 5098 → 브이월드) 위에서 검색 목록 · 고른 장소 핀 · 꾹 눌러 꽂은 핀의 주소,
+        // 그리고 도크 위 주소 한 줄. 공개될 수 있는 그림이라 개인 장소·에디터 위치는 찍지 않는다 — 도크 위 주소는 서울시청 자리로 다시 묻는다(실제 서버 → 브이월드).
+        // 지도 검색·핀 주소는 시험 서버(5099)의 정해 둔 답 — 서울역·서울시청의 실제 주소 그대로
+        private static void PlanVwShot()
+        {
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var T = typeof(R0926FriendsMap);
+            R0926FriendsMap map = null;
+            R0926MapTiles tiles = null;
+            LocationManager lm = null;
+            Func<string, object> get = name => T.GetField(name, F)?.GetValue(map);
+            Func<string, int> count = name => (typeof(R0926MapTiles).GetField(name, F)?.GetValue(tiles) as System.Collections.ICollection)?.Count ?? -1;
+            Func<string> dockText = () => (typeof(LocationManager).GetField("infoText", F)?.GetValue(lm) as Text)?.text ?? "";
+            Func<string> pinName = () => { var t = get("dropName") as Text; return t != null && t.gameObject.activeSelf ? t.text : ""; };
+            Func<int> rowsOn = () => { int n = 0; foreach (var r in (Button[])get("resultRows")) if (r != null && r.gameObject.activeSelf && r.interactable) n++; return n; };
+            Action<double, double, float> look = (lat, lon, lv) =>
+            {
+                double max = Convert.ToDouble(T.GetProperty("MaxZoom", F).GetValue(map));
+                float top = tiles.MaxLevel + R0926FriendsMap.OverZoomLevels;
+                map.EditorPreview(true, (float)(max / Math.Pow(2, top - lv)), (float)lat, (float)lon);
+                T.GetField("nextRefresh", F)?.SetValue(map, float.MaxValue);
+            };
+            Action<string> settle = name => { Sleep(0.6f); Wait(() => count("inflight") == 0, 20f, name + " 타일 받기 끝"); Sleep(0.8f); };
+
+            Do(() =>
+            {
+                R0926MapTiles.EditorBase = "http://127.0.0.1:5098";
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+            });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+
+            Do(() =>
+            {
+                HidePrivatePlaces();
+                lm = UnityEngine.Object.FindAnyObjectByType<LocationManager>(FindObjectsInactive.Include);
+                var m = typeof(LocationManager).GetMethod("GetAddressFromCoordinates", F);
+                if (lm != null && m != null) lm.StartCoroutine((System.Collections.IEnumerator)m.Invoke(lm, new object[] { 37.5665f, 126.978f }));
+            });
+            Wait(() => dockText().Contains("37.5665"), 10f, "도크 위 주소 (서울시청)");
+            Sleep(0.3f);
+            Do(() => log.Add("  도크 위: " + dockText()));
+            Shot("vw_dock");
+
+            Do(() => R0926Geo.EditorBase = "http://127.0.0.1:5099");
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(1));
+            Sleep(1.0f);
+            Do(() =>
+            {
+                map = UnityEngine.Object.FindAnyObjectByType<R0926FriendsMap>(FindObjectsInactive.Include);
+                tiles = map != null ? T.GetField("tiles", F)?.GetValue(map) as R0926MapTiles : null;
+            });
+            Wait(() => tiles != null && tiles.Available, 15f, "서버 타일 켜짐 (시험 서버)");
+            Do(() => look(37.5590, 126.9745, 15f));
+            settle("서울역 둘레");
+            Do(() => map.OpenSearch());
+            Sleep(0.3f);
+            Do(() => { var f = get("searchInput") as InputField; f.text = "서울역"; f.onSubmit.Invoke(f.text); });
+            Wait(() => rowsOn() == 3, 5f, "서울역 목록 세 줄");
+            Sleep(0.5f);
+            Shot("vw_search");
+            Do(() => map.PickResult(0));
+            Sleep(1.6f);
+            settle("서울역");
+            Do(() => log.Add("  고른 장소 핀: " + pinName()));
+            Shot("vw_place");
+
+            Do(() => look(37.5665, 126.9780, 16f));
+            settle("서울시청");
+            Do(() => T.GetMethod("DropPinAt", F).Invoke(map, new object[] { ((RectTransform)map.transform).rect.size / 2f }));
+            Wait(() => pinName() != "", 5f, "꾹 누른 자리 주소");
+            Sleep(0.6f);
+            Do(() => log.Add("  꾹 누른 핀: " + pinName() + " · " + ((get("dropText") as Text)?.text ?? "")));
+            Shot("vw_pin");
+            Do(() =>
+            {
+                map?.EditorPreviewClear();
+                R0926MapTiles.EditorBase = null;
+                R0926Geo.EditorBase = null;
                 typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
                 typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
             });

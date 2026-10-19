@@ -27,7 +27,7 @@ namespace Redesign0926
             var dim = Find(view, "Dim0926");
             if (pins == null || dim == null) { log.Add("지도 핀 자리·덮개(Dim0926) 없음"); return; }
 
-            var pin = BuildDropPin(pins, out var bubble, out var text, out var copy, out var clear);
+            var pin = BuildDropPin(pins, out var bubble, out var text, out var name, out var copy, out var clear);
 
             var sbtn = CtrlButton(view, "Search0926", null, "r0926_i_search");
             SetRect(RT(sbtn), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-30, -30), new Vector2(CtrlSize, CtrlSize));
@@ -35,13 +35,20 @@ namespace Redesign0926
             PutBefore(sbtn.transform, dim.transform);
             var bar = BuildSearchBar(view, out var input, out var paste, out var close);
             PutBefore(bar.transform, dim.transform);
+            var results = BuildSearchResults(view, out var rows);
+            PutBefore(results.transform, dim.transform);
 
             so.FindProperty("dropPin").objectReferenceValue = RT(pin);
             so.FindProperty("dropBubble").objectReferenceValue = bubble;
             so.FindProperty("dropText").objectReferenceValue = text;
+            so.FindProperty("dropName").objectReferenceValue = name;
             so.FindProperty("searchButton").objectReferenceValue = sbtn;
             so.FindProperty("searchBar").objectReferenceValue = bar;
             so.FindProperty("searchInput").objectReferenceValue = input;
+            so.FindProperty("searchResults").objectReferenceValue = results;
+            var rp = so.FindProperty("resultRows");
+            rp.arraySize = rows.Length;
+            for (int i = 0; i < rows.Length; i++) rp.GetArrayElementAtIndex(i).objectReferenceValue = rows[i];
             so.FindProperty("longPressSeconds").floatValue = 0.5f;
             so.ApplyModifiedPropertiesWithoutUndo();
 
@@ -50,10 +57,17 @@ namespace Redesign0926
             Wire(sbtn.GetComponent<Button>(), map.OpenSearch);
             Wire(paste, map.PasteSearch);
             Wire(close, map.CloseSearch);
+            for (int i = 0; i < rows.Length; i++)
+            {
+                ResetListeners(rows[i]);
+                UnityEventTools.AddIntPersistentListener(rows[i].onClick, map.PickResult, i);
+            }
             for (int i = input.onSubmit.GetPersistentEventCount() - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(input.onSubmit, i);
             UnityEventTools.AddPersistentListener(input.onSubmit, map.SearchCoord);
+            for (int i = input.onValueChanged.GetPersistentEventCount() - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(input.onValueChanged, i);
+            UnityEventTools.AddPersistentListener(input.onValueChanged, map.SearchTyped);
             EditorUtility.SetDirty(input);
-            log.Add("map coord ok (꾹 눌러 핀 · 좌표 검색)");
+            log.Add("map coord ok (꾹 눌러 핀 + 주소 · 좌표·주소·장소 검색 + 결과 목록 " + rows.Length + "줄)");
         }
 
         // 덮개보다 앞(아래)에 — 이미 앞이면 그대로
@@ -63,7 +77,7 @@ namespace Redesign0926
         }
 
         // 분홍 물방울 핀 (128×168 그림 · 끝이 아래 4px) — 피벗이 핀 끝. 말풍선 자리는 실행 때 (R0926FriendsMap.PlaceDrop)
-        private static GameObject BuildDropPin(Transform pins, out RectTransform bubble, out Text text, out Button copy, out Button clear)
+        private static GameObject BuildDropPin(Transform pins, out RectTransform bubble, out Text text, out Text name, out Button copy, out Button clear)
         {
             var c = new Vector2(0.5f, 0.5f);
             var tip = new Vector2(0.5f, 4f / 168f);
@@ -90,7 +104,22 @@ namespace Redesign0926
             h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false;
             var fit = Ensure<ContentSizeFitter>(bub);
             fit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize; fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            var tx = FindOrCreate(bub.transform, "Text");
+
+            // 왼쪽 두 줄 — 위: 장소 이름·그 자리 주소(있을 때만) · 아래: 좌표 (10-19 브이월드 주소)
+            var lines = FindOrCreate(bub.transform, "Lines");
+            lines.transform.SetSiblingIndex(0);
+            var v = Ensure<VerticalLayoutGroup>(lines);
+            v.spacing = 0; v.childAlignment = TextAnchor.MiddleLeft;
+            v.childControlWidth = true; v.childControlHeight = true; v.childForceExpandWidth = false; v.childForceExpandHeight = false;
+            var nm = FindOrCreate(lines.transform, "Name");
+            nm.transform.SetSiblingIndex(0);
+            name = Txt(nm, "중구 세종대로 110", 38, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
+            name.horizontalOverflow = HorizontalWrapMode.Overflow;
+            nm.SetActive(false);
+            var old = bub.transform.Find("Text");   // 예전 말풍선은 좌표 한 줄만 바로 아래에 — 두 줄 칸으로 옮긴다
+            var tx = old != null ? old.gameObject : FindOrCreate(lines.transform, "Text");
+            if (tx.transform.parent != lines.transform) tx.transform.SetParent(lines.transform, false);
+            tx.transform.SetSiblingIndex(1);
             text = Txt(tx, "37.566500, 126.978000", 40, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
 
@@ -141,8 +170,8 @@ namespace Redesign0926
             t.supportRichText = false;
             var ph = FindOrCreate(field.transform, "Placeholder");
             Stretch(RT(ph));
-            var pt = Txt(ph, "좌표 (예: 37.5665, 126.9780)", 40, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
-            Loc(ph, "좌표 (예: 37.5665, 126.9780)", "e.g. 37.5665, 126.9780", "座標（例: 37.5665, 126.9780）", "坐标（例：37.5665, 126.9780）", "ej.: 37.5665, 126.9780");
+            var pt = Txt(ph, "주소 · 장소 · 좌표", 40, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            Loc(ph, "주소 · 장소 · 좌표", "Address, place or coordinates", "住所・場所・座標", "地址・地点・坐标", "Dirección, lugar o coordenadas");
             input = Ensure<InputField>(field);
             input.textComponent = t;
             input.placeholder = pt;
@@ -173,6 +202,58 @@ namespace Redesign0926
 
             bar.SetActive(false);
             return bar;
+        }
+
+        private const int ResultRows = 5;
+        private const float ResultRowH = 150f;
+
+        // 검색 줄 바로 아래 결과 목록 — 줄마다 이름(굵게) · 주소(흐리게), 많아야 다섯 (서버가 가까운 곳·같은 이름부터 준다)
+        private static GameObject BuildSearchResults(Transform view, out Button[] rows)
+        {
+            var panel = FindOrCreate(view, "SearchResults0926");
+            SetRect(RT(panel), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -(30 + CtrlSize + 14)), new Vector2(-60, 0));
+            // 불투명 — 리니어 색공간이라 0.97 만 돼도 뒤의 핀 말풍선 글이 비쳐 보였다. 목록을 눌러도 지도에 핀이 꽂히지 않게 받는다
+            Img(panel, Spr("r0926_pill"), new Color(0.055f, 0.067f, 0.078f, 1f), Image.Type.Sliced, 64f / 44f).raycastTarget = true;
+            var vg = Ensure<VerticalLayoutGroup>(panel);
+            vg.padding = new RectOffset(0, 0, 12, 12); vg.spacing = 0; vg.childAlignment = TextAnchor.UpperLeft;
+            vg.childControlWidth = true; vg.childControlHeight = true; vg.childForceExpandWidth = true; vg.childForceExpandHeight = false;
+            var fit = Ensure<ContentSizeFitter>(panel);
+            fit.horizontalFit = ContentSizeFitter.FitMode.Unconstrained; fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            rows = new Button[ResultRows];
+            for (int i = 0; i < ResultRows; i++)
+            {
+                var row = FindOrCreate(panel.transform, "Row" + i);
+                row.transform.SetSiblingIndex(i);
+                Img(row, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+                var b = Ensure<Button>(row);
+                b.transition = Selectable.Transition.ColorTint;   // 누르는 동안 살짝 밝게
+                var cb = b.colors;
+                cb.normalColor = new Color(1, 1, 1, 0); cb.highlightedColor = new Color(1, 1, 1, 0); cb.selectedColor = new Color(1, 1, 1, 0);
+                cb.pressedColor = new Color(1, 1, 1, 0.08f); cb.disabledColor = new Color(1, 1, 1, 0); cb.colorMultiplier = 1f; cb.fadeDuration = 0.05f;
+                b.colors = cb;
+                var le = Ensure<LayoutElement>(row);
+                le.minHeight = ResultRowH; le.preferredHeight = ResultRowH;
+
+                var title = FindOrCreate(row.transform, "Title");
+                SetRect(RT(title), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -22), new Vector2(-96, 54));
+                var tt = Txt(title, "서울역", 42, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+                tt.horizontalOverflow = HorizontalWrapMode.Wrap; tt.verticalOverflow = VerticalWrapMode.Truncate;
+                var addr = FindOrCreate(row.transform, "Address");
+                SetRect(RT(addr), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 22), new Vector2(-96, 50));
+                var at = Txt(addr, "서울특별시 용산구 한강대로 405", 38, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+                at.horizontalOverflow = HorizontalWrapMode.Wrap; at.verticalOverflow = VerticalWrapMode.Truncate;
+
+                // 줄 사이 가는 선 (첫 줄 위는 없음)
+                var sep = FindOrCreate(row.transform, "Sep");
+                SetRect(RT(sep), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(-96, 2));
+                Img(sep, null, Line, Image.Type.Simple).raycastTarget = false;
+                sep.SetActive(i > 0);
+                row.SetActive(false);
+                rows[i] = b;
+            }
+            panel.SetActive(false);
+            return panel;
         }
     }
 }
