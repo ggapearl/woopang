@@ -35,6 +35,18 @@ PC 페이로드(애플에 보내지 않고 가로채서 `at` 확인). Swift 는 
    맨 아래나 첫 안 읽은 글로 가면 → Mac 사파리 › 개발 › (아이폰) › 효딩쓰 로 콘솔을 열고
    `Capacitor.Plugins.DeskNative.pushOpened()` 결과를 적어 보고(앱은 `isInspectable` 이 켜져 있다).
 
+**결과** — 2026-10-19 Mac 빌드 세션 (Xcode 26.3 · iOS 26.2 SDK · xcodegen 2.46.0, 커밋 `9b9df5c`):
+- **컴파일 성공, 고친 파일 없음** — 오류 0 · Swift 경고 0. "nearly matches" 경고 없음.
+  (빌드 도구 안내 `Metadata extraction skipped. No AppIntents.framework dependency found.` 한 줄뿐 — 이 앱과 상관없음.)
+  바이너리에 셀렉터 확인 — 모두 있음: `userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:` ·
+  `userNotificationCenter:willPresentNotification:withCompletionHandler:` · `application:didRegisterForRemoteNotificationsWithDeviceToken:` · 다리 이름 `pushOpened`.
+- `PrivacyInfo.xcprivacy` 앱에 들어감. 서명·프로파일은 2.0.1 그대로(바뀐 것 없음).
+  archive `aps-environment = development` → 로컬 export(업로드 안 함, 2.0.1 결과의 방법) 에서 **`production`** · Apple Distribution · `beta-reports-active = 1`.
+- 아카이브는 Xcode Organizer 에 「효딩쓰 2.1.0 (7)」 로 있다(`~/Library/Developer/Xcode/Archives/2026-10-19/`).
+- **TestFlight 업로드 성공** — 2.1.0 (7), 2026-10-19 11:56 KST. 처리 끝(VALID) · 수출 규정 면제 ·
+  자동 배포로 그룹 「대표님」 에 들어감(`IN_BETA_TESTING`) · 외부 상태 `NOT_APPLICABLE` · 심사 제출 안 함. 만료 2027-01-17.
+- 이상한 점 없음. 대표님 확인 남음: 위 3번 (가운데 알림을 눌러 그 말로 가는지 · 앱을 완전히 끈 상태에서도).
+
 ## 2.0.1 (6) — 2026-10-01 · 알림(푸시)
 
 대표님: 「아이폰 설정 › 알림 에 효딩쓰가 없다」 — 앱이 알림 허락을 한 번도 묻지 않고 APNs 에 등록하지도 않아서였다.
