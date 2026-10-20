@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-20a';
+  const WEB_VERSION = '2026-10-21a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -669,6 +669,21 @@
       return a.play().then(() => this.set(true, 'audio'));
     },
 
+    /** PC 소희 「읽기」 묶음 하나를 끝까지 읽고 풀린다 — 다음 묶음이 이어진다. last 면 다 읽은 뒤 읽기를 끝낸다.
+     *  재생기는 다시 쓴다(iOS 는 한 번 튼 재생기를 계속 틀게 해 준다). */
+    playPart(blob, last) {
+      return new Promise((resolve, reject) => {
+        if (this.url) URL.revokeObjectURL(this.url);
+        this.url = URL.createObjectURL(blob);
+        const a = this.audio || (this.audio = new Audio());
+        a.onended = () => { if (this.audio !== a) return; if (last) this.stop(); resolve(); };
+        a.onerror = () => { if (this.audio === a) this.stop(); reject(new Error('소리를 틀지 못했어요')); };
+        a.src = this.url;
+        a.play().then(() => { if (!this.speaking) this.set(true, 'audio'); },
+          e => { if (this.audio === a) this.stop(); reject(e); });
+      });
+    },
+
     /** 읽던 것·준비하던 것(PC 목소리 받는 중) 모두 멈춘다 */
     stop() {
       this.gen++;
@@ -707,10 +722,30 @@
     const alive = () => speaker.gen === gen;                           // 기다리는 사이 멈춤·다른 읽기를 눌렀는지
     speaker.itemId = itemId || null;
     renderReadButtons();
+    // PC 소희 — 앞 묶음부터 받아 읽고, 읽는 동안 다음 묶음을 받는다 (2026-10-21 — 예전엔 글 전체가 다 만들어질 때까지 1분 넘게 기다렸다)
     const viaPC = async () => {
-      if (full) toast('소희 목소리를 만드는 중이에요 — 긴 글은 조금 걸려요');
-      const blob = await api.request('tts', { method: 'POST', body: JSON.stringify({ text }), timeout: 100000, as: 'blob' });
-      if (alive()) await speaker.play(blob);
+      if (full) toast('소희 목소리를 만드는 중이에요 — 앞부분부터 읽어 드려요');
+      const first = await api.request('tts', { method: 'POST', body: JSON.stringify({ text, full: !!full, parts: true }), timeout: 100000, as: 'blob' });
+      if (!alive()) return;
+      if (!/json/.test(first.type)) return speaker.play(first);       // 예전 PC 효딩쓰 — 글 전체 소리가 한 번에 왔다
+      const plan = JSON.parse(await first.text());
+      const part = async i => {
+        for (;;) {                                                     // 아직 만드는 중이면(202) 다시 묻는다
+          const b = await api.request('tts', { method: 'POST', body: JSON.stringify({ id: plan.id, part: i }), timeout: 60000, as: 'blob' });
+          if (!/json/.test(b.type) || !alive()) return b;
+        }
+      };
+      let next = part(0);
+      for (let i = 0; i < plan.n; i++) {
+        let blob = null;
+        try { blob = await next; } catch (e) { if (i === 0) throw e; }   // 첫 묶음이 안 되면 폰 목소리로 · 중간 묶음은 건너뛴다
+        if (!alive()) return;
+        next = i + 1 < plan.n ? part(i + 1) : null;
+        if (next) next.catch(() => {});
+        const last = i === plan.n - 1;
+        if (blob) await speaker.playPart(blob, last);
+        else if (last) speaker.stop();
+      }
     };
     const viaPhone = async () => { if (alive()) await speaker.phone(clean, S.speed); };
     try {
