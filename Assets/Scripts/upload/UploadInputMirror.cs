@@ -98,6 +98,8 @@ public class UploadInputMirror : MonoBehaviour
     /// <summary>키보드 위에 자리 잡은 입력줄 (아직이면 null)</summary>
     public RectTransform PlacedBar => placed ? mirrorRect : null;
     public bool IsMirrorInput(InputField f) => f != null && f == mirrorInput;
+    /// <summary>키보드 위 입력줄의 실제 입력칸 — R0926InputFocus 가 이 칸의 커서 자리·모양을 원래 칸 안에도 같게 보여 준다</summary>
+    public InputField Bar => mirrorInput;
 
     /// <summary>이 칸은 입력줄 버튼이 '완료' 가 아니라 '보내기' — 누르면(키보드 엔터도) 글을 옮기고 바로 보낸다. null 이면 해제</summary>
     public void SetSubmitAction(InputField src, System.Action onSubmit)

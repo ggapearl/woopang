@@ -7,6 +7,9 @@ using UnityEngine.UI;
 /// 입력하면서도 잘 보일 수 있도록 적절한 위치에 스크롤").
 /// 장소·보물찾기 칸은 키보드 위 입력줄(UploadInputMirror)로 쓴다 — 그때는 원래 칸에 테두리를 두고,
 /// 그 칸이 입력줄 위로 보이게 칸이 든 목록을 부드럽게 올린다(입력줄이 떠 있는 동안 뒤 화면은 손으로 못 움직인다).
+/// 입력줄을 쓰는 칸은 칸이 꺼져 있어 Unity 가 칸 안에 커서를 그리지 않는다(커서는 입력줄에서만 깜빡인다) —
+/// 그 칸 글자 사이에도 입력줄 커서와 같은 자리·모양으로 깜빡이는 커서를 얹는다 (2026-10-20 대표님: "포커싱 되었을 때 앞에 글자 깜빡거리게").
+/// 검색·댓글·대화처럼 칸 안에서 직접 치는 칸은 Unity 가 이미 깜빡이는 커서를 그리니 건드리지 않는다.
 /// 캔버스에 하나 — 적용 단계(Redesign0926ApplyReadable)가 붙이고 연결한다.
 /// </summary>
 public class R0926InputFocus : MonoBehaviour
@@ -19,26 +22,45 @@ public class R0926InputFocus : MonoBehaviour
     [SerializeField] private float scrollSpeed = 12f;
 
     private InputField current;
+    private UploadInputMirror currentVia;
     private ScrollRect currentScroll;
     private Image ring;
+    private Image caret;
+    private TextGenerator measure;   // 칸 글의 자리를 재는 용 — 칸 글이 쓰는 것과 따로 둔다
+    private int caretKey = -1;      // (커서 자리, 글 길이) — 바뀌면 깜빡임을 처음부터 켜진 채로
+    private float blinkStart;
 
     void Update()
     {
         var f = Active(out var via);
+        currentVia = via;
         if (f != current)
         {
             current = f;
             currentScroll = f != null ? VerticalScrollOf(f) : null;
+            caretKey = -1;
             Place(f);
         }
         if (f != null && via != null && currentScroll != null) KeepAbove(f, via.PlacedBar);
     }
 
+    // 글·입력줄 커서가 바뀐 뒤에 그려야 한 박자 늦지 않는다
+    void LateUpdate()
+    {
+        var bar = currentVia != null ? currentVia.Bar : null;
+        if (current != null && bar != null) DrawCaret(current, bar);
+        else HideCaret();
+    }
+
+    void OnDestroy() => (measure as System.IDisposable)?.Dispose();
+
     void OnDisable()
     {
         current = null;
+        currentVia = null;
         currentScroll = null;
         if (ring != null) ring.gameObject.SetActive(false);
+        HideCaret();
     }
 
     private InputField Active(out UploadInputMirror via)
@@ -118,6 +140,70 @@ public class R0926InputFocus : MonoBehaviour
             if (s != null && s.vertical && s.content != null) return s;
         }
         return null;
+    }
+
+    // 칸 글자 위에 입력줄 커서 — 글자 자리는 칸의 글이 그려지는 것과 같은 TextGenerator 로 재서 Unity 가 칸 안에 그릴 때와 같은 자리에 선다
+    private void DrawCaret(InputField f, InputField bar)
+    {
+        var t = f.textComponent;
+        if (t == null || t.font == null || !t.isActiveAndEnabled) { HideCaret(); return; }
+
+        var rt = t.rectTransform;
+        if (measure == null) measure = new TextGenerator();
+        measure.Populate(t.text, t.GetGenerationSettings(rt.rect.size));   // 같은 글·같은 칸이면 다시 계산하지 않는다
+        var chars = measure.characters;
+        var lines = measure.lines;
+        if (chars.Count == 0 || lines.Count == 0) { HideCaret(); return; }
+
+        // 긴 글이라 칸이 일부만 보여 주면 자리를 알 수 없다 — 보이는 글의 끝에 둔다
+        int len = f.text.Length;
+        int at = t.text.Length == len ? Mathf.Clamp(bar.caretPosition, 0, len) : chars.Count - 1;
+        at = Mathf.Min(at, chars.Count - 1);
+
+        float ppu = t.pixelsPerUnit;
+        var line = lines[LineOf(lines, at)];
+        float x = Mathf.Min(chars[at].cursorPos.x / ppu, rt.rect.xMax);
+        float top = line.topY / ppu, height = line.height / ppu;
+        if (top <= rt.rect.yMin) { HideCaret(); return; }   // 칸 아래로 넘쳐 글도 안 보이는 줄
+
+        if (caret == null)
+        {
+            var go = new GameObject("FieldCaret0926", typeof(RectTransform), typeof(Image));
+            caret = go.GetComponent<Image>();
+            caret.raycastTarget = false;
+        }
+        var c = caret.rectTransform;
+        if (c.parent != rt)
+        {
+            c.SetParent(rt, false);
+            c.anchorMin = c.anchorMax = rt.pivot;   // 칸 글의 기준점 — cursorPos 가 여기서부터 잰 자리다
+            c.pivot = new Vector2(0f, 1f);
+            caret.gameObject.layer = t.gameObject.layer;
+        }
+        var pos = new Vector2(x, top);
+        var size = new Vector2(bar.caretWidth, height);
+        if (c.anchoredPosition != pos) c.anchoredPosition = pos;
+        if (c.sizeDelta != size) c.sizeDelta = size;
+        caret.color = bar.caretColor;
+        if (!caret.gameObject.activeSelf) caret.gameObject.SetActive(true);
+
+        // 깜빡임은 Unity 칸과 같게 — 빠르기는 입력줄 설정, 치거나 옮기는 동안은 늘 켜져 있다
+        int key = at * 100003 + len;
+        if (key != caretKey) { caretKey = key; blinkStart = Time.unscaledTime; }
+        float period = bar.caretBlinkRate > 0f ? 1f / bar.caretBlinkRate : 0f;
+        caret.enabled = period <= 0f || (Time.unscaledTime - blinkStart) % period < period * 0.5f;
+    }
+
+    private void HideCaret()
+    {
+        if (caret != null && caret.gameObject.activeSelf) caret.gameObject.SetActive(false);
+    }
+
+    private static int LineOf(System.Collections.Generic.IList<UILineInfo> lines, int charIndex)
+    {
+        for (int i = 0; i < lines.Count - 1; i++)
+            if (lines[i + 1].startCharIdx > charIndex) return i;
+        return lines.Count - 1;
     }
 
     // 입력줄이 떠 있는 동안 — 원래 칸이 입력줄에 가리면 목록을 올리고, 위로 넘어가 있으면 내린다

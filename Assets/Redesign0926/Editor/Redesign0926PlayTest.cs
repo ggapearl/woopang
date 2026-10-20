@@ -86,6 +86,7 @@ namespace Redesign0926
             }
             else if (mode == "skyfast") PlanSkyFast();
             else if (mode == "inputsync") PlanInputSync();
+            else if (mode == "caret") PlanCaret();
             else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }
             else if (mode == "sky") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSky(); }
             else if (mode == "ar") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanAr(); }
@@ -4913,6 +4914,186 @@ namespace Redesign0926
             Check(() => !overlap, "하늘 칩이 상태 알약과 겹치지 않음");
             Sleep(1.2f);
             Shot("skyfast");
+        }
+
+        // 키보드 위 입력줄을 쓰는 칸 안의 깜빡이는 커서 (10-20) — 글 끝에 서고 · 입력줄 커서를 따라가고 · 깜빡이고 · 치면 켜지고 · 닫으면 사라지는지,
+        // 그리고 입력줄을 쓰는 모든 칸에서 칸 글 영역 안에 입력줄 커서와 같은 모양으로 그려지는지 (여러 줄 칸 포함)
+        private static void PlanCaret()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var mt = typeof(UploadInputMirror);
+            UploadInputMirror mirror = null;
+            InputField src = null, bar = null;
+            float endDx = 0f;
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(0.5f);
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.4f);
+            Do(() =>
+            {
+                mirror = WiredMirror();
+                src = Find("UploadPage/Clip0926/UploadSheet0926/CubeUploadPage/Panel/NameInput")?.GetComponent<InputField>();
+                bar = mirror != null ? mt.GetField("mirrorInput", F).GetValue(mirror) as InputField : null;
+                log.Add("  업로드 화면 " + (Active("UploadPage") ? "열림" : "안 열림") + " · 입력줄 " + (mirror != null ? "있음" : "없음") + " · 이름칸 " + (src != null ? "있음" : "없음"));
+                if (mirror != null && src != null) mt.GetMethod("ActivateMirrorFor", F).Invoke(mirror, new object[] { src });
+            });
+            Sleep(0.3f);
+            Check(() => FieldCaret(src) != null && FieldCaret(src).gameObject.activeInHierarchy, "입력줄을 켜면 이름칸 안에 커서가 생김");
+            Check(() => bar != null && bar.caretWidth >= 3 && bar.customCaretColor, "입력줄 커서에 굵기·분홍이 입혀짐");
+            Check(() => { var img = FieldCaret(src); return img != null && bar != null && img.color == bar.caretColor && Mathf.Approximately(img.rectTransform.sizeDelta.x, bar.caretWidth); }, "칸 안 커서가 입력줄 커서와 같은 굵기·색");
+            Do(() => { float dx = CaretDx(src); log.Add((Mathf.Abs(dx) < 3f ? "PASS " : "FAIL ") + "빈 칸이면 커서가 글 왼쪽 끝에 섬 (" + dx.ToString("0.0") + ")"); });
+            Shot("caret_empty");
+
+            // 치면 글 끝으로
+            Do(() => { bar.text = "우팡 테스트"; bar.MoveTextEnd(false); });
+            Sleep(0.2f);
+            Do(() =>
+            {
+                float dx = CaretDx(src), w = src.textComponent.preferredWidth;
+                endDx = dx;
+                log.Add((Mathf.Abs(dx - w) < 4f ? "PASS " : "FAIL ") + $"글 끝에 섬: 커서 {dx:0.0} · 글 폭 {w:0.0}");
+            });
+            Shot("caret_text");
+
+            // 깜빡임 — 1.6초 동안 켜짐·꺼짐이 다 보여야 한다 (한 번 깜빡이는 데 1.2초)
+            int on = 0, off = 0;
+            double until = -1;
+            steps.Enqueue(() =>
+            {
+                var img = FieldCaret(src);
+                if (until < 0) until = EditorApplication.timeSinceStartup + 1.6;
+                if (img != null) { if (img.enabled) on++; else off++; }
+                if (EditorApplication.timeSinceStartup < until) return false;
+                log.Add((on > 0 && off > 0 ? "PASS " : "FAIL ") + $"깜빡임: 1.6초 동안 켜짐 {on}번 · 꺼짐 {off}번 확인");
+                until = -1;
+                return true;
+            });
+
+            // 꺼진 순간에 글을 치면 바로 켜진다 (치는 동안은 늘 켜져 있게)
+            double offUntil = -1;
+            steps.Enqueue(() =>
+            {
+                var img = FieldCaret(src);
+                if (offUntil < 0) offUntil = EditorApplication.timeSinceStartup + 2.0;
+                if (img != null && !img.enabled) { offUntil = -1; return true; }
+                if (EditorApplication.timeSinceStartup < offUntil) return false;
+                log.Add("FAIL 꺼진 순간이 오지 않음");
+                offUntil = -1;
+                return true;
+            });
+            Do(() => { bar.text += "!"; bar.MoveTextEnd(false); });
+            Sleep(0.1f);
+            Check(() => { var img = FieldCaret(src); return img != null && img.enabled; }, "꺼져 있다가도 글을 치면 바로 켜짐");
+
+            // 입력줄 커서를 둘째 글자 뒤로 옮기면 칸 안의 커서도 따라간다
+            Do(() => { bar.caretPosition = 2; });
+            Sleep(0.2f);
+            Do(() =>
+            {
+                float dx = CaretDx(src);
+                var t = src.textComponent;
+                float want = new TextGenerator().GetPreferredWidth("우팡", t.GetGenerationSettings(Vector2.zero)) / t.pixelsPerUnit;
+                log.Add((dx > 0f && dx < endDx && Mathf.Abs(dx - want) < 4f ? "PASS " : "FAIL ") + $"입력줄 커서를 둘째 글자 뒤로 옮기면 따라감: 커서 {dx:0.0} · 두 글자 폭 {want:0.0} · 글 끝 {endDx:0.0}");
+            });
+
+            // 닫으면 사라진다 (보내기 칸이 글을 보내지 않도록 누름 없이 닫기)
+            Do(() => mt.GetMethod("BeginClose", F).Invoke(mirror, new object[] { false }));
+            Sleep(0.4f);
+            Check(() => { var img = FieldCaret(src); return img == null || !img.gameObject.activeSelf; }, "입력줄을 닫으면 칸 안의 커서가 사라짐");
+            Do(() => { if (src != null) src.text = ""; });
+
+            // 입력줄을 쓰는 모든 칸 — 칸 글 영역 안에 그려지는지
+            var all = new List<KeyValuePair<UploadInputMirror, InputField>>();
+            Do(() =>
+            {
+                foreach (var m in UnityEngine.Object.FindObjectsByType<UploadInputMirror>(FindObjectsInactive.Include))
+                {
+                    var srcs = mt.GetField("sourceInputs", F).GetValue(m) as InputField[];
+                    if (srcs == null || mt.GetField("mirrorInput", F).GetValue(m) == null) continue;
+                    foreach (var s0 in srcs) if (s0 != null) all.Add(new KeyValuePair<UploadInputMirror, InputField>(m, s0));
+                }
+                log.Add("  입력줄을 쓰는 칸 " + all.Count + "개");
+            });
+            int idx = -1, readyFrame = 0, phase = 0;
+            var turnedOn = new List<GameObject>();
+            steps.Enqueue(() =>
+            {
+                if (Time.frameCount < readyFrame) return false;
+                var m = idx >= 0 && idx < all.Count ? all[idx].Key : null;
+                var s = m != null ? all[idx].Value : null;
+                var b = m != null ? mt.GetField("mirrorInput", F).GetValue(m) as InputField : null;
+                if (phase == 0)
+                {
+                    if (++idx >= all.Count) return true;
+                    m = all[idx].Key;
+                    s = all[idx].Value;
+                    // 꺼진 칸·꺼진 화면은 위까지 켜 두고 본다 (실제로 쓸 땐 보이는 화면이다) — 바깥부터
+                    turnedOn.Clear();
+                    for (var a = s.transform; a != null; a = a.parent)
+                        if (!a.gameObject.activeSelf) turnedOn.Insert(0, a.gameObject);
+                    foreach (var g in turnedOn) g.SetActive(true);
+                    if (turnedOn.Count > 0) Canvas.ForceUpdateCanvases();
+                    s.text = "";
+                    mt.GetMethod("ActivateMirrorFor", F).Invoke(m, new object[] { s });
+                    phase = 1;
+                    readyFrame = Time.frameCount + 3;   // 입력줄이 켜진 뒤에 — 에디터는 이때 글 전체를 선택해 둔다
+                    return false;
+                }
+                if (phase == 1)
+                {
+                    b.text = "우팡 테스트";
+                    b.MoveTextEnd(false);
+                    phase = 2;
+                    readyFrame = Time.frameCount + 4;
+                    return false;
+                }
+                log.Add(CaretInside(s, b));
+                mt.GetMethod("BeginClose", F).Invoke(m, new object[] { false });
+                s.text = "";
+                for (int k = turnedOn.Count - 1; k >= 0; k--) turnedOn[k].SetActive(false);
+                phase = 0;
+                readyFrame = Time.frameCount + 2;
+                return false;
+            });
+        }
+
+        private static Image FieldCaret(InputField f)
+        {
+            if (f == null || f.textComponent == null) return null;
+            var t = f.textComponent.transform.Find("FieldCaret0926");
+            return t != null ? t.GetComponent<Image>() : null;
+        }
+
+        // 칸 글 왼쪽 끝에서 칸 안의 커서까지 (칸 글 단위)
+        private static float CaretDx(InputField f)
+        {
+            var img = FieldCaret(f);
+            if (img == null) return float.NaN;
+            var c = new Vector3[4];
+            var t = new Vector3[4];
+            img.rectTransform.GetWorldCorners(c);
+            f.textComponent.rectTransform.GetWorldCorners(t);
+            return (c[0].x - t[0].x) / f.textComponent.rectTransform.lossyScale.x;
+        }
+
+        // 칸 안의 커서가 칸 글 영역 안에 있고 입력줄 커서와 같은 모양인지 — 한 줄 결과
+        private static string CaretInside(InputField f, InputField bar)
+        {
+            string name = f.transform.parent.parent.name + "/" + f.name;
+            var img = FieldCaret(f);
+            if (img == null || !img.gameObject.activeInHierarchy) return "FAIL " + name + " · 칸 안에 커서가 없음";
+            var c = new Vector3[4];
+            var t = new Vector3[4];
+            img.rectTransform.GetWorldCorners(c);
+            f.textComponent.rectTransform.GetWorldCorners(t);
+            float s = f.textComponent.rectTransform.lossyScale.x;
+            float left = (c[0].x - t[0].x) / s, right = (t[2].x - c[2].x) / s;   // 글 영역 왼쪽·오른쪽에서 안으로 들어온 만큼
+            float mid = (c[0].y + c[2].y) * 0.5f;
+            bool ok = left >= -1f && right >= -1f && mid >= t[0].y && mid <= t[2].y;
+            bool same = img.color == bar.caretColor && bar.caretWidth >= 3 && bar.customCaretColor;
+            string inside = ok ? "예" : "아니오", look = same ? "같음" : "다름";
+            return (ok && same ? "PASS " : "FAIL ") + name + $" · 커서 왼쪽 {left:0.0} · 오른쪽 여유 {right:0.0} · 높이 {(c[2].y - c[0].y) / s:0.0} · 칸 글 영역 안 {inside} · 입력줄과 모양 {look}";
         }
 
         // 키보드 위 입력줄 → 원래 칸 — 쓰는 동안 · 닫은 뒤 원래 칸에 '보이는' 글자까지 확인 (모든 입력칸)

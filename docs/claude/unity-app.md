@@ -186,6 +186,7 @@ Assets/
 핵심 컴포넌트:
 - Assets/Scripts/upload/UploadInputMirror.cs       (런타임 동작)
 - Assets/Scripts/Editor/UploadInputMirrorSetup.cs  (씬 자동 생성/연결)
+- Assets/Redesign0926/Runtime/R0926InputFocus.cs    (원래 칸의 분홍 테두리 + 깜빡이는 커서 — 미러 칸은 꺼져 있어 Unity 가 커서를 안 그리므로 입력줄 커서를 그대로 얹음)
 
 디자인 일괄 수정 (권장: 프리팹 방식):
 - Assets/Prefabs/Upload/UploadInputMirror.prefab 1개만 수정하면
