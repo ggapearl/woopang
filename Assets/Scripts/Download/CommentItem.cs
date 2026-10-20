@@ -269,18 +269,7 @@ public class CommentItem : MonoBehaviour
     {
         if (!System.DateTime.TryParse(dateStr, out System.DateTime date)) return dateStr;
 
-        System.TimeSpan diff = System.DateTime.Now - date;
-        double minutes = diff.TotalMinutes;
-        double hours = diff.TotalHours;
-        double days = diff.TotalDays;
-
-        if (minutes < 1) return "방금 전";
-        if (minutes < 60) return $"{(int)minutes}분 전";
-        if (hours < 24) return $"{(int)hours}시간 전";
-        if (days < 7) return $"{(int)days}일 전";
-        if (days < 30) return $"{(int)(days / 7)}주 전";
-        if (days < 365) return $"{(int)(days / 30)}달 전";
-        return $"{(int)(days / 365)}년 전";
+        return AppTimeText.Ago(date, System.DateTime.Now);
     }
 
     private void UpdateLikeUI()

@@ -36,6 +36,8 @@ public class R0926SafeInset : MonoBehaviour
     {
         if (rt == null) rt = (RectTransform)transform;
         edge = e;
+        // 에디터(가로 캡처가 세로로 되돌릴 때)에서는 밀지 않는다 — 캡처용 카메라 캔버스 좌표로 엉뚱한 인셋을 더한 채 씬에 저장됐다 (10-21)
+        if (!Application.isPlaying) return;
         applied = 0f;
         lastScale = -1f;
         Apply();

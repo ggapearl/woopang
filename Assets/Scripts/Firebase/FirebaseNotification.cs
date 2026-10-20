@@ -75,42 +75,6 @@ public class TokenResponse
     public int failure_count;
 }
 
-public static class TimeLocalization
-{
-    private static Dictionary<string, Dictionary<string, string>> localizations = new Dictionary<string, Dictionary<string, string>>()
-    {
-        ["en"] = new Dictionary<string, string>()
-        {
-            ["just_now"] = "Just now",
-            ["minutes_ago"] = "{0} minutes ago",
-            ["minute_ago"] = "1 minute ago",
-            ["hours_ago"] = "{0} hours ago",
-            ["hour_ago"] = "1 hour ago",
-            ["location_service_off"] = "Location off"
-        },
-        ["ko"] = new Dictionary<string, string>()
-        {
-            ["just_now"] = "방금",
-            ["minutes_ago"] = "{0}분 전",
-            ["minute_ago"] = "1분 전",
-            ["hours_ago"] = "{0}시간 전",
-            ["hour_ago"] = "1시간 전",
-            ["location_service_off"] = "위치 꺼짐"
-        }
-    };
-
-    public static string GetLocalizedTime(string key, string langCode, params object[] args)
-    {
-        if (!localizations.ContainsKey(langCode))
-            langCode = "en";
-
-        if (localizations[langCode].ContainsKey(key))
-            return string.Format(localizations[langCode][key], args);
-
-        return key;
-    }
-}
-
 public class FirebaseNotification : MonoBehaviour
 {
     public static FirebaseNotification Instance;
@@ -491,21 +455,6 @@ public class FirebaseNotification : MonoBehaviour
         return true;
     }
 
-    private string GetCurrentLanguageCode()
-    {
-        string langCode = Application.systemLanguage switch
-        {
-            SystemLanguage.Korean => "ko",
-            SystemLanguage.Japanese => "ja",
-            SystemLanguage.Chinese => "zh",
-            SystemLanguage.ChineseSimplified => "zh",
-            SystemLanguage.ChineseTraditional => "zh",
-            SystemLanguage.Spanish => "es",
-            _ => "en"
-        };
-        return langCode;
-    }
-
 
     private void LoadTokenFromAndroidPrefs()
     {
@@ -768,8 +717,8 @@ public class FirebaseNotification : MonoBehaviour
                 body = e.Message.Data["body"];
         }
 
-        if (string.IsNullOrEmpty(title)) title = "알림";
-        if (string.IsNullOrEmpty(body)) body = "새 메시지가 도착했습니다.";
+        if (string.IsNullOrEmpty(title)) title = R0926LocalizedText.Say("알림", "Notification", "お知らせ", "通知", "Notificación");
+        if (string.IsNullOrEmpty(body)) body = R0926LocalizedText.Say("새 메시지가 도착했습니다.", "You have a new message.", "新しいメッセージが届きました。", "收到一条新消息。", "Tienes un mensaje nuevo.");
 
         string originalTitle = title;
         string distanceString = CalculateMessageDistance(e.Message);
@@ -1371,7 +1320,7 @@ public class FirebaseNotification : MonoBehaviour
 #endif
         if (notificationIntent != null)
         {
-            string title = notificationIntent.Notification.Title ?? "알림";
+            string title = notificationIntent.Notification.Title ?? R0926LocalizedText.Say("알림", "Notification", "お知らせ", "通知", "Notificación");
             string body = notificationIntent.Notification.Text ?? "";
 
             if (IsDuplicateMessage(title, body))
@@ -1941,8 +1890,7 @@ public class FirebaseNotification : MonoBehaviour
     {
         if (!Input.location.isEnabledByUser || !isLocationServiceEnabled)
         {
-            string langCode = GetCurrentLanguageCode();
-            return TimeLocalization.GetLocalizedTime("location_service_off", langCode);
+            return R0926LocalizedText.Say("위치 꺼짐", "Location off", "位置情報オフ", "定位已关闭", "Ubicación desactivada");
         }
 
         if (messageLat == 0f && messageLon == 0f)

@@ -49,8 +49,7 @@ public class R0926HuntCelebrate : MonoBehaviour
     private int rank;
     private Coroutine playCo, fetchCo;
 
-    private static string Lang => R0926LocalizedText.Lang();
-    private static string T(string ko, string en) => Lang == "ko" ? ko : en;
+    private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
     public static bool Showing => instance != null && instance.panel != null && instance.panel.activeSelf;
 
@@ -90,28 +89,28 @@ public class R0926HuntCelebrate : MonoBehaviour
 
     private void Paint()
     {
-        if (title != null) title.text = T("보물을 찾았습니다!", "You found the treasure!");
+        if (title != null) title.text = T("보물을 찾았습니다!", "You found the treasure!", "宝を見つけました！", "你找到宝藏了！", "¡Encontraste el tesoro!");
         if (rankText != null)
         {
-            string r = rank == 1 ? T("가장 먼저 찾았어요", "You were the first!")
-                     : rank > 1 ? T(rank + "번째로 찾았어요", "You're #" + rank)
+            string r = rank == 1 ? T("가장 먼저 찾았어요", "You were the first!", "一番乗りです！", "你是第一个找到的！", "¡Lo encontraste primero!")
+                     : rank > 1 ? T(rank + "번째로 찾았어요", "You're #" + rank, rank + "番目に見つけました", "你是第 " + rank + " 个找到的", "Puesto #" + rank)
                      : "";
             if (!string.IsNullOrEmpty(huntTitle)) r = string.IsNullOrEmpty(r) ? huntTitle : r + "  ·  " + huntTitle;
             rankText.text = r;
         }
-        if (prizeLabel != null) prizeLabel.text = T("상품", "Prize");
+        if (prizeLabel != null) prizeLabel.text = T("상품", "Prize", "賞品", "奖品", "Premio");
         if (prizeText != null)
-            prizeText.text = prize == null ? T("상품 안내를 불러오는 중…", "Loading the prize…")
+            prizeText.text = prize == null ? T("상품 안내를 불러오는 중…", "Loading the prize…", "賞品情報を読み込んでいます…", "正在加载奖品信息…", "Cargando el premio…")
                            : prize.Length > 0 ? prize
-                           : T("따로 정한 상품은 없어요", "No prize was set for this game");
+                           : T("따로 정한 상품은 없어요", "No prize was set for this game", "このゲームには賞品が設定されていません", "此游戏没有设置奖品", "Este juego no tiene premio");
         if (noteText != null)
         {
-            string who = string.IsNullOrEmpty(hostName) ? T("주최자", "the host") : T("주최자 " + hostName + "님", "the host (" + hostName + ")");
-            string note = T(who + "에게 찾았다는 메세지를 보냈어요", "We let " + who + " know you found it");
-            if (!string.IsNullOrEmpty(prize)) note += "\n" + T("상품은 메세지로 주최자와 이야기해 보세요", "Message the host about the prize");
+            string who = string.IsNullOrEmpty(hostName) ? T("주최자", "the host", "主催者", "主办者", "quien organiza") : T("주최자 " + hostName + "님", "the host (" + hostName + ")", "主催者 " + hostName + " さん", "主办者 " + hostName, hostName);
+            string note = T(who + "에게 찾았다는 메세지를 보냈어요", "We let " + who + " know you found it", who + "に見つけたことをメッセージで送りました", "已发消息通知" + who + "：你找到了宝藏", "Avisamos a " + who + " de que lo encontraste");
+            if (!string.IsNullOrEmpty(prize)) note += "\n" + T("상품은 메세지로 주최자와 이야기해 보세요", "Message the host about the prize", "賞品については主催者とメッセージで相談してください", "关于奖品，请通过消息与主办者沟通", "Escribe a quien organiza para hablar del premio");
             noteText.text = note;
         }
-        if (okLabel != null) okLabel.text = T("확인", "OK");
+        if (okLabel != null) okLabel.text = T("확인", "OK", "OK", "确定", "Aceptar");
     }
 
     private IEnumerator Fetch(int id)

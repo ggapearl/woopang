@@ -108,19 +108,19 @@ public class R0926HuntCard : MonoBehaviour
 
     private static string Lang => R0926LocalizedText.Lang();
     private static bool Ko => Lang == "ko";
-    private static string T(string ko, string en) => Ko ? ko : en;
+    private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
-    // ── 칩 정의 (값, 한국어, 영어) ──
-    private static readonly (string v, string ko, string en)[] Modes = { ("touch", "먼저 터치", "First touch"), ("code", "코드 입력", "Enter a code") };
-    private static readonly (string v, string ko, string en)[] Winners = { ("1", "1명", "1"), ("3", "3명", "3"), ("5", "5명", "5"), ("10", "10명", "10"), ("all", "모두", "Everyone") };
+    // ── 칩 정의 (값, 한국어, 영어, 일본어, 중국어, 스페인어) ──
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Modes = { ("touch", "먼저 터치", "First touch", "先にタッチ", "先触碰", "Primero en tocar"), ("code", "코드 입력", "Enter a code", "コード入力", "输入代码", "Introducir código") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Winners = { ("1", "1명", "1", "1人", "1人", "1"), ("3", "3명", "3", "3人", "3人", "3"), ("5", "5명", "5", "5人", "5人", "5"), ("10", "10명", "10", "10人", "10人", "10"), ("all", "모두", "Everyone", "全員", "所有人", "Todos") };
     // 참가 인원 상한 (2026-10-12 대표님 — 서버 1~100 · 당첨 인원 이상. 칩은 모두 당첨 최대 10명 이상이라 어긋나지 않는다)
-    private static readonly (string v, string ko, string en)[] Players = { ("10", "10명", "10"), ("20", "20명", "20"), ("30", "30명", "30"), ("50", "50명", "50"), ("100", "100명", "100") };
-    private static readonly (string v, string ko, string en)[] Visibles = { ("10", "10m", "10m"), ("30", "30m", "30m"), ("50", "50m", "50m"), ("100", "100m", "100m"), ("200", "200m", "200m") };
-    private static readonly (string v, string ko, string en)[] Radii = { ("1", "1km", "1km"), ("5", "5km", "5km"), ("10", "10km", "10km"), ("30", "30km", "30km"), ("100", "100km", "100km") };
-    private static readonly (string v, string ko, string en)[] Coords = { ("exact", "정확히", "Exact"), ("approx", "대략", "Approx."), ("hidden", "비공개", "Hidden") };
-    private static readonly (string v, string ko, string en)[] Audiences = { ("all", "모두", "Everyone"), ("friends", "맞팔만", "Mutuals"), ("code", "참가 코드", "Join code") };
-    private static readonly (string v, string ko, string en)[] Starts = { ("0", "바로", "Now"), ("60", "1시간 뒤", "In 1h"), ("180", "3시간 뒤", "In 3h"), ("1440", "내일", "Tomorrow"), ("2880", "2일 뒤", "In 2 days") };
-    private static readonly (string v, string ko, string en)[] Durations = { ("30", "30분", "30 min"), ("60", "1시간", "1 hour"), ("180", "3시간", "3 hours"), ("1440", "1일", "1 day"), ("4320", "3일", "3 days"), ("10080", "7일", "7 days") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Players = { ("10", "10명", "10", "10人", "10人", "10"), ("20", "20명", "20", "20人", "20人", "20"), ("30", "30명", "30", "30人", "30人", "30"), ("50", "50명", "50", "50人", "50人", "50"), ("100", "100명", "100", "100人", "100人", "100") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Visibles = { ("10", "10m", "10m", "10m", "10m", "10m"), ("30", "30m", "30m", "30m", "30m", "30m"), ("50", "50m", "50m", "50m", "50m", "50m"), ("100", "100m", "100m", "100m", "100m", "100m"), ("200", "200m", "200m", "200m", "200m", "200m") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Radii = { ("1", "1km", "1km", "1km", "1km", "1km"), ("5", "5km", "5km", "5km", "5km", "5km"), ("10", "10km", "10km", "10km", "10km", "10km"), ("30", "30km", "30km", "30km", "30km", "30km"), ("100", "100km", "100km", "100km", "100km", "100km") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Coords = { ("exact", "정확히", "Exact", "正確", "精确", "Exacta"), ("approx", "대략", "Approx.", "おおよそ", "大致", "Aprox."), ("hidden", "비공개", "Hidden", "非公開", "不公开", "Oculta") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Audiences = { ("all", "모두", "Everyone", "全員", "所有人", "Todos"), ("friends", "맞팔만", "Mutuals", "相互フォロー", "互关好友", "Mutuos"), ("code", "참가 코드", "Join code", "参加コード", "参加代码", "Código") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Starts = { ("0", "바로", "Now", "すぐ", "立即", "Ahora"), ("60", "1시간 뒤", "In 1h", "1時間後", "1小时后", "En 1 h"), ("180", "3시간 뒤", "In 3h", "3時間後", "3小时后", "En 3 h"), ("1440", "내일", "Tomorrow", "明日", "明天", "Mañana"), ("2880", "2일 뒤", "In 2 days", "2日後", "2天后", "En 2 días") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Durations = { ("30", "30분", "30 min", "30分", "30分钟", "30 min"), ("60", "1시간", "1 hour", "1時間", "1小时", "1 hora"), ("180", "3시간", "3 hours", "3時間", "3小时", "3 horas"), ("1440", "1일", "1 day", "1日", "1天", "1 día"), ("4320", "3일", "3 days", "3日", "3天", "3 días"), ("10080", "7일", "7 days", "7日", "7天", "7 días") };
 
     private void Awake()
     {
@@ -271,7 +271,7 @@ public class R0926HuntCard : MonoBehaviour
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Get("/api/hunts/nearby" + q, (c, r) => { code = c; j = r; });
         if (code == 401) { ShowLoggedOut(); yield break; }
-        if (code != 200) { if (nearEmpty != null) { nearEmpty.gameObject.SetActive(true); nearEmpty.text = T("보물찾기를 불러오지 못했어요", "Couldn't load treasure hunts"); } yield break; }
+        if (code != 200) { if (nearEmpty != null) { nearEmpty.gameObject.SetActive(true); nearEmpty.text = T("보물찾기를 불러오지 못했어요", "Couldn't load treasure hunts", "宝探しを読み込めませんでした", "无法加载寻宝活动", "No se pudieron cargar las búsquedas del tesoro"); } yield break; }
         rulesAccepted = j["host_rules"]["accepted"].AsBool;
         rulesVersion = j["host_rules"]["version"].AsInt > 0 ? j["host_rules"]["version"].AsInt : 1;
         bool enabled = j["prefs"]["enabled"].AsBool || !j["prefs"].HasKey("enabled");
@@ -282,11 +282,11 @@ public class R0926HuntCard : MonoBehaviour
         ClearRows(nearList, mineList);
         var near = j["hunts"].AsArray;
         foreach (JSONNode h in near) AddRow(nearList, h);
-        if (nearHead != null) nearHead.text = T("근처 보물찾기", "Nearby hunts") + (near.Count > 0 ? "  " + near.Count : "");
+        if (nearHead != null) nearHead.text = T("근처 보물찾기", "Nearby hunts", "近くの宝探し", "附近的寻宝", "Búsquedas cercanas") + (near.Count > 0 ? "  " + near.Count : "");
         if (nearEmpty != null)
         {
             nearEmpty.gameObject.SetActive(near.Count == 0 && enabled);   // 꺼 두었으면 offBox 가 이미 말한다 (같은 말이 두 줄 나왔다)
-            nearEmpty.text = T("근처에 열린 보물찾기가 없어요 — 첫 보물을 숨겨 보세요", "No hunts nearby yet — hide the first treasure");
+            nearEmpty.text = T("근처에 열린 보물찾기가 없어요 — 첫 보물을 숨겨 보세요", "No hunts nearby yet — hide the first treasure", "近くで開催中の宝探しはありません — 最初の宝を隠してみましょう", "附近还没有寻宝活动 — 来藏第一个宝藏吧", "Aún no hay búsquedas cerca — esconde el primer tesoro");
         }
         var seen = new HashSet<int>();
         int mine = 0;
@@ -322,11 +322,11 @@ public class R0926HuntCard : MonoBehaviour
         SetText(row, "Title", (h["official"].AsBool ? "★ " : "") + h["title"]);
         SetText(row, "Sub", Summary(h));
         var me = h["me"];
-        string badge = h["is_host"].AsBool ? T("주최", "Host")
-                     : me["rank"].AsInt > 0 ? T("찾음", "Found")
-                     : status == "ended" || status == "cancelled" ? T("끝", "Ended")
-                     : me["joined"].AsBool ? T("참가 중", "Joined")
-                     : h["full"].AsBool ? T("마감", "Full") : T("보기", "View");
+        string badge = h["is_host"].AsBool ? T("주최", "Host", "主催", "主办", "Tu juego")
+                     : me["rank"].AsInt > 0 ? T("찾음", "Found", "発見", "已找到", "Encontrado")
+                     : status == "ended" || status == "cancelled" ? T("끝", "Ended", "終了", "已结束", "Terminado")
+                     : me["joined"].AsBool ? T("참가 중", "Joined", "参加中", "参加中", "Participando")
+                     : h["full"].AsBool ? T("마감", "Full", "満員", "已满", "Completo") : T("보기", "View", "見る", "查看", "Ver");
         SetText(row, "Badge", badge);
         int id = h["id"].AsInt;
         var b = row.GetComponent<Button>();
@@ -342,11 +342,11 @@ public class R0926HuntCard : MonoBehaviour
     private static string Summary(JSONNode h)
     {
         var parts = new List<string>();
-        if (h.HasKey("distance_m")) parts.Add(Dist(h["distance_m"].AsFloat) + (h["coord_mode"] == "approx" ? T(" 근처", " away") : ""));
+        if (h.HasKey("distance_m")) parts.Add(Dist(h["distance_m"].AsFloat) + (h["coord_mode"] == "approx" ? T(" 근처", " away", " 付近", " 附近", " aprox.") : ""));
         else if (h.HasKey("distance_text")) parts.Add(h["distance_text"]);
-        parts.Add(T("참가 ", "Players ") + PlayerCount(h));
+        parts.Add(T("참가 ", "Players ", "参加 ", "参加 ", "Jugadores ") + PlayerCount(h));
         int wm = h["winners_max"].AsInt;
-        parts.Add(wm > 0 ? T(h["found"].AsInt + "/" + wm + "명 찾음", h["found"].AsInt + "/" + wm + " found") : T(h["found"].AsInt + "명 찾음", h["found"].AsInt + " found"));
+        parts.Add(wm > 0 ? T(h["found"].AsInt + "/" + wm + "명 찾음", h["found"].AsInt + "/" + wm + " found", h["found"].AsInt + "/" + wm + "人発見", h["found"].AsInt + "/" + wm + " 人找到", h["found"].AsInt + "/" + wm + " encontrados") : T(h["found"].AsInt + "명 찾음", h["found"].AsInt + " found", h["found"].AsInt + "人発見", h["found"].AsInt + " 人找到", h["found"].AsInt + " encontrados"));
         parts.Add(TimeText(h));
         return string.Join(" · ", parts);
     }
@@ -371,19 +371,19 @@ public class R0926HuntCard : MonoBehaviour
     private static string Span(TimeSpan s)
     {
         int m = Mathf.Max(1, Mathf.CeilToInt((float)s.TotalMinutes));
-        if (m < 60) return m + T("분", "m");
-        if (m < 600) return m / 60 + T("시간", "h") + (m % 60 > 0 ? " " + m % 60 + T("분", "m") : "");
-        if (m < 2880) return (m + 30) / 60 + T("시간", "h");
-        return m / 1440 + T("일", "d");
+        if (m < 60) return m + T("분", "m", "分", "分钟", " min");
+        if (m < 600) return m / 60 + T("시간", "h", "時間", "小时", " h") + (m % 60 > 0 ? " " + m % 60 + T("분", "m", "分", "分钟", " min") : "");
+        if (m < 2880) return (m + 30) / 60 + T("시간", "h", "時間", "小时", " h");
+        return m / 1440 + T("일", "d", "日", "天", " días");
     }
 
     private static string TimeText(JSONNode h)
     {
         var now = DateTime.UtcNow;
         string status = h["status"];
-        if (status == "scheduled") { var s = When(h["starts_at"]); return s.HasValue ? T(Span(s.Value - now) + " 뒤 시작", "Starts in " + Span(s.Value - now)) : T("곧 시작", "Soon"); }
-        if (status == "live") { var e = When(h["ends_at"]); return e.HasValue ? T(Span(e.Value - now) + " 남음", Span(e.Value - now) + " left") : T("진행 중", "Live"); }
-        return status == "cancelled" ? T("취소됨", "Cancelled") : T("끝남", "Ended");
+        if (status == "scheduled") { var s = When(h["starts_at"]); return s.HasValue ? T(Span(s.Value - now) + " 뒤 시작", "Starts in " + Span(s.Value - now), Span(s.Value - now) + "後に開始", Span(s.Value - now) + "后开始", "Empieza en " + Span(s.Value - now)) : T("곧 시작", "Soon", "まもなく開始", "即将开始", "Pronto"); }
+        if (status == "live") { var e = When(h["ends_at"]); return e.HasValue ? T(Span(e.Value - now) + " 남음", Span(e.Value - now) + " left", "残り" + Span(e.Value - now), "剩余 " + Span(e.Value - now), "Quedan " + Span(e.Value - now)) : T("진행 중", "Live", "開催中", "进行中", "En curso"); }
+        return status == "cancelled" ? T("취소됨", "Cancelled", "中止", "已取消", "Cancelado") : T("끝남", "Ended", "終了", "已结束", "Terminado");
     }
 
     // ── 숨기기 ────────────────────────────────────────────
@@ -415,7 +415,7 @@ public class R0926HuntCard : MonoBehaviour
         Chips(durationChips, "duration", Durations, "60");
     }
 
-    private void Chips(RectTransform box, string key, (string v, string ko, string en)[] defs, string initial)
+    private void Chips(RectTransform box, string key, (string v, string ko, string en, string ja, string zh, string es)[] defs, string initial)
     {
         if (box == null || chipTemplate == null) return;
         picked[key] = initial;
@@ -424,7 +424,7 @@ public class R0926HuntCard : MonoBehaviour
             var c = Instantiate(chipTemplate, box);
             c.name = "Chip_" + d.v;
             c.SetActive(true);
-            SetText(c, "Label", Ko ? d.ko : d.en);
+            SetText(c, "Label", T(d.ko, d.en, d.ja, d.zh, d.es));
             string v = d.v;
             Wire(c.GetComponent<Button>(), () => { picked[key] = v; PaintChips(box, key); if (key == "mode") PaintCodeBox(); });
         }
@@ -451,23 +451,23 @@ public class R0926HuntCard : MonoBehaviour
 
     private void PaintGps()
     {
-        if (!TryLocation(out _, out _, out float acc)) { gpsText.text = T("위치를 찾는 중이에요…", "Finding your location…"); gpsText.color = Muted; return; }
+        if (!TryLocation(out _, out _, out float acc)) { gpsText.text = T("위치를 찾는 중이에요…", "Finding your location…", "位置を確認しています…", "正在获取位置…", "Buscando tu ubicación…"); gpsText.color = Muted; return; }
         int a = Mathf.RoundToInt(acc);
         bool good = acc > 0f && acc <= 30f;
-        gpsText.text = good ? T("지금 서 있는 자리에 숨겨요 · 정확도 " + a + "m", "Hidden right where you stand · accuracy " + a + "m")
-                            : T("정확도 " + a + "m — 하늘이 보이는 곳에서 잠시 기다려 주세요 (30m 이내)", "Accuracy " + a + "m — wait outdoors (need 30m)");
+        gpsText.text = good ? T("지금 서 있는 자리에 숨겨요 · 정확도 " + a + "m", "Hidden right where you stand · accuracy " + a + "m", "今立っている場所に隠します · 精度 " + a + "m", "藏在你现在站的位置 · 精度 " + a + "m", "Se esconde justo donde estás · precisión " + a + "m")
+                            : T("정확도 " + a + "m — 하늘이 보이는 곳에서 잠시 기다려 주세요 (30m 이내)", "Accuracy " + a + "m — wait outdoors (need 30m)", "精度 " + a + "m — 空が見える場所で少しお待ちください（30m以内）", "精度 " + a + "m — 请在能看到天空的地方稍等（需 30m 以内）", "Precisión " + a + "m — espera al aire libre (máx. 30m)");
         gpsText.color = good ? Teal : Amber;
     }
 
     private void PaintSubmit()
     {
-        if (submitLabel != null) submitLabel.text = busy ? T("숨기는 중…", "Hiding…") : T("이 자리에 보물 숨기기", "Hide the treasure here");
+        if (submitLabel != null) submitLabel.text = busy ? T("숨기는 중…", "Hiding…", "隠しています…", "正在藏宝…", "Escondiendo…") : T("이 자리에 보물 숨기기", "Hide the treasure here", "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí");
     }
 
     private IEnumerator Submit()
     {
         if (busy) yield break;
-        if (!TryLocation(out float lat, out float lon, out float acc)) { FormMsg(T("위치를 아직 못 받았어요", "Location not available yet")); yield break; }
+        if (!TryLocation(out float lat, out float lon, out float acc)) { FormMsg(T("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación")); yield break; }
         string title = titleInput != null ? titleInput.text.Trim() : "";
         if (title.Length == 0) { FormMsg(R0926HuntApi.ErrorText("title", Lang)); yield break; }
         var b = new JSONObject();
@@ -500,7 +500,7 @@ public class R0926HuntCard : MonoBehaviour
             foreach (var f in new[] { titleInput, hintInput, codeInput, questionInput, prizeInput }) if (f != null) f.text = "";
             R0926HuntList.Stale();
             string jc = j["join_code"];
-            Toast(string.IsNullOrEmpty(jc) ? T("보물을 숨겼어요!", "Treasure hidden!") : T("보물을 숨겼어요! 참가 코드 " + jc, "Hidden! Join code " + jc), 4f);
+            Toast(string.IsNullOrEmpty(jc) ? T("보물을 숨겼어요!", "Treasure hidden!", "宝を隠しました！", "宝藏已藏好！", "¡Tesoro escondido!") : T("보물을 숨겼어요! 참가 코드 " + jc, "Hidden! Join code " + jc, "宝を隠しました！参加コード " + jc, "宝藏已藏好！参加代码 " + jc, "¡Escondido! Código " + jc), 4f);
             StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt));
             yield break;
         }
@@ -551,7 +551,7 @@ public class R0926HuntCard : MonoBehaviour
         if (agreeButtonBg != null) agreeButtonBg.color = agreed ? Gold : new Color(1f, 1f, 1f, 0.1f);
         if (agreeButton != null) agreeButton.interactable = agreed;
         var l = agreeButton != null ? agreeButton.GetComponentInChildren<Text>() : null;
-        if (l != null) { l.text = T("동의하고 보물 숨기기", "Agree and hide a treasure"); l.color = agreed ? new Color(0.1f, 0.08f, 0.02f, 1f) : Muted; }
+        if (l != null) { l.text = T("동의하고 보물 숨기기", "Agree and hide a treasure", "同意して宝を隠す", "同意并藏宝", "Aceptar y esconder un tesoro"); l.color = agreed ? new Color(0.1f, 0.08f, 0.02f, 1f) : Muted; }
     }
 
     private IEnumerator Accept()
@@ -569,11 +569,11 @@ public class R0926HuntCard : MonoBehaviour
     {
         if (!R0926HuntApi.CanCall) { if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup(); yield break; }
         string c6 = joinCodeInput != null ? joinCodeInput.text.Trim() : "";
-        if (c6.Length < 6) { Toast(T("참가 코드 6자리를 넣어 주세요", "Enter the 6-character code"), 3f); yield break; }
+        if (c6.Length < 6) { Toast(T("참가 코드 6자리를 넣어 주세요", "Enter the 6-character code", "6桁の参加コードを入力してください", "请输入 6 位参加代码", "Introduce el código de 6 caracteres"), 3f); yield break; }
         long code = 0; JSONNode j = null;
         var b = new JSONObject(); b["code"] = c6;
         yield return R0926HuntApi.Post("/api/hunts/join_code", b, (c, r) => { code = c; j = r; });
-        if (code == 200) { if (joinCodeInput != null) joinCodeInput.text = ""; R0926HuntList.Stale(); Toast(T("참가했어요!", "Joined!"), 2.5f); StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt)); }
+        if (code == 200) { if (joinCodeInput != null) joinCodeInput.text = ""; R0926HuntList.Stale(); Toast(T("참가했어요!", "Joined!", "参加しました！", "已参加！", "¡Te uniste!"), 2.5f); StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt)); }
         else Toast(R0926HuntApi.ErrorText(j["error"], Lang), 3f);
     }
 
@@ -638,27 +638,27 @@ public class R0926HuntCard : MonoBehaviour
         if (dHostText != null)
         {
             string stars = host_["rating"].IsNull || host_["rating"].AsFloat <= 0 ? "" : "  ★" + host_["rating"].AsFloat.ToString("0.0", CultureInfo.InvariantCulture);
-            dHostText.text = T("주최 ", "Host ") + host_["username"] + stars + T("  · 주최 " + host_["hosted"].AsInt + "회", "  · hosted " + host_["hosted"].AsInt);
+            dHostText.text = T("주최 ", "Host ", "主催 ", "主办 ", "Organiza ") + host_["username"] + stars + T("  · 주최 " + host_["hosted"].AsInt + "회", "  · hosted " + host_["hosted"].AsInt, "  · 主催 " + host_["hosted"].AsInt + "回", "  · 主办 " + host_["hosted"].AsInt + " 次", "  · organizó " + host_["hosted"].AsInt);
         }
         var lines = new List<string>();
-        if (!string.IsNullOrEmpty(h["hint"])) lines.Add(T("힌트  ", "Hint  ") + h["hint"]);
-        lines.Add(T("찾는 방식  ", "How  ") + (h["mode"] == "code" ? T("코드 입력", "Enter a code") + (string.IsNullOrEmpty(h["question"]) ? "" : " — " + h["question"]) : T("먼저 터치한 사람", "First to touch")));
+        if (!string.IsNullOrEmpty(h["hint"])) lines.Add(T("힌트  ", "Hint  ", "ヒント  ", "提示  ", "Pista  ") + h["hint"]);
+        lines.Add(T("찾는 방식  ", "How  ", "見つけ方  ", "寻宝方式  ", "Cómo  ") + (h["mode"] == "code" ? T("코드 입력", "Enter a code", "コード入力", "输入代码", "Introducir código") + (string.IsNullOrEmpty(h["question"]) ? "" : " — " + h["question"]) : T("먼저 터치한 사람", "First to touch", "先にタッチした人", "最先触碰的人", "Primero en tocar")));
         int wm = h["winners_max"].AsInt;
-        lines.Add(T("당첨  ", "Winners  ") + (wm > 0 ? T(wm + "명 · " + h["found"].AsInt + "명 찾음", wm + " · " + h["found"].AsInt + " found") : T("찾는 사람 모두 · " + h["found"].AsInt + "명 찾음", "Everyone · " + h["found"].AsInt + " found")));
-        if (!string.IsNullOrEmpty(h["prize"])) lines.Add(T("상품  ", "Prize  ") + h["prize"]);
-        lines.Add(T("보이는 거리 ", "Visible within ") + h["visible_m"].AsInt + "m" + (h["radius_km"].IsNull ? "" : T(" · 참가 범위 ", " · area ") + h["radius_km"].AsFloat.ToString("0.#", CultureInfo.InvariantCulture) + "km"));
-        lines.Add(T("위치 공개  ", "Location  ") + (h["coord_mode"] == "exact" ? T("정확히", "exact") : h["coord_mode"] == "approx" ? T("대략 " + h["approx_m"].AsInt + "m 원", "approx. " + h["approx_m"].AsInt + "m") : T("비공개", "hidden")));
-        if (host && !string.IsNullOrEmpty(h["join_code"])) lines.Add(T("참가 코드  ", "Join code  ") + h["join_code"]);
+        lines.Add(T("당첨  ", "Winners  ", "当選  ", "中奖  ", "Ganadores  ") + (wm > 0 ? T(wm + "명 · " + h["found"].AsInt + "명 찾음", wm + " · " + h["found"].AsInt + " found", wm + "人 · " + h["found"].AsInt + "人発見", wm + " 人 · " + h["found"].AsInt + " 人找到", wm + " · " + h["found"].AsInt + " encontrados") : T("찾는 사람 모두 · " + h["found"].AsInt + "명 찾음", "Everyone · " + h["found"].AsInt + " found", "見つけた人全員 · " + h["found"].AsInt + "人発見", "找到的人都中奖 · " + h["found"].AsInt + " 人找到", "Todos · " + h["found"].AsInt + " encontrados")));
+        if (!string.IsNullOrEmpty(h["prize"])) lines.Add(T("상품  ", "Prize  ", "賞品  ", "奖品  ", "Premio  ") + h["prize"]);
+        lines.Add(T("보이는 거리 ", "Visible within ", "見える距離 ", "可见距离 ", "Visible a ") + h["visible_m"].AsInt + "m" + (h["radius_km"].IsNull ? "" : T(" · 참가 범위 ", " · area ", " · 参加範囲 ", " · 参加范围 ", " · área ") + h["radius_km"].AsFloat.ToString("0.#", CultureInfo.InvariantCulture) + "km"));
+        lines.Add(T("위치 공개  ", "Location  ", "位置の公開  ", "位置公开  ", "Ubicación  ") + (h["coord_mode"] == "exact" ? T("정확히", "exact", "正確", "精确", "exacta") : h["coord_mode"] == "approx" ? T("대략 " + h["approx_m"].AsInt + "m 원", "approx. " + h["approx_m"].AsInt + "m", "おおよそ " + h["approx_m"].AsInt + "m の円", "大致 " + h["approx_m"].AsInt + "m 范围", "aprox. " + h["approx_m"].AsInt + "m") : T("비공개", "hidden", "非公開", "不公开", "oculta")));
+        if (host && !string.IsNullOrEmpty(h["join_code"])) lines.Add(T("참가 코드  ", "Join code  ", "参加コード  ", "参加代码  ", "Código  ") + h["join_code"]);
         bool full = h["full"].AsBool;
-        lines.Add(T("참가  ", "Players  ") + PlayerCount(h) + T("명", "") + (full ? T(" · 마감", " · full") : ""));
+        lines.Add(T("참가  ", "Players  ", "参加  ", "参加  ", "Jugadores  ") + PlayerCount(h) + T("명", "", "人", "人", "") + (full ? T(" · 마감", " · full", " · 満員", " · 已满", " · completo") : ""));
         if (dInfo != null) dInfo.text = string.Join("\n", lines);
         if (dMine != null)
-            dMine.text = host ? (open ? T("내가 연 게임이에요 — 보물 근처에 가면 내 보물이 보여요", "You're the host — your treasure shows up when you're near it")
-                                      : T("내가 연 게임이에요", "You're the host"))
-                       : found ? T(me["rank"].AsInt + "번째로 찾았어요!", "You found it (#" + me["rank"].AsInt + ")")
-                       : me["gave_up"].AsBool ? T("못 찾았다고 남겼어요", "You marked it as not found")
-                       : joined ? T("참가 중이에요 — 보물 근처에 가면 금빛 상자가 보여요. 두 번 톡톡 눌러 열어요", "Joined — get close, then double-tap the golden box")
-                       : open && full ? T("참가 인원이 다 찼어요 — 누가 나가면 자리가 생겨요", "This game is full — a spot opens if someone leaves")
+            dMine.text = host ? (open ? T("내가 연 게임이에요 — 보물 근처에 가면 내 보물이 보여요", "You're the host — your treasure shows up when you're near it", "あなたが主催したゲームです — 宝の近くに行くと自分の宝が見えます", "这是你主办的游戏 — 走近宝藏就能看到", "Organizas este juego — verás tu tesoro cuando estés cerca")
+                                      : T("내가 연 게임이에요", "You're the host", "あなたが主催したゲームです", "这是你主办的游戏", "Organizas este juego"))
+                       : found ? T(me["rank"].AsInt + "번째로 찾았어요!", "You found it (#" + me["rank"].AsInt + ")", me["rank"].AsInt + "番目に見つけました！", "你第 " + me["rank"].AsInt + " 个找到了！", "¡Lo encontraste! (#" + me["rank"].AsInt + ")")
+                       : me["gave_up"].AsBool ? T("못 찾았다고 남겼어요", "You marked it as not found", "見つけられなかったと記録しました", "已标记为未找到", "Lo marcaste como no encontrado")
+                       : joined ? T("참가 중이에요 — 보물 근처에 가면 금빛 상자가 보여요. 두 번 톡톡 눌러 열어요", "Joined — get close, then double-tap the golden box", "参加中です — 宝に近づくと金色の箱が見えます。2回タップして開けましょう", "已参加 — 走近宝藏会看到金色宝箱，双击即可打开", "Participando — acércate y toca dos veces la caja dorada")
+                       : open && full ? T("참가 인원이 다 찼어요 — 누가 나가면 자리가 생겨요", "This game is full — a spot opens if someone leaves", "参加人数がいっぱいです — 誰かが抜けると空きが出ます", "参加人数已满 — 有人退出就会空出名额", "Este juego está completo — habrá sitio si alguien sale")
                        : "";
         PaintDistance();
 
@@ -672,7 +672,7 @@ public class R0926HuntCard : MonoBehaviour
         if (profileButton != null && me["can_rate"].AsBool)
         {
             var l = profileButton.GetComponentInChildren<Text>();
-            if (l != null) l.text = me["my_rating"].AsInt > 0 ? T("주최자 프로필에서 별점 고치기", "Edit your rating on the host's profile") : T("주최자 프로필에서 별점 남기기", "Rate on the host's profile");
+            if (l != null) l.text = me["my_rating"].AsInt > 0 ? T("주최자 프로필에서 별점 고치기", "Edit your rating on the host's profile", "主催者のプロフィールで評価を修正", "在主办者资料中修改评分", "Edita tu valoración en el perfil del organizador") : T("주최자 프로필에서 별점 남기기", "Rate on the host's profile", "主催者のプロフィールで評価する", "在主办者资料中评分", "Valora en el perfil del organizador");
         }
         if (msgBox != null) msgBox.SetActive(found || host);
         // 코드 칸은 근접 확인(Near)이 참가자에게 보이는 거리 안일 때만 켠다 — 주최자·찾은 사람·끝난 게임엔 없다
@@ -715,11 +715,11 @@ public class R0926HuntCard : MonoBehaviour
         else if (have && h.HasKey("approx_lat"))
         {
             float m = Meters(lat, lon, h["approx_lat"].AsDouble, h["approx_lon"].AsDouble);
-            d = m <= h["approx_m"].AsFloat ? T("대략 위치 원 안이에요", "inside the rough area") : T("약 ", "about ") + Dist(Mathf.Round(m / 100f) * 100f);
+            d = m <= h["approx_m"].AsFloat ? T("대략 위치 원 안이에요", "inside the rough area", "おおよその範囲の中です", "在大致范围内", "dentro del área aproximada") : T("약 ", "about ", "約 ", "约 ", "unos ") + Dist(Mathf.Round(m / 100f) * 100f);
         }
-        else if (h.HasKey("distance_m")) d = (h["coord_mode"] == "approx" ? T("약 ", "about ") : "") + Dist(h["distance_m"].AsFloat);
+        else if (h.HasKey("distance_m")) d = (h["coord_mode"] == "approx" ? T("약 ", "about ", "約 ", "约 ", "unos ") : "") + Dist(h["distance_m"].AsFloat);
         else if (h.HasKey("distance_text")) d = h["distance_text"];
-        dNear.text = d != null ? T("나와의 거리  ", "Distance  ") + d : T("나와의 거리 — 위치를 찾는 중이에요", "Distance — finding your location");
+        dNear.text = d != null ? T("나와의 거리  ", "Distance  ", "自分との距離  ", "与我的距离  ", "Distancia  ") + d : T("나와의 거리 — 위치를 찾는 중이에요", "Distance — finding your location", "自分との距離 — 位置を確認しています", "与我的距离 — 正在获取位置", "Distancia — buscando tu ubicación");
         dNear.color = Ink;
     }
 
@@ -748,7 +748,7 @@ public class R0926HuntCard : MonoBehaviour
     {
         var h = current;
         if (h == null || h["status"] != "live" || !h["me"]["joined"].AsBool || h["is_host"].AsBool || h["me"]["rank"].AsInt > 0) yield break;
-        if (!TryLocation(out float lat, out float lon, out float acc)) { if (dNear != null) dNear.text = T("위치를 찾는 중이에요…", "Finding your location…"); yield break; }
+        if (!TryLocation(out float lat, out float lon, out float acc)) { if (dNear != null) dNear.text = T("위치를 찾는 중이에요…", "Finding your location…", "位置を確認しています…", "正在获取位置…", "Buscando tu ubicación…"); yield break; }
         var b = new JSONObject(); b["lat"] = lat; b["lon"] = lon; b["acc"] = acc;
         long code = 0; JSONNode j = null;
         int id = h["id"].AsInt;
@@ -757,13 +757,13 @@ public class R0926HuntCard : MonoBehaviour
         if (current == null || current["id"].AsInt != id || code != 200) yield break;
         string band = j["band"];
         bool visible = j["visible"].AsBool;
-        string bandText = band == "30m" ? T("30m 안 — 거의 다 왔어요!", "Within 30m — almost there!")
-                        : band == "100m" ? T("100m 안", "Within 100m")
-                        : band == "300m" ? T("300m 안", "Within 300m")
-                        : band == "1km" ? T("1km 안", "Within 1km")
-                        : T("아직 멀어요", "Still far");
+        string bandText = band == "30m" ? T("30m 안 — 거의 다 왔어요!", "Within 30m — almost there!", "30m以内 — もうすぐです！", "30m 以内 — 快到了！", "A menos de 30m — ¡casi llegas!")
+                        : band == "100m" ? T("100m 안", "Within 100m", "100m以内", "100m 以内", "A menos de 100m")
+                        : band == "300m" ? T("300m 안", "Within 300m", "300m以内", "300m 以内", "A menos de 300m")
+                        : band == "1km" ? T("1km 안", "Within 1km", "1km以内", "1km 以内", "A menos de 1km")
+                        : T("아직 멀어요", "Still far", "まだ遠いです", "还很远", "Aún lejos");
         if (j.HasKey("distance_m")) bandText += " · " + Dist(j["distance_m"].AsFloat);
-        if (visible) bandText = T("보물이 보이는 거리예요 — 금빛 상자를 두 번 톡톡 눌러 열어요", "In view — double-tap the golden box to open it");
+        if (visible) bandText = T("보물이 보이는 거리예요 — 금빛 상자를 두 번 톡톡 눌러 열어요", "In view — double-tap the golden box to open it", "宝が見える距離です — 金色の箱を2回タップして開けましょう", "已进入可见范围 — 双击金色宝箱即可打开", "A la vista — toca dos veces la caja dorada para abrirla");
         if (dNear != null) { dNear.text = bandText; dNear.color = visible ? Gold : Ink; }
         // 가까워지면 진동 — 단계가 한 칸이라도 가까워질 때만 (상세를 연 뒤 첫 확인은 기준만 잡는다 · 설정에서 끌 수 있다)
         int rank = visible ? 5 : band == "30m" ? 4 : band == "100m" ? 3 : band == "300m" ? 2 : band == "1km" ? 1 : 0;
@@ -792,17 +792,17 @@ public class R0926HuntCard : MonoBehaviour
                 R0926HuntTreasure.Untrack(id);
                 R0926HuntList.Stale();
                 if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, current["prize"], current["host"]["username"]))
-                    Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt), 4f);
+                    Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt, "宝を見つけました！" + j["rank"].AsInt + "番目", "找到宝藏了！第 " + j["rank"].AsInt + " 个", "¡Lo encontraste! #" + j["rank"].AsInt), 4f);
                 StartCoroutine(OpenDetail(id));
                 break;
-            case "need_code": Toast(T("코드를 넣어 주세요", "Enter the code") + (string.IsNullOrEmpty(j["question"]) ? "" : " — " + j["question"]), 3.5f); if (claimCodeBox != null) claimCodeBox.SetActive(true); break;
-            case "wrong_code": Toast(T("코드가 달라요 — 남은 기회 " + j["tries_left"].AsInt + "번", "Wrong code — " + j["tries_left"].AsInt + " tries left"), 3f); break;
-            case "locked": Toast(T("10분 동안 코드를 넣을 수 없어요", "Code locked for 10 minutes"), 3f); break;
-            case "too_far": Toast(T("조금만 더 가까이 — " + j["remaining_m"].AsInt + "m", "A bit closer — " + j["remaining_m"].AsInt + "m"), 3f); break;
-            case "taken": Toast(T("아쉽게도 다른 사람이 먼저 찾았어요", "Someone found it first"), 3.5f); StartCoroutine(OpenDetail(id)); break;
-            case "ended": Toast(T("게임이 끝났어요", "The game has ended"), 3f); StartCoroutine(OpenDetail(id)); break;
+            case "need_code": Toast(T("코드를 넣어 주세요", "Enter the code", "コードを入力してください", "请输入代码", "Introduce el código") + (string.IsNullOrEmpty(j["question"]) ? "" : " — " + j["question"]), 3.5f); if (claimCodeBox != null) claimCodeBox.SetActive(true); break;
+            case "wrong_code": Toast(T("코드가 달라요 — 남은 기회 " + j["tries_left"].AsInt + "번", "Wrong code — " + j["tries_left"].AsInt + " tries left", "コードが違います — 残り " + j["tries_left"].AsInt + "回", "代码错误 — 还剩 " + j["tries_left"].AsInt + " 次机会", "Código incorrecto — quedan " + j["tries_left"].AsInt + " intentos"), 3f); break;
+            case "locked": Toast(T("10분 동안 코드를 넣을 수 없어요", "Code locked for 10 minutes", "10分間コードを入力できません", "10 分钟内无法输入代码", "Código bloqueado 10 minutos"), 3f); break;
+            case "too_far": Toast(T("조금만 더 가까이 — " + j["remaining_m"].AsInt + "m", "A bit closer — " + j["remaining_m"].AsInt + "m", "もう少し近くへ — " + j["remaining_m"].AsInt + "m", "再靠近一点 — " + j["remaining_m"].AsInt + "m", "Un poco más cerca — " + j["remaining_m"].AsInt + "m"), 3f); break;
+            case "taken": Toast(T("아쉽게도 다른 사람이 먼저 찾았어요", "Someone found it first", "残念、ほかの人が先に見つけました", "可惜，别人先找到了", "Alguien lo encontró primero"), 3.5f); StartCoroutine(OpenDetail(id)); break;
+            case "ended": Toast(T("게임이 끝났어요", "The game has ended", "ゲームが終了しました", "游戏已结束", "El juego terminó"), 3f); StartCoroutine(OpenDetail(id)); break;
             case "weak_gps": Toast(R0926HuntApi.ErrorText("weak_gps", Lang), 3.5f); break;
-            case "device_used": Toast(T("이 기기로는 이미 찾았어요", "Already found on this device"), 3f); break;
+            case "device_used": Toast(T("이 기기로는 이미 찾았어요", "Already found on this device", "この端末ではすでに見つけています", "此设备已经找到过了", "Ya se encontró en este dispositivo"), 3f); break;
             default: Toast(R0926HuntApi.ErrorText(result ?? j["error"], Lang), 3f); break;
         }
     }
@@ -840,13 +840,13 @@ public class R0926HuntCard : MonoBehaviour
             if (code == 200)
             {
                 if (same && j.HasKey("ends_at")) { current["ends_at"] = j["ends_at"]; PaintDetail(); StartCoroutine(ReloadDetail(id)); }   // 소식 줄('1시간 늘었어요')까지 — 보던 자리는 그대로
-                Toast(minutes % 1440 == 0 ? T(minutes / 1440 + "일 늘렸어요", "Extended by " + minutes / 1440 + (minutes == 1440 ? " day" : " days"))
-                                          : T(minutes / 60 + "시간 늘렸어요", "Extended by " + minutes / 60 + (minutes == 60 ? " hour" : " hours")), 2.5f);
+                Toast(minutes % 1440 == 0 ? T(minutes / 1440 + "일 늘렸어요", "Extended by " + minutes / 1440 + (minutes == 1440 ? " day" : " days"), minutes / 1440 + "日延長しました", "已延长 " + minutes / 1440 + " 天", "Ampliado " + minutes / 1440 + (minutes == 1440 ? " día" : " días"))
+                                          : T(minutes / 60 + "시간 늘렸어요", "Extended by " + minutes / 60 + (minutes == 60 ? " hour" : " hours"), minutes / 60 + "時間延長しました", "已延长 " + minutes / 60 + " 小时", "Ampliado " + minutes / 60 + (minutes == 60 ? " hora" : " horas")), 2.5f);
             }
             else
             {
                 if (same && prevEnd != null) { current["ends_at"] = prevEnd; PaintDetail(); }
-                Toast(j["error"] == "duration" ? T("최대 " + j["max_min"].AsInt / 1440 + "일까지만 늘릴 수 있어요", "Up to " + j["max_min"].AsInt / 1440 + " days in total")
+                Toast(j["error"] == "duration" ? T("최대 " + j["max_min"].AsInt / 1440 + "일까지만 늘릴 수 있어요", "Up to " + j["max_min"].AsInt / 1440 + " days in total", "延長できるのは合計 " + j["max_min"].AsInt / 1440 + "日までです", "最多只能延长到 " + j["max_min"].AsInt / 1440 + " 天", "Hasta " + j["max_min"].AsInt / 1440 + " días en total")
                                                : R0926HuntApi.ErrorText(j["error"], Lang), 3f);
             }
             yield break;
@@ -854,11 +854,11 @@ public class R0926HuntCard : MonoBehaviour
         if (code == 200)
         {
             R0926HuntList.Stale();   // 참가·나가기·포기·마침 — 장소 목록의 보물찾기 줄을 다음에 다시 받는다
-            Toast(what == "join" ? T("참가했어요! 보물 근처에 가 보세요", "Joined! Head to the treasure")
-                : what == "leave" ? T("나왔어요 — 이 게임 알림은 더 오지 않아요", "Left — no more alerts from this game")
-                : what == "giveup" ? T("못 찾았다고 남겼어요", "Marked as not found")
-                : what == "end" ? T("게임을 마쳤어요", "Game ended")
-                : T("위치를 공개했어요", "Location revealed"), 2.5f);
+            Toast(what == "join" ? T("참가했어요! 보물 근처에 가 보세요", "Joined! Head to the treasure", "参加しました！宝の近くへ行ってみましょう", "已参加！去宝藏附近看看吧", "¡Te uniste! Ve hacia el tesoro")
+                : what == "leave" ? T("나왔어요 — 이 게임 알림은 더 오지 않아요", "Left — no more alerts from this game", "退出しました — このゲームの通知は届きません", "已退出 — 不会再收到此游戏的通知", "Saliste — no recibirás más avisos de este juego")
+                : what == "giveup" ? T("못 찾았다고 남겼어요", "Marked as not found", "見つけられなかったと記録しました", "已标记为未找到", "Marcado como no encontrado")
+                : what == "end" ? T("게임을 마쳤어요", "Game ended", "ゲームを終了しました", "游戏已结束", "Juego terminado")
+                : T("위치를 공개했어요", "Location revealed", "位置を公開しました", "已公开位置", "Ubicación revelada"), 2.5f);
             if (what == "leave") { R0926HuntTreasure.Untrack(id); ShowHub(); }
             else StartCoroutine(OpenDetail(id));
         }
@@ -876,7 +876,7 @@ public class R0926HuntCard : MonoBehaviour
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Post("/api/hunts/" + id + "/message", b, (c, r) => { code = c; j = r; });
         busy = false;
-        if (code == 200) { msgInput.text = ""; Toast(T("참가자·주최자에게 보냈어요", "Sent to players and host"), 2.5f); StartCoroutine(OpenDetail(id)); }
+        if (code == 200) { msgInput.text = ""; Toast(T("참가자·주최자에게 보냈어요", "Sent to players and host", "参加者・主催者に送りました", "已发送给参加者和主办者", "Enviado a jugadores y organizador"), 2.5f); StartCoroutine(OpenDetail(id)); }
         else Toast(R0926HuntApi.ErrorText(j["error"], Lang), 3f);
     }
 

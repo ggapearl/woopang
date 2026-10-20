@@ -128,9 +128,7 @@ namespace Redesign0926
 
             // 아래 시트들 → 가운데 폭 제한
             var more = Find(root, "MoreSheet0926");
-            if (more != null) Add(more, BottomSheet(450, 40 + 150 + 16));
-            var moreCancel = Find(root, "MoreCancel0926");
-            if (moreCancel != null) Add(moreCancel, BottomSheet(150, 40));
+            if (more != null) Add(more, BottomSheet(MoreSheetH, 40));   // 취소는 카드 안 칸 (v30)
             var rep = Find(root, "ReportSheet0926");
             if (rep != null)
             {

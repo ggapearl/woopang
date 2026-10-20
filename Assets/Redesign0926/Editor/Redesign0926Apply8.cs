@@ -17,6 +17,7 @@ namespace Redesign0926
     public static partial class Redesign0926Apply
     {
         private const string FixPanel = "FullScreenPanel/FullScreenGuide/FixButtonPanel/";
+        private const string MoreCancelPath = "MoreSheet0926/Tiles0926/MoreCancel0926";   // v30 부터 카드 안 마지막 칸 (예전엔 카드 밑 따로)
 
         private static void ApplySheetClosing(Transform root, List<string> log)
         {
@@ -28,7 +29,7 @@ namespace Redesign0926
             {
                 "AskAISheet0926/Cancel0926",
                 "FullScreenPanel/ReportSheet0926/Cancel0926",
-                FixPanel + "MoreCancel0926",
+                FixPanel + MoreCancelPath,
                 "FollowPanel/Background/Header/BackButton",
                 "FollowPanel/UnfollowConfirmDialog/DialogBox/ButtonContainer/CancelButton",
                 "DanceAnimPanel/CancelButton",
@@ -134,8 +135,8 @@ namespace Redesign0926
             S("AskAISheet0926/Card0926", "AskAISheet0926/Cancel0926", new[] { "AskAISheet0926/Cancel0926" }, new[] { "AskAISheet0926/Cancel0926" }),
             S("FullScreenPanel/ReportSheet0926/Card0926", "FullScreenPanel/ReportSheet0926/Cancel0926",
               new[] { "FullScreenPanel/ReportSheet0926/Cancel0926" }, new[] { "FullScreenPanel/ReportSheet0926/Cancel0926" }),
-            S(FixPanel + "MoreSheet0926", FixPanel + "MoreCancel0926",
-              new[] { FixPanel + "MoreCancel0926", "FullScreenPanel/FullScreenGuide/TopUIPanel/FixButton_Opposite" }, new[] { FixPanel + "MoreCancel0926" }),
+            S(FixPanel + "MoreSheet0926", FixPanel + MoreCancelPath,
+              new[] { FixPanel + MoreCancelPath, "FullScreenPanel/FullScreenGuide/TopUIPanel/FixButton_Opposite" }),
             S("FollowPanel/Background", "FollowPanel/Background/Header/BackButton", new[] { "FollowPanel/Background/Header/BackButton" }),
             S("DanceAnimPanel", "DanceAnimPanel/CancelButton", new[] { "DanceAnimPanel/CancelButton" }),
             S("PhotoSourceDialog/DialogPanel/BottomContainer", "PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton",

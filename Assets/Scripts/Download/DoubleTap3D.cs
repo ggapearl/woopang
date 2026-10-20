@@ -858,7 +858,7 @@ public class DoubleTap3D : MonoBehaviour
             var ctrl = DanceAnimController.Instance ?? DanceAnimController.EnsureInstance();
             if (ctrl != null)
             {
-                string displayName = !string.IsNullOrEmpty(placeName) ? placeName : "3D 콘텐츠";
+                string displayName = !string.IsNullOrEmpty(placeName) ? placeName : R0926LocalizedText.Say("3D 콘텐츠", "3D content", "3Dコンテンツ", "3D 内容", "Contenido 3D");
                 bool handled = ctrl.OnAnimCubeDoubleTapped(id, displayName);
                 if (handled)
                 {
@@ -978,7 +978,7 @@ public class DoubleTap3D : MonoBehaviour
                             string content = data.content;
                             if (content.Length > 40)
                             {
-                                content = content.Substring(0, 40) + "... 더보기";
+                                content = content.Substring(0, 40) + "... " + R0926LocalizedText.Say("더보기", "more", "もっと見る", "更多", "más");
                             }
                             // 콜론 제거, 띄어쓰기 추가
                             previewText.text = $"<b>{data.username}</b>  {content}";
@@ -1353,16 +1353,14 @@ public class DoubleTap3D : MonoBehaviour
             if (isPlaceInfoPage && isFullscreen)
             {
                 List<string> infoLines = new List<string>();
-                bool isKorean = Application.systemLanguage == SystemLanguage.Korean;
-
                 if (!string.IsNullOrEmpty(tel))
-                    infoLines.Add($"{(isKorean ? "전화번호" : "Phone")}: {tel}");
+                    infoLines.Add(R0926LocalizedText.Say("전화번호", "Phone", "電話番号", "电话", "Teléfono") + ": " + tel);
                 if (!string.IsNullOrEmpty(address))
-                    infoLines.Add($"{(isKorean ? "주소" : "Address")}: {address}");
+                    infoLines.Add(R0926LocalizedText.Say("주소", "Address", "住所", "地址", "Dirección") + ": " + address);
                 if (!string.IsNullOrEmpty(overview))
-                    infoLines.Add($"{(isKorean ? "개요" : "Overview")}: {overview}");
+                    infoLines.Add(R0926LocalizedText.Say("개요", "Overview", "概要", "简介", "Descripción") + ": " + overview);
                 if (!string.IsNullOrEmpty(petInfo))
-                    infoLines.Add($"{(isKorean ? "반려견 동반정보" : "Pet Companion Info")}:\n{petInfo}");
+                    infoLines.Add(R0926LocalizedText.Say("반려견 동반정보", "Pet Companion Info", "ペット同伴情報", "宠物同行信息", "Información para mascotas") + ":\n" + petInfo);
 
                 if (placeInfoText != null)
                 {

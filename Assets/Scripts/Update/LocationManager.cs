@@ -229,7 +229,7 @@ public class LocationManager : MonoBehaviour
                     }
                     else
                     {
-                        textBuilder.Append(currentLanguage == "ko" ? "주소 정보 없음" : "No address");
+                        textBuilder.Append(R0926LocalizedText.Say("주소 정보 없음", "No address", "住所情報なし", "无地址信息", "Sin dirección"));
                     }
 
                     Remember(latitude, longitude);

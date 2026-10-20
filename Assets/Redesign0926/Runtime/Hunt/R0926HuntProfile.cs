@@ -98,10 +98,20 @@ public class R0926HuntProfile : MonoBehaviour
     private static readonly CultureInfo CI = CultureInfo.InvariantCulture;
 
     // 신고 사유 — 서버가 준 것만, 이 순서로 (서버 JSON 은 이름순으로 온다)
-    private static readonly (string key, string en)[] HostReasons =
-        { ("danger", "Hidden in a dangerous place"), ("no_prize", "Didn't give the promised prize"), ("fake", "Fake or scam"), ("harass", "Rude words or behavior"), ("other", "Other") };
-    private static readonly (string key, string en)[] ReviewReasons =
-        { ("abuse", "Abuse or insults"), ("fake", "False review"), ("other", "Other") };
+    private static readonly (string key, string en, string ja, string zh, string es)[] HostReasons =
+    {
+        ("danger", "Hidden in a dangerous place", "危険な場所に隠されていた", "藏在危险的地方", "Escondido en un lugar peligroso"),
+        ("no_prize", "Didn't give the promised prize", "約束の賞品をもらえなかった", "没有给承诺的奖品", "No entregó el premio prometido"),
+        ("fake", "Fake or scam", "偽物・詐欺", "虚假或诈骗", "Falso o estafa"),
+        ("harass", "Rude words or behavior", "失礼な言動", "言行无礼", "Palabras o conducta ofensivas"),
+        ("other", "Other", "その他", "其他", "Otro"),
+    };
+    private static readonly (string key, string en, string ja, string zh, string es)[] ReviewReasons =
+    {
+        ("abuse", "Abuse or insults", "暴言・誹謗中傷", "辱骂或诽谤", "Insultos o abuso"),
+        ("fake", "False review", "虚偽のレビュー", "虚假评价", "Reseña falsa"),
+        ("other", "Other", "その他", "其他", "Otro"),
+    };
 
     private static string expandFor;    // 곧 열릴 이 사람 프로필은 펼친 채로
     private static string expandHunt;   // 별점 남길 게임을 이것으로 (게임 상세·별점 알림에서 왔을 때)
@@ -123,7 +133,7 @@ public class R0926HuntProfile : MonoBehaviour
     private TextAnchor baseAlign;
 
     private static string Lang => R0926LocalizedText.Lang();
-    private static string T(string ko, string en) => Lang == "ko" ? ko : en;
+    private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
     /// <summary>곧 열릴 이 사람 프로필은 보물찾기 칸을 펼친 채로 — toForm 이면 별점 남기기까지 내린다 (huntId 게임을 골라 둔 채)</summary>
     public static void ExpandNext(string userId, bool toForm, string huntId = null)
@@ -255,14 +265,14 @@ public class R0926HuntProfile : MonoBehaviour
         if (hosts)
         {
             string line2 = !host["rating"].IsNull ? Stars(host["rating"].AsFloat) + " <b>" + host["rating"].AsFloat.ToString("0.0", CI) + "</b>"
-                         : hosted > 0 ? T("평가 모으는 중", "Collecting ratings") : T("진행 중", "Live now");
+                         : hosted > 0 ? T("평가 모으는 중", "Collecting ratings", "評価を集計中", "正在收集评分", "Reuniendo valoraciones") : T("진행 중", "Live now", "開催中", "进行中", "En curso");
             if (columnMain != null) columnMain.text = "<size=88><b>" + hosted + "</b></size>\n<size=38><color=" + GoldHex + ">" + line2 + "</color></size>";
-            if (columnLabel != null) columnLabel.text = T("주최", "Hosted");
+            if (columnLabel != null) columnLabel.text = T("주최", "Hosted", "主催", "主办", "Organizados");
         }
         else
         {
-            if (columnMain != null) columnMain.text = "<size=88><b>" + joined + "</b></size>\n<size=38><color=" + TealHex + ">" + T("진행 중", "Live now") + "</color></size>";
-            if (columnLabel != null) columnLabel.text = T("참여", "Joined");
+            if (columnMain != null) columnMain.text = "<size=88><b>" + joined + "</b></size>\n<size=38><color=" + TealHex + ">" + T("진행 중", "Live now", "開催中", "进行中", "En curso") + "</color></size>";
+            if (columnLabel != null) columnLabel.text = T("참여", "Joined", "参加", "参加", "Jugando");
         }
         PaintSection();
     }
@@ -314,8 +324,8 @@ public class R0926HuntProfile : MonoBehaviour
         int hosted = host["hosted"].AsInt;
         bool hosts = hosted > 0 || host["open"].Count > 0;
         if (headRight != null)
-            headRight.text = hosts ? (mine ? T("내 주최 기록", "My hosting") : T("주최 기록 · 리뷰", "Hosting · reviews"))
-                                   : (mine ? T("내가 참여 중", "I'm playing") : T("참여 중", "Playing"));
+            headRight.text = hosts ? (mine ? T("내 주최 기록", "My hosting", "自分の主催記録", "我的主办记录", "Lo que organicé") : T("주최 기록 · 리뷰", "Hosting · reviews", "主催記録 · レビュー", "主办记录 · 评价", "Organizados · reseñas"))
+                                   : (mine ? T("내가 참여 중", "I'm playing", "参加中のゲーム", "我正在参加", "Estoy jugando") : T("참여 중", "Playing", "参加中", "参加中", "Jugando"));
 
         // 주최 정지 — 본인(과 관리자)에게만 온다
         bool suspended = data["suspended"].AsBool;
@@ -326,10 +336,10 @@ public class R0926HuntProfile : MonoBehaviour
         if (recordBox != null) recordBox.SetActive(hosted > 0);
         if (hosted > 0 && recordNums != null && recordNums.Length >= 4)
         {
-            Num(recordNums[0], hosted.ToString(), T("주최", "hosted"));
-            Num(recordNums[1], host["hosted_30d"].AsInt.ToString(), T("최근 30일", "30 days"));
-            Num(recordNums[2], host["avg_participants"].AsFloat.ToString("0.#", CI), T("평균 참가", "avg players"));
-            Num(recordNums[3], Ago(When(host["last_at"]), false), T("마지막", "last"));
+            Num(recordNums[0], hosted.ToString(), T("주최", "hosted", "主催", "主办", "organizados"));
+            Num(recordNums[1], host["hosted_30d"].AsInt.ToString(), T("최근 30일", "30 days", "直近30日", "近 30 天", "30 días"));
+            Num(recordNums[2], host["avg_participants"].AsFloat.ToString("0.#", CI), T("평균 참가", "avg players", "平均参加", "平均参加", "media jugadores"));
+            Num(recordNums[3], Ago(When(host["last_at"]), false), T("마지막", "last", "最終", "最近", "último"));
             if (recordFoot != null) recordFoot.text = Foot(host);
         }
 
@@ -349,13 +359,13 @@ public class R0926HuntProfile : MonoBehaviour
             float r = host["rating"].AsFloat;
             if (rateNum != null) rateNum.text = r.ToString("0.0", CI);
             if (rateStars != null) rateStars.text = Stars(r);
-            if (rateCount != null) rateCount.text = T(raters + "명 평가", raters + (raters == 1 ? " rating" : " ratings"));
+            if (rateCount != null) rateCount.text = T(raters + "명 평가", raters + (raters == 1 ? " rating" : " ratings"), raters + "人が評価", raters + " 人评分", raters + (raters == 1 ? " valoración" : " valoraciones"));
         }
         else
         {
             if (rateNum != null) rateNum.text = "–";
-            if (rateStars != null) rateStars.text = "<size=40>" + T("평가 모으는 중", "Collecting ratings") + "</size>";
-            if (rateCount != null) rateCount.text = raters > 0 ? T(raters + "명 평가", raters + (raters == 1 ? " rating" : " ratings")) : T("아직 평가가 없어요", "No ratings yet");
+            if (rateStars != null) rateStars.text = "<size=40>" + T("평가 모으는 중", "Collecting ratings", "評価を集計中", "正在收集评分", "Reuniendo valoraciones") + "</size>";
+            if (rateCount != null) rateCount.text = raters > 0 ? T(raters + "명 평가", raters + (raters == 1 ? " rating" : " ratings"), raters + "人が評価", raters + " 人评分", raters + (raters == 1 ? " valoración" : " valoraciones")) : T("아직 평가가 없어요", "No ratings yet", "まだ評価がありません", "还没有评分", "Aún no hay valoraciones");
         }
 
         PaintForm(me, mine);
@@ -369,7 +379,7 @@ public class R0926HuntProfile : MonoBehaviour
         if (openTemplate == null || openList == null) return;
         var row = Instantiate(openTemplate, openList);
         row.SetActive(true);
-        string tag = joined ? "<color=" + TealHex + ">" + T("참여", "Joined") + "</color>  " : "<color=" + GoldHex + ">" + T("주최", "Host") + "</color>  ";
+        string tag = joined ? "<color=" + TealHex + ">" + T("참여", "Joined", "参加", "参加", "Jugando") + "</color>  " : "<color=" + GoldHex + ">" + T("주최", "Host", "主催", "主办", "Organiza") + "</color>  ";
         SetText(row, "Title", tag + (h["official"].AsBool ? "★ " : "") + ((string)h["title"]).Replace("<", "＜"));
         SetText(row, "Sub", OpenSub(h));
         var dot = row.transform.Find("Dot")?.GetComponent<Image>();
@@ -387,10 +397,13 @@ public class R0926HuntProfile : MonoBehaviour
     {
         // 신고가 쌓여 멈춘 것(서버: '30일 안에 참가자 3명이 신고')과 관리자가 따로 멈춘 것
         string lead = string.IsNullOrEmpty(reason) || reason.Contains("신고")
-            ? T("최근 30일 동안 참가자 3명이 신고해 ", "3 participants reported you in 30 days — ")
+            ? T("최근 30일 동안 참가자 3명이 신고해 ", "3 participants reported you in 30 days — ", "直近30日間に参加者3人から通報があったため、", "近 30 天内有 3 名参加者举报了你，", "3 participantes te denunciaron en 30 días — ")
             : reason + " — ";
         return lead + T("<b>새 보물찾기를 열 수 없어요.</b> 관리자가 확인한 뒤 풀어 드려요. 이미 진행 중인 게임은 그대로예요.",
-                        "<b>you can't open new hunts.</b> An admin will review and lift it. Games already running continue.");
+                        "<b>you can't open new hunts.</b> An admin will review and lift it. Games already running continue.",
+                        "<b>新しい宝探しを開催できません。</b>管理者が確認したあと解除します。すでに進行中のゲームはそのまま続きます。",
+                        "<b>暂时无法发起新的寻宝。</b>管理员确认后会为你解除。已在进行的游戏不受影响。",
+                        "<b>no puedes abrir nuevas búsquedas.</b> Un administrador lo revisará y lo levantará. Los juegos en curso siguen.");
     }
 
     private static string Foot(JSONNode host)
@@ -398,12 +411,12 @@ public class R0926HuntProfile : MonoBehaviour
         var first = When(host["first_at"]);
         if (!first.HasValue) return "";
         var f = first.Value.ToLocalTime();
-        string s = T("첫 주최 " + f.Month + "월 " + f.Day + "일", "First hosted " + f.ToString("MMM d", CI));
+        string s = T("첫 주최 " + f.Month + "월 " + f.Day + "일", "First hosted " + f.ToString("MMM d", CI), "初主催 " + f.Month + "月" + f.Day + "日", "首次主办 " + f.Month + "月" + f.Day + "日", "Primer juego: " + f.Day + "/" + f.Month);
         int hosted = host["hosted"].AsInt;
         double days = Math.Max(1.0, (DateTime.UtcNow - first.Value).TotalDays);
         double perWeek = hosted / Math.Max(1.0, days / 7.0), perMonth = hosted / Math.Max(1.0, days / 30.0);
-        if (days >= 7 && perWeek >= 1) s += T(" · 주 " + Math.Round(perWeek) + "회꼴", " · ~" + Math.Round(perWeek) + "/week");
-        else if (days >= 30 && perMonth >= 1) s += T(" · 월 " + Math.Round(perMonth) + "회꼴", " · ~" + Math.Round(perMonth) + "/month");
+        if (days >= 7 && perWeek >= 1) s += T(" · 주 " + Math.Round(perWeek) + "회꼴", " · ~" + Math.Round(perWeek) + "/week", " · 週" + Math.Round(perWeek) + "回ほど", " · 每周约 " + Math.Round(perWeek) + " 次", " · ~" + Math.Round(perWeek) + "/semana");
+        else if (days >= 30 && perMonth >= 1) s += T(" · 월 " + Math.Round(perMonth) + "회꼴", " · ~" + Math.Round(perMonth) + "/month", " · 月" + Math.Round(perMonth) + "回ほど", " · 每月约 " + Math.Round(perMonth) + " 次", " · ~" + Math.Round(perMonth) + "/mes");
         return s;
     }
 
@@ -414,16 +427,16 @@ public class R0926HuntProfile : MonoBehaviour
         if (h["status"] == "scheduled")
         {
             var s = When(h["starts_at"]);
-            parts.Add(s.HasValue ? T(Span(s.Value - now) + " 뒤 시작", "Starts in " + Span(s.Value - now)) : T("곧 시작", "Soon"));
+            parts.Add(s.HasValue ? T(Span(s.Value - now) + " 뒤 시작", "Starts in " + Span(s.Value - now), Span(s.Value - now) + "後に開始", Span(s.Value - now) + "后开始", "Empieza en " + Span(s.Value - now)) : T("곧 시작", "Soon", "まもなく開始", "即将开始", "Pronto"));
         }
         else
         {
             var e = When(h["ends_at"]);
-            parts.Add(e.HasValue ? T("진행 중 · " + Span(e.Value - now) + " 남음", "Live · " + Span(e.Value - now) + " left") : T("진행 중", "Live"));
+            parts.Add(e.HasValue ? T("진행 중 · " + Span(e.Value - now) + " 남음", "Live · " + Span(e.Value - now) + " left", "開催中 · 残り" + Span(e.Value - now), "进行中 · 剩余 " + Span(e.Value - now), "En curso · quedan " + Span(e.Value - now)) : T("진행 중", "Live", "開催中", "进行中", "En curso"));
         }
-        parts.Add(T("참가 " + h["participants"].AsInt + "명", h["participants"].AsInt + " players"));
+        parts.Add(T("참가 " + h["participants"].AsInt + "명", h["participants"].AsInt + " players", "参加 " + h["participants"].AsInt + "人", "参加 " + h["participants"].AsInt + " 人", h["participants"].AsInt + " jugadores"));
         int wm = h["winners_max"].AsInt;
-        parts.Add(wm > 0 ? T(h["found"].AsInt + "/" + wm + " 찾음", h["found"].AsInt + "/" + wm + " found") : T(h["found"].AsInt + "명 찾음", h["found"].AsInt + " found"));
+        parts.Add(wm > 0 ? T(h["found"].AsInt + "/" + wm + " 찾음", h["found"].AsInt + "/" + wm + " found", h["found"].AsInt + "/" + wm + " 発見", h["found"].AsInt + "/" + wm + " 找到", h["found"].AsInt + "/" + wm + " encontrados") : T(h["found"].AsInt + "명 찾음", h["found"].AsInt + " found", h["found"].AsInt + "人発見", h["found"].AsInt + " 人找到", h["found"].AsInt + " encontrados"));
         return string.Join(" · ", parts);
     }
 
@@ -441,7 +454,7 @@ public class R0926HuntProfile : MonoBehaviour
         string why = "";
         if (!mine && ok.Count == 0)
             foreach (JSONNode g in list)
-                if (g["why"] == "not_played") { why = T("'" + g["title"] + "' — 보물을 찾았거나 게임 중 1km 안까지 간 참가자만 별점을 남길 수 있어요", "'" + g["title"] + "' — only players who found it or got within 1km can rate"); break; }
+                if (g["why"] == "not_played") { why = T("'" + g["title"] + "' — 보물을 찾았거나 게임 중 1km 안까지 간 참가자만 별점을 남길 수 있어요", "'" + g["title"] + "' — only players who found it or got within 1km can rate", "「" + g["title"] + "」 — 宝を見つけたか、ゲーム中に1km以内まで近づいた参加者だけが評価できます", "“" + g["title"] + "” — 只有找到宝藏或游戏中到过 1km 范围内的参加者才能评分", "'" + g["title"] + "' — solo pueden valorar quienes lo encontraron o se acercaron a menos de 1 km"); break; }
         if (notPlayed != null) { notPlayed.text = why; notPlayed.gameObject.SetActive(why.Length > 0); }
         if (!on) return;
 
@@ -459,9 +472,9 @@ public class R0926HuntProfile : MonoBehaviour
         string day = ended.HasValue ? " (" + ended.Value.ToLocalTime().ToString("M/d", CI) + ")" : "";
         string till = until.HasValue ? until.Value.ToLocalTime().ToString("M/d", CI) : "";
         if (formTitle != null)
-            formTitle.text = T("<b>" + g0["title"] + day + "</b> 어땠나요?", "How was <b>" + g0["title"] + day + "</b>?")
-                           + (till.Length > 0 ? "  <size=30><color=" + MutedHex + ">" + T(till + "까지 고칠 수 있어요", "editable until " + till) + "</color></size>" : "");
-        if (sendLabel != null) sendLabel.text = g0["my_rating"].IsNull ? T("남기기", "Post") : T("고치기", "Update");
+            formTitle.text = T("<b>" + g0["title"] + day + "</b> 어땠나요?", "How was <b>" + g0["title"] + day + "</b>?", "<b>" + g0["title"] + day + "</b> はどうでしたか？", "<b>" + g0["title"] + day + "</b> 怎么样？", "¿Qué tal <b>" + g0["title"] + day + "</b>?")
+                           + (till.Length > 0 ? "  <size=30><color=" + MutedHex + ">" + T(till + "까지 고칠 수 있어요", "editable until " + till, till + "まで修正できます", "可修改至 " + till, "editable hasta el " + till) + "</color></size>" : "");
+        if (sendLabel != null) sendLabel.text = g0["my_rating"].IsNull ? T("남기기", "Post", "投稿", "提交", "Publicar") : T("고치기", "Update", "修正", "修改", "Actualizar");
         PaintStars();
 
         // 남길 게임이 여럿이면 고른다
@@ -519,7 +532,7 @@ public class R0926HuntProfile : MonoBehaviour
         busy = false;
         if (code == 200)
         {
-            Toast(j["changed"].AsBool ? T("별점을 고쳤어요", "Rating updated") : T("별점을 남겼어요 — 고마워요!", "Thanks for rating!"), true);
+            Toast(j["changed"].AsBool ? T("별점을 고쳤어요", "Rating updated", "評価を修正しました", "评分已修改", "Valoración actualizada") : T("별점을 남겼어요 — 고마워요!", "Thanks for rating!", "評価しました — ありがとうございます！", "评分成功 — 谢谢！", "¡Gracias por tu valoración!"), true);
             Reload();
         }
         else Toast(R0926HuntApi.ErrorText(code == 401 ? "login" : (string)j["error"], Lang), false);
@@ -555,7 +568,7 @@ public class R0926HuntProfile : MonoBehaviour
         {
             moreButton.gameObject.SetActive(!allReviews && reviews.Count > ReviewsFirst);
             var t = moreButton.GetComponentInChildren<Text>(true);
-            if (t != null) t.text = T("리뷰 " + (reviews.Count - ReviewsFirst) + "개 더 보기", "Show " + (reviews.Count - ReviewsFirst) + " more");
+            if (t != null) t.text = T("리뷰 " + (reviews.Count - ReviewsFirst) + "개 더 보기", "Show " + (reviews.Count - ReviewsFirst) + " more", "レビューをあと " + (reviews.Count - ReviewsFirst) + "件見る", "再看 " + (reviews.Count - ReviewsFirst) + " 条评价", "Ver " + (reviews.Count - ReviewsFirst) + " más");
         }
     }
 
@@ -574,13 +587,13 @@ public class R0926HuntProfile : MonoBehaviour
             bool reported = me["reported"].AsBool;
             reportButton.interactable = !reported;
             var t = reportButton.GetComponentInChildren<Text>(true);
-            if (t != null) t.text = reported ? T("신고함 — 관리자가 확인 중", "Reported — under review") : T("주최자 신고", "Report host");
+            if (t != null) t.text = reported ? T("신고함 — 관리자가 확인 중", "Reported — under review", "通報済み — 管理者が確認中", "已举报 — 管理员审核中", "Denunciado — en revisión") : T("주최자 신고", "Report host", "主催者を通報", "举报主办者", "Denunciar al organizador");
         }
         if (blockButton != null)
         {
             bool blocked = me["blocked"].AsBool;
             var t = blockButton.GetComponentInChildren<Text>(true);
-            if (t != null) t.text = blocked ? T("차단 풀기", "Unblock") : blockArmed > 0f ? T("한 번 더 누르면 차단", "Tap again to block") : T("차단", "Block");
+            if (t != null) t.text = blocked ? T("차단 풀기", "Unblock", "ブロック解除", "解除屏蔽", "Desbloquear") : blockArmed > 0f ? T("한 번 더 누르면 차단", "Tap again to block", "もう一度押すとブロック", "再按一次即可屏蔽", "Toca otra vez para bloquear") : T("차단", "Block", "ブロック", "屏蔽", "Bloquear");
         }
     }
 
@@ -590,22 +603,22 @@ public class R0926HuntProfile : MonoBehaviour
         reportTarget = target;
         reportRid = rid;
         var given = target == "host" ? data["report_reasons"] : data["review_report_reasons"];
-        var order = new List<(string key, string en)>(target == "host" ? HostReasons : ReviewReasons);
+        var order = new List<(string key, string en, string ja, string zh, string es)>(target == "host" ? HostReasons : ReviewReasons);
         foreach (KeyValuePair<string, JSONNode> kv in given.AsObject)
-            if (order.FindIndex(o => o.key == kv.Key) < 0) order.Add((kv.Key, kv.Value));
+            if (order.FindIndex(o => o.key == kv.Key) < 0) { string v = kv.Value; order.Add((kv.Key, v, v, v, v)); }
         Clear(reasonList);
         foreach (var o in order)
         {
             if (!given.HasKey(o.key) || reasonTemplate == null || reasonList == null) continue;
             var row = Instantiate(reasonTemplate, reasonList);
             row.SetActive(true);
-            SetText(row, "Label", T(given[o.key], o.en));
+            SetText(row, "Label", T(given[o.key], o.en, o.ja, o.zh, o.es));
             string key = o.key;
             Wire(row.GetComponent<Button>(), () => StartCoroutine(Report(key)));
         }
         if (reasonTitle != null)
-            reasonTitle.text = target == "host" ? T("주최자를 신고하는 까닭을 골라 주세요", "Why are you reporting this host?")
-                                                : T("이 리뷰를 신고하는 까닭을 골라 주세요", "Why are you reporting this review?");
+            reasonTitle.text = target == "host" ? T("주최자를 신고하는 까닭을 골라 주세요", "Why are you reporting this host?", "主催者を通報する理由を選んでください", "请选择举报此主办者的原因", "¿Por qué denuncias a este organizador?")
+                                                : T("이 리뷰를 신고하는 까닭을 골라 주세요", "Why are you reporting this review?", "このレビューを通報する理由を選んでください", "请选择举报此评价的原因", "¿Por qué denuncias esta reseña?");
         reasonBox.SetActive(true);
         StartCoroutine(ScrollTo((RectTransform)reasonBox.transform));
     }
@@ -625,8 +638,8 @@ public class R0926HuntProfile : MonoBehaviour
         if (code == 200)
         {
             if (reasonBox != null) reasonBox.SetActive(false);
-            Toast(j["duplicate"].AsBool ? T("이미 신고했어요 — 관리자가 확인하고 있어요", "Already reported — under review")
-                                        : T("신고했어요 — 관리자가 확인해요", "Reported — an admin will review it"), true);
+            Toast(j["duplicate"].AsBool ? T("이미 신고했어요 — 관리자가 확인하고 있어요", "Already reported — under review", "すでに通報済みです — 管理者が確認しています", "已经举报过了 — 管理员正在审核", "Ya lo denunciaste — está en revisión")
+                                        : T("신고했어요 — 관리자가 확인해요", "Reported — an admin will review it", "通報しました — 管理者が確認します", "已举报 — 管理员会审核", "Denunciado — un administrador lo revisará"), true);
             Reload();
         }
         else Toast(R0926HuntApi.ErrorText(code == 401 ? "login" : (string)j["error"], Lang), false);
@@ -655,14 +668,14 @@ public class R0926HuntProfile : MonoBehaviour
         busy = false;
         if (code == 200 || code == 201)
         {
-            Toast(on ? T("차단했어요 — 이 사람 게임이 목록·알림에서 사라져요", "Blocked — their hunts won't show up or notify you")
-                     : T("차단을 풀었어요", "Unblocked"), true);
+            Toast(on ? T("차단했어요 — 이 사람 게임이 목록·알림에서 사라져요", "Blocked — their hunts won't show up or notify you", "ブロックしました — この人のゲームは一覧・通知に表示されません", "已屏蔽 — 此人的游戏不会再出现在列表和通知中", "Bloqueado — no verás sus búsquedas ni avisos")
+                     : T("차단을 풀었어요", "Unblocked", "ブロックを解除しました", "已解除屏蔽", "Desbloqueado"), true);
             Reload();
         }
         else
         {
-            Toast(on ? T("차단하지 못했어요 — 로그인 상태를 확인해 주세요", "Couldn't block — please check you're signed in")
-                     : T("차단을 풀지 못했어요", "Couldn't unblock"), false);
+            Toast(on ? T("차단하지 못했어요 — 로그인 상태를 확인해 주세요", "Couldn't block — please check you're signed in", "ブロックできませんでした — ログイン状態を確認してください", "屏蔽失败 — 请确认登录状态", "No se pudo bloquear — comprueba que has iniciado sesión")
+                     : T("차단을 풀지 못했어요", "Couldn't unblock", "ブロックを解除できませんでした", "解除屏蔽失败", "No se pudo desbloquear"), false);
             PaintActions();
         }
     }
@@ -718,10 +731,10 @@ public class R0926HuntProfile : MonoBehaviour
     private static string Span(TimeSpan s)
     {
         int m = Mathf.Max(1, Mathf.CeilToInt((float)s.TotalMinutes));
-        if (m < 60) return m + T("분", "m");
-        if (m < 600) return m / 60 + T("시간", "h") + (m % 60 > 0 ? " " + m % 60 + T("분", "m") : "");
-        if (m < 2880) return (m + 30) / 60 + T("시간", "h");
-        return m / 1440 + T("일", "d");
+        if (m < 60) return m + T("분", "m", "分", "分钟", " min");
+        if (m < 600) return m / 60 + T("시간", "h", "時間", "小时", " h") + (m % 60 > 0 ? " " + m % 60 + T("분", "m", "分", "分钟", " min") : "");
+        if (m < 2880) return (m + 30) / 60 + T("시간", "h", "時間", "小时", " h");
+        return m / 1440 + T("일", "d", "日", "天", " días");
     }
 
     // 며칠 전 — 날짜(달력) 기준. ago 면 '전'을 붙인다 ('마지막' 칸은 '3일'만)
@@ -729,10 +742,13 @@ public class R0926HuntProfile : MonoBehaviour
     {
         if (!at.HasValue) return "–";
         int d = (int)(DateTime.Now.Date - at.Value.ToLocalTime().Date).TotalDays;
-        if (d <= 0) return T("오늘", "today");
-        if (d == 1) return T("어제", "yesterday");
+        if (d <= 0) return T("오늘", "today", "今日", "今天", "hoy");
+        if (d == 1) return T("어제", "yesterday", "昨日", "昨天", "ayer");
         string ko = d < 14 ? d + "일" : d < 60 ? d / 7 + "주" : d / 30 + "달";
         string en = d < 14 ? d + "d" : d < 60 ? d / 7 + "w" : d / 30 + "mo";
-        return T(ago ? ko + " 전" : ko, ago ? en + " ago" : en);
+        string ja = d < 14 ? d + "日" : d < 60 ? d / 7 + "週間" : d / 30 + "か月";
+        string zh = d < 14 ? d + "天" : d < 60 ? d / 7 + "周" : d / 30 + "个月";
+        string es = d < 14 ? d + " d" : d < 60 ? d / 7 + " sem." : d / 30 + " meses";
+        return T(ago ? ko + " 전" : ko, ago ? en + " ago" : en, ago ? ja + "前" : ja, ago ? zh + "前" : zh, ago ? "hace " + es : es);
     }
 }

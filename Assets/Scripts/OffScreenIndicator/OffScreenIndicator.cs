@@ -883,9 +883,7 @@ public class OffScreenIndicator : MonoBehaviour
 
         if (ToastManager.Instance != null)
         {
-            bool isKo = Application.systemLanguage == SystemLanguage.Korean;
-            string msg = isKo ? "AR 세션 복구 중..." : "Recovering AR session...";
-            ToastManager.Instance.ShowWarning(msg);
+            ToastManager.Instance.ShowWarning(R0926LocalizedText.Say("AR 세션 복구 중...", "Recovering AR session...", "ARセッションを復旧中...", "正在恢复 AR 会话...", "Recuperando la sesión de AR..."));
         }
     }
 

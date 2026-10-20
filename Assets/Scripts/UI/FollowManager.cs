@@ -1187,10 +1187,9 @@ public class FollowManager : MonoBehaviour
                 Debug.LogError($"[FollowManager] {(follow ? "팔로우" : "언팔로우")} 실패: {request.responseCode} {request.error}");
                 if (ToastManager.Instance != null)
                 {
-                    bool ko = AppLanguage.Code == "ko";
                     ToastManager.Instance.ShowWarning(request.responseCode == 403
-                        ? (ko ? "팔로우할 수 없는 상대예요" : "You can't follow this user")
-                        : (ko ? "잠시 후 다시 해 주세요" : "Please try again in a moment"));
+                        ? R0926LocalizedText.Say("팔로우할 수 없는 상대예요", "You can't follow this user", "このユーザーはフォローできません", "无法关注此用户", "No puedes seguir a este usuario")
+                        : R0926LocalizedText.Say("잠시 후 다시 해 주세요", "Please try again in a moment", "しばらくしてからもう一度お試しください", "请稍后再试", "Inténtalo de nuevo en un momento"));
                 }
             }
         }

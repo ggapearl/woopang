@@ -313,7 +313,7 @@ public class UploadInputMirror : MonoBehaviour
         if (mirrorPlaceholder != null)
         {
             string ph = ExtractPlaceholderText(source);
-            mirrorPlaceholder.text = string.IsNullOrEmpty(ph) ? "입력하세요" : ph;
+            mirrorPlaceholder.text = string.IsNullOrEmpty(ph) ? R0926LocalizedText.Say("입력하세요", "Type here", "入力してください", "请输入", "Escribe aquí") : ph;
         }
         mirrorInput.contentType = source.contentType;
         mirrorInput.lineType = source.lineType;

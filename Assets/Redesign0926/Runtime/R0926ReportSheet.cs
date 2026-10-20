@@ -23,7 +23,7 @@ public class R0926ReportSheet : MonoBehaviour
         if (sending) return;
         if (lastPlace == null)
         {
-            Toast(false, R0926LocalizedText.Lang() == "ko" ? "신고할 장소를 찾지 못했습니다." : "Could not find the place to report.");
+            Toast(false, R0926LocalizedText.Say("신고할 장소를 찾지 못했습니다.", "Could not find the place to report.", "報告する場所が見つかりませんでした。", "未找到要举报的地点。", "No se encontró el lugar a denunciar."));
             return;
         }
         int id = lastPlace.GetId();

@@ -163,18 +163,9 @@ public static class ChatBubbleLayoutHelper
         if (!System.DateTime.TryParse(dateStr, out System.DateTime date)) return "";
 
         // 오늘이면 시간만, 아니면 날짜+시간
-        if (date.Date == System.DateTime.Today)
-        {
-            return date.ToString("tt h:mm").Replace("AM", "오전").Replace("PM", "오후");
-        }
-        else if (date.Date == System.DateTime.Today.AddDays(-1))
-        {
-            return "어제 " + date.ToString("tt h:mm").Replace("AM", "오전").Replace("PM", "오후");
-        }
-        else
-        {
-            return date.ToString("M/d tt h:mm").Replace("AM", "오전").Replace("PM", "오후");
-        }
+        if (date.Date == System.DateTime.Today) return AppTimeText.Clock(date);
+        if (date.Date == System.DateTime.Today.AddDays(-1)) return AppTimeText.Yesterday + " " + AppTimeText.Clock(date);
+        return AppTimeText.MonthDayClock(date);
     }
 
     /// <summary>
@@ -185,15 +176,7 @@ public static class ChatBubbleLayoutHelper
         if (string.IsNullOrEmpty(dateStr)) return "";
         if (!System.DateTime.TryParse(dateStr, out System.DateTime date)) return dateStr;
 
-        System.TimeSpan diff = System.DateTime.Now - date;
-
-        if (diff.TotalMinutes < 1) return "방금";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}분 전";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}시간 전";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}일 전";
-        if (diff.TotalDays < 30) return $"{(int)(diff.TotalDays / 7)}주 전";
-
-        return date.ToString("M월 d일");
+        return AppTimeText.Ago(date, System.DateTime.Now, 30);
     }
 
     /// <summary>

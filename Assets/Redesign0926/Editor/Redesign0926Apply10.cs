@@ -443,7 +443,8 @@ namespace Redesign0926
                 Grab(t.gameObject); n++;
             }
             // 추가 카드 — v19 부터 아래로 밀어 닫는다 (좌우 넘기기와는 같은 방향 잠금) → 손잡이 다시
-            foreach (var name in new[] { "MoreSheet0926", "CubeUploadPage", "ModelUploadPage" })   // 이름으로 (틀 안으로 옮겨져 경로가 바뀐다)
+            // 장소 '···'(MoreSheet0926)는 v30 부터 사진 고르기 시트처럼 손잡이 없이 큰 칸만
+            foreach (var name in new[] { "CubeUploadPage", "ModelUploadPage" })   // 이름으로 (틀 안으로 옮겨져 경로가 바뀐다)
             {
                 var g = Find(root, name);
                 if (g != null) { Grab(g); n++; }

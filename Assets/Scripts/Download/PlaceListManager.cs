@@ -140,6 +140,7 @@ public class PlaceListManager : MonoBehaviour
             { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
             { "woopangData", "WOOPANGデータ" }, { "tourApiData", "公共データ" },
             { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" }, { "huntData", "宝探し" },
+            { "noNearbyData", "近くにデータがありません。\n距離スライダーを調整するか、別の場所に移動してみてください。" },
             { "noInternet", "インターネットに接続されていません。\n接続すると周辺の場所を自動で読み込みます。" },
             { "listNotLoaded", "周辺の場所をまだ読み込めていません。\nしばらくすると自動で再読み込みします。" }
         }},
@@ -147,6 +148,7 @@ public class PlaceListManager : MonoBehaviour
             { "petFriendly", "[宠物友好]" }, { "noImage", "[无图片]" },
             { "woopangData", "WOOPANG数据" }, { "tourApiData", "公共数据" },
             { "transportData", "交通数据" }, { "p2pUserData", "附近用户" }, { "huntData", "寻宝" },
+            { "noNearbyData", "附近没有数据。\n请调整距离滑块或换个地方试试。" },
             { "noInternet", "没有网络连接。\n连接后会自动加载附近地点。" },
             { "listNotLoaded", "暂时无法加载附近地点。\n稍后会自动重试。" }
         }},
@@ -154,6 +156,7 @@ public class PlaceListManager : MonoBehaviour
             { "petFriendly", "[Mascotas]" }, { "noImage", "[Sin imagen]" },
             { "woopangData", "Datos WOOPANG" }, { "tourApiData", "Datos Públicos" },
             { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" }, { "huntData", "Búsquedas del tesoro" },
+            { "noNearbyData", "No hay datos cerca.\nAjusta el control de distancia o muévete a otra zona." },
             { "noInternet", "Sin conexión a internet.\nLos lugares cercanos se cargarán automáticamente al reconectar." },
             { "listNotLoaded", "Aún no se pudieron cargar los lugares cercanos.\nLo intentaremos de nuevo automáticamente." }
         }}

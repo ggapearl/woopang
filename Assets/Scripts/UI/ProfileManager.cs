@@ -2269,10 +2269,12 @@ public class ProfileManager : MonoBehaviour
                     editProfileButtonText.text = GetLocalizedText("edit_profile");
             }
 
-            // 로그아웃 버튼 표시 (내 프로필에서만)
+            // 로그아웃 버튼 표시 (내 프로필에서만) — 글자는 앱 언어로 (10-21 전엔 씬의 '로그아웃' 그대로)
             if (logoutButton != null)
             {
                 logoutButton.gameObject.SetActive(true);
+                Text logoutText = logoutButton.GetComponentInChildren<Text>(true);
+                if (logoutText != null) logoutText.text = GetLocalizedText("logout");
             }
         }
         else
@@ -2865,7 +2867,7 @@ public class ProfileManager : MonoBehaviour
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogWarning($"[ProfileManager] 편집 링크 발급 실패: {req.responseCode}");
-                ToastManager.Instance?.ShowError(lang == "ko" ? "다시 로그인한 뒤 시도해주세요" : "Please sign in again and retry");
+                ToastManager.Instance?.ShowError(R0926LocalizedText.Say("다시 로그인한 뒤 시도해주세요", "Please sign in again and retry", "もう一度ログインしてからお試しください", "请重新登录后再试", "Vuelve a iniciar sesión e inténtalo de nuevo"));
                 yield break;
             }
 

@@ -67,43 +67,43 @@ public static class R0926HuntApi
         }
     }
 
-    /// <summary>서버 오류 코드 → 사용자에게 보일 말 (한국어 · 영어)</summary>
+    /// <summary>서버 오류 코드 → 사용자에게 보일 말 (lang: ko · en · ja · zh · es, 그 밖은 영어)</summary>
     public static string ErrorText(string code, string lang)
     {
-        bool ko = lang == "ko";
+        string L(string ko, string en, string ja, string zh, string es) => lang == "ko" ? ko : lang == "ja" ? ja : lang == "zh" ? zh : lang == "es" ? es : en;
         switch (code)
         {
-            case "login": return ko ? "로그인하면 보물찾기를 할 수 있어요" : "Log in to play treasure hunts";
-            case "need_rules": return ko ? "주최 수칙을 먼저 확인해 주세요" : "Please read the host rules first";
-            case "host_suspended": return ko ? "신고가 쌓여 지금은 보물을 숨길 수 없어요" : "Hosting is paused after reports";
-            case "weak_gps": return ko ? "GPS 가 아직 부정확해요 — 하늘이 보이는 곳에서 잠시 기다려 주세요" : "GPS isn't accurate yet — wait a moment outdoors";
-            case "mock_location": return ko ? "가짜 위치로는 숨길 수 없어요" : "Mock locations aren't allowed";
-            case "teleport": return ko ? "위치가 갑자기 크게 바뀌었어요 — 잠시 뒤 다시 해 주세요" : "Your location jumped — try again shortly";
-            case "daily_limit": return ko ? "오늘은 3개까지 숨길 수 있어요" : "Up to 3 games a day";
-            case "open_limit": return ko ? "진행·예약 중인 게임은 2개까지예요" : "Up to 2 open games at a time";
-            case "title": return ko ? "제목을 써 주세요" : "Please add a title";
-            case "code": return ko ? "찾는 사람이 넣을 코드를 써 주세요" : "Please set the code to enter";
-            case "out_of_range": return ko ? "참가 범위 밖이에요" : "You're outside the game area";
-            case "friends_only": return ko ? "맞팔 친구만 참가할 수 있어요" : "Mutual friends only";
-            case "join_code": return ko ? "참가 코드가 맞지 않아요" : "Wrong join code";
-            case "not_open": return ko ? "이미 끝난 게임이에요" : "This game has ended";
-            case "location": return ko ? "위치를 아직 못 받았어요" : "Location not available yet";
-            case "slow_down": return ko ? "잠시 뒤 다시 확인할게요" : "Checking again shortly";
-            case "full": return ko ? "참가 인원이 다 찼어요" : "This game is full";
-            case "players": return ko ? "참가 인원은 당첨 인원보다 적을 수 없어요" : "Max players can't be fewer than winners";
+            case "login": return L("로그인하면 보물찾기를 할 수 있어요", "Log in to play treasure hunts", "ログインすると宝探しに参加できます", "登录后即可参加寻宝", "Inicia sesión para jugar a las búsquedas del tesoro");
+            case "need_rules": return L("주최 수칙을 먼저 확인해 주세요", "Please read the host rules first", "先に主催ルールを確認してください", "请先阅读主办规则", "Primero lee las normas para organizar");
+            case "host_suspended": return L("신고가 쌓여 지금은 보물을 숨길 수 없어요", "Hosting is paused after reports", "通報が重なったため、今は宝を隠せません", "因被多次举报，暂时无法藏宝", "Por las denuncias, ahora no puedes esconder tesoros");
+            case "weak_gps": return L("GPS 가 아직 부정확해요 — 하늘이 보이는 곳에서 잠시 기다려 주세요", "GPS isn't accurate yet — wait a moment outdoors", "GPSがまだ不正確です — 空が見える場所で少しお待ちください", "GPS 还不够准确 — 请到能看到天空的地方稍等", "El GPS aún no es preciso — espera un momento al aire libre");
+            case "mock_location": return L("가짜 위치로는 숨길 수 없어요", "Mock locations aren't allowed", "偽の位置情報では隠せません", "不能使用虚拟位置藏宝", "No se permiten ubicaciones simuladas");
+            case "teleport": return L("위치가 갑자기 크게 바뀌었어요 — 잠시 뒤 다시 해 주세요", "Your location jumped — try again shortly", "位置が急に大きく変わりました — 少ししてからもう一度お試しください", "位置突然大幅变化 — 请稍后再试", "Tu ubicación cambió de golpe — inténtalo en un momento");
+            case "daily_limit": return L("오늘은 3개까지 숨길 수 있어요", "Up to 3 games a day", "1日に隠せるのは3つまでです", "每天最多可藏 3 个", "Hasta 3 juegos al día");
+            case "open_limit": return L("진행·예약 중인 게임은 2개까지예요", "Up to 2 open games at a time", "進行中・予約中のゲームは2つまでです", "进行中或预约中的游戏最多 2 个", "Hasta 2 juegos abiertos a la vez");
+            case "title": return L("제목을 써 주세요", "Please add a title", "タイトルを入力してください", "请填写标题", "Añade un título");
+            case "code": return L("찾는 사람이 넣을 코드를 써 주세요", "Please set the code to enter", "見つける人が入力するコードを設定してください", "请设置寻宝者要输入的代码", "Define el código que deben introducir");
+            case "out_of_range": return L("참가 범위 밖이에요", "You're outside the game area", "参加範囲の外です", "你不在参加范围内", "Estás fuera del área del juego");
+            case "friends_only": return L("맞팔 친구만 참가할 수 있어요", "Mutual friends only", "相互フォローの友だちだけが参加できます", "仅限互相关注的好友参加", "Solo amigos mutuos");
+            case "join_code": return L("참가 코드가 맞지 않아요", "Wrong join code", "参加コードが違います", "参加代码不正确", "Código de acceso incorrecto");
+            case "not_open": return L("이미 끝난 게임이에요", "This game has ended", "すでに終了したゲームです", "游戏已经结束", "Este juego ya terminó");
+            case "location": return L("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación");
+            case "slow_down": return L("잠시 뒤 다시 확인할게요", "Checking again shortly", "少ししてからもう一度確認します", "稍后再为你确认", "Lo comprobaremos de nuevo en breve");
+            case "full": return L("참가 인원이 다 찼어요", "This game is full", "参加人数がいっぱいです", "参加人数已满", "Este juego está completo");
+            case "players": return L("참가 인원은 당첨 인원보다 적을 수 없어요", "Max players can't be fewer than winners", "参加人数は当選人数より少なくできません", "参加人数不能少于中奖人数", "El máximo de jugadores no puede ser menor que el de ganadores");
             // 별점 · 신고 (프로필의 보물찾기 칸) — host · not_joined 는 참가·판정에서도 온다
-            case "stars": return ko ? "별을 눌러 점수를 골라 주세요" : "Tap a star to rate";
-            case "host": return ko ? "주최자 본인은 할 수 없어요" : "Not available to the host";
-            case "not_ended": return ko ? "게임이 끝난 뒤에 남길 수 있어요" : "You can rate after the game ends";
-            case "closed": return ko ? "별점은 게임이 끝나고 7일 안에만 남길 수 있어요" : "Ratings close 7 days after the game";
-            case "not_joined": return ko ? "참가한 사람만 할 수 있어요" : "Only players can do this";
-            case "not_played": return ko ? "보물을 찾았거나 1km 안까지 간 참가자만 남길 수 있어요" : "Only players who found it or got within 1km can rate";
-            case "device_used": return ko ? "이 기기로는 이미 다른 계정이 별점을 남겼어요" : "Another account already rated from this device";
-            case "device": return ko ? "기기 정보를 읽지 못했어요" : "Couldn't read this device";
-            case "not_participant": return ko ? "이 사람 게임에 참가한 적이 있어야 신고할 수 있어요" : "Only players of this host's games can report";
-            case "reason": case "target": return ko ? "신고 내용을 다시 골라 주세요" : "Please choose a reason again";
-            case "not_found": return ko ? "찾을 수 없어요 — 이미 지워졌을 수 있어요" : "Not found — it may have been removed";
-            default: return ko ? "잠시 뒤 다시 해 주세요" : "Please try again shortly";
+            case "stars": return L("별을 눌러 점수를 골라 주세요", "Tap a star to rate", "星をタップして評価を選んでください", "点击星星选择评分", "Toca una estrella para valorar");
+            case "host": return L("주최자 본인은 할 수 없어요", "Not available to the host", "主催者本人はできません", "主办者本人无法操作", "No disponible para quien organiza");
+            case "not_ended": return L("게임이 끝난 뒤에 남길 수 있어요", "You can rate after the game ends", "ゲーム終了後に評価できます", "游戏结束后才能评分", "Podrás valorar cuando termine el juego");
+            case "closed": return L("별점은 게임이 끝나고 7일 안에만 남길 수 있어요", "Ratings close 7 days after the game", "評価はゲーム終了から7日以内のみです", "只能在游戏结束后 7 天内评分", "Las valoraciones cierran 7 días después del juego");
+            case "not_joined": return L("참가한 사람만 할 수 있어요", "Only players can do this", "参加した人だけができます", "仅限参加者", "Solo para jugadores");
+            case "not_played": return L("보물을 찾았거나 1km 안까지 간 참가자만 남길 수 있어요", "Only players who found it or got within 1km can rate", "宝を見つけたか、1km以内まで近づいた参加者だけが評価できます", "只有找到宝藏或到过 1km 范围内的参加者才能评分", "Solo pueden valorar quienes lo encontraron o se acercaron a menos de 1 km");
+            case "device_used": return L("이 기기로는 이미 다른 계정이 별점을 남겼어요", "Another account already rated from this device", "この端末ではすでに別のアカウントが評価しています", "此设备上已有其他账号评过分", "Otra cuenta ya valoró desde este dispositivo");
+            case "device": return L("기기 정보를 읽지 못했어요", "Couldn't read this device", "端末の情報を読み取れませんでした", "无法读取设备信息", "No se pudo leer el dispositivo");
+            case "not_participant": return L("이 사람 게임에 참가한 적이 있어야 신고할 수 있어요", "Only players of this host's games can report", "この人のゲームに参加したことがある人だけが通報できます", "只有参加过此人游戏的人才能举报", "Solo quienes jugaron con este organizador pueden denunciar");
+            case "reason": case "target": return L("신고 내용을 다시 골라 주세요", "Please choose a reason again", "通報内容をもう一度選んでください", "请重新选择举报内容", "Vuelve a elegir un motivo");
+            case "not_found": return L("찾을 수 없어요 — 이미 지워졌을 수 있어요", "Not found — it may have been removed", "見つかりません — すでに削除された可能性があります", "找不到 — 可能已被删除", "No encontrado — puede que se haya eliminado");
+            default: return L("잠시 뒤 다시 해 주세요", "Please try again shortly", "少ししてからもう一度お試しください", "请稍后再试", "Inténtalo de nuevo en breve");
         }
     }
 }

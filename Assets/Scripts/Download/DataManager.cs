@@ -487,7 +487,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
         if (!isGeospatialReady)
         {
-            ShowARGuide("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...");
+            ShowARGuide(R0926LocalizedText.Say("주변을 천천히 둘러보세요\n위치를 파악하고 있습니다...", "Look around slowly\nFinding your location...", "ゆっくり周りを見回してください\n位置を確認しています...", "请慢慢环顾四周\n正在确定位置...", "Mira a tu alrededor despacio\nBuscando tu ubicación..."));
             yield return StartCoroutine(WaitForGeospatialTracking());
             HideARGuide();
         }
@@ -875,7 +875,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                     if (i < retryCount - 1) 
                         yield return new WaitForSeconds(5f);
                     else 
-                        ShowErrorMessage("서버에서 데이터를 받아오지 못했습니다.");
+                        ShowErrorMessage(R0926LocalizedText.Say("서버에서 데이터를 받아오지 못했습니다.", "Couldn't get data from the server.", "サーバーからデータを取得できませんでした。", "无法从服务器获取数据。", "No se pudieron obtener datos del servidor."));
                 }
             }
         }
@@ -890,13 +890,13 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         }
         catch (JsonException)
         {
-            ShowErrorMessage("데이터 파싱에 실패했습니다.");
+            ShowErrorMessage(R0926LocalizedText.Say("데이터 파싱에 실패했습니다.", "Couldn't read the data.", "データを読み取れませんでした。", "数据解析失败。", "No se pudieron leer los datos."));
             yield break;
         }
 
         if (places == null || places.Count == 0)
         {
-            ShowErrorMessage("서버에서 데이터를 받아오지 못했습니다.");
+            ShowErrorMessage(R0926LocalizedText.Say("서버에서 데이터를 받아오지 못했습니다.", "Couldn't get data from the server.", "サーバーからデータを取得できませんでした。", "无法从服务器获取数据。", "No se pudieron obtener datos del servidor."));
             yield break;
         }
 
@@ -1338,7 +1338,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             obj.name = $"Place_ID_{modelType}";
             return obj;
         }
-        ShowErrorMessage("너무 많은 장소가 로드되었습니다.");
+        ShowErrorMessage(R0926LocalizedText.Say("너무 많은 장소가 로드되었습니다.", "Too many places were loaded.", "読み込まれた場所が多すぎます。", "加载的地点过多。", "Se cargaron demasiados lugares."));
         return null;
     }
 
@@ -1823,7 +1823,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         yield return new WaitUntil(() => ARSession.state == ARSessionState.SessionTracking || Time.unscaledTime > 5f);
         if (ARSession.state != ARSessionState.SessionTracking)
         {
-            ShowErrorMessage("AR 세션을 복구할 수 없습니다.");
+            ShowErrorMessage(R0926LocalizedText.Say("AR 세션을 복구할 수 없습니다.", "Couldn't recover the AR session.", "ARセッションを復旧できません。", "无法恢复 AR 会话。", "No se pudo recuperar la sesión de AR."));
             yield break;
         }
 
@@ -1900,16 +1900,16 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
             // 단계별 안내 메시지 변경
             if (elapsed > 30f)
-                UpdateARGuideText("위치 파악이 지연되고 있습니다\n실외로 이동하거나 주변을 둘러봐 주세요");
+                UpdateARGuideText(R0926LocalizedText.Say("위치 파악이 지연되고 있습니다\n실외로 이동하거나 주변을 둘러봐 주세요", "Finding your location is taking a while\nMove outdoors or look around", "位置の確認に時間がかかっています\n屋外に出るか、周りを見回してください", "定位时间较长\n请移到室外或环顾四周", "Localizarte está tardando\nSal al exterior o mira a tu alrededor"));
             else if (elapsed > 15f)
-                UpdateARGuideText("주변 건물이 보이도록\n핸드폰을 천천히 이동해주세요");
+                UpdateARGuideText(R0926LocalizedText.Say("주변 건물이 보이도록\n핸드폰을 천천히 이동해주세요", "Slowly move your phone\nso nearby buildings are in view", "周りの建物が映るように\nスマホをゆっくり動かしてください", "请缓慢移动手机\n让周围的建筑进入画面", "Mueve el teléfono despacio\npara que se vean los edificios cercanos"));
 
             elapsed += 1f;
             yield return new WaitForSeconds(1f);
         }
 
         isGeospatialReady = true;
-        UpdateARGuideText("위치 정확도가 낮을 수 있습니다");
+        UpdateARGuideText(R0926LocalizedText.Say("위치 정확도가 낮을 수 있습니다", "Location accuracy may be low", "位置の精度が低い可能性があります", "位置精度可能较低", "La precisión de la ubicación puede ser baja"));
         yield return new WaitForSeconds(2f);
     }
 

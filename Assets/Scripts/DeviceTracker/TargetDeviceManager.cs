@@ -185,9 +185,7 @@ public class TargetDeviceManager : MonoBehaviour
         {
             DateTime lastUpdated = DateTime.Parse(device.lastUpdated);
             TimeSpan elapsed = DateTime.UtcNow - lastUpdated;
-            statusText.text = elapsed.TotalMinutes < 1 ? "방금 전" :
-                              elapsed.TotalHours < 1 ? $"{(int)elapsed.TotalMinutes}분 전" :
-                              $"{(int)elapsed.TotalHours}시간 전";
+            statusText.text = AppTimeText.Ago(lastUpdated, DateTime.UtcNow);
             statusText.color = elapsed.TotalMinutes < 5 ? Color.green : Color.gray;
         }
 

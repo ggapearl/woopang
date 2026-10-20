@@ -53,11 +53,8 @@ public static class ReportService
         }
     }
 
-    /// <summary>신고 결과 안내 문구 (시스템 언어 기준)</summary>
-    public static string ResultMessage(bool ok)
-    {
-        bool ko = Application.systemLanguage == SystemLanguage.Korean;
-        if (ok) return ko ? "신고가 접수되었습니다. 검토 후 조치하겠습니다." : "Report received. We will review it.";
-        return ko ? "신고하지 못했습니다. 로그인 상태를 확인해주세요." : "Could not send the report. Please check you are signed in.";
-    }
+    /// <summary>신고 결과 안내 문구 (앱 언어)</summary>
+    public static string ResultMessage(bool ok) => ok
+        ? R0926LocalizedText.Say("신고가 접수되었습니다. 검토 후 조치하겠습니다.", "Report received. We will review it.", "報告を受け付けました。確認のうえ対応します。", "举报已提交，我们会审核后处理。", "Denuncia recibida. La revisaremos.")
+        : R0926LocalizedText.Say("신고하지 못했습니다. 로그인 상태를 확인해주세요.", "Could not send the report. Please check you are signed in.", "報告できませんでした。ログイン状態を確認してください。", "举报失败，请确认登录状态。", "No se pudo enviar la denuncia. Comprueba que has iniciado sesión.");
 }

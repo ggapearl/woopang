@@ -214,8 +214,13 @@ namespace Redesign0926
         }
 
         // ============================================================
-        // 장소 상세 '···' — 정보 수정 요청 · 삭제 요청 · 신고하기
+        // 장소 상세 '···' — 정보 수정 · 삭제 요청 · 신고 · 취소
+        // 10-21 대표님 「'사진추가' 할 때처럼 버튼 세개 사이즈 크게」 — 세 줄 목록 + 따로 뜬 취소 알약이던 것을
+        // 사진 고르기 시트와 같은 한 줄 큰 칸으로 (취소도 카드 안 마지막 칸)
         // ============================================================
+        private const float MorePad = 24f;
+        private static float MoreSheetH => PhotoTileH + MorePad * 2;
+
         private static void ApplyPlaceMenu(Transform root, List<string> log)
         {
             var full = Find(root, "FullScreenPanel");
@@ -241,37 +246,52 @@ namespace Redesign0926
             tso.FindProperty("closeButton").objectReferenceValue = fixOpp.GetComponent<Button>();
             tso.ApplyModifiedPropertiesWithoutUndo();
 
-            const float rowH = 150f, cancelH = 150f, gap = 16f, bottom = 40f;
-            var cancel = FindOrCreate(panel.transform, "MoreCancel0926");
-            Img(cancel, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 56f).raycastTarget = true;
-            SetRect(RT(cancel), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, bottom), new Vector2(-CardSide * 2, cancelH));
-            Ensure<R0926SafeInset>(cancel).SetEdge(R0926SafeInset.Edge.Bottom);
+            var sheet = FindOrCreate(panel.transform, "MoreSheet0926");
+            Img(sheet, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 56f).raycastTarget = true;
+            SetRect(RT(sheet), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-CardSide * 2, MoreSheetH));
+            Ensure<R0926SafeInset>(sheet).SetEdge(R0926SafeInset.Edge.Bottom);
+            Slide(sheet, 260f);
+            var grab = sheet.transform.Find("Grab0926");   // 세 줄 목록이던 때의 손잡이 — 사진 시트처럼 없이 (칸 윗변을 가린다)
+            if (grab != null) Object.DestroyImmediate(grab.gameObject);
+            var tiles = FindOrCreate(sheet.transform, "Tiles0926");
+            var trt = RT(tiles);
+            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.pivot = new Vector2(0.5f, 0.5f);
+            trt.offsetMin = new Vector2(MorePad, MorePad); trt.offsetMax = new Vector2(-MorePad, -MorePad);
+            EditorUtility.SetDirty(trt);
+
+            var fixPlace = Find(panel.transform, "FixPlaceButton");
+            var removePlace = Find(panel.transform, "RemovePlaceButton");
+            var report = Find(panel.transform, "ReportButton0926") ?? NewUI("ReportButton0926", tiles.transform);
+            Ensure<Image>(report);
+            var rBtn = Ensure<Button>(report);
+            var cancel = Find(panel.transform, "MoreCancel0926") ?? NewUI("MoreCancel0926", tiles.transform);
+            // 예전엔 카드 밑에 따로 떠서 혼자 올라오고 안전 영역만큼 띄웠다 — 이제 카드 안 칸이라 둘 다 뗀다
+            foreach (var c in new Component[] { cancel.GetComponent<R0926SlideIn>(), cancel.GetComponent<R0926SafeInset>() })
+                if (c != null) Object.DestroyImmediate(c);
+            Ensure<Image>(cancel);
             var cBtn = Ensure<Button>(cancel);
-            ButtonLabel(cancel, CancelWords, Ink);
             ResetListeners(cBtn);
             AddSetActive(cBtn, panel, false);
             AddSetActive(cBtn, fixBtn, true);
             AddSetActive(cBtn, fixOpp, false);
 
-            var sheet = FindOrCreate(panel.transform, "MoreSheet0926");
-            Img(sheet, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 56f).raycastTarget = true;
-            SetRect(RT(sheet), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, bottom + cancelH + gap), new Vector2(-CardSide * 2, rowH * 3));
-            Ensure<R0926SafeInset>(sheet).SetEdge(R0926SafeInset.Edge.Bottom);
-            Slide(sheet, 260f);
-            Slide(cancel, 260f);
-
-            var fixPlace = Find(panel.transform, "FixPlaceButton");
-            var removePlace = Find(panel.transform, "RemovePlaceButton");
-            SheetRow(fixPlace, sheet.transform, 0, rowH, "r0926_i_edit", Ink,
-                new[] { "정보 수정 요청", "Suggest an edit", "情報の修正をリクエスト", "申请修改信息", "Sugerir un cambio" });
-            SheetRow(removePlace, sheet.transform, 1, rowH, "r0926_i_trash", Ink,
-                new[] { "삭제 요청", "Request removal", "削除をリクエスト", "申请删除", "Solicitar eliminación" });
-
-            var report = Find(sheet.transform, "ReportButton0926") ?? NewUI("ReportButton0926", sheet.transform);
-            Ensure<Image>(report);
-            var rBtn = Ensure<Button>(report);
-            SheetRow(report, sheet.transform, 2, rowH, "r0926_i_flag", Danger,
-                new[] { "신고하기", "Report", "報告する", "举报", "Denunciar" });
+            var items = new (GameObject go, string icon, Color fg, string[] words)[]
+            {
+                (fixPlace, "r0926_i_edit", Ink, new[] { "정보 수정", "Edit info", "情報の修正", "修改信息", "Corregir" }),
+                (removePlace, "r0926_i_trash", Ink, new[] { "삭제 요청", "Remove", "削除依頼", "申请删除", "Eliminar" }),
+                (report, "r0926_i_flag", Danger, new[] { "신고", "Report", "報告", "举报", "Denunciar" }),
+                (cancel, "r0926_i_close", Muted, CancelWords),
+            };
+            for (int i = 0; i < items.Length; i++)
+            {
+                var it = items[i];
+                if (it.go == null) { log.Add("장소 메뉴: 칸 없음 " + it.words[0]); continue; }
+                it.go.transform.SetParent(tiles.transform, false);
+                it.go.transform.SetSiblingIndex(i);
+                foreach (var t in it.go.GetComponentsInChildren<Text>(true))
+                    if (t.name != "Label0926") t.enabled = false;   // 예전 "Fix Place" 글자
+                SheetTile(it.go, i, items.Length, it.icon, it.fg, it.words, it.go == cancel);
+            }
 
             OnTop(panel);   // 상세 화면은 도크 아래에 그려지는 구조라, 시트만 맨 위로 올린다
             var reportSheet = BuildReportSheet(full.transform);
@@ -286,34 +306,6 @@ namespace Redesign0926
             AddSetActive(rBtn, fixOpp, false);
             AddSetActive(rBtn, reportSheet, true);
             log.Add("place menu ok");
-        }
-
-        private static void SheetRow(GameObject row, Transform sheet, int index, float rowH, string icon, Color color, string[] words)
-        {
-            if (row == null) return;
-            row.transform.SetParent(sheet, false);
-            row.transform.localScale = Vector3.one;
-            row.transform.SetSiblingIndex(index);
-            SetRect(RT(row), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -rowH * index), new Vector2(0, rowH));
-            var img = row.GetComponent<Image>();
-            img.sprite = null; img.color = new Color(1, 1, 1, 0); img.raycastTarget = true;
-            foreach (var t in row.GetComponentsInChildren<Text>(true))
-                if (t.name != "Label0926") t.enabled = false;   // 예전 "Fix Place" 글자
-
-            if (index > 0)
-            {
-                var line = FindOrCreate(row.transform, "Line0926");
-                Img(line, null, Line, Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(line), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(-80, 2));
-            }
-            var ic = FindOrCreate(row.transform, "Icon0926");
-            Img(ic, Spr(icon), color, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(ic), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(90, 0), new Vector2(60, 60));
-            var lb = FindOrCreate(row.transform, "Label0926");
-            Txt(lb, words[0], 44, color, TextAnchor.MiddleLeft, FontStyle.Bold);
-            var lrt = RT(lb);
-            lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = new Vector2(150, 0); lrt.offsetMax = new Vector2(-40, 0);
-            Loc(lb, words[0], words[1], words[2], words[3], words[4]);
         }
 
         private static GameObject BuildReportSheet(Transform full)
@@ -508,6 +500,15 @@ namespace Redesign0926
             if (follow != null) { PillButton(follow, true); RT(follow).sizeDelta = new Vector2(560, 120); }
             var followed = Find(panel.transform, "FollowedButton");
             if (followed != null) { PillButton(followed, false); RT(followed).sizeDelta = new Vector2(560, 120); }
+            // 10-21 followButtonText 가 숨은 '팔로잉'(FollowedButton) 글자를 가리켜, 보이는 '팔로우' 버튼은 씬의 한국어 그대로였다 (외국어·'맞팔로우' 안 뜸)
+            var pm = Object.FindAnyObjectByType<ProfileManager>(FindObjectsInactive.Include);
+            if (pm != null)
+            {
+                var pso = new SerializedObject(pm);
+                pso.FindProperty("followButtonText").objectReferenceValue = follow != null ? follow.GetComponentInChildren<Text>(true) : null;
+                pso.FindProperty("followedButtonText").objectReferenceValue = followed != null ? followed.GetComponentInChildren<Text>(true) : null;
+                pso.ApplyModifiedPropertiesWithoutUndo();
+            }
             var edit = Find(panel.transform, "EditProfileButton");
             if (edit != null) { PillButton(edit, false); RT(edit).sizeDelta = new Vector2(720, 120); }
 

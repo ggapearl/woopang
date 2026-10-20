@@ -113,7 +113,7 @@ public static class R0926HuntList
     {
         // 목록은 한 줄에 한 곳 — 제목의 줄바꿈은 띄어쓰기로
         string title = ((string)h["title"] ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
-        s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : "보물찾기" };
+        s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro") };
         if (Has(h, "lat") && Has(h, "lon"))
         {
             s.coord = Coord.Exact;

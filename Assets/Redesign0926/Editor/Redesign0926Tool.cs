@@ -337,6 +337,40 @@ namespace Redesign0926
                             }
                         }
                     }
+                    else if (cmd == "hangul")
+                    {
+                        // 다국어가 안 붙은 한글 글자 전수 — 경로 · 글 · 그 글을 코드에서 쥐고 있는 곳(실행 중에 바꿔 넣는지 가늠)
+                        var canvasT = Redesign0926Capture.FindMainCanvas(scene).transform;
+                        var refs = new Dictionary<UnityEngine.Object, List<string>>();
+                        foreach (var rootGo in scene.GetRootGameObjects())
+                            foreach (var mb in rootGo.GetComponentsInChildren<MonoBehaviour>(true))
+                            {
+                                if (mb == null || mb is UnityEngine.UI.Graphic || mb is R0926LocalizedText) continue;
+                                var it = new SerializedObject(mb).GetIterator();
+                                for (bool enter = true; it.NextVisible(enter); enter = it.propertyType != SerializedPropertyType.ObjectReference)
+                                {
+                                    if (it.propertyType != SerializedPropertyType.ObjectReference || it.objectReferenceValue == null) continue;
+                                    var o = it.objectReferenceValue;
+                                    if (!refs.TryGetValue(o, out var l)) refs[o] = l = new List<string>();
+                                    if (l.Count < 3) l.Add(mb.GetType().Name + "." + it.name);
+                                }
+                            }
+                        int n = 0;
+                        foreach (var t in canvasT.GetComponentsInChildren<UnityEngine.UI.Text>(true))
+                        {
+                            if (t.GetComponent<R0926LocalizedText>() != null) continue;
+                            bool han = false;
+                            foreach (char ch in t.text) if (ch >= '가' && ch <= '힣') { han = true; break; }
+                            if (!han) continue;
+                            var who = new List<string>();
+                            if (refs.TryGetValue(t, out var a)) who.AddRange(a);
+                            if (refs.TryGetValue(t.gameObject, out var b)) who.AddRange(b);
+                            log.Add((t.gameObject.activeInHierarchy ? "" : "(off) ") + AnimationUtility.CalculateTransformPath(t.transform, canvasT)
+                                    + " | " + t.text.Replace("\n", "⏎").Substring(0, Math.Min(40, t.text.Length)) + " | " + string.Join(", ", who));
+                            n++;
+                        }
+                        log.Add("hangul " + n);
+                    }
                     else if (cmd.StartsWith("capture:"))
                     {
                         // capture:<dir>:<state,state>  — 드라이브 문자(C:)의 콜론을 피하려고 마지막 콜론으로 자른다

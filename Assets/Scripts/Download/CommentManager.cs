@@ -239,6 +239,9 @@ public class CommentManager : MonoBehaviour
             if (header != null)
                 titleText = header.GetComponentInChildren<Text>(true);
         }
+
+        // 제목은 앱 언어로 (10-21 전엔 씬의 '댓글' 그대로)
+        if (titleText != null) titleText.text = R0926LocalizedText.Say("댓글", "Comments", "コメント", "评论", "Comentarios");
     }
 
     private Transform FindInChildren(Transform parent, string name)
@@ -369,7 +372,7 @@ public class CommentManager : MonoBehaviour
             localizedText = LocalizationManager.Instance.GetText("comment_placeholder");
 
         if (string.IsNullOrEmpty(localizedText))
-            localizedText = "댓글 입력...";
+            localizedText = R0926LocalizedText.Say("댓글 입력...", "Add a comment...", "コメントを入力...", "写评论...", "Escribe un comentario...");
 
         placeholderText.text = localizedText;
     }
@@ -511,7 +514,7 @@ public class CommentManager : MonoBehaviour
                 if (placeText != null)
                 {
                     if (!string.IsNullOrEmpty(objectName))
-                        placeText.text = $"{objectName}에 댓글 달기...";
+                        placeText.text = R0926LocalizedText.Say($"{objectName}에 댓글 달기...", $"Comment on {objectName}...", $"{objectName}にコメント...", $"评论 {objectName}...", $"Comenta en {objectName}...");
                     else
                         ApplyLocalizedPlaceholder();
                 }

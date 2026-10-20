@@ -276,7 +276,7 @@ public class CubeUploadManager : MonoBehaviour
         if (permissionDenied)
         {
             // 찍지 않고 닫아도 경로가 비어 온다 — 권한이 없을 때만 알린다 (예전엔 닫기만 해도 '권한이 필요합니다')
-            if (!NativeCamera.CheckPermission(true)) ShowWarning("카메라 권한이 필요합니다.");
+            if (!NativeCamera.CheckPermission(true)) ShowWarning(R0926LocalizedText.Say("카메라 권한이 필요합니다.", "Camera permission is required.", "カメラの許可が必要です。", "需要相机权限。", "Se necesita permiso de cámara."));
             MainLoading(false);
             isProcessing = false;
             yield break;
@@ -560,7 +560,7 @@ public class CubeUploadManager : MonoBehaviour
         if (remainingSlots <= 0)
         {
             // 최대 개수 도달 → 촬영 종료
-            ShowWarning($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.");
+            ShowWarning(R0926LocalizedText.Say($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.", $"You can add up to {MAX_SUB_PHOTOS} photos.", $"最大{MAX_SUB_PHOTOS}枚まで追加できます。", $"最多可添加 {MAX_SUB_PHOTOS} 张照片。", $"Puedes añadir hasta {MAX_SUB_PHOTOS} fotos."));
             yield break;
         }
 
@@ -588,8 +588,8 @@ public class CubeUploadManager : MonoBehaviour
         {
             SubLoading(0);
             // 찍지 않고 닫아도 경로가 비어 온다 — 권한이 없을 때만 알린다
-            if (!NativeCamera.CheckPermission(true)) ShowWarning("카메라 권한이 필요합니다.");
-            else if (subPhotos.Count > 0) ShowWarning($"Sub 사진 촬영 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
+            if (!NativeCamera.CheckPermission(true)) ShowWarning(R0926LocalizedText.Say("카메라 권한이 필요합니다.", "Camera permission is required.", "カメラの許可が必要です。", "需要相机权限。", "Se necesita permiso de cámara."));
+            else if (subPhotos.Count > 0) ShowWarning(SubPhotosTakenText());
             yield break;
         }
 
@@ -631,7 +631,8 @@ public class CubeUploadManager : MonoBehaviour
 
             // "계속 촬영하시겠습니까?" 다이얼로그 표시
             int currentCount = subPhotos.Count;
-            string message = $"현재 {currentCount}/{MAX_SUB_PHOTOS}장\n계속 촬영하시겠습니까?";
+            string message = R0926LocalizedText.Say($"현재 {currentCount}/{MAX_SUB_PHOTOS}장\n계속 촬영하시겠습니까?", $"{currentCount}/{MAX_SUB_PHOTOS} photos\nKeep taking photos?",
+                $"現在 {currentCount}/{MAX_SUB_PHOTOS}枚\n撮影を続けますか？", $"当前 {currentCount}/{MAX_SUB_PHOTOS} 张\n继续拍摄吗？", $"{currentCount}/{MAX_SUB_PHOTOS} fotos\n¿Seguir tomando fotos?");
 
             if (continueCaptureDialog != null)
             {
@@ -639,7 +640,7 @@ public class CubeUploadManager : MonoBehaviour
                     message,
                     onYes: () => StartCoroutine(CaptureNextSubPhoto()), // 다시 촬영
                     onNo: () => {
-                        ShowWarning($"Sub 사진 촬영 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
+                        ShowWarning(SubPhotosTakenText());
                     }
                 );
             }
@@ -653,8 +654,15 @@ public class CubeUploadManager : MonoBehaviour
             // 촬영 취소
             SubLoading(0);
             if (subPhotos.Count > 0)
-                ShowWarning($"Sub 사진 촬영 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
+                ShowWarning(SubPhotosTakenText());
         }
+    }
+
+    private string SubPhotosTakenText()
+    {
+        int total = subPhotos.Count;
+        return R0926LocalizedText.Say($"Sub 사진 촬영 완료! (총 {total}/{MAX_SUB_PHOTOS}장)", $"Photos taken! ({total}/{MAX_SUB_PHOTOS})",
+            $"写真を撮影しました！（{total}/{MAX_SUB_PHOTOS}枚）", $"拍摄完成！（共 {total}/{MAX_SUB_PHOTOS} 张）", $"¡Fotos tomadas! ({total}/{MAX_SUB_PHOTOS})");
     }
 
     /// <summary>
@@ -668,13 +676,16 @@ public class CubeUploadManager : MonoBehaviour
         }
 
         isProcessing = true;
-        ShowSpinner($"사진 {continuousCapturedPaths.Count}장 로딩 중...");
+        int n = continuousCapturedPaths.Count;
+        ShowSpinner(R0926LocalizedText.Say($"사진 {n}장 로딩 중...", $"Loading {n} photos...", $"写真{n}枚を読み込み中...", $"正在加载 {n} 张照片...", $"Cargando {n} fotos..."));
 
         // 연속 촬영한 모든 사진을 Sub Photos에 추가
         yield return StartCoroutine(LoadMultipleImagesWithFallback(continuousCapturedPaths.ToArray(), () => { }));
 
         HideSpinner();
-        ShowWarning($"Sub 사진 {continuousCapturedPaths.Count}장 추가 완료! (총 {subPhotos.Count}/{MAX_SUB_PHOTOS}장)");
+        int total = subPhotos.Count;
+        ShowWarning(R0926LocalizedText.Say($"Sub 사진 {n}장 추가 완료! (총 {total}/{MAX_SUB_PHOTOS}장)", $"Added {n} photos ({total}/{MAX_SUB_PHOTOS})",
+            $"写真を{n}枚追加しました（{total}/{MAX_SUB_PHOTOS}枚）", $"已添加 {n} 张照片（共 {total}/{MAX_SUB_PHOTOS} 张）", $"{n} fotos añadidas ({total}/{MAX_SUB_PHOTOS})"));
 
         continuousCapturedPaths.Clear();
         isProcessing = false;
@@ -772,7 +783,8 @@ public class CubeUploadManager : MonoBehaviour
                 }
                 else
                 {
-                    ShowWarning($"이미지 로드 실패: {Path.GetFileName(path)}");
+                    string file = Path.GetFileName(path);
+                    ShowWarning(R0926LocalizedText.Say($"이미지 로드 실패: {file}", $"Couldn't load image: {file}", $"画像を読み込めませんでした: {file}", $"图片加载失败：{file}", $"No se pudo cargar la imagen: {file}"));
                 }
             }
 

@@ -2698,36 +2698,7 @@ public class MessagePanelManager : MonoBehaviour
     /// 중국어: "11月3日 下午7:41"
     /// 스페인어: "3 nov. 19:41"
     /// </summary>
-    private string FormatDateSeparator(DateTime dateTime)
-    {
-        string langCode = Application.systemLanguage.ToString();
-
-        int hour12 = dateTime.Hour % 12;
-        if (hour12 == 0) hour12 = 12;
-        bool isPM = dateTime.Hour >= 12;
-
-        switch (Application.systemLanguage)
-        {
-            case SystemLanguage.Korean:
-                return $"{dateTime.Month}월 {dateTime.Day}일 {(isPM ? "오후" : "오전")} {hour12}:{dateTime.Minute:D2}";
-
-            case SystemLanguage.Japanese:
-                return $"{dateTime.Month}月{dateTime.Day}日 {(isPM ? "午後" : "午前")}{hour12}:{dateTime.Minute:D2}";
-
-            case SystemLanguage.Chinese:
-            case SystemLanguage.ChineseSimplified:
-            case SystemLanguage.ChineseTraditional:
-                return $"{dateTime.Month}月{dateTime.Day}日 {(isPM ? "下午" : "上午")}{hour12}:{dateTime.Minute:D2}";
-
-            case SystemLanguage.Spanish:
-                string[] monthsEs = { "", "ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sep.", "oct.", "nov.", "dic." };
-                return $"{dateTime.Day} {monthsEs[dateTime.Month]} {dateTime.Hour:D2}:{dateTime.Minute:D2}";
-
-            default: // English and others
-                string[] monthsEn = { "", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-                return $"{monthsEn[dateTime.Month]} {dateTime.Day}, {hour12}:{dateTime.Minute:D2} {(isPM ? "PM" : "AM")}";
-        }
-    }
+    private string FormatDateSeparator(DateTime dateTime) => AppTimeText.MonthDayClock(dateTime);
 
     /// <summary>
     /// 24시간 이상 차이나는지 확인하고 필요시 날짜 구분선 생성
@@ -3250,7 +3221,7 @@ public class MessagePanelManager : MonoBehaviour
     private static string HuntBubbleText(string title, string body, bool isMine)
     {
         string head = "<size=40><b><color=" + (isMine ? "#FFE7A3" : "#FFCF5C") + ">"
-                    + (AppLanguage.Code == "ko" ? "보물찾기" : "Treasure hunt") + " · " + title.Replace("<", "＜") + "  ›</color></b></size>";
+                    + R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro") + " · " + title.Replace("<", "＜") + "  ›</color></b></size>";
         return string.IsNullOrEmpty(body) ? head : head + "\n" + body;
     }
 
@@ -3265,7 +3236,7 @@ public class MessagePanelManager : MonoBehaviour
         int id = code == 200 && j != null ? j["hunt_id"].AsInt : 0;
         if (id > 0) R0926HuntPush.OpenHunt(id);
         else if (ToastManager.Instance != null)
-            ToastManager.Instance.ShowInfo(AppLanguage.Code == "ko" ? "이 보물찾기를 찾을 수 없어요" : "Couldn't find this treasure hunt");
+            ToastManager.Instance.ShowInfo(R0926LocalizedText.Say("이 보물찾기를 찾을 수 없어요", "Couldn't find this treasure hunt", "この宝探しが見つかりません", "找不到这个寻宝活动", "No se encontró esta búsqueda del tesoro"));
     }
 
     private void CreateMessageBubble(DMMessage msg, bool isMine)
@@ -3877,15 +3848,14 @@ public class MessagePanelManager : MonoBehaviour
 
     private static string SendFailReason(UnityWebRequest request)
     {
-        bool ko = AppLanguage.Code == "ko";
         string body = request.downloadHandler != null ? request.downloadHandler.text ?? "" : "";
         if (request.responseCode == 401)
-            return ko ? "로그인이 풀렸어요. 다시 로그인해 주세요" : "Please sign in again";
+            return R0926LocalizedText.Say("로그인이 풀렸어요. 다시 로그인해 주세요", "Please sign in again", "ログインが切れました。もう一度ログインしてください", "登录已失效，请重新登录", "Vuelve a iniciar sesión");
         if (request.responseCode == 403 && body.Contains("blocked"))
-            return ko ? "메시지를 보낼 수 없는 상대예요" : "You can't message this user";
+            return R0926LocalizedText.Say("메시지를 보낼 수 없는 상대예요", "You can't message this user", "このユーザーにはメッセージを送れません", "无法给此用户发消息", "No puedes enviar mensajes a este usuario");
         if (request.responseCode == 403)
-            return ko ? "팔로우한 사람에게만 메시지를 보낼 수 있어요" : "You can only message people you follow";
-        return ko ? "메시지를 보내지 못했어요. 다시 보내 주세요" : "Message not sent. Please try again";
+            return R0926LocalizedText.Say("팔로우한 사람에게만 메시지를 보낼 수 있어요", "You can only message people you follow", "フォローしている人にだけメッセージを送れます", "只能给你关注的人发消息", "Solo puedes enviar mensajes a quienes sigues");
+        return R0926LocalizedText.Say("메시지를 보내지 못했어요. 다시 보내 주세요", "Message not sent. Please try again", "メッセージを送れませんでした。もう一度送ってください", "消息未发送，请重试", "No se envió el mensaje. Inténtalo de nuevo");
     }
 
     /// <summary>
@@ -4361,10 +4331,9 @@ public class MessagePanelManager : MonoBehaviour
             }
             else if (ToastManager.Instance != null)
             {
-                bool ko = AppLanguage.Code == "ko";
                 ToastManager.Instance.ShowWarning(request.responseCode == 403
-                    ? (ko ? "팔로우할 수 없는 상대예요" : "You can't follow this user")
-                    : (ko ? "잠시 후 다시 해 주세요" : "Please try again in a moment"));
+                    ? R0926LocalizedText.Say("팔로우할 수 없는 상대예요", "You can't follow this user", "このユーザーはフォローできません", "无法关注此用户", "No puedes seguir a este usuario")
+                    : R0926LocalizedText.Say("잠시 후 다시 해 주세요", "Please try again in a moment", "しばらくしてからもう一度お試しください", "请稍后再试", "Inténtalo de nuevo en un momento"));
             }
         }
     }
@@ -4380,7 +4349,7 @@ public class MessagePanelManager : MonoBehaviour
             if (!shown)
             {
                 if (ToastManager.Instance != null)
-                    ToastManager.Instance.ShowWarning(AppLanguage.Code == "ko" ? "프로필을 불러오지 못했어요" : "Couldn't load the profile");
+                    ToastManager.Instance.ShowWarning(R0926LocalizedText.Say("프로필을 불러오지 못했어요", "Couldn't load the profile", "プロフィールを読み込めませんでした", "无法加载个人资料", "No se pudo cargar el perfil"));
                 return;
             }
             if (messagePanel != null) messagePanel.SetActive(false);
@@ -5134,13 +5103,7 @@ public class MessagePanelManager : MonoBehaviour
         if (string.IsNullOrEmpty(dateStr)) return "";
         if (!DateTime.TryParse(dateStr, out DateTime date)) return dateStr;
 
-        TimeSpan diff = DateTime.Now - date;
-
-        if (diff.TotalMinutes < 1) return "방금";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}분 전";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}시간 전";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}일 전";
-        return date.ToString("M월 d일");
+        return AppTimeText.Ago(date, DateTime.Now, 7);
     }
 
     private string GetShortTime(string dateStr)
@@ -5148,11 +5111,7 @@ public class MessagePanelManager : MonoBehaviour
         if (string.IsNullOrEmpty(dateStr)) return "";
         if (!DateTime.TryParse(dateStr, out DateTime date)) return "";
 
-        bool isAM = date.Hour < 12;
-        int hour12 = date.Hour % 12;
-        if (hour12 == 0) hour12 = 12;
-
-        return $"{(isAM ? "오전" : "오후")} {hour12}:{date.Minute:D2}";
+        return AppTimeText.Clock(date);
     }
 
     /// <summary>

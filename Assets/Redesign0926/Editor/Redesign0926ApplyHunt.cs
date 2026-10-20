@@ -276,6 +276,69 @@ namespace Redesign0926
             return content.transform;
         }
 
+        // 보물찾기 글자의 일본어·중국어·스페인어 — 영어 글자로 찾는다 (10-21 — 그전엔 세 언어 모두 영어가 떴다)
+        private static readonly Dictionary<string, string[]> HuntJaZhEs = new Dictionary<string, string[]>
+        {
+            ["Hide a treasure right here\n<size=40>Placed where you stand · host rules first</size>"] = new[] { "ここに宝を隠す\n<size=40>今立っている場所に · はじめに主催ルールを確認</size>", "在这里藏宝\n<size=40>就藏在你站的位置 · 先看主办规则</size>", "Esconde un tesoro aquí\n<size=40>Donde estás ahora · primero, las normas</size>" },
+            ["Host rules  ›"] = new[] { "主催ルールを見る  ›", "查看主办规则  ›", "Normas para organizar  ›" },
+            ["Join with a 6-character code"] = new[] { "6桁の参加コードで参加", "用 6 位参加代码参加", "Únete con un código de 6 caracteres" },
+            ["Join"] = new[] { "参加", "参加", "Unirse" },
+            ["My games"] = new[] { "自分のゲーム", "我的游戏", "Mis juegos" },
+            ["Log in to hide and find treasures"] = new[] { "ログインすると宝を隠したり探したりできます", "登录后即可藏宝和寻宝", "Inicia sesión para esconder y buscar tesoros" },
+            ["Log in"] = new[] { "ログイン", "登录", "Iniciar sesión" },
+            ["Treasure hunts are off — turn them on in List ▸ Settings"] = new[] { "宝探しはオフになっています — 一覧 ▸ 設定でオンにできます", "寻宝已关闭 — 可在 列表 ▸ 设置 中开启", "Las búsquedas están desactivadas — actívalas en Lista ▸ Ajustes" },
+            ["‹  Back"] = new[] { "‹  戻る", "‹  返回", "‹  Volver" },
+            ["Title"] = new[] { "タイトル", "标题", "Título" },
+            ["e.g. Autumn treasure at City Hall"] = new[] { "例：市役所前の秋の宝", "例：市政厅前的秋日宝藏", "p. ej. Tesoro de otoño en el ayuntamiento" },
+            ["Hint (optional)"] = new[] { "ヒント（任意）", "提示（选填）", "Pista (opcional)" },
+            ["A hint for the finders"] = new[] { "探す人へのヒント", "给寻宝者的提示", "Una pista para quienes buscan" },
+            ["How to win"] = new[] { "見つけ方", "寻宝方式", "Cómo se gana" },
+            ["Code — the answer to enter at the treasure"] = new[] { "コード — 宝の前で入力する答え", "代码 — 在宝藏前输入的答案", "Código — la respuesta que se introduce en el tesoro" },
+            ["e.g. woopang123"] = new[] { "例：woopang123", "例：woopang123", "p. ej. woopang123" },
+            ["Question (optional)"] = new[] { "問題（任意）", "问题（选填）", "Pregunta (opcional)" },
+            ["e.g. Our app's name + 123?"] = new[] { "例：このアプリの名前 + 123 は？", "例：我们 App 的名字 + 123 是？", "p. ej. ¿El nombre de la app + 123?" },
+            ["Winners"] = new[] { "当選人数", "中奖人数", "Ganadores" },
+            ["Max players — closes when full"] = new[] { "参加人数 — 埋まると締め切り", "参加人数 — 满员即截止", "Máx. de jugadores — se cierra al llenarse" },
+            ["Prize (optional)"] = new[] { "賞品（任意）", "奖品（选填）", "Premio (opcional)" },
+            ["e.g. Coffee coupon"] = new[] { "例：コーヒーのクーポン", "例：咖啡券", "p. ej. Cupón de café" },
+            ["Visible within — get this close to see it"] = new[] { "見える距離 — ここまで近づくと宝が見えます", "可见距离 — 走到这个范围内才能看到宝藏", "Visible a — acércate hasta aquí para verlo" },
+            ["Who can join (distance)"] = new[] { "参加範囲（距離）", "参加范围（距离）", "Quién puede unirse (distancia)" },
+            ["Show location"] = new[] { "位置の公開", "位置公开", "Mostrar ubicación" },
+            ["Open to"] = new[] { "参加できる人", "参加对象", "Abierto a" },
+            ["Starts"] = new[] { "開始", "开始", "Empieza" },
+            ["Duration"] = new[] { "開催時間", "进行时间", "Duración" },
+            ["Hide the treasure here"] = new[] { "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí" },
+            ["Agree and hide a treasure"] = new[] { "同意して宝を隠す", "同意并藏宝", "Aceptar y esconder un tesoro" },
+            ["‹  Treasure hunt"] = new[] { "‹  宝探し", "‹  寻宝", "‹  Búsqueda del tesoro" },
+            ["Code"] = new[] { "コード", "代码", "Código" },
+            ["Enter the treasure's code"] = new[] { "宝のコードを入力してください", "请输入宝藏的代码", "Introduce el código del tesoro" },
+            ["Open"] = new[] { "開ける", "打开", "Abrir" },
+            ["Rate on the host's profile"] = new[] { "主催者のプロフィールで評価する", "在主办者资料中评分", "Valora en el perfil del organizador" },
+            ["Leave"] = new[] { "退出する", "退出", "Salir" },
+            ["Couldn't find it"] = new[] { "見つけられなかった", "没找到", "No lo encontré" },
+            ["Extend 1 hour"] = new[] { "1時間延長", "延长 1 小时", "Ampliar 1 hora" },
+            ["Extend 1 day"] = new[] { "1日延長", "延长 1 天", "Ampliar 1 día" },
+            ["End the game"] = new[] { "ゲームを終了", "结束游戏", "Terminar el juego" },
+            ["Reveal the location"] = new[] { "宝の位置を公開", "公开宝藏位置", "Revelar la ubicación" },
+            ["Message the players and host"] = new[] { "参加者・主催者にひとこと", "给参加者和主办者留言", "Mensaje a jugadores y organizador" },
+            ["e.g. I'll come get the prize!"] = new[] { "例：賞品を受け取りに行きます！", "例：我会去领奖品！", "p. ej. ¡Voy a por el premio!" },
+            ["Send"] = new[] { "送信", "发送", "Enviar" },
+            ["Updates"] = new[] { "お知らせ", "动态", "Novedades" },
+            ["Hosting record"] = new[] { "主催記録", "主办记录", "Historial como organizador" },
+            ["Player ratings"] = new[] { "参加者の評価", "参加者评分", "Valoraciones de jugadores" },
+            ["One-line review (optional)"] = new[] { "ひとことレビュー（任意）", "一句话评价（选填）", "Reseña breve (opcional)" },
+            ["Only players who found it or got within 1km can rate · The host can't see who wrote it"] = new[] { "宝を見つけたか、ゲーム中に1km以内まで近づいた参加者だけが評価できます · 書いた人は主催者に表示されません", "只有找到宝藏或游戏中到过 1km 范围内的参加者才能评分 · 主办者看不到是谁写的", "Solo pueden valorar quienes lo encontraron o se acercaron a menos de 1 km · Quien organiza no ve quién lo escribió" },
+            ["Player reviews"] = new[] { "参加者のレビュー", "参加者评价", "Reseñas de jugadores" },
+            ["You can report only if you played this host's games · Blocking hides their hunts from your list and alerts"] = new[] { "この人のゲームに参加したことがある場合のみ通報できます · ブロックするとこの人のゲームが一覧・通知から消えます", "只有参加过此人的游戏才能举报 · 屏蔽后此人的游戏将从列表和通知中消失", "Solo puedes denunciar si jugaste a sus juegos · Al bloquear, sus búsquedas desaparecen de tu lista y avisos" },
+            ["Cancel"] = new[] { "キャンセル", "取消", "Cancelar" },
+        };
+
+        private static void HLoc(GameObject g, string ko, string en)
+        {
+            if (!HuntJaZhEs.TryGetValue(en, out var t)) { Debug.LogWarning("[Redesign0926] 보물찾기 번역 없음: " + en); t = new[] { en, en, en }; }
+            Loc(g, ko, en, t[0], t[1], t[2]);
+        }
+
         private static Text HLabel(Transform parent, string name, float h, string ko, string en, float size, Color c, FontStyle st)
         {
             var g = FindOrCreate(parent, name);
@@ -284,7 +347,7 @@ namespace Redesign0926
             var t = Txt(g, ko, size, c, TextAnchor.MiddleLeft, st);
             t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Overflow;
             t.lineSpacing = 1.1f;
-            if (en != null) Loc(g, ko, en, en, en, en);
+            if (en != null) HLoc(g, ko, en);
             return t;
         }
 
@@ -340,7 +403,7 @@ namespace Redesign0926
             Stretch(RT(lg));
             label = Txt(lg, ko, size, fg, TextAnchor.MiddleCenter, st);
             label.horizontalOverflow = HorizontalWrapMode.Wrap; label.supportRichText = true; label.lineSpacing = 1.05f;
-            if (en != null) Loc(lg, ko, en, en, en, en);
+            if (en != null) HLoc(lg, ko, en);
             return b;
         }
 
@@ -362,7 +425,7 @@ namespace Redesign0926
             Stretch(RT(pg)); RT(pg).offsetMin = new Vector2(36, 16); RT(pg).offsetMax = new Vector2(-36, -16);
             var p = Txt(pg, phKo, 42, Muted, a, FontStyle.Normal);
             p.horizontalOverflow = HorizontalWrapMode.Wrap;
-            Loc(pg, phKo, phEn, phEn, phEn, phEn);
+            HLoc(pg, phKo, phEn);
             f.textComponent = t; f.placeholder = p;
             f.lineType = multi ? InputField.LineType.MultiLineNewline : InputField.LineType.SingleLine;
             f.characterLimit = limit;

@@ -81,7 +81,7 @@ public class R0926HuntTreasure : MonoBehaviour
     private bool toastFading;
 
     private static string Lang => R0926LocalizedText.Lang();
-    private static string T(string ko, string en) => Lang == "ko" ? ko : en;
+    private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
     // ── 카드가 부른다 ─────────────────────────────────────
     /// <summary>카드가 게임을 그릴 때 (상세 · 처음 화면의 참가·주최 목록) — 참가 중·아직 못 찾음이거나 내가 연 게임이면 지켜보고, 아니면 그만 본다</summary>
@@ -197,7 +197,7 @@ public class R0926HuntTreasure : MonoBehaviour
         if (tapId != 0 && Time.unscaledTime - tapAt > DoubleTap)
         {
             tapId = 0;   // 한 번만 눌렀다 — 여는 법을 알려 준다
-            Say(T("두 번 톡톡 누르면 보물이 열려요", "Double-tap to open the treasure"), null, 2.5f);
+            Say(T("두 번 톡톡 누르면 보물이 열려요", "Double-tap to open the treasure", "2回タップすると宝が開きます", "双击即可打开宝藏", "Toca dos veces para abrir el tesoro"), null, 2.5f);
         }
         Load();
         if (hunts.Count == 0) return;
@@ -214,8 +214,8 @@ public class R0926HuntTreasure : MonoBehaviour
             if (t.announce && t.obj != null && !Covered())
             {
                 t.announce = false;
-                if (t.host) Say(T("내가 숨긴 보물이 보여요", "Your treasure is in view"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it"), 4f);
-                else Say(T("보물이 근처에 있어요!", "Treasure nearby!"), T("금빛 상자를 두 번 톡톡 눌러 열어 보세요", "Double-tap the golden box to open it"), 4f);
+                if (t.host) Say(T("내가 숨긴 보물이 보여요", "Your treasure is in view", "自分が隠した宝が見えます", "看到了你藏的宝藏", "Tu tesoro está a la vista"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 4f);
+                else Say(T("보물이 근처에 있어요!", "Treasure nearby!", "宝が近くにあります！", "宝藏就在附近！", "¡Tesoro cerca!"), T("금빛 상자를 두 번 톡톡 눌러 열어 보세요", "Double-tap the golden box to open it", "金色の箱を2回タップして開けてみましょう", "双击金色宝箱打开看看", "Toca dos veces la caja dorada para abrirla"), 4f);
             }
         }
         if (!on) return;
@@ -423,7 +423,7 @@ public class R0926HuntTreasure : MonoBehaviour
         if (t.host)
         {
             tapId = 0;
-            Say(T("내가 숨긴 보물이에요", "This is your treasure"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it"), 3f);
+            Say(T("내가 숨긴 보물이에요", "This is your treasure", "自分が隠した宝です", "这是你藏的宝藏", "Este es tu tesoro"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 3f);
             return;
         }
         float now = Time.unscaledTime;
@@ -469,30 +469,30 @@ public class R0926HuntTreasure : MonoBehaviour
                 // 축하 화면 — 상품 안내 · 주최자에게 간 메세지. '확인'을 누르면 그 게임 상세(결과 · 주최자에게 한마디)
                 if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, t.prize, t.hostName))
                 {
-                    Say(T("보물을 찾았어요!", "You found it!"), T(j["rank"].AsInt + "번째로 찾았어요", "You're #" + j["rank"].AsInt), 3.5f);
+                    Say(T("보물을 찾았어요!", "You found it!", "宝を見つけました！", "找到宝藏了！", "¡Lo encontraste!"), T(j["rank"].AsInt + "번째로 찾았어요", "You're #" + j["rank"].AsInt, j["rank"].AsInt + "番目に見つけました", "你是第 " + j["rank"].AsInt + " 个找到的", "Puesto #" + j["rank"].AsInt), 3.5f);
                     yield return new WaitForSecondsRealtime(1.6f);
                     R0926HuntPush.Open(id.ToString(), null, false);
                 }
                 break;
             case "need_code":
-                Say(T("코드를 넣어 주세요", "Enter the code"), Short(j["question"]), 3.5f);
+                Say(T("코드를 넣어 주세요", "Enter the code", "コードを入力してください", "请输入代码", "Introduce el código"), Short(j["question"]), 3.5f);
                 claiming = true;                                   // 상세가 열릴 때까지 다시 누르지 않게
                 yield return new WaitForSecondsRealtime(1.2f);
                 claiming = false;
                 R0926HuntPush.Open(id.ToString(), null, false);   // 상세의 코드 칸 (카드의 근접 확인이 켠다)
                 break;
             case "too_far":
-                Say(T("조금만 더 가까이", "A bit closer"), T(j["remaining_m"].AsInt + "m 더 가 보세요", j["remaining_m"].AsInt + "m to go"), 3f);
+                Say(T("조금만 더 가까이", "A bit closer", "もう少し近くへ", "再靠近一点", "Un poco más cerca"), T(j["remaining_m"].AsInt + "m 더 가 보세요", j["remaining_m"].AsInt + "m to go", "あと " + j["remaining_m"].AsInt + "m 進んでみましょう", "再走 " + j["remaining_m"].AsInt + "m 看看", "Faltan " + j["remaining_m"].AsInt + "m"), 3f);
                 break;
-            case "taken": Say(T("아쉽게도 다른 사람이 먼저 찾았어요", "Someone found it first"), null, 3.5f); Untrack(id); break;
-            case "ended": Say(T("게임이 끝났어요", "The game has ended"), null, 3f); Untrack(id); break;
-            case "device_used": Say(T("이 기기로는 이미 찾았어요", "Already found on this device"), null, 3f); Untrack(id); break;
+            case "taken": Say(T("아쉽게도 다른 사람이 먼저 찾았어요", "Someone found it first", "残念、ほかの人が先に見つけました", "可惜，别人先找到了", "Alguien lo encontró primero"), null, 3.5f); Untrack(id); break;
+            case "ended": Say(T("게임이 끝났어요", "The game has ended", "ゲームが終了しました", "游戏已结束", "El juego terminó"), null, 3f); Untrack(id); break;
+            case "device_used": Say(T("이 기기로는 이미 찾았어요", "Already found on this device", "この端末ではすでに見つけています", "此设备已经找到过了", "Ya se encontró en este dispositivo"), null, 3f); Untrack(id); break;
             case "host":   // 예전에 적어 둔 줄이라 내 게임인 줄 몰랐다 — 계속 보여 준다
                 if (hunts.Contains(t)) { t.host = true; Save(); }
-                Say(T("내가 숨긴 보물이에요", "This is your treasure"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it"), 3f);
+                Say(T("내가 숨긴 보물이에요", "This is your treasure", "自分が隠した宝です", "这是你藏的宝藏", "Este es tu tesoro"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 3f);
                 break;
             case "not_joined": Say(R0926HuntApi.ErrorText(result, Lang), null, 3f); Untrack(id); break;
-            case "locked": Say(T("10분 동안 코드를 넣을 수 없어요", "Code locked for 10 minutes"), null, 3f); break;
+            case "locked": Say(T("10분 동안 코드를 넣을 수 없어요", "Code locked for 10 minutes", "10分間コードを入力できません", "10 分钟内无法输入代码", "Código bloqueado 10 minutos"), null, 3f); break;
             default: Say(R0926HuntApi.ErrorText(result ?? j["error"], Lang), null, 3f); break;
         }
     }

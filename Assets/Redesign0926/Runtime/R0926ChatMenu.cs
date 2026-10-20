@@ -82,9 +82,8 @@ public class R0926ChatMenu : MonoBehaviour
             yield return req.SendWebRequest();
 
             bool ok = req.result == UnityWebRequest.Result.Success;
-            bool ko = R0926LocalizedText.Lang() == "ko";
-            Toast(ok, ok ? (ko ? "차단했습니다. 이 사용자의 메시지를 더 받지 않습니다." : "Blocked. You won't get messages from this user.")
-                         : (ko ? "차단하지 못했습니다. 로그인 상태를 확인해주세요." : "Could not block. Please check you are signed in."));
+            Toast(ok, ok ? R0926LocalizedText.Say("차단했습니다. 이 사용자의 메시지를 더 받지 않습니다.", "Blocked. You won't get messages from this user.", "ブロックしました。このユーザーからのメッセージは届きません。", "已屏蔽，你将不再收到此用户的消息。", "Bloqueado. No recibirás mensajes de este usuario.")
+                         : R0926LocalizedText.Say("차단하지 못했습니다. 로그인 상태를 확인해주세요.", "Could not block. Please check you are signed in.", "ブロックできませんでした。ログイン状態を確認してください。", "屏蔽失败，请确认登录状态。", "No se pudo bloquear. Comprueba que has iniciado sesión."));
         }
         busy = false;
     }

@@ -697,11 +697,13 @@ namespace Redesign0926
         private const float PhotoTileH = 300f;
 
         private static void SheetTileFromIconButton(GameObject btn, int index, string icon, string[] labelWords)
+            => SheetTile(btn, index, 3, icon, labelWords != null ? Muted : Ink, labelWords, labelWords != null);   // 글자를 따로 받는 칸 = 취소
+
+        // 한 줄 큰 칸 (사진 고르기 셋 · 장소 '···' 넷). 칸 글자가 길면(외국어) 칸 안에 들게 줄인다
+        private static void SheetTile(GameObject btn, int index, int count, string icon, Color fg, string[] labelWords, bool quiet)
         {
             if (btn == null) return;
-            const int count = 3;
             const float gap = 20f;
-            bool quiet = labelWords != null;   // 취소
             btn.transform.localScale = Vector3.one;
             var rt = RT(btn);
             rt.anchorMin = new Vector2(index / (float)count, 0); rt.anchorMax = new Vector2((index + 1) / (float)count, 1);
@@ -715,24 +717,24 @@ namespace Redesign0926
             var line = btn.transform.Find("Line0926");   // 세 줄 목록이던 때의 구분선
             if (line != null) Object.DestroyImmediate(line.gameObject);
 
-            var fg = quiet ? Muted : Ink;
             var ic = FindOrCreate(btn.transform, "Icon0926");
             Img(ic, Spr(icon), fg, Image.Type.Simple).raycastTarget = false;
             SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 44), new Vector2(108, 108));
-            foreach (var t in btn.GetComponentsInChildren<Text>(true))
-            {
-                t.fontSize = 50; t.color = fg; t.alignment = TextAnchor.MiddleCenter; t.fontStyle = FontStyle.Bold;
-                t.horizontalOverflow = HorizontalWrapMode.Overflow;
-                if (font != null) t.font = font;
-                SetRect(t.rectTransform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-24, 72));
-                EditorUtility.SetDirty(t);
-            }
             if (labelWords != null)
             {
                 var lb = FindOrCreate(btn.transform, "Label0926");
-                Txt(lb, labelWords[0], 50, fg, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
-                SetRect(RT(lb), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-24, 72));
+                Txt(lb, labelWords[0], 50, fg, TextAnchor.MiddleCenter, FontStyle.Bold);
                 Loc(lb, labelWords[0], labelWords[1], labelWords[2], labelWords[3], labelWords[4]);
+            }
+            foreach (var t in btn.GetComponentsInChildren<Text>(true))
+            {
+                t.fontSize = 50; t.color = fg; t.alignment = TextAnchor.MiddleCenter; t.fontStyle = FontStyle.Bold;
+                // 한 줄(72)에 50 이 안 들어가면 38 까지 줄인다 — 두 줄은 높이가 모자라 늘 한 줄로 남는다
+                t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
+                t.resizeTextForBestFit = true; t.resizeTextMinSize = 38; t.resizeTextMaxSize = 50;
+                if (font != null) t.font = font;
+                SetRect(t.rectTransform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-24, 72));
+                EditorUtility.SetDirty(t);
             }
         }
 
