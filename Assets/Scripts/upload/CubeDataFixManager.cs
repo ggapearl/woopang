@@ -28,6 +28,7 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private GameObject disableObject;
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private Image loadingSpinner;
+    [SerializeField] private R0926PhotoLoading photoLoading; // 대표·추가 사진 칸에 빈 칸+원호 (Redesign0926Apply10 이 만들어 연결)
 
     [Header("카테고리 설정")]
     [SerializeField] private Toggle categoryToggle;
@@ -59,6 +60,7 @@ public class CubeDataFixManager : MonoBehaviour
     };
 
     private Texture2D mainPhoto;
+    private Sprite mainSprite;   // 이 코드가 만든 대표 사진 스프라이트 — 장면에 놓인 기본 그림은 지우면 안 된다
     private List<Texture2D> subPhotos = new List<Texture2D>();
     private List<Image> subPhotoDisplays = new List<Image>();
     private bool showInstagram;
@@ -127,6 +129,10 @@ public class CubeDataFixManager : MonoBehaviour
             continueCaptureDialog = GetComponentInChildren<ContinueCaptureDialog>(true);
             if (continueCaptureDialog == null)
                 continueCaptureDialog = FindFirstObjectByType<ContinueCaptureDialog>();
+        }
+        if (photoLoading == null && mainPhotoButton != null)
+        {
+            photoLoading = mainPhotoButton.transform.parent.GetComponent<R0926PhotoLoading>();
         }
     }
 
@@ -381,7 +387,7 @@ public class CubeDataFixManager : MonoBehaviour
         if (isProcessing) yield break;
         isProcessing = true;
 
-        ShowSpinner(GetLocalizedText("loading_main_photo"));
+        MainLoading(true);
         bool isLoading = true;
         string capturedPath = null;
         bool permissionDenied = false;
@@ -398,8 +404,9 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (permissionDenied)
         {
-            ShowWarning("Camera permission required");
-            HideSpinner();
+            // 찍지 않고 닫아도 경로가 비어 온다 — 권한이 없을 때만 알린다
+            if (!NativeCamera.CheckPermission(true)) ShowWarning("Camera permission required");
+            MainLoading(false);
             isProcessing = false;
             yield break;
         }
@@ -413,7 +420,7 @@ public class CubeDataFixManager : MonoBehaviour
             ShowWarning(GetLocalizedText("photo_selection_failed"));
         }
 
-        HideSpinner();
+        MainLoading(false);
         isProcessing = false;
     }
 
@@ -425,7 +432,7 @@ public class CubeDataFixManager : MonoBehaviour
         if (isProcessing) yield break;
         isProcessing = true;
 
-        ShowSpinner(GetLocalizedText("loading_main_photo"));
+        MainLoading(true);
         bool isLoading = true;
 
         NativeGallery.GetImageFromGallery((path) =>
@@ -438,13 +445,13 @@ public class CubeDataFixManager : MonoBehaviour
             }
             else
             {
-                ShowWarning(GetLocalizedText("photo_selection_failed"));
+                // 고르지 않고 닫았다 — 실패 안내는 띄우지 않는다
                 isLoading = false;
             }
         }, "image/*");
 
         yield return new WaitUntil(() => !isLoading);
-        HideSpinner();
+        MainLoading(false);
         isProcessing = false;
     }
 
@@ -452,6 +459,9 @@ public class CubeDataFixManager : MonoBehaviour
     {
         bool step1Success = false;
         bool processingComplete = false;
+
+        MainLoading(true);
+        yield return null;   // 사진 칸의 빈 칸이 먼저 그려지게 — 사진 읽기(LoadImageAtPath)는 그동안 화면을 멈춘다
 
         // 1단계: NativeGallery.LoadImageAtPath 시도
         try
@@ -535,7 +545,7 @@ public class CubeDataFixManager : MonoBehaviour
 
                         if (mainPhotoDisplay != null)
                         {
-                            mainPhotoDisplay.sprite = GetOrCreateSprite(mainPhoto);
+                            SetMainSprite(mainPhoto);
                             mainPhotoDisplay.gameObject.SetActive(true);
                         }
                     }
@@ -619,6 +629,7 @@ public class CubeDataFixManager : MonoBehaviour
         string capturedPath = null;
         bool permissionDenied = false;
 
+        SubLoading(1);   // 카메라를 닫고 돌아오면 그 자리에 빈 칸이 돌고 있게
         NativeCamera.TakePicture((path) =>
         {
             if (string.IsNullOrEmpty(path))
@@ -631,12 +642,15 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (permissionDenied)
         {
-            ShowWarning("Camera permission required");
+            SubLoading(0);
+            // 찍지 않고 닫아도 경로가 비어 온다 — 권한이 없을 때만 알린다
+            if (!NativeCamera.CheckPermission(true)) ShowWarning("Camera permission required");
             yield break;
         }
 
         if (!string.IsNullOrEmpty(capturedPath))
         {
+            yield return null;   // 빈 칸이 먼저 그려지게 — 사진 읽기는 그동안 화면을 멈춘다
             Texture2D texture = NativeGallery.LoadImageAtPath(capturedPath, maxSize: 1024);
             if (texture != null && texture.width > 8 && texture.height > 8)
             {
@@ -658,6 +672,7 @@ public class CubeDataFixManager : MonoBehaviour
                 }));
                 yield return new WaitUntil(() => conversionComplete);
             }
+            SubLoading(0);
 
             int currentCount = subPhotos.Count;
             if (continueCaptureDialog != null)
@@ -680,34 +695,27 @@ public class CubeDataFixManager : MonoBehaviour
         if (isProcessing) yield break;
         isProcessing = true;
 
-        ShowSpinner(GetLocalizedText("loading_sub_photos"));
+        SubLoading(1);   // 고르는 동안 한 칸 — 몇 장인지는 고른 뒤에 안다
         bool isLoading = true;
 
         NativeGallery.GetImagesFromGallery((paths) =>
         {
             if (paths != null && paths.Length > 0)
             {
-                if (subPhotos.Count + paths.Length > MAX_SUB_PHOTOS)
-                {
-                    ShowWarning(GetLocalizedText("max_sub_photos_exceeded"));
+                // 남은 칸보다 많이 골라도 들어가는 만큼은 넣는다 — 넘친 장수는 LoadSubPhotosWithFallback 가 알린다
+                StartCoroutine(LoadSubPhotosWithFallback(paths, () => {
                     isLoading = false;
-                }
-                else
-                {
-                    StartCoroutine(LoadSubPhotosWithFallback(paths, () => {
-                        isLoading = false;
-                    }));
-                }
+                }));
             }
             else
             {
-                ShowWarning(GetLocalizedText("photo_selection_failed"));
+                // 고르지 않고 닫았다 — 실패 안내는 띄우지 않는다
                 isLoading = false;
             }
         }, "image/*");
 
         yield return new WaitUntil(() => !isLoading);
-        HideSpinner();
+        SubLoading(0);
         UpdateSubPhotoGrid();
         isProcessing = false;
     }
@@ -720,6 +728,11 @@ public class CubeDataFixManager : MonoBehaviour
 
         int processedCount = 0;
         int totalPaths = paths.Length;
+
+        // 들어갈 장수만큼 빈 칸을 먼저 깔고 한 프레임 — 사진 읽기(LoadImageAtPath)는 그동안 화면을 멈춘다
+        int left = Mathf.Min(paths.Length, MAX_SUB_PHOTOS - subPhotos.Count);
+        SubLoading(left);
+        yield return null;
 
         foreach (string path in paths)
         {
@@ -760,9 +773,13 @@ public class CubeDataFixManager : MonoBehaviour
 
             yield return new WaitUntil(() => imageProcessed);
             processedCount++;
+            // 한 장 들어올 때마다 빈 칸 하나가 사진으로 바뀐다
+            SubLoading(--left);
+            UpdateSubPhotoGrid();
             yield return null;
         }
 
+        SubLoading(0);
         onComplete?.Invoke();
     }
 
@@ -783,17 +800,34 @@ public class CubeDataFixManager : MonoBehaviour
     {
         for (int i = 0; i < subPhotoDisplays.Count; i++)
         {
-            if (i < subPhotos.Count)
+            // 같은 사진이면 스프라이트를 그대로 둔다 — 예전엔 부를 때마다 모든 칸의 스프라이트를 새로 만들어 쌓았다 (10-20)
+            Image img = subPhotoDisplays[i];
+            Texture2D tex = i < subPhotos.Count ? subPhotos[i] : null;
+            if (img.sprite != null && (tex == null || img.sprite.texture != tex))
             {
-                subPhotoDisplays[i].sprite = GetOrCreateSprite(subPhotos[i]);
-                subPhotoDisplays[i].gameObject.SetActive(true);
+                Destroy(img.sprite);
+                img.sprite = null;
             }
-            else
-            {
-                subPhotoDisplays[i].sprite = null;
-                subPhotoDisplays[i].gameObject.SetActive(false);
-            }
+            if (tex != null && img.sprite == null) img.sprite = ThumbSprite(tex);
+            img.gameObject.SetActive(tex != null);
         }
+    }
+
+    private void SetMainSprite(Texture2D tex)
+    {
+        if (mainSprite != null) Destroy(mainSprite);
+        mainSprite = tex != null ? GetOrCreateSprite(tex) : null;
+        if (mainPhotoDisplay != null) mainPhotoDisplay.sprite = mainSprite;
+    }
+
+    private void MainLoading(bool on)
+    {
+        if (photoLoading != null) photoLoading.SetMain(on);
+    }
+
+    private void SubLoading(int count)
+    {
+        if (photoLoading != null) photoLoading.SetSub(count);
     }
     #endregion
 
@@ -858,6 +892,14 @@ public class CubeDataFixManager : MonoBehaviour
     private Sprite GetOrCreateSprite(Texture2D texture)
     {
         return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+    }
+
+    // 추가 사진 칸은 가운데를 정사각형으로 잘라 칸을 채운다 — 세로로 긴 사진이 가는 띠로 보였다 (10-20)
+    private static Sprite ThumbSprite(Texture2D texture)
+    {
+        int side = Mathf.Min(texture.width, texture.height);
+        var rect = new Rect((texture.width - side) / 2, (texture.height - side) / 2, side, side);
+        return Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
     }
     #endregion
 
@@ -1527,13 +1569,16 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (mainPhotoDisplay != null) 
         {
-            mainPhotoDisplay.sprite = null;
+            SetMainSprite(null);
             mainPhotoDisplay.gameObject.SetActive(false);
         }
+        MainLoading(false);
+        SubLoading(0);
         if (subPhotoGrid != null)
         {
             foreach (var display in subPhotoDisplays)
             {
+                if (display.sprite != null) Destroy(display.sprite);
                 display.sprite = null;
                 display.gameObject.SetActive(false);
             }

@@ -16,6 +16,19 @@ public class UIFeedbackManager : MonoBehaviour
 
     public static UIFeedbackManager Instance { get; private set; }
 
+    // 안드로이드는 오디오 버퍼가 기본값(가장 큼)이라 버튼을 누른 뒤 소리가 한 박자 늦게, 뭉개져 들렸다 — 아이폰처럼 누르는 순간 나게
+    // 가장 짧은 버퍼로 (10-20 대표님 「안드로이드 효과음이 아이폰과 다르다」). 소리를 내기 전(장면을 읽기 전)에 한 번만 — Reset 은 나던 소리를 끊는다
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void LowLatencyAudio()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        var cfg = AudioSettings.GetConfiguration();
+        if (cfg.dspBufferSize <= 256) return;
+        cfg.dspBufferSize = 256;
+        if (!AudioSettings.Reset(cfg)) Debug.LogWarning("[UIFeedback] 오디오 버퍼를 줄이지 못함");
+#endif
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoInitialize()
     {

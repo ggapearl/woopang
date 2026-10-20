@@ -5,7 +5,10 @@ using UnityEngine.UI;
 /// 시작화면의 반짝이는 별과 별똥별 — 별 그림 한 장을 사각형 여러 개로 한 번에 그린다(그리기 1번).
 /// 별은 저마다 다른 빠르기로 밝아졌다 어두워지고 아주 천천히 흘러가며, 밝은 별에는 십자 빛이 선다.
 /// 별똥별은 1.5~3초에 하나씩 긴 꼬리로 비스듬히 지나간다. (woopang.com 과 같은 색)
+/// ExecuteAlways — 에디터 캡처에서도 별이 그려지게 (Graphic 의 ExecuteAlways 는 물려받지 않아 캡처에 별이 빠져 있었다)
 /// </summary>
+[ExecuteAlways]
+[RequireComponent(typeof(CanvasRenderer))]
 public class R0926StarField : MaskableGraphic
 {
     [SerializeField] private Sprite starSprite;

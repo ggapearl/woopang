@@ -89,6 +89,14 @@ namespace Redesign0926
                 if (state.Length == 0) continue;
                 bool land = state.StartsWith("L_");
                 string key = land ? state.Substring(2) : state;
+                // splash@1.6 — 시작화면의 그 시각 한 장면 (시간표를 장면별로 볼 때)
+                float splashAt = -1f;
+                int atCut = key.IndexOf('@');
+                if (atCut > 0)
+                {
+                    float.TryParse(key.Substring(atCut + 1), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out splashAt);
+                    key = key.Substring(0, atCut);
+                }
                 string[] names = States.TryGetValue(key, out var n) ? n : key.Split('+');
                 var orient = land ? canvas.GetComponentInChildren<R0926Orientation>(true) : null;
                 var toggled = new List<GameObject>();
@@ -130,7 +138,7 @@ namespace Redesign0926
                         int cut = mid ? 11 : 7;
                         string lang = key.Length > cut ? key.Substring(cut) : "ko";
                         Canvas.ForceUpdateCanvases();
-                        splash.EditorPreview(lang, mid ? 0.95f : 3.3f);
+                        splash.EditorPreview(lang, splashAt >= 0f ? splashAt : mid ? 0.95f : 3.3f);
                         Canvas.ForceUpdateCanvases();
                     }
                     var modes = key.StartsWith("fmap") || key == "fset" ? canvas.GetComponentInChildren<R0926SheetModes>(true) : null;

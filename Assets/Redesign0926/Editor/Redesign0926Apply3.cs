@@ -164,8 +164,11 @@ namespace Redesign0926
                     grid.childAlignment = TextAnchor.UpperLeft;
                     grid.constraint = GridLayoutGroup.Constraint.Flexible;
                     EditorUtility.SetDirty(grid);
+                    FitGrid(grid, sub);
                 }
             }
+            // 사진을 불러오는 동안 그 칸에 빈 칸+원호 — 3D 모델은 추가 사진만 (대표 칸은 모델 파일)
+            PhotoLoadingSkeleton(panel, isModel ? null : display, UP, photoY, tile, subs, sub, FindUploadManager(card, isModel), log);
 
             // ── 이름 ──
             const float nameY = photoY - tile - 62;   // -854
@@ -406,6 +409,70 @@ namespace Redesign0926
             SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(iconSize, iconSize));
         }
 
+        /// <summary>
+        /// 사진을 불러오는 동안 그 칸에 — 빛이 흐르는 둥근 빈 칸 + 도는 분홍 원호 (10-20 대표님 「메인·서브 사진 올릴 때(특히 서브)
+        /// 사진이 올라가는 동안 해당 섹션에 로딩스피너나 스켈레톤」). 대표 칸은 그 칸을 덮는 빈 칸 하나,
+        /// 추가 사진은 R0926PhotoLoading 이 불러올 장수만큼 그리드에 복제해 넣는 본 하나 (둘 다 꺼 둔 채)
+        /// </summary>
+        private static void PhotoLoadingSkeleton(Transform panel, Transform mainDisplay, float x, float y, float tile,
+            Transform subGrid, float sub, MonoBehaviour manager, List<string> log)
+        {
+            var pl = Ensure<R0926PhotoLoading>(panel.gameObject);
+            GameObject main = null;
+            if (mainDisplay != null)
+            {
+                main = SkeletonTile(panel, "MainLoading0926", tile * 0.22f, 260f);
+                At(main, x, y, tile, tile);
+                main.transform.SetSiblingIndex(mainDisplay.GetSiblingIndex() + 1);   // 사진 위
+                main.SetActive(false);
+            }
+            GameObject tmpl = null;
+            if (subGrid != null)
+            {
+                tmpl = SkeletonTile(panel, "SubLoading0926_Template", 64f, 150f);
+                At(tmpl, x, y, sub, sub);
+                tmpl.SetActive(false);
+            }
+            var so = new SerializedObject(pl);
+            so.FindProperty("mainSkeleton").objectReferenceValue = main;
+            so.FindProperty("subTemplate").objectReferenceValue = tmpl;
+            so.FindProperty("subGrid").objectReferenceValue = subGrid;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            if (manager == null) { log.Add(panel.parent.name + ": 사진 불러오기 — 매니저 없음"); return; }
+            var mso = new SerializedObject(manager);
+            var prop = mso.FindProperty("photoLoading");
+            if (prop == null) { log.Add(manager.GetType().Name + ": photoLoading 칸 없음"); return; }
+            prop.objectReferenceValue = pl;
+            mso.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // 둥근 빈 칸(카드보다 살짝 밝게, 불투명 — 다시 고를 땐 예전 사진을 가린다) + 빛 띠 + 가운데 분홍 원호
+        private static GameObject SkeletonTile(Transform parent, string name, float spin, float band)
+        {
+            var go = FindOrCreate(parent, name);
+            var bg = Color.Lerp(new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Color.white, 0.07f);
+            Img(go, Spr("r0926_pill"), bg, Image.Type.Sliced, 64f / 34f).raycastTarget = true;
+            Ensure<Mask>(go).showMaskGraphic = true;   // 빛 띠를 둥근 칸 안으로
+            var sh = Ensure<ShimmerEffect>(go);
+            var sso = new SerializedObject(sh);
+            sso.FindProperty("shimmerWidth").floatValue = band;
+            sso.FindProperty("shimmerIntensity").floatValue = 0.16f;
+            sso.FindProperty("perRowStagger").floatValue = 0.12f;
+            sso.ApplyModifiedPropertiesWithoutUndo();
+            PillPart(go.transform, "Spin0926", "r0926_arc", Pink2, spin, Image.Type.Simple);
+            EditorUtility.SetDirty(go);
+            return go;
+        }
+
+        // 추가 사진이 네 장을 넘으면 칸을 줄여 자리 안에 — 예전엔 아래로 넘쳐 '이름' 칸을 덮었다 (10-20)
+        private static void FitGrid(GridLayoutGroup grid, float cell)
+        {
+            var fit = Ensure<R0926FitGrid>(grid.gameObject);
+            var so = new SerializedObject(fit);
+            so.FindProperty("maxCell").floatValue = cell;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         private static void SectionLabel(Transform label, float x, float y, float w)
         {
             if (label == null) return;
@@ -512,41 +579,47 @@ namespace Redesign0926
                 Slide(mc, 140f);
             }
 
-            // 사진 찍기 / 앨범 — 아래 시트 (스크립트가 BottomContainer 를 아래에서 올리는 움직임은 그대로)
+            // 사진 찍기 / 앨범 / 취소 — 아래 시트 (스크립트가 BottomContainer 를 아래에서 올리는 움직임은 그대로)
+            // 10-20 대표님 「'촬영 / 갤러리 / 취소' 는 큼직하게 한줄에」 — 예전 세 줄 목록은 글자가 작아 잘 안 보였다
             var photo = Find(root, "PhotoSourceDialog");
             var pCard = photo != null ? Find(photo.transform, "ContentCard") : null;
             if (pCard != null)
             {
+                const float pad = 24f;
+                SheetDim(photo);
                 Img(pCard, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 56f);
                 var crt = RT(pCard);
                 crt.anchorMin = new Vector2(0, 0); crt.anchorMax = new Vector2(1, 0); crt.pivot = new Vector2(0.5f, 0);
-                crt.anchoredPosition = new Vector2(0, 40); crt.sizeDelta = new Vector2(-CardSide * 2, 150 * 3);
+                crt.anchoredPosition = new Vector2(0, 40); crt.sizeDelta = new Vector2(-CardSide * 2, PhotoTileH + pad * 2);
                 Ensure<R0926SafeInset>(pCard).SetEdge(R0926SafeInset.Edge.Bottom);
                 var row = Find(pCard.transform, "ButtonRow");
                 if (row != null)
                 {
-                    var rrt = RT(row); rrt.anchorMin = Vector2.zero; rrt.anchorMax = Vector2.one; rrt.offsetMin = Vector2.zero; rrt.offsetMax = Vector2.zero;
+                    var rrt = RT(row); rrt.anchorMin = Vector2.zero; rrt.anchorMax = Vector2.one;
+                    rrt.offsetMin = new Vector2(pad, pad); rrt.offsetMax = new Vector2(-pad, -pad);
                 }
-                SheetRowFromIconButton(Find(pCard.transform, "CameraButton"), 0, "r0926_i_cam", null);
-                SheetRowFromIconButton(Find(pCard.transform, "GalleryButton"), 1, "r0926_i_image", null);
-                SheetRowFromIconButton(Find(pCard.transform, "CancelButton"), 2, "r0926_i_close", CancelWords);
+                SheetTileFromIconButton(Find(pCard.transform, "CameraButton"), 0, "r0926_i_cam", null);
+                SheetTileFromIconButton(Find(pCard.transform, "GalleryButton"), 1, "r0926_i_image", null);
+                SheetTileFromIconButton(Find(pCard.transform, "CancelButton"), 2, "r0926_i_close", CancelWords);
             }
 
             var cont = Find(root, "ContinueCaptureDialog");
             var cCard = cont != null ? Find(cont.transform, "ContentCard") : null;
             if (cCard != null)
             {
+                SheetDim(cont);
                 Img(cCard, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 56f);
                 var crt = RT(cCard);
                 crt.anchorMin = new Vector2(0, 0); crt.anchorMax = new Vector2(1, 0); crt.pivot = new Vector2(0.5f, 0);
-                crt.anchoredPosition = new Vector2(0, 40); crt.sizeDelta = new Vector2(-CardSide * 2, 460);
+                // 사진을 찍은 뒤 이어서 뜨는 시트 — 사진 고르기 시트와 함께 글자·버튼을 키웠다 (10-20)
+                crt.anchoredPosition = new Vector2(0, 40); crt.sizeDelta = new Vector2(-CardSide * 2, 500);
                 Ensure<R0926SafeInset>(cCard).SetEdge(R0926SafeInset.Edge.Bottom);
                 var title = Find(cCard.transform, "TitleText");
-                if (title != null) { var t = title.GetComponent<Text>(); t.fontSize = 46; t.fontStyle = FontStyle.Bold; t.color = Ink; }
+                if (title != null) { var t = title.GetComponent<Text>(); t.fontSize = 50; t.fontStyle = FontStyle.Bold; t.color = Ink; }
                 var msg = Find(cCard.transform, "MessageText");
-                if (msg != null) { var t = msg.GetComponent<Text>(); t.fontSize = 38; t.color = Muted; }
+                if (msg != null) { var t = msg.GetComponent<Text>(); t.fontSize = 42; t.color = Muted; }
                 var row = Find(cCard.transform, "ButtonRow");
-                if (row != null) SetRect(RT(row), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 50), new Vector2(-112, 132));
+                if (row != null) SetRect(RT(row), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 50), new Vector2(-96, 156));
                 var noB = Find(cCard.transform, "NoButton");
                 var yesB = Find(cCard.transform, "YesButton");
                 foreach (var (b, primary) in new[] { (noB, false), (yesB, true) })
@@ -559,7 +632,7 @@ namespace Redesign0926
                     foreach (var t in b.GetComponentsInChildren<Text>(true))
                     {
                         var trt = t.rectTransform; trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = Vector2.zero; trt.offsetMax = Vector2.zero;
-                        t.alignment = TextAnchor.MiddleCenter; t.fontSize = 42;
+                        t.alignment = TextAnchor.MiddleCenter; t.fontSize = 48;
                     }
                     // 원래 아이콘 스프라이트 대신 글자 버튼
                 }
@@ -609,36 +682,56 @@ namespace Redesign0926
             log.Add("status screens ok");
         }
 
-        private static void SheetRowFromIconButton(GameObject btn, int index, string icon, string[] labelWords)
+        // 뒤를 반쯤 어둡게 — 다른 아래 시트(신고·AI에게 묻기)와 같게. 예전엔 투명이라 뒤의 '등록하기' 가 시트 위로 비쳐 어수선했다
+        // (DialogPanel 의 CanvasGroup 이 열고 닫을 때 함께 서서히)
+        private static void SheetDim(GameObject dialog)
+        {
+            var panel = dialog.transform.Find("DialogPanel");
+            var img = panel != null ? panel.GetComponent<Image>() : null;
+            if (img == null) return;
+            img.color = new Color(0f, 0f, 0f, 0.5f);
+            EditorUtility.SetDirty(img);
+        }
+
+        // 사진 고르기 시트의 한 칸 — 셋이 한 줄로: 둥근 칸 + 큰 그림 + 그 아래 굵은 글자. 취소는 옅게
+        private const float PhotoTileH = 300f;
+
+        private static void SheetTileFromIconButton(GameObject btn, int index, string icon, string[] labelWords)
         {
             if (btn == null) return;
+            const int count = 3;
+            const float gap = 20f;
+            bool quiet = labelWords != null;   // 취소
             btn.transform.localScale = Vector3.one;
-            const float h = 150f;
-            SetRect(RT(btn), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -h * index), new Vector2(0, h));
-            var img = btn.GetComponent<Image>();
-            img.sprite = null; img.color = new Color(1, 1, 1, 0); img.raycastTarget = true;
-            if (index > 0)
-            {
-                var line = FindOrCreate(btn.transform, "Line0926");
-                Img(line, null, Line, Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(line), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(-80, 2));
-            }
+            var rt = RT(btn);
+            rt.anchorMin = new Vector2(index / (float)count, 0); rt.anchorMax = new Vector2((index + 1) / (float)count, 1);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = new Vector2(index == 0 ? 0 : gap / 2, 0);
+            rt.offsetMax = new Vector2(index == count - 1 ? 0 : -gap / 2, 0);
+            EditorUtility.SetDirty(rt);
+            // 반투명 흰색은 리니어 색 공간에서 훨씬 밝게 섞인다 — 취소가 다른 두 칸보다 밝아 보였다. 둘 다 불투명으로
+            var bg = Color.Lerp(Card, Color.white, quiet ? 0.035f : 0.08f);
+            Img(btn, Spr("r0926_pill"), bg, Image.Type.Sliced, 64f / 48f).raycastTarget = true;
+            var line = btn.transform.Find("Line0926");   // 세 줄 목록이던 때의 구분선
+            if (line != null) Object.DestroyImmediate(line.gameObject);
+
+            var fg = quiet ? Muted : Ink;
             var ic = FindOrCreate(btn.transform, "Icon0926");
-            Img(ic, Spr(icon), labelWords != null ? Muted : Ink, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(ic), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(90, 0), new Vector2(60, 60));
+            Img(ic, Spr(icon), fg, Image.Type.Simple).raycastTarget = false;
+            SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 44), new Vector2(108, 108));
             foreach (var t in btn.GetComponentsInChildren<Text>(true))
             {
-                if (t.name == "Label0926") continue;
-                t.fontSize = 44; t.color = Ink; t.alignment = TextAnchor.MiddleLeft; t.fontStyle = FontStyle.Bold;
+                t.fontSize = 50; t.color = fg; t.alignment = TextAnchor.MiddleCenter; t.fontStyle = FontStyle.Bold;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 if (font != null) t.font = font;
-                var trt = t.rectTransform; trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.offsetMin = new Vector2(150, 0); trt.offsetMax = new Vector2(-40, 0);
+                SetRect(t.rectTransform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-24, 72));
                 EditorUtility.SetDirty(t);
             }
             if (labelWords != null)
             {
                 var lb = FindOrCreate(btn.transform, "Label0926");
-                Txt(lb, labelWords[0], 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
-                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = new Vector2(150, 0); lrt.offsetMax = new Vector2(-40, 0);
+                Txt(lb, labelWords[0], 50, fg, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+                SetRect(RT(lb), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-24, 72));
                 Loc(lb, labelWords[0], labelWords[1], labelWords[2], labelWords[3], labelWords[4]);
             }
         }

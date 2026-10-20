@@ -30,6 +30,8 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private float spinnerScale = 1.5f;
     [SerializeField] private float spinnerRotationSpeed = 30f;
     [SerializeField] private float spinnerMinDuration = 3f;
+    [Tooltip("생길 자리가 화면 밖일 때 가리키는 화살표 크기 — 큐브 화살표의 몇 배")]
+    [SerializeField] private float spawnGuideScale = 2f;
     [SerializeField] private float spinnerFadeDuration = 1.5f;
     [SerializeField] private float cubeFadeInDuration = 1.5f;
 
@@ -125,6 +127,10 @@ public class ARPreviewController : MonoBehaviour
     // ============================================================
     private GameObject spawnedSpinner;
     private GameObject spawnedCube;
+    private GameObject spawnGuide;
+    private Target spawnGuideTarget;
+    private float spawnGuideSize;
+    private Coroutine spawnCoroutine;
     private Action onConfirm;
     private Action onCancel;
     private Camera arCamera;
@@ -166,6 +172,7 @@ public class ARPreviewController : MonoBehaviour
 
     private void Update()
     {
+        PulseSpawnGuide();
         if (!isCubeReady || spawnedCube == null) return;
 
         HandleTouchRotation();
@@ -470,6 +477,7 @@ public class ARPreviewController : MonoBehaviour
             }
         }
 
+        StopSpawn();
         CleanupSpinner();
         CleanupCube();
 
@@ -485,7 +493,36 @@ public class ARPreviewController : MonoBehaviour
 
         Quaternion spawnRotation = Quaternion.Euler(0f, spawnRotationY, 0f);
 
-        StartCoroutine(SpawnWithLoadingSpinner(spawnPosition, spawnRotation, mainPhotoTexture));
+        CreateSpawnGuide(spawnPosition);
+        spawnCoroutine = StartCoroutine(SpawnWithLoadingSpinner(spawnPosition, spawnRotation, mainPhotoTexture));
+    }
+
+    // 10-20 대표님 「생성 중엔 뒤늦게 생겨도 괜찮으니 어디에 생기는지만 — 큼직한 오프스크린 인디케이터를 반짝이게, 2배로」
+    // 생길 자리에 빈 타겟 하나 — 화면 밖이면 큐브 화살표의 2배인 화살표가 반짝이며 그쪽을 가리키고, 화면 안이면 아무것도 안 그린다
+    // (스피너·큐브가 보이니). 미리보기가 끝날 때까지 — 큐브가 생긴 뒤에도 화면 밖이면 이 화살표가 가리킨다
+    private void CreateSpawnGuide(Vector3 position)
+    {
+        CleanupSpawnGuide();
+        Target look = cubePrefab.GetComponentInChildren<Target>(true);
+        spawnGuide = new GameObject("ARPreview_SpawnGuide");
+        spawnGuide.SetActive(false);   // 다 정한 뒤 켜야 OffScreenIndicator 가 처음부터 이 모양으로 받는다
+        spawnGuide.transform.position = position;
+        Target t = spawnGuide.AddComponent<Target>();
+        t.NeedBoxIndicator = false;
+        t.NeedDistanceText = false;
+        t.Sparkle = true;
+        if (look != null) t.TargetColor = look.TargetColor;
+        spawnGuideSize = (look != null ? look.MaxArrowSize : 4f) * spawnGuideScale;
+        t.SetArrowSize(spawnGuideSize);
+        spawnGuideTarget = t;
+        spawnGuide.SetActive(true);
+    }
+
+    // 별빛과 함께 숨 쉬듯 살짝 커졌다 작아진다 — '저기서 만들어지는 중'
+    private void PulseSpawnGuide()
+    {
+        if (spawnGuideTarget == null) return;
+        spawnGuideTarget.SetArrowSize(spawnGuideSize * (1f + 0.08f * Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / 1.2f)));
     }
 
     // ============================================================
@@ -521,6 +558,7 @@ public class ARPreviewController : MonoBehaviour
             // 큐브 생성 (투명)
             spawnedCube = Instantiate(cubePrefab, position, rotation);
             spawnedCube.SetActive(true);
+            HideCubeArrow();
             ApplyTextureToCube(mainPhotoTexture);
             SetObjectAlpha(spawnedCube, 0f);
 
@@ -547,6 +585,7 @@ public class ARPreviewController : MonoBehaviour
 
             spawnedCube = Instantiate(cubePrefab, position, rotation);
             spawnedCube.SetActive(true);
+            HideCubeArrow();
             ApplyTextureToCube(mainPhotoTexture);
             SetObjectAlpha(spawnedCube, 0f);
 
@@ -578,6 +617,13 @@ public class ARPreviewController : MonoBehaviour
         // 텍스트 전환
         isLoadingComplete = true;
         yield return StartCoroutine(TransitionToConfirmText());
+    }
+
+    // 화면 밖일 땐 생길 자리 안내(큰 화살표)가 가리킨다 — 큐브 자기 화살표까지 뜨면 같은 쪽에 화살표가 둘
+    private void HideCubeArrow()
+    {
+        Target t = spawnedCube.GetComponentInChildren<Target>();
+        if (t != null && spawnGuide != null) t.NeedArrowIndicator = false;
     }
 
     private IEnumerator ContinueSpinnerRotation(float duration)
@@ -970,8 +1016,15 @@ public class ARPreviewController : MonoBehaviour
     private void CleanupAll()
     {
         isCubeReady = false;
+        StopSpawn();
+        if (loadingTextCoroutine != null)
+        {
+            StopCoroutine(loadingTextCoroutine);
+            loadingTextCoroutine = null;
+        }
         CleanupCube();
         CleanupSpinner();
+        CleanupSpawnGuide();
 
         CleanupSpotlight();
 
@@ -992,6 +1045,27 @@ public class ARPreviewController : MonoBehaviour
             Destroy(spawnedSpinner);
             spawnedSpinner = null;
         }
+    }
+
+    // 생성 중에 취소·추가하기를 누르면 — 이 컨트롤러는 패널과 다른 오브젝트라 패널을 꺼도 생성 코루틴이 계속 돌아,
+    // 몇 초 뒤 아무도 없는 자리에 큐브와 '신규 오브젝트' 인디케이터가 남았다 (10-20)
+    private void StopSpawn()
+    {
+        if (spawnCoroutine != null)
+        {
+            StopCoroutine(spawnCoroutine);
+            spawnCoroutine = null;
+        }
+    }
+
+    private void CleanupSpawnGuide()
+    {
+        if (spawnGuide != null)
+        {
+            Destroy(spawnGuide);
+            spawnGuide = null;
+        }
+        spawnGuideTarget = null;
     }
 
     private void CleanupCube()
@@ -1145,6 +1219,7 @@ public class ARPreviewController : MonoBehaviour
 
         CleanupSpinner();
         CleanupCube();
+        CleanupSpawnGuide();
 
         CleanupSpotlight();
 

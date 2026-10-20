@@ -3,7 +3,9 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 첫 사용 안내의 모양 — 화면 전체를 어둡게 하고 해당 도크 버튼만 동그랗게 비춘다.
-/// 버튼 바로 위에 짧은 화살표가 까딱이고, 그 위에 '다음', 안내 문구, 쪽 점이 차례로 선다. '건너뛰기'는 오른쪽 위.
+/// 버튼 바로 위에 짧은 화살표가 까딱이고, 안내 글(쪽 점 · 문구 · '다음')은 화면 가운데 조금 위에 크게 선다 (10-20 대표님 「위쪽으로 · 크게」).
+/// 글과 버튼 사이는 칸 쪽으로 흘러가는 점선 길이 잇는다. '건너뛰기'는 오른쪽 위.
+/// 가로 화면(도크가 오른쪽 세로 막대)에선 화살표가 칸 왼쪽에서 칸을 가리키고, 글은 남은 왼쪽 자리 가운데에 선다.
 /// 쪽 넘기기·닫기·첫 실행 판정은 FirstTimeGuide 그대로 (다음 = 왼쪽으로 민 것과 같다, 시작하기·건너뛰기 = 확인 버튼).
 /// 보이는 순서는 FirstTimeGuide 가 정하고, pages·targets 는 쪽 오브젝트와 비출 칸의 짝이다.
 /// 다음·시작하기는 AR 오브젝트를 터치할 때와 같은 소리·진동을 낸다 (건너뛰기·뒤로가기는 조용히).
@@ -25,6 +27,8 @@ public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
     [SerializeField] private GameObject[] pages;
     [SerializeField] private RectTransform[] targets;    // 쪽마다 비출 도크 칸
     [SerializeField] private RectTransform dock;         // 안내 막이 비켜 주는 자리 (하단 버튼 줄)
+    [SerializeField] private RectTransform skip;         // 오른쪽 위 '건너뛰기' — 안내 글은 이 아래까지만
+    [SerializeField] private R0926GuidePath path;        // 안내 글 → 화살표 점선 길
     [SerializeField] private float holeSize = 300f;
     [SerializeField] private float dimAlpha = 0.74f;
     [Tooltip("다음·시작하기 누름 소리 — 비우면 UIFeedbackManager 기본 소리(Touch, AR 오브젝트 터치와 같은 소리)")]
@@ -35,6 +39,7 @@ public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
     private Canvas root;
     private RectTransform dots;
     private readonly Vector3[] c4 = new Vector3[4];
+    private readonly Vector3[] s4 = new Vector3[4];
     private Vector2 holePos;
     private bool placed;
 
@@ -133,7 +138,6 @@ public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
         Vector3 cw = (c4[0] + c4[2]) / 2f;
         Vector3 cl = container.InverseTransformPoint(cw);
         Vector2 want = new Vector2(cl.x, cl.y + H / 2f);
-        float slotTop = container.InverseTransformPoint(c4[1]).y + H / 2f;
         holePos = placed ? Vector2.Lerp(holePos, want, 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime)) : want;
         placed = true;
 
@@ -160,10 +164,35 @@ public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
             ring.color = new Color(1f, 1f, 1f, 0.55f * (1f - k));
         }
 
-        // 화살표 → 다음 → 글자 → 점 (아래에서 위로)
-        float arrowY = slotTop + 120f;
-        if (arrow != null) Place(arrow, new Vector2(want.x, arrowY + 22f * Mathf.Sin(t * Mathf.PI * 2f / 1.25f)), arrow.sizeDelta);
-        float nextY = arrowY + 150f;
+        // 화살표 — 비춘 칸 바깥에서 칸을 가리키며 까딱인다 (구멍을 따라 움직인다)
+        bool land = R0926Orientation.IsLandscape && W > H;
+        Vector2 aSize = arrow != null ? arrow.sizeDelta : new Vector2(84f, 106f);
+        const float Bob = 24f;
+        float reach = r + 20f + aSize.y / 2f + Bob;                        // 구멍 가운데 → 화살표 가운데 (까딱임 가운데)
+        float bob = Bob * Mathf.Sin(t * Mathf.PI * 2f / 1.25f);
+        Vector2 arrowAt = land ? new Vector2(holePos.x - reach, holePos.y) : new Vector2(holePos.x, holePos.y + reach);
+        if (arrow != null)
+        {
+            Place(arrow, arrowAt + (land ? new Vector2(-bob, 0f) : new Vector2(0f, bob)), aSize);
+            arrow.localRotation = Quaternion.Euler(0f, 0f, land ? 90f : 0f);   // 그림은 아래를 가리킨다 — 가로에선 오른쪽(칸)으로
+        }
+
+        // 안내 글이 설 자리 — 위는 '건너뛰기' 아래, 아래(가로는 오른쪽)는 화살표 바깥
+        float top = H - 340f;
+        if (skip != null && skip.gameObject.activeInHierarchy)
+        {
+            skip.GetWorldCorners(s4);
+            top = container.InverseTransformPoint(s4[0]).y + H / 2f - 50f;
+        }
+        float arrowEdge = reach + aSize.y / 2f + Bob;                      // 구멍 가운데 → 화살표 바깥 끝 (가장 멀리 까딱일 때)
+        float left = -W / 2f + 140f, right = W / 2f - 140f, bottom = 60f;
+        if (land) right = Mathf.Min(right, holePos.x - arrowEdge - 90f);
+        else bottom = holePos.y + arrowEdge + 90f;
+        float textW = land ? Mathf.Clamp(right - left, 400f, 1300f) : W - 160f;
+        float blockX = land ? (left + right) / 2f : 0f;
+
+        // 크기 — 점 · 문구 · 다음 (위에서 아래로)
+        float nextH = 0f, nextW = 0f;
         if (next != null)
         {
             if (nextLabel != null)
@@ -171,27 +200,64 @@ public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
                 bool last = IsLast();
                 string lab = last ? L("시작하기", "Get started", "はじめる", "开始", "Empezar") : L("다음", "Next", "次へ", "下一步", "Siguiente");
                 if (nextLabel.text != lab) nextLabel.text = lab;
-                next.sizeDelta = new Vector2(nextLabel.preferredWidth + 150f, next.sizeDelta.y);
+                next.sizeDelta = new Vector2(Mathf.Max(440f, nextLabel.preferredWidth + 200f), next.sizeDelta.y);
             }
-            Place(next, new Vector2(0f, nextY + next.sizeDelta.y / 2f), next.sizeDelta);
+            nextH = next.sizeDelta.y;
+            nextW = next.sizeDelta.x;
         }
-        float textBottom = nextY + (next != null ? next.sizeDelta.y : 0f) + 64f;
+        float th = 0f;
         if (text != null)
         {
             var trt = text.rectTransform;
-            float th = text.preferredHeight;
             trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0.5f);
             trt.pivot = new Vector2(0.5f, 0f);
-            trt.sizeDelta = new Vector2(W - 140f, th + 10f);
-            // 글자는 안내 패널의 자식이고 패널은 화면보다 작고 아래로 치우쳐 있다 — 덮개(화면) 기준 자리로 옮겨 놓는다.
-            // 예전엔 패널 기준으로 놓아 글자가 50 쯤 내려가 '다음' 버튼과 겹쳤다
-            trt.position = container.TransformPoint(new Vector3(0f, textBottom - H / 2f, 0f));
-            if (dots != null)
+            trt.sizeDelta = new Vector2(textW, trt.sizeDelta.y);   // 폭을 먼저 — 줄바꿈 높이가 이 폭으로 잰다
+            th = text.preferredHeight;
+            trt.sizeDelta = new Vector2(textW, th + 10f);
+        }
+        const float DotsH = 46f, DotsGap = 60f, NextGap = 84f;
+        float blockH = DotsH + DotsGap + th + NextGap + nextH;
+        float lo = bottom + blockH / 2f, up = top - blockH / 2f;
+        float cy = lo <= up ? Mathf.Clamp(H * (land ? 0.5f : 0.54f), lo, up) : (bottom + top) / 2f;
+        float blockBottom = cy - blockH / 2f;
+
+        if (next != null) Place(next, new Vector2(blockX, blockBottom + nextH / 2f), next.sizeDelta);
+        float textBottom = blockBottom + nextH + NextGap;
+        if (text != null)
+        {
+            // 글자는 안내 패널의 자식이고 패널은 화면보다 작고 아래로 치우쳐 있다 — 덮개(화면) 기준 자리로 옮겨 놓는다
+            text.rectTransform.position = container.TransformPoint(new Vector3(blockX, textBottom - H / 2f, 0f));
+        }
+        if (dots != null)
+        {
+            dots.anchorMin = dots.anchorMax = new Vector2(0.5f, 0.5f);
+            dots.pivot = new Vector2(0.5f, 0.5f);
+            dots.localPosition = new Vector3(blockX, textBottom + th + DotsGap + DotsH / 2f - H / 2f, 0f);
+        }
+
+        // 점선 길 — '다음' 아래(가로는 오른쪽)에서 화살표까지. 세로·가로 모두 끝은 화살표 방향으로 들어간다
+        if (path != null)
+        {
+            Vector2 a, b, a1, b1;
+            if (land)
             {
-                dots.anchorMin = dots.anchorMax = new Vector2(0.5f, 0.5f);
-                dots.pivot = new Vector2(0.5f, 0.5f);
-                dots.localPosition = new Vector3(0f, textBottom + th + 60f - H / 2f, 0f);
+                a = new Vector2(blockX + nextW / 2f + 40f, blockBottom + nextH / 2f);
+                b = new Vector2(holePos.x - arrowEdge - 26f, holePos.y);
+                float dx = b.x - a.x;
+                a1 = a + new Vector2(0.45f * dx, 0f); b1 = b - new Vector2(0.45f * dx, 0f);
+                path.show = dx > 160f;
             }
+            else
+            {
+                a = new Vector2(blockX, blockBottom - 40f);
+                b = new Vector2(holePos.x, holePos.y + arrowEdge + 26f);
+                float dy = a.y - b.y;
+                a1 = a - new Vector2(0f, 0.45f * dy); b1 = b + new Vector2(0f, 0.45f * dy);
+                path.show = dy > 160f;
+            }
+            var half = new Vector2(0f, H / 2f);   // 길의 좌표는 덮개 가운데 기준
+            path.p0 = a - half; path.p1 = a1 - half; path.p2 = b1 - half; path.p3 = b - half;
+            path.Refresh();
         }
     }
 

@@ -10,6 +10,7 @@ using UnityEngine.UI;
 ///  · 숨긴 장소 수 (인디케이터 X — 앱을 다시 켜면 다시 보인다) · 숨긴 게 있으면 '모두 다시 보이기'
 ///  · 보물찾기 참여 · 새 게임 알림 · 가까워지면 진동 — 계정 설정이라 서버(/api/hunts/prefs)에 있다. 로그인 전엔 흐리게
 ///  · 화면 프레임 30 / 60 (기본 30)
+///  · 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 보통 / 강하게 (기본 보통)
 /// 이벤트는 아직 보낼 내용이 없어 '곧' 표시 — 켜고 끄는 값은 지금부터 저장된다.
 /// </summary>
 public class R0926SettingsPanel : MonoBehaviour
@@ -33,6 +34,8 @@ public class R0926SettingsPanel : MonoBehaviour
     [SerializeField] private Image[] fpsTabs;             // 30 FPS / 60 FPS
     [SerializeField] private Text[] fpsLabels;
     [SerializeField] private Image removeSwitch;          // 오브젝트 삭제 기능 (장소 박스 X)
+    [SerializeField] private Image[] fadeTabs;            // 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 보통 / 강하게
+    [SerializeField] private Text[] fadeLabels;
     [SerializeField] private Text hiddenText;
     [SerializeField] private GameObject showAllRow;       // 모두 다시 보이기 (숨긴 장소가 있을 때만)
     [SerializeField] private Sprite switchOn;
@@ -67,6 +70,7 @@ public class R0926SettingsPanel : MonoBehaviour
     public void SetAngle(int step) { R0926SkySettings.Angle = step; Refresh(); }
     public void SetFps(int step) { R0926FrameRate.Fps = step == 1 ? 60 : 30; Refresh(); }
     public void ToggleRemove() { R0926PlaceSettings.RemoveButton = !R0926PlaceSettings.RemoveButton; Refresh(); }
+    public void SetFarFade(int step) { R0926PlaceSettings.FarFade = step; Refresh(); }
     public void ShowAllHidden() { HiddenPlaces.ShowAll(); Refresh(); }
     public void ToggleHunt() => ToggleHuntPref("enabled");
     public void ToggleHuntNew() => ToggleHuntPref("notify_new");
@@ -153,6 +157,7 @@ public class R0926SettingsPanel : MonoBehaviour
         }
         Seg(angleTabs, angleLabels, R0926SkySettings.Angle);
         Seg(fpsTabs, fpsLabels, R0926FrameRate.Fps == 60 ? 1 : 0);
+        Seg(fadeTabs, fadeLabels, R0926PlaceSettings.FarFade);
         if (hiddenText != null)
         {
             int n = HiddenPlaces.Count;

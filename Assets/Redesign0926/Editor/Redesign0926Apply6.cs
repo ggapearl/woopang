@@ -418,6 +418,19 @@ namespace Redesign0926
             var removeX = SettingRow(g3.transform, "RowRemoveX", new[] { "오브젝트 삭제 기능", "Remove button (X)", "削除ボタン (X)", "删除按钮 (X)", "Botón de borrar (X)" },
                 new[] { "장소 박스 오른쪽 위 X 로 이 기기에서 숨겨요", "Hide a place on this device with the X on its box", "マーカー右上のXでこの端末から隠せます", "点标记右上角的 X 可在本机隐藏", "Oculta un lugar con la X de su marcador" }, false);
             removeX.transform.parent.SetSiblingIndex(0);
+            // 멀리 있는 오브젝트 흐리게 — 네 칸 고르기 (10-20 대표님 「오브젝트 설정에서 투명도 — 멀리 있는 거 흐리게 보이도록 하는 거 설정」)
+            var fadeRow = SegRow(g3.transform, "RowFarFade",
+                new[] { "멀리 있는 오브젝트 흐리게", "Fade distant objects", "遠くのオブジェクトを淡く", "远处物体变淡", "Atenuar objetos lejanos" },
+                new[] { "멀수록 옅고 뿌옇게 — 실제 눈에 보이듯", "Farther ones look fainter, like real distance", "遠いほど淡く霞んで — 実際の見え方のように", "越远越淡，像真实的距离感", "Más lejos, más tenue, como en la realidad" },
+                new[]
+                {
+                    new[] { "끄기", "Off", "オフ", "关闭", "No" },
+                    new[] { "약하게", "Light", "弱め", "弱", "Suave" },
+                    new[] { "보통", "Normal", "普通", "中", "Normal" },
+                    new[] { "강하게", "Strong", "強め", "强", "Fuerte" },
+                },
+                2, out var fadeTabs, out var fadeLabels);
+            fadeRow.transform.SetSiblingIndex(1);
             var hidden = FindOrCreate(g3.transform, "HiddenText");
             Ensure<LayoutElement>(hidden).preferredHeight = 132;
             var ht = Txt(hidden, "숨긴 장소 없음", 38, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
@@ -513,6 +526,8 @@ namespace Redesign0926
             so.FindProperty("hiddenText").objectReferenceValue = ht;
             so.FindProperty("showAllRow").objectReferenceValue = showAll;
             so.FindProperty("removeSwitch").objectReferenceValue = removeX;
+            SetArray(so.FindProperty("fadeTabs"), fadeTabs);
+            SetArray(so.FindProperty("fadeLabels"), fadeLabels);
             so.FindProperty("huntSwitch").objectReferenceValue = hunt;
             so.FindProperty("huntNewSwitch").objectReferenceValue = huntNew;
             so.FindProperty("huntNearSwitch").objectReferenceValue = huntNear;
@@ -545,6 +560,13 @@ namespace Redesign0926
                 var b = fpsTabs[i].GetComponent<Button>();
                 ResetListeners(b);
                 UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetFps, i);
+                EditorUtility.SetDirty(b);
+            }
+            for (int i = 0; i < fadeTabs.Length; i++)
+            {
+                var b = fadeTabs[i].GetComponent<Button>();
+                ResetListeners(b);
+                UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetFarFade, i);
                 EditorUtility.SetDirty(b);
             }
             return sp;

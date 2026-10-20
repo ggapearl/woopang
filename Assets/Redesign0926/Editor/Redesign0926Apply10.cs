@@ -311,8 +311,10 @@ namespace Redesign0926
                     grid.startCorner = GridLayoutGroup.Corner.UpperLeft; grid.childAlignment = TextAnchor.UpperLeft;
                     grid.constraint = GridLayoutGroup.Constraint.Flexible;
                     EditorUtility.SetDirty(grid);
+                    FitGrid(grid, sub);
                 }
             }
+            PhotoLoadingSkeleton(panel, display, UP, photoY, tile, subs, sub, FindInScene<CubeDataFixManager>(card.gameObject), log);
             var loading = P("SubPhoto_LoadingText");
             if (loading != null)
             {

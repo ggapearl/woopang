@@ -99,9 +99,12 @@ namespace Redesign0926
             else if (mode == "login") PlanLogin();
             else if (mode == "chatlook") PlanChatLook();
             else if (mode == "v24") PlanV24();
+            else if (mode == "farfade") PlanFarFade();
             else if (mode == "maptiles") PlanMapTiles();
             else if (mode == "mapcoord") PlanMapCoord();
             else if (mode == "vwshot") PlanVwShot();
+            else if (mode == "arprev") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanArPrev(); }
+            else if (mode == "photoload") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPhotoLoad(); }
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
             else if (mode == "avatar") PlanAvatar();
@@ -112,6 +115,7 @@ namespace Redesign0926
             else if (mode == "scrolllock") PlanScrollLock();
             else if (mode == "filters") PlanFilters();
             else if (mode == "guidetouch") PlanGuideTouch();
+            else if (mode == "guide") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanGuide(); }
             else if (mode == "store2")
             {
                 // 스토어 캡처 2 — 원래 자리(3D 오브젝트가 있는 곳)에서 시작화면 · 8방향 · 하늘 날씨
@@ -834,12 +838,80 @@ namespace Redesign0926
 
         // 10-19 대표님 — 첫 안내 중: 하단 버튼은 눌리고(누르면 그 창이 열리고 안내는 닫힘) AR 오브젝트는 안 눌림, 안내가 끝난 뒤부터 오브젝트
         // · '(친구찾기)' 는 도크 칸이 아니라 메시지 창 제목 아래에만
+        // G1 (10-20 대표님 「첫 안내 — 위쪽으로 · 크게, 버튼 하이라이트 유지」) — 세로 3쪽 · 가로 3쪽.
+        // 글은 화면 가운데 위 · 크게, 비춘 칸 위(가로는 왼쪽)에 화살표, 그 사이 점선 길. 구멍은 칸 그대로
+        private static void PlanGuide()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            R0926GuideOverlay ov = null;
+            Func<string, object> get = n => typeof(R0926GuideOverlay).GetField(n, F)?.GetValue(ov);
+            Action<string, bool> look = (tag, land) =>
+            {
+                Check(() =>
+                {
+                    var text = get("text") as Text;
+                    var next = get("next") as RectTransform;
+                    var arrow = get("arrow") as RectTransform;
+                    var skip = get("skip") as RectTransform;
+                    var hole = get("hole") as RectTransform;
+                    var path = get("path") as R0926GuidePath;
+                    var targets = get("targets") as RectTransform[];
+                    var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                    var target = targets != null && g != null && g.CurrentPage < targets.Length ? targets[g.CurrentPage] : null;
+                    if (text == null || next == null || arrow == null || skip == null || hole == null || path == null || target == null) { log.Add("  안내 조각 없음"); return false; }
+                    Rect t = ScreenRect(text.rectTransform), n = ScreenRect(next), a = ScreenRect(arrow), k = ScreenRect(skip), h = ScreenRect(hole), c = ScreenRect(target);
+                    log.Add($"  {tag}: 글 {t.yMin:0}~{t.yMax:0} (가운데 {t.center.y / Screen.height:0.00}H, 글자 {text.fontSize}) · 다음 {n.width:0}x{n.height:0} · 화살표 ({a.center.x:0},{a.center.y:0}) · 칸 ({c.center.x:0},{c.center.y:0}) · 건너뛰기 아래 {k.yMin:0} · 길 {(path.show ? "보임" : "숨음")}");
+                    bool ok = text.fontSize >= 70 && n.height >= 120 && path.show && t.yMax < k.yMin
+                        && Vector2.Distance(h.center, c.center) < 8f
+                        && t.xMin >= 0f && t.xMax <= Screen.width && n.yMin >= 0f;
+                    if (land) ok &= t.xMax < a.xMin && a.xMax < c.xMin && Mathf.Abs(a.center.y - c.center.y) < 8f && n.xMax < a.xMin;
+                    else ok &= t.center.y > Screen.height * 0.45f && n.yMin > a.yMax && a.yMin > c.yMax && Mathf.Abs(a.center.x - c.center.x) < 8f;
+                    return ok;
+                }, $"첫 안내 {tag}: 글 크게 · {(land ? "왼쪽 가운데" : "가운데 위")} · 화살표가 비춘 칸을 가리킴 · 점선 길 · 건너뛰기와 안 겹침");
+            };
+            Action<bool, string> pages = (land, pre) =>
+            {
+                Do(() => UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include)?.ForceShowGuide());
+                Sleep(1.8f);
+                Do(() => ov = UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include));
+                for (int i = 1; i <= 3; i++)
+                {
+                    int page = i;
+                    look(pre + page, land);
+                    Shot("guide_" + pre + page);
+                    if (page < 3) { Do(() => ov?.Next()); Sleep(1.2f); }
+                }
+                Do(() => ov?.Skip());
+                Sleep(1.0f);
+                Check(() => !Active("FirstTimeGuidePanel"), "안내: 건너뛰기로 닫힘");
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                HidePrivatePlaces();
+                Backdrop("bg_city.png");
+            });
+            Sleep(1.0f);
+            pages(false, "p");
+            Do(() => Rotate(true));
+            Wait(() => Turned(true), 8f, "가로로 돌림");
+            Sleep(1.0f);
+            pages(true, "l");
+            Do(() => Rotate(false));
+            Wait(() => Turned(false), 8f, "세로로 되돌림");
+        }
+
         private static void PlanGuideTouch()
         {
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
             Do(() =>
             {
+                PlayerPrefs.SetInt("IsFirstTime", 1);   // 본 사람으로 — 아니면 6초 뒤 처음 안내가 늦게 떠 '안내가 없을 때' 를 잴 수 없다 (안내는 아래에서 직접 띄운다)
                 var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
                 if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
             });
@@ -2078,6 +2150,477 @@ namespace Redesign0926
                 typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
                 typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
             });
+        }
+
+        // E3 (10-19) 장소 추가 미리보기 — 대표 사진을 고르면 '오브젝트 생성 중' 안내와 함께 앞쪽에 스피너 → 사진 큐브.
+        // 휴대폰을 앞으로 들었을 때(0°)와 아래로 숙였을 때(50°·75°) — 생길 자리가 화면 안에 있는지 · 안내가 어디에 뜨는지 찍는다.
+        // 10-20: 생길 자리가 화면 밖이면 큐브 화살표의 2배인 화살표가 반짝이며 가리킨다 · 생성 중에 취소하면 큐브가 남지 않는다
+        // E4 (10-20) 사진을 불러오는 동안 그 칸에 빈 칸+원호 — 대표 칸 · 추가 사진(실제 읽기 코루틴으로 한 장씩 바뀌는지) ·
+        // 열 장이어도 칸이 줄어 자리 안에(예전엔 네 장을 넘으면 '이름' 칸을 덮었다) · 예전 알약(LoadingPanel)이 시트에 가리는지
+        private static void PlanPhotoLoad()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            CubeUploadManager cum = null;
+            R0926PhotoLoading pl = null;
+            Func<List<Texture2D>> photos = () => typeof(CubeUploadManager).GetField("subPhotos", F).GetValue(cum) as List<Texture2D>;
+            Func<int, string[]> paths = n =>
+            {
+                var names = new[] { "bg_city.png", "bg_sky.png", "brand.png" };
+                var r = new string[n];
+                for (int i = 0; i < n; i++) r[i] = Path.Combine(storeSrc, names[i % names.Length]);
+                return r;
+            };
+            Func<Transform, Rect> rectOf = t => t != null ? ScreenRect((RectTransform)t) : default;
+            Func<string, float> spinAngle = n =>
+            {
+                var t = pl != null ? pl.transform.Find(n + "/Spin0926") : null;
+                return t != null ? t.localEulerAngles.z : float.NaN;
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() =>
+            {
+                cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+                pl = typeof(CubeUploadManager).GetField("photoLoading", F)?.GetValue(cum) as R0926PhotoLoading;
+                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                var fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                var mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
+                var fpl = typeof(CubeDataFixManager).GetField("photoLoading", F)?.GetValue(fix) as R0926PhotoLoading;
+                // 비어 있는 직렬화 칸은 '가짜 null' 이라 그냥 != null 로 보면 있다고 나온다 — Unity 비교로
+                Func<R0926PhotoLoading, string, bool> has = (x, f) => (typeof(R0926PhotoLoading).GetField(f, F).GetValue(x) as UnityEngine.Object) != null;
+                Func<R0926PhotoLoading, string> desc = x => x == null ? "없음" : x.transform.parent.name + "/" + x.name
+                    + " 대표 " + (has(x, "mainSkeleton") ? "O" : "-")
+                    + " 추가 " + (has(x, "subTemplate") ? "O" : "-");
+                log.Add($"  장소 {desc(pl)} · 3D모델 {desc(mpl)} · 장소 수정 {desc(fpl)}");
+            });
+            Check(() =>
+            {
+                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                var fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                var mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
+                var fpl = typeof(CubeDataFixManager).GetField("photoLoading", F)?.GetValue(fix) as R0926PhotoLoading;
+                Func<R0926PhotoLoading, string, bool> has = (x, f) => (typeof(R0926PhotoLoading).GetField(f, F).GetValue(x) as UnityEngine.Object) != null;
+                return pl != null && mpl != null && fpl != null
+                    && has(pl, "mainSkeleton") && has(pl, "subTemplate")
+                    && !has(mpl, "mainSkeleton") && has(mpl, "subTemplate")      // 3D 모델 대표 칸은 모델 파일
+                    && has(fpl, "mainSkeleton") && has(fpl, "subTemplate");
+            }, "연결: 장소(대표·추가) · 3D모델(추가) · 장소 수정(대표·추가)");
+
+            // 0) 사진 고르기 시트 — 대표 사진 칸을 누르면 '촬영 / 갤러리 / 취소' 가 한 줄에 큰 칸으로 (E5)
+            const string dlgRow = "PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/";
+            string[] tiles = { "CameraButton", "GalleryButton", "CancelButton" };
+            Do(() => (typeof(CubeUploadManager).GetField("mainPhotoButton", F).GetValue(cum) as Button)?.onClick.Invoke());
+            Sleep(0.7f);
+            Shot("photoload_dialog");
+            Check(() =>
+            {
+                bool ok = Active("PhotoSourceDialog/DialogPanel");
+                string desc = "";
+                Rect prev = default;
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    var t = Find(dlgRow + tiles[i]);
+                    var r = rectOf(t);
+                    Text label = null;
+                    foreach (var x in t != null ? t.GetComponentsInChildren<Text>(true) : new Text[0]) if (x.gameObject.activeInHierarchy) { label = x; break; }
+                    desc += $" {tiles[i]}({r.x:0},{r.y:0} {r.width:0}x{r.height:0} 「{(label != null ? label.text : "-")}」 {(label != null ? label.fontSize : 0)})";
+                    if (r.width < Screen.width * 0.25f || r.height < 250f) ok = false;                 // 큼직하게
+                    if (label == null || label.fontSize < 48 || !r.Contains(ScreenRect(label.rectTransform).center)) ok = false;
+                    if (i > 0 && (Mathf.Abs(r.y - prev.y) > 2f || r.xMin < prev.xMax)) ok = false;   // 한 줄 · 왼쪽부터 차례로
+                    prev = r;
+                }
+                log.Add("  사진 고르기:" + desc);
+                return ok;
+            }, "사진 고르기: 촬영 · 갤러리 · 취소 — 한 줄에 큰 칸");
+            Do(() => Click(dlgRow + "CancelButton/ClosePx0926"));
+            Sleep(1.0f);
+            Check(() => !Active("PhotoSourceDialog/DialogPanel") && !pl.MainShowing, "사진 고르기: 취소로 닫힘 (빈 칸도 안 뜸)");
+
+            // 1) 예전 알약 — 업로드 진행(%)도 이 알약에 뜬다. 장소 추가 시트 위에서 보이는가
+            Do(() => typeof(CubeUploadManager).GetMethod("ShowSpinner", F).Invoke(cum, new object[] { "업로드 중 42%" }));
+            Sleep(0.5f);
+            Do(() =>
+            {
+                var lp = Find("LoadingPanel");
+                var up = Find("UploadPage");
+                var r = rectOf(lp);
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = r.center }, hits);
+                log.Add($"  알약: 순서 LoadingPanel {lp?.GetSiblingIndex()} · UploadPage {up?.GetSiblingIndex()} · 자리 ({r.center.x:0},{r.center.y:0}) {r.width:0}x{r.height:0}"
+                    + " · 그 자리 맨 위 " + (hits.Count > 0 ? hits[0].gameObject.name + " (" + hits[0].gameObject.transform.parent?.name + ")" : "없음"));
+            });
+            Shot("photoload_pill");
+            Do(() => typeof(CubeUploadManager).GetMethod("HideSpinner", F).Invoke(cum, null));
+
+            // 2) 대표 칸 — 사진 칸을 덮는 빈 칸, 원호가 돈다
+            float a0 = 0f;
+            Do(() => pl.SetMain(true));
+            Sleep(0.5f);
+            Do(() => a0 = spinAngle("MainLoading0926"));
+            Sleep(0.25f);
+            Check(() =>
+            {
+                var m = pl.transform.Find("MainLoading0926");
+                var d = pl.transform.Find("MainPhotoDisplay");
+                Rect rm = rectOf(m), rd = rectOf(d);
+                float a1 = spinAngle("MainLoading0926");
+                log.Add($"  대표 칸: 빈 칸 ({rm.x:0},{rm.y:0}) {rm.width:0}x{rm.height:0} · 사진 칸 ({rd.x:0},{rd.y:0}) {rd.width:0}x{rd.height:0} · 원호 {a0:0}° → {a1:0}° · 사진보다 위 {m.GetSiblingIndex() > d.GetSiblingIndex()}");
+                return pl.MainShowing && Mathf.Abs(rm.x - rd.x) < 2 && Mathf.Abs(rm.y - rd.y) < 2 && Mathf.Abs(rm.width - rd.width) < 2
+                    && Mathf.Abs(Mathf.DeltaAngle(a0, a1)) > 5f && m.GetSiblingIndex() > d.GetSiblingIndex();
+            }, "대표 사진 불러오는 동안: 사진 칸을 덮는 빈 칸 · 원호가 돈다");
+            Shot("photoload_main");
+            Do(() => pl.SetMain(false));
+
+            // 3) 추가 사진 — 빈 칸 셋 / 한 장 들어온 뒤(사진 하나 + 빈 칸 둘)
+            Do(() => pl.SetSub(3));
+            Sleep(0.6f);
+            Shot("photoload_sub3");
+            Do(() =>
+            {
+                var tex = NativeGallery.LoadImageAtPath(paths(1)[0], 1024, false, false);
+                photos().Add(tex);
+                typeof(CubeUploadManager).GetMethod("UpdateSubPhotoGrid", F).Invoke(cum, null);
+                pl.SetSub(2);
+            });
+            Sleep(0.5f);
+            Shot("photoload_sub_mid");
+            Check(() =>
+            {
+                var grid = pl.transform.Find("SubPhotoContainer");
+                int on = 0; string order = "";
+                foreach (Transform c in grid) if (c.gameObject.activeSelf) { on++; order += c.name.StartsWith("SubLoading") ? "□" : "■"; }
+                log.Add($"  추가 사진 칸: {order} (■ 사진 · □ 불러오는 중)");
+                return order == "■□□";
+            }, "추가 사진: 들어온 사진 뒤에 불러오는 빈 칸");
+            Do(() => { typeof(CubeUploadManager).GetMethod("ResetSubPhotos", F).Invoke(cum, null); pl.SetSub(0); });
+            Sleep(0.3f);
+
+            // 4) 실제 읽기 코루틴 — 세 장: 빈 칸 셋이 먼저 깔리고, 한 장씩 사진으로 바뀌어 끝에 빈 칸 0
+            var seen = new List<string>();
+            bool done = false;
+            double until = 0;
+            Do(() =>
+            {
+                seen.Clear(); done = false; until = EditorApplication.timeSinceStartup + 20;
+                var it = (System.Collections.IEnumerator)typeof(CubeUploadManager).GetMethod("LoadMultipleImagesWithFallback", F)
+                    .Invoke(cum, new object[] { paths(3), (Action)(() => done = true) });
+                cum.StartCoroutine(it);
+            });
+            steps.Enqueue(() =>
+            {
+                string st = photos().Count + "+" + pl.SubShowing;
+                if (seen.Count == 0 || seen[seen.Count - 1] != st) seen.Add(st);
+                return done || EditorApplication.timeSinceStartup > until;
+            });
+            Check(() =>
+            {
+                log.Add("  세 장 읽기: " + string.Join(" → ", seen) + " (사진+빈 칸)");
+                bool sum3 = true; int prev = 99;
+                foreach (var st in seen)
+                {
+                    var a = st.Split('+');
+                    int ph = int.Parse(a[0]), sk = int.Parse(a[1]);
+                    if (ph + sk != 3 && !(ph == 3 && sk == 0)) sum3 = false;
+                    if (sk > prev) sum3 = false;
+                    prev = sk;
+                }
+                return done && seen.Count >= 3 && seen[0] == "0+3" && seen[seen.Count - 1] == "3+0" && sum3;
+            }, "추가 사진 세 장: 빈 칸 셋이 먼저 → 한 장씩 사진으로 → 끝에 빈 칸 없음");
+            Sleep(0.3f);
+            Shot("photoload_three");
+            Check(() =>
+            {
+                var grid = pl.transform.Find("SubPhotoContainer");
+                string sz = ""; bool square = true; int n = 0;
+                foreach (Transform c in grid)
+                {
+                    if (!c.gameObject.activeSelf || !c.name.StartsWith("SubPhoto_")) continue;
+                    var sp = c.GetComponent<Image>().sprite;
+                    n++;
+                    if (sp == null) { square = false; continue; }
+                    sz += $" {sp.texture.width}x{sp.texture.height}→{sp.rect.width:0}x{sp.rect.height:0}";
+                    if (Mathf.Abs(sp.rect.width - sp.rect.height) > 1f) square = false;
+                }
+                log.Add("  썸네일 (원본→칸):" + sz);
+                return n == 3 && square;
+            }, "추가 사진 썸네일: 가운데 정사각형으로 잘라 칸을 채움");
+
+            // 5) 열 장 — 칸이 줄어 대표 사진 높이 안에 모두 (이름 칸을 덮지 않는다)
+            Do(() =>
+            {
+                done = false; until = EditorApplication.timeSinceStartup + 30;
+                var it = (System.Collections.IEnumerator)typeof(CubeUploadManager).GetMethod("LoadMultipleImagesWithFallback", F)
+                    .Invoke(cum, new object[] { paths(7), (Action)(() => done = true) });
+                cum.StartCoroutine(it);
+            });
+            steps.Enqueue(() => done || EditorApplication.timeSinceStartup > until);
+            Sleep(0.4f);
+            Check(() =>
+            {
+                var grid = pl.transform.Find("SubPhotoContainer");
+                var name = pl.transform.Find("NameInput");
+                var label = pl.transform.Find("Name");
+                Rect rg = rectOf(grid), rn = rectOf(name), rl = rectOf(label);
+                float low = float.MaxValue; int on = 0;
+                foreach (Transform c in grid) if (c.gameObject.activeSelf) { on++; low = Mathf.Min(low, rectOf(c).yMin); }
+                var cell = grid.GetComponent<GridLayoutGroup>().cellSize;
+                log.Add($"  열 장: 사진 {photos().Count} · 칸 {cell.x:0} · 맨 아래 칸 밑 {low:0} · 그리드 밑 {rg.yMin:0} · 이름표 위 {rl.yMax:0} · 이름 칸 위 {rn.yMax:0}");
+                return photos().Count == 10 && on == 10 && low >= rg.yMin - 2 && low > rl.yMax && cell.x < 203f;
+            }, "추가 사진 열 장: 칸이 줄어 자리 안에 · 이름 칸을 덮지 않음");
+            Shot("photoload_ten");
+
+            // 6) 3D 모델 카드 — 추가 사진 빈 칸 모양만
+            Do(() =>
+            {
+                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                var mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
+                UnityEngine.Object.FindAnyObjectByType<SwipePanelController>()?.SwitchToPanel(1);
+                if (mpl != null) mpl.SetSub(2);
+            });
+            Sleep(1.0f);
+            Shot("photoload_model");
+            Do(() =>
+            {
+                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                var mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
+                if (mpl != null) mpl.SetSub(0);
+                UnityEngine.Object.FindAnyObjectByType<SwipePanelController>()?.SwitchToPanel(0);
+                typeof(CubeUploadManager).GetMethod("ResetSubPhotos", F).Invoke(cum, null);
+            });
+            Sleep(0.6f);
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+        }
+
+        private static void PlanArPrev()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            ARPreviewController prev = null;
+            Func<GameObject> spinner = () => typeof(ARPreviewController).GetField("spawnedSpinner", F)?.GetValue(prev) as GameObject;
+            Func<GameObject> cube = () => typeof(ARPreviewController).GetField("spawnedCube", F)?.GetValue(prev) as GameObject;
+            Func<Target> guide = () => (typeof(ARPreviewController).GetField("spawnGuide", F)?.GetValue(prev) as GameObject)?.GetComponent<Target>();
+            Action<string, bool> guideCheck = (tag, off) => Check(() =>
+            {
+                var g = guide();
+                var c = cube() != null ? cube().GetComponentInChildren<Target>() : null;
+                if (g == null) { log.Add($"  {tag}: 생길 자리 안내 없음"); return false; }
+                var ind = g.indicator;
+                bool arrow = ind != null && ind.gameObject.activeInHierarchy && ind.Type == IndicatorType.ARROW;
+                bool sparkle = ind != null && (typeof(Indicator).GetField("sparkleOn", F)?.GetValue(ind) as bool? ?? false);
+                float sc = ind != null ? ind.transform.localScale.x : 0f;
+                Rect r = ind != null ? ScreenRect((RectTransform)ind.transform) : default;
+                bool cubeArrow = c != null && c.indicator != null && c.indicator.gameObject.activeInHierarchy && c.indicator.Type == IndicatorType.ARROW;
+                var cp = typeof(ARPreviewController).GetField("cubePrefab", F)?.GetValue(prev) as GameObject;
+                float twice = (cp != null ? cp.GetComponentInChildren<Target>(true)?.MaxArrowSize ?? 0f : 0f) * 2f;   // 숨쉬기 ±8%
+                log.Add($"  {tag}: 안내 화살표 {(arrow ? "보임" : "없음")} 크기 {sc:0.0} (큐브 2배 {twice:0.0}) 반짝 {(sparkle ? "O" : "X")} 자리 ({r.center.x:0},{r.center.y:0}) · 큐브 화살표 {(cubeArrow ? "보임" : "없음")}");
+                return off ? arrow && sparkle && twice > 0f && Mathf.Abs(sc / twice - 1f) <= 0.09f && r.center.y > Screen.height * 0.6f && !cubeArrow : !arrow;
+            }, $"생길 자리 안내 {tag}: " + (off ? "화면 밖 → 큐브 화살표의 2배 · 반짝 · 위쪽 가장자리 · 큐브 화살표는 안 겹침" : "화면 안 → 안내 화살표 없음"));
+            Action<string> where = name =>
+            {
+                var go = cube() != null ? cube() : spinner();
+                var cam = Camera.main;
+                string msg = Find("ARPreviewPanel/MessageContainer/MessageText")?.GetComponent<Text>()?.text ?? "";
+                if (go == null || cam == null) { log.Add($"  {name}: 오브젝트 없음 · 안내 '{msg}'"); return; }
+                var sp = cam.WorldToScreenPoint(go.transform.position);
+                bool on = sp.z > 0 && sp.x >= 0 && sp.x <= Screen.width && sp.y >= 0 && sp.y <= Screen.height;
+                log.Add($"  {name}: {go.name} 화면 ({sp.x:0}, {sp.y:0}) 거리 {sp.z:0.0} {(on ? "화면 안" : "화면 밖")} · 안내 '{msg}'");
+            };
+            Action<float, string, bool?> run = (pitch, tag, off) =>
+            {
+                Do(() => AimCamera(pitch, 0f));
+                Do(() => Click("Dock0926/PlusButton"));
+                Sleep(1.2f);
+                Do(() =>
+                {
+                    var cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+                    prev = UnityEngine.Object.FindAnyObjectByType<ARPreviewController>(FindObjectsInactive.Include);
+                    var tex = new Texture2D(2, 2);
+                    tex.LoadImage(File.ReadAllBytes(Path.Combine(storeSrc, "bg_city.png")));
+                    typeof(CubeUploadManager).GetMethod("StartARPreview", F).Invoke(cum, new object[] { tex });
+                });
+                foreach (var (t, n) in new[] { (0.15f, "a"), (0.6f, "b"), (1.4f, "c"), (2.4f, "d"), (1.6f, "e"), (1.5f, "f") })
+                {
+                    Sleep(t);
+                    Do(() => where(tag + "_" + n));
+                    if (off.HasValue && (n == "c" || n == "f")) guideCheck(tag + "_" + n, off.Value);   // c 스피너 · f 큐브
+                    Shot("arprev_" + tag + "_" + n);
+                }
+                Do(() => Click("ARPreviewPanel/MessageContainer/ButtonContainer/CancelButton"));
+                Sleep(1.0f);
+                Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+                Sleep(1.0f);
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                HidePrivatePlaces();
+                Backdrop("bg_city.png");
+            });
+            Sleep(0.6f);
+            run(0f, "level", false);
+            run(50f, "down", null);
+            run(75f, "flat", true);
+
+            // 생성 중(스피너)에 취소 — 예전엔 생성 코루틴이 계속 돌아 몇 초 뒤 빈 자리에 큐브와 '신규 오브젝트' 인디케이터가 남았다
+            Do(() => AimCamera(75f, 0f));
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() =>
+            {
+                var cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+                var tex = new Texture2D(2, 2);
+                tex.LoadImage(File.ReadAllBytes(Path.Combine(storeSrc, "bg_city.png")));
+                typeof(CubeUploadManager).GetMethod("StartARPreview", F).Invoke(cum, new object[] { tex });
+            });
+            Sleep(0.9f);
+            Do(() => Click("ARPreviewPanel/MessageContainer/ButtonContainer/CancelButton"));
+            Sleep(4.5f);
+            Check(() =>
+            {
+                int left = 0;
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsSortMode.None))
+                    if (t.transform.root.name.StartsWith("0000_Cube") || t.name == "ARPreview_SpawnGuide") left++;
+                log.Add($"  취소 4.5초 뒤: 남은 큐브·안내 {left} · 스피너 {(spinner() != null ? "있음" : "없음")}");
+                return left == 0 && cube() == null && spinner() == null && guide() == null;
+            }, "생성 중 취소: 몇 초 뒤에도 큐브·안내·스피너가 남지 않음");
+            Shot("arprev_cancel_early");
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+        }
+
+        // E7 — 설정 ▸ 장소 ▸ '멀리 있는 오브젝트 흐리게' 네 칸: 누르면 저장값 · 칸 표시 · 안개 · 실제 큐브 투명도가 바로 바뀐다 (10-20)
+        private static GameObject fadeCube, nearCube;
+        private static readonly float[] fadeRatio = new float[4];
+        private static readonly float[] nearEdge = new float[4];
+        private static readonly float[] fadeFogEnd = new float[4];
+        private static void PlanFarFade()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const string C = "ListPanel/Sheet0926/SettingsPanel0926/Viewport/Content/";
+            const string R = C + "GroupHidden/RowFarFade/";
+            int before = 2;
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                before = R0926PlaceSettings.FarFade;
+                log.Add("  처음 단계 " + before);
+            });
+            Wait(() => (fadeCube = FarCube(false)) != null, 25f, "큐브 생김");
+            Do(() =>
+            {
+                nearCube = FarCube(true);
+                var cam = Camera.main;
+                foreach (var c in new[] { fadeCube, nearCube })
+                    log.Add(c != null && cam != null ? $"  잴 큐브 '{c.name}' 거리 {Vector3.Distance(cam.transform.position, c.transform.position):0}m" : "  잴 큐브 없음");
+            });
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(2));
+            Sleep(1.2f);
+            Do(() => ScrollToChild(C + "SecPlaces"));
+            Sleep(0.6f);
+            Shot("farfade_settings");
+            Check(() => Active(R + "Seg/Step0") && Active(R + "Seg/Step3") && Find(R + "Seg/Step4") == null, "설정 ▸ 장소에 '멀리 있는 오브젝트 흐리게' 네 칸");
+            Check(() =>
+            {
+                var tr = Find(R + "Title")?.GetComponent<Text>();
+                return tr != null && tr.text.Length > 0 && Find(C + "GroupHidden/RowFarFade").GetSiblingIndex() == 1;
+            }, "제목이 있고 '오브젝트 삭제 기능' 바로 아래");
+            for (int i = 0; i < 4; i++)
+            {
+                int lv = i;
+                Do(() => Click(R + "Seg/Step" + lv));
+                Sleep(0.7f);
+                Shot("farfade_tab" + lv);
+                Do(() =>
+                {
+                    var df = UnityEngine.Object.FindAnyObjectByType<R0926DistanceFade>();
+                    int applied = df != null ? (int)typeof(R0926DistanceFade).GetField("level", F).GetValue(df) : -9;
+                    float farA = df != null ? (float)typeof(R0926DistanceFade).GetField("farA", F).GetValue(df) : -1f;
+                    fadeRatio[lv] = CubeAlphaRatio(fadeCube);
+                    nearEdge[lv] = CubeAlphaRatio(nearCube, "_EdgeIntensity");
+                    fadeFogEnd[lv] = RenderSettings.fogEndDistance;
+                    bool tabs = true;
+                    for (int k = 0; k < 4; k++)
+                    {
+                        var img = Find(R + "Seg/Step" + k)?.GetComponent<Image>();
+                        if (img == null || (k == lv) != (img.color.a > 0.1f)) tabs = false;
+                    }
+                    bool ok = R0926PlaceSettings.FarFade == lv && PlayerPrefs.GetInt("Place_FarFade", -1) == lv && applied == lv && tabs && RenderSettings.fog == (lv > 0);
+                    log.Add((ok ? "PASS " : "FAIL ") + $"단계 {lv}: 저장 {R0926PlaceSettings.FarFade} · 적용 {applied} · 칸 표시 {(tabs ? "맞음" : "틀림")} · 안개 {(RenderSettings.fog ? "켜짐" : "꺼짐")} 끝 {RenderSettings.fogEndDistance:0}m · 가장 멀 때 투명도 {farA:0.00} · 먼 큐브 {fadeRatio[lv]:0.00} · 가까운 큐브 테두리 {nearEdge[lv]:0.00}");
+                });
+            }
+            Check(() => fadeRatio[0] > 0.97f, "끄기: 먼 큐브도 투명도 그대로 (1)");
+            Check(() => fadeRatio[0] > fadeRatio[1] + 0.01f && fadeRatio[1] > fadeRatio[2] + 0.01f && fadeRatio[2] > fadeRatio[3] + 0.01f, "세질수록 먼 큐브가 더 옅다 (끄기 > 약하게 > 보통 > 강하게)");
+            Check(() => fadeFogEnd[1] > fadeFogEnd[2] && fadeFogEnd[2] > fadeFogEnd[3], "세질수록 안개가 가까이에서 짙어진다");
+            Check(() => nearEdge[0] > 0f && Mathf.Abs(nearEdge[0] - nearEdge[3]) < 0.02f && Mathf.Abs(nearEdge[1] - nearEdge[2]) < 0.02f, "가까운 큐브 테두리 빛은 어느 단계든 같다 (끄기를 골라도 가까운 건 그대로)");
+            Do(() => Modes()?.Show(0));
+            Sleep(0.6f);
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(1.2f);
+            Do(() => R0926PlaceSettings.FarFade = 0);
+            Sleep(0.7f);
+            Shot("farfade_ar0");
+            Do(() => R0926PlaceSettings.FarFade = 3);
+            Sleep(0.7f);
+            Shot("farfade_ar3");
+            Do(() => R0926PlaceSettings.FarFade = before);
+            Sleep(0.4f);
+            Check(() => R0926PlaceSettings.FarFade == before, "시험 뒤 원래 단계로 되돌림");
+        }
+
+        // 지금 보이는 큐브(투명도 셰이더) 가운데 카메라에서 가장 먼 것(nearest 면 가장 가까운 것) — 흐림 세기를 실제 값으로 재려고
+        private static GameObject FarCube(bool nearest)
+        {
+            var cam = Camera.main;
+            if (cam == null) return null;
+            var all = new List<GameObject>();
+            if (DataManager.Instance?.GetSpawnedObjects() != null) all.AddRange(DataManager.Instance.GetSpawnedObjects().Values);
+            if (TourAPIManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TourAPIManager.Instance.GetSpawnedObjects().Values);
+            if (SubwayManager.Instance?.GetSpawnedObjects() != null) all.AddRange(SubwayManager.Instance.GetSpawnedObjects().Values);
+            if (TrainStationManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TrainStationManager.Instance.GetSpawnedObjects().Values);
+            if (TerminalManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TerminalManager.Instance.GetSpawnedObjects().Values);
+            GameObject best = null;
+            float pick = nearest ? float.MaxValue : 60f;   // 먼 쪽은 60m 넘는 것만 — 40m 안쪽은 단계와 상관없이 그대로라 잴 수 없다
+            foreach (var go in all)
+            {
+                if (go == null || !go.activeInHierarchy || CubeAlphaRatio(go) < 0f) continue;
+                float d = Vector3.Distance(cam.transform.position, go.transform.position);
+                if (nearest ? d < pick : d > pick) { pick = d; best = go; }
+            }
+            return best;
+        }
+
+        // 큐브에 실제로 들어간 투명도(또는 테두리 빛) ÷ 재질 원래 값 (투명도 셰이더가 없거나 꺼져 있으면 -1)
+        private static float CubeAlphaRatio(GameObject go, string prop = "_GlobalAlpha")
+        {
+            if (go == null) return -1f;
+            var block = new MaterialPropertyBlock();
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled) continue;
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    if (mats[i] == null || !mats[i].HasProperty("_GlobalAlpha") || !mats[i].HasProperty(prop)) continue;
+                    float baseA = mats[i].GetFloat(prop);
+                    r.GetPropertyBlock(block, i);
+                    if (baseA <= 0f || !block.HasFloat(prop)) return -1f;
+                    return block.GetFloat(prop) / baseA;
+                }
+            }
+            return -1f;
         }
 
         private static void PlanV24()
@@ -4620,6 +5163,8 @@ namespace Redesign0926
             }
             if (steps.Count > 0) return;
             running = false;
+            PlayerPrefs.SetInt("IsFirstTime", 1);   // ForceShowGuide 가 지운 '본 적 있음' — 그대로 두면 다음 시험 도중 6초 뒤 처음 안내가 뜬다
+            PlayerPrefs.Save();
             if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; }
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;

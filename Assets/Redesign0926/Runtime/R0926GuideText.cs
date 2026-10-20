@@ -13,7 +13,7 @@ public class R0926GuideText : MonoBehaviour
     [Tooltip("안내 쪽 오브젝트 01(추가) · 02(목록) · 03(메세지) — Lines 와 같은 순서 (보이는 순서와는 무관)")]
     [SerializeField] private GameObject[] pages;
 
-    private const string Sub = "\n<size=42><color=#C9CED3>";
+    private const string Sub = "\n<size=50><color=#C9CED3>";   // 10-20 크게 (42 → 50 · 큰 줄 58 → 74)
     private const string SubEnd = "</color></size>";
 
     private static readonly string[][] Lines =
@@ -39,13 +39,25 @@ public class R0926GuideText : MonoBehaviour
             "Habla con tus amigos\nen ‘Mensajes’" + Sub + "Los mensajes nuevos se muestran con un número" + SubEnd },
     };
 
+    // 가로 화면에선 도크가 오른쪽 세로 막대라 '아래'가 틀린 말이 된다 — 목록 쪽만 방향 낱말을 뺀다 (10-20)
+    private static readonly string[][] Below =
+    {
+        new[] { "아래 ‘목록’을 눌러", "‘목록’을 눌러" },
+        new[] { "Tap ‘List’ below", "Tap ‘List’" },
+        new[] { "下の「リスト」で", "「リスト」で" },
+        new[] { "点击下方“列表”", "点击“列表”" },
+        new[] { "Toca ‘Lista’ abajo", "Toca ‘Lista’" },
+    };
+
     private void LateUpdate()
     {
         if (guideText == null || pages == null) return;
         for (int i = 0; i < pages.Length && i < Lines.Length; i++)
         {
             if (pages[i] == null || !pages[i].activeInHierarchy) continue;
-            string want = Lines[i][LangIndex()];
+            int lang = LangIndex();
+            string want = Lines[i][lang];
+            if (R0926Orientation.IsLandscape) want = want.Replace(Below[lang][0], Below[lang][1]);
             if (guideText.text != want) guideText.text = want;
             return;
         }

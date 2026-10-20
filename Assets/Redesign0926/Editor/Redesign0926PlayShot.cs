@@ -24,6 +24,7 @@ namespace Redesign0926
         private static readonly List<float> pending = new List<float>();
         private static readonly List<string> log = new List<string>();
         private static string dir;
+        private static bool savedRunInBackground;
 
         static Redesign0926PlayShot()
         {
@@ -44,6 +45,8 @@ namespace Redesign0926
             pending.Sort();
             log.Clear();
             log.Add("play " + DateTime.Now.ToString("HH:mm:ss"));
+            savedRunInBackground = Application.runInBackground;
+            Application.runInBackground = true;   // 에디터가 뒤에 있으면 프레임이 멈춰 한 장도 안 찍힌다 (창을 빼앗지 않는다)
             startedAt = EditorApplication.timeSinceStartup;
         }
 
@@ -74,6 +77,7 @@ namespace Redesign0926
                 startedAt = -1;
                 try { File.Delete(PlanPath); } catch (Exception e) { log.Add("plan 삭제 실패 " + e.Message); }
                 File.WriteAllLines(ResultPath, log);
+                Application.runInBackground = savedRunInBackground;
                 EditorApplication.isPlaying = false;
             }
         }

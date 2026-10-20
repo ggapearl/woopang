@@ -11,6 +11,7 @@ using UnityEngine.XR.ARFoundation;
 ///  · GLB 등 불투명 재질: 투명으로 바꾸면 겹침이 깨져서, 대신 색을 살짝 어둡게 해 멀어 보이게 한다
 /// 오브젝트마다 MaterialPropertyBlock 으로만 덮어써서 원본 재질·Renderer.enabled(표시/숨김 로직)는 건드리지 않는다.
 /// 대상: 5개 데이터 매니저의 GetSpawnedObjects() 전부.
+/// 세기는 설정 ▸ 장소 ▸ '멀리 있는 오브젝트 흐리게'(R0926PlaceSettings.FarFade) — 끄기면 거리 흐림·안개 없이, 처음 나타날 때 서서히만.
 /// </summary>
 public class R0926DistanceFade : MonoBehaviour
 {
@@ -56,6 +57,14 @@ public class R0926DistanceFade : MonoBehaviour
 
     private float farClip = -1f;   // matchSpawnRadius 일 때 카메라에 넣을 값
 
+    // 설정 단계별 세기 — 보통(2)이 위 값 그대로. 0 끄기 · 1 약하게 · 3 강하게 (10-20)
+    // 단계는 '가장 멀 때 값'만 바꾼다. 가까운 오브젝트는 어느 단계든 같고, 끄기면 멀어도 가까울 때와 같다
+    private static readonly float[] Strength = { 0f, 0.5f, 1f, 1.6f };
+    private const float NearTint = 1.04f;   // 가까우면 아주 살짝 밝게
+    private int level = -1;
+    private float baseFogEnd;
+    private float farA, farT, farE;
+
     private static readonly int GlobalAlpha = Shader.PropertyToID("_GlobalAlpha");
     private static readonly int EdgeIntensity = Shader.PropertyToID("_EdgeIntensity");
     private static readonly int[] ColorIds =
@@ -96,14 +105,14 @@ public class R0926DistanceFade : MonoBehaviour
             fogEnd = r * 2.4f;               // 반경 끝에서 약 40% 뿌옇게 — 사라지지는 않는다
             farClip = r + farClipMargin;     // 500m → 650m
         }
+        baseFogEnd = fogEnd;
         if (useFog)
         {
-            RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogStartDistance = fogStart;
-            RenderSettings.fogEndDistance = fogEnd;
             RenderSettings.fogColor = Color.Lerp(nightHaze, dayHaze, brightness);
         }
+        ApplyLevel(R0926PlaceSettings.FarFade);
         arCam = FindFirstObjectByType<ARCameraManager>();
         if (arCam != null) arCam.frameReceived += OnFrame;
     }
@@ -111,6 +120,21 @@ public class R0926DistanceFade : MonoBehaviour
     private void OnDestroy()
     {
         if (arCam != null) arCam.frameReceived -= OnFrame;
+    }
+
+    // 흐림 세기 k 만큼 가까울 때 값에서 멀어진다 (k=1 이 원래 값). 안개는 k 가 클수록 가까이에서 짙어진다
+    private void ApplyLevel(int lv)
+    {
+        level = lv;
+        float k = Strength[Mathf.Clamp(lv, 0, Strength.Length - 1)];
+        farA = 1f - (1f - farAlpha) * k;
+        farT = NearTint - (NearTint - farTint) * k;
+        farE = Mathf.Max(0.2f, nearEdgeBoost - (nearEdgeBoost - farEdge) * k);
+        if (useFog)
+        {
+            RenderSettings.fog = k > 0f;
+            if (k > 0f) RenderSettings.fogEndDistance = fogStart + (baseFogEnd - fogStart) / k;
+        }
     }
 
     private void OnFrame(ARCameraFrameEventArgs args)
@@ -126,6 +150,7 @@ public class R0926DistanceFade : MonoBehaviour
         if (cam == null) cam = Camera.main;
         if (cam == null) return;
         if (farClip > 0f && !Mathf.Approximately(cam.farClipPlane, farClip)) cam.farClipPlane = farClip;
+        if (level != R0926PlaceSettings.FarFade) ApplyLevel(R0926PlaceSettings.FarFade);   // 설정에서 바꾸면 바로
 
         if (useFog) RenderSettings.fogColor = Color.Lerp(nightHaze, dayHaze, brightness);
 
@@ -180,9 +205,9 @@ public class R0926DistanceFade : MonoBehaviour
 
             float t = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(nearDistance, farDistance, Vector3.Distance(eye, go.transform.position)));
             float appear = Appear(id, e.renderers);               // 처음 보일 때 0→1 (큐브만 — 불투명 GLB 는 투명으로 못 바꾼다)
-            float alpha = Mathf.Lerp(1f, farAlpha, t) * appear;
-            float tint = Mathf.Lerp(1.04f, farTint, t);          // 가까우면 아주 살짝 밝게
-            float edge = Mathf.Lerp(nearEdgeBoost, farEdge, t) * appear;
+            float alpha = Mathf.Lerp(1f, farA, t) * appear;
+            float tint = Mathf.Lerp(NearTint, farT, t);
+            float edge = Mathf.Lerp(nearEdgeBoost, farE, t) * appear;
             foreach (var r in e.renderers)
                 if (r != null) Apply(r, alpha, tint, edge);
         }

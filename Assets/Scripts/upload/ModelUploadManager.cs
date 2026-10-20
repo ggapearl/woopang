@@ -25,6 +25,7 @@ public class ModelUploadManager : MonoBehaviour
     [SerializeField] private Button subPhotosButton;
     [SerializeField] private GridLayoutGroup subPhotoGrid;
     [SerializeField] private Button resetPhotosButton;
+    [SerializeField] private R0926PhotoLoading photoLoading; // 추가 사진 칸에 빈 칸+원호 (Redesign0926Apply3 가 만들어 연결)
 
     [Header("Toggle Options")]
     [SerializeField] private Toggle petFriendlyToggle;
@@ -113,6 +114,8 @@ public class ModelUploadManager : MonoBehaviour
         }
         if (categoryToggleLabel == null && categoryToggle != null)
             categoryToggleLabel = categoryToggle.GetComponentInChildren<Text>(true);
+        if (photoLoading == null && subPhotosButton != null)
+            photoLoading = subPhotosButton.transform.parent.GetComponent<R0926PhotoLoading>();
     }
 
     private void InitializeComponents()
@@ -378,7 +381,7 @@ public class ModelUploadManager : MonoBehaviour
         if (isProcessing) yield break;
         isProcessing = true;
 
-        ShowSpinner(GetLocalizedText("loading_sub_photos"));
+        SubLoading(1);   // 고르는 동안 한 칸 — 몇 장인지는 고른 뒤에 안다
         bool isLoading = true;
 
         try
@@ -387,19 +390,12 @@ public class ModelUploadManager : MonoBehaviour
             {
                 if (paths != null && paths.Length > 0)
                 {
-                    if (subPhotos.Count + paths.Length > MAX_SUB_PHOTOS)
-                    {
-                        ShowWarning(GetLocalizedText("max_sub_photos_exceeded"));
-                        isLoading = false;
-                    }
-                    else
-                    {
-                        StartCoroutine(LoadSubPhotosWithFallback(paths, () => { isLoading = false; }));
-                    }
+                    // 남은 칸보다 많이 골라도 들어가는 만큼은 넣는다 — 넘친 장수는 LoadSubPhotosWithFallback 가 알린다
+                    StartCoroutine(LoadSubPhotosWithFallback(paths, () => { isLoading = false; }));
                 }
                 else
                 {
-                    ShowWarning(GetLocalizedText("photo_selection_failed"));
+                    // 고르지 않고 닫았다 — 실패 안내는 띄우지 않는다
                     isLoading = false;
                 }
             }, "image/*");
@@ -412,7 +408,7 @@ public class ModelUploadManager : MonoBehaviour
         }
 
         yield return new WaitUntil(() => !isLoading);
-        HideSpinner();
+        SubLoading(0);
         UpdateSubPhotoGrid();
         isProcessing = false;
     }
@@ -422,6 +418,11 @@ public class ModelUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator LoadSubPhotosWithFallback(string[] paths, System.Action onComplete)
     {
+        // 들어갈 장수만큼 빈 칸을 먼저 깔고 한 프레임 — 사진 읽기(LoadImageAtPath)는 그동안 화면을 멈춘다
+        int left = Mathf.Min(paths.Length, MAX_SUB_PHOTOS - subPhotos.Count);
+        SubLoading(left);
+        yield return null;
+
         foreach (string path in paths)
         {
             if (subPhotos.Count >= MAX_SUB_PHOTOS)
@@ -465,11 +466,20 @@ public class ModelUploadManager : MonoBehaviour
                 }
             }
 
+            // 한 장 들어올 때마다 빈 칸 하나가 사진으로 바뀐다
+            SubLoading(--left);
+            UpdateSubPhotoGrid();
             yield return null; // 한 프레임 대기
         }
 
+        SubLoading(0);
         UpdateSubPhotoGrid();
         onComplete?.Invoke();
+    }
+
+    private void SubLoading(int count)
+    {
+        if (photoLoading != null) photoLoading.SetSub(count);
     }
 
     #endregion
@@ -816,16 +826,16 @@ public class ModelUploadManager : MonoBehaviour
 
         for (int i = 0; i < subPhotoDisplays.Count; i++)
         {
-            if (i < subPhotos.Count)
+            // 같은 사진이면 스프라이트를 그대로 둔다 — 예전엔 부를 때마다 모든 칸의 스프라이트를 새로 만들어 쌓았다 (10-20)
+            Image img = subPhotoDisplays[i];
+            Texture2D tex = i < subPhotos.Count ? subPhotos[i] : null;
+            if (img.sprite != null && (tex == null || img.sprite.texture != tex))
             {
-                subPhotoDisplays[i].sprite = GetOrCreateSprite(subPhotos[i]);
-                subPhotoDisplays[i].gameObject.SetActive(true);
+                Destroy(img.sprite);
+                img.sprite = null;
             }
-            else
-            {
-                subPhotoDisplays[i].sprite = null;
-                subPhotoDisplays[i].gameObject.SetActive(false);
-            }
+            if (tex != null && img.sprite == null) img.sprite = ThumbSprite(tex);
+            img.gameObject.SetActive(tex != null);
         }
 
     }
@@ -833,6 +843,14 @@ public class ModelUploadManager : MonoBehaviour
     private Sprite GetOrCreateSprite(Texture2D texture)
     {
         return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+    }
+
+    // 추가 사진 칸은 가운데를 정사각형으로 잘라 칸을 채운다 — 세로로 긴 사진이 가는 띠로 보였다 (10-20)
+    private static Sprite ThumbSprite(Texture2D texture)
+    {
+        int side = Mathf.Min(texture.width, texture.height);
+        var rect = new Rect((texture.width - side) / 2, (texture.height - side) / 2, side, side);
+        return Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
     }
 
     #endregion
@@ -1266,6 +1284,7 @@ public class ModelUploadManager : MonoBehaviour
         }
         subPhotos.Clear();
         UpdateSubPhotoGrid();
+        SubLoading(0);
 
         gpsData = Vector3.zero;
         isProcessing = false;

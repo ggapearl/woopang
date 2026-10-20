@@ -16,7 +16,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [SerializeField] private RectTransform lens;      // 원형 마스크 — 안쪽만 문양이 보인다
     [SerializeField] private RawImage motif;          // 렌즈의 자식이지만 화면에 고정
     [SerializeField] private RawImage motifFaint;     // 렌즈 밖 — 같은 문양을 옅게 (완전한 검정 대신)
-    [SerializeField] private Image ring;              // 렌즈 테두리 (흰색)
+    [SerializeField] private R0926LensFx lensFx;      // 렌즈 밖 그늘 + 얇은 유리 테두리 (10-20 — 예전 흰 링 그림 대신)
     [SerializeField] private Image dimmer;
     [SerializeField] private CanvasGroup emblem;
     [SerializeField] private CanvasGroup wordmark;
@@ -36,6 +36,10 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [Tooltip("마지막 장면에서 화면이 고르게 돌 때까지 기다리는 최대 시간 — 로딩 멈칫 중에 사라지면 뚝 끊겨 보였다")]
     [SerializeField] private float maxWait = 4f;
     [SerializeField] private Image nebula;            // 숨쉬듯 밝아졌다 어두워지는 성운 (별은 R0926StarField 가 스스로)
+    [Tooltip("렌즈 밖 그늘 진하기 — 선형 색공간이라 0.9 가 눈에는 약 1/3 밝기 (10-18 대표님 「원 밖은 많이 더 어둡게」)")]
+    [SerializeField, Range(0f, 1f)] private float outsideShade = 0.9f;
+    [Tooltip("렌즈 안이 살짝 확대돼 보이는 정도 — 렌즈가 움직이면 안쪽 문양이 바깥보다 조금 더 흘러 유리를 들여다보는 느낌")]
+    [SerializeField] private float magnify = 1.06f;
 
     private struct Variant { public string key, accent, bg, text; public float dim, faint; }
 
@@ -123,7 +127,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         v = Pick(lang);
         if (background != null) background.color = Hex(v.bg);
         Color acc = Hex(v.accent);
-        if (ring != null) ring.color = Color.white;
+        if (lensFx != null) lensFx.shadeColor = Hex(v.bg);
         if (barImage != null) barImage.color = acc;
         if (copyText != null)   // 자간 넓게 (legacy Text 에는 자간 설정이 없어 글자 사이를 띄운다)
             copyText.text = "S E E   T H E   <color=" + v.accent + ">U N S E E N</color>";
@@ -150,7 +154,8 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     }
 
     // ── 시간표 ──────────────────────────────────────────────
-    // 0.0 어둠 · 0.3~1.4 렌즈가 왼→오른쪽으로 훑음 · 1.4~1.9 렌즈가 화면 밖으로 퍼짐
+    // 0.0 어둠 · 0.3~1.4 렌즈가 왼→오른쪽으로 훑음 (0.55~1.45 에 반짝임 하나가 위쪽 테두리를 지난다)
+    // 1.4~1.95 렌즈가 화면 밖으로 퍼짐 (테두리는 살짝 번지며 사라지고, 바깥 그늘이 걷히고, 안쪽 확대가 풀린다)
     // 1.5 엠블럼 · 1.9 WOOPANG · 2.3 SEE THE UNSEEN · 2.9 나라 말 한 줄 · 3.7 사라짐
     private void Pose(float time)
     {
@@ -171,14 +176,16 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             lens.anchoredPosition = pos;
             lens.sizeDelta = new Vector2(diameter, diameter);
         }
-        if (ring != null)
+        if (lensFx != null)
         {
-            // 테두리는 마스크 밖 형제 — 안에 두면 바깥 절반이 잘린다
-            ring.rectTransform.anchoredPosition = pos;
-            ring.rectTransform.sizeDelta = new Vector2(diameter, diameter) * 1.03f;
-            var c = ring.color;
-            c.a = Mathf.Clamp01(Mathf.InverseLerp(0.25f, 0.45f, time)) * (1f - grow);
-            ring.color = c;
+            // 그늘·테두리는 마스크 밖 형제 — 테두리 가운데 흰 줄이 마스크의 각진 가장자리를 덮는다
+            lensFx.center = pos;
+            lensFx.radius = diameter * 0.5f;
+            lensFx.shade = outsideShade * (1f - grow);
+            lensFx.ringAlpha = Mathf.Clamp01(Mathf.InverseLerp(0.25f, 0.45f, time)) * (1f - grow) * (1f - grow);
+            lensFx.glint = time > 0.55f && time < 1.45f ? Mathf.InverseLerp(0.55f, 1.45f, time) : -1f;
+            lensFx.spread = grow;
+            lensFx.Refresh();
         }
 
         // 문양은 화면에 붙어 있고(렌즈가 움직여도 제자리) 아주 천천히 떠다닌다 — 확대·이동
@@ -188,8 +195,12 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         Vector3 drift = rt.TransformVector(new Vector3(37f * Mathf.Sin(time * 0.21f), 26f * Mathf.Cos(time * 0.17f), 0f));
         if (motif != null)
         {
-            motif.rectTransform.sizeDelta = coverSize;
-            motif.rectTransform.position = rt.position + drift;
+            // 렌즈 가운데를 기준으로 살짝 확대 — 퍼지면서 풀린다(끝 장면은 확대 없이)
+            float m = Mathf.Lerp(magnify, 1f, grow);
+            Vector3 home = rt.position + drift;
+            Vector3 lc = lens != null ? lens.position : rt.position;
+            motif.rectTransform.sizeDelta = coverSize * m;
+            motif.rectTransform.position = lc + (home - lc) * m;
         }
         if (nebula != null)
         {

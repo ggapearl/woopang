@@ -49,14 +49,22 @@ namespace Redesign0926
             var fImg = Ensure<RawImage>(faint); fImg.texture = null; fImg.raycastTarget = false; fImg.color = new Color(1f, 1f, 1f, 0f);
             faint.transform.SetSiblingIndex(0);
 
-            var ring = FindOrCreate(sp.transform, "Ring0926");
-            SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(920, 920));
-            var ringImg = Img(ring, Spr("r0926_ring"), Color.white, Image.Type.Simple);
-            ringImg.raycastTarget = false;
+            // 예전 흰 링 그림(r0926_ring) — 렌즈와 함께 커져 퍼질 때 굵은 회색 띠가 됐다. 10-20 부터 LensFx0926 이 그늘·테두리를 그린다
+            var oldRing = sp.transform.Find("Ring0926");
+            if (oldRing != null) { Object.DestroyImmediate(oldRing.gameObject); log.Add("splash: 예전 흰 링 삭제"); }
 
             var dim = FindOrCreate(sp.transform, "Dimmer0926");
             Stretch(RT(dim));
             Img(dim, null, new Color(0.043f, 0.051f, 0.059f, 0f), Image.Type.Simple).raycastTarget = false;
+
+            // 렌즈 밖 그늘 + 얇은 유리 테두리 — 별(Stars0926, 어둡게 하는 막 바로 다음)보다 위에서 바깥 별까지 어둡게 덮는다
+            var fx = FindOrCreate(sp.transform, "LensFx0926");
+            Stretch(RT(fx));
+            Ensure<CanvasRenderer>(fx);
+            var fxg = Ensure<R0926LensFx>(fx);
+            fxg.raycastTarget = false;
+            var stars0 = sp.transform.Find("Stars0926");
+            fx.transform.SetSiblingIndex((stars0 != null ? stars0 : dim.transform).GetSiblingIndex() + 1);
 
             // 엠블럼 · WOOPANG · SEE THE UNSEEN · 나라 말 한 줄
             var emblem = FindOrCreate(sp.transform, "Emblem0926");
@@ -101,7 +109,7 @@ namespace Redesign0926
             so.FindProperty("lens").objectReferenceValue = RT(lens);
             so.FindProperty("motif").objectReferenceValue = mImg;
             so.FindProperty("motifFaint").objectReferenceValue = fImg;
-            so.FindProperty("ring").objectReferenceValue = ringImg;
+            so.FindProperty("lensFx").objectReferenceValue = fxg;
             so.FindProperty("dimmer").objectReferenceValue = dim.GetComponent<Image>();
             so.FindProperty("emblem").objectReferenceValue = eg;
             so.FindProperty("wordmark").objectReferenceValue = wg;

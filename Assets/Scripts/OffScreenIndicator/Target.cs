@@ -119,6 +119,9 @@ public class Target : MonoBehaviour
 
     public float MaxArrowSize => maxArrowSize;
 
+    /// <summary>화살표 크기를 거리와 상관없이 하나로 (장소 추가 '생성 중' 자리 안내 — 10-20)</summary>
+    public void SetArrowSize(float size) => defaultArrowSize = maxArrowSize = size;
+
     public float MinDistance => minDistance; // 추가: 최소 거리 프로퍼티
 
     public float MaxDistance => maxDistance; // 추가: 최대 거리 프로퍼티

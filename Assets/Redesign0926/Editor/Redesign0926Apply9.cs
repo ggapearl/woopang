@@ -318,6 +318,7 @@ namespace Redesign0926
             var stars = FindOrCreate(sp.transform, "Stars0926");
             if (dim != null) stars.transform.SetSiblingIndex(dim.GetSiblingIndex() + 1);
             Stretch(RT(stars));
+            Ensure<CanvasRenderer>(stars);   // 없으면 에디터 캡처에 별이 안 그려졌다 (기기에선 Graphic 이 늦게 붙여 그려짐)
             var sf = Ensure<R0926StarField>(stars);
             var sfo = new SerializedObject(sf);
             sfo.FindProperty("starSprite").objectReferenceValue = Spr("r0926_star");
@@ -454,8 +455,8 @@ namespace Redesign0926
             if (guide == null || panel == null) { log.Add("안내 없음"); return; }
 
             var gso = new SerializedObject(guide);
-            gso.FindProperty("dotSize").floatValue = 24f;
-            gso.FindProperty("dotSpacing").floatValue = 24f;
+            gso.FindProperty("dotSize").floatValue = 30f;      // 10-20 「위쪽으로 · 크게」 24 → 30
+            gso.FindProperty("dotSpacing").floatValue = 28f;
             gso.FindProperty("dotActiveScale").floatValue = 1.5f;
             gso.FindProperty("dotActiveYOffset").floatValue = 0f;
             gso.FindProperty("dotLineBgColor").colorValue = new Color(1, 1, 1, 0);
@@ -474,7 +475,7 @@ namespace Redesign0926
             }
             if (text != null)
             {
-                text.fontSize = 58; text.fontStyle = FontStyle.Bold; text.color = Ink; text.alignment = TextAnchor.LowerCenter;
+                text.fontSize = 74; text.fontStyle = FontStyle.Bold;   // 10-20 크게 (58 → 74, 아랫줄은 R0926GuideText 50) text.color = Ink; text.alignment = TextAnchor.LowerCenter;
                 text.lineSpacing = 1.2f; text.supportRichText = true;
                 text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Overflow;
                 if (font != null) text.font = font;
@@ -506,24 +507,31 @@ namespace Redesign0926
             var ring = FindOrCreate(box.transform, "Ring0926");
             var rImg = Img(ring, Spr("r0926_ring_big"), new Color(1, 1, 1, 0.55f), Image.Type.Simple);
             rImg.raycastTarget = false;
+            // 안내 글 → 화살표 점선 길 (글이 화면 가운데 위로 올라가 버튼과 멀어졌다 — 10-20)
+            var pathGo = FindOrCreate(box.transform, "Path0926");
+            Stretch(RT(pathGo));
+            Ensure<CanvasRenderer>(pathGo);
+            var pathG = Ensure<R0926GuidePath>(pathGo);
+            pathG.raycastTarget = false;
+            pathGo.transform.SetSiblingIndex(ring.transform.GetSiblingIndex() + 1);
             var arrow = FindOrCreate(box.transform, "Arrow0926");
-            SetRect(RT(arrow), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 80));
+            SetRect(RT(arrow), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(84, 106));
             Img(arrow, Spr("r0926_arrow_short"), Color.white, Image.Type.Simple).raycastTarget = false;
 
             var next = FindOrCreate(box.transform, "Next0926");
-            SetRect(RT(next), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320, 120));
-            Img(next, Spr("r0926_pill"), Color.white, Image.Type.Sliced, 63f / 60f).raycastTarget = true;
+            SetRect(RT(next), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(440, 150));
+            Img(next, Spr("r0926_pill"), Color.white, Image.Type.Sliced, 63f / 75f).raycastTarget = true;
             var nl = FindOrCreate(next.transform, "Label0926");
-            var nlt = Txt(nl, "다음", 44, Dark, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var nlt = Txt(nl, "다음", 56, Dark, TextAnchor.MiddleCenter, FontStyle.Bold);
             nlt.horizontalOverflow = HorizontalWrapMode.Overflow;
             Stretch(RT(nl));
 
             var skip = FindOrCreate(box.transform, "Skip0926");
-            SetRect(RT(skip), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-50, -30), new Vector2(260, 100));
-            Img(skip, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 63f / 50f).raycastTarget = true;
+            SetRect(RT(skip), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-50, -30), new Vector2(300, 112));
+            Img(skip, Spr("r0926_pill"), new Color(1, 1, 1, 0.12f), Image.Type.Sliced, 63f / 56f).raycastTarget = true;
             Ensure<R0926SafeInset>(skip).SetEdge(R0926SafeInset.Edge.Top);
             var sl = FindOrCreate(skip.transform, "Label0926");
-            Txt(sl, "건너뛰기", 40, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Txt(sl, "건너뛰기", 46, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             Stretch(RT(sl));
             Loc(sl, "건너뛰기", "Skip", "スキップ", "跳过", "Omitir");
 
@@ -542,6 +550,8 @@ namespace Redesign0926
             so.FindProperty("confirm").objectReferenceValue = confirm;
             var dockGo = Find(root, "Dock0926");
             so.FindProperty("dock").objectReferenceValue = dockGo != null ? RT(dockGo) : null;   // 안내 중에도 하단 버튼은 눌린다 (10-19)
+            so.FindProperty("skip").objectReferenceValue = RT(skip);
+            so.FindProperty("path").objectReferenceValue = pathG;
             // 쪽 순서: 목록 · 추가 · 메시지 (GuideOrder — FirstTimeGuide.guidePages 와 같다). 쪽마다 비출 도크 버튼이 짝
             var targets = new Object[GuideOrder.Length];
             for (int i = 0; i < targets.Length; i++) { var slot = Find(root, GuideOrder[i].slot); targets[i] = slot != null ? RT(slot) : null; }
