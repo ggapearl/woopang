@@ -29,6 +29,8 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private Image loadingSpinner;
     [SerializeField] private R0926PhotoLoading photoLoading; // 대표·추가 사진 칸에 빈 칸+원호 (Redesign0926Apply10 이 만들어 연결)
+    [SerializeField] private R0926PhotoCrop photoCrop;       // 대표 사진 자르기 화면 (Redesign0926ApplyCrop 이 만들어 연결)
+    [SerializeField] private R0926Busy busy;                 // 보내는 동안 화면 가운데 카드 — 원호 + '보내는 중… N%' + 막대
 
     [Header("카테고리 설정")]
     [SerializeField] private Toggle categoryToggle;
@@ -134,6 +136,8 @@ public class CubeDataFixManager : MonoBehaviour
         {
             photoLoading = mainPhotoButton.transform.parent.GetComponent<R0926PhotoLoading>();
         }
+        if (photoCrop == null) photoCrop = FindAnyObjectByType<R0926PhotoCrop>(FindObjectsInactive.Include);
+        if (busy == null) busy = FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
     }
 
     private void InitializeComponents()
@@ -513,72 +517,63 @@ public class CubeDataFixManager : MonoBehaviour
         onComplete?.Invoke();
     }
 
+    // 대표 사진 자르기 (장소 추가와 같은 R0926PhotoCrop) — 자르는 동안 fixUIPanel 은 숨긴다
     private void ProcessCropAndDisplay(Texture2D sourceTexture, System.Action onComplete)
     {
-        try
+        if (photoCrop == null)
         {
-            var cropper = ImageCropper.Instance;
-            if (cropper == null)
-            {
-                ShowWarning(GetLocalizedText("main_photo_crop_failed"));
-                onComplete?.Invoke();
-                return;
-            }
-
-            // CubeUploadManager와 동일한 ImageCropper Canvas 설정 사용
-            CubeUploadManager.ConfigureImageCropperCanvas(cropper);
-
-            // 크로퍼가 앞에 렌더링되므로 fixUIPanel 숨김 (깜빡임 방지)
-            StartCoroutine(HideFixUIPanelDelayed());
-
-            cropper.Show(sourceTexture, (success, original, cropped) =>
-            {
-                try
-                {
-                    // 크롭 완료 후 fixUIPanel 복원
-                    if (fixUIPanel != null) fixUIPanel.SetActive(true);
-
-                    if (success && cropped is Texture2D croppedTexture)
-                    {
-                        if (mainPhoto != null) Destroy(mainPhoto);
-                        mainPhoto = croppedTexture;
-
-                        if (mainPhotoDisplay != null)
-                        {
-                            SetMainSprite(mainPhoto);
-                            mainPhotoDisplay.gameObject.SetActive(true);
-                        }
-                    }
-                    else
-                    {
-                        ShowWarning(GetLocalizedText("main_photo_crop_failed"));
-                    }
-                }
-                finally
-                {
-                    onComplete?.Invoke();
-                }
-            }, new ImageCropper.Settings
-            {
-                autoZoomEnabled = false,  // 자동 확대 비활성화 - 핀치 줌으로만 조작
-                selectionMinAspectRatio = 1.0f,
-                selectionMaxAspectRatio = 1.0f
-            });
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"[CubeDataFixManager] 크롭 처리 오류: {e.Message}");
+            Debug.LogError("[CubeDataFixManager] PhotoCrop 이 연결되지 않았습니다");
+            Destroy(sourceTexture);
             ShowWarning(GetLocalizedText("main_photo_crop_failed"));
             onComplete?.Invoke();
+            return;
         }
+
+        photoCrop.Open(sourceTexture, cropped =>
+        {
+            try
+            {
+                // 크롭 완료 후 fixUIPanel 복원
+                if (fixUIPanel != null) fixUIPanel.SetActive(true);
+
+                if (cropped != null)
+                {
+                    if (mainPhoto != null) Destroy(mainPhoto);
+                    mainPhoto = cropped;
+
+                    if (mainPhotoDisplay != null)
+                    {
+                        SetMainSprite(mainPhoto);
+                        mainPhotoDisplay.gameObject.SetActive(true);
+                    }
+                }
+                else
+                {
+                    ShowWarning(GetLocalizedText("main_photo_crop_failed"));
+                }
+            }
+            finally
+            {
+                Destroy(sourceTexture);   // 원본 — 예전엔 남아 사진을 고를 때마다 쌓였다
+                onComplete?.Invoke();
+            }
+        }, () =>
+        {
+            // 취소 — 넣어 둔 대표 사진은 그대로 (예전엔 취소해도 '자르기 실패'가 떴다)
+            Destroy(sourceTexture);
+            if (fixUIPanel != null) fixUIPanel.SetActive(true);
+            onComplete?.Invoke();
+        });
+
+        StartCoroutine(HideFixUIPanelDelayed());
     }
 
     private IEnumerator HideFixUIPanelDelayed()
     {
-        // 2프레임 대기: 크로퍼 Canvas가 완전히 렌더링된 후 숨김
+        // 2프레임 대기: 자르기 화면이 완전히 그려진 후 숨김 (그 사이 닫혔으면 그대로)
         yield return null;
         yield return null;
-        if (fixUIPanel != null)
+        if (fixUIPanel != null && photoCrop != null && photoCrop.IsOpen)
             fixUIPanel.SetActive(false);
     }
 
@@ -1064,9 +1059,16 @@ public class CubeDataFixManager : MonoBehaviour
         isProcessing = false;
     }
 
+    // 보내는 동안 화면 가운데 카드 — 예전엔 2초짜리 경고 글에 퍼센트만 떴다
     private void ShowUploadProgress(int percent)
     {
-        ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
+        if (busy != null) busy.Show(R0926LocalizedText.Say("보내는 중…", "Sending…", "送信中…", "发送中…", "Enviando…") + " " + percent + "%", percent / 100f);
+        else ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
+    }
+
+    private void HideBusy()
+    {
+        if (busy != null) busy.Hide();
     }
 
     private IEnumerator ProcessAndUploadData(
@@ -1074,6 +1076,9 @@ public class CubeDataFixManager : MonoBehaviour
         string instagramID, bool showInstagram, string description, string name,
         string category)
     {
+        ShowUploadProgress(0);
+        yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
+
         WWWForm formData = new WWWForm();
 
         formData.AddField("target_id", id.ToString());
@@ -1100,6 +1105,7 @@ public class CubeDataFixManager : MonoBehaviour
             {
                 Debug.LogError("[CubeDataFixManager] 메인 사진 데이터가 비어 있습니다!");
                 ShowWarning(GetLocalizedText("main_photo_upload_failed"));
+                HideBusy();
                 yield break;
             }
             string mainPath = "main.jpg";
@@ -1109,6 +1115,7 @@ public class CubeDataFixManager : MonoBehaviour
         else
         {
             ShowWarning(GetLocalizedText("upload_main_photo"));
+            HideBusy();
             yield break;
         }
 
@@ -1136,6 +1143,8 @@ public class CubeDataFixManager : MonoBehaviour
             LoginManager.ApplyAuth(www);
             bool timedOut = false;
             yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
+
+            HideBusy();
 
             if (timedOut)
             {

@@ -66,6 +66,10 @@ public class CubeUploadManager : MonoBehaviour
     [Header("사진 불러오는 동안")]
     [SerializeField] private R0926PhotoLoading photoLoading; // 대표·추가 사진 칸에 빈 칸+원호 (Redesign0926Apply3 가 만들어 연결)
 
+    [Header("자르기 · 올리는 중")]
+    [SerializeField] private R0926PhotoCrop photoCrop; // 대표 사진 자르기 화면 (Redesign0926ApplyCrop 이 만들어 연결)
+    [SerializeField] private R0926Busy busy;           // 올리는 동안 화면 가운데 카드 — 원호 + '업로드 중… N%' + 막대
+
     private string serverUrl => ApiConfig.UPLOAD;
 
     private Texture2D mainPhoto;
@@ -159,6 +163,8 @@ public class CubeUploadManager : MonoBehaviour
         {
             photoLoading = mainPhotoButton.transform.parent.GetComponent<R0926PhotoLoading>();
         }
+        if (photoCrop == null) photoCrop = FindAnyObjectByType<R0926PhotoCrop>(FindObjectsInactive.Include);
+        if (busy == null) busy = FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
     }
 
     private void InitializeComponents()
@@ -393,7 +399,8 @@ public class CubeUploadManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 크롭 및 UI 표시 처리
+    /// 대표 사진 자르기 → 사진 칸에 넣고 AR 미리보기. 자르는 동안 UploadPage 는 숨긴다
+    /// (10-20 자르기 화면을 R0926PhotoCrop 으로 — 예전 ImageCropper 는 작은 네모를 모서리로 줄이는 방식이라 쓰기 불편했다)
     /// </summary>
     private void ProcessCropAndDisplay(Texture2D texture, System.Action onComplete)
     {
@@ -403,40 +410,35 @@ public class CubeUploadManager : MonoBehaviour
             return;
         }
 
-        // 크롭 시작 전에 현재 패널 상태 저장
-        SaveCurrentPanelState();
-
-        var cropper = ImageCropper.Instance;
-        if (cropper == null)
+        if (photoCrop == null)
         {
+            Debug.LogError("[CubeUploadManager] PhotoCrop 이 연결되지 않았습니다");
+            Destroy(texture);
+            ShowWarning(LocalizationManager.Instance.GetText("main_photo_crop_failed"));
+            SetMainPhotoUIState(mainPhoto != null);
             onComplete?.Invoke();
             return;
         }
 
-        // ImageCropper Canvas를 메인 UI 위에 표시되도록 설정
-        ConfigureImageCropperCanvas(cropper);
+        // 크롭 시작 전에 현재 패널 상태 저장
+        SaveCurrentPanelState();
 
-        // 크로퍼가 sortingOrder 30000으로 앞에 렌더링되므로
-        // uploadPage는 크로퍼 표시 후 숨김 (깜빡임 방지)
-        StartCoroutine(HideUploadPageDelayed());
-
-        cropper.Show(texture, (success, original, cropped) =>
+        photoCrop.Open(texture, cropped =>
         {
             bool arPreviewStarted = false;
-
             try
             {
-                if (success && cropped is Texture2D croppedTexture)
+                if (cropped != null)
                 {
                     if (mainPhoto != null) Destroy(mainPhoto);
-                    mainPhoto = croppedTexture;
+                    mainPhoto = cropped;
                     SetMainSprite(mainPhoto);
                     SetMainPhotoUIState(true);
 
                     // AR Preview 모드 시작 (메인 사진 크롭 직후)
                     if (arPreviewController != null)
                     {
-                        StartARPreview(croppedTexture);
+                        StartARPreview(cropped);
                         arPreviewStarted = true;
                     }
                 }
@@ -445,29 +447,29 @@ public class CubeUploadManager : MonoBehaviour
                     ShowWarning(LocalizationManager.Instance.GetText("main_photo_crop_failed"));
                     SetMainPhotoUIState(mainPhoto != null);
                 }
-
-                // 원본 텍스처 정리 (크롭된 버전만 유지)
-                if (texture != cropped && texture != null) Destroy(texture);
             }
             finally
             {
-                // AR Preview가 시작되지 않았을 때만 uploadPage 복원
-                if (!arPreviewStarted)
-                {
-                    if (uploadPage != null)
-                        uploadPage.SetActive(true);
-
-                    RestoreCurrentPanelState();
-                }
-
+                Destroy(texture);   // 원본 — 자른 것만 남긴다
+                if (!arPreviewStarted) ShowUploadPageAgain();
                 onComplete?.Invoke();
             }
-        }, new ImageCropper.Settings
+        }, () =>
         {
-            autoZoomEnabled = false,
-            selectionMinAspectRatio = 1.0f,
-            selectionMaxAspectRatio = 1.0f
+            // 취소 — 고른 사진은 버리고 넣어 둔 대표 사진은 그대로 (예전엔 취소해도 '자르기 실패'가 떴다)
+            Destroy(texture);
+            SetMainPhotoUIState(mainPhoto != null);
+            ShowUploadPageAgain();
+            onComplete?.Invoke();
         });
+
+        StartCoroutine(HideUploadPageDelayed());
+    }
+
+    private void ShowUploadPageAgain()
+    {
+        if (uploadPage != null) uploadPage.SetActive(true);
+        RestoreCurrentPanelState();
     }
 
     /// <summary>
@@ -789,24 +791,6 @@ public class CubeUploadManager : MonoBehaviour
     /// iOS PHPickerViewController 비동기 반환 경로를 선택 순서대로 정렬
     /// 임시 파일명 패턴: {basePath}{index}.{ext} (예: /tmp/ngallery1.jpg, /tmp/ngallery2.png)
     /// </summary>
-    /// <summary>
-    /// ImageCropper Canvas를 메인 UI보다 앞에 표시되도록 설정 (sortingOrder 30000)
-    /// 다른 매니저에서도 동일하게 호출 가능
-    /// </summary>
-    public static void ConfigureImageCropperCanvas(ImageCropper cropper)
-    {
-        if (cropper == null) return;
-
-        Canvas cropperCanvas = cropper.GetComponent<Canvas>();
-        if (cropperCanvas == null) cropperCanvas = cropper.GetComponentInChildren<Canvas>();
-
-        if (cropperCanvas != null)
-        {
-            cropperCanvas.overrideSorting = true;
-            cropperCanvas.sortingOrder = 30000;
-        }
-    }
-
     private void SortPathsByFileIndex(string[] paths)
     {
         if (paths == null || paths.Length <= 1) return;
@@ -1478,16 +1462,24 @@ public class CubeUploadManager : MonoBehaviour
         onDone?.Invoke(www.result != UnityWebRequest.Result.Success && Time.realtimeSinceStartup - sentAt >= limit);
     }
 
+    // 올리는 동안 화면 가운데 카드 — 예전엔 2초짜리 경고 글에 퍼센트만 떴고, 스피너(LoadingPanel)는 UploadPage 뒤에 가려 안 보였다
     private void ShowUploadProgress(int percent)
     {
-        ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
+        if (busy != null) busy.Show(R0926LocalizedText.Say("업로드 중…", "Uploading…", "アップロード中…", "上传中…", "Subiendo…") + " " + percent + "%", percent / 100f);
+        else ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
+    }
+
+    private void HideBusy()
+    {
+        if (busy != null) busy.Hide();
     }
 
     private IEnumerator ProcessAndUploadImages(
         CubeUploadManager form, string placeName, string instagramID, bool showInstagram,
         Vector3 gpsData, string locationText, bool petFriendly, bool separateRestroom)
     {
-        ShowSpinner(LocalizationManager.Instance.GetText("uploading_object"));
+        ShowUploadProgress(0);
+        yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
 
         WWWForm formData = new WWWForm();
 
@@ -1533,7 +1525,7 @@ public class CubeUploadManager : MonoBehaviour
             if (mainPhotoBytes.Length == 0)
             {
                 ShowWarning(LocalizationManager.Instance.GetText("main_photo_upload_failed"));
-                HideSpinner();
+                HideBusy();
                 yield break;
             }
             string mainPath = "main.jpg";
@@ -1549,7 +1541,7 @@ public class CubeUploadManager : MonoBehaviour
         else
         {
             ShowWarning(LocalizationManager.Instance.GetText("upload_logo_photo"));
-            HideSpinner();
+            HideBusy();
             yield break;
         }
 
@@ -1577,7 +1569,7 @@ public class CubeUploadManager : MonoBehaviour
             bool timedOut = false;
             yield return StartCoroutine(SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
 
-            HideSpinner();
+            HideBusy();
 
             if (timedOut)
             {
@@ -1914,14 +1906,14 @@ public class CubeUploadManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 크로퍼가 렌더링된 후 uploadPage를 숨김 (깜빡임 방지)
+    /// 자르기 화면이 그려진 뒤 uploadPage를 숨김 (깜빡임 방지)
     /// </summary>
     private IEnumerator HideUploadPageDelayed()
     {
-        // 2프레임 대기: 크로퍼 Canvas가 완전히 렌더링된 후 숨김
+        // 2프레임 대기: 자르기 화면이 완전히 그려진 후 숨김 (그 사이 닫혔으면 그대로)
         yield return null;
         yield return null;
-        if (uploadPage != null)
+        if (uploadPage != null && photoCrop != null && photoCrop.IsOpen)
             uploadPage.SetActive(false);
     }
     

@@ -18,7 +18,12 @@ public class R0926LocalizedText : MonoBehaviour
 
     public static string Lang() => AppLanguage.Code;
 
-    private string Pick(string lang)
+    private string Pick(string lang) => Say(ko, en, ja, zh, es, lang);
+
+    /// <summary>코드에서 바꿔 넣는 문구 (자르는 중… · 올리는 중… 등) — 언어는 위와 같은 순서로 고른다</summary>
+    public static string Say(string ko, string en, string ja, string zh, string es) => Say(ko, en, ja, zh, es, Lang());
+
+    private static string Say(string ko, string en, string ja, string zh, string es, string lang)
     {
         string s = lang switch
         {

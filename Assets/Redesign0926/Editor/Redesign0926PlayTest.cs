@@ -105,6 +105,7 @@ namespace Redesign0926
             else if (mode == "vwshot") PlanVwShot();
             else if (mode == "arprev") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanArPrev(); }
             else if (mode == "photoload") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPhotoLoad(); }
+            else if (mode == "crop") PlanCrop();
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
             else if (mode == "avatar") PlanAvatar();
@@ -2494,6 +2495,460 @@ namespace Redesign0926
             Shot("arprev_cancel_early");
             Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
             Sleep(1.0f);
+        }
+
+        // E11 — 대표 사진 자르기 화면(R0926PhotoCrop) · 처리 중 카드(R0926Busy) (10-20)
+        // 네 귀 색이 다른 사진(아래 왼쪽 빨강 · 아래 오른쪽 초록 · 위 왼쪽 파랑 · 위 오른쪽 노랑)을 잘라 결과 화소를 본다 — 끌고 돌린 그대로 잘리는지
+        private static void PlanCrop()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            CubeUploadManager cum = null;
+            R0926PhotoCrop crop = null;
+            R0926Busy busy = null;
+            Texture2D got = null;
+            bool completed = false, gotDone = false, busySeen = false;
+            float seenMax = 0f, seenMin = 0f, gridMax = 0f;
+            string busyText = "";
+            Vector2 tapM = default, tapImg = default;
+
+            Func<string, object> cf = n => typeof(R0926PhotoCrop).GetField(n, F).GetValue(crop);
+            Func<RectTransform> cFrame = () => (RectTransform)cf("frame");
+            Func<RectTransform[]> cTiles = () => (RectTransform[])cf("tiles");
+            Func<float> cScale = () => (float)cf("scale");
+            Func<Vector2> cPos = () => (Vector2)cf("pos");
+            Func<float> cCover = () => (float)typeof(R0926PhotoCrop).GetProperty("Cover", F).GetValue(crop);
+            Func<Vector2> cLimit = () => (Vector2)typeof(R0926PhotoCrop).GetMethod("Limit", F).Invoke(crop, new object[] { cScale() });
+            Func<float> cGrid = () => ((CanvasGroup)cf("grid")).alpha;
+            Func<float> cAngle = () => ((RawImage)cf("photo")).rectTransform.localEulerAngles.z;
+            Func<Vector2> cCenter = () => cFrame().TransformPoint(cFrame().rect.center);   // 오버레이 캔버스 — 월드 좌표가 곧 화면 좌표
+            Func<Text> busyLabel = () => typeof(R0926Busy).GetField("label", F).GetValue(busy) as Text;
+            Func<Texture2D> mainPhoto = () => typeof(CubeUploadManager).GetField("mainPhoto", F).GetValue(cum) as Texture2D;
+            Func<bool> warn = () => (typeof(CubeUploadManager).GetField("warningObj", F).GetValue(cum) as GameObject)?.activeInHierarchy ?? false;
+            Func<string> cropping = () => R0926LocalizedText.Say("자르는 중…", "Cropping…", "切り抜き中…", "裁剪中…", "Recortando…");
+
+            Func<Texture2D> quad = () =>
+            {
+                const int w = 800, h = 600;
+                var src = new Texture2D(w, h, TextureFormat.RGBA32, false);
+                var px = new Color32[w * h];
+                Color32 red = new Color32(255, 0, 0, 255), green = new Color32(0, 255, 0, 255), blue = new Color32(0, 0, 255, 255), yellow = new Color32(255, 255, 0, 255);
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        px[y * w + x] = y < h / 2 ? (x < w / 2 ? red : green) : (x < w / 2 ? blue : yellow);
+                src.SetPixels32(px);
+                src.Apply();
+                return src;
+            };
+            // 자른 결과는 읽기 전용 — GPU 로 옮겨 읽는다. 줄은 위에서 아래로 "/" 로 잇는다
+            Func<Texture2D, float[], float[], string> colors = (img, xs, ys) =>
+            {
+                if (img == null) return "없음";
+                var rt = RenderTexture.GetTemporary(img.width, img.height, 0);
+                var was = RenderTexture.active;
+                Graphics.Blit(img, rt);
+                RenderTexture.active = rt;
+                var copy = new Texture2D(img.width, img.height, TextureFormat.RGB24, false);
+                copy.ReadPixels(new Rect(0, 0, img.width, img.height), 0, 0, false);
+                copy.Apply();
+                RenderTexture.active = was;
+                RenderTexture.ReleaseTemporary(rt);
+                var rows = new List<string>();
+                foreach (var fy in ys)
+                {
+                    string row = "";
+                    foreach (var fx in xs)
+                    {
+                        Color32 c = copy.GetPixel(Mathf.Clamp((int)(fx * copy.width), 0, copy.width - 1), Mathf.Clamp((int)(fy * copy.height), 0, copy.height - 1));
+                        bool hr = c.r > 180, hg = c.g > 180, hb = c.b > 180, lr = c.r < 75, lg = c.g < 75, lb = c.b < 75;
+                        row += hr && lg && lb ? "빨" : lr && hg && lb ? "초" : lr && lg && hb ? "파" : hr && hg && lb ? "노" : $"?({c.r},{c.g},{c.b})";
+                    }
+                    rows.Add(row);
+                }
+                UnityEngine.Object.Destroy(copy);
+                return string.Join("/", rows);
+            };
+            // 돌린 것도 — 네 귀의 최소·최대 (화면 좌표)
+            Func<RectTransform, Rect> bounds = rt =>
+            {
+                var c = new Vector3[4];
+                rt.GetWorldCorners(c);
+                return Rect.MinMaxRect(Mathf.Min(c[0].x, c[1].x, c[2].x, c[3].x), Mathf.Min(c[0].y, c[1].y, c[2].y, c[3].y),
+                    Mathf.Max(c[0].x, c[1].x, c[2].x, c[3].x), Mathf.Max(c[0].y, c[1].y, c[2].y, c[3].y));
+            };
+            Func<bool> covers = () =>
+            {
+                Rect fr = bounds(cFrame()), pr = bounds(((RawImage)cf("photo")).rectTransform);
+                return pr.xMin <= fr.xMin + 1f && pr.xMax >= fr.xMax - 1f && pr.yMin <= fr.yMin + 1f && pr.yMax >= fr.yMax - 1f;
+            };
+            Func<Vector2, GameObject> topAt = p =>
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = p }, hits);
+                return hits.Count > 0 ? hits[0].gameObject : null;
+            };
+            // 세로: 위 제목 · 가운데 정사각형 틀 · 아래 한 줄 세 칸. 가로: 오른쪽에 세 칸을 위에서 아래로
+            Func<bool, string, bool> layout = (land, tag) =>
+            {
+                Rect fr = bounds(cFrame()), br = bounds((RectTransform)cf("bar")), hr = bounds((RectTransform)cf("header"));
+                var ts = cTiles();
+                bool ok = ts.Length == 3 && Mathf.Abs(fr.width - fr.height) < 2f
+                    && fr.xMin >= -1f && fr.yMin >= -1f && fr.xMax <= Screen.width + 1f && fr.yMax <= Screen.height + 1f
+                    && br.xMin >= -1f && br.yMin >= -1f && br.xMax <= Screen.width + 1f && br.yMax <= Screen.height + 1f
+                    && hr.yMin >= fr.yMax - 1f
+                    && (land ? br.xMin >= fr.xMax - 1f : br.yMax <= fr.yMin + 1f);
+                string desc = $"화면 {Screen.width}x{Screen.height} · 틀 ({fr.x:0},{fr.y:0}) {fr.width:0}x{fr.height:0} · 제목 아래끝 {hr.yMin:0} · 카드 ({br.x:0},{br.y:0}) {br.width:0}x{br.height:0}";
+                Rect prev = default;
+                for (int i = 0; i < ts.Length; i++)
+                {
+                    Rect tr = bounds(ts[i]);
+                    var label = ts[i].GetComponentInChildren<Text>(true);
+                    desc += $" | {ts[i].name} ({tr.x:0},{tr.y:0}) {tr.width:0}x{tr.height:0} 「{(label != null ? label.text : "-")}」 {(label != null ? label.fontSize : 0)}";
+                    ok &= label != null && label.gameObject.activeInHierarchy && label.text.Length > 0 && label.fontSize >= 48 && tr.Contains(bounds(label.rectTransform).center);
+                    ok &= tr.xMin >= br.xMin - 1f && tr.xMax <= br.xMax + 1f && tr.yMin >= br.yMin - 1f && tr.yMax <= br.yMax + 1f;
+                    if (i > 0)
+                        ok &= land ? Mathf.Abs(tr.x - prev.x) < 2f && Mathf.Abs(tr.height - prev.height) < 2f && tr.yMax <= prev.yMin + 1f
+                                   : Mathf.Abs(tr.y - prev.y) < 2f && Mathf.Abs(tr.width - prev.width) < 2f && tr.xMin >= prev.xMax - 1f;
+                    prev = tr;
+                }
+                Rect t0 = ts.Length > 0 ? bounds(ts[0]) : default;
+                ok &= land ? t0.height > Screen.height * 0.18f : t0.width > Screen.width * 0.25f;   // 사진 고르기 시트처럼 큼직하게
+                log.Add($"  [{tag}] " + desc);
+                return ok;
+            };
+            Action<Texture2D> open = src =>
+            {
+                got = null; gotDone = false;
+                crop.Open(src, res => { got = res; gotDone = true; UnityEngine.Object.Destroy(src); }, () => UnityEngine.Object.Destroy(src));
+            };
+            Action<Vector2> doubleTap = p =>
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                crop.OnPointerClick(new UnityEngine.EventSystems.PointerEventData(es)
+                {
+                    position = p, clickCount = 2,
+                    pointerPressRaycast = new UnityEngine.EventSystems.RaycastResult { gameObject = crop.transform.Find("Bg0926").gameObject }
+                });
+            };
+            // 두 손가락 — 틀 가운데를 사이에 두고 gap0 → gap1 (화면 px) 로 벌리거나 오므린 뒤 뗀다. 한 프레임에 한 걸음
+            Action<float, float, Action> twoFingers = (gap0, gap1, watch) =>
+            {
+                Vector2 mid = default;
+                int k = 0, fc = -1;
+                const int n = 10;
+                Action<UnityEngine.InputSystem.TouchPhase, float> put = (ph, g) =>
+                {
+                    InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = 7, phase = ph, position = mid - new Vector2(g * 0.5f, 0f) });
+                    InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = 8, phase = ph, position = mid + new Vector2(g * 0.5f, 0f) });
+                };
+                steps.Enqueue(() => { mid = cCenter(); k = 0; put(UnityEngine.InputSystem.TouchPhase.Began, gap0); fc = Time.frameCount; return true; });
+                steps.Enqueue(() =>
+                {
+                    if (Time.frameCount == fc) return false;
+                    fc = Time.frameCount;
+                    watch?.Invoke();
+                    if (k >= n) return true;
+                    k++;
+                    put(UnityEngine.InputSystem.TouchPhase.Moved, Mathf.Lerp(gap0, gap1, k / (float)n));
+                    return false;
+                });
+                steps.Enqueue(() => { if (Time.frameCount > fc + 1) return true; watch?.Invoke(); return false; });
+                Do(() => put(UnityEngine.InputSystem.TouchPhase.Ended, gap1));
+            };
+            // 돌린 횟수 · 끄는 방향 → 완료 → 결과 색 (xs 왼쪽→오른쪽, ys 위→아래 비율)
+            Action<int, Vector2, string, float[], float[], string> cropCase = (turns, drag, expect, xs, ys, tag) =>
+            {
+                Do(() => open(quad()));
+                Sleep(0.4f);
+                for (int i = 0; i < turns; i++) { Do(() => crop.Rotate()); Sleep(0.35f); }
+                if (drag != Vector2.zero) { Finger(() => cCenter(), new[] { drag }, 8, null, null); Sleep(0.6f); }
+                if (turns == 1 && drag == Vector2.zero) Shot("crop_rotated");
+                Check(() =>
+                {
+                    Vector2 l = cLimit(), p = cPos();
+                    Vector2 want = new Vector2(drag.x > 0f ? l.x : drag.x < 0f ? -l.x : 0f, drag.y > 0f ? l.y : drag.y < 0f ? -l.y : 0f);
+                    log.Add($"  [{tag}] 각도 {cAngle():0.#}° · 배율 {cScale() / cCover():0.###} · 자리 ({p.x:0.#},{p.y:0.#}) 기대 ({want.x:0.#},{want.y:0.#})");
+                    return Mathf.Abs(Mathf.DeltaAngle(cAngle(), 90f * turns)) < 0.5f && Mathf.Abs(cScale() / cCover() - 1f) < 0.01f && (p - want).magnitude < 1f && covers();
+                }, $"{tag}: 돌린 모양에 틀을 빈틈없이 덮음" + (drag != Vector2.zero ? " · 끈 쪽 끝까지" : ""));
+                Do(() => cTiles()[2].GetComponent<Button>().onClick.Invoke());
+                Wait(() => gotDone, 5f, tag + " 자르기 끝");
+                Check(() =>
+                {
+                    string c = colors(got, xs, ys);
+                    log.Add($"  [{tag}] 결과 {(got != null ? got.width + "x" + got.height : "없음")} · 색 {c} (기대 {expect})");
+                    bool ok = got != null && got.width == 600 && got.height == 600 && c == expect && !crop.IsOpen;
+                    if (got != null) UnityEngine.Object.Destroy(got);
+                    got = null;
+                    return ok;
+                }, $"{tag}: 틀 안에 보이던 그대로 잘림");
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+                crop = UnityEngine.Object.FindAnyObjectByType<R0926PhotoCrop>(FindObjectsInactive.Include);
+                busy = UnityEngine.Object.FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+            });
+
+            // 0) 연결
+            Check(() =>
+            {
+                var fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                Func<Type, object, string, UnityEngine.Object> get = (t, o, n) => o == null ? null : t.GetField(n, F)?.GetValue(o) as UnityEngine.Object;
+                UnityEngine.Object a1 = get(typeof(CubeUploadManager), cum, "photoCrop"), a2 = get(typeof(CubeUploadManager), cum, "busy");
+                UnityEngine.Object b1 = get(typeof(CubeDataFixManager), fix, "photoCrop"), b2 = get(typeof(CubeDataFixManager), fix, "busy");
+                UnityEngine.Object c2 = get(typeof(ModelUploadManager), mum, "busy");
+                log.Add($"  연결: 자르기 {(crop != null ? crop.name : "없음")} · 처리 중 {(busy != null ? busy.name : "없음")} · 장소 추가 {a1 == crop}/{a2 == busy} · 장소 수정 {b1 == crop}/{b2 == busy} · 3D 모델 {c2 == busy}");
+                return crop != null && busy != null && a1 == crop && a2 == busy && b1 == crop && b2 == busy && c2 == busy;
+            }, "연결: 장소 추가 · 장소 수정 (자르기 + 처리 중) · 3D 모델 (처리 중)");
+            Check(() =>
+            {
+                var ts = cTiles();
+                var dockFw = Find("Dock0926/List_Button")?.GetComponent<UITouchForwarder>();
+                var clip = dockFw != null ? typeof(UITouchForwarder).GetField("customSound", F).GetValue(dockFw) as AudioClip : null;
+                string[] want = { "Cancel", "Rotate", "Done" };
+                bool ok = ts != null && ts.Length == 3 && clip != null;
+                string desc = "";
+                for (int i = 0; ts != null && i < ts.Length && i < 3; i++)
+                {
+                    var b = ts[i].GetComponent<Button>();
+                    var fw = ts[i].GetComponent<UITouchForwarder>();
+                    var snd = fw != null ? typeof(UITouchForwarder).GetField("customSound", F).GetValue(fw) as AudioClip : null;
+                    bool wired = b != null && b.onClick.GetPersistentEventCount() == 1 && b.onClick.GetPersistentTarget(0) == crop && b.onClick.GetPersistentMethodName(0) == want[i];
+                    desc += $" {ts[i].name}({(wired ? want[i] : "연결 X")} · 소리 {(snd != null ? snd.name : "-")})";
+                    ok &= wired && snd == clip;
+                }
+                bool back = ts != null && ts.Length > 0 && ts[0].GetComponent<ClickButtonOnBack>() != null;
+                log.Add($"  세 칸:{desc} · 하단 메뉴 소리 {(clip != null ? clip.name : "-")} · 취소에 뒤로가기 {(back ? "O" : "X")}");
+                return ok && back;
+            }, "세 칸: 취소 · 회전 · 완료 연결 · 하단 메뉴와 같은 물방울 소리 · 뒤로가기 = 취소");
+            Check(() =>
+            {
+                var dim = busy != null ? busy.transform.Find("Dim0926") : null;
+                Canvas bc = busy != null ? busy.GetComponent<Canvas>() : null, cc = crop != null ? crop.GetComponent<Canvas>() : null;
+                bool swallow = dim != null && dim.GetComponent<Button>() != null && dim.GetComponent<ClickButtonOnBack>() != null;
+                log.Add($"  처리 중 카드: 순서 {(bc != null ? bc.sortingOrder : -1)} · 자르기 {(cc != null ? cc.sortingOrder : -1)} · 뒤로가기 삼킴 {(swallow ? "O" : "X")}");
+                return swallow && bc != null && cc != null && bc.overrideSorting && cc.overrideSorting && bc.sortingOrder > cc.sortingOrder
+                    && !busy.gameObject.activeSelf && !crop.IsOpen;
+            }, "처리 중 카드: 자르기 화면보다 위 · 뒤로가기를 삼킴 · 처음엔 둘 다 꺼짐");
+
+            // 1) 장소 추가에서 대표 사진을 고르면 자르기 화면 (뒤 장소 추가 창은 숨김)
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() => { completed = false; typeof(CubeUploadManager).GetMethod("ProcessCropAndDisplay", F).Invoke(cum, new object[] { quad(), (Action)(() => completed = true) }); });
+            Sleep(0.6f);
+            Shot("crop_open");
+            Check(() => crop.IsOpen && !Active("UploadPage") && !busy.gameObject.activeSelf, "대표 사진을 고르면 자르기 화면 (뒤 장소 추가 창은 숨김)");
+            Check(() => layout(false, "세로"), "세로: 정사각형 틀이 화면 안 · 제목 아래 · 아래 한 줄 큰 세 칸 (취소 · 회전 · 완료)");
+            Check(() => covers() && Mathf.Abs(cScale() / cCover() - 1f) < 0.01f && cPos().magnitude < 1f, "처음: 사진이 틀을 빈틈없이 덮는 가장 작은 크기 · 가운데");
+            Check(() =>
+            {
+                string desc = "";
+                bool ok = true;
+                foreach (var t in cTiles())
+                {
+                    var hit = topAt(ScreenRect(t).center);
+                    desc += $" {t.name}→{(hit != null ? hit.name : "없음")}";
+                    ok &= hit != null && hit.transform.IsChildOf(t);
+                }
+                log.Add("  세 칸 누름:" + desc);
+                return ok;
+            }, "세 칸 모두 그 자리를 누르면 그 칸이 받음");
+
+            // 2) 뒤로가기 = 취소 — '자르기 실패' 없이 장소 추가 창으로
+            Back();
+            Sleep(0.6f);
+            Check(() =>
+            {
+                log.Add($"  취소 뒤: 자르기 {(crop.IsOpen ? "열림" : "닫힘")} · 장소 추가 창 {(Active("UploadPage") ? "보임" : "숨음")} · 끝 알림 {completed} · 안내 {(warn() ? "뜸" : "없음")} · 대표 사진 {(mainPhoto() != null ? "있음" : "없음")}");
+                return !crop.IsOpen && Active("UploadPage") && completed && !warn() && mainPhoto() == null;
+            }, "뒤로가기 → 취소: 장소 추가 창으로 · '자르기 실패' 안내 없음 · 대표 사진 그대로(없음)");
+
+            // 3) 손가락 — 한 손가락 끌기 (진짜 이벤트 시스템으로)
+            Do(() => { completed = false; typeof(CubeUploadManager).GetMethod("ProcessCropAndDisplay", F).Invoke(cum, new object[] { quad(), (Action)(() => completed = true) }); });
+            Sleep(0.6f);
+            Do(() => { seenMax = float.MinValue; gridMax = 0f; });
+            Finger(() => cCenter(), new[] { new Vector2(600f, 0f) }, 8, () => { seenMax = Mathf.Max(seenMax, cPos().x); gridMax = Mathf.Max(gridMax, cGrid()); }, "crop_drag");
+            Sleep(0.6f);
+            Check(() =>
+            {
+                Vector2 l = cLimit(), p = cPos();
+                log.Add($"  끌기: 끄는 동안 최대 {seenMax:0.#} · 놓은 뒤 ({p.x:0.#},{p.y:0.#}) · 틀 끝 {l.x:0.#} · 3x3 줄 최대 {gridMax:0.##} → {cGrid():0.##}");
+                return l.x > 50f && seenMax > l.x + 10f && Mathf.Abs(p.x - l.x) < 1f && Mathf.Abs(p.y) < 1f && gridMax > 0.3f && cGrid() < 0.05f;
+            }, "한 손가락 끌기: 손가락을 따라오고, 놓으면 틀 끝까지만 (빈틈 없이) · 끄는 동안만 3x3 줄");
+
+            // 4) 두 번 톡 — 누른 자리를 크게 (누른 곳이 손가락 밑에 그대로) · 다시 두 번 톡 = 처음 크기
+            Do(() =>
+            {
+                var fr = cFrame();
+                tapM = new Vector2(fr.rect.width / 4f, fr.rect.width / 8f);
+                tapImg = (tapM - cPos()) / cScale();
+                doubleTap(fr.TransformPoint(tapM));
+            });
+            Sleep(0.5f);
+            Check(() =>
+            {
+                Vector2 now = (tapM - cPos()) / cScale();
+                log.Add($"  두 번 톡: 배율 {cScale() / cCover():0.###} · 누른 자리의 사진 점 ({tapImg.x:0.#},{tapImg.y:0.#}) → ({now.x:0.#},{now.y:0.#})");
+                return Mathf.Abs(cScale() / cCover() - 2.2f) < 0.01f && (now - tapImg).magnitude < 1f && covers();
+            }, "두 번 톡: 누른 자리를 2.2배로 (누른 곳이 손가락 밑에 그대로)");
+            Do(() => doubleTap(cCenter()));
+            Sleep(0.5f);
+            Check(() => Mathf.Abs(cScale() / cCover() - 1f) < 0.01f && cPos().magnitude < 1f, "다시 두 번 톡: 처음 크기 · 가운데");
+
+            // 5) 휠 (에디터·PC) — 한 칸 15%
+            Do(() =>
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                float per = es.currentInputModule is UnityEngine.InputSystem.UI.InputSystemUIInputModule im ? im.scrollDeltaPerTick : 1f;
+                crop.OnScroll(new UnityEngine.EventSystems.PointerEventData(es) { position = cCenter(), scrollDelta = new Vector2(0f, 3f * per) });
+                log.Add($"  휠: 한 칸 {per} → 배율 {cScale() / cCover():0.###}");
+            });
+            Check(() => Mathf.Abs(cScale() / cCover() - Mathf.Pow(1.15f, 3f)) < 0.01f, "휠 세 칸: 1.15³ ≈ 1.52배");
+            Do(() => doubleTap(cCenter()));
+            Sleep(0.5f);
+
+            // 6) 두 손가락 — 벌린 만큼 · 틀보다 작게 줄였다 놓으면 다시 꽉 차게
+            twoFingers(120f, 360f, null);
+            Sleep(0.6f);
+            Check(() =>
+            {
+                float k = cScale() / cCover();
+                log.Add($"  두 손가락 벌림: 배율 {k:0.###} · 터치 화면 {(Touchscreen.current == ptTouch ? "시험 손가락" : Touchscreen.current != null ? Touchscreen.current.name : "없음")}");
+                return Mathf.Abs(k - 3f) < 0.1f && covers();
+            }, "두 손가락 벌리기: 벌린 만큼 커짐 (3배)");
+            Do(() => seenMin = float.MaxValue);
+            twoFingers(360f, 72f, () => seenMin = Mathf.Min(seenMin, cScale() / cCover()));
+            Sleep(0.6f);
+            Check(() =>
+            {
+                float k = cScale() / cCover();
+                log.Add($"  두 손가락 오므림: 가장 작을 때 {seenMin:0.###} → 놓은 뒤 {k:0.###}");
+                return seenMin < 0.99f && Mathf.Abs(k - 1f) < 0.01f && cPos().magnitude < 1f && covers();
+            }, "두 손가락 오므리기: 틀보다 작게 줄였다 놓으면 다시 꽉 차게");
+
+            // 7) 오른쪽으로 끌어 둔 채 완료 — 바로 '자르는 중…' · 끌어 둔 그대로 대표 사진에
+            Finger(() => cCenter(), new[] { new Vector2(600f, 0f) }, 8, null, null);
+            Sleep(0.6f);
+            Do(() =>
+            {
+                cTiles()[2].GetComponent<Button>().onClick.Invoke();
+                busySeen = busy.Showing;
+                busyText = busyLabel() != null ? busyLabel().text : "";
+            });
+            Check(() => { log.Add($"  완료 누른 순간: 카드 {(busySeen ? "보임" : "없음")} 「{busyText}」"); return busySeen && busyText == cropping(); }, "완료를 누르면 바로 '자르는 중…' 카드");
+            Wait(() => completed, 5f, "자르기 끝");
+            Sleep(0.4f);
+            Shot("crop_done");
+            Check(() =>
+            {
+                var mp = mainPhoto();
+                string c = colors(mp, new[] { 0.25f, 0.6f, 0.73f }, new[] { 0.75f, 0.25f });
+                bool preview = Active("ARPreviewPanel");
+                log.Add($"  완료: 대표 사진 {(mp != null ? mp.width + "x" + mp.height : "없음")} · 색 {c} (기대 파파노/빨빨초) · {(preview ? "AR 미리보기" : Active("UploadPage") ? "장소 추가 창" : "?")} · 안내 {(warn() ? "뜸" : "없음")} · 카드 {(busy.gameObject.activeSelf ? "남음" : "걷힘")}");
+                return mp != null && mp.width == 600 && mp.height == 600 && c == "파파노/빨빨초" && !crop.IsOpen && !warn() && !busy.gameObject.activeSelf && (preview || Active("UploadPage"));
+            }, "완료: 끌어 둔 그대로 잘려 대표 사진에 (600x600) · 카드 걷힘 · 안내 없음 → AR 미리보기(또는 장소 추가 창)");
+            Do(() => { if (Active("ARPreviewPanel")) Click("ARPreviewPanel/MessageContainer/ButtonContainer/CancelButton"); });
+            Sleep(1.2f);
+            Check(() => Active("UploadPage") && !crop.IsOpen, "미리보기를 닫으면 장소 추가 창으로");
+
+            // 8) 돌리기 — 왼쪽으로 90°씩, 돌린 그대로 잘림
+            cropCase(0, Vector2.zero, "파노/빨초", new[] { 0.25f, 0.75f }, new[] { 0.75f, 0.25f }, "그대로");
+            cropCase(1, Vector2.zero, "노초/파빨", new[] { 0.25f, 0.75f }, new[] { 0.75f, 0.25f }, "왼쪽으로 한 번");
+            cropCase(1, new Vector2(0f, 600f), "노초/파빨/파빨", new[] { 0.25f, 0.75f }, new[] { 0.72f, 0.6f, 0.25f }, "왼쪽으로 한 번 + 위로 끌기");
+            cropCase(2, Vector2.zero, "초빨/노파", new[] { 0.25f, 0.75f }, new[] { 0.75f, 0.25f }, "두 번");
+            cropCase(3, Vector2.zero, "빨파/초노", new[] { 0.25f, 0.75f }, new[] { 0.75f, 0.25f }, "세 번");
+
+            // 9) 자르는 중 카드는 자르기 화면 위 — 그동안 세 칸이 안 눌림
+            Do(() => open(quad()));
+            Sleep(0.4f);
+            Do(() => busy.Show(cropping()));
+            Sleep(0.4f);
+            Shot("crop_busy");
+            Check(() =>
+            {
+                GameObject mid = topAt(cCenter()), done = topAt(ScreenRect(cTiles()[2]).center);
+                log.Add($"  자르는 중: 틀 가운데 맨 위 {(mid != null ? mid.name : "없음")} · 완료 칸 자리 맨 위 {(done != null ? done.name : "없음")}");
+                return busy.Showing && crop.IsOpen && mid != null && mid.transform.IsChildOf(busy.transform) && done != null && done.transform.IsChildOf(busy.transform);
+            }, "자르는 중 카드: 자르기 화면 위 · 그동안 세 칸이 안 눌림");
+            Do(() => busy.Hide());
+            Sleep(0.4f);
+            Do(() => crop.Cancel());
+            Sleep(0.3f);
+
+            // 10) 올리는 중 — 장소 추가 창 위에 카드 + 막대 · 뒤로가기도 삼킴
+            Do(() => typeof(CubeUploadManager).GetMethod("ShowUploadProgress", F).Invoke(cum, new object[] { 42 }));
+            Sleep(0.4f);
+            Shot("crop_upload_busy");
+            Check(() =>
+            {
+                var lb = busyLabel();
+                var barGo = typeof(R0926Busy).GetField("bar", F).GetValue(busy) as GameObject;
+                var fill = typeof(R0926Busy).GetField("barFill", F).GetValue(busy) as RectTransform;
+                var mid = topAt(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f));
+                var xb = Find("UploadPage/DockMirror0926/XButton_Upload") as RectTransform;
+                var onX = xb != null ? topAt(ScreenRect(xb).center) : null;
+                string expect = R0926LocalizedText.Say("업로드 중…", "Uploading…", "アップロード中…", "上传中…", "Subiendo…") + " 42%";
+                log.Add($"  올리는 중: 「{(lb != null ? lb.text : "-")}」 막대 {(barGo != null && barGo.activeInHierarchy ? "보임" : "없음")} 채움 {(fill != null ? fill.anchorMax.x : -1f):0.00} · 가운데 맨 위 {(mid != null ? mid.name : "없음")} · 닫기 자리 맨 위 {(onX != null ? onX.name : "없음")}");
+                return busy.Showing && lb != null && lb.text == expect && barGo != null && barGo.activeInHierarchy && fill != null && Mathf.Abs(fill.anchorMax.x - 0.42f) < 0.001f
+                    && mid != null && mid.transform.IsChildOf(busy.transform) && onX != null && onX.transform.IsChildOf(busy.transform) && Active("UploadPage");
+            }, "올리는 중: 장소 추가 창 위에 '업로드 중… 42%' 카드 + 막대 · 그동안 아래(닫기 포함)는 안 눌림");
+            Back();
+            Sleep(0.5f);
+            Check(() => busy.Showing && Active("UploadPage"), "올리는 중 뒤로가기: 카드가 삼켜 장소 추가 창이 닫히지 않음");
+            Do(() => typeof(CubeUploadManager).GetMethod("HideBusy", F).Invoke(cum, null));
+            Sleep(0.4f);
+            Check(() => !busy.gameObject.activeSelf && Active("UploadPage"), "다 올리면 카드가 걷힘");
+            Check(() =>
+            {
+                var fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                typeof(CubeDataFixManager).GetMethod("ShowUploadProgress", F).Invoke(fix, new object[] { 10 });
+                string a = busyLabel().text;
+                typeof(ModelUploadManager).GetMethod("ShowUploadProgress", F).Invoke(mum, new object[] { 77 });
+                string b = busyLabel().text;
+                typeof(ModelUploadManager).GetMethod("HideBusy", F).Invoke(mum, null);
+                string ea = R0926LocalizedText.Say("보내는 중…", "Sending…", "送信中…", "发送中…", "Enviando…") + " 10%";
+                string eb = R0926LocalizedText.Say("업로드 중…", "Uploading…", "アップロード中…", "上传中…", "Subiendo…") + " 77%";
+                log.Add($"  장소 수정 「{a}」 · 3D 모델 「{b}」");
+                return a == ea && b == eb;
+            }, "장소 수정 '보내는 중… N%' · 3D 모델 '업로드 중… N%' — 같은 카드");
+            Sleep(0.4f);
+            Do(() => { busy.Show("시험"); typeof(R0926Busy).GetField("shownAt", F).SetValue(busy, Time.unscaledTime - 21f); });
+            Sleep(0.5f);
+            Check(() => !busy.gameObject.activeSelf, "부른 쪽이 20초 넘게 소식이 없으면 카드가 저절로 걷힘 (앱이 막히지 않게)");
+
+            // 11) 가로 — 오른쪽에 세 칸을 세로로, 왼쪽에 틀
+            Do(() => open(quad()));
+            Sleep(0.4f);
+            Do(() => Rotate(true));
+            Wait(() => Turned(true), 8f, "가로로 돌림");
+            Sleep(1.0f);
+            Shot("crop_land");
+            Check(() => layout(true, "가로") && covers(), "가로: 오른쪽에 세 칸 세로로 (취소 · 회전 · 완료) · 왼쪽에 틀 · 사진이 틀을 덮음");
+            Do(() => Rotate(false));
+            Wait(() => Turned(false), 8f, "세로로 되돌림");
+            Sleep(1.0f);
+            Check(() => layout(false, "다시 세로") && covers(), "다시 세로: 제자리 · 사진이 틀을 덮음");
+            Do(() => crop.Cancel());
+            Sleep(0.3f);
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+            Do(() =>
+            {
+                if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
+                ptTouch = null;
+            });
         }
 
         // E7 — 설정 ▸ 장소 ▸ '멀리 있는 오브젝트 흐리게' 네 칸: 누르면 저장값 · 칸 표시 · 안개 · 실제 큐브 투명도가 바로 바뀐다 (10-20)
@@ -5163,6 +5618,8 @@ namespace Redesign0926
             }
             if (steps.Count > 0) return;
             running = false;
+            if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);   // 가상 손가락 — 시험이 중간에 끊겨도 남지 않게
+            ptTouch = null;
             PlayerPrefs.SetInt("IsFirstTime", 1);   // ForceShowGuide 가 지운 '본 적 있음' — 그대로 두면 다음 시험 도중 6초 뒤 처음 안내가 뜬다
             PlayerPrefs.Save();
             if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; }

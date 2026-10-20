@@ -46,8 +46,7 @@ public class ModelUploadManager : MonoBehaviour
 
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
-    [SerializeField] private Text loadingText;
-    [SerializeField] private Image loadingSpinner;
+    [SerializeField] private R0926Busy busy;   // 올리는 동안 화면 가운데 카드 — 원호 + '업로드 중… N%' + 막대 (Redesign0926ApplyCrop 이 연결)
 
     [Header("Warning System")]
     [SerializeField] private GameObject warningObj;
@@ -116,6 +115,7 @@ public class ModelUploadManager : MonoBehaviour
             categoryToggleLabel = categoryToggle.GetComponentInChildren<Text>(true);
         if (photoLoading == null && subPhotosButton != null)
             photoLoading = subPhotosButton.transform.parent.GetComponent<R0926PhotoLoading>();
+        if (busy == null) busy = FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
     }
 
     private void InitializeComponents()
@@ -613,38 +613,6 @@ public class ModelUploadManager : MonoBehaviour
         ResetToInitialState();
     }
 
-
-    private void ShowSpinner(string message)
-    {
-        if (loadingPanel != null) loadingPanel.SetActive(true);
-        if (loadingText != null) loadingText.text = message;
-        if (loadingSpinner != null) StartCoroutine(SpinnerAnimation());
-    }
-
-    private void HideSpinner()
-    {
-        if (loadingPanel != null) loadingPanel.SetActive(false);
-        
-        // 스피너 애니메이션 코루틴 안전하게 정지
-        try
-        {
-            StopCoroutine(SpinnerAnimation());
-        }
-        catch (System.Exception)
-        {
-            // 코루틴이 이미 정지된 경우 무시
-        }
-    }
-
-    private IEnumerator SpinnerAnimation()
-    {
-        while (loadingPanel != null && loadingPanel.activeInHierarchy && loadingSpinner != null)
-        {
-            loadingSpinner.transform.Rotate(0, 0, -90 * Time.deltaTime);
-            yield return null;
-        }
-    }
-
     #endregion
 
     #region File Management
@@ -1045,14 +1013,22 @@ public class ModelUploadManager : MonoBehaviour
         isProcessing = false;
     }
 
+    // 올리는 동안 화면 가운데 카드 — 예전엔 2초짜리 경고 글에 퍼센트만 떴고, 스피너는 추가 창 뒤에 가려 안 보였다
     private void ShowUploadProgress(int percent)
     {
-        ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
+        if (busy != null) busy.Show(R0926LocalizedText.Say("업로드 중…", "Uploading…", "アップロード中…", "上传中…", "Subiendo…") + " " + percent + "%", percent / 100f);
+        else ShowWarning(GetLocalizedText("submitting_countdown").Replace("{0}", percent + "%"));
+    }
+
+    private void HideBusy()
+    {
+        if (busy != null) busy.Hide();
     }
 
     private IEnumerator ProcessAndUploadModel()
     {
-        ShowSpinner(GetLocalizedText("uploading_object"));
+        ShowUploadProgress(0);
+        yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
 
         string modelName = nameInput.text.Trim();
 
@@ -1115,7 +1091,7 @@ public class ModelUploadManager : MonoBehaviour
             bool timedOut = false;
             yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
 
-            HideSpinner();
+            HideBusy();
 
             if (timedOut)
             {
