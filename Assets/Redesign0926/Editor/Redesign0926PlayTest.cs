@@ -76,6 +76,7 @@ namespace Redesign0926
             });
             if (mode == "splashprof") PlanSplashProf();
             else if (mode == "chatnav") PlanChatNav();
+            else if (mode == "woopang1") PlanWoopangOne();
             else if (mode == "land") PlanLand();
             else if (mode == "profile")
             {
@@ -1043,14 +1044,19 @@ namespace Redesign0926
                 var vp = Find("MessagePanel/Clip0926/Background/ConversationList/Viewport");
                 return vp != null && vp.GetComponent<Mask>() == null && vp.GetComponent<RectMask2D>() != null;
             }, "목록 자르기는 반듯한 사각 (둥근 마스크 없음)");
+            // (10-21) 이 기기 알림은 이제 WOOPANG 한 줄로 합쳐진다 — 밀기는 목록에만 넣은 시험 대화 줄 셋으로 보고,
+            // '삭제'는 서버에 묻지 않는 WOOPANG 줄로 누른다(저장값은 덜어 두었다가 되돌림). 대화 줄 '삭제'는 운영 서버에서 대화를 지우므로 누르지 않는다
             Do(() =>
             {
-                var m = Mpm();
+                StashWoopangPrefs();
+                var list = Convs();
                 for (int i = 1; i <= 3; i++)
-                    m?.AddLocationNotificationFromPush("밀어 삭제 시험 " + i, "swipe test " + i, SwNote + i);
+                    list?.Add(new ConversationSummary { userId = SwNote + i, username = "밀어 삭제 시험 " + i, avatarUrl = "", lastMessage = "swipe test " + i,
+                        lastMessageTime = DateTime.Now.AddMinutes(i).ToString("yyyy-MM-dd HH:mm:ss") });
+                Mpm()?.AddLocationNotificationFromPush("밀어 삭제 시험", "swipe test woopang", SwNote + "w");   // 목록도 다시 그린다
             });
             Sleep(0.6f);
-            Check(() => SwRow(SwNote + "1") != null && SwRow(SwNote + "2") != null && SwRow(SwNote + "3") != null, "준비: 시험 알림 줄 셋");
+            Check(() => SwRow(SwNote + "1") != null && SwRow(SwNote + "2") != null && SwRow(SwNote + "3") != null && SwRow("woopang_admin") != null, "준비: 시험 대화 줄 셋 + WOOPANG 줄");
             Do(() => SwipeLeft(SwRow(SwNote + "3"), 420f));
             Sleep(0.3f);
             Shot("msgfix_swipe_top");
@@ -1064,28 +1070,60 @@ namespace Redesign0926
             Do(() => SwipeLeft(SwRow(SwNote + "2"), 40f));
             Sleep(0.2f);
             Check(() => OpenDeleteCount() == 0, "조금만 밀면 도로 닫힘");
-            Do(() => SwipeLeft(SwRow(SwNote + "1"), 420f));
+            Do(() => SwipeLeft(SwRow("woopang_admin"), 420f));
             Sleep(0.2f);
             Do(() =>
             {
-                var d = SwRow(SwNote + "1")?.transform.Find("DeleteButton");
+                var d = SwRow("woopang_admin")?.transform.Find("DeleteButton");
                 var b = d != null ? d.GetComponent<Button>() : null;
                 if (b != null) b.onClick.Invoke(); else log.Add("  삭제 버튼 없음");
             });
             Sleep(0.5f);
-            Check(() => SwRow(SwNote + "1") == null && !SwNoteSaved(SwNote + "1") && OpenDeleteCount() == 0, "'삭제'를 누르면 그 줄만 지워짐");
-            Check(() => SwRow(SwNote + "2") != null && SwRow(SwNote + "3") != null, "다른 줄은 그대로");
+            Check(() => SwRow("woopang_admin") == null && WoopangRowCount() == 0 && !SwNoteSaved(SwNote + "w") && OpenDeleteCount() == 0,
+                "'삭제'를 누르면 그 줄만 지워짐 (WOOPANG — 이 기기 알림까지)");
+            Check(() => SwRow(SwNote + "1") != null && SwRow(SwNote + "2") != null && SwRow(SwNote + "3") != null, "다른 줄은 그대로");
 
-            // 정리 — 시험 알림 줄은 저장값에서도 지운다
+            // 정리 — 저장값을 되돌리고(이 기기 알림·공지 숨김·읽음 시각) 시험 대화 줄은 목록에서만 뺀다
+            string before = null;
             Do(() =>
             {
-                var m = Mpm();
-                var del = typeof(MessagePanelManager).GetMethod("DeleteSystemNotification", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                for (int i = 2; i <= 3; i++)
-                    if (m != null && SwNoteSaved(SwNote + i)) del.Invoke(m, new object[] { SwNote + i, SwRow(SwNote + i)?.gameObject });
+                RestoreWoopangPrefs();
+                before = PlayerPrefs.GetString("SystemNotifications", "");
+                Convs()?.RemoveAll(c => c.userId != null && c.userId.StartsWith(SwNote));
+                MpmCall("LoadSystemNotifications");
+                MpmCall("RefreshConversationUI");
             });
             Sleep(0.4f);
-            Check(() => !SwNoteSaved(SwNote + "2") && !SwNoteSaved(SwNote + "3"), "시험 알림 줄 지움");
+            Check(() => SwRow(SwNote + "1") == null && !SwNoteSaved(SwNote + "w") && PlayerPrefs.GetString("SystemNotifications", "") == before
+                     && SessionState.GetString(WoopangBackupKey, "") == "", "시험 줄 지움 · 저장값 되돌림");
+        }
+
+        // WOOPANG 줄 '삭제'를 실제로 눌러 보는 시험 — 이 편집기의 저장값(이 기기 알림·관리자 공지 숨김·읽음 시각)을 덜어 두었다가 되돌린다.
+        // 시험이 중간에 끊겨도(오류 · 플레이 끔 · 스크립트 다시 읽기) 되돌리도록 SessionState 에 둔다
+        private static readonly string[] WoopangStrKeys = { "SystemNotifications", "LocalAdminMessages", "AdminBroadcastLastReadTime" };
+        private const string WoopangIntKey = "HiddenAdminBroadcastMaxId";
+        private const string WoopangBackupKey = "Redesign0926PlayTest.WoopangPrefs";
+        private static void StashWoopangPrefs()
+        {
+            var parts = new List<string>();
+            foreach (var k in WoopangStrKeys) parts.Add(PlayerPrefs.HasKey(k) ? k + "\u0001" + PlayerPrefs.GetString(k, "") : k);
+            parts.Add(PlayerPrefs.HasKey(WoopangIntKey) ? WoopangIntKey + "\u0001" + PlayerPrefs.GetInt(WoopangIntKey) : WoopangIntKey);
+            SessionState.SetString(WoopangBackupKey, string.Join("\u0002", parts));
+        }
+        private static void RestoreWoopangPrefs()
+        {
+            string s = SessionState.GetString(WoopangBackupKey, "");
+            if (s.Length == 0) return;
+            SessionState.EraseString(WoopangBackupKey);
+            foreach (var part in s.Split('\u0002'))
+            {
+                int i = part.IndexOf('\u0001');
+                string k = i > 0 ? part.Substring(0, i) : part;
+                if (i < 0) PlayerPrefs.DeleteKey(k);
+                else if (k == WoopangIntKey) PlayerPrefs.SetInt(k, int.Parse(part.Substring(i + 1)));
+                else PlayerPrefs.SetString(k, part.Substring(i + 1));
+            }
+            PlayerPrefs.Save();
         }
 
         // B11 (10-18) — 메세지 검색으로 아는 사람 찾아 팔로우: 대화가 없는 사람도 검색 줄 오른쪽 끝 알약으로 바로 팔로우 ·
@@ -1294,6 +1332,15 @@ namespace Redesign0926
                 .GetValue(MessagePanelManager.Instance) as List<ConversationSummary>;
             return list != null && list.Exists(c => c.notificationId == FnNote);
         }
+        // WOOPANG 대화의 새 팔로워 말풍선 — 말풍선 칸(BubbleContainer)에 단 버튼
+        private static Button FollowBubble()
+        {
+            var m = Mpm();
+            if (m == null || m.chatMessageContent == null || !m.chatMessageContent.gameObject.activeInHierarchy) return null;
+            foreach (var t in m.chatMessageContent.GetComponentsInChildren<Text>(false))
+                if (t.text.Contains(FnNew + "님이 회원님을 팔로우")) return t.GetComponentInParent<Button>();
+            return null;
+        }
 
         private static void PlanFollowNotif()
         {
@@ -1351,26 +1398,22 @@ namespace Redesign0926
             Do(() => Fm()?.CloseAway());
             Sleep(0.4f);
 
-            // 5) 메세지 탭의 '새로운 팔로워' 알림 줄 → 대화창 대신 내 팔로워 탭 (줄 제목은 늘 WOOPANG — 미리보기 글로 찾는다)
+            // 5) 메세지 탭의 '새로운 팔로워' 알림 → 내 팔로워 탭. (10-21) 알림은 따로 줄이 아니라 WOOPANG 대화 안의 말풍선 — 그 말풍선을 누른다
             Do(() => { var mpm = MessagePanelManager.Instance; if (mpm != null && mpm.messagePanel != null) mpm.messagePanel.SetActive(true); });
             Sleep(0.8f);
             Do(() => MessagePanelManager.Instance?.AddLocationNotificationFromPush("새로운 팔로워", FnNew + "님이 회원님을 팔로우했습니다", FnNote, 0f, 0f, 0f, "", FnNew));
             Sleep(0.6f);
             Shot("follownotif_msgrow");
-            Do(() =>
-            {
-                var root = Find("MessagePanel");
-                Button row = null;
-                if (root != null)
-                    foreach (var t in root.GetComponentsInChildren<Text>(false))
-                        if (t.text.StartsWith(FnNew + "님이 회원님을 팔로우")) { row = t.GetComponentInParent<Button>(); break; }
-                if (row != null) row.onClick.Invoke(); else log.Add("  알림 줄 못 찾음");
-            });
-            Wait(() => Active("FollowPanel") && FollowFirst() != null, 10f, "알림 줄 → 팔로워 탭");
+            Do(TapWoopangRow);
+            Wait(() => Active("ChatRoomPanel") && !Active("MessagePanel") && FollowBubble() != null, 10f, "WOOPANG 대화에 새 팔로워 말풍선");
+            Sleep(0.3f);
+            Shot("follownotif_bubble");
+            Do(() => { var b = FollowBubble(); if (b != null) b.onClick.Invoke(); else log.Add("  새 팔로워 말풍선 못 찾음"); });
+            Wait(() => Active("FollowPanel") && FollowFirst() != null, 10f, "말풍선 → 팔로워 탭");
             Sleep(0.25f);
             Shot("follownotif_fromrow");
-            Check(() => Active("FollowPanel") && !Active("MessagePanel") && !Active("ChatRoomPanel"), "알림 줄 → 대화창 대신 팔로워 탭 (메세지 창 닫힘)");
-            Check(() => FollowFirstName() == FnNew && FollowFirstGlow() > 0.03f, "알림 줄로 열어도 새 팔로워 맨 위 · 밝힘");
+            Check(() => Active("FollowPanel") && !Active("MessagePanel") && !Active("ChatRoomPanel"), "새 팔로워 말풍선 → 팔로워 탭 (메세지·대화 창 닫힘)");
+            Check(() => FollowFirstName() == FnNew && FollowFirstGlow() > 0.03f, "말풍선으로 열어도 새 팔로워 맨 위 · 밝힘");
 
             // 정리 — 시험 알림 줄은 저장값에서도 지운다
             Do(() =>
@@ -3257,6 +3300,227 @@ namespace Redesign0926
             });
             Check(() => { var rt = Find("MessagePanel/Clip0926/Background") as RectTransform; return rt != null && Vector2.Distance(rt.anchoredPosition, msgPos) < 1f; }, "목록이 제자리 (가로·세로)");
             Do(() => log.Add("  열린 창: " + OpenPanels()));
+        }
+
+        // 10-21 대표님 — 관리자 메세지(WOOPANG)가 같은 이름으로 두 줄 · WOOPANG 대화만 아래에서 올라옴 · 대화창 스켈레톤은 늦을 때만.
+        // 이 기기 알림(업로드 완료·위치·새 팔로워)은 WOOPANG 한 줄 · 한 대화로 합치고, 목록에서 열면 다른 대화처럼 옆으로 넘어간다
+        private const string WoNote = "woopang_one_test_";
+        private static List<ConversationSummary> Convs() =>
+            typeof(MessagePanelManager).GetField("conversations", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .GetValue(Mpm()) as List<ConversationSummary>;
+        private static object MpmField(string name)
+        {
+            var m = Mpm();
+            var f = typeof(MessagePanelManager).GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return m != null && f != null ? f.GetValue(m) : null;
+        }
+        private static void MpmCall(string method, params object[] args)
+        {
+            var mi = typeof(MessagePanelManager).GetMethod(method, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (mi != null) mi.Invoke(Mpm(), args); else log.Add("  메서드 없음 " + method);
+        }
+        private static bool ChatSkeletonUp() { var g = MpmField("chatSkeleton") as GameObject; return g != null; }
+        private static bool WoNoteSaved(string id) { var list = Convs(); return (list != null && list.Exists(c => c.notificationId == id)) || PlayerPrefs.GetString("SystemNotifications", "").Contains(id); }
+        // 목록에서 'WOOPANG' 이라고 쓰인 줄 수
+        private static int WoopangRowCount()
+        {
+            var m = Mpm();
+            if (m == null || m.conversationListContent == null) return -1;
+            int n = 0;
+            foreach (Transform row in m.conversationListContent)
+            {
+                if (!row.gameObject.activeSelf) continue;
+                foreach (var t in row.GetComponentsInChildren<Text>(true))
+                    if (t.text == "WOOPANG") { n++; break; }
+            }
+            return n;
+        }
+        private static Transform WoopangRowPart(string name)
+        {
+            var h = SwRow("woopang_admin");
+            if (h == null) return null;
+            var t = h.transform.Find("Content/" + name);
+            return t != null ? t : h.transform.Find(name);
+        }
+        private static string WoopangPreview() { var t = WoopangRowPart("PreviewText"); var tx = t != null ? t.GetComponent<Text>() : null; return tx != null ? tx.text : ""; }
+        private static string WoopangBadge()
+        {
+            var b = WoopangRowPart("UnreadBadge");
+            if (b == null || !b.gameObject.activeSelf) return "";
+            var t = b.GetComponentInChildren<Text>(true);
+            return t != null ? t.text : "?";
+        }
+        private static void TapWoopangRow()
+        {
+            var h = SwRow("woopang_admin");
+            Button b = null;
+            var content = h != null ? h.transform.Find("Content") : null;
+            if (content != null) b = content.GetComponent<Button>();
+            if (b == null && h != null) b = h.GetComponent<Button>();
+            if (b != null) b.onClick.Invoke(); else log.Add("  WOOPANG 줄 버튼 없음");
+        }
+        // 목록의 WOOPANG 줄이 보여야 할 안 읽음 = 서버 공지 요약 줄 + 이 기기의 안 읽은 알림
+        private static int WoopangUnreadExpected()
+        {
+            var list = Convs();
+            if (list == null) return -1;
+            int n = 0;
+            bool admin = false;
+            foreach (var c in list)
+            {
+                if (c.isSystemMessage && !c.isAdminBroadcast && c.userId != "3") { if (!c.isRead) n++; }
+                else if (!admin && (c.isSystemMessage || c.isAdminBroadcast || c.userId == "3")) { admin = true; n += c.unreadCount; }
+            }
+            return n;
+        }
+        // 대화창 말풍선 글 (위에서 아래로) — 날짜 구분선·빈 안내는 뺀다
+        private static List<string> ChatBubbleTexts()
+        {
+            var list = new List<string>();
+            var m = Mpm();
+            if (m == null || m.chatMessageContent == null) return list;
+            foreach (Transform b in m.chatMessageContent)
+            {
+                var box = b.gameObject.activeSelf ? b.Find("BubbleContainer") : null;
+                if (box == null) continue;
+                var sb = new System.Text.StringBuilder();
+                foreach (var t in box.GetComponentsInChildren<Text>(false)) sb.Append(t.text);
+                list.Add(sb.ToString());
+            }
+            return list;
+        }
+        private static float NavOffset()
+        {
+            var nav = R0926ChatNav.Instance;
+            var f = typeof(R0926ChatNav).GetField("chatApplied", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return nav != null && f != null ? (float)f.GetValue(nav) : 0f;
+        }
+        private static float ChatRise()
+        {
+            var nav = R0926ChatNav.Instance;
+            var sf = typeof(R0926ChatNav).GetField("chatSlide", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var s = nav != null && sf != null ? sf.GetValue(nav) as R0926SlideIn : null;
+            var af = typeof(R0926SlideIn).GetField("applied", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return s != null && af != null ? (float)af.GetValue(s) : 0f;
+        }
+
+        private static void PlanWoopangOne()
+        {
+            float side = 0f, rise = 0f;
+            bool skelSeen = false, skelEarly = false;
+            double openedAt = 0, loadSec = -1;
+            const string Body1 = "우팡 한 줄 시험 — 근처 새 오브젝트", Body2 = "우팡한줄친구님이 회원님을 팔로우했습니다", Body3 = "우팡 한 줄 시험 — 대화 보는 중에 온 알림";
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() => { var m = Mpm(); if (m != null && m.messagePanel != null) m.messagePanel.SetActive(true); });
+            Sleep(1.0f);
+            Do(() => log.Add("  처음 WOOPANG 줄 " + WoopangRowCount() + "개"));
+
+            // 1) 알림 둘(보통 · 새 팔로워)이 와도 WOOPANG 은 한 줄 — 미리보기는 마지막 알림, 안 읽음은 합
+            Do(() => Mpm()?.AddLocationNotificationFromPush("📍 우팡 한 줄 시험", Body1, WoNote + "1"));
+            Sleep(1.1f);   // 시각은 초 단위 — 둘째 알림이 확실히 뒤에 오게
+            Do(() => Mpm()?.AddLocationNotificationFromPush("새로운 팔로워", Body2, WoNote + "2", 0f, 0f, 0f, "", "woopang_one_friend"));
+            Sleep(0.6f);
+            Shot("woopang1_list");
+            Do(() => log.Add("  WOOPANG 줄 " + WoopangRowCount() + "개 · 미리보기 '" + WoopangPreview() + "' · 배지 '" + WoopangBadge() + "' (기대 " + WoopangUnreadExpected() + ")"));
+            Check(() => WoopangRowCount() == 1 && SwipeRows().FindAll(h => h.userId == "woopang_admin").Count == 1, "WOOPANG 은 한 줄 (알림이 와도 줄이 늘지 않음)");
+            Check(() => SwipeRows().TrueForAll(h => h.userId == null || !h.userId.StartsWith(WoNote)), "알림마다 따로 생기던 줄 없음");
+            Check(() => WoopangPreview().StartsWith("새로운 팔로워"), "미리보기는 마지막 알림");
+            Check(() => { int e = WoopangUnreadExpected(); return e >= 2 && WoopangBadge() == e.ToString(); }, "안 읽음 배지 = 공지 + 이 기기 알림");
+
+            // 2) WOOPANG 줄을 누르면 다른 대화처럼 옆으로 넘어간다 (아래에서 올라오지 않음) · 빨리 오면 스켈레톤 없음
+            Do(() => { side = 0f; rise = 0f; skelSeen = false; openedAt = EditorApplication.timeSinceStartup; loadSec = -1; TapWoopangRow(); skelEarly = ChatSkeletonUp(); });
+            Wait(() =>
+            {
+                side = Mathf.Max(side, NavOffset());
+                rise = Mathf.Max(rise, Mathf.Abs(ChatRise()));
+                skelSeen |= ChatSkeletonUp();
+                if (loadSec < 0 && !(bool)MpmField("chatLoading")) loadSec = EditorApplication.timeSinceStartup - openedAt;
+                return !Active("MessagePanel") && Active("ChatRoomPanel") && loadSec >= 0;
+            }, 12f, "WOOPANG 대화 열림");
+            Sleep(0.4f);
+            Shot("woopang1_chat");
+            Do(() => log.Add("  옆으로 " + side.ToString("0") + " · 아래에서 " + rise.ToString("0") + " · 불러오기 " + loadSec.ToString("0.00") + "초 · 스켈레톤 " + (skelSeen ? "보임" : "안 보임")));
+            Check(() => side > 100f && rise < 1f, "WOOPANG 줄 → 대화방이 옆에서 들어옴 (아래에서 올라오지 않음)");
+            Check(() => Active("ChatRoomPanel") && !Active("MessagePanel"), "넘긴 뒤 대화방만");
+            Check(() => !skelEarly && (loadSec >= 0.33 || !skelSeen) && !ChatSkeletonUp(), "스켈레톤은 늦을 때만 (바로 띄우지 않음 · 끝나면 치움)");
+            Do(() => { var b = ChatBubbleTexts(); log.Add("  말풍선 " + b.Count + "개 · 끝 둘: " + (b.Count >= 2 ? b[b.Count - 2].Replace("\n", " ") + " / " + b[b.Count - 1].Replace("\n", " ") : "-")); });
+            Check(() =>
+            {
+                var b = ChatBubbleTexts();
+                int i1 = b.FindIndex(s => s.Contains(Body1)), i2 = b.FindIndex(s => s.Contains(Body2));
+                return i1 >= 0 && i2 == b.Count - 1 && i1 < i2;
+            }, "이 기기 알림도 WOOPANG 대화 안에 (시간 순 · 최신이 맨 아래)");
+            Check(() => { var b = ChatBubbleTexts(); var f = b.Find(s => s.Contains(Body2)); return f != null && f.Contains("›"); }, "새 팔로워 알림은 '›' 표시");
+            Check(() =>
+            {
+                var m = Mpm();
+                if (m == null) return false;
+                foreach (Transform b in m.chatMessageContent)
+                {
+                    var box = b.Find("BubbleContainer");
+                    if (box == null) continue;
+                    bool follow = false;
+                    foreach (var t in box.GetComponentsInChildren<Text>(false)) if (t.text.Contains(Body2)) follow = true;
+                    if (!follow) continue;
+                    var btn = box.GetComponent<Button>();
+                    var img = box.GetComponent<Image>();
+                    return btn != null && img != null && img.raycastTarget;
+                }
+                return false;
+            }, "새 팔로워 말풍선은 누를 수 있음 (→ 내 팔로워)");
+            Check(() => { var m = Mpm(); var l = Convs(); return m != null && m.GetUnreadLocationNotificationCount() == 0 && l != null && l.FindAll(c => c.notificationId != null && c.notificationId.StartsWith(WoNote)).TrueForAll(c => c.isRead); },
+                "열면 이 기기 알림도 읽음");
+
+            // 3) 대화를 보는 중에 온 알림은 맨 아래에 바로 붙고 읽은 것으로
+            Do(() => Mpm()?.AddLocationNotificationFromPush("📍 우팡 한 줄 시험 3", Body3, WoNote + "3"));
+            Sleep(0.5f);
+            Shot("woopang1_live");
+            Check(() => { var b = ChatBubbleTexts(); return b.Count > 0 && b[b.Count - 1].Contains(Body3) && b.FindAll(s => s.Contains(Body3)).Count == 1; }, "보는 중에 온 알림 → 맨 아래 한 번");
+            Check(() => { var l = Convs(); var c = l != null ? l.Find(x => x.notificationId == WoNote + "3") : null; return c != null && c.isRead && Mpm().GetUnreadLocationNotificationCount() == 0; }, "보는 중에 온 알림은 읽음");
+
+            // 늦을 때의 스켈레톤 — 불러오기를 일부러 늦출 수 없어 '늦으면 띄우기'만 직접 돌린다: 0.35초 뒤 서서히 뜨고, 다 오면 치운다
+            Do(() =>
+            {
+                var m = Mpm();
+                var e = typeof(MessagePanelManager).GetMethod("SkeletonIfSlow", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .Invoke(m, new object[] { true }) as System.Collections.IEnumerator;
+                typeof(MessagePanelManager).GetField("chatSkeletonWait", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(m, m.StartCoroutine(e));
+            });
+            Wait(() => { var g = MpmField("chatSkeleton") as GameObject; var cg = g != null ? g.GetComponent<CanvasGroup>() : null; return cg != null && cg.alpha > 0.99f; }, 3f, "늦을 때 스켈레톤 뜸");
+            Shot("woopang1_skeleton");
+            Check(() => { var g = MpmField("chatSkeleton") as GameObject; return g != null && g.activeInHierarchy && !g.GetComponent<CanvasGroup>().blocksRaycasts; }, "늦으면 스켈레톤이 서서히 뜸 (누름은 막지 않음)");
+            Do(() => MpmCall("EndChatSkeleton"));
+            Sleep(0.2f);
+            Check(() => !ChatSkeletonUp() && MpmField("chatSkeletonWait") == null, "다 오면 스켈레톤 치움");
+
+            // 4) ← 로 목록에 돌아오면 그대로 한 줄 · 안 읽음 없음
+            Do(() => Click("ChatRoomPanel/Clip0926/Background/Header/BackButton/ClosePx0926"));
+            Wait(() => Active("MessagePanel") && !Active("ChatRoomPanel"), 4f, "목록으로");
+            Sleep(0.6f);
+            Shot("woopang1_back");
+            Check(() => WoopangRowCount() == 1 && WoopangBadge() == "", "돌아오면 WOOPANG 한 줄 · 안 읽음 없음");
+            // 로그인돼 있으면 ← 뒤 도크 메시지 버튼이 목록을 다시 받아 그린다 — 시험은 로그아웃이라 그 다시 그리기만 직접
+            Do(() => MpmCall("RefreshConversationUI"));
+            Sleep(0.3f);
+            Do(() => log.Add("  다시 그린 뒤 WOOPANG 줄 " + WoopangRowCount() + "개 · 미리보기 '" + WoopangPreview() + "' · 배지 '" + WoopangBadge() + "'"));
+            Check(() => WoopangRowCount() == 1 && WoopangBadge() == "" && WoopangPreview().Contains("시험 3"), "다시 그려도 한 줄 · 미리보기는 보는 중에 온 알림");
+
+            // 정리 — 시험 알림은 저장값에서도 지운다
+            Do(() =>
+            {
+                for (int i = 1; i <= 3; i++)
+                    if (WoNoteSaved(WoNote + i)) MpmCall("DeleteSystemNotification", WoNote + i, null);
+                MpmCall("RefreshConversationUI");
+            });
+            Sleep(0.4f);
+            Check(() => !WoNoteSaved(WoNote + "1") && !WoNoteSaved(WoNote + "2") && !WoNoteSaved(WoNote + "3"), "시험 알림 지움");
         }
 
         // 가로 화면 메시지 (10-14 대표님 — 메시지 탭이 안 뜨기도 하고, 대화창 말풍선이 제목·입력칸을 가리며 위아래로 들썩)
@@ -5770,6 +6034,7 @@ namespace Redesign0926
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
                 if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; }   // 팔로우·검색·프로필 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
+                if (running) RestoreWoopangPrefs();   // WOOPANG 줄 삭제 시험이 덜어 둔 저장값 (시험 도중 플레이를 끈 경우)
                 RestoreGameViewSize();   // 가로 시험이 중간에 끊겨도 게임 창 크기는 원래대로
                 if (!EditorApplication.isPlayingOrWillChangePlaymode && SessionState.GetBool(LoginReadyKey, false)) RestoreLogin();
                 running = false;
@@ -5782,6 +6047,7 @@ namespace Redesign0926
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
                     if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "searchfollow")) StashLogin();
+                    RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     MainViewToSimulator();
                     EditorApplication.isPlaying = true;
                 }
@@ -5804,6 +6070,7 @@ namespace Redesign0926
             PlayerPrefs.SetInt("IsFirstTime", 1);   // ForceShowGuide 가 지운 '본 적 있음' — 그대로 두면 다음 시험 도중 6초 뒤 처음 안내가 뜬다
             PlayerPrefs.Save();
             if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; }
+            RestoreWoopangPrefs();
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;

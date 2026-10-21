@@ -69,12 +69,10 @@ public class Indicator : MonoBehaviour
     private Image[] glintImgs;
     private bool sparkleOn;
 
-    // ── 둘레 그림자 (R0926IndicatorHalo) — 글자 뒤 배경이 밝으면 어둡게, 어두우면 밝게. 배경 밝기는 R0926Backdrop 이 카메라 화면에서 잰다
-    private static readonly Color HaloDark = new Color(0f, 0f, 0f, 0.5f);
-    private static readonly Color HaloLight = new Color(1f, 1f, 1f, 0.36f);
+    // ── 둘레 그림자 (R0926IndicatorHalo) — 배경이 밝든 어둡든 늘 어두운 그림자 (10-21 대표님).
+    //    예전엔 배경이 어두우면 밝은 빛으로 바꿨는데, 그 빛이 분류 색 글자를 흐리게 했다
+    private static readonly Color HaloDark = new Color(0f, 0f, 0f, 1f);
     private R0926IndicatorHalo[] halos;
-    private bool haloLight;
-    private float haloK, nextLumaAt;
 
     // ── 목록에서 고른 장소 (OffScreenIndicator.Focus) — 글자 뒤에 흰 테두리 분홍 스티커, 글자는 흰색.
     //    10-17 대표님: 두근거리며 커지던 것은 정신없고 잘 안 보였다 → 크기는 그대로 두고 스티커만 붙는다
@@ -155,29 +153,9 @@ public class Indicator : MonoBehaviour
             var h = g.GetComponent<R0926IndicatorHalo>();
             if (h == null) h = g.gameObject.AddComponent<R0926IndicatorHalo>();
             if (!list.Contains(h)) list.Add(h);
+            h.SetTone(HaloDark);
         }
         halos = list.ToArray();
-    }
-
-    // 0.25초마다 글자 자리의 배경 밝기를 보고 고른다 — 경계에서 깜빡이지 않게 밝음 0.55 이상 / 어두움 0.45 이하에서만 바꾸고, 색은 0.25초에 걸쳐
-    private void UpdateHalo()
-    {
-        if (halos == null || halos.Length == 0) return;
-        if (Time.unscaledTime >= nextLumaAt)
-        {
-            nextLumaAt = Time.unscaledTime + 0.25f + Random.value * 0.1f;   // 인디케이터끼리 엇갈려 — 한 프레임에 몰리지 않게
-            float l = R0926Backdrop.Luma(LabelScreenPos());
-            if (l >= 0f)
-            {
-                if (haloLight && l >= 0.55f) haloLight = false;
-                else if (!haloLight && l <= 0.45f) haloLight = true;
-            }
-        }
-        float want = haloLight ? 1f : 0f;
-        if (haloK == want) return;
-        haloK = Mathf.MoveTowards(haloK, want, Time.unscaledDeltaTime / 0.25f);
-        Color c = Color.Lerp(HaloDark, HaloLight, haloK);
-        foreach (var h in halos) h.SetTone(c);
     }
 
     /// <summary>목록에서 고른 장소 강조 켜고 끄기 — OffScreenIndicator 가 매 프레임</summary>
@@ -194,7 +172,7 @@ public class Indicator : MonoBehaviour
         float a = Smooth(focusK);
         Text label = BadgeLabel();
         var halo = label != null ? label.GetComponent<R0926IndicatorHalo>() : null;
-        if (halo != null) halo.SetTone(Color.Lerp(Color.Lerp(HaloDark, HaloLight, haloK), BadgeHalo, a));
+        if (halo != null) halo.SetTone(Color.Lerp(HaloDark, BadgeHalo, a));
         Rect r = halo != null ? halo.DrawnRect : Rect.zero;
         if (focusK <= 0f || r.width <= 0f)
         {
@@ -257,15 +235,6 @@ public class Indicator : MonoBehaviour
             img.type = Image.Type.Sliced;
         }
         return img;
-    }
-
-    // 글자 자리 (화면 픽셀) — 박스는 이름 글자, 화살표는 이름·거리 글자
-    private Vector2 LabelScreenPos()
-    {
-        Graphic g = nameText != null ? nameText : distanceText != null ? (Graphic)distanceText : indicatorImage;
-        Canvas c = g.canvas;
-        Camera cam = c != null && c.rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? c.rootCanvas.worldCamera : null;
-        return RectTransformUtility.WorldToScreenPoint(cam, g.rectTransform.position);
     }
 
     public void SetImageColor(Color color)
@@ -427,7 +396,6 @@ public class Indicator : MonoBehaviour
     private void LateUpdate()
     {
         UpdateSparkle();
-        UpdateHalo();
         UpdateBadge();
         if (indicatorType != IndicatorType.BOX) return;
         SwapLabels(LabelsSwapped);
@@ -686,6 +654,7 @@ public class Indicator : MonoBehaviour
         focusOn = false;
         focusK = 0f;
         if (badge != null) badge.gameObject.SetActive(false);
+        if (halos != null) foreach (var h in halos) h.SetTone(HaloDark);   // 스티커 위 분홍 그림자가 남지 않게
 
         // 페이드인 중이었다면 중단
         if (fadeCoroutine != null)

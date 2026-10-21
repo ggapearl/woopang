@@ -160,8 +160,6 @@ public class MessagePanelManager : MonoBehaviour
     [Header("=== 스켈레톤 로딩 설정 ===")]
     [Tooltip("스켈레톤 아이템 개수")]
     public int skeletonItemCount = 12;
-    [Tooltip("스켈레톤 최소 표시 시간 (초)")]
-    public float skeletonMinDuration = 1f;
     [Tooltip("스켈레톤 배경 색상")]
     public Color skeletonBgColor = new Color(0.15f, 0.15f, 0.18f, 0.078f);
     [Tooltip("스켈레톤 콘텐츠 색상 (텍스트/아바타 자리)")]
@@ -177,8 +175,6 @@ public class MessagePanelManager : MonoBehaviour
     [Header("=== 채팅방 로딩 설정 ===")]
     [Tooltip("로딩 UI 프리팹 (직접 디자인 가능 - 연결하면 코드 생성 대신 이 프리팹 사용)")]
     public GameObject chatLoadingPrefab;
-    [Tooltip("로딩 최소 표시 시간 (초)")]
-    public float chatSpinnerMinDuration = 1f;
     [Tooltip("코드 생성 fallback - 스피너 크기 (px)")]
     public float chatSpinnerSize = 40f;
     [Tooltip("코드 생성 fallback - 스피너 색상")]
@@ -987,6 +983,7 @@ public class MessagePanelManager : MonoBehaviour
         }
 
         string currentTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        bool seeing = IsChatRoomOpenForUser(WoopangId);   // WOOPANG 대화를 보고 있으면 바로 아래에 붙고 읽은 것으로
 
         // 시스템 메시지로 conversations에 추가
         var systemMessage = new ConversationSummary
@@ -996,9 +993,9 @@ public class MessagePanelManager : MonoBehaviour
             avatarUrl = "",
             lastMessage = body,
             lastMessageTime = currentTime,
-            unreadCount = 1,
+            unreadCount = seeing ? 0 : 1,
             isSystemMessage = true,
-            isRead = false,
+            isRead = seeing,
             notificationId = notificationId,
             latitude = latitude,
             longitude = longitude,
@@ -1010,6 +1007,7 @@ public class MessagePanelManager : MonoBehaviour
         conversations.Insert(0, systemMessage);
         SortConversationsByTime();
         SaveSystemNotifications();
+        if (seeing && !chatLoading) AppendAdminMessageAtBottom("WOOPANG", NoticeText(systemMessage), currentTime, followFrom);   // 불러오는 중이면 그 불러오기가 함께 그린다
 
         // 메시지 패널이 열려있으면 UI 갱신
         if (messagePanel != null && messagePanel.activeInHierarchy)
@@ -1028,7 +1026,7 @@ public class MessagePanelManager : MonoBehaviour
     {
         try
         {
-            var systemMessages = conversations.FindAll(c => c.isSystemMessage);
+            var systemMessages = conversations.FindAll(IsDeviceNotice);   // 서버 공지 요약 줄(userId "3")은 서버에서 다시 받는다
             var list = new ConversationSummaryList { conversations = systemMessages };
             string json = JsonUtility.ToJson(list);
             PlayerPrefs.SetString(SystemNotificationKey, json);
@@ -1053,13 +1051,13 @@ public class MessagePanelManager : MonoBehaviour
                 var list = JsonUtility.FromJson<ConversationSummaryList>(json);
                 if (list != null && list.conversations != null)
                 {
-                    // 기존 시스템 메시지 제거 후 로드
-                    conversations.RemoveAll(c => c.isSystemMessage);
+                    // 기존 알림 제거 후 로드
+                    conversations.RemoveAll(IsDeviceNotice);
 
                     foreach (var conv in list.conversations)
                     {
-                        // 기존 system_{id} 형태의 WOOPANG 대화방은 스킵 (중복 방지)
-                        // 이제 WOOPANG은 userId="3"으로 통합됨
+                        // 예전 저장본의 공지 요약 줄("3") · system_{id} 형태의 WOOPANG 대화방은 스킵 (중복 방지)
+                        if (!IsDeviceNotice(conv)) continue;
                         if (conv.userId != null && conv.userId.StartsWith("system_") &&
                             (conv.username == "WOOPANG" || (conv.username != null && conv.username.Contains("WOOPANG"))))
                         {
@@ -1101,28 +1099,9 @@ public class MessagePanelManager : MonoBehaviour
         foreach (var c in conversations)
         {
             // 관리자 공지는 별도로 GetAdminBroadcastUnreadCount()에서 계산하므로 제외
-            if (c.isSystemMessage && !c.isAdminBroadcast && !c.isRead) count++;
+            if (IsDeviceNotice(c) && !c.isRead) count++;
         }
         return count;
-    }
-
-    /// <summary>
-    /// 시스템 메시지 읽음 처리
-    /// </summary>
-    private void MarkSystemMessageAsRead(ConversationSummary conv)
-    {
-        if (conv == null || !conv.isSystemMessage || conv.isRead) return;
-
-        conv.isRead = true;
-        conv.unreadCount = 0;
-        SaveSystemNotifications();
-        UpdateUnreadUI();
-
-        // 메시지 패널이 열려있으면 UI 갱신 (배지 숨기기)
-        if (messagePanel != null && messagePanel.activeInHierarchy)
-        {
-            RefreshConversationUI();
-        }
     }
 
     #endregion
@@ -1221,6 +1200,8 @@ public class MessagePanelManager : MonoBehaviour
 
             if (isAdmin)
             {
+                MarkDeviceNoticesRead();   // 이 기기 알림도 같은 WOOPANG 대화에 있다
+
                 // 관리자 채팅방 읽음 시간 저장 (unread 카운트 계산용)
                 PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                 PlayerPrefs.Save();
@@ -1247,68 +1228,6 @@ public class MessagePanelManager : MonoBehaviour
             }
         }
     }
-
-    /// <summary>
-    /// 시스템 알림 채팅방 열기 (FCM으로 받은 시스템 메시지)
-    /// </summary>
-    /// <param name="notificationId">알림 ID</param>
-    /// <param name="messageContent">메시지 내용</param>
-    public void OpenSystemChatRoom(string notificationId, string messageContent)
-    {
-        currentChatUserId = "3";
-        currentChatUsername = "WOOPANG";
-        currentChatAvatarUrl = null;
-        isAdminChat = true;
-        currentSystemNotificationId = notificationId;
-        currentSystemMessageContent = messageContent;
-
-        // 메시지 패널에서 채팅룸으로 이동
-        if (messagePanel != null && messagePanel.activeSelf)
-        {
-
-            messagePanel.SetActive(false);
-        }
-        else
-        {
-
-        }
-
-        // chatRoomPanel이 null이면 자동으로 찾기
-        if (chatRoomPanel == null)
-        {
-            GameObject chatPanelObj = GameObject.Find("ChatRoomPanel");
-            if (chatPanelObj != null)
-            {
-                chatRoomPanel = chatPanelObj;
-            }
-        }
-
-        if (chatRoomPanel == null)
-        {
-            Debug.LogError("[MessagePanel] chatRoomPanel이 null! ChatRoomPanel 오브젝트가 씬에 있는지 확인 필요");
-            return;
-        }
-
-        ActivateChatRoomPanel();
-
-        // chatRoomTitle 유효성 검증 + 재연결
-        ValidateAndReconnectChatRoomTitle();
-
-        if (chatRoomTitle != null)
-        {
-            chatRoomTitle.text = "WOOPANG";
-            R0926ChatTitle.Paint(chatRoomTitle, true);
-        }
-        // 입력창 비활성화 (읽기 전용)
-        SetChatInputEnabled(false);
-
-        // 시스템 메시지 표시
-        StartCoroutine(LoadSystemChatMessages(notificationId, messageContent));
-    }
-
-    // 현재 시스템 메시지 정보 저장
-    private string currentSystemNotificationId;
-    private string currentSystemMessageContent;
 
     /// <summary>
     /// chatRoomTitle이 chatRoomPanel의 자식인지 검증하고, 아니면 재연결
@@ -1419,6 +1338,7 @@ public class MessagePanelManager : MonoBehaviour
             chatRoomPanel.SetActive(false);
         if (chatPollCoroutine != null) { StopCoroutine(chatPollCoroutine); chatPollCoroutine = null; }
         chatLoadVersion++;   // 진행 중이던 불러오기 결과는 버린다
+        EndChatSkeleton();
 
         // 채팅방 닫을 때 아바타 핸들러 정리
         if (chatRoomAvatar != null)
@@ -1547,27 +1467,20 @@ public class MessagePanelManager : MonoBehaviour
     {
         int myVersion = ++convLoadVersion;
 
-        // 받아 둔 목록이 있으면 곧바로 보여 주고 뒤에서 새로 고친다 (스켈레톤은 처음 한 번만)
-        List<GameObject> skeletonItems = new List<GameObject>();
-        float skeletonStartTime = Time.time;
+        // 받아 둔 목록이 있으면 곧바로 보여 주고 뒤에서 새로 고친다 (스켈레톤은 처음 한 번만, 그것도 늦을 때만)
         bool search = ShowingSearch;
         bool showSkeleton = !search && (!conversationsLoadedOnce || conversations.Count == 0);
+        EndListSkeleton();
         if (!search) ClearContent(conversationListContent);
         if (showSkeleton)
-        {
-            int n = Mathf.Clamp(skeletonItemCount, 6, 9);   // 한 화면에 보이는 만큼
-            for (int i = 0; i < n; i++)
-                skeletonItems.Add(CreateSkeletonItem(conversationListContent, i));
-        }
+            listSkeletonWait = StartCoroutine(SkeletonIfSlow(false));
         else if (!search)
-        {
             RenderConversationList();
-        }
         ForceLayoutUpdate();
 
         // 1. 관리자 공지 로드
         yield return StartCoroutine(LoadAdminBroadcasts());
-        if (myVersion != convLoadVersion) { RemoveSkeletonItems(skeletonItems); yield break; }
+        if (myVersion != convLoadVersion) yield break;   // 새로 시작한 쪽이 스켈레톤을 정리한다
 
         // 관리자 공지를 conversations에 통합 (기존 항목 제거 후 재추가)
         MergeAdminBroadcastsIntoConversations();
@@ -1581,7 +1494,7 @@ public class MessagePanelManager : MonoBehaviour
             {
                 LoginManager.ApplyAuth(request);
                 yield return request.SendWebRequest();
-                if (myVersion != convLoadVersion) { RemoveSkeletonItems(skeletonItems); yield break; }
+                if (myVersion != convLoadVersion) yield break;
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
@@ -1630,35 +1543,98 @@ public class MessagePanelManager : MonoBehaviour
             }
         }
 
-        // 스켈레톤이 너무 짧게 깜빡이지 않게만 (처음 한 번)
-        if (showSkeleton)
-        {
-            float minShow = Mathf.Min(skeletonMinDuration, 0.4f);   // 예전 1초는 창이 느리게 느껴졌다
-            float elapsed = Time.time - skeletonStartTime;
-            if (elapsed < minShow)
-                yield return new WaitForSeconds(minShow - elapsed);
-            if (myVersion != convLoadVersion) { RemoveSkeletonItems(skeletonItems); yield break; }
-        }
-
-        RemoveSkeletonItems(skeletonItems);
+        EndListSkeleton();
         if (ShowingSearch) yield break;   // 그 사이 검색을 시작했으면 검색 결과를 그대로 둔다 (검색을 끝내면 받아 둔 목록을 그린다)
         ClearContent(conversationListContent);   // 그 사이 그려진 것(푸시 등)을 지우고 한 번만 그린다
         RenderConversationList();
         ForceLayoutUpdate();
     }
 
-    /// <summary>시간순 정렬 후 DM + 시스템 알림 + 관리자 공지를 한 목록으로 그린다</summary>
+    /// <summary>시간순 정렬 후 DM + WOOPANG 한 줄을 그린다</summary>
     private void RenderConversationList()
     {
-        SortConversationsByTime();
-        var seen = new HashSet<string>();
-        foreach (var conv in conversations)
-        {
-            string key = string.IsNullOrEmpty(conv.notificationId) ? "u:" + conv.userId : "n:" + conv.notificationId;
-            if (!seen.Add(key)) continue;   // 같은 대화가 목록에 두 번 들어가 있어도 한 줄만
+        var rows = ListRows();
+        foreach (var conv in rows)
             CreateConversationItem(conv);
+        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), rows.Count == 0);
+    }
+
+    // ── WOOPANG 은 대화 하나 (10-21 대표님: 관리자 메세지가 같은 아이디로 두 줄 보였다) ──
+    // 서버 공지(userId "3")와 이 기기에 온 알림(업로드 완료·위치·새 팔로워)이 예전엔 알림마다 'WOOPANG' 줄을 따로 그렸다.
+    // 이제 목록엔 한 줄(가장 최근 것 · 안 읽음 합계)만, 누르면 둘을 시간순으로 모은 WOOPANG 대화방이 옆으로 열린다
+    private const string WoopangId = "3";
+
+    private struct WoopangLine { public DateTime at; public int seq; public string time, text, followFrom; }
+
+    /// <summary>이 기기에 온 알림(업로드·위치·팔로우) — 서버 공지 요약 줄은 아니다</summary>
+    private static bool IsDeviceNotice(ConversationSummary c) => c.isSystemMessage && !c.isAdminBroadcast && c.userId != WoopangId;
+
+    private static bool IsWoopang(ConversationSummary c) => c.isSystemMessage || c.isAdminBroadcast || c.userId == WoopangId;
+
+    /// <summary>알림 한 건의 말풍선 글 — 제목을 굵게 (팔로우 알림은 눌러서 팔로워 탭으로 가므로 › 를 붙인다)</summary>
+    private static string NoticeText(ConversationSummary c)
+    {
+        string title = string.IsNullOrEmpty(c.username) ? "" : c.username.Replace("<", "＜");
+        if (!string.IsNullOrEmpty(c.followFrom)) title += "  ›";
+        return string.IsNullOrEmpty(title) ? c.lastMessage : "<b>" + title + "</b>\n" + c.lastMessage;
+    }
+
+    private static DateTime ParseTime(string s) => DateTime.TryParse(s, out var t) ? t : DateTime.MinValue;
+
+    /// <summary>목록에 그릴 줄 — DM 은 상대마다 한 줄, WOOPANG(공지+알림)은 한 줄. 최신순</summary>
+    private List<ConversationSummary> ListRows()
+    {
+        SortConversationsByTime();
+        var rows = new List<ConversationSummary>();
+        var seen = new HashSet<string>();
+        ConversationSummary admin = null;
+        ConversationSummary latestNotice = null;
+        int noticeUnread = 0;
+        foreach (var c in conversations)
+        {
+            if (IsDeviceNotice(c))
+            {
+                if (latestNotice == null) latestNotice = c;   // 이미 최신순
+                if (!c.isRead) noticeUnread++;
+                continue;
+            }
+            if (IsWoopang(c)) { if (admin == null) admin = c; continue; }
+            if (seen.Add(c.userId)) rows.Add(c);   // 같은 상대가 목록에 두 번 들어가 있어도 한 줄만
         }
-        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), conversations.Count == 0);
+
+        if (admin != null || latestNotice != null)
+        {
+            bool noticeNewer = latestNotice != null && (admin == null || ParseTime(latestNotice.lastMessageTime) > ParseTime(admin.lastMessageTime));
+            rows.Add(new ConversationSummary
+            {
+                userId = WoopangId,
+                username = "WOOPANG",
+                avatarUrl = "",
+                lastMessage = noticeNewer ? NoticeText(latestNotice) : admin.lastMessage,
+                lastMessageTime = noticeNewer ? latestNotice.lastMessageTime : admin.lastMessageTime,
+                unreadCount = (admin != null ? admin.unreadCount : 0) + noticeUnread,
+                isAdminBroadcast = true,
+                isSystemMessage = true
+            });
+            rows.Sort((a, b) => ParseTime(b.lastMessageTime).CompareTo(ParseTime(a.lastMessageTime)));
+        }
+        return rows;
+    }
+
+    /// <summary>WOOPANG 대화방을 열면 이 기기 알림도 모두 읽은 것으로</summary>
+    private void MarkDeviceNoticesRead()
+    {
+        bool changed = false;
+        foreach (var c in conversations)
+        {
+            if (!IsDeviceNotice(c) || (c.isRead && c.unreadCount == 0)) continue;
+            c.isRead = true;
+            c.unreadCount = 0;
+            changed = true;
+        }
+        if (!changed) return;
+        SaveSystemNotifications();
+        UpdateUnreadUI();
     }
 
     // 새로 깐 앱은 읽음 시각이 비어 있어 지난 공지 전부(서버가 주는 최대 50개)가 안 읽음으로 잡혔다 (2026-10-17).
@@ -1677,11 +1653,12 @@ public class MessagePanelManager : MonoBehaviour
     private void MergeAdminBroadcastsIntoConversations()
     {
         // 기존 WOOPANG 관련 항목 모두 제거 (중복 방지, userId 통일)
-        conversations.RemoveAll(c =>
+        // 이 기기 알림은 남긴다 — 알림 제목이 'WOOPANG' 이어도 서버 공지 요약 줄로 착각해 지우지 않게
+        conversations.RemoveAll(c => !IsDeviceNotice(c) && (
             c.isAdminBroadcast ||
             c.userId == "woopang" ||
             c.userId == "3" ||
-            (c.username != null && c.username == "WOOPANG"));
+            (c.username != null && c.username == "WOOPANG")));
 
         string latestContent = "";
         string latestTime = "";
@@ -1969,6 +1946,65 @@ public class MessagePanelManager : MonoBehaviour
         skeletonItems.Clear();
     }
 
+    // ── 스켈레톤은 늦을 때만 (10-21 대표님: 빠르면 필요 없다) ──
+    // 예전엔 대화창은 매번 1초, 목록은 0.4초를 채워 보여 줘서 이미 받아 온 대화도 그만큼 늦게 떴다.
+    // 이제 0.35초 안에 오면 아무것도 띄우지 않고 바로 그리고, 그보다 늦을 때만 스켈레톤을 서서히 띄운다
+    private const float SkeletonDelay = 0.35f, SkeletonFade = 0.2f;
+    private Coroutine listSkeletonWait, chatSkeletonWait;
+    private readonly List<GameObject> listSkeleton = new List<GameObject>();
+    private GameObject chatSkeleton;
+
+    private IEnumerator SkeletonIfSlow(bool chat)
+    {
+        yield return new WaitForSecondsRealtime(SkeletonDelay);
+        Transform parent = chat ? chatMessageContent : conversationListContent;
+        if (parent == null) yield break;
+
+        var shown = new List<GameObject>();
+        if (chat)
+        {
+            chatSkeleton = CreateChatLoadingSpinner(parent);
+            shown.Add(chatSkeleton);
+        }
+        else
+        {
+            int n = Mathf.Clamp(skeletonItemCount, 6, 9);   // 한 화면에 보이는 만큼
+            for (int i = 0; i < n; i++)
+                listSkeleton.Add(CreateSkeletonItem(parent, i));
+            shown.AddRange(listSkeleton);
+            ForceLayoutUpdate();
+        }
+
+        var groups = new List<CanvasGroup>();
+        foreach (var go in shown)
+        {
+            if (go == null) continue;
+            if (!go.TryGetComponent(out CanvasGroup cg)) cg = go.AddComponent<CanvasGroup>();
+            cg.alpha = 0f;
+            cg.blocksRaycasts = false;
+            groups.Add(cg);
+        }
+        for (float t = 0f; t < SkeletonFade; t += Time.unscaledDeltaTime)
+        {
+            foreach (var cg in groups) if (cg != null) cg.alpha = t / SkeletonFade;
+            yield return null;
+        }
+        foreach (var cg in groups) if (cg != null) cg.alpha = 1f;
+        if (chat) chatSkeletonWait = null; else listSkeletonWait = null;
+    }
+
+    private void EndListSkeleton()
+    {
+        if (listSkeletonWait != null) { StopCoroutine(listSkeletonWait); listSkeletonWait = null; }
+        RemoveSkeletonItems(listSkeleton);
+    }
+
+    private void EndChatSkeleton()
+    {
+        if (chatSkeletonWait != null) { StopCoroutine(chatSkeletonWait); chatSkeletonWait = null; }
+        if (chatSkeleton != null) { Destroy(chatSkeleton); chatSkeleton = null; }
+    }
+
     private void ForceLayoutUpdate()
     {
         if (conversationListContent == null) return;
@@ -2203,39 +2239,17 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (conversationListContent == null) return;
 
-        // 관리자 공지 (AdminBroadcast)
-        if (conv.isAdminBroadcast)
+        // WOOPANG 한 줄 (서버 공지 + 이 기기 알림 — ListRows)
+        if (IsWoopang(conv))
         {
-            if (adminNoticePrefab != null)
-            {
-                GameObject item = Instantiate(adminNoticePrefab, conversationListContent);
-                SetLayerRecursively(item, 5);
-                SetupAdminBroadcastItem(item, conv);
-                SetupSwipeDeleteForAdminBroadcast(item);
-                return;
-            }
-        }
-
-        // 시스템 메시지는 AdminNoticeItem 프리팹 사용
-        if (conv.isSystemMessage)
-        {
-            if (adminNoticePrefab != null)
-            {
-                GameObject item = Instantiate(adminNoticePrefab, conversationListContent);
-                SetLayerRecursively(item, 5);
-                SetupSystemNoticeItem(item, conv);
-                SetupSwipeDeleteForSystemMessage(item, conv.notificationId);
-                return;
-            }
-            else if (conversationItemPrefab != null)
-            {
-                GameObject item = Instantiate(conversationItemPrefab, conversationListContent);
-                SetLayerRecursively(item, 5);
-                conv.username = "WOOPANG";
-                SetupConversationItem(item, conv);
-                SetupSwipeDeleteForSystemMessage(item, conv.notificationId);
-                return;
-            }
+            GameObject prefab = adminNoticePrefab != null ? adminNoticePrefab : conversationItemPrefab;
+            if (prefab == null) return;
+            GameObject item = Instantiate(prefab, conversationListContent);
+            SetLayerRecursively(item, 5);
+            if (adminNoticePrefab != null) SetupAdminBroadcastItem(item, conv);
+            else SetupConversationItem(item, conv);
+            SetupSwipeDeleteForAdminBroadcast(item);
+            return;
         }
 
         // 일반 DM은 ConversationItem 프리팹 사용
@@ -2245,90 +2259,6 @@ public class MessagePanelManager : MonoBehaviour
         SetLayerRecursively(dmItem, 5);
         SetupConversationItem(dmItem, conv);
         SetupSwipeDelete(dmItem, conv.userId);
-    }
-
-    /// <summary>
-    /// 시스템 알림 아이템 설정 (AdminNoticeItem 프리팹 사용)
-    /// </summary>
-    private void SetupSystemNoticeItem(GameObject item, ConversationSummary conv)
-    {
-        // Content 하위에서 찾기 (ConversationItem과 동일 구조)
-        Transform content = item.transform.Find("Content");
-        Transform searchRoot = content != null ? content : item.transform;
-
-        // 제목 - 항상 "WOOPANG"
-        Text titleText = searchRoot.Find("TitleText")?.GetComponent<Text>();
-        if (titleText != null)
-            titleText.text = "WOOPANG";
-
-        // 미리보기
-        Text previewText = searchRoot.Find("PreviewText")?.GetComponent<Text>();
-        if (previewText != null)
-        {
-            string preview = conv.lastMessage ?? "";
-            // Rich text 태그 제거 + 줄바꿈을 공백으로 (미리보기용)
-            preview = System.Text.RegularExpressions.Regex.Replace(preview, "<.*?>", "");
-            preview = preview.Replace("\n", " ").Trim();
-            if (preview.Length > 30)
-                preview = preview.Substring(0, 30) + "...";
-            previewText.text = preview;
-        }
-
-        // 시간
-        Text timeText = searchRoot.Find("TimeText")?.GetComponent<Text>();
-        if (timeText != null)
-            timeText.text = GetRelativeTime(conv.lastMessageTime);
-
-        // 안읽음 배지
-        bool hasUnread = !conv.isRead && conv.unreadCount > 0;
-        GameObject unreadBadge = searchRoot.Find("UnreadBadge")?.gameObject;
-
-        if (unreadBadge != null)
-        {
-            unreadBadge.SetActive(hasUnread);
-
-            if (hasUnread)
-            {
-                Text countText = unreadBadge.GetComponentInChildren<Text>();
-                if (countText != null)
-                    countText.text = conv.unreadCount.ToString();
-            }
-        }
-
-        // 클릭 이벤트 - Content에 연결 (ConversationItem과 동일)
-        Transform clickTarget = content != null ? content : item.transform;
-        Button btn = clickTarget.GetComponent<Button>();
-        if (btn == null)
-            btn = clickTarget.gameObject.AddComponent<Button>();
-
-        // 터치 피드백 (소리+진동) 자동 추가
-        if (clickTarget.GetComponent<UITouchForwarder>() == null)
-            clickTarget.gameObject.AddComponent<UITouchForwarder>();
-
-        btn.onClick.RemoveAllListeners();
-        string notificationId = conv.notificationId;
-        string messageContent = conv.lastMessage;
-        string convUserId = conv.userId;
-
-        btn.onClick.AddListener(() =>
-        {
-            // WOOPANG 관리자 메시지 (userId="3")는 OpenChatRoom으로 열기
-            if (convUserId == "3")
-            {
-                OpenChatRoom("3", "WOOPANG", null, true);
-            }
-            else if (!string.IsNullOrEmpty(conv.followFrom))
-            {
-                // 새 팔로워 알림 — 대화창 대신 내 팔로워 탭 (그 사람을 맨 위에)
-                MarkSystemMessageAsRead(conv);
-                R0926HuntPush.OpenFollowers(conv.followFrom, true);
-            }
-            else
-            {
-                MarkSystemMessageAsRead(conv);
-                OpenSystemChatRoom(notificationId, messageContent);
-            }
-        });
     }
 
     private void SetupConversationItem(GameObject item, ConversationSummary conv)
@@ -2349,16 +2279,6 @@ public class MessagePanelManager : MonoBehaviour
         }
 
         // 프리팹의 Image color를 그대로 사용 (하드코딩 제거)
-
-        // 시스템 메시지 읽음 처리 (클릭 시)
-        if (conv.isSystemMessage && !conv.isRead)
-        {
-            Button itemBtn = item.GetComponent<Button>();
-            if (itemBtn == null)
-                itemBtn = item.AddComponent<Button>();
-
-            itemBtn.onClick.AddListener(() => MarkSystemMessageAsRead(conv));
-        }
 
         // 사용자명 (Content 아래에 있음)
         Text usernameText = item.transform.Find("Content/UsernameText")?.GetComponent<Text>();
@@ -2412,18 +2332,8 @@ public class MessagePanelManager : MonoBehaviour
                 contentArea.gameObject.AddComponent<UITouchForwarder>();
 
             btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(() =>
-            {
-                // 새 팔로워 알림 — 대화창 대신 내 팔로워 탭 (그 사람을 맨 위에)
-                if (!string.IsNullOrEmpty(conv.followFrom))
-                {
-                    MarkSystemMessageAsRead(conv);
-                    R0926HuntPush.OpenFollowers(conv.followFrom, true);
-                    return;
-                }
-                // 시스템 메시지면 isAdmin=true로 전달 (타이틀 색상 및 입력창 처리)
-                OpenChatRoom(conv.userId, conv.username, conv.avatarUrl, conv.isSystemMessage);
-            });
+            // WOOPANG 이면 isAdmin=true (타이틀 색상 및 입력창 처리)
+            btn.onClick.AddListener(() => OpenChatRoom(conv.userId, conv.username, conv.avatarUrl, IsWoopang(conv)));
         }
     }
 
@@ -2440,21 +2350,6 @@ public class MessagePanelManager : MonoBehaviour
         handler.Initialize(userId, swipeThreshold, () =>
         {
             DeleteConversation(userId);
-        });
-    }
-
-    /// <summary>
-    /// 시스템 알림 전용 스와이프 삭제 설정 (로컬 삭제)
-    /// </summary>
-    private void SetupSwipeDeleteForSystemMessage(GameObject item, string notificationId)
-    {
-        SwipeToDeleteHandler handler = item.GetComponent<SwipeToDeleteHandler>();
-        if (handler == null)
-            handler = item.AddComponent<SwipeToDeleteHandler>();
-
-        handler.Initialize(notificationId ?? "", swipeThreshold, () =>
-        {
-            DeleteSystemNotification(notificationId, item);
         });
     }
 
@@ -2478,8 +2373,9 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private void DeleteAdminBroadcast(GameObject item)
     {
-        // conversations 리스트에서 관리자 공지 제거
-        conversations.RemoveAll(c => c.isAdminBroadcast);
+        // WOOPANG 한 줄 = 서버 공지 + 이 기기 알림 — 둘 다 지운다
+        conversations.RemoveAll(IsWoopang);
+        SaveSystemNotifications();
 
         // 로컬 저장된 관리자 메시지 삭제
         PlayerPrefs.DeleteKey("LocalAdminMessages");
@@ -2592,48 +2488,6 @@ public class MessagePanelManager : MonoBehaviour
     #region Chat Room
 
     /// <summary>
-    /// 시스템 알림 메시지 로드 (conversations에서 해당 시스템 메시지 찾아서 표시)
-    /// </summary>
-    private IEnumerator LoadSystemChatMessages(string notificationId, string messageContent)
-    {
-        ClearContent(chatMessageContent);
-        ShowChatEmptyState(false);
-
-        // 날짜 구분선 추적 초기화
-        ResetDateSeparatorTracking();
-
-        // conversations에서 해당 시스템 메시지 찾기
-        ConversationSummary systemMsg = null;
-        foreach (var conv in conversations)
-        {
-            if (conv.isSystemMessage && conv.notificationId == notificationId)
-            {
-                systemMsg = conv;
-                break;
-            }
-        }
-
-        // 메시지 버블 생성 (AdminNoticeItem 스타일)
-        if (systemMsg != null || !string.IsNullOrEmpty(messageContent))
-        {
-            string content = systemMsg != null ? systemMsg.lastMessage : messageContent;
-            string time = systemMsg != null ? systemMsg.lastMessageTime : DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-
-            // 날짜 구분선 생성 (대화 메시지 위 가운데에 표시)
-            CheckAndCreateDateSeparator(time);
-
-            CreateSystemMessageBubble("WOOPANG", content, time);
-        }
-        else
-        {
-            ShowChatEmptyState(true);
-        }
-
-        yield return null;
-        ScrollToBottom();
-    }
-
-    /// <summary>
     /// 날짜 구분선 생성 (24시간 이상 차이날 때 표시)
     /// 형식: "11월 3일 오후 7:41"
     /// </summary>
@@ -2735,16 +2589,17 @@ public class MessagePanelManager : MonoBehaviour
     /// <summary>
     /// 관리자 메시지를 채팅방 하단에 추가 (최신 메시지가 하단)
     /// </summary>
-    private void AppendAdminMessageAtBottom(string senderName, string content, string time)
+    private void AppendAdminMessageAtBottom(string senderName, string content, string time, string followFrom = null)
     {
         if (chatMessageContent == null) return;
+        ShowChatEmptyState(false);
 
         // 날짜 구분선 체크
         if (useDateSeparator)
             CheckAndCreateDateSeparator(time);
 
         // 버블 생성 (기본적으로 마지막 자식으로 추가됨)
-        CreateSystemMessageBubble(senderName, content, time);
+        WireFollowTap(CreateSystemMessageBubble(senderName, content, time), followFrom);
 
         // 레이아웃 강제 갱신
         Canvas.ForceUpdateCanvases();
@@ -2776,13 +2631,28 @@ public class MessagePanelManager : MonoBehaviour
     /// <summary>
     /// 시스템 메시지 버블 생성 (채팅방 내에서 AdminMessageBubble 프리팹 사용)
     /// </summary>
-    private void CreateSystemMessageBubble(string senderName, string content, string time)
+    /// <summary>새 팔로워 알림 말풍선 — 누르면 내 팔로워 탭 (그 사람을 맨 위에). 예전 목록의 알림 줄을 누르던 것과 같은 길</summary>
+    private static void WireFollowTap(GameObject bubble, string followFrom)
     {
-        if (chatMessageContent == null) return;
+        if (bubble == null || string.IsNullOrEmpty(followFrom)) return;
+        Transform target = bubble.transform.Find("BubbleContainer");
+        if (target == null) target = bubble.transform;
+        var img = target.GetComponent<Image>();
+        if (img != null) img.raycastTarget = true;
+        var btn = target.GetComponent<Button>();
+        if (btn == null) btn = target.gameObject.AddComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(() => R0926HuntPush.OpenFollowers(followFrom, true));
+    }
+
+    private GameObject CreateSystemMessageBubble(string senderName, string content, string time)
+    {
+        if (chatMessageContent == null) return null;
 
         // adminMessageBubblePrefab 사용
         GameObject prefab = adminMessageBubblePrefab ?? otherMessageBubblePrefab;
-        if (prefab == null) return;
+        if (prefab == null) return null;
 
         GameObject bubble = Instantiate(prefab, chatMessageContent);
         SetLayerRecursively(bubble, 5);
@@ -2938,6 +2808,7 @@ public class MessagePanelManager : MonoBehaviour
         RectTransform bubbleRect = bubble.GetComponent<RectTransform>();
         if (bubbleRect != null)
             LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleRect);
+        return bubble;
     }
 
     private IEnumerator LoadChatMessages(string otherUserId, bool isAdmin)
@@ -2951,29 +2822,22 @@ public class MessagePanelManager : MonoBehaviour
         ShowChatEmptyState(false); // 기존 빈 상태 제거
         ResetDateSeparatorTracking(); // 날짜 구분선 추적 초기화
 
-        // 로딩 스피너 표시
-        float spinnerStartTime = Time.time;
-        GameObject loadingSpinner = CreateChatLoadingSpinner(chatMessageContent);
+        EndChatSkeleton();
+        chatSkeletonWait = StartCoroutine(SkeletonIfSlow(true));
 
         if (isAdmin)
         {
             // 서버 DB에서 관리자 메시지 조회 (admin_broadcasts 테이블)
             string adminUrl = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50";
-            bool hasAdminMessages = false;
+            var lines = new List<WoopangLine>();
             int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
 
             using (UnityWebRequest adminRequest = UnityWebRequest.Get(adminUrl))
             {
                 adminRequest.timeout = 10;
                 yield return adminRequest.SendWebRequest();
-
-                // 스피너 최소 표시 시간 보장
-                float adminElapsed = Time.time - spinnerStartTime;
-                float minDur = chatSpinnerMinDuration > 0 ? chatSpinnerMinDuration : 1f;
-                if (adminElapsed < minDur)
-                    yield return new WaitForSeconds(minDur - adminElapsed);
-                if (loadingSpinner != null) { Destroy(loadingSpinner); loadingSpinner = null; }
-                if (ver != chatLoadVersion) yield break;   // 그 사이 다른 불러오기가 시작됐다
+                if (ver != chatLoadVersion) yield break;   // 그 사이 다른 불러오기가 시작됐다 (스켈레톤은 그쪽이 정리)
+                EndChatSkeleton();
 
                 if (adminRequest.result == UnityWebRequest.Result.Success)
                 {
@@ -2990,18 +2854,13 @@ public class MessagePanelManager : MonoBehaviour
                             myLon = Input.location.lastData.longitude;
                         }
 
-                        // API는 DESC 순서(최신 먼저) → 역순 반복으로 오래된 것부터 표시 (최신이 하단)
+                        // API는 DESC 순서(최신 먼저) → 역순으로 담아 오래된 것부터
                         for (int i = response.messages.Count - 1; i >= 0; i--)
                         {
                             var msg = response.messages[i];
 
                             // 사용자가 삭제(숨김)한 메시지는 스킵
                             if (msg.id > 0 && msg.id <= hiddenMaxId) continue;
-
-                            hasAdminMessages = true;
-
-                            if (useDateSeparator)
-                                CheckAndCreateDateSeparator(msg.created_at);
 
                             // 제목에 거리 표시 (좌표가 있는 경우)
                             string titleWithDistance = msg.title ?? "";
@@ -3018,7 +2877,7 @@ public class MessagePanelManager : MonoBehaviour
                             string displayContent = !string.IsNullOrEmpty(titleWithDistance)
                                 ? $"<b>{titleWithDistance}</b>\n{msg.body}"
                                 : msg.body;
-                            CreateSystemMessageBubble("WOOPANG", displayContent, msg.created_at);
+                            lines.Add(new WoopangLine { at = ParseTime(msg.created_at), seq = lines.Count, time = msg.created_at, text = displayContent });
                         }
                     }
                 }
@@ -3029,39 +2888,37 @@ public class MessagePanelManager : MonoBehaviour
             }
 
             // 서버 조회 실패/빈 경우 로컬 fallback
-            if (!hasAdminMessages)
-            {
-                var localMessages = LoadLocalAdminMessages();
-                if (localMessages.Count > 0)
-                {
-                    foreach (var msg in localMessages)
-                    {
-                        if (useDateSeparator)
-                            CheckAndCreateDateSeparator(msg.created_at);
+            if (lines.Count == 0)
+                foreach (var msg in LoadLocalAdminMessages())
+                    lines.Add(new WoopangLine { at = ParseTime(msg.created_at), seq = lines.Count, time = msg.created_at, text = msg.content });
 
-                        CreateSystemMessageBubble("WOOPANG", msg.content, msg.created_at);
-                    }
-                }
+            // 이 기기에 온 알림(업로드 완료·위치·새 팔로워)도 같은 WOOPANG 대화에 — 시간순으로 섞는다 (10-21)
+            for (int i = conversations.Count - 1; i >= 0; i--)   // 목록은 최신순 — 거꾸로 담아 같은 초에 온 알림도 온 순서대로
+            {
+                var c = conversations[i];
+                if (IsDeviceNotice(c))
+                    lines.Add(new WoopangLine { at = ParseTime(c.lastMessageTime), seq = lines.Count, time = c.lastMessageTime, text = NoticeText(c), followFrom = c.followFrom });
+            }
+
+            lines.Sort((x, y) => x.at != y.at ? x.at.CompareTo(y.at) : x.seq.CompareTo(y.seq));   // 최신이 하단
+            foreach (var line in lines)
+            {
+                if (useDateSeparator)
+                    CheckAndCreateDateSeparator(line.time);
+                WireFollowTap(CreateSystemMessageBubble("WOOPANG", line.text, line.time), line.followFrom);
             }
 
             // 관리자 채팅방도 최신이 하단이므로 스크롤을 맨 아래로
             chatLoading = false;
+            ShowChatEmptyState(lines.Count == 0);
             yield return null;
             ScrollToBottom();
-
-            // 메시지 없으면 빈 상태 표시
-            if (!hasAdminMessages)
-            {
-                var localCheck = LoadLocalAdminMessages();
-                if (localCheck.Count == 0)
-                    ShowChatEmptyState(true);
-            }
             yield break;
         }
 
         if (!CheckLogin())
         {
-            if (loadingSpinner != null) { Destroy(loadingSpinner); loadingSpinner = null; }
+            EndChatSkeleton();
             ShowChatEmptyState(true);
             chatLoading = false;
             yield break;
@@ -3076,14 +2933,8 @@ public class MessagePanelManager : MonoBehaviour
         {
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
-
-            // 스피너 최소 표시 시간 보장
-            float dmElapsed = Time.time - spinnerStartTime;
-            float dmMinDur = chatSpinnerMinDuration > 0 ? chatSpinnerMinDuration : 1f;
-            if (dmElapsed < dmMinDur)
-                yield return new WaitForSeconds(dmMinDur - dmElapsed);
-            if (loadingSpinner != null) { Destroy(loadingSpinner); loadingSpinner = null; }
             if (ver != chatLoadVersion) yield break;   // 그 사이 다른 불러오기가 시작됐다 — 옛 결과는 버린다
+            EndChatSkeleton();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -4063,14 +3914,7 @@ public class MessagePanelManager : MonoBehaviour
     private void RestoreConversationList()
     {
         ClearContent(conversationListContent);
-        SortConversationsByTime();
-        foreach (var conv in conversations)
-        {
-            CreateConversationItem(conv);
-        }
-
-        bool isEmpty = conversations.Count == 0;
-        ShowEmptyState(conversationListContent, GetLocalizedEmptyInboxMessage(), isEmpty);
+        RenderConversationList();   // 예전엔 여기서만 겹친 줄을 거르지 않아 같은 대화가 두 번 보이기도 했다
         ForceLayoutUpdate();
     }
 
@@ -4099,7 +3943,7 @@ public class MessagePanelManager : MonoBehaviour
         ClearContent(conversationListContent);
 
         int matchCount = 0;
-        foreach (var conv in conversations)
+        foreach (var conv in ListRows())
         {
             if (conv.username != null && conv.username.ToLower().Contains(query))
             {
