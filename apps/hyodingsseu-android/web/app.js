@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-21a';
+  const WEB_VERSION = '2026-10-21b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2046,7 +2046,7 @@
     if (drawerEl) renderDrawer();
   }
 
-  const apprSub = () => (S.appr ? '기다리는 제안 ' + S.appr + '건' : '효딩쓰가 올린 제안 · 승인 · 보류');
+  const apprSub = () => (S.appr ? '기다리는 제안·메일 ' + S.appr + '건' : '효딩쓰가 올린 제안·메일 · 승인 · 보류');
 
   function renderApprBadge() {
     const btn = $('#main .bar .appr');
@@ -2054,7 +2054,7 @@
     const n = S.appr || 0, b = btn.querySelector('.nbadge');
     b.hidden = !n;
     b.textContent = n > 99 ? '99+' : String(n);
-    btn.setAttribute('aria-label', '승인함' + (n ? ' — 기다리는 제안 ' + n + '건' : ''));
+    btn.setAttribute('aria-label', '승인함' + (n ? ' — 기다리는 제안·메일 ' + n + '건' : ''));
   }
 
   // ── 화면: 연결 ─────────────────────────
@@ -2563,38 +2563,44 @@
     }
 
     function row(it) {
-      const st = it.status || 'pending', isOpen = open === it.id;
+      const st = it.status || 'pending', isOpen = open === it.id, noun = it.noun || '제안';
+      // 메일 초안(kind 'mail', 2026-10-21)은 thumb·status_word·sub·fields·acts·labels·done 을 스스로 준다 — 제안은 없으면 예전 그대로
+      const sub = it.sub || (it.horizon ? it.horizon + ' 단위' : '');
       const head = h('button', { class: 'drow2 prow', 'aria-expanded': isOpen ? 'true' : 'false', onclick: () => { open = isOpen ? '' : it.id; draw(); } },
-        h('div', { class: 'dthumb ic ph', text: (it.horizon || '').slice(0, 2) || '제안' }),
+        h('div', { class: 'dthumb ic ph', text: it.thumb || (it.horizon || '').slice(0, 2) || '제안' }),
         h('div', { class: 'dtx' },
           h('b', { text: it.title || '(제목 없음)' }),
-          h('small', null, h('span', { class: 'pst', text: APPR_WORD[st] || st }), ' · ' + timeOnly(it.ts) + (it.horizon ? ' · ' + it.horizon + ' 단위' : ''))),
+          h('small', null, h('span', { class: 'pst', text: it.status_word || APPR_WORD[st] || st }), ' · ' + timeOnly(it.ts) + (sub ? ' · ' + sub : ''))),
         svg('chev'));
       const wrap = h('div', { class: 'pitem ' + st + (isOpen ? ' open' : '') }, head);
       if (!isOpen) return wrap;
       const body = h('div', { class: 'pbody' });
-      [['왜 (근거)', it.why], ['무엇을', it.how], ['대표님이 하실 것', it.needs], ['메모', it.note]].forEach(([t, v]) => {
+      (it.fields || [['왜 (근거)', it.why], ['무엇을', it.how], ['대표님이 하실 것', it.needs], ['메모', it.note]]).forEach(([t, v]) => {
         if (v) body.append(h('h4', { text: t }), h('p', null, linkified(String(v))));      // 제안 글 속 주소도 눌러 열린다 — 문서 전체 누름 처리기가 openLink 로 연다
       });
       if ((it.comments || []).length) {
         body.append(h('h4', { text: '대표님 의견' }));
         it.comments.forEach(c => body.append(h('div', { class: 'pcmt' }, h('small', { text: dayLabel(c.ts) + ' ' + timeOnly(c.ts) }), String(c.text || ''))));
       }
-      if (st === 'pending' || st === 'hold') {
+      const acts = it.acts || (st === 'pending' ? ['ok', 'note', 'hold', 'no'] : st === 'hold' ? ['ok', 'note', 'no'] : []);
+      const lab = Object.assign({ ok: '승인', note: '의견', hold: '보류', no: '거절' }, it.labels);
+      if (acts.length) {
         const act = h('div', { class: 'pact' });
-        [['ok', '승인', 'btn'], ['note', '의견', 'btn ghost'], ['hold', '보류', 'btn ghost'], ['no', '거절', 'btn no']].forEach(([dec, label, cls]) => {
-          if (st === 'hold' && dec === 'hold') return;
-          act.append(h('button', { class: cls, text: label, onclick: () => (dec === 'note' ? noteSheet(it) : decide(it, dec, act)) }));
+        [['ok', 'btn'], ['note', 'btn ghost'], ['hold', 'btn ghost'], ['no', 'btn no']].forEach(([dec, cls]) => {
+          if (!acts.includes(dec)) return;
+          act.append(h('button', { class: cls, text: lab[dec], onclick: () => (dec === 'note' ? noteSheet(it) : decide(it, dec, act)) }));
         });
         body.append(act);
+      } else if (it.done) {
+        body.append(h('div', { class: 'pdone', text: it.done + (it.done_ts ? ' · ' + dayLabel(it.done_ts) + ' ' + timeOnly(it.done_ts) : '') }));
       } else if (st === 'revised') {
         body.append(h('div', { class: 'pdone', text: '대표님 의견대로 고친 제안' + (it.revised_to ? ' ' + it.revised_to : '') + ' 로 바뀌었어요 — 새 제안에서 결정해 주세요' }));
       } else {
         body.append(h('div', { class: 'pdone', text: (APPR_WORD[st] || st) + '했습니다' + (it.decided ? ' · ' + dayLabel(it.decided) + ' ' + timeOnly(it.decided) : '')
           + (st === 'approved' ? (it.decided_by === '의견' ? ' — 대표님 의견대로 효딩쓰가 승인 처리, 할 일 보드에 올라 있어요' : ' — 할 일 보드에 올라 있어요') : '') }));
       }
-      if (it.replaces) body.append(h('div', { class: 'pdone', text: '제안 ' + it.replaces + ' 을 대표님 의견대로 고친 제안이에요' }));
-      body.append(h('div', { class: 'pdone', text: '제안 번호 ' + it.id }));
+      if (it.replaces) body.append(h('div', { class: 'pdone', text: noun + ' ' + it.replaces + ' 을 대표님 의견대로 고친 ' + noun + '이에요' }));
+      body.append(h('div', { class: 'pdone', text: noun + ' 번호 ' + it.id }));
       wrap.append(body);
       return wrap;
     }
@@ -2604,7 +2610,7 @@
       listEl2.textContent = '';
       if (loading && !items.length) { listEl2.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
       if (!items.length) {
-        listEl2.append(h('div', { class: 'doc-empty', text: q || status !== 'pending' ? '찾는 제안이 없어요' : '기다리는 제안이 없어요 — 효딩쓰가 승인이 필요한 일을 올리면 여기 모입니다' }));
+        listEl2.append(h('div', { class: 'doc-empty', text: q || status !== 'pending' ? '찾는 제안이 없어요' : '기다리는 제안·메일이 없어요 — 효딩쓰가 승인이 필요한 일(제안·메일 초안)을 올리면 여기 모입니다' }));
         return;
       }
       let lastDay = null;
@@ -2639,14 +2645,23 @@
     async function decide(it, dec, act) {
       act.querySelectorAll('button').forEach(b => { b.disabled = true; });
       haptic('tap');
+      const mail = it.kind === 'mail';
+      let keep = false;
       try {
-        const r = await api.post('proposals/decide', { id: it.id, dec });
+        // 메일 보내기는 메일 서버에 접속해 몇 초 걸린다 — 기다려 준다
+        const r = await api.post('proposals/decide', { id: it.id, dec, kind: it.kind || 'prop' }, mail ? { timeout: 60000 } : undefined);
         if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(r.counts.pending);
-        toast(APPR_DONE[r && r.status] || '저장했어요');
-        open = '';
+        if (mail) {
+          keep = !!r && r.ok === false;              // 보내지 못했으면 카드를 펼친 채로 — 까닭이 맨 위에 적힌다
+          toast(keep ? '보내지 못했어요 — 까닭을 카드 맨 위에 적어 두었어요' : (r && r.msg) || '이미 처리된 초안이에요');
+        } else {
+          toast(APPR_DONE[r && r.status] || '저장했어요');
+        }
+        if (!keep) open = '';
       } catch (e) {
         show(e);
         act.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        if (mail && alive) load();                   // 서버가 늦게 답해도 메일은 이미 나갔을 수 있다 — 실제 상태를 다시 본다
         return;
       }
       if (alive) load();
@@ -2656,7 +2671,7 @@
     function noteSheet(it) {
       haptic('tap');
       const ta = h('textarea', { class: 'note-ta', rows: '3', maxlength: '2000', 'aria-label': '의견',
-        placeholder: '예) 이 부분은 이렇게 바꿔서 다시 올려 줘 / 좋아, 이대로 진행해',
+        placeholder: it.kind === 'mail' ? '예) 제목을 더 짧게 / 둘째 문단은 빼고 다시 올려 줘' : '예) 이 부분은 이렇게 바꿔서 다시 올려 줘 / 좋아, 이대로 진행해',
         oninput: () => { drafts[it.id] = ta.value; sendBtn.disabled = !ta.value.trim(); grow(ta); } });
       ta.value = drafts[it.id] || '';
       const sendBtn = h('button', { class: 'btn wide', text: '효딩쓰에게 보내기', onclick: () => submit() });
@@ -2666,7 +2681,8 @@
           h('h3', { text: '의견' }),
           h('p', { class: 'note-of', text: it.title || '' }),
           ta,
-          h('p', { class: 'note-hint', text: '효딩쓰가 읽고 고친 제안을 다시 올리거나, 말씀대로 진행합니다' }),
+          h('p', { class: 'note-hint', text: it.kind === 'mail' ? '효딩쓰가 읽고 고친 초안을 다시 올립니다 — 메일은 [보내기]를 누를 때만 나갑니다'
+            : '효딩쓰가 읽고 고친 제안을 다시 올리거나, 말씀대로 진행합니다' }),
           sendBtn,
           h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() })));
       const close = layer(() => scrim.remove());
@@ -2681,7 +2697,7 @@
         ta.disabled = true;
         haptic('tap');
         try {
-          const r = await api.post('proposals/comment', { id: it.id, text });
+          const r = await api.post('proposals/comment', { id: it.id, text, kind: it.kind || 'prop' });
           if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(r.counts.pending);
         } catch (e) {
           show(e);
