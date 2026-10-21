@@ -28,6 +28,8 @@ public class LoginManager : MonoBehaviour
     }
 
     public event Action<bool> OnLoginStateChanged;
+    /// <summary>로그아웃 직전 — 토큰이 아직 있을 때 그 계정으로 서버에 남긴 것을 내린다 (P2PManager 의 근처 사람 위치)</summary>
+    public event Action OnLoggingOut;
 
     [Header("Login Prompt Popup")]
     public GameObject loginPromptPanel;
@@ -398,6 +400,7 @@ public class LoginManager : MonoBehaviour
     {
         // 로그아웃 전에 user_id 저장 (토큰 해제에 사용)
         string previousUserId = CurrentUser?.id;
+        if (CurrentUser != null) OnLoggingOut?.Invoke();
 
         CurrentUser = null;
         IsGuest = false;

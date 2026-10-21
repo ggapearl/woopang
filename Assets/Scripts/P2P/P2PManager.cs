@@ -75,6 +75,15 @@ public class P2PManager : MonoBehaviour
     // Singleton
     public static P2PManager Instance { get; private set; }
 
+#if UNITY_EDITOR
+    public static string EditorBase;   // 플레이 시험 — 위치 등록·팔로잉 목록을 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
+    private static string Api(string url) => string.IsNullOrEmpty(EditorBase) ? url : EditorBase + url.Substring(ApiConfig.MAIN_SERVER.Length);
+    private static bool EditorTesting => !string.IsNullOrEmpty(EditorBase);   // 에디터엔 위치 권한 알림이 없다 — 시험 서버로 돌릴 때만 권한을 기다리지 않는다
+#else
+    private static string Api(string url) => url;
+    private const bool EditorTesting = false;
+#endif
+
     [Header("Server Configuration")]
     [SerializeField] private float foregroundUpdateInterval = 5f;   // 포그라운드: 5초
     [SerializeField] private float backgroundUpdateInterval = 10f;  // 백그라운드: 10초
@@ -112,6 +121,7 @@ public class P2PManager : MonoBehaviour
 
     // State
     private bool isRegistered = false;
+    private bool connectReady;   // 위치 준비까지 끝났다 — 그 뒤 로그인이 바뀌면 바로 다시 등록한다
     private bool isInBackground = false;
     private float currentUpdateInterval => isInBackground ? backgroundUpdateInterval : foregroundUpdateInterval;
 
@@ -184,19 +194,24 @@ public class P2PManager : MonoBehaviour
             yield return new WaitForSeconds(0.5f);
         }
 
+        // 로그인이 바뀌면 그 계정으로 다시 — 예전엔 아래에서 한 번 받은 아이디를 끝까지 써서, 로그아웃하고 다른 아이디로
+        // 들어가도 위치·팔로잉 목록이 처음 아이디로 오갔다 (10-21 대표님 「다른 아이디로 로그인했는데 서로 멀리 보이고 보물찾기 메시지도 안 온다」)
+        loginManager.OnLoginStateChanged -= OnLoginStateChanged;
+        loginManager.OnLoginStateChanged += OnLoginStateChanged;
+        loginManager.OnLoggingOut -= OnLoggingOut;
+        loginManager.OnLoggingOut += OnLoggingOut;
+
         // Wait for user login
         while (loginManager.CurrentUser == null || string.IsNullOrEmpty(loginManager.CurrentUser.id))
         {
             yield return new WaitForSeconds(0.5f);
         }
 
-        currentUserId = loginManager.CurrentUser.id;
-        currentUsername = loginManager.CurrentUser.username;
+        // 기다리는 사이 로그인했으면 OnLoginStateChanged 가 이미 그 계정으로 맞춰 두었다 (팔로잉 목록도 그때 받는다)
+        // 사람 칩이 로그인보다 먼저 '팔로잉'을 정해 두면 그땐 내 아이디가 없어 팔로잉 목록을 못 받았다 — 앱을 켤 때마다 '팔로잉'이 비어 있었다
+        if (currentUserId != loginManager.CurrentUser.id) SwitchUser(loginManager.CurrentUser.id, loginManager.CurrentUser.username);
 
         Log($"User info loaded: {currentUsername} ({currentUserId})");
-
-        // 사람 칩이 로그인보다 먼저 '팔로잉'을 정해 두면 그땐 내 아이디가 없어 팔로잉 목록을 못 받았다 — 앱을 켤 때마다 '팔로잉'이 비어 있었다
-        if (userFilterMode == UserFilterMode.FollowingOnly) StartCoroutine(RefreshFollowingList());
 
         // 위치 권한이 없으면 DataManager의 이벤트를 기다린 후 진행
         if (!Input.location.isEnabledByUser)
@@ -205,7 +220,7 @@ public class P2PManager : MonoBehaviour
             bool permissionGranted = false;
             System.Action onGranted = () => permissionGranted = true;
             DataManager.OnLocationPermissionGranted += onGranted;
-            yield return new WaitUntil(() => permissionGranted);
+            yield return new WaitUntil(() => permissionGranted || EditorTesting);
             DataManager.OnLocationPermissionGranted -= onGranted;
             Log("위치 권한 획득 - P2P 연결 재개");
         }
@@ -255,6 +270,7 @@ public class P2PManager : MonoBehaviour
         }
 
         Log("GPS ready, registering user...");
+        connectReady = true;
         StartTracking();
     }
 
@@ -288,9 +304,39 @@ public class P2PManager : MonoBehaviour
         {
             RemoveUserAvatar(kvp.Key);
         }
+        nearbyUsersData.Clear();   // 더 받지 않으니 근처 사람 목록도 비운다
 
         isRegistered = false;
         Log("P2P tracking stopped");
+    }
+
+    // 로그아웃하는 순간 — 토큰이 아직 있을 때 이 휴대폰이 보내던 그 계정의 위치를 서버에서 내리고 보내기를 멈춘다
+    private void OnLoggingOut()
+    {
+        if (string.IsNullOrEmpty(currentUserId)) return;
+        if (isRegistered) StartCoroutine(SendUnregisterRequest());   // 요청은 지금 토큰을 붙여 만든다 (보내는 건 그 뒤)
+        SwitchUser(null, null);
+    }
+
+    // 로그인이 바뀌었다 — 새 아이디로 다시 등록해 위치·근처 사람·팔로잉 목록이 그 계정으로 오가게
+    private void OnLoginStateChanged(bool loggedIn)
+    {
+        var user = loggedIn && LoginManager.Instance != null ? LoginManager.Instance.CurrentUser : null;
+        string id = user != null && !string.IsNullOrEmpty(user.id) ? user.id : null;
+        if (id == currentUserId) return;
+        SwitchUser(id, user?.username);
+        if (id != null && connectReady) StartTracking();
+    }
+
+    private void SwitchUser(string id, string username)
+    {
+        StopTracking();
+        followingUserIds.Clear();
+        lastFollowingCacheTime = -FOLLOWING_CACHE_DURATION;
+        currentUserId = id;
+        currentUsername = username;
+        if (id != null && userFilterMode == UserFilterMode.FollowingOnly) StartCoroutine(RefreshFollowingList());
+        UserFilterChanged?.Invoke();
     }
 
     /// <summary>
@@ -309,14 +355,20 @@ public class P2PManager : MonoBehaviour
         string json = JsonConvert.SerializeObject(reg);
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_REGISTER, "POST");
+        UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.P2P_REGISTER), "POST");
         LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
         request.SetRequestHeader("Content-Type", "application/json");
 
+        string forUser = currentUserId;
         yield return request.SendWebRequest();
 
+        if (forUser != currentUserId)
+        {
+            request.Dispose();   // 그새 로그아웃·다른 아이디 — 앞 계정으로 위치를 보내기 시작하지 않는다
+            yield break;
+        }
         if (request.result == UnityWebRequest.Result.Success)
         {
             Log($"User registered successfully");
@@ -428,7 +480,7 @@ public class P2PManager : MonoBehaviour
         string json = posUpdate.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UPDATE_POSITION, "POST");
+        UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.P2P_UPDATE_POSITION), "POST");
         LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
@@ -463,6 +515,7 @@ public class P2PManager : MonoBehaviour
             if (usersArray == null) return;
 
             List<string> currentNearbyUserIds = new List<string>();
+            var inResponse = new HashSet<string>();
 
             foreach (JObject userObj in usersArray)
             {
@@ -477,6 +530,7 @@ public class P2PManager : MonoBehaviour
                     bio = userObj["bio"]?.ToString() ?? "",
                     distance = (float)(userObj["distance"] ?? 0)
                 };
+                inResponse.Add(userData.user_id);
 
                 // 거리 및 필터 조건 확인
                 if (userData.distance <= maxTrackingDistance && ShouldShowUser(userData.user_id))
@@ -510,6 +564,10 @@ public class P2PManager : MonoBehaviour
             {
                 RemoveUserAvatar(userId);
             }
+
+            // 더 이상 근처에 없는 사람만 목록 자료에서 뺀다 (필터로 가린 사람은 남겨 둬야 필터를 바꾸면 바로 다시 보인다)
+            foreach (string userId in nearbyUsersData.Keys.Where(id => !inResponse.Contains(id)).ToList())
+                nearbyUsersData.Remove(userId);
 
             Log($"Nearby users: {activeUserAvatars.Count}");
         }
@@ -660,8 +718,9 @@ public class P2PManager : MonoBehaviour
         avatarObj.SetActive(false);
         avatarPool.Enqueue(avatarObj);
 
+        // 자료(nearbyUsersData)는 둔다 — 예전엔 같이 지워서, 사람 칩을 '팔로잉만'으로 바꾸는 순간(팔로잉 목록이 오기 전) 가려진
+        // 사람들의 자료가 사라져 목록이 오고 나서도 다음 위치 갱신까지 아무도 안 나왔다 (10-21)
         activeUserAvatars.Remove(userId);
-        nearbyUsersData.Remove(userId);
 
         Log($"Removed avatar for user: {userId}");
     }
@@ -709,7 +768,7 @@ public class P2PManager : MonoBehaviour
         string json = gestureData.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_SEND_GESTURE, "POST");
+        UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.P2P_SEND_GESTURE), "POST");
         LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
@@ -812,7 +871,7 @@ public class P2PManager : MonoBehaviour
         string json = unregData.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UNREGISTER, "POST");
+        UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.P2P_UNREGISTER), "POST");
         LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
@@ -844,7 +903,7 @@ public class P2PManager : MonoBehaviour
         string json = privacyData.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
 
-        UnityWebRequest request = new UnityWebRequest(ApiConfig.P2P_UPDATE_PRIVACY, "POST");
+        UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.P2P_UPDATE_PRIVACY), "POST");
         LoginManager.ApplyAuth(request);   // P2P 서버가 토큰으로 사용자를 확인한다 (2026-09-27)
         request.uploadHandler = new UploadHandlerRaw(bodyRaw);
         request.downloadHandler = new DownloadHandlerBuffer();
@@ -1064,13 +1123,15 @@ public class P2PManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentUserId)) yield break;
         lastFollowingCacheTime = Time.time;   // 실패해도 1분 안엔 다시 묻지 않는다 (위치 보내기 주기마다 묻게 되지 않게)
+        string forUser = currentUserId;
 
-        string url = $"{ApiConfig.FOLLOWING}?user_id={currentUserId}";
+        string url = $"{Api(ApiConfig.FOLLOWING)}?user_id={currentUserId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
             LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
+            if (forUser != currentUserId) yield break;   // 그새 로그인이 바뀌었다 — 앞 계정의 목록
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -1085,7 +1146,8 @@ public class P2PManager : MonoBehaviour
                     {
                         foreach (JObject user in followingArray)
                         {
-                            string id = user["id"]?.ToString();
+                            // 서버는 user_id 로 준다 — 예전엔 id 를 읽어 목록이 늘 비어 '팔로잉'에 아무도 안 나왔다 (10-21)
+                            string id = (user["user_id"] ?? user["id"])?.ToString();
                             if (!string.IsNullOrEmpty(id))
                             {
                                 followingUserIds.Add(id);
@@ -1200,6 +1262,11 @@ public class P2PManager : MonoBehaviour
 
     void OnDestroy()
     {
+        if (Instance == this && LoginManager.Instance != null)
+        {
+            LoginManager.Instance.OnLoginStateChanged -= OnLoginStateChanged;
+            LoginManager.Instance.OnLoggingOut -= OnLoggingOut;
+        }
         StopTracking();
     }
 
@@ -1220,6 +1287,7 @@ public class P2PManager : MonoBehaviour
     public void RemoveTestUserAvatar(string userId)
     {
         RemoveUserAvatar(userId);
+        nearbyUsersData.Remove(userId);
     }
 
     /// <summary>

@@ -224,6 +224,7 @@ namespace Redesign0926
                 var b = tabs[i].GetComponent<Button>();
                 ResetListeners(b);
                 UnityEventTools.AddIntPersistentListener(b.onClick, modes.Show, i);
+                Ensure<UITouchForwarder>(tabs[i]);   // 누름 소리 — 추가 창의 탭과 같이 (10-21)
                 EditorUtility.SetDirty(b);
             }
 

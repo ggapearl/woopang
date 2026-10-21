@@ -510,6 +510,13 @@ public class ProfileManager : MonoBehaviour
     {
         if (isLoggedIn)
         {
+            // 다른 아이디로 들어왔다 — 앞 계정의 사진·이름이 남지 않게 먼저 비우고 새로 받는다 (10-21)
+            var me = LoginManager.Instance?.CurrentUser;
+            if (me != null && miniProfileUserId != me.id)
+            {
+                ClearMiniProfile();
+                if (miniUsernameText != null) miniUsernameText.text = me.username;
+            }
             LoadMyProfile();
         }
         else
@@ -582,13 +589,7 @@ public class ProfileManager : MonoBehaviour
 
             if (!string.IsNullOrEmpty(profile.avatar_url))
             {
-                // 새 방식: 버전 카운터 + userId 캐시 사용, 로드 완료 시 Sprite 보관
-                miniAvatarLoadCoroutine = StartCoroutine(LoadAvatarAsyncCoroutine(
-                    profile.id, profile.avatar_url, miniAvatarImage, profile.username,
-                    (tex) => {
-                        if (miniAvatarImage != null && miniAvatarImage.sprite != null)
-                            miniProfileAvatarSprite = miniAvatarImage.sprite;
-                    }));
+                miniAvatarLoadCoroutine = StartCoroutine(LoadMiniAvatar(profile));
             }
             else
             {
@@ -603,6 +604,16 @@ public class ProfileManager : MonoBehaviour
             miniProfilePanel.SetActive(true);
     }
 
+    // 받아 온 길(새로 받음·캐시·실패)과 상관없이 끝나면 지금 사진을 되돌릴 사진으로 — 예전엔 새로 받았을 때만 적어서,
+    // 캐시에서 온 새 계정 사진 대신 앞 계정 사진이 프로필 창을 닫을 때마다 되살아났다 (10-21)
+    private IEnumerator LoadMiniAvatar(ProfileData profile)
+    {
+        yield return LoadAvatarAsyncCoroutine(profile.id, profile.avatar_url, miniAvatarImage, profile.username, null);
+        miniAvatarLoadCoroutine = null;
+        if (miniProfileUserId == profile.id && miniAvatarImage != null && miniAvatarImage.sprite != null)
+            miniProfileAvatarSprite = miniAvatarImage.sprite;
+    }
+
     private void ClearMiniProfile()
     {
         miniProfileUserId = null;
@@ -610,8 +621,23 @@ public class ProfileManager : MonoBehaviour
         if (miniUsernameText != null)
             miniUsernameText.text = "Login";  // 로그인 전 기본 텍스트 (번역 안 함)
 
-        if (miniAvatarImage != null && defaultAvatarSprite != null)
-            miniAvatarImage.sprite = defaultAvatarSprite;
+        if (miniAvatarImage != null)
+        {
+            // 받는 중이던 앞 계정 사진이 늦게 와서 덮지 않게 — 그 요청을 끊고 버전을 넘긴다
+            if (miniAvatarLoadCoroutine != null)
+            {
+                StopCoroutine(miniAvatarLoadCoroutine);
+                miniAvatarLoadCoroutine = null;
+            }
+            int imageId = miniAvatarImage.GetInstanceID();
+            StopShimmer(imageId);
+            avatarRequestVersions[imageId] = (avatarRequestVersions.TryGetValue(imageId, out int v) ? v : 0) + 1;
+            if (defaultAvatarSprite != null) miniAvatarImage.sprite = defaultAvatarSprite;
+            miniAvatarImage.color = Color.white;
+        }
+        // 되돌릴 사진도 기본 그림으로 — 예전엔 앞 계정 사진을 그대로 들고 있어, 로그아웃하고 다른 아이디로 들어가도
+        // 프로필 창을 닫을 때마다(RestoreMiniProfileAvatar) 그 사진이 우하단에 되살아났다 (10-21 대표님)
+        miniProfileAvatarSprite = defaultAvatarSprite;
 
         // 미니 프로필 패널은 로그아웃 후에도 유지 (비활성화하지 않음)
         // 패널 내용만 초기화하고 UI 구조는 유지

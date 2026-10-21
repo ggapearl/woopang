@@ -99,6 +99,7 @@ namespace Redesign0926
             else if (mode == "huntprofile") PlanHuntProfile();
             else if (mode == "hunttreasure") PlanHuntTreasure();
             else if (mode == "login") PlanLogin();
+            else if (mode == "loginswitch") PlanLoginSwitch();
             else if (mode == "chatlook") PlanChatLook();
             else if (mode == "v24") PlanV24();
             else if (mode == "farfade") PlanFarFade();
@@ -2311,6 +2312,7 @@ namespace Redesign0926
 
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Sleep(1.0f);
+            Check(() => SoundOnAll("UploadPage", "Seg0926", "Chips0926"), "위 탭(장소·3D·보물)·분류 칩에 누름 소리 — 다른 버튼과 같은 기본 소리 (10-21)");
             Do(() => Click("Dock0926/PlusButton"));
             Sleep(1.2f);
             Do(() =>
@@ -5276,6 +5278,145 @@ namespace Redesign0926
             });
         }
 
+        // 로그인 바꾸기 — 로그아웃하고 다른 아이디로 들어오면 근처 사람(P2P)·팔로잉 목록·작은 프로필이 새 계정으로 (10-21 대표님
+        // 「다른 아이디로 로그인했는데 우측 하단 사진이 그대로 · 서로 멀리 보이고 보물찾기 메시지도 안 온다」 · 「'팔로잉'이면 근처 팔로잉한 사람이 안 나온다」).
+        // 시험 서버(127.0.0.1:5099): hunt-dev:p2pa → 숫자 아이디 2147400001(사진 있음) · p2pb → 2147400002(사진 없음) — 운영처럼 숫자(앱이 숫자로 읽는다).
+        // 근처 사람 등록·해제와 푸시 토큰 등록·해제는 기록만 하고, 기록에는 숫자 아이디를 hunt_test_p2pa 처럼 이름으로 적는다
+        [Serializable] private class P2PEvent { public string kind, token_user, user_id; }
+        [Serializable] private class P2PEvents { public P2PEvent[] events; }
+        private static List<string> P2PLog()
+        {
+            var r = JsonUtility.FromJson<P2PEvents>(DevGet("", "/api/dev/p2p_log"));
+            var list = new List<string>();
+            if (r?.events != null) foreach (var e in r.events) list.Add(e.kind + ":" + e.token_user + ":" + e.user_id);
+            return list;
+        }
+        private static void PlanLoginSwitch()
+        {
+            const string Dev = "http://127.0.0.1:5099";
+            const string IdA = "2147400001", IdB = "2147400002";
+            // 근처에 둘 — 팔로잉한 ft1(시험 서버의 팔로잉 목록에 있다)과 모르는 사람
+            const string NearJson = "{\"users\":[{\"user_id\":\"ft1\",\"username\":\"yeonnam_cafe\",\"latitude\":36.6593,\"longitude\":126.673,\"altitude\":0,\"distance\":30},"
+                                  + "{\"user_id\":\"hunt_test_stranger\",\"username\":\"stranger\",\"latitude\":36.6594,\"longitude\":126.6731,\"altitude\":0,\"distance\":40}]}";
+            string P2PId() => P2PManager.Instance != null ? typeof(P2PManager).GetField("currentUserId", NPI).GetValue(P2PManager.Instance) as string : "(없음)";
+            bool Following(string id) => P2PManager.Instance != null && ((HashSet<string>)typeof(P2PManager).GetField("followingUserIds", NPI).GetValue(P2PManager.Instance)).Contains(id);
+            string Near()
+            {
+                if (P2PManager.Instance == null) return "-";
+                var ids = P2PManager.Instance.GetFilteredNearbyUsers().ConvertAll(u => u.user_id);
+                ids.Sort(StringComparer.Ordinal);
+                return string.Join(",", ids);
+            }
+            Image Mini() => ProfileManager.Instance != null ? ProfileManager.Instance.miniAvatarImage : null;
+            int MiniW() { var s = Mini() != null ? Mini().sprite : null; return s != null && s.texture != null ? s.texture.width : -1; }
+            string MiniName() => ProfileManager.Instance != null && ProfileManager.Instance.miniUsernameText != null ? ProfileManager.Instance.miniUsernameText.text : "";
+            string DockLabel() { var l = UnityEngine.Object.FindAnyObjectByType<R0926ProfileLabel>(); return l != null ? l.GetComponent<Text>().text : ""; }
+            bool Logged(string ev) => P2PLog().Contains(ev);
+            void Diag(string at) => log.Add("  [" + at + "] 근처 '" + Near() + "' · 모드 " + P2PManager.Instance?.GetUserFilterMode()
+                                            + " · 자료 " + (P2PManager.Instance?.GetNearbyUsers().Count ?? -1) + " · 팔로잉 ft1 " + Following("ft1"));
+            void Mode(UserFilterMode m) { var p = UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>(); if (p != null) p.SetFilterModeExternal(m); else P2PManager.Instance?.SetUserFilterMode(m); }
+            var modeWas = UserFilterMode.All;
+            int logoutAt = 0;
+            // 로그아웃한 뒤엔 앞 사람(p2pa) 토큰으로 간 게 해제 말고는 없어야
+            bool NothingOldAfterLogout()
+            {
+                var l = P2PLog();
+                for (int i = logoutAt; i < l.Count; i++)
+                    if (l[i].Contains(":hunt_test_p2pa:") && !l[i].StartsWith("unregister:")) { log.Add("  로그아웃 뒤 " + l[i]); return false; }
+                return true;
+            }
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);
+                savedClipboard = EditorGUIUtility.systemCopyBuffer;
+                LoginManager.EditorAuthBase = Dev;
+                ProfileManager.EditorBase = Dev;
+                FollowManager.EditorBase = Dev;
+                P2PManager.EditorBase = Dev;
+                FirebaseNotification.EditorBase = Dev;
+                R0926HuntApi.EditorBase = Dev;
+                R0926HuntApi.EditorTestUser = null;
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                DevGet("", "/api/dev/p2p_log?reset=1");
+                // 에디터의 가상 사용자(1초마다 근처 사람 'woopang'을 넣는다)가 시험이 넣은 근처 사람 목록을 덮어쓰지 않게
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>();
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                var p = UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
+                if (p != null) modeWas = p.GetCurrentFilterMode();
+                Mode(UserFilterMode.FollowingOnly);
+            });
+            Sleep(0.6f);
+            Check(() => LoginManager.Instance != null && !LoginManager.Instance.IsLoggedIn && P2PId() == null, "시작: 로그아웃 · 근처 사람(P2P) 아이디 없음");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+
+            // 첫 사람 — 사진 있는 p2pa
+            Do(() => { LoginManager.EditorBeforeWebLogin?.Invoke(); CopyLink("p2pa"); });
+            Wait(() => LoginManager.Instance.CurrentUser?.id == IdA, 10f, "첫 사람(p2pa) 로그인");
+            Check(() => P2PId() == IdA, "근처 사람(P2P)도 p2pa 로");
+            Wait(() => MiniW() == 97, 10f, "작은 프로필에 p2pa 사진");
+            Check(() => MiniW() == 97 && MiniName() == "시험_p2pa", "작은 프로필 = p2pa 사진·이름");
+            Wait(() => Following("ft1"), 8f, "팔로잉 목록 받음");
+            Check(() => Following("ft1") && !Following("hunt_test_stranger"), "팔로잉 목록 — 서버가 주는 user_id 로 읽음 (예전엔 id 를 읽어 늘 비었다)");
+            Wait(() => Logged("register:hunt_test_p2pa:hunt_test_p2pa"), 45f, "위치 준비 뒤 p2pa 로 등록 (에디터는 GPS 가 없어 30초 기다린다)");
+            Check(() => Logged("register:hunt_test_p2pa:hunt_test_p2pa"), "근처 사람 서버에 p2pa 로 등록 (그 사람 토큰으로)");
+
+            // 근처 사람 목록 — '팔로잉만'이면 팔로잉한 사람만 · '모든 사람'이면 다 · 필터를 오가도 바로
+            Do(() => Mode(UserFilterMode.All));
+            Do(() => P2PManager.Instance.InjectTestUsersData(NearJson));
+            Check(() => Near() == "ft1,hunt_test_stranger", "모든 사람 → 근처 둘 다");
+            Do(() => Mode(UserFilterMode.FollowingOnly));
+            Sleep(0.3f);
+            Check(() => Near() == "ft1", "팔로잉만 → 근처의 팔로잉한 사람만 (예전엔 아무도 안 나왔다)");
+            Do(() => Diag("팔로잉만"));
+            Do(() => Mode(UserFilterMode.All));
+            Sleep(0.3f);
+            Do(() => Diag("다시 모든 사람"));
+            Check(() => Near() == "ft1,hunt_test_stranger", "다시 모든 사람 → 가렸던 사람도 바로 (예전엔 다음 위치 갱신까지 빠졌다)");
+            Do(() => Mode(UserFilterMode.FollowingOnly));
+
+            // 로그아웃 — 그 사람 토큰이 남아 있을 때 근처 사람 서버에서 내리고, 작은 프로필을 비운다
+            Do(() => { logoutAt = P2PLog().Count; LoginManager.Instance.Logout(); });
+            Sleep(1.0f);
+            Shot("loginswitch_out");
+            Check(() => P2PId() == null && Near() == "", "로그아웃 → 근처 사람 아이디·목록 비움");
+            Check(() => Logged("unregister:hunt_test_p2pa:hunt_test_p2pa"), "로그아웃 → 근처 사람 서버에서 p2pa 를 내림 (그 사람 토큰으로)");
+            Check(() => Logged("fcm_unregister::hunt_test_p2pa") || FirebaseNotification.GetInstance() == null, "로그아웃 → 푸시 토큰에서 p2pa 떼기");
+            Check(() => Mini() != null && Mini().sprite == ProfileManager.Instance.defaultAvatarSprite, "로그아웃 → 작은 프로필 사진이 기본 그림으로");
+            Check(() => DockLabel() == "로그인" || DockLabel() == "Sign in", "로그아웃 → 도크 이름 '로그인'");
+
+            // 다른 아이디 — 사진 없는 p2pb
+            Do(() => { LoginManager.EditorBeforeWebLogin?.Invoke(); CopyLink("p2pb"); });
+            Wait(() => LoginManager.Instance.CurrentUser?.id == IdB, 10f, "다른 아이디(p2pb)로 로그인");
+            Check(() => P2PId() == IdB, "근처 사람(P2P)도 p2pb 로 — 예전엔 처음 아이디를 끝까지 썼다");
+            Wait(() => Logged("register:hunt_test_p2pb:hunt_test_p2pb"), 5f, "p2pb 로 다시 등록");
+            Check(() => Logged("register:hunt_test_p2pb:hunt_test_p2pb"), "근처 사람 서버에 p2pb 로 바로 다시 등록 (위치 준비는 이미 끝났다)");
+            Wait(() => MiniName() == "시험_p2pb", 8f, "작은 프로필 이름 p2pb");
+            Sleep(1.0f);
+            Shot("loginswitch_b");
+            Check(() => MiniName() == "시험_p2pb" && MiniW() != 97, "작은 프로필 = p2pb (앞 사람 p2pa 사진이 남지 않음)");
+            Check(() => DockLabel() == "시험_p2pb", "도크 이름 = 시험_p2pb");
+            Wait(() => Following("ft1"), 8f, "p2pb 의 팔로잉 목록");
+            Check(() => Following("ft1"), "p2pb 로 팔로잉 목록 다시 받음");
+            Check(() => NothingOldAfterLogout(), "로그아웃 뒤 p2pa 로 보낸 것은 해제뿐");
+            Do(() =>
+            {
+                LoginManager.Instance.Logout();   // 시험 서버에 둔 채로 — 끝난 뒤 운영 서버로 시험 토큰이 가지 않게
+                Mode(modeWas);
+                P2PManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                LoginManager.EditorAuthBase = null;
+                EditorGUIUtility.systemCopyBuffer = savedClipboard ?? "";
+                savedClipboard = null;
+            });
+        }
+
         // 요청 대조 — 날씨판 지역 이름(에디터 위치 그대로) · 목록/지도/설정 · 지도 최대 확대 · 추가창과 크기 · 첫 안내 버튼 소리
         private static void PlanAudit()
         {
@@ -6009,9 +6150,27 @@ namespace Redesign0926
             Sleep(0.4f);
             Shot("filters_pet_only");
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly, "반려견 한 번 → 반려견 되는 곳만");
+            Check(() => ChipLabel("PetFriendlyToggle") == "반려견만" || ChipLabel("PetFriendlyToggle") == "Pets only", "반려견 되는 곳만 → 칩 이름 '반려견만'");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.3f);
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.All, "반려견 두 번 → 전부 ('애견동반 안 됨' 없음)");
+            Check(() => ChipLabel("PetFriendlyToggle") == "반려견" || ChipLabel("PetFriendlyToggle") == "Pets", "전부 → 칩 이름 '반려견'");
+
+            // 사람 — '팔로잉만'(꽉 찬 옅은 분홍) · '모든 사람' (10-21 대표님)
+            P2PUserFilterPanel Pp() => UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
+            var p2pWas = UserFilterMode.All;
+            Do(() => { var p = Pp(); if (p != null) { p2pWas = p.GetCurrentFilterMode(); p.SetFilterModeExternal(UserFilterMode.FollowingOnly); } });
+            Sleep(0.2f);
+            Shot("filters_p2p_following");
+            Check(() => ChipLabel("P2PUserToggle") == "팔로잉만" || ChipLabel("P2PUserToggle") == "Following only", "팔로잉 → 칩 이름 '팔로잉만'");
+            Check(() => PinkChip("P2PUserToggle"), "'팔로잉만'은 꽉 찬 옅은 분홍 (글자는 어둡게)");
+            Do(() => Pp()?.SetFilterModeExternal(UserFilterMode.All));
+            Sleep(0.2f);
+            Shot("filters_p2p_all");
+            Check(() => ChipLabel("P2PUserToggle") == "모든 사람" || ChipLabel("P2PUserToggle") == "Everyone", "전체 → 칩 이름 '모든 사람'");
+            Check(() => !PinkChip("P2PUserToggle"), "'모든 사람'은 은은한 분홍 (꽉 찬 칸 아님)");
+            Do(() => Pp()?.SetFilterModeExternal(p2pWas));
+            Check(() => SoundOnAll("ListPanel", "ModeSeg0926"), "'목록|지도|설정' 탭에 누름 소리 (10-21)");
 
             // 3D — 끄면 어둡게 · 켜면 흰색
             Do(() => ClickToggle("3DObjectToggle"));
@@ -6034,6 +6193,30 @@ namespace Redesign0926
         private static float ChipHeight(string name) { var c = Chip(name); return c != null ? c.rect.height : -1f; }
         private static float TabH() { var m = Modes(); var t = m != null ? m.transform.Find("TabList") as RectTransform : null; return t != null ? t.rect.height : -1f; }
         private static bool WhiteChip(string name) { var b = Chip(name)?.GetComponent<Image>(); return b != null && b.color.a > 0.9f && b.color.r > 0.85f && b.color.g > 0.85f && b.color.b > 0.85f; }
+        private static bool PinkChip(string name)
+        {
+            var b = Chip(name)?.GetComponent<Image>();
+            var t = Chip(name)?.Find("Label")?.GetComponent<Text>();
+            return b != null && t != null && b.color.a > 0.9f && b.color.r > 0.95f && b.color.g < 0.9f && b.color.b > 0.8f && t.color.r < 0.3f;
+        }
+        // 그 아래 이 이름들의 묶음 속 버튼이 모두 누름 소리(UITouchForwarder)를 내나
+        private static bool SoundOnAll(string rootPath, params string[] names)
+        {
+            var root = Find(rootPath);
+            if (root == null) { log.Add("  없음 " + rootPath); return false; }
+            int n = 0;
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (Array.IndexOf(names, t.name) < 0) continue;
+                foreach (var b in t.GetComponentsInChildren<Button>(true))
+                {
+                    if (b.GetComponent<UITouchForwarder>() == null) { log.Add("  소리 없음 " + t.name + "/" + b.name); return false; }
+                    n++;
+                }
+            }
+            log.Add("  누름 소리 " + n + "개 (" + string.Join("·", names) + ")");
+            return n > 0;
+        }
         private static bool NoOldLongPress()
         {
             foreach (var c in UnityEngine.Object.FindObjectsByType<R0926FilterChip>())
@@ -6270,7 +6453,7 @@ namespace Redesign0926
             {
                 if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
-                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; }   // 팔로우·검색·프로필 시험 서버도
+                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; }   // 팔로우·검색·프로필 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
                 if (running) RestoreWoopangPrefs();   // WOOPANG 줄 삭제 시험이 덜어 둔 저장값 (시험 도중 플레이를 끈 경우)
                 RestoreGameViewSize();   // 가로 시험이 중간에 끊겨도 게임 창 크기는 원래대로
@@ -6284,7 +6467,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "searchfollow")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow")) StashLogin();
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     MainViewToSimulator();
                     EditorApplication.isPlaying = true;

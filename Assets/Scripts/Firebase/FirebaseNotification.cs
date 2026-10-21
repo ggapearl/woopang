@@ -79,6 +79,13 @@ public class FirebaseNotification : MonoBehaviour
 {
     public static FirebaseNotification Instance;
 
+#if UNITY_EDITOR
+    public static string EditorBase;   // 플레이 시험 — 로그인·로그아웃 때 푸시 토큰 등록·해제를 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
+    private static string Api(string url) => string.IsNullOrEmpty(EditorBase) ? url : EditorBase + url.Substring(ApiConfig.MAIN_SERVER.Length);
+#else
+    private static string Api(string url) => url;
+#endif
+
     [Header("UI References")]
     [Tooltip("안읽은 알림 인디케이터 (선택사항)")]
     public Image UnreadIndicatorIcon;
@@ -2035,7 +2042,7 @@ public class FirebaseNotification : MonoBehaviour
             form.AddField("location_consent", "false");
         }
 
-        UnityWebRequest request = UnityWebRequest.Post(ApiConfig.REGISTER_TOKEN, form);
+        UnityWebRequest request = UnityWebRequest.Post(Api(ApiConfig.REGISTER_TOKEN), form);
         request.timeout = 10;
 
         yield return request.SendWebRequest();
@@ -2052,7 +2059,7 @@ public class FirebaseNotification : MonoBehaviour
             form.AddField("user_id", userId);
         }
 
-        string unregisterUrl = ApiConfig.MAIN_SERVER + "/unregister-user-token";
+        string unregisterUrl = Api(ApiConfig.MAIN_SERVER + "/unregister-user-token");
         UnityWebRequest request = UnityWebRequest.Post(unregisterUrl, form);
         request.timeout = 10;
 

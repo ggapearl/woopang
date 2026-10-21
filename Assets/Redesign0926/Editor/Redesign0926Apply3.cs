@@ -78,6 +78,7 @@ namespace Redesign0926
                 b.targetGraphic = tabs[i];
                 ResetListeners(b);
                 if (swipe != null) UnityEventTools.AddIntPersistentListener(b.onClick, swipe.SwitchToPanel, i);
+                Ensure<UITouchForwarder>(tab);   // 누름 소리 (10-21 대표님 「'3D모델 추가' 등을 눌러도 효과음이 안 난다」)
             }
             var segState = Ensure<R0926SegmentState>(seg);
             var sso = new SerializedObject(segState);
@@ -338,6 +339,7 @@ namespace Redesign0926
                 var b = Ensure<Button>(chip);
                 b.targetGraphic = body;
                 UnityEventTools.AddIntPersistentListener(b.onClick, chips.Select, i);
+                Ensure<UITouchForwarder>(chip);   // 누름 소리 — 다른 버튼과 같은 기본 소리 (10-21)
                 bodies.Add(body); labels.Add(t);
             }
             var so = new SerializedObject(chips);
