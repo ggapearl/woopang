@@ -5491,9 +5491,18 @@ namespace Redesign0926
         // 시작화면이 도는 동안 무거운 프레임과 그 원인 (프로파일러는 플레이 직전에 켜 둠)
         private static void PlanSplashProf()
         {
-            Wait(() => { Redesign0926SplashProf.Analyze(); return !BootOverlay.Showing; }, 30f, "시작화면 끝");
+            int fpsDuring = -1;
+            Wait(() => { Redesign0926SplashProf.Analyze(); if (BootOverlay.Showing) fpsDuring = Application.targetFrameRate; return !BootOverlay.Showing; }, 30f, "시작화면 끝");
             Sleep(0.5f);
-            Do(() => { Redesign0926SplashProf.Analyze(); Redesign0926SplashProf.Stop(); Redesign0926SplashProf.Report(log); });
+            Do(() =>
+            {
+                Redesign0926SplashProf.Analyze(); Redesign0926SplashProf.Stop(); Redesign0926SplashProf.Report(log);
+                var s = UnityEngine.Object.FindAnyObjectByType<R0926Splash>(FindObjectsInactive.Include);
+                var f = typeof(R0926Splash).GetField("heldFor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                log.Add("  렌즈 출발까지 " + (s != null && f != null ? ((float)f.GetValue(s)).ToString("0.00") + "초" : "?")
+                    + " · 시작화면 동안 fps " + fpsDuring + " · 끝난 뒤 fps " + Application.targetFrameRate + " (설정 " + R0926FrameRate.Fps + ")");
+            });
+            Check(() => fpsDuring == 60 && Application.targetFrameRate == R0926FrameRate.Fps, "시작화면 동안만 60fps, 끝나면 설정값으로");
         }
 
         // 스토어용 하늘 날씨 — 날씨판만 또렷하게 (인디케이터·주소줄은 숨김: 주소줄엔 에디터 위치의 정확한 좌표가 찍힌다)

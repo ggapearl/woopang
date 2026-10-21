@@ -69,6 +69,9 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     private bool started;
     private int calmFrames;
     private float waitedStart;
+    private float holdFrom;
+    private int holdFrames;
+    private float heldFor;           // 렌즈가 출발하기까지 실제로 기다린 시간 (시험용 기록)
 
     private void OnEnable()
     {
@@ -82,21 +85,37 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         started = false;
         calmFrames = 0;
         waitedStart = 0f;
+        holdFrom = 0f;
+        holdFrames = 0;
+        heldFor = 0f;
         Pose(0f);
     }
 
-    private void OnDisable() => BootOverlay.Showing = false;
+    private void OnDisable()
+    {
+        BootOverlay.Showing = false;
+        if (Application.isPlaying) R0926FrameRate.Apply();   // 설정에서 고른 30/60 으로 되돌린다
+    }
 
     private void Update()
     {
         float dt = Time.unscaledDeltaTime;
+        // 렌즈가 매끄럽게 — 시작화면 동안만 60fps (기본 30fps 면 렌즈가 뚝뚝 넘어갔다). 끝나면 설정값으로
+        if (Application.targetFrameRate != 60) Application.targetFrameRate = 60;
         if (!started)
         {
             // 앱이 막 켜진 몇 프레임은 초기화(파이어베이스·장소 캐시 읽기)로 무겁다 — 그동안은 우주 배경과 별만 두고,
-            // 화면이 고르게 돌기 시작하면(또는 1.2초가 지나면) 렌즈를 움직인다. 예전엔 그 멈칫에 렌즈가 끊겨 보였다
-            waitedStart += dt;
-            calmFrames = dt < 0.034f ? calmFrames + 1 : 0;
-            if (calmFrames < 4 && waitedStart < 1.2f) { Pose(0f); return; }
+            // 화면이 고르게 돌기 시작하면(또는 0.9초가 지나면) 렌즈를 움직인다.
+            // 예전엔 0.034초로 재서 30fps(0.033초) 기기는 조금만 흔들려도 다시 세느라 늘 1.2초를 다 기다렸다 (10-21 「처음에 살짝 딜레이」)
+            // 한 프레임은 0.1초까지만 센다 — 첫 프레임 dt 에는 앱 로딩 시간이 통째로 들어 있어 기다리지 않고 바로 출발해 버렸다
+            // (그래도 아주 느린 기기에서 한없이 기다리지 않게 실제 시각 2초면 출발)
+            // 첫 화면을 그리는 멈춤(셰이더·그림 올리기)은 세지 않는다 — 두 번째 프레임부터 잰다
+            float now = Time.realtimeSinceStartup;
+            if (++holdFrames <= 2) { holdFrom = now; Pose(0f); return; }
+            waitedStart += Mathf.Min(dt, 0.1f);
+            calmFrames = dt < 1.6f / 60f ? calmFrames + 1 : 0;
+            if (calmFrames < 6 && waitedStart < 0.9f && now - holdFrom < 2f) { Pose(0f); return; }
+            heldFor = now - holdFrom;
             started = true;
         }
         t += Mathf.Min(dt, 0.05f);   // 첫 프레임 로딩 멈춤이 애니메이션을 건너뛰지 않게
