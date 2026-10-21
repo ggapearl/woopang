@@ -19,6 +19,7 @@ public class ModelUploadManager : MonoBehaviour
     [Header("File Selection")]
     [SerializeField] private Button selectFileButton;
     [SerializeField] private Button selectedFileButton;
+    [SerializeField] private Text fileCaption;   // 파일 칸 아래 '(glb,gltf,fbx,obj)' — 고르면 파일 이름 (Redesign0926Apply3 가 연결)
     [SerializeField] private Button uploadButton;
 
     [Header("Photo Selection")]
@@ -43,6 +44,9 @@ public class ModelUploadManager : MonoBehaviour
     [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);    // 핑크색
     [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);      // 초록색
     [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f);   // 보라색 (공공화장실)
+    [SerializeField] private Color categoryColorSport = new Color(0.95f, 0.45f, 0.25f, 1f);    // 주황색 (스포츠)
+    [SerializeField] private Color categoryColorLandmark = new Color(0.2f, 0.7f, 0.9f, 1f);    // 하늘색 (랜드마크)
+    [SerializeField] private Color categoryColorEtc = new Color(0.6f, 0.6f, 0.6f, 1f);        // 회색 (기타)
 
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
@@ -68,12 +72,17 @@ public class ModelUploadManager : MonoBehaviour
     private string instagramID;
     private bool showInstagram;
     private Vector3 gpsData = Vector3.zero;
-    // 카테고리 순환 (none → shop → food → cafe → park → etc → none)
-    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet" };
+    // 카테고리 순환 — 장소 추가와 같은 여덟 가지 (10-21 대표님 「'장소추가' 탭처럼 동일하게」)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
 
     private bool isProcessing = false;
+    // 고르기 창의 답을 기다리는 표 — 답을 잃으면(창이 못 뜸·앱 전환) 칸을 다시 눌러 푼다 (10-21)
+    private readonly R0926PickerWait pick = new R0926PickerWait();
+    private Coroutine locationRoutine;
+    private string fileCaptionDefault;
+    private Color fileCaptionColor;
     // 중복 방지 키 — 같은 내용을 다시 보내면(실패·시간 초과 뒤) 같은 값, 내용이 바뀌거나 성공·초기화 뒤엔 새 값
     private readonly UploadKey uploadKey = new UploadKey();
     private const int MAX_SUB_PHOTOS = 10;
@@ -96,7 +105,7 @@ public class ModelUploadManager : MonoBehaviour
         InitializeComponents();
 
 #if !UNITY_EDITOR
-        StartCoroutine(InitializeLocationService());
+        StartLocation();
 #endif
     }
 
@@ -116,11 +125,19 @@ public class ModelUploadManager : MonoBehaviour
         if (photoLoading == null && subPhotosButton != null)
             photoLoading = subPhotosButton.transform.parent.GetComponent<R0926PhotoLoading>();
         if (busy == null) busy = FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
+        if (fileCaption == null && selectFileButton != null)
+        {
+            Transform cap = selectFileButton.transform.parent.Find("glb_gltf_fbx_obj");
+            if (cap != null) fileCaption = cap.GetComponent<Text>();
+        }
     }
 
     private void InitializeComponents()
     {
         AutoConnectFields();
+
+        // 파일 칸 처음 상태를 맨 먼저 — 아래 어디서 멈춰도 체크 칸이 남지 않게 (10-21)
+        ResetFileSelection();
 
         // AREarthManager 자동 연결 (Inspector 미연결 시)
         if (earthManager == null)
@@ -200,10 +217,6 @@ public class ModelUploadManager : MonoBehaviour
 
         if (warningObj != null) warningObj.SetActive(false);
         if (loadingPanel != null) loadingPanel.SetActive(false);
-
-        // 파일 선택 버튼 초기 상태 설정
-        if (selectFileButton != null) selectFileButton.gameObject.SetActive(true);
-        if (selectedFileButton != null) selectedFileButton.gameObject.SetActive(false);
 
         if (locationInput != null)
         {
@@ -378,16 +391,21 @@ public class ModelUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator SelectSubPhotos()
     {
-        if (isProcessing) yield break;
+        if (!PickerFree()) yield break;
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Gallery)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
         isProcessing = true;
 
         SubLoading(1);   // 고르는 동안 한 칸 — 몇 장인지는 고른 뒤에 안다
         bool isLoading = true;
+        bool answered = false;
+        int t = pick.Begin(R0926PickerWait.Source.Gallery);
 
         try
         {
             NativeGallery.GetImagesFromGallery((paths) =>
             {
+                if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
+                answered = true;
                 if (paths != null && paths.Length > 0)
                 {
                     // 남은 칸보다 많이 골라도 들어가는 만큼은 넣는다 — 넘친 장수는 LoadSubPhotosWithFallback 가 알린다
@@ -403,10 +421,14 @@ public class ModelUploadManager : MonoBehaviour
         catch (System.Exception e)
         {
             Debug.LogError($"[ModelUploadManager] NativeGallery 호출 오류: {e}");
+            pick.End(t);
+            answered = true;
             ShowWarning(GetLocalizedText("photo_selection_failed"));
             isLoading = false;
         }
 
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered) yield break;   // 표를 버렸다 — 정리는 버린 쪽(PickerFree)이 했다
         yield return new WaitUntil(() => !isLoading);
         SubLoading(0);
         UpdateSubPhotoGrid();
@@ -477,6 +499,22 @@ public class ModelUploadManager : MonoBehaviour
         onComplete?.Invoke();
     }
 
+    // 칸을 눌렀을 때 — 처리 중이면 그대로 둔다. 단 고르기 창의 답이 끝내 안 온 것이면(창이 못 떴거나 앱 전환으로 잃음)
+    // 기다림을 버리고 새로 연다. 예전엔 답 하나를 잃으면 앱을 다시 켤 때까지 칸이 아무 반응이 없었다 (10-21)
+    private bool PickerFree()
+    {
+        if (!isProcessing) return true;
+        if (!pick.Waiting) return false;   // 사진·파일을 읽거나 올리는 중
+        if (!pick.TryAbandon())
+        {
+            ShowWarning(R0926PickerWait.BusyText);
+            return false;
+        }
+        SubLoading(0);
+        isProcessing = false;
+        return true;
+    }
+
     private void SubLoading(int count)
     {
         if (photoLoading != null) photoLoading.SetSub(count);
@@ -498,7 +536,7 @@ public class ModelUploadManager : MonoBehaviour
     }
 
     // ============================================================
-    // 카테고리 토글 — 누를 때마다 순환 (none → shop → food → cafe → park → etc → none)
+    // 카테고리 토글 — 누를 때마다 순환 (none → shop → … → etc → none)
     // ============================================================
 
     private void OnCategoryToggleChanged(bool value)
@@ -541,10 +579,10 @@ public class ModelUploadManager : MonoBehaviour
 
         if (categoryToggleLabel != null)
         {
-            if (string.IsNullOrEmpty(selectedCategory))
-                categoryToggleLabel.text = LocalizationManager.Instance.GetText("category_select");
-            else
-                categoryToggleLabel.text = LocalizationManager.Instance.GetText("category_" + selectedCategory);
+            // 시작 순서에 따라 아직 없을 수 있다 — 여기서 멈추면 그 뒤 초기화(사진 칸 등)를 못 했다 (10-21)
+            var lm = LocalizationManager.Instance;
+            if (lm != null)
+                categoryToggleLabel.text = lm.GetText(string.IsNullOrEmpty(selectedCategory) ? "category_select" : "category_" + selectedCategory);
 
             categoryToggleLabel.color = string.IsNullOrEmpty(selectedCategory) ? Color.white : bgColor;
         }
@@ -559,6 +597,9 @@ public class ModelUploadManager : MonoBehaviour
             case "cafe": return categoryColorCafe;
             case "park": return categoryColorPark;
             case "toilet": return categoryColorToilet;
+            case "sport": return categoryColorSport;
+            case "landmark": return categoryColorLandmark;
+            case "etc": return categoryColorEtc;
             default: return Color.white;
         }
     }
@@ -604,7 +645,7 @@ public class ModelUploadManager : MonoBehaviour
     {
         if (uploadPage != null) uploadPage.SetActive(true);
         if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
-        StartCoroutine(InitializeLocationService());
+        StartLocation();
     }
 
     public void HideUploadPage()
@@ -619,6 +660,7 @@ public class ModelUploadManager : MonoBehaviour
 
     private void SelectModelFile()
     {
+        if (!PickerFree()) return;
 #if UNITY_EDITOR
         string path = UnityEditor.EditorUtility.OpenFilePanel(
             "3D Model File Selection",
@@ -652,58 +694,52 @@ public class ModelUploadManager : MonoBehaviour
             }
         }
 
-        bool isDone = false;
-        string selectedPath = null;
-        
         // Android에서 더 포괄적인 MIME 타입 사용
-        NativeFilePicker.PickFile((path) =>
-        {
-            selectedPath = path;
-            isDone = true;
-        }, new string[] { 
-            "model/gltf-binary", 
-            "model/gltf+json", 
+        yield return PickModelFile(new string[] {
+            "model/gltf-binary",
+            "model/gltf+json",
             "application/octet-stream",
             "*/*"  // 모든 파일 타입 허용
         });
-
-        yield return new WaitUntil(() => isDone);
-
-        if (selectedPath != null)
-        {
-            ProcessSelectedFile(selectedPath);
-        }
     }
 #endif
 
 #if UNITY_IOS
     IEnumerator OpenIOSFilePicker()
     {
-
-        bool isDone = false;
-        string selectedPath = null;
-        
         // iOS에서 더 포괄적인 UTI 사용
-        NativeFilePicker.PickFile((path) =>
-        {
-            selectedPath = path;
-            isDone = true;
-        }, new string[] { 
+        yield return PickModelFile(new string[] {
             "com.khronos.glb",           // GLB 파일
-            "org.khronos.gltf",          // GLTF 파일  
+            "org.khronos.gltf",          // GLTF 파일
             "com.autodesk.fbx",          // FBX 파일
             "com.wavefront.obj",         // OBJ 파일
             "public.data",               // 일반 데이터 파일
             "public.item",               // 모든 아이템
             "public.content"             // 모든 콘텐츠
         });
+    }
+#endif
 
-        yield return new WaitUntil(() => isDone);
-
-        if (selectedPath != null)
+#if UNITY_ANDROID || UNITY_IOS
+    // 파일 고르기 창을 열고 답을 기다린다 — 답을 잃으면(창이 못 뜸·앱 전환) 파일 칸을 다시 눌러 푼다 (10-21)
+    private IEnumerator PickModelFile(string[] types)
+    {
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.File)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
+        isProcessing = true;
+        bool answered = false;
+        string selectedPath = null;
+        int t = pick.Begin(R0926PickerWait.Source.File);
+        NativeFilePicker.PickFile(path =>
         {
-            ProcessSelectedFile(selectedPath);
-        }
+            if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
+            selectedPath = path;
+            answered = true;
+        }, types);
+
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered) yield break;   // 표를 버렸다 — 정리는 버린 쪽(PickerFree)이 했다
+        isProcessing = false;
+        if (!string.IsNullOrEmpty(selectedPath)) ProcessSelectedFile(selectedPath);
     }
 #endif
 
@@ -746,9 +782,8 @@ public class ModelUploadManager : MonoBehaviour
                 return;
             }
 
-            // 파일 선택 완료 시 UI 상태 변경
-            if (selectFileButton != null) selectFileButton.gameObject.SetActive(false);
-            if (selectedFileButton != null) selectedFileButton.gameObject.SetActive(true);
+            // 고른 파일은 파일 칸 아래 글자로 알린다 — 예전엔 연두 체크 칸으로 바꿨는데 무엇을 골랐는지 안 보였다 (10-21)
+            ShowFileName(fileName);
 
             processSuccess = true;
         }
@@ -773,8 +808,30 @@ public class ModelUploadManager : MonoBehaviour
 
         if (selectFileButton != null) selectFileButton.gameObject.SetActive(true);
         if (selectedFileButton != null) selectedFileButton.gameObject.SetActive(false);
+        ShowFileName(null);
     }
 
+    // 파일 칸 아래 글자 — 고른 파일 이름(밝게) / 안 골랐으면 원래 '(glb,gltf,fbx,obj)'
+    private void ShowFileName(string fileName)
+    {
+        if (fileCaption == null) return;
+        if (fileCaptionDefault == null)
+        {
+            fileCaptionDefault = fileCaption.text;
+            fileCaptionColor = fileCaption.color;
+        }
+        bool picked = !string.IsNullOrEmpty(fileName);
+        // 칸 폭(한글 16자 남짓)을 넘으면 가운데를 줄인다 — 확장자는 남긴다
+        if (picked && fileName.Length > 16)
+        {
+            string ext = Path.GetExtension(fileName);
+            fileName = fileName.Substring(0, Mathf.Max(1, 15 - ext.Length)) + "…" + ext;
+        }
+        fileCaption.text = picked ? fileName : fileCaptionDefault;
+        fileCaption.color = picked ? Color.white : fileCaptionColor;
+    }
+
+    // '초기화' — 추가 사진에 고른 모델 파일까지 비운다 (10-21 대표님 「초기화를 누르면 서브사진 뿐 아니라 메인까지」)
     private void ResetSubPhotos()
     {
         foreach (var photo in subPhotos)
@@ -783,7 +840,8 @@ public class ModelUploadManager : MonoBehaviour
         }
         subPhotos.Clear();
         UpdateSubPhotoGrid();
-        ShowWarning(GetLocalizedText("sub_photos_reset"));
+        ResetFileSelection();
+        ShowWarning(R0926LocalizedText.Say("파일과 사진이 모두 초기화되었습니다!", "File and photos have been reset!", "ファイルと写真をリセットしました！", "已重置文件和照片！", "¡Se restablecieron el archivo y las fotos!"));
         CancelInvoke("HideWarning");
         Invoke("HideWarning", 2f);
     }
@@ -825,48 +883,45 @@ public class ModelUploadManager : MonoBehaviour
 
     #region Location Services
 
-    private IEnumerator InitializeLocationService()
+    // 위치 읽기 루프는 하나만 — 예전엔 앱으로 돌아올 때마다(파일·사진 고르기 포함)·추가 창을 열 때마다 루프가 하나씩 더 붙었고,
+    // 위치가 잠깐 꺼질 때마다 루프마다 새 루프를 낳아 갈수록 늘었다 (10-21)
+    private void StartLocation()
     {
-        if (!Input.location.isEnabledByUser)
-        {
-            UpdateLocationDisplay();
-            yield break;
-        }
-
-        Input.location.Start();
-        int maxWait = 10; // 최대 10초 대기
-        while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
-        {
-            yield return new WaitForSeconds(1);
-            maxWait--;
-        }
-
-        if (Input.location.status == LocationServiceStatus.Failed)
-        {
-            Debug.LogError("위치 서비스 초기화 실패!");
-            UpdateLocationDisplay();
-            yield break;
-        }
-        else
-        {
-            UpdateLocationDisplay();
-            StartCoroutine(UpdateLocation(10f));
-        }
+        if (locationRoutine != null) StopCoroutine(locationRoutine);
+        locationRoutine = StartCoroutine(InitializeLocationService());
     }
 
-    private IEnumerator UpdateLocation(float interval)
+    private IEnumerator InitializeLocationService()
     {
         while (true)
         {
-            if (Input.location.status == LocationServiceStatus.Running)
+            if (!Input.location.isEnabledByUser)
             {
                 UpdateLocationDisplay();
+                yield break;
             }
-            else
+
+            Input.location.Start();
+            int maxWait = 10; // 최대 10초 대기
+            while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
             {
-                StartCoroutine(InitializeLocationService());
+                yield return new WaitForSeconds(1);
+                maxWait--;
             }
-            yield return new WaitForSeconds(interval);
+
+            UpdateLocationDisplay();
+            if (Input.location.status == LocationServiceStatus.Failed)
+            {
+                Debug.LogError("위치 서비스 초기화 실패!");
+                yield break;
+            }
+
+            // 켜져 있는 동안 10초마다 다시 읽고, 꺼지면 처음부터 다시 켠다
+            do
+            {
+                yield return new WaitForSeconds(10f);
+                if (Input.location.status == LocationServiceStatus.Running) UpdateLocationDisplay();
+            } while (Input.location.status == LocationServiceStatus.Running);
         }
     }
 
@@ -921,7 +976,7 @@ public class ModelUploadManager : MonoBehaviour
 
     private IEnumerator ValidateAndSubmit()
     {
-        if (isProcessing) yield break;
+        if (!PickerFree()) yield break;
         isProcessing = true;
 
         // 0. 로그인 체크
@@ -1212,7 +1267,7 @@ public class ModelUploadManager : MonoBehaviour
     {
         ResetToInitialState();
         StopAllCoroutines();
-        StartCoroutine(InitializeLocationService());
+        StartLocation();
     }
 
     private void ResetToInitialState()
@@ -1535,10 +1590,11 @@ public class ModelUploadManager : MonoBehaviour
 
     private void OnApplicationFocus(bool hasFocus)
     {
+        R0926PickerWait.NoteFocus(hasFocus);
         if (hasFocus)
         {
             if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
-            StartCoroutine(InitializeLocationService());
+            StartLocation();
         }
     }
 

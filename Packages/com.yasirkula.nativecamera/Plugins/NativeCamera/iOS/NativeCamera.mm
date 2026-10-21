@@ -19,12 +19,24 @@ extern UIViewController* UnityGetGLViewController();
 + (char *)loadImageAtPath:(NSString *)path tempFilePath:(NSString *)tempFilePath maximumSize:(int)maximumSize;
 @end
 
+// WOOPANG 패치(2026-10-21): 루트 화면이 이미 무언가를 띄운 채면(남은 창·닫히는 중인 창) 루트에서 띄우기가 조용히 실패하고
+// 완료 블록이 불리지 않아 '띄우는 중'(state 1)이 영원히 남았다 → 그 뒤 모든 호출이 바로 null 로 끝나 창이 다시 뜨지 않았다.
+// 맨 위 화면에서 띄운다 (평소처럼 아무것도 안 띄운 상태면 루트 그대로)
+static UIViewController* NCTopViewController()
+{
+	UIViewController *vc = UnityGetGLViewController();
+	while( vc.presentedViewController != nil && !vc.presentedViewController.isBeingDismissed )
+		vc = vc.presentedViewController;
+	return vc;
+}
+
 @implementation UNativeCamera
 
 static NSString *pickedMediaSavePath;
 static UIImagePickerController *imagePicker;
 static int cameraMaxImageSize = -1;
 static int imagePickerState = 0; // 0 -> none, 1 -> showing, 2 -> finished
+static NSTimeInterval imagePickerShownAt = 0; // WOOPANG 패치 — 띄우라고 한 시각
 static BOOL recordingVideo = NO;
 static AVAudioSessionCategory unityAudioSessionCategory = AVAudioSessionCategoryAmbient;
 static NSUInteger unityAudioSessionCategoryOptions = 1;
@@ -130,7 +142,8 @@ static AVAudioSessionMode unityAudioSessionMode = AVAudioSessionModeDefault;
 	cameraMaxImageSize = maxImageSize;
 	
 	imagePickerState = 1;
-	[UnityGetGLViewController() presentViewController:imagePicker animated:YES completion:^{ imagePickerState = 0; }];
+	imagePickerShownAt = [[NSProcessInfo processInfo] systemUptime];
+	[NCTopViewController() presentViewController:imagePicker animated:YES completion:^{ imagePickerState = 0; }];
 }
 
 + (int)isCameraBusy
@@ -140,7 +153,11 @@ static AVAudioSessionMode unityAudioSessionMode = AVAudioSessionModeDefault;
 	
 	if( imagePicker != nil )
 	{
-		if( imagePickerState == 1 || [imagePicker presentingViewController] == UnityGetGLViewController() )
+		// WOOPANG 패치: 띄우라고 한 지 5초가 지나도 화면에 없으면 띄우기가 실패한 것 — '띄우는 중'을 풀어 C# 쪽이 취소로 받게 한다
+		if( imagePickerState == 1 && [imagePicker presentingViewController] == nil && [[NSProcessInfo processInfo] systemUptime] - imagePickerShownAt > 5.0 )
+			imagePickerState = 0;
+
+		if( imagePickerState == 1 || [imagePicker presentingViewController] != nil )
 			return 1;
 		
 		imagePicker = nil;

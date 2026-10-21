@@ -10,11 +10,23 @@ extern UIViewController* UnityGetGLViewController();
 + (char *)convertExtensionToUTI:(NSString *)extension;
 @end
 
+// WOOPANG 패치(2026-10-21): 루트 화면이 이미 무언가를 띄운 채면(남은 창·닫히는 중인 창) 루트에서 띄우기가 조용히 실패하고
+// 완료 블록이 불리지 않아 '띄우는 중'(state 1)이 영원히 남았다 → 그 뒤 모든 호출이 바로 null 로 끝나 창이 다시 뜨지 않았다.
+// 맨 위 화면에서 띄운다 (평소처럼 아무것도 안 띄운 상태면 루트 그대로)
+static UIViewController* NFPTopViewController()
+{
+	UIViewController *vc = UnityGetGLViewController();
+	while( vc.presentedViewController != nil && !vc.presentedViewController.isBeingDismissed )
+		vc = vc.presentedViewController;
+	return vc;
+}
+
 @implementation UNativeFilePicker
 
 static UIDocumentPickerViewController *filePicker;
 static BOOL pickingMultipleFiles;
 static int filePickerState = 0; // 0 -> none, 1 -> showing, 2 -> finished
+static NSTimeInterval filePickerShownAt = 0; // WOOPANG 패치 — 띄우라고 한 시각
 
 + (void)pickFiles:(BOOL)allowMultipleSelection withUTIs:(NSArray<NSString *> *)allowedUTIs
 {
@@ -30,8 +42,9 @@ static int filePickerState = 0; // 0 -> none, 1 -> showing, 2 -> finished
 	
 	pickingMultipleFiles = allowMultipleSelection;
 	filePickerState = 1;
-	
-	[UnityGetGLViewController() presentViewController:filePicker animated:NO completion:^{ filePickerState = 0; }];
+	filePickerShownAt = [[NSProcessInfo processInfo] systemUptime];
+
+	[NFPTopViewController() presentViewController:filePicker animated:NO completion:^{ filePickerState = 0; }];
 }
 
 + (void)exportFiles:(NSArray<NSURL *> *)paths
@@ -50,7 +63,8 @@ static int filePickerState = 0; // 0 -> none, 1 -> showing, 2 -> finished
 			filePicker.shouldShowFileExtensions = YES;
 		
 		filePickerState = 1;
-		[UnityGetGLViewController() presentViewController:filePicker animated:NO completion:^{ filePickerState = 0; }];
+		filePickerShownAt = [[NSProcessInfo processInfo] systemUptime];
+		[NFPTopViewController() presentViewController:filePicker animated:NO completion:^{ filePickerState = 0; }];
 	}
 }
 
@@ -69,7 +83,11 @@ static int filePickerState = 0; // 0 -> none, 1 -> showing, 2 -> finished
 	
 	if( filePicker != nil )
 	{
-		if( filePickerState == 1 || [filePicker presentingViewController] == UnityGetGLViewController() )
+		// WOOPANG 패치: 띄우라고 한 지 5초가 지나도 화면에 없으면 띄우기가 실패한 것 — '띄우는 중'을 풀어 C# 쪽이 취소로 받게 한다
+		if( filePickerState == 1 && [filePicker presentingViewController] == nil && [[NSProcessInfo processInfo] systemUptime] - filePickerShownAt > 5.0 )
+			filePickerState = 0;
+
+		if( filePickerState == 1 || [filePicker presentingViewController] != nil )
 			return 1;
 		else
 		{

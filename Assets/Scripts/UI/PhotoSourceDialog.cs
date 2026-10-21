@@ -29,6 +29,7 @@ public class PhotoSourceDialog : MonoBehaviour
     private CanvasGroup overlayCanvasGroup;
     private Coroutine animationCoroutine;
     private bool isAnimating;
+    private float animStartedAt;
 
     private void Awake()
     {
@@ -82,7 +83,7 @@ public class PhotoSourceDialog : MonoBehaviour
 
     public void Show(string title, Action onCamera, Action onGallery)
     {
-        if (isAnimating) return;
+        if (AnimatingNow()) return;
 
         onCameraSelected = onCamera;
         onGallerySelected = onGallery;
@@ -113,6 +114,7 @@ public class PhotoSourceDialog : MonoBehaviour
     private IEnumerator ShowAnimation()
     {
         isAnimating = true;
+        animStartedAt = Time.unscaledTime;
         float elapsed = 0f;
 
         // 초기 상태
@@ -152,6 +154,7 @@ public class PhotoSourceDialog : MonoBehaviour
     private IEnumerator HideAnimation(Action onComplete = null)
     {
         isAnimating = true;
+        animStartedAt = Time.unscaledTime;
         float elapsed = 0f;
 
         Vector2 startPos = Vector2.zero;
@@ -182,22 +185,39 @@ public class PhotoSourceDialog : MonoBehaviour
 
     private void OnCameraButtonClicked()
     {
-        if (isAnimating) return;
+        if (AnimatingNow()) return;
         var callback = onCameraSelected;
         Hide(() => callback?.Invoke());
     }
 
     private void OnGalleryButtonClicked()
     {
-        if (isAnimating) return;
+        if (AnimatingNow()) return;
         var callback = onGallerySelected;
         Hide(() => callback?.Invoke());
     }
 
     private void OnCancelButtonClicked()
     {
-        if (isAnimating) return;
+        if (AnimatingNow()) return;
         Hide();
+    }
+
+    // 움직임이 중간에 끊기면(코루틴이 멈추는 등) isAnimating 이 남아 시트가 다시는 안 떴다 — 움직일 시간이 한참 지났으면 버린다 (10-21)
+    private bool AnimatingNow()
+    {
+        if (isAnimating && Time.unscaledTime - animStartedAt > animationDuration + 1f) isAnimating = false;
+        return isAnimating;
+    }
+
+    private void OnDisable()
+    {
+        // 꺼지면 돌던 움직임 코루틴도 같이 끝난다 — 남은 표시·콜백을 지워 다음 Show 가 막히지 않게
+        isAnimating = false;
+        animationCoroutine = null;
+        onCameraSelected = null;
+        onGallerySelected = null;
+        if (dialogPanel != null && dialogPanel != gameObject) dialogPanel.SetActive(false);
     }
 
     private void Hide(Action onComplete = null)

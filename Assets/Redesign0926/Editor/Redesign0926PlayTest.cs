@@ -106,6 +106,7 @@ namespace Redesign0926
             else if (mode == "mapcoord") PlanMapCoord();
             else if (mode == "vwshot") PlanVwShot();
             else if (mode == "arprev") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanArPrev(); }
+            else if (mode == "pickers") PlanPickers();
             else if (mode == "photoload") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPhotoLoad(); }
             else if (mode == "crop") PlanCrop();
             else if (mode == "addcenter") PlanAddCenter();
@@ -2262,6 +2263,174 @@ namespace Redesign0926
         // 10-20: 생길 자리가 화면 밖이면 큐브 화살표의 2배인 화살표가 반짝이며 가리킨다 · 생성 중에 취소하면 큐브가 남지 않는다
         // E4 (10-20) 사진을 불러오는 동안 그 칸에 빈 칸+원호 — 대표 칸 · 추가 사진(실제 읽기 코루틴으로 한 장씩 바뀌는지) ·
         // 열 장이어도 칸이 줄어 자리 안에(예전엔 네 장을 넘으면 '이름' 칸을 덮었다) · 예전 알약(LoadingPanel)이 시트에 가리는지
+        // 추가 창의 사진·모델 파일 칸 — 눌렀을 때 그 칸이 실제로 맨 위에서 눌리는가 · 처리 중 표시가 남아 막고 있지 않은가
+        private static void PlanPickers()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            CubeUploadManager cum = null;
+            ModelUploadManager mum = null;
+            PhotoSourceDialog dlg = null;
+            SwipePanelController swipe = null;
+            Func<object, string, Button> btn = (o, f) => o == null ? null : o.GetType().GetField(f, F)?.GetValue(o) as Button;
+            Func<object, bool> busy = o => o != null && (bool)o.GetType().GetField("isProcessing", F).GetValue(o);
+            Func<bool> dlgAnim = () => dlg != null && (bool)typeof(PhotoSourceDialog).GetField("isAnimating", F).GetValue(dlg);
+            // 그 칸 가운데를 눌렀을 때 맨 위에 걸리는 것
+            Func<Button, string> top = b =>
+            {
+                if (b == null) return "버튼 없음";
+                if (!b.gameObject.activeInHierarchy) return b.name + " 꺼짐";
+                var r = ScreenRect((RectTransform)b.transform);
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = r.center }, hits);
+                if (hits.Count == 0) return b.name + " → 아무것도 안 걸림";
+                var h = hits[0].gameObject;
+                bool mine = h.transform == b.transform || h.transform.IsChildOf(b.transform);
+                var handler = UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(h);
+                return b.name + (mine ? " OK" : " ✗ 막힘: " + h.name + " (" + h.transform.parent?.name + ")") + " · 누르면 " + (handler != null ? handler.name : "없음")
+                    + " · 그 아래 " + string.Join(", ", hits.GetRange(1, Mathf.Min(3, hits.Count - 1)).ConvertAll(x => x.gameObject.name));
+            };
+            Func<Button, bool> topOk = b =>
+            {
+                if (b == null || !b.gameObject.activeInHierarchy) return false;
+                var r = ScreenRect((RectTransform)b.transform);
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = r.center }, hits);
+                if (hits.Count == 0) return false;
+                var handler = UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject);
+                return handler == b.gameObject;
+            };
+            Action<string> state = tag =>
+            {
+                log.Add("  [" + tag + "] 장소 처리중 " + busy(cum) + " · 3D 처리중 " + busy(mum) + " · 사진 시트 애니 " + dlgAnim()
+                    + " · 카드 " + (swipe != null ? swipe.GetCurrentPanel().ToString() : "?"));
+                log.Add("    장소: " + top(btn(cum, "mainPhotoButton")) + " | " + top(btn(cum, "subPhotosButton")) + " | " + top(btn(cum, "resetPhotosButton")));
+                log.Add("    3D: " + top(btn(mum, "selectFileButton")) + " | " + top(btn(mum, "selectedFileButton")) + " | " + top(btn(mum, "subPhotosButton")) + " | " + top(btn(mum, "resetPhotosButton")));
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() =>
+            {
+                cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+                mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                dlg = UnityEngine.Object.FindAnyObjectByType<PhotoSourceDialog>(FindObjectsInactive.Include);
+                swipe = UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Include);
+                log.Add("  관리자 수: 장소 " + UnityEngine.Object.FindObjectsByType<CubeUploadManager>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length
+                    + " · 3D " + UnityEngine.Object.FindObjectsByType<ModelUploadManager>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length
+                    + " · 사진 시트 " + UnityEngine.Object.FindObjectsByType<PhotoSourceDialog>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length);
+                state("장소 탭 처음");
+            });
+            Shot("pickers_place");
+            Check(() => topOk(btn(cum, "mainPhotoButton")) && topOk(btn(cum, "subPhotosButton")), "장소: 대표·추가 사진 칸이 맨 위에서 눌린다");
+            Do(() => btn(cum, "mainPhotoButton")?.onClick.Invoke());
+            Sleep(0.7f);
+            Check(() => Active("PhotoSourceDialog/DialogPanel"), "장소: 대표 사진 칸 → 사진 고르기 시트");
+            Do(() => Click("PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton/ClosePx0926"));
+            Sleep(0.8f);
+
+            Do(() => swipe.SwitchToPanel(1));
+            Sleep(1.2f);
+            Do(() => state("3D 탭"));
+            Shot("pickers_model");
+            Check(() => btn(mum, "selectFileButton") != null && btn(mum, "selectFileButton").gameObject.activeInHierarchy
+                        && !btn(mum, "selectedFileButton").gameObject.activeInHierarchy, "3D: 처음엔 파일 칸(체크 아님)");
+            Check(() => topOk(btn(mum, "selectFileButton")) && topOk(btn(mum, "subPhotosButton")), "3D: 파일·추가 사진 칸이 맨 위에서 눌린다");
+            Check(() => { var c = Find("UploadPage/Clip0926/UploadSheet0926/ModelUploadPage/Panel/Chips0926"); return c != null && c.childCount == 8; }, "3D: 분류 칩 8개(장소와 같게)");
+
+            // 파일을 고른 뒤 — 체크 칸 없이 칸 아래 글자가 파일 이름, 초기화하면 원래대로 (10-21)
+            string glb = null, capDefault = null;
+            Func<string> capText = () => (typeof(ModelUploadManager).GetField("fileCaption", F).GetValue(mum) as Text)?.text;
+            Do(() =>
+            {
+                capDefault = capText();
+                glb = System.IO.Path.Combine(Application.temporaryCachePath, "pk_test.glb");
+                System.IO.File.WriteAllBytes(glb, new byte[64]);
+                typeof(ModelUploadManager).GetMethod("ProcessSelectedFile", F).Invoke(mum, new object[] { glb });
+            });
+            Sleep(0.3f);
+            Do(() => log.Add("  [파일 고른 뒤] 칸 아래 글자 '" + capText() + "' · 체크 칸 켜짐 " + btn(mum, "selectedFileButton").gameObject.activeSelf));
+            Shot("pickers_model_file");
+            Check(() => btn(mum, "selectFileButton").gameObject.activeInHierarchy && !btn(mum, "selectedFileButton").gameObject.activeSelf
+                        && capText() == "pk_test.glb", "3D: 파일을 골라도 체크 칸 없이 칸 아래에 파일 이름");
+            Check(() => topOk(btn(mum, "selectFileButton")), "3D: 파일을 고른 뒤에도 파일 칸이 눌린다");
+            Do(() => btn(mum, "resetPhotosButton").onClick.Invoke());
+            Sleep(0.3f);
+            Check(() => typeof(ModelUploadManager).GetField("selectedFilePath", F).GetValue(mum) == null && !string.IsNullOrEmpty(capDefault) && capText() == capDefault,
+                "3D: 초기화하면 고른 파일도 비고 글자가 원래대로");
+            Do(() => { try { System.IO.File.Delete(glb); } catch { } });
+
+            // 파일 고르기 창의 답을 잃었을 때 — 다시 누르면 풀린다 (에디터에선 파일 칸이 모달 창을 띄우므로 칸 대신 PickerFree 를 직접)
+            Do(() =>
+            {
+                ((R0926PickerWait)typeof(ModelUploadManager).GetField("pick", F).GetValue(mum)).Begin(R0926PickerWait.Source.File);
+                typeof(ModelUploadManager).GetField("isProcessing", F).SetValue(mum, true);
+            });
+            Sleep(1.7f);
+            Check(() => (bool)typeof(ModelUploadManager).GetMethod("PickerFree", F).Invoke(mum, null) && !busy(mum), "3D: 답을 잃은 파일 고르기 → 다시 누르면 풀린다");
+
+            Do(() => swipe.SwitchToPanel(2));
+            Sleep(1.2f);
+            Do(() => swipe.SwitchToPanel(0));
+            Sleep(1.2f);
+            Do(() => state("보물찾기 다녀와서 장소 탭"));
+            Check(() => topOk(btn(cum, "mainPhotoButton")) && topOk(btn(cum, "subPhotosButton")), "장소: 다른 탭 다녀와도 사진 칸이 눌린다");
+            Do(() => btn(cum, "mainPhotoButton")?.onClick.Invoke());
+            Sleep(0.7f);
+            Check(() => Active("PhotoSourceDialog/DialogPanel"), "장소: 다시 눌러도 사진 고르기 시트");
+            Do(() => Click("PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton/ClosePx0926"));
+            Sleep(0.8f);
+
+            // 초기화 = 대표 사진까지 (10-21)
+            Do(() =>
+            {
+                var tex = new Texture2D(8, 8);
+                typeof(CubeUploadManager).GetField("mainPhoto", F).SetValue(cum, tex);
+                typeof(CubeUploadManager).GetMethod("SetMainSprite", F).Invoke(cum, new object[] { tex });
+                typeof(CubeUploadManager).GetMethod("SetMainPhotoUIState", F).Invoke(cum, new object[] { true });
+            });
+            Sleep(0.3f);
+            Func<bool> mainShown = () => ((Component)typeof(CubeUploadManager).GetField("mainPhotoDisplay", F).GetValue(cum)).gameObject.activeSelf;
+            Check(() => typeof(CubeUploadManager).GetField("mainPhoto", F).GetValue(cum) != null && mainShown(), "장소: (준비) 대표 사진을 넣었다");
+            Do(() => btn(cum, "resetPhotosButton").onClick.Invoke());
+            Sleep(0.3f);
+            Check(() => typeof(CubeUploadManager).GetField("mainPhoto", F).GetValue(cum) == null && !mainShown(), "장소: 초기화하면 대표 사진도 빈다");
+
+            // 고르기 창의 답을 잃었을 때 — 불러오는 칸이 떠 있어도 칸이 눌리고, 다시 누르면 풀려 사진 시트가 뜬다 (10-21)
+            Do(() =>
+            {
+                ((R0926PickerWait)typeof(CubeUploadManager).GetField("pick", F).GetValue(cum)).Begin(R0926PickerWait.Source.Gallery);
+                typeof(CubeUploadManager).GetField("isProcessing", F).SetValue(cum, true);
+                typeof(CubeUploadManager).GetMethod("MainLoading", F).Invoke(cum, new object[] { true });
+            });
+            Sleep(0.4f);
+            Do(() => state("답을 잃은 고르기"));
+            Shot("pickers_lost");
+            Check(() => topOk(btn(cum, "mainPhotoButton")), "장소: 불러오는 칸이 떠 있어도 대표 사진 칸이 눌린다");
+            Do(() => btn(cum, "mainPhotoButton")?.onClick.Invoke());   // 연 직후 — 아직은 답을 기다린다
+            Sleep(0.4f);
+            Check(() => busy(cum) && !Active("PhotoSourceDialog/DialogPanel"), "장소: 연 직후(1.5초 안)엔 기다린다");
+            Sleep(1.4f);
+            Do(() => btn(cum, "mainPhotoButton")?.onClick.Invoke());
+            Sleep(0.7f);
+            Do(() => state("다시 누른 뒤"));
+            Check(() => !busy(cum) && Active("PhotoSourceDialog/DialogPanel"), "장소: 답을 잃은 고르기 → 다시 누르면 풀리고 사진 시트");
+            Do(() => Click("PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton/ClosePx0926"));
+            Sleep(0.8f);
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+            // 닫았다 다시 열어도
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() => state("다시 연 장소 탭"));
+            Check(() => topOk(btn(cum, "mainPhotoButton")), "다시 연 추가 창: 대표 사진 칸이 눌린다");
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(0.8f);
+        }
+
         private static void PlanPhotoLoad()
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;

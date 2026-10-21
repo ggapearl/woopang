@@ -25,6 +25,17 @@ extern UIViewController* UnityGetGLViewController();
 + (char *)loadImageAtPath:(NSString *)path tempFilePath:(NSString *)tempFilePath maximumSize:(int)maximumSize;
 @end
 
+// WOOPANG 패치(2026-10-21): 루트 화면이 이미 무언가를 띄운 채면(남은 창·닫히는 중인 창) 루트에서 띄우기가 조용히 실패하고
+// 완료 블록이 불리지 않아 '띄우는 중'(state 1)이 영원히 남았다 → 그 뒤 모든 호출이 바로 null 로 끝나 창이 다시 뜨지 않았다.
+// 맨 위 화면에서 띄운다 (평소처럼 아무것도 안 띄운 상태면 루트 그대로)
+static UIViewController* NGTopViewController()
+{
+	UIViewController *vc = UnityGetGLViewController();
+	while( vc.presentedViewController != nil && !vc.presentedViewController.isBeingDismissed )
+		vc = vc.presentedViewController;
+	return vc;
+}
+
 @implementation UNativeGallery
 
 static NSString *pickedMediaSavePath;
@@ -32,6 +43,7 @@ static UIImagePickerController *imagePicker;
 API_AVAILABLE(ios(14))
 static PHPickerViewController *imagePickerNew;
 static int imagePickerState = 0; // 0 -> none, 1 -> showing (always in this state on iPad), 2 -> finished
+static NSTimeInterval imagePickerShownAt = 0; // WOOPANG 패치 — 띄우라고 한 시각
 static BOOL simpleMediaPickMode;
 static BOOL pickingMultipleFiles = NO;
 
@@ -306,6 +318,7 @@ static BOOL pickingMultipleFiles = NO;
 {
 	pickedMediaSavePath = mediaSavePath;
 	imagePickerState = 1;
+	imagePickerShownAt = [[NSProcessInfo processInfo] systemUptime];
 	simpleMediaPickMode = permissionFreeMode && CHECK_IOS_VERSION( @"11.0" );
 	
 	if( @available(iOS 14.0, *) )
@@ -329,7 +342,7 @@ static BOOL pickingMultipleFiles = NO;
 		
 		imagePickerNew = [[PHPickerViewController alloc] initWithConfiguration:config];
 		imagePickerNew.delegate = (id) self;
-		[UnityGetGLViewController() presentViewController:imagePickerNew animated:YES completion:^{ imagePickerState = 0; }];
+		[NGTopViewController() presentViewController:imagePickerNew animated:YES completion:^{ imagePickerState = 0; }];
 	}
 	else
 	{
@@ -356,7 +369,7 @@ static BOOL pickingMultipleFiles = NO;
 			imagePicker.videoExportPreset = AVAssetExportPresetPassthrough;
 		}
 		
-		UIViewController *rootViewController = UnityGetGLViewController();
+		UIViewController *rootViewController = NGTopViewController();
 		if( UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ) // iPad
 		{
 			imagePicker.modalPresentationStyle = UIModalPresentationPopover;
@@ -377,10 +390,24 @@ static BOOL pickingMultipleFiles = NO;
 {
 	if( imagePickerState == 2 )
 		return 1;
-	
+
+	// WOOPANG 패치: 띄우라고 한 지 5초가 지나도 화면에 없으면 띄우기가 실패한 것 — '띄우는 중'을 풀어 C# 쪽이 취소로 받게 한다
+	if( imagePickerState == 1 && [[NSProcessInfo processInfo] systemUptime] - imagePickerShownAt > 5.0 )
+	{
+		UIViewController *shown = imagePicker;
+		if( shown == nil )
+		{
+			if( @available(iOS 14.0, *) )
+				shown = imagePickerNew;
+		}
+
+		if( shown != nil && [shown presentingViewController] == nil )
+			imagePickerState = 0;
+	}
+
 	if( imagePicker != nil )
 	{
-		if( imagePickerState == 1 || [imagePicker presentingViewController] == UnityGetGLViewController() )
+		if( imagePickerState == 1 || [imagePicker presentingViewController] != nil )
 			return 1;
 		else
 		{
@@ -392,7 +419,7 @@ static BOOL pickingMultipleFiles = NO;
 	{
 		if( imagePickerNew == nil )
 			return 0;
-		else if( imagePickerState == 1 || [imagePickerNew presentingViewController] == UnityGetGLViewController() )
+		else if( imagePickerState == 1 || [imagePickerNew presentingViewController] != nil )
 			return 1;
 		else
 		{

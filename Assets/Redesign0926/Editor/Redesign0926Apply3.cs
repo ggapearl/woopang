@@ -130,14 +130,25 @@ namespace Redesign0926
                 ct.horizontalOverflow = HorizontalWrapMode.Overflow;
                 At(cap.gameObject, UP, photoY - tile + 76, tile, 54);
                 cap.SetAsLastSibling();
+                // 고른 파일 이름을 이 글자에 띄운다 (10-21 — 예전 연두 체크 칸 대신)
+                var mgr = isModel ? FindUploadManager(card, true) : null;
+                if (mgr != null)
+                {
+                    var mso = new SerializedObject(mgr);
+                    mso.FindProperty("fileCaption").objectReferenceValue = ct;
+                    mso.ApplyModifiedPropertiesWithoutUndo();
+                }
             }
 
             foreach (var n in isModel ? new[] { "Select_Button", "Selected_File_Button" } : new[] { "MainPhoto_Button" })
             {
                 var b = P(n);
                 if (b == null) continue;
-                Tile(b.gameObject, UP, photoY, tile, tile, n == "Selected_File_Button" ? "r0926_i_check" : isModel ? "r0926_i_file" : "r0926_i_cam", 124);
+                Tile(b.gameObject, UP, photoY, tile, tile, isModel ? "r0926_i_file" : "r0926_i_cam", 124);
             }
+            // 파일을 고르면 바뀌어 보이던 연두 체크 칸은 쓰지 않는다 (10-21 대표님 「연두색 체크표시 왜 있지?」)
+            var pickedTile = P("Selected_File_Button");
+            if (pickedTile != null) pickedTile.gameObject.SetActive(false);
             var display = P("MainPhotoDisplay");
             if (display != null)
             {
@@ -229,8 +240,8 @@ namespace Redesign0926
             var catLabel = FindOrCreate(panel, "CatLabel0926");
             SectionLabelNew(catLabel, UP, catY, new[] { "분류", "Category", "分類", "分类", "Categoría" });
             var catToggle = P("CategoryToggle");
-            string[] values = isModel ? new[] { "", "shop", "food", "cafe", "park", "toilet" }
-                                      : new[] { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
+            // 3D 모델도 장소와 같은 여덟 가지 (10-21) — 매니저의 categoryValues 와 순서·개수가 같아야 칩이 맞는 분류를 누른다
+            string[] values = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
             if (catToggle != null)
             {
                 // 원래 순환 토글은 숨기고(동작은 칩이 대신 누른다) 칩으로 바로 고른다
@@ -405,7 +416,7 @@ namespace Redesign0926
             foreach (var g in go.GetComponentsInChildren<Graphic>(true))
                 if (g.gameObject != go && g.name != "Icon0926" && g.name != "TileBg0926") g.enabled = false;
             var ic = FindOrCreate(go.transform, "Icon0926");
-            Img(ic, Spr(icon), icon == "r0926_i_check" ? new Color(0.384f, 0.827f, 0.616f, 1f) : Soft, Image.Type.Simple).raycastTarget = false;
+            Img(ic, Spr(icon), Soft, Image.Type.Simple).raycastTarget = false;
             SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(iconSize, iconSize));
         }
 
@@ -451,7 +462,8 @@ namespace Redesign0926
         {
             var go = FindOrCreate(parent, name);
             var bg = Color.Lerp(new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Color.white, 0.07f);
-            Img(go, Spr("r0926_pill"), bg, Image.Type.Sliced, 64f / 34f).raycastTarget = true;
+            // 누름은 아래 칸으로 — 고르기 창의 답을 잃어 빈 칸이 남아도 칸을 다시 눌러 풀 수 있게 (10-21, 처리 중이면 칸이 알아서 무시한다)
+            Img(go, Spr("r0926_pill"), bg, Image.Type.Sliced, 64f / 34f).raycastTarget = false;
             Ensure<Mask>(go).showMaskGraphic = true;   // 빛 띠를 둥근 칸 안으로
             var sh = Ensure<ShimmerEffect>(go);
             var sso = new SerializedObject(sh);

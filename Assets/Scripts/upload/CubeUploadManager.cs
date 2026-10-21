@@ -88,6 +88,9 @@ public class CubeUploadManager : MonoBehaviour
     private string locationText;
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
+    // 고르기 창의 답을 기다리는 표 — 답을 잃으면(창이 못 뜸·앱 전환) 칸을 다시 눌러 푼다 (10-21)
+    private readonly R0926PickerWait pick = new R0926PickerWait();
+    private Coroutine locationRoutine;
     // 중복 방지 키 — 같은 내용을 다시 보내면(실패·시간 초과 뒤) 같은 값, 내용이 바뀌거나 성공·초기화 뒤엔 새 값
     private readonly UploadKey uploadKey = new UploadKey();
 
@@ -102,7 +105,7 @@ public class CubeUploadManager : MonoBehaviour
     {
         if (uploadPage != null) uploadPage.SetActive(true);
         if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
-        StartCoroutine(InitializeLocationService());
+        StartLocation();
 
         var modelManager = FindFirstObjectByType<ModelUploadManager>();
         if (modelManager != null)
@@ -138,7 +141,7 @@ public class CubeUploadManager : MonoBehaviour
         InitializeComponents();
 
 #if !UNITY_EDITOR
-        StartCoroutine(InitializeLocationService());
+        StartLocation();
 #endif
     }
 
@@ -223,10 +226,7 @@ public class CubeUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator SelectAndCropMainPhoto()
     {
-        if (isProcessing)
-        {
-            yield break;
-        }
+        if (!PickerFree()) yield break;
 
         // PhotoSourceDialog 표시
         if (photoSourceDialog != null)
@@ -252,6 +252,7 @@ public class CubeUploadManager : MonoBehaviour
     private IEnumerator CaptureMainPhotoFromCamera()
     {
         if (isProcessing) yield break;
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Camera)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
         isProcessing = true;
 
         MainLoading(true);
@@ -260,8 +261,10 @@ public class CubeUploadManager : MonoBehaviour
         bool permissionDenied = false;
 
         // NativeCamera로 사진 촬영 (내부적으로 권한 처리)
+        int t = pick.Begin(R0926PickerWait.Source.Camera);
         NativeCamera.TakePicture((path) =>
         {
+            if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
             if (string.IsNullOrEmpty(path))
             {
                 // 권한 거부 또는 취소
@@ -271,7 +274,8 @@ public class CubeUploadManager : MonoBehaviour
             isLoading = false;
         }, maxSize: 2048);
 
-        yield return new WaitUntil(() => !isLoading);
+        yield return new WaitUntil(() => !isLoading || !pick.Holds(t));
+        if (isLoading) yield break;   // 표를 버렸다 — 정리는 버린 쪽(PickerFree)이 했다
 
         if (permissionDenied)
         {
@@ -302,15 +306,20 @@ public class CubeUploadManager : MonoBehaviour
     private IEnumerator SelectMainPhotoFromGallery()
     {
         if (isProcessing) yield break;
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Gallery)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
         isProcessing = true;
 
         MainLoading(true);
         bool isLoading = true;
+        bool answered = false;
+        int t = pick.Begin(R0926PickerWait.Source.Gallery);
 
         try
         {
             NativeGallery.GetImageFromGallery((path) =>
             {
+                if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
+                answered = true;
                 if (!string.IsNullOrEmpty(path))
                 {
                     StartCoroutine(ProcessMainPhotoWithFallback(path, () => { isLoading = false; }));
@@ -325,11 +334,15 @@ public class CubeUploadManager : MonoBehaviour
         }
         catch (System.Exception)
         {
+            pick.End(t);
+            answered = true;
             ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
             SetMainPhotoUIState(mainPhoto != null);
             isLoading = false;
         }
 
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered) yield break;   // 표를 버렸다 — 정리는 버린 쪽(PickerFree)이 했다
         yield return new WaitUntil(() => !isLoading);
         MainLoading(false);
         isProcessing = false;
@@ -519,7 +532,7 @@ public class CubeUploadManager : MonoBehaviour
     /// </summary>
     private IEnumerator SelectSubPhotos()
     {
-        if (isProcessing) yield break;
+        if (!PickerFree()) yield break;
 
         // PhotoSourceDialog 표시
         if (photoSourceDialog != null)
@@ -563,15 +576,20 @@ public class CubeUploadManager : MonoBehaviour
             ShowWarning(R0926LocalizedText.Say($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.", $"You can add up to {MAX_SUB_PHOTOS} photos.", $"最大{MAX_SUB_PHOTOS}枚まで追加できます。", $"最多可添加 {MAX_SUB_PHOTOS} 张照片。", $"Puedes añadir hasta {MAX_SUB_PHOTOS} fotos."));
             yield break;
         }
+        if (isProcessing) yield break;
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Camera)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
 
         bool captureDone = false;
         string capturedPath = null;
         bool permissionDenied = false;
 
+        isProcessing = true;   // 찍고 불러오는 동안 — '계속 촬영?' 을 띄우기 전에 푼다
         SubLoading(1);   // 카메라를 닫고 돌아오면 그 자리에 빈 칸이 돌고 있게
         // NativeCamera로 사진 촬영 (내부적으로 권한 처리)
+        int t = pick.Begin(R0926PickerWait.Source.Camera);
         NativeCamera.TakePicture((path) =>
         {
+            if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
             if (string.IsNullOrEmpty(path))
             {
                 // 권한 거부 또는 취소
@@ -582,11 +600,13 @@ public class CubeUploadManager : MonoBehaviour
         }, maxSize: 2048);
 
         // 촬영 완료 대기
-        yield return new WaitUntil(() => captureDone);
+        yield return new WaitUntil(() => captureDone || !pick.Holds(t));
+        if (!captureDone) yield break;   // 표를 버렸다 — 정리는 버린 쪽(PickerFree)이 했다
 
         if (permissionDenied)
         {
             SubLoading(0);
+            isProcessing = false;
             // 찍지 않고 닫아도 경로가 비어 온다 — 권한이 없을 때만 알린다
             if (!NativeCamera.CheckPermission(true)) ShowWarning(R0926LocalizedText.Say("카메라 권한이 필요합니다.", "Camera permission is required.", "カメラの許可が必要です。", "需要相机权限。", "Se necesita permiso de cámara."));
             else if (subPhotos.Count > 0) ShowWarning(SubPhotosTakenText());
@@ -597,10 +617,15 @@ public class CubeUploadManager : MonoBehaviour
         {
             yield return null;   // 빈 칸이 먼저 그려지게 — 사진 읽기는 그동안 화면을 멈춘다
             // 촬영 성공 → 즉시 로드하여 리스트에 추가
-            Texture2D texture = NativeGallery.LoadImageAtPath(capturedPath,
-                maxSize: 1024,
-                markTextureNonReadable: false,
-                generateMipmaps: false);
+            Texture2D texture = null;
+            try
+            {
+                texture = NativeGallery.LoadImageAtPath(capturedPath,
+                    maxSize: 1024,
+                    markTextureNonReadable: false,
+                    generateMipmaps: false);
+            }
+            catch (System.Exception) { }   // 파일이 없으면 던진다 — 아래 2단계로 (처리 중 표시가 남지 않게)
 
             if (texture != null)
             {
@@ -628,6 +653,7 @@ public class CubeUploadManager : MonoBehaviour
                 }
             }
             SubLoading(0);
+            isProcessing = false;
 
             // "계속 촬영하시겠습니까?" 다이얼로그 표시
             int currentCount = subPhotos.Count;
@@ -653,6 +679,7 @@ public class CubeUploadManager : MonoBehaviour
         {
             // 촬영 취소
             SubLoading(0);
+            isProcessing = false;
             if (subPhotos.Count > 0)
                 ShowWarning(SubPhotosTakenText());
         }
@@ -697,15 +724,20 @@ public class CubeUploadManager : MonoBehaviour
     private IEnumerator SelectSubPhotosFromGallery()
     {
         if (isProcessing) yield break;
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Gallery)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
         isProcessing = true;
 
         SubLoading(1);   // 고르는 동안 한 칸 — 몇 장인지는 고른 뒤에 안다
         bool isLoading = true;
+        bool answered = false;
+        int t = pick.Begin(R0926PickerWait.Source.Gallery);
 
         try
         {
             NativeGallery.GetImagesFromGallery((paths) =>
             {
+                if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
+                answered = true;
                 if (paths != null && paths.Length > 0)
                 {
                     // 남은 칸보다 많이 골라도 들어가는 만큼은 넣는다 — 넘친 장수는 LoadMultipleImagesWithFallback 가 알린다
@@ -721,10 +753,14 @@ public class CubeUploadManager : MonoBehaviour
         }
         catch (System.Exception)
         {
+            pick.End(t);
+            answered = true;
             ShowWarning(LocalizationManager.Instance.GetText("photo_selection_failed"));
             isLoading = false;
         }
 
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered) yield break;   // 표를 버렸다 — 정리는 버린 쪽(PickerFree)이 했다
         yield return new WaitUntil(() => !isLoading);
         SubLoading(0);
         UpdateSubPhotoGrid();
@@ -982,6 +1018,24 @@ public class CubeUploadManager : MonoBehaviour
 
     #region UI State Management
 
+    // 칸을 눌렀을 때 — 처리 중이면 그대로 둔다. 단 고르기 창의 답이 끝내 안 온 것이면(창이 못 떴거나 앱 전환으로 잃음)
+    // 기다림을 버리고 새로 연다. 예전엔 답 하나를 잃으면 앱을 다시 켤 때까지 사진 칸이 아무 반응이 없었다 (10-21)
+    private bool PickerFree()
+    {
+        if (!isProcessing) return true;
+        if (!pick.Waiting) return false;   // 사진을 읽거나 자르는 중
+        if (!pick.TryAbandon())
+        {
+            ShowWarning(R0926PickerWait.BusyText);
+            return false;
+        }
+        MainLoading(false);
+        SubLoading(0);
+        SetMainPhotoUIState(mainPhoto != null);
+        isProcessing = false;
+        return true;
+    }
+
     private void SetMainPhotoUIState(bool hasPhoto)
     {
         if (mainPhotoDisplay != null) mainPhotoDisplay.gameObject.SetActive(hasPhoto);
@@ -1063,56 +1117,51 @@ public class CubeUploadManager : MonoBehaviour
 
     #region Location Services
 
-    private IEnumerator InitializeLocationService()
+    // 위치 읽기 루프는 하나만 — 예전엔 앱으로 돌아올 때마다(사진 고르기 포함)·추가 창을 열 때마다 루프가 하나씩 더 붙었고,
+    // 위치가 잠깐 꺼질 때마다 루프마다 새 루프를 낳아 갈수록 늘었다 (10-21)
+    private void StartLocation()
     {
-        if (!Input.location.isEnabledByUser)
-        {
-            UpdateLocationDisplay();
-            yield break;
-        }
-
-        Input.location.Start();
-        int maxWait = 10;
-        while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
-        {
-            yield return new WaitForSeconds(1);
-            maxWait--;
-        }
-
-        if (Input.location.status == LocationServiceStatus.Failed)
-        {
-            UpdateLocationDisplay();
-            yield break;
-        }
-        else
-        {
-            UpdateLocationDisplay();
-            StartCoroutine(UpdateLocation(10f));
-        }
+        if (locationRoutine != null) StopCoroutine(locationRoutine);
+        locationRoutine = StartCoroutine(InitializeLocationService());
     }
 
-    private IEnumerator UpdateLocation(float interval)
+    private IEnumerator InitializeLocationService()
     {
         while (true)
         {
-            if (Input.location.status == LocationServiceStatus.Running)
+            if (!Input.location.isEnabledByUser)
             {
                 UpdateLocationDisplay();
+                yield break;
             }
-            else
+
+            Input.location.Start();
+            int maxWait = 10;
+            while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
             {
-                StartCoroutine(InitializeLocationService());
+                yield return new WaitForSeconds(1);
+                maxWait--;
             }
-            yield return new WaitForSeconds(interval);
+
+            UpdateLocationDisplay();
+            if (Input.location.status == LocationServiceStatus.Failed) yield break;
+
+            // 켜져 있는 동안 10초마다 다시 읽고, 꺼지면 처음부터 다시 켠다
+            do
+            {
+                yield return new WaitForSeconds(10f);
+                if (Input.location.status == LocationServiceStatus.Running) UpdateLocationDisplay();
+            } while (Input.location.status == LocationServiceStatus.Running);
         }
     }
 
     private void OnApplicationFocus(bool hasFocus)
     {
+        R0926PickerWait.NoteFocus(hasFocus);
         if (hasFocus)
         {
-            if (locationInput != null) locationInput.text = LocalizationManager.Instance.GetText("loading_location");
-            StartCoroutine(InitializeLocationService());
+            if (locationInput != null) locationInput.text = GetLocalizedText("loading_location");
+            StartLocation();
         }
     }
 
@@ -1293,6 +1342,7 @@ public class CubeUploadManager : MonoBehaviour
         }
     }
 
+    // '초기화' — 추가 사진에 대표 사진까지 비운다 (10-21 대표님 「초기화를 누르면 서브사진 뿐 아니라 메인사진까지」)
     private void ResetSubPhotos()
     {
         foreach (var photo in subPhotos)
@@ -1301,7 +1351,14 @@ public class CubeUploadManager : MonoBehaviour
         }
         subPhotos.Clear();
         UpdateSubPhotoGrid();
-        ShowWarning(LocalizationManager.Instance.GetText("sub_photos_reset"));
+        if (mainPhoto != null)
+        {
+            Destroy(mainPhoto);
+            mainPhoto = null;
+        }
+        SetMainSprite(null);
+        SetMainPhotoUIState(false);
+        ShowWarning(R0926LocalizedText.Say("사진이 모두 초기화되었습니다!", "All photos have been reset!", "写真をすべてリセットしました！", "已重置全部照片！", "¡Se restablecieron todas las fotos!"));
         CancelInvoke("HideWarning");
         Invoke("HideWarning", 2f);
     }
@@ -1359,7 +1416,7 @@ public class CubeUploadManager : MonoBehaviour
 
     private IEnumerator ValidateAndSubmit()
     {
-        if (isProcessing) yield break;
+        if (!PickerFree()) yield break;
         isProcessing = true;
 
         userName = nameInput?.text.Trim() ?? "";
@@ -1780,7 +1837,7 @@ public class CubeUploadManager : MonoBehaviour
         ResetToInitialState();
 
         StopAllCoroutines();
-        StartCoroutine(InitializeLocationService());
+        StartLocation();
     }
 
     private void ResetToInitialState()
