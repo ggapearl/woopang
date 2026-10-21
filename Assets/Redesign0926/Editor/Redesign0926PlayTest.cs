@@ -1736,11 +1736,22 @@ namespace Redesign0926
             R0926FriendsMap map = null;
             R0926MapTiles tiles = null;
             Func<string, int> count = name => (typeof(R0926MapTiles).GetField(name, F)?.GetValue(tiles) as System.Collections.ICollection)?.Count ?? -1;
+            Func<int> holes = () => tiles != null ? (int)typeof(R0926MapTiles).GetField("holes", F).GetValue(tiles) : -1;
+            Func<double> maxZoom = () => Convert.ToDouble(typeof(R0926FriendsMap).GetProperty("MaxZoom", F).GetValue(map));
+            Func<double> top = () => Convert.ToDouble(typeof(R0926FriendsMap).GetProperty("TopLevel", F).GetValue(map));
+            Func<double, float> zoomAt = lv => (float)(maxZoom() / Math.Pow(2, top() - (lv < 0 ? top() : lv)));   // lv: 1:1 기준 단계 (< 0 = 가장 깊이)
+            // 지금 화면에 쓰는 타일 — 다 받은 뒤엔 받는 단계의 칸들 그대로
+            Func<HashSet<long>> used = () => typeof(R0926MapTiles).GetField("inUse", F)?.GetValue(tiles) as HashSet<long>;
+            Func<int> fetchLevel = () => { int z = -1; var u = used(); if (u != null) foreach (var k in u) z = Math.Max(z, (int)(k >> 48)); return z; };
+            Func<bool> oneLevel = () => { var u = used(); int z = fetchLevel(); if (u == null || u.Count == 0) return false; foreach (var k in u) if ((int)(k >> 48) != z) return false; return true; };
+            string diskRoot = System.IO.Path.Combine(Application.temporaryCachePath, "maptiles");
+            Action wipeDisk = () => { try { if (System.IO.Directory.Exists(diskRoot)) System.IO.Directory.Delete(diskRoot, true); } catch (Exception) { } };
             Do(() =>
             {
                 R0926MapTiles.EditorBase = "http://127.0.0.1:5098";
                 typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
                 typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                wipeDisk();   // 기기 캐시 없이 — 서버에서 받는 길부터
             });
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Sleep(1.0f);
@@ -1762,15 +1773,14 @@ namespace Redesign0926
             Wait(() => tiles != null && tiles.Available, 15f, "서버 타일 켜짐 (시험 서버)");
             Do(() =>
             {
-                var maxF = typeof(R0926FriendsMap).GetProperty("MaxZoom", F);
-                log.Add("  최대 확대 " + (maxF != null ? Convert.ToDouble(maxF.GetValue(map)).ToString("0") : "?") + "배 · 타일 최대 단계 " + tiles.MaxLevel
-                    + " · 보이는 가장 깊은 단계 " + (tiles.MaxLevel + R0926FriendsMap.OverZoomLevels));
+                log.Add("  최대 확대 " + maxZoom().ToString("0") + "배 · 타일 최대 단계 " + tiles.MaxLevel + " · 화면 dpi " + Screen.dpi.ToString("0")
+                    + " → 타일을 " + tiles.DensityLevels.ToString("0.00") + "단계 덜 자세한 것으로 크게 · 가장 깊이 1:1 기준 " + top().ToString("0.00") + "단계");
                 map.EditorPreview(true, 1f, 37.5f, 127f);
             });
             Sleep(2.0f);
             Check(() => count("wanted") == 0 && count("inflight") == 0, "세계 보기 — 6 단계보다 얕으면 타일을 묻지 않음");
+            Check(() => tiles.MaxLevel == 18, "서버 최대 단계 18 (10-21 16→18)");
             Shot("tiles_world");
-            // lv < 0 = 가장 깊은 단계 (타일 최대 단계 + OverZoomLevels — 그 타일을 키워 보여 준다)
             var stops = new (float lv, float lat, float lon, string name)[]
             {
                 (8f, 36.4f, 127.6f, "korea_z8"), (11f, 37.5665f, 126.978f, "seoul_z11"), (13f, 37.5665f, 126.978f, "seoul_z13"),
@@ -1779,22 +1789,20 @@ namespace Redesign0926
             };
             foreach (var st in stops)
             {
-                Do(() =>
-                {
-                    double max = Convert.ToDouble(typeof(R0926FriendsMap).GetProperty("MaxZoom", F).GetValue(map));
-                    float top = tiles.MaxLevel + R0926FriendsMap.OverZoomLevels;
-                    map.EditorPreview(true, (float)(max / Math.Pow(2, top - (st.lv < 0f ? top : st.lv))), st.lat, st.lon);
-                });
+                Do(() => map.EditorPreview(true, zoomAt(st.lv), st.lat, st.lon));
                 Sleep(0.5f);
                 Wait(() => count("inflight") == 0, 20f, st.name + " 타일 받기 끝");
                 Sleep(0.8f);
                 Do(() =>
                 {
                     var at = typeof(R0926MapTiles).GetField("attribution", F)?.GetValue(tiles) as Text;
-                    log.Add("  " + st.name + ": 받은 타일 " + count("cache") + " · 출처 " + (at != null && at.enabled ? "'" + at.text + "'" : "(안 보임)"));
+                    log.Add("  " + st.name + ": 받는 단계 " + fetchLevel() + " · 화면 칸 " + (used()?.Count ?? -1) + " · 빈칸 " + holes()
+                        + " · 메모리 타일 " + count("cache") + " · 출처 " + (at != null && at.enabled ? "'" + at.text + "'" : "(안 보임)"));
                 });
                 Shot("tiles_" + st.name);
                 if (st.name == "seoul_z13")
+                {
+                    Check(() => holes() == 0 && used() != null && used().Count <= 40, "서울 13 — 빈칸 없음 · 한 화면 타일 40장 이하 (예전 60~70장)");
                     Check(() =>
                     {
                         var layer = typeof(R0926FriendsMap).GetField("pinLayer", F)?.GetValue(map) as RectTransform;
@@ -1803,6 +1811,32 @@ namespace Redesign0926
                         var at = a != null ? a.Find("Name/Text")?.GetComponent<Text>() : null;
                         return a != null && a.gameObject.activeSelf && b != null && b.gameObject.activeSelf && at != null && at.text.Length > 0;
                     }, "지도에 보물찾기 둘 (정확히 · 대략) — 금빛 상자 핀 + 게임 이름");
+                    int panHoles = -1;
+                    Do(() =>
+                    {
+                        map.EditorPreview(true, zoomAt(13), st.lat, st.lon + 360f / (1 << fetchLevel()));   // 받는 단계 한 칸만큼 옆으로
+                        panHoles = holes();
+                    });
+                    Check(() => panHoles == 0, "옆으로 한 칸 옮기자마자 빈칸 없음 (위 단계 두 배 넓게 미리 받아 흐리게라도)");
+                    Sleep(0.3f);
+                    Wait(() => count("inflight") == 0, 20f, "seoul_z13 옆 칸 받기 끝");
+                }
+                if (st.name == "seoul_z16")
+                {
+                    int outHoles = -1, outLevel = -1, wasLevel = -1;
+                    bool outExact = false;
+                    Do(() =>
+                    {
+                        wasLevel = fetchLevel();
+                        map.EditorPreview(true, zoomAt(15), st.lat, st.lon);
+                        outHoles = holes(); outLevel = fetchLevel(); outExact = oneLevel();
+                    });
+                    Check(() => outHoles == 0 && outExact && outLevel == wasLevel - 1, "한 단계 축소하자마자 빈칸 없이 제 단계로 (위 단계 두 배 넓게 미리 받기)");
+                    Sleep(0.3f);
+                    Wait(() => count("inflight") == 0, 20f, "seoul_z15 타일 받기 끝");
+                }
+                if (st.name == "seoul_max")
+                    Check(() => fetchLevel() == tiles.MaxLevel && holes() == 0, "가장 깊이 확대하면 가장 자세한 단계(서버 최대)를 받아 씀");
                 if (st.name == "hunt_approx_z15")
                     Check(() => (typeof(R0926FriendsMap).GetField("huntAreaPool", F)?.GetValue(map) as List<GameObject>)?.Exists(g => g != null && g.activeSelf) == true,
                         "대략 공개 게임 — '이 안 어딘가' 금빛 원");
@@ -1812,11 +1846,37 @@ namespace Redesign0926
                 var at = typeof(R0926MapTiles).GetField("attribution", F)?.GetValue(tiles) as Text;
                 return at != null && at.enabled && at.text == "© 국토교통부 V-World";
             }, "지도 출처 '© 국토교통부 V-World' 보임");
+            // 기기 캐시 — 받은 타일을 서버가 적어 준 기간만 둔다. 지도를 닫았다 열면 서버 없이 거기서
+            Sleep(1.0f);
+            int files = 0;
+            bool expiryOk = false;
+            Do(() =>
+            {
+                var all = System.IO.Directory.Exists(diskRoot) ? System.IO.Directory.GetFiles(diskRoot, "*.tile", System.IO.SearchOption.AllDirectories) : new string[0];
+                files = all.Length;
+                DateTime now = DateTime.UtcNow;
+                expiryOk = files > 0 && Array.TrueForAll(all, f => { var t = System.IO.File.GetLastWriteTimeUtc(f); return t > now && t <= now.AddSeconds(259200 + 60); });
+                var dirs = System.IO.Directory.Exists(diskRoot) ? Array.ConvertAll(System.IO.Directory.GetDirectories(diskRoot), System.IO.Path.GetFileName) : new string[0];
+                log.Add("  기기 캐시 " + files + "장 · 폴더 " + string.Join(",", dirs));
+            });
+            Check(() => files > 0 && expiryOk, "받은 타일이 기기 캐시에 — 기한(파일 시각)은 서버가 적어 준 3일 안");
+            Do(() =>
+            {
+                tiles.enabled = false;   // 지도를 닫으면 메모리 타일은 버린다
+                R0926MapTiles.EditorBase = "http://127.0.0.1:9";   // 서버가 없어도
+                tiles.enabled = true;
+                map.EditorPreview(true, zoomAt(13), 37.5665f, 126.978f);
+            });
+            Check(() => count("cache") == 0, "닫았다 열면 메모리는 빈 채로 시작");
+            Wait(() => count("inflight") == 0 && count("cache") > 0 && holes() == 0, 6f, "다시 열기 — 기기 캐시로 채움");
+            Check(() => holes() == 0 && oneLevel(), "서버 없이도 다시 열면 기기 캐시로 다 보임");
+            Shot("tiles_reopen_disk");
             Do(() =>
             {
                 map?.EditorPreviewClear();
                 R0926MapTiles.EditorBase = null;
                 typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                wipeDisk();
             });
         }
 

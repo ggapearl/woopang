@@ -447,8 +447,11 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     public static double WebToNormY(double webY) => (YTop - Math.PI + 2 * Math.PI * webY) / (YTop - YBot);
 
     private bool Tiled => tiles != null && tiles.Available;
-    /// <summary>최대 확대 — 타일이 있으면 서버가 주는 가장 깊은 단계 + OverZoomLevels, 없으면 maxZoom</summary>
-    private double MaxZoom => Tiled ? Math.Max(maxZoom, tiles.ZoomForLevel(tiles.MaxLevel + OverZoomLevels, viewport.rect.width, Scale)) : maxZoom;
+    /// <summary>가장 깊이 확대했을 때 1:1 기준 단계 — 서버의 가장 깊은 타일을 OverZoomLevels 만큼 키워 보여 준다.
+    /// 화면이 촘촘한 폰은 타일을 그 밀도만큼 크게 그리므로(R0926MapTiles.DensityLevels) 그만큼 더 — 가장 깊은 타일을 끝까지 쓰게</summary>
+    private double TopLevel => tiles.MaxLevel + Math.Max(OverZoomLevels, tiles.DensityLevels);
+    /// <summary>최대 확대 — 타일이 있으면 TopLevel, 없으면 maxZoom</summary>
+    private double MaxZoom => Tiled ? Math.Max(maxZoom, tiles.ZoomForLevel(TopLevel, viewport.rect.width, Scale)) : maxZoom;
     /// <summary>친구·내 위치를 눌렀을 때 확대 — 타일이 있으면 시내 수준(13 단계 · 화면 폭 약 15km)</summary>
     private double FocusZoom => Tiled ? Math.Min(MaxZoom, tiles.ZoomForLevel(13, viewport.rect.width, Scale)) : 16;
 
