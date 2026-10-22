@@ -30,8 +30,6 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private float spinnerScale = 1.5f;
     [SerializeField] private float spinnerRotationSpeed = 30f;
     [SerializeField] private float spinnerMinDuration = 3f;
-    [Tooltip("생길 자리가 화면 밖일 때 가리키는 화살표 크기 — 큐브 화살표의 몇 배")]
-    [SerializeField] private float spawnGuideScale = 2f;
     [SerializeField] private float spinnerFadeDuration = 1.5f;
     [SerializeField] private float cubeFadeInDuration = 1.5f;
 
@@ -85,23 +83,17 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private float dimFadeOutDuration = 0.3f;
 
     // ============================================================
-    // Particle Burst (파티클 버스트 효과)
+    // Star Burst (큐브가 생길 때 퍼지는 별빛)
     // ============================================================
-    [Header("Particle Burst")]
-    [Tooltip("파티클 버스트 효과 활성화")]
+    [Header("Star Burst")]
+    [Tooltip("큐브가 생길 때 둘레로 별빛이 퍼진다")]
     [SerializeField] private bool enableParticleBurst = true;
-    [Tooltip("파티클 개수")]
-    [SerializeField] private int particleCount = 80;
-    [Tooltip("파티클 퍼지는 속도")]
-    [SerializeField] private float particleSpeed = 1.2f;
-    [Tooltip("파티클 수명 (초)")]
-    [SerializeField] private float particleLifetime = 3f;
-    [Tooltip("파티클 크기")]
-    [SerializeField] private float particleSize = 0.08f;
-    [Tooltip("파티클 색상 시작")]
-    [SerializeField] private Color particleColorStart = new Color(1f, 1f, 1f, 0.9f);
-    [Tooltip("파티클 색상 끝")]
-    [SerializeField] private Color particleColorEnd = new Color(0.7f, 0.85f, 1f, 0f);
+    [Tooltip("별빛 개수")]
+    [SerializeField] private int starCount = 70;
+    [Tooltip("별빛 수명 (초) — 별마다 60~100%")]
+    [SerializeField] private float starLifetime = 2.8f;
+    [Tooltip("별빛 크기 (m, 별 끝에서 끝까지) — 별마다 50~100%")]
+    [SerializeField] private float starSize = 0.14f;
 
     // ============================================================
     // Spotlight Effect (3D 스포트라이트)
@@ -128,8 +120,6 @@ public class ARPreviewController : MonoBehaviour
     private GameObject spawnedSpinner;
     private GameObject spawnedCube;
     private GameObject spawnGuide;
-    private Target spawnGuideTarget;
-    private float spawnGuideSize;
     private Coroutine spawnCoroutine;
     private Action onConfirm;
     private Action onCancel;
@@ -172,7 +162,6 @@ public class ARPreviewController : MonoBehaviour
 
     private void Update()
     {
-        PulseSpawnGuide();
         if (!isCubeReady || spawnedCube == null) return;
 
         HandleTouchRotation();
@@ -337,95 +326,80 @@ public class ARPreviewController : MonoBehaviour
     }
 
     // ============================================================
-    // Particle Burst
+    // Star Burst
     // ============================================================
+    // 10-22 대표님 「퍼지는 입자가 크고 흰색이 아니라 어색 — 반짝이며 별빛이 나풀거리게」
+    // 작은 흰 별빛이 큐브 겉에서 피어나 별마다 다르게 깜빡이며 천천히 흩날리다 사그라든다
     private void PlayParticleBurst(Vector3 position)
     {
-        if (!enableParticleBurst) return;
+        if (!enableParticleBurst || StarSparkle.Material == null) return;
 
-        GameObject particleObj = new GameObject("ARPreview_ParticleBurst");
+        GameObject particleObj = new GameObject("ARPreview_StarBurst");
         particleObj.transform.position = position;
 
         ParticleSystem ps = particleObj.AddComponent<ParticleSystem>();
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
         main.playOnAwake = false;
-        main.duration = 0.5f;
+        main.duration = 0.6f;
         main.loop = false;
-        main.startLifetime = particleLifetime;
-        main.startSpeed = new ParticleSystem.MinMaxCurve(particleSpeed * 0.3f, particleSpeed);
-        main.startSize = new ParticleSystem.MinMaxCurve(particleSize * 0.5f, particleSize * 1.5f);
-        main.startColor = particleColorStart;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(starLifetime * 0.6f, starLifetime);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.2f, 0.7f);
+        main.startSize = new ParticleSystem.MinMaxCurve(starSize * 0.5f, starSize);
+        main.startRotation = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+        main.startColor = Color.white;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
-        main.gravityModifier = 0.02f;
-        main.maxParticles = particleCount * 2;
+        main.gravityModifier = 0.01f;   // 아주 천천히 내려앉는다
+        main.maxParticles = starCount;
 
         var emission = ps.emission;
         emission.enabled = true;
         emission.rateOverTime = 0;
         emission.SetBursts(new ParticleSystem.Burst[] {
-            new ParticleSystem.Burst(0f, particleCount / 2),
-            new ParticleSystem.Burst(0.15f, particleCount / 3),
-            new ParticleSystem.Burst(0.3f, particleCount / 4)
+            new ParticleSystem.Burst(0f, starCount / 2),
+            new ParticleSystem.Burst(0.25f, starCount * 3 / 10),
+            new ParticleSystem.Burst(0.5f, starCount / 5)
         });
 
         var shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Sphere;
         shape.radius = 0.5f;
+        shape.radiusThickness = 0.4f;
 
-        var colorOverLifetime = ps.colorOverLifetime;
-        colorOverLifetime.enabled = true;
-        Gradient gradient = new Gradient();
-        gradient.SetKeys(
-            new GradientColorKey[] {
-                new GradientColorKey(particleColorStart, 0f),
-                new GradientColorKey(particleColorEnd, 1f)
-            },
-            new GradientAlphaKey[] {
-                new GradientAlphaKey(0f, 0f),
-                new GradientAlphaKey(particleColorStart.a, 0.1f),
-                new GradientAlphaKey(particleColorStart.a, 0.4f),
-                new GradientAlphaKey(particleColorStart.a * 0.5f, 0.7f),
-                new GradientAlphaKey(0f, 1f)
-            }
-        );
-        colorOverLifetime.color = gradient;
+        // 피어날 때만 살짝 퍼지고 곧 느려진다 — 그다음은 흩날림이 움직인다
+        var velocity = ps.velocityOverLifetime;
+        velocity.enabled = true;
+        velocity.speedModifier = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+            new Keyframe(0f, 1f), new Keyframe(0.25f, 0.2f), new Keyframe(1f, 0.05f)));
 
-        var sizeOverLifetime = ps.sizeOverLifetime;
-        sizeOverLifetime.enabled = true;
-        AnimationCurve sizeCurve = new AnimationCurve();
-        sizeCurve.AddKey(0f, 0.3f);
-        sizeCurve.AddKey(0.2f, 1f);
-        sizeCurve.AddKey(0.6f, 1.2f);
-        sizeCurve.AddKey(1f, 0.1f);
-        sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, sizeCurve);
+        var noise = ps.noise;
+        noise.enabled = true;
+        noise.strength = 0.3f;
+        noise.frequency = 0.7f;
+        noise.scrollSpeed = 0.35f;
+        noise.damping = true;
 
-        // 속도 감쇠 (천천히 퍼지다 멈춤)
-        var velocityOverLifetime = ps.velocityOverLifetime;
-        velocityOverLifetime.enabled = true;
-        AnimationCurve speedCurve = new AnimationCurve();
-        speedCurve.AddKey(0f, 1f);
-        speedCurve.AddKey(0.3f, 0.5f);
-        speedCurve.AddKey(0.7f, 0.15f);
-        speedCurve.AddKey(1f, 0f);
-        velocityOverLifetime.speedModifier = new ParticleSystem.MinMaxCurve(1f, speedCurve);
+        var spin = ps.rotationOverLifetime;
+        spin.enabled = true;
+        spin.z = new ParticleSystem.MinMaxCurve(-0.8f, 0.8f);   // 라디안/초 — 빛줄기가 천천히 돈다
 
-        // Renderer
-        var renderer = particleObj.GetComponent<ParticleSystemRenderer>();
-        if (renderer != null)
-        {
-            Shader particleShader = Shader.Find("Particles/Standard Unlit")
-                ?? Shader.Find("Universal Render Pipeline/Particles/Unlit")
-                ?? Shader.Find("Mobile/Particles/Additive");
-            if (particleShader != null)
-                renderer.material = new Material(particleShader);
-            else
-                renderer.material = new Material(Shader.Find("Sprites/Default"));
-            renderer.material.color = particleColorStart;
-        }
+        // 깜빡이는 횟수가 다른 두 곡선 사이에서 별마다 다르게
+        var size = ps.sizeOverLifetime;
+        size.enabled = true;
+        size.size = new ParticleSystem.MinMaxCurve(1f, StarSparkle.TwinkleCurve(3), StarSparkle.TwinkleCurve(5));
+
+        var color = ps.colorOverLifetime;
+        color.enabled = true;
+        Gradient fade = new Gradient();
+        fade.SetKeys(
+            new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+            new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.9f, 0.6f), new GradientAlphaKey(0f, 1f) });
+        color.color = fade;
+
+        particleObj.GetComponent<ParticleSystemRenderer>().sharedMaterial = StarSparkle.Material;
 
         ps.Play();
-        Destroy(particleObj, particleLifetime + 0.5f);
+        Destroy(particleObj, main.duration + starLifetime + 0.5f);
     }
 
     // ============================================================
@@ -497,32 +471,21 @@ public class ARPreviewController : MonoBehaviour
         spawnCoroutine = StartCoroutine(SpawnWithLoadingSpinner(spawnPosition, spawnRotation, mainPhotoTexture));
     }
 
-    // 10-20 대표님 「생성 중엔 뒤늦게 생겨도 괜찮으니 어디에 생기는지만 — 큼직한 오프스크린 인디케이터를 반짝이게, 2배로」
-    // 생길 자리에 빈 타겟 하나 — 화면 밖이면 큐브 화살표의 2배인 화살표가 반짝이며 그쪽을 가리키고, 화면 안이면 아무것도 안 그린다
-    // (스피너·큐브가 보이니). 미리보기가 끝날 때까지 — 큐브가 생긴 뒤에도 화면 밖이면 이 화살표가 가리킨다
+    // 10-20 대표님 「생성 중엔 뒤늦게 생겨도 괜찮으니 어디에 생기는지만」 → 생길 자리에 빈 타겟 하나, 둘레에 별빛.
+    // 10-22 「큰 화살표만 발생하는데 '생성 중...' 이라고 — 기존 인디케이터 형식으로」 → 큐브 인디케이터와 같은 모양·크기
+    // (화면 밖이면 화살표, 안이면 박스)에 이름만 '생성 중...'. 큐브가 다 생기면 큐브 자기 인디케이터('신규 오브젝트')로 넘긴다
     private void CreateSpawnGuide(Vector3 position)
     {
         CleanupSpawnGuide();
-        Target look = cubePrefab.GetComponentInChildren<Target>(true);
         spawnGuide = new GameObject("ARPreview_SpawnGuide");
         spawnGuide.SetActive(false);   // 다 정한 뒤 켜야 OffScreenIndicator 가 처음부터 이 모양으로 받는다
         spawnGuide.transform.position = position;
         Target t = spawnGuide.AddComponent<Target>();
-        t.NeedBoxIndicator = false;
-        t.NeedDistanceText = false;
+        Target look = cubePrefab.GetComponentInChildren<Target>(true);
+        if (look != null) t.CopyLook(look);
+        t.PlaceName = GetLocalizedText("spawn_guide_creating");
         t.Sparkle = true;
-        if (look != null) t.TargetColor = look.TargetColor;
-        spawnGuideSize = (look != null ? look.MaxArrowSize : 4f) * spawnGuideScale;
-        t.SetArrowSize(spawnGuideSize);
-        spawnGuideTarget = t;
         spawnGuide.SetActive(true);
-    }
-
-    // 별빛과 함께 숨 쉬듯 살짝 커졌다 작아진다 — '저기서 만들어지는 중'
-    private void PulseSpawnGuide()
-    {
-        if (spawnGuideTarget == null) return;
-        spawnGuideTarget.SetArrowSize(spawnGuideSize * (1f + 0.08f * Mathf.Sin(Time.unscaledTime * Mathf.PI * 2f / 1.2f)));
     }
 
     // ============================================================
@@ -558,7 +521,7 @@ public class ARPreviewController : MonoBehaviour
             // 큐브 생성 (투명)
             spawnedCube = Instantiate(cubePrefab, position, rotation);
             spawnedCube.SetActive(true);
-            HideCubeArrow();
+            ShowCubeIndicator(false);
             ApplyTextureToCube(mainPhotoTexture);
             SetObjectAlpha(spawnedCube, 0f);
 
@@ -585,19 +548,21 @@ public class ARPreviewController : MonoBehaviour
 
             spawnedCube = Instantiate(cubePrefab, position, rotation);
             spawnedCube.SetActive(true);
-            HideCubeArrow();
+            ShowCubeIndicator(false);
             ApplyTextureToCube(mainPhotoTexture);
             SetObjectAlpha(spawnedCube, 0f);
 
             yield return StartCoroutine(FadeObject(spawnedCube, 0f, 1f, cubeFadeInDuration));
         }
 
-        // 큐브의 Target에 다국어 이름 설정 (OffScreenIndicator에 이름 표시)
+        // '생성 중' 안내 → 큐브 자기 인디케이터('신규 오브젝트')
         Target cubeTarget = spawnedCube.GetComponentInChildren<Target>();
         if (cubeTarget != null)
         {
             cubeTarget.PlaceName = GetLocalizedText("new_object");
         }
+        CleanupSpawnGuide();
+        ShowCubeIndicator(true);
 
         // 큐브 준비 완료 → 터치 회전 + 자동 회전 즉시 활성화
         isCubeReady = true;
@@ -619,11 +584,14 @@ public class ARPreviewController : MonoBehaviour
         yield return StartCoroutine(TransitionToConfirmText());
     }
 
-    // 화면 밖일 땐 생길 자리 안내(큰 화살표)가 가리킨다 — 큐브 자기 화살표까지 뜨면 같은 쪽에 화살표가 둘
-    private void HideCubeArrow()
+    // '생성 중' 안내가 있는 동안은 큐브 자기 인디케이터를 끈다 — 같은 자리에 둘이 겹치지 않게
+    private void ShowCubeIndicator(bool show)
     {
         Target t = spawnedCube.GetComponentInChildren<Target>();
-        if (t != null && spawnGuide != null) t.NeedArrowIndicator = false;
+        Target look = cubePrefab.GetComponentInChildren<Target>(true);
+        if (t == null || look == null) return;
+        t.NeedBoxIndicator = show && look.NeedBoxIndicator;
+        t.NeedArrowIndicator = show && look.NeedArrowIndicator;
     }
 
     private IEnumerator ContinueSpinnerRotation(float duration)
@@ -1060,12 +1028,10 @@ public class ARPreviewController : MonoBehaviour
 
     private void CleanupSpawnGuide()
     {
-        if (spawnGuide != null)
-        {
-            Destroy(spawnGuide);
-            spawnGuide = null;
-        }
-        spawnGuideTarget = null;
+        if (spawnGuide == null) return;
+        spawnGuide.SetActive(false);   // 바로 내린다 — Destroy 는 프레임 끝이라 그 사이 '생성 중'과 '신규 오브젝트'가 한 프레임 겹친다
+        Destroy(spawnGuide);
+        spawnGuide = null;
     }
 
     private void CleanupCube()
@@ -1097,6 +1063,8 @@ public class ARPreviewController : MonoBehaviour
         {
             case "confirm_add_object": return "Would you like to add an object here?";
             case "creating_ar_object": return "Creating AR object";
+            case "spawn_guide_creating": return "Creating...";
+            case "new_object": return "New Object";
             case "confirm": return "Confirm";
             case "cancel": return "Cancel";
             default: return key;

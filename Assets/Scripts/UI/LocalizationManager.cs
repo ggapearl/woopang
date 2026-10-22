@@ -646,6 +646,14 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "ARオブジェクトを作成中",
                 ["es"] = "Creando objeto AR"
             },
+            ["spawn_guide_creating"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Creating...",
+                ["ko"] = "생성 중...",
+                ["zh"] = "生成中...",
+                ["ja"] = "生成中...",
+                ["es"] = "Creando..."
+            },
             ["new_object"] = new Dictionary<string, string>()
             {
                 ["en"] = "New Object",

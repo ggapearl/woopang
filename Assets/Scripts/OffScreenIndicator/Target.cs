@@ -119,8 +119,21 @@ public class Target : MonoBehaviour
 
     public float MaxArrowSize => maxArrowSize;
 
-    /// <summary>화살표 크기를 거리와 상관없이 하나로 (장소 추가 '생성 중' 자리 안내 — 10-20)</summary>
-    public void SetArrowSize(float size) => defaultArrowSize = maxArrowSize = size;
+    /// <summary>다른 타겟과 같은 인디케이터로 (색·박스/화살표·크기·거리 구간) — 장소 추가 '생성 중' 자리 안내 (10-22)</summary>
+    public void CopyLook(Target from)
+    {
+        targetColor = from.targetColor;
+        distanceTextColor = from.distanceTextColor;
+        needBoxIndicator = from.needBoxIndicator;
+        needArrowIndicator = from.needArrowIndicator;
+        needDistanceText = from.needDistanceText;
+        defaultBoxSize = from.defaultBoxSize;
+        maxBoxSize = from.maxBoxSize;
+        defaultArrowSize = from.defaultArrowSize;
+        maxArrowSize = from.maxArrowSize;
+        minDistance = from.minDistance;
+        maxDistance = from.maxDistance;
+    }
 
     public float MinDistance => minDistance; // 추가: 최소 거리 프로퍼티
 

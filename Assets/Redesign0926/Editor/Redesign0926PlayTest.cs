@@ -2912,22 +2912,58 @@ namespace Redesign0926
             Func<GameObject> spinner = () => typeof(ARPreviewController).GetField("spawnedSpinner", F)?.GetValue(prev) as GameObject;
             Func<GameObject> cube = () => typeof(ARPreviewController).GetField("spawnedCube", F)?.GetValue(prev) as GameObject;
             Func<Target> guide = () => (typeof(ARPreviewController).GetField("spawnGuide", F)?.GetValue(prev) as GameObject)?.GetComponent<Target>();
-            Action<string, bool> guideCheck = (tag, off) => Check(() =>
+            Func<Indicator, bool> shown = ind => ind != null && ind.gameObject.activeInHierarchy;
+            Func<Indicator, string> label = ind =>
+            {
+                var nt = typeof(Indicator).GetField("nameText", F)?.GetValue(ind) as Text;
+                var dt = typeof(Indicator).GetField("distanceText", F)?.GetValue(ind) as Text;
+                return ((ind.Type == IndicatorType.BOX && nt != null ? nt.text + " " : "") + (dt != null ? dt.text : "")).Replace("\n", " ");
+            };
+            // 10-22 '생성 중...' — 큐브 인디케이터와 같은 모양·크기(밖 화살표 · 안 박스)에 이름만 '생성 중...', 다 생기면 큐브 것('신규 오브젝트')
+            Action<string, bool, bool> guideCheck = (tag, off, ready) => Check(() =>
             {
                 var g = guide();
                 var c = cube() != null ? cube().GetComponentInChildren<Target>() : null;
-                if (g == null) { log.Add($"  {tag}: 생길 자리 안내 없음"); return false; }
-                var ind = g.indicator;
-                bool arrow = ind != null && ind.gameObject.activeInHierarchy && ind.Type == IndicatorType.ARROW;
-                bool sparkle = ind != null && (typeof(Indicator).GetField("sparkleOn", F)?.GetValue(ind) as bool? ?? false);
-                float sc = ind != null ? ind.transform.localScale.x : 0f;
-                Rect r = ind != null ? ScreenRect((RectTransform)ind.transform) : default;
-                bool cubeArrow = c != null && c.indicator != null && c.indicator.gameObject.activeInHierarchy && c.indicator.Type == IndicatorType.ARROW;
-                var cp = typeof(ARPreviewController).GetField("cubePrefab", F)?.GetValue(prev) as GameObject;
-                float twice = (cp != null ? cp.GetComponentInChildren<Target>(true)?.MaxArrowSize ?? 0f : 0f) * 2f;   // 숨쉬기 ±8%
-                log.Add($"  {tag}: 안내 화살표 {(arrow ? "보임" : "없음")} 크기 {sc:0.0} (큐브 2배 {twice:0.0}) 반짝 {(sparkle ? "O" : "X")} 자리 ({r.center.x:0},{r.center.y:0}) · 큐브 화살표 {(cubeArrow ? "보임" : "없음")}");
-                return off ? arrow && sparkle && twice > 0f && Mathf.Abs(sc / twice - 1f) <= 0.09f && r.center.y > Screen.height * 0.6f && !cubeArrow : !arrow;
-            }, $"생길 자리 안내 {tag}: " + (off ? "화면 밖 → 큐브 화살표의 2배 · 반짝 · 위쪽 가장자리 · 큐브 화살표는 안 겹침" : "화면 안 → 안내 화살표 없음"));
+                var cp = (typeof(ARPreviewController).GetField("cubePrefab", F)?.GetValue(prev) as GameObject)?.GetComponentInChildren<Target>(true);
+                if (cp == null) { log.Add($"  {tag}: 큐브 본 없음"); return false; }
+                var want = off ? IndicatorType.ARROW : IndicatorType.BOX;
+                float wantSize = off ? cp.MaxArrowSize : cp.MaxBoxSize;   // 5m 남짓 — 가까울 때 크기
+                string name = LocalizationManager.Instance.GetText(ready ? "new_object" : "spawn_guide_creating");
+                var who = ready ? c : g;
+                var ind = who != null ? who.indicator : null;
+                bool ok = shown(ind) && ind.Type == want;
+                string text = ok ? label(ind) : "";
+                float sc = ok ? ind.transform.localScale.x : 0f;
+                Rect r = ok ? ScreenRect((RectTransform)ind.transform) : default;
+                bool sparkle = ok && (typeof(Indicator).GetField("sparkleOn", F)?.GetValue(ind) as bool? ?? false);
+                bool other = ready ? g != null : c != null && shown(c.indicator);   // 같은 자리에 둘이 겹침
+                log.Add($"  {tag}: {(ready ? "큐브" : "안내")} {(ok ? ind.Type.ToString() : "없음")} '{text}' 크기 {sc:0.0} (본 {wantSize:0.0}) 반짝 {(sparkle ? "O" : "X")} 자리 ({r.center.x:0},{r.center.y:0}) · {(ready ? "안내 남음" : "큐브 인디케이터")} {(other ? "있음" : "없음")}");
+                return ok && text.Contains(name) && Mathf.Abs(sc / wantSize - 1f) <= 0.02f && sparkle != ready && !other && (!off || r.center.y > Screen.height * 0.6f);
+            }, $"생길 자리 {tag}: " + (ready ? "다 생기면 큐브 인디케이터 '신규 오브젝트' · 안내는 사라짐" : "'생성 중...' 안내 · 큐브 인디케이터와 같은 모양·크기 · 반짝 · 큐브 것과 안 겹침") + (off ? " (화면 밖 → 위쪽 화살표)" : " (화면 안 → 박스)"));
+            // 10-22 별빛 — 흰 별 그림 · 늘 빌드에 들어가는 셰이더 · 흩날림
+            Action<string> starCheck = tag => Check(() =>
+            {
+                var go = GameObject.Find("ARPreview_StarBurst");
+                var ps = go != null ? go.GetComponent<ParticleSystem>() : null;
+                var m = go != null ? go.GetComponent<ParticleSystemRenderer>().sharedMaterial : null;
+                int n = ps != null ? ps.particleCount : 0;
+                if (ps != null && n > 0)
+                {
+                    var arr = new ParticleSystem.Particle[n];
+                    ps.GetParticles(arr);
+                    var cam = Camera.main;
+                    var px = new List<string>();
+                    for (int i = 0; i < Mathf.Min(n, 6); i++)
+                    {
+                        float sz = arr[i].GetCurrentSize(ps);
+                        Vector3 a = cam.WorldToScreenPoint(arr[i].position), b = cam.WorldToScreenPoint(arr[i].position + cam.transform.up * sz);
+                        px.Add($"({a.x:0},{a.y:0}) {sz:0.000}m={Vector2.Distance(a, b):0}px");
+                    }
+                    log.Add($"  {tag}: 별 몇 개 " + string.Join(" · ", px) + $" · 그림 {(go.GetComponent<ParticleSystemRenderer>().sharedMaterial.mainTexture as Texture2D)?.width}px · 카메라 시야 {Camera.main.fieldOfView:0}°");
+                }
+                log.Add($"  {tag}: 별빛 {n}개 · 셰이더 {(m != null ? m.shader.name : "-")} · 그림 {(m != null && m.mainTexture != null ? m.mainTexture.name : "-")} · 색 {(ps != null ? ps.main.startColor.color.ToString() : "-")} · 크기 {(ps != null ? ps.main.startSize.constantMax : 0f):0.00}m");
+                return n > 0 && m != null && m.shader.name == "Sprites/Default" && m.mainTexture == StarSparkle.Texture && ps.main.startColor.color == Color.white && ps.noise.enabled;
+            }, $"별빛 {tag}: 흰 별 그림 · 기기에도 있는 셰이더 · 흩날림");
             Action<string> where = name =>
             {
                 var go = cube() != null ? cube() : spinner();
@@ -2951,11 +2987,12 @@ namespace Redesign0926
                     tex.LoadImage(File.ReadAllBytes(Path.Combine(storeSrc, "bg_city.png")));
                     typeof(CubeUploadManager).GetMethod("StartARPreview", F).Invoke(cum, new object[] { tex });
                 });
-                foreach (var (t, n) in new[] { (0.15f, "a"), (0.6f, "b"), (1.4f, "c"), (2.4f, "d"), (1.6f, "e"), (1.5f, "f") })
+                foreach (var (t, n) in new[] { (0.15f, "a"), (0.6f, "b"), (1.4f, "c"), (1.0f, "s"), (1.4f, "d"), (1.6f, "e"), (1.5f, "f") })
                 {
                     Sleep(t);
                     Do(() => where(tag + "_" + n));
-                    if (off.HasValue && (n == "c" || n == "f")) guideCheck(tag + "_" + n, off.Value);   // c 스피너 · f 큐브
+                    if (off.HasValue && (n == "c" || n == "d" || n == "f")) guideCheck(tag + "_" + n, off.Value, n == "f");   // c 스피너 · d 큐브 생기는 중 · f 다 생김
+                    if (n == "s" || n == "d") starCheck(tag + "_" + n);   // s 별빛 피어남 · d 흩날림
                     Shot("arprev_" + tag + "_" + n);
                 }
                 Do(() => Click("ARPreviewPanel/MessageContainer/ButtonContainer/CancelButton"));
@@ -2972,7 +3009,16 @@ namespace Redesign0926
                 if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
                 HidePrivatePlaces();
                 Backdrop("bg_city.png");
+                DeviceFov();   // 에디터 카메라는 144° 라 별빛·큐브가 기기보다 훨씬 작게 찍힌다
             });
+            Check(() =>
+            {
+                var arr = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]).FindProperty("m_AlwaysIncludedShaders");
+                var names = new List<string>();
+                for (int i = 0; i < arr.arraySize; i++) names.Add((arr.GetArrayElementAtIndex(i).objectReferenceValue as Shader)?.name ?? "-");
+                log.Add("  늘 빌드에 넣는 셰이더: " + string.Join(", ", names));
+                return names.Contains("Sprites/Default");
+            }, "별빛 셰이더(Sprites/Default)는 기기 빌드에 늘 들어감");
             Sleep(0.6f);
             run(0f, "level", false);
             run(50f, "down", null);
