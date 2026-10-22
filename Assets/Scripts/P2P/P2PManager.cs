@@ -105,6 +105,7 @@ public class P2PManager : MonoBehaviour
     private Dictionary<string, GameObject> activeUserAvatars = new Dictionary<string, GameObject>();
     private Dictionary<string, NearbyUserData> nearbyUsersData = new Dictionary<string, NearbyUserData>();
     private Queue<GameObject> avatarPool = new Queue<GameObject>();
+    private ARObjectZoomController zoomController;   // 핀치 줌 배율 — 새로 뜨는 사람 오브젝트도 지금 배율로
 
     // Current user data
     private string currentUserId;
@@ -619,6 +620,7 @@ public class P2PManager : MonoBehaviour
         UpdateAvatarPositionInEditor(avatarObj, userData);
 #endif
 
+        avatarObj.transform.localScale = AvatarScale(CurrentZoom());   // 핀치 줌 그대로 (풀에서 다시 꺼낸 것도)
         avatarObj.SetActive(true);
         activeUserAvatars[userData.user_id] = avatarObj;
         nearbyUsersData[userData.user_id] = userData;
@@ -723,6 +725,26 @@ public class P2PManager : MonoBehaviour
         activeUserAvatars.Remove(userId);
 
         Log($"Removed avatar for user: {userId}");
+    }
+
+    /// <summary>
+    /// 핀치 줌 — 사람 오브젝트도 다섯 매니저·보물처럼 확대·축소한다 (ARObjectZoomController 가 부른다)
+    /// </summary>
+    public void ApplyZoom(float zoom)
+    {
+        foreach (var avatarObj in activeUserAvatars.Values)
+        {
+            if (avatarObj != null) avatarObj.transform.localScale = AvatarScale(zoom);
+        }
+    }
+
+    // 본(템플릿) 크기가 2배라 1배로 덮지 않고 그 크기에 곱한다
+    private Vector3 AvatarScale(float zoom) => (userAvatarPrefab != null ? userAvatarPrefab.transform.localScale : Vector3.one) * zoom;
+
+    private float CurrentZoom()
+    {
+        if (zoomController == null) zoomController = FindFirstObjectByType<ARObjectZoomController>();
+        return zoomController != null ? zoomController.GetZoomLevel() : 1f;
     }
 
     /// <summary>

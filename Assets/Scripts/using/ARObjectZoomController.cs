@@ -203,6 +203,7 @@ public class ARObjectZoomController : MonoBehaviour
         ApplyZoomToManager(trainStationManager?.GetSpawnedObjects());
         ApplyZoomToManager(terminalManager?.GetSpawnedObjects());
         ApplyZoomToManager(R0926HuntTreasure.SpawnedObjects);   // 보물찾기 AR 보물
+        if (P2PManager.Instance != null) P2PManager.Instance.ApplyZoom(currentZoom);   // 사람(P2P) — 예전엔 빠져 있어 확대·축소가 안 됐다
     }
 
     private void ApplyZoomToManager(Dictionary<string, GameObject> spawned)

@@ -104,6 +104,7 @@ namespace Redesign0926
             else if (mode == "v24") PlanV24();
             else if (mode == "farfade") PlanFarFade();
             else if (mode == "nudge") PlanNudge();
+            else if (mode == "p2pzoom") PlanP2PZoom();
             else if (mode == "maptiles") PlanMapTiles();
             else if (mode == "mapcoord") PlanMapCoord();
             else if (mode == "vwshot") PlanVwShot();
@@ -3732,6 +3733,120 @@ namespace Redesign0926
                 ptTouch = null;
                 InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
             });
+        }
+
+        // ── 10-22 N18: 사람(P2P) 오브젝트도 핀치 줌을 따른다 — 본 크기(2배) × 배율 · 줌 중에 새로 뜬 사람·풀에서 다시 꺼낸 사람도 ──
+        private static void PlanP2PZoom()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            ARObjectZoomController z = null;
+            float baseS = 0f;
+            var modeWas = UserFilterMode.All;
+            // 지금 가상 위치에서 북쪽으로 m 미터 — 에디터는 이 차이로 카메라 앞에 세운다
+            Func<string, int, string> user = (id, m) =>
+            {
+                double lat = VirtualLocation.Instance.Latitude + m / 111320.0, lon = VirtualLocation.Instance.Longitude;
+                return $"{{\"user_id\":\"{id}\",\"username\":\"{id}\",\"latitude\":{lat:0.0000000},\"longitude\":{lon:0.0000000},\"altitude\":0,\"distance\":{m}}}";
+            };
+            Func<string[], string> near = ids =>
+            {
+                var parts = new List<string>();
+                for (int i = 0; i < ids.Length; i++) parts.Add(user(ids[i], 12 + i * 6));
+                return "{\"users\":[" + string.Join(",", parts) + "]}";
+            };
+            Func<Dictionary<string, GameObject>> avatars = () => typeof(P2PManager).GetField("activeUserAvatars", F).GetValue(P2PManager.Instance) as Dictionary<string, GameObject>;
+            Func<string, float> sc = id => avatars().TryGetValue(id, out var go) && go != null ? go.transform.localScale.x : -1f;
+            Func<float, string[], bool> all = (k, ids) =>
+            {
+                string desc = "";
+                bool ok = true;
+                foreach (var id in ids) { float v = sc(id); desc += $" {id} {v:0.00}"; if (Mathf.Abs(v - baseS * k) > 0.001f) ok = false; }
+                log.Add($"  배율 {k:0.0} (본 {baseS:0.0} → {baseS * k:0.00}):" + desc);
+                return ok;
+            };
+            Action<float> zoomTo = k =>
+            {
+                typeof(ARObjectZoomController).GetField("currentZoom", F).SetValue(z, k);
+                typeof(ARObjectZoomController).GetMethod("ApplyZoomToARObjects", F).Invoke(z, null);
+            };
+            Action<string> mode = m =>
+            {
+                var um = (UserFilterMode)Enum.Parse(typeof(UserFilterMode), m);
+                var fp = UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
+                if (fp != null) fp.SetFilterModeExternal(um); else P2PManager.Instance?.SetUserFilterMode(um);
+            };
+            Action face = () =>
+            {
+                var cam = Camera.main;
+                if (cam == null || !avatars().TryGetValue("zt1", out var go) || go == null) return;
+                Vector3 d = go.transform.position - cam.transform.position; d.y = 0f;
+                if (d.sqrMagnitude > 0.01f) cam.transform.rotation = Quaternion.LookRotation(d);
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                // 에디터의 가상 사용자(1초마다 근처 사람 'woopang'을 넣는다)가 시험이 넣은 근처 사람 목록을 덮어쓰지 않게
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>();
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                z = UnityEngine.Object.FindAnyObjectByType<ARObjectZoomController>(FindObjectsInactive.Include);
+                var tpl = typeof(P2PManager).GetField("userAvatarPrefab", F).GetValue(P2PManager.Instance) as GameObject;
+                baseS = tpl != null ? tpl.transform.localScale.x : 0f;
+                var fp = UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
+                modeWas = fp != null ? fp.GetCurrentFilterMode() : P2PManager.Instance.GetUserFilterMode();
+                mode("All");
+                log.Add($"  줌 {(z != null ? "있음" : "없음")} · 사람 오브젝트 본 크기 {baseS:0.0} · 필터 {modeWas} → All");
+            });
+            Sleep(0.4f);
+
+            // 1) 줌 1 — 본 크기 그대로
+            Do(() => P2PManager.Instance.InjectTestUsersData(near(new[] { "zt1", "zt2" })));
+            Sleep(0.5f);
+            Do(face);
+            Sleep(0.4f);
+            Shot("p2pzoom_1x");
+            Check(() => baseS > 0f && all(1f, new[] { "zt1", "zt2" }), "줌 1: 사람 오브젝트는 본 크기 그대로 (반으로 줄지 않음)");
+
+            // 2) 1.5배 — 떠 있는 사람도 같이 커지고, 줌 중에 새로 뜬 사람도 1.5배로 나온다
+            Do(() => zoomTo(1.5f));
+            Sleep(0.4f);
+            Shot("p2pzoom_15x");
+            Check(() => all(1.5f, new[] { "zt1", "zt2" }), "핀치 1.5배: 떠 있는 사람 오브젝트도 1.5배");
+            Do(() =>
+            {
+                var dm = DataManager.Instance?.GetSpawnedObjects();
+                foreach (var kv in dm ?? new Dictionary<int, GameObject>()) { if (kv.Value != null && kv.Value.activeSelf) { log.Add($"  (참고) 장소 오브젝트 '{kv.Value.name}' 크기 {kv.Value.transform.localScale.x:0.00}"); break; } }
+            });
+            Do(() => P2PManager.Instance.InjectTestUsersData(near(new[] { "zt1", "zt2", "zt3" })));
+            Sleep(0.4f);
+            Check(() => all(1.5f, new[] { "zt1", "zt2", "zt3" }), "줌 중에 새로 뜬 사람도 지금 배율(1.5배)로");
+
+            // 3) 0.6배로 줄이고 · 되돌리면 본 크기
+            Do(() => zoomTo(0.6f));
+            Sleep(0.3f);
+            Check(() => all(0.6f, new[] { "zt1", "zt2", "zt3" }), "핀치 0.6배: 작아짐");
+            Do(() => z.ResetZoom());
+            Sleep(0.3f);
+            Check(() => all(1f, new[] { "zt1", "zt2", "zt3" }), "줌 되돌리기: 본 크기");
+
+            // 4) 사라졌다 풀에서 다시 꺼낸 사람도 그때 배율로
+            Do(() => { foreach (var id in new[] { "zt1", "zt2", "zt3" }) P2PManager.Instance.RemoveTestUserAvatar(id); });
+            Do(() => zoomTo(2f));
+            Do(() => P2PManager.Instance.InjectTestUsersData(near(new[] { "zt1" })));
+            Sleep(0.3f);
+            Check(() => all(2f, new[] { "zt1" }), "풀에서 다시 꺼낸 사람도 지금 배율(2배)로");
+
+            Do(() =>
+            {
+                z.ResetZoom();
+                P2PManager.Instance.RemoveTestUserAvatar("zt1");
+                mode(modeWas.ToString());
+            });
+            Sleep(0.3f);
+            Check(() => avatars().Count == 0 || !avatars().ContainsKey("zt1"), "시험 사람 정리 · 줌·필터 되돌림");
         }
 
         // 누를 오브젝트 — 가까운 것부터 카메라를 돌려 화면 가운데에 두고, 그 자리를 누르면 그 오브젝트가 맞는 것 (앞을 다른 것이 안 가림)
