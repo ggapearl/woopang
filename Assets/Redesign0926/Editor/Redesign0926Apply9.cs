@@ -52,7 +52,7 @@ namespace Redesign0926
             Apply1004(root, log);   // 10-04 아이폰 확인 뒤 — 도크 칸 · 손잡이 · 프로필 카드 · 입력줄 · 날씨 크기
             Apply1005(root, log);   // 10-05 — 업로드 제한시간 60초 (창 닫기 통일은 각 단계 안에서)
             ApplyHunt(root, log);   // 보물찾기 — 추가 창 세 번째 카드 (Redesign0926ApplyHunt)
-            ApplyHuntTreasure(root, log);   // 보물찾기 — AR 보물(금빛 상자) · 상태 알약 아래 알림 (Redesign0926ApplyHuntTreasure)
+            ApplyHuntTreasure(root, log);   // 보물찾기 — AR 보물(보물상자) · 상태 알약 아래 알림 (Redesign0926ApplyHuntTreasure)
             ApplyHuntProfile(root, log);   // 보물찾기 — 프로필 카드의 '주최' 칸과 펼침 (ProfileCard 다음이어야 한다)
             ApplyChatLook(root, log);   // 대화창 말풍선·날짜·제목줄 (Redesign0926ApplyChat)
             ApplyFollowLook(root, log);   // 팔로잉/팔로워 창 · 줄 프리팹 (Redesign0926ApplyFollow)

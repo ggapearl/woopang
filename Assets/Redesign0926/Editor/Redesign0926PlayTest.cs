@@ -98,6 +98,7 @@ namespace Redesign0926
             else if (mode == "huntpush") PlanHuntPush();
             else if (mode == "huntprofile") PlanHuntProfile();
             else if (mode == "hunttreasure") PlanHuntTreasure();
+            else if (mode == "huntchest") PlanHuntChest();
             else if (mode == "login") PlanLogin();
             else if (mode == "loginswitch") PlanLoginSwitch();
             else if (mode == "chatlook") PlanChatLook();
@@ -4574,7 +4575,7 @@ namespace Redesign0926
             Sleep(9.5f);
             Shot("hunt_near");
             Check(() => (Find(H + "Detail/Viewport/Content/Info")?.GetComponent<Text>()?.text ?? "").Contains("참가  1/30명"), "참가 → 상세 1/30명");
-            Check(() => TextOf(H + "Detail/Viewport/Content/Near").Contains("두 번 톡톡"), "보이는 거리 안 → '금빛 상자를 두 번 톡톡 눌러 열어요'");
+            Check(() => TextOf(H + "Detail/Viewport/Content/Near").Contains("두 번 톡톡"), "보이는 거리 안 → '보물상자를 두 번 톡톡 눌러 열어요'");
             Check(() => R0926HuntCard.EditorBuzzes == 1, "보물 자리로 다가감 → 진동 한 번");
             OpenTreasureAR("hunt_celebrate");
             Shot("hunt_found");
@@ -4994,13 +4995,15 @@ namespace Redesign0926
             }
         }
 
-        // AR 보물 — 참가한 게임의 보물에 '보이는 거리'(50m)까지 다가가면 그 자리에 금빛 상자 · 누르면 찾기.
+        // AR 보물 — 참가한 게임의 보물에 '보이는 거리'(50m)까지 다가가면 그 자리에 보물상자 · 두 번 톡톡이면 열고 찾기.
         // 개발 서버의 두 게임(누르기 T1 · 코드 T2)에 시험 아이디로 참가해 두고, 에디터 위치(VirtualLocation)를 옮기며 걷는다
         private const string TreasurePref = "r0926_hunt_treasure";
         private const string TrPlayer = "hunt_test_tplayer";
         private const System.Reflection.BindingFlags NPI = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
         private static int trHunt1, trHunt2;
         private static Vector2 trBase;
+        private static Vector3 trChestAt;
+        private static float trChestYaw;
         private static bool treasureRun;
         private static void PlanHuntTreasure()
         {
@@ -5062,17 +5065,29 @@ namespace Redesign0926
                 var go = Treasure(trHunt1);
                 var t = go != null ? go.GetComponentInChildren<Target>(true) : null;
                 var r = go != null ? go.GetComponentInChildren<MeshRenderer>(true) : null;
-                return t != null && r != null && r.sharedMaterial != null && r.sharedMaterial.name.StartsWith("GoldenGlowCube")
+                return t != null && r != null && r.sharedMaterial != null && r.sharedMaterial.name.StartsWith("HuntChestGold")
                        && t.PlaceName == T1Title && t.placeId == "hunt_" + trHunt1 && Mathf.Abs(t.TargetColor.b - 0.31f) < 0.01f && t.OnIndicatorTapped != null && t.Sparkle;
-            }, "금빛 상자 · 이름 · 금색 박스·화살표(별빛) · 박스를 눌러도 찾기");
+            }, "보물상자(금빛 재질) · 이름 · 금색 박스·화살표(별빛) · 박스를 눌러도 찾기");
             Check(() =>
             {
-                var cube = Treasure(trHunt1)?.GetComponentInChildren<GoldenGlowCube>();
-                if (cube == null) return false;
-                var so = new SerializedObject(cube);
-                return !so.FindProperty("enableFloat").boolValue;
-            }, "보물은 제자리 — 위아래로 떠다니지 않음");
-            Check(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!" && TextOf("HuntToast0926/Pill/Sub") == "금빛 상자를 두 번 톡톡 눌러 열어 보세요",
+                var go = Treasure(trHunt1);
+                var chest = go != null ? go.GetComponentInChildren<R0926HuntChest>() : null;
+                var tw = go != null ? go.transform.Find("Twinkle")?.GetComponent<ParticleSystem>() : null;
+                if (chest == null || tw == null) { log.Add("  상자 " + (chest != null) + " · 별빛 " + (tw != null)); return false; }
+                trChestAt = chest.transform.position;
+                trChestYaw = chest.transform.eulerAngles.y;
+                return go.GetComponentInChildren<GoldenGlowCube>(true) == null && chest.transform.Find("Lid") != null && chest.LidAngle < 1f && tw.isPlaying;
+            }, "보물상자 — 뚜껑 닫힘 · 둘레에 별빛 · 예전 금빛 큐브(GoldenGlowCube)는 없음");
+            Sleep(0.6f);
+            Check(() =>
+            {
+                var chest = Treasure(trHunt1)?.GetComponentInChildren<R0926HuntChest>();
+                if (chest == null) return false;
+                float turned = Mathf.Abs(Mathf.DeltaAngle(trChestYaw, chest.transform.eulerAngles.y));
+                log.Add("  0.6초에 " + turned.ToString("0.0") + "° 돎 · 높이 차 " + Mathf.Abs(chest.transform.position.y - trChestAt.y).ToString("0.000") + "m");
+                return turned > 5f && (chest.transform.position - trChestAt).sqrMagnitude < 1e-6f;
+            }, "보물은 제자리에서 천천히 돎 — 위아래로 떠다니지 않음");
+            Check(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!" && TextOf("HuntToast0926/Pill/Sub") == "보물상자를 두 번 톡톡 눌러 열어 보세요",
                 "처음 보이면 상태 알약 아래 알림 '보물이 근처에 있어요!'");
             Check(() =>
             {
@@ -5143,7 +5158,7 @@ namespace Redesign0926
                         && R0926HuntTreasure.Tracking(trHunt1) && Treasure(trHunt1) != null,
                 "45m 에서 상자를 누르면 '조금만 더 가까이 · Nm 더 가 보세요' · 보물은 그대로");
 
-            // 12m — 누르면 찾음 → 상자가 사라지고 그 게임 상세
+            // 12m — 두 번 톡톡 → 찾음 → 상자가 이쪽을 보고 열린 뒤 사라지고 · 축하 화면 → 그 게임 상세
             Do(() => VirtualLocation.Instance.SetCoordinates(trBase.x + 0.0003f - 0.000108f, trBase.y));
             Sleep(0.6f);
             Do(() => FaceTreasure(trHunt1));
@@ -5151,16 +5166,26 @@ namespace Redesign0926
             Shot("treasure_12m");
             DoubleTapTreasure(() => trHunt1);
             Wait(() => R0926HuntCelebrate.Showing, 8f, "12m 두 번 톡톡 → 축하 화면");
-            Sleep(0.5f);
-            Shot("treasure_open");   // 선물 상자가 튀어나와 흔들리는 중
-            Sleep(1.6f);
+            Sleep(0.35f);
+            Shot("treasure_open_ar");   // AR 상자가 이쪽을 보고 뚜껑이 열리는 중
+            Check(() =>
+            {
+                var chest = UnityEngine.Object.FindAnyObjectByType<R0926HuntChest>();
+                var t = chest != null ? chest.GetComponent<Target>() : null;
+                if (chest == null) { log.Add("  여는 상자 없음"); return false; }
+                log.Add("  뚜껑 " + chest.LidAngle.ToString("0") + "°");
+                return chest.Opening && chest.LidAngle > 20f && t != null && !t.enabled;
+            }, "찾음 → 상자가 이쪽을 보고 뚜껑이 열림 · 박스·화살표는 걷힘");
+            Sleep(0.6f);
+            Shot("treasure_open");   // 화면이 스르륵 — 열린 보물상자가 튀어나오는 중
+            Sleep(1.4f);
             Shot("treasure_found");
             Do(() => log.Add("  축하: " + TextOf(C + "Title") + " / " + TextOf(C + "Rank") + " / " + TextOf(C + "PrizeCard/Prize") + " / " + TextOf(C + "Note")));
             Check(() => TextOf(C + "Title") == "보물을 찾았습니다!" && TextOf(C + "Rank") == "가장 먼저 찾았어요  ·  " + T1Title
                         && TextOf(C + "PrizeCard/Prize") == Prize && TextOf(C + "Note").Contains("님에게 찾았다는 메세지를 보냈어요"),
                 "축하 화면: '보물을 찾았습니다!' · 가장 먼저 · 상품 안내 · 주최자에게 메세지 보냄");
             Check(() => !R0926HuntTreasure.Tracking(trHunt1) && !R0926HuntTreasure.SpawnedObjects.ContainsKey("hunt_" + trHunt1), "찾음 → 그만 지켜봄");
-            Check(() => GameObject.Find("HuntTreasure_" + trHunt1) == null && PrefLine(trHunt1) == null, "상자는 빙글 돌며 사라짐 · 기기 기록에서도 지움");
+            Check(() => GameObject.Find("HuntTreasure_" + trHunt1) == null && PrefLine(trHunt1) == null, "상자는 열린 뒤 작아지며 사라짐 · 기기 기록에서도 지움");
             Do(() => Click(C + "OK"));
             Wait(() => Active(H + "Detail") && DetailTitle().Contains(T1Title), 12f, "확인 → 그 게임 상세");
             Sleep(1.2f);
@@ -5230,6 +5255,169 @@ namespace Redesign0926
                 return at && host && skip && !PlayerPrefs.HasKey(TreasurePref);
             }, "예약 게임은 시작 시각(UTC)을 적어 그때부터 · 주최자도 내 보물을 봄(참가는 못 함) · 이미 찾은 게임은 안 봄");
             Do(() => { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; });
+        }
+
+        // 보물상자 근접 촬영 — 서버 없이 프리팹을 눈앞에 두고: 가까이·중간·멀리 · 누름(살짝 커짐) · 달그락 · 열기(이쪽을 봄 → 뚜껑 · 빛기둥 · 별빛) · 축하 화면
+        private static GameObject hcGo;
+        private static R0926HuntChest hcChest;
+        private static float hcRest, hcPeak, hcTilt, hcYaw;
+        private static void PlanHuntChest()
+        {
+            const string C = "HuntCelebrate0926/Panel/Content/";
+            Action<float> place = d => steps.Enqueue(() =>
+            {
+                var cam = Camera.main;
+                if (hcGo == null || cam == null) return true;
+                Vector3 f = cam.transform.forward; f.y = 0f; f.Normalize();
+                hcGo.transform.position = cam.transform.position + f * d + Vector3.down * 0.35f;
+                return true;
+            });
+            // sec 초 동안 매 프레임 지켜본다 (찍는 두 프레임 사이에 정점을 놓치지 않게)
+            Action<float, Action> watch = (sec, each) =>
+            {
+                double until = -1;
+                steps.Enqueue(() =>
+                {
+                    if (until < 0) until = EditorApplication.timeSinceStartup + sec;
+                    each();
+                    return EditorApplication.timeSinceStartup >= until;
+                });
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                DeviceFov();
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";   // 축하 화면이 무엇을 부르더라도 개발 서버로만
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Redesign0926/Prefabs/HuntTreasure0926.prefab");
+                hcGo = prefab != null ? UnityEngine.Object.Instantiate(prefab) : null;
+                if (hcGo != null) hcGo.name = "HuntChestShot";
+                hcChest = hcGo != null ? hcGo.GetComponentInChildren<R0926HuntChest>() : null;
+                hcRest = hcChest != null ? hcChest.transform.localScale.x : 1f;
+            });
+            place(3.6f);
+            Sleep(1.2f);
+            Check(() =>
+            {
+                if (hcChest == null) { log.Add("  보물상자 프리팹 없음"); return false; }
+                var mf = hcChest.GetComponent<MeshFilter>(); var mr = hcChest.GetComponent<MeshRenderer>();
+                var lid = hcChest.transform.Find("Lid");
+                var lmf = lid != null ? lid.GetComponent<MeshFilter>() : null;
+                var mats = mr != null ? mr.sharedMaterials : new Material[0];
+                log.Add("  몸통 " + (mf != null && mf.sharedMesh != null ? mf.sharedMesh.name + " " + mf.sharedMesh.vertexCount : "없음") + " · 재질 " + string.Join(", ", System.Array.ConvertAll(mats, m => m != null ? m.name : "null")));
+                return mf != null && mf.sharedMesh != null && mf.sharedMesh.name == "HuntChestBody" && mats.Length == 3 && mats[0] != null && mats[0].name == "HuntChestGold_Mat"
+                       && lmf != null && lmf.sharedMesh != null && lmf.sharedMesh.name == "HuntChestLid" && hcChest.LidAngle < 1f
+                       && hcGo.GetComponentInChildren<GoldenGlowCube>(true) == null && hcChest.GetComponent<Target>() != null && hcChest.GetComponent<BoxCollider>() != null;
+            }, "보물상자 프리팹 — 몸통·뚜껑(경첩) 모양 · 금빛·청동·금화 재질 · 뚜껑 닫힘 · 박스·화살표(Target) · 누르는 상자");
+            Check(() =>
+            {
+                var tw = hcGo != null ? hcGo.transform.Find("Twinkle")?.GetComponent<ParticleSystem>() : null;
+                if (tw == null) return false;
+                log.Add("  별빛 " + tw.particleCount + "개");
+                return tw.isPlaying && tw.particleCount > 0;
+            }, "둘레에 흰 별빛이 피었다 사그라듦 (켜자마자 — 미리 돌려 둠)");
+            Shot("chest_close");
+            Do(() => hcYaw = hcChest != null ? hcChest.transform.eulerAngles.y : 0f);
+            place(9f);
+            Sleep(0.6f);
+            Shot("chest_mid");
+            place(20f);
+            Sleep(0.6f);
+            Shot("chest_far");
+            Check(() => hcChest != null && Mathf.Abs(Mathf.DeltaAngle(hcYaw, hcChest.transform.eulerAngles.y)) > 10f, "제자리에서 천천히 돎");
+
+            // 한 번 누름 — 살짝 커졌다 돌아온다 (예전 금빛 상자와 같은 1.15배 · 0.16초)
+            place(3.6f);
+            Sleep(0.5f);
+            Do(() => { hcPeak = 0f; hcChest?.Nudge(); });
+            watch(0.12f, () => { if (hcChest != null) hcPeak = Mathf.Max(hcPeak, hcChest.transform.localScale.x / hcRest); });
+            Shot("chest_nudge");
+            watch(0.5f, () => { if (hcChest != null) hcPeak = Mathf.Max(hcPeak, hcChest.transform.localScale.x / hcRest); });
+            Check(() =>
+            {
+                float now = hcChest != null ? hcChest.transform.localScale.x / hcRest : 0f;
+                log.Add("  누름: 가장 클 때 " + hcPeak.ToString("0.000") + "배 → 지금 " + now.ToString("0.000"));
+                return hcPeak > 1.05f && hcPeak < 1.16f && Mathf.Abs(now - 1f) < 0.01f;
+            }, "누르면 살짝 커졌다 돌아옴");
+
+            // 서버에 묻는 동안 달그락
+            Do(() => { hcTilt = 0f; hcChest?.Rattle(true); });
+            watch(0.3f, () => { if (hcChest != null) hcTilt = Mathf.Max(hcTilt, Mathf.Abs(Mathf.DeltaAngle(0f, hcChest.transform.eulerAngles.z))); });
+            Shot("chest_rattle");
+            Do(() => hcChest?.Rattle(false));
+            Sleep(0.2f);
+            Check(() =>
+            {
+                float z = hcChest != null ? Mathf.Abs(Mathf.DeltaAngle(0f, hcChest.transform.eulerAngles.z)) : 99f;
+                log.Add("  달그락: 가장 기울 때 " + hcTilt.ToString("0.0") + "° → 멈춘 뒤 " + z.ToString("0.0") + "°");
+                return hcTilt > 1.5f && hcTilt < 4f && z < 0.01f;
+            }, "묻는 동안 달그락 (±3.5°) · 멈추면 반듯");
+
+            // 찾음 — 이쪽을 보고 뚜껑이 열리며 빛기둥·별빛 → 작아지며 사라짐 · 그 사이 축하 화면
+            Do(() =>
+            {
+                hcChest?.Open();
+                R0926HuntCelebrate.Show(0, "카페 앞 보물찾기", 1, "커피 쿠폰 한 장", "우팡");
+            });
+            Sleep(0.12f);
+            Shot("chest_open_turn");
+            Sleep(0.22f);
+            Shot("chest_open_lid");
+            Check(() =>
+            {
+                if (hcChest == null) return false;
+                var t = hcChest.GetComponent<Target>();
+                var cam = Camera.main.transform;
+                Vector3 to = cam.position - hcChest.transform.position; to.y = 0f;
+                float face = Vector3.Angle(-hcChest.transform.forward, to);   // 자물쇠(앞)가 -Z
+                log.Add("  열기: 뚜껑 " + hcChest.LidAngle.ToString("0") + "° · 앞이 카메라에서 " + face.ToString("0") + "°");
+                return hcChest.Opening && hcChest.LidAngle > 20f && face < 8f && t != null && !t.enabled;
+            }, "열 때 앞(자물쇠)이 이쪽을 보고 뚜껑이 열림 · 박스·화살표는 걷힘");
+            Sleep(0.3f);
+            Shot("chest_open_beam");
+            Check(() =>
+            {
+                bool beam = hcGo != null && hcGo.transform.Find("Beam") != null;
+                bool stars = GameObject.Find("HuntChestFountain") != null;
+                log.Add("  뚜껑 " + (hcChest != null ? hcChest.LidAngle.ToString("0") : "-") + "° · 빛기둥 " + beam + " · 솟는 별빛 " + stars);
+                return hcChest != null && hcChest.LidAngle > 100f && beam && stars;
+            }, "뚜껑이 활짝 (100° 넘게) · 빛기둥과 흰 별빛이 솟음");
+            Sleep(0.45f);
+            Shot("chest_modal_pop");
+            Sleep(0.4f);
+            Shot("chest_modal_lid");
+            Check(() =>
+            {
+                var stage = Find(C + "Stage");
+                int coins = 0, paper = 0;
+                if (stage != null)
+                    foreach (Transform c in stage)
+                        if (c.name == "Paper" && c.gameObject.activeSelf) { paper++; if (c.GetComponent<Image>().sprite != null && c.GetComponent<Image>().sprite.name == "r0926_coin") coins++; }
+                log.Add("  축하 화면 꽃가루 " + paper + "개 중 금화 " + coins);
+                return Active(C + "Stage/ChestBody") && Active(C + "Stage/ChestLid") && !Active(C + "Stage/GiftBox") && paper > 20 && coins > 3;
+            }, "축하 화면: 열린 보물상자 · 금화가 섞인 꽃가루");
+            Sleep(0.9f);
+            Shot("chest_modal_done");
+            Check(() =>
+            {
+                var lid = Find(C + "Stage/ChestLid");
+                var info = Find(C + "Info")?.GetComponent<CanvasGroup>();
+                return hcGo == null && lid != null && Mathf.Abs(lid.localScale.y - 1f) < 0.01f && info != null && info.alpha > 0.99f
+                       && TextOf(C + "Info/Title") == "보물을 찾았습니다!" && TextOf(C + "Info/PrizeCard/Prize") == "커피 쿠폰 한 장" && Active(C + "Info/OK");
+            }, "AR 상자는 사라지고 · 축하 화면 다 열림 (뚜껑 · '보물을 찾았습니다!' · 상품 · 확인)");
+            Do(() =>
+            {
+                var cel = UnityEngine.Object.FindAnyObjectByType<R0926HuntCelebrate>(FindObjectsInactive.Include);
+                (typeof(R0926HuntCelebrate).GetField("panel", NPI)?.GetValue(cel) as GameObject)?.SetActive(false);   // '확인'은 그 게임 상세를 서버에서 연다 — 서버 없는 시험이라 닫기만
+                R0926HuntApi.EditorBase = null;
+            });
         }
 
         private static int DevCreateHuntAt(string host, string title, float lat, float lon, string code, string question, string prize = null)
@@ -5320,7 +5508,7 @@ namespace Redesign0926
             Sleep(0.3f);
             DoubleTapTreasure(() => arHunt);
             Wait(() => R0926HuntCelebrate.Showing, 8f, "두 번 톡톡 → 축하 화면");
-            Sleep(2.0f);
+            Sleep(2.4f);
             Shot(shot);
             Do(() => log.Add("  축하: " + TextOf(C + "Title") + " / " + TextOf(C + "Rank") + " / " + TextOf(C + "PrizeCard/Prize") + " / " + TextOf(C + "Note")));
             Check(() => TextOf(C + "Title") == "보물을 찾았습니다!" && Active(C + "OK"), "두 번 톡톡 → '보물을 찾았습니다!' 축하 화면");

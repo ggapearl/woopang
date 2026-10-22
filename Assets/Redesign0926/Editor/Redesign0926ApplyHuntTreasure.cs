@@ -7,13 +7,12 @@ using UnityEngine.UI;
 namespace Redesign0926
 {
     /// <summary>
-    /// 보물찾기 AR 보물 — 금빛 상자 프리팹(앵커 + 상자 + Target)과 상태 알약 아래 알림을 만들고 캔버스의 R0926HuntTreasure 에 잇는다.
-    /// 상자는 홈페이지 히어로와 같은 금빛 큐브(GoldenGlowCube) — 장소 큐브(흰 테두리)와 한눈에 갈린다.
+    /// 보물찾기 AR 보물 — 보물상자 프리팹(앵커 + 상자 + Target)과 상태 알약 아래 알림을 만들고 캔버스의 R0926HuntTreasure 에 잇는다.
+    /// 상자는 예전 금빛 큐브와 같은 금빛에 짙은 청동 띠를 두른 보물상자(R0926HuntChest · 모양은 Redesign0926ApplyHuntChest) — 장소 큐브(흰 테두리)와 한눈에 갈린다.
     /// </summary>
     public static partial class Redesign0926Apply
     {
         private const string TreasurePrefabPath = "Assets/Redesign0926/Prefabs/HuntTreasure0926.prefab";
-        private const string TreasureMatPath = "Assets/Materials/AR/GoldenGlowCube_Mat.mat";
         private const string PlaceCubePath = "Assets/Prefab/0000_Cube.prefab";
 
         private static void ApplyHuntTreasure(Transform root, List<string> log)
@@ -75,7 +74,7 @@ namespace Redesign0926
         }
 
         // ── 찾았을 때 축하 화면 — 캔버스 맨 위, 늘 켜진 빈 틀 + 꺼 둔 Panel (R0926HuntCelebrate 가 켠다) ──
-        //    선물 상자(뚜껑이 날아감) · 빛줄기 둘 · 꽃가루 · '보물을 찾았습니다!' · 몇 번째 · 상품 카드(선물 그림) · 주최자 안내 · 확인
+        //    열린 보물상자(뚜껑이 경첩에서 펼쳐짐 · 금화 더미) · 빛줄기 둘 · 금화·꽃가루 · '보물을 찾았습니다!' · 몇 번째 · 상품 카드(선물 그림) · 주최자 안내 · 확인
         private static void HuntCelebrate(Transform root, List<string> log)
         {
             var host = FindOrCreate(root, "HuntCelebrate0926");
@@ -112,8 +111,18 @@ namespace Redesign0926
             var rays2 = Layer("Rays2", Spr("r0926_rays"), new Color(HuntAmber.r, HuntAmber.g, HuntAmber.b, 0f), Vector2.zero, new Vector2(1020, 1020));
             RT(rays2).localEulerAngles = new Vector3(0, 0, 13f);
             var glow = Layer("Glow", Spr("r0926_glow"), new Color(1f, 0.82f, 0.45f, 0f), new Vector2(0, -20), new Vector2(820, 820));   // 가장자리까지 0 으로 지는 번짐 (64px 별을 키웠더니 옅은 테두리가 계단처럼 보였다)
-            var box = Layer("GiftBox", Spr("r0926_gift_box"), Color.white, new Vector2(0, -120), new Vector2(480, 360));
-            var lid = Layer("GiftLid", Spr("r0926_gift_lid"), Color.white, new Vector2(0, 195), new Vector2(540, 330));
+            // 10-22: 선물 상자 → 열린 보물상자 (AR 에서 연 그 상자가 이어서 뜬다)
+            foreach (var oldName in new[] { "GiftBox", "GiftLid" })
+            {
+                var old = stage.transform.Find(oldName);
+                if (old != null) { Object.DestroyImmediate(old.gameObject); log.Add("축하 화면: 선물 상자 " + oldName + " 지움 → 보물상자"); }
+            }
+            var lid = Layer("ChestLid", Spr("r0926_chest_lid"), Color.white, new Vector2(0, -70), new Vector2(560, 300));
+            RT(lid).pivot = new Vector2(0.5f, 0f);   // 경첩(아래)에서 위로 펼쳐진다
+            RT(lid).anchoredPosition = new Vector2(0, -70);
+            var box = Layer("ChestBody", Spr("r0926_chest_body"), Color.white, new Vector2(0, -130), new Vector2(560, 450));
+            lid.transform.SetSiblingIndex(glow.transform.GetSiblingIndex() + 1);   // 빛 앞 · 몸통 뒤
+            box.transform.SetSiblingIndex(lid.transform.GetSiblingIndex() + 1);
 
             var info = FindOrCreate(content.transform, "Info");
             SetRect(RT(info), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), new Vector2(0, -70), new Vector2(1240, 840));
@@ -171,8 +180,8 @@ namespace Redesign0926
             so.FindProperty("rays").objectReferenceValue = RT(rays);
             so.FindProperty("rays2").objectReferenceValue = RT(rays2);
             so.FindProperty("glow").objectReferenceValue = RT(glow);
-            so.FindProperty("giftBox").objectReferenceValue = RT(box);
-            so.FindProperty("giftLid").objectReferenceValue = RT(lid);
+            so.FindProperty("chestBody").objectReferenceValue = RT(box);
+            so.FindProperty("chestLid").objectReferenceValue = RT(lid);
             so.FindProperty("stage").objectReferenceValue = RT(stage);
             so.FindProperty("info").objectReferenceValue = infoGroup;
             so.FindProperty("title").objectReferenceValue = tt;
@@ -184,16 +193,17 @@ namespace Redesign0926
             so.FindProperty("okButton").objectReferenceValue = okBtn;
             so.FindProperty("confettiRound").objectReferenceValue = Spr("r0926_circle");
             so.FindProperty("glintSprite").objectReferenceValue = Spr("r0926_glint");
+            so.FindProperty("coinSprite").objectReferenceValue = Spr("r0926_coin");
             so.ApplyModifiedPropertiesWithoutUndo();
             log.Add("hunt celebrate ok");
         }
 
-        // 앵커(뿌리, 크기 1 — 줌이 뿌리 크기를 바꾼다) + 금빛 상자 1.2m (누르기 쉽게 충돌 상자는 조금 크게) + 박스·화살표(Target, 금색).
+        // 앵커(뿌리, 크기 1 — 줌이 뿌리 크기를 바꾼다) + 보물상자 1.2배(폭 약 1.25m · 누르기 쉽게 충돌 상자는 조금 크게) + 뚜껑(경첩 원점) + 박스·화살표(Target, 금색).
         // 한 번 만든 뒤엔 열어서 고쳐 저장한다 — 새로 저장하면 내부 ID 가 바뀌어 장면의 참조가 끊길 수 있다
         private static GameObject TreasurePrefab(List<string> log)
         {
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(TreasureMatPath);
-            if (mat == null) { log.Add("보물찾기 AR 보물: 재질 없음 " + TreasureMatPath); return null; }
+            var parts = ChestAssets(log);
+            if (parts == null) return null;
             if (!File.Exists(TreasurePrefabPath))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(TreasurePrefabPath));
@@ -213,23 +223,36 @@ namespace Redesign0926
                 chest.transform.localPosition = Vector3.zero;
                 chest.transform.localRotation = Quaternion.identity;
                 chest.transform.localScale = Vector3.one * 1.2f;
-                Ensure<MeshFilter>(chest).sharedMesh = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
+                // 10-22 금빛 큐브 → 보물상자: 큐브를 돌리던 GoldenGlowCube 는 뗀다 (돌기·누름·열기·별빛은 R0926HuntChest)
+                var cube = chest.GetComponent<GoldenGlowCube>();
+                if (cube != null) { Object.DestroyImmediate(cube); log.Add("보물: 금빛 큐브(GoldenGlowCube) 떼어 냄 → 보물상자"); }
+                Ensure<MeshFilter>(chest).sharedMesh = parts.body;
                 var mr = Ensure<MeshRenderer>(chest);
-                mr.sharedMaterial = mat;
+                mr.sharedMaterials = new[] { parts.gold, parts.trim, parts.treasure };
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 mr.receiveShadows = false;
                 var bc = Ensure<BoxCollider>(chest);
-                bc.center = Vector3.zero;
-                bc.size = Vector3.one * 1.4f;
+                bc.center = new Vector3(0f, 0.01f, -0.01f);
+                bc.size = new Vector3(1.3f, 1.12f, 0.95f);
 
-                var glow = Ensure<GoldenGlowCube>(chest);
-                var gso = new SerializedObject(glow);
-                gso.FindProperty("rotateSpeedX").floatValue = 0f;     // 옆으로 구르지 않고 제자리에서 돈다
-                gso.FindProperty("rotateSpeedY").floatValue = 24f;
-                // 위아래로 떠다니지 않게 — 보물은 숨긴 자리에 가만히 (10-14 대표님: '위아래로 움직이지? 제자리에 가만히')
-                gso.FindProperty("enableFloat").boolValue = false;
-                gso.FindProperty("floatAmplitude").floatValue = 0f;
-                gso.ApplyModifiedPropertiesWithoutUndo();
+                var lidT = chest.transform.Find("Lid");
+                var lid = lidT != null ? lidT.gameObject : new GameObject("Lid");
+                lid.transform.SetParent(chest.transform, false);
+                lid.transform.localPosition = ChestHinge;
+                lid.transform.localRotation = Quaternion.identity;
+                lid.transform.localScale = Vector3.one;
+                Ensure<MeshFilter>(lid).sharedMesh = parts.lid;
+                var lr = Ensure<MeshRenderer>(lid);
+                lr.sharedMaterials = new[] { parts.gold, parts.trim };
+                lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                lr.receiveShadows = false;
+
+                // 제자리에서 천천히 돈다 — 위아래로 떠다니지 않게 (10-14 대표님: '위아래로 움직이지? 제자리에 가만히')
+                var box = Ensure<R0926HuntChest>(chest);
+                var cso = new SerializedObject(box);
+                cso.FindProperty("lid").objectReferenceValue = lid.transform;
+                cso.FindProperty("spinSpeed").floatValue = 24f;
+                cso.ApplyModifiedPropertiesWithoutUndo();
 
                 var target = Ensure<Target>(chest);
                 var dst = new SerializedObject(target);

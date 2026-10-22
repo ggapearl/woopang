@@ -14,9 +14,9 @@ using UnityEngine.XR.ARSubsystems;
 #endif
 
 /// <summary>
-/// 보물찾기 AR 보물 — 참가 중인 게임(내가 연 게임도)의 보물에 '보이는 거리'까지 다가가면 그 자리에 금빛 상자를 띄운다.
+/// 보물찾기 AR 보물 — 참가 중인 게임(내가 연 게임도)의 보물에 '보이는 거리'까지 다가가면 그 자리에 보물상자(R0926HuntChest)를 띄운다.
 ///  · 근접 확인(/near)이 보인다고 할 때만 서버가 보물 좌표를 준다 — 그 자리에 지오스페이셜 앵커로 놓는다 (높이는 휴대폰보다 조금 아래)
-///  · 상자나 그 박스·화살표를 두 번 톡톡 누르면 찾기(/claim): 찾음 → 축하 화면(R0926HuntCelebrate) → 그 게임 상세 · 조금 더 가까이 ·
+///  · 상자나 그 박스·화살표를 두 번 톡톡 누르면 찾기(/claim): 찾음 → 상자가 열리고 축하 화면(R0926HuntCelebrate) → 그 게임 상세 · 조금 더 가까이 ·
 ///    코드 게임 → 상세의 코드 칸 · 먼저 찾음 · 끝남. 한 번만 누르면 '두 번 톡톡' 안내 (10-14 대표님: '보물 열기' 버튼 대신 더블터치)
 ///  · 주최자는 참가는 못 해도 자기 보물은 보인다 — 누르면 '내가 숨긴 보물'이라고만 알린다 (10-14 대표님)
 ///  · 지켜볼 게임은 카드가 알려 준다(상세 · 처음 화면의 참가·주최 목록). 기기에 적어 두어 앱을 다시 켜도 이어 보고,
@@ -28,7 +28,7 @@ using UnityEngine.XR.ARSubsystems;
 /// </summary>
 public class R0926HuntTreasure : MonoBehaviour
 {
-    [SerializeField] private GameObject treasurePrefab;   // HuntTreasure0926 — 앵커 + 금빛 상자(Target)
+    [SerializeField] private GameObject treasurePrefab;   // HuntTreasure0926 — 앵커 + 보물상자(Target)
     [SerializeField] private CanvasGroup toast;           // 상태 알약 아래 알림
     [SerializeField] private RectTransform toastPill;
     [SerializeField] private Text toastTitle;
@@ -215,7 +215,7 @@ public class R0926HuntTreasure : MonoBehaviour
             {
                 t.announce = false;
                 if (t.host) Say(T("내가 숨긴 보물이 보여요", "Your treasure is in view", "自分が隠した宝が見えます", "看到了你藏的宝藏", "Tu tesoro está a la vista"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 4f);
-                else Say(T("보물이 근처에 있어요!", "Treasure nearby!", "宝が近くにあります！", "宝藏就在附近！", "¡Tesoro cerca!"), T("금빛 상자를 두 번 톡톡 눌러 열어 보세요", "Double-tap the golden box to open it", "金色の箱を2回タップして開けてみましょう", "双击金色宝箱打开看看", "Toca dos veces la caja dorada para abrirla"), 4f);
+                else Say(T("보물이 근처에 있어요!", "Treasure nearby!", "宝が近くにあります！", "宝藏就在附近！", "¡Tesoro cerca!"), T("보물상자를 두 번 톡톡 눌러 열어 보세요", "Double-tap the treasure chest to open it", "宝箱を2回タップして開けてみましょう", "双击宝箱打开看看", "Toca dos veces el cofre para abrirlo"), 4f);
             }
         }
         if (!on) return;
@@ -320,7 +320,8 @@ public class R0926HuntTreasure : MonoBehaviour
         return zoom != null ? zoom.GetZoomLevel() : 1f;
     }
 
-    private static void Despawn(Hunt t, bool pop)
+    // open = 찾음 — 상자가 이쪽을 보고 열린 뒤 스스로 사라진다 (그 사이 축하 화면이 뜬다)
+    private static void Despawn(Hunt t, bool open)
     {
         SpawnedObjects.Remove("hunt_" + t.id);
         var go = t.obj;
@@ -328,25 +329,9 @@ public class R0926HuntTreasure : MonoBehaviour
         if (go == null) return;
         var a = go.GetComponent<CustomARGeospatialCreatorAnchor>();
         if (a != null) a.ReleaseAnchor();
-        if (pop && instance != null && go.activeInHierarchy) instance.StartCoroutine(Pop(go));
+        var chest = open && go.activeInHierarchy ? go.GetComponentInChildren<R0926HuntChest>() : null;
+        if (chest != null) chest.Open();
         else Destroy(go);
-    }
-
-    // 찾았을 때 — 환하게 빛나며 빙글 돌다 커진 뒤 쏙 사라진다 (그 사이 축하 화면이 뜬다)
-    private static IEnumerator Pop(GameObject go)
-    {
-        var cube = go.GetComponentInChildren<GoldenGlowCube>();
-        if (cube != null) cube.OnTouchEnter();
-        Transform spin = cube != null ? cube.transform : go.transform;
-        Vector3 s0 = go.transform.localScale;
-        for (float k = 0f; k < 1f && go != null; k += Time.unscaledDeltaTime / 0.7f)
-        {
-            float grow = k < 0.45f ? Mathf.SmoothStep(1f, 1.4f, k / 0.45f) : Mathf.SmoothStep(1.4f, 0f, (k - 0.45f) / 0.55f);
-            go.transform.localScale = s0 * grow;
-            spin.Rotate(0f, 900f * Time.unscaledDeltaTime, 0f, Space.Self);
-            yield return null;
-        }
-        if (go != null) Destroy(go);
     }
 
     private static void Remove(Hunt t)
@@ -412,14 +397,14 @@ public class R0926HuntTreasure : MonoBehaviour
         if (id != 0 && (pos - pressAt).sqrMagnitude <= slop * slop) Tap(id);
     }
 
-    // 두 번 톡톡 — 첫 누름은 상자가 움찔하기만, 0.45초 안에 같은 보물을 또 누르면 연다
+    // 두 번 톡톡 — 첫 누름은 상자가 살짝 커졌다 돌아오기만, 0.45초 안에 같은 보물을 또 누르면 연다
     private static void Tap(int id)
     {
         if (instance == null || instance.claiming) return;
         var t = Get(id);
         if (t == null) return;
         if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HandleTouchFeedbackDirect();
-        instance.Nudge(t);
+        Chest(t)?.Nudge();
         if (t.host)
         {
             tapId = 0;
@@ -437,18 +422,10 @@ public class R0926HuntTreasure : MonoBehaviour
         tapAt = now;
     }
 
-    // 누를 때마다 상자가 살짝 커지며 빛났다가 돌아온다
-    private void Nudge(Hunt t)
+    private static R0926HuntChest Chest(Hunt t)
     {
-        var cube = t.obj != null ? t.obj.GetComponentInChildren<GoldenGlowCube>() : null;
-        if (cube != null) StartCoroutine(NudgeCo(cube));
-    }
-
-    private static IEnumerator NudgeCo(GoldenGlowCube cube)
-    {
-        cube.OnTouchEnter();
-        yield return new WaitForSecondsRealtime(0.16f);
-        if (cube != null) cube.OnTouchExit();
+        var c = t != null && t.obj != null ? t.obj.GetComponentInChildren<R0926HuntChest>() : null;
+        return c != null ? c : null;   // 지워진 오브젝트는 ?. 가 못 걸러서 진짜 null 로
     }
 
     private IEnumerator Claim(Hunt t)
@@ -459,9 +436,11 @@ public class R0926HuntTreasure : MonoBehaviour
         b["device_id"] = SystemInfo.deviceUniqueIdentifier;
         int id = t.id;
         long code = 0; JSONNode j = null;
+        Chest(t)?.Rattle(true);   // 묻는 동안 달그락
         yield return R0926HuntApi.Post("/api/hunts/" + id + "/claim", b, (c, r) => { code = c; j = r; });
         claiming = false;
         string result = j["result"];
+        if (result != "found") Chest(t)?.Rattle(false);
         switch (result)
         {
             case "found":

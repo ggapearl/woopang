@@ -24,7 +24,7 @@ public class Object3DTouchHaptic : MonoBehaviour
     private bool isProcessingTouch = false;
     private Collider objectCollider;
 
-    // 누를 때마다 살짝 커졌다 돌아온다 — 보물상자(GoldenGlowCube 1.15배 · 0.16초 · 속도 5)와 같은 느낌
+    // 누를 때마다 살짝 커졌다 돌아온다 — 보물상자(R0926HuntChest 1.15배 · 0.16초 · 속도 5)와 같은 느낌
     private const float NudgeScale = 1.15f, NudgeHold = 0.16f, NudgeSpeed = 5f;
     private Coroutine nudging;
     private Vector3 restScale;

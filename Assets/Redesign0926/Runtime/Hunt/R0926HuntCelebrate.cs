@@ -6,8 +6,9 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 보물찾기 — 보물을 찾았을 때 축하 화면 (10-14 대표님: 더블터치로 열면 '보물을 찾았습니다' 와 함께 축하 애니메이션이 살짝,
-/// 그 게임의 상품 안내가 그림과 함께).
-///  · 선물 상자가 튀어나와 들썩이다 뚜껑이 날아가고 — 빛줄기가 돌고 꽃가루가 잠깐 터진다
+/// 그 게임의 상품 안내가 그림과 함께 · 10-22: 열리는 애니메이션과 함께, 일반 오브젝트를 두 번 톡톡 했을 때 사진이 뜨듯 화면 가득).
+///  · AR 보물상자가 이쪽을 보고 열리는 것을 잠깐 보인 뒤 화면이 스르륵 — 열린 보물상자가 튀어나오며 뚜껑이 경첩에서 펼쳐지고,
+///    금화 더미가 빛나며 빛줄기가 돌고 금화·꽃가루가 잠깐 터진다
 ///  · '보물을 찾았습니다!' · 몇 번째 · 상품(선물 그림) · 주최자에게 '찾았다'는 메세지가 갔다는 안내 (메세지는 서버가 찾은 사람 이름으로 보낸다)
 ///  · '확인'(안드로이드 뒤로가기도)을 누르면 그 게임 상세로 — 결과 · 주최자에게 한마디
 /// 이 컴포넌트는 늘 켜진 빈 틀(HuntCelebrate0926)에 있고 보이는 것은 panel 아래 — Apply(Redesign0926ApplyHuntTreasure)가 만든다.
@@ -18,13 +19,14 @@ public class R0926HuntCelebrate : MonoBehaviour
     [SerializeField] private CanvasGroup group;
     [SerializeField] private RectTransform content;        // 가로 화면에선 통째로 줄인다
     [SerializeField] private RectTransform rays, rays2, glow;
-    [SerializeField] private RectTransform giftBox, giftLid;
+    [SerializeField] private RectTransform chestBody, chestLid;   // 뚜껑은 아래(경첩)가 피벗 — 위로 펼쳐진다
     [SerializeField] private RectTransform stage;          // 상자 자리 — 꽃가루·별빛도 여기에
     [SerializeField] private CanvasGroup info;             // 글·상품·버튼 — 뚜껑이 열린 뒤 떠오른다
     [SerializeField] private Text title, rankText, prizeLabel, prizeText, noteText, okLabel;
     [SerializeField] private Button okButton;
     [SerializeField] private Sprite confettiRound;         // 동그란 꽃가루 (비어 있으면 네모만)
     [SerializeField] private Sprite glintSprite;
+    [SerializeField] private Sprite coinSprite;            // 꽃가루에 섞이는 금화 (팔랑이면 동전이 도는 것처럼)
 
     private const float NeedHeight = 1900f;                // content 가 다 들어가는 높이 (캔버스 단위)
     private static readonly Color Gold = new Color(0.910f, 0.749f, 0.310f, 1f);
@@ -42,7 +44,6 @@ public class R0926HuntCelebrate : MonoBehaviour
     private readonly List<Piece> pieces = new List<Piece>();
     private RectTransform[] glints;
     private Image[] glintImgs;
-    private Vector2 lidRest;
     private bool opened;
     private int huntId;
     private string huntTitle, prize, hostName;
@@ -65,7 +66,6 @@ public class R0926HuntCelebrate : MonoBehaviour
     private void Awake()
     {
         instance = this;
-        if (giftLid != null) lidRest = giftLid.anchoredPosition;
         if (okButton != null) okButton.onClick.AddListener(Close);
         if (panel != null) panel.SetActive(false);
     }
@@ -137,54 +137,46 @@ public class R0926HuntCelebrate : MonoBehaviour
         foreach (var p in pieces) p.rt.gameObject.SetActive(false);
         SetGlints(false);
         Set(rays, 0f, 0.6f); Set(rays2, 0f, 0.6f); Set(glow, 0f, 0.5f);
-        giftBox.localScale = Vector3.zero;
-        giftLid.localScale = Vector3.zero;
-        giftLid.anchoredPosition = lidRest;
-        giftLid.localEulerAngles = Vector3.zero;
-        Alpha(giftLid, 1f);
+        chestBody.localScale = Vector3.zero;
+        chestLid.localScale = new Vector3(1f, 0f, 1f);
+        chestLid.localEulerAngles = Vector3.zero;
         var infoRt = (RectTransform)info.transform;
         Vector2 infoAt = infoRt.anchoredPosition;
 
-        yield return Wait(0.25f);   // AR 상자가 빙글 돌며 사라지는 것을 잠깐 보이고
-        yield return Tween(0.25f, k => group.alpha = k);
+        yield return Wait(0.7f);    // AR 보물상자가 이쪽을 보고 뚜껑이 활짝 열리는 것까지 보이고
+        yield return Tween(0.3f, k => group.alpha = k);   // 일반 오브젝트를 두 번 톡톡 했을 때 사진 화면처럼 스르륵
 
-        // 선물 상자가 튀어나온다
-        yield return Tween(0.45f, k =>
+        // 보물상자가 튀어나온다
+        yield return Tween(0.36f, k =>
         {
-            float s = BackOut(k);
-            giftBox.localScale = giftLid.localScale = Vector3.one * s;
-            Set(glow, 0.45f * k, 0.5f + 0.4f * k);
-        });
-        // 뚜껑이 들썩인다
-        yield return Tween(0.45f, k =>
-        {
-            float a = Mathf.Sin(k * Mathf.PI * 6f) * 7f * (1f - k);
-            giftLid.localEulerAngles = new Vector3(0f, 0f, a);
-            giftLid.anchoredPosition = lidRest + new Vector2(0f, Mathf.Abs(a) * 2f);
+            chestBody.localScale = Vector3.one * BackOut(k);
+            Set(glow, 0.4f * k, 0.5f + 0.4f * k);
         });
 
-        // 펑 — 뚜껑이 날아가고 빛줄기·꽃가루
+        // 뚜껑이 활짝 — 금화 더미가 빛나고 빛줄기·금화·꽃가루
         opened = true;
-        Burst(new Vector2(0f, giftBox.anchoredPosition.y + giftBox.rect.height * 0.5f), 40);
+        Burst(new Vector2(0f, chestBody.anchoredPosition.y + chestBody.rect.height * 0.32f), 44);
         SetGlints(true);
         if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HandleTouchFeedbackDirect();
         float infoFrom = infoAt.y - 50f;
-        yield return Tween(0.55f, k =>
+        yield return Tween(0.6f, k =>
         {
+            float kl = Mathf.Clamp01(k / 0.55f);
+            chestLid.localScale = new Vector3(1f, BackOut(kl), 1f);
+            chestLid.localEulerAngles = new Vector3(0f, 0f, Mathf.Sin(kl * Mathf.PI * 2f) * 2.5f * (1f - kl));
             float e = 1f - (1f - k) * (1f - k);
-            giftLid.anchoredPosition = lidRest + new Vector2(170f * e, 380f * e);
-            giftLid.localEulerAngles = new Vector3(0f, 0f, -28f * e);
-            Alpha(giftLid, 1f - Mathf.Clamp01((k - 0.4f) / 0.6f));
-            float squash = k < 0.3f ? 1f - 0.08f * Mathf.Sin(k / 0.3f * Mathf.PI) : 1f;
-            giftBox.localScale = new Vector3(2f - squash, squash, 1f);
+            float squash = k < 0.25f ? 1f - 0.07f * Mathf.Sin(k / 0.25f * Mathf.PI) : 1f;
+            chestBody.localScale = new Vector3(2f - squash, squash, 1f);
             Set(rays, 0.85f * e, 0.6f + 0.4f * e);
             Set(rays2, 0.5f * e, 0.6f + 0.4f * e);
-            Set(glow, 0.45f + 0.25f * e, 0.9f + 0.2f * e);
-            float ki = Mathf.Clamp01((k - 0.35f) / 0.65f);
+            Set(glow, 0.4f + 0.3f * e, 0.9f + 0.2f * e);
+            float ki = Mathf.Clamp01((k - 0.3f) / 0.7f);
             info.alpha = ki;
             infoRt.anchoredPosition = new Vector2(infoAt.x, Mathf.Lerp(infoFrom, infoAt.y, 1f - (1f - ki) * (1f - ki)));
         });
-        giftBox.localScale = Vector3.one;
+        chestBody.localScale = Vector3.one;
+        chestLid.localScale = Vector3.one;
+        chestLid.localEulerAngles = Vector3.zero;
         info.alpha = 1f;
         infoRt.anchoredPosition = infoAt;
         info.blocksRaycasts = true;
@@ -246,10 +238,12 @@ public class R0926HuntCelebrate : MonoBehaviour
         for (int i = 0; i < n; i++)
         {
             var p = i < pieces.Count ? pieces[i] : NewPiece();
-            bool round = confettiRound != null && Random.value < 0.35f;
-            p.img.sprite = round ? confettiRound : null;
-            p.rt.sizeDelta = round ? Vector2.one * Random.Range(18f, 26f) : new Vector2(Random.Range(14f, 22f), Random.Range(26f, 40f));
-            p.img.color = Paper[Random.Range(0, Paper.Length)];
+            float roll = Random.value;
+            bool coin = coinSprite != null && roll < 0.3f;
+            bool round = !coin && confettiRound != null && roll < 0.55f;
+            p.img.sprite = coin ? coinSprite : round ? confettiRound : null;
+            p.rt.sizeDelta = coin ? Vector2.one * Random.Range(44f, 62f) : round ? Vector2.one * Random.Range(18f, 26f) : new Vector2(Random.Range(14f, 22f), Random.Range(26f, 40f));
+            p.img.color = coin ? Color.white : Paper[Random.Range(0, Paper.Length)];
             p.rt.anchoredPosition = from + Random.insideUnitCircle * 40f;
             p.rt.localEulerAngles = new Vector3(0f, 0f, Random.Range(0f, 360f));
             float ang = Random.Range(-70f, 70f) * Mathf.Deg2Rad;
