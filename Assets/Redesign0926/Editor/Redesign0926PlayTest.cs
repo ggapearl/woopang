@@ -103,6 +103,7 @@ namespace Redesign0926
             else if (mode == "chatlook") PlanChatLook();
             else if (mode == "v24") PlanV24();
             else if (mode == "farfade") PlanFarFade();
+            else if (mode == "nudge") PlanNudge();
             else if (mode == "maptiles") PlanMapTiles();
             else if (mode == "mapcoord") PlanMapCoord();
             else if (mode == "vwshot") PlanVwShot();
@@ -3630,6 +3631,133 @@ namespace Redesign0926
                 }
             }
             return -1f;
+        }
+
+        // ── 10-22 N12: 일반 오브젝트도 보물상자처럼 — 누를 때마다 살짝 커졌다 돌아오고, 두 번 톡톡이면 커지며 사진이 뜬다 ──
+        private static void PlanNudge()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            Object3DTouchHaptic hap = null;
+            DoubleTap3D dt = null;
+            float rest = 1f, peak = 0f, atTap2 = 0f;
+            Func<float> ratio = () => hap != null ? hap.transform.localScale.x / rest : 0f;
+            Func<bool> open = () => dt != null && dt.fullscreenCanvasGroup != null && dt.fullscreenCanvasGroup.gameObject.activeSelf;
+            Func<float> lastTap = () => dt != null ? (float)typeof(DoubleTap3D).GetField("lastTapTime", F).GetValue(dt) : 0f;
+            // 가상 손가락 한 번 — 오브젝트 가운데를 누르고 두 프레임 뒤에 뗀다
+            Action<int> tap = id =>
+            {
+                int f = -1;
+                Vector2 p = default;
+                steps.Enqueue(() =>
+                {
+                    if (hap == null || ptTouch == null) return true;
+                    if (f < 0)
+                    {
+                        Vector3 sp = Camera.main.WorldToScreenPoint(hap.GetComponent<Collider>().bounds.center);
+                        p = new Vector2(sp.x, sp.y);
+                        InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = id, phase = UnityEngine.InputSystem.TouchPhase.Began, position = p });
+                        f = Time.frameCount;
+                    }
+                    peak = Mathf.Max(peak, ratio());
+                    if (Time.frameCount < f + 2) return false;
+                    InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = id, phase = UnityEngine.InputSystem.TouchPhase.Ended, position = p });
+                    return true;
+                });
+            };
+            // sec 초 동안 크기를 지켜본다 (가장 컸던 배율) — 커져 있을 때 한 장 찍는다 (따로 찍으면 찍는 두 프레임 동안 정점을 놓친다)
+            Action<float, string> watch = (sec, shot) =>
+            {
+                double until = -1;
+                bool shotDone = shot == null;
+                steps.Enqueue(() =>
+                {
+                    if (until < 0) until = EditorApplication.timeSinceStartup + sec;
+                    peak = Mathf.Max(peak, ratio());
+                    if (!shotDone && ratio() >= 1.06f) { ScreenCapture.CaptureScreenshot(Path.Combine(dir, "test_" + shot + ".png")); shotDone = true; }
+                    return EditorApplication.timeSinceStartup >= until;
+                });
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                ptFocusWas = InputSystem.settings.editorInputBehaviorInPlayMode;
+                InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;   // 에디터 창이 뒤에 있어도
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+            });
+            Wait(() => (hap = NudgePick()) != null, 25f, "누를 오브젝트");
+            Do(() =>
+            {
+                dt = hap != null ? hap.GetComponent<DoubleTap3D>() : null;
+                rest = hap != null ? hap.transform.localScale.x : 1f;
+                log.Add(hap != null ? $"  누를 오브젝트 '{hap.transform.parent.name}' 거리 {Vector3.Distance(Camera.main.transform.position, hap.transform.position):0.0}m · 크기 {rest:0.00}" : "  누를 오브젝트 없음");
+            });
+            Sleep(0.4f);
+            Shot("nudge_rest");
+
+            // 1) 한 번 — 살짝 커졌다 돌아온다 · 사진은 안 뜬다
+            Do(() => peak = 0f);
+            tap(7);
+            watch(1.4f, "nudge_tap1");
+            Do(() => log.Add($"  한 번: 가장 클 때 {peak:0.000}배 · 지금 {ratio():0.000}배 · 사진 {(open() ? "뜸" : "안 뜸")}"));
+            Check(() => peak > 1.05f && peak < 1.16f && Mathf.Abs(ratio() - 1f) < 0.003f && !open(), "한 번 누름: 살짝 커졌다(1.05~1.15배) 제 크기로 · 사진은 안 뜸");
+
+            // 2) 두 번 톡톡 — 두 번째는 첫 누름이 닿고 0.15초 뒤 (DoubleTap3D 는 게임 시간 0.1~0.3초를 두 번으로 본다)
+            Sleep(0.4f);
+            Do(() => peak = 0f);
+            tap(7);
+            steps.Enqueue(() => dt == null || Time.time >= lastTap() + 0.15f);
+            Do(() => { atTap2 = ratio(); peak = 0f; });
+            tap(8);
+            watch(0.5f, "nudge_tap2");
+            Do(() => log.Add($"  두 번: 두 번째 누를 때 {atTap2:0.000}배 → 가장 클 때 {peak:0.000}배 · 사진 {(open() ? "뜸" : "안 뜸")}"));
+            Check(() => open() && peak > atTap2 + 0.01f && peak < 1.16f, "두 번 톡톡: 한 번 더 살짝 커지며 사진 화면이 뜬다");
+            watch(1.2f, null);
+            Shot("nudge_open");
+            Check(() => Mathf.Abs(ratio() - 1f) < 0.003f, "사진이 뜬 뒤 오브젝트는 제 크기로 돌아와 있음");
+            Do(() => { if (open()) typeof(DoubleTap3D).GetMethod("CloseFullscreen", F).Invoke(dt, null); });
+            Sleep(0.8f);
+            Check(() => !open() && Mathf.Abs(ratio() - 1f) < 0.003f, "사진 화면을 닫음 · 크기 그대로");
+
+            Do(() =>
+            {
+                if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
+                ptTouch = null;
+                InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
+            });
+        }
+
+        // 누를 오브젝트 — 가까운 것부터 카메라를 돌려 화면 가운데에 두고, 그 자리를 누르면 그 오브젝트가 맞는 것 (앞을 다른 것이 안 가림)
+        private static Object3DTouchHaptic NudgePick()
+        {
+            var cam = Camera.main;
+            if (cam == null) return null;
+            var all = new List<GameObject>();
+            if (DataManager.Instance?.GetSpawnedObjects() != null) all.AddRange(DataManager.Instance.GetSpawnedObjects().Values);
+            if (TourAPIManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TourAPIManager.Instance.GetSpawnedObjects().Values);
+            if (SubwayManager.Instance?.GetSpawnedObjects() != null) all.AddRange(SubwayManager.Instance.GetSpawnedObjects().Values);
+            if (TrainStationManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TrainStationManager.Instance.GetSpawnedObjects().Values);
+            if (TerminalManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TerminalManager.Instance.GetSpawnedObjects().Values);
+            all.RemoveAll(go => go == null || !go.activeInHierarchy);
+            Vector3 eye = cam.transform.position;
+            all.Sort((a, b) => Vector3.Distance(eye, a.transform.position).CompareTo(Vector3.Distance(eye, b.transform.position)));
+            foreach (var go in all)
+            {
+                var h = go.GetComponentInChildren<Object3DTouchHaptic>();
+                var c = h != null ? h.GetComponent<Collider>() : null;
+                if (c == null || !c.enabled || h.GetComponent<DoubleTap3D>() == null) continue;
+                cam.transform.rotation = Quaternion.LookRotation(c.bounds.center - eye);
+                Vector3 sp = cam.WorldToScreenPoint(c.bounds.center);
+                if (sp.z > 0f && Physics.Raycast(cam.ScreenPointToRay(sp), out var hit) && hit.collider == c) return h;
+            }
+            return null;
         }
 
         private static void PlanV24()

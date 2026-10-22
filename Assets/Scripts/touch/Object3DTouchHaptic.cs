@@ -24,6 +24,12 @@ public class Object3DTouchHaptic : MonoBehaviour
     private bool isProcessingTouch = false;
     private Collider objectCollider;
 
+    // 누를 때마다 살짝 커졌다 돌아온다 — 보물상자(GoldenGlowCube 1.15배 · 0.16초 · 속도 5)와 같은 느낌
+    private const float NudgeScale = 1.15f, NudgeHold = 0.16f, NudgeSpeed = 5f;
+    private Coroutine nudging;
+    private Vector3 restScale;
+    private float nudge = 1f;
+
     void OnEnable()
     {
         EnhancedTouchSupport.Enable();
@@ -32,6 +38,11 @@ public class Object3DTouchHaptic : MonoBehaviour
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
+        if (nudging != null)
+        {
+            StopCoroutine(nudging);
+            EndNudge();
+        }
     }
 
     void Start()
@@ -159,6 +170,8 @@ public class Object3DTouchHaptic : MonoBehaviour
 
     private void TriggerFeedback()
     {
+        Nudge();
+
         // UIFeedbackManager를 통해 소리/진동 통합 처리
         if (UIFeedbackManager.Instance != null)
         {
@@ -176,6 +189,7 @@ public class Object3DTouchHaptic : MonoBehaviour
     /// </summary>
     public void PlayDoubleTapFeedback()
     {
+        Nudge();   // 같은 프레임에 TriggerFeedback 이 먼저 불렀어도 이어서 한 번만 커진다
         AudioClip clip = doubleTapSound != null ? doubleTapSound : touchSound;
 
         if (UIFeedbackManager.Instance != null)
@@ -187,5 +201,31 @@ public class Object3DTouchHaptic : MonoBehaviour
             if (clip != null && audioSource != null)
                 audioSource.PlayOneShot(clip, soundVolume);
         }
+    }
+
+    private void Nudge()
+    {
+        if (!isActiveAndEnabled) return;
+        if (nudging != null) StopCoroutine(nudging);
+        else restScale = transform.localScale;
+        nudging = StartCoroutine(NudgeCo());
+    }
+
+    private IEnumerator NudgeCo()
+    {
+        for (float t = 0f; t < NudgeHold || nudge > 1.001f; t += Time.unscaledDeltaTime)
+        {
+            nudge = Mathf.Lerp(nudge, t < NudgeHold ? NudgeScale : 1f, Time.unscaledDeltaTime * NudgeSpeed);
+            transform.localScale = restScale * nudge;
+            yield return null;
+        }
+        EndNudge();
+    }
+
+    private void EndNudge()
+    {
+        nudge = 1f;
+        transform.localScale = restScale;
+        nudging = null;
     }
 }
