@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-21b';
+  const WEB_VERSION = '2026-10-22a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2529,11 +2529,13 @@
   }
 
   // ── 승인함 (ApprView — 2026-10-12, PC 창 승인함과 같은 틀. 제안을 펼쳐 읽고 그 자리에서 결정) ──
-  const APPR_ST = [['pending', '대기'], ['hold', '보류'], ['approved', '승인'], ['rejected', '거절'], ['all', '전체']];
-  const APPR_WORD = { pending: '대기', hold: '보류', approved: '승인', rejected: '거절', revised: '수정' };
+  // 「의견」 칩은 의견 반영 중인 건이 있을 때만 보인다 (2026-10-22 — 의견은 승인도 보류도 거절도 아니라 따로 둔다)
+  const APPR_ST = [['pending', '대기'], ['revising', '의견'], ['hold', '보류'], ['approved', '승인'], ['rejected', '거절'], ['all', '전체']];
+  const APPR_WORD = { pending: '대기', hold: '보류', approved: '승인', rejected: '거절', revised: '수정', revising: '의견 반영 중' };
   const APPR_DONE = { approved: '승인했어요 — 할 일 보드에 올리고 효딩쓰가 대화에서 바로 시작합니다',
     hold: '보류해 두었어요 — 「보류」에서 다시 볼 수 있어요', rejected: '거절했어요',
-    revised: '대표님 의견대로 고친 제안으로 바뀌었어요 — 새 제안에서 결정해 주세요' };
+    revised: '대표님 의견대로 고친 제안으로 바뀌었어요 — 새 제안에서 결정해 주세요',
+    revising: '의견을 반영하는 중이에요 — 고친 안이 올라오면 거기서 결정해 주세요' };
 
   function openAppr() {
     let status = 'pending', q = '', items = [], counts = {}, total = 0, open = '', loading = false, loaded = false, alive = true, seqN = 0, searchTimer = 0;
@@ -2555,6 +2557,7 @@
       chipsEl.textContent = '';
       APPR_ST.forEach(([k, label]) => {
         const n = k === 'all' ? total : (counts[k] || 0);
+        if (k === 'revising' && !n && status !== 'revising') return;
         chipsEl.append(h('button', {
           class: 'dchip' + (status === k ? ' on' : ''), text: label + (loaded && n ? ' ' + n : ''), 'aria-pressed': status === k ? 'true' : 'false',
           onclick: () => { if (status === k) return; status = k; open = ''; load(); },
@@ -2606,7 +2609,7 @@
     }
 
     function draw() {
-      totalEl.textContent = loaded ? '대기 ' + (counts.pending || 0) + '건 · 전체 ' + total + '건' : '';
+      totalEl.textContent = loaded ? '대기 ' + (counts.pending || 0) + '건' + (counts.revising ? ' · 의견 반영 중 ' + counts.revising + '건' : '') + ' · 전체 ' + total + '건' : '';
       listEl2.textContent = '';
       if (loading && !items.length) { listEl2.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
       if (!items.length) {
@@ -2696,9 +2699,11 @@
         sendBtn.disabled = true;
         ta.disabled = true;
         haptic('tap');
+        let msg = '';
         try {
           const r = await api.post('proposals/comment', { id: it.id, text, kind: it.kind || 'prop' });
           if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(r.counts.pending);
+          msg = (r && r.msg) || '';               // 서버가 상태에 맞게 적어 준다 — 의견 반영 중으로 옮겨졌는지, 한도로 늦는지
         } catch (e) {
           show(e);
           sendBtn.disabled = false;
@@ -2707,7 +2712,7 @@
         }
         delete drafts[it.id];
         close();
-        toast('의견을 보냈어요 — 효딩쓰가 대화에서 답합니다');
+        toast(msg || '의견을 보냈어요 — 효딩쓰가 대화에서 답합니다');
         if (alive) load();
       }
     }
