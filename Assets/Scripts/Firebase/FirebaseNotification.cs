@@ -490,6 +490,32 @@ public class FirebaseNotification : MonoBehaviour
 #endif
     }
 
+    // 토큰 줄에 함께 적는 위치 — 서버는 이걸로 '근처 보물찾기' 알림 받을 사람을 고른다. 측정값 없이 보내면 위치 동의가 0 으로
+    // 내려가 알림 대상에서 빠진다 (2026-10-21 아이디를 바꾼 휴대폰이 보물찾기 알림을 못 받았다) — 위치 서비스가 켜지길 잠깐 기다린다.
+    // 위치 서비스는 지도·근처 사람·AR 이 같이 쓴다. 여기서 끄지 않는다 (예전엔 앱으로 돌아올 때마다 꺼서 길게는 1분 위치가 멎었다)
+    private static IEnumerator WaitForTokenLocation()
+    {
+        if (!Input.location.isEnabledByUser || Input.location.status == LocationServiceStatus.Running) yield break;
+        Input.location.Start(10f, 1f);
+        for (int wait = 20; Input.location.status == LocationServiceStatus.Initializing && wait > 0; wait--)
+            yield return new WaitForSeconds(1);
+    }
+
+    private static void AddTokenLocation(WWWForm form)
+    {
+        var d = Input.location.lastData;
+        if (Input.location.status == LocationServiceStatus.Running && d.latitude != 0f && d.longitude != 0f)
+        {
+            form.AddField("latitude", d.latitude.ToString("F6", CultureInfo.InvariantCulture));
+            form.AddField("longitude", d.longitude.ToString("F6", CultureInfo.InvariantCulture));
+            form.AddField("location_consent", "true");
+        }
+        else
+        {
+            form.AddField("location_consent", "false");
+        }
+    }
+
     private IEnumerator SendTokenToServer(string token)
     {
         if (string.IsNullOrEmpty(token))
@@ -497,29 +523,7 @@ public class FirebaseNotification : MonoBehaviour
             yield break;
         }
 
-        float latitude = 0f;
-        float longitude = 0f;
-        bool locationConsent = false;
-        
-        if (Input.location.isEnabledByUser)
-        {
-            Input.location.Start(10f, 1f);
-            int maxWait = 20;
-            while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
-            {
-                yield return new WaitForSeconds(1);
-                maxWait--;
-            }
-            
-            if (Input.location.status == LocationServiceStatus.Running)
-            {
-                latitude = Input.location.lastData.latitude;
-                longitude = Input.location.lastData.longitude;
-                locationConsent = true;
-            }
-            
-            Input.location.Stop();
-        }
+        yield return WaitForTokenLocation();
         
         WWWForm form = new WWWForm();
         form.AddField("token", token);
@@ -547,16 +551,7 @@ public class FirebaseNotification : MonoBehaviour
         form.AddField("platform", "unknown");
 #endif
         
-        if (locationConsent && latitude != 0f && longitude != 0f)
-        {
-            form.AddField("latitude", latitude.ToString("F6"));
-            form.AddField("longitude", longitude.ToString("F6"));
-            form.AddField("location_consent", "true");
-        }
-        else
-        {
-            form.AddField("location_consent", "false");
-        }
+        AddTokenLocation(form);
         
         UnityWebRequest request = UnityWebRequest.Post(ApiConfig.REGISTER_TOKEN, form);
         request.timeout = 10;
@@ -1999,16 +1994,9 @@ public class FirebaseNotification : MonoBehaviour
             yield break;
         }
 
-        float latitude = 0f;
-        float longitude = 0f;
-        bool locationConsent = false;
-
-        if (Input.location.isEnabledByUser && Input.location.status == LocationServiceStatus.Running)
-        {
-            latitude = Input.location.lastData.latitude;
-            longitude = Input.location.lastData.longitude;
-            locationConsent = true;
-        }
+        yield return WaitForTokenLocation();
+        // 기다리는 사이 로그아웃했거나 다른 아이디로 들어왔으면 이 계정으로 잇지 않는다 (새 로그인이 따로 잇는다)
+        if (LoginManager.Instance != null && LoginManager.Instance.CurrentUser?.id != userId) yield break;
 
         WWWForm form = new WWWForm();
         form.AddField("token", token);
@@ -2031,16 +2019,7 @@ public class FirebaseNotification : MonoBehaviour
         form.AddField("platform", "unknown");
 #endif
 
-        if (locationConsent && latitude != 0f && longitude != 0f)
-        {
-            form.AddField("latitude", latitude.ToString("F6"));
-            form.AddField("longitude", longitude.ToString("F6"));
-            form.AddField("location_consent", "true");
-        }
-        else
-        {
-            form.AddField("location_consent", "false");
-        }
+        AddTokenLocation(form);
 
         UnityWebRequest request = UnityWebRequest.Post(Api(ApiConfig.REGISTER_TOKEN), form);
         request.timeout = 10;

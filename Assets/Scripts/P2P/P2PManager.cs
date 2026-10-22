@@ -397,20 +397,26 @@ public class P2PManager : MonoBehaviour
         while (isRegistered)
         {
             bool positionUpdated = false;
+            var loc = Input.location.lastData;
+            bool gps = Input.location.status == LocationServiceStatus.Running && UsableFix(loc);
 
-            // Get current GPS position (ARCore Geospatial)
+            // AR(Geospatial) 값은 정확하고 휴대폰 GPS 와 어긋나지 않을 때만 — 지도에 보이는 내 자리가 GPS 라 남에게도 그 자리를 보낸다.
+            // 실내·VPS 전에는 수백 m 틀어지고 AR 이 멈춘 사이엔 옛 자리에 머문다 (2026-10-21 두 휴대폰이 서로를 약 500m 떨어진 곳에 봤다)
             if (earthManager != null && earthManager.EarthTrackingState == UnityEngine.XR.ARSubsystems.TrackingState.Tracking)
             {
                 var pose = earthManager.CameraGeospatialPose;
-                currentLatitude = pose.Latitude;
-                currentLongitude = pose.Longitude;
-                currentAltitude = pose.Altitude;
-                positionUpdated = true;
+                if (pose.HorizontalAccuracy > 0 && pose.HorizontalAccuracy <= MaxGeoAccuracy
+                    && (!gps || Meters(pose.Latitude, pose.Longitude, loc.latitude, loc.longitude) <= Mathf.Max(60f, loc.horizontalAccuracy * 2f)))
+                {
+                    currentLatitude = pose.Latitude;
+                    currentLongitude = pose.Longitude;
+                    currentAltitude = pose.Altitude;
+                    positionUpdated = true;
+                }
             }
-            // GPS fallback (AREarthManager가 작동 안할 때 - 포그라운드/백그라운드 모두)
-            else if (Input.location.status == LocationServiceStatus.Running && UsableFix(Input.location.lastData))
+            // GPS (AR 값이 흐리거나 AREarthManager가 작동 안할 때 - 포그라운드/백그라운드 모두)
+            if (!positionUpdated && gps)
             {
-                var loc = Input.location.lastData;
                 currentLatitude = loc.latitude;
                 currentLongitude = loc.longitude;
                 // iOS는 WGS84 타원체 고도 → MSL 보정 필요 (Android는 그대로)
@@ -435,6 +441,7 @@ public class P2PManager : MonoBehaviour
     // 앱을 켜거나 돌아온 직후의 GPS 값은 휴대폰에 남아 있던 예전 측정값일 수 있다 — 잠깐 켰다 끄면 그 옛 자리가
     // '방금'으로 저장돼 친구 지도에 24시간 남았다 (2026-10-11). 새 측정값을 본 뒤부터 보낸다.
     private const float MaxFixAccuracy = 500f;   // 이보다 흐린 값(대략 위치 권한·기지국 측위, 수 km)은 보내지 않는다
+    private const float MaxGeoAccuracy = 20f;    // AR(Geospatial) 값은 이 안으로 정확할 때만 쓴다
     private bool fixTrusted;
     private double fixFirstStamp;
     private float fixWaitFrom = -1f;
@@ -455,6 +462,12 @@ public class P2PManager : MonoBehaviour
         // 처음 본 뒤 새 측정값이 왔거나 · 2분 안에 잰 값이거나 · 30초를 기다려도 새 값이 없으면(가만히 있어 휴대폰이 새로 안 잰다) 믿는다
         fixTrusted = loc.timestamp != fixFirstStamp || (age > -60.0 && age < 120.0) || Time.realtimeSinceStartup - fixWaitFrom > 30f;
         return fixTrusted;
+    }
+
+    private static float Meters(double lat1, double lon1, double lat2, double lon2)
+    {
+        double x = (lon2 - lon1) * Math.Cos((lat1 + lat2) * 0.5 * Math.PI / 180.0), y = lat2 - lat1;
+        return (float)(Math.Sqrt(x * x + y * y) * 111320.0);
     }
 
     /// <summary>
