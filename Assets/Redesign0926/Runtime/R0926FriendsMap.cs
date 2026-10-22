@@ -99,6 +99,13 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     [SerializeField] private float refreshSeconds = 60f;
 
+#if UNITY_EDITOR
+    public static string EditorBase;   // 플레이 시험 — 친구 지도·공유 스위치를 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
+    private static string Api(string url) => string.IsNullOrEmpty(EditorBase) ? url : EditorBase + url.Substring(ApiConfig.MAIN_SERVER.Length);
+#else
+    private static string Api(string url) => url;
+#endif
+
     [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public float lat; public float lon; public int ago; }
     [Serializable] private class Resp { public string status; public bool sharing; public int mutual; public Friend[] friends; }
 
@@ -134,6 +141,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private float prevPinch = -1f;
     private Vector2 lastSize;
     private Coroutine anim;
+    private D2 animTo;
+    private double animZoom;
+    private Vector2? animKeep;
+    private float profileWaitUntil;
     private const string ViewKey = "R0926Map.View";   // 보던 자리 "가운데 x|가운데 y|배율" (정규 좌표)
     private bool restorePending;
     private bool hasDrop;
@@ -174,6 +185,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     private void OnDisable()
     {
+        FinishAnim();
         SaveView();
         mapShown = false;
         pressId = NoPress;
@@ -248,7 +260,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (!loggedIn) { loaded = true; netError = false; Refresh(); yield break; }
 
         busy = true;
-        using (var req = UnityWebRequest.Get(ApiConfig.P2P_SERVER + "/api/p2p/friends_map"))
+        using (var req = UnityWebRequest.Get(Api(ApiConfig.P2P_SERVER + "/api/p2p/friends_map")))
         {
             LoginManager.ApplyAuth(req);
             req.timeout = 10;
@@ -282,7 +294,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private IEnumerator SetShare(bool on)
     {
         busy = true;
-        var req = new UnityWebRequest(ApiConfig.P2P_SERVER + "/api/p2p/map_share", "POST");
+        var req = new UnityWebRequest(Api(ApiConfig.P2P_SERVER + "/api/p2p/map_share"), "POST");
         LoginManager.ApplyAuth(req);
         req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(on ? "{\"enabled\":true}" : "{\"enabled\":false}"));
         req.downloadHandler = new DownloadHandlerBuffer();
@@ -393,7 +405,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             var sel = go.transform.Find("Sel");
             if (sel != null) sel.gameObject.SetActive(f.user_id == selectedId);
             var btn = go.GetComponent<Button>();
-            if (btn != null) { var ff = f; btn.onClick.AddListener(() => Focus(ff)); }
+            if (btn != null) { string id = f.user_id; btn.onClick.AddListener(() => TapFriend(id)); }
             rows.Add(go);
         }
         if (adSlot != null) adSlot.SetAsLastSibling();
@@ -598,7 +610,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                         var nm = go.transform.Find("Name/Text")?.GetComponent<Text>();
                         if (nm != null) nm.text = f.username;
                         var btn = go.GetComponent<Button>();
-                        if (btn != null) { btn.onClick.RemoveAllListeners(); var ff = f; btn.onClick.AddListener(() => Focus(ff)); }
+                        if (btn != null) { btn.onClick.RemoveAllListeners(); string id = f.user_id; btn.onClick.AddListener(() => TapFriend(id)); }
                     }
                     Place((RectTransform)go.transform, g.pos);
                 }
@@ -697,6 +709,23 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     }
 
     // ── 이동 ─────────────────────────────────────────────────
+    // 친구 핀·목록 줄 — 그 자리로 옮기고 그 사람 프로필 (프로필이 뜨면 시트는 닫혔다가 프로필을 닫으면 그 자리로 다시 열린다 — ProfileManager)
+    private void TapFriend(string id)
+    {
+        var f = friends.Find(x => x.user_id == id);
+        if (f == null) return;
+        Focus(f);
+        var pm = ProfileManager.Instance;
+        if (pm == null || string.IsNullOrEmpty(f.user_id) || Time.unscaledTime < profileWaitUntil) return;   // 받는 중에 또 눌러도 한 번만
+        profileWaitUntil = Time.unscaledTime + 3f;
+        pm.ShowProfile(f.user_id, shown =>
+        {
+            profileWaitUntil = 0f;
+            if (!shown && ToastManager.Instance != null)
+                ToastManager.Instance.ShowWarning(L("프로필을 불러오지 못했어요", "Couldn't load the profile", "プロフィールを読み込めませんでした", "无法加载个人资料", "No se pudo cargar el perfil"));
+        });
+    }
+
     private void Focus(Friend f)
     {
         selectedId = f.user_id;
@@ -727,7 +756,22 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         touched = true;
         if (anim != null) StopCoroutine(anim);
+        animTo = n; animZoom = targetZoom; animKeep = keepPoint;
         anim = StartCoroutine(AnimRoutine(n, targetZoom, keepPoint));
+    }
+
+    // 움직이는 중에 지도가 꺼지면(친구를 눌러 프로필로 넘어가며 시트가 닫힘) 끝자리로 — 보던 자리에 가다 만 곳이 적히지 않게
+    private void FinishAnim()
+    {
+        if (anim == null) return;
+        StopCoroutine(anim);
+        anim = null;
+        if (viewport == null || viewport.rect.width <= 1f) return;
+        zoom = Math.Max(1, animZoom);
+        D2 m = MapSize;
+        Vector2 at = animKeep ?? viewport.rect.size / 2f;
+        origin = new D2(at.x - animTo.x * m.x, at.y - animTo.y * m.y);
+        Clamp();
     }
 
     private IEnumerator AnimRoutine(D2 n, double targetZoom, Vector2? keepPoint)

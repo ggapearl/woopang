@@ -1376,6 +1376,9 @@ public class MessagePanelManager : MonoBehaviour
     private string savedChatUserId;
     private string savedChatUsername;
 
+    /// <summary>이 사람과의 대화창을 숨기고 그 사람 프로필을 띄운 중인지 — 프로필의 '메세지 보내기'는 닫기만 하면 된다</summary>
+    public bool IsChatBehindProfile(string userId) => profileOpenedFromChatRoom && !string.IsNullOrEmpty(userId) && savedChatUserId == userId;
+
     /// <summary>
     /// 채팅방에서 아바타 탭 시 프로필 열기
     /// ChatRoomPanel을 숨기고 FullProfilePanel을 표시
@@ -1488,7 +1491,7 @@ public class MessagePanelManager : MonoBehaviour
         if (CheckLogin())
         {
             string userId = LoginManager.Instance.CurrentUser.id;
-            string url = $"{ApiConfig.DM_CONVERSATIONS}?user_id={userId}";
+            string url = Api($"{ApiConfig.DM_CONVERSATIONS}?user_id={userId}");
 
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
@@ -2118,7 +2121,7 @@ public class MessagePanelManager : MonoBehaviour
 
     private IEnumerator LoadAdminBroadcasts()
     {
-        string url = $"{ApiConfig.MAIN_SERVER}/api/broadcast/list?limit=5";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/api/broadcast/list?limit=5");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -2441,7 +2444,7 @@ public class MessagePanelManager : MonoBehaviour
         if (!CheckLogin()) yield break;
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/dm/conversation?user_id={userId}&other_id={otherUserId}";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/api/dm/conversation?user_id={userId}&other_id={otherUserId}");
 
         using (UnityWebRequest request = UnityWebRequest.Delete(url))
         {
@@ -2828,7 +2831,7 @@ public class MessagePanelManager : MonoBehaviour
         if (isAdmin)
         {
             // 서버 DB에서 관리자 메시지 조회 (admin_broadcasts 테이블)
-            string adminUrl = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50";
+            string adminUrl = Api($"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50");
             var lines = new List<WoopangLine>();
             int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
 
@@ -2925,7 +2928,7 @@ public class MessagePanelManager : MonoBehaviour
         }
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.DM_CONVERSATION}?user_id={userId}&other_id={otherUserId}";
+        string url = Api($"{ApiConfig.DM_CONVERSATION}?user_id={userId}&other_id={otherUserId}");
 
         bool hasMessages = false;
 
@@ -2990,7 +2993,7 @@ public class MessagePanelManager : MonoBehaviour
 
         int ver = chatLoadVersion;
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.DM_CONVERSATION}?user_id={userId}&other_id={otherUserId}&after_id={lastChatMessageId}&limit=100";
+        string url = Api($"{ApiConfig.DM_CONVERSATION}?user_id={userId}&other_id={otherUserId}&after_id={lastChatMessageId}&limit=100");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -3645,7 +3648,7 @@ public class MessagePanelManager : MonoBehaviour
 
         string json = JsonUtility.ToJson(postData);
 
-        using (UnityWebRequest request = new UnityWebRequest(ApiConfig.DM_SEND, "POST"))
+        using (UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.DM_SEND), "POST"))
         {
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -3739,7 +3742,7 @@ public class MessagePanelManager : MonoBehaviour
 
         string json = JsonUtility.ToJson(postData);
 
-        using (UnityWebRequest request = new UnityWebRequest(ApiConfig.DM_SEND, "POST"))
+        using (UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.DM_SEND), "POST"))
         {
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -3768,7 +3771,7 @@ public class MessagePanelManager : MonoBehaviour
 
         string json = JsonUtility.ToJson(postData);
 
-        using (UnityWebRequest request = new UnityWebRequest(ApiConfig.DM_READ_ALL, "POST"))
+        using (UnityWebRequest request = new UnityWebRequest(Api(ApiConfig.DM_READ_ALL), "POST"))
         {
             byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
@@ -3794,10 +3797,12 @@ public class MessagePanelManager : MonoBehaviour
     #region Search
 
 #if UNITY_EDITOR
-    public static string EditorBase;   // 플레이 시험 — 아이디 검색·팔로우를 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
+    public static string EditorBase;   // 플레이 시험 — 아이디 검색·팔로우·대화를 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
     private static string SearchBase => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+    private static string Api(string url) => string.IsNullOrEmpty(EditorBase) ? url : EditorBase + url.Substring(ApiConfig.MAIN_SERVER.Length);
 #else
     private static string SearchBase => ApiConfig.MAIN_SERVER;
+    private static string Api(string url) => url;
 #endif
 
     private bool isSearchMode = false;
@@ -4318,7 +4323,7 @@ public class MessagePanelManager : MonoBehaviour
         if (!CheckLogin()) yield break;
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/dm/{messageId}/like";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/api/dm/{messageId}/like");
 
         var postData = new LikeRequest { user_id = userId, set_liked = setLiked };
         string json = JsonUtility.ToJson(postData);
@@ -4365,7 +4370,7 @@ public class MessagePanelManager : MonoBehaviour
         }
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.MAIN_SERVER}/api/dm/{messageId}/like";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/api/dm/{messageId}/like");
 
         var postData = new LikeRequest { user_id = userId, set_liked = setLiked };
         string json = JsonUtility.ToJson(postData);
@@ -5016,7 +5021,7 @@ public class MessagePanelManager : MonoBehaviour
         if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn) yield break;
 
         string userId = LoginManager.Instance.CurrentUser.id;
-        string url = $"{ApiConfig.DM_UNREAD_COUNT}?user_id={userId}";
+        string url = Api($"{ApiConfig.DM_UNREAD_COUNT}?user_id={userId}");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {

@@ -38,7 +38,13 @@ public class ProfileManager : MonoBehaviour
     public Text followedButtonText; // 팔로우 중 버튼 텍스트
     public Button editProfileButton;  // 내 프로필: 웹으로 이동, 다른 사람: DM 보내기
     public Text editProfileButtonText;  // 버튼 텍스트 (동적 변경용)
+    public Button messageButton;  // 팔로우 중인 사람: '팔로우 중' 옆 '메세지 보내기'
     public Button closeButton;
+
+    [Header("목록 시트 (도크 '목록' 칸) — 프로필보다 위 층이라 프로필을 띄우면 닫았다가 프로필을 닫으면 다시 연다")]
+    public Button listSheetClose;   // XButton_List
+    public Button listSheetOpen;    // List_Button
+    private bool reopenListSheet;
 
     [Header("Logout Button (내 프로필에서만 표시)")]
     [Tooltip("로그아웃 버튼 - 내 프로필에서만 표시")]
@@ -206,6 +212,8 @@ public class ProfileManager : MonoBehaviour
             followButton.onClick.AddListener(OnFollowButtonClicked);
         if (editProfileButton != null)
             editProfileButton.onClick.AddListener(OpenEditProfileWeb);
+        if (messageButton != null)
+            messageButton.onClick.AddListener(OpenDMWithUser);
         // avatarButton 런타임 fallback (에디터에서 연결 안 된 경우)
         if (avatarButton == null && fullProfilePanel != null)
         {
@@ -829,6 +837,14 @@ public class ProfileManager : MonoBehaviour
             }
 
             fullProfilePanel.SetActive(true);
+
+            // 목록 시트(지도·친구 목록·근처 사람)는 프로필보다 위 층 — 열린 채 띄우면 카드가 시트 뒤에 겹쳐 반쯤 가려졌다.
+            // 도크 X 와 같은 길로 닫고 프로필을 닫을 때 다시 연다 (지도는 보던 자리 그대로 · 대화창 등 다른 화면으로 넘어가면 열지 않음)
+            if (listSheetClose != null && listSheetClose.gameObject.activeInHierarchy)
+            {
+                listSheetClose.onClick.Invoke();
+                reopenListSheet = true;
+            }
         }
         else
         {
@@ -846,6 +862,7 @@ public class ProfileManager : MonoBehaviour
         FollowManager.returnToFollowPanel = false;
         onCloseCallback = null;
         profileToReturnTo = null;
+        reopenListSheet = false;
         if (fullProfilePanel != null && fullProfilePanel.activeSelf) CloseFullProfile();
     }
 
@@ -858,6 +875,13 @@ public class ProfileManager : MonoBehaviour
 
         // MiniProfile 아바타 복원 (다른 프로필 열람 후 변경되었을 수 있음)
         RestoreMiniProfileAvatar();
+
+        // 프로필을 띄우며 닫은 목록 시트(지도)를 다시 연다 — 도크 '목록'과 같은 길
+        if (reopenListSheet)
+        {
+            reopenListSheet = false;
+            if (listSheetOpen != null && listSheetOpen.gameObject.activeInHierarchy) listSheetOpen.onClick.Invoke();
+        }
 
         // FollowPanel에서 열렸으면 돌아가기
         if (openedFromFollowPanel)
@@ -920,6 +944,8 @@ public class ProfileManager : MonoBehaviour
         // 팔로우 전: followButton 표시, followedButton 숨김
         if (followButton != null)
             followButton.gameObject.SetActive(!iFollowThem);
+        if (messageButton != null)
+            messageButton.gameObject.SetActive(iFollowThem);
 
         if (followedButton != null)
         {
@@ -2283,6 +2309,8 @@ public class ProfileManager : MonoBehaviour
                 followButton.gameObject.SetActive(false);
             if (followedButton != null)
                 followedButton.gameObject.SetActive(false);
+            if (messageButton != null)
+                messageButton.gameObject.SetActive(false);
 
             // SNS 아이콘 표시 - 내 프로필: FollowButton 위치에 배치
             SetupSnsIcons(currentProfile, useFollowButtonPosition: true);
@@ -2314,6 +2342,8 @@ public class ProfileManager : MonoBehaviour
                 followButton.gameObject.SetActive(false);
                 if (followedButton != null)
                     followedButton.gameObject.SetActive(false);
+                if (messageButton != null)
+                    messageButton.gameObject.SetActive(false);
 
                 if (!isGuest)
                 {
@@ -2825,23 +2855,33 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private void OpenDMWithUser()
     {
-        if (currentProfile == null) return;
+        if (currentProfile == null || isMyProfile) return;
 
-        if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null) return;
-
-        // MessagePanelManager를 통해 DM 열기
-        if (MessagePanelManager.Instance != null)
+        if (LoginManager.Instance == null) return;
+        if (LoginManager.Instance.CurrentUser == null || LoginManager.Instance.IsGuest)
         {
-            // 프로필 패널 닫기
-            CloseFullProfile();
-
-            // DM 채팅 열기
-            MessagePanelManager.Instance.OpenChatRoom(
-                currentProfile.id,
-                currentProfile.username,
-                currentProfile.avatar_url
-            );
+            LoginManager.Instance.ShowLoginRequirementPopup();
+            return;
         }
+
+        var mpm = MessagePanelManager.Instance;
+        if (mpm == null) return;
+
+        // 닫으면 currentProfile 이 비므로 먼저 적어 둔다 — 예전엔 닫은 뒤에 읽어 사진을 눌러도 대화창이 열리지 않고 프로필만 닫혔다
+        string id = currentProfile.id, username = currentProfile.username, avatarUrl = currentProfile.avatar_url;
+
+        // 그 사람과의 대화창에서 연 프로필이면 닫기만 — 숨겨 둔 그 대화창이 되살아난다
+        if (mpm.IsChatBehindProfile(id))
+        {
+            CloseFullProfile();
+            return;
+        }
+
+        // 열어 준 곳(팔로우 목록·목록 시트·메시지 목록)으로 되돌아가지 않고 닫는다 — 되살아난 창이 대화창 위·아래에 겹쳤다.
+        // 다른 사람과의 대화창에서 건너온 프로필이면 숨겨 둔 그 대화창도 정리한다 (남겨 두면 나중에 그 사람 '메세지 보내기'가 닫기만 했다)
+        CloseAway();
+        mpm.CloseAway();
+        mpm.OpenChatRoom(id, username, avatarUrl);
     }
 
     #endregion

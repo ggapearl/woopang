@@ -24,6 +24,8 @@ public class R0926ProfileLayout : MonoBehaviour
         public float gapBefore;
         [Tooltip("같은 가운데에 함께 놓을 것 (예: 사진 위 테두리)")]
         public RectTransform companion;
+        [Tooltip("켜져 있으면 오른쪽에 나란히 — 두 칸이 폭을 반씩 (예: '팔로우 중 | 메세지 보내기')")]
+        public RectTransform pair;
         [NonSerialized] public float extra;   // 실행 중 더한 높이 (SetExtra)
     }
 
@@ -33,6 +35,7 @@ public class R0926ProfileLayout : MonoBehaviour
     [SerializeField] private float padTop = 80f;
     [SerializeField] private float padBottom = 74f;
     [SerializeField] private float minHeight = 900f;
+    [SerializeField] private float pairGap = 24f;
 
     [Header("공개 상태 알약")]
     [SerializeField] private Text visText;
@@ -108,7 +111,13 @@ public class R0926ProfileLayout : MonoBehaviour
             if (place)
             {
                 float w = it.width > 0f ? it.width : it.rt.sizeDelta.x;
-                Place(it.rt, y, w, ih);
+                if (it.pair != null && it.pair.gameObject.activeSelf)
+                {
+                    float half = (w - pairGap) / 2f;
+                    Place(it.rt, y, half, ih, -(half + pairGap) / 2f);
+                    Place(it.pair, y, half, ih, (half + pairGap) / 2f);
+                }
+                else Place(it.rt, y, w, ih);
                 if (it.companion != null)
                 {
                     // 같은 가운데에 (크기는 그대로)
@@ -154,11 +163,11 @@ public class R0926ProfileLayout : MonoBehaviour
         return 2f * Mathf.Min(top - center, center - bottom);
     }
 
-    private static void Place(RectTransform rt, float top, float w, float h)
+    private static void Place(RectTransform rt, float top, float w, float h, float x = 0f)
     {
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, -top);
+        rt.anchoredPosition = new Vector2(x, -top);
         rt.sizeDelta = new Vector2(w, h);
     }
 

@@ -565,9 +565,32 @@ namespace Redesign0926
                 }
             }
 
+            // '팔로우 중' 옆 '메세지 보내기' — 팔로우 중인 사람 프로필에서만 켠다 (ProfileManager) · 둘이 한 줄을 반씩 (10-21 대표님)
+            Transform message = null;
+            if (followed != null)
+            {
+                var mgo = FindOrCreate(followed.parent, "MessageButton0926");
+                mgo.transform.SetSiblingIndex(followed.GetSiblingIndex() + 1);
+                var lb = FindOrCreate(mgo.transform, "Text");
+                Txt(lb, "메세지 보내기", 54, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
+                var lrt = RT(lb);
+                lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
+                Loc(lb, "메세지 보내기", "Message", "メッセージ", "发消息", "Mensaje");
+                PillButton(mgo, false);
+                var mb = Ensure<Button>(mgo);
+                var fb = followed.GetComponent<Button>();
+                if (fb != null) { mb.transition = fb.transition; mb.colors = fb.colors; }
+                mb.targetGraphic = mgo.GetComponent<Image>();
+                EditorUtility.SetDirty(mb);
+                mgo.SetActive(false);
+                message = mgo.transform;
+            }
+            foreach (var b in new[] { followed, message, edit })
+                if (b != null) Ensure<UITouchForwarder>(b.gameObject);   // 누름 소리 — '팔로우' 버튼과 같이
+
             // 버튼 — 카드 폭에 맞춘 알약
             const float BtnW = 1052f, BtnH = 170f;
-            foreach (var b in new[] { follow, followed, edit })
+            foreach (var b in new[] { follow, followed, message, edit })
             {
                 if (b == null) continue;
                 foreach (var tx in b.GetComponentsInChildren<Text>(true))
@@ -601,18 +624,18 @@ namespace Redesign0926
             var lso = new SerializedObject(lay);
             lso.FindProperty("card").objectReferenceValue = crt;
             SetArray(lso.FindProperty("stretchParents"), top as RectTransform, bottom as RectTransform);
-            var items = new (Transform rt, GameObject activeIf, float h, float w, float gap, Transform companion)[]
+            var items = new (Transform rt, GameObject activeIf, float h, float w, float gap, Transform companion, Transform pair)[]
             {
-                (outline, null, ringSize, ringSize, 0, mask),
-                (vis != null ? vis.parent : null, vis != null ? vis.gameObject : null, 96, 0, 44, null),
-                (uname, null, 110, 1052, 34, null),
-                (bio, null, 66, 1052, 6, null),
-                (stats, null, 190, 900, 60, null),
-                (follow, null, BtnH, BtnW, 60, null),
-                (followed, null, BtnH, BtnW, 60, null),
-                (sns, null, 163, 900, 60, null),
-                (edit, null, BtnH, BtnW, 60, null),
-                (logout, null, 90, 600, 36, null),
+                (outline, null, ringSize, ringSize, 0, mask, null),
+                (vis != null ? vis.parent : null, vis != null ? vis.gameObject : null, 96, 0, 44, null, null),
+                (uname, null, 110, 1052, 34, null, null),
+                (bio, null, 66, 1052, 6, null, null),
+                (stats, null, 190, 900, 60, null, null),
+                (follow, null, BtnH, BtnW, 60, null, null),
+                (followed, null, BtnH, BtnW, 60, null, message),
+                (sns, null, 163, 900, 60, null, null),
+                (edit, null, BtnH, BtnW, 60, null, null),
+                (logout, null, 90, 600, 36, null, null),
             };
             var arr = lso.FindProperty("items");
             arr.arraySize = items.Length;
@@ -625,6 +648,7 @@ namespace Redesign0926
                 e.FindPropertyRelative("width").floatValue = items[i].w;
                 e.FindPropertyRelative("gapBefore").floatValue = items[i].gap;
                 e.FindPropertyRelative("companion").objectReferenceValue = items[i].companion as RectTransform;
+                e.FindPropertyRelative("pair").objectReferenceValue = items[i].pair as RectTransform;
             }
             lso.FindProperty("padTop").floatValue = 80f;
             lso.FindProperty("padBottom").floatValue = 70f;
@@ -634,7 +658,17 @@ namespace Redesign0926
             lso.FindProperty("visDot").objectReferenceValue = dotImg;
             SetArray(lso.FindProperty("countTexts"), countTexts.ToArray());
             lso.ApplyModifiedPropertiesWithoutUndo();
-            log.Add("profile card ok");
+
+            var pm = Object.FindAnyObjectByType<ProfileManager>(FindObjectsInactive.Include);
+            if (pm != null)
+            {
+                var pso = new SerializedObject(pm);
+                pso.FindProperty("messageButton").objectReferenceValue = message != null ? message.GetComponent<Button>() : null;
+                pso.FindProperty("listSheetClose").objectReferenceValue = Find(root, "XButton_List")?.GetComponent<Button>();
+                pso.FindProperty("listSheetOpen").objectReferenceValue = Find(root, "List_Button")?.GetComponent<Button>();
+                pso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            log.Add("profile card ok" + (message == null ? " (메세지 버튼 없음)" : ""));
         }
 
         // ── 입력줄 (채팅 · 키보드 위) ───────────────────────────

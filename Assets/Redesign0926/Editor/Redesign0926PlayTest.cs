@@ -117,6 +117,7 @@ namespace Redesign0926
             else if (mode == "follownotif") PlanFollowNotif();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
+            else if (mode == "mapprofile") PlanMapProfile();
             else if (mode == "scrolllock") PlanScrollLock();
             else if (mode == "filters") PlanFilters();
             else if (mode == "guidetouch") PlanGuideTouch();
@@ -1135,7 +1136,7 @@ namespace Redesign0926
         private const string SfMe = "hunt_test_sfme", SfNote = "search_test_b11";
         private static UserData sfUserBackup;
         private static bool sfGuestBackup;
-        private static void SfLogin(bool on)
+        private static void SfLogin(bool on, string id = SfMe)
         {
             var lm = LoginManager.Instance;
             if (lm == null) return;
@@ -1145,7 +1146,7 @@ namespace Redesign0926
             {
                 sfUserBackup = lm.CurrentUser;
                 sfGuestBackup = lm.IsGuest;
-                user.SetValue(lm, new UserData { id = SfMe, username = SfMe });
+                user.SetValue(lm, new UserData { id = id, username = id });
                 guest.SetValue(lm, false);
             }
             else
@@ -1311,6 +1312,238 @@ namespace Redesign0926
             });
             Sleep(0.3f);
             Check(() => !PlayerPrefs.GetString("SystemNotifications", "").Contains(SfNote), "시험 알림 줄 지움");
+        }
+
+        // N2·N3·N15 (10-21) — 지도의 친구 핀·친구 목록 줄을 누르면 그 사람 프로필. 목록 시트가 프로필보다 위 층이라 열린 채 띄우면 카드가 시트 뒤에 겹쳤다 —
+        // 시트는 닫았다가 프로필을 닫으면 보던 자리 그대로 다시 연다. 팔로우 중이면 '팔로우 중 | 메세지 보내기' 한 줄 · 프로필 사진을 눌러도 대화창 (예전엔 프로필만 닫혔다).
+        // 친구 위치·프로필·팔로우·대화는 시험 서버(127.0.0.1:5099)의 고정 답. 시험 토큰은 덜어 둔 로그인 자리에만 두고 플레이를 끄면 되돌린다
+        private const string MpMe = "hunt_test_mpme", MpFriend = "hunt_test_s2", MpFan = "hunt_test_s3";
+        private static readonly List<string> mpErrors = new List<string>();
+        private static void MpLog(string msg, string stack, LogType type)
+        {
+            if (type == LogType.Exception) mpErrors.Add(msg);
+        }
+        private static void PlanMapProfile()
+        {
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var T = typeof(R0926FriendsMap);
+            R0926FriendsMap map = null;
+            string viewBackup = null;
+            float halfW = 0f;
+            Func<string, Transform> pin = id => (T.GetField("pinLayer", F)?.GetValue(map) as RectTransform)?.Find("Pin_" + id);
+            Func<string, Transform> row = id => (T.GetField("listContent", F)?.GetValue(map) as RectTransform)?.Find("Friend_" + id);
+            Func<Transform, bool> on = t => t != null && t.gameObject.activeInHierarchy;
+            Action<Transform> tap = t =>
+            {
+                if (t == null) { log.Add("  누를 것 없음"); return; }
+                UnityEngine.EventSystems.ExecuteEvents.Execute(t.gameObject, new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                    { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left }, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+            };
+            Func<ProfileManager> pm = () => ProfileManager.Instance;
+            Func<string> who = () => pm()?.usernameText?.text;
+            Func<bool> msgOn = () => on(pm()?.messageButton?.transform);
+            Func<float> width = () => { var b = pm()?.followButton?.transform as RectTransform; return b != null ? b.rect.width : -1f; };
+            // '팔로우 중 | 메세지 보내기' — 같은 줄에 폭 반씩 · 사이를 두고
+            Func<bool> pairOk = () =>
+            {
+                var a = pm()?.followedButton?.transform as RectTransform;
+                var b = pm()?.messageButton?.transform as RectTransform;
+                if (!on(a) || !on(b)) return false;
+                var ca = new Vector3[4];
+                var cb = new Vector3[4];
+                a.GetWorldCorners(ca);
+                b.GetWorldCorners(cb);
+                float s = a.lossyScale.x > 0f ? a.lossyScale.x : 1f;
+                float wa = (ca[2].x - ca[0].x) / s, wb = (cb[2].x - cb[0].x) / s, gap = (cb[0].x - ca[2].x) / s, dy = Mathf.Abs(ca[0].y - cb[0].y) / s;
+                halfW = wa;
+                log.Add($"  한 줄: 팔로우 중 {wa:F0} · 메세지 보내기 {wb:F0} · 사이 {gap:F0} · 높이 차 {dy:F1}");
+                return Mathf.Abs(wa - wb) < 1f && gap > 8f && dy < 1f;
+            };
+            Func<double[]> center = () =>
+            {
+                var vp = (RectTransform)map.transform;
+                object n = T.GetMethod("ToNorm", F).Invoke(map, new object[] { vp.rect.size / 2f });
+                var a = new object[] { n, null, null };
+                T.GetMethod("LatLon", SF).Invoke(null, a);
+                return new[] { (double)a[1], (double)a[2] };
+            };
+            Func<string, int> dmCount = kind =>
+            {
+                string r = DevGet(MpMe, "/api/dev/dm_log"), key = "\"kind\":\"" + kind + "\"";
+                int n = 0;
+                for (int i = r.IndexOf(key, StringComparison.Ordinal); i >= 0; i = r.IndexOf(key, i + 1, StringComparison.Ordinal)) n++;
+                return n;
+            };
+            Func<string> chatTitle = () => Mpm()?.chatRoomTitle?.text;
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                const string dev = "http://127.0.0.1:5099";
+                MessagePanelManager.EditorBase = dev;
+                ProfileManager.EditorBase = dev;
+                FollowManager.EditorBase = dev;
+                P2PManager.EditorBase = dev;
+                FirebaseNotification.EditorBase = dev;
+                R0926FriendsMap.EditorBase = dev;
+                R0926HuntApi.EditorBase = dev;
+                R0926HuntApi.EditorTestUser = MpMe;
+                R0926MapTiles.EditorBase = "http://127.0.0.1:9";   // 닫힌 자리 — 지도 타일 없이 (진짜 서버의 타일을 부르지 않는다)
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                viewBackup = PlayerPrefs.HasKey("R0926Map.View") ? PlayerPrefs.GetString("R0926Map.View") : null;
+                PlayerPrefs.DeleteKey("R0926Map.View");   // 처음 열면 친구가 다 보이게
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, LocalTestLogin + MpMe.Substring("hunt_test_".Length));
+                DevPost(MpMe, "/api/dev/search_reset", "{}");   // 나 ↔ s2 맞팔 · s3 → 나만
+                DevGet(MpMe, "/api/dev/dm_log?reset=1");
+                SfLogin(true, MpMe);
+                mpErrors.Clear();
+                Application.logMessageReceived -= MpLog;
+                Application.logMessageReceived += MpLog;
+            });
+            Check(() => LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUser.id == MpMe, "준비: 시험 아이디 (로그인 이벤트 없이)");
+
+            // 1) 목록 → 지도 · 친구 핀 둘
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(1));
+            Sleep(0.8f);
+            Do(() => map = UnityEngine.Object.FindAnyObjectByType<R0926FriendsMap>(FindObjectsInactive.Include));
+            Wait(() => on(pin(MpFriend)) && on(pin(MpFan)) && on(row(MpFriend)) && on(row(MpFan)), 10f, "친구 핀·줄 받음 (시험 서버)");
+            Sleep(0.6f);
+            Shot("mapprofile_map");
+            Do(() => log.Add($"  맞힘 검사 화면 {Screen.width}x{Screen.height} · 핀 맨 위: " + TopHitAt(pin(MpFriend) as RectTransform) + " · 줄 맨 위: " + TopHitAt(row(MpFan) as RectTransform)));
+            HitCheck(() => pin(MpFriend) as RectTransform, false, "친구 핀이 가려지지 않음");
+
+            // 2) 핀 → 그 사람 프로필 · 시트는 닫히고 프로필만 · 팔로우 중이면 '팔로우 중 | 메세지 보내기'
+            Do(() => tap(pin(MpFriend)));
+            Wait(() => Active("FullProfilePanel") && who() == "goosoon_friend" && SfFollowState() == "following", 8f, "핀 → 프로필");
+            Sleep(0.8f);
+            Shot("mapprofile_profile_following");
+            Do(() => log.Add("  열린 창: " + OpenPanels() + " · 도크 목록 " + (Active("Dock0926/List_Button") ? "보임" : "숨음") + " · 도크 맨 위: " + TopHit("Dock0926/List_Button")));
+            Check(() => OpenPanels() == "FullProfilePanel" && !Active("ListPanel"), "핀 → 그 사람 프로필만 (목록 시트는 닫혀 겹치지 않음)");
+            Check(() => Active("Dock0926/List_Button"), "도크 '목록'은 제자리");
+            HitCheck(() => Find("Dock0926/List_Button") as RectTransform, true, "도크 '목록'은 프로필 덮개에 가려 눌리지 않음");
+            Check(() => SfFollowState() == "following" && msgOn() && pairOk(), "팔로우 중 → '팔로우 중 | 메세지 보내기' 한 줄 (폭 반씩)");
+            HitCheck(() => pm().messageButton.transform as RectTransform, false, "'메세지 보내기'가 가려지지 않음");
+            Check(() => (pm().messageButton.GetComponentInChildren<Text>(true)?.text ?? "") == "메세지 보내기", "글: '메세지 보내기'");
+
+            // 3) 프로필 닫기 → 시트가 다시 · 지도는 누른 친구 자리 그대로
+            Do(() => pm().closeButton.onClick.Invoke());
+            Wait(() => Active("ListPanel") && !Active("FullProfilePanel"), 5f, "프로필 닫음");
+            Sleep(0.8f);
+            Shot("mapprofile_back_map");
+            Do(() => { var c = center(); log.Add($"  지도 가운데 {c[0]:F4}, {c[1]:F4} · 탭 {Modes()?.Current}"); });
+            Check(() => Active("ListPanel") && Modes()?.Current == 1 && Active("ListPanel/DockMirror0926/XButton_List") && !Active("Dock0926/List_Button"),
+                "프로필을 닫으면 목록 시트가 지도 탭 그대로 다시 열림 (도크 X 도)");
+            Check(() => { var c = center(); return Math.Abs(c[0] - 37.5665) < 0.05 && Math.Abs(c[1] - 126.978) < 0.05; }, "지도는 누른 친구 자리 그대로 (가다 만 곳이 아니라)");
+            Check(() => on(row(MpFriend)?.Find("Sel")), "누른 친구 줄이 골라진 채");
+
+            // 4) 친구 목록 줄 → 프로필 · 팔로우 안 한 사람은 '팔로우' 한 칸 (메세지 버튼 없음) · 뒤로가기로 닫으면 시트가 다시
+            Do(() => tap(row(MpFan)));
+            Wait(() => Active("FullProfilePanel") && who() == "goosoon_fan" && SfFollowState() != "?", 8f, "줄 → 프로필");
+            Sleep(0.8f);
+            Shot("mapprofile_profile_follow");
+            Check(() => OpenPanels() == "FullProfilePanel", "친구 줄 → 그 사람 프로필만");
+            Do(() => log.Add("  팔로우 폭 " + width().ToString("F0")));
+            Check(() => SfFollowState() == "follow" && !msgOn() && Mathf.Abs(width() - (2f * halfW + 24f)) < 2f,
+                "팔로우 안 한 사람 → '팔로우' 한 칸 (메세지 버튼 없음 · 폭 그대로)");
+            Back();
+            Wait(() => Active("ListPanel") && !Active("FullProfilePanel"), 5f, "뒤로가기 → 프로필 닫음");
+            Sleep(0.6f);
+            Check(() => OpenPanels() == "ListPanel" && Modes()?.Current == 1, "뒤로가기로 닫아도 목록 시트가 지도 그대로 (하나만)");
+            Back();
+            Wait(() => !Active("ListPanel"), 5f, "뒤로가기 → 시트 닫음");
+            Sleep(0.6f);
+            Check(() => OpenCount() == 0 && Active("Dock0926/List_Button"), "한 번 더 뒤로가기 → 시트도 닫힘 (남는 창 없음)");
+
+            // 5) '메세지 보내기' → 그 사람 대화창 (프로필·시트는 닫고 되살아나지 않음)
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.0f);
+            Wait(() => on(pin(MpFriend)), 6f, "다시 지도");
+            Do(() => tap(pin(MpFriend)));
+            Wait(() => Active("FullProfilePanel") && who() == "goosoon_friend" && msgOn(), 8f, "핀 → 프로필 (팔로우 중)");
+            Sleep(0.5f);
+            Do(() => tap(pm().messageButton.transform));
+            Wait(() => Active("ChatRoomPanel"), 6f, "'메세지 보내기' → 대화창");
+            Sleep(1.0f);
+            Shot("mapprofile_chat");
+            Do(() => log.Add("  열린 창: " + OpenPanels() + " · 대화 제목 " + chatTitle() + " · 서버 대화 " + dmCount("conversation") + " · 읽음 " + dmCount("read_all")));
+            Check(() => OpenPanels() == "ChatRoomPanel" && chatTitle() == "goosoon_friend", "'메세지 보내기' → 그 사람 대화창만 (프로필·목록 시트 닫힘)");
+            Check(() => dmCount("conversation") >= 1, "대화는 시험 서버에서 받음 (운영 서버에 시험 아이디로 묻지 않음)");
+            Back();
+            Wait(() => !Active("ChatRoomPanel"), 5f, "뒤로가기 → 대화창 닫음");
+            Sleep(0.8f);
+            Do(() => log.Add("  대화창 닫은 뒤: " + OpenPanels()));
+            Check(() => OpenPanels() == "MessagePanel", "대화창을 닫으면 메세지 목록 하나만 (프로필·목록 시트가 다시 겹쳐 뜨지 않음)");
+            CloseAll();
+
+            // 6) 프로필 사진 → 대화창 (예전엔 사진을 눌러도 프로필만 닫혔다)
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.0f);
+            Wait(() => on(pin(MpFan)), 6f, "다시 지도");
+            Do(() => tap(pin(MpFan)));
+            Wait(() => Active("FullProfilePanel") && who() == "goosoon_fan" && SfFollowState() != "?", 8f, "핀 → 프로필 (팔로우 안 함)");
+            Sleep(0.5f);
+            Do(() => log.Add("  사진 맨 위: " + TopHit("FullProfilePanel/Content/TopPanel/AvatarMask")));
+            HitCheck(() => Find("FullProfilePanel/Content/TopPanel/AvatarMask") as RectTransform, false, "프로필 사진이 가려지지 않음");
+            Do(() => tap(pm().avatarButton.transform));
+            Wait(() => Active("ChatRoomPanel"), 6f, "사진 → 대화창");
+            Sleep(0.8f);
+            Shot("mapprofile_avatar_chat");
+            Check(() => OpenPanels() == "ChatRoomPanel" && chatTitle() == "goosoon_fan", "팔로우 안 한 사람도 사진을 누르면 그 사람 대화창");
+
+            // 7) 대화창에서 연 그 사람 프로필 → '메세지 보내기'는 같은 대화창으로 돌아감 (새로 열지 않음).
+            //    지금 대화창 머리에는 사진 칸이 없어(chatRoomAvatar 비어 있음) 사진 대신 그 길을 바로 부른다
+            Do(() => DevPost(MpMe, "/api/follow", "{\"following_id\":\"" + MpFan + "\"}"));
+            int convBefore = 0;
+            Do(() => convBefore = dmCount("conversation"));
+            Do(() => Mpm().OpenProfileFromChatRoom(MpFan, "goosoon_fan"));
+            Wait(() => Active("FullProfilePanel") && who() == "goosoon_fan" && msgOn(), 8f, "대화창에서 프로필 (방금 팔로우)");
+            Sleep(0.5f);
+            Check(() => OpenPanels() == "FullProfilePanel", "대화창에서 연 프로필 — 대화창은 뒤로 숨음");
+            Do(() => tap(pm().messageButton.transform));
+            Wait(() => Active("ChatRoomPanel") && !Active("FullProfilePanel"), 6f, "'메세지 보내기' → 대화창");
+            Sleep(0.6f);
+            Check(() => OpenPanels() == "ChatRoomPanel" && chatTitle() == "goosoon_fan" && dmCount("conversation") == convBefore,
+                "그 사람 대화창에서 연 프로필의 '메세지 보내기' → 보던 대화창 그대로 (다시 받지 않음)");
+            Back();
+            Wait(() => !Active("ChatRoomPanel"), 5f, "대화창 닫음");
+            Sleep(0.6f);
+            Check(() => OpenPanels() == "MessagePanel", "대화창을 닫으면 메세지 목록 하나만");
+            Check(() => mpErrors.Count == 0, "오류 없음" + (mpErrors.Count > 0 ? " — " + mpErrors[0] : ""));
+            Do(() => { foreach (var e in mpErrors) log.Add("  오류: " + e); });
+
+            // 정리 — 시험 서버 주소 · 시험 아이디 · 보던 지도 자리
+            CloseAll();
+            Do(() =>
+            {
+                Application.logMessageReceived -= MpLog;
+                SfLogin(false);
+                MessagePanelManager.EditorBase = null;
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                P2PManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+                R0926FriendsMap.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                R0926HuntApi.EditorTestUser = null;
+                R0926MapTiles.EditorBase = null;
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+                if (viewBackup != null) PlayerPrefs.SetString("R0926Map.View", viewBackup); else PlayerPrefs.DeleteKey("R0926Map.View");
+                PlayerPrefs.Save();
+                DevPost(MpMe, "/api/dev/search_reset", "{}");
+            });
         }
 
         // B8 (10-18) — 새 팔로워 알림을 누르면 덮인 창(추가 창까지)을 닫고 내 팔로워 탭 · 그 사람을 맨 위에 잠깐 밝게.
@@ -4350,9 +4583,9 @@ namespace Redesign0926
         }
 
         // 그 칸 자리를 누르면 맨 위에 맞는 것 — 열린 창이 도크의 다른 칸을 가리는지
-        private static string TopHit(string path)
+        private static string TopHit(string path) => TopHitAt(Find(path) as RectTransform);
+        private static string TopHitAt(RectTransform rt)
         {
-            var rt = Find(path) as RectTransform;
             var es = UnityEngine.EventSystems.EventSystem.current;
             if (rt == null || es == null) return "-";
             var canvas = rt.GetComponentInParent<Canvas>().rootCanvas;
@@ -4360,6 +4593,23 @@ namespace Redesign0926
             var hits = new List<UnityEngine.EventSystems.RaycastResult>();
             es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = RectTransformUtility.WorldToScreenPoint(cam, rt.TransformPoint(rt.rect.center)) }, hits);
             return hits.Count == 0 ? "없음" : hits[0].gameObject.name + (hits[0].gameObject.transform.IsChildOf(rt) ? " (그 칸)" : " (가림)");
+        }
+
+        // 맨 위에 맞는 것이 그 칸인지(covered 면 다른 것인지) — 가끔 아무것도 안 맞는 프레임이 있어 맞을 때까지 3초 안에서 기다렸다 본다
+        private static void HitCheck(Func<RectTransform> rt, bool covered, string what)
+        {
+            double until = -1;
+            int misses = 0;
+            string missAt = "";
+            steps.Enqueue(() =>
+            {
+                if (until < 0) until = EditorApplication.timeSinceStartup + 3;
+                string hit = TopHitAt(rt());
+                if (hit == "없음" && EditorApplication.timeSinceStartup < until) { misses++; missAt = $"{Screen.width}x{Screen.height}"; return false; }
+                bool ok = hit != "없음" && hit != "-" && hit.EndsWith("(그 칸)") != covered;
+                log.Add((ok ? "PASS " : "FAIL ") + what + (ok ? "" : " — 맨 위: " + hit) + (misses > 0 ? $" (빈 맞힘 {misses}번 · 그때 화면 {missAt})" : ""));
+                return true;
+            });
         }
 
         private static int OpenCount()
@@ -6453,7 +6703,7 @@ namespace Redesign0926
             {
                 if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
-                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; }   // 팔로우·검색·프로필 시험 서버도
+                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
                 if (running) RestoreWoopangPrefs();   // WOOPANG 줄 삭제 시험이 덜어 둔 저장값 (시험 도중 플레이를 끈 경우)
                 RestoreGameViewSize();   // 가로 시험이 중간에 끊겨도 게임 창 크기는 원래대로
@@ -6467,7 +6717,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile")) StashLogin();
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     MainViewToSimulator();
                     EditorApplication.isPlaying = true;
