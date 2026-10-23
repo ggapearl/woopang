@@ -1523,6 +1523,50 @@ namespace Redesign0926
             Wait(() => !Active("ChatRoomPanel"), 5f, "대화창 닫음");
             Sleep(0.6f);
             Check(() => OpenPanels() == "MessagePanel", "대화창을 닫으면 메세지 목록 하나만");
+
+            // 8) 근처 사람(P2P) 목록에 정확히 온 친구 → 서버의 약 1km 칸 가운데가 아니라 그 자리 (10-21 한자리의 두 휴대폰이 서로 약 500m 떨어져 보였다)
+            Func<string, object> friendOf = id =>
+            {
+                foreach (var o in (System.Collections.IList)T.GetField("friends", F).GetValue(map))
+                    if ((string)o.GetType().GetField("user_id").GetValue(o) == id) return o;
+                return null;
+            };
+            Func<string, string, object> fv = (id, n) => { var o = friendOf(id); return o?.GetType().GetField(n).GetValue(o); };
+            Func<double, double, Vector2> viewAt = (la, lo) =>
+                (Vector2)T.GetMethod("ToView", F).Invoke(map, new[] { T.GetMethod("NormD", SF).Invoke(null, new object[] { la, lo }) });
+            Action<bool> nearby = add =>
+            {
+                if (!add) { P2PManager.Instance?.RemoveTestUserAvatar(MpFriend); return; }
+                // 에디터의 가상 사용자(1초마다 근처 사람을 넣는다)가 시험이 넣은 근처 사람 목록을 덮어쓰지 않게
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>();
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                P2PManager.Instance?.InjectTestUsersData("{\"users\":[{\"user_id\":\"" + MpFriend + "\",\"username\":\"goosoon_friend\",\"latitude\":37.5707,\"longitude\":126.9801,\"altitude\":0,\"distance\":470}]}");
+            };
+            CloseAll();
+            Do(() => PlayerPrefs.DeleteKey("R0926Map.View"));   // 처음 열 때처럼 친구가 다 보이게
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.0f);
+            Do(() => Modes()?.Show(1));
+            Wait(() => on(pin(MpFriend)) && on(pin(MpFan)), 8f, "다시 지도 · 친구 핀 둘");
+            Check(() => fv(MpFriend, "exact") is bool b0 && !b0, "근처 목록에 오기 전엔 서버 자리 (약 1km 칸)");
+            Do(() => nearby(true));
+            Wait(() => fv(MpFriend, "exact") is bool b1 && b1, 8f, "근처 친구 → 정확한 자리 (5초마다 확인)");
+            Sleep(0.3f);
+            Shot("mapprofile_nearby_exact");
+            Do(() =>
+            {
+                var q = viewAt(37.5707, 126.9801);
+                var pr = pin(MpFriend) as RectTransform;
+                log.Add($"  근처 친구 {fv(MpFriend, "lat")}, {fv(MpFriend, "lon")} · 핀 {(pr != null ? pr.anchoredPosition.ToString() : "없음")} · 그 자리 ({q.x:F1}, {-q.y:F1}) · 줄 " +
+                        row(MpFriend)?.Find("Sub")?.GetComponent<Text>()?.text);
+            });
+            Check(() => Math.Abs((float)fv(MpFriend, "lat") - 37.5707) < 1e-4 && Math.Abs((float)fv(MpFriend, "lon") - 126.9801) < 1e-4,
+                "근처 친구 = 근처 사람 목록의 자리 (서버가 보낸 37.5665, 126.978 이 아니라)");
+            Check(() => { var pr = pin(MpFriend) as RectTransform; var q = viewAt(37.5707, 126.9801); return pr != null && Vector2.Distance(pr.anchoredPosition, new Vector2(q.x, -q.y)) < 1f; },
+                "핀도 그 자리에");
+            Check(() => fv(MpFan, "exact") is bool b2 && !b2 && Math.Abs((float)fv(MpFan, "lat") - 36.3504) < 1e-4, "근처 목록에 없는 친구는 서버 자리 그대로");
+            Do(() => nearby(false));
+
             Check(() => mpErrors.Count == 0, "오류 없음" + (mpErrors.Count > 0 ? " — " + mpErrors[0] : ""));
             Do(() => { foreach (var e in mpErrors) log.Add("  오류: " + e); });
 

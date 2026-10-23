@@ -104,6 +104,7 @@ public class P2PManager : MonoBehaviour
     // User tracking
     private Dictionary<string, GameObject> activeUserAvatars = new Dictionary<string, GameObject>();
     private Dictionary<string, NearbyUserData> nearbyUsersData = new Dictionary<string, NearbyUserData>();
+    private float nearbyAt;   // 근처 사람 목록을 마지막으로 받은 때 — 비공개로 바꿔 더 안 받으면 그 뒤로 남은 자리는 쓰지 않는다
     private Queue<GameObject> avatarPool = new Queue<GameObject>();
     private ARObjectZoomController zoomController;   // 핀치 줌 배율 — 새로 뜨는 사람 오브젝트도 지금 배율로
 
@@ -527,6 +528,7 @@ public class P2PManager : MonoBehaviour
             JArray usersArray = (JArray)response["users"];
 
             if (usersArray == null) return;
+            nearbyAt = Time.realtimeSinceStartup;
 
             List<string> currentNearbyUserIds = new List<string>();
             var inResponse = new HashSet<string>();
@@ -1065,6 +1067,15 @@ public class P2PManager : MonoBehaviour
     public List<NearbyUserData> GetNearbyUsers()
     {
         return nearbyUsersData.Values.ToList();
+    }
+
+    /// <summary>
+    /// 근처 사람 한 명의 정확한 자리 (서버가 공유 반경 안이라 AR 로 보내 주는 사람) — 목록을 30초 넘게 못 받았으면 없는 셈. 친구 지도가 쓴다
+    /// </summary>
+    public bool TryGetNearbyUser(string userId, out NearbyUserData data)
+    {
+        data = null;
+        return userId != null && Time.realtimeSinceStartup - nearbyAt < 30f && nearbyUsersData.TryGetValue(userId, out data);
     }
 
     /// <summary>

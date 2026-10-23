@@ -9,7 +9,7 @@ using UnityEngine.Networking;
 using UnityEngine.UI;
 
 /// <summary>
-/// 목록 시트의 '지도' — 맞팔 친구의 대략적인 위치(약 1km)와 내 보물찾기 게임을 세계 지도에.
+/// 목록 시트의 '지도' — 맞팔 친구의 위치(멀면 약 1km 칸 · 근처면 AR 과 같은 정확한 자리)와 내 보물찾기 게임을 세계 지도에.
 ///  · 서버: /api/p2p/friends_map · /api/p2p/map_share (토큰 필수, 규칙은 서버가 지킨다)
 ///  · 보물찾기: 장소 목록과 같은 게임(R0926HuntList — 내가 열었거나 참가 중)을 게임의 공개 설정대로 —
 ///    정확히 공개면 그 자리, 대략 공개면 원(이 안 어딘가), 비공개는 자리가 없어 안 나온다. 누르면 그 게임 상세
@@ -42,7 +42,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [SerializeField] private RectTransform pinLayer;
     [SerializeField] private GameObject pinTemplate;
     [SerializeField] private GameObject clusterTemplate;
-    [Tooltip("깊이 확대했을 때 친구 핀 둘레의 '이 근처' 원 (친구 위치는 약 1km 칸으로 온다)")]
+    [Tooltip("깊이 확대했을 때 친구 핀 둘레의 '이 근처' 원 (멀리 있는 친구 위치는 약 1km 칸으로 온다 — 근처 친구는 정확한 자리라 원 없음)")]
     [SerializeField] private GameObject areaTemplate;
     [SerializeField] private RectTransform meDot;
     [SerializeField] private Image mePulse;
@@ -106,7 +106,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private static string Api(string url) => url;
 #endif
 
-    [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public float lat; public float lon; public int ago; }
+    [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public float lat; public float lon; public int ago; [NonSerialized] public bool exact; }
     [Serializable] private class Resp { public string status; public bool sharing; public int mutual; public Friend[] friends; }
 
     private struct D2
@@ -137,7 +137,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private bool touched;            // 마지막으로 맞춘 뒤 손으로 움직였다 — 보물찾기 목록이 바뀌어도 다시 맞추지 않는다
     private int mutual;
     private string selectedId;
-    private float nextRefresh, nextHuntCheck;
+    private float nextRefresh, nextHuntCheck, nextNearby;
     private float prevPinch = -1f;
     private Vector2 lastSize;
     private Coroutine anim;
@@ -234,6 +234,12 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             var co = R0926HuntList.RefreshIfDue();
             if (co != null) StartCoroutine(co);
         }
+        // 근처 친구의 정확한 자리 — 근처 사람 목록이 오는 주기(5초)로
+        if (Time.unscaledTime >= nextNearby)
+        {
+            nextNearby = Time.unscaledTime + 5f;
+            if (loaded && UseNearby()) Refresh();
+        }
 
         Vector2 size = viewport.rect.size;
         if (size != lastSize) { lastSize = size; Clamp(); Layout(); }
@@ -278,10 +284,31 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             mutual = r.mutual;
             friends.Clear();
             if (r.friends != null) friends.AddRange(r.friends);
+            UseNearby();
             loaded = true;
             netError = false;
             Refresh();
         }
+    }
+
+    // 근처 친구는 AR 과 같은 정확한 자리에 — 근처 사람(P2P) 목록에 이미 정확히 오는 사람(공유 반경 안)만. 서버의 약 1km 칸은 멀리 있는 친구에게만
+    // (2026-10-21 한자리에 있던 두 휴대폰이 지도에서 서로를 약 500m 떨어진 칸 가운데에 봤다)
+    private bool UseNearby()
+    {
+        var p2p = P2PManager.Instance;
+        if (p2p == null) return false;
+        bool changed = false;
+        foreach (var f in friends)
+        {
+            if (!p2p.TryGetNearbyUser(f.user_id, out var u) || (u.latitude == 0 && u.longitude == 0)) continue;
+            float la = (float)u.latitude, lo = (float)u.longitude;
+            if (f.exact && Mathf.Abs(la - f.lat) < 0.00005f && Mathf.Abs(lo - f.lon) < 0.00005f) continue;   // 몇 m 흔들림은 다시 그리지 않는다
+            f.lat = la;
+            f.lon = lo;
+            f.exact = true;
+            changed = true;
+        }
+        return changed;
     }
 
     /// <summary>공유 스위치 (동의 카드·아래 줄 공통)</summary>
@@ -345,18 +372,18 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 : !loggedIn
                 ? L("로그인하면 맞팔로우한 친구끼리 대략적인 위치를 서로 볼 수 있어요.", "Log in to see roughly where your mutual friends are.",
                     "ログインすると相互フォローの友だちとおおよその位置を見せ合えます。", "登录后，互相关注的好友可以互相查看大致位置。", "Inicia sesión para ver dónde están tus amigos mutuos.")
-                : L("맞팔로우한 친구끼리 대략적인 위치(약 1km)를 서로 볼 수 있어요. 내 위치를 켜야 친구 위치도 보여요.",
-                    "Mutual friends can see each other's rough location (about 1 km). Turn yours on to see theirs.",
-                    "相互フォローの友だち同士で、おおよその位置（約1km）を見せ合えます。自分の位置をオンにすると友だちの位置も見えます。",
-                    "互相关注的好友可以互相查看大致位置（约1公里）。开启你的位置后才能看到好友。",
-                    "Los amigos mutuos pueden ver su ubicación aproximada (1 km). Activa la tuya para ver la de ellos.");
+                : L("맞팔로우한 친구끼리 위치를 서로 볼 수 있어요(멀면 약 1km 단위 · 근처면 AR 과 같은 자리). 내 위치를 켜야 친구 위치도 보여요.",
+                    "Mutual friends can see each other's location (about 1 km when far, the same spot as in AR when nearby). Turn yours on to see theirs.",
+                    "相互フォローの友だち同士で位置を見せ合えます（遠いと約1km単位・近いとARと同じ場所）。自分の位置をオンにすると友だちの位置も見えます。",
+                    "互相关注的好友可以互相查看位置（较远时约1公里，附近时与AR相同的位置）。开启你的位置后才能看到好友。",
+                    "Los amigos mutuos pueden ver su ubicación (1 km aprox. si están lejos, el mismo punto que en AR si están cerca). Activa la tuya para ver la de ellos.");
         }
         if (consentNote != null)
             consentNote.text = L("언제든 끌 수 있고, 끄면 지도에서 바로 사라져요.", "You can turn it off anytime — you disappear right away.",
                 "いつでもオフにでき、オフにするとすぐ地図から消えます。", "可随时关闭，关闭后立即从地图消失。", "Puedes desactivarlo cuando quieras; desapareces al instante.");
         if (shareText != null)
             shareText.text = sharing
-                ? L("내 위치 공유 중 · 약 1km 단위", "Sharing my location · about 1 km", "位置を共有中 · 約1km", "正在共享位置 · 约1公里", "Compartiendo ubicación · ~1 km")
+                ? L("내 위치 공유 중 · 멀면 약 1km", "Sharing my location · ~1 km if far", "位置を共有中 · 遠いと約1km", "正在共享位置 · 远时约1公里", "Ubicación compartida · ~1 km lejos")
                 : L("내 위치 공유 꺼짐", "Location sharing off", "位置の共有オフ", "位置共享已关闭", "Ubicación no compartida");
 
         if (chipText != null)
@@ -400,7 +427,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             if (sub != null)
             {
                 float km = Km(me, f);
-                sub.text = Ago(f.ago) + (me != Vector2.zero ? " · " + (km < 1f ? "1km" : Mathf.RoundToInt(km).ToString("N0") + "km") : "");
+                sub.text = Ago(f.ago) + (me != Vector2.zero ? " · " + Dist(km, f.exact) : "");
             }
             var sel = go.transform.Find("Sel");
             if (sel != null) sel.gameObject.SetActive(f.user_id == selectedId);
@@ -590,7 +617,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             }
             foreach (var g in groups)
             {
-                float ar = AreaRadius(g.members[0].lat);
+                float ar = AllExact(g.members) ? 0f : AreaRadius(g.members[0].lat);
                 float edge = Mathf.Max(120f, ar);
                 if (g.pos.x < -edge || g.pos.y < -edge || g.pos.x > v.x + edge || g.pos.y > v.y + edge) continue;
                 if (ar > 0f)
@@ -675,8 +702,14 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     }
 
     // 친구 위치는 서버가 약 1km 칸(소수 둘째 자리)으로 뭉개 보낸다 — 칸 가운데에서 모서리까지 약 0.7km.
-    // 그 칸이 아바타보다 커 보일 만큼 확대하면 핀이 정확한 건물처럼 보이지 않게 '이 근처' 원을 같이 그린다.
+    // 그 칸이 아바타보다 커 보일 만큼 확대하면 핀이 정확한 건물처럼 보이지 않게 '이 근처' 원을 같이 그린다. 근처 친구(UseNearby)는 정확한 자리라 원 없이
     private const float ApproxKm = 0.7f;
+
+    private static bool AllExact(List<Friend> members)
+    {
+        foreach (var m in members) if (!m.exact) return false;
+        return true;
+    }
 
     private float AreaRadius(float lat)
     {
@@ -1326,6 +1359,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         float h = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) + Mathf.Cos(me.x * Mathf.Deg2Rad) * Mathf.Cos(f.lat * Mathf.Deg2Rad) * Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
         return 6371f * 2f * Mathf.Asin(Mathf.Min(1f, Mathf.Sqrt(h)));
     }
+
+    // 멀리 있는 친구는 약 1km 칸이라 1km 아래는 '1km' — 근처 친구(정확한 자리)는 10m 단위
+    private static string Dist(float km, bool exact) =>
+        km >= 1f ? Mathf.RoundToInt(km).ToString("N0") + "km" : exact ? Mathf.Max(10, Mathf.RoundToInt(km * 100f) * 10) + "m" : "1km";
 
     private static string Ago(int sec)
     {
