@@ -1,4 +1,4 @@
-> Effective October 23, 2026
+> Effective October 24, 2026
 
 QUE.ENT ("we") processes the personal information of people who use the WOOPANG app and woopang.com (the "Service") in accordance with Korea's Personal Information Protection Act and other applicable laws. This policy explains what we collect and why, how long we keep it, and how you can delete it or stop its use.
 
@@ -6,7 +6,7 @@ QUE.ENT ("we") processes the personal information of people who use the WOOPANG 
 ### Sign-up and login
 - Email sign-up: user ID, email address, password (stored with one-way encryption)
 - Kakao, Google or Apple sign-up: user ID, plus the email address and account identifier that service provides
-- Country code derived from your IP address at sign-up
+- Country code derived from your IP address at sign-up — looked up with data kept on our own server; your IP address is not sent anywhere
 - Used for: identifying members, login, preventing abuse
 ### Profile (only if you add it)
 - Profile photo, bio, mobile number, Instagram, Facebook and X handles
@@ -34,24 +34,32 @@ QUE.ENT ("we") processes the personal information of people who use the WOOPANG 
 - Photos are sent to our servers only when you choose or take them to post
 
 ## 2. How long we keep it
-- Account information and content: until you delete your account, then deleted without delay
+- Account information and content: until you delete your account. When you do, we delete without delay everything you posted, including places, comments, messages, treasure hunt records, speech bubbles and reports
 - Location: only the last location per feature, overwritten by the new one, and deleted when you delete your account
 - Server backups: backups kept for recovery are deleted in turn after 14 days
-- Access logs: 3 months (Protection of Communications Secrets Act)
+- Access logs: 3 months (Protection of Communications Secrets Act) — split by day, with each day's log deleted once it is 3 months old
 
 ## 3. Sharing with others
 - We do not provide your personal information to other companies or institutions, except when investigative or other authorities request it through procedures set by law
 - By the nature of the Service, other users can see your user ID and profile, the places, comments, speech bubbles and treasure hunts you post, and your location while location sharing is on
 
 ## 4. Service providers and transfers abroad
-Your personal information is stored on servers we operate ourselves in Korea. We use outside services only for the following.
-- Android notifications — Google LLC (USA), Firebase Cloud Messaging: push token and notification content, sent each time a notification is delivered
-- iPhone notifications — Apple Inc. (USA), Apple Push Notification service: push token and notification content, sent each time a notification is delivered
-- Address lookup — OpenStreetMap Foundation (UK), Nominatim: coordinates only, to create the approximate address used for notifications
-- Sign-up country check — ip-api.com: your IP address only, at sign-up, to get a country code
-- If you do not want notifications, turn off WOOPANG notifications in your phone settings
+Your personal information is stored on servers we operate ourselves in Korea. We entrust only the delivery of notifications to the companies below, and send the data over the network each time a notification is delivered.
+- Android notifications — Google LLC (USA, support.google.com/policies), Firebase Cloud Messaging: push token and notification content
+- iPhone notifications — Apple Inc. (USA, apple.com/legal/privacy/contact), Apple Push Notification service: push token and notification content
+- Retention: until the notification is delivered (up to 4 weeks if your phone is off)
+- If you do not want this, turn off WOOPANG notifications in your phone settings. Nothing is sent to these companies, and you will not receive notifications
+### Lookups that send coordinates only
+These lookups send coordinates only, without anything that identifies you such as your name, user ID or contact details. Our server makes the request on your behalf, so your IP address is not passed on either.
+- Weather — OpenMeteo GmbH (Switzerland), Open-Meteo: coordinates rounded to about 5 km
+- Addresses and neighborhood names — VWorld (Korean Ministry of Land, Infrastructure and Transport), Kakao Local, OpenStreetMap Foundation (UK) Nominatim
+- Nearby public places and transit — Korea Public Data Portal (Korea Tourism Organization, Ministry of Land, Infrastructure and Transport)
+- When the app is not in Korean or you are outside Korea, the app sends coordinates directly to the OpenStreetMap Foundation (UK) Nominatim to get an address. In that case your phone's IP address also reaches that server
 ### Signing in with another company
 - If you choose Kakao, Google or Apple login, you sign in on that company's screen and we receive only the result (account identifier and email address)
+### Features that hand off to another app, only when you tap them
+- Ask AI: hands a question made from your neighborhood name and the nearby place list to the AI app you choose (ChatGPT, Claude or Gemini). Coordinates are not included
+- Translate screen: saves the current screen to your photo library and opens the Google Translate web page. You decide whether to upload the photo
 
 ## 5. Your rights
 - You can edit your profile or delete your account in Edit Profile
@@ -64,7 +72,7 @@ Your personal information is stored on servers we operate ourselves in Korea. We
 - Electronic files are deleted in a way that cannot be recovered
 
 ## 7. How we protect it
-- All communication between the app and our servers is encrypted (HTTPS)
+- Communication between the app and our servers, and between our servers and outside services, is encrypted (HTTPS)
 - Passwords are stored with one-way encryption
 - Our database cannot be reached from outside, and access to admin pages is restricted
 - We keep the number of people who handle personal information to a minimum
@@ -77,7 +85,7 @@ Your personal information is stored on servers we operate ourselves in Korea. We
 - WOOPANG is not intended for children under 14. If we learn that we have collected information from a child under 14, we delete it without delay
 
 ## 10. Privacy officer
-- Privacy officer: CEO, QUE.ENT
+- Privacy officer: 김영훈 (CEO, QUE.ENT)
 - Contact: master@woopang.com
 - You can also contact these Korean agencies about privacy violations
   - Personal Information Infringement Report Center 118 (privacy.kisa.or.kr)
@@ -87,4 +95,5 @@ Your personal information is stored on servers we operate ourselves in Korea. We
 
 ## 11. Changes to this policy
 - We will announce changes in the app and on our website at least 7 days before they take effect, or 30 days before for changes that significantly affect your rights
-- This policy takes effect on October 23, 2026
+- This policy takes effect on October 24, 2026
+- Sign-up country checks use free data from DB-IP (IP Geolocation by DB-IP, db-ip.com, CC BY 4.0)
