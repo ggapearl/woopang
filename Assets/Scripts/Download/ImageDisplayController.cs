@@ -16,14 +16,22 @@ public class ImageDisplayController : MonoBehaviour
     [Tooltip("패딩 영역 색상")]
     public Color paddingColor = new Color(0.05f, 0.05f, 0.05f, 1f);
 
-    private List<Sprite> loadedSprites = new List<Sprite>();
     private Texture2D baseMapTexture;
+    private string baseMapUrl;   // 지금 면에 붙어 있는 사진 주소 — 같은 장소 정보를 다시 받아도 또 받지 않는다
+    private Texture defaultFaceTexture;   // 프리팹에 원래 붙어 있던 면 — 사진을 지울 때 이걸로 되돌린다 (공유 자산이라 지우지 않는다)
 
-    private Coroutine currentSubPhotoCoroutine;
     private Coroutine currentBaseMapCoroutine;
 
     // 세대 번호: 풀 재활용 시 증가 → 이전 코루틴이 yield 후 자신의 세대와 다르면 즉시 종료
     private int loadGeneration = 0;
+
+    void Awake()
+    {
+        if (cubeRenderer == null || cubeRenderer.sharedMaterial == null) return;
+        Material m = cubeRenderer.sharedMaterial;
+        if (m.HasProperty("_BaseMap")) defaultFaceTexture = m.GetTexture("_BaseMap");
+        else if (m.HasProperty("_MainTex")) defaultFaceTexture = m.GetTexture("_MainTex");
+    }
 
     void Start()
     {
@@ -39,6 +47,7 @@ public class ImageDisplayController : MonoBehaviour
     public void SetBaseMap(string imageUrl)
     {
         if (!enabled) return;
+        if (imageUrl == baseMapUrl && baseMapTexture != null && currentBaseMapCoroutine == null) return;
 
         // 이전 BaseMap 코루틴 중단
         if (currentBaseMapCoroutine != null)
@@ -80,6 +89,7 @@ public class ImageDisplayController : MonoBehaviour
         // 이전에 다운로드해 둔 동적 텍스처만 정리. 내장(공유) 텍스처는 소유하지 않으므로 참조만.
         if (baseMapTexture != null && baseMapTexture != tex) Destroy(baseMapTexture);
         baseMapTexture = null;
+        baseMapUrl = null;
 
         if (cubeRenderer != null)
         {
@@ -102,7 +112,7 @@ public class ImageDisplayController : MonoBehaviour
         {
             string thumbUrl = ApiConfig.MAIN_SERVER + "/thumb/512/" + imageUrl.Replace("\\", "/").TrimStart('/');
             bool thumbOk = false;
-            using (UnityWebRequest tr = UnityWebRequestTexture.GetTexture(thumbUrl))
+            using (UnityWebRequest tr = UnityWebRequestTexture.GetTexture(thumbUrl, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
             {
                 tr.timeout = 20;
                 yield return tr.SendWebRequest();
@@ -113,7 +123,7 @@ public class ImageDisplayController : MonoBehaviour
                     if (t != null)
                     {
                         thumbOk = true;
-                        ApplyBaseMap(t);
+                        ApplyBaseMap(t, imageUrl);
                     }
                 }
             }
@@ -124,7 +134,7 @@ public class ImageDisplayController : MonoBehaviour
             }
         }
 
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
+        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl, true))
         {
             request.timeout = 20;
 
@@ -136,7 +146,7 @@ public class ImageDisplayController : MonoBehaviour
             if (request.result == UnityWebRequest.Result.Success)
             {
                 Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
-                if (newTexture != null) ApplyBaseMap(newTexture);
+                if (newTexture != null) ApplyBaseMap(newTexture, imageUrl);
             }
             else
             {
@@ -152,10 +162,11 @@ public class ImageDisplayController : MonoBehaviour
         currentBaseMapCoroutine = null;
     }
 
-    private void ApplyBaseMap(Texture2D newTexture)
+    private void ApplyBaseMap(Texture2D newTexture, string imageUrl)
     {
         if (baseMapTexture != null) Destroy(baseMapTexture);
         baseMapTexture = newTexture;
+        baseMapUrl = imageUrl;
         if (cubeRenderer == null) return;
 
         if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", baseMapTexture);
@@ -172,126 +183,7 @@ public class ImageDisplayController : MonoBehaviour
     public void SetSubPhotos(List<string> subPhotoUrls)
     {
         if (!enabled) return;
-
-        // 이전 로딩 코루틴이 있으면 중단 (이전 장소 이미지가 나중에 덮어쓰는 문제 방지)
-        if (currentSubPhotoCoroutine != null)
-        {
-            StopCoroutine(currentSubPhotoCoroutine);
-            currentSubPhotoCoroutine = null;
-        }
-
-        // 이전 서브 사진 정리
-        ClearSubPhotos();
-
-        if (subPhotoUrls == null || subPhotoUrls.Count == 0)
-        {
-            if (doubleTap3DScript != null)
-            {
-                Texture2D fallbackTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-                Color[] pixels = new Color[16];
-                for (int i = 0; i < 16; i++) pixels[i] = Color.black;
-                fallbackTex.SetPixels(pixels);
-                fallbackTex.Apply();
-                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
-                loadedSprites.Add(defaultSprite);
-            }
-            return;
-        }
-
-        if (gameObject.activeInHierarchy)
-            currentSubPhotoCoroutine = StartCoroutine(LoadSubPhotos(subPhotoUrls));
-    }
-
-    private IEnumerator LoadSubPhotos(List<string> subPhotoUrls)
-    {
-        int myGeneration = loadGeneration;
-        ClearSubPhotos();
-
-        // 시작화면이 도는 동안엔 내려받지 않는다 — 큰 사진 처리가 시작화면을 멈칫하게 했다
-        while (BootOverlay.Showing) yield return null;
-        if (myGeneration != loadGeneration) yield break;
-
-        List<Sprite> spriteList = new List<Sprite>();
-
-        foreach (string photoUrl in subPhotoUrls)
-        {
-            string fullUrl = photoUrl.StartsWith("http") ? photoUrl : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
-
-            using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
-            {
-                yield return request.SendWebRequest();
-
-                // 세대 체크: 풀 재활용으로 이미 다른 장소가 되었으면 즉시 종료
-                if (myGeneration != loadGeneration)
-                {
-                    // 이미 다운로드한 스프라이트 정리
-                    foreach (var s in spriteList)
-                    {
-                        if (s != null) { if (s.texture != null) Destroy(s.texture); Destroy(s); }
-                    }
-                    yield break;
-                }
-
-                if (request.result == UnityWebRequest.Result.Success)
-                {
-                    Texture2D texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
-                    if (texture != null)
-                    {
-                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                        if (sprite != null)
-                        {
-                            spriteList.Add(sprite);
-                            loadedSprites.Add(sprite);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 최종 세대 체크
-        if (myGeneration != loadGeneration) yield break;
-
-        if (spriteList.Count > 0 && doubleTap3DScript != null)
-        {
-            doubleTap3DScript.SetImageSprites(spriteList);
-        }
-        else
-        {
-            if (doubleTap3DScript != null)
-            {
-                Texture2D fallbackTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-                Color[] pixels = new Color[16];
-                for (int i = 0; i < 16; i++) pixels[i] = Color.black;
-                fallbackTex.SetPixels(pixels);
-                fallbackTex.Apply();
-                Sprite defaultSprite = Sprite.Create(fallbackTex, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                doubleTap3DScript.SetImageSprites(new List<Sprite> { defaultSprite });
-                loadedSprites.Add(defaultSprite);
-            }
-        }
-    }
-
-    // 서브 사진만 정리
-    private void ClearSubPhotos()
-    {
-        foreach (var sprite in loadedSprites)
-        {
-            if (sprite != null)
-            {
-                if (sprite.texture != null && sprite.texture != Texture2D.blackTexture)
-                {
-                    Destroy(sprite.texture);
-                }
-                Destroy(sprite);
-            }
-        }
-        loadedSprites.Clear();
-
-        if (doubleTap3DScript != null)
-        {
-            doubleTap3DScript.SetImageSprites(new List<Sprite>());
-        }
+        if (doubleTap3DScript != null) doubleTap3DScript.SetImageUrls(subPhotoUrls);
     }
 
     /// <summary>
@@ -302,24 +194,22 @@ public class ImageDisplayController : MonoBehaviour
     {
         loadGeneration++; // 세대 증가 → yield 후 돌아온 이전 코루틴 무효화
         StopAllCoroutines();
-        currentSubPhotoCoroutine = null;
         currentBaseMapCoroutine = null;
     }
 
-    // 모든 텍스처 해제
+    // 모든 텍스처 해제 — 풀로 돌아갈 때 · 파괴될 때
     public void ClearImages()
     {
         loadGeneration++;
         StopAllCoroutines();
-        currentSubPhotoCoroutine = null;
         currentBaseMapCoroutine = null;
 
         if (cubeRenderer != null)
         {
             if (cubeRenderer.material.HasProperty("_BaseMap"))
-                cubeRenderer.material.SetTexture("_BaseMap", null);
+                cubeRenderer.material.SetTexture("_BaseMap", defaultFaceTexture);
             if (cubeRenderer.material.HasProperty("_MainTex"))
-                cubeRenderer.material.SetTexture("_MainTex", null);
+                cubeRenderer.material.SetTexture("_MainTex", defaultFaceTexture);
         }
 
         if (baseMapTexture != null && baseMapTexture != Texture2D.blackTexture)
@@ -327,8 +217,9 @@ public class ImageDisplayController : MonoBehaviour
             Destroy(baseMapTexture);
             baseMapTexture = null;
         }
+        baseMapUrl = null;
 
-        ClearSubPhotos();
+        if (doubleTap3DScript != null) doubleTap3DScript.ReleasePhotos();
     }
 
     void OnDestroy()

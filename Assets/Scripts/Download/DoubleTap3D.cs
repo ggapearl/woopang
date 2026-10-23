@@ -82,16 +82,15 @@ public class DoubleTap3D : MonoBehaviour
     private List<string> imageUrls = new List<string>();
     private ImageDisplayController imageDisplayController;
 
-    // iOS 캐싱 시스템 (백그라운드 복귀 시 텍스처 복원용)
-    private struct CachedTextureData
-    {
-        public byte[] rawData;
-        public int width;
-        public int height;
-        public TextureFormat format;
-    }
-    private Dictionary<int, CachedTextureData> cachedImageData = new Dictionary<int, CachedTextureData>();
-    private bool imagesAreCached = false;
+    // 상세 사진 — 오브젝트가 뜰 때는 주소만 받아 두고 상세를 열 때 내려받는다. 한 번에 한 장소 것만 메모리에 둔다
+    // (2026-10-23 아이폰이 'AR 세션' 화면에서 꺼지던 것: 주변 장소마다 사진을 미리 다 받았고, 관광공사 오브젝트는 다시 쓰일 때마다 쌓였다)
+    private static DoubleTap3D photoHolder;
+    private readonly List<Sprite> ownedPhotos = new List<Sprite>();
+    private bool serverPhotoFallback = true;   // 주소 목록이 비었을 때 우팡 서버(/locations/id)에서 찾아본다 — 관광공사 장소는 id 가 달라 끈다
+    private bool photosLoading, photosLoaded;
+    private int photoGeneration;
+    private int expectedPhotos;   // 받는 중인 사진 수 — 아직 안 온 칸으로도 넘길 수 있게 (도착하면 뜬다)
+    private int PhotoSlots => photosLoading ? Mathf.Max(imageSprites.Count, expectedPhotos) : imageSprites.Count;
     private bool isCooldown = false; // 더블탭 쿨다운
     private bool canClose = true; // 닫기 방지 쿨다운
     private bool isFadingOut = false; // FadeOut 코루틴 중복 실행 방지
@@ -410,81 +409,6 @@ public class DoubleTap3D : MonoBehaviour
         yield return new WaitForSeconds(duration);
     }
 
-    // 이미지를 byte[]로 캐싱
-    private void CacheImagesForFullscreen()
-    {
-        if (imagesAreCached) return;
-
-        cachedImageData.Clear();
-
-        for (int i = 0; i < imageSprites.Count; i++)
-        {
-            if (imageSprites[i] != null && imageSprites[i].texture != null)
-            {
-                try
-                {
-                    Texture2D tex = imageSprites[i].texture;
-                    cachedImageData[i] = new CachedTextureData
-                    {
-                        rawData = tex.GetRawTextureData(),
-                        width = tex.width,
-                        height = tex.height,
-                        format = tex.format
-                    };
-                }
-                catch (Exception)
-                {
-                    // 이미지 캐싱 실패 - 무시
-                }
-            }
-        }
-
-        imagesAreCached = true;
-    }
-
-    // 캐시에서 이미지 복원
-    private void RestoreImagesFromCache()
-    {
-        if (cachedImageData.Count == 0)
-        {
-            return;
-        }
-
-        List<Sprite> restoredSprites = new List<Sprite>();
-
-        foreach (var kvp in cachedImageData)
-        {
-            try
-            {
-                CachedTextureData cached = kvp.Value;
-                Texture2D restoredTexture = new Texture2D(cached.width, cached.height, cached.format, false);
-                restoredTexture.LoadRawTextureData(cached.rawData);
-                restoredTexture.Apply();
-
-                Sprite restoredSprite = Sprite.Create(
-                    restoredTexture,
-                    new Rect(0, 0, cached.width, cached.height),
-                    new Vector2(0.5f, 0.5f)
-                , 100f, 0, SpriteMeshType.FullRect);
-
-                restoredSprites.Add(restoredSprite);
-            }
-            catch (Exception)
-            {
-                // 이미지 복원 실패 - 무시
-            }
-        }
-
-        imageSprites = restoredSprites;
-    }
-
-    // 캐시 메모리 해제
-    private void ClearImageCache()
-    {
-        cachedImageData.Clear();
-        imagesAreCached = false;
-    }
-
 #if UNITY_IOS
     void OnApplicationPause(bool pauseStatus)
     {
@@ -494,7 +418,6 @@ public class DoubleTap3D : MonoBehaviour
             savedObjectId = this.id;
             savedImageIndex = imageIndex;
             savedIsPlaceInfoPage = isPlaceInfoPage;
-            CacheImagesForFullscreen();
         }
         else if (!pauseStatus && savedFullscreenState && savedObjectId == this.id)
         {
@@ -506,12 +429,8 @@ public class DoubleTap3D : MonoBehaviour
     {
         yield return new WaitForSeconds(0.5f);
 
-        if (imagesAreCached && cachedImageData.Count > 0)
-        {
-            RestoreImagesFromCache();
-        }
-
         isFullscreen = true;
+        EnsurePhotos();   // 그사이 놓아줬으면 다시 받는다
         imageIndex = savedImageIndex;
         isPlaceInfoPage = savedIsPlaceInfoPage;
         currentIndex = imageIndex >= 0 ? imageIndex : 0;
@@ -547,6 +466,7 @@ public class DoubleTap3D : MonoBehaviour
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
+        if (photosLoading) ReleasePhotos();
 
         // 버튼 리스너 개별 제거 (다른 컴포넌트의 리스너 보호)
         if (instagramButton != null)
@@ -570,6 +490,13 @@ public class DoubleTap3D : MonoBehaviour
             {
                 isFullscreen = false;
             }
+        }
+
+        // 지금 보고 있는 칸 사진이 막 도착했으면 띄운다 (넘기는 중에 도착한 것도)
+        if (isFullscreen && !isSliding && !isDragging && fullscreenImage != null && !fullscreenImage.enabled
+            && imageIndex >= 0 && imageIndex < imageSprites.Count && imageSprites[imageIndex] != null)
+        {
+            ShowImage(imageIndex);
         }
 
         // 댓글 패널이 열려있으면 모든 터치 입력 무시 (댓글 패널이 최상위 UI)
@@ -657,7 +584,7 @@ public class DoubleTap3D : MonoBehaviour
 
                         // 경계 체크
                         bool isAtStart = (placeInfoTextPanel == null || !isPlaceInfoPage) && imageIndex == 0;
-                        bool isAtEnd = imageIndex == imageSprites.Count - 1 && !isPlaceInfoPage;
+                        bool isAtEnd = imageIndex >= PhotoSlots - 1 && !isPlaceInfoPage;
 
                         if (isAtStart && dragX > 0)
                             dragX *= 0.3f;
@@ -906,26 +833,6 @@ public class DoubleTap3D : MonoBehaviour
             canClose = false;
             StartCoroutine(EnableCloseAfterDelay());
 
-            // ⭐ 이미지가 없거나 유효하지 않으면 서버에서 동적으로 로드
-            bool needsImageLoad = imageSprites == null || imageSprites.Count == 0;
-            if (!needsImageLoad && imageSprites.Count > 0)
-            {
-                // 스프라이트가 있지만 유효한지 확인
-                foreach (var sprite in imageSprites)
-                {
-                    if (sprite == null || sprite.texture == null || sprite.texture == Texture2D.blackTexture)
-                    {
-                        needsImageLoad = true;
-                        break;
-                    }
-                }
-            }
-
-            if (needsImageLoad && id > 0)
-            {
-                StartCoroutine(FetchSubPhotosFromServer(id));
-            }
-
             currentIndex = 0;
             isPlaceInfoPage = placeInfoTextPanel != null;
             imageIndex = placeInfoTextPanel != null ? -1 : 0;
@@ -938,7 +845,9 @@ public class DoubleTap3D : MonoBehaviour
             {
                 StopAllCoroutines();
                 isFadingOut = false;
+                if (photosLoading) ReleasePhotos();   // 받던 사진도 같이 멈췄다 — 처음부터 다시
             }
+            EnsurePhotos();
 
             fullscreenCanvasGroup.gameObject.SetActive(true);
             guidePanel.SetActive(true);
@@ -1045,7 +954,7 @@ public class DoubleTap3D : MonoBehaviour
 
     public void ShowNextImage()
     {
-        if (imageSprites.Count == 0 || isSliding) return;
+        if (PhotoSlots == 0 || isSliding) return;
 
         // PlaceInfo 페이지에서 첫 이미지로 이동
         if (placeInfoTextPanel != null && isPlaceInfoPage)
@@ -1057,7 +966,7 @@ public class DoubleTap3D : MonoBehaviour
             StartCoroutine(SlideToImage(-1, targetIdx));
             UpdatePlaceInfoVisibility();
         }
-        else if (imageIndex < imageSprites.Count - 1)
+        else if (imageIndex < PhotoSlots - 1)
         {
             int targetIdx = imageIndex + 1;
             imageIndex = targetIdx;
@@ -1072,7 +981,7 @@ public class DoubleTap3D : MonoBehaviour
 
     public void ShowPreviousImage()
     {
-        if (imageSprites.Count == 0 || isSliding) return;
+        if (PhotoSlots == 0 || isSliding) return;
 
         if (placeInfoTextPanel != null && !isPlaceInfoPage && imageIndex == 0)
         {
@@ -1149,7 +1058,7 @@ public class DoubleTap3D : MonoBehaviour
         {
             if (isPlaceInfoPage && placeInfoTextPanel != null)
                 targetIndex = 0;
-            else if (imageIndex < imageSprites.Count - 1)
+            else if (imageIndex < PhotoSlots - 1)
                 targetIndex = imageIndex + 1;
         }
         else if (direction == 1) // 오른쪽 드래그 → 이전 이미지
@@ -1182,6 +1091,10 @@ public class DoubleTap3D : MonoBehaviour
             float posX = (direction == -1) ? (screenW + slideImageGap) : -(screenW + slideImageGap);
             if (nextImageRect != null)
                 nextImageRect.anchoredPosition = new Vector2(posX, imageBasePos.y);
+        }
+        else
+        {
+            nextFullscreenImage.enabled = false;   // 아직 안 온 칸 — 비워 둔다
         }
     }
 
@@ -1379,20 +1292,61 @@ public class DoubleTap3D : MonoBehaviour
         }
     }
 
-    public void SetImageSprites(List<Sprite> sprites)
+    /// <summary>상세 사진 주소 — 사진은 상세를 열 때 받는다. serverFallback=false 면 목록이 비어도 우팡 서버에서 찾지 않는다 (관광공사)</summary>
+    public void SetImageUrls(List<string> urls, bool serverFallback = true)
     {
-        imageSprites = sprites ?? new List<Sprite>();
-        imagesAreCached = false;
-
-        if (isFullscreen)
-        {
-            ShowImage(imageIndex);
-        }
+        serverPhotoFallback = serverFallback;
+        if (urls == null) urls = new List<string>();
+        if (SameUrls(urls)) return;   // 같은 장소 정보를 다시 받은 것 — 받아 둔 사진은 그대로
+        ReleasePhotos();
+        imageUrls = new List<string>(urls);
+        if (isFullscreen) EnsurePhotos();
     }
 
-    public void SetImageUrls(List<string> urls)
+    private bool SameUrls(List<string> urls)
     {
-        imageUrls = urls;
+        if (urls.Count != imageUrls.Count) return false;
+        for (int i = 0; i < urls.Count; i++)
+            if (urls[i] != imageUrls[i]) return false;
+        return true;
+    }
+
+    private void EnsurePhotos()
+    {
+        if (photoHolder != this)
+        {
+            if (photoHolder != null) photoHolder.ReleasePhotos();   // 앞서 연 장소 사진은 놓아준다
+            photoHolder = this;
+        }
+        if (photosLoading || photosLoaded) return;
+        if (imageSprites.Count > 0) { photosLoaded = true; return; }   // 인스펙터에 넣어 둔 사진 (씬에 놓은 큐브)
+
+        if (imageUrls.Count > 0) { photosLoading = true; StartCoroutine(LoadSubPhotosDirectly(imageUrls)); }
+        else if (serverPhotoFallback && id > 0) { photosLoading = true; StartCoroutine(FetchSubPhotosFromServer(id)); }
+    }
+
+    /// <summary>내려받은 상세 사진을 지운다 — 다시 열면 새로 받는다</summary>
+    public void ReleasePhotos()
+    {
+        photoGeneration++;   // 받던 코루틴은 돌아와서 스스로 그만둔다
+        photosLoading = photosLoaded = false;
+        if (photoHolder == this) photoHolder = null;
+        if (ownedPhotos.Count == 0) return;
+
+        foreach (var s in ownedPhotos)
+        {
+            if (s == null) continue;
+            if (s.texture != null) Destroy(s.texture);
+            Destroy(s);
+        }
+        ownedPhotos.Clear();
+        imageSprites = new List<Sprite>();
+        if (isFullscreen && fullscreenImage != null) ShowImage(imageIndex);
+    }
+
+    void OnDestroy()
+    {
+        ReleasePhotos();
     }
 
     private void CloseFullscreen()
@@ -1403,11 +1357,7 @@ public class DoubleTap3D : MonoBehaviour
             return;
         }
 
-
-        // 풀스크린 닫을 때 캐시 메모리 해제
 #if UNITY_IOS
-        ClearImageCache();
-
         if (savedObjectId == this.id)
         {
             savedFullscreenState = false;
@@ -1499,9 +1449,9 @@ public class DoubleTap3D : MonoBehaviour
         address = null;
         overview = null;
         petInfo = null;
+        ReleasePhotos();
         imageUrls.Clear();
-        imageSprites.Clear();
-        ClearImageCache();
+        serverPhotoFallback = true;
     }
 
     /// <summary>
@@ -1586,28 +1536,23 @@ public class DoubleTap3D : MonoBehaviour
 
     private IEnumerator FetchSubPhotosFromServer(int locationId)
     {
-        int myId = locationId; // 요청 시점의 장소 ID 기록
-        string url = $"{ApiConfig.MAIN_SERVER}/locations/{locationId}";
+        int gen = photoGeneration;
+        List<string> allSubPhotos = null;
 
-        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        using (UnityWebRequest request = UnityWebRequest.Get($"{ApiConfig.MAIN_SERVER}/locations/{locationId}"))
         {
             request.timeout = 10;
             yield return request.SendWebRequest();
 
-            // yield 후 장소가 바뀌었으면 무시 (풀 재활용)
-            if (this.id != myId) yield break;
-
+            if (gen != photoGeneration) yield break;   // 그사이 놓아줬거나 다른 장소가 됐다 (풀 재활용)
             if (request.result == UnityWebRequest.Result.Success)
-            {
-                string json = request.downloadHandler.text;
-                List<string> allSubPhotos = ParseSubPhotosFromJson(json);
-
-                if (allSubPhotos != null && allSubPhotos.Count > 0)
-                {
-                    yield return StartCoroutine(LoadSubPhotosDirectly(allSubPhotos));
-                }
-            }
+                allSubPhotos = ParseSubPhotosFromJson(request.downloadHandler.text);
         }
+
+        if (allSubPhotos != null && allSubPhotos.Count > 0)
+            yield return StartCoroutine(LoadSubPhotosDirectly(allSubPhotos));
+        else
+            photosLoading = false;   // 없거나 못 받았다 — 다음에 열 때 다시 본다
     }
 
     private List<string> ParseSubPhotosFromJson(string json)
@@ -1666,56 +1611,36 @@ public class DoubleTap3D : MonoBehaviour
 
     private IEnumerator LoadSubPhotosDirectly(List<string> photoUrls)
     {
-        int myId = this.id; // 로딩 시작 시점의 장소 ID 기록
-        List<Sprite> newSprites = new List<Sprite>();
+        int gen = photoGeneration;
+        expectedPhotos = photoUrls.Count;
 
-        foreach (string photoUrl in photoUrls)
+        foreach (string photoUrl in new List<string>(photoUrls))
         {
             string fullUrl = photoUrl.StartsWith("http") ? photoUrl : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
 
-            using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
+            using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
             {
                 request.timeout = 15;
                 yield return request.SendWebRequest();
 
-                // 장소 ID가 바뀌었으면 풀 재활용으로 다른 장소가 된 것 → 즉시 종료
-                if (this.id != myId)
-                {
-                    foreach (var s in newSprites)
-                    {
-                        if (s != null) { if (s.texture != null) Destroy(s.texture); Destroy(s); }
-                    }
-                    yield break;
-                }
+                // 그사이 놓아줬거나(다른 장소를 엶) 다른 장소가 됐다(풀 재활용) — 앞서 받은 것은 ReleasePhotos 가 지웠다
+                if (gen != photoGeneration) yield break;
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
-                    Texture2D texture = ((DownloadHandlerTexture)request.downloadHandler).texture;
+                    Texture2D texture = DownloadHandlerTexture.GetContent(request);
                     if (texture != null)
                     {
                         Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                        if (sprite != null)
-                        {
-                            newSprites.Add(sprite);
-                        }
+                        ownedPhotos.Add(sprite);
+                        imageSprites.Add(sprite);   // 보고 있는 칸이면 Update 가 바로 띄운다
                     }
                 }
             }
         }
 
-        // 최종 ID 체크
-        if (this.id != myId) yield break;
-
-        if (newSprites.Count > 0)
-        {
-            imageSprites = newSprites;
-            imagesAreCached = false;
-
-            if (isFullscreen && imageIndex >= 0)
-            {
-                ShowImage(imageIndex);
-            }
-        }
+        photosLoading = false;
+        photosLoaded = imageSprites.Count > 0;   // 하나도 못 받았으면 다음에 열 때 다시
     }
 
 }

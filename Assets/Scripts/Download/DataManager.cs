@@ -1129,17 +1129,21 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         if (anchor == null) return false;
         anchor.SetCoordinatesAndCreateAnchor(place.latitude, place.longitude, place.altitude);
 
+        // 상세 사진은 주소만 넘긴다 (상세를 열 때 받는다). 사진을 다 지운 장소도 빈 목록으로 넘겨 앞서 받은 주소를 비운다
         ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
-        if (displayCtrl != null && place.sub_photos != null && place.sub_photos.Count > 0)
+        if (displayCtrl != null)
         {
             List<string> allSubPhotos = new List<string>();
-            foreach (var photoGroup in place.sub_photos)
+            if (place.sub_photos != null)
             {
-                if (photoGroup != null)
+                foreach (var photoGroup in place.sub_photos)
                 {
-                    foreach (var photo in photoGroup)
+                    if (photoGroup != null)
                     {
-                        if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
+                        foreach (var photo in photoGroup)
+                        {
+                            if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
+                        }
                     }
                 }
             }
@@ -1367,13 +1371,12 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             GLBModelLoader glbLoader = obj.GetComponent<GLBModelLoader>();
             if (glbLoader != null) glbLoader.ClearModel();
         }
-        else // cube
-        {
-            // 진행 중인 서버 이미지/서브포토 로딩 즉시 취소 — 풀 재사용 시 이전 장소 잔여 다운로드가
-            // 새 장소 텍스처를 덮어쓰는 레이스 방지(loadGeneration 증가).
-            ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
-            if (display != null) display.CancelPendingLoads();
-        }
+
+        // 받던 사진은 멈추고(loadGeneration 증가 — 풀 재사용 때 앞 장소 사진이 새 장소를 덮어쓰지 않게) 받아 둔 사진은 지운다.
+        // 예전엔 로딩만 멈춰 풀에 든 오브젝트마다 지나온 장소 사진을 들고 있었다 (2026-10-23 아이폰 메모리)
+        ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
+        if (display != null) display.ClearImages();
+        foreach (var doubleTap in obj.GetComponentsInChildren<DoubleTap3D>(true)) doubleTap.ReleasePhotos();
         obj.SetActive(false);
         targetPool.Enqueue(obj);
     }

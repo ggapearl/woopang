@@ -576,15 +576,16 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         );
         LogDebug($"[TourAPIManager] DoubleTap3D 컴포넌트 설정 완료: ID={place.contentid}, Title={place.title}");
 
+        // 사진이 없어도 넘긴다 — 빈 목록이면 상세에서 우팡 서버(/locations/번호)를 찾지 않는다 (관광공사 번호는 우팡 장소 번호가 아니다)
         TourAPIImageController tourImageController = obj.GetComponentInChildren<TourAPIImageController>();
-        if (tourImageController != null && place.imageUrls.Count > 0)
+        if (tourImageController != null)
         {
             tourImageController.SetTourImages(place.imageUrls);
             LogDebug($"[TourAPIManager] TourAPIImageController 이미지 설정: ID={place.contentid}, 이미지 수={place.imageUrls.Count}");
         }
         else
         {
-            LogDebug($"[TourAPIManager] TourAPIImageController 없음 또는 imageUrls 비어 있음: ID={place.contentid}, imageUrls.Count={place.imageUrls.Count}");
+            LogDebug($"[TourAPIManager] TourAPIImageController 없음: ID={place.contentid}");
         }
 
         CustomARGeospatialCreatorAnchor anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>();
@@ -668,6 +669,11 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     private void ReturnToPool(GameObject obj)
     {
+        // 풀에 있는 동안 사진을 들고 있지 않는다 — 다시 쓰일 때 새로 받는다
+        ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
+        if (display != null) display.ClearImages();
+        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
+        if (doubleTap != null) doubleTap.ReleasePhotos();
         obj.SetActive(false);
         objectPool.Enqueue(obj);
         LogDebug($"[TourAPIManager] 오브젝트 풀에 반환됨: {obj.name}, 풀 크기: {objectPool.Count}");

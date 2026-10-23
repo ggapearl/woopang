@@ -105,6 +105,7 @@ namespace Redesign0926
             else if (mode == "v24") PlanV24();
             else if (mode == "farfade") PlanFarFade();
             else if (mode == "nudge") PlanNudge();
+            else if (mode == "photomem") PlanPhotoMem();
             else if (mode == "p2pzoom") PlanP2PZoom();
             else if (mode == "maptiles") PlanMapTiles();
             else if (mode == "mapcoord") PlanMapCoord();
@@ -3778,6 +3779,178 @@ namespace Redesign0926
                 ptTouch = null;
                 InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
             });
+        }
+
+        // ── 10-23 A2: 아이폰이 'AR 세션' 화면에서 꺼지던 것 — 상세 사진은 열 때 받고 한 번에 한 장소 것만 · 풀로 돌아가면 사진을 놓는다 ──
+        private static void PlanPhotoMem()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const System.Reflection.BindingFlags S = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            int idA = -1, idB = -1;
+            DoubleTap3D a = null, b = null;
+            GameObject pooled = null;
+            Texture2D faceWas = null, fake = null;
+            bool poolOk = false;
+            P2PUserInfo pu = null;
+            Func<DoubleTap3D, int> urls = d => d != null ? ((List<string>)typeof(DoubleTap3D).GetField("imageUrls", F).GetValue(d)).Count : -1;
+            Func<DoubleTap3D, int> owned = d => d != null ? ((List<Sprite>)typeof(DoubleTap3D).GetField("ownedPhotos", F).GetValue(d)).Count : -1;
+            Func<DoubleTap3D, bool> loaded = d => d != null && (bool)typeof(DoubleTap3D).GetField("photosLoaded", F).GetValue(d);
+            Func<DoubleTap3D> holder = () => typeof(DoubleTap3D).GetField("photoHolder", S).GetValue(null) as DoubleTap3D;
+            Func<DoubleTap3D, bool> open = d => d != null && d.fullscreenCanvasGroup != null && d.fullscreenCanvasGroup.gameObject.activeSelf;
+            Func<int, GameObject> spawned = id => DataManager.Instance != null && DataManager.Instance.GetSpawnedObjects().TryGetValue(id, out var go) ? go : null;
+            Func<GameObject, ImageDisplayController> disp = go => go != null ? go.GetComponentInChildren<ImageDisplayController>(true) : null;
+            Func<ImageDisplayController, Texture2D> face = c => c != null ? typeof(ImageDisplayController).GetField("baseMapTexture", F).GetValue(c) as Texture2D : null;
+            Func<int, DoubleTap3D> dtOf = id => spawned(id) != null ? spawned(id).GetComponentInChildren<DoubleTap3D>(true) : null;
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            // 상세 사진이 있는 우팡 큐브 둘 (면 사진까지 받은 것)
+            Wait(() =>
+            {
+                if (DataManager.Instance == null) return false;
+                var map = DataManager.Instance.GetPlaceDataMap();
+                idA = idB = -1;
+                foreach (var kv in DataManager.Instance.GetSpawnedObjects())
+                {
+                    if (kv.Value == null || !kv.Value.activeInHierarchy || !map.TryGetValue(kv.Key, out var p) || p.model_type != "cube") continue;
+                    if (p.sub_photos == null || urls(kv.Value.GetComponentInChildren<DoubleTap3D>(true)) <= 0 || face(disp(kv.Value)) == null) continue;
+                    if (idA < 0) idA = kv.Key; else { idB = kv.Key; break; }
+                }
+                return idB > 0;
+            }, 40f, "상세 사진이 있는 큐브 둘");
+            Do(() =>
+            {
+                a = dtOf(idA);
+                b = dtOf(idB);
+                log.Add($"  큐브 A {idA} 상세 사진 주소 {urls(a)}장 · B {idB} {urls(b)}장 · 면 사진 {face(disp(spawned(idA))).width}px");
+            });
+            Check(() => a.imageSprites.Count == 0 && owned(a) == 0 && b.imageSprites.Count == 0 && owned(b) == 0, "뜰 때는 상세 사진을 받지 않는다 (주소만)");
+            Check(() => !face(disp(spawned(idA))).isReadable && !face(disp(spawned(idB))).isReadable, "면 사진은 읽기 전용 (CPU 쪽 사본 없음)");
+
+            // 1) A 를 열면 그때 받는다
+            Do(() => typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(a, null));
+            Wait(() => open(a) && loaded(a), 30f, "A 상세 사진 받음");
+            Sleep(0.6f);
+            Shot("photomem_open_a");
+            Do(() => log.Add($"  A 를 열고: 받은 사진 {a.imageSprites.Count}장 · 사진을 든 오브젝트 {(holder() == a ? "A" : holder() == null ? "없음" : holder().name)}"));
+            Check(() => a.imageSprites.Count == urls(a) && owned(a) == urls(a) && holder() == a, "A 를 열면 그때 받는다 — 주소 수만큼 · 사진을 든 건 A 하나");
+            Check(() => a.imageSprites.TrueForAll(x => x != null && x.texture != null && !x.texture.isReadable), "상세 사진도 읽기 전용");
+            Do(() => typeof(DoubleTap3D).GetMethod("CloseFullscreen", F).Invoke(a, null));
+            Sleep(1.2f);
+            Check(() => !open(a) && owned(a) == urls(a), "닫아도 A 사진은 그대로 (다시 열면 바로 보인다)");
+
+            // 2) B 를 열면 A 사진은 놓는다
+            Do(() => typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(b, null));
+            Wait(() => open(b) && loaded(b), 30f, "B 상세 사진 받음");
+            Sleep(0.6f);
+            Shot("photomem_open_b");
+            Do(() => log.Add($"  B 를 열고: A 사진 {owned(a)}장 · B 사진 {owned(b)}장"));
+            Check(() => holder() == b && owned(a) == 0 && a.imageSprites.Count == 0 && owned(b) == urls(b), "B 를 열면 A 사진은 지운다 — 한 번에 한 장소 것만");
+            Do(() => typeof(DoubleTap3D).GetMethod("CloseFullscreen", F).Invoke(b, null));
+            Sleep(1.2f);
+
+            // 3) B 를 풀로 돌려보낸다 — 면 사진·상세 사진을 놓고 프리팹 원래 면으로
+            Do(() =>
+            {
+                pooled = spawned(idB);
+                faceWas = face(disp(pooled));
+                DataManager.Instance.DespawnFullObject(idB.ToString());
+                var c = disp(pooled);
+                var def = typeof(ImageDisplayController).GetField("defaultFaceTexture", F).GetValue(c) as Texture;
+                var now = c.cubeRenderer.material.HasProperty("_BaseMap") ? c.cubeRenderer.material.GetTexture("_BaseMap") : c.cubeRenderer.material.mainTexture;
+                poolOk = !pooled.activeSelf && face(c) == null && owned(b) == 0 && b.imageSprites.Count == 0 && holder() == null && now == def;
+                log.Add($"  풀로 간 B: 켜짐 {pooled.activeSelf} · 면 사진 {(face(c) == null ? "놓음" : "들고 있음")} · 상세 사진 {owned(b)}장 · 면 {(now == def ? "원래 면" : now != null ? now.name : "없음")}");
+            });
+            Sleep(0.3f);
+            Check(() => poolOk && faceWas == null, "풀로 돌아간 큐브는 면 사진을 지우고(메모리에서) 상세 사진도 놓고 원래 면으로");
+            Do(() => DataManager.Instance.SpawnFullObject(idB.ToString()));
+            Wait(() => face(disp(spawned(idB))) != null, 30f, "B 다시 뜨고 면 사진 다시 받음");
+            Check(() => !face(disp(spawned(idB))).isReadable && urls(dtOf(idB)) > 0 && dtOf(idB).imageSprites.Count == 0, "다시 뜬 B: 면 사진은 다시 받고 상세 사진은 주소만");
+
+            // 3b) 열자마자 넘기면 — 아직 안 온 칸으로 넘어가 있다가 사진이 도착하면 뜬다
+            int slot = -9;
+            Do(() =>
+            {
+                typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(a, null);
+                a.ShowNextImage();
+                slot = (int)typeof(DoubleTap3D).GetField("imageIndex", F).GetValue(a);
+                log.Add($"  A 를 다시 열고 바로 넘김: 받은 사진 {a.imageSprites.Count}장 · 지금 칸 {slot}");
+            });
+            Wait(() => open(a) && loaded(a), 30f, "A 상세 사진 다시 받음");
+            Sleep(0.8f);
+            Shot("photomem_slot");
+            Check(() => slot >= 0 && slot < a.imageSprites.Count && a.fullscreenImage.enabled && a.fullscreenImage.sprite == a.imageSprites[slot]
+                        && (int)typeof(DoubleTap3D).GetField("imageIndex", F).GetValue(a) == slot, "열자마자 넘겨도 그 칸 사진이 도착하면 뜬다");
+            Do(() => typeof(DoubleTap3D).GetMethod("CloseFullscreen", F).Invoke(a, null));
+            Sleep(1.2f);
+
+            // 4) 관광공사 — 미리 받지 않고 우팡 서버(/locations/번호)로 찾지 않는다
+            Check(() =>
+            {
+                var objs = TourAPIManager.Instance != null ? TourAPIManager.Instance.GetSpawnedObjects() : null;
+                if (objs == null || objs.Count == 0) { log.Add("  관광공사 오브젝트 없음 — 건너뜀"); return true; }
+                int n = 0, eager = 0, fallback = 0, withUrls = 0;
+                foreach (var go in objs.Values)
+                {
+                    var d = go != null ? go.GetComponentInChildren<DoubleTap3D>(true) : null;
+                    if (d == null) continue;
+                    n++;
+                    if (owned(d) > 0) eager++;
+                    if (urls(d) > 0) withUrls++;
+                    if ((bool)typeof(DoubleTap3D).GetField("serverPhotoFallback", F).GetValue(d)) fallback++;
+                }
+                log.Add($"  관광공사 오브젝트 {n} · 사진 주소 받은 것 {withUrls} · 미리 받은 것 {eager} · 우팡 서버로 찾는 것 {fallback}");
+                return eager == 0 && fallback == 0;
+            }, "관광공사: 상세 사진을 미리 받지 않고 · 우팡 서버로 찾지 않는다");
+
+            // 5) 근처 사람 — 풀에서 다른 사람으로 다시 쓰이면 앞사람 사진을 지우고 원래 면으로
+            Do(() =>
+            {
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>(FindObjectsInactive.Include);
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                foreach (var u in UnityEngine.Object.FindObjectsByType<P2PUserInfo>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (!u.gameObject.activeInHierarchy) { pu = u; break; }
+                if (pu == null) return;
+                pu.Initialize("pt_a2_user1", "pt1", "", "", 10f);
+                fake = new Texture2D(8, 8);
+                typeof(P2PUserInfo).GetMethod("ApplyProfileTextureToAvatar", F).Invoke(pu, new object[] { fake });
+                typeof(P2PUserInfo).GetField("avatarTextureUrl", F).SetValue(pu, "pt://avatar1");
+                pu.Initialize("pt_a2_user2", "pt2", "", "", 10f);
+            });
+            Sleep(0.3f);
+            Check(() =>
+            {
+                if (pu == null) { log.Add("  쉬고 있는 사람 오브젝트 없음 — 건너뜀"); return true; }
+                var r = (MeshRenderer)typeof(P2PUserInfo).GetField("avatarRenderer", F).GetValue(pu);
+                var def = typeof(P2PUserInfo).GetField("defaultAvatarTexture", F).GetValue(pu) as Texture;
+                var now = r.material.HasProperty("_BaseMap") ? r.material.GetTexture("_BaseMap") : r.material.mainTexture;
+                bool held = typeof(P2PUserInfo).GetField("avatarTexture", F).GetValue(pu) as Texture2D != null;
+                log.Add($"  앞사람 사진 {(fake == null ? "지워짐" : "남아 있음")} · 지금 면 {(now == def ? "원래 면" : now != null ? now.name : "없음")}");
+                return fake == null && !held && now == def;
+            }, "근처 사람: 다른 사람으로 다시 쓰이면 앞사람 사진을 지우고 원래 면으로");
+
+            // 6) 알림 기록 — 최근 500개만
+            Check(() =>
+            {
+                var fn = UnityEngine.Object.FindAnyObjectByType<FirebaseNotification>(FindObjectsInactive.Include);
+                if (fn == null) { log.Add("  FirebaseNotification 없음 — 건너뜀"); return true; }
+                var set = (HashSet<string>)typeof(FirebaseNotification).GetField("processedMessageIds", F).GetValue(fn);
+                var order = (Queue<string>)typeof(FirebaseNotification).GetField("processedOrder", F).GetValue(fn);
+                var remember = typeof(FirebaseNotification).GetMethod("RememberProcessed", F);
+                var keep = order.ToArray();
+                for (int i = 0; i < 600; i++) remember.Invoke(fn, new object[] { "pt_a2_" + i });
+                bool ok = set.Count == 500 && order.Count == 500 && !set.Contains("pt_a2_0") && !set.Contains("pt_a2_99") && set.Contains("pt_a2_100") && set.Contains("pt_a2_599");
+                log.Add($"  처음 {keep.Length}개 · 600개 더 넣은 뒤 {set.Count}개 (가장 오래된 것부터 빠짐 {(ok ? "맞음" : "틀림")})");
+                set.Clear();
+                order.Clear();
+                foreach (var k in keep) remember.Invoke(fn, new object[] { k });   // 시험 전으로 (저장은 안 했다)
+                return ok && set.Count == keep.Length;
+            }, "알림 기록: 최근 500개만 기억 — 오래된 것부터 빠진다");
         }
 
         // ── 10-22 N18: 사람(P2P) 오브젝트도 핀치 줌을 따른다 — 본 크기(2배) × 배율 · 줌 중에 새로 뜬 사람·풀에서 다시 꺼낸 사람도 ──

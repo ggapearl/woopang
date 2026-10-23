@@ -65,6 +65,13 @@ public class P2PUserInfo : MonoBehaviour
     private bool isFollowing = false;
     private Coroutine downloadCoroutine;
 
+    // 받은 프로필 사진 — 바꿀 때·없어질 때 지운다. 같은 주소면 다시 받지 않는다
+    // (예전엔 켜질 때마다 새로 받아 앞 사진을 지우지 않았고, 풀에서 다른 사람으로 다시 쓰이면 앞사람 사진이 그대로 보였다)
+    private Texture2D avatarTexture;
+    private string avatarTextureUrl;
+    private Texture defaultAvatarTexture;   // 프리팹에 원래 붙어 있던 면 (공유 자산 — 지우지 않는다)
+    private Material fallbackMaterial;      // _BaseMap/_MainTex 가 없는 셰이더일 때 한 번만 만든다
+
     // 더블탭 감지
     private float lastTapTime = 0f;
     private bool waitingForSecondTap = false;
@@ -83,6 +90,9 @@ public class P2PUserInfo : MonoBehaviour
         originalAvatarColor = defaultAvatarColor;
         if (avatarRenderer != null)
         {
+            Material shared = avatarRenderer.sharedMaterial;
+            if (shared != null && shared.HasProperty("_BaseMap")) defaultAvatarTexture = shared.GetTexture("_BaseMap");
+            else if (shared != null && shared.HasProperty("_MainTex")) defaultAvatarTexture = shared.GetTexture("_MainTex");
             avatarRenderer.material.color = originalAvatarColor;
         }
 
@@ -98,6 +108,7 @@ public class P2PUserInfo : MonoBehaviour
     // ============================================================
     public void Initialize(string uid, string uname, string avatar, string userBio, float dist)
     {
+        if (uid != userId) ClearAvatarTexture();   // 풀에서 다른 사람으로 다시 쓰인다 — 앞사람 사진을 내린다
         userId = uid;
         username = uname;
         avatarUrl = avatar;
@@ -124,7 +135,8 @@ public class P2PUserInfo : MonoBehaviour
             };
         }
 
-        // 텍스처 로딩은 OnEnable에서 처리 (오브젝트가 활성화될 때)
+        // 텍스처 로딩은 OnEnable에서 처리 (오브젝트가 활성화될 때). 풀이 비어 새로 만든 것은 이미 켜져 있어 OnEnable 이 다시 오지 않는다
+        if (gameObject.activeInHierarchy) LoadProfileTexture();
     }
 
     void OnEnable()
@@ -160,6 +172,7 @@ public class P2PUserInfo : MonoBehaviour
     {
         if (avatarRenderer == null) return;
         if (!gameObject.activeInHierarchy) return;
+        if (avatarTexture != null && !string.IsNullOrEmpty(avatarUrl) && avatarUrl == avatarTextureUrl) return;   // 이미 붙어 있다
 
         if (downloadCoroutine != null) StopCoroutine(downloadCoroutine);
 
@@ -223,7 +236,7 @@ public class P2PUserInfo : MonoBehaviour
 
     private IEnumerator DownloadTexture(string url)
     {
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url))
+        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
         {
             request.timeout = 15;
             yield return request.SendWebRequest();
@@ -234,6 +247,7 @@ public class P2PUserInfo : MonoBehaviour
                 if (texture != null)
                 {
                     ApplyProfileTextureToAvatar(texture);
+                    avatarTextureUrl = url;
                 }
             }
         }
@@ -247,6 +261,9 @@ public class P2PUserInfo : MonoBehaviour
     private void ApplyProfileTextureToAvatar(Texture2D texture)
     {
         if (texture == null || avatarRenderer == null) return;
+
+        if (avatarTexture != null && avatarTexture != texture) Destroy(avatarTexture);
+        avatarTexture = texture;
 
         Material mat = avatarRenderer.material;
 
@@ -262,15 +279,47 @@ public class P2PUserInfo : MonoBehaviour
         }
         else
         {
-            Material unlitMat = new Material(Shader.Find("Unlit/Texture"));
-            if (unlitMat.shader == null || unlitMat.shader.name == "Hidden/InternalErrorShader")
+            if (fallbackMaterial == null)
             {
-                unlitMat = new Material(Shader.Find("Standard"));
+                fallbackMaterial = new Material(Shader.Find("Unlit/Texture"));
+                if (fallbackMaterial.shader == null || fallbackMaterial.shader.name == "Hidden/InternalErrorShader")
+                {
+                    Destroy(fallbackMaterial);
+                    fallbackMaterial = new Material(Shader.Find("Standard"));
+                }
+                avatarRenderer.material = fallbackMaterial;
             }
-            unlitMat.mainTexture = texture;
-            unlitMat.color = Color.white;
-            avatarRenderer.material = unlitMat;
+            fallbackMaterial.mainTexture = texture;
+            fallbackMaterial.color = Color.white;
         }
+    }
+
+    /// <summary>받은 프로필 사진을 내리고 프리팹 원래 면·색으로 되돌린다</summary>
+    private void ClearAvatarTexture()
+    {
+        if (downloadCoroutine != null)
+        {
+            StopCoroutine(downloadCoroutine);
+            downloadCoroutine = null;
+        }
+        avatarTextureUrl = null;
+        if (avatarTexture == null) return;
+
+        if (avatarRenderer != null)
+        {
+            Material mat = avatarRenderer.material;
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", defaultAvatarTexture);
+            else if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", defaultAvatarTexture);
+            mat.color = originalAvatarColor;
+        }
+        Destroy(avatarTexture);
+        avatarTexture = null;
+    }
+
+    void OnDestroy()
+    {
+        if (avatarTexture != null) Destroy(avatarTexture);
+        if (fallbackMaterial != null) Destroy(fallbackMaterial);
     }
 
     // ============================================================

@@ -121,7 +121,11 @@ public class FirebaseNotification : MonoBehaviour
 
     private string currentFCMToken = "";
 
+    // 처리한 알림 번호 — 최근 것만 기억한다. 예전엔 끝없이 늘어 알림이 올 때마다 전부를 다시 저장했다.
+    // 관리자 메시지는 since(마지막 받은 시각) 뒤의 것만 다시 받으므로 오래된 번호를 잊어도 다시 처리되지 않는다
+    private const int MAX_PROCESSED_IDS = 500;
     private HashSet<string> processedMessageIds = new HashSet<string>();
+    private readonly Queue<string> processedOrder = new Queue<string>();
 #if UNITY_ANDROID
     private bool trayOpened;                       // 알림바의 FCM 알림을 눌러 들어온 메시지를 처리하는 중 — 그 알림은 이미 보였으니 다시 띄우지 않는다
     private int handledTapIntent = int.MinValue;   // 눌러서 앱을 연 보물찾기·새 팔로워 알림 — 인텐트가 남아 돌아올 때마다 다시 보인다 (한 번만 연다)
@@ -358,28 +362,30 @@ public class FirebaseNotification : MonoBehaviour
 
     private void LoadProcessedMessageIds()
     {
+        processedMessageIds.Clear();
+        processedOrder.Clear();
         string processedIds = PlayerPrefs.GetString("ProcessedMessageIds", "");
-        if (!string.IsNullOrEmpty(processedIds))
+        if (string.IsNullOrEmpty(processedIds)) return;
+
+        // 저장 순서 = 처리한 순서 — 넘치면 앞(오래된 것)부터 빠진다
+        foreach (string id in processedIds.Split('|'))
         {
-            try
-            {
-                string[] ids = processedIds.Split('|');
-                processedMessageIds = new HashSet<string>(ids);
-            }
-            catch (System.Exception)
-            {
-                processedMessageIds = new HashSet<string>();
-            }
+            if (!string.IsNullOrEmpty(id)) RememberProcessed(id);
         }
+    }
+
+    private void RememberProcessed(string id)
+    {
+        if (!processedMessageIds.Add(id)) return;
+        processedOrder.Enqueue(id);
+        while (processedOrder.Count > MAX_PROCESSED_IDS) processedMessageIds.Remove(processedOrder.Dequeue());
     }
 
     private void SaveProcessedMessageIds()
     {
         try
         {
-            string[] ids = new string[processedMessageIds.Count];
-            processedMessageIds.CopyTo(ids);
-            string processedIds = string.Join("|", ids);
+            string processedIds = string.Join("|", processedOrder);
             PlayerPrefs.SetString("ProcessedMessageIds", processedIds);
             PlayerPrefs.Save();
         }
@@ -456,7 +462,7 @@ public class FirebaseNotification : MonoBehaviour
             return false;
         }
 
-        processedMessageIds.Add(messageId);
+        RememberProcessed(messageId);
         SaveProcessedMessageIds();
 
         return true;
@@ -1495,7 +1501,7 @@ public class FirebaseNotification : MonoBehaviour
                         // 이미 처리된 메시지인지 중복 체크 (내용+시간 기반)
                         string dupKey = $"admin_{msgBody}_{createdAt}";
                         if (processedMessageIds.Contains(dupKey)) continue;
-                        processedMessageIds.Add(dupKey);
+                        RememberProcessed(dupKey);
 
                         // 대화 목록에 추가/업데이트
                         try
