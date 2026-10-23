@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
@@ -53,6 +54,13 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private Button submitButton;
     [SerializeField] private Text submitLabel;
     [SerializeField] private Text formMsg;
+
+    [Header("보물 모양 (10-24 — 고르면 미리보기 · 사진·3D 모델은 숨길 때 올린다)")]
+    [SerializeField] private RectTransform shapeChips;
+    [SerializeField] private R0926HuntShapePreview shapePreview;
+    [SerializeField] private Button pickButton;
+    [SerializeField] private Text pickLabel;
+    [SerializeField] private Text pickCaption;
 
     [Header("주최 수칙")]
     [SerializeField] private Text rulesTitle;
@@ -106,6 +114,15 @@ public class R0926HuntCard : MonoBehaviour
     private int detailGen;                    // 상세를 새로 열 때마다 — 그 전에 떠난 다시 받기는 버린다
     private Coroutine toastCo;
 
+    // 고른 사진(JPG)·3D 모델(GLB) — 숨길 때 올리고, 올린 주소는 같은 파일로 다시 숨길 때 쓴다
+    private byte[] objData;
+    private string objKind, objUrl;
+    private Texture2D objTex;                 // 고른 사진 (미리보기 액자)
+    private string pickNote;                  // 고르기 칸 아래 알림 (못 연 파일 등)
+    private bool uploading, previewLoading;
+    private readonly R0926PickerWait pick = new R0926PickerWait();
+    private const int ModelMax = 10 * 1024 * 1024;   // 서버 OBJECT_MAX['model'] 과 같다
+
     private static string Lang => R0926LocalizedText.Lang();
     private static bool Ko => Lang == "ko";
     private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
@@ -121,6 +138,8 @@ public class R0926HuntCard : MonoBehaviour
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Audiences = { ("all", "모두", "Everyone", "全員", "所有人", "Todos"), ("friends", "맞팔만", "Mutuals", "相互フォロー", "互关好友", "Mutuos"), ("code", "참가 코드", "Join code", "参加コード", "参加代码", "Código") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Starts = { ("0", "바로", "Now", "すぐ", "立即", "Ahora"), ("60", "1시간 뒤", "In 1h", "1時間後", "1小时后", "En 1 h"), ("180", "3시간 뒤", "In 3h", "3時間後", "3小时后", "En 3 h"), ("1440", "내일", "Tomorrow", "明日", "明天", "Mañana"), ("2880", "2일 뒤", "In 2 days", "2日後", "2天后", "En 2 días") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Durations = { ("30", "30분", "30 min", "30分", "30分钟", "30 min"), ("60", "1시간", "1 hour", "1時間", "1小时", "1 hora"), ("180", "3시간", "3 hours", "3時間", "3小时", "3 horas"), ("1440", "1일", "1 day", "1日", "1天", "1 día"), ("4320", "3일", "3 days", "3日", "3天", "3 días"), ("10080", "7일", "7 days", "7日", "7天", "7 días") };
+    // 보물 모양 (2026-10-24 대표님 — 주최자가 고른다. 서버 hunts.object_kind · 모르는 모양은 옛 앱에서 보물상자)
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Shapes = { ("chest", "보물상자", "Chest", "宝箱", "宝箱", "Cofre"), ("gift", "선물상자", "Gift box", "ギフト箱", "礼物盒", "Regalo"), ("egg", "보물알", "Egg", "宝の卵", "宝蛋", "Huevo"), ("gem", "보석", "Gem", "宝石", "宝石", "Gema"), ("star", "별", "Star", "星", "星星", "Estrella"), ("heart", "하트", "Heart", "ハート", "爱心", "Corazón"), ("photo", "사진", "Photo", "写真", "照片", "Foto"), ("model", "3D 모델", "3D model", "3Dモデル", "3D 模型", "Modelo 3D") };
 
     private void Awake()
     {
@@ -131,6 +150,7 @@ public class R0926HuntCard : MonoBehaviour
         Wire(loginButton, () => { if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup(); });
         Wire(formBack, ShowHub);
         Wire(submitButton, () => StartCoroutine(Submit()));
+        Wire(pickButton, OnPick);
         Wire(agreeRow, () => { agreed = !agreed; PaintAgree(); });
         Wire(agreeButton, () => StartCoroutine(Accept()));
         Wire(rulesBack, ShowHub);
@@ -177,7 +197,10 @@ public class R0926HuntCard : MonoBehaviour
         if (LoginManager.Instance != null) LoginManager.Instance.OnLoginStateChanged -= OnLoginChanged;
         NearHuntId = 0;
         busy = false;   // 보내는 중에 창이 닫히면 코루틴이 멈춘 채 남아 — 다시 열었을 때 버튼이 다 먹통이었다
+        uploading = false;
     }
+
+    private void OnApplicationFocus(bool hasFocus) => R0926PickerWait.NoteFocus(hasFocus);
 
     /// <summary>상세가 근접 확인 중인 게임 (없으면 0) — R0926HuntTreasure 가 같은 게임을 따로 묻지 않는다</summary>
     public static int NearHuntId { get; private set; }
@@ -192,6 +215,17 @@ public class R0926HuntCard : MonoBehaviour
     {
         NearHuntId = detail != null && detail.activeInHierarchy && current != null && NearMode(current) ? current["id"].AsInt : 0;
         if (form != null && form.activeInHierarchy && gpsText != null) PaintGps();
+        if (form != null && form.activeInHierarchy && shapePreview != null)
+        {
+            // 고른 3D 모델을 미리보기가 못 열었다 — 숨겨도 보물상자로만 보이니 다시 고르게 한다
+            if (objKind == "model" && shapePreview.ModelFailed)
+            {
+                ClearObject();
+                pickNote = T("이 3D 모델은 열 수 없어요 — 다른 GLB 를 골라 주세요", "Couldn't open this 3D model — choose another GLB", "この3Dモデルは開けません — 別のGLBを選んでください", "无法打开此 3D 模型 — 请选择其他 GLB", "No se pudo abrir este modelo 3D — elige otro GLB");
+                PaintShape();
+            }
+            if (shapePreview.Loading != previewLoading) { previewLoading = shapePreview.Loading; PaintPick(); }
+        }
         if (detail != null && detail.activeInHierarchy && current != null && Time.unscaledTime >= nextNear && !busy)
         {
             nextNear = Time.unscaledTime + 8.5f;
@@ -398,12 +432,15 @@ public class R0926HuntCard : MonoBehaviour
     {
         Show(form);
         if (formMsg != null) formMsg.text = "";
+        pickNote = null;
         PaintCodeBox();
+        PaintShape();
         PaintSubmit();
     }
 
     private void BuildChips()
     {
+        Chips(shapeChips, "shape", Shapes, "chest");
         Chips(modeChips, "mode", Modes, "touch");
         Chips(winnerChips, "winners", Winners, "1");
         Chips(playerChips, "players", Players, "30");
@@ -426,7 +463,12 @@ public class R0926HuntCard : MonoBehaviour
             c.SetActive(true);
             SetText(c, "Label", T(d.ko, d.en, d.ja, d.zh, d.es));
             string v = d.v;
-            Wire(c.GetComponent<Button>(), () => { picked[key] = v; PaintChips(box, key); if (key == "mode") PaintCodeBox(); });
+            Wire(c.GetComponent<Button>(), () =>
+            {
+                picked[key] = v; PaintChips(box, key);
+                if (key == "mode") PaintCodeBox();
+                else if (key == "shape") { pickNote = null; PaintShape(); }
+            });
         }
         PaintChips(box, key);
     }
@@ -461,8 +503,168 @@ public class R0926HuntCard : MonoBehaviour
 
     private void PaintSubmit()
     {
-        if (submitLabel != null) submitLabel.text = busy ? T("숨기는 중…", "Hiding…", "隠しています…", "正在藏宝…", "Escondiendo…") : T("이 자리에 보물 숨기기", "Hide the treasure here", "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí");
+        if (submitLabel != null) submitLabel.text = uploading ? T("올리는 중…", "Uploading…", "アップロード中…", "正在上传…", "Subiendo…")
+                                                  : busy ? T("숨기는 중…", "Hiding…", "隠しています…", "正在藏宝…", "Escondiendo…") : T("이 자리에 보물 숨기기", "Hide the treasure here", "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí");
     }
+
+    // ── 보물 모양 ─────────────────────────────────────────
+    private string Shape => picked.TryGetValue("shape", out var s) ? s : "chest";
+
+    private void PaintShape()
+    {
+        string k = Shape;
+        bool have = objData != null && objKind == k;
+        if (shapePreview != null)
+        {
+            if (have && k == "photo") shapePreview.ShowPhoto(objTex);
+            else if (have && k == "model") shapePreview.ShowModel(objData);
+            else shapePreview.Show(k == "model" ? "chest" : k);   // 3D 모델을 아직 안 골랐으면 — 못 열 때 보이는 보물상자
+        }
+        PaintPick();
+    }
+
+    private void PaintPick()
+    {
+        string k = Shape;
+        bool file = k == "photo" || k == "model";
+        if (pickButton != null) pickButton.gameObject.SetActive(file);
+        if (pickCaption != null) pickCaption.gameObject.SetActive(file);
+        if (!file) return;
+        bool have = objData != null && objKind == k;
+        if (pickLabel != null)
+            pickLabel.text = k == "photo" ? (have ? T("다른 사진 고르기", "Choose another photo", "別の写真を選ぶ", "选择其他照片", "Elegir otra foto") : T("앨범에서 사진 고르기", "Choose a photo", "アルバムから写真を選ぶ", "从相册选择照片", "Elegir una foto"))
+                                          : (have ? T("다른 3D 모델 고르기", "Choose another 3D model", "別の3Dモデルを選ぶ", "选择其他 3D 模型", "Elegir otro modelo 3D") : T("3D 모델(GLB) 고르기", "Choose a 3D model (GLB)", "3Dモデル（GLB）を選ぶ", "选择 3D 模型（GLB）", "Elegir un modelo 3D (GLB)"));
+        if (pickCaption == null) return;
+        bool warn = !string.IsNullOrEmpty(pickNote);
+        pickCaption.color = warn ? Amber : Muted;
+        if (warn) pickCaption.text = pickNote;
+        else if (have && k == "photo") pickCaption.text = T("사진", "Photo", "写真", "照片", "Foto") + (objTex != null ? " " + objTex.width + "×" + objTex.height : "") + " · " + Size(objData.Length);
+        else if (have) pickCaption.text = T("3D 모델", "3D model", "3Dモデル", "3D 模型", "Modelo 3D") + " · " + Size(objData.Length)
+                                          + (shapePreview != null && shapePreview.Loading ? T(" · 불러오는 중…", " · loading…", " · 読み込み中…", " · 正在加载…", " · cargando…") : "");
+        else pickCaption.text = k == "photo" ? T("고른 사진을 액자에 끼워 숨겨요", "Your photo goes in a frame as the treasure", "選んだ写真を額に入れて隠します", "所选照片会装进相框藏起来", "Tu foto se esconde en un marco")
+                                             : T("GLB 한 파일 · 10MB 까지 — 고르면 여기서 먼저 보여 줘요", "One GLB file, up to 10MB — previewed here first", "GLB 1ファイル・10MBまで — 選ぶとここで先に確認できます", "单个 GLB 文件，最大 10MB — 选好后先在这里预览", "Un solo archivo GLB, hasta 10 MB — se previsualiza aquí");
+    }
+
+    private static string Size(int n) => n < 1024 * 1024 ? Mathf.Max(1, n / 1024) + "KB" : (n / 1048576f).ToString("0.0", CultureInfo.InvariantCulture) + "MB";
+
+    private void OnPick()
+    {
+        if (busy) return;
+        // 앞서 연 고르기 창의 답이 끝내 안 왔으면(창이 못 떴거나 앱 전환으로 잃음) 버리고 새로 연다 (CubeUploadManager 와 같이)
+        if (pick.Waiting && !pick.TryAbandon()) { FormMsg(R0926PickerWait.BusyText); return; }
+        StartCoroutine(Shape == "photo" ? PickPhoto() : PickModel());
+    }
+
+    private IEnumerator PickPhoto()
+    {
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Gallery)) { FormMsg(R0926PickerWait.BusyText); yield break; }
+        bool answered = false;
+        string path = null;
+        int t = pick.Begin(R0926PickerWait.Source.Gallery);
+        try
+        {
+            NativeGallery.GetImageFromGallery(p => { if (!pick.End(t)) return; path = p; answered = true; },
+                T("보물 사진 고르기", "Choose a treasure photo", "宝の写真を選ぶ", "选择宝藏照片", "Elige la foto del tesoro"), "image/*");
+        }
+        catch (Exception) { pick.End(t); answered = true; }
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered || string.IsNullOrEmpty(path)) yield break;   // 표를 버렸거나 고르지 않고 닫았다 — 고른 것은 그대로
+        if (pickCaption != null) { pickCaption.text = T("사진을 읽는 중…", "Reading the photo…", "写真を読み込み中…", "正在读取照片…", "Leyendo la foto…"); pickCaption.color = Muted; }
+        yield return null;   // 사진 읽기는 화면을 멈춘다 — 안내를 먼저 그린다
+        Texture2D tex = null;
+        byte[] jpg = null;
+        try
+        {
+            tex = NativeGallery.LoadImageAtPath(path, 1280, false, false);   // 서버도 긴 변 1280 으로 줄인다
+            if (tex != null) jpg = tex.EncodeToJPG(85);
+        }
+        catch (Exception) { jpg = null; }
+        if (jpg == null)
+        {
+            if (tex != null) Destroy(tex);
+            PickFailed(T("이 사진은 열 수 없어요 — 다른 사진을 골라 주세요", "Couldn't open this photo — choose another", "この写真は開けません — 別の写真を選んでください", "无法打开这张照片 — 请选择其他照片", "No se pudo abrir esta foto — elige otra"));
+            yield break;
+        }
+        TakeObject("photo", jpg, tex);
+    }
+
+    private IEnumerator PickModel()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (!NativeFilePicker.CheckPermission())
+        {
+            var perm = NativeFilePicker.Permission.Denied;
+            bool asked = false;
+            NativeFilePicker.RequestPermissionAsync(p => { perm = p; asked = true; });
+            yield return new WaitUntil(() => asked);
+            if (perm != NativeFilePicker.Permission.Granted) { PickFailed(T("파일을 열 권한이 없어요 — 설정에서 허용해 주세요", "No permission to open files — allow it in Settings", "ファイルを開く権限がありません — 設定で許可してください", "没有打开文件的权限 — 请在设置中允许", "Sin permiso para abrir archivos — actívalo en Ajustes")); yield break; }
+        }
+        string[] types = { "model/gltf-binary", "application/octet-stream", "*/*" };
+#else
+        string[] types = { "com.khronos.glb", "public.data", "public.item", "public.content" };
+#endif
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.File)) { FormMsg(R0926PickerWait.BusyText); yield break; }
+        bool answered = false;
+        string path = null;
+        int t = pick.Begin(R0926PickerWait.Source.File);
+        try { NativeFilePicker.PickFile(p => { if (!pick.End(t)) return; path = p; answered = true; }, types); }
+        catch (Exception) { pick.End(t); answered = true; }
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered || string.IsNullOrEmpty(path)) yield break;
+        byte[] data = null;
+        string err = null;
+        try
+        {
+            if (new FileInfo(path).Length > ModelMax) err = R0926HuntApi.ErrorText("file_size", Lang);
+            else data = File.ReadAllBytes(path);
+        }
+        catch (Exception) { err = T("파일을 읽지 못했어요 — 다시 골라 주세요", "Couldn't read the file — choose it again", "ファイルを読み込めませんでした — もう一度選んでください", "无法读取文件 — 请重新选择", "No se pudo leer el archivo — elígelo de nuevo"); }
+        if (err == null && !IsGlb(data)) err = R0926HuntApi.ErrorText("file_type", Lang);
+        if (err != null) { PickFailed(err); yield break; }
+        TakeObject("model", data, null);
+    }
+
+    // GLB 2.0 한 파일 — 서버(_glb_ok)와 같은 앞머리 검사 (바깥 파일을 부르는지는 서버가 본다)
+    private static bool IsGlb(byte[] d) =>
+        d != null && d.Length >= 20 && d[0] == 0x67 && d[1] == 0x6C && d[2] == 0x54 && d[3] == 0x46
+        && BitConverter.ToUInt32(d, 4) == 2 && BitConverter.ToUInt32(d, 8) == (uint)d.Length;
+
+    private void TakeObject(string kind, byte[] data, Texture2D tex)
+    {
+        ClearObject();
+        objKind = kind; objData = data; objTex = tex; pickNote = null;
+        picked["shape"] = kind;
+        if (shapeChips != null) PaintChips(shapeChips, "shape");
+        PaintShape();
+    }
+
+    // 고르다 못 연 파일 — 앞서 고른 것은 그대로 두고 칸 아래에 알린다
+    private void PickFailed(string note)
+    {
+        pickNote = note;
+        PaintPick();
+    }
+
+    private void ClearObject()
+    {
+        if (objTex != null) Destroy(objTex);
+        objTex = null; objData = null; objKind = null; objUrl = null;
+    }
+
+#if UNITY_EDITOR
+    /// <summary>플레이 시험 — 고르기 창 없이 사진(JPG·PNG)·3D 모델(GLB)을 고른 것처럼</summary>
+    public void EditorPick(string kind, byte[] bytes)
+    {
+        if (kind == "photo")
+        {
+            var tex = new Texture2D(2, 2);
+            if (tex.LoadImage(bytes)) TakeObject("photo", tex.EncodeToJPG(85), tex);
+            else { Destroy(tex); PickFailed("photo"); }
+        }
+        else if (IsGlb(bytes)) TakeObject("model", bytes, null);
+        else PickFailed(R0926HuntApi.ErrorText("file_type", Lang));
+    }
+#endif
 
     private IEnumerator Submit()
     {
@@ -470,6 +672,15 @@ public class R0926HuntCard : MonoBehaviour
         if (!TryLocation(out float lat, out float lon, out float acc)) { FormMsg(T("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación")); yield break; }
         string title = titleInput != null ? titleInput.text.Trim() : "";
         if (title.Length == 0) { FormMsg(R0926HuntApi.ErrorText("title", Lang)); yield break; }
+        string shape = Shape;
+        bool file = shape == "photo" || shape == "model";
+        if (file && (objData == null || objKind != shape))
+        {
+            FormMsg(shape == "photo" ? T("보물로 쓸 사진을 골라 주세요", "Choose a photo for the treasure", "宝にする写真を選んでください", "请选择用作宝藏的照片", "Elige una foto para el tesoro")
+                                     : T("보물로 쓸 3D 모델(GLB)을 골라 주세요", "Choose a 3D model (GLB) for the treasure", "宝にする3Dモデル（GLB）を選んでください", "请选择用作宝藏的 3D 模型（GLB）", "Elige un modelo 3D (GLB) para el tesoro"));
+            yield break;
+        }
+        if (shape == "model" && shapePreview != null && shapePreview.Loading) { FormMsg(T("3D 모델을 불러오는 중이에요 — 잠시만요", "Still loading the 3D model — one moment", "3Dモデルを読み込み中です — 少々お待ちください", "正在加载 3D 模型 — 请稍候", "Cargando el modelo 3D — un momento")); yield break; }
         var b = new JSONObject();
         b["title"] = title;
         b["hint"] = hintInput != null ? hintInput.text.Trim() : "";
@@ -490,14 +701,46 @@ public class R0926HuntCard : MonoBehaviour
         b["start_in_min"] = int.Parse(picked["start"]);
         b["duration_min"] = int.Parse(picked["duration"]);
         b["lat"] = lat; b["lon"] = lon; b["acc"] = acc; b["mock"] = false;
+        b["object_kind"] = shape;
 
         busy = true; PaintSubmit();
+        if (file)
+        {
+            // 사진·3D 모델은 먼저 올리고 받은 주소로 숨긴다 — 숨기기가 막혀 다시 누르면 올린 주소를 그대로 쓴다
+            if (string.IsNullOrEmpty(objUrl))
+            {
+                byte[] data = objData;
+                uploading = true; PaintSubmit();
+                long uc = 0; JSONNode uj = null;
+                yield return R0926HuntApi.Upload("/api/hunts/object", data, shape == "photo" ? "treasure.jpg" : "treasure.glb", shape == "photo" ? "image/jpeg" : "model/gltf-binary",
+                                                 new Dictionary<string, string> { { "kind", shape } }, (c, r) => { uc = c; uj = r; });
+                uploading = false;
+                string url = uc == 200 && uj != null && uj["ok"].AsBool ? (string)uj["url"] : null;
+                if (string.IsNullOrEmpty(url) || !ReferenceEquals(objData, data))
+                {
+                    busy = false; PaintSubmit();
+                    if (string.IsNullOrEmpty(url)) FormMsg(uc == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(uj != null ? (string)uj["error"] : null, Lang));
+                    yield break;   // 올리는 사이 고른 파일이 바뀌었으면 — 바뀐 것을 보고 다시 누르게
+                }
+                objUrl = url;
+            }
+            b["object_url"] = objUrl;
+        }
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Post("/api/hunts", b, (c, r) => { code = c; j = r; });
         busy = false; PaintSubmit();
         if (code == 200 && j["ok"].AsBool)
         {
             foreach (var f in new[] { titleInput, hintInput, codeInput, questionInput, prizeInput }) if (f != null) f.text = "";
+            if (file)
+            {
+                // 고른 파일은 이 보물 것 — 다음 보물은 새로 고른다 (내 3D 모델은 AR 에서 다시 받지 않게 캐시에)
+                if (shape == "model" && objData != null) GLBModelLoader.PreloadCache(R0926HuntApi.Url(objUrl), objData);
+                ClearObject();
+                picked["shape"] = "chest";
+                if (shapeChips != null) PaintChips(shapeChips, "shape");
+                PaintShape();
+            }
             R0926HuntList.Stale();
             string jc = j["join_code"];
             Toast(string.IsNullOrEmpty(jc) ? T("보물을 숨겼어요!", "Treasure hidden!", "宝を隠しました！", "宝藏已藏好！", "¡Tesoro escondido!") : T("보물을 숨겼어요! 참가 코드 " + jc, "Hidden! Join code " + jc, "宝を隠しました！参加コード " + jc, "宝藏已藏好！参加代码 " + jc, "¡Escondido! Código " + jc), 4f);

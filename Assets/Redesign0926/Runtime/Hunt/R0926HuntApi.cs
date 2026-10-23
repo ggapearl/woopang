@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using SimpleJSON;
 using UnityEngine;
@@ -37,6 +38,34 @@ public static class R0926HuntApi
             if (!string.IsNullOrEmpty(EditorTestUser)) return true;
 #endif
             return LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn;
+        }
+    }
+
+    /// <summary>서버 파일 주소 — 'uploads/…' 같은 상대 주소면 서버 앞주소를 붙인다 (보물 모양 사진·3D 모델)</summary>
+    public static string Url(string path)
+    {
+        if (string.IsNullOrEmpty(path) || path.Contains("://")) return path;
+        return Base.TrimEnd('/') + "/" + path.TrimStart('/');
+    }
+
+    /// <summary>파일 올리기 (보물 모양 사진·3D 모델) — multipart 'file' + 글자 칸들</summary>
+    public static IEnumerator Upload(string path, byte[] data, string fileName, string mime, Dictionary<string, string> fields, Action<long, JSONNode> done)
+    {
+        var form = new List<IMultipartFormSection>();
+        if (fields != null) foreach (var kv in fields) form.Add(new MultipartFormDataSection(kv.Key, kv.Value));
+        form.Add(new MultipartFormFileSection("file", data, fileName, mime));
+        using (var req = UnityWebRequest.Post(Base + path, form))
+        {
+            req.timeout = 120;
+            LoginManager.ApplyAuth(req);
+#if UNITY_EDITOR
+            if (!string.IsNullOrEmpty(EditorTestUser)) req.SetRequestHeader("X-Test-User", EditorTestUser);
+#endif
+            yield return req.SendWebRequest();
+            JSONNode j = null;
+            try { j = JSON.Parse(req.downloadHandler != null ? req.downloadHandler.text : ""); }
+            catch (Exception) { j = null; }
+            done?.Invoke(req.result == UnityWebRequest.Result.ConnectionError ? 0 : req.responseCode, j ?? new JSONObject());
         }
     }
 
@@ -103,6 +132,11 @@ public static class R0926HuntApi
             case "not_participant": return L("이 사람 게임에 참가한 적이 있어야 신고할 수 있어요", "Only players of this host's games can report", "この人のゲームに参加したことがある人だけが通報できます", "只有参加过此人游戏的人才能举报", "Solo quienes jugaron con este organizador pueden denunciar");
             case "reason": case "target": return L("신고 내용을 다시 골라 주세요", "Please choose a reason again", "通報内容をもう一度選んでください", "请重新选择举报内容", "Vuelve a elegir un motivo");
             case "not_found": return L("찾을 수 없어요 — 이미 지워졌을 수 있어요", "Not found — it may have been removed", "見つかりません — すでに削除された可能性があります", "找不到 — 可能已被删除", "No encontrado — puede que se haya eliminado");
+            // 보물 모양 (사진·3D 모델 올리기)
+            case "object": case "object_url": case "file": return L("보물 모양을 다시 골라 주세요", "Please choose the treasure's look again", "宝の見た目をもう一度選んでください", "请重新选择宝藏外观", "Vuelve a elegir el aspecto del tesoro");
+            case "file_type": return L("이 파일은 쓸 수 없어요 — 사진(JPG·PNG) 또는 GLB 한 파일로 골라 주세요", "Can't use this file — choose a photo (JPG/PNG) or a single GLB", "このファイルは使えません — 写真（JPG・PNG）か GLB 1ファイルを選んでください", "无法使用此文件 — 请选择照片（JPG/PNG）或单个 GLB", "No se puede usar este archivo — elige una foto (JPG/PNG) o un solo GLB");
+            case "file_size": return L("파일이 너무 커요 — 3D 모델은 10MB 까지예요", "File too large — 3D models up to 10MB", "ファイルが大きすぎます — 3Dモデルは10MBまでです", "文件太大 — 3D 模型最大 10MB", "Archivo demasiado grande — modelos 3D hasta 10 MB");
+            case "upload_limit": return L("오늘은 더 올릴 수 없어요 — 내일 다시 해 주세요", "Upload limit reached for today", "今日はこれ以上アップロードできません", "今天无法再上传了", "Has alcanzado el límite de subidas de hoy");
             default: return L("잠시 뒤 다시 해 주세요", "Please try again shortly", "少ししてからもう一度お試しください", "请稍后再试", "Inténtalo de nuevo en breve");
         }
     }

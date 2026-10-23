@@ -55,6 +55,7 @@ public class R0926HuntTreasure : MonoBehaviour
         public int misses;           // 보이다가 안 보인 횟수 — 경계에서 깜빡이지 않게 두 번 연속이면 치운다
         public bool spot;            // 서버가 보물 자리를 줬다 (보이는 거리 안)
         public double lat, lon;
+        public string kind, url;     // 보물 모양 (주최자가 고름 — 사진·3D 모델은 url)
         public bool announce;        // 처음 보였을 때 알림 (카드 상세가 보는 중이면 카드가 이미 알린다)
         public GameObject obj;
     }
@@ -259,6 +260,9 @@ public class R0926HuntTreasure : MonoBehaviour
                 t.misses = 0;
                 t.lat = j["object"]["lat"].AsDouble;
                 t.lon = j["object"]["lon"].AsDouble;
+                t.kind = j["object"]["kind"];
+                t.url = j["object"]["url"];
+                Chest(t)?.Dress(t.kind, t.url);
                 if (!t.spot) t.announce = own;
                 t.spot = true;
             }
@@ -297,6 +301,7 @@ public class R0926HuntTreasure : MonoBehaviour
         }
         t.obj = go;
         SpawnedObjects["hunt_" + t.id] = go;
+        Chest(t)?.Dress(t.kind, t.url);
     }
 
     private static bool Altitude(out double alt)

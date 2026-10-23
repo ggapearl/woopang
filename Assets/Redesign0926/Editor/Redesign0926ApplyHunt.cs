@@ -14,6 +14,7 @@ namespace Redesign0926
         private static readonly Color HuntGold = new Color(0.910f, 0.749f, 0.310f, 1f);
         private static readonly Color HuntDark = new Color(0.102f, 0.078f, 0.020f, 1f);   // 금색 위 글
         private static readonly Color HuntAmber = new Color(1f, 0.702f, 0.278f, 1f);
+        private static readonly Color HuntStage = new Color(0.055f, 0.063f, 0.075f, 1f);   // 보물 모양 미리보기 무대
 
         private static void ApplyHunt(Transform root, List<string> log)
         {
@@ -96,6 +97,18 @@ namespace Redesign0926
             var tIn = HInput(form, "TitleInput", 132, "예: 시청 앞 가을 보물", "e.g. Autumn treasure at City Hall", false, 40); S("titleInput", tIn);
             HLabel(form, "LHint", 72, "힌트 (선택)", "Hint (optional)", 44, Muted, FontStyle.Bold);
             var hIn = HInput(form, "HintInput", 220, "찾는 사람에게 줄 힌트", "A hint for the finders", true, 300); S("hintInput", hIn);
+            // 보물 모양 — 고르면 아래 칸에 바로 보인다. 사진·3D 모델은 고르기 버튼이 나온다 (2026-10-24)
+            var lShape = HLabel(form, "LShape", 72, "보물 모양", "Treasure look", 44, Muted, FontStyle.Bold);
+            var shapeChips = HChips(form, "ShapeChips"); S("shapeChips", shapeChips);
+            var shapePreview = HuntShapePreview(form, log); S("shapePreview", shapePreview);
+            var pickButton = HButton(form, "PickButton", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "앨범에서 사진 고르기", null, 44, HuntGold, FontStyle.Bold, out var pickLabel);
+            S("pickButton", pickButton); S("pickLabel", pickLabel);
+            var pickCaption = HLabel(form, "PickCaption", 0, "", null, 38, Muted, FontStyle.Normal); S("pickCaption", pickCaption);
+            pickButton.gameObject.SetActive(false);
+            pickCaption.gameObject.SetActive(false);
+            // 이미 있던 양식엔 맨 끝에 붙으므로 힌트 바로 아래로
+            int si = form.Find("HintInput").GetSiblingIndex();
+            foreach (var t in new Transform[] { lShape.transform, shapeChips, shapePreview.transform, pickButton.transform, pickCaption.transform }) t.SetSiblingIndex(++si);
             HLabel(form, "LMode", 72, "찾는 방식", "How to win", 44, Muted, FontStyle.Bold);
             S("modeChips", HChips(form, "ModeChips"));
             var codeBox = HList(form, "CodeBox");
@@ -291,6 +304,7 @@ namespace Redesign0926
             ["Title"] = new[] { "タイトル", "标题", "Título" },
             ["e.g. Autumn treasure at City Hall"] = new[] { "例：市役所前の秋の宝", "例：市政厅前的秋日宝藏", "p. ej. Tesoro de otoño en el ayuntamiento" },
             ["Hint (optional)"] = new[] { "ヒント（任意）", "提示（选填）", "Pista (opcional)" },
+            ["Treasure look"] = new[] { "宝の見た目", "宝藏外观", "Aspecto del tesoro" },
             ["A hint for the finders"] = new[] { "探す人へのヒント", "给寻宝者的提示", "Una pista para quienes buscan" },
             ["How to win"] = new[] { "見つけ方", "寻宝方式", "Cómo se gana" },
             ["Code — the answer to enter at the treasure"] = new[] { "コード — 宝の前で入力する答え", "代码 — 在宝藏前输入的答案", "Código — la respuesta que se introduce en el tesoro" },
@@ -337,6 +351,29 @@ namespace Redesign0926
         {
             if (!HuntJaZhEs.TryGetValue(en, out var t)) { Debug.LogWarning("[Redesign0926] 보물찾기 번역 없음: " + en); t = new[] { en, en, en }; }
             Loc(g, ko, en, t[0], t[1], t[2]);
+        }
+
+        // 보물 모양 미리보기 — AR 보물 프리팹을 화면 밖 무대에서 찍어 이 칸에 띄운다 (R0926HuntShapePreview)
+        private static R0926HuntShapePreview HuntShapePreview(Transform parent, List<string> log)
+        {
+            var g = FindOrCreate(parent, "ShapePreview");
+            Ensure<LayoutElement>(g).preferredHeight = 540;
+            Img(g, Spr("r0926_pill"), HuntStage, Image.Type.Sliced, 64f / 46f).raycastTarget = false;
+            Ensure<Mask>(g).showMaskGraphic = true;   // 둥근 모서리 안으로
+            var v = FindOrCreate(g.transform, "View");
+            Stretch(RT(v));
+            var raw = Ensure<RawImage>(v);
+            raw.raycastTarget = false;
+            raw.enabled = false;   // 처음 찍기 전엔 무대색만
+            var pv = Ensure<R0926HuntShapePreview>(g);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(TreasurePrefabPath);
+            if (prefab == null) log.Add("보물찾기: 미리보기 — 보물 프리팹 없음");
+            var pso = new SerializedObject(pv);
+            pso.FindProperty("treasurePrefab").objectReferenceValue = prefab;
+            pso.FindProperty("view").objectReferenceValue = raw;
+            pso.FindProperty("background").colorValue = HuntStage;
+            pso.ApplyModifiedPropertiesWithoutUndo();
+            return pv;
         }
 
         private static Text HLabel(Transform parent, string name, float h, string ko, string en, float size, Color c, FontStyle st)

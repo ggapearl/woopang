@@ -375,8 +375,8 @@ public class GLBModelLoader : MonoBehaviour
             yield break;
         }
         
-        // 씬 인스턴스화
-        
+        // 씬 인스턴스화 — 로딩 고리(GLBSpawnEffect)가 먼저 이 칸에 들어 있으므로 새로 붙는 쪽이 모델이다
+        int childrenBefore = glbContainer.childCount;
         var instantiateTask = gltf.InstantiateMainSceneAsync(glbContainer);
         
         while (!instantiateTask.IsCompleted)
@@ -398,10 +398,11 @@ public class GLBModelLoader : MonoBehaviour
         }
         
         
-        if (instantiateSuccess && glbContainer.childCount > 0)
+        if (instantiateSuccess && glbContainer.childCount > childrenBefore)
         {
-            
-            loadedModel = glbContainer.GetChild(0).gameObject;
+            // 예전엔 GetChild(0) — 09-07 로딩 고리가 생긴 뒤로 고리를 모델로 집어 배율·등장 연출·콜라이더·애니메이션이 고리에 걸리고,
+            // 고리가 지워지면 모델을 잃어 다음 ClearModel 이 진짜 모델을 못 지웠다 (10-24 보물 3D 모델 시험에서 발견)
+            loadedModel = glbContainer.GetChild(glbContainer.childCount - 1).gameObject;
             
             
             // 모델 변환 설정
@@ -667,8 +668,11 @@ public class GLBModelLoader : MonoBehaviour
                     color = Color.white;
                 }
 
+                // 바탕 그림은 그대로 옮긴다 — 셰이더만 바꾸면 glTF 텍스처가 떨어져 그림 입힌 모델이 흰 덩어리가 된다 (10-24)
+                Texture baseTex = BaseColorTexture(mats[i]);
                 mats[i].shader = targetShader;
                 mats[i].SetColor("_BaseColor", color);
+                if (baseTex != null) mats[i].SetTexture("_BaseMap", baseTex);
                 mats[i].SetFloat("_Surface", 0); // Opaque
                 if (useEmission)
                 {
@@ -697,6 +701,13 @@ public class GLBModelLoader : MonoBehaviour
             }
         }
         DbgLog($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 재질이름매칭={byMatName} GO이름매칭={byGoName} 위치폴백={byPosition}");
+    }
+
+    private static Texture BaseColorTexture(Material m)
+    {
+        foreach (var p in new[] { "baseColorTexture", "_BaseMap", "_MainTex" })
+            if (m.HasProperty(p) && m.GetTexture(p) != null) return m.GetTexture(p);
+        return null;
     }
 
     /// <summary>

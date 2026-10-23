@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 
 /// <summary>
 /// 보물찾기 AR 보물상자 (10-22 대표님: 금빛 큐브가 '보물' 같지 않다 — 보물상자로, 색 톤은 그대로 · 둘레가 살짝 반짝이게 ·
@@ -9,15 +11,33 @@ using UnityEngine;
 ///  · 누를 때마다 살짝 커졌다 돌아온다 (Nudge — 일반 오브젝트와 같은 1.15배) · 서버에 '찾았다'를 묻는 동안엔 달그락(Rattle)
 ///  · 찾으면(Open) 이쪽을 돌아보고 뚜껑이 열리며 빛기둥과 별빛이 솟은 뒤 작아지며 사라진다(뿌리째) — 그 사이 축하 화면이 뜬다
 /// 몸통·뚜껑 메시와 재질은 Apply(Redesign0926ApplyHuntChest)가 만든다. 앵커(뿌리) 아래 'Chest' 에 둔다.
+/// 보물 모양(10-24 대표님 — 주최자가 고른다): 보물상자 · 선물상자 · 보물알(뚜껑이 열린다) · 보석 · 별 · 하트(빛만 솟는다) ·
+///  사진(액자에 끼운다) · 3D 모델(GLB — 못 받으면 보물상자). 서버 hunts.object_kind / object_url → Dress.
 /// </summary>
 public class R0926HuntChest : MonoBehaviour
 {
     [SerializeField] private Transform lid;               // 원점 = 경첩(몸통 뒤 위 모서리) — X 로 돌면 열린다
     [SerializeField] private float spinSpeed = 24f;       // 도/초
+    [SerializeField] private Skin[] skins;                // 모양마다 몸통·뚜껑 (보물상자 포함)
+
+    /// <summary>보물 모양 하나 — 뚜껑이 없으면(보석·별·하트·사진·모델) 열 때 빛만 솟는다</summary>
+    [Serializable]
+    public class Skin
+    {
+        public string kind;
+        public Mesh body, lid;
+        public Material[] bodyMats, lidMats;
+        public Vector3 hinge;                             // 뚜껑 원점
+        public float seam;                                // 빛기둥·별빛이 솟는 높이
+        public Vector3 boxCenter, boxSize;                // 누르기 충돌 상자
+    }
+
+    /// <summary>사진 칸 — 액자(사진 모양) 앞면의 정사각형 (상자 좌표)</summary>
+    private const float PhotoSide = 0.68f, PhotoY = 0.12f, PhotoZ = 0.032f;
+    private const float ModelSize = 1.0f;                 // 3D 모델은 가장 긴 변을 보물상자 폭에 맞춘다
 
     private const float NudgeScale = 1.15f, NudgeHold = 0.16f, NudgeSpeed = 5f;   // 일반 오브젝트(Object3DTouchHaptic)와 같은 느낌
     private const float LidOpen = 112f;
-    private const float Seam = 0.10f;                     // 몸통 윗면 높이 (상자 좌표) — 빛기둥이 여기서 솟는다
     private static readonly int PhaseId = Shader.PropertyToID("_PulsePhaseOffset");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static Mesh beamMesh;
@@ -27,6 +47,21 @@ public class R0926HuntChest : MonoBehaviour
     private Vector3 rest;
     private float yaw, wobble, nudge = 1f, nudgeUntil = -1f;
     private bool rattle, opening, gone;
+    private float seam = 0.10f;                           // 몸통 윗면 높이 (상자 좌표) — 빛기둥이 여기서 솟는다
+    private readonly List<GameObject> extras = new List<GameObject>();   // 사진 판·3D 모델 — 다른 모양으로 갈아입으면 걷는다
+    private readonly List<Renderer> extraRenderers = new List<Renderer>();
+    private readonly List<UnityEngine.Object> owned = new List<UnityEngine.Object>();   // 받은 사진·재질 — 지울 때 같이
+    private Transform modelHolder;
+    private int dressGen;
+
+    /// <summary>지금 입은 모양 (기본 보물상자)</summary>
+    public string Kind { get; private set; } = "chest";
+    /// <summary>사진·3D 모델을 받는 중</summary>
+    public bool Loading { get; private set; }
+    /// <summary>입힌 3D 모델 (없으면 null)</summary>
+    public GameObject Model { get; private set; }
+    /// <summary>액자에 끼운 사진 (없으면 null)</summary>
+    public Texture Photo { get; private set; }
 
     /// <summary>여는 중 (찾음) — 누름·달그락은 더 받지 않는다</summary>
     public bool Opening => opening;
@@ -51,8 +86,18 @@ public class R0926HuntChest : MonoBehaviour
         if (opening && !gone && transform.parent != null) { gone = true; Destroy(transform.parent.gameObject); }
     }
 
+    private void OnDestroy()
+    {
+        foreach (var o in owned) if (o != null) Destroy(o);
+    }
+
     private void Update()
     {
+        // 사진 판·모델(받는 동안의 로딩 고리 포함)도 앵커가 몸통을 숨기고 보일 때 같이 (나중에 붙어 앵커가 모른다)
+        if (Loading && modelHolder != null) modelHolder.GetComponentsInChildren(true, extraRenderers);
+        if (body != null)
+            foreach (var r in extraRenderers) if (r != null && r.enabled != body.enabled) r.enabled = body.enabled;
+
         if (!opening) yaw += spinSpeed * Time.deltaTime;
         float tilt = wobble + (rattle && !opening ? Mathf.Sin(Time.unscaledTime * 40f) * 3.5f : 0f);
         transform.rotation = Quaternion.Euler(0f, yaw, tilt);
@@ -72,6 +117,170 @@ public class R0926HuntChest : MonoBehaviour
     public void Rattle(bool on)
     {
         rattle = on && !opening;
+    }
+
+    // ── 모양 ──────────────────────────────────────────────
+    /// <summary>서버의 보물 모양 — 코드로 만든 모양은 바로, 사진·3D 모델은 받아서 붙인다 (못 받으면 보물상자 그대로)</summary>
+    public void Dress(string kind, string url)
+    {
+        if (string.IsNullOrEmpty(kind) || kind == Kind) return;
+        if ((kind == "photo" || kind == "model") && string.IsNullOrEmpty(url)) return;
+        if (!Wear(kind)) return;   // 모르는 모양(새 앱이 만든 모양을 옛 앱이 받음) — 보물상자 그대로
+        if (kind == "photo") StartCoroutine(PhotoCo(url, dressGen));
+        else if (kind == "model") StartCoroutine(ModelCo(url, dressGen));
+    }
+
+    /// <summary>모양 갈아입기 (사진·모델은 빈 액자·빈 자리까지만 — 붙이는 건 ShowPhoto · ShowModel). 모르는 모양이면 false</summary>
+    public bool Wear(string kind)
+    {
+        Skin s = null;
+        if (skins != null) foreach (var k in skins) if (k != null && k.kind == kind) { s = k; break; }
+        if (s == null) return false;
+        ClearExtras();
+        Kind = kind;
+        var mf = GetComponent<MeshFilter>();
+        if (mf != null) mf.sharedMesh = s.body;
+        if (body != null) body.sharedMaterials = s.bodyMats ?? new Material[0];
+        if (lid != null)
+        {
+            lid.localPosition = s.hinge;
+            lid.localRotation = Quaternion.identity;
+            var lf = lid.GetComponent<MeshFilter>();
+            if (lf != null) lf.sharedMesh = s.lid;
+            var lr = lid.GetComponent<MeshRenderer>();
+            if (lr != null) lr.sharedMaterials = s.lidMats ?? new Material[0];
+        }
+        var bc = GetComponent<BoxCollider>();
+        if (bc != null && s.boxSize != Vector3.zero) { bc.center = s.boxCenter; bc.size = s.boxSize; }
+        seam = s.seam;
+        return true;
+    }
+
+    /// <summary>액자에 사진을 끼운다 (가로·세로 비율 그대로 정사각형 칸 안에) — 앞뒤 두 장, 뒤에서 봐도 바로 읽힌다</summary>
+    public void ShowPhoto(Texture tex)
+    {
+        if (tex == null || Kind != "photo") return;
+        ClearExtras();
+        var sh = Shader.Find("Sprites/Default");   // 늘 빌드에 들어간다 — 사진은 그늘 없이 환하게
+        if (sh == null) return;
+        var mat = new Material(sh) { name = "HuntPhoto", mainTexture = tex };
+        owned.Add(mat);
+        float w = PhotoSide, h = PhotoSide;
+        if (tex.width >= tex.height) h *= (float)tex.height / Mathf.Max(1, tex.width);
+        else w *= (float)tex.width / Mathf.Max(1, tex.height);
+        var quad = PhotoQuad(w, h);
+        owned.Add(quad);
+        for (int side = 0; side < 2; side++)
+        {
+            var go = new GameObject(side == 0 ? "PhotoFront" : "PhotoBack");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = new Vector3(0f, PhotoY, side == 0 ? -PhotoZ : PhotoZ);
+            go.transform.localRotation = side == 0 ? Quaternion.identity : Quaternion.Euler(0f, 180f, 0f);
+            go.AddComponent<MeshFilter>().sharedMesh = quad;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            mr.enabled = body == null || body.enabled;
+            extras.Add(go);
+            extraRenderers.Add(mr);
+        }
+        Photo = tex;
+    }
+
+    /// <summary>3D 모델(GLB)을 붙인다 — 받은 바이트를 GLBModelLoader.PreloadCache 에 미리 넣어 두면 내려받지 않는다. 못 받으면 보물상자로</summary>
+    public void ShowModel(string url)
+    {
+        if (string.IsNullOrEmpty(url) || Kind != "model") return;
+        ClearExtras();
+        StartCoroutine(ModelCo(url, dressGen));
+    }
+
+    private IEnumerator PhotoCo(string url, int gen)
+    {
+        Loading = true;
+        using (var req = UnityWebRequestTexture.GetTexture(R0926HuntApi.Url(url), true))
+        {
+            req.timeout = 20;
+            yield return req.SendWebRequest();
+            if (gen != dressGen) yield break;
+            Loading = false;
+            var tex = req.result == UnityWebRequest.Result.Success ? DownloadHandlerTexture.GetContent(req) : null;
+            if (tex == null) { Wear("chest"); yield break; }
+            ShowPhoto(tex);
+            owned.Add(tex);   // 붙인 뒤에 — 붙이며 앞서 붙인 것들을 지운다
+        }
+    }
+
+    private IEnumerator ModelCo(string url, int gen)
+    {
+        Loading = true;
+        var holder = new GameObject("Model");
+        holder.transform.SetParent(transform, false);
+        extras.Add(holder);
+        modelHolder = holder.transform;
+        var loader = holder.AddComponent<GLBModelLoader>();
+        yield return null;   // 불러오기 칸(GLBContainer)은 GLBModelLoader.Start 가 만든다
+        bool ok = false;
+        if (gen == dressGen && loader != null) yield return loader.LoadGLBModelCoroutine(R0926HuntApi.Url(url), 1f, r => ok = r);
+        if (gen != dressGen || holder == null) yield break;
+        Loading = false;
+        if (!ok || !loader.HasLoadedModel()) { Wear("chest"); yield break; }
+        Model = loader.GetLoadedModel();
+        Fit(holder.transform, Model.transform);
+        holder.GetComponentsInChildren(true, extraRenderers);
+        foreach (var r in extraRenderers) r.enabled = body == null || body.enabled;
+    }
+
+    // 가장 긴 변을 보물상자 폭에 맞추고 가운데를 상자 가운데로. 모델 뿌리 좌표로 잰다 — 불러오기 연출이 모델을 0.85배에서 키우고
+    // 로딩 고리도 잠깐 남아 있어 월드 경계로 재면 작게 붙는다(10-24 시험: 0.68). 뿌리의 끝 크기는 불러올 때 준 배율 1
+    private static void Fit(Transform holder, Transform model)
+    {
+        var toHolder = holder.worldToLocalMatrix * model.parent.localToWorldMatrix * Matrix4x4.TRS(model.localPosition, model.localRotation, Vector3.one) * model.worldToLocalMatrix;
+        bool any = false;
+        var b = new Bounds();
+        foreach (var r in model.GetComponentsInChildren<Renderer>(true))
+        {
+            var lb = r.localBounds;
+            if (lb.extents == Vector3.zero) continue;
+            var smr = r as SkinnedMeshRenderer;
+            var m = toHolder * (smr != null && smr.rootBone != null ? smr.rootBone : r.transform).localToWorldMatrix;
+            for (int i = 0; i < 8; i++)
+            {
+                var p = m.MultiplyPoint3x4(lb.center + Vector3.Scale(lb.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f)));
+                if (any) b.Encapsulate(p); else { b = new Bounds(p, Vector3.zero); any = true; }
+            }
+        }
+        float size = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
+        if (!any || size < 1e-4f) return;
+        float k = ModelSize / size;
+        holder.localScale = Vector3.one * k;
+        holder.localPosition = -b.center * k;
+    }
+
+    private void ClearExtras()
+    {
+        dressGen++;
+        Loading = false;
+        foreach (var go in extras) if (go != null) Destroy(go);
+        extras.Clear();
+        extraRenderers.Clear();
+        foreach (var o in owned) if (o != null) Destroy(o);   // 미리보기는 같은 보물에 사진을 여러 번 갈아 끼운다
+        owned.Clear();
+        modelHolder = null;
+        Model = null;
+        Photo = null;
+    }
+
+    private static Mesh PhotoQuad(float w, float h)
+    {
+        var m = new Mesh { name = "HuntPhotoQuad" };
+        m.SetVertices(new[] { new Vector3(-w / 2f, -h / 2f, 0f), new Vector3(w / 2f, -h / 2f, 0f), new Vector3(-w / 2f, h / 2f, 0f), new Vector3(w / 2f, h / 2f, 0f) });
+        m.SetUVs(0, new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f) });
+        m.SetColors(new[] { Color.white, Color.white, Color.white, Color.white });
+        m.SetTriangles(new[] { 0, 2, 1, 1, 2, 3 }, 0);   // 앞(-Z 쪽)에서 보이는 면
+        m.RecalculateBounds();
+        return m;
     }
 
     /// <summary>찾았다 — 이쪽을 돌아보고 뚜껑이 열리며 빛기둥·별빛이 솟은 뒤 작아지며 사라진다 (뿌리째, 약 1.2초 — 축하 화면의 상자가 뜨기 전에 비킨다)</summary>
@@ -182,7 +391,7 @@ public class R0926HuntChest : MonoBehaviour
         if (mat == null) return;
         float s = root.lossyScale.x;
         var go = new GameObject("HuntChestFountain");
-        go.transform.SetPositionAndRotation(transform.TransformPoint(0f, Seam, 0f), Quaternion.Euler(-90f, 0f, 0f));
+        go.transform.SetPositionAndRotation(transform.TransformPoint(0f, seam, 0f), Quaternion.Euler(-90f, 0f, 0f));
         var ps = go.AddComponent<ParticleSystem>();
         ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         var main = ps.main;
@@ -232,7 +441,7 @@ public class R0926HuntChest : MonoBehaviour
         if (!BeamAssets()) return null;
         var go = new GameObject("Beam");
         go.transform.SetParent(root, false);
-        go.transform.position = transform.TransformPoint(0f, Seam, 0f);
+        go.transform.position = transform.TransformPoint(0f, seam, 0f);
         go.transform.localScale = Vector3.zero;
         go.AddComponent<MeshFilter>().sharedMesh = beamMesh;
         var mr = go.AddComponent<MeshRenderer>();

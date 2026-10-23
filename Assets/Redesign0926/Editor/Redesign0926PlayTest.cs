@@ -99,6 +99,9 @@ namespace Redesign0926
             else if (mode == "huntprofile") PlanHuntProfile();
             else if (mode == "hunttreasure") PlanHuntTreasure();
             else if (mode == "huntchest") PlanHuntChest();
+            else if (mode == "huntshapes") PlanHuntShapes();
+            else if (mode == "huntform") PlanHuntForm();
+            else if (mode == "glbload") PlanGlbLoad();
             else if (mode == "login") PlanLogin();
             else if (mode == "loginswitch") PlanLoginSwitch();
             else if (mode == "chatlook") PlanChatLook();
@@ -5845,6 +5848,436 @@ namespace Redesign0926
                 (typeof(R0926HuntCelebrate).GetField("panel", NPI)?.GetValue(cel) as GameObject)?.SetActive(false);   // '확인'은 그 게임 상세를 서버에서 연다 — 서버 없는 시험이라 닫기만
                 R0926HuntApi.EditorBase = null;
             });
+        }
+
+        // 보물 모양 (C21 · 10-24) — 주최자가 고르는 8가지를 차례로 입혀 같은 각도에서 찍는다 · 사진은 액자에 · 3D 모델은 상자 폭에 맞춰 ·
+        // 뚜껑 없는 모양은 열 때 빛만 솟음 · 사진을 못 받으면 보물상자로
+        private const string ShapeGlb = "local://hunt-shapes/checker_box.glb", ShapeGlbFile = "Assets/Redesign0926/Editor/TestData/checker_box.glb";   // 그림 입힌 1.2×0.7×0.5 상자
+        private static readonly Dictionary<string, string[]> ShapeMeshes = new Dictionary<string, string[]>
+        {
+            { "chest", new[] { "HuntChestBody", "HuntChestLid" } }, { "gift", new[] { "HuntGiftBody", "HuntGiftLid" } },
+            { "egg", new[] { "HuntEggBody", "HuntEggLid" } }, { "gem", new[] { "HuntGem", null } }, { "star", new[] { "HuntStar", null } },
+            { "heart", new[] { "HuntHeart", null } }, { "photo", new[] { "HuntPhotoFrame", null } }, { "model", new string[] { null, null } },
+        };
+        private static Texture2D hcShapeTex;
+
+        private static void PlanHuntShapes()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() => { DeviceFov(); HcSpawn("HuntShapesShot"); });
+            HcPlace(3.2f);
+            Sleep(1.0f);
+            foreach (var kind in ShapeMeshes.Keys)
+            {
+                string k = kind;
+                if (k == "photo")
+                    Do(() =>
+                    {
+                        hcShapeTex = new Texture2D(2, 2);
+                        hcShapeTex.LoadImage(File.ReadAllBytes("Assets/Redesign0926/Splash0926_other/motif_kr.jpg"));
+                        hcChest?.Wear("photo");
+                        hcChest?.ShowPhoto(hcShapeTex);
+                    });
+                else if (k == "model")
+                {
+                    Do(() =>
+                    {
+                        GLBModelLoader.PreloadCache(ShapeGlb, File.ReadAllBytes(ShapeGlbFile));
+                        hcChest?.Wear("model");
+                        hcChest?.ShowModel(ShapeGlb);
+                    });
+                    Wait(() => hcChest != null && !hcChest.Loading && hcChest.Model != null, 20f, "3D 모델 붙음");
+                    Check(() => hcChest != null && hcChest.Model != null && hcChest.Model.name != "GLB_LoadingSpinner", "불러온 모델이 로딩 고리가 아니라 GLB 모델 (예전 GetChild(0))");
+                    Sleep(1.2f);   // 드러나는 연출(0.85배 → 1배, 1초)과 로딩 고리 걷힘이 끝난 뒤 잰다
+                }
+                else Do(() => hcChest?.Wear(k));
+                Do(() => HcFace(-28f));
+                Sleep(0.5f);
+                Shot("shape_" + k);
+                Check(() => ShapeOk(k), "모양 '" + k + "' — 몸통·뚜껑 메시 · 재질 수 = 부분 수" + (k == "photo" ? " · 사진 앞뒤" : k == "model" ? " · 상자 폭에 맞춤" : ""));
+            }
+            Check(() => hcChest != null && !hcChest.Wear("rocket") && hcChest.Kind == "model", "모르는 모양(새 앱이 만든 모양)은 그대로 둠");
+
+            // 서버가 준 모양 — 사진·모델은 주소가 있어야 · 못 받으면 보물상자로
+            Do(() =>
+            {
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
+                hcChest?.Dress("gift", null);
+                hcChest?.Dress("photo", "");
+            });
+            Check(() => hcChest != null && hcChest.Kind == "gift", "Dress: 선물상자는 바로 · 주소 없는 사진은 무시");
+            Do(() => hcChest?.Dress("photo", "uploads/hunts/0/none.jpg"));
+            Wait(() => hcChest != null && !hcChest.Loading && hcChest.Kind == "chest", 25f, "사진을 못 받으면 보물상자로");
+            Do(() => R0926HuntApi.EditorBase = null);
+
+            // 열기 — 뚜껑 있는 모양은 뚜껑이, 없는 모양은 빛기둥·별빛만
+            foreach (var kind in new[] { "gift", "egg", "gem", "heart" })
+            {
+                string k = kind;
+                Do(() => { HcSpawn("HuntShapesOpen_" + k); hcChest?.Wear(k); });
+                HcPlace(3.2f);
+                Sleep(0.4f);
+                Do(() => hcChest?.Open());
+                Sleep(0.62f);
+                Shot("shape_open_" + k);
+                Check(() =>
+                {
+                    bool beam = hcGo != null && hcGo.transform.Find("Beam") != null;
+                    log.Add("  열기 " + k + ": 뚜껑 " + (hcChest != null ? hcChest.LidAngle.ToString("0") : "-") + "° · 빛기둥 " + beam);
+                    return hcChest != null && hcChest.Opening && beam && (ShapeMeshes[k][1] == null || hcChest.LidAngle > 100f);
+                }, "열기 '" + k + "' — " + (ShapeMeshes[k][1] != null ? "뚜껑이 활짝 · 빛기둥" : "빛기둥·별빛"));
+                Sleep(1.0f);
+            }
+            Do(() =>
+            {
+                if (hcGo != null) UnityEngine.Object.Destroy(hcGo);
+                if (hcShapeTex != null) UnityEngine.Object.Destroy(hcShapeTex);
+            });
+        }
+
+        // 숨기기 양식의 보물 모양 (10-24 대표님 — 코드로 만든 모양을 고르고, 사진·3D 모델은 올려서. 숨기기 전에 미리보기).
+        // 시험 서버(127.0.0.1:5099)로: 모양 칩 8개 → 미리보기 칸이 그 모양을 찍는지 → 사진 고름(고르기 창 대신 EditorPick) → 숨기기(올린 주소가
+        // 게임에 붙음) → 내 AR 보물이 그 사진 액자로 → 다시 양식: 못 여는 GLB 는 되돌림 → 3D 모델로 숨기기 → AR 보물에 그 모델
+        private static R0926HuntCard hfCard;
+        private static R0926HuntShapePreview hfPreview;
+        private const string HfForm = HuntCardPath + "Form/Viewport/Content/";
+        private static void PlanHuntForm()
+        {
+            const string H = HuntCardPath, F = HfForm;
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
+                R0926HuntApi.EditorTestUser = "hunt_test_host";
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            HfOpenForm();
+            Do(() =>
+            {
+                hfCard = UnityEngine.Object.FindAnyObjectByType<R0926HuntCard>(FindObjectsInactive.Include);
+                hfPreview = Find(F + "ShapePreview")?.GetComponent<R0926HuntShapePreview>();
+            });
+            Check(() => ActiveChildren(F + "ShapeChips") == 8 && TextOf(F + "LShape") == "보물 모양", "'보물 모양' 칩 8개 (보물상자·선물상자·보물알·보석·별·하트·사진·3D 모델)");
+            Check(() => !Active(F + "PickButton") && !Active(F + "PickCaption"), "보물상자 — 고르기 버튼 없음");
+            Do(() => ScrollToChild(F + "LShape"));
+            Wait(() => hfPreview != null && hfPreview.Chest != null && hfPreview.EditorTexture != null, 8f, "미리보기 칸이 찍기 시작");
+            Sleep(0.8f);
+            Shot("hf_chest");
+            Check(() => hfPreview != null && hfPreview.Chest.Kind == "chest" && HfInk(), "미리보기 — 보물상자가 칸에 그려짐");
+            Check(() => HfStageHidden(), "미리보기 무대는 칸의 카메라가 찍을 때만 켜짐 (AR 화면엔 안 보임)");
+            foreach (var kind in new[] { "gift", "egg", "gem", "star", "heart", "chest" })
+            {
+                string k = kind;
+                Do(() => Click(F + "ShapeChips/Chip_" + k));
+                Sleep(0.5f);
+                Shot("hf_" + k);
+                Check(() => hfPreview.Chest.Kind == k && HfInk() && !Active(F + "PickButton"), "모양 '" + k + "' 누름 → 미리보기도 '" + k + "'");
+            }
+
+            // 사진 — 고르기 전엔 빈 액자, 고르면 그 사진. 숨기면 올리고 그 주소가 게임에 붙는다
+            Do(() => Click(F + "ShapeChips/Chip_photo"));
+            Sleep(0.5f);
+            Shot("hf_photo_empty");
+            Check(() => hfPreview.Chest.Kind == "photo" && hfPreview.Chest.Photo == null && Active(F + "PickButton")
+                        && TextOf(F + "PickButton/Label") == "앨범에서 사진 고르기" && TextOf(F + "PickCaption").Contains("액자"),
+                "사진 칸 — 빈 액자 · '앨범에서 사진 고르기' · 안내");
+            Do(() => Find(F + "TitleInput").GetComponent<InputField>().text = "사진 보물 (플레이 시험)");
+            Do(() => Click(F + "Submit"));
+            Sleep(0.4f);
+            Check(() => Active(F + "Submit") && TextOf(F + "Msg") == "보물로 쓸 사진을 골라 주세요", "사진 없이 숨기기 → '보물로 쓸 사진을 골라 주세요'");
+            Do(() => hfCard.EditorPick("photo", File.ReadAllBytes("Assets/Redesign0926/Splash0926_other/motif_kr.jpg")));
+            Sleep(0.6f);
+            Shot("hf_photo");
+            Check(() => hfPreview.Chest.Kind == "photo" && hfPreview.Chest.Photo != null && HfInk(), "사진 고름 → 미리보기 액자에 그 사진");
+            Check(() => TextOf(F + "PickButton/Label") == "다른 사진 고르기" && System.Text.RegularExpressions.Regex.IsMatch(TextOf(F + "PickCaption"), @"^사진 \d+×\d+ · \d+(KB|\.\dMB)$"),
+                "'다른 사진 고르기' · '사진 W×H · 크기'");
+            Do(() => log.Add("  고른 사진: " + TextOf(F + "PickCaption")));
+            Do(() => { Click(F + "Submit"); log.Add("  누른 직후: " + TextOf(F + "Submit/Label")); });
+            Check(() => TextOf(F + "Submit/Label") == "올리는 중…", "숨기기 누름 → 먼저 '올리는 중…'");
+            Wait(() => Active(H + "Detail"), 20f, "올리고 숨김 → 상세");
+            Sleep(1.0f);
+            Shot("hf_photo_detail");
+            Check(() => HfCurrent("object_kind") == "photo" && System.Text.RegularExpressions.Regex.IsMatch(HfCurrent("object_url"), @"^/?uploads/hunts/hunt_test_host/[0-9a-f]{16}\.jpg$"), "게임에 사진 모양 · 올린 주소 (uploads/hunts/<주최자>/…jpg)");
+            Check(() => HfServedJpeg(HfCurrent("object_url")), "올린 사진을 서버가 내줌 (JPEG · 긴 변 1280 이하)");
+            Do(() => log.Add("  게임: " + HfCurrent("object_kind") + " · " + HfCurrent("object_url")));
+            HfArChest("photo");
+
+            // 다시 양식 — 고른 사진은 그 게임 것이라 비우고 보물상자로. 3D 모델: 못 여는 GLB 는 되돌리고, 열리는 것으로 숨긴다
+            HfOpenForm();
+            Check(() => hfPreview.Chest.Kind == "chest" && !Active(F + "PickButton") && HfPicked("shape") == "chest", "숨긴 뒤 다시 양식 — 보물상자로 돌아옴 (고른 사진은 비움)");
+            Do(() => ScrollToChild(F + "LShape"));
+            Do(() => Click(F + "ShapeChips/Chip_model"));
+            Sleep(0.5f);
+            Check(() => hfPreview.Chest.Kind == "chest" && TextOf(F + "PickButton/Label") == "3D 모델(GLB) 고르기" && TextOf(F + "PickCaption").Contains("10MB"),
+                "3D 모델 칸 — 고르기 전엔 보물상자 · 'GLB 고르기' · '10MB 까지'");
+            Do(() => hfCard.EditorPick("model", System.Text.Encoding.ASCII.GetBytes("not a glb file at all")));
+            Sleep(0.3f);
+            Do(() => log.Add("  GLB 아님: " + TextOf(F + "PickCaption")));
+            Check(() => TextOf(F + "PickCaption") == R0926HuntApi.ErrorText("file_type", "ko") && TextOf(F + "PickButton/Label") == "3D 모델(GLB) 고르기", "GLB 가 아닌 파일 → 고르기 칸 아래 안내 · 고른 것 없음");
+            Do(() => hfCard.EditorPick("model", HfBrokenGlb()));
+            Wait(() => TextOf(F + "PickCaption").Contains("열 수 없어요"), 20f, "속이 깨진 GLB → 안내");
+            Sleep(0.3f);
+            Shot("hf_model_broken");
+            Check(() => TextOf(F + "PickCaption").Contains("열 수 없어요") && hfPreview.Chest.Kind == "chest" && TextOf(F + "PickButton/Label") == "3D 모델(GLB) 고르기",
+                "앞머리만 맞고 속이 깨진 GLB → '열 수 없어요' · 고른 것 비움 · 보물상자");
+            Do(() => hfCard.EditorPick("model", File.ReadAllBytes(ShapeGlbFile)));
+            Wait(() => hfPreview.Chest.Kind == "model" && !hfPreview.Loading && hfPreview.Chest.Model != null, 20f, "미리보기에 3D 모델");
+            Sleep(1.4f);   // 드러나는 연출이 끝난 뒤
+            Shot("hf_model");
+            Check(() => hfPreview.Chest.Kind == "model" && hfPreview.Chest.Model != null && hfPreview.Chest.Model.name != "GLB_LoadingSpinner" && HfInk(), "GLB 고름 → 미리보기에 그 모델");
+            Check(() => TextOf(F + "PickButton/Label") == "다른 3D 모델 고르기" && TextOf(F + "PickCaption").StartsWith("3D 모델 · "), "'다른 3D 모델 고르기' · '3D 모델 · 크기'");
+            Check(() => HfStageHidden(), "모델도 칸의 카메라가 찍을 때만 켜짐");
+            Do(() => Find(F + "TitleInput").GetComponent<InputField>().text = "3D 모델 보물 (플레이 시험)");
+            Do(() => Click(F + "Submit"));
+            Wait(() => Active(H + "Detail"), 20f, "올리고 숨김 → 상세");
+            Sleep(1.0f);
+            Check(() => HfCurrent("object_kind") == "model" && System.Text.RegularExpressions.Regex.IsMatch(HfCurrent("object_url"), @"^/?uploads/hunts/hunt_test_host/[0-9a-f]{16}\.glb$"), "게임에 3D 모델 모양 · 올린 주소 (…glb)");
+            Do(() => log.Add("  게임: " + HfCurrent("object_kind") + " · " + HfCurrent("object_url")));
+            HfArChest("model");
+            Do(() => R0926HuntApi.EditorBase = null);
+        }
+        // 추가 창 → 보물찾기 카드 → 숨기기 (처음 주최면 수칙 동의)
+        private static void HfOpenForm()
+        {
+            const string H = HuntCardPath;
+            Do(() => { if (!Active("UploadPage")) Click("Dock0926/PlusButton"); });
+            Sleep(1.2f);
+            Do(() => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude)?.SwitchToPanel(2));
+            Sleep(1.5f);
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926HuntCard>(FindObjectsInactive.Include)?.ShowHub());
+            Sleep(1.0f);
+            Do(() => Click(H + "Hub/Viewport/Content/Hero"));
+            Sleep(2.0f);
+            Do(() => { if (Active(H + "Rules")) Click(H + "Rules/Viewport/Content/Agree"); });
+            Sleep(0.3f);
+            Do(() => { if (Active(H + "Rules")) Click(H + "Rules/Viewport/Content/AgreeButton"); });
+            Wait(() => Active(H + "Form"), 8f, "숨기기 양식");
+            Sleep(0.6f);
+        }
+        // 숨긴 게임의 내 AR 보물 — 주최자는 자기 보물이 보인다. 추가 창을 닫고 그 보물이 고른 모양으로 붙는지
+        private static void HfArChest(string kind)
+        {
+            Do(() =>
+            {
+                int.TryParse(HfCurrent("id"), out arHunt);   // 주최자는 근접 확인을 안 해 NearHuntId 가 0
+                log.Add("  AR 로 볼 게임 " + arHunt);
+                var v = VirtualLocation.Instance;
+                v.SetCoordinates(v.Latitude - 0.00007f, v.Longitude);   // 8m 남쪽에서 본다 — 숨긴 자리에 서 있으면 보물이 화면을 덮는다
+            });
+            CloseUpload();
+            Wait(() => HfArKind() == kind && HfArLoaded(), 40f, "AR 보물이 '" + kind + "' 모양으로");
+            Sleep(1.4f);
+            Do(() => FaceTreasure(arHunt));
+            Sleep(0.6f);
+            Shot("hf_ar_" + kind);
+            Check(() => HfArKind() == kind && HfArLoaded(), "내 AR 보물 — '" + kind + "' (" + (kind == "photo" ? "올린 사진 액자" : "올린 3D 모델") + ")");
+        }
+        private static R0926HuntChest HfArChestOf() =>
+            arHunt != 0 && R0926HuntTreasure.SpawnedObjects.TryGetValue("hunt_" + arHunt, out var go) && go != null ? go.GetComponentInChildren<R0926HuntChest>(true) : null;
+        private static string HfPicked(string key) =>
+            hfCard != null && typeof(R0926HuntCard).GetField("picked", NPI)?.GetValue(hfCard) is Dictionary<string, string> d && d.TryGetValue(key, out var v) ? v : "";
+        private static string HfArKind() => HfArChestOf()?.Kind ?? "";
+        private static bool HfArLoaded()
+        {
+            var c = HfArChestOf();
+            return c != null && !c.Loading && (c.Kind == "photo" ? c.Photo != null : c.Kind != "model" || (c.Model != null && c.Model.name != "GLB_LoadingSpinner"));
+        }
+        // 상세에 띄운 게임의 값 (SimpleJSON 이름이 다른 dll 과 겹쳐 리플렉션으로)
+        private static string HfCurrent(string key)
+        {
+            var node = hfCard != null ? typeof(R0926HuntCard).GetField("current", NPI)?.GetValue(hfCard) : null;
+            var v = node?.GetType().GetProperty("Item", new[] { typeof(string) })?.GetValue(node, new object[] { key });
+            return v == null ? "" : v.ToString().Trim('"').Replace("\\/", "/");
+        }
+        private static bool HfServedJpeg(string url)
+        {
+            try
+            {
+                using (var wc = new System.Net.WebClient())
+                {
+                    var d = wc.DownloadData("http://127.0.0.1:5099/" + url.TrimStart('/'));
+                    var t = new Texture2D(2, 2);
+                    bool ok = d.Length > 3 && d[0] == 0xFF && d[1] == 0xD8 && t.LoadImage(d) && Mathf.Max(t.width, t.height) <= 1280;
+                    log.Add("  받은 사진 " + d.Length + "B · " + t.width + "x" + t.height);
+                    UnityEngine.Object.Destroy(t);
+                    return ok;
+                }
+            }
+            catch (Exception e) { log.Add("  사진 받기 실패: " + e.Message); return false; }
+        }
+        // 앞머리(glTF 2 · 길이)는 맞고 속(JSON)이 깨진 GLB — 서버·앱의 앞머리 검사는 통과하고 불러오기에서 실패한다
+        private static byte[] HfBrokenGlb()
+        {
+            var js = System.Text.Encoding.ASCII.GetBytes("{\"asset\":{\"version\":\"2.0\"},\"meshes\":[{]}");
+            int pad = (4 - js.Length % 4) % 4, n = js.Length + pad;
+            var ms = new MemoryStream();
+            var w = new BinaryWriter(ms);
+            w.Write(0x46546C67u); w.Write(2u); w.Write((uint)(12 + 8 + n));
+            w.Write((uint)n); w.Write(0x4E4F534Au); w.Write(js);
+            for (int i = 0; i < pad; i++) w.Write((byte)0x20);
+            w.Flush();
+            return ms.ToArray();
+        }
+        // 칸이 찍은 그림에 무대색이 아닌 점이 충분한지 (모양이 실제로 그려졌는지)
+        private static bool HfInk()
+        {
+            var rt = hfPreview != null ? hfPreview.EditorTexture : null;
+            if (rt == null) return false;
+            var prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            tex.Apply();
+            RenderTexture.active = prev;
+            var px = tex.GetPixels32();
+            var bg = px[2 * rt.width + 2];
+            int n = 0;
+            foreach (var c in px) if (Mathf.Abs(c.r - bg.r) + Mathf.Abs(c.g - bg.g) + Mathf.Abs(c.b - bg.b) > 40) n++;
+            UnityEngine.Object.Destroy(tex);
+            float share = n / (float)px.Length;
+            log.Add("  미리보기 " + rt.width + "x" + rt.height + " · 그려진 점 " + (share * 100f).ToString("0.0") + "%");
+            return share > 0.02f && share < 0.7f;
+        }
+        private static bool HfStageHidden()
+        {
+            var st = GameObject.Find("HuntShapePreviewStage");
+            if (st == null) return false;
+            int on = 0, all = 0;
+            foreach (var r in st.GetComponentsInChildren<Renderer>(true)) { all++; if (r.enabled) on++; }
+            log.Add("  무대 렌더러 " + all + "개 중 켜진 것 " + on);
+            return all > 0 && on == 0;
+        }
+
+        // 일반 장소 3D 모델 (0001_GLB · DataManager.SetupGLBObject 와 같은 길) — 09-07 로딩 고리가 생긴 뒤로 고리를 모델로 집어
+        // 배율·색(셰이더)·콜라이더·애니메이션이 고리에 걸리고, 다시 쓸 때 앞 모델이 안 지워지던 것 (10-24 고침)
+        private static GameObject glbObj;
+        private static bool glbDone, glbOk;
+        private static void PlanGlbLoad()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                DeviceFov();
+                glbObj = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Scripts/Download/0001_GLB.prefab"));
+                glbObj.name = "GlbLoadShot";
+                var cam = Camera.main;
+                Vector3 f = cam.transform.forward; f.y = 0f; f.Normalize();
+                glbObj.transform.position = cam.transform.position + f * 4f + Vector3.down * 0.6f;
+                glbObj.SetActive(true);   // 풀에 꺼진 채 들어 있는 프리팹
+                glbObj.AddComponent<GLBModelLoader>();   // DataManager 처럼 뿌리에
+            });
+            Sleep(0.2f);   // Start 가 GLBContainer 를 잡는다
+            Do(() =>
+            {
+                glbDone = glbOk = false;
+                GLBModelLoader.PreloadCache(ShapeGlb, File.ReadAllBytes(ShapeGlbFile));
+                var ld = glbObj.GetComponent<GLBModelLoader>();
+                ld.StartCoroutine(ld.LoadGLBModelCoroutine(ShapeGlb, 1.5f, r => { glbOk = r; glbDone = true; }));
+            });
+            Wait(() => glbDone, 20f, "불러오기 끝");
+            Check(() =>
+            {
+                var m = glbObj != null ? glbObj.GetComponent<GLBModelLoader>().GetLoadedModel() : null;
+                log.Add("  불러온 모델 " + (m != null ? m.name : "없음"));
+                return glbOk && m != null && m.name == "CheckerBox";
+            }, "불러온 모델이 로딩 고리가 아니라 GLB 모델");
+            Sleep(1.4f);   // 드러나는 연출 · 콜라이더(나눠서 붙임)가 끝나게
+            Shot("glb_lion");
+            Check(() =>
+            {
+                var ld = glbObj.GetComponent<GLBModelLoader>();
+                var m = ld.GetLoadedModel();
+                var mr = m != null ? m.GetComponentInChildren<MeshRenderer>() : null;
+                var box = glbObj.transform.Find("GLBContainer")?.GetComponent<BoxCollider>();
+                var mat = mr != null ? mr.sharedMaterial : null;
+                bool tex = mat != null && mat.HasProperty("_BaseMap") && mat.GetTexture("_BaseMap") != null;
+                log.Add("  배율 " + (m != null ? m.transform.localScale.x.ToString("0.00") : "-") + " · 셰이더 " + (mat != null ? mat.shader.name : "-") + " · 그림 " + tex
+                        + " · 모델 콜라이더 " + (mr != null && mr.GetComponent<MeshCollider>() != null) + " · 누르는 상자가 모델을 감쌈 " + (box != null && mr != null && box.bounds.Contains(mr.bounds.center)));
+                return ld.HasLoadedModel() && Mathf.Abs(m.transform.localScale.x - 1.5f) < 0.01f && mat != null && mat.shader.name.Contains("Universal Render Pipeline") && tex
+                       && mr.GetComponent<MeshCollider>() != null && box != null && box.bounds.Contains(mr.bounds.center);
+            }, "모델에 배율 1.5 · URP 셰이더로 바꿔도 바탕 그림 유지 · 모델 콜라이더 · 누르는 상자가 모델을 감쌈 · 연출 뒤에도 모델을 쥐고 있음");
+            Do(() => glbObj.GetComponent<GLBModelLoader>().ClearModel());
+            Sleep(0.1f);
+            Check(() =>
+            {
+                var c = glbObj.transform.Find("GLBContainer");
+                int left = 0;
+                foreach (Transform t in c) if (t.name == "CheckerBox") left++;
+                return left == 0;
+            }, "다시 쓸 때(ClearModel) 앞 모델이 지워짐");
+            Do(() => UnityEngine.Object.Destroy(glbObj));
+        }
+
+        private static void HcSpawn(string name)
+        {
+            if (hcGo != null) UnityEngine.Object.Destroy(hcGo);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Redesign0926/Prefabs/HuntTreasure0926.prefab");
+            hcGo = prefab != null ? UnityEngine.Object.Instantiate(prefab) : null;
+            if (hcGo != null) hcGo.name = name;
+            hcChest = hcGo != null ? hcGo.GetComponentInChildren<R0926HuntChest>() : null;
+            hcRest = hcChest != null ? hcChest.transform.localScale.x : 1f;
+        }
+        private static void HcPlace(float d) => steps.Enqueue(() =>
+        {
+            var cam = Camera.main;
+            if (hcGo == null || cam == null) return true;
+            Vector3 f = cam.transform.forward; f.y = 0f; f.Normalize();
+            hcGo.transform.position = cam.transform.position + f * d + Vector3.down * 0.35f;
+            return true;
+        });
+        // 도는 걸 멈추고 정면(-Z)에서 off 도 비껴 — 모양끼리 같은 각도로 견주어 보게
+        private static void HcFace(float off)
+        {
+            var cam = Camera.main;
+            if (hcChest == null || cam == null) return;
+            Vector3 f = cam.transform.forward; f.y = 0f;
+            typeof(R0926HuntChest).GetField("spinSpeed", NPI)?.SetValue(hcChest, 0f);
+            typeof(R0926HuntChest).GetField("yaw", NPI)?.SetValue(hcChest, Quaternion.LookRotation(f).eulerAngles.y + off);
+        }
+        private static bool ShapeOk(string kind)
+        {
+            if (hcChest == null) return false;
+            var mf = hcChest.GetComponent<MeshFilter>(); var mr = hcChest.GetComponent<MeshRenderer>();
+            var lf = hcChest.transform.Find("Lid")?.GetComponent<MeshFilter>();
+            string b = mf != null && mf.sharedMesh != null ? mf.sharedMesh.name : null, l = lf != null && lf.sharedMesh != null ? lf.sharedMesh.name : null;
+            int mats = mr != null ? mr.sharedMaterials.Length : -1, subs = mf != null && mf.sharedMesh != null ? mf.sharedMesh.subMeshCount : 0;
+            bool nullMat = mr != null && System.Array.Exists(mr.sharedMaterials, m => m == null);
+            log.Add("  " + kind + ": 몸통 " + (b ?? "-") + " · 뚜껑 " + (l ?? "-") + " · 재질 " + mats + "/" + subs + (hcChest.Photo != null ? " · 사진" : "") + (hcChest.Model != null ? " · 모델" : ""));
+            var want = ShapeMeshes[kind];
+            bool ok = hcChest.Kind == kind && b == want[0] && l == want[1] && mats == subs && !nullMat;
+            if (kind == "photo") ok &= hcChest.Photo != null && hcChest.transform.Find("PhotoFront") != null && hcChest.transform.Find("PhotoBack") != null;
+            if (kind == "model")
+            {
+                var holder = hcChest.transform.Find("Model");
+                var loader = holder != null ? holder.GetComponent<GLBModelLoader>() : null;
+                log.Add("  모델 칸 " + (holder != null ? "배율 " + holder.localScale.x.ToString("0.000") + " · 자리 " + holder.localPosition.ToString("F2") + " · 자식 " + holder.childCount : "없음")
+                        + " · 불러온 모델 " + (loader != null && loader.HasLoadedModel() ? loader.GetLoadedModel().name : "없음") + " · Model " + (hcChest.Model != null ? hcChest.Model.name : "null"));
+                var rs = hcChest.Model != null ? hcChest.Model.GetComponentsInChildren<Renderer>() : new Renderer[0];
+                if (rs.Length == 0 || loader == null || !loader.HasLoadedModel() || loader.GetLoadedModel() != hcChest.Model) return false;
+                if (holder.Find("GLBContainer/GLB_LoadingSpinner") != null) { log.Add("  로딩 고리가 남아 있음"); return false; }
+                var rot = hcChest.transform.rotation;
+                hcChest.transform.rotation = Quaternion.identity;
+                var bb = rs[0].bounds;
+                foreach (var r in rs) bb.Encapsulate(r.bounds);
+                hcChest.transform.rotation = rot;
+                float size = Mathf.Max(bb.size.x, Mathf.Max(bb.size.y, bb.size.z)) / hcChest.transform.lossyScale.x;
+                float off = (bb.center - hcChest.transform.position).magnitude / hcChest.transform.lossyScale.x;
+                log.Add("  3D 모델: 가장 긴 변 " + size.ToString("0.00") + " · 가운데 어긋남 " + off.ToString("0.00") + " (상자 폭 1.0 기준)");
+                ok &= Mathf.Abs(size - 1f) < 0.05f && off < 0.05f;
+            }
+            return ok;
         }
 
         private static int DevCreateHuntAt(string host, string title, float lat, float lon, string code, string question, string prize = null)

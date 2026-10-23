@@ -232,8 +232,8 @@ namespace Redesign0926
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 mr.receiveShadows = false;
                 var bc = Ensure<BoxCollider>(chest);
-                bc.center = new Vector3(0f, 0.01f, -0.01f);
-                bc.size = new Vector3(1.3f, 1.12f, 0.95f);
+                bc.center = ChestBoxCenter;
+                bc.size = ChestBoxSize;
 
                 var lidT = chest.transform.Find("Lid");
                 var lid = lidT != null ? lidT.gameObject : new GameObject("Lid");
@@ -252,6 +252,22 @@ namespace Redesign0926
                 var cso = new SerializedObject(box);
                 cso.FindProperty("lid").objectReferenceValue = lid.transform;
                 cso.FindProperty("spinSpeed").floatValue = 24f;
+                var skins = cso.FindProperty("skins");   // 주최자가 고르는 모양 (Redesign0926ApplyHuntChest.ChestSkins)
+                skins.arraySize = parts.skins.Count;
+                for (int i = 0; i < parts.skins.Count; i++)
+                {
+                    var s = parts.skins[i];
+                    var e = skins.GetArrayElementAtIndex(i);
+                    e.FindPropertyRelative("kind").stringValue = s.kind;
+                    e.FindPropertyRelative("body").objectReferenceValue = s.body;
+                    e.FindPropertyRelative("lid").objectReferenceValue = s.lid;
+                    SetMaterials(e.FindPropertyRelative("bodyMats"), s.bodyMats);
+                    SetMaterials(e.FindPropertyRelative("lidMats"), s.lidMats);
+                    e.FindPropertyRelative("hinge").vector3Value = s.hinge;
+                    e.FindPropertyRelative("seam").floatValue = s.seam;
+                    e.FindPropertyRelative("boxCenter").vector3Value = s.boxCenter;
+                    e.FindPropertyRelative("boxSize").vector3Value = s.boxSize;
+                }
                 cso.ApplyModifiedPropertiesWithoutUndo();
 
                 var target = Ensure<Target>(chest);
@@ -282,6 +298,12 @@ namespace Redesign0926
                 PrefabUtility.UnloadPrefabContents(rootGo);
             }
             return AssetDatabase.LoadAssetAtPath<GameObject>(TreasurePrefabPath);
+        }
+
+        private static void SetMaterials(SerializedProperty list, Material[] mats)
+        {
+            list.arraySize = mats.Length;
+            for (int i = 0; i < mats.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = mats[i];
         }
     }
 }
