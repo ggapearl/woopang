@@ -321,11 +321,11 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .pair details input{width:100%;margin-top:6px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:13px}
 
 /* ── 떠 있는 것 ───────────────────────── */
-.toast{position:absolute;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translate(-50%,-12px);opacity:0;z-index:40;
-  max-width:calc(100% - 40px);width:max-content;font-size:13px;font-weight:500;color:var(--ink);background:var(--surface);
-  padding:10px 14px;border-radius:999px;border:1px solid var(--pink-line);box-shadow:0 4px 20px rgba(0,0,0,.12);
-  transition:opacity .2s,transform .2s;pointer-events:none;text-align:center}
-.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);opacity:0;z-index:40;
+  max-width:calc(100% - 56px);width:max-content;font-size:14px;font-weight:500;line-height:1.5;color:var(--ink);background:var(--surface);
+  padding:12px 18px;border-radius:18px;border:1px solid var(--pink-line);box-shadow:0 6px 28px rgba(0,0,0,.16);
+  transition:opacity .25s,transform .25s;pointer-events:none;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .menu{position:absolute;z-index:31;min-width:160px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:4px}
 .menu h4{margin:0;padding:8px 12px 4px;font-size:11px;font-weight:700;color:var(--ink-3)}
 .menu button{display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border-radius:8px;font-size:15px;text-align:left;color:var(--ink)}
