@@ -12,6 +12,7 @@ using UnityEngine.UI;
 /// 서버가 /api/map/tiles/info 로 켜져 있다고 답할 때만 타일을 받고, 아니면 아무것도 받지 않는다 (앱에 든 그림만 — 흐리게 확대).
 /// 받는 중인 칸은 받아 둔 위 단계 타일을 잘라 채우고, 축소하는 중이면 받아 둔 아래 단계 타일로 채운다.
 /// 한 단계 위 타일을 화면 두 배 넓이로 미리 받아 두어 축소하면 바로 보이고, 옮기는 동안에도 비지 않는다.
+/// 처음 보는 곳은 화면을 한두 장으로 덮는 두 단계 위 타일부터 받아 흐리게라도 한 번에 채우고, 막 받은 타일은 그 위에 서서히 나타난다.
 /// 지도를 닫으면 메모리의 타일은 버리고(안 쓰는 동안 메모리 0), 받은 타일은 기기 캐시 폴더에 서버가 적어 준 기간만 둔다 — 다시 열면 거기서 바로.
 /// </summary>
 public class R0926MapTiles : MonoBehaviour
@@ -31,6 +32,8 @@ public class R0926MapTiles : MonoBehaviour
     private const int MaxVisible = 80;
     private const int ParentLevels = 6;
     private const int MaxDiskLoads = 6;
+    private const int CoverLevels = 2;              // 처음 보는 곳 — 이만큼 위 단계 타일로 화면을 먼저 덮는다 (한 장이 칸 16개)
+    private const float FadeTime = 0.2f;            // 막 받은 타일이 나타나는 시간 — 흐린 칸이 또렷한 칸으로 툭 바뀌지 않게
     private const int MaxKeepSec = 259200;          // 서버가 더 길게 적어 와도 3일까지 (브이월드 약관 제19조 — 서버 캐시와 같은 기준)
     private const long DiskCapBytes = 80L << 20;    // 기기 캐시 상한 (타일 한 장 약 20KB — 4천 장쯤). 넘으면 곧 만료될 것부터 지운다
 
@@ -62,6 +65,9 @@ public class R0926MapTiles : MonoBehaviour
     private readonly HashSet<long> notOnDisk = new HashSet<long>();   // 기기 캐시에 없다고 본 칸 — 매 프레임 파일을 다시 보지 않게
     private readonly List<RawImage> pool = new List<RawImage>();
     private readonly HashSet<long> inUse = new HashSet<long>();   // 지금 화면에 쓰는 타일 (위·아래 단계 포함) — 버리지 않는다
+    private readonly HashSet<long> cover = new HashSet<long>();   // 아무것도 못 그린 칸을 덮는 위 단계 타일 — 가장 먼저 받는다
+    private readonly Dictionary<long, float> arrived = new Dictionary<long, float>();   // 막 받은 타일 → 받은 시각 (나타나는 중)
+    private bool fading;               // 마지막 화면에 나타나는 중인 타일이 있었다 — 다 나타날 때까지 매 프레임 다시 그린다
     private int failures;
     private float pausedUntil;
     private int holes;                 // 마지막 화면에서 아무것도 못 그린 칸 수 (아래 세계 그림이 비친다)
@@ -122,6 +128,8 @@ public class R0926MapTiles : MonoBehaviour
         foreach (var t in cache.Values) if (t != null) Destroy(t);
         cache.Clear();
         lastUsed.Clear();
+        arrived.Clear();
+        fading = false;
         notOnDisk.Clear();
         foreach (var img in pool) if (img != null) { img.texture = null; img.enabled = false; }
         if (attribution != null) attribution.enabled = false;
@@ -138,6 +146,8 @@ public class R0926MapTiles : MonoBehaviour
         lastOx = ox; lastOy = oy; lastMapW = mapW; lastMapH = mapH; lastView = view; lastScale = scale;
         wanted.Clear();
         inUse.Clear();
+        cover.Clear();
+        fading = false;
         int shown = 0;
         holes = 0;
         if (Available && layer != null && mapW > 1 && mapH > 1)
@@ -163,16 +173,25 @@ public class R0926MapTiles : MonoBehaviour
             {
                 Vector2 center = view / 2f;
                 int frame = Time.frameCount;
+                // 아무것도 못 그린 칸은 그 칸을 덮는 두 단계 위 타일(화면 전체가 한두 장)을 가장 먼저 받는다 — 처음 보는 곳도 흐리게라도
+                // 화면이 한 번에 차고, 자세한 칸은 받는 대로 그 위에 (10-23 — 처음 보는 동네는 브이월드가 한 장에 0.5~1.5초라 2초쯤 듬성듬성 비었다)
+                int zc = Math.Max(MinLevel, z - CoverLevels), d = z - zc;
                 for (int y = y0; y <= y1; y++)
                     for (int x = x0; x <= x1; x++)
                     {
                         float px = (float)(ox + x * tw), py = (float)(baseY + y * th);
                         long k = Key(z, x, y);
                         int used = Show(shown, k, px, py, (float)tw, (float)th, frame);
-                        if (used == 0) holes++;
+                        if (used == 0)
+                        {
+                            holes++;
+                            if (d > 0) cover.Add(Key(zc, x >> d, y >> d));
+                        }
                         shown += used;
                         if (!cache.ContainsKey(k)) Want(k, px, py, tw, th, center, false);
                     }
+                foreach (long ck in cover)
+                    if (!cache.ContainsKey(ck)) wanted.Add((-1f, ck, false));
                 // 다음에 쓸 칸 — 한 단계 위 타일을 화면 두 배 넓이로: 한 단계 축소하면 그대로 보이고, 옮기거나 확대하는 동안 빈 곳을 흐리게라도 채운다.
                 // (화면 둘레 한 줄을 같은 단계로 더 받는 것은 요청이 두 배가 돼 뺐다 — 10-21 시험에서 서버 분당 상한에 걸림)
                 // 보이는 칸과 함께 메모리에 다 들어갈 때만 — 칸이 많은 큰 화면에선 미리 받은 것끼리 서로 밀어내며 다시 받게 된다
@@ -209,15 +228,21 @@ public class R0926MapTiles : MonoBehaviour
         => wanted.Add(((new Vector2(x + (float)w / 2f, y + (float)h / 2f) - center).sqrMagnitude, k, ahead));
 
     // 칸 하나 — 받은 타일. 없으면 받아 둔 위 단계 타일을 잘라 깔고, 받아 둔 아래 단계 타일(축소하는 중)이 있으면 그 위에.
-    // 아무것도 없으면 안 그린다 (아래 세계 그림이 보인다). 쓴 그림 수를 돌려준다
+    // 막 받은 타일은 그 위에 서서히 나타난다. 아무것도 없으면 안 그린다 (아래 세계 그림이 보인다). 쓴 그림 수를 돌려준다
     private int Show(int index, long k, float x, float y, float w, float h, int frame)
     {
-        if (cache.TryGetValue(k, out var tex))
+        float alpha = 0f;
+        if (cache.TryGetValue(k, out var own))
         {
             Use(k, frame);
-            Place(index, tex, FullUv, x, y, w, h);
-            return 1;
+            alpha = Opacity(k);
+            if (alpha >= 1f)
+            {
+                Place(index, own, FullUv, x, y, w, h, 1f);
+                return 1;
+            }
         }
+        Texture2D tex;
         int z = KZ(k), tx = KX(k), ty = KY(k), used = 0, kids = 0;
         if (z < MaxLevel)
             for (int i = 0; i < 4; i++)
@@ -230,7 +255,7 @@ public class R0926MapTiles : MonoBehaviour
                 Use(pk, frame);
                 float s = 1f / (1 << up);
                 int ox = tx - ((tx >> up) << up), oy = ty - ((ty >> up) << up);
-                Place(index + used++, tex, new Rect(ox * s, 1f - (oy + 1) * s, s, s), x, y, w, h);   // 그림의 v 는 아래에서 위로
+                Place(index + used++, tex, new Rect(ox * s, 1f - (oy + 1) * s, s, s), x, y, w, h, 1f);   // 그림의 v 는 아래에서 위로
                 break;
             }
         if (kids > 0)
@@ -240,8 +265,9 @@ public class R0926MapTiles : MonoBehaviour
                 long ck = Key(z + 1, tx * 2 + cx, ty * 2 + cy);
                 if (!cache.TryGetValue(ck, out tex)) continue;
                 Use(ck, frame);
-                Place(index + used++, tex, FullUv, x + cx * w / 2f, y + cy * h / 2f, w / 2f, h / 2f);
+                Place(index + used++, tex, FullUv, x + cx * w / 2f, y + cy * h / 2f, w / 2f, h / 2f, 1f);
             }
+        if (own != null) Place(index + used++, own, FullUv, x, y, w, h, alpha);
         return used;
     }
 
@@ -251,7 +277,17 @@ public class R0926MapTiles : MonoBehaviour
         inUse.Add(k);
     }
 
-    private void Place(int index, Texture2D tex, Rect uv, float x, float y, float w, float h)
+    // 막 받은 타일의 불투명도 — FadeTime 동안 0 → 1. 다 나타나면 기록을 지운다
+    private float Opacity(long k)
+    {
+        if (!arrived.TryGetValue(k, out float at)) return 1f;
+        float p = (Time.realtimeSinceStartup - at) / FadeTime;
+        if (p >= 1f) { arrived.Remove(k); return 1f; }
+        fading = true;
+        return p <= 0f ? 0f : p * p * (3f - 2f * p);
+    }
+
+    private void Place(int index, Texture2D tex, Rect uv, float x, float y, float w, float h, float alpha)
     {
         while (pool.Count <= index)
         {
@@ -268,6 +304,7 @@ public class R0926MapTiles : MonoBehaviour
         var img = pool[index];
         img.texture = tex;
         img.uvRect = uv;
+        img.color = new Color(1f, 1f, 1f, alpha);
         img.rectTransform.anchoredPosition = new Vector2(x, -y);
         img.rectTransform.sizeDelta = new Vector2(w + 1f, h + 1f);   // 1 겹쳐 칸 사이 실금을 덮는다
         if (!img.enabled) img.enabled = true;
@@ -303,6 +340,7 @@ public class R0926MapTiles : MonoBehaviour
                 tex.wrapMode = TextureWrapMode.Clamp;
                 cache[f.key] = tex;
                 lastUsed[f.key] = Time.frameCount;
+                arrived[f.key] = now;
                 changed = true;
                 if (!f.disk) { failures = 0; SaveToDisk(f.key, req); }
             }
@@ -318,7 +356,8 @@ public class R0926MapTiles : MonoBehaviour
             }
             req.Dispose();
         }
-        if (changed) { Trim(); if (hasView) UpdateView(lastOx, lastOy, lastMapW, lastMapH, lastView, lastScale); }
+        if (changed) Trim();
+        if ((changed || fading) && hasView) UpdateView(lastOx, lastOy, lastMapW, lastMapH, lastView, lastScale);   // 막 받은 타일이 나타나는 동안은 매 프레임
 
         int net = 0, disk = 0;
         foreach (var f in inflight) if (f.disk) disk++; else net++;
@@ -372,6 +411,7 @@ public class R0926MapTiles : MonoBehaviour
             if (cache.TryGetValue(oldest, out var t) && t != null) Destroy(t);
             cache.Remove(oldest);
             lastUsed.Remove(oldest);
+            arrived.Remove(oldest);
         }
     }
 

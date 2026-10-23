@@ -2028,6 +2028,8 @@ namespace Redesign0926
             Func<HashSet<long>> used = () => typeof(R0926MapTiles).GetField("inUse", F)?.GetValue(tiles) as HashSet<long>;
             Func<int> fetchLevel = () => { int z = -1; var u = used(); if (u != null) foreach (var k in u) z = Math.Max(z, (int)(k >> 48)); return z; };
             Func<bool> oneLevel = () => { var u = used(); int z = fetchLevel(); if (u == null || u.Count == 0) return false; foreach (var k in u) if ((int)(k >> 48) != z) return false; return true; };
+            // 막 받은 타일이 아직 나타나는 중 (10-23 — 그동안은 아래 단계도 함께 깔린다)
+            Func<bool> fadingNow = () => tiles != null && (bool)typeof(R0926MapTiles).GetField("fading", F).GetValue(tiles);
             string diskRoot = System.IO.Path.Combine(Application.temporaryCachePath, "maptiles");
             Action wipeDisk = () => { try { if (System.IO.Directory.Exists(diskRoot)) System.IO.Directory.Delete(diskRoot, true); } catch (Exception) { } };
             Do(() =>
@@ -2152,9 +2154,56 @@ namespace Redesign0926
                 map.EditorPreview(true, zoomAt(13), 37.5665f, 126.978f);
             });
             Check(() => count("cache") == 0, "닫았다 열면 메모리는 빈 채로 시작");
-            Wait(() => count("inflight") == 0 && count("cache") > 0 && holes() == 0, 6f, "다시 열기 — 기기 캐시로 채움");
+            Wait(() => count("inflight") == 0 && count("cache") > 0 && holes() == 0 && !fadingNow(), 6f, "다시 열기 — 기기 캐시로 채움");
             Check(() => holes() == 0 && oneLevel(), "서버 없이도 다시 열면 기기 캐시로 다 보임");
             Shot("tiles_reopen_disk");
+            // 처음 보는 곳 (10-23) — 메모리·기기 캐시 없이 새 자리로: 화면을 덮는 두 단계 위 타일을 가장 먼저 받고, 막 받은 타일은 서서히 나타난다
+            int coverCount = -1, coverLevel = -1, sharpLevel = -1;
+            bool coverFirst = false;
+            float minAlpha = 1f;
+            Func<List<RawImage>> pool = () => typeof(R0926MapTiles).GetField("pool", F)?.GetValue(tiles) as List<RawImage>;
+            Do(() =>
+            {
+                tiles.enabled = false;
+                wipeDisk();
+                R0926MapTiles.EditorBase = "http://127.0.0.1:5098";
+                tiles.enabled = true;
+                map.EditorPreview(true, zoomAt(15), 35.1587f, 129.1604f);   // 해운대 — 앞에서 안 본 곳
+                var w = typeof(R0926MapTiles).GetField("wanted", F)?.GetValue(tiles) as List<(float dist, long key, bool ahead)>;
+                coverCount = 0; coverFirst = w != null && w.Count > 0;
+                if (w != null)
+                {
+                    foreach (var e in w) if (!e.ahead && e.dist >= 0f) sharpLevel = Math.Max(sharpLevel, (int)(e.key >> 48));
+                    bool other = false;
+                    foreach (var e in w)
+                    {
+                        if (e.dist >= 0f) { other = true; continue; }
+                        coverCount++;
+                        coverLevel = (int)(e.key >> 48);
+                        if (other) coverFirst = false;
+                    }
+                }
+                log.Add("  처음 보는 곳: 자세한 단계 " + sharpLevel + " · 먼저 받는 위 단계 " + coverLevel + " " + coverCount + "장 · 받을 것 " + (w?.Count ?? -1));
+            });
+            Check(() => coverFirst && coverCount >= 1 && coverCount <= 4 && coverLevel == sharpLevel - 2,
+                "처음 보는 곳 — 화면을 덮는 두 단계 위 타일(1~4장)을 가장 먼저 받는다");
+            Wait(() =>
+            {
+                var p = pool();
+                if (p != null) foreach (var r in p) if (r != null && r.enabled && r.texture != null) minAlpha = Mathf.Min(minAlpha, r.color.a);
+                return count("inflight") == 0 && holes() == 0 && !fadingNow();
+            }, 20f, "처음 보는 곳 타일 받기 끝");
+            Sleep(0.3f);
+            Check(() => minAlpha < 0.99f, "막 받은 타일은 서서히 나타난다 (흐린 칸이 또렷한 칸으로 툭 바뀌지 않게)");
+            Do(() => log.Add("  나타나는 중 가장 옅은 타일 " + minAlpha.ToString("0.00")));
+            Check(() =>
+            {
+                var p = pool();
+                if (p == null) return false;
+                foreach (var r in p) if (r != null && r.enabled && r.color.a < 1f) return false;
+                return holes() == 0 && oneLevel() && fetchLevel() == sharpLevel;
+            }, "다 받은 뒤엔 자세한 단계 한 겹만 · 반투명으로 남은 칸 없음");
+            Shot("tiles_fresh_area");
             Do(() =>
             {
                 map?.EditorPreviewClear();
