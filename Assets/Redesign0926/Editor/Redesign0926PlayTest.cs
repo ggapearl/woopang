@@ -106,6 +106,7 @@ namespace Redesign0926
             else if (mode == "farfade") PlanFarFade();
             else if (mode == "nudge") PlanNudge();
             else if (mode == "photomem") PlanPhotoMem();
+            else if (mode == "appinfo") PlanAppInfo();
             else if (mode == "p2pzoom") PlanP2PZoom();
             else if (mode == "maptiles") PlanMapTiles();
             else if (mode == "mapcoord") PlanMapCoord();
@@ -4114,12 +4115,8 @@ namespace Redesign0926
                 foreach (var t in CanvasRoot().GetComponentsInChildren<Text>())
                     if (t.name == "Name" && t.transform.parent != null && t.transform.parent.parent != null && t.transform.parent.parent.name == "Content") { name = t; break; }
                 log.Add(name != null ? $"  목록 이름 글자 {name.fontSize} '{name.text}'" : "  목록 줄 없음");
-                Transform copy = null;
-                foreach (var t in CanvasRoot().GetComponentsInChildren<Transform>(true)) if (t.name == "copyright") { copy = t; break; }
-                var crt = copy as RectTransform;
-                log.Add(crt != null ? $"  저작권 자리 pos={crt.anchoredPosition} size={crt.sizeDelta} aMin={crt.anchorMin} aMax={crt.anchorMax}" : "  저작권 없음");
-                log.Add((crt != null && Vector2.Distance(crt.anchoredPosition, new Vector2(0, 20)) < 0.5f && Vector2.Distance(crt.sizeDelta, new Vector2(600, 100)) < 0.5f ? "PASS " : "FAIL ") + "저작권: 대표님이 잡은 자리 그대로 (0,20 · 600×100)");
             });
+            Check(() => ListToBottom("세로"), "목록: 저작권 줄 없이 시트 아래 끝까지 (저작권은 설정 › 앱 정보로 — 10-23)");
             Do(() => Modes()?.Show(2));
             Sleep(0.9f);
             Do(() =>
@@ -4139,8 +4136,9 @@ namespace Redesign0926
                 log.Add((vt != null && vt.text.StartsWith("Version ") ? "PASS " : "FAIL ") + "설정 맨 아래 버전: " + (vt != null ? "'" + vt.text + "' fs" + vt.fontSize : "없음"));
                 var sp = UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include);
                 log.Add("  처음 fps " + Application.targetFrameRate + " (저장 " + R0926FrameRate.Fps + ")");
-                sp?.SetFps(1);
             });
+            Check(() => FooterOrder("세로"), "설정 맨 아래: 버전이 위 · 저작권 그림이 아래");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include)?.SetFps(1));
             Sleep(0.3f);
             Shot("v24_settings_60");
             Check(() => Application.targetFrameRate == 60 && R0926FrameRate.Fps == 60, "설정: 60fps 를 고르면 60");
@@ -4202,6 +4200,169 @@ namespace Redesign0926
                 typeof(LoadingManager).GetMethod("StopDotAnimation", F)?.Invoke(lm, null);
                 if (lm != null && lm.loadingPanel != null) lm.loadingPanel.SetActive(false);
             });
+        }
+
+        // 설정 › 앱 정보 (10-23 대표님) — 문의 master@woopang.com · 버전 아래 저작권 그림 · 개인정보처리방침이 앱 안에서 바로 열림 ·
+        // 목록은 저작권 줄 없이 시트 아래 끝까지. 세로와 가로 둘 다
+        private const string SetPath = "ListPanel/Sheet0926/SettingsPanel0926/";
+        private const string PrivacyPath = SetPath + "PrivacyPage0926";
+        private static void PlanAppInfo()
+        {
+            const string C = SetPath + "Viewport/Content/";
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                if (Active("LoginPromptPanel")) BackNow();
+            });
+            Sleep(0.6f);
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.3f);
+            Do(() => Modes()?.Show(0));
+            Sleep(0.8f);
+            Shot("appinfo_list");
+            Check(() => ListToBottom("세로"), "세로: 목록이 시트 아래 끝까지 · 저작권 줄 없음");
+            Do(() => Modes()?.Show(2));
+            Sleep(0.9f);
+            Do(ScrollSettingsBottom);
+            Sleep(0.6f);
+            Shot("appinfo_settings");
+            Check(() => (Find(C + "GroupInfo/RowContact/Value")?.GetComponent<Text>()?.text ?? "") == "master@woopang.com", "문의: master@woopang.com");
+            Check(() => FooterOrder("세로"), "세로: 버전이 위 · 저작권 그림이 아래 (보이는 칸 안)");
+            Do(() => Click(C + "GroupInfo/RowPrivacy"));
+            Sleep(0.8f);
+            Shot("appinfo_privacy");
+            Check(() => PrivacyShown("세로"), "개인정보처리방침: 누르면 앱 안에서 바로 (제목 11개 · 설정 쪽을 덮음)");
+            Do(() => ScrollPrivacy(0f));
+            Sleep(0.6f);
+            Shot("appinfo_privacy_end");
+            Check(PrivacyEnd, "끝까지 내리면 마지막 줄(시행일)이 보이는 칸 안");
+            Do(BackNow);
+            Sleep(0.8f);
+            Check(() => !Active(PrivacyPath) && Active(C + "GroupInfo/RowPrivacy") && Active("ListPanel"), "안드로이드 뒤로가기 → 설정으로 (목록 시트는 그대로)");
+            Do(() => Click(C + "GroupInfo/RowPrivacy"));
+            Sleep(0.8f);
+            Do(() => Click("ListPanel/Sheet0926/ModeSeg0926/TabSettings"));
+            Sleep(0.8f);
+            Check(() => !Active(PrivacyPath), "설정 탭을 누르면 닫힘");
+            // 가로 — 연 채로 돌린다
+            Do(() => Click(C + "GroupInfo/RowPrivacy"));
+            Sleep(0.6f);
+            Do(() => Rotate(true));
+            Wait(() => Turned(true), 8f, "가로로 돌림");
+            Sleep(1.2f);
+            Shot("appinfo_land_privacy");
+            Check(() => PrivacyShown("가로"), "가로: 개인정보처리방침이 설정 쪽을 덮고 화면 안");
+            Check(() => TopHit(PrivacyPath + "/Top0926").EndsWith("(그 칸)"), "가로: ‹ 줄을 누를 수 있음");
+            Do(() => ScrollPrivacy(0f));
+            Sleep(0.6f);
+            Shot("appinfo_land_privacy_end");
+            Check(PrivacyEnd, "가로: 끝까지 내리면 마지막 줄이 보이는 칸 안");
+            Do(() => Click(PrivacyPath + "/Top0926"));
+            Sleep(0.8f);
+            Check(() => !Active(PrivacyPath), "가로: ‹ 로 닫힘");
+            Do(ScrollSettingsBottom);
+            Sleep(0.6f);
+            Shot("appinfo_land_settings");
+            Check(() => FooterOrder("가로"), "가로: 버전이 위 · 저작권 그림이 아래 (보이는 칸 안)");
+            Do(() => Modes()?.Show(0));
+            Sleep(0.9f);
+            Shot("appinfo_land_list");
+            Check(() => ListToBottom("가로"), "가로: 목록이 시트 아래 끝까지");
+            Do(() => Rotate(false));
+            Wait(() => Turned(false), 8f, "세로로 되돌림");
+            Sleep(0.8f);
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(1.0f);
+        }
+
+        // 목록이 시트 아래 끝까지 내려오는지 — 저작권 줄을 설정으로 옮긴 뒤 (10-23)
+        private static bool ListToBottom(string when)
+        {
+            var sheet = Find("ListPanel/Sheet0926") as RectTransform;
+            RectTransform list = null;
+            if (sheet != null) foreach (var t in sheet.GetComponentsInChildren<RectTransform>(true)) if (t.name == "Scroll View") { list = t; break; }
+            bool copy = false;
+            foreach (var t in CanvasRoot().GetComponentsInChildren<Transform>(true)) if (t.name == "copyright") { copy = true; break; }
+            if (sheet == null || list == null || !list.gameObject.activeInHierarchy) { log.Add($"  {when}: 목록 없음"); return false; }
+            float scale = sheet.GetComponentInParent<Canvas>().rootCanvas.scaleFactor;
+            Rect s = ScreenRect(sheet), l = ScreenRect(list);
+            float gap = (l.yMin - s.yMin) / scale;
+            log.Add($"  {when}: 목록 아래 {l.yMin:0} · 시트 아래 {s.yMin:0} → 여백 {gap:0} · 저작권 그림 {(copy ? "있음" : "없음")}");
+            return !copy && gap >= 0f && gap <= 40f && l.yMin >= -1f;
+        }
+
+        // 설정 맨 아래 — 버전이 위, 저작권 그림이 아래, 둘 다 보이는 칸 안 (10-23)
+        private static bool FooterOrder(string when)
+        {
+            var ver = Find(SetPath + "Viewport/Content/VersionFooter") as RectTransform;
+            var cp = Find(SetPath + "Viewport/Content/CopyrightFooter") as RectTransform;
+            var vp = Find(SetPath + "Viewport") as RectTransform;
+            if (ver == null || cp == null || vp == null) { log.Add($"  {when}: 버전 {ver != null} · 저작권 {cp != null}"); return false; }
+            var img = cp.GetComponent<Image>();
+            var vt = ver.GetComponentInChildren<Text>();
+            Rect v = ScreenRect(ver), c = ScreenRect(cp), w = ScreenRect(vp);
+            log.Add($"  {when}: 버전 '{vt?.text}' {v.yMin:0}~{v.yMax:0} · 저작권 {c.yMin:0}~{c.yMax:0} '{(img != null && img.sprite != null ? img.sprite.name : "-")}' · 보이는 칸 {w.yMin:0}~{w.yMax:0}");
+            return img != null && img.sprite != null && img.sprite.name == "r0926_copyright" && vt != null && vt.text.StartsWith("Version ")
+                && v.yMin >= c.yMax - 1f && c.yMin >= w.yMin - 1f && v.yMax <= w.yMax + 1f && c.yMin >= -1f;
+        }
+
+        private static void ScrollSettingsBottom()
+        {
+            var sr = UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include)?.GetComponent<ScrollRect>();
+            if (sr == null) { log.Add("  설정 스크롤 없음"); return; }
+            Canvas.ForceUpdateCanvases();
+            sr.StopMovement();
+            sr.verticalNormalizedPosition = 0f;
+        }
+
+        private static void ScrollPrivacy(float v)
+        {
+            var sr = Find(PrivacyPath + "/Scroll0926")?.GetComponent<ScrollRect>();
+            if (sr == null) { log.Add("  개인정보처리방침 스크롤 없음"); return; }
+            Canvas.ForceUpdateCanvases();
+            sr.StopMovement();
+            sr.verticalNormalizedPosition = v;
+        }
+
+        // 개인정보처리방침 — 제목 11개 · 줄이 다 만들어지고, 설정 쪽을 덮고, 화면 안 (10-23)
+        private static bool PrivacyShown(string when)
+        {
+            var page = Find(PrivacyPath) as RectTransform;
+            var sp = Find(SetPath.TrimEnd('/')) as RectTransform;
+            if (page == null || sp == null || !page.gameObject.activeInHierarchy) { log.Add($"  {when}: 개인정보처리방침이 안 열림"); return false; }
+            var content = Find(PrivacyPath + "/Scroll0926/Viewport/Content");
+            int heads = 0, lines = 0;
+            Text note = null;
+            if (content != null)
+                foreach (Transform t in content)
+                {
+                    if (!t.gameObject.activeSelf) continue;
+                    if (t.name == "Head") heads++;
+                    if (t.name != "Gap") lines++;
+                    if (note == null && t.name == "Note") note = t.GetComponent<Text>();
+                }
+            Rect p = ScreenRect(page), s = ScreenRect(sp);
+            bool covers = Mathf.Abs(p.xMin - s.xMin) < 2f && Mathf.Abs(p.xMax - s.xMax) < 2f && Mathf.Abs(p.yMax - s.yMax) < 2f && Mathf.Abs(p.yMin - s.yMin) < 2f;
+            bool onScreen = p.xMin >= -1f && p.xMax <= Screen.width + 1f && p.yMin >= -1f && p.yMax <= Screen.height + 1f;
+            log.Add($"  {when}: 제목 {heads} · 줄 {lines} · 첫 줄 '{note?.text}' · 쪽 {p.xMin:0}~{p.xMax:0} × {p.yMin:0}~{p.yMax:0} · 설정 쪽 {s.xMin:0}~{s.xMax:0} × {s.yMin:0}~{s.yMax:0}");
+            return heads == 11 && lines > 50 && note != null && note.text.Contains("2026") && covers && onScreen;
+        }
+
+        // 끝까지 내리면 맨 끝 줄('… 시행합니다')이 보이는 칸 안에
+        private static bool PrivacyEnd()
+        {
+            var vp = Find(PrivacyPath + "/Scroll0926/Viewport") as RectTransform;
+            var content = vp != null ? vp.Find("Content") : null;
+            if (content == null) return false;
+            Text last = null;
+            foreach (var t in content.GetComponentsInChildren<Text>()) last = t;
+            if (last == null) return false;
+            Rect l = ScreenRect(last.rectTransform), w = ScreenRect(vp);
+            log.Add($"  맨 끝 줄 '{last.text}' {l.yMin:0}~{l.yMax:0} · 보이는 칸 {w.yMin:0}~{w.yMax:0}");
+            return last.text.Contains("2026") && l.yMin >= w.yMin - 1f && l.yMax <= w.yMax + 1f;
         }
 
         private static void FillSampleChat(bool admin)

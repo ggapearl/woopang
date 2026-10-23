@@ -227,6 +227,9 @@ namespace Redesign0926
                 Ensure<UITouchForwarder>(tabs[i]);   // 누름 소리 — 추가 창의 탭과 같이 (10-21)
                 EditorUtility.SetDirty(b);
             }
+            // 설정 탭을 누르면 개인정보처리방침을 닫고 설정 첫 화면으로
+            var privacy = settings.GetComponentInChildren<R0926PrivacyPage>(true);
+            if (privacy != null) UnityEventTools.AddPersistentListener(tabSet.GetComponent<Button>().onClick, privacy.Close);
 
             // ── 연결 ──
             var fm = Ensure<R0926FriendsMap>(view);
@@ -489,24 +492,31 @@ namespace Redesign0926
             var rInsta = InfoRow(g4.transform, "RowInstagram", new[] { "인스타그램", "Instagram", "Instagram", "Instagram", "Instagram" },
                 new[] { "@" + R0926AppInfo.Instagram }, true);
             var rPriv = InfoRow(g4.transform, "RowPrivacy", new[] { "개인정보처리방침", "Privacy policy", "プライバシーポリシー", "隐私政策", "Política de privacidad" },
-                new[] { "woopang.com" }, true);
+                new[] { "" }, true);   // 홈페이지로 나가지 않고 앱 안에서 바로 열린다 (2026-10-23)
             InfoRow(g4.transform, "RowData", new[] { "관광 정보 출처", "Tourism data", "観光情報の出典", "旅游信息来源", "Datos turísticos" },
                 new[] { "한국관광공사", "Korea Tourism Organization", "韓国観光公社", "韩国观光公社", "Organización de Turismo de Corea" }, false);
             // 버전은 줄이 아니라 탭 맨 아래에 작게 (2026-10-06 대표님)
             var oldVer = g4.transform.Find("RowVersion");
             if (oldVer != null) Object.DestroyImmediate(oldVer.gameObject);
             var verFoot = FindOrCreate(content.transform, "VersionFooter");
-            Ensure<LayoutElement>(verFoot).preferredHeight = 96;
+            Ensure<LayoutElement>(verFoot).preferredHeight = 56;
             var verText = Txt(verFoot, "Version", 30, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            // 버전 아래 저작권 그림 — 목록 맨 아래에 있던 것을 여기로 (2026-10-23 대표님: 버전이 위, 저작권이 아래). 목록에서 보던 크기 그대로(높이 약 61)
+            var copyFoot = FindOrCreate(content.transform, "CopyrightFooter");
+            Ensure<LayoutElement>(copyFoot).preferredHeight = 61;
+            var copyImg = Img(copyFoot, Spr("r0926_copyright"), new Color(1, 1, 1, 0.82f), Image.Type.Simple);
+            copyImg.preserveAspect = true;
+            copyImg.raycastTarget = false;
             var aso = new SerializedObject(appInfo);
             aso.FindProperty("versionText").objectReferenceValue = verText;
+            aso.FindProperty("privacyPage").objectReferenceValue = BuildPrivacyPage(sp);
             aso.ApplyModifiedPropertiesWithoutUndo();
             Wire(rMail.GetComponent<Button>(), appInfo.OpenMail);
             Wire(rInsta.GetComponent<Button>(), appInfo.OpenInstagram);
             Wire(rPriv.GetComponent<Button>(), appInfo.OpenPrivacy);
 
             // 새로 만든 칸은 맨 뒤에 붙으므로 순서를 매번 맞춘다
-            foreach (var n in new[] { "SecSky", "GroupMaster", "GroupChannels", "SecPlaces", "GroupHidden", "SecHunt", "GroupHunt", "GroupHuntAlerts", "HuntNote", "SecDisplay", "GroupDisplay", "SecInfo", "GroupInfo", "VersionFooter" })
+            foreach (var n in new[] { "SecSky", "GroupMaster", "GroupChannels", "SecPlaces", "GroupHidden", "SecHunt", "GroupHunt", "GroupHuntAlerts", "HuntNote", "SecDisplay", "GroupDisplay", "SecInfo", "GroupInfo", "VersionFooter", "CopyrightFooter" })
             {
                 var c = content.transform.Find(n);
                 if (c != null) c.SetAsLastSibling();
@@ -571,6 +581,82 @@ namespace Redesign0926
                 EditorUtility.SetDirty(b);
             }
             return sp;
+        }
+
+        private const float PrivacyTopH = 120f;
+
+        /// <summary>설정 › 앱 정보 › 개인정보처리방침 — 설정 쪽을 덮는 한 장 (2026-10-23 대표님: 홈페이지로 보내지 말고 바로 보이게).
+        /// 글 줄은 실행 때 R0926PrivacyPage 가 Text/privacy_*.txt 를 읽어 만든다 — 여기서는 틀과 글 본(本)만</summary>
+        private static R0926PrivacyPage BuildPrivacyPage(GameObject sp)
+        {
+            var page = FindOrCreate(sp.transform, "PrivacyPage0926");
+            page.transform.SetAsLastSibling();
+            Stretch(RT(page));
+            Img(page, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Image.Type.Sliced, 64f / CardRadius).raycastTarget = true;
+
+            // 맨 위 '‹ 개인정보처리방침' — 줄 전체가 닫기 버튼 (안드로이드 뒤로가기도 이 버튼)
+            var top = FindOrCreate(page.transform, "Top0926");
+            SetRect(RT(top), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(0, PrivacyTopH));
+            Img(top, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            var backBtn = Ensure<Button>(top);
+            backBtn.transition = Selectable.Transition.None;
+            Ensure<ClickButtonOnBack>(top);
+            var icon = FindOrCreate(top.transform, "Icon0926");   // 대화방·팔로우 제목줄의 뒤로 그림과 같은 것
+            SetRect(RT(icon), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(SheetPad - 20, 0), new Vector2(72, 72));
+            Img(icon, Spr("r0926_i_back"), Ink, Image.Type.Simple).raycastTarget = false;
+            var title = FindOrCreate(top.transform, "Title");
+            SetRect(RT(title), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0.5f), new Vector2(SheetPad + 64, 0), new Vector2(-(SheetPad * 2 + 64), PrivacyTopH));
+            Txt(title, "개인정보처리방침", 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Loc(title, "개인정보처리방침", "Privacy policy", "プライバシーポリシー", "隐私政策", "Política de privacidad");
+            var line = FindOrCreate(top.transform, "Line");
+            SetRect(RT(line), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(-SheetPad * 2, 2));
+            Img(line, null, new Color(1, 1, 1, 0.07f), Image.Type.Simple).raycastTarget = false;
+
+            // 본문 — 세로로만 넘긴다 (옆으로 밀면 목록·지도로 넘어간다: R0926SheetModes)
+            var sv = FindOrCreate(page.transform, "Scroll0926");
+            Stretch(RT(sv));
+            RT(sv).offsetMin = new Vector2(0, 24);
+            RT(sv).offsetMax = new Vector2(0, -PrivacyTopH);
+            var sr = Ensure<ScrollRect>(sv);
+            sr.horizontal = false; sr.vertical = true; sr.scrollSensitivity = 30; sr.movementType = ScrollRect.MovementType.Elastic;
+            var vp = FindOrCreate(sv.transform, "Viewport");
+            Stretch(RT(vp));
+            Ensure<RectMask2D>(vp);
+            Img(vp, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            var content = FindOrCreate(vp.transform, "Content");
+            SetRect(RT(content), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, Vector2.zero);
+            var vl = Ensure<VerticalLayoutGroup>(content);
+            vl.padding = new RectOffset((int)SheetPad, (int)SheetPad, 28, 72); vl.spacing = 10;
+            vl.childControlWidth = true; vl.childControlHeight = true; vl.childForceExpandWidth = true; vl.childForceExpandHeight = false;
+            Ensure<ContentSizeFitter>(content).verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            sr.viewport = RT(vp); sr.content = RT(content);
+            EditorUtility.SetDirty(sr);
+
+            var pp = Ensure<R0926PrivacyPage>(page);
+            var so = new SerializedObject(pp);
+            so.FindProperty("korean").objectReferenceValue = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Redesign0926/Text/privacy_ko.txt");
+            so.FindProperty("english").objectReferenceValue = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Redesign0926/Text/privacy_en.txt");
+            so.FindProperty("scroll").objectReferenceValue = sr;
+            so.FindProperty("content").objectReferenceValue = RT(content);
+            so.FindProperty("headTemplate").objectReferenceValue = PrivacyTpl(content, "HeadTpl", 42, Ink, FontStyle.Bold);
+            so.FindProperty("subTemplate").objectReferenceValue = PrivacyTpl(content, "SubTpl", 38, Soft, FontStyle.Bold);
+            so.FindProperty("bodyTemplate").objectReferenceValue = PrivacyTpl(content, "BodyTpl", 36, Soft, FontStyle.Normal);
+            so.FindProperty("noteTemplate").objectReferenceValue = PrivacyTpl(content, "NoteTpl", 32, Muted, FontStyle.Normal);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            Wire(backBtn, pp.Close);
+            page.SetActive(false);
+            return pp;
+        }
+
+        private static Text PrivacyTpl(GameObject content, string name, float size, Color c, FontStyle style)
+        {
+            var go = FindOrCreate(content.transform, name);
+            var t = Txt(go, "", size, c, TextAnchor.UpperLeft, style);
+            t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.lineSpacing = 1.15f;
+            t.supportRichText = false;
+            go.SetActive(false);
+            return t;
         }
 
         private static void SectionLabel(Transform parent, string name, string[] words)

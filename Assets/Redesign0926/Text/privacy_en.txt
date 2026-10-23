@@ -1,0 +1,90 @@
+> Effective October 23, 2026
+
+QUE.ENT ("we") processes the personal information of people who use the WOOPANG app and woopang.com (the "Service") in accordance with Korea's Personal Information Protection Act and other applicable laws. This policy explains what we collect and why, how long we keep it, and how you can delete it or stop its use.
+
+## 1. What we collect and why
+### Sign-up and login
+- Email sign-up: user ID, email address, password (stored with one-way encryption)
+- Kakao, Google or Apple sign-up: user ID, plus the email address and account identifier that service provides
+- Country code derived from your IP address at sign-up
+- Used for: identifying members, login, preventing abuse
+### Profile (only if you add it)
+- Profile photo, bio, mobile number, Instagram, Facebook and X handles
+- Used for: your profile as other users see it. Your email address and mobile number are not shown to other users
+### Location
+- Your current location while you use the app: to show nearby places, AR objects, the map and the weather, and to pick local information and ads
+- Nearby people: while location sharing is on, other users can see your location according to your visibility and sharing-radius settings
+- Treasure hunts: distance guidance for games you join, confirming a find, and alerts about new games nearby
+- Notifications: for devices that allow location use, we keep the last location and its approximate address to send nearby news
+- We do not build a history of where you have been. Each feature keeps only your last location and overwrites it with the new one
+- The locations of places, speech bubbles and treasures you post are stored with that content
+### Content and activity
+- Places (name, location, photos, description), comments, likes, speech bubbles, reports
+- Treasure hunt games, participation, finds and reviews
+- Direct messages (sender, recipient, content, read status), follow and block lists
+- Used for: providing the Service, handling reports, preventing abuse
+### Device and notifications
+- Push token, device identifier, device name and model, OS and app version, last active time
+- Used for: sending notifications, keeping per-device settings
+### Collected automatically
+- Server access logs (IP address, time, requested address, including coordinates when nearby information is requested): security and troubleshooting
+- App error reports (error message, app version, device model, OS, screen name): fixing errors. They are not linked to your account
+### Camera and photos
+- The camera view is processed only on your phone to display AR and is never sent to our servers
+- Photos are sent to our servers only when you choose or take them to post
+
+## 2. How long we keep it
+- Account information and content: until you delete your account, then deleted without delay
+- Location: only the last location per feature, overwritten by the new one, and deleted when you delete your account
+- Server backups: backups kept for recovery are deleted in turn after 14 days
+- Access logs: 3 months (Protection of Communications Secrets Act)
+
+## 3. Sharing with others
+- We do not provide your personal information to other companies or institutions, except when investigative or other authorities request it through procedures set by law
+- By the nature of the Service, other users can see your user ID and profile, the places, comments, speech bubbles and treasure hunts you post, and your location while location sharing is on
+
+## 4. Service providers and transfers abroad
+Your personal information is stored on servers we operate ourselves in Korea. We use outside services only for the following.
+- Android notifications — Google LLC (USA), Firebase Cloud Messaging: push token and notification content, sent each time a notification is delivered
+- iPhone notifications — Apple Inc. (USA), Apple Push Notification service: push token and notification content, sent each time a notification is delivered
+- Address lookup — OpenStreetMap Foundation (UK), Nominatim: coordinates only, to create the approximate address used for notifications
+- Sign-up country check — ip-api.com: your IP address only, at sign-up, to get a country code
+- If you do not want notifications, turn off WOOPANG notifications in your phone settings
+### Signing in with another company
+- If you choose Kakao, Google or Apple login, you sign in on that company's screen and we receive only the result (account identifier and email address)
+
+## 5. Your rights
+- You can edit your profile or delete your account in Edit Profile
+- In Settings you can turn off nearby location sharing and treasure hunt participation and alerts
+- You can turn off location, notification, camera and photo permissions in your phone settings at any time. Features that need them will stop working
+- For other requests to access, correct, delete or stop processing your information, email master@woopang.com and we will act within 10 days. You may also make a request through a representative
+
+## 6. How we delete information
+- We delete information without delay when its retention period ends or when you delete your account
+- Electronic files are deleted in a way that cannot be recovered
+
+## 7. How we protect it
+- All communication between the app and our servers is encrypted (HTTPS)
+- Passwords are stored with one-way encryption
+- Our database cannot be reached from outside, and access to admin pages is restricted
+- We keep the number of people who handle personal information to a minimum
+
+## 8. Cookies and tracking
+- The app does not use cookies. Only the web login and sign-up pages use a session cookie while you log in
+- We do not use ad tracking or behavioral analytics tools. Ads in the app are placed by us directly, and we count only how often they are shown and tapped
+
+## 9. Children under 14
+- WOOPANG is not intended for children under 14. If we learn that we have collected information from a child under 14, we delete it without delay
+
+## 10. Privacy officer
+- Privacy officer: CEO, QUE.ENT
+- Contact: master@woopang.com
+- You can also contact these Korean agencies about privacy violations
+  - Personal Information Infringement Report Center 118 (privacy.kisa.or.kr)
+  - Personal Information Dispute Mediation Committee 1833-6972 (www.kopico.go.kr)
+  - Supreme Prosecutors' Office 1301 (www.spo.go.kr)
+  - Korean National Police Agency 182 (ecrm.police.go.kr)
+
+## 11. Changes to this policy
+- We will announce changes in the app and on our website at least 7 days before they take effect, or 30 days before for changes that significantly affect your rights
+- This policy takes effect on October 23, 2026

@@ -394,7 +394,7 @@ namespace Redesign0926
         private const float ChipGap = 18f;
         private const float SummaryY = ChipsY - (ChipH * 2 + ChipGap) - 22f;   // -392
         private const float ListTop = SummaryY - 50f;                          // -442
-        private const float FooterH = 80f;   // 목록 맨 아래 저작권 줄 — 자리는 대표님이 씬에서 잡은 것(바닥 20 · 높이 100, 그림은 가운데 약 61)
+        private const float ListBottom = 24f;   // 목록은 시트 아래 끝까지 (2026-10-23 대표님 — 저작권 그림은 설정 › 앱 정보로 옮겼다)
         private const float RowH = 96f;    // 1006: 글자가 작다(대표님) — 이름 38→48 · 거리 33→41 (0930 엔 66 으로 촘촘하게, 예전 84)
         private const float CloseSize = 72f;
 
@@ -516,7 +516,7 @@ namespace Redesign0926
                 scroll.transform.SetParent(sheet.transform, false);
                 var srt = RT(scroll);
                 srt.anchorMin = new Vector2(0, 0); srt.anchorMax = new Vector2(1, 1); srt.pivot = new Vector2(0.5f, 0.5f);
-                srt.offsetMin = new Vector2(SheetPad - 8, FooterH + 18);
+                srt.offsetMin = new Vector2(SheetPad - 8, ListBottom);
                 srt.offsetMax = new Vector2(-(SheetPad - 8), ListTop);
                 NoInset(scroll);   // 카드 자체가 안전영역만큼 올라간다
 
@@ -590,24 +590,14 @@ namespace Redesign0926
                 if (pImg != null) pImg.raycastTarget = true;
             }
 
-            // 예전 카드 배경은 숨기고, 저작권 이미지는 글만 잘라 둔 그림으로 (원본 1920x1080 은 줄 높이에 넣으면 몇 px 로 쪼그라들었다).
-            // 자리·크기는 대표님이 씬에서 직접 잡았다(2026-10-06: 맨 아래 가운데) — 여기서는 그림만 맞추고 위치는 건드리지 않는다
+            // 예전 카드 배경은 숨긴다. 저작권 그림은 설정 › 앱 정보의 버전 아래로 옮겼다 (2026-10-23 대표님 — 목록은 아래 끝까지). Apply6 BuildSettingsPanel
             var copy = Find(back != null ? back.transform : sheet.transform, "copyright") ?? Find(sheet.transform, "copyright");
             if (back != null)
             {
                 var bImg = back.GetComponent<Image>();
                 if (bImg != null) bImg.enabled = false;
             }
-            if (copy != null)
-            {
-                if (copy.transform.parent != sheet.transform) copy.transform.SetParent(sheet.transform, false);
-                var cImg = copy.GetComponent<Image>();
-                var trimmed = Spr("r0926_copyright");
-                if (trimmed != null) cImg.sprite = trimmed;
-                cImg.preserveAspect = true;
-                cImg.raycastTarget = false;
-                EditorUtility.SetDirty(cImg);
-            }
+            if (copy != null) Object.DestroyImmediate(copy);
             // 버전은 목록에서 빼고 설정 탭 맨 아래에 작게 (2026-10-06 대표님 — 목록의 버전 버튼 둘은 대표님이 씬에서 지웠다). Apply6 BuildSettingsPanel
             var info = panel.transform.Find("Info");
             if (info != null) info.gameObject.SetActive(false);
