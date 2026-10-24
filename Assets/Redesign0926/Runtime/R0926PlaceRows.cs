@@ -13,6 +13,7 @@ using UnityEngine.UI;
 /// AR 의 그 박스·화살표 글자 뒤에 분홍 스티커가 붙는다. 아직 없으면 목록은 그대로, 그 줄이 분홍으로 밝혀지고
 /// 거리 칸에 '아직 AR화면 내에 없음'. 줄 ↔ 장소는 PlaceListManager.ShownEntries(글자와 같은 순서)로 잇는다.
 /// 줄 앞 표시: 장소는 색 점 · 근처 사람은 사람 모양(핑크) · 보물찾기는 금빛 상자 — 보물찾기 줄을 누르면 그 게임 상세가 열린다.
+/// 축제는 축제 분위기 그림(불꽃·등불·꽃…), 보호소는 강아지 — 누르면 그 축제를 찾은 쪽 · 카카오맵 장소 쪽이 열린다.
 /// </summary>
 public class R0926PlaceRows : MonoBehaviour
 {
@@ -67,6 +68,9 @@ public class R0926PlaceRows : MonoBehaviour
     [Tooltip("그림 크기 — 그림마다 둘레 여백이 달라 따로 둔다 (보이는 크기를 이름 글자에 맞춘다)")]
     [SerializeField] private float personIconSize = 48f;
     [SerializeField] private float huntIconSize = 44f;
+    [Tooltip("축제·보호소 그림 (r0926_f_<이름> — 서버가 축제마다 고른 이름, 보호소는 shelter)")]
+    [SerializeField] private Sprite[] kindIcons;
+    [SerializeField] private float kindIconSize = 50f;
     [Tooltip("그림 가운데 — 줄 왼쪽 끝에서")]
     [SerializeField] private float iconCenterX = 26f;
 
@@ -84,6 +88,8 @@ public class R0926PlaceRows : MonoBehaviour
     private static readonly Regex StatRx = new Regex(@"^(.+?):\s*(\d+)$", RegexOptions.Compiled);
 
     private readonly List<Row> rows = new List<Row>();
+    private Dictionary<string, Sprite> kindIconMap;
+    private const string KindIconPrefix = "r0926_f_";
 
     public struct Entry { public string name; public string distance; }
     private readonly List<Entry> entries = new List<Entry>();
@@ -267,7 +273,7 @@ public class R0926PlaceRows : MonoBehaviour
                 bool known = FindEntry(index, key, out var e);
                 // 근처 사람은 이름이 @아이디 — 장소 정보와 아직 못 맞춘 프레임에도 사람 모양으로
                 var kind = known ? e.kind : key.StartsWith("@") ? PlaceListManager.EntryKind.Person : PlaceListManager.EntryKind.Place;
-                SetIcon(r, kind, ParseHex(m.Groups[1].Value));
+                SetIcon(r, kind, ParseHex(m.Groups[1].Value), known ? e.icon : null);
                 string label = key;
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움)
                 string roman = korean ? null : R0926Romanizer.Romanize(label);
@@ -399,14 +405,15 @@ public class R0926PlaceRows : MonoBehaviour
         }
     }
 
-    // 줄 앞 표시 — 장소는 색 점, 사람은 사람 모양(핑크 그대로), 보물찾기는 금빛 상자(그림 색 그대로). 그림이 없으면 색 점
-    private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color)
+    // 줄 앞 표시 — 장소는 색 점, 사람은 사람 모양(핑크 그대로), 보물찾기는 금빛 상자 · 축제·보호소는 제 그림(그림 색 그대로). 그림이 없으면 색 점
+    private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color, string icon)
     {
         Sprite s = kind == PlaceListManager.EntryKind.Person ? personSprite
-                 : kind == PlaceListManager.EntryKind.Hunt ? huntSprite : null;
+                 : kind == PlaceListManager.EntryKind.Hunt ? huntSprite
+                 : kind == PlaceListManager.EntryKind.Festival || kind == PlaceListManager.EntryKind.Shelter ? KindIcon(icon) : null;
         if (s == null) kind = PlaceListManager.EntryKind.Place;
-        r.dot.color = kind == PlaceListManager.EntryKind.Hunt ? Color.white : color;
-        if (kind == r.kind) return;
+        r.dot.color = kind == PlaceListManager.EntryKind.Place || kind == PlaceListManager.EntryKind.Person ? color : Color.white;
+        if (kind == r.kind && (s == null || r.dot.sprite == s)) return;
         r.kind = kind;
         var rt = r.dot.rectTransform;
         if (kind == PlaceListManager.EntryKind.Place)
@@ -417,11 +424,26 @@ public class R0926PlaceRows : MonoBehaviour
             rt.sizeDelta = r.dotSize;
             return;
         }
-        float size = kind == PlaceListManager.EntryKind.Person ? personIconSize : huntIconSize;
+        float size = kind == PlaceListManager.EntryKind.Person ? personIconSize
+                   : kind == PlaceListManager.EntryKind.Hunt ? huntIconSize : kindIconSize;
         r.dot.sprite = s;
         r.dot.preserveAspect = true;
         rt.anchoredPosition = new Vector2(iconCenterX, r.dotPos.y);
         rt.sizeDelta = new Vector2(size, size);
+    }
+
+    // 축제·보호소 그림 — 이름으로 (모르는 이름은 축제 기본 그림)
+    private Sprite KindIcon(string key)
+    {
+        if (kindIcons == null || kindIcons.Length == 0) return null;
+        if (kindIconMap == null)
+        {
+            kindIconMap = new Dictionary<string, Sprite>();
+            foreach (var sp in kindIcons)
+                if (sp != null) kindIconMap[sp.name.StartsWith(KindIconPrefix) ? sp.name.Substring(KindIconPrefix.Length) : sp.name] = sp;
+        }
+        if (!string.IsNullOrEmpty(key) && kindIconMap.TryGetValue(key, out var s)) return s;
+        return kindIconMap.TryGetValue("party", out s) ? s : null;
     }
 
     // ── 줄 누르기 ─────────────────────────────────────────
@@ -430,6 +452,14 @@ public class R0926PlaceRows : MonoBehaviour
     {
         if (places == null || !TryGetEntry(r, out var e)) return;
         if (e.kind == PlaceListManager.EntryKind.Hunt) { R0926HuntPush.OpenHunt(e.huntId); return; }   // 그 게임 상세 (목록은 뒤로가기 순서대로 닫힌다)
+        if (e.kind == PlaceListManager.EntryKind.Festival || e.kind == PlaceListManager.EntryKind.Shelter)
+        {
+            // AR 에 띄우지 않는 줄 — 축제는 이름으로 찾은 쪽(날짜·장소·포스터), 보호소는 카카오맵 장소 쪽(전화·길찾기)
+            if (string.IsNullOrEmpty(e.link)) return;
+            Flash(r, tapFlashDuration);
+            Application.OpenURL(e.link);
+            return;
+        }
         Target t = places.FindTarget(e);
         if (t != null && indicators != null && indicators.Focus(t, tapFlashDuration + 0.1f))
         {

@@ -18,6 +18,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Toggle terminalToggle;
     [SerializeField] private Toggle object3DToggle;
     [SerializeField] private Toggle categoryToggle;
+    [Tooltip("축제 칩 — 켜면 목록이 근처 축제만 (AR 은 그대로). 앱을 켤 때마다 꺼진 채 시작")]
+    [SerializeField] private Toggle festivalToggle;
 
     [Header("카테고리 색상 설정")]
     [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f); // 파란색
@@ -119,6 +121,7 @@ public class FilterManager : MonoBehaviour
     private bool filterTrain = true;
     private bool filterTerminal = true;
     private bool filterObject3D = true;
+    private bool filterFestival;   // 저장하지 않는다 — 목록을 잠깐 축제로 바꿔 보는 칩
 
     private bool isUpdatingToggles = false;
 
@@ -158,6 +161,7 @@ public class FilterManager : MonoBehaviour
             { "train", "Train" },
             { "terminal", "Bus / Train" },
             { "object3D", "3D Objects" },
+            { "festival", "Festivals" },
             { "categoryAll", "Category (All)" },
             { "categoryShop", "Shop" },
             { "categoryFood", "Food" },
@@ -179,6 +183,7 @@ public class FilterManager : MonoBehaviour
             { "train", "기차역" },
             { "terminal", "터미널 / 기차" },
             { "object3D", "3D 오브젝트" },
+            { "festival", "축제" },
             { "categoryAll", "카테고리(전체)" },
             { "categoryShop", "샵" },
             { "categoryFood", "음식점" },
@@ -200,6 +205,7 @@ public class FilterManager : MonoBehaviour
             { "train", "鉄道駅" },
             { "terminal", "ターミナル / 駅" },
             { "object3D", "3Dオブジェクト" },
+            { "festival", "お祭り" },
             { "categoryAll", "カテゴリ(全体)" },
             { "categoryShop", "ショップ" },
             { "categoryFood", "グルメ" },
@@ -221,6 +227,7 @@ public class FilterManager : MonoBehaviour
             { "train", "火车站" },
             { "terminal", "客运站 / 火车站" },
             { "object3D", "3D对象" },
+            { "festival", "节庆" },
             { "categoryAll", "分类(全部)" },
             { "categoryShop", "商店" },
             { "categoryFood", "美食" },
@@ -242,6 +249,7 @@ public class FilterManager : MonoBehaviour
             { "train", "Estación de Tren" },
             { "terminal", "Terminal / Tren" },
             { "object3D", "Objetos 3D" },
+            { "festival", "Festivales" },
             { "categoryAll", "Categoría (Todo)" },
             { "categoryShop", "Tienda" },
             { "categoryFood", "Comida" },
@@ -294,6 +302,7 @@ public class FilterManager : MonoBehaviour
         SetupToggle(trainToggle, filterTrain, OnTrainToggleChanged, "train");
         SetupToggle(terminalToggle, filterTerminal, OnTerminalToggleChanged, "terminal");
         SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
+        SetupToggle(festivalToggle, false, OnFestivalToggleChanged, "festival");
 
         // Category는 PetFriendly처럼 multi-state이므로 별도 처리
         if (categoryToggle != null)
@@ -358,6 +367,7 @@ public class FilterManager : MonoBehaviour
         SetToggleLabel(trainToggle, texts["train"]);
         SetToggleLabel(terminalToggle, texts["terminal"]);
         SetToggleLabel(object3DToggle, texts["object3D"]);
+        SetToggleLabel(festivalToggle, texts["festival"]);
     }
 
     private void SetToggleLabel(Toggle toggle, string text)
@@ -702,6 +712,35 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
+    // 축제 칩 (10-23 대표님) — 목록만 근처 축제로 바꾼다 (AR 배분은 그대로라 목록에만 알린다)
+    private void OnFestivalToggleChanged(bool isOn)
+    {
+        if (isUpdatingToggles) return;
+        filterFestival = isOn;
+        RefreshFestivalLock();
+        if (placeListManager != null) placeListManager.ApplyFilters(GetActiveFilters());
+    }
+
+    /// <summary>
+    /// 축제 칩이 켜진 동안은 다른 칩이 목록에 아무 일도 하지 않으니 잠가 둔다 (흐리게).
+    /// 끄면 되돌린다 — 분류를 고른 동안 잠겨 있던 공공·교통·사람 칸은 그대로 잠긴 채
+    /// </summary>
+    private void RefreshFestivalLock()
+    {
+        bool free = !filterFestival;
+        bool open = free && categoryState == CategoryFilterState.All;
+        SetToggleInteractable(categoryToggle, free);
+        SetToggleInteractable(petFriendlyToggle, free);
+        SetToggleInteractable(object3DToggle, free);
+        SetToggleInteractable(publicDataToggle, open);
+        SetToggleInteractable(subwayToggle, open);
+        SetToggleInteractable(trainToggle, open);
+        SetToggleInteractable(terminalToggle, open);
+        SetToggleInteractable(alcoholToggle, open);
+        var p2pPanel = Object.FindFirstObjectByType<P2PUserFilterPanel>(FindObjectsInactive.Include);
+        if (p2pPanel != null) SetToggleInteractable(p2pPanel.GetToggle(), open);
+    }
+
     // ============================================================
     // 카테고리 토글 — 고르기 목록이 걸려 있으면 펼치고, 없으면 누를 때마다 다음 분류로
     // ============================================================
@@ -723,8 +762,10 @@ public class FilterManager : MonoBehaviour
             return;
         }
 
-        // 순환: 전체 → 샵 → 음식점 → 카페 → 공원 → 화장실 → 스포츠 → 랜드마크 → 전체
-        SetCategory((CategoryFilterState)(((int)categoryState + 1) % categoryStateValues.Length));
+        // 순환 (보여 주는 순서): 전체 → 음식점 → 카페 → 샵 → 공원 → 스포츠 → 화장실 → 랜드마크 → 전체
+        var order = R0926FilterChip.CatOrder;
+        int at = System.Array.IndexOf(order, (int)categoryState);
+        SetCategory((CategoryFilterState)order[(at + 1) % order.Length]);
     }
 
     /// <summary>분류를 고른다 — 고르기 목록과 순환이 같이 쓴다</summary>
@@ -807,19 +848,19 @@ public class FilterManager : MonoBehaviour
             if (terminalToggle != null) terminalToggle.SetIsOnWithoutNotify(filterTerminal);
             if (alcoholToggle != null) alcoholToggle.SetIsOnWithoutNotify(filterAlcohol);
 
-            // 토글 터치 가능으로 복원
-            SetToggleInteractable(publicDataToggle, true);
-            SetToggleInteractable(subwayToggle, true);
-            SetToggleInteractable(trainToggle, true);
-            SetToggleInteractable(terminalToggle, true);
-            SetToggleInteractable(alcoholToggle, true);
+            // 토글 터치 가능으로 복원 (축제 칩이 켜져 있으면 그쪽 잠금이 이어진다)
+            SetToggleInteractable(publicDataToggle, !filterFestival);
+            SetToggleInteractable(subwayToggle, !filterFestival);
+            SetToggleInteractable(trainToggle, !filterFestival);
+            SetToggleInteractable(terminalToggle, !filterFestival);
+            SetToggleInteractable(alcoholToggle, !filterFestival);
 
             // P2P 복원
             var p2pPanel = Object.FindFirstObjectByType<P2PUserFilterPanel>(FindObjectsInactive.Include);
             if (p2pPanel != null)
             {
                 p2pPanel.SetCategoryLock(false);
-                SetToggleInteractable(p2pPanel.GetToggle(), true);
+                SetToggleInteractable(p2pPanel.GetToggle(), !filterFestival);
             }
 
             // 비활성화 비주얼 해제 → 원래 on/off 색상 복원
@@ -979,7 +1020,8 @@ public class FilterManager : MonoBehaviour
             { "terminal", categoryActive ? false : filterTerminal },
             { "object3D", filterObject3D },
             { "categoryFilter", categoryActive },
-            { "p2pUsers", categoryActive ? false : true }
+            { "p2pUsers", categoryActive ? false : true },
+            { "festival", filterFestival }   // 목록만 — 근처 축제 (PlaceListManager)
         };
     }
 

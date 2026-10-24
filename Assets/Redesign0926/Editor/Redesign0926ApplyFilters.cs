@@ -15,11 +15,17 @@ namespace Redesign0926
     ///    기차역 칩은 지우고 터미널 칩 하나가 둘을 함께 켜고 끈다 (FilterManager)
     ///    ⚠ 기차역 칩은 FilterManager 의 '주류' 토글로도 잘못 이어져 있었다 — 기차역을 끄면 술 파는 가게까지 숨었다. 같이 끊는다
     ///  · "'AI에게 묻기' 버튼은 우선 주석처리" → 버튼을 숨기고 만드는 코드는 Apply5 에 주석으로 남김
+    ///  · 10-23 대표님: "3D를 '사람' 좌측에 … '터미널/기차' 는 '지하철' 우측에 … '공공데이터' 우측에 (현재 3D 자리) '축제'"
+    ///    → 위 [전체 ∨][반려견][공공데이터][축제] · 아래 [지하철][터미널 / 기차][3D][사람] — 4칸씩, 두 칸 쓰는 칩 없음
+    ///    축제 칩은 공공데이터 칩을 본떠 만들고 FilterManager.festivalToggle 에 잇는다
+    ///  · 분류 목록은 전체 · 음식점 · 카페 · 샵 · 공원 · 스포츠 · 화장실 · 랜드마크 순, 줄 앞은 분류 그림 (r0926_c_*)
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        // 칸 순서 — 위 4칸 · 아래 3칸 (터미널 / 기차가 두 칸)
-        private static readonly string[] ChipOrder = { "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "3DObjectToggle", "MetroToggle", "TerminalToggle", "P2PUserToggle" };
+        // 칸 순서 — 위 4칸 · 아래 4칸
+        private static readonly string[] ChipOrder = { "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "FestivalToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle" };
+        // 분류 그림 r0926_c_<이름> — FilterManager.CategoryFilterState 순서
+        private static readonly string[] CatIconKeys = { "all", "shop", "food", "cafe", "park", "toilet", "sport", "landmark" };
         private const float MenuRowH = 112f, MenuPad = 12f, MenuW = 560f;
         private static readonly Color MenuCard = new Color(0.125f, 0.141f, 0.161f, 0.985f);
 
@@ -48,6 +54,7 @@ namespace Redesign0926
                 }
                 Object.DestroyImmediate(train.gameObject);
             }
+            FestivalChip(filters);
             for (int i = 0; i < ChipOrder.Length; i++)
             {
                 var c = filters.transform.Find(ChipOrder[i]);
@@ -59,11 +66,31 @@ namespace Redesign0926
             cso.FindProperty("columns").intValue = 4;
             cso.FindProperty("gap").floatValue = ChipGap;
             cso.FindProperty("rowHeight").floatValue = ChipH;
-            var wide = cso.FindProperty("wide");
-            var term = filters.transform.Find("TerminalToggle");
-            wide.arraySize = term != null ? 1 : 0;
-            if (term != null) wide.GetArrayElementAtIndex(0).objectReferenceValue = term;
+            cso.FindProperty("wide").arraySize = 0;   // 예전엔 터미널 / 기차가 두 칸
             cso.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // 축제 칩 — 공공데이터 칩을 본떠 (모양·누름 소리 그대로) 만들고 FilterManager 에 잇는다. 이미 있으면 잇기만
+        private static void FestivalChip(GameObject filters)
+        {
+            var fest = filters.transform.Find("FestivalToggle");
+            if (fest == null)
+            {
+                var src = filters.transform.Find("PublicDataToggle");
+                if (src == null) return;
+                fest = Object.Instantiate(src.gameObject, filters.transform, false).transform;
+                fest.name = "FestivalToggle";
+                var t = fest.GetComponent<Toggle>();
+                for (int k = t.onValueChanged.GetPersistentEventCount() - 1; k >= 0; k--)
+                    UnityEventTools.RemovePersistentListener(t.onValueChanged, k);
+                t.group = null;
+                t.SetIsOnWithoutNotify(false);
+            }
+            var fm = FindInScene<FilterManager>(filters);
+            if (fm == null) return;
+            var so = new SerializedObject(fm);
+            so.FindProperty("festivalToggle").objectReferenceValue = fest.GetComponent<Toggle>();
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // 0930 틀(ListPage0926)이 씌워진 뒤에 — 고르기 목록은 목록 쪽과 함께 옆으로 밀린다
@@ -124,11 +151,11 @@ namespace Redesign0926
             var menu = Ensure<R0926CategoryMenu>(chip.gameObject);
             int n = R0926FilterChip.CatNames.Length;
             var rows = new Object[n];
-            var dots = new Object[n];
             var labels = new Object[n];
             var checks = new Object[n];
             for (int i = 0; i < n; i++)
             {
+                int ci = i < R0926FilterChip.CatOrder.Length ? R0926FilterChip.CatOrder[i] : i;   // 이 줄의 분류 (CategoryFilterState)
                 var row = FindOrCreate(content.transform, "Row" + i);
                 row.transform.SetSiblingIndex(i);
                 var rrt = RT(row);
@@ -143,18 +170,22 @@ namespace Redesign0926
                 b.targetGraphic = bg;
                 var nav = b.navigation; nav.mode = Navigation.Mode.None; b.navigation = nav;
                 ResetListeners(b);
-                UnityEventTools.AddIntPersistentListener(b.onClick, menu.Pick, i);
+                UnityEventTools.AddIntPersistentListener(b.onClick, menu.Pick, ci);
 
-                var dot = FindOrCreate(row.transform, "Dot");
-                SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(46, 0), new Vector2(24, 24));
-                var dImg = Img(dot, Spr("r0926_circle"), R0926FilterChip.CatColors[i], Image.Type.Simple);
-                dImg.raycastTarget = false;
+                // 줄 앞 — 예전 색 점 대신 분류 그림
+                var dot = row.transform.Find("Dot");
+                if (dot != null) Object.DestroyImmediate(dot.gameObject);
+                var icon = FindOrCreate(row.transform, "Icon");
+                SetRect(RT(icon), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(54, 0), new Vector2(56, 56));
+                var iImg = Img(icon, Spr("r0926_c_" + CatIconKeys[ci]), Color.white, Image.Type.Simple);
+                iImg.raycastTarget = false;
+                iImg.preserveAspect = true;
 
                 var label = FindOrCreate(row.transform, "Label");
                 var lrt = RT(label);
                 lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.pivot = new Vector2(0.5f, 0.5f);
-                lrt.offsetMin = new Vector2(84, 0); lrt.offsetMax = new Vector2(-90, 0);
-                var t = Txt(label, R0926FilterChip.CatNames[i][0], 44, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
+                lrt.offsetMin = new Vector2(104, 0); lrt.offsetMax = new Vector2(-90, 0);
+                var t = Txt(label, R0926FilterChip.CatNames[ci][0], 44, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 t.verticalOverflow = VerticalWrapMode.Overflow;
 
@@ -163,9 +194,9 @@ namespace Redesign0926
                 var cImg = Img(check, Spr("r0926_i_check"), Ink, Image.Type.Simple);
                 cImg.raycastTarget = false;
                 cImg.preserveAspect = true;
-                cImg.enabled = i == 0;
+                cImg.enabled = ci == 0;
 
-                rows[i] = b; dots[i] = dImg; labels[i] = t; checks[i] = cImg;
+                rows[i] = b; labels[i] = t; checks[i] = cImg;
             }
             for (int i = content.transform.childCount - 1; i >= n; i--)   // 분류가 줄면 남는 줄
                 Object.DestroyImmediate(content.transform.GetChild(i).gameObject);
@@ -178,7 +209,7 @@ namespace Redesign0926
             mso.FindProperty("card").objectReferenceValue = RT(card);
             mso.FindProperty("scroll").objectReferenceValue = sr;
             SetArray(mso.FindProperty("rows"), rows);
-            SetArray(mso.FindProperty("dots"), dots);
+            mso.FindProperty("dots").arraySize = 0;   // 줄 앞은 분류 그림 — 색 점 없음
             SetArray(mso.FindProperty("labels"), labels);
             SetArray(mso.FindProperty("checks"), checks);
             mso.FindProperty("modes").objectReferenceValue = modes;

@@ -5,9 +5,10 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 목록 시트의 필터 칩 모양 — 체크 동그라미 없이 칸 전체가 켜짐/꺼짐.
-/// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(3D·전체)은 꽉 찬 흰색 · 팔로잉만은 꽉 찬 옅은 분홍 · 꺼짐: 어둡게 · 반려견 '되는 곳만': 꽉 찬 노랑 + 앞의 점이 흰색으로 반짝.
+/// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(전체)은 꽉 찬 흰색 · 3D 는 꽉 찬 보라 + 흰 글자 · 팔로잉만은 꽉 찬 옅은 분홍 · 꺼짐: 어둡게 · 반려견 '되는 곳만': 꽉 찬 노랑 + 앞의 점이 흰색으로 반짝.
+/// 분류 칩은 고른 분류의 그림(음식점 그릇 · 카페 모카 잔 …)을 점 자리에. 사람 칩이 꺼지면 '주변 사람'.
 /// 필터 로직(FilterManager)은 그대로 두고, 그 상태를 읽어 매 프레임 끝에 모양·이름만 다시 그린다.
-/// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다.
+/// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다. 목록을 통째로 바꾸는 축제 칩은 끼지 않는다.
 /// </summary>
 public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
 {
@@ -25,6 +26,13 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     [FormerlySerializedAs("cycle")]
     [SerializeField] private Image drop;
     [SerializeField] private float longPress = 0.55f;
+    [Tooltip("켜지면 그 색으로 꽉 찬 칸 + 흰 글자 (3D — 10-23 대표님 '켜졌을 때 버튼배경 보라색')")]
+    [SerializeField] private bool solidOn;
+    [Tooltip("목록을 통째로 바꾸는 칩(축제) — 길게 누르기 '이것만'에 끼지 않는다")]
+    [SerializeField] private bool modeChip;
+    [Tooltip("분류 칩 — 분류마다 그림 (FilterManager.CategoryFilterState 순서). '전체'는 점 그대로")]
+    [SerializeField] private Sprite[] catIcons;
+    [SerializeField] private float catIconSize = 46f;
 
     private FilterManager fm;
     private R0926CategoryMenu menu;
@@ -33,7 +41,13 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     private int baseFont;
     private bool pressing, fired, suppress;
     private float pressAt;
+    private Sprite dotSprite;
+    private Vector2 dotSize;
 
+    /// <summary>분류를 보여 주는 순서 (10-23 대표님) — 전체 · 음식점 · 카페 · 샵 · 공원 · 스포츠 · 화장실 · 랜드마크. 값은 CategoryFilterState</summary>
+    public static readonly int[] CatOrder = { 0, 2, 3, 1, 4, 6, 5, 7 };
+
+    // CategoryFilterState 순서 (보여 주는 순서는 CatOrder)
     public static readonly string[][] CatNames =
     {
         new[] { "전체", "All", "すべて", "全部", "Todo" },
@@ -45,13 +59,15 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         new[] { "스포츠", "Sports", "スポーツ", "运动", "Deporte" },
         new[] { "랜드마크", "Landmark", "名所", "地标", "Lugar" },
     };
+    // 카페는 모카 · 스포츠는 빨강 (10-23 대표님)
     public static readonly Color[] CatColors =
     {
-        new Color(0.91f, 0.93f, 0.945f), new Color(0.31f, 0.55f, 1f), new Color(1f, 0.54f, 0.24f), new Color(0.69f, 0.42f, 0.94f),
-        new Color(0.22f, 0.85f, 0.54f), new Color(0.61f, 0.48f, 1f), new Color(0.18f, 0.77f, 0.77f), new Color(0.96f, 0.77f, 0.26f),
+        new Color(0.91f, 0.93f, 0.945f), new Color(0.31f, 0.55f, 1f), new Color(1f, 0.54f, 0.24f), new Color(0.643f, 0.459f, 0.318f),
+        new Color(0.22f, 0.85f, 0.54f), new Color(0.61f, 0.48f, 1f), new Color(0.94f, 0.28f, 0.28f), new Color(0.96f, 0.77f, 0.26f),
     };
-    // 10-21 대표님 — '사람'은 '모든 사람', '팔로잉'은 '팔로잉만'(살짝 분홍), 반려견 되는 곳만 볼 때는 '반려견만'
+    // 10-21 대표님 — '사람'은 '모든 사람', '팔로잉'은 '팔로잉만'(살짝 분홍), 반려견 되는 곳만 볼 때는 '반려견만' · 10-23 꺼지면 '주변 사람'
     private static readonly string[] P2PAll = { "모든 사람", "Everyone", "すべての人", "所有人", "Todos" };
+    private static readonly string[] P2PNearby = { "주변 사람", "Nearby people", "近くの人", "附近的人", "Gente cerca" };
     private static readonly string[] P2PFollowing = { "팔로잉만", "Following only", "フォロー中のみ", "仅关注", "Solo seguidos" };
     private static readonly string[] PetOnly = { "반려견만", "Pets only", "ペットのみ", "仅宠物", "Solo mascotas" };
     private static readonly Color Pink = new Color(0.914f, 0.325f, 0.514f);
@@ -65,11 +81,12 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         fm = FindAnyObjectByType<FilterManager>();
         menu = GetComponent<R0926CategoryMenu>();
         if (label != null) baseFont = label.fontSize;
+        if (dot != null) { dotSprite = dot.sprite; dotSize = dot.rectTransform.sizeDelta; }
     }
 
     public void OnPointerDown(PointerEventData e)
     {
-        if (kind != Kind.Simple || toggle == null || !toggle.interactable) return;
+        if (kind != Kind.Simple || modeChip || toggle == null || !toggle.interactable) return;
         pressing = true;
         fired = false;
         pressAt = Time.unscaledTime;
@@ -84,7 +101,7 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         fired = true;
         // 이것만 켠다 — 손을 뗄 때의 누름이 다시 끄지 않게 그동안 토글을 잠근다
         foreach (var chip in transform.parent.GetComponentsInChildren<R0926FilterChip>())
-            if (chip.kind == Kind.Simple && chip.toggle != null && chip.toggle.interactable && chip.toggle.isOn != (chip == this))
+            if (chip.kind == Kind.Simple && !chip.modeChip && chip.toggle != null && chip.toggle.interactable && chip.toggle.isOn != (chip == this))
                 chip.toggle.isOn = chip == this;
         suppress = true;
         toggle.interactable = false;
@@ -100,11 +117,13 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         Color c = color;
         string text = Pick(names);
         bool arrow = false, solid = false;
+        Sprite icon = null;
         switch (kind)
         {
             case Kind.Category:
                 int ci = fm != null ? Mathf.Clamp((int)fm.CategoryState, 0, CatNames.Length - 1) : 0;
                 st = 1; c = CatColors[ci]; text = Pick(CatNames[ci]); arrow = true;
+                if (ci > 0 && catIcons != null && ci < catIcons.Length) icon = catIcons[ci];
                 break;
             case Kind.Pet:
                 var ps = fm != null ? fm.PetState : FilterManager.PetFriendlyFilterState.All;
@@ -113,24 +132,32 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
                 break;
             case Kind.P2P:
                 var p2 = fm != null ? fm.P2PState : FilterManager.P2PFilterState.All;
-                if (p2 == FilterManager.P2PFilterState.None) { st = 0; c = Pink; text = Pick(P2PAll); }
+                if (p2 == FilterManager.P2PFilterState.None) { st = 0; c = Pink; text = Pick(P2PNearby); }
                 else if (p2 == FilterManager.P2PFilterState.FollowingOnly) { st = 1; c = FollowPink; text = Pick(P2PFollowing); solid = true; }
                 else { st = 1; c = Pink; text = Pick(P2PAll); }
                 break;
         }
-        float dim = toggle.interactable || suppress ? 1f : 0.35f;   // 카테고리를 고르면 FilterManager 가 공공·사람 칸을 잠근다
-        // 흰 칩(3D·전체)이 켜지면 꽉 찬 흰색 — 반투명하면 회색으로 보여 켜진 건지 꺼진 건지 몰랐다 (10-17 대표님). 팔로잉만은 꽉 찬 옅은 분홍
-        bool white = st == 1 && dim >= 1f && (solid || c.r > 0.85f && c.g > 0.85f && c.b > 0.85f);
+        float dim = toggle.interactable || suppress ? 1f : 0.35f;   // 카테고리를 고르면 공공·사람 칸을, 축제 칩을 켜면 나머지 칸을 FilterManager 가 잠근다
+        // 흰 칩(전체)이 켜지면 꽉 찬 흰색 — 반투명하면 회색으로 보여 켜진 건지 꺼진 건지 몰랐다 (10-17 대표님). 팔로잉만은 꽉 찬 옅은 분홍.
+        // 3D 는 꽉 찬 보라에 흰 글자 (solidOn)
+        bool filled = st == 1 && dim >= 1f && (solid || solidOn || c.r > 0.85f && c.g > 0.85f && c.b > 0.85f);
+        bool ink = filled && !solidOn;   // 밝은 바탕엔 어두운 글자·점
 
-        body.color = white ? new Color(c.r, c.g, c.b, 0.94f)
+        body.color = filled ? new Color(c.r, c.g, c.b, solidOn ? 1f : 0.94f)
                    : st == 2 ? new Color(c.r, c.g, c.b, dim)
                    : st == 1 ? new Color(c.r, c.g, c.b, 0.26f * dim)
                    : new Color(1f, 1f, 1f, 0.035f * dim);
-        label.color = white ? InkOnWhite
+        label.color = ink ? InkOnWhite : filled ? Color.white
                     : st == 0 ? new Color(1f, 1f, 1f, 0.34f * dim) : new Color(1f, 1f, 1f, dim);
         if (dot != null)
         {
-            if (st == 2)
+            SetDotSprite(icon);
+            if (icon != null)
+            {
+                dot.color = new Color(1f, 1f, 1f, dim);   // 분류 그림은 제 색 그대로
+                dot.rectTransform.localScale = Vector3.one;
+            }
+            else if (st == 2)
             {
                 // 꽉 찬 칸 위에서 점이 묻히지 않게 — 흰 점이 반짝인다
                 float k = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 3.9f);
@@ -139,14 +166,14 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
             }
             else
             {
-                dot.color = white ? InkOnWhite : st == 1 ? new Color(c.r, c.g, c.b, dim) : new Color(1f, 1f, 1f, 0.28f * dim);
+                dot.color = ink ? InkOnWhite : filled ? Color.white : st == 1 ? new Color(c.r, c.g, c.b, dim) : new Color(1f, 1f, 1f, 0.28f * dim);
                 dot.rectTransform.localScale = Vector3.one;
             }
         }
         if (drop != null)
         {
             if (drop.enabled != arrow) drop.enabled = arrow;
-            drop.color = white ? new Color(InkOnWhite.r, InkOnWhite.g, InkOnWhite.b, 0.75f) : new Color(1f, 1f, 1f, 0.75f * dim);
+            drop.color = ink ? new Color(InkOnWhite.r, InkOnWhite.g, InkOnWhite.b, 0.75f) : new Color(1f, 1f, 1f, 0.75f * dim);
             bool open = menu != null && menu.IsOpen;
             drop.rectTransform.localEulerAngles = new Vector3(0f, 0f, open ? 180f : 0f);
         }
@@ -160,6 +187,17 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
             placedW = w;
             Place(arrow, w);
         }
+    }
+
+    // 점 자리 — 분류 그림이 있으면 그림(크게), 없으면 원래 점. 크기가 바뀌면 묶음을 다시 놓는다
+    private void SetDotSprite(Sprite icon)
+    {
+        Sprite want = icon != null ? icon : dotSprite;
+        if (want == null || dot.sprite == want) return;
+        dot.sprite = want;
+        dot.preserveAspect = icon != null;
+        dot.rectTransform.sizeDelta = icon != null ? new Vector2(catIconSize, catIconSize) : dotSize;
+        placedFor = null;
     }
 
     /// <summary>점과 글자(분류 칩은 ∨ 까지)를 한 묶음으로 가운데에 — 칸보다 길면(긴 언어) 글자를 앱 최소 크기까지 줄인다</summary>

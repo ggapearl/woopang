@@ -7676,28 +7676,52 @@ namespace Redesign0926
             bool MenuOpen() { var m = UnityEngine.Object.FindAnyObjectByType<R0926CategoryMenu>(); return m != null && m.IsOpen; }
             Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
             Sleep(1.0f);
+            // 근처 축제·보호소는 시험 서버의 정해 둔 답 (관광공사·카카오를 부르지 않는다)
+            Do(() => { R0926Nearby.EditorBase = "http://127.0.0.1:5099"; DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok"); R0926Nearby.EditorForget(); });
             Do(() => Fm()?.SetCategory(FilterManager.CategoryFilterState.All));
             Do(() => Click("Dock0926/List_Button"));
             Sleep(1.2f);
             Shot("filters_list");
             Do(() => log.Add("  칩: " + ChipLayout()));
-            Check(() => ChipGridOk(), "칩 두 줄 — 위 4칸(전체·반려견·공공데이터·3D) · 아래 3칸(지하철·터미널 / 기차·사람), 칸 경계가 위아래로 맞음");
-            Do(() => log.Add("  이름: " + ChipLabel("PublicDataToggle") + " · " + ChipLabel("TerminalToggle")));
+            Check(() => ChipGridOk(), "칩 두 줄 4칸씩 — 위 전체·반려견·공공데이터·축제 · 아래 지하철·터미널 / 기차·3D·사람, 칸 경계가 위아래로 맞음 (10-23)");
+            Do(() => log.Add("  이름: " + ChipLabel("PublicDataToggle") + " · " + ChipLabel("FestivalToggle") + " · " + ChipLabel("TerminalToggle")));
             Check(() => ChipLabel("TerminalToggle").Contains("/"), "터미널 / 기차 한 칩");
+            Check(() => ChipLabel("FestivalToggle") == "축제" || ChipLabel("FestivalToggle") == "Festivals", "'공공데이터' 오른쪽에 '축제' 칩");
+            Check(() => ChipOn("FestivalToggle") == false, "축제 칩은 꺼진 채 시작");
             Check(() => ChipLabel("PublicDataToggle") == "공공데이터" || ChipLabel("PublicDataToggle") == "Public data", "'공공' → '공공데이터'");
+            Check(() => ChipTextsFit(), "다섯 나라 말 모두 칩 칸 안에 (한 칸이 된 '터미널 / 기차' 포함)");
             Check(() => NoOldLongPress(), "0926 칩에 옛 길게 누르기(LongPressHandler)가 없음 — 0.8초 넘게 누른 손을 떼도 칩이 다시 꺼지지 않음");
             Check(() => !AnyActive("AskAI0926"), "'AI에게 묻기' 숨김");
             Do(() => log.Add("  '목록|지도|설정' 칸 높이 " + TabH() + " · 칩 높이 " + ChipHeight("CategoryToggle")));
             Check(() => Mathf.Abs(TabH() - ChipHeight("CategoryToggle")) < 1f, "'목록|지도|설정' 칸 높이 = 필터 칩 높이");
-            Check(() => WhiteChip("CategoryToggle") && WhiteChip("3DObjectToggle"), "켜진 '전체'·'3D' 칩은 꽉 찬 흰색");
+            Check(() => WhiteChip("CategoryToggle"), "켜진 '전체' 칩은 꽉 찬 흰색");
+            Check(() => PurpleChip("3DObjectToggle"), "켜진 '3D' 칩은 꽉 찬 보라 + 흰 글자 (10-23)");
 
             // '전체' → 고르기 목록
             Do(() => ClickToggle("CategoryToggle"));
             Sleep(0.4f);
             Shot("filters_menu");
             Check(() => MenuOpen(), "'전체'를 누르면 분류 고르기 목록이 펼쳐짐");
-            Check(() => MenuRows() == 8, "분류 8줄 (전체·샵·음식점·카페·공원·화장실·스포츠·랜드마크)");
+            Check(() => MenuRows() == 8, "분류 8줄");
+            Do(() => log.Add("  분류 순서: " + MenuOrder()));
+            Check(() => MenuOrder() == "전체·음식점·카페·샵·공원·스포츠·화장실·랜드마크" || MenuOrder() == "All·Food·Cafe·Shop·Park·Sports·Toilet·Landmark",
+                  "분류 순서 — 전체·음식점·카페·샵·공원·스포츠·화장실·랜드마크 (10-23)");
+            Check(() => MenuIconsOk(), "줄 앞은 분류 그림 (전체·그릇·모카 잔·가방·나무·공·화장실·건물) — 예전 색 점 없음");
             Check(() => Fm().CategoryState == FilterManager.CategoryFilterState.All, "펼치기만 해서는 분류가 바뀌지 않음");
+            Do(() => PickCategory(2));
+            Sleep(0.4f);
+            Shot("filters_cafe");
+            Check(() => Fm().CategoryState == FilterManager.CategoryFilterState.Cafe, "셋째 줄은 '카페'");
+            Check(() => ChipIcon("CategoryToggle") == "r0926_c_cafe", "칩 점 자리에 모카 잔 그림");
+            Check(() => ChipTint("CategoryToggle", new Color(0.643f, 0.459f, 0.318f)), "카페는 모카색 (10-23)");
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.3f);
+            Do(() => PickCategory(5));
+            Sleep(0.4f);
+            Check(() => Fm().CategoryState == FilterManager.CategoryFilterState.Sport && ChipIcon("CategoryToggle") == "r0926_c_sport", "여섯째 줄은 '스포츠' · 공 그림");
+            Check(() => ChipTint("CategoryToggle", new Color(0.94f, 0.28f, 0.28f)), "스포츠는 빨강 (10-23)");
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.3f);
             Do(() => PickCategory(4));
             Sleep(0.4f);
             Shot("filters_park");
@@ -7722,6 +7746,7 @@ namespace Redesign0926
             Do(() => PickCategory(0));
             Sleep(0.3f);
             Check(() => Fm().CategoryState == FilterManager.CategoryFilterState.All, "'전체'로 돌아옴");
+            Check(() => ChipIcon("CategoryToggle") == "r0926_circle", "'전체'는 그림 없이 점");
 
             // 터미널 / 기차 — 한 번에 둘 다
             Do(() => ClickToggle("TerminalToggle"));
@@ -7738,10 +7763,21 @@ namespace Redesign0926
             Shot("filters_pet_only");
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly, "반려견 한 번 → 반려견 되는 곳만");
             Check(() => ChipLabel("PetFriendlyToggle") == "반려견만" || ChipLabel("PetFriendlyToggle") == "Pets only", "반려견 되는 곳만 → 칩 이름 '반려견만'");
+            // 반려견만 — 맨 위에 가까운 유기견 보호소 세 곳 (10-23)
+            Wait(() => Shown(PlaceListManager.EntryKind.Shelter) > 0, 10f, "보호소 받음");
+            Sleep(0.6f);
+            Shot("filters_shelter");
+            Do(() => log.Add("  줄: " + RowsSummary(5)));
+            Check(() => Shown(PlaceListManager.EntryKind.Shelter) == 3, "보호소는 세 곳만 (서버는 다섯 곳)");
+            Check(() => ShelterOnTop(), "보호소 세 줄이 맨 위 — 가까운 가게보다 먼저");
+            Check(() => RowIcons(3).TrueForAll(s => s == "r0926_f_shelter"), "보호소 줄 앞은 강아지 그림");
+            Check(() => ShownLinks(PlaceListManager.EntryKind.Shelter).TrueForAll(l => l.StartsWith("https://place.map.kakao.com/")), "보호소를 누르면 카카오맵 장소 쪽 (전화·길찾기)");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.3f);
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.All, "반려견 두 번 → 전부 ('애견동반 안 됨' 없음)");
             Check(() => ChipLabel("PetFriendlyToggle") == "반려견" || ChipLabel("PetFriendlyToggle") == "Pets", "전부 → 칩 이름 '반려견'");
+            Sleep(0.4f);
+            Check(() => Shown(PlaceListManager.EntryKind.Shelter) == 0, "반려견만을 풀면 보호소 줄 없음");
 
             // 사람 — '팔로잉만'(꽉 찬 옅은 분홍) · '모든 사람' (10-21 대표님)
             P2PUserFilterPanel Pp() => UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
@@ -7756,19 +7792,216 @@ namespace Redesign0926
             Shot("filters_p2p_all");
             Check(() => ChipLabel("P2PUserToggle") == "모든 사람" || ChipLabel("P2PUserToggle") == "Everyone", "전체 → 칩 이름 '모든 사람'");
             Check(() => !PinkChip("P2PUserToggle"), "'모든 사람'은 은은한 분홍 (꽉 찬 칸 아님)");
+            Do(() => Pp()?.SetFilterModeExternal(UserFilterMode.None));
+            Sleep(0.2f);
+            Shot("filters_p2p_none");
+            Check(() => ChipLabel("P2PUserToggle") == "주변 사람" || ChipLabel("P2PUserToggle") == "Nearby people", "끄면 칩 이름 '주변 사람' (10-23)");
             Do(() => Pp()?.SetFilterModeExternal(p2pWas));
             Check(() => SoundOnAll("ListPanel", "ModeSeg0926"), "'목록|지도|설정' 탭에 누름 소리 (10-21)");
 
-            // 3D — 끄면 어둡게 · 켜면 흰색
+            // 3D — 끄면 어둡게 · 켜면 꽉 찬 보라
             Do(() => ClickToggle("3DObjectToggle"));
             Sleep(0.3f);
-            Check(() => !WhiteChip("3DObjectToggle"), "3D 끄면 흰색이 아님");
+            Check(() => !PurpleChip("3DObjectToggle") && !WhiteChip("3DObjectToggle"), "3D 끄면 어두운 칸");
             Shot("filters_3d_off");
             Do(() => ClickToggle("3DObjectToggle"));
             Sleep(0.3f);
-            Check(() => WhiteChip("3DObjectToggle"), "3D 켜면 다시 흰색");
+            Check(() => PurpleChip("3DObjectToggle"), "3D 켜면 다시 꽉 찬 보라");
+
+            // 축제 — 목록이 거리와 상관없이 근처 축제만 (10-23)
+            Do(() => ClickToggle("FestivalToggle"));
+            Wait(() => Shown(PlaceListManager.EntryKind.Festival) > 0, 10f, "축제 받음");
+            Sleep(0.6f);
+            Shot("filters_festival");
+            Do(() => log.Add("  줄: " + RowsSummary(5)));
+            Check(() => Fm().GetActiveFilters()["festival"], "축제 칩을 켜면 festival 필터");
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 4 && ShownTotal() == 4, "목록이 축제 네 곳만 (가게·사람·보물찾기 없음)");
+            Check(() => FestivalRowsOk(), "가까운 순 · 거리 칸은 '며칠부터 · 거리' / '진행 중 · 거리' / '오늘까지 · 거리' · 200km 먼 곳도 나옴");
+            Check(() => string.Join(",", RowIcons(4)) == "r0926_f_fireworks,r0926_f_maple,r0926_f_crab,r0926_f_fruit", "줄 앞은 축제마다 그림 (불꽃·단풍·꽃게·사과)");
+            Check(() => ShownLinks(PlaceListManager.EntryKind.Festival).TrueForAll(l => l.StartsWith("https://m.search.naver.com/search.naver?query=")), "축제를 누르면 축제 이름으로 검색");
+            Check(() => ChipsLocked(true, "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle"),
+                  "축제를 보는 동안 다른 칩은 잠김 (어둡게)");
+            Do(() => ClickToggle("FestivalToggle"));
+            Sleep(0.6f);
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 0 && ShownTotal() > 0, "다시 누르면 원래 목록");
+            Check(() => ChipsLocked(false, "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle"), "칩 잠김 풀림");
+
+            // 공공데이터 신청 전(서버가 not_registered) — 빈 목록 대신 안내 한 줄
+            Do(() => { DevGet(FiMe, "/api/dev/nearby_mode?festivals=not_registered"); R0926Nearby.EditorForget(); });
+            Do(() => ClickToggle("FestivalToggle"));
+            Wait(() => R0926Nearby.FestivalStatus == "not_registered", 10f, "축제 — 신청 전");
+            Sleep(0.6f);
+            Shot("filters_festival_pending");
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 0 && SummaryText().Contains(R0926Nearby.EmptyMessage().Split('\n')[0]), "신청 전이면 '축제 정보를 준비하고 있어요' 안내");
+            Do(() => ClickToggle("FestivalToggle"));
+            Sleep(0.4f);
+            Do(() => { DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok"); R0926Nearby.EditorBase = null; R0926Nearby.EditorForget(); });
             Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
             Sleep(1.0f);
+        }
+
+        private const string FiMe = "hunt_test_filters";
+        private static bool ChipOn(string name) { var t = Chip(name)?.GetComponent<Toggle>(); return t != null && t.isOn; }
+        private static bool PurpleChip(string name)
+        {
+            var b = Chip(name)?.GetComponent<Image>();
+            var t = Chip(name)?.Find("Label")?.GetComponent<Text>();
+            return b != null && t != null && b.color.a > 0.95f && Mathf.Abs(b.color.r - 0.545f) < 0.05f && Mathf.Abs(b.color.g - 0.361f) < 0.05f && Mathf.Abs(b.color.b - 0.965f) < 0.05f
+                && t.color.r > 0.95f && t.color.g > 0.95f && t.color.b > 0.95f;
+        }
+        private static string ChipIcon(string name) { var d = Chip(name)?.Find("Dot0926")?.GetComponent<Image>(); return d != null && d.sprite != null ? d.sprite.name : ""; }
+        // 켜진 일반 칸 — 그 분류 색이 옅게 깔린다
+        private static bool ChipTint(string name, Color want)
+        {
+            var b = Chip(name)?.GetComponent<Image>();
+            return b != null && Mathf.Abs(b.color.r - want.r) < 0.02f && Mathf.Abs(b.color.g - want.g) < 0.02f && Mathf.Abs(b.color.b - want.b) < 0.02f;
+        }
+        private static bool ChipsLocked(bool locked, params string[] names)
+        {
+            foreach (var n in names)
+            {
+                var t = Chip(n)?.GetComponent<Toggle>();
+                if (t == null || t.interactable == locked) { log.Add("  잠김 다름 " + n); return false; }
+            }
+            return true;
+        }
+        // 다섯 나라 말 중 가장 긴 이름이 앱 최소 글자(38)로 칩 칸에 들어가나 — 점·∨ 자리까지
+        private static bool ChipTextsFit()
+        {
+            var sets = new (string chip, bool arrow, string[] texts)[]
+            {
+                ("CategoryToggle", true, new[] { "랜드마크", "Landmark", "ショップ", "Deporte", "Comida" }),
+                ("PetFriendlyToggle", false, new[] { "반려견만", "Pets only", "ペットのみ", "仅宠物", "Solo mascotas" }),
+                ("PublicDataToggle", false, new[] { "공공데이터", "Public data", "公共データ", "公共数据", "Público" }),
+                ("FestivalToggle", false, new[] { "축제", "Festivals", "お祭り", "节庆", "Festivales" }),
+                ("MetroToggle", false, new[] { "지하철", "Subway", "地下鉄", "地铁", "Metro" }),
+                ("TerminalToggle", false, new[] { "터미널 / 기차", "Bus / Train", "ターミナル / 駅", "客运站 / 火车站", "Bus / Tren" }),
+                ("P2PUserToggle", false, new[] { "주변 사람", "Nearby people", "Following only", "近くの人", "Gente cerca", "Solo seguidos" }),
+            };
+            bool ok = true;
+            foreach (var s in sets)
+            {
+                var c = Chip(s.chip);
+                var t = c != null ? c.Find("Label")?.GetComponent<Text>() : null;
+                var d = c != null ? c.Find("Dot0926") as RectTransform : null;
+                if (t == null || d == null) { log.Add("  칩 없음 " + s.chip); return false; }
+                string was = t.text; int size = t.fontSize;
+                float room = c.rect.width - 16f - (s.arrow ? 46f + 18f + 52f : d.sizeDelta.x + 18f);
+                t.fontSize = 38;
+                foreach (var x in s.texts)
+                {
+                    t.text = x;
+                    if (t.preferredWidth > room) { log.Add("  칸 넘침 " + s.chip + " '" + x + "' " + Mathf.RoundToInt(t.preferredWidth) + " > " + Mathf.RoundToInt(room)); ok = false; }
+                }
+                t.text = was; t.fontSize = size;
+            }
+            return ok;
+        }
+        private static string MenuOrder()
+        {
+            var names = new SortedDictionary<int, string>();
+            foreach (var b in UnityEngine.Object.FindObjectsByType<Button>())
+            {
+                int i = MenuRow(b);
+                var t = i >= 0 ? b.transform.Find("Label")?.GetComponent<Text>() : null;
+                if (t != null) names[i] = t.text;
+            }
+            return string.Join("·", names.Values);
+        }
+        private static bool MenuIconsOk()
+        {
+            string[] want = { "all", "food", "cafe", "shop", "park", "sport", "toilet", "landmark" };
+            int n = 0;
+            foreach (var b in UnityEngine.Object.FindObjectsByType<Button>())
+            {
+                int i = MenuRow(b);
+                if (i < 0) continue;
+                var ic = b.transform.Find("Icon")?.GetComponent<Image>();
+                if (ic == null || ic.sprite == null || ic.sprite.name != "r0926_c_" + want[i] || b.transform.Find("Dot") != null)
+                { log.Add("  분류 그림 다름 " + i + " " + (ic != null && ic.sprite != null ? ic.sprite.name : "없음")); return false; }
+                n++;
+            }
+            return n == 8;
+        }
+
+        private static PlaceListManager Plm() => UnityEngine.Object.FindAnyObjectByType<PlaceListManager>();
+        private static int ShownTotal() { var p = Plm(); return p != null ? p.ShownEntries.Count : 0; }
+        private static int Shown(PlaceListManager.EntryKind kind)
+        {
+            var p = Plm();
+            int n = 0;
+            if (p != null) foreach (var e in p.ShownEntries) if (e.kind == kind) n++;
+            return n;
+        }
+        private static List<string> ShownLinks(PlaceListManager.EntryKind kind)
+        {
+            var r = new List<string>();
+            var p = Plm();
+            if (p != null) foreach (var e in p.ShownEntries) if (e.kind == kind) r.Add(e.link ?? "");
+            if (r.Count == 0) r.Add("");   // 줄이 없으면 실패로
+            return r;
+        }
+        private static bool ShelterOnTop()
+        {
+            var p = Plm();
+            if (p == null || p.ShownEntries.Count < 3) return false;
+            for (int i = 0; i < 3; i++) if (p.ShownEntries[i].kind != PlaceListManager.EntryKind.Shelter) return false;
+            if (p.ShownEntries.Count > 3)
+                log.Add("  넷째 줄 " + p.ShownEntries[3].name + " " + Mathf.RoundToInt(p.ShownEntries[3].distance) + "m · 첫 보호소 " + Mathf.RoundToInt(p.ShownEntries[0].distance) + "m");
+            return true;
+        }
+        private static bool FestivalRowsOk()
+        {
+            var p = Plm();
+            if (p == null || p.ShownEntries.Count != 4) return false;
+            float last = -1f;
+            foreach (var e in p.ShownEntries)
+            {
+                string d = e.distanceText ?? "";
+                bool when = d.Contains("부터") || d.Contains("진행 중") || d.Contains("오늘까지") || d.StartsWith("from") || d.StartsWith("on now") || d.StartsWith("ends today");
+                if (!when || !d.Contains(" · ") || !(d.EndsWith("km") || d.EndsWith("m")) || e.distance < last) { log.Add("  축제 줄 다름 " + e.name + " '" + d + "'"); return false; }
+                last = e.distance;
+            }
+            return last > 150000f;
+        }
+        // 목록 줄(화면) 앞 그림 이름 — 위에서부터 n 줄
+        private static List<string> RowIcons(int n)
+        {
+            var r = new List<string>();
+            foreach (var row in ListRows())
+            {
+                if (r.Count >= n) break;
+                var d = row.Find("Dot")?.GetComponent<Image>();
+                r.Add(d != null && d.sprite != null ? d.sprite.name : "");
+            }
+            return r;
+        }
+        private static string RowsSummary(int n)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var row in ListRows())
+            {
+                if (n-- <= 0) break;
+                var d = row.Find("Dot")?.GetComponent<Image>();
+                sb.Append(row.Find("Name")?.GetComponent<Text>()?.text).Append(" [").Append(row.Find("Dist")?.GetComponent<Text>()?.text).Append("] ")
+                  .Append(d != null && d.sprite != null ? d.sprite.name : "-").Append(" | ");
+            }
+            return sb.ToString();
+        }
+        private static List<Transform> ListRows()
+        {
+            var r = new List<Transform>();
+            var pr = UnityEngine.Object.FindAnyObjectByType<R0926PlaceRows>();
+            var box = pr != null ? new SerializedObject(pr).FindProperty("rowContainer").objectReferenceValue as Transform : null;
+            if (box == null) return r;
+            foreach (Transform t in box) if (t.gameObject.activeSelf && t.name == "Row") r.Add(t);
+            return r;
+        }
+        private static string SummaryText()
+        {
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Text>())
+                if (t.name == "Summary0926" && t.gameObject.activeInHierarchy) return t.text;
+            return "";
         }
 
         private static RectTransform Chip(string name)
@@ -7860,26 +8093,24 @@ namespace Redesign0926
         }
         private static bool ChipGridOk()
         {
-            string[] top = { "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "3DObjectToggle" };
-            string[] bottom = { "MetroToggle", "TerminalToggle", "P2PUserToggle" };
+            string[] top = { "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "FestivalToggle" };
+            string[] bottom = { "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle" };
             var grid = UnityEngine.Object.FindAnyObjectByType<R0926ChipGrid>();
             if (grid == null || grid.transform.Find("TrainStationToggle") != null) return false;
             int active = 0;
             foreach (Transform t in grid.transform) if (t.gameObject.activeSelf) active++;
-            if (active != 7) return false;
+            if (active != 8) return false;
             var T = new RectTransform[4];
-            var B = new RectTransform[3];
-            for (int i = 0; i < 4; i++) { T[i] = Chip(top[i]); if (T[i] == null) return false; }
-            for (int i = 0; i < 3; i++) { B[i] = Chip(bottom[i]); if (B[i] == null) return false; }
+            var B = new RectTransform[4];
+            for (int i = 0; i < 4; i++) { T[i] = Chip(top[i]); B[i] = Chip(bottom[i]); if (T[i] == null || B[i] == null) return false; }
             bool Near(float a, float b) => Mathf.Abs(a - b) < 1.5f;
             float L(RectTransform r) => r.anchoredPosition.x;
             float R(RectTransform r) => r.anchoredPosition.x + r.sizeDelta.x;
             foreach (var r in T) if (!Near(r.anchoredPosition.y, T[0].anchoredPosition.y)) return false;
             foreach (var r in B) if (!Near(r.anchoredPosition.y, B[0].anchoredPosition.y)) return false;
             if (B[0].anchoredPosition.y >= T[0].anchoredPosition.y) return false;
-            return Near(L(B[0]), L(T[0])) && Near(R(B[0]), R(T[0]))
-                && Near(L(B[1]), L(T[1])) && Near(R(B[1]), R(T[2]))
-                && Near(L(B[2]), L(T[3])) && Near(R(B[2]), R(T[3]));
+            for (int i = 0; i < 4; i++) if (!Near(L(B[i]), L(T[i])) || !Near(R(B[i]), R(T[i]))) return false;
+            return true;
         }
 
         private static R0926SheetModes Modes() => UnityEngine.Object.FindAnyObjectByType<R0926SheetModes>(FindObjectsInactive.Include);

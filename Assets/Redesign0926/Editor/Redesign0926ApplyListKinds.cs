@@ -10,7 +10,7 @@ namespace Redesign0926
     /// '팔로잉' 을 눌러도 해당 내용이 바뀌거나 변하지 않는데 … 사람의 경우 간단한 사람 이모지를 써서 '핑크색 유지'").
     ///  · 사람 필터(P2PUserFilterPanel)가 FilterManager 오브젝트와 사람 칩(P2PUserToggle)에 둘 붙어 있었다 — 한 번 누르면 둘이 따로 돌고
     ///    칩은 그중 하나만 읽었다. 앱을 켤 때부터 켜져 있는 FilterManager 쪽 하나만 남긴다 (칩 쪽은 목록을 처음 열 때에야 깨어났다)
-    ///  · 목록 줄 앞 그림 — 사람 모양(핑크) · 금빛 상자 (R0926PlaceRows)
+    ///  · 목록 줄 앞 그림 — 사람 모양(핑크) · 금빛 상자 · 축제마다 그림 · 보호소 강아지 (R0926PlaceRows)
     ///  · 지도의 보물찾기 핀·원 (10-13 대표님: "'지도' 에서도 보물찾기 이벤트의 경우에는 보일 수 있도록") — R0926FriendsMap
     /// </summary>
     public static partial class Redesign0926Apply
@@ -49,7 +49,16 @@ namespace Redesign0926
                 var rso = new SerializedObject(rows);
                 rso.FindProperty("personSprite").objectReferenceValue = Spr("r0926_i_user");
                 rso.FindProperty("huntSprite").objectReferenceValue = Spr("r0926_i_treasure");
+                // 축제·보호소 줄 그림 — 서버가 축제마다 고른 이름(r0926_f_<이름>) · 보호소는 shelter (10-23 대표님)
+                var kinds = new List<Sprite>();
+                foreach (var file in System.IO.Directory.GetFiles(SpriteDir, "r0926_f_*.png"))   // 막 바꿔 들인 그림은 FindAssets 색인에 아직 없다
+                {
+                    var s = Spr(System.IO.Path.GetFileNameWithoutExtension(file));
+                    if (s != null) kinds.Add(s);
+                }
+                SetArray(rso.FindProperty("kindIcons"), kinds.ToArray());
                 rso.ApplyModifiedPropertiesWithoutUndo();
+                if (kinds.Count == 0) log.Add("축제 그림(r0926_f_*) 없음");
             }
             else log.Add("목록 줄(R0926PlaceRows) 없음");
 

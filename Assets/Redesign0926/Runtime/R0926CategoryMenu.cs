@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// 목록 시트 '전체'(분류) 칩을 누르면 칩 바로 아래로 펼쳐지는 분류 고르기 목록.
 /// 10-17 대표님: 누를 때마다 다음 분류로 넘어가면 지금이 '전체'인지, 몇 번째가 샵·음식점인지 계속 눌러 봐야 안다 → 펼쳐 놓고 고른다.
 /// 칸(분류 8줄)은 Apply 가 만들어 두고 여기서는 열고 닫기 · 지금 분류 표시 · 고르기만 한다.
+/// 줄은 보여 주는 순서(R0926FilterChip.CatOrder — 전체 · 음식점 · 카페 · 샵 · 공원 · 스포츠 · 화장실 · 랜드마크), 줄 앞은 분류 그림 (10-23 대표님).
 /// 분류 칩에 붙는다 — 칩이 켜져 있는(시트가 열린) 동안만 FilterManager 에 고르기 목록을 건다.
 /// </summary>
 public class R0926CategoryMenu : MonoBehaviour
@@ -13,8 +14,9 @@ public class R0926CategoryMenu : MonoBehaviour
     [SerializeField] private CanvasGroup layer;
     [SerializeField] private RectTransform card;
     [SerializeField] private ScrollRect scroll;
-    [Tooltip("분류 순서대로 (FilterManager.CategoryFilterState) — 누르면 Pick(번호)")]
+    [Tooltip("보여 주는 순서대로 (R0926FilterChip.CatOrder) — 누르면 Pick(그 줄의 CategoryFilterState 값)")]
     [SerializeField] private Button[] rows;
+    [Tooltip("줄 앞 색 점 — 예전 줄 (분류 그림으로 바꾼 줄은 비어 있다)")]
     [SerializeField] private Image[] dots;
     [SerializeField] private Text[] labels;
     [SerializeField] private Image[] checks;
@@ -59,12 +61,17 @@ public class R0926CategoryMenu : MonoBehaviour
         if (open) Hide();
     }
 
-    public void Pick(int index)
+    /// <summary>분류를 고른다 — 값은 CategoryFilterState (줄 순번이 아니다)</summary>
+    public void Pick(int category)
     {
         if (fm == null) fm = FindAnyObjectByType<FilterManager>();
-        if (fm != null) fm.SetCategory((FilterManager.CategoryFilterState)Mathf.Clamp(index, 0, R0926FilterChip.CatNames.Length - 1));
+        if (fm != null) fm.SetCategory((FilterManager.CategoryFilterState)Mathf.Clamp(category, 0, R0926FilterChip.CatNames.Length - 1));
         Hide();
     }
+
+    // i 번째 줄의 분류 (CategoryFilterState 값)
+    private static int CategoryAt(int i) =>
+        i < R0926FilterChip.CatOrder.Length ? R0926FilterChip.CatOrder[i] : Mathf.Min(i, R0926FilterChip.CatNames.Length - 1);
 
     private void Hide()
     {
@@ -90,15 +97,15 @@ public class R0926CategoryMenu : MonoBehaviour
         card.localScale = new Vector3(1f, Mathf.Lerp(0.94f, 1f, k), 1f);
     }
 
-    /// <summary>줄마다 이름·색 점 — 지금 고른 분류는 체크 · 그 분류 색 바탕 · 굵은 글자</summary>
+    /// <summary>줄마다 이름 — 지금 고른 분류는 체크 · 그 분류 색 바탕 · 굵은 글자</summary>
     private void Refresh()
     {
         int cur = fm != null ? (int)fm.CategoryState : 0;
         for (int i = 0; rows != null && i < rows.Length; i++)
         {
-            int ci = Mathf.Min(i, R0926FilterChip.CatNames.Length - 1);
+            int ci = CategoryAt(i);
             Color c = R0926FilterChip.CatColors[ci];
-            bool sel = i == cur;
+            bool sel = ci == cur;
             if (labels != null && i < labels.Length && labels[i] != null)
             {
                 labels[i].text = R0926FilterChip.Pick(R0926FilterChip.CatNames[ci]);
@@ -147,7 +154,7 @@ public class R0926CategoryMenu : MonoBehaviour
         float over = full - h;
         scroll.StopMovement();
         scroll.vertical = over > 0f;
-        int cur = fm != null ? (int)fm.CategoryState : 0;
+        int cur = fm != null ? Mathf.Max(0, System.Array.IndexOf(R0926FilterChip.CatOrder, (int)fm.CategoryState)) : 0;   // 고른 줄의 자리
         scroll.verticalNormalizedPosition = over <= 0f ? 1f : 1f - Mathf.Clamp01((pad + cur * rowHeight - (h - rowHeight) / 2f) / over);
     }
 }
