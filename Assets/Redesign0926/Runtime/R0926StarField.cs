@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// 시작화면의 반짝이는 별과 별똥별 — 별 그림 한 장을 사각형 여러 개로 한 번에 그린다(그리기 1번).
 /// 별은 저마다 다른 빠르기로 밝아졌다 어두워지고 아주 천천히 흘러가며, 밝은 별에는 십자 빛이 선다.
 /// 별똥별은 1.5~3초에 하나씩 긴 꼬리로 비스듬히 지나간다. (woopang.com 과 같은 색)
+/// 시작화면의 줌아웃(zoom)은 가운데를 기준으로 펼쳤다 모은다 — 가까운 별일수록 조금 더 움직여 멀어지는 깊이가 느껴진다.
 /// ExecuteAlways — 에디터 캡처에서도 별이 그려지게 (Graphic 의 ExecuteAlways 는 물려받지 않아 캡처에 별이 빠져 있었다)
 /// </summary>
 [ExecuteAlways]
@@ -15,6 +16,9 @@ public class R0926StarField : MaskableGraphic
     [SerializeField] private int count = 120;
     [SerializeField, Range(0f, 1f)] private float bigFraction = 0.22f;
     [SerializeField] private int seed = 926;
+
+    /// <summary>1 보다 크면 확대돼 보인다 — R0926Splash 가 매 프레임 넣는다 (1.15 → 1)</summary>
+    [System.NonSerialized] public float zoom = 1f;
 
     private struct Star { public Vector2 p; public float r, phase, speed, depth; public Color c; public bool big; }
     private struct Shoot { public Vector2 start; public float t0, len; }
@@ -78,6 +82,7 @@ public class R0926StarField : MaskableGraphic
         vh.Clear();
         if (stars == null) return;
         Rect r = rectTransform.rect;
+        Vector2 mid = r.center;
         Color tint = color;
 
         foreach (var s in stars)
@@ -86,13 +91,15 @@ public class R0926StarField : MaskableGraphic
             float a = 0.12f + 0.88f * Mathf.Pow(tw, 1.6f);
             float x = Mathf.Repeat(s.p.x - time * 0.004f * s.depth, 1f);
             float y = Mathf.Repeat(s.p.y - time * 0.008f * s.depth, 1f);
-            Vector2 c = new Vector2(r.xMin + x * r.width, r.yMin + y * r.height);
+            // 먼 별(depth 0.2)은 줌의 0.65배, 가까운 별(1)은 1.25배 — 평균은 문양과 비슷하게
+            float k = 1f + (zoom - 1f) * (0.5f + 0.75f * s.depth);
+            Vector2 c = mid + (new Vector2(r.xMin + x * r.width, r.yMin + y * r.height) - mid) * k;
             Color col = s.c * tint; col.a = a * tint.a;
-            Quad(vh, c, new Vector2(s.r, s.r), col);
+            Quad(vh, c, new Vector2(s.r, s.r) * k, col);
             if (s.big)
             {
                 // 십자 빛 — 밝을수록 길게
-                float L = 16f + a * 26f;
+                float L = (16f + a * 26f) * k;
                 Color fl = col; fl.a *= 0.55f;
                 Quad(vh, c, new Vector2(L, 2.2f), fl);
                 Quad(vh, c, new Vector2(2.2f, L), fl);

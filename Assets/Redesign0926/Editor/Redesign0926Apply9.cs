@@ -327,6 +327,7 @@ namespace Redesign0926
 
             var so = new SerializedObject(splash);
             so.FindProperty("nebula").objectReferenceValue = nImg;
+            so.FindProperty("stars").objectReferenceValue = sf;   // 줌아웃 값을 매 프레임 넣는다
             so.ApplyModifiedPropertiesWithoutUndo();
             log.Add("splash stars ok");
         }

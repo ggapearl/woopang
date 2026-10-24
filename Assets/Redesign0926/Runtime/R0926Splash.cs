@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// 시작화면 — "SEE THE UNSEEN". 어두운 화면을 렌즈가 훑고 지나가면 그 나라의 숨은 문양이 드러나고,
 /// 강아지 엠블럼 · WOOPANG · SEE THE UNSEEN · 그 나라 말 한 줄이 차례로 뜬다 (약 3.7초).
 /// 그동안 뒤에서는 원래대로 AR·데이터가 준비된다. 끝나면 사라지고, 아직 준비 중이면 원래 로딩 화면이 이어진다.
+/// 뒷배경(문양·성운·별)은 처음에 살짝 확대돼 있다가 3.8초에 걸쳐 줌아웃한다 — 배경이 멀어지는 느낌, 로고는 그대로 (10-23 대표님).
 /// 앱을 새로 켤 때 한 번만 뜬다 (R0926SplashBoot 가 켠다). 0.8초 뒤부터는 눌러서 건너뛸 수 있다.
 /// 문양은 기기 언어에 맞는 한 장만 Resources 에서 불러오고, 끝나면 메모리에서 내린다.
 /// </summary>
@@ -40,6 +41,11 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [SerializeField, Range(0f, 1f)] private float outsideShade = 0.9f;
     [Tooltip("렌즈 안이 살짝 확대돼 보이는 정도 — 렌즈가 움직이면 안쪽 문양이 바깥보다 조금 더 흘러 유리를 들여다보는 느낌")]
     [SerializeField] private float magnify = 1.06f;
+    [SerializeField] private R0926StarField stars;
+    [Tooltip("뒷배경(문양·성운·별)이 처음에 확대돼 있는 정도 — 여기서 1 로 줌아웃한다 (10-23 대표님 「뒷배경이 멀어지는 느낌」)")]
+    [SerializeField] private float zoomFrom = 1.15f;
+    [Tooltip("줌아웃이 끝나는 시각(초) — 렌즈가 퍼지며 배경이 다 드러나는 2초 무렵에 가장 빠르고, 사라지기 전에 멈춘다")]
+    [SerializeField] private float zoomEnd = 3.8f;
 
     private struct Variant { public string key, accent, bg, text; public float dim, faint; }
 
@@ -176,11 +182,13 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     // 0.0 어둠 · 0.3~1.4 렌즈가 왼→오른쪽으로 훑음 (0.55~1.45 에 반짝임 하나가 위쪽 테두리를 지난다)
     // 1.4~1.95 렌즈가 화면 밖으로 퍼짐 (테두리는 살짝 번지며 사라지고, 바깥 그늘이 걷히고, 안쪽 확대가 풀린다)
     // 1.5 엠블럼 · 1.9 WOOPANG · 2.3 SEE THE UNSEEN · 2.9 나라 말 한 줄 · 3.7 사라짐
+    // 그동안 뒷배경은 확대(1.15)에서 3.8초에 1 로 줌아웃 — 어두운 처음엔 천천히, 배경이 다 드러나는 2초 무렵에 가장 빠르게, 끝은 멈추듯
     private void Pose(float time)
     {
         var rt = (RectTransform)transform;
         Vector2 size = rt.rect.size;
         float w = size.x, h = size.y;
+        float zoom = Mathf.SmoothStep(zoomFrom, 1f, time / zoomEnd);
 
         // 렌즈 — 지름은 화면 폭의 0.9. 훑는 동안 살짝 위아래로 흔들리며 지나간다
         float d0 = w * 0.9f;
@@ -207,9 +215,10 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             lensFx.Refresh();
         }
 
-        // 문양은 화면에 붙어 있고(렌즈가 움직여도 제자리) 아주 천천히 떠다닌다 — 확대·이동
+        // 문양은 화면에 붙어 있고(렌즈가 움직여도 제자리) 아주 천천히 떠다니며 줌아웃한다.
+        // 1.07 은 떠다녀도 가장자리가 드러나지 않을 여유. 예전의 숨쉬는 확대(sin)는 3.7초 동안 커지기만 해 줌아웃과 거꾸로라 뺐다
         float coverH = Mathf.Max(h, w / motifAspect);
-        float ks = 1.07f + 0.025f * Mathf.Sin(time * 0.35f);
+        float ks = 1.07f * zoom;
         var coverSize = new Vector2(coverH * motifAspect, coverH) * ks;
         Vector3 drift = rt.TransformVector(new Vector3(37f * Mathf.Sin(time * 0.21f), 26f * Mathf.Cos(time * 0.17f), 0f));
         if (motif != null)
@@ -226,7 +235,12 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             var nc = nebula.color;
             nc.a = 0.28f + 0.3f * (0.5f + 0.5f * Mathf.Sin(time * 0.9f));
             nebula.color = nc;
-            nebula.rectTransform.localScale = Vector3.one * (1f + 0.05f * Mathf.Sin(time * 0.45f));
+            nebula.rectTransform.localScale = Vector3.one * zoom;   // 밝기는 숨쉬고, 크기는 문양과 함께 줌아웃 (예전 sin 확대는 커지기만 했다)
+        }
+        if (stars != null)
+        {
+            stars.zoom = zoom;
+            stars.SetVerticesDirty();
         }
         if (motifFaint != null)
         {

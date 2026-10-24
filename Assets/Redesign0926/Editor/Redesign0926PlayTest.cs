@@ -75,6 +75,7 @@ namespace Redesign0926
                     + (now != firstScreen ? " (처음 " + firstScreen + ")" : "") + (mainViewNote.Length > 0 ? " · 주 화면 " + mainViewNote : ""));
             });
             if (mode == "splashprof") PlanSplashProf();
+            else if (mode == "splashzoom") PlanSplashZoom();
             else if (mode == "chatnav") PlanChatNav();
             else if (mode == "woopang1") PlanWoopangOne();
             else if (mode == "land") PlanLand();
@@ -7383,6 +7384,80 @@ namespace Redesign0926
             Sleep(0.8f);
             Check(() => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude)?.GetCurrentPanel() == 1, "3D모델에 이름을 쓰고 닫아도 3D모델 탭에 머문다");
             Do(() => { var src = Find("UploadPage/Clip0926/UploadSheet0926/ModelUploadPage/Panel/NameInput")?.GetComponent<InputField>(); if (src != null) src.text = ""; });
+        }
+
+        // 10-23 대표님 「오프닝 — 살짝 확대된 상태로(배경만, 별들 포함) 줌아웃, 뒷배경이 멀어지는 느낌 · 로고는 그대로」
+        // 시작화면이 도는 동안 뒷배경(성운·별·문양)의 크기와 로고 자리를 재고, 0.1초마다 화면을 찍는다 (움직임 미리보기용)
+        private static void PlanSplashZoom()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var rec = new List<(float t, float neb, float star, float motif)>();
+            R0926Splash sp = null;
+            RectTransform emb = null, word = null, motif = null;
+            Transform neb = null, fx = null;
+            R0926StarField stars = null;
+            Vector2 embAt = default, wordAt = default;
+            bool logoMoved = false, fxScaled = false;
+            float nextSeq = 0f;
+            int seq = 0;
+            steps.Enqueue(() =>
+            {
+                if (sp == null)
+                {
+                    sp = UnityEngine.Object.FindAnyObjectByType<R0926Splash>(FindObjectsInactive.Include);
+                    if (sp == null) { log.Add("  시작화면 없음"); return true; }
+                    neb = sp.transform.Find("Nebula0926");
+                    fx = sp.transform.Find("LensFx0926");
+                    emb = sp.transform.Find("Emblem0926") as RectTransform;
+                    word = sp.transform.Find("Wordmark0926") as RectTransform;
+                    motif = sp.transform.Find("Lens0926/Motif") as RectTransform;
+                    stars = sp.GetComponentInChildren<R0926StarField>(true);
+                    embAt = emb.anchoredPosition;
+                    wordAt = word.anchoredPosition;
+                }
+                if (!sp.isActiveAndEnabled) return true;
+                float t = (float)typeof(R0926Splash).GetField("t", F).GetValue(sp);
+                if (rec.Count == 0 || t - rec[rec.Count - 1].t >= 0.05f)
+                    rec.Add((t, neb.localScale.x, stars != null ? stars.zoom : -1f, motif.sizeDelta.x));
+                if (emb.anchoredPosition != embAt || word.anchoredPosition != wordAt) logoMoved = true;
+                if (fx.localScale != Vector3.one) fxScaled = true;
+                if (t >= nextSeq)
+                {
+                    ScreenCapture.CaptureScreenshot(Path.Combine(dir, "seq_" + (seq++).ToString("00") + "_" + t.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + ".png"));
+                    nextSeq = t + 0.1f;
+                }
+                return false;
+            });
+            (float t, float neb, float star, float motif) At(float time)
+            {
+                var best = rec[0];
+                foreach (var r in rec) if (Mathf.Abs(r.t - time) < Mathf.Abs(best.t - time)) best = r;
+                return best;
+            }
+            Do(() =>
+            {
+                if (rec.Count == 0) { log.Add("  기록 없음"); return; }
+                var sb = new System.Text.StringBuilder("  뒷배경 크기 (초:성운/별/문양 폭) ");
+                foreach (var time in new[] { 0f, 0.6f, 1.2f, 1.6f, 1.95f, 2.4f, 2.9f, 3.4f, 3.8f, 4.2f })
+                {
+                    var r = At(time);
+                    sb.Append(r.t.ToString("0.00") + ":" + r.neb.ToString("0.000") + "/" + r.star.ToString("0.000") + "/" + r.motif.ToString("0") + "  ");
+                }
+                log.Add(sb.ToString());
+                log.Add("  화면 " + seq + "장 · 마지막 기록 " + rec[rec.Count - 1].t.ToString("0.00") + "초");
+            });
+            Check(() => rec.Count > 0 && rec[0].t < 0.5f && rec[0].neb >= 1.14f, "처음엔 뒷배경이 확대돼 있다 (1.15배)");
+            Check(() =>
+            {
+                for (int i = 1; i < rec.Count; i++) if (rec[i].neb > rec[i - 1].neb + 1e-4f) return false;
+                return rec.Count > 1;
+            }, "뒷배경은 작아지기만 한다 (멀어짐 — 다시 커지지 않음)");
+            Check(() => rec.Count > 0 && Mathf.Abs(rec[rec.Count - 1].neb - 1f) < 0.003f, "끝엔 원래 크기 (1배)");
+            Check(() => rec.Count > 0 && At(1.95f).neb > 1.05f && At(1.95f).neb < 1.1f, "배경이 다 드러나는 2초 무렵에도 아직 멀어지는 중 (1.05~1.1배)");
+            Check(() => rec.Count > 0 && rec.TrueForAll(r => Mathf.Abs(r.star - r.neb) < 1e-4f), "별도 성운과 같은 줌으로");
+            Check(() => rec.Count > 0 && rec[0].motif / rec[rec.Count - 1].motif > 1.18f, "문양도 확대(1.15 × 렌즈 1.06)에서 원래 크기로");
+            Check(() => !logoMoved && emb.localScale == Vector3.one && word.localScale == Vector3.one, "로고(엠블럼·WOOPANG)는 자리·크기 그대로");
+            Check(() => !fxScaled, "렌즈 테두리·반짝임은 줌과 상관없이 그대로");
         }
 
         // 시작화면이 도는 동안 무거운 프레임과 그 원인 (프로파일러는 플레이 직전에 켜 둠)
