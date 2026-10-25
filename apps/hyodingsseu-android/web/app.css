@@ -47,6 +47,7 @@ body{
   -webkit-font-smoothing:antialiased; overscroll-behavior:none; word-break:keep-all;
 }
 button,input,textarea,select{font:inherit;color:inherit}
+textarea{word-break:break-all;overflow-wrap:anywhere}
 button{cursor:pointer;border:0;background:none;padding:0}
 button:disabled{cursor:default}
 :focus-visible{outline:2px solid var(--navy);outline-offset:2px}
@@ -237,10 +238,11 @@ svg{display:block}
 .drawer{position:absolute;top:0;bottom:0;left:0;width:min(308px,86vw);z-index:21;background:var(--surface);display:flex;flex-direction:column;
   transform:translateX(-100%);transition:transform .22s ease-out;padding-top:env(safe-area-inset-top);box-shadow:var(--shadow)}
 .drawer.on{transform:none}
-.drawer header{display:flex;align-items:center;padding:8px 8px 0 20px}
+.drawer header{flex:none;height:58px;display:flex;align-items:center;gap:6px;padding:0 12px 0 calc(4px + env(safe-area-inset-left))}
 .drawer header h2{flex:1;margin:0;font-size:20px;font-weight:700;color:var(--ink)}
-.drawer header button{width:40px;height:40px;display:grid;place-items:center;color:var(--ink-2)}
-.drawer header svg{width:16px;height:16px}
+.drawer header button{width:44px;height:44px;flex:none;display:grid;place-items:center;color:var(--ink-2);border-radius:12px}
+.drawer header button:active{background:var(--surface-2)}
+.drawer header svg{width:22px;height:22px}
 .drawer .scroll{flex:1;overflow-y:auto;padding:0 8px 20px}
 .sec{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--ink-3);padding:16px 12px 4px}
 .drow{width:100%;display:flex;align-items:center;gap:11px;padding:7px 10px;border-radius:12px;text-align:left}

@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-23a';
+  const WEB_VERSION = '2026-10-25a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2276,7 +2276,7 @@
       h('div', { class: 'sec', text: '더 보기' }),
       drawerRow('새 대화', '효딩쓰와 처음부터 다시', false, h('span', { class: 'badge-ic' }, svg('pencil')), () => { newChat(); close(); }));
     d.append(
-      h('header', null, h('h2', { text: '대화 상대' }), h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close })),
+      h('header', null, h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close }), h('h2', { text: '대화 상대' })),
       scroll,
       h('footer', null, h('i'), h('span')));
     scroll.scrollTop = top;
