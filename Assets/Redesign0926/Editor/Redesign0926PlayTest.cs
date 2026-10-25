@@ -118,6 +118,7 @@ namespace Redesign0926
             else if (mode == "farfade") PlanFarFade();
             else if (mode == "nudge") PlanNudge();
             else if (mode == "photomem") PlanPhotoMem();
+            else if (mode == "detaillift") PlanDetailLift();
             else if (mode == "placeedit") PlanPlaceEdit();
             else if (mode == "appinfo") PlanAppInfo();
             else if (mode == "p2pzoom") PlanP2PZoom();
@@ -4530,6 +4531,141 @@ namespace Redesign0926
         // 남의 장소(B)는 열어 보기만 — 수정 요청(/fix_upload)·삭제 요청은 운영 서버로 가므로 누르지 않는다
         [Serializable] private class DevPlaceRow { public bool exists, pet, main_on_disk, folder_on_disk; public string name, category, lat, lon, main; public string[] subs, files; public bool[] subs_on_disk; }
         private const string PeMe = "hunt_test_peme";
+        // 장소 상세 위 여백 (10-24 대표님 「위쪽으로 여백이 큰데 … 버튼이나 서브사진들 및 각 레이아웃들을 전체적으로 좀 올려야」)
+        // 우팡 큐브(사진 있는 것) · 관광공사(정보 글 있는 것)를 열어 첫 장 · 사진 장을 찍고 칸마다 화면 자리를 적는다 — 가로에서도 한 번
+        private static void PlanDetailLift()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            DoubleTap3D a = null, t = null;
+            Func<DoubleTap3D, bool> open = d => d != null && d.fullscreenCanvasGroup != null && d.fullscreenCanvasGroup.gameObject.activeSelf;
+            Func<DoubleTap3D, bool> loaded = d => d != null && (bool)typeof(DoubleTap3D).GetField("photosLoaded", F).GetValue(d);
+            Func<DoubleTap3D, int> urls = d => d != null ? ((List<string>)typeof(DoubleTap3D).GetField("imageUrls", F).GetValue(d)).Count : -1;
+            Func<DoubleTap3D, string> addr = d => d != null ? typeof(DoubleTap3D).GetField("address", F).GetValue(d) as string : null;
+            Action<DoubleTap3D> tap = d => typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(d, null);
+            Action<DoubleTap3D> close = d => typeof(DoubleTap3D).GetMethod("CloseFullscreen", F).Invoke(d, null);
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                if (Active("LoginPromptPanel")) BackNow();
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Wait(() =>
+            {
+                if (DataManager.Instance == null) return false;
+                var map = DataManager.Instance.GetPlaceDataMap();
+                foreach (var kv in DataManager.Instance.GetSpawnedObjects())
+                {
+                    if (kv.Value == null || !kv.Value.activeInHierarchy || !map.TryGetValue(kv.Key, out var p) || p.model_type != "cube") continue;
+                    var d = kv.Value.GetComponentInChildren<DoubleTap3D>(true);
+                    if (urls(d) > 0) { a = d; return true; }
+                }
+                return false;
+            }, 40f, "상세 사진이 있는 우팡 큐브");
+            Do(() => HideAddressLine());
+
+            // 1) 우팡 큐브 — 첫 장 · 사진 장
+            Do(() => tap(a));
+            Wait(() => open(a) && loaded(a), 30f, "우팡 큐브 상세 사진 받음");
+            Sleep(0.8f);
+            Do(() => DetailRects("우팡 첫 장"));
+            Shot("detail_a_first");
+            Do(() => a.ShowNextImage());
+            Sleep(1.0f);
+            Do(() => DetailRects("우팡 다음 장"));
+            Shot("detail_a_next");
+            Do(() => close(a));
+            Sleep(1.2f);
+
+            // 2) 관광공사 — 주소 · 전화 같은 정보 글이 첫 장
+            Do(() =>
+            {
+                var objs = TourAPIManager.Instance != null ? TourAPIManager.Instance.GetSpawnedObjects() : null;
+                if (objs != null)
+                    foreach (var go in objs.Values)
+                    {
+                        var d = go != null && go.activeInHierarchy ? go.GetComponentInChildren<DoubleTap3D>(true) : null;
+                        if (d != null && !string.IsNullOrEmpty(addr(d))) { t = d; break; }
+                    }
+                log.Add(t != null ? "  관광공사 " + t.transform.root.name : "  정보 글 있는 관광공사 오브젝트 없음 — 건너뜀");
+                if (t != null) tap(t);
+            });
+            Sleep(1.6f);
+            Do(() => { if (t != null) DetailRects("관광공사 첫 장"); });
+            Shot("detail_t_first");
+            Do(() => { if (t != null) t.ShowNextImage(); });
+            Sleep(1.2f);
+            Shot("detail_t_next");
+            Do(() => { if (t != null) close(t); });
+            Sleep(1.2f);
+
+            // 3) 가로 — 사진은 왼쪽 · 글 · 버튼은 오른쪽 열 (넘겨도 사진이 제자리로 들어오는지)
+            Do(() => Rotate(true));
+            Wait(() => Turned(true), 8f, "가로로 돌림");
+            Sleep(1.0f);
+            Do(() => tap(a));
+            Wait(() => open(a) && loaded(a), 30f, "가로: 상세 열림");
+            Sleep(0.8f);
+            Do(() => DetailRects("가로 첫 장"));
+            Shot("detail_land_first");
+            Do(() => a.ShowNextImage());
+            Sleep(1.0f);
+            Do(() => DetailRects("가로 다음 장"));
+            Shot("detail_land_next");
+            Do(() => close(a));
+            Sleep(1.2f);
+            Do(() => Rotate(false));
+            Wait(() => Turned(false), 8f, "세로로 되돌림");
+            Sleep(0.8f);
+
+            // 4) 세로로 돌아와 다시 — 가로를 다녀와도 세로 자리 그대로
+            Do(() => tap(a));
+            Wait(() => open(a) && loaded(a), 30f, "세로: 다시 열림");
+            Sleep(0.8f);
+            Do(() => a.ShowNextImage());
+            Sleep(1.0f);
+            Do(() => DetailRects("세로로 돌아와 다음 장"));
+            Shot("detail_a_back");
+            Do(() => close(a));
+            Sleep(1.2f);
+        }
+
+        // 장소 상세 칸들의 화면 자리 — 화면 위에서 잰 px (위~아래). 글은 글자가 실제로 찍힌 줄 기준
+        private static void DetailRects(string label)
+        {
+            var sa = Screen.safeArea;
+            var sb = new System.Text.StringBuilder($"  [{label}] 화면 {Screen.width}x{Screen.height} · 안전영역 위 {Screen.height - sa.yMax:0} 아래 {sa.yMin:0}");
+            const string G = "FullScreenPanel/FullScreenGuide/";
+            foreach (var n in new[] { G + "TopUIPanel/Info_01", G + "TopUIPanel/Info_02", G + "TopUIPanel/InstgramButton", G + "TopUIPanel/TranslationButton", G + "TopUIPanel/FixButton",
+                                      G + "PlaceName", G + "Roman0926", G + "CreatedByText", G + "TourAPI_Description", G + "PlaceInfoTextPanel",
+                                      "FullScreenPanel/FullScreenImage", G + "Button_Previous", G + "Button_Close", "FullScreenPanel/CommentPreviewPanel", "Dock0926" })
+            {
+                var tr = Find(n) as RectTransform;
+                if (tr == null || !tr.gameObject.activeInHierarchy) continue;
+                var r = ScreenRect(tr);
+                var tx = tr.GetComponent<Text>();
+                string ink = "";
+                if (tx != null && tx.enabled)
+                {
+                    if (string.IsNullOrEmpty(tx.text)) continue;
+                    var gen = tx.cachedTextGenerator;
+                    if (gen.vertexCount > 0)
+                    {
+                        float lo = float.MaxValue, hi = float.MinValue;
+                        foreach (var v in gen.verts) { lo = Mathf.Min(lo, v.position.y); hi = Mathf.Max(hi, v.position.y); }
+                        float k = tr.lossyScale.y / tx.pixelsPerUnit;
+                        var mid = tr.TransformPoint(Vector3.zero).y;
+                        ink = $" 글자 {Screen.height - (mid + hi * k):0}~{Screen.height - (mid + lo * k):0}";
+                    }
+                }
+                var im = tr.GetComponent<Image>();
+                if (im != null && !im.enabled && tx == null) continue;
+                sb.Append($" | {n.Substring(n.LastIndexOf('/') + 1)} {Screen.height - r.yMax:0}~{Screen.height - r.yMin:0}{ink}");
+            }
+            log.Add(sb.ToString());
+        }
+
         private static void PlanPlaceEdit()
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
