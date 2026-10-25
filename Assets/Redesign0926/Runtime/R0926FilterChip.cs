@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 목록 시트의 필터 칩 모양 — 체크 동그라미 없이 칸 전체가 켜짐/꺼짐.
-/// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(전체)은 꽉 찬 흰색 · 3D 는 꽉 찬 보라 + 흰 글자 · 팔로잉만은 꽉 찬 옅은 분홍 · 꺼짐: 어둡게 · 반려견 '되는 곳만': 꽉 찬 노랑 + 앞의 점이 흰색으로 반짝.
+/// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(전체)은 꽉 찬 흰색 · 3D 는 꽉 찬 보라 + 흰 글자 · 팔로잉만은 꽉 찬 옅은 분홍 · 꺼짐: 어둡게 · 애견동반: 켜면 꽉 찬 진한 노랑 + 어두운 글자(애견동반 되는 곳만), 끄면 다른 칩처럼 회색 — 두 가지뿐.
 /// 분류 칩은 고른 분류의 그림(음식점 그릇 · 카페 모카 잔 …)을 점 자리에. 사람 칩이 꺼지면 '주변 사람'.
 /// 필터 로직(FilterManager)은 그대로 두고, 그 상태를 읽어 매 프레임 끝에 모양·이름만 다시 그린다.
 /// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다. 목록을 통째로 바꾸는 축제 칩은 끼지 않는다.
@@ -65,11 +65,10 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         new Color(0.91f, 0.93f, 0.945f), new Color(0.31f, 0.55f, 1f), new Color(1f, 0.54f, 0.24f), new Color(0.643f, 0.459f, 0.318f),
         new Color(0.22f, 0.85f, 0.54f), new Color(0.61f, 0.48f, 1f), new Color(0.94f, 0.28f, 0.28f), new Color(0.96f, 0.77f, 0.26f),
     };
-    // 10-21 대표님 — '사람'은 '모든 사람', '팔로잉'은 '팔로잉만'(살짝 분홍), 반려견 되는 곳만 볼 때는 '반려견만' · 10-23 꺼지면 '주변 사람'
+    // 10-21 대표님 — '사람'은 '모든 사람', '팔로잉'은 '팔로잉만'(살짝 분홍) · 10-23 꺼지면 '주변 사람'
     private static readonly string[] P2PAll = { "모든 사람", "Everyone", "すべての人", "所有人", "Todos" };
     private static readonly string[] P2PNearby = { "주변 사람", "Nearby people", "近くの人", "附近的人", "Gente cerca" };
     private static readonly string[] P2PFollowing = { "팔로잉만", "Following only", "フォロー中のみ", "仅关注", "Solo seguidos" };
-    private static readonly string[] PetOnly = { "반려견만", "Pets only", "ペットのみ", "仅宠物", "Solo mascotas" };
     private static readonly Color Pink = new Color(0.914f, 0.325f, 0.514f);
     private static readonly Color FollowPink = new Color(1f, 0.80f, 0.87f);
     /// <summary>흰 칩 위 글자·점 — 시트 바탕색</summary>
@@ -113,7 +112,7 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         if (toggle == null || body == null || label == null) return;
         if (fm == null) fm = FindAnyObjectByType<FilterManager>();
 
-        int st = toggle.isOn ? 1 : 0;   // 0 꺼짐 · 1 켜짐 · 2 강하게(반려견 되는 곳만)
+        int st = toggle.isOn ? 1 : 0;   // 0 꺼짐 · 1 켜짐
         Color c = color;
         string text = Pick(names);
         bool arrow = false, solid = false;
@@ -126,9 +125,9 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
                 if (ci > 0 && catIcons != null && ci < catIcons.Length) icon = catIcons[ci];
                 break;
             case Kind.Pet:
-                var ps = fm != null ? fm.PetState : FilterManager.PetFriendlyFilterState.All;
-                st = ps == FilterManager.PetFriendlyFilterState.OnlyPetFriendly ? 2 : 1;
-                if (st == 2) text = Pick(PetOnly);
+                // 10-26 대표님 — '애견동반' 하나만: 꺼짐(회색 · 전부) / 켜짐(꽉 찬 진한 노랑 · 애견동반 되는 곳만). 이름은 그대로
+                st = fm != null && fm.PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly ? 1 : 0;
+                solid = true;
                 break;
             case Kind.P2P:
                 var p2 = fm != null ? fm.P2PState : FilterManager.P2PFilterState.All;
@@ -139,12 +138,11 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         }
         float dim = toggle.interactable || suppress ? 1f : 0.35f;   // 카테고리를 고르면 공공·사람 칸을, 축제 칩을 켜면 나머지 칸을 FilterManager 가 잠근다
         // 흰 칩(전체)이 켜지면 꽉 찬 흰색 — 반투명하면 회색으로 보여 켜진 건지 꺼진 건지 몰랐다 (10-17 대표님). 팔로잉만은 꽉 찬 옅은 분홍.
-        // 3D 는 꽉 찬 보라에 흰 글자 (solidOn)
+        // 3D 는 꽉 찬 보라에 흰 글자 (solidOn) · 애견동반은 꽉 찬 진한 노랑에 어두운 글자
         bool filled = st == 1 && dim >= 1f && (solid || solidOn || c.r > 0.85f && c.g > 0.85f && c.b > 0.85f);
         bool ink = filled && !solidOn;   // 밝은 바탕엔 어두운 글자·점
 
         body.color = filled ? new Color(c.r, c.g, c.b, solidOn ? 1f : 0.94f)
-                   : st == 2 ? new Color(c.r, c.g, c.b, dim)
                    : st == 1 ? new Color(c.r, c.g, c.b, 0.26f * dim)
                    : new Color(1f, 1f, 1f, 0.035f * dim);
         label.color = ink ? InkOnWhite : filled ? Color.white
@@ -156,13 +154,6 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
             {
                 dot.color = new Color(1f, 1f, 1f, dim);   // 분류 그림은 제 색 그대로
                 dot.rectTransform.localScale = Vector3.one;
-            }
-            else if (st == 2)
-            {
-                // 꽉 찬 칸 위에서 점이 묻히지 않게 — 흰 점이 반짝인다
-                float k = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 3.9f);
-                dot.color = new Color(1f, 1f, 1f, Mathf.Lerp(0.55f, 1f, k));
-                dot.rectTransform.localScale = Vector3.one * Mathf.Lerp(1f, 1.45f, k);
             }
             else
             {

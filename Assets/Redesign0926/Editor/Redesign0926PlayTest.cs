@@ -289,7 +289,7 @@ namespace Redesign0926
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.5f);
             Shot("list_pet_required");
-            Do(() => ClickToggle("PetFriendlyToggle"));   // 반려견은 두 가지 — 다시 누르면 전부
+            Do(() => ClickToggle("PetFriendlyToggle"));   // 애견동반은 두 가지 — 다시 누르면 꺼짐(전부)
             Do(() => ClickToggle("CategoryToggle"));      // 분류 고르기 목록이 펼쳐진다
             Sleep(0.4f);
             Shot("list_category_menu");
@@ -8876,7 +8876,7 @@ namespace Redesign0926
             Sleep(1.2f);
             Shot("filters_list");
             Do(() => log.Add("  칩: " + ChipLayout()));
-            Check(() => ChipGridOk(), "칩 두 줄 4칸씩 — 위 전체·반려견·공공데이터·축제 · 아래 지하철·터미널 / 기차·3D·사람, 칸 경계가 위아래로 맞음 (10-23)");
+            Check(() => ChipGridOk(), "칩 두 줄 4칸씩 — 위 전체·애견동반·공공데이터·축제 · 아래 지하철·터미널 / 기차·3D·사람, 칸 경계가 위아래로 맞음 (10-23)");
             Do(() => log.Add("  이름: " + ChipLabel("PublicDataToggle") + " · " + ChipLabel("FestivalToggle") + " · " + ChipLabel("TerminalToggle")));
             Check(() => ChipLabel("TerminalToggle").Contains("/"), "터미널 / 기차 한 칩");
             Check(() => ChipLabel("FestivalToggle") == "축제" || ChipLabel("FestivalToggle") == "Festivals", "'공공데이터' 오른쪽에 '축제' 칩");
@@ -8950,13 +8950,14 @@ namespace Redesign0926
             Sleep(0.3f);
             Check(() => Fm().GetActiveFilters()["terminal"] && Fm().GetActiveFilters()["train"], "다시 켜면 둘 다 켜짐");
 
-            // 반려견 — 두 가지
+            // 애견동반 — 꺼짐(회색) · 켜짐(꽉 찬 진한 노랑) 두 가지 (10-26 대표님 — 예전 '반려견' · '반려견만')
+            Check(() => PetChip(false), "애견동반 꺼짐 — 다른 꺼진 칩처럼 회색 · 이름 '애견동반'");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.4f);
             Shot("filters_pet_only");
-            Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly, "반려견 한 번 → 반려견 되는 곳만");
-            Check(() => ChipLabel("PetFriendlyToggle") == "반려견만" || ChipLabel("PetFriendlyToggle") == "Pets only", "반려견 되는 곳만 → 칩 이름 '반려견만'");
-            // 반려견만 — 맨 위에 가까운 유기견 보호소 세 곳 (10-23)
+            Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly, "애견동반 한 번 → 애견동반 되는 곳만");
+            Check(() => PetChip(true), "켜짐 → 꽉 찬 진한 노랑 · 어두운 글자 · 이름 그대로 '애견동반'");
+            // 애견동반 켜짐 — 맨 위에 가까운 유기견 보호소 세 곳 (10-23)
             Wait(() => Shown(PlaceListManager.EntryKind.Shelter) > 0, 10f, "보호소 받음");
             Sleep(0.6f);
             Shot("filters_shelter");
@@ -8967,10 +8968,11 @@ namespace Redesign0926
             Check(() => ShownLinks(PlaceListManager.EntryKind.Shelter).TrueForAll(l => l.StartsWith("https://place.map.kakao.com/")), "보호소를 누르면 카카오맵 장소 쪽 (전화·길찾기)");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.3f);
-            Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.All, "반려견 두 번 → 전부 ('애견동반 안 됨' 없음)");
-            Check(() => ChipLabel("PetFriendlyToggle") == "반려견" || ChipLabel("PetFriendlyToggle") == "Pets", "전부 → 칩 이름 '반려견'");
+            Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.All, "애견동반 다시 → 꺼짐(전부) ('애견동반 안 됨' 없음)");
+            Check(() => PetChip(false), "꺼짐 → 회색 · 이름 그대로 '애견동반'");
+            Shot("filters_pet_off");
             Sleep(0.4f);
-            Check(() => Shown(PlaceListManager.EntryKind.Shelter) == 0, "반려견만을 풀면 보호소 줄 없음");
+            Check(() => Shown(PlaceListManager.EntryKind.Shelter) == 0, "애견동반을 끄면 보호소 줄 없음");
 
             // 사람 — '팔로잉만'(꽉 찬 옅은 분홍) · '모든 사람' (10-21 대표님)
             P2PUserFilterPanel Pp() => UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
@@ -9054,6 +9056,19 @@ namespace Redesign0926
             return b != null && t != null && b.color.a > 0.95f && Mathf.Abs(b.color.r - 0.545f) < 0.05f && Mathf.Abs(b.color.g - 0.361f) < 0.05f && Mathf.Abs(b.color.b - 0.965f) < 0.05f
                 && t.color.r > 0.95f && t.color.g > 0.95f && t.color.b > 0.95f;
         }
+        // 애견동반 칩 (10-26 대표님) — 켜짐: 꽉 찬 진한 노랑(#FFC107) + 어두운 글자 · 꺼짐: 다른 꺼진 칩처럼 거의 투명한 회색 + 흐린 글자. 이름은 늘 '애견동반'
+        private static bool PetChip(bool on)
+        {
+            var c = Chip("PetFriendlyToggle");
+            var b = c != null ? c.GetComponent<Image>() : null;
+            var t = c != null ? c.Find("Label")?.GetComponent<Text>() : null;
+            if (b == null || t == null) return false;
+            bool named = t.text == "애견동반" || t.text == "Pet-friendly";
+            if (!named || on != b.color.a > 0.9f)
+                log.Add($"  애견동반 칩 '{t.text}' 바탕 {ColorUtility.ToHtmlStringRGBA(b.color)} 글자 {ColorUtility.ToHtmlStringRGBA(t.color)}");
+            if (on) return named && b.color.a > 0.9f && Mathf.Abs(b.color.r - 1f) < 0.03f && Mathf.Abs(b.color.g - 0.757f) < 0.03f && b.color.b < 0.1f && t.color.r < 0.2f;
+            return named && b.color.a < 0.1f && t.color.a < 0.5f;
+        }
         private static string ChipIcon(string name) { var d = Chip(name)?.Find("Dot0926")?.GetComponent<Image>(); return d != null && d.sprite != null ? d.sprite.name : ""; }
         // 켜진 일반 칸 — 그 분류 색이 옅게 깔린다
         private static bool ChipTint(string name, Color want)
@@ -9076,7 +9091,7 @@ namespace Redesign0926
             var sets = new (string chip, bool arrow, string[] texts)[]
             {
                 ("CategoryToggle", true, new[] { "랜드마크", "Landmark", "ショップ", "Deporte", "Comida" }),
-                ("PetFriendlyToggle", false, new[] { "반려견만", "Pets only", "ペットのみ", "仅宠物", "Solo mascotas" }),
+                ("PetFriendlyToggle", false, new[] { "애견동반", "Pet-friendly", "ペット同伴", "可带宠物", "Con mascotas" }),
                 ("PublicDataToggle", false, new[] { "공공데이터", "Public data", "公共データ", "公共数据", "Público" }),
                 ("FestivalToggle", false, new[] { "축제", "Festivals", "お祭り", "节庆", "Festivales" }),
                 ("MetroToggle", false, new[] { "지하철", "Subway", "地下鉄", "地铁", "Metro" }),
