@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-25b';
+  const WEB_VERSION = '2026-10-26a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -773,16 +773,22 @@
           if (Date.now() - t0 < 300) await sleep(300);                // 곧바로 「아직」이면 잠깐 쉬고 — 쉼 없이 물으면 소리 만드는 PC 를 붙잡는다
         }
       };
-      let next = part(0);
+      // 받기는 읽기와 따로 — 한 묶음을 받자마자 다음 묶음을 묻는다. PC 는 폰이 받아 간 것보다 하나 앞까지만
+      // 만들어서(READ_AHEAD), 재생이 끝날 때까지 기다렸다 물으면 그동안 PC 가 쉬어 빈틈이 생겼다 (10/26 PC 실측)
+      const parts = [];
+      for (let i = 0; i < plan.n; i++) {
+        parts.push(i === 0 ? part(0) : parts[i - 1].catch(() => {}).then(() => alive() ? part(i) : null));
+        parts[i].catch(() => {});
+      }
       for (let i = 0; i < plan.n; i++) {
         let blob = null;
-        try { blob = await next; } catch (e) { if (i === 0) throw e; }   // 첫 묶음이 안 되면 폰 목소리로 · 중간 묶음은 건너뛴다
+        try { blob = await parts[i]; } catch (e) { if (i === 0) throw e; }   // 첫 묶음이 안 되면 폰 목소리로 · 중간 묶음은 건너뛴다
         if (!alive()) return;
-        next = i + 1 < plan.n ? part(i + 1) : null;
-        if (next) next.then(b => { if (alive()) speaker.preload(b); }, () => {});
         const last = i === plan.n - 1;
-        if (blob) await speaker.playPart(blob, last);
-        else if (last) speaker.stop();
+        if (!blob) { if (last) speaker.stop(); continue; }
+        const playing = speaker.playPart(blob, last);                   // 미리 올려 둔 재생기는 여기서 바로 가져간다
+        if (!last) parts[i + 1].then(b => { if (alive()) speaker.preload(b); }, () => {});
+        await playing;
       }
     };
     const viaPhone = async () => { if (alive()) await speaker.phone(clean, S.speed); };
