@@ -154,6 +154,13 @@ namespace Redesign0926
                 VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f);
                 PlanStore();
             }
+            else if (mode == "cards" || mode == "cards_clean")
+            {
+                // 파트너 제안 카드 원본 화면 — 서울 시청 앞(가상 위치) · 운영 데이터 그대로 · AR 뒤는 흐린 도시 그림
+                storeSrc = lines.Length > 2 ? lines[2].Trim() : "";
+                VirtualLocation.Instance.SetCoordinates(CardSpot.x, CardSpot.y);
+                PlanCards(mode == "cards_clean");
+            }
             else if (mode == "upload") PlanUpload(); else if (mode == "look") PlanLook(); else if (mode == "look2") PlanLook2(); else if (mode == "look3") PlanLook3(); else Plan();
             running = true;
         }
@@ -652,6 +659,203 @@ namespace Redesign0926
             Do(() => AimCamera(-58f, 0f));
             Sleep(2.0f);
             Shot("sky58");
+        }
+
+        // 파트너 제안 카드(보호소 · 행사)용 원본 화면 (10-26 효딩쓰 경유 대표님) — 서울 시청 앞 · 로그아웃 · 운영 데이터 그대로.
+        // 대표님 계정의 광화문 시연 글 두 곳 · 좌표가 틀린 공공 화장실 한 곳(시청 앞에 찍힌 '현대자동차 개포점')은 찍는 동안만 숨긴다.
+        // 강아지 3D 와 보물 상자는 그 자리에 실제로 있는 게 아니라 카메라 앞에 띄운 연출 — 운영 DB · 시험 서버에 아무것도 만들지 않는다
+        private static readonly Vector2 CardSpot = new Vector2(37.5665f, 126.9780f);
+        private static readonly string[] CardHide = { "dm_34820", "dm_34821", "dm_42176" };
+        private const string CardDogUrl = "local://cards/shiba.glb";
+        private const string CardDogFile = "C:/woopang/server/uploads/20260608_150000_Shiba_Quaternius/shiba.glb";   // 운영 '시바견 (Quaternius)' 장소와 같은 파일 (CC0)
+        private static GameObject cardDog;
+        private static bool cardSubway, cardTerminal, cardPublic, cardPet;
+        private static FilterManager.CategoryFilterState cardCat;
+
+        private static FilterManager CardFm() => UnityEngine.Object.FindAnyObjectByType<FilterManager>(FindObjectsInactive.Include);
+        private static bool CardPetOn() => CardFm() != null && CardFm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
+
+        // clean: 주위 장소 글자 없는 컷만 — 필터는 저장되므로 끝에 전부 처음대로 되돌린다
+        private static void PlanCards(bool clean)
+        {
+            Do(() =>
+            {
+                Backdrop("bg_city.png");
+                foreach (var id in CardHide) HiddenPlaces.Hide(id);
+                R0926Nearby.EditorBase = null;                   // 보호소는 운영 서버에서
+                R0926Nearby.EditorForget();
+                R0926Nearby.EditorOpened = new List<string>();   // 줄을 눌러도 진짜 쪽은 열지 않는다
+            });
+            Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
+            Do(() =>
+            {
+                if (Active("LoginPromptPanel")) BackNow();
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                DeviceFov();
+                var f = CardFm().GetActiveFilters();
+                cardSubway = f["subway"]; cardTerminal = f["terminal"]; cardPublic = f["publicData"]; cardPet = CardPetOn(); cardCat = CardFm().CategoryState;
+            });
+            Check(() => LoginManager.Instance != null && !LoginManager.Instance.IsLoggedIn, "로그아웃 상태 — 계정 이름이 찍히지 않음");
+            Sleep(12f);   // 주변 장소 · 관광공사 애견동반 여행지를 받아 3D 로 세울 틈
+            Do(() => { HideAddressLine(); DeviceFov(); });   // 주소줄은 에디터가 켜질 때의 위치(대표님 PC 쪽)를 그대로 보여 준다
+
+            if (clean) PlanCardsClean(); else PlanCardsFull();
+
+            Do(() =>
+            {
+                if (cardDog != null) UnityEngine.Object.Destroy(cardDog);
+                if (hcGo != null) UnityEngine.Object.Destroy(hcGo);
+                var f = CardFm().GetActiveFilters();
+                if (CardPetOn() != cardPet) ClickToggle("PetFriendlyToggle");
+                if (f["subway"] != cardSubway) ClickToggle("MetroToggle");
+                if (f["terminal"] != cardTerminal) ClickToggle("TerminalToggle");
+                if (f["publicData"] != cardPublic) ClickToggle("PublicDataToggle");
+                CardFm().SetCategory(cardCat);
+                foreach (var id in CardHide) HiddenPlaces.Unhide(id);
+                R0926Nearby.EditorOpened = null;
+            });
+            Check(() =>
+            {
+                var f = CardFm().GetActiveFilters();
+                return CardPetOn() == cardPet && f["subway"] == cardSubway && f["terminal"] == cardTerminal && f["publicData"] == cardPublic && CardFm().CategoryState == cardCat;
+            }, "필터는 처음대로 되돌림");
+        }
+
+        private static void PlanCardsFull()
+        {
+            // B ③ — 보물찾기 상자 (필터는 처음 그대로 — 주위에 시청 앞 실제 장소들)
+            Do(() => HcSpawn("CardChest"));
+            Sleep(1.5f);
+            CardChestShots("B03_chest", new[] { 0, 60, 120, 200, 290 });
+
+            // A 보호소 — 목록에서 애견동반을 켠다 (지하철 · 터미널 / 기차는 꺼서 애견동반 되는 곳만)
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.4f);
+            Do(() =>
+            {
+                CardFm().SetCategory(FilterManager.CategoryFilterState.All);
+                var f = CardFm().GetActiveFilters();
+                if (f["subway"]) ClickToggle("MetroToggle");
+                if (f["terminal"]) ClickToggle("TerminalToggle");
+                if (!CardPetOn()) ClickToggle("PetFriendlyToggle");
+            });
+            Wait(() => Shown(PlaceListManager.EntryKind.Shelter) == 3, 15f, "가까운 보호소 세 곳 받음");
+            Sleep(1.2f);
+            Do(() => log.Add("  줄: " + RowsSummary(18) + " · 집계: " + SummaryText()));
+            Check(() => ShelterOnTop(), "보호소 세 줄이 맨 위");
+            Check(() => PetChip(true), "애견동반 켜짐 — 꽉 찬 진한 노랑");
+            Shot("A02_shelters_top");
+            Do(() => ListRowToTop(3));
+            Sleep(0.8f);
+            Shot("A01_pet_places");
+            Do(() => ListRowToTop(0));
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(4f);   // 애견동반 아닌 3D 가 걷힐 틈
+            Do(() => HideAddressLine());
+            CardChestShots("B03_chest_quiet", new[] { 0, 120 });
+            Do(() => { if (hcGo != null) UnityEngine.Object.Destroy(hcGo); });
+
+            // A ④ — 강아지 3D(GLB)를 AR 화면에 (애견동반은 켠 채 — 주위엔 애견동반 되는 곳만) · 18m 앞
+            CardDogLoad();
+            foreach (int yaw in new[] { 110, 130 })
+                foreach (int turn in new[] { 0, 90, 180, 270 })
+                    CardDogShot("A04_dog_yaw" + yaw.ToString("000") + "_turn" + turn.ToString("000"), yaw, turn);
+        }
+
+        // 주위 글자 없는 컷 — 애견동반 켬 · 공공데이터 · 지하철 · 터미널 / 기차 끔 (사용자가 칩을 그렇게 둔 화면 그대로)
+        private static void PlanCardsClean()
+        {
+            Do(() =>
+            {
+                var f = CardFm().GetActiveFilters();
+                if (!CardPetOn()) ClickToggle("PetFriendlyToggle");
+                if (f["publicData"]) ClickToggle("PublicDataToggle");
+                if (f["subway"]) ClickToggle("MetroToggle");
+                if (f["terminal"]) ClickToggle("TerminalToggle");
+            });
+            Sleep(4f);   // 꺼진 칩의 3D 가 걷힐 틈
+            Do(() => HideAddressLine());
+            CardDogLoad();
+            foreach (int turn in new[] { 90, 270, 60, 300 })
+                CardDogShot("A04c_dog_turn" + turn.ToString("000"), 120, turn);
+            Do(() => { if (cardDog != null) UnityEngine.Object.Destroy(cardDog); });
+            Do(() => HcSpawn("CardChest"));
+            Sleep(1.5f);
+            CardChestShots("B03c_chest", new[] { 0 });
+            CardChestShots("B03c_chest_far", new[] { 0 }, 4.6f, 32f);
+        }
+
+        // 강아지 3D — 운영 '시바견' 장소와 같은 파일을 앱의 GLB 로더로 (풀에 꺼진 채 들어 있는 프리팹을 켜고 · DataManager 처럼 뿌리에 로더)
+        private static void CardDogLoad()
+        {
+            Do(() =>
+            {
+                cardDog = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Scripts/Download/0001_GLB.prefab"));
+                cardDog.name = "CardDog";
+                cardDog.SetActive(true);
+                cardDog.AddComponent<GLBModelLoader>();
+                CardPlace(cardDog, 18f, 1.2f, 0f);
+            });
+            Sleep(0.2f);
+            Do(() =>
+            {
+                glbDone = glbOk = false;
+                GLBModelLoader.PreloadCache(CardDogUrl, File.ReadAllBytes(CardDogFile));
+                var ld = cardDog.GetComponent<GLBModelLoader>();
+                ld.StartCoroutine(ld.LoadGLBModelCoroutine(CardDogUrl, 1f, r => { glbOk = r; glbDone = true; }));
+            });
+            Wait(() => glbDone, 20f, "강아지 3D 불러옴");
+            Check(() => glbOk && cardDog.GetComponent<GLBModelLoader>().GetLoadedModel() != null, "강아지 3D 모델이 붙음");
+            Sleep(1.5f);
+        }
+
+        // 18m 앞에 turn 도 비껴 선 강아지를 yaw 방향에서 한 장
+        private static void CardDogShot(string name, int yaw, int turn)
+        {
+            Do(() => { AimCamera(-4f, yaw); CardPlace(cardDog, 18f, 1.2f, turn); });
+            Sleep(1.4f);
+            Do(() => { log.Add("  [" + name + "]"); LogTargets(); });
+            Shot(name);
+        }
+
+        // 보물 상자를 카메라 앞 d 미터에 두고 정면에서 face 도 비껴 — 방향마다 한 장씩
+        private static void CardChestShots(string name, int[] yaws, float d = 3.2f, float face = -28f)
+        {
+            foreach (int yaw in yaws)
+            {
+                int y = yaw;
+                Do(() => AimCamera(-4f, y));
+                HcPlace(d);
+                Do(() => HcFace(face));
+                Sleep(1.6f);
+                Do(() => { log.Add("  [" + name + " " + y + "°]"); LogTargets(); });
+                Shot(name + "_yaw" + y.ToString("000"));
+            }
+        }
+
+        // 카메라 앞 d 미터 · 아래 down 미터에 놓고, 앞면이 카메라를 보다가 turn 도 비껴 서게
+        private static void CardPlace(GameObject go, float d, float down, float turn)
+        {
+            var cam = Camera.main;
+            if (go == null || cam == null) return;
+            Vector3 f = cam.transform.forward; f.y = 0f; f.Normalize();
+            go.transform.position = cam.transform.position + f * d + Vector3.down * down;
+            go.transform.rotation = Quaternion.LookRotation(-f) * Quaternion.Euler(0f, turn, 0f);
+        }
+
+        // 목록을 i 번째 줄이 보이는 칸 맨 위에 오게 굴린다
+        private static void ListRowToTop(int i)
+        {
+            var rows = ListRows();
+            if (rows.Count <= i) { log.Add("  줄 모자람 " + rows.Count); return; }
+            var sr = rows[i].GetComponentInParent<ScrollRect>();
+            if (sr == null || sr.viewport == null) { log.Add("  목록 스크롤 없음"); return; }
+            Canvas.ForceUpdateCanvases();
+            sr.StopMovement();
+            var vc = new Vector3[4]; sr.viewport.GetWorldCorners(vc);
+            var rc = new Vector3[4]; ((RectTransform)rows[i]).GetWorldCorners(rc);
+            sr.content.anchoredPosition += new Vector2(0f, (vc[1].y - rc[1].y) / sr.content.lossyScale.y);
         }
 
         // 메시지 목록 → 대화방 → ← : 옆으로 넘어가는지, 돌아온 목록이 제자리인지 (아래에서 다시 올라오지 않는지)
