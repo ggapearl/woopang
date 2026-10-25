@@ -56,8 +56,10 @@ public class PlaceListManager : MonoBehaviour
         public string icon;          // 축제·보호소 — 줄 앞 그림 (R0926PlaceRows)
         public string start, end;    // 축제 날짜 (YYYYMMDD)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
-        public bool pinned;          // 목록 맨 위에 (반려견만 볼 때 보호소)
+        public bool pinned;          // 목록 맨 위에 (반려견만 볼 때 보호소 · 축제 칩의 광고 줄)
         public bool anyDistance;     // 거리 슬라이더와 상관없이 (축제·보호소)
+        public bool promo;           // 관리자가 띄운 협력 업체(광고) 줄 — '광고'를 밝히고 노출·클릭을 센다
+        public string adId, emojiUrl;
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
 
@@ -79,6 +81,8 @@ public class PlaceListManager : MonoBehaviour
         public bool noDirection;     // 방향을 보이지 않는다 (비공개 보물찾기 · 대략 원 안 · 축제)
         public string icon;          // 축제·보호소 줄 앞 그림
         public string link;          // 축제·보호소 — 누르면 여는 쪽
+        public bool promo;           // 광고 줄 (축제 칩 맨 위) — 거리 칸 '광고 · 거리' · 줄 앞은 고른 이모지 그림
+        public string adId, emojiUrl;
     }
     private readonly List<ListEntry> shownEntries = new List<ListEntry>();
     /// <summary>listText 의 장소 줄과 같은 순서의 장소 정보. 글자는 예전 그대로다 (다른 코드가 글자를 읽는다)</summary>
@@ -435,7 +439,7 @@ public class PlaceListManager : MonoBehaviour
         }
 
         cachedFooter = festivalMode
-            ? $"\n{GetLocalizedText("festivalData")}: {festivalCount}"
+            ? (festivalCount > 0 ? $"\n{GetLocalizedText("festivalData")}: {festivalCount}" : "\n" + R0926Nearby.EmptyMessage())   // 광고 줄만 있으면 그 아래 까닭 한 줄
             : $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
         if (huntCount > 0) cachedFooter += $"\n{GetLocalizedText("huntData")}: {huntCount}";
         if (shelterCount > 0) cachedFooter += $"\n{GetLocalizedText("shelterData")}: {shelterCount}";
@@ -626,7 +630,8 @@ public class PlaceListManager : MonoBehaviour
 
     private static ListEntry ToListEntry(LiveEntry e, float distance)
     {
-        var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = e.baseLat, lon = e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link };
+        var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = e.baseLat, lon = e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link,
+                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl };
         if (e.kind == EntryKind.Hunt)
         {
             le.distanceText = R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);
@@ -634,7 +639,8 @@ public class PlaceListManager : MonoBehaviour
         }
         else if (e.kind == EntryKind.Festival)
         {
-            le.distanceText = R0926Nearby.FestivalLabel(e.start, e.end, distance);   // '10.30부터 · 12km' — 방향 자리까지 쓴다
+            // '10.30부터 · 12km' — 방향 자리까지 쓴다. 광고 줄은 '광고 · 6.7km'
+            le.distanceText = e.promo ? R0926Nearby.AdLabel + " · " + R0926Nearby.Km(distance) : R0926Nearby.FestivalLabel(e.start, e.end, distance);
             le.noDirection = true;
         }
         return le;
@@ -729,7 +735,7 @@ public class PlaceListManager : MonoBehaviour
 
     /// <summary>
     /// 축제 칩 — 받아 둔 근처 축제 전부 (거리 슬라이더와 상관없이 가까운 순). 줄 앞은 축제 분위기 그림, 거리 칸은 '며칠부터 · 거리'.
-    /// 누르면 축제 이름으로 찾은 쪽 (R0926PlaceRows)
+    /// 누르면 축제 이름으로 찾은 쪽 (R0926PlaceRows). 관리자가 띄운 광고 줄은 맨 위에 '광고 · 거리' — 누르면 업체 링크, 축제 수에는 넣지 않는다
     /// </summary>
     private void AddFestivalData(float lat, float lon)
     {
@@ -740,10 +746,12 @@ public class PlaceListManager : MonoBehaviour
             var e = new LiveEntry
             {
                 id = "fest:" + f.id, baseLabel = title, colorHex = R0926Nearby.FestivalHex, baseLat = (float)f.lat, baseLon = (float)f.lon,
-                kind = EntryKind.Festival, icon = f.icon, start = f.start, end = f.end, link = R0926Nearby.FestivalLink(title), anyDistance = true
+                kind = EntryKind.Festival, icon = f.icon, start = f.start, end = f.end, anyDistance = true,
+                link = f.promo ? R0926Nearby.PromoLink(f.link, title, f.lat, f.lon) : R0926Nearby.FestivalLink(title),
+                pinned = f.promo, promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url
             };
             float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
-            festivalCount++;
+            if (!f.promo) festivalCount++;
             combinedPlaces.Add((f, d, e.id, $"{title} - {Mathf.FloorToInt(d)}m", e.colorHex));
             liveEntries.Add(e);
         }

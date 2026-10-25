@@ -30,16 +30,17 @@ namespace Redesign0926
             var cg = Ensure<CanvasGroup>(board);
             cg.alpha = 0f; cg.blocksRaycasts = false; cg.interactable = false;
 
-            var temp = FindOrCreate(board.transform, "Temp0926");
+            var wp = WeatherPage(board);   // v38: 날씨 조각은 날씨 장(Weather0926) 안 — 옆 장과 같이 좌우로 밀린다
+            var temp = FindOrCreate(wp, "Temp0926");
             var tt = Txt(temp, "19°", 300, Color.white, TextAnchor.MiddleCenter, FontStyle.Normal);
             tt.horizontalOverflow = HorizontalWrapMode.Overflow; tt.verticalOverflow = VerticalWrapMode.Overflow;
             SetRect(RT(temp), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -20), new Vector2(1000, 320));
             AddShadow(temp);
-            var cond = FindOrCreate(board.transform, "Cond0926");
+            var cond = FindOrCreate(wp, "Cond0926");
             var ct = Txt(cond, "맑음", 72, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
             SetRect(RT(cond), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -350), new Vector2(1000, 100));
             AddShadow(cond);
-            var det = FindOrCreate(board.transform, "Detail0926");
+            var det = FindOrCreate(wp, "Detail0926");
             var dt = Txt(det, "미세먼지 좋음 · 일몰 18:22 · 바람 1.2m/s", 46, new Color(1, 1, 1, 0.88f), TextAnchor.UpperCenter, FontStyle.Normal);
             dt.horizontalOverflow = HorizontalWrapMode.Wrap;
             SetRect(RT(det), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -460), new Vector2(1000, 140));

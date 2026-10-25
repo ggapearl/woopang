@@ -861,7 +861,7 @@ namespace Redesign0926
             var so = new SerializedObject(sky);
             so.FindProperty("boardFov").floatValue = 42f * 0.8f;   // 본판 80%
             so.ApplyModifiedPropertiesWithoutUndo();
-            var fc = board.transform.Find("Forecast0926");
+            var fc = WeatherPage(board).Find("Forecast0926");
             if (fc != null)
             {
                 // 예보 줄은 본판의 75% → 화면에서 예전의 60%. 본판 바로 아래에 담백하게

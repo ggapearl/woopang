@@ -39,6 +39,25 @@ public static class R0926HuntList
     /// <summary>목록이 바뀌었다 — PlaceListManager 가 다시 그린다</summary>
     public static event Action Changed;
 
+    /// <summary>
+    /// 하늘 옆 장 '근처 보물찾기' — 내 범위 안에서 진행 중 · 곧 시작하는 남의 게임 (아직 못 찾음 · 포기 안 함 · 자리가 남았거나 이미 참가).
+    /// 새 게임 알림을 못 받은 사람도 여기서 보고 참가한다 (10-23 대표님). 순서는 서버 그대로 (공식 · 진행 중 · 가까운 순)
+    /// </summary>
+    public struct Near
+    {
+        public int id;
+        public string title, prize;
+        public bool live, joined, official;
+        public float meters;          // 정확히 · 대략 공개 게임의 거리 — 비공개면 -1
+        public float bandM;           // 비공개 게임의 굵은 거리 끝 (1km · 5km · 20km) — 모르면 0
+        public int players, maxPlayers;   // maxPlayers 0 = 제한 없음
+        public DateTime startsAt;     // 곧 시작 — 이 기기 시각 (모르면 MinValue)
+    }
+    public static readonly List<Near> Nearby = new List<Near>();
+    /// <summary>Nearby 가 바뀔 때마다 1씩 — 하늘 옆 장이 다시 그릴지 본다</summary>
+    public static int NearbyVersion { get; private set; }
+    private static string nearSig = "";
+
     private const float RefreshEvery = 60f;
     private static float fetchedAt = -999f, fetchStartedAt = -999f;
     private static bool fetching;   // 묻는 중 — 목록이 꺼져 코루틴이 멈추면 풀리지 않으니 30초 뒤엔 다시 묻는다
@@ -54,6 +73,8 @@ public static class R0926HuntList
         fetchedAt = fetchStartedAt = -999f;
         fetching = false;
         sig = "";
+        Nearby.Clear();
+        nearSig = "";
     }
 
     /// <summary>목록을 그릴 때 PlaceListManager 가 부른다 — 1분이 지났으면 다시 물을 코루틴, 아니면 null</summary>
@@ -97,6 +118,65 @@ public static class R0926HuntList
             foreach (JSONNode h in j[key].AsArray)
                 if (seen.Add(h["id"].AsInt) && Playing(h) && TryMake(h, out var s)) list.Add(s);
         Set(list);
+        var near = new List<Near>();
+        foreach (JSONNode h in j["hunts"].AsArray)
+            if (TryNear(h, out var n)) near.Add(n);
+        SetNearby(near);
+    }
+
+    private static bool TryNear(JSONNode h, out Near n)
+    {
+        n = default;
+        string st = h["status"];
+        if ((st != "live" && st != "scheduled") || h["is_host"].AsBool) return false;
+        var me = h["me"];
+        bool joined = me["joined"].AsBool;
+        if (me["rank"].AsInt > 0 || me["gave_up"].AsBool || (!joined && h["full"].AsBool)) return false;
+        string title = OneLine(h["title"]);
+        n.id = h["id"].AsInt;
+        n.title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro");
+        n.prize = OneLine(h["prize"]);
+        n.live = st == "live";
+        n.joined = joined;
+        n.official = h["official"].AsBool;
+        n.meters = Has(h, "distance_m") ? h["distance_m"].AsFloat : -1f;
+        n.bandM = n.meters < 0f ? BandKm(h["distance_text"]) * 1000f : 0f;
+        n.players = h["participants"].AsInt;
+        n.maxPlayers = Has(h, "max_players") ? h["max_players"].AsInt : 0;
+        n.startsAt = DateTimeOffset.TryParse((string)h["starts_at"] ?? "", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at)
+            ? at.LocalDateTime : DateTime.MinValue;
+        return true;
+    }
+
+    private static string OneLine(string s) => (s ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+
+    // '1km 이내' · '5km 이내' · '20km 이내' → 1 · 5 · 20, '20km 넘게' · 없음 → 0
+    private static int BandKm(string t)
+    {
+        if (string.IsNullOrEmpty(t) || t.Contains("넘게")) return 0;
+        int km = 0;
+        foreach (char c in t)
+        {
+            if (c >= '0' && c <= '9') km = km * 10 + (c - '0');
+            else if (km > 0) break;
+        }
+        return km;
+    }
+
+    private static void SetNearby(List<Near> list)
+    {
+        sb.Length = 0;
+        if (list != null)
+            foreach (var n in list)
+                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined)
+                  .Append('|').Append(Mathf.RoundToInt(n.meters / 10f)).Append('|').Append(n.bandM).Append('|').Append(n.players).Append('/').Append(n.maxPlayers)
+                  .Append('|').Append(n.startsAt.Ticks).Append(';');
+        string now = sb.ToString();
+        if (now == nearSig) return;
+        nearSig = now;
+        Nearby.Clear();
+        if (list != null) Nearby.AddRange(list);
+        NearbyVersion++;
     }
 
     // 시작 전·진행 중이고, 내가 열었거나 참가해서 아직 못 찾음·포기 안 함 (R0926HuntTreasure.Track 과 같은 기준 + 포기)
@@ -130,14 +210,7 @@ public static class R0926HuntList
             return true;
         }
         // 비공개 — 서버가 내 위치로 잰 굵은 거리 ('1km 이내' · '5km 이내' · '20km 이내' · '20km 넘게'). 위치를 못 보냈으면 없다
-        string t = h["distance_text"];
-        if (string.IsNullOrEmpty(t) || t.Contains("넘게")) return false;
-        int km = 0;
-        foreach (char c in t)
-        {
-            if (c >= '0' && c <= '9') km = km * 10 + (c - '0');
-            else if (km > 0) break;
-        }
+        int km = BandKm(h["distance_text"]);
         if (km <= 0) return false;
         s.coord = Coord.Hidden;
         s.bandM = km * 1000f;
@@ -149,6 +222,7 @@ public static class R0926HuntList
 
     private static void Set(List<Spot> list)
     {
+        if (list == null) SetNearby(null);   // 로그아웃 · 참여 끔 — 하늘 옆 장도 비운다
         sb.Length = 0;
         if (list != null)
             foreach (var s in list)

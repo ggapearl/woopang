@@ -402,8 +402,9 @@ namespace Redesign0926
             var cg = Ensure<CanvasGroup>(g2);
             var weather = SettingRow(g2.transform, "RowWeather", new[] { "날씨", "Weather", "天気", "天气", "Tiempo" },
                 new[] { "기온 · 미세먼지 · 일몰", "Temperature · air · sunset", "気温 · PM10 · 日没", "气温 · 空气 · 日落", "Temperatura · aire · atardecer" }, false);
-            var events = SettingRow(g2.transform, "RowEvents", new[] { "동네 이벤트 · 게임", "Local events · games", "イベント · ゲーム", "活动 · 游戏", "Eventos · juegos" },
-                new[] { "보물찾기 · 숨바꼭질 같은 이벤트", "Treasure hunts, hide-and-seek", "宝探し・かくれんぼなど", "寻宝、捉迷藏等活动", "Búsquedas del tesoro y más" }, true);
+            // v38: 날씨판 옆 장(R0926SkyPages) — 끄면 하늘엔 날씨만 (예전 '동네 이벤트 · 게임 (곧)' 자리)
+            var events = SettingRow(g2.transform, "RowEvents", new[] { "동네 소식 · 라이브", "Nearby & live", "近くの情報・ライブ", "附近动态 · 直播", "Cerca y en directo" },
+                new[] { "보물찾기 · 축제 · 핫플 · 친구 · 라이브", "Hunts · festivals · hot spots · friends · news", "宝探し・祭り・スポット・友だち・ライブ", "寻宝 · 节庆 · 热门 · 好友 · 直播", "Tesoros, fiestas, sitios, amigos, TV" }, false);
             // 라이브 방송 · 광고 · 제휴 소식 줄은 뺐다 (10-18 대표님 "'라이브 / 광고소식' 로직은 삭제해도 될 것 같은데?") — 이미 만든 씬에서도 지운다
             foreach (var oldRowName in new[] { "RowLive", "RowAds" })
             {

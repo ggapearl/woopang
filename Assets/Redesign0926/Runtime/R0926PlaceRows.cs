@@ -98,6 +98,7 @@ public class R0926PlaceRows : MonoBehaviour
     private readonly StringBuilder sb = new StringBuilder(128);
     private string last;
     private bool korean = true;
+    private int nearVer = -1;   // 근처 데이터 판 — 광고 줄 이모지를 받으면 다시 그린다
 
     private class Row
     {
@@ -172,9 +173,10 @@ public class R0926PlaceRows : MonoBehaviour
     {
         if (source == null) return;
         string t = source.text;
-        if (t != last)
+        if (t != last || nearVer != R0926Nearby.Version)
         {
             last = t;
+            nearVer = R0926Nearby.Version;
             Rebuild(t);
         }
         else if (Time.unscaledTime >= nextDirAt) RefreshDirections();
@@ -273,7 +275,8 @@ public class R0926PlaceRows : MonoBehaviour
                 bool known = FindEntry(index, key, out var e);
                 // 근처 사람은 이름이 @아이디 — 장소 정보와 아직 못 맞춘 프레임에도 사람 모양으로
                 var kind = known ? e.kind : key.StartsWith("@") ? PlaceListManager.EntryKind.Person : PlaceListManager.EntryKind.Place;
-                SetIcon(r, kind, ParseHex(m.Groups[1].Value), known ? e.icon : null);
+                SetIcon(r, kind, ParseHex(m.Groups[1].Value), known ? e.icon : null, known ? e.emojiUrl : null);
+                if (known && e.promo) R0926Nearby.AdView(this, e.adId, "festival");   // 광고 줄은 축제 칩에만 온다
                 string label = key;
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움)
                 string roman = korean ? null : R0926Romanizer.Romanize(label);
@@ -405,12 +408,14 @@ public class R0926PlaceRows : MonoBehaviour
         }
     }
 
-    // 줄 앞 표시 — 장소는 색 점, 사람은 사람 모양(핑크 그대로), 보물찾기는 금빛 상자 · 축제·보호소는 제 그림(그림 색 그대로). 그림이 없으면 색 점
-    private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color, string icon)
+    // 줄 앞 표시 — 장소는 색 점, 사람은 사람 모양(핑크 그대로), 보물찾기는 금빛 상자 · 축제·보호소는 제 그림(그림 색 그대로) · 광고 줄은 고른 이모지. 그림이 없으면 색 점
+    private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color, string icon, string emojiUrl)
     {
         Sprite s = kind == PlaceListManager.EntryKind.Person ? personSprite
                  : kind == PlaceListManager.EntryKind.Hunt ? huntSprite
                  : kind == PlaceListManager.EntryKind.Festival || kind == PlaceListManager.EntryKind.Shelter ? KindIcon(icon) : null;
+        var emoji = R0926Nearby.Emoji(emojiUrl, this);   // 받는 동안은 축제 기본 그림
+        if (emoji != null) s = emoji;
         if (s == null) kind = PlaceListManager.EntryKind.Place;
         r.dot.color = kind == PlaceListManager.EntryKind.Place || kind == PlaceListManager.EntryKind.Person ? color : Color.white;
         if (kind == r.kind && (s == null || r.dot.sprite == s)) return;
@@ -454,10 +459,11 @@ public class R0926PlaceRows : MonoBehaviour
         if (e.kind == PlaceListManager.EntryKind.Hunt) { R0926HuntPush.OpenHunt(e.huntId); return; }   // 그 게임 상세 (목록은 뒤로가기 순서대로 닫힌다)
         if (e.kind == PlaceListManager.EntryKind.Festival || e.kind == PlaceListManager.EntryKind.Shelter)
         {
-            // AR 에 띄우지 않는 줄 — 축제는 이름으로 찾은 쪽(날짜·장소·포스터), 보호소는 카카오맵 장소 쪽(전화·길찾기)
+            // AR 에 띄우지 않는 줄 — 축제는 이름으로 찾은 쪽(날짜·장소·포스터), 보호소는 카카오맵 장소 쪽(전화·길찾기), 광고 줄은 업체 링크(클릭을 센다)
             if (string.IsNullOrEmpty(e.link)) return;
             Flash(r, tapFlashDuration);
-            Application.OpenURL(e.link);
+            if (e.promo) R0926Nearby.AdClick(this, e.adId, "festival", e.link);
+            else R0926Nearby.Open(e.link);
             return;
         }
         Target t = places.FindTarget(e);

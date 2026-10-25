@@ -14,6 +14,9 @@ using UnityEngine.XR.ARFoundation;
 ///  · 하늘의 날씨판은 한 번 걸리면 그 방향에 머물러, 휴대폰을 움직이면 하늘에 붙은 것처럼 흘러간다
 ///  · 밤하늘·천장처럼 특징이 없어 AR 추적이 안 잡히면 카메라 방향이 멈춘다 — 그때는 휴대폰 중력 센서로 기울기를 읽고
 ///    날씨판은 화면 앞에 붙여 보여 준다 (예전엔 밤·실내에서 하늘을 비춰도 날씨가 안 떴다)
+///  · 판을 좌우로 밀면 옆 장 — 근처 보물찾기 · 축제 · 핫플 · 친구 · 언론사 라이브 (R0926SkyPages)
+///  · 판을 아래로 끌거나 📌 를 누르면 화면 아래쪽(주소줄 위)에 고정 — 휴대폰을 내려도 남는다. 위로 밀거나 📌 를 다시 누르면 하늘로
+///    (10-25 대표님 「조금만 움직여도 해당 내용이 사라질 수 있으니 … 고정」). 한 번 뜬 판은 설정 각도보다 조금 더 내려야 사라진다
 /// 데이터: 우팡 서버 /api/weather (10분 캐시). 스폰 시스템과 따로 돌아 기존 오브젝트 로직을 건드리지 않는다.
 /// </summary>
 public class R0926SkyWeather : MonoBehaviour
@@ -53,6 +56,21 @@ public class R0926SkyWeather : MonoBehaviour
     [Tooltip("하늘에서 날씨판이 차지하는 폭 (시야각 도)")]
     [SerializeField] private float boardFov = 42f;
     [SerializeField] private float refreshMinutes = 10f;
+    [Tooltip("한 번 뜬 판은 설정 각도보다 이만큼 더 내려야 사라진다 (경계에서 깜빡이지 않게)")]
+    [SerializeField] private float hideSlack = 8f;
+
+    [Header("고정 — 판의 틀(Frame0926)만 화면 UI 로 옮겨 붙인다")]
+    [SerializeField] private RectTransform frame;
+    [SerializeField] private CanvasGroup frameGroup;
+    [Tooltip("화면 UI 의 고정 자리 (SkyPin0926 — 장소 표시 위 · 도크와 창 아래, 아래 가운데 기준)")]
+    [SerializeField] private RectTransform pinLayer;
+    [Tooltip("판 전체에서 손가락을 받는 판 — 고정했을 때만 유리로 보인다 (카메라 화면 위에서도 글이 읽히게)")]
+    [SerializeField] private Image glass;
+    [Tooltip("고정한 판은 이것들 위에 놓는다 (주소줄 · 도크)")]
+    [SerializeField] private RectTransform[] pinFloor;
+    [Tooltip("고정한 판의 유리 폭 — 화면 폭의 이만큼")]
+    [SerializeField] private float pinWidth = 0.86f;
+    [SerializeField] private float pinGap = 24f;
 
     private Camera cam;
     private bool hasData;
@@ -100,6 +118,17 @@ public class R0926SkyWeather : MonoBehaviour
     private float highSince = -1f;
     private Vector3 highPos;
     private bool boardShowing;
+    private bool skyShow;            // 하늘에 걸린 판이 보일 때 (고정과 상관없이 — 풀면 이 자리로 돌아간다)
+    private float holdUntil;
+    private bool pinned;
+    private float pinT = 1f;         // 고정 · 풀기로 옮기는 중 0 → 1
+    private Vector2 fromPos;
+    private float fromScale, fromAlpha;
+    private Color glassColor;
+    private Vector2 frameSize;
+    private float pull;              // 위아래로 끄는 손가락을 따라간 만큼 (틀 단위 — R0926SkyPages)
+    private const float PinTime = 0.34f;
+    private readonly Vector3[] corners = new Vector3[4];
     private string lastChip;
     private float pillSince = -1f;
     private const float PillWaitMax = 30f;   // 알약이 이보다 오래 안 걷히면(최종 개수가 안 온 경우 등) 칩이 더 기다리지 않는다
@@ -111,6 +140,8 @@ public class R0926SkyWeather : MonoBehaviour
         if (skyGroup != null) skyGroup.alpha = 0f;
         if (chipGroup != null) chipGroup.alpha = 0f;
         if (skyBoard != null) skyBoard.gameObject.SetActive(false);
+        if (frame != null) frameSize = frame.rect.size;
+        if (glass != null) { glassColor = glass.color; SetGlass(0f); }
         LoadCache();
     }
 
@@ -174,10 +205,53 @@ public class R0926SkyWeather : MonoBehaviour
         catch (Exception) { }
     }
 
+    /// <summary>날씨를 받아 판에 그릴 수 있다 (설정에서 날씨를 껐으면 false) — 하늘 옆 장이 날씨 장을 넣을지 본다</summary>
+    public bool WeatherReady => R0926SkySettings.Enabled && R0926SkySettings.Weather && hasData;
+    /// <summary>휴대폰이 수평보다 몇 도 위를 보는지 (마지막 프레임) — 하늘 옆 장이 미리 받아 둘 때를 본다</summary>
+    public float Pitch { get; private set; }
+
+    /// <summary>판을 화면에 고정했는지 — 휴대폰을 내려도 화면 아래쪽에 남는다</summary>
+    public bool Pinned => pinned;
+
+    /// <summary>
+    /// 고정 · 풀기 (판의 📌 · 판을 아래로 끌기 / 위로 밀기 — R0926SkyPages). 떠 있는 판만 고정한다.
+    /// 고정하면 지금 보이는 자리에서 화면 아래쪽으로 내려오고, 풀면 하늘 자리로 돌아간다 (하늘을 안 보고 있으면 위로 날아가며 사라진다)
+    /// </summary>
+    public void SetPinned(bool on)
+    {
+        if (on == pinned || frame == null || frameGroup == null || pinLayer == null || glass == null || cam == null) return;
+        if (on && !skyShow) return;
+        pinned = on;
+        pinT = 0f;
+        if (on)
+        {
+            if (!ScreenRect(frame, out fromPos, out fromScale)) PinnedRect(out fromPos, out fromScale);
+            fromAlpha = skyGroup != null ? skyGroup.alpha : 1f;
+            frame.SetParent(pinLayer, false);
+            frame.anchorMin = frame.anchorMax = new Vector2(0.5f, 0f);   // 하늘에선 판에 꽉 차게 늘어나 있다 — 크기를 직접
+            frame.sizeDelta = frameSize;
+            frame.localRotation = Quaternion.identity;
+            collapsed = false;
+        }
+        else
+        {
+            fromPos = frame.anchoredPosition;
+            fromScale = frame.localScale.x;
+            fromAlpha = frameGroup.alpha;
+        }
+        UpdatePin();
+    }
+
+    /// <summary>판을 만지는 중 — 잠깐 기울어져도 사라지지 않게 (미는 손에 휴대폰이 같이 기운다)</summary>
+    public void Hold() => holdUntil = Time.unscaledTime + 1.2f;
+
+    /// <summary>위아래로 끄는 동안 판이 손가락을 따라 내려오거나 올라간 만큼 (틀 단위)</summary>
+    public void SetPull(float y) => pull = y;
+
     /// <summary>위쪽 칩을 누르면 — 판이 떠 있으면 접고, 접혀 있으면 편다</summary>
     public void ToggleCollapse()
     {
-        if (boardShowing) collapsed = true;
+        if (boardShowing) { collapsed = true; SetPinned(false); }
         else
         {
             collapsed = false;
@@ -187,8 +261,12 @@ public class R0926SkyWeather : MonoBehaviour
 
     private void Update()
     {
-        bool allowed = R0926SkySettings.Enabled && R0926SkySettings.Weather;
-        if (allowed && !fetching && Time.unscaledTime >= nextFetch) StartCoroutine(Fetch());
+        // 판에는 날씨 장과 옆 장(근처 보물찾기 · 축제 · 핫플 · 친구 · 언론사 라이브 — R0926SkyPages)이 있다.
+        // 날씨를 켰으면 날씨가 올 때까지 기다리고(장 순서가 뒤늦게 밀리지 않게), 날씨를 끄고 옆 장만 켰으면 바로 띄운다
+        bool weatherOn = R0926SkySettings.Enabled && R0926SkySettings.Weather;
+        bool eventsOn = R0926SkySettings.Enabled && R0926SkySettings.Events;
+        if (weatherOn && !fetching && Time.unscaledTime >= nextFetch) StartCoroutine(Fetch());
+        bool ready = weatherOn ? hasData : eventsOn;
         if (cam == null) cam = Camera.main;
         if (cam == null || skyBoard == null) return;
 
@@ -197,7 +275,9 @@ public class R0926SkyWeather : MonoBehaviour
         Vector3 fwd = cam.transform.forward;
         float camPitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
         float pitch = SensorPitch() ?? camPitch;
-        bool up = pitch > R0926SkySettings.MinPitch;
+        Pitch = pitch;
+        // 한 번 뜬 판은 설정 각도보다 hideSlack 더 내려야 사라진다 — 경계에서 조금만 기울여도 꺼지던 것
+        bool up = pitch > R0926SkySettings.MinPitch - (skyShow ? hideSlack : 0f);
         lookUpSince = up ? (lookUpSince < 0f ? Time.unscaledTime : lookUpSince) : -1f;
         bool settled = up && Time.unscaledTime - lookUpSince > 0.6f;   // 잠깐 스친 건 무시
         if (tracking) UpdateLying(pitch);
@@ -207,25 +287,27 @@ public class R0926SkyWeather : MonoBehaviour
             highSince = -1f;
             if (pitch < 30f) { lying = false; lyingOverride = false; }
         }
-        bool near = tracking && settled && NearObjectInView();
+        bool held = skyShow && Time.unscaledTime < holdUntil;   // 판을 만지는 중
+        bool near = tracking && settled && !held && NearObjectInView();
         bool lyingHide = lying && !lyingOverride && R0926SkySettings.HideWhenLying;
 
-        bool showSky = allowed && hasData && settled && !near && !collapsed && !lyingHide;
+        skyShow = ready && (settled || held) && !near && !collapsed && !lyingHide;
+        if (pinned && !ready) SetPinned(false);   // 설정에서 하늘을 껐다
         // 칩은 노치 아래 상태 알약('N곳을 찾았어요' 등)과 같은 자리 — 알약이 걷힐 때까지 기다린다 (앱을 켜자마자 둘이 겹치던 것)
         bool pill = R0926StatusPill.AnyShowing;
         if (!pill) pillSince = -1f; else if (pillSince < 0f) pillSince = Time.unscaledTime;
-        bool showChip = allowed && hasData && settled && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
-        boardShowing = showSky;
-        UpdateChip(showSky);
+        bool showChip = ready && settled && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
+        boardShowing = skyShow || pinned;
+        UpdateChip(boardShowing);
 
         if (!tracking)
         {
             // 화면 앞에 붙인다 — 카메라가 멈춰 있어도 늘 화면 가운데 보인다
             anchored = false;
-            if (showSky || skyBoard.gameObject.activeSelf) PinToCamera();
+            if (skyShow || skyBoard.gameObject.activeSelf) PinToCamera();
         }
-        else if (showSky && !anchored) Anchor(fwd, camPitch);
-        if (!up) anchored = false;
+        else if (skyShow && !anchored) Anchor(fwd, camPitch);
+        if (!up && !held) anchored = false;
         if (tracking && anchored)
         {
             // 너무 옆으로 돌아서면(70° 이상) 새 방향으로 다시 건다
@@ -234,11 +316,105 @@ public class R0926SkyWeather : MonoBehaviour
             skyBoard.rotation = Quaternion.LookRotation(skyBoard.position - cam.transform.position);
         }
 
-        Fade(skyGroup, showSky, 1.6f);
+        Fade(skyGroup, skyShow, 1.6f);
         Fade(chipGroup, showChip, 3f);
         if (chipGroup != null) { bool touch = chipGroup.alpha > 0.5f; chipGroup.blocksRaycasts = touch; chipGroup.interactable = touch; }
+        // 판도 또렷이 보일 때만 손가락을 받는다 (옆으로 밀기 · 줄 누르기) — 사라지는 중엔 뒤의 AR 을 누를 수 있게
+        if (skyGroup != null) { bool touch = skyShow && skyGroup.alpha > 0.5f; skyGroup.blocksRaycasts = touch; skyGroup.interactable = touch; }
         bool boardVisible = skyGroup != null && skyGroup.alpha > 0.001f;
         if (skyBoard.gameObject.activeSelf != boardVisible) skyBoard.gameObject.SetActive(boardVisible);
+        UpdatePin();   // 하늘 자리가 이번 프레임에 정해진 뒤 — 풀 때 그 자리로 간다
+    }
+
+    // ── 고정 ─────────────────────────────────────────────────
+    // 고정하면 틀이 화면 UI 의 고정 자리(pinLayer)로 옮겨 가 화면 아래쪽(주소줄 위)에 머문다.
+    // 하늘의 빈 판(skyBoard)은 그동안에도 평소처럼 걸리고 사라진다 — 풀면 그 자리로 돌아가 이어진다
+    private void UpdatePin()
+    {
+        if (frame == null || frameGroup == null || pinLayer == null || glass == null) return;
+        if (!pinned && pinT >= 1f)
+        {
+            // 하늘에 있다 — 끄는 손가락만 따라간다
+            if (!Mathf.Approximately(frame.anchoredPosition.y, pull)) frame.anchoredPosition = new Vector2(0f, pull);
+            return;
+        }
+        pinT = Mathf.Min(1f, pinT + Time.unscaledDeltaTime / PinTime);
+        float e = 1f - (1f - pinT) * (1f - pinT) * (1f - pinT);   // 빨리 떠나 살며시 닿는다
+        Vector2 toPos;
+        float toScale, toAlpha = 1f;
+        if (pinned) { PinnedRect(out toPos, out toScale); toPos.y += pull * toScale; }
+        else if (skyShow && ScreenRect(skyBoard, out toPos, out toScale)) toAlpha = skyGroup != null ? skyGroup.alpha : 1f;
+        else { toPos = fromPos + new Vector2(0f, pinLayer.rect.height * 0.35f); toScale = fromScale * 0.9f; toAlpha = 0f; }   // 하늘을 안 보고 있으면 위로 날아가며 사라진다
+        frame.anchoredPosition = Vector2.LerpUnclamped(fromPos, toPos, e);
+        float s = Mathf.LerpUnclamped(fromScale, toScale, e);
+        frame.localScale = new Vector3(s, s, 1f);
+        frameGroup.alpha = Mathf.Lerp(fromAlpha, toAlpha, e);
+        SetGlass(pinned ? e : 1f - e);
+        bool touch = pinned && pinT > 0.6f;
+        frameGroup.blocksRaycasts = touch;
+        frameGroup.interactable = touch;
+        if (!pinned && pinT >= 1f) BackToSky();
+    }
+
+    private void BackToSky()
+    {
+        frame.SetParent(skyBoard, false);
+        frame.anchorMin = Vector2.zero;   // 판에 꽉 차게 — 판 크기가 바뀌어도 따라간다
+        frame.anchorMax = Vector2.one;
+        frame.offsetMin = frame.offsetMax = Vector2.zero;
+        frame.localScale = Vector3.one;
+        frame.localRotation = Quaternion.identity;
+        frameGroup.alpha = 1f;
+        frameGroup.blocksRaycasts = frameGroup.interactable = true;   // 하늘에선 판(skyGroup)이 막고 연다
+        SetGlass(0f);
+    }
+
+    // 고정 자리 — 화면 아래쪽 가운데, 주소줄 · 도크 바로 위. 유리 폭이 화면 폭의 pinWidth (가로 화면에선 높이의 42% 까지)
+    private void PinnedRect(out Vector2 pos, out float scale)
+    {
+        var g = glass.rectTransform;
+        float bottom = g.localPosition.y + g.rect.yMin, top = g.localPosition.y + g.rect.yMax;
+        var area = pinLayer.rect;
+        scale = Mathf.Min(area.width * pinWidth / Mathf.Max(1f, g.rect.width), area.height * 0.42f / Mathf.Max(1f, top - bottom));
+        pos = new Vector2(0f, Floor() + pinGap - bottom * scale);
+    }
+
+    // 주소줄 · 도크 중 가장 높은 윗변 — pinLayer 아래 변에서 위로
+    private float Floor()
+    {
+        float floor = 0f;
+        if (pinFloor == null) return floor;
+        foreach (var f in pinFloor)
+        {
+            if (f == null || !f.gameObject.activeInHierarchy) continue;
+            f.GetWorldCorners(corners);
+            floor = Mathf.Max(floor, pinLayer.InverseTransformPoint(corners[1]).y - pinLayer.rect.yMin);
+        }
+        return floor;
+    }
+
+    // 하늘의 판(또는 틀)이 지금 화면에서 차지하는 자리 — 고정 자리와 같은 좌표 (pinLayer 아래 가운데 기준 · 배율)
+    private bool ScreenRect(Transform t, out Vector2 pos, out float scale)
+    {
+        pos = Vector2.zero;
+        scale = 1f;
+        if (frameSize.x <= 0f) return false;
+        Vector3 c = cam.WorldToScreenPoint(t.position);
+        Vector3 r = cam.WorldToScreenPoint(t.TransformPoint(new Vector3(frameSize.x * 0.5f, 0f, 0f)));
+        if (c.z <= 0f || r.z <= 0f) return false;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(pinLayer, c, null, out var lp)) return false;
+        var area = pinLayer.rect;
+        pos = lp - new Vector2(area.center.x, area.yMin);
+        scale = Vector2.Distance(c, r) / Mathf.Max(0.0001f, pinLayer.lossyScale.x) / (frameSize.x * 0.5f);
+        return true;
+    }
+
+    private void SetGlass(float k)
+    {
+        if (glass == null) return;
+        var c = glassColor;
+        c.a *= Mathf.Clamp01(k);
+        glass.color = c;
     }
 
     // 누워서 위로 들고 쓰는 경우(천장) — 크게 기울인 채 거의 움직이지 않으면
@@ -254,7 +430,10 @@ public class R0926SkyWeather : MonoBehaviour
     private void UpdateChip(bool boardUp)
     {
         if (chipText == null) return;
-        string text = boardUp ? L(R0926LocalizedText.Lang(), "하늘 접기", "Hide sky", "空をたたむ", "收起天空", "Ocultar cielo") : weatherChip;
+        string lang = R0926LocalizedText.Lang();
+        string text = boardUp ? L(lang, "하늘 접기", "Hide sky", "空をたたむ", "收起天空", "Ocultar cielo")
+                    : WeatherReady && weatherChip.Length > 0 ? weatherChip
+                    : L(lang, "하늘 펼치기", "Show sky", "空を広げる", "展开天空", "Mostrar cielo");   // 날씨를 끄고 옆 장만 볼 때
         if (text == lastChip) return;
         lastChip = text;
         chipText.text = text;

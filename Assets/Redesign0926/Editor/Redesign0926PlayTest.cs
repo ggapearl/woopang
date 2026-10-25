@@ -56,7 +56,7 @@ namespace Redesign0926
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
             // 스토어 캡처는 날씨를 광화문 좌표로 넣는다 — 판의 지역 이름도 그 자리로 (에디터 위치의 지역이 찍혔다)
-            R0926SkyWeather.EditorRegionOverride = mode == "store" || mode == "store2" || mode == "store3" || mode == "sky" || mode == "ar" ? StoreRegion : null;
+            R0926SkyWeather.EditorRegionOverride = mode == "store" || mode == "store2" || mode == "store3" || mode == "sky" || mode == "skypages" || mode == "ar" ? StoreRegion : null;
             // 기기 화면과 UI 바탕(캔버스)의 크기가 다르면 자리 시험이 전부 어긋난다 — 먼저 확인하고, 어긋났으면 시뮬레이터를 주 화면으로 다시 맞춘 뒤 다시 잰다
             // (10-19: UI 가 숨은 Game 탭 크기 877x646 으로 깔려 왼쪽 아래 구석에 작게 그려졌다)
             string firstScreen = null;
@@ -91,6 +91,13 @@ namespace Redesign0926
             else if (mode == "caret") PlanCaret();
             else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }
             else if (mode == "sky") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSky(); }
+            else if (mode == "skypages")
+            {
+                // 하늘 옆 장 · 고정 — 날씨 좌표(광화문)로 옮겨 시험 서버의 축제 · 핫플 · 친구(서울)가 근처에 들게
+                storeSrc = lines.Length > 2 ? lines[2].Trim() : "";
+                VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f);
+                PlanSkyPages();
+            }
             else if (mode == "ar") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanAr(); }
             else if (mode == "update") PlanUpdate();
             else if (mode == "audit") PlanAudit();
@@ -105,6 +112,7 @@ namespace Redesign0926
             else if (mode == "glbload") PlanGlbLoad();
             else if (mode == "login") PlanLogin();
             else if (mode == "loginswitch") PlanLoginSwitch();
+            else if (mode == "authexpire") PlanAuthExpire();
             else if (mode == "chatlook") PlanChatLook();
             else if (mode == "v24") PlanV24();
             else if (mode == "farfade") PlanFarFade();
@@ -7005,6 +7013,141 @@ namespace Redesign0926
             });
         }
 
+        // 로그인 만료 (10-25 goosoon56 — 친구 지도가 '인터넷 연결을 확인' 이라는데 실은 7월에 받은 1시간 토큰이 그대로 남아 모든 요청이 401) —
+        // ① 만료된 토큰을 둔 채 켜면 로그인된 척하지 않는다: 로그아웃 · 저장값 지움 · 푸시 연결 끊기 · 시작화면 뒤 「로그인이 만료됐어요」 (서버엔 묻지 않는다)
+        // ② 로그인한 채 서버가 토큰을 거절하면(친구 지도 401) 지도에 '로그인 만료'(인터넷 탓 아님) · 서버에 한 번 확인해 로그아웃 + 안내
+        // ③ 401 이어도 서버가 토큰이 살아 있다고 하면 로그인 그대로 · 서버가 준 새 토큰 저장 · 지도는 곧 다시 받아 정상
+        // ④ 돌아올 때(포커스) 하루 넘은 토큰이면 서버에 물어 새 토큰 · 하루 안 된 토큰과 이미 바꾼 토큰은 묻지 않는다
+        // ⑤ 돌아올 때 토큰이 만료돼 있으면 서버에 묻지 않고 로그아웃 + 안내
+        // 시험 서버(127.0.0.1:5099)만 쓴다 — 시작 전 로그인 저장값은 덜어 두었다가(StashLogin) 끝나면 되돌린다
+        private const string AuthDev = "http://127.0.0.1:5099";
+        private const string ExpiredUser = "2147400099";
+        [Serializable] private class DevAuth { public string[] verify; }
+        // JWT 모양 시험 토큰 — 가운데에 발급·만료 시각 · 서명 자리의 hunt-dev-<이름> 은 시험 서버만 받는다 (운영 서버는 서명이 틀려 거절)
+        private static string DevJwt(string who, long issuedAgo, long expiresIn)
+        {
+            Func<string, string> b64 = t => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(t)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            return b64("{\"alg\":\"HS256\",\"typ\":\"JWT\"}") + "." + b64("{\"user_id\":" + ExpiredUser + ",\"iat\":" + (now - issuedAgo) + ",\"exp\":" + (now + expiresIn) + "}")
+                   + ".hunt-dev-" + who;
+        }
+        private static void ArmExpiredLogin()
+        {
+            SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+            PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, DevJwt("expired", 31 * 86400, -86400));   // 하루 전에 만료
+            PlayerPrefs.SetString("SavedUserId", ExpiredUser);
+            PlayerPrefs.SetString("SavedUsername", "시험_만료");
+            PlayerPrefs.SetString("LoginProvider", "kakao");
+            PlayerPrefs.Save();
+            LoginManager.EditorAuthBase = AuthDev;      // 켜는 순간(Awake)부터 시험 서버로
+            FirebaseNotification.EditorBase = AuthDev;  // 로그아웃 때 푸시 연결 끊기도
+            DevGet("", "/api/dev/p2p_log?reset=1");
+            DevGet("", "/api/dev/auth?reset=1");
+        }
+        private static void PlanAuthExpire()
+        {
+            const string Expired = "로그인이 만료됐어요.\n다시 로그인할까요?";
+            R0926FriendsMap map = null;
+            int verifyAt = 0;
+            string Body() => map != null ? (typeof(R0926FriendsMap).GetField("consentBody", NPI)?.GetValue(map) as Text)?.text ?? "" : "";
+            bool CardOn() => map != null && (typeof(R0926FriendsMap).GetField("consentCard", NPI)?.GetValue(map) as GameObject)?.activeSelf == true;
+            string Prompt() => LoginManager.Instance?.promptText?.text ?? "";
+            string Token() => PlayerPrefs.GetString(LoginManager.AUTH_TOKEN_KEY, "");
+            int Verifies() => JsonUtility.FromJson<DevAuth>(DevGet("", "/api/dev/auth"))?.verify?.Length ?? -1;
+            void Focus() => typeof(LoginManager).GetMethod("OnApplicationFocus", NPI)?.Invoke(LoginManager.Instance, new object[] { true });
+            void Login(string who) { LoginManager.Instance.CloseLoginPrompt(); LoginManager.Instance.SimulateDeepLink("woopang://auth?token=" + LocalTestLogin + who); }
+
+            // ① 만료된 토큰으로 켜기 (ArmExpiredLogin 이 플레이 전에 넣었다)
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+                ProfileManager.EditorBase = AuthDev;
+                FollowManager.EditorBase = AuthDev;
+                P2PManager.EditorBase = AuthDev;
+                MessagePanelManager.EditorBase = AuthDev;
+                R0926HuntApi.EditorBase = AuthDev;
+                R0926HuntApi.EditorTestUser = null;
+                R0926FriendsMap.EditorBase = AuthDev;
+                R0926MapTiles.EditorBase = "http://127.0.0.1:9";   // 닫힌 자리 — 지도 타일 없이 (진짜 서버의 타일을 부르지 않는다)
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Check(() => LoginManager.Instance != null && !LoginManager.Instance.IsLoggedIn, "① 만료된 토큰으로 켜면 로그인된 척하지 않는다 (로그아웃 상태)");
+            Check(() => !PlayerPrefs.HasKey(LoginManager.AUTH_TOKEN_KEY) && !PlayerPrefs.HasKey("SavedUserId") && !PlayerPrefs.HasKey("SavedUsername"),
+                "저장된 로그인을 지운다 — 다음에 켜도 그대로 로그아웃");
+            Wait(() => Active("LoginPromptPanel") && Prompt() == Expired, 6f, "시작화면 뒤 「로그인이 만료됐어요 · 다시 로그인할까요?」");
+            Sleep(0.6f);
+            Shot("auth_expired_prompt");
+            Wait(() => P2PLog().Contains("fcm_unregister::" + ExpiredUser), 8f, "그 아이디의 푸시 연결 끊기");
+            Check(() => Verifies() == 0, "만료된 토큰은 서버에 묻지 않는다 (휴대폰 안에서 판단)");
+
+            // ② 다시 로그인 → 서버가 그 토큰을 거절 (친구 지도 401)
+            Do(() => Login("authx"));
+            Wait(() => LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUsername == "시험_authx", 10f, "② 다시 로그인 (시험 서버가 확인)");
+            Do(() => DevGet("", "/api/dev/auth?revoke=authx"));
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(1));
+            Do(() => map = UnityEngine.Object.FindAnyObjectByType<R0926FriendsMap>(FindObjectsInactive.Include));
+            Wait(() => Body().StartsWith("로그인이 만료됐어요"), 10f, "친구 지도 401 → '로그인이 만료됐어요' (인터넷 연결 탓이 아니다)");
+            Sleep(0.4f);
+            Shot("auth_map_expired");
+            Wait(() => !LoginManager.Instance.IsLoggedIn, 10f, "서버에 한 번 확인 → 거절 → 로그아웃");
+            Wait(() => Active("LoginPromptPanel") && Prompt() == Expired, 5f, "다시 로그인하라는 안내");
+            Check(() => !PlayerPrefs.HasKey(LoginManager.AUTH_TOKEN_KEY), "거절된 토큰을 지운다");
+
+            // ③ 401 이어도 서버가 토큰이 살아 있다고 하면 — 로그인 그대로 · 새 토큰 저장 · 지도는 곧 다시 받아 정상
+            Do(() => Login("authy"));
+            Wait(() => LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUsername == "시험_authy", 10f, "③ 다른 아이디로 다시 로그인");
+            Wait(() => !CardOn(), 12f, "지도 정상 (친구 핀)");
+            Do(() =>
+            {
+                DevGet("", "/api/dev/auth?once401=authy&renew=authy:authy2");
+                typeof(R0926FriendsMap).GetField("nextRefresh", NPI)?.SetValue(map, 0f);   // 지금 다시 받기
+            });
+            Wait(() => Token() == LocalTestLogin + "authy2", 10f, "친구 지도 401 → 서버 확인: 살아 있음 · 새 토큰 저장");
+            Do(() => log.Add("  그 사이 지도: " + (CardOn() ? Body() : "(카드 없음)")));
+            Check(() => LoginManager.Instance.IsLoggedIn && !Active("LoginPromptPanel"), "로그인 그대로 · 안내 없음 (401 한 번으로 내보내지 않는다)");
+            Wait(() => !CardOn(), 12f, "지도는 곧 새 토큰으로 다시 받아 정상");
+            Sleep(0.6f);
+            Shot("auth_map_recovered");
+
+            // ④ 돌아올 때(포커스) — 하루 넘은 토큰만 서버에 물어 새 토큰
+            Do(() => { PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, DevJwt("authy", 3600, 29 * 86400)); verifyAt = Verifies(); Focus(); });
+            Sleep(1.5f);
+            Check(() => Verifies() == verifyAt && Token().EndsWith(".hunt-dev-authy") && LoginManager.Instance.IsLoggedIn, "④ 돌아올 때 — 하루 안 된 토큰은 서버에 묻지 않는다");
+            Do(() => { PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, DevJwt("authy", 2 * 86400, 28 * 86400)); DevGet("", "/api/dev/auth?renew=authy:authy3"); Focus(); });
+            Wait(() => Token() == LocalTestLogin + "authy3", 8f, "하루 넘은 토큰 → 서버에 물어 새 토큰으로");
+            Check(() => Verifies() == verifyAt + 1 && LoginManager.Instance.IsLoggedIn, "물어본 건 한 번 · 로그인 그대로");
+            Do(() => Focus());
+            Sleep(1.5f);
+            Check(() => Verifies() == verifyAt + 1, "새 토큰으로 돌아오면 다시 묻지 않는다");
+
+            // ⑤ 돌아올 때 토큰이 만료돼 있으면 — 서버에 묻지 않고 로그아웃 + 안내
+            Do(() => { PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, DevJwt("authy", 31 * 86400, -10)); verifyAt = Verifies(); Focus(); });
+            Wait(() => !LoginManager.Instance.IsLoggedIn, 5f, "⑤ 돌아올 때 만료 → 로그아웃");
+            Wait(() => Active("LoginPromptPanel") && Prompt() == Expired, 5f, "「로그인이 만료됐어요」 안내");
+            Check(() => Verifies() == verifyAt, "만료는 서버에 묻지 않는다");
+            Do(() =>
+            {
+                LoginManager.Instance.CloseLoginPrompt();
+                if (LoginManager.Instance.IsLoggedIn) LoginManager.Instance.Logout();   // 시험 서버에 둔 채로 — 끝난 뒤 운영 서버로 시험 토큰이 가지 않게
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                P2PManager.EditorBase = null;
+                MessagePanelManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                R0926FriendsMap.EditorBase = null;
+                R0926MapTiles.EditorBase = null;
+                LoginManager.EditorAuthBase = null;
+                DevGet("", "/api/dev/auth?reset=1");
+            });
+        }
+
         // 요청 대조 — 날씨판 지역 이름(에디터 위치 그대로) · 목록/지도/설정 · 지도 최대 확대 · 추가창과 크기 · 첫 안내 버튼 소리
         private static void PlanAudit()
         {
@@ -7497,6 +7640,372 @@ namespace Redesign0926
             Shot("sky52c");
         }
 
+        // ── P2 (10-23 · 10-25 대표님) — 하늘 옆 장 · 고정 ──
+        // 날씨판을 옆으로 밀면 근처 보물찾기 · 축제 · 핫플 · 친구 · 언론사 라이브. 판을 아래로 끌거나 📌 를 누르면 화면 아래쪽에 고정,
+        // 위로 밀거나 📌 를 다시 누르면 하늘로. 축제 · 핫플 · 친구는 시험 서버(127.0.0.1:5099), 보물찾기는 목록을 직접 넣는다(시험 서버의
+        // 보물찾기는 운영 DB 를 쓴다). 줄 · 방송사 칸은 누르지 않는다 — 바깥 주소가 열리거나 보물찾기 서버에 묻는다
+        private static readonly string[] SkyPrefKeys = { "Sky_Enabled", "Sky_Weather", "Sky_Events", "Sky_Angle", "Sky_StartCollapsed", "Sky_Swiped", "Sky_PinUsed" };
+        private const string SkyPrefsBackupKey = "Redesign0926PlayTest.SkyPrefs";
+        private static bool skyPagesRun;
+
+        private static void PlanSkyPages()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const string S = "ListPanel/Sheet0926/SettingsPanel0926/Viewport/Content/";
+            R0926SkyWeather sky = null;
+            R0926SkyPages pg = null;
+            RectTransform frame = null, glass = null;
+            Transform skyBoard = null, pinLayer = null;
+            var errors = new List<string>();
+            Application.LogCallback onLog = (msg, stack, type) =>
+            {
+                if (type == LogType.Exception || type == LogType.Error && (msg + stack).Contains("R0926Sky")) errors.Add(msg);
+            };
+            Func<bool> showing = () => sky != null && (bool)typeof(R0926SkyWeather).GetField("skyShow", F).GetValue(sky);
+            Func<float> skyAlpha = () => sky != null && typeof(R0926SkyWeather).GetField("skyGroup", F).GetValue(sky) is CanvasGroup g ? g.alpha : 0f;
+            Func<float> glassAlpha = () => glass != null ? glass.GetComponent<Image>().color.a : -1f;
+            Func<Vector2?> mid = () => SkyScreenRect(glass)?.center;
+            Func<Vector2?> pinAt = () => pg != null ? SkyScreenRect(pg.EditorPinButton)?.center : null;
+            var move = new Vector2[1];
+            float maxPull = 0f;
+            bool sawArmed = false, heldOk = true;
+            double heldFor = 0;
+
+            Do(() => { Backdrop("bg_sky.png"); DeviceFov(); });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                skyPagesRun = true;
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                StashSkyPrefs();   // 하늘 설정 · '밀어 봤음' · '고정해 봤음' — 끝나면(끊겨도) 되돌린다
+                foreach (var k in new[] { "Sky_Enabled", "Sky_Weather", "Sky_Events" }) PlayerPrefs.SetInt(k, 1);
+                PlayerPrefs.SetInt("Sky_Angle", 1);   // 28°
+                foreach (var k in new[] { "Sky_StartCollapsed", "Sky_Swiped", "Sky_PinUsed" }) PlayerPrefs.SetInt(k, 0);
+                const string dev = "http://127.0.0.1:5099";
+                MessagePanelManager.EditorBase = dev;
+                ProfileManager.EditorBase = dev;
+                FollowManager.EditorBase = dev;
+                P2PManager.EditorBase = dev;
+                FirebaseNotification.EditorBase = dev;
+                R0926FriendsMap.EditorBase = dev;
+                R0926Nearby.EditorBase = dev;
+                R0926HuntApi.EditorBase = "http://127.0.0.1:9";   // 닫힌 자리 — 보물찾기 목록은 아래에서 넣는다 (다시 묻다 끊기면 넣은 목록 그대로)
+                R0926HuntApi.EditorTestUser = MpMe;
+                R0926MapTiles.EditorBase = "http://127.0.0.1:9";
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, LocalTestLogin + MpMe.Substring("hunt_test_".Length));
+                PlayerPrefs.Save();
+                DevGet(MpMe, "/api/dev/nearby_mode?festivals=ok");
+                DevPost(MpMe, "/api/dev/hot_set", "{}");   // 핫플 기본 세 곳 — 협력 업체 광고(맨 위) · 좋아요 많은 카페 · 새로 생긴 곳
+                DevGet(MpMe, "/api/dev/ad_events?clear=1");
+                R0926Nearby.EditorOpened = new List<string>();   // 줄을 눌러도 진짜 쪽은 열지 않는다
+                SfLogin(true, MpMe);
+                R0926Nearby.EditorForget();
+                // SimpleJSON 은 에디터 쪽 다른 dll 과 이름이 겹쳐 리플렉션으로
+                var node = typeof(R0926SkyPages).Assembly.GetType("SimpleJSON.JSON").GetMethod("Parse", new[] { typeof(string) }).Invoke(null, new object[] { SkyHuntJson() });
+                typeof(R0926HuntList).GetMethod("Take").Invoke(null, new[] { node });
+                sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+                pg = UnityEngine.Object.FindAnyObjectByType<R0926SkyPages>(FindObjectsInactive.Include);
+                if (sky == null || pg == null) return;
+                typeof(R0926SkyWeather).GetField("collapsed", F)?.SetValue(sky, false);
+                typeof(R0926SkyPages).GetField("nextFriends", F)?.SetValue(pg, 0f);
+                frame = pg.EditorFrame;
+                glass = frame != null ? frame.Find("Glass0926") as RectTransform : null;
+                skyBoard = typeof(R0926SkyWeather).GetField("skyBoard", F)?.GetValue(sky) as Transform;
+                pinLayer = Find("SkyPin0926");
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude)) t.gameObject.SetActive(false);
+                InjectWeather();
+                errors.Clear();
+                Application.logMessageReceived -= onLog;
+                Application.logMessageReceived += onLog;
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+            });
+            Check(() => sky != null && pg != null && frame != null && glass != null && skyBoard != null && pinLayer != null && pg.EditorPinButton != null,
+                "준비: 판 · 틀(Frame0926) · 유리 · 📌 · 고정 자리(SkyPin0926)");
+            Check(() => frame.parent == skyBoard && pinLayer.parent == Find("Dock0926")?.parent && pinLayer.GetSiblingIndex() + 1 == Find("Dock0926").GetSiblingIndex(),
+                "틀은 하늘 판 안 · 고정 자리는 도크 바로 앞 (도크 · 창 아래)");
+
+            // 1) 하늘을 보면 판 — 옆 장 여섯
+            Do(() => AimCamera(-45f, 0f));
+            Wait(() => showing() && pg.EditorPageCount >= 6, 15f, "하늘 판 · 옆 장 여섯");
+            Do(() => log.Add($"  장 {pg.EditorPageCount} · 보물찾기 {R0926HuntList.Nearby.Count} · 축제 {R0926Nearby.Festivals.Count} · 핫플 {R0926Nearby.HotPlaces.Count}"));
+            Sleep(3.0f);
+            Shot("sp_weather");
+            Check(() => pg.EditorPageCount == 6, "장 여섯 — 날씨 · 보물찾기 · 축제 · 핫플 · 친구 · 라이브");
+            Check(() => glassAlpha() < 0.01f, "하늘에선 유리 바탕이 투명 (예전 모습 그대로)");
+            foreach (var k in new[] { R0926SkyPages.Kind.Hunt, R0926SkyPages.Kind.Festival, R0926SkyPages.Kind.Hot, R0926SkyPages.Kind.Friends, R0926SkyPages.Kind.Live })
+            {
+                Do(() => pg.EditorGo(k));
+                Sleep(0.9f);
+                Shot("sp_" + k.ToString().ToLowerInvariant());
+                Check(() => pg.EditorCurrent == k, k + " 장");
+            }
+
+            // 1b) 광고 줄 (관리자가 /ads/admin 에서 띄운 협력 업체) — 축제 · 핫플 맨 위에 '광고 · …' · 고른 이모지 그림.
+            //     지금 보는 장이면 노출 한 번(다시 봐도 한 번) · 누르면 클릭 한 번과 업체 링크(안 적었으면 카카오맵의 그 자리)
+            Do(() => pg.EditorGo(R0926SkyPages.Kind.Festival));
+            Wait(() => SkyIcon(pg, R0926SkyPages.Kind.Festival) == "emoji_1f950", 8f, "축제 광고 줄 이모지 그림");
+            Sleep(1.3f);   // 라이브 장에서 세 장을 건너온다 — 다 멈춘 뒤 찍는다
+            Shot("sp_festival_ad");
+            Check(() => SkyRowText(pg, R0926SkyPages.Kind.Festival) == "시험 제휴 카페 | " + R0926Nearby.AdLabel + " · 가을 한정 1+1",
+                "축제 장 맨 위는 광고 줄 — 가장 가까운 축제(5km)보다 멀어도(6.7km) · '광고 · 가을 한정 1+1' · 고른 이모지 🥐");
+            Do(() => pg.EditorGo(R0926SkyPages.Kind.Hot));
+            Wait(() => SkyIcon(pg, R0926SkyPages.Kind.Hot) == "emoji_1f3a8", 8f, "핫플 광고 줄 이모지 그림");
+            Sleep(0.9f);
+            Shot("sp_hot_ad");
+            Check(() => SkyRowText(pg, R0926SkyPages.Kind.Hot) == "시험 제휴 공방 | " + R0926Nearby.AdLabel + " · 체험 10% 할인", "핫플 장 맨 위 광고 줄 — '광고 · 체험 10% 할인' · 고른 이모지 🎨");
+            Do(() => R0926Nearby.EditorOpened?.Clear());
+            Press(() => SkyScreenRect(SkyRow(pg, R0926SkyPages.Kind.Hot, 0)?.root)?.center, 0.12f, null);
+            Sleep(0.6f);
+            Do(() => pg.EditorGo(R0926SkyPages.Kind.Festival));
+            Sleep(0.9f);
+            Press(() => SkyScreenRect(SkyRow(pg, R0926SkyPages.Kind.Festival, 0)?.root)?.center, 0.12f, null);
+            Sleep(1.0f);
+            Do(() => log.Add("  연 쪽: " + string.Join(" , ", R0926Nearby.EditorOpened ?? new List<string>()) + " · 센 것: " + DevGet(MpMe, "/api/dev/ad_events")));
+            Check(() => { var o = R0926Nearby.EditorOpened; return o != null && o.Count == 2 && o[0] == "https://woopang.com/" && o[1].StartsWith("https://map.kakao.com/link/map/"); },
+                "광고 줄을 누르면 업체 링크 · 링크를 안 적은 광고는 카카오맵의 그 자리");
+            Check(() => Has(DevGet(MpMe, "/api/dev/ad_events"), "\"festival|dev-fest|view\":1", "\"hot|dev-hot|view\":1", "\"festival|dev-fest|click\":1", "\"hot|dev-hot|click\":1"),
+                "노출은 광고마다 한 번(장을 다시 봐도) · 누르면 클릭 한 번 — 축제 · 핫플 자리를 따로 센다");
+
+            // 2) 하늘에서 옆으로 밀기
+            Do(() => pg.EditorGo(R0926SkyPages.Kind.Weather));
+            Sleep(0.8f);
+            Do(() => move[0] = new Vector2(-(SkyScreenRect(glass)?.width ?? 0f) * 0.35f, 0f));
+            Finger(mid, move, 10, null, null);
+            Sleep(0.8f);
+            Check(() => pg.EditorCurrent == R0926SkyPages.Kind.Hunt, "왼쪽으로 밀면 다음 장 (근처 보물찾기)");
+            Check(() => PlayerPrefs.GetInt("Sky_Swiped", 0) == 1, "밀어 봤다고 저장 — 다음부턴 옆 장 미리 보이기 없음");
+            Do(() => move[0] = new Vector2((SkyScreenRect(glass)?.width ?? 0f) * 0.35f, 0f));
+            Finger(mid, move, 10, null, null);
+            Sleep(0.8f);
+            Check(() => pg.EditorCurrent == R0926SkyPages.Kind.Weather, "오른쪽으로 밀면 날씨로");
+
+            // 3) 아래로 끌어 고정
+            Do(() => { move[0] = new Vector2(0f, -(SkyScreenRect(glass)?.height ?? 0f) * 0.32f); maxPull = 0f; sawArmed = false; });
+            Finger(mid, move, 12, () => { maxPull = Mathf.Max(maxPull, -pg.EditorPull); sawArmed |= pg.EditorArmed; }, "sp_pulling");
+            Sleep(0.8f);
+            Shot("sp_pinned");
+            Do(() => log.Add($"  끄는 동안 판이 내려온 만큼 최대 {maxPull:0} · 놓으면 고정될 때 📌 미리 보임 {sawArmed}"));
+            Check(() => sawArmed && maxPull > 60f, "아래로 끄는 동안 판이 손가락을 따라 내려오고, 충분히 끌면 📌 가 미리 금색");
+            Check(() => sky.Pinned && frame.parent == pinLayer, "놓으면 고정 — 틀이 화면 UI 의 고정 자리로");
+            Check(() => glassAlpha() > 0.5f, "고정하면 어두운 유리 바탕");
+            Check(() => PlayerPrefs.GetInt("Sky_PinUsed", 0) == 1, "처음 고정 — 푸는 법 안내 한 번 (다음부턴 안 뜸)");
+            Do(() =>
+            {
+                var g = SkyScreenRect(glass);
+                var a = SkyScreenRect(Find("LocationManagerPanel") as RectTransform);
+                var d = SkyScreenRect(Find("Dock0926") as RectTransform);
+                float floor = Mathf.Max(a?.yMax ?? 0f, d?.yMax ?? 0f);
+                bool ok = g.HasValue && g.Value.yMin > floor && g.Value.xMin >= 0f && g.Value.xMax <= Screen.width && g.Value.yMax < Screen.height;
+                log.Add((ok ? "PASS " : "FAIL ") + "고정한 판 — 주소줄 · 도크 위, 화면 안" + (g.HasValue
+                    ? $" (유리 x {g.Value.xMin:0}~{g.Value.xMax:0} · y {g.Value.yMin:0}~{g.Value.yMax:0} · 화면 폭의 {g.Value.width / Screen.width:P0} · 높이의 {g.Value.height / Screen.height:P0} · 주소줄 윗변 {a?.yMax:0} · 도크 윗변 {d?.yMax:0} · 화면 {Screen.width}x{Screen.height})"
+                    : " (유리 없음)"));
+            });
+
+            // 4) 휴대폰을 내려도 고정한 판은 그대로 — 손가락도 받는다
+            Do(() => AimCamera(0f, 0f));
+            Sleep(2.5f);
+            Shot("sp_pinned_down");
+            Check(() => !showing() && sky.Pinned && frame.gameObject.activeInHierarchy && frame.GetComponent<CanvasGroup>().alpha > 0.99f,
+                "휴대폰을 내려 하늘 판이 사라져도 고정한 판은 그대로");
+            HitCheck(() => frame, false, "고정한 판이 다른 화면 UI 에 가려지지 않음");
+            Do(() => move[0] = new Vector2(-(SkyScreenRect(glass)?.width ?? 0f) * 0.35f, 0f));
+            Finger(mid, move, 10, null, null);
+            Sleep(0.8f);
+            Shot("sp_pinned_hunt");
+            Check(() => pg.EditorCurrent == R0926SkyPages.Kind.Hunt && sky.Pinned, "고정한 판도 옆으로 밀면 다음 장 (고정은 그대로)");
+
+            // 5) 위로 밀어 풀기 — 하늘을 안 보고 있으니 위로 날아가며 사라지고, 틀은 하늘 판으로 돌아간다
+            Do(() => move[0] = new Vector2(0f, (SkyScreenRect(glass)?.height ?? 0f) * 0.32f));
+            Finger(mid, move, 12, null, "sp_pushing");
+            Sleep(0.9f);
+            Check(() => !sky.Pinned && frame.parent == skyBoard && !frame.gameObject.activeInHierarchy, "위로 밀면 고정 풀림 — 하늘 판으로 돌아감 (하늘을 안 봐서 안 보임)");
+            Do(() => AimCamera(-45f, 0f));
+            Wait(() => showing() && frame.gameObject.activeInHierarchy, 6f, "다시 하늘을 보면 판이 하늘 자리에");
+            Sleep(2.0f);
+            Shot("sp_back_sky");
+            Check(() => frame.parent == skyBoard && Mathf.Abs(frame.anchoredPosition.y) < 1f && Mathf.Abs(frame.localScale.x - 1f) < 0.01f && glassAlpha() < 0.01f,
+                "하늘에선 틀이 판에 꽉 차게 · 유리 투명 (고정 전과 같음)");
+
+            // 6) 경계에서 깜빡이지 않게 — 한 번 뜬 판은 설정 각도(28°)보다 8° 더 내려야 사라진다
+            Do(() => AimCamera(-(R0926SkySettings.MinPitch - 4f), 0f));
+            Sleep(1.5f);
+            Check(() => showing(), "설정 각도보다 4° 내려도 그대로");
+            Do(() => AimCamera(-(R0926SkySettings.MinPitch - 12f), 0f));
+            Sleep(1.0f);
+            Check(() => !showing(), "12° 내리면 사라짐");
+
+            // 7) 판을 누르고 있는 동안은 휴대폰이 기울어도 그대로 (누르는 손에 휴대폰이 같이 기운다) — 날씨 장 가운데라 눌러도 열리는 것 없음
+            Do(() => AimCamera(-45f, 0f));
+            Wait(() => showing() && skyAlpha() > 0.9f, 8f, "다시 뜸");
+            Do(() => pg.EditorGo(R0926SkyPages.Kind.Weather));
+            Sleep(0.8f);
+            Do(() => { log.Add("  누를 자리 맨 위: " + TopHitAt(glass)); heldOk = true; heldFor = 0; });
+            Press(mid, 2.0f, t => { if (t > 0.2) AimCamera(-10f, 0f); if (t > 0.4) heldOk &= showing(); heldFor = t; });
+            Do(() => log.Add($"  누른 채 {heldFor:0.0}초 · 그동안 휴대폰 10°"));
+            Check(() => heldOk, "판을 누르고 있는 동안(2초 — 붙잡는 1.2초보다 길게)은 휴대폰을 내려도 판이 그대로");
+            Sleep(2.5f);
+            Check(() => !showing(), "손을 떼면 잠시 뒤 사라짐");
+
+            // 8) 📌 로 고정 · 풀기 — 하늘을 보고 있으면 풀 때 하늘 자리로 돌아간다
+            Do(() => AimCamera(-45f, 0f));
+            Wait(() => showing() && skyAlpha() > 0.9f, 8f, "다시 뜸");
+            Sleep(0.5f);
+            Press(pinAt, 0.12f, null);
+            Sleep(0.8f);
+            Shot("sp_pin_button");
+            Check(() => sky.Pinned && frame.parent == pinLayer, "📌 를 누르면 고정");
+            Press(pinAt, 0.12f, null);
+            Sleep(0.9f);
+            Shot("sp_unpin_sky");
+            Check(() => !sky.Pinned && frame.parent == skyBoard && frame.gameObject.activeInHierarchy && glassAlpha() < 0.01f, "📌 를 다시 누르면 하늘 자리로 (하늘을 보고 있어 그대로 보임)");
+
+            // 9) 고정한 판은 창 아래 — 목록 시트를 열면 가려지고 닫으면 그대로. 설정 '동네 소식 · 라이브' 줄도 본다
+            Press(pinAt, 0.12f, null);
+            Sleep(0.8f);
+            Do(() => AimCamera(0f, 0f));
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(2));
+            Sleep(1.5f);
+            Do(() => ScrollToChild(S + "SecSky"));
+            Sleep(0.8f);
+            Shot("sp_settings");
+            HitCheck(() => frame, true, "목록 창을 열면 고정한 판은 창 아래");
+            Check(() => { var t = Find(S + "GroupChannels/RowEvents/Sub")?.GetComponent<Text>(); return t != null && t.preferredHeight <= ((RectTransform)t.transform).rect.height + 1f; },
+                "설정 '동네 소식 · 라이브' 아랫줄이 한 줄에 들어감");
+            CloseAll();
+            Sleep(0.6f);
+            Shot("sp_after_list");
+            Check(() => sky.Pinned && frame.gameObject.activeInHierarchy, "창을 닫으면 고정한 판이 그대로");
+
+            Check(() => errors.Count == 0, "오류 없음");
+            Do(() => { foreach (var e in errors) log.Add("  오류: " + e); });
+            Do(() => { Application.logMessageReceived -= onLog; SkyPagesCleanup(); });
+        }
+
+        // 하늘 옆 장의 줄 — k 장의 i 번째 줄
+        private static R0926SkyPages.Row SkyRow(R0926SkyPages pg, R0926SkyPages.Kind k, int i)
+        {
+            var pages = typeof(R0926SkyPages).GetField("pages", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(pg) as R0926SkyPages.Page[];
+            if (pages != null) foreach (var p in pages) if (p != null && p.kind == k && p.rows != null && i < p.rows.Length) return p.rows[i];
+            return null;
+        }
+        private static string SkyIcon(R0926SkyPages pg, R0926SkyPages.Kind k) { var r = SkyRow(pg, k, 0); return r != null && r.icon != null && r.icon.sprite != null ? r.icon.sprite.name : ""; }
+        private static string SkyRowText(R0926SkyPages pg, R0926SkyPages.Kind k) { var r = SkyRow(pg, k, 0); return r == null || r.title == null || r.sub == null ? "" : r.title.text + " | " + r.sub.text; }
+
+        // 근처 보물찾기 두 판 — 진행 중(공식 · 420m · 7/100명 · 상품) · 3시간 뒤 시작(비공개 '5km 이내')
+        private static string SkyHuntJson()
+        {
+            string soon = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            const string me = "\"is_host\":false,\"me\":{\"joined\":false,\"rank\":0,\"gave_up\":false},\"full\":false";
+            return "{\"prefs\":{\"enabled\":true},\"hosted\":[],\"joined\":[],\"hunts\":["
+                   + "{\"id\":990101,\"status\":\"live\"," + me + ",\"title\":\"시험 광화문 보물찾기\",\"prize\":\"아메리카노 기프티콘\",\"official\":true,"
+                   + "\"distance_m\":420,\"participants\":7,\"max_players\":100},"
+                   + "{\"id\":990102,\"status\":\"scheduled\"," + me + ",\"title\":\"시험 북촌 골목 보물찾기\",\"prize\":\"\",\"official\":false,"
+                   + "\"distance_text\":\"5km 이내\",\"participants\":2,\"max_players\":0,\"starts_at\":\"" + soon + "\"}]}";
+        }
+
+        // 화면에서 차지하는 자리 (픽셀) — 하늘 판은 월드 캔버스라 카메라로 비추고, 고정하면 화면 UI 라 그대로
+        private static Rect? SkyScreenRect(RectTransform rt)
+        {
+            if (rt == null || !rt.gameObject.activeInHierarchy) return null;
+            var canvas = rt.GetComponentInParent<Canvas>();
+            if (canvas == null) return null;
+            canvas = canvas.rootCanvas;
+            Camera cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
+            var w = new Vector3[4];
+            rt.GetWorldCorners(w);
+            Vector2 lo = new Vector2(float.MaxValue, float.MaxValue), hi = new Vector2(float.MinValue, float.MinValue);
+            foreach (var p in w)
+            {
+                if (cam != null && cam.WorldToScreenPoint(p).z <= 0f) return null;
+                Vector2 s = RectTransformUtility.WorldToScreenPoint(cam, p);
+                lo = Vector2.Min(lo, s);
+                hi = Vector2.Max(hi, s);
+            }
+            return Rect.MinMaxRect(lo.x, lo.y, hi.x, hi.y);
+        }
+
+        // 가상 손가락 — at 에서 누른 채 seconds 동안 가만히 있다가 뗀다 (watch 에 누른 뒤 흐른 초)
+        private static void Press(Func<Vector2?> at, float seconds, Action<double> watch)
+        {
+            Vector2 p = default;
+            double from = 0;
+            bool skip = false;
+            Do(() =>
+            {
+                var a = at();
+                skip = a == null || ptTouch == null;
+                if (skip) { log.Add("  누를 자리 없음"); return; }
+                p = a.Value;
+                from = EditorApplication.timeSinceStartup;
+                InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = 7, phase = UnityEngine.InputSystem.TouchPhase.Began, position = p });
+            });
+            steps.Enqueue(() =>
+            {
+                if (skip) return true;
+                double t = EditorApplication.timeSinceStartup - from;
+                watch?.Invoke(t);
+                if (t < seconds) return false;
+                InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = 7, phase = UnityEngine.InputSystem.TouchPhase.Ended, position = p });
+                return true;
+            });
+        }
+
+        private static void StashSkyPrefs()
+        {
+            var parts = new List<string>();
+            foreach (var k in SkyPrefKeys) parts.Add(PlayerPrefs.HasKey(k) ? k + "\u0001" + PlayerPrefs.GetInt(k) : k);
+            SessionState.SetString(SkyPrefsBackupKey, string.Join("\u0002", parts));
+        }
+        private static void RestoreSkyPrefs()
+        {
+            string s = SessionState.GetString(SkyPrefsBackupKey, "");
+            if (s.Length == 0) return;
+            SessionState.EraseString(SkyPrefsBackupKey);
+            foreach (var part in s.Split('\u0002'))
+            {
+                int i = part.IndexOf('\u0001');
+                if (i < 0) PlayerPrefs.DeleteKey(part);
+                else PlayerPrefs.SetInt(part.Substring(0, i), int.Parse(part.Substring(i + 1)));
+            }
+            PlayerPrefs.Save();
+        }
+
+        // 시험 서버 주소 · 시험 아이디 · 하늘 설정을 되돌린다 (시험이 오류로 끊겨도 Tick 이 부른다)
+        private static void SkyPagesCleanup()
+        {
+            skyPagesRun = false;
+            var sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+            if (sky != null && sky.Pinned) sky.SetPinned(false);
+            SfLogin(false);
+            MessagePanelManager.EditorBase = null;
+            ProfileManager.EditorBase = null;
+            FollowManager.EditorBase = null;
+            P2PManager.EditorBase = null;
+            FirebaseNotification.EditorBase = null;
+            R0926FriendsMap.EditorBase = null;
+            R0926Nearby.EditorBase = null;
+            R0926Nearby.EditorOpened = null;
+            R0926HuntApi.EditorBase = null;
+            R0926HuntApi.EditorTestUser = null;
+            R0926MapTiles.EditorBase = null;
+            typeof(R0926MapTiles).GetField("info", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, null);
+            PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            PlayerPrefs.Save();
+            RestoreSkyPrefs();
+        }
+
         // 스토어용 카메라 화면 — 장소 박스가 모인 쪽을 겨눈다 (개인 장소·주소줄은 숨김)
         private static void PlanAr()
         {
@@ -7752,7 +8261,14 @@ namespace Redesign0926
             Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
             Sleep(1.0f);
             // 근처 축제·보호소는 시험 서버의 정해 둔 답 (관광공사·카카오를 부르지 않는다)
-            Do(() => { R0926Nearby.EditorBase = "http://127.0.0.1:5099"; DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok"); R0926Nearby.EditorForget(); });
+            Do(() =>
+            {
+                R0926Nearby.EditorBase = "http://127.0.0.1:5099";
+                DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok");
+                DevGet(FiMe, "/api/dev/ad_events?clear=1");
+                R0926Nearby.EditorForget();
+                R0926Nearby.EditorOpened = new List<string>();   // 줄을 눌러도 진짜 쪽은 열지 않는다
+            });
             Do(() => Fm()?.SetCategory(FilterManager.CategoryFilterState.All));
             Do(() => Click("Dock0926/List_Button"));
             Sleep(1.2f);
@@ -7883,17 +8399,28 @@ namespace Redesign0926
             Sleep(0.3f);
             Check(() => PurpleChip("3DObjectToggle"), "3D 켜면 다시 꽉 찬 보라");
 
-            // 축제 — 목록이 거리와 상관없이 근처 축제만 (10-23)
+            // 축제 — 목록이 거리와 상관없이 근처 축제만 (10-23) · 맨 위는 관리자가 띄운 광고 줄 (10-25)
             Do(() => ClickToggle("FestivalToggle"));
             Wait(() => Shown(PlaceListManager.EntryKind.Festival) > 0, 10f, "축제 받음");
+            Wait(() => RowIcons(1).Count > 0 && RowIcons(1)[0] == "emoji_1f950", 8f, "광고 줄 이모지 그림");
             Sleep(0.6f);
             Shot("filters_festival");
-            Do(() => log.Add("  줄: " + RowsSummary(5)));
+            Do(() => log.Add("  줄: " + RowsSummary(6) + " · 집계: " + SummaryText()));
             Check(() => Fm().GetActiveFilters()["festival"], "축제 칩을 켜면 festival 필터");
-            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 4 && ShownTotal() == 4, "목록이 축제 네 곳만 (가게·사람·보물찾기 없음)");
-            Check(() => FestivalRowsOk(), "가까운 순 · 거리 칸은 '며칠부터 · 거리' / '진행 중 · 거리' / '오늘까지 · 거리' · 200km 먼 곳도 나옴");
-            Check(() => string.Join(",", RowIcons(4)) == "r0926_f_fireworks,r0926_f_maple,r0926_f_crab,r0926_f_fruit", "줄 앞은 축제마다 그림 (불꽃·단풍·꽃게·사과)");
-            Check(() => ShownLinks(PlaceListManager.EntryKind.Festival).TrueForAll(l => l.StartsWith("https://m.search.naver.com/search.naver?query=")), "축제를 누르면 축제 이름으로 검색");
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 5 && ShownTotal() == 5, "목록이 광고 한 줄 + 축제 네 곳만 (가게·사람·보물찾기 없음)");
+            Check(() => FestivalRowsOk(), "맨 위 광고 줄 '광고 · 6.7km'(가장 가까운 축제보다 멀어도) · 그 아래 가까운 순 · 거리 칸은 '며칠부터 · 거리' / '진행 중 · 거리' / '오늘까지 · 거리' · 200km 먼 곳도 나옴");
+            Check(() => string.Join(",", RowIcons(5)) == "emoji_1f950,r0926_f_fireworks,r0926_f_maple,r0926_f_crab,r0926_f_fruit", "줄 앞은 축제마다 그림 (불꽃·단풍·꽃게·사과) · 광고 줄은 고른 이모지 🥐");
+            Check(() =>
+            {
+                var l = ShownLinks(PlaceListManager.EntryKind.Festival);
+                return l.Count == 5 && l[0].StartsWith("https://map.kakao.com/link/map/") && l.GetRange(1, 4).TrueForAll(x => x.StartsWith("https://m.search.naver.com/search.naver?query="));
+            }, "축제를 누르면 축제 이름으로 검색 · 광고 줄은 업체 링크(안 적었으면 카카오맵의 그 자리)");
+            Check(() => SummaryText().EndsWith(" 4"), "집계 줄의 축제 수는 광고 줄을 빼고 4");
+            Do(() => { R0926Nearby.EditorOpened?.Clear(); ListRows()[0].GetComponent<Button>().onClick.Invoke(); });
+            Sleep(0.8f);
+            Check(() => R0926Nearby.EditorOpened != null && R0926Nearby.EditorOpened.Count == 1 && R0926Nearby.EditorOpened[0].StartsWith("https://map.kakao.com/link/map/"),
+                "목록의 광고 줄을 누르면 그 자리 (카카오맵)");
+            Check(() => Has(DevGet(FiMe, "/api/dev/ad_events"), "\"festival|dev-fest|view\":1", "\"festival|dev-fest|click\":1"), "목록의 광고 줄도 보이면 노출 한 번 · 누르면 클릭 한 번");
             Check(() => ChipsLocked(true, "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle"),
                   "축제를 보는 동안 다른 칩은 잠김 (어둡게)");
             Do(() => ClickToggle("FestivalToggle"));
@@ -7907,10 +8434,11 @@ namespace Redesign0926
             Wait(() => R0926Nearby.FestivalStatus == "not_registered", 10f, "축제 — 신청 전");
             Sleep(0.6f);
             Shot("filters_festival_pending");
-            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 0 && SummaryText().Contains(R0926Nearby.EmptyMessage().Split('\n')[0]), "신청 전이면 '축제 정보를 준비하고 있어요' 안내");
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 1 && SummaryText().Contains(R0926Nearby.EmptyMessage().Split('\n')[0]),
+                "신청 전이면 '축제 정보를 준비하고 있어요' 안내 — 광고 줄은 그대로 맨 위");
             Do(() => ClickToggle("FestivalToggle"));
             Sleep(0.4f);
-            Do(() => { DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok"); R0926Nearby.EditorBase = null; R0926Nearby.EditorForget(); });
+            Do(() => { DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok"); R0926Nearby.EditorBase = null; R0926Nearby.EditorOpened = null; R0926Nearby.EditorForget(); });
             Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
             Sleep(1.0f);
         }
@@ -8028,10 +8556,17 @@ namespace Redesign0926
         private static bool FestivalRowsOk()
         {
             var p = Plm();
-            if (p == null || p.ShownEntries.Count != 4) return false;
-            float last = -1f;
-            foreach (var e in p.ShownEntries)
+            if (p == null || p.ShownEntries.Count != 5) return false;
+            var ad = p.ShownEntries[0];
+            if (!ad.promo || ad.distanceText != R0926Nearby.AdLabel + " · " + R0926Nearby.Km(ad.distance) || ad.distance < p.ShownEntries[1].distance)
             {
+                log.Add("  광고 줄 다름 " + ad.name + " '" + ad.distanceText + "' " + Mathf.RoundToInt(ad.distance) + "m");
+                return false;
+            }
+            float last = -1f;
+            for (int i = 1; i < p.ShownEntries.Count; i++)
+            {
+                var e = p.ShownEntries[i];
                 string d = e.distanceText ?? "";
                 bool when = d.Contains("부터") || d.Contains("진행 중") || d.Contains("오늘까지") || d.StartsWith("from") || d.StartsWith("on now") || d.StartsWith("ends today");
                 if (!when || !d.Contains(" · ") || !(d.EndsWith("km") || d.EndsWith("m")) || e.distance < last) { log.Add("  축제 줄 다름 " + e.name + " '" + d + "'"); return false; }
@@ -8346,9 +8881,10 @@ namespace Redesign0926
             {
                 if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
-                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일 시험 서버도
+                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; R0926Nearby.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일·근처 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
                 if (running) RestoreWoopangPrefs();   // WOOPANG 줄 삭제 시험이 덜어 둔 저장값 (시험 도중 플레이를 끈 경우)
+                if (running) { RestoreSkyPrefs(); skyPagesRun = false; }   // 하늘 옆 장 시험이 바꾼 하늘 설정도
                 RestoreGameViewSize();   // 가로 시험이 중간에 끊겨도 게임 창 크기는 원래대로
                 if (!EditorApplication.isPlayingOrWillChangePlaymode && SessionState.GetBool(LoginReadyKey, false)) RestoreLogin();
                 running = false;
@@ -8360,8 +8896,10 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire")) StashLogin();
+                    if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
+                    RestoreSkyPrefs();
                     MainViewToSimulator();
                     EditorApplication.isPlaying = true;
                 }
@@ -8385,6 +8923,7 @@ namespace Redesign0926
             PlayerPrefs.Save();
             if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; }
             RestoreWoopangPrefs();
+            if (skyPagesRun) SkyPagesCleanup();   // 하늘 옆 장 시험이 오류로 끊긴 경우 — 시험 서버 주소 · 시험 아이디 · 하늘 설정
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;

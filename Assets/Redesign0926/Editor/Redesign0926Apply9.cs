@@ -616,15 +616,16 @@ namespace Redesign0926
             if (board == null || sky == null) { log.Add("날씨판 없음"); return; }
             RT(board).sizeDelta = new Vector2(1000, 880);
 
-            var icon = BuildWeatherIcon(board.transform, "Icon0926", 230f);
+            var wp = WeatherPage(board);
+            var icon = BuildWeatherIcon(wp, "Icon0926", 230f);
             SetRect(RT(icon.gameObject), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(-230, -180), new Vector2(230, 230));
-            var det = board.transform.Find("Detail0926");
+            var det = wp.Find("Detail0926");
             if (det != null) SetRect(RT(det.gameObject), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -452), new Vector2(1000, 70));
 
             // 지역 — '예산군 대흥면' (시·군·구 + 읍·면·동). 이름이 오기 전엔 숨는다 (R0926SkyWeather.ShowRegion)
             // 2026-10-12 대표님: 판 위쪽 바깥에 글자만 떠 따로 노는 느낌 → 기온 바로 위로 내리고 예보 줄과 같은 유리 알약(핀 + 이름) 바탕
             const float RegionH = 80f, RegionBottom = -30f, PinBox = 48f, PadL = 24f, PinGap = 8f, PadR = 34f;   // 핀 그림은 상자보다 좁아 왼쪽이 덜 비어 보이게 PadL 을 작게
-            var region = FindOrCreate(board.transform, "Region0926");
+            var region = FindOrCreate(wp, "Region0926");
             var oldText = region.GetComponent<Text>();   // 예전엔 이 자리가 글자 하나 — 그림 바탕을 달려면 글자를 안쪽으로 옮긴다
             if (oldText != null)
             {
@@ -647,7 +648,7 @@ namespace Redesign0926
             lrt.offsetMin = new Vector2(PadL + PinBox + PinGap, 0); lrt.offsetMax = new Vector2(-PadR, 0);
             EditorUtility.SetDirty(lrt);
 
-            var fc = FindOrCreate(board.transform, "Forecast0926");
+            var fc = FindOrCreate(wp, "Forecast0926");
             SetRect(RT(fc), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -560), new Vector2(780, 280));
             Img(fc, Spr("r0926_pill"), new Color(0.094f, 0.118f, 0.149f, 0.3f), Image.Type.Sliced, 63f / 64f).raycastTarget = false;
             var labels = new Text[3]; var temps = new Text[3]; var icons = new R0926WeatherIcon[3];
