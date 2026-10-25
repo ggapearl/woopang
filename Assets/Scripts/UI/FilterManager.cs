@@ -1237,6 +1237,9 @@ public class FilterManager : MonoBehaviour
         HiddenPlaces.Hidden -= OnPlaceHidden;
     }
 
+    /// <summary>지워진 장소(올린 사람이 지움 · 2026-10-26) — 숨긴 장소와 같이 바로 치우고 빈자리를 채운다</summary>
+    public void ForgetPlace(string uniqueId) => OnPlaceHidden(uniqueId);
+
     /// <summary>
     /// 인디케이터 X 로 숨긴 장소 — 바로 치우고(3D·박스·화살표), 빈자리는 다음 장소로 채운다
     /// </summary>

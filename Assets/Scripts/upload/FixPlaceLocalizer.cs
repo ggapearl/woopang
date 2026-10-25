@@ -16,6 +16,18 @@ public class FixPlaceLocalizer : MonoBehaviour
     [SerializeField] private Text categoryLabel;         // "Select Category" 라벨
 
     private string currentLanguage;
+    private bool ownerMode;   // 내가 올린 장소 — 바로 고친다 (남의 장소는 수정 요청)
+
+    // 2026-10-26 내 장소 고치기 — 남의 장소는 '수정 요청'으로 이름을 바꿨다 (예전 '장소 수정'은 바로 고쳐지는 줄 알기 쉬웠다)
+    private static readonly Dictionary<string, string[]> modeTitles = new Dictionary<string, string[]>()
+    {
+        // { 내 장소, 남의 장소, 내 장소 이름 칸 }
+        ["en"] = new[] { "Edit my place", "Suggest an edit", "Place name" },
+        ["ko"] = new[] { "내 장소 수정", "장소 수정 요청", "장소 이름" },
+        ["ja"] = new[] { "自分の場所を編集", "修正をリクエスト", "場所の名前" },
+        ["zh"] = new[] { "编辑我的地点", "申请修改地点", "地点名称" },
+        ["es"] = new[] { "Editar mi lugar", "Sugerir cambios", "Nombre del lugar" },
+    };
 
     // 다국어 텍스트 딕셔너리
     private Dictionary<string, LocalizedFixPlaceTexts> localizedTexts = new Dictionary<string, LocalizedFixPlaceTexts>()
@@ -98,31 +110,17 @@ public class FixPlaceLocalizer : MonoBehaviour
         UpdateUI();
     }
 
+    // 앱의 다른 화면과 같은 기준 (앱 언어 설정 → 기기 언어) — 예전엔 기기 언어만 봤다
     void DetectDeviceLanguage()
     {
-        SystemLanguage deviceLanguage = Application.systemLanguage;
-        
-        switch (deviceLanguage)
-        {
-            case SystemLanguage.Korean:
-                currentLanguage = "ko";
-                break;
-            case SystemLanguage.Japanese:
-                currentLanguage = "ja";
-                break;
-            case SystemLanguage.Chinese:
-            case SystemLanguage.ChineseSimplified:
-            case SystemLanguage.ChineseTraditional:
-                currentLanguage = "zh";
-                break;
-            case SystemLanguage.Spanish:
-                currentLanguage = "es";
-                break;
-            default:
-                currentLanguage = "en"; // 기본값은 영어
-                break;
-        }
-        
+        currentLanguage = AppLanguage.Code;
+    }
+
+    /// <summary>내 장소면 '내 장소 수정'(바로 고친다) · 남의 장소면 '장소 수정 요청' — CubeDataFixManager 가 연 장소를 보고 부른다</summary>
+    public void SetOwnerMode(bool owner)
+    {
+        ownerMode = owner;
+        if (!string.IsNullOrEmpty(currentLanguage)) UpdateUI();
     }
 
     bool ValidateUIElements()
@@ -151,11 +149,12 @@ public class FixPlaceLocalizer : MonoBehaviour
         LocalizedFixPlaceTexts texts = localizedTexts[currentLanguage];
         
         // 각 UI 텍스트 업데이트
+        string[] mode = modeTitles.ContainsKey(currentLanguage) ? modeTitles[currentLanguage] : modeTitles["en"];
         if (fixPlaceTitle != null)
-            fixPlaceTitle.text = texts.fixPlaceTitle;
+            fixPlaceTitle.text = ownerMode ? mode[0] : mode[1];
             
         if (changedNameLabel != null)
-            changedNameLabel.text = texts.changedNameLabel;
+            changedNameLabel.text = ownerMode ? mode[2] : texts.changedNameLabel;
             
         if (descriptionLabel != null)
             descriptionLabel.text = texts.descriptionLabel;

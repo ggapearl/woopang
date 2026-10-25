@@ -389,10 +389,158 @@ namespace Redesign0926
                 var srt = RT(submit.gameObject);
                 srt.anchorMin = new Vector2(0, 0); srt.anchorMax = new Vector2(1, 0); srt.pivot = new Vector2(0.5f, 0);
                 srt.anchoredPosition = new Vector2(0, 48); srt.sizeDelta = new Vector2(-UP * 2, 150);
-                ButtonLabel(submit.gameObject, new[] { "수정 완료", "Save", "保存", "保存", "Guardar" }, Dark);
+                // 남의 장소는 바로 고쳐지지 않는다 — '수정 요청' (내 장소면 CubeDataFixManager 가 '수정하기'로 바꾼다)
+                ButtonLabel(submit.gameObject, new[] { "수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud" }, Dark);
                 submit.SetAsLastSibling();
             }
+            FixPageOwner(root, card, panel, log);
             log.Add("fix page ok (" + (-sy + 128) + " / card)");
+        }
+
+        // ── 내가 올린 장소 고치기 (2026-10-26) ───────────────────────────
+        // 대표님 (10-25): 「'정보 수정' 버튼을 눌러서 수정할 때는 기존에 있던 것들을 그대로 불러와서 각 사진 우측 위에 (메인사진포함)
+        // x버튼을 적당히 작게」 · 「본인이 올린 것에 한해서는 직접 삭제」 · 「위치가 좀 바뀌었다면 … 수정한 사람이 수정하는 경우 바로 적용」
+        // 위치 줄·삭제는 내 장소일 때만 CubeDataFixManager 가 켠다 (남의 장소는 예전처럼 '수정할 내용' 칸)
+        private static void FixPageOwner(Transform root, Transform card, Transform panel, List<string> log)
+        {
+            var mgr = FindInScene<CubeDataFixManager>(card.gameObject);
+            if (mgr == null) { log.Add("내 장소 고치기 — 매니저 없음"); return; }
+
+            // 위치 — '수정할 내용' 자리에 (둘 중 하나만 보인다)
+            var locLabel = FindOrCreate(panel, "LocLabel0926");
+            SectionLabelNew(locLabel, UP, -420, new[] { "위치", "Location", "位置", "位置", "Ubicación" });
+            locLabel.SetActive(false);
+            var row = FindOrCreate(panel, "LocRow0926");
+            Img(row, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 34f).raycastTarget = false;
+            Row(row, -486, 140, UP);
+            var coords = FindOrCreate(row.transform, "Coords0926");
+            var ct = Txt(coords, "—", 44, Ink, TextAnchor.LowerLeft, FontStyle.Bold);
+            ct.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var crt = RT(coords);
+            crt.anchorMin = new Vector2(0, 0.5f); crt.anchorMax = new Vector2(1, 1); crt.pivot = new Vector2(0, 0.5f);
+            crt.offsetMin = new Vector2(36, 0); crt.offsetMax = new Vector2(-420, -12);
+            var note = FindOrCreate(row.transform, "Note0926");
+            var nt = Txt(note, "", 34, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
+            nt.horizontalOverflow = HorizontalWrapMode.Wrap; nt.verticalOverflow = VerticalWrapMode.Truncate;
+            nt.resizeTextForBestFit = true; nt.resizeTextMinSize = 24; nt.resizeTextMaxSize = 34;
+            var nrt = RT(note);
+            nrt.anchorMin = new Vector2(0, 0); nrt.anchorMax = new Vector2(1, 0.5f); nrt.pivot = new Vector2(0, 0.5f);
+            nrt.offsetMin = new Vector2(36, 8); nrt.offsetMax = new Vector2(-420, 0);
+
+            // '여기로 옮기기' — 켜고 저장하면 지금 내 위치로 (기본 꺼짐 · 글자를 눌러도 켜진다)
+            var mv = FindOrCreate(row.transform, "MoveHere0926");
+            mv.transform.localScale = Vector3.one;
+            var mrt = RT(mv);
+            mrt.anchorMin = new Vector2(1, 0); mrt.anchorMax = new Vector2(1, 1); mrt.pivot = new Vector2(1, 0.5f);
+            mrt.anchoredPosition = new Vector2(-28, 0); mrt.sizeDelta = new Vector2(380, 0);
+            Img(mv, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            var sw = FindOrCreate(mv.transform, "Background");
+            var swImg = Img(sw, Spr("r0926_sw_off"), Color.white, Image.Type.Simple);
+            swImg.raycastTarget = false;
+            SetRect(RT(sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(132, 80));
+            var ck = FindOrCreate(sw.transform, "Checkmark");
+            var ckImg = Img(ck, Spr("r0926_sw_on"), Color.white, Image.Type.Simple);
+            ckImg.raycastTarget = false;
+            var ckrt = RT(ck); ckrt.anchorMin = Vector2.zero; ckrt.anchorMax = Vector2.one; ckrt.offsetMin = Vector2.zero; ckrt.offsetMax = Vector2.zero;
+            var mvl = FindOrCreate(mv.transform, "Label0926");
+            var mt = Txt(mvl, "여기로 옮기기", 34, Soft, TextAnchor.MiddleRight, FontStyle.Bold);
+            mt.resizeTextForBestFit = true; mt.resizeTextMinSize = 24; mt.resizeTextMaxSize = 34;
+            var mlr = RT(mvl); mlr.anchorMin = Vector2.zero; mlr.anchorMax = Vector2.one; mlr.offsetMin = Vector2.zero; mlr.offsetMax = new Vector2(-152, 0);
+            Loc(mvl, "여기로 옮기기", "Move here", "ここに移動", "移到这里", "Mover aquí");
+            var tg = Ensure<Toggle>(mv);
+            tg.targetGraphic = swImg; tg.graphic = ckImg;
+            tg.transition = Selectable.Transition.None;
+            tg.toggleTransition = Toggle.ToggleTransition.Fade;
+            tg.isOn = false;
+            EditorUtility.SetDirty(tg);
+            row.SetActive(false);
+
+            // 사진 x — 대표 사진은 사진 위, 추가 사진은 칸마다 복제해 넣는 본 (CubeDataFixManager 가 풀을 만들 때)
+            var display = panel.Find("MainPhotoDisplay");
+            Button mainX = display != null ? RemoveX(display, "RemoveX0926", 120, 60, 10) : null;
+            Button subX = RemoveX(panel, "SubRemoveX0926_Template", 108, 46, 6);
+            subX.gameObject.SetActive(false);
+
+            // 삭제 — 카드 오른쪽 위, 닫기 X 왼쪽 (내 장소일 때만 보인다)
+            var del = FindOrCreate(card, "DeletePlace0926");
+            del.transform.localScale = Vector3.one;
+            SetRect(RT(del), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-170, -30), new Vector2(250, 110));
+            Img(del, Spr("r0926_pill"), new Color(Danger.r, Danger.g, Danger.b, 0.14f), Image.Type.Sliced, 64f / 55f).raycastTarget = true;
+            var dIc = FindOrCreate(del.transform, "Icon0926");
+            Img(dIc, Spr("r0926_i_trash"), Danger, Image.Type.Simple).raycastTarget = false;
+            SetRect(RT(dIc), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(54, 0), new Vector2(48, 48));
+            var dLb = FindOrCreate(del.transform, "Label0926");
+            var dt = Txt(dLb, "삭제", 42, Danger, TextAnchor.MiddleLeft, FontStyle.Bold);
+            dt.resizeTextForBestFit = true; dt.resizeTextMinSize = 28; dt.resizeTextMaxSize = 42;
+            var dlr = RT(dLb); dlr.anchorMin = Vector2.zero; dlr.anchorMax = Vector2.one; dlr.offsetMin = new Vector2(92, 0); dlr.offsetMax = new Vector2(-20, 0);
+            Loc(dLb, "삭제", "Delete", "削除", "删除", "Eliminar");
+            var delBtn = Ensure<Button>(del);
+            delBtn.targetGraphic = del.GetComponent<Image>();
+            ResetListeners(delBtn);
+            del.SetActive(false);
+
+            var rr = FindInScene<RemoveRequest>(card.gameObject);
+            var open = Find(root, "FixPlaceButton");
+            var desc = panel.Find("Description");
+            var so = new SerializedObject(mgr);
+            void Wire(SerializedObject o, string prop, Object v)
+            {
+                var p = o.FindProperty(prop);
+                if (p == null) { log.Add(o.targetObject.GetType().Name + ": " + prop + " 칸 없음"); return; }
+                p.objectReferenceValue = v;
+                if (v == null) log.Add(o.targetObject.GetType().Name + ": " + prop + " 찾지 못함");
+            }
+            Wire(so, "openButton", open != null ? open.GetComponent<Button>() : null);
+            Wire(so, "mainPhotoRemove", mainX);
+            Wire(so, "subPhotoRemoveTemplate", subX);
+            Wire(so, "descriptionLabel", desc != null ? desc.gameObject : null);
+            Wire(so, "locationLabel", locLabel);
+            Wire(so, "locationRow", row);
+            Wire(so, "locationCoords", ct);
+            Wire(so, "locationNote", nt);
+            Wire(so, "moveHereToggle", tg);
+            Wire(so, "deletePlaceButton", delBtn);
+            Wire(so, "localizer", card.GetComponentInChildren<FixPlaceLocalizer>(true));
+            Wire(so, "removeRequest", rr);
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            // 장소 '···' 의 '삭제 요청' 칸 · 묻는 창 — 내 장소면 RemoveRequest 가 '삭제'·'지우기'로 바꿔 끼운다
+            if (rr != null)
+            {
+                var remPanel = Find(root, "RemoveRequestPanel");
+                R0926LocalizedText LT(GameObject go, string child)
+                {
+                    var t = go != null ? go.transform.Find(child) : null;
+                    return t != null ? t.GetComponent<R0926LocalizedText>() : null;
+                }
+                var rso = new SerializedObject(rr);
+                Wire(rso, "menuLabel", LT(open != null ? Find(open.transform.parent, "RemovePlaceButton") : null, "Label0926"));
+                Wire(rso, "dialogText", LT(remPanel, "Box0926/Text"));
+                Wire(rso, "yesLabel", LT(remPanel != null ? Find(remPanel.transform, "Remove_YES") : null, "Label0926"));
+                rso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            log.Add("내 장소 고치기 ok");
+        }
+
+        // 사진 오른쪽 위 작은 x — 누름 영역은 동그라미보다 넓게 (사진 칸 자체는 누를 일이 없다)
+        private static Button RemoveX(Transform parent, string name, float hit, float dot, float inset)
+        {
+            var go = FindOrCreate(parent, name);
+            go.transform.localScale = Vector3.one;
+            go.transform.SetAsLastSibling();
+            SetRect(RT(go), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), Vector2.zero, new Vector2(hit, hit));
+            Img(go, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            var d = FindOrCreate(go.transform, "Dot0926");
+            var di = Img(d, Spr("r0926_circle"), new Color(0.05f, 0.06f, 0.07f, 0.78f), Image.Type.Simple);
+            di.raycastTarget = false;
+            SetRect(RT(d), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-inset, -inset), new Vector2(dot, dot));
+            var ic = FindOrCreate(d.transform, "Icon0926");
+            Img(ic, Spr("r0926_i_close"), Ink, Image.Type.Simple).raycastTarget = false;
+            SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(dot * 0.5f, dot * 0.5f));
+            var b = Ensure<Button>(go);
+            b.targetGraphic = di;
+            ResetListeners(b);
+            return b;
         }
 
         // ── 도크 칸 감추기 ──────────────────────────────────────

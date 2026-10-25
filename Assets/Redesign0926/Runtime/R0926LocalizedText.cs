@@ -18,6 +18,13 @@ public class R0926LocalizedText : MonoBehaviour
 
     public static string Lang() => AppLanguage.Code;
 
+    /// <summary>같은 칸의 문구를 바꿔 끼운다 ('수정 요청' ↔ '수정하기' 등) — Start 보다 먼저 불려도 Start 가 이 문구로 그린다</summary>
+    public void Set(string ko, string en, string ja, string zh, string es)
+    {
+        this.ko = ko; this.en = en; this.ja = ja; this.zh = zh; this.es = es;
+        GetComponent<Text>().text = Pick(Lang());
+    }
+
     private string Pick(string lang) => Say(ko, en, ja, zh, es, lang);
 
     /// <summary>코드에서 바꿔 넣는 문구 (자르는 중… · 올리는 중… 등) — 언어는 위와 같은 순서로 고른다</summary>

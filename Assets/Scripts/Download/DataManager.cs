@@ -1131,28 +1131,28 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
         // 상세 사진은 주소만 넘긴다 (상세를 열 때 받는다). 사진을 다 지운 장소도 빈 목록으로 넘겨 앞서 받은 주소를 비운다
         ImageDisplayController displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
-        if (displayCtrl != null)
-        {
-            List<string> allSubPhotos = new List<string>();
-            if (place.sub_photos != null)
-            {
-                foreach (var photoGroup in place.sub_photos)
-                {
-                    if (photoGroup != null)
-                    {
-                        foreach (var photo in photoGroup)
-                        {
-                            if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
-                        }
-                    }
-                }
-            }
-            displayCtrl.SetSubPhotos(allSubPhotos);
-        }
+        if (displayCtrl != null) displayCtrl.SetSubPhotos(FlattenSubPhotos(place));
 
         if (place.model_type == "cube") return SetupCubeObject(obj, place);
         else if (place.model_type == "custom") return SetupGLBObject(obj, place);
         else return SetupCubeObject(obj, place);
+    }
+
+    public static List<string> FlattenSubPhotos(PlaceData place)
+    {
+        List<string> allSubPhotos = new List<string>();
+        if (place.sub_photos != null)
+        {
+            foreach (var photoGroup in place.sub_photos)
+            {
+                if (photoGroup == null) continue;
+                foreach (var photo in photoGroup)
+                {
+                    if (!string.IsNullOrEmpty(photo)) allSubPhotos.Add(photo);
+                }
+            }
+        }
+        return allSubPhotos;
     }
 
     // 앱 내장 심볼을 쓰는 공공데이터 카테고리 — 서버 사진 로딩 없이 Resources/PublicIcons/{cat}.png 사용.
@@ -2142,6 +2142,110 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         foreach (int id in indicatorOnlyObjects.Keys)
             result.Add("dm_" + id);
         return result;
+    }
+
+    /// <summary>
+    /// 올린 사람이 고친 장소를 바로 반영 (2026-10-26 '정보 수정') — 서버가 돌려준 값으로 바꾸고,
+    /// 자리를 옮겼을 때만 앵커를 다시 세운다(매번 새로 세우면 고치지 않은 장소도 한 번 사라졌다 뜬다).
+    /// 3D(GLB) 장소는 모델을 다시 받지 않고 이름·사진 정보만 바꾼다.
+    /// </summary>
+    public void ApplyEditedPlace(PlaceData edited, bool moved)
+    {
+        if (edited == null) return;
+        if (placeDataMap.TryGetValue(edited.id, out PlaceData old) && old != null)
+        {
+            edited.original_model_type = string.IsNullOrEmpty(old.original_model_type) ? old.model_type : old.original_model_type;
+            edited.model_type = old.model_type;   // GLB 대신 큐브로 떠 있던 것은 그대로
+        }
+        else edited.original_model_type = edited.model_type;
+        placeDataMap[edited.id] = edited;
+
+        string raw = edited.id.ToString();
+        var cached = lightCache.Find(c => c.rawId == raw);
+        if (cached != null)
+        {
+            cached.displayName = edited.name;
+            cached.category = edited.category;
+            cached.petFriendly = edited.pet_friendly;
+            cached.latitude = edited.latitude;
+            cached.longitude = edited.longitude;
+            cached.altitude = edited.altitude;
+        }
+
+        if (spawnedObjects.TryGetValue(edited.id, out GameObject obj) && obj != null)
+        {
+            if (moved)
+            {
+                var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+                if (anchor != null) anchor.SetCoordinatesAndCreateAnchor(edited.latitude, edited.longitude, edited.altitude);
+            }
+            var displayCtrl = obj.GetComponentInChildren<ImageDisplayController>(true);
+            if (displayCtrl != null) displayCtrl.SetSubPhotos(FlattenSubPhotos(edited));
+            if (edited.model_type == "custom")
+            {
+                var doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
+                if (doubleTap != null) SetupDoubleTapInfo(doubleTap, edited);
+                var target = obj.GetComponentInChildren<Target>(true);
+                if (target != null) SetupTargetInfo(target, edited);
+            }
+            else SetupCubeObject(obj, edited);
+            obj.name = string.Format("Place_{0}_{1}", edited.id, edited.model_type);
+        }
+
+        if (indicatorOnlyObjects.TryGetValue(edited.id, out GameObject ind) && ind != null)
+        {
+            var target = ind.GetComponentInChildren<Target>(true);
+            if (target != null)   // SpawnIndicatorOnly 와 같은 값
+            {
+                target.PlaceName = edited.name;
+                target.gpsLatitude = edited.latitude;
+                target.gpsLongitude = edited.longitude;
+                Color catColor = GetCategoryColor(edited.category, edited.name);
+                if (catColor != Color.white) target.TargetColor = catColor;
+            }
+            if (moved)
+            {
+                var anchor = ind.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+                if (anchor != null) anchor.SetCoordinatesAndCreateAnchor(edited.latitude, edited.longitude, edited.altitude);
+            }
+            ind.name = $"Indicator_{edited.id}_{edited.name}";
+        }
+
+        AfterPlaceChanged();
+    }
+
+    /// <summary>
+    /// 두 번 누른 오브젝트가 이 매니저가 띄운 우팡 장소면 그 장소 — 아니면 null.
+    /// 공공데이터(TourAPI)는 contentid 를 번호로 써서 우팡 장소 번호와 겹칠 수 있다 → 번호만 보지 않고 그 오브젝트인지 본다
+    /// </summary>
+    public PlaceData PlaceOf(DoubleTap3D tapped)
+    {
+        if (tapped == null) return null;
+        int id = tapped.GetId();
+        if (!spawnedObjects.TryGetValue(id, out GameObject obj) || obj == null || !tapped.transform.IsChildOf(obj.transform)) return null;
+        return placeDataMap.TryGetValue(id, out PlaceData p) ? p : null;
+    }
+
+    /// <summary>올린 사람이 지운 장소를 바로 치운다 — 캐시·3D·박스·목록에서 (빈자리는 FilterManager 가 채운다)</summary>
+    public void RemovePlace(int id)
+    {
+        string raw = id.ToString();
+        lightCache.RemoveAll(c => c.rawId == raw);
+        pendingDetailFetchIds.Remove(id);
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filterMgr != null) filterMgr.ForgetPlace("dm_" + raw);
+        DespawnFullObject(raw);
+        DespawnIndicatorOnly(raw);
+        placeDataMap.Remove(id);
+        AfterPlaceChanged();
+    }
+
+    private void AfterPlaceChanged()
+    {
+        PlaceListManager plm = FindFirstObjectByType<PlaceListManager>(FindObjectsInactive.Include);
+        if (plm != null) plm.UpdateUI();
+        FilterManager filterMgr = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+        if (filterMgr != null) filterMgr.TriggerReallocation();   // 분류를 바꿔 필터에서 빠졌거나, 옮겨 거리가 달라졌을 수 있다
     }
 
     public void RefreshCache(float lat, float lon)

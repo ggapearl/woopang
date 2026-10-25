@@ -118,6 +118,7 @@ namespace Redesign0926
             else if (mode == "farfade") PlanFarFade();
             else if (mode == "nudge") PlanNudge();
             else if (mode == "photomem") PlanPhotoMem();
+            else if (mode == "placeedit") PlanPlaceEdit();
             else if (mode == "appinfo") PlanAppInfo();
             else if (mode == "p2pzoom") PlanP2PZoom();
             else if (mode == "maptiles") PlanMapTiles();
@@ -4315,6 +4316,305 @@ namespace Redesign0926
                 foreach (var k in keep) remember.Invoke(fn, new object[] { k });   // 시험 전으로 (저장은 안 했다)
                 return ok && set.Count == keep.Length;
             }, "알림 기록: 최근 500개만 기억 — 오래된 것부터 빠진다");
+        }
+
+        // ── 10-26 N-C·N-M: 내가 올린 장소 고치기·지우기 ──
+        // 대표님 「본인이 올린 것에 한해서는 직접 삭제 … 기존에 있던 것들을 그대로 불러와서 각 사진 우측 위에 (메인사진포함) x … '수정하기'」 ·
+        // 「위치가 좀 바뀌었다면 … 수정한 사람이 수정하는 경우 이게 바로 적용, 위치가 바뀌도록」.
+        // 시험 서버(5099)의 place_edit 는 버리는 Postgres(55442)를 쓴다 — 장면에 뜬 우팡 장소 두 곳의 번호로 시험 장소를 심고
+        // (사진은 MAIN · 1~4 번호 그림), A 는 메모리의 올린 사람을 시험 아이디로 바꿔 '내 장소'로 연다.
+        // 남의 장소(B)는 열어 보기만 — 수정 요청(/fix_upload)·삭제 요청은 운영 서버로 가므로 누르지 않는다
+        [Serializable] private class DevPlaceRow { public bool exists, pet, main_on_disk, folder_on_disk; public string name, category, lat, lon, main; public string[] subs, files; public bool[] subs_on_disk; }
+        private const string PeMe = "hunt_test_peme";
+        private static void PlanPlaceEdit()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const string More = "FullScreenPanel/FullScreenGuide/TopUIPanel/FixButton";
+            const string Menu = "FullScreenPanel/FullScreenGuide/FixButtonPanel/MoreSheet0926/Tiles0926/";
+            const string Page = "Fixpage/FixUploadPage/";
+            const string NameA = "시험 가게", NameA2 = "시험 가게 고침", NameB = "남의 가게";
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            CubeDataFixManager fix = null;
+            RemoveRequest rr = null;
+            DoubleTap3D tour = null;
+            int idA = -1, idB = -1;
+            double seedLat = 0, seedLon = 0;
+            Vector2 here = Vector2.zero;
+            DevPlaceRow row = null;
+            Func<string, object> fv = n => typeof(CubeDataFixManager).GetField(n, F).GetValue(fix);
+            Func<string, bool> shown = n =>
+            {
+                var o = fv(n);
+                var go = o is Component c && c != null ? c.gameObject : o as GameObject;
+                return go != null && go.activeInHierarchy;
+            };
+            Func<string, R0926LocalizedText> rrl = n => typeof(RemoveRequest).GetField(n, F).GetValue(rr) as R0926LocalizedText;
+            Func<R0926LocalizedText, string> said = l => l != null ? l.GetComponent<Text>()?.text : null;
+            Func<string, string> scene = n =>
+            {
+                var w = (string[])typeof(RemoveRequest).GetField(n, F).GetValue(rr);
+                return w != null ? R0926LocalizedText.Say(w[0], w[1], w[2], w[3], w[4]) : null;
+            };
+            Func<List<string>> keeps = () => (List<string>)fv("subKeepPaths");
+            Func<List<Texture2D>> subs = () => (List<Texture2D>)fv("subPhotos");
+            Func<List<Image>> cells = () => (List<Image>)fv("subPhotoDisplays");
+            Func<bool> loading = () => (bool)fv("isProcessing");
+            Func<string> title = () => Find(Page + "TITLE")?.GetComponent<Text>()?.text;
+            Func<string> submit = () => Find(Page + "Panel/SubmitButton/Label0926")?.GetComponent<Text>()?.text;
+            Func<int, string> modeTitle = k =>
+            {
+                var loc = fv("localizer");
+                var lang = (string)typeof(FixPlaceLocalizer).GetField("currentLanguage", F).GetValue(loc);
+                var t = (Dictionary<string, string[]>)typeof(FixPlaceLocalizer).GetField("modeTitles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static).GetValue(null);
+                return (t.ContainsKey(lang) ? t[lang] : t["en"])[k];
+            };
+            Func<int, GameObject> spawned = id => DataManager.Instance != null && DataManager.Instance.GetSpawnedObjects().TryGetValue(id, out var go) ? go : null;
+            Func<int, DoubleTap3D> dtOf = id => spawned(id) != null ? spawned(id).GetComponentInChildren<DoubleTap3D>(true) : null;
+            Func<int, PlaceData> placeOf = id => DataManager.Instance != null && DataManager.Instance.GetPlaceDataMap().TryGetValue(id, out var p) ? p : null;
+            Func<DoubleTap3D, bool> open = d => d != null && d.fullscreenCanvasGroup != null && d.fullscreenCanvasGroup.gameObject.activeSelf;
+            Action<DoubleTap3D> tap = d => typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(d, null);
+            Func<int, string> photo = k => "uploads/pe_" + idA + "/" + (k == 0 ? "main.jpg" : "sub_" + k + ".jpg");
+            Func<int[], string> order = ks => string.Join("|", Array.ConvertAll(ks, k => photo(k)));
+            Func<int, DevPlaceRow> rowOf = id =>
+            {
+                string r = DevGet("", "/api/dev/place_row/" + id);
+                return string.IsNullOrEmpty(r) ? null : JsonUtility.FromJson<DevPlaceRow>(r);
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                CubeDataFixManager.EditorBase = "http://127.0.0.1:5099";
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, LocalTestLogin + PeMe.Substring("hunt_test_".Length));
+                SfLogin(true, PeMe);
+                fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                rr = UnityEngine.Object.FindAnyObjectByType<RemoveRequest>(FindObjectsInactive.Include);
+            });
+            Check(() => fix != null && rr != null && LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUsername == PeMe, "준비: 시험 아이디 (로그인 이벤트 없이) · 장소 고치기는 시험 서버로");
+            Check(() =>
+            {
+                var miss = new List<string>();
+                foreach (var n in new[] { "openButton", "mainPhotoRemove", "subPhotoRemoveTemplate", "descriptionLabel", "locationLabel", "locationRow",
+                                          "locationCoords", "locationNote", "moveHereToggle", "deletePlaceButton", "localizer", "removeRequest", "submitLabel" })
+                    if (fv(n) == null || fv(n).Equals(null)) miss.Add(n);
+                foreach (var n in new[] { "menuLabel", "dialogText", "yesLabel" })
+                    if (rrl(n) == null) miss.Add("RemoveRequest." + n);
+                log.Add("  연결 빠짐: " + (miss.Count == 0 ? "없음" : string.Join(", ", miss)));
+                return miss.Count == 0;
+            }, "연결: 정보 수정 칸 · 사진 x · 위치 줄 · 옮기기 · 삭제 · 메뉴·묻는 글·단추 글자");
+
+            Wait(() =>
+            {
+                if (DataManager.Instance == null) return false;
+                var map = DataManager.Instance.GetPlaceDataMap();
+                idA = idB = -1;
+                foreach (var kv in DataManager.Instance.GetSpawnedObjects())
+                {
+                    if (kv.Value == null || !kv.Value.activeInHierarchy || !map.ContainsKey(kv.Key) || dtOf(kv.Key) == null) continue;
+                    if (idA < 0) idA = kv.Key; else { idB = kv.Key; break; }
+                }
+                return idB > 0;
+            }, 40f, "장면에 뜬 우팡 장소 둘");
+            Do(() =>
+            {
+                // A 는 지금 위치에서 북쪽으로 35m 쯤 — '여기로 옮기기' 를 켜고 저장하면 지금 위치(소수 6자리)로
+                seedLat = Math.Round(VirtualLocation.Instance.Latitude + 0.000315, 6);
+                seedLon = Math.Round((double)VirtualLocation.Instance.Longitude, 6);
+                string at = ",\"lat\":" + seedLat.ToString("F6", inv) + ",\"lon\":" + seedLon.ToString("F6", inv) + ",\"alt\":30";
+                string a = DevPost("", "/api/dev/place_seed", "{\"id\":" + idA + ",\"name\":\"" + NameA + "\",\"category\":\"shop\"" + at + ",\"subs\":4,\"owner\":\"peme\",\"pet\":true,\"insta\":\"pe_test\"}");
+                string b = DevPost("", "/api/dev/place_seed", "{\"id\":" + idB + ",\"name\":\"" + NameB + "\",\"category\":\"food\"" + at + ",\"subs\":2,\"owner\":\"other\"}");
+                placeOf(idA).username = PeMe;   // 메모리만 — 앱은 장소를 저장하지 않는다
+                log.Add($"  A {idA} (내 장소로) · B {idB} (남의 장소) — 시험 장소 {(Has(a, "\"ok\":true") && Has(b, "\"ok\":true") ? "심음" : "못 심음")}");
+            });
+
+            // 1) 내 장소 A — '···' 는 '삭제' · 정보 수정은 지금 값 그대로 (사진은 올린 순서 · 칸마다 x)
+            Do(() => tap(dtOf(idA)));
+            Wait(() => open(dtOf(idA)), 10f, "A 상세 열림");
+            Do(() => Click(More));
+            Sleep(0.8f);
+            Shot("placeedit_menu_mine");
+            Check(() => said(rrl("menuLabel")) == R0926LocalizedText.Say("삭제", "Delete", "削除", "删除", "Eliminar"), "내 장소의 '···' — '삭제 요청' 대신 '삭제'");
+            Do(() => Click(Menu + "FixPlaceButton"));
+            Wait(() => Active("Fixpage") && !loading() && subs().Count == 4 && fv("mainPhoto") != null, 20f, "A 고치기 화면 — 서버 값 받음");
+            Sleep(0.8f);
+            Shot("placeedit_mine_prefill");
+            Check(() =>
+            {
+                string name = ((InputField)fv("nameInput")).text, insta = ((InputField)fv("instagramIDInput")).text;
+                int cat = (int)fv("currentCategoryIndex");
+                bool pet = ((Toggle)fv("petFriendlyToggle")).isOn;
+                log.Add($"  이름 '{name}' · 분류 {cat} · 반려견 {pet} · 인스타 '{insta}' · 대표 {fv("mainKeepPath")} · 추가 {string.Join(", ", keeps())}");
+                return name == NameA && cat == 1 && pet && insta == "pe_test" && (string)fv("mainKeepPath") == photo(0) && string.Join("|", keeps()) == order(new[] { 1, 2, 3, 4 });
+            }, "지금 값 그대로 — 이름·분류(샵)·스위치·인스타 · 사진은 올린 순서 (대표 + 1·2·3·4)");
+            Check(() =>
+            {
+                var c = cells();
+                bool ok = c.Count > 4;
+                for (int i = 0; i < c.Count; i++)
+                {
+                    bool want = i < 4;
+                    var x = c[i].transform.Find("RemoveX0926");
+                    ok &= c[i].gameObject.activeSelf == want
+                          && (!want || (c[i].sprite != null && c[i].sprite.texture == subs()[i] && x != null && x.gameObject.activeInHierarchy));
+                }
+                return ok && shown("mainPhotoRemove") && ((Image)fv("mainPhotoDisplay")).gameObject.activeInHierarchy;
+            }, "사진 칸마다 오른쪽 위 x (대표 사진 포함) · 칸 순서 = 사진 순서");
+            Check(() => title() == modeTitle(0) && submit() == R0926LocalizedText.Say("수정하기", "Save changes", "保存する", "保存修改", "Guardar cambios")
+                        && shown("locationLabel") && shown("locationRow") && shown("deletePlaceButton") && !shown("descriptionInput") && !shown("descriptionLabel"),
+                  "내 장소 — 제목 '" + "내 장소 수정" + "' · 위치 줄 · '삭제' · 수정할 내용 칸 없음 · 단추 '수정하기'");
+            Check(() =>
+            {
+                string coords = ((Text)fv("locationCoords")).text, note = ((Text)fv("locationNote")).text;
+                log.Add($"  위치 줄: {coords} · {note}");
+                return coords == seedLat.ToString("F4", inv) + ", " + seedLon.ToString("F4", inv)
+                       && note == R0926LocalizedText.Say("지금 내 위치에서 35m", "35m from you", "現在地から35m", "距你 35m", "A 35m de ti");
+            }, "위치 줄 — 장소 좌표(보이는 건 소수 4자리) · 지금 내 위치에서 35m");
+
+            // 고치기 — 2번 사진 x · 이름 · 분류(카페) · 반려견 끔 · 여기로 옮기기
+            Do(() =>
+            {
+                cells()[1].transform.Find("RemoveX0926").GetComponent<Button>().onClick.Invoke();
+                ((InputField)fv("nameInput")).text = NameA2;
+                Click(Page + "Panel/Chips0926/Chip_cafe");
+                ((Toggle)fv("petFriendlyToggle")).isOn = false;
+                ((Toggle)fv("moveHereToggle")).isOn = true;
+            });
+            Sleep(0.6f);
+            Shot("placeedit_mine_edit");
+            Check(() => string.Join("|", keeps()) == order(new[] { 1, 3, 4 }) && subs().Count == 3 && cells()[2].gameObject.activeSelf && !cells()[3].gameObject.activeSelf
+                        && cells()[1].sprite != null && cells()[1].sprite.texture == subs()[1],
+                  "2번 사진 x — 그 사진만 빠지고 뒤가 당겨진다 (1·3·4)");
+            Check(() => (string)fv("selectedCategory") == "cafe", "분류 칩 → 카페");
+            Check(() => ((Text)fv("locationNote")).text == R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요 · 35m", "Saving moves it to where you are · 35m", "保存すると現在地に移動します · 35m", "保存后移到你现在的位置 · 35m", "Al guardar se moverá a tu ubicación · 35m"),
+                  "'여기로 옮기기' 를 켜면 — '저장하면 지금 위치로 옮겨요 · 35m'");
+            Check(() =>
+            {
+                var fl = typeof(CubeDataFixManager).GetField("placeLat", F);
+                var refresh = typeof(CubeDataFixManager).GetMethod("RefreshLocation", F);
+                double was = (double)fl.GetValue(fix);
+                fl.SetValue(fix, was + 0.05);
+                refresh.Invoke(fix, new object[] { true });
+                var n = (Text)fv("locationNote");
+                string far = n.text;
+                bool red = n.color.r > 0.9f && n.color.g < 0.5f;
+                fl.SetValue(fix, was);
+                refresh.Invoke(fix, new object[] { true });
+                log.Add("  5.6km 떨어진 장소였다면: " + far + (red ? " (빨강)" : " (색 그대로)"));
+                return red && far.Contains("km");
+            }, "1km 넘게 옮기게 되면 빨간 글로 한 번 더 알린다");
+
+            Do(() =>
+            {
+                here = new Vector2(VirtualLocation.Instance.Latitude, VirtualLocation.Instance.Longitude);
+                Click(Page + "Panel/SubmitButton");
+            });
+            Wait(() => !Active("Fixpage"), 20f, "'수정하기' → 저장되고 창 닫힘");
+            Sleep(0.4f);
+            Shot("placeedit_saved");
+            Do(() => row = rowOf(idA));
+            Check(() =>
+            {
+                if (row == null || !row.exists) return false;
+                log.Add($"  서버: '{row.name}' · {row.category} · 반려견 {row.pet} · 대표 {row.main} · 추가 {string.Join(", ", row.subs)} · 폴더 {string.Join(", ", row.files)} · {row.lat},{row.lon}");
+                return row.name == NameA2 && row.category == "cafe" && !row.pet && row.main == photo(0) && row.main_on_disk
+                       && string.Join("|", row.subs) == order(new[] { 1, 3, 4 }) && Array.TrueForAll(row.subs_on_disk, x => x)
+                       && Array.IndexOf(row.files, "sub_2.jpg") < 0;
+            }, "서버에 바로 반영 — 이름·분류·스위치 · 사진 1·3·4 그 순서 · 뺀 2번 파일은 지움");
+            Check(() => row != null && row.lat == ((double)here.x).ToString("F6", inv) && row.lon == ((double)here.y).ToString("F6", inv),
+                  "위치 — 지금 위치로 옮겨짐 (소수 6자리 그대로)");
+            Check(() =>
+            {
+                var p = placeOf(idA);
+                return p != null && p.name == NameA2 && p.category == "cafe" && Math.Abs(p.latitude - here.x) < 1e-5 && Math.Abs(p.longitude - here.y) < 1e-5;
+            }, "앱에도 바로 — 이 장소의 이름·분류·좌표");
+
+            // 2) 다시 열면 고친 값 그대로 → 카드의 '삭제' 로 지우기
+            Do(() => tap(dtOf(idA)));
+            Wait(() => open(dtOf(idA)), 10f, "A 다시 상세");
+            Do(() => Click(More));
+            Sleep(0.6f);
+            Do(() => Click(Menu + "FixPlaceButton"));
+            Wait(() => Active("Fixpage") && !loading() && subs().Count == 3 && fv("mainPhoto") != null, 20f, "A 다시 고치기 — 고친 값");
+            Sleep(0.5f);
+            Shot("placeedit_reopen");
+            Check(() => ((InputField)fv("nameInput")).text == NameA2 && (int)fv("currentCategoryIndex") == 3 && string.Join("|", keeps()) == order(new[] { 1, 3, 4 })
+                        && ((Text)fv("locationCoords")).text == ((double)here.x).ToString("F4", inv) + ", " + ((double)here.y).ToString("F4", inv),
+                  "다시 열면 고친 값 그대로 — 이름·카페·사진 1·3·4·옮긴 좌표");
+            Do(() => ((Button)fv("deletePlaceButton")).onClick.Invoke());
+            Wait(() => Active("RemoveRequestPanel"), 5f, "지울까 묻는 창");
+            Sleep(0.5f);
+            Shot("placeedit_delete_ask");
+            Check(() => said(rrl("dialogText")) == R0926LocalizedText.Say("이 장소를 지울까요?\n사진과 댓글도 함께 지워져요", "Delete this place?\nIts photos and comments go too", "この場所を削除しますか？\n写真とコメントも消えます", "要删除这个地点吗？\n照片和评论也会一起删除", "¿Eliminar este lugar?\nTambién se borran sus fotos y comentarios")
+                        && said(rrl("yesLabel")) == R0926LocalizedText.Say("지우기", "Delete", "削除する", "删除", "Eliminar"),
+                  "카드의 '삭제' — '이 장소를 지울까요?' · 단추 '지우기' (삭제 요청이 아니다)");
+            Do(() => Click("RemoveRequestPanel/Box0926/Buttons0926/Remove_YES"));
+            Wait(() => placeOf(idA) == null && !Active("RemoveRequestPanel") && !Active("Fixpage"), 15f, "'지우기' → 장소 사라짐 · 창 닫힘");
+            Sleep(0.4f);
+            Shot("placeedit_deleted");
+            Do(() => row = rowOf(idA));
+            Check(() => row != null && !row.exists && !row.folder_on_disk && spawned(idA) == null, "서버에서 지움 (사진 폴더까지) · 장면에서도 바로 사라짐");
+            Check(() => said(rrl("menuLabel")) == scene("menuReq") && said(rrl("dialogText")) == scene("dialogReq") && said(rrl("yesLabel")) == scene("yesReq"),
+                  "지운 뒤 메뉴·묻는 글·단추는 원래대로 ('삭제 요청')");
+
+            // 3) 남의 장소 B — '삭제 요청' 그대로 · '장소 수정 요청' (보내 보지는 않는다 — 운영 서버로 간다)
+            Do(() => tap(dtOf(idB)));
+            Wait(() => open(dtOf(idB)), 10f, "B 상세 열림");
+            Do(() => Click(More));
+            Sleep(0.6f);
+            Check(() => said(rrl("menuLabel")) == scene("menuReq"), "남의 장소의 '···' — '삭제 요청' 그대로");
+            Do(() => Click(Menu + "FixPlaceButton"));
+            Wait(() => Active("Fixpage") && !loading() && subs().Count == 2 && fv("mainPhoto") != null, 20f, "B 고치기 화면 — 지금 값 (남의 장소)");
+            Sleep(0.6f);
+            Shot("placeedit_other");
+            Check(() => title() == modeTitle(1) && ((InputField)fv("nameInput")).text == NameB && (int)fv("currentCategoryIndex") == 2
+                        && submit() == R0926LocalizedText.Say("수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud")
+                        && shown("descriptionInput") && !shown("locationRow") && !shown("deletePlaceButton"),
+                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 수정할 내용 칸 · 위치 줄·삭제 없음 · '수정 요청'");
+            Do(() => Click(Page + "XButton_FixUpload"));
+            Sleep(0.4f);
+            Check(() => !Active("Fixpage"), "닫기 — 남의 장소는 보내 보지 않는다 (수정 요청은 운영 서버로 간다)");
+
+            // 4) 우팡 장소가 아닌 것(관광공사 등) — 이름만 채운다 (예전엔 빈 칸)
+            Do(() =>
+            {
+                var objs = TourAPIManager.Instance != null ? TourAPIManager.Instance.GetSpawnedObjects() : null;
+                if (objs != null)
+                    foreach (var go in objs.Values)
+                    {
+                        var d = go != null && go.activeInHierarchy ? go.GetComponentInChildren<DoubleTap3D>(true) : null;
+                        if (d != null && !string.IsNullOrEmpty(d.GetName())) { tour = d; break; }
+                    }
+                if (tour == null) { log.Add("  관광공사 오브젝트 없음 — 건너뜀"); return; }
+                tap(tour);
+            });
+            Sleep(1.0f);
+            Do(() => { if (tour != null) Click(Menu + "FixPlaceButton"); });
+            Sleep(0.8f);
+            Check(() =>
+            {
+                if (tour == null) return true;
+                string n = ((InputField)fv("nameInput")).text;
+                log.Add($"  관광공사 '{tour.GetName()}' → 이름 칸 '{n}' · 장소 번호 {fv("editId")} · 내 장소 {fv("ownerMode")}");
+                return n == tour.GetName() && (int)fv("editId") == 0 && !(bool)fv("ownerMode") && subs().Count == 0 && title() == modeTitle(1);
+            }, "우팡 장소가 아닌 것 — 이름만 채우고 수정 요청으로");
+            Do(() => { if (tour != null) Click(Page + "XButton_FixUpload"); });
+            Sleep(0.3f);
+
+            Do(() =>
+            {
+                DevPost("", "/api/dev/place_reset", "{\"ids\":[" + idA + "," + idB + "]}");
+                CubeDataFixManager.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
         }
 
         // ── 10-22 N18: 사람(P2P) 오브젝트도 핀치 줌을 따른다 — 본 크기(2배) × 배율 · 줌 중에 새로 뜬 사람·풀에서 다시 꺼낸 사람도 ──
@@ -9183,7 +9483,7 @@ namespace Redesign0926
             {
                 if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
-                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; R0926Nearby.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일·근처 시험 서버도
+                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; R0926Nearby.EditorBase = null; CubeDataFixManager.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일·근처·장소 고치기 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
                 if (running) RestoreWoopangPrefs();   // WOOPANG 줄 삭제 시험이 덜어 둔 저장값 (시험 도중 플레이를 끈 경우)
                 if (running) { RestoreSkyPrefs(); skyPagesRun = false; }   // 하늘 옆 장 시험이 바꾼 하늘 설정도
@@ -9198,7 +9498,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();
@@ -9228,6 +9528,7 @@ namespace Redesign0926
             if (skyPagesRun) SkyPagesCleanup();   // 하늘 옆 장 시험이 오류로 끊긴 경우 — 시험 서버 주소 · 시험 아이디 · 하늘 설정
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
+            CubeDataFixManager.EditorBase = null;   // 장소 고치기 시험이 오류로 끊겨도 다음 플레이가 시험 서버로 가지 않게
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;
             InputSystem.settings.backgroundBehavior = savedBackground;
             Application.runInBackground = savedRunInBackground;

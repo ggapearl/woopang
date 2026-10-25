@@ -5,7 +5,11 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine.Networking;
 using System;
+using System.Globalization;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json;
+using Google.XR.ARCoreExtensions;
+using UnityEngine.XR.ARSubsystems;
 
 public class CubeDataFixManager : MonoBehaviour
 {
@@ -31,6 +35,21 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private R0926PhotoLoading photoLoading; // 대표·추가 사진 칸에 빈 칸+원호 (Redesign0926Apply10 이 만들어 연결)
     [SerializeField] private R0926PhotoCrop photoCrop;       // 대표 사진 자르기 화면 (Redesign0926ApplyCrop 이 만들어 연결)
     [SerializeField] private R0926Busy busy;                 // 보내는 동안 화면 가운데 카드 — 원호 + '보내는 중… N%' + 막대
+
+    [Header("내가 올린 장소 고치기 (2026-10-26) — Redesign0926Apply10 이 만들어 연결")]
+    [SerializeField] private Button openButton;              // 장소 '···' 의 '정보 수정' 칸 — 누르면 그 장소의 지금 값으로 채운다
+    [SerializeField] private Button mainPhotoRemove;         // 대표 사진 오른쪽 위 x
+    [SerializeField] private Button subPhotoRemoveTemplate;  // 추가 사진 칸마다 복제해 넣는 x (꺼 둔 본)
+    [SerializeField] private GameObject descriptionLabel;    // 수정 요청의 '수정할 내용' — 내 장소에선 숨긴다
+    [SerializeField] private GameObject locationLabel;       // 내 장소에서만 — '위치'
+    [SerializeField] private GameObject locationRow;
+    [SerializeField] private Text locationCoords;
+    [SerializeField] private Text locationNote;
+    [SerializeField] private Toggle moveHereToggle;          // 켜고 저장하면 지금 내 위치로 옮긴다 (기본 꺼짐)
+    [SerializeField] private Button deletePlaceButton;       // 내 장소에서만 — 카드 오른쪽 위 '삭제'
+    [SerializeField] private FixPlaceLocalizer localizer;
+    [SerializeField] private RemoveRequest removeRequest;
+    [SerializeField] private AREarthManager earthManager;
 
     [Header("카테고리 설정")]
     [SerializeField] private Toggle categoryToggle;
@@ -74,6 +93,24 @@ public class CubeDataFixManager : MonoBehaviour
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
 
+    // 내 장소 고치기 — 서버에 있던 사진은 경로로 남기고(다시 올리지 않는다) 새로 고른 사진만 올린다
+    private int editId;                // 지금 채워 둔 우팡 장소 (0 = 없음 — 공공데이터 등은 이름만 채운다)
+    private bool ownerMode;            // 서버가 '내 장소'라고 확인했을 때만 — 아니면 예전처럼 수정 요청
+    private string mainKeepPath;       // 대표 사진이 서버에 있던 그대로면 그 경로
+    private readonly List<string> subKeepPaths = new List<string>();   // subPhotos 와 같은 순서 · 새로 고른 사진은 null
+    private int loadGen;
+    private bool hasPlaceCoords;
+    private double placeLat, placeLon;
+    private string loadedCategory = "";
+    private float nextNoteAt;
+    private Color noteColor = Color.gray;
+    private R0926LocalizedText submitLabel;
+
+    /// <summary>플레이 시험 — 고치기·지우기와 그 사진을 내 PC 시험 서버로 (운영 서버의 장소를 시험으로 바꾸지 않게)</summary>
+    public static string EditorBase;
+    private static string Base => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+    public static string PlaceUrl(int id, string tail = "") => Base + "/api/place/" + id + tail;
+
     private void Awake()
     {
         if (FindObjectsByType<CubeDataFixManager>(FindObjectsSortMode.None).Length > 1)
@@ -92,11 +129,19 @@ public class CubeDataFixManager : MonoBehaviour
         ResetToInitialState();
 
         DoubleTap3D.OnDoubleTapEvent += HandleDoubleTap;
+        RemoveRequest.PlaceDeleted += OnPlaceDeleted;
+    }
+
+    private void Update()
+    {
+        // 위치 줄 — 걸으며 보면 거리가 바뀐다 (1초에 한 번)
+        if (ownerMode && fixUIPanel != null && fixUIPanel.activeInHierarchy) RefreshLocation(false);
     }
 
     void OnDestroy()
     {
         DoubleTap3D.OnDoubleTapEvent -= HandleDoubleTap;
+        RemoveRequest.PlaceDeleted -= OnPlaceDeleted;
     }
 
     private void HandleDoubleTap(DoubleTap3D tappedDoubleTap)
@@ -138,6 +183,14 @@ public class CubeDataFixManager : MonoBehaviour
         }
         if (photoCrop == null) photoCrop = FindAnyObjectByType<R0926PhotoCrop>(FindObjectsInactive.Include);
         if (busy == null) busy = FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
+        if (localizer == null) localizer = FindAnyObjectByType<FixPlaceLocalizer>(FindObjectsInactive.Include);
+        if (removeRequest == null) removeRequest = FindAnyObjectByType<RemoveRequest>(FindObjectsInactive.Include);
+        if (earthManager == null) earthManager = FindAnyObjectByType<AREarthManager>(FindObjectsInactive.Include);
+        if (submitLabel == null && submitButton != null)
+        {
+            Transform lb = submitButton.transform.Find("Label0926");
+            if (lb != null) submitLabel = lb.GetComponent<R0926LocalizedText>();
+        }
     }
 
     private void InitializeComponents()
@@ -167,6 +220,16 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (submitButton != null) submitButton.onClick.AddListener(() => StartCoroutine(ValidateAndSubmit()));
         else Debug.LogError("[CubeDataFixManager] SubmitButton이 할당되지 않았습니다!");
+
+        if (openButton != null) openButton.onClick.AddListener(BeginEdit);   // 창을 여는 장면 연결(SetActive)보다 뒤에 불린다
+        if (mainPhotoRemove != null) mainPhotoRemove.onClick.AddListener(RemoveMain);
+        if (deletePlaceButton != null) deletePlaceButton.onClick.AddListener(AskDelete);
+        if (moveHereToggle != null)
+        {
+            moveHereToggle.isOn = false;
+            moveHereToggle.onValueChanged.AddListener(_ => RefreshLocation(true));
+        }
+        if (locationNote != null) noteColor = locationNote.color;
 
         // 카테고리 토글 초기화
         if (categoryToggle != null)
@@ -219,6 +282,15 @@ public class CubeDataFixManager : MonoBehaviour
             Image img = imageObj.AddComponent<Image>();
             img.preserveAspect = true;
             subPhotoDisplays.Add(img);
+            if (subPhotoRemoveTemplate != null)
+            {
+                // 칸마다 오른쪽 위 x — 그 사진만 뺀다 (뒤 사진이 한 칸씩 당겨진다)
+                Button x = Instantiate(subPhotoRemoveTemplate, imageObj.transform, false);
+                x.name = "RemoveX0926";
+                x.gameObject.SetActive(true);
+                int k = i;
+                x.onClick.AddListener(() => RemoveSub(k));
+            }
             imageObj.SetActive(false);
         }
     }
@@ -540,6 +612,7 @@ public class CubeDataFixManager : MonoBehaviour
                 {
                     if (mainPhoto != null) Destroy(mainPhoto);
                     mainPhoto = cropped;
+                    mainKeepPath = null;   // 새로 고른 대표 사진 — 저장할 때 올린다
 
                     if (mainPhotoDisplay != null)
                     {
@@ -649,7 +722,7 @@ public class CubeDataFixManager : MonoBehaviour
             Texture2D texture = NativeGallery.LoadImageAtPath(capturedPath, maxSize: 1024);
             if (texture != null && texture.width > 8 && texture.height > 8)
             {
-                subPhotos.Add(texture);
+                AddSub(texture, null);
                 UpdateSubPhotoGrid();
             }
             else
@@ -660,7 +733,7 @@ public class CubeDataFixManager : MonoBehaviour
                 {
                     if (result != null)
                     {
-                        subPhotos.Add(result);
+                        AddSub(result, null);
                         UpdateSubPhotoGrid();
                     }
                     conversionComplete = true;
@@ -744,7 +817,7 @@ public class CubeDataFixManager : MonoBehaviour
             
             if (texture != null && texture.width > 8 && texture.height > 8)
             {
-                subPhotos.Add(texture);
+                AddSub(texture, null);
                 imageProcessed = true;
             }
             else
@@ -755,7 +828,7 @@ public class CubeDataFixManager : MonoBehaviour
                 yield return StartCoroutine(LoadImageWithConversion(path, (convertedTexture) => {
                     if (convertedTexture != null)
                     {
-                        subPhotos.Add(convertedTexture);
+                        AddSub(convertedTexture, null);
                     }
                     else
                     {
@@ -785,6 +858,7 @@ public class CubeDataFixManager : MonoBehaviour
             Destroy(photo);
         }
         subPhotos.Clear();
+        subKeepPaths.Clear();
         UpdateSubPhotoGrid();
         ShowWarning(GetLocalizedText("sub_photos_reset"));
         CancelInvoke("HideWarning");
@@ -976,7 +1050,7 @@ public class CubeDataFixManager : MonoBehaviour
         if (isProcessing) yield break;
         isProcessing = true;
 
-        if (doubleTap == null)
+        if (doubleTap == null && editId <= 0)
         {
             ShowWarning(GetLocalizedText("no_object_selected"));
             Debug.LogError("[CubeDataFixManager] ValidateAndSubmit: DoubleTap3D가 null입니다!");
@@ -984,7 +1058,7 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        int id = doubleTap.GetId();
+        int id = editId > 0 ? editId : doubleTap.GetId();   // 채워 둔 장소 — 창이 열린 사이 다른 오브젝트를 두 번 눌러도 그 장소로
         if (id <= 0)
         {
             ShowWarning(GetLocalizedText("valid_id_not_found"));
@@ -1012,7 +1086,7 @@ public class CubeDataFixManager : MonoBehaviour
         string description = descriptionInput.text?.Trim() ?? "";
         string name = nameInput.text?.Trim() ?? "";
 
-        if (string.IsNullOrEmpty(description))
+        if (!ownerMode && string.IsNullOrEmpty(description))   // 내 장소는 바로 고치므로 '수정할 내용'이 없다
         {
             ShowWarning(GetLocalizedText("enter_description"));
             isProcessing = false;
@@ -1045,16 +1119,25 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        // 시간 제한은 요청을 보낸 뒤부터 (CubeUploadManager.SendRequestWithTimeout)
-        yield return StartCoroutine(ProcessAndUploadData(
-            this, id, petFriendly, separateRestroom, instagramID, showInstagram, description, name,
-            selectedCategory));
+        if (ownerMode && id == editId)
+        {
+            yield return StartCoroutine(SubmitOwnerEdit(name, petFriendly, separateRestroom, instagramID));
+        }
+        else
+        {
+            // 시간 제한은 요청을 보낸 뒤부터 (CubeUploadManager.SendRequestWithTimeout)
+            yield return StartCoroutine(ProcessAndUploadData(
+                this, id, petFriendly, separateRestroom, instagramID, showInstagram, description, name,
+                selectedCategory));
+        }
 
         if (!isProcessing)
         {
             SetUIActive(fixUIPanel, false);
             ResetToInitialState();
+            int gen = loadGen;
             yield return new WaitForSeconds(2f);
+            if (gen != loadGen) yield break;   // 그사이 다른 장소를 열었다 — 사진을 불러오는 중이면 저장을 막아 둔 채로
         }
         isProcessing = false;
     }
@@ -1181,6 +1264,418 @@ public class CubeDataFixManager : MonoBehaviour
                 isProcessing = true;
                 ShowWarning(GetLocalizedText("server_error"));
             }
+        }
+    }
+    #endregion
+
+    #region 내 장소 고치기 (2026-10-26)
+    // 대표님 (10-25): 「'정보 수정' 버튼을 눌러서 수정할 때는 기존에 있던 것들을 그대로 불러와서 각 사진 우측 위에 (메인사진포함) x버튼 …
+    // 순서대로 있던 그대로 불러와서 … '수정하기' 버튼을 눌러서 수정되도록」 · 「본인이 올린 것에 한해서는 직접 삭제」 ·
+    // 「위치가 좀 바뀌었다면 … 수정한 사람이 수정하는 경우 이게 바로 적용, 위치가 바뀌도록」
+    // 서버가 내 장소라고 확인하면 바로 고친다(/api/place/<id>/edit) — 남의 장소·확인 못 한 때는 예전처럼 수정 요청(/fix_upload)
+
+    /// <summary>장소 '···' 의 '정보 수정' — 그 장소의 지금 값(이름·분류·스위치·사진을 올린 순서 그대로)으로 채운다</summary>
+    private void BeginEdit()
+    {
+        loadGen++;
+        ResetToInitialState();
+        editId = 0;
+        PlaceData local = DataManager.Instance != null ? DataManager.Instance.PlaceOf(doubleTap) : null;
+        SetOwnerMode(RemoveRequest.LooksMine(local));
+        if (local == null)
+        {
+            // 우팡 장소가 아닌 것(공공데이터·교통 등) — 이름만 (예전엔 빈 칸)
+            if (nameInput != null && doubleTap != null) nameInput.text = doubleTap.GetName() ?? "";
+            return;
+        }
+        editId = local.id;
+        StartCoroutine(LoadPlace(local, loadGen));
+    }
+
+    private IEnumerator LoadPlace(PlaceData local, int gen)
+    {
+        isProcessing = true;   // 다 불러오기 전엔 저장·사진 고르기를 막는다
+        Fill(local);
+        MainLoading(true);
+
+        PlaceData place = local;
+        bool mine = false;
+        using (UnityWebRequest www = UnityWebRequest.Get(PlaceUrl(local.id)))
+        {
+            LoginManager.ApplyAuth(www);
+            www.timeout = 15;
+            yield return www.SendWebRequest();
+            if (gen != loadGen) yield break;
+            PlaceEditResponse res = www.result == UnityWebRequest.Result.Success ? PlaceEditResponse.Parse(www.downloadHandler.text) : null;
+            if (res != null && res.ok && res.place != null && res.place.id == local.id)
+            {
+                place = res.place;
+                mine = res.mine;
+            }
+        }
+        // 내 장소인지는 서버가 정한다 — 묻지 못했으면 수정 요청으로 (요청은 옛 서버에서도 된다)
+        SetOwnerMode(mine);
+        Fill(place);
+
+        List<string> subs = new List<string>();
+        foreach (string p in DataManager.FlattenSubPhotos(place))
+            if (!subs.Contains(p) && subs.Count < MAX_SUB_PHOTOS) subs.Add(p);
+        SubLoading(subs.Count);
+        int failed = 0;
+
+        if (!string.IsNullOrEmpty(place.main_photo))
+        {
+            Texture2D tex = null;
+            yield return StartCoroutine(DownloadPhoto(place.main_photo, gen, t => tex = t));
+            if (gen != loadGen) { if (tex != null) Destroy(tex); yield break; }
+            if (tex == null) { failed++; if (ownerMode) tex = Placeholder(); }
+            if (tex != null)
+            {
+                mainPhoto = tex;
+                mainKeepPath = place.main_photo;
+                SetMainSprite(tex);
+                if (mainPhotoDisplay != null) mainPhotoDisplay.gameObject.SetActive(true);
+            }
+        }
+        MainLoading(false);
+
+        int left = subs.Count;
+        foreach (string p in subs)
+        {
+            Texture2D tex = null;
+            yield return StartCoroutine(DownloadPhoto(p, gen, t => tex = t));
+            if (gen != loadGen) { if (tex != null) Destroy(tex); yield break; }
+            if (tex == null) { failed++; if (ownerMode) tex = Placeholder(); }
+            if (tex != null) AddSub(tex, p);
+            SubLoading(--left);
+            UpdateSubPhotoGrid();
+        }
+        SubLoading(0);
+        if (failed > 0)
+            ShowWarning(ownerMode
+                ? R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요 — 그대로 두면 지워지지 않아요", "Couldn't load " + failed + " photo(s) — they stay unless you remove them", "写真" + failed + "枚を読み込めませんでした — そのままなら消えません", failed + " 张照片未能加载 — 不删除就会保留", "No se cargaron " + failed + " foto(s) — se conservan si no las quitas")
+                : R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요", "Couldn't load " + failed + " photo(s)", "写真" + failed + "枚を読み込めませんでした", failed + " 张照片未能加载", "No se cargaron " + failed + " foto(s)"));
+        isProcessing = false;
+    }
+
+    // 서버 사진 한 장 — 512 썸네일 먼저(옛 사진은 원본이 2048px 까지라 열 장이면 메모리가 크다), 안 되면 원본
+    private IEnumerator DownloadPhoto(string path, int gen, Action<Texture2D> done)
+    {
+        Texture2D got = null;
+        string clean = path.Replace("\\", "/").TrimStart('/');
+        string[] urls = path.StartsWith("http") ? new[] { path } : new[] { Base + "/thumb/512/" + clean, Base + "/" + clean };
+        foreach (string url in urls)
+        {
+            using (UnityWebRequest r = UnityWebRequestTexture.GetTexture(url, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
+            {
+                r.timeout = 20;
+                yield return r.SendWebRequest();
+                if (gen != loadGen) break;
+                if (r.result == UnityWebRequest.Result.Success)
+                {
+                    got = DownloadHandlerTexture.GetContent(r);
+                    if (got != null) break;
+                }
+            }
+        }
+        done(got);
+    }
+
+    // 받지 못한 사진 — 내 장소면 회색 칸으로 남긴다 (경로는 그대로라 저장해도 지워지지 않는다 · x 로 뺄 수 있다)
+    private static Texture2D Placeholder()
+    {
+        var t = new Texture2D(8, 8, TextureFormat.RGB24, false);
+        var px = new Color32[64];
+        for (int i = 0; i < px.Length; i++) px[i] = new Color32(58, 60, 66, 255);
+        t.SetPixels32(px);
+        t.Apply(false, true);
+        return t;
+    }
+
+    private void Fill(PlaceData p)
+    {
+        if (nameInput != null) nameInput.text = p.name ?? "";
+        if (petFriendlyToggle != null) petFriendlyToggle.isOn = p.pet_friendly;
+        if (separateRestroomToggle != null) separateRestroomToggle.isOn = p.separate_restroom;
+        string insta = (p.instagram_id ?? "").Trim();
+        if (instagramToggle != null) instagramToggle.isOn = insta.Length > 0;   // 켜야 칸이 보인다 — 끄면 칸을 비우므로 글은 그 뒤에
+        if (instagramIDInput != null && insta.Length > 0) instagramIDInput.text = insta;
+        SetCategory(p.category);
+        hasPlaceCoords = !(p.latitude == 0f && p.longitude == 0f);
+        placeLat = p.latitude;
+        placeLon = p.longitude;
+        RefreshLocation(true);
+    }
+
+    // 장소의 분류를 칩에 — 고를 수 없는 옛 분류(gov 등)는 칩을 비워 두고 값은 그대로 (저장해도 바뀌지 않게)
+    private void SetCategory(string raw)
+    {
+        raw = raw ?? "";
+        int idx = Array.IndexOf(categoryValues, raw);
+        currentCategoryIndex = idx > 0 ? idx : 0;
+        selectedCategory = raw;
+        loadedCategory = raw;
+        if (categoryToggle != null)
+        {
+            categoryToggle.onValueChanged.RemoveListener(OnCategoryToggleChanged);
+            categoryToggle.isOn = currentCategoryIndex != 0;
+            categoryToggle.onValueChanged.AddListener(OnCategoryToggleChanged);
+        }
+        UpdateCategoryToggleUI();
+    }
+
+    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄 · 삭제) — 아니면 '장소 수정 요청'(수정할 내용 칸)</summary>
+    private void SetOwnerMode(bool mine)
+    {
+        ownerMode = mine;
+        if (localizer != null) localizer.SetOwnerMode(mine);
+        if (descriptionInput != null) descriptionInput.gameObject.SetActive(!mine);
+        SetUIActive(descriptionLabel, !mine);
+        SetUIActive(locationLabel, mine);
+        SetUIActive(locationRow, mine);
+        SetUIActive(deletePlaceButton != null ? deletePlaceButton.gameObject : null, mine);
+        if (moveHereToggle != null) moveHereToggle.isOn = false;
+        if (submitLabel != null)
+        {
+            if (mine) submitLabel.Set("수정하기", "Save changes", "保存する", "保存修改", "Guardar cambios");
+            else submitLabel.Set("수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud");
+        }
+        RefreshLocation(true);
+    }
+
+    private void AddSub(Texture2D tex, string keepPath)
+    {
+        subPhotos.Add(tex);
+        subKeepPaths.Add(keepPath);
+    }
+
+    /// <summary>추가 사진 x — 그 사진만 빼고 뒤 사진을 당긴다</summary>
+    private void RemoveSub(int i)
+    {
+        if (isProcessing || i < 0 || i >= subPhotos.Count) return;
+        Destroy(subPhotos[i]);
+        subPhotos.RemoveAt(i);
+        if (i < subKeepPaths.Count) subKeepPaths.RemoveAt(i);
+        UpdateSubPhotoGrid();
+    }
+
+    /// <summary>대표 사진 x — 빼면 저장 전에 새 대표 사진을 넣어야 한다 (대표 사진은 꼭 있어야 한다)</summary>
+    private void RemoveMain()
+    {
+        if (isProcessing) return;
+        if (mainPhoto != null) Destroy(mainPhoto);
+        mainPhoto = null;
+        mainKeepPath = null;
+        SetMainSprite(null);
+        if (mainPhotoDisplay != null) mainPhotoDisplay.gameObject.SetActive(false);
+    }
+
+    private void AskDelete()
+    {
+        if (isProcessing || !ownerMode || editId <= 0 || removeRequest == null) return;
+        removeRequest.AskOwnerDelete(editId);
+    }
+
+    private void OnPlaceDeleted(int id)
+    {
+        if (id != editId) return;
+        loadGen++;
+        SetUIActive(fixUIPanel, false);
+        ResetToInitialState();
+        editId = 0;
+    }
+
+    // 위치 줄 — 장소 좌표 · 지금 내 위치에서 얼마나 떨어졌나 (스위치를 켜면 저장할 때 지금 위치로 옮긴다)
+    private void RefreshLocation(bool force)
+    {
+        if (!ownerMode || locationRow == null) return;
+        if (!force && Time.unscaledTime < nextNoteAt) return;
+        nextNoteAt = Time.unscaledTime + 1f;
+        if (locationCoords != null)
+            locationCoords.text = hasPlaceCoords
+                ? placeLat.ToString("F4", CultureInfo.InvariantCulture) + ", " + placeLon.ToString("F4", CultureInfo.InvariantCulture)
+                : "—";
+        if (locationNote == null) return;
+        locationNote.color = noteColor;
+        bool move = moveHereToggle != null && moveHereToggle.isOn;
+        if (!TryGetHere(out double lat, out double lon, out _))
+        {
+            locationNote.text = R0926LocalizedText.Say("지금 위치를 찾는 중…", "Finding your location…", "現在地を取得中…", "正在获取你的位置…", "Buscando tu ubicación…");
+            return;
+        }
+        if (!hasPlaceCoords)
+        {
+            locationNote.text = move ? R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요", "Saving moves it to where you are", "保存すると現在地に移動します", "保存后移到你现在的位置", "Al guardar se moverá a tu ubicación") : "";
+            return;
+        }
+        double m = Meters(placeLat, placeLon, lat, lon);
+        string d = m < 1000 ? Mathf.RoundToInt((float)m) + "m" : (m / 1000).ToString("0.#", CultureInfo.InvariantCulture) + "km";
+        if (!move)
+            locationNote.text = R0926LocalizedText.Say("지금 내 위치에서 " + d, d + " from you", "現在地から" + d, "距你 " + d, "A " + d + " de ti");
+        else if (m > 1000)
+        {
+            locationNote.text = R0926LocalizedText.Say(d + " 떨어진 지금 위치로 옮겨져요", "It will move " + d + " to where you are", d + "離れた現在地に移動します", "将移到 " + d + " 外你现在的位置", "Se moverá " + d + " hasta tu ubicación");
+            locationNote.color = new Color(1f, 0.42f, 0.42f, 1f);   // 멀리 옮기는 건 실수일 수 있다
+        }
+        else
+            locationNote.text = R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요 · " + d, "Saving moves it to where you are · " + d, "保存すると現在地に移動します · " + d, "保存后移到你现在的位置 · " + d, "Al guardar se moverá a tu ubicación · " + d);
+    }
+
+    // 지금 내 위치 — 장소 추가와 같은 차례 (Geospatial → 휴대폰 위치 + 고도 보정 · 에디터는 가상 위치)
+    private bool TryGetHere(out double lat, out double lon, out double alt)
+    {
+#if UNITY_EDITOR
+        VirtualLocation v = VirtualLocation.Instance;
+        lat = v.Latitude;
+        lon = v.Longitude;
+        alt = v.Altitude;
+        return true;
+#else
+        if (earthManager != null && earthManager.EarthTrackingState == TrackingState.Tracking)
+        {
+            var pose = earthManager.CameraGeospatialPose;
+            lat = pose.Latitude;
+            lon = pose.Longitude;
+            alt = pose.Altitude;
+            return true;
+        }
+        if (Input.location.status == LocationServiceStatus.Running)
+        {
+            LocationInfo d = Input.location.lastData;
+            lat = d.latitude;
+            lon = d.longitude;
+            alt = GeoidHelper.NormalizeAltitude((double)d.altitude, lat, lon);
+            return !(lat == 0 && lon == 0);
+        }
+        lat = lon = alt = 0;
+        return false;
+#endif
+    }
+
+    private static double Meters(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double R = 6371000.0, Rad = Math.PI / 180.0;
+        double dLat = (lat2 - lat1) * Rad, dLon = (lon2 - lon1) * Rad;
+        double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(lat1 * Rad) * Math.Cos(lat2 * Rad) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return 2 * R * Math.Asin(Math.Min(1.0, Math.Sqrt(a)));
+    }
+
+    // 장소 추가가 올리는 색과 같게 — 장면의 업로드 매니저 값(인스펙터에서 바꾼 색 포함)을 먼저
+    private Color UploadColor(string category)
+    {
+        CubeUploadManager up = FindFirstObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+        return up != null ? up.GetCategoryColor(category) : GetCategoryColor(category);
+    }
+
+    private IEnumerator SubmitOwnerEdit(string name, bool petFriendly, bool separateRestroom, string instagramID)
+    {
+        // 옮기기를 켰으면 지금 위치 — 못 읽으면 보내지 않는다 (엉뚱한 곳으로 옮기지 않게)
+        bool move = moveHereToggle != null && moveHereToggle.isOn;
+        double lat = 0, lon = 0, alt = 0;
+        if (move && !TryGetHere(out lat, out lon, out alt))
+        {
+            ShowWarning(R0926LocalizedText.Say("지금 위치를 아직 못 찾았어요", "Can't find your location yet", "現在地がまだ見つかりません", "还没找到你的位置", "Aún no encontramos tu ubicación"));
+            isProcessing = true;
+            yield break;
+        }
+
+        ShowUploadProgress(0);
+        yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
+
+        WWWForm form = new WWWForm();
+        form.AddField("name", name);
+        form.AddField("category", selectedCategory);
+        if (selectedCategory != loadedCategory && Array.IndexOf(categoryValues, selectedCategory) > 0)
+            form.AddField("color", ColorUtility.ToHtmlStringRGB(UploadColor(selectedCategory)));   // 분류를 바꿨을 때만 — 그대로면 원래 색
+        form.AddField("pet_friendly", petFriendly ? "true" : "false");
+        form.AddField("separate_restroom", separateRestroom ? "true" : "false");
+        form.AddField("instagram_id", instagramID);
+
+        if (mainKeepPath != null) form.AddField("main", "keep");
+        else
+        {
+            Texture2D resized = ResizeTextureWithRenderTexture(mainPhoto, 444, 444);
+            byte[] bytes = resized.EncodeToJPG(50);
+            Destroy(resized);
+            form.AddField("main", "new");
+            form.AddBinaryData("main_photo", bytes, "main.jpg", "image/jpeg");
+        }
+
+        // 추가 사진 — 보이는 순서대로, 서버에 있던 것은 경로 · 새로 고른 것은 "new:n" (n 번째 sub_photos 파일)
+        List<string> plan = new List<string>();
+        int fresh = 0;
+        for (int i = 0; i < subPhotos.Count && i < MAX_SUB_PHOTOS; i++)
+        {
+            string keep = i < subKeepPaths.Count ? subKeepPaths[i] : null;
+            if (keep != null)
+            {
+                plan.Add(keep);
+                continue;
+            }
+            Texture2D resized = ResizeTextureKeepAspectWithRenderTexture(subPhotos[i], 800, 800);
+            byte[] bytes = resized.EncodeToJPG(50);
+            Destroy(resized);
+            if (bytes.Length == 0) continue;
+            plan.Add("new:" + fresh);
+            form.AddBinaryData("sub_photos", bytes, "sub_" + (fresh + 1) + ".jpg", "image/jpeg");
+            fresh++;
+        }
+        form.AddField("subs", JsonConvert.SerializeObject(plan));
+
+        if (move)
+        {
+            form.AddField("latitude", lat.ToString("F6", CultureInfo.InvariantCulture));
+            form.AddField("longitude", lon.ToString("F6", CultureInfo.InvariantCulture));
+            form.AddField("altitude", alt.ToString("F2", CultureInfo.InvariantCulture));
+        }
+
+        using (UnityWebRequest www = UnityWebRequest.Post(PlaceUrl(editId, "/edit"), form))
+        {
+            LoginManager.ApplyAuth(www);
+            bool timedOut = false;
+            yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
+            HideBusy();
+
+            if (timedOut)
+            {
+                isProcessing = true;   // 입력은 그대로 — 다시 누를 수 있다
+                ShowWarning(GetLocalizedText("request_timeout"));
+                yield break;
+            }
+
+            PlaceEditResponse res = PlaceEditResponse.Parse(www.downloadHandler != null ? www.downloadHandler.text : null);
+            if (www.result == UnityWebRequest.Result.Success && res != null && res.ok && res.place != null)
+            {
+                if (DataManager.Instance != null) DataManager.Instance.ApplyEditedPlace(res.place, res.moved);
+                isProcessing = false;
+                ShowWarning(R0926LocalizedText.Say("고쳤어요", "Saved", "保存しました", "已保存", "Guardado"));
+                SetUIActive(fixUIPanel, false);
+                ResetToInitialState();
+                yield break;
+            }
+
+            LoginManager.CheckUnauthorized(www);
+            string err = res != null ? res.error ?? "" : "";
+            Debug.LogWarning($"[CubeDataFixManager] 고치기 실패 id={editId}: {www.responseCode} {err} {www.error}");
+            if (err == "not_owner") SetOwnerMode(false);   // 이름만 같은 남의 장소 — 이제 수정 요청으로 보낼 수 있다
+            isProcessing = true;
+            ShowWarning(EditError(err));
+        }
+    }
+
+    private string EditError(string code)
+    {
+        switch (code)
+        {
+            case "login_required": return R0926LocalizedText.Say("로그인이 필요해요", "Please log in", "ログインが必要です", "请先登录", "Inicia sesión");
+            case "not_owner": return R0926LocalizedText.Say("내가 올린 장소가 아니에요 — 수정 요청으로 보내 주세요", "Not your place — send it as a request", "自分の場所ではありません — 修正依頼として送ってください", "不是你上传的地点 — 请提交修改申请", "No es tu lugar — envíalo como solicitud");
+            case "not_found": return R0926LocalizedText.Say("이미 지워진 장소예요", "This place was deleted", "この場所は削除されています", "该地点已被删除", "Este lugar fue eliminado");
+            case "unknown_photo": return R0926LocalizedText.Say("다른 곳에서 고쳐진 장소예요 — 다시 열어 주세요", "Changed elsewhere — open it again", "他の場所で変更されました — もう一度開いてください", "已在别处修改 — 请重新打开", "Se cambió en otro lugar — ábrelo de nuevo");
+            case "bad_photo": return R0926LocalizedText.Say("사진을 읽지 못했어요 — 다른 사진으로 해 주세요", "Couldn't read a photo — try another", "写真を読み込めませんでした — 別の写真にしてください", "无法读取照片 — 请换一张", "No se pudo leer una foto — prueba con otra");
+            case "bad_location": return R0926LocalizedText.Say("지금 위치가 이상해요 — 잠시 뒤 다시 해 주세요", "Your location looks wrong — try again", "現在地が正しくありません — 後でもう一度", "你的位置异常 — 请稍后再试", "Tu ubicación no es válida — inténtalo de nuevo");
+            case "name_too_long": return R0926LocalizedText.Say("이름이 너무 길어요", "The name is too long", "名前が長すぎます", "名称太长", "El nombre es demasiado largo");
+            case "too_large": return R0926LocalizedText.Say("사진이 너무 커요", "Photos are too large", "写真が大きすぎます", "照片太大", "Las fotos son demasiado grandes");
+            default: return GetLocalizedText("server_error");
         }
     }
     #endregion
@@ -1575,6 +2070,8 @@ public class CubeDataFixManager : MonoBehaviour
             Destroy(photo);
         }
         subPhotos.Clear();
+        subKeepPaths.Clear();
+        mainKeepPath = null;
 
         if (mainPhotoDisplay != null) 
         {
@@ -1626,6 +2123,9 @@ public class CubeDataFixManager : MonoBehaviour
         }
         UpdateCategoryToggleUI();
 
+        loadedCategory = "";
+        hasPlaceCoords = false;
+        if (moveHereToggle != null) moveHereToggle.isOn = false;
         isProcessing = false;
     }
     #endregion
@@ -1646,4 +2146,28 @@ public class CubeDataFixManager : MonoBehaviour
         ResetToInitialState();
     }
     #endregion
+}
+
+/// <summary>GET /api/place/&lt;id&gt; · POST /api/place/&lt;id&gt;/edit · DELETE /api/place/&lt;id&gt; 의 답</summary>
+public class PlaceEditResponse
+{
+    public bool ok;
+    public bool mine;
+    public bool moved;
+    public string error;
+    public PlaceData place;
+
+    /// <summary>JSON 이 아니면(옛 서버의 404 화면 등) null</summary>
+    public static PlaceEditResponse Parse(string json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try
+        {
+            return JsonConvert.DeserializeObject<PlaceEditResponse>(json, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }
