@@ -62,6 +62,7 @@ public static class R0926HuntApi
             if (!string.IsNullOrEmpty(EditorTestUser)) req.SetRequestHeader("X-Test-User", EditorTestUser);
 #endif
             yield return req.SendWebRequest();
+            LoginManager.CheckUnauthorized(req);   // 401 이면 로그인이 살아 있는지 서버에 확인 — 죽었으면 다시 로그인하라고
             JSONNode j = null;
             try { j = JSON.Parse(req.downloadHandler != null ? req.downloadHandler.text : ""); }
             catch (Exception) { j = null; }
@@ -89,6 +90,7 @@ public static class R0926HuntApi
             if (!string.IsNullOrEmpty(EditorTestUser)) req.SetRequestHeader("X-Test-User", EditorTestUser);
 #endif
             yield return req.SendWebRequest();
+            LoginManager.CheckUnauthorized(req);   // 401 이면 로그인이 살아 있는지 서버에 확인 — 죽었으면 다시 로그인하라고
             JSONNode j = null;
             try { j = JSON.Parse(req.downloadHandler != null ? req.downloadHandler.text : ""); }
             catch (Exception) { j = null; }

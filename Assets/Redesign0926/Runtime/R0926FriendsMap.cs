@@ -134,6 +134,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private double zoom = 1;
     private D2 origin;               // 지도 왼쪽 위 모서리 — viewport 왼쪽 위 기준, 아래가 +
     private bool sharing, loggedIn, loaded, fitted, busy, mapShown, netError;
+    /// <summary>서버가 401 — 로그인(토큰)이 만료됐다. 인터넷 문제가 아니다</summary>
+    private bool authError;
     private bool touched;            // 마지막으로 맞춘 뒤 손으로 움직였다 — 보물찾기 목록이 바뀌어도 다시 맞추지 않는다
     private int mutual;
     private string selectedId;
@@ -263,7 +265,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private IEnumerator Fetch()
     {
         loggedIn = LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null && !string.IsNullOrEmpty(LoginManager.Instance.CurrentUser.id);
-        if (!loggedIn) { loaded = true; netError = false; Refresh(); yield break; }
+        if (!loggedIn) { loaded = true; netError = false; authError = false; Refresh(); yield break; }
 
         busy = true;
         using (var req = UnityWebRequest.Get(Api(ApiConfig.P2P_SERVER + "/api/p2p/friends_map")))
@@ -274,7 +276,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             busy = false;
             if (req.result != UnityWebRequest.Result.Success)
             {
-                if (!loaded) { loaded = true; netError = true; Refresh(); }
+                // 401 은 로그인 만료 — '인터넷 연결을 확인' 이라고 하면 엉뚱한 데를 고치게 된다 (2026-10-25 goosoon56)
+                bool auth = LoginManager.CheckUnauthorized(req);
+                if (auth && !authError) nextRefresh = Time.unscaledTime + 5f;   // 서버 확인(토큰이 살아 있으면 새 토큰까지)이 끝난 뒤 곧 다시 받아 본다
+                if (!loaded || auth != authError) { loaded = true; netError = !auth; authError = auth; Refresh(); }
                 yield break;
             }
             Resp r = null;
@@ -287,6 +292,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             UseNearby();
             loaded = true;
             netError = false;
+            authError = false;
             Refresh();
         }
     }
@@ -329,8 +335,15 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         req.timeout = 10;
         yield return req.SendWebRequest();
         bool ok = req.result == UnityWebRequest.Result.Success;
+        bool auth = LoginManager.CheckUnauthorized(req);
         req.Dispose();
         busy = false;
+        if (auth)
+        {
+            authError = true;
+            Refresh();
+            yield break;
+        }
         if (!ok)
         {
             if (ToastManager.Instance != null) ToastManager.Instance.ShowError(L("지금은 바꿀 수 없어요. 잠시 후 다시 해 주세요", "Couldn't change it now. Try again shortly",
@@ -356,17 +369,21 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private void Refresh()
     {
         // 보물찾기 게임이 지도에 있으면 위치 공유를 꺼 두었어도 지도를 가리지 않는다 — 공유 스위치는 아래 줄에 그대로
-        bool showConsent = !loggedIn || netError || (!sharing && !HasHuntMarkers);
+        bool showConsent = !loggedIn || netError || authError || (!sharing && !HasHuntMarkers);
         if (dim != null) dim.SetActive(showConsent);
         if (consentCard != null) consentCard.SetActive(showConsent);
-        if (consentSwitchRow != null) consentSwitchRow.SetActive(loggedIn && !netError);
+        if (consentSwitchRow != null) consentSwitchRow.SetActive(loggedIn && !netError && !authError);
         if (consentSwitch != null) consentSwitch.sprite = sharing ? switchOn : switchOff;
         if (shareSwitch != null) shareSwitch.sprite = sharing ? switchOn : switchOff;
 
         if (consentTitle != null) consentTitle.text = L("친구 지도", "Friends map", "友だちマップ", "好友地图", "Mapa de amigos");
         if (consentBody != null)
         {
-            consentBody.text = netError
+            consentBody.text = authError
+                ? L("로그인이 만료됐어요. 다시 로그인하면 친구 위치를 볼 수 있어요.", "Your login has expired. Log in again to see your friends.",
+                    "ログインの有効期限が切れました。もう一度ログインすると友だちの位置が見られます。", "登录已过期。重新登录后即可查看好友位置。",
+                    "Tu sesión ha caducado. Inicia sesión de nuevo para ver a tus amigos.")
+                : netError
                 ? L("친구 위치를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.", "Couldn't load friends' locations. Check your connection.",
                     "友だちの位置を読み込めませんでした。接続を確認してください。", "无法加载好友位置，请检查网络。", "No se pudieron cargar las ubicaciones. Revisa tu conexión.")
                 : !loggedIn
@@ -1361,10 +1378,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     }
 
     // 멀리 있는 친구는 약 1km 칸이라 1km 아래는 '1km' — 근처 친구(정확한 자리)는 10m 단위
-    private static string Dist(float km, bool exact) =>
+    internal static string Dist(float km, bool exact) =>
         km >= 1f ? Mathf.RoundToInt(km).ToString("N0") + "km" : exact ? Mathf.Max(10, Mathf.RoundToInt(km * 100f) * 10) + "m" : "1km";
 
-    private static string Ago(int sec)
+    internal static string Ago(int sec)
     {
         if (sec < 180) return L("방금", "just now", "たった今", "刚刚", "ahora");
         if (sec < 3600) return string.Format(L("{0}분 전", "{0}m ago", "{0}分前", "{0}分钟前", "hace {0} min"), sec / 60);

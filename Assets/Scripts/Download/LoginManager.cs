@@ -27,6 +27,17 @@ public class LoginManager : MonoBehaviour
             request.SetRequestHeader("Authorization", "Bearer " + stored);
     }
 
+    /// <summary>
+    /// 토큰을 붙인 요청이 끝난 뒤 부른다 — 401 이면 true. 로그인 중이었으면 서버에 토큰을 한 번 확인해
+    /// 정말 죽었을 때만 로그아웃하고 다시 로그인하라고 알린다 (401 한 번으로 내보내면 서버 한 곳의 일시 오류에도 로그인이 풀린다)
+    /// </summary>
+    public static bool CheckUnauthorized(UnityWebRequest request)
+    {
+        if (request == null || request.responseCode != 401) return false;
+        if (Instance != null && Instance.IsLoggedIn) Instance.RecheckToken();
+        return true;
+    }
+
     public event Action<bool> OnLoginStateChanged;
     /// <summary>로그아웃 직전 — 토큰이 아직 있을 때 그 계정으로 서버에 남긴 것을 내린다 (P2PManager 의 근처 사람 위치)</summary>
     public event Action OnLoggingOut;
@@ -52,6 +63,11 @@ public class LoginManager : MonoBehaviour
     public string CurrentUsername => CurrentUser?.username;
 
     private string currentLang = "en";
+
+    private bool recheckRunning;
+    private string recheckToken;   // 마지막으로 서버에 물어본 토큰 — 같은 토큰은 1분에 한 번까지 (다시 로그인한 새 토큰은 바로)
+    private float recheckAt = -999f;
+    private Coroutine expiredPromptCo;
 
 #if UNITY_EDITOR
     [Header("=== 에디터 로그인 ===")]
@@ -157,6 +173,16 @@ public class LoginManager : MonoBehaviour
 
     void OnApplicationFocus(bool hasFocus)
     {
+        // 켜 둔 채로도 토큰은 만료된다 — 돌아올 때 확인. 하루 넘은 토큰이면 서버에 물어 새 토큰을 받아 둔다 (껐다 켜지 않고 며칠을 써도 풀리지 않게)
+        if (hasFocus && IsLoggedIn)
+        {
+            if (StoredTokenDead())
+            {
+                ExpireSession();
+                return;
+            }
+            if (StoredTokenStale()) RecheckToken();
+        }
         if (hasFocus && !IsLoggedIn)
         {
             // 웹 로그인 후 앱 복귀 시 딥링크가 누락된 경우 대비
@@ -211,6 +237,15 @@ public class LoginManager : MonoBehaviour
                     case "es": return "Se requiere inicio de sesión.\n¿Quieres iniciar sesión?";
                     default: return "Login is required for this feature.\nDo you want to log in?";
                 }
+            case "session_expired":
+                switch (currentLang)
+                {
+                    case "ko": return "로그인이 만료됐어요.\n다시 로그인할까요?";
+                    case "ja": return "ログインの有効期限が切れました。\nもう一度ログインしますか？";
+                    case "zh": return "登录已过期。\n要重新登录吗？";
+                    case "es": return "Tu sesión ha caducado.\n¿Quieres iniciar sesión de nuevo?";
+                    default: return "Your login has expired.\nLog in again?";
+                }
             default:
                 return key;
         }
@@ -228,6 +263,14 @@ public class LoginManager : MonoBehaviour
 
         if (!string.IsNullOrEmpty(savedUserId) && !string.IsNullOrEmpty(savedUsername))
         {
+            // 토큰이 없거나 만료됐으면 로그인된 척하지 않는다 — 화면은 로그인 상태인데 토큰이 필요한 기능(친구 지도·DM·보물찾기·위치 공유)이
+            // 모두 401 이라 다시 로그인할 길도 안 보였다 (2026-10-25 goosoon56 — 안드로이드 백업이 옛 토큰을 되살려 앱을 지웠다 깔아도 그대로)
+            if (StoredTokenDead())
+            {
+                ExpireSession();
+                return;
+            }
+
             CurrentUser = new UserData
             {
                 id = savedUserId,
@@ -240,6 +283,9 @@ public class LoginManager : MonoBehaviour
 
             // 자동 로그인 시에도 FCM 토큰에 user_id 연결 (앱 재시작 시)
             StartCoroutine(DelayedTokenRegistration(savedUserId));
+
+            // 서명·탈퇴 여부는 서버만 안다 — 켤 때 한 번 확인 (서버가 오래된 토큰을 새 토큰으로 바꿔 주면 그것도 받는다)
+            RecheckToken();
         }
         else
         {
@@ -252,6 +298,127 @@ public class LoginManager : MonoBehaviour
         // Firebase 초기화 대기
         yield return new WaitForSeconds(3f);
         RegisterFCMTokenWithUserId(userId);
+    }
+
+    [Serializable]
+    private class JwtClaims { public double exp, iat; }
+
+    /// <summary>JWT 의 만료 · 발급 시각(유닉스 초) — JWT 가 아니거나 읽을 수 없으면 null (서명은 서버가 본다)</summary>
+    private static JwtClaims TokenClaims(string token)
+    {
+        string[] parts = token.Split('.');
+        if (parts.Length != 3) return null;
+        try
+        {
+            string b64 = parts[1].Replace('-', '+').Replace('_', '/');
+            b64 += new string('=', (4 - b64.Length % 4) % 4);
+            return JsonUtility.FromJson<JwtClaims>(System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64)));
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 저장된 토큰을 더는 못 쓰는가 — 없거나(실기기) 만료된 JWT.
+    /// 에디터 로그인(EditorLogin)은 토큰 없이 쓰고, 플레이 시험의 시험 토큰은 JWT 가 아니라 여기서 판단하지 않는다
+    /// </summary>
+    private static bool StoredTokenDead()
+    {
+        string jwt = PlayerPrefs.GetString(AUTH_TOKEN_KEY, "");
+        if (string.IsNullOrEmpty(jwt)) return !Application.isEditor;
+        double exp = TokenClaims(jwt)?.exp ?? 0;
+        return exp > 0 && exp < DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 60;
+    }
+
+    /// <summary>하루 넘은 토큰 — 서버에 물으면 새 토큰으로 바꿔 준다. 이번에 이미 물어본 토큰이면 다시 묻지 않는다 (180일이 지나 서버가 더 늘려 주지 않는 토큰)</summary>
+    private bool StoredTokenStale()
+    {
+        string jwt = PlayerPrefs.GetString(AUTH_TOKEN_KEY, "");
+        if (string.IsNullOrEmpty(jwt) || jwt == recheckToken) return false;
+        double iat = TokenClaims(jwt)?.iat ?? 0;
+        return iat > 0 && iat < DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 86400;
+    }
+
+    /// <summary>저장된 토큰을 서버에 확인한다 — 서버가 분명히 거절할 때만 로그아웃 (연결이 안 되거나 서버 오류면 그대로). 같은 토큰은 1분에 한 번까지</summary>
+    private void RecheckToken()
+    {
+#if UNITY_EDITOR
+        if (string.IsNullOrEmpty(EditorAuthBase)) return;   // 에디터는 시험 서버로 돌릴 때만 — 시험 토큰을 운영 서버에 묻지 않게
+#endif
+        string jwt = PlayerPrefs.GetString(AUTH_TOKEN_KEY, "");
+        if (string.IsNullOrEmpty(jwt) || recheckRunning || (jwt == recheckToken && Time.unscaledTime - recheckAt < 60f)) return;
+        StartCoroutine(RecheckTokenCo(jwt));
+    }
+
+    private IEnumerator RecheckTokenCo(string token)
+    {
+        recheckRunning = true;
+        recheckToken = token;
+        recheckAt = Time.unscaledTime;
+        using (UnityWebRequest request = VerifyRequest(token))
+        {
+            request.timeout = 15;
+            yield return request.SendWebRequest();
+            recheckRunning = false;
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                recheckToken = null;   // 연결이 안 됐다 — 다음에 돌아올 때 다시 묻는다
+                yield break;
+            }
+
+            AuthVerifyResponse response = null;
+            try { response = JsonUtility.FromJson<AuthVerifyResponse>(request.downloadHandler.text); }
+            catch (Exception) { }
+            // 그 사이 로그아웃했거나 다른 토큰으로 새로 로그인했으면 이 결과는 버린다
+            if (response == null || !IsLoggedIn || PlayerPrefs.GetString(AUTH_TOKEN_KEY, "") != token) yield break;
+
+            if (response.success)
+            {
+                if (!string.IsNullOrEmpty(response.token) && response.token != token)
+                {
+                    PlayerPrefs.SetString(AUTH_TOKEN_KEY, response.token);   // 쓰는 동안은 만료되지 않게 서버가 늘려 준 토큰
+                    PlayerPrefs.Save();
+                }
+                yield break;
+            }
+            if (response.message != "Invalid or expired token" && response.message != "User not found") yield break;   // 'Server error' 등은 그대로 둔다
+            Debug.LogWarning($"[LoginManager] 서버가 저장된 로그인을 거절해 로그아웃합니다: {response.message}");
+            ExpireSession();
+        }
+    }
+
+    /// <summary>토큰이 죽었다 — 로그아웃 상태로 돌리고, 시작화면이 끝나면 다시 로그인하라고 알린다</summary>
+    private void ExpireSession()
+    {
+        if (CurrentUser != null)
+        {
+            Logout();
+        }
+        else
+        {
+            // 앱을 켜는 중 (Awake) — 아직 아무도 로그인 상태를 받지 않았다. 푸시 연결은 Firebase 가 뜬 뒤에 끊는다
+            string userId = PlayerPrefs.GetString("SavedUserId", "");
+            ClearSavedLogin();
+            StartCoroutine(DelayedUnregister(userId));
+        }
+        if (expiredPromptCo == null) expiredPromptCo = StartCoroutine(ShowExpiredPrompt());
+    }
+
+    private IEnumerator DelayedUnregister(string userId)
+    {
+        yield return new WaitForSeconds(3f);
+        UnregisterFCMToken(userId);
+    }
+
+    private IEnumerator ShowExpiredPrompt()
+    {
+        yield return null;   // 시작화면이 이번 프레임 Awake 에서 켜진다
+        while (FindFirstObjectByType<R0926Splash>() != null) yield return new WaitForSecondsRealtime(0.25f);
+        yield return new WaitForSecondsRealtime(0.5f);
+        expiredPromptCo = null;
+        if (!IsLoggedIn) ShowLoginPrompt(GetLocalizedText("session_expired"));
     }
 
     #endregion
@@ -322,21 +489,24 @@ public class LoginManager : MonoBehaviour
         StartCoroutine(VerifyTokenAndLogin(token));
     }
 
-    private IEnumerator VerifyTokenAndLogin(string jwtToken)
+    private static UnityWebRequest VerifyRequest(string jwtToken)
     {
         string verifyUrl = $"{ApiConfig.MAIN_SERVER}/api/auth/verify";
 #if UNITY_EDITOR
         if (!string.IsNullOrEmpty(EditorAuthBase)) verifyUrl = EditorAuthBase + "/api/auth/verify";
 #endif
         string jsonBody = $"{{\"token\":\"{jwtToken}\"}}";
+        var request = new UnityWebRequest(verifyUrl, "POST");
+        request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody));
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+        return request;
+    }
 
-        using (UnityWebRequest request = new UnityWebRequest(verifyUrl, "POST"))
+    private IEnumerator VerifyTokenAndLogin(string jwtToken)
+    {
+        using (UnityWebRequest request = VerifyRequest(jwtToken))
         {
-            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -405,18 +575,23 @@ public class LoginManager : MonoBehaviour
         CurrentUser = null;
         IsGuest = false;
 
-        PlayerPrefs.DeleteKey(AUTH_TOKEN_KEY);
-        PlayerPrefs.DeleteKey("SavedUserId");
-        PlayerPrefs.DeleteKey("SavedUsername");
-        PlayerPrefs.DeleteKey("LoginProvider");
-        PlayerPrefs.DeleteKey("IsGuest");
-        PlayerPrefs.Save();
+        ClearSavedLogin();
 
         // FCM 토큰에서 user_id 제거 (푸시 알림 수신 중지)
         UnregisterFCMToken(previousUserId);
 
         OnLoginStateChanged?.Invoke(false);
         UpdateProfileUI();
+    }
+
+    private static void ClearSavedLogin()
+    {
+        PlayerPrefs.DeleteKey(AUTH_TOKEN_KEY);
+        PlayerPrefs.DeleteKey("SavedUserId");
+        PlayerPrefs.DeleteKey("SavedUsername");
+        PlayerPrefs.DeleteKey("LoginProvider");
+        PlayerPrefs.DeleteKey("IsGuest");
+        PlayerPrefs.Save();
     }
 
     #endregion
@@ -453,16 +628,13 @@ public class LoginManager : MonoBehaviour
 
     #region Login Prompt Popup
 
-    public void ShowLoginRequirementPopup()
+    public void ShowLoginRequirementPopup() => ShowLoginPrompt(GetLocalizedText("login_required"));
+
+    private void ShowLoginPrompt(string message)
     {
-        if (loginPromptPanel != null)
-        {
-            if (promptText != null)
-            {
-                promptText.text = GetLocalizedText("login_required");
-            }
-            loginPromptPanel.SetActive(true);
-        }
+        if (loginPromptPanel == null) return;
+        if (promptText != null) promptText.text = message;
+        loginPromptPanel.SetActive(true);
     }
 
     public void CloseLoginPrompt()
@@ -551,6 +723,7 @@ public class AuthVerifyResponse
     public bool success;
     public string message;
     public AuthVerifyData data;
+    public string token;   // 서버가 오래된 토큰 대신 새로 준 토큰 (없으면 빈 값)
 }
 
 [System.Serializable]
