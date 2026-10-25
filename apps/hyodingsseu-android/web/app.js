@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-25a';
+  const WEB_VERSION = '2026-10-25b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -628,6 +628,7 @@
 
   const speaker = {
     speaking: false, via: null, audio: null, url: null, itemId: null, gen: 0,
+    spare: null,                                            // 다음 묶음을 미리 올려 둔 재생기 { a, url, blob }
 
     set(on, via) {
       this.speaking = on;
@@ -669,18 +670,52 @@
       return a.play().then(() => this.set(true, 'audio'));
     },
 
+    /** 읽는 동안 받은 다음 묶음을 두 번째 재생기에 미리 올려 둔다 — 앞 묶음이 끝나자마자 곧바로 이어진다(10/25) */
+    preload(blob) {
+      if (!blob || /json/.test(blob.type)) return;
+      this.dropSpare();
+      const a = new Audio();
+      a.preload = 'auto';
+      const url = URL.createObjectURL(blob);
+      a.src = url;
+      a.load();
+      this.spare = { a, url, blob };
+    },
+
+    dropSpare() {
+      if (!this.spare) return;
+      this.spare.a.removeAttribute('src');
+      URL.revokeObjectURL(this.spare.url);
+      this.spare = null;
+    },
+
     /** PC 소희 「읽기」 묶음 하나를 끝까지 읽고 풀린다 — 다음 묶음이 이어진다. last 면 다 읽은 뒤 읽기를 끝낸다.
-     *  재생기는 다시 쓴다(iOS 는 한 번 튼 재생기를 계속 틀게 해 준다). */
+     *  미리 올려 둔 재생기가 있으면 그것을 틀고, 못 틀면(브라우저가 막으면) 쓰던 재생기를 다시 쓴다(iOS 는 한 번 튼 재생기를 계속 틀게 해 준다). */
     playPart(blob, last) {
       return new Promise((resolve, reject) => {
-        if (this.url) URL.revokeObjectURL(this.url);
-        this.url = URL.createObjectURL(blob);
-        const a = this.audio || (this.audio = new Audio());
-        a.onended = () => { if (this.audio !== a) return; if (last) this.stop(); resolve(); };
-        a.onerror = () => { if (this.audio === a) this.stop(); reject(new Error('소리를 틀지 못했어요')); };
-        a.src = this.url;
-        a.play().then(() => { if (!this.speaking) this.set(true, 'audio'); },
-          e => { if (this.audio === a) this.stop(); reject(e); });
+        const old = this.audio;
+        const start = (a, url) => {
+          if (this.url && this.url !== url) URL.revokeObjectURL(this.url);
+          this.url = url;
+          this.audio = a;
+          a.onended = () => { if (this.audio !== a) return; if (last) this.stop(); resolve(); };
+          a.onerror = () => { if (this.audio === a) this.stop(); reject(new Error('소리를 틀지 못했어요')); };
+          return a.play().then(() => { if (!this.speaking) this.set(true, 'audio'); });
+        };
+        const fresh = () => {
+          const a = old || new Audio();
+          const url = URL.createObjectURL(blob);
+          a.src = url;
+          return start(a, url);
+        };
+        const sp = this.spare && this.spare.blob === blob ? this.spare : null;
+        let run;
+        if (sp) {
+          this.spare = null;
+          if (old) { old.onended = old.onerror = null; old.pause(); }
+          run = start(sp.a, sp.url).catch(() => { sp.a.onended = sp.a.onerror = null; return fresh(); });
+        } else run = fresh();
+        run.catch(e => { this.stop(); reject(e); });
       });
     },
 
@@ -692,6 +727,7 @@
       if (this.via === 'web' && window.speechSynthesis) speechSynthesis.cancel();
       if (this.audio) { this.audio.onended = this.audio.onerror = null; this.audio.pause(); this.audio = null; }
       if (this.url) { URL.revokeObjectURL(this.url); this.url = null; }
+      this.dropSpare();
       if (this.speaking || this.itemId != null) this.set(false);
     },
   };
@@ -731,8 +767,10 @@
       const plan = JSON.parse(await first.text());
       const part = async i => {
         for (;;) {                                                     // 아직 만드는 중이면(202) 다시 묻는다
+          const t0 = Date.now();
           const b = await api.request('tts', { method: 'POST', body: JSON.stringify({ id: plan.id, part: i }), timeout: 60000, as: 'blob' });
           if (!/json/.test(b.type) || !alive()) return b;
+          if (Date.now() - t0 < 300) await sleep(300);                // 곧바로 「아직」이면 잠깐 쉬고 — 쉼 없이 물으면 소리 만드는 PC 를 붙잡는다
         }
       };
       let next = part(0);
@@ -741,7 +779,7 @@
         try { blob = await next; } catch (e) { if (i === 0) throw e; }   // 첫 묶음이 안 되면 폰 목소리로 · 중간 묶음은 건너뛴다
         if (!alive()) return;
         next = i + 1 < plan.n ? part(i + 1) : null;
-        if (next) next.catch(() => {});
+        if (next) next.then(b => { if (alive()) speaker.preload(b); }, () => {});
         const last = i === plan.n - 1;
         if (blob) await speaker.playPart(blob, last);
         else if (last) speaker.stop();
