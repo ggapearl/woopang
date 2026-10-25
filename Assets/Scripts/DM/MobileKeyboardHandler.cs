@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 /// 핵심 동작:
 /// 1. 키보드 활성화 시 패널 확장 (Background, InputArea, Viewport)
 /// 2. 대화창 터치/스크롤 시 키보드 유지 (LateUpdate에서 강제 재포커스)
-/// 3. 네이티브 키보드 dismiss 버튼으로만 키보드 닫기 허용
+/// 3. 네이티브 키보드 dismiss 버튼 · 입력줄을 아래로 쓸어내리기(R0926KeyboardSwipe — 아이폰 기본 키보드엔 내리기 키가 없다)로만 키보드 닫기 허용
 /// 4. 패널 비활성화(OnDisable) 시 즉시 원상 복구
 ///
 /// ⚠ 키보드가 없을 때는 패널 위치를 건드리지 않는다 (2026-10-04).
@@ -480,6 +480,7 @@ public class MobileKeyboardHandler : MonoBehaviour
     //   1. OnDisable (패널 닫힘)
     //   2. native dismiss (kbH=0 + 최근 Unity 터치 없음)
     //   3. timeout (maxReactivateTime 초과)
+    //   4. 입력줄을 아래로 쓸어내림 (DismissBySwipe)
     // ============================================================
 
     private void HandleKeyboardStateMachine()
@@ -596,6 +597,18 @@ public class MobileKeyboardHandler : MonoBehaviour
             EventSystem.current.SetSelectedGameObject(null);
 
         SetCollapsedTargets();
+    }
+
+    /// <summary>키보드가 떠 있어 창이 키보드 위로 올라가 있다 (R0926KeyboardSwipe 가 입력줄을 아래로 쓸어내리는지 볼 때)</summary>
+    public bool KeyboardUp => keyboardLogicallyActive;
+
+    /// <summary>입력줄을 아래로 쓸어내렸다 (R0926KeyboardSwipe) — 기기 키보드를 내린 것과 같게 키보드를 내리고 창은 제자리로</summary>
+    public void DismissBySwipe()
+    {
+#if UNITY_EDITOR
+        if (editorPreviewActive) EditorResetPreview();
+#endif
+        DismissKeyboardCleanly();
     }
 
     /// <summary>

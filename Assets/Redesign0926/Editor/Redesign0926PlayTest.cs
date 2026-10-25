@@ -136,6 +136,7 @@ namespace Redesign0926
             else if (mode == "searchfollow") PlanSearchFollow();
             else if (mode == "mapprofile") PlanMapProfile();
             else if (mode == "scrolllock") PlanScrollLock();
+            else if (mode == "kbswipe") PlanKbSwipe();
             else if (mode == "filters") PlanFilters();
             else if (mode == "guidetouch") PlanGuideTouch();
             else if (mode == "guide") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanGuide(); }
@@ -1905,6 +1906,307 @@ namespace Redesign0926
                 bool ok = still ? lockDev < 2f && end < 2f : lockDev > 30f;
                 log.Add((ok ? "PASS " : "FAIL ") + what + $" — 끄는 동안 최대 {lockDev:0.#} · 뗀 뒤 {end:0.#} (목록 {lockList.name}, 높이 {lockList.content.rect.height:0}/{((RectTransform)lockList.transform).rect.height:0})");
             });
+        }
+
+        // ── N-B (10-25 대표님): 키보드가 떠 있을 때 입력칸을 아래로 쓸어내리면 키보드가 내려간다 ──
+        // 대화·댓글 창 · 키보드 위 입력줄(장소 추가) · 메시지 검색칸. 키보드가 내려가며 입력줄도 내려와 손가락 밑으로 다시 오므로,
+        // 그 자리(키보드 없을 때 칸 자리)에서 손을 떼어 입력칸이 다시 열리거나 단추가 눌리지 않는지 본다
+        private static InputField kbField;
+        private static string kbText;
+        private static Button kbButton;
+        private static int kbClicks, kbSent;
+        private static float kbSheet;
+        private static Vector2 kbRestField, kbRestSend;
+        private static readonly Vector2[] kbLegs = new Vector2[3];   // 내리기 + 멈춤 두 번 (창이 제자리로 돌아올 때까지 누른 채)
+        private static readonly System.Reflection.FieldInfo sheetApplied = typeof(R0926SwipeDismiss).GetField("applied", NPI);
+
+        private static void PlanKbSwipe()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                ptFocusWas = InputSystem.settings.editorInputBehaviorInPlayMode;
+                InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+            });
+            Check(() => UnityEngine.Object.FindAnyObjectByType<R0926KeyboardSwipe>() != null, "키보드 쓸어내리기가 캔버스에 붙어 있음");
+
+            // 1) 대화창 입력칸 — 키보드만 내려가고 창은 그대로 (아래로 밀어 닫는 시트가 같이 끌려 내려가지 않는다)
+            Do(() => Mpm()?.OpenChatRoom("chatlook_peer", "연남동이웃", null, false));
+            Sleep(1.6f);
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Sleep(0.4f);
+            Do(() => FillSampleChat(false));
+            Sleep(0.8f);
+            Do(() =>
+            {
+                kbRestField = Center(Mkh()?.targetInputField) ?? default;
+                kbRestSend = Center(Mpm()?.sendButton) ?? default;
+                log.Add($"  키보드 없을 때 입력칸 가운데 {kbRestField} · 보내기 {kbRestSend} (화면 {Screen.width}x{Screen.height})");
+            });
+            KbUpFor(Mkh);
+            Shot("kb_chat_up");
+            Check(() => KbUp(Mkh()), "대화창: 키보드가 떠 있고 입력칸에 커서");
+            Do(() => KbLegTo(Mkh()?.targetInputField, kbRestField));
+            KbSwipe(() => Mkh()?.targetInputField, "kb_chat_swipe", "ChatRoomPanel");
+            Sleep(1.0f);
+            Shot("kb_chat_down");
+            Check(() => KbDown(Mkh()), "대화창 입력칸을 아래로 쓸어내림 → 키보드가 내려가고 커서도 빠짐 · 제자리로 온 입력칸 위에서 손을 떼도 다시 열리지 않음");
+            Check(() => Active("ChatRoomPanel") && kbSheet < 2f, "… 대화창은 닫히지도 끌려 내려가지도 않음");
+            Check(() => ChatFits("쓸어내린 뒤"), "… 창이 키보드 없는 제자리로");
+
+            // 2) 누르기만 · 옆으로 · 위로 · 대화 목록 굴리기 — 키보드 그대로
+            KbUpFor(Mkh);
+            Finger(() => Center(Mkh()?.targetInputField), new[] { new Vector2(0f, -4f) }, 2, null, null);
+            Sleep(0.8f);
+            Check(() => KbUp(Mkh()), "입력칸을 살짝 누르기만 하면 키보드 그대로");
+            Finger(() => Center(Mkh()?.targetInputField), new[] { new Vector2(-120f, -10f) }, 8, null, null);
+            Sleep(0.8f);
+            Check(() => KbUp(Mkh()), "입력칸에서 옆으로 밀면(커서 옮기기) 키보드 그대로");
+            Finger(() => Center(Mkh()?.targetInputField), new[] { new Vector2(0f, 200f) }, 8, null, null);
+            Sleep(0.8f);
+            Check(() => KbUp(Mkh()), "입력칸에서 위로 밀면 키보드 그대로");
+            Finger(() => { var k = Mkh(); var sr = k != null && k.scrollViewRect != null ? k.scrollViewRect.GetComponent<ScrollRect>() : null; return sr != null ? ListPoint(sr) : null; },
+                new[] { new Vector2(0f, 150f) }, 8, null, null);
+            Sleep(1.4f);
+            Check(() => KbUp(Mkh()), "대화 목록을 굴리면 키보드 그대로 (예전대로)");
+
+            // 3) 보내기 단추에서 시작해 아래로 — 키보드는 내려가고, 제자리로 온 보내기 위에서 손을 떼도 눌리지 않는다
+            Do(() =>
+            {
+                kbButton = Mpm()?.sendButton;
+                kbClicks = 0;
+                if (kbButton != null) kbButton.onClick.AddListener(KbClick);
+                var k = Mkh();
+                if (k != null && k.targetInputField != null) k.targetInputField.text = "";   // 혹시 눌려도 빈 글이라 보내지지 않는다
+                log.Add("  보내기 단추: " + (kbButton != null ? kbButton.name + (kbButton.interactable ? "" : " (꺼짐)") : "없음"));
+            });
+            Do(() => KbLegTo(kbButton, kbRestSend));
+            KbSwipe(() => kbButton, "kb_chat_send", "ChatRoomPanel");
+            Sleep(1.0f);
+            Check(() => KbDown(Mkh()), "보내기 단추에서 시작해 아래로 → 키보드가 내려감");
+            Check(() => kbButton != null && kbClicks == 0 && kbButton.enabled, "… 보내기는 눌리지 않고, 손을 뗀 뒤 단추는 다시 켜짐");
+            Check(() => Active("ChatRoomPanel") && kbSheet < 2f, "… 대화창은 그대로");
+            Do(() => { if (kbButton != null) kbButton.onClick.RemoveListener(KbClick); });
+            Do(KeyboardDown);
+            CloseAll();
+            Sleep(1.0f);
+
+            // 4) 댓글 창 — 같은 방식
+            Do(() => UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include)?.OpenCommentPanel(1, "시험"));
+            Sleep(1.8f);
+            Do(() => kbRestField = Center(CommentMkh()?.targetInputField) ?? default);
+            KbUpFor(CommentMkh);
+            Shot("kb_comment_up");
+            Check(() => KbUp(CommentMkh()), "댓글 창: 키보드가 떠 있고 입력칸에 커서");
+            Do(() => KbLegTo(CommentMkh()?.targetInputField, kbRestField));
+            KbSwipe(() => CommentMkh()?.targetInputField, "kb_comment_swipe", null);
+            Sleep(1.0f);
+            Shot("kb_comment_down");
+            Check(() => KbDown(CommentMkh()), "댓글 입력칸을 아래로 쓸어내림 → 키보드가 내려가고 손을 뗀 뒤 다시 열리지 않음");
+            Check(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); return cm != null && cm.commentPanel != null && cm.commentPanel.activeInHierarchy; }, "… 댓글 창은 그대로");
+
+            // 4-2) 댓글이 많을 때 목록 가운데서 아래로 굴리기 (키보드 없이) — 시트 전체가 밀어 닫기 자리라 목록 대신 창이 내려가는지 본다
+            Do(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                var make = typeof(CommentManager).GetMethod("CreateCommentItem", NPI);
+                for (int i = 0; cm != null && make != null && i < 14; i++)
+                    make.Invoke(cm, new object[] { new CommentData { id = 900 + i, user_id = "pt_" + i, username = "시험" + i, content = i % 2 == 0 ? "목록 굴리기 시험" : "목록 굴리기 시험 — 두 줄이 되게 조금 길게 씁니다 두 줄이 되게", created_at = System.DateTime.Now.AddHours(-i).ToString(), like_count = i } });
+                var sr = CommentList();
+                if (sr != null) { Canvas.ForceUpdateCanvases(); sr.verticalNormalizedPosition = 0.5f; }
+                log.Add("  댓글 목록: " + (sr != null ? $"높이 {sr.content.rect.height:0}/{((RectTransform)sr.transform).rect.height:0}" : "없음"));
+            });
+            Sleep(0.6f);
+            Do(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); kbSheet = 0f; kbRestField = cm != null && cm.panelRect != null ? cm.panelRect.anchoredPosition : default; });
+            LockCase("댓글 목록 가운데 · 아래로 굴리기", CommentList, new Vector2(0f, -300f), Vector2.zero, "kb_comment_list", false, 10,
+                () => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); if (cm != null && cm.panelRect != null) kbSheet = Mathf.Max(kbSheet, kbRestField.y - cm.panelRect.anchoredPosition.y); });
+            Sleep(0.6f);
+            Do(() => log.Add($"  댓글 창이 내려간 만큼 {kbSheet:0.#}"));
+            Check(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); return cm != null && cm.commentPanel != null && cm.commentPanel.activeInHierarchy && kbSheet < 2f; }, "댓글 목록 가운데서 아래로 굴리면 목록만 굴러가고 창은 그대로");
+            Do(() => { var sr = CommentList(); if (sr != null) sr.verticalNormalizedPosition = 1f; });
+            Sleep(0.5f);
+            Finger(() => { var sr = CommentList(); return sr != null ? ListPoint(sr) : null; }, new[] { new Vector2(0f, -300f) }, 10, null, "kb_comment_list_top");
+            Sleep(1.2f);
+            Check(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); return cm != null && cm.commentPanel != null && !cm.commentPanel.activeInHierarchy; }, "목록이 맨 위일 때 아래로 끌면 예전대로 댓글 창이 닫힘");
+            Do(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); if (cm != null && cm.commentPanel != null && cm.commentPanel.activeInHierarchy) cm.ClosePanel(); });
+            Sleep(1.2f);
+
+            // 5) 키보드 위 입력줄 (장소 추가 이름칸, 보내기 칸으로 둔다) — 입력줄 · 그 위 빈 곳 · ✓ 단추에서 시작해 아래로
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.4f);
+            Do(() =>
+            {
+                kbSent = 0;
+                KbNameInput();
+                var m = WiredMirror();
+                if (m != null && kbField != null) m.SetSubmitAction(kbField, KbSend);
+            });
+            KbMirrorOpen("쓸어내림 시험");
+            Shot("kb_mirror_up");
+            Check(() => WiredMirror()?.ActiveSource != null && WiredMirror().ActiveSource == kbField, "장소 이름칸: 키보드 위 입력줄이 떠 있음");
+            Do(() => KbLeg(new Vector2(0f, -Screen.height * 0.3f)));
+            KbSwipe(() => WiredMirror()?.Bar, "kb_mirror_swipe", null);
+            Sleep(0.8f);
+            Shot("kb_mirror_down");
+            KbMirrorClosed("입력줄을 아래로 쓸어내림");
+
+            KbMirrorOpen("쓸어내림 시험 둘");
+            Finger(() => new Vector2(Screen.width * 0.5f, Screen.height * 0.72f), new[] { new Vector2(0f, -Screen.height * 0.25f) }, 10, null, null);
+            Sleep(0.8f);
+            KbMirrorClosed("입력줄 위 빈 곳(막)을 아래로 쓸어내림");
+
+            KbMirrorOpen("쓸어내림 시험 셋");
+            Do(() =>
+            {
+                var m = WiredMirror();
+                kbButton = m != null ? typeof(UploadInputMirror).GetField("closeButton", NPI).GetValue(m) as Button : null;
+                log.Add("  입력줄 단추: " + (kbButton != null ? kbButton.name : "없음"));
+            });
+            Do(() => KbLeg(new Vector2(0f, -Screen.height * 0.3f)));
+            KbSwipe(() => kbButton, "kb_mirror_button", null);
+            Sleep(0.8f);
+            KbMirrorClosed("입력줄 ✓(보내기) 단추에서 시작해 아래로");
+            Check(() => kbButton != null && kbButton.enabled, "… 손을 뗀 뒤 단추는 다시 켜짐");
+            Do(() =>
+            {
+                var m = WiredMirror();
+                if (m != null && kbField != null) m.SetSubmitAction(kbField, null);
+                if (kbField != null) kbField.text = "";
+            });
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.2f);
+
+            // 6) 칸 안에서 바로 쓰는 칸 (메시지 검색) — 내렸다가 칸 위로 되돌아와 떼도 다시 열리지 않는다
+            Do(() => { var m = Mpm(); if (m != null && m.messagePanel != null) m.messagePanel.SetActive(true); });
+            Sleep(1.0f);
+            Do(() => { var s = Mpm()?.searchInput; if (s != null) { s.Select(); s.ActivateInputField(); } });
+            Sleep(0.8f);
+            Shot("kb_search_up");
+            Check(() => Mpm()?.searchInput != null && Mpm().searchInput.isFocused, "메시지 검색칸에 커서");
+            Finger(() => Center(Mpm()?.searchInput), new[] { new Vector2(0f, -120f), new Vector2(0f, 120f) }, 10, null, "kb_search_swipe");
+            Sleep(0.8f);
+            Check(() => { var s = Mpm()?.searchInput; return s != null && !s.isFocused && s.enabled; }, "검색칸을 아래로 쓸어내림 → 커서가 빠지고, 칸 위로 돌아와 손을 떼도 다시 열리지 않음");
+            Check(() => Active("MessagePanel"), "… 메시지 창은 그대로");
+            CloseAll();
+            Sleep(0.8f);
+
+            Do(() =>
+            {
+                if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
+                ptTouch = null;
+                InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
+            });
+        }
+
+        private static void KbClick() => kbClicks++;
+        private static void KbSend() => kbSent++;
+
+        private static ScrollRect CommentList()
+        {
+            var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+            return cm != null && cm.commentContent != null ? cm.commentContent.GetComponentInParent<ScrollRect>() : null;
+        }
+
+        private static MobileKeyboardHandler CommentMkh()
+        {
+            var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+            if (cm == null || cm.commentInputField == null) return null;
+            foreach (var k in UnityEngine.Object.FindObjectsByType<MobileKeyboardHandler>(FindObjectsInactive.Include))
+                if (k.targetInputField == cm.commentInputField) return k;
+            return null;
+        }
+
+        // 기기에서 입력칸을 눌러 키보드가 올라온 것처럼 — 커서 + 키보드 높이
+        private static void KbUpFor(Func<MobileKeyboardHandler> handler)
+        {
+            Do(() =>
+            {
+                var k = handler();
+                var c = CanvasRoot() as RectTransform;
+                if (k == null || c == null || k.targetInputField == null) { log.Add("  키보드를 띄울 창 없음"); return; }
+                k.targetInputField.Select();
+                k.targetInputField.ActivateInputField();
+                k.EditorPreviewKeyboard(c.rect.height * 0.40f);   // 에디터 가상 키보드(칸을 고르면 뜬다)와 같은 높이 — 입력줄이 그 위에 놓인다
+            });
+            Sleep(1.4f);
+        }
+
+        private static bool KbUp(MobileKeyboardHandler k) => k != null && k.KeyboardUp && k.targetInputField != null && k.targetInputField.isFocused;
+        private static bool KbDown(MobileKeyboardHandler k) => k != null && !k.KeyboardUp && k.targetInputField != null && !k.targetInputField.isFocused && k.targetInputField.enabled;
+
+        private static void KbLeg(Vector2 move)
+        {
+            kbLegs[0] = move;
+            kbLegs[1] = kbLegs[2] = Vector2.zero;
+        }
+
+        // 키보드 없을 때 그 칸 자리(rest)까지 내린다
+        private static void KbLegTo(Component c, Vector2 rest)
+        {
+            var now = Center(c);
+            KbLeg(now.HasValue && rest != default ? rest - now.Value : new Vector2(0f, -300f));
+            log.Add($"  내릴 만큼 {kbLegs[0]}" + (now.HasValue && rest != default ? "" : " (칸 자리를 몰라 기본값)"));
+        }
+
+        // at 의 가운데를 눌러 내린 뒤 잠시 누른 채 있다가 뗀다 — 그동안 sheetPanel 의 밀어 닫는 시트가 내려간 만큼을 kbSheet 에
+        private static void KbSwipe(Func<Component> at, string shot, string sheetPanel)
+        {
+            Do(() => kbSheet = 0f);
+            Finger(() => Center(at()), kbLegs, 12, () =>
+            {
+                var sd = sheetPanel != null ? Find(sheetPanel)?.GetComponentInChildren<R0926SwipeDismiss>(true) : null;
+                if (sd != null && sheetApplied != null) kbSheet = Mathf.Max(kbSheet, (float)sheetApplied.GetValue(sd));
+            }, shot);
+            Do(() => { if (sheetPanel != null) log.Add($"  시트가 내려간 만큼 {kbSheet:0.#}"); });
+        }
+
+        private static Vector2? Center(Component c)
+        {
+            var rt = c != null ? c.transform as RectTransform : null;
+            if (rt == null || !rt.gameObject.activeInHierarchy) return null;
+            return ScreenRect(rt).center;
+        }
+
+        private static void KbNameInput()
+        {
+            kbField = null;
+            foreach (var f in UnityEngine.Object.FindObjectsByType<InputField>(FindObjectsInactive.Exclude))
+                if (f.name == "NameInput" && f.gameObject.activeInHierarchy && f.transform.parent.parent.name == "CubeUploadPage") { kbField = f; break; }
+        }
+
+        private static void KbMirrorOpen(string text)
+        {
+            Do(() =>
+            {
+                var m = WiredMirror();
+                kbText = text;
+                if (m == null || kbField == null) { log.Add("  입력줄 · 장소 이름칸 없음"); return; }
+                typeof(UploadInputMirror).GetMethod("ActivateMirrorFor", NPI).Invoke(m, new object[] { kbField });
+                m.Bar.text = text;
+            });
+            Sleep(0.9f);
+        }
+
+        private static void KbMirrorClosed(string what)
+        {
+            Do(() => log.Add("  장소 이름칸 = '" + (kbField != null ? kbField.text : "-") + "' · 보낸 횟수 " + kbSent));
+            Check(() =>
+            {
+                var m = WiredMirror();
+                var panel = m != null ? typeof(UploadInputMirror).GetField("mirrorPanel", NPI).GetValue(m) as GameObject : null;
+                return m != null && m.ActiveSource == null && panel != null && !panel.activeSelf;
+            }, what + " → 입력줄이 닫힘");
+            Check(() => kbField != null && kbField.text == kbText, what + " → 쓴 글은 원래 칸(장소 이름)에 남음");
+            Check(() => kbSent == 0, what + " → 보내기 칸이어도 보내지 않음");
+            Check(() => WiredMirror() != null && WiredMirror().Bar.enabled, what + " → 손을 뗀 뒤 입력줄 칸이 다시 켜짐");
         }
 
         // 가상 손가락 — at 에서 누르고 legs 를 차례로, 한 프레임에 한 걸음씩 움직인 뒤 뗀다. 프레임마다 watch

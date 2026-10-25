@@ -1,14 +1,19 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using TouchPhase = UnityEngine.InputSystem.TouchPhase;
+using UnityEngine.UI;
 
 /// <summary>
 /// 아래로 스와이프하여 패널 닫기
 /// Enhanced Touch 기반 — DoubleTap3D와 동일한 입력 시스템 사용
 /// EventSystem 드래그 핸들러 대신 직접 터치 추적
+/// 세로 목록 가운데서 시작한 손가락은 목록 몫 — 목록이 맨 위일 때만 창을 끌어 내린다 (R0926SwipeDismiss 와 같은 기준).
+/// 댓글 창은 시트 전체가 끄는 자리라, 예전엔 지난 댓글을 보려고 목록을 아래로 굴리면 창이 닫혔다 (2026-10-25)
 /// </summary>
 public class SwipeToClose : MonoBehaviour
 {
@@ -46,6 +51,8 @@ public class SwipeToClose : MonoBehaviour
 
     // 터치 식별 (멀티터치 시 동일 터치 추적)
     private int trackingFingerId = -1;
+
+    private static readonly List<RaycastResult> hits = new List<RaycastResult>();
 
     void Start()
     {
@@ -193,6 +200,13 @@ public class SwipeToClose : MonoBehaviour
         if (!IsTouchOnPanel(screenPos))
             return;
 
+        // 키보드가 떠 있는 입력줄 — 창은 두고 키보드만 내린다 (R0926KeyboardSwipe)
+        if (R0926KeyboardSwipe.Claims(screenPos))
+            return;
+
+        if (OnScrolledList(screenPos))
+            return;
+
         startPos = screenPos;
         lastPos = screenPos;
         lastTime = Time.unscaledTime;
@@ -290,6 +304,18 @@ public class SwipeToClose : MonoBehaviour
         }
 
         return false;
+    }
+
+    // 손가락 밑이 맨 위가 아닌 세로 목록 — 아래로 끌면 목록이 굴러가야 한다
+    private bool OnScrolledList(Vector2 screenPos)
+    {
+        var es = EventSystem.current;
+        if (es == null) return false;
+        hits.Clear();
+        es.RaycastAll(new PointerEventData(es) { position = screenPos }, hits);
+        if (hits.Count == 0) return false;
+        var sr = hits[0].gameObject.GetComponentInParent<ScrollRect>();
+        return sr != null && sr.vertical && sr.transform.IsChildOf(panelRect) && !R0926SwipeDismiss.AtTop(sr);
     }
 
     private Camera GetCanvasCamera(RectTransform rect)

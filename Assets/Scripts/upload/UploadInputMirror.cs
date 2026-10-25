@@ -100,6 +100,11 @@ public class UploadInputMirror : MonoBehaviour
     public bool IsMirrorInput(InputField f) => f != null && f == mirrorInput;
     /// <summary>키보드 위 입력줄의 실제 입력칸 — R0926InputFocus 가 이 칸의 커서 자리·모양을 원래 칸 안에도 같게 보여 준다</summary>
     public InputField Bar => mirrorInput;
+    /// <summary>입력줄이나 그 위 막(backdrop) — 아래로 쓸어내리면 닫는 자리 (R0926KeyboardSwipe)</summary>
+    public bool Covers(Transform t) => t != null && (mirrorPanel != null && t.IsChildOf(mirrorPanel.transform) || backdrop != null && t.IsChildOf(backdrop.transform));
+
+    /// <summary>입력줄을 아래로 쓸어내렸다 (R0926KeyboardSwipe) — 기기 키보드를 내린 것과 같게 글을 원래 칸에 옮기고 닫는다 (보내기 칸이어도 보내지 않는다 · 엔터를 쳤으면 보낸다)</summary>
+    public void CloseBySwipe() => BeginClose(false);
 
     /// <summary>이 칸은 입력줄 버튼이 '완료' 가 아니라 '보내기' — 누르면(키보드 엔터도) 글을 옮기고 바로 보낸다. null 이면 해제</summary>
     public void SetSubmitAction(InputField src, System.Action onSubmit)

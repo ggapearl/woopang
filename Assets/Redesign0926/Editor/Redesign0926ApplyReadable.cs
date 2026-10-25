@@ -13,6 +13,7 @@ namespace Redesign0926
     ///    키운 글이 칸보다 높아 통째로 사라지는 것(Truncate)은 넘쳐 보이게 바꾸고 로그에 남긴다 — 캡처로 확인
     ///  · 입력칸 — 커서를 굵고 분홍으로 · 메시지·팔로우 검색칸은 키보드 위 작은 기본 입력줄 없이 칸 안에서 바로 쓰이게
     ///    · 지금 쓰는 칸에 분홍 테두리, 키보드 위 입력줄로 쓰는 칸(장소·보물찾기)은 입력줄 위로 보이게 스크롤 (R0926InputFocus)
+    ///    · 키보드가 떠 있을 때 입력칸을 아래로 쓸어내리면 키보드가 내려간다 (R0926KeyboardSwipe · 10-25)
     /// 다른 단계가 글자 크기를 다 정한 뒤 맨 끝에 돈다.
     /// </summary>
     public static partial class Redesign0926Apply
@@ -135,6 +136,19 @@ namespace Redesign0926
             for (int i = 0; i < ms.Length; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = ms[i];
             so.ApplyModifiedPropertiesWithoutUndo();
             log.Add("input focus ok (입력줄 " + ms.Length + "개)");
+
+            // 키보드가 떠 있을 때 입력칸을 아래로 쓸어내리면 키보드를 내린다 — 키보드 위 입력줄 · 대화·댓글 입력줄 · 검색 등 칸 (10-25)
+            var ks = Ensure<R0926KeyboardSwipe>(root.gameObject);
+            var kso = new SerializedObject(ks);
+            var km = kso.FindProperty("mirrors");
+            km.arraySize = ms.Length;
+            for (int i = 0; i < ms.Length; i++) km.GetArrayElementAtIndex(i).objectReferenceValue = ms[i];
+            var hs = root.GetComponentsInChildren<MobileKeyboardHandler>(true);
+            var kc = kso.FindProperty("chats");
+            kc.arraySize = hs.Length;
+            for (int i = 0; i < hs.Length; i++) kc.GetArrayElementAtIndex(i).objectReferenceValue = hs[i];
+            kso.ApplyModifiedPropertiesWithoutUndo();
+            log.Add("keyboard swipe ok (입력줄 " + ms.Length + "개 · 대화·댓글 " + hs.Length + "개)");
         }
 
         // ── 토스트 — 화면 위쪽, 상태 알약 아래 (보물 알림과 같은 자리) ──

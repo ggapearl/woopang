@@ -12,6 +12,7 @@ using UnityEngine.UI;
 ///   · 제목·빈 곳에서 시작 → 바로 시트가 따라 내려온다
 ///   · 세로 스크롤 목록 위에서 시작 → 목록이 맨 위일 때만 넘겨받고, 그동안 목록은 멈춘다
 ///   · 지도·슬라이더·입력창처럼 스스로 끄는 것 위에서 시작 → 건드리지 않는다
+///   · 키보드가 떠 있을 때 입력줄에서 시작 → 키보드만 내린다 (R0926KeyboardSwipe)
 /// 닫기 버튼·뒤로가기·바깥 누르기로 닫을 때도 R0926CloseProxy 가 AnimateClose 를 불러 아래로 미끄러져 사라진다.
 /// 위치는 증분으로만 더하고 빼서 R0926SlideIn·R0926SafeInset 과 겹쳐도 자리가 틀어지지 않는다.
 /// 방향은 14px 움직였을 때 정한다 — 옆으로 넘기기(R0926SheetModes·SwipePanelController)도 같은 순간 같은 기준이라 둘이 함께 움직이지 않는다.
@@ -160,6 +161,7 @@ public class R0926SwipeDismiss : R0926Closer
     {
         phase = Phase.Ignored;
         if (pager != null && pager.locked) return;
+        if (R0926KeyboardSwipe.Claims(pos)) return;                 // 키보드가 떠 있는 입력줄 — 키보드만 내린다
         var es = EventSystem.current;
         if (es == null) return;
         hits.Clear();
@@ -277,7 +279,8 @@ public class R0926SwipeDismiss : R0926Closer
         frozen = null;
     }
 
-    private static bool AtTop(ScrollRect sr)
+    /// <summary>세로 목록이 맨 위다(굴릴 게 없어도) — 여기서 아래로 끌면 시트가 내려온다 (SwipeToClose 도 같은 기준)</summary>
+    public static bool AtTop(ScrollRect sr)
     {
         var content = sr.content;
         if (content == null) return true;
