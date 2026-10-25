@@ -46,6 +46,8 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private Text chipText;
     [SerializeField] private RectTransform chipArrow;
     [SerializeField] private RectTransform chipRect;
+    [Tooltip("이것들이 떠 있는 동안 칩은 숨는다 — 노치 아래 같은 줄을 쓰는 확대/축소 표시 · 아이콘 줄을 칩 바로 아래까지 올린 장소 상세")]
+    [SerializeField] private GameObject[] chipWaitFor;
 
     [Header("조건 (보이는 각도는 설정 탭 — R0926SkySettings)")]
     [SerializeField] private float nearObjectDistance = 60f;
@@ -296,7 +298,9 @@ public class R0926SkyWeather : MonoBehaviour
         // 칩은 노치 아래 상태 알약('N곳을 찾았어요' 등)과 같은 자리 — 알약이 걷힐 때까지 기다린다 (앱을 켜자마자 둘이 겹치던 것)
         bool pill = R0926StatusPill.AnyShowing;
         if (!pill) pillSince = -1f; else if (pillSince < 0f) pillSince = Time.unscaledTime;
-        bool showChip = ready && settled && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
+        bool covered = false;
+        if (chipWaitFor != null) foreach (var g in chipWaitFor) if (g != null && g.activeInHierarchy) { covered = true; break; }
+        bool showChip = ready && settled && !covered && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
         boardShowing = skyShow || pinned;
         UpdateChip(boardShowing);
 
@@ -317,7 +321,8 @@ public class R0926SkyWeather : MonoBehaviour
         }
 
         Fade(skyGroup, skyShow, 1.6f);
-        Fade(chipGroup, showChip, 3f);
+        if (covered && chipGroup != null) chipGroup.alpha = 0f;   // 같은 자리에 확대/축소 표시가 곧장 뜬다 — 서서히 사라지면 글자가 겹친다
+        else Fade(chipGroup, showChip, 3f);
         if (chipGroup != null) { bool touch = chipGroup.alpha > 0.5f; chipGroup.blocksRaycasts = touch; chipGroup.interactable = touch; }
         // 판도 또렷이 보일 때만 손가락을 받는다 (옆으로 밀기 · 줄 누르기) — 사라지는 중엔 뒤의 AR 을 누를 수 있게
         if (skyGroup != null) { bool touch = skyShow && skyGroup.alpha > 0.5f; skyGroup.blocksRaycasts = touch; skyGroup.interactable = touch; }

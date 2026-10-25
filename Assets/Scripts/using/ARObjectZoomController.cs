@@ -16,6 +16,10 @@ public class ARObjectZoomController : MonoBehaviour
     [SerializeField] private float maxZoom = 3f; // 최대 줌 (확대 - 오브젝트가 커짐)
     [SerializeField] private float zoomSpeed = 0.01f; // 줌 속도
 
+    [Header("1.0x 스냅")]
+    [Tooltip("1.0x 에서 벗어나려면 손가락을 이만큼(dp) 더 벌리거나 좁혀야 한다 — 1.0x 로 쓰도록 유도")]
+    [SerializeField] private float snapTravelDp = 30f;
+
     [Header("Zoom Indicator")]
     [SerializeField] private GameObject zoomIndicatorObject; // 줌 인디케이터 GameObject
     private ZoomIndicator zoomIndicator; // 줌 인디케이터 컴포넌트
@@ -30,6 +34,15 @@ public class ARObjectZoomController : MonoBehaviour
     private float currentZoom = 1f;
     private float previousTouchDistance = 0f;
     private bool isPinching = false;
+    private float rawZoom = 1f;   // 손가락이 실제로 간 만큼 — 1.0x 에 붙는 칸까지 포함
+    private bool snapArmed;       // 1.0x 에서 충분히 떨어졌다 — 다시 붙을 때 진동 (칸 경계에서 손이 떨려 거듭 울리지 않게)
+
+    private const float SnapZoom = 1f;
+    private const float SnapNear = 0.05f;   // 이보다 가까우면 표시가 '1.0x'
+
+#if UNITY_EDITOR
+    public static int EditorSnaps;   // 플레이 시험이 센다 (에디터엔 진동이 없다)
+#endif
 
     void OnEnable()
     {
@@ -108,34 +121,16 @@ public class ARObjectZoomController : MonoBehaviour
             {
                 previousTouchDistance = currentTouchDistance;
                 isPinching = true;
+                SyncRaw();
             }
             // 핀치 진행 중
             else if (touch0.phase == UnityEngine.InputSystem.TouchPhase.Moved || touch1.phase == UnityEngine.InputSystem.TouchPhase.Moved)
             {
                 if (isPinching && previousTouchDistance > 0)
                 {
-                    // 거리 차이로 줌 계산
-                    float distanceDelta = currentTouchDistance - previousTouchDistance;
-
-                    // 줌 레벨 조정 (거리가 멀어지면 확대, 가까워지면 축소)
-                    // 화면 해상도에 따른 속도 보정을 위해 Screen.height로 나눌 수도 있음 (선택사항)
-                    // 여기서는 기존 zoomSpeed를 그대로 사용
-                    currentZoom += distanceDelta * zoomSpeed;
-                    currentZoom = Mathf.Clamp(currentZoom, minZoom, maxZoom);
-
-                    // AR 오브젝트들의 스케일 조절
-                    ApplyZoomToARObjects();
-
+                    // 거리 차이로 줌 계산 (거리가 멀어지면 확대, 가까워지면 축소)
+                    PinchBy(currentTouchDistance - previousTouchDistance);
                     previousTouchDistance = currentTouchDistance;
-
-                    // 줌 인디케이터 업데이트
-                    if (zoomIndicator != null)
-                    {
-                        zoomIndicator.UpdateZoom(currentZoom);
-                    }
-
-                    // 너무 잦은 로그는 성능 저하 유발 가능 -> 주석 처리 또는 조건부 로그
-                    // Debug.Log($"[ARObjectZoomController] 핀치 줌! delta: {distanceDelta:F2}, Zoom: {currentZoom:F2}x");
                 }
             }
         }
@@ -146,6 +141,7 @@ public class ARObjectZoomController : MonoBehaviour
             {
                 isPinching = false;
                 previousTouchDistance = 0f;
+                EndPinch();
 
                 // 줌 인디케이터 숨김 (5초 딜레이)
                 if (zoomIndicator != null)
@@ -155,6 +151,51 @@ public class ARObjectZoomController : MonoBehaviour
             }
         }
 
+    }
+
+    // 손가락 사이가 distanceDelta(px)만큼 벌어지면(+) 확대, 좁혀지면(-) 축소 — 1.0x 근처에선 1.0x 에 붙는다
+    // (10-26 대표님 「1.0x 가 되었을 때 핸드폰에서 진동이 살짝 울리면서 snap … 1.0x 로 사용하도록 유도」)
+    private void PinchBy(float distanceDelta)
+    {
+        float band = SnapBand();
+        rawZoom = Mathf.Clamp(rawZoom + distanceDelta * zoomSpeed, minZoom - band, maxZoom + band);
+        float zoom = rawZoom > SnapZoom + band ? rawZoom - band : rawZoom < SnapZoom - band ? rawZoom + band : SnapZoom;
+        if (zoom == SnapZoom && currentZoom != SnapZoom && snapArmed) { SnapBuzz(); snapArmed = false; }
+        else if (Mathf.Abs(zoom - SnapZoom) >= SnapNear) snapArmed = true;
+        currentZoom = zoom;
+        ApplyZoomToARObjects();
+        if (zoomIndicator != null) zoomIndicator.UpdateZoom(currentZoom);
+    }
+
+    // 지금 배율에서 이어서 — 1.0x 에서 시작하면 붙는 칸 한가운데부터 (매번 같은 만큼 움직여야 벗어난다)
+    private void SyncRaw()
+    {
+        float band = SnapBand();
+        rawZoom = currentZoom > SnapZoom ? currentZoom + band : currentZoom < SnapZoom ? currentZoom - band : SnapZoom;
+        snapArmed = Mathf.Abs(currentZoom - SnapZoom) >= SnapNear;
+    }
+
+    // 손을 뗐을 때 '1.0x' 로 보이는 배율은 정확히 1.0x 로 — 멀리서 다가온 거면 진동도
+    private void EndPinch()
+    {
+        if (currentZoom == SnapZoom || Mathf.Abs(currentZoom - SnapZoom) >= SnapNear) return;
+        if (snapArmed) SnapBuzz();
+        currentZoom = SnapZoom;
+        SyncRaw();
+        ApplyZoomToARObjects();
+        if (zoomIndicator != null) zoomIndicator.UpdateZoom(currentZoom);
+    }
+
+    // 1.0x 에 붙는 칸 (배율 단위) — 화면 밀도가 달라도 손끝에선 같은 거리
+    private float SnapBand() => snapTravelDp * (Screen.dpi > 0 ? Screen.dpi : 400f) / 160f * zoomSpeed;
+
+    private static void SnapBuzz()
+    {
+#if UNITY_EDITOR
+        EditorSnaps++;
+#else
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.TriggerLightHaptic();
+#endif
     }
 
     /// <summary>
@@ -233,6 +274,7 @@ public class ARObjectZoomController : MonoBehaviour
     public void ResetZoom()
     {
         currentZoom = defaultZoom;
+        SyncRaw();
         ApplyZoomToARObjects();
 
         if (zoomIndicator != null)

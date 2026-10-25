@@ -119,6 +119,8 @@ namespace Redesign0926
             else if (mode == "nudge") PlanNudge();
             else if (mode == "photomem") PlanPhotoMem();
             else if (mode == "detaillift") PlanDetailLift();
+            else if (mode == "zoomind") PlanZoomInd();
+            else if (mode == "zoomsnap") PlanZoomSnap();
             else if (mode == "placeedit") PlanPlaceEdit();
             else if (mode == "appinfo") PlanAppInfo();
             else if (mode == "p2pzoom") PlanP2PZoom();
@@ -4662,6 +4664,145 @@ namespace Redesign0926
                 var im = tr.GetComponent<Image>();
                 if (im != null && !im.enabled && tx == null) continue;
                 sb.Append($" | {n.Substring(n.LastIndexOf('/') + 1)} {Screen.height - r.yMax:0}~{Screen.height - r.yMin:0}{ink}");
+            }
+            log.Add(sb.ToString());
+        }
+
+        // 확대/축소 표시 (10-24 대표님 「화면확대하거나 축소할 때 발생하는 확대축소 레이아웃도 조금 올려줘. 아이폰의 경우 노치랑 겹치지만 않으면 돼」)
+        // 표시를 띄운 채 세로 · 가로에서 찍고 노치 아래 칸들(상태 알약 · 하늘 칩)과 화면 자리를 적는다
+        private static void PlanZoomInd()
+        {
+            ZoomIndicator z = null;
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                if (Active("LoginPromptPanel")) BackNow();
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                z = UnityEngine.Object.FindAnyObjectByType<ZoomIndicator>(FindObjectsInactive.Include);
+                log.Add(z != null ? "  확대 표시 " + z.name : "  ZoomIndicator 없음");
+            });
+            Sleep(1.0f);
+            Do(() => ZoomRects("확대 전"));
+            Do(() => { if (z != null) z.UpdateZoom(1.5f); });
+            Sleep(0.3f);
+            Do(() => { if (z != null) z.UpdateZoom(2.0f); ZoomRects("세로 확대"); });
+            Shot("zoom_in");
+            Do(() => { if (z != null) z.UpdateZoom(1.2f); });
+            Sleep(0.3f);
+            Do(() => ZoomRects("세로 축소"));
+            Shot("zoom_out");
+
+            Do(() => Rotate(true));
+            Wait(() => Turned(true), 8f, "가로로 돌림");
+            Sleep(1.0f);
+            Do(() => { if (z != null) z.UpdateZoom(2.0f); });
+            Sleep(0.3f);
+            Do(() => ZoomRects("가로 확대"));
+            Shot("zoom_land");
+            Do(() => Rotate(false));
+            Wait(() => Turned(false), 8f, "세로로 되돌림");
+            Sleep(0.8f);
+            Do(() => { if (z != null) z.Hide(); });
+            Sleep(0.6f);
+            Do(() => ZoomRects("표시 끈 뒤"));
+            Shot("zoom_after");
+        }
+
+        // 1.0x 스냅 (10-26 대표님 「1.0x 가 되었을 때 핸드폰에서 진동이 살짝 울리면서 snap … 1.0x 로 사용하도록 유도」)
+        // 에디터는 핀치를 못 받으므로 손가락 사이 거리 변화(px)를 직접 넣는다 · 진동은 횟수로 센다
+        private static void PlanZoomSnap()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var T = typeof(ARObjectZoomController);
+            ARObjectZoomController z = null;
+            float b = 0f, speed = 0f, min = 0f, max = 0f;   // b = 1.0x 에 붙는 칸 (px)
+            int snaps0 = 0;
+            Action<string> call = n => T.GetMethod(n, F).Invoke(z, null);
+            Action<float> pinch = px => T.GetMethod("PinchBy", F).Invoke(z, new object[] { px });
+            Func<float> zoom = () => z.GetZoomLevel();
+            Func<int> snaps = () => ARObjectZoomController.EditorSnaps - snaps0;
+            Func<string, bool> say = s => { log.Add($"  {s} → {zoom():0.000}x · 진동 {snaps()}"); return true; };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                if (Active("LoginPromptPanel")) BackNow();
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                z = UnityEngine.Object.FindAnyObjectByType<ARObjectZoomController>(FindObjectsInactive.Include);
+                if (z == null) { log.Add("  ARObjectZoomController 없음"); return; }
+                z.ResetZoom();
+                speed = (float)T.GetField("zoomSpeed", F).GetValue(z);
+                min = (float)T.GetField("minZoom", F).GetValue(z);
+                max = (float)T.GetField("maxZoom", F).GetValue(z);
+                b = (float)T.GetMethod("SnapBand", F).Invoke(z, null) / speed;
+                snaps0 = ARObjectZoomController.EditorSnaps;
+                log.Add($"  배율 {min}~{max} · 1px 에 {speed} · 1.0x 붙는 칸 ±{b:0}px (화면 {Screen.dpi:0}dpi)");
+            });
+            Check(() => z != null && b > 0f, "확대/축소 컨트롤러 · 붙는 칸");
+
+            Do(() => { call("SyncRaw"); pinch(b * 0.5f); });
+            Check(() => say("칸 절반 벌림") && zoom() == 1f && snaps() == 0, "1.0x 에서 조금 벌려도 1.0x 그대로 (붙어 있음 · 진동 없음)");
+            Do(() => pinch(b * 0.6f));
+            Check(() => say("칸을 넘김") && zoom() > 1f && zoom() < 1.05f, "칸을 넘으면 1.0x 에서 이어서 커짐 (튀지 않음)");
+            Do(() => pinch(200f));
+            Check(() => say("200px 더") && zoom() > 1.5f, "계속 벌리면 확대");
+            Do(() => pinch(-(200f + b * 0.3f)));
+            Check(() => say("다시 좁힘") && zoom() == 1f && snaps() == 1, "줄이다 1.0x 에 닿으면 붙고 진동 한 번");
+            Do(() => ZoomRects("1.0x 붙음"));
+            Shot("snap_1x");
+            Do(() => { pinch(b * 0.25f); pinch(-b * 0.1f); pinch(b * 0.1f); pinch(-b * 0.1f); });
+            Check(() => say("칸 경계에서 떨림") && zoom() == 1f && snaps() == 1, "칸 경계에서 손이 떨려도 진동은 더 안 울림");
+            Do(() => pinch(-b * 2.5f));
+            Check(() => say("더 좁힘") && zoom() < 0.95f, "더 좁히면 1.0x 아래로 축소");
+            Do(() => pinch(b * 0.7f));
+            Check(() => say("다시 벌림") && zoom() == 1f && snaps() == 2, "아래에서 올라와도 1.0x 에 붙고 진동");
+
+            Do(() => { call("EndPinch"); call("SyncRaw"); pinch(b * 1.04f); });
+            Check(() => say("칸을 살짝 넘긴 채") && zoom() > 1f && zoom() < 1.05f, "칸을 살짝 넘김 ('1.0x' 로 보임)");
+            Do(() => call("EndPinch"));
+            Check(() => say("손 뗌") && zoom() == 1f && snaps() == 2, "'1.0x' 로 보이는 채 손을 떼면 정확히 1.0x (진동 없이)");
+            Do(() => { call("SyncRaw"); pinch(b + 0.3f / speed); pinch(-0.27f / speed); });
+            Check(() => say("1.3x 에서 1.03x 까지") && Mathf.Abs(zoom() - 1.03f) < 0.005f, "1.3x 에서 1.0x 바로 앞까지 줄임");
+            Do(() => call("EndPinch"));
+            Check(() => say("손 뗌") && zoom() == 1f && snaps() == 3, "1.0x 바로 앞에서 손을 떼도 1.0x 로 붙고 진동");
+
+            Do(() => { call("SyncRaw"); pinch(1e6f); });
+            Check(() => say("끝까지 벌림") && Mathf.Abs(zoom() - max) < 0.001f, "끝까지 벌리면 최대 배율에서 멈춤");
+            Do(() => pinch(-1e6f));
+            Check(() => say("끝까지 좁힘") && Mathf.Abs(zoom() - min) < 0.001f, "끝까지 좁히면 최소 배율에서 멈춤");
+            Do(() => { call("EndPinch"); z.ResetZoom(); });
+            Check(() => say("되돌림") && zoom() == 1f, "되돌리면 1.0x");
+        }
+
+        private static void ZoomRects(string label)
+        {
+            var sa = Screen.safeArea;
+            var sb = new System.Text.StringBuilder($"  [{label}] 화면 {Screen.width}x{Screen.height} · 안전영역 위 {Screen.height - sa.yMax:0} 아래 {sa.yMin:0}");
+            var z = UnityEngine.Object.FindAnyObjectByType<ZoomIndicator>(FindObjectsInactive.Include);
+            var oc = UnityEngine.Object.FindAnyObjectByType<ObjectCountUI>(FindObjectsInactive.Include);
+            var parts = new List<Transform>();
+            if (z != null) foreach (Transform c in z.transform) parts.Add(c);
+            if (oc != null) foreach (var n in new[] { "Back", "Text", "Ic0926" }) { var b = oc.transform.Find(n); if (b != null) parts.Add(b); }
+            var chip = Find("SkyChip0926"); if (chip != null) parts.Add(chip);
+            foreach (var t in parts)
+            {
+                var rt = t as RectTransform;
+                if (rt == null || !rt.gameObject.activeInHierarchy) { sb.Append($" | {t.name} 꺼짐"); continue; }
+                var r = ScreenRect(rt);
+                var tx = rt.GetComponent<Text>();
+                float a = 1f;   // 실제로 보이는 정도 — 위로 올라가며 CanvasGroup 알파를 곱한다
+                for (var p = rt.transform; p != null; p = p.parent)
+                {
+                    var g = p.GetComponent<CanvasGroup>();
+                    if (g == null || !g.enabled) continue;
+                    a *= g.alpha;
+                    if (g.ignoreParentGroups) break;
+                }
+                var hw = rt.GetComponent<R0926HideWhile>();
+                var own = hw != null ? hw.GetComponent<CanvasGroup>() : null;
+                sb.Append($" | {t.name} {Screen.height - r.yMax:0}~{Screen.height - r.yMin:0} (x {r.xMin:0}~{r.xMax:0}){(tx != null ? " '" + tx.text + "'" : "")} 보임 {a:0.00}{(own != null ? $" (숨김장치 {own.alpha:0.00})" : "")}");
             }
             log.Add(sb.ToString());
         }

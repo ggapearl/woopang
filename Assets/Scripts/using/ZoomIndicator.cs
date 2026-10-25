@@ -26,6 +26,7 @@ public class ZoomIndicator : MonoBehaviour
 
     private Coroutine hideCoroutine;
     private float lastZoomLevel = 1.0f;
+    private bool shown;
 
     void Start()
     {
@@ -38,7 +39,8 @@ public class ZoomIndicator : MonoBehaviour
             }
         }
 
-        // 초기에는 숨김
+        // 초기에는 숨김 — 첫 UpdateZoom 으로 켜진 경우는 그대로 둔다 (예전엔 바로 다음 프레임에 도로 꺼져 첫 핀치 · 배율 초기화 표시가 사라졌다)
+        if (shown) return;
         canvasGroup.alpha = 0f;
         gameObject.SetActive(false);
     }
@@ -49,6 +51,8 @@ public class ZoomIndicator : MonoBehaviour
     /// <param name="zoomLevel">줌 배율 (1.0 = 기본, 2.0 = 2배 확대)</param>
     public void UpdateZoom(float zoomLevel)
     {
+        shown = true;
+
         // 줌 인디케이터 표시
         if (!gameObject.activeSelf)
         {

@@ -13,7 +13,7 @@ namespace Redesign0926
     ///  · X 는 사진과 같은 앵커로 사진 아래끝에 걸친다 (예전엔 화면 아래 기준이라 사진만 올리면 떨어진다)
     ///  · 댓글 미리보기는 도크처럼 아래 안전영역만큼 오른다 (예전엔 도크만 올라 아이폰에서 글이 도크 윗선에 붙었다)
     ///    · 미리보기의 투명한 누름 칸이 X 아래쪽 절반을 덮어 그 자리를 누르면 닫히지 않고 댓글 창이 열렸다 — 누름 칸 위쪽을 줄인다
-    ///  · 노치 아래 상태 알약('주변에서 N곳을 찾았어요')은 상세가 열려 있는 동안 숨긴다 — 올린 아이콘 줄과 같은 높이다
+    ///  · 노치 아래 상태 알약('주변에서 N곳을 찾았어요')은 상세가 열려 있는 동안 숨긴다 — 올린 아이콘 줄과 같은 높이다 (ApplyTopSlot)
     /// 가로 배치는 그대로 — ApplyFadeAndLandscape 가 여기서 정한 세로 값을 세로 자리로 다시 담는다
     /// </summary>
     public static partial class Redesign0926Apply
@@ -68,22 +68,6 @@ namespace Redesign0926
                 var img = preview.GetComponent<Image>();
                 if (img != null) { img.raycastPadding = new Vector4(0, 0, 0, PreviewTapTrim); EditorUtility.SetDirty(img); }
             }
-
-            // 상태 알약 — ObjectCountUI 는 자기 CanvasGroup 알파로 나타나고 사라지므로, 겹치지 않게 자식(Back · Text · Ic0926)마다 따로 숨긴다
-            var oc = FindInScene<ObjectCountUI>(root.gameObject);
-            if (oc != null)
-            {
-                foreach (Transform c in oc.transform)
-                {
-                    var hide = Ensure<R0926HideWhile>(c.gameObject);
-                    var so = new SerializedObject(hide);
-                    var arr = so.FindProperty("panels");
-                    arr.arraySize = 1;
-                    arr.GetArrayElementAtIndex(0).objectReferenceValue = full;
-                    so.ApplyModifiedPropertiesWithoutUndo();
-                }
-            }
-            else log.Add("상세 올리기: ObjectCountUI 없음");
             log.Add("detail lift ok");
         }
     }
