@@ -16,7 +16,7 @@ using UnityEngine.XR.ARSubsystems;
 /// <summary>
 /// 보물찾기 AR 보물 — 참가 중인 게임(내가 연 게임도)의 보물에 '보이는 거리'까지 다가가면 그 자리에 보물상자(R0926HuntChest)를 띄운다.
 ///  · 근접 확인(/near)이 보인다고 할 때만 서버가 보물 좌표를 준다 — 그 자리에 지오스페이셜 앵커로 놓는다 (높이는 휴대폰보다 조금 아래)
-///  · 상자나 그 박스·화살표를 두 번 톡톡 누르면 찾기(/claim): 찾음 → 상자가 열리고 축하 화면(R0926HuntCelebrate) → 그 게임 상세 · 조금 더 가까이 ·
+///  · 상자나 그 박스·화살표를 두 번 톡톡 누르면 찾기(/claim): 찾음 → 그 상자가 축하 화면(R0926HuntCelebrate)으로 날아가 두근두근 떨다 열린다 → 그 게임 상세 · 조금 더 가까이 ·
 ///    코드 게임 → 상세의 코드 칸 · 먼저 찾음 · 끝남. 한 번만 누르면 '두 번 톡톡' 안내 (10-14 대표님: '보물 열기' 버튼 대신 더블터치)
 ///  · 주최자는 참가는 못 해도 자기 보물은 보인다 — 누르면 '내가 숨긴 보물'이라고만 알린다 (10-14 대표님)
 ///  · 지켜볼 게임은 카드가 알려 준다(상세 · 처음 화면의 참가·주최 목록). 기기에 적어 두어 앱을 다시 켜도 이어 보고,
@@ -339,6 +339,23 @@ public class R0926HuntTreasure : MonoBehaviour
         else Destroy(go);
     }
 
+    // 찾음 — AR 보물을 축하 화면에 넘긴다: 앵커는 풀고 뿌리는 지우고 상자만 (둘레 별빛도 같이). 보이지 않으면 null
+    private static R0926HuntChest Take(Hunt t)
+    {
+        var go = t.obj;
+        var chest = Chest(t);
+        if (go == null || chest == null || !go.activeInHierarchy) return null;
+        SpawnedObjects.Remove("hunt_" + t.id);
+        t.obj = null;
+        var a = go.GetComponent<CustomARGeospatialCreatorAnchor>();
+        if (a != null) a.ReleaseAnchor();
+        var twinkle = go.transform.Find("Twinkle");
+        if (twinkle != null) twinkle.SetParent(chest.transform, true);
+        chest.transform.SetParent(null, true);
+        Destroy(go);
+        return chest;
+    }
+
     private static void Remove(Hunt t)
     {
         Despawn(t, false);
@@ -449,10 +466,18 @@ public class R0926HuntTreasure : MonoBehaviour
         switch (result)
         {
             case "found":
-                if (hunts.Contains(t)) { Despawn(t, true); hunts.Remove(t); Save(); }
-                // 축하 화면 — 상품 안내 · 주최자에게 간 메세지. '확인'을 누르면 그 게임 상세(결과 · 주최자에게 한마디)
-                if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, t.prize, t.hostName))
+                R0926HuntChest live = null;
+                if (hunts.Contains(t))
                 {
+                    live = R0926HuntCelebrate.Ready ? Take(t) : null;   // 그 상자가 축하 화면으로 — 못 넘기면 AR 에서 열리고 사라진다
+                    if (live == null) Despawn(t, true);
+                    hunts.Remove(t);
+                    Save();
+                }
+                // 축하 화면 — 두근두근 · 짜잔 · 카드(상품 · 몇 번째 · 주최자에게 간 메세지). '확인'을 누르면 그 게임 상세(결과 · 주최자에게 한마디)
+                if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, t.prize, t.hostName, t.kind, t.url, live))
+                {
+                    if (live != null) Destroy(live.gameObject);
                     Say(T("보물을 찾았어요!", "You found it!", "宝を見つけました！", "找到宝藏了！", "¡Lo encontraste!"), T(j["rank"].AsInt + "번째로 찾았어요", "You're #" + j["rank"].AsInt, j["rank"].AsInt + "番目に見つけました", "你是第 " + j["rank"].AsInt + " 个找到的", "Puesto #" + j["rank"].AsInt), 3.5f);
                     yield return new WaitForSecondsRealtime(1.6f);
                     R0926HuntPush.Open(id.ToString(), null, false);

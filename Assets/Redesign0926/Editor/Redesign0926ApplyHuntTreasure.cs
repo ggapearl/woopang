@@ -70,12 +70,18 @@ namespace Redesign0926
             if (missing > 0) log.Add("보물찾기 AR 보물: 덮는 창 " + missing + "개 못 찾음");
             so.ApplyModifiedPropertiesWithoutUndo();
             log.Add(prefab != null ? "hunt treasure ok" : "보물찾기 AR 보물: 프리팹 없음");
-            HuntCelebrate(root, log);
+            HuntCelebrate(root, prefab, log);
         }
 
         // ── 찾았을 때 축하 화면 — 캔버스 맨 위, 늘 켜진 빈 틀 + 꺼 둔 Panel (R0926HuntCelebrate 가 켠다) ──
-        //    열린 보물상자(뚜껑이 경첩에서 펼쳐짐 · 금화 더미) · 빛줄기 둘 · 금화·꽃가루 · '보물을 찾았습니다!' · 몇 번째 · 상품 카드(선물 그림) · 주최자 안내 · 확인
-        private static void HuntCelebrate(Transform root, List<string> log)
+        //    10-26: 찾은 그 보물을 3D 로(ChestView — R0926HuntReveal) 두근두근 떨다 짜잔 → 상자에서 금박 카드가 솟아 뒤집힌다
+        //    카드: 순위 메달(1등은 왕관) · '보물을 찾았습니다!' · 몇 번째 · 게임 이름 · 상품(선물 그림) · 주최 · 찾은 시각 · 순위 · 주최자 안내 · 아래 '확인'
+        private const string PremulMatPath = "Assets/Redesign0926/Materials/R0926PremultipliedUI.mat";
+        private const float CelebrateChestY = 70f, CelebrateCardY = 0f;
+        private static readonly Color SealGold = new Color(1f, 0.82f, 0.42f, 1f);
+        private static readonly Color SealInk = new Color(0.27f, 0.18f, 0.04f, 1f);
+
+        private static void HuntCelebrate(Transform root, GameObject treasurePrefab, List<string> log)
         {
             var host = FindOrCreate(root, "HuntCelebrate0926");
             host.transform.SetAsLastSibling();
@@ -86,116 +92,241 @@ namespace Redesign0926
             EditorUtility.SetDirty(cv);
             Ensure<GraphicRaycaster>(host);
             var cel = Ensure<R0926HuntCelebrate>(host);
+            var reveal = Ensure<R0926HuntReveal>(host);
 
             var panel = FindOrCreate(host.transform, "Panel");
             Stretch(RT(panel));
             var group = Ensure<CanvasGroup>(panel);
             var dim = FindOrCreate(panel.transform, "Dim");
             Stretch(RT(dim));
-            Img(dim, null, new Color(0.02f, 0.02f, 0.04f, 0.78f), Image.Type.Simple).raycastTarget = true;   // 뒤의 AR·도크를 누르지 않게
+            var dimImg = Img(dim, null, new Color(0.02f, 0.02f, 0.04f, 0.85f), Image.Type.Simple);
+            dimImg.raycastTarget = true;   // 뒤의 AR·도크를 누르지 않게 — 두근두근 동안 누르면 바로 연다
+            var skip = Ensure<Button>(dim);
+            skip.transition = Selectable.Transition.None;
+            skip.navigation = new Navigation { mode = Navigation.Mode.None };
+            EditorUtility.SetDirty(skip);
 
             var content = FindOrCreate(panel.transform, "Content");
-            SetRect(RT(content), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 40), new Vector2(1440, 1900));
-
-            var stage = FindOrCreate(content.transform, "Stage");
-            SetRect(RT(stage), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 430), new Vector2(900, 900));
-            GameObject Layer(string name, Sprite sp, Color c, Vector2 pos, Vector2 size)
+            SetRect(RT(content), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1440, 1800));
+            // 10-26: 그림 상자(Stage 의 ChestBody·ChestLid) · 글 칸(Info) → 3D 보물(ChestView) + 카드(Card)
+            foreach (var oldName in new[] { "Stage", "Info" })
             {
-                var g = FindOrCreate(stage.transform, name);
+                var old = content.transform.Find(oldName);
+                if (old != null) { Object.DestroyImmediate(old.gameObject); log.Add("축하 화면: 예전 " + oldName + " 지움 → 3D 보물 + 카드"); }
+            }
+            GameObject Layer(Transform parent, string name, Sprite sp, Color c, Vector2 pos, Vector2 size)
+            {
+                var g = FindOrCreate(parent, name);
                 SetRect(RT(g), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), pos, size);
                 var im = Img(g, sp, c, Image.Type.Simple);
                 im.raycastTarget = false; im.preserveAspect = true;
                 return g;
             }
-            var rays = Layer("Rays", Spr("r0926_rays"), new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0f), Vector2.zero, new Vector2(1500, 1500));
-            var rays2 = Layer("Rays2", Spr("r0926_rays"), new Color(HuntAmber.r, HuntAmber.g, HuntAmber.b, 0f), Vector2.zero, new Vector2(1020, 1020));
-            RT(rays2).localEulerAngles = new Vector3(0, 0, 13f);
-            var glow = Layer("Glow", Spr("r0926_glow"), new Color(1f, 0.82f, 0.45f, 0f), new Vector2(0, -20), new Vector2(820, 820));   // 가장자리까지 0 으로 지는 번짐 (64px 별을 키웠더니 옅은 테두리가 계단처럼 보였다)
-            // 10-22: 선물 상자 → 열린 보물상자 (AR 에서 연 그 상자가 이어서 뜬다)
-            foreach (var oldName in new[] { "GiftBox", "GiftLid" })
+            Text Label(Transform parent, string name, Vector2 pos, Vector2 size, float fontSize, Color c, TextAnchor align, FontStyle style, int minSize = 0)
             {
-                var old = stage.transform.Find(oldName);
-                if (old != null) { Object.DestroyImmediate(old.gameObject); log.Add("축하 화면: 선물 상자 " + oldName + " 지움 → 보물상자"); }
+                var g = FindOrCreate(parent, name);
+                SetRect(RT(g), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), pos, size);
+                var t = Txt(g, "", fontSize, c, align, style);
+                t.horizontalOverflow = HorizontalWrapMode.Wrap; t.verticalOverflow = VerticalWrapMode.Truncate;
+                t.resizeTextForBestFit = minSize > 0; t.resizeTextMinSize = minSize > 0 ? minSize : 10; t.resizeTextMaxSize = Mathf.RoundToInt(fontSize);
+                return t;
             }
-            var lid = Layer("ChestLid", Spr("r0926_chest_lid"), Color.white, new Vector2(0, -70), new Vector2(560, 300));
-            RT(lid).pivot = new Vector2(0.5f, 0f);   // 경첩(아래)에서 위로 펼쳐진다
-            RT(lid).anchoredPosition = new Vector2(0, -70);
-            var box = Layer("ChestBody", Spr("r0926_chest_body"), Color.white, new Vector2(0, -130), new Vector2(560, 450));
-            lid.transform.SetSiblingIndex(glow.transform.GetSiblingIndex() + 1);   // 빛 앞 · 몸통 뒤
-            box.transform.SetSiblingIndex(lid.transform.GetSiblingIndex() + 1);
 
-            var info = FindOrCreate(content.transform, "Info");
-            SetRect(RT(info), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), new Vector2(0, -70), new Vector2(1240, 840));
-            var infoGroup = Ensure<CanvasGroup>(info);
-            var title = FindOrCreate(info.transform, "Title");
-            SetRect(RT(title), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(0, 116));
-            var tt = Txt(title, "보물을 찾았습니다!", 84, HuntGold, TextAnchor.MiddleCenter, FontStyle.Bold);
-            tt.horizontalOverflow = HorizontalWrapMode.Wrap; tt.resizeTextForBestFit = true; tt.resizeTextMinSize = 56; tt.resizeTextMaxSize = 84;
-            var rank = FindOrCreate(info.transform, "Rank");
-            SetRect(RT(rank), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -126), new Vector2(0, 64));
-            var rt = Txt(rank, "", 44, Soft, TextAnchor.MiddleCenter, FontStyle.Normal);
-            rt.horizontalOverflow = HorizontalWrapMode.Wrap; rt.resizeTextForBestFit = true; rt.resizeTextMinSize = 32; rt.resizeTextMaxSize = 44;
+            // 뒤 — 빛줄기 둘 · 번짐 (열린 뒤 돈다)
+            var back = FindOrCreate(content.transform, "Back");
+            SetRect(RT(back), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 40), Vector2.zero);
+            var rays = Layer(back.transform, "Rays", Spr("r0926_rays"), new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0f), Vector2.zero, new Vector2(1500, 1500));
+            var rays2 = Layer(back.transform, "Rays2", Spr("r0926_rays"), new Color(HuntAmber.r, HuntAmber.g, HuntAmber.b, 0f), Vector2.zero, new Vector2(1020, 1020));
+            RT(rays2).localEulerAngles = new Vector3(0, 0, 13f);
+            var glow = Layer(back.transform, "Glow", Spr("r0926_glow"), new Color(1f, 0.82f, 0.45f, 0f), new Vector2(0, 30), new Vector2(900, 900));
 
-            var card = FindOrCreate(info.transform, "PrizeCard");
-            SetRect(RT(card), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -226), new Vector2(1180, 250));
-            Img(card, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 44f).raycastTarget = false;
-            var gift = FindOrCreate(card.transform, "Gift");
-            SetRect(RT(gift), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(128, -4), new Vector2(180, 190));
+            // 3D 보물 — 투명 배경에 찍은 판 (미리 곱한 알파로 띄운다)
+            var chestView = FindOrCreate(content.transform, "ChestView");
+            SetRect(RT(chestView), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, CelebrateChestY), new Vector2(1200, 1200));
+            var raw = Ensure<RawImage>(chestView);
+            raw.raycastTarget = false;
+            raw.color = Color.white;
+            raw.texture = null;
+            raw.material = PremulMaterial(log);
+            raw.enabled = false;
+            EditorUtility.SetDirty(raw);
+            var seamGlow = Layer(content.transform, "SeamGlow", Spr("r0926_glow"), new Color(1f, 0.88f, 0.55f, 0f), new Vector2(0, CelebrateChestY), new Vector2(360, 360));
+            var caption = Label(content.transform, "Caption", new Vector2(0, CelebrateChestY - 470), new Vector2(1240, 110), 66, HuntGold, TextAnchor.MiddleCenter, FontStyle.Bold, 44);
+            var cs = Ensure<Shadow>(caption.gameObject);
+            cs.effectColor = new Color(0f, 0f, 0f, 0.55f); cs.effectDistance = new Vector2(0, -4);
+            EditorUtility.SetDirty(cs);
+
+            // 카드 — 금박 9분할 (가장자리 150px → 96 단위). 뒷면은 메달에 '?', 앞면이 결과. 캔버스 폭(기준 1440×3200 · 휴대폰 약 1460)의 84%
+            var card = FindOrCreate(content.transform, "Card");
+            SetRect(RT(card), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, CelebrateCardY), new Vector2(1220, 1260));
+            var cardBack = FindOrCreate(card.transform, "BackFace");
+            Stretch(RT(cardBack));
+            Img(cardBack, Spr("r0926_card"), Color.white, Image.Type.Sliced, 1.5625f).raycastTarget = false;
+            Layer(cardBack.transform, "Rays", Spr("r0926_rays"), new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.22f), Vector2.zero, new Vector2(1000, 1000));
+            var backSeal = Layer(cardBack.transform, "Seal", Spr("r0926_seal"), SealGold, Vector2.zero, new Vector2(380, 380));
+            var mark = Label(backSeal.transform, "Mark", new Vector2(0, 6), new Vector2(340, 340), 190, SealInk, TextAnchor.MiddleCenter, FontStyle.Bold);
+            mark.text = "?";
+
+            var front = FindOrCreate(card.transform, "Front");
+            Stretch(RT(front));
+            Img(front, Spr("r0926_card"), Color.white, Image.Type.Sliced, 1.5625f).raycastTarget = false;
+            var clip = FindOrCreate(front.transform, "ShineClip");
+            Stretch(RT(clip));
+            RT(clip).offsetMin = new Vector2(26, 26); RT(clip).offsetMax = new Vector2(-26, -26);   // 둥근 모서리 밖으로 새지 않게 금박 안쪽까지만
+            Ensure<RectMask2D>(clip);
+            var shine = Layer(clip.transform, "Shine", Spr("r0926_shine"), new Color(1f, 1f, 1f, 0.3f), new Vector2(-2000, 0), new Vector2(210, 1900));
+            RT(shine).localEulerAngles = new Vector3(0, 0, -22f);
+            shine.GetComponent<Image>().preserveAspect = false;
+
+            var title = Label(front.transform, "Title", new Vector2(0, 440), new Vector2(1100, 110), 84, HuntGold, TextAnchor.MiddleCenter, FontStyle.Bold, 56);
+            var rank = Label(front.transform, "Rank", new Vector2(0, 345), new Vector2(1100, 70), 52, Ink, TextAnchor.MiddleCenter, FontStyle.Normal, 40);
+            var hunt = Label(front.transform, "Hunt", new Vector2(0, 278), new Vector2(1100, 60), 42, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);   // 길면 … (R0926HuntCelebrate.OneLine)
+            var line = FindOrCreate(front.transform, "Divider");
+            SetRect(RT(line), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 215), new Vector2(900, 3));
+            Img(line, null, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.35f), Image.Type.Simple).raycastTarget = false;
+            var diamond = FindOrCreate(front.transform, "Diamond");
+            SetRect(RT(diamond), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 215), new Vector2(20, 20));
+            RT(diamond).localEulerAngles = new Vector3(0, 0, 45f);
+            Img(diamond, null, HuntGold, Image.Type.Simple).raycastTarget = false;
+
+            var prizeBox = FindOrCreate(front.transform, "PrizeBox");
+            SetRect(RT(prizeBox), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 40), new Vector2(1060, 260));
+            Img(prizeBox, Spr("r0926_pill"), new Color(1f, 0.92f, 0.75f, 0.06f), Image.Type.Sliced, 64f / 44f).raycastTarget = false;
+            var gift = FindOrCreate(prizeBox.transform, "Gift");
+            SetRect(RT(gift), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-385, -4), new Vector2(180, 190));
+            RT(gift).localScale = Vector3.one * 1.04f;
             var gb = FindOrCreate(gift.transform, "Box");
             SetRect(RT(gb), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -34), new Vector2(160, 120));
             var gbi = Img(gb, Spr("r0926_gift_box"), Color.white, Image.Type.Simple); gbi.raycastTarget = false; gbi.preserveAspect = true;
             var gl = FindOrCreate(gift.transform, "Lid");
             SetRect(RT(gl), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 41), new Vector2(180, 110));
             var gli = Img(gl, Spr("r0926_gift_lid"), Color.white, Image.Type.Simple); gli.raycastTarget = false; gli.preserveAspect = true;
-            var plabel = FindOrCreate(card.transform, "Label");
-            SetRect(RT(plabel), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(256, 34), new Vector2(-256 - 44, 52));
-            Txt(plabel, "상품", 36, HuntGold, TextAnchor.LowerLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
-            var prize = FindOrCreate(card.transform, "Prize");
-            SetRect(RT(prize), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(256, 26), new Vector2(-256 - 44, 124));
-            var pt = Txt(prize, "", 46, Ink, TextAnchor.UpperLeft, FontStyle.Bold);
+            var plabel = FindOrCreate(prizeBox.transform, "Label");
+            SetRect(RT(plabel), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0.5f), new Vector2(-250, 64), new Vector2(730, 56));
+            var plt = Txt(plabel, "상품", 40, HuntGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            plt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var prize = FindOrCreate(prizeBox.transform, "Prize");
+            SetRect(RT(prize), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 1f), new Vector2(-250, 32), new Vector2(730, 150));
+            var pt = Txt(prize, "", 56, Ink, TextAnchor.UpperLeft, FontStyle.Bold);
             pt.horizontalOverflow = HorizontalWrapMode.Wrap; pt.verticalOverflow = VerticalWrapMode.Truncate; pt.lineSpacing = 1.05f;
-            pt.resizeTextForBestFit = true; pt.resizeTextMinSize = 34; pt.resizeTextMaxSize = 46;
+            pt.resizeTextForBestFit = true; pt.resizeTextMinSize = 40; pt.resizeTextMaxSize = 56;
 
-            var note = FindOrCreate(info.transform, "Note");
-            SetRect(RT(note), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -500), new Vector2(0, 120));
-            var nt = Txt(note, "", 36, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
-            nt.horizontalOverflow = HorizontalWrapMode.Wrap; nt.lineSpacing = 1.15f;
+            // 정보 줄 — 주최 · 찾은 시각 · 순위 (값이 없는 줄은 R0926HuntCelebrate 가 빼고 위로 당긴다)
+            var keys = new Text[3];
+            var values = new Text[3];
+            for (int i = 0; i < 3; i++)
+            {
+                var row = FindOrCreate(front.transform, "Meta" + i);
+                SetRect(RT(row), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -170 - 70 * i), new Vector2(1000, 62));
+                var k = FindOrCreate(row.transform, "Key");
+                Stretch(RT(k));
+                keys[i] = Txt(k, "", 40, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+                keys[i].horizontalOverflow = HorizontalWrapMode.Overflow;
+                var v = FindOrCreate(row.transform, "Value");
+                Stretch(RT(v));
+                RT(v).offsetMin = new Vector2(280, 0);
+                values[i] = Txt(v, "", 42, Soft, TextAnchor.MiddleRight, FontStyle.Normal);   // 길면 … (R0926HuntCelebrate.OneLine)
+                values[i].horizontalOverflow = HorizontalWrapMode.Wrap; values[i].verticalOverflow = VerticalWrapMode.Truncate;
+                values[i].resizeTextForBestFit = false;
+            }
+            var note = Label(front.transform, "Note", new Vector2(0, -450), new Vector2(1080, 130), 40, Muted, TextAnchor.MiddleCenter, FontStyle.Normal, 38);
+            note.lineSpacing = 1.15f;
 
-            var ok = FindOrCreate(info.transform, "OK");
-            SetRect(RT(ok), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -660), new Vector2(760, 150));
+            // 메달 — 카드 윗변에 걸친다 (1등은 위에 왕관)
+            var seal = Layer(front.transform, "Seal", Spr("r0926_seal"), SealGold, new Vector2(0, 640), new Vector2(260, 260));
+            var sealNum = Label(seal.transform, "Num", new Vector2(0, 5), new Vector2(230, 230), 134, SealInk, TextAnchor.MiddleCenter, FontStyle.Bold);
+            sealNum.text = "1";
+            sealNum.verticalOverflow = VerticalWrapMode.Overflow;
+            var crown = Layer(front.transform, "Crown", Spr("r0926_crown"), Color.white, new Vector2(0, 800), new Vector2(170, 112));
+            card.SetActive(false);
+
+            // 확인 — 카드 아래
+            var ok = FindOrCreate(content.transform, "OK");
+            SetRect(RT(ok), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, CelebrateCardY - 630 - 60 - 78), new Vector2(800, 156));
+            var okGroup = Ensure<CanvasGroup>(ok);
             var okImg = Img(ok, Spr("r0926_pill"), HuntGold, Image.Type.Sliced, 64f / 70f);
             okImg.raycastTarget = true;
             var okBtn = Ensure<Button>(ok);
             okBtn.transition = Selectable.Transition.ColorTint; okBtn.targetGraphic = okImg;
-            Ensure<ClickButtonOnBack>(ok);   // 안드로이드 뒤로가기 = 확인
+            Ensure<ClickButtonOnBack>(ok);   // 안드로이드 뒤로가기 = 확인 (연출 중에도 — 바로 닫고 그 게임 상세)
             var okl = FindOrCreate(ok.transform, "Label");
             Stretch(RT(okl));
-            var okText = Txt(okl, "확인", 50, HuntDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var okText = Txt(okl, "확인", 54, HuntDark, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            // 금화·꽃가루·별빛 (content 가운데 기준) · 짜잔 번쩍(화면 전체)
+            var fx = FindOrCreate(content.transform, "Fx");
+            SetRect(RT(fx), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            int order = 0;
+            foreach (var g in new[] { back, chestView, seamGlow, caption.gameObject, card, ok, fx }) g.transform.SetSiblingIndex(order++);
+            var flash = FindOrCreate(panel.transform, "Flash");
+            Stretch(RT(flash));
+            var flashImg = Img(flash, null, new Color(1f, 1f, 1f, 0f), Image.Type.Simple);
+            flashImg.raycastTarget = false;
+            flash.transform.SetAsLastSibling();
             panel.SetActive(false);
+
+            var rso = new SerializedObject(reveal);
+            rso.FindProperty("treasurePrefab").objectReferenceValue = treasurePrefab;
+            rso.FindProperty("view").objectReferenceValue = raw;
+            rso.ApplyModifiedPropertiesWithoutUndo();
 
             var so = new SerializedObject(cel);
             so.FindProperty("panel").objectReferenceValue = panel;
             so.FindProperty("group").objectReferenceValue = group;
+            so.FindProperty("dim").objectReferenceValue = dimImg;
+            so.FindProperty("skipButton").objectReferenceValue = skip;
             so.FindProperty("content").objectReferenceValue = RT(content);
+            so.FindProperty("reveal").objectReferenceValue = reveal;
             so.FindProperty("rays").objectReferenceValue = RT(rays);
             so.FindProperty("rays2").objectReferenceValue = RT(rays2);
             so.FindProperty("glow").objectReferenceValue = RT(glow);
-            so.FindProperty("chestBody").objectReferenceValue = RT(box);
-            so.FindProperty("chestLid").objectReferenceValue = RT(lid);
-            so.FindProperty("stage").objectReferenceValue = RT(stage);
-            so.FindProperty("info").objectReferenceValue = infoGroup;
-            so.FindProperty("title").objectReferenceValue = tt;
-            so.FindProperty("rankText").objectReferenceValue = rt;
-            so.FindProperty("prizeLabel").objectReferenceValue = plabel.GetComponent<Text>();
+            so.FindProperty("seamGlow").objectReferenceValue = RT(seamGlow);
+            so.FindProperty("caption").objectReferenceValue = caption;
+            so.FindProperty("card").objectReferenceValue = RT(card);
+            so.FindProperty("cardFront").objectReferenceValue = RT(front);
+            so.FindProperty("cardBack").objectReferenceValue = RT(cardBack);
+            so.FindProperty("shine").objectReferenceValue = RT(shine);
+            so.FindProperty("seal").objectReferenceValue = RT(seal);
+            so.FindProperty("crown").objectReferenceValue = RT(crown);
+            so.FindProperty("sealNum").objectReferenceValue = sealNum;
+            so.FindProperty("title").objectReferenceValue = title;
+            so.FindProperty("rankText").objectReferenceValue = rank;
+            so.FindProperty("huntText").objectReferenceValue = hunt;
+            so.FindProperty("prizeLabel").objectReferenceValue = plt;
             so.FindProperty("prizeText").objectReferenceValue = pt;
-            so.FindProperty("noteText").objectReferenceValue = nt;
+            so.FindProperty("noteText").objectReferenceValue = note;
             so.FindProperty("okLabel").objectReferenceValue = okText;
+            var mk = so.FindProperty("metaKeys");
+            var mv = so.FindProperty("metaValues");
+            mk.arraySize = keys.Length; mv.arraySize = values.Length;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                mk.GetArrayElementAtIndex(i).objectReferenceValue = keys[i];
+                mv.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+            }
+            so.FindProperty("okGroup").objectReferenceValue = okGroup;
             so.FindProperty("okButton").objectReferenceValue = okBtn;
+            so.FindProperty("fx").objectReferenceValue = RT(fx);
+            so.FindProperty("flash").objectReferenceValue = flashImg;
             so.FindProperty("confettiRound").objectReferenceValue = Spr("r0926_circle");
             so.FindProperty("glintSprite").objectReferenceValue = Spr("r0926_glint");
             so.FindProperty("coinSprite").objectReferenceValue = Spr("r0926_coin");
             so.ApplyModifiedPropertiesWithoutUndo();
-            log.Add("hunt celebrate ok");
+            log.Add(raw.material != null && treasurePrefab != null ? "hunt celebrate ok" : "축하 화면: 재질·보물 프리팹 빠짐");
+        }
+
+        // 3D 보물 판(RawImage) 재질 — 장면이 참조하므로 셰이더가 빌드에 들어간다
+        private static Material PremulMaterial(List<string> log)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(PremulMatPath);
+            if (mat != null) return mat;
+            var sh = Shader.Find("Hidden/R0926/PremultipliedUI");
+            if (sh == null) { log.Add("축하 화면: PremultipliedUI 셰이더 없음 — 기본 UI 재질로"); return null; }
+            Directory.CreateDirectory(Path.GetDirectoryName(PremulMatPath));
+            mat = new Material(sh) { name = "R0926PremultipliedUI" };
+            AssetDatabase.CreateAsset(mat, PremulMatPath);
+            log.Add("축하 화면: PremultipliedUI 재질 만듦");
+            return mat;
         }
 
         // 앵커(뿌리, 크기 1 — 줌이 뿌리 크기를 바꾼다) + 보물상자 1.2배(폭 약 1.25m · 누르기 쉽게 충돌 상자는 조금 크게) + 뚜껑(경첩 원점) + 박스·화살표(Target, 금색).

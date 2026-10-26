@@ -6531,7 +6531,7 @@ namespace Redesign0926
         {
             const string H = HuntCardPath;
             const string T1Title = "AR 보물 시험 1", T2Title = "AR 보물 시험 2 (코드)", Question = "문 앞 번호 네 자리는?", Prize = "커피 쿠폰 한 장";
-            const string C = "HuntCelebrate0926/Panel/Content/Info/";
+            const string C = "HuntCelebrate0926/Panel/Content/", F = C + "Card/Front/";
             Do(() =>
             {
                 treasureRun = true;
@@ -6688,26 +6688,32 @@ namespace Redesign0926
             Shot("treasure_12m");
             DoubleTapTreasure(() => trHunt1);
             Wait(() => R0926HuntCelebrate.Showing, 8f, "12m 두 번 톡톡 → 축하 화면");
-            Sleep(0.35f);
-            Shot("treasure_open_ar");   // AR 상자가 이쪽을 보고 뚜껑이 열리는 중
+            Sleep(0.2f);
+            Shot("treasure_reveal_fly");   // 찾은 그 보물이 AR 자리에서 가운데로 날아오는 중
             Check(() =>
             {
-                var chest = UnityEngine.Object.FindAnyObjectByType<R0926HuntChest>();
-                var t = chest != null ? chest.GetComponent<Target>() : null;
-                if (chest == null) { log.Add("  여는 상자 없음"); return false; }
-                log.Add("  뚜껑 " + chest.LidAngle.ToString("0") + "°");
-                return chest.Opening && chest.LidAngle > 20f && t != null && !t.enabled;
-            }, "찾음 → 상자가 이쪽을 보고 뚜껑이 열림 · 박스·화살표는 걷힘");
-            Sleep(0.6f);
-            Shot("treasure_open");   // 화면이 스르륵 — 열린 보물상자가 튀어나오는 중
-            Sleep(1.4f);
+                var chest = RevealChest();
+                log.Add("  무대의 보물 " + (chest != null ? chest.transform.root.name + " · 잡힘 " + chest.Held : "없음") + " · AR 자리에서 " + CelebrateFrom()
+                        + " · 단계 " + R0926HuntCelebrate.EditorPhase);
+                return chest != null && chest.transform.root.name == "HuntRevealStage" && chest.Held && chest.GetComponentInChildren<Target>(true) == null
+                       && chest.GetComponentInChildren<Collider>(true) == null && GameObject.Find("HuntTreasure_" + trHunt1) == null && CelebrateFrom();
+            }, "찾음 → AR 의 그 보물상자를 떼어 축하 화면으로 (보이던 자리에서 날아옴 · 박스·화살표·누르는 상자는 떼고 · AR 에는 안 남음)");
+            Sleep(1.2f);
+            Shot("treasure_reveal_suspense");   // 두근두근
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Open", 5f, "두근두근 → 짜잔");
+            Sleep(0.15f);
+            Shot("treasure_reveal_open");
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Done", 4f, "짜잔 → 카드");
+            Sleep(0.8f);
             Shot("treasure_found");
-            Do(() => log.Add("  축하: " + TextOf(C + "Title") + " / " + TextOf(C + "Rank") + " / " + TextOf(C + "PrizeCard/Prize") + " / " + TextOf(C + "Note")));
-            Check(() => TextOf(C + "Title") == "보물을 찾았습니다!" && TextOf(C + "Rank") == "가장 먼저 찾았어요  ·  " + T1Title
-                        && TextOf(C + "PrizeCard/Prize") == Prize && TextOf(C + "Note").Contains("님에게 찾았다는 메세지를 보냈어요"),
-                "축하 화면: '보물을 찾았습니다!' · 가장 먼저 · 상품 안내 · 주최자에게 메세지 보냄");
+            Do(() => log.Add("  카드: " + CardSummary(F) + " · 열리기까지 " + R0926HuntCelebrate.EditorOpenedAfter.ToString("0.00") + "초"));
+            Check(() => TextOf(F + "Title") == "보물을 찾았습니다!" && TextOf(F + "Rank") == "가장 먼저 찾았어요" && TextOf(F + "Hunt") == T1Title
+                        && TextOf(F + "PrizeBox/Prize") == Prize && TextOf(F + "Meta0/Value").EndsWith("님") && TextOf(F + "Meta2/Value") == "1 / 1명"
+                        && TextOf(F + "Note").StartsWith("주최자에게 찾았다는 메세지를 보냈어요") && TextOf(F + "Seal/Num") == "1" && Active(F + "Crown"),
+                "카드: '보물을 찾았습니다!' · 가장 먼저 · 게임 이름 · 상품 · 주최 · 순위 1 / 1명 · 주최자에게 메세지 · 1 메달 + 왕관");
+            Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f, "두근두근 3~4초 뒤에 짜잔");
             Check(() => !R0926HuntTreasure.Tracking(trHunt1) && !R0926HuntTreasure.SpawnedObjects.ContainsKey("hunt_" + trHunt1), "찾음 → 그만 지켜봄");
-            Check(() => GameObject.Find("HuntTreasure_" + trHunt1) == null && PrefLine(trHunt1) == null, "상자는 열린 뒤 작아지며 사라짐 · 기기 기록에서도 지움");
+            Check(() => RevealChest() == null && GameObject.Find("HuntRevealStage") == null && PrefLine(trHunt1) == null, "카드가 다 가리면 3D 보물·카메라를 치움 · 기기 기록에서도 지움");
             Do(() => Click(C + "OK"));
             Wait(() => Active(H + "Detail") && DetailTitle().Contains(T1Title), 12f, "확인 → 그 게임 상세");
             Sleep(1.2f);
@@ -6755,6 +6761,42 @@ namespace Redesign0926
                         && GameObject.Find("HuntTreasure_" + trHunt2) == null && !PlayerPrefs.HasKey(TreasurePref),
                 "나가기 → 보물 치움 · 지켜보기 끝 · 기기 기록 지움");
 
+            // 코드로 찾기 — 다시 참가 → 상세의 코드 칸 → 틀린 코드 → 맞는 코드 → 같은 연출 (그 게임 모양으로 새 상자)
+            const string CodeRow = H + "Detail/Viewport/Content/ClaimCodeBox/CodeRow/", CardToast = "UploadPage/Clip0926/UploadSheet0926/HuntUploadPage/Toast0926/Text";
+            Do(() => R0926HuntPush.Open(trHunt2.ToString(), null, false));
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(T2Title) && Active(H + "Detail/Viewport/Content/Join"), 15f, "T2 상세 (참가하기)");
+            Do(() => Click(H + "Detail/Viewport/Content/Join"));
+            Wait(() => R0926HuntTreasure.Tracking(trHunt2) && Active(H + "Detail/Viewport/Content/ClaimCodeBox"), 20f, "다시 참가 → 코드 칸");
+            Do(() => { Find(CodeRow + "ClaimCodeInput").GetComponent<InputField>().text = "1111"; Click(CodeRow + "CodeOk"); });
+            Wait(() => TextOf(CardToast).StartsWith("코드가 달라요"), 8f, "틀린 코드");
+            Check(() => TextOf(CardToast).StartsWith("코드가 달라요 — 남은 기회") && !R0926HuntCelebrate.Showing, "틀린 코드 → '코드가 달라요 — 남은 기회 N번' · 축하 화면 없음");
+            Do(() => { Find(CodeRow + "ClaimCodeInput").GetComponent<InputField>().text = "4321"; Click(CodeRow + "CodeOk"); });
+            Wait(() => R0926HuntCelebrate.Showing, 10f, "맞는 코드 → 축하 화면");
+            Sleep(0.4f);
+            Shot("treasure_code_reveal");
+            Check(() =>
+            {
+                var chest = RevealChest();
+                log.Add("  코드로 찾음: 무대의 보물 " + (chest != null ? chest.name + " · 뚜껑 " + chest.HasLid : "없음") + " · AR 자리에서 " + CelebrateFrom() + " · 단계 " + R0926HuntCelebrate.EditorPhase);
+                return chest != null && chest.HasLid && chest.GetComponent<Target>() == null && !CelebrateFrom()
+                       && GameObject.Find("HuntTreasure_" + trHunt2) == null && !R0926HuntTreasure.Tracking(trHunt2);
+            }, "코드로 찾음 → 그 게임 모양으로 새 보물상자 (가운데서 떠오름) · AR 보물은 치우고 그만 봄");
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Done", 9f, "코드 → 두근두근 → 짜잔 → 카드");
+            Sleep(0.8f);
+            Shot("treasure_code_found");
+            Do(() => log.Add("  카드: " + CardSummary(F) + " · 열리기까지 " + R0926HuntCelebrate.EditorOpenedAfter.ToString("0.00") + "초"));
+            Check(() => TextOf(F + "Rank") == "가장 먼저 찾았어요" && TextOf(F + "Hunt") == T2Title && TextOf(F + "PrizeBox/Prize") == "따로 정한 상품은 없어요"
+                        && TextOf(F + "Meta2/Value") == "1 / 1명" && TextOf(F + "Seal/Num") == "1" && Active(F + "Crown"),
+                "코드로 찾은 카드: 가장 먼저 · 게임 이름 · 상품 없음 · 1 / 1명 · 1 메달 + 왕관");
+            Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f, "코드로 찾아도 두근두근 3~4초 뒤에 짜잔");
+            Back();
+            Wait(() => !R0926HuntCelebrate.Showing && Active(H + "Detail") && DetailTitle().Contains(T2Title) && TextOf(H + "Detail/Viewport/Content/Mine").Contains("찾았어요"), 12f, "뒤로가기 → T2 상세");
+            Sleep(0.6f);
+            Shot("treasure_code_detail_found");
+            Check(() => !R0926HuntCelebrate.Showing && !Active(H + "Detail/Viewport/Content/ClaimCodeBox") && TextOf(H + "Detail/Viewport/Content/Mine").Contains("찾았어요")
+                        && Has(DevGet(TrPlayer, "/api/hunts/" + trHunt2), "\"rank\":1") && !R0926HuntTreasure.Tracking(trHunt2) && !PlayerPrefs.HasKey(TreasurePref),
+                "뒤로가기(= 확인) → 축하 화면 닫힘 · T2 상세 — '찾았어요' · 코드 칸 닫힘 · 서버에 1등 · 그만 지켜봄");
+
             // 지켜보는 게임은 최근 다섯 · 예약 게임은 시작 시각부터 · 주최자·찾은 게임은 안 봄 (서버 없이)
             Check(() =>
             {
@@ -6782,10 +6824,10 @@ namespace Redesign0926
         // 보물상자 근접 촬영 — 서버 없이 프리팹을 눈앞에 두고: 가까이·중간·멀리 · 누름(살짝 커짐) · 달그락 · 열기(이쪽을 봄 → 뚜껑 · 빛기둥 · 별빛) · 축하 화면
         private static GameObject hcGo;
         private static R0926HuntChest hcChest;
-        private static float hcRest, hcPeak, hcTilt, hcYaw;
+        private static float hcRest, hcPeak, hcTilt, hcYaw, hcLidMax, hcRollMax, hcScaleMax;
         private static void PlanHuntChest()
         {
-            const string C = "HuntCelebrate0926/Panel/Content/";
+            const string C = "HuntCelebrate0926/Panel/Content/", F = C + "Card/Front/";
             Action<float> place = d => steps.Enqueue(() =>
             {
                 var cam = Camera.main;
@@ -6882,62 +6924,124 @@ namespace Redesign0926
                 return hcTilt > 1.5f && hcTilt < 4f && z < 0.01f;
             }, "묻는 동안 달그락 (±3.5°) · 멈추면 반듯");
 
-            // 찾음 — 이쪽을 보고 뚜껑이 열리며 빛기둥·별빛 → 작아지며 사라짐 · 그 사이 축하 화면
+            // 찾음 — AR 의 그 보물을 떼어 축하 화면으로 (R0926HuntTreasure.Take 처럼: 별빛은 상자 아래로 · 앵커 뿌리는 지움)
+            //  날아옴 0.55초 → 두근두근 3.2초(쿵-쿵 진동 · 점점 세게 떪 · 뚜껑이 두 번 들썩이며 틈으로 빛 · 끝에 몰아침) → 짜잔(뚜껑 활짝 · 빛줄기 · 금화·꽃가루) → 카드가 솟아 뒤집힘
             Do(() =>
             {
-                hcChest?.Open();
-                R0926HuntCelebrate.Show(0, "카페 앞 보물찾기", 1, "커피 쿠폰 한 장", "우팡");
+                hcLidMax = 0f; hcRollMax = 0f; hcScaleMax = 0f;
+                if (hcChest != null)
+                {
+                    hcGo.transform.Find("Twinkle")?.SetParent(hcChest.transform, true);
+                    hcChest.transform.SetParent(null, true);
+                    UnityEngine.Object.Destroy(hcGo);
+                }
+                R0926HuntCelebrate.Show(0, "카페 앞 보물찾기", 1, 3, false, "커피 쿠폰 한 장", "우팡", "chest", null, hcChest);
             });
-            Sleep(0.12f);
-            Shot("chest_open_turn");
-            Sleep(0.22f);
-            Shot("chest_open_lid");
+            Action rec = () =>
+            {
+                var c = RevealChest();
+                if (c == null || R0926HuntCelebrate.EditorPhase != "Suspense") return;
+                var pv = c.transform.parent;
+                hcLidMax = Mathf.Max(hcLidMax, c.LidAngle);
+                hcRollMax = Mathf.Max(hcRollMax, Mathf.Abs(Mathf.DeltaAngle(0f, pv.localEulerAngles.z)));
+                hcScaleMax = Mathf.Max(hcScaleMax, pv.localScale.x);
+            };
+            Sleep(0.15f);
+            Shot("reveal_fly");
             Check(() =>
             {
-                if (hcChest == null) return false;
-                var t = hcChest.GetComponent<Target>();
-                var cam = Camera.main.transform;
-                Vector3 to = cam.position - hcChest.transform.position; to.y = 0f;
-                float face = Vector3.Angle(-hcChest.transform.forward, to);   // 자물쇠(앞)가 -Z
-                log.Add("  열기: 뚜껑 " + hcChest.LidAngle.ToString("0") + "° · 앞이 카메라에서 " + face.ToString("0") + "°");
-                return hcChest.Opening && hcChest.LidAngle > 20f && face < 8f && t != null && !t.enabled;
-            }, "열 때 앞(자물쇠)이 이쪽을 보고 뚜껑이 열림 · 박스·화살표는 걷힘");
+                var c = RevealChest();
+                log.Add("  무대의 보물 " + (c != null ? c.transform.root.name + " · 잡힘 " + c.Held + " · 뚜껑 " + c.HasLid : "없음") + " · AR 자리에서 " + CelebrateFrom()
+                        + " · 단계 " + R0926HuntCelebrate.EditorPhase);
+                return c != null && c == hcChest && c.transform.root.name == "HuntRevealStage" && c.Held && c.HasLid && c.GetComponent<Target>() == null
+                       && hcGo == null && CelebrateFrom() && R0926HuntCelebrate.EditorPhase == "Arrive";
+            }, "찾은 그 보물상자가 AR 에서 떨어져 축하 화면 무대로 (보이던 자리에서 날아옴 · 박스·화살표는 뗌)");
+            watch(1.0f, rec);
+            Shot("reveal_beat");
+            Check(() => RevealPixels("reveal_rt"), "3D 보물은 투명 배경에 찍힘 (모서리 알파 0 · 상자는 불투명) — 뒤의 어둠·빛줄기가 비침");
+            watch(0.65f, rec);
+            Shot("reveal_peek");
+            watch(1.45f, rec);
+            Shot("reveal_crescendo");
+            watch(0.2f, rec);
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Open", 3f, "두근두근 → 짜잔");
+            Do(() => log.Add("  두근두근: 뚜껑 가장 크게 " + hcLidMax.ToString("0.0") + "° · 가장 크게 떤 " + hcRollMax.ToString("0.0") + "° · 가장 크게 부푼 "
+                             + hcScaleMax.ToString("0.000") + "배 · 진동 " + R0926HuntCelebrate.EditorBuzz + "번 · 열리기까지 " + R0926HuntCelebrate.EditorOpenedAfter.ToString("0.00") + "초"));
+            Check(() => hcLidMax > 10f && hcLidMax < 16f, "두근두근 — 뚜껑이 들썩 (활짝 열리기 전엔 13° 까지만)");
+            Check(() => hcRollMax > 3f && hcRollMax < 8f && hcScaleMax > 1.04f, "두근두근 — 쿵쿵 부풀고 끝으로 갈수록 세게 떪");
+            Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f && R0926HuntCelebrate.EditorBuzz >= 15,
+                "뜬 뒤 3~4초에 짜잔 · 그 사이 심장 박동 진동");
+            Sleep(0.1f);
+            Shot("reveal_open");
+            Sleep(0.25f);
+            Shot("reveal_open_wide");
+            Check(() =>
+            {
+                var c = RevealChest();
+                log.Add("  짜잔: 뚜껑 " + (c != null ? c.LidAngle.ToString("0") : "-") + "° · 빛줄기 " + Alpha(C + "Back/Rays").ToString("0.00") + " · 꽃가루 " + Confetti());
+                return c != null && c.LidAngle > 100f && Alpha(C + "Back/Rays") > 0.5f && Confetti() > 30;
+            }, "짜잔 — 뚜껑이 활짝 (100° 넘게) · 빛줄기 · 금화가 섞인 꽃가루");
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Card", 2f, "짜잔 → 카드");
             Sleep(0.3f);
-            Shot("chest_open_beam");
+            Shot("reveal_card_flip");
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Done", 2f, "카드 → 다 열림");
+            Sleep(0.75f);
+            Shot("reveal_done");
+            Do(() => log.Add("  카드: " + CardSummary(F)));
+            Check(() => TextOf(F + "Title") == "보물을 찾았습니다!" && TextOf(F + "Rank") == "가장 먼저 찾았어요" && TextOf(F + "Hunt") == "카페 앞 보물찾기"
+                        && TextOf(F + "PrizeBox/Prize") == "커피 쿠폰 한 장" && TextOf(F + "Meta0/Value") == "우팡님" && TextOf(F + "Meta1/Value").Contains(":")
+                        && TextOf(F + "Meta2/Value") == "1 / 3명" && TextOf(F + "Note").Contains("\n") && TextOf(F + "Seal/Num") == "1" && Active(F + "Crown")
+                        && Active(C + "Card/Front") && !Active(C + "Card/BackFace"),
+                "카드 앞면: '보물을 찾았습니다!' · 가장 먼저 · 게임 이름 · 상품 · 주최 우팡님 · 찾은 시각 · 1 / 3명 · 주최자 안내 두 줄 · 1 메달 + 왕관");
             Check(() =>
             {
-                bool beam = hcGo != null && hcGo.transform.Find("Beam") != null;
-                bool stars = GameObject.Find("HuntChestFountain") != null;
-                log.Add("  뚜껑 " + (hcChest != null ? hcChest.LidAngle.ToString("0") : "-") + "° · 빛기둥 " + beam + " · 솟는 별빛 " + stars);
-                return hcChest != null && hcChest.LidAngle > 100f && beam && stars;
-            }, "뚜껑이 활짝 (100° 넘게) · 빛기둥과 흰 별빛이 솟음");
-            Sleep(0.45f);
-            Shot("chest_modal_pop");
-            Sleep(0.4f);
-            Shot("chest_modal_lid");
+                var ok = Find(C + "OK")?.GetComponent<CanvasGroup>();
+                var card = Find(C + "Card") as RectTransform;
+                log.Add("  확인 " + (ok != null ? ok.alpha.ToString("0.00") + " · 누름 " + ok.interactable : "없음") + " · 카드 " + (card != null ? card.localScale.ToString("0.000") + " " + card.anchoredPosition : "없음"));
+                return ok != null && ok.alpha > 0.99f && ok.interactable && card != null && card.localScale == Vector3.one && card.anchoredPosition == Vector2.zero;
+            }, "카드는 제자리 · '확인'이 떠서 누를 수 있음");
+            Check(() => RevealChest() == null && GameObject.Find("HuntRevealStage") == null && !(Find(C + "ChestView")?.GetComponent<RawImage>()?.enabled ?? true),
+                "카드가 다 가리면 3D 보물·카메라·판을 치움");
+            Do(CloseCelebrate);
+
+            // 2등 · AR 보물 없이(상세에서 코드로 찾음) — 같은 프리팹으로 새로 · 두근두근 중 화면(어둠)을 누르면 바로 짜잔 · 상품 없음 · 인원 제한 없음
+            Do(() => R0926HuntCelebrate.Show(0, "카페 앞 보물찾기", 2, 0, false, "", "우팡", "chest", null));
+            Sleep(1.3f);
+            Shot("reveal_new");
             Check(() =>
             {
-                var stage = Find(C + "Stage");
-                int coins = 0, paper = 0;
-                if (stage != null)
-                    foreach (Transform c in stage)
-                        if (c.name == "Paper" && c.gameObject.activeSelf) { paper++; if (c.GetComponent<Image>().sprite != null && c.GetComponent<Image>().sprite.name == "r0926_coin") coins++; }
-                log.Add("  축하 화면 꽃가루 " + paper + "개 중 금화 " + coins);
-                return Active(C + "Stage/ChestBody") && Active(C + "Stage/ChestLid") && !Active(C + "Stage/GiftBox") && paper > 20 && coins > 3;
-            }, "축하 화면: 열린 보물상자 · 금화가 섞인 꽃가루");
-            Sleep(0.9f);
-            Shot("chest_modal_done");
+                var c = RevealChest();
+                return c != null && c != hcChest && c.HasLid && c.GetComponent<Target>() == null && c.GetComponent<Collider>() == null && !CelebrateFrom()
+                       && R0926HuntCelebrate.EditorPhase == "Suspense";
+            }, "AR 보물이 없으면 프리팹으로 새 보물상자 (박스·화살표·누르는 상자 없이) · 가운데서 톡 튀어나옴");
+            Do(() => Click("HuntCelebrate0926/Panel/Dim"));
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Open", 1.5f, "어둠을 누름 → 바로 짜잔");
+            Check(() => R0926HuntCelebrate.EditorOpenedAfter > 1.2f && R0926HuntCelebrate.EditorOpenedAfter < 2.4f, "두근두근 중 화면을 누르면 끝의 몰아침(0.45초)만 남기고 바로 짜잔");
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Done", 3f, "카드");
+            Sleep(0.75f);
+            Shot("reveal_rank2");
+            Do(() => log.Add("  카드: " + CardSummary(F)));
+            Check(() => TextOf(F + "Rank") == "2번째로 찾았어요" && TextOf(F + "PrizeBox/Prize") == "따로 정한 상품은 없어요" && TextOf(F + "Meta2/Value") == "2번째"
+                        && !TextOf(F + "Note").Contains("\n") && TextOf(F + "Seal/Num") == "2" && !Active(F + "Crown"),
+                "2등: '2번째로 찾았어요' · 상품 없음 안내 · 순위 2번째(인원 제한 없음) · 안내 한 줄 · 2 메달 · 왕관 없음");
+            Do(CloseCelebrate);
+
+            // 뚜껑 없는 모양(보석) — 들썩 대신 폴짝 · 짜잔에 한 바퀴 / 마지막 보물 / 뒤로가기 = 확인 (연출 중에도 바로 닫힘)
+            Do(() => { SetPushRunning(true); R0926HuntCelebrate.Show(0, "카페 앞 보물찾기", 3, 3, true, "커피 쿠폰 한 장", "우팡", "gem", null); });
+            Sleep(1.9f);
+            Shot("reveal_gem");
             Check(() =>
             {
-                var lid = Find(C + "Stage/ChestLid");
-                var info = Find(C + "Info")?.GetComponent<CanvasGroup>();
-                return hcGo == null && lid != null && Mathf.Abs(lid.localScale.y - 1f) < 0.01f && info != null && info.alpha > 0.99f
-                       && TextOf(C + "Info/Title") == "보물을 찾았습니다!" && TextOf(C + "Info/PrizeCard/Prize") == "커피 쿠폰 한 장" && Active(C + "Info/OK");
-            }, "AR 상자는 사라지고 · 축하 화면 다 열림 (뚜껑 · '보물을 찾았습니다!' · 상품 · 확인)");
+                var c = RevealChest();
+                return c != null && !c.HasLid && TextOf(F + "Rank") == "마지막 보물을 찾았어요" && TextOf(F + "Meta2/Value") == "3 / 3명";
+            }, "보석 — 뚜껑 없는 모양도 같은 무대에 · 3등이 마지막이면 '마지막 보물을 찾았어요'");
+            Back();
+            Wait(() => !R0926HuntCelebrate.Showing, 2f, "뒤로가기 → 닫힘");
+            Check(() => !R0926HuntCelebrate.Showing && RevealChest() == null && GameObject.Find("HuntRevealStage") == null && PushPending() == "0",
+                "두근두근 중에도 뒤로가기 = 확인 — 바로 닫고 치움 · 그 게임 상세로");
             Do(() =>
             {
-                var cel = UnityEngine.Object.FindAnyObjectByType<R0926HuntCelebrate>(FindObjectsInactive.Include);
-                (typeof(R0926HuntCelebrate).GetField("panel", NPI)?.GetValue(cel) as GameObject)?.SetActive(false);   // '확인'은 그 게임 상세를 서버에서 연다 — 서버 없는 시험이라 닫기만
+                SetPushRunning(false, true);
                 R0926HuntApi.EditorBase = null;
             });
         }
@@ -7451,7 +7555,7 @@ namespace Redesign0926
         private static int arHunt;
         private static void OpenTreasureAR(string shot)
         {
-            const string C = "HuntCelebrate0926/Panel/Content/Info/";
+            const string C = "HuntCelebrate0926/Panel/Content/", F = C + "Card/Front/";
             Do(() => { arHunt = R0926HuntCard.NearHuntId; log.Add("  AR 로 열 게임 " + arHunt); });
             CloseUpload();
             Wait(() => arHunt != 0 && R0926HuntTreasure.SpawnedObjects.ContainsKey("hunt_" + arHunt), 25f, "AR 보물 상자");
@@ -7460,14 +7564,86 @@ namespace Redesign0926
             Sleep(0.3f);
             DoubleTapTreasure(() => arHunt);
             Wait(() => R0926HuntCelebrate.Showing, 8f, "두 번 톡톡 → 축하 화면");
-            Sleep(2.4f);
+            Wait(() => R0926HuntCelebrate.EditorPhase == "Done", 8f, "두근두근 → 짜잔 → 카드");
+            Sleep(0.75f);
             Shot(shot);
-            Do(() => log.Add("  축하: " + TextOf(C + "Title") + " / " + TextOf(C + "Rank") + " / " + TextOf(C + "PrizeCard/Prize") + " / " + TextOf(C + "Note")));
-            Check(() => TextOf(C + "Title") == "보물을 찾았습니다!" && Active(C + "OK"), "두 번 톡톡 → '보물을 찾았습니다!' 축하 화면");
-            Do(() => Click(C + "OK"));
-            Wait(() => !R0926HuntCelebrate.Showing && Active(HuntCardPath + "Detail"), 12f, "확인 → 그 게임 상세");
+            Do(() => log.Add("  카드: " + CardSummary(F)));
+            Check(() => TextOf(F + "Title") == "보물을 찾았습니다!" && Active(C + "OK"), "두 번 톡톡 → 두근두근 → '보물을 찾았습니다!' 카드");
+            Back();   // 안드로이드 뒤로가기 = 확인
+            Wait(() => !R0926HuntCelebrate.Showing && Active(HuntCardPath + "Detail"), 12f, "뒤로가기(= 확인) → 그 게임 상세");
             Sleep(1.2f);
         }
+
+        // ── 축하 화면 도우미 ──
+        // 무대의 3D 보물 (없으면 null)
+        private static R0926HuntChest RevealChest()
+        {
+            var rv = UnityEngine.Object.FindAnyObjectByType<R0926HuntReveal>(FindObjectsInactive.Include);
+            return rv != null ? rv.Chest : null;
+        }
+        // AR 화면에 보이던 그 자리에서 날아왔나
+        private static bool CelebrateFrom()
+        {
+            var cel = UnityEngine.Object.FindAnyObjectByType<R0926HuntCelebrate>(FindObjectsInactive.Include);
+            return cel != null && (bool)typeof(R0926HuntCelebrate).GetField("hasFrom", NPI).GetValue(cel);
+        }
+        private static string CardSummary(string f) =>
+            TextOf(f + "Title") + " / " + TextOf(f + "Rank") + " / " + TextOf(f + "Hunt") + " / " + TextOf(f + "PrizeBox/Label") + ": " + TextOf(f + "PrizeBox/Prize")
+            + " / " + TextOf(f + "Meta0/Key") + " " + TextOf(f + "Meta0/Value") + " · " + TextOf(f + "Meta1/Key") + " " + TextOf(f + "Meta1/Value")
+            + " · " + TextOf(f + "Meta2/Key") + " " + TextOf(f + "Meta2/Value") + " / " + TextOf(f + "Note").Replace("\n", " ⏎ ")
+            + " / 메달 " + TextOf(f + "Seal/Num") + (Active(f + "Crown") ? " + 왕관" : "");
+        private static float Alpha(string path) => Find(path)?.GetComponent<Graphic>()?.color.a ?? 0f;
+        private static int Confetti()
+        {
+            var fx = Find("HuntCelebrate0926/Panel/Content/Fx");
+            int n = 0;
+            if (fx != null) foreach (Transform c in fx) if (c.name == "Paper" && c.gameObject.activeSelf) n++;
+            return n;
+        }
+        // 서버 없는 시험 — '확인'(그 게임 상세를 서버에서 연다) 대신 닫기만
+        private static void CloseCelebrate()
+        {
+            var cel = UnityEngine.Object.FindAnyObjectByType<R0926HuntCelebrate>(FindObjectsInactive.Include);
+            if (cel != null) typeof(R0926HuntCelebrate).GetMethod("Finish", NPI)?.Invoke(cel, null);
+        }
+        // '확인'·뒤로가기가 연 게임 상세 길을 막아 둔다 (running 이면 R0926HuntPush 가 넘기지 않는다) · clear 면 쌓인 것도 버린다
+        private static void SetPushRunning(bool on, bool clear = false)
+        {
+            var push = UnityEngine.Object.FindAnyObjectByType<R0926HuntPush>(FindObjectsInactive.Include);
+            if (push != null) typeof(R0926HuntPush).GetField("running", NPI)?.SetValue(push, on);
+            if (clear) typeof(R0926HuntPush).GetField("pending", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, false);
+        }
+        private static string PushPending()
+        {
+            const System.Reflection.BindingFlags S = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            bool on = (bool)(typeof(R0926HuntPush).GetField("pending", S)?.GetValue(null) ?? false);
+            return on ? typeof(R0926HuntPush).GetField("pendingHunt", S)?.GetValue(null) as string : null;
+        }
+        // 3D 보물 판 — 모서리는 투명(알파 0) · 상자 자리는 불투명 · 상자가 판의 어디를 차지하나 (구도 맞추기) · 판을 그림으로도 남긴다
+        private static bool RevealPixels(string name)
+        {
+            var rv = UnityEngine.Object.FindAnyObjectByType<R0926HuntReveal>(FindObjectsInactive.Include);
+            var rt = rv != null ? rv.EditorTexture : null;
+            if (rt == null) { log.Add("  찍은 판 없음"); return false; }
+            var prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+            tex.Apply();
+            RenderTexture.active = prev;
+            var px = tex.GetPixels32();
+            int w = rt.width, h = rt.height, solid = 0, x0 = w, x1 = -1, y0 = h, y1 = -1;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if (px[y * w + x].a > 128) { solid++; x0 = Mathf.Min(x0, x); x1 = Mathf.Max(x1, x); y0 = Mathf.Min(y0, y); y1 = Mathf.Max(y1, y); }
+            int corner = Mathf.Max(px[0].a, px[w - 1].a, px[(h - 1) * w].a, px[h * w - 1].a);
+            File.WriteAllBytes(Path.Combine(dir, "test_" + name + ".png"), tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            log.Add("  판 " + w + "x" + h + " · 모서리 알파 " + corner + " · 불투명 " + (100f * solid / (w * h)).ToString("0.0") + "% · 상자 자리 x " + (x0 * 100 / w) + "~" + (x1 * 100 / w)
+                    + "% · y " + (y0 * 100 / h) + "~" + (y1 * 100 / h) + "%");
+            return corner == 0 && solid > w * h / 50;
+        }
+
         // 추가 창이 열려 있으면 뒤로가기로 닫는다 (상세 → 처음 화면 → 닫힘)
         private static void CloseUpload()
         {

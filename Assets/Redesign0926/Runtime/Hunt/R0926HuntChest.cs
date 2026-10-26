@@ -9,7 +9,8 @@ using UnityEngine.Networking;
 /// 누르면 열리는 애니메이션과 함께 상품·축하 메세지).
 ///  · 제자리에서 천천히 돌고(위아래로 떠다니지 않음) 둘레에 흰 별빛이 피었다 사그라든다
 ///  · 누를 때마다 살짝 커졌다 돌아온다 (Nudge — 일반 오브젝트와 같은 1.15배) · 서버에 '찾았다'를 묻는 동안엔 달그락(Rattle)
-///  · 찾으면(Open) 이쪽을 돌아보고 뚜껑이 열리며 빛기둥과 별빛이 솟은 뒤 작아지며 사라진다(뿌리째) — 그 사이 축하 화면이 뜬다
+///  · 찾으면(Open) 이쪽을 돌아보고 뚜껑이 열리며 빛기둥과 별빛이 솟은 뒤 작아지며 사라진다(뿌리째) — 축하 화면을 띄울 수 없을 때만.
+///    10-26 부터는 축하 화면이 이 상자를 그대로 가져가(Hold) 두근두근 떨다 연다 (R0926HuntReveal · R0926HuntCelebrate)
 /// 몸통·뚜껑 메시와 재질은 Apply(Redesign0926ApplyHuntChest)가 만든다. 앵커(뿌리) 아래 'Chest' 에 둔다.
 /// 보물 모양(10-24 대표님 — 주최자가 고른다): 보물상자 · 선물상자 · 보물알(뚜껑이 열린다) · 보석 · 별 · 하트(빛만 솟는다) ·
 ///  사진(액자에 끼운다) · 3D 모델(GLB — 못 받으면 보물상자). 서버 hunts.object_kind / object_url → Dress.
@@ -46,7 +47,7 @@ public class R0926HuntChest : MonoBehaviour
     private Renderer body;
     private Vector3 rest;
     private float yaw, wobble, nudge = 1f, nudgeUntil = -1f;
-    private bool rattle, opening, gone;
+    private bool rattle, opening, gone, held;
     private float seam = 0.10f;                           // 몸통 윗면 높이 (상자 좌표) — 빛기둥이 여기서 솟는다
     private readonly List<GameObject> extras = new List<GameObject>();   // 사진 판·3D 모델 — 다른 모양으로 갈아입으면 걷는다
     private readonly List<Renderer> extraRenderers = new List<Renderer>();
@@ -67,6 +68,19 @@ public class R0926HuntChest : MonoBehaviour
     public bool Opening => opening;
     /// <summary>뚜껑이 열린 각도 (도)</summary>
     public float LidAngle => lid != null ? Quaternion.Angle(Quaternion.identity, lid.localRotation) : 0f;
+    /// <summary>뚜껑이 있는 모양 (보물상자·선물상자·보물알) — 나머지는 열 때 빛만 솟는다</summary>
+    public bool HasLid
+    {
+        get
+        {
+            var mf = lid != null ? lid.GetComponent<MeshFilter>() : null;
+            return mf != null && mf.sharedMesh != null;
+        }
+    }
+    /// <summary>빛기둥·별빛이 솟는 높이 (상자 좌표)</summary>
+    public float Seam => seam;
+    /// <summary>축하 화면이 가져갔다 — 스스로는 움직이지 않는다</summary>
+    public bool Held => held;
 
     private void Awake()
     {
@@ -98,6 +112,7 @@ public class R0926HuntChest : MonoBehaviour
         if (body != null)
             foreach (var r in extraRenderers) if (r != null && r.enabled != body.enabled) r.enabled = body.enabled;
 
+        if (held) return;   // 축하 화면이 움직인다
         if (!opening) yaw += spinSpeed * Time.deltaTime;
         float tilt = wobble + (rattle && !opening ? Mathf.Sin(Time.unscaledTime * 40f) * 3.5f : 0f);
         transform.rotation = Quaternion.Euler(0f, yaw, tilt);
@@ -117,6 +132,25 @@ public class R0926HuntChest : MonoBehaviour
     public void Rattle(bool on)
     {
         rattle = on && !opening;
+    }
+
+    /// <summary>축하 화면이 가져간다 — 돌기·달그락·누름을 멈추고 똑바로 · 제 크기로 (흔들고 여는 건 R0926HuntReveal)</summary>
+    public void Hold()
+    {
+        held = true;
+        rattle = false;
+        wobble = 0f;
+        nudge = 1f;
+        nudgeUntil = -1f;
+        transform.localRotation = Quaternion.identity;
+        transform.localScale = rest;
+        SetLid(0f);
+    }
+
+    /// <summary>뚜껑 각도 (도 — 0 닫힘 · 112 활짝)</summary>
+    public void SetLid(float deg)
+    {
+        if (lid != null) lid.localRotation = Quaternion.Euler(deg, 0f, 0f);
     }
 
     // ── 모양 ──────────────────────────────────────────────

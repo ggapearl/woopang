@@ -1034,7 +1034,7 @@ public class R0926HuntCard : MonoBehaviour
                 if (claimCodeInput != null) claimCodeInput.text = "";
                 R0926HuntTreasure.Untrack(id);
                 R0926HuntList.Stale();
-                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, current["prize"], current["host"]["username"]))
+                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, current["prize"], current["host"]["username"], current["object_kind"], current["object_url"]))
                     Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt, "宝を見つけました！" + j["rank"].AsInt + "番目", "找到宝藏了！第 " + j["rank"].AsInt + " 个", "¡Lo encontraste! #" + j["rank"].AsInt), 4f);
                 StartCoroutine(OpenDetail(id));
                 break;
