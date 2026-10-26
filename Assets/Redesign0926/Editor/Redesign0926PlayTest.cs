@@ -3128,6 +3128,12 @@ namespace Redesign0926
             Func<object, string, Button> btn = (o, f) => o == null ? null : o.GetType().GetField(f, F)?.GetValue(o) as Button;
             Func<object, bool> busy = o => o != null && (bool)o.GetType().GetField("isProcessing", F).GetValue(o);
             Func<bool> dlgAnim = () => dlg != null && (bool)typeof(PhotoSourceDialog).GetField("isAnimating", F).GetValue(dlg);
+            // 에디터에선 UGUI 가 '지금 게임뷰가 보여 주는 화면 번호'와 캔버스 화면 번호가 다르면 누름을 버린다 — 그때 값을 같이 적는다
+            Func<string> disp = () =>
+            {
+                var p = typeof(Display).GetProperty("activeEditorGameViewTarget", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                return "화면 " + Screen.width + "x" + Screen.height + " · 게임뷰 대상 " + (p != null ? p.GetValue(null) : "?") + " · 프레임 " + Time.frameCount;
+            };
             // 그 칸 가운데를 눌렀을 때 맨 위에 걸리는 것
             Func<Button, string> top = b =>
             {
@@ -3137,7 +3143,7 @@ namespace Redesign0926
                 var es = UnityEngine.EventSystems.EventSystem.current;
                 var hits = new List<UnityEngine.EventSystems.RaycastResult>();
                 es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = r.center }, hits);
-                if (hits.Count == 0) return b.name + " → 아무것도 안 걸림";
+                if (hits.Count == 0) return b.name + " → 아무것도 안 걸림 (누른 자리 " + r.center + " · " + disp() + ")";
                 var h = hits[0].gameObject;
                 bool mine = h.transform == b.transform || h.transform.IsChildOf(b.transform);
                 var handler = UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(h);
@@ -3151,8 +3157,8 @@ namespace Redesign0926
                 var es = UnityEngine.EventSystems.EventSystem.current;
                 var hits = new List<UnityEngine.EventSystems.RaycastResult>();
                 es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = r.center }, hits);
-                if (hits.Count == 0) return false;
-                var handler = UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject);
+                var handler = hits.Count == 0 ? null : UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject);
+                if (handler != b.gameObject) log.Add("    (그 순간) " + top(b) + " · " + disp());
                 return handler == b.gameObject;
             };
             Action<string> state = tag =>
@@ -3478,12 +3484,67 @@ namespace Redesign0926
                 return n == 3 && square;
             }, "추가 사진 썸네일: 가운데 정사각형으로 잘라 칸을 채움");
 
+            // 꾹 눌러 끌기 · 칸마다 x (10-26) — 장소 정보 수정과 같은 손놀림. 든 동안 시트를 아래로 끌어도 시트는 그대로
+            Func<List<Image>> ucells = () => typeof(CubeUploadManager).GetField("subPhotoDisplays", F).GetValue(cum) as List<Image>;
+            Func<R0926PhotoReorder> ureo = () => typeof(CubeUploadManager).GetField("subReorder", F).GetValue(cum) as R0926PhotoReorder;
+            Func<int, Vector2> ugrip = k => { var r = ScreenRect(ucells()[k].rectTransform); return new Vector2(r.xMin + r.width * 0.3f, r.yMin + r.height * 0.3f); };
+            List<Texture2D> before = null;
+            R0926SwipeDismiss usd = null;
+            Vector2 u0 = default;
+            Check(() => ureo() != null && typeof(CubeUploadManager).GetField("subPhotoRemoveTemplate", F).GetValue(cum) as Button != null,
+                  "연결: 장소 추가 — 꾹 눌러 옮기기 · 칸마다 x");
+            Check(() =>
+            {
+                bool ok = true;
+                for (int k = 0; k < 3; k++)
+                {
+                    var x = ucells()[k].transform.Find("RemoveX0926");
+                    ok &= x != null && x.gameObject.activeInHierarchy && rectOf(x).width <= rectOf(ucells()[k].transform).width * 0.55f;
+                }
+                return ok;
+            }, "장소 추가에도 사진마다 오른쪽 위 x (칸의 절반 이하)");
+            Do(() =>
+            {
+                before = new List<Texture2D>(photos());
+                usd = Find("UploadPage/UploadSheet0926")?.GetComponent<R0926SwipeDismiss>();
+                u0 = ugrip(2);
+                ureo().EditorFeed(true, u0);
+                if (usd != null) usd.EditorFeed(true, u0);
+            });
+            Sleep(0.55f);
+            Check(() => R0926PhotoReorder.Holding && ureo().EditorGhostShown, "꾹 — 장소 추가에서도 사진이 떠오름");
+            Do(() => Diagnose("UploadPage/UploadSheet0926", u0));   // 밀어 닫기가 이 손가락을 받을 수 있었는지 (끌기 받는 곳 없음 + phase Pending 이어야 아래 검사가 뜻이 있다)
+            Do(() => { var p = u0 - new Vector2(0f, 120f); ureo().EditorFeed(true, p); if (usd != null) usd.EditorFeed(true, p); });
+            Sleep(0.15f);
+            Do(() => { var p = u0 - new Vector2(0f, 260f); ureo().EditorFeed(true, p); if (usd != null) usd.EditorFeed(true, p); });
+            Sleep(0.25f);
+            Shot("photoload_reorder_down");
+            Check(() =>
+            {
+                float applied = usd != null ? (float)sheetApplied.GetValue(usd) : -1f;
+                log.Add("  사진을 든 채 260px 아래로: 시트 내려감 " + applied.ToString("0") + " · 사진 " + photos().Count);
+                return usd != null && applied < 1f && Active("UploadPage") && R0926PhotoReorder.Holding;
+            }, "사진을 든 채 아래로 끌어도 시트는 그대로 (밀어 닫기가 손가락을 놓아준다)");
+            Do(() => { var p = ugrip(0); ureo().EditorFeed(true, p); if (usd != null) usd.EditorFeed(true, p); });
+            Sleep(0.25f);
+            Do(() => { var p = ugrip(0); ureo().EditorFeed(false, p); if (usd != null) usd.EditorFeed(false, p); });
+            Sleep(0.4f);
+            Do(() => { ureo().EditorFeedEnd(); if (usd != null) usd.EditorFeedEnd(); });
+            Shot("photoload_reorder");
+            Check(() => photos().Count == 3 && photos()[0] == before[2] && photos()[1] == before[0] && photos()[2] == before[1] && !R0926PhotoReorder.Holding
+                        && ucells()[0].sprite != null && ucells()[0].sprite.texture == before[2] && Active("UploadPage"),
+                  "끌어 맨 앞으로 — 세 번째 사진이 첫 칸 (올리는 순서도 이대로)");
+            Do(() => ucells()[1].transform.Find("RemoveX0926").GetComponent<Button>().onClick.Invoke());
+            Sleep(0.3f);
+            Check(() => photos().Count == 2 && photos()[0] == before[2] && photos()[1] == before[1] && !ucells()[2].gameObject.activeSelf,
+                  "x — 그 사진만 빠지고 뒤가 당겨진다");
+
             // 5) 열 장 — 칸이 줄어 대표 사진 높이 안에 모두 (이름 칸을 덮지 않는다)
             Do(() =>
             {
                 done = false; until = EditorApplication.timeSinceStartup + 30;
                 var it = (System.Collections.IEnumerator)typeof(CubeUploadManager).GetMethod("LoadMultipleImagesWithFallback", F)
-                    .Invoke(cum, new object[] { paths(7), (Action)(() => done = true) });
+                    .Invoke(cum, new object[] { paths(8), (Action)(() => done = true) });
                 cum.StartCoroutine(it);
             });
             steps.Enqueue(() => done || EditorApplication.timeSinceStartup > until);
@@ -3500,6 +3561,20 @@ namespace Redesign0926
                 log.Add($"  열 장: 사진 {photos().Count} · 칸 {cell.x:0} · 맨 아래 칸 밑 {low:0} · 그리드 밑 {rg.yMin:0} · 이름표 위 {rl.yMax:0} · 이름 칸 위 {rn.yMax:0}");
                 return photos().Count == 10 && on == 10 && low >= rg.yMin - 2 && low > rl.yMax && cell.x < 203f;
             }, "추가 사진 열 장: 칸이 줄어 자리 안에 · 이름 칸을 덮지 않음");
+            Check(() =>
+            {
+                var grid = pl.transform.Find("SubPhotoContainer");
+                float worst = 0f;
+                foreach (Transform c in grid)
+                {
+                    if (!c.gameObject.activeSelf || !c.name.StartsWith("SubPhoto_")) continue;
+                    var x = c.Find("RemoveX0926");
+                    if (x == null) return false;
+                    worst = Mathf.Max(worst, rectOf(x).width / rectOf(c).width);
+                }
+                log.Add($"  열 장 x 누름 자리 / 칸: 최대 {worst:0.00}");
+                return worst > 0.3f && worst <= 0.55f;
+            }, "칸이 작아져도 x 가 칸을 덮지 않음 — 칸의 절반 (예전엔 108 고정이라 작은 칸은 통째로 x)");
             Shot("photoload_ten");
 
             // 6) 3D 모델 카드 — 추가 사진 빈 칸 모양만
@@ -4973,6 +5048,46 @@ namespace Redesign0926
             Check(() => string.Join("|", keeps()) == order(new[] { 1, 3, 4 }) && subs().Count == 3 && cells()[2].gameObject.activeSelf && !cells()[3].gameObject.activeSelf
                         && cells()[1].sprite != null && cells()[1].sprite.texture == subs()[1],
                   "2번 사진 x — 그 사진만 빠지고 뒤가 당겨진다 (1·3·4)");
+
+            // 꾹 눌러 끌어 순서 바꾸기 (10-26 대표님 「사진들을 옮겨서 … 보이는 순서를 조절」) — 맨 뒤(4)를 맨 앞으로 → 4·1·3
+            Func<R0926PhotoReorder> reo = () => (R0926PhotoReorder)fv("subReorder");
+            Func<int, Vector2> grip = k => { var r = ScreenRect(cells()[k].rectTransform); return new Vector2(r.xMin + r.width * 0.3f, r.yMin + r.height * 0.3f); };   // 사진 왼쪽 아래 (x 를 피해)
+            Check(() => reo() != null, "연결: 추가 사진 꾹 눌러 옮기기");
+            Do(() => reo().EditorFeed(true, grip(2)));
+            Sleep(0.05f);
+            Do(() => reo().EditorFeed(true, grip(2) + new Vector2(40f, 0f)));
+            Sleep(0.5f);
+            Check(() => !R0926PhotoReorder.Holding && !reo().EditorGhostShown && string.Join("|", keeps()) == order(new[] { 1, 3, 4 }),
+                  "누르자마자 움직이면 들지 않음 — 시트 끌기·넘기기 몫");
+            Do(() => reo().EditorFeed(false, grip(2)));
+            Sleep(0.1f);
+            Do(() => reo().EditorFeed(true, grip(2)));
+            Sleep(0.15f);
+            Check(() => !R0926PhotoReorder.Holding && !reo().EditorGhostShown, "0.15초 — 아직 들리지 않음");
+            Sleep(0.4f);
+            Shot("placeedit_reorder_lift");
+            Check(() => R0926PhotoReorder.Holding && reo().EditorGhostShown && reo().EditorDimmed == 2 && cells()[2].color.a < 0.5f
+                        && !cells()[2].transform.Find("RemoveX0926").gameObject.activeSelf && cells()[1].transform.Find("RemoveX0926").gameObject.activeSelf,
+                  "꾹 누르면 사진이 떠오르고 그 자리는 흐리게 비움 (그 칸 x 만 감춤)");
+            Do(() => reo().EditorFeed(true, grip(1)));
+            Sleep(0.25f);
+            Check(() => string.Join("|", keeps()) == order(new[] { 1, 4, 3 }) && reo().EditorDimmed == 1, "가운데 칸 위로 — 4 가 가운데 (1·4·3)");
+            Do(() => reo().EditorFeed(true, grip(0)));
+            Sleep(0.25f);
+            Shot("placeedit_reorder_drag");
+            Check(() => string.Join("|", keeps()) == order(new[] { 4, 1, 3 }) && reo().EditorDimmed == 0, "맨 앞 칸 위로 — 4·1·3");
+            Do(() => reo().EditorFeed(false, grip(0)));
+            Sleep(0.4f);
+            Do(() => reo().EditorFeedEnd());
+            Shot("placeedit_reorder_done");
+            Check(() =>
+            {
+                bool ok = !R0926PhotoReorder.Holding && !reo().EditorGhostShown && reo().EditorDimmed == -1;
+                for (int k = 0; k < 3; k++)
+                    ok &= cells()[k].color.a > 0.99f && cells()[k].transform.Find("RemoveX0926").gameObject.activeSelf
+                          && cells()[k].sprite != null && cells()[k].sprite.texture == subs()[k];
+                return ok;
+            }, "손을 떼면 그 칸에 내려앉음 — 흐림·x 되돌림 · 칸 그림 = 사진 순서");
             Check(() => (string)fv("selectedCategory") == "cafe", "분류 칩 → 카페");
             Check(() => ((Text)fv("locationNote")).text == R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요 · 35m", "Saving moves it to where you are · 35m", "保存すると現在地に移動します · 35m", "保存后移到你现在的位置 · 35m", "Al guardar se moverá a tu ubicación · 35m"),
                   "'여기로 옮기기' 를 켜면 — '저장하면 지금 위치로 옮겨요 · 35m'");
@@ -5006,9 +5121,9 @@ namespace Redesign0926
                 if (row == null || !row.exists) return false;
                 log.Add($"  서버: '{row.name}' · {row.category} · 반려견 {row.pet} · 대표 {row.main} · 추가 {string.Join(", ", row.subs)} · 폴더 {string.Join(", ", row.files)} · {row.lat},{row.lon}");
                 return row.name == NameA2 && row.category == "cafe" && !row.pet && row.main == photo(0) && row.main_on_disk
-                       && string.Join("|", row.subs) == order(new[] { 1, 3, 4 }) && Array.TrueForAll(row.subs_on_disk, x => x)
+                       && string.Join("|", row.subs) == order(new[] { 4, 1, 3 }) && Array.TrueForAll(row.subs_on_disk, x => x)
                        && Array.IndexOf(row.files, "sub_2.jpg") < 0;
-            }, "서버에 바로 반영 — 이름·분류·스위치 · 사진 1·3·4 그 순서 · 뺀 2번 파일은 지움");
+            }, "서버에 바로 반영 — 이름·분류·스위치 · 사진은 옮긴 순서(4·1·3) 그대로 · 뺀 2번 파일은 지움");
             Check(() => row != null && row.lat == ((double)here.x).ToString("F6", inv) && row.lon == ((double)here.y).ToString("F6", inv),
                   "위치 — 지금 위치로 옮겨짐 (소수 6자리 그대로)");
             Check(() =>
@@ -5026,9 +5141,43 @@ namespace Redesign0926
             Wait(() => Active("Fixpage") && !loading() && subs().Count == 3 && fv("mainPhoto") != null, 20f, "A 다시 고치기 — 고친 값");
             Sleep(0.5f);
             Shot("placeedit_reopen");
-            Check(() => ((InputField)fv("nameInput")).text == NameA2 && (int)fv("currentCategoryIndex") == 3 && string.Join("|", keeps()) == order(new[] { 1, 3, 4 })
+            Check(() => ((InputField)fv("nameInput")).text == NameA2 && (int)fv("currentCategoryIndex") == 3 && string.Join("|", keeps()) == order(new[] { 4, 1, 3 })
                         && ((Text)fv("locationCoords")).text == ((double)here.x).ToString("F4", inv) + ", " + ((double)here.y).ToString("F4", inv),
-                  "다시 열면 고친 값 그대로 — 이름·카페·사진 1·3·4·옮긴 좌표");
+                  "다시 열면 고친 값 그대로 — 이름·카페·사진 4·1·3·옮긴 좌표");
+
+            // 마지막 한 장은 빼지 않는다 — 사진이 있던 장소 (10-26 대표님 「최소한 한장의 서브사진이 있도록 유지」)
+            Func<string> warn = () => { var w = (GameObject)fv("warningObj"); return w != null && w.activeInHierarchy ? w.GetComponentInChildren<Text>()?.text : null; };
+            Do(() =>
+            {
+                cells()[2].transform.Find("RemoveX0926").GetComponent<Button>().onClick.Invoke();
+                cells()[1].transform.Find("RemoveX0926").GetComponent<Button>().onClick.Invoke();
+            });
+            Sleep(0.3f);
+            Check(() => subs().Count == 1 && string.Join("|", keeps()) == order(new[] { 4 }), "x 두 번 — 4 한 장만 남음");
+            Do(() => cells()[0].transform.Find("RemoveX0926").GetComponent<Button>().onClick.Invoke());
+            Sleep(0.3f);
+            Shot("placeedit_keep_one");
+            Check(() =>
+            {
+                log.Add("  마지막 한 장 x: " + subs().Count + "장 · 알림 '" + warn() + "'");
+                return subs().Count == 1 && string.Join("|", keeps()) == order(new[] { 4 }) && cells()[0].gameObject.activeSelf
+                       && warn() == R0926LocalizedText.Say("추가 사진은 한 장 이상 있어야 해요 — 새 사진을 먼저 넣고 빼 주세요", "Keep at least one extra photo — add a new one first, then remove this",
+                           "追加写真は1枚以上必要です — 先に新しい写真を入れてから外してください", "至少要保留一张附加照片 — 请先添加新照片再删除", "Debe quedar al menos una foto adicional — añade otra antes de quitar esta");
+            }, "마지막 한 장의 x — 빼지 않고 '추가 사진은 한 장 이상 있어야 해요 — 새 사진을 먼저 넣고 빼 주세요'");
+            Do(() => typeof(CubeDataFixManager).GetMethod("ResetSubPhotos", F).Invoke(fix, null));
+            Sleep(0.3f);
+            Check(() => subs().Count == 0, "'초기화' — 추가 사진을 모두 비움 (새로 넣으려고)");
+            Do(() => Click(Page + "Panel/SubmitButton"));
+            Sleep(0.8f);
+            Shot("placeedit_need_one");
+            Do(() => row = rowOf(idA));
+            Check(() =>
+            {
+                log.Add("  0장으로 '수정하기': 알림 '" + warn() + "' · 서버 추가 사진 " + (row != null ? string.Join(", ", row.subs) : "-"));
+                return Active("Fixpage") && !loading()
+                       && warn() == R0926LocalizedText.Say("추가 사진을 한 장 이상 넣어 주세요", "Add at least one extra photo", "追加写真を1枚以上入れてください", "请至少添加一张附加照片", "Añade al menos una foto adicional")
+                       && row != null && string.Join("|", row.subs) == order(new[] { 4, 1, 3 });
+            }, "추가 사진 0장으로 '수정하기' — 저장하지 않고 '추가 사진을 한 장 이상 넣어 주세요' (서버 그대로)");
             Do(() => ((Button)fv("deletePlaceButton")).onClick.Invoke());
             Wait(() => Active("RemoveRequestPanel"), 5f, "지울까 묻는 창");
             Sleep(0.5f);

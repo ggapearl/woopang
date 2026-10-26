@@ -181,6 +181,7 @@ namespace Redesign0926
             }
             // 사진을 불러오는 동안 그 칸에 빈 칸+원호 — 3D 모델은 추가 사진만 (대표 칸은 모델 파일)
             PhotoLoadingSkeleton(panel, isModel ? null : display, UP, photoY, tile, subs, sub, FindUploadManager(card, isModel), log);
+            SubPhotoTools(panel, subs, FindUploadManager(card, isModel), true, log);   // 꾹 눌러 옮기기 · 칸마다 x (10-26)
 
             // ── 이름 ──
             const float nameY = photoY - tile - 62;   // -854

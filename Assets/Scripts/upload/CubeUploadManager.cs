@@ -66,6 +66,10 @@ public class CubeUploadManager : MonoBehaviour
     [Header("사진 불러오는 동안")]
     [SerializeField] private R0926PhotoLoading photoLoading; // 대표·추가 사진 칸에 빈 칸+원호 (Redesign0926Apply3 가 만들어 연결)
 
+    [Header("추가 사진 칸 (10-26) — Redesign0926Apply3 이 만들어 연결")]
+    [SerializeField] private Button subPhotoRemoveTemplate; // 칸마다 복제해 넣는 x (꺼 둔 본)
+    [SerializeField] private R0926PhotoReorder subReorder;  // 사진을 꾹 눌러 끌면 보이는 순서가 바뀐다
+
     [Header("자르기 · 올리는 중")]
     [SerializeField] private R0926PhotoCrop photoCrop; // 대표 사진 자르기 화면 (Redesign0926ApplyCrop 이 만들어 연결)
     [SerializeField] private R0926Busy busy;           // 올리는 동안 화면 가운데 카드 — 원호 + '업로드 중… N%' + 막대
@@ -1338,8 +1342,37 @@ public class CubeUploadManager : MonoBehaviour
             Image img = imageObj.AddComponent<Image>();
             img.preserveAspect = true;
             subPhotoDisplays.Add(img);
+            if (subPhotoRemoveTemplate != null)
+            {
+                // 칸마다 오른쪽 위 x — 그 사진만 뺀다 (뒤 사진이 한 칸씩 당겨진다 · 장소 정보 수정과 같은 모양)
+                Button x = Instantiate(subPhotoRemoveTemplate, imageObj.transform, false);
+                x.name = "RemoveX0926";
+                x.gameObject.SetActive(true);
+                int k = i;
+                x.onClick.AddListener(() => RemoveSub(k));
+            }
             imageObj.SetActive(false);
         }
+        if (subReorder != null) subReorder.Bind(subPhotoDisplays, () => subPhotos.Count, MoveSub, () => isProcessing);
+    }
+
+    /// <summary>추가 사진 x — 그 사진만 빼고 뒤 사진을 당긴다 (올릴 때 한 장은 있어야 한다 — '등록하기' 가 알린다)</summary>
+    private void RemoveSub(int i)
+    {
+        if (isProcessing || i < 0 || i >= subPhotos.Count || (subReorder != null && subReorder.Engaged)) return;
+        Destroy(subPhotos[i]);
+        subPhotos.RemoveAt(i);
+        UpdateSubPhotoGrid();
+    }
+
+    /// <summary>꾹 눌러 옮기기 — from 자리 사진을 to 자리로 (사이 사진은 한 칸씩 밀린다). 올리는 순서도 이대로</summary>
+    private void MoveSub(int from, int to)
+    {
+        if (from == to || from < 0 || to < 0 || from >= subPhotos.Count || to >= subPhotos.Count) return;
+        var tex = subPhotos[from];
+        subPhotos.RemoveAt(from);
+        subPhotos.Insert(to, tex);
+        UpdateSubPhotoGrid();
     }
 
     // '초기화' — 추가 사진에 대표 사진까지 비운다 (10-21 대표님 「초기화를 누르면 서브사진 뿐 아니라 메인사진까지」)

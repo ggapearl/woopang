@@ -190,7 +190,7 @@ public class R0926SwipeDismiss : R0926Closer
         Vector2 d = pos - startPos;
         if (d.magnitude < DecidePx) return;
         bool downward = d.y < 0f && Mathf.Abs(d.y) > Mathf.Abs(d.x) * 1.2f;
-        if (!downward || (scroll != null && !scrollHorizontalOnly && !AtTop(scroll)))
+        if (!downward || R0926PhotoReorder.Holding || (scroll != null && !scrollHorizontalOnly && !AtTop(scroll)))
         {
             phase = Phase.Ignored;   // 이번 손가락은 목록·가로 넘기기 몫
             return;

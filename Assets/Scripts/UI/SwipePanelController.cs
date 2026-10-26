@@ -120,7 +120,7 @@ public class SwipePanelController : MonoBehaviour
                     // 아래로 끄는 손가락은 시트 밀어 닫기(R0926SwipeDismiss) 몫 — 같은 순간 같은 기준으로 정해 둘이 함께 움직이지 않는다
                     if (d.magnitude < 14f) return;
                     dirDecided = true;
-                    horizontal = Mathf.Abs(d.x) >= Mathf.Abs(d.y) * 1.3f && !R0926SwipeDismiss.AnyDragging;
+                    horizontal = Mathf.Abs(d.x) >= Mathf.Abs(d.y) * 1.3f && !R0926SwipeDismiss.AnyDragging && !R0926PhotoReorder.Holding;   // 꾹 눌러 든 사진을 옮기는 손가락
                     if (!horizontal) { isDragging = false; return; }
                 }
                 currentAnchoredX = dragStartPosX + d.x;

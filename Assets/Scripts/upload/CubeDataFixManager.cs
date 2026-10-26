@@ -40,6 +40,7 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Button openButton;              // 장소 '···' 의 '정보 수정' 칸 — 누르면 그 장소의 지금 값으로 채운다
     [SerializeField] private Button mainPhotoRemove;         // 대표 사진 오른쪽 위 x
     [SerializeField] private Button subPhotoRemoveTemplate;  // 추가 사진 칸마다 복제해 넣는 x (꺼 둔 본)
+    [SerializeField] private R0926PhotoReorder subReorder;   // 추가 사진을 꾹 눌러 끌면 보이는 순서가 바뀐다 (10-26)
     [SerializeField] private GameObject descriptionLabel;    // 수정 요청의 '수정할 내용' — 내 장소에선 숨긴다
     [SerializeField] private GameObject locationLabel;       // 내 장소에서만 — '위치'
     [SerializeField] private GameObject locationRow;
@@ -98,6 +99,7 @@ public class CubeDataFixManager : MonoBehaviour
     private bool ownerMode;            // 서버가 '내 장소'라고 확인했을 때만 — 아니면 예전처럼 수정 요청
     private string mainKeepPath;       // 대표 사진이 서버에 있던 그대로면 그 경로
     private readonly List<string> subKeepPaths = new List<string>();   // subPhotos 와 같은 순서 · 새로 고른 사진은 null
+    private int loadedSubs;   // 불러온 장소에 있던 추가 사진 수 — 있었으면 0장으로는 저장하지 않는다 (10-26 대표님 「최소한 한장의 서브사진이 있도록 유지」)
     private int loadGen;
     private bool hasPlaceCoords;
     private double placeLat, placeLon;
@@ -293,6 +295,7 @@ public class CubeDataFixManager : MonoBehaviour
             }
             imageObj.SetActive(false);
         }
+        if (subReorder != null) subReorder.Bind(subPhotoDisplays, () => subPhotos.Count, MoveSub, () => isProcessing);
     }
     #endregion
 
@@ -1119,6 +1122,14 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
+        // 사진이 있던 장소는 추가 사진을 다 빼고(초기화) 저장하지 않는다
+        if (subPhotos.Count == 0 && loadedSubs > 0)
+        {
+            ShowWarning(R0926LocalizedText.Say("추가 사진을 한 장 이상 넣어 주세요", "Add at least one extra photo", "追加写真を1枚以上入れてください", "请至少添加一张附加照片", "Añade al menos una foto adicional"));
+            isProcessing = false;
+            yield break;
+        }
+
         if (ownerMode && id == editId)
         {
             yield return StartCoroutine(SubmitOwnerEdit(name, petFriendly, separateRestroom, instagramID));
@@ -1320,6 +1331,7 @@ public class CubeDataFixManager : MonoBehaviour
         List<string> subs = new List<string>();
         foreach (string p in DataManager.FlattenSubPhotos(place))
             if (!subs.Contains(p) && subs.Count < MAX_SUB_PHOTOS) subs.Add(p);
+        loadedSubs = subs.Count;
         SubLoading(subs.Count);
         int failed = 0;
 
@@ -1449,13 +1461,35 @@ public class CubeDataFixManager : MonoBehaviour
         subKeepPaths.Add(keepPath);
     }
 
-    /// <summary>추가 사진 x — 그 사진만 빼고 뒤 사진을 당긴다</summary>
+    /// <summary>추가 사진 x — 그 사진만 빼고 뒤 사진을 당긴다. 사진이 있던 장소면 마지막 한 장은 빼지 않는다(새 사진을 먼저 넣고 빼면 된다)</summary>
     private void RemoveSub(int i)
     {
-        if (isProcessing || i < 0 || i >= subPhotos.Count) return;
+        if (isProcessing || i < 0 || i >= subPhotos.Count || (subReorder != null && subReorder.Engaged)) return;
+        if (subPhotos.Count == 1 && loadedSubs > 0)
+        {
+            ShowWarning(R0926LocalizedText.Say("추가 사진은 한 장 이상 있어야 해요 — 새 사진을 먼저 넣고 빼 주세요", "Keep at least one extra photo — add a new one first, then remove this",
+                "追加写真は1枚以上必要です — 先に新しい写真を入れてから外してください", "至少要保留一张附加照片 — 请先添加新照片再删除", "Debe quedar al menos una foto adicional — añade otra antes de quitar esta"));
+            return;
+        }
         Destroy(subPhotos[i]);
         subPhotos.RemoveAt(i);
         if (i < subKeepPaths.Count) subKeepPaths.RemoveAt(i);
+        UpdateSubPhotoGrid();
+    }
+
+    /// <summary>꾹 눌러 옮기기 — from 자리 사진을 to 자리로 (사이 사진은 한 칸씩 밀린다). 저장하는 순서도 이대로</summary>
+    private void MoveSub(int from, int to)
+    {
+        if (from == to || from < 0 || to < 0 || from >= subPhotos.Count || to >= subPhotos.Count) return;
+        var tex = subPhotos[from];
+        subPhotos.RemoveAt(from);
+        subPhotos.Insert(to, tex);
+        if (from < subKeepPaths.Count && to < subKeepPaths.Count)
+        {
+            string keep = subKeepPaths[from];
+            subKeepPaths.RemoveAt(from);
+            subKeepPaths.Insert(to, keep);
+        }
         UpdateSubPhotoGrid();
     }
 
@@ -2071,6 +2105,7 @@ public class CubeDataFixManager : MonoBehaviour
         }
         subPhotos.Clear();
         subKeepPaths.Clear();
+        loadedSubs = 0;
         mainKeepPath = null;
 
         if (mainPhotoDisplay != null) 

@@ -458,8 +458,9 @@ namespace Redesign0926
             // 사진 x — 대표 사진은 사진 위, 추가 사진은 칸마다 복제해 넣는 본 (CubeDataFixManager 가 풀을 만들 때)
             var display = panel.Find("MainPhotoDisplay");
             Button mainX = display != null ? RemoveX(display, "RemoveX0926", 120, 60, 10) : null;
-            Button subX = RemoveX(panel, "SubRemoveX0926_Template", 108, 46, 6);
+            Button subX = SubRemoveX(panel, "SubRemoveX0926_Template");   // 칸 크기를 따라가는 x (10-26)
             subX.gameObject.SetActive(false);
+            SubPhotoTools(panel, panel.Find("SubPhotoContainer"), mgr, false, log);   // 꾹 눌러 옮기기 (10-26)
 
             // 삭제 — 카드 오른쪽 위, 닫기 X 왼쪽 (내 장소일 때만 보인다)
             var del = FindOrCreate(card, "DeletePlace0926");
