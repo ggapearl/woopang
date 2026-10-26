@@ -231,7 +231,7 @@ public class R0926HuntTreasure : MonoBehaviour
     {
         polling = true;
         t.nextPoll = Time.unscaledTime + 30f;   // 답이 없으면 이만큼 뒤에 다시
-        if (R0926HuntCard.TryLocation(out float lat, out float lon, out float acc))
+        if (R0926HuntCard.TryLocation(out double lat, out double lon, out float acc))
         {
             var b = new JSONObject(); b["lat"] = lat; b["lon"] = lon; b["acc"] = acc;
             long code = 0; JSONNode j = null;
@@ -454,7 +454,7 @@ public class R0926HuntTreasure : MonoBehaviour
 
     private IEnumerator Claim(Hunt t)
     {
-        if (!R0926HuntCard.TryLocation(out float lat, out float lon, out float acc)) { Say(R0926HuntApi.ErrorText("location", Lang), null, 3f); yield break; }
+        if (!R0926HuntCard.TryLocation(out double lat, out double lon, out float acc)) { Say(R0926HuntApi.ErrorText("location", Lang), null, 3f); yield break; }
         claiming = true;
         var b = new JSONObject(); b["lat"] = lat; b["lon"] = lon; b["acc"] = acc; b["mock"] = false;
         b["device_id"] = SystemInfo.deviceUniqueIdentifier;

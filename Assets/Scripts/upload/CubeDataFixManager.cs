@@ -56,16 +56,6 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Toggle categoryToggle;
     [SerializeField] private Text categoryToggleLabel;
 
-    [Tooltip("카테고리별 토글 배경색 (순서: shop, food, cafe, park, etc)")]
-    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f);
-    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
-    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
-    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
-    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f);
-    [SerializeField] private Color categoryColorSport = new Color(0.95f, 0.45f, 0.25f, 1f);
-    [SerializeField] private Color categoryColorLandmark = new Color(0.2f, 0.7f, 0.9f, 1f);
-    [SerializeField] private Color categoryColorEtc = new Color(0.6f, 0.6f, 0.6f, 1f);
-
     [Header("Photo Dialogs")]
     [SerializeField] private PhotoSourceDialog photoSourceDialog;
     [SerializeField] private ContinueCaptureDialog continueCaptureDialog;
@@ -1029,21 +1019,8 @@ public class CubeDataFixManager : MonoBehaviour
         }
     }
 
-    public Color GetCategoryColor(string category)
-    {
-        switch (category)
-        {
-            case "shop": return categoryColorShop;
-            case "food": return categoryColorFood;
-            case "cafe": return categoryColorCafe;
-            case "park": return categoryColorPark;
-            case "toilet": return categoryColorToilet;
-            case "sport": return categoryColorSport;
-            case "landmark": return categoryColorLandmark;
-            case "etc": return categoryColorEtc;
-            default: return Color.white;
-        }
-    }
+    // 분류 색 — 장소 추가·AR 인디케이터·목록·필터 칩과 같은 값 (10-25)
+    public Color GetCategoryColor(string category) => DataManager.GetCategoryColor(category);
 
     #endregion
 
@@ -1107,13 +1084,7 @@ public class CubeDataFixManager : MonoBehaviour
         bool petFriendly = petFriendlyToggle?.isOn ?? false;
         bool separateRestroom = separateRestroomToggle?.isOn ?? false;
 
-        // 카테고리 필수 검증
-        if (string.IsNullOrEmpty(selectedCategory))
-        {
-            ShowWarning(GetLocalizedText("category_required"));
-            isProcessing = false;
-            yield break;
-        }
+        // 분류는 비워도 된다 — 분류를 지우면 흰색 (10-25 대표님)
 
         if (mainPhoto == null)
         {
@@ -1556,35 +1527,7 @@ public class CubeDataFixManager : MonoBehaviour
     }
 
     // 지금 내 위치 — 장소 추가와 같은 차례 (Geospatial → 휴대폰 위치 + 고도 보정 · 에디터는 가상 위치)
-    private bool TryGetHere(out double lat, out double lon, out double alt)
-    {
-#if UNITY_EDITOR
-        VirtualLocation v = VirtualLocation.Instance;
-        lat = v.Latitude;
-        lon = v.Longitude;
-        alt = v.Altitude;
-        return true;
-#else
-        if (earthManager != null && earthManager.EarthTrackingState == TrackingState.Tracking)
-        {
-            var pose = earthManager.CameraGeospatialPose;
-            lat = pose.Latitude;
-            lon = pose.Longitude;
-            alt = pose.Altitude;
-            return true;
-        }
-        if (Input.location.status == LocationServiceStatus.Running)
-        {
-            LocationInfo d = Input.location.lastData;
-            lat = d.latitude;
-            lon = d.longitude;
-            alt = GeoidHelper.NormalizeAltitude((double)d.altitude, lat, lon);
-            return !(lat == 0 && lon == 0);
-        }
-        lat = lon = alt = 0;
-        return false;
-#endif
-    }
+    private bool TryGetHere(out double lat, out double lon, out double alt) => GeoHere.TryGet(out lat, out lon, out alt, earthManager);
 
     private static double Meters(double lat1, double lon1, double lat2, double lon2)
     {
@@ -1592,13 +1535,6 @@ public class CubeDataFixManager : MonoBehaviour
         double dLat = (lat2 - lat1) * Rad, dLon = (lon2 - lon1) * Rad;
         double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(lat1 * Rad) * Math.Cos(lat2 * Rad) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
         return 2 * R * Math.Asin(Math.Min(1.0, Math.Sqrt(a)));
-    }
-
-    // 장소 추가가 올리는 색과 같게 — 장면의 업로드 매니저 값(인스펙터에서 바꾼 색 포함)을 먼저
-    private Color UploadColor(string category)
-    {
-        CubeUploadManager up = FindFirstObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
-        return up != null ? up.GetCategoryColor(category) : GetCategoryColor(category);
     }
 
     private IEnumerator SubmitOwnerEdit(string name, bool petFriendly, bool separateRestroom, string instagramID)
@@ -1620,7 +1556,7 @@ public class CubeDataFixManager : MonoBehaviour
         form.AddField("name", name);
         form.AddField("category", selectedCategory);
         if (selectedCategory != loadedCategory && Array.IndexOf(categoryValues, selectedCategory) > 0)
-            form.AddField("color", ColorUtility.ToHtmlStringRGB(UploadColor(selectedCategory)));   // 분류를 바꿨을 때만 — 그대로면 원래 색
+            form.AddField("color", ColorUtility.ToHtmlStringRGB(GetCategoryColor(selectedCategory)));   // 분류를 바꿨을 때만 — 그대로면 원래 색 · 비우면 서버가 NULL(흰색)
         form.AddField("pet_friendly", petFriendly ? "true" : "false");
         form.AddField("separate_restroom", separateRestroom ? "true" : "false");
         form.AddField("instagram_id", instagramID);
@@ -2005,17 +1941,6 @@ public class CubeDataFixManager : MonoBehaviour
                     case SystemLanguage.ChineseSimplified: return "服务器错误";
                     case SystemLanguage.Spanish: return "Error del servidor";
                     default: return "Server error occurred";
-                }
-
-            case "category_required":
-                switch (lang)
-                {
-                    case SystemLanguage.Korean: return "카테고리를 선택해주세요";
-                    case SystemLanguage.Japanese: return "カテゴリーを選択してください";
-                    case SystemLanguage.Chinese:
-                    case SystemLanguage.ChineseSimplified: return "请选择类别";
-                    case SystemLanguage.Spanish: return "Seleccione una categoría";
-                    default: return "Please select a category";
                 }
 
             case "category_select":

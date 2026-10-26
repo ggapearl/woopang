@@ -49,6 +49,21 @@ public class CommentManager : MonoBehaviour
     private int currentLocationId = -1;
     public bool IsPanelOpen { get; private set; } = false;
 
+    /// <summary>
+    /// 댓글이 바뀌었다 (쓰기·지우기·신고·좋아요) — 장소 번호. 사진 아래 댓글 미리보기(DoubleTap3D)가 다시 불러온다.
+    /// 예전엔 미리보기를 사진을 열 때 한 번만 채워서, 댓글을 써도 사진을 다시 열어야 보였다 (10-24 미르네집)
+    /// </summary>
+    public static event Action<int> CommentsChanged;
+    public static void NotifyChanged(int locationId) => CommentsChanged?.Invoke(locationId);
+
+    public static string EditorBase;   // 플레이 시험 — 댓글을 내 PC 시험 서버로 (운영 서버에 시험 댓글을 남기지 않게)
+    public static string Api(string url) => string.IsNullOrEmpty(EditorBase) ? url : EditorBase + url.Substring(ApiConfig.MAIN_SERVER.Length);
+
+    // 창 여닫기는 이 둘만 멈춘다 — 예전엔 StopAllCoroutines 라 보내던 댓글·미리보기 불러오기까지 끊겼다
+    private Coroutine slideRoutine, fetchRoutine;
+    private R0926CommentReportSheet reportSheet;
+    private static readonly Color ReportSwipeColor = new Color(0.941f, 0.533f, 0.243f, 1f);   // 주황 — 빨간 '삭제'와 다른 일
+
     void Awake()
     {
         if (Instance == null) Instance = this;
@@ -452,12 +467,10 @@ public class CommentManager : MonoBehaviour
                 itemScript.likedSprite = likedSprite;
 
             itemScript.Setup(data);
+            itemScript.LocationId = currentLocationId;
 
-            // 내 댓글이면 SwipeToDeleteHandler 부착 (MessagePanel과 동일한 오버레이 패턴)
-            if (itemScript.IsMyComment)
-            {
-                SetupCommentSwipeDelete(itemObj, itemScript);
-            }
+            // 왼쪽으로 밀면 — 내 댓글은 '삭제', 남의 댓글은 '신고' (MessagePanel과 동일한 오버레이 패턴)
+            SetupCommentSwipe(itemObj, itemScript);
         }
         else
         {
@@ -469,10 +482,12 @@ public class CommentManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 댓글 아이템에 SwipeToDeleteHandler 부착 (MessagePanel과 동일한 패턴)
+    /// 댓글 아이템에 SwipeToDeleteHandler 부착 (MessagePanel과 동일한 패턴) — 내 댓글은 삭제, 남의 댓글은 신고.
+    /// 보내는 중인 내 댓글(번호 -1)은 번호를 받은 뒤에 붙인다.
     /// </summary>
-    private void SetupCommentSwipeDelete(GameObject itemObj, CommentItem itemScript)
+    private void SetupCommentSwipe(GameObject itemObj, CommentItem itemScript)
     {
+        if (itemScript.CommentId <= 0) return;
         SwipeToDeleteHandler handler = itemObj.GetComponent<SwipeToDeleteHandler>();
         if (handler == null)
             handler = itemObj.AddComponent<SwipeToDeleteHandler>();
@@ -481,10 +496,60 @@ public class CommentManager : MonoBehaviour
         if (LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null)
             userId = LoginManager.Instance.CurrentUser.id;
 
+        if (itemScript.IsMyComment)
+        {
+            handler.Initialize(userId, 80f, () =>
+            {
+                itemScript.DeleteThisComment();
+            });
+            return;
+        }
         handler.Initialize(userId, 80f, () =>
         {
-            itemScript.DeleteThisComment();
-        });
+            handler.ResetPosition();
+            OpenReport(itemScript);
+        }, R0926LocalizedText.Say("신고", "Report", "報告", "举报", "Denunciar"), ReportSwipeColor);
+    }
+
+    private void OpenReport(CommentItem item)
+    {
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
+        {
+            if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup();
+            return;
+        }
+        if (reportSheet == null && commentPanel != null)
+            reportSheet = commentPanel.GetComponentInChildren<R0926CommentReportSheet>(true);
+        if (reportSheet == null) return;
+        if (commentInputField != null) commentInputField.DeactivateInputField();   // 키보드가 떠 있으면 아래 시트를 가린다
+        reportSheet.Open(item);
+    }
+
+    private void HideReportSheet()
+    {
+        if (reportSheet == null && commentPanel != null)
+            reportSheet = commentPanel.GetComponentInChildren<R0926CommentReportSheet>(true);
+        if (reportSheet != null && reportSheet.gameObject.activeSelf) reportSheet.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 댓글 신고 (신고 시트의 사유) — 접수되면 내 목록에서 빼고 미리보기도 다시 부른다.
+    /// 서버는 신고한 사람에겐 그 댓글을 다시 주지 않고, 서로 다른 10명이 신고하면 지운다.
+    /// </summary>
+    public void ReportComment(CommentItem item, string reason, Action<bool> done)
+    {
+        int id = item != null ? item.CommentId : 0;
+        if (id <= 0) { done?.Invoke(false); return; }
+        int location = item.LocationId;
+        StartCoroutine(ReportService.Send("comment", id.ToString(), reason, "", (ok, removed) =>
+        {
+            if (ok)
+            {
+                if (item != null) item.RemoveLocally();
+                NotifyChanged(location);
+            }
+            done?.Invoke(ok);
+        }));
     }
 
     public void OpenCommentPanel(int locationId, string objectName = null)
@@ -500,8 +565,10 @@ public class CommentManager : MonoBehaviour
             // ★ CommentPanel을 항상 최상위 형제로 이동 — FullScreenPanel보다 위에 렌더되도록
             commentPanel.transform.SetAsLastSibling();
             commentPanel.SetActive(true);
-            StopAllCoroutines();
-            StartCoroutine(SlidePanelThenEnableMKH(mkhToDefer));
+            HideReportSheet();
+            if (slideRoutine != null) StopCoroutine(slideRoutine);
+            if (fetchRoutine != null) StopCoroutine(fetchRoutine);
+            slideRoutine = StartCoroutine(SlidePanelThenEnableMKH(mkhToDefer));
 
             // SwipeToClose 쿨다운 시작 — 오픈 스와이프가 닫기로 오인되는 것 방지
             SwipeToClose swipe = commentPanel.GetComponent<SwipeToClose>();
@@ -524,7 +591,7 @@ public class CommentManager : MonoBehaviour
                                    ? LoginManager.Instance.CurrentUser.id 
                                    : "";
             
-            StartCoroutine(FetchComments(locationId, currentUserId));
+            fetchRoutine = StartCoroutine(FetchComments(locationId, currentUserId));
         }
         IsPanelOpen = true;
     }
@@ -586,8 +653,9 @@ public class CommentManager : MonoBehaviour
             MobileKeyboardHandler mkh = commentPanel.GetComponent<MobileKeyboardHandler>();
             if (mkh != null) mkh.enabled = false;
 
-            StopAllCoroutines();
-            StartCoroutine(SlidePanel(false));
+            HideReportSheet();
+            if (slideRoutine != null) StopCoroutine(slideRoutine);
+            slideRoutine = StartCoroutine(SlidePanel(false));
             IsPanelOpen = false;
         }
     }
@@ -597,7 +665,8 @@ public class CommentManager : MonoBehaviour
     /// </summary>
     private IEnumerator SlidePanelThenEnableMKH(MobileKeyboardHandler mkhToEnable)
     {
-        yield return StartCoroutine(SlidePanel(true));
+        IEnumerator slide = SlidePanel(true);
+        while (slide.MoveNext()) yield return slide.Current;
 
         // 슬라이드 완료 → MKH 활성화 (이때 offset이 올바른 값)
         if (mkhToEnable != null)
@@ -654,10 +723,11 @@ public class CommentManager : MonoBehaviour
         ShowSkeleton(); // 로딩 시작 시 스켈레톤 표시
         float skeletonStartTime = Time.time;
 
-        string url = $"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={currentUserId}";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={currentUserId}");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            LoginManager.ApplyAuth(request);   // 내가 신고한 댓글은 빼고 받는다
             yield return request.SendWebRequest();
 
             // 최소 0.8초 스켈레톤 표시 (너무 빨리 사라지지 않도록)
@@ -674,6 +744,7 @@ public class CommentManager : MonoBehaviour
 
                 foreach (var comment in comments)
                 {
+                    if (FindItem(comment.id) != null) continue;   // 받는 사이 보낸 내 댓글이 이미 올라와 있다
                     CreateCommentItem(comment);
                 }
 
@@ -858,7 +929,18 @@ public class CommentManager : MonoBehaviour
         // 선처리: 즉시 댓글 아이템 표시
         GameObject optimisticItem = AddOptimisticComment(content);
 
-        StartCoroutine(PostCommentCoroutine(content, optimisticItem));
+        StartCoroutine(PostCommentCoroutine(currentLocationId, content, optimisticItem));
+    }
+
+    private CommentItem FindItem(int id)
+    {
+        if (commentContent == null || id <= 0) return null;
+        foreach (Transform child in commentContent)
+        {
+            CommentItem it = child.GetComponent<CommentItem>();
+            if (it != null && it.CommentId == id) return it;
+        }
+        return null;
     }
 
     /// <summary>
@@ -895,27 +977,33 @@ public class CommentManager : MonoBehaviour
                 itemScript.likedSprite = likedSprite;
 
             itemScript.Setup(tempData);
+            itemScript.LocationId = currentLocationId;
         }
 
-        // 스크롤 최하단으로
+        // 목록은 새 글부터 — 맨 위에 넣고 맨 위로 (예전엔 맨 아래에 붙어, 다시 열면 맨 위로 옮겨 가 있었다)
+        itemObj.transform.SetAsFirstSibling();
         if (commentContent != null)
         {
             Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(commentContent as RectTransform);
             ScrollRect sr = commentContent.GetComponentInParent<ScrollRect>();
             if (sr != null)
-                sr.normalizedPosition = Vector2.zero;
+            {
+                sr.StopMovement();
+                sr.verticalNormalizedPosition = 1f;
+            }
         }
 
         return itemObj;
     }
 
-    private IEnumerator PostCommentCoroutine(string content, GameObject optimisticItem = null)
+    private IEnumerator PostCommentCoroutine(int locationId, string content, GameObject optimisticItem = null)
     {
-        string url = $"{ApiConfig.MAIN_SERVER}/comments";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/comments");
 
         CommentPostData postData = new CommentPostData
         {
-            location_id = currentLocationId,
+            location_id = locationId,
             user_id = LoginManager.Instance.CurrentUser.id,
             username = LoginManager.Instance.CurrentUser.username,
             content = content
@@ -929,20 +1017,39 @@ public class CommentManager : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                // 선처리 아이템이 이미 표시되어 있으므로 전체 새로고침 불필요
+                // 선처리 아이템에 받은 번호를 달고 삭제 스와이프를 붙인다 (예전엔 -1 그대로라 다시 열기 전엔 지우거나 좋아요를 못 했다)
+                CommentPostResult res = null;
+                try { res = JsonUtility.FromJson<CommentPostResult>(request.downloadHandler.text); } catch (Exception) { }
+                CommentItem it = optimisticItem != null ? optimisticItem.GetComponent<CommentItem>() : null;
+                if (it != null && res != null && res.id > 0)
+                {
+                    if (FindItem(res.id) != null) Destroy(optimisticItem);   // 목록을 다시 받으며 이미 들어왔다
+                    else
+                    {
+                        it.AssignServerId(res.id);
+                        SetupCommentSwipe(optimisticItem, it);
+                    }
+                }
+                NotifyChanged(locationId);
             }
             else
             {
                 Debug.LogError($"[CommentManager] PostComment failed: {request.error}");
+                LoginManager.CheckUnauthorized(request);
 
-                // 전송 실패: 선처리 아이템 제거
+                // 전송 실패: 선처리 아이템 제거 · 알리고 쓴 글은 입력칸에 돌려준다
                 if (optimisticItem != null)
                     Destroy(optimisticItem);
+                if (ToastManager.Instance != null)
+                    ToastManager.Instance.ShowError(R0926LocalizedText.Say("댓글을 올리지 못했습니다. 잠시 후 다시 해 주세요.", "Couldn't post your comment. Please try again.", "コメントを投稿できませんでした。もう一度お試しください。", "评论发送失败，请稍后重试。", "No se pudo publicar el comentario. Inténtalo de nuevo."));
+                if (IsPanelOpen && currentLocationId == locationId && commentInputField != null && string.IsNullOrEmpty(commentInputField.text))
+                    commentInputField.text = content;
             }
         }
     }
@@ -985,10 +1092,11 @@ public class CommentManager : MonoBehaviour
 
     private IEnumerator FetchBestCommentCoroutine(int locationId, string userId, System.Action<CommentData> callback)
     {
-        string url = $"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={userId}";
+        string url = Api($"{ApiConfig.MAIN_SERVER}/comments?location_id={locationId}&user_id={userId}");
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
@@ -1067,6 +1175,13 @@ public class CommentData
 public class CommentListWrapper
 {
     public List<CommentData> items;
+}
+
+[System.Serializable]
+public class CommentPostResult
+{
+    public int id;
+    public string created_at;
 }
 
 [System.Serializable]

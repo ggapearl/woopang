@@ -94,7 +94,7 @@ public static class R0926HuntList
     {
         fetching = true;
         fetchedAt = fetchStartedAt = Time.unscaledTime;
-        string q = R0926HuntCard.TryLocation(out float lat, out float lon, out _)
+        string q = R0926HuntCard.TryLocation(out double lat, out double lon, out _)
             ? "?lat=" + lat.ToString("F6", CultureInfo.InvariantCulture) + "&lon=" + lon.ToString("F6", CultureInfo.InvariantCulture)
             : "";
         long code = 0;

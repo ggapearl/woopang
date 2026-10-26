@@ -66,10 +66,10 @@ namespace Redesign0926
             fso.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        // 말풍선 칸 — 제목줄(창 위 50~200) 아래 · 입력칸(창 아래 20~170) 위에 고정 여백으로 (2026-10-18 대표님: 가로에서 말풍선이 제목·입력칸을 가림).
+        // 말풍선 칸 — 제목줄(창 위 50~200) 아래 · 입력칸(창 아래 0~176 — 10-25 에 150→176) 위에 고정 여백으로 (2026-10-18 대표님: 가로에서 말풍선이 제목·입력칸을 가림).
         // 예전엔 창 높이의 10~90% 비율이라 창이 낮은 가로(1339)에선 위아래로 삐져나가 제목줄·입력칸을 덮었다 — 세로도 짧은 폰은 제목줄에 닿았다.
         // 제목줄·입력칸은 창 끝에 붙어 다니므로 같은 여백이면 세로·가로·키보드 어느 높이에서도 그 사이에 든다 (입력칸이 커지면 AutoExpandInputField 가 아래 여백을 늘린다)
-        private const float ChatAreaSide = 75f, ChatAreaTop = 216f, ChatAreaBottom = 194f;
+        private const float ChatAreaSide = 75f, ChatAreaTop = 216f, ChatAreaBottom = 220f;
         private static void ChatArea(Transform chat, List<string> log)
         {
             var area = Find(chat, "MessageArea");

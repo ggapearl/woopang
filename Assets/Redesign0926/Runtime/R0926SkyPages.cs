@@ -189,7 +189,7 @@ public class R0926SkyPages : MonoBehaviour
         var h = R0926HuntList.RefreshIfDue();
         if (h != null) StartCoroutine(h);
         if (!friendsBusy && Time.unscaledTime >= nextFriends) StartCoroutine(FetchFriends());
-        if (!R0926HuntCard.TryLocation(out float lat, out float lon, out _)) return;
+        if (!R0926HuntCard.TryLocation(out double lat, out double lon, out _)) return;
         var f = R0926Nearby.FestivalsIfDue(lat, lon);
         if (f != null) StartCoroutine(f);
         var t = R0926Nearby.HotIfDue(lat, lon);
@@ -236,7 +236,7 @@ public class R0926SkyPages : MonoBehaviour
     // 축제는 가까운 · 곧 하는 것만, 친구는 20km 안 — 1초마다 (걸으면 바뀐다)
     private void Collect()
     {
-        bool hasMe = R0926HuntCard.TryLocation(out float myLat, out float myLon, out _);
+        bool hasMe = R0926HuntCard.TryLocation(out double myLat, out double myLon, out _);
         DateTime today = DateTime.Now.Date;
         fests.Clear();
         foreach (var f in R0926Nearby.Festivals)
@@ -391,7 +391,7 @@ public class R0926SkyPages : MonoBehaviour
                 else SetIcon(row, "r0926_c_" + h.category, "r0926_s_hot");
                 title = h.name;
                 sub = HotSub(h);
-                double m = R0926HuntCard.TryLocation(out float la, out float lo, out _) ? R0926Nearby.Meters(la, lo, h.lat, h.lon) : h.dist;
+                double m = R0926HuntCard.TryLocation(out double la, out double lo, out _) ? R0926Nearby.Meters(la, lo, h.lat, h.lon) : h.dist;
                 right = R0926Nearby.Km((float)m);
                 break;
             }

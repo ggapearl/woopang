@@ -7,9 +7,12 @@ using UnityEngine.Networking;
 /// 신고 전송. Apple 심사 1.2(사용자 생성 콘텐츠 앱)는 신고가 실제로 동작해야 한다.
 /// 서버는 신고자를 로그인 토큰에서 정하고, 운영자에게 즉시 알린다.
 /// target_type: user / location / comment / dm
+/// 댓글은 서로 다른 10명이 신고하면 서버가 지운다 (removed — 2026-10-26)
 /// </summary>
 public static class ReportService
 {
+    public static string EditorBase;   // 플레이 시험 — 신고를 내 PC 시험 서버로 (운영 서버에 시험 신고를 남기지 않게)
+
     [Serializable]
     private class ReportBody
     {
@@ -23,9 +26,14 @@ public static class ReportService
     private class ReportResult
     {
         public bool success;
+        public bool removed;
     }
 
     public static IEnumerator Send(string targetType, string targetId, string reason, string detail, Action<bool> done)
+        => Send(targetType, targetId, reason, detail, (ok, removed) => done?.Invoke(ok));
+
+    /// <summary>done(접수됐는지, 그 신고로 지워졌는지)</summary>
+    public static IEnumerator Send(string targetType, string targetId, string reason, string detail, Action<bool, bool> done)
     {
         string json = JsonUtility.ToJson(new ReportBody
         {
@@ -35,7 +43,8 @@ public static class ReportService
             detail = detail ?? ""
         });
 
-        using (UnityWebRequest req = new UnityWebRequest(ApiConfig.MAIN_SERVER + "/api/report", "POST"))
+        string url = (string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase) + "/api/report";
+        using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
         {
             req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
             req.downloadHandler = new DownloadHandlerBuffer();
@@ -43,13 +52,15 @@ public static class ReportService
             LoginManager.ApplyAuth(req);
             yield return req.SendWebRequest();
 
-            bool ok = false;
+            bool ok = false, removed = false;
             if (req.result == UnityWebRequest.Result.Success)
             {
                 ReportResult r = JsonUtility.FromJson<ReportResult>(req.downloadHandler.text);
                 ok = r != null && r.success;
+                removed = ok && r.removed;
             }
-            done?.Invoke(ok);
+            else LoginManager.CheckUnauthorized(req);
+            done?.Invoke(ok, removed);
         }
     }
 

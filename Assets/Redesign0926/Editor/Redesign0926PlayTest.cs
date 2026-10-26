@@ -123,6 +123,9 @@ namespace Redesign0926
             else if (mode == "zoomind") PlanZoomInd();
             else if (mode == "zoomsnap") PlanZoomSnap();
             else if (mode == "placeedit") PlanPlaceEdit();
+            else if (mode == "coords") PlanCoords();
+            else if (mode == "comments") PlanComments();
+            else if (mode == "nocat") PlanNoCategory();
             else if (mode == "appinfo") PlanAppInfo();
             else if (mode == "p2pzoom") PlanP2PZoom();
             else if (mode == "maptiles") PlanMapTiles();
@@ -1980,6 +1983,8 @@ namespace Redesign0926
             Do(() => { foreach (var b in avatarBoxes) if (b != null) UnityEngine.Object.Destroy(b.gameObject); avatarBoxes.Clear(); });
         }
 
+        private static InputField ChatInputField() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.chatInput;
+
         private static void PlanChatLook()
         {
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
@@ -1991,6 +1996,48 @@ namespace Redesign0926
             Sleep(0.8f);
             Shot("chat_look");
             Check(() => OnScreen("ChatRoomPanel/Clip0926/Background"), "대화방이 화면 안");
+            // 10-25 N-Y: 대화 입력줄만 키웠다 — 키보드 위 입력줄은 그대로
+            Check(() =>
+            {
+                var f = ChatInputField();
+                var ax = f != null ? f.GetComponent<AutoExpandInputField>() : null;
+                var send = f != null ? f.transform.parent.Find("SendButton") as RectTransform : null;
+                var ph = f != null ? f.placeholder as Text : null;
+                if (f == null || ax == null || ax.scrollRect == null || send == null || ph == null) return false;
+                var area = (RectTransform)f.transform.parent;
+                var msg = (RectTransform)ax.scrollRect.transform;
+                float h = ((RectTransform)f.transform).rect.height;
+                log.Add("  입력 글자 " + f.textComponent.fontSize + " · 안내 " + ph.fontSize + " · 칸 " + h.ToString("0") + " · 줄 " + area.rect.height.ToString("0") + " · 보내기 " + send.rect.width.ToString("0") + " · 말풍선 칸 아래 " + msg.offsetMin.y.ToString("0") + " · 최대 " + ax.maxHeight.ToString("0"));
+                return f.textComponent.fontSize == 54 && ph.fontSize == 52 && Mathf.Abs(h - 132) < 1 && Mathf.Abs(area.rect.height - 176) < 1
+                    && Mathf.Abs(send.rect.width - 136) < 1 && Mathf.Abs(msg.offsetMin.y - 220) < 1 && Mathf.Abs(ax.maxHeight - 290) < 1;
+            }, "대화 입력줄 — 글자 54 · 안내 52 · 칸 132 · 줄 176 · 보내기 136 · 말풍선 칸 아래 220");
+            Check(() =>
+            {
+                int n = 0;
+                foreach (var m in UnityEngine.Object.FindObjectsByType<UploadInputMirror>(FindObjectsInactive.Include))
+                {
+                    var f = m.transform.Find("UploadInputMirror/TextInput")?.GetComponent<InputField>();
+                    if (f == null) continue;
+                    if (f.textComponent.fontSize != 46 || Mathf.Abs(((RectTransform)f.transform).rect.height - 110) > 1) return false;
+                    n++;
+                }
+                return n > 0;
+            }, "키보드 위 입력줄은 그대로 (글자 46 · 칸 110)");
+            Do(() => { var f = ChatInputField(); if (f != null) f.text = "입력칸이 커졌는지 보려고 길게 씁니다. 줄이 넘어가면 칸이 위로 자라고 네 줄을 넘으면 칸 안에서 굴러갑니다. 한 줄 더 씁니다. 또 한 줄 더 씁니다. 마지막 줄입니다."; });
+            Sleep(0.4f);
+            Shot("chat_input_long");
+            Check(() =>
+            {
+                var f = ChatInputField();
+                var ax = f != null ? f.GetComponent<AutoExpandInputField>() : null;
+                if (ax == null || ax.scrollRect == null) return false;
+                float h = ((RectTransform)f.transform).rect.height, bottom = ((RectTransform)ax.scrollRect.transform).offsetMin.y;
+                log.Add("  긴 글 칸 " + h.ToString("0") + " · 말풍선 칸 아래 " + bottom.ToString("0"));
+                return h > 133 && h <= 290.5f && Mathf.Abs(bottom - (220 + h - 132)) < 1;
+            }, "긴 글이면 입력칸이 위로 자라고(최대 290) 말풍선 칸도 같이 올라감");
+            Do(() => { var f = ChatInputField(); if (f != null) f.text = ""; });
+            Sleep(0.3f);
+            Check(() => { var f = ChatInputField(); return f != null && Mathf.Abs(((RectTransform)f.transform).rect.height - 132) < 1; }, "글을 지우면 입력칸이 원래 높이로");
             Do(() =>
             {
                 var mpm = UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include);
@@ -4607,8 +4654,15 @@ namespace Redesign0926
         // 시험 서버(5099)의 place_edit 는 버리는 Postgres(55442)를 쓴다 — 장면에 뜬 우팡 장소 두 곳의 번호로 시험 장소를 심고
         // (사진은 MAIN · 1~4 번호 그림), A 는 메모리의 올린 사람을 시험 아이디로 바꿔 '내 장소'로 연다.
         // 남의 장소(B)는 열어 보기만 — 수정 요청(/fix_upload)·삭제 요청은 운영 서버로 가므로 누르지 않는다
-        [Serializable] private class DevPlaceRow { public bool exists, pet, main_on_disk, folder_on_disk; public string name, category, lat, lon, main; public string[] subs, files; public bool[] subs_on_disk; }
+        [Serializable] private class DevPlaceRow { public bool exists, pet, main_on_disk, folder_on_disk; public string name, category, lat, lon, main, color; public string[] subs, files; public bool[] subs_on_disk; }
         private const string PeMe = "hunt_test_peme";
+        // 시험 서버 /upload 가 마지막으로 받은 것 (api/dev/last_upload)
+        [Serializable] private class DevLastUpload { public int id, main, subs; public string username, form_username, name, category, color, lat, lon; public bool has_category, has_color, has_upload_id; }
+        private const string NcMe = "hunt_test_ncme";
+        [Serializable] private class DevComment { public int id; public string user_id, content; }
+        [Serializable] private class DevCommentReport { public string target_id, reporter_id, status, reason, detail; }
+        [Serializable] private class DevCommentState { public DevComment[] comments; public DevCommentReport[] reports; }
+        [Serializable] private class DevCommentSeed { public bool ok; public int[] ids; }
         // 장소 상세 위 여백 (10-24 대표님 「위쪽으로 여백이 큰데 … 버튼이나 서브사진들 및 각 레이아웃들을 전체적으로 좀 올려야」)
         // 우팡 큐브(사진 있는 것) · 관광공사(정보 글 있는 것)를 열어 첫 장 · 사진 장을 찍고 칸마다 화면 자리를 적는다 — 가로에서도 한 번
         private static void PlanDetailLift()
@@ -4883,6 +4937,94 @@ namespace Redesign0926
             log.Add(sb.ToString());
         }
 
+        // N-L (10-26 대표님) — 좌표는 소수 6자리로 저장·작동, 화면엔 4자리.
+        // 장소·3D 올리기 · 좌표 줄 · 보물찾기가 같은 자리(GeoHere)를 쓰고, 내려받은 장소는 double 로 읽어 AR 자리까지 cm 로 맞는다
+        private static void PlanCoords()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            Vector3 was = Vector3.zero;
+            CubeUploadManager cum = null;
+            ModelUploadManager mum = null;
+            Func<object, string, double> dv = (o, f) => (double)o.GetType().GetField(f, F).GetValue(o);
+            Func<object, string> inputOf = o => (o.GetType().GetField("locationInput", F).GetValue(o) as InputField)?.text;
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var v = VirtualLocation.Instance;
+                was = new Vector3(v.Latitude, v.Longitude, v.Altitude);
+                v.SetCoordinates(36.636123f, 126.828045f, 30.5f);   // float 그대로 F6 이면 경도가 126.828000 으로 잘리는 자리
+                Click("Dock0926/PlusButton");
+            });
+            Sleep(1.6f);   // 좌표 줄은 1초마다
+            Do(() =>
+            {
+                cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+                mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
+                typeof(CubeUploadManager).GetMethod("UpdateLocationDisplay", F).Invoke(cum, null);
+                typeof(ModelUploadManager).GetMethod("UpdateLocationDisplay", F).Invoke(mum, null);
+            });
+            Shot("coords_upload");
+
+            Check(() =>
+            {
+                var v = VirtualLocation.Instance;
+                double lat = dv(cum, "gpsLat"), lon = dv(cum, "gpsLon");
+                log.Add("  장소 올리기가 보낼 값: " + GeoHere.Save(lat) + ", " + GeoHere.Save(lon)
+                        + "  (예전처럼 float 로 F6: " + ((float)lat).ToString("F6", inv) + ", " + ((float)lon).ToString("F6", inv) + ")");
+                return lat == (double)v.Latitude && lon == (double)v.Longitude
+                       && GeoHere.Save(lat) == ((double)v.Latitude).ToString("F6", inv) && GeoHere.Save(lon) == ((double)v.Longitude).ToString("F6", inv)
+                       && GeoHere.Save(lon).Split('.')[1].Length == 6;
+            }, "장소 올리기 — 위치를 double 그대로 들고 소수 6자리로 보낸다");
+            Check(() =>
+            {
+                var v = VirtualLocation.Instance;
+                return dv(mum, "gpsLat") == (double)v.Latitude && dv(mum, "gpsLon") == (double)v.Longitude && dv(mum, "gpsAlt") == (double)v.Altitude;
+            }, "3D 올리기도 같은 값 (double)");
+            Check(() =>
+            {
+                log.Add("  입력칸(장소): " + inputOf(cum) + " · (3D): " + inputOf(mum));
+                return inputOf(cum) == "Lat:36.6361,Lon:126.8280,Alt:30.50" && inputOf(mum) == inputOf(cum);
+            }, "올리기 창의 위치 값 — 화면은 소수 4자리");
+            Check(() =>
+            {
+                var lines = UnityEngine.Object.FindObjectsByType<R0926CoordLine>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                var t = lines.Length > 0 ? typeof(R0926CoordLine).GetField("text", F).GetValue(lines[0]) as Text : null;
+                log.Add("  좌표 줄: " + (t != null ? t.text : "-") + " (켜진 줄 " + lines.Length + ")");
+                return t != null && t.text == "36.6361,  126.8280";
+            }, "좌표 줄 — 저장되는 것과 같은 자리를 소수 4자리로 (예전엔 GPS 를 5자리)");
+            Check(() =>
+            {
+                var m = typeof(R0926HuntCard).GetMethod("TryLocation", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                var args = new object[] { 0.0, 0.0, 0f };
+                bool ok = m != null && (bool)m.Invoke(null, args);
+                double lat = (double)args[0], lon = (double)args[1];
+                log.Add("  보물찾기 위치: " + lat.ToString("R", inv) + ", " + lon.ToString("R", inv) + " · 정확도 " + args[2] + "m");
+                return ok && lat == Math.Round((double)VirtualLocation.Instance.Latitude, 6) && lon == Math.Round((double)VirtualLocation.Instance.Longitude, 6);
+            }, "보물찾기 — 같은 자리(GeoHere)를 소수 6자리로 (숨긴 자리 = AR 보물 자리)");
+            Check(() =>
+            {
+                const string J = "{\"id\":1,\"latitude\":36.636109,\"longitude\":126.828045,\"altitude\":30.25}";
+                var p = Newtonsoft.Json.JsonConvert.DeserializeObject<PlaceData>(J);
+                var l = Newtonsoft.Json.JsonConvert.DeserializeObject<LightPlaceData>(J);
+                var tp = Newtonsoft.Json.JsonConvert.DeserializeObject<TourPlaceData>("{\"mapx\":126.828045,\"mapy\":36.636109}");
+                var go = new GameObject("CoordProbe0926");
+                go.AddComponent<CustomARGeospatialCreatorAnchor>().SetCoordinatesAndCreateAnchor(p.latitude, p.longitude, p.altitude);
+                Vector3 pos = go.transform.position;
+                UnityEngine.Object.Destroy(go);
+                // 에디터 앵커는 (36.6361, 126.8280) 에서 몇 m 인지로 놓인다 — 북 0.000009° = 1.002m · 동 0.000045° = 4.02m
+                double wantZ = (36.636109 - 36.6361) * 111319.9;
+                double wantX = (126.828045 - 126.8280) * 111319.9 * Math.Cos(36.6361 * (Math.PI / 180.0));
+                log.Add($"  36.636109, 126.828045 → AR 자리 북 {pos.z:0.000}m (계산 {wantZ:0.000}) · 동 {pos.x:0.000}m (계산 {wantX:0.000})"
+                        + $" — float 였다면 북 {((double)36.636109f - 36.6361) * 111319.9:0.000}m · 동 {((double)126.828045f - 126.8280) * 111319.9 * Math.Cos(36.6361 * (Math.PI / 180.0)):0.000}m");
+                return p.latitude == 36.636109 && p.longitude == 126.828045 && p.altitude == 30.25
+                       && l.latitude == 36.636109 && l.longitude == 126.828045 && tp.mapx == 126.828045 && tp.mapy == 36.636109
+                       && Math.Abs(pos.z - wantZ) < 0.005 && Math.Abs(pos.x - wantX) < 0.005;
+            }, "내려받은 장소 — 좌표를 double 로 읽어 AR 자리도 cm 까지 (예전 float 은 위도 0.4m·경도 0.7m 단위)");
+            Do(() => VirtualLocation.Instance.SetCoordinates(was.x, was.y, was.z));
+        }
+
         private static void PlanPlaceEdit()
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -5132,6 +5274,11 @@ namespace Redesign0926
                 var p = placeOf(idA);
                 return p != null && p.name == NameA2 && p.category == "cafe" && Math.Abs(p.latitude - here.x) < 1e-5 && Math.Abs(p.longitude - here.y) < 1e-5;
             }, "앱에도 바로 — 이 장소의 이름·분류·좌표");
+            Check(() =>
+            {
+                var p = placeOf(idA);
+                return p != null && row != null && p.latitude.ToString("F6", inv) == row.lat && p.longitude.ToString("F6", inv) == row.lon;
+            }, "앱 좌표도 서버와 같은 소수 6자리 (double — 예전 float 은 경도가 0.7m 단위로 끊겼다)");
 
             // 2) 다시 열면 고친 값 그대로 → 카드의 '삭제' 로 지우기
             Do(() => tap(dtOf(idA)));
@@ -5243,6 +5390,617 @@ namespace Redesign0926
             {
                 DevPost("", "/api/dev/place_reset", "{\"ids\":[" + idA + "," + idB + "]}");
                 CubeDataFixManager.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+        }
+
+        // ── 10-25 N-X: 분류 없이 올리기 · 분류 색 — 대표님 「'분류' 에 있어서 체크하지 않고 올려도 되도록 … 그냥 흰색으로 발생하도록 해주고,
+        //    각 필터링 분류의 색에 맞게 적절힌 인디케이터 색이 반영되어서 목록 및 AR화면에 잘 발생하도록 되어있는 지 확인해줘」.
+        //    색은 DataManager.GetCategoryColor 하나 (목록 필터 칩 · 올리기 칩 · AR 인디케이터 · 목록 줄) · 분류 없음·기타 = 흰색.
+        //    올리기·정보 수정은 시험 서버(5099 · 버리는 DB 55442)로만 — 운영 /upload·올림 알림(푸시)은 부르지 않는다.
+        //    3D 올리기는 운영 서버에 하루 한도를 묻고 기록하므로 돌리지 않는다 (서버 쪽은 test_model_route.py 로 따로 시험)
+        private static void PlanNoCategory()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const string Sheet = "UploadPage/Clip0926/UploadSheet0926/";
+            const string Cube = Sheet + "CubeUploadPage/Panel/", Model = Sheet + "ModelUploadPage/Panel/", Fix = "Fixpage/FixUploadPage/Panel/";
+            const string More = "FullScreenPanel/FullScreenGuide/TopUIPanel/FixButton";
+            const string Menu = "FullScreenPanel/FullScreenGuide/FixButtonPanel/MoreSheet0926/Tiles0926/";
+            const string FakeId = "990777", NameG = "분류 시험 장소", NameF = "분류 없이 올린 시험 장소";
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string[] cats = { "shop", "food", "cafe", "park", "toilet", "sport", "landmark" };
+            string[] hexes = { "4F8CFF", "FF8A3D", "A47551", "38D98A", "9C7AFF", "F04747", "F5C442" };
+            CubeDataFixManager fix = null;
+            CubeUploadManager cum = null;
+            int idA = -1, upId = -1;
+            PlaceData orig = null;
+            DevPlaceRow row = null;
+            DevLastUpload lu = null;
+            Func<Color, string> hex = c => ColorUtility.ToHtmlStringRGB(c);
+            Func<int, GameObject> spawned = id => DataManager.Instance != null && DataManager.Instance.GetSpawnedObjects().TryGetValue(id, out var go) ? go : null;
+            Func<int, DoubleTap3D> dtOf = id => spawned(id) != null ? spawned(id).GetComponentInChildren<DoubleTap3D>(true) : null;
+            Func<int, Target> targetOf = id => spawned(id) != null ? spawned(id).GetComponentInChildren<Target>(true) : null;
+            Func<int, PlaceData> placeOf = id => DataManager.Instance != null && DataManager.Instance.GetPlaceDataMap().TryGetValue(id, out var p) ? p : null;
+            Func<DoubleTap3D, bool> open = d => d != null && d.fullscreenCanvasGroup != null && d.fullscreenCanvasGroup.gameObject.activeSelf;
+            Action<DoubleTap3D> tap = d => typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(d, null);
+            Action<DoubleTap3D> close = d => typeof(DoubleTap3D).GetMethod("CloseFullscreen", F).Invoke(d, null);
+            Func<string, object> fv = n => typeof(CubeDataFixManager).GetField(n, F).GetValue(fix);
+            Func<string, object> uv = n => typeof(CubeUploadManager).GetField(n, F).GetValue(cum);
+            Func<PlaceData, PlaceData> copy = p => Newtonsoft.Json.JsonConvert.DeserializeObject<PlaceData>(Newtonsoft.Json.JsonConvert.SerializeObject(p));
+            Func<string, float> chipAlpha = c => Find(Fix + "Chips0926/Chip_" + c)?.GetComponent<Image>()?.color.a ?? -1f;
+            // 목록 줄의 색 (우팡 장소 번호 → RRGGBB) — 목록을 연 동안 combinedPlaces 에서
+            Func<Dictionary<string, string>> listColors = () =>
+            {
+                var d = new Dictionary<string, string>();
+                var cache = DataManager.Instance.GetLightCache();
+                var cp = (List<(object place, float distance, string id, string displayText, string colorHex)>)typeof(PlaceListManager).GetField("combinedPlaces", F).GetValue(Plm());
+                foreach (var e in cp)
+                    if (e.place is PlaceData || (e.place is CachedPlaceData c && cache.Contains(c))) d[e.id] = e.colorHex;
+                return d;
+            };
+            Func<int, DevPlaceRow> rowOf = id =>
+            {
+                string r = DevGet("", "/api/dev/place_row/" + id);
+                return string.IsNullOrEmpty(r) ? null : JsonUtility.FromJson<DevPlaceRow>(r);
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                CubeUploadManager.EditorBase = CubeDataFixManager.EditorBase = "http://127.0.0.1:5099";
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, LocalTestLogin + NcMe.Substring("hunt_test_".Length));
+                SfLogin(true, NcMe);
+                fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);
+            });
+            Check(() => fix != null && cum != null && LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUsername == NcMe,
+                  "준비: 시험 아이디 (로그인 이벤트 없이) · 장소 올리기·고치기는 시험 서버로");
+
+            // 1) 색표 하나 — 목록 필터 칩과 같은 색 · 기타·분류 없음은 흰색
+            Check(() =>
+            {
+                var got = new List<string>();
+                bool ok = true;
+                for (int i = 0; i < cats.Length; i++)
+                {
+                    string h = hex(DataManager.GetCategoryColor(cats[i]));
+                    got.Add(cats[i] + " " + h);
+                    ok &= h == hexes[i] && hex(R0926FilterChip.CatColors[i + 1]) == h;
+                }
+                foreach (var c in new[] { "etc", "", null })
+                {
+                    string h = hex(DataManager.GetCategoryColor(c));
+                    got.Add((c == null ? "null" : c == "" ? "(없음)" : c) + " " + h);
+                    ok &= h == "FFFFFF";
+                }
+                log.Add("  " + string.Join(" · ", got));
+                return ok;
+            }, "색표 — 샵 4F8CFF · 음식점 FF8A3D · 카페 A47551 · 공원 38D98A · 화장실 9C7AFF · 스포츠 F04747 · 랜드마크 F5C442 (= 목록 필터 칩) · 기타·분류 없음 흰색");
+            Check(() =>
+            {
+                var cases = new[]
+                {
+                    new[] { "33B2E6", "landmark", "F5C442" },   // 옛 앱이 올린 랜드마크 하늘색 → 칩 색
+                    new[] { "AE53C5", "toilet", "9C7AFF" },     // 서버가 'purple' 을 바꿔 둔 색 → 칩 색
+                    new[] { "FBC15D", "food", "FF8A3D" },
+                    new[] { "4CD980", "park", "38D98A" },
+                    new[] { null, "", "FFFFFF" },               // 분류 없이 올린 장소 (색 NULL)
+                    new[] { "", "", "FFFFFF" },
+                    new[] { "a", "", "FFFFFF" },                // 망가진 색 값
+                    new[] { null, "etc", "FFFFFF" },
+                    new[] { "44619B", "gov", "44619B" },        // 공공데이터는 서버 색 그대로
+                    new[] { "FFFF00", "", "FFFF00" },           // 분류 없는 옛 장소에 남은 색 — 그대로 둔다
+                };
+                bool ok = true;
+                foreach (var c in cases)
+                {
+                    string h = DataManager.ResolvePlaceColorHex(c[0], c[1]);
+                    if (h != c[2]) { ok = false; log.Add($"  {c[0] ?? "null"} / '{c[1]}' → {h} (기대 {c[2]})"); }
+                }
+                return ok;
+            }, "색 고르기 — 칩 분류는 옛 색이 남아 있어도 칩 색 · 분류 없음·기타·망가진 값은 흰색 · 공공데이터와 분류 없는 옛 장소의 색은 그대로");
+            Check(() =>
+            {
+                var bad = new List<string>();
+                int n = 0;
+                foreach (var pg in new[] { ("장소", Cube), ("3D", Model), ("수정", Fix) })
+                    foreach (var c in new[] { "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" })
+                    {
+                        var dot = Find(pg.Item2 + "Chips0926/Chip_" + c + "/Dot")?.GetComponent<Image>();
+                        n++;
+                        if (dot == null) bad.Add(pg.Item1 + " " + c + " 없음");
+                        else if (hex(dot.color) != hex(DataManager.GetCategoryColor(c))) bad.Add(pg.Item1 + " " + c + " " + hex(dot.color));
+                    }
+                log.Add($"  칩 점 {n}개 — 다른 색 " + (bad.Count == 0 ? "없음" : string.Join(", ", bad)));
+                return n == 24 && bad.Count == 0;
+            }, "장소 추가 · 3D 추가 · 정보 수정의 분류 칩 점 = 같은 색표 (기타는 흰 점)");
+
+            Wait(() =>
+            {
+                if (DataManager.Instance == null) return false;
+                var map = DataManager.Instance.GetPlaceDataMap();
+                idA = -1;
+                foreach (var kv in DataManager.Instance.GetSpawnedObjects())
+                    if (kv.Value != null && kv.Value.activeInHierarchy && map.TryGetValue(kv.Key, out var p) && p.model_type == "cube" && dtOf(kv.Key) != null && targetOf(kv.Key) != null)
+                    { idA = kv.Key; break; }
+                return idA > 0;
+            }, 40f, "장면에 뜬 우팡 큐브 장소");
+
+            // 2) 풀에서 꺼낸 인디케이터 — 앞서 쓴 장소의 색(여기선 하늘색)을 들고 있어도 이 장소의 색으로 (분류 없음은 흰색)
+            Check(() =>
+            {
+                var dm = DataManager.Instance;
+                var cache = dm.GetLightCache();
+                var pool = (Queue<GameObject>)typeof(DataManager).GetField("indicatorOnlyPool", F).GetValue(dm);
+                var fake = new CachedPlaceData
+                {
+                    uniqueId = "dm_" + FakeId, rawId = FakeId, displayName = "분류 없는 시험 장소", category = "", sourceManager = "DataManager", modelType = "cube",
+                    latitude = VirtualLocation.Instance.Latitude + 0.5, longitude = VirtualLocation.Instance.Longitude, altitude = 30,
+                };
+                var got = new List<string>();
+                cache.Add(fake);
+                try
+                {
+                    dm.SpawnIndicatorOnly(FakeId);   // 풀을 한 번 채워 둔다 — 아래 매번 풀에서 꺼낸다
+                    dm.DespawnIndicatorOnly(FakeId);
+                    foreach (var c in new[] { "", "sport", "etc", "landmark" })
+                    {
+                        fake.category = c;
+                        int stale = 0;
+                        foreach (var go in pool)
+                        {
+                            var t = go != null ? go.GetComponentInChildren<Target>(true) : null;
+                            if (t != null) { t.TargetColor = Color.cyan; stale++; }
+                        }
+                        bool on = dm.SpawnIndicatorOnly(FakeId);
+                        var tg = on && dm.GetIndicatorOnlyObjects().TryGetValue(int.Parse(FakeId), out var o) && o != null ? o.GetComponentInChildren<Target>(true) : null;
+                        got.Add((c == "" ? "(없음)" : c) + " " + (tg != null ? hex(tg.TargetColor) : "-") + (stale > 0 ? "" : " (풀 빔)"));
+                        dm.DespawnIndicatorOnly(FakeId);
+                    }
+                }
+                finally { cache.Remove(fake); }
+                log.Add("  풀에서 꺼낸 인디케이터: " + string.Join(" · ", got));
+                return string.Join("|", got) == "(없음) FFFFFF|sport F04747|etc FFFFFF|landmark F5C442";
+            }, "풀에서 꺼낸 인디케이터 — 앞 장소 색이 남지 않음: 분류 없음 흰색 · 스포츠 빨강 · 기타 흰색 · 랜드마크 금색");
+
+            // 3) 장면 전체 — AR 인디케이터 색 = 목록 줄 색
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.5f);
+            Shot("nocat_list");
+            Check(() =>
+            {
+                var dm = DataManager.Instance;
+                var map = dm.GetPlaceDataMap();
+                var list = listColors();
+                int ar = 0, both = 0;
+                var bad = new List<string>();
+                Action<int, Target, string, string, string> one = (id, t, raw, cat, name) =>
+                {
+                    if (t == null) return;
+                    ar++;
+                    string want = DataManager.ResolvePlaceColorHex(raw, cat, name), got = hex(t.TargetColor);
+                    if (got != want) bad.Add($"{id} AR {got}≠{want}");
+                    if (DataManager.IsChipCategory(cat) && got != hex(DataManager.GetCategoryColor(cat))) bad.Add($"{id} {cat} {got}");
+                    if (list.TryGetValue(id.ToString(), out var lh)) { both++; if (lh != got) bad.Add($"{id} 목록 {lh}≠AR {got}"); }
+                };
+                foreach (var kv in dm.GetSpawnedObjects())
+                    if (kv.Value != null && map.TryGetValue(kv.Key, out var p)) one(kv.Key, kv.Value.GetComponentInChildren<Target>(true), p.color, p.category, p.name);
+                foreach (var kv in dm.GetIndicatorOnlyObjects())
+                {
+                    var c = dm.GetLightCache().Find(x => x.rawId == kv.Key.ToString());
+                    if (kv.Value != null && c != null) one(kv.Key, kv.Value.GetComponentInChildren<Target>(true), map.TryGetValue(kv.Key, out var p) ? p.color : null, c.category, c.displayName);
+                }
+                log.Add($"  AR {ar}곳 · 목록 {list.Count}줄 · 둘 다 {both}곳 — 어긋남 " + (bad.Count == 0 ? "없음" : string.Join(", ", bad.GetRange(0, Math.Min(8, bad.Count)))));
+                return ar > 0 && both > 0 && bad.Count == 0;
+            }, "장면의 우팡 장소 모두 — AR 인디케이터 색 = 목록 줄 색 · 칩 분류는 칩 색");
+            Back();
+            Sleep(0.8f);
+            Check(() => !Active("ListPanel"), "목록 닫힘");
+
+            // 4) 내 장소의 분류 비우기 — 스포츠(빨강)를 다시 눌러 해제 → '수정하기' → 서버 '' · 색 NULL → AR·목록 흰색
+            Do(() =>
+            {
+                orig = copy(placeOf(idA));
+                string seed = DevPost("", "/api/dev/place_seed", "{\"id\":" + idA + ",\"name\":\"" + NameG + "\",\"category\":\"sport\",\"lat\":" + orig.latitude.ToString("F6", inv)
+                                      + ",\"lon\":" + orig.longitude.ToString("F6", inv) + ",\"alt\":" + orig.altitude.ToString("F2", inv) + ",\"subs\":2,\"owner\":\"" + NcMe.Substring("hunt_test_".Length) + "\"}");
+                var p = copy(orig);
+                p.name = NameG; p.category = "sport"; p.color = null; p.username = NcMe;
+                DataManager.Instance.ApplyEditedPlace(p, false);   // 메모리만 — 이 장소를 내가 올린 스포츠 장소로 (앱은 장소를 저장하지 않는다)
+                log.Add($"  A {idA} '{orig.name}' ({orig.category}/{orig.color ?? "null"}) → 시험 장소 {(Has(seed, "\"ok\":true") ? "심음" : "못 심음")}");
+            });
+            Sleep(0.3f);
+            Check(() => targetOf(idA) != null && hex(targetOf(idA).TargetColor) == "F04747", "준비: 내 스포츠 장소 — AR 인디케이터 빨강");
+            Do(() => tap(dtOf(idA)));
+            Wait(() => open(dtOf(idA)), 10f, "A 상세 열림");
+            Do(() => Click(More));
+            Sleep(0.8f);
+            Do(() => Click(Menu + "FixPlaceButton"));
+            Wait(() => Active("Fixpage") && !(bool)fv("isProcessing") && (string)fv("selectedCategory") == "sport", 20f, "A 정보 수정 — 서버 값(스포츠) 받음");
+            Sleep(0.6f);
+            Shot("nocat_fix_sport");
+            Check(() => (int)fv("currentCategoryIndex") == 6 && chipAlpha("sport") > 0.2f, "스포츠 칩이 골라져 있음");
+            Do(() => Click(Fix + "Chips0926/Chip_sport"));
+            Sleep(0.4f);
+            Shot("nocat_fix_cleared");
+            Check(() => (string)fv("selectedCategory") == "" && (int)fv("currentCategoryIndex") == 0 && chipAlpha("sport") >= 0f && chipAlpha("sport") < 0.1f,
+                  "골라 둔 칩을 다시 누르면 해제 — 분류 없음");
+            Do(() => Click(Fix + "SubmitButton"));
+            Wait(() => !Active("Fixpage"), 20f, "'수정하기' — 분류 없이 저장되고 창 닫힘");
+            Sleep(0.5f);
+            Do(() => row = rowOf(idA));
+            Check(() =>
+            {
+                log.Add($"  서버: '{row?.name}' · 분류 '{row?.category}' · 색 '{row?.color}'");
+                return row != null && row.exists && row.category == "" && string.IsNullOrEmpty(row.color);
+            }, "서버 — 분류 '' · 색 NULL");
+            Check(() => placeOf(idA) != null && placeOf(idA).category == "" && targetOf(idA) != null && hex(targetOf(idA).TargetColor) == "FFFFFF",
+                  "AR 인디케이터 바로 흰색");
+            Do(() => { if (open(dtOf(idA))) close(dtOf(idA)); });
+            Sleep(0.8f);
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.5f);
+            Shot("nocat_list_white");
+            Check(() =>
+            {
+                var l = listColors();
+                log.Add("  목록 A 줄 색: " + (l.TryGetValue(idA.ToString(), out var h) ? h : "(목록에 없음)"));
+                return h == "FFFFFF";
+            }, "목록 줄도 흰색");
+            Back();
+            Sleep(0.8f);
+            Do(() =>
+            {
+                if (orig != null) DataManager.Instance.ApplyEditedPlace(copy(orig), false);   // 장면은 원래 장소로
+            });
+            Sleep(0.3f);
+            Check(() => orig != null && placeOf(idA)?.name == orig.name && targetOf(idA) != null
+                        && hex(targetOf(idA).TargetColor) == DataManager.ResolvePlaceColorHex(orig.color, orig.category, orig.name),
+                  "되돌림 — 장면의 A 는 원래 이름·색");
+
+            // 5) 분류 없이 장소 올리기 — 칩을 하나도 안 고르고 '등록하기' → 막지 않고 올라감 · 분류 '' · 색은 보내지 않음
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() =>
+            {
+                ((InputField)uv("nameInput")).text = NameF;
+                var main = new Texture2D(64, 64);
+                typeof(CubeUploadManager).GetField("mainPhoto", F).SetValue(cum, main);
+                typeof(CubeUploadManager).GetMethod("SetMainSprite", F).Invoke(cum, new object[] { main });
+                typeof(CubeUploadManager).GetMethod("SetMainPhotoUIState", F).Invoke(cum, new object[] { true });
+                var subs = (List<Texture2D>)uv("subPhotos");
+                subs.Add(new Texture2D(64, 64));
+                subs.Add(new Texture2D(64, 64));
+                typeof(CubeUploadManager).GetMethod("UpdateSubPhotoGrid", F).Invoke(cum, null);
+            });
+            Sleep(0.6f);
+            Shot("nocat_upload_ready");
+            Check(() =>
+            {
+                log.Add($"  분류 '{uv("selectedCategory")}' ({uv("currentCategoryIndex")}) · 인스타 {uv("showInstagram")} · 추가 사진 {((List<Texture2D>)uv("subPhotos")).Count}장");
+                return Active(Cube + "SubmitButton") && (string)uv("selectedCategory") == "" && (int)uv("currentCategoryIndex") == 0;
+            }, "장소 추가 — 분류 칩을 하나도 고르지 않은 채");
+            Do(() => Click(Cube + "SubmitButton"));
+            Wait(() => !Active("UploadPage"), 30f, "'등록하기' — 막지 않고 올라가고 창 닫힘");
+            Sleep(0.3f);
+            Do(() =>
+            {
+                string j = DevGet("", "/api/dev/last_upload");
+                lu = string.IsNullOrEmpty(j) ? null : JsonUtility.FromJson<DevLastUpload>(j);
+                upId = lu != null ? lu.id : -1;
+            });
+            Check(() =>
+            {
+                if (lu == null || lu.id <= 0) return false;
+                log.Add($"  시험 서버가 받은 것: #{lu.id} '{lu.name}' · 올린 사람 {lu.username} (폼 {lu.form_username}) · 분류 '{lu.category}' (칸 {lu.has_category}) · 색 칸 {lu.has_color} · {lu.lat},{lu.lon} · 사진 {lu.main}+{lu.subs} · 중복 막기 키 {lu.has_upload_id}");
+                return lu.has_category && lu.category == "" && !lu.has_color && lu.username == NcMe && lu.form_username == NcMe && lu.name == NameF
+                       && lu.main == 1 && lu.subs == 2 && lu.has_upload_id;
+            }, "보낸 것 — 분류 '' · 색은 안 보냄 · 올린 사람 · 대표 + 추가 2장 · 중복 막기 키");
+            Check(() =>
+            {
+                var six = new System.Text.RegularExpressions.Regex(@"^-?\d+\.\d{6}$");
+                return lu != null && six.IsMatch(lu.lat ?? "") && six.IsMatch(lu.lon ?? "")
+                       && Math.Abs(double.Parse(lu.lat, inv) - VirtualLocation.Instance.Latitude) < 1e-4
+                       && Math.Abs(double.Parse(lu.lon, inv) - VirtualLocation.Instance.Longitude) < 1e-4;
+            }, "좌표 — 소수 6자리 · 지금 위치");
+            Do(() => row = upId > 0 ? rowOf(upId) : null);
+            Check(() => row != null && row.exists && row.name == NameF && row.category == "" && string.IsNullOrEmpty(row.color),
+                  "저장된 줄 — 분류 '' · 색 NULL (앱에서는 흰색)");
+
+            Do(() =>
+            {
+                var ids = new List<string>();
+                if (idA > 0) ids.Add(idA.ToString());
+                if (upId > 0) ids.Add(upId.ToString());
+                DevPost("", "/api/dev/place_reset", "{\"ids\":[" + string.Join(",", ids) + "]}");
+                CubeUploadManager.EditorBase = CubeDataFixManager.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+        }
+
+        // ── 10-24 N-J · N-N: 댓글 — 대표님 「상품 댓글 … '신고' 할 수 있도록 하고 10개정도 신고 들어가면 그냥 삭제 … 본인이 쓴 댓글은 스와이프 통해서 삭제버튼」
+        //    · 「'미르네집' … 댓글을 남겼는데 이게 바로 반영이 안되는데」
+        //    쓰자마자 맨 위 · 사진 아래 미리보기도 바로 · 내 댓글을 밀면 빨간 '삭제' · 남의 댓글을 밀면 주황 '신고' → 사유 시트 → 내 목록에서 빠짐
+        //    · 서로 다른 10명이 신고하면 서버가 지움. 댓글·신고는 시험 서버(5099 · 버리는 DB 55442)로만 — 운영 서버에는 쓰지 않는다
+        private static void PlanComments()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const string Me = "cmme", Sheet = "CommentPanel_HQ/CommentReportSheet0926";
+            const string Mine = "시험 댓글 — 쓰자마자 보여야 해요", OtherA = "남의 댓글 하나", OtherB = "신고할 남의 댓글";
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            CommentManager cm = null;
+            DoubleTap3D dt = null;
+            int id = -1, idA = -1, idB = -1, mineId = -1;
+            string meId = null;
+            DevCommentState st = null;
+            Func<int, GameObject> spawned = k => DataManager.Instance != null && DataManager.Instance.GetSpawnedObjects().TryGetValue(k, out var go) ? go : null;
+            Func<int, DoubleTap3D> dtOf = k => spawned(k) != null ? spawned(k).GetComponentInChildren<DoubleTap3D>(true) : null;
+            Func<DoubleTap3D, bool> open = d => d != null && d.fullscreenCanvasGroup != null && d.fullscreenCanvasGroup.gameObject.activeSelf;
+            Action openComments = () => typeof(DoubleTap3D).GetMethod("OnCommentPreviewClicked", F).Invoke(dt, null);
+            Func<List<CommentItem>> items = () =>
+            {
+                var l = new List<CommentItem>();
+                if (cm != null && cm.commentContent != null)
+                    foreach (Transform c in cm.commentContent)
+                    {
+                        var it = c.GetComponent<CommentItem>();
+                        if (it != null && c.gameObject.activeSelf) l.Add(it);
+                    }
+                return l;
+            };
+            Func<int, CommentItem> item = k => items().Find(i => i.CommentId == k);
+            Func<int, SwipeToDeleteHandler> sw = k => item(k) != null ? item(k).GetComponent<SwipeToDeleteHandler>() : null;
+            Func<SwipeToDeleteHandler, string> swLabel = h => h != null ? h.transform.Find("DeleteButton/Text")?.GetComponent<Text>()?.text : null;
+            Func<SwipeToDeleteHandler, Color> swColor = h => h != null && h.transform.Find("DeleteButton") != null ? h.transform.Find("DeleteButton").GetComponent<Image>().color : Color.clear;
+            Action<SwipeToDeleteHandler> swTap = h => h.transform.Find("DeleteButton").GetComponent<Button>().onClick.Invoke();
+            Func<string> preview = () => dt != null && dt.previewText != null ? dt.previewText.text : null;
+            Func<string> none = () => R0926LocalizedText.Say("아직 댓글이 없습니다. 첫 댓글을 남겨보세요!", "No comments yet. Be the first to comment!",
+                "コメントはまだありません。最初のコメントを残してください！", "暂无评论。快来抢沙发吧！", "Aún no hay comentarios. ¡Sé el primero en comentar!");
+            Func<string, string> row = code => Find(Sheet + "/Card0926/Reason_" + code + "/Label0926")?.GetComponent<Text>()?.text;
+            Func<SwipeToClose> behind = () => cm != null && cm.commentPanel != null ? cm.commentPanel.GetComponent<SwipeToClose>() : null;
+            Func<DevCommentState> state = () =>
+            {
+                string r = DevGet("", "/api/dev/comment_state?location_id=" + id + "&ids=" + idA + "," + idB + "," + mineId);
+                return string.IsNullOrEmpty(r) ? null : JsonUtility.FromJson<DevCommentState>(r);
+            };
+            Func<int, List<DevCommentReport>> reportsOf = k => st == null || st.reports == null ? new List<DevCommentReport>()
+                : new List<DevCommentReport>(Array.FindAll(st.reports, x => x.target_id == k.ToString()));
+            Func<int, bool> alive = k => st != null && st.comments != null && Array.Exists(st.comments, c => c.id == k);
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Wait(() =>
+            {
+                if (DataManager.Instance == null) return false;
+                var map = DataManager.Instance.GetPlaceDataMap();
+                foreach (var kv in DataManager.Instance.GetSpawnedObjects())
+                    if (kv.Value != null && kv.Value.activeInHierarchy && map.ContainsKey(kv.Key) && dtOf(kv.Key) != null) { id = kv.Key; return true; }
+                return false;
+            }, 40f, "장면에 뜬 우팡 장소");
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                CommentManager.EditorBase = "http://127.0.0.1:5099";
+                ReportService.EditorBase = "http://127.0.0.1:5099";
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, LocalTestLogin + Me);
+                cm = CommentManager.Instance;
+                dt = dtOf(id);
+                // 시험 DB 에 같은 번호의 장소 — 댓글이 그 장소를 가리켜야 한다 (댓글은 아직 없이)
+                DevPost("", "/api/dev/place_reset", "{\"ids\":[" + id + "]}");
+                string at = ",\"lat\":" + Math.Round((double)VirtualLocation.Instance.Latitude, 6).ToString("F6", inv)
+                          + ",\"lon\":" + Math.Round((double)VirtualLocation.Instance.Longitude, 6).ToString("F6", inv) + ",\"alt\":30";
+                string p = DevPost("", "/api/dev/place_seed", "{\"id\":" + id + ",\"name\":\"댓글 시험\",\"category\":\"food\"" + at + ",\"subs\":1,\"owner\":\"cmo1\"}");
+                string s = DevPost("", "/api/dev/comment_seed", "{\"location_id\":" + id + ",\"me\":\"" + Me + "\",\"comments\":[]}");
+                meId = System.Text.RegularExpressions.Regex.Match(s ?? "", "\"me\"\\s*:\\s*\"(\\d+)\"").Groups[1].Value;
+                SfLogin(true, meId);
+                LoginManager.Instance.CurrentUser.username = "hunt_test_" + Me;
+                log.Add($"  장소 {id} · 나 {meId} — 시험 장소 {(Has(p, "\"ok\":true") ? "심음" : "못 심음")}");
+            });
+            Check(() => cm != null && dt != null && !string.IsNullOrEmpty(meId) && LoginManager.Instance.IsLoggedIn, "준비: 시험 아이디 (로그인 이벤트 없이) · 댓글·신고는 시험 서버로");
+            Check(() =>
+            {
+                var t = Find(Sheet);
+                bool ok = t != null && t.GetComponent<R0926CommentReportSheet>() != null && t.GetComponent<R0926TapToClose>() != null
+                          && Find(Sheet + "/Card0926")?.GetComponent<R0926SwipeDismiss>() != null
+                          && Find(Sheet + "/Cancel0926/ClosePx0926")?.GetComponent<ClickButtonOnBack>() != null
+                          && Find(Sheet + "/Cancel0926")?.GetComponent<ClickButtonOnBack>() == null
+                          && t.parent == cm.commentPanel.transform && t.GetSiblingIndex() == t.parent.childCount - 1 && !t.gameObject.activeSelf;
+                foreach (var code in new[] { "spam", "abuse", "sexual_hate", "other" }) ok &= Find(Sheet + "/Card0926/Reason_" + code) != null;
+                return ok;
+            }, "연결: 댓글 창 맨 위에 신고 시트 (사유 넷 · 끌어내리기 · 뒤로가기는 덮개 · 바깥 누르기) — 처음엔 꺼짐");
+
+            // 1) 미리보기 '댓글 없음' → 댓글 창 → 보내자마자 맨 위 → 서버 번호 → 미리보기도 바로 (다시 열지 않고)
+            Do(() => typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(dt, null));
+            Wait(() => open(dt), 10f, "장소 상세 열림");
+            Wait(() => preview() == none(), 10f, "사진 아래 미리보기 — 댓글 없음");
+            Shot("comments_preview_empty");
+            Check(() => preview() == none(), "미리보기: '아직 댓글이 없습니다' (앱 언어 — 예전엔 이 줄만 기기 언어)");
+            Do(() => openComments());
+            Wait(() => cm.IsPanelOpen && cm.commentPanel.activeInHierarchy, 5f, "댓글 창 열림");
+            Sleep(1.2f);
+            Check(() => items().Count == 0, "댓글 창 — 비어 있음");
+            Do(() =>
+            {
+                cm.commentInputField.text = Mine;
+                cm.PostComment();
+                var l = items();
+                bool ok = l.Count == 1 && l[0].CommentId == -1 && cm.commentContent.GetChild(0) == l[0].transform
+                          && Array.Exists(l[0].GetComponentsInChildren<Text>(true), x => x.text.Contains(Mine));
+                log.Add((ok ? "PASS " : "FAIL ") + "보내자마자 맨 위에 내 댓글 (서버 답 전 · 번호 -1)");
+            });
+            Wait(() => items().Count == 1 && items()[0].CommentId > 0, 10f, "서버 번호 받음");
+            Do(() => mineId = items()[0].CommentId);
+            Sleep(0.5f);
+            Shot("comments_posted");
+            Check(() => sw(mineId) != null && cm.commentInputField.text == "", "번호를 받으면 밀어 지우기가 붙음 · 입력칸 비움");
+            Do(() => st = state());
+            Check(() =>
+            {
+                var c = st != null && st.comments != null && st.comments.Length == 1 ? st.comments[0] : null;
+                log.Add("  서버 댓글: " + (c != null ? c.id + " · " + c.user_id + " · " + c.content : "-"));
+                return c != null && c.id == mineId && c.user_id == meId && c.content == Mine;
+            }, "서버(시험 DB)에 내 댓글 — 토큰의 회원번호로");
+            Wait(() => preview() != null && preview().Contains(Mine), 10f, "미리보기 바뀜");
+            Check(() => preview() == "<b>hunt_test_" + Me + "</b>  " + Mine, "사진 아래 미리보기 — 다시 열지 않아도 내 댓글로 (10-24 미르네집)");
+
+            // 2) 내 댓글을 밀면 빨간 '삭제' → 지움 → 미리보기도 '댓글 없음'
+            Do(() => SwipeLeft(sw(mineId), 300f));
+            Sleep(0.3f);
+            Shot("comments_swipe_mine");
+            Check(() =>
+            {
+                var h = sw(mineId); var c = swColor(h);
+                log.Add($"  내 댓글 밀기: '{swLabel(h)}' · 색 {c} · 폭 {DeleteWidth(h)}");
+                return swLabel(h) == LocalizationManager.Instance.GetText("swipe_delete") && c.r > 0.85f && c.g < 0.35f && DeleteWidth(h) > 200f;
+            }, "내 댓글을 밀면 빨간 '삭제'");
+            Do(() => swTap(sw(mineId)));
+            Wait(() => item(mineId) == null, 10f, "'삭제' → 목록에서 사라짐");
+            Do(() => st = state());
+            Check(() => st != null && st.comments != null && st.comments.Length == 0, "서버에서도 지움");
+            Wait(() => preview() == none(), 10f, "미리보기 — 댓글 없음");
+            Check(() => preview() == none(), "지우면 미리보기도 바로 '댓글 없음'");
+
+            // 3) 남의 댓글 둘 — 밀면 주황 '신고' → 사유 시트 (뒤로가기 · 바깥 누르기는 시트만 닫는다)
+            Do(() =>
+            {
+                string s = DevPost("", "/api/dev/comment_seed", "{\"location_id\":" + id + ",\"me\":\"" + Me + "\",\"comments\":[{\"user\":\"cmo1\",\"content\":\"" + OtherA + "\"},{\"user\":\"cmo2\",\"content\":\"" + OtherB + "\"}]}");
+                var seed = string.IsNullOrEmpty(s) ? null : JsonUtility.FromJson<DevCommentSeed>(s);
+                if (seed != null && seed.ids != null && seed.ids.Length == 2) { idA = seed.ids[0]; idB = seed.ids[1]; }
+                cm.ClosePanel();
+            });
+            Wait(() => !cm.IsPanelOpen && !cm.commentPanel.activeInHierarchy, 5f, "댓글 창 닫힘");
+            Do(() => openComments());
+            Wait(() => item(idA) != null && item(idB) != null && sw(idA) != null && sw(idB) != null, 10f, "남의 댓글 둘");
+            Sleep(0.4f);
+            Check(() => items().Count == 2 && cm.commentContent.GetChild(0) == item(idB).transform, "남의 댓글 둘 — 새 글(B)이 위");
+            Do(() => SwipeLeft(sw(idB), 300f));
+            Sleep(0.3f);
+            Shot("comments_swipe_other");
+            Check(() =>
+            {
+                var h = sw(idB); var c = swColor(h);
+                log.Add($"  남의 댓글 밀기: '{swLabel(h)}' · 색 {c}");
+                return swLabel(h) == R0926LocalizedText.Say("신고", "Report", "報告", "举报", "Denunciar") && c.r > 0.9f && c.g > 0.45f && c.g < 0.6f && c.b < 0.3f;
+            }, "남의 댓글을 밀면 주황 '신고' (내 댓글의 빨간 '삭제'와 다르게)");
+            Do(() => cm.commentInputField.ActivateInputField());
+            Sleep(0.2f);
+            Do(() => swTap(sw(idB)));
+            Wait(() => Active(Sheet), 3f, "신고 사유 시트");
+            Sleep(0.6f);
+            Shot("comments_report_sheet");
+            Check(() => cm.IsPanelOpen && DeleteWidth(sw(idB)) < 1f && item(idB) != null && !cm.commentInputField.isFocused && behind() != null && !behind().enabled,
+                  "'신고' → 사유 시트 (댓글 창은 그대로 · 민 줄은 닫힘 · 입력칸 놓음 · 뒤 댓글 창 끌어 닫기는 쉼)");
+            Check(() =>
+            {
+                string got = row("spam") + " / " + row("abuse") + " / " + row("sexual_hate") + " / " + row("other");
+                log.Add("  사유: " + got);
+                return row("spam") == R0926LocalizedText.Say("스팸·광고", "Spam or ads", "スパム・広告", "垃圾广告", "Spam")
+                       && row("abuse") == R0926LocalizedText.Say("욕설·비방", "Harassment or insults", "誹謗中傷", "辱骂诽谤", "Acoso o insultos")
+                       && row("sexual_hate") == R0926LocalizedText.Say("음란·혐오", "Sexual or hateful", "わいせつ・ヘイト", "色情或仇恨", "Sexual u odio")
+                       && row("other") == R0926LocalizedText.Say("기타", "Other", "その他", "其他", "Otro");
+            }, "사유 넷 — 스팸·광고 / 욕설·비방 / 음란·혐오 / 기타 (앱 언어)");
+            Do(() => BackNow());
+            Wait(() => !Active(Sheet), 3f, "뒤로가기 → 시트 닫힘");
+            Sleep(0.3f);
+            Check(() => cm.IsPanelOpen && cm.commentPanel.activeInHierarchy && behind() != null && behind().enabled, "뒤로가기 — 시트만 내려가고 댓글 창은 그대로 · 끌어 닫기 되살아남");
+            Do(() => SwipeLeft(sw(idB), 300f));
+            Sleep(0.2f);
+            Do(() => swTap(sw(idB)));
+            Wait(() => Active(Sheet), 3f, "다시 신고 시트");
+            Sleep(0.6f);
+            Do(() =>
+            {
+                // 화면 위쪽(카드 밖)을 누른다 — 맨 위에 맞는 것이 시트 바탕이어야 한다
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var pe = new UnityEngine.EventSystems.PointerEventData(es) { position = new Vector2(Screen.width * 0.5f, Screen.height * 0.85f) };
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(pe, hits);
+                if (hits.Count == 0) { log.Add("FAIL 바깥 누르기 — 맞는 것 없음"); return; }
+                pe.pointerPressRaycast = hits[0]; pe.pointerCurrentRaycast = hits[0];
+                log.Add((hits[0].gameObject == Find(Sheet).gameObject ? "PASS " : "FAIL ") + "카드 밖 맨 위는 시트 바탕 (" + PathOf(hits[0].gameObject.transform) + ")");
+                UnityEngine.EventSystems.ExecuteEvents.Execute(UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject),
+                    pe, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+            });
+            Wait(() => !Active(Sheet), 3f, "바깥 누르기 → 시트 닫힘");
+            Check(() => !Active(Sheet) && cm.IsPanelOpen, "바깥(어두운 곳) 누르기 — 시트만 닫힘");
+
+            // 4) 사유를 고르면 접수 — 그 댓글은 내 목록에서 바로 빠지고, 서버도 나에게는 다시 주지 않는다
+            Do(() => SwipeLeft(sw(idB), 300f));
+            Sleep(0.2f);
+            Do(() => swTap(sw(idB)));
+            Wait(() => Active(Sheet), 3f, "또 신고 시트");
+            Sleep(0.6f);
+            Do(() => Click(Sheet + "/Card0926/Reason_abuse"));
+            Wait(() => !Active(Sheet) && item(idB) == null, 10f, "'욕설·비방' → 접수 · 시트 닫힘 · 목록에서 빠짐");
+            Sleep(0.3f);
+            Shot("comments_reported");
+            Do(() => st = state());
+            Check(() =>
+            {
+                var r = reportsOf(idB);
+                log.Add("  B 신고: " + string.Join(", ", r.ConvertAll(x => x.reporter_id + "/" + x.reason + "/" + x.status)) + " · 남음 " + alive(idB));
+                return r.Count == 1 && r[0].reporter_id == meId && r[0].reason == "abuse" && r[0].status == "open" && r[0].detail.Contains(OtherB) && alive(idB);
+            }, "서버: 신고 한 건 (욕설·비방 · 내 회원번호 · 댓글 내용 함께) — 아직 1명이라 댓글은 남음");
+            Check(() => item(idA) != null && items().Count == 1, "다른 댓글은 그대로");
+            Wait(() => preview() == "<b>hunt_test_cmo1</b>  " + OtherA, 10f, "미리보기 — 신고한 댓글 말고");
+            Check(() => preview() == "<b>hunt_test_cmo1</b>  " + OtherA, "미리보기도 신고한 댓글은 빼고 다음 댓글로");
+            Do(() => cm.ClosePanel());
+            Wait(() => !cm.IsPanelOpen && !cm.commentPanel.activeInHierarchy, 5f, "댓글 창 닫힘");
+            // 다시 열면 예전 줄을 지우고(그 프레임 끝에 사라진다) 새로 받는다 — 지워지기 직전의 예전 A 를 새 목록으로 보지 않게
+            CommentItem oldA = null;
+            Do(() => { oldA = item(idA); openComments(); });
+            Wait(() => item(idA) != null && item(idA) != oldA, 10f, "다시 열기 (새로 받은 목록)");
+            Sleep(0.6f);
+            Check(() =>
+            {
+                var l = items();
+                log.Add("  다시 연 목록: " + string.Join(", ", l.ConvertAll(i => i.CommentId.ToString())) + " · 토큰 " + (PlayerPrefs.GetString(LoginManager.AUTH_TOKEN_KEY, "") != "" ? "있음" : "없음"));
+                return l.Count == 1 && item(idB) == null;
+            }, "다시 열어도 신고한 댓글은 안 옴 (서버가 신고한 사람에겐 빼고 준다)");
+
+            // 5) 서로 다른 10명 — 9명이 신고해 둔 댓글을 내가 신고하면 서버가 지운다
+            Do(() => DevPost("", "/api/dev/comment_reports", "{\"comment_id\":" + idA + ",\"n\":9}"));
+            Do(() => SwipeLeft(sw(idA), 300f));
+            Sleep(0.2f);
+            Do(() => swTap(sw(idA)));
+            Wait(() => Active(Sheet), 3f, "A 신고 시트");
+            Sleep(0.6f);
+            Do(() => Click(Sheet + "/Card0926/Reason_spam"));
+            Wait(() => !Active(Sheet) && item(idA) == null, 10f, "'스팸·광고' → 접수 · 목록에서 빠짐");
+            Sleep(0.3f);
+            Shot("comments_auto_deleted");
+            Do(() => st = state());
+            Check(() =>
+            {
+                var r = reportsOf(idA);
+                log.Add($"  A 신고 {r.Count}건 · 상태 {string.Join(",", new HashSet<string>(r.ConvertAll(x => x.status)))} · 남음 {alive(idA)}");
+                return !alive(idA) && r.Count == 10 && r.TrueForAll(x => x.status == "auto_deleted") && r.Exists(x => x.reporter_id == meId && x.reason == "spam");
+            }, "열 번째(서로 다른 10명) 신고 — 서버가 댓글을 지움 · 신고 10건 모두 'auto_deleted'");
+            Check(() => alive(idB) && reportsOf(idB).Count == 1, "1명만 신고한 B 는 그대로 (나에게만 안 보임)");
+            Wait(() => preview() == none(), 10f, "미리보기 — 남은 댓글 없음");
+            Check(() => preview() == none() && items().Count == 0, "미리보기 · 목록 모두 '댓글 없음' (B 는 내가 신고해서 · A 는 지워져서)");
+
+            Do(() =>
+            {
+                if (cm != null && cm.IsPanelOpen) cm.ClosePanel();
+                DevPost("", "/api/dev/place_reset", "{\"ids\":[" + id + "]}");
+                CommentManager.EditorBase = null;
+                ReportService.EditorBase = null;
                 SfLogin(false);
                 PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
             });
@@ -5525,6 +6283,7 @@ namespace Redesign0926
             Shot("appinfo_settings");
             Check(() => (Find(C + "GroupInfo/RowContact/Value")?.GetComponent<Text>()?.text ?? "") == "master@woopang.com", "문의: master@woopang.com");
             Check(() => FooterOrder("세로"), "세로: 버전이 위 · 저작권 그림이 아래 (보이는 칸 안)");
+            Check(() => FooterLow("세로"), "세로: 버전·저작권을 조금씩 아래로 — 묶음에서 버전 글 62 · 저작권 124 · 맨 아래 여백 24 (예전 50·100·48)");
             Do(() => Click(C + "GroupInfo/RowPrivacy"));
             Sleep(0.8f);
             Shot("appinfo_privacy");
@@ -5532,7 +6291,7 @@ namespace Redesign0926
             Do(() => ScrollPrivacy(0f));
             Sleep(0.6f);
             Shot("appinfo_privacy_end");
-            Check(PrivacyEnd, "끝까지 내리면 마지막 줄(시행일)이 보이는 칸 안");
+            Check(PrivacyEnd, "끝까지 내리면 글의 마지막 줄이 보이는 칸 안");
             Do(BackNow);
             Sleep(0.8f);
             Check(() => !Active(PrivacyPath) && Active(C + "GroupInfo/RowPrivacy") && Active("ListPanel"), "안드로이드 뒤로가기 → 설정으로 (목록 시트는 그대로)");
@@ -5561,6 +6320,7 @@ namespace Redesign0926
             Sleep(0.6f);
             Shot("appinfo_land_settings");
             Check(() => FooterOrder("가로"), "가로: 버전이 위 · 저작권 그림이 아래 (보이는 칸 안)");
+            Check(() => FooterLow("가로"), "가로: 버전·저작권도 같은 간격 (묶음에서 62 · 124 · 맨 아래 24)");
             Do(() => Modes()?.Show(0));
             Sleep(0.9f);
             Shot("appinfo_land_list");
@@ -5601,6 +6361,21 @@ namespace Redesign0926
             log.Add($"  {when}: 버전 '{vt?.text}' {v.yMin:0}~{v.yMax:0} · 저작권 {c.yMin:0}~{c.yMax:0} '{(img != null && img.sprite != null ? img.sprite.name : "-")}' · 보이는 칸 {w.yMin:0}~{w.yMax:0}");
             return img != null && img.sprite != null && img.sprite.name == "r0926_copyright" && vt != null && vt.text.StartsWith("Version ")
                 && v.yMin >= c.yMax - 1f && c.yMin >= w.yMin - 1f && v.yMax <= w.yMax + 1f && c.yMin >= -1f;
+        }
+
+        // 버전·저작권을 조금씩 아래로 (10-24 대표님) — 끝까지 내린 자리에서 캔버스 단위로 잰다
+        private static bool FooterLow(string when)
+        {
+            var g = Find(SetPath + "Viewport/Content/GroupInfo") as RectTransform;
+            var ver = Find(SetPath + "Viewport/Content/VersionFooter") as RectTransform;
+            var cp = Find(SetPath + "Viewport/Content/CopyrightFooter") as RectTransform;
+            var vp = Find(SetPath + "Viewport") as RectTransform;
+            if (g == null || ver == null || cp == null || vp == null) { log.Add($"  {when}: 묶음·버전·저작권·보이는 칸 중 없음"); return false; }
+            float scale = vp.GetComponentInParent<Canvas>().rootCanvas.scaleFactor;
+            Rect gr = ScreenRect(g), v = ScreenRect(ver), c = ScreenRect(cp), w = ScreenRect(vp);
+            float toVer = (gr.yMin - v.center.y) / scale, toCopy = (gr.yMin - c.yMax) / scale, bottom = (c.yMin - w.yMin) / scale;
+            log.Add($"  {when}: 묶음 아래 → 버전 글 가운데 {toVer:0.#} · 저작권 위 {toCopy:0.#} · 저작권 아래 여백 {bottom:0.#} (버전 칸 {v.height / scale:0.#})");
+            return Mathf.Abs(toVer - 62f) < 1.5f && Mathf.Abs(toCopy - 124f) < 1.5f && Mathf.Abs(bottom - 24f) < 2f;
         }
 
         private static void ScrollSettingsBottom()
@@ -5645,7 +6420,7 @@ namespace Redesign0926
             return heads == 11 && lines > 50 && note != null && note.text.Contains("2026") && covers && onScreen;
         }
 
-        // 끝까지 내리면 맨 끝 줄('… 시행합니다')이 보이는 칸 안에
+        // 끝까지 내리면 글 파일의 맨 끝 줄이 보이는 칸 안에 (10-24 부터 맨 끝은 시행일 다음의 DB-IP 표기)
         private static bool PrivacyEnd()
         {
             var vp = Find(PrivacyPath + "/Scroll0926/Viewport") as RectTransform;
@@ -5654,9 +6429,11 @@ namespace Redesign0926
             Text last = null;
             foreach (var t in content.GetComponentsInChildren<Text>()) last = t;
             if (last == null) return false;
+            string src = System.IO.File.ReadAllText(R0926LocalizedText.Lang() == "ko" ? "Assets/Redesign0926/Text/privacy_ko.txt" : "Assets/Redesign0926/Text/privacy_en.txt");
+            string want = System.Array.FindLast(src.Replace("\r", "").Split('\n'), s => s.Trim().Length > 0).Trim().TrimStart('-', '>', '#', ' ');
             Rect l = ScreenRect(last.rectTransform), w = ScreenRect(vp);
             log.Add($"  맨 끝 줄 '{last.text}' {l.yMin:0}~{l.yMax:0} · 보이는 칸 {w.yMin:0}~{w.yMax:0}");
-            return last.text.Contains("2026") && l.yMin >= w.yMin - 1f && l.yMax <= w.yMax + 1f;
+            return last.text == want && l.yMin >= w.yMin - 1f && l.yMax <= w.yMax + 1f;
         }
 
         private static void FillSampleChat(bool admin)
@@ -6192,6 +6969,20 @@ namespace Redesign0926
             Shot("hunt_rules");
             Check(() => Active(H + "Rules"), "처음 주최 → 주최 수칙");
             Check(() => ActiveChildren(H + "Rules/Viewport/Content/List") == 8, "수칙 8가지");
+            Check(() =>
+            {
+                var on = new List<Transform>();
+                var list = Find(H + "Rules/Viewport/Content/List");
+                if (list != null) foreach (Transform c in list) if (c.gameObject.activeSelf) on.Add(c);
+                var t1 = on.Count == 8 ? on[0].Find("Title")?.GetComponent<Text>() : null;
+                var t4 = on.Count == 8 ? on[3].Find("Title")?.GetComponent<Text>() : null;
+                var b4 = on.Count == 8 ? on[3].Find("Body")?.GetComponent<Text>() : null;
+                var b7 = on.Count == 8 ? on[6].Find("Body")?.GetComponent<Text>() : null;
+                log.Add("  수칙 4: " + (t4 != null ? t4.text : "-") + " ⏎ " + (b4 != null ? b4.text.Replace("\n", " ⏎ ") : "-"));
+                return t1 != null && t4 != null && b4 != null && b7 != null && t4.text == "이런 게임은 계정이 정지·삭제될 수 있어요"
+                       && b4.text.Contains("낚시성") && b4.text.Contains("도박성") && b4.text.Contains("유해성") && b4.text.Contains("계정이 정지되거나 삭제돼요")
+                       && t4.color.r > 0.9f && t4.color.b < 0.4f && t1.color != t4.color && !b7.text.Contains("대략");
+            }, "수칙 4 — 낚시성·도박성·유해성 → 계정 정지·삭제 (제목 주황) · 7 에 없는 '대략·비공개' 안내 없음");
             Do(() => Click(H + "Rules/Viewport/Content/Agree"));
             Sleep(0.3f);
             Do(() => Click(H + "Rules/Viewport/Content/AgreeButton"));
@@ -6242,6 +7033,9 @@ namespace Redesign0926
                         && Active(RV + "/Sheet0926/Buttons/Edit") && TextOf(RV + "/Sheet0926/Buttons/Go/Label") == "숨기기"
                         && !Active(RV + "/Sheet0926/Buttons/Share") && !Active(RV + "/Sheet0926/Buttons/Done") && !Active(RV + "/Sheet0926/CodeBox"),
                 "숨기기 → 확인 카드 '이대로 숨길까요?' · 11줄 · [고치기 | 숨기기]");
+            Check(() => Active(RV + "/Sheet0926/Warn") && TextOf(RV + "/Sheet0926/Warn") == "낚시성·도박·유해한 게임은 내려가고, 계정이 정지되거나 삭제될 수 있어요"
+                        && Find(RV + "/Sheet0926/Warn").GetSiblingIndex() == Find(RV + "/Sheet0926/Note").GetSiblingIndex() + 1,
+                "확인 카드 — 안내 아래 경고 줄 (낚시성·도박·유해 → 계정 정지·삭제)");
             Check(() =>
             {
                 foreach (var r in new[] { "제목", "상품", "힌트", "보물 모양", "찾는 방식", "당첨 · 참가", "보이는 거리", "참가 범위", "누구에게", "시작 · 진행", "숨길 자리" })
@@ -6278,6 +7072,7 @@ namespace Redesign0926
                         && Active(RV + "/Sheet0926/Buttons/Share") && Active(RV + "/Sheet0926/Buttons/Done") && !Active(RV + "/Sheet0926/Buttons/Edit") && !Active(RV + "/Sheet0926/Buttons/Go")
                         && TextOf(RV + "/Sheet0926/Note").StartsWith("참가 범위 안의 사람들이 목록에서"),
                 "숨긴 뒤 같은 카드 — 제목 · [확인 | 공유하기] · '모두' 게임은 참가 코드 없음");
+            Check(() => !Active(RV + "/Sheet0926/Warn"), "숨긴 뒤엔 경고 줄 없음 (숨기기 전에만)");
             Do(() => Click(RV + "/Sheet0926/Buttons/Share"));
             Do(() => log.Add("  공유 글: " + (R0926Share.EditorLast ?? "-").Replace("\n", " ⏎ ")));
             Check(() => (R0926Share.EditorLast ?? "").StartsWith("[우팡 보물찾기] 시험 보물 (플레이 시험)\n상품: 커피 쿠폰 (시험)\n") && R0926Share.EditorLast.EndsWith("/hunt/" + huntPosted)
@@ -6737,7 +7532,7 @@ namespace Redesign0926
         // 개발 서버에 시험 게임 하나 (수칙 동의 → 숨기기) — 시험 아이디라 알림은 기록만 된다
         private static int DevCreateHunt(string host, string title, string lat)
         {
-            DevPost(host, "/api/hunts/rules/accept", "{\"version\":1}");
+            DevPost(host, "/api/hunts/rules/accept", "{\"version\":2}");
             string r = DevPost(host, "/api/hunts", "{\"title\":\"" + title + "\",\"mode\":\"touch\",\"winners\":1,\"radius_km\":5,\"visible_m\":50,\"lat\":" + lat
                                                   + ",\"lon\":126.673000,\"acc\":5,\"duration_min\":60}");
             return string.IsNullOrEmpty(r) ? 0 : JsonUtility.FromJson<DevHuntReply>(r)?.hunt?.id ?? 0;
@@ -7706,7 +8501,7 @@ namespace Redesign0926
             CloseUpload();
 
             // ⑤ 비밀번호 힌트 없이 (서버도 선택)
-            Check(() => Has(DevSend("hunt_test_spw", "/api/hunts/rules/accept", "{\"version\":1}"), "\"ok\":true")
+            Check(() => Has(DevSend("hunt_test_spw", "/api/hunts/rules/accept", "{\"version\":2}"), "\"ok\":true")
                         && Has(DevSend("hunt_test_spw", "/api/hunts", "{\"title\":\"힌트 없는 비밀번호 (시험)\",\"mode\":\"code\",\"code\":\"1234\",\"question\":\"\",\"winners\":1,\"radius_km\":5,\"visible_m\":50,\"lat\":"
                                                               + Deg(VirtualLocation.Instance.Latitude) + ",\"lon\":" + Deg(VirtualLocation.Instance.Longitude) + ",\"acc\":5,\"duration_min\":60}"), "\"ok\":true"),
                 "서버 — 비밀번호 힌트 없이도 숨겨짐 (힌트는 선택)");
@@ -8173,7 +8968,7 @@ namespace Redesign0926
 
         private static int DevCreateHuntAt(string host, string title, float lat, float lon, string code, string question, string prize = null)
         {
-            DevPost(host, "/api/hunts/rules/accept", "{\"version\":1}");
+            DevPost(host, "/api/hunts/rules/accept", "{\"version\":2}");
             string mode = code == null ? "\"mode\":\"touch\"" : "\"mode\":\"code\",\"code\":\"" + code + "\",\"question\":\"" + question + "\"";
             if (prize != null) mode += ",\"prize\":\"" + prize + "\"";
             return HuntId(DevPost(host, "/api/hunts", "{\"title\":\"" + title + "\"," + mode + ",\"winners\":1,\"radius_km\":5,\"visible_m\":50,\"lat\":" + Deg(lat)
@@ -8558,7 +9353,7 @@ namespace Redesign0926
         private static void SeedHostProfile()
         {
             const string spot = "\"lat\":36.660100,\"lon\":126.673000";
-            DevPost(ProfHost, "/api/hunts/rules/accept", "{\"version\":1}");
+            DevPost(ProfHost, "/api/hunts/rules/accept", "{\"version\":2}");
             profHuntA = HuntId(DevPost(ProfHost, "/api/hunts", "{\"title\":\"프로필 시험 보물 A\",\"mode\":\"touch\",\"winners_all\":true,\"radius_km\":5,\"visible_m\":50,"
                                                               + spot + ",\"acc\":5,\"duration_min\":60}"));
             if (profHuntA <= 0) return;
@@ -10868,7 +11663,7 @@ namespace Redesign0926
             {
                 if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
-                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; R0926Nearby.EditorBase = null; CubeDataFixManager.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일·근처·장소 고치기 시험 서버도
+                if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; R0926Nearby.EditorBase = null; CubeDataFixManager.EditorBase = null; CommentManager.EditorBase = null; ReportService.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일·근처·장소 고치기·댓글 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
                 if (running) RestoreWoopangPrefs();   // WOOPANG 줄 삭제 시험이 덜어 둔 저장값 (시험 도중 플레이를 끈 경우)
                 if (running) { RestoreSkyPrefs(); skyPagesRun = false; }   // 하늘 옆 장 시험이 바꾼 하늘 설정도
@@ -10883,7 +11678,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();
@@ -10914,6 +11709,7 @@ namespace Redesign0926
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
             CubeDataFixManager.EditorBase = null;   // 장소 고치기 시험이 오류로 끊겨도 다음 플레이가 시험 서버로 가지 않게
+            CommentManager.EditorBase = null; ReportService.EditorBase = null;   // 댓글 시험도
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;
             InputSystem.settings.backgroundBehavior = savedBackground;
             Application.runInBackground = savedRunInBackground;

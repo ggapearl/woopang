@@ -86,10 +86,13 @@ namespace Redesign0926
 
             var note = HLabel(sheet.transform, "Note", 0, "", null, 38, Muted, FontStyle.Normal);
             note.alignment = TextAnchor.MiddleCenter;
+            // 낚시성·도박·유해 → 계정 정지·삭제 (10-24 대표님) — 숨기기 전에만 보인다 (글은 R0926HuntCard 가 앱 언어로)
+            var warn = HLabel(sheet.transform, "Warn", 0, "", null, 34, HuntAmber, FontStyle.Normal);
+            warn.alignment = TextAnchor.MiddleCenter;
             var msg = HLabel(sheet.transform, "Msg", 0, "", null, 40, HuntAmber, FontStyle.Bold);
             msg.alignment = TextAnchor.MiddleCenter;
             msg.gameObject.SetActive(false);
-            S("reviewNote", note); S("reviewMsg", msg);
+            S("reviewNote", note); S("reviewWarn", warn); S("reviewMsg", msg);
 
             // 확인할 땐 [고치기 | 숨기기], 숨긴 뒤엔 [확인 | 공유하기] — 왼쪽은 물러나기, 오른쪽(금색)은 나아가기
             var bar = HRow(sheet.transform, "Buttons", 148);
@@ -107,7 +110,7 @@ namespace Redesign0926
             S("reviewEdit", edit); S("reviewGo", goB); S("reviewGoLabel", goLabel); S("reviewShare", share); S("reviewDone", done);
 
             int si = 0;
-            foreach (var t in new Transform[] { head.transform, sub.transform, rows.transform, codeBox.transform, note.transform, msg.transform, bar }) t.SetSiblingIndex(si++);
+            foreach (var t in new Transform[] { head.transform, sub.transform, rows.transform, codeBox.transform, note.transform, warn.transform, msg.transform, bar }) t.SetSiblingIndex(si++);
             go.SetActive(false);
         }
     }

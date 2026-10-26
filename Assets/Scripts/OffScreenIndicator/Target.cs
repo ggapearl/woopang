@@ -50,8 +50,8 @@ public class Target : MonoBehaviour
     [SerializeField] private string placeName = "";
 
     [HideInInspector] public string placeId = "";
-    [HideInInspector] public float gpsLatitude;
-    [HideInInspector] public float gpsLongitude;
+    [HideInInspector] public double gpsLatitude;   // 장소 좌표 그대로 (double)
+    [HideInInspector] public double gpsLongitude;
 
     [HideInInspector] public Indicator indicator;
 
@@ -170,16 +170,9 @@ public class Target : MonoBehaviour
     /// <summary>
     /// GPS 좌표 기반 거리 계산 (Haversine) — fallback 모드에서 비활성 타겟 거리 표시용
     /// </summary>
-    public float GetGPSDistance(float userLat, float userLon)
+    public float GetGPSDistance(double userLat, double userLon)
     {
-        if (gpsLatitude == 0f && gpsLongitude == 0f) return -1f;
-        const float R = 6371000f;
-        float dLat = Mathf.Deg2Rad * (gpsLatitude - userLat);
-        float dLon = Mathf.Deg2Rad * (gpsLongitude - userLon);
-        float a = Mathf.Sin(dLat / 2f) * Mathf.Sin(dLat / 2f) +
-                  Mathf.Cos(Mathf.Deg2Rad * userLat) * Mathf.Cos(Mathf.Deg2Rad * gpsLatitude) *
-                  Mathf.Sin(dLon / 2f) * Mathf.Sin(dLon / 2f);
-        float c = 2f * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1f - a));
-        return R * c;
+        if (gpsLatitude == 0 && gpsLongitude == 0) return -1f;
+        return (float)GeoHere.Meters(userLat, userLon, gpsLatitude, gpsLongitude);
     }
 }

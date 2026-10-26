@@ -59,11 +59,11 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         new[] { "스포츠", "Sports", "スポーツ", "运动", "Deporte" },
         new[] { "랜드마크", "Landmark", "名所", "地标", "Lugar" },
     };
-    // 카페는 모카 · 스포츠는 빨강 (10-23 대표님)
+    // 분류 색은 DataManager.GetCategoryColor 하나 — AR 인디케이터·목록·올리기 칩과 같다 (10-25). 카페 모카 · 스포츠 빨강 (10-23). 전체는 옅은 흰색
     public static readonly Color[] CatColors =
     {
-        new Color(0.91f, 0.93f, 0.945f), new Color(0.31f, 0.55f, 1f), new Color(1f, 0.54f, 0.24f), new Color(0.643f, 0.459f, 0.318f),
-        new Color(0.22f, 0.85f, 0.54f), new Color(0.61f, 0.48f, 1f), new Color(0.94f, 0.28f, 0.28f), new Color(0.96f, 0.77f, 0.26f),
+        new Color(0.91f, 0.93f, 0.945f), DataManager.GetCategoryColor("shop"), DataManager.GetCategoryColor("food"), DataManager.GetCategoryColor("cafe"),
+        DataManager.GetCategoryColor("park"), DataManager.GetCategoryColor("toilet"), DataManager.GetCategoryColor("sport"), DataManager.GetCategoryColor("landmark"),
     };
     // 10-21 대표님 — '사람'은 '모든 사람', '팔로잉'은 '팔로잉만'(살짝 분홍) · 10-23 꺼지면 '주변 사람'
     private static readonly string[] P2PAll = { "모든 사람", "Everyone", "すべての人", "所有人", "Todos" };

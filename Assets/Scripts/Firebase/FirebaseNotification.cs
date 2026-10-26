@@ -304,8 +304,8 @@ public class FirebaseNotification : MonoBehaviour
             using (AndroidJavaObject sharedPrefs = currentActivity.Call<AndroidJavaObject>("getSharedPreferences", "firebase_messages", 0))
             using (AndroidJavaObject editor = sharedPrefs.Call<AndroidJavaObject>("edit"))
             {
-                editor.Call<AndroidJavaObject>("putString", "last_latitude", latitude.ToString("F6"));
-                editor.Call<AndroidJavaObject>("putString", "last_longitude", longitude.ToString("F6"));
+                editor.Call<AndroidJavaObject>("putString", "last_latitude", GeoHere.Save(latitude));
+                editor.Call<AndroidJavaObject>("putString", "last_longitude", GeoHere.Save(longitude));
                 editor.Call("apply");
             }
         }
@@ -512,8 +512,8 @@ public class FirebaseNotification : MonoBehaviour
         var d = Input.location.lastData;
         if (Input.location.status == LocationServiceStatus.Running && d.latitude != 0f && d.longitude != 0f)
         {
-            form.AddField("latitude", d.latitude.ToString("F6", CultureInfo.InvariantCulture));
-            form.AddField("longitude", d.longitude.ToString("F6", CultureInfo.InvariantCulture));
+            form.AddField("latitude", GeoHere.Save(d.latitude));    // float 그대로 F6 이면 경도가 4자리만 남는다
+            form.AddField("longitude", GeoHere.Save(d.longitude));
             form.AddField("location_consent", "true");
         }
         else

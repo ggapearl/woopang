@@ -49,6 +49,7 @@ namespace Redesign0926
             SkyTop(root, log);
             WeatherBoard(root, log);
             CommentBar(root, log);
+            CommentReportSheet(root, log);   // 댓글 신고 사유 시트 — 댓글 창 위 (Redesign0926ApplyCommentReport)
             Apply1004(root, log);   // 10-04 아이폰 확인 뒤 — 도크 칸 · 손잡이 · 프로필 카드 · 입력줄 · 날씨 크기
             Apply1005(root, log);   // 10-05 — 업로드 제한시간 60초 (창 닫기 통일은 각 단계 안에서)
             ApplyHunt(root, log);   // 보물찾기 — 추가 창 세 번째 카드 (Redesign0926ApplyHunt)

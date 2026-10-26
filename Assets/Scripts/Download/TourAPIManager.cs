@@ -630,17 +630,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         return true;
     }
 
-    private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
-    {
-        const float R = 6371000;
-        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
-        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
-        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) +
-                  Mathf.Cos(Mathf.Deg2Rad * lat1) * Mathf.Cos(Mathf.Deg2Rad * lat2) *
-                  Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
-        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
-        return R * c;
-    }
+    private float CalculateDistance(double lat1, double lon1, double lat2, double lon2) => (float)GeoHere.Meters(lat1, lon1, lat2, lon2);
 
     private GameObject GetFromPool()
     {
@@ -1194,8 +1184,8 @@ public class TourPlaceData
 {
     public string contentid { get; set; }
     public string title { get; set; }
-    public float mapx { get; set; }
-    public float mapy { get; set; }
+    public double mapx { get; set; }   // 경도 — double (AR 앵커 자리, 10-26)
+    public double mapy { get; set; }   // 위도
     public string firstimage { get; set; }
     public string description { get; set; }
     public string color { get; set; }

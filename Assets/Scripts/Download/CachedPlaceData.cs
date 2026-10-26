@@ -15,9 +15,10 @@ public class CachedPlaceData
     /// <summary>표시 이름</summary>
     public string displayName;
 
-    public float latitude;
-    public float longitude;
-    public float altitude;
+    // double — 이 값으로 AR 앵커를 놓는다 (float 면 위도 0.4m·경도 0.7m 단위로 끊긴다, 10-26)
+    public double latitude;
+    public double longitude;
+    public double altitude;
 
     /// <summary>카테고리 (shop, food, cafe, park, gov, edu 등)</summary>
     public string category;

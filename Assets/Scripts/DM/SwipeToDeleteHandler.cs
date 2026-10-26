@@ -7,6 +7,7 @@ using System;
 /// 스와이프로 삭제하는 핸들러 (우측→좌측 스와이프)
 /// 오버레이 모드: 콘텐츠는 움직이지 않고 삭제 버튼이 우측에서 덮어씀
 /// ScrollRect와 호환: 수직 드래그는 스크롤, 수평 드래그는 스와이프
+/// 글자·색을 바꿔 다른 일에도 쓴다 — 남의 댓글은 '신고' (2026-10-26)
 /// </summary>
 public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler, IPointerUpHandler
 {
@@ -42,11 +43,15 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
     // Content 내부 Button도 캐싱
     private Button contentButton;
 
-    public void Initialize(string userId, float threshold, Action deleteCallback)
+    private string label;
+
+    public void Initialize(string userId, float threshold, Action deleteCallback, string label = null, Color? color = null)
     {
         this.userId = userId;
         this.swipeThreshold = threshold;
         this.onDelete = deleteCallback;
+        this.label = label;
+        if (color.HasValue) deleteButtonColor = color.Value;
 
         rectTransform = GetComponent<RectTransform>();
 
@@ -91,15 +96,16 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
         // 배경
         Image bg = deleteButton.AddComponent<Image>();
         bg.color = deleteButtonColor;
+        deleteButton.AddComponent<RectMask2D>();   // 밀어 여는 동안 글자는 제자리에서 드러난다 (좁을 때 줄바꿈으로 깨지지 않게)
 
         // 텍스트
         GameObject textObj = new GameObject("Text");
         textObj.transform.SetParent(deleteButton.transform, false);
 
         Text text = textObj.AddComponent<Text>();
-        string deleteText = "Delete";
-        if (LocalizationManager.Instance != null)
-            deleteText = LocalizationManager.Instance.GetText("swipe_delete");
+        string deleteText = label;
+        if (string.IsNullOrEmpty(deleteText))
+            deleteText = LocalizationManager.Instance != null ? LocalizationManager.Instance.GetText("swipe_delete") : "Delete";
         text.text = deleteText;
         Font customFont = Resources.Load<Font>("Fonts/AppleSDGothicNeoM");
         text.font = customFont != null ? customFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -107,11 +113,18 @@ public class SwipeToDeleteHandler : MonoBehaviour, IBeginDragHandler, IDragHandl
         text.fontStyle = FontStyle.Bold;
         text.color = Color.white;
         text.alignment = TextAnchor.MiddleCenter;
+        text.resizeTextForBestFit = true;   // 'Denunciar'·'Eliminar' 처럼 긴 말도 칸 안에
+        text.resizeTextMinSize = 24;
+        text.resizeTextMaxSize = deleteFontSize;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.raycastTarget = false;
 
         RectTransform textRect = textObj.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.sizeDelta = Vector2.zero;
+        textRect.anchorMin = new Vector2(1, 0);
+        textRect.anchorMax = new Vector2(1, 1);
+        textRect.pivot = new Vector2(1, 0.5f);
+        textRect.anchoredPosition = new Vector2(-12, 0);
+        textRect.sizeDelta = new Vector2(deleteButtonWidth - 24, 0);
 
         // 버튼 클릭
         Button btn = deleteButton.AddComponent<Button>();

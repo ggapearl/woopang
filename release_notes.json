@@ -28,6 +28,10 @@
     "1.2.57": {
       "ko": "• 보물찾기 — 보물 모양을 골라 숨겨요. 보물상자·선물상자·보물알·보석·별·하트 중에 고르거나, 내 사진이나 3D 모델(GLB)을 올릴 수 있어요. 숨기기 전에 돌려 보며 미리 확인해요.\n• 장소의 3D 모델이 정한 크기·색 그대로 보이고, 눌러도 잘 반응해요.\n• 지도 — 처음 가 보는 곳도 한 번에 빠르게 채워지고, 근처 친구는 정확한 자리에 보여요.\n• 설정 › 앱 정보에서 개인정보처리방침을 앱 안에서 바로 볼 수 있어요. 문의 master@woopang.com\n• 장소 사진을 한꺼번에 미리 받아 두지 않게 해 메모리를 줄이고, 안정성을 높였어요.",
       "en": "• Treasure Hunt — choose how your treasure looks: chest, gift box, egg, gem, star or heart, or upload your own photo or 3D model (GLB). Spin a preview before you hide it.\n• 3D models at places now show at their set size and colors, and respond to taps reliably.\n• Map — new areas fill in quickly in one go, and nearby friends appear at their exact spot.\n• Read the privacy policy right inside the app (Settings › App info). Contact: master@woopang.com\n• Lower memory use — place photos are no longer all downloaded in advance — and stability fixes."
+    },
+    "1.2.58": {
+      "ko": "• 보물찾기 — 보물을 찾으면 두근두근 보물상자가 열리고 금박 카드가 떠요. 비밀번호(4자)와 힌트로 잠글 수 있고, 숨기기 전에 한 번 더 확인해요. 공유 링크로 바로 참가해요.\n• 하늘 날씨판을 옆으로 넘기면 근처 보물찾기·축제·핫플·친구 소식 — 📌로 고정해요.\n• 내가 올린 장소 — '정보 수정'에서 사진 순서·분류·위치를 바로 고치고 직접 지울 수 있어요. 분류는 안 골라도 올라가요.\n• 댓글 — 쓰자마자 보이고, 내 댓글은 밀어서 삭제, 불편한 댓글은 밀어서 신고해요.\n• 목록 필터(애견동반·축제) 새 정리, 대화 입력칸 글자 크게, 위치 정확도와 안정성 개선.",
+      "en": "• Treasure Hunt — a found treasure opens a chest with a gold-foil card. Lock hunts with a 4-character password and hint, review before hiding, join from a shared link.\n• Swipe the sky weather board for nearby hunts, festivals, hot spots and friends.\n• Your places — fix photo order, category and location in Edit info, or delete them. Category is optional.\n• Comments appear instantly; swipe to delete yours or report others'.\n• New list filters, bigger chat text, better location accuracy."
     }
   }
 }

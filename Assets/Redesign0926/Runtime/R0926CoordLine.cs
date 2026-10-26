@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 장소 추가 카드의 '좌표' — 지금 위치를 흐린 흰 글씨로 늘 보여 준다 (누를 것 없음).
-/// 등록에 쓰는 값은 업로드 매니저의 입력칸이 그대로 갖고 있다 (보이지 않게만 해 둠).
+/// 등록 때 저장되는 것과 같은 값(GeoHere — Geospatial 우선)을 소수 4자리로. 저장은 소수 6자리 (10-26).
 /// </summary>
 public class R0926CoordLine : MonoBehaviour
 {
@@ -20,15 +20,8 @@ public class R0926CoordLine : MonoBehaviour
         if (text == null || Time.unscaledTime < next) return;
         next = Time.unscaledTime + 1f;
         string s;
-        if (Input.location.status == LocationServiceStatus.Running)
-        {
-            var d = Input.location.lastData;
-            s = d.latitude.ToString("F5") + ",  " + d.longitude.ToString("F5");
-        }
-#if UNITY_EDITOR
-        else if (VirtualLocation.Instance != null)
-            s = VirtualLocation.Instance.Latitude.ToString("F5") + ",  " + VirtualLocation.Instance.Longitude.ToString("F5");
-#endif
+        if (GeoHere.TryGet(out double lat, out double lon, out _))
+            s = GeoHere.Show(lat) + ",  " + GeoHere.Show(lon);
         else if (source != null && !string.IsNullOrEmpty(source.text))
             s = source.text.StartsWith("Lat") ? FromSource(source.text) : source.text;   // 이미 받은 좌표 · '위치 확인 중' 같은 안내
         else

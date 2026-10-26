@@ -97,6 +97,7 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private GameObject review;
     [SerializeField] private Button reviewDim;
     [SerializeField] private Text reviewHead, reviewSub, reviewNote, reviewMsg, reviewCode;
+    [SerializeField] private Text reviewWarn;   // 낚시성·도박·유해 → 계정 정지·삭제 (10-24 대표님) — 숨기기 전에만
     [SerializeField] private GameObject reviewCodeBox;
     [SerializeField] private RectTransform reviewRows;
     [SerializeField] private GameObject reviewRowTemplate;
@@ -144,7 +145,6 @@ public class R0926HuntCard : MonoBehaviour
     private const int ModelMax = 10 * 1024 * 1024;   // 서버 OBJECT_MAX['model'] 과 같다
 
     private static string Lang => R0926LocalizedText.Lang();
-    private static bool Ko => Lang == "ko";
     private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
     // ── 칩 정의 (값, 한국어, 영어, 일본어, 중국어, 스페인어) ──
@@ -277,30 +277,20 @@ public class R0926HuntCard : MonoBehaviour
     }
 
     // ── 위치 ──────────────────────────────────────────────
-    internal static bool TryLocation(out float lat, out float lon, out float acc)
+    // 장소 올리기·정보 수정과 같은 자리 (GeoHere) — Geospatial(VPS) 이 잡혀 있으면 그것(AR 보물 앵커와 같은 기준), 아니면 휴대폰 위치.
+    // 예전엔 휴대폰 위치(float)만 봐서 숨긴 자리가 GPS 오차만큼 AR 보물과 어긋날 수 있었다. 보내고 저장하는 값은 소수 6자리 (10-26)
+    internal static bool TryLocation(out double lat, out double lon, out float acc)
     {
-        // 켜진 직후 첫 위치가 오기 전엔 0,0 이 온다 — 장소·3D모델 올리기(gpsData == zero)와 같이 '아직 없음'
-        if (Input.location.status == LocationServiceStatus.Running)
+        if (GeoHere.TryGet(out lat, out lon, out _, out acc))
         {
-            var ld = Input.location.lastData;
-            if (ld.latitude != 0f || ld.longitude != 0f)
-            {
-                lat = ld.latitude; lon = ld.longitude; acc = ld.horizontalAccuracy;
-                return true;
-            }
-        }
-#if UNITY_EDITOR
-        if (VirtualLocation.Instance != null)
-        {
-            lat = VirtualLocation.Instance.Latitude; lon = VirtualLocation.Instance.Longitude; acc = 5f;
+            lat = Math.Round(lat, 6); lon = Math.Round(lon, 6);
             return true;
         }
-#endif
-        lat = lon = acc = 0f;
+        acc = 0f;
         return false;
     }
 
-    private static string Q(float v) => v.ToString("F6", CultureInfo.InvariantCulture);
+    private static string Q(double v) => v.ToString("F6", CultureInfo.InvariantCulture);
 
     // ── 처음 화면 ─────────────────────────────────────────
     private void Show(GameObject view)
@@ -333,7 +323,7 @@ public class R0926HuntCard : MonoBehaviour
 
     private IEnumerator LoadHub()
     {
-        string q = TryLocation(out float lat, out float lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
+        string q = TryLocation(out double lat, out double lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Get("/api/hunts/nearby" + q, (c, r) => { code = c; j = r; });
         if (code == 401) { ShowLoggedOut(); yield break; }
@@ -746,7 +736,7 @@ public class R0926HuntCard : MonoBehaviour
     private static string Field(InputField f) => f != null ? f.text.Trim() : "";
 
     // 양식 확인 — 틀리면 알림 줄(확인 카드가 떠 있으면 카드 안)에 적고 false
-    private bool Validate(out float lat, out float lon, out float acc)
+    private bool Validate(out double lat, out double lon, out float acc)
     {
         if (!TryLocation(out lat, out lon, out acc)) { Warn(T("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación")); return false; }
         if (Field(titleInput).Length == 0) { Warn(R0926HuntApi.ErrorText("title", Lang)); return false; }
@@ -831,6 +821,15 @@ public class R0926HuntCard : MonoBehaviour
         if (reviewHead != null) reviewHead.text = T("이대로 숨길까요?", "Hide it like this?", "この内容で隠しますか？", "就这样藏起来吗？", "¿Lo escondemos así?");
         if (reviewSub != null) reviewSub.text = T("숨긴 뒤에는 내용을 고칠 수 없어요 — 한 번 더 확인해 주세요", "You can't edit it after hiding — please check once more", "隠した後は内容を修正できません — もう一度確認してください", "藏好后无法修改内容 — 请再确认一次", "No podrás editarlo después — revísalo una vez más");
         if (reviewNote != null) reviewNote.text = AudienceText(picked["audience"]);
+        if (reviewWarn != null)
+        {
+            reviewWarn.text = T("낚시성·도박·유해한 게임은 내려가고, 계정이 정지되거나 삭제될 수 있어요",
+                                "Bait, gambling or harmful games are taken down, and the account may be suspended or deleted",
+                                "釣り・賭博・有害なゲームは取り下げられ、アカウントが停止または削除されることがあります",
+                                "诱导、赌博或有害的游戏会被撤下，账号可能被停用或删除",
+                                "Los juegos engañosos, de apuestas o dañinos se retiran, y la cuenta puede suspenderse o eliminarse");
+            reviewWarn.gameObject.SetActive(true);
+        }
         if (reviewMsg != null) { reviewMsg.text = ""; reviewMsg.gameObject.SetActive(false); }
         if (reviewCodeBox != null) reviewCodeBox.SetActive(false);
         if (reviewRows != null)
@@ -864,6 +863,7 @@ public class R0926HuntCard : MonoBehaviour
         if (reviewCodeBox != null) reviewCodeBox.SetActive(hasCode);
         if (reviewCode != null) reviewCode.text = postedCode ?? "";
         if (reviewNote != null) reviewNote.text = DoneText(postedAudience);
+        if (reviewWarn != null) reviewWarn.gameObject.SetActive(false);
         if (reviewMsg != null) { reviewMsg.text = ""; reviewMsg.gameObject.SetActive(false); }
         Set(reviewEdit, false); Set(reviewGo, false); Set(reviewShare, true); Set(reviewDone, true);
     }
@@ -883,7 +883,7 @@ public class R0926HuntCard : MonoBehaviour
     private IEnumerator Post()
     {
         if (busy || postedId > 0) yield break;
-        if (!Validate(out float lat, out float lon, out float acc)) yield break;   // 카드를 보는 사이 위치·고른 파일이 바뀌었을 수 있다
+        if (!Validate(out double lat, out double lon, out float acc)) yield break;   // 카드를 보는 사이 위치·고른 파일이 바뀌었을 수 있다
         string title = Field(titleInput), prize = Field(prizeInput), audience = picked["audience"];
         string shape = Shape;
         bool file = shape == "photo" || shape == "model";
@@ -1030,7 +1030,7 @@ public class R0926HuntCard : MonoBehaviour
         if (agreeButton != null) agreeButton.gameObject.SetActive(thenForm || !rulesAccepted);
         if (agreeRow != null) agreeRow.gameObject.SetActive(thenForm || !rulesAccepted);
         long code = 0; JSONNode j = null;
-        yield return R0926HuntApi.Get("/api/hunts/rules?lang=" + (Ko ? "ko" : "en"), (c, r) => { code = c; j = r; });
+        yield return R0926HuntApi.Get("/api/hunts/rules?lang=" + Lang, (c, r) => { code = c; j = r; });   // 다섯 말 (예전엔 ko 가 아니면 en)
         if (code != 200) { Toast(R0926HuntApi.ErrorText(code == 401 ? "login" : "", Lang), 3f); yield break; }
         rulesVersion = j["version"].AsInt;
         rulesAccepted = j["accepted"].AsBool;
@@ -1049,6 +1049,7 @@ public class R0926HuntCard : MonoBehaviour
             SetText(g, "Icon/Num", (++n).ToString());   // 서버 글의 이모지는 앱 글꼴이 못 그린다 — 번호 원으로
             SetText(g, "Title", it["title"]);
             SetText(g, "Body", it["body"]);
+            if (it["warn"].AsBool && g.transform.Find("Title")?.GetComponent<Text>() is Text wt) wt.color = Amber;   // 계정 정지·삭제 경고 줄
         }
     }
 
@@ -1089,7 +1090,7 @@ public class R0926HuntCard : MonoBehaviour
     public IEnumerator OpenDetail(int id)
     {
         detailGen++;
-        string q = TryLocation(out float lat, out float lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
+        string q = TryLocation(out double lat, out double lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Get("/api/hunts/" + id + q, (c, r) => { code = c; j = r; });
         if (code != 200)
@@ -1131,7 +1132,7 @@ public class R0926HuntCard : MonoBehaviour
     private IEnumerator ReloadDetail(int id)
     {
         int gen = detailGen;
-        string q = TryLocation(out float lat, out float lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
+        string q = TryLocation(out double lat, out double lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Get("/api/hunts/" + id + q, (c, r) => { code = c; j = r; });
         if (code != 200 || gen != detailGen || busy || current == null || current["id"].AsInt != id || !detail.activeInHierarchy) yield break;
@@ -1235,7 +1236,7 @@ public class R0926HuntCard : MonoBehaviour
     {
         var h = current;
         if (dNear == null || h == null || NearMode(h)) return;
-        bool have = TryLocation(out float lat, out float lon, out _);
+        bool have = TryLocation(out double lat, out double lon, out _);
         string d = null;
         if (have && h.HasKey("lat")) d = Dist(Meters(lat, lon, h["lat"].AsDouble, h["lon"].AsDouble));
         else if (have && h.HasKey("approx_lat"))
@@ -1275,7 +1276,7 @@ public class R0926HuntCard : MonoBehaviour
     {
         var h = current;
         if (h == null || h["status"] != "live" || !h["me"]["joined"].AsBool || h["is_host"].AsBool || h["me"]["rank"].AsInt > 0) yield break;
-        if (!TryLocation(out float lat, out float lon, out float acc)) { if (dNear != null) dNear.text = T("위치를 찾는 중이에요…", "Finding your location…", "位置を確認しています…", "正在获取位置…", "Buscando tu ubicación…"); yield break; }
+        if (!TryLocation(out double lat, out double lon, out float acc)) { if (dNear != null) dNear.text = T("위치를 찾는 중이에요…", "Finding your location…", "位置を確認しています…", "正在获取位置…", "Buscando tu ubicación…"); yield break; }
         var b = new JSONObject(); b["lat"] = lat; b["lon"] = lon; b["acc"] = acc;
         long code = 0; JSONNode j = null;
         int id = h["id"].AsInt;
@@ -1302,7 +1303,7 @@ public class R0926HuntCard : MonoBehaviour
     private IEnumerator Claim()
     {
         if (busy || current == null) yield break;
-        if (!TryLocation(out float lat, out float lon, out float acc)) yield break;
+        if (!TryLocation(out double lat, out double lon, out float acc)) yield break;
         var b = new JSONObject(); b["lat"] = lat; b["lon"] = lon; b["acc"] = acc; b["mock"] = false;
         b["device_id"] = SystemInfo.deviceUniqueIdentifier;
         if (current["mode"] == "code" && claimCodeInput != null) b["code"] = claimCodeInput.text.Trim();
@@ -1341,7 +1342,7 @@ public class R0926HuntCard : MonoBehaviour
         var b = new JSONObject();
         if (what == "join")
         {
-            if (!TryLocation(out float lat, out float lon, out _)) { Toast(R0926HuntApi.ErrorText("location", Lang), 3f); yield break; }
+            if (!TryLocation(out double lat, out double lon, out _)) { Toast(R0926HuntApi.ErrorText("location", Lang), 3f); yield break; }
             b["lat"] = lat; b["lon"] = lon;
         }
         string prevEnd = null;

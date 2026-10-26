@@ -740,14 +740,6 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "ショップ",
                 ["es"] = "Tienda"
             },
-            ["category_required"] = new Dictionary<string, string>()
-            {
-                ["en"] = "Please select a category",
-                ["ko"] = "분류를 선택해주세요",
-                ["zh"] = "请选择分类",
-                ["ja"] = "分類を選択してください",
-                ["es"] = "Seleccione una categoría"
-            },
             ["category_food"] = new Dictionary<string, string>()
             {
                 ["en"] = "Food",

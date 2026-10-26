@@ -7,8 +7,9 @@ using System.Text;
 /// <summary>
 /// 댓글 아이템.
 /// - 좋아요: LikeButton(Button.onClick) + ContentArea 더블탭(IPointerClickHandler)
-/// - 스와이프 삭제: SwipeToDeleteHandler를 CommentManager에서 런타임 부착
+/// - 스와이프: 내 댓글은 '삭제', 남의 댓글은 '신고' — SwipeToDeleteHandler를 CommentManager에서 런타임 부착
 /// - 스크롤: 드래그 이벤트를 부모 ScrollRect로 전파
+/// - 요청은 CommentManager 에서 돌린다 — 그사이 댓글 창을 닫아도 끝까지 가고, 사진 아래 미리보기도 바뀐다
 /// </summary>
 public class CommentItem : MonoBehaviour
 {
@@ -219,9 +220,28 @@ public class CommentItem : MonoBehaviour
     public bool IsMyComment => isMyComment;
 
     /// <summary>
-    /// 댓글 ID 반환 (삭제 API용)
+    /// 댓글 ID 반환 (삭제 API용) — 보내는 중인 내 댓글은 -1
     /// </summary>
     public int CommentId => commentId;
+
+    /// <summary>어느 장소의 댓글인지 — 바뀌면 그 장소의 미리보기를 다시 불러온다</summary>
+    public int LocationId { get; set; }
+
+    /// <summary>보낸 댓글이 서버에 올라가 번호를 받았다</summary>
+    public void AssignServerId(int id) => commentId = id;
+
+    /// <summary>목록에서만 뺀다 (신고한 댓글 — 서버도 나에게는 다시 주지 않는다)</summary>
+    public void RemoveLocally()
+    {
+        if (isActiveAndEnabled) StartCoroutine(AnimateAndDestroy());
+        else Destroy(gameObject);
+    }
+
+    private void Run(IEnumerator routine)
+    {
+        if (CommentManager.Instance != null) CommentManager.Instance.StartCoroutine(routine);
+        else if (isActiveAndEnabled) StartCoroutine(routine);
+    }
 
     private IEnumerator ForceLayoutUpdate()
     {
@@ -347,18 +367,19 @@ public class CommentItem : MonoBehaviour
             if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup();
             return;
         }
+        if (commentId <= 0) return;   // 아직 보내는 중인 내 댓글
 
         // Optimistic UI Update
         isLiked = !isLiked;
         likeCount += isLiked ? 1 : -1;
         UpdateLikeUI();
 
-        StartCoroutine(ToggleLike());
+        Run(ToggleLike());
     }
 
     private IEnumerator ToggleLike()
     {
-        string url = ApiConfig.COMMENTS_LIKE;
+        string url = CommentManager.Api(ApiConfig.COMMENTS_LIKE);
         LikePostData data = new LikePostData { comment_id = commentId, user_id = LoginManager.Instance.CurrentUser.id };
         string json = JsonUtility.ToJson(data);
 
@@ -368,17 +389,23 @@ public class CommentItem : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            LoginManager.ApplyAuth(request);
 
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
+                CommentManager.NotifyChanged(LocationId);
+                if (this == null) yield break;
                 var response = JsonUtility.FromJson<CommentLikeResponse>(request.downloadHandler.text);
+                isLiked = response.action == "liked";
                 likeCount = response.like_count;
                 UpdateLikeUI();
             }
             else
             {
+                LoginManager.CheckUnauthorized(request);
+                if (this == null) yield break;
                 isLiked = !isLiked;
                 likeCount += isLiked ? 1 : -1;
                 UpdateLikeUI();
@@ -392,33 +419,45 @@ public class CommentItem : MonoBehaviour
     /// </summary>
     public void DeleteThisComment()
     {
-        if (!isMyComment) return;
-        StartCoroutine(DeleteComment());
+        if (!isMyComment || commentId <= 0 || deleting) return;
+        deleting = true;
+        Run(DeleteComment());
     }
+
+    private bool deleting;
 
     private IEnumerator DeleteComment()
     {
-        string url = $"{ApiConfig.MAIN_SERVER}/comments/{commentId}";
+        string url = CommentManager.Api($"{ApiConfig.MAIN_SERVER}/comments/{commentId}");
 
         if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null)
         {
             Debug.LogError("[CommentItem] 로그인이 필요합니다.");
+            deleting = false;
             yield break;
         }
 
         string userId = LoginManager.Instance.CurrentUser.id;
+        int location = LocationId;
 
         using (UnityWebRequest request = UnityWebRequest.Delete(url + $"?user_id={userId}"))
         {
+            LoginManager.ApplyAuth(request);
             yield return request.SendWebRequest();
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                StartCoroutine(AnimateAndDestroy());
+                CommentManager.NotifyChanged(location);
+                if (this != null) RemoveLocally();
             }
             else
             {
                 Debug.LogError($"[CommentItem] 댓글 삭제 실패: {request.error}");
+                LoginManager.CheckUnauthorized(request);
+                if (ToastManager.Instance != null)
+                    ToastManager.Instance.ShowError(R0926LocalizedText.Say("댓글을 지우지 못했습니다. 잠시 후 다시 해 주세요.", "Couldn't delete the comment. Please try again.", "コメントを削除できませんでした。もう一度お試しください。", "评论删除失败，请稍后重试。", "No se pudo eliminar el comentario. Inténtalo de nuevo."));
+                if (this == null) yield break;
+                deleting = false;
                 // SwipeToDeleteHandler 복원
                 var handler = GetComponent<SwipeToDeleteHandler>();
                 if (handler != null) handler.ResetPosition();

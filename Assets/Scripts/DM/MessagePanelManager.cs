@@ -317,7 +317,7 @@ public class MessagePanelManager : MonoBehaviour
         // 입력창 자동 확장 설정
         if (chatInput != null)
         {
-            AutoExpandInputField.Setup(chatInput, 0f, 250f);
+            AutoExpandInputField.Setup(chatInput, 0f, 290f);   // 글자 54 에서도 네 줄까지 (10-25 입력줄 키움)
 
             // 네이티브 모바일 입력바 숨기기 (iOS "완료/취소" 바 제거)
             chatInput.shouldHideMobileInput = true;

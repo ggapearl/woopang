@@ -413,14 +413,5 @@ public class DanceAnimController : MonoBehaviour
 #endif
     }
 
-    static float HaversineMeters(float lat1, float lon1, float lat2, float lon2)
-    {
-        const float R = 6371000f;
-        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
-        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
-        float a = Mathf.Sin(dLat / 2f) * Mathf.Sin(dLat / 2f) +
-                  Mathf.Cos(Mathf.Deg2Rad * lat1) * Mathf.Cos(Mathf.Deg2Rad * lat2) *
-                  Mathf.Sin(dLon / 2f) * Mathf.Sin(dLon / 2f);
-        return R * 2f * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1f - a));
-    }
+    static float HaversineMeters(double lat1, double lon1, double lat2, double lon2) => (float)GeoHere.Meters(lat1, lon1, lat2, lon2);
 }

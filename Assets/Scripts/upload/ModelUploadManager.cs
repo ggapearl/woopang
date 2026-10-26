@@ -42,16 +42,6 @@ public class ModelUploadManager : MonoBehaviour
     [SerializeField] private Toggle categoryToggle;
     [SerializeField] private Text categoryToggleLabel;
 
-    [Tooltip("카테고리별 토글 배경색")]
-    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f);   // 파란색
-    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f); // 노란색
-    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);    // 핑크색
-    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);      // 초록색
-    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f);   // 보라색 (공공화장실)
-    [SerializeField] private Color categoryColorSport = new Color(0.95f, 0.45f, 0.25f, 1f);    // 주황색 (스포츠)
-    [SerializeField] private Color categoryColorLandmark = new Color(0.2f, 0.7f, 0.9f, 1f);    // 하늘색 (랜드마크)
-    [SerializeField] private Color categoryColorEtc = new Color(0.6f, 0.6f, 0.6f, 1f);        // 회색 (기타)
-
     [Header("Progress UI")]
     [SerializeField] private GameObject loadingPanel;
     [SerializeField] private R0926Busy busy;   // 올리는 동안 화면 가운데 카드 — 원호 + '업로드 중… N%' + 막대 (Redesign0926ApplyCrop 이 연결)
@@ -75,7 +65,9 @@ public class ModelUploadManager : MonoBehaviour
     private string locationText;
     private string instagramID;
     private bool showInstagram;
-    private Vector3 gpsData = Vector3.zero;
+    // 위치는 double 그대로 — float(Vector3) 일 땐 경도가 소수 4자리(약 9m)로 잘려 저장됐다 (10-26)
+    private double gpsLat, gpsLon, gpsAlt;
+    private bool HasGps => !(gpsLat == 0 && gpsLon == 0);
     // 카테고리 순환 — 장소 추가와 같은 여덟 가지 (10-21 대표님 「'장소추가' 탭처럼 동일하게」)
     private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
     private int currentCategoryIndex = 0;
@@ -592,21 +584,8 @@ public class ModelUploadManager : MonoBehaviour
         }
     }
 
-    public Color GetCategoryColor(string category)
-    {
-        switch (category)
-        {
-            case "shop": return categoryColorShop;
-            case "food": return categoryColorFood;
-            case "cafe": return categoryColorCafe;
-            case "park": return categoryColorPark;
-            case "toilet": return categoryColorToilet;
-            case "sport": return categoryColorSport;
-            case "landmark": return categoryColorLandmark;
-            case "etc": return categoryColorEtc;
-            default: return Color.white;
-        }
-    }
+    // 분류 색 — AR 인디케이터·목록·필터 칩과 같은 값 (10-25)
+    public Color GetCategoryColor(string category) => DataManager.GetCategoryColor(category);
 
     private void InitializeObjectPool()
     {
@@ -958,45 +937,14 @@ public class ModelUploadManager : MonoBehaviour
         }
     }
 
+    // 장소 올리기와 같다 — GeoHere (Geospatial 우선 → 휴대폰 위치 + 고도 보정)
     private void UpdateLocationDisplay()
     {
-        bool locationObtained = false;
-
-        // ARCore Geospatial API 우선 사용 (CubeUploadManager와 동일)
-        if (useGeospatialAPI && earthManager != null)
+        if (GeoHere.TryGet(out gpsLat, out gpsLon, out gpsAlt, earthManager, useGeospatialAPI))
+            locationText = "Lat:" + GeoHere.Show(gpsLat) + ",Lon:" + GeoHere.Show(gpsLon) + ",Alt:" + gpsAlt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        else
         {
-            if (earthManager.EarthTrackingState == TrackingState.Tracking)
-            {
-                var pose = earthManager.CameraGeospatialPose;
-
-                // Geospatial API는 자동으로 MSL 고도 제공 (iOS/Android 통일)
-                gpsData = new Vector3(
-                    (float)pose.Latitude,
-                    (float)pose.Longitude,
-                    (float)pose.Altitude
-                );
-
-                locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
-                locationObtained = true;
-            }
-        }
-
-        // Fallback: 기본 GPS 사용 (ARCore 사용 안 함 또는 실패 시)
-        if (!locationObtained && Input.location.status == LocationServiceStatus.Running)
-        {
-            float lat = Input.location.lastData.latitude;
-            float lon = Input.location.lastData.longitude;
-            float normalizedAltitude = GeoidHelper.NormalizeAltitude(
-                Input.location.lastData.altitude, lat, lon);
-
-            gpsData = new Vector3(lat, lon, normalizedAltitude);
-            locationText = $"Lat:{gpsData.x:F4},Lon:{gpsData.y:F4},Alt:{gpsData.z:F2}";
-            locationObtained = true;
-        }
-
-        if (!locationObtained)
-        {
-            gpsData = Vector3.zero;
+            gpsLat = gpsLon = gpsAlt = 0;
             locationText = GetLocalizedText("no_location_data");
         }
 
@@ -1042,8 +990,9 @@ public class ModelUploadManager : MonoBehaviour
             yield break;
         }
 
-        // 2. 위치 서비스 체크
-        if (Input.location.status != LocationServiceStatus.Running || gpsData == Vector3.zero)
+        // 2. 위치 서비스 체크 — 누른 순간의 자리로 다시 읽는다 (10초마다 읽던 값은 그사이 걸었으면 뒤처져 있다)
+        UpdateLocationDisplay();
+        if (Input.location.status != LocationServiceStatus.Running || !HasGps)
         {
             ShowWarning(GetLocalizedText(Input.location.isEnabledByUser ? "location_not_ready" : "enable_location_service"));
             isProcessing = false;
@@ -1082,13 +1031,7 @@ public class ModelUploadManager : MonoBehaviour
             yield break;
         }
 
-        // 7. 카테고리 선택 필수 체크
-        if (string.IsNullOrEmpty(selectedCategory))
-        {
-            ShowWarning(GetLocalizedText("category_required"));
-            isProcessing = false;
-            yield break;
-        }
+        // 7. 분류는 고르지 않아도 된다 — 분류 없는 모델은 흰색 (10-25 대표님)
 
         // 시간 제한은 요청을 보낸 뒤부터 (CubeUploadManager.SendRequestWithTimeout)
         yield return StartCoroutine(ProcessAndUploadModel());
@@ -1123,9 +1066,9 @@ public class ModelUploadManager : MonoBehaviour
         WWWForm formData = new WWWForm();
 
         formData.AddField("name", modelName);
-        formData.AddField("latitude", gpsData.x.ToString("F6"));
-        formData.AddField("longitude", gpsData.y.ToString("F6"));
-        formData.AddField("altitude", gpsData.z.ToString("F2"));
+        formData.AddField("latitude", GeoHere.Save(gpsLat));    // 소수 6자리 (약 0.1m)
+        formData.AddField("longitude", GeoHere.Save(gpsLon));
+        formData.AddField("altitude", gpsAlt.ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
         formData.AddField("model_type", "custom");
         // status는 서버에서 AUTO_APPROVE 설정에 따라 결정
         formData.AddField("device_id", SystemInfo.deviceUniqueIdentifier);  // 업로더 추적용
@@ -1350,7 +1293,7 @@ public class ModelUploadManager : MonoBehaviour
         UpdateSubPhotoGrid();
         SubLoading(0);
 
-        gpsData = Vector3.zero;
+        gpsLat = gpsLon = gpsAlt = 0;
         isProcessing = false;
         uploadKey.Reset();
         instagramID = "";

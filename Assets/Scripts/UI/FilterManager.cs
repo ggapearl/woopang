@@ -21,14 +21,6 @@ public class FilterManager : MonoBehaviour
     [Tooltip("축제 칩 — 켜면 목록이 근처 축제만 (AR 은 그대로). 앱을 켤 때마다 꺼진 채 시작")]
     [SerializeField] private Toggle festivalToggle;
 
-    [Header("카테고리 색상 설정")]
-    [SerializeField] private Color categoryColorShop = new Color(0.25f, 0.5f, 0.95f, 1f); // 파란색
-    [SerializeField] private Color categoryColorFood = new Color(0.984f, 0.757f, 0.365f, 1f);
-    [SerializeField] private Color categoryColorCafe = new Color(0.91f, 0.33f, 0.63f, 1f);
-    [SerializeField] private Color categoryColorPark = new Color(0.3f, 0.85f, 0.5f, 1f);
-    [SerializeField] private Color categoryColorToilet = new Color(0.68f, 0.33f, 0.77f, 1f); // 보라색 (공중화장실)
-    [SerializeField] private Color categoryColorSport = new Color(0.2f, 0.75f, 0.75f, 1f); // 청록색 (스포츠)
-    [SerializeField] private Color categoryColorLandmark = new Color(0.85f, 0.65f, 0.13f, 1f); // 금색 (랜드마크)
 
     [Header("References")]
     [SerializeField] private PlaceListManager placeListManager;
@@ -65,9 +57,9 @@ public class FilterManager : MonoBehaviour
         Food = 2,
         Cafe = 3,
         Park = 4,
-        Toilet = 5,  // 공중화장실 (보라색)
-        Sport = 6,   // 스포츠 (청록색)
-        Landmark = 7 // 랜드마크 (금색)
+        Toilet = 5,  // 공중화장실 — 색은 모두 DataManager.GetCategoryColor
+        Sport = 6,
+        Landmark = 7
     }
 
     private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark" };
@@ -944,31 +936,31 @@ public class FilterManager : MonoBehaviour
                 labelText = texts["categoryAll"];
                 break;
             case CategoryFilterState.Shop:
-                bgColor = categoryColorShop;
+                bgColor = DataManager.GetCategoryColor("shop");
                 labelText = texts["categoryShop"];
                 break;
             case CategoryFilterState.Food:
-                bgColor = categoryColorFood;
+                bgColor = DataManager.GetCategoryColor("food");
                 labelText = texts["categoryFood"];
                 break;
             case CategoryFilterState.Cafe:
-                bgColor = categoryColorCafe;
+                bgColor = DataManager.GetCategoryColor("cafe");
                 labelText = texts["categoryCafe"];
                 break;
             case CategoryFilterState.Park:
-                bgColor = categoryColorPark;
+                bgColor = DataManager.GetCategoryColor("park");
                 labelText = texts["categoryPark"];
                 break;
             case CategoryFilterState.Toilet:
-                bgColor = categoryColorToilet;
+                bgColor = DataManager.GetCategoryColor("toilet");
                 labelText = texts["categoryToilet"];
                 break;
             case CategoryFilterState.Sport:
-                bgColor = categoryColorSport;
+                bgColor = DataManager.GetCategoryColor("sport");
                 labelText = texts["categorySport"];
                 break;
             case CategoryFilterState.Landmark:
-                bgColor = categoryColorLandmark;
+                bgColor = DataManager.GetCategoryColor("landmark");
                 labelText = texts["categoryLandmark"];
                 break;
         }
@@ -1822,17 +1814,7 @@ public class FilterManager : MonoBehaviour
     /// <summary>
     /// GPS 거리 계산 (Haversine)
     /// </summary>
-    private float CalculateGPSDistance(float lat1, float lon1, float lat2, float lon2)
-    {
-        const float R = 6371000f;
-        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
-        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
-        float a = Mathf.Sin(dLat / 2f) * Mathf.Sin(dLat / 2f)
-                + Mathf.Cos(Mathf.Deg2Rad * lat1) * Mathf.Cos(Mathf.Deg2Rad * lat2)
-                * Mathf.Sin(dLon / 2f) * Mathf.Sin(dLon / 2f);
-        float c = 2f * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1f - a));
-        return R * c;
-    }
+    private float CalculateGPSDistance(double lat1, double lon1, double lat2, double lon2) => (float)GeoHere.Meters(lat1, lon1, lat2, lon2);
 }
 
 public class LongPressHandler : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler

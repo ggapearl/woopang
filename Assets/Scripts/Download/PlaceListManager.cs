@@ -44,8 +44,8 @@ public class PlaceListManager : MonoBehaviour
         public string id;
         public string baseLabel;     // 거리 빼고 표시명만 (예: "스타벅스" 또는 "@user")
         public string colorHex;
-        public float baseLat;
-        public float baseLon;
+        public double baseLat;
+        public double baseLon;
         public Transform targetTf;   // 스폰된 GameObject가 있으면 카메라 거리 우선
         public Target target;        // 같은 오브젝트의 Target (목록 줄 누르기·방향)
         public EntryKind kind;
@@ -587,8 +587,8 @@ public class PlaceListManager : MonoBehaviour
             else
             {
                 // 2순위: GPS 거리 fallback — 평면 근사 (한국 위도/5km 이내 오차 0.5% 미만, 매 프레임 trig 회피)
-                float dLatM = (e.baseLat - lat) * 111320f;
-                float dLonM = (e.baseLon - lon) * 111320f * cosLat;
+                float dLatM = (float)((e.baseLat - lat) * 111320.0);   // 빼기는 double 로 — float 끼리 빼면 0.4m 단위로 끊긴다
+                float dLonM = (float)((e.baseLon - lon) * 111320.0 * cosLat);
                 d = Mathf.Sqrt(dLatM * dLatM + dLonM * dLonM);
             }
             distBuffer[i] = d;
@@ -630,7 +630,7 @@ public class PlaceListManager : MonoBehaviour
 
     private static ListEntry ToListEntry(LiveEntry e, float distance)
     {
-        var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = e.baseLat, lon = e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link,
+        var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = (float)e.baseLat, lon = (float)e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link,
                                  promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl };
         if (e.kind == EntryKind.Hunt)
         {
@@ -813,16 +813,7 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
-    private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
-    {
-        const float R = 6371000;
-        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
-        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
-        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) +
-                  Mathf.Cos(Mathf.Deg2Rad * (lat1)) * Mathf.Cos(Mathf.Deg2Rad * (lat2)) *
-                  Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
-        return R * 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
-    }
+    private float CalculateDistance(double lat1, double lon1, double lat2, double lon2) => (float)GeoHere.Meters(lat1, lon1, lat2, lon2);
 
     public void ApplyFilters(Dictionary<string, bool> filters) {
         activeFilters = filters;

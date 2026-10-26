@@ -875,7 +875,9 @@ namespace Redesign0926
 
         private static void InputBar(GameObject area, string inputName, string sendName, bool isMirror, List<string> log)
         {
-            const float Pad = 40f, SendSize = 116f;
+            // 대화 입력줄은 10-25 대표님 「메세지 입력창 글자 너무 작다」로 키웠다(칸 110→132 · 글자 46→54 · 보내기 116→136) — 키보드 위 입력줄은 그대로
+            const float Pad = 40f;
+            float sendSize = isMirror ? 116f : 136f, half = isMirror ? 55f : 66f, textPad = isMirror ? 40f : 46f;
             // 바탕: 채팅은 창 안이라 투명(위에 가는 줄), 키보드 위 입력줄은 창 색으로 꽉
             var bg = area.GetComponent<Image>();
             if (bg != null) { bg.sprite = null; bg.color = isMirror ? CardBg : new Color(0, 0, 0, 0); EditorUtility.SetDirty(bg); }
@@ -885,7 +887,7 @@ namespace Redesign0926
             // 채팅 입력줄은 카드보다 넓어(좌우 15) 줄이 카드 둥근 끝 밖으로 삐져나왔다 → 입력칸 양 끝에 맞춘다
             SetRect(RT(line), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(isMirror ? 0 : -2 * Pad, 2));
             var art = RT(area);
-            art.sizeDelta = new Vector2(art.sizeDelta.x, 150);
+            art.sizeDelta = new Vector2(art.sizeDelta.x, isMirror ? 150 : 176);
 
             var input = area.transform.Find(inputName);
             InputField field = null;
@@ -893,17 +895,17 @@ namespace Redesign0926
             {
                 var irt = RT(input.gameObject);
                 irt.anchorMin = new Vector2(0, 0.5f); irt.anchorMax = new Vector2(1, 0.5f); irt.pivot = new Vector2(0.5f, 0.5f);
-                irt.offsetMin = new Vector2(Pad, -55); irt.offsetMax = new Vector2(-(Pad + SendSize + 24), 55);
-                Img(input.gameObject, Spr("r0926_pill"), Glass7, Image.Type.Sliced, 64f / 55f).raycastTarget = true;
+                irt.offsetMin = new Vector2(Pad, -half); irt.offsetMax = new Vector2(-(Pad + sendSize + 24), half);
+                Img(input.gameObject, Spr("r0926_pill"), Glass7, Image.Type.Sliced, 64f / half).raycastTarget = true;
                 field = input.GetComponent<InputField>();
                 foreach (var t in input.GetComponentsInChildren<Text>(true))
                 {
                     bool ph = field != null && field.placeholder == t;
-                    t.fontSize = ph ? 44 : 46; t.color = ph ? Muted : Ink; t.alignment = TextAnchor.MiddleLeft;
+                    t.fontSize = ph ? (isMirror ? 44 : 52) : (isMirror ? 46 : 54); t.color = ph ? Muted : Ink; t.alignment = TextAnchor.MiddleLeft;
                     t.fontStyle = FontStyle.Normal;
                     if (font != null) t.font = font;
                     var trt = t.rectTransform; trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
-                    trt.offsetMin = new Vector2(40, 0); trt.offsetMax = new Vector2(-40, 0);
+                    trt.offsetMin = new Vector2(textPad, 0); trt.offsetMax = new Vector2(-textPad, 0);
                     EditorUtility.SetDirty(t);
                 }
                 foreach (var o in input.GetComponents<Outline>()) Object.DestroyImmediate(o);
@@ -912,7 +914,7 @@ namespace Redesign0926
             Image sendBg = null;
             if (send != null)
             {
-                SetRect(RT(send.gameObject), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-Pad, 0), new Vector2(SendSize, SendSize));
+                SetRect(RT(send.gameObject), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-Pad, 0), new Vector2(sendSize, sendSize));
                 sendBg = Img(send.gameObject, Spr("r0926_circle"), SendOff, Image.Type.Simple);
                 sendBg.raycastTarget = true; sendBg.preserveAspect = true;
                 var b = send.GetComponent<Button>();
@@ -920,7 +922,7 @@ namespace Redesign0926
                 var ic = FindOrCreate(send.transform, "Icon0926");
                 var icImg = Img(ic, Spr(isMirror ? "r0926_check" : "r0926_arrow_short"), Color.white, Image.Type.Simple);
                 icImg.raycastTarget = false; icImg.preserveAspect = true;
-                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, isMirror ? new Vector2(58, 58) : new Vector2(50, 62));
+                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, isMirror ? new Vector2(58, 58) : new Vector2(58, 72));
                 RT(ic).localEulerAngles = isMirror ? Vector3.zero : new Vector3(0, 0, 180);   // 아래 화살표를 뒤집어 보내기(위)
                 foreach (var t in send.GetComponentsInChildren<Text>(true)) t.enabled = false;
             }

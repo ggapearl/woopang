@@ -388,7 +388,7 @@ namespace Redesign0926
             var content = FindOrCreate(vp.transform, "Content");
             SetRect(RT(content), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, Vector2.zero);
             var vl = Ensure<VerticalLayoutGroup>(content);
-            vl.padding = new RectOffset((int)SheetPad - 8, (int)SheetPad - 8, 8, 48); vl.spacing = 22;
+            vl.padding = new RectOffset((int)SheetPad - 8, (int)SheetPad - 8, 8, 24); vl.spacing = 22;   // 아래 48→24 (10-24 — 버전·저작권을 조금 아래로)
             vl.childControlWidth = true; vl.childControlHeight = true; vl.childForceExpandWidth = true; vl.childForceExpandHeight = false;
             Ensure<ContentSizeFitter>(content).verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.viewport = RT(vp); sr.content = RT(content);
@@ -499,8 +499,10 @@ namespace Redesign0926
             // 버전은 줄이 아니라 탭 맨 아래에 작게 (2026-10-06 대표님)
             var oldVer = g4.transform.Find("RowVersion");
             if (oldVer != null) Object.DestroyImmediate(oldVer.gameObject);
+            // 10-24 대표님 「copy 랑 version footer 조금씩만 아래로」 — 버전 칸 56→80(글은 가운데라 12 아래) · 맨 아래 여백 48→24.
+            // 끝까지 내리면 위 '앱 정보' 묶음은 그 자리 그대로, 버전 12 · 저작권 24 만큼 내려간다
             var verFoot = FindOrCreate(content.transform, "VersionFooter");
-            Ensure<LayoutElement>(verFoot).preferredHeight = 56;
+            Ensure<LayoutElement>(verFoot).preferredHeight = 80;
             var verText = Txt(verFoot, "Version", 30, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
             // 버전 아래 저작권 그림 — 목록 맨 아래에 있던 것을 여기로 (2026-10-23 대표님: 버전이 위, 저작권이 아래). 목록에서 보던 크기 그대로(높이 약 61)
             var copyFoot = FindOrCreate(content.transform, "CopyrightFooter");

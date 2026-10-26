@@ -1233,8 +1233,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
     private void SetupTargetInfo(Target target, PlaceData place)
     {
-        // 서버 color(HEX) 우선, 비었거나 무효(예: 공공데이터 NULL/'blue')면 카테고리 색으로 폴백.
-        // 이전엔 폴백이 흰색이라 공공데이터·색 미지정 업로드의 인디케이터가 흰색으로 떴음(버그).
+        // 칩이 있는 분류는 칩 색, 그 밖은 서버 color(HEX) → 카테고리 색 → 흰색 (ResolvePlaceColor — 목록과 같은 값)
         target.TargetColor = ResolvePlaceColor(place.color, place.category, place.name);
         target.PlaceName = place.name;
         target.placeId = place.id.ToString();
@@ -1313,15 +1312,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         return CalculateDistance(lat, lon, place.latitude, place.longitude) <= maxDist;
     }
 
-    private float CalculateDistance(float lat1, float lon1, float lat2, float lon2)
-    {
-        const float R = 6371000;
-        float dLat = Mathf.Deg2Rad * (lat2 - lat1);
-        float dLon = Mathf.Deg2Rad * (lon2 - lon1);
-        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) + Mathf.Cos(Mathf.Deg2Rad * (lat1)) * Mathf.Cos(Mathf.Deg2Rad * (lat2)) * Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
-        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
-        return R * c;
-    }
+    private float CalculateDistance(double lat1, double lon1, double lat2, double lon2) => (float)GeoHere.Meters(lat1, lon1, lat2, lon2);
 
     private GameObject GetFromPool(string modelType)
     {
@@ -2071,10 +2062,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             target.gpsLatitude = cached.latitude;
             target.gpsLongitude = cached.longitude;
 
-            // 카테고리(+이름) 색 — full 스폰과 동일 소스. 흰색이면 굳이 덮어쓰지 않음(프리팹 기본 유지)
-            Color catColor = GetCategoryColor(cached.category, cached.displayName);
-            if (catColor != Color.white)
-                target.TargetColor = catColor;
+            // full 스폰·목록과 같은 값. 흰색이어도 꼭 넣는다 — 풀에서 꺼낸 인디케이터는 앞서 쓴 장소의 색을 들고 있다
+            target.TargetColor = ResolvePlaceColor(placeDataMap.TryGetValue(id, out PlaceData known) ? known.color : null, cached.category, cached.displayName);
 
             // dance_anim은 큐브로 정상 스폰되어 더블탭으로 라우팅됨 — 인디케이터 훅 불필요
         }
@@ -2200,8 +2189,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                 target.PlaceName = edited.name;
                 target.gpsLatitude = edited.latitude;
                 target.gpsLongitude = edited.longitude;
-                Color catColor = GetCategoryColor(edited.category, edited.name);
-                if (catColor != Color.white) target.TargetColor = catColor;
+                target.TargetColor = ResolvePlaceColor(edited.color, edited.category, edited.name);   // 분류를 지웠으면 흰색으로
             }
             if (moved)
             {
@@ -2257,23 +2245,29 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     }
 
     /// <summary>
-    /// 카테고리(+장소명) 기반 색상 — 인디케이터/리스트 공통 단일 소스.
+    /// 카테고리(+장소명) 기반 색상 — AR 인디케이터 · 목록 · 목록 필터 칩 · 올리기 분류 칩 공통 단일 소스.
     ///
-    /// 공공데이터(공공시설)는 카페(핑크)·음식점(주황)과 헷갈리지 않도록 빨강/핑크 계열을
-    /// 제외하고 "푸르스름한 차분한 5색" 으로 통일. 사용자 데이터(shop/food/cafe)는 기존 유지.
+    /// 목록 필터에 칩이 있는 분류(샵·음식점·카페·공원·화장실·스포츠·랜드마크)는 칩 색 그대로 — 10-25 대표님
+    /// 「각 필터링 분류의 색에 맞게 적절한 인디케이터 색이 반영되어서 목록 및 AR화면에」. 예전엔 올리기 화면·AR·칩이
+    /// 서로 달랐다(스포츠 주황/청록/빨강 · 카페 핑크/모카 · 랜드마크 하늘/금색).
+    /// 분류 없이 올린 곳과 '기타'는 흰색 (10-25 「체크하지 않고 올려도 … 그냥 흰색」).
     ///
-    /// 소방서·경찰서 모두 gov 회청색으로 통일(공공데이터는 빨강/노랑 없이 푸르스름 계열만).
-    /// toilet은 별도 토글이라 보라색 그대로. placeName 파라미터는 향후 이름 기반 세분화 여지로 유지.
+    /// 공공데이터(공공시설)는 카페·음식점과 헷갈리지 않도록 "푸르스름한 차분한 색" 으로 (소방서·경찰서 모두 gov 회청색).
+    /// placeName 파라미터는 향후 이름 기반 세분화 여지로 유지.
     /// </summary>
     public static Color GetCategoryColor(string category, string placeName = null)
     {
         if (string.IsNullOrEmpty(category)) return Color.white;
         switch (category)
         {
-            // --- 사용자 데이터 (기존 유지) ---
-            case "shop":     return new Color(0.25f, 0.5f, 0.95f);     // 파랑 #4080F2
-            case "food":     return new Color(0.984f, 0.757f, 0.365f); // 주황 #FBC15D
-            case "cafe":     return new Color(0.91f, 0.33f, 0.63f);    // 핑크 #E854A1
+            // --- 목록 필터 칩이 있는 분류 = 칩 색 (R0926FilterChip.CatColors 가 이 값을 쓴다) ---
+            case "shop":     return new Color(0.31f, 0.55f, 1f);       // 파랑 #4F8CFF
+            case "food":     return new Color(1f, 0.54f, 0.24f);       // 주황 #FF8A3D
+            case "cafe":     return new Color(0.643f, 0.459f, 0.318f); // 모카 #A47551 (10-23)
+            case "park":     return new Color(0.22f, 0.85f, 0.54f);    // 초록 #38D98A
+            case "toilet":   return new Color(0.61f, 0.48f, 1f);       // 보라 #9C7AFF
+            case "sport":    return new Color(0.94f, 0.28f, 0.28f);    // 빨강 #F04747 (10-23)
+            case "landmark": return new Color(0.96f, 0.77f, 0.26f);    // 금색 #F5C442
 
             // --- 공공데이터(기관/시설, publicData 토글) — 푸르스름/녹색, 흰색 금지 ---
             case "gov":      return new Color(0.533f, 0.6f, 0.667f);   // 회청 #8899AA (경찰서·소방서 포함)
@@ -2284,22 +2278,23 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             case "medical":  return new Color(0.239f, 0.643f, 0.62f);  // 청록 #3DA49E (빨강에서 변경)
             case "welfare":  return new Color(0.306f, 0.62f, 0.471f);  // 청록그린 #4E9E78
 
-            // --- 독립 카테고리(자체 필터 토글 보유) — 고유색 유지, 필터 토글 색과 일치 ---
-            case "park":     return new Color(0.3f, 0.85f, 0.5f);      // 초록 #4DD980
-            case "sport":    return new Color(0.2f, 0.75f, 0.75f);     // 청록 #33BFBF
-            case "landmark": return new Color(0.85f, 0.65f, 0.13f);    // 금색 #D9A621 (공공데이터 아님)
-            case "toilet":   return new Color(0.68f, 0.33f, 0.77f);    // 보라 #AE54C4 (별도 토글)
-            default:         return Color.white;
+            default:         return Color.white;   // 기타(etc) · 분류 없음
         }
     }
 
+    /// <summary>목록 필터에 칩이 있는 분류 — 이 분류는 서버에 남은 색보다 칩 색이 먼저</summary>
+    public static bool IsChipCategory(string category)
+        => category == "shop" || category == "food" || category == "cafe" || category == "park"
+           || category == "toilet" || category == "sport" || category == "landmark";
+
     /// <summary>
-    /// 서버 color(HEX) 우선, 비었거나 유효하지 않으면 카테고리(+이름) 색으로 폴백.
-    /// 풀 오브젝트·인디케이터·리스트가 모두 이 한 함수를 거쳐 색이 항상 일치하도록 통일.
-    /// 공공데이터의 DB color는 대부분 NULL/이름('blue' 등)이라 자연히 카테고리 팔레트로 귀결됨.
+    /// 칩이 있는 분류는 늘 칩 색 — 예전 앱이 올린 색(스포츠 주황 · 랜드마크 하늘 …)이나 서버가 이름을 바꾼 색
+    /// ('purple' → AE53C5)이 남아 있어도 (10-25). 그 밖(공공데이터 기관·관광·분류 없음)은 서버 color(HEX) 우선,
+    /// 비었거나 무효면 카테고리 색 → 흰색. 풀 오브젝트·인디케이터·목록이 모두 이 한 함수를 거쳐 색이 늘 같다.
     /// </summary>
     public static Color ResolvePlaceColor(string rawColorHex, string category, string placeName = null)
     {
+        if (IsChipCategory(category)) return GetCategoryColor(category, placeName);
         if (!string.IsNullOrEmpty(rawColorHex))
         {
             string hex = rawColorHex.StartsWith("#") ? rawColorHex : "#" + rawColorHex;
@@ -2324,9 +2319,9 @@ public class LightPlaceData
 {
     public int id { get; set; }
     public string name { get; set; }
-    public float latitude { get; set; }
-    public float longitude { get; set; }
-    public float altitude { get; set; }
+    public double latitude { get; set; }   // double — float 면 AR 앵커 자리가 위도 0.4m·경도 0.7m 단위로 끊긴다 (10-26)
+    public double longitude { get; set; }
+    public double altitude { get; set; }
     public string category { get; set; }
     public string model_type { get; set; }
     public bool pet_friendly { get; set; }
@@ -2346,9 +2341,9 @@ public class PlaceData
     public bool separate_restroom { get; set; }
     public bool alcohol_available { get; set; } // 주류 판매 여부
     public string instagram_id { get; set; }
-    public float latitude { get; set; }
-    public float longitude { get; set; }
-    public float altitude { get; set; }
+    public double latitude { get; set; }   // double — float 면 AR 앵커 자리가 위도 0.4m·경도 0.7m 단위로 끊긴다 (10-26)
+    public double longitude { get; set; }
+    public double altitude { get; set; }
     public string color { get; set; }
     public string username { get; set; }
     public string model_type { get; set; } = "cube";

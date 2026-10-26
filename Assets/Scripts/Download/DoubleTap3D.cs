@@ -458,14 +458,70 @@ public class DoubleTap3D : MonoBehaviour
     }
 #endif
 
+    // 댓글을 쓰거나 지우거나 신고하면 사진 아래 미리보기도 바로 바꾼다 (예전엔 사진을 열 때 한 번만 채워 — 10-24 미르네집)
+    private void OnCommentsChanged(int locationId)
+    {
+        if (isFullscreen && locationId == id) RefreshCommentPreview();
+    }
+
+    private void RefreshCommentPreview()
+    {
+        if (CommentManager.Instance == null) return;
+        CommentManager.Instance.GetBestComment(this.id, (data) =>
+        {
+            if (!isFullscreen || previewText == null) return;   // 그사이 닫았다 — 미리보기 칸은 사진마다 함께 써서 다른 장소 것을 덮으면 안 된다
+            if (data != null)
+            {
+                string content = data.content;
+                if (content.Length > 40)
+                {
+                    content = content.Substring(0, 40) + "... " + R0926LocalizedText.Say("더보기", "more", "もっと見る", "更多", "más");
+                }
+                // 콜론 제거, 띄어쓰기 추가
+                previewText.text = $"<b>{data.username}</b>  {content}";
+
+                // 좋아요 아이콘/숫자 처리
+                if (previewLikeIcon != null)
+                {
+                    previewLikeIcon.gameObject.SetActive(true);
+                    // 현재 사용자가 좋아요를 눌렀으면 채워진 하트, 아니면 빈 하트
+                    previewLikeIcon.sprite = data.is_liked ? likedSprite : likeIcon;
+                    previewLikeIcon.color = Color.white;
+                }
+
+                if (previewLikeCount != null)
+                {
+                    // 좋아요 0이면 숫자 표시 안함
+                    previewLikeCount.text = data.like_count > 0 ? data.like_count.ToString() : "";
+                }
+            }
+            else
+            {
+                // 앱 언어로 ('더보기'와 같은 기준 — 예전엔 이 줄만 기기 언어였다)
+                previewText.text = R0926LocalizedText.Say(noCommentTranslations["ko"], noCommentTranslations["en"],
+                    noCommentTranslations["ja"], noCommentTranslations["zh"], noCommentTranslations["es"]);
+                if (previewLikeCount != null) previewLikeCount.text = "";
+                // 댓글 없으면 빈 하트 표시
+                if (previewLikeIcon != null)
+                {
+                    previewLikeIcon.sprite = likeIcon;
+                    previewLikeIcon.color = Color.white;
+                    previewLikeIcon.gameObject.SetActive(true);
+                }
+            }
+        });
+    }
+
     void OnEnable()
     {
         EnhancedTouchSupport.Enable();
+        CommentManager.CommentsChanged += OnCommentsChanged;
     }
 
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
+        CommentManager.CommentsChanged -= OnCommentsChanged;
         if (photosLoading) ReleasePhotos();
 
         // 버튼 리스너 개별 제거 (다른 컴포넌트의 리스너 보호)
@@ -878,55 +934,7 @@ public class DoubleTap3D : MonoBehaviour
                     }
                 }
                 
-                CommentManager.Instance.GetBestComment(this.id, (data) => 
-                {
-                    if (previewText != null)
-                    {
-                        if (data != null)
-                        {
-                            string content = data.content;
-                            if (content.Length > 40)
-                            {
-                                content = content.Substring(0, 40) + "... " + R0926LocalizedText.Say("더보기", "more", "もっと見る", "更多", "más");
-                            }
-                            // 콜론 제거, 띄어쓰기 추가
-                            previewText.text = $"<b>{data.username}</b>  {content}";
-
-                            // 좋아요 아이콘/숫자 처리
-                            if (previewLikeIcon != null)
-                            {
-                                previewLikeIcon.gameObject.SetActive(true);
-                                // 현재 사용자가 좋아요를 눌렀으면 채워진 하트, 아니면 빈 하트
-                                previewLikeIcon.sprite = data.is_liked ? likedSprite : likeIcon;
-                                previewLikeIcon.color = Color.white;
-                            }
-
-                            if (previewLikeCount != null)
-                            {
-                                // 좋아요 0이면 숫자 표시 안함
-                                previewLikeCount.text = data.like_count > 0 ? data.like_count.ToString() : "";
-                            }
-                        }
-                        else
-                        {
-                            string langCode = Application.systemLanguage == SystemLanguage.Korean ? "ko"
-                            : Application.systemLanguage == SystemLanguage.Japanese ? "ja"
-                            : Application.systemLanguage == SystemLanguage.Chinese || Application.systemLanguage == SystemLanguage.ChineseSimplified || Application.systemLanguage == SystemLanguage.ChineseTraditional ? "zh"
-                            : Application.systemLanguage == SystemLanguage.Spanish ? "es"
-                            : "en";
-                        string noCommentMsg = noCommentTranslations.ContainsKey(langCode) ? noCommentTranslations[langCode] : noCommentTranslations["en"];
-                        previewText.text = noCommentMsg;
-                            if (previewLikeCount != null) previewLikeCount.text = "";
-                            // 댓글 없으면 빈 하트 표시
-                            if (previewLikeIcon != null)
-                            {
-                                previewLikeIcon.sprite = likeIcon;
-                                previewLikeIcon.color = Color.white;
-                                previewLikeIcon.gameObject.SetActive(true);
-                            }
-                        }
-                    }
-                });
+                RefreshCommentPreview();
             }
         }
         else
