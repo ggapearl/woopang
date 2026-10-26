@@ -11,6 +11,7 @@ using UnityEngine.UI;
 ///  1) 찾은 AR 보물이 그 자리에서 화면 가운데로 날아온다 — R0926HuntReveal 이 그 보물을 그대로 3D 로 찍는다 (사진·3D 모델도 입은 그대로)
 ///  2) 두근두근 약 3.2초 — 심장처럼 쿵-쿵 부풀며 진동, 점점 세게 떨고, 뚜껑이 두 번 들썩이며 틈으로 빛이 샌다. 화면을 누르면 바로 연다
 ///  3) 짜잔 — 번쩍 · 뚜껑이 활짝(뚜껑 없는 모양은 한 바퀴) · 빛줄기 · 금화·꽃가루 · 강한 진동
+///  글자(두근두근…·짜잔!)는 띄우지 않는다 — 진동과 짜잔의 터치음만 (10-26 대표님)
 ///  4) 상자에서 카드가 솟으며 뒤집혀 앞면 — 금박 카드: 순위 메달(1등은 왕관) · '보물을 찾았습니다!' · 몇 번째 · 게임 이름 · 상품 ·
 ///     주최 · 찾은 시각 · 순위 · 주최자에게 메세지가 갔다는 안내. 반짝임이 훑고 '확인'(안드로이드 뒤로가기도) → 그 게임 상세
 /// 이 컴포넌트는 늘 켜진 빈 틀(HuntCelebrate0926)에 있고 보이는 것은 panel 아래 — Apply(Redesign0926ApplyHuntTreasure)가 만든다.
@@ -25,7 +26,6 @@ public class R0926HuntCelebrate : MonoBehaviour
     [SerializeField] private R0926HuntReveal reveal;
     [SerializeField] private RectTransform rays, rays2, glow;
     [SerializeField] private RectTransform seamGlow;       // 틈으로 새는 빛
-    [SerializeField] private Text caption;                 // 두근두근… · 짜잔!
     [SerializeField] private RectTransform card, cardFront, cardBack;
     [SerializeField] private RectTransform shine;          // 카드를 훑는 반짝임 (RectMask2D 안)
     [SerializeField] private RectTransform seal, crown;
@@ -71,6 +71,7 @@ public class R0926HuntCelebrate : MonoBehaviour
     private Vector2 fromPos;
     private float fromHeight, fromYaw, flashT = 9f, shineT;
     private int huntId, rank, total;
+    private float closedAt = -99f;                       // 마지막으로 닫은 시각 — 늦게 온 같은 보물의 '찾음'을 거른다
     private bool ended;
     private string huntTitle, prize, hostName;
     private System.DateTime foundAt;
@@ -88,6 +89,13 @@ public class R0926HuntCelebrate : MonoBehaviour
     public static bool Show(int id, string title, int rank, int total, bool ended, string prize, string hostName, string kind, string url, R0926HuntChest chest = null, bool locked = false)
     {
         if (instance == null || instance.panel == null) return false;
+        // 같은 보물의 두 번째 '찾음' — AR 두 번 톡톡과 상세의 비밀번호 칸이 거의 같은 때 눌렸거나 답이 늦게 왔다(서버는 같은 순위로 again).
+        // 축하하는 중이거나 막 닫았으면 다시 열지 않는다 (10-26 대표님). id 0 = 게임 없이 띄운 연출
+        if (id > 0 && id == instance.huntId && (Showing || Time.unscaledTime - instance.closedAt < 10f))
+        {
+            if (chest != null) Destroy(chest.gameObject);
+            return true;
+        }
         R0926HuntTreasure.HideToast();   // 남아 있던 '조금만 더 가까이' 같은 알약이 축하 화면 뒤로 비치지 않게
         instance.Begin(id, title, rank, total, ended, prize, hostName, kind, url, chest, locked);
         return true;
@@ -257,7 +265,6 @@ public class R0926HuntCelebrate : MonoBehaviour
         foreach (var p in pieces) p.rt.gameObject.SetActive(false);
         SetGlints(false, null);
         Set(rays, 0f, 0.6f); Set(rays2, 0f, 0.6f); Set(glow, 0f, 0.7f); Set(seamGlow, 0f, 1f);
-        Caption("", 0f, 1f);
         card.gameObject.SetActive(false);
         flashT = 9f;
         Alpha(flash, 0f);
@@ -308,12 +315,8 @@ public class R0926HuntCelebrate : MonoBehaviour
 
             // 2) 두근두근 — 쿵-쿵 · 점점 세게 떨고 · 뚜껑이 들썩이며 틈으로 빛 · 끝에 몰아치듯
             phase = Phase.Suspense;
-            string second = lidded ? T("무엇이 들어 있을까요?", "What's inside?", "何が入っているかな？", "里面会是什么呢？", "¿Qué habrá dentro?")
-                                   : T("과연 어떤 보물일까요?", "What could it be?", "どんな宝かな？", "会是什么宝藏呢？", "¿Qué será?");
-            Caption(T("두근두근…", "Ba-dum, ba-dum…", "ドキドキ…", "怦怦心跳…", "Bum, bum…"), 0f, 1f);
             int lub = 0, dub = 0, slam = 0;
-            float tick = Crescendo, said = 0f;
-            bool swapped = false;
+            float tick = Crescendo;
             for (float s = 0f; s < Suspense; s += Time.unscaledDeltaTime)
             {
                 if (skip)
@@ -358,9 +361,6 @@ public class R0926HuntCelebrate : MonoBehaviour
                 Set(seamGlow, leak, 0.8f + 0.6f * leak);
                 Set(glow, 0.2f + 0.2f * beat + 0.1f * s / Suspense + 0.3f * grow, 0.9f + 0.08f * beat + 0.2f * grow);
 
-                if (!swapped && s >= 1.75f) { swapped = true; said = 0f; Caption(second, 0f, 1f); }
-                said += Time.unscaledDeltaTime;
-                Caption(null, Mathf.Clamp01(said / 0.3f), 1f + 0.05f * beat);
                 if (s >= Suspense - 0.3f) Unlocked();   // 비밀번호를 건 보물 — 짜잔 직전에 딸깍
                 yield return null;
             }
@@ -376,7 +376,6 @@ public class R0926HuntCelebrate : MonoBehaviour
 #if UNITY_EDITOR
             EditorBuzz++;
 #endif
-            Caption(T("짜잔!", "Ta-da!", "じゃーん！", "当当！", "¡Tachán!"), 1f, 1.5f);
             Vector2 mouth = InContent(view, reveal.ViewPoint(new Vector3(0f, seam, 0f)));
             Burst(mouth, 44);
             SetGlints(true, ChestSpots);
@@ -396,7 +395,6 @@ public class R0926HuntCelebrate : MonoBehaviour
                 Set(glow, 0.45f + 0.3f * e, 1f + 0.15f * e);
                 seamGlow.anchoredPosition = InContent(view, reveal.ViewPoint(new Vector3(0f, seam, 0f)));
                 Set(seamGlow, 1f - 0.4f * e, 1.4f + 1.4f * e);
-                Caption(null, 1f, 1f + 0.5f * (1f - Mathf.Clamp01(BackOut(Mathf.Clamp01(t / 0.3f)))));
                 if (k >= 1f) break;
                 yield return null;
             }
@@ -435,7 +433,6 @@ public class R0926HuntCelebrate : MonoBehaviour
             card.localScale = new Vector3(sc * Mathf.Max(0.02f, Mathf.Abs(Mathf.Cos(flip * Mathf.Deg2Rad))), sc, 1f);
             card.localEulerAngles = new Vector3(0f, 0f, Mathf.Lerp(-14f, 0f, e));
             if (view != null) Alpha(view, 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.2f, 0.7f, k)));
-            Caption(null, 1f - Mathf.Clamp01(k * 2f), 1f);
             Set(seamGlow, 0.6f * (1f - k), 2.8f);
             if (k >= 1f) break;
             yield return null;
@@ -636,6 +633,7 @@ public class R0926HuntCelebrate : MonoBehaviour
         SetGlints(false, null);
         phase = Phase.None;
         panel.SetActive(false);
+        closedAt = Time.unscaledTime;
     }
 
     // ── 작은 도구 ───────────────────────────────────────────
@@ -645,17 +643,6 @@ public class R0926HuntCelebrate : MonoBehaviour
         var c = dim.color;
         c.a = 0.85f * k;
         dim.color = c;
-    }
-
-    // text 가 null 이면 글은 그대로 두고 알파·크기만
-    private void Caption(string text, float alpha, float scale)
-    {
-        if (caption == null) return;
-        if (text != null) caption.text = text;
-        var c = caption.color;
-        c.a = alpha;
-        caption.color = c;
-        caption.rectTransform.localScale = Vector3.one * scale;
     }
 
     // view 의 로컬 좌표 → content 좌표

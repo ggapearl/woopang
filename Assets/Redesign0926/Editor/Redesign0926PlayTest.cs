@@ -6092,12 +6092,12 @@ namespace Redesign0926
             Do(() => Click(H + "Detail/Viewport/Content/Join"));
             Sleep(11.0f);   // 참가 → 상세 다시 → 근접 확인(8.5초마다)
             Do(() => log.Add("  250m 밖: " + (Find(H + "Detail/Viewport/Content/Near")?.GetComponent<Text>()?.text ?? "-")));
-            Check(() => !TextOf(H + "Detail/Viewport/Content/Near").Contains("두 번 톡톡") && R0926HuntCard.EditorBuzzes == 0, "250m 밖에서 참가 → 아직 안 보임 · 진동 없음(첫 확인은 기준만)");
+            Check(() => !TextOf(H + "Detail/Viewport/Content/Near").StartsWith("보물이 보이는 거리예요") && R0926HuntCard.EditorBuzzes == 0, "250m 밖에서 참가 → 아직 안 보임 · 진동 없음(첫 확인은 기준만)");
             Do(() => VirtualLocation.Instance.SetCoordinates(huntSpot.x - 0.00009f, huntSpot.y));   // 10m 남쪽 — 상자를 화면에서 누를 수 있게
             Sleep(9.5f);
             Shot("hunt_near");
             Check(() => (Find(H + "Detail/Viewport/Content/Info")?.GetComponent<Text>()?.text ?? "").Contains("참가  1/30명"), "참가 → 상세 1/30명");
-            Check(() => TextOf(H + "Detail/Viewport/Content/Near").Contains("두 번 톡톡"), "보이는 거리 안 → '보물상자를 두 번 톡톡 눌러 열어요'");
+            Check(() => TextOf(H + "Detail/Viewport/Content/Near") == "보물이 보이는 거리예요", "보이는 거리 안 → '보물이 보이는 거리예요' (여는 법 안내 글 없이)");
             Check(() => R0926HuntCard.EditorBuzzes == 1, "보물 자리로 다가감 → 진동 한 번");
             OpenTreasureAR("hunt_celebrate");
             Shot("hunt_found");
@@ -6636,8 +6636,8 @@ namespace Redesign0926
                 var c = Treasure(trHunt1)?.GetComponentInChildren<R0926HuntChest>(true);
                 return c != null && !c.Locked && !c.PadlockShown;
             }, "비밀번호 없는 보물(T1) — 자물쇠 없음");
-            Check(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!" && TextOf("HuntToast0926/Pill/Sub") == "보물상자를 두 번 톡톡 눌러 열어 보세요",
-                "처음 보이면 상태 알약 아래 알림 '보물이 근처에 있어요!'");
+            Check(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!" && !Active("HuntToast0926/Pill/Sub"),
+                "처음 보이면 상태 알약 아래 알림 '보물이 근처에 있어요!' 한 줄 (여는 법 안내 글 없이)");
             Check(() =>
             {
                 var pill = Find("HuntToast0926/Pill") as RectTransform;
@@ -6692,11 +6692,13 @@ namespace Redesign0926
                 return (bool)check.Invoke(sw, new object[] { R0926HuntTreasure.SpawnedObjects.Values, Camera.main.transform.position });
             }, "하늘 날씨: 60m 안 화면의 보물을 가까운 오브젝트로 침");
 
-            // 한 번만 누르면 여는 법 안내 · 45m 에서 두 번 톡톡 → '조금만 더 가까이' (판정 거리 30m)
+            // 한 번만 누르면 살짝 커졌다 돌아오기만 (여는 법 안내 글 없음) · 45m 에서 두 번 톡톡 → '조금만 더 가까이' (판정 거리 30m)
             TapTreasure(() => trHunt1);
-            Wait(() => TextOf("HuntToast0926/Pill/Title") == "두 번 톡톡 누르면 보물이 열려요", 4f, "한 번 누름 → 여는 법");
-            Check(() => TextOf("HuntToast0926/Pill/Title") == "두 번 톡톡 누르면 보물이 열려요" && R0926HuntTreasure.Tracking(trHunt1) && Treasure(trHunt1) != null,
-                "한 번만 누르면 '두 번 톡톡 누르면 보물이 열려요' · 열리지 않음");
+            Sleep(0.9f);
+            Do(() => log.Add("  한 번 누른 뒤 알림: " + (Active("HuntToast0926") ? TextOf("HuntToast0926/Pill/Title") : "없음")));
+            Check(() => !TextOf("HuntToast0926/Pill/Title").Contains("톡톡") && !TextOf("HuntToast0926/Pill/Sub").Contains("톡톡")
+                        && R0926HuntTreasure.Tracking(trHunt1) && Treasure(trHunt1) != null,
+                "한 번만 누르면 — 여는 법 안내 글 없이 · 열리지 않음");
             Sleep(0.6f);
             DoubleTapTreasure(() => trHunt1);
             Wait(() => TextOf("HuntToast0926/Pill/Title") == "조금만 더 가까이", 6f, "45m 두 번 톡톡 → 조금만 더");
@@ -6727,6 +6729,11 @@ namespace Redesign0926
             }, "찾음 → AR 의 그 보물상자를 떼어 축하 화면으로 (보이던 자리에서 날아옴 · 박스·화살표·누르는 상자는 떼고 · AR 에는 안 남음)");
             Sleep(1.2f);
             Shot("treasure_reveal_suspense");   // 두근두근
+            Do(() => log.Add("  두근두근 중 글자: " + (StageWords(C) == "" ? "없음" : StageWords(C))));
+            Check(() => StageWords(C) == "" && Find(C + "Caption") == null, "두근두근 — 글자 없이 (진동·소리만)");
+            Do(() => R0926HuntCelebrate.Show(trHunt1, T1Title, 1, 1, false, Prize, "dup", "chest", null));   // 거의 같은 때 누른 두 번째 '찾음'
+            Check(() => R0926HuntCelebrate.Showing && R0926HuntCelebrate.EditorPhase == "Suspense" && RevealChest() != null,
+                "축하 중에 같은 보물의 '찾음'이 또 와도 처음부터 다시 열지 않음");
             Wait(() => R0926HuntCelebrate.EditorPhase == "Open", 5f, "두근두근 → 짜잔");
             Sleep(0.15f);
             Shot("treasure_reveal_open");
@@ -6743,6 +6750,10 @@ namespace Redesign0926
             Check(() => !R0926HuntTreasure.Tracking(trHunt1) && !R0926HuntTreasure.SpawnedObjects.ContainsKey("hunt_" + trHunt1), "찾음 → 그만 지켜봄");
             Check(() => RevealChest() == null && GameObject.Find("HuntRevealStage") == null && PrefLine(trHunt1) == null, "카드가 다 가리면 3D 보물·카메라를 치움 · 기기 기록에서도 지움");
             Do(() => Click(C + "OK"));
+            Wait(() => !R0926HuntCelebrate.Showing, 2f, "확인 → 축하 화면 닫힘");
+            Do(() => R0926HuntCelebrate.Show(trHunt1, T1Title, 1, 1, false, Prize, "dup", "chest", null));   // 답이 늦게 온 두 번째 '찾음'
+            Sleep(0.3f);
+            Check(() => !R0926HuntCelebrate.Showing, "막 닫은 보물의 늦게 온 '찾음' — 축하 화면을 다시 열지 않음");
             Wait(() => Active(H + "Detail") && DetailTitle().Contains(T1Title), 12f, "확인 → 그 게임 상세");
             Sleep(1.2f);
             Shot("treasure_found_detail");
@@ -7009,6 +7020,8 @@ namespace Redesign0926
             Shot("reveal_peek");
             watch(1.45f, rec);
             Shot("reveal_crescendo");
+            Do(() => log.Add("  두근두근 중 글자: " + (StageWords(C) == "" ? "없음" : StageWords(C))));
+            Check(() => StageWords(C) == "" && Find(C + "Caption") == null, "두근두근 — 글자 없이 (진동·소리만)");
             watch(0.2f, rec);
             Wait(() => R0926HuntCelebrate.EditorPhase == "Open", 3f, "두근두근 → 짜잔");
             Do(() => log.Add("  두근두근: 뚜껑 가장 크게 " + hcLidMax.ToString("0.0") + "° · 가장 크게 떤 " + hcRollMax.ToString("0.0") + "° · 가장 크게 부푼 "
@@ -7021,6 +7034,7 @@ namespace Redesign0926
             Shot("reveal_open");
             Sleep(0.25f);
             Shot("reveal_open_wide");
+            Check(() => StageWords(C) == "", "짜잔 — 글자 없이");
             Check(() =>
             {
                 var c = RevealChest();
@@ -7528,6 +7542,17 @@ namespace Redesign0926
         }
 
         private static float hcLockSwing;
+        // 축하 화면 연출 중 보이는 글자 (카드 · 확인 버튼 말고) — 두근두근·짜잔 글자는 10-26 에 없앴다
+        private static string StageWords(string content)
+        {
+            var root = Find(content.TrimEnd('/'));
+            if (root == null) return "-";
+            var card = root.Find("Card"); var ok = root.Find("OK");
+            var words = new List<string>();
+            foreach (var t in root.GetComponentsInChildren<Text>(false))
+                if ((card == null || !t.transform.IsChildOf(card)) && (ok == null || !t.transform.IsChildOf(ok)) && t.text.Trim().Length > 0) words.Add(t.text);
+            return string.Join(" · ", words);
+        }
         // 보물찾기 처음 화면 목록 — 그 제목 줄의 자물쇠 (-1 줄 없음 · 0 없음 · 1 있음)
         private static int HubRowLock(string title)
         {
@@ -7695,12 +7720,23 @@ namespace Redesign0926
                 if (tr == null || c == null || cam == null) { tr = null; log.Add("  누를 보물 없음"); return; }
                 Vector3 s = cam.WorldToScreenPoint(c.bounds.center);
                 p = new Vector2(s.x, s.y);
+                CoverLog(p);
                 tr.EditorFeed(true, p);   // 에디터에선 넣은 마우스 이벤트가 기기에 닿지 않는다 — 스와이프 시험처럼 직접 넣는다
             });
             Sleep(0.15f);
             Do(() => { if (tr != null) tr.EditorFeed(false, p); });
             Sleep(0.2f);
         }
+        // 누를 자리를 UI 가 덮었으면 적는다 (덮였으면 보물이 아니라 그 UI 를 누른다)
+        private static void CoverLog(Vector2 p)
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es == null) return;
+            var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+            es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = p }, hits);
+            if (hits.Count > 0) log.Add("  누를 자리를 덮은 UI: " + PathOf(hits[0].gameObject.transform));
+        }
+        private static string PathOf(Transform t) => t == null ? "" : t.parent == null ? t.name : PathOf(t.parent) + "/" + t.name;
         // 두 번 톡톡 — 0.45초 안에 같은 상자를 두 번 (한 단계 안에서 누르고 떼고를 두 번 — 단계 사이 시간이 들쭉날쭉해도 창을 넘지 않게)
         private static void DoubleTapTreasure(Func<int> id)
         {
@@ -7711,6 +7747,7 @@ namespace Redesign0926
                 if (tr == null || c == null || cam == null) { log.Add("  누를 보물 없음"); return; }
                 Vector3 s = cam.WorldToScreenPoint(c.bounds.center);
                 var p = new Vector2(s.x, s.y);
+                CoverLog(p);
                 for (int i = 0; i < 2; i++) { tr.EditorFeed(true, p); tr.EditorFeed(false, p); }
             });
             Sleep(0.2f);
@@ -8283,7 +8320,7 @@ namespace Redesign0926
             Do(() => { var v = VirtualLocation.Instance; v.SetCoordinates(v.Latitude - 0.00009f, v.Longitude); });   // 10m 물러나 — 상자를 화면에서 누를 수 있게
             Do(() => Click(H + "Detail/Viewport/Content/Join"));
             Sleep(11.0f);   // 참가 → 상세 다시 → 근접 확인(8.5초마다)
-            Check(() => TextOf(H + "Detail/Viewport/Content/Near").Contains("두 번 톡톡"), "보이는 거리 안 → '두 번 톡톡 눌러 열어요'");
+            Check(() => TextOf(H + "Detail/Viewport/Content/Near") == "보물이 보이는 거리예요", "보이는 거리 안 → '보물이 보이는 거리예요'");
             OpenTreasureAR("login_celebrate");
             Shot("login_found");
             Do(() => log.Add("  내 상태: " + (Find(H + "Detail/Viewport/Content/Mine")?.GetComponent<Text>()?.text ?? "-")));

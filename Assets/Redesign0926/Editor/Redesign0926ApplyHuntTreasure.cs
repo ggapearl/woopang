@@ -108,11 +108,11 @@ namespace Redesign0926
 
             var content = FindOrCreate(panel.transform, "Content");
             SetRect(RT(content), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1440, 1800));
-            // 10-26: 그림 상자(Stage 의 ChestBody·ChestLid) · 글 칸(Info) → 3D 보물(ChestView) + 카드(Card)
-            foreach (var oldName in new[] { "Stage", "Info" })
+            // 10-26: 그림 상자(Stage 의 ChestBody·ChestLid) · 글 칸(Info) → 3D 보물(ChestView) + 카드(Card) / 두근두근·짜잔 글자(Caption) 없앰
+            foreach (var oldName in new[] { "Stage", "Info", "Caption" })
             {
                 var old = content.transform.Find(oldName);
-                if (old != null) { Object.DestroyImmediate(old.gameObject); log.Add("축하 화면: 예전 " + oldName + " 지움 → 3D 보물 + 카드"); }
+                if (old != null) { Object.DestroyImmediate(old.gameObject); log.Add("축하 화면: 예전 " + oldName + " 지움"); }
             }
             GameObject Layer(Transform parent, string name, Sprite sp, Color c, Vector2 pos, Vector2 size)
             {
@@ -151,10 +151,6 @@ namespace Redesign0926
             raw.enabled = false;
             EditorUtility.SetDirty(raw);
             var seamGlow = Layer(content.transform, "SeamGlow", Spr("r0926_glow"), new Color(1f, 0.88f, 0.55f, 0f), new Vector2(0, CelebrateChestY), new Vector2(360, 360));
-            var caption = Label(content.transform, "Caption", new Vector2(0, CelebrateChestY - 470), new Vector2(1240, 110), 66, HuntGold, TextAnchor.MiddleCenter, FontStyle.Bold, 44);
-            var cs = Ensure<Shadow>(caption.gameObject);
-            cs.effectColor = new Color(0f, 0f, 0f, 0.55f); cs.effectDistance = new Vector2(0, -4);
-            EditorUtility.SetDirty(cs);
 
             // 카드 — 금박 9분할 (가장자리 150px → 96 단위). 뒷면은 메달에 '?', 앞면이 결과. 캔버스 폭(기준 1440×3200 · 휴대폰 약 1460)의 84%
             var card = FindOrCreate(content.transform, "Card");
@@ -257,7 +253,7 @@ namespace Redesign0926
             var fx = FindOrCreate(content.transform, "Fx");
             SetRect(RT(fx), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             int order = 0;
-            foreach (var g in new[] { back, chestView, seamGlow, caption.gameObject, card, ok, fx }) g.transform.SetSiblingIndex(order++);
+            foreach (var g in new[] { back, chestView, seamGlow, card, ok, fx }) g.transform.SetSiblingIndex(order++);
             var flash = FindOrCreate(panel.transform, "Flash");
             Stretch(RT(flash));
             var flashImg = Img(flash, null, new Color(1f, 1f, 1f, 0f), Image.Type.Simple);
@@ -281,7 +277,6 @@ namespace Redesign0926
             so.FindProperty("rays2").objectReferenceValue = RT(rays2);
             so.FindProperty("glow").objectReferenceValue = RT(glow);
             so.FindProperty("seamGlow").objectReferenceValue = RT(seamGlow);
-            so.FindProperty("caption").objectReferenceValue = caption;
             so.FindProperty("card").objectReferenceValue = RT(card);
             so.FindProperty("cardFront").objectReferenceValue = RT(front);
             so.FindProperty("cardBack").objectReferenceValue = RT(cardBack);

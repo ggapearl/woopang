@@ -17,7 +17,7 @@ using UnityEngine.XR.ARSubsystems;
 /// 보물찾기 AR 보물 — 참가 중인 게임(내가 연 게임도)의 보물에 '보이는 거리'까지 다가가면 그 자리에 보물상자(R0926HuntChest)를 띄운다.
 ///  · 근접 확인(/near)이 보인다고 할 때만 서버가 보물 좌표를 준다 — 그 자리에 지오스페이셜 앵커로 놓는다 (높이는 휴대폰보다 조금 아래)
 ///  · 상자나 그 박스·화살표를 두 번 톡톡 누르면 찾기(/claim): 찾음 → 그 상자가 축하 화면(R0926HuntCelebrate)으로 날아가 두근두근 떨다 열린다 → 그 게임 상세 · 조금 더 가까이 ·
-///    코드 게임 → 상세의 코드 칸 · 먼저 찾음 · 끝남. 한 번만 누르면 '두 번 톡톡' 안내 (10-14 대표님: '보물 열기' 버튼 대신 더블터치)
+///    비밀번호 게임 → 상세의 비밀번호 칸 · 먼저 찾음 · 끝남 (10-14 대표님: '보물 열기' 버튼 대신 더블터치 · 10-26: 여는 법 안내 글은 띄우지 않는다)
 ///  · 주최자는 참가는 못 해도 자기 보물은 보인다 — 누르면 '내가 숨긴 보물'이라고만 알린다 (10-14 대표님)
 ///  · 지켜볼 게임은 카드가 알려 준다(상세 · 처음 화면의 참가·주최 목록). 기기에 적어 두어 앱을 다시 켜도 이어 보고,
 ///    나가기 · 찾음 · 끝남 · 참가 아님이면 지운다. 설정에서 보물찾기 참여를 끄거나 로그아웃하면 띄우지 않는다
@@ -198,11 +198,7 @@ public class R0926HuntTreasure : MonoBehaviour
     private void Update()
     {
         if (toastCo != null && !toastFading && Covered()) { StopCoroutine(toastCo); toastCo = StartCoroutine(FadeToast(8f)); }   // 창의 탭·제목을 가리지 않게 (찾은 뒤 상세 등)
-        if (tapId != 0 && Time.unscaledTime - tapAt > DoubleTap)
-        {
-            tapId = 0;   // 한 번만 눌렀다 — 여는 법을 알려 준다
-            Say(T("두 번 톡톡 누르면 보물이 열려요", "Double-tap to open the treasure", "2回タップすると宝が開きます", "双击即可打开宝藏", "Toca dos veces para abrir el tesoro"), null, 2.5f);
-        }
+        if (tapId != 0 && Time.unscaledTime - tapAt > DoubleTap) tapId = 0;   // 한 번만 눌렀다 — 살짝 커졌다 돌아오기만
         Load();
         if (hunts.Count == 0) return;
         Pointer();
@@ -219,7 +215,7 @@ public class R0926HuntTreasure : MonoBehaviour
             {
                 t.announce = false;
                 if (t.host) Say(T("내가 숨긴 보물이 보여요", "Your treasure is in view", "自分が隠した宝が見えます", "看到了你藏的宝藏", "Tu tesoro está a la vista"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 4f);
-                else Say(T("보물이 근처에 있어요!", "Treasure nearby!", "宝が近くにあります！", "宝藏就在附近！", "¡Tesoro cerca!"), T("보물상자를 두 번 톡톡 눌러 열어 보세요", "Double-tap the treasure chest to open it", "宝箱を2回タップして開けてみましょう", "双击宝箱打开看看", "Toca dos veces el cofre para abrirlo"), 4f);
+                else Say(T("보물이 근처에 있어요!", "Treasure nearby!", "宝が近くにあります！", "宝藏就在附近！", "¡Tesoro cerca!"), null, 4f);
             }
         }
         if (!on) return;

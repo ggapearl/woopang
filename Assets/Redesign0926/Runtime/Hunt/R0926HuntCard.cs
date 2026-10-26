@@ -922,7 +922,7 @@ public class R0926HuntCard : MonoBehaviour
                                       : T("내가 연 게임이에요", "You're the host", "あなたが主催したゲームです", "这是你主办的游戏", "Organizas este juego"))
                        : found ? T(me["rank"].AsInt + "번째로 찾았어요!", "You found it (#" + me["rank"].AsInt + ")", me["rank"].AsInt + "番目に見つけました！", "你第 " + me["rank"].AsInt + " 个找到了！", "¡Lo encontraste! (#" + me["rank"].AsInt + ")")
                        : me["gave_up"].AsBool ? T("못 찾았다고 남겼어요", "You marked it as not found", "見つけられなかったと記録しました", "已标记为未找到", "Lo marcaste como no encontrado")
-                       : joined ? T("참가 중이에요 — 보물 근처에 가면 보물상자가 보여요. 두 번 톡톡 눌러 열어요", "Joined — get close, then double-tap the treasure chest", "参加中です — 宝に近づくと宝箱が見えます。2回タップして開けましょう", "已参加 — 走近宝藏会看到宝箱，双击即可打开", "Participando — acércate y toca dos veces el cofre")
+                       : joined ? T("참가 중이에요 — 보물 근처에 가면 보물상자가 보여요", "Joined — the treasure chest shows up when you get close", "参加中です — 宝に近づくと宝箱が見えます", "已参加 — 走近宝藏会看到宝箱", "Participando — verás el cofre cuando estés cerca")
                        : open && full ? T("참가 인원이 다 찼어요 — 누가 나가면 자리가 생겨요", "This game is full — a spot opens if someone leaves", "参加人数がいっぱいです — 誰かが抜けると空きが出ます", "参加人数已满 — 有人退出就会空出名额", "Este juego está completo — habrá sitio si alguien sale")
                        : "";
         PaintDistance();
@@ -1028,7 +1028,7 @@ public class R0926HuntCard : MonoBehaviour
                         : band == "1km" ? T("1km 안", "Within 1km", "1km以内", "1km 以内", "A menos de 1km")
                         : T("아직 멀어요", "Still far", "まだ遠いです", "还很远", "Aún lejos");
         if (j.HasKey("distance_m")) bandText += " · " + Dist(j["distance_m"].AsFloat);
-        if (visible) bandText = T("보물이 보이는 거리예요 — 보물상자를 두 번 톡톡 눌러 열어요", "In view — double-tap the treasure chest to open it", "宝が見える距離です — 宝箱を2回タップして開けましょう", "已进入可见范围 — 双击宝箱即可打开", "A la vista — toca dos veces el cofre para abrirlo");
+        if (visible) bandText = T("보물이 보이는 거리예요", "In view", "宝が見える距離です", "已进入可见范围", "A la vista");
         if (dNear != null) { dNear.text = bandText; dNear.color = visible ? Gold : Ink; }
         // 가까워지면 진동 — 단계가 한 칸이라도 가까워질 때만 (상세를 연 뒤 첫 확인은 기준만 잡는다 · 설정에서 끌 수 있다)
         int rank = visible ? 5 : band == "30m" ? 4 : band == "100m" ? 3 : band == "300m" ? 2 : band == "1km" ? 1 : 0;
