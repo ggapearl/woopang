@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-26b';
+  const WEB_VERSION = '2026-10-26c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -206,6 +206,20 @@
   function openLink(url) {
     if (Native) Native.openExternal({ url }).catch(e => toast(e.message || '열 수 없어요'));
     else window.open(url, '_blank', 'noopener');
+  }
+
+  /** 내려받기 (2026-10-26) — 서버가 Content-Disposition: attachment 로 주는 주소(?dl=1)를 기기 브라우저가 받는다.
+   *  앱 안(웹뷰)은 파일 저장을 못 해서 기본 브라우저로 넘기고, 브라우저는 <a download> 로 바로 받는다. 효딩쓰 문서 주소(/AI/doc/)만. */
+  function downloadFile(url, name) {
+    if (!url) return;
+    if (!/\/AI\/doc\//.test(url)) { openLink(url); return; }
+    const u = url + (url.includes('?') ? '&' : '?') + 'dl=1';
+    toast('내려받는 중이에요');
+    if (Native) { Native.openExternal({ url: u }).catch(e => toast(e.message || '받을 수 없어요')); return; }
+    const a = h('a', { href: u, download: name || '', rel: 'noopener', style: 'display:none' });
+    document.body.append(a);
+    a.click();
+    a.remove();
   }
 
   const sleep = (ms, signal) => new Promise(res => {
@@ -1207,6 +1221,7 @@
     phone: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2.5" width="8" height="15" rx="2"/><path d="M9 14.5h2"/></svg>',
     pc: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/></svg>',
     micSm: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5v3"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 19h14"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>',
     inbox: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5l1.8-6.2A1.5 1.5 0 0 1 6.2 4.2h7.6a1.5 1.5 0 0 1 1.4 1.1L17 11.5V15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15z"/><path d="M3 11.5h4l1 2h4l1-2h4"/><path d="M7.8 7.7l1.6 1.6 2.9-2.9"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
@@ -2513,6 +2528,10 @@
         h('div', { class: 'dtx' },
           h('b', { text: it.title || '(제목 없음)' }),
           h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
+        files.length === 1 && files[0].url
+          ? h('button', { class: 'dl-btn', 'aria-label': '내려받기', html: ICON.download,
+              onclick: ev => { ev.stopPropagation(); sfx.play('tap'); downloadFile(files[0].url, files[0].name); } })
+          : null,
         files.length > 1 ? svg('chev') : null);
     }
 
@@ -2857,7 +2876,9 @@
       h('div', { class: 'vw-top' },
         h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
-        h('button', { class: 'vw-btn text', text: '공유', onclick: share })),
+        h('div', { class: 'vw-acts' },
+          h('button', { class: 'vw-btn text', text: '저장', onclick: () => downloadFile(list[idx].url, list[idx].name) }),
+          h('button', { class: 'vw-btn text', text: '공유', onclick: share }))),
       h('div', { class: 'vw-stage' }, track, prev, next),
       h('div', { class: 'vw-foot' }, nameEl, h('button', { class: 'vw-open', text: '브라우저로 열기', onclick: () => openLink(list[idx].url) })));
 
