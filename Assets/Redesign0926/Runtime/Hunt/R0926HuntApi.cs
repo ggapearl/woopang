@@ -12,6 +12,9 @@ using UnityEngine.Networking;
 /// </summary>
 public static class R0926HuntApi
 {
+    /// <summary>비밀번호를 건 보물의 비밀번호 글자 수 (서버 CODE_LEN 과 같다)</summary>
+    public const int CodeLen = 4;
+
 #if UNITY_EDITOR
     /// <summary>플레이 시험이 시험 서버로 돌릴 때 (비어 있으면 실제 서버)</summary>
     public static string EditorBase;
@@ -113,7 +116,8 @@ public static class R0926HuntApi
             case "daily_limit": return L("오늘은 3개까지 숨길 수 있어요", "Up to 3 games a day", "1日に隠せるのは3つまでです", "每天最多可藏 3 个", "Hasta 3 juegos al día");
             case "open_limit": return L("진행·예약 중인 게임은 2개까지예요", "Up to 2 open games at a time", "進行中・予約中のゲームは2つまでです", "进行中或预约中的游戏最多 2 个", "Hasta 2 juegos abiertos a la vez");
             case "title": return L("제목을 써 주세요", "Please add a title", "タイトルを入力してください", "请填写标题", "Añade un título");
-            case "code": return L("찾는 사람이 넣을 코드를 써 주세요", "Please set the code to enter", "見つける人が入力するコードを設定してください", "请设置寻宝者要输入的代码", "Define el código que deben introducir");
+            case "code": return L("비밀번호는 4자로 정해 주세요", "Set a 4-character password", "パスワードは4文字で設定してください", "请设置 4 个字符的密码", "La contraseña debe tener 4 caracteres");
+            case "question": return L("비밀번호를 건 보물엔 힌트를 꼭 써 주세요", "A password-locked treasure needs a hint", "パスワード付きの宝にはヒントが必要です", "设置了密码的宝藏必须填写提示", "Un tesoro con contraseña necesita una pista");
             case "out_of_range": return L("참가 범위 밖이에요", "You're outside the game area", "参加範囲の外です", "你不在参加范围内", "Estás fuera del área del juego");
             case "friends_only": return L("맞팔 친구만 참가할 수 있어요", "Mutual friends only", "相互フォローの友だちだけが参加できます", "仅限互相关注的好友参加", "Solo amigos mutuos");
             case "join_code": return L("참가 코드가 맞지 않아요", "Wrong join code", "参加コードが違います", "参加代码不正确", "Código de acceso incorrecto");

@@ -378,11 +378,25 @@ namespace Redesign0926
                 lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 lr.receiveShadows = false;
 
+                // 비밀번호를 건 보물 — 앞에 매다는 자물쇠 (꺼 둔다 · R0926HuntChest.Lock 이 켜고 Unlock 이 풀어 떨군다)
+                var padT = chest.transform.Find("Padlock");
+                var pad = padT != null ? padT.gameObject : new GameObject("Padlock");
+                pad.transform.SetParent(chest.transform, false);
+                var first = parts.skins[0];
+                pad.transform.localPosition = first.lockPos;
+                pad.transform.localRotation = Quaternion.Euler(first.lockTilt, 0f, 0f);
+                pad.transform.localScale = Vector3.one * first.lockScale;
+                LockPart(pad.transform, "Body", parts.lockBody, new[] { parts.steel, parts.gold, parts.trim }, Vector3.zero);
+                var shackle = LockPart(pad.transform, "Shackle", parts.lockShackle, new[] { parts.steel }, new Vector3(-ShackleR, 0f, 0f));
+                pad.SetActive(false);
+
                 // 제자리에서 천천히 돈다 — 위아래로 떠다니지 않게 (10-14 대표님: '위아래로 움직이지? 제자리에 가만히')
                 var box = Ensure<R0926HuntChest>(chest);
                 var cso = new SerializedObject(box);
                 cso.FindProperty("lid").objectReferenceValue = lid.transform;
                 cso.FindProperty("spinSpeed").floatValue = 24f;
+                cso.FindProperty("padlock").objectReferenceValue = pad.transform;
+                cso.FindProperty("shackle").objectReferenceValue = shackle;
                 var skins = cso.FindProperty("skins");   // 주최자가 고르는 모양 (Redesign0926ApplyHuntChest.ChestSkins)
                 skins.arraySize = parts.skins.Count;
                 for (int i = 0; i < parts.skins.Count; i++)
@@ -398,6 +412,9 @@ namespace Redesign0926
                     e.FindPropertyRelative("seam").floatValue = s.seam;
                     e.FindPropertyRelative("boxCenter").vector3Value = s.boxCenter;
                     e.FindPropertyRelative("boxSize").vector3Value = s.boxSize;
+                    e.FindPropertyRelative("lockPos").vector3Value = s.lockPos;
+                    e.FindPropertyRelative("lockTilt").floatValue = s.lockTilt;
+                    e.FindPropertyRelative("lockScale").floatValue = s.lockScale;
                 }
                 cso.ApplyModifiedPropertiesWithoutUndo();
 
@@ -429,6 +446,23 @@ namespace Redesign0926
                 PrefabUtility.UnloadPrefabContents(rootGo);
             }
             return AssetDatabase.LoadAssetAtPath<GameObject>(TreasurePrefabPath);
+        }
+
+        // 자물쇠 한 조각 — 누르기 상자는 없다 (보물의 누르기 상자가 받는다)
+        private static Transform LockPart(Transform parent, string name, Mesh mesh, Material[] mats, Vector3 pos)
+        {
+            var t = parent.Find(name);
+            var go = t != null ? t.gameObject : new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
+            Ensure<MeshFilter>(go).sharedMesh = mesh;
+            var r = Ensure<MeshRenderer>(go);
+            r.sharedMaterials = mats;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            return go.transform;
         }
 
         private static void SetMaterials(SerializedProperty list, Material[] mats)

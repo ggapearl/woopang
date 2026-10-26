@@ -30,6 +30,7 @@ public static class R0926HuntList
         public float approxM;     // Approx: 원 반지름
         public float bandM;       // Hidden: 굵은 거리의 끝 (1km · 5km · 20km)
         public float bandFromM;   // Hidden: 굵은 거리의 시작 — 거리 슬라이더가 이보다 크면 목록에 넣는다
+        public bool locked;       // 비밀번호를 건 보물 — 목록 그림에 자물쇠
     }
 
     /// <summary>목록 줄 이름 앞의 금빛 상자 색 (글자 줄의 색 — 그림이 대신하지만 원본 글자에도 남긴다)</summary>
@@ -47,7 +48,7 @@ public static class R0926HuntList
     {
         public int id;
         public string title, prize;
-        public bool live, joined, official;
+        public bool live, joined, official, locked;
         public float meters;          // 정확히 · 대략 공개 게임의 거리 — 비공개면 -1
         public float bandM;           // 비공개 게임의 굵은 거리 끝 (1km · 5km · 20km) — 모르면 0
         public int players, maxPlayers;   // maxPlayers 0 = 제한 없음
@@ -139,6 +140,7 @@ public static class R0926HuntList
         n.live = st == "live";
         n.joined = joined;
         n.official = h["official"].AsBool;
+        n.locked = h["mode"] == "code";
         n.meters = Has(h, "distance_m") ? h["distance_m"].AsFloat : -1f;
         n.bandM = n.meters < 0f ? BandKm(h["distance_text"]) * 1000f : 0f;
         n.players = h["participants"].AsInt;
@@ -168,7 +170,7 @@ public static class R0926HuntList
         sb.Length = 0;
         if (list != null)
             foreach (var n in list)
-                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined)
+                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined).Append(n.locked)
                   .Append('|').Append(Mathf.RoundToInt(n.meters / 10f)).Append('|').Append(n.bandM).Append('|').Append(n.players).Append('/').Append(n.maxPlayers)
                   .Append('|').Append(n.startsAt.Ticks).Append(';');
         string now = sb.ToString();
@@ -193,7 +195,7 @@ public static class R0926HuntList
     {
         // 목록은 한 줄에 한 곳 — 제목의 줄바꿈은 띄어쓰기로
         string title = ((string)h["title"] ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
-        s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro") };
+        s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro"), locked = h["mode"] == "code" };
         if (Has(h, "lat") && Has(h, "lon"))
         {
             s.coord = Coord.Exact;
@@ -228,7 +230,7 @@ public static class R0926HuntList
             foreach (var s in list)
                 sb.Append(s.id).Append('|').Append(s.title).Append('|').Append((int)s.coord).Append('|')
                   .Append(s.lat.ToString("F6", CultureInfo.InvariantCulture)).Append('|').Append(s.lon.ToString("F6", CultureInfo.InvariantCulture))
-                  .Append('|').Append(s.approxM).Append('|').Append(s.bandM).Append(';');
+                  .Append('|').Append(s.approxM).Append('|').Append(s.bandM).Append('|').Append(s.locked).Append(';');
         string now = sb.ToString();
         if (now == sig) return;
         sig = now;

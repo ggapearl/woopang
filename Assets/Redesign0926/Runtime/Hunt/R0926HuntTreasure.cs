@@ -56,6 +56,7 @@ public class R0926HuntTreasure : MonoBehaviour
         public bool spot;            // 서버가 보물 자리를 줬다 (보이는 거리 안)
         public double lat, lon;
         public string kind, url;     // 보물 모양 (주최자가 고름 — 사진·3D 모델은 url)
+        public bool locked;          // 비밀번호를 건 보물 — 앞에 자물쇠
         public bool announce;        // 처음 보였을 때 알림 (카드 상세가 보는 중이면 카드가 이미 알린다)
         public GameObject obj;
     }
@@ -108,6 +109,8 @@ public class R0926HuntTreasure : MonoBehaviour
         if (h.HasKey("prize")) t.prize = h["prize"];
         if (h["host"].HasKey("username")) t.hostName = h["host"]["username"];
         t.startsAt = status == "scheduled" ? Unix(h["starts_at"]) : 0;
+        t.locked = h["mode"] == "code";
+        Chest(t)?.Lock(t.locked);
         Save();
     }
 
@@ -262,7 +265,9 @@ public class R0926HuntTreasure : MonoBehaviour
                 t.lon = j["object"]["lon"].AsDouble;
                 t.kind = j["object"]["kind"];
                 t.url = j["object"]["url"];
+                if (j["object"].HasKey("lock")) t.locked = j["object"]["lock"].AsBool;
                 Chest(t)?.Dress(t.kind, t.url);
+                Chest(t)?.Lock(t.locked);
                 if (!t.spot) t.announce = own;
                 t.spot = true;
             }
@@ -302,6 +307,7 @@ public class R0926HuntTreasure : MonoBehaviour
         t.obj = go;
         SpawnedObjects["hunt_" + t.id] = go;
         Chest(t)?.Dress(t.kind, t.url);
+        Chest(t)?.Lock(t.locked);
     }
 
     private static bool Altitude(out double alt)
@@ -475,7 +481,7 @@ public class R0926HuntTreasure : MonoBehaviour
                     Save();
                 }
                 // 축하 화면 — 두근두근 · 짜잔 · 카드(상품 · 몇 번째 · 주최자에게 간 메세지). '확인'을 누르면 그 게임 상세(결과 · 주최자에게 한마디)
-                if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, t.prize, t.hostName, t.kind, t.url, live))
+                if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, t.prize, t.hostName, t.kind, t.url, live, t.locked))
                 {
                     if (live != null) Destroy(live.gameObject);
                     Say(T("보물을 찾았어요!", "You found it!", "宝を見つけました！", "找到宝藏了！", "¡Lo encontraste!"), T(j["rank"].AsInt + "번째로 찾았어요", "You're #" + j["rank"].AsInt, j["rank"].AsInt + "番目に見つけました", "你是第 " + j["rank"].AsInt + " 个找到的", "Puesto #" + j["rank"].AsInt), 3.5f);
@@ -484,7 +490,8 @@ public class R0926HuntTreasure : MonoBehaviour
                 }
                 break;
             case "need_code":
-                Say(T("코드를 넣어 주세요", "Enter the code", "コードを入力してください", "请输入代码", "Introduce el código"), Short(j["question"]), 3.5f);
+                Chest(t)?.Jiggle();   // 자물쇠가 대롱
+                Say(T("비밀번호를 넣어 주세요", "Enter the password", "パスワードを入力してください", "请输入密码", "Introduce la contraseña"), Short(j["question"]), 3.5f);
                 claiming = true;                                   // 상세가 열릴 때까지 다시 누르지 않게
                 yield return new WaitForSecondsRealtime(1.2f);
                 claiming = false;
@@ -501,7 +508,7 @@ public class R0926HuntTreasure : MonoBehaviour
                 Say(T("내가 숨긴 보물이에요", "This is your treasure", "自分が隠した宝です", "这是你藏的宝藏", "Este es tu tesoro"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 3f);
                 break;
             case "not_joined": Say(R0926HuntApi.ErrorText(result, Lang), null, 3f); Untrack(id); break;
-            case "locked": Say(T("10분 동안 코드를 넣을 수 없어요", "Code locked for 10 minutes", "10分間コードを入力できません", "10 分钟内无法输入代码", "Código bloqueado 10 minutos"), null, 3f); break;
+            case "locked": Chest(t)?.Jiggle(); Say(T("10분 동안 비밀번호를 넣을 수 없어요", "Password locked for 10 minutes", "10分間パスワードを入力できません", "10 分钟内无法输入密码", "Contraseña bloqueada 10 minutos"), null, 3f); break;
             default: Say(R0926HuntApi.ErrorText(result ?? j["error"], Lang), null, 3f); break;
         }
     }

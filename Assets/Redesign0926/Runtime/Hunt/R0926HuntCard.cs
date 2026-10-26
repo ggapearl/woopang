@@ -128,7 +128,7 @@ public class R0926HuntCard : MonoBehaviour
     private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
     // ── 칩 정의 (값, 한국어, 영어, 일본어, 중국어, 스페인어) ──
-    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Modes = { ("touch", "먼저 터치", "First touch", "先にタッチ", "先触碰", "Primero en tocar"), ("code", "코드 입력", "Enter a code", "コード入力", "输入代码", "Introducir código") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Modes = { ("touch", "먼저 터치", "First touch", "先にタッチ", "先触碰", "Primero en tocar"), ("code", "비밀번호", "Password", "パスワード", "密码", "Contraseña") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Winners = { ("1", "1명", "1", "1人", "1人", "1"), ("3", "3명", "3", "3人", "3人", "3"), ("5", "5명", "5", "5人", "5人", "5"), ("10", "10명", "10", "10人", "10人", "10"), ("all", "모두", "Everyone", "全員", "所有人", "Todos") };
     // 참가 인원 상한 (2026-10-12 대표님 — 서버 1~100 · 당첨 인원 이상. 칩은 모두 당첨 최대 10명 이상이라 어긋나지 않는다)
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Players = { ("10", "10명", "10", "10人", "10人", "10"), ("20", "20명", "20", "20人", "20人", "20"), ("30", "30명", "30", "30人", "30人", "30"), ("50", "50명", "50", "50人", "50人", "50"), ("100", "100명", "100", "100人", "100人", "100") };
@@ -354,6 +354,11 @@ public class R0926HuntCard : MonoBehaviour
         var dot = row.transform.Find("Dot")?.GetComponent<Image>();
         if (dot != null) dot.color = status == "live" ? Teal : status == "scheduled" ? Amber : Muted;
         SetText(row, "Title", (h["official"].AsBool ? "★ " : "") + h["title"]);
+        if (h["mode"] == "code" && row.transform.Find("Lock") is RectTransform lockIcon)   // 비밀번호를 건 보물 — 제목 앞 작은 자물쇠
+        {
+            lockIcon.gameObject.SetActive(true);
+            if (row.transform.Find("Title") is RectTransform tr) tr.offsetMin += new Vector2(lockIcon.sizeDelta.x + 10, 0);
+        }
         SetText(row, "Sub", Summary(h));
         var me = h["me"];
         string badge = h["is_host"].AsBool ? T("주최", "Host", "主催", "主办", "Tu juego")
@@ -488,7 +493,9 @@ public class R0926HuntCard : MonoBehaviour
 
     private void PaintCodeBox()
     {
-        if (codeBox != null) codeBox.SetActive(picked.TryGetValue("mode", out var m) && m == "code");
+        bool code = picked.TryGetValue("mode", out var m) && m == "code";
+        if (codeBox != null) codeBox.SetActive(code);
+        if (shapePreview != null) shapePreview.Locked = code;   // 미리보기 보물에도 자물쇠
     }
 
     private void PaintGps()
@@ -666,6 +673,14 @@ public class R0926HuntCard : MonoBehaviour
     }
 #endif
 
+    // 서버처럼 빈칸을 빼고 센 글자 수 (두 칸을 쓰는 이모지도 한 글자)
+    private static int Letters(string s)
+    {
+        int n = 0;
+        foreach (char c in s) if (!char.IsWhiteSpace(c) && !char.IsLowSurrogate(c)) n++;
+        return n;
+    }
+
     private IEnumerator Submit()
     {
         if (busy) yield break;
@@ -681,6 +696,11 @@ public class R0926HuntCard : MonoBehaviour
             yield break;
         }
         if (shape == "model" && shapePreview != null && shapePreview.Loading) { FormMsg(T("3D 모델을 불러오는 중이에요 — 잠시만요", "Still loading the 3D model — one moment", "3Dモデルを読み込み中です — 少々お待ちください", "正在加载 3D 模型 — 请稍候", "Cargando el modelo 3D — un momento")); yield break; }
+        if (picked["mode"] == "code")   // 비밀번호는 4자 · 걸면 힌트도 반드시 (서버도 같은 규칙)
+        {
+            if (Letters(codeInput != null ? codeInput.text : "") != R0926HuntApi.CodeLen) { FormMsg(R0926HuntApi.ErrorText("code", Lang)); yield break; }
+            if (questionInput == null || questionInput.text.Trim().Length == 0) { FormMsg(R0926HuntApi.ErrorText("question", Lang)); yield break; }
+        }
         var b = new JSONObject();
         b["title"] = title;
         b["hint"] = hintInput != null ? hintInput.text.Trim() : "";
@@ -885,7 +905,9 @@ public class R0926HuntCard : MonoBehaviour
         }
         var lines = new List<string>();
         if (!string.IsNullOrEmpty(h["hint"])) lines.Add(T("힌트  ", "Hint  ", "ヒント  ", "提示  ", "Pista  ") + h["hint"]);
-        lines.Add(T("찾는 방식  ", "How  ", "見つけ方  ", "寻宝方式  ", "Cómo  ") + (h["mode"] == "code" ? T("코드 입력", "Enter a code", "コード入力", "输入代码", "Introducir código") + (string.IsNullOrEmpty(h["question"]) ? "" : " — " + h["question"]) : T("먼저 터치한 사람", "First to touch", "先にタッチした人", "最先触碰的人", "Primero en tocar")));
+        bool locked = h["mode"] == "code";
+        lines.Add(T("찾는 방식  ", "How  ", "見つけ方  ", "寻宝方式  ", "Cómo  ") + (locked ? T("비밀번호 (4자)", "Password (4 characters)", "パスワード（4文字）", "密码（4 个字符）", "Contraseña (4 caracteres)") : T("먼저 터치한 사람", "First to touch", "先にタッチした人", "最先触碰的人", "Primero en tocar")));
+        if (locked && !string.IsNullOrEmpty(h["question"])) lines.Add(T("비밀번호 힌트  ", "Password hint  ", "パスワードのヒント  ", "密码提示  ", "Pista de la contraseña  ") + h["question"]);
         int wm = h["winners_max"].AsInt;
         lines.Add(T("당첨  ", "Winners  ", "当選  ", "中奖  ", "Ganadores  ") + (wm > 0 ? T(wm + "명 · " + h["found"].AsInt + "명 찾음", wm + " · " + h["found"].AsInt + " found", wm + "人 · " + h["found"].AsInt + "人発見", wm + " 人 · " + h["found"].AsInt + " 人找到", wm + " · " + h["found"].AsInt + " encontrados") : T("찾는 사람 모두 · " + h["found"].AsInt + "명 찾음", "Everyone · " + h["found"].AsInt + " found", "見つけた人全員 · " + h["found"].AsInt + "人発見", "找到的人都中奖 · " + h["found"].AsInt + " 人找到", "Todos · " + h["found"].AsInt + " encontrados")));
         if (!string.IsNullOrEmpty(h["prize"])) lines.Add(T("상품  ", "Prize  ", "賞品  ", "奖品  ", "Premio  ") + h["prize"]);
@@ -1034,13 +1056,13 @@ public class R0926HuntCard : MonoBehaviour
                 if (claimCodeInput != null) claimCodeInput.text = "";
                 R0926HuntTreasure.Untrack(id);
                 R0926HuntList.Stale();
-                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, current["prize"], current["host"]["username"], current["object_kind"], current["object_url"]))
+                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, current["prize"], current["host"]["username"], current["object_kind"], current["object_url"], null, current["mode"] == "code"))
                     Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt, "宝を見つけました！" + j["rank"].AsInt + "番目", "找到宝藏了！第 " + j["rank"].AsInt + " 个", "¡Lo encontraste! #" + j["rank"].AsInt), 4f);
                 StartCoroutine(OpenDetail(id));
                 break;
-            case "need_code": Toast(T("코드를 넣어 주세요", "Enter the code", "コードを入力してください", "请输入代码", "Introduce el código") + (string.IsNullOrEmpty(j["question"]) ? "" : " — " + j["question"]), 3.5f); if (claimCodeBox != null) claimCodeBox.SetActive(true); break;
-            case "wrong_code": Toast(T("코드가 달라요 — 남은 기회 " + j["tries_left"].AsInt + "번", "Wrong code — " + j["tries_left"].AsInt + " tries left", "コードが違います — 残り " + j["tries_left"].AsInt + "回", "代码错误 — 还剩 " + j["tries_left"].AsInt + " 次机会", "Código incorrecto — quedan " + j["tries_left"].AsInt + " intentos"), 3f); break;
-            case "locked": Toast(T("10분 동안 코드를 넣을 수 없어요", "Code locked for 10 minutes", "10分間コードを入力できません", "10 分钟内无法输入代码", "Código bloqueado 10 minutos"), 3f); break;
+            case "need_code": Toast(T("비밀번호를 넣어 주세요", "Enter the password", "パスワードを入力してください", "请输入密码", "Introduce la contraseña") + (string.IsNullOrEmpty(j["question"]) ? "" : " — " + j["question"]), 3.5f); if (claimCodeBox != null) claimCodeBox.SetActive(true); break;
+            case "wrong_code": Toast(T("비밀번호가 달라요 — 남은 기회 " + j["tries_left"].AsInt + "번", "Wrong password — " + j["tries_left"].AsInt + " tries left", "パスワードが違います — 残り " + j["tries_left"].AsInt + "回", "密码错误 — 还剩 " + j["tries_left"].AsInt + " 次机会", "Contraseña incorrecta — quedan " + j["tries_left"].AsInt + " intentos"), 3f); break;
+            case "locked": Toast(T("10분 동안 비밀번호를 넣을 수 없어요", "Password locked for 10 minutes", "10分間パスワードを入力できません", "10 分钟内无法输入密码", "Contraseña bloqueada 10 minutos"), 3f); break;
             case "too_far": Toast(T("조금만 더 가까이 — " + j["remaining_m"].AsInt + "m", "A bit closer — " + j["remaining_m"].AsInt + "m", "もう少し近くへ — " + j["remaining_m"].AsInt + "m", "再靠近一点 — " + j["remaining_m"].AsInt + "m", "Un poco más cerca — " + j["remaining_m"].AsInt + "m"), 3f); break;
             case "taken": Toast(T("아쉽게도 다른 사람이 먼저 찾았어요", "Someone found it first", "残念、ほかの人が先に見つけました", "可惜，别人先找到了", "Alguien lo encontró primero"), 3.5f); StartCoroutine(OpenDetail(id)); break;
             case "ended": Toast(T("게임이 끝났어요", "The game has ended", "ゲームが終了しました", "游戏已结束", "El juego terminó"), 3f); StartCoroutine(OpenDetail(id)); break;

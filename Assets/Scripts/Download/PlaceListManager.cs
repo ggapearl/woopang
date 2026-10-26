@@ -53,7 +53,7 @@ public class PlaceListManager : MonoBehaviour
         public R0926HuntList.Coord huntCoord;
         public float approxM;
         public float fixedDistance = -1f;   // 0 이상이면 이 거리 그대로 (비공개 보물찾기 — 자리를 모른다)
-        public string icon;          // 축제·보호소 — 줄 앞 그림 (R0926PlaceRows)
+        public string icon;          // 축제·보호소 — 줄 앞 그림 · 보물찾기는 "lock" = 비밀번호를 건 보물 (R0926PlaceRows)
         public string start, end;    // 축제 날짜 (YYYYMMDD)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
         public bool pinned;          // 목록 맨 위에 (반려견만 볼 때 보호소 · 축제 칩의 광고 줄)
@@ -79,7 +79,7 @@ public class PlaceListManager : MonoBehaviour
         public int huntId;           // 보물찾기 — 누르면 그 게임 상세
         public string distanceText;  // 거리 칸에 숫자 대신 쓸 말 (보물찾기 대략·비공개) — null 이면 숫자
         public bool noDirection;     // 방향을 보이지 않는다 (비공개 보물찾기 · 대략 원 안 · 축제)
-        public string icon;          // 축제·보호소 줄 앞 그림
+        public string icon;          // 축제·보호소 줄 앞 그림 · 보물찾기는 "lock" (자물쇠 배지)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
         public bool promo;           // 광고 줄 (축제 칩 맨 위) — 거리 칸 '광고 · 거리' · 줄 앞은 고른 이모지 그림
         public string adId, emojiUrl;
@@ -712,7 +712,7 @@ public class PlaceListManager : MonoBehaviour
     {
         foreach (var s in R0926HuntList.Spots)
         {
-            var e = new LiveEntry { id = "hunt:" + s.id, baseLabel = s.title, colorHex = R0926HuntList.ColorHex, kind = EntryKind.Hunt, huntId = s.id, huntCoord = s.coord };
+            var e = new LiveEntry { id = "hunt:" + s.id, baseLabel = s.title, colorHex = R0926HuntList.ColorHex, kind = EntryKind.Hunt, huntId = s.id, huntCoord = s.coord, icon = s.locked ? "lock" : null };
             float d;
             if (s.coord == R0926HuntList.Coord.Hidden)
             {

@@ -65,6 +65,8 @@ public class R0926PlaceRows : MonoBehaviour
     [Header("줄 앞 표시 — 장소는 템플릿의 색 점")]
     [SerializeField] private Sprite personSprite;
     [SerializeField] private Sprite huntSprite;
+    [Tooltip("비밀번호를 건 보물 — 보물 그림 + 자물쇠 배지")]
+    [SerializeField] private Sprite huntLockSprite;
     [Tooltip("그림 크기 — 그림마다 둘레 여백이 달라 따로 둔다 (보이는 크기를 이름 글자에 맞춘다)")]
     [SerializeField] private float personIconSize = 48f;
     [SerializeField] private float huntIconSize = 44f;
@@ -412,7 +414,7 @@ public class R0926PlaceRows : MonoBehaviour
     private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color, string icon, string emojiUrl)
     {
         Sprite s = kind == PlaceListManager.EntryKind.Person ? personSprite
-                 : kind == PlaceListManager.EntryKind.Hunt ? huntSprite
+                 : kind == PlaceListManager.EntryKind.Hunt ? (icon == "lock" && huntLockSprite != null ? huntLockSprite : huntSprite)
                  : kind == PlaceListManager.EntryKind.Festival || kind == PlaceListManager.EntryKind.Shelter ? KindIcon(icon) : null;
         var emoji = R0926Nearby.Emoji(emojiUrl, this);   // 받는 동안은 축제 기본 그림
         if (emoji != null) s = emoji;

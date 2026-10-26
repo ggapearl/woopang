@@ -26,6 +26,7 @@ public class R0926HuntShapePreview : MonoBehaviour
     private readonly List<Renderer> renderers = new List<Renderer>();
 
     private string lookKind = "chest";
+    private bool locked;
     private Texture lookPhoto;
     private byte[] lookModel;
     private string lookModelUrl;
@@ -34,6 +35,16 @@ public class R0926HuntShapePreview : MonoBehaviour
     public R0926HuntChest Chest { get; private set; }
     /// <summary>3D 모델을 불러오는 중</summary>
     public bool Loading => Chest != null && Chest.Loading;
+    /// <summary>비밀번호를 건 보물 — 미리보기 보물에도 자물쇠</summary>
+    public bool Locked
+    {
+        get => locked;
+        set
+        {
+            locked = value;
+            if (Chest != null && stage != null && stage.activeSelf) Chest.Lock(value);
+        }
+    }
     /// <summary>고른 3D 모델을 열지 못해 보물상자로 돌아갔다</summary>
     public bool ModelFailed => lookKind == "model" && lookModel != null && Chest != null && stage != null && stage.activeSelf && !Chest.Loading && Chest.Kind != "model";
 
@@ -74,6 +85,7 @@ public class R0926HuntShapePreview : MonoBehaviour
             if (Chest.Wear("model")) Chest.ShowModel(lookModelUrl);
         }
         else if (lookKind == "model" || !Chest.Wear(lookKind)) Chest.Wear("chest");   // 3D 모델을 아직 안 골랐으면 — 못 열 때 보이는 보물상자
+        Chest.Lock(locked);
         stage.GetComponentsInChildren(true, renderers);
         Hide();
     }

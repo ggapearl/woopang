@@ -6530,7 +6530,7 @@ namespace Redesign0926
         private static void PlanHuntTreasure()
         {
             const string H = HuntCardPath;
-            const string T1Title = "AR 보물 시험 1", T2Title = "AR 보물 시험 2 (코드)", Question = "문 앞 번호 네 자리는?", Prize = "커피 쿠폰 한 장";
+            const string T1Title = "AR 보물 시험 1", T2Title = "AR 보물 시험 2 (비밀번호)", Question = "문 앞 번호 네 자리는?", Prize = "커피 쿠폰 한 장";
             const string C = "HuntCelebrate0926/Panel/Content/", F = C + "Card/Front/";
             Do(() =>
             {
@@ -6571,9 +6571,31 @@ namespace Redesign0926
             Wait(() => R0926HuntTreasure.Tracking(trHunt2), 10f, "처음 화면 참가 목록 → T2");
             Sleep(0.5f);
             Check(() => R0926HuntTreasure.Tracking(trHunt2) && PrefLine(trHunt2) == trHunt2 + "\t0\t" + T2Title, "처음 화면의 참가 목록(T2)도 지켜봄");
+            Do(() => log.Add("  처음 화면 줄 자물쇠: T1 " + HubRowLock(T1Title) + " · T2 " + HubRowLock(T2Title)));
+            Check(() => HubRowLock(T2Title) == 1 && HubRowLock(T1Title) == 0, "처음 화면 참가 목록 — 비밀번호를 건 T2 줄만 제목 앞에 자물쇠");
+            Shot("treasure_hub_lock");
             Check(() => R0926HuntTreasure.SpawnedObjects.Count == 0, "284m 밖 → 보물 안 뜸 (서버가 자리를 안 준다)");
             CloseUpload();
             Check(() => !Active("UploadPage"), "추가 창을 닫음 — 닫혀 있어도 지켜본다");
+
+            // 비밀번호를 건 게임은 장소 목록 · 지도에도 자물쇠
+            Do(() => Click("Dock0926/List_Button"));
+            Wait(() => Active("ListPanel") && HuntRowIcon(T1Title) != "" && HuntRowIcon(T2Title) != "", 15f, "장소 목록에 보물 줄 둘");
+            Sleep(0.8f);
+            Shot("treasure_list_lock");
+            Do(() => log.Add("  목록 보물 줄 그림: T1 " + HuntRowIcon(T1Title) + " · T2 " + HuntRowIcon(T2Title)));
+            Check(() => HuntRowIcon(T2Title) == "r0926_i_treasure_lock" && HuntRowIcon(T1Title) == "r0926_i_treasure", "장소 목록 — 비밀번호를 건 T2 줄만 자물쇠 달린 보물 그림");
+            Do(() => Modes()?.Show(1));
+            Wait(() => MapPinLock(trHunt1) >= 0 && MapPinLock(trHunt2) >= 0, 10f, "지도에 보물 핀 둘");
+            Sleep(0.8f);
+            Shot("treasure_map_lock");
+            Do(() => log.Add("  지도 핀 자물쇠: T1 " + MapPinLock(trHunt1) + " · T2 " + MapPinLock(trHunt2)));
+            Check(() => MapPinLock(trHunt2) == 1 && MapPinLock(trHunt1) == 0, "지도 — 비밀번호를 건 T2 핀만 테 오른쪽 아래 자물쇠");
+            Do(() => Modes()?.Show(0));
+            Sleep(0.6f);
+            Back();
+            Sleep(0.8f);
+            Check(() => !Active("ListPanel"), "목록을 닫음");
 
             // 45m — 보이는 거리 안: 상자 · 알림 · 가까워져 진동 (카드 없이도)
             Do(() => { R0926HuntCard.EditorBuzzes = 0; VirtualLocation.Instance.SetCoordinates(trBase.x + 0.0003f - 0.000405f, trBase.y); });
@@ -6609,6 +6631,11 @@ namespace Redesign0926
                 log.Add("  0.6초에 " + turned.ToString("0.0") + "° 돎 · 높이 차 " + Mathf.Abs(chest.transform.position.y - trChestAt.y).ToString("0.000") + "m");
                 return turned > 5f && (chest.transform.position - trChestAt).sqrMagnitude < 1e-6f;
             }, "보물은 제자리에서 천천히 돎 — 위아래로 떠다니지 않음");
+            Check(() =>
+            {
+                var c = Treasure(trHunt1)?.GetComponentInChildren<R0926HuntChest>(true);
+                return c != null && !c.Locked && !c.PadlockShown;
+            }, "비밀번호 없는 보물(T1) — 자물쇠 없음");
             Check(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!" && TextOf("HuntToast0926/Pill/Sub") == "보물상자를 두 번 톡톡 눌러 열어 보세요",
                 "처음 보이면 상태 알약 아래 알림 '보물이 근처에 있어요!'");
             Check(() =>
@@ -6712,6 +6739,7 @@ namespace Redesign0926
                         && TextOf(F + "Note").StartsWith("주최자에게 찾았다는 메세지를 보냈어요") && TextOf(F + "Seal/Num") == "1" && Active(F + "Crown"),
                 "카드: '보물을 찾았습니다!' · 가장 먼저 · 게임 이름 · 상품 · 주최 · 순위 1 / 1명 · 주최자에게 메세지 · 1 메달 + 왕관");
             Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f, "두근두근 3~4초 뒤에 짜잔");
+            Check(() => R0926HuntCelebrate.EditorUnlockedAfter < 0f, "비밀번호 없는 보물 — 자물쇠 없이 바로 열림");
             Check(() => !R0926HuntTreasure.Tracking(trHunt1) && !R0926HuntTreasure.SpawnedObjects.ContainsKey("hunt_" + trHunt1), "찾음 → 그만 지켜봄");
             Check(() => RevealChest() == null && GameObject.Find("HuntRevealStage") == null && PrefLine(trHunt1) == null, "카드가 다 가리면 3D 보물·카메라를 치움 · 기기 기록에서도 지움");
             Do(() => Click(C + "OK"));
@@ -6730,14 +6758,25 @@ namespace Redesign0926
             CloseUpload();
             Wait(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!", 6f, "창을 닫으면 미뤄 둔 알림");
             Check(() => Active("HuntToast0926") && TextOf("HuntToast0926/Pill/Title") == "보물이 근처에 있어요!", "창을 닫으면 미뤄 둔 '보물이 근처에 있어요!'");
-            // 박스(화살표)를 누르는 길로: 거리 통과 → '코드를 넣어 주세요' → 상세의 코드 칸
+            // 박스(화살표)를 누르는 길로: 거리 통과 → '비밀번호를 넣어 주세요' → 상세의 비밀번호 칸
             Sleep(0.3f);
             Do(() => FaceTreasure(trHunt2));
             Sleep(0.3f);
             Shot("treasure_code_20m");
+            Check(() =>
+            {
+                var c = Treasure(trHunt2)?.GetComponentInChildren<R0926HuntChest>(true);
+                var pad = c != null ? c.transform.Find("Padlock") : null;
+                var r = pad != null ? pad.Find("Body")?.GetComponent<MeshRenderer>() : null;
+                log.Add("  T2 자물쇠: " + (c == null ? "상자 없음" : "잠김 " + c.Locked + " · 보임 " + c.PadlockShown + " · 그림 " + (r != null && r.enabled)
+                        + " · 재질 " + (r != null && r.sharedMaterial != null ? r.sharedMaterial.name : "-") + " · 자리 " + (pad != null ? pad.localPosition.ToString("F3") : "-")));
+                return c != null && c.Locked && c.PadlockShown && r != null && r.enabled && r.sharedMaterial != null && r.sharedMaterial.name.StartsWith("HuntLockSteel")
+                       && pad.localPosition.z < -0.05f;
+            }, "비밀번호를 건 보물(T2) — 앞에 은빛 자물쇠");
             Do(() => { var tap = Treasure(trHunt2)?.GetComponentInChildren<Target>(true)?.OnIndicatorTapped; tap?.Invoke(); tap?.Invoke(); });   // 두 번 톡톡
-            Wait(() => TextOf("HuntToast0926/Pill/Title") == "코드를 넣어 주세요", 6f, "박스 누름 → 코드");
-            Check(() => TextOf("HuntToast0926/Pill/Sub") == Question, "코드 게임: '코드를 넣어 주세요' · 아래 줄에 문제");
+            Wait(() => TextOf("HuntToast0926/Pill/Title") == "비밀번호를 넣어 주세요", 6f, "박스 누름 → 비밀번호");
+            Check(() => TextOf("HuntToast0926/Pill/Sub") == Question, "비밀번호 게임: '비밀번호를 넣어 주세요' · 아래 줄에 힌트");
+            Check(() => Treasure(trHunt2)?.GetComponentInChildren<R0926HuntChest>(true)?.Locked == true, "비밀번호를 넣기 전엔 자물쇠 그대로");
             Wait(() => Active(H + "Detail") && DetailTitle().Contains(T2Title) && Active(H + "Detail/Viewport/Content/ClaimCodeBox"), 20f, "T2 상세 코드 칸");
             Sleep(1.0f);
             Shot("treasure_code_detail");
@@ -6768,8 +6807,8 @@ namespace Redesign0926
             Do(() => Click(H + "Detail/Viewport/Content/Join"));
             Wait(() => R0926HuntTreasure.Tracking(trHunt2) && Active(H + "Detail/Viewport/Content/ClaimCodeBox"), 20f, "다시 참가 → 코드 칸");
             Do(() => { Find(CodeRow + "ClaimCodeInput").GetComponent<InputField>().text = "1111"; Click(CodeRow + "CodeOk"); });
-            Wait(() => TextOf(CardToast).StartsWith("코드가 달라요"), 8f, "틀린 코드");
-            Check(() => TextOf(CardToast).StartsWith("코드가 달라요 — 남은 기회") && !R0926HuntCelebrate.Showing, "틀린 코드 → '코드가 달라요 — 남은 기회 N번' · 축하 화면 없음");
+            Wait(() => TextOf(CardToast).StartsWith("비밀번호가 달라요"), 8f, "틀린 비밀번호");
+            Check(() => TextOf(CardToast).StartsWith("비밀번호가 달라요 — 남은 기회") && !R0926HuntCelebrate.Showing, "틀린 비밀번호 → '비밀번호가 달라요 — 남은 기회 N번' · 축하 화면 없음");
             Do(() => { Find(CodeRow + "ClaimCodeInput").GetComponent<InputField>().text = "4321"; Click(CodeRow + "CodeOk"); });
             Wait(() => R0926HuntCelebrate.Showing, 10f, "맞는 코드 → 축하 화면");
             Sleep(0.4f);
@@ -6777,10 +6816,11 @@ namespace Redesign0926
             Check(() =>
             {
                 var chest = RevealChest();
-                log.Add("  코드로 찾음: 무대의 보물 " + (chest != null ? chest.name + " · 뚜껑 " + chest.HasLid : "없음") + " · AR 자리에서 " + CelebrateFrom() + " · 단계 " + R0926HuntCelebrate.EditorPhase);
-                return chest != null && chest.HasLid && chest.GetComponent<Target>() == null && !CelebrateFrom()
+                log.Add("  비밀번호로 찾음: 무대의 보물 " + (chest != null ? chest.name + " · 뚜껑 " + chest.HasLid + " · 자물쇠 " + chest.Locked + "/" + chest.PadlockShown : "없음")
+                        + " · AR 자리에서 " + CelebrateFrom() + " · 단계 " + R0926HuntCelebrate.EditorPhase);
+                return chest != null && chest.HasLid && chest.GetComponent<Target>() == null && !CelebrateFrom() && chest.Locked && chest.PadlockShown
                        && GameObject.Find("HuntTreasure_" + trHunt2) == null && !R0926HuntTreasure.Tracking(trHunt2);
-            }, "코드로 찾음 → 그 게임 모양으로 새 보물상자 (가운데서 떠오름) · AR 보물은 치우고 그만 봄");
+            }, "비밀번호로 찾음 → 그 게임 모양으로 새 보물상자 (가운데서 떠오름 · 자물쇠 걸린 채) · AR 보물은 치우고 그만 봄");
             Wait(() => R0926HuntCelebrate.EditorPhase == "Done", 9f, "코드 → 두근두근 → 짜잔 → 카드");
             Sleep(0.8f);
             Shot("treasure_code_found");
@@ -6788,7 +6828,13 @@ namespace Redesign0926
             Check(() => TextOf(F + "Rank") == "가장 먼저 찾았어요" && TextOf(F + "Hunt") == T2Title && TextOf(F + "PrizeBox/Prize") == "따로 정한 상품은 없어요"
                         && TextOf(F + "Meta2/Value") == "1 / 1명" && TextOf(F + "Seal/Num") == "1" && Active(F + "Crown"),
                 "코드로 찾은 카드: 가장 먼저 · 게임 이름 · 상품 없음 · 1 / 1명 · 1 메달 + 왕관");
-            Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f, "코드로 찾아도 두근두근 3~4초 뒤에 짜잔");
+            Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f, "비밀번호로 찾아도 두근두근 3~4초 뒤에 짜잔");
+            Check(() =>
+            {
+                float lead = R0926HuntCelebrate.EditorOpenedAfter - R0926HuntCelebrate.EditorUnlockedAfter;
+                log.Add("  자물쇠 풀림 " + R0926HuntCelebrate.EditorUnlockedAfter.ToString("0.00") + "초 · 열림 " + R0926HuntCelebrate.EditorOpenedAfter.ToString("0.00") + "초 (" + lead.ToString("0.00") + "초 먼저)");
+                return R0926HuntCelebrate.EditorUnlockedAfter > 0f && lead >= 0.15f && lead <= 0.45f;
+            }, "비밀번호를 건 보물 — 열리기 직전(0.3초)에 자물쇠가 딸깍 풀려 떨어짐");
             Back();
             Wait(() => !R0926HuntCelebrate.Showing && Active(H + "Detail") && DetailTitle().Contains(T2Title) && TextOf(H + "Detail/Viewport/Content/Mine").Contains("찾았어요"), 12f, "뒤로가기 → T2 상세");
             Sleep(0.6f);
@@ -7098,6 +7144,12 @@ namespace Redesign0926
                 Sleep(0.5f);
                 Shot("shape_" + k);
                 Check(() => ShapeOk(k), "모양 '" + k + "' — 몸통·뚜껑 메시 · 재질 수 = 부분 수" + (k == "photo" ? " · 사진 앞뒤" : k == "model" ? " · 상자 폭에 맞춤" : ""));
+                Do(() => hcChest?.Lock(true));
+                Sleep(0.3f);
+                Shot("shape_lock_" + k);
+                Check(() => LockOk(k), "모양 '" + k + "' + 비밀번호 — 은빛 자물쇠" + (k == "star" ? " (별 아래)" : " (앞면)"));
+                Do(() => hcChest?.Lock(false));
+                Check(() => hcChest != null && !hcChest.Locked && !hcChest.PadlockShown, "자물쇠를 떼면 바로 사라짐");
             }
             Check(() => hcChest != null && !hcChest.Wear("rocket") && hcChest.Kind == "model", "모르는 모양(새 앱이 만든 모양)은 그대로 둠");
 
@@ -7112,6 +7164,31 @@ namespace Redesign0926
             Do(() => hcChest?.Dress("photo", "uploads/hunts/0/none.jpg"));
             Wait(() => hcChest != null && !hcChest.Loading && hcChest.Kind == "chest", 25f, "사진을 못 받으면 보물상자로");
             Do(() => R0926HuntApi.EditorBase = null);
+
+            // 자물쇠 — 비밀번호가 달라 못 열면 덜컹 · 찾으면 고리가 딸깍 풀리고 떨어진 뒤 뚜껑이 열린다
+            Do(() => { HcSpawn("HuntShapesLock"); hcChest?.Wear("chest"); hcChest?.Lock(true); });
+            HcPlace(3.2f);
+            Sleep(0.4f);
+            Do(() => { HcFace(-28f); hcLockSwing = 0f; hcChest?.Jiggle(); });
+            ShapeWatch(0.6f, () =>
+            {
+                var pad = hcChest != null ? hcChest.transform.Find("Padlock") : null;
+                if (pad != null) hcLockSwing = Mathf.Max(hcLockSwing, Mathf.Abs(Mathf.DeltaAngle(0f, pad.localEulerAngles.z)));
+            });
+            Do(() => log.Add("  덜컹: 최대 " + hcLockSwing.ToString("0.0") + "°"));
+            Check(() => hcChest != null && hcChest.Locked && hcChest.PadlockShown && hcLockSwing > 6f, "덜컹 — 자물쇠가 고리에 매달려 흔들림 · 그대로 잠김");
+            Sleep(0.4f);
+            Do(() => { hcLockSwing = 0f; hcChest?.Open(); });
+            ShapeWatch(0.3f, () =>
+            {
+                var sh = hcChest != null ? hcChest.transform.Find("Padlock/Shackle") : null;
+                if (sh != null) hcLockSwing = Mathf.Max(hcLockSwing, Mathf.Abs(Mathf.DeltaAngle(0f, sh.localEulerAngles.y)));
+            });
+            Shot("shape_unlock");
+            Do(() => log.Add("  딸깍: 고리 " + hcLockSwing.ToString("0") + "° 돎"));
+            Check(() => hcChest != null && !hcChest.Locked && hcLockSwing > 30f, "열면 먼저 자물쇠 고리가 딸깍 풀림");
+            Wait(() => hcChest == null || !hcChest.PadlockShown, 1.5f, "풀린 자물쇠가 떨어져 사라짐");
+            Check(() => hcChest != null && !hcChest.PadlockShown && hcChest.LidAngle > 60f, "풀린 자물쇠는 떨어져 사라지고 뚜껑이 열림 (상자가 작아져 사라지기 전)");
 
             // 열기 — 뚜껑 있는 모양은 뚜껑이, 없는 모양은 빛기둥·별빛만
             foreach (var kind in new[] { "gift", "egg", "gem", "heart" })
@@ -7171,6 +7248,40 @@ namespace Redesign0926
             Shot("hf_chest");
             Check(() => hfPreview != null && hfPreview.Chest.Kind == "chest" && HfInk(), "미리보기 — 보물상자가 칸에 그려짐");
             Check(() => HfStageHidden(), "미리보기 무대는 칸의 카메라가 찍을 때만 켜짐 (AR 화면엔 안 보임)");
+
+            // 비밀번호 — 칩을 고르면 칸이 열리고 미리보기 보물에 자물쇠 · 4자 · 힌트는 반드시
+            Do(() => ScrollToChild(F + "ModeChips"));
+            Do(() => Click(F + "ModeChips/Chip_code"));
+            Sleep(0.5f);
+            Do(() => ScrollToChild(F + "LShape"));
+            Sleep(0.4f);
+            Shot("hf_lock_chest");
+            Check(() => Active(F + "CodeBox") && hfPreview.Locked && hfPreview.Chest.Locked && hfPreview.Chest.PadlockShown && HfInk(),
+                "'비밀번호' 칩 → 비밀번호·힌트 칸 · 미리보기 보물에 자물쇠");
+            Check(() => TextOf(F + "CodeBox/LCode") == "비밀번호 (4자) — 보물 앞에서 넣을 답" && TextOf(F + "CodeBox/LQuestion") == "비밀번호 힌트 (필수)"
+                        && Find(F + "CodeBox/CodeInput")?.GetComponent<InputField>()?.characterLimit == 4, "칸 이름 '비밀번호 (4자)' · '비밀번호 힌트 (필수)' · 4자까지만 들어감");
+            Do(() =>
+            {
+                Find(F + "TitleInput").GetComponent<InputField>().text = "비밀번호 보물 (플레이 시험)";
+                Find(F + "CodeBox/CodeInput").GetComponent<InputField>().text = "123";
+                Find(F + "CodeBox/QuestionInput").GetComponent<InputField>().text = "";
+                Click(F + "Submit");
+            });
+            Sleep(0.4f);
+            Check(() => Active(F + "Submit") && TextOf(F + "Msg") == "비밀번호는 4자로 정해 주세요", "3자 → '비밀번호는 4자로 정해 주세요'");
+            Do(() =>
+            {
+                Find(F + "CodeBox/CodeInput").GetComponent<InputField>().text = "1234";
+                Click(F + "Submit");
+            });
+            Sleep(0.4f);
+            Check(() => Active(F + "Submit") && TextOf(F + "Msg") == "비밀번호를 건 보물엔 힌트를 꼭 써 주세요", "힌트 없이 → '비밀번호를 건 보물엔 힌트를 꼭 써 주세요'");
+            Do(() => Click(F + "ModeChips/Chip_touch"));
+            Sleep(0.4f);
+            Check(() => !Active(F + "CodeBox") && !hfPreview.Locked && !hfPreview.Chest.PadlockShown, "'먼저 터치'로 돌리면 칸이 닫히고 자물쇠도 떨어짐");
+            Do(() => Find(F + "TitleInput").GetComponent<InputField>().text = "");
+            Do(() => ScrollToChild(F + "LShape"));
+            Sleep(0.4f);
             foreach (var kind in new[] { "gift", "egg", "gem", "star", "heart", "chest" })
             {
                 string k = kind;
@@ -7416,6 +7527,59 @@ namespace Redesign0926
             Do(() => UnityEngine.Object.Destroy(glbObj));
         }
 
+        private static float hcLockSwing;
+        // 보물찾기 처음 화면 목록 — 그 제목 줄의 자물쇠 (-1 줄 없음 · 0 없음 · 1 있음)
+        private static int HubRowLock(string title)
+        {
+            var hub = Find(HuntCardPath + "Hub");
+            if (hub == null) return -1;
+            foreach (var t in hub.GetComponentsInChildren<Text>(false))
+                if (t.name == "Title" && t.text.EndsWith(title) && t.transform.parent.Find("Lock") is Transform lk) return lk.gameObject.activeSelf ? 1 : 0;
+            return -1;
+        }
+        // 장소 목록에서 그 제목 보물 줄 앞의 그림 ("" 줄 없음)
+        private static string HuntRowIcon(string title)
+        {
+            foreach (var row in ListRows())
+            {
+                var n = row.Find("Name")?.GetComponent<Text>();
+                if (n == null || !n.text.Contains(title)) continue;
+                var d = row.Find("Dot")?.GetComponent<Image>();
+                return d != null && d.sprite != null ? d.sprite.name : "-";
+            }
+            return "";
+        }
+        // 지도 보물 핀의 자물쇠 (-1 핀 없음 · 0 없음 · 1 있음)
+        private static int MapPinLock(int id)
+        {
+            var list = Find("ListPanel");
+            if (list == null) return -1;
+            foreach (var t in list.GetComponentsInChildren<Transform>(false))
+                if (t.name == "Hunt_" + id) { var lk = t.Find("Ring/Lock"); return lk != null && lk.gameObject.activeSelf ? 1 : 0; }
+            return -1;
+        }
+        // sec 초 동안 매 프레임 지켜본다 (흔들림·고리 각도의 정점을 놓치지 않게)
+        private static void ShapeWatch(float sec, Action each)
+        {
+            double until = -1;
+            steps.Enqueue(() =>
+            {
+                if (until < 0) until = EditorApplication.timeSinceStartup + sec;
+                each();
+                return EditorApplication.timeSinceStartup >= until;
+            });
+        }
+        // 자물쇠 — 걸렸고 · 보이고 · 몸통과 같이 그려지고 · 앞면(-Z)에 (별은 아래에 매달림)
+        private static bool LockOk(string kind)
+        {
+            if (hcChest == null) return false;
+            var pad = hcChest.transform.Find("Padlock");
+            var r = pad != null ? pad.Find("Body")?.GetComponent<MeshRenderer>() : null;
+            if (pad == null || r == null) { log.Add("  " + kind + ": 자물쇠 없음"); return false; }
+            log.Add("  " + kind + " 자물쇠: 자리 " + pad.localPosition.ToString("F3") + " · 기울기 " + Mathf.DeltaAngle(0f, pad.localEulerAngles.x).ToString("0") + "° · 배율 "
+                    + pad.localScale.x.ToString("0.00") + " · 그림 " + r.enabled);
+            return hcChest.Locked && hcChest.PadlockShown && r.enabled && (kind == "star" ? pad.localPosition.y < -0.2f : pad.localPosition.z < -0.05f);
+        }
         private static void HcSpawn(string name)
         {
             if (hcGo != null) UnityEngine.Object.Destroy(hcGo);
@@ -9009,6 +9173,12 @@ namespace Redesign0926
                 Check(() => pg.EditorCurrent == k, k + " 장");
             }
 
+            Do(() => pg.EditorGo(R0926SkyPages.Kind.Hunt));
+            Sleep(0.9f);
+            Do(() => log.Add("  근처 보물찾기 줄 그림: " + SkyIcon(pg, R0926SkyPages.Kind.Hunt, 0) + " · " + SkyIcon(pg, R0926SkyPages.Kind.Hunt, 1)));
+            Check(() => SkyIcon(pg, R0926SkyPages.Kind.Hunt, 0) == "r0926_i_treasure" && SkyIcon(pg, R0926SkyPages.Kind.Hunt, 1) == "r0926_i_treasure_lock",
+                "근처 보물찾기 장 — 비밀번호를 건 판(북촌)만 자물쇠 달린 보물 그림");
+
             // 1b) 광고 줄 (관리자가 /ads/admin 에서 띄운 협력 업체) — 축제 · 핫플 맨 위에 '광고 · …' · 고른 이모지 그림.
             //     지금 보는 장이면 노출 한 번(다시 봐도 한 번) · 누르면 클릭 한 번과 업체 링크(안 적었으면 카카오맵의 그 자리)
             Do(() => pg.EditorGo(R0926SkyPages.Kind.Festival));
@@ -9159,10 +9329,10 @@ namespace Redesign0926
             if (pages != null) foreach (var p in pages) if (p != null && p.kind == k && p.rows != null && i < p.rows.Length) return p.rows[i];
             return null;
         }
-        private static string SkyIcon(R0926SkyPages pg, R0926SkyPages.Kind k) { var r = SkyRow(pg, k, 0); return r != null && r.icon != null && r.icon.sprite != null ? r.icon.sprite.name : ""; }
+        private static string SkyIcon(R0926SkyPages pg, R0926SkyPages.Kind k, int i = 0) { var r = SkyRow(pg, k, i); return r != null && r.icon != null && r.icon.sprite != null ? r.icon.sprite.name : ""; }
         private static string SkyRowText(R0926SkyPages pg, R0926SkyPages.Kind k) { var r = SkyRow(pg, k, 0); return r == null || r.title == null || r.sub == null ? "" : r.title.text + " | " + r.sub.text; }
 
-        // 근처 보물찾기 두 판 — 진행 중(공식 · 420m · 7/100명 · 상품) · 3시간 뒤 시작(비공개 '5km 이내')
+        // 근처 보물찾기 두 판 — 진행 중(공식 · 420m · 7/100명 · 상품) · 3시간 뒤 시작(비공개 '5km 이내' · 비밀번호)
         private static string SkyHuntJson()
         {
             string soon = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -9170,7 +9340,7 @@ namespace Redesign0926
             return "{\"prefs\":{\"enabled\":true},\"hosted\":[],\"joined\":[],\"hunts\":["
                    + "{\"id\":990101,\"status\":\"live\"," + me + ",\"title\":\"시험 광화문 보물찾기\",\"prize\":\"아메리카노 기프티콘\",\"official\":true,"
                    + "\"distance_m\":420,\"participants\":7,\"max_players\":100},"
-                   + "{\"id\":990102,\"status\":\"scheduled\"," + me + ",\"title\":\"시험 북촌 골목 보물찾기\",\"prize\":\"\",\"official\":false,"
+                   + "{\"id\":990102,\"status\":\"scheduled\"," + me + ",\"title\":\"시험 북촌 골목 보물찾기\",\"prize\":\"\",\"official\":false,\"mode\":\"code\","
                    + "\"distance_text\":\"5km 이내\",\"participants\":2,\"max_players\":0,\"starts_at\":\"" + soon + "\"}]}";
         }
 

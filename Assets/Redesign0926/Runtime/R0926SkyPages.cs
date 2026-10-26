@@ -367,7 +367,8 @@ public class R0926SkyPages : MonoBehaviour
             case Kind.Hunt:
             {
                 var n = R0926HuntList.Nearby[r];
-                SetIcon(row, "r0926_i_treasure");
+                if (n.locked) SetIcon(row, "r0926_i_treasure_lock", "r0926_i_treasure");   // 비밀번호를 건 보물 — 자물쇠 배지
+                else SetIcon(row, "r0926_i_treasure");
                 title = n.title;
                 sub = HuntSub(n);
                 right = n.meters >= 0f ? R0926Nearby.Km(n.meters) : n.bandM > 0f ? R0926HuntList.Label(R0926HuntList.Coord.Hidden, 0f, 0f, n.bandM) : "";

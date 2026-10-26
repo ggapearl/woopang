@@ -32,8 +32,9 @@ public class R0926HuntReveal : MonoBehaviour
     public R0926HuntChest Chest { get; private set; }
     public RectTransform View => view != null ? view.rectTransform : null;
 
-    /// <summary>보물을 무대에 올린다 — live 가 있으면 그것을(화살표·누르기 상자는 뗀다), 없으면 프리팹으로 새로 만들어 kind·url 을 입힌다</summary>
-    public bool Begin(R0926HuntChest live, string kind, string url)
+    /// <summary>보물을 무대에 올린다 — live 가 있으면 그것을(화살표·누르기 상자는 뗀다), 없으면 프리팹으로 새로 만들어 kind·url 을 입힌다.
+    /// locked = 비밀번호를 건 보물 (자물쇠를 걸어 두고 축하 화면이 짜잔 직전에 푼다)</summary>
+    public bool Begin(R0926HuntChest live, string kind, string url, bool locked = false)
     {
         Build();
         Clear();
@@ -61,6 +62,7 @@ public class R0926HuntReveal : MonoBehaviour
             c.Dress(kind, url);
         }
         c.Hold();
+        c.Lock(locked);
         c.transform.localPosition = new Vector3(0f, Base, 0f);
         Chest = c;
         // 둘레 별빛 — 상자를 따라 떨지 않게 받침에 (AR 보물은 R0926HuntTreasure.Take 가 상자 아래로 옮겨 왔고, 새로 만든 보물은 Awake 가 받침에 만들었다)

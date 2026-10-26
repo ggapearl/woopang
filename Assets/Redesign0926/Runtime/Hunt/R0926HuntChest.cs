@@ -14,12 +14,16 @@ using UnityEngine.Networking;
 /// 몸통·뚜껑 메시와 재질은 Apply(Redesign0926ApplyHuntChest)가 만든다. 앵커(뿌리) 아래 'Chest' 에 둔다.
 /// 보물 모양(10-24 대표님 — 주최자가 고른다): 보물상자 · 선물상자 · 보물알(뚜껑이 열린다) · 보석 · 별 · 하트(빛만 솟는다) ·
 ///  사진(액자에 끼운다) · 3D 모델(GLB — 못 받으면 보물상자). 서버 hunts.object_kind / object_url → Dress.
+/// 비밀번호를 건 보물(10-26 대표님)은 앞에 작은 자물쇠를 매단다 (Lock) — 비밀번호 없이 열려 하면 대롱 흔들리고(Jiggle),
+///  찾으면 딸깍 풀려 떨어진 뒤 열린다 (Unlock — 축하 화면이 짜잔 직전에 부른다)
 /// </summary>
 public class R0926HuntChest : MonoBehaviour
 {
     [SerializeField] private Transform lid;               // 원점 = 경첩(몸통 뒤 위 모서리) — X 로 돌면 열린다
     [SerializeField] private float spinSpeed = 24f;       // 도/초
     [SerializeField] private Skin[] skins;                // 모양마다 몸통·뚜껑 (보물상자 포함)
+    [SerializeField] private Transform padlock;           // 비밀번호를 건 보물의 자물쇠 (꺼 둔다) — 원점 = 몸통 위 가운데
+    [SerializeField] private Transform shackle;           // 자물쇠 고리 — 원점 = 왼쪽 다리 (열릴 때 이 다리를 축으로 돈다)
 
     /// <summary>보물 모양 하나 — 뚜껑이 없으면(보석·별·하트·사진·모델) 열 때 빛만 솟는다</summary>
     [Serializable]
@@ -31,6 +35,9 @@ public class R0926HuntChest : MonoBehaviour
         public Vector3 hinge;                             // 뚜껑 원점
         public float seam;                                // 빛기둥·별빛이 솟는 높이
         public Vector3 boxCenter, boxSize;                // 누르기 충돌 상자
+        public Vector3 lockPos;                           // 자물쇠 자리 (상자 좌표 · 앞 = -Z)
+        public float lockTilt;                            // 자물쇠 위가 상자 쪽으로 기운 각도 (도)
+        public float lockScale = 1f;
     }
 
     /// <summary>사진 칸 — 액자(사진 모양) 앞면의 정사각형 (상자 좌표)</summary>
@@ -39,6 +46,7 @@ public class R0926HuntChest : MonoBehaviour
 
     private const float NudgeScale = 1.15f, NudgeHold = 0.16f, NudgeSpeed = 5f;   // 일반 오브젝트(Object3DTouchHaptic)와 같은 느낌
     private const float LidOpen = 112f;
+    private static readonly Vector3 LockHook = new Vector3(0f, 0.10f, 0f);   // 자물쇠가 걸린 점 (고리 안쪽 꼭대기 — 자물쇠 좌표) · 흔들 때 축
     private static readonly int PhaseId = Shader.PropertyToID("_PulsePhaseOffset");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static Mesh beamMesh;
@@ -54,6 +62,10 @@ public class R0926HuntChest : MonoBehaviour
     private readonly List<UnityEngine.Object> owned = new List<UnityEngine.Object>();   // 받은 사진·재질 — 지울 때 같이
     private Transform modelHolder;
     private int dressGen;
+    private Skin worn;
+    private Vector3 shackleRest, modelSize;               // modelSize = 붙인 3D 모델의 크기 (상자 좌표 — 자물쇠를 모델 앞에)
+    private readonly List<Renderer> lockRenderers = new List<Renderer>();
+    private Coroutine unlockCo, jiggleCo;
 
     /// <summary>지금 입은 모양 (기본 보물상자)</summary>
     public string Kind { get; private set; } = "chest";
@@ -81,11 +93,18 @@ public class R0926HuntChest : MonoBehaviour
     public float Seam => seam;
     /// <summary>축하 화면이 가져갔다 — 스스로는 움직이지 않는다</summary>
     public bool Held => held;
+    /// <summary>비밀번호를 건 보물 — 자물쇠가 걸려 있다 (풀리는 중이면 이미 false)</summary>
+    public bool Locked { get; private set; }
+    /// <summary>자물쇠가 보인다 (풀려 떨어지는 동안 포함)</summary>
+    public bool PadlockShown => padlock != null && padlock.gameObject.activeSelf;
 
     private void Awake()
     {
         body = GetComponent<Renderer>();
         rest = transform.localScale;
+        worn = Find(Kind);
+        if (shackle != null) shackleRest = shackle.localPosition;
+        if (padlock != null) padlock.GetComponentsInChildren(true, lockRenderers);   // 꺼 둔 자물쇠는 앵커가 모른다 — 몸통을 따라 켜고 끈다
         yaw = transform.eulerAngles.y;
         // 상자마다 빛이 숨 쉬는 박자를 다르게 (예전 금빛 큐브처럼)
         var mpb = new MaterialPropertyBlock();
@@ -110,7 +129,10 @@ public class R0926HuntChest : MonoBehaviour
         // 사진 판·모델(받는 동안의 로딩 고리 포함)도 앵커가 몸통을 숨기고 보일 때 같이 (나중에 붙어 앵커가 모른다)
         if (Loading && modelHolder != null) modelHolder.GetComponentsInChildren(true, extraRenderers);
         if (body != null)
+        {
             foreach (var r in extraRenderers) if (r != null && r.enabled != body.enabled) r.enabled = body.enabled;
+            foreach (var r in lockRenderers) if (r != null && r.enabled != body.enabled) r.enabled = body.enabled;
+        }
 
         if (held) return;   // 축하 화면이 움직인다
         if (!opening) yaw += spinSpeed * Time.deltaTime;
@@ -153,6 +175,110 @@ public class R0926HuntChest : MonoBehaviour
         if (lid != null) lid.localRotation = Quaternion.Euler(deg, 0f, 0f);
     }
 
+    // ── 자물쇠 (비밀번호를 건 보물) ─────────────────────────────
+    /// <summary>자물쇠를 건다 · 뗀다 (움직임 없이). 이미 그 상태면 그대로 — 흔들거나 풀려 떨어지는 중이면 마저</summary>
+    public void Lock(bool on)
+    {
+        if (padlock == null) { Locked = false; return; }
+        if (on == Locked && (!on || padlock.gameObject.activeSelf)) return;
+        StopLockMotion();
+        Locked = on;
+        padlock.gameObject.SetActive(on);
+        PlaceLock();
+    }
+
+    /// <summary>찾았다 — 딸깍 고리가 튀어 오르고 돌아 열린 뒤 자물쇠가 앞으로 떨어지며 사라진다 (약 0.66초)</summary>
+    public void Unlock()
+    {
+        if (!Locked || padlock == null) return;
+        StopLockMotion();
+        Locked = false;
+        if (isActiveAndEnabled && padlock.gameObject.activeSelf) unlockCo = StartCoroutine(UnlockCo());
+        else padlock.gameObject.SetActive(false);
+    }
+
+    /// <summary>비밀번호 없이 열려 했다 — 자물쇠가 걸린 점을 축으로 대롱대롱</summary>
+    public void Jiggle()
+    {
+        if (!Locked || padlock == null || !isActiveAndEnabled) return;
+        StopLockMotion();
+        jiggleCo = StartCoroutine(JiggleCo());
+    }
+
+    private void StopLockMotion()
+    {
+        if (jiggleCo != null) { StopCoroutine(jiggleCo); jiggleCo = null; PlaceLock(); }
+        if (unlockCo != null)
+        {
+            StopCoroutine(unlockCo);
+            unlockCo = null;
+            if (padlock != null && !Locked) padlock.gameObject.SetActive(false);
+            PlaceLock();
+        }
+    }
+
+    // 지금 모양의 자물쇠 자리 — 3D 모델은 붙인 모델 앞 아래
+    private void PlaceLock()
+    {
+        if (padlock == null) return;
+        Vector3 pos = worn != null ? worn.lockPos : new Vector3(0f, -0.10f, -0.397f);
+        float tilt = worn != null ? worn.lockTilt : 10f;
+        float k = worn != null && worn.lockScale > 0f ? worn.lockScale : 1f;
+        if (Kind == "model" && modelSize != Vector3.zero)
+        {
+            pos = new Vector3(0f, -modelSize.y / 2f + 0.15f * k, -modelSize.z / 2f - 0.04f);
+            tilt = 0f;
+        }
+        padlock.localPosition = pos;
+        padlock.localRotation = Quaternion.Euler(tilt, 0f, 0f);
+        padlock.localScale = Vector3.one * k;
+        if (shackle != null) { shackle.localPosition = shackleRest; shackle.localRotation = Quaternion.identity; }
+    }
+
+    private IEnumerator UnlockCo()
+    {
+        PlaceLock();
+        Vector3 p0 = padlock.localPosition, s0 = padlock.localScale;
+        Quaternion r0 = padlock.localRotation;
+        float k = s0.x;
+        // 딸깍 — 고리가 톡 튀어 오르고 자물쇠가 살짝 부푼다
+        yield return Tween(0.08f, t =>
+        {
+            if (shackle != null) shackle.localPosition = shackleRest + Vector3.up * (0.035f * t);
+            padlock.localScale = s0 * (1f + 0.08f * Mathf.Sin(t * Mathf.PI));
+        });
+        // 고리가 돌아 열린다 (짧은 다리가 앞으로)
+        yield return Tween(0.16f, t =>
+        {
+            if (shackle != null) shackle.localRotation = Quaternion.Euler(0f, 100f * BackOut(t), 0f);
+        });
+        // 앞으로 기울며 떨어지고 작아진다
+        yield return Tween(0.42f, t =>
+        {
+            float t2 = t * t;
+            padlock.localPosition = p0 + new Vector3(0f, -0.55f * t2, -0.12f * t) * k;
+            padlock.localRotation = r0 * Quaternion.Euler(-70f * t2, 0f, 25f * t);
+            padlock.localScale = s0 * Mathf.Lerp(1f, 0.4f, t);
+        });
+        unlockCo = null;
+        padlock.gameObject.SetActive(false);
+        PlaceLock();
+    }
+
+    private IEnumerator JiggleCo()
+    {
+        Vector3 p0 = padlock.localPosition;
+        Quaternion r0 = padlock.localRotation;
+        Vector3 h = LockHook * padlock.localScale.x;
+        yield return Tween(0.7f, t =>
+        {
+            var rz = Quaternion.Euler(0f, 0f, 16f * Mathf.Sin(t * Mathf.PI * 5f) * (1f - t));
+            padlock.localRotation = r0 * rz;
+            padlock.localPosition = p0 + r0 * h - r0 * (rz * h);   // 걸린 점은 제자리
+        });
+        jiggleCo = null;
+    }
+
     // ── 모양 ──────────────────────────────────────────────
     /// <summary>서버의 보물 모양 — 코드로 만든 모양은 바로, 사진·3D 모델은 받아서 붙인다 (못 받으면 보물상자 그대로)</summary>
     public void Dress(string kind, string url)
@@ -167,8 +293,7 @@ public class R0926HuntChest : MonoBehaviour
     /// <summary>모양 갈아입기 (사진·모델은 빈 액자·빈 자리까지만 — 붙이는 건 ShowPhoto · ShowModel). 모르는 모양이면 false</summary>
     public bool Wear(string kind)
     {
-        Skin s = null;
-        if (skins != null) foreach (var k in skins) if (k != null && k.kind == kind) { s = k; break; }
+        var s = Find(kind);
         if (s == null) return false;
         ClearExtras();
         Kind = kind;
@@ -187,7 +312,16 @@ public class R0926HuntChest : MonoBehaviour
         var bc = GetComponent<BoxCollider>();
         if (bc != null && s.boxSize != Vector3.zero) { bc.center = s.boxCenter; bc.size = s.boxSize; }
         seam = s.seam;
+        worn = s;
+        StopLockMotion();
+        PlaceLock();
         return true;
+    }
+
+    private Skin Find(string kind)
+    {
+        if (skins != null) foreach (var k in skins) if (k != null && k.kind == kind) return k;
+        return null;
     }
 
     /// <summary>액자에 사진을 끼운다 (가로·세로 비율 그대로 정사각형 칸 안에) — 앞뒤 두 장, 뒤에서 봐도 바로 읽힌다</summary>
@@ -261,14 +395,16 @@ public class R0926HuntChest : MonoBehaviour
         Loading = false;
         if (!ok || !loader.HasLoadedModel()) { Wear("chest"); yield break; }
         Model = loader.GetLoadedModel();
-        Fit(holder.transform, Model.transform);
+        modelSize = Fit(holder.transform, Model.transform);
+        if (Locked) { StopLockMotion(); PlaceLock(); }   // 자물쇠를 모델 앞으로
         holder.GetComponentsInChildren(true, extraRenderers);
         foreach (var r in extraRenderers) r.enabled = body == null || body.enabled;
     }
 
     // 가장 긴 변을 보물상자 폭에 맞추고 가운데를 상자 가운데로. 모델 뿌리 좌표로 잰다 — 불러오기 연출이 모델을 0.85배에서 키우고
-    // 로딩 고리도 잠깐 남아 있어 월드 경계로 재면 작게 붙는다(10-24 시험: 0.68). 뿌리의 끝 크기는 불러올 때 준 배율 1
-    private static void Fit(Transform holder, Transform model)
+    // 로딩 고리도 잠깐 남아 있어 월드 경계로 재면 작게 붙는다(10-24 시험: 0.68). 뿌리의 끝 크기는 불러올 때 준 배율 1.
+    // 맞춘 크기(상자 좌표)를 돌려준다 — 못 재면 0
+    private static Vector3 Fit(Transform holder, Transform model)
     {
         var toHolder = holder.worldToLocalMatrix * model.parent.localToWorldMatrix * Matrix4x4.TRS(model.localPosition, model.localRotation, Vector3.one) * model.worldToLocalMatrix;
         bool any = false;
@@ -286,10 +422,11 @@ public class R0926HuntChest : MonoBehaviour
             }
         }
         float size = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
-        if (!any || size < 1e-4f) return;
+        if (!any || size < 1e-4f) return Vector3.zero;
         float k = ModelSize / size;
         holder.localScale = Vector3.one * k;
         holder.localPosition = -b.center * k;
+        return b.size * k;
     }
 
     private void ClearExtras()
@@ -304,6 +441,7 @@ public class R0926HuntChest : MonoBehaviour
         modelHolder = null;
         Model = null;
         Photo = null;
+        modelSize = Vector3.zero;
     }
 
     private static Mesh PhotoQuad(float w, float h)
@@ -333,6 +471,7 @@ public class R0926HuntChest : MonoBehaviour
         Transform root = transform.parent != null ? transform.parent : transform;
         bool seen = body != null && body.enabled;     // 복구 중(렌더러 숨김)이면 빛 연출 없이 사라진다
         var cam = Camera.main;
+        Unlock();   // 비밀번호를 건 보물 — 돌아보는 사이 딸깍 풀려 떨어진다
 
         // 1) 이쪽을 돌아본다 — 살짝 들썩이며
         float y0 = yaw, y1 = yaw;

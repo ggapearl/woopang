@@ -112,10 +112,11 @@ namespace Redesign0926
             HLabel(form, "LMode", 72, "찾는 방식", "How to win", 44, Muted, FontStyle.Bold);
             S("modeChips", HChips(form, "ModeChips"));
             var codeBox = HList(form, "CodeBox");
-            HLabel(codeBox, "LCode", 68, "코드 — 보물 앞에서 넣을 답", "Code — the answer to enter at the treasure", 40, Muted, FontStyle.Bold);
-            var cIn = HInput(codeBox, "CodeInput", 132, "예: 우팡123", "e.g. woopang123", false, 30); S("codeInput", cIn);
-            HLabel(codeBox, "LQuestion", 68, "문제 (선택)", "Question (optional)", 40, Muted, FontStyle.Bold);
-            var qIn = HInput(codeBox, "QuestionInput", 132, "예: 우리 앱 이름 + 123 은?", "e.g. Our app's name + 123?", false, 120); S("questionInput", qIn);
+            // 비밀번호 — 4자 · 걸면 힌트도 반드시 (10-26 대표님)
+            HLabel(codeBox, "LCode", 68, "비밀번호 (4자) — 보물 앞에서 넣을 답", "Password (4 characters) — the answer to enter at the treasure", 40, Muted, FontStyle.Bold);
+            var cIn = HInput(codeBox, "CodeInput", 132, "예: 1234", "e.g. 1234", false, R0926HuntApi.CodeLen); S("codeInput", cIn);
+            HLabel(codeBox, "LQuestion", 68, "비밀번호 힌트 (필수)", "Password hint (required)", 40, Muted, FontStyle.Bold);
+            var qIn = HInput(codeBox, "QuestionInput", 132, "예: 가게 간판 아래 숫자 네 자리", "e.g. The four digits under the shop sign", false, 120); S("questionInput", qIn);
             S("codeBox", codeBox.gameObject);
             HLabel(form, "LWinners", 72, "당첨 인원", "Winners", 44, Muted, FontStyle.Bold);
             S("winnerChips", HChips(form, "WinnerChips"));
@@ -185,12 +186,12 @@ namespace Redesign0926
             var oldOpen = det.Find("Open");
             if (oldOpen != null) Object.DestroyImmediate(oldOpen.gameObject);
             var ccb = HList(det, "ClaimCodeBox");
-            HLabel(ccb, "L", 68, "코드", "Code", 40, Muted, FontStyle.Bold);
+            HLabel(ccb, "L", 68, "비밀번호", "Password", 40, Muted, FontStyle.Bold);
             // 코드 칸 옆에 '열기' — 입력줄의 보내기(엔터)로도 바로 연다
             var codeRow = HRow(ccb, "CodeRow", 132);
             var oldCc = ccb.Find("ClaimCodeInput");
             if (oldCc != null) oldCc.SetParent(codeRow, false);
-            var ccIn = HInput(codeRow, "ClaimCodeInput", 132, "보물에 걸린 코드를 넣어 주세요", "Enter the treasure's code", false, 30);
+            var ccIn = HInput(codeRow, "ClaimCodeInput", 132, "비밀번호 4자를 넣어 주세요", "Enter the 4-character password", false, R0926HuntApi.CodeLen);
             Ensure<LayoutElement>(ccIn.gameObject).flexibleWidth = 1;
             var ccOk = HButton(codeRow, "CodeOk", 132, HuntGold, "열기", "Open", 46, HuntDark, FontStyle.Bold, out _);
             var ccle = Ensure<LayoutElement>(ccOk.gameObject); ccle.preferredWidth = 220; ccle.flexibleWidth = 0;
@@ -307,10 +308,10 @@ namespace Redesign0926
             ["Treasure look"] = new[] { "宝の見た目", "宝藏外观", "Aspecto del tesoro" },
             ["A hint for the finders"] = new[] { "探す人へのヒント", "给寻宝者的提示", "Una pista para quienes buscan" },
             ["How to win"] = new[] { "見つけ方", "寻宝方式", "Cómo se gana" },
-            ["Code — the answer to enter at the treasure"] = new[] { "コード — 宝の前で入力する答え", "代码 — 在宝藏前输入的答案", "Código — la respuesta que se introduce en el tesoro" },
-            ["e.g. woopang123"] = new[] { "例：woopang123", "例：woopang123", "p. ej. woopang123" },
-            ["Question (optional)"] = new[] { "問題（任意）", "问题（选填）", "Pregunta (opcional)" },
-            ["e.g. Our app's name + 123?"] = new[] { "例：このアプリの名前 + 123 は？", "例：我们 App 的名字 + 123 是？", "p. ej. ¿El nombre de la app + 123?" },
+            ["Password (4 characters) — the answer to enter at the treasure"] = new[] { "パスワード（4文字）— 宝の前で入力する答え", "密码（4 个字符）— 在宝藏前输入的答案", "Contraseña (4 caracteres): la respuesta que se introduce en el tesoro" },
+            ["e.g. 1234"] = new[] { "例：1234", "例：1234", "p. ej. 1234" },
+            ["Password hint (required)"] = new[] { "パスワードのヒント（必須）", "密码提示（必填）", "Pista de la contraseña (obligatoria)" },
+            ["e.g. The four digits under the shop sign"] = new[] { "例：お店の看板の下にある数字4桁", "例：店铺招牌下方的四位数字", "p. ej. Los cuatro dígitos bajo el letrero de la tienda" },
             ["Winners"] = new[] { "当選人数", "中奖人数", "Ganadores" },
             ["Max players — closes when full"] = new[] { "参加人数 — 埋まると締め切り", "参加人数 — 满员即截止", "Máx. de jugadores — se cierra al llenarse" },
             ["Prize (optional)"] = new[] { "賞品（任意）", "奖品（选填）", "Premio (opcional)" },
@@ -324,8 +325,8 @@ namespace Redesign0926
             ["Hide the treasure here"] = new[] { "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí" },
             ["Agree and hide a treasure"] = new[] { "同意して宝を隠す", "同意并藏宝", "Aceptar y esconder un tesoro" },
             ["‹  Treasure hunt"] = new[] { "‹  宝探し", "‹  寻宝", "‹  Búsqueda del tesoro" },
-            ["Code"] = new[] { "コード", "代码", "Código" },
-            ["Enter the treasure's code"] = new[] { "宝のコードを入力してください", "请输入宝藏的代码", "Introduce el código del tesoro" },
+            ["Password"] = new[] { "パスワード", "密码", "Contraseña" },
+            ["Enter the 4-character password"] = new[] { "4文字のパスワードを入力してください", "请输入 4 个字符的密码", "Introduce la contraseña de 4 caracteres" },
             ["Open"] = new[] { "開ける", "打开", "Abrir" },
             ["Rate on the host's profile"] = new[] { "主催者のプロフィールで評価する", "在主办者资料中评分", "Valora en el perfil del organizador" },
             ["Leave"] = new[] { "退出する", "退出", "Salir" },
@@ -494,6 +495,10 @@ namespace Redesign0926
             var title = FindOrCreate(row.transform, "Title");
             SetRect(RT(title), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(96, 2), new Vector2(-96 - 250, 66));
             OneLine(Txt(title, "", 50, Ink, TextAnchor.LowerLeft, FontStyle.Bold), 36);
+            var lk = FindOrCreate(row.transform, "Lock");
+            SetRect(RT(lk), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(96, 26), new Vector2(38, 38));
+            Img(lk, Spr("r0926_lock"), HuntGold, Image.Type.Simple).raycastTarget = false;
+            lk.SetActive(false);
             var sub = FindOrCreate(row.transform, "Sub");
             SetRect(RT(sub), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(96, -6), new Vector2(-96 - 250, 54));
             OneLine(Txt(sub, "", 40, Soft, TextAnchor.UpperLeft, FontStyle.Normal), 30);

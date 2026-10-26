@@ -142,16 +142,18 @@ namespace Redesign0926
             so.FindProperty("pinIcon").objectReferenceValue = pinImg;
             so.FindProperty("board").objectReferenceValue = (RectTransform)frame;
 
-            // 줄 그림 — 축제(r0926_f_*) · 장소 분류(r0926_c_*) · 하늘 옆 장(r0926_s_*) · 보물상자
+            // 줄 그림 — 축제(r0926_f_*) · 장소 분류(r0926_c_*) · 하늘 옆 장(r0926_s_*) · 보물상자(비밀번호를 건 것은 자물쇠 배지)
             var icons = new List<Object>();
             foreach (var guid in AssetDatabase.FindAssets("t:Sprite r0926_", new[] { SpriteDir.TrimEnd('/') }))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var file = System.IO.Path.GetFileNameWithoutExtension(path);
-                if (!file.StartsWith("r0926_f_") && !file.StartsWith("r0926_c_") && !file.StartsWith("r0926_s_") && file != "r0926_i_treasure") continue;
+                if (!file.StartsWith("r0926_f_") && !file.StartsWith("r0926_c_") && !file.StartsWith("r0926_s_") && file != "r0926_i_treasure" && file != "r0926_i_treasure_lock") continue;
                 var sp = AssetDatabase.LoadAssetAtPath<Sprite>(path);
                 if (sp != null) icons.Add(sp);
             }
+            var lockIcon = AssetDatabase.LoadAssetAtPath<Sprite>(SpriteDir + "r0926_i_treasure_lock.png");   // 막 들인 그림은 FindAssets 색인에 아직 없다
+            if (lockIcon != null && !icons.Contains(lockIcon)) icons.Add(lockIcon);
             SetArray(so.FindProperty("icons"), icons.ToArray());
             so.ApplyModifiedPropertiesWithoutUndo();
 

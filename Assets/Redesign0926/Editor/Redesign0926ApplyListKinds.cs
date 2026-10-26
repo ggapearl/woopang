@@ -49,6 +49,7 @@ namespace Redesign0926
                 var rso = new SerializedObject(rows);
                 rso.FindProperty("personSprite").objectReferenceValue = Spr("r0926_i_user");
                 rso.FindProperty("huntSprite").objectReferenceValue = Spr("r0926_i_treasure");
+                rso.FindProperty("huntLockSprite").objectReferenceValue = Spr("r0926_i_treasure_lock");
                 // 축제·보호소 줄 그림 — 서버가 축제마다 고른 이름(r0926_f_<이름>) · 보호소는 shelter (10-23 대표님)
                 var kinds = new List<Sprite>();
                 foreach (var file in System.IO.Directory.GetFiles(SpriteDir, "r0926_f_*.png"))   // 막 바꿔 들인 그림은 FindAssets 색인에 아직 없다
@@ -89,6 +90,19 @@ namespace Redesign0926
             SetRect(RT(icon), center, center, center, new Vector2(0, 2), new Vector2(84, 84));
             var ii = Img(icon, Spr("r0926_i_treasure"), Color.white, Image.Type.Simple);
             ii.raycastTarget = false; ii.preserveAspect = true;
+            // 비밀번호를 건 보물 — 테 오른쪽 아래 작은 자물쇠 배지 (R0926FriendsMap 이 켠다)
+            var lk = FindOrCreate(ring.transform, "Lock");
+            lk.transform.SetAsLastSibling();
+            SetRect(RT(lk), center, center, center, new Vector2(40, -40), new Vector2(48, 48));
+            Img(lk, Spr("r0926_circle"), HuntGold, Image.Type.Simple).raycastTarget = false;
+            var lf = FindOrCreate(lk.transform, "Face");
+            SetRect(RT(lf), center, center, center, Vector2.zero, new Vector2(40, 40));
+            Img(lf, Spr("r0926_circle"), Dark, Image.Type.Simple).raycastTarget = false;
+            var lg = FindOrCreate(lf.transform, "Glyph");
+            SetRect(RT(lg), center, center, center, new Vector2(0, 1), new Vector2(26, 26));
+            var lgi = Img(lg, Spr("r0926_lock"), HuntGold, Image.Type.Simple);
+            lgi.raycastTarget = false; lgi.preserveAspect = true;
+            lk.SetActive(false);
             var name = FindOrCreate(pin.transform, "Name");
             SetRect(RT(name), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(150, 52));
             Img(name, Spr("r0926_pill"), new Color(0.055f, 0.067f, 0.078f, 0.88f), Image.Type.Sliced, 64f / 26f).raycastTarget = false;

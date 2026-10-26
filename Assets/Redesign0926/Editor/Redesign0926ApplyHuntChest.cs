@@ -35,11 +35,15 @@ namespace Redesign0926
         // 사진 액자 — 사진 칸은 R0926HuntChest.PhotoSide · PhotoY · PhotoZ 와 같다 (바꾸면 같이)
         private const float PhotoWin = 0.34f, PhotoMid = 0.12f, PhotoHalfW = 0.42f, PhotoTop = 0.54f, PhotoBot = -0.42f, PhotoDepth = 0.045f;
         private const float StarY = -0.04f, HeartScale = 0.0297f;
+        // 비밀번호를 건 보물의 자물쇠 (10-26) — 원점 = 몸통 위 가운데(고리 다리가 들어가는 곳). 고리는 왼쪽 다리를 축으로 열린다
+        private const string LockSteelMatPath = "Assets/Materials/AR/HuntLockSteel_Mat.mat";
+        private const float LockHalfW = 0.09f, LockHalfH = 0.075f, LockHalfD = 0.03f;
+        private const float ShackleR = 0.055f, ShackleTube = 0.016f, ShackleTop = 0.045f;   // 고리 반지름 · 굵기 · 반원이 시작되는 높이
 
         private class ChestParts
         {
-            public Mesh body, lid;
-            public Material gold, trim, treasure;
+            public Mesh body, lid, lockBody, lockShackle;
+            public Material gold, trim, treasure, steel;
             public readonly List<R0926HuntChest.Skin> skins = new List<R0926HuntChest.Skin>();
         }
 
@@ -64,6 +68,10 @@ namespace Redesign0926
             ChestLid(lid);
             p.lid = lid.Save(ChestLidPath, "HuntChestLid");
             log.Add($"보물상자 모양: 몸통 {p.body.vertexCount} · 뚜껑 {p.lid.vertexCount} 꼭짓점");
+            // 자물쇠 — 은빛 강철 몸통 · 금 동그라미 · 짙은 열쇠 구멍 (금·빨강·보라 모양 어디에 걸어도 갈려 보이게)
+            p.steel = ChestMat(LockSteelMatPath, sh, new Color(0.72f, 0.75f, 0.80f), new Color(0.85f, 0.9f, 1f), 0.5f, new Color(0.95f, 0.97f, 1f), 2.4f, 1.2f, new Color(0.85f, 0.88f, 0.95f));
+            p.lockBody = ShapeMesh("HuntPadlockBody", 3, PadlockBody);
+            p.lockShackle = ShapeMesh("HuntPadlockShackle", 1, PadlockShackle);
             ChestSkins(p, sh, log);
             return p;
         }
@@ -79,20 +87,28 @@ namespace Redesign0926
             var rose = ChestMat(dir + "HuntHeart_Mat.mat", sh, new Color(0.96f, 0.30f, 0.48f), new Color(1f, 0.45f, 0.58f), 0.9f, new Color(1f, 0.82f, 0.88f), 2f, 1.4f, new Color(1f, 0.55f, 0.65f));
             var cream = ChestMat(dir + "HuntPhotoFrame_Mat.mat", sh, new Color(0.96f, 0.94f, 0.89f), new Color(1f, 0.95f, 0.85f), 0.35f, new Color(1f, 0.84f, 0.45f), 2.6f, 1.1f);
 
-            void Add(string kind, Mesh body, Mesh lid, Material[] bodyMats, Material[] lidMats, Vector3 hinge, float seam, Vector3 boxCenter, Vector3 boxSize) =>
-                p.skins.Add(new R0926HuntChest.Skin { kind = kind, body = body, lid = lid, bodyMats = bodyMats, lidMats = lidMats, hinge = hinge, seam = seam, boxCenter = boxCenter, boxSize = boxSize });
+            // lockPos · lockTilt · lockScale = 비밀번호를 건 보물의 자물쇠 자리 — 앞(-Z)에 매단다 (뚜껑 있는 모양은 이음매 아래 · 기울기는 위가 상자 쪽으로)
+            void Add(string kind, Mesh body, Mesh lid, Material[] bodyMats, Material[] lidMats, Vector3 hinge, float seam, Vector3 boxCenter, Vector3 boxSize,
+                     Vector3 lockPos, float lockTilt, float lockScale) =>
+                p.skins.Add(new R0926HuntChest.Skin { kind = kind, body = body, lid = lid, bodyMats = bodyMats, lidMats = lidMats, hinge = hinge, seam = seam, boxCenter = boxCenter, boxSize = boxSize,
+                                                      lockPos = lockPos, lockTilt = lockTilt, lockScale = lockScale });
             var none = new Material[0];
             p.skins.Clear();
-            Add("chest", p.body, p.lid, new[] { p.gold, p.trim, p.treasure }, new[] { p.gold, p.trim }, ChestHinge, ChestSeam, ChestBoxCenter, ChestBoxSize);
+            Add("chest", p.body, p.lid, new[] { p.gold, p.trim, p.treasure }, new[] { p.gold, p.trim }, ChestHinge, ChestSeam, ChestBoxCenter, ChestBoxSize,
+                new Vector3(0f, -0.10f, -0.397f), 10f, 1f);
             Add("gift", ShapeMesh("HuntGiftBody", 4, GiftBody), ShapeMesh("HuntGiftLid", 3, GiftLid), new[] { red, p.gold, p.trim, p.treasure }, new[] { red, p.gold, p.trim },
-                GiftHinge, GiftSeam, new Vector3(0f, 0.01f, 0f), new Vector3(1.15f, 1.1f, 1.15f));
+                GiftHinge, GiftSeam, new Vector3(0f, 0.01f, 0f), new Vector3(1.15f, 1.1f, 1.15f), new Vector3(0f, -0.03f, -0.441f), 10f, 1f);
             Add("egg", ShapeMesh("HuntEggBody", 4, EggBody), ShapeMesh("HuntEggLid", 3, EggLid), new[] { shell, p.gold, p.trim, p.treasure }, new[] { shell, p.gold, p.trim },
-                EggHinge, EggSeam, new Vector3(0f, 0.03f, 0f), new Vector3(0.95f, 1.1f, 0.95f));
-            Add("gem", ShapeMesh("HuntGem", 1, Gem), null, new[] { gem }, none, Vector3.zero, 0.30f, new Vector3(0f, -0.07f, 0f), new Vector3(1.05f, 0.95f, 1.05f));
-            Add("star", ShapeMesh("HuntStar", 1, Star), null, new[] { star }, none, Vector3.zero, StarY, new Vector3(0f, StarY, 0f), new Vector3(1.15f, 1.1f, 0.7f));
-            Add("heart", ShapeMesh("HuntHeart", 3, Heart), null, new[] { rose, p.gold, p.trim }, none, Vector3.zero, 0f, Vector3.zero, new Vector3(1.15f, 1f, 0.7f));
-            Add("photo", ShapeMesh("HuntPhotoFrame", 2, PhotoFrame), null, new[] { cream, p.gold }, none, Vector3.zero, 0.30f, new Vector3(0f, 0.06f, 0f), new Vector3(1f, 1.1f, 0.5f));
-            Add("model", null, null, none, none, Vector3.zero, 0f, Vector3.zero, Vector3.one * 1.2f);
+                EggHinge, EggSeam, new Vector3(0f, 0.03f, 0f), new Vector3(0.95f, 1.1f, 0.95f), new Vector3(0f, -0.14f, -0.407f), 6f, 0.9f);
+            Add("gem", ShapeMesh("HuntGem", 1, Gem), null, new[] { gem }, none, Vector3.zero, 0.30f, new Vector3(0f, -0.07f, 0f), new Vector3(1.05f, 0.95f, 1.05f),
+                new Vector3(0f, -0.02f, -0.473f), 10f, 0.9f);
+            Add("star", ShapeMesh("HuntStar", 1, Star), null, new[] { star }, none, Vector3.zero, StarY, new Vector3(0f, StarY, 0f), new Vector3(1.15f, 1.1f, 0.7f),
+                new Vector3(0f, -0.35f, 0f), 0f, 0.9f);
+            Add("heart", ShapeMesh("HuntHeart", 3, Heart), null, new[] { rose, p.gold, p.trim }, none, Vector3.zero, 0f, Vector3.zero, new Vector3(1.15f, 1f, 0.7f),
+                new Vector3(0f, -0.055f, -0.249f), 10f, 0.9f);
+            Add("photo", ShapeMesh("HuntPhotoFrame", 2, PhotoFrame), null, new[] { cream, p.gold }, none, Vector3.zero, 0.30f, new Vector3(0f, 0.06f, 0f), new Vector3(1f, 1.1f, 0.5f),
+                new Vector3(0f, -0.33f, -0.086f), 10f, 0.9f);
+            Add("model", null, null, none, none, Vector3.zero, 0f, Vector3.zero, Vector3.one * 1.2f, new Vector3(0f, -0.30f, -0.45f), 0f, 1f);   // 모델을 붙이면 런타임이 모델 앞 아래로 옮긴다
             log.Add("보물 모양 " + p.skins.Count + "가지: " + string.Join(" · ", p.skins.ConvertAll(s => s.kind + (s.body != null ? " " + s.body.vertexCount : ""))));
         }
 
@@ -258,6 +274,32 @@ namespace Redesign0926
                 var n = new Vector3(u.x / rad.x, u.y / rad.y, u.z / rad.z).normalized;
                 k.Coin(sub, c + Vector3.Scale(u, rad) + n * 0.003f, n, 0.034f, 0.004f, 14);
             }
+        }
+
+        // 자물쇠 몸통 — 둥근 강철 몸통 + 앞뒤 금 동그라미 + 열쇠 구멍(짙게). 원점 = 몸통 위 가운데
+        private static void PadlockBody(ChestMesh k)
+        {
+            const int S = 0, G = 1, T = 2;
+            k.RoundedBox(S, new Vector3(0f, -LockHalfH, 0f), new Vector3(LockHalfW, LockHalfH, LockHalfD), 0.028f, 3);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                var face = s < 0 ? Vector3.back : Vector3.forward;
+                float z = s * (LockHalfD + 0.002f);
+                k.Coin(G, new Vector3(0f, -LockHalfH + 0.005f, z), face, 0.034f, 0.003f, 24);
+                k.Coin(T, new Vector3(0f, -LockHalfH + 0.016f, z + s * 0.0035f), face, 0.011f, 0.0012f, 16);
+                k.RoundedBox(T, new Vector3(0f, -LockHalfH - 0.002f, z + s * 0.0035f), new Vector3(0.0045f, 0.014f, 0.0012f), 0.002f, 1);
+            }
+        }
+
+        // 자물쇠 고리 — 다리 둘 + 위 반원. 원점 = 왼쪽 다리 (열 때 이 다리를 축으로 돈다 — 그래서 더 길어 튀어 올라도 몸통 속에 남는다)
+        private static void PadlockShackle(ChestMesh k)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                float low = i == 0 ? -0.06f : -0.02f;
+                k.Coin(0, new Vector3(i * 2f * ShackleR, (low + ShackleTop) / 2f, 0f), Vector3.up, ShackleTube, (ShackleTop - low) / 2f, 14);
+            }
+            k.Torus(0, new Vector3(ShackleR, ShackleTop, 0f), Quaternion.identity, new Vector2(ShackleR, ShackleR), ShackleTube, 20, 12, 0f, Mathf.PI);
         }
 
         // 보석 — 브릴리언트 컷을 줄인 모양 (윗면 · 크라운 24면 · 거들 · 파빌리온 16면). 면마다 꼭짓점을 따로 두어 반짝임이 갈린다
@@ -555,13 +597,13 @@ namespace Redesign0926
                     }
             }
 
-            // 타원 고리 (나비매듭) — 고리는 XY 면 (radii = 가로·세로 반지름) · r = 관 굵기 · rot 로 돌린다
-            public void Torus(int sub, Vector3 c, Quaternion rot, Vector2 radii, float r, int su, int sv)
+            // 타원 고리 (나비매듭) — 고리는 XY 면 (radii = 가로·세로 반지름) · r = 관 굵기 · rot 로 돌린다 · a0~a1 = 고리 일부만 (자물쇠 고리는 위 반원)
+            public void Torus(int sub, Vector3 c, Quaternion rot, Vector2 radii, float r, int su, int sv, float a0 = 0f, float a1 = 2f * Mathf.PI)
             {
                 int start = v.Count;
                 for (int i = 0; i <= su; i++)
                 {
-                    float a = 2f * Mathf.PI * i / su;
+                    float a = a0 + (a1 - a0) * i / su;
                     var p = new Vector3(radii.x * Mathf.Cos(a), radii.y * Mathf.Sin(a), 0f);
                     var d = new Vector3(radii.y * Mathf.Cos(a), radii.x * Mathf.Sin(a), 0f).normalized;   // 타원의 바깥 방향
                     for (int j = 0; j <= sv; j++)

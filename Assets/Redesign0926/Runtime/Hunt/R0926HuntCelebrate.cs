@@ -83,12 +83,13 @@ public class R0926HuntCelebrate : MonoBehaviour
     public static bool Ready => instance != null && instance.panel != null && instance.reveal != null;
 
     /// <summary>찾음 — 축하 화면을 띄운다. chest = AR 에서 떼어 낸 그 보물 (없으면 kind·url 로 새로 만든다).
-    /// prize 가 null 이면(앱을 다시 켜 아직 모름) 서버에서 받아 채운다. total 은 찾을 수 있는 사람 수 (0 = 제한 없음). 띄울 화면이 없으면 false</summary>
-    public static bool Show(int id, string title, int rank, int total, bool ended, string prize, string hostName, string kind, string url, R0926HuntChest chest = null)
+    /// prize 가 null 이면(앱을 다시 켜 아직 모름) 서버에서 받아 채운다. total 은 찾을 수 있는 사람 수 (0 = 제한 없음). 띄울 화면이 없으면 false.
+    /// locked = 비밀번호를 건 보물 — 짜잔 직전에 자물쇠가 딸깍 풀린다</summary>
+    public static bool Show(int id, string title, int rank, int total, bool ended, string prize, string hostName, string kind, string url, R0926HuntChest chest = null, bool locked = false)
     {
         if (instance == null || instance.panel == null) return false;
         R0926HuntTreasure.HideToast();   // 남아 있던 '조금만 더 가까이' 같은 알약이 축하 화면 뒤로 비치지 않게
-        instance.Begin(id, title, rank, total, ended, prize, hostName, kind, url, chest);
+        instance.Begin(id, title, rank, total, ended, prize, hostName, kind, url, chest, locked);
         return true;
     }
 
@@ -110,7 +111,7 @@ public class R0926HuntCelebrate : MonoBehaviour
         if (instance == this) instance = null;
     }
 
-    private void Begin(int id, string t, int r, int n, bool last, string p, string host, string kind, string url, R0926HuntChest chest)
+    private void Begin(int id, string t, int r, int n, bool last, string p, string host, string kind, string url, R0926HuntChest chest, bool locked)
     {
         if (Showing) Finish();
         huntId = id; huntTitle = t; rank = r; total = n; ended = last; prize = p; hostName = host;
@@ -120,11 +121,12 @@ public class R0926HuntCelebrate : MonoBehaviour
         panel.SetActive(true);
         Fit();
         hasFrom = chest != null && Source(chest);   // AR 화면의 자리·크기·방향 — 무대로 옮기기 전에
-        bool staged = reveal != null && reveal.Begin(chest, kind, url);
+        bool staged = reveal != null && reveal.Begin(chest, kind, url, locked);
         Paint();
 #if UNITY_EDITOR
         EditorBuzz = 0;
         EditorOpenedAfter = -1f;
+        EditorUnlockedAfter = -1f;
         editorShownAt = Time.unscaledTime;
 #endif
         if (playCo != null) StopCoroutine(playCo);
@@ -359,8 +361,10 @@ public class R0926HuntCelebrate : MonoBehaviour
                 if (!swapped && s >= 1.75f) { swapped = true; said = 0f; Caption(second, 0f, 1f); }
                 said += Time.unscaledDeltaTime;
                 Caption(null, Mathf.Clamp01(said / 0.3f), 1f + 0.05f * beat);
+                if (s >= Suspense - 0.3f) Unlocked();   // 비밀번호를 건 보물 — 짜잔 직전에 딸깍
                 yield return null;
             }
+            Unlocked();   // 한 프레임이 길어 위를 건너뛰었어도
 
             // 3) 짜잔 — 번쩍 · 뚜껑이 활짝(뚜껑 없는 모양은 한 바퀴) · 빛줄기 · 금화·꽃가루
             phase = Phase.Open;
@@ -683,6 +687,18 @@ public class R0926HuntCelebrate : MonoBehaviour
         return 0.18f * Mathf.Sin((x - 0.2f) / 0.12f * Mathf.PI);
     }
 
+    // 자물쇠가 걸려 있으면 푼다 (딸깍 — 진동 한 번)
+    private void Unlocked()
+    {
+        var c = reveal != null ? reveal.Chest : null;
+        if (c == null || !c.Locked) return;
+        c.Unlock();
+        Buzz(1);
+#if UNITY_EDITOR
+        EditorUnlockedAfter = Time.unscaledTime - editorShownAt;
+#endif
+    }
+
     private static void Buzz(int level)
     {
 #if UNITY_EDITOR
@@ -732,6 +748,8 @@ public class R0926HuntCelebrate : MonoBehaviour
     public static int EditorBuzz;
     /// <summary>플레이 시험 — 뜬 뒤 열리기까지 (초, 아직이면 -1)</summary>
     public static float EditorOpenedAfter = -1f;
+    /// <summary>플레이 시험 — 보인 뒤 자물쇠가 풀릴 때까지 (초 · 아직이면 -1)</summary>
+    public static float EditorUnlockedAfter = -1f;
     private static float editorShownAt;
     public static string EditorPhase => instance != null ? instance.phase.ToString() : "";
     public static void EditorSkip() { if (instance != null) instance.Skip(); }

@@ -704,6 +704,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 if (nm != null) nm.text = h.title.Length <= 12 ? h.title : h.title.Substring(0, 11) + "…";
                 var btn = go.GetComponent<Button>();
                 if (btn != null) { btn.onClick.RemoveAllListeners(); int id = h.id; btn.onClick.AddListener(() => R0926HuntPush.OpenHunt(id)); }
+                go.transform.Find("Ring/Lock")?.gameObject.SetActive(h.locked);   // 비밀번호를 건 보물 — 테 오른쪽 아래 자물쇠
             }
             Place((RectTransform)go.transform, q);
         }
