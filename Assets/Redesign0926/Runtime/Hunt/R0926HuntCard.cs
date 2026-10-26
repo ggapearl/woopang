@@ -10,7 +10,8 @@ using UnityEngine.UI;
 /// <summary>
 /// '추가' 창 세 번째 카드 — 보물찾기 (2026-10-06 대표님: 주최는 장소 추가·3D모델 추가 옆에서. 따로 탭은 찾기 어렵다).
 ///  · 처음: 맨 위 '지금 이 자리에 보물 숨기기' · 코드로 참가 · 근처 보물찾기(참가) · 내 게임
-///  · 숨기기: 처음엔 주최 수칙 동의 → 양식(현장 GPS · 방식 · 인원 · 보이는 거리 · 범위 · 공개 · 대상 · 시작 · 진행 시간)
+///  · 숨기기: 처음엔 주최 수칙 동의 → 양식(현장 GPS · 제목 · 상품 · 힌트 · 모양 · 방식 · 인원 · 보이는 거리 · 범위 · 대상 · 시작 · 진행 시간)
+///    → 확인 카드(고치기 · 숨기기) → 숨기면 같은 카드에 참가 코드 · 공유하기 (10-26) · 공유 링크로 열면 OpenLink(코드가 있으면 바로 참가)
 ///  · 상세: 게임 정보 · 참가/나가기/포기 · 8초마다 근접 단계 · 찾기는 AR 보물을 두 번 톡톡(R0926HuntTreasure — '보물 열기' 버튼은 10-14 대표님 요청으로 없앰),
 ///    코드 게임은 보이는 거리 안에서 코드 칸 · 찾은 사람·주최자 메시지 · 주최자 늘리기(1시간·1일 한 줄)/끝내기/위치 공개
 ///  · 한마디·코드 칸은 키보드 위 입력줄의 보내기(엔터)로 바로 보낸다 (UploadInputMirror.SetSubmitAction)
@@ -50,7 +51,8 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private Text gpsText;
     [SerializeField] private InputField titleInput, hintInput, codeInput, questionInput, prizeInput;
     [SerializeField] private GameObject codeBox;
-    [SerializeField] private RectTransform modeChips, winnerChips, playerChips, visibleChips, radiusChips, coordChips, audienceChips, startChips, durationChips;
+    [SerializeField] private RectTransform modeChips, winnerChips, playerChips, visibleChips, radiusChips, audienceChips, startChips, durationChips;
+    [SerializeField] private Text audienceNote;          // '누구에게' 아래 — 고른 대상이 무엇인지 (참가 코드는 어떻게 쓰이는지)
     [SerializeField] private Button submitButton;
     [SerializeField] private Text submitLabel;
     [SerializeField] private Text formMsg;
@@ -82,6 +84,7 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private InputField claimCodeInput;
     [SerializeField] private Button claimCodeButton;      // 코드 게임 — 넣은 코드로 열기
     [SerializeField] private Button joinButton, leaveButton, giveupButton, endButton, revealButton, profileButton;
+    [SerializeField] private Button shareButton;           // 공유하기 — 주최자는 늘, 다른 사람은 '모두' 게임만
     [SerializeField] private GameObject extendRow;         // 주최자 — '1시간 연장하기 · 1일 연장하기' 한 줄
     [SerializeField] private Button extendButton, extendDayButton;
     [SerializeField] private GameObject msgBox;
@@ -89,6 +92,16 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private Button msgSend;
     [SerializeField] private RectTransform feedList;
     [SerializeField] private UploadInputMirror inputMirror;   // 키보드 위 입력줄 — 보내기(엔터)로 한마디·코드를 바로
+
+    [Header("숨기기 전 확인 카드 (10-26 — 캔버스 맨 위 층 · 숨긴 뒤엔 참가 코드 · 공유하기)")]
+    [SerializeField] private GameObject review;
+    [SerializeField] private Button reviewDim;
+    [SerializeField] private Text reviewHead, reviewSub, reviewNote, reviewMsg, reviewCode;
+    [SerializeField] private GameObject reviewCodeBox;
+    [SerializeField] private RectTransform reviewRows;
+    [SerializeField] private GameObject reviewRowTemplate;
+    [SerializeField] private Button reviewEdit, reviewGo, reviewShare, reviewDone;
+    [SerializeField] private Text reviewGoLabel;
 
     [Header("알림")]
     [SerializeField] private Text toast;
@@ -114,6 +127,13 @@ public class R0926HuntCard : MonoBehaviour
     private int detailGen;                    // 상세를 새로 열 때마다 — 그 전에 떠난 다시 받기는 버린다
     private Coroutine toastCo;
 
+    // 확인 카드 — 숨긴 뒤(postedId > 0)엔 그 게임의 참가 코드 · 공유하기
+    private int postedId;
+    private string postedCode, postedTitle, postedPrize, postedAudience;
+
+    /// <summary>숨기기 확인 카드가 떠 있다 — 추가 창 옆으로 넘기기·아래로 밀어 닫기를 막는다 (SwipePanelController · R0926SwipeDismiss). 거짓이면 카드가 스스로 닫힌다 (R0926HuntReview)</summary>
+    public static bool Reviewing { get; private set; }
+
     // 고른 사진(JPG)·3D 모델(GLB) — 숨길 때 올리고, 올린 주소는 같은 파일로 다시 숨길 때 쓴다
     private byte[] objData;
     private string objKind, objUrl;
@@ -134,12 +154,15 @@ public class R0926HuntCard : MonoBehaviour
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Players = { ("10", "10명", "10", "10人", "10人", "10"), ("20", "20명", "20", "20人", "20人", "20"), ("30", "30명", "30", "30人", "30人", "30"), ("50", "50명", "50", "50人", "50人", "50"), ("100", "100명", "100", "100人", "100人", "100") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Visibles = { ("10", "10m", "10m", "10m", "10m", "10m"), ("30", "30m", "30m", "30m", "30m", "30m"), ("50", "50m", "50m", "50m", "50m", "50m"), ("100", "100m", "100m", "100m", "100m", "100m"), ("200", "200m", "200m", "200m", "200m", "200m") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Radii = { ("1", "1km", "1km", "1km", "1km", "1km"), ("5", "5km", "5km", "5km", "5km", "5km"), ("10", "10km", "10km", "10km", "10km", "10km"), ("30", "30km", "30km", "30km", "30km", "30km"), ("100", "100km", "100km", "100km", "100km", "100km") };
-    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Coords = { ("exact", "정확히", "Exact", "正確", "精确", "Exacta"), ("approx", "대략", "Approx.", "おおよそ", "大致", "Aprox."), ("hidden", "비공개", "Hidden", "非公開", "不公开", "Oculta") };
-    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Audiences = { ("all", "모두", "Everyone", "全員", "所有人", "Todos"), ("friends", "맞팔만", "Mutuals", "相互フォロー", "互关好友", "Mutuos"), ("code", "참가 코드", "Join code", "参加コード", "参加代码", "Código") };
+    // 위치 공개(정확히·대략·비공개) 칩은 없앴다 — 늘 정확히 (10-26 대표님). 예전 대략·비공개 게임은 상세가 그대로 그린다
+    // 누구에게 — 팔로워 모두 = 주최자를 팔로우하는 사람(맞팔 포함 · 10-26 대표님)
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Audiences = { ("all", "모두", "Everyone", "全員", "所有人", "Todos"), ("friends", "맞팔", "Mutuals", "相互フォロー", "互关好友", "Mutuos"), ("follower", "팔로워 모두", "Followers", "フォロワー全員", "所有粉丝", "Seguidores"), ("code", "참가 코드", "Join code", "参加コード", "参加代码", "Código") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Starts = { ("0", "바로", "Now", "すぐ", "立即", "Ahora"), ("60", "1시간 뒤", "In 1h", "1時間後", "1小时后", "En 1 h"), ("180", "3시간 뒤", "In 3h", "3時間後", "3小时后", "En 3 h"), ("1440", "내일", "Tomorrow", "明日", "明天", "Mañana"), ("2880", "2일 뒤", "In 2 days", "2日後", "2天后", "En 2 días") };
-    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Durations = { ("30", "30분", "30 min", "30分", "30分钟", "30 min"), ("60", "1시간", "1 hour", "1時間", "1小时", "1 hora"), ("180", "3시간", "3 hours", "3時間", "3小时", "3 horas"), ("1440", "1일", "1 day", "1日", "1天", "1 día"), ("4320", "3일", "3 days", "3日", "3天", "3 días"), ("10080", "7일", "7 days", "7日", "7天", "7 días") };
-    // 보물 모양 (2026-10-24 대표님 — 주최자가 고른다. 서버 hunts.object_kind · 모르는 모양은 옛 앱에서 보물상자)
-    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Shapes = { ("chest", "보물상자", "Chest", "宝箱", "宝箱", "Cofre"), ("gift", "선물상자", "Gift box", "ギフト箱", "礼物盒", "Regalo"), ("egg", "보물알", "Egg", "宝の卵", "宝蛋", "Huevo"), ("gem", "보석", "Gem", "宝石", "宝石", "Gema"), ("star", "별", "Star", "星", "星星", "Estrella"), ("heart", "하트", "Heart", "ハート", "爱心", "Corazón"), ("photo", "사진", "Photo", "写真", "照片", "Foto"), ("model", "3D 모델", "3D model", "3Dモデル", "3D 模型", "Modelo 3D") };
+    // 진행 시간 — 1시간부터 · 7일은 '일주일' (10-26 대표님 — 30분은 없앰. 서버는 옛 앱을 위해 15분부터 그대로 받는다)
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Durations = { ("60", "1시간", "1 hour", "1時間", "1小时", "1 hora"), ("180", "3시간", "3 hours", "3時間", "3小时", "3 horas"), ("1440", "1일", "1 day", "1日", "1天", "1 día"), ("4320", "3일", "3 days", "3日", "3天", "3 días"), ("10080", "일주일", "1 week", "1週間", "1周", "1 semana") };
+    // 보물 모양 (2026-10-24 대표님 — 주최자가 고른다. 서버 hunts.object_kind · 모르는 모양은 옛 앱에서 보물상자).
+    // 10-26 대표님 — 고르는 칩은 보물상자·선물상자·하트·사진·3D 모델만. 예전에 숨긴 보물알·보석·별 게임은 AR 이 그대로 그린다
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Shapes = { ("chest", "보물상자", "Chest", "宝箱", "宝箱", "Cofre"), ("gift", "선물상자", "Gift box", "ギフト箱", "礼物盒", "Regalo"), ("heart", "하트", "Heart", "ハート", "爱心", "Corazón"), ("photo", "사진", "Photo", "写真", "照片", "Foto"), ("model", "3D 모델", "3D model", "3Dモデル", "3D 模型", "Modelo 3D") };
 
     private void Awake()
     {
@@ -149,7 +172,13 @@ public class R0926HuntCard : MonoBehaviour
         Wire(joinCodeButton, () => StartCoroutine(JoinByCode()));
         Wire(loginButton, () => { if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup(); });
         Wire(formBack, ShowHub);
-        Wire(submitButton, () => StartCoroutine(Submit()));
+        Wire(submitButton, OnSubmit);
+        Wire(reviewEdit, () => { if (!busy) HideReview(); });
+        Wire(reviewGo, () => StartCoroutine(Post()));
+        Wire(reviewDone, CloseDone);
+        Wire(reviewShare, () => Share(postedId, postedCode, postedTitle, postedPrize));
+        Wire(reviewDim, OnReviewBack);
+        Wire(shareButton, ShareCurrent);
         Wire(pickButton, OnPick);
         Wire(agreeRow, () => { agreed = !agreed; PaintAgree(); });
         Wire(agreeButton, () => StartCoroutine(Accept()));
@@ -198,6 +227,8 @@ public class R0926HuntCard : MonoBehaviour
         NearHuntId = 0;
         busy = false;   // 보내는 중에 창이 닫히면 코루틴이 멈춘 채 남아 — 다시 열었을 때 버튼이 다 먹통이었다
         uploading = false;
+        Reviewing = false;   // 확인 카드는 다음 LateUpdate 에 스스로 닫힌다 (꺼지는 중엔 다른 오브젝트를 끄지 않는다)
+        postedId = 0;
     }
 
     private void OnApplicationFocus(bool hasFocus) => R0926PickerWait.NoteFocus(hasFocus);
@@ -208,6 +239,7 @@ public class R0926HuntCard : MonoBehaviour
     // 로그인하고 돌아오면 처음 화면을 다시 — '로그인하면 …' 안내가 그대로 남아 있었다
     private void OnLoginChanged(bool loggedIn)
     {
+        if (loggedIn && linkId > 0 && R0926HuntApi.CanCall) { StartCoroutine(OpenLink(linkId, linkCode)); return; }   // 공유 링크로 왔다가 로그인했다 — 이어서
         if (hub != null && hub.activeInHierarchy) ShowHub();
     }
 
@@ -440,21 +472,22 @@ public class R0926HuntCard : MonoBehaviour
         pickNote = null;
         PaintCodeBox();
         PaintShape();
+        PaintAudience();
         PaintSubmit();
     }
 
+    // 기본값 (10-26 대표님) — 보물상자 · 먼저 터치 · 당첨 1명 · 참가 100명 · 보이는 거리 10m · 참가 범위 10km · 모두 · 바로 · 일주일
     private void BuildChips()
     {
         Chips(shapeChips, "shape", Shapes, "chest");
         Chips(modeChips, "mode", Modes, "touch");
         Chips(winnerChips, "winners", Winners, "1");
-        Chips(playerChips, "players", Players, "30");
-        Chips(visibleChips, "visible", Visibles, "50");
-        Chips(radiusChips, "radius", Radii, "5");
-        Chips(coordChips, "coord", Coords, "exact");
+        Chips(playerChips, "players", Players, "100");
+        Chips(visibleChips, "visible", Visibles, "10");
+        Chips(radiusChips, "radius", Radii, "10");
         Chips(audienceChips, "audience", Audiences, "all");
         Chips(startChips, "start", Starts, "0");
-        Chips(durationChips, "duration", Durations, "60");
+        Chips(durationChips, "duration", Durations, "10080");
     }
 
     private void Chips(RectTransform box, string key, (string v, string ko, string en, string ja, string zh, string es)[] defs, string initial)
@@ -473,6 +506,7 @@ public class R0926HuntCard : MonoBehaviour
                 picked[key] = v; PaintChips(box, key);
                 if (key == "mode") PaintCodeBox();
                 else if (key == "shape") { pickNote = null; PaintShape(); }
+                else if (key == "audience") PaintAudience();
             });
         }
         PaintChips(box, key);
@@ -510,9 +544,29 @@ public class R0926HuntCard : MonoBehaviour
 
     private void PaintSubmit()
     {
-        if (submitLabel != null) submitLabel.text = uploading ? T("올리는 중…", "Uploading…", "アップロード中…", "正在上传…", "Subiendo…")
-                                                  : busy ? T("숨기는 중…", "Hiding…", "隠しています…", "正在藏宝…", "Escondiendo…") : T("이 자리에 보물 숨기기", "Hide the treasure here", "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí");
+        string state = uploading ? T("올리는 중…", "Uploading…", "アップロード中…", "正在上传…", "Subiendo…")
+                     : busy ? T("숨기는 중…", "Hiding…", "隠しています…", "正在藏宝…", "Escondiendo…") : null;
+        if (submitLabel != null) submitLabel.text = state ?? T("이 자리에 보물 숨기기", "Hide the treasure here", "ここに宝を隠す", "在这里藏宝", "Esconder el tesoro aquí");
+        if (reviewGoLabel != null) reviewGoLabel.text = state ?? T("숨기기", "Hide it", "隠す", "藏起来", "Esconderlo");
+        if (reviewEdit != null) reviewEdit.interactable = !busy;
     }
+
+    private void PaintAudience()
+    {
+        if (audienceNote != null) audienceNote.text = AudienceText(picked.TryGetValue("audience", out var a) ? a : "all");
+    }
+
+    private static string AudienceText(string a) => a switch
+    {
+        "friends" => T("나와 서로 팔로우하는 사람만 보고 참가할 수 있어요", "Only people who follow each other with you can see and join", "相互フォローの人だけが見て参加できます", "只有与你互相关注的人可以看到并参加", "Solo quienes os seguís mutuamente pueden verlo y unirse"),
+        "follower" => T("나를 팔로우하는 사람만 보고 참가할 수 있어요 (맞팔 포함)", "Only your followers can see and join (mutuals included)", "あなたをフォローしている人だけが見て参加できます（相互フォローを含む）", "只有关注你的人可以看到并参加（含互关）", "Solo tus seguidores pueden verlo y unirse (mutuos incluidos)"),
+        "code" => T("목록·알림에 나오지 않아요 — 숨기면 참가 코드가 만들어지고, 코드나 공유 링크를 받은 사람만 어디서든 참가할 수 있어요",
+                    "Hidden from lists and alerts — a join code is made when you hide it, and only people with the code or link can join, from anywhere",
+                    "一覧・通知には出ません — 隠すと参加コードが作られ、コードか共有リンクを受け取った人だけがどこからでも参加できます",
+                    "不会出现在列表和通知中 — 藏好后会生成参加代码，只有收到代码或分享链接的人才能在任何地方参加",
+                    "No aparece en listas ni avisos: al esconderlo se crea un código y solo quien tenga el código o el enlace puede unirse, desde cualquier lugar"),
+        _ => T("참가 범위 안의 우팡 사용자라면 누구나 보고 참가할 수 있어요", "Anyone on WOOPANG within the join area can see and join", "参加範囲内のWOOPANGユーザーなら誰でも見て参加できます", "参加范围内的任何 WOOPANG 用户都可以看到并参加", "Cualquier usuario de WOOPANG dentro del área puede verlo y unirse"),
+    };
 
     // ── 보물 모양 ─────────────────────────────────────────
     private string Shape => picked.TryGetValue("shape", out var s) ? s : "chest";
@@ -681,47 +735,179 @@ public class R0926HuntCard : MonoBehaviour
         return n;
     }
 
-    private IEnumerator Submit()
+    // ── 숨기기 → 확인 카드 → 올리기 (10-26 대표님 — 올리기 전에 한 번 보고 '숨기기') ──
+    private void OnSubmit()
     {
-        if (busy) yield break;
-        if (!TryLocation(out float lat, out float lon, out float acc)) { FormMsg(T("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación")); yield break; }
-        string title = titleInput != null ? titleInput.text.Trim() : "";
-        if (title.Length == 0) { FormMsg(R0926HuntApi.ErrorText("title", Lang)); yield break; }
+        if (busy || !Validate(out _, out _, out _)) return;
+        if (formMsg != null) formMsg.text = "";   // 앞서 틀렸던 안내 — 고치기로 돌아와도 남지 않게
+        OpenReview();
+    }
+
+    private static string Field(InputField f) => f != null ? f.text.Trim() : "";
+
+    // 양식 확인 — 틀리면 알림 줄(확인 카드가 떠 있으면 카드 안)에 적고 false
+    private bool Validate(out float lat, out float lon, out float acc)
+    {
+        if (!TryLocation(out lat, out lon, out acc)) { Warn(T("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación")); return false; }
+        if (Field(titleInput).Length == 0) { Warn(R0926HuntApi.ErrorText("title", Lang)); return false; }
+        string shape = Shape;
+        if ((shape == "photo" || shape == "model") && (objData == null || objKind != shape))
+        {
+            Warn(shape == "photo" ? T("보물로 쓸 사진을 골라 주세요", "Choose a photo for the treasure", "宝にする写真を選んでください", "请选择用作宝藏的照片", "Elige una foto para el tesoro")
+                                  : T("보물로 쓸 3D 모델(GLB)을 골라 주세요", "Choose a 3D model (GLB) for the treasure", "宝にする3Dモデル（GLB）を選んでください", "请选择用作宝藏的 3D 模型（GLB）", "Elige un modelo 3D (GLB) para el tesoro"));
+            return false;
+        }
+        if (shape == "model" && shapePreview != null && shapePreview.Loading) { Warn(T("3D 모델을 불러오는 중이에요 — 잠시만요", "Still loading the 3D model — one moment", "3Dモデルを読み込み中です — 少々お待ちください", "正在加载 3D 模型 — 请稍候", "Cargando el modelo 3D — un momento")); return false; }
+        // 비밀번호는 4자 — 비밀번호 힌트는 선택 (10-26 대표님 — 힌트는 모두 선택으로 통일 · 서버도 같은 규칙)
+        if (picked["mode"] == "code" && Letters(codeInput != null ? codeInput.text : "") != R0926HuntApi.CodeLen) { Warn(R0926HuntApi.ErrorText("code", Lang)); return false; }
+        return true;
+    }
+
+    private void Warn(string s)
+    {
+        if (review != null && review.activeSelf && reviewMsg != null) { reviewMsg.text = s; reviewMsg.gameObject.SetActive(true); }
+        else FormMsg(s);
+    }
+
+    private void OpenReview()
+    {
+        postedId = 0;
+        if (review == null) { StartCoroutine(Post()); return; }   // 확인 카드를 아직 안 만든 장면 — 예전처럼 바로
+        Reviewing = true;
+        review.SetActive(true);
+        PaintReview();
+    }
+
+    private void HideReview()
+    {
+        Reviewing = false;
+        if (review != null) review.SetActive(false);
+    }
+
+    // 바깥(어두운 곳)·뒤로가기 — 올리는 중엔 그대로, 숨긴 뒤면 '확인'과 같이, 아니면 '고치기'와 같이
+    private void OnReviewBack()
+    {
+        if (busy) return;
+        if (postedId > 0) CloseDone(); else HideReview();
+    }
+
+    private void CloseDone()
+    {
+        int id = postedId;
+        postedId = 0;
+        HideReview();
+        if (id > 0) StartCoroutine(OpenDetail(id));
+    }
+
+    private static string Pick((string v, string ko, string en, string ja, string zh, string es)[] defs, string v)
+    {
+        foreach (var d in defs) if (d.v == v) return T(d.ko, d.en, d.ja, d.zh, d.es);
+        return v;
+    }
+
+    private static string Cut(string s, int n) => s.Length <= n ? s : s.Substring(0, n) + "…";
+
+    // 확인 카드 — 고른 그대로 한 줄씩 (숨긴 뒤엔 시간 늘리기·끝내기만 된다)
+    private void PaintReview()
+    {
+        TryLocation(out _, out _, out float acc);
+        string none = T("없음", "None", "なし", "无", "Ninguno");
+        string prize = Field(prizeInput), hint = Field(hintInput), question = Field(questionInput);
+        bool locked = picked["mode"] == "code", code = picked["audience"] == "code";
+        var rows = new List<(string, string)>
+        {
+            (T("제목", "Title", "タイトル", "标题", "Título"), Field(titleInput)),
+            (T("상품", "Prize", "賞品", "奖品", "Premio"), prize.Length > 0 ? prize : none),
+            (T("힌트", "Hint", "ヒント", "提示", "Pista"), hint.Length > 0 ? Cut(hint, 60) : none),
+            (T("보물 모양", "Shape", "宝の形", "宝藏外形", "Forma"), Pick(Shapes, Shape)),
+            (T("찾는 방식", "How", "見つけ方", "寻宝方式", "Cómo"), locked ? T("비밀번호 ", "Password ", "パスワード ", "密码 ", "Contraseña ") + Field(codeInput) + (question.Length > 0 ? "\n" + T("힌트 ", "Hint ", "ヒント ", "提示 ", "Pista ") + Cut(question, 40) : "") : Pick(Modes, "touch")),
+            (T("당첨 · 참가", "Winners · players", "当選 · 参加", "中奖 · 参加", "Ganadores · jugadores"), Pick(Winners, picked["winners"]) + " · " + T("최대 ", "up to ", "最大 ", "最多 ", "hasta ") + Pick(Players, picked["players"])),
+            (T("보이는 거리", "Visible within", "見える距離", "可见距离", "Visible a"), Pick(Visibles, picked["visible"])),
+            (T("참가 범위", "Join area", "参加範囲", "参加范围", "Área"), code ? T("코드를 받은 사람은 어디서든", "Anywhere, with the code", "コードを受け取った人はどこからでも", "收到代码的人可在任何地方参加", "Desde cualquier lugar, con el código") : Pick(Radii, picked["radius"])),
+            (T("누구에게", "Who can join", "参加できる人", "谁可以参加", "Quién puede unirse"), Pick(Audiences, picked["audience"])),
+            (T("시작 · 진행", "Start · length", "開始 · 期間", "开始 · 时长", "Inicio · duración"), Pick(Starts, picked["start"]) + " · " + Pick(Durations, picked["duration"])),
+            (T("숨길 자리", "Spot", "隠す場所", "藏宝位置", "Lugar"), T("지금 서 있는 자리", "Where you stand now", "今立っている場所", "你现在站的位置", "Donde estás ahora") + (acc > 0f ? T(" · 정확도 ", " · accuracy ", " · 精度 ", " · 精度 ", " · precisión ") + Mathf.RoundToInt(acc) + "m" : "")),
+        };
+        if (reviewHead != null) reviewHead.text = T("이대로 숨길까요?", "Hide it like this?", "この内容で隠しますか？", "就这样藏起来吗？", "¿Lo escondemos así?");
+        if (reviewSub != null) reviewSub.text = T("숨긴 뒤에는 내용을 고칠 수 없어요 — 한 번 더 확인해 주세요", "You can't edit it after hiding — please check once more", "隠した後は内容を修正できません — もう一度確認してください", "藏好后无法修改内容 — 请再确认一次", "No podrás editarlo después — revísalo una vez más");
+        if (reviewNote != null) reviewNote.text = AudienceText(picked["audience"]);
+        if (reviewMsg != null) { reviewMsg.text = ""; reviewMsg.gameObject.SetActive(false); }
+        if (reviewCodeBox != null) reviewCodeBox.SetActive(false);
+        if (reviewRows != null)
+        {
+            reviewRows.gameObject.SetActive(true);
+            for (int i = reviewRows.childCount - 1; i >= 0; i--)
+            {
+                var c = reviewRows.GetChild(i).gameObject;
+                if (c != reviewRowTemplate) { c.SetActive(false); Destroy(c); }
+            }
+            if (reviewRowTemplate != null)
+                foreach (var (k, v) in rows)
+                {
+                    var g = Instantiate(reviewRowTemplate, reviewRows);
+                    g.SetActive(true);
+                    SetText(g, "Label", k);
+                    SetText(g, "Value", v);
+                }
+        }
+        Set(reviewEdit, true); Set(reviewGo, true); Set(reviewShare, false); Set(reviewDone, false);
+        PaintSubmit();
+    }
+
+    // 숨긴 뒤 — 같은 카드에 참가 코드 · 공유하기 · 확인 (참가 코드 게임은 코드·링크를 받은 사람만 들어온다)
+    private void PaintDone()
+    {
+        bool hasCode = !string.IsNullOrEmpty(postedCode);
+        if (reviewHead != null) reviewHead.text = T("보물을 숨겼어요!", "Treasure hidden!", "宝を隠しました！", "宝藏已藏好！", "¡Tesoro escondido!");
+        if (reviewSub != null) reviewSub.text = postedTitle;
+        if (reviewRows != null) reviewRows.gameObject.SetActive(false);
+        if (reviewCodeBox != null) reviewCodeBox.SetActive(hasCode);
+        if (reviewCode != null) reviewCode.text = postedCode ?? "";
+        if (reviewNote != null) reviewNote.text = DoneText(postedAudience);
+        if (reviewMsg != null) { reviewMsg.text = ""; reviewMsg.gameObject.SetActive(false); }
+        Set(reviewEdit, false); Set(reviewGo, false); Set(reviewShare, true); Set(reviewDone, true);
+    }
+
+    private static string DoneText(string a) => a switch
+    {
+        "code" => T("이 코드나 공유 링크를 받은 사람만 어디서든 참가할 수 있어요 — 목록·알림에는 나오지 않으니 공유해 주세요",
+                    "Only people with this code or the shared link can join, from anywhere — it isn't listed, so share it",
+                    "このコードか共有リンクを受け取った人だけがどこからでも参加できます — 一覧に出ないので共有してください",
+                    "只有收到此代码或分享链接的人才能在任何地方参加 — 不会出现在列表中，请分享出去",
+                    "Solo quien tenga este código o el enlace puede unirse, desde cualquier lugar — no aparece en listas, así que compártelo"),
+        "friends" => T("맞팔 친구에게만 보여요 — 링크를 받아도 맞팔이 아니면 참가할 수 없어요", "Only mutuals can see it — people without a mutual follow can't join, even with the link", "相互フォローの友だちにだけ表示されます — リンクを受け取っても相互フォローでなければ参加できません", "仅互关好友可见 — 即使收到链接，非互关也无法参加", "Solo lo ven tus mutuos — sin seguimiento mutuo no pueden unirse, aunque tengan el enlace"),
+        "follower" => T("나를 팔로우하는 사람에게만 보여요 — 링크를 받은 사람도 팔로우하면 참가할 수 있어요", "Only your followers can see it — people with the link can join once they follow you", "あなたのフォロワーにだけ表示されます — リンクを受け取った人もフォローすれば参加できます", "仅关注你的人可见 — 收到链接的人关注你后即可参加", "Solo lo ven tus seguidores — quien tenga el enlace puede unirse si te sigue"),
+        _ => T("참가 범위 안의 사람들이 목록에서 보고 참가해요 — 공유하면 더 많은 사람이 찾아와요", "People in the join area will find it in their list — share it to bring more", "参加範囲内の人が一覧で見つけて参加します — 共有するともっと多くの人が来ます", "参加范围内的人会在列表中看到并参加 — 分享出去会有更多人来", "La gente dentro del área lo verá en su lista — compártelo para atraer a más"),
+    };
+
+    private IEnumerator Post()
+    {
+        if (busy || postedId > 0) yield break;
+        if (!Validate(out float lat, out float lon, out float acc)) yield break;   // 카드를 보는 사이 위치·고른 파일이 바뀌었을 수 있다
+        string title = Field(titleInput), prize = Field(prizeInput), audience = picked["audience"];
         string shape = Shape;
         bool file = shape == "photo" || shape == "model";
-        if (file && (objData == null || objKind != shape))
-        {
-            FormMsg(shape == "photo" ? T("보물로 쓸 사진을 골라 주세요", "Choose a photo for the treasure", "宝にする写真を選んでください", "请选择用作宝藏的照片", "Elige una foto para el tesoro")
-                                     : T("보물로 쓸 3D 모델(GLB)을 골라 주세요", "Choose a 3D model (GLB) for the treasure", "宝にする3Dモデル（GLB）を選んでください", "请选择用作宝藏的 3D 模型（GLB）", "Elige un modelo 3D (GLB) para el tesoro"));
-            yield break;
-        }
-        if (shape == "model" && shapePreview != null && shapePreview.Loading) { FormMsg(T("3D 모델을 불러오는 중이에요 — 잠시만요", "Still loading the 3D model — one moment", "3Dモデルを読み込み中です — 少々お待ちください", "正在加载 3D 模型 — 请稍候", "Cargando el modelo 3D — un momento")); yield break; }
-        if (picked["mode"] == "code")   // 비밀번호는 4자 · 걸면 힌트도 반드시 (서버도 같은 규칙)
-        {
-            if (Letters(codeInput != null ? codeInput.text : "") != R0926HuntApi.CodeLen) { FormMsg(R0926HuntApi.ErrorText("code", Lang)); yield break; }
-            if (questionInput == null || questionInput.text.Trim().Length == 0) { FormMsg(R0926HuntApi.ErrorText("question", Lang)); yield break; }
-        }
         var b = new JSONObject();
         b["title"] = title;
-        b["hint"] = hintInput != null ? hintInput.text.Trim() : "";
+        b["hint"] = Field(hintInput);
         b["mode"] = picked["mode"];
         if (picked["mode"] == "code")
         {
-            b["code"] = codeInput != null ? codeInput.text.Trim() : "";
-            b["question"] = questionInput != null ? questionInput.text.Trim() : "";
+            b["code"] = Field(codeInput);
+            b["question"] = Field(questionInput);
         }
         if (picked["winners"] == "all") b["winners_all"] = true; else b["winners"] = int.Parse(picked["winners"]);
         if (picked.TryGetValue("players", out var players)) b["max_players"] = int.Parse(players);
-        b["prize"] = prizeInput != null ? prizeInput.text.Trim() : "";
+        b["prize"] = prize;
         b["visible_m"] = int.Parse(picked["visible"]);
         b["radius_km"] = float.Parse(picked["radius"], CultureInfo.InvariantCulture);
-        b["coord_mode"] = picked["coord"];
-        if (picked["coord"] == "approx") b["approx_m"] = 300;
-        b["audience"] = picked["audience"];
+        b["coord_mode"] = "exact";   // 위치 공개 칩은 없앴다 — 늘 정확히 (10-26 대표님)
+        b["audience"] = audience;
         b["start_in_min"] = int.Parse(picked["start"]);
         b["duration_min"] = int.Parse(picked["duration"]);
         b["lat"] = lat; b["lon"] = lon; b["acc"] = acc; b["mock"] = false;
         b["object_kind"] = shape;
+        if (reviewMsg != null) reviewMsg.gameObject.SetActive(false);
 
         busy = true; PaintSubmit();
         if (file)
@@ -739,7 +925,7 @@ public class R0926HuntCard : MonoBehaviour
                 if (string.IsNullOrEmpty(url) || !ReferenceEquals(objData, data))
                 {
                     busy = false; PaintSubmit();
-                    if (string.IsNullOrEmpty(url)) FormMsg(uc == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(uj != null ? (string)uj["error"] : null, Lang));
+                    if (string.IsNullOrEmpty(url)) Warn(uc == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(uj != null ? (string)uj["error"] : null, Lang));
                     yield break;   // 올리는 사이 고른 파일이 바뀌었으면 — 바뀐 것을 보고 다시 누르게
                 }
                 objUrl = url;
@@ -762,13 +948,72 @@ public class R0926HuntCard : MonoBehaviour
                 PaintShape();
             }
             R0926HuntList.Stale();
-            string jc = j["join_code"];
-            Toast(string.IsNullOrEmpty(jc) ? T("보물을 숨겼어요!", "Treasure hidden!", "宝を隠しました！", "宝藏已藏好！", "¡Tesoro escondido!") : T("보물을 숨겼어요! 참가 코드 " + jc, "Hidden! Join code " + jc, "宝を隠しました！参加コード " + jc, "宝藏已藏好！参加代码 " + jc, "¡Escondido! Código " + jc), 4f);
-            StartCoroutine(OpenDetail(j["hunt"]["id"].AsInt));
+            postedId = j["hunt"]["id"].AsInt;
+            postedCode = j["join_code"];
+            postedTitle = title; postedPrize = prize; postedAudience = audience;
+            if (review != null && review.activeSelf) PaintDone();
+            else CloseDone();
             yield break;
         }
-        if (j["error"] == "need_rules") { rulesAccepted = false; StartCoroutine(OpenRules(true)); yield break; }
-        FormMsg(code == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(j["error"], Lang));
+        if (j["error"] == "need_rules") { HideReview(); rulesAccepted = false; StartCoroutine(OpenRules(true)); yield break; }
+        Warn(code == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(j["error"], Lang));
+    }
+
+    // ── 공유하기 (10-26 대표님 — 카톡·문자·SNS 로 널리) ──
+    // 링크는 woopang.com/hunt/<번호>(?c=참가 코드) — 앱이 있으면 '우팡 앱에서 열기', 없으면 스토어. 좌표는 싣지 않는다
+    private void Share(int id, string code, string title, string prize)
+    {
+        if (id <= 0) return;
+        bool hasCode = !string.IsNullOrEmpty(code);
+        var lines = new List<string> { T("[우팡 보물찾기] ", "[WOOPANG treasure hunt] ", "[WOOPANG 宝探し] ", "[WOOPANG 寻宝] ", "[WOOPANG búsqueda del tesoro] ") + title };
+        if (!string.IsNullOrEmpty(prize)) lines.Add(T("상품: ", "Prize: ", "賞品: ", "奖品: ", "Premio: ") + prize);
+        if (hasCode) lines.Add(T("참가 코드: ", "Join code: ", "参加コード: ", "参加代码: ", "Código: ") + code);
+        lines.Add(R0926HuntApi.Url("hunt/" + id) + (hasCode ? "?c=" + code : ""));
+        if (R0926Share.Text(string.Join("\n", lines), T("보물찾기 공유하기", "Share treasure hunt", "宝探しを共有", "分享寻宝", "Compartir búsqueda del tesoro"))) return;
+        string copied = T("링크를 복사했어요 — 붙여 넣어 보내 주세요", "Link copied — paste it to share", "リンクをコピーしました — 貼り付けて送ってください", "链接已复制 — 粘贴后发送即可", "Enlace copiado — pégalo para compartir");
+        if (review != null && review.activeSelf) Warn(copied); else Toast(copied, 3f);
+    }
+
+    private void ShareCurrent()
+    {
+        if (current == null) return;
+        Share(current["id"].AsInt, current["is_host"].AsBool ? (string)current["join_code"] : null, current["title"], current["prize"]);
+    }
+
+    // ── 공유 링크로 열기 (R0926HuntPush 가 부른다) ──
+    private int linkId;
+    private string linkCode;
+
+    /// <summary>공유 링크(woopang://hunt?id=…&amp;c=…)로 들어왔다 — 코드가 있으면 바로 참가하고 그 게임 상세를, 없으면 상세만.
+    /// 로그인 전이면 처음 화면에 코드를 넣어 두고, 로그인하면 이어서 연다</summary>
+    public IEnumerator OpenLink(int id, string code)
+    {
+        if (!R0926HuntApi.CanCall)
+        {
+            linkId = id; linkCode = code;
+            ShowHub();
+            if (joinCodeInput != null && !string.IsNullOrEmpty(code)) joinCodeInput.text = code;
+            Toast(T("로그인하면 이 보물찾기를 바로 열어요", "Log in to open this treasure hunt", "ログインするとこの宝探しを開きます", "登录后即可打开这个寻宝", "Inicia sesión para abrir esta búsqueda"), 3.5f);
+            if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup();
+            yield break;
+        }
+        linkId = 0; linkCode = null;
+        if (string.IsNullOrEmpty(code)) { yield return OpenDetail(id); yield break; }
+        long rc = 0; JSONNode j = null;
+        var b = new JSONObject(); b["code"] = code;
+        yield return R0926HuntApi.Post("/api/hunts/join_code", b, (c, r) => { rc = c; j = r; });
+        if (rc == 200)
+        {
+            if (joinCodeInput != null) joinCodeInput.text = "";
+            R0926HuntList.Stale();
+            Toast(T("참가했어요!", "Joined!", "参加しました！", "已参加！", "¡Te uniste!"), 2.5f);
+            yield return OpenDetail(j["hunt"]["id"].AsInt);
+            yield break;
+        }
+        if (j["error"] == "host") { yield return OpenDetail(id); yield break; }   // 내가 연 게임 — 상세로
+        ShowHub();
+        if (joinCodeInput != null) joinCodeInput.text = code;
+        Toast(R0926HuntApi.ErrorText(j["error"], Lang), 3.5f);
     }
 
     private void FormMsg(string s)
@@ -847,7 +1092,21 @@ public class R0926HuntCard : MonoBehaviour
         string q = TryLocation(out float lat, out float lon, out _) ? "?lat=" + Q(lat) + "&lon=" + Q(lon) : "";
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Get("/api/hunts/" + id + q, (c, r) => { code = c; j = r; });
-        if (code != 200) { Toast(R0926HuntApi.ErrorText(j["error"], Lang), 3f); yield break; }
+        if (code != 200)
+        {
+            // 팔로워 게임 링크를 받았는데 아직 팔로우 전 — 알리고 주최자 프로필을 연다 (팔로우하면 참가, 10-26)
+            string host = j["error"] == "followers_only" ? (string)j["host_id"] : null;
+            bool follow = !string.IsNullOrEmpty(host) && ProfileManager.Instance != null;
+            Toast(R0926HuntApi.ErrorText(j["error"], Lang) + (follow ? T(" — 프로필에서 팔로우해 주세요", " — follow them from their profile", " — プロフィールからフォローしてください", " — 请在主页关注", " — síguelo desde su perfil") : ""), 3f);
+            if (!follow) yield break;
+            yield return new WaitForSecondsRealtime(1.6f);   // 알림을 읽을 틈 — 프로필이 추가 창 위로 덮는다
+            if (!isActiveAndEnabled) yield break;
+#if UNITY_EDITOR
+            EditorFollowHost = host;
+#endif
+            ProfileManager.Instance.ShowProfile(host);
+            yield break;
+        }
         current = j["hunt"];
         Show(detail);
         PaintDetail();
@@ -912,7 +1171,8 @@ public class R0926HuntCard : MonoBehaviour
         lines.Add(T("당첨  ", "Winners  ", "当選  ", "中奖  ", "Ganadores  ") + (wm > 0 ? T(wm + "명 · " + h["found"].AsInt + "명 찾음", wm + " · " + h["found"].AsInt + " found", wm + "人 · " + h["found"].AsInt + "人発見", wm + " 人 · " + h["found"].AsInt + " 人找到", wm + " · " + h["found"].AsInt + " encontrados") : T("찾는 사람 모두 · " + h["found"].AsInt + "명 찾음", "Everyone · " + h["found"].AsInt + " found", "見つけた人全員 · " + h["found"].AsInt + "人発見", "找到的人都中奖 · " + h["found"].AsInt + " 人找到", "Todos · " + h["found"].AsInt + " encontrados")));
         if (!string.IsNullOrEmpty(h["prize"])) lines.Add(T("상품  ", "Prize  ", "賞品  ", "奖品  ", "Premio  ") + h["prize"]);
         lines.Add(T("보이는 거리 ", "Visible within ", "見える距離 ", "可见距离 ", "Visible a ") + h["visible_m"].AsInt + "m" + (h["radius_km"].IsNull ? "" : T(" · 참가 범위 ", " · area ", " · 参加範囲 ", " · 参加范围 ", " · área ") + h["radius_km"].AsFloat.ToString("0.#", CultureInfo.InvariantCulture) + "km"));
-        lines.Add(T("위치 공개  ", "Location  ", "位置の公開  ", "位置公开  ", "Ubicación  ") + (h["coord_mode"] == "exact" ? T("정확히", "exact", "正確", "精确", "exacta") : h["coord_mode"] == "approx" ? T("대략 " + h["approx_m"].AsInt + "m 원", "approx. " + h["approx_m"].AsInt + "m", "おおよそ " + h["approx_m"].AsInt + "m の円", "大致 " + h["approx_m"].AsInt + "m 范围", "aprox. " + h["approx_m"].AsInt + "m") : T("비공개", "hidden", "非公開", "不公开", "oculta")));
+        // 위치 공개 칩은 없앴다(10-26 — 늘 정확히). 예전에 대략·비공개로 숨긴 게임만 그 줄을 남긴다
+        if (h["coord_mode"] != "exact") lines.Add(T("위치 공개  ", "Location  ", "位置の公開  ", "位置公开  ", "Ubicación  ") + (h["coord_mode"] == "approx" ? T("대략 " + h["approx_m"].AsInt + "m 원", "approx. " + h["approx_m"].AsInt + "m", "おおよそ " + h["approx_m"].AsInt + "m の円", "大致 " + h["approx_m"].AsInt + "m 范围", "aprox. " + h["approx_m"].AsInt + "m") : T("비공개", "hidden", "非公開", "不公开", "oculta")));
         if (host && !string.IsNullOrEmpty(h["join_code"])) lines.Add(T("참가 코드  ", "Join code  ", "参加コード  ", "参加代码  ", "Código  ") + h["join_code"]);
         bool full = h["full"].AsBool;
         lines.Add(T("참가  ", "Players  ", "参加  ", "参加  ", "Jugadores  ") + PlayerCount(h) + T("명", "", "人", "人", "") + (full ? T(" · 마감", " · full", " · 満員", " · 已满", " · completo") : ""));
@@ -928,6 +1188,7 @@ public class R0926HuntCard : MonoBehaviour
         PaintDistance();
 
         Set(joinButton, open && !joined && !host && h["audience"] != "code" && !full);
+        Set(shareButton, open && (host || h["audience"] == "all"));   // 맞팔·팔로워·코드 게임은 주최자만 퍼뜨린다
         Set(leaveButton, open && joined && !host && !found);
         Set(giveupButton, status == "live" && joined && !host && !found && !me["gave_up"].AsBool);
         if (extendRow != null) extendRow.SetActive(host && open && !h["ends_at"].IsNull);
@@ -998,6 +1259,7 @@ public class R0926HuntCard : MonoBehaviour
 
 #if UNITY_EDITOR
     public static int EditorBuzzes;   // 플레이 시험이 센다 (에디터엔 진동이 없다)
+    public static string EditorFollowHost;   // 팔로워 게임 링크로 연 주최자 프로필 (시험 아이디는 실제 서버에 프로필이 없어 창이 안 뜬다)
 #endif
 
     internal static void Buzz()

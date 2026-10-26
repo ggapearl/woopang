@@ -112,10 +112,10 @@ namespace Redesign0926
             HLabel(form, "LMode", 72, "찾는 방식", "How to win", 44, Muted, FontStyle.Bold);
             S("modeChips", HChips(form, "ModeChips"));
             var codeBox = HList(form, "CodeBox");
-            // 비밀번호 — 4자 · 걸면 힌트도 반드시 (10-26 대표님)
+            // 비밀번호 — 4자 · 비밀번호 힌트는 선택 (10-26 대표님 — 힌트는 모두 선택으로 통일)
             HLabel(codeBox, "LCode", 68, "비밀번호 (4자) — 보물 앞에서 넣을 답", "Password (4 characters) — the answer to enter at the treasure", 40, Muted, FontStyle.Bold);
             var cIn = HInput(codeBox, "CodeInput", 132, "예: 1234", "e.g. 1234", false, R0926HuntApi.CodeLen); S("codeInput", cIn);
-            HLabel(codeBox, "LQuestion", 68, "비밀번호 힌트 (필수)", "Password hint (required)", 40, Muted, FontStyle.Bold);
+            HLabel(codeBox, "LQuestion", 68, "비밀번호 힌트 (선택)", "Password hint (optional)", 40, Muted, FontStyle.Bold);
             var qIn = HInput(codeBox, "QuestionInput", 132, "예: 가게 간판 아래 숫자 네 자리", "e.g. The four digits under the shop sign", false, 120); S("questionInput", qIn);
             S("codeBox", codeBox.gameObject);
             HLabel(form, "LWinners", 72, "당첨 인원", "Winners", 44, Muted, FontStyle.Bold);
@@ -126,16 +126,23 @@ namespace Redesign0926
             int wi = form.Find("WinnerChips").GetSiblingIndex();
             lPlayers.transform.SetSiblingIndex(wi + 1);
             playerChips.SetSiblingIndex(wi + 2);
-            HLabel(form, "LPrize", 72, "상품 (선택)", "Prize (optional)", 44, Muted, FontStyle.Bold);
+            // 상품은 제목과 힌트 사이 — 위에서 한 번에 쓴다 (10-26 대표님)
+            var lPrize = HLabel(form, "LPrize", 72, "상품 (선택)", "Prize (optional)", 44, Muted, FontStyle.Bold);
             var pIn = HInput(form, "PrizeInput", 132, "예: 커피 쿠폰", "e.g. Coffee coupon", false, 80); S("prizeInput", pIn);
+            int ti = form.Find("TitleInput").GetSiblingIndex();
+            lPrize.transform.SetSiblingIndex(ti + 1);
+            pIn.transform.SetSiblingIndex(ti + 2);
             HLabel(form, "LVisible", 72, "보이는 거리 — 이 안에 와야 보물이 보여요", "Visible within — get this close to see it", 44, Muted, FontStyle.Bold);
             S("visibleChips", HChips(form, "VisibleChips"));
             HLabel(form, "LRadius", 72, "참가 범위", "Who can join (distance)", 44, Muted, FontStyle.Bold);
             S("radiusChips", HChips(form, "RadiusChips"));
-            HLabel(form, "LCoord", 72, "위치 공개", "Show location", 44, Muted, FontStyle.Bold);
-            S("coordChips", HChips(form, "CoordChips"));
+            // 위치 공개(정확히·대략·비공개)는 없앴다 — 늘 정확히 (10-26 대표님)
+            foreach (var gone in new[] { "LCoord", "CoordChips" }) { var g = form.Find(gone); if (g != null) Object.DestroyImmediate(g.gameObject); }
             HLabel(form, "LAudience", 72, "누구에게", "Open to", 44, Muted, FontStyle.Bold);
-            S("audienceChips", HChips(form, "AudienceChips"));
+            var audienceChips = HChips(form, "AudienceChips"); S("audienceChips", audienceChips);
+            // 고른 대상이 무엇인지 — 참가 코드는 어떻게 쓰이는지 (R0926HuntCard 가 칩에 맞춰 쓴다)
+            var audienceNote = HLabel(form, "AudienceNote", 0, "", null, 38, Muted, FontStyle.Normal); S("audienceNote", audienceNote);
+            audienceNote.transform.SetSiblingIndex(audienceChips.GetSiblingIndex() + 1);
             HLabel(form, "LStart", 72, "시작", "Starts", 44, Muted, FontStyle.Bold);
             S("startChips", HChips(form, "StartChips"));
             HLabel(form, "LDuration", 72, "진행 시간", "Duration", 44, Muted, FontStyle.Bold);
@@ -199,6 +206,10 @@ namespace Redesign0926
             ccb.gameObject.SetActive(false);   // 근접 확인이 켠다
             S("dInfo", HLabel(det, "Info", 0, "", null, 42, Soft, FontStyle.Normal));
             S("joinButton", HButton(det, "Join", 144, HuntGold, "참가하기", "Join", 50, HuntDark, FontStyle.Bold, out _));
+            // 공유하기 — 주최자는 늘, 다른 사람은 '모두' 게임만 (10-26 대표님 — 링크로 널리)
+            var shareB = HButton(det, "Share", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "공유하기", "Share this hunt", 44, HuntGold, FontStyle.Bold, out _);
+            shareB.transform.SetSiblingIndex(det.Find("Join").GetSiblingIndex() + 1);
+            S("shareButton", shareB);
             S("profileButton", HButton(det, "Profile", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "주최자 프로필에서 별점 남기기", "Rate on the host's profile", 44, HuntGold, FontStyle.Bold, out _));
             S("leaveButton", HButton(det, "Leave", 124, new Color(1, 1, 1, 0.08f), "나가기", "Leave", 44, Soft, FontStyle.Bold, out _));
             S("giveupButton", HButton(det, "GiveUp", 124, new Color(1, 1, 1, 0.08f), "못 찾았어요", "Couldn't find it", 44, Soft, FontStyle.Bold, out _));
@@ -235,6 +246,7 @@ namespace Redesign0926
             S("toast", toastText);
             var mirror = page.GetComponentInChildren<UploadInputMirror>(true);
             S("inputMirror", mirror);   // 한마디·코드 칸 — 입력줄의 보내기(엔터)로 바로 보낸다
+            HuntReviewCard(root, so, log);   // 숨기기 전 확인 카드 · 숨긴 뒤 참가 코드·공유하기 (Redesign0926ApplyHuntReview)
             so.ApplyModifiedPropertiesWithoutUndo();
 
             hubView.SetActive(true); formView.SetActive(false); rulesView.SetActive(false); detView.SetActive(false);
@@ -310,7 +322,7 @@ namespace Redesign0926
             ["How to win"] = new[] { "見つけ方", "寻宝方式", "Cómo se gana" },
             ["Password (4 characters) — the answer to enter at the treasure"] = new[] { "パスワード（4文字）— 宝の前で入力する答え", "密码（4 个字符）— 在宝藏前输入的答案", "Contraseña (4 caracteres): la respuesta que se introduce en el tesoro" },
             ["e.g. 1234"] = new[] { "例：1234", "例：1234", "p. ej. 1234" },
-            ["Password hint (required)"] = new[] { "パスワードのヒント（必須）", "密码提示（必填）", "Pista de la contraseña (obligatoria)" },
+            ["Password hint (optional)"] = new[] { "パスワードのヒント（任意）", "密码提示（选填）", "Pista de la contraseña (opcional)" },
             ["e.g. The four digits under the shop sign"] = new[] { "例：お店の看板の下にある数字4桁", "例：店铺招牌下方的四位数字", "p. ej. Los cuatro dígitos bajo el letrero de la tienda" },
             ["Winners"] = new[] { "当選人数", "中奖人数", "Ganadores" },
             ["Max players — closes when full"] = new[] { "参加人数 — 埋まると締め切り", "参加人数 — 满员即截止", "Máx. de jugadores — se cierra al llenarse" },
@@ -318,7 +330,6 @@ namespace Redesign0926
             ["e.g. Coffee coupon"] = new[] { "例：コーヒーのクーポン", "例：咖啡券", "p. ej. Cupón de café" },
             ["Visible within — get this close to see it"] = new[] { "見える距離 — ここまで近づくと宝が見えます", "可见距离 — 走到这个范围内才能看到宝藏", "Visible a — acércate hasta aquí para verlo" },
             ["Who can join (distance)"] = new[] { "参加範囲（距離）", "参加范围（距离）", "Quién puede unirse (distancia)" },
-            ["Show location"] = new[] { "位置の公開", "位置公开", "Mostrar ubicación" },
             ["Open to"] = new[] { "参加できる人", "参加对象", "Abierto a" },
             ["Starts"] = new[] { "開始", "开始", "Empieza" },
             ["Duration"] = new[] { "開催時間", "进行时间", "Duración" },
@@ -346,6 +357,12 @@ namespace Redesign0926
             ["Player reviews"] = new[] { "参加者のレビュー", "参加者评价", "Reseñas de jugadores" },
             ["You can report only if you played this host's games · Blocking hides their hunts from your list and alerts"] = new[] { "この人のゲームに参加したことがある場合のみ通報できます · ブロックするとこの人のゲームが一覧・通知から消えます", "只有参加过此人的游戏才能举报 · 屏蔽后此人的游戏将从列表和通知中消失", "Solo puedes denunciar si jugaste a sus juegos · Al bloquear, sus búsquedas desaparecen de tu lista y avisos" },
             ["Cancel"] = new[] { "キャンセル", "取消", "Cancelar" },
+            // 숨기기 확인 카드 · 공유하기 (10-26)
+            ["Edit"] = new[] { "修正する", "修改", "Editar" },
+            ["OK"] = new[] { "OK", "确定", "Aceptar" },
+            ["Share"] = new[] { "共有する", "分享", "Compartir" },
+            ["Join code"] = new[] { "参加コード", "参加代码", "Código para unirse" },
+            ["Share this hunt"] = new[] { "この宝探しを共有", "分享这个寻宝", "Compartir esta búsqueda" },
         };
 
         private static void HLoc(GameObject g, string ko, string en)

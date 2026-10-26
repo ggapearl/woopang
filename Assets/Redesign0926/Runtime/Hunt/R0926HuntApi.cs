@@ -120,6 +120,7 @@ public static class R0926HuntApi
             case "question": return L("비밀번호를 건 보물엔 힌트를 꼭 써 주세요", "A password-locked treasure needs a hint", "パスワード付きの宝にはヒントが必要です", "设置了密码的宝藏必须填写提示", "Un tesoro con contraseña necesita una pista");
             case "out_of_range": return L("참가 범위 밖이에요", "You're outside the game area", "参加範囲の外です", "你不在参加范围内", "Estás fuera del área del juego");
             case "friends_only": return L("맞팔 친구만 참가할 수 있어요", "Mutual friends only", "相互フォローの友だちだけが参加できます", "仅限互相关注的好友参加", "Solo amigos mutuos");
+            case "followers_only": return L("주최자를 팔로우한 사람만 참가할 수 있어요", "Followers of the host only", "主催者をフォローしている人だけが参加できます", "仅限关注主办者的人参加", "Solo seguidores de quien organiza");
             case "join_code": return L("참가 코드가 맞지 않아요", "Wrong join code", "参加コードが違います", "参加代码不正确", "Código de acceso incorrecto");
             case "not_open": return L("이미 끝난 게임이에요", "This game has ended", "すでに終了したゲームです", "游戏已经结束", "Este juego ya terminó");
             case "location": return L("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación");

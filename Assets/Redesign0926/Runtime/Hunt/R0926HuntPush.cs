@@ -1,5 +1,8 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,6 +15,7 @@ using UnityEngine.UI;
 /// FirebaseNotification 이 부른다 — 안드로이드: 알림바에서 눌러 열림 · 앱을 보는 중 띄운 알림을 누름 / 아이폰: 눌러 열림 · 보는 중 뜬 배너를 누름.
 /// 추가 창이 켜진 채 연 프로필(카드의 주최자 · 별점 알림)은 추가 창 위로 올린다 — 프로필 창이 캔버스에서 추가 창보다 앞 순서라 뒤에 가려졌다.
 /// 새 팔로워 알림(notification_type=follow)도 같은 길로 — 덮인 창을 추가 창까지 닫고 내 팔로워 탭을 연다. 그 사람은 맨 위에 두고 잠깐 밝힌다 (B8, 10-18).
+/// 공유 링크(woopang://hunt?id=…&amp;c=… — woopang.com/hunt/&lt;번호&gt; 의 '우팡 앱에서 열기')로 열려도 같은 길로 — 코드가 있으면 바로 참가 (10-26).
 /// </summary>
 public class R0926HuntPush : MonoBehaviour
 {
@@ -27,6 +31,8 @@ public class R0926HuntPush : MonoBehaviour
     private static string pendingFollower;  // 맨 위에 둘 새 팔로워 아이디
     private static string lastKey;
     private static float lastAt = -99f;
+    private static bool pendingLink;        // 공유 링크로 열림 — 상세 대신 R0926HuntCard.OpenLink (코드가 있으면 바로 참가)
+    private static string pendingLinkCode;
 
     private bool running;
     private float readySince = -1f;
@@ -58,7 +64,55 @@ public class R0926HuntPush : MonoBehaviour
         pendingHost = hostId;
         pendingProfile = toProfile;
         pendingFollow = false;
+        pendingLink = false;
         pending = true;
+    }
+
+    /// <summary>보물찾기 공유 링크로 앱이 열렸다 (woopang://hunt?id=…&amp;c=… · https://woopang.com/hunt/&lt;번호&gt;?c=…) — 그 게임으로, 코드가 있으면 바로 참가.
+    /// 보물찾기 링크가 아니면 false. 같은 링크가 두 길로 와도(앱을 연 주소 · 링크 알림) 한 번만</summary>
+    public static bool OpenLink(string url)
+    {
+        if (!TryParseLink(url, out int id, out string code)) return false;
+        string key = "link|" + id + "|" + code;
+        if (key == lastKey && Time.realtimeSinceStartup - lastAt < 10f) return true;
+        lastKey = key;
+        lastAt = Time.realtimeSinceStartup;
+        pendingHunt = id.ToString();
+        pendingHost = null;
+        pendingProfile = false;
+        pendingFollow = false;
+        pendingLink = true;
+        pendingLinkCode = code;
+        pending = true;
+        return true;
+    }
+
+    /// <summary>공유 링크에서 게임 번호와 참가 코드(영문·숫자만 · 대문자 · 12자까지)를 꺼낸다</summary>
+    public static bool TryParseLink(string url, out int id, out string code)
+    {
+        id = 0; code = null;
+        if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return false;
+        string scheme = uri.Scheme.ToLowerInvariant(), host = uri.Host.ToLowerInvariant(), idText;
+        if (scheme == "woopang" && host == "hunt") idText = Query(uri.Query, "id");
+        else if ((scheme == "https" || scheme == "http") && (host == "woopang.com" || host == "www.woopang.com") && uri.AbsolutePath.StartsWith("/hunt/"))
+            idText = uri.AbsolutePath.Substring("/hunt/".Length).TrimEnd('/');
+        else return false;
+        if (!int.TryParse(idText, NumberStyles.None, CultureInfo.InvariantCulture, out id) || id <= 0) { id = 0; return false; }
+        var sb = new StringBuilder();
+        foreach (char ch in Query(uri.Query, "c") ?? "")
+            if (sb.Length < 12 && ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9'))) sb.Append(char.ToUpperInvariant(ch));
+        code = sb.Length > 0 ? sb.ToString() : null;
+        return true;
+    }
+
+    private static string Query(string query, string key)
+    {
+        foreach (var part in (query ?? "").TrimStart('?').Split('&'))
+        {
+            int eq = part.IndexOf('=');
+            if ((eq >= 0 ? part.Substring(0, eq) : part) == key) return eq >= 0 ? Uri.UnescapeDataString(part.Substring(eq + 1).Replace('+', ' ')) : "";
+        }
+        return null;
     }
 
     /// <summary>새 팔로워 알림 데이터(notification_type=follow · from_username)면 내 팔로워 탭으로. 아니면 false</summary>
@@ -79,6 +133,7 @@ public class R0926HuntPush : MonoBehaviour
         lastAt = Time.realtimeSinceStartup;
         pendingFollower = fromUsername;
         pendingFollow = true;
+        pendingLink = false;
         pending = true;
     }
 
@@ -89,6 +144,7 @@ public class R0926HuntPush : MonoBehaviour
         pendingHost = null;
         pendingProfile = false;
         pendingFollow = false;
+        pendingLink = false;
         pending = true;
     }
 
@@ -104,10 +160,16 @@ public class R0926HuntPush : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetOnLaunch()
     {
-        pending = pendingProfile = pendingFollow = false;
-        pendingHunt = pendingHost = pendingFollower = lastKey = null;
+        pending = pendingProfile = pendingFollow = pendingLink = false;
+        pendingHunt = pendingHost = pendingFollower = pendingLinkCode = lastKey = null;
         lastAt = -99f;
     }
+
+    // 공유 링크 — 꺼진 앱이 링크로 켜지면 Application.absoluteURL, 켜진 앱이면 deepLinkActivated (로그인 링크 woopang://auth 는 LoginManager)
+    private void OnEnable() => Application.deepLinkActivated += OnDeepLink;
+    private void OnDisable() => Application.deepLinkActivated -= OnDeepLink;
+    private void Start() => OnDeepLink(Application.absoluteURL);
+    private static void OnDeepLink(string url) => OpenLink(url);
 
     private void Update()
     {
@@ -158,8 +220,10 @@ public class R0926HuntPush : MonoBehaviour
         running = true;
         pending = false;
         string hunt = pendingHunt, host = pendingHost, follower = pendingFollower;
-        bool toProfile = pendingProfile, toFollowers = pendingFollow;
-        pendingFollow = false;
+        bool toProfile = pendingProfile, toFollowers = pendingFollow, link = pendingLink;
+        string linkCode = pendingLinkCode;
+        pendingFollow = pendingLink = false;
+        pendingLinkCode = null;
         // 프로필·팔로우 목록·대화방은 열어 준 곳으로 돌아가지 않고 바로 닫는다 — 팔로우 목록 → 프로필, 대화방 → 메시지 목록이
         // 닫히며 앞 창을 되살려 상세 위에 겹쳤다 (10-13 대표님). 나머지 창은 뒤로가기 순서대로
         if (FollowManager.Instance != null) FollowManager.Instance.CloseAway();
@@ -188,7 +252,7 @@ public class R0926HuntPush : MonoBehaviour
             if (swipe != null) swipe.SwitchToPanel(2);
             float until = Time.unscaledTime + 3f;
             while (!card.isActiveAndEnabled && Time.unscaledTime < until) yield return null;
-            if (card.isActiveAndEnabled) card.StartCoroutine(card.OpenDetail(id));
+            if (card.isActiveAndEnabled) card.StartCoroutine(link ? card.OpenLink(id, linkCode) : card.OpenDetail(id));
         }
         running = false;
     }

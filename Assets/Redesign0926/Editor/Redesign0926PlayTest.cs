@@ -109,6 +109,7 @@ namespace Redesign0926
             else if (mode == "huntchest") PlanHuntChest();
             else if (mode == "huntshapes") PlanHuntShapes();
             else if (mode == "huntform") PlanHuntForm();
+            else if (mode == "huntshare") PlanHuntShare();
             else if (mode == "glbload") PlanGlbLoad();
             else if (mode == "login") PlanLogin();
             else if (mode == "loginswitch") PlanLoginSwitch();
@@ -6197,16 +6198,101 @@ namespace Redesign0926
             Sleep(1.5f);
             Shot("hunt_form");
             Check(() => Active(H + "Form"), "동의 → 숨기기 양식");
-            Check(() => ActiveChildren(H + "Form/Viewport/Content/PlayerChips") == 5, "참가 인원 칩 5개(10·20·30·50·100)");
-            Do(() => { var f = Find(H + "Form/Viewport/Content/TitleInput")?.GetComponent<InputField>(); if (f != null) f.text = "시험 보물 (플레이 시험)"; });
-            Do(() => { var f = Find(H + "Form/Viewport/Content/HintInput")?.GetComponent<InputField>(); if (f != null) f.text = "충남도청 앞 분수대 근처"; });
-            Do(() => Click(H + "Form/Viewport/Content/Submit"));
-            Sleep(2.5f);
+            const string F = HfForm, RV = HuntReview;
+            Check(() => ActiveChildren(F + "PlayerChips") == 5, "참가 인원 칩 5개(10·20·30·50·100)");
+            // 기본값 (10-26 대표님) — 고른 칩만 굵은 글자
+            Check(() =>
+            {
+                var on = new List<string>();
+                foreach (var box in new[] { "ShapeChips", "ModeChips", "WinnerChips", "PlayerChips", "VisibleChips", "RadiusChips", "AudienceChips", "StartChips", "DurationChips" })
+                    on.Add(HuntChipOn(F + box));
+                log.Add("  기본값: " + string.Join(" · ", on));
+                return string.Join(",", on) == "chest,touch,1,100,10,10,all,0,10080";
+            }, "기본값 — 보물상자 · 먼저 터치 · 당첨 1명 · 참가 100명 · 보이는 거리 10m · 참가 범위 10km · 모두 · 바로 · 일주일");
+            Check(() => HuntChipValues(F + "DurationChips") == "60,180,1440,4320,10080" && TextOf(F + "DurationChips/Chip_10080/Label") == "일주일", "진행 시간 — 30분 없음 · 1시간부터 · 7일은 '일주일'");
+            Check(() => HuntChipValues(F + "ShapeChips") == "chest,gift,heart,photo,model", "보물 모양 — 보물상자 · 선물상자 · 하트 · 사진 · 3D 모델만");
+            Check(() => HuntChipValues(F + "AudienceChips") == "all,friends,follower,code" && TextOf(F + "AudienceChips/Chip_follower/Label") == "팔로워 모두", "누구에게 — 모두 · 맞팔 · 팔로워 모두 · 참가 코드");
+            Check(() => Find(F + "CoordChips") == null && Find(F + "LCoord") == null, "'위치 공개' 칸 없음 (늘 정확히)");
+            Check(() =>
+            {
+                int t = Find(F + "TitleInput").GetSiblingIndex();
+                return Find(F + "LPrize").GetSiblingIndex() == t + 1 && Find(F + "PrizeInput").GetSiblingIndex() == t + 2 && Find(F + "LHint").GetSiblingIndex() == t + 3;
+            }, "상품 칸은 제목과 힌트 사이");
+            Check(() => TextOf(F + "AudienceNote").StartsWith("참가 범위 안의 우팡 사용자라면 누구나"), "'모두' — 안내 줄");
+            Do(() => Click(F + "AudienceChips/Chip_code"));
+            Check(() => TextOf(F + "AudienceNote").Contains("참가 코드가 만들어지고") && TextOf(F + "AudienceNote").Contains("어디서든"),
+                "'참가 코드' — 목록·알림에 안 나오고 코드·공유 링크를 받은 사람만 어디서든 참가한다고 안내");
+            Do(() => Click(F + "AudienceChips/Chip_follower"));
+            Check(() => TextOf(F + "AudienceNote").StartsWith("나를 팔로우하는 사람만"), "'팔로워 모두' — 안내 줄");
+            Do(() => Click(F + "AudienceChips/Chip_all"));
+            // 시험은 1시간 · 보이는 거리 50m (연장 · 다가가기 시험이 이 값으로 잰다)
+            Do(() => { Click(F + "DurationChips/Chip_60"); Click(F + "VisibleChips/Chip_50"); });
+            Do(() =>
+            {
+                Find(F + "TitleInput").GetComponent<InputField>().text = "시험 보물 (플레이 시험)";
+                Find(F + "PrizeInput").GetComponent<InputField>().text = "커피 쿠폰 (시험)";
+                Find(F + "HintInput").GetComponent<InputField>().text = "충남도청 앞 분수대 근처";
+            });
+
+            // 숨기기 → 확인 카드 (10-26 대표님) — 고치기 · 바깥 · 뒤로가기는 양식으로 (적은 것 그대로) · 숨기기 → 같은 카드에 공유하기
+            Do(() => Click(F + "Submit"));
+            Sleep(0.6f);
+            Shot("hunt_review");
+            Check(() => Active(RV) && R0926HuntCard.Reviewing && TextOf(RV + "/Sheet0926/Head") == "이대로 숨길까요?" && ActiveChildren(RV + "/Sheet0926/Rows") == 11
+                        && Active(RV + "/Sheet0926/Buttons/Edit") && TextOf(RV + "/Sheet0926/Buttons/Go/Label") == "숨기기"
+                        && !Active(RV + "/Sheet0926/Buttons/Share") && !Active(RV + "/Sheet0926/Buttons/Done") && !Active(RV + "/Sheet0926/CodeBox"),
+                "숨기기 → 확인 카드 '이대로 숨길까요?' · 11줄 · [고치기 | 숨기기]");
+            Check(() =>
+            {
+                foreach (var r in new[] { "제목", "상품", "힌트", "보물 모양", "찾는 방식", "당첨 · 참가", "보이는 거리", "참가 범위", "누구에게", "시작 · 진행", "숨길 자리" })
+                    log.Add("  카드 " + r + ": " + ReviewRow(r).Replace("\n", " ⏎ "));
+                return ReviewRow("제목") == "시험 보물 (플레이 시험)" && ReviewRow("상품") == "커피 쿠폰 (시험)" && ReviewRow("힌트") == "충남도청 앞 분수대 근처"
+                       && ReviewRow("보물 모양") == "보물상자" && ReviewRow("찾는 방식") == "먼저 터치" && ReviewRow("당첨 · 참가") == "1명 · 최대 100명"
+                       && ReviewRow("보이는 거리") == "50m" && ReviewRow("참가 범위") == "10km" && ReviewRow("누구에게") == "모두" && ReviewRow("시작 · 진행") == "바로 · 1시간"
+                       && ReviewRow("숨길 자리").StartsWith("지금 서 있는 자리");
+            }, "확인 카드 — 고른 그대로 한 줄씩");
+            Check(() => Find(RV)?.GetComponent<Canvas>() is Canvas cv && cv.overrideSorting && cv.sortingOrder > 9500, "확인 카드는 캔버스 맨 위 층 (도크·창·토스트 위)");
+            HitCheck(() => Find(RV + "/Sheet0926/Buttons/Go") as RectTransform, false, "확인 카드의 '숨기기'가 맨 위에서 눌림");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Edit"));
+            Sleep(0.4f);
+            Check(() => !Active(RV) && !R0926HuntCard.Reviewing && Active(H + "Form") && Find(F + "TitleInput").GetComponent<InputField>().text == "시험 보물 (플레이 시험)"
+                        && Find(F + "PrizeInput").GetComponent<InputField>().text == "커피 쿠폰 (시험)", "고치기 → 카드만 닫힘 · 적은 것 그대로");
+            Do(() => Click(F + "Submit"));
+            Sleep(0.4f);
+            Back();
+            Sleep(0.6f);
+            Check(() => !Active(RV) && Active("UploadPage") && Active(H + "Form"), "뒤로가기 → 카드만 닫힘 (추가 창 · 양식 그대로)");
+            Do(() => Click(F + "Submit"));
+            Sleep(0.4f);
+            Do(() => Click(RV + "/Dim0926"));
+            Sleep(0.4f);
+            Check(() => !Active(RV) && Active(H + "Form"), "카드 바깥(어두운 곳) → 카드만 닫힘");
+            Do(() => Click(F + "Submit"));
+            Sleep(0.4f);
+            Do(() => { R0926Share.EditorLast = null; Click(RV + "/Sheet0926/Buttons/Go"); });
+            Wait(() => TextOf(RV + "/Sheet0926/Head") == "보물을 숨겼어요!", 10f, "숨김 → 카드 '보물을 숨겼어요!'");
+            Sleep(0.5f);
+            Shot("hunt_review_done");
+            Do(() => { huntPosted = HuntPostedId(); log.Add("  숨긴 게임 " + huntPosted); });
+            Check(() => huntPosted > 0 && TextOf(RV + "/Sheet0926/Sub") == "시험 보물 (플레이 시험)" && !Active(RV + "/Sheet0926/Rows") && !Active(RV + "/Sheet0926/CodeBox")
+                        && Active(RV + "/Sheet0926/Buttons/Share") && Active(RV + "/Sheet0926/Buttons/Done") && !Active(RV + "/Sheet0926/Buttons/Edit") && !Active(RV + "/Sheet0926/Buttons/Go")
+                        && TextOf(RV + "/Sheet0926/Note").StartsWith("참가 범위 안의 사람들이 목록에서"),
+                "숨긴 뒤 같은 카드 — 제목 · [확인 | 공유하기] · '모두' 게임은 참가 코드 없음");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Share"));
+            Do(() => log.Add("  공유 글: " + (R0926Share.EditorLast ?? "-").Replace("\n", " ⏎ ")));
+            Check(() => (R0926Share.EditorLast ?? "").StartsWith("[우팡 보물찾기] 시험 보물 (플레이 시험)\n상품: 커피 쿠폰 (시험)\n") && R0926Share.EditorLast.EndsWith("/hunt/" + huntPosted)
+                        && !R0926Share.EditorLast.Contains("참가 코드") && Active(RV),
+                "공유하기 → '[우팡 보물찾기] 제목 ⏎ 상품 ⏎ …/hunt/번호' (코드 없음) · 카드는 그대로");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Done"));
+            Wait(() => Active(H + "Detail"), 8f, "확인 → 상세");
+            Sleep(1.0f);
             Shot("hunt_detail_host");
-            Check(() => Active(H + "Detail"), "숨기기 → 상세(주최자)");
+            Check(() => Active(H + "Detail") && !Active(RV) && !R0926HuntCard.Reviewing, "확인 → 카드 닫고 상세(주최자)");
             Check(() => Find(H + "Detail/Viewport/Content/Open") == null && Active(H + "Detail/Viewport/Content/ExtendRow/Extend") && Active(H + "Detail/Viewport/Content/ExtendRow/ExtendDay"),
                 "주최자 상세: '보물 열기' 버튼 없음 · '1시간 연장하기 / 1일 연장하기' 한 줄");
-            Check(() => (Find(H + "Detail/Viewport/Content/Info")?.GetComponent<Text>()?.text ?? "").Contains("참가  0/30명"), "상세: 참가 0/30명 (인원 기본 30)");
+            Check(() => TextOf(H + "Detail/Viewport/Content/Info").Contains("참가  0/100명") && !TextOf(H + "Detail/Viewport/Content/Info").Contains("위치 공개"),
+                "상세: 참가 0/100명 (인원 기본 100) · '위치 공개' 줄 없음");
+            Check(() => Active(H + "Detail/Viewport/Content/Share"), "주최자 상세에 '공유하기'");
             Check(() =>
             {
                 var a = Find(H + "Detail/Viewport/Content/ExtendRow/Extend") as RectTransform;
@@ -6231,6 +6317,8 @@ namespace Redesign0926
             Check(() => ActiveChildren(H + "Hub/Viewport/Content/NearList") >= 1, "다른 사람 근처 목록에 그 게임");
             Do(() => FirstActiveChild(H + "Hub/Viewport/Content/NearList")?.GetComponent<Button>()?.onClick.Invoke());
             Sleep(2.0f);
+            Do(() => { R0926Share.EditorLast = null; Click(H + "Detail/Viewport/Content/Share"); });
+            Check(() => Active(H + "Detail/Viewport/Content/Share") && (R0926Share.EditorLast ?? "").EndsWith("/hunt/" + huntPosted), "참가자 상세에도 '공유하기' ('모두' 게임) → 같은 링크");
             // 보물에서 250m 떨어진 데서 참가 → 첫 근접 확인은 기준만 → 보물 자리로 걸어가면 한 번 진동 ('가까워지면 진동' 기본 켜짐)
             Do(() =>
             {
@@ -6245,7 +6333,7 @@ namespace Redesign0926
             Do(() => VirtualLocation.Instance.SetCoordinates(huntSpot.x - 0.00009f, huntSpot.y));   // 10m 남쪽 — 상자를 화면에서 누를 수 있게
             Sleep(9.5f);
             Shot("hunt_near");
-            Check(() => (Find(H + "Detail/Viewport/Content/Info")?.GetComponent<Text>()?.text ?? "").Contains("참가  1/30명"), "참가 → 상세 1/30명");
+            Check(() => (Find(H + "Detail/Viewport/Content/Info")?.GetComponent<Text>()?.text ?? "").Contains("참가  1/100명"), "참가 → 상세 1/100명");
             Check(() => TextOf(H + "Detail/Viewport/Content/Near") == "보물이 보이는 거리예요", "보이는 거리 안 → '보물이 보이는 거리예요' (여는 법 안내 글 없이)");
             Check(() => R0926HuntCard.EditorBuzzes == 1, "보물 자리로 다가감 → 진동 한 번");
             OpenTreasureAR("hunt_celebrate");
@@ -7378,8 +7466,256 @@ namespace Redesign0926
             });
         }
 
+        // 보물 숨기기 확인 카드 (캔버스 맨 위 층 · R0926HuntCard 가 채운다)
+        private const string HuntReview = "HuntReview0926";
+        private static int huntPosted;
+        // 확인 카드의 그 이름 줄 값 ('제목' · '상품' …) — 없으면 ""
+        private static string ReviewRow(string label)
+        {
+            var rows = Find(HuntReview + "/Sheet0926/Rows");
+            if (rows != null)
+                foreach (Transform r in rows)
+                    if (r.gameObject.activeSelf && r.Find("Label")?.GetComponent<Text>()?.text == label) return r.Find("Value")?.GetComponent<Text>()?.text ?? "";
+            return "";
+        }
+        // 칩 줄에서 고른 칩(굵은 글자)의 값 — 하나가 아니면 ""
+        private static string HuntChipOn(string box)
+        {
+            var t = Find(box);
+            string on = null;
+            if (t != null)
+                foreach (Transform c in t)
+                {
+                    if (!c.gameObject.activeSelf || !c.name.StartsWith("Chip_") || c.Find("Label")?.GetComponent<Text>()?.fontStyle != FontStyle.Bold) continue;
+                    if (on != null) return "";
+                    on = c.name.Substring(5);
+                }
+            return on ?? "";
+        }
+        private static string HuntChipValues(string box)
+        {
+            var t = Find(box);
+            var v = new List<string>();
+            if (t != null) foreach (Transform c in t) if (c.gameObject.activeSelf && c.name.StartsWith("Chip_")) v.Add(c.name.Substring(5));
+            return string.Join(",", v);
+        }
+        // 방금 숨긴 게임 번호 (확인 카드의 '확인'을 누르기 전까지)
+        private static int HuntPostedId()
+        {
+            var card = UnityEngine.Object.FindAnyObjectByType<R0926HuntCard>(FindObjectsInactive.Include);
+            return card != null && typeof(R0926HuntCard).GetField("postedId", NPI)?.GetValue(card) is int i ? i : 0;
+        }
+        // 개발 서버 응답 — 4xx 여도 본문을 (오류 이름 · host_id 를 보려고)
+        private static string DevSend(string user, string path, string json = null)
+        {
+            using (var wc = new System.Net.WebClient())
+            {
+                wc.Encoding = System.Text.Encoding.UTF8;
+                if (user != null) wc.Headers.Add("X-Test-User", user);
+                wc.Headers.Add("Accept-Language", "ko-KR,ko;q=0.9");
+                try
+                {
+                    if (json == null) return wc.DownloadString("http://127.0.0.1:5099" + path);
+                    wc.Headers.Add("Content-Type", "application/json");
+                    return wc.UploadString("http://127.0.0.1:5099" + path, json);
+                }
+                catch (System.Net.WebException e)
+                {
+                    if (e.Response == null) { log.Add("  개발 서버 " + path + " 실패: " + e.Message); return ""; }
+                    using (var r = new StreamReader(e.Response.GetResponseStream(), System.Text.Encoding.UTF8)) return r.ReadToEnd();
+                }
+            }
+        }
+        // 근처 목록(/api/hunts/nearby)의 '근처 게임'에 그 번호가 있나 — 주최·참가 목록은 빼고 본다
+        private static bool NearbyHas(string user, int id)
+        {
+            var v = VirtualLocation.Instance;
+            string json = DevSend(user, "/api/hunts/nearby?lat=" + Deg(v.Latitude) + "&lon=" + Deg(v.Longitude));
+            int a = json.IndexOf("\"hunts\":", StringComparison.Ordinal);
+            if (a < 0) { log.Add("  근처 목록 못 받음 (" + user + ")"); return false; }
+            int depth = 0, end = a;
+            for (int i = json.IndexOf('[', a); i >= 0 && i < json.Length; i++)
+            {
+                if (json[i] == '[') depth++;
+                else if (json[i] == ']' && --depth == 0) { end = i; break; }
+            }
+            return System.Text.RegularExpressions.Regex.IsMatch(json.Substring(a, end - a + 1), "\"id\":\\s*" + id + "[,}]");
+        }
+
+        private static void PushForget() => typeof(R0926HuntPush).GetField("lastKey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, null);
+
+        // 공유하기 · 공유 링크 · 누구에게 (10-26 대표님) — 시험 서버(127.0.0.1:5099)로:
+        // ① 링크 읽기 ② 참가 코드 게임 → 숨긴 카드에 참가 코드 · 공유 글에 코드와 …/hunt/번호?c=코드 · 목록엔 안 나옴
+        // ③ 다른 사람이 그 링크로 앱을 열면 바로 참가하고 상세 · 틀린 코드면 처음 화면 코드 칸에 넣어 두고 안내
+        // ④ '팔로워 모두' — 팔로워·맞팔만 목록·참가 · 아닌 사람이 링크로 열면 주최자 프로필로 · 공유 페이지(/hunt/번호)
+        // ⑤ 비밀번호 힌트 없이도 숨겨짐 (서버)
+        private const string ShHost = "hunt_test_shost";
+        private static int shCodeHunt, shFollowHunt;
+        private static string shCode;
+        private static void PlanHuntShare()
+        {
+            const string H = HuntCardPath, F = HfForm, RV = HuntReview;
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
+                R0926HuntApi.EditorTestUser = ShHost;
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+
+            // ① 링크 읽기
+            Check(() =>
+            {
+                bool a = R0926HuntPush.TryParseLink("woopang://hunt?id=123&c=ab-c12x", out int i1, out string c1) && i1 == 123 && c1 == "ABC12X";
+                bool b = R0926HuntPush.TryParseLink("https://woopang.com/hunt/77?c=QW12ER", out int i2, out string c2) && i2 == 77 && c2 == "QW12ER";
+                bool c = R0926HuntPush.TryParseLink("https://www.woopang.com/hunt/8", out int i3, out string c3) && i3 == 8 && c3 == null;
+                bool d = !R0926HuntPush.TryParseLink("https://evil.example/hunt/5?c=AAAAAA", out _, out _) && !R0926HuntPush.TryParseLink("woopang://auth?token=x", out _, out _)
+                         && !R0926HuntPush.TryParseLink("woopang://hunt?id=-3", out _, out _) && !R0926HuntPush.TryParseLink("https://woopang.com/hunts/5", out _, out _);
+                log.Add("  링크 읽기: " + a + " · " + b + " · " + c + " · " + d);
+                return a && b && c && d;
+            }, "링크 읽기 — woopang://hunt?id=…&c=… · https://(www.)woopang.com/hunt/번호?c=… (코드는 영문·숫자만 대문자로) · 다른 주소·로그인 링크는 무시");
+
+            // ② 참가 코드 게임
+            HfOpenForm();
+            Do(() =>
+            {
+                Click(F + "AudienceChips/Chip_code");
+                Click(F + "DurationChips/Chip_60");
+                Find(F + "TitleInput").GetComponent<InputField>().text = "코드 시험 보물 (플레이 시험)";
+                Find(F + "PrizeInput").GetComponent<InputField>().text = "";
+                Find(F + "HintInput").GetComponent<InputField>().text = "";
+            });
+            Do(() => Click(F + "Submit"));
+            Sleep(0.6f);
+            Shot("share_code_review");
+            Check(() => Active(RV) && ReviewRow("누구에게") == "참가 코드" && ReviewRow("참가 범위") == "코드를 받은 사람은 어디서든" && ReviewRow("상품") == "없음" && ReviewRow("힌트") == "없음"
+                        && TextOf(RV + "/Sheet0926/Note").Contains("참가 코드가 만들어지고"),
+                "참가 코드 게임 확인 카드 — 참가 범위 '코드를 받은 사람은 어디서든' · 상품·힌트 '없음' · 코드 안내");
+            Do(() => { R0926Share.EditorLast = null; Click(RV + "/Sheet0926/Buttons/Go"); });
+            Wait(() => TextOf(RV + "/Sheet0926/Head") == "보물을 숨겼어요!", 10f, "숨김 → 카드 '보물을 숨겼어요!'");
+            Sleep(0.6f);
+            Shot("share_code_done");
+            Do(() => { shCodeHunt = HuntPostedId(); shCode = TextOf(RV + "/Sheet0926/CodeBox/Code"); log.Add("  코드 게임 " + shCodeHunt + " · 코드 " + shCode); });
+            Check(() => shCodeHunt > 0 && Active(RV + "/Sheet0926/CodeBox") && System.Text.RegularExpressions.Regex.IsMatch(shCode ?? "", "^[A-Z0-9]{6}$")
+                        && TextOf(RV + "/Sheet0926/CodeBox/L") == "참가 코드" && TextOf(RV + "/Sheet0926/Note").StartsWith("이 코드나 공유 링크를 받은 사람만"),
+                "숨긴 카드에 참가 코드 6자 · '코드나 공유 링크를 받은 사람만 어디서든' 안내");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Share"));
+            Do(() => log.Add("  공유 글: " + (R0926Share.EditorLast ?? "-").Replace("\n", " ⏎ ")));
+            Check(() => R0926Share.EditorLast == "[우팡 보물찾기] 코드 시험 보물 (플레이 시험)\n참가 코드: " + shCode + "\nhttp://127.0.0.1:5099/hunt/" + shCodeHunt + "?c=" + shCode,
+                "공유 글 — 제목 ⏎ 참가 코드 ⏎ …/hunt/번호?c=코드 (상품이 없으면 상품 줄 없음)");
+            Check(() => !NearbyHas("hunt_test_s1", shCodeHunt), "참가 코드 게임은 다른 사람 근처 목록에 안 나옴");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Done"));
+            Wait(() => Active(H + "Detail"), 8f, "확인 → 상세");
+            Sleep(0.8f);
+            Check(() => Active(H + "Detail/Viewport/Content/Share") && !Active(RV), "주최자 상세 — '공유하기' (참가 코드 게임도 주최자는 공유)");
+            Do(() => { R0926Share.EditorLast = null; Click(H + "Detail/Viewport/Content/Share"); });
+            Check(() => (R0926Share.EditorLast ?? "").EndsWith("/hunt/" + shCodeHunt + "?c=" + shCode), "주최자 상세의 공유하기도 코드가 든 링크");
+            CloseUpload();
+
+            // ③ 다른 사람이 공유 링크로 앱을 연다 — 코드가 들어가 바로 참가
+            Do(() =>
+            {
+                R0926HuntApi.EditorTestUser = "hunt_test_s1";
+                R0926HuntPush.OpenLink("woopang://hunt?id=" + shCodeHunt + "&c=" + shCode.ToLowerInvariant());
+            });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains("코드 시험 보물"), 15f, "링크 → 참가 → 상세");
+            Sleep(0.6f);
+            Shot("share_link_joined");
+            Check(() => Active("UploadPage") && UploadSwipe()?.GetCurrentPanel() == 2 && TextOf(HuntCardToast) == "참가했어요!" && Has(DevSend("hunt_test_s1", "/api/hunts/" + shCodeHunt), "\"joined\":true"),
+                "링크(woopang://hunt?id=…&c=…)로 열면 추가 창 보물찾기 카드 · '참가했어요!' · 서버에도 참가");
+            Check(() => !Active(H + "Detail/Viewport/Content/Share"), "참가 코드 게임 — 참가자 상세엔 '공유하기' 없음 (코드는 주최자만 퍼뜨린다)");
+            Do(() =>
+            {
+                R0926HuntApi.EditorTestUser = "hunt_test_s2";
+                R0926HuntPush.OpenLink("https://woopang.com/hunt/" + shCodeHunt + "?c=ZZZZZZ");
+            });
+            Wait(() => Active(H + "Hub") && Find(H + "Hub/Viewport/Content/JoinCodeRow/JoinCodeInput")?.GetComponent<InputField>()?.text == "ZZZZZZ", 12f, "틀린 코드 링크 → 처음 화면");
+            Sleep(0.4f);
+            Shot("share_link_badcode");
+            Check(() => TextOf(HuntCardToast) == R0926HuntApi.ErrorText("join_code", "ko") && !Has(DevSend("hunt_test_s2", "/api/hunts/" + shCodeHunt), "\"joined\":true"),
+                "틀린 코드 링크 → 처음 화면 코드 칸에 그 코드 · 안내 · 참가 안 됨");
+            CloseUpload();
+
+            // ④ '팔로워 모두' — 시험 서버 팔로우: s2 맞팔 · s3 나를 팔로우 · s1 관계 없음
+            Do(() => { R0926HuntApi.EditorTestUser = ShHost; DevSend(ShHost, "/api/dev/search_reset", "{}"); });
+            HfOpenForm();
+            Do(() =>
+            {
+                Click(F + "AudienceChips/Chip_follower");
+                Click(F + "DurationChips/Chip_60");
+                Find(F + "TitleInput").GetComponent<InputField>().text = "팔로워 시험 보물 (플레이 시험)";
+                Find(F + "PrizeInput").GetComponent<InputField>().text = "아메리카노 (시험)";
+            });
+            Do(() => Click(F + "Submit"));
+            Sleep(0.6f);
+            Check(() => Active(RV) && ReviewRow("누구에게") == "팔로워 모두" && ReviewRow("참가 범위") == "10km" && TextOf(RV + "/Sheet0926/Note").StartsWith("나를 팔로우하는 사람만"),
+                "팔로워 게임 확인 카드 — '팔로워 모두' · 참가 범위 10km");
+            Do(() => { R0926Share.EditorLast = null; Click(RV + "/Sheet0926/Buttons/Go"); });
+            Wait(() => TextOf(RV + "/Sheet0926/Head") == "보물을 숨겼어요!", 10f, "숨김");
+            Sleep(0.6f);
+            Shot("share_follow_done");
+            Do(() => { shFollowHunt = HuntPostedId(); log.Add("  팔로워 게임 " + shFollowHunt); });
+            Check(() => shFollowHunt > 0 && !Active(RV + "/Sheet0926/CodeBox") && TextOf(RV + "/Sheet0926/Note").StartsWith("나를 팔로우하는 사람에게만 보여요"),
+                "숨긴 카드 — 코드 없음 · '팔로우하면 참가' 안내");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Share"));
+            Check(() => (R0926Share.EditorLast ?? "").EndsWith("/hunt/" + shFollowHunt) && R0926Share.EditorLast.Contains("상품: 아메리카노 (시험)"), "팔로워 게임 공유 글 — 상품 · 링크(코드 없음)");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Done"));
+            Wait(() => Active(H + "Detail"), 8f, "확인 → 상세");
+            Check(() => NearbyHas("hunt_test_s3", shFollowHunt) && NearbyHas("hunt_test_s2", shFollowHunt) && !NearbyHas("hunt_test_s1", shFollowHunt),
+                "근처 목록 — 나를 팔로우하는 사람(s3)·맞팔(s2)에겐 보이고 관계 없는 사람(s1)에겐 안 보임");
+            Check(() => Has(DevSend("hunt_test_s1", "/api/hunts/" + shFollowHunt), "\"error\":\"followers_only\"", "\"host_id\":\"" + ShHost + "\"")
+                        && !DevSend("hunt_test_s1", "/api/hunts/" + shFollowHunt).Contains("팔로워 시험 보물"),
+                "팔로우 전 상세 요청 → followers_only + 주최자만 (제목은 안 줌)");
+            Check(() => Has(DevSend("hunt_test_s1", "/api/hunts/" + shFollowHunt + "/join", "{\"lat\":" + Deg(VirtualLocation.Instance.Latitude) + ",\"lon\":" + Deg(VirtualLocation.Instance.Longitude) + "}"), "\"error\":\"followers_only\"")
+                        && Has(DevSend("hunt_test_s3", "/api/hunts/" + shFollowHunt + "/join", "{\"lat\":" + Deg(VirtualLocation.Instance.Latitude) + ",\"lon\":" + Deg(VirtualLocation.Instance.Longitude) + "}"), "\"ok\":true"),
+                "참가 — 관계 없는 사람은 followers_only · 나를 팔로우하는 사람은 참가됨");
+            Check(() =>
+            {
+                string page = DevSend(null, "/hunt/" + shFollowHunt);
+                bool ok = page.Contains("팔로워에게 열린 보물찾기") && page.Contains("팔로우하면 참가할 수 있어요") && !page.Contains("팔로워 시험 보물") && !page.Contains("아메리카노");
+                string codePage = DevSend(null, "/hunt/" + shCodeHunt), codeFull = DevSend(null, "/hunt/" + shCodeHunt + "?c=" + shCode);
+                ok &= codePage.Contains("초대받은 사람만 참가하는 보물찾기") && !codePage.Contains("코드 시험 보물") && !codePage.Contains(shCode)
+                      && codeFull.Contains("코드 시험 보물") && codeFull.Contains(shCode) && codeFull.Contains("woopang://hunt?id=" + shCodeHunt + "&amp;c=" + shCode);
+                return ok;
+            }, "공유 페이지 — 팔로워 게임은 제목·상품 없이 '팔로우하면 참가' · 코드 게임은 맞는 ?c= 가 있어야 제목·코드 · 앱 열기 링크에 코드");
+            CloseUpload();
+            Do(() =>
+            {
+                R0926HuntApi.EditorTestUser = "hunt_test_s1";
+                R0926HuntCard.EditorFollowHost = null;
+                R0926HuntPush.OpenLink("https://woopang.com/hunt/" + shFollowHunt);
+            });
+            Wait(() => Active("UploadPage") && TextOf(HuntCardToast).StartsWith("주최자를 팔로우한 사람만 참가할 수 있어요"), 12f, "팔로우 전 링크 → 안내");
+            Sleep(0.2f);
+            Shot("share_follow_link");
+            Check(() => TextOf(HuntCardToast) == "주최자를 팔로우한 사람만 참가할 수 있어요 — 프로필에서 팔로우해 주세요" && !Active(H + "Detail"),
+                "팔로우 전 사람이 링크로 열면 — '프로필에서 팔로우해 주세요' (상세는 안 열림)");
+            Wait(() => R0926HuntCard.EditorFollowHost == ShHost, 5f, "주최자 프로필 열기");
+            Check(() => R0926HuntCard.EditorFollowHost == ShHost, "안내 뒤 주최자 프로필을 연다 (팔로우하면 참가)");
+            Do(() =>
+            {
+                R0926HuntApi.EditorTestUser = "hunt_test_s3";
+                PushForget();   // 같은 링크를 다른 사람으로 — 10초 안 같은 링크는 한 번으로 친다
+                R0926HuntPush.OpenLink("woopang://hunt?id=" + shFollowHunt);
+            });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains("팔로워 시험 보물"), 12f, "팔로워는 링크 → 상세");
+            Check(() => Active(H + "Detail") && !Active(H + "Detail/Viewport/Content/Share"), "나를 팔로우하는 사람은 링크로 상세 · 참가자 '공유하기'는 '모두' 게임만");
+            CloseUpload();
+
+            // ⑤ 비밀번호 힌트 없이 (서버도 선택)
+            Check(() => Has(DevSend("hunt_test_spw", "/api/hunts/rules/accept", "{\"version\":1}"), "\"ok\":true")
+                        && Has(DevSend("hunt_test_spw", "/api/hunts", "{\"title\":\"힌트 없는 비밀번호 (시험)\",\"mode\":\"code\",\"code\":\"1234\",\"question\":\"\",\"winners\":1,\"radius_km\":5,\"visible_m\":50,\"lat\":"
+                                                              + Deg(VirtualLocation.Instance.Latitude) + ",\"lon\":" + Deg(VirtualLocation.Instance.Longitude) + ",\"acc\":5,\"duration_min\":60}"), "\"ok\":true"),
+                "서버 — 비밀번호 힌트 없이도 숨겨짐 (힌트는 선택)");
+            Do(() => { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; });
+        }
+
         // 숨기기 양식의 보물 모양 (10-24 대표님 — 코드로 만든 모양을 고르고, 사진·3D 모델은 올려서. 숨기기 전에 미리보기).
-        // 시험 서버(127.0.0.1:5099)로: 모양 칩 8개 → 미리보기 칸이 그 모양을 찍는지 → 사진 고름(고르기 창 대신 EditorPick) → 숨기기(올린 주소가
+        // 10-26: 모양은 다섯(보물상자·선물상자·하트·사진·3D 모델) · 비밀번호 힌트는 선택 · 숨기기는 확인 카드를 거친다.
+        // 시험 서버(127.0.0.1:5099)로: 모양 칩 5개 → 미리보기 칸이 그 모양을 찍는지 → 사진 고름(고르기 창 대신 EditorPick) → 숨기기(올린 주소가
         // 게임에 붙음) → 내 AR 보물이 그 사진 액자로 → 다시 양식: 못 여는 GLB 는 되돌림 → 3D 모델로 숨기기 → AR 보물에 그 모델
         private static R0926HuntCard hfCard;
         private static R0926HuntShapePreview hfPreview;
@@ -7403,7 +7739,7 @@ namespace Redesign0926
                 hfCard = UnityEngine.Object.FindAnyObjectByType<R0926HuntCard>(FindObjectsInactive.Include);
                 hfPreview = Find(F + "ShapePreview")?.GetComponent<R0926HuntShapePreview>();
             });
-            Check(() => ActiveChildren(F + "ShapeChips") == 8 && TextOf(F + "LShape") == "보물 모양", "'보물 모양' 칩 8개 (보물상자·선물상자·보물알·보석·별·하트·사진·3D 모델)");
+            Check(() => ActiveChildren(F + "ShapeChips") == 5 && TextOf(F + "LShape") == "보물 모양", "'보물 모양' 칩 5개 (보물상자·선물상자·하트·사진·3D 모델)");
             Check(() => !Active(F + "PickButton") && !Active(F + "PickCaption"), "보물상자 — 고르기 버튼 없음");
             Do(() => ScrollToChild(F + "LShape"));
             Wait(() => hfPreview != null && hfPreview.Chest != null && hfPreview.EditorTexture != null, 8f, "미리보기 칸이 찍기 시작");
@@ -7412,7 +7748,7 @@ namespace Redesign0926
             Check(() => hfPreview != null && hfPreview.Chest.Kind == "chest" && HfInk(), "미리보기 — 보물상자가 칸에 그려짐");
             Check(() => HfStageHidden(), "미리보기 무대는 칸의 카메라가 찍을 때만 켜짐 (AR 화면엔 안 보임)");
 
-            // 비밀번호 — 칩을 고르면 칸이 열리고 미리보기 보물에 자물쇠 · 4자 · 힌트는 반드시
+            // 비밀번호 — 칩을 고르면 칸이 열리고 미리보기 보물에 자물쇠 · 4자 · 힌트는 선택 (10-26)
             Do(() => ScrollToChild(F + "ModeChips"));
             Do(() => Click(F + "ModeChips/Chip_code"));
             Sleep(0.5f);
@@ -7421,8 +7757,8 @@ namespace Redesign0926
             Shot("hf_lock_chest");
             Check(() => Active(F + "CodeBox") && hfPreview.Locked && hfPreview.Chest.Locked && hfPreview.Chest.PadlockShown && HfInk(),
                 "'비밀번호' 칩 → 비밀번호·힌트 칸 · 미리보기 보물에 자물쇠");
-            Check(() => TextOf(F + "CodeBox/LCode") == "비밀번호 (4자) — 보물 앞에서 넣을 답" && TextOf(F + "CodeBox/LQuestion") == "비밀번호 힌트 (필수)"
-                        && Find(F + "CodeBox/CodeInput")?.GetComponent<InputField>()?.characterLimit == 4, "칸 이름 '비밀번호 (4자)' · '비밀번호 힌트 (필수)' · 4자까지만 들어감");
+            Check(() => TextOf(F + "CodeBox/LCode") == "비밀번호 (4자) — 보물 앞에서 넣을 답" && TextOf(F + "CodeBox/LQuestion") == "비밀번호 힌트 (선택)"
+                        && Find(F + "CodeBox/CodeInput")?.GetComponent<InputField>()?.characterLimit == 4, "칸 이름 '비밀번호 (4자)' · '비밀번호 힌트 (선택)' · 4자까지만 들어감");
             Do(() =>
             {
                 Find(F + "TitleInput").GetComponent<InputField>().text = "비밀번호 보물 (플레이 시험)";
@@ -7437,15 +7773,26 @@ namespace Redesign0926
                 Find(F + "CodeBox/CodeInput").GetComponent<InputField>().text = "1234";
                 Click(F + "Submit");
             });
-            Sleep(0.4f);
-            Check(() => Active(F + "Submit") && TextOf(F + "Msg") == "비밀번호를 건 보물엔 힌트를 꼭 써 주세요", "힌트 없이 → '비밀번호를 건 보물엔 힌트를 꼭 써 주세요'");
+            Sleep(0.5f);
+            Shot("hf_review_code");
+            Check(() => Active(HuntReview) && ReviewRow("찾는 방식") == "비밀번호 1234" && TextOf(F + "Msg") == "",
+                "비밀번호 힌트 없이도 확인 카드로 (힌트는 선택) · '비밀번호 1234' · 앞서 틀렸던 안내는 지워짐");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Edit"));
+            Sleep(0.3f);
+            Do(() => { Find(F + "CodeBox/QuestionInput").GetComponent<InputField>().text = "가게 간판 아래 숫자"; Click(F + "Submit"); });
+            Sleep(0.5f);
+            Check(() => Active(HuntReview) && ReviewRow("찾는 방식") == "비밀번호 1234\n힌트 가게 간판 아래 숫자", "비밀번호 힌트를 쓰면 확인 카드에 함께");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Edit"));
+            Sleep(0.3f);
+            Check(() => !Active(HuntReview) && Active(F + "CodeBox") && HfCurrent("id") == "", "고치기 → 양식으로 (숨기지 않음)");
+            Do(() => Find(F + "CodeBox/QuestionInput").GetComponent<InputField>().text = "");
             Do(() => Click(F + "ModeChips/Chip_touch"));
             Sleep(0.4f);
             Check(() => !Active(F + "CodeBox") && !hfPreview.Locked && !hfPreview.Chest.PadlockShown, "'먼저 터치'로 돌리면 칸이 닫히고 자물쇠도 떨어짐");
             Do(() => Find(F + "TitleInput").GetComponent<InputField>().text = "");
             Do(() => ScrollToChild(F + "LShape"));
             Sleep(0.4f);
-            foreach (var kind in new[] { "gift", "egg", "gem", "star", "heart", "chest" })
+            foreach (var kind in new[] { "gift", "heart", "chest" })
             {
                 string k = kind;
                 Do(() => Click(F + "ShapeChips/Chip_" + k));
@@ -7464,7 +7811,7 @@ namespace Redesign0926
             Do(() => Find(F + "TitleInput").GetComponent<InputField>().text = "사진 보물 (플레이 시험)");
             Do(() => Click(F + "Submit"));
             Sleep(0.4f);
-            Check(() => Active(F + "Submit") && TextOf(F + "Msg") == "보물로 쓸 사진을 골라 주세요", "사진 없이 숨기기 → '보물로 쓸 사진을 골라 주세요'");
+            Check(() => Active(F + "Submit") && TextOf(F + "Msg") == "보물로 쓸 사진을 골라 주세요" && !Active(HuntReview), "사진 없이 숨기기 → '보물로 쓸 사진을 골라 주세요' (확인 카드 안 뜸)");
             Do(() => hfCard.EditorPick("photo", File.ReadAllBytes("Assets/Redesign0926/Splash0926_other/motif_kr.jpg")));
             Sleep(0.6f);
             Shot("hf_photo");
@@ -7472,9 +7819,14 @@ namespace Redesign0926
             Check(() => TextOf(F + "PickButton/Label") == "다른 사진 고르기" && System.Text.RegularExpressions.Regex.IsMatch(TextOf(F + "PickCaption"), @"^사진 \d+×\d+ · \d+(KB|\.\dMB)$"),
                 "'다른 사진 고르기' · '사진 W×H · 크기'");
             Do(() => log.Add("  고른 사진: " + TextOf(F + "PickCaption")));
-            Do(() => { Click(F + "Submit"); log.Add("  누른 직후: " + TextOf(F + "Submit/Label")); });
-            Check(() => TextOf(F + "Submit/Label") == "올리는 중…", "숨기기 누름 → 먼저 '올리는 중…'");
-            Wait(() => Active(H + "Detail"), 20f, "올리고 숨김 → 상세");
+            Do(() => Click(F + "Submit"));
+            Sleep(0.4f);
+            Check(() => Active(HuntReview) && ReviewRow("보물 모양") == "사진", "숨기기 → 확인 카드 (보물 모양 '사진')");
+            Do(() => { Click(HuntReview + "/Sheet0926/Buttons/Go"); log.Add("  누른 직후: " + TextOf(HuntReview + "/Sheet0926/Buttons/Go/Label") + " · " + TextOf(F + "Submit/Label")); });
+            Check(() => TextOf(HuntReview + "/Sheet0926/Buttons/Go/Label") == "올리는 중…" && TextOf(F + "Submit/Label") == "올리는 중…", "카드의 '숨기기' 누름 → 먼저 '올리는 중…'");
+            Wait(() => TextOf(HuntReview + "/Sheet0926/Head") == "보물을 숨겼어요!", 20f, "올리고 숨김 → 카드 '보물을 숨겼어요!'");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Done"));
+            Wait(() => Active(H + "Detail"), 10f, "확인 → 상세");
             Sleep(1.0f);
             Shot("hf_photo_detail");
             Check(() => HfCurrent("object_kind") == "photo" && System.Text.RegularExpressions.Regex.IsMatch(HfCurrent("object_url"), @"^/?uploads/hunts/hunt_test_host/[0-9a-f]{16}\.jpg$"), "게임에 사진 모양 · 올린 주소 (uploads/hunts/<주최자>/…jpg)");
@@ -7509,7 +7861,12 @@ namespace Redesign0926
             Check(() => HfStageHidden(), "모델도 칸의 카메라가 찍을 때만 켜짐");
             Do(() => Find(F + "TitleInput").GetComponent<InputField>().text = "3D 모델 보물 (플레이 시험)");
             Do(() => Click(F + "Submit"));
-            Wait(() => Active(H + "Detail"), 20f, "올리고 숨김 → 상세");
+            Sleep(0.4f);
+            Check(() => Active(HuntReview) && ReviewRow("보물 모양") == "3D 모델", "숨기기 → 확인 카드 (보물 모양 '3D 모델')");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Go"));
+            Wait(() => TextOf(HuntReview + "/Sheet0926/Head") == "보물을 숨겼어요!", 20f, "올리고 숨김 → 카드 '보물을 숨겼어요!'");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Done"));
+            Wait(() => Active(H + "Detail"), 10f, "확인 → 상세");
             Sleep(1.0f);
             Check(() => HfCurrent("object_kind") == "model" && System.Text.RegularExpressions.Regex.IsMatch(HfCurrent("object_url"), @"^/?uploads/hunts/hunt_test_host/[0-9a-f]{16}\.glb$"), "게임에 3D 모델 모양 · 올린 주소 (…glb)");
             Do(() => log.Add("  게임: " + HfCurrent("object_kind") + " · " + HfCurrent("object_url")));

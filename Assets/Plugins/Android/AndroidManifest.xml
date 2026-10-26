@@ -16,6 +16,13 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="woopang" android:host="auth" />
       </intent-filter>
+      <!-- 보물찾기 공유 링크 woopang://hunt?id=…&c=… (woopang.com/hunt/<id> 의 '우팡 앱에서 열기') -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="woopang" android:host="hunt" />
+      </intent-filter>
       <!-- 서버 FCM 알림의 click_action — 이 필터가 없으면 알림을 눌러도 앱이 열리지 않았다 -->
       <intent-filter>
         <action android:name="OPEN_MESSAGE_PANEL" />
