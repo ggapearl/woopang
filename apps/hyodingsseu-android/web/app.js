@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-26c';
+  const WEB_VERSION = '2026-10-27a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2645,6 +2645,9 @@
       (it.fields || [['왜 (근거)', it.why], ['무엇을', it.how], ['대표님이 하실 것', it.needs], ['메모', it.note]]).forEach(([t, v]) => {
         if (v) body.append(h('h4', { text: t }), h('p', null, linkified(String(v))));      // 제안 글 속 주소도 눌러 열린다 — 문서 전체 누름 처리기가 openLink 로 연다
       });
+      if ((it.images || []).length) {
+        body.append(h('div', { class: 'pimgs' }, it.images.map((im, i) => h('button', { class: 'pimg', 'aria-label': im.name, onclick: () => openViewer(it.images, i, it.title) }, h('img', { src: im.url, alt: im.name, loading: 'lazy' })))));
+      }
       if ((it.comments || []).length) {
         body.append(h('h4', { text: '대표님 의견' }));
         it.comments.forEach(c => body.append(h('div', { class: 'pcmt' }, h('small', { text: dayLabel(c.ts) + ' ' + timeOnly(c.ts) }), String(c.text || ''))));
