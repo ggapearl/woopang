@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-27a';
+  const WEB_VERSION = '2026-10-27b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2379,10 +2379,55 @@
         h('span', { class: 'spacer' })),
       content);
     page.onClose = onClose;
+    swipeBack(page);
     pages.push(page);
     $('#app').append(page);
     requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('on')));
     return page;
+  }
+
+  /** 오른쪽에서 밀려 들어온 화면(승인함·문서함·설정·직원 대화)을 왼쪽→오른쪽으로 밀면 손가락을 따라가다 닫힌다 (10/27 대표님) */
+  function swipeBack(page) {
+    let x0 = null, y0 = 0, t0 = 0, dx = 0, drag = false;
+    const sideScroll = el => {                                // 가로로 넘기는 칸(칩 줄·사진 넘기기·슬라이더) 안에서는 그쪽이 먼저
+      for (; el && el !== page; el = el.parentElement) {
+        if (el.matches('input,textarea,select')) return true;
+        const ox = getComputedStyle(el).overflowX;
+        if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 1) return true;
+      }
+      return false;
+    };
+    const reset = () => { page.style.transition = ''; page.style.transform = ''; };
+    page.addEventListener('touchstart', e => {
+      x0 = e.touches.length === 1 && !sideScroll(e.target) ? e.touches[0].clientX : null;
+      y0 = e.touches[0].clientY; t0 = Date.now(); dx = 0; drag = false;
+    }, { passive: true });
+    page.addEventListener('touchmove', e => {
+      if (x0 == null) return;
+      const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (!drag) {
+        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { x0 = null; return; }   // 세로 스크롤이면 놓아준다
+        if (mx < 12 || mx < Math.abs(my) * 1.5) return;
+        drag = true;
+        page.style.transition = 'none';
+      }
+      dx = Math.max(0, mx);
+      page.style.transform = 'translateX(' + dx + 'px)';
+    }, { passive: true });
+    const end = () => {
+      if (x0 == null) return;
+      x0 = null;
+      if (!drag) return;
+      const fast = dx > 40 && dx / Math.max(1, Date.now() - t0) > 0.5;
+      if ((dx > page.clientWidth * 0.3 || fast) && pages[pages.length - 1] === page) {
+        page.style.transition = '';
+        page.style.transform = 'translateX(100%)';            // 손을 뗀 자리에서 오른쪽 끝까지 밀려 나간다
+        sfx.play('tap');
+        popPage();
+      } else reset();                                         // 덜 밀었으면 제자리로
+    };
+    page.addEventListener('touchend', end);
+    page.addEventListener('touchcancel', end);
   }
 
   function popPage() {
