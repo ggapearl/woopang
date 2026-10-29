@@ -10,13 +10,20 @@ using UnityEngine.Networking;
 /// 앱에서 난 예외(Exception)를 우팡 서버(/api/crash)로 보낸다 — Crashlytics SDK 없이 가볍게.
 /// 같은 오류는 세션당 한 번, 세션당 최대 15건. 서버가 같은 오류를 묶어 두고, 처음 보는 오류일 때만 텔레그램으로 알린다.
 /// 개인 정보(로그인 id·위치)는 보내지 않는다. 에디터에서는 보내지 않는다.
+/// 앱이 통째로 꺼지는 충돌(네이티브 · 메모리 부족 · 멈춤)은 예외로 안 잡히므로, 화면에 떠 있는 동안만 표식을 두고
+/// 다음 실행에 표식이 남아 있으면 '화면을 켠 채 끝남'으로 보낸다 (10-27 아이폰 첫 실행 충돌 — 서버에 기록이 없었다).
 /// </summary>
 public class CrashReporter : MonoBehaviour
 {
     private const int MaxPerSession = 15;
+    private const string LiveKey = "Crash_Live", LaunchKey = "Crash_Launches";
+    private const float RunningAfter = 30f;
     private static readonly ConcurrentQueue<string[]> queue = new ConcurrentQueue<string[]>();
     private static readonly HashSet<int> sent = new HashSet<int>();
     private static int count;
+    private static int launch;
+    private static string startedUtc, stage;
+    private float since;
 
     [Serializable]
     private class Report
@@ -30,6 +37,23 @@ public class CrashReporter : MonoBehaviour
         public string scene;
     }
 
+    // 장면을 읽기 전 — 앞 실행의 표식을 보고, 이번 실행의 표식을 둔다
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Arm()
+    {
+        if (Application.isEditor) return;
+        try
+        {
+            string prev = PlayerPrefs.GetString(LiveKey, "");
+            launch = PlayerPrefs.GetInt(LaunchKey, 0) + 1;
+            PlayerPrefs.SetInt(LaunchKey, launch);
+            startedUtc = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
+            if (prev.Length > 0) queue.Enqueue(new[] { "Abnormal exit: previous run ended while in foreground", prev });
+            Mark("boot");
+        }
+        catch (Exception) { }
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Boot()
     {
@@ -38,7 +62,38 @@ public class CrashReporter : MonoBehaviour
         DontDestroyOnLoad(go);
         go.AddComponent<CrashReporter>();
         Application.logMessageReceivedThreaded += OnLog;
+        Mark("scene");
     }
+
+    // 서버는 메시지 + 빈 줄을 뺀 스택 앞 세 줄로 묶는다 — 묶을 것(단계 · 첫 실행 · 버전)을 앞 세 줄에, 실행마다 다른 것은 그 뒤에
+    private static void Mark(string s)
+    {
+        stage = s;
+        try
+        {
+            PlayerPrefs.SetString(LiveKey, $"stage: {s}\nfirst launch: {(launch == 1 ? "yes" : "no")}\nv{Application.version} {Application.platform}\nlaunch {launch} · started {startedUtc} UTC");
+            PlayerPrefs.Save();
+        }
+        catch (Exception) { }
+    }
+
+    private static void Disarm()
+    {
+        try
+        {
+            PlayerPrefs.DeleteKey(LiveKey);
+            PlayerPrefs.Save();
+        }
+        catch (Exception) { }
+    }
+
+    private void OnApplicationPause(bool paused)
+    {
+        if (paused) Disarm();
+        else Mark(stage == "boot" || stage == "scene" ? stage : "running");
+    }
+
+    private void OnApplicationQuit() => Disarm();
 
     private static void OnLog(string message, string stack, LogType type)
     {
@@ -55,6 +110,7 @@ public class CrashReporter : MonoBehaviour
 
     private void Update()
     {
+        if (stage == "scene" && (since += Time.unscaledDeltaTime) >= RunningAfter) Mark("running");
         while (queue.TryDequeue(out var e))
         {
             int key = (e[0] + "|" + Head(e[1], 3)).GetHashCode();
