@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-29a';
+  const WEB_VERSION = '2026-10-29b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -55,6 +55,7 @@
   const S = {
     items: [], agentState: 'idle', link: { k: 'connecting' }, name: '효딩쓰', host: 'gui', model: 'normal',
     models: MODEL_DEFAULTS, workers: [], uploadingVoice: false, paired: false, pairMessage: null, quick: null,
+    docsNew: 0,                              // 문서함 새 자료 수 — PC 가 state·events 에 붙여 준다
     appr: null,                              // 승인함에서 기다리는 제안 수 — PC 가 state·events 에 붙여 준다(모르면 null)
     speed: parseFloat(local.get('speed', '1.2')) || 1.2,
     replyVoice: local.get('replyVoice', 'voiceOnly'),
@@ -317,6 +318,7 @@
         if (typeof r.state === 'string') S.agentState = r.state;
         takeQuick(r.quick);
         takeAppr(r.appr);
+        takeDocs(r.docs_new);
         renderStatus();
         if (pushLand(true)) scanSeen();                 // 누른 알림의 그 말이 이제 왔다 (10/19)
         else if (!(land && Date.now() > pushHeldUntil && landUnreadAfterAway())) afterChange(stick || force, (r.events || []).length > 0);
@@ -1039,6 +1041,7 @@
     if (ws.length) S.workers = ws;
     takeQuick(st.quick);
     takeAppr(st.appr);
+    takeDocs(st.docs_new);
 
     S.items = [];
     openAI = [];
@@ -2252,6 +2255,21 @@
     if (drawerEl) renderDrawer();
   }
 
+  function takeDocs(n) {
+    if (typeof n !== 'number' || n === S.docsNew) return;
+    S.docsNew = n;
+    renderDocsBadge();
+  }
+
+  function renderDocsBadge() {
+    const btn = $('#main .bar .docs');
+    if (!btn) return;
+    const n = S.docsNew || 0, b = btn.querySelector('.nbadge');
+    b.hidden = !n;
+    b.textContent = n > 99 ? '99+' : String(n);
+    btn.setAttribute('aria-label', '문서함' + (n ? ' — 새 자료 ' + n + '개' : ''));
+  }
+
   const apprSub = () => (S.appr ? '기다리는 제안·메일 ' + S.appr + '건' : '효딩쓰가 올린 제안·메일 · 승인 · 보류');
 
   function renderApprBadge() {
@@ -2370,7 +2388,8 @@
       h('button', { class: 'icon', 'aria-label': '메뉴 — 대화 상대 고르기', onclick: openDrawer, html: ICON.menu }),
       orb(orbState(), 26),
       h('div', { class: 'who' }, h('b'), h('small')),
-      h('button', { class: 'icon docs', 'aria-label': '문서함', onclick: () => { sfx.play('tap'); openDocs(); }, html: ICON.folder }),
+      h('button', { class: 'icon docs', 'aria-label': '문서함', onclick: () => { sfx.play('tap'); openDocs(); } },
+        svg('folder'), h('span', { class: 'nbadge', hidden: true })),
       h('button', { class: 'icon appr', 'aria-label': '승인함', onclick: () => { sfx.play('tap'); openAppr(); } },
         svg('inbox'), h('span', { class: 'nbadge', hidden: true })),
       h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) }));
@@ -2390,6 +2409,7 @@
     renderStatus();
     renderApprBadge();
     renderAttach();
+    renderDocsBadge();
     scrollToBottom(false);
     loadPendingVoice();
   }
@@ -2650,6 +2670,8 @@
   const DOC_WORD = { video: '영상', image: '사진', audio: '음성' };
 
   function openDocs() {
+    S.docsNew = 0;
+    renderDocsBadge();
     let kind = '', q = '', items = [], more = false, total = 0, loading = false, loadedOnce = false, alive = true, searchTimer = 0;
 
     const totalEl = h('div', { class: 'doc-total' });

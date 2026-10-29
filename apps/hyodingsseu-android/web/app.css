@@ -408,7 +408,7 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .doc-empty{font-size:13px;color:var(--ink-3);text-align:center;padding:40px 24px;line-height:1.6}
 
 /* 승인함 (2026-10-12) — 문서함 틀에 펼쳐 읽기 · 그 자리에서 승인·보류·거절 */
-.bar .appr{position:relative}
+.bar .appr,.bar .docs{position:relative}
 .nbadge{position:absolute;top:4px;right:3px;min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--pink);color:#fff;
   font-size:10.5px;font-weight:700;line-height:17px;text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 2px var(--bar);pointer-events:none}
 .badge-ic.appr{background:var(--pink-soft);color:var(--pink-deep)}
