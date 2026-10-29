@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-27a';
+  const WEB_VERSION = '2026-10-29a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -222,6 +222,31 @@
     a.remove();
   }
 
+  /** 공유 (2026-10-29) — 사진·영상 파일 자체를 기기의 공유 창으로(카톡·인스타·메일 등). 파일로 못 보내는 기기는 링크로. */
+  async function shareFiles(list, title) {
+    list = (list || []).filter(f => f && f.url).slice(0, 10);
+    if (!list.length) return;
+    if (navigator.share && navigator.canShare) {
+      try {
+        toast('공유 준비하는 중이에요');
+        const files = [];
+        for (const f of list) {
+          const res = await fetch(f.url);
+          if (!res.ok || Number(res.headers.get('content-length') || 0) > 80 * 1024 * 1024) { if (res.body) res.body.cancel(); throw new Error('size'); }
+          const b = await res.blob();
+          files.push(new File([b], f.name || nameFromUrl(f.url), { type: b.type || 'application/octet-stream' }));
+        }
+        if (navigator.canShare({ files })) { await navigator.share({ files, title: title || '효딩쓰' }); return; }
+      } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    if (navigator.share) {
+      try { await navigator.share({ url: list[0].url, title: title || list[0].name || '효딩쓰' }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    openLink(list[0].url);
+  }
+
+  const nameFromUrl = u => { try { return decodeURIComponent(String(u).split(/[?#]/)[0].split('/').pop()) || 'file'; } catch (e) { return 'file'; } };
+
   const sleep = (ms, signal) => new Promise(res => {
     const t = setTimeout(res, ms);
     if (signal) signal.addEventListener('abort', () => { clearTimeout(t); res(); }, { once: true });
@@ -404,6 +429,126 @@
     speaker.stop();
     haptic('tap');
     fire('send', { text: t });
+  }
+
+  // ── 사진·파일 첨부 (2026-10-29 대표님 「모바일에서도 사진 붙여 넣기 · 입력칸 왼쪽 + 로 사진·파일 첨부」) ──
+  // 고른 것은 PC 에 올려 두고(upload) 그 경로를 말과 함께 보낸다(send 의 files) — 효딩쓰가 그림을 직접 본다.
+  const ATT_MAX = 25 * 1024 * 1024, ATT_COUNT = 8, ATT_SMALL = 3 * 1024 * 1024, ATT_SIDE = 2048;
+  const pending = [];                                   // [{ blob, name, url(그림 미리보기), kind: 'image'|'file' }]
+  let attUploading = false;
+
+  const hhmmss = () => { const d = new Date(), z = n => String(n).padStart(2, '0'); return z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()); };
+
+  /** 큰 사진은 긴 변 2048px 로 줄여 JPEG 로 — 올리는 시간·PC 가 읽는 부담을 줄인다. 못 읽는 모양(HEIC 등)은 원본 그대로. */
+  async function prepAttach(file) {
+    let blob = file, name = file.name || '', type = file.type || '';
+    const isImg = /^image\//i.test(type) || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(name);
+    if (!name || /^image\.\w+$/.test(name)) name = '사진_' + hhmmss() + (type === 'image/png' ? '.png' : '.jpg');
+    if (isImg && !/gif/i.test(type) && window.createImageBitmap) {
+      try {
+        const bmp = await createImageBitmap(file);
+        const k = Math.min(1, ATT_SIDE / Math.max(bmp.width, bmp.height));
+        if (k < 1 || file.size > ATT_SMALL) {
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+          const g = c.getContext('2d');
+          g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+          g.drawImage(bmp, 0, 0, c.width, c.height);
+          const out = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.88));
+          if (out && out.size < file.size) { blob = out; name = name.replace(/\.[^.]+$/, '') + '.jpg'; }
+        }
+        if (bmp.close) bmp.close();
+      } catch (e) { /* 원본 그대로 */ }
+    }
+    const kind = isImg ? 'image' : 'file';
+    return { blob, name, kind, url: kind === 'image' ? URL.createObjectURL(blob) : '' };
+  }
+
+  async function addAttach(files) {
+    for (const f of Array.from(files || [])) {
+      if (pending.length >= ATT_COUNT) { toast('한 번에 ' + ATT_COUNT + '개까지 보낼 수 있어요'); break; }
+      const p = await prepAttach(f);
+      if (p.blob.size > ATT_MAX) { toast(p.name + ' — 25MB 가 넘어 보낼 수 없어요'); if (p.url) URL.revokeObjectURL(p.url); continue; }
+      pending.push(p);
+    }
+    renderAttach();
+    const ta = $('#main textarea');
+    if (ta) ta.focus();
+  }
+
+  function dropAttach(i) {
+    const [p] = pending.splice(i, 1);
+    if (p && p.url) URL.revokeObjectURL(p.url);
+    renderAttach();
+  }
+
+  /** 입력칸 위의 첨부 띠 — 그림은 작은 미리보기, 파일은 이름. ✕ 로 뺀다 */
+  function renderAttach() {
+    const strip = $('#main .att-strip');
+    if (!strip) return;
+    strip.hidden = !pending.length;
+    strip.textContent = '';
+    pending.forEach((p, i) => strip.append(h('div', { class: 'att-chip' + (p.kind === 'image' ? '' : ' file') },
+      p.kind === 'image' ? h('img', { src: p.url, alt: p.name }) : h('span', { text: '📎 ' + p.name }),
+      h('button', { class: 'x', 'aria-label': '빼기', html: ICON.close, disabled: attUploading, onclick: () => dropAttach(i) }))));
+    if (attUploading) strip.append(h('i', { class: 'spinner att-spin' }));
+    renderSend();
+  }
+
+  /** 첨부가 있는 말 보내기 — 한 개씩 올린 뒤 경로를 말과 함께. 성공하면 true */
+  async function sendAttached(text) {
+    if (attUploading || !pending.length) return false;
+    attUploading = true;
+    renderAttach();
+    haptic('tap');
+    try {
+      const paths = [];
+      for (const p of pending) {
+        const r = await api.request('upload', { method: 'POST', body: p.blob, contentType: p.blob.type || 'application/octet-stream', query: { name: p.name }, timeout: 110000 });
+        paths.push(r.path);
+      }
+      await api.post('send', { text: String(text || '').trim(), files: paths });
+      pending.splice(0).forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+      return true;
+    } catch (e) {
+      show(e);
+      return false;
+    } finally {
+      attUploading = false;
+      renderAttach();
+    }
+  }
+
+  /** 입력칸 왼쪽 + — 사진·동영상 / 카메라 / 파일. 고르면 첨부 띠에 올라온다 */
+  function attachMenu(anchor) {
+    const r = anchor.getBoundingClientRect();
+    const pick = (accept, camera) => {
+      close();
+      const inp = h('input', { type: 'file', accept, style: 'display:none' });
+      inp.multiple = !camera;
+      if (camera) inp.setAttribute('capture', 'environment');
+      inp.addEventListener('change', () => { addAttach(inp.files); inp.remove(); });
+      document.body.append(inp);
+      inp.click();
+    };
+    const menu = h('div', { class: 'menu att-menu', role: 'menu', style: 'left:12px;bottom:' + Math.max(8, innerHeight - r.top + 6) + 'px' },
+      h('button', { role: 'menuitem', onclick: () => pick('image/*,video/*', false) }, h('i', { text: '🖼' }), '사진·동영상'),
+      h('button', { role: 'menuitem', onclick: () => pick('image/*', true) }, h('i', { text: '📷' }), '카메라로 찍기'),
+      h('button', { role: 'menuitem', onclick: () => pick('*/*', false) }, h('i', { text: '📎' }), '파일'));
+    const scrim = h('div', { class: 'menu-scrim', onclick: () => close() });
+    const close = layer(() => { scrim.remove(); menu.remove(); });
+    $('#app').append(scrim, menu);
+  }
+
+  /** 복사해 둔 사진 붙여 넣기 — 입력칸에 붙이면 첨부로 (글 붙여 넣기는 그대로) */
+  function pasteAttach(ev) {
+    const cd = ev.clipboardData;
+    if (!cd) return;
+    const files = Array.from(cd.files || []).filter(f => f && f.size);
+    const items = files.length ? files : Array.from(cd.items || []).filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean);
+    if (!items.length) return;
+    ev.preventDefault();
+    addAttach(items);
   }
 
   function decide(id, decision) {
@@ -1221,6 +1366,8 @@
     phone: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2.5" width="8" height="15" rx="2"/><path d="M9 14.5h2"/></svg>',
     pc: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 17h6M10 13.5V17"/></svg>',
     micSm: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5"/><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5v3"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m8 8 4-4 4 4"/><path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
     download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 19h14"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>',
     inbox: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5l1.8-6.2A1.5 1.5 0 0 1 6.2 4.2h7.6a1.5 1.5 0 0 1 1.4 1.1L17 11.5V15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15z"/><path d="M3 11.5h4l1 2h4l1-2h4"/><path d="M7.8 7.7l1.6 1.6 2.9-2.9"/></svg>',
@@ -2065,11 +2212,11 @@
     if (!main) return;
     const ta = main.querySelector('textarea');
     const btn = main.querySelector('.send');
-    const empty = !ta.value.trim();
+    const empty = !ta.value.trim() && !pending.length;
     const voiceMode = recorder.recording || (!!voice.pending && !S.uploadingVoice);   // 녹음을 보낼 수 있다
     const stopMode = !voiceMode && busy() && empty;
     btn.className = 'round send' + (stopMode ? ' stop' : '') + (voiceMode ? ' voice' : '');
-    btn.disabled = S.uploadingVoice || (!voiceMode && !stopMode && empty);
+    btn.disabled = S.uploadingVoice || attUploading || (!voiceMode && !stopMode && empty);
     btn.innerHTML = '';
     btn.append(svg(stopMode ? 'stop' : 'up'));
     btn.setAttribute('aria-label', voiceMode ? '녹음 보내기' : stopMode ? '멈추기' : '보내기');
@@ -2177,12 +2324,18 @@
     const ta = h('textarea', {
       rows: '1', placeholder: '무엇이든 시키세요', 'aria-label': '효딩쓰에게 보낼 말', enterkeyhint: 'enter',
       oninput: () => { grow(ta); renderSend(); },
+      onpaste: pasteAttach,
     });
     const sendBtn = h('button', {
       class: 'round send',
       onclick: () => {
         if (recorder.recording) { finishRecording(); return; }               // 녹음 중 — 끝내고 보낸다
         if (voice.pending && !S.uploadingVoice) { uploadVoice(voice.pending); return; }   // 끊겼던 녹음을 다시 보낸다
+        if (pending.length) {
+          const t = ta.value;
+          sendAttached(t).then(ok => { if (ok) { if (ta.value === t) ta.value = ''; grow(ta); renderSend(); sfx.play('send'); } });
+          return;
+        }
         if (busy() && !ta.value.trim()) { stop(); return; }
         if (ta.value.trim()) sfx.play('send');
         send(ta.value);
@@ -2192,6 +2345,7 @@
       },
     });
     const mic = h('button', { class: 'round mic', onclick: toggleRecording });
+    const plusBtn = h('button', { class: 'round plus', 'aria-label': '사진·파일 붙이기', html: ICON.plus, onclick: ev => { sfx.play('tap'); attachMenu(ev.currentTarget); } });
 
     chatEl = h('div', { class: 'chat', onscroll: () => {
       atBottom = nearBottom();
@@ -2227,13 +2381,15 @@
       h('div', { class: 'chat-wrap' }, chatEl, jumpEl),
       h('div', { class: 'composer' },
         h('div', { class: 'chips' }),
-        h('div', { class: 'row' }, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn))),
+        h('div', { class: 'att-strip', hidden: true }),
+        h('div', { class: 'row' }, plusBtn, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn))),
       h('div', { class: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite' }));
 
     renderAllItems();
     renderChips();
     renderStatus();
     renderApprBadge();
+    renderAttach();
     scrollToBottom(false);
     loadPendingVoice();
   }
@@ -2528,11 +2684,22 @@
         h('div', { class: 'dtx' },
           h('b', { text: it.title || '(제목 없음)' }),
           h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
-        files.length === 1 && files[0].url
+        files.some(f => f.url)
           ? h('button', { class: 'dl-btn', 'aria-label': '내려받기', html: ICON.download,
-              onclick: ev => { ev.stopPropagation(); sfx.play('tap'); downloadFile(files[0].url, files[0].name); } })
+              onclick: ev => { ev.stopPropagation(); sfx.play('tap'); downloadRow(files); } })
           : null,
-        files.length > 1 ? svg('chev') : null);
+        files.some(f => f.url)
+          ? h('button', { class: 'dl-btn', 'aria-label': '공유', html: ICON.share,
+              onclick: ev => { ev.stopPropagation(); sfx.play('tap'); shareFiles(files, it.title || ''); } })
+          : null);
+    }
+
+    /** 내려받기 — 한 파일이면 바로, 여러 장은 브라우저에서 차례로(앱 안에서는 열어서 한 장씩) */
+    function downloadRow(files) {
+      const fs = files.filter(f => f && f.url);
+      if (fs.length === 1) { downloadFile(fs[0].url, fs[0].name); return; }
+      if (Native) { toast('여러 장은 열어서 한 장씩 저장해 주세요'); rowTap({ files: fs, title: '' }); return; }
+      fs.forEach((f, i) => setTimeout(() => downloadFile(f.url, f.name), i * 700));
     }
 
     /** 항목의 파일 전부를 앱 안 보기 화면으로 — 첫 장부터 */
@@ -2915,13 +3082,9 @@
       });
     }, { passive: true });
 
-    async function share() {
+    function share() {
       const e = list[idx];
-      const data = { url: e.url, title: e.name || title || '효딩쓰' };
-      if (navigator.share) {
-        try { await navigator.share(data); return; } catch (err) { if (err && err.name === 'AbortError') return; }
-      }
-      openLink(e.url);
+      return shareFiles([e], e.name || title || '효딩쓰');
     }
 
     const onKey = ev => {
