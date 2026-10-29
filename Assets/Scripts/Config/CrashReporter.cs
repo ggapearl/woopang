@@ -46,6 +46,13 @@ public class CrashReporter : MonoBehaviour
         queue.Enqueue(new[] { message ?? "", stack ?? "" });
     }
 
+    /// <summary>예외가 아닌 이상 동작도 같은 길로 보낸다 (예: 키보드가 안 떠 다시 부름 — UploadInputMirror). 같은 글은 세션에 한 번</summary>
+    public static void Note(string message)
+    {
+        if (Application.isEditor || string.IsNullOrEmpty(message)) return;
+        queue.Enqueue(new[] { message, "" });
+    }
+
     private void Update()
     {
         while (queue.TryDequeue(out var e))

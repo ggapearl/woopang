@@ -59,6 +59,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [SerializeField] private GameObject huntPinTemplate;
     [Tooltip("대략 공개 게임의 '이 안 어딘가' 원")]
     [SerializeField] private GameObject huntAreaTemplate;
+    [Tooltip("친구 목록 아래 '근처 보물찾기' 제목 줄 — 가까운 순 보물찾기 줄 앞에 한 번")]
+    [SerializeField] private GameObject sectionTemplate;
+    [Tooltip("내 위치 점 둘레의 방향 표시(쉐브론) — 나침반이 읽힐 때만 켜진다")]
+    [SerializeField] private RectTransform meHeading;
 
     [Header("좌표 — 꾹 눌러 핀 · 주소·장소·좌표 검색")]
     [Tooltip("꾹 누른 곳·검색한 곳에 꽂는 핀 (피벗이 핀 끝) — 자식 말풍선에 주소 · 좌표 · 복사 · 지우기")]
@@ -139,6 +143,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private bool touched;            // 마지막으로 맞춘 뒤 손으로 움직였다 — 보물찾기 목록이 바뀌어도 다시 맞추지 않는다
     private int mutual;
     private string selectedId;
+    private int selectedHunt;
     private float nextRefresh, nextHuntCheck, nextNearby;
     private float prevPinch = -1f;
     private Vector2 lastSize;
@@ -170,6 +175,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (areaTemplate != null) areaTemplate.SetActive(false);
         if (huntPinTemplate != null) huntPinTemplate.SetActive(false);
         if (huntAreaTemplate != null) huntAreaTemplate.SetActive(false);
+        if (sectionTemplate != null) sectionTemplate.SetActive(false);
+        if (meHeading != null) meHeading.gameObject.SetActive(false);
         if (rowTemplate != null) rowTemplate.SetActive(false);
     }
 
@@ -193,6 +200,9 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         pressId = NoPress;
         searchCo = null;   // 꺼지면 코루틴도 멈춘다 — 다시 켜서 찾을 수 있게
         R0926HuntList.Changed -= OnHuntsChanged;
+        if (compassOwned) { Input.compass.enabled = false; compassOwned = false; }   // 우리가 켠 경우에만 끈다
+        headingOk = false;
+        if (meHeading != null) meHeading.gameObject.SetActive(false);
     }
 
     // 앱이 뒤로 가면 그대로 꺼질 수 있다 — 그 전에 보던 자리를
@@ -246,6 +256,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         Vector2 size = viewport.rect.size;
         if (size != lastSize) { lastSize = size; Clamp(); Layout(); }
 
+        UpdateHeading();
         Pinch();
         if (pressId != NoPress && !pressFired && Time.unscaledTime - pressAt >= longPressSeconds)
         {
@@ -259,6 +270,42 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             mePulse.rectTransform.localScale = Vector3.one * Mathf.Lerp(1f, 2.4f, t);
             var c = mePulse.color; c.a = Mathf.Lerp(0.35f, 0f, t); mePulse.color = c;
         }
+    }
+
+    // 내 위치 방향 — 나침반(진북, 없으면 자북)을 부드럽게. 읽히지 않으면(PC · 나침반 없는 기기 · 위치 꺼짐) 표시를 숨긴다. 지도는 늘 북쪽이 위
+    private bool compassOwned, compassFailed, headingOk;
+    private float headingDeg;
+
+    private void UpdateHeading()
+    {
+        if (meHeading == null) return;
+        bool ok = false;
+        float deg = 0f;
+#if UNITY_EDITOR
+        if (previewHeading >= 0f) { ok = true; deg = previewHeading; }
+#endif
+        if (!ok && !compassFailed && Input.location.status == LocationServiceStatus.Running)
+        {
+            try
+            {
+                if (!Input.compass.enabled) { Input.compass.enabled = true; compassOwned = true; }   // 켠 직후엔 아직 값이 없다
+                else if (Input.compass.timestamp > 0)
+                {
+                    deg = Input.compass.trueHeading;
+                    if (deg < 0f) deg = Input.compass.magneticHeading;
+                    ok = true;
+                }
+            }
+            catch (InvalidOperationException) { compassFailed = true; }   // 이 입력 설정에서 못 읽으면 다시 시도하지 않는다
+        }
+        bool show = ok && MyLatLon() != Vector2.zero;
+        if (show)
+        {
+            headingDeg = headingOk ? Mathf.LerpAngle(headingDeg, deg, 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime)) : deg;
+            meHeading.localRotation = Quaternion.Euler(0f, 0f, -headingDeg);
+        }
+        headingOk = ok;
+        if (meHeading.gameObject.activeSelf != show) meHeading.gameObject.SetActive(show);
     }
 
     // ── 서버 ─────────────────────────────────────────────────
@@ -427,32 +474,90 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 ? L("맞팔 친구가 위치를 켜면 여기에 나와요.", "Mutual friends who share appear here.", "位置を共有した相互フォローの友だちがここに表示されます。", "开启共享的互关好友会显示在这里。", "Aquí aparecen tus amigos mutuos que comparten.")
                 : string.Format(L("맞팔 친구 {0}명", "{0} mutual friends", "相互フォロー {0}人", "互关好友 {0} 位", "{0} amigos mutuos"), mutual);
         }
-        if (rowTemplate == null || listContent == null || !sharing) { if (adSlot != null) adSlot.SetAsLastSibling(); return; }
+        if (rowTemplate == null || listContent == null) { if (adSlot != null) adSlot.SetAsLastSibling(); return; }
 
         Vector2 me = MyLatLon();
-        var sorted = new List<Friend>(friends);
-        sorted.Sort((a, b) => Km(me, a).CompareTo(Km(me, b)));
-        foreach (var f in sorted)
+        if (sharing)
+        {
+            // 마지막 접속이 가까운 친구가 위 (10-29 대표님 「최신접속순」) — 같으면 가까운 순
+            var sorted = new List<Friend>(friends);
+            sorted.Sort((a, b) => a.ago != b.ago ? a.ago.CompareTo(b.ago) : Km(me, a).CompareTo(Km(me, b)));
+            foreach (var f in sorted)
+            {
+                var go = Instantiate(rowTemplate, listContent);
+                go.name = "Friend_" + f.user_id;
+                go.SetActive(true);
+                FillAvatar(go.transform.Find("Avatar"), f);
+                var name = go.transform.Find("Name")?.GetComponent<Text>();
+                if (name != null) name.text = "@" + f.username;
+                var sub = go.transform.Find("Sub")?.GetComponent<Text>();
+                if (sub != null)
+                {
+                    float km = Km(me, f);
+                    sub.text = Ago(f.ago) + (me != Vector2.zero ? " · " + Dist(km, f.exact) : "");
+                }
+                var sel = go.transform.Find("Sel");
+                if (sel != null) sel.gameObject.SetActive(f.user_id == selectedId);
+                var btn = go.GetComponent<Button>();
+                if (btn != null) { string id = f.user_id; btn.onClick.AddListener(() => FocusFriend(id)); }   // 줄은 그 자리로만 — 프로필은 지도의 핀을 눌러서
+                rows.Add(go);
+            }
+        }
+        AddHuntRows(me);
+        if (adSlot != null) adSlot.SetAsLastSibling();
+    }
+
+    // 근처 보물찾기 — 친구 줄 아래에 가까운 순. 자리를 알려 주는(정확히·대략 공개) 게임만 — 비공개는 지도에 자리가 없다
+    private void AddHuntRows(Vector2 me)
+    {
+        var near = new List<(R0926HuntList.Spot s, float km)>();
+        foreach (var h in HuntSpots)
+            if (h.coord != R0926HuntList.Coord.Hidden) near.Add((h, me == Vector2.zero ? 0f : KmTo(me, h.lat, h.lon)));
+        if (near.Count == 0) return;
+        if (me != Vector2.zero) near.Sort((a, b) => a.km.CompareTo(b.km));
+        if (sectionTemplate != null)
+        {
+            var head = Instantiate(sectionTemplate, listContent);
+            head.name = "HuntSection";
+            head.SetActive(true);
+            var t = head.GetComponentInChildren<Text>(true);
+            if (t != null) t.text = L("근처 보물찾기", "Treasure hunts nearby", "近くの宝探し", "附近寻宝", "Tesoros cerca");
+            rows.Add(head);
+        }
+        foreach (var (h, km) in near)
         {
             var go = Instantiate(rowTemplate, listContent);
-            go.name = "Friend_" + f.user_id;
+            go.name = "HuntRow_" + h.id;
             go.SetActive(true);
-            FillAvatar(go.transform.Find("Avatar"), f);
+            go.transform.Find("Avatar")?.gameObject.SetActive(false);
+            var icon = go.transform.Find("HuntIcon");
+            if (icon != null)
+            {
+                icon.gameObject.SetActive(true);
+                icon.Find("Ring/Lock")?.gameObject.SetActive(h.locked);
+            }
             var name = go.transform.Find("Name")?.GetComponent<Text>();
-            if (name != null) name.text = "@" + f.username;
+            if (name != null) name.text = Ellipsis(h.title, 18);
             var sub = go.transform.Find("Sub")?.GetComponent<Text>();
             if (sub != null)
             {
-                float km = Km(me, f);
-                sub.text = Ago(f.ago) + (me != Vector2.zero ? " · " + Dist(km, f.exact) : "");
+                string state = h.found ? L("찾은 보물입니다", "Treasure found", "見つけた宝です", "已找到的宝藏", "Tesoro encontrado")
+                             : h.live ? L("진행 중", "On now", "開催中", "进行中", "En curso")
+                             : L("곧 시작", "Starting soon", "まもなく開始", "即将开始", "Empieza pronto");
+                string dist = "";
+                if (me != Vector2.zero)
+                {
+                    float m = km * 1000f;
+                    dist = R0926HuntList.Label(h.coord, m, h.approxM, 0f) ?? (m >= 1000f ? (m / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + "km" : Mathf.Max(10, Mathf.RoundToInt(m / 10f) * 10) + "m");
+                }
+                sub.text = dist.Length > 0 ? state + " · " + dist : state;
             }
             var sel = go.transform.Find("Sel");
-            if (sel != null) sel.gameObject.SetActive(f.user_id == selectedId);
+            if (sel != null) sel.gameObject.SetActive(h.id == selectedHunt);
             var btn = go.GetComponent<Button>();
-            if (btn != null) { string id = f.user_id; btn.onClick.AddListener(() => TapFriend(id)); }
+            if (btn != null) { var spot = h; btn.onClick.AddListener(() => FocusHunt(spot)); }
             rows.Add(go);
         }
-        if (adSlot != null) adSlot.SetAsLastSibling();
     }
 
     private void FillAvatar(Transform avatar, Friend f)
@@ -614,6 +719,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
         Vector2 v = viewport.rect.size;
         int p = 0, c = 0, a = 0;
+        labelTaken.Clear();
         if (sharing && loggedIn)
         {
             // 화면 거리 기준으로 가까운 친구를 묶는다 (욕심쟁이 방식 — 친구 수가 적어 충분)
@@ -637,6 +743,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 float ar = AllExact(g.members) ? 0f : AreaRadius(g.members[0].lat);
                 float edge = Mathf.Max(120f, ar);
                 if (g.pos.x < -edge || g.pos.y < -edge || g.pos.x > v.x + edge || g.pos.y > v.y + edge) continue;
+                labelTaken.Add(g.pos);
                 if (ar > 0f)
                 {
                     var area = Pool(areaPool, areaTemplate, a++, behind: true);
@@ -679,6 +786,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         for (int i = ha; i < huntAreaPool.Count; i++) if (huntAreaPool[i].activeSelf) huntAreaPool[i].SetActive(false);
     }
 
+    private readonly List<Vector2> labelTaken = new List<Vector2>();   // 이번 배치에서 이름표가 놓인 자리 (친구 핀 · 상자)
+
     // 보물찾기 — 정확히 공개(내가 연 게임 포함)면 그 자리, 대략 공개면 원 가운데 + 원. 친구와 묶지 않는다
     private void LayoutHunts(Vector2 v, bool force, ref int hp, ref int ha)
     {
@@ -707,6 +816,13 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 go.transform.Find("Ring/Lock")?.gameObject.SetActive(h.locked);   // 비밀번호를 건 보물 — 테 오른쪽 아래 자물쇠
             }
             Place((RectTransform)go.transform, q);
+            // 친구 핀이나 먼저 놓인 상자와 겹치면 이 상자의 이름표는 숨긴다 — 글자끼리 포개져 둘 다 못 읽게 되지 않게 (상자는 그대로 눌린다)
+            bool crowded = false;
+            foreach (var t in labelTaken)
+                if (Mathf.Abs(t.x - q.x) < 260f && Mathf.Abs(t.y - q.y) < 110f) { crowded = true; break; }
+            var tag = go.transform.Find("Name");
+            if (tag != null && tag.gameObject.activeSelf == crowded) tag.gameObject.SetActive(!crowded);
+            labelTaken.Add(q);
         }
     }
 
@@ -780,12 +896,34 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private void Focus(Friend f)
     {
         selectedId = f.user_id;
+        selectedHunt = 0;
+        Highlight();
+        StartAnim(NormD(f.lat, f.lon), Math.Max(zoom, FocusZoom));
+    }
+
+    // 목록의 친구 줄 — 그 자리로 지도를 옮기기만 (프로필은 지도의 핀을 눌러서)
+    private void FocusFriend(string id)
+    {
+        var f = friends.Find(x => x.user_id == id);
+        if (f != null) Focus(f);
+    }
+
+    // 목록의 보물찾기 줄 — 그 자리로 지도를 옮기기만 (보물찾기 창은 지도의 상자를 눌러서)
+    private void FocusHunt(R0926HuntList.Spot h)
+    {
+        selectedHunt = h.id;
+        selectedId = null;
+        Highlight();
+        StartAnim(NormD(h.lat, h.lon), Math.Max(zoom, FocusZoom));
+    }
+
+    private void Highlight()
+    {
         foreach (var r in rows)
         {
             var sel = r != null ? r.transform.Find("Sel") : null;
-            if (sel != null) sel.gameObject.SetActive(r.name == "Friend_" + f.user_id);
+            if (sel != null) sel.gameObject.SetActive(r.name == "Friend_" + selectedId || r.name == "HuntRow_" + selectedHunt);
         }
-        StartAnim(NormD(f.lat, f.lon), Math.Max(zoom, FocusZoom));
     }
 
     public void ZoomIn() => Animate(viewport.rect.size / 2f, 2f);
@@ -1309,7 +1447,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 #if UNITY_EDITOR
     private static Vector2 previewMe;
     private List<R0926HuntList.Spot> previewHunts;
-    private List<R0926HuntList.Spot> HuntSpots => previewHunts ?? R0926HuntList.Spots;
+    private List<R0926HuntList.Spot> HuntSpots => previewHunts ?? R0926HuntList.MapSpots;
+    private static float previewHeading = -1f;
 
     /// <summary>캡처용 미리보기 (편집 모드) — 예시 친구 5명 · 보물찾기 둘(정확히 · 대략). zoomTo 가 있으면 그 자리로 확대</summary>
     public void EditorPreview(bool share, float zoomTo = 0f, float lat = 0f, float lon = 0f)
@@ -1318,6 +1457,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         canvas = GetComponentInParent<Canvas>();
         EnsureTextures();
         previewMe = new Vector2(37.50f, 127.03f);
+        previewHeading = 50f;
         loggedIn = true; sharing = share; mutual = 12; loaded = true; fitted = false; netError = false; restorePending = false;
         friends.Clear();
         friends.Add(new Friend { user_id = "1", username = "minji", lat = 37.57f, lon = 126.98f, ago = 60 });
@@ -1328,8 +1468,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         previewHunts = new List<R0926HuntList.Spot>();
         if (share)
         {
-            previewHunts.Add(new R0926HuntList.Spot { id = -1, title = "서울숲 가을 보물찾기", coord = R0926HuntList.Coord.Exact, lat = 37.5444, lon = 127.0374 });
-            previewHunts.Add(new R0926HuntList.Spot { id = -2, title = "여의도 한강공원 주말 보물찾기", coord = R0926HuntList.Coord.Approx, lat = 37.5283, lon = 126.9326, approxM = 500f });
+            previewHunts.Add(new R0926HuntList.Spot { id = -1, title = "서울숲 가을 보물찾기", coord = R0926HuntList.Coord.Exact, lat = 37.5444, lon = 127.0374, live = true });
+            previewHunts.Add(new R0926HuntList.Spot { id = -2, title = "여의도 한강공원 주말 보물찾기", coord = R0926HuntList.Coord.Approx, lat = 37.5283, lon = 126.9326, approxM = 500f, live = true, found = true });
         }
         else friends.Clear();
         selectedId = "2";
@@ -1349,6 +1489,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         foreach (var g in huntAreaPool) Kill(g);
         pinPool.Clear(); clusterPool.Clear(); areaPool.Clear(); huntPinPool.Clear(); huntAreaPool.Clear(); friends.Clear();
         previewMe = Vector2.zero;
+        previewHeading = -1f;
         previewHunts = null;
         ClearDropPin();
         if (Searching) CloseSearch();
@@ -1356,7 +1497,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (detailImage != null) detailImage.texture = null;
     }
 #else
-    private static List<R0926HuntList.Spot> HuntSpots => R0926HuntList.Spots;
+    private static List<R0926HuntList.Spot> HuntSpots => R0926HuntList.MapSpots;
 #endif
 
     private static Vector2 MyLatLon()
@@ -1370,12 +1511,14 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         return Vector2.zero;
     }
 
-    private static float Km(Vector2 me, Friend f)
+    private static float Km(Vector2 me, Friend f) => me == Vector2.zero ? 0f : KmTo(me, f.lat, f.lon);
+
+    // 보물찾기는 가까워서 float 위경도를 쓰면 몇 m 가 흔들린다 — double 로
+    private static float KmTo(Vector2 me, double lat, double lon)
     {
-        if (me == Vector2.zero) return 0f;
-        float dLat = (f.lat - me.x) * Mathf.Deg2Rad, dLon = (f.lon - me.y) * Mathf.Deg2Rad;
-        float h = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2) + Mathf.Cos(me.x * Mathf.Deg2Rad) * Mathf.Cos(f.lat * Mathf.Deg2Rad) * Mathf.Sin(dLon / 2) * Mathf.Sin(dLon / 2);
-        return 6371f * 2f * Mathf.Asin(Mathf.Min(1f, Mathf.Sqrt(h)));
+        double dLat = (lat - me.x) * Math.PI / 180, dLon = (lon - me.y) * Math.PI / 180;
+        double h = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos(me.x * Math.PI / 180) * Math.Cos(lat * Math.PI / 180) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return (float)(6371.0 * 2.0 * Math.Asin(Math.Min(1.0, Math.Sqrt(h))));
     }
 
     // 멀리 있는 친구는 약 1km 칸이라 1km 아래는 '1km' — 근처 친구(정확한 자리)는 10m 단위
@@ -1386,7 +1529,8 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         if (sec < 180) return L("방금", "just now", "たった今", "刚刚", "ahora");
         if (sec < 3600) return string.Format(L("{0}분 전", "{0}m ago", "{0}分前", "{0}分钟前", "hace {0} min"), sec / 60);
-        return string.Format(L("{0}시간 전", "{0}h ago", "{0}時間前", "{0}小时前", "hace {0} h"), sec / 3600);
+        if (sec < 86400) return string.Format(L("{0}시간 전", "{0}h ago", "{0}時間前", "{0}小时前", "hace {0} h"), sec / 3600);
+        return string.Format(L("{0}일 전", "{0}d ago", "{0}日前", "{0}天前", "hace {0} d"), sec / 86400);
     }
 
     private static string L(string ko, string en, string ja, string zh, string es)

@@ -21,6 +21,7 @@ public class ImageDisplayController : MonoBehaviour
     private Texture defaultFaceTexture;   // 프리팹에 원래 붙어 있던 면 — 사진을 지울 때 이걸로 되돌린다 (공유 자산이라 지우지 않는다)
 
     private Coroutine currentBaseMapCoroutine;
+    private string wantedUrl;   // 이 면에 붙이려던 사진 — 받는 도중 오브젝트가 꺼지면 코루틴이 죽으므로 다시 켜질 때 이어 받는다 (10-29)
 
     // 세대 번호: 풀 재활용 시 증가 → 이전 코루틴이 yield 후 자신의 세대와 다르면 즉시 종료
     private int loadGeneration = 0;
@@ -43,10 +44,21 @@ public class ImageDisplayController : MonoBehaviour
         }
     }
 
+    void OnEnable()
+    {
+        // 거리·필터 때문에 받는 도중 꺼졌다 켜지면 사진 없이 기본 면(프리팹 그대로)이 남던 것
+        if (!string.IsNullOrEmpty(wantedUrl) && (baseMapTexture == null || baseMapUrl != wantedUrl))
+        {
+            if (currentBaseMapCoroutine != null) { StopCoroutine(currentBaseMapCoroutine); currentBaseMapCoroutine = null; }
+            currentBaseMapCoroutine = StartCoroutine(LoadBaseMapTexture(wantedUrl, 0));
+        }
+    }
+
     // 메인 사진 설정
     public void SetBaseMap(string imageUrl)
     {
         if (!enabled) return;
+        wantedUrl = imageUrl;
         if (imageUrl == baseMapUrl && baseMapTexture != null && currentBaseMapCoroutine == null) return;
 
         // 이전 BaseMap 코루틴 중단
@@ -62,7 +74,8 @@ public class ImageDisplayController : MonoBehaviour
             cubeRenderer.enabled = false;
         }
 
-        currentBaseMapCoroutine = StartCoroutine(LoadBaseMapTexture(imageUrl));
+        if (!gameObject.activeInHierarchy) { currentBaseMapCoroutine = null; return; }   // 꺼진 채로는 받을 수 없다 — 켜질 때 OnEnable 이 받는다
+        currentBaseMapCoroutine = StartCoroutine(LoadBaseMapTexture(imageUrl, 0));
     }
 
     /// <summary>
@@ -85,6 +98,7 @@ public class ImageDisplayController : MonoBehaviour
             currentBaseMapCoroutine = null;
         }
         loadGeneration++;
+        wantedUrl = null;
 
         // 이전에 다운로드해 둔 동적 텍스처만 정리. 내장(공유) 텍스처는 소유하지 않으므로 참조만.
         if (baseMapTexture != null && baseMapTexture != tex) Destroy(baseMapTexture);
@@ -101,7 +115,7 @@ public class ImageDisplayController : MonoBehaviour
         return true;
     }
 
-    private IEnumerator LoadBaseMapTexture(string imageUrl)
+    private IEnumerator LoadBaseMapTexture(string imageUrl, int attempt)
     {
         int myGeneration = loadGeneration;
         string fullUrl = imageUrl.StartsWith("http") ? imageUrl : ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
@@ -152,10 +166,17 @@ public class ImageDisplayController : MonoBehaviour
             {
                 Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
 
-                // 로딩 실패 시에도 큐브 표시
+                // 로딩 실패 시에도 큐브 표시 (눌러서 열 수 있게) — 사진은 뒤에서 다시 받아 바꿔 끼운다
                 if (cubeRenderer != null)
                 {
                     cubeRenderer.enabled = true;
+                }
+                if (attempt < 3)
+                {
+                    yield return new WaitForSeconds(4f * (attempt + 1));
+                    if (myGeneration != loadGeneration) yield break;
+                    yield return LoadBaseMapTexture(imageUrl, attempt + 1);
+                    yield break;
                 }
             }
         }
@@ -192,6 +213,7 @@ public class ImageDisplayController : MonoBehaviour
     /// </summary>
     public void CancelPendingLoads()
     {
+        wantedUrl = null;
         loadGeneration++; // 세대 증가 → yield 후 돌아온 이전 코루틴 무효화
         StopAllCoroutines();
         currentBaseMapCoroutine = null;
@@ -200,6 +222,7 @@ public class ImageDisplayController : MonoBehaviour
     // 모든 텍스처 해제 — 풀로 돌아갈 때 · 파괴될 때
     public void ClearImages()
     {
+        wantedUrl = null;
         loadGeneration++;
         StopAllCoroutines();
         currentBaseMapCoroutine = null;

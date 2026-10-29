@@ -31,12 +31,20 @@ public static class R0926HuntList
         public float bandM;       // Hidden: 굵은 거리의 끝 (1km · 5km · 20km)
         public float bandFromM;   // Hidden: 굵은 거리의 시작 — 거리 슬라이더가 이보다 크면 목록에 넣는다
         public bool locked;       // 비밀번호를 건 보물 — 목록 그림에 자물쇠
+        public bool live;         // 진행 중 (아니면 곧 시작)
+        public bool found;        // 내가 이미 찾음 — 게임은 아직 진행 중이라 남는다 (목록·지도 뒤쪽 · '찾은 보물입니다')
     }
 
     /// <summary>목록 줄 이름 앞의 금빛 상자 색 (글자 줄의 색 — 그림이 대신하지만 원본 글자에도 남긴다)</summary>
     public const string ColorHex = "E8BF4F";
 
     public static readonly List<Spot> Spots = new List<Spot>();
+    /// <summary>
+    /// 지도에 올릴 자리 — Spots 에 근처의 남의 게임(자리를 알려 주는 것만: 정확히·대략 공개)을 더한 것. 비공개는 자리가 없어 빠진다.
+    /// 지도의 '근처 보물찾기' 목록도 이걸로 (누르면 그 자리로)
+    /// </summary>
+    public static readonly List<Spot> MapSpots = new List<Spot>();
+    private static string mapSig = "";
     /// <summary>목록이 바뀌었다 — PlaceListManager 가 다시 그린다</summary>
     public static event Action Changed;
 
@@ -49,6 +57,10 @@ public static class R0926HuntList
         public int id;
         public string title, prize;
         public bool live, joined, official, locked;
+        public bool found;            // 내가 이미 찾음 — 진행 중이라 목록엔 남기되 못 찾은 게임 뒤로
+        public Coord coord;           // 자리를 알려 주는 정도 — Hidden 이면 lat/lon 없음
+        public double lat, lon;       // Exact: 그 자리 · Approx: 원 가운데
+        public float approxM;         // Approx: 원 반지름
         public float meters;          // 정확히 · 대략 공개 게임의 거리 — 비공개면 -1
         public float bandM;           // 비공개 게임의 굵은 거리 끝 (1km · 5km · 20km) — 모르면 0
         public int players, maxPlayers;   // maxPlayers 0 = 제한 없음
@@ -70,6 +82,8 @@ public static class R0926HuntList
     private static void ResetOnLaunch()
     {
         Spots.Clear();
+        MapSpots.Clear();
+        mapSig = "";
         Changed = null;
         fetchedAt = fetchStartedAt = -999f;
         fetching = false;
@@ -118,11 +132,26 @@ public static class R0926HuntList
         foreach (var key in new[] { "hosted", "joined" })
             foreach (JSONNode h in j[key].AsArray)
                 if (seen.Add(h["id"].AsInt) && Playing(h) && TryMake(h, out var s)) list.Add(s);
-        Set(list);
         var near = new List<Near>();
         foreach (JSONNode h in j["hunts"].AsArray)
             if (TryNear(h, out var n)) near.Add(n);
-        SetNearby(near);
+        // 아직 못 찾은 게임이 앞, 이미 찾은 게임은 뒤 (서버 순서는 각각 그대로)
+        var ordered = new List<Near>(near.Count);
+        foreach (var n in near) if (!n.found) ordered.Add(n);
+        foreach (var n in near) if (n.found) ordered.Add(n);
+        SetNearby(ordered);
+        // 목록도 같은 순서 — 못 찾은 게임 먼저
+        var spots = new List<Spot>(list.Count);
+        foreach (var s in list) if (!s.found) spots.Add(s);
+        foreach (var s in list) if (s.found) spots.Add(s);
+        var map = new List<Spot>();
+        var onMap = new HashSet<int>();
+        foreach (var s in spots)
+            if (s.coord != Coord.Hidden && onMap.Add(s.id)) map.Add(s);
+        foreach (var n in ordered)
+            if (n.coord != Coord.Hidden && onMap.Add(n.id))
+                map.Add(new Spot { id = n.id, title = n.title, coord = n.coord, lat = n.lat, lon = n.lon, approxM = n.approxM, locked = n.locked, live = n.live, found = n.found });
+        Set(spots, SetMap(map));
     }
 
     private static bool TryNear(JSONNode h, out Near n)
@@ -132,7 +161,8 @@ public static class R0926HuntList
         if ((st != "live" && st != "scheduled") || h["is_host"].AsBool) return false;
         var me = h["me"];
         bool joined = me["joined"].AsBool;
-        if (me["rank"].AsInt > 0 || me["gave_up"].AsBool || (!joined && h["full"].AsBool)) return false;
+        if (me["gave_up"].AsBool || (!joined && h["full"].AsBool)) return false;
+        n.found = joined && me["rank"].AsInt > 0;   // 찾았어도 게임이 진행 중이면 남는다 — 못 찾은 게임 뒤에 '찾은 보물입니다'
         string title = OneLine(h["title"]);
         n.id = h["id"].AsInt;
         n.title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro");
@@ -147,6 +177,9 @@ public static class R0926HuntList
         n.maxPlayers = Has(h, "max_players") ? h["max_players"].AsInt : 0;
         n.startsAt = DateTimeOffset.TryParse((string)h["starts_at"] ?? "", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at)
             ? at.LocalDateTime : DateTime.MinValue;
+        if (Has(h, "lat") && Has(h, "lon")) { n.coord = Coord.Exact; n.lat = h["lat"].AsDouble; n.lon = h["lon"].AsDouble; }
+        else if (Has(h, "approx_lat") && Has(h, "approx_lon")) { n.coord = Coord.Approx; n.lat = h["approx_lat"].AsDouble; n.lon = h["approx_lon"].AsDouble; n.approxM = h["approx_m"].AsFloat; }
+        else n.coord = Coord.Hidden;
         return true;
     }
 
@@ -170,7 +203,7 @@ public static class R0926HuntList
         sb.Length = 0;
         if (list != null)
             foreach (var n in list)
-                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined).Append(n.locked)
+                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined).Append(n.locked).Append(n.found)
                   .Append('|').Append(Mathf.RoundToInt(n.meters / 10f)).Append('|').Append(n.bandM).Append('|').Append(n.players).Append('/').Append(n.maxPlayers)
                   .Append('|').Append(n.startsAt.Ticks).Append(';');
         string now = sb.ToString();
@@ -181,14 +214,14 @@ public static class R0926HuntList
         NearbyVersion++;
     }
 
-    // 시작 전·진행 중이고, 내가 열었거나 참가해서 아직 못 찾음·포기 안 함 (R0926HuntTreasure.Track 과 같은 기준 + 포기)
+    // 시작 전·진행 중이고, 내가 열었거나 참가해서 포기 안 함. 이미 찾은 게임도 진행 중이면 남긴다 (found — 목록·지도에선 뒤쪽)
     private static bool Playing(JSONNode h)
     {
         string st = h["status"];
         if (st != "live" && st != "scheduled") return false;
         if (h["is_host"].AsBool) return true;
         var me = h["me"];
-        return me["joined"].AsBool && me["rank"].AsInt <= 0 && !me["gave_up"].AsBool;
+        return me["joined"].AsBool && !me["gave_up"].AsBool;
     }
 
     private static bool TryMake(JSONNode h, out Spot s)
@@ -196,6 +229,8 @@ public static class R0926HuntList
         // 목록은 한 줄에 한 곳 — 제목의 줄바꿈은 띄어쓰기로
         string title = ((string)h["title"] ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
         s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro"), locked = h["mode"] == "code" };
+        s.live = h["status"] == "live";
+        s.found = !h["is_host"].AsBool && h["me"]["rank"].AsInt > 0;
         if (Has(h, "lat") && Has(h, "lon"))
         {
             s.coord = Coord.Exact;
@@ -222,17 +257,37 @@ public static class R0926HuntList
 
     private static bool Has(JSONNode h, string key) => h.HasKey(key) && !h[key].IsNull;
 
-    private static void Set(List<Spot> list)
+    private static string Sig(List<Spot> list)
     {
-        if (list == null) SetNearby(null);   // 로그아웃 · 참여 끔 — 하늘 옆 장도 비운다
         sb.Length = 0;
         if (list != null)
             foreach (var s in list)
                 sb.Append(s.id).Append('|').Append(s.title).Append('|').Append((int)s.coord).Append('|')
                   .Append(s.lat.ToString("F6", CultureInfo.InvariantCulture)).Append('|').Append(s.lon.ToString("F6", CultureInfo.InvariantCulture))
-                  .Append('|').Append(s.approxM).Append('|').Append(s.bandM).Append('|').Append(s.locked).Append(';');
-        string now = sb.ToString();
-        if (now == sig) return;
+                  .Append('|').Append(s.approxM).Append('|').Append(s.bandM).Append('|').Append(s.locked).Append(s.live).Append(s.found).Append(';');
+        return sb.ToString();
+    }
+
+    // 지도용 자리를 조용히 바꾼다 — 바뀌었는지만 돌려주고 알림은 Set 이 한 번에
+    private static bool SetMap(List<Spot> list)
+    {
+        string now = Sig(list);
+        if (now == mapSig) return false;
+        mapSig = now;
+        MapSpots.Clear();
+        if (list != null) MapSpots.AddRange(list);
+        return true;
+    }
+
+    private static void Set(List<Spot> list, bool mapChanged = false)
+    {
+        if (list == null)   // 로그아웃 · 참여 끔 — 하늘 옆 장도, 지도의 자리도 비운다
+        {
+            SetNearby(null);
+            mapChanged |= SetMap(null);
+        }
+        string now = Sig(list);
+        if (now == sig && !mapChanged) return;
         sig = now;
         Spots.Clear();
         if (list != null) Spots.AddRange(list);
@@ -255,6 +310,9 @@ public static class R0926HuntList
                 return null;
         }
     }
+
+    /// <summary>이미 찾은 보물 줄의 거리 칸 (게임은 아직 진행 중)</summary>
+    public static string FoundText => L("찾은 보물입니다", "Treasure found", "見つけた宝です", "已找到的宝藏", "Tesoro encontrado");
 
     /// <summary>방향(앞·오른쪽 …)을 보이지 않는 줄 — 비공개 게임 · 대략 원 안</summary>
     public static bool NoDirection(Coord c, float meters, float approxM) =>

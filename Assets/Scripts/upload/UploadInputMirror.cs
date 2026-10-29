@@ -14,6 +14,7 @@ using UnityEngine.EventSystems;
 // - mirrorInput.onValueChanged → source.text 동기화
 // - 닫기 버튼 → mirrorPanel.SetActive(false), mirrorInput.DeactivateInputField
 // - 키보드가 사라지면 자동으로 미러 패널도 닫음
+// - 키보드가 끝내 안 뜨면(안드로이드가 '띄워'를 놓침) 닫았다 다시 부름 — 두 번까지, 그 뒤엔 입력줄을 누르면 (WatchKeyboard)
 // - 키보드 위로 mirrorPanel 위치 lerp (UpdateMirrorPosition)
 // - 미러 패널 영역 밖 터치/드래그는 backdrop이 흡수해 뒷 UI 영향 차단
 // ============================================================
@@ -74,6 +75,22 @@ public class UploadInputMirror : MonoBehaviour
     private bool placed;                    // 키보드 위에 처음 놓았는지
     private const float SHOW_FALLBACK = 0.5f;   // 키보드 높이를 못 읽는 기기 — 이만큼 지나면 그냥 보인다
 
+    // 안드로이드 유니티 키보드는 키보드 창이 포커스를 얻는 순간 한 번만 키보드를 부르고, 안 떠도 다시 부르지 않는다.
+    // 그 한 번이 묻히면 입력줄만 뜨고 키보드는 끝내 안 떴다 — 입력줄을 다시 눌러도 칸은 이미 키보드를 쥔 줄 안다
+    // (2026-10-29 대표님: 장소 추가·3D 모델 칸 가끔 키보드 안 뜸) → 잠깐 기다려도 안 뜨면 닫았다 다시 부른다
+    private const float KEYBOARD_WAIT = 1.5f;   // 느린 기기의 첫 키보드도 이 안에 뜬다
+    private const int KEYBOARD_RETRIES = 2;     // 저절로는 여기까지 — 그 뒤엔 입력줄을 누르면
+    private float kbAskedAt = -1f;              // 마지막으로 키보드를 부른 때 (-1 이면 안 지켜본다)
+    private int kbRetries;
+    private bool kbReopen;                      // 다음 프레임에 다시 부른다
+    private bool kbTyped;                       // 글이 들어왔다 — 높이를 못 읽어도 키보드는 떠 있다
+    private bool kbNoted;
+    private string kbContext = "";              // 부를 때 사정 (기기 기록용)
+    private string kbFirst = "";                // 처음 다시 부를 때 유니티 쪽 키보드 (기기 기록용)
+    private static float lastCloseAt = -100f;   // 입력줄을 마지막으로 닫은 때 (모든 입력줄)
+    private static float appBackAt = -100f;     // 앱으로 돌아온 때 (사진 고르기·권한 창 등)
+    private static int sdk = -1;
+
     void OnEnable()
     {
         TryInitialize();
@@ -98,6 +115,8 @@ public class UploadInputMirror : MonoBehaviour
     /// <summary>키보드 위에 자리 잡은 입력줄 (아직이면 null)</summary>
     public RectTransform PlacedBar => placed ? mirrorRect : null;
     public bool IsMirrorInput(InputField f) => f != null && f == mirrorInput;
+    /// <summary>이번에 키보드를 다시 부른 횟수 (시험용)</summary>
+    public int KeyboardRetries => kbRetries;
     /// <summary>키보드 위 입력줄의 실제 입력칸 — R0926InputFocus 가 이 칸의 커서 자리·모양을 원래 칸 안에도 같게 보여 준다</summary>
     public InputField Bar => mirrorInput;
     /// <summary>입력줄이나 그 위 막(backdrop) — 아래로 쓸어내리면 닫는 자리 (R0926KeyboardSwipe)</summary>
@@ -139,6 +158,9 @@ public class UploadInputMirror : MonoBehaviour
             closePress = closeButton.GetComponent<MirrorButtonPress>();
             if (closePress == null) closePress = closeButton.gameObject.AddComponent<MirrorButtonPress>();
         }
+        var tap = mirrorInput.GetComponent<MirrorBarTap>();
+        if (tap == null) tap = mirrorInput.gameObject.AddComponent<MirrorBarTap>();
+        tap.onDown = OnBarTapped;
 
         if (createBackdrop) EnsureBackdrop();
         AttachSourceTriggers();
@@ -285,7 +307,10 @@ public class UploadInputMirror : MonoBehaviour
 
     private void ActivateMirrorFor(InputField source)
     {
-        ReleaseOtherInput();
+        bool tookOver = ReleaseOtherInput();
+        float now = Time.unscaledTime;
+        kbContext = (tookOver ? "다른 칸 키보드를 넘겨받음" : now - lastCloseAt < 1.5f ? "앞 입력줄을 막 닫음" : "앞 키보드 없음")
+                    + (now - appBackAt < 3f ? " · 앱으로 막 돌아옴" : "");
         activeSource = source;
         submitRequested = false;
         PaintCloseIcon(submitActions.ContainsKey(source));
@@ -336,18 +361,23 @@ public class UploadInputMirror : MonoBehaviour
         mirrorActivatedAt = Time.unscaledTime;
         lastTyped = source.text ?? "";
         closing = false;
+        kbAskedAt = mirrorActivatedAt;
+        kbRetries = 0;
+        kbReopen = kbTyped = kbNoted = false;
     }
 
     // 다른 입력칸(뒤에 열린 대화창 등)이 아직 키보드를 쥐고 있으면 먼저 놓게 한다 — 두 칸이 한 키보드를 나눠 쓰면
-    // 친 글이 그쪽으로 가거나 지워졌다 (2026-10-14 안드로이드: 보물찾기 제목·힌트가 안 들어감)
-    private void ReleaseOtherInput()
+    // 친 글이 그쪽으로 가거나 지워졌다 (2026-10-14 안드로이드: 보물찾기 제목·힌트가 안 들어감). 놓게 했으면 true
+    private bool ReleaseOtherInput()
     {
         var es = EventSystem.current;
         var sel = es != null ? es.currentSelectedGameObject : null;
         var other = sel != null ? sel.GetComponent<InputField>() : null;
-        if (other == null || other == mirrorInput) return;
+        if (other == null || other == mirrorInput) return false;
         if (other is KeyboardPersistentInputField kp) kp.lockFocus = false;
-        if (other.isFocused) other.DeactivateInputField();
+        if (!other.isFocused) return false;
+        other.DeactivateInputField();
+        return true;
     }
 
     private void PaintCloseIcon(bool send)
@@ -379,6 +409,7 @@ public class UploadInputMirror : MonoBehaviour
         // 키보드가 닫히면서 입력칸이 처음 글로 되돌리는 것은 옮기지 않는다 (그 빈 글이 원래 칸을 덮어썼다)
         var kb = mirrorInput != null ? mirrorInput.touchScreenKeyboard : null;
         if (kb != null && kb.status != TouchScreenKeyboard.Status.Visible) return;
+        kbTyped = true;
         lastTyped = value ?? "";
         syncing = true;
         activeSource.text = lastTyped;
@@ -462,10 +493,17 @@ public class UploadInputMirror : MonoBehaviour
 
     private void HideMirror()
     {
+        if (activeSource != null)
+        {
+            lastCloseAt = Time.unscaledTime;
+            if (kbRetries > 0 && !keyboardActive && !kbTyped) NoteKeyboard(kbRetries + "번 불러도 안 뜸");
+        }
         activeSource = null;
         lastKb = null;
         keyboardActive = false;
         mirrorActivatedAt = -1f;
+        kbAskedAt = -1f;
+        kbReopen = false;
         if (mirrorPanel != null) mirrorPanel.SetActive(false);
         if (backdrop != null) backdrop.SetActive(false);
         RestoreSwipeControllers();
@@ -536,16 +574,134 @@ public class UploadInputMirror : MonoBehaviour
             if (mirrorGroup.alpha != want) mirrorGroup.alpha = Mathf.MoveTowards(mirrorGroup.alpha, want, Time.unscaledDeltaTime / 0.12f);
         }
 
-        bool inGrace = mirrorActivatedAt > 0f && (Time.unscaledTime - mirrorActivatedAt) < KEYBOARD_GRACE;
+        if (kbReopen && !closing) { kbReopen = false; AskKeyboard(); }
+
+        bool inGrace = mirrorActivatedAt > 0f && (Time.unscaledTime - mirrorActivatedAt) < KEYBOARD_GRACE
+                       || kbAskedAt > 0f && Time.unscaledTime - kbAskedAt < KEYBOARD_GRACE;   // 다시 부른 뒤도 — 앞 키보드가 내려가는 사이에 닫지 않는다
 
         float kbCanvas = GetKeyboardHeightCanvas();
         bool kbUp = kbCanvas > 0f;
 
-        if (kbUp) keyboardActive = true;
+        if (kbUp)
+        {
+            if (!keyboardActive && kbRetries > 0) NoteKeyboard(kbRetries + "번째에 뜸");
+            keyboardActive = true;
+        }
         else if (keyboardActive && !inGrace && (closePress == null || !closePress.Down))
         {
             BeginClose(false);
         }
+        else if (!keyboardActive) WatchKeyboard();
+    }
+
+    // 부른 키보드가 잠깐 기다려도 안 뜨면 닫았다 다시 부른다 — 안드로이드만 (에디터는 시험용 흉내: EditorVirtualKeyboard.DropShows)
+    private void WatchKeyboard()
+    {
+#if UNITY_ANDROID || UNITY_EDITOR
+        if (closing || kbReopen || activeSource == null || kbAskedAt < 0f || kbTyped || kbRetries >= KEYBOARD_RETRIES) return;
+        if (Time.unscaledTime - kbAskedAt < KEYBOARD_WAIT) return;
+        if (ImeShown()) { kbAskedAt = -1f; return; }   // 떠 있는데 높이로 못 읽는 키보드 (떠 있는 키보드·화면 나누기)
+        ReopenKeyboard();
+#endif
+    }
+
+    // 입력줄을 눌렀는데 키보드가 없다 — 다시 부른다
+    private void OnBarTapped()
+    {
+#if UNITY_ANDROID || UNITY_EDITOR
+        if (closing || kbReopen || activeSource == null || keyboardActive || kbTyped || ImeShown()) return;
+        ReopenKeyboard();
+#endif
+    }
+
+    // 닫고 한 프레임 쉰 뒤 부른다 — 키보드(에디터 흉내도)가 닫힌 걸 알아야 새로 띄운다
+    private void ReopenKeyboard()
+    {
+        kbRetries++;
+        if (kbRetries == 1) kbFirst = KeyboardState();
+        Debug.LogWarning($"[UpInputMirror] 키보드가 안 떠 다시 부릅니다 ({kbRetries}) — {kbFirst}");
+        if (mirrorInput.isFocused) mirrorInput.DeactivateInputField();
+        var es = EventSystem.current;
+        if (es != null && es.currentSelectedGameObject == mirrorInput.gameObject) es.SetSelectedGameObject(null);
+        kbReopen = true;
+    }
+
+    private void AskKeyboard()
+    {
+        if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(mirrorInput.gameObject);
+        mirrorInput.ActivateInputField();
+        mirrorInput.caretPosition = mirrorInput.text.Length;
+        keyboardActive = false;   // 앞 키보드가 아직 보여도 새 키보드로 치지 않는다
+        kbAskedAt = Time.unscaledTime;
+    }
+
+    // 유니티 쪽 키보드 — 아예 안 불렀는지(하드웨어 키보드로 알면 안 부른다) / 불렀는데 안 떴는지
+    private string KeyboardState()
+    {
+        var kb = mirrorInput.touchScreenKeyboard;
+        string s = kb == null ? (mirrorInput.isFocused ? "칸만 잡힘·키보드 요청 없음" : "칸 놓침") : "요청됨(" + kb.status + (kb.active ? "" : "·꺼짐") + ")";
+        return TouchScreenKeyboard.isInPlaceEditingAllowed ? s + " · 하드웨어 키보드로 앎" : s;
+    }
+
+    // 실제 기기에서 언제 생기는지 모은다 — 앱 오류 수집(/api/crash, 기종·OS 가 같이 간다). 같은 글은 세션에 한 번
+    private void NoteKeyboard(string result)
+    {
+        if (kbNoted) return;
+        kbNoted = true;
+        CrashReporter.Note($"[키보드] 안 떠서 다시 부름 — {result} · API {Sdk()} · {ImeName()} · {kbFirst} · {kbContext}");
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void WatchAppFocus() => Application.focusChanged += f => { if (f) appBackAt = Time.unscaledTime; };
+
+    private static int Sdk()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        if (sdk < 0)
+            using (var v = new AndroidJavaClass("android.os.Build$VERSION")) sdk = v.GetStatic<int>("SDK_INT");
+#endif
+        return sdk;
+    }
+
+    // 안드로이드 11+ — 키보드 창이 떠 있는지 창 인셋으로 본다 (높이로 못 읽는 떠 있는 키보드·화면 나누기). 모르면 false
+    private static bool ImeShown()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            if (Sdk() < 30) return false;
+            using (var up = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var act = up.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var win = act?.Call<AndroidJavaObject>("getWindow"))
+            using (var decor = win?.Call<AndroidJavaObject>("getDecorView"))
+            using (var insets = decor?.Call<AndroidJavaObject>("getRootWindowInsets"))
+            using (var type = new AndroidJavaClass("android.view.WindowInsets$Type"))
+                return insets != null && insets.Call<bool>("isVisible", type.CallStatic<int>("ime"));
+        }
+        catch (System.Exception) { return false; }
+#else
+        return false;
+#endif
+    }
+
+    // 쓰는 키보드 앱 (삼성 키보드·Gboard 등) — 모르면 ?
+    private static string ImeName()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            using (var up = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var act = up.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var cr = act?.Call<AndroidJavaObject>("getContentResolver"))
+            using (var sec = new AndroidJavaClass("android.provider.Settings$Secure"))
+            {
+                string id = cr != null ? sec.CallStatic<string>("getString", cr, "default_input_method") : null;
+                if (!string.IsNullOrEmpty(id)) return id.Split('/')[0];
+            }
+        }
+        catch (System.Exception) { }
+#endif
+        return "?";
     }
 
     private void UpdateMirrorPosition()
@@ -648,6 +804,13 @@ public class MirrorButtonPress : MonoBehaviour, IPointerDownHandler, IPointerUpH
     public void OnPointerDown(PointerEventData e) { Down = true; }
     public void OnPointerUp(PointerEventData e) { Down = false; }
     void OnDisable() { Down = false; }
+}
+
+/// <summary>입력줄 칸을 눌렀다 — 키보드가 안 떠 있으면 다시 부른다 (UploadInputMirror)</summary>
+public class MirrorBarTap : MonoBehaviour, IPointerDownHandler
+{
+    public System.Action onDown;
+    public void OnPointerDown(PointerEventData e) => onDown?.Invoke();
 }
 
 /// <summary>

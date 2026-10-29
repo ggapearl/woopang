@@ -271,7 +271,7 @@ public class R0926SkyPages : MonoBehaviour
                 float km = (float)(R0926Nearby.Meters(myLat, myLon, la, lo) / 1000.0);
                 if (km <= friendKm) mates.Add(new Mate { f = f, km = km, exact = exact });
             }
-            mates.Sort((a, b) => a.km.CompareTo(b.km));
+            mates.Sort((a, b) => a.f.ago != b.f.ago ? a.f.ago.CompareTo(b.f.ago) : a.km.CompareTo(b.km));   // 마지막 접속이 가까운 친구가 위 (10-29)
         }
     }
 
@@ -425,6 +425,7 @@ public class R0926SkyPages : MonoBehaviour
 
     private string HuntSub(R0926HuntList.Near n)
     {
+        if (n.found) return L("찾은 보물입니다", "Treasure found", "見つけた宝です", "已找到的宝藏", "Tesoro encontrado");   // 게임은 아직 진행 중 — 못 찾은 게임 뒤에 남는다
         string state = n.joined ? L("참가 중", "Joined", "参加中", "已参加", "Participando")
                      : n.live ? L("진행 중", "On now", "開催中", "进行中", "En curso")
                      : Starts(n.startsAt);

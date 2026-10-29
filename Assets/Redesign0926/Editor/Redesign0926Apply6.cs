@@ -77,6 +77,10 @@ namespace Redesign0926
             var pulse = FindOrCreate(me.transform, "Pulse");
             SetRect(RT(pulse), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(78, 78));
             var pulseImg = Img(pulse, Spr("r0926_circle"), new Color(Pink.r, Pink.g, Pink.b, 0.35f), Image.Type.Simple); pulseImg.raycastTarget = false;
+            var heading = FindOrCreate(me.transform, "Heading0926");   // 위쪽이 앞 — 앱이 나침반대로 돌린다 (R0926FriendsMap.UpdateHeading)
+            SetRect(RT(heading), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(130, 130));
+            var headingImg = Img(heading, Spr("r0926_heading"), Color.white, Image.Type.Simple); headingImg.raycastTarget = false;
+            heading.SetActive(false);
             var ring = FindOrCreate(me.transform, "Ring");
             SetRect(RT(ring), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56, 56));
             Img(ring, Spr("r0926_circle"), Color.white, Image.Type.Simple).raycastTarget = false;
@@ -186,6 +190,7 @@ namespace Redesign0926
             hint.transform.SetAsFirstSibling();
             Ensure<LayoutElement>(hint).preferredHeight = 80;
             Txt(hint, "", 38, Muted, TextAnchor.MiddleLeft, FontStyle.Normal).horizontalOverflow = HorizontalWrapMode.Wrap;
+            var huntSection = BuildHuntSectionTemplate(flContent.transform);
             var ad = BuildAdSlot(flContent.transform, "friends_map");
 
             // ── 공유 줄 ──
@@ -253,6 +258,8 @@ namespace Redesign0926
             so.FindProperty("consentNote").objectReferenceValue = noteT;
             so.FindProperty("listContent").objectReferenceValue = RT(flContent);
             so.FindProperty("rowTemplate").objectReferenceValue = rowTpl;
+            so.FindProperty("sectionTemplate").objectReferenceValue = huntSection;
+            so.FindProperty("meHeading").objectReferenceValue = RT(heading);
             so.FindProperty("listHint").objectReferenceValue = hint.GetComponent<Text>();
             so.FindProperty("adSlot").objectReferenceValue = RT(ad);
             so.FindProperty("shareText").objectReferenceValue = shareLabel.GetComponent<Text>();
@@ -942,8 +949,47 @@ namespace Redesign0926
             SetRect(RT(sub), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(156, -4), new Vector2(-176, 50));
             var subT = Txt(sub, "", 37, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
             subT.horizontalOverflow = HorizontalWrapMode.Overflow; subT.verticalOverflow = VerticalWrapMode.Overflow;
+            // 보물찾기 줄은 아바타 대신 이 그림 (R0926FriendsMap.AddHuntRows 가 켠다)
+            var hi = FindOrCreate(row.transform, "HuntIcon");
+            SetRect(RT(hi), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(18, 0), new Vector2(104, 104));
+            var center = new Vector2(0.5f, 0.5f);
+            var ring = FindOrCreate(hi.transform, "Ring");
+            Stretch(RT(ring));
+            Img(ring, Spr("r0926_circle"), HuntGold, Image.Type.Simple).raycastTarget = false;
+            var face = FindOrCreate(ring.transform, "Face");
+            SetRect(RT(face), center, center, center, Vector2.zero, new Vector2(92, 92));
+            Img(face, Spr("r0926_circle"), Dark, Image.Type.Simple).raycastTarget = false;
+            var icon = FindOrCreate(face.transform, "Icon");
+            SetRect(RT(icon), center, center, center, new Vector2(0, 2), new Vector2(72, 72));
+            var ii = Img(icon, Spr("r0926_i_treasure"), Color.white, Image.Type.Simple);
+            ii.raycastTarget = false; ii.preserveAspect = true;
+            var lk = FindOrCreate(ring.transform, "Lock");
+            SetRect(RT(lk), center, center, center, new Vector2(36, -36), new Vector2(44, 44));
+            Img(lk, Spr("r0926_circle"), HuntGold, Image.Type.Simple).raycastTarget = false;
+            var lf = FindOrCreate(lk.transform, "Face");
+            SetRect(RT(lf), center, center, center, Vector2.zero, new Vector2(36, 36));
+            Img(lf, Spr("r0926_circle"), Dark, Image.Type.Simple).raycastTarget = false;
+            var lg = FindOrCreate(lf.transform, "Glyph");
+            SetRect(RT(lg), center, center, center, new Vector2(0, 1), new Vector2(24, 24));
+            var lgi = Img(lg, Spr("r0926_lock"), HuntGold, Image.Type.Simple);
+            lgi.raycastTarget = false; lgi.preserveAspect = true;
+            lk.SetActive(false);
+            hi.SetActive(false);
             row.SetActive(false);
             return row;
+        }
+
+        // 목록의 '근처 보물찾기' 제목 줄 — 금빛 작은 제목 (친구 줄 아래, 가까운 순 보물찾기 줄 앞에 한 번)
+        private static GameObject BuildHuntSectionTemplate(Transform content)
+        {
+            var sec = FindOrCreate(content, "HuntSection0926");
+            Ensure<LayoutElement>(sec).preferredHeight = 104;
+            var t = FindOrCreate(sec.transform, "Text");
+            SetRect(RT(t), new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0.5f), new Vector2(22, -10), new Vector2(-44, 0));
+            var tt = Txt(t, "근처 보물찾기", 41, HuntGold, TextAnchor.LowerLeft, FontStyle.Bold);
+            tt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            sec.SetActive(false);
+            return sec;
         }
 
         // 광고 한 칸: [썸네일] 제목 · 두 줄 문구 · '광고' 표시 · [버튼]

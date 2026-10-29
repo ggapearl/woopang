@@ -12,6 +12,12 @@ public class EditorVirtualKeyboard : MonoBehaviour
 {
     public static EditorVirtualKeyboard Instance { get; private set; }
 
+    /// <summary>시험용 — 다음 이만큼의 '키보드 띄워'를 못 들은 척한다. 안드로이드에서 가끔 키보드가 안 뜨던 것(2026-10-29)을 흉내 내 UploadInputMirror 가 다시 부르는지 본다</summary>
+    public static int DropShows;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetTestHooks() => DropShows = 0;
+
     [Header("키보드 설정")]
     [Tooltip("Android 키보드 높이 = 화면 높이 × 이 비율 (실제 디바이스 ~38%)")]
     [SerializeField, Range(0.2f, 0.6f)] private float androidHeightRatio = 0.40f;
@@ -128,7 +134,8 @@ public class EditorVirtualKeyboard : MonoBehaviour
                 InputField inputField = selected.GetComponent<InputField>();
                 if (inputField != null && inputField != currentInputField)
                 {
-                    ShowKeyboard(inputField);
+                    if (DropShows > 0) { DropShows--; currentInputField = inputField; }   // 못 들은 척 — 칸은 기억해 둬 다시 띄우지 않는다
+                    else ShowKeyboard(inputField);
                 }
                 else if (inputField == null && !IsKeyboardElement(selected) && currentInputField != null)
                 {

@@ -51,6 +51,7 @@ public class PlaceListManager : MonoBehaviour
         public EntryKind kind;
         public int huntId;
         public R0926HuntList.Coord huntCoord;
+        public bool huntFound;       // 내가 이미 찾은 보물 — 진행 중이라 남기되 못 찾은 것 뒤로 ('찾은 보물입니다')
         public float approxM;
         public float fixedDistance = -1f;   // 0 이상이면 이 거리 그대로 (비공개 보물찾기 — 자리를 모른다)
         public string icon;          // 축제·보호소 — 줄 앞 그림 · 보물찾기는 "lock" = 비밀번호를 건 보물 (R0926PlaceRows)
@@ -420,7 +421,7 @@ public class PlaceListManager : MonoBehaviour
         // liveEntries 는 combinedPlaces 와 같은 순서로 하나씩 쌓였다 — 같은 순서로 골라 목록 줄과 1:1 로 맞춘다
         // (예전 id 기준 자르기는 매니저끼리 id 가 겹치면 어긋났다)
         var order = Enumerable.Range(0, combinedPlaces.Count)
-            .OrderBy(i => i < liveEntries.Count && liveEntries[i].pinned ? 0 : 1).ThenBy(i => combinedPlaces[i].distance)
+            .OrderBy(i => i < liveEntries.Count && liveEntries[i].pinned ? 0 : 1).ThenBy(i => i < liveEntries.Count && liveEntries[i].huntFound ? 1 : 0).ThenBy(i => combinedPlaces[i].distance)
             .Take(maxListEntries).ToList();
         var sortedPlaces = new List<(object place, float distance, string id, string displayText, string colorHex)>(order.Count);
         var sortedLive = new List<LiveEntry>(order.Count);
@@ -634,7 +635,7 @@ public class PlaceListManager : MonoBehaviour
                                  promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl };
         if (e.kind == EntryKind.Hunt)
         {
-            le.distanceText = R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);
+            le.distanceText = e.huntFound ? R0926HuntList.FoundText : R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);
             le.noDirection = R0926HuntList.NoDirection(e.huntCoord, distance, e.approxM);
         }
         else if (e.kind == EntryKind.Festival)
@@ -712,7 +713,7 @@ public class PlaceListManager : MonoBehaviour
     {
         foreach (var s in R0926HuntList.Spots)
         {
-            var e = new LiveEntry { id = "hunt:" + s.id, baseLabel = s.title, colorHex = R0926HuntList.ColorHex, kind = EntryKind.Hunt, huntId = s.id, huntCoord = s.coord, icon = s.locked ? "lock" : null };
+            var e = new LiveEntry { id = "hunt:" + s.id, baseLabel = s.title, colorHex = R0926HuntList.ColorHex, kind = EntryKind.Hunt, huntId = s.id, huntCoord = s.coord, huntFound = s.found, icon = s.locked ? "lock" : null };
             float d;
             if (s.coord == R0926HuntList.Coord.Hidden)
             {

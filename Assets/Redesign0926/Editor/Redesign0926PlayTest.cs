@@ -143,8 +143,10 @@ namespace Redesign0926
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
             else if (mode == "mapprofile") PlanMapProfile();
+            else if (mode == "mapnear") PlanMapNear();
             else if (mode == "scrolllock") PlanScrollLock();
             else if (mode == "kbswipe") PlanKbSwipe();
+            else if (mode == "kbretry") PlanKbRetry();
             else if (mode == "filters") PlanFilters();
             else if (mode == "guidetouch") PlanGuideTouch();
             else if (mode == "guide") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanGuide(); }
@@ -1678,12 +1680,31 @@ namespace Redesign0926
             Check(() => { var c = center(); return Math.Abs(c[0] - 37.5665) < 0.05 && Math.Abs(c[1] - 126.978) < 0.05; }, "지도는 누른 친구 자리 그대로 (가다 만 곳이 아니라)");
             Check(() => on(row(MpFriend)?.Find("Sel")), "누른 친구 줄이 골라진 채");
 
-            // 4) 친구 목록 줄 → 프로필 · 팔로우 안 한 사람은 '팔로우' 한 칸 (메세지 버튼 없음) · 뒤로가기로 닫으면 시트가 다시
+            // 4a) 친구 목록 줄 → 프로필이 아니라 지도가 그 친구 자리로 (10-29 대표님) — 프로필은 지도의 핀을 눌러서
             Do(() => tap(row(MpFan)));
-            Wait(() => Active("FullProfilePanel") && who() == "goosoon_fan" && SfFollowState() != "?", 8f, "줄 → 프로필");
+            Sleep(1.4f);
+            Check(() => Active("ListPanel") && !Active("FullProfilePanel"), "친구 줄 → 프로필은 안 뜨고 목록 시트 그대로");
+            Check(() =>
+            {
+                var c = center();
+                var list = (System.Collections.IList)T.GetField("friends", F).GetValue(map);
+                foreach (var o in list)
+                {
+                    var ft = o.GetType();
+                    if ((string)ft.GetField("user_id").GetValue(o) != MpFan) continue;
+                    double la = (float)ft.GetField("lat").GetValue(o), lo = (float)ft.GetField("lon").GetValue(o);
+                    return Math.Abs(c[0] - la) < 0.03 && Math.Abs(c[1] - lo) < 0.03;
+                }
+                return false;
+            }, "지도 가운데가 그 친구 자리로");
+            Check(() => on(row(MpFan)?.Find("Sel")) && !on(row(MpFriend)?.Find("Sel")), "누른 줄만 골라짐");
+
+            // 4b) 지도의 핀 → 프로필 · 팔로우 안 한 사람은 '팔로우' 한 칸 (메세지 버튼 없음) · 뒤로가기로 닫으면 시트가 다시
+            Do(() => tap(pin(MpFan)));
+            Wait(() => Active("FullProfilePanel") && who() == "goosoon_fan" && SfFollowState() != "?", 8f, "핀 → 프로필");
             Sleep(0.8f);
             Shot("mapprofile_profile_follow");
-            Check(() => OpenPanels() == "FullProfilePanel", "친구 줄 → 그 사람 프로필만");
+            Check(() => OpenPanels() == "FullProfilePanel", "친구 핀 → 그 사람 프로필만");
             Do(() => log.Add("  팔로우 폭 " + width().ToString("F0")));
             Check(() => SfFollowState() == "follow" && !msgOn() && Mathf.Abs(width() - (2f * halfW + 24f)) < 2f,
                 "팔로우 안 한 사람 → '팔로우' 한 칸 (메세지 버튼 없음 · 폭 그대로)");
@@ -1798,6 +1819,163 @@ namespace Redesign0926
             Do(() => { foreach (var e in mpErrors) log.Add("  오류: " + e); });
 
             // 정리 — 시험 서버 주소 · 시험 아이디 · 보던 지도 자리
+            CloseAll();
+            Do(() =>
+            {
+                Application.logMessageReceived -= MpLog;
+                SfLogin(false);
+                MessagePanelManager.EditorBase = null;
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                P2PManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+                R0926FriendsMap.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                R0926HuntApi.EditorTestUser = null;
+                R0926MapTiles.EditorBase = null;
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+                if (viewBackup != null) PlayerPrefs.SetString("R0926Map.View", viewBackup); else PlayerPrefs.DeleteKey("R0926Map.View");
+                PlayerPrefs.Save();
+                DevPost(MpMe, "/api/dev/search_reset", "{}");
+            });
+        }
+
+        // 지도 목록 (10-29 대표님) — 친구 줄(최근 접속순) 아래에 근처 보물찾기(가까운 순) · 줄을 누르면 프로필·보물찾기 창이 아니라 지도가 그 자리로 ·
+        // 핀·상자를 누르면 프로필 / 보물찾기 창 · 내 위치 점 둘레에 나침반 방향 표시.
+        // 시험 서버(127.0.0.1:5099)의 시험 아이디와 시험 게임만 쓴다 — 운영 서버에 아무것도 올리지 않는다
+        private const string MnHostA = "hunt_test_mnha", MnHostB = "hunt_test_mnhb";
+        private static void PlanMapNear()
+        {
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var T = typeof(R0926FriendsMap);
+            R0926FriendsMap map = null;
+            string viewBackup = null;
+            int nearId = 0, farId = 0;
+            Func<RectTransform> pins = () => T.GetField("pinLayer", F)?.GetValue(map) as RectTransform;
+            Func<string, Transform> row = name => (T.GetField("listContent", F)?.GetValue(map) as RectTransform)?.Find(name);
+            Func<Transform, bool> on = t => t != null && t.gameObject.activeInHierarchy;
+            Action<Transform> tap = t =>
+            {
+                if (t == null) { log.Add("  누를 것 없음"); return; }
+                UnityEngine.EventSystems.ExecuteEvents.Execute(t.gameObject, new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                    { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left }, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+            };
+            Func<double[]> center = () =>
+            {
+                var vp = (RectTransform)map.transform;
+                object n = T.GetMethod("ToNorm", F).Invoke(map, new object[] { vp.rect.size / 2f });
+                var a = new object[] { n, null, null };
+                T.GetMethod("LatLon", SF).Invoke(null, a);
+                return new[] { (double)a[1], (double)a[2] };
+            };
+            Func<string, string> sub = id => row(id)?.Find("Sub")?.GetComponent<Text>()?.text ?? "";
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);
+                const string dev = "http://127.0.0.1:5099";
+                MessagePanelManager.EditorBase = dev;
+                ProfileManager.EditorBase = dev;
+                FollowManager.EditorBase = dev;
+                P2PManager.EditorBase = dev;
+                FirebaseNotification.EditorBase = dev;
+                R0926FriendsMap.EditorBase = dev;
+                R0926HuntApi.EditorBase = dev;
+                R0926HuntApi.EditorTestUser = MpMe;
+                R0926MapTiles.EditorBase = "http://127.0.0.1:9";
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                viewBackup = PlayerPrefs.HasKey("R0926Map.View") ? PlayerPrefs.GetString("R0926Map.View") : null;
+                PlayerPrefs.DeleteKey("R0926Map.View");
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, LocalTestLogin + MpMe.Substring("hunt_test_".Length));
+                DevPost(MpMe, "/api/dev/search_reset", "{}");
+                SfLogin(true, MpMe);
+                VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f);
+                nearId = DevCreateHuntAt(MnHostA, "지도 시험 가까운 보물", 37.5790f, 126.9790f, null, null);   // 약 400m
+                farId = DevCreateHuntAt(MnHostB, "지도 시험 먼 보물", 37.5950f, 126.9950f, null, null);       // 약 2.7km
+                log.Add("  시험 게임 " + nearId + " · " + farId);
+                mpErrors.Clear();
+                Application.logMessageReceived -= MpLog;
+                Application.logMessageReceived += MpLog;
+            });
+            Check(() => nearId > 0 && farId > 0, "개발 서버에 시험 게임 둘 (가까운 · 먼)");
+            Check(() => LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUser.id == MpMe, "준비: 시험 아이디");
+
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(1));
+            Sleep(0.8f);
+            Do(() => map = UnityEngine.Object.FindAnyObjectByType<R0926FriendsMap>(FindObjectsInactive.Include));
+            Wait(() => on(row("Friend_" + MpFriend)) && on(row("HuntRow_" + nearId)) && on(row("HuntRow_" + farId)), 15f, "친구 줄 · 보물찾기 줄 받음 (시험 서버)");
+            Sleep(0.8f);
+            Shot("mapnear_list");
+
+            // 1) 목록 순서 — 친구 줄 → '근처 보물찾기' 제목 → 가까운 순 보물찾기 → 광고 칸
+            Check(() => row("HuntSection") != null && row("Friend_" + MpFriend).GetSiblingIndex() < row("HuntSection").GetSiblingIndex()
+                && row("HuntSection").GetSiblingIndex() < row("HuntRow_" + nearId).GetSiblingIndex(), "친구 줄 아래에 '근처 보물찾기' 제목");
+            Check(() => row("HuntRow_" + nearId).GetSiblingIndex() < row("HuntRow_" + farId).GetSiblingIndex(), "보물찾기는 가까운 순 (400m 가 2.7km 보다 위)");
+            Check(() => row("HuntSection").GetComponentInChildren<Text>(true).text == "근처 보물찾기", "제목 글: 근처 보물찾기");
+            Do(() => log.Add("  가까운 보물 둘째 줄: " + sub("HuntRow_" + nearId) + " · 먼 보물: " + sub("HuntRow_" + farId) + " · 이름: " + row("HuntRow_" + nearId).Find("Name")?.GetComponent<Text>()?.text));
+            Check(() => sub("HuntRow_" + nearId).Contains("m") && sub("HuntRow_" + farId).Contains("km"), "보물찾기 줄에 거리 (400m · 2.7km)");
+            Check(() => on(row("HuntRow_" + nearId).Find("HuntIcon")) && !on(row("HuntRow_" + nearId).Find("Avatar")), "보물찾기 줄은 아바타 대신 보물 그림");
+            Check(() => on(row("Friend_" + MpFriend).Find("Avatar")) && !on(row("Friend_" + MpFriend).Find("HuntIcon")), "친구 줄은 아바타 그대로");
+            Check(() => on(pins().Find("Hunt_" + nearId)), "지도에도 그 게임 상자");
+
+            // 2) 보물찾기 줄 → 보물찾기 창이 아니라 지도가 그 자리로
+            Do(() => tap(row("HuntRow_" + farId)));
+            Sleep(1.4f);
+            Shot("mapnear_focus_far");
+            Check(() => Active("ListPanel") && !Active("UploadPage"), "보물찾기 줄 → 보물찾기 창은 안 뜸 (목록 시트 그대로)");
+            Check(() => { var c = center(); return Math.Abs(c[0] - 37.5950) < 0.01 && Math.Abs(c[1] - 126.9950) < 0.01; }, "지도 가운데가 그 게임 자리로");
+            Check(() => on(row("HuntRow_" + farId).Find("Sel")) && !on(row("HuntRow_" + nearId).Find("Sel")), "누른 줄만 골라짐");
+
+            // 3) 지도의 상자 → 그 게임의 보물찾기 창
+            Do(() => tap(pins().Find("Hunt_" + farId)));
+            Wait(() => Active(HuntCardPath + "Detail"), 10f, "상자 → 보물찾기 창");
+            Sleep(1.0f);
+            Shot("mapnear_hunt_card");
+            Check(() => Active("UploadPage") && DetailTitle().Contains("지도 시험 먼 보물"), "지도의 상자 → 그 게임의 보물찾기 창");
+            CloseAll();
+            Sleep(0.6f);
+
+            // 4) 내 위치 방향 — 나침반 값이 있을 때 점 둘레의 쉐브론이 그 방향으로 (PC 에는 나침반이 없어 시험 값을 넣는다)
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() =>
+            {
+                Modes()?.Show(1);
+                typeof(R0926FriendsMap).GetField("previewHeading", SF).SetValue(null, 90f);
+                VirtualLocation.Instance.SetCoordinates(37.30f, 126.97f);   // 친구·상자 핀에 가리지 않게 잠깐 30km 남쪽에서 (타일 없는 시험 지도는 멀리서 보인다)
+                T.GetField("zoom", F).SetValue(map, T.GetField("maxZoom", F).GetValue(map) is float mz ? (double)mz : 200.0);
+                map.LocateMe();
+            });
+            Sleep(1.4f);
+            Shot("mapnear_heading");
+            Check(() =>
+            {
+                var h = T.GetField("meHeading", F)?.GetValue(map) as RectTransform;
+                if (h == null || !h.gameObject.activeInHierarchy) return false;
+                float z = h.localEulerAngles.z;
+                log.Add("  방향 쉐브론 z = " + z.ToString("F1"));
+                return Mathf.Abs(Mathf.DeltaAngle(z, -90f)) < 3f;
+            }, "내 위치 점 둘레 방향 표시가 동쪽(90°)을 가리킴");
+            Do(() => { typeof(R0926FriendsMap).GetField("previewHeading", SF).SetValue(null, -1f); VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f); });
+            Sleep(0.6f);
+            Check(() => { var h = T.GetField("meHeading", F)?.GetValue(map) as RectTransform; return h != null && !h.gameObject.activeSelf; }, "나침반 값이 없으면 방향 표시는 숨김");
+
+            Check(() => mpErrors.Count == 0, "오류 없음" + (mpErrors.Count > 0 ? " — " + mpErrors[0] : ""));
+            Do(() => { foreach (var e in mpErrors) log.Add("  오류: " + e); });
+
             CloseAll();
             Do(() =>
             {
@@ -2360,6 +2538,112 @@ namespace Redesign0926
                 ptTouch = null;
                 InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
             });
+        }
+
+        // 10-29 대표님 「장소추가 / 3D모델 추가 입력칸 — 키보드가 간헐적으로 안 뜨고 입력줄만 뜬다」
+        // 안드로이드 유니티 키보드는 키보드 창이 포커스를 얻을 때 한 번만 키보드를 부른다 — 그 한 번이 묻힌 것을
+        // 에디터 가상 키보드가 '못 들은 척'(EditorVirtualKeyboard.DropShows)으로 흉내 내고, 입력줄이 다시 부르는지 본다
+        private static void PlanKbRetry()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                ptFocusWas = InputSystem.settings.editorInputBehaviorInPlayMode;
+                InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+            });
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.4f);
+            Do(KbNameInput);
+            Check(() => kbField != null && WiredMirror() != null, "장소 추가 — 장소 이름칸과 키보드 위 입력줄");
+
+            // 1) 평소 — 누르면 바로 뜨고, 다시 부르지 않는다
+            KbRetryTap(0, () => kbField);
+            Sleep(2.2f);
+            Check(() => KbRetryUp() && WiredMirror().ActiveSource == kbField && WiredMirror().KeyboardRetries == 0, "평소: 장소 이름칸을 누르면 키보드가 바로 뜨고 다시 부르지 않음");
+            KbRetryClose("평소");
+
+            // 2) 키보드가 한 번 안 뜸 — 입력줄만 떠 있다가(대표님 사진) 잠깐 뒤 다시 불러 뜬다
+            KbRetryTap(1, () => kbField);
+            Sleep(0.9f);
+            Check(() => !KbRetryUp() && WiredMirror()?.ActiveSource == kbField && KbRetryBarAlpha() > 0.9f && WiredMirror().KeyboardRetries == 0,
+                "키보드가 '띄워'를 놓치면 — 입력줄만 뜨고 키보드는 없음 (안드로이드에서 생기던 모습)");
+            Shot("kbretry_stuck");
+            Sleep(1.4f);
+            Check(() => KbRetryUp() && WiredMirror().KeyboardRetries == 1 && WiredMirror().Bar.isFocused && WiredMirror().PlacedBar != null,
+                "… 1.5초 안에 안 뜨면 다시 불러 키보드가 뜨고, 입력줄이 키보드 위에 놓임");
+            Shot("kbretry_recovered");
+            Do(() => { var m = WiredMirror(); if (m != null) m.Bar.text = "다시 뜬 키보드"; });
+            Sleep(0.2f);
+            Check(() => kbField != null && kbField.text == "다시 뜬 키보드", "… 다시 뜬 키보드로 친 글이 장소 이름칸에 들어감");
+            KbRetryClose("다시 뜬 뒤");
+            Check(() => kbField != null && kbField.text == "다시 뜬 키보드", "… 닫은 뒤에도 장소 이름칸에 남음");
+            Do(() => { if (kbField != null) kbField.text = ""; });
+
+            // 3) 두 번 다시 불러도 안 뜸 — 입력줄은 닫지 않고 기다리다, 입력줄을 누르면 다시 불러 뜬다
+            KbRetryTap(3, () => kbField);
+            Sleep(4.2f);
+            Check(() => !KbRetryUp() && WiredMirror()?.ActiveSource == kbField && WiredMirror().KeyboardRetries == 2 && EditorVirtualKeyboard.DropShows == 0,
+                "두 번 다시 불러도 안 뜨면 — 더 부르지 않고 입력줄은 그대로 둠");
+            Shot("kbretry_gaveup");
+            Finger(() => Center(WiredMirror()?.Bar), new[] { Vector2.zero }, 2, null, null);
+            Sleep(1.0f);
+            Check(() => KbRetryUp() && WiredMirror().KeyboardRetries == 3 && WiredMirror().Bar.isFocused, "… 입력줄을 누르면 다시 불러 키보드가 뜸");
+            Shot("kbretry_bartap");
+            Finger(() => Center(WiredMirror()?.Bar), new[] { Vector2.zero }, 2, null, null);
+            Sleep(0.8f);
+            Check(() => KbRetryUp() && WiredMirror().KeyboardRetries == 3, "… 키보드가 떠 있을 땐 입력줄을 눌러도 다시 부르지 않음");
+            KbRetryClose("입력줄을 눌러 뜬 뒤");
+
+            // 4) 3D 모델 추가 이름칸 — 같은 입력줄
+            Do(() => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude)?.SwitchToPanel(1));
+            Sleep(0.8f);
+            KbRetryTap(1, () => Find("UploadPage/Clip0926/UploadSheet0926/ModelUploadPage/Panel/NameInput")?.GetComponent<InputField>());
+            Sleep(2.4f);
+            Check(() => KbRetryUp() && WiredMirror()?.ActiveSource != null && WiredMirror().ActiveSource.transform.parent.parent.name == "ModelUploadPage" && WiredMirror().KeyboardRetries == 1,
+                "3D 모델 이름칸: 키보드가 한 번 안 떠도 다시 불러 뜸");
+            Shot("kbretry_model");
+            KbRetryClose("3D 모델");
+
+            Do(() =>
+            {
+                EditorVirtualKeyboard.DropShows = 0;
+                if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
+                ptTouch = null;
+                InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
+            });
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+        }
+
+        // 원래 칸을 손가락으로 누른다 — 그 전에 가상 키보드가 '띄워'를 몇 번 못 들은 척할지 정한다
+        private static void KbRetryTap(int drops, Func<InputField> field)
+        {
+            Do(() => EditorVirtualKeyboard.DropShows = drops);
+            Finger(() => Center(field()), new[] { Vector2.zero }, 2, null, null);
+        }
+
+        private static bool KbRetryUp() => EditorVirtualKeyboard.CurrentVisibleHeight > 0f;
+
+        private static float KbRetryBarAlpha()
+        {
+            var m = WiredMirror();
+            var g = m != null ? typeof(UploadInputMirror).GetField("mirrorGroup", NPI).GetValue(m) as CanvasGroup : null;
+            return g != null ? g.alpha : -1f;
+        }
+
+        private static void KbRetryClose(string what)
+        {
+            Do(() => { var m = WiredMirror(); if (m != null && m.ActiveSource != null) typeof(UploadInputMirror).GetMethod("OnCloseClicked", NPI).Invoke(m, null); });
+            Sleep(0.8f);
+            Check(() => { var m = WiredMirror(); return m != null && m.ActiveSource == null && !KbRetryUp(); }, what + " → ✓ 로 닫으면 입력줄·키보드가 내려감");
         }
 
         private static void KbClick() => kbClicks++;
@@ -6934,6 +7218,15 @@ namespace Redesign0926
             foreach (Transform c in t) if (c.gameObject.activeSelf) return c;
             return null;
         }
+        // 제목이 이 글인 줄 — 시험 자리 근처에 진짜 게임이 있으면 첫 줄이 시험 게임이 아니다
+        private static Transform ActiveChildTitled(string path, string title)
+        {
+            var t = Find(path);
+            if (t == null) return null;
+            foreach (Transform c in t)
+                if (c.gameObject.activeSelf && (c.Find("Title")?.GetComponent<Text>()?.text ?? "").EndsWith(title)) return c;
+            return null;
+        }
         private static int ActiveChildren(string path)
         {
             var t = Find(path);
@@ -7110,7 +7403,7 @@ namespace Redesign0926
             Sleep(2.5f);
             Shot("hunt_hub_player");
             Check(() => ActiveChildren(H + "Hub/Viewport/Content/NearList") >= 1, "다른 사람 근처 목록에 그 게임");
-            Do(() => FirstActiveChild(H + "Hub/Viewport/Content/NearList")?.GetComponent<Button>()?.onClick.Invoke());
+            Do(() => ActiveChildTitled(H + "Hub/Viewport/Content/NearList", "시험 보물 (플레이 시험)")?.GetComponent<Button>()?.onClick.Invoke());
             Sleep(2.0f);
             Do(() => { R0926Share.EditorLast = null; Click(H + "Detail/Viewport/Content/Share"); });
             Check(() => Active(H + "Detail/Viewport/Content/Share") && (R0926Share.EditorLast ?? "").EndsWith("/hunt/" + huntPosted), "참가자 상세에도 '공유하기' ('모두' 게임) → 같은 링크");
@@ -8062,10 +8355,7 @@ namespace Redesign0926
             Check(() => hcRollMax > 3f && hcRollMax < 8f && hcScaleMax > 1.04f, "두근두근 — 쿵쿵 부풀고 끝으로 갈수록 세게 떪");
             Check(() => R0926HuntCelebrate.EditorOpenedAfter >= 3f && R0926HuntCelebrate.EditorOpenedAfter <= 4.2f && R0926HuntCelebrate.EditorBuzz >= 15,
                 "뜬 뒤 3~4초에 짜잔 · 그 사이 심장 박동 진동");
-            Sleep(0.1f);
-            Shot("reveal_open");
-            Sleep(0.25f);
-            Shot("reveal_open_wide");
+            Sleep(0.35f);   // 뚜껑은 0.32초에 다 열린다 — 사진(한 장에 0.5초 넘게 걸리기도)보다 먼저 본다. 늦게 보면 카드가 이미 덮어 상자를 치운 뒤다
             Check(() => StageWords(C) == "", "짜잔 — 글자 없이");
             Check(() =>
             {
@@ -8073,6 +8363,7 @@ namespace Redesign0926
                 log.Add("  짜잔: 뚜껑 " + (c != null ? c.LidAngle.ToString("0") : "-") + "° · 빛줄기 " + Alpha(C + "Back/Rays").ToString("0.00") + " · 꽃가루 " + Confetti());
                 return c != null && c.LidAngle > 100f && Alpha(C + "Back/Rays") > 0.5f && Confetti() > 30;
             }, "짜잔 — 뚜껑이 활짝 (100° 넘게) · 빛줄기 · 금화가 섞인 꽃가루");
+            Shot("reveal_open");
             Wait(() => R0926HuntCelebrate.EditorPhase == "Card", 2f, "짜잔 → 카드");
             Sleep(0.3f);
             Shot("reveal_card_flip");
@@ -9605,7 +9896,11 @@ namespace Redesign0926
             Do(() => { var f = Find(H + "Form/Viewport/Content/TitleInput")?.GetComponent<InputField>(); if (f != null) f.text = "로그인 시험 보물"; });
             Do(() => { var f = Find(H + "Form/Viewport/Content/HintInput")?.GetComponent<InputField>(); if (f != null) f.text = "충남도청 앞 분수대 근처"; });
             Do(() => Click(H + "Form/Viewport/Content/Submit"));
-            Sleep(2.5f);
+            Sleep(0.6f);
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Go"));   // 숨기기 전 확인 카드 (10-26) → 같은 카드에 공유하기 · 확인
+            Wait(() => Active(HuntReview + "/Sheet0926/Buttons/Done"), 10f, "확인 카드 → 숨김");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Done"));
+            Sleep(1.5f);
             Shot("login_detail_host");
             Check(() => Active(H + "Detail") && Find(H + "Detail/Viewport/Content/Open") == null, "숨기기 → 상세(주최자 · '보물 열기' 버튼 없음)");
             // 다른 사람으로 다시 로그인 — 같은 길(웹 로그인 → 링크 복사)
@@ -9616,9 +9911,9 @@ namespace Redesign0926
             Sleep(2.5f);
             Shot("login_hub_player");
             Check(() => ActiveChildren(H + "Hub/Viewport/Content/NearList") >= 1, "두 번째 사람 근처 목록에 그 게임");
-            Do(() => FirstActiveChild(H + "Hub/Viewport/Content/NearList")?.GetComponent<Button>()?.onClick.Invoke());
+            Do(() => ActiveChildTitled(H + "Hub/Viewport/Content/NearList", "로그인 시험 보물")?.GetComponent<Button>()?.onClick.Invoke());
             Sleep(2.0f);
-            Do(() => { var v = VirtualLocation.Instance; v.SetCoordinates(v.Latitude - 0.00009f, v.Longitude); });   // 10m 물러나 — 상자를 화면에서 누를 수 있게
+            Do(() => { var v = VirtualLocation.Instance; v.SetCoordinates(v.Latitude - 0.00007f, v.Longitude); });   // 8m 물러나 — 보이는 거리 기본 10m(v48) 안 · 상자를 화면에서 누를 수 있게
             Do(() => Click(H + "Detail/Viewport/Content/Join"));
             Sleep(11.0f);   // 참가 → 상세 다시 → 근접 확인(8.5초마다)
             Check(() => TextOf(H + "Detail/Viewport/Content/Near") == "보물이 보이는 거리예요", "보이는 거리 안 → '보물이 보이는 거리예요'");
@@ -10255,8 +10550,10 @@ namespace Redesign0926
                         string live = src.textComponent != null ? src.textComponent.text : "-";
                         t.GetMethod("OnCloseClicked", F).Invoke(m, null);
                         string after = src.textComponent != null ? src.textComponent.text : "-";
-                        bool ok = src.text == "우팡 테스트" && after == "우팡 테스트";
-                        log.Add((ok && live == "우팡 테스트" ? "PASS " : "FAIL ") + m.name + "/" + src.transform.parent.parent.name + "/" + src.name
+                        // 글자 수 제한 칸(보물찾기 비밀번호 4자)은 앞부분만 들어가는 게 맞다
+                        string want = src.characterLimit > 0 && src.characterLimit < 6 ? "우팡 테스트".Substring(0, src.characterLimit) : "우팡 테스트";
+                        bool ok = src.text == want && after == want;
+                        log.Add((ok && live == want ? "PASS " : "FAIL ") + m.name + "/" + src.transform.parent.parent.name + "/" + src.name
                                 + " · 쓰는 중 보임='" + live + "' · 닫은 뒤 값='" + src.text + "' 보임='" + after + "'");
                         src.text = "";
                         for (int k = turnedOn.Count - 1; k >= 0; k--) turnedOn[k].SetActive(false);
@@ -11678,7 +11975,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();

@@ -180,7 +180,10 @@ namespace Redesign0926
             // ── 상세 ──
             var det = HuntScroll(body.transform, "Detail", out var detView, out var detSr);
             S("detail", detView); S("detailScroll", detSr);
-            S("detailBack", HBack(det, "‹  보물찾기", "‹  Treasure hunt"));
+            // 10-29 대표님: 상세에서 돌아가는 버튼은 '‹ 보물찾기' 가 아니라 주최 수칙과 같은 '‹ 돌아가기' — 위쪽 가운데에
+            var detBack = HBack(det, "‹  돌아가기", "‹  Back");
+            detBack.transform.parent.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
+            S("detailBack", detBack);
             S("dTitle", HLabel(det, "Title", 0, "", null, 58, Ink, FontStyle.Bold));
             S("dStatus", HLabel(det, "Status", 0, "", null, 44, Muted, FontStyle.Bold));
             S("dHost", HButton(det, "Host", 116, new Color(1, 1, 1, 0.06f), "", null, 42, Soft, FontStyle.Normal, out var hostText));

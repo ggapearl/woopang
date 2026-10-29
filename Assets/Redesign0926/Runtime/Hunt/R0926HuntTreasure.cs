@@ -29,6 +29,7 @@ using UnityEngine.XR.ARSubsystems;
 public class R0926HuntTreasure : MonoBehaviour
 {
     [SerializeField] private GameObject treasurePrefab;   // HuntTreasure0926 — 앵커 + 보물상자(Target)
+    [SerializeField] private GameObject indicatorPrefab;  // IndicatorOnly — 보이는 거리 밖에서 방향 화살표만 (장소와 같은 인디케이터 전용 프리팹)
     [SerializeField] private CanvasGroup toast;           // 상태 알약 아래 알림
     [SerializeField] private RectTransform toastPill;
     [SerializeField] private Text toastTitle;
@@ -59,6 +60,9 @@ public class R0926HuntTreasure : MonoBehaviour
         public bool locked;          // 비밀번호를 건 보물 — 앞에 자물쇠
         public bool announce;        // 처음 보였을 때 알림 (카드 상세가 보는 중이면 카드가 이미 알린다)
         public GameObject obj;
+        public bool pin;             // 자리가 이미 공개된 게임(정확한 좌표) — 보이는 거리 밖에서도 다른 오브젝트처럼 방향 화살표를 띄운다 (10-29 대표님)
+        public double pinLat, pinLon;
+        public GameObject ind;       // 그 화살표만 있는 오브젝트 (상자가 뜨면 치운다)
     }
 
     private static readonly List<Hunt> hunts = new List<Hunt>();
@@ -109,6 +113,8 @@ public class R0926HuntTreasure : MonoBehaviour
         if (h.HasKey("prize")) t.prize = h["prize"];
         if (h["host"].HasKey("username")) t.hostName = h["host"]["username"];
         t.startsAt = status == "scheduled" ? Unix(h["starts_at"]) : 0;
+        t.pin = status == "live" && h.HasKey("lat") && h.HasKey("lon") && !h["lat"].IsNull && !h["lon"].IsNull;
+        if (t.pin) { t.pinLat = h["lat"].AsDouble; t.pinLon = h["lon"].AsDouble; }
         t.locked = h["mode"] == "code";
         Chest(t)?.Lock(t.locked);
         Save();
@@ -142,6 +148,7 @@ public class R0926HuntTreasure : MonoBehaviour
     public static void SetObjectsActive(bool on)
     {
         foreach (var go in SpawnedObjects.Values) if (go != null) go.SetActive(on);
+        foreach (var t in hunts) if (t.ind != null) t.ind.SetActive(on);
     }
 
     /// <summary>fallback·복구 중 렌더러만 끄고 켠다 (Target 은 그대로 — 박스·화살표는 남는다)</summary>
@@ -166,6 +173,13 @@ public class R0926HuntTreasure : MonoBehaviour
         {
             if (go == null || !go.activeSelf) continue;
             var a = go.GetComponent<CustomARGeospatialCreatorAnchor>();
+            if (a == null || a.IsAnchorCreated || a.IsRetrying) continue;
+            a.RecreateAnchor();
+        }
+        foreach (var t in hunts)
+        {
+            if (t.ind == null || !t.ind.activeSelf) continue;
+            var a = t.ind.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
             if (a == null || a.IsAnchorCreated || a.IsRetrying) continue;
             a.RecreateAnchor();
         }
@@ -207,10 +221,13 @@ public class R0926HuntTreasure : MonoBehaviour
         {
             if (!on)
             {
-                if (t.spot || t.obj != null) { Despawn(t, false); t.spot = false; t.rank = -1; }
+                if (t.spot || t.obj != null || t.ind != null) { Despawn(t, false); t.spot = false; t.rank = -1; }
                 continue;
             }
             if (t.spot && t.obj == null) Spawn(t);
+            bool wantInd = t.pin && t.obj == null && !t.spot;   // 자리는 아는데 아직 보이는 거리 밖
+            if (wantInd && t.ind == null) SpawnIndicator(t);
+            else if (!wantInd && t.ind != null) DespawnIndicator(t);
             if (t.announce && t.obj != null && !Covered())
             {
                 t.announce = false;
@@ -306,6 +323,38 @@ public class R0926HuntTreasure : MonoBehaviour
         Chest(t)?.Lock(t.locked);
     }
 
+    private void SpawnIndicator(Hunt t)
+    {
+        if (indicatorPrefab == null || !Altitude(out double alt)) return;
+        var go = Instantiate(indicatorPrefab);
+        go.SetActive(true);
+        go.name = "HuntIndicator_" + t.id;
+        var target = go.GetComponentInChildren<Target>(true);
+        if (target != null)
+        {
+            target.PlaceName = t.title;
+            target.placeId = "hunt_" + t.id;
+            target.gpsLatitude = (float)t.pinLat;
+            target.gpsLongitude = (float)t.pinLon;
+            target.TargetColor = Gold;
+            target.Sparkle = true;
+            target.OnIndicatorTapped = () => Say(T("가까이 가면 보물상자가 보여요", "Get closer to see the chest", "近づくと宝箱が見えます", "走近就能看到宝箱", "Acércate para ver el cofre"), null, 2.5f);
+        }
+        var anchor = go.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (anchor != null) anchor.SetCoordinatesAndCreateAnchor(t.pinLat, t.pinLon, alt);
+        t.ind = go;
+    }
+
+    private static void DespawnIndicator(Hunt t)
+    {
+        var go = t.ind;
+        t.ind = null;
+        if (go == null) return;
+        var a = go.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+        if (a != null) a.ReleaseAnchor();
+        Destroy(go);
+    }
+
     private static bool Altitude(out double alt)
     {
 #if UNITY_EDITOR
@@ -330,6 +379,7 @@ public class R0926HuntTreasure : MonoBehaviour
     // open = 찾음 — 상자가 이쪽을 보고 열린 뒤 스스로 사라진다 (그 사이 축하 화면이 뜬다)
     private static void Despawn(Hunt t, bool open)
     {
+        DespawnIndicator(t);
         SpawnedObjects.Remove("hunt_" + t.id);
         var go = t.obj;
         t.obj = null;

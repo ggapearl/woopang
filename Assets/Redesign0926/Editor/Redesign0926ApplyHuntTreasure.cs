@@ -54,6 +54,7 @@ namespace Redesign0926
 
             var so = new SerializedObject(tr);
             so.FindProperty("treasurePrefab").objectReferenceValue = prefab;
+            so.FindProperty("indicatorPrefab").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefab/IndicatorOnly.prefab");
             so.FindProperty("toast").objectReferenceValue = cg;
             so.FindProperty("toastPill").objectReferenceValue = RT(pill);
             so.FindProperty("toastTitle").objectReferenceValue = tText;
