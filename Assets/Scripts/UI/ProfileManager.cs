@@ -2890,15 +2890,17 @@ public class ProfileManager : MonoBehaviour
 
     /// <summary>
     /// 편집/DM 버튼 클릭 핸들러
-    /// - 내 프로필: 프로필 편집 웹페이지 열기
+    /// - 내 프로필: 앱 안 프로필 편집 시트 (없으면 웹 편집 페이지)
     /// - 다른 사람 프로필: DM 보내기
     /// </summary>
     private void OpenEditProfileWeb()
     {
         if (isMyProfile)
         {
-            // 내 프로필: 편집 페이지 열기
-            OpenEditProfileWebPage();
+            // 내 프로필: 앱 안에서 고친다 — 웹은 안드로이드에서 사진을 '내 파일'로 골랐다 (2026-10-30 R0926ProfileEdit)
+            var sheet = fullProfilePanel != null ? fullProfilePanel.GetComponentInChildren<R0926ProfileEdit>(true) : null;
+            if (sheet != null) sheet.Open(currentProfile);
+            else OpenEditProfileWebPage();
         }
         else
         {
@@ -2908,9 +2910,9 @@ public class ProfileManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 프로필 편집 웹페이지 열기 (내 프로필에서만)
+    /// 프로필 편집 웹페이지 열기 (내 프로필에서만) — 앱 안 편집 시트의 '비밀번호 변경 · 계정 삭제'도 여기로
     /// </summary>
-    private void OpenEditProfileWebPage()
+    public void OpenEditProfileWebPage()
     {
         if (LoginManager.Instance == null || LoginManager.Instance.CurrentUser == null) return;
 

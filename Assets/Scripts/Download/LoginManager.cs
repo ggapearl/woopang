@@ -657,6 +657,16 @@ public class LoginManager : MonoBehaviour
         }
     }
 
+    /// <summary>앱 '프로필 편집'에서 아이디를 바꿨다 (R0926ProfileEdit) — 다음에 켤 때도 새 아이디로</summary>
+    public void SetUsername(string username)
+    {
+        if (CurrentUser == null || string.IsNullOrEmpty(username)) return;
+        CurrentUser.username = username;
+        PlayerPrefs.SetString("SavedUsername", username);
+        PlayerPrefs.Save();
+        UpdateProfileUI();
+    }
+
     public IEnumerator FetchProfileCoroutine(string userId)
     {
         // 안전 가드: 현재 로그인 유저의 프로필만 업데이트 허용

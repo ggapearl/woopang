@@ -9,7 +9,7 @@ using UnityEngine.UI;
 /// 아래 한 줄 큰 세 칸 '취소 / 회전 / 완료' — 사진 고르기 시트와 같은 모양 · 하단 메뉴와 같은 물방울 소리. 완료를 누르면 '자르는 중…'.
 /// 10-20 대표님 「사진 크롭이 온전하지 않은데 버튼이랑 효과음 잘 정리해서 만들어볼래? 지금 껀 옛날에 어디서 따와서 쓴 건데 쓰기가 여간 불편」
 /// — 예전 ImageCropper(yasirkula)는 작은 네모를 모서리 손잡이로 줄이고 옮기는 방식(사진 확대 없음)에 위쪽 작은 아이콘 버튼, 소리 없음이었다.
-/// 장소 추가·장소 수정이 같이 쓴다. 화면은 Redesign0926ApplyCrop 이 만들어 꺼 둔다
+/// 장소 추가·장소 수정·프로필 사진이 같이 쓴다(프로필은 제목만 '프로필 사진'). 화면은 Redesign0926ApplyCrop 이 만들어 꺼 둔다
 /// </summary>
 public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IScrollHandler, IPointerClickHandler
 {
@@ -17,6 +17,7 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     [SerializeField] private RawImage photo;
     [SerializeField] private CanvasGroup grid;         // 만지는 동안만 보이는 3x3 줄
     [SerializeField] private RectTransform header;     // 제목 + 안내
+    [SerializeField] private R0926LocalizedText title;
     [SerializeField] private RectTransform bar;        // 취소 · 회전 · 완료 카드
     [SerializeField] private RectTransform[] tiles = new RectTransform[0];   // 카드 안 칸 (왼쪽부터 — 가로 화면에선 위부터)
     [SerializeField] private R0926Busy busy;
@@ -27,6 +28,7 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     private const float MaxZoom = 6f, Resist = 0.35f, SettleTime = 0.2f, MinBusy = 0.35f;
     private const int MaxOut = 2048;
     private const int NoPointer = int.MinValue;
+    private static readonly string[] MainTitle = { "메인 사진", "Main photo", "メイン写真", "主照片", "Foto principal" };
 
     private Texture2D tex;
     private Action<Texture2D> onDone;
@@ -47,8 +49,13 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
     /// <param name="done">자른 사진 (실패하면 null)</param>
     /// <param name="cancel">취소 — 고른 사진은 넣지 않는다</param>
-    public void Open(Texture2D texture, Action<Texture2D> done, Action cancel)
+    public void Open(Texture2D texture, Action<Texture2D> done, Action cancel) => Open(texture, done, cancel, null);
+
+    /// <param name="titleWords">제목 (ko·en·ja·zh·es) — 없으면 '메인 사진'</param>
+    public void Open(Texture2D texture, Action<Texture2D> done, Action cancel, string[] titleWords)
     {
+        var w = titleWords ?? MainTitle;
+        if (title != null) title.Set(w[0], w[1], w[2], w[3], w[4]);
         tex = texture;
         onDone = done;
         onCancel = cancel;

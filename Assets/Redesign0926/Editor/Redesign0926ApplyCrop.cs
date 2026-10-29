@@ -200,6 +200,7 @@ namespace Redesign0926
             so.FindProperty("bar").objectReferenceValue = RT(bar);
             SetArray(so.FindProperty("tiles"), new Object[] { cancel, rotate, done });
             so.FindProperty("busy").objectReferenceValue = busy;
+            so.FindProperty("title").objectReferenceValue = title.GetComponent<R0926LocalizedText>();
             so.ApplyModifiedPropertiesWithoutUndo();
             go.SetActive(false);
             return crop;

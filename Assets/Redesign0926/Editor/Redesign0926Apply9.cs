@@ -57,6 +57,7 @@ namespace Redesign0926
             ApplyHuntProfile(root, log);   // 보물찾기 — 프로필 카드의 '주최' 칸과 펼침 (ProfileCard 다음이어야 한다)
             ApplyChatLook(root, log);   // 대화창 말풍선·날짜·제목줄 (Redesign0926ApplyChat)
             ApplyFollowLook(root, log);   // 팔로잉/팔로워 창 · 줄 프리팹 (Redesign0926ApplyFollow)
+            ApplyProfileEdit(root, log);   // 내 프로필 '편집' — 웹 대신 앱 안 시트 (Redesign0926ApplyProfileEdit, 프로필 창 키보드 입력줄 다음이어야 한다)
             var marker = Find(root, "Redesign0926Marker");
             var close = marker != null ? marker.GetComponent<R0926IndicatorClose>() : null;
             if (close != null)

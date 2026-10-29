@@ -130,6 +130,7 @@ namespace Redesign0926
             else if (mode == "zoomind") PlanZoomInd();
             else if (mode == "zoomsnap") PlanZoomSnap();
             else if (mode == "placeedit") PlanPlaceEdit();
+            else if (mode == "profileedit") PlanProfileEdit();
             else if (mode == "coords") PlanCoords();
             else if (mode == "comments") PlanComments();
             else if (mode == "nocat") PlanNoCategory();
@@ -5684,6 +5685,321 @@ namespace Redesign0926
                 SfLogin(false);
                 PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
             });
+        }
+
+        // ── v53 앱 안 '프로필 편집' — 대표님 10-27 「안드로이드는 '사진설정'을 하려 해도 '사진첩'·'갤러리'가 아니라 '내 파일'로 안내」
+        //    「아예 웹으로 이동하지 않고 앱 내에서 수정할 수 있으면 더 좋을 것 같긴 해」.
+        //    시험 서버(127.0.0.1:5099)의 프로필 흉내(dev_profile_shim — 운영 app_improved 의 프로필·사진 코드 그대로, DB 는 버리는 55442):
+        //    시험 회원 880001 pe_me(사진 있음) · 880002 pe_taken — 토큰 hunt-dev:pe1 이 880001.
+        //    받는 동안 → 칸 → 아이디 규칙(한글·숫자와 마침표·남의 아이디) → 전화 → 저장(아이디·소개 두 줄·전화·X) → 30일 잠금 → 그냥 닫힘
+        //    → 사진(자르기 → 올리기 · 서버 거절 · 그림 아님) → 닫기 셋(뒤로·X·끌기) → 불러오기 실패·다시 로그인
+        [Serializable] private class DevProfileRow { public bool exists, changed; public string username, bio, phone, instagram_id, facebook_id, x_id, avatar_url, photo_format; public string[] files; public int photo_w, photo_h; }
+        private const string PfId = "880001", PfToken = "hunt-dev:pe1";
+        private const string PfS = "FullProfilePanel/ProfileEdit0926", PfCard = PfS + "/Card0926", PfC = PfCard + "/Form0926/Viewport/Content/";
+        private const string PfPhoto = "Assets/Redesign0926/Splash0926_other/motif_kr.jpg";
+        private static void PlanProfileEdit()
+        {
+            R0926ProfileEdit pe = null;
+            R0926PhotoCrop crop = null;
+            R0926Busy busy = null;
+            UploadInputMirror mirror = null;
+            string firstPhoto = null, newPhoto = null;
+            var T = typeof(UploadInputMirror);
+            Func<string> state = () => pe != null ? typeof(R0926ProfileEdit).GetField("state", NPI).GetValue(pe).ToString() : "";
+            Func<string, InputField> inp = k => Find(PfC + "F_" + k + "/Input")?.GetComponent<InputField>();
+            Func<string> msg = () => Active(PfCard + "/Message0926") ? TextOf(PfCard + "/Message0926") : "";
+            Func<string> save = () => TextOf(PfCard + "/Save0926/Label0926");
+            Func<CanvasGroup> form = () => Find(PfCard + "/Form0926")?.GetComponent<CanvasGroup>();
+            Func<Image> photo = () => Find(PfC + "Avatar0926/Mask0926/Photo0926")?.GetComponent<Image>();
+            Func<DevProfileRow> row = () =>
+            {
+                string r = DevGet("", "/api/dev/profile_state/1");
+                return string.IsNullOrEmpty(r) ? new DevProfileRow() : JsonUtility.FromJson<DevProfileRow>(r);
+            };
+            Func<InputField> mi = () => mirror != null ? T.GetField("mirrorInput", NPI).GetValue(mirror) as InputField : null;
+            Func<string> busyText = () => busy != null && busy.Showing ? (typeof(R0926Busy).GetField("label", NPI).GetValue(busy) as Text)?.text ?? "" : "";
+            Func<string, bool> toastHas = part =>
+            {
+                var tm = ToastManager.Instance;
+                var l = tm != null ? typeof(ToastManager).GetField("live", NPI)?.GetValue(tm) as System.Collections.IList : null;
+                if (l == null) return false;
+                foreach (var o in l) if ((o.GetType().GetField("message")?.GetValue(o) as string ?? "").Contains(part)) return true;
+                return false;
+            };
+            // 칸을 누른 것처럼 키보드 위 입력줄을 열고 글을 쓴다 → 닫으면 칸에 들어간다
+            Action<string, string> typeOpen = (k, text) =>
+            {
+                var src = inp(k);
+                if (mirror == null || src == null || mi() == null) { log.Add("  입력줄 없음 " + k); return; }
+                T.GetMethod("ActivateMirrorFor", NPI).Invoke(mirror, new object[] { src });
+                mi().text = text;
+            };
+            Action typeClose = () => { if (mirror != null) T.GetMethod("OnCloseClicked", NPI).Invoke(mirror, null); };
+            Action<string, string> type = (k, text) => { Do(() => typeOpen(k, text)); Sleep(0.3f); Do(typeClose); Sleep(0.5f); };
+            Action edit = () => ProfileManager.Instance.editProfileButton.onClick.Invoke();
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                const string dev = "http://127.0.0.1:5099";
+                ProfileManager.EditorBase = dev;
+                FollowManager.EditorBase = dev;
+                MessagePanelManager.EditorBase = dev;
+                R0926HuntApi.EditorBase = dev;
+                DevPost("", "/api/dev/profile_reset", "{\"users\":[{\"n\":1,\"username\":\"pe_me\",\"email\":\"pe@x.y\",\"bio\":\"처음 소개\",\"phone\":\"010-1234-5678\",\"instagram_id\":\"insta_me\",\"avatar\":true},"
+                                                     + "{\"n\":2,\"username\":\"pe_taken\"}]}");
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, PfToken);
+                SfLogin(true, PfId);
+                LoginManager.Instance.CurrentUser.username = "pe_me";
+                pe = UnityEngine.Object.FindAnyObjectByType<R0926ProfileEdit>(FindObjectsInactive.Include);
+                if (pe != null)
+                {
+                    crop = typeof(R0926ProfileEdit).GetField("photoCrop", NPI).GetValue(pe) as R0926PhotoCrop;
+                    busy = typeof(R0926ProfileEdit).GetField("busy", NPI).GetValue(pe) as R0926Busy;
+                }
+                mirror = Find("FullProfilePanel")?.GetComponent<UploadInputMirror>();
+            });
+            Check(() => pe != null && LoginManager.Instance.IsLoggedIn && LoginManager.Instance.CurrentUser.id == PfId && row().exists,
+                "준비: 시험 회원 880001 pe_me (로그인 이벤트 없이) · 프로필은 시험 서버로");
+            Check(() =>
+            {
+                var miss = new List<string>();
+                foreach (var n in new[] { "form", "scroll", "avatar", "usernameInput", "usernameNote", "usernameLock", "bioInput", "phoneInput", "instagramInput",
+                                          "facebookInput", "xInput", "message", "saveButton", "saveLabel", "photoCrop", "busy", "closer", "closeButton" })
+                    if (!(typeof(R0926ProfileEdit).GetField(n, NPI)?.GetValue(pe) is UnityEngine.Object o) || o == null) miss.Add(n);
+                log.Add("  연결 빠짐: " + (miss.Count == 0 ? "없음" : string.Join(", ", miss)));
+                return miss.Count == 0;
+            }, "연결: 칸 여섯 · 사진 · 안내 · 저장 · 자르기 · 진행 안내 · 닫기");
+
+            // 내 프로필 → '편집' — 웹 대신 앱 안 시트 (받는 동안은 보이던 공개 정보 · 흐리게)
+            Do(() => ProfileManager.Instance.ShowProfile(PfId));
+            Wait(() => Active("FullProfilePanel") && ProfileManager.Instance.editProfileButton != null && ProfileManager.Instance.editProfileButton.gameObject.activeInHierarchy,
+                12f, "내 프로필 → '편집' 버튼");
+            Sleep(1.2f);
+            Shot("pe_profile");
+            Do(() => DevPost("", "/api/dev/profile_fail", "{\"get\":{\"delay\":1.5}}"));
+            Do(edit);
+            Sleep(0.5f);
+            Shot("pe_loading");
+            Check(() => Active(PfS) && state() == "Loading" && save() == "불러오는 중…" && inp("username").text == "pe_me" && inp("phone").text == ""
+                        && form() != null && !form().blocksRaycasts && form().alpha < 0.5f,
+                "'편집' → 앱 안 시트 (웹으로 나가지 않음) · 받는 동안 '불러오는 중…' · 공개 정보 먼저 · 칸은 흐리게(못 누름)");
+            Wait(() => state() == "Ready", 10f, "서버에서 내 정보를 받음");
+            Sleep(0.8f);
+            Shot("pe_open");
+            Check(() => inp("username").text == "pe_me" && inp("bio").text == "처음 소개" && inp("phone").text == "010-1234-5678" && inp("instagram").text == "insta_me"
+                        && inp("facebook").text == "" && inp("x").text == "" && form().blocksRaycasts && form().alpha > 0.99f,
+                "받은 내 정보가 칸에: 아이디 · 소개 · 전화번호(본인에게만 옴) · 인스타그램 · 칸을 누를 수 있음");
+            Check(() => save() == "저장하기" && !Active(PfC + "F_username/Input/Lock0926") && TextOf(PfC + "F_username/Note0926").StartsWith("영문 소문자") && msg() == "",
+                "'저장하기' · 아이디 잠금 없음 · 아이디 규칙 안내 한 줄");
+            Check(() => photo()?.sprite != null && TextOf(PfC + "Avatar0926/Label0926") == "사진 바꾸기" && TextOf(PfC + "Web0926/Label0926") == "비밀번호 변경 · 계정 삭제  ›",
+                "사진 칸에 지금 사진 · '사진 바꾸기' · 맨 아래 '비밀번호 변경 · 계정 삭제' (이것만 웹)");
+            Check(() =>
+            {
+                var rt = Find(PfCard) as RectTransform;
+                if (rt == null) return false;
+                var c = new Vector3[4];
+                rt.GetWorldCorners(c);
+                log.Add($"  카드 {c[0].x:0},{c[0].y:0} ~ {c[2].x:0},{c[2].y:0} · 화면 {Screen.width}x{Screen.height}");
+                return c[0].x >= -1 && c[0].y >= -1 && c[2].x <= Screen.width + 1 && c[2].y <= Screen.height + 1;
+            }, "카드가 화면 안");
+            Check(() =>
+            {
+                var src = mirror != null ? T.GetField("sourceInputs", NPI).GetValue(mirror) as InputField[] : null;
+                if (src == null) return false;
+                int n = 0;
+                foreach (var k in new[] { "username", "bio", "phone", "instagram", "facebook", "x" })
+                    if (inp(k) != null && Array.IndexOf(src, inp(k)) >= 0 && !inp(k).enabled) n++;
+                log.Add("  입력줄이 맡은 칸 " + n + "/6");
+                return n == 6;
+            }, "여섯 칸 모두 키보드 위 입력줄로 (칸은 꺼 두고 누르면 입력줄 — 장소 추가·보물찾기 리뷰와 같은 줄)");
+            Do(() => { var sr = Find(PfCard + "/Form0926")?.GetComponent<ScrollRect>(); if (sr != null) { sr.StopMovement(); sr.verticalNormalizedPosition = 0f; } });
+            Sleep(0.4f);
+            Shot("pe_bottom");
+            Check(() => InView(PfC + "Web0926", PfCard + "/Form0926/Viewport"), "칸 목록을 내리면 맨 아래 줄까지 보임");
+            Do(() => { var sr = Find(PfCard + "/Form0926")?.GetComponent<ScrollRect>(); if (sr != null) { sr.StopMovement(); sr.verticalNormalizedPosition = 1f; } });
+            Sleep(0.3f);
+
+            // 아이디 — 입력줄(영문 키보드·20자) · 한글 · 숫자와 마침표 · 남의 아이디
+            Do(() => typeOpen("username", "한글아이디"));
+            Sleep(0.4f);
+            Shot("pe_typing");
+            Check(() => Active("FullProfilePanel/UploadInputMirror") && mi() != null && mi().keyboardType == TouchScreenKeyboardType.EmailAddress && mi().characterLimit == 20
+                        && mi().lineType == InputField.LineType.SingleLine,
+                "아이디 칸 → 키보드 위 입력줄 (영문 키보드 · 20자 · 한 줄)");
+            Do(typeClose);
+            Sleep(0.5f);
+            Check(() => inp("username").text == "한글아이디" && !Active("FullProfilePanel/UploadInputMirror"), "입력줄을 닫으면 아이디 칸에");
+            Do(() => Click(PfCard + "/Save0926"));
+            Sleep(0.3f);
+            Check(() => msg().StartsWith("아이디는 영문 소문자") && state() == "Ready" && row().username == "pe_me", "한글 아이디 → 보내지 않고 저장 버튼 위에 안내");
+            type("username", "1.2");
+            Do(() => Click(PfCard + "/Save0926"));
+            Sleep(0.3f);
+            Check(() => msg() == "숫자와 마침표만으로 된 아이디는 쓸 수 없어요", "숫자·마침표만 → 안내 (서버가 기관 아이디 모양으로 막는 것)");
+            type("username", "PE_Taken");
+            Do(() => Click(PfCard + "/Save0926"));
+            Wait(() => state() == "Ready" && msg() != "", 8f, "남의 아이디 → 서버 답");
+            Shot("pe_taken");
+            Check(() => msg() == "이미 쓰는 아이디예요" && save() == "저장하기" && row().username == "pe_me", "남의 아이디(대문자로 써도) → 서버 409 · '이미 쓰는 아이디예요' · 그대로");
+
+            // 전화 — 숫자 키보드 · 글자가 섞이면 안내
+            type("username", "pe_me");
+            Do(() => typeOpen("phone", "010-abc"));
+            Sleep(0.4f);
+            Check(() => mi() != null && mi().keyboardType == TouchScreenKeyboardType.PhonePad && mi().characterLimit == 20, "전화번호 칸 → 숫자 키보드 · 20자");
+            Do(typeClose);
+            Sleep(0.5f);
+            Do(() => Click(PfCard + "/Save0926"));
+            Sleep(0.3f);
+            Check(() => msg() == "전화번호는 숫자와 + - ( ) 만 쓸 수 있어요", "전화번호에 글자 → 안내");
+
+            // 저장 — 아이디(대문자 → 소문자) · 소개 두 줄 · 전화 · X (인스타그램은 손대지 않아 보내지 않음)
+            type("phone", "02-123-4567");
+            Do(() => typeOpen("bio", "고친 소개\n둘째 줄"));
+            Sleep(0.4f);
+            Check(() => mi() != null && mi().lineType == InputField.LineType.MultiLineNewline && mi().characterLimit == 150, "소개 칸 → 여러 줄 · 150자");
+            Do(typeClose);
+            Sleep(0.5f);
+            type("username", "PE_Renamed");
+            type("x", "x_me");
+            Do(() => DevPost("", "/api/dev/profile_fail", "{\"profile\":{\"delay\":1.2}}"));
+            Do(() => Click(PfCard + "/Save0926"));
+            Sleep(0.4f);
+            Shot("pe_saving");
+            Check(() => state() == "Saving" && save() == "저장하는 중…" && !form().blocksRaycasts, "저장 → '저장하는 중…' · 그동안 칸을 못 누름");
+            Wait(() => !Active(PfS), 8f, "저장되면 시트가 내려가며 닫힘");
+            Check(() => toastHas("프로필을 저장했어요"), "'프로필을 저장했어요'");
+            Check(() =>
+            {
+                var r = row();
+                log.Add($"  서버: '{r.username}' · 소개 '{(r.bio ?? "").Replace("\n", "⏎")}' · 전화 '{r.phone}' · 인스타 '{r.instagram_id}' · X '{r.x_id}' · 바꾼 날 {r.changed}");
+                return r.username == "pe_renamed" && r.bio == "고친 소개\n둘째 줄" && r.phone == "02-123-4567" && r.instagram_id == "insta_me" && r.x_id == "x_me" && r.changed;
+            }, "서버에 저장: 아이디 소문자로 · 소개 두 줄 · 전화 · X (인스타그램은 그대로)");
+            Check(() => LoginManager.Instance.CurrentUser.username == "pe_renamed" && PlayerPrefs.GetString("SavedUsername", "") == "pe_renamed",
+                "앱의 내 아이디도 새 아이디로 (다음에 켤 때도)");
+            Wait(() => (typeof(ProfileManager).GetField("currentProfile", NPI).GetValue(ProfileManager.Instance) as ProfileData)?.username == "pe_renamed", 6f,
+                "뒤의 프로필 창도 새 아이디로");
+            Sleep(0.6f);
+            Shot("pe_saved");
+
+            // 다시 열면 아이디 30일 잠금 — 칸을 누르면 입력줄 대신 남은 날 · 고친 것 없이 '저장하기' 는 그냥 닫힘
+            Do(edit);
+            Wait(() => state() == "Ready", 10f, "다시 열기");
+            Sleep(0.6f);
+            Check(() => Active(PfC + "F_username/Input/Lock0926") && TextOf(PfC + "F_username/Note0926") == "아이디는 30일 뒤에 다시 바꿀 수 있어요"
+                        && inp("username").text == "pe_renamed" && inp("bio").text == "고친 소개\n둘째 줄",
+                "다시 열면: 아이디 잠금 (30일) · 새 아이디 · 소개 두 줄");
+            Do(() => Click(PfC + "F_username/Input/Lock0926"));
+            Sleep(0.3f);
+            Shot("pe_locked");
+            Check(() => msg() == "아이디는 30일 뒤에 다시 바꿀 수 있어요" && !Active("FullProfilePanel/UploadInputMirror"), "잠긴 아이디 칸을 누르면 입력줄 대신 남은 날");
+            Do(() => Click(PfCard + "/Save0926"));
+            Sleep(0.3f);
+            Check(() => !Active(PfS) && row().username == "pe_renamed", "고친 것 없이 '저장하기' → 보내지 않고 닫힘");
+
+            // 사진 — 사진첩 대신 EditorPick → 자르기 → 올리는 중(진행) → 새 사진
+            Do(edit);
+            Wait(() => state() == "Ready", 10f, "다시 열기");
+            Do(() => { firstPhoto = row().avatar_url; DevPost("", "/api/dev/profile_fail", "{\"avatar\":{\"delay\":1.5}}"); });
+            Do(() => pe.EditorPick(File.ReadAllBytes(PfPhoto)));
+            Wait(() => crop != null && crop.IsOpen, 5f, "사진 → 자르기 화면");
+            Func<string> cropTitle = () => crop.transform.Find("Head0926/Title0926")?.GetComponent<Text>()?.text ?? "";
+            Check(() => cropTitle() == "프로필 사진", "자르기 화면 제목 '프로필 사진' (장소의 '메인 사진' 아님)");
+            Sleep(0.6f);
+            Shot("pe_crop");
+            Do(() => crop.Done());
+            Wait(() => busyText().StartsWith("사진 올리는 중"), 6f, "자르기 → '사진 올리는 중…'");
+            Sleep(0.6f);
+            Check(() => { log.Add($"  답을 기다리는 동안: 「{busyText()}」"); return busyText().StartsWith("사진 올리는 중") && !busyText().Contains("100%"); },
+                  "답을 기다리는 동안 100% 로 보이지 않음 (99 까지)");
+            Shot("pe_uploading");
+            Wait(() => busy != null && !busy.Showing && toastHas("프로필 사진을 바꿨어요"), 12f, "올리기 끝 → '프로필 사진을 바꿨어요'");
+            Wait(() => photo()?.sprite != null && photo().sprite.texture.width == 512, 6f, "시트 사진 칸에 새 사진 (서버의 512)");
+            Sleep(0.5f);
+            Shot("pe_photo");
+            Check(() =>
+            {
+                var r = row();
+                newPhoto = r.avatar_url;
+                log.Add($"  서버 사진 {r.avatar_url} · {r.photo_w}x{r.photo_h} {r.photo_format} · 파일 {string.Join(",", r.files ?? new string[0])} (앞 사진 {firstPhoto})");
+                return r.avatar_url != firstPhoto && r.avatar_url.StartsWith("/uploads/avatars/avatar_880001_") && r.photo_w == 512 && r.photo_h == 512 && r.photo_format == "JPEG"
+                       && r.files != null && r.files.Length == 1 && !r.files[0].Contains("seed");
+            }, "서버: 새 사진 512 정사각형 JPEG · 앞 사진 파일은 지움");
+            Check(() => (LoginManager.Instance.CurrentUser.avatar_url ?? "").EndsWith(newPhoto ?? "-"), "앱의 내 사진 주소도 새 것");
+            Do(() => pe.EditorPick(File.ReadAllBytes(PfPhoto)));
+            Wait(() => crop.IsOpen, 5f, "사진 → 자르기");
+            Do(() => crop.Cancel());
+            Sleep(0.3f);
+            Check(() => !crop.IsOpen && state() == "Ready" && row().avatar_url == newPhoto, "자르기에서 취소 → 올리지 않음");
+            Texture2D placeTex = null;
+            Do(() => { placeTex = new Texture2D(64, 64); crop.Open(placeTex, r => { if (r != null) UnityEngine.Object.Destroy(r); }, () => { }); });
+            Check(() => crop.IsOpen && cropTitle() == "메인 사진", "제목 없이 열면(장소 추가·수정) 다시 '메인 사진'");
+            Do(() => { crop.Cancel(); UnityEngine.Object.Destroy(placeTex); });
+            Do(() => DevPost("", "/api/dev/profile_fail", "{\"avatar\":{\"status\":413,\"error\":\"too_large\"}}"));
+            Do(() => pe.EditorPick(File.ReadAllBytes(PfPhoto)));
+            Wait(() => crop.IsOpen, 5f, "다시 사진 → 자르기");
+            Do(() => crop.Done());
+            Wait(() => busy != null && !busy.Showing && toastHas("사진을 열지 못했어요"), 10f, "서버가 거절(너무 큼) → '사진을 열지 못했어요'");
+            Check(() => row().avatar_url == newPhoto, "실패하면 사진은 그대로");
+            Do(() => pe.EditorPick(System.Text.Encoding.ASCII.GetBytes("not an image")));
+            Sleep(0.3f);
+            Check(() => !crop.IsOpen && msg() == "사진을 열지 못했어요. 다른 사진을 골라 주세요", "그림이 아닌 파일 → 자르기 없이 안내");
+
+            // 닫기 셋 — 뒤로가기 · X · 끌어내리기 (편집 시트만 닫히고 프로필은 그대로)
+            Back();
+            Sleep(0.9f);
+            Check(() => !Active(PfS) && Active("FullProfilePanel"), "뒤로가기 → 편집 시트만 닫힘 (프로필은 그대로)");
+            Do(edit);
+            Wait(() => state() == "Ready", 10f, "다시 열기");
+            Sleep(0.4f);
+            Do(() => Click(PfCard + "/Close0926/ClosePx0926"));
+            Sleep(0.9f);
+            Check(() => !Active(PfS) && Active("FullProfilePanel"), "X → 내려가며 닫힘");
+            Do(edit);
+            Wait(() => state() == "Ready", 10f, "다시 열기");
+            Sleep(0.6f);
+            Drag(PfCard, 0.45f, "pe_drag");
+            Sleep(0.9f);
+            Check(() => !Active(PfS) && Active("FullProfilePanel"), "끌어내리면 닫힘 (프로필은 그대로)");
+
+            // 불러오기 실패 → '다시 불러오기' · 토큰 없음 → '다시 로그인'
+            Do(() => DevPost("", "/api/dev/profile_fail", "{\"get\":{\"status\":500,\"error\":\"x\"}}"));
+            Do(edit);
+            Wait(() => state() == "Failed", 8f, "불러오기 실패");
+            Sleep(0.4f);
+            Shot("pe_loadfail");
+            Check(() => save() == "다시 불러오기" && msg() == "잠시 뒤 다시 해 주세요" && Find(PfCard + "/Save0926").GetComponent<Button>().interactable && !form().blocksRaycasts,
+                "서버 오류 → '잠시 뒤 다시 해 주세요' · 버튼은 '다시 불러오기' · 칸은 못 누름");
+            Do(() => Click(PfCard + "/Save0926"));
+            Wait(() => state() == "Ready", 8f, "'다시 불러오기' → 받음");
+            Check(() => msg() == "" && inp("username").text == "pe_renamed" && save() == "저장하기", "다시 받으면 안내가 사라지고 칸이 채워짐");
+            Do(() => { pe.Close(); PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, ""); });
+            Do(edit);
+            Wait(() => state() == "Failed", 8f, "토큰 없이 열기");
+            Check(() => msg() == "다시 로그인한 뒤 고칠 수 있어요", "토큰이 없으면(서버가 나로 알아보지 못함) '다시 로그인한 뒤 고칠 수 있어요'");
+
+            Do(() =>
+            {
+                if (pe != null) pe.Close();
+                ProfileManager.Instance?.CloseFullProfile();
+                DevPost("", "/api/dev/profile_reset", "{}");
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                MessagePanelManager.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+            Sleep(0.5f);
         }
 
         // ── 10-25 N-X: 분류 없이 올리기 · 분류 색 — 대표님 「'분류' 에 있어서 체크하지 않고 올려도 되도록 … 그냥 흰색으로 발생하도록 해주고,
@@ -12172,7 +12488,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();
