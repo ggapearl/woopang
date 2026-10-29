@@ -106,7 +106,13 @@ namespace Redesign0926
             else if (mode == "huntpush") PlanHuntPush();
             else if (mode == "huntprofile") PlanHuntProfile();
             else if (mode == "hunttreasure") PlanHuntTreasure();
-            else if (mode == "huntchest") PlanHuntChest();
+            else if (mode == "huntchest")
+            {
+                // 3번째 줄에 배경 그림 폴더를 주면 — 메일·소개용 컷: 주변 장소 글자가 없는 자리(서해 바다)에서 흐린 도시 배경으로
+                storeSrc = lines.Length > 2 ? lines[2].Trim() : "";
+                if (storeSrc.Length > 0) VirtualLocation.Instance.SetCoordinates(35.5f, 124.3f);
+                PlanHuntChest();
+            }
             else if (mode == "huntshapes") PlanHuntShapes();
             else if (mode == "huntform") PlanHuntForm();
             else if (mode == "huntshare") PlanHuntShare();
@@ -8242,6 +8248,7 @@ namespace Redesign0926
             Do(() =>
             {
                 DeviceFov();
+                if (!string.IsNullOrEmpty(storeSrc)) Backdrop("bg_city.png");
                 R0926HuntApi.EditorBase = "http://127.0.0.1:5099";   // 축하 화면이 무엇을 부르더라도 개발 서버로만
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Redesign0926/Prefabs/HuntTreasure0926.prefab");
                 hcGo = prefab != null ? UnityEngine.Object.Instantiate(prefab) : null;
