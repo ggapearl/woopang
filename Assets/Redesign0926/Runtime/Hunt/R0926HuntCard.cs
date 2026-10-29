@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using SimpleJSON;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 /// <summary>
@@ -93,6 +94,13 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private RectTransform feedList;
     [SerializeField] private UploadInputMirror inputMirror;   // 키보드 위 입력줄 — 보내기(엔터)로 한마디·코드를 바로
 
+    [Header("찾은 사람 (10-27 — 프로필 사진·아이디 · 찾은 순서 · 다섯 명까지 보이고 '더 보기')")]
+    [SerializeField] private GameObject findersBox;
+    [SerializeField] private Text findersHead, findersStat, findersEmpty, findersMoreText;
+    [SerializeField] private RectTransform findersList;
+    [SerializeField] private Button findersMore;
+    [SerializeField] private GameObject finderTemplate;
+
     [Header("숨기기 전 확인 카드 (10-26 — 캔버스 맨 위 층 · 숨긴 뒤엔 참가 코드 · 공유하기)")]
     [SerializeField] private GameObject review;
     [SerializeField] private Button reviewDim;
@@ -127,6 +135,10 @@ public class R0926HuntCard : MonoBehaviour
     private float nextReload;                 // 상세를 보는 동안 소식·상태를 다시 받는 때
     private int detailGen;                    // 상세를 새로 열 때마다 — 그 전에 떠난 다시 받기는 버린다
     private Coroutine toastCo;
+    private const int FindersShown = 5;
+    private int findersFor;                   // '더 보기'를 펼친 게임 — 다른 게임을 열면 다시 접는다
+    private bool findersAll;
+    private readonly Dictionary<string, Texture2D> faces = new Dictionary<string, Texture2D>();   // 찾은 사람 사진 (받는 중이면 null)
 
     // 확인 카드 — 숨긴 뒤(postedId > 0)엔 그 게임의 참가 코드 · 공유하기
     private int postedId;
@@ -195,6 +207,7 @@ public class R0926HuntCard : MonoBehaviour
         Wire(endButton, () => StartCoroutine(Act("end")));
         Wire(revealButton, () => StartCoroutine(Act("reveal")));
         Wire(msgSend, () => StartCoroutine(SendMessage()));
+        Wire(findersMore, () => { findersAll = !findersAll; if (current != null) PaintFinders(current); });
         if (inputMirror != null)
         {
             // 입력줄의 보내기(또는 키패드 엔터)를 누르면 글이 칸에 들어간 뒤 바로 보낸다 — 대화창과 같이 (10-14 대표님)
@@ -1186,6 +1199,7 @@ public class R0926HuntCard : MonoBehaviour
                        : joined ? T("참가 중이에요 — 보물 근처에 가면 보물상자가 보여요", "Joined — the treasure chest shows up when you get close", "参加中です — 宝に近づくと宝箱が見えます", "已参加 — 走近宝藏会看到宝箱", "Participando — verás el cofre cuando estés cerca")
                        : open && full ? T("참가 인원이 다 찼어요 — 누가 나가면 자리가 생겨요", "This game is full — a spot opens if someone leaves", "参加人数がいっぱいです — 誰かが抜けると空きが出ます", "参加人数已满 — 有人退出就会空出名额", "Este juego está completo — habrá sitio si alguien sale")
                        : "";
+        if (dMine != null) dMine.gameObject.SetActive(dMine.text.Length > 0);   // 참가 전엔 빈 줄이 '주최'와 '나와의 거리' 사이에 틈으로 남았다
         PaintDistance();
 
         Set(joinButton, open && !joined && !host && h["audience"] != "code" && !full);
@@ -1204,6 +1218,7 @@ public class R0926HuntCard : MonoBehaviour
         if (msgBox != null) msgBox.SetActive(found || host);
         // 코드 칸은 근접 확인(Near)이 참가자에게 보이는 거리 안일 때만 켠다 — 주최자·찾은 사람·끝난 게임엔 없다
         if (claimCodeBox != null) claimCodeBox.SetActive(false);
+        PaintFinders(h);
 
         // 소식
         for (int i = feedList.childCount - 1; i >= 0; i--)
@@ -1225,6 +1240,129 @@ public class R0926HuntCard : MonoBehaviour
     }
 
     private static void Set(Button b, bool on) { if (b != null) b.gameObject.SetActive(on); }
+
+    // 찾은 사람 (10-27 대표님) — 찾은 순서대로 프로필 사진·아이디, 내 줄은 '나'. 다섯 명까지 보이고 나머지는 '더 보기'
+    // (내가 다섯 명 밖이면 내 줄은 덧붙인다). 나와 차단 관계인 사람은 서버가 뺀다. 시작 전 게임엔 칸이 없다
+    private void PaintFinders(JSONNode h)
+    {
+        if (findersBox == null || findersList == null || finderTemplate == null) return;
+        int id = h["id"].AsInt;
+        if (id != findersFor) { findersFor = id; findersAll = false; }
+        var list = h["finders"].AsArray;
+        int found = Mathf.Max(h["found"].AsInt, list.Count);
+        string status = h["status"];
+        bool show = status != "scheduled" || found > 0;
+        findersBox.SetActive(show);
+        if (!show) return;
+        // 참가 전이면 '참가하기·공유하기' 아래로 — 참가 버튼이 밀려 내려가지 않게. 그 밖엔 게임 정보 바로 아래 (현황)
+        bool joinFirst = joinButton != null && joinButton.gameObject.activeSelf;
+        Transform after = joinFirst ? (shareButton != null && shareButton.gameObject.activeSelf ? shareButton.transform : joinButton.transform)
+                                    : dInfo != null ? dInfo.transform : null;
+        if (after != null && after.parent == findersBox.transform.parent)
+        {
+            findersBox.transform.SetAsLastSibling();
+            findersBox.transform.SetSiblingIndex(after.GetSiblingIndex() + 1);
+        }
+        if (findersHead != null) findersHead.text = T("찾은 사람 " + found + "명", "Found · " + found, "見つけた人 " + found + "人", "找到的人 " + found + " 人", "Encontrado · " + found);
+        // 참가 인원·당첨 수는 바로 위 게임 정보에 있다 — 여기엔 남은 당첨 자리만 ('모두 당첨'·끝난 게임은 비움)
+        int wm = h["winners_max"].AsInt, left = Mathf.Max(0, wm - found);
+        bool open = status == "live" || status == "scheduled";
+        if (findersStat != null)
+            findersStat.text = wm > 0 && open ? T("남은 당첨 " + left + "자리", left + " left", "残り " + left + "枠", "剩余 " + left + " 个名额", "quedan " + left) : "";
+
+        for (int i = findersList.childCount - 1; i >= 0; i--)
+        {
+            var c = findersList.GetChild(i).gameObject;
+            c.SetActive(false);   // 지우는 건 프레임 끝 — 그 전에 레이아웃에서 빠지게
+            Destroy(c);
+        }
+        int folded = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (i < FindersShown || list[i]["me"].AsBool || findersAll) AddFinder(list[i]);
+            if (i >= FindersShown && !list[i]["me"].AsBool) folded++;
+        }
+        if (findersMore != null) findersMore.gameObject.SetActive(folded > 0);
+        if (findersMoreText != null)
+            findersMoreText.text = findersAll ? T("접기", "Show less", "閉じる", "收起", "Ver menos")
+                                              : T(folded + "명 더 보기", "Show " + folded + " more", "あと " + folded + "人を見る", "再看 " + folded + " 人", "Ver " + folded + " más");
+        if (findersEmpty != null)
+        {
+            findersEmpty.gameObject.SetActive(found == 0);
+            findersEmpty.text = status == "ended" ? T("찾은 사람 없이 끝났어요", "Ended with no finders", "見つけた人なしで終了しました", "无人找到，游戏已结束", "Terminó sin ganadores")
+                                                  : T("아직 찾은 사람이 없어요", "No one has found it yet", "まだ誰も見つけていません", "还没有人找到", "Nadie lo ha encontrado aún");
+        }
+    }
+
+    private void AddFinder(JSONNode f)
+    {
+        var g = Instantiate(finderTemplate, findersList);
+        g.SetActive(true);
+        string name = f["username"];
+        if (string.IsNullOrEmpty(name)) name = T("사용자", "User", "ユーザー", "用户", "Usuario");
+        SetText(g, "Name", name.Length > 12 ? name.Substring(0, 11) + "…" : name);
+        bool me = f["me"].AsBool;
+        var tag = g.transform.Find("Me");
+        if (tag != null) { tag.gameObject.SetActive(me); SetText(tag.gameObject, "Pill/Text", T("나", "Me", "自分", "我", "Yo")); }
+        int rank = f["rank"].AsInt;
+        var at = When(f["at"]);
+        string when = "";
+        if (at.HasValue)
+        {
+            var local = at.Value.ToLocalTime();
+            when = local.ToString(local.Date == DateTime.Now.Date ? "HH:mm" : "M/d", CultureInfo.InvariantCulture);
+        }
+        SetText(g, "Rank", "<color=#E8BF4F><b>" + T(rank + "번째", "#" + rank, rank + "番目", "第 " + rank + " 个", "#" + rank) + "</b></color>" + (when != "" ? "   " + when : ""));
+        FillFace(g.transform.Find("Avatar"), name, f["avatar_url"]);
+        string uid = f["id"];
+        var b = g.GetComponent<Button>();
+        if (me || string.IsNullOrEmpty(uid)) { if (b != null) b.enabled = false; }
+        else Wire(b, () => OpenFinder(uid));
+    }
+
+#if UNITY_EDITOR
+    public static string EditorFinderProfile;   // 플레이 시험 — 찾은 사람 줄을 눌러 연 프로필
+#endif
+
+    private static void OpenFinder(string uid)
+    {
+#if UNITY_EDITOR
+        EditorFinderProfile = uid;
+#endif
+        if (ProfileManager.Instance != null) ProfileManager.Instance.ShowProfile(uid);   // 추가 창 위로 덮는다
+    }
+
+    // 친구 지도와 같은 동그라미 — 사진이 없거나 아직 못 받았으면 바탕색 위 첫 글자
+    private void FillFace(Transform avatar, string name, string url)
+    {
+        if (avatar == null) return;
+        var bg = avatar.Find("Face")?.GetComponent<Image>();
+        if (bg != null) bg.color = R0926FriendsMap.Palette[(name.GetHashCode() & 0x7fffffff) % R0926FriendsMap.Palette.Length];
+        SetText(avatar.gameObject, "Face/Initial", name.Substring(0, char.IsSurrogatePair(name, 0) ? 2 : 1).ToUpperInvariant());
+        var photo = avatar.Find("Face/Photo")?.GetComponent<RawImage>();
+        if (photo == null) return;
+        photo.enabled = false;
+        if (string.IsNullOrEmpty(url)) return;
+        if (!faces.TryGetValue(url, out var tex)) { StartCoroutine(LoadFace(url)); return; }
+        if (tex == null) return;
+        photo.texture = tex;
+        float a = (float)tex.width / Mathf.Max(1, tex.height);   // 가운데 정사각형만 — 눌려 보이지 않게
+        photo.uvRect = a > 1f ? new Rect((1f - 1f / a) / 2f, 0f, 1f / a, 1f) : new Rect(0f, (1f - a) / 2f, 1f, a);
+        photo.enabled = true;
+    }
+
+    private IEnumerator LoadFace(string url)
+    {
+        faces[url] = null;   // 받는 동안 같은 사진을 또 받지 않게 — 못 받으면 첫 글자로 두고 다음에 그릴 때 다시
+        using (var req = UnityWebRequestTexture.GetTexture(url))
+        {
+            req.timeout = 10;
+            yield return req.SendWebRequest();
+            if (req.result != UnityWebRequest.Result.Success) { faces.Remove(url); yield break; }
+            faces[url] = DownloadHandlerTexture.GetContent(req);
+        }
+        if (current != null && findersBox != null && findersBox.activeInHierarchy) PaintFinders(current);
+    }
 
     // 보물 근처 알림을 받는 중(참가·진행 중·아직 못 찾음)엔 그 줄을 Near() 가 쓴다
     private static bool NearMode(JSONNode h) =>

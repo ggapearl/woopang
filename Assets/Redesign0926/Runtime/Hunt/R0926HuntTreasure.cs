@@ -482,7 +482,7 @@ public class R0926HuntTreasure : MonoBehaviour
         if (t.host)
         {
             tapId = 0;
-            Say(T("내가 숨긴 보물이에요", "This is your treasure", "自分が隠した宝です", "这是你藏的宝藏", "Este es tu tesoro"), T("참가자가 찾으면 메세지로 알려 드려요", "We'll message you when someone finds it", "参加者が見つけたらメッセージでお知らせします", "有参加者找到时会发消息通知你", "Te avisaremos por mensaje cuando alguien lo encuentre"), 3f);
+            R0926HuntPush.OpenHunt(id);   // 내 보물 — 현황 카드(찾은 사람 · 남은 당첨 · 참가)로 (10-27 대표님)
             return;
         }
         float now = Time.unscaledTime;

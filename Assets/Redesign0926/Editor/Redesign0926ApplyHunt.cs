@@ -60,6 +60,7 @@ namespace Redesign0926
             S("chipTemplate", HuntChipTemplate(tpl.transform));
             S("ruleTemplate", HuntRuleTemplate(tpl.transform));
             S("feedTemplate", HuntFeedTemplate(tpl.transform));
+            S("finderTemplate", HuntFinderTemplate(tpl.transform));
 
             // ── 처음 화면 ──
             var hub = HuntScroll(body.transform, "Hub", out var hubView, out var hubSr);
@@ -208,6 +209,23 @@ namespace Redesign0926
             S("claimCodeInput", ccIn); S("claimCodeButton", ccOk); S("claimCodeBox", ccb.gameObject);
             ccb.gameObject.SetActive(false);   // 근접 확인이 켠다
             S("dInfo", HLabel(det, "Info", 0, "", null, 42, Soft, FontStyle.Normal));
+            // 찾은 사람 (10-27 대표님) — 프로필 사진·아이디를 찾은 순서대로. 게임 정보 바로 아래 (참가 전엔 앱이 '참가하기' 아래로 옮긴다)
+            var fd = HList(det, "Finders");
+            fd.SetSiblingIndex(det.Find("Info").GetSiblingIndex() + 1);
+            var fdl = fd.GetComponent<VerticalLayoutGroup>();
+            fdl.padding = new RectOffset(36, 36, 20, 16); fdl.spacing = 4;
+            Img(fd.gameObject, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 40f).raycastTarget = false;
+            var fh = HRow(fd, "Head", 76);
+            var fht = HLabel(fh, "Title", 76, "찾은 사람", null, 44, Ink, FontStyle.Bold);
+            Ensure<LayoutElement>(fht.gameObject).flexibleWidth = 1;
+            var fhs = HLabel(fh, "Stat", 76, "", null, 36, Muted, FontStyle.Normal);
+            fhs.alignment = TextAnchor.MiddleRight;
+            var frows = HList(fd, "Rows");
+            frows.GetComponent<VerticalLayoutGroup>().spacing = 4;
+            var fe = HLabel(fd, "Empty", 84, "아직 찾은 사람이 없어요", null, 38, Muted, FontStyle.Normal);
+            var fm = HButton(fd, "More", 96, new Color(1, 1, 1, 0f), "더 보기", null, 40, HuntGold, FontStyle.Bold, out var fmt);
+            S("findersBox", fd.gameObject); S("findersHead", fht); S("findersStat", fhs); S("findersList", frows);
+            S("findersEmpty", fe); S("findersMore", fm); S("findersMoreText", fmt);
             S("joinButton", HButton(det, "Join", 144, HuntGold, "참가하기", "Join", 50, HuntDark, FontStyle.Bold, out _));
             // 공유하기 — 주최자는 늘, 다른 사람은 '모두' 게임만 (10-26 대표님 — 링크로 널리)
             var shareB = HButton(det, "Share", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "공유하기", "Share this hunt", 44, HuntGold, FontStyle.Bold, out _);
@@ -559,6 +577,38 @@ namespace Redesign0926
             var body = FindOrCreate(r.transform, "Body");
             var bt = Txt(body, "", 38, Soft, TextAnchor.UpperLeft, FontStyle.Normal);
             bt.horizontalOverflow = HorizontalWrapMode.Wrap; bt.lineSpacing = 1.1f;
+            return r;
+        }
+
+        // 찾은 사람 한 줄 — 프로필 사진 · 아이디 · '나' · 몇 번째 · 찾은 때 (누르면 그 사람 프로필)
+        private static GameObject HuntFinderTemplate(Transform tpl)
+        {
+            var r = FindOrCreate(tpl, "Finder");
+            var le = Ensure<LayoutElement>(r); le.preferredHeight = 112; le.minHeight = 112;
+            Img(r, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            Ensure<Button>(r).transition = Selectable.Transition.None;
+            var hl = Ensure<HorizontalLayoutGroup>(r);
+            hl.spacing = 24; hl.childAlignment = TextAnchor.MiddleLeft;
+            hl.childControlWidth = true; hl.childControlHeight = true; hl.childForceExpandWidth = false; hl.childForceExpandHeight = true;
+            var av = BuildAvatar(r.transform, 84, false);
+            Ensure<LayoutElement>(av).preferredWidth = 84;
+            av.transform.Find("Face").GetComponent<Image>().raycastTarget = false;
+            av.transform.Find("Live").gameObject.SetActive(false);
+            var n = FindOrCreate(r.transform, "Name");
+            Txt(n, "", 42, Ink, TextAnchor.MiddleLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            var me = FindOrCreate(r.transform, "Me");
+            Ensure<LayoutElement>(me).preferredWidth = 76;
+            var mp = FindOrCreate(me.transform, "Pill");
+            SetRect(RT(mp), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(76, 50));
+            Img(mp, Spr("r0926_pill"), HuntGold, Image.Type.Sliced, 64f / 25f).raycastTarget = false;
+            var mt = FindOrCreate(mp.transform, "Text");
+            Stretch(RT(mt));
+            Txt(mt, "나", 30, HuntDark, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            var sp = FindOrCreate(r.transform, "Space");
+            Ensure<LayoutElement>(sp).flexibleWidth = 1;
+            var rk = FindOrCreate(r.transform, "Rank");
+            var rt = Txt(rk, "", 36, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
+            rt.horizontalOverflow = HorizontalWrapMode.Overflow; rt.supportRichText = true;
             return r;
         }
 

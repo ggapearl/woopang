@@ -110,6 +110,7 @@ namespace Redesign0926
             else if (mode == "huntshapes") PlanHuntShapes();
             else if (mode == "huntform") PlanHuntForm();
             else if (mode == "huntshare") PlanHuntShare();
+            else if (mode == "huntfinders") PlanHuntFinders();
             else if (mode == "glbload") PlanGlbLoad();
             else if (mode == "login") PlanLogin();
             else if (mode == "loginswitch") PlanLoginSwitch();
@@ -9667,6 +9668,195 @@ namespace Redesign0926
             if (!Has(r, "\"result\":\"found\"")) log.Add("  " + user + " 찾기 실패: " + r);
         }
         private static int HuntId(string reply) => string.IsNullOrEmpty(reply) ? 0 : JsonUtility.FromJson<DevHuntReply>(reply)?.hunt?.id ?? 0;
+
+        // 보물찾기 '찾은 사람' (10-27 대표님) — 보물·상세의 현황 카드: 찾은 순서대로 사진·아이디, 다섯 명까지 · 'N명 더 보기' · 내 줄은 '나'.
+        // 개발 서버: 시험 주최자의 '모두 당첨' 게임을 fd1~fd7 이 찾음 (이름 '시험_fd1' · fd1·fd3 만 사진(97x61) · fd4 는 열두 자 넘는 이름)
+        private const string FdHost = "hunt_test_fdhost", FdHost0 = "hunt_test_fdhost0", FdHostS = "hunt_test_fdhosts", FdMe = "hunt_test_fd7", FdOut = "hunt_test_fd8";
+        private const string FdTitle = "찾은 사람 시험", FdTitle0 = "찾은 사람 시험 (아직)", FdTitleS = "찾은 사람 시험 (예약)";
+        private const string FdLong = "시험_보물찾기를정말좋…";
+        private static int fdHunt, fdHunt0, fdHuntS;
+        private static void PlanHuntFinders()
+        {
+            const string H = HuntCardPath, D = H + "Detail/Viewport/Content/", F = D + "Finders/";
+            Do(() =>
+            {
+                treasureRun = true;   // 주최자 게임은 상세를 열면 지켜본다 — 끝나면 지운다
+                PlayerPrefs.DeleteKey(TreasurePref);
+                typeof(R0926HuntTreasure).GetField("loaded", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.SetValue(null, false);
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
+                R0926HuntApi.EditorTestUser = FdHost;
+                ProfileManager.EditorBase = "http://127.0.0.1:5099";   // 찾은 사람 줄 → 그 사람 프로필도 개발 서버에서
+                R0926HuntCard.EditorFinderProfile = null;
+                string spot = "\"lat\":" + Deg(VirtualLocation.Instance.Latitude) + ",\"lon\":" + Deg(VirtualLocation.Instance.Longitude);
+                string rest = ",\"mode\":\"touch\",\"radius_km\":5,\"visible_m\":50," + spot + ",\"acc\":5,\"duration_min\":60";
+                foreach (var host in new[] { FdHost, FdHost0, FdHostS }) DevPost(host, "/api/hunts/rules/accept", "{\"version\":2}");
+                fdHunt = HuntId(DevPost(FdHost, "/api/hunts", "{\"title\":\"" + FdTitle + "\",\"winners_all\":true" + rest + "}"));
+                fdHunt0 = HuntId(DevPost(FdHost0, "/api/hunts", "{\"title\":\"" + FdTitle0 + "\",\"winners\":1" + rest + "}"));
+                fdHuntS = HuntId(DevPost(FdHostS, "/api/hunts", "{\"title\":\"" + FdTitleS + "\",\"winners\":2" + rest + ",\"start_in_min\":30}"));
+                for (int n = 1; n <= 7; n++) SeedPlay("hunt_test_fd" + n, fdHunt, spot);
+                log.Add("  시험 게임 " + fdHunt + " · 아직 " + fdHunt0 + " · 예약 " + fdHuntS);
+            });
+            Check(() => fdHunt > 0 && fdHunt0 > 0 && fdHuntS > 0 && Has(DevGet(FdHost, "/api/hunts/" + fdHunt), "\"found\":7", "\"participants\":7"),
+                "개발 서버: '모두 당첨' 게임을 fd1~fd7 이 찾음 · 아무도 못 찾은 게임 · 30분 뒤 시작하는 게임");
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                if (Active("LoginPromptPanel")) BackNow();
+            });
+            Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
+            Sleep(0.6f);
+
+            // ① 주최자 — 게임 정보 바로 아래: 찾은 사람 7명 · 참가 7/100명 · 다섯 줄 + '2명 더 보기'
+            Do(() => R0926HuntPush.Open(fdHunt.ToString(), null, false));
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle) && FinderRows().Count > 0, 15f, "주최자 — 게임 상세");
+            Wait(() => FinderPhoto(0) != null && FinderPhoto(0).enabled, 8f, "fd1 사진 받음");
+            Sleep(0.5f);
+            Shot("finders_host");
+            Do(() => log.Add("  " + TextOf(F + "Head/Title") + " | " + TextOf(F + "Head/Stat") + " | " + FinderNames() + " | 더 보기 " + Active(F + "More") + " '" + FinderMoreText() + "'"));
+            Check(() => Find(D + "Finders").GetSiblingIndex() == Find(D + "Info").GetSiblingIndex() + 1 && !Active(D + "Join"), "주최자: 현황 카드는 게임 정보 바로 아래");
+            Check(() => TextOf(F + "Head/Title") == "찾은 사람 7명" && TextOf(F + "Head/Stat") == "" && !Active(F + "Empty"),
+                "머리줄 '찾은 사람 7명' · 오른쪽은 비움 ('모두 당첨'이라 남은 자리가 없고, 참가 인원은 바로 위 게임 정보에)");
+            Check(() => FinderNames() == "시험_fd1,시험_fd2,시험_fd3," + FdLong + ",시험_fd5" && FinderMe() == "" && Active(F + "More") && FinderMoreText() == "2명 더 보기",
+                "찾은 순서대로 다섯 명 (열두 자 넘는 이름은 잘림) · '나' 없음 · '2명 더 보기'");
+            Check(() =>
+            {
+                var r = FinderRows();
+                for (int i = 0; i < r.Count; i++)
+                {
+                    string t = r[i].Find("Rank").GetComponent<Text>().text;
+                    if (!t.Contains(">" + (i + 1) + "번째<") || !System.Text.RegularExpressions.Regex.IsMatch(t, @"   \d\d:\d\d$")) { log.Add("  순위 " + i + " '" + t + "'"); return false; }
+                }
+                return r.Count == 5;
+            }, "줄마다 '1번째 … 5번째'(금색) · 찾은 시각 (오늘이면 시:분)");
+            Check(() =>
+            {
+                var p1 = FinderPhoto(0); var p2 = FinderPhoto(1); var p3 = FinderPhoto(2);
+                var t = p1 != null ? p1.texture : null;
+                float w = 61f / 97f;
+                string ini = FinderRows()[1].Find("Avatar/Face/Initial")?.GetComponent<Text>()?.text;
+                log.Add("  사진: fd1 " + (t != null ? t.width + "x" + t.height : "-") + " uv " + (p1 != null ? p1.uvRect.ToString("F3") : "-")
+                        + " · fd2 " + (p2 != null && p2.enabled) + " '" + ini + "' · fd3 " + (p3 != null && p3.enabled));
+                return t != null && t.width == 97 && t.height == 61 && Mathf.Abs(p1.uvRect.width - w) < 0.01f && Mathf.Abs(p1.uvRect.x - (1f - w) / 2f) < 0.01f
+                       && Mathf.Abs(p1.uvRect.height - 1f) < 0.01f && p2 != null && !p2.enabled && ini == "시" && p3 != null && p3.enabled;
+            }, "사진 있는 사람(fd1·fd3)은 사진 — 가로로 긴 사진은 가운데 정사각형만 · 없는 사람(fd2)은 바탕색에 첫 글자");
+            Check(FinderRowsFit, "이름·순위 글이 자기 칸 안에 (긴 이름도 옆 칸과 겹치지 않음)");
+
+            Do(() => Click(F + "More"));
+            Sleep(0.4f);
+            Shot("finders_all");
+            Check(() => FinderRows().Count == 7 && FinderNames().EndsWith(",시험_fd6,시험_fd7") && FinderMoreText() == "접기", "'2명 더 보기' → 일곱 명 모두 · '접기'");
+
+            Do(() => { var r = FinderRows(); if (r.Count > 1) r[1].GetComponent<Button>().onClick.Invoke(); });
+            Wait(() => Active("FullProfilePanel") && ProfileManager.Instance.usernameText.text == "시험_fd2", 8f, "fd2 줄 → 프로필");
+            Sleep(0.6f);
+            Shot("finders_profile");
+            Check(() => R0926HuntCard.EditorFinderProfile == "hunt_test_fd2" && Active("FullProfilePanel") && ProfileManager.Instance.usernameText.text == "시험_fd2",
+                "찾은 사람 줄을 누르면 그 사람 프로필 (추가 창 위로)");
+            Back();
+            Wait(() => !Active("FullProfilePanel"), 5f, "뒤로 → 프로필 닫음");
+            Sleep(0.6f);
+            Check(() => !Active("FullProfilePanel") && Active(H + "Detail") && DetailTitle().Contains(FdTitle), "프로필을 닫으면 보던 보물찾기 상세 그대로");
+            Do(() => Click(F + "More"));
+            Sleep(0.4f);
+            Check(() => FinderRows().Count == 5 && FinderMoreText() == "2명 더 보기", "'접기' → 다시 다섯 명");
+
+            // ② 주최자가 자기 AR 보물을 누르면 — 예전엔 '내가 숨긴 보물이에요' 알림만 → 이 현황 카드로
+            Check(() => R0926HuntTreasure.Tracking(fdHunt), "주최자 게임은 지켜봄 (AR 보물)");
+            CloseUpload();
+            Check(() => !Active("UploadPage"), "추가 창을 닫음");
+            Do(() => typeof(R0926HuntTreasure).GetMethod("Tap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static).Invoke(null, new object[] { fdHunt }));
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle) && FinderRows().Count > 0, 10f, "AR 보물을 누름 → 현황 카드");
+            Sleep(0.5f);
+            Shot("finders_ar_tap");
+            Check(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle) && TextOf(F + "Head/Title") == "찾은 사람 7명" && FinderRows().Count == 5,
+                "주최자가 자기 AR 보물을 누르면 그 게임 현황 카드 (찾은 사람 7명)");
+
+            // ③ 찾은 사람(fd7)이 보면 — 내 줄에 '나' · 내가 차단한 fd6 은 목록에서 빠짐 (숫자는 그대로 7명)
+            Do(() => DevPost(FdMe, "/api/block", "{\"blocked_id\":\"hunt_test_fd6\"}"));
+            CloseUpload();
+            Do(() => { R0926HuntApi.EditorTestUser = FdMe; R0926HuntPush.OpenHunt(fdHunt); });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle) && FinderMe() != "", 15f, "fd7 — 게임 상세");
+            Sleep(0.6f);
+            Shot("finders_me");
+            Do(() => log.Add("  " + TextOf(F + "Head/Title") + " | " + FinderNames() + " | 나: " + FinderMe() + " | 더 보기 " + Active(F + "More")));
+            Check(() => TextOf(F + "Head/Title") == "찾은 사람 7명" && FinderNames() == "시험_fd1,시험_fd2,시험_fd3," + FdLong + ",시험_fd5,시험_fd7"
+                        && FinderMe() == "시험_fd7" && !Active(F + "More") && Find(D + "Finders").GetSiblingIndex() == Find(D + "Info").GetSiblingIndex() + 1,
+                "찾은 사람이 보면: 다섯 명 + 내 줄('나') · 차단한 fd6 은 빠짐 · 접어 둔 사람이 없으니 '더 보기' 없음");
+            Check(() => { var r = FinderRows(); var b = r.Count == 6 ? r[5].GetComponent<Button>() : null; return b != null && !b.enabled && r[0].GetComponent<Button>().enabled; },
+                "내 줄은 눌러도 아무것도 (다른 사람 줄만 프로필)");
+            Check(FinderRowsFit, "'나' 표가 붙은 줄도 글이 칸 안에");
+            Do(() => DevPost(FdMe, "/api/unblock", "{\"blocked_id\":\"hunt_test_fd6\"}"));
+
+            // ④ 아직 참가 안 한 사람 — '참가하기·공유하기' 아래 (참가 버튼이 밀려 내려가지 않게)
+            CloseUpload();
+            Do(() => { R0926HuntApi.EditorTestUser = FdOut; R0926HuntPush.OpenHunt(fdHunt); });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle) && FinderRows().Count > 0, 15f, "fd8 — 게임 상세");
+            Sleep(0.6f);
+            Shot("finders_outsider");
+            Check(() =>
+            {
+                var box = Find(D + "Finders"); var join = Find(D + "Join"); var share = Find(D + "Share");
+                Transform above = share != null && share.gameObject.activeSelf ? share : join;
+                log.Add("  참가 " + Active(D + "Join") + " · 공유 " + Active(D + "Share") + " · 칸 " + box.GetSiblingIndex() + " (위 " + above.name + " " + above.GetSiblingIndex() + ")");
+                return Active(D + "Join") && box.GetSiblingIndex() == above.GetSiblingIndex() + 1 && FinderRows().Count == 5 && FinderMe() == "";
+            }, "참가 전: 현황 카드는 '참가하기·공유하기' 바로 아래 · 다섯 명");
+
+            // ⑤ 아직 아무도 못 찾음 → 끝냄 · 시작 전(예약) 게임엔 칸이 없다
+            CloseUpload();
+            Do(() => { R0926HuntApi.EditorTestUser = FdHost0; R0926HuntPush.OpenHunt(fdHunt0); });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle0), 15f, "아무도 못 찾은 게임");
+            Sleep(0.6f);
+            Shot("finders_none");
+            Do(() => log.Add("  " + TextOf(F + "Head/Title") + " | " + TextOf(F + "Head/Stat") + " | " + TextOf(F + "Empty")));
+            Check(() => Active(D + "Finders") && TextOf(F + "Head/Title") == "찾은 사람 0명" && TextOf(F + "Head/Stat") == "남은 당첨 1자리"
+                        && Active(F + "Empty") && TextOf(F + "Empty") == "아직 찾은 사람이 없어요" && FinderRows().Count == 0 && !Active(F + "More"),
+                "아무도 못 찾은 진행 중 게임: '찾은 사람 0명' · '남은 당첨 1자리' · '아직 찾은 사람이 없어요'");
+            Do(() => DevPost(FdHost0, "/api/hunts/" + fdHunt0 + "/end", "{}"));
+            CloseUpload();
+            Do(() => R0926HuntPush.OpenHunt(fdHunt0));
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitle0) && TextOf(F + "Empty") == "찾은 사람 없이 끝났어요", 15f, "끝낸 뒤");
+            Check(() => Active(F + "Empty") && TextOf(F + "Empty") == "찾은 사람 없이 끝났어요" && TextOf(F + "Head/Stat") == "",
+                "끝난 게임: '찾은 사람 없이 끝났어요' · 남은 자리 줄 없음");
+            CloseUpload();
+            Do(() => { R0926HuntApi.EditorTestUser = FdHostS; R0926HuntPush.OpenHunt(fdHuntS); });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(FdTitleS), 15f, "예약 게임");
+            Sleep(0.6f);
+            Check(() => !Active(D + "Finders"), "시작 전 게임엔 '찾은 사람' 칸이 없음");
+            CloseUpload();
+            Do(() =>
+            {
+                R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; ProfileManager.EditorBase = null; R0926HuntCard.EditorFinderProfile = null;
+                PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false;
+            });
+        }
+        private static List<Transform> FinderRows()
+        {
+            var rows = new List<Transform>();
+            var l = Find(HuntCardPath + "Detail/Viewport/Content/Finders/Rows");
+            if (l != null) foreach (Transform c in l) if (c.gameObject.activeSelf) rows.Add(c);
+            return rows;
+        }
+        private static string FinderNames() => string.Join(",", FinderRows().ConvertAll(r => r.Find("Name")?.GetComponent<Text>()?.text ?? "?"));
+        private static string FinderMe() => string.Join(",", FinderRows().FindAll(r => r.Find("Me") != null && r.Find("Me").gameObject.activeSelf).ConvertAll(r => r.Find("Name").GetComponent<Text>().text));
+        private static string FinderMoreText() => Find(HuntCardPath + "Detail/Viewport/Content/Finders/More")?.GetComponentInChildren<Text>(true)?.text ?? "";
+        private static RawImage FinderPhoto(int i) { var r = FinderRows(); return i < r.Count ? r[i].Find("Avatar/Face/Photo")?.GetComponent<RawImage>() : null; }
+        // 줄의 글이 자기 칸보다 길어 옆 칸에 겹치지 않나 (이름 · 순위)
+        private static bool FinderRowsFit()
+        {
+            bool ok = true;
+            foreach (var r in FinderRows())
+                foreach (var n in new[] { "Name", "Rank" })
+                {
+                    var t = r.Find(n)?.GetComponent<Text>();
+                    if (t == null) continue;
+                    float w = t.rectTransform.rect.width, need = t.preferredWidth;
+                    if (w + 1f < need) { log.Add("  넘침 " + n + " '" + t.text + "' 칸 " + w.ToString("0") + " < 글 " + need.ToString("0")); ok = false; }
+                }
+            return ok;
+        }
 
         [Serializable] private class ProfReply { public ProfMeJ me; public ProfReviewJ[] reviews; }
         [Serializable] private class ProfMeJ { public ProfCanJ[] can_review; }

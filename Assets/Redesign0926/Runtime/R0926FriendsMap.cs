@@ -120,7 +120,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     }
 
     private static readonly Dictionary<string, Texture2D> avatarCache = new Dictionary<string, Texture2D>();
-    private static readonly Color[] Palette =
+    internal static readonly Color[] Palette =   // 보물찾기 '찾은 사람' 줄도 같은 색 (R0926HuntCard)
     {
         new Color(0.97f, 0.78f, 0.45f), new Color(0.56f, 0.77f, 1f), new Color(0.72f, 0.91f, 0.53f),
         new Color(1f, 0.62f, 0.71f), new Color(0.79f, 0.71f, 1f), new Color(0.49f, 0.86f, 0.84f),
