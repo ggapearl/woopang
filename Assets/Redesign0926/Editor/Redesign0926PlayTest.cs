@@ -1939,6 +1939,27 @@ namespace Redesign0926
             Check(() => on(row("Friend_" + MpFriend).Find("Avatar")) && !on(row("Friend_" + MpFriend).Find("HuntIcon")), "친구 줄은 아바타 그대로");
             Check(() => on(pins().Find("Hunt_" + nearId)), "지도에도 그 게임 상자");
 
+            // 1b) 친구 줄 — 일주일까지 '5시간 전 · 6일 전', 마지막 접속이 가까운 친구가 위 (10-29 대표님 · 서버 168시간)
+            Do(() => { DevGet(MpMe, "/api/dev/friend_ages?" + MpFriend + "=525600&" + MpFan + "=18000"); T.GetField("nextRefresh", F)?.SetValue(map, 0f); });
+            Wait(() => sub("Friend_" + MpFriend).StartsWith("6일 전") && sub("Friend_" + MpFan).StartsWith("5시간 전"), 10f, "친구 줄 둘째 줄 — '6일 전' · '5시간 전'");
+            Do(() => log.Add("  친구 줄: " + sub("Friend_" + MpFan) + " / " + sub("Friend_" + MpFriend)));
+            Check(() => row("Friend_" + MpFan).GetSiblingIndex() < row("Friend_" + MpFriend).GetSiblingIndex(), "마지막 접속이 가까운 친구(5시간 전)가 위 — 더 가까이 있는 친구(6일 전)보다");
+            // 지도 핀 — 지도를 연 채 접속 상태가 바뀌어도 초록 점(10분 안)·흐림(3시간 넘음)이 따라간다
+            Func<string, string> pinState = id =>
+            {
+                var a = pins()?.Find("Pin_" + id + "/Avatar");
+                if (a == null) return "핀 없음";
+                var g = a.GetComponent<CanvasGroup>();
+                return (on(a.Find("Live")) ? "초록 점" : "점 없음") + " · " + (g != null && g.alpha < 0.99f ? "흐리게" : "또렷하게");
+            };
+            Do(() => log.Add("  지도 핀: " + MpFriend + " " + pinState(MpFriend) + " / " + MpFan + " " + pinState(MpFan)));
+            Check(() => pinState(MpFriend) == "점 없음 · 흐리게", "지도 핀도 — 6일 전 친구는 초록 점 없이 흐리게 (지도를 연 채)");
+            Sleep(0.6f);
+            Shot("mapnear_friend_ages");
+            Do(() => { DevGet(MpMe, "/api/dev/friend_ages?clear=1"); T.GetField("nextRefresh", F)?.SetValue(map, 0f); });
+            Wait(() => sub("Friend_" + MpFriend).StartsWith("방금") && row("Friend_" + MpFriend).GetSiblingIndex() < row("Friend_" + MpFan).GetSiblingIndex(), 10f, "되돌림 — 둘 다 '방금'이면 가까운 친구가 위");
+            Check(() => pinState(MpFriend) == "초록 점 · 또렷하게", "되돌림 — 지도 핀에 초록 점 다시");
+
             // 2) 보물찾기 줄 → 보물찾기 창이 아니라 지도가 그 자리로
             Do(() => tap(row("HuntRow_" + farId)));
             Sleep(1.4f);
@@ -11320,6 +11341,19 @@ namespace Redesign0926
                 Shot("sp_" + k.ToString().ToLowerInvariant());
                 Check(() => pg.EditorCurrent == k, k + " 장");
             }
+
+            // 1a) 친구 장 — 일주일 전 접속까지 '6일 전'으로 (10-29 대표님 「일주일까지는 추적」 · 서버 168시간 · 지도와 같은 글)
+            Do(() =>
+            {
+                DevGet(MpMe, "/api/dev/friend_ages?" + MpFriend + "=525600");   // 6일 2시간
+                typeof(R0926SkyPages).GetField("nextFriends", F)?.SetValue(pg, 0f);
+                pg.EditorGo(R0926SkyPages.Kind.Friends);
+            });
+            Wait(() => SkyRowText(pg, R0926SkyPages.Kind.Friends).EndsWith("| 6일 전"), 10f, "친구 장 — 6일 전에 접속한 친구도 '6일 전'으로");
+            Sleep(0.6f);
+            Shot("sp_friends_6d");
+            Do(() => { DevGet(MpMe, "/api/dev/friend_ages?clear=1"); typeof(R0926SkyPages).GetField("nextFriends", F)?.SetValue(pg, 0f); });
+            Wait(() => SkyRowText(pg, R0926SkyPages.Kind.Friends).EndsWith("| 방금"), 10f, "되돌림 — '방금'");
 
             Do(() => pg.EditorGo(R0926SkyPages.Kind.Hunt));
             Sleep(0.9f);

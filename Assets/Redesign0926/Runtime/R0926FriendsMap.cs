@@ -568,10 +568,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (bg != null) bg.color = Palette[((f.username ?? "").GetHashCode() & 0x7fffffff) % Palette.Length];
         var initial = avatar.Find("Face/Initial")?.GetComponent<Text>();
         if (initial != null) initial.text = string.IsNullOrEmpty(f.username) ? "?" : f.username.Substring(0, 1).ToUpperInvariant();
-        var live = avatar.Find("Live");
-        if (live != null) live.gameObject.SetActive(f.ago < 600);
-        var group = avatar.GetComponent<CanvasGroup>();
-        if (group != null) group.alpha = f.ago >= 3 * 3600 ? 0.6f : 1f;
+        FillState(avatar, f);
         var photo = avatar.Find("Face/Photo")?.GetComponent<RawImage>();
         if (photo != null)
         {
@@ -582,6 +579,16 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 else StartCoroutine(LoadAvatar(f.avatar_url));
             }
         }
+    }
+
+    // 마지막 접속 — 10분 안이면 초록 점, 3시간 넘으면 흐리게
+    private static void FillState(Transform avatar, Friend f)
+    {
+        if (avatar == null) return;
+        var live = avatar.Find("Live");
+        if (live != null && live.gameObject.activeSelf != f.ago < 600) live.gameObject.SetActive(f.ago < 600);
+        var group = avatar.GetComponent<CanvasGroup>();
+        if (group != null) group.alpha = f.ago >= 3 * 3600 ? 0.6f : 1f;
     }
 
     private IEnumerator LoadAvatar(string url)
@@ -763,6 +770,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                         var btn = go.GetComponent<Button>();
                         if (btn != null) { btn.onClick.RemoveAllListeners(); string id = f.user_id; btn.onClick.AddListener(() => TapFriend(id)); }
                     }
+                    else FillState(go.transform.Find("Avatar"), f);   // 같은 친구 핀 — 지도를 연 채 접속 상태가 바뀌어도 (사진은 그대로)
                     Place((RectTransform)go.transform, g.pos);
                 }
                 else
