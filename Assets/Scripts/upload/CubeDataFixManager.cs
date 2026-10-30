@@ -19,8 +19,6 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Image mainPhotoDisplay;
     [SerializeField] private Button subPhotosButton;
     [SerializeField] private GridLayoutGroup subPhotoGrid;
-    [SerializeField] private Button resetPhotosButton;
-    [SerializeField] private Text loadingText;
     [SerializeField] private Toggle petFriendlyToggle;
     [SerializeField] private Toggle separateRestroomToggle;
     [SerializeField] private Toggle instagramToggle;
@@ -206,9 +204,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (subPhotosButton != null) subPhotosButton.onClick.AddListener(() => StartCoroutine(SelectSubPhotos()));
         else Debug.LogError("[CubeDataFixManager] SubPhotosButton이 할당되지 않았습니다!");
 
-        if (resetPhotosButton != null) resetPhotosButton.onClick.AddListener(ResetSubPhotos);
-        else Debug.LogError("[CubeDataFixManager] ResetPhotosButton이 할당되지 않았습니다!");
-
         if (submitButton != null) submitButton.onClick.AddListener(() => StartCoroutine(ValidateAndSubmit()));
         else Debug.LogError("[CubeDataFixManager] SubmitButton이 할당되지 않았습니다!");
 
@@ -234,7 +229,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (nameInput == null) Debug.LogError("[CubeDataFixManager] NameInput이 할당되지 않았습니다!");
         if (mainPhotoDisplay == null) Debug.LogError("[CubeDataFixManager] MainPhotoDisplay가 할당되지 않았습니다!");
         if (subPhotoGrid == null) Debug.LogError("[CubeDataFixManager] SubPhotoGrid가 할당되지 않았습니다!");
-        if (loadingText == null) Debug.LogError("[CubeDataFixManager] LoadingText가 할당되지 않았습니다!");
         if (petFriendlyToggle == null) Debug.LogError("[CubeDataFixManager] PetFriendlyToggle이 할당되지 않았습니다!");
         if (separateRestroomToggle == null) Debug.LogError("[CubeDataFixManager] SeparateRestroomToggle이 할당되지 않았습니다!");
         if (instagramIDInput == null) Debug.LogError("[CubeDataFixManager] InstagramIDInput이 할당되지 않았습니다!");
@@ -242,7 +236,6 @@ public class CubeDataFixManager : MonoBehaviour
         if (fixUIPanel == null) Debug.LogError("[CubeDataFixManager] FixUIPanel이 할당되지 않았습니다!");
         if (disableObject == null) Debug.LogError("[CubeDataFixManager] DisableObject가 할당되지 않았습니다!");
 
-        SetUIActive(loadingText?.gameObject, false);
         SetUIActive(warningObj, false);
         SetUIActive(fixUIPanel, false);
         SetUIActive(disableObject, false);
@@ -842,20 +835,6 @@ public class CubeDataFixManager : MonoBehaviour
         onComplete?.Invoke();
     }
 
-    private void ResetSubPhotos()
-    {
-        foreach (var photo in subPhotos)
-        {
-            Destroy(photo);
-        }
-        subPhotos.Clear();
-        subKeepPaths.Clear();
-        UpdateSubPhotoGrid();
-        ShowWarning(GetLocalizedText("sub_photos_reset"));
-        CancelInvoke("HideWarning");
-        Invoke("HideWarning", 2f);
-    }
-
     private void UpdateSubPhotoGrid()
     {
         for (int i = 0; i < subPhotoDisplays.Count; i++)
@@ -900,13 +879,6 @@ public class CubeDataFixManager : MonoBehaviour
     private void SetUIText(Text uiText, string text)
     {
         if (uiText != null) uiText.text = text;
-    }
-
-    private void ShowSpinner(string message)
-    {
-        if (loadingPanel != null) loadingPanel.SetActive(true);
-        if (loadingText != null) loadingText.text = message;
-        if (loadingSpinner != null) StartCoroutine(SpinnerAnimation());
     }
 
     private void HideSpinner()
@@ -1801,17 +1773,6 @@ public class CubeDataFixManager : MonoBehaviour
                     case SystemLanguage.ChineseSimplified: return "最多只能选择10张照片";
                     case SystemLanguage.Spanish: return "Solo se pueden seleccionar hasta 10 fotos";
                     default: return "Maximum 10 photos can be selected";
-                }
-
-            case "sub_photos_reset":
-                switch (lang)
-                {
-                    case SystemLanguage.Korean: return "서브 사진이 리셋되었습니다";
-                    case SystemLanguage.Japanese: return "サブ写真がリセットされました";
-                    case SystemLanguage.Chinese: 
-                    case SystemLanguage.ChineseSimplified: return "子照片已重置";
-                    case SystemLanguage.Spanish: return "Las fotos secundarias se han restablecido";
-                    default: return "Sub photos have been reset";
                 }
 
             case "no_object_selected":

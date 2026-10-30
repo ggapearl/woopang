@@ -121,7 +121,7 @@ namespace Redesign0926
             Transform P(string n) => panel.Find(n);
 
             // ── 사진 ──
-            const float photoY = -362f, tile = 430f, sub = 203f, gap = 24f;
+            const float photoY = -362f, tile = 430f, gap = 24f;
             SectionLabel(isModel ? P("Add_File") : P("Add_Logo"), UP, -276, 400);
             SectionLabel(P("Add_Imgs"), UP + tile + gap, -276, 700);
             var cap = P("glb_gltf_fbx_obj");
@@ -156,32 +156,24 @@ namespace Redesign0926
                 At(display.gameObject, UP, photoY, tile, tile);
                 var di = display.GetComponent<Image>(); di.preserveAspect = false; di.type = Image.Type.Simple;
             }
-            var subBtn = P("SubPhoto_Button");
-            if (subBtn != null) Tile(subBtn.gameObject, UP + tile + gap, photoY, sub, sub, "r0926_i_plus", 80);
-            var reset = P("SubPhoto_Reset");
-            if (reset != null) Tile(reset.gameObject, UP + tile + gap, photoY - sub - gap, sub, sub, "r0926_i_reset", 72);
-            var subs = P("SubPhotoContainer");
-            if (subs != null)
+            // 대표 사진 · 고른 파일 오른쪽 위 x — '초기화' 를 없애도 비울 수 있게 (정보 수정과 같은 모양 · 10-27)
+            var manager = FindUploadManager(card, isModel);
+            var fileTile = isModel ? P("Select_Button") : null;
+            var mainX = isModel ? (fileTile != null ? RemoveX(fileTile, "RemoveX0926", 140, 84, 12) : null)
+                                : (display != null ? RemoveX(display, "RemoveX0926", 140, 84, 12) : null);
+            if (manager != null && mainX != null)
             {
-                var srt = RT(subs.gameObject);
-                srt.anchorMin = new Vector2(0, 1); srt.anchorMax = new Vector2(1, 1); srt.pivot = new Vector2(0, 1);
-                srt.offsetMin = new Vector2(UP + tile + gap + sub + 16, photoY - tile);
-                srt.offsetMax = new Vector2(-UP, photoY);
-                var grid = subs.GetComponent<GridLayoutGroup>();
-                if (grid != null)
-                {
-                    grid.cellSize = new Vector2(sub, sub);
-                    grid.spacing = new Vector2(16, gap);
-                    grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
-                    grid.childAlignment = TextAnchor.UpperLeft;
-                    grid.constraint = GridLayoutGroup.Constraint.Flexible;
-                    EditorUtility.SetDirty(grid);
-                    FitGrid(grid, sub);
-                }
+                var xso = new SerializedObject(manager);
+                xso.FindProperty(isModel ? "fileRemove" : "mainPhotoRemove").objectReferenceValue = mainX;
+                xso.ApplyModifiedPropertiesWithoutUndo();
+                if (isModel) mainX.gameObject.SetActive(false);   // 파일을 고르면 켠다
             }
+            // 추가 사진 — 대표 사진 오른쪽에 두 줄, 넘치면 옆으로 민다 · '+' 는 늘 다음 칸 (10-27)
+            var subs = SubPhotoStrip(panel, UP + tile + gap, photoY, tile, log);
+            float sub = subs != null ? subs.GetComponent<GridLayoutGroup>().cellSize.x : 0f;
             // 사진을 불러오는 동안 그 칸에 빈 칸+원호 — 3D 모델은 추가 사진만 (대표 칸은 모델 파일)
-            PhotoLoadingSkeleton(panel, isModel ? null : display, UP, photoY, tile, subs, sub, FindUploadManager(card, isModel), log);
-            SubPhotoTools(panel, subs, FindUploadManager(card, isModel), true, log);   // 꾹 눌러 옮기기 · 칸마다 x (10-26)
+            PhotoLoadingSkeleton(panel, isModel ? null : display, UP, photoY, tile, subs, sub, manager, log);
+            SubPhotoTools(panel, subs, manager, true, log);   // 꾹 눌러 옮기기 · 칸마다 x (10-26)
 
             // ── 이름 ──
             const float nameY = photoY - tile - 62;   // -854
@@ -479,15 +471,6 @@ namespace Redesign0926
             PillPart(go.transform, "Spin0926", "r0926_arc", Pink2, spin, Image.Type.Simple);
             EditorUtility.SetDirty(go);
             return go;
-        }
-
-        // 추가 사진이 네 장을 넘으면 칸을 줄여 자리 안에 — 예전엔 아래로 넘쳐 '이름' 칸을 덮었다 (10-20)
-        private static void FitGrid(GridLayoutGroup grid, float cell)
-        {
-            var fit = Ensure<R0926FitGrid>(grid.gameObject);
-            var so = new SerializedObject(fit);
-            so.FindProperty("maxCell").floatValue = cell;
-            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void SectionLabel(Transform label, float x, float y, float w)

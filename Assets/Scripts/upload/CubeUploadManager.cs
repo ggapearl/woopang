@@ -17,7 +17,6 @@ public class CubeUploadManager : MonoBehaviour
     [SerializeField] private Image mainPhotoDisplay;
     [SerializeField] private Button subPhotosButton;
     [SerializeField] private GridLayoutGroup subPhotoGrid;
-    [SerializeField] private Button resetPhotosButton;
     [SerializeField] private Toggle petFriendlyToggle;
     [SerializeField] private Toggle separateRestroomToggle;
     [SerializeField] private Toggle instagramToggle;
@@ -59,6 +58,7 @@ public class CubeUploadManager : MonoBehaviour
     [Header("추가 사진 칸 (10-26) — Redesign0926Apply3 이 만들어 연결")]
     [SerializeField] private Button subPhotoRemoveTemplate; // 칸마다 복제해 넣는 x (꺼 둔 본)
     [SerializeField] private R0926PhotoReorder subReorder;  // 사진을 꾹 눌러 끌면 보이는 순서가 바뀐다
+    [SerializeField] private Button mainPhotoRemove;        // 대표 사진 오른쪽 위 x — '초기화' 를 없앤 대신 (10-27)
 
     [Header("자르기 · 올리는 중")]
     [SerializeField] private R0926PhotoCrop photoCrop; // 대표 사진 자르기 화면 (Redesign0926ApplyCrop 이 만들어 연결)
@@ -190,7 +190,7 @@ public class CubeUploadManager : MonoBehaviour
         }
         if (mainPhotoButton != null) mainPhotoButton.onClick.AddListener(() => StartCoroutine(SelectAndCropMainPhoto()));
         if (subPhotosButton != null) subPhotosButton.onClick.AddListener(() => StartCoroutine(SelectSubPhotos()));
-        if (resetPhotosButton != null) resetPhotosButton.onClick.AddListener(ResetSubPhotos);
+        if (mainPhotoRemove != null) mainPhotoRemove.onClick.AddListener(RemoveMain);
         if (submitButton != null) submitButton.onClick.AddListener(() => StartCoroutine(ValidateAndSubmit()));
 
         // 카테고리 토글 초기화
@@ -1319,15 +1319,10 @@ public class CubeUploadManager : MonoBehaviour
         UpdateSubPhotoGrid();
     }
 
-    // '초기화' — 추가 사진에 대표 사진까지 비운다 (10-21 대표님 「초기화를 누르면 서브사진 뿐 아니라 메인사진까지」)
-    private void ResetSubPhotos()
+    /// <summary>대표 사진 x — 대표 사진만 비운다 (올릴 때 대표 사진은 꼭 있어야 한다 — '등록하기' 가 알린다)</summary>
+    private void RemoveMain()
     {
-        foreach (var photo in subPhotos)
-        {
-            Destroy(photo);
-        }
-        subPhotos.Clear();
-        UpdateSubPhotoGrid();
+        if (isProcessing) return;
         if (mainPhoto != null)
         {
             Destroy(mainPhoto);
@@ -1335,9 +1330,6 @@ public class CubeUploadManager : MonoBehaviour
         }
         SetMainSprite(null);
         SetMainPhotoUIState(false);
-        ShowWarning(R0926LocalizedText.Say("사진이 모두 초기화되었습니다!", "All photos have been reset!", "写真をすべてリセットしました！", "已重置全部照片！", "¡Se restablecieron todas las fotos!"));
-        CancelInvoke("HideWarning");
-        Invoke("HideWarning", 2f);
     }
 
     private void UpdateSubPhotoGrid()
@@ -2130,17 +2122,6 @@ public class CubeUploadManager : MonoBehaviour
                     case SystemLanguage.ChineseSimplified: return "照片裁剪失败";
                     case SystemLanguage.Spanish: return "Error al recortar la foto";
                     default: return "Photo crop failed";
-                }
-
-            case "sub_photos_reset":
-                switch (lang)
-                {
-                    case SystemLanguage.Korean: return "서브 사진이 리셋되었습니다";
-                    case SystemLanguage.Japanese: return "サブ写真がリセットされました";
-                    case SystemLanguage.Chinese: return "子照片已重置";
-                    case SystemLanguage.ChineseSimplified: return "子照片已重置";
-                    case SystemLanguage.Spanish: return "Fotos secundarias restablecidas";
-                    default: return "Sub photos reset";
                 }
 
             case "enable_location_service":

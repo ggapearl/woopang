@@ -108,7 +108,7 @@ public class SwipePanelController : MonoBehaviour
             {
                 startPos = touch.screenPosition;
                 dragStartPosX = currentAnchoredX;
-                isDragging = true;
+                isDragging = !R0926PhotoStrip.Covers(touch.screenPosition);   // 옆으로 밀리는 추가 사진 줄 위 — 그 줄 몫
                 dirDecided = false;
             }
             else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Moved && isDragging)

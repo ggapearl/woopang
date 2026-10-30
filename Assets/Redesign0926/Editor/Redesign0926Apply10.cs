@@ -281,7 +281,7 @@ namespace Redesign0926
             }
 
             // 사진 — 로고 한 칸 + 추가 사진
-            const float tile = 400f, sub = 188f, gap = 24f;
+            const float tile = 400f, gap = 24f;
             float photoY = y - 66f;
             SectionLabel(P("Add_Logo"), UP, y, 400);
             SectionLabel(P("Add_Imgs"), UP + tile + gap, y, 700);
@@ -293,34 +293,10 @@ namespace Redesign0926
                 At(display.gameObject, UP, photoY, tile, tile);
                 var di = display.GetComponent<Image>(); if (di != null) { di.preserveAspect = false; di.type = Image.Type.Simple; }
             }
-            var subBtn = P("SubPhoto_Button");
-            if (subBtn != null) Tile(subBtn.gameObject, UP + tile + gap, photoY, sub, sub, "r0926_i_plus", 76);
-            var reset = P("SubPhoto_Reset");
-            if (reset != null) Tile(reset.gameObject, UP + tile + gap, photoY - sub - gap, sub, sub, "r0926_i_reset", 68);
-            var subs = P("SubPhotoContainer");
-            if (subs != null)
-            {
-                var srt = RT(subs.gameObject);
-                srt.anchorMin = new Vector2(0, 1); srt.anchorMax = new Vector2(1, 1); srt.pivot = new Vector2(0, 1);
-                srt.offsetMin = new Vector2(UP + tile + gap + sub + 16, photoY - tile);
-                srt.offsetMax = new Vector2(-UP, photoY);
-                var grid = subs.GetComponent<GridLayoutGroup>();
-                if (grid != null)
-                {
-                    grid.cellSize = new Vector2(sub, sub); grid.spacing = new Vector2(16, 16);
-                    grid.startCorner = GridLayoutGroup.Corner.UpperLeft; grid.childAlignment = TextAnchor.UpperLeft;
-                    grid.constraint = GridLayoutGroup.Constraint.Flexible;
-                    EditorUtility.SetDirty(grid);
-                    FitGrid(grid, sub);
-                }
-            }
+            // 추가 사진 — 대표 사진 오른쪽에 두 줄, 넘치면 옆으로 민다 · '+' 는 늘 다음 칸 · '초기화'·'Loading images..' 없음 (10-27)
+            var subs = SubPhotoStrip(panel, UP + tile + gap, photoY, tile, log);
+            float sub = subs != null ? subs.GetComponent<GridLayoutGroup>().cellSize.x : 0f;
             PhotoLoadingSkeleton(panel, display, UP, photoY, tile, subs, sub, FindInScene<CubeDataFixManager>(card.gameObject), log);
-            var loading = P("SubPhoto_LoadingText");
-            if (loading != null)
-            {
-                Txt(loading.gameObject, null, 36, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
-                At(loading.gameObject, UP + tile + gap, photoY - tile - 8, 700, 50);
-            }
 
             // 분류 칩
             float catY = photoY - tile - 60f;
@@ -457,10 +433,10 @@ namespace Redesign0926
 
             // 사진 x — 대표 사진은 사진 위, 추가 사진은 칸마다 복제해 넣는 본 (CubeDataFixManager 가 풀을 만들 때)
             var display = panel.Find("MainPhotoDisplay");
-            Button mainX = display != null ? RemoveX(display, "RemoveX0926", 120, 60, 10) : null;
+            Button mainX = display != null ? RemoveX(display, "RemoveX0926", 140, 84, 12) : null;   // 10-27 대표님 「x버튼이 너무 작은데 … 키워」
             Button subX = SubRemoveX(panel, "SubRemoveX0926_Template");   // 칸 크기를 따라가는 x (10-26)
             subX.gameObject.SetActive(false);
-            SubPhotoTools(panel, panel.Find("SubPhotoContainer"), mgr, false, log);   // 꾹 눌러 옮기기 (10-26)
+            SubPhotoTools(panel, panel.Find("SubStrip0926/SubPhotoContainer"), mgr, false, log);   // 꾹 눌러 옮기기 (10-26) — 추가 사진은 옆으로 밀리는 줄 안 (10-27)
 
             // 카드 오른쪽 위 '삭제'는 없앤다 — 장소 '···' 에 '삭제'가 이미 있다 (10-27 대표님)
             var oldDel = card.Find("DeletePlace0926");
@@ -508,17 +484,21 @@ namespace Redesign0926
             log.Add("내 장소 고치기 ok");
         }
 
-        // 사진 오른쪽 위 작은 x — 누름 영역은 동그라미보다 넓게 (사진 칸 자체는 누를 일이 없다)
+        // 사진 오른쪽 위 x — 누름 영역은 동그라미보다 넓게 (사진 칸 자체는 누를 일이 없다).
+        // 그림은 다시 켠다 — 3D 파일 칸의 x 는 Tile 이 칸 속 그림을 끄는 자리에 있다
         private static Button RemoveX(Transform parent, string name, float hit, float dot, float inset)
         {
             var go = FindOrCreate(parent, name);
             go.transform.localScale = Vector3.one;
             go.transform.SetAsLastSibling();
             SetRect(RT(go), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), Vector2.zero, new Vector2(hit, hit));
-            Img(go, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            var hi = Img(go, null, new Color(0, 0, 0, 0), Image.Type.Simple);
+            hi.raycastTarget = true;
+            hi.enabled = true;
             var d = FindOrCreate(go.transform, "Dot0926");
             var di = Img(d, Spr("r0926_circle"), new Color(0.05f, 0.06f, 0.07f, 0.78f), Image.Type.Simple);
             di.raycastTarget = false;
+            di.enabled = true;
             SetRect(RT(d), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-inset, -inset), new Vector2(dot, dot));
             var ic = FindOrCreate(d.transform, "Icon0926");
             Img(ic, Spr("r0926_i_close"), Ink, Image.Type.Simple).raycastTarget = false;

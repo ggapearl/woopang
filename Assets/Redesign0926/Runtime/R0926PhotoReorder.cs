@@ -12,7 +12,8 @@ using UnityEngine.UI;
 /// 들고 있는 사진의 자리는 흐리게 비워 둔다. 손을 떼면 떠 있던 사진이 그 칸으로 내려앉는다.
 /// 터치를 직접 읽는다(R0926SwipeDismiss 와 같은 방식) — 오른쪽 위 x 위에서 꾹 눌러도 들리고, 그때 x 는 눌리지 않는다(Engaged).
 /// 꾹 누르기 전에 손가락이 움직이면 들지 않는다(시트 밀어 닫기·옆으로 넘기기 몫) — 들고 있는 동안엔 그 둘이 이 손가락을 놓아준다(Holding).
-/// 칸 목록·옮기기는 매니저가 Bind 로 넘기고, 떠 있는 사진(ghost)은 Redesign0926Apply 가 만들어 꺼 둔다
+/// 칸 목록·옮기기는 매니저가 Bind 로 넘기고, 떠 있는 사진(ghost)은 Redesign0926Apply 가 만들어 꺼 둔다.
+/// 옆으로 밀리는 줄(R0926PhotoStrip) 안이면 — 들고 가장자리로 가면 그쪽으로 밀고, 줄 밖(잘려 안 보이는 칸)에는 내려놓지 않는다
 /// </summary>
 public class R0926PhotoReorder : MonoBehaviour
 {
@@ -37,6 +38,7 @@ public class R0926PhotoReorder : MonoBehaviour
     private Func<bool> busy;
 
     private Canvas root;
+    private R0926PhotoStrip strip;
     private Pointer tracked;          // 이번에 누른 장치 — 터치·마우스가 섞여도 끝까지 그것만 본다
     private int pressIndex = -1;
     private Vector2 pressPos;
@@ -68,6 +70,7 @@ public class R0926PhotoReorder : MonoBehaviour
     {
         var c = GetComponentInParent<Canvas>(true);
         root = c != null ? c.rootCanvas : null;
+        strip = GetComponentInParent<R0926PhotoStrip>(true);
     }
 
     private void OnDisable() => Drop(true);
@@ -175,6 +178,7 @@ public class R0926PhotoReorder : MonoBehaviour
             float s = Mathf.Lerp(g.localScale.x, LiftScale, 1f - Mathf.Exp(-20f * Time.unscaledDeltaTime));
             g.localScale = new Vector3(s, s, 1f);
         }
+        if (strip != null) strip.EdgeScroll(pos);
         int to = Over(at);
         if (to < 0 || to == held) return;
         move(held, to);
@@ -182,9 +186,10 @@ public class R0926PhotoReorder : MonoBehaviour
         Dim(to);
     }
 
-    // 그 자리의 사진 칸 (칸 사이 틈 · 빈 칸이면 -1 — 그대로 둔다)
+    // 그 자리의 사진 칸 (칸 사이 틈 · 빈 칸 · 줄 밖이면 -1 — 그대로 둔다)
     private int Over(Vector2 screen)
     {
+        if (strip != null && !strip.Shows(screen)) return -1;
         int n = Mathf.Min(count(), cells.Count);
         for (int i = 0; i < n; i++)
             if (cells[i] != null && cells[i].gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(cells[i].rectTransform, screen, Cam)) return i;

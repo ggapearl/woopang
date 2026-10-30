@@ -20,12 +20,12 @@ public class ModelUploadManager : MonoBehaviour
     [SerializeField] private Button selectFileButton;
     [SerializeField] private Button selectedFileButton;
     [SerializeField] private Text fileCaption;   // 파일 칸 아래 '(glb,gltf,fbx,obj)' — 고르면 파일 이름 (Redesign0926Apply3 가 연결)
+    [SerializeField] private Button fileRemove;  // 파일 칸 오른쪽 위 x — 고른 파일을 비운다 ('초기화' 를 없앤 대신 · 10-27, Redesign0926Apply3 가 연결)
     [SerializeField] private Button uploadButton;
 
     [Header("Photo Selection")]
     [SerializeField] private Button subPhotosButton;
     [SerializeField] private GridLayoutGroup subPhotoGrid;
-    [SerializeField] private Button resetPhotosButton;
     [SerializeField] private R0926PhotoLoading photoLoading; // 추가 사진 칸에 빈 칸+원호 (Redesign0926Apply3 가 만들어 연결)
 
     [Header("추가 사진 칸 (10-26) — Redesign0926Apply3 이 만들어 연결")]
@@ -119,7 +119,7 @@ public class ModelUploadManager : MonoBehaviour
         if (categoryToggleLabel == null && categoryToggle != null)
             categoryToggleLabel = categoryToggle.GetComponentInChildren<Text>(true);
         if (photoLoading == null && subPhotosButton != null)
-            photoLoading = subPhotosButton.transform.parent.GetComponent<R0926PhotoLoading>();
+            photoLoading = subPhotosButton.GetComponentInParent<R0926PhotoLoading>(true);   // '+' 는 추가 사진 그리드 안 (10-27)
         if (busy == null) busy = FindAnyObjectByType<R0926Busy>(FindObjectsInactive.Include);
         if (fileCaption == null && selectFileButton != null)
         {
@@ -177,14 +177,7 @@ public class ModelUploadManager : MonoBehaviour
             Debug.LogError("subPhotosButton이 할당되지 않았습니다!");
         }
 
-        if (resetPhotosButton != null) 
-        {
-            resetPhotosButton.onClick.AddListener(ResetSubPhotos);
-        }
-        else 
-        {
-            Debug.LogError("resetPhotosButton이 할당되지 않았습니다!");
-        }
+        if (fileRemove != null) fileRemove.onClick.AddListener(() => { if (!isProcessing) ResetFileSelection(); });
 
         if (instagramToggle != null)
         {
@@ -826,13 +819,14 @@ public class ModelUploadManager : MonoBehaviour
     // 파일 칸 아래 글자 — 고른 파일 이름(밝게) / 안 골랐으면 원래 '(glb,gltf,fbx,obj)'
     private void ShowFileName(string fileName)
     {
+        bool picked = !string.IsNullOrEmpty(fileName);
+        if (fileRemove != null) fileRemove.gameObject.SetActive(picked);
         if (fileCaption == null) return;
         if (fileCaptionDefault == null)
         {
             fileCaptionDefault = fileCaption.text;
             fileCaptionColor = fileCaption.color;
         }
-        bool picked = !string.IsNullOrEmpty(fileName);
         // 칸 폭(한글 16자 남짓)을 넘으면 가운데를 줄인다 — 확장자는 남긴다
         if (picked && fileName.Length > 16)
         {
@@ -841,21 +835,6 @@ public class ModelUploadManager : MonoBehaviour
         }
         fileCaption.text = picked ? fileName : fileCaptionDefault;
         fileCaption.color = picked ? Color.white : fileCaptionColor;
-    }
-
-    // '초기화' — 추가 사진에 고른 모델 파일까지 비운다 (10-21 대표님 「초기화를 누르면 서브사진 뿐 아니라 메인까지」)
-    private void ResetSubPhotos()
-    {
-        foreach (var photo in subPhotos)
-        {
-            Destroy(photo);
-        }
-        subPhotos.Clear();
-        UpdateSubPhotoGrid();
-        ResetFileSelection();
-        ShowWarning(R0926LocalizedText.Say("파일과 사진이 모두 초기화되었습니다!", "File and photos have been reset!", "ファイルと写真をリセットしました！", "已重置文件和照片！", "¡Se restablecieron el archivo y las fotos!"));
-        CancelInvoke("HideWarning");
-        Invoke("HideWarning", 2f);
     }
 
     private void UpdateSubPhotoGrid()
@@ -1421,17 +1400,6 @@ public class ModelUploadManager : MonoBehaviour
                     case SystemLanguage.ChineseSimplified: return "照片选择失败";
                     case SystemLanguage.Spanish: return "Falló la selección de fotos";
                     default: return "Photo selection failed";
-                }
-
-            case "sub_photos_reset":
-                switch (lang)
-                {
-                    case SystemLanguage.Korean: return "서브 사진이 리셋되었습니다";
-                    case SystemLanguage.Japanese: return "サブ写真がリセットされました";
-                    case SystemLanguage.Chinese: return "子照片已重置";
-                    case SystemLanguage.ChineseSimplified: return "子照片已重置";
-                    case SystemLanguage.Spanish: return "Fotos secundarias restablecidas";
-                    default: return "Sub photos reset";
                 }
 
             case "location_not_ready":

@@ -3527,8 +3527,8 @@ namespace Redesign0926
             {
                 log.Add("  [" + tag + "] 장소 처리중 " + busy(cum) + " · 3D 처리중 " + busy(mum) + " · 사진 시트 애니 " + dlgAnim()
                     + " · 카드 " + (swipe != null ? swipe.GetCurrentPanel().ToString() : "?"));
-                log.Add("    장소: " + top(btn(cum, "mainPhotoButton")) + " | " + top(btn(cum, "subPhotosButton")) + " | " + top(btn(cum, "resetPhotosButton")));
-                log.Add("    3D: " + top(btn(mum, "selectFileButton")) + " | " + top(btn(mum, "selectedFileButton")) + " | " + top(btn(mum, "subPhotosButton")) + " | " + top(btn(mum, "resetPhotosButton")));
+                log.Add("    장소: " + top(btn(cum, "mainPhotoButton")) + " | " + top(btn(cum, "subPhotosButton")) + " | " + top(btn(cum, "mainPhotoRemove")));
+                log.Add("    3D: " + top(btn(mum, "selectFileButton")) + " | " + top(btn(mum, "selectedFileButton")) + " | " + top(btn(mum, "subPhotosButton")) + " | " + top(btn(mum, "fileRemove")));
             };
 
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
@@ -3563,6 +3563,17 @@ namespace Redesign0926
                         && !btn(mum, "selectedFileButton").gameObject.activeInHierarchy, "3D: 처음엔 파일 칸(체크 아님)");
             Check(() => topOk(btn(mum, "selectFileButton")) && topOk(btn(mum, "subPhotosButton")), "3D: 파일·추가 사진 칸이 맨 위에서 눌린다");
             Check(() => { var c = Find("UploadPage/Clip0926/UploadSheet0926/ModelUploadPage/Panel/Chips0926"); return c != null && c.childCount == 8; }, "3D: 분류 칩 8개(장소와 같게)");
+            Check(() =>
+            {
+                foreach (var page in new[] { "CubeUploadPage", "ModelUploadPage" })
+                {
+                    var p = Find("UploadPage/Clip0926/UploadSheet0926/" + page + "/Panel");
+                    if (p == null) return false;
+                    foreach (var t in p.GetComponentsInChildren<Transform>(true)) if (t.name == "SubPhoto_Reset" || t.name == "SubPhoto_LoadingText") return false;
+                    foreach (var t in p.GetComponentsInChildren<Text>(true)) if (t.text.Contains("Loading images")) return false;
+                }
+                return btn(mum, "fileRemove") != null && !btn(mum, "fileRemove").gameObject.activeSelf;
+            }, "장소·3D: '초기화' 단추 · 'Loading images..' 글자 없음 · 3D 파일 x 는 고르기 전엔 숨김 (10-27)");
 
             // 파일을 고른 뒤 — 체크 칸 없이 칸 아래 글자가 파일 이름, 초기화하면 원래대로 (10-21)
             string glb = null, capDefault = null;
@@ -3580,10 +3591,12 @@ namespace Redesign0926
             Check(() => btn(mum, "selectFileButton").gameObject.activeInHierarchy && !btn(mum, "selectedFileButton").gameObject.activeSelf
                         && capText() == "pk_test.glb", "3D: 파일을 골라도 체크 칸 없이 칸 아래에 파일 이름");
             Check(() => topOk(btn(mum, "selectFileButton")), "3D: 파일을 고른 뒤에도 파일 칸이 눌린다");
-            Do(() => btn(mum, "resetPhotosButton").onClick.Invoke());
+            Check(() => topOk(btn(mum, "fileRemove")), "3D: 파일을 고르면 칸 오른쪽 위에 x — 맨 위에서 눌린다 ('초기화' 대신 · 10-27)");
+            Do(() => btn(mum, "fileRemove").onClick.Invoke());
             Sleep(0.3f);
-            Check(() => typeof(ModelUploadManager).GetField("selectedFilePath", F).GetValue(mum) == null && !string.IsNullOrEmpty(capDefault) && capText() == capDefault,
-                "3D: 초기화하면 고른 파일도 비고 글자가 원래대로");
+            Check(() => typeof(ModelUploadManager).GetField("selectedFilePath", F).GetValue(mum) == null && !string.IsNullOrEmpty(capDefault) && capText() == capDefault
+                        && !btn(mum, "fileRemove").gameObject.activeSelf,
+                "3D: 파일 x — 고른 파일이 비고 글자가 원래대로 · x 도 숨는다");
             Do(() => { try { System.IO.File.Delete(glb); } catch { } });
 
             // 파일 고르기 창의 답을 잃었을 때 — 다시 누르면 풀린다 (에디터에선 파일 칸이 모달 창을 띄우므로 칸 대신 PickerFree 를 직접)
@@ -3607,7 +3620,7 @@ namespace Redesign0926
             Do(() => Click("PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton/ClosePx0926"));
             Sleep(0.8f);
 
-            // 초기화 = 대표 사진까지 (10-21)
+            // 대표 사진 x — '초기화' 를 없앤 대신 대표 사진은 이걸로 비운다 (10-27)
             Do(() =>
             {
                 var tex = new Texture2D(8, 8);
@@ -3618,9 +3631,11 @@ namespace Redesign0926
             Sleep(0.3f);
             Func<bool> mainShown = () => ((Component)typeof(CubeUploadManager).GetField("mainPhotoDisplay", F).GetValue(cum)).gameObject.activeSelf;
             Check(() => typeof(CubeUploadManager).GetField("mainPhoto", F).GetValue(cum) != null && mainShown(), "장소: (준비) 대표 사진을 넣었다");
-            Do(() => btn(cum, "resetPhotosButton").onClick.Invoke());
+            Shot("pickers_main_x");
+            Check(() => topOk(btn(cum, "mainPhotoRemove")), "장소: 대표 사진 오른쪽 위 x 가 맨 위에서 눌린다");
+            Do(() => btn(cum, "mainPhotoRemove").onClick.Invoke());
             Sleep(0.3f);
-            Check(() => typeof(CubeUploadManager).GetField("mainPhoto", F).GetValue(cum) == null && !mainShown(), "장소: 초기화하면 대표 사진도 빈다");
+            Check(() => typeof(CubeUploadManager).GetField("mainPhoto", F).GetValue(cum) == null && !mainShown(), "장소: 대표 사진 x — 대표 사진이 빈다");
 
             // 고르기 창의 답을 잃었을 때 — 불러오는 칸이 떠 있어도 칸이 눌리고, 다시 누르면 풀려 사진 시트가 뜬다 (10-21)
             Do(() =>
@@ -3654,12 +3669,57 @@ namespace Redesign0926
             Sleep(0.8f);
         }
 
+        // 추가 사진 줄의 켜진 칸마다 (열,줄) — 두 줄로 위에서 아래(1 3 5 / 2 4 6)면 k 번째 칸이 (k/2, k%2) (10-27).
+        // symbols: ■ 사진 · □ 불러오는 빈 칸 · + 추가 단추
+        private static string SlotLayout(Transform grid, out string symbols, out bool columnMajor)
+        {
+            symbols = "";
+            columnMajor = grid != null;
+            if (grid == null) return "그리드 없음";
+            var g = grid.GetComponent<GridLayoutGroup>();
+            var gr = ((RectTransform)grid).rect;
+            var s = new List<string>();
+            int k = 0;
+            foreach (Transform c in grid)
+            {
+                if (!c.gameObject.activeSelf) continue;
+                var rt = (RectTransform)c;
+                Vector2 p = grid.InverseTransformPoint(rt.TransformPoint(rt.rect.center));
+                int col = Mathf.RoundToInt((p.x - gr.xMin - g.padding.left - g.cellSize.x / 2f) / (g.cellSize.x + g.spacing.x));
+                int row = Mathf.RoundToInt((gr.yMax - g.padding.top - g.cellSize.y / 2f - p.y) / (g.cellSize.y + g.spacing.y));
+                string sym = c.name == "SubPhoto_Button" ? "+" : c.name.StartsWith("SubLoading") ? "□" : "■";
+                symbols += sym;
+                s.Add(sym + "(" + col + "," + row + ")");
+                if (col != k / 2 || row != k % 2) columnMajor = false;
+                k++;
+            }
+            return string.Join(" ", s);
+        }
+
+        // 그 자리를 누르면 그 단추가 받는다 (맨 위에 걸린 것의 누름 받는 곳)
+        private static bool TopIs(Transform button, Vector2 screen)
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es == null || button == null) return false;
+            var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+            es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = screen }, hits);
+            return hits.Count > 0 && UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerClickHandler>(hits[0].gameObject) == button.gameObject;
+        }
+
         private static void PlanPhotoLoad()
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const string Strip = "SubStrip0926";   // 추가 사진 줄 — 옆으로 민다 (10-27)
             CubeUploadManager cum = null;
             R0926PhotoLoading pl = null;
             Func<List<Texture2D>> photos = () => typeof(CubeUploadManager).GetField("subPhotos", F).GetValue(cum) as List<Texture2D>;
+            // 추가 사진 비우기 — '초기화' 를 없앴으니(10-27) 시험이 직접
+            Action clearSubs = () =>
+            {
+                foreach (var t in photos()) if (t != null) UnityEngine.Object.Destroy(t);
+                photos().Clear();
+                typeof(CubeUploadManager).GetMethod("UpdateSubPhotoGrid", F).Invoke(cum, null);
+            };
             Func<int, string[]> paths = n =>
             {
                 var names = new[] { "bg_city.png", "bg_sky.png", "brand.png" };
@@ -3787,13 +3847,32 @@ namespace Redesign0926
             Shot("photoload_sub_mid");
             Check(() =>
             {
-                var grid = pl.transform.Find("SubPhotoContainer");
-                int on = 0; string order = "";
-                foreach (Transform c in grid) if (c.gameObject.activeSelf) { on++; order += c.name.StartsWith("SubLoading") ? "□" : "■"; }
-                log.Add($"  추가 사진 칸: {order} (■ 사진 · □ 불러오는 중)");
-                return order == "■□□";
-            }, "추가 사진: 들어온 사진 뒤에 불러오는 빈 칸");
-            Do(() => { typeof(CubeUploadManager).GetMethod("ResetSubPhotos", F).Invoke(cum, null); pl.SetSub(0); });
+                string lay = SlotLayout(pl.transform.Find(Strip + "/SubPhotoContainer"), out string order, out bool colMajor);
+                log.Add($"  추가 사진 칸: {lay} (■ 사진 · □ 불러오는 중 · (열,줄))");
+                return order == "■□□+" && colMajor;
+            }, "추가 사진: 들어온 사진 뒤에 불러오는 빈 칸 · '+' 는 그다음 칸 — 두 줄로 위에서 아래 (1 3 / 2 4)");
+            Do(() => { clearSubs(); pl.SetSub(0); });
+            Sleep(0.3f);
+            Check(() =>
+            {
+                string lay = SlotLayout(pl.transform.Find(Strip + "/SubPhotoContainer"), out string order, out bool colMajor);
+                log.Add("  사진 0장: " + lay);
+                return order == "+" && colMajor;
+            }, "추가 사진 0장 — '+' 는 1번 칸 (10-27)");
+            Do(() =>
+            {
+                photos().Add(NativeGallery.LoadImageAtPath(paths(1)[0], 1024, false, false));
+                typeof(CubeUploadManager).GetMethod("UpdateSubPhotoGrid", F).Invoke(cum, null);
+            });
+            Sleep(0.3f);
+            Shot("photoload_one");
+            Check(() =>
+            {
+                string lay = SlotLayout(pl.transform.Find(Strip + "/SubPhotoContainer"), out string order, out bool colMajor);
+                log.Add("  사진 1장: " + lay);
+                return order == "■+" && colMajor;
+            }, "추가 사진 1장 — '+' 는 2번 칸 (첫 칸 아래)");
+            Do(clearSubs);
             Sleep(0.3f);
 
             // 4) 실제 읽기 코루틴 — 세 장: 빈 칸 셋이 먼저 깔리고, 한 장씩 사진으로 바뀌어 끝에 빈 칸 0
@@ -3831,11 +3910,11 @@ namespace Redesign0926
             Shot("photoload_three");
             Check(() =>
             {
-                var grid = pl.transform.Find("SubPhotoContainer");
+                var grid = pl.transform.Find(Strip + "/SubPhotoContainer");
                 string sz = ""; bool square = true; int n = 0;
                 foreach (Transform c in grid)
                 {
-                    if (!c.gameObject.activeSelf || !c.name.StartsWith("SubPhoto_")) continue;
+                    if (!c.gameObject.activeSelf || !c.name.StartsWith("SubPhoto_") || c.name == "SubPhoto_Button") continue;
                     var sp = c.GetComponent<Image>().sprite;
                     n++;
                     if (sp == null) { square = false; continue; }
@@ -3857,14 +3936,19 @@ namespace Redesign0926
                   "연결: 장소 추가 — 꾹 눌러 옮기기 · 칸마다 x");
             Check(() =>
             {
-                bool ok = true;
+                bool ok = true; string sz = "";
                 for (int k = 0; k < 3; k++)
                 {
                     var x = ucells()[k].transform.Find("RemoveX0926");
-                    ok &= x != null && x.gameObject.activeInHierarchy && rectOf(x).width <= rectOf(ucells()[k].transform).width * 0.55f;
+                    var dot = x != null ? x.Find("Dot0926") : null;
+                    if (dot == null) return false;
+                    float cw = rectOf(ucells()[k].transform).width, hw = rectOf(x).width, dw = rectOf(dot).width;
+                    if (k == 0) sz = $"칸 {cw:0}px · 누름 자리 {hw:0}px · 점 {dw:0}px";
+                    ok &= x.gameObject.activeInHierarchy && hw <= cw * 0.62f && dw >= cw * 0.33f && TopIs(x, rectOf(dot).center);
                 }
+                log.Add("  추가 사진 x: " + sz);
                 return ok;
-            }, "장소 추가에도 사진마다 오른쪽 위 x (칸의 절반 이하)");
+            }, "장소 추가에도 사진마다 오른쪽 위 x — 점이 칸의 1/3 넘게 크고 맨 위에서 눌린다 (10-27 「x버튼이 너무 작은데」)");
             Do(() =>
             {
                 before = new List<Texture2D>(photos());
@@ -3901,7 +3985,18 @@ namespace Redesign0926
             Check(() => photos().Count == 2 && photos()[0] == before[2] && photos()[1] == before[1] && !ucells()[2].gameObject.activeSelf,
                   "x — 그 사진만 빠지고 뒤가 당겨진다");
 
-            // 5) 열 장 — 칸이 줄어 대표 사진 높이 안에 모두 (이름 칸을 덮지 않는다)
+            // 5) 열 장 — 칸은 줄지 않고 두 줄 그대로, 옆으로 밀어 본다 (10-27). '+' 를 누른 뒤 칸이 늘면 끝까지 밀어 새 칸을 보여 준다
+            R0926PhotoStrip strip = null;
+            Func<Transform> ugrid = () => pl.transform.Find(Strip + "/SubPhotoContainer");
+            Func<float> sx = () => strip.content.anchoredPosition.x;
+            Do(() =>
+            {
+                strip = pl.transform.Find(Strip)?.GetComponent<R0926PhotoStrip>();
+                (typeof(CubeUploadManager).GetField("subPhotosButton", F).GetValue(cum) as Button)?.onClick.Invoke();   // '+' — 사진 고르기 시트
+            });
+            Sleep(0.7f);
+            Do(() => Click(dlgRow + "CancelButton/ClosePx0926"));
+            Sleep(1.0f);
             Do(() =>
             {
                 done = false; until = EditorApplication.timeSinceStartup + 30;
@@ -3911,51 +4006,118 @@ namespace Redesign0926
             });
             steps.Enqueue(() => done || EditorApplication.timeSinceStartup > until);
             Sleep(0.4f);
-            Check(() =>
-            {
-                var grid = pl.transform.Find("SubPhotoContainer");
-                var name = pl.transform.Find("NameInput");
-                var label = pl.transform.Find("Name");
-                Rect rg = rectOf(grid), rn = rectOf(name), rl = rectOf(label);
-                float low = float.MaxValue; int on = 0;
-                foreach (Transform c in grid) if (c.gameObject.activeSelf) { on++; low = Mathf.Min(low, rectOf(c).yMin); }
-                var cell = grid.GetComponent<GridLayoutGroup>().cellSize;
-                log.Add($"  열 장: 사진 {photos().Count} · 칸 {cell.x:0} · 맨 아래 칸 밑 {low:0} · 그리드 밑 {rg.yMin:0} · 이름표 위 {rl.yMax:0} · 이름 칸 위 {rn.yMax:0}");
-                return photos().Count == 10 && on == 10 && low >= rg.yMin - 2 && low > rl.yMax && cell.x < 203f;
-            }, "추가 사진 열 장: 칸이 줄어 자리 안에 · 이름 칸을 덮지 않음");
-            Check(() =>
-            {
-                var grid = pl.transform.Find("SubPhotoContainer");
-                float worst = 0f;
-                foreach (Transform c in grid)
-                {
-                    if (!c.gameObject.activeSelf || !c.name.StartsWith("SubPhoto_")) continue;
-                    var x = c.Find("RemoveX0926");
-                    if (x == null) return false;
-                    worst = Mathf.Max(worst, rectOf(x).width / rectOf(c).width);
-                }
-                log.Add($"  열 장 x 누름 자리 / 칸: 최대 {worst:0.00}");
-                return worst > 0.3f && worst <= 0.55f;
-            }, "칸이 작아져도 x 가 칸을 덮지 않음 — 칸의 절반 (예전엔 108 고정이라 작은 칸은 통째로 x)");
             Shot("photoload_ten");
+            Check(() =>
+            {
+                var grid = ugrid();
+                var label = pl.transform.Find("Name");
+                Rect rv = rectOf(strip.transform), rl = rectOf(label);
+                float low = float.MaxValue, right = float.MinValue; int on = 0;
+                foreach (Transform c in grid) if (c.gameObject.activeSelf) { on++; low = Mathf.Min(low, rectOf(c).yMin); right = Mathf.Max(right, rectOf(c).xMax); }
+                var cell = grid.GetComponent<GridLayoutGroup>().cellSize;
+                string lay = SlotLayout(grid, out string order, out bool colMajor);
+                log.Add($"  열 장: 사진 {photos().Count} · 칸 {cell.x:0} · {lay} · 줄 {rv.xMin:0}~{rv.xMax:0} · 마지막 칸 오른쪽 {right:0} · 맨 아래 칸 밑 {low:0} · 이름표 위 {rl.yMax:0}");
+                return photos().Count == 10 && on == 10 && order == "■■■■■■■■■■" && colMajor && cell.x >= 190f && strip != null && strip.Scrollable
+                       && low > rl.yMax && right <= rv.xMax + 2f && right >= rv.xMax - 80f;
+            }, "추가 사진 열 장: 칸은 줄지 않고 두 줄 · '+' 숨음 · '+' 를 누른 뒤라 끝까지 밀려 마지막 칸이 보인다 · 이름 칸을 덮지 않음");
 
-            // 6) 3D 모델 카드 — 추가 사진 빈 칸 모양만
+            // 손가락으로 밀기 — 오른쪽으로 밀면 첫 칸으로 돌아오고, 세로로 끌면 줄은 그대로 (시트 밀어 닫기 몫)
+            Func<Vector2, GameObject> drag = d =>
+            {
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                Vector2 at = rectOf(strip.transform).center;
+                var e = new UnityEngine.EventSystems.PointerEventData(es) { position = at, pressPosition = at, button = UnityEngine.EventSystems.PointerEventData.InputButton.Left };
+                var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                es.RaycastAll(e, hits);
+                if (hits.Count == 0) return null;
+                e.pointerPressRaycast = e.pointerCurrentRaycast = hits[0];
+                var to = UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IBeginDragHandler>(hits[0].gameObject);
+                if (to == null) return null;
+                UnityEngine.EventSystems.ExecuteEvents.Execute(to, e, UnityEngine.EventSystems.ExecuteEvents.initializePotentialDrag);
+                e.position = at + d * 0.1f;   // 방향이 정해지는 첫 움직임
+                UnityEngine.EventSystems.ExecuteEvents.Execute(to, e, UnityEngine.EventSystems.ExecuteEvents.beginDragHandler);
+                e.dragging = true;
+                e.position = at + d;
+                UnityEngine.EventSystems.ExecuteEvents.Execute(to, e, UnityEngine.EventSystems.ExecuteEvents.dragHandler);
+                UnityEngine.EventSystems.ExecuteEvents.Execute(to, e, UnityEngine.EventSystems.ExecuteEvents.endDragHandler);
+                return to;
+            };
+            GameObject took = null;
+            float before0 = 0f;
+            Do(() => { before0 = sx(); took = drag(new Vector2(Screen.width * 0.8f, 0f)); });
+            Sleep(0.8f);
+            Shot("photoload_strip_back");
+            Check(() =>
+            {
+                Rect first = rectOf(ucells()[0].transform), rv = rectOf(strip.transform);
+                log.Add($"  오른쪽으로 밀기: 받은 곳 {(took != null ? took.name : "없음")} · 줄 {before0:0} → {sx():0} · 첫 칸 왼쪽 {first.xMin:0} (줄 왼쪽 {rv.xMin:0})");
+                return took == strip.gameObject && Mathf.Abs(sx()) < 2f && first.xMin >= rv.xMin - 2f;
+            }, "오른쪽으로 밀면 첫 칸까지 돌아온다 (줄이 손가락을 받는다)");
+            Do(() => { before0 = sx(); took = drag(new Vector2(-120f, -300f)); });
+            Sleep(0.4f);
+            Check(() =>
+            {
+                log.Add($"  세로로 끌기: 줄 {before0:0} → {sx():0}");
+                return Mathf.Abs(sx() - before0) < 0.5f;
+            }, "세로로 끌면 줄은 그대로 — 시트 밀어 닫기 몫");
+            Check(() => R0926PhotoStrip.Covers(rectOf(strip.transform).center) && !R0926PhotoStrip.Covers(rectOf(pl.transform.Find("NameInput")).center),
+                  "줄 위에서만 장소·3D·보물 넘기기가 손가락을 놓아준다 (밀 게 있을 때)");
+
+            // 사진을 들고 줄 오른쪽 끝으로 — 그쪽으로 밀린다 (잘려 안 보이는 칸으로도 옮길 수 있게)
+            Texture2D heldTex = null;
+            Do(() => { before0 = sx(); heldTex = photos()[0]; ureo().EditorFeed(true, ugrip(0)); });
+            Sleep(0.55f);
+            Do(() => { var r = rectOf(strip.transform); ureo().EditorFeed(true, new Vector2(r.xMax - 30f, ugrip(0).y)); });
+            Sleep(0.5f);
+            Shot("photoload_edge");
+            Check(() =>
+            {
+                log.Add($"  사진을 들고 오른쪽 끝: 줄 {before0:0} → {sx():0}");
+                return R0926PhotoReorder.Holding && sx() < before0 - 60f;
+            }, "사진을 들고 줄 오른쪽 끝으로 가면 그쪽으로 밀린다");
+            Do(() => { var r = rectOf(strip.transform); ureo().EditorFeed(true, new Vector2(r.center.x, r.yMax + 400f)); });   // 줄 밖 — 옮기지 않는다
+            Sleep(0.25f);
+            Do(() => { var r = rectOf(strip.transform); ureo().EditorFeed(false, new Vector2(r.center.x, r.yMax + 400f)); });
+            Sleep(0.4f);
+            Do(() => ureo().EditorFeedEnd());
+            Check(() => !R0926PhotoReorder.Holding && photos().Count == 10 && photos().Contains(heldTex), "줄 밖에서 놓아도 사진은 그대로 열 장");
+            Check(() =>
+            {
+                float lo = float.MaxValue, hi = 0f;
+                foreach (Transform c in ugrid())
+                {
+                    if (!c.gameObject.activeSelf || c.name == "SubPhoto_Button") continue;
+                    var dot = c.Find("RemoveX0926/Dot0926");
+                    if (dot == null) return false;
+                    float r = rectOf(dot).width / rectOf(c).width;
+                    lo = Mathf.Min(lo, r); hi = Mathf.Max(hi, r);
+                }
+                log.Add($"  열 장 x 점 / 칸: {lo:0.00}~{hi:0.00}");
+                return lo >= 0.33f && hi - lo < 0.01f;
+            }, "열 장이어도 x 는 그대로 큼직 — 칸이 줄지 않는다 (예전엔 열 장이면 점이 22 까지 작아졌다)");
+
+            // 6) 3D 모델 카드 — 추가 사진 빈 칸 모양 · '+' 는 그다음 칸
+            R0926PhotoLoading mpl = null;
             Do(() =>
             {
                 var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
-                var mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
+                mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
                 UnityEngine.Object.FindAnyObjectByType<SwipePanelController>()?.SwitchToPanel(1);
                 if (mpl != null) mpl.SetSub(2);
             });
             Sleep(1.0f);
             Shot("photoload_model");
+            Check(() =>
+            {
+                string lay = SlotLayout(mpl != null ? mpl.transform.Find(Strip + "/SubPhotoContainer") : null, out string order, out bool colMajor);
+                log.Add("  3D 추가 사진 칸: " + lay);
+                return order == "□□+" && colMajor;
+            }, "3D 모델 추가도 같은 줄 — 불러오는 빈 칸 둘 뒤 '+' (1 3 / 2)");
             Do(() =>
             {
-                var mum = UnityEngine.Object.FindAnyObjectByType<ModelUploadManager>(FindObjectsInactive.Include);
-                var mpl = typeof(ModelUploadManager).GetField("photoLoading", F)?.GetValue(mum) as R0926PhotoLoading;
                 if (mpl != null) mpl.SetSub(0);
                 UnityEngine.Object.FindAnyObjectByType<SwipePanelController>()?.SwitchToPanel(0);
-                typeof(CubeUploadManager).GetMethod("ResetSubPhotos", F).Invoke(cum, null);
+                clearSubs();
             });
             Sleep(0.6f);
             Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
@@ -5480,6 +5642,19 @@ namespace Redesign0926
                 }
                 return ok && shown("mainPhotoRemove") && ((Image)fv("mainPhotoDisplay")).gameObject.activeInHierarchy;
             }, "사진 칸마다 오른쪽 위 x (대표 사진 포함) · 칸 순서 = 사진 순서");
+            Check(() =>
+            {
+                var panel = Find(Page + "Panel");
+                string lay = SlotLayout(Find(Page + "Panel/SubStrip0926/SubPhotoContainer"), out string order, out bool colMajor);
+                bool gone = panel != null;
+                if (panel != null)
+                {
+                    foreach (var t in panel.GetComponentsInChildren<Transform>(true)) if (t.name == "SubPhoto_Reset" || t.name == "SubPhoto_LoadingText") gone = false;
+                    foreach (var t in panel.GetComponentsInChildren<Text>(true)) if (t.text.Contains("Loading images")) gone = false;
+                }
+                log.Add("  추가 사진 칸: " + lay);
+                return order == "■■■■+" && colMajor && gone;
+            }, "추가 사진 네 장 — 두 줄로 위에서 아래 (1 3 / 2 4) · '+' 는 5번 칸 · '초기화'·'Loading images..' 없음 (10-27)");
             Check(() => title() == modeTitle(0) && submit() == R0926LocalizedText.Say("수정하기", "Save changes", "保存する", "保存修改", "Guardar cambios")
                         && shown("locationLabel") && shown("locationRow") && Find(Page + "DeletePlace0926") == null && !shown("descriptionInput") && !shown("descriptionLabel"),
                   "내 장소 — 제목 '" + "내 장소 수정" + "' · 위치 줄 · 오른쪽 위 '삭제' 없음 (10-27 — '···' 에 있다) · 수정할 내용 칸 없음 · 단추 '수정하기'");
@@ -5626,9 +5801,21 @@ namespace Redesign0926
                        && warn() == R0926LocalizedText.Say("추가 사진은 한 장 이상 있어야 해요 — 새 사진을 먼저 넣고 빼 주세요", "Keep at least one extra photo — add a new one first, then remove this",
                            "追加写真は1枚以上必要です — 先に新しい写真を入れてから外してください", "至少要保留一张附加照片 — 请先添加新照片再删除", "Debe quedar al menos una foto adicional — añade otra antes de quitar esta");
             }, "마지막 한 장의 x — 빼지 않고 '추가 사진은 한 장 이상 있어야 해요 — 새 사진을 먼저 넣고 빼 주세요'");
-            Do(() => typeof(CubeDataFixManager).GetMethod("ResetSubPhotos", F).Invoke(fix, null));
+            // 0장으로 저장해 보기 — '초기화' 를 없앴으니(10-27) 시험이 직접 비운다 (마지막 한 장 x 는 위처럼 막힌다)
+            Do(() =>
+            {
+                foreach (var t in subs()) if (t != null) UnityEngine.Object.Destroy(t);
+                subs().Clear();
+                keeps().Clear();
+                typeof(CubeDataFixManager).GetMethod("UpdateSubPhotoGrid", F).Invoke(fix, null);
+            });
             Sleep(0.3f);
-            Check(() => subs().Count == 0, "'초기화' — 추가 사진을 모두 비움 (새로 넣으려고)");
+            Check(() =>
+            {
+                string lay = SlotLayout(Find(Page + "Panel/SubStrip0926/SubPhotoContainer"), out string order, out bool colMajor);
+                log.Add("  추가 사진 0장: " + lay);
+                return subs().Count == 0 && order == "+" && colMajor;
+            }, "(준비) 추가 사진 0장 — '+' 는 1번 칸");
             Do(() => Click(Page + "Panel/SubmitButton"));
             Sleep(0.8f);
             Shot("placeedit_need_one");
