@@ -2289,12 +2289,15 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
     /// <summary>
     /// 칩이 있는 분류는 늘 칩 색 — 예전 앱이 올린 색(스포츠 주황 · 랜드마크 하늘 …)이나 서버가 이름을 바꾼 색
-    /// ('purple' → AE53C5)이 남아 있어도 (10-25). 그 밖(공공데이터 기관·관광·분류 없음)은 서버 color(HEX) 우선,
-    /// 비었거나 무효면 카테고리 색 → 흰색. 풀 오브젝트·인디케이터·목록이 모두 이 한 함수를 거쳐 색이 늘 같다.
+    /// ('purple' → AE53C5)이 남아 있어도 (10-25). 분류 없음·기타는 늘 흰색 — 예전에 올린 노란색(우팡이쉼터 · 구수한농장 …)이
+    /// 남아 있어도 (10-27 대표님 「기존에 업로드했던 것들에 있어서 '노란색' 으로 되어 있는 것들 … 흰색 동그라미로」).
+    /// 그 밖(공공데이터 기관 등)은 서버 color(HEX) 우선, 비었거나 무효면 카테고리 색.
+    /// 풀 오브젝트·인디케이터·목록이 모두 이 한 함수를 거쳐 색이 늘 같다.
     /// </summary>
     public static Color ResolvePlaceColor(string rawColorHex, string category, string placeName = null)
     {
         if (IsChipCategory(category)) return GetCategoryColor(category, placeName);
+        if (string.IsNullOrEmpty(category) || category == "etc") return Color.white;
         if (!string.IsNullOrEmpty(rawColorHex))
         {
             string hex = rawColorHex.StartsWith("#") ? rawColorHex : "#" + rawColorHex;

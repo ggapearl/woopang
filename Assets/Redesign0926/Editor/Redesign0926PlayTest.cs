@@ -6127,7 +6127,9 @@ namespace Redesign0926
                     new[] { "a", "", "FFFFFF" },                // 망가진 색 값
                     new[] { null, "etc", "FFFFFF" },
                     new[] { "44619B", "gov", "44619B" },        // 공공데이터는 서버 색 그대로
-                    new[] { "FFFF00", "", "FFFF00" },           // 분류 없는 옛 장소에 남은 색 — 그대로 둔다
+                    new[] { "FBC15D", "", "FFFFFF" },           // 분류 없는 옛 장소에 남은 노란색('yellow') — 흰색으로 (10-27)
+                    new[] { "3DA29C", "", "FFFFFF" },
+                    new[] { "FBC15D", "etc", "FFFFFF" },
                 };
                 bool ok = true;
                 foreach (var c in cases)
@@ -6136,7 +6138,7 @@ namespace Redesign0926
                     if (h != c[2]) { ok = false; log.Add($"  {c[0] ?? "null"} / '{c[1]}' → {h} (기대 {c[2]})"); }
                 }
                 return ok;
-            }, "색 고르기 — 칩 분류는 옛 색이 남아 있어도 칩 색 · 분류 없음·기타·망가진 값은 흰색 · 공공데이터와 분류 없는 옛 장소의 색은 그대로");
+            }, "색 고르기 — 칩 분류는 옛 색이 남아 있어도 칩 색 · 분류 없음·기타는 예전에 올린 색이 남아 있어도 흰색 (10-27 「'노란색' 으로 되어 있는 것들 … 흰색 동그라미로」) · 공공데이터는 서버 색 그대로");
             Check(() =>
             {
                 var bad = new List<string>();
@@ -11993,7 +11995,7 @@ namespace Redesign0926
             Check(() => ChipTextsFit(), "다섯 나라 말 모두 칩 칸 안에 (한 칸이 된 '터미널 / 기차' 포함)");
             Check(() => ChipIconsOk(), "칩마다 이름 앞 그림 — 전체 네 칸 · 애견동반 발 · 공공데이터 청사 · 축제 / 보물 폭죽 · 지하철 · 버스 · 3D 상자 · 사람 (10-27 동그라미 대신 이모지)");
             Do(() => log.Add("  줄: " + RowsSummary(8)));
-            Check(() => PlaceRowIconsOk(), "장소 줄 앞은 분류 그림 (필터 칩과 같은 그림) — 분류 없는 장소만 흰 점 (10-27)");
+            Check(() => PlaceRowIconsOk(), "장소 줄 앞은 분류 그림 (필터 칩과 같은 그림) — 분류 없는 장소만 흰 점 · 예전에 노란색으로 올린 곳도 흰 점 (10-27)");
             Check(() => NoOldLongPress(), "0926 칩에 옛 길게 누르기(LongPressHandler)가 없음 — 0.8초 넘게 누른 손을 떼도 칩이 다시 꺼지지 않음");
             Check(() => !AnyActive("AskAI0926"), "'AI에게 묻기' 숨김");
             Do(() => log.Add("  '목록|지도|설정' 칸 높이 " + TabH() + " · 칩 높이 " + ChipHeight("CategoryToggle")));
@@ -12335,6 +12337,7 @@ namespace Redesign0926
                 string got = d != null && d.sprite != null ? d.sprite.name : "";
                 if (got != want) { ok = false; log.Add("  줄 그림 다름 " + e.name + " (" + e.icon + ") " + got); continue; }
                 if (has) { icons++; kinds.Add(e.icon); } else dots++;
+                if (!has && ColorUtility.ToHtmlStringRGB(d.color) != "FFFFFF") { ok = false; log.Add("  분류 없는 장소가 흰 점이 아님 " + e.name + " " + ColorUtility.ToHtmlStringRGB(d.color)); }
                 if (has && d.color != Color.white) { ok = false; log.Add("  분류 그림에 색이 덮임 " + e.name + " " + ColorUtility.ToHtmlStringRGBA(d.color)); }
             }
             log.Add($"  장소 줄 — 분류 그림 {icons} · 점 {dots} · 분류 {string.Join(",", kinds)}");

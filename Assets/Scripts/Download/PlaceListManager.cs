@@ -338,7 +338,7 @@ public class PlaceListManager : MonoBehaviour
                         woopangCount++;
                     }
 
-                    // 색상: 서버 color(HEX) 우선 → 카테고리(+이름) 색 폴백 (DataManager 단일 소스)
+                    // 색상: DataManager 단일 소스 (칩 분류는 칩 색 · 분류 없음은 흰색 · 그 밖은 서버 color(HEX) 우선)
                     string displayName = cached.displayName;
                     string rawColor = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
                     string colorHex = DataManager.ResolvePlaceColorHex(rawColor, cat, displayName);
