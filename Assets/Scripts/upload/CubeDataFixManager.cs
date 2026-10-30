@@ -47,7 +47,6 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Text locationCoords;
     [SerializeField] private Text locationNote;
     [SerializeField] private Toggle moveHereToggle;          // 켜고 저장하면 지금 내 위치로 옮긴다 (기본 꺼짐)
-    [SerializeField] private Button deletePlaceButton;       // 내 장소에서만 — 카드 오른쪽 위 '삭제'
     [SerializeField] private FixPlaceLocalizer localizer;
     [SerializeField] private RemoveRequest removeRequest;
     [SerializeField] private AREarthManager earthManager;
@@ -215,7 +214,6 @@ public class CubeDataFixManager : MonoBehaviour
 
         if (openButton != null) openButton.onClick.AddListener(BeginEdit);   // 창을 여는 장면 연결(SetActive)보다 뒤에 불린다
         if (mainPhotoRemove != null) mainPhotoRemove.onClick.AddListener(RemoveMain);
-        if (deletePlaceButton != null) deletePlaceButton.onClick.AddListener(AskDelete);
         if (moveHereToggle != null)
         {
             moveHereToggle.isOn = false;
@@ -1407,7 +1405,8 @@ public class CubeDataFixManager : MonoBehaviour
         UpdateCategoryToggleUI();
     }
 
-    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄 · 삭제) — 아니면 '장소 수정 요청'(수정할 내용 칸)</summary>
+    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄) — 아니면 '장소 수정 요청'(수정할 내용 칸).
+    /// 지우기는 장소 '···' 의 '삭제' 하나로 (10-27 대표님 — 카드 오른쪽 위 '삭제'는 없앴다)</summary>
     private void SetOwnerMode(bool mine)
     {
         ownerMode = mine;
@@ -1416,7 +1415,6 @@ public class CubeDataFixManager : MonoBehaviour
         SetUIActive(descriptionLabel, !mine);
         SetUIActive(locationLabel, mine);
         SetUIActive(locationRow, mine);
-        SetUIActive(deletePlaceButton != null ? deletePlaceButton.gameObject : null, mine);
         if (moveHereToggle != null) moveHereToggle.isOn = false;
         if (submitLabel != null)
         {
@@ -1473,12 +1471,6 @@ public class CubeDataFixManager : MonoBehaviour
         mainKeepPath = null;
         SetMainSprite(null);
         if (mainPhotoDisplay != null) mainPhotoDisplay.gameObject.SetActive(false);
-    }
-
-    private void AskDelete()
-    {
-        if (isProcessing || !ownerMode || editId <= 0 || removeRequest == null) return;
-        removeRequest.AskOwnerDelete(editId);
     }
 
     private void OnPlaceDeleted(int id)

@@ -462,23 +462,9 @@ namespace Redesign0926
             subX.gameObject.SetActive(false);
             SubPhotoTools(panel, panel.Find("SubPhotoContainer"), mgr, false, log);   // 꾹 눌러 옮기기 (10-26)
 
-            // 삭제 — 카드 오른쪽 위, 닫기 X 왼쪽 (내 장소일 때만 보인다)
-            var del = FindOrCreate(card, "DeletePlace0926");
-            del.transform.localScale = Vector3.one;
-            SetRect(RT(del), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-170, -30), new Vector2(250, 110));
-            Img(del, Spr("r0926_pill"), new Color(Danger.r, Danger.g, Danger.b, 0.14f), Image.Type.Sliced, 64f / 55f).raycastTarget = true;
-            var dIc = FindOrCreate(del.transform, "Icon0926");
-            Img(dIc, Spr("r0926_i_trash"), Danger, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(dIc), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(54, 0), new Vector2(48, 48));
-            var dLb = FindOrCreate(del.transform, "Label0926");
-            var dt = Txt(dLb, "삭제", 42, Danger, TextAnchor.MiddleLeft, FontStyle.Bold);
-            dt.resizeTextForBestFit = true; dt.resizeTextMinSize = 28; dt.resizeTextMaxSize = 42;
-            var dlr = RT(dLb); dlr.anchorMin = Vector2.zero; dlr.anchorMax = Vector2.one; dlr.offsetMin = new Vector2(92, 0); dlr.offsetMax = new Vector2(-20, 0);
-            Loc(dLb, "삭제", "Delete", "削除", "删除", "Eliminar");
-            var delBtn = Ensure<Button>(del);
-            delBtn.targetGraphic = del.GetComponent<Image>();
-            ResetListeners(delBtn);
-            del.SetActive(false);
+            // 카드 오른쪽 위 '삭제'는 없앤다 — 장소 '···' 에 '삭제'가 이미 있다 (10-27 대표님)
+            var oldDel = card.Find("DeletePlace0926");
+            if (oldDel != null) Object.DestroyImmediate(oldDel.gameObject);
 
             var rr = FindInScene<RemoveRequest>(card.gameObject);
             var open = Find(root, "FixPlaceButton");
@@ -500,7 +486,6 @@ namespace Redesign0926
             Wire(so, "locationCoords", ct);
             Wire(so, "locationNote", nt);
             Wire(so, "moveHereToggle", tg);
-            Wire(so, "deletePlaceButton", delBtn);
             Wire(so, "localizer", card.GetComponentInChildren<FixPlaceLocalizer>(true));
             Wire(so, "removeRequest", rr);
             so.ApplyModifiedPropertiesWithoutUndo();

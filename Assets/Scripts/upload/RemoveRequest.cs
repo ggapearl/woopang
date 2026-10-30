@@ -181,13 +181,6 @@ public class RemoveRequest : MonoBehaviour
         return lm != null && lm.IsLoggedIn && p.username == lm.CurrentUsername;
     }
 
-    /// <summary>고치기 창의 '삭제' — 내 장소를 지울지 묻는다</summary>
-    public void AskOwnerDelete(int id)
-    {
-        SetOwn(id);
-        if (removeRequestPanel != null) removeRequestPanel.SetActive(true);
-    }
-
     // 메뉴 칸 · 묻는 글 · 단추를 내 장소(바로 지우기) / 남의 장소(삭제 요청)에 맞게
     private void SetOwn(int id)
     {

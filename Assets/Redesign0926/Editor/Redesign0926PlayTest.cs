@@ -5416,13 +5416,13 @@ namespace Redesign0926
             {
                 var miss = new List<string>();
                 foreach (var n in new[] { "openButton", "mainPhotoRemove", "subPhotoRemoveTemplate", "descriptionLabel", "locationLabel", "locationRow",
-                                          "locationCoords", "locationNote", "moveHereToggle", "deletePlaceButton", "localizer", "removeRequest", "submitLabel" })
+                                          "locationCoords", "locationNote", "moveHereToggle", "localizer", "removeRequest", "submitLabel" })
                     if (fv(n) == null || fv(n).Equals(null)) miss.Add(n);
                 foreach (var n in new[] { "menuLabel", "dialogText", "yesLabel" })
                     if (rrl(n) == null) miss.Add("RemoveRequest." + n);
                 log.Add("  연결 빠짐: " + (miss.Count == 0 ? "없음" : string.Join(", ", miss)));
                 return miss.Count == 0;
-            }, "연결: 정보 수정 칸 · 사진 x · 위치 줄 · 옮기기 · 삭제 · 메뉴·묻는 글·단추 글자");
+            }, "연결: 정보 수정 칸 · 사진 x · 위치 줄 · 옮기기 · 메뉴·묻는 글·단추 글자");
 
             Wait(() =>
             {
@@ -5481,8 +5481,8 @@ namespace Redesign0926
                 return ok && shown("mainPhotoRemove") && ((Image)fv("mainPhotoDisplay")).gameObject.activeInHierarchy;
             }, "사진 칸마다 오른쪽 위 x (대표 사진 포함) · 칸 순서 = 사진 순서");
             Check(() => title() == modeTitle(0) && submit() == R0926LocalizedText.Say("수정하기", "Save changes", "保存する", "保存修改", "Guardar cambios")
-                        && shown("locationLabel") && shown("locationRow") && shown("deletePlaceButton") && !shown("descriptionInput") && !shown("descriptionLabel"),
-                  "내 장소 — 제목 '" + "내 장소 수정" + "' · 위치 줄 · '삭제' · 수정할 내용 칸 없음 · 단추 '수정하기'");
+                        && shown("locationLabel") && shown("locationRow") && Find(Page + "DeletePlace0926") == null && !shown("descriptionInput") && !shown("descriptionLabel"),
+                  "내 장소 — 제목 '" + "내 장소 수정" + "' · 위치 줄 · 오른쪽 위 '삭제' 없음 (10-27 — '···' 에 있다) · 수정할 내용 칸 없음 · 단추 '수정하기'");
             Check(() =>
             {
                 string coords = ((Text)fv("locationCoords")).text, note = ((Text)fv("locationNote")).text;
@@ -5594,7 +5594,7 @@ namespace Redesign0926
                 return p != null && row != null && p.latitude.ToString("F6", inv) == row.lat && p.longitude.ToString("F6", inv) == row.lon;
             }, "앱 좌표도 서버와 같은 소수 6자리 (double — 예전 float 은 경도가 0.7m 단위로 끊겼다)");
 
-            // 2) 다시 열면 고친 값 그대로 → 카드의 '삭제' 로 지우기
+            // 2) 다시 열면 고친 값 그대로 → 장소 '···' 의 '삭제' 로 지우기
             Do(() => tap(dtOf(idA)));
             Wait(() => open(dtOf(idA)), 10f, "A 다시 상세");
             Do(() => Click(More));
@@ -5640,13 +5640,21 @@ namespace Redesign0926
                        && warn() == R0926LocalizedText.Say("추가 사진을 한 장 이상 넣어 주세요", "Add at least one extra photo", "追加写真を1枚以上入れてください", "请至少添加一张附加照片", "Añade al menos una foto adicional")
                        && row != null && string.Join("|", row.subs) == order(new[] { 4, 1, 3 });
             }, "추가 사진 0장으로 '수정하기' — 저장하지 않고 '추가 사진을 한 장 이상 넣어 주세요' (서버 그대로)");
-            Do(() => ((Button)fv("deletePlaceButton")).onClick.Invoke());
+            // 지우기는 장소 '···' 의 '삭제' 하나로 (10-27 대표님 「정보 수정 화면 우측 상단 '삭제' 제거 — 오브젝트 더블터치에 삭제가 이미 있음」)
+            Do(() => Click(Page + "XButton_FixUpload"));
+            Sleep(0.4f);
+            Do(() => { log.Add("  고치기 닫은 뒤 A 상세 " + (open(dtOf(idA)) ? "그대로" : "닫힘 — 다시 연다")); if (!open(dtOf(idA))) tap(dtOf(idA)); });
+            Wait(() => !Active("Fixpage") && open(dtOf(idA)) && Active(More), 10f, "A 상세 — '···' 보임");
+            Do(() => Click(More));
+            Sleep(0.6f);
+            Check(() => said(rrl("menuLabel")) == R0926LocalizedText.Say("삭제", "Delete", "削除", "删除", "Eliminar"), "고치기를 닫고 '···' — 그대로 '삭제'");
+            Do(() => Click(Menu + "RemovePlaceButton"));
             Wait(() => Active("RemoveRequestPanel"), 5f, "지울까 묻는 창");
             Sleep(0.5f);
             Shot("placeedit_delete_ask");
             Check(() => said(rrl("dialogText")) == R0926LocalizedText.Say("이 장소를 지울까요?\n사진과 댓글도 함께 지워져요", "Delete this place?\nIts photos and comments go too", "この場所を削除しますか？\n写真とコメントも消えます", "要删除这个地点吗？\n照片和评论也会一起删除", "¿Eliminar este lugar?\nTambién se borran sus fotos y comentarios")
                         && said(rrl("yesLabel")) == R0926LocalizedText.Say("지우기", "Delete", "削除する", "删除", "Eliminar"),
-                  "카드의 '삭제' — '이 장소를 지울까요?' · 단추 '지우기' (삭제 요청이 아니다)");
+                  "내 장소 '···' 의 '삭제' — '이 장소를 지울까요?' · 단추 '지우기' (삭제 요청이 아니다)");
             Do(() => Click("RemoveRequestPanel/Box0926/Buttons0926/Remove_YES"));
             Wait(() => placeOf(idA) == null && !Active("RemoveRequestPanel") && !Active("Fixpage"), 15f, "'지우기' → 장소 사라짐 · 창 닫힘");
             Sleep(0.4f);
@@ -5668,8 +5676,8 @@ namespace Redesign0926
             Shot("placeedit_other");
             Check(() => title() == modeTitle(1) && ((InputField)fv("nameInput")).text == NameB && (int)fv("currentCategoryIndex") == 2
                         && submit() == R0926LocalizedText.Say("수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud")
-                        && shown("descriptionInput") && !shown("locationRow") && !shown("deletePlaceButton"),
-                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 수정할 내용 칸 · 위치 줄·삭제 없음 · '수정 요청'");
+                        && shown("descriptionInput") && !shown("locationRow"),
+                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 수정할 내용 칸 · 위치 줄 없음 · '수정 요청'");
             Do(() => Click(Page + "XButton_FixUpload"));
             Sleep(0.4f);
             Check(() => !Active("Fixpage"), "닫기 — 남의 장소는 보내 보지 않는다 (수정 요청은 운영 서버로 간다)");
