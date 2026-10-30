@@ -12079,6 +12079,7 @@ namespace Redesign0926
             Check(() => ShelterOnTop(), "보호소 세 줄이 맨 위 — 가까운 가게보다 먼저");
             Check(() => RowIcons(3).TrueForAll(s => s == "r0926_f_shelter"), "보호소 줄 앞은 강아지 그림");
             Check(() => ShownLinks(PlaceListManager.EntryKind.Shelter).TrueForAll(l => l.StartsWith("https://place.map.kakao.com/")), "보호소를 누르면 카카오맵 장소 쪽 (전화·길찾기)");
+            Check(() => PetRowNames(true), "애견동반만 — 장소 줄 이름이 모두 노랑 (관광공사 반려동물 여행 자료 포함 · 따로 켜 둔 교통 줄만 흰색) (10-27 「목록에서 글자색이 흰색으로 발생하지 않고 노란색으로」)");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.3f);
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.All, "애견동반 다시 → 꺼짐(전부) ('애견동반 안 됨' 없음)");
@@ -12086,6 +12087,7 @@ namespace Redesign0926
             Shot("filters_pet_off");
             Sleep(0.4f);
             Check(() => Shown(PlaceListManager.EntryKind.Shelter) == 0, "애견동반을 끄면 보호소 줄 없음");
+            Check(() => PetRowNames(false), "애견동반을 꺼도 애견동반 되는 장소 이름은 노랑 · 나머지는 흰색");
 
             // 사람 — '팔로잉만'(꽉 찬 옅은 분홍) · '모든 사람' (10-21 대표님)
             P2PUserFilterPanel Pp() => UnityEngine.Object.FindAnyObjectByType<P2PUserFilterPanel>();
@@ -12122,7 +12124,9 @@ namespace Redesign0926
                 R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
                 R0926HuntApi.EditorTestUser = FiMe;
                 var at = VirtualLocation.Instance;
-                fiHunt = DevCreateHuntAt(FiHost, FiHuntTitle, at.Latitude + 0.00018f, at.Longitude, null, null);   // 약 20m
+                // 운영 규칙 — 한 사람이 하루 세 게임까지. 같은 아이디로는 그날 네 번째 시험부터 막혀(400 daily_limit) 시험마다 다른 시험 아이디로
+                fiHost = "hunt_test_fh" + DateTime.Now.ToString("MMddHHmmss");
+                fiHunt = DevCreateHuntAt(fiHost, FiHuntTitle, at.Latitude + 0.00018f, at.Longitude, null, null);   // 약 20m
                 log.Add("  시험 게임 " + fiHunt);
                 R0926HuntList.Stale();
             });
@@ -12197,15 +12201,16 @@ namespace Redesign0926
             Sleep(1.0f);
             Do(() =>
             {
-                if (fiHunt > 0) DevPost(FiHost, "/api/hunts/" + fiHunt + "/end", "{}");
+                if (fiHunt > 0) DevPost(fiHost, "/api/hunts/" + fiHunt + "/end", "{}");
                 R0926HuntApi.EditorBase = null;
                 R0926HuntApi.EditorTestUser = null;
                 R0926HuntList.Stale();
             });
         }
 
-        private const string FiMe = "hunt_test_filters", FiHost = "hunt_test_fihost", FiHuntTitle = "필터 시험 근처 보물";
+        private const string FiMe = "hunt_test_filters", FiHuntTitle = "필터 시험 근처 보물";
         private static int fiHunt;
+        private static string fiHost;   // 이번 시험에서 게임을 연 시험 아이디
         private static bool ChipOn(string name) { var t = Chip(name)?.GetComponent<Toggle>(); return t != null && t.isOn; }
         private static bool PurpleChip(string name)
         {
@@ -12215,6 +12220,27 @@ namespace Redesign0926
                 && t.color.r > 0.95f && t.color.g > 0.95f && t.color.b > 0.95f;
         }
         // 애견동반 칩 (10-26 대표님) — 켜짐: 꽉 찬 진한 노랑(#FFC107) + 어두운 글자 · 꺼짐: 다른 꺼진 칩처럼 거의 투명한 회색 + 흐린 글자. 이름은 늘 '애견동반'
+        // 장소 줄 이름 색 — 애견동반 되는 곳은 노랑, 나머지는 템플릿 색 (onlyPet: 애견동반만 켠 목록이라 장소 줄이 모두 애견동반)
+        private static bool PetRowNames(bool onlyPet)
+        {
+            var pl = Plm();
+            var rows = ListRows();
+            if (pl == null || rows.Count == 0) { log.Add("  목록 줄 없음"); return false; }
+            int pets = 0, others = 0;
+            for (int i = 0; i < rows.Count && i < pl.ShownEntries.Count; i++)
+            {
+                var e = pl.ShownEntries[i];
+                if (e.kind != PlaceListManager.EntryKind.Place) continue;
+                var t = rows[i].Find("Name")?.GetComponent<Text>();
+                if (t == null) return false;
+                bool yellow = t.color == R0926PlaceRows.PetName;
+                bool transit = e.icon == "subway" || e.icon == "train" || e.icon == "bus" || e.icon == "airport";   // 교통 칩은 애견동반과 따로 — 애견동반만이어도 남는다
+                if (yellow != e.pet || onlyPet && !e.pet && !transit) { log.Add("  이름 색 다름 " + e.name + " 애견동반 " + e.pet + " " + ColorUtility.ToHtmlStringRGB(t.color)); return false; }
+                if (e.pet) pets++; else others++;
+            }
+            log.Add($"  애견동반 줄 {pets} · 나머지 {others}");
+            return pets > 0 && (onlyPet || others > 0);
+        }
         private static bool PetChip(bool on)
         {
             var c = Chip("PetFriendlyToggle");

@@ -61,6 +61,7 @@ public class PlaceListManager : MonoBehaviour
         public bool anyDistance;     // 거리 슬라이더와 상관없이 (축제·보호소·맨 위 보물찾기)
         public bool promo;           // 관리자가 띄운 협력 업체(광고) 줄 — '광고'를 밝히고 노출·클릭을 센다
         public string adId, emojiUrl;
+        public bool pet;             // 애견동반 되는 장소 — 목록 이름이 노랑 (R0926PlaceRows)
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
 
@@ -84,6 +85,7 @@ public class PlaceListManager : MonoBehaviour
         public string link;          // 축제·보호소 — 누르면 여는 쪽
         public bool promo;           // 광고 줄 (축제 칩 맨 위) — 거리 칸 '광고 · 거리' · 줄 앞은 고른 이모지 그림
         public string adId, emojiUrl;
+        public bool pet;             // 애견동반 되는 장소 — 이름을 노랑으로
     }
     private readonly List<ListEntry> shownEntries = new List<ListEntry>();
     /// <summary>listText 의 장소 줄과 같은 순서의 장소 정보. 글자는 예전 그대로다 (다른 코드가 글자를 읽는다)</summary>
@@ -341,7 +343,7 @@ public class PlaceListManager : MonoBehaviour
                     string rawColor = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
                     string colorHex = DataManager.ResolvePlaceColorHex(rawColor, cat, displayName);
                     combinedPlaces.Add((cached, d, id.ToString(), $"{displayName} - {Mathf.FloorToInt(d)}m", colorHex));
-                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude, icon = PlaceIcon(cat, modelType == "custom") });
+                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude, icon = PlaceIcon(cat, modelType == "custom"), pet = cached.petFriendly });
                     addedIds.Add(id);
                 }
             }
@@ -372,7 +374,7 @@ public class PlaceListManager : MonoBehaviour
                     }
                     string pColor = DataManager.ResolvePlaceColorHex(p.color, p.category, p.name);
                     combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", pColor));
-                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude, icon = PlaceIcon(p.category, origType == "custom") });
+                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude, icon = PlaceIcon(p.category, origType == "custom"), pet = p.pet_friendly });
                 }
             }
         }
@@ -385,7 +387,8 @@ public class PlaceListManager : MonoBehaviour
                 if (d <= maxDisplayDistance) {
                     tourAPICount++;
                     combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
-                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = "tour" });
+                    // 관광공사 반려동물 여행 자료 — 모두 애견동반 (TourAPIManager 캐시도 petFriendly = true)
+                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = "tour", pet = true });
                 }
             }
         }
@@ -628,7 +631,7 @@ public class PlaceListManager : MonoBehaviour
     private static ListEntry ToListEntry(LiveEntry e, float distance)
     {
         var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = (float)e.baseLat, lon = (float)e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link,
-                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl };
+                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl, pet = e.pet };
         if (e.kind == EntryKind.Hunt)
         {
             le.distanceText = e.huntFound ? R0926HuntList.FoundText : R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);

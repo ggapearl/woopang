@@ -95,6 +95,8 @@ public class R0926PlaceRows : MonoBehaviour
     private Dictionary<string, Sprite> kindIconMap;
     private const string KindIconPrefix = "r0926_f_";
     private Dictionary<string, Sprite> catIconMap;
+    /// <summary>애견동반 되는 장소의 이름 — 애견동반 칩과 같은 노랑 (10-27 대표님 「'애견동반' 의 경우 목록에서 글자색이 흰색으로 발생하지 않고 노란색으로」)</summary>
+    public static readonly Color PetName = new Color32(0xFF, 0xC1, 0x07, 0xFF);
     private const string CatIconPrefix = "r0926_c_";
 
     public struct Entry { public string name; public string distance; }
@@ -124,6 +126,7 @@ public class R0926PlaceRows : MonoBehaviour
         public PlaceListManager.EntryKind kind;   // 지금 줄 앞 표시 (템플릿 = 장소)
         public Sprite dotSprite;   // 템플릿의 색 점 — 장소로 돌아올 때
         public Vector2 dotPos, dotSize;
+        public Color nameColor;    // 템플릿의 이름 색 — 애견동반이 아닌 줄
     }
 
     private void Awake()
@@ -287,6 +290,7 @@ public class R0926PlaceRows : MonoBehaviour
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움)
                 string roman = korean ? null : R0926Romanizer.Romanize(label);
                 r.name.text = roman == null ? label : label + "  <color=#6F7880>" + roman + "</color>";
+                r.name.color = known && e.pet ? PetName : r.nameColor;
                 if (r.key != key) { r.key = key; r.dir = -2; r.noteUntil = 0f; r.flashUntil = 0f; }   // 다른 장소가 이 줄로 왔다 — 방향을 새로
                 // 보물찾기는 게임의 공개 설정대로 ('약 300m' · '범위 안' · '1km 이내')
                 r.distLabel = known && e.distanceText != null ? e.distanceText : FormatDistance(int.Parse(m.Groups[3].Value));
@@ -353,6 +357,7 @@ public class R0926PlaceRows : MonoBehaviour
             nr.dotSprite = nr.dot.sprite;
             nr.dotPos = nr.dot.rectTransform.anchoredPosition;
             nr.dotSize = nr.dot.rectTransform.sizeDelta;
+            nr.nameColor = nr.name.color;
             SetupRow(nr);
             rows.Add(nr);
         }
