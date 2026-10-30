@@ -80,8 +80,17 @@ public class R0926SkyPages : MonoBehaviour
     [SerializeField] private int festivalSoonDays = 14;
     [SerializeField] private float friendKm = 20f;
 
-    // 언론사 유튜브 생방송 — '@채널/live' 는 그 채널이 지금 하는 생방송으로 열린다 (10-25 여섯 곳 모두 생방송 중인 것을 확인)
-    private static readonly string[] Handles = { "ytnnews24", "yonhapnewstv23", "newskbs", "MBCNEWS11", "sbsnews8", "jtbc_news" };
+    // 언론사 생방송 — 칸 순서대로 YTN · KBS1 · KBS2 · MBC · SBS · JTBC (10-27 대표님 「KBS 를 KBS1 · KBS2 로 나누고, '연합뉴스' 삭제」)
+    //   유튜브 '@채널/live' 는 그 채널이 지금 하는 생방송으로 열린다. KBS 1TV · 2TV 는 유튜브 생방송이 없어 KBS 온에어(브라우저에서 바로 재생 · 국내만)
+    private static readonly string[] LiveUrls =
+    {
+        "https://www.youtube.com/@ytnnews24/live",
+        "https://onair.kbs.co.kr/index.html?sname=onair&stype=live&ch_code=11",
+        "https://onair.kbs.co.kr/index.html?sname=onair&stype=live&ch_code=12",
+        "https://www.youtube.com/@MBCNEWS11/live",
+        "https://www.youtube.com/@sbsnews8/live",
+        "https://www.youtube.com/@jtbc_news/live",
+    };
 
     private static readonly Color RowColor = new Color(0.094f, 0.118f, 0.149f, 0.34f);
     private static readonly Color FlashColor = new Color(0.95f, 0.48f, 0.63f, 0.62f);
@@ -109,6 +118,8 @@ public class R0926SkyPages : MonoBehaviour
 
     private readonly List<R0926Nearby.Festival> fests = new List<R0926Nearby.Festival>();
     private readonly List<Mate> mates = new List<Mate>();
+    private readonly List<Pick> hotPicks = new List<Pick>();   // '근처 핫플' 장의 줄 — 보물찾기 · 축제 · 핫플이 섞인다
+    private struct Pick { public Kind kind; public int index; public Pick(Kind k, int i) { kind = k; index = i; } }
     private Dictionary<string, Sprite> iconMap;
     private readonly Dictionary<Text, string> raw = new Dictionary<Text, string>();
 
@@ -273,6 +284,34 @@ public class R0926SkyPages : MonoBehaviour
             }
             mates.Sort((a, b) => a.f.ago != b.f.ago ? a.f.ago.CompareTo(b.f.ago) : a.km.CompareTo(b.km));   // 마지막 접속이 가까운 친구가 위 (10-29)
         }
+        CollectHot();
+    }
+
+    // '근처 핫플' 장 — 돈 낸 상단 노출(광고) · 아직 못 찾은 근처 보물찾기 · 축제를 먼저, 그 뒤 좋아요 · 댓글 많은 곳 (서버 순서)
+    //   (10-27 대표님 「'근처 핫플' 의 경우에도 '축제/ 보물찾기' 를 우선해서 … 향후 비용을 받거나 해서 상단에 노출」)
+    //   장에 줄이 셋뿐이라 보물찾기 · 축제가 다 차지하지 않게, 핫플이 있으면 마지막 줄 하나는 핫플 몫
+    private void CollectHot()
+    {
+        hotPicks.Clear();
+        var hot = R0926Nearby.HotPlaces;
+        for (int i = 0; i < hot.Count; i++) if (hot[i].promo) hotPicks.Add(new Pick(Kind.Hot, i));
+        var hunts = R0926HuntList.Nearby;
+        for (int i = 0; i < hunts.Count; i++) if (!hunts[i].found) hotPicks.Add(new Pick(Kind.Hunt, i));
+        for (int i = 0; i < fests.Count; i++) if (!fests[i].promo) hotPicks.Add(new Pick(Kind.Festival, i));   // 축제 광고는 축제 장에서만
+        int firstHot = hotPicks.Count, seat = HotSeats() - 1;
+        for (int i = 0; i < hot.Count; i++) if (!hot[i].promo) hotPicks.Add(new Pick(Kind.Hot, i));
+        if (seat >= 0 && firstHot > seat && firstHot < hotPicks.Count)
+        {
+            var p = hotPicks[firstHot];
+            hotPicks.RemoveAt(firstHot);
+            hotPicks.Insert(seat, p);
+        }
+    }
+
+    private int HotSeats()
+    {
+        foreach (var p in pages) if (p.kind == Kind.Hot) return p.rows != null ? p.rows.Length : 0;
+        return 0;
     }
 
     private int Count(Kind k)
@@ -281,9 +320,9 @@ public class R0926SkyPages : MonoBehaviour
         {
             case Kind.Hunt: return R0926HuntList.Nearby.Count;
             case Kind.Festival: return fests.Count;
-            case Kind.Hot: return R0926Nearby.HotPlaces.Count;
+            case Kind.Hot: return hotPicks.Count;
             case Kind.Friends: return mates.Count;
-            case Kind.Live: return Handles.Length;
+            case Kind.Live: return LiveUrls.Length;
             default: return 0;
         }
     }
@@ -358,6 +397,7 @@ public class R0926SkyPages : MonoBehaviour
 
     private void BindRow(Kind k, int r, Row row)
     {
+        if (k == Kind.Hot) { var pick = hotPicks[r]; k = pick.kind; r = pick.index; }   // 핫플 장의 보물찾기 · 축제 줄은 제 장의 줄과 같은 모양
         bool face = k == Kind.Friends;
         if (row.icon != null && row.icon.gameObject.activeSelf == face) row.icon.gameObject.SetActive(!face);
         if (row.face != null && row.face.gameObject.activeSelf != face) row.face.gameObject.SetActive(face);
@@ -769,11 +809,11 @@ public class R0926SkyPages : MonoBehaviour
         var p = pages[shown[Mathf.Clamp(target, 0, shown.Count - 1)]];
         if (p.kind == Kind.Live)
         {
-            for (int i = 0; i < liveChips.Length && i < Handles.Length; i++)
+            for (int i = 0; i < liveChips.Length && i < LiveUrls.Length; i++)
                 if (liveChips[i] != null && hit.transform.IsChildOf(liveChips[i]))
                 {
                     Haptic();
-                    Application.OpenURL("https://www.youtube.com/@" + Handles[i] + "/live");
+                    Application.OpenURL(LiveUrls[i]);
                     return;
                 }
             return;
@@ -792,6 +832,11 @@ public class R0926SkyPages : MonoBehaviour
     {
         row.flashUntil = Time.unscaledTime + FlashTime;
         Haptic();
+        if (k == Kind.Hot)
+        {
+            if (r >= hotPicks.Count) return;
+            k = hotPicks[r].kind; r = hotPicks[r].index;
+        }
         switch (k)
         {
             case Kind.Hunt:

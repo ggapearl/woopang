@@ -269,14 +269,14 @@ namespace Redesign0926
             return r;
         }
 
-        // 언론사 라이브 — 두 줄 세 칸, 누르면 그 방송사 유튜브 생방송 (R0926SkyPages 의 Handles 순서)
+        // 언론사 라이브 — 두 줄 세 칸, 누르면 그 방송사 생방송 (R0926SkyPages 의 LiveUrls 순서)
         private static RectTransform[] LiveChips(Transform page)
         {
             var names = new[]
             {
                 new[] { "YTN", "YTN", "YTN", "YTN", "YTN" },
-                new[] { "연합뉴스TV", "Yonhap TV", "聯合ニュースTV", "韩联社TV", "Yonhap TV" },
-                new[] { "KBS", "KBS", "KBS", "KBS", "KBS" },
+                new[] { "KBS1", "KBS1", "KBS1", "KBS1", "KBS1" },
+                new[] { "KBS2", "KBS2", "KBS2", "KBS2", "KBS2" },
                 new[] { "MBC", "MBC", "MBC", "MBC", "MBC" },
                 new[] { "SBS", "SBS", "SBS", "SBS", "SBS" },
                 new[] { "JTBC", "JTBC", "JTBC", "JTBC", "JTBC" },
@@ -296,7 +296,9 @@ namespace Redesign0926
                 nrt.offsetMin = new Vector2(44, 2); nrt.offsetMax = new Vector2(-24, 76);
                 EditorUtility.SetDirty(nrt);
                 AddShadow(nm);
+                var oldLoc = nm.GetComponent<R0926LocalizedText>();   // 이 칸에 예전 방송사(연합뉴스TV)의 번역이 남아 있으면 지운다
                 if (names[i][0] != names[i][1]) Loc(nm, names[i][0], names[i][1], names[i][2], names[i][3], names[i][4]);
+                else if (oldLoc != null) Object.DestroyImmediate(oldLoc);
                 var dot = FindOrCreate(chip.transform, "Dot");
                 Img(dot, Spr("r0926_circle"), new Color(1f, 0.3f, 0.3f, 1f), Image.Type.Simple).raycastTarget = false;
                 SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(56, -35), new Vector2(22, 22));
