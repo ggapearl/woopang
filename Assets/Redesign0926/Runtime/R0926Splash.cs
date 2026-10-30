@@ -17,7 +17,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [SerializeField] private RectTransform lens;      // 원형 마스크 — 안쪽만 문양이 보인다
     [SerializeField] private RawImage motif;          // 렌즈의 자식이지만 화면에 고정
     [SerializeField] private RawImage motifFaint;     // 렌즈 밖 — 같은 문양을 옅게 (완전한 검정 대신)
-    [SerializeField] private R0926LensFx lensFx;      // 렌즈 밖 그늘 + 얇은 유리 테두리 (10-20 — 예전 흰 링 그림 대신)
+    [SerializeField] private R0926LensFx lensFx;      // 렌즈 밖 그늘 — 테두리 없이 렌즈 안팎 밝기 대비만 (10-31)
     [SerializeField] private Image dimmer;
     [SerializeField] private CanvasGroup emblem;
     [SerializeField] private CanvasGroup wordmark;
@@ -179,8 +179,8 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     }
 
     // ── 시간표 ──────────────────────────────────────────────
-    // 0.0 어둠 · 0.3~1.4 렌즈가 왼→오른쪽으로 훑음 (0.55~1.45 에 반짝임 하나가 위쪽 테두리를 지난다)
-    // 1.4~1.95 렌즈가 화면 밖으로 퍼짐 (테두리는 살짝 번지며 사라지고, 바깥 그늘이 걷히고, 안쪽 확대가 풀린다)
+    // 0.0 어둠 · 0.3~1.4 렌즈가 왼→오른쪽으로 훑음
+    // 1.4~1.95 렌즈가 화면 밖으로 퍼짐 (바깥 그늘이 걷히고, 안쪽 확대가 풀린다)
     // 1.5 엠블럼 · 1.9 WOOPANG · 2.3 SEE THE UNSEEN · 2.9 나라 말 한 줄 · 3.7 사라짐
     // 그동안 뒷배경은 확대(1.15)에서 3.8초에 1 로 줌아웃 — 어두운 처음엔 천천히, 배경이 다 드러나는 2초 무렵에 가장 빠르게, 끝은 멈추듯
     private void Pose(float time)
@@ -205,13 +205,10 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         }
         if (lensFx != null)
         {
-            // 그늘·테두리는 마스크 밖 형제 — 테두리 가운데 흰 줄이 마스크의 각진 가장자리를 덮는다
+            // 그늘은 마스크 밖 형제 — 렌즈 가장자리부터 바깥을 덮는다 (흰 테두리는 10-31 대표님 「밝기 대비만」으로 뺐다)
             lensFx.center = pos;
             lensFx.radius = diameter * 0.5f;
             lensFx.shade = outsideShade * (1f - grow);
-            lensFx.ringAlpha = Mathf.Clamp01(Mathf.InverseLerp(0.25f, 0.45f, time)) * (1f - grow) * (1f - grow);
-            lensFx.glint = time > 0.55f && time < 1.45f ? Mathf.InverseLerp(0.55f, 1.45f, time) : -1f;
-            lensFx.spread = grow;
             lensFx.Refresh();
         }
 

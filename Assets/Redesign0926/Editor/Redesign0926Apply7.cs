@@ -49,7 +49,7 @@ namespace Redesign0926
             var fImg = Ensure<RawImage>(faint); fImg.texture = null; fImg.raycastTarget = false; fImg.color = new Color(1f, 1f, 1f, 0f);
             faint.transform.SetSiblingIndex(0);
 
-            // 예전 흰 링 그림(r0926_ring) — 렌즈와 함께 커져 퍼질 때 굵은 회색 띠가 됐다. 10-20 부터 LensFx0926 이 그늘·테두리를 그린다
+            // 예전 흰 링 그림(r0926_ring) — 렌즈와 함께 커져 퍼질 때 굵은 회색 띠가 됐다. 10-20 부터 LensFx0926 이 그린다 (10-31 부터 그늘만 — 흰 테두리 없음)
             var oldRing = sp.transform.Find("Ring0926");
             if (oldRing != null) { Object.DestroyImmediate(oldRing.gameObject); log.Add("splash: 예전 흰 링 삭제"); }
 
@@ -57,7 +57,7 @@ namespace Redesign0926
             Stretch(RT(dim));
             Img(dim, null, new Color(0.043f, 0.051f, 0.059f, 0f), Image.Type.Simple).raycastTarget = false;
 
-            // 렌즈 밖 그늘 + 얇은 유리 테두리 — 별(Stars0926, 어둡게 하는 막 바로 다음)보다 위에서 바깥 별까지 어둡게 덮는다
+            // 렌즈 밖 그늘 — 별(Stars0926, 어둡게 하는 막 바로 다음)보다 위에서 바깥 별까지 어둡게 덮는다
             var fx = FindOrCreate(sp.transform, "LensFx0926");
             Stretch(RT(fx));
             Ensure<CanvasRenderer>(fx);
