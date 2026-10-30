@@ -11,12 +11,13 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class R0926IndicatorHalo : BaseMeshEffect
 {
-    // 글자 크기에 대한 비율 — 가까운 고리 · 먼 고리 · 아래로 내림 (더 넓히면 글자가 번져 보였다)
-    private const float TextNear = 0.05f, TextFar = 0.12f, TextDrop = 0.03f;
+    // 글자 크기에 대한 비율 — 가까운 고리 · 먼 고리 · 아래로 내림 (가까운 고리를 더 넓히면 글자가 번져 보였다)
+    //   10-27 대표님 「셰도우 범위를 아주 조금 더 넓히고 진하기를 좀 줄이면」 — 먼 고리만 0.12 → 0.15, 진하기 0.8 · 0.26 → 0.64 · 0.24
+    private const float TextNear = 0.05f, TextFar = 0.15f, TextDrop = 0.03f;
     // 그림(박스·화살표)은 짧은 변에 대한 비율 — 선이 가늘어 글자보다 작게. 화살표는 돌아가므로 아래로 내리지 않는다
-    private const float ImageNear = 0.02f, ImageFar = 0.045f, ImageDrop = 0f;
+    private const float ImageNear = 0.02f, ImageFar = 0.055f, ImageDrop = 0f;
     // 사본이 겹친 진하기 — 글자 바로 둘레(또렷한 테두리) / 번지는 끝 (tone.a 에 곱한다)
-    private const float NearShare = 0.8f, FarShare = 0.26f;
+    private const float NearShare = 0.64f, FarShare = 0.24f;
     private static readonly Vector2[] NearRing = Ring(8, 0f);
     private static readonly Vector2[] FarRing = Ring(12, 15f);
     private static readonly List<UIVertex> src = new List<UIVertex>();
