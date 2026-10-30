@@ -12147,6 +12147,12 @@ namespace Redesign0926
                 return ic.Count > 0 && ic[0] == "emoji_1f950" && string.Join(",", ic.FindAll(x => x.StartsWith("r0926_f_"))) == "r0926_f_fireworks,r0926_f_maple,r0926_f_crab"
                        && ic.FindAll(x => x.StartsWith("r0926_i_treasure")).Count == NearHuntRows();
             }, "줄 앞 그림 — 광고 줄은 고른 이모지 🥐 · 축제마다 그림 (불꽃·단풍·꽃게) · 보물찾기는 보물 상자");
+            Check(() => HuntGlowOk(), "보물찾기 줄만 은은한 금빛 바탕 (10-27 「'보물찾기' 리스트의 경우 살짝 하이라이트, 반짝임 등이 있어서 좀 구분되서」)");
+            Do(() => { shineMinX = float.MaxValue; shineMaxX = float.MinValue; twinkleMax = 0f; });
+            Wait(() => HuntShineSeen(), 8f, "보물찾기 줄 반짝임 지켜봄");
+            Check(() => shineMaxX - shineMinX > 400f && twinkleMax > 0.9f, "가끔 반짝 — 상자 옆 별이 반짝이고 빛 띠가 줄을 왼쪽에서 오른쪽으로 지나간다");
+            Wait(() => HuntShineMid(), 8f, "빛 띠가 보물찾기 줄 가운데");
+            Shot("filters_hunt_shine");
             Check(() =>
             {
                 var l = ShownLinks(PlaceListManager.EntryKind.Festival);
@@ -12269,6 +12275,46 @@ namespace Redesign0926
                 if (got != w.icon) { log.Add("  칩 그림 다름 " + w.chip + " " + got); ok = false; }
             }
             return ok;
+        }
+        // 보물찾기 줄 반짝임 — 금빛 바탕은 보물찾기 줄에만 · 지켜보는 동안 별이 반짝이고 빛 띠가 줄을 지나간다
+        private static float shineMinX, shineMaxX, twinkleMax;
+        private static bool HuntGlowOk()
+        {
+            var pl = Plm();
+            var rows = ListRows();
+            if (pl == null || rows.Count == 0) { log.Add("  목록 줄 없음"); return false; }
+            int hunts = 0;
+            for (int i = 0; i < rows.Count && i < pl.ShownEntries.Count; i++)
+            {
+                bool hunt = pl.ShownEntries[i].kind == PlaceListManager.EntryKind.Hunt;
+                var g = rows[i].Find("HuntGlow");
+                if (g == null || g.gameObject.activeSelf != hunt) { log.Add("  금빛 바탕 다름 " + pl.ShownEntries[i].name + " 보물찾기 " + hunt); return false; }
+                if (hunt) hunts++;
+            }
+            log.Add($"  금빛 바탕 줄 {hunts}");
+            return hunts > 0;
+        }
+        // 불릴 때마다 쌓는다 — 빛 띠가 움직인 폭 · 별이 가장 커진 크기
+        private static bool HuntShineSeen()
+        {
+            foreach (var row in ListRows())
+            {
+                var s = row.Find("HuntGlow/Shine") as RectTransform;
+                if (s != null && s.gameObject.activeInHierarchy) { shineMinX = Mathf.Min(shineMinX, s.anchoredPosition.x); shineMaxX = Mathf.Max(shineMaxX, s.anchoredPosition.x); }
+                var t = row.Find("Dot/Twinkle");
+                if (t != null && t.gameObject.activeInHierarchy) twinkleMax = Mathf.Max(twinkleMax, t.localScale.x);
+            }
+            return shineMaxX - shineMinX > 400f && twinkleMax > 0.9f;
+        }
+        private static bool HuntShineMid()
+        {
+            foreach (var row in ListRows())
+            {
+                var s = row.Find("HuntGlow/Shine") as RectTransform;
+                if (s == null || !s.gameObject.activeInHierarchy) continue;
+                return Mathf.Abs(s.anchoredPosition.x / ((RectTransform)s.parent).rect.width - 0.5f) < 0.1f;
+            }
+            return false;
         }
         // 목록의 장소 줄 앞 그림 = 그 장소의 분류 그림 (r0926_c_<분류>) · 분류가 없거나 그림이 없는 분류는 점. 줄과 ShownEntries 는 같은 순서
         private static bool PlaceRowIconsOk()

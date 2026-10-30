@@ -50,6 +50,10 @@ namespace Redesign0926
                 rso.FindProperty("personSprite").objectReferenceValue = Spr("r0926_i_user");
                 rso.FindProperty("huntSprite").objectReferenceValue = Spr("r0926_i_treasure");
                 rso.FindProperty("huntLockSprite").objectReferenceValue = Spr("r0926_i_treasure_lock");
+                // 보물찾기 줄 — 금빛 테두리 · 지나가는 빛 띠 · 상자 옆 별 (10-27 대표님 「살짝 하이라이트, 반짝임」)
+                rso.FindProperty("huntRingSprite").objectReferenceValue = Spr("r0926_pill_ring");
+                rso.FindProperty("shineSprite").objectReferenceValue = Spr("r0926_shine");
+                rso.FindProperty("twinkleSprite").objectReferenceValue = Spr("r0926_re_spark");
                 // 축제·보호소 줄 그림 — 서버가 축제마다 고른 이름(r0926_f_<이름>) · 보호소는 shelter (10-23 대표님)
                 var kinds = new List<Sprite>();
                 foreach (var file in System.IO.Directory.GetFiles(SpriteDir, "r0926_f_*.png"))   // 막 바꿔 들인 그림은 FindAssets 색인에 아직 없다

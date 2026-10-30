@@ -13,6 +13,7 @@ using UnityEngine.UI;
 /// AR 의 그 박스·화살표 글자 뒤에 분홍 스티커가 붙는다. 아직 없으면 목록은 그대로, 그 줄이 분홍으로 밝혀지고
 /// 거리 칸에 '아직 AR화면 내에 없음'. 줄 ↔ 장소는 PlaceListManager.ShownEntries(글자와 같은 순서)로 잇는다.
 /// 줄 앞 표시: 장소는 색 점 · 근처 사람은 사람 모양(핑크) · 보물찾기는 금빛 상자 — 보물찾기 줄을 누르면 그 게임 상세가 열린다.
+/// 보물찾기 줄은 은은한 금빛 바탕 · 가는 금빛 테두리에 가끔 반짝인다 (상자 옆 별 · 지나가는 빛 띠).
 /// 축제는 축제 분위기 그림(불꽃·등불·꽃…), 보호소는 강아지 — 누르면 그 축제를 찾은 쪽 · 카카오맵 장소 쪽이 열린다.
 /// </summary>
 public class R0926PlaceRows : MonoBehaviour
@@ -78,6 +79,21 @@ public class R0926PlaceRows : MonoBehaviour
     [Tooltip("그림 가운데 — 줄 왼쪽 끝에서")]
     [SerializeField] private float iconCenterX = 26f;
 
+    [Header("보물찾기 줄 — 은은한 금빛 바탕 · 테두리 · 가끔 반짝 (10-27 대표님 「'보물찾기' 리스트의 경우 살짝 하이라이트, 반짝임 등이 있어서 좀 구분되서 보이도록」)")]
+    [Tooltip("금빛 테두리 (r0926_pill_ring — barSprite 와 같은 9-slice)")]
+    [SerializeField] private Sprite huntRingSprite;
+    [Tooltip("줄을 가로질러 지나가는 빛 띠 (r0926_shine)")]
+    [SerializeField] private Sprite shineSprite;
+    [Tooltip("상자 오른쪽 위에서 반짝이는 별 (r0926_re_spark)")]
+    [SerializeField] private Sprite twinkleSprite;
+    [Tooltip("반짝임 간격 (초) — 한 번에 별이 반짝이고 빛 띠가 왼쪽에서 오른쪽으로 지나간다")]
+    [SerializeField] private float huntShinePeriod = 3.2f;
+    private static readonly Color HuntTint = new Color(0.910f, 0.749f, 0.310f, 0.05f);   // 지도 보물 핀 테두리와 같은 금빛 (선형 색 공간이라 낮은 값도 꽤 진하다)
+    private static readonly Color HuntRing = new Color(0.910f, 0.749f, 0.310f, 0.32f);
+    private static readonly Color ShineColor = new Color(1f, 0.93f, 0.75f, 0.24f);
+    private const float ShineStart = 0.15f, ShineTime = 0.9f, TwinkleTime = 0.5f, HuntStagger = 0.22f, ShineEdge = 72f;
+    private int huntRows;
+
     private const float Hysteresis = 10f;        // 경계에서 방향 글자가 깜빡이지 않게 (도)
     private const float GpsMinDistance = 10f;   // GPS 오차 안쪽은 나침반 방향을 쓰지 않는다 (m)
 
@@ -127,6 +143,9 @@ public class R0926PlaceRows : MonoBehaviour
         public Sprite dotSprite;   // 템플릿의 색 점 — 장소로 돌아올 때
         public Vector2 dotPos, dotSize;
         public Color nameColor;    // 템플릿의 이름 색 — 애견동반이 아닌 줄
+        public Image huntGlow;     // 보물찾기 줄 금빛 바탕 — 빛 띠를 그 안에서만 보이게 담는다
+        public Image huntShine, huntTwinkle;
+        public int huntOrder = -1; // 보물찾기 줄 중 몇 번째 (차례로 반짝) · 보물찾기가 아니면 -1
     }
 
     private void Awake()
@@ -194,6 +213,7 @@ public class R0926PlaceRows : MonoBehaviour
             UpdateFlashes();
             if (Time.unscaledTime > flashEnd) flashEnd = 0f;
         }
+        if (huntRows > 0) UpdateHuntShine();
         if (closeAt > 0f && Time.unscaledTime >= closeAt)
         {
             closeAt = -1f;
@@ -264,6 +284,7 @@ public class R0926PlaceRows : MonoBehaviour
     private void Rebuild(string text)
     {
         int used = 0;
+        huntRows = 0;
         sb.Length = 0;
         entries.Clear();
         string message = null;
@@ -285,6 +306,7 @@ public class R0926PlaceRows : MonoBehaviour
                 // 근처 사람은 이름이 @아이디 — 장소 정보와 아직 못 맞춘 프레임에도 사람 모양으로
                 var kind = known ? e.kind : key.StartsWith("@") ? PlaceListManager.EntryKind.Person : PlaceListManager.EntryKind.Place;
                 SetIcon(r, kind, ParseHex(m.Groups[1].Value), known ? e.icon : null, known ? e.emojiUrl : null);
+                SetHuntGlow(r, kind == PlaceListManager.EntryKind.Hunt ? huntRows++ : -1);
                 if (known && e.promo) R0926Nearby.AdView(this, e.adId, "festival");   // 광고 줄은 축제 칩에만 온다
                 string label = key;
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움)
@@ -410,6 +432,52 @@ public class R0926PlaceRows : MonoBehaviour
         row.flash.raycastTarget = false;
         fl.SetActive(false);
 
+        // 보물찾기 줄 금빛 바탕 — 분홍 바탕보다도 뒤 (첫 자식). 빛 띠는 이 바탕 안에서만 보인다. 보물찾기 줄일 때만 켠다
+        var hg = new GameObject("HuntGlow", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+        hg.layer = go.layer;
+        var hrt = (RectTransform)hg.transform;
+        hrt.SetParent(go.transform, false);
+        hrt.SetAsFirstSibling();
+        hrt.anchorMin = Vector2.zero; hrt.anchorMax = Vector2.one;
+        hrt.offsetMin = new Vector2(-6f, 6f); hrt.offsetMax = new Vector2(6f, -6f);   // 좌우로 조금 넓게 — 상자 그림·거리 글자가 테두리에 붙지 않게 (목록 칸 여백 8 안)
+        row.huntGlow = hg.GetComponent<Image>();
+        row.huntGlow.sprite = barSprite;
+        row.huntGlow.type = row.flash.type;
+        row.huntGlow.pixelsPerUnitMultiplier = row.flash.pixelsPerUnitMultiplier;
+        row.huntGlow.color = HuntTint;
+        row.huntGlow.raycastTarget = false;
+        if (huntRingSprite != null)
+        {
+            var ring = Decor("Ring", hrt, huntRingSprite, HuntRing);
+            var rrt = ring.rectTransform;
+            rrt.anchorMin = Vector2.zero; rrt.anchorMax = Vector2.one;
+            rrt.offsetMin = rrt.offsetMax = Vector2.zero;
+            ring.type = row.huntGlow.type;
+            ring.pixelsPerUnitMultiplier = row.huntGlow.pixelsPerUnitMultiplier;
+        }
+        if (shineSprite != null)
+        {
+            // 살짝 기운 빛 띠 — 둥근 모서리에 걸리지 않게 곧은 가운데 구간만 지나간다
+            row.huntShine = Decor("Shine", hrt, shineSprite, ShineColor);
+            var srt = row.huntShine.rectTransform;
+            srt.anchorMin = srt.anchorMax = new Vector2(0f, 0.5f);
+            srt.sizeDelta = new Vector2(64f, 124f);
+            srt.localRotation = Quaternion.Euler(0f, 0f, -18f);
+            row.huntShine.gameObject.SetActive(false);
+        }
+        hg.SetActive(false);
+        if (twinkleSprite != null)
+        {
+            // 상자 오른쪽 위 작은 별 — 줄 앞 그림을 따라간다
+            row.huntTwinkle = Decor("Twinkle", row.dot.rectTransform, twinkleSprite, Color.white);
+            var trt = row.huntTwinkle.rectTransform;
+            trt.anchorMin = trt.anchorMax = Vector2.one;
+            trt.anchoredPosition = new Vector2(-2f, -4f);
+            trt.sizeDelta = new Vector2(28f, 28f);
+            row.huntTwinkle.preserveAspect = true;
+            row.huntTwinkle.gameObject.SetActive(false);
+        }
+
         if (showDirection && directionWidth > 0f)
         {
             // 방향 글자 자리 — 거리 칸(오른쪽 기준)을 왼쪽으로 넓히고 이름 칸은 그만큼 좁힌다. 길어도 거리가 잘리지 않게 한 줄로
@@ -507,6 +575,63 @@ public class R0926PlaceRows : MonoBehaviour
         r.dist.text = "<size=" + directionFontSize + "><color=#FFFFFF>"
                     + L("아직 AR화면 내에 없음", "Not in AR view yet", "まだAR画面にありません", "尚未出现在AR画面中", "Aún no está en la vista AR")
                     + "</color></size>";
+    }
+
+    private Image Decor(string name, Transform parent, Sprite sprite, Color color)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        go.layer = gameObject.layer;
+        go.transform.SetParent(parent, false);
+        var img = go.GetComponent<Image>();
+        img.sprite = sprite;
+        img.color = color;
+        img.raycastTarget = false;
+        return img;
+    }
+
+    // 보물찾기 줄만 금빛 바탕 · 반짝임 (order = 보물찾기 줄 중 몇 번째, 아니면 -1)
+    private void SetHuntGlow(Row r, int order)
+    {
+        r.huntOrder = order;
+        bool on = order >= 0;
+        if (r.huntGlow != null && r.huntGlow.gameObject.activeSelf != on) r.huntGlow.gameObject.SetActive(on);
+        if (!on && r.huntTwinkle != null && r.huntTwinkle.gameObject.activeSelf) r.huntTwinkle.gameObject.SetActive(false);
+    }
+
+    // 한 주기에 한 번 — 상자 옆 별이 반짝이고, 이어서 빛 띠가 줄을 왼쪽에서 오른쪽으로 지나간다. 아래 줄일수록 조금씩 늦게.
+    // 쉬는 동안은 아무것도 움직이지 않는다 (목록 화면을 매 프레임 다시 그리지 않게)
+    private void UpdateHuntShine()
+    {
+        float now = Time.unscaledTime - openedAt - 0.35f;   // 목록이 다 올라온 뒤 첫 반짝
+        foreach (var r in rows)
+        {
+            if (r.huntOrder < 0 || !r.go.activeSelf) continue;
+            float t = Mathf.Repeat(now - r.huntOrder * HuntStagger, huntShinePeriod);
+            if (r.huntShine != null)
+            {
+                float s = (t - ShineStart) / ShineTime;
+                bool on = s > 0f && s < 1f;
+                if (r.huntShine.gameObject.activeSelf != on) r.huntShine.gameObject.SetActive(on);
+                if (on)
+                {
+                    float w = r.huntGlow.rectTransform.rect.width;
+                    r.huntShine.rectTransform.anchoredPosition = new Vector2(Mathf.Lerp(ShineEdge, w - ShineEdge, Mathf.SmoothStep(0f, 1f, s)), 0f);
+                    r.huntShine.canvasRenderer.SetAlpha(Mathf.Sin(s * Mathf.PI));
+                }
+            }
+            if (r.huntTwinkle != null)
+            {
+                float k = t / TwinkleTime;
+                bool on = k < 1f;
+                if (r.huntTwinkle.gameObject.activeSelf != on) r.huntTwinkle.gameObject.SetActive(on);
+                if (on)
+                {
+                    var trt = r.huntTwinkle.rectTransform;
+                    trt.localScale = Vector3.one * Mathf.Sin(k * Mathf.PI);
+                    trt.localRotation = Quaternion.Euler(0f, 0f, -40f * k);
+                }
+            }
+        }
     }
 
     private void Flash(Row r, float hold)
