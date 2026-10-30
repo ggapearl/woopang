@@ -57,8 +57,8 @@ public class PlaceListManager : MonoBehaviour
         public string icon;          // 축제·보호소 — 줄 앞 그림 · 보물찾기는 "lock" = 비밀번호를 건 보물 (R0926PlaceRows)
         public string start, end;    // 축제 날짜 (YYYYMMDD)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
-        public bool pinned;          // 목록 맨 위에 (반려견만 볼 때 보호소 · 축제 칩의 광고 줄)
-        public bool anyDistance;     // 거리 슬라이더와 상관없이 (축제·보호소)
+        public byte pin;             // 목록 맨 위에 — 클수록 위: 3 광고 줄 · 2 축제 / 보물 칩의 축제·보물찾기 · 1 애견동반의 보호소 (0 은 거리순)
+        public bool anyDistance;     // 거리 슬라이더와 상관없이 (축제·보호소·맨 위 보물찾기)
         public bool promo;           // 관리자가 띄운 협력 업체(광고) 줄 — '광고'를 밝히고 노출·클릭을 센다
         public string adId, emojiUrl;
     }
@@ -91,8 +91,8 @@ public class PlaceListManager : MonoBehaviour
     private System.Text.StringBuilder liveBuilder = new System.Text.StringBuilder(2048);
     private (float d, int idx)[] orderedBuffer = new (float, int)[64];
     private float[] distBuffer = new float[64];
-    private const float PinnedFirst = 1e7f;   // 맨 위 줄(보호소)은 정렬 열쇠에서 이만큼 빼 앞으로
-    private const int MaxShelters = 3;
+    private const float PinnedFirst = 1e7f;   // 맨 위 줄은 정렬 열쇠에서 pin 마다 이만큼 빼 앞으로
+    private const int MaxShelters = 3, MaxFestivals = 3, MaxNearHunts = 3;
     private float lastGpsLat;
     private float lastGpsLon;
     private bool hasLiveSnapshot = false;
@@ -286,14 +286,14 @@ public class PlaceListManager : MonoBehaviour
         lastGpsLat = lat; lastGpsLon = lon;
         woopangCount = 0; tourAPICount = 0; publicTransportCount = 0; p2pUserCount = 0; huntCount = 0; festivalCount = 0; shelterCount = 0;
 
-        // 축제 칩을 켜면 목록은 축제만 — 거리와 상관없이 가까운 순 (2026-10-24 대표님)
+        // 축제 / 보물 칩 — 다른 칩은 그대로 두고 지금 목록 맨 위에 가까운 축제 · 보물찾기를 더한다 (10-27 대표님, 예전엔 목록이 축제만)
         bool festivalMode = activeFilters.GetValueOrDefault("festival", false);
         bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
         bool petFriendlyAll = activeFilters.GetValueOrDefault("petFriendlyAll", true);
-        bool showPublic = !festivalMode && activeFilters.GetValueOrDefault("publicData", true);
-        bool showSubway = !festivalMode && activeFilters.GetValueOrDefault("subway", true);
-        bool showTrain = !festivalMode && activeFilters.GetValueOrDefault("train", true);
-        bool showTerminal = !festivalMode && activeFilters.GetValueOrDefault("terminal", true);
+        bool showPublic = activeFilters.GetValueOrDefault("publicData", true);
+        bool showSubway = activeFilters.GetValueOrDefault("subway", true);
+        bool showTrain = activeFilters.GetValueOrDefault("train", true);
+        bool showTerminal = activeFilters.GetValueOrDefault("terminal", true);
         bool showObject3D = activeFilters.GetValueOrDefault("object3D", true);
         bool categoryFilterActive = activeFilters.GetValueOrDefault("categoryFilter", false);
 
@@ -304,7 +304,7 @@ public class PlaceListManager : MonoBehaviour
             activeCategoryFilter = filterMgr.GetActiveCategoryFilter();
 
         // 1. Woopang Data (lightCache 기반 — placeDataMap에 있으면 상세 데이터 활용)
-        if (dataManager != null && !festivalMode) {
+        if (dataManager != null) {
             HashSet<int> addedIds = new HashSet<int>();
             var placeDataMap = dataManager.GetPlaceDataMap();
 
@@ -396,32 +396,38 @@ public class PlaceListManager : MonoBehaviour
         AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_");
 
         // 4. P2P Users (근처 사용자)
-        bool showP2PUsers = !festivalMode && activeFilters.GetValueOrDefault("p2pUsers", true);
+        bool showP2PUsers = activeFilters.GetValueOrDefault("p2pUsers", true);
         if (showP2PUsers && p2pManager != null)
         {
             AddP2PUserData(lat, lon);
         }
 
-        // 5. 보물찾기 — 내가 연 게임 · 참가 중인 게임 (분류를 고른 동안은 사람처럼 뺀다)
-        if (!categoryFilterActive && !festivalMode) AddHuntData(lat, lon);
+        // 5. 보물찾기 — 내가 연 게임 · 참가 중인 게임 (분류를 고른 동안은 사람처럼 뺀다). 축제 / 보물 칩을 켜지 않아도 보인다
+        if (!categoryFilterActive) AddHuntData(lat, lon);
         if (listPanel != null && listPanel.activeInHierarchy)
         {
             var huntFetch = R0926HuntList.RefreshIfDue();   // 열려 있는 동안 1분에 한 번 — 받으면 Changed 로 다시 그린다
             if (huntFetch != null) StartCoroutine(huntFetch);
             // 근처 축제·보호소 — 1km 넘게 움직였거나 30분이 지났을 때만 다시 묻는다 (받으면 Changed)
-            var nearFetch = festivalMode ? R0926Nearby.FestivalsIfDue(lat, lon) : petFriendlyOnly ? R0926Nearby.SheltersIfDue(lat, lon) : null;
-            if (nearFetch != null) StartCoroutine(nearFetch);
+            var festFetch = festivalMode ? R0926Nearby.FestivalsIfDue(lat, lon) : null;
+            if (festFetch != null) StartCoroutine(festFetch);
+            var shelterFetch = petFriendlyOnly ? R0926Nearby.SheltersIfDue(lat, lon) : null;
+            if (shelterFetch != null) StartCoroutine(shelterFetch);
         }
 
-        // 6. 축제 칩 — 축제만 · 반려견만 — 맨 위에 가까운 보호소 (둘 다 거리 슬라이더와 상관없이)
-        if (festivalMode) AddFestivalData(lat, lon);
-        else if (petFriendlyOnly) AddShelterData(lat, lon);
+        // 6. 맨 위 줄 (거리 슬라이더와 상관없이) — 축제 / 보물: 광고 줄 · 가까운 축제 · 참가할 수 있는 근처 보물찾기 / 애견동반: 가까운 보호소
+        if (festivalMode)
+        {
+            AddFestivalData(lat, lon);
+            if (!categoryFilterActive) AddNearHuntData(lat, lon);
+        }
+        if (petFriendlyOnly) AddShelterData(lat, lon);
 
-        // 거리순 정렬 + 상위 maxListEntries개만 (DB 커져도 이 값 이상은 안 만짐) — 맨 위 줄(보호소)은 먼저
+        // 거리순 정렬 + 상위 maxListEntries개만 (DB 커져도 이 값 이상은 안 만짐) — 맨 위 줄은 먼저 (pin 큰 것부터)
         // liveEntries 는 combinedPlaces 와 같은 순서로 하나씩 쌓였다 — 같은 순서로 골라 목록 줄과 1:1 로 맞춘다
         // (예전 id 기준 자르기는 매니저끼리 id 가 겹치면 어긋났다)
         var order = Enumerable.Range(0, combinedPlaces.Count)
-            .OrderBy(i => i < liveEntries.Count && liveEntries[i].pinned ? 0 : 1).ThenBy(i => i < liveEntries.Count && liveEntries[i].huntFound ? 1 : 0).ThenBy(i => combinedPlaces[i].distance)
+            .OrderByDescending(i => i < liveEntries.Count ? liveEntries[i].pin : 0).ThenBy(i => i < liveEntries.Count && liveEntries[i].huntFound ? 1 : 0).ThenBy(i => combinedPlaces[i].distance)
             .Take(maxListEntries).ToList();
         var sortedPlaces = new List<(object place, float distance, string id, string displayText, string colorHex)>(order.Count);
         var sortedLive = new List<LiveEntry>(order.Count);
@@ -439,22 +445,12 @@ public class PlaceListManager : MonoBehaviour
             sb.Append($"<color=#{color}>{item.displayText}</color>\n");
         }
 
-        cachedFooter = festivalMode
-            ? (festivalCount > 0 ? $"\n{GetLocalizedText("festivalData")}: {festivalCount}" : "\n" + R0926Nearby.EmptyMessage())   // 광고 줄만 있으면 그 아래 까닭 한 줄
-            : $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
+        cachedFooter = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
         if (huntCount > 0) cachedFooter += $"\n{GetLocalizedText("huntData")}: {huntCount}";
+        // 축제 수 (광고 줄은 빼고) — 없으면 까닭 한 줄 (아직 받는 중 · 공공데이터 신청 전 · 근처에 없음)
+        if (festivalMode) cachedFooter += festivalCount > 0 ? $"\n{GetLocalizedText("festivalData")}: {festivalCount}" : "\n" + R0926Nearby.EmptyMessage();
         if (shelterCount > 0) cachedFooter += $"\n{GetLocalizedText("shelterData")}: {shelterCount}";
         sb.Append(cachedFooter);
-
-        // 축제 칩인데 줄이 없다 — 다시 묻지 않고 까닭만 (아직 받는 중 · 공공데이터 신청 전 · 근처에 없음)
-        if (combinedPlaces.Count == 0 && festivalMode)
-        {
-            string festMsg = R0926Nearby.EmptyMessage();
-            if (listText != null) { listText.text = festMsg; lastDisplayedText = festMsg; }
-            shownEntries.Clear();
-            hasLiveSnapshot = false;
-            yield break;
-        }
 
         // 데이터 비어있고 panel 열려있으면 자동 재시도 (데이터 로드 race condition 대응)
         if (combinedPlaces.Count == 0 && listPanel != null && listPanel.activeInHierarchy)
@@ -593,7 +589,7 @@ public class PlaceListManager : MonoBehaviour
                 d = Mathf.Sqrt(dLatM * dLatM + dLonM * dLonM);
             }
             distBuffer[i] = d;
-            orderedBuffer[i] = (e.pinned ? d - PinnedFirst : d, i);
+            orderedBuffer[i] = (d - PinnedFirst * e.pin, i);
         }
         Array.Sort(orderedBuffer, 0, count, OrderedComparer.Instance);
 
@@ -735,21 +731,23 @@ public class PlaceListManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 축제 칩 — 받아 둔 근처 축제 전부 (거리 슬라이더와 상관없이 가까운 순). 줄 앞은 축제 분위기 그림, 거리 칸은 '며칠부터 · 거리'.
-    /// 누르면 축제 이름으로 찾은 쪽 (R0926PlaceRows). 관리자가 띄운 광고 줄은 맨 위에 '광고 · 거리' — 누르면 업체 링크, 축제 수에는 넣지 않는다
+    /// 축제 / 보물 칩 — 받아 둔 근처 축제 중 앞의 세 곳(서버가 가깝고 곧 하는 순으로 준다)을 목록 맨 위에, 그 안에서는 가까운 순 (거리 슬라이더와 상관없이).
+    /// 줄 앞은 축제 분위기 그림, 거리 칸은 '며칠부터 · 거리'. 누르면 축제 이름으로 찾은 쪽 (R0926PlaceRows).
+    /// 관리자가 띄운 광고 줄은 그보다 위에 '광고 · 거리' — 누르면 업체 링크, 축제 수에는 넣지 않는다
     /// </summary>
     private void AddFestivalData(float lat, float lon)
     {
         foreach (var f in R0926Nearby.Festivals)
         {
             if (f == null || string.IsNullOrEmpty(f.title)) continue;
+            if (!f.promo && festivalCount >= MaxFestivals) continue;
             string title = f.title.Replace('\r', ' ').Replace('\n', ' ').Trim();
             var e = new LiveEntry
             {
                 id = "fest:" + f.id, baseLabel = title, colorHex = R0926Nearby.FestivalHex, baseLat = (float)f.lat, baseLon = (float)f.lon,
                 kind = EntryKind.Festival, icon = f.icon, start = f.start, end = f.end, anyDistance = true,
                 link = f.promo ? R0926Nearby.PromoLink(f.link, title, f.lat, f.lon) : R0926Nearby.FestivalLink(title),
-                pinned = f.promo, promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url
+                pin = (byte)(f.promo ? 3 : 2), promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url
             };
             float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
             if (!f.promo) festivalCount++;
@@ -769,11 +767,45 @@ public class PlaceListManager : MonoBehaviour
             var e = new LiveEntry
             {
                 id = "shelter:" + s.id, baseLabel = name, colorHex = R0926Nearby.ShelterHex, baseLat = (float)s.lat, baseLon = (float)s.lon,
-                kind = EntryKind.Shelter, icon = "shelter", link = s.url, pinned = true, anyDistance = true
+                kind = EntryKind.Shelter, icon = "shelter", link = s.url, pin = 1, anyDistance = true
             };
             float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
             shelterCount++;
             combinedPlaces.Add((s, d, e.id, $"{name} - {Mathf.FloorToInt(d)}m", e.colorHex));
+            liveEntries.Add(e);
+        }
+    }
+
+    /// <summary>
+    /// 축제 / 보물 칩 — 아직 참가하지 않은 근처 보물찾기 세 곳을 축제와 함께 맨 위에 (R0926HuntList.Nearby: 주최자가 정한 범위 안 · 진행 중이거나 곧 시작 · 자리가 남은 것).
+    /// 누르면 그 게임 상세에서 보고 참가한다 (10-27 대표님 「보물찾기 참여자가 아니어도 근처 보물찾기·축제가 목록에 나오고, 누르면 정보를 보고 참가」).
+    /// 참가한 게임은 칩과 상관없이 AddHuntData 가 넣는다. 자리는 게임의 공개 설정대로만 (AddHuntData 와 같다)
+    /// </summary>
+    private void AddNearHuntData(float lat, float lon)
+    {
+        int added = 0;
+        foreach (var n in R0926HuntList.Nearby)
+        {
+            if (added >= MaxNearHunts) break;
+            if (n.joined) continue;
+            var e = new LiveEntry { id = "hunt:" + n.id, baseLabel = n.title, colorHex = R0926HuntList.ColorHex, kind = EntryKind.Hunt, huntId = n.id, huntCoord = n.coord,
+                                    icon = n.locked ? "lock" : null, pin = 2, anyDistance = true };
+            float d;
+            if (n.coord == R0926HuntList.Coord.Hidden)
+            {
+                if (n.bandM <= 0f) continue;   // '20km 넘게' — 거리를 말할 수 없다
+                d = e.fixedDistance = n.bandM;
+            }
+            else
+            {
+                e.baseLat = n.lat;
+                e.baseLon = n.lon;
+                e.approxM = n.coord == R0926HuntList.Coord.Approx ? n.approxM : 0f;
+                d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
+            }
+            added++;
+            huntCount++;
+            combinedPlaces.Add((n, d, e.id, $"{n.title} - {Mathf.FloorToInt(d)}m", e.colorHex));
             liveEntries.Add(e);
         }
     }

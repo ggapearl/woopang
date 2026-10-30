@@ -113,7 +113,7 @@ public class FilterManager : MonoBehaviour
     private bool filterTrain = true;
     private bool filterTerminal = true;
     private bool filterObject3D = true;
-    private bool filterFestival;   // 저장하지 않는다 — 목록을 잠깐 축제로 바꿔 보는 칩
+    private bool filterFestival;   // 축제 / 보물 — 목록 맨 위에 근처 축제 · 보물찾기 (기본 꺼짐)
 
     private bool isUpdatingToggles = false;
 
@@ -137,6 +137,7 @@ public class FilterManager : MonoBehaviour
     private const string PREF_TERMINAL = "Filter_Terminal_V2";
     private const string PREF_OBJECT3D = "Filter_Object3D_V2";
     private const string PREF_CATEGORY = "Filter_Category_V1";
+    private const string PREF_FESTIVAL = "Filter_Festival_V1";
 
     // 다국어 데이터
     private Dictionary<string, Dictionary<string, string>> localizedFilterNames = new Dictionary<string, Dictionary<string, string>>
@@ -153,7 +154,7 @@ public class FilterManager : MonoBehaviour
             { "train", "Train" },
             { "terminal", "Bus / Train" },
             { "object3D", "3D Objects" },
-            { "festival", "Festivals" },
+            { "festival", "Fests / Hunts" },
             { "categoryAll", "Category (All)" },
             { "categoryShop", "Shop" },
             { "categoryFood", "Food" },
@@ -175,7 +176,7 @@ public class FilterManager : MonoBehaviour
             { "train", "기차역" },
             { "terminal", "터미널 / 기차" },
             { "object3D", "3D 오브젝트" },
-            { "festival", "축제" },
+            { "festival", "축제 / 보물" },
             { "categoryAll", "카테고리(전체)" },
             { "categoryShop", "샵" },
             { "categoryFood", "음식점" },
@@ -197,7 +198,7 @@ public class FilterManager : MonoBehaviour
             { "train", "鉄道駅" },
             { "terminal", "ターミナル / 駅" },
             { "object3D", "3Dオブジェクト" },
-            { "festival", "お祭り" },
+            { "festival", "祭り / 宝探し" },
             { "categoryAll", "カテゴリ(全体)" },
             { "categoryShop", "ショップ" },
             { "categoryFood", "グルメ" },
@@ -219,7 +220,7 @@ public class FilterManager : MonoBehaviour
             { "train", "火车站" },
             { "terminal", "客运站 / 火车站" },
             { "object3D", "3D对象" },
-            { "festival", "节庆" },
+            { "festival", "节庆 / 寻宝" },
             { "categoryAll", "分类(全部)" },
             { "categoryShop", "商店" },
             { "categoryFood", "美食" },
@@ -241,7 +242,7 @@ public class FilterManager : MonoBehaviour
             { "train", "Estación de Tren" },
             { "terminal", "Terminal / Tren" },
             { "object3D", "Objetos 3D" },
-            { "festival", "Festivales" },
+            { "festival", "Fiesta / Tesoro" },
             { "categoryAll", "Categoría (Todo)" },
             { "categoryShop", "Tienda" },
             { "categoryFood", "Comida" },
@@ -294,7 +295,7 @@ public class FilterManager : MonoBehaviour
         SetupToggle(trainToggle, filterTrain, OnTrainToggleChanged, "train");
         SetupToggle(terminalToggle, filterTerminal, OnTerminalToggleChanged, "terminal");
         SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
-        SetupToggle(festivalToggle, false, OnFestivalToggleChanged, "festival");
+        SetupToggle(festivalToggle, filterFestival, OnFestivalToggleChanged, "festival");
 
         // Category는 PetFriendly처럼 multi-state이므로 별도 처리
         if (categoryToggle != null)
@@ -593,6 +594,7 @@ public class FilterManager : MonoBehaviour
         filterTrain = filterTerminal = PlayerPrefs.GetInt(PREF_TRAIN, 1) == 1 || PlayerPrefs.GetInt(PREF_TERMINAL, 1) == 1;
         filterObject3D = PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
         categoryState = (CategoryFilterState)PlayerPrefs.GetInt(PREF_CATEGORY, 0);
+        filterFestival = PlayerPrefs.GetInt(PREF_FESTIVAL, 0) == 1;
     }
 
     private void SaveFilterSettings()
@@ -606,6 +608,7 @@ public class FilterManager : MonoBehaviour
         PlayerPrefs.SetInt(PREF_TERMINAL, filterTerminal ? 1 : 0);
         PlayerPrefs.SetInt(PREF_OBJECT3D, filterObject3D ? 1 : 0);
         PlayerPrefs.SetInt(PREF_CATEGORY, (int)categoryState);
+        PlayerPrefs.SetInt(PREF_FESTIVAL, filterFestival ? 1 : 0);
         PlayerPrefs.Save();
     }
 
@@ -704,33 +707,13 @@ public class FilterManager : MonoBehaviour
         ApplyAllFilters();
     }
 
-    // 축제 칩 (10-23 대표님) — 목록만 근처 축제로 바꾼다 (AR 배분은 그대로라 목록에만 알린다)
+    // 축제 / 보물 칩 (10-23 · 10-27 대표님) — 다른 칩은 그대로, 목록 맨 위에 근처 축제 · 보물찾기를 더한다 (AR 배분은 그대로라 목록에만 알린다)
     private void OnFestivalToggleChanged(bool isOn)
     {
         if (isUpdatingToggles) return;
         filterFestival = isOn;
-        RefreshFestivalLock();
+        SaveFilterSettings();
         if (placeListManager != null) placeListManager.ApplyFilters(GetActiveFilters());
-    }
-
-    /// <summary>
-    /// 축제 칩이 켜진 동안은 다른 칩이 목록에 아무 일도 하지 않으니 잠가 둔다 (흐리게).
-    /// 끄면 되돌린다 — 분류를 고른 동안 잠겨 있던 공공·교통·사람 칸은 그대로 잠긴 채
-    /// </summary>
-    private void RefreshFestivalLock()
-    {
-        bool free = !filterFestival;
-        bool open = free && categoryState == CategoryFilterState.All;
-        SetToggleInteractable(categoryToggle, free);
-        SetToggleInteractable(petFriendlyToggle, free);
-        SetToggleInteractable(object3DToggle, free);
-        SetToggleInteractable(publicDataToggle, open);
-        SetToggleInteractable(subwayToggle, open);
-        SetToggleInteractable(trainToggle, open);
-        SetToggleInteractable(terminalToggle, open);
-        SetToggleInteractable(alcoholToggle, open);
-        var p2pPanel = Object.FindFirstObjectByType<P2PUserFilterPanel>(FindObjectsInactive.Include);
-        if (p2pPanel != null) SetToggleInteractable(p2pPanel.GetToggle(), open);
     }
 
     // ============================================================
@@ -840,19 +823,19 @@ public class FilterManager : MonoBehaviour
             if (terminalToggle != null) terminalToggle.SetIsOnWithoutNotify(filterTerminal);
             if (alcoholToggle != null) alcoholToggle.SetIsOnWithoutNotify(filterAlcohol);
 
-            // 토글 터치 가능으로 복원 (축제 칩이 켜져 있으면 그쪽 잠금이 이어진다)
-            SetToggleInteractable(publicDataToggle, !filterFestival);
-            SetToggleInteractable(subwayToggle, !filterFestival);
-            SetToggleInteractable(trainToggle, !filterFestival);
-            SetToggleInteractable(terminalToggle, !filterFestival);
-            SetToggleInteractable(alcoholToggle, !filterFestival);
+            // 토글 터치 가능으로 복원
+            SetToggleInteractable(publicDataToggle, true);
+            SetToggleInteractable(subwayToggle, true);
+            SetToggleInteractable(trainToggle, true);
+            SetToggleInteractable(terminalToggle, true);
+            SetToggleInteractable(alcoholToggle, true);
 
             // P2P 복원
             var p2pPanel = Object.FindFirstObjectByType<P2PUserFilterPanel>(FindObjectsInactive.Include);
             if (p2pPanel != null)
             {
                 p2pPanel.SetCategoryLock(false);
-                SetToggleInteractable(p2pPanel.GetToggle(), !filterFestival);
+                SetToggleInteractable(p2pPanel.GetToggle(), true);
             }
 
             // 비활성화 비주얼 해제 → 원래 on/off 색상 복원
@@ -1013,7 +996,7 @@ public class FilterManager : MonoBehaviour
             { "object3D", filterObject3D },
             { "categoryFilter", categoryActive },
             { "p2pUsers", categoryActive ? false : true },
-            { "festival", filterFestival }   // 목록만 — 근처 축제 (PlaceListManager)
+            { "festival", filterFestival }   // 목록만 — 맨 위에 근처 축제 · 보물찾기 (PlaceListManager)
         };
     }
 

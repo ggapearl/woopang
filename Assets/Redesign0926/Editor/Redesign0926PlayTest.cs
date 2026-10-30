@@ -11885,11 +11885,11 @@ namespace Redesign0926
             Sleep(1.2f);
             Shot("filters_list");
             Do(() => log.Add("  칩: " + ChipLayout()));
-            Check(() => ChipGridOk(), "칩 두 줄 4칸씩 — 위 전체·애견동반·공공데이터·축제 · 아래 지하철·터미널 / 기차·3D·사람, 칸 경계가 위아래로 맞음 (10-23)");
+            Check(() => ChipGridOk(), "칩 두 줄 4칸씩 — 위 전체·애견동반·공공데이터·축제 / 보물 · 아래 지하철·터미널 / 기차·3D·사람, 칸 경계가 위아래로 맞음 (10-23)");
             Do(() => log.Add("  이름: " + ChipLabel("PublicDataToggle") + " · " + ChipLabel("FestivalToggle") + " · " + ChipLabel("TerminalToggle")));
             Check(() => ChipLabel("TerminalToggle").Contains("/"), "터미널 / 기차 한 칩");
-            Check(() => ChipLabel("FestivalToggle") == "축제" || ChipLabel("FestivalToggle") == "Festivals", "'공공데이터' 오른쪽에 '축제' 칩");
-            Check(() => ChipOn("FestivalToggle") == false, "축제 칩은 꺼진 채 시작");
+            Check(() => ChipLabel("FestivalToggle") == "축제 / 보물" || ChipLabel("FestivalToggle") == "Fests / Hunts", "'공공데이터' 오른쪽에 '축제 / 보물' 칩 (10-27 '축제' → '축제 / 보물')");
+            Check(() => ChipOn("FestivalToggle") == false, "축제 / 보물 칩은 꺼진 채 시작");
             Check(() => ChipLabel("PublicDataToggle") == "공공데이터" || ChipLabel("PublicDataToggle") == "Public data", "'공공' → '공공데이터'");
             Check(() => ChipTextsFit(), "다섯 나라 말 모두 칩 칸 안에 (한 칸이 된 '터미널 / 기차' 포함)");
             Check(() => NoOldLongPress(), "0926 칩에 옛 길게 누르기(LongPressHandler)가 없음 — 0.8초 넘게 누른 손을 떼도 칩이 다시 꺼지지 않음");
@@ -12012,34 +12012,71 @@ namespace Redesign0926
             Sleep(0.3f);
             Check(() => PurpleChip("3DObjectToggle"), "3D 켜면 다시 꽉 찬 보라");
 
-            // 축제 — 목록이 거리와 상관없이 근처 축제만 (10-23) · 맨 위는 관리자가 띄운 광고 줄 (10-25)
+            // 축제 / 보물 (10-27 대표님) — 다른 칩은 그대로 두고 지금 목록 맨 위에 광고 줄 · 가까운 축제 세 곳 · 참가 안 한 근처 보물찾기 (애견동반의 보호소처럼)
+            Do(() =>
+            {
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
+                R0926HuntApi.EditorTestUser = FiMe;
+                var at = VirtualLocation.Instance;
+                fiHunt = DevCreateHuntAt(FiHost, FiHuntTitle, at.Latitude + 0.00018f, at.Longitude, null, null);   // 약 20m
+                log.Add("  시험 게임 " + fiHunt);
+                R0926HuntList.Stale();
+            });
+            Check(() => fiHunt > 0, "개발 서버에 참가 안 한 근처 보물찾기 하나");
             Do(() => ClickToggle("FestivalToggle"));
-            Wait(() => Shown(PlaceListManager.EntryKind.Festival) > 0, 10f, "축제 받음");
+            Wait(() => Shown(PlaceListManager.EntryKind.Festival) > 0 && NearHuntRows() > 0, 10f, "축제 · 근처 보물찾기 받음");
             Wait(() => RowIcons(1).Count > 0 && RowIcons(1)[0] == "emoji_1f950", 8f, "광고 줄 이모지 그림");
             Sleep(0.6f);
             Shot("filters_festival");
-            Do(() => log.Add("  줄: " + RowsSummary(6) + " · 집계: " + SummaryText()));
-            Check(() => Fm().GetActiveFilters()["festival"], "축제 칩을 켜면 festival 필터");
-            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 5 && ShownTotal() == 5, "목록이 광고 한 줄 + 축제 네 곳만 (가게·사람·보물찾기 없음)");
-            Check(() => FestivalRowsOk(), "맨 위 광고 줄 '광고 · 6.7km'(가장 가까운 축제보다 멀어도) · 그 아래 가까운 순 · 거리 칸은 '며칠부터 · 거리' / '진행 중 · 거리' / '오늘까지 · 거리' · 200km 먼 곳도 나옴");
-            Check(() => string.Join(",", RowIcons(5)) == "emoji_1f950,r0926_f_fireworks,r0926_f_maple,r0926_f_crab,r0926_f_fruit", "줄 앞은 축제마다 그림 (불꽃·단풍·꽃게·사과) · 광고 줄은 고른 이모지 🥐");
+            Do(() => log.Add("  줄: " + RowsSummary(4 + NearHuntRows() + 2) + " · 집계: " + SummaryText()));
+            Check(() => Fm().GetActiveFilters()["festival"], "축제 / 보물 칩을 켜면 festival 필터");
+            Check(() => PlayerPrefs.GetInt("Filter_Festival_V1", 0) == 1, "켠 칩은 기억 (다른 칩처럼)");
+            Check(() => TopBlockOk(fiHunt), "맨 위 광고 줄 '광고 · 6.7km'(가장 가까운 축제보다 멀어도) → 가까운 축제 세 곳과 참가 안 한 근처 보물찾기(셋까지)가 가까운 순 · 200km 먼 축제는 빠짐 → 그 아래 원래 목록");
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 4 && ShownTotal() > 4 + NearHuntRows(), "가게·공공 줄도 그대로 (예전처럼 축제만 남지 않음)");
+            Check(() =>
+            {
+                var ic = RowIcons(4 + NearHuntRows());
+                return ic.Count > 0 && ic[0] == "emoji_1f950" && string.Join(",", ic.FindAll(x => x.StartsWith("r0926_f_"))) == "r0926_f_fireworks,r0926_f_maple,r0926_f_crab"
+                       && ic.FindAll(x => x.StartsWith("r0926_i_treasure")).Count == NearHuntRows();
+            }, "줄 앞 그림 — 광고 줄은 고른 이모지 🥐 · 축제마다 그림 (불꽃·단풍·꽃게) · 보물찾기는 보물 상자");
             Check(() =>
             {
                 var l = ShownLinks(PlaceListManager.EntryKind.Festival);
-                return l.Count == 5 && l[0].StartsWith("https://map.kakao.com/link/map/") && l.GetRange(1, 4).TrueForAll(x => x.StartsWith("https://m.search.naver.com/search.naver?query="));
+                return l.Count == 4 && l[0].StartsWith("https://map.kakao.com/link/map/") && l.GetRange(1, 3).TrueForAll(x => x.StartsWith("https://m.search.naver.com/search.naver?query="));
             }, "축제를 누르면 축제 이름으로 검색 · 광고 줄은 업체 링크(안 적었으면 카카오맵의 그 자리)");
-            Check(() => SummaryText().EndsWith(" 4"), "집계 줄의 축제 수는 광고 줄을 빼고 4");
+            Check(() => SummaryText().EndsWith(" 3"), "집계 줄의 축제 수는 광고 줄을 빼고 3");
             Do(() => { R0926Nearby.EditorOpened?.Clear(); ListRows()[0].GetComponent<Button>().onClick.Invoke(); });
             Sleep(0.8f);
             Check(() => R0926Nearby.EditorOpened != null && R0926Nearby.EditorOpened.Count == 1 && R0926Nearby.EditorOpened[0].StartsWith("https://map.kakao.com/link/map/"),
                 "목록의 광고 줄을 누르면 그 자리 (카카오맵)");
             Check(() => Has(DevGet(FiMe, "/api/dev/ad_events"), "\"festival|dev-fest|view\":1", "\"festival|dev-fest|click\":1"), "목록의 광고 줄도 보이면 노출 한 번 · 누르면 클릭 한 번");
-            Check(() => ChipsLocked(true, "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle"),
-                  "축제를 보는 동안 다른 칩은 잠김 (어둡게)");
+            Check(() => ChipsLocked(false, "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle"),
+                  "축제 / 보물을 켜도 다른 칩은 잠기지 않음 (예전엔 어둡게 잠김)");
+
+            // 근처 보물찾기 줄을 누르면 그 게임 상세 — 참가 안 한 게임이라 '참가하기'
+            string huntRow = null;
+            Do(() =>
+            {
+                huntRow = NearHuntName(fiHunt);
+                var row = ListRows().Find(r => r.Find("Name")?.GetComponent<Text>()?.text == huntRow);
+                if (row != null) row.GetComponent<Button>().onClick.Invoke(); else log.Add("  보물찾기 줄 없음 " + huntRow);
+            });
+            Wait(() => Active(HuntCardPath + "Detail") && DetailTitle().Contains(huntRow ?? "-"), 15f, "근처 보물찾기 줄 → 그 게임 상세");
+            Sleep(0.6f);
+            Shot("filters_festival_hunt");
+            Check(() => Active(HuntCardPath + "Detail") && DetailTitle().Contains(huntRow ?? "-") && Active(HuntCardPath + "Detail/Viewport/Content/Join"),
+                "근처 보물찾기 줄을 누르면 그 게임 상세 — 아직 참가 안 한 게임이라 '참가하기'");
+            CloseUpload();
+            // 상세를 열 때 덮인 창(목록)은 뒤로가기 순서대로 닫힌다 — 다시 열어도 칩은 켜진 그대로
+            Do(() => { if (!Active("ListPanel")) Click("Dock0926/List_Button"); });
+            Sleep(1.2f);
+            Check(() => !Active("UploadPage") && Active("ListPanel") && ChipOn("FestivalToggle") && NearHuntRows() > 0 && Shown(PlaceListManager.EntryKind.Festival) == 4,
+                "목록을 다시 열어도 축제 / 보물 칩은 켜진 그대로 (맨 위 축제 · 보물찾기)");
+
             Do(() => ClickToggle("FestivalToggle"));
             Sleep(0.6f);
-            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 0 && ShownTotal() > 0, "다시 누르면 원래 목록");
-            Check(() => ChipsLocked(false, "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle"), "칩 잠김 풀림");
+            Check(() => Shown(PlaceListManager.EntryKind.Festival) == 0 && NearHuntRows() == 0 && ShownTotal() > 0, "다시 누르면 원래 목록 (축제 · 근처 보물찾기 빠짐)");
+            Check(() => PlayerPrefs.GetInt("Filter_Festival_V1", 1) == 0, "끈 것도 기억");
 
             // 공공데이터 신청 전(서버가 not_registered) — 빈 목록 대신 안내 한 줄
             Do(() => { DevGet(FiMe, "/api/dev/nearby_mode?festivals=not_registered"); R0926Nearby.EditorForget(); });
@@ -12054,9 +12091,17 @@ namespace Redesign0926
             Do(() => { DevGet(FiMe, "/api/dev/nearby_mode?festivals=ok"); R0926Nearby.EditorBase = null; R0926Nearby.EditorOpened = null; R0926Nearby.EditorForget(); });
             Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
             Sleep(1.0f);
+            Do(() =>
+            {
+                if (fiHunt > 0) DevPost(FiHost, "/api/hunts/" + fiHunt + "/end", "{}");
+                R0926HuntApi.EditorBase = null;
+                R0926HuntApi.EditorTestUser = null;
+                R0926HuntList.Stale();
+            });
         }
 
-        private const string FiMe = "hunt_test_filters";
+        private const string FiMe = "hunt_test_filters", FiHost = "hunt_test_fihost", FiHuntTitle = "필터 시험 근처 보물";
+        private static int fiHunt;
         private static bool ChipOn(string name) { var t = Chip(name)?.GetComponent<Toggle>(); return t != null && t.isOn; }
         private static bool PurpleChip(string name)
         {
@@ -12102,7 +12147,7 @@ namespace Redesign0926
                 ("CategoryToggle", true, new[] { "랜드마크", "Landmark", "ショップ", "Deporte", "Comida" }),
                 ("PetFriendlyToggle", false, new[] { "애견동반", "Pet-friendly", "ペット同伴", "可带宠物", "Con mascotas" }),
                 ("PublicDataToggle", false, new[] { "공공데이터", "Public data", "公共データ", "公共数据", "Público" }),
-                ("FestivalToggle", false, new[] { "축제", "Festivals", "お祭り", "节庆", "Festivales" }),
+                ("FestivalToggle", false, new[] { "축제 / 보물", "Fests / Hunts", "祭り / 宝探し", "节庆 / 寻宝", "Fiesta / Tesoro" }),
                 ("MetroToggle", false, new[] { "지하철", "Subway", "地下鉄", "地铁", "Metro" }),
                 ("TerminalToggle", false, new[] { "터미널 / 기차", "Bus / Train", "ターミナル / 駅", "客运站 / 火车站", "Bus / Tren" }),
                 ("P2PUserToggle", false, new[] { "주변 사람", "Nearby people", "Following only", "近くの人", "Gente cerca", "Solo seguidos" }),
@@ -12179,26 +12224,75 @@ namespace Redesign0926
                 log.Add("  넷째 줄 " + p.ShownEntries[3].name + " " + Mathf.RoundToInt(p.ShownEntries[3].distance) + "m · 첫 보호소 " + Mathf.RoundToInt(p.ShownEntries[0].distance) + "m");
             return true;
         }
-        private static bool FestivalRowsOk()
+        // 축제 / 보물 칩 — 맨 위 광고 줄 → 축제 세 곳과 근처 보물찾기(목록에 더하는 것과 같게 Nearby 앞에서 참가 안 한 셋)가 가까운 순 → 그 아래 원래 목록
+        private static bool TopBlockOk(int mine)
         {
             var p = Plm();
-            if (p == null || p.ShownEntries.Count != 5) return false;
+            if (p == null || p.ShownEntries.Count < 2) return false;
             var ad = p.ShownEntries[0];
             if (!ad.promo || ad.distanceText != R0926Nearby.AdLabel + " · " + R0926Nearby.Km(ad.distance) || ad.distance < p.ShownEntries[1].distance)
             {
                 log.Add("  광고 줄 다름 " + ad.name + " '" + ad.distanceText + "' " + Mathf.RoundToInt(ad.distance) + "m");
                 return false;
             }
-            float last = -1f;
-            for (int i = 1; i < p.ShownEntries.Count; i++)
+            var want = new HashSet<int>();
+            foreach (var n in R0926HuntList.Nearby)
+            {
+                if (want.Count >= 3) break;
+                if (n.joined || (n.coord == R0926HuntList.Coord.Hidden && n.bandM <= 0f)) continue;
+                want.Add(n.id);
+            }
+            var got = new HashSet<int>();
+            int fests = 0, i = 1;
+            float last = -1f, farFest = 0f;
+            for (; i < p.ShownEntries.Count; i++)
             {
                 var e = p.ShownEntries[i];
+                bool near = e.kind == PlaceListManager.EntryKind.Hunt && want.Contains(e.huntId) && !got.Contains(e.huntId);
+                if (e.kind != PlaceListManager.EntryKind.Festival && !near) break;
+                if (e.distance < last) { log.Add("  맨 위 줄이 가까운 순이 아님 " + e.name); return false; }
+                last = e.distance;
+                if (near) { got.Add(e.huntId); continue; }
                 string d = e.distanceText ?? "";
                 bool when = d.Contains("부터") || d.Contains("진행 중") || d.Contains("오늘까지") || d.StartsWith("from") || d.StartsWith("on now") || d.StartsWith("ends today");
-                if (!when || !d.Contains(" · ") || !(d.EndsWith("km") || d.EndsWith("m")) || e.distance < last) { log.Add("  축제 줄 다름 " + e.name + " '" + d + "'"); return false; }
-                last = e.distance;
+                if (e.promo || !when || !d.Contains(" · ") || !(d.EndsWith("km") || d.EndsWith("m"))) { log.Add("  축제 줄 다름 " + e.name + " '" + d + "'"); return false; }
+                fests++;
+                farFest = e.distance;
             }
-            return last > 150000f;
+            int rest = p.ShownEntries.Count - i;
+            for (int j = i; j < p.ShownEntries.Count; j++)
+            {
+                var e = p.ShownEntries[j];
+                if (e.kind == PlaceListManager.EntryKind.Festival || (e.kind == PlaceListManager.EntryKind.Hunt && want.Contains(e.huntId))) { log.Add("  맨 위 줄이 아래에 " + e.name); return false; }
+            }
+            bool mineThere = R0926HuntList.Nearby.Exists(x => x.id == mine);
+            log.Add("  맨 위: 축제 " + fests + " (가장 먼 곳 " + Mathf.RoundToInt(farFest / 1000f) + "km) · 근처 보물찾기 " + got.Count + "/" + want.Count
+                    + (want.Contains(mine) ? " (시험 게임 포함)" : "") + " · 그 아래 " + rest + "줄 · 서버가 준 시험 게임 " + mineThere);
+            return fests == 3 && farFest > 100000f && farFest < 150000f && got.SetEquals(want) && want.Count > 0 && mineThere && rest > 0;
+        }
+        // 지금 목록에 보이는 '참가 안 한 근처 보물찾기' 줄 수 (참가한 게임 · 내가 연 게임 줄은 빼고)
+        private static int NearHuntRows()
+        {
+            var p = Plm();
+            int n = 0;
+            if (p != null)
+                foreach (var e in p.ShownEntries)
+                    if (e.kind == PlaceListManager.EntryKind.Hunt && R0926HuntList.Nearby.Exists(x => x.id == e.huntId && !x.joined)) n++;
+            return n;
+        }
+        // 누를 근처 보물찾기 줄 이름 — 이 시험이 연 게임이 보이면 그것, 아니면 맨 위의 첫 보물찾기
+        private static string NearHuntName(int mine)
+        {
+            var p = Plm();
+            string first = null;
+            if (p != null)
+                foreach (var e in p.ShownEntries)
+                {
+                    if (e.kind != PlaceListManager.EntryKind.Hunt || !R0926HuntList.Nearby.Exists(x => x.id == e.huntId && !x.joined)) continue;
+                    if (e.huntId == mine) return e.name;
+                    if (first == null) first = e.name;
+                }
+            return first;
         }
         // 목록 줄(화면) 앞 그림 이름 — 위에서부터 n 줄
         private static List<string> RowIcons(int n)

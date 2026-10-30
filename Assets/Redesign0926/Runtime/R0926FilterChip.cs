@@ -8,7 +8,7 @@ using UnityEngine.UI;
 /// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(전체)은 꽉 찬 흰색 · 3D 는 꽉 찬 보라 + 흰 글자 · 팔로잉만은 꽉 찬 옅은 분홍 · 꺼짐: 어둡게 · 애견동반: 켜면 꽉 찬 진한 노랑 + 어두운 글자(애견동반 되는 곳만), 끄면 다른 칩처럼 회색 — 두 가지뿐.
 /// 분류 칩은 고른 분류의 그림(음식점 그릇 · 카페 모카 잔 …)을 점 자리에. 사람 칩이 꺼지면 '주변 사람'.
 /// 필터 로직(FilterManager)은 그대로 두고, 그 상태를 읽어 매 프레임 끝에 모양·이름만 다시 그린다.
-/// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다. 목록을 통째로 바꾸는 축제 칩은 끼지 않는다.
+/// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다. 목록 맨 위에 더하는 축제 / 보물 칩은 끼지 않는다.
 /// </summary>
 public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
 {
@@ -28,7 +28,7 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     [SerializeField] private float longPress = 0.55f;
     [Tooltip("켜지면 그 색으로 꽉 찬 칸 + 흰 글자 (3D — 10-23 대표님 '켜졌을 때 버튼배경 보라색')")]
     [SerializeField] private bool solidOn;
-    [Tooltip("목록을 통째로 바꾸는 칩(축제) — 길게 누르기 '이것만'에 끼지 않는다")]
+    [Tooltip("목록 맨 위에 더하는 칩(축제 / 보물) — 길게 누르기 '이것만'에 끼지 않는다")]
     [SerializeField] private bool modeChip;
     [Tooltip("분류 칩 — 분류마다 그림 (FilterManager.CategoryFilterState 순서). '전체'는 점 그대로")]
     [SerializeField] private Sprite[] catIcons;
@@ -136,7 +136,7 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
                 else { st = 1; c = Pink; text = Pick(P2PAll); }
                 break;
         }
-        float dim = toggle.interactable || suppress ? 1f : 0.35f;   // 카테고리를 고르면 공공·사람 칸을, 축제 칩을 켜면 나머지 칸을 FilterManager 가 잠근다
+        float dim = toggle.interactable || suppress ? 1f : 0.35f;   // 카테고리를 고르면 공공·사람 칸을 FilterManager 가 잠근다
         // 흰 칩(전체)이 켜지면 꽉 찬 흰색 — 반투명하면 회색으로 보여 켜진 건지 꺼진 건지 몰랐다 (10-17 대표님). 팔로잉만은 꽉 찬 옅은 분홍.
         // 3D 는 꽉 찬 보라에 흰 글자 (solidOn) · 애견동반은 꽉 찬 진한 노랑에 어두운 글자
         bool filled = st == 1 && dim >= 1f && (solid || solidOn || c.r > 0.85f && c.g > 0.85f && c.b > 0.85f);
