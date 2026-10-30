@@ -4724,21 +4724,45 @@ namespace Redesign0926
             });
         }
 
-        // E7 — 설정 ▸ 장소 ▸ '멀리 있는 오브젝트 흐리게' 네 칸: 누르면 저장값 · 칸 표시 · 안개 · 실제 큐브 투명도가 바로 바뀐다 (10-20)
+        // E7 — 설정 ▸ 장소 ▸ '멀리 있는 오브젝트 흐리게' 세 칸(끄기 · 약하게 · 강하게): 누르면 저장값 · 칸 표시 · 안개 · 실제 큐브 투명도 ·
+        // 장소 박스·화살표 투명도가 바로 바뀐다 (10-20 · 10-27 대표님 「'끄기 / 약하게 / 강하게' 로 … 1.2.58 에서 안 된다」)
         private static GameObject fadeCube, nearCube;
-        private static readonly float[] fadeRatio = new float[4];
-        private static readonly float[] nearEdge = new float[4];
-        private static readonly float[] fadeFogEnd = new float[4];
+        private static Target fadeTarget;
+        private static float nearCubeDist;
+        private static readonly float[] fadeRatio = new float[3];
+        private static readonly float[] nearRatio = new float[3];
+        private static readonly float[] fadeBox = new float[3];
+        private static readonly float[] fadeFogEnd = new float[3];
         private static void PlanFarFade()
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
             const string C = "ListPanel/Sheet0926/SettingsPanel0926/Viewport/Content/";
             const string R = C + "GroupHidden/RowFarFade/";
-            int before = 2;
+            int before = 1;
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Sleep(1.0f);
             Do(() =>
             {
+                // 예전 네 칸 저장값(Place_FarFade) 옮기기 — 0 끄기 · 1 약하게 · 2 보통 → 약하게 · 3 강하게 → 강하게 · 저장값 없음 → 약하게
+                var cache = typeof(R0926PlaceSettings).GetField("farFade", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                bool hadNew = PlayerPrefs.HasKey("Place_FarFade3"), hadOld = PlayerPrefs.HasKey("Place_FarFade");
+                int savedNew = PlayerPrefs.GetInt("Place_FarFade3", 1), savedOld = PlayerPrefs.GetInt("Place_FarFade", 2);
+                int[] want = { 0, 1, 1, 2, 1 };
+                var got = new List<int>();
+                for (int old = 0; old < want.Length; old++)
+                {
+                    PlayerPrefs.DeleteKey("Place_FarFade3");
+                    if (old < 4) PlayerPrefs.SetInt("Place_FarFade", old); else PlayerPrefs.DeleteKey("Place_FarFade");
+                    cache.SetValue(null, -1);
+                    got.Add(R0926PlaceSettings.FarFade);
+                }
+                if (hadNew) PlayerPrefs.SetInt("Place_FarFade3", savedNew); else PlayerPrefs.DeleteKey("Place_FarFade3");
+                if (hadOld) PlayerPrefs.SetInt("Place_FarFade", savedOld); else PlayerPrefs.DeleteKey("Place_FarFade");
+                cache.SetValue(null, -1);
+                bool ok = true;
+                for (int k = 0; k < want.Length; k++) if (got[k] != want[k]) ok = false;
+                log.Add((ok ? "PASS " : "FAIL ") + "예전 네 칸 값 옮김 — 끄기·약하게·보통·강하게·없음 → " + string.Join("·", got) + " (바라는 값 0·1·1·2·1)");
+
                 var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
                 if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
                 before = R0926PlaceSettings.FarFade;
@@ -4749,6 +4773,7 @@ namespace Redesign0926
             {
                 nearCube = FarCube(true);
                 var cam = Camera.main;
+                nearCubeDist = nearCube != null && cam != null ? Vector3.Distance(cam.transform.position, nearCube.transform.position) : 0f;
                 foreach (var c in new[] { fadeCube, nearCube })
                     log.Add(c != null && cam != null ? $"  잴 큐브 '{c.name}' 거리 {Vector3.Distance(cam.transform.position, c.transform.position):0}m" : "  잴 큐브 없음");
             });
@@ -4759,13 +4784,13 @@ namespace Redesign0926
             Do(() => ScrollToChild(C + "SecPlaces"));
             Sleep(0.6f);
             Shot("farfade_settings");
-            Check(() => Active(R + "Seg/Step0") && Active(R + "Seg/Step3") && Find(R + "Seg/Step4") == null, "설정 ▸ 장소에 '멀리 있는 오브젝트 흐리게' 네 칸");
+            Check(() => Active(R + "Seg/Step0") && Active(R + "Seg/Step2") && Find(R + "Seg/Step3") == null, "설정 ▸ 장소에 '멀리 있는 오브젝트 흐리게' 세 칸");
             Check(() =>
             {
                 var tr = Find(R + "Title")?.GetComponent<Text>();
                 return tr != null && tr.text.Length > 0 && Find(C + "GroupHidden/RowFarFade").GetSiblingIndex() == 1;
             }, "제목이 있고 '오브젝트 삭제 기능' 바로 아래");
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 3; i++)
             {
                 int lv = i;
                 Do(() => Click(R + "Seg/Step" + lv));
@@ -4775,34 +4800,39 @@ namespace Redesign0926
                 {
                     var df = UnityEngine.Object.FindAnyObjectByType<R0926DistanceFade>();
                     int applied = df != null ? (int)typeof(R0926DistanceFade).GetField("level", F).GetValue(df) : -9;
-                    float farA = df != null ? (float)typeof(R0926DistanceFade).GetField("farA", F).GetValue(df) : -1f;
                     fadeRatio[lv] = CubeAlphaRatio(fadeCube);
-                    nearEdge[lv] = CubeAlphaRatio(nearCube, "_EdgeIntensity");
+                    nearRatio[lv] = CubeAlphaRatio(nearCube);
                     fadeFogEnd[lv] = RenderSettings.fogEndDistance;
                     bool tabs = true;
-                    for (int k = 0; k < 4; k++)
+                    for (int k = 0; k < 3; k++)
                     {
                         var img = Find(R + "Seg/Step" + k)?.GetComponent<Image>();
                         if (img == null || (k == lv) != (img.color.a > 0.1f)) tabs = false;
                     }
-                    bool ok = R0926PlaceSettings.FarFade == lv && PlayerPrefs.GetInt("Place_FarFade", -1) == lv && applied == lv && tabs && RenderSettings.fog == (lv > 0);
-                    log.Add((ok ? "PASS " : "FAIL ") + $"단계 {lv}: 저장 {R0926PlaceSettings.FarFade} · 적용 {applied} · 칸 표시 {(tabs ? "맞음" : "틀림")} · 안개 {(RenderSettings.fog ? "켜짐" : "꺼짐")} 끝 {RenderSettings.fogEndDistance:0}m · 가장 멀 때 투명도 {farA:0.00} · 먼 큐브 {fadeRatio[lv]:0.00} · 가까운 큐브 테두리 {nearEdge[lv]:0.00}");
+                    bool ok = R0926PlaceSettings.FarFade == lv && PlayerPrefs.GetInt("Place_FarFade3", -1) == lv && applied == lv && tabs && RenderSettings.fog == (lv > 0);
+                    log.Add((ok ? "PASS " : "FAIL ") + $"단계 {lv}: 저장 {R0926PlaceSettings.FarFade} · 적용 {applied} · 칸 표시 {(tabs ? "맞음" : "틀림")} · 안개 {(RenderSettings.fog ? "켜짐" : "꺼짐")} 끝 {RenderSettings.fogEndDistance:0}m · 먼 큐브 {fadeRatio[lv]:0.00} · 가까운 큐브({nearCubeDist:0}m) {nearRatio[lv]:0.00}");
                 });
             }
             Check(() => fadeRatio[0] > 0.97f, "끄기: 먼 큐브도 투명도 그대로 (1)");
-            Check(() => fadeRatio[0] > fadeRatio[1] + 0.01f && fadeRatio[1] > fadeRatio[2] + 0.01f && fadeRatio[2] > fadeRatio[3] + 0.01f, "세질수록 먼 큐브가 더 옅다 (끄기 > 약하게 > 보통 > 강하게)");
-            Check(() => fadeFogEnd[1] > fadeFogEnd[2] && fadeFogEnd[2] > fadeFogEnd[3], "세질수록 안개가 가까이에서 짙어진다");
-            Check(() => nearEdge[0] > 0f && Mathf.Abs(nearEdge[0] - nearEdge[3]) < 0.02f && Mathf.Abs(nearEdge[1] - nearEdge[2]) < 0.02f, "가까운 큐브 테두리 빛은 어느 단계든 같다 (끄기를 골라도 가까운 건 그대로)");
+            Check(() => fadeRatio[0] > fadeRatio[1] + 0.05f && fadeRatio[1] > fadeRatio[2] + 0.05f, "세질수록 먼 큐브가 더 옅다 (끄기 > 약하게 > 강하게)");
+            Check(() => nearCubeDist < 30f || (nearRatio[0] > nearRatio[1] + 0.05f && nearRatio[1] > nearRatio[2] + 0.05f), "가까운 큐브(30m 넘으면)도 단계 차이가 보인다");
+            Check(() => fadeFogEnd[1] > fadeFogEnd[2], "강하게는 안개가 더 가까이에서 짙어진다");
             Do(() => Modes()?.Show(0));
             Sleep(0.6f);
             Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
             Sleep(1.2f);
-            Do(() => R0926PlaceSettings.FarFade = 0);
-            Sleep(0.7f);
-            Shot("farfade_ar0");
-            Do(() => R0926PlaceSettings.FarFade = 3);
-            Sleep(0.7f);
-            Shot("farfade_ar3");
+            // 장소 박스·화살표는 목록 시트가 덮고 있으면 숨으므로 AR 화면에서 잰다 — 처음 단계에서 고른 먼 장소 하나를 끝까지
+            Do(() => { fadeTarget = FarIndicatorTarget(); log.Add(fadeTarget != null ? $"  잴 박스 '{fadeTarget.name}' 거리 {Vector3.Distance(Camera.main.transform.position, fadeTarget.transform.position):0}m" : "  잴 박스 없음"); });
+            for (int i = 0; i < 3; i++)
+            {
+                int lv = i;
+                Do(() => R0926PlaceSettings.FarFade = lv);
+                Sleep(0.7f);
+                Shot("farfade_ar" + lv);
+                Do(() => { fadeBox[lv] = IndicatorAlpha(fadeTarget); log.Add($"  AR 단계 {lv}: 먼 장소 박스·화살표 {fadeBox[lv]:0.00}"); });
+            }
+            Check(() => fadeBox[0] > 0.97f, "끄기: 먼 장소 박스·화살표도 또렷 (1)");
+            Check(() => fadeBox[0] > fadeBox[1] + 0.05f && fadeBox[1] > fadeBox[2] + 0.05f, "장소 박스·화살표도 단계를 따른다 (끄기 > 약하게 > 강하게)");
             Do(() => R0926PlaceSettings.FarFade = before);
             Sleep(0.4f);
             Check(() => R0926PlaceSettings.FarFade == before, "시험 뒤 원래 단계로 되돌림");
@@ -4849,6 +4879,29 @@ namespace Redesign0926
                 }
             }
             return -1f;
+        }
+
+        // 지금 박스·화살표가 떠 있는 장소 가운데 카메라에서 가장 먼 것 (60m 넘는 것만 — 그 안쪽은 약하게·강하게 차이가 작다)
+        private static Target FarIndicatorTarget()
+        {
+            var cam = Camera.main;
+            if (cam == null) return null;
+            Target best = null;
+            float pick = 60f;
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude))
+            {
+                if (t.indicator == null || !t.indicator.gameObject.activeInHierarchy) continue;
+                float d = Vector3.Distance(cam.transform.position, t.transform.position);
+                if (d > pick) { pick = d; best = t; }
+            }
+            return best;
+        }
+
+        // 그 장소의 박스(화면 밖이면 화살표)에 들어간 거리 투명도 (인디케이터가 없으면 -1)
+        private static float IndicatorAlpha(Target target)
+        {
+            if (target == null || target.indicator == null || !target.indicator.gameObject.activeInHierarchy) return -1f;
+            return (float)typeof(Indicator).GetField("distanceAlpha", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(target.indicator);
         }
 
         // ── 10-22 N12: 일반 오브젝트도 보물상자처럼 — 누를 때마다 살짝 커졌다 돌아오고, 두 번 톡톡이면 커지며 사진이 뜬다 ──

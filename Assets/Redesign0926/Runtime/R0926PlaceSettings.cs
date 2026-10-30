@@ -14,8 +14,10 @@ public static class R0926PlaceSettings
     }
 
     /// <summary>
-    /// 멀리 있는 오브젝트 흐리게 — 0 끄기 · 1 약하게 · 2 보통(기본, 지금까지의 모습) · 3 강하게 (R0926DistanceFade 가 0.2초마다 본다).
-    /// 10-20 대표님 「오브젝트 설정에서 투명도 — 멀리 있는 거 흐리게 보이도록 하는 거 설정할 수 있도록」
+    /// 멀리 있는 오브젝트 흐리게 — 0 끄기 · 1 약하게(기본) · 2 강하게.
+    /// 큐브·3D 모델·안개는 R0926DistanceFade 가 0.2초마다, 장소 박스·화살표는 OffScreenIndicator 가 매 프레임 본다.
+    /// 10-20 대표님 「오브젝트 설정에서 투명도 — 멀리 있는 거 흐리게 보이도록 하는 거 설정할 수 있도록」 ·
+    /// 10-27 「'끄기 / 약하게 / 강하게' 로」 — 예전 네 칸(Place_FarFade 0 끄기 · 1 약하게 · 2 보통 · 3 강하게)은 읽을 때 옮긴다(보통은 약하게로)
     /// </summary>
     public static int FarFade
     {
@@ -23,16 +25,25 @@ public static class R0926PlaceSettings
         {
             if (farFade < 0)
             {
-                try { farFade = Mathf.Clamp(PlayerPrefs.GetInt("Place_FarFade", 2), 0, 3); }
-                catch (Exception) { farFade = 2; }
+                try
+                {
+                    if (PlayerPrefs.HasKey(FarFadeKey)) farFade = Mathf.Clamp(PlayerPrefs.GetInt(FarFadeKey, 1), 0, 2);
+                    else
+                    {
+                        int old = PlayerPrefs.GetInt("Place_FarFade", 2);
+                        farFade = old <= 0 ? 0 : old >= 3 ? 2 : 1;
+                    }
+                }
+                catch (Exception) { farFade = 1; }
             }
             return farFade;
         }
         set
         {
-            farFade = Mathf.Clamp(value, 0, 3);
-            try { PlayerPrefs.SetInt("Place_FarFade", farFade); PlayerPrefs.Save(); } catch (Exception) { }
+            farFade = Mathf.Clamp(value, 0, 2);
+            try { PlayerPrefs.SetInt(FarFadeKey, farFade); PlayerPrefs.Save(); } catch (Exception) { }
         }
     }
+    private const string FarFadeKey = "Place_FarFade3";
     private static int farFade = -1;
 }

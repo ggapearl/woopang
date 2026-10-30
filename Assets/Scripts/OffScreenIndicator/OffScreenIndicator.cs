@@ -130,6 +130,14 @@ public class OffScreenIndicator : MonoBehaviour
     [Tooltip("박스(화면 안 오브젝트)에도 거리 투명도를 적용할지")]
     [SerializeField] private bool fadeBoxToo = true;
 
+    [Header("거리별 투명도 — 설정 '멀리 있는 오브젝트 흐리게' 강하게 (위 값은 약하게)")]
+    [SerializeField] private float strongFadeNearDistance = 35f;
+    [SerializeField] private float strongFadeFarDistance = 240f;
+    [Range(0f, 1f)]
+    [SerializeField] private float strongFadeStartAlpha = 0.45f;
+    [Range(0f, 1f)]
+    [SerializeField] private float strongFarAlpha = 0.12f;
+
     [Header("=== 일반 모드 인디케이터 개수 제한 ===")]
     [Tooltip("일반 모드에서 화살표 최대 표시 개수 (0이면 제한 없음, 가까운 순)")]
     [SerializeField] private int maxNormalIndicatorCount = 12;
@@ -1337,13 +1345,20 @@ public class OffScreenIndicator : MonoBehaviour
     ///   far 이상(최대거리)  : farAlpha (가장 흐림)
     /// near 를 넘는 순간(오브젝트가 화면 밖으로 나가 화살표만 남는 지점)부터
     /// 0.6 에서 시작해 멀어질수록 0.3 까지 떨어진다.
+    /// 설정 '멀리 있는 오브젝트 흐리게'(R0926PlaceSettings.FarFade)를 따른다 — 끄기면 늘 1, 약하게는 위 값, 강하게는 strong* 값
+    /// (1.2.58 까지는 설정과 상관없이 늘 위 값이라, 단계를 바꿔도 화면에서 가장 잘 보이는 박스·화살표는 그대로였다)
     /// </summary>
     private float ComputeDistanceAlpha(float distance)
     {
-        if (distance <= indicatorFadeNearDistance)
+        int lv = R0926PlaceSettings.FarFade;
+        if (lv <= 0)
             return 1f;
-        float t = Mathf.InverseLerp(indicatorFadeNearDistance, indicatorFadeFarDistance, distance);
-        return Mathf.Lerp(indicatorFadeStartAlpha, indicatorFarAlpha, t);
+        bool strong = lv >= 2;
+        float near = strong ? strongFadeNearDistance : indicatorFadeNearDistance;
+        if (distance <= near)
+            return 1f;
+        float t = Mathf.InverseLerp(near, strong ? strongFadeFarDistance : indicatorFadeFarDistance, distance);
+        return strong ? Mathf.Lerp(strongFadeStartAlpha, strongFarAlpha, t) : Mathf.Lerp(indicatorFadeStartAlpha, indicatorFarAlpha, t);
     }
 
     private Indicator GetIndicator(ref Indicator indicator, IndicatorType type, Target target, Vector3 finalScreenPosition)

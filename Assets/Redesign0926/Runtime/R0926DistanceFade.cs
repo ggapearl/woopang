@@ -12,24 +12,12 @@ using UnityEngine.XR.ARFoundation;
 /// 오브젝트마다 MaterialPropertyBlock 으로만 덮어써서 원본 재질·Renderer.enabled(표시/숨김 로직)는 건드리지 않는다.
 /// 대상: 5개 데이터 매니저의 GetSpawnedObjects() 전부.
 /// 세기는 설정 ▸ 장소 ▸ '멀리 있는 오브젝트 흐리게'(R0926PlaceSettings.FarFade) — 끄기면 거리 흐림·안개 없이, 처음 나타날 때 서서히만.
+/// 장소 박스·화살표는 같은 설정을 OffScreenIndicator 가 따른다.
 /// </summary>
 public class R0926DistanceFade : MonoBehaviour
 {
-    [Header("거리 (m)")]
-    [Tooltip("이 거리까지는 선명")]
-    [SerializeField] private float nearDistance = 40f;
-    [Tooltip("이 거리부터 가장 흐림")]
-    [SerializeField] private float farDistance = 400f;
-
-    [Header("가장 멀 때")]
-    [Range(0f, 1f)] [Tooltip("큐브 투명도 (1=그대로)")]
-    [SerializeField] private float farAlpha = 0.62f;
-    [Range(0f, 1f)] [Tooltip("3D 캐릭터 등 불투명 재질의 밝기 배율 (1=그대로)")]
-    [SerializeField] private float farTint = 0.82f;
     [Tooltip("가까울 때 큐브 테두리 빛 배율 — 작아도 잘 보이게")]
     [SerializeField] private float nearEdgeBoost = 1.25f;
-    [Tooltip("멀 때 큐브 테두리 빛 배율")]
-    [SerializeField] private float farEdge = 0.5f;
 
     [Header("대기 원근 (안개)")]
     [SerializeField] private bool useFog = true;
@@ -39,7 +27,7 @@ public class R0926DistanceFade : MonoBehaviour
     [SerializeField] private Color nightHaze = new Color(0.16f, 0.19f, 0.25f, 1f);
 
     [Header("실제 스폰 반경에 맞추기")]
-    [Tooltip("FilterManager 의 3D 오브젝트 반경(기본 500m)에 흐림·안개·카메라 거리를 맞춘다. " +
+    [Tooltip("FilterManager 의 3D 오브젝트 반경(기본 500m)에 안개·카메라 거리를 맞춘다. " +
              "3D 오브젝트는 그 반경 안에만 생기고 밖은 화살표·박스(메시 없음)라, 카메라를 1000m 까지 그릴 이유가 없다.")]
     [SerializeField] private bool matchSpawnRadius = true;
     [Tooltip("카메라 최대 렌더 거리 = 스폰 반경 + 이 여유 (GPS 오차·배분 히스테리시스)")]
@@ -57,13 +45,21 @@ public class R0926DistanceFade : MonoBehaviour
 
     private float farClip = -1f;   // matchSpawnRadius 일 때 카메라에 넣을 값
 
-    // 설정 단계별 세기 — 보통(2)이 위 값 그대로. 0 끄기 · 1 약하게 · 3 강하게 (10-20)
-    // 단계는 '가장 멀 때 값'만 바꾼다. 가까운 오브젝트는 어느 단계든 같고, 끄기면 멀어도 가까울 때와 같다
-    private static readonly float[] Strength = { 0f, 0.5f, 1f, 1.6f };
+    // 설정 단계별 — 0 끄기 · 1 약하게(기본) · 2 강하게 (10-27 대표님 「끄기 / 약하게 / 강하게」).
+    // 1.2.58 까지는 40m 부터 반경 끝(450m)까지 S자로 천천히 옅어져, 큐브가 또렷이 보이는 100m 안쪽에선
+    // 단계를 바꿔도 2~4% 차이뿐이었다. 이제 near 부터 바로 옅어지기 시작해(ease-out) 60~150m 에서 단계 차이가 보인다.
+    // alpha·tint·edge 는 far 이상일 때 값, fog 는 안개 세기(클수록 가까이에서 짙다 · 0 이면 안개 없음). 끄기면 멀어도 가까울 때와 같다
+    private struct Level { public float near, far, alpha, tint, edge, fog; }
+    private static readonly Level[] Levels =
+    {
+        new Level(),                                                                              // 끄기 (Visit 이 거리를 안 본다)
+        new Level { near = 25f, far = 300f, alpha = 0.45f, tint = 0.72f, edge = 0.5f, fog = 1f },
+        new Level { near = 15f, far = 220f, alpha = 0.2f, tint = 0.5f, edge = 0.3f, fog = 1.6f },
+    };
     private const float NearTint = 1.04f;   // 가까우면 아주 살짝 밝게
     private int level = -1;
+    private Level cur;
     private float baseFogEnd;
-    private float farA, farT, farE;
 
     private static readonly int GlobalAlpha = Shader.PropertyToID("_GlobalAlpha");
     private static readonly int EdgeIntensity = Shader.PropertyToID("_EdgeIntensity");
@@ -101,7 +97,6 @@ public class R0926DistanceFade : MonoBehaviour
         if (fm != null && fm.FullObjectRadius > 50f)
         {
             float r = fm.FullObjectRadius;
-            farDistance = r * 0.9f;          // 가장 먼 3D 오브젝트가 가장 옅게
             fogEnd = r * 2.4f;               // 반경 끝에서 약 40% 뿌옇게 — 사라지지는 않는다
             farClip = r + farClipMargin;     // 500m → 650m
         }
@@ -122,18 +117,15 @@ public class R0926DistanceFade : MonoBehaviour
         if (arCam != null) arCam.frameReceived -= OnFrame;
     }
 
-    // 흐림 세기 k 만큼 가까울 때 값에서 멀어진다 (k=1 이 원래 값). 안개는 k 가 클수록 가까이에서 짙어진다
+    // 안개는 세기 k 가 클수록 가까이에서 짙어진다 (약하게 = 반경 끝에서 약 40%)
     private void ApplyLevel(int lv)
     {
         level = lv;
-        float k = Strength[Mathf.Clamp(lv, 0, Strength.Length - 1)];
-        farA = 1f - (1f - farAlpha) * k;
-        farT = NearTint - (NearTint - farTint) * k;
-        farE = Mathf.Max(0.2f, nearEdgeBoost - (nearEdgeBoost - farEdge) * k);
+        cur = Levels[Mathf.Clamp(lv, 0, Levels.Length - 1)];
         if (useFog)
         {
-            RenderSettings.fog = k > 0f;
-            if (k > 0f) RenderSettings.fogEndDistance = fogStart + (baseFogEnd - fogStart) / k;
+            RenderSettings.fog = cur.fog > 0f;
+            if (cur.fog > 0f) RenderSettings.fogEndDistance = fogStart + (baseFogEnd - fogStart) / cur.fog;
         }
     }
 
@@ -203,11 +195,12 @@ public class R0926DistanceFade : MonoBehaviour
                 cache[id] = e;
             }
 
-            float t = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(nearDistance, farDistance, Vector3.Distance(eye, go.transform.position)));
+            float u = level > 0 ? Mathf.InverseLerp(cur.near, cur.far, Vector3.Distance(eye, go.transform.position)) : 0f;
+            float t = 1f - (1f - u) * (1f - u);                   // ease-out — near 를 넘자마자 옅어지기 시작
             float appear = Appear(id, e.renderers);               // 처음 보일 때 0→1 (큐브만 — 불투명 GLB 는 투명으로 못 바꾼다)
-            float alpha = Mathf.Lerp(1f, farA, t) * appear;
-            float tint = Mathf.Lerp(NearTint, farT, t);
-            float edge = Mathf.Lerp(nearEdgeBoost, farE, t) * appear;
+            float alpha = Mathf.Lerp(1f, cur.alpha, t) * appear;
+            float tint = Mathf.Lerp(NearTint, cur.tint, t);
+            float edge = Mathf.Lerp(nearEdgeBoost, cur.edge, t) * appear;
             foreach (var r in e.renderers)
                 if (r != null) Apply(r, alpha, tint, edge);
         }
