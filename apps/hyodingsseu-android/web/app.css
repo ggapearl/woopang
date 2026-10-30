@@ -55,6 +55,12 @@ svg{display:block}
 [hidden]{display:none!important}
 
 #app{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden;background:var(--ground)}
+/* 아이패드·가로 화면 — 폰 폭 그대로 늘어나 글줄이 한없이 길어지던 것을 가운데 한 줄(최대 780px)로 모은다 (2026-10-31).
+   transform 이 있으면 안의 fixed 요소(시트·창·토스트)도 이 칸 기준이 되어 같이 모인다. 양옆은 어두운 바 색 */
+@media (min-width:700px){
+  body{background:var(--bar)}
+  #app{left:50%;right:auto;width:min(100%,780px);transform:translateX(-50%);box-shadow:0 0 0 1px rgba(255,255,255,.07),0 0 70px rgba(0,0,0,.4)}
+}
 .screen{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;background:var(--ground);
   padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
 
