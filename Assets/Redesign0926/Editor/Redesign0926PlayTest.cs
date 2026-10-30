@@ -143,6 +143,7 @@ namespace Redesign0926
             else if (mode == "pickers") PlanPickers();
             else if (mode == "photoload") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPhotoLoad(); }
             else if (mode == "crop") PlanCrop();
+            else if (mode == "stickers") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStickers(); }
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
             else if (mode == "avatar") PlanAvatar();
@@ -11633,6 +11634,103 @@ namespace Redesign0926
             Do(() => AimAt(new[] { "충청남도교육청기록원", "시바견 (Quaternius)" }, 0f));
             Sleep(1.5f);
             Shot("ar_north");
+        }
+
+        // 10-30 L29 공공·교통 상자의 기본 그림(투명 바탕 스티커) — 진짜 메시·셰이더로 견본 상자를 카메라 앞에 세워 찍는다
+        private static void PlanStickers()
+        {
+            var made = new List<GameObject>();
+            string[] transport = { "0006_Cube_Metro", "0005_Cube_Train", "0004_Cube_Terminal", "0002_Cube_TourAPI" };
+            string[] cats = { "gov", "utility", "edu", "medical", "welfare", "park", "sport", "toilet" };
+            Func<string, MeshRenderer> tpl = root =>
+            {
+                foreach (var mr in Resources.FindObjectsOfTypeAll<MeshRenderer>())
+                    if (mr.gameObject.scene.IsValid() && mr.name == "Cube" && mr.transform.parent != null && mr.transform.parent.name == root) return mr;
+                return null;
+            };
+            // 공공시설 = DataManager 상자 + 내장 그림 — ImageDisplayController.SetBaseMapFromResources 가 쓰는 여백 설정 그대로
+            Func<string, Material> pub = cat =>
+            {
+                var src = tpl("0000_Cube");
+                if (src == null) return null;
+                var m = new Material(src.sharedMaterial);
+                m.SetTexture("_BaseMap", Resources.Load<Texture2D>("PublicIcons/" + cat));
+                m.SetFloat("_TexturePadding", 0.05f);
+                m.SetColor("_PaddingColor", new Color(0.05f, 0.05f, 0.05f, 1f));
+                return m;
+            };
+            Action clear = () =>
+            {
+                foreach (var g in made) UnityEngine.Object.Destroy(g);
+                made.Clear();
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude)) t.gameObject.SetActive(false);   // 진짜 오브젝트는 치운다 — 견본만
+            };
+            Action<MeshRenderer, Material, Vector3, float, float> put = (src, mat, at, size, yaw) =>
+            {
+                if (src == null || mat == null) { log.Add("  견본 못 만듦 " + (src == null ? "메시" : "머티리얼")); return; }
+                var cam = Camera.main.transform;
+                var go = new GameObject("StickerSample", typeof(MeshFilter), typeof(MeshRenderer));
+                go.GetComponent<MeshFilter>().sharedMesh = src.GetComponent<MeshFilter>().sharedMesh;
+                go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+                go.transform.position = cam.position + cam.rotation * at;
+                go.transform.rotation = Quaternion.LookRotation(cam.forward, Vector3.up) * Quaternion.Euler(-10f, yaw, 0f);
+                go.transform.localScale = Vector3.one * size;
+                made.Add(go);
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Sleep(2f);
+            Do(() => { Backdrop("bg_city.png"); DeviceFov(); HideAddressLine(); AimCamera(0f, 0f); });
+            Check(() =>
+            {
+                var bad = new List<string>();
+                foreach (var c in cats)
+                {
+                    var t = Resources.Load<Texture2D>("PublicIcons/" + c);
+                    if (t == null || !UnityEngine.Experimental.Rendering.GraphicsFormatUtility.HasAlphaChannel(t.graphicsFormat)) bad.Add(c);
+                }
+                foreach (var n in transport)
+                {
+                    var t = tpl(n)?.sharedMaterial.GetTexture("_BaseMap") as Texture2D;
+                    if (t == null || !UnityEngine.Experimental.Rendering.GraphicsFormatUtility.HasAlphaChannel(t.graphicsFormat)) bad.Add(n);
+                    else log.Add($"  {n}: {t.name} {t.width}px {t.graphicsFormat}");
+                }
+                if (bad.Count > 0) log.Add("  알파 없음: " + string.Join(", ", bad));
+                return bad.Count == 0;
+            }, "공공·교통 상자 그림이 모두 투명 바탕(알파) 스티커");
+
+            Do(() =>
+            {
+                clear();
+                for (int i = 0; i < transport.Length; i++)
+                {
+                    var src = tpl(transport[i]);
+                    put(src, src != null ? src.sharedMaterial : null, new Vector3(i % 2 == 0 ? -0.8f : 0.8f, i < 2 ? 1.0f : -1.0f, 6f), 1.0f, i % 2 == 0 ? 28f : -28f);
+                }
+            });
+            Sleep(1f);
+            Shot("stickers_transport");
+            Do(() =>
+            {
+                clear();
+                for (int i = 0; i < cats.Length; i++)
+                    put(tpl("0000_Cube"), pub(cats[i]), new Vector3(i % 2 == 0 ? -0.8f : 0.8f, 2.1f - (i / 2) * 1.4f, 7f), 0.9f, i % 2 == 0 ? 28f : -28f);
+            });
+            Sleep(1f);
+            Shot("stickers_public");
+            // 실제로 흔한 거리 — 교통 4m 상자 25m · 공공시설 2m 상자 14m
+            Do(() =>
+            {
+                clear();
+                var metro = tpl(transport[0]);
+                put(metro, metro != null ? metro.sharedMaterial : null, new Vector3(-2.2f, 1.5f, 25f), 4f, 28f);
+                var tour = tpl(transport[3]);
+                put(tour, tour != null ? tour.sharedMaterial : null, new Vector3(2.4f, -1.5f, 25f), 4f, -28f);
+                put(tpl("0000_Cube"), pub("gov"), new Vector3(0.2f, -3.2f, 14f), 2f, 20f);
+            });
+            Sleep(1f);
+            Shot("stickers_far");
+            Do(() => clear());
         }
 
         private static void AimAt(string[] names, float pitchOffset)
