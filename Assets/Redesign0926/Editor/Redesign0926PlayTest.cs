@@ -6144,14 +6144,15 @@ namespace Redesign0926
                 foreach (var pg in new[] { ("장소", Cube), ("3D", Model), ("수정", Fix) })
                     foreach (var c in new[] { "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" })
                     {
-                        var dot = Find(pg.Item2 + "Chips0926/Chip_" + c + "/Dot")?.GetComponent<Image>();
+                        var chip = Find(pg.Item2 + "Chips0926/Chip_" + c);
+                        var ic = chip != null ? chip.Find("Icon")?.GetComponent<Image>() : null;
                         n++;
-                        if (dot == null) bad.Add(pg.Item1 + " " + c + " 없음");
-                        else if (hex(dot.color) != hex(DataManager.GetCategoryColor(c))) bad.Add(pg.Item1 + " " + c + " " + hex(dot.color));
+                        if (ic == null) bad.Add(pg.Item1 + " " + c + " 없음");
+                        else if (ic.sprite == null || ic.sprite.name != "r0926_c_" + c || chip.Find("Dot") != null) bad.Add(pg.Item1 + " " + c + " " + (ic.sprite != null ? ic.sprite.name : "-"));
                     }
-                log.Add($"  칩 점 {n}개 — 다른 색 " + (bad.Count == 0 ? "없음" : string.Join(", ", bad)));
+                log.Add($"  칩 그림 {n}개 — 다른 그림 " + (bad.Count == 0 ? "없음" : string.Join(", ", bad)));
                 return n == 24 && bad.Count == 0;
-            }, "장소 추가 · 3D 추가 · 정보 수정의 분류 칩 점 = 같은 색표 (기타는 흰 점)");
+            }, "장소 추가 · 3D 추가 · 정보 수정의 분류 칩 이름 앞 = 분류 그림 (목록·필터 칩과 같은 그림 · 기타는 흰 핀 · 예전 색 점 없음) (10-27)");
 
             Wait(() =>
             {
@@ -11990,6 +11991,9 @@ namespace Redesign0926
             Check(() => ChipOn("FestivalToggle") == false, "축제 / 보물 칩은 꺼진 채 시작");
             Check(() => ChipLabel("PublicDataToggle") == "공공데이터" || ChipLabel("PublicDataToggle") == "Public data", "'공공' → '공공데이터'");
             Check(() => ChipTextsFit(), "다섯 나라 말 모두 칩 칸 안에 (한 칸이 된 '터미널 / 기차' 포함)");
+            Check(() => ChipIconsOk(), "칩마다 이름 앞 그림 — 전체 네 칸 · 애견동반 발 · 공공데이터 청사 · 축제 / 보물 폭죽 · 지하철 · 버스 · 3D 상자 · 사람 (10-27 동그라미 대신 이모지)");
+            Do(() => log.Add("  줄: " + RowsSummary(8)));
+            Check(() => PlaceRowIconsOk(), "장소 줄 앞은 분류 그림 (필터 칩과 같은 그림) — 분류 없는 장소만 흰 점 (10-27)");
             Check(() => NoOldLongPress(), "0926 칩에 옛 길게 누르기(LongPressHandler)가 없음 — 0.8초 넘게 누른 손을 떼도 칩이 다시 꺼지지 않음");
             Check(() => !AnyActive("AskAI0926"), "'AI에게 묻기' 숨김");
             Do(() => log.Add("  '목록|지도|설정' 칸 높이 " + TabH() + " · 칩 높이 " + ChipHeight("CategoryToggle")));
@@ -12046,7 +12050,7 @@ namespace Redesign0926
             Do(() => PickCategory(0));
             Sleep(0.3f);
             Check(() => Fm().CategoryState == FilterManager.CategoryFilterState.All, "'전체'로 돌아옴");
-            Check(() => ChipIcon("CategoryToggle") == "r0926_circle", "'전체'는 그림 없이 점");
+            Check(() => ChipIcon("CategoryToggle") == "r0926_c_all", "'전체'로 돌아오면 네 칸 그림 (10-27 칩마다 이모지 — 예전엔 점)");
 
             // 터미널 / 기차 — 한 번에 둘 다
             Do(() => ClickToggle("TerminalToggle"));
@@ -12064,6 +12068,8 @@ namespace Redesign0926
             Shot("filters_pet_only");
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly, "애견동반 한 번 → 애견동반 되는 곳만");
             Check(() => PetChip(true), "켜짐 → 꽉 찬 진한 노랑 · 어두운 글자 · 이름 그대로 '애견동반'");
+            Check(() => { var d = Chip("PetFriendlyToggle")?.Find("Dot0926")?.GetComponent<Image>(); return d != null && d.color.r < 0.2f && d.color.a > 0.9f; },
+                  "켜진 애견동반의 발 그림은 글자처럼 어두운 실루엣 (노랑 위 노란 발이 묻히지 않게)");
             // 애견동반 켜짐 — 맨 위에 가까운 유기견 보호소 세 곳 (10-23)
             Wait(() => Shown(PlaceListManager.EntryKind.Shelter) > 0, 10f, "보호소 받음");
             Sleep(0.6f);
@@ -12222,6 +12228,46 @@ namespace Redesign0926
             return named && b.color.a < 0.1f && t.color.a < 0.5f;
         }
         private static string ChipIcon(string name) { var d = Chip(name)?.Find("Dot0926")?.GetComponent<Image>(); return d != null && d.sprite != null ? d.sprite.name : ""; }
+        // 칩 여덟 개의 이름 앞 그림 (분류 칩은 '전체'일 때)
+        private static bool ChipIconsOk()
+        {
+            var want = new (string chip, string icon)[]
+            {
+                ("CategoryToggle", "r0926_c_all"), ("PetFriendlyToggle", "r0926_c_pet"), ("PublicDataToggle", "r0926_c_gov"), ("FestivalToggle", "r0926_f_party"),
+                ("MetroToggle", "r0926_c_subway"), ("TerminalToggle", "r0926_c_bus"), ("3DObjectToggle", "r0926_c_3d"), ("P2PUserToggle", "r0926_i_user"),
+            };
+            bool ok = true;
+            foreach (var w in want)
+            {
+                string got = ChipIcon(w.chip);
+                if (got != w.icon) { log.Add("  칩 그림 다름 " + w.chip + " " + got); ok = false; }
+            }
+            return ok;
+        }
+        // 목록의 장소 줄 앞 그림 = 그 장소의 분류 그림 (r0926_c_<분류>) · 분류가 없거나 그림이 없는 분류는 점. 줄과 ShownEntries 는 같은 순서
+        private static bool PlaceRowIconsOk()
+        {
+            var pl = Plm();
+            var rows = ListRows();
+            if (pl == null || rows.Count == 0) { log.Add("  목록 줄 없음"); return false; }
+            int icons = 0, dots = 0;
+            bool ok = true;
+            var kinds = new SortedSet<string>();
+            for (int i = 0; i < rows.Count && i < pl.ShownEntries.Count; i++)
+            {
+                var e = pl.ShownEntries[i];
+                if (e.kind != PlaceListManager.EntryKind.Place) continue;
+                bool has = !string.IsNullOrEmpty(e.icon) && AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Redesign0926/Sprites/r0926_c_" + e.icon + ".png") != null;
+                string want = has ? "r0926_c_" + e.icon : "r0926_circle";
+                var d = rows[i].Find("Dot")?.GetComponent<Image>();
+                string got = d != null && d.sprite != null ? d.sprite.name : "";
+                if (got != want) { ok = false; log.Add("  줄 그림 다름 " + e.name + " (" + e.icon + ") " + got); continue; }
+                if (has) { icons++; kinds.Add(e.icon); } else dots++;
+                if (has && d.color != Color.white) { ok = false; log.Add("  분류 그림에 색이 덮임 " + e.name + " " + ColorUtility.ToHtmlStringRGBA(d.color)); }
+            }
+            log.Add($"  장소 줄 — 분류 그림 {icons} · 점 {dots} · 분류 {string.Join(",", kinds)}");
+            return ok && icons > 0;
+        }
         // 켜진 일반 칸 — 그 분류 색이 옅게 깔린다
         private static bool ChipTint(string name, Color want)
         {
@@ -12258,7 +12304,7 @@ namespace Redesign0926
                 var d = c != null ? c.Find("Dot0926") as RectTransform : null;
                 if (t == null || d == null) { log.Add("  칩 없음 " + s.chip); return false; }
                 string was = t.text; int size = t.fontSize;
-                float room = c.rect.width - 16f - (s.arrow ? 46f + 18f + 52f : d.sizeDelta.x + 18f);
+                float room = c.rect.width - 16f - (s.arrow ? 46f + 12f + 52f : d.sizeDelta.x + (d.sizeDelta.x > 30f ? 12f : 18f));   // 그림 뒤 12 · 점 뒤 18 (R0926FilterChip.Place)
                 t.fontSize = 38;
                 foreach (var x in s.texts)
                 {

@@ -329,13 +329,15 @@ namespace Redesign0926
                 var chip = NewUI("Chip_" + values[i], box.transform);
                 var body = Img(chip, Spr("r0926_pill"), new Color(1, 1, 1, 0.07f), Image.Type.Sliced, 64f / (ChipRowH / 2f));
                 body.raycastTarget = true;
-                var dot = NewUI("Dot", chip.transform);
-                Img(dot, Spr("r0926_circle"), DataManager.GetCategoryColor(values[i]), Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(42, 0), new Vector2(24, 24));
+                // 분류 이름 앞 그림 — 목록 줄·필터 칩과 같은 그림 (10-27 대표님 「'카테고리' 이모지가 해당 분류 앞에 (현재는 동그라미만 있음)」)
+                var icon = NewUI("Icon", chip.transform);
+                var ii = Img(icon, Spr("r0926_c_" + values[i]), Color.white, Image.Type.Simple);
+                ii.raycastTarget = false; ii.preserveAspect = true;
+                SetRect(RT(icon), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(48, 0), new Vector2(56, 56));
                 var lb = NewUI("Label0926", chip.transform);
                 var t = Txt(lb, w[0], 44, Soft, TextAnchor.MiddleLeft, FontStyle.Bold);
                 t.resizeTextForBestFit = true; t.resizeTextMinSize = 24; t.resizeTextMaxSize = 40;
-                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = new Vector2(70, 0); lrt.offsetMax = new Vector2(-12, 0);
+                var lrt = RT(lb); lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.offsetMin = new Vector2(86, 0); lrt.offsetMax = new Vector2(-12, 0);
                 Loc(lb, w[0], w[1], w[2], w[3], w[4]);
                 var b = Ensure<Button>(chip);
                 b.targetGraphic = body;

@@ -54,7 +54,7 @@ public class PlaceListManager : MonoBehaviour
         public bool huntFound;       // 내가 이미 찾은 보물 — 진행 중이라 남기되 못 찾은 것 뒤로 ('찾은 보물입니다')
         public float approxM;
         public float fixedDistance = -1f;   // 0 이상이면 이 거리 그대로 (비공개 보물찾기 — 자리를 모른다)
-        public string icon;          // 축제·보호소 — 줄 앞 그림 · 보물찾기는 "lock" = 비밀번호를 건 보물 (R0926PlaceRows)
+        public string icon;          // 장소 — 분류 그림(r0926_c_<이름>, PlaceIcon) · 축제·보호소 — 줄 앞 그림 · 보물찾기는 "lock" = 비밀번호를 건 보물 (R0926PlaceRows)
         public string start, end;    // 축제 날짜 (YYYYMMDD)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
         public byte pin;             // 목록 맨 위에 — 클수록 위: 3 광고 줄 · 2 축제 / 보물 칩의 축제·보물찾기 · 1 애견동반의 보호소 (0 은 거리순)
@@ -64,7 +64,7 @@ public class PlaceListManager : MonoBehaviour
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
 
-    /// <summary>목록 줄 앞의 그림 — 장소는 색 점, 사람은 분홍 사람, 보물찾기는 금빛 상자, 축제는 축제 분위기 그림, 보호소는 강아지</summary>
+    /// <summary>목록 줄 앞의 그림 — 장소는 분류 그림(분류가 없으면 색 점), 사람은 분홍 사람, 보물찾기는 금빛 상자, 축제는 축제 분위기 그림, 보호소는 강아지</summary>
     public enum EntryKind : byte { Place, Person, Hunt, Festival, Shelter }
 
     /// <summary>목록 글자의 장소 한 줄 — 글자와 같은 순서·같은 개수 (R0926PlaceRows 가 줄 누르기·방향 표시에 쓴다)</summary>
@@ -80,7 +80,7 @@ public class PlaceListManager : MonoBehaviour
         public int huntId;           // 보물찾기 — 누르면 그 게임 상세
         public string distanceText;  // 거리 칸에 숫자 대신 쓸 말 (보물찾기 대략·비공개) — null 이면 숫자
         public bool noDirection;     // 방향을 보이지 않는다 (비공개 보물찾기 · 대략 원 안 · 축제)
-        public string icon;          // 축제·보호소 줄 앞 그림 · 보물찾기는 "lock" (자물쇠 배지)
+        public string icon;          // 장소는 분류 그림 이름 · 축제·보호소 줄 앞 그림 · 보물찾기는 "lock" (자물쇠 배지)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
         public bool promo;           // 광고 줄 (축제 칩 맨 위) — 거리 칸 '광고 · 거리' · 줄 앞은 고른 이모지 그림
         public string adId, emojiUrl;
@@ -341,7 +341,7 @@ public class PlaceListManager : MonoBehaviour
                     string rawColor = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
                     string colorHex = DataManager.ResolvePlaceColorHex(rawColor, cat, displayName);
                     combinedPlaces.Add((cached, d, id.ToString(), $"{displayName} - {Mathf.FloorToInt(d)}m", colorHex));
-                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude });
+                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude, icon = PlaceIcon(cat, modelType == "custom") });
                     addedIds.Add(id);
                 }
             }
@@ -372,7 +372,7 @@ public class PlaceListManager : MonoBehaviour
                     }
                     string pColor = DataManager.ResolvePlaceColorHex(p.color, p.category, p.name);
                     combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", pColor));
-                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude });
+                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude, icon = PlaceIcon(p.category, origType == "custom") });
                 }
             }
         }
@@ -385,15 +385,15 @@ public class PlaceListManager : MonoBehaviour
                 if (d <= maxDisplayDistance) {
                     tourAPICount++;
                     combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
-                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx });
+                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = "tour" });
                 }
             }
         }
 
         // 3. New Public Transport Managers
-        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_");
-        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_");
-        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_");
+        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus");
+        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_", "train");
+        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_", "subway");
 
         // 4. P2P Users (근처 사용자)
         bool showP2PUsers = activeFilters.GetValueOrDefault("p2pUsers", true);
@@ -810,7 +810,7 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
-    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null) where T : MonoBehaviour
+    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null, string icon = null) where T : MonoBehaviour
     {
         if (!filter || manager == null) return;
 
@@ -841,12 +841,22 @@ public class PlaceListManager : MonoBehaviour
             if (d <= maxDisplayDistance) {
                 count++;
                 combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", colorHex));
-                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon });
+                // 터미널 칩에는 버스터미널과 공항이 함께 있다 — 공항은 비행기 그림
+                string pIcon = icon == "bus" && pName != null && (pName.Contains("공항") || pName.IndexOf("airport", StringComparison.OrdinalIgnoreCase) >= 0) ? "airport" : icon;
+                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon });
             }
         }
     }
 
     private float CalculateDistance(double lat1, double lon1, double lat2, double lon2) => (float)GeoHere.Meters(lat1, lon1, lat2, lon2);
+
+    /// <summary>장소 줄 앞 분류 그림 이름 (r0926_c_<이름> — 업로드 칩·필터 칩과 같은 그림). 분류가 없는 3D 모델 · 춤 모델(anim)은 3d,
+    /// 둘 다 아니면 null = 흰 점 (10-27 대표님 「아무런 필터, 분류값이 없는 건 흰색 동그라미」)</summary>
+    private static string PlaceIcon(string category, bool model)
+    {
+        if (category == "anim" || string.IsNullOrEmpty(category) && model) return "3d";
+        return string.IsNullOrEmpty(category) ? null : category;
+    }
 
     public void ApplyFilters(Dictionary<string, bool> filters) {
         activeFilters = filters;

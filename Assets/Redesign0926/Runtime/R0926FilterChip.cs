@@ -6,7 +6,8 @@ using UnityEngine.UI;
 /// <summary>
 /// 목록 시트의 필터 칩 모양 — 체크 동그라미 없이 칸 전체가 켜짐/꺼짐.
 /// 켜짐: 그 분류 색으로 은은하게 · 흰 칩(전체)은 꽉 찬 흰색 · 3D 는 꽉 찬 보라 + 흰 글자 · 팔로잉만은 꽉 찬 옅은 분홍 · 꺼짐: 어둡게 · 애견동반: 켜면 꽉 찬 진한 노랑 + 어두운 글자(애견동반 되는 곳만), 끄면 다른 칩처럼 회색 — 두 가지뿐.
-/// 분류 칩은 고른 분류의 그림(음식점 그릇 · 카페 모카 잔 …)을 점 자리에. 사람 칩이 꺼지면 '주변 사람'.
+/// 칩마다 이름 앞에 그림 (10-27 대표님 「각 '필터' 에 있어서도 각각의 이모지가 … 동그라미가 아닌 이모지를 글자 앞에」) — 분류 칩은 고른 분류의 그림
+/// (전체 네 칸 · 음식점 그릇 · 카페 모카 잔 …), 나머지는 칩마다 하나 (목록 줄·올리기 칩과 같은 r0926_c_* 표). 꺼진 칩의 그림은 흐리게. 사람 칩이 꺼지면 '주변 사람'.
 /// 필터 로직(FilterManager)은 그대로 두고, 그 상태를 읽어 매 프레임 끝에 모양·이름만 다시 그린다.
 /// 길게 누르면 '이것만' — 같은 칸의 일반 칩(공공데이터·교통·3D) 중 이것만 켠다. 목록 맨 위에 더하는 축제 / 보물 칩은 끼지 않는다.
 /// </summary>
@@ -30,8 +31,12 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     [SerializeField] private bool solidOn;
     [Tooltip("목록 맨 위에 더하는 칩(축제 / 보물) — 길게 누르기 '이것만'에 끼지 않는다")]
     [SerializeField] private bool modeChip;
-    [Tooltip("분류 칩 — 분류마다 그림 (FilterManager.CategoryFilterState 순서). '전체'는 점 그대로")]
+    [Tooltip("분류 칩 — 분류마다 그림 (FilterManager.CategoryFilterState 순서, 0 = 전체)")]
     [SerializeField] private Sprite[] catIcons;
+    [Tooltip("이름 앞 그림 (분류 칩 말고) — 없으면 예전 색 점")]
+    [SerializeField] private Sprite icon;
+    [Tooltip("한 색 그림 — 점처럼 칩 색으로 칠한다 (사람 모양). 끄면 그림 제 색 그대로")]
+    [SerializeField] private bool tintIcon;
     [SerializeField] private float catIconSize = 46f;
 
     private FilterManager fm;
@@ -116,13 +121,13 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         Color c = color;
         string text = Pick(names);
         bool arrow = false, solid = false;
-        Sprite icon = null;
+        Sprite pic = icon;
         switch (kind)
         {
             case Kind.Category:
                 int ci = fm != null ? Mathf.Clamp((int)fm.CategoryState, 0, CatNames.Length - 1) : 0;
                 st = 1; c = CatColors[ci]; text = Pick(CatNames[ci]); arrow = true;
-                if (ci > 0 && catIcons != null && ci < catIcons.Length) icon = catIcons[ci];
+                if (catIcons != null && ci < catIcons.Length && catIcons[ci] != null) pic = catIcons[ci];
                 break;
             case Kind.Pet:
                 // 10-26 대표님 — '애견동반' 하나만: 꺼짐(회색 · 전부) / 켜짐(꽉 찬 진한 노랑 · 애견동반 되는 곳만). 이름은 그대로
@@ -149,17 +154,13 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
                     : st == 0 ? new Color(1f, 1f, 1f, 0.34f * dim) : new Color(1f, 1f, 1f, dim);
         if (dot != null)
         {
-            SetDotSprite(icon);
-            if (icon != null)
-            {
-                dot.color = new Color(1f, 1f, 1f, dim);   // 분류 그림은 제 색 그대로
-                dot.rectTransform.localScale = Vector3.one;
-            }
-            else
-            {
-                dot.color = ink ? InkOnWhite : filled ? Color.white : st == 1 ? new Color(c.r, c.g, c.b, dim) : new Color(1f, 1f, 1f, 0.28f * dim);
-                dot.rectTransform.localScale = Vector3.one;
-            }
+            SetDotSprite(pic);
+            // 그림은 제 색 그대로 (꺼진 칩은 흐리게) — 같은 색으로 꽉 찬 칸(애견동반 켜짐 · 노랑 위 노란 발)에선 글자처럼 어두운 실루엣.
+            // 점과 한 색 그림(사람)은 칩 색으로
+            dot.color = pic != null && !tintIcon
+                ? (ink && kind != Kind.Category ? InkOnWhite : new Color(1f, 1f, 1f, (st == 1 ? 1f : 0.42f) * dim))
+                : ink ? InkOnWhite : filled ? Color.white : st == 1 ? new Color(c.r, c.g, c.b, dim) : new Color(1f, 1f, 1f, 0.28f * dim);
+            dot.rectTransform.localScale = Vector3.one;
         }
         if (drop != null)
         {
@@ -180,21 +181,22 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         }
     }
 
-    // 점 자리 — 분류 그림이 있으면 그림(크게), 없으면 원래 점. 크기가 바뀌면 묶음을 다시 놓는다
-    private void SetDotSprite(Sprite icon)
+    // 점 자리 — 그림이 있으면 그림(크게), 없으면 원래 점. 크기가 바뀌면 묶음을 다시 놓는다
+    private void SetDotSprite(Sprite pic)
     {
-        Sprite want = icon != null ? icon : dotSprite;
+        Sprite want = pic != null ? pic : dotSprite;
         if (want == null || dot.sprite == want) return;
         dot.sprite = want;
-        dot.preserveAspect = icon != null;
-        dot.rectTransform.sizeDelta = icon != null ? new Vector2(catIconSize, catIconSize) : dotSize;
+        dot.preserveAspect = pic != null;
+        dot.rectTransform.sizeDelta = pic != null ? new Vector2(catIconSize, catIconSize) : dotSize;
         placedFor = null;
     }
 
-    /// <summary>점과 글자(분류 칩은 ∨ 까지)를 한 묶음으로 가운데에 — 칸보다 길면(긴 언어) 글자를 앱 최소 크기까지 줄인다</summary>
+    /// <summary>점과 글자(분류 칩은 ∨ 까지)를 한 묶음으로 가운데에 — 칸보다 길면(긴 언어) 글자를 앱 최소 크기까지 줄인다.
+    /// 그림은 점보다 커서 글자와 사이를 좁힌다 (긴 중국어 '客运站 / 火车站'도 칸 안에)</summary>
     private void Place(bool arrow, float chipW)
     {
-        float gap = 18f, dw = dot.rectTransform.sizeDelta.x;
+        float gap = dot.sprite != dotSprite ? 12f : 18f, dw = dot.rectTransform.sizeDelta.x;
         float aw = arrow && drop != null ? drop.rectTransform.sizeDelta.x + 12f : 0f;
         if (baseFont > 0)
         {

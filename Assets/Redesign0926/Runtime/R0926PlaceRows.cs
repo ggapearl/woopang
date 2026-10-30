@@ -62,7 +62,7 @@ public class R0926PlaceRows : MonoBehaviour
     private const float FlashFadeIn = 0.08f, FlashFadeOut = 0.35f;
     private float flashEnd, closeAt = -1f;
 
-    [Header("줄 앞 표시 — 장소는 템플릿의 색 점")]
+    [Header("줄 앞 표시 — 장소는 분류 그림 (분류가 없으면 템플릿의 색 점)")]
     [SerializeField] private Sprite personSprite;
     [SerializeField] private Sprite huntSprite;
     [Tooltip("비밀번호를 건 보물 — 보물 그림 + 자물쇠 배지")]
@@ -73,6 +73,8 @@ public class R0926PlaceRows : MonoBehaviour
     [Tooltip("축제·보호소 그림 (r0926_f_<이름> — 서버가 축제마다 고른 이름, 보호소는 shelter)")]
     [SerializeField] private Sprite[] kindIcons;
     [SerializeField] private float kindIconSize = 50f;
+    [Tooltip("장소 분류 그림 (r0926_c_<분류> — 필터 칩·올리기 칩과 같은 그림 · 공공데이터 분류 · 교통 · 관광 · 3D · 기타). 크기는 kindIconSize")]
+    [SerializeField] private Sprite[] catIcons;
     [Tooltip("그림 가운데 — 줄 왼쪽 끝에서")]
     [SerializeField] private float iconCenterX = 26f;
 
@@ -92,6 +94,8 @@ public class R0926PlaceRows : MonoBehaviour
     private readonly List<Row> rows = new List<Row>();
     private Dictionary<string, Sprite> kindIconMap;
     private const string KindIconPrefix = "r0926_f_";
+    private Dictionary<string, Sprite> catIconMap;
+    private const string CatIconPrefix = "r0926_c_";
 
     public struct Entry { public string name; public string distance; }
     private readonly List<Entry> entries = new List<Entry>();
@@ -410,20 +414,21 @@ public class R0926PlaceRows : MonoBehaviour
         }
     }
 
-    // 줄 앞 표시 — 장소는 색 점, 사람은 사람 모양(핑크 그대로), 보물찾기는 금빛 상자 · 축제·보호소는 제 그림(그림 색 그대로) · 광고 줄은 고른 이모지. 그림이 없으면 색 점
+    // 줄 앞 표시 — 장소는 분류 그림(10-27 대표님 「'전체' 탭을 눌렀을 때 발생하는 각 이모지가 '목록' 에서도」), 사람은 사람 모양(핑크 그대로),
+    // 보물찾기는 금빛 상자 · 축제·보호소는 제 그림 · 광고 줄은 고른 이모지. 그림은 제 색 그대로 — 그림이 없으면(분류 없는 장소) 줄 색 점
     private void SetIcon(Row r, PlaceListManager.EntryKind kind, Color color, string icon, string emojiUrl)
     {
         Sprite s = kind == PlaceListManager.EntryKind.Person ? personSprite
                  : kind == PlaceListManager.EntryKind.Hunt ? (icon == "lock" && huntLockSprite != null ? huntLockSprite : huntSprite)
-                 : kind == PlaceListManager.EntryKind.Festival || kind == PlaceListManager.EntryKind.Shelter ? KindIcon(icon) : null;
+                 : kind == PlaceListManager.EntryKind.Festival || kind == PlaceListManager.EntryKind.Shelter ? KindIcon(icon)
+                 : CatIcon(icon);
         var emoji = R0926Nearby.Emoji(emojiUrl, this);   // 받는 동안은 축제 기본 그림
         if (emoji != null) s = emoji;
-        if (s == null) kind = PlaceListManager.EntryKind.Place;
-        r.dot.color = kind == PlaceListManager.EntryKind.Place || kind == PlaceListManager.EntryKind.Person ? color : Color.white;
-        if (kind == r.kind && (s == null || r.dot.sprite == s)) return;
+        r.dot.color = s == null || kind == PlaceListManager.EntryKind.Person ? color : Color.white;
+        if (kind == r.kind && r.dot.sprite == (s != null ? s : r.dotSprite)) return;   // 줄은 다시 쓰인다 — 그림 있던 줄이 점으로 돌아가는 것도 본다
         r.kind = kind;
         var rt = r.dot.rectTransform;
-        if (kind == PlaceListManager.EntryKind.Place)
+        if (s == null)
         {
             r.dot.sprite = r.dotSprite;
             r.dot.preserveAspect = false;
@@ -437,6 +442,19 @@ public class R0926PlaceRows : MonoBehaviour
         r.dot.preserveAspect = true;
         rt.anchoredPosition = new Vector2(iconCenterX, r.dotPos.y);
         rt.sizeDelta = new Vector2(size, size);
+    }
+
+    // 장소 분류 그림 — 분류 이름으로 (모르는 분류·분류 없음은 null → 색 점)
+    private Sprite CatIcon(string key)
+    {
+        if (string.IsNullOrEmpty(key) || catIcons == null || catIcons.Length == 0) return null;
+        if (catIconMap == null)
+        {
+            catIconMap = new Dictionary<string, Sprite>();
+            foreach (var sp in catIcons)
+                if (sp != null) catIconMap[sp.name.StartsWith(CatIconPrefix) ? sp.name.Substring(CatIconPrefix.Length) : sp.name] = sp;
+        }
+        return catIconMap.TryGetValue(key, out var s) ? s : null;
     }
 
     // 축제·보호소 그림 — 이름으로 (모르는 이름은 축제 기본 그림)
