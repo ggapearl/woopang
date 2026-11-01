@@ -11,6 +11,17 @@
 - 이번에 확인할 것: 아이패드에서 창이 아니라 화면 가득 뜨는지 · 세로/가로 돌려도 가운데 칸이 유지되는지 · 아이폰은 그대로인지.
   App Store Connect 에 아이패드 스크린샷(13인치 등)이 필요할 수 있다 — 심사 제출 때 요구하면 대표님께 알린다.
 
+**결과** — 2026-11-01 Mac 빌드 세션 (Xcode 26.3 · iOS 26.2 SDK · xcodegen 2.46.0, 커밋 `27a152b`):
+- **컴파일 성공, 고친 파일 없음** — 오류 0 · Swift 경고 0 (빌드 도구 안내 `Metadata extraction skipped. No AppIntents.framework dependency found.` 한 줄뿐). `PrivacyInfo.xcprivacy` 앱에 들어감.
+- `xcodegen generate` → `TARGETED_DEVICE_FAMILY = "1,2"` · `MARKETING_VERSION 2.2.0` · `CURRENT_PROJECT_VERSION 8`.
+  archive Info.plist: `UIDeviceFamily = [1, 2]` · 아이패드 방향 4개 · 아이폰 방향 세로.
+- 서명: 로컬 export(업로드 안 함) 확인 — `aps-environment = production` · Apple Distribution · `beta-reports-active = 1` · `get-task-allow = 0` · export 된 IPA 의 `UIDeviceFamily = [1, 2]`.
+  ⚠ 로컬 export 도 `-authenticationKey*` 3개 옵션이 있어야 한다(없으면 `No Accounts` 로 실패).
+- 아카이브는 Xcode Organizer 에 「효딩쓰 2.2.0 (8)」 로 있다.
+- **TestFlight 업로드 성공** — 2.2.0 (8), 2026-11-01 20:27 KST. 처리 끝(VALID, 20:28) · 수출 규정 면제 · 자동 배포로 그룹 「대표님」 에 들어감(`IN_BETA_TESTING`) · 외부 `NOT_APPLICABLE` · 심사 제출 안 함. 만료 2027-01-30.
+- 아이패드 스크린샷 요구: 내부 테스트(TestFlight)에서는 나오지 않았다. 심사 제출 때만 해당.
+- 대표님 확인 남음: 위 「이번에 확인할 것」 (아이패드에서 창이 아니라 화면 가득 · 세로/가로 돌려도 가운데 칸 · 아이폰은 그대로).
+
 ## 2.1.0 (7) — 2026-10-19 · 알림을 누르면 그 말로
 
 대표님: 「알림을 누르면 그 알림의 정확한 화면으로 가기 — 재빌드 해도 되니까 진행해」.
