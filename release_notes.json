@@ -32,6 +32,10 @@
     "1.2.58": {
       "ko": "• 보물찾기 — 보물을 찾으면 두근두근 보물상자가 열리고 금박 카드가 떠요. 비밀번호(4자)와 힌트로 잠글 수 있고, 숨기기 전에 한 번 더 확인해요. 공유 링크로 바로 참가해요.\n• 하늘 날씨판을 옆으로 넘기면 근처 보물찾기·축제·핫플·친구 소식 — 📌로 고정해요.\n• 내가 올린 장소 — '정보 수정'에서 사진 순서·분류·위치를 바로 고치고 직접 지울 수 있어요. 분류는 안 골라도 올라가요.\n• 댓글 — 쓰자마자 보이고, 내 댓글은 밀어서 삭제, 불편한 댓글은 밀어서 신고해요.\n• 목록 필터(애견동반·축제) 새 정리, 대화 입력칸 글자 크게, 위치 정확도와 안정성 개선.",
       "en": "• Treasure Hunt — a found treasure opens a chest with a gold-foil card. Lock hunts with a 4-character password and hint, review before hiding, join from a shared link.\n• Swipe the sky weather board for nearby hunts, festivals, hot spots and friends.\n• Your places — fix photo order, category and location in Edit info, or delete them. Category is optional.\n• Comments appear instantly; swipe to delete yours or report others'.\n• New list filters, bigger chat text, better location accuracy."
+    },
+    "1.2.59": {
+      "ko": "• 대화방 사진 공유 — + 버튼으로 사진을 보내고, 눌러서 크게 보고, 저장하거나 팔로잉 친구에게 공유해요. 대화 속 링크는 누르면 바로 브라우저로 열려요.\n• 메시지 알림을 누르면 그 대화방으로 바로 들어가요.\n• 프로필 편집을 앱 안에서, 버튼마다 소리와 진동.\n• 멀리 있는 오브젝트 흐리게 — 끄기·약하게·강하게 세 단계.\n• 보물찾기 카드에 '찾은 사람', 지도에 근처 보물찾기와 내 방향.\n• 목록 새 단장 — 분류 그림, 애견동반 장소는 이름이 노랑, 보물찾기는 은은한 금빛.\n• 하늘 라이브 KBS1·KBS2, 각 나라 언어 다듬기와 안정성 개선.",
+      "en": "• Chat photos — send with the + button, tap to view, save, or share with people you follow. Links open in your browser.\n• Tap a message notification to jump to that chat.\n• Edit your profile in the app; buttons now have sound and haptics.\n• Fade distant objects: Off, Light or Strong.\n• Treasure cards show who found them; the map shows nearby hunts and your heading.\n• Refreshed lists, KBS1 and KBS2 on the sky board, better translations and stability."
     }
   }
 }

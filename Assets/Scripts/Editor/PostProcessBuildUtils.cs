@@ -464,7 +464,7 @@ namespace Editor
             rootDict.SetString("NSPhotoLibraryUsageDescription",
                 "Photos used for AR object placement and capturing photos for upload.");
             rootDict.SetString("NSPhotoLibraryAddUsageDescription",
-                "Photos used for AR object placement and capturing photos for upload.");
+                "Saves photos from chats and photos you take to your photo library.");
 
             // --- 마이크 권한 (Unity 기본 영문 대신 기존 문구 유지) ---
             rootDict.SetString("NSMicrophoneUsageDescription",
