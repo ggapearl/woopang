@@ -18,6 +18,9 @@ public class DoubleTouchLikeHandler : MonoBehaviour, IPointerClickHandler
     private float lastTapTime = 0f;
     private float doubleTapThreshold = 0.3f;
 
+    /// <summary>마지막으로 누른 화면 자리 — 글 속 주소를 눌렀는지 볼 때</summary>
+    public Vector2 LastTap { get; private set; }
+
     public void Initialize(int messageId, RectTransform rect, Action<int, RectTransform> callback)
     {
         this.messageId = messageId;
@@ -33,6 +36,7 @@ public class DoubleTouchLikeHandler : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
+        LastTap = eventData.position;
         float currentTime = Time.time;
         float timeSinceLastTap = currentTime - lastTapTime;
 

@@ -384,7 +384,7 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         prevMid = mid;
     }
 
-    private static int Touches(out Vector2 a, out Vector2 b)
+    public static int Touches(out Vector2 a, out Vector2 b)
     {
         a = b = default;
         var ts = UnityEngine.InputSystem.Touchscreen.current;
@@ -457,7 +457,7 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         frame.sizeDelta = new Vector2(side, side);
     }
 
-    private static void Stretch(RectTransform rt, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax)
+    public static void Stretch(RectTransform rt, Vector2 aMin, Vector2 aMax, Vector2 oMin, Vector2 oMax)
     {
         if (rt == null) return;
         rt.anchorMin = aMin;

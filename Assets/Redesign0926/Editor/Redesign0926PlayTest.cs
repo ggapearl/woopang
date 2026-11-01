@@ -151,6 +151,7 @@ namespace Redesign0926
             else if (mode == "follow") PlanFollow();
             else if (mode == "follownotif") PlanFollowNotif();
             else if (mode == "chatnotif") PlanChatNotif();
+            else if (mode == "chatphoto") PlanChatPhoto();
             else if (mode == "tapfeedback") PlanTapFeedback();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
@@ -2310,6 +2311,683 @@ namespace Redesign0926
             Check(() => played(Find(H + "Hub/Viewport/Content/LoginBox/LoginButton").gameObject) == 1, "보물찾기 버튼도 한 번");
             Sleep(0.6f);
             Shot("tapfeedback");
+        }
+
+        // 대화방 사진 · 웹 주소 — 10-30 대표님 「메세지창 앞 +버튼으로 사진 공유 · 웹링크는 브라우저로 · 사진 눌러 보기 · 다운로드, 공유 · 공유는 팔로잉 친구에게」
+        private static byte[] SamplePhoto(int w, int h, Color32 tint)
+        {
+            var t = new Texture2D(w, h, TextureFormat.RGB24, false);
+            var px = new Color32[w * h];
+            int cell = Mathf.Max(8, Mathf.Max(w, h) / 12);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    float k = ((x / cell + y / cell) % 2 == 0 ? 0.6f : 1f) * (0.45f + 0.55f * y / h);
+                    px[y * w + x] = new Color32((byte)(tint.r * k), (byte)(tint.g * k), (byte)(tint.b * k), 255);
+                }
+            t.SetPixels32(px);
+            t.Apply();
+            var b = t.EncodeToJPG(90);
+            UnityEngine.Object.DestroyImmediate(t);
+            return b;
+        }
+        [Serializable] private class DmRow { public string sender_id, recipient_id, content; }
+        [Serializable] private class DmRows { public DmRow[] messages; }
+        private static DmRow[] DmStore() => JsonUtility.FromJson<DmRows>(DevGet(MpMe, "/api/dev/dm_store")).messages ?? new DmRow[0];
+        private static R0926ChatPhotoBubble[] PhotoBubbles() => Mpm().chatMessageContent.GetComponentsInChildren<R0926ChatPhotoBubble>(false);
+        private static object BubbleField(R0926ChatPhotoBubble b, string name) => typeof(R0926ChatPhotoBubble).GetField(name, NPI).GetValue(b);
+        private static bool PhotoReady(R0926ChatPhotoBubble b) => b != null && BubbleField(b, "reference") != null && !(bool)BubbleField(b, "local") && (BubbleField(b, "tex") as Texture2D) != null;
+        private static R0926ChatPhotoBubble LastPhoto() { var a = PhotoBubbles(); return a.Length > 0 ? a[a.Length - 1] : null; }
+        private static Vector2 ScreenOf(RectTransform rt) => RectTransformUtility.WorldToScreenPoint(null, rt.TransformPoint(rt.rect.center));
+        private static void TapAt(GameObject go, Vector2 screen)
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            UnityEngine.EventSystems.ExecuteEvents.Execute(go, new UnityEngine.EventSystems.PointerEventData(es) { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left, position = screen },
+                UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+        }
+        private static bool ToastHas(string part)
+        {
+            var tm = ToastManager.Instance;
+            var l = tm != null ? typeof(ToastManager).GetField("live", NPI)?.GetValue(tm) as System.Collections.IList : null;
+            if (l == null) return false;
+            foreach (var o in l) if ((o.GetType().GetField("message")?.GetValue(o) as string ?? "").Contains(part)) return true;
+            return false;
+        }
+        // 글자 하나의 화면 자리 — 앱이 그리는 것과 같은 글자 배치로 계산
+        private static Vector2 CharLocal(Text t, string plain, int index)
+        {
+            var g = new TextGenerator(plain.Length + 1);
+            g.PopulateWithErrors(plain, t.GetGenerationSettings(t.rectTransform.rect.size), t.gameObject);
+            var c = g.characters[index];
+            int l = g.lines.Count - 1;
+            while (l > 0 && g.lines[l].startCharIdx > index) l--;
+            float ppu = t.pixelsPerUnit;
+            return new Vector2((c.cursorPos.x + c.charWidth * 0.5f) / ppu, (g.lines[l].topY - g.lines[l].height * 0.5f) / ppu);
+        }
+        private static Vector2 CharScreen(Text t, string plain, int index) => RectTransformUtility.WorldToScreenPoint(null, t.rectTransform.TransformPoint(CharLocal(t, plain, index)));
+        private static void TapMark(Text t, string plain, int index)
+        {
+            var dot = new GameObject("TapMark", typeof(RectTransform), typeof(Image));
+            dot.transform.SetParent(t.transform, false);
+            dot.GetComponent<Image>().color = Color.red;
+            dot.GetComponent<Image>().raycastTarget = false;
+            var rt = (RectTransform)dot.transform;
+            rt.sizeDelta = new Vector2(14, 14);
+            rt.localPosition = CharLocal(t, plain, index);
+        }
+        private static void TapMarksClear()
+        {
+            foreach (var r in UnityEngine.Object.FindObjectsByType<RectTransform>(FindObjectsInactive.Exclude))
+                if (r != null && r.name == "TapMark") UnityEngine.Object.Destroy(r.gameObject);
+        }
+
+        private static void PlanChatPhoto()
+        {
+            const string Dev = "http://127.0.0.1:5099", Me = MpMe, Peer = "hunt_test_cp1", Name = "연남동이웃";
+            const string Area = "ChatRoomPanel/Clip0926/Background/InputArea", Plus = Area + "/PlusButton0926";
+            const string View = "ChatPhotoView0926", Tiles = View + "/Bar0926/Row0926", Sheet = View + "/ShareSheet0926", Rows = Sheet + "/Card0926/List0926/Content0926";
+            const string Status = Sheet + "/Card0926/List0926/Status0926";
+            Func<string, string, Dictionary<string, string>> dm = (id, n) => new Dictionary<string, string> { { "msg_type", "dm" }, { "type", "dm" }, { "sender", n }, { "sender_username", n }, { "sender_id", id }, { "message_id", "7" }, { "conversation_id", "7" } };
+            var notice = new Dictionary<string, string> { { "type", "admin_broadcast" }, { "sender_id", MessagePanelManager.WoopangId }, { "sender_username", "WOOPANG" } };
+            Func<string, bool> room = id => Mpm() != null && Mpm().IsChatRoomOpenForUser(id);
+            Func<RectTransform> input = () => ChatInputField().transform as RectTransform;
+            Func<R0926PhotoView> pv = () => Mpm().photoView;
+            Func<RawImage> big = () => Find(View + "/Stage0926/Photo0926")?.GetComponent<RawImage>();
+            Func<string, object> pvf = n => typeof(R0926PhotoView).GetField(n, NPI).GetValue(pv());
+            Func<float> fit = () => (float)typeof(R0926PhotoView).GetProperty("Fit", NPI).GetValue(pv());
+            Func<float> scale = () => (float)pvf("scale");
+            Func<Vector2> pos = () => (Vector2)pvf("pos");
+            Func<int, int, UnityEngine.EventSystems.PointerEventData> pe = (dx, dy) => new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+            {
+                pointerId = 0,
+                position = ScreenOf(Find(View + "/Stage0926") as RectTransform),
+                delta = new Vector2(dx, dy),
+                pointerPressRaycast = new UnityEngine.EventSystems.RaycastResult { gameObject = Find(View + "/Bg0926").gameObject },
+            };
+            Action dbl = () => { var e = pe(0, 0); e.clickCount = 2; pv().OnPointerClick(e); };
+            Func<int> msgs = () => DmStore().Length;
+            Func<string, string, int> sentTo = (to, part) =>
+            {
+                int c = 0;
+                foreach (var m in DmStore())
+                    if (m.recipient_id == to && m.content.Contains(part)) c++;
+                return c;
+            };
+            Func<string> lastUrl = () =>
+            {
+                var a = DmStore();
+                return a.Length > 0 ? a[a.Length - 1].content : "";
+            };
+            byte[] wide = null, tall = null, pano = null, tiny = null;
+            string opened = null;
+            int count = 0;
+
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);
+                savedClipboard = EditorGUIUtility.systemCopyBuffer;
+                LoginManager.EditorAuthBase = Dev;
+                R0926HuntApi.EditorBase = Dev;
+                R0926HuntApi.EditorTestUser = "hunt_test_mpme";
+                MessagePanelManager.EditorBase = Dev;
+                ProfileManager.EditorBase = Dev;
+                FollowManager.EditorBase = Dev;
+                P2PManager.EditorBase = Dev;
+                FirebaseNotification.EditorBase = Dev;
+                R0926ChatLinks.EditorOpened = u => opened = u;
+                DevGet(Me, "/api/dev/dm_store?clear=1");
+                wide = SamplePhoto(1200, 800, new Color32(255, 170, 90, 255));
+                tall = SamplePhoto(700, 1500, new Color32(110, 200, 255, 255));
+                pano = SamplePhoto(1600, 240, new Color32(130, 240, 170, 255));
+                tiny = SamplePhoto(4, 4, new Color32(255, 255, 255, 255));
+
+                // 주소 찾기
+                Action<string, string[]> lk = (text, want) =>
+                {
+                    var got = R0926ChatLinks.Find(text).ConvertAll(l => l.url);
+                    log.Add((string.Join("|", got) == string.Join("|", want) ? "PASS " : "FAIL ") + "주소 찾기 [" + text + "] → " + string.Join(" , ", got));
+                };
+                lk("여기 봐 https://woopang.com/hunt/12?a=1 어때", new[] { "https://woopang.com/hunt/12?a=1" });
+                lk("woopang.com 들어가 봐", new[] { "https://woopang.com" });
+                lk("woopang.com은 좋아", new[] { "https://woopang.com" });
+                lk("www.naver.com/abc.", new[] { "https://www.naver.com/abc" });
+                lk("(https://woopang.com/a)", new[] { "https://woopang.com/a" });
+                lk("농민.com 에서 샀어", new[] { "https://xn--980bx1r.com" });
+                lk("https://woopang.com/aㅋㅋㅋ", new[] { "https://woopang.com/a" });
+                lk("naver.me/abc 랑 youtu.be/x1", new[] { "https://naver.me/abc", "https://youtu.be/x1" });
+                lk("주소는 http://example.org:8080/x#y 입니다", new[] { "http://example.org:8080/x#y" });
+                lk("https://woopang.com/검색?q=농민", new[] { "https://woopang.com/%EA%B2%80%EC%83%89?q=%EB%86%8D%EB%AF%BC" });
+                lk("https://a.com/x https://b.co.kr/y", new[] { "https://a.com/x", "https://b.co.kr/y" });
+                lk("문의는 master@woopang.com 으로", new string[0]);
+                lk("1.5km 지나서 3.14 정도", new string[0]);
+                lk("파일.txt 보내 줘", new string[0]);
+                lk("끝났다.좋아", new string[0]);
+
+                // 사진 주소 알아보기 — 우리 서버의 주소 모양만
+                string good = Dev + "/uploads/dm/0123456789abcdef0123456789abcdef_640x480.jpg";
+                log.Add((R0926ChatPhoto.TryParse(good)?.w == 640 ? "PASS " : "FAIL ") + "사진 주소 알아봄");
+                log.Add((R0926ChatPhoto.TryParse("https://evil.example/uploads/dm/0123456789abcdef0123456789abcdef_640x480.jpg") == null ? "PASS " : "FAIL ") + "다른 곳 주소는 사진으로 받지 않는다");
+                log.Add((R0926ChatPhoto.TryParse(good + "?x=1") == null && R0926ChatPhoto.TryParse(Dev + "/uploads/dm/../secret.jpg") == null ? "PASS " : "FAIL ") + "모양이 다른 주소는 글");
+                log.Add((R0926ChatPhoto.TryParse(Dev + "/uploads/dm/0123456789abcdef0123456789abcdef_0x480.jpg") == null ? "PASS " : "FAIL ") + "크기 0 은 사진 아님");
+                log.Add((R0926ChatPhoto.Preview(good) == "사진" && R0926ChatPhoto.Preview("📷 사진") == "사진" && R0926ChatPhoto.Preview("안녕") == "안녕" ? "PASS " : "FAIL ") + "대화 목록 미리보기 — 주소 대신 '사진'");
+            });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Do(() =>
+            {
+                LoginManager.EditorBeforeWebLogin?.Invoke();
+                LoginManager.Instance.CloseLoginPrompt();
+            });
+            Sleep(0.3f);
+            Do(() => CopyLink("mpme"));
+            Wait(() => LoginManager.Instance.IsLoggedIn, 10f, "시험 로그인");
+            Do(() => { EditorGUIUtility.systemCopyBuffer = savedClipboard ?? ""; savedClipboard = null; });
+            Sleep(2.0f);
+
+            // 1) 입력줄 — + 버튼 · 입력칸 · 보내기가 겹치지 않는다
+            Do(() => R0926HuntPush.OpenChat(dm(Peer, Name)));
+            Wait(() => room(Peer), 12f, "대화방 열림");
+            Sleep(1.0f);
+            Shot("chatphoto_room");
+            Check(() => Active(Plus) && Mathf.Abs(input().offsetMin.x - 196) < 1, "+ 버튼이 입력칸 앞에 있다");
+            Check(() =>
+            {
+                Rect W(RectTransform r) { var c = new Vector3[4]; r.GetWorldCorners(c); return Rect.MinMaxRect(c[0].x, c[0].y, c[2].x, c[2].y); }
+                var plus = W(Find(Plus) as RectTransform);
+                var field = W(input());
+                var send = W(Find(Area + "/SendButton") as RectTransform);
+                log.Add($"  + {plus} · 입력칸 {field} · 보내기 {send}");
+                return plus.xMax <= field.xMin + 1 && field.xMax <= send.xMin + 1;
+            }, "+ · 입력칸 · 보내기 차례로 — 겹치지 않음");
+            Check(() => TopHit(Plus).Contains("그 칸"), "+ 버튼이 가려지지 않음");
+            Check(() => Mpm().chatPhoto != null && typeof(R0926ChatPhoto).GetField("sourceDialog", NPI).GetValue(Mpm().chatPhoto) != null, "사진 고르기 시트 연결");
+
+            // 2) + → 사진 고르기 시트 (대화방 위) · 닫으면 대화방 그대로
+            Do(() => Click(Plus));
+            Sleep(0.7f);
+            Shot("chatphoto_source");
+            Check(() =>
+            {
+                var d = Mpm().chatPhoto;
+                var dlg = typeof(R0926ChatPhoto).GetField("sourceDialog", NPI).GetValue(d) as PhotoSourceDialog;
+                var cam = typeof(PhotoSourceDialog).GetField("cameraButton", NPI).GetValue(dlg) as Button;
+                log.Add("  고르기 시트 맨 위: " + TopHitAt(cam.transform as RectTransform));
+                return TopHitAt(cam.transform as RectTransform).Contains("그 칸");
+            }, "사진 고르기 시트가 대화방 위에 뜬다");
+            Do(() =>
+            {
+                var dlg = typeof(R0926ChatPhoto).GetField("sourceDialog", NPI).GetValue(Mpm().chatPhoto) as PhotoSourceDialog;
+                (typeof(PhotoSourceDialog).GetField("cancelButton", NPI).GetValue(dlg) as Button).onClick.Invoke();
+            });
+            Sleep(0.7f);
+            Check(() => room(Peer) && Active("ChatRoomPanel"), "취소하면 대화방 그대로");
+
+            // 3) 첫 사진 — 빈 대화 안내가 사라지고, 올리는 동안에도 말풍선이 있다
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?delay=1.5"); Mpm().chatPhoto.EditorPick(wide); });
+            Sleep(0.7f);
+            Shot("chatphoto_uploading");
+            Check(() => PhotoBubbles().Length == 1 && BubbleField(LastPhoto(), "reference") == null, "올리는 동안 내 말풍선에 사진이 보인다");
+            Check(() => Mpm().chatMessageContent.Find("ChatEmptyState") == null, "빈 대화 안내가 사라진다");
+            Wait(() => PhotoReady(LastPhoto()), 12f, "올리기 · 작은 사진 받기 끝");
+            Sleep(0.5f);
+            Shot("chatphoto_sent");
+            Do(() => DevGet(Me, "/api/dev/dm_mode?delay=0"));
+            Check(() => msgs() == 1 && sentTo(Peer, "/uploads/dm/") == 1 && lastUrl().Contains("_1200x800.jpg"), "서버에 사진 메시지 하나");
+            Check(() =>
+            {
+                var b = (RectTransform)BubbleField(LastPhoto(), "bubble");
+                log.Add($"  말풍선 {b.rect.size}");
+                return Mathf.Abs(b.rect.width - 760) < 2 && Mathf.Abs(b.rect.height - 507) < 2;
+            }, "말풍선 크기 = 사진 비율 (760×507)");
+            Check(() => TopHitAt((RectTransform)BubbleField(LastPhoto(), "bubble")).Contains("그 칸"), "사진을 실제로 누를 수 있다 (손가락이 말풍선에 맞는다)");
+
+            // 4) 눌러서 크게 보기 → 원본 · 화면에 맞춤
+            Do(() => TapAt(LastPhoto().gameObject, ScreenOf((RectTransform)BubbleField(LastPhoto(), "bubble"))));
+            Wait(() => pv().IsOpen, 3f, "크게 보기 열림");
+            Wait(() => big().texture != null && big().texture.width == 1200, 8f, "원본으로 바뀜");
+            Sleep(0.4f);
+            Shot("chatphoto_view");
+            Check(() => Active(View) && !Active(View + "/Stage0926/Spin0926") && big().texture.width == 1200, "크게 보기 — 원본 · 도는 표시 꺼짐");
+            Check(() =>
+            {
+                var c = new Vector3[4]; big().rectTransform.GetWorldCorners(c);
+                var d = new Vector3[4]; (Find(View + "/Bar0926") as RectTransform).GetWorldCorners(d);
+                log.Add($"  사진 {big().rectTransform.rect.size} 바닥 {c[0].y} · 카드 꼭대기 {d[1].y}");
+                return c[0].y >= d[1].y - 1 && c[0].x >= -1 && c[2].x <= Screen.width + 1;
+            }, "사진이 화면 안 · 카드와 겹치지 않음");
+            Check(() => TopHit(Tiles + "/Close0926").Contains("그 칸") && TopHit(Tiles + "/Download0926").Contains("그 칸") && TopHit(Tiles + "/Share0926").Contains("그 칸"), "닫기 · 다운로드 · 공유 세 칸 누를 수 있다");
+
+            // 키우기 · 옮기기 · 맞춤
+            float f0 = 0f;
+            Do(() =>
+            {
+                f0 = fit();
+                var e = pe(0, 0);
+                e.scrollDelta = new Vector2(0, 18f);
+                pv().OnScroll(e);
+            });
+            Sleep(0.1f);
+            Check(() => scale() > f0 * 1.3f, "휠로 키우기");
+            Do(dbl);
+            Sleep(0.4f);
+            Check(() => Mathf.Abs(scale() - f0) < 0.001f && pos().magnitude < 1f, "키운 상태에서 두 번 톡 → 맞춤");
+            Do(dbl);
+            Sleep(0.4f);
+            Check(() => scale() > f0 * 2f, "두 번 톡 → 크게");
+            Shot("chatphoto_zoom");
+            Do(() =>
+            {
+                var e = pe(0, 0); pv().OnBeginDrag(e);
+                e = pe(160, 90); pv().OnDrag(e);
+                e = pe(0, 0); pv().OnEndDrag(e);
+            });
+            Sleep(0.4f);
+            Check(() => pos().magnitude > 50f, "큰 사진 옮기기");
+            Do(() =>
+            {
+                var e = pe(0, 0); pv().OnBeginDrag(e);
+                e = pe(30000, 30000); pv().OnDrag(e);
+                e = pe(0, 0); pv().OnEndDrag(e);
+            });
+            Sleep(0.4f);
+            Check(() =>
+            {
+                float w = 1200 * scale(), h = 800 * scale();
+                var area = (Vector2)pvf("area");
+                log.Add($"  놓은 자리 {pos()} · 한계 {Mathf.Max(0, (w - area.x) / 2)} {Mathf.Max(0, (h - area.y) / 2)}");
+                return Mathf.Abs(pos().x) <= Mathf.Max(0, (w - area.x) / 2) + 1 && Mathf.Abs(pos().y) <= Mathf.Max(0, (h - area.y) / 2) + 1;
+            }, "사진 끝을 넘겨 끌어도 돌아온다");
+            Do(dbl);
+            Sleep(0.4f);
+            // 맞춤 크기에서 끌기 — 짧게 끌면 제자리, 길게 끌면 닫힘
+            Do(() =>
+            {
+                var e = pe(0, 0); pv().OnBeginDrag(e);
+                e = pe(0, -120); pv().OnDrag(e);
+                e = pe(0, 0); pv().OnEndDrag(e);
+            });
+            Sleep(0.4f);
+            Check(() => pv().IsOpen && pos().magnitude < 1f, "짧게 끌면 제자리");
+            Do(() =>
+            {
+                var e = pe(0, 0); pv().OnBeginDrag(e);
+                e = pe(0, -340); pv().OnDrag(e);
+                e = pe(0, 0); pv().OnEndDrag(e);
+            });
+            Sleep(0.3f);
+            Check(() => !pv().IsOpen && room(Peer), "길게 끌면 닫힘 · 대화방 그대로");
+
+            // 5) 다운로드
+            Do(() => { R0926PhotoView.EditorSaved = null; TapAt(LastPhoto().gameObject, ScreenOf((RectTransform)BubbleField(LastPhoto(), "bubble"))); });
+            Wait(() => pv().IsOpen, 3f, "다시 열림");
+            Wait(() => big().texture != null && big().texture.width == 1200, 8f, "기기에 받아 둔 원본");
+            Do(() => Click(Tiles + "/Download0926"));
+            Wait(() => ToastHas("사진첩에 저장"), 4f, "저장 알림");
+            Sleep(0.3f);
+            Shot("chatphoto_saved");
+            Check(() => R0926PhotoView.EditorSaved != null && R0926PhotoView.EditorSaved.Length > 1000 && R0926PhotoView.EditorSaved[0] == 0xFF && R0926PhotoView.EditorSaved[1] == 0xD8, "다운로드 — 원본 JPEG 를 사진첩으로");
+
+            // 6) 공유 — 팔로잉 목록
+            Do(() => Click(Tiles + "/Share0926"));
+            Wait(() => Active(Sheet) && Find(Rows + "/Row_ft1") != null, 6f, "공유 시트 · 팔로잉 목록");
+            Sleep(0.6f);
+            Shot("chatphoto_share");
+            Check(() => Find(Rows + "/Row_ft1") != null && Find(Rows + "/Row_ft2") != null && Find(Rows + "/Row_ft6") != null && Find(Rows + "/Row_ft3") == null, "팔로잉하는 사람만 나온다 (나를 팔로우만 하는 사람은 없음)");
+            Check(() => !Active(Status), "목록이 있으면 안내 글 없음");
+            Check(() =>
+            {
+                var list = Find(Sheet + "/Card0926/List0926") as RectTransform;
+                var body = Find(Rows) as RectTransform;
+                log.Add($"  목록 {list.rect.height} · 내용 {body.rect.height}");
+                return list.rect.height >= body.rect.height - 1;
+            }, "세 줄이 잘리지 않고 다 보인다");
+            Check(() => !Active(View + "/Bar0926"), "시트가 열리면 뒤의 세 칸은 숨긴다");
+            Check(() => Find(Rows + "/Row_ft1/Name0926").GetComponent<Text>().text == "yeonnam_cafe", "이름");
+            Check(() => TopHit(Rows + "/Row_ft1/Send0926").Contains("그 칸"), "보내기를 누를 수 있다");
+            Do(() => Click(Rows + "/Row_ft1/Send0926"));
+            Wait(() => Find(Rows + "/Row_ft1/Send0926/Label0926").GetComponent<Text>().text == "보냄", 5f, "보냄 표시");
+            Sleep(0.3f);
+            Shot("chatphoto_share_sent");
+            Check(() => sentTo("ft1", "/uploads/dm/") == 1, "같은 사진 주소가 그 친구에게 메시지로");
+            Check(() => !Find(Rows + "/Row_ft1/Send0926").GetComponent<Button>().interactable, "보낸 줄은 다시 누를 수 없다");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?fail=500"); Click(Rows + "/Row_ft2/Send0926"); });
+            Wait(() => ToastHas("보내지 못했어요"), 5f, "못 보냄 알림");
+            Check(() => Find(Rows + "/Row_ft2/Send0926").GetComponent<Button>().interactable && Find(Rows + "/Row_ft2/Send0926/Label0926").GetComponent<Text>().text == "보내기", "못 보내면 다시 누를 수 있다");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?fail=0"); Click(Rows + "/Row_ft2/Send0926"); });
+            Wait(() => Find(Rows + "/Row_ft2/Send0926/Label0926").GetComponent<Text>().text == "보냄", 5f, "두 번째 친구");
+            Check(() => sentTo("ft2", "/uploads/dm/") == 1 && sentTo("ft1", "/uploads/dm/") == 1 && room(Peer) && Active(View), "여러 친구에게 차례로 · 대화방은 그대로");
+
+            // 뒤로가기 — 공유 → 크게 보기 → 대화방
+            Back();
+            Sleep(0.6f);
+            Check(() => !Active(Sheet) && Active(View), "뒤로가기 1번 — 공유 시트만 닫힘");
+            Check(() => Active(Tiles + "/Close0926"), "공유 시트를 닫으면 세 칸이 돌아온다");
+            Back();
+            Sleep(0.6f);
+            Check(() => !Active(View) && room(Peer) && Active("ChatRoomPanel"), "뒤로가기 2번 — 크게 보기 닫힘 · 대화방 그대로");
+
+            // 공유 시트 — 친구가 없을 때 · 목록을 못 받을 때 · 많을 때
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?following=empty"); TapAt(LastPhoto().gameObject, ScreenOf((RectTransform)BubbleField(LastPhoto(), "bubble"))); });
+            Wait(() => pv().IsOpen, 3f, "다시 열림");
+            Do(() => Click(Tiles + "/Share0926"));
+            Wait(() => Active(Status) && TextOf(Status).Contains("팔로잉한 친구가 없어요"), 5f, "친구 없음 안내");
+            Sleep(0.5f);
+            Shot("chatphoto_share_empty");
+            Do(() => Click(Sheet + "/Cancel0926"));
+            Sleep(0.5f);
+            Check(() => !Active(Sheet) && Active(View), "닫기 알약 — 공유 시트만 닫힘");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?following=error"); Click(Tiles + "/Share0926"); });
+            Wait(() => Active(Status) && TextOf(Status).Contains("불러오지 못했어요"), 5f, "목록 못 받음 안내");
+            Do(() => Click(Sheet + "/Cancel0926"));
+            Sleep(0.5f);
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?following=many"); Click(Tiles + "/Share0926"); });
+            Wait(() => Find(Rows + "/Row_fm8") != null, 5f, "친구 많음");
+            Sleep(0.6f);
+            Shot("chatphoto_share_many");
+            Check(() =>
+            {
+                var card = Find(Sheet + "/Card0926") as RectTransform;
+                var list = Find(Sheet + "/Card0926/List0926") as RectTransform;
+                var body = Find(Rows) as RectTransform;
+                log.Add($"  카드 높이 {card.rect.height} · 목록 {list.rect.height} · 내용 {body.rect.height}");
+                return Mathf.Abs(card.rect.height - (174 + 5.5f * 168)) < 2 && body.rect.height > list.rect.height + 100;
+            }, "친구가 많으면 카드는 그대로 · 안에서 스크롤");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?following=ok"); Click(Sheet + "/Cancel0926"); });
+            Sleep(0.5f);
+
+            // 대화방이 닫히면 크게 보기도 같이 닫힌다
+            Do(() => Mpm().CloseAway());
+            Sleep(0.4f);
+            Check(() => !Active(View), "대화방이 닫히면 크게 보기도 닫힘");
+
+            // 7) 받은 사진 · 세로 사진 · 긴 사진 · 작은 사진 거절
+            Do(() => R0926HuntPush.OpenChat(dm(Peer, Name)));
+            Wait(() => room(Peer), 12f, "대화방 다시");
+            Wait(() => PhotoBubbles().Length >= 1 && PhotoReady(LastPhoto()), 8f, "지난 사진이 다시 그려진다");
+            Do(() => count = PhotoBubbles().Length);
+            Do(() => DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"" + Peer + "\",\"recipient_id\":\"" + Me + "\",\"content\":\"" + lastUrl() + "\"}"));
+            Wait(() => PhotoBubbles().Length == count + 1 && PhotoReady(LastPhoto()), 8f, "받은 사진");
+            Do(() => { count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(tall); });
+            Wait(() => PhotoBubbles().Length == count + 1 && PhotoReady(LastPhoto()), 12f, "세로 사진");
+            Sleep(0.5f);
+            Shot("chatphoto_tall");
+            Check(() =>
+            {
+                var b = (RectTransform)BubbleField(LastPhoto(), "bubble");
+                log.Add($"  세로 말풍선 {b.rect.size}");
+                return b.rect.height <= 901 && b.rect.width <= 761 && Mathf.Abs(b.rect.width / b.rect.height - 700f / 1500f) < 0.05f;
+            }, "세로 사진 — 높이 900 안");
+            Do(() => { count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(pano); });
+            Wait(() => PhotoBubbles().Length == count + 1 && PhotoReady(LastPhoto()), 12f, "아주 긴 사진");
+            Sleep(0.5f);
+            Shot("chatphoto_pano");
+            Check(() =>
+            {
+                var b = (RectTransform)BubbleField(LastPhoto(), "bubble");
+                log.Add($"  긴 사진 말풍선 {b.rect.size}");
+                return Mathf.Abs(b.rect.width - 760) < 2 && Mathf.Abs(b.rect.height - 380) < 2;
+            }, "아주 긴 사진 — 2:1 로 가운데를 보여 준다");
+            Do(() => { count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(tiny); });
+            Sleep(0.8f);
+            Check(() => PhotoBubbles().Length == count && ToastHas("보낼 수 없어요"), "너무 작은 사진은 거절");
+
+            // 8) 원본을 받는 동안 다운로드 — 기다렸다가 저장 · 원본을 못 받으면 작은 사진을 그대로
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?orig_delay=2"); count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(SamplePhoto(1000, 1000, new Color32(255, 130, 170, 255))); });
+            Wait(() => PhotoBubbles().Length == count + 1 && PhotoReady(LastPhoto()), 12f, "새 사진");
+            Do(() => TapAt(LastPhoto().gameObject, ScreenOf((RectTransform)BubbleField(LastPhoto(), "bubble"))));
+            Wait(() => pv().IsOpen, 3f, "크게 보기");
+            Do(() => { R0926PhotoView.EditorSaved = null; Click(Tiles + "/Download0926"); });
+            Sleep(0.4f);
+            Shot("chatphoto_view_loading");
+            Check(() => R0926PhotoView.EditorSaved == null && (bool)pvf("loading") && Active(View + "/Stage0926/Spin0926") && big().enabled, "원본을 받는 동안 — 작은 사진 + 도는 표시");
+            Wait(() => R0926PhotoView.EditorSaved != null, 6f, "원본이 오면 저장");
+            Check(() => R0926PhotoView.EditorSaved != null, "받는 중에 누른 다운로드는 원본이 오면 저장된다");
+            Do(() => DevGet(Me, "/api/dev/dm_mode?orig_delay=0&orig_fail=1"));
+            Back();
+            Sleep(0.5f);
+            Do(() => { count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(SamplePhoto(900, 600, new Color32(190, 150, 255, 255))); });
+            Wait(() => PhotoBubbles().Length == count + 1 && PhotoReady(LastPhoto()), 12f, "새 사진 2");
+            Do(() => TapAt(LastPhoto().gameObject, ScreenOf((RectTransform)BubbleField(LastPhoto(), "bubble"))));
+            Wait(() => ToastHas("불러오지 못했어요"), 5f, "원본 실패 알림");
+            Check(() => pv().IsOpen && big().enabled && big().texture != null, "원본을 못 받아도 작은 사진은 보인다");
+            Do(() => DevGet(Me, "/api/dev/dm_mode?orig_fail=0"));
+            Back();
+            Sleep(0.5f);
+
+            // 9) 받지 못하는 사진 — 말풍선 안내 · 눌러서 다시
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?thumb_fail=1&orig_fail=1"); count = PhotoBubbles().Length; DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"" + Peer + "\",\"recipient_id\":\"" + Me + "\",\"content\":\"" + Dev + "/uploads/dm/00000000000000000000000000000000_800x600.jpg\"}"); });
+            Wait(() => PhotoBubbles().Length == count + 1 && (bool)BubbleField(LastPhoto(), "failed"), 10f, "못 받은 사진");
+            Sleep(0.3f);
+            Shot("chatphoto_load_fail");
+            Check(() => (BubbleField(LastPhoto(), "label") as Text).gameObject.activeInHierarchy, "못 받으면 말풍선에 안내");
+            Do(() => TapAt(LastPhoto().gameObject, ScreenOf((RectTransform)BubbleField(LastPhoto(), "bubble"))));
+            Sleep(0.6f);
+            Check(() => !pv().IsOpen, "못 받은 사진을 눌러도 빈 화면이 뜨지 않는다");
+            Wait(() => (bool)BubbleField(LastPhoto(), "failed"), 5f, "다시 시도 끝");
+            Do(() => DevGet(Me, "/api/dev/dm_mode?thumb_fail=0&orig_fail=0"));
+
+            // 10) 보내기 실패 — 말풍선이 사라지고 이유를 알린다
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?fail=429"); count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(wide); });
+            Wait(() => ToastHas("너무 많이"), 6f, "많이 보냄 알림");
+            Sleep(0.3f);
+            Check(() => PhotoBubbles().Length == count, "429 — 말풍선 없어짐 · 알림");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?fail=500"); Mpm().chatPhoto.EditorPick(wide); });
+            Wait(() => ToastHas("사진을 보내지 못했어요"), 6f, "못 보냄 알림 2");
+            Sleep(0.3f);
+            Check(() => PhotoBubbles().Length == count, "500 — 말풍선 없어짐 · 알림");
+            Do(() => DevGet(Me, "/api/dev/dm_mode?fail=0"));
+
+            // 11) 답보다 새 메시지 확인이 먼저 — 사진이 두 장이 되지 않는다
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?delay=6"); count = PhotoBubbles().Length; Mpm().chatPhoto.EditorPick(wide); });
+            Sleep(5.6f);
+            Do(() => log.Add("  답 오기 전 말풍선 " + (PhotoBubbles().Length - count) + "개 더"));
+            Wait(() => PhotoBubbles().Length == count + 1 && PhotoReady(LastPhoto()), 6f, "답 도착");
+            Sleep(1.0f);
+            Check(() => PhotoBubbles().Length == count + 1, "새 메시지 확인이 먼저 와도 사진은 한 장");
+            Do(() => DevGet(Me, "/api/dev/dm_mode?delay=0"));
+            Sleep(4.5f);
+            Check(() => PhotoBubbles().Length == count + 1, "그다음 확인에서도 늘어나지 않음");
+
+            // 12) 차단 · 팔로우 안 한 상대
+            Do(() => Mpm().CloseAway());
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat(dm("hunt_test_blocked", "차단한사람")));
+            Wait(() => room("hunt_test_blocked"), 12f, "차단 상대 방");
+            Sleep(0.6f);
+            Do(() => Mpm().chatPhoto.EditorPick(wide));
+            Wait(() => ToastHas("보낼 수 없는 상대"), 6f, "차단 알림");
+            Check(() => PhotoBubbles().Length == 0, "차단 상대 — 말풍선 없어짐 · 이유 알림");
+            Do(() => Mpm().CloseAway());
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat(dm("hunt_test_stranger", "모르는사람")));
+            Wait(() => room("hunt_test_stranger"), 12f, "모르는 상대 방");
+            Sleep(0.6f);
+            Do(() => Mpm().chatPhoto.EditorPick(wide));
+            Wait(() => ToastHas("팔로우한 사람에게만"), 6f, "팔로우 안내");
+            Check(() => PhotoBubbles().Length == 0, "팔로우 안 한 상대 — 말풍선 없어짐 · 이유 알림");
+            Do(() => Mpm().CloseAway());
+            Sleep(0.4f);
+
+            // 13) 웹 주소 — 색 · 그 글자를 누르면 브라우저 · 다른 자리는 아무 일 없음
+            const string Words = "여기 봐요 https://woopang.com/hunt/123 그리고 농민.com 도 좋아요";
+            string longUrl = "https://woopang.com/" + new string('a', 90);
+            Text linkText = null, longText = null, myText = null;
+            Func<string, Text> textWith = part =>
+            {
+                foreach (var t in Mpm().chatMessageContent.GetComponentsInChildren<Text>())
+                    if (t.text.Contains(part)) return t;
+                return null;
+            };
+            Do(() => R0926HuntPush.OpenChat(dm(Peer, Name)));
+            Wait(() => room(Peer), 12f, "대화방 다시 2");
+            Sleep(1.0f);
+            Do(() =>
+            {
+                DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"" + Peer + "\",\"recipient_id\":\"" + Me + "\",\"content\":\"" + Words + "\"}");
+                DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"" + Peer + "\",\"recipient_id\":\"" + Me + "\",\"content\":\"이건 긴 주소 " + longUrl + "\"}");
+                DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"" + Me + "\",\"recipient_id\":\"" + Peer + "\",\"content\":\"내가 보낸 woopang.com 주소\"}");
+            });
+            Wait(() => (linkText = textWith("hunt/123")) != null && (longText = textWith("이건 긴 주소")) != null && (myText = textWith("내가 보낸")) != null, 8f, "주소 말풍선");
+            Sleep(0.6f);
+            Do(() =>
+            {
+                TapMark(linkText, Words, Words.IndexOf("hunt/123"));
+                TapMark(linkText, Words, Words.IndexOf("농민.com") + 1);
+                string lp = "이건 긴 주소 " + longUrl;
+                TapMark(longText, lp, lp.Length - 3);
+            });
+            Sleep(0.2f);
+            Shot("chatphoto_links");
+            Do(TapMarksClear);
+            Check(() => linkText.text.Contains("<color=#8CCBFF>https://woopang.com/hunt/123</color>") && myText.text.Contains("<color=#FFE7A3>woopang.com</color>"), "주소에 색 (받은 말 · 내 말 구분)");
+            Do(() => { opened = null; TapAt(linkText.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(linkText, Words, Words.IndexOf("hunt/123"))); });
+            Sleep(0.5f);
+            Check(() => opened == "https://woopang.com/hunt/123", "주소 글자를 누르면 그 주소를 연다");
+            Do(() => { opened = null; TapAt(linkText.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(linkText, Words, Words.IndexOf("농민.com") + 1)); });
+            Sleep(0.5f);
+            Check(() => opened == "https://xn--980bx1r.com", "한글 주소 — 브라우저가 여는 모양으로");
+            Do(() => { opened = null; TapAt(linkText.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(linkText, Words, Words.Length - 1)); });
+            Sleep(0.5f);
+            Check(() => opened == null, "주소가 아닌 글자를 누르면 아무 일 없다");
+            Do(() => { opened = null; TapAt(linkText.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(linkText, Words, Words.IndexOf("hunt/123")) + new Vector2(0, 46)); });
+            Sleep(0.5f);
+            Check(() => opened == "https://woopang.com/hunt/123", "주소 글자 조금 위를 눌러도 열린다");
+            Do(() =>
+            {
+                string lp = "이건 긴 주소 " + longUrl;
+                opened = null;
+                TapAt(longText.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(longText, lp, lp.Length - 3));
+            });
+            Sleep(0.5f);
+            Check(() => opened == longUrl, "줄이 넘어간 긴 주소도 끝까지 눌린다");
+
+            // 14) 입력칸이 커져도 + 버튼 자리 그대로
+            Do(() => { var f = ChatInputField(); if (f != null) f.text = "입력칸이 커졌는지 보려고 길게 씁니다. 줄이 넘어가면 칸이 위로 커지고 + 버튼은 제자리에 있어야 합니다. 한 줄 더, 한 줄 더, 한 줄 더."; });
+            Sleep(0.5f);
+            Shot("chatphoto_input_grown");
+            Check(() => Mathf.Abs(input().offsetMin.x - 196) < 1 && Active(Plus), "입력칸이 커져도 + 버튼 오른쪽에서 시작");
+            Do(() => { var f = ChatInputField(); if (f != null) f.text = ""; });
+            Sleep(0.3f);
+
+            // 15) 가로 화면 — 카드는 오른쪽 · 공유 시트도 화면 안
+            Do(() => Rotate(true));
+            Wait(() => Turned(true), 8f, "가로로 돌림");
+            Sleep(1.2f);
+            Shot("chatphoto_land_room");
+            Do(() => { var b = PhotoBubbles(); TapAt(b[0].gameObject, ScreenOf((RectTransform)BubbleField(b[0], "bubble"))); });
+            Wait(() => pv().IsOpen, 3f, "가로 크게 보기");
+            Wait(() => big().texture != null && big().texture.width == 1200, 8f, "가로 원본");
+            Sleep(0.5f);
+            Shot("chatphoto_land_view");
+            Check(() =>
+            {
+                var c = new Vector3[4]; big().rectTransform.GetWorldCorners(c);
+                var d = new Vector3[4]; (Find(View + "/Bar0926") as RectTransform).GetWorldCorners(d);
+                log.Add($"  가로 사진 오른쪽 {c[2].x} · 카드 왼쪽 {d[0].x} · 화면 {Screen.width}x{Screen.height}");
+                return c[2].x <= d[0].x + 1 && c[0].y >= -1 && c[2].y <= Screen.height + 1;
+            }, "가로 — 사진 · 카드가 겹치지 않음");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?following=many"); Click(Tiles + "/Share0926"); });   // 카드가 가장 높을 때
+            Wait(() => Find(Rows + "/Row_fm0") != null, 5f, "가로 공유 시트");
+            Sleep(0.6f);
+            Shot("chatphoto_land_share");
+            Check(() =>
+            {
+                var c = new Vector3[4]; (Find(Sheet + "/Card0926") as RectTransform).GetWorldCorners(c);
+                log.Add($"  가로 카드 위 {c[1].y} · 화면 높이 {Screen.height}");
+                return c[1].y <= Screen.height + 1;
+            }, "가로 — 공유 카드가 화면 안");
+            Do(() => { DevGet(Me, "/api/dev/dm_mode?following=ok"); Click(Sheet + "/Cancel0926"); });
+            Sleep(0.4f);
+            Do(() => Rotate(false));
+            Wait(() => Turned(false), 8f, "세로로 되돌림");
+            Sleep(1.0f);
+            Check(() =>
+            {
+                var c = new Vector3[4]; big().rectTransform.GetWorldCorners(c);
+                var d = new Vector3[4]; (Find(View + "/Bar0926") as RectTransform).GetWorldCorners(d);
+                return pv().IsOpen && c[0].y >= d[1].y - 1;
+            }, "세로로 돌아와도 사진이 카드 위에");
+            Back();
+            Sleep(0.5f);
+
+            // 16) 공지 방 — + 없음 · 입력칸 왼쪽으로 · 공지 속 주소 (공지는 제목이 굵은 글씨로 앞에 붙는다)
+            const string NoticeText = "<b>이번 주 공지입니다 꼭 읽어 주세요 제목이 긴 공지입니다</b>\n공지 https://woopang.com/event 에서 확인해 주세요";
+            Do(() => Mpm().CloseAway());
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat(notice));
+            Wait(() => room(MessagePanelManager.WoopangId), 12f, "공지 방");
+            Sleep(0.8f);
+            Check(() => !Active(Plus) && Mathf.Abs(input().offsetMin.x - 40) < 1, "공지 방은 + 없음 · 입력칸이 왼쪽까지");
+            Do(() => typeof(MessagePanelManager).GetMethod("AppendAdminMessageAtBottom", NPI).Invoke(Mpm(), new object[] { "WOOPANG", NoticeText, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), null }));
+            Sleep(0.5f);
+            Do(() => TapMark(textWith("woopang.com/event"), NoticeText, NoticeText.IndexOf("/event")));
+            Sleep(0.2f);
+            Shot("chatphoto_notice");
+            Do(TapMarksClear);
+            Do(() =>
+            {
+                opened = null;
+                var t = textWith("woopang.com/event");
+                TapAt(t.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(t, NoticeText, NoticeText.IndexOf("/event")));
+            });
+            Sleep(0.5f);
+            Check(() => opened == "https://woopang.com/event", "제목이 굵은 공지 속 주소도 그 글자를 누르면 브라우저로");
+            Do(() =>
+            {
+                opened = null;
+                var t = textWith("woopang.com/event");
+                TapAt(t.GetComponentInParent<DoubleTouchLikeHandler>().gameObject, CharScreen(t, NoticeText, NoticeText.IndexOf("확인")));
+            });
+            Sleep(0.5f);
+            Check(() => opened == null, "공지의 다른 글자는 아무 일 없다");
+            Do(() => Mpm().CloseAway());
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat(dm(Peer, Name)));
+            Wait(() => room(Peer), 12f, "다시 1:1 방");
+            Sleep(0.6f);
+            Check(() => Active(Plus) && Mathf.Abs(input().offsetMin.x - 196) < 1, "1:1 방으로 돌아오면 + 다시");
+
+            // 17) 언어 — 세 칸 · 공유 시트 글
+            Action relabel = () =>
+            {
+                foreach (var t in Find(View).GetComponentsInChildren<R0926LocalizedText>(true)) t.Set(t.ko, t.en, t.ja, t.zh, t.es);
+            };
+            Func<string, string> label = path => Find(path)?.GetComponentInChildren<Text>(true)?.text ?? "";
+            Do(() =>
+            {
+                AppLanguage.EditorOverride = "es";
+                relabel();
+                var b = PhotoBubbles();
+                TapAt(b[0].gameObject, ScreenOf((RectTransform)BubbleField(b[0], "bubble")));
+            });
+            Wait(() => pv().IsOpen, 3f, "에스파냐어 크게 보기");
+            Sleep(0.5f);
+            Do(() => Click(Tiles + "/Share0926"));
+            Wait(() => Find(Rows + "/Row_ft1") != null, 5f, "에스파냐어 공유 시트");
+            Sleep(0.6f);
+            Shot("chatphoto_es_share");
+            Check(() => label(Sheet + "/Card0926/Title0926") == "Compartir con quienes sigues" && label(Rows + "/Row_ft1/Send0926") == "Enviar" && label(Sheet + "/Cancel0926") == "Cerrar", "공유 시트가 기기 언어로");
+            Do(() => Click(Sheet + "/Cancel0926"));
+            Sleep(0.5f);
+            Shot("chatphoto_es_view");
+            Check(() => label(Tiles + "/Close0926") == "Cerrar" && label(Tiles + "/Download0926") == "Descargar" && label(Tiles + "/Share0926") == "Compartir", "세 칸이 기기 언어로");
+            Do(() =>
+            {
+                AppLanguage.EditorOverride = null;
+                relabel();
+            });
+            Back();
+            Sleep(0.5f);
+            Do(() =>
+            {
+                R0926ChatLinks.EditorOpened = null;
+                R0926PhotoView.EditorSaved = null;
+                DevGet(Me, "/api/dev/dm_store?clear=1");
+            });
         }
 
         private static void PlanChatNotif()
@@ -13733,6 +14411,7 @@ namespace Redesign0926
                     if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     if (pl.Length > 1 && pl[1].Trim() == "chatnotif") StashLogin();
+                    if (pl.Length > 1 && pl[1].Trim() == "chatphoto") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "tapfeedback") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim().StartsWith("lang_")) { AppLanguage.EditorOverride = pl[1].Trim().Substring(5); StashLogin(); }   // 기기 언어를 바꿔 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것

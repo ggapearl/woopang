@@ -13,7 +13,8 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 63;  // v63: 11-02 「설정탭처럼 다른 버튼들도 소리·햅틱」 — 팔로우 · 프로필의 도크 X 도 다른 창의 도크 X 와 같은 소리
+        public const int Version = 64;  // v64: 11-02 「메세지창 앞 +버튼으로 사진 공유 · 사진 눌러 크게 보기 · 다운로드 · 팔로잉 친구에게 공유」 — 입력줄 + 버튼 · 크게 보기 화면 · 공유 시트
+        // v63: 11-02 「설정탭처럼 다른 버튼들도 소리·햅틱」 — 팔로우 · 프로필의 도크 X 도 다른 창의 도크 X 와 같은 소리
         // v62: 11-01 언어 점검 — 지도 광고 칸의 '광고' 표시가 다섯 언어 모두 빈 알약이던 것(10-16 최소 글자 38 이 높이 46 칸에서 글을 통째로 지웠다): 높이 50 · 글 길이만큼 넓어지는 알약
         // v61: 11-01 언어 점검 — 지도 주소 칸 안내(중국어 일본식 가운뎃점 → '地址、地点或坐标') · 설정 '화면' 묶음 이름 중국어 '显示'
         // v59: 10-27 대표님 「KBS 를 KBS1 · KBS2 로 나누고, '연합뉴스' 삭제」 — 하늘 '언론사 라이브' 칸: YTN · KBS1 · KBS2 · MBC · SBS · JTBC (KBS 1·2TV 는 유튜브 생방송이 없어 KBS 온에어로 연다 · 연합뉴스TV 칸에 남은 번역 지움)
@@ -95,6 +96,7 @@ namespace Redesign0926
             ApplyListFilters(root, log);        // 목록 필터 — '전체' 고르기 목록 · 'AI에게 묻기' 숨김 (0930 틀 안에)
             ApplyMapCoord(root, log);           // 지도 꾹 눌러 핀 · 좌표 검색 (입력칸 다듬기보다 먼저)
             ApplyCrop(root, log);               // 대표 사진 자르기 화면 · 처리 중 카드 (도크 소리를 쓰므로 도크 뒤)
+            ApplyChatPhoto(root, log);          // 대화방 + 버튼 · 사진 크게 보기 · 팔로잉 공유 시트
             ApplyReadable(root, log);           // 토스트 · 앱 전체 최소 글자 · 입력칸 커서 — 다른 단계가 글자 크기를 다 정한 뒤에
             ApplySkyPages(root, log);           // 하늘 날씨판 옆 장 — 날씨판이 다 자리잡은 뒤에
             CloseStartPanels(root, log);

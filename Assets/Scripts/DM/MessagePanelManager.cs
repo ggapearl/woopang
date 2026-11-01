@@ -50,6 +50,10 @@ public class MessagePanelManager : MonoBehaviour
     public Text chatRoomTitle;
     public Image chatRoomAvatar;
     public Button chatRoomBackButton;
+    [Tooltip("입력줄 앞 + 버튼 — 사진 보내기 (공지 방엔 없다)")]
+    public R0926ChatPhoto chatPhoto;
+    [Tooltip("말풍선 사진 크게 보기")]
+    public R0926PhotoView photoView;
 
     [Header("=== 전송 버튼 아이콘 설정 ===")]
     [Tooltip("전송 버튼 아이콘 스프라이트 (WhiteArrow 등)")]
@@ -1267,6 +1271,7 @@ public class MessagePanelManager : MonoBehaviour
         {
             chatInputArea.SetActive(true);
         }
+        if (chatPhoto != null) chatPhoto.Show(enabled);
 
         if (chatInput != null)
         {
@@ -2294,7 +2299,7 @@ public class MessagePanelManager : MonoBehaviour
         Text previewText = item.transform.Find("Content/PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            SetTextWithEllipsis(previewText, conv.lastMessage);
+            SetTextWithEllipsis(previewText, R0926ChatPhoto.Preview(conv.lastMessage));
         }
 
         // 시간 (Content 아래에 있음)
@@ -2762,6 +2767,16 @@ public class MessagePanelManager : MonoBehaviour
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
             contentText.text = content;
+            // 공지 속 웹 주소도 그 글자를 누르면 브라우저로
+            var links = R0926ChatLinks.Find(content);
+            if (links.Count > 0)
+            {
+                contentText.text = R0926ChatLinks.Style(content, links, false);
+                var bubbleImage = bubbleContainerTr != null ? bubbleContainerTr.GetComponent<Image>() : null;
+                if (bubbleImage != null) bubbleImage.raycastTarget = true;
+                var linkTap = bubble.AddComponent<DoubleTouchLikeHandler>();
+                linkTap.SetSingleTap(() => OpenLinkAt(contentText, content, links, linkTap));
+            }
             // 폰트만 설정 (프리팹에 없을 경우)
             if (chatFont != null && contentText.font == null)
                 contentText.font = chatFont;
@@ -3106,6 +3121,8 @@ public class MessagePanelManager : MonoBehaviour
     {
         SetLayerRecursively(item, 5);
         string huntTitle = SplitHuntHeader(msg.content, out string huntBody);
+        R0926ChatPhoto.Ref photoRef = huntTitle == null ? R0926ChatPhoto.TryParse(msg.content) : null;
+        var links = huntTitle == null && photoRef == null ? R0926ChatLinks.Find(msg.content) : null;
 
         // BubbleContainer 또는 Bubble 찾기
         Transform bubbleContainerTr = item.transform.Find("BubbleContainer");
@@ -3160,7 +3177,9 @@ public class MessagePanelManager : MonoBehaviour
         if (contentText != null)
         {
             // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
-            contentText.text = huntTitle != null ? HuntBubbleText(huntTitle, huntBody, isMine) : msg.content;
+            contentText.text = huntTitle != null ? HuntBubbleText(huntTitle, huntBody, isMine)
+                : links != null && links.Count > 0 ? R0926ChatLinks.Style(msg.content, links, isMine)
+                : msg.content;
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
             // 폰트만 설정 (프리팹에 없을 경우)
@@ -3286,6 +3305,11 @@ public class MessagePanelManager : MonoBehaviour
                 timeText.font = chatFont;
         }
 
+        // 사진 메시지 — 글 대신 사진을 넣는다 (크기는 주소에 적힌 가로·세로로 바로 정해진다)
+        R0926ChatPhotoBubble photoBubble = null;
+        if (photoRef != null && contentText != null && bubbleContainerTr != null)
+            photoBubble = R0926ChatPhotoBubble.Attach(item, bubbleContainerTr as RectTransform, contentText, photoRef, photoView);
+
         // 레이아웃 리빌드
         if (bubbleContainerTr != null)
         {
@@ -3334,8 +3358,12 @@ public class MessagePanelManager : MonoBehaviour
         {
             LikeMessage(messageId, rect);
         });
-        // 보물찾기에서 온 1:1 메세지 — 한 번 누르면 그 게임 상세로
-        likeHandler.SetSingleTap(huntTitle != null ? () => StartCoroutine(OpenHuntFromChat(huntTitle)) : (Action)null);
+        // 한 번 누름 — 보물찾기에서 온 1:1 메세지는 그 게임 상세로 · 사진은 크게 보기 · 글 속 주소는 브라우저로
+        likeHandler.SetSingleTap(
+            huntTitle != null ? () => StartCoroutine(OpenHuntFromChat(huntTitle))
+            : photoBubble != null ? photoBubble.Tap
+            : links != null && links.Count > 0 ? () => OpenLinkAt(contentText, msg.content, links, likeHandler)
+            : (Action)null);
 
         // 아바타 처리 (상대방 버블: 표시 + 프로필 열기 / 내 버블: 숨김)
         Transform avatarTr = item.transform.Find("AvatarContainer");
@@ -3602,6 +3630,7 @@ public class MessagePanelManager : MonoBehaviour
         if (myMessageBubblePrefab == null || chatMessageContent == null) return null;
 
         string userId = LoginManager.Instance?.CurrentUser?.id ?? "";
+        ShowChatEmptyState(false);   // 첫 말 — 빈 대화 안내가 말풍선과 겹쳐 남지 않게
 
         // 임시 DMMessage 생성
         DMMessage tempMsg = new DMMessage
@@ -3631,6 +3660,54 @@ public class MessagePanelManager : MonoBehaviour
             UIFeedbackManager.Instance.TriggerLightHaptic();
 
         return item;
+    }
+
+    private static void OpenLinkAt(Text label, string plain, List<R0926ChatLinks.Link> links, DoubleTouchLikeHandler tap)
+    {
+        string url = R0926ChatLinks.At(label, plain, links, tap.LastTap);
+        if (url != null) R0926ChatLinks.Open(url);
+    }
+
+    /// <summary>+ 버튼 — 사진을 보낼 상대. 로그인이 없으면 안내를 띄우고 null</summary>
+    public string PhotoPeer()
+    {
+        if (string.IsNullOrEmpty(currentChatUserId) || isAdminChat) return null;
+        return CheckLogin() ? currentChatUserId : null;
+    }
+
+    /// <summary>고른 사진을 내 말풍선으로 바로 그린다 — 이 사진(picked)은 말풍선이 가져간다</summary>
+    public R0926ChatPhotoBubble AddPendingPhotoBubble(Texture2D picked)
+    {
+        GameObject item = AddOptimisticMyBubble(" ");
+        Transform bubble = item != null ? item.transform.Find("BubbleContainer") ?? item.transform.Find("Bubble") : null;
+        Text text = bubble != null ? bubble.Find("ContentText")?.GetComponent<Text>() : null;
+        if (text == null)
+        {
+            if (item != null) Destroy(item);
+            Destroy(picked);
+            return null;
+        }
+        var ui = R0926ChatPhotoBubble.AttachLocal(item, bubble as RectTransform, text, picked, photoView);
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(bubble as RectTransform);
+        ScrollToBottom();
+        return ui;
+    }
+
+    /// <summary>올리기 끝 — 답보다 새 메시지 확인이 먼저 그 사진을 그렸으면 임시 말풍선을 지운다 (사진이 두 장이 되지 않게)</summary>
+    public void FinishPendingPhoto(R0926ChatPhotoBubble ui, int messageId, R0926ChatPhoto.Ref sent)
+    {
+        if (ui == null) return;
+        if (!renderedMessageIds.Add(messageId)) { Destroy(ui.gameObject); return; }
+        ui.Sent(sent);
+        Text readText = ui.transform.Find("ReadText")?.GetComponent<Text>();
+        if (readText != null) readText.text = "✓";
+        var likeHandler = ui.GetComponent<DoubleTouchLikeHandler>();
+        if (likeHandler != null)
+        {
+            likeHandler.Initialize(messageId, ui.transform as RectTransform, (id, rect) => LikeMessage(id, rect));
+            likeHandler.SetSingleTap(ui.Tap);
+        }
     }
 
     private IEnumerator SendMessageCoroutine(string recipientId, string content, GameObject optimisticBubble = null)
@@ -3700,7 +3777,7 @@ public class MessagePanelManager : MonoBehaviour
         }
     }
 
-    private static string SendFailReason(UnityWebRequest request)
+    public static string SendFailReason(UnityWebRequest request)
     {
         string body = request.downloadHandler != null ? request.downloadHandler.text ?? "" : "";
         if (request.responseCode == 401)
@@ -3798,10 +3875,10 @@ public class MessagePanelManager : MonoBehaviour
 
 #if UNITY_EDITOR
     public static string EditorBase;   // 플레이 시험 — 아이디 검색·팔로우·대화를 내 PC 시험 서버로 (운영 서버에 시험 아이디로 묻지 않게)
-    private static string SearchBase => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+    public static string SearchBase => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
     private static string Api(string url) => string.IsNullOrEmpty(EditorBase) ? url : EditorBase + url.Substring(ApiConfig.MAIN_SERVER.Length);
 #else
-    private static string SearchBase => ApiConfig.MAIN_SERVER;
+    public static string SearchBase => ApiConfig.MAIN_SERVER;
     private static string Api(string url) => url;
 #endif
 
