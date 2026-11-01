@@ -150,6 +150,7 @@ namespace Redesign0926
             else if (mode == "avatar") PlanAvatar();
             else if (mode == "follow") PlanFollow();
             else if (mode == "follownotif") PlanFollowNotif();
+            else if (mode == "chatnotif") PlanChatNotif();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
             else if (mode == "mapprofile") PlanMapProfile();
@@ -2193,6 +2194,159 @@ namespace Redesign0926
         }
 
         private static InputField ChatInputField() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.chatInput;
+
+        // 메시지·공지 알림을 누르면 그 대화방으로 (10-27 대표님 「'메세지' 가 왔을 때 해당 알림을 터치해서 앱이 켜지면 해당 메세지창으로 바로 이동」) — 서버가 보내는 값 그대로
+        private static void PlanChatNotif()
+        {
+            const string Dev = "http://127.0.0.1:5099", PeerA = "hunt_test_cna", PeerB = "hunt_test_cnb", NameA = "연남동이웃", NameB = "효자동이웃";
+            var dmA = new Dictionary<string, string> { { "msg_type", "dm" }, { "type", "dm" }, { "sender", NameA }, { "sender_username", NameA }, { "sender_id", PeerA }, { "message_id", "7" }, { "conversation_id", "7" } };
+            var dmB = new Dictionary<string, string> { { "msg_type", "dm" }, { "type", "dm" }, { "sender", NameB }, { "sender_username", NameB }, { "sender_id", PeerB }, { "message_id", "8" }, { "conversation_id", "8" } };
+            var notice = new Dictionary<string, string> { { "type", "admin_broadcast" }, { "sender_id", MessagePanelManager.WoopangId }, { "sender_username", "WOOPANG" } };
+            string Title() => Mpm()?.chatRoomTitle?.text ?? "";
+            bool Room(string id) => Mpm() != null && Mpm().IsChatRoomOpenForUser(id);
+            int LoadVer() => (int)typeof(MessagePanelManager).GetField("chatLoadVersion", NPI).GetValue(Mpm());
+            int ver = 0;
+
+            // 1) 앱이 켜지는 중 누름 — 시작화면이 걷힌 뒤 그 대화방 (시험 아이디 = 자동 로그인이 돌아온 것과 같다)
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                savedClipboard = EditorGUIUtility.systemCopyBuffer;
+                LoginManager.EditorAuthBase = Dev;
+                R0926HuntApi.EditorBase = Dev;
+                R0926HuntApi.EditorTestUser = "hunt_test_mpme";
+                MessagePanelManager.EditorBase = Dev;
+                ProfileManager.EditorBase = Dev;
+                FollowManager.EditorBase = Dev;
+                P2PManager.EditorBase = Dev;
+                FirebaseNotification.EditorBase = Dev;
+                log.Add("  누른 때 시작화면 " + BootOverlay.Showing);
+                R0926HuntPush.OpenChat(dmA);
+            });
+            Check(() => !Room(PeerA), "시작화면 위에서는 아직 열지 않는다");
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Wait(() => Room(PeerA), 12f, "켜지는 중 누른 알림 → 대화방");
+            Sleep(0.8f);
+            Shot("chatnotif_cold");
+            Check(() => Room(PeerA) && Title().Contains(NameA), "켜지는 중 누른 알림 → 시작화면이 걷힌 뒤 그 대화방");
+
+            // 2) 로그인이 없으면 — 메시지는 로그인 안내, 공지 방은 그대로 연다
+            Do(() => { Mpm().CloseAway(); R0926HuntApi.EditorTestUser = null; });
+            Sleep(0.6f);
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat(dmB));
+            Wait(() => Active("LoginPromptPanel"), 12f, "로그인 없이 누른 메시지 알림 → 안내");
+            Sleep(0.4f);
+            Shot("chatnotif_guest");
+            Check(() => Active("LoginPromptPanel") && !Active("ChatRoomPanel"), "로그인이 없으면 빈 대화방 대신 로그인 안내");
+            Do(() => BackNow());
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat(notice));
+            Wait(() => Room(MessagePanelManager.WoopangId), 12f, "로그인 없이 누른 공지 알림 → 공지 방");
+            Check(() => Room(MessagePanelManager.WoopangId) && Title().Contains("WOOPANG"), "공지 방은 로그인 없이도 연다");
+            Do(() => Mpm().CloseAway());
+            Sleep(0.5f);
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+
+            // 시험 서버로 로그인
+            Do(() =>
+            {
+                LoginManager.EditorBeforeWebLogin?.Invoke();
+                LoginManager.Instance.CloseLoginPrompt();
+            });
+            Sleep(0.3f);
+            Do(() => CopyLink("mpme"));
+            Wait(() => LoginManager.Instance.IsLoggedIn, 10f, "시험 로그인");
+            Do(() => { EditorGUIUtility.systemCopyBuffer = savedClipboard ?? ""; savedClipboard = null; });
+            Sleep(2.0f);
+            Check(() => LoginManager.Instance.IsLoggedIn, "시험 로그인 됨");
+
+            // 3) 다른 알림은 이 길로 안 간다
+            Check(() => !R0926HuntPush.OpenChat(new Dictionary<string, string> { { "msg_type", "hunt_new" }, { "hunt_id", "1" } })
+                     && !R0926HuntPush.OpenChat(new Dictionary<string, string> { { "notification_type", "follow" }, { "from_username", NameA } })
+                     && !R0926HuntPush.OpenChat(new Dictionary<string, string> { { "type", "like" } })
+                     && !R0926HuntPush.OpenChat(null) && !HuntPushPending(), "보물찾기·팔로우·좋아요 알림은 대화방 길로 안 감");
+
+            // 4) 추가 창을 연 채 누름 → 추가 창까지 닫고 그 대화방
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.4f);
+            Check(() => Active("UploadPage"), "준비: 추가 창 열림");
+            Check(() => R0926HuntPush.OpenChat(dmA), "메시지 알림 → 대화방 길");
+            Wait(() => Room(PeerA), 8f, "대화방 열림");
+            Sleep(0.8f);
+            Shot("chatnotif_open");
+            Do(() => log.Add("  열린 창: " + OpenPanels() + " · 제목 " + Title()));
+            Check(() => Room(PeerA) && !Active("UploadPage"), "추가 창은 닫히고 그 대화방만");
+            Check(() => Title().Contains(NameA), "제목 = 보낸 사람");
+            Check(() => OnScreen("ChatRoomPanel/Clip0926/Background"), "대화방이 화면 안");
+            Check(() => ChatInputField() != null && ChatInputField().interactable, "입력칸 켜짐");
+            Check(() => { R0926HuntPush.OpenChat(dmA); return !HuntPushPending(); }, "같은 알림이 두 길로 와도(FCM 콜백 · 인텐트) 한 번만");
+
+            // 5) 그 방을 보는 중 또 눌러도 그대로 · 다른 사람 알림이면 그 방으로
+            Do(() => ver = LoadVer());
+            Sleep(10.2f);
+            Do(() => R0926HuntPush.OpenChat(dmA));
+            Sleep(1.2f);
+            Check(() => Room(PeerA) && LoadVer() == ver, "그 방을 보는 중 같은 사람 알림 → 그대로 (다시 안 불러옴)");
+            Do(() => R0926HuntPush.OpenChat(dmB));
+            Wait(() => Room(PeerB), 8f, "다른 사람 알림 → 그 방");
+            Sleep(0.6f);
+            Check(() => Room(PeerB) && Title().Contains(NameB) && !Active("MessagePanel"), "다른 방을 보는 중 누름 → 그 사람 대화방으로 옮김");
+
+            // 6) 뒤로 → 메시지 목록 → 메인
+            Do(() => Click("ChatRoomPanel/Clip0926/Background/Header/BackButton/ClosePx0926"));
+            Wait(() => Active("MessagePanel") && !Active("ChatRoomPanel"), 5f, "뒤로 → 메시지 목록");
+            Sleep(0.8f);
+            Shot("chatnotif_back");
+            Check(() => Active("MessagePanel") && !Active("ChatRoomPanel"), "알림으로 연 방에서 뒤로 → 메시지 목록");
+
+            // 7) 메시지 목록을 보는 중 누름 → 그 방 (목록은 뒤에 남지 않는다)
+            Check(() => R0926HuntPush.OpenChat(dmA), "목록을 보는 중 메시지 알림");
+            Wait(() => Room(PeerA), 8f, "목록 → 그 방");
+            Sleep(0.8f);
+            Check(() => Room(PeerA) && !Active("MessagePanel"), "목록을 보는 중 누름 → 그 방");
+            Do(() => Mpm().CloseAway());
+            Sleep(0.6f);
+
+            // 8) 프로필을 보는 중 공지 알림 → 공지 방 (입력칸 꺼짐)
+            Do(() => typeof(ProfileManager).GetMethod("ShowProfilePanel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(ProfileManager.Instance, new object[] { new ProfileData { id = PeerA, username = "연남동이웃", bio = "" } }));   // 시험 서버엔 이 이웃의 프로필이 없다 — 서버가 줄 답을 그대로
+            Wait(() => Active("FullProfilePanel"), 6f, "준비: 프로필 열림");
+            Sleep(0.6f);
+            Check(() => Active("FullProfilePanel"), "준비: 프로필 열림");
+            Check(() => R0926HuntPush.OpenChat(notice), "공지 알림 → 대화방 길");
+            Wait(() => Room(MessagePanelManager.WoopangId), 8f, "공지 방 열림");
+            Sleep(0.8f);
+            Shot("chatnotif_notice");
+            Check(() => Room(MessagePanelManager.WoopangId) && Title().Contains("WOOPANG") && !Active("FullProfilePanel"), "프로필은 닫히고 공지 방");
+            Check(() => ChatInputField() != null && !ChatInputField().interactable, "공지 방은 입력칸 꺼짐");
+
+            // 9) 공지 알림에 보낸 사람이 없어도 WOOPANG 방으로
+            Do(() => R0926HuntPush.OpenChat(dmB));
+            Wait(() => Room(PeerB), 8f, "다시 메시지 방");
+            Sleep(0.4f);
+            Do(() => R0926HuntPush.OpenChat("admin_broadcast", null, null));
+            Wait(() => Room(MessagePanelManager.WoopangId), 8f, "보낸 사람 없는 공지 → 공지 방");
+            Sleep(0.4f);
+            Check(() => Room(MessagePanelManager.WoopangId) && Title().Contains("WOOPANG"), "보낸 사람 없는 공지도 WOOPANG 방으로");
+
+            Do(() =>
+            {
+                Mpm().CloseAway();
+                LoginManager.EditorAuthBase = null;
+                R0926HuntApi.EditorBase = null;
+                MessagePanelManager.EditorBase = null;
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                P2PManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+            });
+        }
 
         private static void PlanChatLook()
         {
@@ -13435,6 +13589,7 @@ namespace Redesign0926
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
                     if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
+                    if (pl.Length > 1 && pl[1].Trim() == "chatnotif") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim().StartsWith("lang_")) { AppLanguage.EditorOverride = pl[1].Trim().Substring(5); StashLogin(); }   // 기기 언어를 바꿔 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();

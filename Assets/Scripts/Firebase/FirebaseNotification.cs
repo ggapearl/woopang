@@ -143,6 +143,7 @@ public class FirebaseNotification : MonoBehaviour
 
     // 클릭 시 열 대화 정보
     private string pendingOpenUserId;
+    private bool tappedChat;   // 눌러서 앱을 켠 메시지 알림을 처리하는 중 — 곧 그 대화방이 열리니 배너를 띄우지 않는다
     private string pendingOpenUsername;
 
     public static FirebaseNotification GetInstance()
@@ -199,7 +200,8 @@ public class FirebaseNotification : MonoBehaviour
         var notification = Unity.Notifications.iOS.iOSNotificationCenter.GetLastRespondedNotification();
         if (notification != null) lastRespondedId = notification.Identifier;
         if (notification != null && R0926HuntPush.Open(notification.UserInfo)) notification = null;   // 보물찾기 알림을 눌러 켜졌으면 그 게임으로
-        else if (notification != null) R0926HuntPush.OpenFollow(notification.UserInfo);              // 새 팔로워 알림이면 내 팔로워 탭으로 (알림함에도 넣는다)
+        else if (notification != null && !R0926HuntPush.OpenFollow(notification.UserInfo)              // 새 팔로워 알림이면 내 팔로워 탭으로 (알림함에도 넣는다)
+                 && R0926HuntPush.OpenChat(notification.UserInfo)) tappedChat = true;                  // 메시지·공지 알림이면 그 대화방으로 (대화 목록엔 넣고 배너는 띄우지 않는다)
         StartCoroutine(WatchResponded());
         if (notification != null)
         {
@@ -241,6 +243,7 @@ public class FirebaseNotification : MonoBehaviour
             }
 
             ProcessNativeMessage(title, body, targetLat, targetLon, radius, msgType, senderId, senderUsername);
+            tappedChat = false;
         }
 #endif
 
@@ -762,8 +765,8 @@ public class FirebaseNotification : MonoBehaviour
             return;
         }
 
-        // 새 팔로워 — 알림바에서 눌러 열렸으면 내 팔로워 탭으로 (메세지 탭 알림 줄은 아래에서 그대로 넣는다)
-        if (e.Message.NotificationOpened) R0926HuntPush.OpenFollow(e.Message.Data);
+        // 새 팔로워·메시지 — 알림바에서 눌러 열렸으면 내 팔로워 탭 / 그 대화방으로 (메세지 탭에 넣는 일은 아래에서 그대로)
+        if (e.Message.NotificationOpened && !R0926HuntPush.OpenFollow(e.Message.Data)) R0926HuntPush.OpenChat(e.Message.Data);
 
         trayOpened = e.Message.NotificationOpened;
         try
@@ -934,7 +937,8 @@ public class FirebaseNotification : MonoBehaviour
                         FireTime = System.DateTime.Now.AddSeconds(0.5f),
                         SmallIcon = NotifIcon,
                         ShouldAutoCancel = true,
-                        Group = "woopang_dm"
+                        Group = "woopang_dm",
+                        IntentData = "dm|" + senderId + "|" + senderUsername   // 누르면 CheckBackgroundNotification 이 그 대화방으로
                     };
 
                     int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
@@ -1003,7 +1007,8 @@ public class FirebaseNotification : MonoBehaviour
                     FireTime = System.DateTime.Now,
                     SmallIcon = NotifIcon,
                     ShouldAutoCancel = true,
-                    Group = "woopang_admin"
+                    Group = "woopang_admin",
+                    IntentData = "admin_broadcast|" + adminSenderId + "|WOOPANG"
                 };
                 int adminNotifId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
                 PostLocal(adminNotif);
@@ -1194,7 +1199,8 @@ public class FirebaseNotification : MonoBehaviour
                         FireTime = System.DateTime.Now.AddSeconds(0.5f),
                         SmallIcon = NotifIcon,
                         ShouldAutoCancel = true,
-                        Group = "woopang_dm"
+                        Group = "woopang_dm",
+                        IntentData = "dm|" + senderId + "|" + senderUsername   // 누르면 CheckBackgroundNotification 이 그 대화방으로
                     };
 
                     int dmNotificationId = (int)(System.DateTime.Now.Ticks % int.MaxValue);
@@ -1310,15 +1316,16 @@ public class FirebaseNotification : MonoBehaviour
     {
 #if UNITY_ANDROID
         var notificationIntent = AndroidNotificationCenter.GetLastNotificationIntent();
-        // 앱이 띄운 보물찾기·새 팔로워 알림을 눌러 들어왔으면 그 게임 / 내 팔로워 탭으로 (알림함엔 넣지 않는다 — 새 팔로워는 받을 때 넣었다)
+        // 앱이 띄운 보물찾기·새 팔로워·메시지 알림을 눌러 들어왔으면 그 게임 / 내 팔로워 탭 / 그 대화방으로 (알림함엔 넣지 않는다 — 받을 때 넣었다)
         string tapIntent = notificationIntent?.Notification.IntentData;
-        if (tapIntent != null && (tapIntent.StartsWith("hunt|") || tapIntent.StartsWith("follow|")))
+        if (tapIntent != null && (tapIntent.StartsWith("hunt|") || tapIntent.StartsWith("follow|") || tapIntent.StartsWith("dm|") || tapIntent.StartsWith("admin_broadcast|")))
         {
             if (notificationIntent.Id != handledTapIntent)
             {
                 handledTapIntent = notificationIntent.Id;
                 var p = tapIntent.Split('|');
                 if (p[0] == "follow") R0926HuntPush.OpenFollowers(tapIntent.Substring("follow|".Length), false);
+                else if (R0926HuntPush.IsChat(p[0])) { if (p.Length >= 3) R0926HuntPush.OpenChat(p[0], p[1], tapIntent.Substring(p[0].Length + p[1].Length + 2)); }
                 else if (p.Length >= 4) R0926HuntPush.Open(p[1], p[2], p[3] == "1");
             }
             yield break;
@@ -1357,8 +1364,8 @@ public class FirebaseNotification : MonoBehaviour
     }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-    // 서버 FCM 알림을 알림바에서 눌러 앱이 열리면 그 알림 내용(msg_type·hunt_id … / notification_type·from_username)이 인텐트에 실려 온다 —
-    // FCM 콜백(NotificationOpened)이 늦거나 오지 않아도 그 게임 / 내 팔로워 탭으로 (두 길로 와도 R0926HuntPush 가 한 번만 연다)
+    // 서버 FCM 알림을 알림바에서 눌러 앱이 열리면 그 알림 내용(msg_type·hunt_id … / notification_type·from_username / type·sender_id·sender_username)이 인텐트에 실려 온다 —
+    // FCM 콜백(NotificationOpened)이 늦거나 오지 않아도 그 게임 / 내 팔로워 탭 / 그 대화방으로 (두 길로 와도 R0926HuntPush 가 한 번만 연다)
     private static void CheckLaunchIntent()
     {
         try
@@ -1378,6 +1385,11 @@ public class FirebaseNotification : MonoBehaviour
                     R0926HuntPush.OpenFollowers(intent.Call<string>("getStringExtra", "from_username"), false);
                     intent.Call("removeExtra", "notification_type");
                 }
+                else if (R0926HuntPush.IsChat(intent.Call<string>("getStringExtra", "type")))
+                {
+                    R0926HuntPush.OpenChat(intent.Call<string>("getStringExtra", "type"), intent.Call<string>("getStringExtra", "sender_id"), intent.Call<string>("getStringExtra", "sender_username"));
+                    intent.Call("removeExtra", "type");
+                }
             }
         }
         catch (Exception ex)
@@ -1395,7 +1407,7 @@ public class FirebaseNotification : MonoBehaviour
         var notification = Unity.Notifications.iOS.iOSNotificationCenter.GetLastRespondedNotification();
         if (notification == null || notification.Identifier == lastRespondedId) return;
         lastRespondedId = notification.Identifier;
-        if (!R0926HuntPush.Open(notification.UserInfo)) R0926HuntPush.OpenFollow(notification.UserInfo);
+        if (!R0926HuntPush.Open(notification.UserInfo) && !R0926HuntPush.OpenFollow(notification.UserInfo)) R0926HuntPush.OpenChat(notification.UserInfo);
     }
 
     private IEnumerator WatchResponded()
@@ -1742,7 +1754,7 @@ public class FirebaseNotification : MonoBehaviour
                 manager.AddOrUpdateConversationFromPush(senderId, senderUsername, messageContent);
 
                 // chatRoomPanel에서 해당 상대와 대화 중이면 인앱 배너 억제
-                if (!manager.IsChatRoomOpenForUser(senderId))
+                if (!tappedChat && !manager.IsChatRoomOpenForUser(senderId))
                 {
                     ShowInAppNotification(title, body, senderId, senderUsername);
                 }
@@ -1779,7 +1791,7 @@ public class FirebaseNotification : MonoBehaviour
             // iOS 포그라운드에서 인앱 배너 표시 (관리자 채팅방 열려있으면 억제)
             if (Application.isFocused)
             {
-                if (manager == null || !manager.IsChatRoomOpenForUser(adminSenderId))
+                if (!tappedChat && (manager == null || !manager.IsChatRoomOpenForUser(adminSenderId)))
                 {
                     ShowInAppNotification(title, body, adminSenderId, adminSenderName);
                 }

@@ -1565,7 +1565,7 @@ public class MessagePanelManager : MonoBehaviour
     // ── WOOPANG 은 대화 하나 (10-21 대표님: 관리자 메세지가 같은 아이디로 두 줄 보였다) ──
     // 서버 공지(userId "3")와 이 기기에 온 알림(업로드 완료·위치·새 팔로워)이 예전엔 알림마다 'WOOPANG' 줄을 따로 그렸다.
     // 이제 목록엔 한 줄(가장 최근 것 · 안 읽음 합계)만, 누르면 둘을 시간순으로 모은 WOOPANG 대화방이 옆으로 열린다
-    private const string WoopangId = "3";
+    public const string WoopangId = "3";
 
     private struct WoopangLine { public DateTime at; public int seq; public string time, text, followFrom; }
 

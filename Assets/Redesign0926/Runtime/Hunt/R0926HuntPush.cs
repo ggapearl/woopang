@@ -16,6 +16,7 @@ using UnityEngine.UI;
 /// 추가 창이 켜진 채 연 프로필(카드의 주최자 · 별점 알림)은 추가 창 위로 올린다 — 프로필 창이 캔버스에서 추가 창보다 앞 순서라 뒤에 가려졌다.
 /// 새 팔로워 알림(notification_type=follow)도 같은 길로 — 덮인 창을 추가 창까지 닫고 내 팔로워 탭을 연다. 그 사람은 맨 위에 두고 잠깐 밝힌다 (B8, 10-18).
 /// 공유 링크(woopang://hunt?id=…&amp;c=… — woopang.com/hunt/&lt;번호&gt; 의 '우팡 앱에서 열기')로 열려도 같은 길로 — 코드가 있으면 바로 참가 (10-26).
+/// 메시지·공지 알림(type=dm · admin_broadcast)도 같은 길로 — 덮인 창을 추가 창까지 닫고 그 대화방을 연다 (L12).
 /// </summary>
 public class R0926HuntPush : MonoBehaviour
 {
@@ -33,6 +34,8 @@ public class R0926HuntPush : MonoBehaviour
     private static float lastAt = -99f;
     private static bool pendingLink;        // 공유 링크로 열림 — 상세 대신 R0926HuntCard.OpenLink (코드가 있으면 바로 참가)
     private static string pendingLinkCode;
+    private static bool pendingChat;        // 보물찾기 대신 그 사람과의 대화방으로
+    private static string pendingChatUser, pendingChatName;
 
     private bool running;
     private float readySince = -1f;
@@ -65,6 +68,7 @@ public class R0926HuntPush : MonoBehaviour
         pendingProfile = toProfile;
         pendingFollow = false;
         pendingLink = false;
+        pendingChat = false;
         pending = true;
     }
 
@@ -83,6 +87,7 @@ public class R0926HuntPush : MonoBehaviour
         pendingFollow = false;
         pendingLink = true;
         pendingLinkCode = code;
+        pendingChat = false;
         pending = true;
         return true;
     }
@@ -134,6 +139,40 @@ public class R0926HuntPush : MonoBehaviour
         pendingFollower = fromUsername;
         pendingFollow = true;
         pendingLink = false;
+        pendingChat = false;
+        pending = true;
+    }
+
+    public static bool IsChat(string type) => type == "dm" || type == "admin_broadcast";
+
+    /// <summary>메시지·공지 알림 데이터(type · sender_id · sender_username)면 그 대화방으로. 아니면 false</summary>
+    public static bool OpenChat(IDictionary<string, string> data)
+    {
+        if (data == null || !data.TryGetValue("type", out var type) || !IsChat(type)) return false;
+        data.TryGetValue("sender_id", out var id);
+        data.TryGetValue("sender_username", out var name);
+        OpenChat(type, id, name);
+        return true;
+    }
+
+    /// <summary>알림을 누름 — 그 대화방을 연다. 같은 알림이 두 길로 와도 한 번만. 공지는 보낸 사람이 없어도 WOOPANG 방으로</summary>
+    public static void OpenChat(string type, string userId, string username)
+    {
+        if (type == "admin_broadcast")
+        {
+            if (string.IsNullOrEmpty(userId)) userId = MessagePanelManager.WoopangId;
+            if (string.IsNullOrEmpty(username)) username = "WOOPANG";
+        }
+        if (string.IsNullOrEmpty(userId)) return;
+        string key = "chat|" + userId;
+        if (key == lastKey && Time.realtimeSinceStartup - lastAt < 10f) return;
+        lastKey = key;
+        lastAt = Time.realtimeSinceStartup;
+        pendingChatUser = userId;
+        pendingChatName = username;
+        pendingChat = true;
+        pendingFollow = false;
+        pendingLink = false;
         pending = true;
     }
 
@@ -145,6 +184,7 @@ public class R0926HuntPush : MonoBehaviour
         pendingProfile = false;
         pendingFollow = false;
         pendingLink = false;
+        pendingChat = false;
         pending = true;
     }
 
@@ -160,8 +200,8 @@ public class R0926HuntPush : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetOnLaunch()
     {
-        pending = pendingProfile = pendingFollow = pendingLink = false;
-        pendingHunt = pendingHost = pendingFollower = pendingLinkCode = lastKey = null;
+        pending = pendingProfile = pendingFollow = pendingLink = pendingChat = false;
+        pendingHunt = pendingHost = pendingFollower = pendingLinkCode = pendingChatUser = pendingChatName = lastKey = null;
         lastAt = -99f;
     }
 
@@ -221,16 +261,29 @@ public class R0926HuntPush : MonoBehaviour
         pending = false;
         string hunt = pendingHunt, host = pendingHost, follower = pendingFollower;
         bool toProfile = pendingProfile, toFollowers = pendingFollow, link = pendingLink;
-        string linkCode = pendingLinkCode;
-        pendingFollow = pendingLink = false;
-        pendingLinkCode = null;
+        string linkCode = pendingLinkCode, chatUser = pendingChatUser, chatName = pendingChatName;
+        bool toChat = pendingChat;
+        pendingFollow = pendingLink = pendingChat = false;
+        pendingLinkCode = pendingChatUser = pendingChatName = null;
+        var messages = MessagePanelManager.Instance;
+        if (toChat && messages != null && messages.IsChatRoomOpenForUser(chatUser)) { running = false; yield break; }   // 이미 그 대화방을 보고 있다
+        if (toChat && chatUser != MessagePanelManager.WoopangId && !R0926HuntApi.CanCall)   // 로그인이 끝내 안 돌아왔다 — 빈 대화방 대신 로그인 안내 (공지 방은 로그인 없이도 읽는다)
+        {
+            if (LoginManager.Instance != null) LoginManager.Instance.ShowLoginRequirementPopup();
+            running = false;
+            yield break;
+        }
         // 프로필·팔로우 목록·대화방은 열어 준 곳으로 돌아가지 않고 바로 닫는다 — 팔로우 목록 → 프로필, 대화방 → 메시지 목록이
         // 닫히며 앞 창을 되살려 상세 위에 겹쳤다 (10-13 대표님). 나머지 창은 뒤로가기 순서대로
         if (FollowManager.Instance != null) FollowManager.Instance.CloseAway();
         if (ProfileManager.Instance != null) ProfileManager.Instance.CloseAway();
         if (MessagePanelManager.Instance != null) MessagePanelManager.Instance.CloseAway();
-        yield return CloseCovering(!toFollowers);   // 팔로워 탭은 추가 창까지 닫고 연다 (닫기를 누르면 메인으로)
-        if (toFollowers)
+        yield return CloseCovering(!toFollowers && !toChat);   // 팔로워 탭·대화방은 추가 창까지 닫고 연다 (닫기를 누르면 메인으로)
+        if (toChat)
+        {
+            if (messages != null) messages.OpenChatRoom(chatUser, chatName, null, chatUser == MessagePanelManager.WoopangId);
+        }
+        else if (toFollowers)
         {
             var me = LoginManager.Instance != null ? LoginManager.Instance.CurrentUser : null;
 #if UNITY_EDITOR
