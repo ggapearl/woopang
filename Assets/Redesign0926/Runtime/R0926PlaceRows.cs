@@ -106,6 +106,7 @@ public class R0926PlaceRows : MonoBehaviour
     private static readonly Regex RowRx =
         new Regex(@"^<color=#([0-9A-Fa-f]{6,8})>(.*) - (\d+)m</color>$", RegexOptions.Compiled);
     private static readonly Regex StatRx = new Regex(@"^(.+?):\s*(\d+)$", RegexOptions.Compiled);
+    private static readonly Regex EnglishNamed = new Regex(@"[A-Za-z].*\([가-힣0-9\s]+\)\s*$", RegexOptions.Compiled);
 
     private readonly List<Row> rows = new List<Row>();
     private Dictionary<string, Sprite> kindIconMap;
@@ -160,6 +161,11 @@ public class R0926PlaceRows : MonoBehaviour
         }
         if (rowTemplate != null) rowTemplate.SetActive(false);
         korean = R0926LocalizedText.Lang() == "ko";
+        if (summaryText != null)
+        {
+            summaryText.resizeTextMaxSize = summaryText.fontSize;
+            summaryText.resizeTextMinSize = 26;
+        }
         ResolveRefs();
     }
 
@@ -309,8 +315,8 @@ public class R0926PlaceRows : MonoBehaviour
                 SetHuntGlow(r, kind == PlaceListManager.EntryKind.Hunt ? huntRows++ : -1);
                 if (known && e.promo) R0926Nearby.AdView(this, e.adId, "festival");   // 광고 줄은 축제 칩에만 온다
                 string label = key;
-                // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움)
-                string roman = korean ? null : R0926Romanizer.Romanize(label);
+                // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움) — 'Seoul (Station) (서울역)' 처럼 영어 이름이 이미 있으면 그대로
+                string roman = korean || EnglishNamed.IsMatch(label) ? null : R0926Romanizer.Romanize(label);
                 r.name.text = roman == null ? label : label + "  <color=#6F7880>" + roman + "</color>";
                 r.name.color = known && e.pet ? PetName : r.nameColor;
                 if (r.key != key) { r.key = key; r.dir = -2; r.noteUntil = 0f; r.flashUntil = 0f; }   // 다른 장소가 이 줄로 왔다 — 방향을 새로
@@ -337,7 +343,11 @@ public class R0926PlaceRows : MonoBehaviour
         RefreshDirections();   // 거리 칸은 여기서 쓴다 (방향과 함께)
 
         if (countText != null) countText.text = used > 0 ? used.ToString() : "";
-        if (summaryText != null) summaryText.text = message ?? sb.ToString();
+        if (summaryText != null)
+        {
+            summaryText.resizeTextForBestFit = message == null;   // 종류가 많은 날 뒤쪽이 줄 밖으로 사라지지 않게 — 넘칠 때만 글자를 줄인다
+            summaryText.text = message ?? sb.ToString();
+        }
         SetSkeleton(used == 0 && message == null && Application.isPlaying && Time.unscaledTime - openedAt <= skeletonTimeout);
     }
 

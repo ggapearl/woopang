@@ -68,10 +68,8 @@ public class ARSessionRecovery : MonoBehaviour
             {
                 if (ToastManager.Instance != null)
                 {
-                    bool isKo = Application.systemLanguage == SystemLanguage.Korean;
-                    string msg = isKo
-                        ? $"AR 세션 복구 중... ({attempt}/{maxGpsRetries})"
-                        : $"Recovering AR session... ({attempt}/{maxGpsRetries})";
+                    string msg = R0926LocalizedText.Say("AR 세션 복구 중...", "Recovering AR session...", "ARセッションを復旧中...", "正在恢复 AR 会话...", "Recuperando la sesión AR...")
+                        + $" ({attempt}/{maxGpsRetries})";
                     ToastManager.Instance.ShowWarning(msg);
                 }
                 yield return new WaitForSeconds(retryInterval);
@@ -81,10 +79,11 @@ public class ARSessionRecovery : MonoBehaviour
         // maxGpsRetries회 모두 실패 — 최종 안내 (실외 이동 권장)
         if (ToastManager.Instance != null)
         {
-            bool isKo = Application.systemLanguage == SystemLanguage.Korean;
-            string msg = isKo
-                ? "GPS 신호를 찾지 못하였습니다.\n실외 또는 신호가 잡히는 곳으로 이동해주세요."
-                : "GPS signal not found.\nPlease move outdoors or to an area with signal.";
+            string msg = R0926LocalizedText.Say("GPS 신호를 찾지 못하였습니다.\n실외 또는 신호가 잡히는 곳으로 이동해주세요.",
+                "GPS signal not found.\nPlease move outdoors or to an area with signal.",
+                "GPS信号が見つかりません。\n屋外か電波の届く場所へ移動してください。",
+                "未找到 GPS 信号。\n请移到室外或信号良好的地方。",
+                "No se encontró señal GPS.\nMuévete al exterior o a una zona con señal.");
             ToastManager.Instance.ShowError(msg);
         }
         ShowErrorMessage("GPS signal not found after retries.");

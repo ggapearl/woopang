@@ -1073,7 +1073,7 @@ public class FirstTimeGuide : MonoBehaviour
 
     private string GetLanguageCode()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean: return "ko";
             case SystemLanguage.Japanese: return "ja";

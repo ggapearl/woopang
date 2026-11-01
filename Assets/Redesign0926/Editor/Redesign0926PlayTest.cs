@@ -56,7 +56,7 @@ namespace Redesign0926
             var lines = File.ReadAllLines(PlanPath);
             string mode = lines.Length > 1 ? lines[1].Trim() : "";
             // 스토어 캡처는 날씨를 광화문 좌표로 넣는다 — 판의 지역 이름도 그 자리로 (에디터 위치의 지역이 찍혔다)
-            R0926SkyWeather.EditorRegionOverride = mode == "store" || mode == "store2" || mode == "store3" || mode == "sky" || mode == "skypages" || mode == "ar" ? StoreRegion : null;
+            R0926SkyWeather.EditorRegionOverride = mode == "store" || mode == "store2" || mode == "store3" || mode == "sky" || mode == "skypages" || mode == "ar" || mode.StartsWith("lang_") ? StoreRegion : null;
             // 기기 화면과 UI 바탕(캔버스)의 크기가 다르면 자리 시험이 전부 어긋난다 — 먼저 확인하고, 어긋났으면 시뮬레이터를 주 화면으로 다시 맞춘 뒤 다시 잰다
             // (10-19: UI 가 숨은 Game 탭 크기 877x646 으로 깔려 왼쪽 아래 구석에 작게 그려졌다)
             string firstScreen = null;
@@ -122,6 +122,7 @@ namespace Redesign0926
             else if (mode == "loginswitch") PlanLoginSwitch();
             else if (mode == "authexpire") PlanAuthExpire();
             else if (mode == "chatlook") PlanChatLook();
+            else if (mode.StartsWith("lang_")) { VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f); PlanLang(); }
             else if (mode == "v24") PlanV24();
             else if (mode == "farfade") PlanFarFade();
             else if (mode == "nudge") PlanNudge();
@@ -6644,7 +6645,7 @@ namespace Redesign0926
             Action<SwipeToDeleteHandler> swTap = h => h.transform.Find("DeleteButton").GetComponent<Button>().onClick.Invoke();
             Func<string> preview = () => dt != null && dt.previewText != null ? dt.previewText.text : null;
             Func<string> none = () => R0926LocalizedText.Say("아직 댓글이 없습니다. 첫 댓글을 남겨보세요!", "No comments yet. Be the first to comment!",
-                "コメントはまだありません。最初のコメントを残してください！", "暂无评论。快来抢沙发吧！", "Aún no hay comentarios. ¡Sé el primero en comentar!");
+                "コメントはまだありません。最初の一言をどうぞ！", "暂无评论。快来抢沙发吧！", "Aún no hay comentarios. ¡Sé el primero en comentar!");
             Func<string, string> row = code => Find(Sheet + "/Card0926/Reason_" + code + "/Label0926")?.GetComponent<Text>()?.text;
             Func<SwipeToClose> behind = () => cm != null && cm.commentPanel != null ? cm.commentPanel.GetComponent<SwipeToClose>() : null;
             Func<DevCommentState> state = () =>
@@ -13061,12 +13062,361 @@ namespace Redesign0926
         private static void Remember(string path) { var rt = Find(path) as RectTransform; if (rt != null) remembered = rt.anchoredPosition; }
         private static bool SamePlace(string path) { var rt = Find(path) as RectTransform; return rt != null && Vector2.Distance(rt.anchoredPosition, remembered) < 1f; }
 
+        // ── 각 나라 언어 점검 — 기기 언어를 바꿔 켠 뒤(lang_ko · en · ja · zh · es) 화면을 돌며 보이는 글자를 모은다 ──
+        // <폴더>/texts.tsv : 화면 · 경로 · 글 (언어끼리 견줘 미번역을 찾는다) · 한글이 남은 칸은 결과에 KO 줄로
+        // <폴더>/scene_ko.tsv : 켜 두지 않은 칸까지 — 번역 부품 없이 한글이 든 글자 (코드가 덮어쓰는지는 따로 본다)
+        private static readonly HashSet<string> langSeen = new HashSet<string>();
+        private static bool HasHangul(string s)
+        {
+            foreach (char c in s) if (c >= 0xAC00 && c <= 0xD7A3) return true;
+            return false;
+        }
+        private static float GroupAlpha(Transform t)
+        {
+            float a = 1f;
+            for (; t != null; t = t.parent)
+            {
+                var g = t.GetComponent<CanvasGroup>();
+                if (g == null) continue;
+                a *= g.alpha;
+                if (g.ignoreParentGroups) break;
+            }
+            return a;
+        }
+        // 글이 칸을 넘는가 — 세로로 잘리거나(칸 높이 < 글 높이) 한 줄 글이 화면 밖으로 나간다
+        private static string TextCut(Text t)
+        {
+            if (t.canvas == null) return null;
+            if (t.resizeTextForBestFit)
+            {
+                float used = t.cachedTextGenerator.fontSizeUsedForBestFit / t.pixelsPerUnit;
+                return used > 0f && used <= t.resizeTextMinSize + 0.5f ? "가장 작은 글자 " + t.resizeTextMinSize : null;
+            }
+            var r = t.rectTransform.rect;
+            if (t.verticalOverflow == VerticalWrapMode.Truncate && t.preferredHeight > r.height + 2f)
+                return "높이 " + Mathf.RoundToInt(t.preferredHeight) + ">" + Mathf.RoundToInt(r.height);
+            if (t.canvas.renderMode != RenderMode.ScreenSpaceOverlay) return null;
+            if (t.horizontalOverflow == HorizontalWrapMode.Wrap && t.verticalOverflow == VerticalWrapMode.Truncate)
+            {
+                // 줄바꿈이 없는 한 낱말이 칸보다 길면 글자 단위로 끊긴다 — 잘리진 않아 넘어간다
+                return null;
+            }
+            if (t.horizontalOverflow != HorizontalWrapMode.Overflow) return null;
+            float a = t.alignment == TextAnchor.UpperLeft || t.alignment == TextAnchor.MiddleLeft || t.alignment == TextAnchor.LowerLeft ? 0f
+                    : t.alignment == TextAnchor.UpperRight || t.alignment == TextAnchor.MiddleRight || t.alignment == TextAnchor.LowerRight ? 1f : 0.5f;
+            var c = new Vector3[4];
+            t.rectTransform.GetWorldCorners(c);
+            float w = c[2].x - c[0].x, pw = t.preferredWidth * t.rectTransform.lossyScale.x;
+            float left = c[0].x + a * (w - pw), right = left + pw;
+            return left < -1f || right > Screen.width + 1f ? "화면 밖 " + Mathf.RoundToInt(left) + "~" + Mathf.RoundToInt(right) + " / " + Screen.width : null;
+        }
+        private static void ScanTexts(string where)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Text>(FindObjectsInactive.Exclude))
+            {
+                if (string.IsNullOrEmpty(t.text) || !t.enabled || t.color.a < 0.03f || GroupAlpha(t.transform) < 0.03f) continue;
+                string p = PathOf(t.transform), s = t.text.Replace("\n", " / ").Replace("\t", " ");
+                if (!langSeen.Add(p + "|" + s)) continue;
+                sb.Append(where).Append('\t').Append(p).Append('\t').Append(s).Append('\n');
+                if (HasHangul(s) && AppLanguage.EditorOverride != "ko") log.Add("KO [" + where + "] " + p + " :: " + s);
+                string cut = TextCut(t);
+                if (cut != null) File.AppendAllText(Path.Combine(dir, "cut.tsv"), where + "\t" + p + "\t" + cut + "\t" + s + "\n");
+            }
+            File.AppendAllText(Path.Combine(dir, "texts.tsv"), sb.ToString());
+        }
+        private static void See(string where)
+        {
+            Sleep(0.4f);
+            Do(() => ScanTexts(where));
+            Shot("lang_" + where);
+        }
+        private static void PlanLang()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const string H = HuntCardPath, C = SetPath + "Viewport/Content/", Report = "CommentPanel_HQ/CommentReportSheet0926";
+            R0926SkyWeather sky = null;
+            R0926SkyPages pg = null;
+            DoubleTap3D dt = null;
+            Func<R0926GuideOverlay> guide = () => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include);
+            Func<R0926SheetModes> modes = () => UnityEngine.Object.FindAnyObjectByType<R0926SheetModes>(FindObjectsInactive.Include);
+            Func<SwipePanelController> swipe = () => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude);
+            Func<bool> showing = () => sky != null && (bool)typeof(R0926SkyWeather).GetField("skyShow", F).GetValue(sky);
+            Action<float> scroll = y =>
+            {
+                var sp = UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include);
+                var sr = sp != null ? sp.GetComponent<ScrollRect>() : null;
+                if (sr != null) sr.verticalNormalizedPosition = y;
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                langSeen.Clear();
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                log.Add("  앱 언어 " + AppLanguage.Code + " · LocalizationManager " + (LocalizationManager.Instance != null ? LocalizationManager.Instance.GetCurrentLanguage() : "-"));
+                var sb = new System.Text.StringBuilder();
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Text>(FindObjectsInactive.Include))
+                    if (!string.IsNullOrEmpty(t.text) && HasHangul(t.text) && t.GetComponent<R0926LocalizedText>() == null)
+                        sb.Append(PathOf(t.transform)).Append('\t').Append(t.text.Replace("\n", " / ")).Append('\n');
+                File.WriteAllText(Path.Combine(dir, "scene_ko.tsv"), sb.ToString());
+                File.WriteAllText(Path.Combine(dir, "texts.tsv"), "");
+                File.WriteAllText(Path.Combine(dir, "cut.tsv"), "");
+            });
+            See("first");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Sleep(0.4f);
+
+            // 처음 안내
+            Do(() => UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include)?.ForceShowGuide());
+            Sleep(1.8f);
+            See("guide1");
+            Do(() => guide()?.Next());
+            Sleep(1.2f);
+            See("guide2");
+            Do(() => guide()?.Next());
+            Sleep(1.2f);
+            See("guide3");
+            Do(() => guide()?.Skip());
+            Sleep(1.0f);
+            Do(() => { PlayerPrefs.SetInt("IsFirstTime", 1); PlayerPrefs.Save(); });
+
+            // 로그인 전 — 목록 · 지도 · 설정 · 추가 창
+            See("ar");
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            See("list");
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.5f);
+            See("list_category");
+            Do(() => ClickToggle("CategoryToggle"));
+            Sleep(0.3f);
+            Do(() => modes()?.Show(1));
+            Sleep(1.2f);
+            See("map_guest");
+            Check(() =>
+            {
+                var t = Find("ListPanel/Clip0926/Sheet0926/MapPanel0926/FriendList0926/Viewport/Content/AdSlot0926/Badge/Text")?.GetComponent<Text>();
+                return t != null && t.cachedTextGenerator.characterCountVisible >= t.text.Length && t.preferredWidth <= t.rectTransform.rect.width + 1f;
+            }, "광고 표시가 빠짐없이 알약 안에");
+            Do(() => modes()?.Show(2));
+            Sleep(1.2f);
+            See("settings_guest");
+            Do(() => scroll(0f));
+            Sleep(0.5f);
+            See("settings_guest_bottom");
+            Do(() => Click(C + "GroupInfo/RowPrivacy"));
+            Sleep(1.0f);
+            See("privacy");
+            Back();
+            Sleep(0.8f);
+            Back();
+            Sleep(1.0f);
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            See("upload_place");
+            Do(() => swipe()?.SwitchToPanel(1));
+            Sleep(1.2f);
+            See("upload_3d");
+            Do(() => swipe()?.SwitchToPanel(2));
+            Sleep(2.0f);
+            See("hunt_guest");
+            Do(() => Click(H + "Hub/Viewport/Content/LoginBox/LoginButton"));
+            Sleep(0.8f);
+            See("login_prompt");
+
+            // 시험 서버로 로그인 — 안내 창의 '로그인'이 하는 일 중 브라우저 열기만 뺐다
+            Do(() =>
+            {
+                const string dev = "http://127.0.0.1:5099";
+                savedClipboard = EditorGUIUtility.systemCopyBuffer;
+                LoginManager.EditorAuthBase = dev;
+                R0926HuntApi.EditorBase = dev;
+                R0926HuntApi.EditorTestUser = null;
+                MessagePanelManager.EditorBase = dev;
+                ProfileManager.EditorBase = dev;
+                FollowManager.EditorBase = dev;
+                P2PManager.EditorBase = dev;
+                FirebaseNotification.EditorBase = dev;
+                R0926FriendsMap.EditorBase = dev;
+                R0926Nearby.EditorBase = dev;
+                CommentManager.EditorBase = dev;
+                ReportService.EditorBase = dev;
+                R0926MapTiles.EditorBase = "http://127.0.0.1:9";
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                LoginManager.EditorBeforeWebLogin?.Invoke();
+                LoginManager.Instance.CloseLoginPrompt();
+            });
+            Sleep(0.3f);
+            Do(() => CopyLink("mpme"));
+            Wait(() => LoginManager.Instance.IsLoggedIn, 10f, "시험 로그인");
+            Do(() => { EditorGUIUtility.systemCopyBuffer = savedClipboard ?? ""; savedClipboard = null; });   // 앱이 로그인하며 비운다 — 시험이 끊겨도 남지 않게 바로
+            Sleep(2.0f);
+            See("hunt_hub");
+            Do(() => Click(H + "Hub/Viewport/Content/Hero"));
+            Sleep(2.0f);
+            See("hunt_rules");
+            Do(() => Click(H + "Rules/Viewport/Content/Agree"));
+            Sleep(0.3f);
+            Do(() => Click(H + "Rules/Viewport/Content/AgreeButton"));
+            Sleep(1.5f);
+            See("hunt_form");
+            Do(() => { var f = Find(H + "Form/Viewport/Content/TitleInput")?.GetComponent<InputField>(); if (f != null) f.text = "Language test"; });
+            Do(() => { var f = Find(H + "Form/Viewport/Content/HintInput")?.GetComponent<InputField>(); if (f != null) f.text = "Near the fountain"; });
+            Do(() => Click(H + "Form/Viewport/Content/Submit"));
+            Sleep(0.6f);
+            See("hunt_review");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Go"));
+            Wait(() => Active(HuntReview + "/Sheet0926/Buttons/Done"), 10f, "확인 카드 → 숨김");
+            See("hunt_done");
+            Do(() => Click(HuntReview + "/Sheet0926/Buttons/Done"));
+            Sleep(1.5f);
+            See("hunt_detail");
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+
+            // 로그인 뒤 — 지도 · 설정 · 메시지 · 대화 · 프로필
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.0f);
+            Do(() => modes()?.Show(1));
+            Sleep(1.5f);
+            See("map");
+            Do(() => modes()?.Show(2));
+            Sleep(1.5f);
+            See("settings");
+            Back();
+            Sleep(1.0f);
+            Do(() => Click("Dock0926/Message_Button"));
+            Sleep(1.6f);
+            See("messages");
+            Do(() => Mpm()?.OpenChatRoom("chatlook_peer", "연남동이웃", null, false));
+            Sleep(1.6f);
+            Do(() => FillSampleChat(false));
+            Sleep(0.8f);
+            See("chat");
+            Do(() => Mpm()?.OpenChatRoom("3", "WOOPANG", null, true));
+            Sleep(1.6f);
+            Do(() => FillSampleChat(true));
+            Sleep(0.8f);
+            See("chat_admin");
+            Do(() => Click("ChatRoomPanel/Clip0926/Background/Header/BackButton/ClosePx0926"));
+            Sleep(0.8f);
+            Back();
+            Sleep(1.0f);
+            Do(() => typeof(ProfileManager).GetMethod("ShowProfilePanel", F).Invoke(ProfileManager.Instance, new object[] { new ProfileData { id = LoginManager.Instance.CurrentUser.id, username = "hunt_test_mpme", bio = "Language test", followers_count = 3, following_count = 5 } }));   // 시험 서버엔 이 계정의 프로필이 없다 — 서버가 줄 답을 그대로 넣어 내 프로필로
+            Sleep(2.0f);
+            See("profile");
+            Do(() => ProfileManager.Instance.followersButton?.onClick.Invoke());
+            Sleep(1.5f);
+            See("follow_list");
+            Back();
+            Sleep(0.8f);
+            Do(() => ProfileManager.Instance.editProfileButton?.onClick.Invoke());
+            Sleep(1.5f);
+            See("profile_edit");
+            Back();
+            Sleep(0.8f);
+            Do(() => ProfileManager.Instance.logoutButton?.onClick.Invoke());
+            Sleep(0.8f);
+            See("logout_confirm");
+            Do(() => ProfileManager.Instance.logoutCancelButton?.onClick.Invoke());
+            Sleep(0.6f);
+            Do(() => Click("FullProfilePanel/DockMirror0926/ProfileToggle0926"));
+            Sleep(1.0f);
+
+            // 하늘 판 — 옆 장 전부
+            Do(() =>
+            {
+                skyPagesRun = true;
+                StashSkyPrefs();   // 끝나면(끊겨도) 되돌린다
+                foreach (var k in new[] { "Sky_Enabled", "Sky_Weather", "Sky_Events" }) PlayerPrefs.SetInt(k, 1);
+                PlayerPrefs.SetInt("Sky_Angle", 1);
+                foreach (var k in new[] { "Sky_StartCollapsed", "Sky_Swiped", "Sky_PinUsed" }) PlayerPrefs.SetInt(k, 0);
+                DevGet(MpMe, "/api/dev/nearby_mode?festivals=ok");
+                DevPost(MpMe, "/api/dev/hot_set", "{}");
+                DevGet(MpMe, "/api/dev/ad_events?clear=1");
+                R0926Nearby.EditorOpened = new List<string>();   // 줄을 눌러도 진짜 쪽은 열지 않는다
+                R0926Nearby.EditorForget();
+                sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+                pg = UnityEngine.Object.FindAnyObjectByType<R0926SkyPages>(FindObjectsInactive.Include);
+                if (sky == null || pg == null) return;
+                typeof(R0926SkyWeather).GetField("collapsed", F)?.SetValue(sky, false);
+                typeof(R0926SkyPages).GetField("nextFriends", F)?.SetValue(pg, 0f);
+                InjectWeather();
+            });
+            Do(() => AimCamera(-45f, 0f));
+            Wait(() => showing(), 15f, "하늘 판");
+            Sleep(3.0f);
+            See("sky");
+            foreach (var k in new[] { R0926SkyPages.Kind.Hunt, R0926SkyPages.Kind.Festival, R0926SkyPages.Kind.Hot, R0926SkyPages.Kind.Friends, R0926SkyPages.Kind.Live })
+            {
+                Do(() => pg?.EditorGo(k));
+                Sleep(0.9f);
+                See("sky_" + k.ToString().ToLowerInvariant());
+            }
+            Do(() => log.Add("  옆 장 " + (pg != null ? pg.EditorPageCount : 0)));
+            Do(() => AimCamera(0f, 0f));
+            Sleep(1.0f);
+
+            // 장소 카드 · 댓글 · 신고 · AI 에게 묻기
+            Wait(() =>
+            {
+                var all = new List<GameObject>();
+                if (DataManager.Instance?.GetSpawnedObjects() != null) all.AddRange(DataManager.Instance.GetSpawnedObjects().Values);
+                if (TourAPIManager.Instance?.GetSpawnedObjects() != null) all.AddRange(TourAPIManager.Instance.GetSpawnedObjects().Values);
+                foreach (var go in all)
+                {
+                    dt = go != null && go.activeInHierarchy ? go.GetComponentInChildren<DoubleTap3D>(true) : null;
+                    if (dt != null) return true;
+                }
+                return false;
+            }, 40f, "장면에 뜬 장소");
+            Do(() => { if (dt != null) typeof(DoubleTap3D).GetMethod("OnDoubleTapCube", F).Invoke(dt, null); });
+            Wait(() => dt != null && dt.fullscreenCanvasGroup != null && dt.fullscreenCanvasGroup.gameObject.activeSelf, 10f, "장소 카드 열림");
+            Sleep(1.5f);
+            See("place_card");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926AskAI>(FindObjectsInactive.Include)?.Open());
+            Sleep(0.6f);
+            See("ask_ai");
+            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926AskAI>(FindObjectsInactive.Include)?.Close());
+            Sleep(0.4f);
+            Do(() => { if (dt != null) typeof(DoubleTap3D).GetMethod("OnCommentPreviewClicked", F).Invoke(dt, null); });
+            Sleep(1.5f);
+            See("comments");
+            Do(() => Find(Report)?.gameObject.SetActive(true));
+            Sleep(0.6f);
+            See("comment_report");
+            Do(() => Find(Report)?.gameObject.SetActive(false));
+            Sleep(0.4f);
+            Back();
+            Sleep(0.8f);
+            Back();
+            Sleep(0.8f);
+            foreach (var (panel, name) in new[] { ("Fixpage", "fix_place"), ("RemoveRequestPanel", "remove_request") })   // 글자만 본다 — 저장하지 않는다
+            {
+                Do(() => Find(panel)?.gameObject.SetActive(true));
+                Sleep(0.8f);
+                See(name);
+                Do(() => Find(panel)?.gameObject.SetActive(false));
+                Sleep(0.3f);
+            }
+
+            Do(() =>
+            {
+                LoginManager.EditorAuthBase = null;
+                if (skyPagesRun) SkyPagesCleanup();
+                else RestoreSkyPrefs();
+            });
+        }
+
         // ── 진행 ────────────────────────────────────────────────
         private static void Tick()
         {
             if (!EditorApplication.isPlaying)
             {
-                if (running) R0926SkyWeather.EditorRegionOverride = null;   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
+                if (running) { R0926SkyWeather.EditorRegionOverride = null; AppLanguage.EditorOverride = null; }   // 시험 도중 플레이를 끈 경우 — 다음 플레이에 남지 않게 (도메인 다시 읽기 꺼져 있다)
                 if (running) { R0926HuntApi.EditorBase = null; R0926HuntApi.EditorTestUser = null; R0926HuntProfile.EditorHostAlias = null; LoginManager.EditorAuthBase = null; }   // 보물찾기·로그인 시험 서버도 같은 이유로
                 if (running) { FollowManager.EditorBase = null; MessagePanelManager.EditorBase = null; ProfileManager.EditorBase = null; P2PManager.EditorBase = null; FirebaseNotification.EditorBase = null; R0926FriendsMap.EditorBase = null; R0926MapTiles.EditorBase = null; R0926Nearby.EditorBase = null; CubeDataFixManager.EditorBase = null; CommentManager.EditorBase = null; ReportService.EditorBase = null; }   // 팔로우·검색·프로필·친구 지도·타일·근처·장소 고치기·댓글 시험 서버도
                 if (treasureRun) { PlayerPrefs.DeleteKey(TreasurePref); treasureRun = false; }   // 시험 게임을 지켜보던 기록 (시험이 중간에 끊겨도)
@@ -13085,6 +13435,7 @@ namespace Redesign0926
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
                     if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
+                    if (pl.Length > 1 && pl[1].Trim().StartsWith("lang_")) { AppLanguage.EditorOverride = pl[1].Trim().Substring(5); StashLogin(); }   // 기기 언어를 바꿔 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();
                     MainViewToSimulator();
@@ -13113,6 +13464,8 @@ namespace Redesign0926
             if (skyPagesRun) SkyPagesCleanup();   // 하늘 옆 장 시험이 오류로 끊긴 경우 — 시험 서버 주소 · 시험 아이디 · 하늘 설정
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
+            AppLanguage.EditorOverride = null;
+            LoginManager.EditorAuthBase = null;
             CubeDataFixManager.EditorBase = null;   // 장소 고치기 시험이 오류로 끊겨도 다음 플레이가 시험 서버로 가지 않게
             CommentManager.EditorBase = null; ReportService.EditorBase = null;   // 댓글 시험도
             InputSystem.settings.editorInputBehaviorInPlayMode = savedBehavior;

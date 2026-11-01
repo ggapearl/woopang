@@ -2960,7 +2960,7 @@ public class ProfileManager : MonoBehaviour
     /// </summary>
     private string GetCurrentLanguageCode()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean: return "ko";
             case SystemLanguage.Japanese: return "ja";
@@ -3222,12 +3222,7 @@ public class ProfileManager : MonoBehaviour
         }
 
         // Fallback: LocalizationManager가 없을 경우
-        string lang = Application.systemLanguage == SystemLanguage.Korean ? "ko" : "en";
-        switch (lang)
-        {
-            case "ko": return "로그아웃 하시겠습니까?";
-            default: return "Are you sure you want to logout?";
-        }
+        return R0926LocalizedText.Say("로그아웃 하시겠습니까?", "Are you sure you want to logout?", "ログアウトしますか？", "确定要退出登录吗？", "¿Seguro que quieres cerrar sesión?");
     }
 
     #endregion

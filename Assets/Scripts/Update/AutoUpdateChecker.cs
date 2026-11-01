@@ -136,7 +136,7 @@ public class AutoUpdateChecker : MonoBehaviour
 
     void DetectDeviceLanguage()
     {
-        SystemLanguage deviceLanguage = Application.systemLanguage;
+        SystemLanguage deviceLanguage = AppLanguage.AsSystemLanguage();
         
         switch (deviceLanguage)
         {

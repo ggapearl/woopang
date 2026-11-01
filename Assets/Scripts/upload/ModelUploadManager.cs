@@ -1194,7 +1194,7 @@ public class ModelUploadManager : MonoBehaviour
 
     private string GetTimezone()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean: return "Asia/Seoul";
             case SystemLanguage.Chinese:
@@ -1207,7 +1207,7 @@ public class ModelUploadManager : MonoBehaviour
 
     private string GetTimezoneOffset()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean: return "+09:00";
             case SystemLanguage.Chinese:
@@ -1289,7 +1289,7 @@ public class ModelUploadManager : MonoBehaviour
             return LocalizationManager.Instance.GetText(key);
         }
 
-        SystemLanguage lang = Application.systemLanguage;
+        SystemLanguage lang = AppLanguage.AsSystemLanguage();
         switch (key)
         {
             case "loading_location":

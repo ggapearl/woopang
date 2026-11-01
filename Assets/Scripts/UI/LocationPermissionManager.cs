@@ -91,7 +91,7 @@ public class LocationPermissionManager : MonoBehaviour
 
     private void SetLanguage()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:   currentLang = "ko"; break;
             case SystemLanguage.Japanese: currentLang = "ja"; break;

@@ -484,7 +484,7 @@ namespace Redesign0926
             huntNoteGo.SetActive(false);   // 로그인 전·못 불러왔을 때만 (R0926SettingsPanel.RefreshHunt)
 
             // 화면 — 30 / 60 FPS (2026-10-06 대표님: 기본 30)
-            SectionLabel(content.transform, "SecDisplay", new[] { "화면", "Display", "画面", "画面", "Pantalla" });
+            SectionLabel(content.transform, "SecDisplay", new[] { "화면", "Display", "画面", "显示", "Pantalla" });
             var g5 = Group(content.transform, "GroupDisplay");
             SegRow(g5.transform, "RowFps", new[] { "화면 프레임", "Frame rate", "フレームレート", "帧率", "Fotogramas" },
                 new[] { "60 은 더 부드럽고, 30 은 배터리·발열이 덜해요", "60 is smoother, 30 saves battery and heat", "60はなめらか、30は電池と発熱を抑えます", "60 更流畅，30 更省电、发热更少", "60 es más fluido, 30 ahorra batería" },
@@ -1014,16 +1014,17 @@ namespace Redesign0926
             Img(icon, Spr("r0926_i_megaphone"), Pink, Image.Type.Simple).raycastTarget = false;
 
             var badge = FindOrCreate(card.transform, "Badge");
-            SetRect(RT(badge), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(204, -34), new Vector2(92, 46));
-            Img(badge, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 64f / 23f).raycastTarget = false;
+            SetRect(RT(badge), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(204, -32), new Vector2(104, 50));   // 최소 글자 38 이 들어가는 높이 — 46 이면 글이 줄째 사라져 빈 알약이 됐다
+            Img(badge, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 64f / 25f).raycastTarget = false;
             var bt = FindOrCreate(badge.transform, "Text");
             Stretch(RT(bt));
-            var btT = Txt(bt, "광고", 29, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
-            btT.resizeTextForBestFit = true; btT.resizeTextMinSize = 20; btT.resizeTextMaxSize = 29;   // 'Anuncio' 같은 긴 말만 줄여 알약 안에
+            var btT = Txt(bt, "광고", MinFont, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            btT.resizeTextForBestFit = false;   // 'Anuncio' 같은 긴 말은 R0926AdSlot 이 알약을 넓혀 담는다
+            btT.horizontalOverflow = HorizontalWrapMode.Overflow; btT.verticalOverflow = VerticalWrapMode.Overflow;
             Loc(bt, "광고", "Ad", "広告", "广告", "Anuncio");
 
             var title = FindOrCreate(card.transform, "Title");
-            SetRect(RT(title), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(318, -28), new Vector2(-318 - 262, 60));
+            SetRect(RT(title), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(330, -28), new Vector2(-330 - 262, 60));
             var tt = Txt(title, "이 자리에 가게를 알려 보세요", 41, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             tt.horizontalOverflow = HorizontalWrapMode.Wrap; tt.verticalOverflow = VerticalWrapMode.Truncate;
             var body = FindOrCreate(card.transform, "Body");
@@ -1041,6 +1042,7 @@ namespace Redesign0926
             var slot = Ensure<R0926AdSlot>(card);
             var so = new SerializedObject(slot);
             so.FindProperty("placement").stringValue = placement;
+            so.FindProperty("badge").objectReferenceValue = RT(badge);
             so.FindProperty("photo").objectReferenceValue = ph;
             so.FindProperty("icon").objectReferenceValue = icon;
             so.FindProperty("title").objectReferenceValue = tt;

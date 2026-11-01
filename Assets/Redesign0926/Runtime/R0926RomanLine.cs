@@ -12,6 +12,7 @@ public class R0926RomanLine : MonoBehaviour
 
     private Text self;
     private string last;
+    private bool lastLand;
     private bool korean;
 
     private void Awake()
@@ -25,8 +26,14 @@ public class R0926RomanLine : MonoBehaviour
     {
         if (korean || source == null) return;
         string t = source.text;
-        if (t == last) return;
+        bool land = R0926Orientation.IsLandscape;
+        if (t == last && land == lastLand) return;
         last = t;
-        self.text = R0926Romanizer.Romanize(t) ?? "";
+        lastLand = land;
+        string roman = R0926Romanizer.Romanize(t);
+        // 세로 화면의 이름 칸은 높고 가운데 맞춤이라 이 줄이 이름 위에 겹친다 — 이름을 칸 위쪽으로 올려 비켜 주고, 두 줄 이름은 자리가 없어 로마자를 뺀다
+        if (!land && source.preferredHeight > source.fontSize * 1.6f) roman = null;
+        source.alignment = !land && roman != null ? TextAnchor.UpperCenter : TextAnchor.MiddleCenter;
+        self.text = roman ?? "";
     }
 }

@@ -106,7 +106,7 @@ public class RemoveRequest : MonoBehaviour
 
     private string GetLocalizedRemoveTitle()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "삭제 요청하시겠습니까?";
@@ -125,7 +125,7 @@ public class RemoveRequest : MonoBehaviour
 
     private string GetLocalizedRemoveButton()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "삭제 요청";
@@ -144,7 +144,7 @@ public class RemoveRequest : MonoBehaviour
 
     private string GetLocalizedCancelButton()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "취소";
@@ -333,7 +333,7 @@ public class RemoveRequest : MonoBehaviour
 
     private string GetTimezone()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "Asia/Seoul";
@@ -352,7 +352,7 @@ public class RemoveRequest : MonoBehaviour
 
     private string GetTimezoneOffset()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "+09:00";

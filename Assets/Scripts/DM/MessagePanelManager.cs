@@ -4233,7 +4233,7 @@ public class MessagePanelManager : MonoBehaviour
         {
             case "tap_to_chat":
             case "tap_to_follow_and_chat":
-                switch (Application.systemLanguage)
+                switch (AppLanguage.AsSystemLanguage())
                 {
                     case SystemLanguage.Korean: return "탭하여 대화 시작";
                     case SystemLanguage.Japanese: return "タップして会話を開始";
@@ -4253,7 +4253,7 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private string GetLocalizedFilterEmptyMessage()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "일치하는 대화가 없습니다.";
@@ -4275,7 +4275,7 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private string GetLocalizedSearchEmptyMessage()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "검색 결과가 없습니다.";
@@ -4297,7 +4297,7 @@ public class MessagePanelManager : MonoBehaviour
     /// </summary>
     private string GetLocalizedSearchPlaceholder()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "아이디 검색...";

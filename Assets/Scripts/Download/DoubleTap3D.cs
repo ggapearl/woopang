@@ -107,7 +107,7 @@ public class DoubleTap3D : MonoBehaviour
     {
         { "en", "No comments yet. Be the first to comment!" },
         { "ko", "아직 댓글이 없습니다. 첫 댓글을 남겨보세요!" },
-        { "ja", "コメントはまだありません。最初のコメントを残してください！" },
+        { "ja", "コメントはまだありません。最初の一言をどうぞ！" },
         { "zh", "暂无评论。快来抢沙发吧！" },
         { "es", "Aún no hay comentarios. ¡Sé el primero en comentar!" }
     };

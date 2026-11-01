@@ -160,7 +160,7 @@ public class R0926HuntCard : MonoBehaviour
     private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
     // ── 칩 정의 (값, 한국어, 영어, 일본어, 중국어, 스페인어) ──
-    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Modes = { ("touch", "먼저 터치", "First touch", "先にタッチ", "先触碰", "Primero en tocar"), ("code", "비밀번호", "Password", "パスワード", "密码", "Contraseña") };
+    private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Modes = { ("touch", "먼저 터치", "First touch", "先にタッチ", "先触碰", "Al tocar"), ("code", "비밀번호", "Password", "パスワード", "密码", "Contraseña") };
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Winners = { ("1", "1명", "1", "1人", "1人", "1"), ("3", "3명", "3", "3人", "3人", "3"), ("5", "5명", "5", "5人", "5人", "5"), ("10", "10명", "10", "10人", "10人", "10"), ("all", "모두", "Everyone", "全員", "所有人", "Todos") };
     // 참가 인원 상한 (2026-10-12 대표님 — 서버 1~100 · 당첨 인원 이상. 칩은 모두 당첨 최대 10명 이상이라 어긋나지 않는다)
     private static readonly (string v, string ko, string en, string ja, string zh, string es)[] Players = { ("10", "10명", "10", "10人", "10人", "10"), ("20", "20명", "20", "20人", "20人", "20"), ("30", "30명", "30", "30人", "30人", "30"), ("50", "50명", "50", "50人", "50人", "50"), ("100", "100명", "100", "100人", "100人", "100") };
@@ -1174,12 +1174,12 @@ public class R0926HuntCard : MonoBehaviour
         if (dHostText != null)
         {
             string stars = host_["rating"].IsNull || host_["rating"].AsFloat <= 0 ? "" : "  ★" + host_["rating"].AsFloat.ToString("0.0", CultureInfo.InvariantCulture);
-            dHostText.text = T("주최 ", "Host ", "主催 ", "主办 ", "Organiza ") + host_["username"] + stars + T("  · 주최 " + host_["hosted"].AsInt + "회", "  · hosted " + host_["hosted"].AsInt, "  · 主催 " + host_["hosted"].AsInt + "回", "  · 主办 " + host_["hosted"].AsInt + " 次", "  · organizó " + host_["hosted"].AsInt);
+            dHostText.text = T("주최 ", "Host ", "主催 ", "主办 ", "Organiza ") + LocalName(host_["username"]) + stars + T("  · 주최 " + host_["hosted"].AsInt + "회", "  · hosted " + host_["hosted"].AsInt, "  · 主催 " + host_["hosted"].AsInt + "回", "  · 主办 " + host_["hosted"].AsInt + " 次", "  · organizó " + host_["hosted"].AsInt);
         }
         var lines = new List<string>();
         if (!string.IsNullOrEmpty(h["hint"])) lines.Add(T("힌트  ", "Hint  ", "ヒント  ", "提示  ", "Pista  ") + h["hint"]);
         bool locked = h["mode"] == "code";
-        lines.Add(T("찾는 방식  ", "How  ", "見つけ方  ", "寻宝方式  ", "Cómo  ") + (locked ? T("비밀번호 (4자)", "Password (4 characters)", "パスワード（4文字）", "密码（4 个字符）", "Contraseña (4 caracteres)") : T("먼저 터치한 사람", "First to touch", "先にタッチした人", "最先触碰的人", "Primero en tocar")));
+        lines.Add(T("찾는 방식  ", "How  ", "見つけ方  ", "寻宝方式  ", "Cómo  ") + (locked ? T("비밀번호 (4자)", "Password (4 characters)", "パスワード（4文字）", "密码（4 个字符）", "Contraseña (4 caracteres)") : T("먼저 터치한 사람", "First to touch", "先にタッチした人", "最先触碰的人", "Al tocar")));
         if (locked && !string.IsNullOrEmpty(h["question"])) lines.Add(T("비밀번호 힌트  ", "Password hint  ", "パスワードのヒント  ", "密码提示  ", "Pista de la contraseña  ") + h["question"]);
         int wm = h["winners_max"].AsInt;
         lines.Add(T("당첨  ", "Winners  ", "当選  ", "中奖  ", "Ganadores  ") + (wm > 0 ? T(wm + "명 · " + h["found"].AsInt + "명 찾음", wm + " · " + h["found"].AsInt + " found", wm + "人 · " + h["found"].AsInt + "人発見", wm + " 人 · " + h["found"].AsInt + " 人找到", wm + " · " + h["found"].AsInt + " encontrados") : T("찾는 사람 모두 · " + h["found"].AsInt + "명 찾음", "Everyone · " + h["found"].AsInt + " found", "見つけた人全員 · " + h["found"].AsInt + "人発見", "找到的人都中奖 · " + h["found"].AsInt + " 人找到", "Todos · " + h["found"].AsInt + " encontrados")));
@@ -1234,10 +1234,49 @@ public class R0926HuntCard : MonoBehaviour
             g.SetActive(true);
             string who = f["kind"] == "message" && !string.IsNullOrEmpty(f["user"]["username"]) ? f["user"]["username"] + ": " : "";
             var at = When(f["at"]);
-            SetText(g, "Text", who + f["text"]);
+            SetText(g, "Text", who + FeedText(f));
             SetText(g, "Time", at.HasValue ? at.Value.ToLocalTime().ToString("M/d HH:mm", CultureInfo.InvariantCulture) : "");
         }
     }
+
+    // 서버의 소식 글은 한국어 한 줄이다(이미 쌓인 소식도) — 한국어가 아닌 기기엔 여기서 옮긴다. 모르는 글은 그대로
+    private static string FeedText(JSONNode f)
+    {
+        string s = f["text"];
+        if (string.IsNullOrEmpty(s) || f["kind"] == "message" || R0926LocalizedText.Lang() == "ko") return s;
+        switch (s)
+        {
+            case "보물을 숨겼어요": return T(s, "The treasure is hidden", "宝物を隠しました", "宝物已藏好", "El tesoro está escondido");
+            case "보물을 숨겼어요 — 곧 시작해요": return T(s, "The treasure is hidden — starting soon", "宝物を隠しました — まもなく開始", "宝物已藏好 — 即将开始", "El tesoro está escondido — empieza pronto");
+            case "못 찾았어요": return T(s, "Gave up", "見つけられませんでした", "未能找到", "Se rindió");
+            case "모든 보물을 찾았어요 — 보물찾기가 끝났어요": return T(s, "All treasures found — the hunt is over", "宝物がすべて見つかり、宝探しが終わりました", "宝物已全部找到，寻宝结束", "Se encontraron todos los tesoros — la búsqueda terminó");
+            case "주최자가 보물찾기를 마쳤어요": return T(s, "The host ended the hunt", "主催者が宝探しを終了しました", "主办人已结束寻宝", "El organizador terminó la búsqueda");
+            case "주최자가 보물 위치를 공개했어요": return T(s, "The host revealed the treasure's location", "主催者が宝物の場所を公開しました", "主办人已公开宝物位置", "El organizador reveló la ubicación del tesoro");
+            case "보물찾기가 시작됐어요": return T(s, "The hunt has started", "宝探しが始まりました", "寻宝已开始", "La búsqueda ha comenzado");
+            case "시간이 끝났어요": return T(s, "Time is up", "時間切れです", "时间已到", "Se acabó el tiempo");
+        }
+        const string foundTail = "님이 보물을 찾았어요! (";
+        int cut = s.IndexOf(foundTail, StringComparison.Ordinal);
+        if (cut > 0 && s.EndsWith(")"))
+        {
+            string name = LocalName(s.Substring(0, cut));
+            string rank = s.Substring(cut + foundTail.Length, s.Length - cut - foundTail.Length - 1);
+            if (rank.EndsWith("번째")) { string n = rank.Substring(0, rank.Length - 2); rank = T(rank, "#" + n, n + "番目", "第 " + n + " 位", "n.º " + n); }
+            return T(s, name + " found the treasure! (" + rank + ")", name + "さんが宝物を見つけました！（" + rank + "）", name + " 找到了宝物！（" + rank + "）", "¡" + name + " encontró el tesoro! (" + rank + ")");
+        }
+        const string moreTail = " 늘었어요";
+        if (s.EndsWith(moreTail))
+        {
+            string t = s.Substring(0, s.Length - moreTail.Length);
+            if (t.EndsWith("일") && int.TryParse(t.Substring(0, t.Length - 1), out int d)) t = d + T("일", d == 1 ? " day" : " days", "日", " 天", d == 1 ? " día" : " días");
+            else t = t.Replace("시간", T("시간", " h", "時間", " 小时", " h")).Replace("분", T("분", " min", "分", " 分钟", " min"));
+            return T(s, "Extended by " + t, t + "延長されました", "已延长 " + t, "Ampliado " + t);
+        }
+        return s;
+    }
+
+    // 서버는 이름 없는 계정을 '사용자'라고 보낸다
+    private static string LocalName(string name) => name == "사용자" ? T(name, "User", "ユーザー", "用户", "Usuario") : name;
 
     private static void Set(Button b, bool on) { if (b != null) b.gameObject.SetActive(on); }
 
@@ -1299,7 +1338,7 @@ public class R0926HuntCard : MonoBehaviour
         var g = Instantiate(finderTemplate, findersList);
         g.SetActive(true);
         string name = f["username"];
-        if (string.IsNullOrEmpty(name)) name = T("사용자", "User", "ユーザー", "用户", "Usuario");
+        name = LocalName(string.IsNullOrEmpty(name) ? "사용자" : name);
         SetText(g, "Name", name.Length > 12 ? name.Substring(0, 11) + "…" : name);
         bool me = f["me"].AsBool;
         var tag = g.transform.Find("Me");

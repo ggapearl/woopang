@@ -1617,7 +1617,7 @@ public class CubeDataFixManager : MonoBehaviour
     #region Utility Methods
     private string GetTimezone()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "Asia/Seoul";
@@ -1636,7 +1636,7 @@ public class CubeDataFixManager : MonoBehaviour
 
     private string GetTimezoneOffset()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "+09:00";
@@ -1716,7 +1716,7 @@ public class CubeDataFixManager : MonoBehaviour
         }
 
         // 2단계: LocalizationManager가 없으면 내장 다국어 사용
-        SystemLanguage lang = Application.systemLanguage;
+        SystemLanguage lang = AppLanguage.AsSystemLanguage();
         
         switch (key)
         {

@@ -1741,7 +1741,7 @@ public class CubeUploadManager : MonoBehaviour
 
     private string GetTimezone()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "Asia/Seoul";
@@ -1760,7 +1760,7 @@ public class CubeUploadManager : MonoBehaviour
 
     private string GetTimezoneOffset()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 return "+09:00";
@@ -1978,7 +1978,7 @@ public class CubeUploadManager : MonoBehaviour
             return LocalizationManager.Instance.GetText(key);
         }
 
-        SystemLanguage lang = Application.systemLanguage;
+        SystemLanguage lang = AppLanguage.AsSystemLanguage();
         switch (key)
         {
             case "loading_location":

@@ -8,10 +8,18 @@ using UnityEngine;
 /// </summary>
 public static class AppLanguage
 {
+#if UNITY_EDITOR
+    /// <summary>에디터 시험용 기기 언어 (ko/en/ja/zh/es) — 플레이 시험 'lang' 이 플레이를 켜기 전에 넣는다 (도메인 다시 읽기가 꺼져 있어 플레이 안까지 남는다)</summary>
+    public static string EditorOverride;
+#endif
+
     public static string Code
     {
         get
         {
+#if UNITY_EDITOR
+            if (!string.IsNullOrEmpty(EditorOverride)) return EditorOverride;
+#endif
             if (LocalizationManager.Instance != null)
             {
                 string l = LocalizationManager.Instance.GetCurrentLanguage();

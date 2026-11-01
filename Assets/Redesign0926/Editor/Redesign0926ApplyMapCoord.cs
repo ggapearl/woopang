@@ -171,7 +171,7 @@ namespace Redesign0926
             var ph = FindOrCreate(field.transform, "Placeholder");
             Stretch(RT(ph));
             var pt = Txt(ph, "주소 · 장소 · 좌표", 40, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
-            Loc(ph, "주소 · 장소 · 좌표", "Address, place or coordinates", "住所・場所・座標", "地址・地点・坐标", "Dirección, lugar o coordenadas");
+            Loc(ph, "주소 · 장소 · 좌표", "Address, place or coordinates", "住所・場所・座標", "地址、地点或坐标", "Dirección, lugar o coordenadas");
             input = Ensure<InputField>(field);
             input.textComponent = t;
             input.placeholder = pt;

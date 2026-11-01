@@ -32,8 +32,11 @@ public class LocalizationManager : MonoBehaviour
     
     private string GetDeviceLanguage()
     {
+#if UNITY_EDITOR
+        if (!string.IsNullOrEmpty(AppLanguage.EditorOverride)) return AppLanguage.EditorOverride;
+#endif
         string deviceLang = "en"; // 기본값: 영어
-        
+
         switch (Application.systemLanguage)
         {
             case SystemLanguage.Korean:
@@ -795,6 +798,30 @@ public class LocalizationManager : MonoBehaviour
                 ["zh"] = "其他",
                 ["ja"] = "その他",
                 ["es"] = "Otros"
+            },
+            ["follow_btn"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Follow",
+                ["ko"] = "팔로우",
+                ["zh"] = "关注",
+                ["ja"] = "フォロー",
+                ["es"] = "Seguir"
+            },
+            ["following_btn"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Following",
+                ["ko"] = "팔로잉",
+                ["zh"] = "已关注",
+                ["ja"] = "フォロー中",
+                ["es"] = "Siguiendo"
+            },
+            ["message_btn"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Message",
+                ["ko"] = "메시지",
+                ["zh"] = "消息",
+                ["ja"] = "メッセージ",
+                ["es"] = "Mensaje"
             }
         };
     }

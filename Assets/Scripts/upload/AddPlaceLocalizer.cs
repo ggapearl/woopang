@@ -27,8 +27,8 @@ public class AddPlaceLocalizer : MonoBehaviour
             nameLabel = "Name",
             coordinateLabel = "Coordinate",
             coordinateSubtext = "You need to enable location service",
-            addPlaceLogoLabel = "Add Place Logo",
-            addPlaceImgsLabel = "Add Place Imgs",
+            addPlaceLogoLabel = "Add place logo",
+            addPlaceImgsLabel = "Add place photos",
             petFriendlyLabel = "Pet Friendly",
             separatedRestroomLabel = "Separated Restroom",
             instagramIdLabel = "Instagram ID",
@@ -106,7 +106,7 @@ public class AddPlaceLocalizer : MonoBehaviour
 
     void DetectDeviceLanguage()
     {
-        SystemLanguage deviceLanguage = Application.systemLanguage;
+        SystemLanguage deviceLanguage = AppLanguage.AsSystemLanguage();
         
         switch (deviceLanguage)
         {

@@ -333,7 +333,7 @@ public class CommentItem : MonoBehaviour
     {
         if (count < 1000) return count.ToString();
 
-        SystemLanguage lang = Application.systemLanguage;
+        SystemLanguage lang = AppLanguage.AsSystemLanguage();
 
         if (lang == SystemLanguage.Korean)
         {

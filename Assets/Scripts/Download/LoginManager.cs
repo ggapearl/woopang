@@ -202,7 +202,7 @@ public class LoginManager : MonoBehaviour
 
     private void SetLanguage()
     {
-        switch (Application.systemLanguage)
+        switch (AppLanguage.AsSystemLanguage())
         {
             case SystemLanguage.Korean:
                 currentLang = "ko";

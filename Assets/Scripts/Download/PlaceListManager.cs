@@ -141,8 +141,8 @@ public class PlaceListManager : MonoBehaviour
     {
         { "en", new Dictionary<string, string> {
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
-            { "woopangData", "WOOPANG DATA" }, { "tourApiData", "Public Data" },
-            { "transportData", "TRANSPORT DATA" }, { "p2pUserData", "NEARBY USERS" }, { "huntData", "TREASURE HUNTS" }, { "festivalData", "FESTIVALS" }, { "shelterData", "SHELTERS" },
+            { "woopangData", "WOOPANG" }, { "tourApiData", "Public" },
+            { "transportData", "Transit" }, { "p2pUserData", "People" }, { "huntData", "Hunts" }, { "festivalData", "Festivals" }, { "shelterData", "Shelters" },
             { "noNearbyData", "No nearby data found.\nTry adjusting the distance slider or moving to a different area." },
             { "noInternet", "No internet connection.\nNearby places will load automatically once you're back online." },
             { "listNotLoaded", "Couldn't load nearby places yet.\nWe'll try again automatically." }
@@ -157,8 +157,8 @@ public class PlaceListManager : MonoBehaviour
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
-            { "woopangData", "WOOPANGデータ" }, { "tourApiData", "公共データ" },
-            { "transportData", "交通データ" }, { "p2pUserData", "近くのユーザー" }, { "huntData", "宝探し" }, { "festivalData", "お祭り" }, { "shelterData", "保護施設" },
+            { "woopangData", "WOOPANG" }, { "tourApiData", "公共" },
+            { "transportData", "交通" }, { "p2pUserData", "近くの人" }, { "huntData", "宝探し" }, { "festivalData", "お祭り" }, { "shelterData", "保護施設" },
             { "noNearbyData", "近くにデータがありません。\n距離スライダーを調整するか、別の場所に移動してみてください。" },
             { "noInternet", "インターネットに接続されていません。\n接続すると周辺の場所を自動で読み込みます。" },
             { "listNotLoaded", "周辺の場所をまだ読み込めていません。\nしばらくすると自動で再読み込みします。" }
@@ -173,8 +173,8 @@ public class PlaceListManager : MonoBehaviour
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendly", "[Mascotas]" }, { "noImage", "[Sin imagen]" },
-            { "woopangData", "Datos WOOPANG" }, { "tourApiData", "Datos Públicos" },
-            { "transportData", "Datos de Transporte" }, { "p2pUserData", "Usuarios Cercanos" }, { "huntData", "Búsquedas del tesoro" }, { "festivalData", "Festivales" }, { "shelterData", "Refugios" },
+            { "woopangData", "WOOPANG" }, { "tourApiData", "Público" },
+            { "transportData", "Transporte" }, { "p2pUserData", "Personas" }, { "huntData", "Tesoros" }, { "festivalData", "Festivales" }, { "shelterData", "Refugios" },
             { "noNearbyData", "No hay datos cerca.\nAjusta el control de distancia o muévete a otra zona." },
             { "noInternet", "Sin conexión a internet.\nLos lugares cercanos se cargarán automáticamente al reconectar." },
             { "listNotLoaded", "Aún no se pudieron cargar los lugares cercanos.\nLo intentaremos de nuevo automáticamente." }

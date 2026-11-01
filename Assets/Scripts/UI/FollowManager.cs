@@ -431,7 +431,7 @@ public class FollowManager : MonoBehaviour
                 return text;
         }
 
-        string langCode = Application.systemLanguage switch
+        string langCode = AppLanguage.AsSystemLanguage() switch
         {
             SystemLanguage.Korean => "ko",
             SystemLanguage.Japanese => "ja",
@@ -1052,7 +1052,7 @@ public class FollowManager : MonoBehaviour
     /// </summary>
     private string GetUnfollowConfirmMessage()
     {
-        string langCode = Application.systemLanguage switch
+        string langCode = AppLanguage.AsSystemLanguage() switch
         {
             SystemLanguage.Korean => "ko",
             SystemLanguage.Japanese => "ja",

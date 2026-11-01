@@ -35,10 +35,10 @@ public class FixPlaceLocalizer : MonoBehaviour
         ["en"] = new LocalizedFixPlaceTexts
         {
             fixPlaceTitle = "Fix Place",
-            changedNameLabel = "Changing Name",
+            changedNameLabel = "New name",
             descriptionLabel = "Description",
-            addPlaceLogoLabel = "Add Place Logo",
-            addPlaceImgsLabel = "Add Place Imgs",
+            addPlaceLogoLabel = "Add place logo",
+            addPlaceImgsLabel = "Add place photos",
             petFriendlyLabel = "Pet Friendly",
             separatedRestroomLabel = "Separated Restroom",
             instagramIdLabel = "Instagram ID",

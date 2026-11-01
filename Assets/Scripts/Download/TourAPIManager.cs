@@ -618,7 +618,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         if (string.IsNullOrEmpty(place.title))
         {
             LogDebug($"[TourAPIManager] ID {place.contentid}의 title이 비어 있음. 기본 이름 설정.");
-            target.PlaceName = "알 수 없는 장소";
+            target.PlaceName = R0926LocalizedText.Say("알 수 없는 장소", "Unknown place", "不明な場所", "未知地点", "Lugar desconocido");
         }
         else
         {

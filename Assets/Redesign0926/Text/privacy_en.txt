@@ -85,7 +85,7 @@ These lookups send coordinates only, without anything that identifies you such a
 - WOOPANG is not intended for children under 14. If we learn that we have collected information from a child under 14, we delete it without delay
 
 ## 10. Privacy officer
-- Privacy officer: 김영훈 (CEO, QUE.ENT)
+- Privacy officer: Younghoon Kim (CEO, QUE.ENT)
 - Contact: master@woopang.com
 - You can also contact these Korean agencies about privacy violations
   - Personal Information Infringement Report Center 118 (privacy.kisa.or.kr)

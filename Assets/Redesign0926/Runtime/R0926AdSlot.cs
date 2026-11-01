@@ -12,6 +12,7 @@ using UnityEngine.UI;
 public class R0926AdSlot : MonoBehaviour
 {
     [SerializeField] private string placement = "friends_map";
+    [SerializeField] private RectTransform badge;
     [SerializeField] private RawImage photo;
     [SerializeField] private GameObject icon;
     [SerializeField] private Text title;
@@ -31,9 +32,23 @@ public class R0926AdSlot : MonoBehaviour
 
     private void OnEnable()
     {
+        FitBadge();
         Show();
         if (Time.unscaledTime >= nextFetch) StartCoroutine(Fetch());
         else SendView();
+    }
+
+    // '광고' 표시 — 글 길이만큼 알약을 넓히고 제목은 그 뒤로 ('Anuncio' 는 두 글자 자리에 안 들어간다)
+    private void FitBadge()
+    {
+        if (badge == null || title == null) return;
+        var label = badge.GetComponentInChildren<R0926LocalizedText>();
+        var text = label.GetComponent<Text>();
+        text.text = R0926LocalizedText.Say(label.ko, label.en, label.ja, label.zh, label.es);   // 글의 Start 보다 먼저 길이를 잰다
+        float w = Mathf.Max(badge.sizeDelta.x, Mathf.Ceil(text.preferredWidth) + 28f);
+        badge.sizeDelta = new Vector2(w, badge.sizeDelta.y);
+        var rt = title.rectTransform;
+        rt.offsetMin = new Vector2(badge.anchoredPosition.x + w + 22f, rt.offsetMin.y);
     }
 
     private IEnumerator Fetch()

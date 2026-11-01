@@ -28,7 +28,7 @@ public class ModelUploadLocalizer : MonoBehaviour
             coordinateLabel = "Coordinate",
             coordinateSubtext = "You need to enable location service",
             addFileLabel = "Add File",
-            addPlaceImgsLabel = "Add Place Imgs",
+            addPlaceImgsLabel = "Add place photos",
             petFriendlyLabel = "Pet Friendly",
             separatedRestroomLabel = "Separated Restroom",
             instagramIdLabel = "Instagram ID",
@@ -106,7 +106,7 @@ public class ModelUploadLocalizer : MonoBehaviour
 
     void DetectDeviceLanguage()
     {
-        SystemLanguage deviceLanguage = Application.systemLanguage;
+        SystemLanguage deviceLanguage = AppLanguage.AsSystemLanguage();
         
         switch (deviceLanguage)
         {

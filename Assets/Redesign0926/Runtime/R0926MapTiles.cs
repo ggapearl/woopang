@@ -220,7 +220,7 @@ public class R0926MapTiles : MonoBehaviour
         {
             bool on = shown > 0 && !string.IsNullOrEmpty(info.attribution);
             attribution.enabled = on;
-            if (on) attribution.text = info.attribution;
+            if (on) attribution.text = info.attribution.Replace("국토교통부", R0926LocalizedText.Say("국토교통부", "MOLIT Korea", "韓国 国土交通部", "韩国国土交通部", "MOLIT de Corea"));   // 글은 서버 설정 — 기관 이름만 기기 언어로
         }
     }
 
