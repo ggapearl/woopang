@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-10-31a';
+  const WEB_VERSION = '2026-11-01a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1159,7 +1159,7 @@
         if (e.from) source += ' · ' + e.from;
         const buttons = e.buttons || null;
         append({ kind: 'incoming', source, text: e.text || '', auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
-          images: e.images || [], files: e.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts: e.ts, mid: e.mid });
+          images: e.images || [], files: e.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null, done: [] } : null, ts: e.ts, mid: e.mid });
         lastAI = null;
         return false;
       }
@@ -1258,7 +1258,7 @@
         const buttons = raw.buttons || null;
         return { kind: 'incoming', source: INCOMING_SOURCE(kind, raw.from), text: raw.text || '',
           auto: kind === 'auto' || kind === 'system', out: kind === 'phone_out',
-          images: raw.images || [], files: raw.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null } : null, ts, mid };
+          images: raw.images || [], files: raw.files || [], buttons, btnState: buttons && buttons.length ? { busy: false, doneIndex: null, done: [] } : null, ts, mid };
       }
       case 'note':
         return { kind: 'note', text: raw.text || '', ts, mid };
@@ -1573,15 +1573,17 @@
       files.map(f => h('button', { class: 'file', text: '📄 ' + f.name, onclick: () => openViewer([{ url: f.url, name: f.name }], 0, f.name) })));
   }
 
-  /** 알림에 달린 버튼(제안 승인·메일 보내기 등) — 누르면 그 항목의 버튼을 모두 잠근다 */
+  /** 알림에 달린 버튼 — 제안 승인·메일 보내기처럼 한 번 정하면 끝인 것은 하나 누르면 나머지를 잠그고,
+      AI Office 승인함(office:)은 줄마다 따로라 누른 것만 「✓ 눌렀어요」 · 나머지는 계속 누를 수 있다 (2026-10-31) */
+  const indep = it => (it.buttons || []).every(([, data]) => /^office:/.test(data));
   function buttonRow(it) {
     if (!it.buttons || !it.buttons.length) return null;
-    const st = it.btnState;
+    const st = it.btnState, one = !indep(it);
     return h('div', { class: 'nbtns' }, it.buttons.map(([label, data], i) => {
-      const done = st.doneIndex === i;
+      const done = (st.done || []).includes(i);
       return h('button', {
         class: 'nbtn' + (done ? ' done' : ''),
-        disabled: st.busy || st.doneIndex != null,
+        disabled: st.busy || done || (one && st.doneIndex != null),
         text: done ? '✓ 눌렀어요' : label,
         onclick: () => pressButton(it, i, data),
       });
@@ -1589,13 +1591,14 @@
   }
 
   async function pressButton(it, i, data) {
-    const st = it.btnState;
-    if (!st || st.busy || st.doneIndex != null) return;
+    const st = it.btnState, one = !indep(it);
+    if (!st || st.busy || (st.done || []).includes(i) || (one && st.doneIndex != null)) return;
     st.busy = true;
     paint(it);
     try {
       await api.post('button', { data });      // 서버는 {data: '…'} 를 받는다
       st.doneIndex = i;
+      (st.done = st.done || []).push(i);
     } catch (e) {
       show(e);
     } finally {
