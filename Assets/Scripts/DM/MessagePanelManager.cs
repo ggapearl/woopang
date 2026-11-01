@@ -4396,10 +4396,6 @@ public class MessagePanelManager : MonoBehaviour
                 {
                     heartIcon.gameObject.SetActive(setLiked);
                 }
-
-                // 햅틱 피드백
-                if (UIFeedbackManager.Instance != null)
-                    UIFeedbackManager.Instance.TriggerLightHaptic();
             }
 
             handler?.OnRequestComplete();

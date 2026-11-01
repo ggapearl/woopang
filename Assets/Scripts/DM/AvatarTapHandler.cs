@@ -31,6 +31,10 @@ public class AvatarTapHandler : MonoBehaviour, IPointerClickHandler
         {
             img.raycastTarget = true;
         }
+
+        // 터치 피드백 (소리+진동) 자동 추가
+        if (GetComponent<UITouchForwarder>() == null)
+            gameObject.AddComponent<UITouchForwarder>();
     }
 
     public void OnPointerClick(PointerEventData eventData)

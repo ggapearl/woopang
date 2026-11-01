@@ -254,6 +254,7 @@ namespace Redesign0926
             ResetListeners(b);
             UnityEventTools.AddPersistentListener(b.onClick, fm.CloseAway);
             EditorUtility.SetDirty(b);
+            DockCloseSound(root, go, log);
 
             var sd = bg.GetComponent<R0926SwipeDismiss>();
             if (sd != null) Proxy(root, sd, "FollowPanel/DockMirror0926/DockClose0926", log);

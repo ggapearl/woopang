@@ -151,6 +151,7 @@ namespace Redesign0926
             else if (mode == "follow") PlanFollow();
             else if (mode == "follownotif") PlanFollowNotif();
             else if (mode == "chatnotif") PlanChatNotif();
+            else if (mode == "tapfeedback") PlanTapFeedback();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
             else if (mode == "mapprofile") PlanMapProfile();
@@ -2196,6 +2197,121 @@ namespace Redesign0926
         private static InputField ChatInputField() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.chatInput;
 
         // 메시지·공지 알림을 누르면 그 대화방으로 (10-27 대표님 「'메세지' 가 왔을 때 해당 알림을 터치해서 앱이 켜지면 해당 메세지창으로 바로 이동」) — 서버가 보내는 값 그대로
+        // 설정 탭처럼 다른 버튼들도 소리 · 햅틱 (10-30 대표님 「설정 등 다른 화면들에 있어서도 상단의 '설정탭' 누를 때처럼 소리랑 햅틱효과 발생하도록 기타 다른 버튼들도 잘 확인하고 해당 효과 넣어줘」)
+        private static void PlanTapFeedback()
+        {
+            const string H = HuntCardPath, C = SetPath + "Viewport/Content/";
+            var made = new List<GameObject>();
+            Transform host = null;
+            Button plain = null, wired = null, selfLock = null, locked = null, dim = null, swap = null;
+            Toggle toggle = null;
+            GameObject heart = null, avatar = null;
+            int likes = 0, avatars = 0;
+            Func<R0926SheetModes> modes = () => UnityEngine.Object.FindAnyObjectByType<R0926SheetModes>(FindObjectsInactive.Include);
+            Func<SwipePanelController> swipe = () => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude);
+            Func<string, GameObject> ui = name =>
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(host, false);
+                made.Add(go);
+                return go;
+            };
+            Func<string, Button> button = name => ui(name).AddComponent<Button>();
+            // 손을 떼는 순서 그대로 — 눌러서 소리 · 진동이 몇 번 났는지
+            Func<GameObject, int> played = go =>
+            {
+                int n = UIFeedbackManager.EditorFeedbacks;
+                var e = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current) { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left, pointerPress = go };
+                UnityEngine.EventSystems.ExecuteEvents.Execute(go, e, UnityEngine.EventSystems.ExecuteEvents.pointerUpHandler);
+                UnityEngine.EventSystems.ExecuteEvents.Execute(go, e, UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+                return UIFeedbackManager.EditorFeedbacks - n;
+            };
+            Func<string, AudioClip> sound = path =>
+            {
+                var fw = Find(path)?.GetComponent<UITouchForwarder>();
+                return fw != null ? typeof(UITouchForwarder).GetField("customSound", NPI).GetValue(fw) as AudioClip : null;
+            };
+
+            Do(() => SessionState.SetBool(LoginReadyKey, true));   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(1.0f);
+
+            // 1) 실행 중에 생긴 것 — 줄 · 핀 · 말풍선과 같다
+            Do(() =>
+            {
+                host = Find("Dock0926").parent;
+                plain = button("TapPlain0926");
+                wired = button("TapWired0926");
+                wired.onClick.AddListener(() => UIFeedbackManager.Instance.HandleTouchFeedbackDirect());   // 보물찾기 버튼처럼 스스로 소리를 낸다
+                selfLock = button("TapSelfLock0926");
+                selfLock.onClick.AddListener(() => selfLock.interactable = false);   // 보내는 동안 잠그는 버튼처럼
+                locked = button("TapLocked0926");
+                locked.interactable = false;
+                dim = button("Dim0926");
+                toggle = ui("TapToggle0926").AddComponent<Toggle>();
+                heart = ui("TapHeart0926");
+                heart.AddComponent<HeartLikeButtonHandler>().Initialize(1, true, (id, liked) => likes++);
+                avatar = ui("TapAvatar0926");
+                avatar.AddComponent<AvatarTapHandler>().Initialize("7", "이웃", (id, name) => avatars++);
+            });
+            Sleep(0.1f);
+            Check(() => plain.GetComponent<UITouchForwarder>() != null && toggle.GetComponent<UITouchForwarder>() != null, "실행 중에 생긴 버튼 · 토글에도 바로 붙는다");
+            Check(() => dim.GetComponent<UITouchForwarder>() == null, "시트 바깥 어두운 곳에는 붙지 않는다");
+            Check(() => played(plain.gameObject) == 1, "버튼 누름 = 소리 · 진동 한 번");
+            Sleep(0.1f);
+            Check(() => played(toggle.gameObject) == 1, "토글 누름 = 한 번");
+            Sleep(0.1f);
+            Check(() => played(wired.gameObject) == 1, "스스로 소리 내는 버튼도 두 번 겹치지 않는다");
+            Sleep(0.1f);
+            Check(() => played(selfLock.gameObject) == 1 && !selfLock.interactable, "누르자마자 스스로 잠그는 버튼도 소리");
+            Sleep(0.1f);
+            Check(() => played(selfLock.gameObject) == 0, "잠긴 뒤에는 소리 없음");
+            Sleep(0.1f);
+            Check(() => played(locked.gameObject) == 0, "막힌 버튼은 소리 없음");
+            Sleep(0.1f);
+            Check(() => played(heart) == 1 && likes == 1, "말풍선 하트 = 한 번");
+            Sleep(0.1f);
+            Check(() => played(avatar) == 1 && avatars == 1, "대화방 아바타 = 한 번");
+            Sleep(0.1f);
+            Do(() => { plain.gameObject.SetActive(false); swap = button("TapSwap0926"); });   // 개수는 그대로 화면만 바뀐다
+            Sleep(0.45f);
+            Check(() => swap.GetComponent<UITouchForwarder>() != null, "개수가 같게 바뀐 화면도 곧 붙는다");
+            Do(() => { foreach (var go in made) UnityEngine.Object.Destroy(go); });
+            Sleep(0.1f);
+
+            // 2) 도크 칸 X 는 어느 창에서든 같은 소리
+            Check(() =>
+            {
+                var x = sound("MessagePanel/DockMirror0926/CloseButton");
+                log.Add("  도크 X 소리 " + (x != null ? x.name : "-") + " · 도크 " + (sound("Dock0926/List_Button") != null ? sound("Dock0926/List_Button").name : "-"));
+                return x != null && sound("FollowPanel/DockMirror0926/DockClose0926/ClosePx0926") == x && sound("FullProfilePanel/DockMirror0926/ProfileToggle0926") == x;
+            }, "팔로우 · 프로필의 도크 X = 다른 창 도크 X 소리");
+
+            // 3) 실제 화면 — 설정 줄(전엔 없었다) · 도크(물방울 그대로) · 보물찾기(스스로 소리)
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.2f);
+            Do(() => modes()?.Show(2));
+            Sleep(1.2f);
+            Check(() => played(Find(C + "GroupInfo/RowPrivacy").gameObject) == 1, "설정 줄 누름 = 한 번");
+            Sleep(1.0f);
+            Back();
+            Sleep(0.8f);
+            Back();
+            Sleep(1.0f);
+            Check(() => sound("Dock0926/PlusButton") != null && played(Find("Dock0926/PlusButton").gameObject) == 1, "도크 버튼은 물방울 소리 그대로 한 번");
+            Sleep(1.2f);
+            Do(() => swipe()?.SwitchToPanel(2));
+            Sleep(2.0f);
+            Check(() => played(Find(H + "Hub/Viewport/Content/LoginBox/LoginButton").gameObject) == 1, "보물찾기 버튼도 한 번");
+            Sleep(0.6f);
+            Shot("tapfeedback");
+        }
+
         private static void PlanChatNotif()
         {
             const string Dev = "http://127.0.0.1:5099", PeerA = "hunt_test_cna", PeerB = "hunt_test_cnb", NameA = "연남동이웃", NameB = "효자동이웃";
@@ -13283,7 +13399,26 @@ namespace Redesign0926
         {
             Sleep(0.4f);
             Do(() => ScanTexts(where));
+            Do(() => ScanTaps(where));
             Shot("lang_" + where);
+        }
+        // 화면마다 켜진 버튼에 누름 소리가 붙었는지 · 화면을 거의 덮는 버튼 이름 (어두운 바깥을 놓치지 않았는지 사람이 본다)
+        private static readonly HashSet<string> tapSilent = new HashSet<string>();
+        private static readonly HashSet<string> tapHuge = new HashSet<string>();
+        private static void ScanTaps(string where)
+        {
+            var corners = new Vector3[4];
+            foreach (var s in UnityEngine.Object.FindObjectsByType<Selectable>(FindObjectsInactive.Exclude))
+            {
+                if (!(s is Button || s is Toggle) || !s.enabled || UIFeedbackManager.IsBackdrop(s.name)) continue;   // 꺼 둔 버튼 = 누를 수 없는 안내 줄
+                if (s.GetComponent<UITouchForwarder>() == null) tapSilent.Add(where + ": " + PathOf(s.transform));
+                var canvas = s.GetComponentInParent<Canvas>();
+                if (canvas == null) continue;
+                var cam = canvas.rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.rootCanvas.worldCamera;
+                ((RectTransform)s.transform).GetWorldCorners(corners);
+                var size = RectTransformUtility.WorldToScreenPoint(cam, corners[2]) - RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
+                if (Mathf.Abs(size.x * size.y) > 0.6f * Screen.width * Screen.height) tapHuge.Add(PathOf(s.transform));
+            }
         }
         private static void PlanLang()
         {
@@ -13308,6 +13443,8 @@ namespace Redesign0926
             Do(() =>
             {
                 langSeen.Clear();
+                tapSilent.Clear();
+                tapHuge.Clear();
                 SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
                 log.Add("  앱 언어 " + AppLanguage.Code + " · LocalizationManager " + (LocalizationManager.Instance != null ? LocalizationManager.Instance.GetCurrentLanguage() : "-"));
                 var sb = new System.Text.StringBuilder();
@@ -13559,6 +13696,12 @@ namespace Redesign0926
 
             Do(() =>
             {
+                log.Add("  화면을 덮는 버튼: " + string.Join(" · ", tapHuge));
+                foreach (var s in tapSilent) log.Add("  소리 없는 버튼 " + s);
+            });
+            Check(() => tapSilent.Count == 0, "지나간 화면의 버튼에 모두 누름 소리");
+            Do(() =>
+            {
                 LoginManager.EditorAuthBase = null;
                 if (skyPagesRun) SkyPagesCleanup();
                 else RestoreSkyPrefs();
@@ -13590,6 +13733,7 @@ namespace Redesign0926
                     if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     if (pl.Length > 1 && pl[1].Trim() == "chatnotif") StashLogin();
+                    if (pl.Length > 1 && pl[1].Trim() == "tapfeedback") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim().StartsWith("lang_")) { AppLanguage.EditorOverride = pl[1].Trim().Substring(5); StashLogin(); }   // 기기 언어를 바꿔 켠다
                     RestoreWoopangPrefs();   // 지난 시험이 스크립트 다시 읽기로 끊겨 못 되돌린 것
                     RestoreSkyPrefs();

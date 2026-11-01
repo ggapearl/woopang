@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 public class UIFeedbackManager : MonoBehaviour
@@ -50,6 +51,21 @@ public class UIFeedbackManager : MonoBehaviour
     private AudioSource audioSource;
     private AudioClip cachedButtonSound;
 
+    // 누를 수 있는 것은 모두 설정 탭처럼 소리·진동 (10-30 대표님) — 줄·핀·말풍선처럼 실행 중에 생기는 버튼도 있어, 켜진 버튼을 훑어 붙인다
+    private const float ScanEvery = 0.25f;
+    // 버튼이 아니라 시트 바깥 어두운 곳 · 입력 막이
+    private static readonly HashSet<string> Backdrops = new HashSet<string> { "Dim", "Dim0926", "Shade0926", "BackClose0926", "CommentPanel_HQ", "UploadPage", "DialogPanel" };
+    private Selectable[] selectables = new Selectable[256];
+    private int lastSelectableCount = -1;
+    private float nextScan;
+    private int lastFeedbackFrame = -1;
+
+    public bool FedBackThisFrame => lastFeedbackFrame == Time.frameCount;
+    public static bool IsBackdrop(string objectName) => Backdrops.Contains(objectName);
+#if UNITY_EDITOR
+    public static int EditorFeedbacks;
+#endif
+
     public enum HapticIntensity
     {
         Light = 0,
@@ -80,6 +96,23 @@ public class UIFeedbackManager : MonoBehaviour
         else
         {
             Destroy(gameObject);
+        }
+    }
+
+    void Update()
+    {
+        int count = Selectable.allSelectableCount;
+        if (count == lastSelectableCount && Time.unscaledTime < nextScan) return;   // 창이 열려 개수가 바뀌면 바로, 같은 개수로 바뀐 화면은 곧
+        lastSelectableCount = count;
+        nextScan = Time.unscaledTime + ScanEvery;
+
+        if (selectables.Length < count) selectables = new Selectable[count * 2];
+        int n = Selectable.AllSelectablesNoAlloc(selectables);
+        for (int i = 0; i < n; i++)
+        {
+            var s = selectables[i];
+            if (!(s is Button || s is Toggle) || s.TryGetComponent<UITouchForwarder>(out _) || Backdrops.Contains(s.name)) continue;
+            s.gameObject.AddComponent<UITouchForwarder>();
         }
     }
 
@@ -162,6 +195,10 @@ public class UIFeedbackManager : MonoBehaviour
 
     private void ExecuteFeedback(float intensity, AudioClip clip, float volumeScale = 1f)
     {
+        lastFeedbackFrame = Time.frameCount;
+#if UNITY_EDITOR
+        EditorFeedbacks++;
+#endif
         PlaySound(clip, volumeScale);
         TriggerHaptic(intensity);
     }

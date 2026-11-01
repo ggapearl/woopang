@@ -173,6 +173,7 @@ namespace Redesign0926
                 var gb = Ensure<Button>(tog);
                 gb.transition = Selectable.Transition.None;
                 DockCloseLook(tog);
+                DockCloseSound(root, tog, log);
                 var cp = Ensure<R0926CloseProxy>(tog);
                 var cso = new SerializedObject(cp);
                 cso.FindProperty("sheet").objectReferenceValue = fade;

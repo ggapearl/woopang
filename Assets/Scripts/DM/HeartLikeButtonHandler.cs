@@ -32,6 +32,10 @@ public class HeartLikeButtonHandler : MonoBehaviour, IPointerClickHandler
         this.messageId = messageId;
         this.isLiked = isLiked;
         this.onLikeToggle = callback;
+
+        // 터치 피드백 (소리+진동) 자동 추가
+        if (GetComponent<UITouchForwarder>() == null)
+            gameObject.AddComponent<UITouchForwarder>();
     }
 
     /// <summary>

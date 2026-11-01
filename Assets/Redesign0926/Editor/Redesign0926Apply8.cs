@@ -143,6 +143,16 @@ namespace Redesign0926
               new[] { "PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton" }),
         };
 
+        // 도크 칸의 X 는 어느 창에서든 같은 소리 — 메시지 창 X 의 소리를 쓴다
+        private static void DockCloseSound(Transform root, GameObject go, List<string> log)
+        {
+            var same = FindP(root, "MessagePanel/DockMirror0926/CloseButton")?.GetComponent<UITouchForwarder>();
+            if (same == null) { log.Add("도크 X 소리 못 찾음 — 기본 소리"); return; }
+            var so = new SerializedObject(Ensure<UITouchForwarder>(go));
+            so.FindProperty("customSound").objectReferenceValue = new SerializedObject(same).FindProperty("customSound").objectReferenceValue;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         // 원래 닫기 버튼 위에 투명한 누름 영역을 덮는다 — 누르면 시트가 내려간 뒤 원래 버튼을 누른다.
         // 뒤로가기 등록(ClickButtonOnBack)과 바깥 누르기(R0926TapToClose)도 이 덮개로 옮긴다
         private static void Proxy(Transform root, R0926Closer sd, string realPath, List<string> log)
