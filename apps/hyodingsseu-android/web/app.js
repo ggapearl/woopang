@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-02d';
+  const WEB_VERSION = '2026-11-02e';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2408,8 +2408,7 @@
       h('button', { class: 'icon docs', 'aria-label': '문서함', onclick: () => { sfx.play('tap'); openDocs(); } },
         svg('folder'), h('span', { class: 'nbadge', hidden: true })),
       h('button', { class: 'icon appr', 'aria-label': '승인함', onclick: () => { sfx.play('tap'); openAppr(); } },
-        svg('inbox'), h('span', { class: 'nbadge', hidden: true })),
-      h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) }));
+        svg('inbox'), h('span', { class: 'nbadge', hidden: true })));
 
     app.append(h('div', { class: 'screen', id: 'main' },
       bar,
@@ -2418,7 +2417,8 @@
       h('div', { class: 'composer' },
         h('div', { class: 'chips' }),
         h('div', { class: 'att-strip', hidden: true }),
-        h('div', { class: 'row' }, plusBtn, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn))),
+        h('div', { class: 'row' }, plusBtn, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn),
+        h('div', { class: 'cfoot' }, h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) })))),
       h('div', { class: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite' }));
 
     renderAllItems();
@@ -2470,7 +2470,7 @@
 
   function modelMenu(anchor) {
     const r = anchor.getBoundingClientRect();
-    const menu = h('div', { class: 'menu', role: 'menu', style: 'top:' + (r.bottom + 6) + 'px;right:' + Math.max(8, innerWidth - r.right) + 'px' },
+    const menu = h('div', { class: 'menu', role: 'menu', style: 'bottom:' + (innerHeight - r.top + 6) + 'px;left:' + Math.max(8, r.left) + 'px' },
       h('h4', { text: '모델' }),
       S.models.map(m => h('button', { role: 'menuitemradio', 'aria-checked': m.key === S.model ? 'true' : 'false', onclick: () => { close(); sfx.play('tap'); setModel(m.key); } },
         h('i', { text: m.key === S.model ? '✓' : '' }),
@@ -2529,7 +2529,7 @@
       h('div', { class: 'sec', text: '더 보기' }),
       drawerRow('새 대화', '효딩쓰와 처음부터 다시', false, h('span', { class: 'badge-ic' }, svg('pencil')), () => { newChat(); close(); }));
     d.append(
-      h('header', null, h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close }), h('h2', { text: '대화 상대' })),
+      h('header', null, h('h2', { text: '대화 상대' }), h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close })),
       scroll,
       h('footer', null, h('i'), h('span')));
     scroll.scrollTop = top;
@@ -2567,9 +2567,9 @@
     opts = opts || {};
     const page = h('div', { class: 'screen page' },
       h('div', { class: 'bar sub' },
-        h('button', { class: 'icon', 'aria-label': opts.close ? '닫기' : '뒤로', onclick: () => popPage(), html: opts.close ? ICON.close : ICON.back }),
+        opts.close ? h('span', { class: 'spacer' }) : h('button', { class: 'icon', 'aria-label': '뒤로', onclick: () => popPage(), html: ICON.back }),
         h('div', { class: 'who' }, h('b', { text: title })),
-        h('span', { class: 'spacer' })),
+        opts.close ? h('button', { class: 'icon', 'aria-label': '닫기', onclick: () => popPage(), html: ICON.close }) : h('span', { class: 'spacer' })),
       content);
     page.onClose = onClose;
     pages.push(page);
@@ -3195,11 +3195,11 @@
     const next = many ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
     const el = h('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '보기' },
       h('div', { class: 'vw-top' },
-        h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
         h('div', { class: 'vw-acts' },
           h('button', { class: 'vw-btn text', text: '저장', onclick: () => downloadFile(list[idx].url, list[idx].name) }),
-          h('button', { class: 'vw-btn text', text: '공유', onclick: share }))),
+          h('button', { class: 'vw-btn text', text: '공유', onclick: share }),
+          h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }))),
       h('div', { class: 'vw-stage' }, track, prev, next),
       h('div', { class: 'vw-foot' }, nameEl, h('button', { class: 'vw-open', text: '브라우저로 열기', onclick: () => openLink(list[idx].url) })));
 
@@ -3237,6 +3237,37 @@
       const e = list[idx];
       return shareFiles([e], e.name || title || '효딩쓰');
     }
+
+    /** 아래로 쓸어내리면 닫힌다 (2026-11-02 대표님) — 사진·영상·상단·하단에서. 가로로 넘기기·확대·글 문서(안쪽이 따로 스크롤)는 건드리지 않는다. */
+    let sy = 0, sx = 0, st = 0, drag = false;
+    el.addEventListener('touchstart', ev => {
+      drag = ev.touches.length === 1 && !(window.visualViewport && window.visualViewport.scale > 1.05)
+        && !ev.target.closest('iframe,.vw-btn,.vw-open,.vw-arrow,video,audio');
+      if (!drag) return;
+      sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; st = Date.now();
+    }, { passive: true });
+    el.addEventListener('touchmove', ev => {
+      if (!drag) return;
+      const dx = ev.touches[0].clientX - sx, dy = ev.touches[0].clientY - sy;
+      if (dy > 12 && dy > Math.abs(dx) * 1.5) {
+        el.style.transition = 'none';
+        el.style.transform = 'translateY(' + dy + 'px)';
+        el.style.opacity = String(Math.max(0.3, 1 - dy / 500));
+      } else if (Math.abs(dx) > 24) { drag = false; el.style.transform = ''; el.style.opacity = ''; }
+    }, { passive: true });
+    const endDrag = ev => {
+      if (!drag) return;
+      drag = false;
+      const t = ev.changedTouches && ev.changedTouches[0], dy = t ? t.clientY - sy : 0, dx = t ? t.clientX - sx : 0;
+      el.style.transition = 'transform .18s ease, opacity .18s ease';
+      if (dy > 110 && dy > Math.abs(dx) * 1.5 && (dy > 180 || Date.now() - st < 600)) {
+        haptic('tap'); sfx.play('tap');
+        el.style.transform = 'translateY(100%)'; el.style.opacity = '0';
+        setTimeout(() => close(), 120);
+      } else { el.style.transform = ''; el.style.opacity = ''; }
+    };
+    el.addEventListener('touchend', endDrag, { passive: true });
+    el.addEventListener('touchcancel', endDrag, { passive: true });
 
     const onKey = ev => {
       if (ev.key === 'Escape') close();

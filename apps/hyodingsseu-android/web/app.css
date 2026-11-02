@@ -77,8 +77,10 @@ svg{display:block}
 .who{min-width:0;flex:1}
 .who b{display:block;font-size:17px;font-weight:600;line-height:1.25;letter-spacing:-.01em}
 .who small{display:block;font-size:12px;line-height:1.35;color:var(--bar-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pill{flex:none;font-size:12px;font-weight:600;color:var(--bar-ink);padding:6px 11px;border-radius:999px;background:rgba(255,255,255,.13)}
-.pill:active{background:rgba(255,255,255,.22)}
+.pill{flex:none;display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink-2);padding:5px 11px;border-radius:999px;background:var(--surface-2)}
+.pill::after{content:'';width:6px;height:6px;border-right:1.6px solid currentColor;border-top:1.6px solid currentColor;transform:rotate(-45deg) translate(-1px,1px)}
+.pill:active{background:var(--line)}
+.cfoot{display:flex;align-items:center;padding:6px 12px 0}
 .bar.sub .who{text-align:center}
 .bar.sub .spacer{width:44px;flex:none}
 
@@ -458,13 +460,13 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 /* 사진·영상 보기 (2026-10-04) — 사진이 잘 보이게 늘 검은 바탕 */
 .viewer{position:absolute;top:0;right:0;bottom:0;left:0;z-index:38;background:#000;color:#fff;display:flex;flex-direction:column;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-.vw-top{flex:none;height:52px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 6px}
+.vw-top{flex:none;height:52px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 6px 0 16px}
 .vw-acts{display:flex;align-items:center}
 .vw-btn{min-width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:#fff}
 .vw-btn svg{width:22px;height:22px}
 .vw-btn.text{padding:0 12px;font-size:15px;font-weight:600}
 .vw-btn:active{background:rgba(255,255,255,.14)}
-.vw-count{flex:1;text-align:center;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.vw-count{flex:1;text-align:left;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
 .vw-stage{flex:1;min-height:0;position:relative}
 .vw-track{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;
   overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none}
