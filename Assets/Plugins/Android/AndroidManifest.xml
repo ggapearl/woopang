@@ -32,6 +32,13 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="woopang" android:host="hunt" />
       </intent-filter>
+      <!-- 계정 관리 웹(비밀번호 변경·계정 삭제)이 앱으로 돌아오는 길 woopang://account/close|password|deleted (11-02, 앱 안 크롬 탭이 닫힌다) -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="woopang" android:host="account" />
+      </intent-filter>
       <!-- 서버 FCM 알림의 click_action — 이 필터가 없으면 알림을 눌러도 앱이 열리지 않았다 -->
       <intent-filter>
         <action android:name="OPEN_MESSAGE_PANEL" />

@@ -431,9 +431,12 @@ public class LoginManager : MonoBehaviour
 #if UNITY_EDITOR
         EditorBeforeWebLogin?.Invoke();
 #endif
-        Application.OpenURL(url);
+        R0926Web.Open(url, true);   // 앱 안 브라우저 — 사파리·크롬에 남은 카카오·구글 로그인은 그대로 이어 쓴다 (11-02)
         CloseLoginPrompt();
     }
+
+    /// <summary>앱 안 브라우저(아이폰)가 돌려준 woopang://… — 딥링크와 같은 길로 (R0926Web)</summary>
+    public void HandleLink(string url) => OnDeepLinkActivated(url);
 
     private void OnDeepLinkActivated(string url)
     {
@@ -442,6 +445,33 @@ public class LoginManager : MonoBehaviour
         if (url.StartsWith("woopang://auth"))
         {
             ParseAuthDeepLink(url);
+        }
+        else if (url.StartsWith("woopang://account"))
+        {
+            OnAccountLink(url);
+        }
+    }
+
+    /// <summary>
+    /// 계정 관리 웹(비밀번호 변경·계정 삭제)에서 돌아왔다 — woopang://account/close|password|deleted (11-02).
+    /// 로그인돼 있을 때만 — 안드로이드는 마지막 딥링크가 absoluteURL 에 남아 로그아웃 뒤 앱으로 돌아올 때마다 다시 들어온다.
+    /// </summary>
+    private void OnAccountLink(string url)
+    {
+        if (!IsLoggedIn) return;
+        string what = url.Substring("woopang://account".Length).TrimStart('/');
+        int cut = what.IndexOfAny(new[] { '/', '?', '#' });
+        if (cut >= 0) what = what.Substring(0, cut);
+        if (what == "deleted")
+        {
+            if (ProfileManager.Instance != null) ProfileManager.Instance.CloseAway();
+            Logout();
+            ToastManager.Instance?.ShowInfo(R0926LocalizedText.Say("계정을 삭제했어요. 그동안 고마웠어요", "Your account has been deleted. Thank you for using Woopang",
+                "アカウントを削除しました。ご利用ありがとうございました", "账户已删除，感谢你使用 Woopang", "Tu cuenta se ha eliminado. Gracias por usar Woopang"));
+        }
+        else if (what == "password")
+        {
+            ToastManager.Instance?.ShowSuccess(R0926LocalizedText.Say("비밀번호를 바꿨어요", "Password changed", "パスワードを変更しました", "密码已修改", "Contraseña cambiada"));
         }
     }
 

@@ -155,6 +155,7 @@ namespace Redesign0926
             else if (mode == "person") PlanPerson();
             else if (mode == "personmodel") PlanPersonModel();
             else if (mode == "profilemodel") PlanProfileModel();
+            else if (mode == "inappweb") PlanInAppWeb();
             else if (mode == "tapfeedback") PlanTapFeedback();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
@@ -2204,6 +2205,168 @@ namespace Redesign0926
         // 프로필 3D 모델 (10-25 대표님 「glb 파일 업로드한 경우 프로필에서는 해당 glb 파일이 보이고」「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」).
         //    시험 서버의 프로필 흉내에 운영 avatar_model_route·make_lite 를 그대로 붙였다 (DB 는 버리는 55442).
         //    올리기 전 → 안 보내는 파일 → 올리기 → 프로필 화면 → 사진/3D 고르기 → 바꾸기 → 서버 거절 → 시트를 닫아도 끝까지 → 지우기 두 번 → 남의 프로필 → 다섯 언어
+        [Serializable] private class DevAccountState { public bool exists, password_ok, hash_ok; public int followers, follows; public string[] model_files; }
+        /// <summary>앱 안 브라우저 (11-02) — 로그인·계정 관리를 R0926Web 으로 열고, 계정 관리 웹은 비밀번호·삭제만, woopang://account/* 로 돌아온다</summary>
+        private static void PlanInAppWeb()
+        {
+            const string Dev = "http://127.0.0.1:5099";
+            R0926ProfileEdit pe = null;
+            string token = null, html = null, pwRes = null, delRes = null;
+            int opened = 0;
+            bool quietOnCancel = false;
+            Func<string, bool> toastHas = part =>
+            {
+                var tm = ToastManager.Instance;
+                var l = tm != null ? typeof(ToastManager).GetField("live", NPI)?.GetValue(tm) as System.Collections.IList : null;
+                if (l == null) return false;
+                foreach (var o in l) if ((o.GetType().GetField("message")?.GetValue(o) as string ?? "").Contains(part)) return true;
+                return false;
+            };
+            Action toastClear = () =>
+            {
+                var tm = ToastManager.Instance;
+                var l = tm != null ? typeof(ToastManager).GetField("live", NPI)?.GetValue(tm) as System.Collections.IList : null;
+                if (l == null) return;
+                foreach (var o in l) o.GetType().GetField("message")?.SetValue(o, "");
+            };
+            Func<int, string, DevAccountState> account = (n, pw) =>
+            {
+                string r = DevPost("", "/api/dev/account_state", "{\"n\":" + n + ",\"password\":" + (pw == null ? "null" : "\"" + pw + "\"") + "}");
+                return string.IsNullOrEmpty(r) ? new DevAccountState() : JsonUtility.FromJson<DevAccountState>(r);
+            };
+            // 웹 화면이 하는 부름 — 화면이 쥔 토큰으로
+            Func<string, string, string, string> call = (method, path, json) =>
+            {
+                using (var wc = new System.Net.WebClient())
+                {
+                    wc.Encoding = System.Text.Encoding.UTF8;
+                    wc.Headers[System.Net.HttpRequestHeader.Authorization] = "Bearer " + token;
+                    wc.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
+                    try { return wc.UploadString(Dev + path, method, json ?? ""); }
+                    catch (System.Net.WebException e) when (e.Response != null)
+                    {
+                        using (var r = new System.IO.StreamReader(e.Response.GetResponseStream())) return r.ReadToEnd();
+                    }
+                }
+            };
+            Func<string, bool> ok = res => res != null && System.Text.RegularExpressions.Regex.IsMatch(res, "\"success\"\\s*:\\s*true");
+            Func<bool> sheetReady = () => pe != null && typeof(R0926ProfileEdit).GetField("state", NPI).GetValue(pe).ToString() == "Ready";
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다 (시험이 로그아웃까지 한다)
+                LoginManager.EditorAuthBase = Dev;
+                ProfileManager.EditorBase = Dev;
+                FollowManager.EditorBase = Dev;
+                MessagePanelManager.EditorBase = Dev;
+                R0926HuntApi.EditorBase = Dev;
+                P2PManager.EditorBase = Dev;
+                FirebaseNotification.EditorBase = Dev;
+                R0926Web.EditorQuiet = true;
+                DevPost("", "/api/dev/profile_reset", "{\"users\":[{\"n\":1,\"username\":\"pe_web\",\"email\":\"web@x.y\",\"avatar\":true},{\"n\":2,\"username\":\"pe_web_friend\"}]}");
+                DevPost("", "/api/dev/account_seed", "{\"users\":[{\"n\":1,\"provider\":\"email\",\"password\":\"webpass11\",\"model\":true,\"follows\":[2]},{\"n\":2,\"provider\":\"kakao\"}]}");
+                pe = UnityEngine.Object.FindAnyObjectByType<R0926ProfileEdit>(FindObjectsInactive.Include);
+                opened = R0926Web.EditorCount;
+            });
+            Check(() => pe != null && account(1, "webpass11").password_ok && account(1, null).model_files.Length == 1 && account(2, null).followers == 1, "준비: 시험 회원 880001 (이메일 · 3D 모델 · 880002 팔로우)");
+
+            // 로그인 — 앱 안 브라우저 (사파리·크롬의 카카오·구글 로그인을 이어 쓴다)
+            Do(() => LoginManager.Instance.OpenWebLogin());
+            Check(() => R0926Web.EditorCount == opened + 1 && (R0926Web.EditorLast ?? "").StartsWith(ApiConfig.LOGIN_VIEW + "?lang=") && R0926Web.EditorLastShared && !Active("LoginPromptPanel"),
+                "로그인 → 앱 안 브라우저로 로그인 화면 (로그인 이어 쓰기)");
+
+            Do(() =>
+            {
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, PfToken);
+                SfLogin(true, PfId);
+                LoginManager.Instance.CurrentUser.username = "pe_web";
+                ProfileManager.Instance.ShowProfile(PfId);
+            });
+            Wait(() => Active("FullProfilePanel") && ProfileManager.Instance.editProfileButton != null && ProfileManager.Instance.editProfileButton.gameObject.activeInHierarchy, 12f, "내 프로필");
+            Sleep(0.8f);
+            Do(() => ProfileManager.Instance.editProfileButton.onClick.Invoke());
+            Wait(sheetReady, 10f, "편집 시트");
+            Sleep(0.5f);
+            Do(() => { opened = R0926Web.EditorCount; Click(PfC + "Web0926"); });
+            Wait(() => R0926Web.EditorCount == opened + 1, 10f, "계정 관리 열기");
+            Check(() => !Active(PfS) && (R0926Web.EditorLast ?? "").StartsWith(Dev + "/profile/edit?code=") && !R0926Web.EditorLastShared,
+                "'비밀번호 변경 · 계정 삭제' → 시트를 닫고 앱 안 브라우저로 (로그인은 나누지 않음)");
+            Do(() =>
+            {
+                using (var wc = new System.Net.WebClient()) { wc.Encoding = System.Text.Encoding.UTF8; html = wc.DownloadString(R0926Web.EditorLast); }
+                var m = System.Text.RegularExpressions.Regex.Match(html ?? "", "const TOKEN = \"([0-9a-f-]{36})\";");
+                token = m.Success ? m.Groups[1].Value : null;
+            });
+            Check(() => html.Contains("id=\"del-word\"") && html.Contains("id=\"cur\"") && !html.Contains("id=\"avatar-input\"") && !html.Contains("id=\"bio\"") && html.Contains("@pe_web") && token != null,
+                "열린 웹 = 계정 관리 (비밀번호 변경·계정 삭제만 · 사진·소개 칸 없음)");
+
+            // 돌아오는 길
+            Do(() => { toastClear(); LoginManager.Instance.HandleLink("woopang://account/close"); });
+            Sleep(0.3f);
+            Check(() => LoginManager.Instance.IsLoggedIn && !toastHas("비밀번호") && !toastHas("삭제"), "woopang://account/close → 그대로 (알림 없음)");
+            Do(() => pwRes = call("POST", "/api/account/password", "{\"current_password\":\"webpass11\",\"new_password\":\"webpass22\"}"));
+            Check(() => ok(pwRes) && account(1, "webpass22").password_ok && account(1, "webpass22").hash_ok, "웹에서 비밀번호 바꾸기 → 두 칸 다 새 비밀번호");
+            Do(() => { toastClear(); LoginManager.Instance.HandleLink("woopang://account/password"); });
+            Check(() => LoginManager.Instance.IsLoggedIn && toastHas("비밀번호를 바꿨어요"), "woopang://account/password → '비밀번호를 바꿨어요'");
+            Do(() =>
+            {
+                var go = new GameObject("R0926Web");   // 아이폰 시트가 결과를 보내는 받이
+                var w = go.AddComponent<R0926Web>();
+                toastClear();
+                w.OnWebReturn("");
+                quietOnCancel = !toastHas("비밀번호") && LoginManager.Instance.IsLoggedIn;
+                AppLanguage.EditorOverride = "en";
+                w.OnWebReturn("woopang://account/password");
+                UnityEngine.Object.Destroy(go);
+            });
+            Check(() => quietOnCancel && toastHas("Password changed"), "아이폰 시트 결과 — 닫으면 아무 일 없음 · woopang://account/password → (영어) 'Password changed'");
+            Do(() => AppLanguage.EditorOverride = null);
+
+            // 계정 삭제
+            Do(() => delRes = call("DELETE", "/api/account/delete", null));
+            Check(() => ok(delRes) && !account(1, null).exists && account(1, null).model_files.Length == 0 && account(2, null).followers == 0,
+                "웹에서 계정 삭제 → 회원 · 3D 모델 파일 · 팔로우(상대 팔로워 수) 정리");
+            Check(() => Active("FullProfilePanel"), "지우기 전 — 내 프로필이 떠 있다");
+            Do(() => { toastClear(); LoginManager.Instance.HandleLink("woopang://account/deleted"); });
+            Sleep(0.4f);
+            Check(() => !LoginManager.Instance.IsLoggedIn && !Active("FullProfilePanel") && toastHas("계정을 삭제했어요") && PlayerPrefs.GetString(LoginManager.AUTH_TOKEN_KEY, "") == "",
+                "woopang://account/deleted → 로그아웃 · 프로필 닫힘 · '계정을 삭제했어요'");
+            Do(() =>
+            {
+                toastClear();
+                LoginManager.Instance.HandleLink("woopang://account/deleted");
+                LoginManager.Instance.HandleLink("woopang://account/password");
+            });
+            Sleep(0.3f);
+            Check(() => !toastHas("계정을 삭제했어요") && !toastHas("비밀번호를 바꿨어요"), "로그아웃 뒤 같은 링크가 또 와도(안드로이드는 마지막 딥링크가 남는다) 알림 없음");
+
+            Do(() =>
+            {
+                AppLanguage.EditorOverride = null;
+                R0926Web.EditorQuiet = false;
+                ProfileManager.Instance?.CloseFullProfile();
+                DevPost("", "/api/dev/profile_reset", "{}");
+                LoginManager.EditorAuthBase = null;
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                MessagePanelManager.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                P2PManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+            Sleep(0.5f);
+        }
+
         [Serializable] private class DevModelRow { public string model_url, model_display; public string[] model_files; public int model_bytes; }
         private static void PlanProfileModel()
         {

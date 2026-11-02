@@ -2931,7 +2931,7 @@ public class ProfileManager : MonoBehaviour
     private IEnumerator OpenEditProfileWithCode()
     {
         string lang = GetCurrentLanguageCode();
-        using (UnityWebRequest req = new UnityWebRequest($"{BASE_URL}/api/profile/edit-link", "POST"))
+        using (UnityWebRequest req = new UnityWebRequest($"{BASE_URL}/api/profile/edit-link?scope=account", "POST"))   // 웹은 비밀번호 변경·계정 삭제만 (11-02)
         {
             req.downloadHandler = new DownloadHandlerBuffer();
             LoginManager.ApplyAuth(req);
@@ -2949,7 +2949,7 @@ public class ProfileManager : MonoBehaviour
 
             // 프로필 편집 페이지를 열었음을 표시 (돌아올 때 새로고침하기 위해)
             openedProfileEdit = true;
-            Application.OpenURL($"{BASE_URL}/profile/edit?code={res.code}&lang={lang}");
+            R0926Web.Open($"{BASE_URL}/profile/edit?code={res.code}&lang={lang}", false);   // 앱 안 브라우저
         }
     }
 

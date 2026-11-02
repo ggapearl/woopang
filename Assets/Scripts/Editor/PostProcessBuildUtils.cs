@@ -259,6 +259,9 @@ namespace Editor
             project.AddBuildProperty(mainTargetGuid, "OTHER_LDFLAGS", "-ObjC");
             project.AddBuildProperty(unityFrameworkGuid, "OTHER_LDFLAGS", "-ObjC");
 
+            // 앱 안 브라우저(웹 로그인·계정 관리) — Plugins/iOS/WoopangWeb.mm 의 ASWebAuthenticationSession
+            project.AddFrameworkToProject(unityFrameworkGuid, "AuthenticationServices.framework", false);
+
             // Bitcode 비활성화 (Unity 권장) - 모든 타겟
             project.SetBuildProperty(mainTargetGuid, "ENABLE_BITCODE", "NO");
             project.SetBuildProperty(unityFrameworkGuid, "ENABLE_BITCODE", "NO");
