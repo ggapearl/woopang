@@ -34,7 +34,7 @@ namespace Redesign0926
         private static readonly Vector3 EggHinge = new Vector3(0f, EggSeam, EggR);
         // 사진 액자 — 사진 칸은 R0926HuntChest.PhotoSide · PhotoY · PhotoZ 와 같다 (바꾸면 같이)
         private const float PhotoWin = 0.34f, PhotoMid = 0.12f, PhotoHalfW = 0.42f, PhotoTop = 0.54f, PhotoBot = -0.42f, PhotoDepth = 0.045f;
-        private const float StarY = -0.04f, HeartScale = 0.0297f;
+        private const float StarY = -0.04f, HeartScale = 0.0297f, HeartTable = 0.185f;   // 보석 하트 테이블 높이 (앞뒤) — 자물쇠가 이 앞에 붙는다
         // 비밀번호를 건 보물의 자물쇠 (10-26) — 원점 = 몸통 위 가운데(고리 다리가 들어가는 곳). 고리는 왼쪽 다리를 축으로 열린다
         private const string LockSteelMatPath = "Assets/Materials/AR/HuntLockSteel_Mat.mat";
         private const float LockHalfW = 0.09f, LockHalfH = 0.075f, LockHalfD = 0.03f;
@@ -84,7 +84,7 @@ namespace Redesign0926
             var shell = ChestMat(dir + "HuntEggShell_Mat.mat", sh, new Color(0.64f, 0.50f, 0.94f), new Color(0.78f, 0.66f, 1f), 0.7f, new Color(0.95f, 0.90f, 1f), 2f, 1.3f, new Color(0.75f, 0.62f, 1f));
             var gem = ChestMat(dir + "HuntGem_Mat.mat", sh, new Color(0.18f, 0.72f, 0.95f), new Color(0.45f, 0.90f, 1f), 1.1f, new Color(0.85f, 0.98f, 1f), 1.5f, 2f, new Color(0.6f, 0.95f, 1f));
             var star = ChestMat(dir + "HuntStar_Mat.mat", sh, new Color(1f, 0.80f, 0.22f), new Color(1f, 0.86f, 0.40f), 2.2f, new Color(1f, 0.95f, 0.65f), 2f, 1.6f);
-            var rose = ChestMat(dir + "HuntHeart_Mat.mat", sh, new Color(0.96f, 0.30f, 0.48f), new Color(1f, 0.45f, 0.58f), 0.9f, new Color(1f, 0.82f, 0.88f), 2f, 1.4f, new Color(1f, 0.55f, 0.65f));
+            var rose = ChestMat(dir + "HuntHeart_Mat.mat", sh, new Color(0.93f, 0.22f, 0.44f), new Color(1f, 0.40f, 0.58f), 1.0f, new Color(1f, 0.84f, 0.92f), 2f, 1.5f, new Color(1f, 0.52f, 0.66f));   // 보석 하트 — 반짝임은 면이 갈려서 · 테두리 빛을 더 세게 하면 오목한 곳의 가파른 면이 흰 금처럼 보인다
             var cream = ChestMat(dir + "HuntPhotoFrame_Mat.mat", sh, new Color(0.96f, 0.94f, 0.89f), new Color(1f, 0.95f, 0.85f), 0.35f, new Color(1f, 0.84f, 0.45f), 2.6f, 1.1f);
 
             // lockPos · lockTilt · lockScale = 비밀번호를 건 보물의 자물쇠 자리 — 앞(-Z)에 매단다 (뚜껑 있는 모양은 이음매 아래 · 기울기는 위가 상자 쪽으로)
@@ -104,8 +104,8 @@ namespace Redesign0926
                 new Vector3(0f, -0.02f, -0.473f), 10f, 0.9f);
             Add("star", ShapeMesh("HuntStar", 1, Star), null, new[] { star }, none, Vector3.zero, StarY, new Vector3(0f, StarY, 0f), new Vector3(1.15f, 1.1f, 0.7f),
                 new Vector3(0f, -0.35f, 0f), 0f, 0.9f);
-            Add("heart", ShapeMesh("HuntHeart", 3, Heart), null, new[] { rose, p.gold, p.trim }, none, Vector3.zero, 0f, Vector3.zero, new Vector3(1.15f, 1f, 0.7f),
-                new Vector3(0f, -0.055f, -0.249f), 10f, 0.9f);
+            Add("heart", ShapeMesh("HuntHeart", 1, Heart), null, new[] { rose }, none, Vector3.zero, 0f, Vector3.zero, new Vector3(1.15f, 1f, 0.7f),
+                new Vector3(0f, -0.055f, -(HeartTable + 0.037f)), 10f, 0.9f);
             Add("photo", ShapeMesh("HuntPhotoFrame", 2, PhotoFrame), null, new[] { cream, p.gold }, none, Vector3.zero, 0.30f, new Vector3(0f, 0.06f, 0f), new Vector3(1f, 1.1f, 0.5f),
                 new Vector3(0f, -0.33f, -0.086f), 10f, 0.9f);
             Add("model", null, null, none, none, Vector3.zero, 0f, Vector3.zero, Vector3.one * 1.2f, new Vector3(0f, -0.30f, -0.45f), 0f, 1f);   // 모델을 붙이면 런타임이 모델 앞 아래로 옮긴다
@@ -351,20 +351,67 @@ namespace Redesign0926
             }
         }
 
-        // 하트 — 하트 곡선을 가운데 쪽으로 줄여 가며 앞뒤로 부풀린 쿠션 + 앞뒤 금 자물쇠(열쇠 구멍)
+        // 하트 — 살짝 각진 보석 (11-02 대표님 「하트모양은 … 살짝 각진 보석모양의 하트로」). 하트 곡선을 길이로 고르게 20점 찍은 거들 +
+        // 앞뒤 크라운(거들 쪽 가파른 면 · 테이블 쪽 별 면) + 하트 모양 테이블. 면마다 꼭짓점을 따로 두어 보석처럼 면마다 빛이 갈린다
         private static void Heart(ChestMesh k)
         {
-            const int H = 0, G = 1, T = 2;
-            const float depth = 0.2f;
-            var c = new Vector2(0f, 0.5f * HeartScale);   // 하트 곡선이 이 점에서 다 보인다 (오목한 위 가운데까지)
-            k.Puff(H, HeartAt, c, depth, 72, 8);
-            for (int s = -1; s <= 1; s += 2)
+            const int n = 20;                                                 // 거들 꼭짓점 — 위 오목한 곳·아래 끝도 꼭짓점
+            const float girdle = 0.02f, crown = 0.125f, table = HeartTable;   // 거들 반 두께 · 꺾이는 높이 · 테이블 높이 (앞뒤 같게)
+            const float kCrown = 0.72f, kTable = 0.46f;                       // 가운데 쪽으로 줄인 비율 — 크라운이 오목한 곳 위로 넘지 않게 0.75 아래
+            var c = new Vector2(0f, 0.5f * HeartScale);                       // 하트 곡선이 이 점에서 다 보인다 (오목한 위 가운데까지)
+            var mid = new Vector3(c.x, c.y, 0f);
+            var ring = HeartRing(2 * n);                                      // 짝수 = 거들·테이블 자리 · 홀수 = 그 사이 크라운 자리
+            Vector3 P(int i, float scale, float z)
             {
-                var face = new Vector3(0f, 0f, s);
-                k.Coin(G, new Vector3(c.x, c.y, s * (depth - 0.004f)), face, 0.05f, 0.012f, 24);   // 볼록한 면에 박히게 두껍게
-                k.Coin(T, new Vector3(c.x, c.y + 0.01f, s * (depth + 0.0095f)), face, 0.014f, 0.0015f, 16);
-                k.RoundedBox(T, new Vector3(c.x, c.y - 0.012f, s * (depth + 0.0095f)), new Vector3(0.006f, 0.016f, 0.0015f), 0.0015f, 1);
+                var q = c + (ring[(i + 2 * n) % (2 * n)] - c) * scale;
+                return new Vector3(q.x, q.y, z);
             }
+            void Face(Vector3 a, Vector3 b, Vector3 d) => k.Facet(0, a, b, d, (a + b + d) / 3f - mid);
+            for (int j = 0; j < n; j++)
+            {
+                int e = 2 * j;
+                // 거들 — 얇은 옆 띠. 곡선이 시계 방향으로 돌아 진행 방향의 왼쪽이 바깥
+                Vector3 g0 = P(e, 1f, 0f), g1 = P(e + 2, 1f, 0f), gz = new Vector3(0f, 0f, girdle);
+                var side = new Vector3(g0.y - g1.y, g1.x - g0.x, 0f);
+                k.Facet(0, g0 - gz, g1 - gz, g1 + gz, side);
+                k.Facet(0, g0 - gz, g1 + gz, g0 + gz, side);
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    Vector3 G0 = P(e, 1f, s * girdle), G1 = P(e + 2, 1f, s * girdle);
+                    Vector3 B0 = P(e - 1, kCrown, s * crown), B1 = P(e + 1, kCrown, s * crown);
+                    Vector3 T0 = P(e, kTable, s * table), T1 = P(e + 2, kTable, s * table);
+                    Face(G0, G1, B1);                                          // 거들 쪽 면
+                    Face(B0, B1, G0);
+                    Face(B0, B1, T0);                                          // 베젤
+                    Face(T0, T1, B1);                                          // 별 면
+                    k.Facet(0, new Vector3(c.x, c.y, s * table), T0, T1, new Vector3(0f, 0f, s));   // 테이블
+                }
+            }
+        }
+
+        // 하트 곡선을 길이로 고르게 m 점 (m 짝수) — 0 = 위 오목한 곳 · m/2 = 아래 끝 · 오른쪽 반을 재고 왼쪽은 거울로 (시계 방향)
+        private static Vector2[] HeartRing(int m)
+        {
+            const int fine = 600;
+            var pts = new Vector2[fine + 1];
+            var len = new float[fine + 1];
+            for (int i = 0; i <= fine; i++)
+            {
+                pts[i] = HeartAt(Mathf.PI * i / fine);
+                if (i > 0) len[i] = len[i - 1] + Vector2.Distance(pts[i - 1], pts[i]);
+            }
+            int half = m / 2, seg = 0;
+            var ring = new Vector2[m];
+            for (int i = 0; i <= half; i++)
+            {
+                float want = len[fine] * i / half;
+                while (seg < fine - 1 && len[seg + 1] < want) seg++;
+                var p = Vector2.Lerp(pts[seg], pts[seg + 1], Mathf.InverseLerp(len[seg], len[seg + 1], want));
+                if (i == 0 || i == half) p.x = 0f;
+                ring[i] = p;
+                if (i > 0 && i < half) ring[m - i] = new Vector2(-p.x, p.y);
+            }
+            return ring;
         }
 
         // 하트 곡선 (x = 16 sin³t · y = 13cos t − 5cos 2t − 2cos 3t − cos 4t) — 위아래 가운데를 0 에 맞춰 상자 크기로
@@ -651,42 +698,6 @@ namespace Redesign0926
                         Vert(c + d * ro + Vector3.up * h, nn);
                     }
                     for (int i = 0; i < seg; i++) { int a = st + i * 2; Quad(sub, a, a + 1, a + 3, a + 2, nn); }
-                }
-            }
-
-            // 부푼 쿠션 (하트) — 윤곽 outline(t, 0~2π) 을 가운데 c 쪽으로 줄여 가며 앞뒤로 depth 만큼 부풀린다.
-            // 어느 방향으로 잘라도 단면이 타원이라 둥글다. c 에서 윤곽 전체가 보여야 한다 (별 모양 영역)
-            public void Puff(int sub, System.Func<float, Vector2> outline, Vector2 c, float depth, int seg, int rings)
-            {
-                var c3 = new Vector3(c.x, c.y, 0f);
-                float dt = Mathf.PI / seg, dth = Mathf.PI / 4f / rings, top = Mathf.PI / 2f;   // 법선은 이웃 반 칸 차이로
-                for (int s = -1; s <= 1; s += 2)
-                {
-                    Vector3 P(float th, float t)
-                    {
-                        var q = c + (outline(t) - c) * Mathf.Cos(th);
-                        return new Vector3(q.x, q.y, s * depth * Mathf.Sin(th));
-                    }
-                    int start = v.Count;
-                    for (int i = 0; i <= rings; i++)
-                    {
-                        float th = top * i / rings;
-                        for (int j = 0; j <= seg; j++)
-                        {
-                            float t = 2f * Mathf.PI * j / seg;
-                            var p = P(th, t);
-                            var nn = Vector3.Cross(P(th, t + dt) - P(th, t - dt), P(Mathf.Min(th + dth, top), t) - P(Mathf.Max(th - dth, 0f), t));
-                            nn = nn.sqrMagnitude < 1e-12f ? new Vector3(0f, 0f, s) : nn.normalized;   // 꼭대기는 한 점
-                            if (Vector3.Dot(nn, p - c3) < 0f) nn = -nn;
-                            Vert(p, nn);
-                        }
-                    }
-                    for (int i = 0; i < rings; i++)
-                        for (int j = 0; j < seg; j++)
-                        {
-                            int a = start + i * (seg + 1) + j, b = a + seg + 1;
-                            Quad(sub, a, a + 1, b + 1, b, (v[a] + v[a + 1] + v[b] + v[b + 1]) * 0.25f - c3);
-                        }
                 }
             }
 

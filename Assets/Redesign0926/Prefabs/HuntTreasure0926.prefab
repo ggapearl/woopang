@@ -385,14 +385,12 @@ MonoBehaviour:
     lid: {fileID: 0}
     bodyMats:
     - {fileID: 2100000, guid: dafaef453b9f3ab49915e580bcffabad, type: 2}
-    - {fileID: 2100000, guid: 0e589b82fd8a63f44b9e165a7b56e575, type: 2}
-    - {fileID: 2100000, guid: 3e992e85de40c0f4d88cf88ea2c80898, type: 2}
     lidMats: []
     hinge: {x: 0, y: 0, z: 0}
     seam: 0
     boxCenter: {x: 0, y: 0, z: 0}
     boxSize: {x: 1.15, y: 1, z: 0.7}
-    lockPos: {x: 0, y: -0.055, z: -0.249}
+    lockPos: {x: 0, y: -0.055, z: -0.222}
     lockTilt: 10
     lockScale: 0.9
   - kind: photo
