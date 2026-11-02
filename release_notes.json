@@ -36,6 +36,10 @@
     "1.2.59": {
       "ko": "• 대화방 사진 공유 — + 버튼으로 사진을 보내고, 눌러서 크게 보고, 저장하거나 팔로잉 친구에게 공유해요. 대화 속 링크는 누르면 바로 브라우저로 열려요.\n• 메시지 알림을 누르면 그 대화방으로 바로 들어가요.\n• 프로필 편집을 앱 안에서, 버튼마다 소리와 진동.\n• 멀리 있는 오브젝트 흐리게 — 끄기·약하게·강하게 세 단계.\n• 보물찾기 카드에 '찾은 사람', 지도에 근처 보물찾기와 내 방향.\n• 목록 새 단장 — 분류 그림, 애견동반 장소는 이름이 노랑, 보물찾기는 은은한 금빛.\n• 하늘 라이브 KBS1·KBS2, 각 나라 언어 다듬기와 안정성 개선.",
       "en": "• Chat photos — send with the + button, tap to view, save, or share with people you follow. Links open in your browser.\n• Tap a message notification to jump to that chat.\n• Edit your profile in the app; buttons now have sound and haptics.\n• Fade distant objects: Off, Light or Strong.\n• Treasure cards show who found them; the map shows nearby hunts and your heading.\n• Refreshed lists, KBS1 and KBS2 on the sky board, better translations and stability."
+    },
+    "1.2.60": {
+      "ko": "• 나를 3D로 — 프로필 편집에서 3D 모델(GLB)을 올리면 AR 속 내 자리와 프로필 카드에 3D로 떠요.\n• 근처 사람은 늘 나를 보는 사진 원으로 — 분홍 테두리, 사진이 없으면 기본 얼굴.\n• 이모지 — 보내기 옆 단추로 큰 이모지를 골라 대화와 댓글에 넣어요.\n• 웹 로그인과 계정 관리가 앱을 떠나지 않고 앱 안에서 열려요.\n• 보물 모양 '하트'가 반짝이는 보석 하트로.\n• 입력칸 다듬기 — 맨 아래 칸도 입력줄 위로 올라오고, 칸 위에서 끌어도 목록이 부드럽게 굴러가요.\n• 하늘 '근처 핫플' 정리와 안정성 개선.",
+      "en": "• Go 3D — upload a 3D model (GLB) in Edit profile to appear in 3D in AR and on your profile card.\n• People nearby now show as photo circles that always face you.\n• Emoji — tap the button next to Send to add big emoji to chats and comments.\n• Sign in and manage your account without leaving the app.\n• The heart treasure is now a sparkling gem heart.\n• Smoother text fields, a tidier sky hot-spots page and better stability."
     }
   }
 }
