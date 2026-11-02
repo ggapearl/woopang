@@ -404,7 +404,7 @@ public class R0926HuntChest : MonoBehaviour
     // 가장 긴 변을 보물상자 폭에 맞추고 가운데를 상자 가운데로. 모델 뿌리 좌표로 잰다 — 불러오기 연출이 모델을 0.85배에서 키우고
     // 로딩 고리도 잠깐 남아 있어 월드 경계로 재면 작게 붙는다(10-24 시험: 0.68). 뿌리의 끝 크기는 불러올 때 준 배율 1.
     // 맞춘 크기(상자 좌표)를 돌려준다 — 못 재면 0
-    private static Vector3 Fit(Transform holder, Transform model)
+    public static Vector3 Fit(Transform holder, Transform model, float longest = ModelSize)
     {
         var toHolder = holder.worldToLocalMatrix * model.parent.localToWorldMatrix * Matrix4x4.TRS(model.localPosition, model.localRotation, Vector3.one) * model.worldToLocalMatrix;
         bool any = false;
@@ -423,7 +423,7 @@ public class R0926HuntChest : MonoBehaviour
         }
         float size = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
         if (!any || size < 1e-4f) return Vector3.zero;
-        float k = ModelSize / size;
+        float k = longest / size;
         holder.localScale = Vector3.one * k;
         holder.localPosition = -b.center * k;
         return b.size * k;

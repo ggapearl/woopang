@@ -60,6 +60,12 @@ public class GLBModelLoader : MonoBehaviour
     /// <summary>현재 GLB가 인스턴스화 + 모델 로드까지 완료됐는지.</summary>
     public bool IsModelLoaded => isModelLoaded;
 
+    /// <summary>
+    /// 보여 주기만 하는 모델 (사람 오브젝트·프로필 화면) — 로딩 고리는 띄우지 않고 콜라이더·회전도 붙이지 않는다.
+    /// 터치는 바깥에서 받는다. 모델 크기대로 붙는 콜라이더는 작은 모델을 키우면 주변 터치를 가로챈다.
+    /// </summary>
+    [HideInInspector] public bool displayOnly;
+
     void Start()
     {
         
@@ -103,7 +109,7 @@ public class GLBModelLoader : MonoBehaviour
         {
             if (spawnEffect == null)
                 spawnEffect = GetComponent<GLBSpawnEffect>() ?? gameObject.AddComponent<GLBSpawnEffect>();
-            spawnEffect.BeginLoading(glbContainer != null ? glbContainer : transform);
+            if (!displayOnly) spawnEffect.BeginLoading(glbContainer != null ? glbContainer : transform);
         }
 
         if (string.IsNullOrEmpty(url))
@@ -438,14 +444,14 @@ public class GLBModelLoader : MonoBehaviour
             MeshFilter[] meshFilters = loadedModel.GetComponentsInChildren<MeshFilter>();
             
             // 콜라이더 설정 (백그라운드에서)
-            StartCoroutine(SetupModelCollidersAsync());
+            if (!displayOnly) StartCoroutine(SetupModelCollidersAsync());
             
             // DoubleTap3D 연결 설정
-            SetupDoubleTap3DIntegration();
+            if (!displayOnly) SetupDoubleTap3DIntegration();
 
             // 큐브와 동일한 스와이프 회전 — 콜라이더가 준비된 뒤에 붙여야 한다
             // (CubeTouchRotator는 Awake에서 GetComponent<Collider>()로 자기 콜라이더를 잡는다)
-            SetupTouchRotator();
+            if (!displayOnly) SetupTouchRotator();
             
             // 로딩 후 메모리 정리
             MemoryOptimizationAfterLoading();

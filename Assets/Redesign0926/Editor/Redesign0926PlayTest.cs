@@ -153,6 +153,7 @@ namespace Redesign0926
             else if (mode == "chatnotif") PlanChatNotif();
             else if (mode == "chatphoto") PlanChatPhoto();
             else if (mode == "person") PlanPerson();
+            else if (mode == "personmodel") PlanPersonModel();
             else if (mode == "tapfeedback") PlanTapFeedback();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
@@ -2199,6 +2200,226 @@ namespace Redesign0926
         private static InputField ChatInputField() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.chatInput;
 
         // 메시지·공지 알림을 누르면 그 대화방으로 (10-27 대표님 「'메세지' 가 왔을 때 해당 알림을 터치해서 앱이 켜지면 해당 메세지창으로 바로 이동」) — 서버가 보내는 값 그대로
+        // 사람 오브젝트 3D 모델 (10-25 대표님 「glb 파일 업로드한 경우 프로필에서는 해당 glb 파일이 보이고, 오브젝트도 빌보드가 아닌 glb 로 보이도록」)
+        private static void PlanPersonModel()
+        {
+            const string Site = "http://127.0.0.1:5097/", Dev = "http://127.0.0.1:5099", Photo = Site + "pp_photo.png";
+            string Shiba = Site + "pm_shiba.glb", Textured = Site + "pm_textured.glb", Dance = Site + "pm_dance.glb", Lion = Site + "pm_lion.glb", Gone = Site + "pm_none.glb";
+            const string A = "pm_a", B = "pm_b", C = "pm_c", D = "pm_d", E = "pm_e", Pro = "hunt_test_p2pa";
+            const float Longest = 0.72f * 1.1f;   // 사진 원 지름 · 누르기 칸 여유
+            var S = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            Func<int> out_ = () => (int)typeof(P2PUserInfo).GetField("modelsOut", S).GetValue(null);
+            Func<string, P2PUserInfo> who = id =>
+            {
+                foreach (var u in UnityEngine.Object.FindObjectsByType<P2PUserInfo>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                    if (u.userId == id) return u;
+                return null;
+            };
+            Func<string, Transform> holder = id => who(id)?.transform.Find("Model");
+            Func<string, GameObject> model = id => holder(id)?.GetComponent<GLBModelLoader>()?.GetLoadedModel();
+            Func<string, MeshRenderer> ring = id => who(id)?.GetComponent<MeshRenderer>();
+            Func<string, bool> ready = id => model(id) != null && ring(id).forceRenderingOff;
+            Func<string, bool> disc = id =>
+            {
+                var u = who(id);
+                return u != null && holder(id) == null && !ring(id).forceRenderingOff && u.GetComponent<P2PBillboard>().enabled
+                    && !u.GetComponent<CubeTouchRotator>().enabled && u.GetComponent<BoxCollider>().size == new Vector3(0.76f, 0.76f, 0.1f);
+            };
+            Func<string, bool> opaque = id =>
+            {
+                foreach (var r in model(id).GetComponentsInChildren<Renderer>(true))
+                    foreach (var m in r.sharedMaterials)
+                        if (m == null || m.renderQueue != (int)UnityEngine.Rendering.RenderQueue.Geometry) return false;
+                return true;
+            };
+            Func<string, Animation> anim = id => holder(id)?.GetComponentInChildren<Animation>(true);
+            Func<string, string, string, string, float, float, string> user = (id, name, photo, glb, forward, right) =>
+            {
+                var c = Camera.main.transform;
+                Vector3 d = Vector3.ProjectOnPlane(c.forward, Vector3.up).normalized * forward + Vector3.ProjectOnPlane(c.right, Vector3.up).normalized * right;
+                double lat = VirtualLocation.Instance.Latitude, lon = VirtualLocation.Instance.Longitude;
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"user_id\":\"{0}\",\"username\":\"{1}\",\"latitude\":{2:0.0000000},\"longitude\":{3:0.0000000},\"altitude\":0,\"avatar_url\":\"{4}\",\"avatar_glb_url\":\"{5}\",\"distance\":{6:0}}}",
+                    id, name, lat + d.z / 111320.0, lon + d.x / (111320.0 * Math.Cos(lat * Math.PI / 180.0)), photo, glb, d.magnitude);
+            };
+            Action<string[]> inject = list => P2PManager.Instance.InjectTestUsersData("{\"users\":[" + string.Join(",", list) + "]}");
+            Func<string, bool> hitBox = id =>
+            {
+                var u = who(id);
+                var cam = Camera.main.transform;
+                return u != null && Physics.Raycast(cam.position, u.transform.position - cam.position, out var h, 1000f)
+                    && h.collider == typeof(CubeTouchRotator).GetField("myCollider", NPI).GetValue(u.GetComponent<CubeTouchRotator>()) as Collider;
+            };
+            Func<string, bool> faces = id =>
+            {
+                var u = who(id);
+                Vector3 to = Camera.main.transform.position - u.transform.position;
+                to.y = 0f;
+                return Vector3.Angle(u.transform.forward, to) < 1f;
+            };
+
+            Do(() => SessionState.SetBool(LoginReadyKey, true));
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(1.0f);
+            Do(() =>
+            {
+                ProfileManager.EditorBase = Dev;
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>();
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                P2PManager.Instance.SetUserFilterMode(UserFilterMode.All);
+            });
+
+            // 1) 받는 동안은 사진 원 → 도착하면 모델로
+            Do(() => inject(new[] { user(A, "시바", Photo, Shiba, 7f, -2.4f), user(B, "그림시바", Photo, Textured, 7f, 2.4f), user(C, "사진만", Photo, "", 11f, 0f) }));
+            Sleep(0.05f);
+            Check(() => holder(A) != null && !ring(A).forceRenderingOff, "받는 동안 사진 원이 자리를 지킨다");
+            Check(() => holder(A)?.Find("GLBContainer/GLB_LoadingSpinner") == null, "로딩 고리를 띄우지 않는다");
+            Wait(() => ready(A) && ready(B), 12f, "모델 도착");
+            Check(() => ready(A) && ready(B), "모델이 사진 원 자리에 나온다");
+            Check(() => disc(C), "모델이 없는 사람은 그대로 사진 원");
+            Check(() => out_() == 2, "모델 수를 센다");
+            Sleep(0.4f);
+            Check(() => opaque(A) && opaque(B), "나타나는 연출이 끝나면 불투명으로 돌아온다");
+            Check(() => ring(A).material.GetFloat("_GlobalAlpha") == 1f, "사진 원 투명도는 되돌려 둔다 (다시 쓸 때를 위해)");
+            Shot("pm_two");
+
+            // 2) 크기 · 누르는 자리 · 정면
+            Check(() =>
+            {
+                var s = who(A).GetComponent<BoxCollider>().size;
+                return Mathf.Abs(Mathf.Max(s.x, Mathf.Max(s.y, s.z)) - Longest) < 0.01f;
+            }, "가장 긴 변이 사진 원 지름");
+            Check(() => holder(A).GetComponentsInChildren<Collider>(true).Length == 0, "모델에 콜라이더를 붙이지 않는다");
+            Check(() => hitBox(A) && hitBox(B), "누르면 사람 오브젝트 칸이 받는다 (드래그 회전과 두 번 누르기)");
+            Check(() => faces(A) && faces(B), "처음엔 카메라 쪽을 본다");
+            Check(() => !who(A).GetComponent<P2PBillboard>().enabled && who(A).GetComponent<CubeTouchRotator>().enabled, "빌보드 대신 드래그 회전");
+            Quaternion before = Quaternion.identity;
+            Do(() =>
+            {
+                before = who(A).transform.rotation;
+                typeof(CubeTouchRotator).GetMethod("ApplyRotation", NPI).Invoke(who(A).GetComponent<CubeTouchRotator>(), new object[] { new Vector2(120f, 0f) });
+            });
+            Sleep(0.3f);
+            Check(() => Quaternion.Angle(before, who(A).transform.rotation) > 5f, "드래그로 돈다 (빌보드가 되돌리지 않는다)");
+            float baseScale = 0f;
+            Do(() => { baseScale = holder(A).lossyScale.x; P2PManager.Instance.ApplyZoom(2f); });
+            Sleep(0.2f);
+            Check(() => Mathf.Abs(holder(A).lossyScale.x - baseScale * 2f) < 0.01f, "핀치 줌을 따라 커진다");
+            Do(() => P2PManager.Instance.ApplyZoom(1f));
+            Sleep(0.2f);
+
+            // 3) 움직임 — 뼈대 하나 · 부품 나눔 넷
+            Check(() => anim(A) != null && anim(A).isPlaying, "뼈대 모델의 움직임이 돈다");
+            Do(() => inject(new[] { user(A, "시바", Photo, Dance, 7f, -2.4f), user(B, "그림시바", Photo, Textured, 7f, 2.4f), user(C, "사자", Photo, Lion, 11f, 0f) }));
+            Wait(() => ready(A) && ready(C), 12f, "다른 모델 도착");
+            Check(() => ready(C), "사진 원이던 사람도 3D 로 바꾸면 모델로");
+            Check(() => ready(A) && anim(A) != null && anim(A).isPlaying, "모델을 바꾼 사람은 새 모델로");
+            Sleep(1.3f);
+            Shot("pm_dance_a");
+            Sleep(0.45f);
+            Shot("pm_dance_b");
+            Check(() => out_() == 3, "모델을 바꿔도 수가 어긋나지 않는다");
+
+            // 4) 3D 를 끈 사람 — 사진 원으로
+            Do(() => inject(new[] { user(A, "시바", Photo, "", 7f, -2.4f), user(B, "그림시바", Photo, Textured, 7f, 2.4f), user(C, "사자", Photo, Lion, 11f, 0f) }));
+            Sleep(0.2f);
+            Check(() => disc(A), "3D 를 끄면 사진 원으로 돌아온다");
+            Check(() => out_() == 2, "내린 모델은 수에서 빠진다");
+            Sleep(0.1f);
+            Shot("pm_back_disc");
+
+            // 5) 거리 · 필터로 숨을 때 모델도
+            Do(() => inject(new[] { user(A, "시바", Photo, "", 7f, -2.4f), user(B, "그림시바", Photo, Textured, 460f, 0f), user(C, "사자", Photo, Lion, 11f, 0f) }));
+            Wait(() => !ring(B).enabled, 3f, "멀어서 숨음");
+            Sleep(0.1f);
+            Check(() => !model(B).activeSelf, "400m 밖이면 모델도 숨는다");
+            Do(() => inject(new[] { user(A, "시바", Photo, "", 7f, -2.4f), user(B, "그림시바", Photo, Textured, 7f, 2.4f), user(C, "사자", Photo, Lion, 11f, 0f) }));
+            Wait(() => ring(B).enabled, 3f, "다시 보임");
+            Sleep(0.1f);
+            Check(() => model(B).activeSelf, "가까워지면 모델이 돌아온다");
+            Do(() => P2PManager.Instance.SetUserFilterMode(UserFilterMode.None));
+            Sleep(0.2f);
+            Check(() => !model(B).activeSelf, "사람 필터를 끄면 모델도 숨는다");
+            Do(() => P2PManager.Instance.SetUserFilterMode(UserFilterMode.All));
+            Sleep(0.2f);
+            Check(() => model(B).activeSelf, "필터를 켜면 돌아온다");
+
+            // 6) 못 받는 모델 — 사진 원으로 남고 다음 갱신에 또 받지 않는다
+            Do(() => { P2PManager.Instance.RemoveTestUserAvatar(C); inject(new[] { user(D, "없는모델", Photo, Gone, 11f, 0f) }); });
+            Wait(() => who(D) != null && holder(D) == null && out_() == 0, 10f, "못 받음");
+            Check(() => disc(D), "못 받으면 사진 원으로 남는다");
+            Check(() => out_() == 0, "못 받은 모델은 수에서 빠진다");
+            Do(() => inject(new[] { user(D, "없는모델", Photo, Gone, 11f, 0f) }));
+            Sleep(0.1f);
+            Check(() => holder(D) == null, "다음 갱신에 바로 또 받지 않는다");
+            Do(() => inject(new[] { user(D, "없는모델", Photo, Lion, 11f, 0f) }));
+            Wait(() => ready(D), 12f, "고친 모델 도착");
+            Check(() => ready(D), "주소가 바뀌면 바로 받는다");
+
+            // 7) 풀 — 앞사람 모델이 남지 않는다
+            Do(() => P2PManager.Instance.RemoveTestUserAvatar(D));
+            Sleep(0.2f);
+            Check(() => out_() == 0, "사람이 떠나면 모델이 내려간다");
+            Do(() => inject(new[] { user(E, "새사람", Photo, "", 11f, 0f) }));
+            Sleep(0.3f);
+            Check(() => disc(E), "풀에서 나온 새 사람은 사진 원");
+            Check(() => Vector3.Angle(who(E).transform.forward, who(E).transform.position - Camera.main.transform.position) < 1f, "새 사람은 다시 늘 정면");
+
+            // 8) 받는 도중 떠난 사람
+            Do(() => { inject(new[] { user(D, "금방떠남", Photo, Lion, 11f, 3f) }); });
+            Sleep(0.05f);
+            Do(() => P2PManager.Instance.RemoveTestUserAvatar(D));
+            Sleep(0.4f);
+            Check(() => out_() == 0, "받는 도중 떠나도 수가 어긋나지 않는다");
+
+            // 9) 한꺼번에 6개까지 — 나머지는 사진 원, 자리가 나면 다음 갱신에
+            string[] crowd = null;
+            Do(() =>
+            {
+                P2PManager.Instance.RemoveTestUserAvatar(B);
+                P2PManager.Instance.RemoveTestUserAvatar(E);
+                crowd = new string[8];
+                for (int i = 0; i < 8; i++) crowd[i] = user("pm_c" + i, "모델" + i, Photo, Shiba, 8f + i, -7f + i * 2f);
+                inject(crowd);
+            });
+            Wait(() => { for (int i = 0; i < 6; i++) if (!ready("pm_c" + i)) return false; return true; }, 15f, "모델 여섯");
+            Check(() => out_() == 6, "모델은 여섯까지");
+            Check(() => ready("pm_c0") && ready("pm_c5"), "먼저 온(가까운) 여섯이 모델");
+            Check(() => disc("pm_c6") && disc("pm_c7"), "나머지는 사진 원");
+            Sleep(0.1f);
+            Shot("pm_crowd");
+            Do(() => { P2PManager.Instance.RemoveTestUserAvatar("pm_c0"); inject(crowd); });
+            Wait(() => model("pm_c6") != null || model("pm_c0") != null, 10f, "자리 남");
+            Check(() => out_() == 6, "자리가 나면 다음 사람이 모델로");
+
+            // 10) 두 번 누르면 프로필 (모델이어도)
+            Do(() =>
+            {
+                for (int i = 0; i < 8; i++) P2PManager.Instance.RemoveTestUserAvatar("pm_c" + i);
+                inject(new[] { user(Pro, "프로필시험", Photo, Shiba, 8f, 3f) });
+            });
+            Wait(() => ready(Pro), 12f, "모델 도착");
+            Do(() => who(Pro).OnUserDoubleTapped());
+            Wait(() => Active("FullProfilePanel"), 5f, "프로필 열림");
+            Check(() => Active("FullProfilePanel"), "모델을 두 번 누르면 그 사람 프로필");
+            Sleep(0.6f);
+            Do(() => Back());
+            Sleep(0.6f);
+
+            Do(() =>
+            {
+                foreach (var id in new[] { A, B, C, D, E, Pro }) P2PManager.Instance.RemoveTestUserAvatar(id);
+                ProfileManager.EditorBase = null;
+            });
+            Sleep(0.3f);
+            Check(() => out_() == 0, "모두 떠나면 남는 모델이 없다");
+        }
+
         // 사람 오브젝트 — 사진 원 · 분홍 테두리 · 늘 정면 (10-25 대표님 「정면이 항상 보이는 동그라미 (이것도 확대축소 가능) … 테두리에 핑크색 원 (우측하단 프로필 버튼처럼)」)
         private static void PlanPerson()
         {

@@ -1,6 +1,7 @@
 /**
  * P2PUserInfo.cs
  * P2P 사용자 아바타 - 터치(더블탭) → 프로필 열기, 프로필 사진 원(빌보드) 적용
+ * 프로필에서 3D 로 보이게 한 사람은 사진 원 대신 GLB 모델 (드래그로 돌린다)
  * 0000_Cube.prefab의 DoubleTap3D 패턴을 참고하여 단순화
  */
 
@@ -31,6 +32,23 @@ public class P2PUserInfo : MonoBehaviour
     [SerializeField] private MeshRenderer avatarRenderer;
     [Tooltip("사진이 없는 사람의 기본 얼굴 크기 (px)")]
     [SerializeField] private int defaultFaceSize = 256;
+
+    // ============================================================
+    // 3D Model (프로필에서 3D 로 보이게 한 사람)
+    // ============================================================
+    [Header("3D Model")]
+    [Tooltip("모델의 가장 긴 변 — 사진 원 지름과 같게 (이 오브젝트 좌표)")]
+    [SerializeField] private float modelSize = 0.72f;
+    [Tooltip("누르기 칸이 모델보다 넉넉한 배율")]
+    [SerializeField] private float modelTouchMargin = 1.1f;
+    [Tooltip("누르기 칸의 가장 작은 변 — 얇은 모델도 누를 수 있게")]
+    [SerializeField] private float modelTouchMin = 0.4f;
+    [Tooltip("한꺼번에 띄우는 모델 수 — 넘치면 나머지는 사진 원으로 남는다 (서버가 가까운 사람부터 준다)")]
+    [SerializeField] private int maxModels = 6;
+    [Tooltip("못 불러왔을 때 다시 해 보는 간격 (초)")]
+    [SerializeField] private float modelRetrySeconds = 60f;
+    [Tooltip("사진 원이 옅어지는 시간 (초) — 모델이 나타나는 연출(GLBSpawnEffect)과 같이")]
+    [SerializeField] private float discFadeSeconds = 1f;
 
     // ============================================================
     // OffScreen Indicator
@@ -74,6 +92,17 @@ public class P2PUserInfo : MonoBehaviour
     private Texture defaultAvatarTexture;   // 프리팹에 원래 붙어 있던 면 (공유 자산 — 지우지 않는다)
     private Material fallbackMaterial;      // _BaseMap/_MainTex 가 없는 셰이더일 때 한 번만 만든다
 
+    private static readonly int GlobalAlpha = Shader.PropertyToID("_GlobalAlpha");
+    private static int modelsOut;           // 지금 떠 있거나 받는 중인 모델 수 (사람 전체)
+    private string modelUrl = "";
+    private GameObject modelHolder;
+    private GameObject modelObject;
+    private Coroutine modelCoroutine;
+    private float modelRetryAt;
+    private Vector3 discTouchSize;
+    private P2PBillboard billboard;
+    private CubeTouchRotator rotator;
+
     // 더블탭 감지
     private float lastTapTime = 0f;
     private bool waitingForSecondTap = false;
@@ -100,6 +129,9 @@ public class P2PUserInfo : MonoBehaviour
 
         // 터치 콜라이더 설정
         SetupTouchCollider();
+        if (touchCollider is BoxCollider disc) discTouchSize = disc.size;
+        billboard = GetComponent<P2PBillboard>();
+        rotator = GetComponent<CubeTouchRotator>();
 
         // 오프스크린 인디케이터 설정
         SetupOffScreenIndicator();
@@ -148,6 +180,7 @@ public class P2PUserInfo : MonoBehaviour
         if (isInitialized)
         {
             LoadProfileTexture();
+            SetAvatarModel(modelUrl);
         }
     }
 
@@ -160,6 +193,7 @@ public class P2PUserInfo : MonoBehaviour
             StopCoroutine(downloadCoroutine);
             downloadCoroutine = null;
         }
+        ClearModel();   // 풀로 돌아간다 — 모델은 메모리를 많이 쓴다 (다시 켜지면 다시 붙인다)
     }
 
     // ============================================================
@@ -339,6 +373,102 @@ public class P2PUserInfo : MonoBehaviour
         avatarTexture = null;
     }
 
+    // ============================================================
+    // 3D Model
+    // ============================================================
+
+    /// <summary>
+    /// 주변 사용자 갱신 때마다 부른다 — 빈 주소면 사진 원. 받는 동안은 사진 원이 자리를 지키고,
+    /// 못 받으면 사진 원으로 남아 잠시 뒤 다시 해 본다. 켜지기 전에 불리면 주소만 기억해 둔다.
+    /// </summary>
+    public void SetAvatarModel(string url)
+    {
+        url = url ?? "";
+        if (url != modelUrl)
+        {
+            ClearModel();
+            modelUrl = url;
+            modelRetryAt = 0f;
+        }
+        if (modelHolder != null || modelUrl.Length == 0 || !isActiveAndEnabled) return;
+        if (Time.unscaledTime < modelRetryAt || modelsOut >= maxModels) return;
+        modelCoroutine = StartCoroutine(LoadModel(modelUrl));
+    }
+
+    private IEnumerator LoadModel(string url)
+    {
+        modelsOut++;
+        modelHolder = new GameObject("Model");
+        modelHolder.transform.SetParent(transform, false);
+        var loader = modelHolder.AddComponent<GLBModelLoader>();
+        loader.displayOnly = true;
+        yield return null;   // 불러오기 칸(GLBContainer)은 GLBModelLoader.Start 가 만든다
+
+        bool ok = false;
+        yield return loader.LoadGLBModelCoroutine(url, 1f, r => ok = r);
+        modelCoroutine = null;
+        if (!ok || !loader.HasLoadedModel())
+        {
+            ClearModel();
+            modelRetryAt = Time.unscaledTime + modelRetrySeconds;
+            yield break;
+        }
+
+        modelObject = loader.GetLoadedModel();
+        Vector3 fitted = R0926HuntChest.Fit(modelHolder.transform, modelObject.transform, modelSize);
+        if (touchCollider is BoxCollider box)
+        {
+            box.size = Vector3.Max(fitted * modelTouchMargin, Vector3.one * modelTouchMin);
+        }
+        if (billboard != null) billboard.enabled = false;
+        if (rotator != null) rotator.enabled = true;
+        if (mainCamera != null)
+        {
+            Vector3 toCamera = mainCamera.transform.position - transform.position;
+            toCamera.y = 0f;
+            if (toCamera.sqrMagnitude > 0.001f) transform.rotation = Quaternion.LookRotation(toCamera, Vector3.up);
+        }
+        modelCoroutine = StartCoroutine(FadeOutDisc());
+    }
+
+    private IEnumerator FadeOutDisc()
+    {
+        if (avatarRenderer == null) yield break;
+        Material mat = avatarRenderer.material;
+        for (float t = 0f; t < discFadeSeconds; t += Time.deltaTime)
+        {
+            mat.SetFloat(GlobalAlpha, 1f - t / discFadeSeconds);
+            yield return null;
+        }
+        mat.SetFloat(GlobalAlpha, 1f);
+        avatarRenderer.forceRenderingOff = true;
+        modelCoroutine = null;
+    }
+
+    /// <summary>모델을 내리고 사진 원으로 되돌린다</summary>
+    private void ClearModel()
+    {
+        if (modelHolder == null) return;
+        if (modelCoroutine != null)
+        {
+            StopCoroutine(modelCoroutine);
+            modelCoroutine = null;
+        }
+        Destroy(modelHolder);
+        modelHolder = null;
+        modelObject = null;
+        modelsOut--;
+
+        if (touchCollider is BoxCollider box) box.size = discTouchSize;
+        if (billboard != null) billboard.enabled = true;
+        if (rotator != null) rotator.enabled = false;
+        if (avatarRenderer != null)
+        {
+            avatarRenderer.forceRenderingOff = false;
+            avatarRenderer.material.SetFloat(GlobalAlpha, 1f);
+        }
+    }
+
     void OnDestroy()
     {
         if (avatarTexture != null) Destroy(avatarTexture);
@@ -353,6 +483,10 @@ public class P2PUserInfo : MonoBehaviour
         if (!isInitialized) return;
 
         if (mainCamera == null) mainCamera = Camera.main;
+
+        // 거리·필터는 사진 원의 enabled 로 정해진다 — 모델이 따라간다 (DistanceBasedVisibility 는 뼈대 모델을 못 끈다)
+        if (modelObject != null && avatarRenderer != null && modelObject.activeSelf != avatarRenderer.enabled)
+            modelObject.SetActive(avatarRenderer.enabled);
 
         if (enableTouch && !R0926GuideOverlay.BlocksWorld)   // 첫 사용 안내 중에는 누르지 않는다
         {

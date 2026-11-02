@@ -48,6 +48,7 @@ public class NearbyUserData
     public double longitude;
     public double altitude;
     public string avatar_url;
+    public string avatar_glb_url;   // 프로필에서 3D 로 보이게 한 사람만 — 비면 사진 원
     public string bio;
     public float distance;
 }
@@ -543,6 +544,7 @@ public class P2PManager : MonoBehaviour
                     longitude = (double)(userObj["longitude"] ?? 0),
                     altitude = (double)(userObj["altitude"] ?? 0),
                     avatar_url = userObj["avatar_url"]?.ToString() ?? "",
+                    avatar_glb_url = userObj["avatar_glb_url"]?.ToString() ?? "",
                     bio = userObj["bio"]?.ToString() ?? "",
                     distance = (float)(userObj["distance"] ?? 0)
                 };
@@ -628,6 +630,7 @@ public class P2PManager : MonoBehaviour
                 userData.bio,
                 userData.distance
             );
+            userInfo.SetAvatarModel(userData.avatar_glb_url);
         }
 
 #if UNITY_EDITOR
@@ -670,6 +673,7 @@ public class P2PManager : MonoBehaviour
         {
             userInfo.UpdateDistance(userData.distance);
             userInfo.UpdateAvatarUrl(userData.avatar_url);
+            userInfo.SetAvatarModel(userData.avatar_glb_url);
         }
 
         nearbyUsersData[userData.user_id] = userData;
