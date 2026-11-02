@@ -10,7 +10,9 @@ TrueTypeFontImporter:
   includeFontData: 1
   fontNames:
   - AppleSDGothicNeoM00
-  fallbackFontReferences: []
+  - WoopangEmoji
+  fallbackFontReferences:
+  - {fileID: 12800000, guid: a31a7470e95114646a4bf1aa94d1bf57, type: 3}
   customCharacters: 
   fontRenderingMode: 0
   ascentCalculationMode: 1

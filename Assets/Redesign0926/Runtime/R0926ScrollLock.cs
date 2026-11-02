@@ -71,6 +71,7 @@ public class R0926ScrollLock : MonoBehaviour
         var sr = handler.GetComponent<ScrollRect>();
         if (sr == null) sr = handler.GetComponentInParent<ScrollRect>();
         if (sr == null || !sr.vertical || sr.horizontal || sr.content == null || !sr.enabled) return;   // 가로 칩 줄·지도는 그쪽 몫
+        if (sr is R0926EmojiScroll) return;   // 이모지 창 목록 — 맨 위에서 아래로 끌면 창이 내려간다 (멈추면 그 끌기가 끊긴다)
 
         target = sr;
         startY = sr.content.anchoredPosition.y;

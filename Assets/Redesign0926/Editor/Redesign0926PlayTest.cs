@@ -164,6 +164,7 @@ namespace Redesign0926
             else if (mode == "scrolllock") PlanScrollLock();
             else if (mode == "kbswipe") PlanKbSwipe();
             else if (mode == "kbretry") PlanKbRetry();
+            else if (mode == "emoji") PlanEmoji();
             else if (mode == "filters") PlanFilters();
             else if (mode == "guidetouch") PlanGuideTouch();
             else if (mode == "guide") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanGuide(); }
@@ -454,9 +455,8 @@ namespace Redesign0926
             Do(() =>
             {
                 var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
-                var bar = UnityEngine.Object.FindAnyObjectByType<R0926CommentBar>(FindObjectsInactive.Include);
-                if (bar != null) bar.React("❤️");
-                log.Add("  입력칸 = " + (cm != null && cm.commentInputField != null ? cm.commentInputField.text : "-"));
+                if (cm != null && cm.commentInputField != null) cm.commentInputField.text = "좋아요 ❤️";
+                log.Add("  입력칸 = " + (cm != null && cm.commentInputField != null ? R0926Emoji.ToReal(cm.commentInputField.text) : "-"));
             });
             Sleep(0.6f);
             Shot("comment_react");
@@ -4467,6 +4467,382 @@ namespace Redesign0926
                 ptTouch = null;
                 InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
             });
+        }
+
+        // 11-02 대표님 N-U 이모지 창 — 「'전송버튼' 좌측에 … 이모지 버튼 … 누르면 키패드가 사라지고 … 키패드 전체를 채우는 식으로」 ·
+        // 「키패드 각 버튼이 textinputfield 창 내에서 발생하는 텍스트보다 큰 것마냥」 · 「아래로 아래로 스크롤 … 최상단에서 아래로 스와이프하면 해당 창이 내려가도록」
+        private const string EmojiRecentKey = "r0926_emoji_recent";
+        private static string emojiRecentWas;
+        private static int emojiLen, emojiPicked;
+
+        private static void PlanEmoji()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                ptFocusWas = InputSystem.settings.editorInputBehaviorInPlayMode;
+                InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+                emojiRecentWas = PlayerPrefs.HasKey(EmojiRecentKey) ? PlayerPrefs.GetString(EmojiRecentKey) : null;
+                PlayerPrefs.DeleteKey(EmojiRecentKey);   // 자주 쓰는 줄은 처음 깔린 12개로
+            });
+
+            // 0) 글자 바꾸기 — 진짜 이모지 ↔ 우팡 이모지 글자
+            Check(() => R0926Emoji.Count >= 1500, $"이모지 자료 {R0926Emoji.Count}개 (Fluent Emoji 3D)");
+            Check(() => R0926Emoji.ToDisplay("❤️").Length == 1 && R0926Emoji.ToReal(R0926Emoji.ToDisplay("❤️")) == "❤️", "❤️ → 한 글자 → 보낼 때 ❤️ 그대로");
+            Check(() => R0926Emoji.ToDisplay("❤") == "❤" && R0926Emoji.ToDisplay("©") == "©", "모양 글자(FE0F) 없는 ❤ · © 는 글자로 둔다");
+            Check(() => { string x = "좋아요 😂👍 ok 🫠"; return R0926Emoji.ToReal(R0926Emoji.ToDisplay(x)) == x && R0926Emoji.ToInput(x) == R0926Emoji.ToDisplay(x); }, "글 속 이모지 왕복 (😂👍🫠)");
+            Check(() => R0926Emoji.ToDisplay("👍🏽").Length == 1, "피부색 붙은 👍🏽 도 한 그림으로 (보낼 때는 " + R0926Emoji.ToReal(R0926Emoji.ToDisplay("👍🏽")) + ")");
+            Check(() => R0926Emoji.ToDisplay("❤️‍🔥").Length == 1 && R0926Emoji.ToDisplay("🧑‍💻").Length == 1, "잇기(ZWJ) 이모지 ❤️‍🔥 · 🧑‍💻 도 한 그림");
+            Check(() => { string x = "👨‍👩‍👧"; return PuaCount(R0926Emoji.ToDisplay(x)) == 3 && R0926Emoji.ToReal(R0926Emoji.ToInput(x)) == x; }, "목록에 없는 가족 이모지 — 사람 셋으로 보이고, 입력칸에 들어온 글은 보낼 때 그대로");
+            Do(() => log.Add("  국기 🇰🇷 → " + (R0926Emoji.HasPua(R0926Emoji.ToDisplay("🇰🇷")) ? "그림" : "글자 그대로 (Fluent 에 국기 없음)")));
+
+            // 1) 말풍선 · 미리보기 — 진짜 이모지가 그림으로
+            Do(() => Mpm()?.OpenChatRoom("chatlook_peer", "연남동이웃", null, false));
+            Sleep(1.6f);
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
+            Sleep(0.4f);
+            Do(() => FillSampleChat(false));
+            Do(() =>
+            {
+                var mpm = Mpm();
+                var bubble = typeof(MessagePanelManager).GetMethod("CreateMessageBubble", NPI);
+                string at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss") + "Z";
+                bubble?.Invoke(mpm, new object[] { new DMMessage { id = 7, sender_id = "chatlook_peer", content = "좋아요 😂❤️ 내일 봬요 🙌🏻", is_read = true, created_at = at, sender_username = "연남동이웃" }, false });
+                bubble?.Invoke(mpm, new object[] { new DMMessage { id = 8, sender_id = "me", content = "🥳🎉", is_read = true, is_mine = true, created_at = at, sender_username = "나" }, true });
+                bubble?.Invoke(mpm, new object[] { new DMMessage { id = 9, sender_id = "me", content = "국기 🇰🇷 · 글자 하트 ❤ · 녹는 얼굴 🫠", is_read = true, is_mine = true, created_at = at, sender_username = "나" }, true });
+            });
+            Sleep(1.0f);
+            Shot("emoji_bubbles");
+            Check(() =>
+            {
+                var c = Mpm()?.chatMessageContent;
+                if (c == null || c.childCount == 0) return false;
+                int pua = 0, layers = 0;
+                foreach (var t in c.GetComponentsInChildren<Text>(false))
+                {
+                    if (t.name != "ContentText") continue;
+                    if (R0926Emoji.HasPua(t.text)) pua++;
+                    var l = t.transform.Find("Emoji0926");
+                    if (l != null && l.GetComponent<R0926EmojiLayer>() != null) layers++;
+                }
+                log.Add($"  이모지 든 말풍선 {pua} · 그림 층 {layers}");
+                return pua >= 3 && layers >= 3;
+            }, "말풍선 글 속 이모지가 우팡 이모지 글자 + 그림 층으로");
+
+            // 2) 키보드가 떠 있을 때 이모지 단추 → 키보드가 내려가고 그 자리에 이모지 창 (창은 그 위에 그대로)
+            Do(() => { var f = Mkh()?.targetInputField; if (f != null) f.text = "가나다"; });
+            KbUpFor(Mkh);
+            Do(() =>
+            {
+                var f = Mkh()?.targetInputField;
+                if (f == null) return;
+                f.caretPosition = 1;   // 가|나다 — 이 자리에 들어가야 한다
+            });
+            Sleep(0.3f);
+            Shot("emoji_kb");
+            Check(() => EmojiKeyOf(Mkh()?.targetInputField) != null, "대화 입력칸 오른쪽(보내기 단추 왼쪽)에 이모지 단추");
+            Check(() =>
+            {
+                var key = EmojiKeyOf(Mkh()?.targetInputField);
+                var send = Mpm()?.sendButton;
+                if (key == null || send == null) return false;
+                Rect k = ScreenRect(key), s = ScreenRect((RectTransform)send.transform);
+                log.Add($"  이모지 단추 x {k.xMin:0}~{k.xMax:0} · 보내기 x {s.xMin:0}~{s.xMax:0}");
+                return k.xMax <= s.xMin + 1f;
+            }, "… 보내기 단추 왼쪽");
+            FingerTap(() => Center(EmojiKeyOf(Mkh()?.targetInputField)));
+            Sleep(0.6f);
+            Shot("emoji_open");
+            Check(() => EmojiOpenFor(Mkh()?.targetInputField), "이모지 단추 → 이모지 창이 뜸");
+            Check(() => { var k = Mkh(); return k != null && k.KeyboardUp && !k.targetInputField.isFocused; }, "… 키보드는 내려가고(칸 포커스 없음) 창은 이모지 창 위에 그대로");
+            Check(() => { var k = Mkh(); return k != null && (k.editorKeyboardPreviewObj == null || !k.editorKeyboardPreviewObj.activeInHierarchy); }, "… 가상 키보드 그림도 내려감");
+            Check(EmojiAboveSheet("대화"), "… 입력줄이 이모지 창 바로 위");
+            Check(() =>
+            {
+                var sh = EmojiSheet();
+                var k = Mkh();
+                if (sh == null || k == null) return false;
+                float h = ScreenRect(sh).height, kb = k.LastKeyboardHeight * CanvasScale();
+                log.Add($"  이모지 창 높이 {h:0} · 마지막 키보드 {kb:0} (화면 {Screen.height})");
+                return Mathf.Abs(h - kb) < 4f;
+            }, "… 이모지 창 높이 = 키보드 높이 (키패드 전체를 채움)");
+            Check(() =>
+            {
+                var g = EmojiGrids();
+                var f = Mkh()?.targetInputField;
+                if (g == null || g.Length == 0 || f == null) return false;
+                log.Add($"  이모지 한 변 {g[0].size:0} · 입력칸 글자 {f.textComponent.fontSize}");
+                return g[0].size >= f.textComponent.fontSize * 2f;
+            }, "키패드 이모지가 입력칸 글자보다 2배 넘게 큼");
+            Wait(() => { var g = EmojiGrids(); if (g == null) return false; foreach (var x in g) if (x.Page == null) return false; return true; }, 4f, "키패드 큰 그림 다 읽음");
+            Check(() =>
+            {
+                var c = EmojiContent();
+                var view = c != null ? c.parent as RectTransform : null;
+                if (c == null || view == null) return false;
+                log.Add($"  목록 높이 {c.rect.height:0} · 보이는 칸 {view.rect.height:0} (×{c.rect.height / view.rect.height:0.#})");
+                return c.rect.height > view.rect.height * 10f;
+            }, "아래로 아래로 굴려 볼 만큼 많음");
+            Sleep(0.3f);
+            Shot("emoji_open_loaded");
+
+            // 3) 고르기 — 커서 자리에 하나씩 · 칸이 꺼져 있어도 커서 표시
+            Do(() => { emojiLen = Mkh()?.targetInputField?.text.Length ?? 0; emojiPicked = EmojiAt(0, 0); });
+            FingerTap(() => EmojiCell(0, 0));
+            Sleep(0.3f);
+            Check(() =>
+            {
+                var f = Mkh()?.targetInputField;
+                if (f == null) return false;
+                log.Add($"  칸 글 '{R0926Emoji.ToReal(f.text)}' (넣을 자리 {R0926EmojiPanel.InsertAt})");
+                return f.text.Length == emojiLen + 1 && f.text.Length > 1 && R0926Emoji.IndexOf(f.text[1]) == emojiPicked && R0926EmojiPanel.InsertAt == 2;
+            }, "자주 쓰는 첫 칸을 누르면 커서 자리(가|나다)에 그 이모지");
+            FingerTap(() => EmojiCell(0, 1));
+            FingerTap(() => EmojiCell(1, 0));
+            Sleep(0.3f);
+            Check(() => { var f = Mkh()?.targetInputField; return f != null && PuaCount(f.text) == 3 && R0926EmojiPanel.InsertAt == 4; }, "하나 더 · 분류 첫 칸도 — 이어서 들어감");
+            Check(() => { var t = Mkh()?.targetInputField?.textComponent; return t != null && t.transform.Find("Emoji0926") != null; }, "입력칸 글에도 그림 층");
+            Check(() => EmojiOpenFor(Mkh()?.targetInputField), "고르는 동안 창은 그대로");
+            Shot("emoji_picked");
+
+            // 4) ⌫ 한 번 · 누르고 있기
+            FingerTap(() => Center(Find("EmojiPanel0926/Sheet0926/Tabs0926/Delete0926")));
+            Sleep(0.3f);
+            Check(() => { var f = Mkh()?.targetInputField; return f != null && PuaCount(f.text) == 2 && R0926EmojiPanel.InsertAt == 3; }, "⌫ 한 번 → 커서 앞 이모지 하나");
+            Do(() => emojiLen = Mkh()?.targetInputField?.text.Length ?? 0);
+            Hold(() => Center(Find("EmojiPanel0926/Sheet0926/Tabs0926/Delete0926")), 0.9f);
+            Sleep(0.2f);
+            Check(() =>
+            {
+                var f = Mkh()?.targetInputField;
+                if (f == null) return false;
+                log.Add($"  누르고 있은 뒤 '{f.text}' (넣을 자리 {R0926EmojiPanel.InsertAt})");
+                return f.text == "나다" && R0926EmojiPanel.InsertAt == 0;
+            }, "⌫ 누르고 있으면 커서 앞을 계속 지움 (뒤 글자는 그대로)");
+            FingerTap(() => EmojiCell(1, 2));
+            Sleep(0.2f);
+
+            // 5) 아래 탭 — 분류로 건너뛰기
+            FingerTap(() => Center(Find("EmojiPanel0926/Sheet0926/Tabs0926/Tab3")));
+            Sleep(0.4f);
+            Shot("emoji_tab");
+            Check(() => { var c = EmojiContent(); log.Add($"  목록 자리 {c?.anchoredPosition.y:0}"); return c != null && c.anchoredPosition.y > 500f && EmojiSelected() == 3; }, "음식 탭 → 그 분류로 건너뛰고 탭 표시도 옮김");
+            FingerTap(() => Center(Find("EmojiPanel0926/Sheet0926/Tabs0926/Tab0")));
+            Sleep(0.3f);
+            Check(() => { var c = EmojiContent(); return c != null && c.anchoredPosition.y < 1f && EmojiSelected() == 0; }, "자주 쓰는 탭 → 맨 위");
+
+            // 6) 굴리기 — 위로 밀면 아래 이모지 · 중간에서 아래로 밀면 목록만 · 맨 위에서 아래로 끌면 창이 내려감
+            Finger(EmojiListPoint, new[] { new Vector2(0f, Screen.height * 0.3f) }, 10, null, null);
+            Sleep(0.8f);
+            Shot("emoji_scrolled");
+            Check(() => { var c = EmojiContent(); log.Add($"  굴린 뒤 목록 자리 {c?.anchoredPosition.y:0}"); return c != null && c.anchoredPosition.y > 300f && EmojiOpenFor(Mkh()?.targetInputField); }, "목록을 위로 밀면 아래 이모지가 올라옴");
+            Do(() => { kbSheet = 0f; emojiLen = Mkh()?.targetInputField?.text.Length ?? 0; });
+            Finger(EmojiListPoint, new[] { new Vector2(0f, -Screen.height * 0.08f) }, 8, () => { var sh = EmojiSheet(); if (sh != null) kbSheet = Mathf.Max(kbSheet, -sh.anchoredPosition.y); }, null);
+            Sleep(0.6f);
+            Check(() => EmojiOpenFor(Mkh()?.targetInputField) && kbSheet < 1f && (Mkh()?.targetInputField?.text.Length ?? -1) == emojiLen, "목록 중간에서 아래로 밀면 목록만 굴러감 (창은 그대로 · 이모지도 안 들어감)");
+            FingerTap(() => Center(Find("EmojiPanel0926/Sheet0926/Tabs0926/Tab0")));
+            Sleep(0.3f);
+            Finger(EmojiListPoint, new[] { new Vector2(0f, -Screen.height * 0.12f) }, 10, null, "emoji_drag");
+            Sleep(0.8f);
+            Shot("emoji_closed");
+            Check(() => EmojiClosed() && R0926EmojiPanel.Target == null, "맨 위에서 아래로 끌면 이모지 창이 내려감");
+            Check(() => { var k = Mkh(); return k != null && !k.KeyboardUp && !k.targetInputField.isFocused; }, "… 키보드도 다시 뜨지 않고 창이 제자리로");
+            Check(() => ChatFits("이모지 창을 내린 뒤"), "… 대화창 자리 맞음");
+            Check(() => Active("ChatRoomPanel"), "… 대화창은 닫히지 않음");
+
+            // 7) 키보드 없을 때 이모지 단추 → 이모지 창 · ⌨ 단추 → 키보드로 (커서는 이모지 넣은 자리)
+            FingerTap(() => Center(EmojiKeyOf(Mkh()?.targetInputField)));
+            Sleep(0.6f);
+            Check(() => EmojiOpenFor(Mkh()?.targetInputField), "키보드 없을 때 이모지 단추 → 이모지 창");
+            Check(EmojiAboveSheet("대화 (키보드 없이 연 뒤)"), "… 입력줄이 이모지 창 바로 위");
+            Check(() => { var i = EmojiKeyOf(Mkh()?.targetInputField)?.Find("Icon0926")?.GetComponent<Image>(); return i != null && i.sprite != null && i.sprite.name.Contains("keyboard"); }, "… 떠 있는 동안 단추는 ⌨");
+            Back();
+            Sleep(0.6f);
+            Check(() =>
+            {
+                bool closed = EmojiClosed(), chat = Active("ChatRoomPanel"), up = Mkh()?.KeyboardUp ?? true;
+                if (!closed || !chat || up) log.Add($"  뒤로가기 뒤: 이모지 창 닫힘 {closed} · 대화창 {chat} · 창 올라감 {up}");
+                return closed && chat && !up;
+            }, "뒤로가기 → 이모지 창만 내려가고 대화창은 그대로");
+
+            Do(() => { var f = Mkh()?.targetInputField; if (f != null) f.text = "가나다"; });
+            KbUpFor(Mkh);
+            Do(() => { var f = Mkh()?.targetInputField; if (f != null) f.caretPosition = 1; });
+            FingerTap(() => Center(EmojiKeyOf(Mkh()?.targetInputField)));
+            Sleep(0.6f);
+            FingerTap(() => EmojiCell(0, 0));
+            Sleep(0.2f);
+            FingerTap(() => Center(EmojiKeyOf(Mkh()?.targetInputField)));
+            Sleep(1.2f);
+            Shot("emoji_back_to_kb");
+            Check(() => EmojiClosed(), "⌨ 단추 → 이모지 창이 내려감");
+            Check(() => KbUp(Mkh()), "… 키보드가 다시 뜨고 칸에 커서");
+            Check(() => { var f = Mkh()?.targetInputField; log.Add($"  커서 {f?.caretPosition} · 글 '{R0926Emoji.ToReal(f?.text)}'"); return f != null && f.caretPosition == 2; }, "… 커서는 이모지 넣은 자리 바로 뒤");
+            Check(() => ChatFits("키보드로 돌아온 뒤"), "… 대화창 자리 맞음 (키보드 위)");
+            Do(() => { var f = Mkh()?.targetInputField; if (f != null) f.text = ""; });
+            Do(KeyboardDown);
+            CloseAll();
+            Sleep(1.0f);
+
+            // 8) 댓글 창 — 같은 단추 · 같은 창 (빠른 반응 줄은 없앰)
+            Do(() => UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include)?.OpenCommentPanel(1, "시험"));
+            Sleep(1.8f);
+            Check(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                if (cm == null || cm.commentPanel == null) return false;
+                foreach (var t in cm.commentPanel.GetComponentsInChildren<Transform>(true))
+                    if (t.name == "Quick0926") return false;
+                return true;
+            }, "댓글 입력칸 위 빠른 반응(이모지) 줄 없음");
+            Check(() => EmojiKeyOf(CommentField()) != null, "댓글 입력칸에도 이모지 단추");
+            FingerTap(() => Center(EmojiKeyOf(CommentField())));
+            Sleep(0.6f);
+            FingerTap(() => EmojiCell(0, 1));
+            FingerTap(() => EmojiCell(1, 3));
+            Sleep(0.4f);
+            Shot("emoji_comment");
+            Check(() => EmojiOpenFor(CommentField()) && PuaCount(CommentField().text) == 2, "댓글 칸에 이모지 둘");
+            Check(EmojiAboveSheet("댓글"), "… 댓글 입력줄이 이모지 창 바로 위");
+            Finger(() => Center(Find("EmojiPanel0926/Sheet0926/Handle0926")), new[] { new Vector2(0f, -Screen.height * 0.12f) }, 10, null, null);
+            Sleep(0.8f);
+            Check(() => EmojiClosed(), "손잡이를 아래로 끌면 이모지 창이 내려감");
+            Check(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); return cm != null && cm.commentPanel != null && cm.commentPanel.activeInHierarchy; }, "… 댓글 창은 그대로");
+            Do(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                var make = typeof(CommentManager).GetMethod("CreateCommentItem", NPI);
+                if (cm != null && make != null)
+                    make.Invoke(cm, new object[] { new CommentData { id = 990, user_id = "pt_e", username = "시험", content = "사진 너무 좋아요 😍👍 다음에 같이 가요 🙌", created_at = DateTime.Now.ToString(), like_count = 2 } });
+                if (CommentField() != null) CommentField().text = "";
+            });
+            Sleep(0.6f);
+            Shot("emoji_comment_item");
+            Check(() =>
+            {
+                var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include);
+                if (cm == null || cm.commentContent == null) return false;
+                foreach (var t in cm.commentContent.GetComponentsInChildren<Text>(false))
+                    if (R0926Emoji.HasPua(t.text) && t.transform.Find("Emoji0926") != null) return true;
+                return false;
+            }, "댓글 글 속 이모지도 그림으로");
+            Do(() => { var cm = UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include); if (cm != null && cm.commentPanel != null && cm.commentPanel.activeInHierarchy) cm.ClosePanel(); });
+            Sleep(1.0f);
+
+            // 9) 프리팹 — 말풍선 · 대화 목록 · 댓글 글에 그림 부품
+            foreach (var (path, child) in new[] {
+                ("Assets/Prefabs/DM/MyMessageBubble.prefab", "ContentText"), ("Assets/Prefabs/DM/OtherMessageBubble.prefab", "ContentText"),
+                ("Assets/Prefabs/DM/AdminMessageBubble.prefab", "ContentText"), ("Assets/Prefabs/DM/ConversationItem.prefab", "PreviewText"),
+                ("Assets/Prefabs/DM/AdminNoticeItem.prefab", "PreviewText"), ("Assets/Prefabs/CommentItem_Template.prefab", "Text_content") })
+            {
+                Check(() =>
+                {
+                    var p = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (p == null) return false;
+                    foreach (var t in p.GetComponentsInChildren<Text>(true))
+                        if (t.name == child) return t.GetComponent<R0926EmojiText>() != null;
+                    return false;
+                }, "프리팹 " + Path.GetFileNameWithoutExtension(path) + "/" + child + " 에 R0926EmojiText");
+            }
+
+            Do(() =>
+            {
+                if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
+                ptTouch = null;
+                InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
+                if (emojiRecentWas != null) PlayerPrefs.SetString(EmojiRecentKey, emojiRecentWas);
+                else PlayerPrefs.DeleteKey(EmojiRecentKey);
+            });
+        }
+
+        private static R0926EmojiPanel EmojiPanel() => UnityEngine.Object.FindAnyObjectByType<R0926EmojiPanel>(FindObjectsInactive.Include);
+        private static RectTransform EmojiSheet() => Find("EmojiPanel0926/Sheet0926") as RectTransform;
+        private static RectTransform EmojiContent() { var p = EmojiPanel(); return p != null ? typeof(R0926EmojiPanel).GetField("content", NPI).GetValue(p) as RectTransform : null; }
+        private static R0926EmojiGrid[] EmojiGrids() { var p = EmojiPanel(); return p != null ? typeof(R0926EmojiPanel).GetField("grids", NPI).GetValue(p) as R0926EmojiGrid[] : null; }
+        private static int EmojiSelected() { var p = EmojiPanel(); return p != null ? (int)typeof(R0926EmojiPanel).GetField("selected", NPI).GetValue(p) : -1; }
+        private static bool EmojiOpenFor(InputField f) => R0926EmojiPanel.IsOpenFor(f) && EmojiSheet() != null && EmojiSheet().gameObject.activeInHierarchy;
+        private static bool EmojiClosed() => EmojiSheet() != null && !EmojiSheet().gameObject.activeSelf;
+        private static RectTransform EmojiKeyOf(InputField f) => f != null ? f.transform.Find("EmojiButton0926") as RectTransform : null;
+        private static InputField CommentField() => UnityEngine.Object.FindAnyObjectByType<CommentManager>(FindObjectsInactive.Include)?.commentInputField;
+        private static float CanvasScale() { var c = CanvasRoot()?.GetComponent<Canvas>(); return c != null && c.scaleFactor > 0f ? c.scaleFactor : 1f; }
+        private static int PuaCount(string s) { int n = 0; if (s != null) foreach (char c in s) if (R0926Emoji.IndexOf(c) >= 0) n++; return n; }
+
+        // s 분류의 k 번째 이모지
+        private static int EmojiAt(int s, int k)
+        {
+            var p = EmojiPanel();
+            var lists = p != null ? typeof(R0926EmojiPanel).GetField("sections", NPI).GetValue(p) as List<int>[] : null;
+            return lists != null && s < lists.Length && k < lists[s].Count ? lists[s][k] : -1;
+        }
+
+        // s 분류의 k 번째 칸 가운데 (화면 좌표) — 보이는 칸 안일 때만
+        private static Vector2? EmojiCell(int s, int k)
+        {
+            var p = EmojiPanel();
+            var content = EmojiContent();
+            if (p == null || content == null || !content.gameObject.activeInHierarchy) return null;
+            var c = (Vector2)typeof(R0926EmojiPanel).GetMethod("CellCenter", NPI).Invoke(p, new object[] { s, k });
+            Vector2 w = content.TransformPoint(c);
+            var view = content.parent as RectTransform;
+            return view != null && ScreenRect(view).Contains(w) ? w : (Vector2?)null;
+        }
+
+        private static Vector2? EmojiListPoint()
+        {
+            var view = Find("EmojiPanel0926/Sheet0926/Scroll0926/Viewport") as RectTransform;
+            if (view == null || !view.gameObject.activeInHierarchy) return null;
+            var r = ScreenRect(view);
+            return new Vector2(r.center.x, Mathf.Lerp(r.yMax, r.yMin, 0.3f));
+        }
+
+        // 입력줄 아랫선이 이모지 창 윗선에 붙어 있는지
+        private static Func<bool> EmojiAboveSheet(string what) => () =>
+        {
+            var sh = EmojiSheet();
+            RectTransform bar = null;
+            if (what.StartsWith("댓글")) bar = CommentField()?.transform.parent as RectTransform;
+            else bar = Mkh()?.inputAreaRect;
+            if (sh == null || bar == null) return false;
+            Rect s = ScreenRect(sh), b = ScreenRect(bar);
+            log.Add($"  [{what}] 이모지 창 위 {s.yMax:0} · 입력줄 {b.yMin:0}~{b.yMax:0} (화면 {Screen.height})");
+            return b.yMin >= s.yMax - 2f && b.yMin <= s.yMax + Screen.height * 0.06f;
+        };
+
+        // 손가락으로 톡 — 눌렀다 바로 뗀다
+        private static void FingerTap(Func<Vector2?> at)
+        {
+            Finger(at, new[] { Vector2.zero }, 1, null, null);
+            Sleep(0.12f);
+        }
+
+        // 누른 채 s 초 (⌫ 누르고 있기)
+        private static void Hold(Func<Vector2?> at, float s)
+        {
+            Vector2 p = default;
+            bool skip = false;
+            double until = -1;
+            steps.Enqueue(() =>
+            {
+                var a = at();
+                skip = a == null || ptTouch == null;
+                if (skip) { log.Add("  누를 곳 없음"); return true; }
+                p = a.Value;
+                InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = 7, phase = UnityEngine.InputSystem.TouchPhase.Began, position = p });
+                until = EditorApplication.timeSinceStartup + s;
+                return true;
+            });
+            steps.Enqueue(() => skip || EditorApplication.timeSinceStartup >= until);
+            Do(() => { if (!skip) InputSystem.QueueStateEvent(ptTouch, new TouchState { touchId = 7, phase = UnityEngine.InputSystem.TouchPhase.Ended, position = p }); });
         }
 
         // 10-29 대표님 「장소추가 / 3D모델 추가 입력칸 — 키보드가 간헐적으로 안 뜨고 입력줄만 뜬다」

@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 댓글 입력줄 — 둥근 유리 입력칸 · 내 사진 · 보내기(글이 있으면 분홍으로 켜진다) · 빠른 반응(누르면 입력칸에 붙는다).
+/// 댓글 입력줄 — 둥근 유리 입력칸 · 내 사진 · 보내기(글이 있으면 분홍으로 켜진다). 이모지는 입력칸 오른쪽 단추(R0926EmojiButton)로.
 /// 보내기·글자 검사는 CommentManager 그대로. 보내기 버튼 색만 여기서 다시 칠한다(원래는 회색/파랑).
 /// </summary>
 public class R0926CommentBar : MonoBehaviour
@@ -16,14 +16,6 @@ public class R0926CommentBar : MonoBehaviour
     private static readonly Color Pink = new Color(0.914f, 0.325f, 0.514f);
     private static readonly Color Off = new Color(0.227f, 0.251f, 0.275f);
     private float k = -1f;
-
-    public void React(string emoji)
-    {
-        if (input == null || string.IsNullOrEmpty(emoji)) return;
-        if (input.characterLimit > 0 && input.text.Length + emoji.Length > input.characterLimit) return;
-        input.text += emoji;   // onValueChanged → CommentManager 가 보내기를 켠다
-        input.MoveTextEnd(false);
-    }
 
     private void LateUpdate()
     {

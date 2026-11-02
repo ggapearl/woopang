@@ -173,6 +173,19 @@ public class MobileKeyboardHandler : MonoBehaviour
     private int updateCallCount;
 
     // ============================================================
+    // 이모지 창 (N-U) — 키보드 자리에 R0926EmojiPanel 이 뜬 동안
+    // ============================================================
+
+    private const float AccessoryHandoff = 0.6f;   // 이모지 창 → 키보드: 키보드가 올라올 때까지 창을 그 높이로 들고 기다리는 시간
+
+    private bool accessoryActive;
+    private float accessoryHeight;
+    private float accessoryHandoffUntil;
+#if UNITY_EDITOR
+    private float editorAccessoryPreviewH;   // 이모지 창을 열 때 떠 있던 에디터 미리보기 키보드 — 키보드로 돌아갈 때 다시 띄운다
+#endif
+
+    // ============================================================
     // Lifecycle
     // ============================================================
 
@@ -186,6 +199,8 @@ public class MobileKeyboardHandler : MonoBehaviour
 
         expandLogCount = 0;
         keyboardLogicallyActive = false;
+        accessoryActive = false;
+        accessoryHandoffUntil = 0f;
         driving = false;
         captured = false;
         kbGoneStartTime = 0;
@@ -200,6 +215,8 @@ public class MobileKeyboardHandler : MonoBehaviour
         // 즉시 원상 복구
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
+        accessoryActive = false;
+        accessoryHandoffUntil = 0f;
         kbGoneStartTime = 0;
         needsScrollToBottom = false;
 
@@ -258,6 +275,7 @@ public class MobileKeyboardHandler : MonoBehaviour
         R0926Orientation.ReapplyNow();
         CaptureOrig();
         if (keyboardLogicallyActive) SetExpandedTargets(lastKbHeight);
+        else if (accessoryActive) SetExpandedTargets(accessoryHeight);
         else SetCollapsedTargets();
     }
 
@@ -493,8 +511,31 @@ public class MobileKeyboardHandler : MonoBehaviour
         // 뒤에 열려 있던 대화창이 보물찾기 제목·힌트에 친 글을 가로챘다 (2026-10-14 안드로이드)
         if (OtherInputSelected())
         {
-            if (keyboardLogicallyActive) ReleaseToOtherInput();
+            if (keyboardLogicallyActive || accessoryActive || accessoryHandoffUntil > 0f) ReleaseToOtherInput();
             return;
+        }
+
+        // 이모지 창이 떠 있는 동안·키보드로 넘기는 동안 — 창은 이모지 창 위에 그대로 (N-U)
+        bool fromAccessory = false;
+        if (accessoryActive || accessoryHandoffUntil > 0f)
+        {
+            if (kbH > 0 && inputFocused)
+            {
+                accessoryActive = false;   // 키보드가 이어받았다 (칸을 눌렀거나 이모지 창의 키보드 단추)
+                accessoryHandoffUntil = 0f;
+                fromAccessory = true;
+            }
+            else if (accessoryActive || Time.time < accessoryHandoffUntil)
+            {
+                SetExpandedTargets(accessoryHeight);
+                return;
+            }
+            else
+            {
+                accessoryHandoffUntil = 0f;   // 키보드가 오지 않았다 (외장 키보드 · 에디터)
+                SetCollapsedTargets();
+                return;
+            }
         }
 
         // ── 키보드 높이 > 0 감지됨 ──
@@ -513,7 +554,7 @@ public class MobileKeyboardHandler : MonoBehaviour
             {
                 if (!captured) CaptureOrig();
                 keyboardLogicallyActive = true;
-                needsScrollToBottom = true;
+                needsScrollToBottom = !fromAccessory;   // 이모지 창에서 넘어오면 보던 자리 그대로
                 if (persistentInput != null) persistentInput.lockFocus = true;
             }
             driving = true;
@@ -577,6 +618,8 @@ public class MobileKeyboardHandler : MonoBehaviour
     {
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
+        accessoryActive = false;
+        accessoryHandoffUntil = 0f;
         kbGoneStartTime = 0;
         needsScrollToBottom = false;
         if (targetInputField != null && targetInputField.isFocused) targetInputField.DeactivateInputField();
@@ -587,6 +630,8 @@ public class MobileKeyboardHandler : MonoBehaviour
     {
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
+        accessoryActive = false;
+        accessoryHandoffUntil = 0f;
         kbGoneStartTime = 0;
         needsScrollToBottom = false;
 
@@ -599,8 +644,90 @@ public class MobileKeyboardHandler : MonoBehaviour
         SetCollapsedTargets();
     }
 
-    /// <summary>키보드가 떠 있어 창이 키보드 위로 올라가 있다 (R0926KeyboardSwipe 가 입력줄을 아래로 쓸어내리는지 볼 때)</summary>
-    public bool KeyboardUp => keyboardLogicallyActive;
+    /// <summary>키보드(또는 이모지 창)가 떠 있어 창이 그 위로 올라가 있다 (R0926KeyboardSwipe 가 입력줄을 아래로 쓸어내리는지 볼 때)</summary>
+    public bool KeyboardUp => keyboardLogicallyActive || accessoryActive;
+
+    /// <summary>이모지 창을 들고 있다 — 떠 있거나 키보드로 넘기는 중. 아니면 이모지 창(R0926EmojiPanel)은 스스로 내려간다</summary>
+    public bool AccessoryHolding => accessoryActive || (accessoryHandoffUntil > 0f && Time.time < accessoryHandoffUntil);
+
+    /// <summary>마지막으로 본 키보드 높이 (캔버스 단위) — 이모지 창을 키보드와 같은 높이로</summary>
+    public float LastKeyboardHeight => lastKbHeight;
+
+    /// <summary>
+    /// 키보드 자리에 이모지 창을 띄운다 (N-U · 10-26 대표님 「이모지버튼을 누르면 키패드가 사라지고 … 키패드 전체를 채우는 식으로」).
+    /// 키보드는 내리고 창은 이모지 창(높이 h, 캔버스 단위) 위에 그대로 둔다 — 키보드가 없을 때 누르면 그 높이로 올린다.
+    /// </summary>
+    public void ShowAccessory(float h)
+    {
+        TryInitialize();
+        if (!initialized || backgroundRect == null) return;
+        if (!captured) CaptureOrig();
+        if (persistentInput != null) persistentInput.lockFocus = false;
+        needsScrollToBottom = !driving;   // 키보드 없이 바로 열었을 때만 맨 아래로 (키보드에서 넘어오면 보던 자리 그대로)
+        keyboardLogicallyActive = false;
+        kbGoneStartTime = 0;
+        accessoryActive = true;
+        accessoryHeight = h;
+        accessoryHandoffUntil = 0f;
+        if (targetInputField != null && targetInputField.isFocused) targetInputField.DeactivateInputField();
+        var es = EventSystem.current;
+        if (es != null && targetInputField != null && es.currentSelectedGameObject == targetInputField.gameObject) es.SetSelectedGameObject(null);
+#if UNITY_EDITOR
+        editorAccessoryPreviewH = editorPreviewActive ? editorPreviewKeyboardHeight : 0f;
+        if (editorPreviewActive) EditorResetPreview();
+#endif
+        driving = true;
+        SetExpandedTargets(h);
+    }
+
+    /// <summary>이모지 창 높이가 바뀌었다 (끌어내리는 중 · 화면이 돌았다) — snap 이면 창을 바로 그 자리에 (손가락을 따라가게)</summary>
+    public void SetAccessoryHeight(float h, bool snap = false)
+    {
+        if (!accessoryActive) return;
+        accessoryHeight = h;
+        SetExpandedTargets(h);
+        if (snap) SnapToTargets();
+    }
+
+    /// <summary>이모지 창을 내린다 — toKeyboard 면 키보드를 다시 올린다(올라올 때까지 창은 그 높이 그대로), 아니면 창도 제자리로</summary>
+    public void HideAccessory(bool toKeyboard)
+    {
+        if (!accessoryActive) return;
+        accessoryActive = false;
+        if (toKeyboard && targetInputField != null && targetInputField.isActiveAndEnabled)
+        {
+            accessoryHandoffUntil = Time.time + AccessoryHandoff;
+            var es = EventSystem.current;
+            if (es != null) es.SetSelectedGameObject(targetInputField.gameObject);
+            targetInputField.ActivateInputField();
+#if UNITY_EDITOR
+            if (editorAccessoryPreviewH > 0f) EditorPreviewKeyboard(editorAccessoryPreviewH);
+#endif
+        }
+        else
+        {
+            accessoryHandoffUntil = 0f;
+            SetCollapsedTargets();
+        }
+    }
+
+    private void SnapToTargets()
+    {
+        backgroundRect.anchorMin = targetAnchorMin;
+        backgroundRect.anchorMax = targetAnchorMax;
+        backgroundRect.offsetMin = targetOffsetMin;
+        backgroundRect.offsetMax = targetOffsetMax;
+        if (viewportRect != null)
+        {
+            viewportRect.offsetMin = targetViewportOffsetMin;
+            viewportRect.offsetMax = targetViewportOffsetMax;
+        }
+        if (inputAreaRect != null)
+        {
+            inputAreaRect.offsetMin = new Vector2(targetInputAreaOffsetMin.x, inputAreaRect.offsetMin.y);
+            inputAreaRect.offsetMax = new Vector2(targetInputAreaOffsetMax.x, inputAreaRect.offsetMax.y);
+        }
+    }
 
     /// <summary>입력줄을 아래로 쓸어내렸다 (R0926KeyboardSwipe) — 기기 키보드를 내린 것과 같게 키보드를 내리고 창은 제자리로</summary>
     public void DismissBySwipe()
@@ -623,6 +750,8 @@ public class MobileKeyboardHandler : MonoBehaviour
     {
         if (persistentInput != null) persistentInput.lockFocus = false;
         keyboardLogicallyActive = false;
+        accessoryActive = false;
+        accessoryHandoffUntil = 0f;
         kbGoneStartTime = 0;
         needsScrollToBottom = false;
 

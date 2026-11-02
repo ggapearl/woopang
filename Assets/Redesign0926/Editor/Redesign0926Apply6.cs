@@ -503,6 +503,7 @@ namespace Redesign0926
                 new[] { "" }, true);   // 홈페이지로 나가지 않고 앱 안에서 바로 열린다 (2026-10-23)
             InfoRow(g4.transform, "RowData", new[] { "관광 정보 출처", "Tourism data", "観光情報の出典", "旅游信息来源", "Datos turísticos" },
                 new[] { "한국관광공사", "Korea Tourism Organization", "韓国観光公社", "韩国观光公社", "Organización de Turismo de Corea" }, false);
+            var rLicense = InfoRow(g4.transform, "RowLicenses", LicenseWords, new[] { "" }, true);   // 이모지 그림(Fluent Emoji · MIT) 고지 — 앱 안에서 바로 (11-02)
             // 버전은 줄이 아니라 탭 맨 아래에 작게 (2026-10-06 대표님)
             var oldVer = g4.transform.Find("RowVersion");
             if (oldVer != null) Object.DestroyImmediate(oldVer.gameObject);
@@ -520,10 +521,12 @@ namespace Redesign0926
             var aso = new SerializedObject(appInfo);
             aso.FindProperty("versionText").objectReferenceValue = verText;
             aso.FindProperty("privacyPage").objectReferenceValue = BuildPrivacyPage(sp);
+            aso.FindProperty("licensePage").objectReferenceValue = BuildLicensePage(sp);
             aso.ApplyModifiedPropertiesWithoutUndo();
             Wire(rMail.GetComponent<Button>(), appInfo.OpenMail);
             Wire(rInsta.GetComponent<Button>(), appInfo.OpenInstagram);
             Wire(rPriv.GetComponent<Button>(), appInfo.OpenPrivacy);
+            Wire(rLicense.GetComponent<Button>(), appInfo.OpenLicenses);
 
             // 새로 만든 칸은 맨 뒤에 붙으므로 순서를 매번 맞춘다
             foreach (var n in new[] { "SecSky", "GroupMaster", "GroupChannels", "SecPlaces", "GroupHidden", "SecHunt", "GroupHunt", "GroupHuntAlerts", "HuntNote", "SecDisplay", "GroupDisplay", "SecInfo", "GroupInfo", "VersionFooter", "CopyrightFooter" })
@@ -595,16 +598,24 @@ namespace Redesign0926
 
         private const float PrivacyTopH = 120f;
 
+        private static readonly string[] LicenseWords = { "오픈소스 라이선스", "Open source licenses", "オープンソースライセンス", "开源许可", "Licencias de código abierto" };
+
         /// <summary>설정 › 앱 정보 › 개인정보처리방침 — 설정 쪽을 덮는 한 장 (2026-10-23 대표님: 홈페이지로 보내지 말고 바로 보이게).
         /// 글 줄은 실행 때 R0926PrivacyPage 가 Text/privacy_*.txt 를 읽어 만든다 — 여기서는 틀과 글 본(本)만</summary>
-        private static R0926PrivacyPage BuildPrivacyPage(GameObject sp)
+        private static R0926PrivacyPage BuildPrivacyPage(GameObject sp) =>
+            BuildTextPage(sp, "PrivacyPage0926", new[] { "개인정보처리방침", "Privacy policy", "プライバシーポリシー", "隐私政策", "Política de privacidad" }, "privacy");
+
+        /// <summary>설정 › 앱 정보 › 오픈소스 라이선스 — 같은 모양의 한 장, 글은 Text/licenses_*.txt (이모지 그림 Fluent Emoji · MIT 고지 · 11-02)</summary>
+        private static R0926PrivacyPage BuildLicensePage(GameObject sp) => BuildTextPage(sp, "LicensePage0926", LicenseWords, "licenses");
+
+        private static R0926PrivacyPage BuildTextPage(GameObject sp, string name, string[] words, string textName)
         {
-            var page = FindOrCreate(sp.transform, "PrivacyPage0926");
+            var page = FindOrCreate(sp.transform, name);
             page.transform.SetAsLastSibling();
             Stretch(RT(page));
             Img(page, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Image.Type.Sliced, 64f / CardRadius).raycastTarget = true;
 
-            // 맨 위 '‹ 개인정보처리방침' — 줄 전체가 닫기 버튼 (안드로이드 뒤로가기도 이 버튼)
+            // 맨 위 '‹ 제목' — 줄 전체가 닫기 버튼 (안드로이드 뒤로가기도 이 버튼)
             var top = FindOrCreate(page.transform, "Top0926");
             SetRect(RT(top), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(0, PrivacyTopH));
             Img(top, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
@@ -616,8 +627,8 @@ namespace Redesign0926
             Img(icon, Spr("r0926_i_back"), Ink, Image.Type.Simple).raycastTarget = false;
             var title = FindOrCreate(top.transform, "Title");
             SetRect(RT(title), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0.5f), new Vector2(SheetPad + 64, 0), new Vector2(-(SheetPad * 2 + 64), PrivacyTopH));
-            Txt(title, "개인정보처리방침", 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
-            Loc(title, "개인정보처리방침", "Privacy policy", "プライバシーポリシー", "隐私政策", "Política de privacidad");
+            Txt(title, words[0], 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Loc(title, words[0], words[1], words[2], words[3], words[4]);
             var line = FindOrCreate(top.transform, "Line");
             SetRect(RT(line), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(-SheetPad * 2, 2));
             Img(line, null, new Color(1, 1, 1, 0.07f), Image.Type.Simple).raycastTarget = false;
@@ -644,8 +655,8 @@ namespace Redesign0926
 
             var pp = Ensure<R0926PrivacyPage>(page);
             var so = new SerializedObject(pp);
-            so.FindProperty("korean").objectReferenceValue = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Redesign0926/Text/privacy_ko.txt");
-            so.FindProperty("english").objectReferenceValue = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Redesign0926/Text/privacy_en.txt");
+            so.FindProperty("korean").objectReferenceValue = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Redesign0926/Text/" + textName + "_ko.txt");
+            so.FindProperty("english").objectReferenceValue = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/Redesign0926/Text/" + textName + "_en.txt");
             so.FindProperty("scroll").objectReferenceValue = sr;
             so.FindProperty("content").objectReferenceValue = RT(content);
             so.FindProperty("headTemplate").objectReferenceValue = PrivacyTpl(content, "HeadTpl", 42, Ink, FontStyle.Bold);

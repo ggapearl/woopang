@@ -10,6 +10,7 @@ using UnityEngine.UI;
 /// 입력줄을 쓰는 칸은 칸이 꺼져 있어 Unity 가 칸 안에 커서를 그리지 않는다(커서는 입력줄에서만 깜빡인다) —
 /// 그 칸 글자 사이에도 입력줄 커서와 같은 자리·모양으로 깜빡이는 커서를 얹는다 (2026-10-20 대표님: "포커싱 되었을 때 앞에 글자 깜빡거리게").
 /// 검색·댓글·대화처럼 칸 안에서 직접 치는 칸은 Unity 가 이미 깜빡이는 커서를 그리니 건드리지 않는다.
+/// 이모지 창(R0926EmojiPanel)이 떠 있는 동안은 칸이 꺼져 있어도 쓰고 있는 칸이다 — 테두리를 두고 이모지가 들어갈 자리에 커서를 얹는다.
 /// 캔버스에 하나 — 적용 단계(Redesign0926ApplyReadable)가 붙이고 연결한다.
 /// </summary>
 public class R0926InputFocus : MonoBehaviour
@@ -48,7 +49,8 @@ public class R0926InputFocus : MonoBehaviour
     void LateUpdate()
     {
         var bar = currentVia != null ? currentVia.Bar : null;
-        if (current != null && bar != null) DrawCaret(current, bar);
+        if (current != null && bar != null) DrawCaret(current, bar.caretPosition, bar);
+        else if (current != null && !current.isFocused && R0926EmojiPanel.IsOpenFor(current)) DrawCaret(current, R0926EmojiPanel.InsertAt, current);
         else HideCaret();
     }
 
@@ -74,6 +76,8 @@ public class R0926InputFocus : MonoBehaviour
                 if (s != null && s.gameObject.activeInHierarchy) { via = m; return s; }
             }
         }
+        var emoji = R0926EmojiPanel.Target;
+        if (emoji != null && emoji.gameObject.activeInHierarchy) return emoji;
         var es = EventSystem.current;
         var go = es != null ? es.currentSelectedGameObject : null;
         var f = go != null ? go.GetComponent<InputField>() : null;
@@ -143,7 +147,7 @@ public class R0926InputFocus : MonoBehaviour
     }
 
     // 칸 글자 위에 입력줄 커서 — 글자 자리는 칸의 글이 그려지는 것과 같은 TextGenerator 로 재서 Unity 가 칸 안에 그릴 때와 같은 자리에 선다
-    private void DrawCaret(InputField f, InputField bar)
+    private void DrawCaret(InputField f, int caretPos, InputField style)
     {
         var t = f.textComponent;
         if (t == null || t.font == null || !t.isActiveAndEnabled) { HideCaret(); return; }
@@ -157,7 +161,7 @@ public class R0926InputFocus : MonoBehaviour
 
         // 긴 글이라 칸이 일부만 보여 주면 자리를 알 수 없다 — 보이는 글의 끝에 둔다
         int len = f.text.Length;
-        int at = t.text.Length == len ? Mathf.Clamp(bar.caretPosition, 0, len) : chars.Count - 1;
+        int at = t.text.Length == len ? Mathf.Clamp(caretPos, 0, len) : chars.Count - 1;
         at = Mathf.Min(at, chars.Count - 1);
 
         float ppu = t.pixelsPerUnit;
@@ -181,16 +185,16 @@ public class R0926InputFocus : MonoBehaviour
             caret.gameObject.layer = t.gameObject.layer;
         }
         var pos = new Vector2(x, top);
-        var size = new Vector2(bar.caretWidth, height);
+        var size = new Vector2(style.caretWidth, height);
         if (c.anchoredPosition != pos) c.anchoredPosition = pos;
         if (c.sizeDelta != size) c.sizeDelta = size;
-        caret.color = bar.caretColor;
+        caret.color = style.caretColor;
         if (!caret.gameObject.activeSelf) caret.gameObject.SetActive(true);
 
         // 깜빡임은 Unity 칸과 같게 — 빠르기는 입력줄 설정, 치거나 옮기는 동안은 늘 켜져 있다
         int key = at * 100003 + len;
         if (key != caretKey) { caretKey = key; blinkStart = Time.unscaledTime; }
-        float period = bar.caretBlinkRate > 0f ? 1f / bar.caretBlinkRate : 0f;
+        float period = style.caretBlinkRate > 0f ? 1f / style.caretBlinkRate : 0f;
         caret.enabled = period <= 0f || (Time.unscaledTime - blinkStart) % period < period * 0.5f;
     }
 

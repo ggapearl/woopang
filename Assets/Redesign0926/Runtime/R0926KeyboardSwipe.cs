@@ -40,9 +40,10 @@ public class R0926KeyboardSwipe : MonoBehaviour
     private static readonly List<RaycastResult> hits = new List<RaycastResult>();
     private static readonly List<R0926KeyboardSwipe> live = new List<R0926KeyboardSwipe>();
 
-    /// <summary>여기서 누른 손가락은 키보드 내리기 몫이다 — 아래로 밀어 닫는 시트는 받지 않는다</summary>
+    /// <summary>여기서 누른 손가락은 키보드 내리기 몫이다 — 아래로 밀어 닫는 시트는 받지 않는다 (키보드 자리에 뜬 이모지 창도 — 끌어내리면 이모지 창만 내려간다)</summary>
     public static bool Claims(Vector2 pos)
     {
+        if (R0926EmojiPanel.Covers(pos)) return true;
         foreach (var s in live)
             if (s.ZoneAt(pos, out _) != Kind.None) return true;
         return false;

@@ -905,7 +905,7 @@ public class CommentManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(commentInputField.text)) return;
 
-        string content = commentInputField.text.Trim();
+        string content = R0926Emoji.ToReal(commentInputField.text).Trim();   // 우팡 이모지 글자 → 진짜 이모지
         if (string.IsNullOrEmpty(content)) return;
 
         // 입력 초기화

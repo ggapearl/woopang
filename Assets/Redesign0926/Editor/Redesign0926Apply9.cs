@@ -724,7 +724,7 @@ namespace Redesign0926
         }
 
         // ============================================================
-        // 댓글 입력줄 — 둥근 유리 입력칸 · 내 사진 · 분홍 보내기 · 빠른 반응
+        // 댓글 입력줄 — 둥근 유리 입력칸 · 내 사진 · 분홍 보내기 (이모지 단추는 ApplyEmoji)
         // ============================================================
         private static void CommentBar(Transform root, List<string> log)
         {
@@ -733,19 +733,18 @@ namespace Redesign0926
             var area = panel != null ? Find(panel.transform, "InputArea") : null;
             if (area == null) { log.Add("댓글 입력줄 없음"); return; }
             const float Edge = 50f + 40f;   // 시트가 화면보다 좌우 50씩 넓다
-            const float QuickH = 124f;
             const float BarPad = 20f, FieldH = 110f;
 
-            // 입력줄 바탕 — 반투명 시트 뒤로 도크가 비치지 않게 (빠른 반응 줄까지 덮는다)
+            // 입력줄 바탕 — 반투명 시트 뒤로 도크가 비치지 않게
             var bgBar = FindOrCreate(area.transform, "Bg0926");
             bgBar.transform.SetAsFirstSibling();
             var bbr = RT(bgBar);
             bbr.anchorMin = Vector2.zero; bbr.anchorMax = Vector2.one; bbr.pivot = new Vector2(0.5f, 0.5f);
-            bbr.offsetMin = new Vector2(0, -240); bbr.offsetMax = new Vector2(0, QuickH);
+            bbr.offsetMin = new Vector2(0, -240); bbr.offsetMax = Vector2.zero;
             Img(bgBar, null, new Color(0.082f, 0.094f, 0.106f, 1f), Image.Type.Simple).raycastTarget = true;
 
             var scroll = Find(panel.transform, "Scroll View");
-            if (scroll != null) { var srt = RT(scroll); srt.offsetMin = new Vector2(srt.offsetMin.x, 150 + QuickH); EditorUtility.SetDirty(srt); }
+            if (scroll != null) { var srt = RT(scroll); srt.offsetMin = new Vector2(srt.offsetMin.x, 150); EditorUtility.SetDirty(srt); }
 
             var container = area.transform.Find("InputContainer");
             if (container != null)
@@ -808,35 +807,10 @@ namespace Redesign0926
             var mini = Find(root, "MiniProfile");
             var src = mini != null ? Find(mini.transform, "Avatar") : null;
 
-            // 빠른 반응 — 입력칸 바로 위 한 줄
+            // 빠른 반응 줄은 지웠다 (10-25 대표님 「채팅창 위에 이모지 발생하는 거 삭제해줘. 그냥 글만 쓸 수 있도록」) — 이모지는 입력칸 오른쪽 단추의 이모지 창으로
+            var quick = area.transform.Find("Quick0926");
+            if (quick != null) Object.DestroyImmediate(quick.gameObject);
             var bar = Ensure<R0926CommentBar>(area);
-            var quick = FindOrCreate(area.transform, "Quick0926");
-            SetRect(RT(quick), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 0), Vector2.zero, new Vector2(0, QuickH));
-            var qline = FindOrCreate(quick.transform, "Line0926");
-            SetRect(RT(qline), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(0, 2));
-            Img(qline, null, Line, Image.Type.Simple).raycastTarget = false;
-            var hl = Ensure<HorizontalLayoutGroup>(quick);
-            hl.padding = new RectOffset((int)Edge, 40, 10, 6); hl.spacing = 20; hl.childAlignment = TextAnchor.MiddleLeft;
-            hl.childControlWidth = false; hl.childControlHeight = false; hl.childForceExpandWidth = false; hl.childForceExpandHeight = false;
-            var reacts = new (string sprite, string emoji)[]
-            {
-                ("r0926_re_heart", "❤️"), ("r0926_re_like", "👍"), ("r0926_re_laugh", "😂"),
-                ("r0926_re_wow", "😮"), ("r0926_re_spark", "✨"), ("r0926_re_fire", "🔥"),
-            };
-            for (int i = 0; i < reacts.Length; i++)
-            {
-                var r = FindOrCreate(quick.transform, "Re" + i);
-                RT(r).sizeDelta = new Vector2(140, 100);
-                Img(r, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 63f / 54f).raycastTarget = true;
-                var ic = FindOrCreate(r.transform, "Icon");
-                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(70, 70));
-                var ii = Img(ic, Spr(reacts[i].sprite), Color.white, Image.Type.Simple);
-                ii.raycastTarget = false; ii.preserveAspect = true;
-                var rb = Ensure<Button>(r);
-                rb.targetGraphic = r.GetComponent<Image>();
-                ResetListeners(rb);
-                UnityEventTools.AddStringPersistentListener(rb.onClick, bar.React, reacts[i].emoji);
-            }
 
             var so = new SerializedObject(bar);
             so.FindProperty("input").objectReferenceValue = cm.commentInputField;

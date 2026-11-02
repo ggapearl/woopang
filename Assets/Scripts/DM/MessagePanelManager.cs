@@ -2195,7 +2195,7 @@ public class MessagePanelManager : MonoBehaviour
         Text previewText = searchRoot.Find("PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            string preview = conv.lastMessage ?? "";
+            string preview = R0926Emoji.ToDisplay(conv.lastMessage ?? "");
             // Rich text 태그 제거 + 줄바꿈을 공백으로 (미리보기용)
             preview = System.Text.RegularExpressions.Regex.Replace(preview, "<.*?>", "");
             preview = preview.Replace("\n", " ").Trim();
@@ -2299,7 +2299,7 @@ public class MessagePanelManager : MonoBehaviour
         Text previewText = item.transform.Find("Content/PreviewText")?.GetComponent<Text>();
         if (previewText != null)
         {
-            SetTextWithEllipsis(previewText, R0926ChatPhoto.Preview(conv.lastMessage));
+            SetTextWithEllipsis(previewText, R0926Emoji.ToDisplay(R0926ChatPhoto.Preview(conv.lastMessage)));
         }
 
         // 시간 (Content 아래에 있음)
@@ -2766,6 +2766,7 @@ public class MessagePanelManager : MonoBehaviour
             // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
+            content = R0926Emoji.ToDisplay(content);
             contentText.text = content;
             // 공지 속 웹 주소도 그 글자를 누르면 브라우저로
             var links = R0926ChatLinks.Find(content);
@@ -3122,7 +3123,8 @@ public class MessagePanelManager : MonoBehaviour
         SetLayerRecursively(item, 5);
         string huntTitle = SplitHuntHeader(msg.content, out string huntBody);
         R0926ChatPhoto.Ref photoRef = huntTitle == null ? R0926ChatPhoto.TryParse(msg.content) : null;
-        var links = huntTitle == null && photoRef == null ? R0926ChatLinks.Find(msg.content) : null;
+        string shown = R0926Emoji.ToDisplay(msg.content);   // 진짜 이모지 → 우팡 이모지 글자 (말풍선 폭을 재기 전에)
+        var links = huntTitle == null && photoRef == null ? R0926ChatLinks.Find(shown) : null;
 
         // BubbleContainer 또는 Bubble 찾기
         Transform bubbleContainerTr = item.transform.Find("BubbleContainer");
@@ -3177,9 +3179,9 @@ public class MessagePanelManager : MonoBehaviour
         if (contentText != null)
         {
             // 텍스트 설정 (폰트 크기/색상은 프리팹 값 유지)
-            contentText.text = huntTitle != null ? HuntBubbleText(huntTitle, huntBody, isMine)
-                : links != null && links.Count > 0 ? R0926ChatLinks.Style(msg.content, links, isMine)
-                : msg.content;
+            contentText.text = huntTitle != null ? HuntBubbleText(R0926Emoji.ToDisplay(huntTitle), R0926Emoji.ToDisplay(huntBody), isMine)
+                : links != null && links.Count > 0 ? R0926ChatLinks.Style(shown, links, isMine)
+                : shown;
             contentText.horizontalOverflow = HorizontalWrapMode.Wrap;
             contentText.verticalOverflow = VerticalWrapMode.Overflow;
             // 폰트만 설정 (프리팹에 없을 경우)
@@ -3362,7 +3364,7 @@ public class MessagePanelManager : MonoBehaviour
         likeHandler.SetSingleTap(
             huntTitle != null ? () => StartCoroutine(OpenHuntFromChat(huntTitle))
             : photoBubble != null ? photoBubble.Tap
-            : links != null && links.Count > 0 ? () => OpenLinkAt(contentText, msg.content, links, likeHandler)
+            : links != null && links.Count > 0 ? () => OpenLinkAt(contentText, shown, links, likeHandler)
             : (Action)null);
 
         // 아바타 처리 (상대방 버블: 표시 + 프로필 열기 / 내 버블: 숨김)
@@ -3608,7 +3610,7 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(currentChatUserId) || isAdminChat) return;
 
-        string content = chatInput?.text?.Trim();
+        string content = R0926Emoji.ToReal(chatInput?.text)?.Trim();   // 우팡 이모지 글자 → 진짜 이모지
         if (string.IsNullOrEmpty(content)) return;
 
         // 입력 초기화

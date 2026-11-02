@@ -168,7 +168,7 @@ namespace Redesign0926
             if (ti == null) { log.Add("글꼴 없음: " + path); return; }
             string[] want =
             {
-                "AppleSDGothicNeoM00", "Apple SD Gothic Neo", "PingFang SC", "PingFang TC", "Hiragino Sans", "Helvetica Neue",
+                "AppleSDGothicNeoM00", "WoopangEmoji", "Apple SD Gothic Neo", "PingFang SC", "PingFang TC", "Hiragino Sans", "Helvetica Neue",
                 "Noto Sans CJK KR", "Noto Sans CJK SC", "Noto Sans CJK JP", "NotoSansCJK-Regular", "Roboto", "Droid Sans Fallback",
             };
             // 속성(ti.fontNames)으로 넣으면 저장될 때 글꼴 자기 이름 하나로 되돌아갔다 → 직렬화 필드에 직접 쓴다

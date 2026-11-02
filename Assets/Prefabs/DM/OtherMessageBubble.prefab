@@ -309,6 +309,7 @@ GameObject:
   - component: {fileID: 3706781614970171813}
   - component: {fileID: 6235274718149940544}
   - component: {fileID: 6235274718149940545}
+  - component: {fileID: 3669080018718001440}
   m_Layer: 5
   m_Name: ContentText
   m_TagString: Untagged
@@ -397,6 +398,19 @@ MonoBehaviour:
   m_FlexibleWidth: 0
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &3669080018718001440
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7491796344925613443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a51d54f3040f3d14c9b29ad8c2911853, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::R0926EmojiText
+  convert: 1
 --- !u!1 &7702585615078128658
 GameObject:
   m_ObjectHideFlags: 0

@@ -174,7 +174,7 @@ public class CommentItem : MonoBehaviour
 
         if (contentText != null)
         {
-            contentText.text = data.content;
+            contentText.text = R0926Emoji.ToDisplay(data.content);
             contentText.verticalOverflow = VerticalWrapMode.Truncate;
 
             RectTransform contentRect = contentText.GetComponent<RectTransform>();

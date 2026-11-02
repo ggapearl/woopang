@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// 설정 › 앱 정보 › 개인정보처리방침 — 설정 쪽을 덮고 바로 보인다 (2026-10-23 대표님: 홈페이지로 보내지 말고 바로 보이게).
 /// 글은 Text/privacy_ko.txt · privacy_en.txt (일본어·중국어·스페인어는 영어). 줄 머리: '## ' 제목 · '### ' 작은 제목 · '- ' 점 목록 ·
 /// '  - ' 안쪽 목록 · '> ' 흐린 줄 · 빈 줄은 띄움. 오른쪽에서 밀려 들어오고, ‹ · 안드로이드 뒤로가기 · 설정 탭으로 닫는다.
+/// 오픈소스 라이선스 장(LicensePage0926)도 이 부품 — 글만 Text/licenses_*.txt (11-02).
 /// </summary>
 public class R0926PrivacyPage : MonoBehaviour
 {
