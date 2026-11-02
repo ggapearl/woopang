@@ -181,7 +181,7 @@ public class R0926ProfileEdit : MonoBehaviour
         {
             form.alpha = s == State.Loading || s == State.Failed ? 0.45f : 1f;
             form.interactable = ready;
-            form.blocksRaycasts = ready;   // 입력칸은 누르는 순간 입력줄이 뜬다(EventTrigger) — interactable 만으론 못 막는다
+            form.blocksRaycasts = ready;   // 입력칸은 누르면 입력줄이 뜬다(MirrorSourceTap) — interactable 만으론 못 막는다
         }
         if (saveButton != null) saveButton.interactable = ready || s == State.Failed;
         if (saveLabel != null)

@@ -164,6 +164,8 @@ namespace Redesign0926
             else if (mode == "scrolllock") PlanScrollLock();
             else if (mode == "kbswipe") PlanKbSwipe();
             else if (mode == "kbretry") PlanKbRetry();
+            else if (mode == "inputaudit") PlanInputAudit();
+            else if (mode == "inputscroll") PlanInputScroll();
             else if (mode == "emoji") PlanEmoji();
             else if (mode == "filters") PlanFilters();
             else if (mode == "guidetouch") PlanGuideTouch();
@@ -4926,6 +4928,281 @@ namespace Redesign0926
             });
             Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
             Sleep(1.0f);
+        }
+
+        // 앱의 입력칸 전부 — 키보드 위 입력줄이 맡은 칸 · 대화 입력줄 · 칸 안에서 바로 치는 칸, 각자 든 세로 목록과 그 목록의 짜임 (기록만)
+        private static void PlanInputAudit()
+        {
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var mp = typeof(UploadInputMirror).GetField("mirrorPanel", NPI);
+                var mi = typeof(UploadInputMirror).GetField("mirrorInput", NPI);
+                var si = typeof(UploadInputMirror).GetField("sourceInputs", NPI);
+                var kind = new Dictionary<InputField, string>();
+                foreach (var m in UnityEngine.Object.FindObjectsByType<UploadInputMirror>(FindObjectsInactive.Include))
+                {
+                    var src = si.GetValue(m) as InputField[] ?? new InputField[0];
+                    log.Add($"  입력줄 {PathOf(m.transform)} · 연결 {(mp.GetValue(m) as GameObject != null ? "됨" : "없음")} · 맡은 칸 {src.Length}");
+                    if (mi.GetValue(m) is InputField bar && bar != null) kind[bar] = "입력줄 자신";
+                    foreach (var s in src) if (s != null) kind[s] = "입력줄이 맡음";
+                }
+                foreach (var k in UnityEngine.Object.FindObjectsByType<MobileKeyboardHandler>(FindObjectsInactive.Include))
+                    if (k.targetInputField != null) kind[k.targetInputField] = "대화 입력줄";
+                foreach (var f in UnityEngine.Object.FindObjectsByType<InputField>(FindObjectsInactive.Include))
+                {
+                    if (!kind.TryGetValue(f, out var how)) how = "바로 침";
+                    ScrollRect sr = null;
+                    for (var t = f.transform.parent; t != null && sr == null; t = t.parent)
+                    {
+                        var s = t.GetComponent<ScrollRect>();
+                        if (s != null && s.vertical && s.content != null) sr = s;
+                    }
+                    string inScroll = "목록 밖";
+                    if (sr != null)
+                    {
+                        var c = sr.content;
+                        string lay = (c.GetComponent<VerticalLayoutGroup>() != null ? "세로줄" : c.GetComponent<LayoutGroup>() != null ? c.GetComponent<LayoutGroup>().GetType().Name : "손배치")
+                                     + (c.GetComponent<ContentSizeFitter>() != null ? "+맞춤" : "");
+                        inScroll = $"목록 {PathOf(sr.transform)} ({sr.movementType} · 내용 {lay} · 보는창 {(sr.viewport != null && sr.viewport != sr.transform ? "따로" : "자신")})";
+                    }
+                    log.Add($"  [{how}] {PathOf(f.transform)} · {inScroll}");
+                }
+            });
+        }
+
+        // 11-03 대표님 「'프로필 편집' 에 들어갔을 때 포커스된 각 textinputfield 에 있어서 적절히 보이도록 스크롤 이동해야 하는데 … 키패드가 발생해서
+        //   해당 입력창을 가리거든? … 입력창에서 먼저 터치해서 스와이프할 경우에는 스크롤 이동 자체가 안되고 입력창 포커싱되어서 키패드 발생」
+        //   · 안드로이드 '키보드 안 뜸' 기록(칸 놓침 — 키보드가 뜨기 전에 입력줄 칸이 놓임). 가상 손가락으로:
+        //   칸에서 시작한 끌기 → 목록이 움직이고 입력줄은 안 뜸 · 칸마다 목록 창 맨 아래에서 눌러 칸이 입력줄 위로 보이는지(목록이 짧거나 끝이어도) ·
+        //   키보드를 기다리는 사이 같은 칸을 다시 누르면 바로 뜨고 · 다른 데를 누르면 닫힌 채(저절로 다시 뜨지 않음) ·
+        //   기기 키보드가 뜨기도 전에 닫히면 — 취소(뒤로 가기)는 입력줄도 닫고, 그냥 놓친 것은 기다리지 않고 다시 부름
+        private static void PlanInputScroll()
+        {
+            UploadInputMirror mirror = null;
+            ScrollRect list = null;
+            R0926ProfileEdit pe = null;
+            float startY = 0f, maxMove = 0f;
+            var c4 = new Vector3[4];
+            Func<string, InputField> inp = k => Find(PfC + "F_" + k + "/Input")?.GetComponent<InputField>();
+            Func<InputField> join = () => Find(HuntCardPath + "Hub/Viewport/Content/JoinCodeRow/JoinCodeInput")?.GetComponent<InputField>();
+            Func<RectTransform> view = () => list == null ? null : list.viewport != null ? list.viewport : (RectTransform)list.transform;
+            Func<bool> barShut = () =>
+            {
+                var panel = mirror != null ? typeof(UploadInputMirror).GetField("mirrorPanel", NPI).GetValue(mirror) as GameObject : null;
+                return mirror != null && mirror.ActiveSource == null && panel != null && !panel.activeSelf;
+            };
+            Action close = () => { if (mirror != null && mirror.ActiveSource != null) typeof(UploadInputMirror).GetMethod("OnCloseClicked", NPI).Invoke(mirror, null); };
+            // 칸을 목록 창 안 가장 아래로 — 손으로 굴려 와서 누르는 자리 (키보드에 가리기 가장 쉬운 자리)
+            Action<InputField> low = f =>
+            {
+                if (f == null || list == null) return;
+                Canvas.ForceUpdateCanvases();
+                float scale = list.content.parent.lossyScale.y, scrollable = list.content.rect.height - view().rect.height;
+                list.content.GetWorldCorners(c4);
+                float top = c4[1].y;
+                ((RectTransform)f.transform).GetWorldCorners(c4);
+                float o = Mathf.Clamp((top - c4[0].y) / scale - view().rect.height + 24f, 0f, Mathf.Max(0f, scrollable));
+                list.StopMovement();
+                if (scrollable > 1f) list.verticalNormalizedPosition = 1f - o / scrollable;
+            };
+            // 칸이 입력줄 위 · 목록 창 안에 보이는지
+            Func<InputField, string, bool> clear = (f, what) =>
+            {
+                var bar = mirror != null ? mirror.PlacedBar : null;
+                if (f == null || bar == null || list == null) { log.Add($"  {what}: 입력줄이 키보드 위에 없음"); return false; }
+                ((RectTransform)f.transform).GetWorldCorners(c4);
+                float fb = c4[0].y, ft = c4[1].y;
+                bar.GetWorldCorners(c4);
+                float barTop = c4[1].y;
+                view().GetWorldCorners(c4);
+                log.Add($"  {what}: 칸 {fb:0}~{ft:0} · 입력줄 위 {barTop:0} · 목록 창 {c4[0].y:0}~{c4[1].y:0} · 키보드 {EditorVirtualKeyboard.CurrentVisibleHeight:0}");
+                return fb >= barTop - 2f && ft <= c4[1].y + 2f;
+            };
+            // 입력줄이 닫힌 뒤 — 끝을 넘겨 올려 둔 목록이 제 테두리 안으로 돌아왔는지
+            Func<bool> rest = () =>
+            {
+                if (list == null) return false;
+                view().GetWorldCorners(c4);
+                float vb = c4[0].y, vt = c4[1].y;
+                list.content.GetWorldCorners(c4);
+                log.Add($"  목록 내용 {c4[0].y:0}~{c4[1].y:0} · 창 {vb:0}~{vt:0} · {list.movementType}");
+                return list.movementType == ScrollRect.MovementType.Elastic && c4[1].y >= vt - 2f && (c4[0].y <= vb + 2f || c4[1].y <= vt + 2f);
+            };
+            // 칸을 짚고 끌기 — 끄는 동안 목록이 따라 움직인 만큼
+            Action<Func<InputField>, Vector2, string> drag = (f, by, shot) =>
+            {
+                Do(() => { startY = list != null ? list.content.anchoredPosition.y : 0f; maxMove = 0f; });
+                Finger(() => Center(f()), new[] { by }, 12, () => { if (list != null) maxMove = Mathf.Max(maxMove, Mathf.Abs(list.content.anchoredPosition.y - startY)); }, shot);
+                Sleep(0.8f);
+            };
+            // 키보드가 '띄워'를 한 번 못 들은 척 — 입력줄만 떠 있는 때 (안드로이드에서 생기던 모습)
+            Action<string, string> stuck = (k, what) =>
+            {
+                Do(() => low(inp(k)));
+                Sleep(0.5f);
+                Do(() => EditorVirtualKeyboard.DropShows = 1);
+                FingerTap(() => Center(inp(k)));
+                Sleep(0.7f);
+                Check(() => mirror.ActiveSource == inp(k) && !KbRetryUp() && mirror.KeyboardRetries == 0 && mirror.Bar.isFocused, what + ": 키보드가 '띄워'를 놓침 — 입력줄만 떠 있음");
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                ptFocusWas = InputSystem.settings.editorInputBehaviorInPlayMode;
+                InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+                ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
+                R0926HuntApi.EditorBase = "http://127.0.0.1:5099";
+                R0926HuntApi.EditorTestUser = "hunt_test_host";
+            });
+
+            // 1) 보물찾기 카드 첫 화면 — 참가 코드 칸 (추가 창의 입력줄)
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(1.2f);
+            Do(() => UnityEngine.Object.FindAnyObjectByType<SwipePanelController>(FindObjectsInactive.Exclude)?.SwitchToPanel(2));
+            Sleep(2.0f);
+            Do(() =>
+            {
+                mirror = Find("UploadPage")?.GetComponent<UploadInputMirror>();
+                list = Find(HuntCardPath + "Hub")?.GetComponent<ScrollRect>();
+                if (list != null) log.Add($"  보물찾기 첫 화면 목록 내용 {list.content.rect.height:0} · 보는 창 {view().rect.height:0}");
+            });
+            Check(() => mirror != null && list != null && join() != null && join().gameObject.activeInHierarchy, "추가 → 보물찾기 카드 첫 화면 · 참가 코드 칸");
+            drag(join, new Vector2(0f, 420f), "is_hub_drag");
+            Check(() => { log.Add($"  끄는 동안 목록이 움직인 만큼 {maxMove:0}"); return maxMove > 60f && barShut() && !KbRetryUp(); },
+                "참가 코드 칸을 짚고 위로 끌기 → 목록이 따라 움직임 · 입력줄·키보드는 안 뜸");
+            Do(() => low(join()));
+            Sleep(0.5f);
+            FingerTap(() => Center(join()));
+            Sleep(1.4f);
+            Check(() => mirror.ActiveSource == join() && KbRetryUp() && clear(join(), "참가 코드"), "참가 코드 칸을 누르면 → 키보드 위 입력줄 · 칸이 입력줄 위로 보임");
+            Shot("is_hub_join");
+            Do(close);
+            Sleep(0.9f);
+            Check(rest, "… 닫으면 목록이 제자리로");
+            Do(() => Click("UploadPage/DockMirror0926/XButton_Upload"));
+            Sleep(1.0f);
+
+            // 2) 프로필 편집 — 시험 회원 880001 (시험 서버 5099 · 버리는 DB 55442)
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                const string dev = "http://127.0.0.1:5099";
+                ProfileManager.EditorBase = dev;
+                FollowManager.EditorBase = dev;
+                MessagePanelManager.EditorBase = dev;
+                R0926HuntApi.EditorTestUser = null;
+                DevPost("", "/api/dev/profile_reset", "{\"users\":[{\"n\":1,\"username\":\"pe_me\",\"email\":\"pe@x.y\",\"bio\":\"처음 소개\",\"phone\":\"010-1234-5678\",\"instagram_id\":\"insta_me\",\"avatar\":true}]}");
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, PfToken);
+                SfLogin(true, PfId);
+                LoginManager.Instance.CurrentUser.username = "pe_me";
+                pe = UnityEngine.Object.FindAnyObjectByType<R0926ProfileEdit>(FindObjectsInactive.Include);
+                mirror = Find("FullProfilePanel")?.GetComponent<UploadInputMirror>();
+            });
+            Do(() => ProfileManager.Instance.ShowProfile(PfId));
+            Wait(() => Active("FullProfilePanel") && ProfileManager.Instance.editProfileButton != null && ProfileManager.Instance.editProfileButton.gameObject.activeInHierarchy,
+                12f, "내 프로필 → '편집' 버튼");
+            Sleep(1.0f);
+            Do(() => ProfileManager.Instance.editProfileButton.onClick.Invoke());
+            Wait(() => pe != null && typeof(R0926ProfileEdit).GetField("state", NPI).GetValue(pe).ToString() == "Ready", 10f, "프로필 편집 — 내 정보를 받음");
+            Sleep(0.8f);
+            Do(() =>
+            {
+                list = Find(PfCard + "/Form0926")?.GetComponent<ScrollRect>();
+                if (list != null) log.Add($"  프로필 편집 목록 내용 {list.content.rect.height:0} · 보는 창 {view().rect.height:0} · {list.movementType}");
+            });
+            Check(() => mirror != null && list != null, "프로필 편집 시트 · 칸 목록 · 키보드 위 입력줄");
+            Shot("is_pe_open");
+
+            Do(() => { if (list != null) list.verticalNormalizedPosition = 1f; });
+            Sleep(0.4f);
+            drag(() => inp("bio"), new Vector2(0f, 420f), "is_pe_drag_up");
+            Check(() => { log.Add($"  끄는 동안 목록이 움직인 만큼 {maxMove:0}"); return maxMove > 60f && barShut() && !KbRetryUp(); },
+                "소개 칸을 짚고 위로 끌기 → 목록이 따라 움직임 · 입력줄·키보드는 안 뜸 (예전: 칸이 끌기를 가로채 입력줄·키보드만 뜸)");
+            Do(() => low(inp("x")));
+            Sleep(0.4f);
+            drag(() => inp("x"), new Vector2(0f, -300f), "is_pe_drag_down");
+            Check(() => { log.Add($"  끄는 동안 목록이 움직인 만큼 {maxMove:0}"); return maxMove > 60f && barShut() && !KbRetryUp(); },
+                "X 칸을 짚고 아래로 끌기 → 목록이 따라 움직임 · 입력줄·키보드는 안 뜸");
+            Check(rest, "… 손을 떼면 목록이 제자리로");
+
+            foreach (var key in new[] { "username", "bio", "phone", "instagram", "facebook", "x" })
+            {
+                string k = key;
+                Do(() => low(inp(k)));
+                Sleep(0.5f);
+                FingerTap(() => Center(inp(k)));
+                Sleep(1.4f);
+                Check(() => mirror.ActiveSource == inp(k) && KbRetryUp() && mirror.KeyboardRetries == 0 && clear(inp(k), k),
+                    k + " 칸을 목록 창 맨 아래에서 누르면 → 키보드 위 입력줄 · 칸이 입력줄 위로 보임");
+                Shot("is_pe_" + k);
+                Do(close);
+                Sleep(0.9f);
+                Check(rest, "… 닫으면 목록이 제자리로");
+            }
+
+            stuck("phone", "전화번호");
+            FingerTap(() => Center(inp("phone")));
+            Sleep(0.35f);
+            Check(() => KbRetryUp() && mirror.ActiveSource == inp("phone") && mirror.KeyboardRetries == 0,
+                "… 같은 칸을 다시 누르면 기다리지 않고 바로 다시 불러 뜸 (기기가 놓친 게 아니라 다시 부른 횟수·기록에 안 넣음)");
+            Shot("is_retap");
+            Do(close);
+            Sleep(0.9f);
+
+            stuck("instagram", "인스타그램");
+            FingerTap(() => Center(Find(PfCard + "/Title0926")));
+            Sleep(0.4f);
+            Check(barShut, "… 칸 밖(제목)을 누르면 입력줄이 닫힘");
+            Sleep(1.6f);
+            Check(() => barShut() && !KbRetryUp(), "… 1.5초가 지나도 키보드가 저절로 뜨지 않음 (예전: 다른 데를 눌러도 잠시 뒤 키보드가 떠오름)");
+
+            stuck("facebook", "페이스북");
+            Do(() =>
+            {
+                typeof(InputField).GetField("m_WasCanceled", NPI).SetValue(mirror.Bar, true);   // 기기 키보드가 '취소'로 닫힘(뒤로 가기) — 칸이 스스로 놓는 길과 같게
+                mirror.Bar.OnDeselect(null);
+            });
+            Sleep(0.3f);
+            Check(barShut, "… 뜨기도 전에 기기 키보드가 닫히면(뒤로 가기) 입력줄도 닫힘");
+            Sleep(1.6f);
+            Check(() => barShut() && !KbRetryUp(), "… 그 뒤 키보드가 저절로 뜨지 않음");
+
+            stuck("facebook", "페이스북 둘");
+            Do(() => mirror.Bar.DeactivateInputField());   // 기기 키보드가 아무 말 없이 닫힘 — 선택은 그대로, 칸만 놓임
+            Sleep(0.35f);
+            Check(() => KbRetryUp() && mirror.ActiveSource == inp("facebook") && mirror.KeyboardRetries == 1 && mirror.Bar.isFocused,
+                "… 뜨기도 전에 칸이 놓이면 1.5초를 기다리지 않고 바로 다시 불러 뜸 (1번째로 셈)");
+            Shot("is_dropped");
+            Do(close);
+            Sleep(0.9f);
+            Check(rest, "… 닫으면 목록이 제자리로");
+
+            Do(() =>
+            {
+                EditorVirtualKeyboard.DropShows = 0;
+                if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
+                ptTouch = null;
+                InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
+                if (pe != null) pe.Close();
+                ProfileManager.Instance?.CloseFullProfile();
+                DevPost("", "/api/dev/profile_reset", "{}");
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                MessagePanelManager.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+            Sleep(0.5f);
         }
 
         // 원래 칸을 손가락으로 누른다 — 그 전에 가상 키보드가 '띄워'를 몇 번 못 들은 척할지 정한다
@@ -15775,7 +16052,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
-                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit")) StashLogin();
+                    if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit" || pl[1].Trim() == "inputscroll")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     if (pl.Length > 1 && pl[1].Trim() == "chatnotif") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "chatphoto") StashLogin();

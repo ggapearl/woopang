@@ -25,6 +25,8 @@ public class R0926InputFocus : MonoBehaviour
     private InputField current;
     private UploadInputMirror currentVia;
     private ScrollRect currentScroll;
+    private ScrollRect lifted;                  // 목록 끝을 넘겨서라도 칸을 올려 둔 목록 — 입력줄이 닫히면 원래대로 돌아간다
+    private ScrollRect.MovementType liftedType;
     private Image ring;
     private Image caret;
     private TextGenerator measure;   // 칸 글의 자리를 재는 용 — 칸 글이 쓰는 것과 따로 둔다
@@ -42,6 +44,7 @@ public class R0926InputFocus : MonoBehaviour
             caretKey = -1;
             Place(f);
         }
+        if (lifted != null && (via == null || lifted != currentScroll)) Unlift();
         if (f != null && via != null && currentScroll != null) KeepAbove(f, via.PlacedBar);
     }
 
@@ -58,6 +61,7 @@ public class R0926InputFocus : MonoBehaviour
 
     void OnDisable()
     {
+        Unlift();
         current = null;
         currentVia = null;
         currentScroll = null;
@@ -210,17 +214,19 @@ public class R0926InputFocus : MonoBehaviour
         return lines.Count - 1;
     }
 
-    // 입력줄이 떠 있는 동안 — 원래 칸이 입력줄에 가리면 목록을 올리고, 위로 넘어가 있으면 내린다
+    // 입력줄이 떠 있는 동안 — 원래 칸이 입력줄에 가리면 목록을 올리고, 위로 넘어가 있으면 내린다.
+    // 예전엔 목록이 짧거나 끝에 닿으면 더 못 올려 아래쪽 칸이 키보드에 가렸다 (2026-11-03 대표님: 프로필 편집) — 그동안은 목록 끝을 넘겨 올려 둔다.
+    // 목록 창 위로는 넘기지 않는다(넘기면 잘려 안 보인다) — 키보드 위 자리보다 큰 칸은 윗부분을 보인다
     private readonly Vector3[] corners = new Vector3[4];
 
     private void KeepAbove(InputField f, RectTransform bar)
     {
         if (bar == null) return;
         var sr = currentScroll;
+        var content = sr.content;
         var view = sr.viewport != null ? sr.viewport : (RectTransform)sr.transform;
-        float scrollable = sr.content.rect.height - view.rect.height;
-        float scale = sr.content.lossyScale.y;
-        if (scrollable <= 1f || scale <= 0f) return;
+        float scale = content.parent.lossyScale.y;
+        if (scale <= 0f) return;
 
         ((RectTransform)f.transform).GetWorldCorners(corners);
         float fieldBottom = corners[0].y, fieldTop = corners[1].y;
@@ -228,15 +234,30 @@ public class R0926InputFocus : MonoBehaviour
         float barTop = corners[1].y;
         view.GetWorldCorners(corners);
         float viewTop = corners[1].y;
+        content.GetWorldCorners(corners);
+        float contentTop = corners[1].y;
 
-        float g = gap * scale, delta = 0f;   // 목록을 위로 올릴 양 (월드)
-        if (fieldBottom < barTop + g) delta = barTop + g - fieldBottom;
-        else if (fieldTop > viewTop - g) delta = viewTop - g - fieldTop;
+        float g = gap * scale, lo = barTop + g, hi = viewTop - g, delta = 0f;   // 목록을 위로 올릴 양 (월드)
+        if (fieldBottom < lo) delta = Mathf.Min(lo - fieldBottom, hi - fieldTop);
+        else if (fieldTop > hi) delta = hi - fieldTop;
+        if (delta < 0f) delta = Mathf.Max(delta, Mathf.Min(0f, viewTop - contentTop));   // 내리기는 목록 맨 위까지만
         if (Mathf.Abs(delta) < scale) return;
 
-        float target = Mathf.Clamp01(sr.verticalNormalizedPosition - delta / scale / scrollable);
-        if (Mathf.Abs(target - sr.verticalNormalizedPosition) < 0.0005f) return;   // 목록 끝 — 더 못 움직인다
-        sr.velocity = Vector2.zero;
-        sr.verticalNormalizedPosition = Mathf.Lerp(sr.verticalNormalizedPosition, target, Mathf.Clamp01(Time.unscaledDeltaTime * scrollSpeed));
+        if (lifted != sr)
+        {
+            lifted = sr;
+            liftedType = sr.movementType;
+            sr.movementType = ScrollRect.MovementType.Unrestricted;
+        }
+        sr.StopMovement();
+        var p = content.anchoredPosition;
+        p.y += delta / scale * Mathf.Clamp01(Time.unscaledDeltaTime * scrollSpeed);
+        content.anchoredPosition = p;
+    }
+
+    private void Unlift()
+    {
+        if (lifted != null) lifted.movementType = liftedType;   // 넘겨 둔 만큼은 목록이 스스로 튕겨 돌아간다
+        lifted = null;
     }
 }

@@ -10,11 +10,13 @@ using UnityEngine.EventSystems;
 // 기본 SetActive(false). source 입력칸을 클릭하면 미러 패널 활성화 + 포커스 이전.
 //
 // 동작:
-// - source 클릭 → mirrorPanel.SetActive(true) + mirrorInput.text 동기화 + ActivateInputField
+// - source 를 눌렀다 떼면(MirrorSourceTap) → mirrorPanel.SetActive(true) + mirrorInput.text 동기화 + ActivateInputField
+//   source 에서 시작한 끌기는 source 가 든 목록이 굴린다
 // - mirrorInput.onValueChanged → source.text 동기화
 // - 닫기 버튼 → mirrorPanel.SetActive(false), mirrorInput.DeactivateInputField
 // - 키보드가 사라지면 자동으로 미러 패널도 닫음
 // - 키보드가 끝내 안 뜨면(안드로이드가 '띄워'를 놓침) 닫았다 다시 부름 — 두 번까지, 그 뒤엔 입력줄을 누르면 (WatchKeyboard)
+// - 키보드가 뜨기 전에 화면을 또 누르면 — 원래 칸이면 바로 다시 부르고, 다른 데면 닫음 (OnBarDeselected)
 // - 키보드 위로 mirrorPanel 위치 lerp (UpdateMirrorPosition)
 // - 미러 패널 영역 밖 터치/드래그는 backdrop이 흡수해 뒷 UI 영향 차단
 // ============================================================
@@ -82,7 +84,9 @@ public class UploadInputMirror : MonoBehaviour
     private const int KEYBOARD_RETRIES = 2;     // 저절로는 여기까지 — 그 뒤엔 입력줄을 누르면
     private float kbAskedAt = -1f;              // 마지막으로 키보드를 부른 때 (-1 이면 안 지켜본다)
     private int kbRetries;
-    private bool kbReopen;                      // 다음 프레임에 다시 부른다
+    private bool kbReopen;                      // 곧 다시 부른다
+    private int kbReopenFrame;                  // 놓은 프레임 — 한 프레임 통째로 놓인 채 지나야 키보드(에디터 흉내도)가 닫힌 걸 안다
+    private bool kbHeld;                        // 부른 뒤 입력칸이 키보드를 쥐었다 — 그 뒤 놓으면 기기 키보드가 닫힌 것
     private bool kbTyped;                       // 글이 들어왔다 — 높이를 못 읽어도 키보드는 떠 있다
     private bool kbNoted;
     private string kbContext = "";              // 부를 때 사정 (기기 기록용)
@@ -90,6 +94,7 @@ public class UploadInputMirror : MonoBehaviour
     private static float lastCloseAt = -100f;   // 입력줄을 마지막으로 닫은 때 (모든 입력줄)
     private static float appBackAt = -100f;     // 앱으로 돌아온 때 (사진 고르기·권한 창 등)
     private static int sdk = -1;
+    private InputField queued;                  // 닫는 사이 누른 칸 — 다 닫고 연다
 
     void OnEnable()
     {
@@ -107,6 +112,7 @@ public class UploadInputMirror : MonoBehaviour
         }
         DetachSourceTriggers();
         HideMirror();
+        queued = null;
         initialized = false;   // 다시 켜지면 듣기·트리거를 다시 단다 (예전엔 끈 뒤로 ✓·입력이 먹지 않았다)
     }
 
@@ -161,6 +167,7 @@ public class UploadInputMirror : MonoBehaviour
         var tap = mirrorInput.GetComponent<MirrorBarTap>();
         if (tap == null) tap = mirrorInput.gameObject.AddComponent<MirrorBarTap>();
         tap.onDown = OnBarTapped;
+        tap.onDeselect = OnBarDeselected;
 
         if (createBackdrop) EnsureBackdrop();
         AttachSourceTriggers();
@@ -229,34 +236,9 @@ public class UploadInputMirror : MonoBehaviour
             var src = sourceInputs[i];
             if (src == null) continue;
             src.shouldHideMobileInput = true;
-            // InputField 컴포넌트 disable → 키보드/포커스 차단. EventTrigger만 PointerDown 수신
+            // InputField 컴포넌트 disable → 키보드/포커스 차단. 눌렀다 떼는 것만 MirrorSourceTap 이 받는다
             src.enabled = false;
             AttachSourceTrigger(src);
-        }
-    }
-
-    private void EnsureSourceState()
-    {
-        if (sourceInputs == null) return;
-        for (int i = 0; i < sourceInputs.Length; i++)
-        {
-            var src = sourceInputs[i];
-            if (src == null) continue;
-
-            if (src.enabled) src.enabled = false;
-            if (!src.shouldHideMobileInput) src.shouldHideMobileInput = true;
-
-            var tr = src.GetComponent<EventTrigger>();
-            bool hasPointerDown = false;
-            if (tr != null)
-            {
-                for (int j = 0; j < tr.triggers.Count; j++)
-                {
-                    if (tr.triggers[j].eventID == EventTriggerType.PointerDown)
-                    { hasPointerDown = true; break; }
-                }
-            }
-            if (!hasPointerDown) AttachSourceTrigger(src);
         }
     }
 
@@ -265,43 +247,25 @@ public class UploadInputMirror : MonoBehaviour
         if (sourceInputs == null) return;
         for (int i = 0; i < sourceInputs.Length; i++)
         {
-            if (sourceInputs[i] == null) continue;
-            var trigger = sourceInputs[i].GetComponent<EventTrigger>();
-            if (trigger == null) continue;
-            for (int j = trigger.triggers.Count - 1; j >= 0; j--)
-            {
-                if (trigger.triggers[j].eventID == EventTriggerType.PointerDown)
-                    trigger.triggers.RemoveAt(j);
-            }
+            var tap = sourceInputs[i] != null ? sourceInputs[i].GetComponent<MirrorSourceTap>() : null;
+            if (tap != null) tap.onTap = null;
         }
     }
 
-    private static bool HasPointerDownTrigger(EventTrigger tr)
-    {
-        for (int i = 0; i < tr.triggers.Count; i++)
-            if (tr.triggers[i].eventID == EventTriggerType.PointerDown) return true;
-        return false;
-    }
-
+    // 예전엔 누르는 순간(EventTrigger PointerDown) 열었다 — EventTrigger 가 끌기까지 가로채, 칸에서 시작한 스와이프는 목록을 못 굴리고
+    // 입력줄·키보드만 떴다 (2026-11-03 대표님: 프로필 편집에서 칸을 짚고 내리려 하면 키패드가 뜸). 이제 눌렀다 뗄 때만 연다
     private void AttachSourceTrigger(InputField src)
     {
-        var trigger = src.GetComponent<EventTrigger>();
-        if (trigger == null) trigger = src.gameObject.AddComponent<EventTrigger>();
-
-        for (int i = trigger.triggers.Count - 1; i >= 0; i--)
-        {
-            if (trigger.triggers[i].eventID == EventTriggerType.PointerDown)
-                trigger.triggers.RemoveAt(i);
-        }
-
+        var tap = src.GetComponent<MirrorSourceTap>();
+        if (tap == null) tap = src.gameObject.AddComponent<MirrorSourceTap>();
         InputField captured = src;
-        var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
-        entry.callback.AddListener((_) => OnSourceClicked(captured));
-        trigger.triggers.Add(entry);
+        tap.onTap = () => OnSourceClicked(captured);
     }
 
     private void OnSourceClicked(InputField src)
     {
+        if (closing) { queued = src; return; }   // 닫는 두 프레임 사이 — 다 닫고 연다
+        if (src == activeSource) return;         // 키보드를 기다리다 같은 칸을 다시 누른 것 — 누르는 순간 OnBarDeselected 가 다시 불렀다
         ActivateMirrorFor(src);
     }
 
@@ -363,7 +327,7 @@ public class UploadInputMirror : MonoBehaviour
         closing = false;
         kbAskedAt = mirrorActivatedAt;
         kbRetries = 0;
-        kbReopen = kbTyped = kbNoted = false;
+        kbReopen = kbHeld = kbTyped = kbNoted = false;
     }
 
     // 다른 입력칸(뒤에 열린 대화창 등)이 아직 키보드를 쥐고 있으면 먼저 놓게 한다 — 두 칸이 한 키보드를 나눠 쓰면
@@ -444,7 +408,10 @@ public class UploadInputMirror : MonoBehaviour
             if (!string.IsNullOrEmpty(kb.text) && kb.status != TouchScreenKeyboard.Status.Canceled) final = kb.text;
         }
         closing = false;
+        var next = queued;
+        queued = null;
         CloseNow(final, src, pressed || submitRequested);
+        if (next != null && next.gameObject.activeInHierarchy && isActiveAndEnabled) ActivateMirrorFor(next);
     }
 
     private string FinalText(TouchScreenKeyboard kb)
@@ -503,7 +470,7 @@ public class UploadInputMirror : MonoBehaviour
         keyboardActive = false;
         mirrorActivatedAt = -1f;
         kbAskedAt = -1f;
-        kbReopen = false;
+        kbReopen = kbHeld = false;
         if (mirrorPanel != null) mirrorPanel.SetActive(false);
         if (backdrop != null) backdrop.SetActive(false);
         RestoreSwipeControllers();
@@ -545,9 +512,9 @@ public class UploadInputMirror : MonoBehaviour
                 if (s == null) continue;
                 if (s.enabled) s.enabled = false;
                 if (!s.shouldHideMobileInput) s.shouldHideMobileInput = true;
-                // EventTrigger 누락 검사 — InstagramAccountInput처럼 비활성 → 활성 전환 후 트리거 필요
-                var tr = s.GetComponent<EventTrigger>();
-                if (tr == null || !HasPointerDownTrigger(tr))
+                // 누르기 받는 부품 누락 검사 — InstagramAccountInput처럼 비활성 → 활성 전환 후 필요
+                var tap = s.GetComponent<MirrorSourceTap>();
+                if (tap == null || tap.onTap == null)
                     AttachSourceTrigger(s);
             }
         }
@@ -574,7 +541,8 @@ public class UploadInputMirror : MonoBehaviour
             if (mirrorGroup.alpha != want) mirrorGroup.alpha = Mathf.MoveTowards(mirrorGroup.alpha, want, Time.unscaledDeltaTime / 0.12f);
         }
 
-        if (kbReopen && !closing) { kbReopen = false; AskKeyboard(); }
+        if (kbReopen && !closing && Time.frameCount > kbReopenFrame + 1) { kbReopen = false; AskKeyboard(); }
+        if (KeyboardDropped()) return;
 
         bool inGrace = mirrorActivatedAt > 0f && (Time.unscaledTime - mirrorActivatedAt) < KEYBOARD_GRACE
                        || kbAskedAt > 0f && Time.unscaledTime - kbAskedAt < KEYBOARD_GRACE;   // 다시 부른 뒤도 — 앞 키보드가 내려가는 사이에 닫지 않는다
@@ -614,16 +582,51 @@ public class UploadInputMirror : MonoBehaviour
 #endif
     }
 
-    // 닫고 한 프레임 쉰 뒤 부른다 — 키보드(에디터 흉내도)가 닫힌 걸 알아야 새로 띄운다
+    // 키보드가 뜨기 전에 화면을 또 눌렀다 — 누르는 순간 입력칸이 놓이며 키보드 요청도 같이 취소된다. 예전엔 1.5초 뒤 저절로
+    // 다시 불러, 다른 데를 눌러도 키보드가 떠올랐다 (기기 기록 '칸 놓침' 4건 — 2026-11-02 대표님 폰).
+    // 원래 칸을 다시 누른 거면 바로 다시 부르고(몇 번째로 세지 않는다 — 기기가 놓친 게 아니다), 다른 데면 그만 쓰려는 것이라 닫는다
+    private void OnBarDeselected(BaseEventData e)
+    {
+        if (!(e is PointerEventData p) || keyboardActive || closing || kbReopen || activeSource == null) return;
+        var hit = p.pointerPressRaycast.gameObject;
+        if (hit != null && mirrorPanel != null && hit.transform.IsChildOf(mirrorPanel.transform)) return;   // 입력줄의 단추 — 단추가 맡는다
+        if (Over(activeSource.transform as RectTransform, p)) { kbReopen = true; kbReopenFrame = Time.frameCount; }
+        else BeginClose(false);
+    }
+
+    private static bool Over(RectTransform rt, PointerEventData p)
+    {
+        if (rt == null || !RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, p.position, p.pressEventCamera, out var at)) return false;
+        const float pad = 16f;   // 칸 가장자리를 살짝 비껴 눌러도
+        var r = rt.rect;
+        return at.x >= r.xMin - pad && at.x <= r.xMax + pad && at.y >= r.yMin - pad && at.y <= r.yMax + pad;
+    }
+
+    // 누르지 않았는데 입력칸이 키보드를 놓았다(선택은 그대로) — 기기 키보드가 닫혔다. 뒤로 가기·완료·친 뒤 내린 것이면 닫고,
+    // 뜨기도 전에 닫힌 거면 기다리지 않고 바로 다시 부른다. 닫았으면 true
+    private bool KeyboardDropped()
+    {
+        if (keyboardActive || closing || kbReopen || activeSource == null) return false;
+        if (mirrorInput.isFocused) { kbHeld = true; return false; }
+        var es = EventSystem.current;
+        if (!kbHeld || es == null || es.currentSelectedGameObject != mirrorInput.gameObject) return false;
+        kbHeld = false;
+        if (mirrorInput.wasCanceled || submitRequested || kbTyped) { BeginClose(false); return true; }
+        if (kbRetries < KEYBOARD_RETRIES) ReopenKeyboard();
+        return false;
+    }
+
+    // 닫고 한 프레임 통째로 쉰 뒤 부른다 — 키보드(에디터 흉내도)가 닫힌 걸 알아야 새로 띄운다
     private void ReopenKeyboard()
     {
         kbRetries++;
         if (kbRetries == 1) kbFirst = KeyboardState();
         Debug.LogWarning($"[UpInputMirror] 키보드가 안 떠 다시 부릅니다 ({kbRetries}) — {kbFirst}");
+        kbReopen = true;   // 아래에서 놓을 때 OnBarDeselected 가 또 다루지 않게 먼저
+        kbReopenFrame = Time.frameCount;
         if (mirrorInput.isFocused) mirrorInput.DeactivateInputField();
         var es = EventSystem.current;
         if (es != null && es.currentSelectedGameObject == mirrorInput.gameObject) es.SetSelectedGameObject(null);
-        kbReopen = true;
     }
 
     private void AskKeyboard()
@@ -632,6 +635,7 @@ public class UploadInputMirror : MonoBehaviour
         mirrorInput.ActivateInputField();
         mirrorInput.caretPosition = mirrorInput.text.Length;
         keyboardActive = false;   // 앞 키보드가 아직 보여도 새 키보드로 치지 않는다
+        kbHeld = false;
         kbAskedAt = Time.unscaledTime;
     }
 
@@ -639,7 +643,9 @@ public class UploadInputMirror : MonoBehaviour
     private string KeyboardState()
     {
         var kb = mirrorInput.touchScreenKeyboard;
-        string s = kb == null ? (mirrorInput.isFocused ? "칸만 잡힘·키보드 요청 없음" : "칸 놓침") : "요청됨(" + kb.status + (kb.active ? "" : "·꺼짐") + ")";
+        var es = EventSystem.current;
+        string lost = es != null && es.currentSelectedGameObject == mirrorInput.gameObject ? "칸 놓침·선택 그대로" : "칸 놓침·선택 풀림";
+        string s = kb == null ? (mirrorInput.isFocused ? "칸만 잡힘·키보드 요청 없음" : lost) : "요청됨(" + kb.status + (kb.active ? "" : "·꺼짐") + ")";
         return TouchScreenKeyboard.isInPlaceEditingAllowed ? s + " · 하드웨어 키보드로 앎" : s;
     }
 
@@ -806,11 +812,30 @@ public class MirrorButtonPress : MonoBehaviour, IPointerDownHandler, IPointerUpH
     void OnDisable() { Down = false; }
 }
 
-/// <summary>입력줄 칸을 눌렀다 — 키보드가 안 떠 있으면 다시 부른다 (UploadInputMirror)</summary>
-public class MirrorBarTap : MonoBehaviour, IPointerDownHandler
+/// <summary>입력줄 칸을 눌렀다 — 키보드가 안 떠 있으면 다시 부른다 · 칸이 놓였다(어디를 눌러서인지는 onDeselect 가 본다) (UploadInputMirror)</summary>
+public class MirrorBarTap : MonoBehaviour, IPointerDownHandler, IDeselectHandler
 {
     public System.Action onDown;
+    public System.Action<BaseEventData> onDeselect;
     public void OnPointerDown(PointerEventData e) => onDown?.Invoke();
+    public void OnDeselect(BaseEventData e) => onDeselect?.Invoke(e);
+}
+
+/// <summary>
+/// 원래 칸을 눌렀다 뗐다 — 끌기 받는 부품이 아니라서 칸에서 시작한 끌기는 칸이 든 목록이 굴린다 (UploadInputMirror).
+/// 끌기 받는 목록이 없는 칸도 4mm 넘게 민 것은 누른 게 아니다 (페이지 넘기기 등)
+/// </summary>
+public class MirrorSourceTap : MonoBehaviour, IPointerClickHandler
+{
+    public System.Action onTap;
+
+    public void OnPointerClick(PointerEventData e)
+    {
+        if (e.dragging) return;
+        float slop = Screen.dpi > 0f ? Screen.dpi * 0.16f : 40f;
+        if ((e.position - e.pressPosition).sqrMagnitude > slop * slop) return;
+        onTap?.Invoke();
+    }
 }
 
 /// <summary>
