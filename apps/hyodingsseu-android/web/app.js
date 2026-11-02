@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-02b';
+  const WEB_VERSION = '2026-11-02c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -195,11 +195,17 @@
   };
 
   /** PC 문서 경로 → PC 효딩쓰가 서명한 링크(30일)를 받아 앱 밖(브라우저)에서 연다 */
+  // 글·그림·소리처럼 간단한 파일은 앱 안 보기로 연다 (2026-11-02 대표님: 앱 밖 브라우저로 나가지 말고 앱 안에서). 폴더·PDF 같은 건 예전처럼 밖으로.
+  const INAPP_DOC = /\.(txt|md|markdown|csv|json|log|html?|png|jpe?g|gif|webp|mp4|m4v|mov|mp3|m4a|wav)$/i;
+  const baseName = p => String(p || '').split(/[?#]/)[0].split(/[\\/]/).pop();
+
   async function openDoc(path) {
-    const w = Native ? null : window.open('', '_blank');           // 브라우저: 누른 순간 창을 열어 두어야 막히지 않는다
+    const inApp = INAPP_DOC.test(String(path).split(/[?#]/)[0]);
+    const w = Native || inApp ? null : window.open('', '_blank');   // 브라우저: 누른 순간 창을 열어 두어야 막히지 않는다
     try {
       const r = await api.get('doc', { path });
-      if (w) w.location = r.url; else openLink(r.url);
+      if (inApp) openViewer([{ url: r.url, name: baseName(path) }], 0, baseName(path));
+      else if (w) w.location = r.url; else openLink(r.url);
     } catch (e) {
       if (w) w.close();
       show(e);
@@ -2567,9 +2573,36 @@
       content);
     page.onClose = onClose;
     pages.push(page);
+    bindSwipeClose(page);
     $('#app').append(page);
     requestAnimationFrame(() => requestAnimationFrame(() => page.classList.add('on')));
     return page;
+  }
+
+  /** 왼쪽에서 오른쪽으로 밀면 이 화면(문서함·승인함 등)이 닫힌다 (2026-11-02 대표님) — 오른쪽 끝에서 밀려 들어온 화면이니 온 길로 돌려보낸다.
+      글 쓰는 칸·가로로 밀리는 줄(칩·사진 줄)·열린 창 위에서 시작한 손짓은 그쪽 몫이라 건드리지 않는다. */
+  function bindSwipeClose(page) {
+    let x0 = 0, y0 = 0, t0 = 0, on = false;
+    page.addEventListener('touchstart', ev => {
+      on = false;
+      if (ev.touches.length !== 1 || pages[pages.length - 1] !== page || layers.length) return;
+      const t = ev.target;
+      if (t.closest && t.closest('input,textarea,select,[contenteditable]')) return;
+      for (let n = t; n && n !== page; n = n.parentElement) {
+        if (n.scrollWidth > n.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(n).overflowX)) return;
+      }
+      x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY; t0 = Date.now(); on = true;
+    }, { passive: true });
+    page.addEventListener('touchend', ev => {
+      if (!on) return;
+      on = false;
+      const c = ev.changedTouches[0], dx = c.clientX - x0, dy = c.clientY - y0;
+      if (dx > 80 && Math.abs(dy) < dx * 0.5 && Date.now() - t0 < 800 && pages[pages.length - 1] === page) {
+        haptic('tap');
+        sfx.play('tap');
+        popPage();
+      }
+    }, { passive: true });
   }
 
   function popPage() {
@@ -3063,7 +3096,7 @@
     + 'e.preventDefault();if(t)t.scrollIntoView();return;}if(!/^https?:/i.test(a.href))return;e.preventDefault();parent.postMessage({hyoDocOpen:a.href},"*");},true);<\/script>';
   const DOC_PAGE = body => '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<style>body{margin:0;padding:18px 16px 48px;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;color:#1b1f2a;background:#fff;'
-    + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
+    + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}pre.txt{font:inherit}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
     + 'img{max-width:100%}@media (prefers-color-scheme:dark){body{background:#14161c;color:#e8eaf0}td,th{border-color:#333}}</style></head><body>' + body + '</body></html>';
 
   async function loadDoc(f) {
@@ -3082,7 +3115,7 @@
           return;
         }
         if (r.ok && /^text\/(markdown|x-markdown)/.test(type)) { f.srcdoc = DOC_PAGE(markdown(await r.text()) + DOC_LINK); return; }
-        if (r.ok && /^text\/|json/.test(type)) { f.srcdoc = DOC_PAGE('<pre>' + esc(await r.text()) + '</pre>'); return; }
+        if (r.ok && /^text\/|json/.test(type)) { f.srcdoc = DOC_PAGE('<pre class="txt">' + esc(await r.text()) + '</pre>'); return; }
       } catch (e) { /* 아래 주소로 */ }
     }
     f.src = url;                                            // PDF·다른 사이트 — 예전처럼 주소로
@@ -3269,8 +3302,10 @@
     const a = ev.target.closest && ev.target.closest('a[href]');
     if (!a) return;
     ev.preventDefault();
+    const href = a.getAttribute('href');
     if (a.dataset.doc) openDoc(a.dataset.doc);
-    else openLink(a.getAttribute('href'));
+    else if (/\/AI\/doc\//.test(href) && INAPP_DOC.test(href.split(/[?#]/)[0])) openViewer([{ url: href, name: nameFromUrl(href) }], 0, nameFromUrl(href));
+    else openLink(href);
   });
 
   document.addEventListener('visibilitychange', () => appVisible(!document.hidden));
