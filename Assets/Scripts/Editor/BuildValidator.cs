@@ -361,6 +361,11 @@ namespace Editor
             {
                 issues.Add($"[출시노트 누락] 이번 빌드 버전 {version} 의 ko/en 출시노트가 없습니다.\n" + hint);
             }
+            // 애플이 이모지가 든 문구를 409 로 거부한다 — 1.2.58 때 📌 하나로 TestFlight '테스트할 내용'·App Store '새로운 기능'이 둘 다 막혔다
+            else if (Regex.IsMatch(entry.Groups[1].Value, @"[\uD800-\uDFFF☀-➿️]"))
+            {
+                issues.Add($"[출시노트 이모지] 이번 빌드 버전 {version} 의 출시노트에 이모지가 있습니다. 애플이 거부하니 글자로만 쓰세요.");
+            }
         }
     }
 }

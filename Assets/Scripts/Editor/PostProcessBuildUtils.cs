@@ -54,7 +54,8 @@ namespace Editor
         public static bool enableBitcode = false;
         private const string ARCoreSwiftPackageName = "ARCoreGeospatial";
         private const string ARCoreSwiftPackageURL = "https://github.com/google-ar/arcore-ios-sdk";
-        private const string ARCoreSwiftPackageVersion = "1.52.0";
+        // 정확히 이 버전으로 고정한다 — 다음 메이저까지 열어 두면 최신이 잡히는데, 1.57.0 은 구글의 CloudAnchors.zip 체크섬이 맞지 않아 아카이브가 실패한다 (맥이 빌드마다 손으로 1.56.0 으로 내렸다)
+        private const string ARCoreSwiftPackageVersion = "1.56.0";
 
         // ============================================================
         // Xcode 프로젝트 설정 (팀 ID 등)
@@ -275,7 +276,8 @@ namespace Editor
             }
 
             // === 모든 destination 비활성 (iPhone만 사용) ===
-            // App Store Connect 경고: "UIRequiredDeviceCapabilities [arkit] not supported in visionOS"
+            // ⚠ 이걸 꺼도 App Store Connect 경고 "UIRequiredDeviceCapabilities [arkit] not supported in visionOS" 는 계속 뜬다 (Info.plist 의 arkit 을 보고 낸다).
+            // 그대로 둬도 된다 — 업로드·심사를 막지 않고, 우팡은 ARKit 없이는 못 도니 Vision Pro 에 안 나가는 게 맞다. arkit 을 빼면 안 된다 (ARKit 없는 기기에도 설치된다)
             // Xcode General > Supported Destinations에 보이는 항목들을 코드로 강제 OFF
             // 적용 대상: mainTarget + UnityFramework + Tests + GameAssembly + notificationservice 등 모든 native target
             string[] destinationKeys = new[]
@@ -703,7 +705,7 @@ namespace Editor
             project.ReadFromFile(projectPath);
 
             string packageGuid =
-                project.AddRemotePackageReferenceAtVersionUpToNextMajor(url: packageUrl, version: version);
+                project.AddRemotePackageReferenceAtVersion(url: packageUrl, version: version);
             // UnityFramework 타겟에 링크 (C# 코드가 여기서 컴파일되므로 네이티브 심볼이 여기에 필요)
             project.AddRemotePackageFrameworkToProject(targetGuid: project.GetUnityFrameworkTargetGuid(), name: packageName,
                 packageGuid: packageGuid, weak: false);
