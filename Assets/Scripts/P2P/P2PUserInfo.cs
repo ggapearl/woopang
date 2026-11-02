@@ -1,6 +1,6 @@
 /**
  * P2PUserInfo.cs
- * P2P 사용자 아바타 - 터치(더블탭) → 프로필 열기, 프로필 사진 텍스처 적용
+ * P2P 사용자 아바타 - 터치(더블탭) → 프로필 열기, 프로필 사진 원(빌보드) 적용
  * 0000_Cube.prefab의 DoubleTap3D 패턴을 참고하여 단순화
  */
 
@@ -27,8 +27,10 @@ public class P2PUserInfo : MonoBehaviour
     // 3D Avatar Renderer
     // ============================================================
     [Header("3D Avatar Renderer")]
-    [Tooltip("큐브의 MeshRenderer (프리팹에서 연결)")]
+    [Tooltip("사진 원의 MeshRenderer (프리팹에서 연결)")]
     [SerializeField] private MeshRenderer avatarRenderer;
+    [Tooltip("사진이 없는 사람의 기본 얼굴 크기 (px)")]
+    [SerializeField] private int defaultFaceSize = 256;
 
     // ============================================================
     // OffScreen Indicator
@@ -165,7 +167,7 @@ public class P2PUserInfo : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// 프로필 사진 로딩 → 큐브 MeshRenderer에 텍스처 적용
+    /// 프로필 사진 로딩 → 사진 원에 텍스처 적용
     /// avatarUrl이 비어있으면 서버에서 userId로 프로필 조회 후 avatar_url을 가져옴
     /// </summary>
     private void LoadProfileTexture()
@@ -174,6 +176,7 @@ public class P2PUserInfo : MonoBehaviour
         if (!gameObject.activeInHierarchy) return;
         if (avatarTexture != null && !string.IsNullOrEmpty(avatarUrl) && avatarUrl == avatarTextureUrl) return;   // 이미 붙어 있다
 
+        if (avatarTexture == null) ApplyDefaultFace();   // 사진이 오기 전 · 사진이 없는 사람
         if (downloadCoroutine != null) StopCoroutine(downloadCoroutine);
 
         if (!string.IsNullOrEmpty(avatarUrl))
@@ -193,7 +196,7 @@ public class P2PUserInfo : MonoBehaviour
     /// </summary>
     private IEnumerator FetchAvatarUrlAndDownload()
     {
-        string profileUrl = $"{ApiConfig.USER_PROFILE}?user_id={userId}";
+        string profileUrl = $"{ProfileManager.ServerBase}/api/user/profile?user_id={userId}";
 
         using (UnityWebRequest request = UnityWebRequest.Get(profileUrl))
         {
@@ -234,9 +237,17 @@ public class P2PUserInfo : MonoBehaviour
         public string avatar_url;
     }
 
+    /// <summary>주변 사용자 갱신 때 — 사진을 바꾼 사람은 다시 받는다. 빈 주소는 넘긴다(사진이 없는 사람은 FetchAvatarUrlAndDownload 가 이미 물어봤다)</summary>
+    public void UpdateAvatarUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url) || url == avatarUrl) return;
+        avatarUrl = url;
+        LoadProfileTexture();
+    }
+
     private IEnumerator DownloadTexture(string url)
     {
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(url, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
+        using (UnityWebRequest request = ProfileManager.AvatarRequest(url))   // 밉맵 — 멀리서 작게 보여도 자글거리지 않게. 읽기 전용이라 CPU 쪽 사본도 없다
         {
             request.timeout = 15;
             yield return request.SendWebRequest();
@@ -256,7 +267,7 @@ public class P2PUserInfo : MonoBehaviour
     }
 
     /// <summary>
-    /// 프로필 사진을 큐브 MeshRenderer에 적용
+    /// 프로필 사진을 원에 적용 — 정사각형이 아니면 가운데를 잘라 원을 채운다
     /// </summary>
     private void ApplyProfileTextureToAvatar(Texture2D texture)
     {
@@ -270,6 +281,10 @@ public class P2PUserInfo : MonoBehaviour
         if (mat.HasProperty("_BaseMap"))
         {
             mat.SetTexture("_BaseMap", texture);
+            float w = texture.width, h = texture.height;
+            Vector2 crop = w >= h ? new Vector2(h / w, 1f) : new Vector2(1f, w / h);
+            mat.SetTextureScale("_BaseMap", crop);
+            mat.SetTextureOffset("_BaseMap", (Vector2.one - crop) * 0.5f);
             mat.color = Color.white;
         }
         else if (mat.HasProperty("_MainTex"))
@@ -292,6 +307,14 @@ public class P2PUserInfo : MonoBehaviour
             fallbackMaterial.mainTexture = texture;
             fallbackMaterial.color = Color.white;
         }
+    }
+
+    /// <summary>사진이 없을 때의 얼굴 — 프로필 화면과 같은 기본 아바타 (이름마다 색이 정해져 있다)</summary>
+    private void ApplyDefaultFace()
+    {
+        Sprite face = ProfileManager.GenerateDefaultAvatarSprite(username, defaultFaceSize);
+        ApplyProfileTextureToAvatar(face.texture);   // 텍스처는 avatarTexture 가 갖는다 — 사진이 오면 지워진다
+        Destroy(face);
     }
 
     /// <summary>받은 프로필 사진을 내리고 프리팹 원래 면·색으로 되돌린다</summary>

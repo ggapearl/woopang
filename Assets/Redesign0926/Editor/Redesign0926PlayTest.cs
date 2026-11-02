@@ -152,6 +152,7 @@ namespace Redesign0926
             else if (mode == "follownotif") PlanFollowNotif();
             else if (mode == "chatnotif") PlanChatNotif();
             else if (mode == "chatphoto") PlanChatPhoto();
+            else if (mode == "person") PlanPerson();
             else if (mode == "tapfeedback") PlanTapFeedback();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
@@ -2198,6 +2199,162 @@ namespace Redesign0926
         private static InputField ChatInputField() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.chatInput;
 
         // 메시지·공지 알림을 누르면 그 대화방으로 (10-27 대표님 「'메세지' 가 왔을 때 해당 알림을 터치해서 앱이 켜지면 해당 메세지창으로 바로 이동」) — 서버가 보내는 값 그대로
+        // 사람 오브젝트 — 사진 원 · 분홍 테두리 · 늘 정면 (10-25 대표님 「정면이 항상 보이는 동그라미 (이것도 확대축소 가능) … 테두리에 핑크색 원 (우측하단 프로필 버튼처럼)」)
+        private static void PlanPerson()
+        {
+            const string Dev = "http://127.0.0.1:5099", Photo = "http://127.0.0.1:5097/pp_photo.png", Wide = "http://127.0.0.1:5097/pp_wide.png";
+            const string A = "pp_a", B = "pp_b", C = "pp_c", D = "pp_d", P = "hunt_test_p2pa";
+            const int PhotoW = 512, WideW = 640, FaceW = 256;
+            Func<GameObject> template = () => (GameObject)typeof(P2PManager).GetField("userAvatarPrefab", NPI).GetValue(P2PManager.Instance);
+            Func<Transform> cube = () => template().transform.Find("Cube");
+            Func<string, P2PUserInfo> who = id =>
+            {
+                foreach (var u in UnityEngine.Object.FindObjectsByType<P2PUserInfo>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                    if (u.userId == id) return u;
+                return null;
+            };
+            Func<string, Material> mat = id => who(id)?.GetComponent<MeshRenderer>().material;
+            Func<string, int> face = id => mat(id)?.GetTexture("_BaseMap")?.width ?? 0;
+            Func<string, bool> faces = id =>
+            {
+                var u = who(id);
+                return u != null && Vector3.Angle(u.transform.forward, u.transform.position - Camera.main.transform.position) < 1f;
+            };
+            // 카메라 앞 forward m · 오른쪽 right m 자리의 사람
+            Func<string, string, string, float, float, string> user = (id, name, url, forward, right) =>
+            {
+                var c = Camera.main.transform;
+                Vector3 d = Vector3.ProjectOnPlane(c.forward, Vector3.up).normalized * forward + Vector3.ProjectOnPlane(c.right, Vector3.up).normalized * right;
+                double lat = VirtualLocation.Instance.Latitude, lon = VirtualLocation.Instance.Longitude;
+                return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"user_id\":\"{0}\",\"username\":\"{1}\",\"latitude\":{2:0.0000000},\"longitude\":{3:0.0000000},\"altitude\":0,\"avatar_url\":\"{4}\",\"distance\":{5:0}}}",
+                    id, name, lat + d.z / 111320.0, lon + d.x / (111320.0 * Math.Cos(lat * Math.PI / 180.0)), url, d.magnitude);
+            };
+            Action<string[]> inject = list => P2PManager.Instance.InjectTestUsersData("{\"users\":[" + string.Join(",", list) + "]}");
+            Func<string, bool> hit = id =>
+            {
+                var u = who(id);
+                var cam = Camera.main.transform;
+                return u != null && Physics.Raycast(cam.position, u.transform.position - cam.position, out var h, 1000f) && h.collider.gameObject == u.gameObject;
+            };
+            Func<string, bool> missBeside = id =>
+            {
+                var u = who(id);
+                var cam = Camera.main.transform;
+                return u != null && !(Physics.Raycast(cam.position, u.transform.position + cam.right * 1.6f - cam.position, out var h, 1000f) && h.collider.gameObject == u.gameObject);
+            };
+
+            Do(() => SessionState.SetBool(LoginReadyKey, true));   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(1.0f);
+            Do(() =>
+            {
+                ProfileManager.EditorBase = Dev;
+                // 에디터의 가상 사용자(1초마다 근처 사람을 넣는다)가 시험이 넣은 근처 사람 목록을 덮어쓰지 않게
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>();
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                P2PManager.Instance.SetUserFilterMode(UserFilterMode.All);
+            });
+
+            // 1) 씬 — 육면체가 사진 원으로
+            Check(() => cube().GetComponent<MeshFilter>().sharedMesh.name == "Quad", "본 메시가 판");
+            Check(() => cube().GetComponent<MeshRenderer>().sharedMaterial.shader.name == "Universal Render Pipeline/R0926PersonDisc", "본 재질이 사진 원 셰이더");
+            Check(() => cube().GetComponent<UnityEngine.ProBuilder.ProBuilderMesh>() == null, "ProBuilder 가 메시를 다시 만들지 않는다");
+            Check(() => !cube().Find("Pulse").gameObject.activeSelf, "옛 육면체 둘레 빛은 꺼져 있다");
+            Check(() => cube().GetComponent<P2PBillboard>() != null, "늘 정면 (빌보드)");
+            Check(() => !cube().GetComponent<CubeTouchRotator>().enabled, "원은 드래그로 돌지 않는다");
+            Check(() => cube().GetComponent<MeshRenderer>().shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.Off, "판은 그림자를 드리우지 않는다");
+
+            // 2) 사진 · 가로 사진 · 사진 없는 사람
+            Do(() => inject(new[] { user(A, "사진있음", Photo, 13f, -3.6f), user(B, "가로사진", Wide, 13f, 3.6f), user(C, "사진없음", "", 7f, 0f) }));
+            Wait(() => face(A) == PhotoW && face(B) == WideW, 8f, "사진 도착");
+            Check(() => face(A) == PhotoW, "사진이 원에 붙는다");
+            Check(() => mat(A).GetColor("_BaseColor") == Color.white, "사진에 색이 덧칠되지 않는다");
+            Check(() => mat(A).GetTextureScale("_BaseMap") == Vector2.one, "정사각형 사진은 그대로");
+            Check(() => Mathf.Abs(mat(B).GetTextureScale("_BaseMap").x - 0.5f) < 0.01f && Mathf.Abs(mat(B).GetTextureOffset("_BaseMap").x - 0.25f) < 0.01f, "가로 사진은 가운데를 잘라 원을 채운다");
+            Check(() => face(C) == FaceW, "사진 없는 사람은 기본 얼굴");
+            Check(() => mat(C).GetColor("_BaseColor") == Color.white, "기본 얼굴도 색이 덧칠되지 않는다");
+            Sleep(0.3f);
+            Shot("person_three");
+            Sleep(1.2f);
+            Shot("person_three_b");
+            Sleep(1.2f);
+            Shot("person_three_c");
+            Sleep(1.2f);
+            Shot("person_three_d");
+
+            // 3) 늘 정면 — 옆에 있어도, 자리가 바뀌어도
+            Check(() => faces(A) && faces(B) && faces(C), "셋 다 카메라를 본다");
+            Check(() => Vector3.Angle(who(A).transform.forward, who(B).transform.forward) > 5f, "서로 다른 쪽을 본다 (각자 카메라로)");
+            Check(() => Mathf.Abs(Vector3.Dot(who(C).transform.right, Vector3.up)) < 0.01f, "사진이 옆으로 눕지 않는다");
+            Check(() => who(A).GetComponent<Target>() != null && who(A).GetComponent<Target>().PlaceName == "사진있음", "화면 밖 표시 이름");
+            Do(() => inject(new[] { user(A, "사진있음", Photo, 4f, -9f), user(B, "가로사진", Wide, 13f, 3.6f), user(C, "사진없음", "", 7f, 0f) }));
+            Sleep(0.3f);
+            Check(() => faces(A), "자리가 바뀌어도 카메라를 본다");
+
+            // 4) 누르는 자리
+            Check(() => hit(C), "원을 누르면 그 사람");
+            Check(() => missBeside(C), "원 바깥은 누르지 않는다");
+
+            // 5) 확대 · 축소 — 핀치 줌과 같은 길
+            float baseScale = 0f;
+            Do(() => { baseScale = who(C).transform.lossyScale.x; P2PManager.Instance.ApplyZoom(2f); });
+            Sleep(0.2f);
+            Check(() => Mathf.Abs(who(C).transform.lossyScale.x - baseScale * 2f) < 0.01f, "확대하면 원이 커진다");
+            Check(() => faces(C), "커져도 정면");
+            Shot("person_zoom2");
+            Do(() => P2PManager.Instance.ApplyZoom(0.5f));
+            Sleep(0.2f);
+            Check(() => Mathf.Abs(who(C).transform.lossyScale.x - baseScale * 0.5f) < 0.01f, "축소하면 원이 작아진다");
+            Do(() => P2PManager.Instance.ApplyZoom(1f));
+            Sleep(0.2f);
+
+            // 6) 사진을 바꾼 사람 — 주변 갱신에서 새 사진으로
+            Do(() => inject(new[] { user(A, "사진있음", Photo, 13f, -3.6f), user(B, "가로사진", Wide, 13f, 3.6f), user(C, "사진없음", Photo, 7f, 0f) }));
+            Wait(() => face(C) == PhotoW, 6f, "새 사진 도착");
+            Check(() => face(C) == PhotoW, "주변 갱신에서 사진이 바뀐다");
+
+            // 7) 풀에서 다른 사람으로 다시 쓰일 때 — 앞사람 사진 · 자르기가 남지 않는다
+            Do(() => P2PManager.Instance.RemoveTestUserAvatar(B));
+            Sleep(0.2f);
+            Do(() => inject(new[] { user(A, "사진있음", Photo, 13f, -3.6f), user(D, "새사람", "", 13f, 3.6f), user(C, "사진없음", Photo, 7f, 0f) }));
+            Wait(() => face(D) == FaceW, 6f, "새 사람 기본 얼굴");
+            Check(() => face(D) == FaceW, "새 사람에게 앞사람 사진이 남지 않는다");
+            Check(() => mat(D).GetTextureScale("_BaseMap") == Vector2.one, "앞사람 사진 자르기가 남지 않는다");
+            Shot("person_pool");
+
+            // 8) 멀어지면 숨는다 (400m) · 가까워지면 다시
+            Do(() => inject(new[] { user(A, "사진있음", Photo, 460f, 0f), user(D, "새사람", "", 13f, 3.6f), user(C, "사진없음", Photo, 7f, 0f) }));
+            Wait(() => who(A) != null && !who(A).GetComponent<MeshRenderer>().enabled, 3f, "멀어서 숨음");
+            Check(() => who(A) != null && !who(A).GetComponent<MeshRenderer>().enabled, "400m 밖이면 원이 숨는다");
+            Do(() => inject(new[] { user(A, "사진있음", Photo, 13f, -3.6f), user(D, "새사람", "", 13f, 3.6f), user(C, "사진없음", Photo, 7f, 0f) }));
+            Wait(() => who(A) != null && who(A).GetComponent<MeshRenderer>().enabled, 3f, "다시 보임");
+            Check(() => who(A) != null && who(A).GetComponent<MeshRenderer>().enabled, "가까워지면 원이 돌아온다");
+
+            // 9) 주변 목록에 사진 주소가 없어도 프로필의 사진을 쓴다 · 두 번 누르면 프로필
+            Do(() => { P2PManager.Instance.RemoveTestUserAvatar(D); inject(new[] { user(P, "프로필시험", "", 8f, 3.6f), user(A, "사진있음", Photo, 13f, -3.6f), user(C, "사진없음", Photo, 7f, 0f) }); });
+            Wait(() => who(P) != null && !string.IsNullOrEmpty(who(P).avatarUrl), 6f, "프로필의 사진 주소");
+            Sleep(0.6f);
+            Check(() => who(P) != null && (who(P).avatarUrl ?? "").EndsWith("/api/dev/avatar.png"), "주변 목록에 없는 사진 주소는 프로필에서 받아 온다");
+            Do(() => who(P).OnUserDoubleTapped());
+            Wait(() => Active("FullProfilePanel"), 5f, "프로필 열림");
+            Check(() => Active("FullProfilePanel"), "두 번 누르면 그 사람 프로필");
+            Sleep(0.6f);
+            Do(() => Back());
+            Sleep(0.6f);
+
+            Do(() =>
+            {
+                foreach (var id in new[] { A, C, D, P }) P2PManager.Instance.RemoveTestUserAvatar(id);
+                ProfileManager.EditorBase = null;
+            });
+        }
+
         // 설정 탭처럼 다른 버튼들도 소리 · 햅틱 (10-30 대표님 「설정 등 다른 화면들에 있어서도 상단의 '설정탭' 누를 때처럼 소리랑 햅틱효과 발생하도록 기타 다른 버튼들도 잘 확인하고 해당 효과 넣어줘」)
         private static void PlanTapFeedback()
         {

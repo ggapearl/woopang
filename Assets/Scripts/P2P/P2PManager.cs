@@ -669,6 +669,7 @@ public class P2PManager : MonoBehaviour
         if (userInfo != null)
         {
             userInfo.UpdateDistance(userData.distance);
+            userInfo.UpdateAvatarUrl(userData.avatar_url);
         }
 
         nearbyUsersData[userData.user_id] = userData;

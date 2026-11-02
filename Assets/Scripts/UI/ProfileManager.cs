@@ -144,7 +144,8 @@ public class ProfileManager : MonoBehaviour
 
 #if UNITY_EDITOR
     public static string EditorBase;   // 플레이 시험 — 프로필·팔로우를 내 PC 시험 서버에서 (운영 서버에 시험 아이디로 묻지 않게)
-    private string BASE_URL => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+    public static string ServerBase => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
+    private string BASE_URL => ServerBase;
 #else
     private string BASE_URL => ApiConfig.MAIN_SERVER;
 #endif
@@ -2003,7 +2004,7 @@ public class ProfileManager : MonoBehaviour
     /// <summary>
     /// 아바타를 밉맵과 함께 받는다 — 큰 사진을 프로필 원(333)처럼 작게 그릴 때 밉맵이 없으면 자글자글하게 깨져 보였다
     /// </summary>
-    private static UnityWebRequest AvatarRequest(string url)
+    public static UnityWebRequest AvatarRequest(string url)
     {
         var p = DownloadedTextureParams.Default;
         p.mipmapChain = true;
