@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-02e';
+  const WEB_VERSION = '2026-11-02f';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -26,10 +26,6 @@
   const REPLY_VOICE = [['off', '듣지 않기'], ['voiceOnly', '말로 물었을 때만'], ['always', '항상']];
   const VOICE_ENGINE = [['phone', '폰 목소리 · 바로'], ['pc', 'PC 소희 목소리 · 조금 늦음']];
   const THEMES = [['system', '폰 설정대로'], ['light', '라이트'], ['dark', '다크']];
-  const QUICK = [['서버 상태', '서버 상태 어때?'], ['승인 대기', 'AI Office 승인 대기 뭐 있어?'],
-    ['오늘 할 일', '오늘 뭐부터 하면 좋을까? 급한 것부터 3개만.'], ['농민닷컴 현황', '농민닷컴 오늘 주문이랑 배송 현황 짧게 알려줘'],
-    ['홍보 뭐 올려', '오늘 올릴 홍보물 하나 만들어서 보내줘']];
-  const SUGGEST = ['서버 상태 어때?', 'AI Office 직원들 지금 뭐 하고 있어?', '농민닷컴 오늘 주문 현황 알려줘', '오늘 뭐부터 하면 좋을까?'];
   const CLOSED = { allow: '허락했습니다', always: '이번 대화에선 계속 허락했습니다', deny: '거절했습니다',
     timeout: '답이 없어 하지 않았습니다', answer: '답했습니다' };
   const INCOMING = { peer: '다른 세션', 'task-notification': '작업 알림', channel: '채널', auto: '자율 점검', system: '시스템',
@@ -54,7 +50,7 @@
   // ── 상태 (DeskStore) ───────────────────
   const S = {
     items: [], agentState: 'idle', link: { k: 'connecting' }, name: '효딩쓰', host: 'gui', model: 'normal',
-    models: MODEL_DEFAULTS, workers: [], uploadingVoice: false, paired: false, pairMessage: null, quick: null,
+    models: MODEL_DEFAULTS, workers: [], uploadingVoice: false, paired: false, pairMessage: null,
     docsNew: 0,                              // 문서함 새 자료 수 — PC 가 state·events 에 붙여 준다
     appr: null,                              // 승인함에서 기다리는 제안 수 — PC 가 state·events 에 붙여 준다(모르면 null)
     speed: parseFloat(local.get('speed', '1.2')) || 1.2,
@@ -324,8 +320,7 @@
         landAfterAway = false;
         if (typeof r.seq === 'number') seq = Math.max(seq, r.seq);
         if (typeof r.state === 'string') S.agentState = r.state;
-        takeQuick(r.quick);
-        takeAppr(r.appr);
+            takeAppr(r.appr);
         takeDocs(r.docs_new);
         renderStatus();
         if (pushLand(true)) scanSeen();                 // 누른 알림의 그 말이 이제 왔다 (10/19)
@@ -1047,7 +1042,6 @@
     S.agentState = st.state || 'idle';
     const ws = (st.office || []).map(worker).filter(Boolean);
     if (ws.length) S.workers = ws;
-    takeQuick(st.quick);
     takeAppr(st.appr);
     takeDocs(st.docs_new);
 
@@ -2242,28 +2236,6 @@
     btn.setAttribute('aria-label', voiceMode ? '녹음 보내기' : stopMode ? '멈추기' : '보내기');
   }
 
-  /** 바로 누르기 — PC 효딩쓰가 지금 하는 일에 맞춰 고른 것(없으면 늘 쓰는 것), 두 줄로 (2026-10-06) */
-  function renderChips() {
-    const box = $('#main .chips');
-    if (!box) return;
-    const list = (S.quick && S.quick.length ? S.quick.map(q => [q.label, q.say]) : QUICK).slice(0, 8);
-    const key = JSON.stringify(list);
-    if (box.dataset.key === key) return;
-    box.dataset.key = key;
-    const half = Math.ceil(list.length / 2);
-    const chip = ([t, say]) => h('button', { class: 'chip', text: t, onclick: () => { sfx.play('tap'); send(say); } });
-    box.textContent = '';
-    box.append(h('div', { class: 'chips-in' },
-      h('div', { class: 'chip-row' }, list.slice(0, half).map(chip)),
-      list.length > half ? h('div', { class: 'chip-row' }, list.slice(half).map(chip)) : null));
-  }
-
-  function takeQuick(q) {
-    if (!Array.isArray(q)) return;
-    const ok = q.filter(x => x && typeof x.label === 'string' && typeof x.say === 'string' && x.label && x.say);
-    if (ok.length) { S.quick = ok; renderChips(); }
-  }
-
   /** 승인함 숫자 — 예전 PC(숫자를 안 주는)면 그대로 둔다 */
   function takeAppr(n) {
     if (typeof n !== 'number' || n === S.appr) return;
@@ -2404,7 +2376,7 @@
     const bar = h('div', { class: 'bar' },
       h('button', { class: 'icon', 'aria-label': '메뉴 — 대화 상대 고르기', onclick: openDrawer, html: ICON.menu }),
       orb(orbState(), 26),
-      h('div', { class: 'who' }, h('b'), h('small')),
+      h('div', { class: 'who' }, h('div', { class: 'wname' }, h('b'), h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) })), h('small')),
       h('button', { class: 'icon docs', 'aria-label': '문서함', onclick: () => { sfx.play('tap'); openDocs(); } },
         svg('folder'), h('span', { class: 'nbadge', hidden: true })),
       h('button', { class: 'icon appr', 'aria-label': '승인함', onclick: () => { sfx.play('tap'); openAppr(); } },
@@ -2415,14 +2387,11 @@
       h('div', { class: 'banner', hidden: true }, h('i', { class: 'spinner' }), h('span')),
       h('div', { class: 'chat-wrap' }, chatEl, jumpEl),
       h('div', { class: 'composer' },
-        h('div', { class: 'chips' }),
         h('div', { class: 'att-strip', hidden: true }),
-        h('div', { class: 'row' }, plusBtn, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn),
-        h('div', { class: 'cfoot' }, h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) })))),
+        h('div', { class: 'row' }, plusBtn, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn))),
       h('div', { class: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite' }));
 
     renderAllItems();
-    renderChips();
     renderStatus();
     renderApprBadge();
     renderAttach();
@@ -2435,8 +2404,7 @@
     return h('div', { class: 'hello' },
       orb('idle', 68),
       h('h2', { text: '대표님, 부르시면 바로 옵니다' }),
-      h('p', { html: '아래에 적거나 마이크를 눌러 말씀하세요.<br>PC 의 효딩쓰와 같은 대화예요.' }),
-      h('div', { class: 'list' }, SUGGEST.map(s => h('button', { class: 'suggest', text: s, onclick: () => send(s) }))));
+      h('p', { html: '아래에 적거나 마이크를 눌러 말씀하세요.<br>PC 의 효딩쓰와 같은 대화예요.' }));
   }
 
   function grow(ta) {
@@ -2470,7 +2438,7 @@
 
   function modelMenu(anchor) {
     const r = anchor.getBoundingClientRect();
-    const menu = h('div', { class: 'menu', role: 'menu', style: 'bottom:' + (innerHeight - r.top + 6) + 'px;left:' + Math.max(8, r.left) + 'px' },
+    const menu = h('div', { class: 'menu', role: 'menu', style: 'top:' + (r.bottom + 6) + 'px;left:' + Math.max(8, Math.min(r.left, innerWidth - 250)) + 'px' },
       h('h4', { text: '모델' }),
       S.models.map(m => h('button', { role: 'menuitemradio', 'aria-checked': m.key === S.model ? 'true' : 'false', onclick: () => { close(); sfx.play('tap'); setModel(m.key); } },
         h('i', { text: m.key === S.model ? '✓' : '' }),
@@ -2529,7 +2497,7 @@
       h('div', { class: 'sec', text: '더 보기' }),
       drawerRow('새 대화', '효딩쓰와 처음부터 다시', false, h('span', { class: 'badge-ic' }, svg('pencil')), () => { newChat(); close(); }));
     d.append(
-      h('header', null, h('h2', { text: '대화 상대' }), h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close })),
+      h('header', null, h('button', { 'aria-label': '닫기', onclick: close, html: ICON.close }), h('h2', { text: '대화 상대' })),
       scroll,
       h('footer', null, h('i'), h('span')));
     scroll.scrollTop = top;
@@ -2567,9 +2535,9 @@
     opts = opts || {};
     const page = h('div', { class: 'screen page' },
       h('div', { class: 'bar sub' },
-        opts.close ? h('span', { class: 'spacer' }) : h('button', { class: 'icon', 'aria-label': '뒤로', onclick: () => popPage(), html: ICON.back }),
+        h('button', { class: 'icon', 'aria-label': opts.close ? '닫기' : '뒤로', onclick: () => popPage(), html: opts.close ? ICON.close : ICON.back }),
         h('div', { class: 'who' }, h('b', { text: title })),
-        opts.close ? h('button', { class: 'icon', 'aria-label': '닫기', onclick: () => popPage(), html: ICON.close }) : h('span', { class: 'spacer' })),
+        h('span', { class: 'spacer' })),
       content);
     page.onClose = onClose;
     pages.push(page);
@@ -3144,7 +3112,11 @@
       sandbox(allow-same-origin 없음)는 그대로라 문서 속 스크립트는 앱 저장소에 못 닿는다. 링크는 앱이 브라우저로 연다(DOC_LINK). */
   const DOC_LINK = '<script>document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a)return;'
     + 'var raw=a.getAttribute("href")||"";if(raw.charAt(0)==="#"){var id=decodeURIComponent(raw.slice(1)),t=document.getElementById(id)||document.getElementsByName(id)[0];'
-    + 'e.preventDefault();if(t)t.scrollIntoView();return;}if(!/^https?:/i.test(a.href))return;e.preventDefault();parent.postMessage({hyoDocOpen:a.href},"*");},true);<\/script>';
+    + 'e.preventDefault();if(t)t.scrollIntoView();return;}if(!/^https?:/i.test(a.href))return;e.preventDefault();parent.postMessage({hyoDocOpen:a.href},"*");},true);'
+    + 'var y0=0,x0=0,t0=0,on=0,atTop=function(){return(document.scrollingElement||document.documentElement).scrollTop<=0};'
+    + 'addEventListener("touchstart",function(e){on=e.touches.length===1&&atTop();x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now()},{passive:true});'
+    + 'addEventListener("touchend",function(e){if(!on)return;on=0;var c=e.changedTouches[0],dy=c.clientY-y0,dx=c.clientX-x0;'
+    + 'if(dy>110&&dy>Math.abs(dx)*1.5&&Date.now()-t0<900)parent.postMessage({hyoDocClose:1},"*")},{passive:true});<\/script>';
   const DOC_PAGE = body => '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<style>body{margin:0;padding:18px 16px 48px;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;color:#1b1f2a;background:#fff;'
     + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}pre.txt{font:inherit}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
@@ -3166,7 +3138,7 @@
           return;
         }
         if (r.ok && /^text\/(markdown|x-markdown)/.test(type)) { f.srcdoc = DOC_PAGE(markdown(await r.text()) + DOC_LINK); return; }
-        if (r.ok && /^text\/|json/.test(type)) { f.srcdoc = DOC_PAGE('<pre class="txt">' + esc(await r.text()) + '</pre>'); return; }
+        if (r.ok && /^text\/|json/.test(type)) { f.srcdoc = DOC_PAGE('<pre class="txt">' + esc(await r.text()) + '</pre>' + DOC_LINK); return; }
       } catch (e) { /* 아래 주소로 */ }
     }
     f.src = url;                                            // PDF·다른 사이트 — 예전처럼 주소로
@@ -3174,6 +3146,12 @@
 
   let docOpenAt = 0;
   window.addEventListener('message', ev => {
+    if (ev.data && ev.data.hyoDocClose) {                   // 글 문서 맨 위에서 아래로 쓸어내림 — 보기 화면을 닫는다
+      const fr = Array.from(document.querySelectorAll('.vw-doc iframe')).find(x => x.contentWindow === ev.source);
+      const vw = fr && fr.closest('.viewer');
+      if (vw && vw.closeViewer) { haptic('tap'); sfx.play('tap'); vw.closeViewer(); }
+      return;
+    }
     const u = ev.data && ev.data.hyoDocOpen;
     if (typeof u !== 'string' || !/^https?:\/\//i.test(u) || Date.now() - docOpenAt < 800) return;
     if (!Array.from(document.querySelectorAll('.vw-doc iframe')).some(fr => fr.contentWindow === ev.source)) return;
@@ -3189,23 +3167,20 @@
     const many = list.length > 1;
 
     const counter = h('div', { class: 'vw-count', 'aria-live': 'polite' });
-    const nameEl = h('span', { class: 'vw-name' });
     const track = h('div', { class: 'vw-track' }, list.map(viewerSlide));
     const prev = many ? h('button', { class: 'vw-arrow prev', 'aria-label': '앞 장', html: ICON.back, onclick: () => go(idx - 1) }) : null;
     const next = many ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
     const el = h('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '보기' },
       h('div', { class: 'vw-top' },
+        h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
         h('div', { class: 'vw-acts' },
           h('button', { class: 'vw-btn text', text: '저장', onclick: () => downloadFile(list[idx].url, list[idx].name) }),
-          h('button', { class: 'vw-btn text', text: '공유', onclick: share }),
-          h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }))),
-      h('div', { class: 'vw-stage' }, track, prev, next),
-      h('div', { class: 'vw-foot' }, nameEl, h('button', { class: 'vw-open', text: '브라우저로 열기', onclick: () => openLink(list[idx].url) })));
+          h('button', { class: 'vw-btn text', text: '공유', onclick: share }))),
+      h('div', { class: 'vw-stage' }, track, prev, next));
 
     function sync() {
       counter.textContent = many ? (idx + 1) + ' / ' + list.length : '';
-      nameEl.textContent = list[idx].name || title || '';
       if (prev) prev.hidden = idx === 0;
       if (next) next.hidden = idx === list.length - 1;
       Array.from(track.children).forEach((s, i) => {
@@ -3281,6 +3256,7 @@
       el.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
       el.remove();
     });
+    el.closeViewer = close;
     document.addEventListener('keydown', onKey);
     addEventListener('resize', jump);                      // 가로·세로 돌려도 보던 장 그대로
     $('#app').append(el);
