@@ -118,7 +118,7 @@ public class R0926SkyPages : MonoBehaviour
 
     private readonly List<R0926Nearby.Festival> fests = new List<R0926Nearby.Festival>();
     private readonly List<Mate> mates = new List<Mate>();
-    private readonly List<Pick> hotPicks = new List<Pick>();   // '근처 핫플' 장의 줄 — 보물찾기 · 축제 · 핫플이 섞인다
+    private readonly List<Pick> hotPicks = new List<Pick>();   // '근처 핫플' 장의 줄 — 축제 · 핫플이 섞인다
     private struct Pick { public Kind kind; public int index; public Pick(Kind k, int i) { kind = k; index = i; } }
     private Dictionary<string, Sprite> iconMap;
     private readonly Dictionary<Text, string> raw = new Dictionary<Text, string>();
@@ -287,16 +287,15 @@ public class R0926SkyPages : MonoBehaviour
         CollectHot();
     }
 
-    // '근처 핫플' 장 — 돈 낸 상단 노출(광고) · 아직 못 찾은 근처 보물찾기 · 축제를 먼저, 그 뒤 좋아요 · 댓글 많은 곳 (서버 순서)
+    // '근처 핫플' 장 — 돈 낸 상단 노출(광고) · 축제를 먼저, 그 뒤 좋아요 · 댓글 많은 곳 (서버 순서)
     //   (10-27 대표님 「'근처 핫플' 의 경우에도 '축제/ 보물찾기' 를 우선해서 … 향후 비용을 받거나 해서 상단에 노출」)
-    //   장에 줄이 셋뿐이라 보물찾기 · 축제가 다 차지하지 않게, 핫플이 있으면 마지막 줄 하나는 핫플 몫
+    //   보물찾기는 '근처 보물찾기' 장에만 — 없으면 그 장이 빠지고 핫플 장만 남는다 (11-02 대표님 「근처핫플에서는 '보물찾기' 리스트가 발생하지 않도록 … 중복으로 발생해서 이상하거든」)
+    //   장에 줄이 셋뿐이라 축제가 다 차지하지 않게, 핫플이 있으면 마지막 줄 하나는 핫플 몫
     private void CollectHot()
     {
         hotPicks.Clear();
         var hot = R0926Nearby.HotPlaces;
         for (int i = 0; i < hot.Count; i++) if (hot[i].promo) hotPicks.Add(new Pick(Kind.Hot, i));
-        var hunts = R0926HuntList.Nearby;
-        for (int i = 0; i < hunts.Count; i++) if (!hunts[i].found) hotPicks.Add(new Pick(Kind.Hunt, i));
         for (int i = 0; i < fests.Count; i++) if (!fests[i].promo) hotPicks.Add(new Pick(Kind.Festival, i));   // 축제 광고는 축제 장에서만
         int firstHot = hotPicks.Count, seat = HotSeats() - 1;
         for (int i = 0; i < hot.Count; i++) if (!hot[i].promo) hotPicks.Add(new Pick(Kind.Hot, i));
@@ -397,7 +396,7 @@ public class R0926SkyPages : MonoBehaviour
 
     private void BindRow(Kind k, int r, Row row)
     {
-        if (k == Kind.Hot) { var pick = hotPicks[r]; k = pick.kind; r = pick.index; }   // 핫플 장의 보물찾기 · 축제 줄은 제 장의 줄과 같은 모양
+        if (k == Kind.Hot) { var pick = hotPicks[r]; k = pick.kind; r = pick.index; }   // 핫플 장의 축제 줄은 제 장의 줄과 같은 모양
         bool face = k == Kind.Friends;
         if (row.icon != null && row.icon.gameObject.activeSelf == face) row.icon.gameObject.SetActive(!face);
         if (row.face != null && row.face.gameObject.activeSelf != face) row.face.gameObject.SetActive(face);

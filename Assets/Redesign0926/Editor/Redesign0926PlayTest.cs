@@ -12503,9 +12503,7 @@ namespace Redesign0926
                 R0926Nearby.EditorOpened = new List<string>();   // 줄을 눌러도 진짜 쪽은 열지 않는다
                 SfLogin(true, MpMe);
                 R0926Nearby.EditorForget();
-                // SimpleJSON 은 에디터 쪽 다른 dll 과 이름이 겹쳐 리플렉션으로
-                var node = typeof(R0926SkyPages).Assembly.GetType("SimpleJSON.JSON").GetMethod("Parse", new[] { typeof(string) }).Invoke(null, new object[] { SkyHuntJson() });
-                typeof(R0926HuntList).GetMethod("Take").Invoke(null, new[] { node });
+                SkyTakeHunts(SkyHuntJson());
                 sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
                 pg = UnityEngine.Object.FindAnyObjectByType<R0926SkyPages>(FindObjectsInactive.Include);
                 if (sky == null || pg == null) return;
@@ -12575,6 +12573,29 @@ namespace Redesign0926
             Sleep(0.9f);
             Shot("sp_hot_ad");
             Check(() => SkyRowText(pg, R0926SkyPages.Kind.Hot) == "시험 제휴 공방 | " + R0926Nearby.AdLabel + " · 체험 10% 할인", "핫플 장 맨 위 광고 줄 — '광고 · 체험 10% 할인' · 고른 이모지 🎨");
+            // 1c) 핫플 장 — 광고 다음은 축제, 마지막 줄 하나는 핫플 (10-27 대표님 「'근처 핫플' 의 경우에도 '축제/ 보물찾기' 를 우선해서」)
+            //     보물찾기 줄은 없다 — '근처 보물찾기' 장에만 (11-02 대표님 「근처핫플에서는 '보물찾기' 리스트가 발생하지 않도록」)
+            Do(() =>
+            {
+                var s = new List<string>();
+                for (int i = 0; i < 3; i++) s.Add(SkyRow(pg, R0926SkyPages.Kind.Hot, i)?.title?.text + " [" + SkyIcon(pg, R0926SkyPages.Kind.Hot, i) + "]");
+                log.Add("  핫플 장 줄: " + string.Join(" · ", s));
+            });
+            Check(() => SkyIcon(pg, R0926SkyPages.Kind.Hot, 1).StartsWith("r0926_f_"), "핫플 장 둘째 줄은 축제 — 광고 다음, 핫플보다 먼저");
+            Check(() => SkyHotHuntRows(pg) == 0, "핫플 장에 보물찾기 줄이 없다 — 근처 보물찾기 장과 겹치지 않는다");
+            Check(() => { var i = SkyIcon(pg, R0926SkyPages.Kind.Hot, 2); return i.StartsWith("r0926_c_") || i == "r0926_s_hot"; },
+                "핫플 장 마지막 줄은 핫플 몫 — 축제가 세 줄을 다 차지하지 않는다");
+            // 근처 보물찾기가 없으면 그 장만 빠지고 핫플 장은 그대로
+            Do(() => SkyTakeHunts("{\"prefs\":{\"enabled\":true},\"hosted\":[],\"joined\":[],\"hunts\":[]}"));
+            Wait(() => R0926HuntList.Nearby.Count == 0 && pg.EditorPageCount == 5, 5f, "근처 보물찾기가 없으면 장 다섯");
+            Sleep(0.6f);
+            Shot("sp_hot_nohunt");
+            Check(() => pg.EditorCurrent == R0926SkyPages.Kind.Hot && SkyHotHuntRows(pg) == 0 && SkyRowText(pg, R0926SkyPages.Kind.Hot).StartsWith("시험 제휴 공방"),
+                "근처 보물찾기가 없으면 그 장이 빠지고 보던 핫플 장은 그대로");
+            Do(() => SkyTakeHunts(SkyHuntJson()));
+            Wait(() => R0926HuntList.Nearby.Count == 2 && pg.EditorPageCount == 6, 5f, "되돌림 — 장 여섯");
+            Sleep(0.3f);
+            Check(() => pg.EditorCurrent == R0926SkyPages.Kind.Hot && SkyHotHuntRows(pg) == 0, "보물찾기가 다시 생겨도 핫플 장에는 안 들어온다");
             Do(() => R0926Nearby.EditorOpened?.Clear());
             Press(() => SkyScreenRect(SkyRow(pg, R0926SkyPages.Kind.Hot, 0)?.root)?.center, 0.12f, null);
             Sleep(0.6f);
@@ -12714,6 +12735,26 @@ namespace Redesign0926
         }
         private static string SkyIcon(R0926SkyPages pg, R0926SkyPages.Kind k, int i = 0) { var r = SkyRow(pg, k, i); return r != null && r.icon != null && r.icon.sprite != null ? r.icon.sprite.name : ""; }
         private static string SkyRowText(R0926SkyPages pg, R0926SkyPages.Kind k) { var r = SkyRow(pg, k, 0); return r == null || r.title == null || r.sub == null ? "" : r.title.text + " | " + r.sub.text; }
+
+        // 핫플 장에 떠 있는 보물찾기 줄 수 — 그림과 제목으로 센다
+        private static int SkyHotHuntRows(R0926SkyPages pg)
+        {
+            int n = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                var r = SkyRow(pg, R0926SkyPages.Kind.Hot, i);
+                if (r?.root == null || !r.root.gameObject.activeSelf) continue;
+                if (SkyIcon(pg, R0926SkyPages.Kind.Hot, i).StartsWith("r0926_i_treasure") || (r.title != null && r.title.text.Contains("보물찾기"))) n++;
+            }
+            return n;
+        }
+
+        // /api/hunts/nearby 응답을 받은 것처럼 — SimpleJSON 은 에디터 쪽 다른 dll 과 이름이 겹쳐 리플렉션으로
+        private static void SkyTakeHunts(string json)
+        {
+            var node = typeof(R0926SkyPages).Assembly.GetType("SimpleJSON.JSON").GetMethod("Parse", new[] { typeof(string) }).Invoke(null, new object[] { json });
+            typeof(R0926HuntList).GetMethod("Take").Invoke(null, new[] { node });
+        }
 
         // 근처 보물찾기 두 판 — 진행 중(공식 · 420m · 7/100명 · 상품) · 3시간 뒤 시작(비공개 '5km 이내' · 비밀번호)
         private static string SkyHuntJson()
