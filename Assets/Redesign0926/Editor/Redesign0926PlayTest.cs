@@ -154,6 +154,7 @@ namespace Redesign0926
             else if (mode == "chatphoto") PlanChatPhoto();
             else if (mode == "person") PlanPerson();
             else if (mode == "personmodel") PlanPersonModel();
+            else if (mode == "profilemodel") PlanProfileModel();
             else if (mode == "tapfeedback") PlanTapFeedback();
             else if (mode == "msgfix") PlanMsgFix();
             else if (mode == "searchfollow") PlanSearchFollow();
@@ -2200,6 +2201,414 @@ namespace Redesign0926
         private static InputField ChatInputField() => UnityEngine.Object.FindAnyObjectByType<MessagePanelManager>(FindObjectsInactive.Include)?.chatInput;
 
         // 메시지·공지 알림을 누르면 그 대화방으로 (10-27 대표님 「'메세지' 가 왔을 때 해당 알림을 터치해서 앱이 켜지면 해당 메세지창으로 바로 이동」) — 서버가 보내는 값 그대로
+        // 프로필 3D 모델 (10-25 대표님 「glb 파일 업로드한 경우 프로필에서는 해당 glb 파일이 보이고」「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」).
+        //    시험 서버의 프로필 흉내에 운영 avatar_model_route·make_lite 를 그대로 붙였다 (DB 는 버리는 55442).
+        //    올리기 전 → 안 보내는 파일 → 올리기 → 프로필 화면 → 사진/3D 고르기 → 바꾸기 → 서버 거절 → 시트를 닫아도 끝까지 → 지우기 두 번 → 남의 프로필 → 다섯 언어
+        [Serializable] private class DevModelRow { public string model_url, model_display; public string[] model_files; public int model_bytes; }
+        private static void PlanProfileModel()
+        {
+            const string Dev = "http://127.0.0.1:5099", Site = "http://127.0.0.1:5097/";
+            const string Row = PfC + "Model0926", Group = PfC + "F_display", Tabs = Group + "/Seg0926/", Remove = Group + "/Remove0926";
+            const string Prof = "FullProfilePanel/Content/TopPanel/AvatarMask/Model0926";
+            const string OtherId = "880002", OtherToken = "hunt-dev:pe2";
+            var V = typeof(R0926ProfileModelView);
+            R0926ProfileEdit pe = null;
+            R0926ProfileModelView preview = null, shown = null;
+            R0926Busy busy = null;
+            byte[] shiba = null, textured = null;
+            var seen = new List<string>();
+            string firstUrl = null, keptUrl = null, keptFile = null;
+            Quaternion swayA = Quaternion.identity;
+            UnityEngine.Networking.UnityWebRequest other = null;
+            Func<string> state = () => pe != null ? typeof(R0926ProfileEdit).GetField("state", NPI).GetValue(pe).ToString() : "";
+            Func<string> msg = () => Active(PfCard + "/Message0926") ? TextOf(PfCard + "/Message0926") : "";
+            Func<DevModelRow> row = () =>
+            {
+                string r = DevGet("", "/api/dev/profile_state/1");
+                return string.IsNullOrEmpty(r) ? new DevModelRow() : JsonUtility.FromJson<DevModelRow>(r);
+            };
+            Func<string> busyText = () => busy != null && busy.Showing ? (typeof(R0926Busy).GetField("label", NPI).GetValue(busy) as Text)?.text ?? "" : "";
+            Func<string, bool> toastHas = part =>
+            {
+                var tm = ToastManager.Instance;
+                var l = tm != null ? typeof(ToastManager).GetField("live", NPI)?.GetValue(tm) as System.Collections.IList : null;
+                if (l == null) return false;
+                foreach (var o in l) if ((o.GetType().GetField("message")?.GetValue(o) as string ?? "").Contains(part)) return true;
+                return false;
+            };
+            Action toastClear = () =>
+            {
+                var tm = ToastManager.Instance;
+                var l = tm != null ? typeof(ToastManager).GetField("live", NPI)?.GetValue(tm) as System.Collections.IList : null;
+                if (l == null) return;
+                foreach (var o in l) o.GetType().GetField("message")?.SetValue(o, "");
+            };
+            Func<bool> photoTab = () => Find(Tabs + "TabPhoto").GetComponent<Image>().color.a > 0.1f && Find(Tabs + "TabModel").GetComponent<Image>().color.a < 0.01f;
+            Func<bool> modelTab = () => Find(Tabs + "TabModel").GetComponent<Image>().color.a > 0.1f && Find(Tabs + "TabPhoto").GetComponent<Image>().color.a < 0.01f;
+            Func<string> label = () => TextOf(Row + "/Label0926");
+            Func<string> removeWord = () => TextOf(Remove + "/Label0926");
+            Func<R0926ProfileModelView, float> ink = v =>
+            {
+                var rt = v != null ? v.EditorTexture : null;
+                if (rt == null) return 0f;
+                var prev = RenderTexture.active;
+                RenderTexture.active = rt;
+                var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
+                tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+                tex.Apply();
+                RenderTexture.active = prev;
+                var px = tex.GetPixels32();
+                var bg = px[2 * rt.width + 2];
+                int n = 0;
+                foreach (var c in px) if (Mathf.Abs(c.r - bg.r) + Mathf.Abs(c.g - bg.g) + Mathf.Abs(c.b - bg.b) > 40) n++;
+                UnityEngine.Object.Destroy(tex);
+                float share = n / (float)px.Length;
+                log.Add("  " + v.name + " " + rt.width + "x" + rt.height + " · 그려진 점 " + (share * 100f).ToString("0.0") + "%");
+                return share;
+            };
+            Func<R0926ProfileModelView, Transform> pivot = v => V.GetField("pivot", NPI).GetValue(v) as Transform;
+            Func<R0926ProfileModelView, GameObject> stage = v => V.GetField("stage", NPI).GetValue(v) as GameObject;
+            Func<R0926ProfileModelView, bool> stageHidden = v =>
+            {
+                var s = stage(v);
+                if (s == null) return false;
+                foreach (var r in s.GetComponentsInChildren<Renderer>(true)) if (r.enabled) return false;
+                return true;
+            };
+            Func<R0926ProfileModelView, bool> empty = v => !v.Showing && !v.Loading && !v.GetComponent<RawImage>().enabled;
+            Func<string, bool> allWords = path =>
+            {
+                var l = Find(path)?.GetComponent<R0926LocalizedText>();
+                return l != null && !string.IsNullOrEmpty(l.ko) && !string.IsNullOrEmpty(l.en) && !string.IsNullOrEmpty(l.ja) && !string.IsNullOrEmpty(l.zh) && !string.IsNullOrEmpty(l.es);
+            };
+            Action<string> say = code =>
+            {
+                AppLanguage.EditorOverride = code;
+                typeof(R0926ProfileEdit).GetMethod("ApplyModel", NPI).Invoke(pe, null);
+            };
+            Action edit = () => ProfileManager.Instance.editProfileButton.onClick.Invoke();
+            Action open = () =>
+            {
+                Do(edit);
+                Wait(() => state() == "Ready", 10f, "시트 열림");
+                Sleep(0.5f);
+            };
+            Action x = () =>
+            {
+                Do(() => Click(PfCard + "/Close0926/ClosePx0926"));
+                Wait(() => !Active(PfS), 5f, "시트 닫힘");
+                Sleep(0.4f);
+            };
+            Action save = () =>
+            {
+                Do(() => Click(PfCard + "/Save0926"));
+                Wait(() => !Active(PfS), 8f, "저장하고 닫힘");
+            };
+            Action<string> fail = json => Do(() => DevPost("", "/api/dev/profile_fail", "{\"model\":" + json + "}"));
+            Action<string, string, string> refused = (json, part, what) =>
+            {
+                fail(json);
+                Do(() => { toastClear(); keptUrl = row().model_url; pe.EditorPickModel(shiba); });
+                Wait(() => toastHas(part), 8f, what + " 안내");
+                Check(() => row().model_url == keptUrl && !busy.Showing && state() == "Ready" && preview.Showing && label() == "3D 모델 바꾸기", what + " → '" + part + "' · 올린 모델은 그대로");
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);   // 플레이를 끄면 덜어 둔 로그인 저장값을 되돌린다
+                ProfileManager.EditorBase = Dev;
+                FollowManager.EditorBase = Dev;
+                MessagePanelManager.EditorBase = Dev;
+                R0926HuntApi.EditorBase = Dev;
+                DevPost("", "/api/dev/profile_reset", "{\"users\":[{\"n\":1,\"username\":\"pe_me\",\"email\":\"pe@x.y\",\"bio\":\"처음 소개\",\"avatar\":true},{\"n\":2,\"username\":\"pe_other\",\"avatar\":true}]}");
+                PlayerPrefs.SetString(LoginManager.AUTH_TOKEN_KEY, PfToken);
+                SfLogin(true, PfId);
+                LoginManager.Instance.CurrentUser.username = "pe_me";
+                pe = UnityEngine.Object.FindAnyObjectByType<R0926ProfileEdit>(FindObjectsInactive.Include);
+                if (pe != null)
+                {
+                    busy = typeof(R0926ProfileEdit).GetField("busy", NPI).GetValue(pe) as R0926Busy;
+                    preview = typeof(R0926ProfileEdit).GetField("modelView", NPI).GetValue(pe) as R0926ProfileModelView;
+                }
+                shown = ProfileManager.Instance.avatarModel;
+                using (var wc = new System.Net.WebClient())
+                {
+                    shiba = wc.DownloadData(Site + "pm_shiba.glb");
+                    textured = wc.DownloadData(Site + "pm_textured.glb");
+                }
+            });
+            Check(() => pe != null && LoginManager.Instance.CurrentUser.id == PfId && shiba != null && textured != null && shiba.Length > 100000, "준비: 시험 회원 880001 · 올릴 GLB 두 개");
+            Check(() =>
+            {
+                var miss = new List<string>();
+                foreach (var n in new[] { "modelView", "modelLabel", "displayGroup", "removeLabel" })
+                    if (!(typeof(R0926ProfileEdit).GetField(n, NPI)?.GetValue(pe) is UnityEngine.Object o) || o == null) miss.Add(n);
+                var t = typeof(R0926ProfileEdit).GetField("displayTabs", NPI).GetValue(pe) as Image[];
+                var l = typeof(R0926ProfileEdit).GetField("displayLabels", NPI).GetValue(pe) as Text[];
+                if (t == null || t.Length != 2 || t[0] == null || t[1] == null) miss.Add("displayTabs");
+                if (l == null || l.Length != 2 || l[0] == null || l[1] == null) miss.Add("displayLabels");
+                if (shown == null || V.GetField("view", NPI).GetValue(shown) as RawImage == null) miss.Add("avatarModel");
+                if (preview == null || V.GetField("view", NPI).GetValue(preview) as RawImage == null) miss.Add("preview view");
+                log.Add("  연결 빠짐: " + (miss.Count == 0 ? "없음" : string.Join(", ", miss)));
+                return miss.Count == 0;
+            }, "연결: 모델 칸 · 고르기 탭 둘 · 지우기 · 프로필 카드 3D 칸");
+            Check(() =>
+            {
+                var b = Find(Row)?.GetComponent<Button>();
+                return b != null && b.onClick.GetPersistentEventCount() == 1 && b.onClick.GetPersistentMethodName(0) == "PickModel" && b.onClick.GetPersistentTarget(0) == pe;
+            }, "모델 칸을 누르면 파일 고르기 (에디터에선 창이 멈춰 세우므로 연결만 본다)");
+            Check(() => allWords(Row + "/Sub0926") && allWords(Group + "/Label0926") && allWords(Tabs + "TabPhoto/Label0926") && allWords(Tabs + "TabModel/Label0926"), "안내·이름·탭 — 다섯 언어 모두");
+
+            // 올리기 전
+            Do(() => ProfileManager.Instance.ShowProfile(PfId));
+            Wait(() => Active("FullProfilePanel") && ProfileManager.Instance.editProfileButton != null && ProfileManager.Instance.editProfileButton.gameObject.activeInHierarchy, 12f, "내 프로필");
+            Sleep(1f);
+            Check(() => empty(shown), "모델이 없으면 프로필 카드는 사진 그대로");
+            open();
+            Shot("pfm_open");
+            Check(() => label() == "3D 모델 올리기" && !Active(Group) && empty(preview), "'3D 모델 올리기' · 고르기 칸은 숨김");
+            Check(() => Find(PfC + "Avatar0926").GetSiblingIndex() == 0 && Find(Row).GetSiblingIndex() == 1 && Find(Group).GetSiblingIndex() == 2 && Find(PfC + "F_username").GetSiblingIndex() > 2,
+                "칸 순서: 사진 → 3D 모델 → 보이는 모습 → 아이디 ...");
+
+            // 보내지 않는 파일
+            Do(() => pe.EditorPickModel(System.Text.Encoding.UTF8.GetBytes("<html>this is not a model file</html>")));
+            Sleep(0.3f);
+            Check(() => toastHas("GLB 파일만") && !busy.Showing && row().model_files.Length == 0, "GLB 가 아닌 파일 → 보내지 않고 안내");
+            Do(() => { toastClear(); pe.EditorPickModel(new byte[0]); });
+            Sleep(0.3f);
+            Check(() => toastHas("이 모델은 쓸 수 없어요") && row().model_files.Length == 0, "빈 파일 → 안내");
+            Do(() =>
+            {
+                toastClear();
+                var huge = new byte[60 * 1024 * 1024 + 1];
+                huge[0] = (byte)'g'; huge[1] = (byte)'l'; huge[2] = (byte)'T'; huge[3] = (byte)'F';
+                pe.EditorPickModel(huge);
+            });
+            Sleep(0.3f);
+            Check(() => toastHas("파일이 너무 커요") && row().model_files.Length == 0, "60MB 넘는 파일 → 보내지 않고 안내");
+
+            // 올리기 — 시트 위 진행 안내 → 칸에 모델 · 고르기 칸 · 뒤의 프로필 카드
+            fail("{\"delay\":1.2}");
+            Func<bool> note = () =>
+            {
+                string t = busyText();
+                if (t != "" && (seen.Count == 0 || seen[seen.Count - 1] != t)) seen.Add(t);
+                return true;
+            };
+            Do(() => { toastClear(); seen.Clear(); pe.EditorPickModel(shiba); });
+            Wait(() => note() && busyText() == "가볍게 줄이는 중…", 8f, "다 보냄 → 서버가 줄이는 중");
+            Shot("pfm_shrinking");
+            Wait(() => note() && !busy.Showing, 15f, "올리기 끝");
+            Check(() =>
+            {
+                log.Add("  진행 안내: " + string.Join(" → ", seen));
+                return seen.Count >= 2 && seen[0].StartsWith("3D 모델 올리는 중…") && seen[seen.Count - 1] == "가볍게 줄이는 중…";
+            }, "보내는 동안 '3D 모델 올리는 중… %' → 다 보내면 '가볍게 줄이는 중…' (99% 에 멈춰 보이지 않게)");
+            Check(() => toastHas("3D 모델을 올렸어요"), "끝나면 '3D 모델을 올렸어요'");
+            Wait(() => preview.Showing, 12f, "모델 칸에 뜸");
+            Sleep(0.7f);
+            Shot("pfm_uploaded");
+            Check(() => label() == "3D 모델 바꾸기" && Active(Group) && modelTab() && removeWord() == "3D 모델 지우기",
+                "올리면 '3D 모델 바꾸기' · 고르기 칸이 나타남 · 3D 모델 칸이 켜짐");
+            Check(() =>
+            {
+                var r = row();
+                log.Add("  서버 " + r.model_url + " · " + r.model_display + " · 파일 " + r.model_files.Length + " · " + r.model_bytes + "B (원본 " + shiba.Length + "B)");
+                firstUrl = r.model_url;
+                return r.model_url.EndsWith(".glb") && r.model_display == "glb" && r.model_files.Length == 1 && r.model_url.Contains(r.model_files[0])
+                       && r.model_bytes > 1000 && r.model_bytes <= shiba.Length;
+            }, "서버: 줄인 파일 하나 · 올리면 바로 3D 로 보임 (원본을 줄이는 크기는 서버 시험에서 — 이 파일은 이미 줄인 것)");
+            Check(() => ink(preview) > 0.02f, "모델 칸에 모델이 그려짐");
+            Wait(() => shown.Showing, 12f, "뒤의 프로필 카드도 모델로");
+            Sleep(0.4f);
+            Check(() => ink(shown) > 0.02f && stage(preview) != stage(shown) && Vector3.Distance(stage(preview).transform.position, stage(shown).transform.position) >= 40f,
+                "두 칸이 따로 찍음 (무대가 겹치지 않음)");
+            Check(() => stageHidden(preview) && stageHidden(shown), "무대의 렌더러는 찍을 때만 — AR 화면에는 안 보임");
+            Do(() => swayA = pivot(shown).localRotation);
+            Sleep(0.8f);
+            Check(() => Quaternion.Angle(swayA, pivot(shown).localRotation) > 0.5f && Quaternion.Angle(Quaternion.Euler(0f, 180f, 0f), pivot(shown).localRotation) <= 30.5f, "정면을 보며 좌우로 ±30도");
+            x();
+            Sleep(0.5f);
+            Shot("pfm_profile_model");
+            Check(() => shown.Showing && shown.GetComponent<RawImage>().enabled && ink(shown) > 0.02f, "프로필 카드 — 사진 대신 모델");
+            Check(() => empty(preview) && pivot(preview).childCount == 0, "시트가 닫히면 칸의 모델을 내림");
+
+            // 사진/3D 고르기 — 저장 전엔 서버 그대로
+            open();
+            Check(() => modelTab() && preview.Showing || preview.Loading, "다시 열면 3D 모델이 켜진 채");
+            Do(() => Click(Tabs + "TabPhoto"));
+            Sleep(0.2f);
+            Shot("pfm_pick_photo");
+            Check(() => photoTab() && row().model_display == "glb", "'사진'을 눌러도 저장 전엔 서버는 그대로");
+            x();
+            Check(() => row().model_display == "glb" && shown.Showing, "저장 않고 닫으면 안 바뀜");
+            open();
+            Check(() => modelTab(), "다시 열면 서버 값 (3D 모델)");
+            Do(() => { toastClear(); Click(Tabs + "TabPhoto"); });
+            save();
+            Check(() => toastHas("프로필을 저장했어요"), "저장하면 '프로필을 저장했어요'");
+            Wait(() => !shown.Showing, 8f, "프로필 카드가 사진으로");
+            Sleep(0.6f);
+            Shot("pfm_profile_photo");
+            Check(() => row().model_display == "photo" && empty(shown), "'사진' + 저장 → 서버 photo · 프로필 카드는 사진");
+            open();
+            Wait(() => preview.Showing, 12f, "모델 칸은 모델 그대로");
+            Check(() => photoTab() && label() == "3D 모델 바꾸기" && row().model_url == firstUrl, "다시 열면 '사진'이 켜진 채 · 모델은 남아 있음");
+            Do(() => Click(Tabs + "TabModel"));
+            save();
+            Wait(() => shown.Showing, 12f, "프로필 카드가 모델로");
+            Check(() => row().model_display == "glb", "'3D 모델' + 저장 → 서버 glb · 프로필 카드는 모델");
+
+            // 없는 모델로 저장 — 다른 곳에서 지웠을 때
+            open();
+            Do(() => Click(Tabs + "TabPhoto"));
+            Do(() => DevPost("", "/api/dev/profile_fail", "{\"profile\":{\"status\":409,\"error\":\"no_model\"}}"));
+            Do(() => Click(PfCard + "/Save0926"));
+            Wait(() => msg() != "", 8f, "저장 거절");
+            Check(() => msg() == "3D 모델이 없어요. 먼저 올려 주세요" && state() == "Ready", "서버에 모델이 없으면 저장 버튼 위에 안내");
+            Do(() => Click(Tabs + "TabModel"));
+
+            // 바꾸기 — 옛 파일은 서버에서 지워짐
+            Wait(() => preview.Showing, 12f, "칸에 모델");
+            Do(() => { toastClear(); keptUrl = row().model_url; keptFile = row().model_files[0]; pe.EditorPickModel(textured); });
+            Wait(() => !busy.Showing && row().model_url != keptUrl, 15f, "새 모델 올리기 끝");
+            Wait(() => preview.Showing && preview.GetComponent<RawImage>().enabled, 12f, "칸에 새 모델");
+            Sleep(0.6f);
+            Shot("pfm_replaced");
+            Check(() =>
+            {
+                var r = row();
+                log.Add("  " + r.model_url + " · 파일 " + string.Join(",", r.model_files));
+                return r.model_files.Length == 1 && r.model_files[0] != keptFile && r.model_url.Contains(r.model_files[0]) && ink(preview) > 0.02f;
+            }, "새 모델로 바꾸면 옛 파일은 지워짐 · 칸에 새 모델");
+
+            // 서버가 거절 — 안내만 · 올린 모델은 그대로
+            refused("{\"status\":413,\"error\":\"too_big\"}", "파일이 너무 커요", "서버 413");
+            refused("{\"status\":400,\"error\":\"external\"}", "텍스처가 파일 안에", "외부 텍스처 파일");
+            refused("{\"status\":400,\"error\":\"unsupported\"}", "이 모델은 쓸 수 없어요", "쓸 수 없는 모델");
+            refused("{\"status\":400,\"error\":\"not_glb\"}", "GLB 파일만", "서버가 GLB 아님");
+            refused("{\"status\":500,\"error\":\"failed\"}", "이 모델은 쓸 수 없어요", "변환 실패");
+            refused("{\"status\":429,\"error\":\"busy\"}", "잠시 뒤 다시", "동시에 너무 많이");
+            refused("{\"status\":404,\"error\":\"user_not_found\"}", "회원 정보를", "회원 없음");
+
+            // 올리는 중 시트를 닫아도 끝까지
+            fail("{\"delay\":1.2}");
+            Do(() => { toastClear(); keptUrl = row().model_url; pe.EditorPickModel(shiba); });
+            Sleep(0.3f);
+            Do(() => pe.Close());
+            Wait(() => row().model_url != keptUrl, 15f, "시트를 닫아도 올라감");
+            Wait(() => toastHas("3D 모델을 올렸어요"), 8f, "끝나면 알림");
+            Check(() => !Active(PfS) && !busy.Showing && row().model_files.Length == 1, "닫힌 시트는 건드리지 않음 · 진행 안내도 사라짐");
+            Wait(() => shown.Showing, 12f, "프로필 카드는 새 모델");
+            open();
+            Wait(() => preview.Showing, 12f, "다시 열면 새 모델");
+
+            // 다섯 언어 — 런타임이 바꾸는 글
+            Do(() => say("en"));
+            Check(() => label() == "Change 3D model" && removeWord() == "Delete 3D model", "영어");
+            Do(() => say("ja"));
+            Check(() => label() == "3Dモデルを変更" && removeWord() == "3Dモデルを削除", "일본어");
+            Do(() => say("zh"));
+            Check(() => label() == "更换3D模型" && removeWord() == "删除3D模型", "중국어");
+            Do(() => say("es"));
+            Check(() => label() == "Cambiar modelo 3D" && removeWord() == "Eliminar modelo 3D", "스페인어");
+            Do(() => say(null));
+            Check(() => label() == "3D 모델 바꾸기", "한국어로");
+
+            // 지우기 — 다시 올리려면 파일이 있어야 해서 한 번 더 눌러야 지운다
+            Do(() => Click(Remove));
+            Sleep(0.2f);
+            Shot("pfm_remove_armed");
+            Check(() => removeWord() == "한 번 더 누르면 지워져요" && row().model_url != "", "첫 번째 누름 → '한 번 더 누르면 지워져요' · 아직 안 지움");
+            Sleep(4.3f);
+            Check(() => removeWord() == "3D 모델 지우기" && row().model_url != "", "4초 지나면 되돌아감");
+            fail("{\"status\":500,\"error\":\"x\"}");
+            Do(() => { toastClear(); Click(Remove); Click(Remove); });
+            Wait(() => toastHas("잠시 뒤 다시"), 6f, "지우기 실패 안내");
+            Check(() => row().model_url != "" && Active(Group) && label() == "3D 모델 바꾸기", "지우기 실패 → 안내 · 모델은 그대로");
+            Do(() => { toastClear(); Click(Remove); });
+            Sleep(0.2f);
+            Do(() => Click(Remove));
+            Wait(() => empty(preview) && label() == "3D 모델 올리기", 6f, "두 번 누르면 지움 · 칸이 비워짐");
+            Check(() => toastHas("3D 모델을 지웠어요"), "지우면 '3D 모델을 지웠어요'");
+            Sleep(0.5f);
+            Shot("pfm_removed");
+            Check(() =>
+            {
+                var r = row();
+                log.Add("  고르기 칸 " + Active(Group) + " · 서버 '" + r.model_url + "' " + r.model_display + " · 파일 " + (r.model_files == null ? -1 : r.model_files.Length));
+                return !Active(Group) && r.model_url == "" && r.model_display == "photo" && r.model_files.Length == 0;
+            }, "지우면 파일·서버 값이 사라지고 고르기 칸도 숨김");
+            Wait(() => empty(shown), 6f, "프로필 카드도 사진으로");
+            Do(() => say("en"));
+            Check(() => label() == "Add 3D model", "영어 (없을 때)");
+            Do(() => say("ja"));
+            Check(() => label() == "3Dモデルを追加", "일본어 (없을 때)");
+            Do(() => say("zh"));
+            Check(() => label() == "添加3D模型", "중국어 (없을 때)");
+            Do(() => say("es"));
+            Check(() => label() == "Añadir modelo 3D", "스페인어 (없을 때)");
+            Do(() => say(null));
+            x();
+
+            // 남의 프로필 — 올린 사람이 3D 로 고르면 모델 · 사진으로 고르면 사진 · 편집 버튼 없음
+            Do(() =>
+            {
+                other = UnityEngine.Networking.UnityWebRequest.Post(Dev + "/api/user/avatar-model", new List<UnityEngine.Networking.IMultipartFormSection>
+                {
+                    new UnityEngine.Networking.MultipartFormFileSection("model", shiba, "model.glb", "model/gltf-binary")
+                });
+                other.SetRequestHeader("Authorization", "Bearer " + OtherToken);
+                other.SendWebRequest();
+            });
+            Wait(() => other.isDone, 15f, "다른 회원이 모델을 올림");
+            Check(() => other.responseCode == 200, "다른 회원 올리기 200");
+            Do(() => { other.Dispose(); ProfileManager.Instance.ShowProfile(OtherId); });
+            Wait(() => shown.Showing, 12f, "남의 프로필에 모델");
+            Sleep(0.6f);
+            Shot("pfm_other_model");
+            Check(() => ink(shown) > 0.02f && !ProfileManager.Instance.editProfileButton.gameObject.activeInHierarchy, "남의 프로필 — 모델이 보임 · 편집 버튼 없음");
+            Do(() =>
+            {
+                other = new UnityEngine.Networking.UnityWebRequest(Dev + "/api/user/profile", "POST");
+                other.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes("{\"user_id\":\"" + OtherId + "\",\"avatar_display\":\"photo\"}"));
+                other.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+                other.SetRequestHeader("Content-Type", "application/json");
+                other.SetRequestHeader("Authorization", "Bearer " + OtherToken);
+                other.SendWebRequest();
+            });
+            Wait(() => other.isDone, 8f, "다른 회원이 '사진'으로 고름");
+            Do(() => { other.Dispose(); ProfileManager.Instance.ShowProfile(OtherId); });
+            Wait(() => empty(shown), 8f, "남의 프로필이 사진으로");
+            Check(() => empty(shown), "사진으로 고른 사람은 모델이 있어도 사진");
+            Do(() => ProfileManager.Instance.CloseFullProfile());
+            Sleep(0.6f);
+            Check(() => !Active("FullProfilePanel") && empty(shown), "프로필을 닫으면 모델을 내림");
+
+            Do(() =>
+            {
+                AppLanguage.EditorOverride = null;
+                if (pe != null) pe.Close();
+                ProfileManager.Instance?.CloseFullProfile();
+                DevPost("", "/api/dev/profile_reset", "{}");
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                MessagePanelManager.EditorBase = null;
+                R0926HuntApi.EditorBase = null;
+                SfLogin(false);
+                PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+            Sleep(0.5f);
+        }
+
         // 사람 오브젝트 3D 모델 (10-25 대표님 「glb 파일 업로드한 경우 프로필에서는 해당 glb 파일이 보이고, 오브젝트도 빌보드가 아닌 glb 로 보이도록」)
         private static void PlanPersonModel()
         {

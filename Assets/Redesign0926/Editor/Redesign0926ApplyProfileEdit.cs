@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace Redesign0926
@@ -12,6 +13,7 @@ namespace Redesign0926
     ///  — 내 프로필 '편집'이 웹 대신 여는 시트(ProfileEdit0926, R0926ProfileEdit). 프로필 창 위 어두운 바탕 + 장소 수정 카드와 같은 자리의 카드:
     ///  사진(사진첩 → 자르기) · 아이디 · 소개 · 전화번호 · 인스타그램 · 페이스북 · X · 맨 아래 '비밀번호 변경 · 계정 삭제'(웹) · 저장하기.
     ///  입력칸은 프로필 창의 키보드 위 입력줄(UploadInputMirror — 보물찾기 리뷰 칸과 같은 줄)로 쓴다. 끌어내리기·X·뒤로가기로 닫는다(바깥 누르기는 안 닫는다 — 고치던 글이 날아간다).
+    /// v66: 10-25 대표님 「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」 — 사진 칸 아래 3D 모델 칸(Model0926) · 사진/3D 고르기(F_display) · 프로필 화면 둥근 사진 위 3D 칸.
     /// </summary>
     public static partial class Redesign0926Apply
     {
@@ -65,6 +67,8 @@ namespace Redesign0926
             EditorUtility.SetDirty(cvl);
 
             var photo = PeAvatarRow(content, logic);
+            var modelRow = PeModelRow(content, logic, out var modelLabel, out var modelView);
+            var displayGroup = PeDisplayGroup(content, logic, out var dTabs, out var dLabels, out var removeLabel);
 
             var uGroup = PeGroup(content, "F_username", new[] { "아이디", "Username", "ユーザー名", "用户名", "Nombre de usuario" });
             var uIn = PeInput(uGroup, "Input", 140, new[] { "영문 소문자·숫자·._", "Lowercase letters, numbers, . and _", "英小文字・数字・._", "小写字母、数字、._", "Minúsculas, números, . y _" },
@@ -100,6 +104,9 @@ namespace Redesign0926
             var xIn = PeInput(PeGroup(content, "F_x", new[] { "X", "X", "X", "X", "X" }), "Input", 140,
                 new[] { "X 아이디", "X username", "Xのユーザー名", "X 用户名", "Usuario de X" },
                 false, 50, InputField.ContentType.Custom, TouchScreenKeyboardType.EmailAddress);
+
+            modelRow.SetSiblingIndex(1);       // 칸 묶음은 차례로 맨 뒤에 붙는다 — 사진 칸 바로 아래로
+            displayGroup.transform.SetSiblingIndex(2);
 
             // 비밀번호·계정 삭제는 웹에서 (일회용 코드로 연다)
             var web = FindOrCreate(content, "Web0926");
@@ -169,6 +176,12 @@ namespace Redesign0926
             S("busy", FindInScene<R0926Busy>(root.gameObject));
             S("closer", sd);
             S("closeButton", xBtn);
+            S("modelView", modelView);
+            S("modelLabel", modelLabel);
+            S("displayGroup", displayGroup);
+            SetArray(so.FindProperty("displayTabs"), dTabs);
+            SetArray(so.FindProperty("displayLabels"), dLabels);
+            S("removeLabel", removeLabel);
             so.ApplyModifiedPropertiesWithoutUndo();
             if (FindInScene<R0926PhotoCrop>(root.gameObject) == null) log.Add("프로필 편집: 자르기 화면 없음");
 
@@ -190,32 +203,137 @@ namespace Redesign0926
             }
             else log.Add("프로필 편집: 키보드 입력줄 없음");
 
+            // 프로필 화면 — 둥근 사진 위 3D 칸 (사진과 같은 원에 잘린다)
+            var avatarMask = Find(panel.transform, "AvatarMask");
+            var pm = FindInScene<ProfileManager>(root.gameObject);
+            if (avatarMask != null && pm != null)
+            {
+                var am = FindOrCreate(avatarMask.transform, "Model0926");
+                am.transform.SetAsLastSibling();
+                pm.avatarModel = PeModelView(am);
+                EditorUtility.SetDirty(pm);
+            }
+            else log.Add("프로필 편집: 프로필 화면 사진 칸 없음");
+
             sheet.SetActive(false);
             log.Add("profile edit ok");
         }
 
-        // 사진 칸 — 둥근 사진 + 분홍 테두리 + 카메라 표 · 오른쪽에 안내 두 줄. 칸 전체가 버튼
+        // 사진 칸
         private static Image PeAvatarRow(Transform content, R0926ProfileEdit logic)
+        {
+            var mask = PeCircleRow(content, "Avatar0926", logic.PickPhoto, "r0926_i_cam",
+                new[] { "사진 바꾸기", "Change photo", "写真を変更", "更换头像", "Cambiar foto" },
+                new[] { "사진첩에서 골라 정사각형으로 잘라요", "Pick from your photos and crop it square", "写真から選んで正方形に切り抜きます", "从相册选择并裁剪为正方形", "Elige de tus fotos y recórtala en cuadrado" }, out _);
+            mask.transform.parent.SetAsFirstSibling();
+            var ph = FindOrCreate(mask.transform, "Photo0926");
+            Stretch(RT(ph));
+            var photo = Img(ph, null, new Color(1, 1, 1, 0.08f), Image.Type.Simple);
+            photo.raycastTarget = false; photo.preserveAspect = false;
+            return photo;
+        }
+
+        // 3D 모델 칸 — 없으면 원 안에 '3D', 있으면 모델이 돈다. 글은 런타임이 모델이 있는지 따라 바꾼다
+        private static Transform PeModelRow(Transform content, R0926ProfileEdit logic, out Text label, out R0926ProfileModelView view)
+        {
+            var mask = PeCircleRow(content, "Model0926", logic.PickModel, "r0926_i_plus", null,
+                new[] { "GLB 파일 60MB까지 · 앱에서 바로 보이도록 가볍게 줄여요", "GLB files up to 60 MB · made lighter so it shows right away", "GLBファイル60MBまで · すぐ表示できるよう軽くします", "GLB 文件，最大 60MB · 自动压缩以便立即显示", "Archivos GLB de hasta 60 MB · se aligeran para verse al instante" }, out label);
+            var empty = FindOrCreate(mask.transform, "Empty0926");
+            Stretch(RT(empty));
+            Img(empty, null, new Color(1, 1, 1, 0.08f), Image.Type.Simple).raycastTarget = false;
+            var mark = FindOrCreate(empty.transform, "Mark0926");
+            Stretch(RT(mark));
+            Txt(mark, "3D", 72, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var pv = FindOrCreate(mask.transform, "Preview0926");
+            pv.transform.SetAsLastSibling();
+            view = PeModelView(pv);
+            return mask.transform.parent;
+        }
+
+        // 둥근 칸 위 3D 그림 — 모델이 뜨기 전엔 꺼 둔다(밑의 사진이 보인다)
+        private static R0926ProfileModelView PeModelView(GameObject go)
+        {
+            Stretch(RT(go));
+            var raw = Ensure<RawImage>(go);
+            raw.raycastTarget = false;
+            raw.enabled = false;
+            var view = Ensure<R0926ProfileModelView>(go);
+            var so = new SerializedObject(view);
+            so.FindProperty("view").objectReferenceValue = raw;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return view;
+        }
+
+        // 사진/3D 고르기 + 지우기 — 모델이 있을 때만 보인다
+        private static GameObject PeDisplayGroup(Transform content, R0926ProfileEdit logic, out Image[] tabs, out Text[] labels, out Text removeLabel)
+        {
+            const float segH = 110f;
+            var g = PeGroup(content, "F_display", new[] { "다른 사람에게 보이는 모습", "How others see you", "他の人への見え方", "别人看到的样子", "Cómo te ven los demás" });
+            var seg = FindOrCreate(g, "Seg0926");
+            Ensure<LayoutElement>(seg).preferredHeight = segH;
+            Img(seg, Spr("r0926_pill"), new Color(1, 1, 1, 0.06f), Image.Type.Sliced, 64f / (segH / 2f)).raycastTarget = true;
+            string[][] words =
+            {
+                new[] { "사진", "Photo", "写真", "照片", "Foto" },
+                new[] { "3D 모델", "3D model", "3Dモデル", "3D模型", "Modelo 3D" },
+            };
+            tabs = new Image[2];
+            labels = new Text[2];
+            for (int i = 0; i < 2; i++)
+            {
+                var tab = FindOrCreate(seg.transform, i == 0 ? "TabPhoto" : "TabModel");
+                tabs[i] = Img(tab, Spr("r0926_pill"), new Color(1, 1, 1, 0f), Image.Type.Sliced, 64f / (segH / 2f - 6f));
+                tabs[i].raycastTarget = true;
+                var trt = RT(tab);
+                trt.anchorMin = new Vector2(i / 2f, 0); trt.anchorMax = new Vector2((i + 1) / 2f, 1); trt.pivot = new Vector2(0.5f, 0.5f);
+                trt.offsetMin = new Vector2(6, 6); trt.offsetMax = new Vector2(-6, -6);
+                var lb = FindOrCreate(tab.transform, "Label0926");
+                Stretch(RT(lb));
+                labels[i] = Txt(lb, words[i][0], 44, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                Loc(lb, words[i][0], words[i][1], words[i][2], words[i][3], words[i][4]);
+                var b = Ensure<Button>(tab);
+                b.targetGraphic = tabs[i];
+                b.transition = Selectable.Transition.None;
+                ResetListeners(b);
+                if (i == 0) UnityEventTools.AddPersistentListener(b.onClick, logic.ShowAsPhoto);
+                else UnityEventTools.AddPersistentListener(b.onClick, logic.ShowAsModel);
+            }
+
+            var rm = FindOrCreate(g, "Remove0926");
+            Ensure<LayoutElement>(rm).preferredHeight = 90;
+            Img(rm, null, new Color(1, 1, 1, 0), Image.Type.Simple).raycastTarget = true;
+            var rmBtn = Ensure<Button>(rm);
+            rmBtn.transition = Selectable.Transition.None;
+            ResetListeners(rmBtn);
+            UnityEventTools.AddPersistentListener(rmBtn.onClick, logic.RemoveModel);
+            var rl = FindOrCreate(rm.transform, "Label0926");
+            Stretch(RT(rl));
+            removeLabel = Txt(rl, "3D 모델 지우기", 40, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);   // 글은 런타임이 바꾼다 (번역 부품을 달지 않는다)
+            removeLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+            var go = g.gameObject;
+            go.SetActive(false);
+            return go;
+        }
+
+        // 둥근 그림 + 분홍 테두리 + 표 · 오른쪽에 안내 두 줄. 칸 전체가 버튼 — 돌려주는 원 안에 그림을 넣는다.
+        // title 이 null 이면 제목 글은 런타임이 넣는다 (번역 부품을 달지 않는다)
+        private static GameObject PeCircleRow(Transform content, string name, UnityAction click, string icon, string[] title, string[] subWords, out Text titleText)
         {
             const float ms = 240f, cx = 150f;
             float ring = (ms / 2f - 4f) / 0.82f * 2f;   // 테두리 안쪽 가장자리(그림의 0.82)가 사진 가장자리를 4 덮게 (프로필 카드와 같은 셈)
-            var row = FindOrCreate(content, "Avatar0926");
-            row.transform.SetAsFirstSibling();
+            var row = FindOrCreate(content, name);
             Ensure<LayoutElement>(row).preferredHeight = 300;
             Img(row, null, new Color(1, 1, 1, 0), Image.Type.Simple).raycastTarget = true;
             var b = Ensure<Button>(row);
             b.transition = Selectable.Transition.None;
             ResetListeners(b);
-            UnityEventTools.AddPersistentListener(b.onClick, logic.PickPhoto);
+            UnityEventTools.AddPersistentListener(b.onClick, click);
 
             var mask = FindOrCreate(row.transform, "Mask0926");
             SetRect(RT(mask), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(cx, 0), new Vector2(ms, ms));
             Img(mask, Spr("r0926_circle"), Color.white, Image.Type.Simple).raycastTarget = false;
             Ensure<Mask>(mask).showMaskGraphic = false;
-            var ph = FindOrCreate(mask.transform, "Photo0926");
-            Stretch(RT(ph));
-            var photo = Img(ph, null, new Color(1, 1, 1, 0.08f), Image.Type.Simple);
-            photo.raycastTarget = false; photo.preserveAspect = false;
 
             var rg = FindOrCreate(row.transform, "Ring0926");
             SetRect(RT(rg), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(cx, 0), new Vector2(ring, ring));
@@ -226,18 +344,19 @@ namespace Redesign0926
             Img(badge, Spr("r0926_circle"), Pink, Image.Type.Simple).raycastTarget = false;
             var bic = FindOrCreate(badge.transform, "Icon0926");
             SetRect(RT(bic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(48, 48));
-            Img(bic, Spr("r0926_i_cam"), Dark, Image.Type.Simple).raycastTarget = false;
+            Img(bic, Spr(icon), Dark, Image.Type.Simple).raycastTarget = false;
 
             var lb = FindOrCreate(row.transform, "Label0926");
             SetRect(RT(lb), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(cx + ring / 2f + 40, 6), new Vector2(-(cx + ring / 2f + 40), 70));
-            Txt(lb, "사진 바꾸기", 50, Ink, TextAnchor.LowerLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Wrap;
-            Loc(lb, "사진 바꾸기", "Change photo", "写真を変更", "更换头像", "Cambiar foto");
+            titleText = Txt(lb, title != null ? title[0] : "", 50, Ink, TextAnchor.LowerLeft, FontStyle.Bold);
+            titleText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            if (title != null) Loc(lb, title[0], title[1], title[2], title[3], title[4]);
             var sub = FindOrCreate(row.transform, "Sub0926");
             SetRect(RT(sub), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 1), new Vector2(cx + ring / 2f + 40, -6), new Vector2(-(cx + ring / 2f + 40), 110));
-            var st = Txt(sub, "사진첩에서 골라 정사각형으로 잘라요", 38, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
+            var st = Txt(sub, subWords[0], 38, Muted, TextAnchor.UpperLeft, FontStyle.Normal);
             st.horizontalOverflow = HorizontalWrapMode.Wrap; st.verticalOverflow = VerticalWrapMode.Overflow;
-            Loc(sub, "사진첩에서 골라 정사각형으로 잘라요", "Pick from your photos and crop it square", "写真から選んで正方形に切り抜きます", "从相册选择并裁剪为正方形", "Elige de tus fotos y recórtala en cuadrado");
-            return photo;
+            Loc(sub, subWords[0], subWords[1], subWords[2], subWords[3], subWords[4]);
+            return mask;
         }
 
         // 칸 묶음 — 이름 한 줄 + 칸 (+ 안내)

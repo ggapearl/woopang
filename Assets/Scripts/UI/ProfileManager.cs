@@ -26,6 +26,8 @@ public class ProfileManager : MonoBehaviour
     [Tooltip("전체 프로필 패널")]
     public GameObject fullProfilePanel;
     public Image avatarImage;
+    [Tooltip("3D 모델로 보이게 한 사람 — 사진 위에 띄우는 칸 (Redesign0926ApplyProfileEdit 이 연결)")]
+    public R0926ProfileModelView avatarModel;
     public Text usernameText;
     public Text bioText;
     public Text followersCountText;
@@ -796,6 +798,8 @@ public class ProfileManager : MonoBehaviour
                 avatarImage.color = GetAvatarColorFromName(profile.username);
             }
         }
+
+        if (avatarModel != null) avatarModel.Show(profile.avatar_display == "glb" ? profile.avatar_glb_url : "");
 
         // 조건부 버튼 상태 설정
         SetupConditionalUI();
@@ -3238,6 +3242,8 @@ public class ProfileData
     public string username;
     public string email;
     public string avatar_url;
+    public string avatar_glb_url;   // 올린 3D 모델 (없으면 빈 값)
+    public string avatar_display;   // 'photo' · 'glb'
     public string bio;
     public string phone;
     public string instagram_id;

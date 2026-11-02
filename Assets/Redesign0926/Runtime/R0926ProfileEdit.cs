@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 using SimpleJSON;
 using UnityEngine;
@@ -14,6 +15,8 @@ using UnityEngine.UI;
 /// 이제 이 시트에서 바로 고친다 — 사진은 사진첩(NativeGallery, 안드로이드 ACTION_PICK)에서 골라 장소 사진과 같은 자르기 화면으로 정사각형,
 /// 아이디·소개·전화번호·SNS 는 키보드 위 입력줄(UploadInputMirror)로. 비밀번호·계정 삭제만 웹으로(맨 아래 줄).
 /// 서버: GET /api/user/profile (본인이면 연락처·아이디를 다시 바꿀 수 있을 때까지 남은 날) · POST /api/user/profile (바꾼 칸만) · POST /api/user/avatar.
+/// 3D 모델 (10-25 대표님 「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」) — 올리기·지우기는 바로 서버에(POST·DELETE /api/user/avatar-model,
+/// 서버가 앱에서 바로 보일 만큼 줄인다), 사진/3D 고르기는 다른 칸처럼 '저장하기'로.
 /// 저장·사진 올리기는 ProfileManager 위에서 돌려 시트를 닫아도 끝까지 간다.
 /// </summary>
 public class R0926ProfileEdit : MonoBehaviour
@@ -36,6 +39,12 @@ public class R0926ProfileEdit : MonoBehaviour
     [SerializeField] private R0926Busy busy;
     [SerializeField] private R0926Closer closer;        // 저장하면 끌어 닫을 때처럼 아래로 내려가며 닫힌다
     [SerializeField] private Button closeButton;
+    [SerializeField] private R0926ProfileModelView modelView;
+    [SerializeField] private Text modelLabel;           // '3D 모델 올리기' — 모델이 있으면 '바꾸기'
+    [SerializeField] private GameObject displayGroup;   // 사진·3D 고르기 + 지우기 — 모델이 있을 때만
+    [SerializeField] private Image[] displayTabs;       // 0 사진 · 1 3D 모델
+    [SerializeField] private Text[] displayLabels;
+    [SerializeField] private Text removeLabel;
 
     private enum State { Loading, Failed, Ready, Saving }
 
@@ -45,12 +54,21 @@ public class R0926ProfileEdit : MonoBehaviour
     private static readonly Regex DigitsDots = new Regex(@"^[0-9]+(\.[0-9]+)+$");   // 서버가 기관(공공데이터) 아이디 모양으로 막는다
     private static readonly Regex PhoneRe = new Regex(@"^[0-9+\-() ]*$");
     private const int AvatarMax = 512;   // 서버가 512 정사각형으로 다시 저장한다
+    private const long ModelMax = 60L * 1024 * 1024;   // 서버 AVATAR_MODEL_MAX_BYTES 와 같게
+    private const float RemoveArmSeconds = 4f;
+    private const string ShowPhoto = "photo", ShowModel = "glb";
+    private static readonly Color TabOn = new Color(1f, 1f, 1f, 0.14f), TabOff = new Color(1f, 1f, 1f, 0f);
+    private static readonly Color WordOff = new Color(0.549f, 0.584f, 0.616f, 1f);
+    private static readonly Color Pink = new Color(0.914f, 0.325f, 0.514f, 1f);
 
     private State state;
     private int session;
     private string me;
     private int waitDays;
     private bool saving, uploading;
+    private string modelUrl = "";
+    private string display = ShowPhoto, shownDisplay = ShowPhoto;   // 고른 것 · 서버에 있는 것 — 다르면 '저장하기'로 보낸다
+    private Coroutine removeArm;
     private readonly string[] shown = new string[6];   // 불러와 칸에 넣은 글 — 손대지 않은 칸은 보내지 않는다
     private readonly R0926PickerWait pick = new R0926PickerWait();
 
@@ -82,11 +100,13 @@ public class R0926ProfileEdit : MonoBehaviour
         {
             Fill(profile.username, profile.bio, "", profile.instagram_id, profile.facebook_id, profile.x_id);
             ProfileManager.LoadAvatarAsync(me, profile.avatar_url, avatar, profile.username);
+            SetModel(profile.avatar_glb_url, profile.avatar_display);
         }
         else
         {
             Fill(user.username, "", "", "", "", "");
             ProfileManager.LoadAvatarAsync(me, null, avatar, user.username);
+            SetModel("", ShowPhoto);
         }
         waitDays = 0;
         ApplyLock();
@@ -124,6 +144,7 @@ public class R0926ProfileEdit : MonoBehaviour
             waitDays = j["username_wait_days"].AsInt;
             ApplyLock();
             ProfileManager.LoadAvatarAsync(me, j["avatar_url"].Value, avatar, j["username"].Value);
+            SetModel(j["avatar_glb_url"].Value, j["avatar_display"].Value);
             SetState(State.Ready);
             yield break;
         }
@@ -217,6 +238,7 @@ public class R0926ProfileEdit : MonoBehaviour
             else if (i == 2 && !PhoneRe.IsMatch(v)) { Say(PhoneText); return; }
             body[Keys[i]] = v;
         }
+        if (display != shownDisplay) body["avatar_display"] = display;
         if (body.Count == 0) { Close(); return; }
         body["user_id"] = me;
         Say("");
@@ -274,6 +296,7 @@ public class R0926ProfileEdit : MonoBehaviour
             if (here) { waitDays = j["days"].AsInt; ApplyLock(); }
         }
         else if (err == "invalid_phone") text = PhoneText;
+        else if (err == "no_model") text = T("3D 모델이 없어요. 먼저 올려 주세요", "There's no 3D model yet. Please upload one first", "3Dモデルがありません。先にアップロードしてください", "还没有3D模型，请先上传", "Aún no hay modelo 3D. Súbelo primero");
         else if (err == "too_long") text = string.Format(T("글자가 너무 길어요 ({0}자까지)", "Too long (up to {0} characters)", "文字数が多すぎます（{0}文字まで）", "内容太长（最多{0}个字）", "Demasiado largo (hasta {0} caracteres)"), j["max"].AsInt);
         else text = GenericText;
 
@@ -413,6 +436,230 @@ public class R0926ProfileEdit : MonoBehaviour
             : err == "not_image" || err == "too_large" ? PhotoFailText : GenericText);
     }
 
+    // ── 3D 모델 ─────────────────────────────────────────
+    private void SetModel(string url, string shownAs)
+    {
+        modelUrl = url ?? "";
+        display = shownDisplay = modelUrl.Length > 0 && shownAs == ShowModel ? ShowModel : ShowPhoto;
+        ApplyModel();
+    }
+
+    private void ApplyModel()
+    {
+        bool has = modelUrl.Length > 0;
+        if (modelLabel != null)
+            modelLabel.text = has ? T("3D 모델 바꾸기", "Change 3D model", "3Dモデルを変更", "更换3D模型", "Cambiar modelo 3D")
+                : T("3D 모델 올리기", "Add 3D model", "3Dモデルを追加", "添加3D模型", "Añadir modelo 3D");
+        if (displayGroup != null) displayGroup.SetActive(has);
+        if (modelView != null) modelView.Show(modelUrl);
+        DisarmRemove();
+        ApplyDisplay();
+    }
+
+    private void ApplyDisplay()
+    {
+        for (int i = 0; displayTabs != null && i < displayTabs.Length; i++)
+        {
+            bool on = (i == 1) == (display == ShowModel);
+            if (displayTabs[i] != null) displayTabs[i].color = on ? TabOn : TabOff;
+            if (displayLabels != null && i < displayLabels.Length && displayLabels[i] != null) displayLabels[i].color = on ? Color.white : WordOff;
+        }
+    }
+
+    /// <summary>'사진' 칸 — '저장하기'를 눌러야 바뀐다</summary>
+    public void ShowAsPhoto() => PickDisplay(ShowPhoto);
+
+    /// <summary>'3D 모델' 칸 — '저장하기'를 눌러야 바뀐다</summary>
+    public void ShowAsModel() => PickDisplay(ShowModel);
+
+    private void PickDisplay(string how)
+    {
+        if (state != State.Ready) return;
+        display = how;
+        ApplyDisplay();
+    }
+
+    /// <summary>모델 칸 — 내 파일에서 GLB 를 골라 바로 올린다</summary>
+    public void PickModel()
+    {
+        if (state != State.Ready || uploading) return;
+        if (pick.Waiting && !pick.TryAbandon()) { Say(R0926PickerWait.BusyText); return; }
+        Say("");
+        StartCoroutine(PickModelRoutine());
+    }
+
+    private IEnumerator PickModelRoutine()
+    {
+#if UNITY_ANDROID
+        if (!NativeFilePicker.CheckPermission(true))
+        {
+            bool asked = false;
+            NativeFilePicker.RequestPermissionAsync(_ => asked = true, true);
+            yield return new WaitUntil(() => asked);
+            if (!NativeFilePicker.CheckPermission(true))
+            {
+                Say(T("파일을 열 권한이 없어요. 설정에서 허용해 주세요", "Allow file access in Settings to continue", "設定でファイルへのアクセスを許可してください", "请在设置中允许访问文件", "Permite el acceso a archivos en Ajustes"));
+                yield break;
+            }
+        }
+#endif
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.File)) { Say(R0926PickerWait.BusyText); yield break; }
+        bool answered = false;
+        string path = null;
+        int t = pick.Begin(R0926PickerWait.Source.File);
+        try
+        {
+            NativeFilePicker.PickFile(p =>
+            {
+                if (!pick.End(t)) return;
+                path = p;
+                answered = true;
+            }, ModelTypes);
+        }
+        catch (Exception)
+        {
+            pick.End(t);
+            answered = true;
+        }
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered || string.IsNullOrEmpty(path)) yield break;
+
+        yield return null;   // 고르기 창이 닫힌 화면이 먼저 그려지게 — 파일 읽기는 그동안 화면을 멈춘다
+        byte[] raw = null;
+        try
+        {
+            if (new FileInfo(path).Length > ModelMax) { Toast(false, ModelErrorText("too_big")); yield break; }
+            raw = File.ReadAllBytes(path);
+        }
+        catch (Exception e) { Debug.LogWarning("[ProfileEdit] 모델 파일을 읽지 못함: " + e.Message); }
+        SendModel(raw);
+    }
+
+    // 고르기 창의 파일 종류 — 3D 모델 추가(ModelUploadManager)와 같은 값. 기기에 따라 glb 를 일반 파일로 알아 넓게 연다
+#if UNITY_IOS
+    private static readonly string[] ModelTypes = { "com.khronos.glb", "org.khronos.gltf", "public.data", "public.item", "public.content" };
+#else
+    private static readonly string[] ModelTypes = { "model/gltf-binary", "model/gltf+json", "application/octet-stream", "*/*" };
+#endif
+
+#if UNITY_EDITOR
+    /// <summary>플레이 시험 — 파일 고르기 대신 이 파일을 고른 것처럼</summary>
+    public void EditorPickModel(byte[] bytes) => SendModel(bytes);
+#endif
+
+    private void SendModel(byte[] raw)
+    {
+        if (raw == null || raw.Length == 0) { Toast(false, ModelErrorText("failed")); return; }
+        if (raw.Length > ModelMax) { Toast(false, ModelErrorText("too_big")); return; }
+        // 머리표가 glTF 가 아니면 보내지 않는다 — 큰 파일을 다 올린 뒤에야 거절당하지 않게
+        if (raw.Length < 12 || raw[0] != 'g' || raw[1] != 'l' || raw[2] != 'T' || raw[3] != 'F') { Toast(false, ModelErrorText("not_glb")); return; }
+        Host.StartCoroutine(UploadModel(session, me, raw));
+    }
+
+    private IEnumerator UploadModel(int s, string uid, byte[] glb)
+    {
+        uploading = true;
+        if (busy != null) busy.Show(ModelUploadText(0f), 0f);
+        long code;
+        JSONNode j;
+        var parts = new List<IMultipartFormSection> { new MultipartFormFileSection("model", glb, "model.glb", "model/gltf-binary") };
+        using (var req = UnityWebRequest.Post(Base + "/api/user/avatar-model", parts))
+        {
+            req.timeout = 180;
+            LoginManager.ApplyAuth(req);
+            var op = req.SendWebRequest();
+            while (!op.isDone)
+            {
+                float p = req.uploadProgress;
+                if (busy != null)
+                {
+                    if (p < 1f) busy.Show(ModelUploadText(p), p);
+                    else busy.Show(ModelShrinkText);   // 다 보낸 뒤 서버가 줄이는 동안 — 얼마나 걸릴지 몰라 막대 없이
+                }
+                yield return null;
+            }
+            LoginManager.CheckUnauthorized(req);
+            code = req.result == UnityWebRequest.Result.ConnectionError ? 0 : req.responseCode;
+            j = Parse(req);
+        }
+        uploading = false;
+        if (busy != null) busy.Hide();
+
+        string url = j["avatar_glb_url"].Value;
+        if (code == 200 && !string.IsNullOrEmpty(url))
+        {
+            RefreshProfile();
+            if (s == session && isActiveAndEnabled) SetModel(url, ShowModel);
+            Toast(true, T("3D 모델을 올렸어요", "3D model uploaded", "3Dモデルをアップロードしました", "3D模型已上传", "Modelo 3D subido"));
+            yield break;
+        }
+        Toast(false, code == 0 ? NetworkText : code == 401 ? ReloginText : code == 404 ? NotFoundText : ModelErrorText(j["error"].Value));
+    }
+
+    /// <summary>'3D 모델 지우기' — 다시 올리려면 파일이 있어야 해서 한 번 더 눌러야 지운다</summary>
+    public void RemoveModel()
+    {
+        if (state != State.Ready || uploading || modelUrl.Length == 0) return;
+        if (removeArm == null)
+        {
+            removeArm = StartCoroutine(ArmRemove());
+            return;
+        }
+        DisarmRemove();
+        Host.StartCoroutine(DeleteModel(session, me));
+    }
+
+    private IEnumerator ArmRemove()
+    {
+        if (removeLabel != null)
+        {
+            removeLabel.text = T("한 번 더 누르면 지워져요", "Tap again to delete", "もう一度押すと削除します", "再按一次即可删除", "Toca otra vez para eliminar");
+            removeLabel.color = Pink;
+        }
+        yield return new WaitForSecondsRealtime(RemoveArmSeconds);
+        removeArm = null;
+        DisarmRemove();
+    }
+
+    private void DisarmRemove()
+    {
+        if (removeArm != null) { StopCoroutine(removeArm); removeArm = null; }
+        if (removeLabel == null) return;
+        removeLabel.text = T("3D 모델 지우기", "Delete 3D model", "3Dモデルを削除", "删除3D模型", "Eliminar modelo 3D");
+        removeLabel.color = WordOff;
+    }
+
+    private IEnumerator DeleteModel(int s, string uid)
+    {
+        uploading = true;
+        long code;
+        using (var req = UnityWebRequest.Delete(Base + "/api/user/avatar-model"))
+        {
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.timeout = 20;
+            LoginManager.ApplyAuth(req);
+            yield return req.SendWebRequest();
+            LoginManager.CheckUnauthorized(req);
+            code = req.result == UnityWebRequest.Result.ConnectionError ? 0 : req.responseCode;
+        }
+        uploading = false;
+        if (code == 200)
+        {
+            RefreshProfile();
+            if (s == session && isActiveAndEnabled) SetModel("", ShowPhoto);
+            Toast(true, T("3D 모델을 지웠어요", "3D model deleted", "3Dモデルを削除しました", "3D模型已删除", "Modelo 3D eliminado"));
+            yield break;
+        }
+        Toast(false, code == 0 ? NetworkText : code == 401 ? ReloginText : code == 404 ? NotFoundText : GenericText);
+    }
+
+    private static void RefreshProfile()
+    {
+        if (ProfileManager.Instance == null) return;
+        ProfileManager.Instance.LoadMyProfile();
+        ProfileManager.Instance.RefreshCurrentProfile();
+    }
+
     // 자른 사진(읽기 전용)을 max 이하 정사각형 JPEG 로 — 업로드와 같은 RenderTexture 줄이기
     private static byte[] Jpeg(Texture2D src, int max)
     {
@@ -473,6 +720,17 @@ public class R0926ProfileEdit : MonoBehaviour
         : string.Format(T("아이디는 {0}일 뒤에 다시 바꿀 수 있어요", "You can change your username again in {0} days", "ユーザー名は{0}日後に再変更できます", "{0}天后可以再次修改用户名", "Podrás cambiar tu nombre de usuario en {0} días"), d);
 
     private static string UploadText(float p) => string.Format(T("사진 올리는 중… {0}%", "Uploading photo… {0}%", "写真をアップロード中… {0}%", "正在上传照片… {0}%", "Subiendo foto… {0}%"), Mathf.FloorToInt(Mathf.Clamp01(p) * 100f));
+
+    private static string ModelUploadText(float p) => string.Format(T("3D 모델 올리는 중… {0}%", "Uploading 3D model… {0}%", "3Dモデルをアップロード中… {0}%", "正在上传3D模型… {0}%", "Subiendo modelo 3D… {0}%"), Mathf.FloorToInt(Mathf.Clamp01(p) * 100f));
+
+    private static string ModelShrinkText => T("가볍게 줄이는 중…", "Making it lighter…", "軽量化しています…", "正在压缩…", "Aligerando el modelo…");
+
+    private static string ModelErrorText(string err) =>
+        err == "not_glb" ? T("GLB 파일만 올릴 수 있어요", "Only GLB files can be uploaded", "GLBファイルのみアップロードできます", "只能上传 GLB 文件", "Solo se pueden subir archivos GLB")
+        : err == "external" ? T("텍스처가 파일 안에 함께 들어 있는 GLB 만 올릴 수 있어요", "The GLB must include its textures inside the file", "テクスチャが含まれたGLBのみアップロードできます", "GLB 文件必须内含贴图", "El GLB debe incluir sus texturas")
+        : err == "too_big" ? T("파일이 너무 커요. 더 작은 모델로 올려 주세요", "That file is too big. Please try a smaller model", "ファイルが大きすぎます。もっと小さいモデルにしてください", "文件太大，请换一个较小的模型", "El archivo es demasiado grande. Prueba con un modelo más pequeño")
+        : err == "unsupported" || err == "failed" ? T("이 모델은 쓸 수 없어요. 다른 파일로 올려 주세요", "This model can't be used. Please try another file", "このモデルは使えません。別のファイルを選んでください", "无法使用此模型，请换一个文件", "No se puede usar este modelo. Prueba con otro archivo")
+        : GenericText;
 
     private static string ReloginText => T("다시 로그인한 뒤 고칠 수 있어요", "Please sign in again to edit your profile", "もう一度ログインすると編集できます", "请重新登录后再编辑", "Vuelve a iniciar sesión para editar tu perfil");
     private static string NetworkText => T("인터넷 연결을 확인해 주세요", "Check your internet connection", "インターネット接続を確認してください", "请检查网络连接", "Revisa tu conexión a internet");
