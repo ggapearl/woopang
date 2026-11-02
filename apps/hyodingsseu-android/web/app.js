@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-01a';
+  const WEB_VERSION = '2026-11-02a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -128,7 +128,8 @@
   };
 
   // ── 폰 기능 ────────────────────────────
-  const haptic = kind => { if (Native) Native.haptic({ kind }).catch(() => {}); };
+  let hapticAt = 0, sfxAt = 0;                                       // 마지막으로 울린 때 — 터치 한 번에 소리·진동이 겹치지 않게 (아래 「모든 터치」)
+  const haptic = kind => { hapticAt = performance.now(); if (Native) Native.haptic({ kind }).catch(() => {}); };
 
   // 버튼 효과음 (2026-10-06) — 파일 없이 짧은 음 몇 개. 설정 › 화면 › 버튼 효과음 으로 끈다. [주파수, 시작(초), 길이, 크기]
   const SFX = {
@@ -143,6 +144,7 @@
   const sfx = {
     ctx: null,
     play(kind) {
+      sfxAt = performance.now();
       if (local.get('sfx', '1') !== '1') return;
       try {
         const AC = window.AudioContext || window.webkitAudioContext;
@@ -1330,6 +1332,8 @@
   // ── 화면 도구 ──────────────────────────
   const $ = sel => document.querySelector(sel);
 
+  const tappable = new WeakSet();                                     // onclick 을 단 칸(div 줄 등) — 「모든 터치」가 알아보게
+
   function h(tag, attrs) {
     const el = document.createElement(tag);
     if (attrs) {
@@ -1339,7 +1343,7 @@
         if (k === 'class') el.className = v;
         else if (k === 'text') el.textContent = v;
         else if (k === 'html') el.innerHTML = v;
-        else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+        else if (k.startsWith('on')) { el.addEventListener(k.slice(2), v); if (k === 'onclick') tappable.add(el); }
         else if (k === 'style') el.style.cssText = v;
         else el.setAttribute(k, v === true ? '' : v);
       });
@@ -1599,7 +1603,11 @@
       await api.post('button', { data });      // 서버는 {data: '…'} 를 받는다
       st.doneIndex = i;
       (st.done = st.done || []).push(i);
+      sfx.play('send');
+      haptic('tap');
     } catch (e) {
+      sfx.play('error');
+      haptic('alert');
       show(e);
     } finally {
       st.busy = false;
@@ -3207,6 +3215,21 @@
 
   // ── 시작 ───────────────────────────────
   let appVersion = '';
+
+  // 모든 터치 — 누를 수 있는 것(버튼·줄·칩·스위치·바깥 어두운 곳)을 누르면 진동 + 짧은 소리 (2026-11-02 대표님: 승인함 열기·줄 펼치기 포함 전부).
+  // 그 칸의 처리기가 이미 소리·진동을 냈으면(보내기·삭제·메뉴 등 제 소리) 겹치지 않게 빠진 쪽만 채운다. 막힌 버튼·글 쓰는 칸은 조용히.
+  const TAP_SEL = 'button,a[href],summary,label,select,input[type=checkbox],input[type=radio],[role=button],[role=menuitem],[role=menuitemradio],[role=tab],[role=switch]';
+  document.addEventListener('click', ev => {
+    if (pressHeld || Date.now() < swallowUntil) return;
+    let el = null;
+    for (let n = ev.target; n && n.nodeType === 1; n = n.parentElement) {
+      if (tappable.has(n) || (n.matches && n.matches(TAP_SEL))) { el = n; break; }
+    }
+    if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+    if (/scrim/.test(el.className) && ev.target !== el) return;       // 열린 창 안쪽을 눌렀을 뿐 — 바깥 어두운 곳을 눌렀을 때만
+    if (hapticAt < ev.timeStamp) haptic('tap');
+    if (sfxAt < ev.timeStamp) sfx.play('tap');
+  });
 
   document.addEventListener('click', ev => {
     const a = ev.target.closest && ev.target.closest('a[href]');
