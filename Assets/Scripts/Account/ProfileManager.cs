@@ -147,10 +147,10 @@ public class ProfileManager : MonoBehaviour
 #if UNITY_EDITOR
     public static string EditorBase;   // 플레이 시험 — 프로필·팔로우를 내 PC 시험 서버에서 (운영 서버에 시험 아이디로 묻지 않게)
     public static string ServerBase => string.IsNullOrEmpty(EditorBase) ? ApiConfig.MAIN_SERVER : EditorBase;
-    private string BASE_URL => ServerBase;
 #else
-    private string BASE_URL => ApiConfig.MAIN_SERVER;
+    public static string ServerBase => ApiConfig.MAIN_SERVER;
 #endif
+    private string BASE_URL => ServerBase;
 
     // 현재 표시 중인 프로필
     private ProfileData currentProfile;
