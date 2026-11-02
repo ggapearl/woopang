@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-02a';
+  const WEB_VERSION = '2026-11-02b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2891,16 +2891,20 @@
       });
     }
 
-    async function load() {
+    // silent — 보고 계신 화면을 건드리지 않고 목록만 조용히 새로 받는다 (보내기 결과·늦은 답 뒤에)
+    async function load(silent) {
       const my = ++seqN;
-      loading = true;
-      drawChips();
-      draw();
+      if (!silent) {
+        loading = true;
+        drawChips();
+        draw();
+      }
       try {
         const r = await api.get('proposals', { status, q });
         if (!alive || my !== seqN) return;
-        items = r.items || [];
+        items = (r.items || []).filter(x => !sending.has(x.id));      // 보내는 중인 메일은 서버가 끝내기 전엔 다시 나오지 않는다
         counts = r.counts || {};
+        if (counts.pending && sending.size) counts.pending = Math.max(0, counts.pending - sending.size);
         total = typeof r.total === 'number' ? r.total : items.length;
         loaded = true;
         takeAppr(counts.pending || 0);
@@ -2911,10 +2915,40 @@
       }
     }
 
+    const sending = new Set();         // 보내는 중인 메일 id
+
+    /** 메일 [보내기] — 누르면 바로 카드를 치우고 「보내기 요청하였습니다」. 메일 서버가 몇 초 걸려도 기다리지 않고, 못 보냈을 때만 승인함에 다시 올린다 (2026-11-02 대표님).
+        보는 중이던 다른 카드·스크롤은 건드리지 않는다 — 결과 안내(토스트)만 뜬다. */
+    function sendMail(it) {
+      sending.add(it.id);
+      items = items.filter(x => x.id !== it.id);
+      if (counts.pending) counts.pending -= 1;
+      takeAppr(counts.pending || 0);
+      if (open === it.id) open = '';
+      drawChips();
+      draw();
+      sfx.play('send');
+      toast('보내기 요청하였습니다');
+      const done = () => { sending.delete(it.id); if (alive) load(true); };
+      api.post('proposals/decide', { id: it.id, dec: 'ok', kind: 'mail' }, { timeout: 90000 }).then(r => {
+        if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(Math.max(0, r.counts.pending - (sending.size - 1)));
+        if (r && r.ok === false) { sfx.play('error'); haptic('alert'); toast('보내지 못했어요 — 승인함에 다시 올렸어요'); done(); return; }
+        if (r && r.sending) { toast(r.msg || '계속 보내는 중입니다'); setTimeout(done, 30000); return; }    // 메일 서버가 느리다 — 끝나기를 기다렸다 실제 상태를 본다
+        toast((r && r.msg) || '보냈어요');
+        done();
+      }).catch(e => {
+        sfx.play('error');
+        haptic('alert');
+        show(e);                                                       // 늦게 답해도 메일은 이미 나갔을 수 있다 — 실제 상태를 다시 보고, 남아 있으면 다시 나온다
+        done();
+      });
+    }
+
     /** 승인·보류·거절 — 알림 버튼과 같은 결정. 승인이면 PC 효딩쓰가 대화에서 바로 시작한다 */
     async function decide(it, dec, act) {
-      act.querySelectorAll('button').forEach(b => { b.disabled = true; });
       haptic('tap');
+      if (it.kind === 'mail' && dec === 'ok') { sendMail(it); return; }
+      act.querySelectorAll('button').forEach(b => { b.disabled = true; });
       const mail = it.kind === 'mail';
       let keep = false;
       try {
@@ -2927,14 +2961,14 @@
         } else {
           toast(APPR_DONE[r && r.status] || '저장했어요');
         }
-        if (!keep) open = '';
+        if (!keep && open === it.id) open = '';      // 그 사이 다른 카드를 보고 계시면 그대로 둔다
       } catch (e) {
         show(e);
         act.querySelectorAll('button').forEach(b => { b.disabled = false; });
-        if (mail && alive) load();                   // 서버가 늦게 답해도 메일은 이미 나갔을 수 있다 — 실제 상태를 다시 본다
+        if (mail && alive) load(true);               // 서버가 늦게 답해도 메일은 이미 나갔을 수 있다 — 실제 상태를 다시 본다
         return;
       }
-      if (alive) load();
+      if (alive) load(true);
     }
 
     /** 의견 — 이 제안에 대한 대표님 말을 효딩쓰에게(10-19). 효딩쓰가 읽고 고친 제안을 다시 올리거나 말씀대로 진행한다 */
