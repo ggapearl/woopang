@@ -21,10 +21,10 @@ GameObject.SetActive(true/false)         ← 1단계: 오브젝트 활성/비활
 ### 핵심 파일
 | 파일 | 역할 |
 |------|------|
-| [CustomARGeospatialCreatorAnchor.cs](../../Assets/Scripts/Prefab/CustomARGeospatialCreatorAnchor.cs) | ARGeospatialAnchor 생성/유지/재시도. trackingState 감시. SetVisible/SetForceHideRenderers |
-| [LoadingManager.cs](../../Assets/Scripts/UI/LoadingManager.cs) | 백그라운드 복귀 흐름 (`HandleBackgroundRecovery`). fallback 모드 ON/OFF |
-| [FilterManager.cs](../../Assets/Scripts/UI/FilterManager.cs) | `AllocationLoop`(주기적) → `RetryFailedAnchors` 호출. 속도 기반 SlowdownRefresh |
-| [DataManager.cs](../../Assets/Scripts/Download/DataManager.cs) + Tour/Subway/Terminal/TrainStation | `RetryFailedAnchorsIn`로 실패 앵커 선별 재시도. `SetAllRenderersVisible`(forceHide 플래그 토글) |
+| [CustomARGeospatialCreatorAnchor.cs](../../Assets/Scripts/ARObjects/CustomARGeospatialCreatorAnchor.cs) | ARGeospatialAnchor 생성/유지/재시도. trackingState 감시. SetVisible/SetForceHideRenderers |
+| [LoadingManager.cs](../../Assets/Scripts/App/LoadingManager.cs) | 백그라운드 복귀 흐름 (`HandleBackgroundRecovery`). fallback 모드 ON/OFF |
+| [FilterManager.cs](../../Assets/Scripts/Places/FilterManager.cs) | `AllocationLoop`(주기적) → `RetryFailedAnchors` 호출. 속도 기반 SlowdownRefresh |
+| [DataManager.cs](../../Assets/Scripts/Places/DataManager.cs) + Tour/Subway/Terminal/TrainStation | `RetryFailedAnchorsIn`로 실패 앵커 선별 재시도. `SetAllRenderersVisible`(forceHide 플래그 토글) |
 | [OffScreenIndicator.cs](../../Assets/Scripts/OffScreenIndicator/OffScreenIndicator.cs) | fallback 모드 (특징점 부족 시 화살표 분산). `IsFallbackMode` |
 
 ---
@@ -44,16 +44,16 @@ anchor.RecreateAnchor();
 **왜:** `RecreateAnchor()`는 내부에서 기존 anchor를 Destroy하고 새로 시작 + `_hasBeenTracking=false` 리셋. 정상 동작 중인 걸 매 2초 tick마다 깨뜨리면 화면에서 깜빡이거나 영영 안 보임.
 
 **해당 위치 (모두 동일 가드 필요):**
-- [DataManager.cs](../../Assets/Scripts/Download/DataManager.cs) `RetryFailedAnchorsIn`, `CreateAllInitialAnchors`
-- [SubwayManager.cs](../../Assets/Scripts/Download/SubwayManager.cs) `RetryFailedAnchorsIn`
-- [TerminalManager.cs](../../Assets/Scripts/Download/TerminalManager.cs) `RetryFailedAnchorsIn`
-- [TourAPIManager.cs](../../Assets/Scripts/Download/TourAPIManager.cs) `RetryFailedAnchorsIn`
-- [TrainStationManager.cs](../../Assets/Scripts/Download/TrainStationManager.cs) `RetryFailedAnchorsIn`
+- [DataManager.cs](../../Assets/Scripts/Places/DataManager.cs) `RetryFailedAnchorsIn`, `CreateAllInitialAnchors`
+- [SubwayManager.cs](../../Assets/Scripts/Places/SubwayManager.cs) `RetryFailedAnchorsIn`
+- [TerminalManager.cs](../../Assets/Scripts/Places/TerminalManager.cs) `RetryFailedAnchorsIn`
+- [TourAPIManager.cs](../../Assets/Scripts/Places/TourAPIManager.cs) `RetryFailedAnchorsIn`
+- [TrainStationManager.cs](../../Assets/Scripts/Places/TrainStationManager.cs) `RetryFailedAnchorsIn`
 
 ---
 
 ### 2.2 백그라운드 복귀 — 경량/풀 복구 양쪽 모두 복원 로직 필요
-[LoadingManager.HandleBackgroundRecovery](../../Assets/Scripts/UI/LoadingManager.cs)는 두 경로로 분기:
+[LoadingManager.HandleBackgroundRecovery](../../Assets/Scripts/App/LoadingManager.cs)는 두 경로로 분기:
 
 #### 경량 복구 (Tracking 유지)
 ```csharp
@@ -82,7 +82,7 @@ ForceRetryAllAnchors();                // 3. 앵커 재시도
 ### 2.3 fallback 모드 OFF 시 forceHide 자동 해제 (워치독)
 `OffScreenIndicator.EnableFallbackMode(false)`를 호출하는 곳이 LoadingManager에 17곳 이상 있고, 그 중 일부는 `SetAllManagerRenderersVisible(true)`를 빼먹기 쉽다.
 
-**보호책:** [CustomARGeospatialCreatorAnchor.Update()](../../Assets/Scripts/Prefab/CustomARGeospatialCreatorAnchor.cs)에 워치독 존재 — `_forceHideRenderers=true`인데 OSI가 `IsFallbackMode==false`이면 자동 복원.
+**보호책:** [CustomARGeospatialCreatorAnchor.Update()](../../Assets/Scripts/ARObjects/CustomARGeospatialCreatorAnchor.cs)에 워치독 존재 — `_forceHideRenderers=true`인데 OSI가 `IsFallbackMode==false`이면 자동 복원.
 
 ```csharp
 if (_forceHideRenderers && _anchorCreated && _hasBeenTracking)
@@ -101,7 +101,7 @@ if (_forceHideRenderers && _anchorCreated && _hasBeenTracking)
 ---
 
 ### 2.4 SlowdownRefresh — 백그라운드 복귀 직후 차단
-[FilterManager.TriggerSlowdownRefresh](../../Assets/Scripts/UI/FilterManager.cs)는 25km/h 이상 → 5km/h 미만 감속 시 `RestartFetchingAfterResume`을 한 번 호출.
+[FilterManager.TriggerSlowdownRefresh](../../Assets/Scripts/Places/FilterManager.cs)는 25km/h 이상 → 5km/h 미만 감속 시 `RestartFetchingAfterResume`을 한 번 호출.
 
 **문제 시나리오:** 백그라운드 진입 중 GPS가 끊김 → 복귀 시 "고속에서 정지"로 잘못 감지 → 막 생성된 앵커와 충돌.
 
@@ -113,7 +113,7 @@ if (_forceHideRenderers && _anchorCreated && _hasBeenTracking)
 
 ## 3. 디버그 진단 패턴
 
-`[BG-iOS-DBG]` 로그가 [CustomARGeospatialCreatorAnchor.cs](../../Assets/Scripts/Prefab/CustomARGeospatialCreatorAnchor.cs)에 깔려 있음. 가까운 오브젝트 (`Place_1`, `Place_665`, `Place_98` 등)만 추적하도록 `ShouldLog()` 필터링 적용됨 — 로그 폭주 방지.
+`[BG-iOS-DBG]` 로그가 [CustomARGeospatialCreatorAnchor.cs](../../Assets/Scripts/ARObjects/CustomARGeospatialCreatorAnchor.cs)에 깔려 있음. 가까운 오브젝트 (`Place_1`, `Place_665`, `Place_98` 등)만 추적하도록 `ShouldLog()` 필터링 적용됨 — 로그 폭주 방지.
 
 ### 정상 흐름 (로그 시퀀스)
 ```

@@ -77,7 +77,7 @@ woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사
 
 ## 5. 데이터 매니저 (AR 오브젝트 스폰) — 요약
 
-우팡 앱은 **5개 데이터 매니저**가 AR 오브젝트를 스폰: `DataManager`(자체 DB) · `TourAPIManager`(공공데이터) · `SubwayManager`/`TrainStationManager`/`TerminalManager`(공공교통). 모두 [Assets/Scripts/Download/](Assets/Scripts/Download/)에 위치.
+우팡 앱은 **5개 데이터 매니저**가 AR 오브젝트를 스폰: `DataManager`(자체 DB) · `TourAPIManager`(공공데이터) · `SubwayManager`/`TrainStationManager`/`TerminalManager`(공공교통). 모두 [Assets/Scripts/Places/](Assets/Scripts/Places/)에 위치.
 
 - ⚠️ "공공데이터(TourAPI)" ≠ "공공교통(Subway/Train/Terminal)" — 별도 카테고리. 한국어로 둘 다 "공공"이라 헷갈리기 쉬우니 명확히 구분할 것.
 - 매니저 추가·수정 시 zoom·리스트·visibility 등 **6개 연결 시스템 체크리스트**를 반드시 점검 → **[docs/claude/data-managers.md](docs/claude/data-managers.md)** (필독). 한 곳이라도 빠지면 그 매니저 데이터만 기능 누락 (공공교통 zoom 누락 사례).

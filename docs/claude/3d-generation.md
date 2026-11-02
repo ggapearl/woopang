@@ -336,10 +336,10 @@ print(f'INSERT id={new_id}')
 
 | 파일 | 역할 |
 |------|------|
-| [GLBModelLoader.cs](../../Assets/Scripts/Download_Model/GLBModelLoader.cs) | GLB 다운·인스턴스화·애니 자동 재생 (`TryPlayAnimation()`) |
-| [DataManager.cs](../../Assets/Scripts/Download/DataManager.cs) | `category='anim'` 인디케이터 탭 → DanceAnimController |
-| [FilterManager.cs](../../Assets/Scripts/UI/FilterManager.cs) | anim 카테고리 자동 Full 스폰 제외 + Full 보존 |
-| [DanceAnimController.cs](../../Assets/Scripts/UI/DanceAnimController.cs) | 확인 패널·다운로드·스폰·자동 디스폰 (100m/3분) |
+| [GLBModelLoader.cs](../../Assets/Scripts/ARObjects/GLBModelLoader.cs) | GLB 다운·인스턴스화·애니 자동 재생 (`TryPlayAnimation()`) |
+| [DataManager.cs](../../Assets/Scripts/Places/DataManager.cs) | `category='anim'` 인디케이터 탭 → DanceAnimController |
+| [FilterManager.cs](../../Assets/Scripts/Places/FilterManager.cs) | anim 카테고리 자동 Full 스폰 제외 + Full 보존 |
+| [DanceAnimController.cs](../../Assets/Scripts/ARObjects/DanceAnimController.cs) | 확인 패널·다운로드·스폰·자동 디스폰 (100m/3분) |
 | [Editor/DanceAnimPanelSetup.cs](../../Assets/Scripts/Editor/DanceAnimPanelSetup.cs) | 패널 UI 자동 생성 (씬에) |
 
 ---

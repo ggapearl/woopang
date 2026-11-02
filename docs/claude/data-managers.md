@@ -8,11 +8,11 @@
 ### 5개 매니저
 | 매니저 | 데이터 카테고리 | 위치 |
 |--------|----------------|------|
-| `DataManager` | 우팡 자체 DB (사용자 업로드 AR 오브젝트) | [Assets/Scripts/Download/DataManager.cs](../../Assets/Scripts/Download/DataManager.cs) |
-| `TourAPIManager` | 공공데이터 (관광공사 API — 관광지·맛집 등) | [Assets/Scripts/Download/TourAPIManager.cs](../../Assets/Scripts/Download/TourAPIManager.cs) |
-| `SubwayManager` | 공공교통 (지하철역) | [Assets/Scripts/Download/SubwayManager.cs](../../Assets/Scripts/Download/SubwayManager.cs) |
-| `TrainStationManager` | 공공교통 (기차역) | [Assets/Scripts/Download/TrainStationManager.cs](../../Assets/Scripts/Download/TrainStationManager.cs) |
-| `TerminalManager` | 공공교통 (버스 터미널) | [Assets/Scripts/Download/TerminalManager.cs](../../Assets/Scripts/Download/TerminalManager.cs) |
+| `DataManager` | 우팡 자체 DB (사용자 업로드 AR 오브젝트) | [Assets/Scripts/Places/DataManager.cs](../../Assets/Scripts/Places/DataManager.cs) |
+| `TourAPIManager` | 공공데이터 (관광공사 API — 관광지·맛집 등) | [Assets/Scripts/Places/TourAPIManager.cs](../../Assets/Scripts/Places/TourAPIManager.cs) |
+| `SubwayManager` | 공공교통 (지하철역) | [Assets/Scripts/Places/SubwayManager.cs](../../Assets/Scripts/Places/SubwayManager.cs) |
+| `TrainStationManager` | 공공교통 (기차역) | [Assets/Scripts/Places/TrainStationManager.cs](../../Assets/Scripts/Places/TrainStationManager.cs) |
+| `TerminalManager` | 공공교통 (버스 터미널) | [Assets/Scripts/Places/TerminalManager.cs](../../Assets/Scripts/Places/TerminalManager.cs) |
 
 ⚠️ "공공데이터(TourAPI)" ≠ "공공교통(Subway/Train/Terminal)" — 별도 카테고리. 한국어로 둘 다 "공공"이라 헷갈리기 쉬우니 작업 시 명확히 구분할 것.
 

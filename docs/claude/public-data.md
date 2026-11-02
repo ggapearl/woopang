@@ -251,7 +251,7 @@ DELETE 순서 (반드시 이 순서대로):
 
 ### 왜 중요한가
 앱은 고도를 **MSL(해발) 기준**으로 사용한다. iOS는 WGS84 타원체 고도를 주므로
-[GeoidHelper.cs](../../Assets/Scripts/Utils/GeoidHelper.cs)가 지역별 오프셋(한국 ~30m)을 더해
+[GeoidHelper.cs](../../Assets/Scripts/Location/GeoidHelper.cs)가 지역별 오프셋(한국 ~30m)을 더해
 Android(MSL)와 기준을 통일한다. 최종적으로 이 값이 그대로
 `CustomARGeospatialCreatorAnchor.SetCoordinatesAndCreateAnchor()` → `anchorManager.AddAnchor(lat, lon, alt, ...)`로 전달된다.
 
