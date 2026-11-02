@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-02c';
+  const WEB_VERSION = '2026-11-02d';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2716,7 +2716,7 @@
   function openDocs() {
     S.docsNew = 0;
     renderDocsBadge();
-    let kind = '', q = '', items = [], more = false, total = 0, loading = false, loadedOnce = false, alive = true, searchTimer = 0;
+    let kind = '', q = '', items = [], pinned = [], more = false, total = 0, loading = false, loadedOnce = false, alive = true, searchTimer = 0;
 
     const totalEl = h('div', { class: 'doc-total' });
     const chipsEl = h('div', { class: 'doc-chips' });
@@ -2743,12 +2743,55 @@
       return word + ' ' + n + (it.kind === 'image' ? '장' : '개');
     }
 
+    const isPinned = it => pinned.some(p => p.id === it.id);
+
+    /** 꾹 누르기(0.5초) 또는 오른쪽→왼쪽으로 밀기 = 상단 고정/해제 (2026-11-02 대표님 — 기록해 둘 문서) */
+    function bindPin(row, it) {
+      let timer = 0, x0 = 0, y0 = 0, t0 = 0, live = false;
+      const cancel = () => { clearTimeout(timer); timer = 0; };
+      row.addEventListener('touchstart', ev => {
+        live = ev.touches.length === 1 && !ev.target.closest('.dl-btn');
+        if (!live) return;
+        x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY; t0 = Date.now();
+        cancel();
+        timer = setTimeout(() => {                                   // 꾹 누르기 — 손가락을 뗄 때 생기는 클릭은 열기로 새지 않게 막는다
+          timer = 0; live = false;
+          pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 4000);
+          togglePin(it);
+        }, PRESS_MS);
+      }, { passive: true });
+      row.addEventListener('touchmove', ev => {
+        if (timer && Math.hypot(ev.touches[0].clientX - x0, ev.touches[0].clientY - y0) > 10) cancel();
+      }, { passive: true });
+      row.addEventListener('touchend', ev => {
+        cancel();
+        if (!live) return;
+        live = false;
+        const t = ev.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+        if (dx < -70 && Math.abs(dy) < Math.abs(dx) * 0.5 && Date.now() - t0 < 800) {   // 오른쪽→왼쪽으로 밀기
+          swallowUntil = Date.now() + 450;
+          togglePin(it);
+        }
+      }, { passive: true });
+      row.addEventListener('touchcancel', () => { cancel(); live = false; }, { passive: true });
+      row.addEventListener('contextmenu', ev => { ev.preventDefault(); });   // 안드로이드 꾹 누르기 메뉴는 위 타이머가 대신한다
+    }
+
+    function togglePin(it) {
+      const on = !isPinned(it), before = pinned.slice();
+      pinned = on ? [it].concat(pinned.filter(p => p.id !== it.id)) : pinned.filter(p => p.id !== it.id);
+      haptic('tap'); sfx.play('tap');
+      toast(on ? '맨 위에 고정했어요' : '고정을 풀었어요');
+      draw();
+      api.post('docs/pin', { id: it.id, on }).catch(e => { pinned = before; if (alive) { draw(); show(e); } });
+    }
+
     function docRow(it) {
       const files = it.files || [];
-      return h('div', { class: 'drow2', onclick: () => rowTap(it) },
+      const row = h('div', { class: 'drow2' + (isPinned(it) ? ' pinned' : ''), onclick: () => rowTap(it) },
         it.thumb ? h('img', { class: 'dthumb', src: it.thumb, alt: '', loading: 'lazy' }) : h('div', { class: 'dthumb ic', text: DOC_ICON[it.kind] || '📄' }),
         h('div', { class: 'dtx' },
-          h('b', { text: it.title || '(제목 없음)' }),
+          h('b', { text: (isPinned(it) ? '📌 ' : '') + (it.title || '(제목 없음)') }),
           h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
         files.some(f => f.url)
           ? h('button', { class: 'dl-btn', 'aria-label': '내려받기', html: ICON.download,
@@ -2758,6 +2801,8 @@
           ? h('button', { class: 'dl-btn', 'aria-label': '공유', html: ICON.share,
               onclick: ev => { ev.stopPropagation(); sfx.play('tap'); shareFiles(files, it.title || ''); } })
           : null);
+      if (it.id) bindPin(row, it);
+      return row;
     }
 
     /** 내려받기 — 한 파일이면 바로, 여러 장은 브라우저에서 차례로(앱 안에서는 열어서 한 장씩) */
@@ -2776,12 +2821,17 @@
     }
 
     function draw() {
-      totalEl.textContent = loadedOnce ? '전체 ' + total + '개' : '';
+      totalEl.textContent = loadedOnce ? '전체 ' + total + '개 · 꾹 누르거나 왼쪽으로 밀면 맨 위에 고정' : '';
       listEl2.textContent = '';
       if (loading && !items.length) { listEl2.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
-      if (!items.length) { listEl2.append(h('div', { class: 'doc-empty', text: '아직 자료가 없어요 — 효딩쓰가 만든 영상·카드뉴스·캡처가 여기 모입니다' })); return; }
+      if (!items.length && !pinned.length) { listEl2.append(h('div', { class: 'doc-empty', text: '아직 자료가 없어요 — 효딩쓰가 만든 영상·카드뉴스·캡처가 여기 모입니다' })); return; }
+      if (pinned.length) {
+        listEl2.append(h('div', { class: 'doc-day pin', text: '📌 고정' }));
+        pinned.forEach(it => listEl2.append(docRow(it)));
+      }
       let lastDay = null;
       items.forEach(it => {
+        if (isPinned(it)) return;
         const day = dayLabel(it.ts);
         if (day !== lastDay) { listEl2.append(h('div', { class: 'doc-day', text: day })); lastDay = day; }
         listEl2.append(docRow(it));
@@ -2798,6 +2848,7 @@
         const r = await api.get('docs', query);
         if (!alive) return;
         const got = r.items || [];
+        if (!before) pinned = r.pinned || [];
         items = before ? items.concat(got) : got;
         more = !!r.more;
         total = typeof r.total === 'number' ? r.total : items.length;
