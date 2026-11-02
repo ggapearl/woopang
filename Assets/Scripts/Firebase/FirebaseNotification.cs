@@ -183,10 +183,12 @@ public class FirebaseNotification : MonoBehaviour
         InitializeAndroidNotificationChannel();
         StartNotificationCleanup();
 
-        // Firebase는 Android에서만 사용
+        // Firebase는 Android 기기에서만 사용 — 에디터엔 FCM 이 없어 데스크톱 Firebase 가 'Database URL not set' 경고만 남겼다
+#if !UNITY_EDITOR
         FirebaseMessaging.TokenReceived += OnTokenReceived;
         FirebaseMessaging.MessageReceived += OnMessageReceived;
         StartCoroutine(InitializeFirebaseCoroutine());
+#endif
 #elif UNITY_IOS
         // iOS는 네이티브 APNs 사용 (UnityAppController.mm에서 처리)
         // OnNativeTokenReceived와 OnNativeMessageReceived 콜백 사용
@@ -2332,7 +2334,7 @@ public class FirebaseNotification : MonoBehaviour
         // 모든 활성 알림 정리
         ClearAllNotifications();
 
-#if UNITY_ANDROID
+#if UNITY_ANDROID && !UNITY_EDITOR
         try
         {
             FirebaseMessaging.TokenReceived -= OnTokenReceived;

@@ -182,9 +182,12 @@ namespace Google.XR.ARCoreExtensions.Editor.Internal
             bool result = (bool)field.GetValue(null);
             if (result != enable)
             {
-                Debug.LogFormat(
-                    "{0} Analytics Reporting in External Dependency Manager.",
-                    enable ? "Enabling" : "Disabling");
+                // WOOPANG patch: 끄는 건 플레이할 때마다(PostProcessScene) 일어나 조용히 끈다
+                if (enable)
+                {
+                    Debug.Log("Enabling Analytics Reporting in External Dependency Manager.");
+                }
+
                 field.SetValue(null, enable);
             }
         }

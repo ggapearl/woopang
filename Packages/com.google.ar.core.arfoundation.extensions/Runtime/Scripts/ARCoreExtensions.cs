@@ -202,9 +202,11 @@ namespace Google.XR.ARCoreExtensions
             _arCoreSubsystem = (ARCoreSessionSubsystem)Session.subsystem;
             if (_arCoreSubsystem == null)
             {
+#if !UNITY_EDITOR   // WOOPANG patch: 에디터엔 ARCore 가 없다 — 플레이마다 빨간 줄만 남겼다
                 Debug.LogError(
                     "No active ARCoreSessionSubsystem is available in this session, Please " +
                     "ensure that a valid loader configuration exists in the XR project settings.");
+#endif
             }
             else
             {
@@ -214,9 +216,11 @@ namespace Google.XR.ARCoreExtensions
             _arCoreCameraSubsystem = (ARCoreCameraSubsystem)CameraManager.subsystem;
             if (_arCoreCameraSubsystem == null)
             {
+#if !UNITY_EDITOR   // WOOPANG patch: 위와 같음
                 Debug.LogError(
                     "No active ARCoreCameraSubsystem is available in this session, Please " +
                     "ensure that a valid loader configuration exists in the XR project settings.");
+#endif
             }
             else
             {
@@ -556,6 +560,12 @@ namespace Google.XR.ARCoreExtensions
             {
                 yield return null;
                 frameCount++;
+            }
+
+            // WOOPANG patch: 세션 핸들이 끝내 없으면(에디터 — arcore_sdk_c 가 없다) 네이티브를 부르지 않는다
+            if (currentARCoreSessionHandle == IntPtr.Zero)
+            {
+                yield break;
             }
 
             ApiGeospatialCreatorPlatform geospatialCreatorPlatform =

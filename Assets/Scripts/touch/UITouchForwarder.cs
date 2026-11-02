@@ -9,12 +9,21 @@ public class UITouchForwarder : MonoBehaviour, IPointerUpHandler, IPointerClickH
 
     private bool blocked;
 
+    // 버튼이 아니어도 누를 수 있는 것(말풍선 하트 · 아바타 · 슬라이더 칸)에 일부러 붙인다 — 누를 게 하나도 없을 때만 알린다
     void Start()
     {
-        if (!GetComponent<Selectable>())
+        if (!CanBePressed())
         {
-            Debug.LogWarning($"UITouchForwarder on {gameObject.name} requires a Button component!");
+            Debug.LogWarning($"UITouchForwarder on {gameObject.name} has nothing to press (no Selectable or click handler)!");
         }
+    }
+
+    bool CanBePressed()
+    {
+        if (GetComponentInChildren<Selectable>(true) != null) return true;
+        foreach (var h in GetComponents<IPointerClickHandler>())
+            if (!ReferenceEquals(h, this)) return true;
+        return false;
     }
 
     // 막힌 버튼은 소리 없이 — 클릭 때 보면 누르자마자 스스로 잠그는 버튼(보내기 등)까지 막힌 것으로 보여 손을 뗄 때 본다

@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 66;  // v66: 10-25 대표님 「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」 「프로필에서는 해당 glb 파일이 보이고」 — 편집 시트 3D 모델 칸 · 사진/3D 고르기 · 프로필 화면 둥근 사진 위 3D 칸
+        public const int Version = 67;  // v67: 11-02 대표님 「유니티에서 시뮬레이터 돌렸을 때 발생하는 경고 … 개선할 수 있는 건 개선」 — 상단 그늘(Panel_Top)의 누름 소리 부품을 뗌(로고를 누르던 시절 것 · 이제 터치를 받지 않아 'requires a Button' 경고만 남겼다) · v66: 10-25 대표님 「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」 「프로필에서는 해당 glb 파일이 보이고」 — 편집 시트 3D 모델 칸 · 사진/3D 고르기 · 프로필 화면 둥근 사진 위 3D 칸
         // v65: 11-02 「사람 오브젝트 — 정면이 항상 보이는 동그라미, 테두리에 핑크색 원 (우측하단 프로필 버튼처럼)」 — P2P_Avatar/Cube 를 사진 원으로
         // v64: 11-02 「메세지창 앞 +버튼으로 사진 공유 · 사진 눌러 크게 보기 · 다운로드 · 팔로잉 친구에게 공유」 — 입력줄 + 버튼 · 크게 보기 화면 · 공유 시트
         // v63: 11-02 「설정탭처럼 다른 버튼들도 소리·햅틱」 — 팔로우 · 프로필의 도크 X 도 다른 창의 도크 X 와 같은 소리
@@ -154,6 +154,9 @@ namespace Redesign0926
                 var old = Find(top.transform, n);
                 if (old != null) { Object.DestroyImmediate(old); log.Add("top: " + n + " 삭제"); }
             }
+            // 누름 소리도 로고를 누르던 시절 것 — 그늘은 터치를 받지 않는다
+            var fw = top.GetComponent<UITouchForwarder>();
+            if (fw != null) { Object.DestroyImmediate(fw); log.Add("top: UITouchForwarder 삭제"); }
             var changer = top.GetComponent<TopPanelColorChanger>();
             if (changer != null)
             {
