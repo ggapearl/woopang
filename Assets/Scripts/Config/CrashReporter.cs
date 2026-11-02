@@ -8,8 +8,9 @@ using UnityEngine.Networking;
 
 /// <summary>
 /// 앱에서 난 예외(Exception)를 우팡 서버(/api/crash)로 보낸다 — Crashlytics SDK 없이 가볍게.
-/// 같은 오류는 세션당 한 번, 세션당 최대 15건. 서버가 같은 오류를 묶어 두고, 처음 보는 오류일 때만 텔레그램으로 알린다.
-/// 개인 정보(로그인 id·위치)는 보내지 않는다. 에디터에서는 보내지 않는다.
+/// 같은 오류는 세션당 한 번, 세션당 최대 15건. 서버가 같은 오류를 묶어 두고, 대표님 계정에서 처음 보는 오류일 때만 알린다.
+/// 개인 정보(로그인 id·위치)는 싣지 않는다 — 로그인 토큰만 다른 요청처럼 붙이고, 서버는 알림을 가르는 데만 쓴다(저장 안 함).
+/// 에디터에서는 보내지 않는다.
 /// 앱이 통째로 꺼지는 충돌(네이티브 · 메모리 부족 · 멈춤)은 예외로 안 잡히므로, 화면에 떠 있는 동안만 표식을 두고
 /// 다음 실행에 표식이 남아 있으면 '화면을 켠 채 끝남'으로 보낸다 (10-27 아이폰 첫 실행 충돌 — 서버에 기록이 없었다).
 /// </summary>
@@ -150,6 +151,7 @@ public class CrashReporter : MonoBehaviour
             req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(JsonUtility.ToJson(r)));
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
+            LoginManager.ApplyAuth(req);
             req.timeout = 10;
             yield return req.SendWebRequest();   // 실패해도 조용히 — 오류 보고가 또 오류를 만들면 안 된다
         }
