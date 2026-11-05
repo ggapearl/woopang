@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-02f';
+  const WEB_VERSION = '2026-11-05a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2329,7 +2329,7 @@
     app.textContent = '';
 
     const ta = h('textarea', {
-      rows: '1', placeholder: '무엇이든 시키세요', 'aria-label': '효딩쓰에게 보낼 말', enterkeyhint: 'enter',
+      rows: '1', 'aria-label': '효딩쓰에게 보낼 말', enterkeyhint: 'enter',
       oninput: () => { grow(ta); renderSend(); },
       onpaste: pasteAttach,
     });
@@ -2592,7 +2592,7 @@
     let messages = [], waiting = false, loading = true, alive = true;
     const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px;padding:16px' });
     const content = h('div', { class: 'content' }, list);
-    const ta = h('textarea', { rows: '1', placeholder: w.name + ' 님에게 지시', 'aria-label': w.name + ' 님에게 지시', oninput: () => { grow(ta); sync(); } });
+    const ta = h('textarea', { rows: '1', 'aria-label': w.name + ' 님에게 지시', oninput: () => { grow(ta); sync(); } });
     const btn = h('button', { class: 'round send', 'aria-label': '보내기', onclick: sendIt }, svg('up'));
     const composer = h('div', { class: 'composer' }, h('div', { class: 'row' }, ta, btn));
     const wrap = h('div', { style: 'flex:1;min-height:0;display:flex;flex-direction:column' }, content, composer);
