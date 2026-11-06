@@ -66,7 +66,6 @@ public class R0926CompassMode : MonoBehaviour
 
     // 어둠 판정
     private float lostSince = -1f, darkSince = -1f, armStart = -1f, nextTry, exitedAt = -100f, lastToast = -1000f;
-    private NotTrackingReason darkReason;
     private float bothOkSince = -1f, vioOnlySince = -1f;
     // 밝을 때 기억해 둔 것 — 지구 기준 방향과 자리, 마지막으로 추적된 카메라와 그때의 자이로
     private bool cacheOk;
@@ -181,11 +180,7 @@ public class R0926CompassMode : MonoBehaviour
 
         // 추적이 끊겼다
         if (lostSince < 0f) lostSince = now;
-        if (reason == NotTrackingReason.InsufficientLight || reason == NotTrackingReason.InsufficientFeatures)
-        {
-            if (darkSince < 0f) darkSince = now;
-            darkReason = reason;
-        }
+        if ((reason == NotTrackingReason.InsufficientLight || reason == NotTrackingReason.InsufficientFeatures) && darkSince < 0f) darkSince = now;
         bool ready = darkSince >= 0f
             ? now - darkSince >= EnterAfter
             : initializing && (reason == NotTrackingReason.Initializing || reason == NotTrackingReason.None) && now - lostSince >= EnterAfterInit;
@@ -344,22 +339,17 @@ public class R0926CompassMode : MonoBehaviour
         }
     }
 
+    // 안내는 한 줄 (11-07 대표님 「'주변이 어두워 대략적인 위치임' 이라고만 간결하게」). 아이폰은 어두워도 「빛 부족」이 아니라
+    // 「특징 부족」으로 알려 와 예전엔 늘 긴 쪽 문구가 떴다 — 이유와 상관없이 같은 문구
     private void Toast(float now)
     {
         if (now - lastToast < ToastGap || ToastManager.Instance == null) return;
         lastToast = now;
-        string msg = darkSince >= 0f && darkReason == NotTrackingReason.InsufficientLight
-            ? R0926LocalizedText.Say("어두워서 나침반으로 방향을 잡았어요 · 위치는 대략이에요",
-                "It's dark, so we're using the compass · positions are approximate",
-                "暗いのでコンパスで方向を合わせました · 位置はおおよそです",
-                "光线太暗，已改用指南针定向 · 位置为大致位置",
-                "Está oscuro, usamos la brújula · las posiciones son aproximadas")
-            : R0926LocalizedText.Say("주변이 잘 안 보여 나침반으로 방향을 잡았어요 · 위치는 대략이에요",
-                "We can't see much around, so we're using the compass · positions are approximate",
-                "周りがよく見えないのでコンパスで方向を合わせました · 位置はおおよそです",
-                "周围看不清，已改用指南针定向 · 位置为大致位置",
-                "No se ve bien el entorno, usamos la brújula · las posiciones son aproximadas");
-        ToastManager.Instance.ShowInfo(msg);
+        ToastManager.Instance.ShowInfo(R0926LocalizedText.Say("주변이 어두워 대략적인 위치임",
+            "Dark surroundings · approximate positions",
+            "周囲が暗いため、おおよその位置です",
+            "周围较暗，显示大致位置",
+            "Entorno oscuro · posiciones aproximadas"));
     }
 
     // ── 상태 ──

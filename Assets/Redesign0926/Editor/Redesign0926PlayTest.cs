@@ -8189,7 +8189,8 @@ namespace Redesign0926
             Func<string, Vector3> vp = k => cam.WorldToViewportPoint(cubes[k].transform.position);
             Func<string, bool> centered = k => { var p = vp(k); return p.z > 0f && Mathf.Abs(p.x - 0.5f) < 0.03f && p.y > 0.25f && p.y < 0.75f; };
             Func<string, bool> shown = k => cubes[k].GetComponent<Renderer>().enabled;
-            Func<bool> compassToast = () => PsToast("나침반") || PsToast("compass");
+            Func<bool> compassToast = () => PsToast("대략적인 위치") || PsToast("approximate");
+            bool toastShort = false;
             Action<string, float, float, Color> spawn = (k, dn, de, col) =>
             {
                 var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -8247,14 +8248,14 @@ namespace Redesign0926
             Wait(() =>
             {
                 if (R0926CompassMode.Active && enterSec < 0f) { enterSec = Time.realtimeSinceStartup - darkAt; yawAfter = yawOf(cam.transform.rotation); enterPos = cam.transform.position; }
-                if (compassToast()) toastSeen = true;
+                if (compassToast() && !toastSeen) { toastSeen = true; toastShort = !PsToast("나침반") && !PsToast("compass"); }
                 return R0926CompassMode.Active && toastSeen;
             }, 6f, "나침반 모드 켜짐 · 안내 토스트");
             Do(() => log.Add($"  어두워진 뒤 {enterSec:0.00}초에 켜짐 · 카메라 방위 {yawBefore:0.0}° → {yawAfter:0.0}°"));
             Check(() => enterSec >= 2.3f && enterSec <= 3.5f, "어두워진 뒤 2.5초쯤 저절로 켜진다 (버튼 없음)");
             Check(() => CustomARGeospatialCreatorAnchor.CompassHold && (pd == null || !pd.enabled), "켜지면 — 앵커 만들기·포기를 멈추고 카메라 추적을 끈다 (자이로가 돌린다)");
             Check(() => Mathf.Abs(Mathf.DeltaAngle(yawBefore, yawAfter)) < 1f, "켜지는 순간 화면이 튀지 않는다 (방위 차이 1° 미만)");
-            Check(() => toastSeen, "안내 토스트 「…나침반으로 방향을 잡았어요 · 위치는 대략이에요」");
+            Check(() => toastSeen && toastShort, "안내 토스트는 「주변이 어두워 대략적인 위치임」 한 줄 (11-07 대표님 — 나침반 · 방향 설명 없이)");
             Sleep(0.5f);
             Check(() => cubes["N"].CompassPlaced && cubes["E"].CompassPlaced && cubes["S"].CompassPlaced && shown("N") && shown("E") && shown("S"), "상자 3개 모두 나침반 자리에 · 보인다");
             Check(() => centered("N"), "진북을 보면 북쪽 상자가 화면 가운데 (편각 −8.5° 를 바로잡은 진북)");
@@ -8321,35 +8322,55 @@ namespace Redesign0926
             Do(() => log.Add($"  30 m 북쪽으로 — 카메라가 움직인 거리 {Vector3.Distance(enterPos, cam.transform.position):0.0} m"));
             Check(() => Vector3.Distance(cam.transform.position, enterPos + Quaternion.Euler(0f, 12f, 0f) * new Vector3(0f, 0f, 30f)) < 3f, "30 m 걸어가면 카메라도 GPS 를 따라 북쪽으로 30 m (±3 m)");
 
-            // 7-2) 하늘을 보면 하늘 판 — 어두워 추적이 멈춰도 기울기로 뜨고, 화면에 붙어 떨리지 않는다 (11-06 대표님 「하늘 비췄을 때 발생하는 건 그냥 나오게 … 떨리지 않고?」)
+            // 7-2) 하늘을 보면 하늘 판 — 어두워 추적이 멈춰도 기울기로 뜬다 (11-06 대표님 「하늘 비췄을 때 발생하는 건 그냥 나오게」).
+            //      나침반 모드에선 하늘을 3초 봐야 뜨고 (11-07 대표님 「어두운 상황에서는 하늘이 좀 천천히 (3-4초 딜레이)」), 뜬 판은 하늘 한 자리에 걸려
+            //      자이로가 돌리는 카메라와 같이 움직인다 — 나침반이 흔들려도 · AR 추적이 깜빡여도 떨리지 않는다 (11-07 「'하늘' 봤을 때 … 떨리는 느낌」)
             R0926SkyWeather skyW = null; Transform skyB = null;
-            double skyUntil = -1; int skyFrame = -1; float skyMaxD = 0f; Vector3 skyLast = Vector3.zero; bool skyAllOn = true;
+            double skyUntil = -1, turnFrom = 0; int skyFrame = -1; float skyMaxD = 0f, skyMaxW = 0f, upAt = 0f, skySec = -1f;
+            Vector3 skyLast = Vector3.zero, skyAt = Vector3.zero; bool skyAllOn = true;
+            Func<bool> skyOn = () => skyW != null && (bool)typeof(R0926SkyWeather).GetField("skyShow", F).GetValue(skyW);
+            Func<float> skyAlpha = () => skyW != null && typeof(R0926SkyWeather).GetField("skyGroup", F).GetValue(skyW) is CanvasGroup sg ? sg.alpha : 0f;
+            // secs 동안 매 프레임 step 을 부르며 판을 잰다 — 화면 속 한 프레임 사이 최대 이동 · 처음 자리(월드)에서 벗어난 최대 거리 · 내내 떠 있었는지
+            Func<float, Action, Func<bool>> watchSky = (secs, step) => () =>
+            {
+                if (skyUntil < 0) { skyUntil = EditorApplication.timeSinceStartup + secs; skyFrame = -1; skyMaxD = skyMaxW = 0f; skyAllOn = true; skyAt = skyB.position; }
+                if (Time.frameCount != skyFrame)
+                {
+                    Vector3 v = cam.WorldToViewportPoint(skyB.position);
+                    if (skyFrame >= 0) skyMaxD = Mathf.Max(skyMaxD, Vector2.Distance(v, skyLast));
+                    skyMaxW = Mathf.Max(skyMaxW, Vector3.Distance(skyB.position, skyAt));
+                    if (!skyOn()) skyAllOn = false;
+                    skyLast = v;
+                    skyFrame = Time.frameCount;
+                    step();
+                }
+                if (EditorApplication.timeSinceStartup <= skyUntil) return false;
+                skyUntil = -1;
+                return true;
+            };
             Do(() =>
             {
                 skyW = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
                 if (skyW != null) { typeof(R0926SkyWeather).GetField("collapsed", F)?.SetValue(skyW, false); skyB = typeof(R0926SkyWeather).GetField("skyBoard", F)?.GetValue(skyW) as Transform; }
                 aim(Quaternion.Euler(-55f, 90f, 0f));   // 동쪽 하늘
+                upAt = Time.realtimeSinceStartup;
             });
             Sleep(2f);
-            Do(() => log.Add($"  하늘 판 {(skyW == null ? "없음" : (bool)typeof(R0926SkyWeather).GetField("skyShow", F).GetValue(skyW) ? "보임" : "안 보임")} · 날씨 {(skyW != null && skyW.WeatherReady ? "받음" : "없음")} · 카메라 고개 {-Mathf.DeltaAngle(0f, cam.transform.eulerAngles.x):0.0}°"));
-            Check(() => skyW != null && skyB != null && (bool)typeof(R0926SkyWeather).GetField("skyShow", F).GetValue(skyW), "나침반 모드에서도 하늘을 보면 하늘 판이 뜬다 (AR 추적 없이 기울기로)");
-            Wait(() =>
-            {
-                if (skyUntil < 0) { skyUntil = EditorApplication.timeSinceStartup + 2.5; skyFrame = -1; skyMaxD = 0f; }
-                if (Time.frameCount != skyFrame)
-                {
-                    Vector3 v = cam.WorldToViewportPoint(skyB.position);
-                    if (skyFrame >= 0) skyMaxD = Mathf.Max(skyMaxD, Vector2.Distance(v, skyLast));
-                    if (!(bool)typeof(R0926SkyWeather).GetField("skyShow", F).GetValue(skyW)) skyAllOn = false;
-                    skyLast = v;
-                    skyFrame = Time.frameCount;
-                    R0926CompassMode.EditorAbs = Quaternion.Euler(0f, -Decl + (float)(rng.NextDouble() * 12.0 - 6.0), 0f) * Quaternion.Euler(-55f, 90f, 0f);
-                }
-                return EditorApplication.timeSinceStartup > skyUntil;
-            }, 5f, "하늘을 보며 나침반 ±6° 흔들기 2.5초");
-            Do(() => log.Add($"  하늘 판 화면 위치 {cam.WorldToViewportPoint(skyB.position)} · 한 프레임 사이 최대 이동 {skyMaxD:0.0000} (화면 폭 1 기준)"));
-            Check(() => skyAllOn && skyMaxD < 0.002f && Mathf.Abs(skyLast.x - 0.5f) < 0.01f && Mathf.Abs(skyLast.y - 0.5f) < 0.01f, "하늘 판은 화면 가운데에 붙어 떨리지 않는다 (나침반이 흔들려도)");
+            Check(() => skyW != null && skyB != null && !skyOn(), "나침반 모드에선 하늘을 봐도 2초 동안은 판이 안 뜬다 (3초 기다린다)");
+            Wait(() => { if (skySec < 0f && skyOn()) skySec = Time.realtimeSinceStartup - upAt; return skySec >= 0f; }, 4f, "하늘을 보면 하늘 판");
+            Do(() => log.Add($"  하늘을 본 뒤 {skySec:0.00}초에 판 · 날씨 {(skyW != null && skyW.WeatherReady ? "받음" : "없음")} · 카메라 고개 {-Mathf.DeltaAngle(0f, cam.transform.eulerAngles.x):0.0}°"));
+            Check(() => skySec >= 2.9f && skySec <= 4f, "나침반 모드에서도 하늘을 보면 하늘 판이 뜬다 — 3~4초 뒤에 (AR 추적 없이 기울기로)");
+            Sleep(1.2f);   // 천천히(1초) 나타난다
+            Wait(watchSky(2.5f, () => R0926CompassMode.EditorAbs = Quaternion.Euler(0f, -Decl + (float)(rng.NextDouble() * 12.0 - 6.0), 0f) * Quaternion.Euler(-55f, 90f, 0f)), 5f, "하늘을 보며 나침반 ±6° 흔들기 2.5초");
+            Do(() => log.Add($"  하늘 판 화면 위치 {skyLast} · 한 프레임 사이 최대 이동 {skyMaxD:0.0000} (화면 폭 1 기준) · 하늘 자리에서 {skyMaxW:0.00} m"));
+            Check(() => skyAllOn && skyMaxD < 0.002f && skyMaxW < 0.5f && Mathf.Abs(skyLast.x - 0.5f) < 0.03f && Mathf.Abs(skyLast.y - 0.5f) < 0.03f, "하늘 판은 하늘 한 자리에 걸려 떨리지 않는다 (나침반이 흔들려도 · 화면 가운데 부근)");
             Shot("compass_sky");
+
+            // 7-3) 어둠 속에서 AR 추적이 잠깐씩 잡혔다 놓쳐도 판은 그 자리 (예전엔 하늘 자리 60° ↔ 화면 가운데를 오가며 떨렸다)
+            Do(() => aim(Quaternion.Euler(-55f, 90f, 0f)));   // 흔들기 마지막 값 대신 제 나침반
+            Wait(watchSky(2f, () => R0926SkyWeather.EditorTracking = Time.frameCount / 4 % 2 == 0), 5f, "나침반 모드에서 AR 추적이 4프레임마다 잡혔다 놓쳤다 2초");
+            Do(() => { R0926SkyWeather.EditorTracking = null; log.Add($"  깜빡이는 동안 한 프레임 사이 최대 이동 {skyMaxD:0.0000} · 하늘 자리에서 {skyMaxW:0.00} m"); });
+            Check(() => skyAllOn && skyMaxD < 0.002f && skyMaxW < 0.5f, "AR 추적이 깜빡여도 하늘 판은 그 자리 — 튀지 않고 계속 떠 있다");
 
             // 8) 밝아지면 원래대로
             Do(() => { aim(Quaternion.identity); R0926CompassMode.EditorDark = false; darkAt = Time.realtimeSinceStartup; });
@@ -8368,9 +8389,33 @@ namespace Redesign0926
 
             Do(() => R0926CompassMode.EditorDark = false);
             Wait(() => !R0926CompassMode.Active, 4f, "정리: 밝게");
+
+            // 10) 나침반 모드가 아닐 때 — AR 추적이 1초 안에 잡혔다 놓쳤다 하면 판은 화면 앞 그대로, 1초 넘게 잡히면 지금 자리 그대로 하늘에 건다
+            //     (예전엔 잡히는 순간 하늘 자리 60° 로 뛰었다), 다시 놓치면 화면 가운데로 미끄러져 온다. 카메라는 초당 20° 돈다
+            Action turn = () => cam.transform.rotation = Quaternion.Euler(-70f, 30f + 20f * (float)(EditorApplication.timeSinceStartup - turnFrom), 0f);
+            Func<float> skyElev = () => Mathf.Asin(Mathf.Clamp((skyB.position - cam.transform.position).normalized.y, -1f, 1f)) * Mathf.Rad2Deg;
+            Do(() => { R0926SkyWeather.EditorTracking = false; AimCamera(-70f, 30f); });
+            Wait(() => skyOn() && skyAlpha() > 0.9f, 4f, "추적 없이 70° 하늘을 보면 판 (화면 앞)");
+            Do(() => turnFrom = EditorApplication.timeSinceStartup);
+            Wait(watchSky(2f, () => { R0926SkyWeather.EditorTracking = Time.frameCount / 6 % 2 == 0; turn(); }), 5f, "AR 추적이 6프레임마다 잡혔다 놓쳤다 2초 (돌면서)");
+            Do(() => log.Add($"  깜빡이는 동안 화면 위치 {skyLast} · 한 프레임 사이 최대 이동 {skyMaxD:0.0000}"));
+            Check(() => skyAllOn && skyMaxD < 0.002f && Mathf.Abs(skyLast.x - 0.5f) < 0.01f && Mathf.Abs(skyLast.y - 0.5f) < 0.01f, "추적이 1초 안에 깜빡이면 판은 화면 가운데 그대로 (튀지 않는다)");
+            Do(() => R0926SkyWeather.EditorTracking = true);
+            Wait(watchSky(1.3f, turn), 4f, "AR 추적이 잡혀 1.3초 (돌면서)");
+            Do(() => log.Add($"  잡히는 동안 한 프레임 사이 최대 이동 {skyMaxD:0.0000} · 판 높이 {skyElev():0.0}°"));
+            Check(() => skyAllOn && skyMaxD < 0.06f && Mathf.Abs(skyElev() - 70f) < 1.5f, "1초 넘게 잡히면 지금 자리 그대로 하늘에 건다 (60° 로 뛰지 않는다)");
+            Wait(watchSky(1f, turn), 4f, "그대로 1초 더 돌기");
+            Do(() => log.Add($"  하늘에 걸린 뒤 화면 위치 {skyLast} · 하늘 자리에서 {skyMaxW:0.00} m"));
+            Check(() => skyAllOn && skyMaxW < 0.5f && skyLast.x < 0.48f, "하늘에 걸린 판은 휴대폰을 돌리면 화면에서 흘러간다 (하늘 한 자리)");
+            Do(() => R0926SkyWeather.EditorTracking = false);
+            Wait(watchSky(1.6f, () => { }), 4f, "AR 추적을 놓치고 1.6초");
+            Do(() => log.Add($"  놓친 뒤 화면 위치 {skyLast} · 한 프레임 사이 최대 이동 {skyMaxD:0.0000}"));
+            Check(() => skyAllOn && skyMaxD < 0.06f && Mathf.Abs(skyLast.x - 0.5f) < 0.01f && Mathf.Abs(skyLast.y - 0.5f) < 0.01f, "놓치면 화면 가운데로 미끄러져 온다 (한 번에 뛰지 않는다)");
             Do(() =>
             {
                 log.Add("  Input.compass (에디터 · 새 Input System 전용 설정) " + (R0926CompassMode.EditorCompassThrew ? "예외 — 막힌다 (기기에선 자기장 센서·회전 벡터를 먼저 쓴다)" : "예외 없음"));
+                R0926SkyWeather.EditorTracking = null;
+                if (pd != null) pd.enabled = pdWasOn;
                 R0926CompassMode.EditorDark = null;
                 R0926CompassMode.EditorAbs = null;
                 R0926CompassMode.EditorRel = null;

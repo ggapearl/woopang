@@ -14,6 +14,9 @@ using UnityEngine.XR.ARFoundation;
 ///  · 하늘의 날씨판은 한 번 걸리면 그 방향에 머물러, 휴대폰을 움직이면 하늘에 붙은 것처럼 흘러간다
 ///  · 밤하늘·천장처럼 특징이 없어 AR 추적이 안 잡히면 카메라 방향이 멈춘다 — 그때는 휴대폰 중력 센서로 기울기를 읽고
 ///    날씨판은 화면 앞에 붙여 보여 준다 (예전엔 밤·실내에서 하늘을 비춰도 날씨가 안 떴다)
+///  · 나침반 모드(R0926CompassMode — 자이로가 카메라를 돌린다)에선 AR 추적과 상관없이 하늘 한 자리에 걸고, 하늘을 3초 봐야 뜬다.
+///    AR 추적은 1초 넘게 이어져야 믿는다 — 어둠 속에서 잠깐씩 잡혔다 놓치면 판이 하늘 자리 ↔ 화면 가운데를 오가며 떨렸다
+///    (11-07 대표님 「'하늘' 봤을 때 위치를 못잡아서 떨리는 느낌」). 거는 방식이 바뀌어도 판은 화면 속 그 자리에서 이어 간다
 ///  · 판을 좌우로 밀면 옆 장 — 근처 보물찾기 · 축제 · 핫플 · 친구 · 언론사 라이브 (R0926SkyPages)
 ///  · 판을 아래로 끌거나 📌 를 누르면 화면 아래쪽(주소줄 위)에 고정 — 휴대폰을 내려도 남는다. 위로 밀거나 📌 를 다시 누르면 하늘로
 ///    (10-25 대표님 「조금만 움직여도 해당 내용이 사라질 수 있으니 … 고정」). 한 번 뜬 판은 설정 각도보다 조금 더 내려야 사라진다
@@ -79,6 +82,13 @@ public class R0926SkyWeather : MonoBehaviour
     private Camera cam;
     private bool hasData;
     private bool anchored;
+    private int hang = -1;                       // 판을 거는 방식 — 0 화면 앞 · 1 하늘 한 자리 (AR 추적) · 2 하늘 한 자리 (나침반 모드)
+    private int hangFrames;                      // 방식이 바뀐 뒤 화면 속 자리를 이어받는 동안 (프레임)
+    private Vector3 hangDir = Vector3.forward;   // 카메라에서 본 판 방향 (지난 프레임) — 화면 앞에 붙일 때도 이 방향
+    private float arSince = -1f, compassSince = -1f;
+    private const float ArSteady = 1f;           // AR 추적이 이만큼 이어져야 하늘 자리에 건다
+    private const float CompassSettle = 3f;      // 나침반 모드에선 하늘을 이만큼 봐야 뜬다 (11-07 대표님 「어두운 상황에서는 하늘이 좀 천천히 (3-4초 딜레이)」)
+    private const float GlideTau = 0.4f;         // 하늘 자리에서 화면 앞으로 넘어오면 가운데로 이 빠르기로 미끄러져 온다
     private float nextFetch;
     private bool fetching;
     // 마지막으로 받은 날씨와 자리 — 앱을 켜자마자 하늘을 비춰도 바로 보이게 (예전엔 GPS 가 잡히기 전 첫 시도를 버리고 30초 뒤에야 다시 받았다)
@@ -162,6 +172,10 @@ public class R0926SkyWeather : MonoBehaviour
     /// <summary>스토어 캡처(Redesign0926PlayTest)용 — 판의 지역 이름을 이 글로 고정 (에디터 위치가 찍히지 않게). null 이면 실제 지역</summary>
     public static string EditorRegionOverride;
     public void EditorRefreshRegion() => ShowRegion(LocationManager.ShortRegion);
+    /// <summary>시험용 (Redesign0926PlayTest compass) — AR 추적이 잡혔는지 흉내 낸다. null 이면 실제 ARSession</summary>
+    public static bool? EditorTracking;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetEditorStatics() => EditorTracking = null;
 #endif
 
     private void ShowRegion(string region)
@@ -296,16 +310,28 @@ public class R0926SkyWeather : MonoBehaviour
         if (cam == null) cam = Camera.main;
         if (cam == null || skyBoard == null) return;
 
-        // AR 이 자리를 잡았을 때만 카메라 방향·위치를 믿는다
-        bool tracking = ARSession.state == ARSessionState.SessionTracking;
+        // 카메라 방향을 믿을 수 있으면 판을 하늘 한 자리에, 못 믿으면 화면 앞에 — AR 추적(1초 넘게 이어진 것만) 또는 나침반 모드.
+        // tracking 은 카메라 자리까지 믿을 때만 (누움 · 가까운 오브젝트 판정) — 나침반 모드의 카메라 자리는 대략이다
+        float now = Time.unscaledTime;
+        bool compass = R0926CompassMode.Active;
+        bool arOn = ARSession.state == ARSessionState.SessionTracking;
+#if UNITY_EDITOR
+        if (EditorTracking != null) arOn = EditorTracking.Value;
+#endif
+        arSince = arOn ? (arSince < 0f ? now : arSince) : -1f;
+        compassSince = compass ? (compassSince < 0f ? now : compassSince) : -1f;
+        bool tracking = !compass && arOn && now - arSince >= ArSteady;
+        int mode = compass ? 2 : tracking ? 1 : 0;
         Vector3 fwd = cam.transform.forward;
         float camPitch = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg;
         float pitch = SensorPitch() ?? camPitch;
         Pitch = pitch;
         // 한 번 뜬 판은 설정 각도보다 hideSlack 더 내려야 사라진다 — 경계에서 조금만 기울여도 꺼지던 것
         bool up = pitch > R0926SkySettings.MinPitch - (skyShow ? hideSlack : 0f);
-        lookUpSince = up ? (lookUpSince < 0f ? Time.unscaledTime : lookUpSince) : -1f;
-        bool settled = up && Time.unscaledTime - lookUpSince > 0.6f;   // 잠깐 스친 건 무시
+        lookUpSince = up ? (lookUpSince < 0f ? now : lookUpSince) : -1f;
+        // 잠깐 스친 건 무시 — 나침반 모드에선 하늘을 3초(켜진 뒤로도 3초) 봐야 뜬다. 이미 떠 있던 판은 그대로
+        bool slow = compass && !skyShow;
+        bool settled = up && now - (slow ? Mathf.Max(lookUpSince, compassSince) : lookUpSince) > (slow ? CompassSettle : 0.6f);
         if (tracking) UpdateLying(pitch);
         else
         {
@@ -328,15 +354,33 @@ public class R0926SkyWeather : MonoBehaviour
         boardShowing = skyShow || pinned;
         UpdateChip(boardShowing);
 
-        if (!tracking)
+        if (mode != hang)
         {
-            // 화면 앞에 붙인다 — 카메라가 멈춰 있어도 늘 화면 가운데 보인다
+            // 거는 방식이 바뀌었다 (추적이 잡힘·놓침 · 나침반 모드 켜짐·꺼짐) — 판은 지금 화면 속 자리에서 이어 간다.
+            // 두 프레임은 카메라 앞 그 자리에 두고 나서 하늘에 건다 (나침반 모드가 끝나는 프레임엔 AR 카메라 자세가 그리기 직전에야 바뀐다)
+            hangFrames = hang >= 0 && skyBoard.gameObject.activeSelf ? 2 : 0;
+            hang = mode;
             anchored = false;
-            if (skyShow || skyBoard.gameObject.activeSelf) PinToCamera();
+        }
+        if (hangFrames > 0)
+        {
+            PinToCamera();
+            if (--hangFrames == 0 && mode != 0) anchored = true;
+        }
+        else if (mode == 0)
+        {
+            // 화면 앞에 붙인다 — 카메라가 멈춰 있어도 늘 화면 가운데 보인다 (하늘 자리에서 넘어왔으면 가운데로 미끄러져 온다)
+            anchored = false;
+            if (skyShow || skyBoard.gameObject.activeSelf)
+            {
+                hangDir = Vector3.Angle(hangDir, Vector3.forward) > 50f ? Vector3.forward   // 화면 밖이었다
+                        : Vector3.Slerp(hangDir, Vector3.forward, 1f - Mathf.Exp(-Time.unscaledDeltaTime / GlideTau));
+                PinToCamera();
+            }
         }
         else if (skyShow && !anchored) Anchor(fwd, camPitch);
         if (!up && !held) anchored = false;
-        if (tracking && anchored)
+        if (mode != 0 && anchored)
         {
             // 너무 옆으로 돌아서면(70° 이상) 새 방향으로 다시 건다
             Vector3 toBoard = (skyBoard.position - cam.transform.position).normalized;
@@ -344,7 +388,7 @@ public class R0926SkyWeather : MonoBehaviour
             skyBoard.rotation = Quaternion.LookRotation(skyBoard.position - cam.transform.position);
         }
 
-        Fade(skyGroup, skyShow, 1.6f);
+        Fade(skyGroup, skyShow, compass && skyShow ? 1f : 1.6f);   // 나침반 모드에선 천천히 나타난다
         if (covered && chipGroup != null) chipGroup.alpha = 0f;   // 같은 자리에 확대/축소 표시가 곧장 뜬다 — 서서히 사라지면 글자가 겹친다
         else Fade(chipGroup, showChip, 3f);
         if (chipGroup != null) { bool touch = chipGroup.alpha > 0.5f; chipGroup.blocksRaycasts = touch; chipGroup.interactable = touch; }
@@ -352,6 +396,7 @@ public class R0926SkyWeather : MonoBehaviour
         if (skyGroup != null) { bool touch = skyShow && skyGroup.alpha > 0.5f; skyGroup.blocksRaycasts = touch; skyGroup.interactable = touch; }
         bool boardVisible = skyGroup != null && skyGroup.alpha > 0.001f;
         if (skyBoard.gameObject.activeSelf != boardVisible) skyBoard.gameObject.SetActive(boardVisible);
+        hangDir = boardVisible ? Quaternion.Inverse(cam.transform.rotation) * (skyBoard.position - cam.transform.position).normalized : Vector3.forward;
         UpdatePin();   // 하늘 자리가 이번 프레임에 정해진 뒤 — 풀 때 그 자리로 간다
     }
 
@@ -506,11 +551,13 @@ public class R0926SkyWeather : MonoBehaviour
 
     private static Vector3 Flat(Vector3 v) { v.y = 0f; return v.normalized; }
 
+    // 카메라 앞 hangDir 쪽에 (보통은 화면 가운데)
     private void PinToCamera()
     {
         float d = Mathf.Min(boardDistance, cam.farClipPlane * 0.7f);
-        skyBoard.position = cam.transform.position + cam.transform.forward * d;
-        skyBoard.rotation = Quaternion.LookRotation(cam.transform.forward);
+        Vector3 dir = cam.transform.rotation * hangDir;
+        skyBoard.position = cam.transform.position + dir * d;
+        skyBoard.rotation = Quaternion.LookRotation(dir);
         float k = 2f * d * Mathf.Tan(boardFov * 0.5f * Mathf.Deg2Rad) / 1000f;
         skyBoard.localScale = new Vector3(k, k, k);
     }
