@@ -110,7 +110,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private static string Api(string url) => url;
 #endif
 
-    [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public float lat; public float lon; public int ago; [NonSerialized] public bool exact; }
+    [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public float lat; public float lon; public int ago; public bool precise; [NonSerialized] public bool exact; }
     [Serializable] private class Resp { public string status; public bool sharing; public int mutual; public Friend[] friends; }
 
     private struct D2
@@ -128,7 +128,6 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     private readonly List<Friend> friends = new List<Friend>();
     private readonly List<GameObject> pinPool = new List<GameObject>();
-    private readonly List<GameObject> clusterPool = new List<GameObject>();
     private readonly List<GameObject> areaPool = new List<GameObject>();
     private readonly List<GameObject> huntPinPool = new List<GameObject>();
     private readonly List<GameObject> huntAreaPool = new List<GameObject>();
@@ -336,6 +335,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             mutual = r.mutual;
             friends.Clear();
             if (r.friends != null) friends.AddRange(r.friends);
+            foreach (var f in friends) f.exact = f.precise;   // 11-05 대표님 「정확한 위치를 반영해서 최종적으로 사용한 위치에」 — 서버가 1km 칸 대신 마지막 자리를 준다
             UseNearby();
             loaded = true;
             netError = false;
@@ -499,7 +499,9 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 var sel = go.transform.Find("Sel");
                 if (sel != null) sel.gameObject.SetActive(f.user_id == selectedId);
                 var btn = go.GetComponent<Button>();
-                if (btn != null) { string id = f.user_id; btn.onClick.AddListener(() => FocusFriend(id)); }   // 줄은 그 자리로만 — 프로필은 지도의 핀을 눌러서
+                if (btn != null) { string id = f.user_id; btn.onClick.AddListener(() => FocusFriend(id)); }   // 줄은 그 자리로
+                var face = go.transform.Find("Avatar")?.GetComponent<Button>();   // 동그란 사진은 프로필 (11-05 대표님)
+                if (face != null) { string id = f.user_id; face.onClick.AddListener(() => TapFriend(id)); }
                 rows.Add(go);
             }
         }
@@ -507,21 +509,21 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (adSlot != null) adSlot.SetAsLastSibling();
     }
 
-    // 근처 보물찾기 — 친구 줄 아래에 가까운 순. 자리를 알려 주는(정확히·대략 공개) 게임만 — 비공개는 지도에 자리가 없다
+    // 보물찾기 — 친구 줄 아래. 내가 연·참가한 게임이 맨 위, 그다음 근처 게임 (각각 가까운 순). 자리를 알려 주는(정확히·대략 공개) 게임만 — 비공개는 지도에 자리가 없다
     private void AddHuntRows(Vector2 me)
     {
-        var near = new List<(R0926HuntList.Spot s, float km)>();
+        var near = new List<(R0926HuntList.Spot s, float km)>();   // 내가 연·참가한 게임이 맨 위 (멀어도 — 코드로 참가한 게임을 찾아가게, 11-05 대표님) · 그다음 근처 게임, 각각 가까운 순
         foreach (var h in HuntSpots)
             if (h.coord != R0926HuntList.Coord.Hidden) near.Add((h, me == Vector2.zero ? 0f : KmTo(me, h.lat, h.lon)));
         if (near.Count == 0) return;
-        if (me != Vector2.zero) near.Sort((a, b) => a.km.CompareTo(b.km));
+        near.Sort((a, b) => a.s.mine != b.s.mine ? (a.s.mine ? -1 : 1) : a.km.CompareTo(b.km));
         if (sectionTemplate != null)
         {
             var head = Instantiate(sectionTemplate, listContent);
             head.name = "HuntSection";
             head.SetActive(true);
             var t = head.GetComponentInChildren<Text>(true);
-            if (t != null) t.text = L("근처 보물찾기", "Treasure hunts nearby", "近くの宝探し", "附近寻宝", "Tesoros cerca");
+            if (t != null) t.text = L("보물찾기", "Treasure hunts", "宝探し", "寻宝", "Búsquedas del tesoro");
             rows.Add(head);
         }
         foreach (var (h, km) in near)
@@ -725,7 +727,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         }
 
         Vector2 v = viewport.rect.size;
-        int p = 0, c = 0, a = 0;
+        int p = 0, a = 0;
         labelTaken.Clear();
         if (sharing && loggedIn)
         {
@@ -757,10 +759,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                     ((RectTransform)area.transform).sizeDelta = new Vector2(ar * 2f, ar * 2f);
                     Place((RectTransform)area.transform, g.pos);
                 }
-                if (g.members.Count == 1)
+                // 겹친 친구도 핀 하나 — 가장 최근에 접속한 친구 사진 · 이름에 오른쪽 위 '+N' (11-05 대표님 「숫자 '2'를 터치해도 프로필이 발생하지 않거든」)
                 {
                     var go = Pool(pinPool, pinTemplate, p++);
-                    var f = g.members[0];
+                    var f = Latest(g.members);
                     if (force || go.name != "Pin_" + f.user_id)
                     {
                         go.name = "Pin_" + f.user_id;
@@ -771,15 +773,14 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                         if (btn != null) { btn.onClick.RemoveAllListeners(); string id = f.user_id; btn.onClick.AddListener(() => TapFriend(id)); }
                     }
                     else FillState(go.transform.Find("Avatar"), f);   // 같은 친구 핀 — 지도를 연 채 접속 상태가 바뀌어도 (사진은 그대로)
-                    Place((RectTransform)go.transform, g.pos);
-                }
-                else
-                {
-                    var go = Pool(clusterPool, clusterTemplate, c++);
-                    var t = go.GetComponentInChildren<Text>();
-                    if (t != null) t.text = g.members.Count.ToString();
-                    var btn = go.GetComponent<Button>();
-                    if (btn != null) { btn.onClick.RemoveAllListeners(); var at = g.pos; btn.onClick.AddListener(() => Animate(at, 3f)); }
+                    var more = go.transform.Find("More");
+                    if (more != null)
+                    {
+                        bool many = g.members.Count > 1;
+                        if (more.gameObject.activeSelf != many) more.gameObject.SetActive(many);
+                        var mt = many ? more.GetComponentInChildren<Text>(true) : null;
+                        if (mt != null) mt.text = "+" + (g.members.Count - 1);
+                    }
                     Place((RectTransform)go.transform, g.pos);
                 }
             }
@@ -788,7 +789,6 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         LayoutHunts(v, force, ref hp, ref ha);
         PlaceDrop(v);
         for (int i = p; i < pinPool.Count; i++) if (pinPool[i].activeSelf) pinPool[i].SetActive(false);
-        for (int i = c; i < clusterPool.Count; i++) if (clusterPool[i].activeSelf) clusterPool[i].SetActive(false);
         for (int i = a; i < areaPool.Count; i++) if (areaPool[i].activeSelf) areaPool[i].SetActive(false);
         for (int i = hp; i < huntPinPool.Count; i++) if (huntPinPool[i].activeSelf) huntPinPool[i].SetActive(false);
         for (int i = ha; i < huntAreaPool.Count; i++) if (huntAreaPool[i].activeSelf) huntAreaPool[i].SetActive(false);
@@ -853,6 +853,14 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         return true;
     }
 
+    // 묶음에서 가장 최근에 접속한 친구 (ago 가 가장 작은)
+    private static Friend Latest(List<Friend> members)
+    {
+        var best = members[0];
+        foreach (var m in members) if (m.ago < best.ago) best = m;
+        return best;
+    }
+
     private float AreaRadius(float lat)
     {
         if (areaTemplate == null) return 0f;
@@ -909,7 +917,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         StartAnim(NormD(f.lat, f.lon), Math.Max(zoom, FocusZoom));
     }
 
-    // 목록의 친구 줄 — 그 자리로 지도를 옮기기만 (프로필은 지도의 핀을 눌러서)
+    // 목록의 친구 줄 — 그 자리로 지도를 옮기기만 (프로필은 줄의 동그란 사진이나 지도의 핀을 눌러서)
     private void FocusFriend(string id)
     {
         var f = friends.Find(x => x.user_id == id);
@@ -1041,8 +1049,20 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     public void OnPointerClick(PointerEventData e)
     {
         if (pressFired) { pressFired = false; return; }
-        if (e.clickCount == 2) Animate(LocalTopLeft(e.position), 2f);
+        // 터치는 누를 때마다 새 포인터라 clickCount 가 늘 1 — 두 번 누름을 직접 센다 (11-05 대표님 「더블터치하면 '+' 버튼 누른 것처럼」)
+        float tol = Screen.dpi > 0f ? Screen.dpi * 0.35f : 90f;
+        if (e.clickCount == 2 || (Time.unscaledTime - lastTapAt < 0.35f && (e.position - lastTapPos).sqrMagnitude < tol * tol))
+        {
+            lastTapAt = -1f;
+            Animate(LocalTopLeft(e.position), 2f);
+            return;
+        }
+        lastTapAt = Time.unscaledTime;
+        lastTapPos = e.position;
     }
+
+    private float lastTapAt = -1f;
+    private Vector2 lastTapPos;
 
     private void Pinch()
     {
@@ -1491,11 +1511,10 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         foreach (var r in rows) Kill(r);
         rows.Clear();
         foreach (var g in pinPool) Kill(g);
-        foreach (var g in clusterPool) Kill(g);
         foreach (var g in areaPool) Kill(g);
         foreach (var g in huntPinPool) Kill(g);
         foreach (var g in huntAreaPool) Kill(g);
-        pinPool.Clear(); clusterPool.Clear(); areaPool.Clear(); huntPinPool.Clear(); huntAreaPool.Clear(); friends.Clear();
+        pinPool.Clear(); areaPool.Clear(); huntPinPool.Clear(); huntAreaPool.Clear(); friends.Clear();
         previewMe = Vector2.zero;
         previewHeading = -1f;
         previewHunts = null;

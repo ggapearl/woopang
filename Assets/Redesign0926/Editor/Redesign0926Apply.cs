@@ -13,7 +13,8 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 69;  // v69: 11-02 대표님 N-AF 「하트모양은 … 살짝 각진 보석모양의 하트로 보물을 설정할 수 있도록」 — 보물 모양 '하트'를 쿠션+금 장식에서 면이 갈린 보석 하트로 (거들 20점 · 앞뒤 크라운·테이블)
+        public const int Version = 74;  // v74: 11-06 대표님 「'나침반 모드' 로 해서 어두운환경에서는 자연스럽게 이 모드로」 — LoadingManager 에 R0926CompassMode (카메라 · TrackedPoseDriver · AR 세션 · 지구 추적 연결). v73: 11-06 대표님 「보물찾기 상품 '사진' — 할인쿠폰·QR 코드 캡처」 — 양식 상품 칸 아래 사진 고르기 · 상세 상품 사진 칸(찾기 전 자물쇠) · 축하 카드 상품 칸에 사진(누르면 크게 · 저장) · 사진 크게 보기 공유 칸을 대화 사진만. v72: 11-05 대표님 「'AR세션 확인중..' 과 '주변에서 ○○을 찾았습니다' 가 겹쳐서」 — 노치 아래 두 알약(주변 장소 · AR/GPS 안내)이 한 자리를 엇갈려 쓴다(찾았어요가 잠깐 앞, 불러오는 중은 AR 안내 뒤). v71: 11-05 대표님 — 보물찾기 '3D 모델' 칸 견본을 갈색 티베탄 마스티프로 (고르기 전 미리보기). v70: 11-05 대표님 — 필터 '축제 / 보물' → '축제' · 친구 지도: 겹친 친구는 최근 접속한 사람 핀 + 오른쪽 위 '+N' 배지(묶음 숫자 대신) · 아래 목록 얼굴을 누르면 프로필(나머지는 지도 이동) · 내 방향 표시를 작은 ▲ 로 · 장소 추가·수정 입력줄 이모지 단추
+        // v69: 11-02 대표님 N-AF 「하트모양은 … 살짝 각진 보석모양의 하트로 보물을 설정할 수 있도록」 — 보물 모양 '하트'를 쿠션+금 장식에서 면이 갈린 보석 하트로 (거들 20점 · 앞뒤 크라운·테이블)
         // v68: 11-02 대표님 N-U 「'전송버튼' 좌측에 '이모지' 버튼 … 누르면 키패드가 사라지고 이모지만 잔뜩 … 키패드 전체를 채우는 식으로」 「키패드 각 버튼이 입력창 글자보다 큰 것마냥 · 아래로 스크롤 · 최상단에서 아래로 스와이프하면 창이 내려가도록」 — 이모지 창(EmojiPanel0926) · 대화·댓글 입력칸 이모지 단추 · 말풍선·미리보기·댓글 글 속 이모지 그림 · 댓글 빠른 반응 줄 지움(10-25 「채팅창 위에 이모지 … 삭제」) · 설정 '오픈소스 라이선스'
         // v67: 11-02 대표님 「유니티에서 시뮬레이터 돌렸을 때 발생하는 경고 … 개선할 수 있는 건 개선」 — 상단 그늘(Panel_Top)의 누름 소리 부품을 뗌(로고를 누르던 시절 것 · 이제 터치를 받지 않아 'requires a Button' 경고만 남겼다) · v66: 10-25 대표님 「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」 「프로필에서는 해당 glb 파일이 보이고」 — 편집 시트 3D 모델 칸 · 사진/3D 고르기 · 프로필 화면 둥근 사진 위 3D 칸
         // v65: 11-02 「사람 오브젝트 — 정면이 항상 보이는 동그라미, 테두리에 핑크색 원 (우측하단 프로필 버튼처럼)」 — P2P_Avatar/Cube 를 사진 원으로
@@ -101,6 +102,7 @@ namespace Redesign0926
             ApplyMapCoord(root, log);           // 지도 꾹 눌러 핀 · 좌표 검색 (입력칸 다듬기보다 먼저)
             ApplyCrop(root, log);               // 대표 사진 자르기 화면 · 처리 중 카드 (도크 소리를 쓰므로 도크 뒤)
             ApplyPerson(scene, log);            // 사람 오브젝트 — 씬 맨 바깥에 있어 캔버스와 무관
+            ApplyCompass(scene, log);           // 나침반 모드 — 어두워 위치 추적이 멈추면 저절로 (캔버스와 무관)
             ApplyChatPhoto(root, log);          // 대화방 + 버튼 · 사진 크게 보기 · 팔로잉 공유 시트
             ApplyEmoji(root, log);              // 이모지 창 · 입력칸 이모지 단추 — 입력칸 글 자리(Apply10 · CommentBar)가 정해진 뒤에
             ApplyReadable(root, log);           // 토스트 · 앱 전체 최소 글자 · 입력칸 커서 — 다른 단계가 글자 크기를 다 정한 뒤에
@@ -635,7 +637,7 @@ namespace Redesign0926
             ("CategoryToggle", R0926FilterChip.Kind.Category, "#E8EDF1", null),
             ("PetFriendlyToggle", R0926FilterChip.Kind.Pet, "#FFC107", new[] { "애견동반", "Pet-friendly", "ペット同伴", "可带宠物", "Con mascotas" }),   // 10-26 대표님 — 켜면 진한 노랑
             ("PublicDataToggle", R0926FilterChip.Kind.Simple, "#59B7FF", new[] { "공공데이터", "Public data", "公共データ", "公共数据", "Público" }),
-            ("FestivalToggle", R0926FilterChip.Kind.Simple, "#FF6B57", new[] { "축제 / 보물", "Fests / Hunts", "祭り / 宝探し", "节庆 / 寻宝", "Fiesta / Tesoro" }),   // 10-27 대표님 '축제' → '축제 / 보물'
+            ("FestivalToggle", R0926FilterChip.Kind.Simple, "#FF6B57", new[] { "축제", "Festivals", "祭り", "节庆", "Fiestas" }),   // 11-05 대표님 「보물찾기는 항상 나오니까 '축제 / 보물' 말고 '축제'」
             ("MetroToggle", R0926FilterChip.Kind.Simple, "#3FC1B0", new[] { "지하철", "Subway", "地下鉄", "地铁", "Metro" }),
             // 한 칸이 되어 스페인어는 짧게 (Terminal / Tren 은 최소 글자로도 칸을 넘는다)
             ("TerminalToggle", R0926FilterChip.Kind.Simple, "#7DDC54", new[] { "터미널 / 기차", "Bus / Train", "ターミナル / 駅", "客运站 / 火车站", "Bus / Tren" }),

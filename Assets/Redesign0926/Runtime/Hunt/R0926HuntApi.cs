@@ -51,6 +51,17 @@ public static class R0926HuntApi
         return Base.TrimEnd('/') + "/" + path.TrimStart('/');
     }
 
+    /// <summary>상품 사진(쿠폰·QR 캡처 — 11-06)의 기기 캐시 이름. 크게 보기(R0926PhotoView)는 "f_" + 이 이름으로 같은 캐시를 쓴다</summary>
+    public static string PrizeFile(string url) => "hp_" + System.IO.Path.GetFileName(url ?? "");
+
+    /// <summary>상품 사진 받기 — 한 번 받은 것은 기기에 두고(매장에서 꺼내 볼 때 바로) 다시 쓴다. 못 받으면 null</summary>
+    public static IEnumerator LoadPrize(string url, Action<Texture2D> done)
+    {
+        byte[] bytes = null;
+        yield return R0926ChatPhoto.Fetch(Url(url), "f_" + PrizeFile(url), b => bytes = b);
+        done(R0926ChatPhoto.Decode(bytes));
+    }
+
     /// <summary>파일 올리기 (보물 모양 사진·3D 모델) — multipart 'file' + 글자 칸들</summary>
     public static IEnumerator Upload(string path, byte[] data, string fileName, string mime, Dictionary<string, string> fields, Action<long, JSONNode> done)
     {
@@ -143,6 +154,7 @@ public static class R0926HuntApi
             case "object": case "object_url": case "file": return L("보물 모양을 다시 골라 주세요", "Please choose the treasure's look again", "宝の見た目をもう一度選んでください", "请重新选择宝藏外观", "Vuelve a elegir el aspecto del tesoro");
             case "file_type": return L("이 파일은 쓸 수 없어요 — 사진(JPG·PNG) 또는 GLB 한 파일로 골라 주세요", "Can't use this file — choose a photo (JPG/PNG) or a single GLB", "このファイルは使えません — 写真（JPG・PNG）か GLB 1ファイルを選んでください", "无法使用此文件 — 请选择照片（JPG/PNG）或单个 GLB", "No se puede usar este archivo — elige una foto (JPG/PNG) o un solo GLB");
             case "file_size": return L("파일이 너무 커요 — 3D 모델은 10MB 까지예요", "File too large — 3D models up to 10MB", "ファイルが大きすぎます — 3Dモデルは10MBまでです", "文件太大 — 3D 模型最大 10MB", "Archivo demasiado grande — modelos 3D hasta 10 MB");
+            case "prize_photo": return L("상품 사진을 다시 골라 주세요", "Please choose the prize photo again", "賞品の写真をもう一度選んでください", "请重新选择奖品照片", "Vuelve a elegir la foto del premio");
             case "upload_limit": return L("오늘은 더 올릴 수 없어요 — 내일 다시 해 주세요", "Upload limit reached for today", "今日はこれ以上アップロードできません", "今天无法再上传了", "Has alcanzado el límite de subidas de hoy");
             default: return L("잠시 뒤 다시 해 주세요", "Please try again shortly", "少ししてからもう一度お試しください", "请稍后再试", "Inténtalo de nuevo en breve");
         }

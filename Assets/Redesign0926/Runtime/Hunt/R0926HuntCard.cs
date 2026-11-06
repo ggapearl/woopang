@@ -11,7 +11,8 @@ using UnityEngine.UI;
 /// <summary>
 /// '추가' 창 세 번째 카드 — 보물찾기 (2026-10-06 대표님: 주최는 장소 추가·3D모델 추가 옆에서. 따로 탭은 찾기 어렵다).
 ///  · 처음: 맨 위 '지금 이 자리에 보물 숨기기' · 코드로 참가 · 근처 보물찾기(참가) · 내 게임
-///  · 숨기기: 처음엔 주최 수칙 동의 → 양식(현장 GPS · 제목 · 상품 · 힌트 · 모양 · 방식 · 인원 · 보이는 거리 · 범위 · 대상 · 시작 · 진행 시간)
+///  · 숨기기: 처음엔 주최 수칙 동의 → 양식(현장 GPS · 제목 · 상품 · 상품 사진 · 힌트 · 모양 · 방식 · 인원 · 보이는 거리 · 범위 · 대상 · 시작 · 진행 시간)
+///    상품 사진(11-06 — 할인쿠폰·QR 코드 캡처)은 주최자와 찾은 사람만 본다 — 상세에서 눌러 크게 보고 저장(R0926PhotoView), 찾기 전엔 자물쇠
 ///    → 확인 카드(고치기 · 숨기기) → 숨기면 같은 카드에 참가 코드 · 공유하기 (10-26) · 공유 링크로 열면 OpenLink(코드가 있으면 바로 참가)
 ///  · 상세: 게임 정보 · 참가/나가기/포기 · 8초마다 근접 단계 · 찾기는 AR 보물을 두 번 톡톡(R0926HuntTreasure — '보물 열기' 버튼은 10-14 대표님 요청으로 없앰),
 ///    코드 게임은 보이는 거리 안에서 코드 칸 · 찾은 사람·주최자 메시지 · 주최자 늘리기(1시간·1일 한 줄)/끝내기/위치 공개
@@ -64,6 +65,17 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private Button pickButton;
     [SerializeField] private Text pickLabel;
     [SerializeField] private Text pickCaption;
+
+    [Header("상품 사진 (11-06 — 쿠폰·QR 캡처 · 주최자와 찾은 사람만 본다)")]
+    [SerializeField] private Button prizePhotoButton;     // 양식 — 사진 고르기 · 바꾸기
+    [SerializeField] private Text prizePhotoLabel;
+    [SerializeField] private Button prizePhotoRemove;     // 양식 — 빼기
+    [SerializeField] private RawImage prizePhotoThumb;    // 양식 — 고른 사진 (칸은 그 부모)
+    [SerializeField] private Button dPrizePhoto;          // 상세 — 누르면 크게 보고 저장
+    [SerializeField] private RawImage dPrizePhotoThumb;
+    [SerializeField] private GameObject dPrizePhotoLock;  // 상세 — 찾기 전 자물쇠
+    [SerializeField] private Text dPrizePhotoText;
+    [SerializeField] private R0926PhotoView photoView;    // 크게 보기 (대화방 사진과 같은 화면)
 
     [Header("주최 수칙")]
     [SerializeField] private Text rulesTitle;
@@ -156,6 +168,14 @@ public class R0926HuntCard : MonoBehaviour
     private readonly R0926PickerWait pick = new R0926PickerWait();
     private const int ModelMax = 10 * 1024 * 1024;   // 서버 OBJECT_MAX['model'] 과 같다
 
+    // 상품 사진 — 숨길 때 올린다 (올린 주소는 다시 숨길 때 그대로). 쿠폰 바코드가 읽히게 크게 (서버 PRIZE_SIDE 와 같다)
+    private byte[] prizeData;
+    private Texture2D prizeTex;
+    private string prizeUrl;
+    private Texture2D dPrizeTex;              // 상세에 띄운 상품 사진
+    private string dPrizeFor;                 // 그 사진의 주소 (받는 중이어도)
+    private const int PrizeSide = 2048;
+
     private static string Lang => R0926LocalizedText.Lang();
     private static string T(string ko, string en, string ja, string zh, string es) => R0926LocalizedText.Say(ko, en, ja, zh, es);
 
@@ -192,6 +212,9 @@ public class R0926HuntCard : MonoBehaviour
         Wire(reviewDim, OnReviewBack);
         Wire(shareButton, ShareCurrent);
         Wire(pickButton, OnPick);
+        Wire(prizePhotoButton, OnPickPrize);
+        Wire(prizePhotoRemove, () => { if (busy) return; ClearPrize(); PaintPrize(); });
+        Wire(dPrizePhoto, OpenPrizePhoto);
         Wire(agreeRow, () => { agreed = !agreed; PaintAgree(); });
         Wire(agreeButton, () => StartCoroutine(Accept()));
         Wire(rulesBack, ShowHub);
@@ -475,6 +498,7 @@ public class R0926HuntCard : MonoBehaviour
         pickNote = null;
         PaintCodeBox();
         PaintShape();
+        PaintPrize();
         PaintAudience();
         PaintSubmit();
     }
@@ -582,7 +606,7 @@ public class R0926HuntCard : MonoBehaviour
         {
             if (have && k == "photo") shapePreview.ShowPhoto(objTex);
             else if (have && k == "model") shapePreview.ShowModel(objData);
-            else shapePreview.Show(k == "model" ? "chest" : k);   // 3D 모델을 아직 안 골랐으면 — 못 열 때 보이는 보물상자
+            else shapePreview.Show(k);   // 3D 모델을 아직 안 골랐으면 — 견본(티베탄 마스티프)
         }
         PaintPick();
     }
@@ -688,6 +712,134 @@ public class R0926HuntCard : MonoBehaviour
         TakeObject("model", data, null);
     }
 
+    // ── 상품 사진 (11-06 대표님 — 할인쿠폰·QR 코드 캡처를 찾은 사람에게) ──
+    private void OnPickPrize()
+    {
+        if (busy) return;
+        if (pick.Waiting && !pick.TryAbandon()) { FormMsg(R0926PickerWait.BusyText); return; }
+        StartCoroutine(PickPrize());
+    }
+
+    private IEnumerator PickPrize()
+    {
+        if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Gallery)) { FormMsg(R0926PickerWait.BusyText); yield break; }
+        bool answered = false;
+        string path = null;
+        int t = pick.Begin(R0926PickerWait.Source.Gallery);
+        try
+        {
+            NativeGallery.GetImageFromGallery(p => { if (!pick.End(t)) return; path = p; answered = true; },
+                T("상품 사진 고르기", "Choose a prize photo", "賞品の写真を選ぶ", "选择奖品照片", "Elige la foto del premio"), "image/*");
+        }
+        catch (Exception) { pick.End(t); answered = true; }
+        yield return new WaitUntil(() => answered || !pick.Holds(t));
+        if (!answered || string.IsNullOrEmpty(path)) yield break;
+        if (prizePhotoLabel != null) prizePhotoLabel.text = T("사진을 읽는 중…", "Reading the photo…", "写真を読み込み中…", "正在读取照片…", "Leyendo la foto…");
+        yield return null;
+        Texture2D tex = null;
+        byte[] jpg = null;
+        try
+        {
+            tex = NativeGallery.LoadImageAtPath(path, PrizeSide, false, false);
+            if (tex != null) jpg = tex.EncodeToJPG(92);
+        }
+        catch (Exception) { jpg = null; }
+        if (jpg == null)
+        {
+            if (tex != null) Destroy(tex);
+            PaintPrize();
+            FormMsg(T("이 사진은 열 수 없어요 — 다른 사진을 골라 주세요", "Couldn't open this photo — choose another", "この写真は開けません — 別の写真を選んでください", "无法打开这张照片 — 请选择其他照片", "No se pudo abrir esta foto — elige otra"));
+            yield break;
+        }
+        TakePrize(jpg, tex);
+    }
+
+    private void TakePrize(byte[] jpg, Texture2D tex)
+    {
+        ClearPrize();
+        prizeData = jpg; prizeTex = tex;
+        if (formMsg != null) formMsg.text = "";
+        PaintPrize();
+    }
+
+    private void ClearPrize()
+    {
+        if (prizeTex != null) Destroy(prizeTex);
+        prizeTex = null; prizeData = null; prizeUrl = null;
+    }
+
+    private void PaintPrize()
+    {
+        bool have = prizeData != null;
+        if (prizePhotoThumb != null)
+        {
+            prizePhotoThumb.texture = prizeTex;
+            Envelope(prizePhotoThumb, prizeTex);
+            prizePhotoThumb.transform.parent.gameObject.SetActive(have);
+        }
+        if (prizePhotoRemove != null) prizePhotoRemove.gameObject.SetActive(have);
+        if (prizePhotoLabel != null)
+            prizePhotoLabel.text = have ? T("다른 사진으로 바꾸기", "Change photo", "別の写真に変える", "更换照片", "Cambiar foto")
+                                        : T("＋ 상품 사진 (쿠폰·QR)", "+ Prize photo (coupon · QR)", "＋ 賞品の写真（クーポン・QR）", "＋ 奖品照片（优惠券·二维码）", "+ Foto del premio (cupón · QR)");
+    }
+
+    // 네모 칸을 꽉 채우게 — 넘치는 쪽은 칸의 마스크가 자른다
+    private static void Envelope(RawImage img, Texture tex)
+    {
+        var f = img.GetComponent<AspectRatioFitter>();
+        if (f != null && tex != null) f.aspectRatio = tex.width / (float)Mathf.Max(1, tex.height);
+    }
+
+    // 상세 — 주최자·찾은 사람은 사진(누르면 크게 · 저장), 다른 사람은 자물쇠와 '찾으면 열려요'
+    private void PaintPrizePhoto(JSONNode h)
+    {
+        if (dPrizePhoto == null) return;
+        string url = h.HasKey("prize_photo") ? (string)h["prize_photo"] : "";
+        bool have = !string.IsNullOrEmpty(url), locked = !have && h["prize_photo_locked"].AsBool;
+        dPrizePhoto.gameObject.SetActive(have || locked);
+        dPrizePhoto.interactable = have;
+        if (dPrizePhotoLock != null) dPrizePhotoLock.SetActive(locked);
+        if (dPrizePhotoText != null)
+            dPrizePhotoText.text = have ? T("상품 사진 보기  ›", "View the prize photo  ›", "賞品の写真を見る  ›", "查看奖品照片  ›", "Ver la foto del premio  ›") + "\n<size=36><color=#8C959D>"
+                                          + T("눌러서 크게 보고 저장할 수 있어요", "Tap to view it large and save it", "タップで大きく表示・保存できます", "点击可放大查看并保存", "Toca para verla en grande y guardarla") + "</color></size>"
+                                        : T("상품 사진이 있어요", "There's a prize photo", "賞品の写真があります", "有奖品照片", "Hay una foto del premio") + "\n<size=36><color=#8C959D>"
+                                          + T("보물을 찾으면 열려요", "It unlocks when you find the treasure", "宝を見つけると開きます", "找到宝藏后即可查看", "Se desbloquea al encontrar el tesoro") + "</color></size>";
+        if (!have) { SetPrizeThumb(null, null); return; }
+        if (url == dPrizeFor) return;   // 받았거나 받는 중
+        SetPrizeThumb(null, url);
+        StartCoroutine(LoadDetailPrize(url));
+    }
+
+    private void SetPrizeThumb(Texture2D tex, string forUrl)
+    {
+        if (dPrizeTex != null && dPrizeTex != tex) Destroy(dPrizeTex);
+        dPrizeTex = tex;
+        dPrizeFor = forUrl;
+        if (dPrizePhotoThumb == null) return;
+        dPrizePhotoThumb.texture = tex;
+        dPrizePhotoThumb.enabled = tex != null;
+        Envelope(dPrizePhotoThumb, tex);
+    }
+
+    private IEnumerator LoadDetailPrize(string url)
+    {
+        Texture2D tex = null;
+        yield return R0926HuntApi.LoadPrize(url, t => tex = t);
+        if (url != dPrizeFor) { if (tex != null) Destroy(tex); yield break; }   // 그사이 다른 게임을 열었다
+        if (tex == null) { dPrizeFor = null; yield break; }                     // 다음에 그릴 때 다시 받는다
+        SetPrizeThumb(tex, url);
+    }
+
+    private void OpenPrizePhoto()
+    {
+        if (dPrizeTex == null || string.IsNullOrEmpty(dPrizeFor))
+        {
+            Toast(T("사진을 받는 중이에요 — 잠시만요", "Loading the photo — one moment", "写真を読み込み中です — 少々お待ちください", "正在加载照片 — 请稍候", "Cargando la foto — un momento"), 2f);
+            return;
+        }
+        if (photoView != null) photoView.OpenPrize(dPrizeFor, dPrizeTex);
+    }
+
     // GLB 2.0 한 파일 — 서버(_glb_ok)와 같은 앞머리 검사 (바깥 파일을 부르는지는 서버가 본다)
     private static bool IsGlb(byte[] d) =>
         d != null && d.Length >= 20 && d[0] == 0x67 && d[1] == 0x6C && d[2] == 0x54 && d[3] == 0x46
@@ -719,6 +871,13 @@ public class R0926HuntCard : MonoBehaviour
     /// <summary>플레이 시험 — 고르기 창 없이 사진(JPG·PNG)·3D 모델(GLB)을 고른 것처럼</summary>
     public void EditorPick(string kind, byte[] bytes)
     {
+        if (kind == "prize")
+        {
+            var pt = new Texture2D(2, 2);
+            if (pt.LoadImage(bytes)) TakePrize(pt.EncodeToJPG(92), pt);
+            else Destroy(pt);
+            return;
+        }
         if (kind == "photo")
         {
             var tex = new Texture2D(2, 2);
@@ -820,7 +979,7 @@ public class R0926HuntCard : MonoBehaviour
         var rows = new List<(string, string)>
         {
             (T("제목", "Title", "タイトル", "标题", "Título"), Field(titleInput)),
-            (T("상품", "Prize", "賞品", "奖品", "Premio"), prize.Length > 0 ? prize : none),
+            (T("상품", "Prize", "賞品", "奖品", "Premio"), PrizeRow(prize, none)),
             (T("힌트", "Hint", "ヒント", "提示", "Pista"), hint.Length > 0 ? Cut(hint, 60) : none),
             (T("보물 모양", "Shape", "宝の形", "宝藏外形", "Forma"), Pick(Shapes, Shape)),
             (T("찾는 방식", "How", "見つけ方", "寻宝方式", "Cómo"), locked ? T("비밀번호 ", "Password ", "パスワード ", "密码 ", "Contraseña ") + Field(codeInput) + (question.Length > 0 ? "\n" + T("힌트 ", "Hint ", "ヒント ", "提示 ", "Pista ") + Cut(question, 40) : "") : Pick(Modes, "touch")),
@@ -864,6 +1023,13 @@ public class R0926HuntCard : MonoBehaviour
         }
         Set(reviewEdit, true); Set(reviewGo, true); Set(reviewShare, false); Set(reviewDone, false);
         PaintSubmit();
+    }
+
+    private string PrizeRow(string prize, string none)
+    {
+        if (prizeData == null) return prize.Length > 0 ? prize : none;
+        string photo = T("사진 1장 — 찾은 사람에게만 보여요", "1 photo — only finders see it", "写真1枚 — 見つけた人だけに表示", "1 张照片 — 仅找到的人可见", "1 foto — solo la ve quien lo encuentre");
+        return prize.Length > 0 ? prize + "\n" + photo : photo;
     }
 
     // 숨긴 뒤 — 같은 카드에 참가 코드 · 공유하기 · 확인 (참가 코드 게임은 코드·링크를 받은 사람만 들어온다)
@@ -945,12 +1111,33 @@ public class R0926HuntCard : MonoBehaviour
             }
             b["object_url"] = objUrl;
         }
+        if (prizeData != null && string.IsNullOrEmpty(prizeUrl))
+        {
+            // 상품 사진 — 보물 모양과 같이 먼저 올리고 받은 주소로 (찾은 사람·주최자만 받는다)
+            byte[] pd = prizeData;
+            uploading = true; PaintSubmit();
+            long pc = 0; JSONNode pj = null;
+            yield return R0926HuntApi.Upload("/api/hunts/object", pd, "prize.jpg", "image/jpeg",
+                                             new Dictionary<string, string> { { "kind", "prize" } }, (c, r) => { pc = c; pj = r; });
+            uploading = false;
+            string purl = pc == 200 && pj != null && pj["ok"].AsBool ? (string)pj["url"] : null;
+            if (string.IsNullOrEmpty(purl) || !ReferenceEquals(prizeData, pd))
+            {
+                busy = false; PaintSubmit();
+                string pe = pj != null ? (string)pj["error"] : null;
+                if (string.IsNullOrEmpty(purl)) Warn(pc == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(pe == "object" || pe == "file" ? "prize_photo" : pe, Lang));
+                yield break;
+            }
+            prizeUrl = purl;
+        }
+        if (prizeData != null) b["prize_photo"] = prizeUrl;
         long code = 0; JSONNode j = null;
         yield return R0926HuntApi.Post("/api/hunts", b, (c, r) => { code = c; j = r; });
         busy = false; PaintSubmit();
         if (code == 200 && j["ok"].AsBool)
         {
             foreach (var f in new[] { titleInput, hintInput, codeInput, questionInput, prizeInput }) if (f != null) f.text = "";
+            ClearPrize(); PaintPrize();   // 상품 사진도 이 보물 것
             if (file)
             {
                 // 고른 파일은 이 보물 것 — 다음 보물은 새로 고른다 (내 3D 모델은 AR 에서 다시 받지 않게 캐시에)
@@ -969,6 +1156,7 @@ public class R0926HuntCard : MonoBehaviour
             yield break;
         }
         if (j["error"] == "need_rules") { HideReview(); rulesAccepted = false; StartCoroutine(OpenRules(true)); yield break; }
+        if (j["error"] == "prize_photo") prizeUrl = null;   // 올린 사진이 하루가 지나 치워졌다 — 다음엔 다시 올린다
         Warn(code == 401 ? R0926HuntApi.ErrorText("login", Lang) : R0926HuntApi.ErrorText(j["error"], Lang));
     }
 
@@ -1191,6 +1379,7 @@ public class R0926HuntCard : MonoBehaviour
         bool full = h["full"].AsBool;
         lines.Add(T("참가  ", "Players  ", "参加  ", "参加  ", "Jugadores  ") + PlayerCount(h) + T("명", "", "人", "人", "") + (full ? T(" · 마감", " · full", " · 満員", " · 已满", " · completo") : ""));
         if (dInfo != null) dInfo.text = string.Join("\n", lines);
+        PaintPrizePhoto(h);
         if (dMine != null)
             dMine.text = host ? (open ? T("내가 연 게임이에요 — 보물 근처에 가면 내 보물이 보여요", "You're the host — your treasure shows up when you're near it", "あなたが主催したゲームです — 宝の近くに行くと自分の宝が見えます", "这是你主办的游戏 — 走近宝藏就能看到", "Organizas este juego — verás tu tesoro cuando estés cerca")
                                       : T("내가 연 게임이에요", "You're the host", "あなたが主催したゲームです", "这是你主办的游戏", "Organizas este juego"))
@@ -1296,6 +1485,7 @@ public class R0926HuntCard : MonoBehaviour
         // 참가 전이면 '참가하기·공유하기' 아래로 — 참가 버튼이 밀려 내려가지 않게. 그 밖엔 게임 정보 바로 아래 (현황)
         bool joinFirst = joinButton != null && joinButton.gameObject.activeSelf;
         Transform after = joinFirst ? (shareButton != null && shareButton.gameObject.activeSelf ? shareButton.transform : joinButton.transform)
+                                    : dPrizePhoto != null && dPrizePhoto.gameObject.activeSelf ? dPrizePhoto.transform   // 상품 사진은 게임 정보에 붙여 둔다
                                     : dInfo != null ? dInfo.transform : null;
         if (after != null && after.parent == findersBox.transform.parent)
         {
@@ -1496,7 +1686,8 @@ public class R0926HuntCard : MonoBehaviour
                 if (claimCodeInput != null) claimCodeInput.text = "";
                 R0926HuntTreasure.Untrack(id);
                 R0926HuntList.Stale();
-                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, current["prize"], current["host"]["username"], current["object_kind"], current["object_url"], null, current["mode"] == "code"))
+                if (!R0926HuntCelebrate.Show(id, current["title"], j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, current["prize"], current["host"]["username"], current["object_kind"], current["object_url"], null, current["mode"] == "code",
+                                             j.HasKey("prize_photo") ? (string)j["prize_photo"] : null))
                     Toast(T("보물을 찾았어요! " + j["rank"].AsInt + "번째", "You found it! #" + j["rank"].AsInt, "宝を見つけました！" + j["rank"].AsInt + "番目", "找到宝藏了！第 " + j["rank"].AsInt + " 个", "¡Lo encontraste! #" + j["rank"].AsInt), 4f);
                 StartCoroutine(OpenDetail(id));
                 break;

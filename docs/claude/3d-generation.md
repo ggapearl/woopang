@@ -58,7 +58,7 @@ INSERT INTO locations (
 | 텍스처 | 1024×1024 권장, KTX2 압축 |
 | 본 수 | 30~50 권장 (Mixamo 65 표준에서 감산) |
 | 애니메이션 | 첫 클립이 자동 루프 재생됨 (`GLBModelLoader.TryPlayAnimation()`) |
-| 압축 | Draco 메시 + KTX2 텍스처 필수 (안 하면 8~15MB로 부풀음) |
+| 압축 | ⚠️ **Draco 쓰지 말 것** — 앱 glTFast 에 Draco 해독기(`com.unity.cloud.draco`)가 없어 Draco GLB 는 열리지 않는다(2026-11-05 확인: 견본 강아지가 보물상자로 떨어짐). 텍스처 JPEG 1024 + 면 수 줄이기로 크기를 맞춘다 (15k tri + 텍스처 = 약 0.6MB) |
 
 ---
 
@@ -85,7 +85,8 @@ INSERT INTO locations (
 4. `bpy.ops.object.armature_add` → `edit_bones.new(...)` 본 추가
 5. `bpy.ops.object.parent_set(type='ARMATURE_AUTO')` Auto-weight 스키닝
 6. Pose mode에서 `keyframe_insert("location"/"rotation_euler")`로 안무
-7. `bpy.ops.export_scene.gltf(export_draco_mesh_compression_enable=True, level=6)` GLB export
+7. `bpy.ops.export_scene.gltf(export_draco_mesh_compression_enable=False, export_image_format='JPEG')` GLB export (Draco 금지 — 위 표)
+8. **앱은 모든 재질을 URP/Unlit 으로 바꾼다(조명 없음)** — 음영·털결은 텍스처에 구워 넣어야 입체로 보인다. 예: 고해상(복셀 리메시+노이즈 털결, 정점색) → 데시메이트 저해상+UV → Cycles 「선택→활성」 굽기 2번(색 COLOR · 빛 DIRECT+INDIRECT) → numpy 로 색×음영. 실례: 보물찾기 견본 티베탄 마스티프 `C:\woopang-app\mockups\tibetan_mastiff\`(스크립트 사본 포함 · 앱 `Assets/Redesign0926/Meshes/HuntSampleMastiff.bytes`)
 
 ### 한계
 - 박스 조합 → 아무리 잘해도 "스타일라이즈" 수준
@@ -105,7 +106,7 @@ INSERT INTO locations (
 3. 사람 모델 업로드 시: 턱·손목·무릎·사타구니 5점 클릭 → Auto-Rigger
 4. **Find Animations** → "Hip Hop Dance", "K-pop", "Samba" 등 무료 라이브러리
 5. Format=**FBX Binary**, Skin=With Skin, FPS=30, Keyframe Reduction=None → Download
-6. Blender import → glTF 2.0 export (Draco + animations 체크)
+6. Blender import → glTF 2.0 export (animations 체크 · Draco 는 끔 — 위 표)
 
 ### Tip
 - 자체 모델 업로드는 **T-pose 또는 A-pose** 권장

@@ -9,6 +9,7 @@ using UnityEngine.UI;
 /// 아래 한 줄 큰 세 칸 '닫기 / 다운로드 / 공유' — 사진 자르기 화면과 같은 카드 · 칸 · 물방울 소리.
 /// 말풍선의 작은 사진을 바로 보여 주고 원본을 받아 바꿔 끼운다. 두 손가락·두 번 톡·휠로 키우고, 맞춤 크기에서 위아래로 끌면 닫힌다(뒤로가기도).
 /// 대화방이 닫히면 같이 닫힌다(알림을 눌러 다른 방으로 옮길 때). 화면은 Redesign0926ApplyChatPhoto 가 만들어 꺼 둔다
+/// 보물찾기 상품 사진(쿠폰·QR — 11-06)도 이 화면으로 연다(OpenPrize) — 대화방과 상관없이 · 공유(팔로잉에게 대화로) 칸은 빼고 닫기 · 다운로드 두 칸
 /// </summary>
 public class R0926PhotoView : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IScrollHandler, IPointerClickHandler
 {
@@ -17,6 +18,7 @@ public class R0926PhotoView : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     [SerializeField] private Image backdrop;
     [SerializeField] private RectTransform bar;        // 닫기 · 다운로드 · 공유 카드
     [SerializeField] private RectTransform[] tiles = new RectTransform[0];   // 카드 안 칸 (왼쪽부터 — 가로 화면에선 위부터)
+    [SerializeField] private RectTransform shareTile;  // 공유 칸 — 대화 사진만 (상품 사진은 뺀다)
     [SerializeField] private RectTransform spin;
     [SerializeField] private R0926PhotoShare share;
     [SerializeField] private GameObject chatRoom;
@@ -27,6 +29,7 @@ public class R0926PhotoView : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     private const int NoPointer = int.MinValue;
 
     private R0926ChatPhoto.Ref cur;
+    private bool roomBound;                            // 대화방 사진 — 방이 닫히면 같이 닫는다
     private Texture2D full;
     private byte[] fullBytes;
     private bool loading, saving, saveAfterLoad, pinching, pulling;
@@ -50,10 +53,21 @@ public class R0926PhotoView : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     }
 
     /// <param name="thumb">말풍선에 보이던 작은 사진 — 원본이 올 때까지 보여 준다 (없으면 도는 표시만)</param>
-    public void Open(R0926ChatPhoto.Ref reference, Texture thumb)
+    public void Open(R0926ChatPhoto.Ref reference, Texture thumb) => Open(reference, thumb, true);
+
+    /// <summary>보물찾기 상품 사진(쿠폰·QR — 11-06) — 받아 둔 사진 그대로 크게. 다운로드는 사진첩으로, 공유 칸은 뺀다</summary>
+    public void OpenPrize(string url, Texture tex)
+    {
+        if (tex == null || string.IsNullOrEmpty(url)) return;
+        Open(new R0926ChatPhoto.Ref { url = R0926HuntApi.Url(url), file = R0926HuntApi.PrizeFile(url), w = tex.width, h = tex.height }, tex, false);
+    }
+
+    private void Open(R0926ChatPhoto.Ref reference, Texture thumb, bool chat)
     {
         if (IsOpen) return;
         cur = reference;
+        roomBound = chat;
+        if (shareTile != null) shareTile.gameObject.SetActive(chat);
         gameObject.SetActive(true);
         photo.texture = thumb;
         photo.enabled = thumb != null;
@@ -156,7 +170,7 @@ public class R0926PhotoView : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     private void Update()
     {
         if (cur == null) return;
-        if (chatRoom != null && !chatRoom.activeInHierarchy) { Close(); return; }
+        if (roomBound && chatRoom != null && !chatRoom.activeInHierarchy) { Close(); return; }
         if (laidFor != ((RectTransform)transform).rect.size || laidSafe != Screen.safeArea) Relayout();
         if (bar.gameObject.activeSelf == ShareOpen) bar.gameObject.SetActive(!ShareOpen);   // 공유 시트 틈으로 세 칸이 비치지 않게
         if (photo.enabled && photo.texture == null) photo.enabled = false;   // 말풍선이 작은 사진을 내려놓았다 — 원본이 올 때까지
@@ -381,12 +395,14 @@ public class R0926PhotoView : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
             R0926PhotoCrop.Stretch(bar, new Vector2(1, 0), new Vector2(1, 1), new Vector2(-right, insB + BarSide), new Vector2(-insR - BarSide, -insT - BarSide));
             r = Rect.MinMaxRect(insL, insB + Gap, size.x - right - Gap, size.y - insT - Gap);
         }
-        // 칸 사이 간격이 같게 — i 번째 칸은 앞쪽을 i·g/n, 뒤쪽을 (n-1-i)·g/n 만큼 줄인다
-        int n = tiles.Length;
-        for (int i = 0; i < n; i++)
+        // 칸 사이 간격이 같게 — i 번째 칸은 앞쪽을 i·g/n, 뒤쪽을 (n-1-i)·g/n 만큼 줄인다 (꺼 둔 칸은 빼고 — 상품 사진은 두 칸)
+        int n = 0;
+        foreach (var t in tiles) if (t != null && t.gameObject.activeSelf) n++;
+        int i = -1;
+        foreach (var t in tiles)
         {
-            var t = tiles[i];
-            if (t == null) continue;
+            if (t == null || !t.gameObject.activeSelf) continue;
+            i++;
             float a = i / (float)n, b = (i + 1) / (float)n;
             float lead = i * TileGap / n, trail = (n - 1 - i) * TileGap / n;
             if (!land) R0926PhotoCrop.Stretch(t, new Vector2(a, 0), new Vector2(b, 1), new Vector2(lead, 0), new Vector2(-trail, 0));

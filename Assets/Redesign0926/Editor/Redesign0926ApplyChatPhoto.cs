@@ -33,6 +33,14 @@ namespace Redesign0926
             var vso = new SerializedObject(view);
             vso.FindProperty("share").objectReferenceValue = share;
             vso.ApplyModifiedPropertiesWithoutUndo();
+            // 보물찾기 상품 사진(쿠폰·QR — 11-06)도 이 화면으로 크게 · 저장
+            foreach (var hc in new MonoBehaviour[] { FindInScene<R0926HuntCard>(root.gameObject), FindInScene<R0926HuntCelebrate>(root.gameObject) })
+            {
+                if (hc == null) { log.Add("사진 보기: 보물찾기 칸 없음"); continue; }
+                var hso = new SerializedObject(hc);
+                hso.FindProperty("photoView").objectReferenceValue = view;
+                hso.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             var plus = BuildChatPlus(root, area, input as RectTransform, chat);
             var cso = new SerializedObject(chat);
@@ -137,6 +145,7 @@ namespace Redesign0926
             so.FindProperty("backdrop").objectReferenceValue = backdrop;
             so.FindProperty("bar").objectReferenceValue = RT(bar);
             SetArray(so.FindProperty("tiles"), new Object[] { close, down, share });
+            so.FindProperty("shareTile").objectReferenceValue = share;   // 상품 사진은 공유 칸 없이
             so.FindProperty("spin").objectReferenceValue = RT(spin.gameObject);
             so.FindProperty("chatRoom").objectReferenceValue = room;
             so.ApplyModifiedPropertiesWithoutUndo();

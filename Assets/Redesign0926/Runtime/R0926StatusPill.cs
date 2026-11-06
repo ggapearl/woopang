@@ -34,8 +34,40 @@ public class R0926StatusPill : MonoBehaviour
     private static readonly System.Predicate<R0926StatusPill> gone = p => p == null;
     public static bool AnyShowing { get { showing.RemoveWhere(gone); return showing.Count > 0; } }
 
+    // 노치 아래 자리는 하나 — 두 알약(주변 장소 · AR/GPS 안내)이 같이 뜨면 한쪽만 보인다 (11-05 대표님 「'AR세션 확인중..' 과 '주변에서 ○○을 찾았습니다' 가 겹쳐서」).
+    // '찾았어요'·'없어요' 같은 소식이 잠깐 앞에 서고, 그동안 AR·GPS 안내는 물러나 있다가 소식이 걷히면 다시 나온다.
+    // '주변 장소 불러오는 중' 은 AR·GPS 안내에 자리를 내준다. 그림 조각은 R0926HideWhile 이 엇갈려 페이드한다
+    private static readonly HashSet<R0926StatusPill> live = new HashSet<R0926StatusPill>();
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() => showing.Clear();
+    private static void ResetStatics() { showing.Clear(); live.Clear(); }
+
+    /// <summary>보이려는 중인데 더 앞선 알약에 자리를 내줬다</summary>
+    public bool Yielding
+    {
+        get
+        {
+            if (!Wants) return false;
+            int me = Rank;
+            foreach (var p in live) if (p != null && p != this && p.Rank > me && p.Wants) return true;
+            return false;
+        }
+    }
+
+    /// <summary>물러나는 알약이 아직 다 걷히지 않았다 — 다 걷힌 뒤에 나온다 (두 글자가 반투명으로 겹쳐 보이지 않게)</summary>
+    public bool WaitingForSlot
+    {
+        get
+        {
+            foreach (var p in live) if (p != null && p != this && p.partAlpha > 0.02f && p.Yielding) return true;
+            return false;
+        }
+    }
+
+    internal float partAlpha;   // 그림 조각(R0926HideWhile)이 지금 보이는 정도
+
+    private bool Wants => isActiveAndEnabled && Alpha() > 0.05f;
+    private int Rank => source == null ? 1 : source.CurrentCount > 0 || source.ShowingNoData ? 2 : 0;
 
     private void OnEnable()
     {
@@ -43,9 +75,10 @@ public class R0926StatusPill : MonoBehaviour
         lastRaw = null;
         lastText = null;
         groups = null;
+        live.Add(this);
     }
 
-    private void OnDisable() => showing.Remove(this);
+    private void OnDisable() { showing.Remove(this); live.Remove(this); }
 
     private void LateUpdate()
     {

@@ -3,6 +3,22 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+/// <summary>이모지 창을 키보드 자리에 들고 있는 쪽 — 대화·댓글 창(MobileKeyboardHandler) · 장소 칸의 키보드 위 입력줄(UploadInputMirror, 11-05)</summary>
+public interface IR0926KeyboardHost
+{
+    bool isActiveAndEnabled { get; }
+    /// <summary>이모지 창을 들고 있다 — 떠 있거나 키보드로 넘기는 중. 아니면 이모지 창은 스스로 내려간다</summary>
+    bool AccessoryHolding { get; }
+    /// <summary>마지막으로 본 키보드 높이 (캔버스 단위) — 이모지 창을 키보드와 같은 높이로</summary>
+    float LastKeyboardHeight { get; }
+    /// <summary>키보드를 내리고 그 자리(높이 h, 캔버스 단위)에 이모지 창을 둔다</summary>
+    void ShowAccessory(float h);
+    /// <summary>이모지 창 높이가 바뀌었다 (끌어내리는 중 · 화면이 돌았다) — snap 이면 바로 그 자리에</summary>
+    void SetAccessoryHeight(float h, bool snap = false);
+    /// <summary>이모지 창을 내린다 — toKeyboard 면 키보드를 다시 올린다</summary>
+    void HideAccessory(bool toKeyboard);
+}
+
 /// <summary>
 /// 이모지 창 (N-U · 10-26 대표님 「이모지버튼을 누르면 키패드가 사라지고 … 이모지만 잔뜩 … 키패드 전체를 채우는 식으로」 ·
 /// 11-02 「키패드 각 버튼이 입력창 글자보다 큰 것마냥 · 아래로 아래로 스크롤 · 최상단에서 아래로 스와이프하면 창이 내려가도록」).
@@ -50,7 +66,7 @@ public class R0926EmojiPanel : MonoBehaviour,
         open != null && open.sheet.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(open.sheet, screenPos, open.Cam);
 
     private InputField target;
-    private MobileKeyboardHandler keyboard;
+    private IR0926KeyboardHost keyboard;
     private int insertAt;
     private float height;
     private bool closing;
@@ -80,6 +96,9 @@ public class R0926EmojiPanel : MonoBehaviour,
     private bool deleteHeld;
     private float nextRepeat;
 
+    // 들고 있는 쪽이 지워졌으면 (유니티의 가짜 null — 인터페이스로는 != null 이 못 거른다)
+    private bool KbAlive => keyboard is Object o ? o != null : keyboard != null;
+
     private Camera Cam => root != null && root.renderMode != RenderMode.ScreenSpaceOverlay ? root.worldCamera : null;
 
     private void Awake()
@@ -98,7 +117,7 @@ public class R0926EmojiPanel : MonoBehaviour,
     // ── 열기 · 닫기 ───────────────────────────────────────────
 
     /// <summary>f 칸에 이모지를 넣는 창을 키보드 자리에 띄운다 (키보드는 kb 가 내린다)</summary>
-    public void Open(InputField f, MobileKeyboardHandler kb)
+    public void Open(InputField f, IR0926KeyboardHost kb)
     {
         if (f == null || kb == null || sheet == null) return;
         target = f;
@@ -133,7 +152,7 @@ public class R0926EmojiPanel : MonoBehaviour,
     /// <summary>뒤로가기 — 창만 내린다</summary>
     public void CloseByBack()
     {
-        if (keyboard != null) keyboard.HideAccessory(false);
+        if (KbAlive) keyboard.HideAccessory(false);
         BeginClose();
     }
 
@@ -172,7 +191,7 @@ public class R0926EmojiPanel : MonoBehaviour,
 
         if (!closing)
         {
-            bool hold = keyboard != null && keyboard.isActiveAndEnabled && keyboard.AccessoryHolding
+            bool hold = KbAlive && keyboard.isActiveAndEnabled && keyboard.AccessoryHolding
                         && target != null && target.isActiveAndEnabled;
             if (!hold) BeginClose();
         }
@@ -341,7 +360,7 @@ public class R0926EmojiPanel : MonoBehaviour,
     private float PanelHeight()
     {
         float h = CanvasSize().y;
-        float kb = keyboard != null ? keyboard.LastKeyboardHeight : 0f;
+        float kb = KbAlive ? keyboard.LastKeyboardHeight : 0f;
         return kb >= h * 0.25f && kb <= h * 0.6f ? kb : h * 0.4f;
     }
 
@@ -599,7 +618,7 @@ public class R0926EmojiPanel : MonoBehaviour,
         dragSpeed = Mathf.Lerp(dragSpeed, (off - dragOffset) / dt, 0.5f);
         dragOffset = off;
         sheet.anchoredPosition = new Vector2(0f, -off);
-        if (keyboard != null) keyboard.SetAccessoryHeight(height - off, true);
+        if (KbAlive) keyboard.SetAccessoryHeight(height - off, true);
     }
 
     internal void EndSheetDrag(PointerEventData e)
@@ -609,11 +628,11 @@ public class R0926EmojiPanel : MonoBehaviour,
         bool close = dragOffset > height * CloseDrag || (dragSpeed > CloseSpeed && dragOffset > 20f);
         if (close)
         {
-            if (keyboard != null) keyboard.HideAccessory(false);
+            if (KbAlive) keyboard.HideAccessory(false);
             BeginClose();
             return;
         }
-        if (keyboard != null) keyboard.SetAccessoryHeight(height);
+        if (KbAlive) keyboard.SetAccessoryHeight(height);
         Slide(sheet.anchoredPosition.y, 0f);
     }
 

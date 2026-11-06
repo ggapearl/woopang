@@ -1388,7 +1388,7 @@ public class CubeUploadManager : MonoBehaviour
         if (!PickerFree()) yield break;
         isProcessing = true;
 
-        userName = nameInput?.text.Trim() ?? "";
+        userName = R0926Emoji.ToReal(nameInput?.text.Trim() ?? "");   // 우팡 이모지 글자 → 진짜 이모지
         instagramID = showInstagram ? instagramIDInput?.text.Trim() ?? "" : "";
         UpdateLocationDisplay();   // 누른 순간의 자리 — 10초마다 읽던 값은 그사이 걸었으면 몇 m 뒤처져 있다
         locationText = locationInput?.text.Trim() ?? "";

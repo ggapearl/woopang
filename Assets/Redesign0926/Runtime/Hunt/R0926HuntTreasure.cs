@@ -527,7 +527,8 @@ public class R0926HuntTreasure : MonoBehaviour
                     Save();
                 }
                 // 축하 화면 — 두근두근 · 짜잔 · 카드(상품 · 몇 번째 · 주최자에게 간 메세지). '확인'을 누르면 그 게임 상세(결과 · 주최자에게 한마디)
-                if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, t.prize, t.hostName, t.kind, t.url, live, t.locked))
+                if (!R0926HuntCelebrate.Show(id, t.title, j["rank"].AsInt, j["total"].AsInt, j["ended"].AsBool, t.prize, t.hostName, t.kind, t.url, live, t.locked,
+                                             j.HasKey("prize_photo") ? (string)j["prize_photo"] : null))
                 {
                     if (live != null) Destroy(live.gameObject);
                     Say(T("보물을 찾았어요!", "You found it!", "宝を見つけました！", "找到宝藏了！", "¡Lo encontraste!"), T(j["rank"].AsInt + "번째로 찾았어요", "You're #" + j["rank"].AsInt, j["rank"].AsInt + "番目に見つけました", "你是第 " + j["rank"].AsInt + " 个找到的", "Puesto #" + j["rank"].AsInt), 3.5f);

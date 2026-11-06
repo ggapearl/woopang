@@ -38,14 +38,15 @@ namespace Redesign0926
 
             // 상태 알약 — 자기 CanvasGroup 알파로 나타나고 사라지므로(ObjectCountUI · R0926StatusPill) 겹치지 않게 그림 조각마다 따로 숨긴다
             var oc = FindInScene<ObjectCountUI>(root.gameObject);
-            if (oc != null) foreach (Transform c in oc.transform) HideWhile(c.gameObject, waitFor);   // Back · Text · Ic0926
+            // 두 알약끼리도 한 자리 — 앞선 쪽에 자리를 내준 알약은 조각이 서서히 숨는다 (R0926StatusPill.Yielding, 11-05)
+            if (oc != null) foreach (Transform c in oc.transform) HideWhile(c.gameObject, waitFor, oc.GetComponent<R0926StatusPill>());   // Back · Text · Ic0926
             else log.Add("노치 아래 줄: ObjectCountUI 없음");
             var lp = Find(root, "LoadingPanel");
             if (lp != null)
                 foreach (var n in new[] { "PillBg0926", "LoadingText ", "LoadingSpinner " })
                 {
                     var g = Find(lp.transform, n);
-                    if (g != null) HideWhile(g, waitFor);
+                    if (g != null) HideWhile(g, waitFor, lp.GetComponent<R0926StatusPill>());
                 }
 
             var marker = Find(root, "Redesign0926Marker");
@@ -61,10 +62,11 @@ namespace Redesign0926
             log.Add("top slot ok");
         }
 
-        private static void HideWhile(GameObject go, GameObject[] panels)
+        private static void HideWhile(GameObject go, GameObject[] panels, R0926StatusPill pill)
         {
             var so = new SerializedObject(Ensure<R0926HideWhile>(go));
             so.FindProperty("hideAtOnce").boolValue = true;
+            so.FindProperty("pill").objectReferenceValue = pill;
             var arr = so.FindProperty("panels");
             arr.arraySize = panels.Length;
             for (int i = 0; i < panels.Length; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = panels[i];

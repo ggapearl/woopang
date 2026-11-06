@@ -52,7 +52,7 @@ public class R0926InputFocus : MonoBehaviour
     void LateUpdate()
     {
         var bar = currentVia != null ? currentVia.Bar : null;
-        if (current != null && bar != null) DrawCaret(current, bar.caretPosition, bar);
+        if (current != null && bar != null) DrawCaret(current, R0926EmojiPanel.IsOpenFor(bar) ? R0926EmojiPanel.InsertAt : bar.caretPosition, bar);   // 이모지 창이 떠 있으면 이모지가 들어갈 자리
         else if (current != null && !current.isFocused && R0926EmojiPanel.IsOpenFor(current)) DrawCaret(current, R0926EmojiPanel.InsertAt, current);
         else HideCaret();
     }

@@ -1040,7 +1040,7 @@ public class ModelUploadManager : MonoBehaviour
         ShowUploadProgress(0);
         yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
 
-        string modelName = nameInput.text.Trim();
+        string modelName = R0926Emoji.ToReal(nameInput.text.Trim());   // 우팡 이모지 글자 → 진짜 이모지
 
         WWWForm formData = new WWWForm();
 

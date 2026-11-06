@@ -133,6 +133,22 @@ namespace Redesign0926
             int ti = form.Find("TitleInput").GetSiblingIndex();
             lPrize.transform.SetSiblingIndex(ti + 1);
             pIn.transform.SetSiblingIndex(ti + 2);
+            // 상품 사진 (11-06 대표님 — 할인쿠폰·QR 코드 캡처) — 상품 칸 바로 아래. 고르면 왼쪽에 작은 사진 · 오른쪽에 '빼기'
+            var ppRow = HRow(form, "PrizePhotoRow", 132);
+            var ppThumb = PhotoFill(ppRow, "Thumb", out var ppRaw);
+            var ppTle = Ensure<LayoutElement>(ppThumb); ppTle.preferredWidth = 132; ppTle.flexibleWidth = 0;
+            var ppPick = HButton(ppRow, "Pick", 132, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "＋ 상품 사진 (쿠폰·QR)", null, 44, HuntGold, FontStyle.Bold, out var ppLabel);
+            var ppPle = Ensure<LayoutElement>(ppPick.gameObject); ppPle.preferredWidth = 0; ppPle.flexibleWidth = 1;
+            var ppDel = HButton(ppRow, "Remove", 132, new Color(1, 1, 1, 0.08f), "빼기", "Remove", 44, Soft, FontStyle.Bold, out _);
+            var ppDle = Ensure<LayoutElement>(ppDel.gameObject); ppDle.preferredWidth = 200; ppDle.flexibleWidth = 0;
+            var ppNote = HLabel(form, "PrizePhotoNote", 0, "할인쿠폰·QR 코드 캡처 등 — 보물을 찾은 사람과 나만 볼 수 있어요",
+                "Coupon or QR code screenshot — only finders and you can see it", 38, Muted, FontStyle.Normal);
+            int ppi = form.Find("PrizeInput").GetSiblingIndex();
+            ppRow.SetSiblingIndex(ppi + 1);
+            ppNote.transform.SetSiblingIndex(ppi + 2);
+            ppThumb.SetActive(false);
+            ppDel.gameObject.SetActive(false);
+            S("prizePhotoButton", ppPick); S("prizePhotoLabel", ppLabel); S("prizePhotoRemove", ppDel); S("prizePhotoThumb", ppRaw);
             HLabel(form, "LVisible", 72, "보이는 거리 — 이 안에 와야 보물이 보여요", "Visible within — get this close to see it", 44, Muted, FontStyle.Bold);
             S("visibleChips", HChips(form, "VisibleChips"));
             HLabel(form, "LRadius", 72, "참가 범위", "Who can join (distance)", 44, Muted, FontStyle.Bold);
@@ -226,6 +242,20 @@ namespace Redesign0926
             var fm = HButton(fd, "More", 96, new Color(1, 1, 1, 0f), "더 보기", null, 40, HuntGold, FontStyle.Bold, out var fmt);
             S("findersBox", fd.gameObject); S("findersHead", fht); S("findersStat", fhs); S("findersList", frows);
             S("findersEmpty", fe); S("findersMore", fm); S("findersMoreText", fmt);
+            // 상품 사진 (11-06) — 주최자·찾은 사람은 사진(누르면 크게 보고 저장), 다른 사람은 자물쇠와 '보물을 찾으면 열려요'
+            var dpp = HButton(det, "PrizePhoto", 236, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.10f), "", null, 46, Ink, FontStyle.Bold, out var dppText);
+            dppText.alignment = TextAnchor.MiddleLeft;
+            RT(dppText.gameObject).offsetMin = new Vector2(236, 0); RT(dppText.gameObject).offsetMax = new Vector2(-36, 0);
+            var dppThumb = PhotoFill(dpp.transform, "Thumb", out var dppRaw);
+            SetRect(RT(dppThumb), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(184, 184));
+            dppRaw.enabled = false;
+            var dppLock = FindOrCreate(dppThumb.transform, "Lock");
+            SetRect(RT(dppLock), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(84, 84));
+            var dli = Img(dppLock, Spr("r0926_lock"), HuntGold, Image.Type.Simple); dli.raycastTarget = false; dli.preserveAspect = true;
+            dppLock.transform.SetAsLastSibling();
+            dpp.transform.SetSiblingIndex(det.Find("Info").GetSiblingIndex() + 1);   // 게임 정보 · 상품 사진 · 찾은 사람
+            dpp.gameObject.SetActive(false);   // 상품 사진이 있는 게임만 (R0926HuntCard)
+            S("dPrizePhoto", dpp); S("dPrizePhotoThumb", dppRaw); S("dPrizePhotoLock", dppLock); S("dPrizePhotoText", dppText);
             S("joinButton", HButton(det, "Join", 144, HuntGold, "참가하기", "Join", 50, HuntDark, FontStyle.Bold, out _));
             // 공유하기 — 주최자는 늘, 다른 사람은 '모두' 게임만 (10-26 대표님 — 링크로 널리)
             var shareB = HButton(det, "Share", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "공유하기", "Share this hunt", 44, HuntGold, FontStyle.Bold, out _);
@@ -384,6 +414,9 @@ namespace Redesign0926
             ["Share"] = new[] { "共有する", "分享", "Compartir" },
             ["Join code"] = new[] { "参加コード", "参加代码", "Código para unirse" },
             ["Share this hunt"] = new[] { "この宝探しを共有", "分享这个寻宝", "Compartir esta búsqueda" },
+            // 상품 사진 (11-06)
+            ["Remove"] = new[] { "外す", "移除", "Quitar" },
+            ["Coupon or QR code screenshot — only finders and you can see it"] = new[] { "クーポンやQRコードのキャプチャなど — 見つけた人とあなただけが見られます", "优惠券或二维码截图等 — 仅找到的人和你可见", "Captura de cupón o código QR — solo tú y quien lo encuentre pueden verla" },
         };
 
         private static void HLoc(GameObject g, string ko, string en)
@@ -411,8 +444,29 @@ namespace Redesign0926
             pso.FindProperty("treasurePrefab").objectReferenceValue = prefab;
             pso.FindProperty("view").objectReferenceValue = raw;
             pso.FindProperty("background").colorValue = HuntStage;
+            var sample = AssetDatabase.LoadAssetAtPath<TextAsset>(HuntSampleModelPath);
+            if (sample == null) log.Add("보물찾기: 미리보기 — 견본 3D 모델 없음");
+            pso.FindProperty("sampleModel").objectReferenceValue = sample;
             pso.ApplyModifiedPropertiesWithoutUndo();
             return pv;
+        }
+
+        // 사진 칸 — 둥근 칸을 꽉 채우고 넘치는 쪽은 자른다 (RawImage + AspectRatioFitter 바깥 맞춤 — 비율은 앱이 사진에 맞춰 넣는다)
+        private static GameObject PhotoFill(Transform parent, string name, out RawImage raw)
+        {
+            var g = FindOrCreate(parent, name);
+            Img(g, Spr("r0926_pill"), InputBg, Image.Type.Sliced, 64f / 32f).raycastTarget = false;
+            Ensure<Mask>(g).showMaskGraphic = true;
+            var v = FindOrCreate(g.transform, "Photo");
+            var rt = RT(v);
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            raw = Ensure<RawImage>(v);
+            raw.raycastTarget = false;
+            var f = Ensure<AspectRatioFitter>(v);
+            f.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            f.aspectRatio = 1f;
+            return g;
         }
 
         private static Text HLabel(Transform parent, string name, float h, string ko, string en, float size, Color c, FontStyle st)

@@ -242,6 +242,17 @@ public class Indicator : MonoBehaviour
         indicatorImage.color = color;
     }
 
+    // 이름 속 이모지는 우팡 이모지 그림으로 (11-05) — 매 프레임 불리므로 이름이 바뀔 때만 바꾼다
+    private string nameSrc, nameShown;
+    private string ShownName(string s)
+    {
+        if (ReferenceEquals(s, nameSrc)) return nameShown;
+        nameSrc = s;
+        nameShown = R0926Emoji.ToDisplay(s);
+        if (R0926Emoji.HasPua(nameShown) && nameText != null && nameText.GetComponent<R0926EmojiText>() == null) nameText.gameObject.AddComponent<R0926EmojiText>();
+        return nameShown;
+    }
+
     public void SetDistanceText(float value, Color textColor, string placeName)
     {
         bool hasValidDistance = value >= 0;
@@ -250,7 +261,7 @@ public class Indicator : MonoBehaviour
         if (indicatorType == IndicatorType.BOX && nameText != null)
         {
             // 박스 인디케이터: 이름(위) + 거리(아래) 분리 표시
-            nameText.text = string.IsNullOrEmpty(placeName) ? "" : $"<b>{placeName}</b>";
+            nameText.text = string.IsNullOrEmpty(placeName) ? "" : $"<b>{ShownName(placeName)}</b>";
             nameText.color = textColor;
 
             if (distanceText != null)

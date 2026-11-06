@@ -37,6 +37,10 @@ namespace Redesign0926
             if (field != null && cm.commentPanel != null) EmojiKey(field, cm.commentPanel.GetComponent<MobileKeyboardHandler>(), panel, 90f, 58f, 10f);
             else log.Add("이모지: 댓글 입력칸 없음");
 
+            // 장소 추가·수정 — 키보드 위 입력줄 (11-05 대표님 「'장소추가' 하는 탭의 텍스트입력필드에서도 '이모지'」). 이 칸들을 쓸 때만 단추가 보인다
+            EmojiKeyOnMirror(root.Find("UploadPage"), new[] { "Clip0926/UploadSheet0926/CubeUploadPage/Panel/NameInput", "Clip0926/UploadSheet0926/ModelUploadPage/Panel/NameInput" }, panel, log);
+            EmojiKeyOnMirror(root.Find("Fixpage"), new[] { "FixUploadPage/Panel/NameInput", "FixUploadPage/Panel/DescriptionInput" }, panel, log);
+
             const string Dm = "Assets/Prefabs/DM/";
             EmojiOnPrefab(Dm + "MyMessageBubble.prefab", "ContentText", log);
             EmojiOnPrefab(Dm + "OtherMessageBubble.prefab", "ContentText", log);
@@ -169,7 +173,7 @@ namespace Redesign0926
         }
 
         // ── 입력칸 오른쪽 끝 단추 · 칸 안 글 ─────────────────────
-        private static void EmojiKey(InputField field, MobileKeyboardHandler kb, R0926EmojiPanel panel, float size, float icon, float pad)
+        private static GameObject EmojiKey(InputField field, MobileKeyboardHandler kb, R0926EmojiPanel panel, float size, float icon, float pad, bool inset = true)
         {
             var key = FindOrCreate(field.transform, "EmojiButton0926");
             var corner = new Vector2(1, 0);   // 칸 안 오른쪽 아래 — 여러 줄로 늘어나도 맨 아래 줄 옆
@@ -198,9 +202,9 @@ namespace Redesign0926
             so.FindProperty("keys").objectReferenceValue = Spr("r0926_i_keyboard");
             so.ApplyModifiedPropertiesWithoutUndo();
 
-            // 글이 단추 밑으로 들어가지 않게
+            // 글이 단추 밑으로 들어가지 않게 (키보드 위 입력줄은 단추를 켤 때 UploadInputMirror 가 줄인다)
             float textRight = pad + size + 4f;
-            foreach (var t in new[] { field.textComponent, field.placeholder as Text })
+            foreach (var t in inset ? new[] { field.textComponent, field.placeholder as Text } : new Text[0])
             {
                 if (t == null) continue;
                 var trt = t.rectTransform;
@@ -214,6 +218,43 @@ namespace Redesign0926
                 et.convert = false;   // 칸 글은 R0926EmojiInput 이 바꾼다
                 EditorUtility.SetDirty(et);
             }
+            return key;
+        }
+
+        // 키보드 위 입력줄 — sources 칸을 쓸 때만 단추를 켠다. 원래 칸 글에도 그림 (입력줄이 우팡 이모지 글자로 옮겨 준다)
+        private static void EmojiKeyOnMirror(Transform page, string[] sources, R0926EmojiPanel panel, List<string> log)
+        {
+            var m = page != null ? page.GetComponent<UploadInputMirror>() : null;
+            if (m == null) { log.Add("이모지: 키보드 위 입력줄 없음 " + (page != null ? page.name : "?")); return; }
+            var so = new SerializedObject(m);
+            var bar = so.FindProperty("mirrorInput").objectReferenceValue as InputField;
+            if (bar == null) { log.Add("이모지: 입력줄 칸 없음 " + page.name); return; }
+            var list = new List<InputField>();
+            foreach (var path in sources)
+            {
+                var t = page.Find(path);
+                var f = t != null ? t.GetComponent<InputField>() : null;
+                if (f == null) { log.Add("이모지: 칸 없음 " + page.name + "/" + path); continue; }
+                list.Add(f);
+                if (f.textComponent == null) continue;
+                var et = Ensure<R0926EmojiText>(f.textComponent.gameObject);
+                et.convert = false;
+                EditorUtility.SetDirty(et);
+            }
+            const float Size = 86f, Icon = 56f, Pad = 12f;   // 입력줄 칸 높이 110 (Apply10 InputBar) — 가운데에
+            var key = EmojiKey(bar, null, panel, Size, Icon, Pad, false);
+            var bso = new SerializedObject(key.GetComponent<R0926EmojiButton>());
+            bso.FindProperty("mirror").objectReferenceValue = m;
+            bso.ApplyModifiedPropertiesWithoutUndo();
+            float textRight = bar.textComponent != null ? -bar.textComponent.rectTransform.offsetMax.x : 0f;
+            var arr = so.FindProperty("emojiSources");
+            arr.arraySize = list.Count;
+            for (int i = 0; i < list.Count; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = list[i];
+            so.FindProperty("emojiKey").objectReferenceValue = key;
+            so.FindProperty("emojiInset").floatValue = Mathf.Max(0f, Pad + Size + 4f - textRight);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            key.SetActive(false);   // 이모지 칸을 쓸 때만 입력줄이 켠다
+            log.Add("이모지 입력줄: " + page.name + " (칸 " + list.Count + ")");
         }
 
         // 말풍선 · 대화 목록 미리보기 · 댓글 — 글 속 이모지 자리에 그림 (이미 있으면 프리팹을 다시 쓰지 않는다)

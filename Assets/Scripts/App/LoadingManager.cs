@@ -565,6 +565,9 @@ public class LoadingManager : MonoBehaviour
 
         if (isCheckingAREnvironment && enableAREnvironmentDetection)
         {
+            // 나침반 모드(어둠 속 자동 — R0926CompassMode)가 맡고 있는 동안은 어둠 안내·fallback 을 띄우지 않는다
+            if (R0926CompassMode.Engaged) { SyncWhileCompass(); return; }
+
             // 매 프레임: 트래킹 상태 변화 즉시 감지 (오브젝트 뭉침/복구)
             CheckTrackingStateChange();
 
@@ -604,6 +607,38 @@ public class LoadingManager : MonoBehaviour
     public float earthLossDebounce = 3f;
     [Tooltip("Earth tracking 복귀 후 fallback 해제까지 대기 (초)")]
     public float earthRecoverDebounce = 1.5f;
+
+    /// <summary>
+    /// 나침반 모드 동안 — 추적 상태를 지금 값으로 맞춰 둔다. 나침반 모드가 끝난 뒤 묵은 「추적 끊김」 디바운스로
+    /// fallback(화살표)·「AR 세션 복구 중」 이 뒤늦게 켜지지 않게.
+    /// </summary>
+    private void SyncWhileCompass()
+    {
+        if (arSession != null && arSession.subsystem != null) lastFrameTrackingState = arSession.subsystem.trackingState;
+        pendingFallbackEntry = false;
+        earthDropStartTime = -1f;
+        earthRecoverStartTime = -1f;
+        lastEnvironmentCheckTime = Time.realtimeSinceStartup;
+    }
+
+    /// <summary>나침반 모드가 켜졌다 — 띄워 둔 어둠 안내·fallback 을 거두고 오브젝트를 보이게 (자리는 나침반 모드가)</summary>
+    public void YieldToCompass()
+    {
+        SyncWhileCompass();
+        earthFallbackActive = false;
+        hasShownEnvironmentGuidance = false;   // 어둠 안내 코루틴(AutoRetry·지연 안내)이 스스로 멈춘다
+        SetAllManagerRenderersVisible(true);
+        if (!isBackgroundRecovering) ExitFallbackWithGuidance(reason: "Compass", forceDisable: true);
+    }
+
+    /// <summary>나침반 모드가 끝났다 (위치 추적 복귀) — 거리 필터 → 렌더러 → 앵커 다시 (ar-object-spawn.md 순서)</summary>
+    public void OnCompassExit()
+    {
+        SyncWhileCompass();
+        RestoreAllManagerObjects();
+        SetAllManagerRenderersVisible(true);
+        ForceRetryAllAnchors();
+    }
 
     void CheckTrackingStateChange()
     {
@@ -883,6 +918,11 @@ public class LoadingManager : MonoBehaviour
         OffScreenIndicator osi = GetCachedOSI();
         if (osi == null)
         {
+            yield break;
+        }
+        if (R0926CompassMode.Engaged)
+        {
+            osi.SetSuppressNormalIndicators(false); // 나침반 모드가 자리를 잡는다 — fallback 없이
             yield break;
         }
 
@@ -1297,6 +1337,7 @@ public class LoadingManager : MonoBehaviour
     
     void HandleEnvironmentIssue(AREnvironmentIssue issue)
     {
+        if (R0926CompassMode.Engaged) return;   // 나침반 모드가 맡고 있다
         if (hasShownEnvironmentGuidance)
         {
             return;
@@ -1338,6 +1379,7 @@ public class LoadingManager : MonoBehaviour
     IEnumerator ShowDelayedEnvironmentGuidance(AREnvironmentIssue issue)
     {
         yield return new WaitForSeconds(2.5f);
+        if (R0926CompassMode.Engaged) { hasShownEnvironmentGuidance = false; yield break; }   // 그사이 나침반 모드가 켜졌다
 
         AREnvironmentIssue currentIssue = DetermineEnvironmentIssue(
             arSession?.subsystem?.trackingState ?? TrackingState.None);
@@ -1482,6 +1524,7 @@ public class LoadingManager : MonoBehaviour
         while (hasShownEnvironmentGuidance)
         {
             yield return new WaitForSeconds(1f);
+            if (R0926CompassMode.Active) yield break;   // 나침반 모드가 안내를 거뒀다
             elapsed += 1f;
 
             AREnvironmentIssue currentIssue = DetermineEnvironmentIssue(
@@ -1824,6 +1867,7 @@ public class LoadingManager : MonoBehaviour
     /// </summary>
     private void EnterFallbackWithGuidance(string reason, OffScreenIndicator.FallbackConfig config = null, bool autoDisable = false, string customMessage = null, bool animateDots = true)
     {
+        if (R0926CompassMode.Engaged) return;   // 나침반 모드가 자리를 잡고 있다 — 화살표·안내 없이
         OffScreenIndicator osi = GetCachedOSI();
         if (osi != null)
         {

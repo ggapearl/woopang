@@ -33,6 +33,7 @@ public static class R0926HuntList
         public bool locked;       // 비밀번호를 건 보물 — 목록 그림에 자물쇠
         public bool live;         // 진행 중 (아니면 곧 시작)
         public bool found;        // 내가 이미 찾음 — 게임은 아직 진행 중이라 남는다 (목록·지도 뒤쪽 · '찾은 보물입니다')
+        public bool mine;         // 내가 열었거나 참가한 게임 — 지도 아래 '보물찾기' 목록 맨 위 (멀어도)
     }
 
     /// <summary>목록 줄 이름 앞의 금빛 상자 색 (글자 줄의 색 — 그림이 대신하지만 원본 글자에도 남긴다)</summary>
@@ -228,7 +229,7 @@ public static class R0926HuntList
     {
         // 목록은 한 줄에 한 곳 — 제목의 줄바꿈은 띄어쓰기로
         string title = ((string)h["title"] ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
-        s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro"), locked = h["mode"] == "code" };
+        s = new Spot { id = h["id"].AsInt, title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro"), locked = h["mode"] == "code", mine = true };
         s.live = h["status"] == "live";
         s.found = !h["is_host"].AsBool && h["me"]["rank"].AsInt > 0;
         if (Has(h, "lat") && Has(h, "lon"))
@@ -264,7 +265,7 @@ public static class R0926HuntList
             foreach (var s in list)
                 sb.Append(s.id).Append('|').Append(s.title).Append('|').Append((int)s.coord).Append('|')
                   .Append(s.lat.ToString("F6", CultureInfo.InvariantCulture)).Append('|').Append(s.lon.ToString("F6", CultureInfo.InvariantCulture))
-                  .Append('|').Append(s.approxM).Append('|').Append(s.bandM).Append('|').Append(s.locked).Append(s.live).Append(s.found).Append(';');
+                  .Append('|').Append(s.approxM).Append('|').Append(s.bandM).Append('|').Append(s.locked).Append(s.live).Append(s.found).Append(s.mine).Append(';');
         return sb.ToString();
     }
 

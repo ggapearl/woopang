@@ -911,6 +911,19 @@ namespace Redesign0926
             Ensure<ContentSizeFitter>(name).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             var nt = FindOrCreate(name.transform, "Text");
             Txt(nt, "name", 34, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            // 겹친 친구 — 가장 최근 친구 사진 오른쪽 위 '+N' (11-05 대표님 · R0926FriendsMap 이 켜고 숫자를 넣는다)
+            var mid = new Vector2(0.5f, 0.5f);
+            var more = FindOrCreate(pin.transform, "More");
+            SetRect(RT(more), new Vector2(0.5f, 1), new Vector2(0.5f, 1), mid, new Vector2(48, -18), new Vector2(78, 56));
+            Img(more, Spr("r0926_pill"), Color.white, Image.Type.Sliced, 64f / 28f).raycastTarget = false;
+            var moreIn = FindOrCreate(more.transform, "In");
+            SetRect(RT(moreIn), mid, mid, mid, Vector2.zero, new Vector2(70, 48));
+            Img(moreIn, Spr("r0926_pill"), Pink, Image.Type.Sliced, 64f / 24f).raycastTarget = false;
+            var moreT = FindOrCreate(moreIn.transform, "Text");
+            Stretch(RT(moreT));
+            Txt(moreT, "+1", 32, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            more.transform.SetAsLastSibling();
+            more.SetActive(false);
             pin.SetActive(false);
             return pin;
         }
@@ -954,6 +967,7 @@ namespace Redesign0926
             sel.SetActive(false);
             var av = BuildAvatar(row.transform, 104, false);
             SetRect(RT(av), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(18, 0), new Vector2(104, 104));
+            Ensure<Button>(av).transition = Selectable.Transition.None;   // 동그란 사진은 프로필 · 줄의 나머지는 그 자리로 (11-05 대표님 — R0926FriendsMap)
             var name = FindOrCreate(row.transform, "Name");
             SetRect(RT(name), new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0), new Vector2(156, 2), new Vector2(-176, 58));
             var nameT = Txt(name, "@name", 46, Ink, TextAnchor.LowerLeft, FontStyle.Bold);

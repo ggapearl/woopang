@@ -41,6 +41,29 @@ public class ToastManager : MonoBehaviour
 
     private readonly List<Live> live = new List<Live>();
 
+    /// <summary>화면 위쪽을 차지한 판(위쪽에 고정한 하늘 판) — 토스트가 그 밑으로 내려가 판을 가리지 않는다 (11-05). 없으면 null</summary>
+    public static RectTransform AvoidTop;
+    private readonly Vector3[] corners = new Vector3[4];
+    private VerticalLayoutGroup stackLayout;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => AvoidTop = null;
+
+    void LateUpdate()
+    {
+        if (container == null) return;
+        if (stackLayout == null && (stackLayout = container.GetComponent<VerticalLayoutGroup>()) == null) return;
+        int push = 0;
+        if (AvoidTop != null && AvoidTop.gameObject.activeInHierarchy)
+        {
+            AvoidTop.GetWorldCorners(corners);
+            push = Mathf.Max(0, Mathf.RoundToInt(container.rect.yMax - container.InverseTransformPoint(corners[0]).y + 20f));
+        }
+        if (stackLayout.padding.top == push) return;
+        stackLayout.padding.top = push;
+        LayoutRebuilder.MarkLayoutForRebuild(container);
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(this); return; }

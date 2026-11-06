@@ -317,7 +317,7 @@ public class R0926PlaceRows : MonoBehaviour
                 string label = key;
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움) — 'Seoul (Station) (서울역)' 처럼 영어 이름이 이미 있으면 그대로
                 string roman = korean || EnglishNamed.IsMatch(label) ? null : R0926Romanizer.Romanize(label);
-                r.name.text = roman == null ? label : label + "  <color=#6F7880>" + roman + "</color>";
+                R0926EmojiText.Set(r.name, roman == null ? label : label + "  <color=#6F7880>" + roman + "</color>");   // 이름 속 이모지는 우팡 이모지 그림으로
                 r.name.color = known && e.pet ? PetName : r.nameColor;
                 if (r.key != key) { r.key = key; r.dir = -2; r.noteUntil = 0f; r.flashUntil = 0f; }   // 다른 장소가 이 줄로 왔다 — 방향을 새로
                 // 보물찾기는 게임의 공개 설정대로 ('약 300m' · '범위 안' · '1km 이내')

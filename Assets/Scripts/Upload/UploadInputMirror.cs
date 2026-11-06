@@ -19,8 +19,9 @@ using UnityEngine.EventSystems;
 // - 키보드가 뜨기 전에 화면을 또 누르면 — 원래 칸이면 바로 다시 부르고, 다른 데면 닫음 (OnBarDeselected)
 // - 키보드 위로 mirrorPanel 위치 lerp (UpdateMirrorPosition)
 // - 미러 패널 영역 밖 터치/드래그는 backdrop이 흡수해 뒷 UI 영향 차단
+// - 장소 이름·설명 칸은 입력줄에 이모지 단추 — 누르면 키보드 자리에 이모지 창이 뜨고 입력줄은 그 위에 그대로 (IR0926KeyboardHost · 11-05)
 // ============================================================
-public class UploadInputMirror : MonoBehaviour
+public class UploadInputMirror : MonoBehaviour, IR0926KeyboardHost
 {
     [Header("미러 UI — 사용자가 씬에 배치 후 직접 연결")]
     [Tooltip("미러 입력바 루트. 기본 SetActive(false) 상태로 배치")]
@@ -46,6 +47,11 @@ public class UploadInputMirror : MonoBehaviour
     [Header("보내기 칸 (보물찾기 한마디 등) — 버튼이 ✓ 대신 보내기")]
     [SerializeField] private Image closeIcon;
     [SerializeField] private Sprite sendSprite;
+
+    [Header("이모지 (11-05 대표님 「'장소추가' 하는 탭의 텍스트입력필드에서도 '이모지'」) — 이 칸들만 입력줄에 이모지 단추")]
+    [SerializeField] private InputField[] emojiSources;
+    [SerializeField] private GameObject emojiKey;      // 입력칸 안 오른쪽 끝 단추 (R0926EmojiButton — 적용 단계가 만든다)
+    [SerializeField] private float emojiInset = 60f;   // 단추가 있을 때 글·안내 글을 오른쪽에서 이만큼 덜 쓴다
 
     private RectTransform canvasRect;
     private InputField activeSource;
@@ -95,6 +101,15 @@ public class UploadInputMirror : MonoBehaviour
     private static float appBackAt = -100f;     // 앱으로 돌아온 때 (사진 고르기·권한 창 등)
     private static int sdk = -1;
     private InputField queued;                  // 닫는 사이 누른 칸 — 다 닫고 연다
+
+    // 이모지 창 (R0926EmojiPanel) — 키보드 자리에 떠 있는 동안 입력줄은 그 위에 두고, 키보드가 내려가도 닫지 않는다
+    private const float AccessoryHandoff = 0.6f;   // 이모지 창 → 키보드: 키보드가 올라올 때까지 입력줄을 그 높이로 들고 기다리는 시간
+    private bool accessoryActive;
+    private float accessoryHeight;
+    private float accessoryHandoffUntil = -1f;
+    private float lastKbCanvas;                 // 마지막으로 본 키보드 높이 (캔버스 단위) — 이모지 창을 같은 높이로
+    private MirrorButtonPress emojiPress;
+    private float textRightBase = float.NaN, placeholderRightBase = float.NaN;
 
     void OnEnable()
     {
@@ -163,6 +178,11 @@ public class UploadInputMirror : MonoBehaviour
             closeButton.onClick.AddListener(OnCloseClicked);
             closePress = closeButton.GetComponent<MirrorButtonPress>();
             if (closePress == null) closePress = closeButton.gameObject.AddComponent<MirrorButtonPress>();
+        }
+        if (emojiKey != null)
+        {
+            emojiPress = emojiKey.GetComponent<MirrorButtonPress>();
+            if (emojiPress == null) emojiPress = emojiKey.AddComponent<MirrorButtonPress>();
         }
         var tap = mirrorInput.GetComponent<MirrorBarTap>();
         if (tap == null) tap = mirrorInput.gameObject.AddComponent<MirrorBarTap>();
@@ -278,6 +298,9 @@ public class UploadInputMirror : MonoBehaviour
         activeSource = source;
         submitRequested = false;
         PaintCloseIcon(submitActions.ContainsKey(source));
+        ShowEmojiKey(AllowsEmoji(source));
+        accessoryActive = false;
+        accessoryHandoffUntil = -1f;
 
         if (backdrop != null)
         {
@@ -372,7 +395,7 @@ public class UploadInputMirror : MonoBehaviour
         if (syncing || closing || activeSource == null) return;
         // 키보드가 닫히면서 입력칸이 처음 글로 되돌리는 것은 옮기지 않는다 (그 빈 글이 원래 칸을 덮어썼다)
         var kb = mirrorInput != null ? mirrorInput.touchScreenKeyboard : null;
-        if (kb != null && kb.status != TouchScreenKeyboard.Status.Visible) return;
+        if (!accessoryActive && kb != null && kb.status != TouchScreenKeyboard.Status.Visible) return;   // 이모지 창이 넣은 글은 옮긴다
         kbTyped = true;
         lastTyped = value ?? "";
         syncing = true;
@@ -381,6 +404,101 @@ public class UploadInputMirror : MonoBehaviour
     }
 
     private void OnCloseClicked() => BeginClose(true);
+
+    // 입력줄 단추(✓ · 이모지)를 누르고 있다 — 누르는 순간 입력칸이 놓여 키보드가 먼저 내려간다. 그 사이 저절로 닫지 않는다
+    private bool ButtonHeld() => closePress != null && closePress.Down || emojiPress != null && emojiPress.Down;
+
+    // ── 이모지 (IR0926KeyboardHost — R0926EmojiPanel 이 부른다) ─────────────────
+
+    private bool AllowsEmoji(InputField src)
+    {
+        if (emojiSources == null || src == null) return false;
+        foreach (var f in emojiSources) if (f == src) return true;
+        return false;
+    }
+
+    private void ShowEmojiKey(bool on)
+    {
+        if (emojiKey == null || mirrorInput == null) return;
+        if (emojiKey.activeSelf != on) emojiKey.SetActive(on);
+        Inset(mirrorInput.textComponent, ref textRightBase, on);
+        Inset(mirrorInput.placeholder, ref placeholderRightBase, on);
+    }
+
+    private void Inset(Graphic g, ref float baseX, bool on)
+    {
+        if (g == null) return;
+        var rt = g.rectTransform;
+        if (float.IsNaN(baseX)) baseX = rt.offsetMax.x;
+        float want = on ? baseX - emojiInset : baseX;
+        if (!Mathf.Approximately(rt.offsetMax.x, want)) rt.offsetMax = new Vector2(want, rt.offsetMax.y);
+    }
+
+    public bool AccessoryHolding => accessoryActive || accessoryHandoffUntil > 0f && Time.unscaledTime < accessoryHandoffUntil;
+    public float LastKeyboardHeight => lastKbCanvas;
+
+    /// <summary>
+    /// 이모지 단추를 눌렀다 (창을 열기 전) — 누르는 순간 입력칸이 놓여 키보드가 내려가는 중이다.
+    /// 조합 중이던 한글은 그때 확정되므로 키보드에 남은 글을 입력줄·원래 칸에 둔다 (닫을 때 CloseRoutine 이 하는 것과 같게)
+    /// </summary>
+    public void BeforeEmoji()
+    {
+        if (activeSource == null || closing || mirrorInput == null) return;
+        var kb = mirrorInput.touchScreenKeyboard;
+        if (kb == null) kb = lastKb;
+        string t = lastTyped ?? "";
+        if (kb != null && !string.IsNullOrEmpty(kb.text) && kb.status != TouchScreenKeyboard.Status.Canceled) t = kb.text;
+        if (activeSource.characterLimit > 0 && t.Length > activeSource.characterLimit) t = t.Substring(0, activeSource.characterLimit);
+        lastTyped = t;
+        syncing = true;
+        if (mirrorInput.text != t) mirrorInput.text = t;
+        activeSource.text = t;
+        syncing = false;
+    }
+
+    /// <summary>키보드를 내리고 그 자리(높이 h)에 이모지 창 — 입력줄은 그 위에 그대로</summary>
+    public void ShowAccessory(float h)
+    {
+        if (activeSource == null || closing) return;
+        accessoryActive = true;
+        accessoryHeight = h;
+        accessoryHandoffUntil = -1f;
+        kbReopen = false;
+        kbAskedAt = -1f;
+        kbHeld = false;
+        lastKb = null;   // 내려간 키보드의 글은 이제 옛 글 — 닫을 때 다시 읽으면 이모지가 지워진다
+        if (mirrorInput.isFocused) mirrorInput.DeactivateInputField();
+        var es = EventSystem.current;
+        if (es != null && es.currentSelectedGameObject == mirrorInput.gameObject) es.SetSelectedGameObject(null);
+    }
+
+    public void SetAccessoryHeight(float h, bool snap = false)
+    {
+        if (!accessoryActive) return;
+        accessoryHeight = h;
+        if (!snap || mirrorRect == null || canvasRect == null || canvasRect.rect.height <= 0f) return;
+        float a = Mathf.Clamp01((h + keyboardTopPadding) / canvasRect.rect.height);   // 끌어내리는 손가락을 바로 따라간다
+        mirrorRect.anchorMin = new Vector2(0f, a);
+        mirrorRect.anchorMax = new Vector2(1f, a);
+    }
+
+    /// <summary>이모지 창을 내린다 — toKeyboard 면 키보드를 다시 부르고(올라올 때까지 입력줄은 그 높이), 아니면 키보드를 내린 것처럼 글을 옮기고 닫는다</summary>
+    public void HideAccessory(bool toKeyboard)
+    {
+        if (!accessoryActive) return;
+        accessoryActive = false;
+        if (toKeyboard && activeSource != null && !closing && mirrorInput != null && mirrorInput.isActiveAndEnabled)
+        {
+            accessoryHandoffUntil = Time.unscaledTime + AccessoryHandoff;
+            kbRetries = 0;
+            AskKeyboard();
+        }
+        else
+        {
+            accessoryHandoffUntil = -1f;
+            BeginClose(false);
+        }
+    }
 
     // pressed = 입력줄 버튼을 눌렀다 (보내기 칸이면 보낸다). 키보드가 그냥 내려가면 false — 그땐 엔터로 닫혔을 때만 보낸다
     private void BeginClose(bool pressed)
@@ -468,6 +586,8 @@ public class UploadInputMirror : MonoBehaviour
         activeSource = null;
         lastKb = null;
         keyboardActive = false;
+        accessoryActive = false;
+        accessoryHandoffUntil = -1f;
         mirrorActivatedAt = -1f;
         kbAskedAt = -1f;
         kbReopen = kbHeld = false;
@@ -541,6 +661,7 @@ public class UploadInputMirror : MonoBehaviour
             if (mirrorGroup.alpha != want) mirrorGroup.alpha = Mathf.MoveTowards(mirrorGroup.alpha, want, Time.unscaledDeltaTime / 0.12f);
         }
 
+        if (accessoryActive) return;   // 이모지 창이 키보드 자리에 — 키보드를 기다리거나 내려갔다고 닫지 않는다
         if (kbReopen && !closing && Time.frameCount > kbReopenFrame + 1) { kbReopen = false; AskKeyboard(); }
         if (KeyboardDropped()) return;
 
@@ -549,13 +670,14 @@ public class UploadInputMirror : MonoBehaviour
 
         float kbCanvas = GetKeyboardHeightCanvas();
         bool kbUp = kbCanvas > 0f;
+        if (kbUp) lastKbCanvas = kbCanvas;
 
         if (kbUp)
         {
             if (!keyboardActive && kbRetries > 0) NoteKeyboard(kbRetries + "번째에 뜸");
             keyboardActive = true;
         }
-        else if (keyboardActive && !inGrace && (closePress == null || !closePress.Down))
+        else if (keyboardActive && !inGrace && !ButtonHeld() && !AccessoryHolding)
         {
             BeginClose(false);
         }
@@ -713,8 +835,12 @@ public class UploadInputMirror : MonoBehaviour
     private void UpdateMirrorPosition()
     {
         if (mirrorRect == null || canvasRect == null) return;
+        // 입력줄 단추(✓ · 이모지)를 누르고 있는 동안은 제자리 — 누르는 순간 키보드가 내려가 입력줄이 따라 내려가면, 손을 뗄 때 단추 밖이라 눌리지 않는다
+        if (placed && ButtonHeld()) return;
 
         float kbCanvas = GetKeyboardHeightCanvas();
+        if (accessoryActive) kbCanvas = accessoryHeight;                                  // 이모지 창 위
+        else if (AccessoryHolding) kbCanvas = Mathf.Max(kbCanvas, accessoryHeight);        // 키보드가 다 올라올 때까지 그 높이
         if (kbCanvas <= 0f) return;
 
         float canvasH = canvasRect.rect.height;

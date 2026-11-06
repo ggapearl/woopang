@@ -21,6 +21,7 @@ using UnityEngine.UI;
 /// 데이터는 휴대폰을 하늘 쪽으로 들 때만 묻는다 (설정한 각도보다 조금 아래부터 — 판이 뜰 때 이미 와 있게).
 /// 판(SkyWeather0926)은 보일 때만 켜져 있어 이 스크립트는 늘 켜진 표식에 두고, 손가락은 판 틀의 R0926SkyBoardInput 이 넘겨준다.
 /// 판을 아래로 끌거나 📌 를 누르면 화면 아래쪽에 고정, 고정한 판을 위로 밀거나 📌 를 다시 누르면 하늘로 (R0926SkyWeather.SetPinned)
+/// 판을 위로 밀면 화면 위쪽에 고정, 위쪽 판을 아래로 밀거나 📌 를 누르면 하늘로 (11-05)
 /// </summary>
 public class R0926SkyPages : MonoBehaviour
 {
@@ -707,7 +708,7 @@ public class R0926SkyPages : MonoBehaviour
         Vector2 d = e.position - e.pressPosition;   // 첫 걸음(delta)만 보면 손떨림에 갈린다 — 누른 데서부터
         if (Mathf.Abs(d.y) > Mathf.Abs(d.x))
         {
-            // 위아래 — 하늘 판은 아래로 끌어 고정, 고정한 판은 위로 밀어 하늘로
+            // 위아래 — 하늘 판은 아래로 끌면 아래쪽 · 위로 밀면 위쪽에 고정, 고정한 판은 반대로 밀어 하늘로
             pulling = true;
             armed = false;
             dragPointer = e.pointerId;
@@ -756,7 +757,7 @@ public class R0926SkyPages : MonoBehaviour
         lastY = y;
         lastT = Time.unscaledTime;
         pullRaw = y - pullStartY;
-        float way = sky.Pinned ? pullRaw : -pullRaw;   // + 면 놓았을 때 고정 · 풀기 쪽
+        float way = PullWay(pullRaw);   // + 면 놓았을 때 고정 · 풀기 쪽
         float give = way > 0f ? Rubber(pullRaw, 0.8f, 170f) : Rubber(pullRaw, 0.25f, 50f);
         pull = give;
         bool arm = way > pinPull;
@@ -767,6 +768,10 @@ public class R0926SkyPages : MonoBehaviour
 
     private static float Rubber(float v, float k, float max) => Mathf.Sign(v) * max * (1f - Mathf.Exp(-Mathf.Abs(v) * k / max));
 
+    // 놓았을 때 고정 · 풀기가 되는 쪽으로 간 만큼 (+) — 하늘 판은 위아래 어느 쪽이든(아래 = 아래쪽 고정 · 위 = 위쪽 고정),
+    // 아래쪽 고정은 위로, 위쪽 고정은 아래로
+    private float PullWay(float v) => !sky.Pinned ? Mathf.Abs(v) : sky.PinnedTop ? -v : v;
+
     public void EndDrag(PointerEventData e)
     {
         if (e.pointerId != dragPointer) return;
@@ -775,10 +780,11 @@ public class R0926SkyPages : MonoBehaviour
             pulling = false;
             if (Time.unscaledTime - lastT > 0.12f) flingV = 0f;
             bool toPin = !sky.Pinned;
-            float way = toPin ? -pullRaw : pullRaw, fling = toPin ? -flingV : flingV;
+            bool up = pullRaw > 0f;
+            float way = PullWay(pullRaw), fling = toPin ? (up ? flingV : -flingV) : sky.PinnedTop ? -flingV : flingV;
             bool go = armed || fling > flipSpeed && way > 40f;   // 끝까지 안 끌어도 휙 튕기면
             armed = false;
-            if (go) SetPin(toPin);
+            if (go) SetPin(toPin, toPin && up);
             return;
         }
         if (!dragging) return;
@@ -899,15 +905,19 @@ public class R0926SkyPages : MonoBehaviour
         return idOnly;
     }
 
-    private void SetPin(bool on)
+    private void SetPin(bool on, bool top = false)
     {
-        sky.SetPinned(on);
+        sky.SetPinned(on, top);
         if (sky.Pinned != on) return;   // 판이 안 떠 있다
         Haptic();
         pinHintAt = -1f;
         if (!on || PlayerPrefs.GetInt(PinKey, 0) != 0) return;
         PlayerPrefs.SetInt(PinKey, 1);   // 처음 고정했을 때만 — 푸는 법
-        if (ToastManager.Instance != null)
+        if (ToastManager.Instance == null) return;
+        if (top)
+            ToastManager.Instance.ShowInfo(L("고정했어요 · 아래로 밀면 하늘로 돌아가요", "Pinned · Swipe down to send it back to the sky", "固定しました · 下にスワイプすると空に戻ります",
+                                             "已固定 · 向下滑动即可放回天空", "Fijado · Desliza hacia abajo para devolverlo al cielo"));
+        else
             ToastManager.Instance.ShowInfo(L("고정했어요 · 위로 밀면 하늘로 돌아가요", "Pinned · Swipe up to send it back to the sky", "固定しました · 上にスワイプすると空に戻ります",
                                              "已固定 · 向上滑动即可放回天空", "Fijado · Desliza hacia arriba para devolverlo al cielo"));
     }

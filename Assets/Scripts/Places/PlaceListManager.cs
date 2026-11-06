@@ -317,7 +317,7 @@ public class PlaceListManager : MonoBehaviour
                 string cat = cached.category ?? "";
                 string modelType = cached.modelType ?? "cube";
 
-                if (!showObject3D && modelType == "custom") continue;
+                if (!showObject3D && FilterManager.Is3D(cat, modelType)) continue;
                 if (petFriendlyOnly && !cached.petFriendly) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {
@@ -353,7 +353,7 @@ public class PlaceListManager : MonoBehaviour
                 if (addedIds.Contains(p.id)) continue;
                 if (HiddenPlaces.IsHidden("dm_" + p.id)) continue;
                 string origType = p.original_model_type ?? p.model_type;
-                if (!showObject3D && origType == "custom") continue;
+                if (!showObject3D && FilterManager.Is3D(p.category, origType)) continue;
                 if (petFriendlyOnly && !p.pet_friendly) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {

@@ -320,9 +320,10 @@ public static class NativeGallery
 		GetMediaFromGallery( callback, mediaTypes, "*/*", title );
 	}
 
-	public static void GetImagesFromGallery( MediaPickMultipleCallback callback, string title = "", string mime = "image/*" )
+	// WOOPANG 패치 (2026-11-05): selectionLimit — iOS 사진 고르기 창에서 이 장수까지만 (0 = 제한 없음). 안드로이드는 창이 제한을 모른다 (앱이 자른다)
+	public static void GetImagesFromGallery( MediaPickMultipleCallback callback, string title = "", string mime = "image/*", int selectionLimit = 0 )
 	{
-		GetMultipleMediaFromGallery( callback, MediaType.Image, mime, title );
+		GetMultipleMediaFromGallery( callback, MediaType.Image, mime, title, selectionLimit );
 	}
 
 	public static void GetVideosFromGallery( MediaPickMultipleCallback callback, string title = "", string mime = "video/*" )
@@ -592,7 +593,7 @@ public static class NativeGallery
 		}, PermissionType.Read, mediaType );
 	}
 
-	private static void GetMultipleMediaFromGallery( MediaPickMultipleCallback callback, MediaType mediaType, string mime, string title )
+	private static void GetMultipleMediaFromGallery( MediaPickMultipleCallback callback, MediaType mediaType, string mime, string title, int selectionLimit = 0 )
 	{
 		RequestPermissionAsync( ( permission ) =>
 		{
@@ -617,7 +618,7 @@ public static class NativeGallery
 				else
 				{
 					NGMediaReceiveCallbackiOS.Initialize( null, callback );
-					_NativeGallery_PickMedia( SelectedMediaPath, (int) ( mediaType & ~MediaType.Audio ), PermissionFreeMode ? 1 : 0, 0 );
+					_NativeGallery_PickMedia( SelectedMediaPath, (int) ( mediaType & ~MediaType.Audio ), PermissionFreeMode ? 1 : 0, selectionLimit > 1 ? selectionLimit : 0 ); // WOOPANG 패치: 원본은 0 (제한 없음)
 				}
 #else
 				if( callback != null )

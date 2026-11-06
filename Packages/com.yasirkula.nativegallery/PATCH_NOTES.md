@@ -18,3 +18,9 @@
   3. 사용 중 판정의 `presentingViewController == UnityGetGLViewController()` 를 `!= nil` 로 — 맨 위 화면에서 띄우면 띄운 쪽이 루트가 아니어서, 창이 떠 있는데도 '끝남'으로 볼 뻔했다.
 - C# 쪽 짝: `Assets/Redesign0926/Runtime/R0926PickerWait.cs` (답을 잃은 고르기를 칸을 다시 눌러 풂 — 콜백 오브젝트에 취소 답을 대신 넣는다).
 - 원본을 새 버전으로 바꿀 땐 위 세 가지를 다시 적용할 것.
+
+### `Plugins/NativeGallery/NativeGallery.cs` — 여러 장 고르기에 장수 제한 (2026-11-05, WOOPANG)
+- 대표님 「대화창에서 사진 첨부할 경우 10장까지 선택해서 보낼 수 있도록」. 원본 `GetImagesFromGallery` 는 iOS PHPicker 에 `selectionLimit` 0(제한 없음)을 고정으로 넘겼다.
+- 패치 (`WOOPANG 패치` 로 검색): `GetImagesFromGallery(…, int selectionLimit = 0)` · `GetMultipleMediaFromGallery(…, int selectionLimit = 0)` — 2 이상이면 iOS 창이 그 장수까지만 고르게 한다(네이티브 `.mm` 은 원래 이 값을 받는다). 기본값 0 이라 다른 호출은 그대로.
+- 안드로이드 고르기 창(ACTION_GET_CONTENT · EXTRA_ALLOW_MULTIPLE)은 제한을 받지 않는다 — 앱(`R0926ChatPhoto`)이 앞의 장수만 쓰고 알린다.
+- 원본을 새 버전으로 바꿀 땐 이 매개변수를 다시 넣을 것 (없으면 `R0926ChatPhoto` 가 컴파일되지 않는다).

@@ -15,8 +15,11 @@ public class R0926HuntShapePreview : MonoBehaviour
     [SerializeField] private GameObject treasurePrefab;   // HuntTreasure0926
     [SerializeField] private RawImage view;
     [SerializeField] private Color background = new Color(0.055f, 0.063f, 0.075f, 1f);
+    [SerializeField] private TextAsset sampleModel;   // 3D 모델을 아직 안 골랐을 때 보이는 견본 (11-05 대표님 — 갈색 티베탄 마스티프)
 
     private const int MaxSide = 1024;
+    private const string SampleUrl = "local://hunt-preview/sample.glb";
+    private byte[] sampleBytes;   // TextAsset.bytes 는 부를 때마다 복사본을 만든다 (static 이면 에디터가 도메인을 안 다시 읽어 옛 견본이 남는다)
     private static readonly Vector3 StagePos = new Vector3(0f, -2000f, 0f);
     private static int modelSeq;
 
@@ -45,6 +48,8 @@ public class R0926HuntShapePreview : MonoBehaviour
             if (Chest != null && stage != null && stage.activeSelf) Chest.Lock(value);
         }
     }
+    /// <summary>3D 모델 칸에서 아직 고르지 않아 견본을 보이는 중</summary>
+    public bool ShowingSample => lookKind == "model" && lookModel == null;
     /// <summary>고른 3D 모델을 열지 못해 보물상자로 돌아갔다</summary>
     public bool ModelFailed => lookKind == "model" && lookModel != null && Chest != null && stage != null && stage.activeSelf && !Chest.Loading && Chest.Kind != "model";
 
@@ -84,7 +89,17 @@ public class R0926HuntShapePreview : MonoBehaviour
             GLBModelLoader.PreloadCache(lookModelUrl, lookModel);   // 다른 모델들이 캐시에서 밀어냈을 수 있다
             if (Chest.Wear("model")) Chest.ShowModel(lookModelUrl);
         }
-        else if (lookKind == "model" || !Chest.Wear(lookKind)) Chest.Wear("chest");   // 3D 모델을 아직 안 골랐으면 — 못 열 때 보이는 보물상자
+        else if (lookKind == "model")   // 아직 안 골랐다 — 견본 3D 모델 (없거나 못 열면 보물상자)
+        {
+            if (sampleBytes == null && sampleModel != null) sampleBytes = sampleModel.bytes;
+            if (sampleBytes != null && Chest.Wear("model"))
+            {
+                GLBModelLoader.PreloadCache(SampleUrl, sampleBytes);
+                Chest.ShowModel(SampleUrl);
+            }
+            else Chest.Wear("chest");
+        }
+        else if (!Chest.Wear(lookKind)) Chest.Wear("chest");
         Chest.Lock(locked);
         stage.GetComponentsInChildren(true, renderers);
         Hide();

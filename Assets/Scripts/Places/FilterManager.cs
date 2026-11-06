@@ -154,7 +154,7 @@ public class FilterManager : MonoBehaviour
             { "train", "Train" },
             { "terminal", "Bus / Train" },
             { "object3D", "3D Objects" },
-            { "festival", "Fests / Hunts" },
+            { "festival", "Festivals" },
             { "categoryAll", "Category (All)" },
             { "categoryShop", "Shop" },
             { "categoryFood", "Food" },
@@ -176,7 +176,7 @@ public class FilterManager : MonoBehaviour
             { "train", "기차역" },
             { "terminal", "터미널 / 기차" },
             { "object3D", "3D 오브젝트" },
-            { "festival", "축제 / 보물" },
+            { "festival", "축제" },
             { "categoryAll", "카테고리(전체)" },
             { "categoryShop", "샵" },
             { "categoryFood", "음식점" },
@@ -198,7 +198,7 @@ public class FilterManager : MonoBehaviour
             { "train", "鉄道駅" },
             { "terminal", "ターミナル / 駅" },
             { "object3D", "3Dオブジェクト" },
-            { "festival", "祭り / 宝探し" },
+            { "festival", "祭り" },
             { "categoryAll", "カテゴリ(全体)" },
             { "categoryShop", "ショップ" },
             { "categoryFood", "グルメ" },
@@ -220,7 +220,7 @@ public class FilterManager : MonoBehaviour
             { "train", "火车站" },
             { "terminal", "客运站 / 火车站" },
             { "object3D", "3D对象" },
-            { "festival", "节庆 / 寻宝" },
+            { "festival", "节庆" },
             { "categoryAll", "分类(全部)" },
             { "categoryShop", "商店" },
             { "categoryFood", "美食" },
@@ -242,7 +242,7 @@ public class FilterManager : MonoBehaviour
             { "train", "Estación de Tren" },
             { "terminal", "Terminal / Tren" },
             { "object3D", "Objetos 3D" },
-            { "festival", "Fiesta / Tesoro" },
+            { "festival", "Fiestas" },
             { "categoryAll", "Categoría (Todo)" },
             { "categoryShop", "Tienda" },
             { "categoryFood", "Comida" },
@@ -1645,10 +1645,7 @@ public class FilterManager : MonoBehaviour
 
         if (!PassesSourceOrCategory(place, filters)) return false;
 
-        // 3D 오브젝트 필터 (model_type == "custom")
-        bool showObject3D = !filters.ContainsKey("object3D") || filters["object3D"];
-        if (!showObject3D && place.modelType == "custom")
-            return false;
+        if (!Passes3D(place, filters)) return false;
 
         // 애견동반 필터
         bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
@@ -1659,14 +1656,27 @@ public class FilterManager : MonoBehaviour
 
     /// <summary>
     /// IndicatorOnly용 필터 체크
-    /// 매니저 토글(publicData, subway, train, terminal) + 카테고리 필터 적용
-    /// 세부 필터(petFriendly, object3D)는 적용하지 않음
+    /// 매니저 토글(publicData, subway, train, terminal) + 카테고리 필터 + 3D 끄기 적용
+    /// 애견동반은 적용하지 않음 (동반 안 되는 곳도 화살표로는 보인다)
     /// </summary>
     private bool IsPassingManagerToggle(CachedPlaceData place, Dictionary<string, bool> filters)
     {
         if (filters == null) return true;
 
-        return PassesSourceOrCategory(place, filters);
+        return PassesSourceOrCategory(place, filters) && Passes3D(place, filters);
+    }
+
+    /// <summary>
+    /// 3D 오브젝트 — 올린 3D 모델(분류 anim · 큐브로 떠 있다 더블탭하면 GLB) 또는 model_type custom.
+    /// 11-05 대표님 「3D 체크를 해제하더라도 '시바견'이 계속 보이는데」 — 서버의 장소는 전부 model_type cube 라
+    /// custom 만 보던 3D 끄기가 아무것도 숨기지 못했고, 큰 예산에서 빠진 것은 화살표로 다시 떴다
+    /// </summary>
+    public static bool Is3D(string category, string modelType) => modelType == "custom" || category == "anim";
+
+    private static bool Passes3D(CachedPlaceData place, Dictionary<string, bool> filters)
+    {
+        bool show = !filters.ContainsKey("object3D") || filters["object3D"];
+        return show || !Is3D(place.category, place.modelType);
     }
 
     /// <summary>

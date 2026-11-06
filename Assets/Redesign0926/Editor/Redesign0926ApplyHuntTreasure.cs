@@ -13,6 +13,7 @@ namespace Redesign0926
     public static partial class Redesign0926Apply
     {
         private const string TreasurePrefabPath = "Assets/Redesign0926/Prefabs/HuntTreasure0926.prefab";
+        private const string HuntSampleModelPath = "Assets/Redesign0926/Meshes/HuntSampleMastiff.bytes";   // 3D 모델 칸 견본 (Blender 로 만든 GLB)
         private const string PlaceCubePath = "Assets/Prefab/0000_Cube.prefab";
 
         private static void ApplyHuntTreasure(Transform root, List<string> log)
@@ -207,6 +208,20 @@ namespace Redesign0926
             var pt = Txt(prize, "", 56, Ink, TextAnchor.UpperLeft, FontStyle.Bold);
             pt.horizontalOverflow = HorizontalWrapMode.Wrap; pt.verticalOverflow = VerticalWrapMode.Truncate; pt.lineSpacing = 1.05f;
             pt.resizeTextForBestFit = true; pt.resizeTextMinSize = 40; pt.resizeTextMaxSize = 56;
+            // 상품 사진 (11-06 — 쿠폰·QR) — 있으면 선물 그림 자리에 사진 · 상품 칸을 누르면 크게 보고 저장 (R0926HuntCelebrate)
+            var pbox = PhotoFill(prizeBox.transform, "PhotoBox", out var praw);
+            SetRect(RT(pbox), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-392, 0), new Vector2(222, 222));
+            praw.enabled = false;
+            pbox.SetActive(false);
+            var phint = FindOrCreate(prizeBox.transform, "Hint");
+            SetRect(RT(phint), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 1f), new Vector2(-250, -72), new Vector2(730, 52));
+            var pht = Txt(phint, "", 36, HuntGold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            pht.horizontalOverflow = HorizontalWrapMode.Overflow; pht.raycastTarget = false;
+            phint.SetActive(false);
+            var pbtn = Ensure<Button>(prizeBox);
+            pbtn.transition = Selectable.Transition.None;
+            pbtn.targetGraphic = prizeBox.GetComponent<Image>();
+            pbtn.interactable = false;
 
             // 정보 줄 — 주최 · 찾은 시각 · 순위 (값이 없는 줄은 R0926HuntCelebrate 가 빼고 위로 당긴다)
             var keys = new Text[3];
@@ -290,6 +305,10 @@ namespace Redesign0926
             so.FindProperty("huntText").objectReferenceValue = hunt;
             so.FindProperty("prizeLabel").objectReferenceValue = plt;
             so.FindProperty("prizeText").objectReferenceValue = pt;
+            so.FindProperty("prizePhoto").objectReferenceValue = praw;
+            so.FindProperty("prizeGift").objectReferenceValue = gift;
+            so.FindProperty("prizeButton").objectReferenceValue = pbtn;
+            so.FindProperty("prizeHint").objectReferenceValue = pht;
             so.FindProperty("noteText").objectReferenceValue = note;
             so.FindProperty("okLabel").objectReferenceValue = okText;
             var mk = so.FindProperty("metaKeys");

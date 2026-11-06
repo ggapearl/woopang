@@ -17,6 +17,8 @@ using UnityEngine.XR.ARFoundation;
 ///  · 판을 좌우로 밀면 옆 장 — 근처 보물찾기 · 축제 · 핫플 · 친구 · 언론사 라이브 (R0926SkyPages)
 ///  · 판을 아래로 끌거나 📌 를 누르면 화면 아래쪽(주소줄 위)에 고정 — 휴대폰을 내려도 남는다. 위로 밀거나 📌 를 다시 누르면 하늘로
 ///    (10-25 대표님 「조금만 움직여도 해당 내용이 사라질 수 있으니 … 고정」). 한 번 뜬 판은 설정 각도보다 조금 더 내려야 사라진다
+///  · 판을 위로 밀면 화면 위쪽(노치 아래 칩 밑)에 고정 — 아래로 밀거나 📌 를 누르면 하늘로 (11-05 대표님 「위로 스와이프하면 위쪽으로 고정 …
+///    아랫쪽 로직도 그대로 두고」)
 /// 데이터: 우팡 서버 /api/weather (10분 캐시). 스폰 시스템과 따로 돌아 기존 오브젝트 로직을 건드리지 않는다.
 /// </summary>
 public class R0926SkyWeather : MonoBehaviour
@@ -123,6 +125,8 @@ public class R0926SkyWeather : MonoBehaviour
     private bool skyShow;            // 하늘에 걸린 판이 보일 때 (고정과 상관없이 — 풀면 이 자리로 돌아간다)
     private float holdUntil;
     private bool pinned;
+    private bool pinTop;             // 위쪽에 고정 (위로 밀어서) — 아니면 아래쪽
+    private float flyDir = 1f;       // 하늘을 안 볼 때 풀면 날아가는 쪽 (+위 · -아래 — 민 방향)
     private float pinT = 1f;         // 고정 · 풀기로 옮기는 중 0 → 1
     private Vector2 fromPos;
     private float fromScale, fromAlpha;
@@ -148,7 +152,11 @@ public class R0926SkyWeather : MonoBehaviour
     }
 
     private void OnEnable() { LocationManager.ShortRegionChanged += ShowRegion; }
-    private void OnDisable() { LocationManager.ShortRegionChanged -= ShowRegion; }
+    private void OnDisable()
+    {
+        LocationManager.ShortRegionChanged -= ShowRegion;
+        if (glass != null && ToastManager.AvoidTop == glass.rectTransform) ToastManager.AvoidTop = null;
+    }
 
 #if UNITY_EDITOR
     /// <summary>스토어 캡처(Redesign0926PlayTest)용 — 판의 지역 이름을 이 글로 고정 (에디터 위치가 찍히지 않게). null 이면 실제 지역</summary>
@@ -212,21 +220,37 @@ public class R0926SkyWeather : MonoBehaviour
     /// <summary>휴대폰이 수평보다 몇 도 위를 보는지 (마지막 프레임) — 하늘 옆 장이 미리 받아 둘 때를 본다</summary>
     public float Pitch { get; private set; }
 
-    /// <summary>판을 화면에 고정했는지 — 휴대폰을 내려도 화면 아래쪽에 남는다</summary>
+    /// <summary>판을 화면에 고정했는지 — 휴대폰을 내려도 화면 아래쪽(또는 위쪽)에 남는다</summary>
     public bool Pinned => pinned;
+    /// <summary>위쪽에 고정했는지 (위로 밀어서)</summary>
+    public bool PinnedTop => pinned && pinTop;
 
     /// <summary>
-    /// 고정 · 풀기 (판의 📌 · 판을 아래로 끌기 / 위로 밀기 — R0926SkyPages). 떠 있는 판만 고정한다.
-    /// 고정하면 지금 보이는 자리에서 화면 아래쪽으로 내려오고, 풀면 하늘 자리로 돌아간다 (하늘을 안 보고 있으면 위로 날아가며 사라진다)
+    /// 고정 · 풀기 (판의 📌 · 판을 위아래로 밀기 — R0926SkyPages). 떠 있는 판만 고정한다.
+    /// 고정하면 지금 보이는 자리에서 화면 아래쪽(top 이면 위쪽)으로 옮겨 가고, 풀면 하늘 자리로 돌아간다 (하늘을 안 보고 있으면 민 쪽으로 날아가며 사라진다)
     /// </summary>
-    public void SetPinned(bool on)
+    public void SetPinned(bool on, bool top = false)
     {
-        if (on == pinned || frame == null || frameGroup == null || pinLayer == null || glass == null || cam == null) return;
-        if (on && !skyShow) return;
+        if (frame == null || frameGroup == null || pinLayer == null || glass == null || cam == null) return;
+        if (on == pinned && (!on || top == pinTop)) return;
+        if (on && !pinned && !skyShow) return;
+        if (on && pinned)
+        {
+            // 위 <-> 아래 — 지금 자리에서 그쪽 고정 자리로
+            pinTop = top;
+            fromPos = frame.anchoredPosition;
+            fromScale = frame.localScale.x;
+            fromAlpha = frameGroup.alpha;
+            pinT = 0f;
+            UpdatePin();
+            return;
+        }
+        if (!on) flyDir = pinTop ? -1f : 1f;
         pinned = on;
         pinT = 0f;
         if (on)
         {
+            pinTop = top;
             if (!ScreenRect(frame, out fromPos, out fromScale)) PinnedRect(out fromPos, out fromScale);
             fromAlpha = skyGroup != null ? skyGroup.alpha : 1f;
             frame.SetParent(pinLayer, false);
@@ -337,6 +361,8 @@ public class R0926SkyWeather : MonoBehaviour
     private void UpdatePin()
     {
         if (frame == null || frameGroup == null || pinLayer == null || glass == null) return;
+        var avoid = pinned && pinTop ? glass.rectTransform : null;   // 위쪽에 고정한 판은 토스트가 피해 간다 (판 머리를 가리던 것)
+        if (ToastManager.AvoidTop != avoid && (avoid != null || ToastManager.AvoidTop == glass.rectTransform)) ToastManager.AvoidTop = avoid;
         if (!pinned && pinT >= 1f)
         {
             // 하늘에 있다 — 끄는 손가락만 따라간다
@@ -349,7 +375,7 @@ public class R0926SkyWeather : MonoBehaviour
         float toScale, toAlpha = 1f;
         if (pinned) { PinnedRect(out toPos, out toScale); toPos.y += pull * toScale; }
         else if (skyShow && ScreenRect(skyBoard, out toPos, out toScale)) toAlpha = skyGroup != null ? skyGroup.alpha : 1f;
-        else { toPos = fromPos + new Vector2(0f, pinLayer.rect.height * 0.35f); toScale = fromScale * 0.9f; toAlpha = 0f; }   // 하늘을 안 보고 있으면 위로 날아가며 사라진다
+        else { toPos = fromPos + new Vector2(0f, flyDir * pinLayer.rect.height * 0.35f); toScale = fromScale * 0.9f; toAlpha = 0f; }   // 하늘을 안 보고 있으면 민 쪽으로 날아가며 사라진다
         frame.anchoredPosition = Vector2.LerpUnclamped(fromPos, toPos, e);
         float s = Mathf.LerpUnclamped(fromScale, toScale, e);
         frame.localScale = new Vector3(s, s, 1f);
@@ -374,14 +400,28 @@ public class R0926SkyWeather : MonoBehaviour
         SetGlass(0f);
     }
 
-    // 고정 자리 — 화면 아래쪽 가운데, 주소줄 · 도크 바로 위. 유리 폭이 화면 폭의 pinWidth (가로 화면에선 높이의 42% 까지)
+    // 고정 자리 — 화면 아래쪽 가운데, 주소줄 · 도크 바로 위 (위쪽 고정이면 노치 아래 칩 바로 밑). 유리 폭이 화면 폭의 pinWidth (가로 화면에선 높이의 42% 까지)
     private void PinnedRect(out Vector2 pos, out float scale)
     {
         var g = glass.rectTransform;
         float bottom = g.localPosition.y + g.rect.yMin, top = g.localPosition.y + g.rect.yMax;
         var area = pinLayer.rect;
         scale = Mathf.Min(area.width * pinWidth / Mathf.Max(1f, g.rect.width), area.height * 0.42f / Mathf.Max(1f, top - bottom));
-        pos = new Vector2(0f, Floor() + pinGap - bottom * scale);
+        pos = new Vector2(0f, pinTop ? Ceiling() - pinGap - top * scale : Floor() + pinGap - bottom * scale);
+    }
+
+    // 노치 아래 칩(하늘 접기 · 상태 알약과 같은 줄)의 아랫변 — pinLayer 아래 변에서 위로. 칩이 없으면 안전영역 윗변
+    private float Ceiling()
+    {
+        var area = pinLayer.rect;
+        if (chipRect != null && chipRect.gameObject.activeInHierarchy)
+        {
+            chipRect.GetWorldCorners(corners);
+            return pinLayer.InverseTransformPoint(corners[0]).y - area.yMin;
+        }
+        var sa = Screen.safeArea;
+        float k = area.height / Mathf.Max(1f, Screen.height);
+        return area.height - (Screen.height - sa.yMax) * k;
     }
 
     // 주소줄 · 도크 중 가장 높은 윗변 — pinLayer 아래 변에서 위로

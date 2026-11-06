@@ -27,7 +27,7 @@ using UnityEngine.InputSystem;
 /// - keyboardLogicallyActive = false: 키보드 없는 상태
 ///   → 패널 원래 크기, 포커스 자유
 /// </summary>
-public class MobileKeyboardHandler : MonoBehaviour
+public class MobileKeyboardHandler : MonoBehaviour, IR0926KeyboardHost
 {
     // ============================================================
     // Inspector Fields

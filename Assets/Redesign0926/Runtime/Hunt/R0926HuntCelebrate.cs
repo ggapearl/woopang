@@ -14,6 +14,7 @@ using UnityEngine.UI;
 ///  글자(두근두근…·짜잔!)는 띄우지 않는다 — 진동과 짜잔의 터치음만 (10-26 대표님)
 ///  4) 상자에서 카드가 솟으며 뒤집혀 앞면 — 금박 카드: 순위 메달(1등은 왕관) · '보물을 찾았습니다!' · 몇 번째 · 게임 이름 · 상품 ·
 ///     주최 · 찾은 시각 · 순위 · 주최자에게 메세지가 갔다는 안내. 반짝임이 훑고 '확인'(안드로이드 뒤로가기도) → 그 게임 상세
+///     상품 사진(쿠폰·QR — 11-06 대표님)이 있으면 상품 칸의 선물 그림 자리에 그 사진 · '눌러서 크게 보기 · 저장' — 누르면 크게(R0926PhotoView)
 /// 이 컴포넌트는 늘 켜진 빈 틀(HuntCelebrate0926)에 있고 보이는 것은 panel 아래 — Apply(Redesign0926ApplyHuntTreasure)가 만든다.
 /// </summary>
 public class R0926HuntCelebrate : MonoBehaviour
@@ -39,6 +40,12 @@ public class R0926HuntCelebrate : MonoBehaviour
     [SerializeField] private Sprite confettiRound;         // 동그란 꽃가루 (비어 있으면 네모만)
     [SerializeField] private Sprite glintSprite;
     [SerializeField] private Sprite coinSprite;            // 꽃가루에 섞이는 금화 (팔랑이면 동전이 도는 것처럼)
+    [Header("상품 사진 (11-06 — 쿠폰·QR)")]
+    [SerializeField] private RawImage prizePhoto;          // 상품 칸 왼쪽 (칸은 그 부모 — 둥근 마스크)
+    [SerializeField] private GameObject prizeGift;         // 선물 그림 — 사진이 있으면 숨긴다
+    [SerializeField] private Button prizeButton;           // 상품 칸 — 사진이 있을 때만 눌린다
+    [SerializeField] private Text prizeHint;               // '눌러서 크게 보기 · 저장'
+    [SerializeField] private R0926PhotoView photoView;
 
     private const float NeedHeight = 1800f, NeedWidth = 1300f;   // content 가 다 들어가는 크기 (캔버스 단위)
     private const float ChestY = 70f, CardY = 0f, CardTop = 640f;   // CardTop = 카드 가운데에서 메달까지
@@ -74,6 +81,9 @@ public class R0926HuntCelebrate : MonoBehaviour
     private float closedAt = -99f;                       // 마지막으로 닫은 시각 — 늦게 온 같은 보물의 '찾음'을 거른다
     private bool ended;
     private string huntTitle, prize, hostName;
+    private string prizePhotoUrl;                        // null = 아직 모름(서버에서 받는다) · "" = 없음
+    private Texture2D prizeTex;
+    private Coroutine prizeCo;
     private System.DateTime foundAt;
     private Coroutine playCo, fetchCo;
 
@@ -85,8 +95,8 @@ public class R0926HuntCelebrate : MonoBehaviour
 
     /// <summary>찾음 — 축하 화면을 띄운다. chest = AR 에서 떼어 낸 그 보물 (없으면 kind·url 로 새로 만든다).
     /// prize 가 null 이면(앱을 다시 켜 아직 모름) 서버에서 받아 채운다. total 은 찾을 수 있는 사람 수 (0 = 제한 없음). 띄울 화면이 없으면 false.
-    /// locked = 비밀번호를 건 보물 — 짜잔 직전에 자물쇠가 딸깍 풀린다</summary>
-    public static bool Show(int id, string title, int rank, int total, bool ended, string prize, string hostName, string kind, string url, R0926HuntChest chest = null, bool locked = false)
+    /// locked = 비밀번호를 건 보물 — 짜잔 직전에 자물쇠가 딸깍 풀린다. prizePhoto = 상품 사진 주소 ("" 없음 · null 이면 서버에서 받는다)</summary>
+    public static bool Show(int id, string title, int rank, int total, bool ended, string prize, string hostName, string kind, string url, R0926HuntChest chest = null, bool locked = false, string prizePhoto = null)
     {
         if (instance == null || instance.panel == null) return false;
         // 같은 보물의 두 번째 '찾음' — AR 두 번 톡톡과 상세의 비밀번호 칸이 거의 같은 때 눌렸거나 답이 늦게 왔다(서버는 같은 순위로 again).
@@ -97,7 +107,7 @@ public class R0926HuntCelebrate : MonoBehaviour
             return true;
         }
         R0926HuntTreasure.HideToast();   // 남아 있던 '조금만 더 가까이' 같은 알약이 축하 화면 뒤로 비치지 않게
-        instance.Begin(id, title, rank, total, ended, prize, hostName, kind, url, chest, locked);
+        instance.Begin(id, title, rank, total, ended, prize, hostName, kind, url, chest, locked, prizePhoto);
         return true;
     }
 
@@ -106,6 +116,7 @@ public class R0926HuntCelebrate : MonoBehaviour
         instance = this;
         if (okButton != null) okButton.onClick.AddListener(Close);
         if (skipButton != null) skipButton.onClick.AddListener(Skip);
+        if (prizeButton != null) prizeButton.onClick.AddListener(OpenPrize);
         if (panel != null) panel.SetActive(false);
     }
 
@@ -119,10 +130,11 @@ public class R0926HuntCelebrate : MonoBehaviour
         if (instance == this) instance = null;
     }
 
-    private void Begin(int id, string t, int r, int n, bool last, string p, string host, string kind, string url, R0926HuntChest chest, bool locked)
+    private void Begin(int id, string t, int r, int n, bool last, string p, string host, string kind, string url, R0926HuntChest chest, bool locked, string photo)
     {
         if (Showing) Finish();
         huntId = id; huntTitle = t; rank = r; total = n; ended = last; prize = p; hostName = host;
+        SetPrizePhoto(photo);
         foundAt = System.DateTime.Now;
         closing = false;
         transform.SetAsLastSibling();
@@ -140,7 +152,7 @@ public class R0926HuntCelebrate : MonoBehaviour
         if (playCo != null) StopCoroutine(playCo);
         playCo = StartCoroutine(Play(staged));
         if (fetchCo != null) StopCoroutine(fetchCo);
-        fetchCo = prize == null && R0926HuntApi.CanCall ? StartCoroutine(Fetch(id)) : null;
+        fetchCo = (prize == null || prizePhotoUrl == null) && R0926HuntApi.CanCall ? StartCoroutine(Fetch(id)) : null;
     }
 
     // AR 보물이 화면에 보이던 자리(content 좌표)·높이·이쪽에서 본 방향
@@ -177,10 +189,37 @@ public class R0926HuntCelebrate : MonoBehaviour
                           : "";
         if (huntText != null) OneLine(huntText, huntTitle ?? "");
         if (prizeLabel != null) prizeLabel.text = T("상품", "Prize", "賞品", "奖品", "Premio");
+        bool photo = !string.IsNullOrEmpty(prizePhotoUrl);
         if (prizeText != null)
+        {
             prizeText.text = prize == null ? T("상품 안내를 불러오는 중…", "Loading the prize…", "賞品情報を読み込んでいます…", "正在加载奖品信息…", "Cargando el premio…")
                            : prize.Length > 0 ? prize
+                           : photo ? T("상품 사진을 확인해 보세요", "Check the prize photo", "賞品の写真を確認してください", "请查看奖品照片", "Mira la foto del premio")
                            : T("따로 정한 상품은 없어요", "No prize was set for this game", "このゲームには賞品が設定されていません", "此游戏没有设置奖品", "Este juego no tiene premio");
+            var ps = prizeText.rectTransform.sizeDelta;
+            prizeText.rectTransform.sizeDelta = new Vector2(ps.x, photo ? 100f : 150f);   // 사진이 있으면 아래 줄에 '눌러서 크게 보기'
+        }
+        // 상품 사진 — 선물 그림 자리에 사진, 상품 칸을 누르면 크게 보고 저장
+        if (prizeGift != null) prizeGift.SetActive(!photo);
+        if (prizePhoto != null)
+        {
+            prizePhoto.transform.parent.gameObject.SetActive(photo);
+            prizePhoto.texture = prizeTex;
+            prizePhoto.enabled = prizeTex != null;
+            var fit = prizePhoto.GetComponent<AspectRatioFitter>();
+            if (fit != null && prizeTex != null) fit.aspectRatio = prizeTex.width / (float)Mathf.Max(1, prizeTex.height);
+        }
+        if (prizeButton != null)
+        {
+            prizeButton.interactable = photo;
+            if (prizeButton.targetGraphic != null) prizeButton.targetGraphic.raycastTarget = photo;
+        }
+        if (prizeHint != null)
+        {
+            prizeHint.gameObject.SetActive(photo);
+            prizeHint.text = prizeTex != null ? T("눌러서 크게 보기 · 저장  ›", "Tap to view large · save  ›", "タップで拡大 · 保存  ›", "点击放大 · 保存  ›", "Toca para ampliar · guardar  ›")
+                                              : T("사진을 받는 중…", "Loading the photo…", "写真を読み込み中…", "正在加载照片…", "Cargando la foto…");
+        }
         int row = 0;
         Meta(ref row, T("주최", "Host", "主催", "主办", "Organiza"),
              string.IsNullOrEmpty(hostName) ? null : T(hostName + "님", hostName, hostName + " さん", hostName, hostName));
@@ -194,7 +233,8 @@ public class R0926HuntCelebrate : MonoBehaviour
         if (noteText != null)
         {
             string note = T("주최자에게 찾았다는 메세지를 보냈어요", "We let the host know you found it", "主催者に見つけたことをメッセージで送りました", "已发消息通知主办者：你找到了宝藏", "Avisamos a quien organiza de que lo encontraste");
-            if (!string.IsNullOrEmpty(prize)) note += "\n" + T("상품은 메세지로 주최자와 이야기해 보세요", "Message the host about the prize", "賞品については主催者とメッセージで相談してください", "关于奖品，请通过消息与主办者沟通", "Escribe a quien organiza para hablar del premio");
+            if (photo) note += "\n" + T("상품 사진은 이 게임 상세에서 언제든 다시 볼 수 있어요", "You can see the prize photo again in this game's details", "賞品の写真はこのゲームの詳細でいつでも見られます", "随时可在此游戏详情中再次查看奖品照片", "Puedes volver a ver la foto del premio en los detalles del juego");
+            else if (!string.IsNullOrEmpty(prize)) note += "\n" + T("상품은 메세지로 주최자와 이야기해 보세요", "Message the host about the prize", "賞品については主催者とメッセージで相談してください", "关于奖品，请通过消息与主办者沟通", "Escribe a quien organiza para hablar del premio");
             noteText.text = note;
         }
         if (okLabel != null) okLabel.text = T("확인", "OK", "OK", "确定", "Aceptar");
@@ -247,11 +287,41 @@ public class R0926HuntCelebrate : MonoBehaviour
         fetchCo = null;
         if (id != huntId || !Showing) yield break;
         var h = code == 200 && j != null ? j["hunt"] : null;
-        prize = h != null && h.HasKey("prize") ? (string)h["prize"] : "";
+        if (prize == null) prize = h != null && h.HasKey("prize") ? (string)h["prize"] : "";
+        if (prizePhotoUrl == null) SetPrizePhoto(h != null && h.HasKey("prize_photo") ? (string)h["prize_photo"] : "");
         if (h != null && string.IsNullOrEmpty(hostName)) hostName = h["host"]["username"];
         if (h != null && total <= 0) total = h["winners_max"].AsInt;
         Paint();
     }
+
+    // ── 상품 사진 ───────────────────────────────────────────
+    private void SetPrizePhoto(string url)
+    {
+        if (prizeCo != null) { StopCoroutine(prizeCo); prizeCo = null; }
+        if (prizeTex != null) { Destroy(prizeTex); prizeTex = null; }
+        prizePhotoUrl = url;
+        if (!string.IsNullOrEmpty(url)) prizeCo = StartCoroutine(LoadPrize(huntId, url));
+    }
+
+    private IEnumerator LoadPrize(int id, string url)
+    {
+        Texture2D tex = null;
+        yield return R0926HuntApi.LoadPrize(url, t => tex = t);
+        prizeCo = null;
+        if (id != huntId || url != prizePhotoUrl || !Showing) { if (tex != null) Destroy(tex); yield break; }
+        prizeTex = tex;
+        Paint();
+    }
+
+    private void OpenPrize()
+    {
+        if (photoView != null && prizeTex != null && !string.IsNullOrEmpty(prizePhotoUrl)) photoView.OpenPrize(prizePhotoUrl, prizeTex);
+    }
+
+#if UNITY_EDITOR
+    public static bool EditorPrizeLoaded => instance != null && instance.prizeTex != null;
+    public static void EditorOpenPrize() { if (instance != null) instance.OpenPrize(); }
+#endif
 
     // ── 연출 ────────────────────────────────────────────────
     private IEnumerator Play(bool staged)
@@ -382,6 +452,9 @@ public class R0926HuntCelebrate : MonoBehaviour
             float lid0 = reveal.Chest.LidAngle;
             for (float t = 0f; ; t += Time.unscaledDeltaTime)
             {
+#if UNITY_EDITOR
+                if (EditorHoldOpen >= 0f && t > EditorHoldOpen) t = EditorHoldOpen;   // 스토어 사진 — 활짝 열린 순간에 멈춰 둔다
+#endif
                 float k = Mathf.Clamp01(t / 0.5f);
                 if (lidded) reveal.Lid(Mathf.LerpUnclamped(lid0, LidOpen, BackOut(Mathf.Clamp01(t / 0.32f))));
                 float spin = lidded ? 0f : 360f * (1f - Mathf.Pow(1f - Mathf.Clamp01(t / 0.6f), 3f));
@@ -632,6 +705,8 @@ public class R0926HuntCelebrate : MonoBehaviour
         foreach (var p in pieces) p.rt.gameObject.SetActive(false);
         SetGlints(false, null);
         phase = Phase.None;
+        if (prizeCo != null) { StopCoroutine(prizeCo); prizeCo = null; }
+        if (prizeTex != null) { Destroy(prizeTex); prizeTex = null; }
         panel.SetActive(false);
         closedAt = Time.unscaledTime;
     }
@@ -737,6 +812,8 @@ public class R0926HuntCelebrate : MonoBehaviour
     public static float EditorOpenedAfter = -1f;
     /// <summary>플레이 시험 — 보인 뒤 자물쇠가 풀릴 때까지 (초 · 아직이면 -1)</summary>
     public static float EditorUnlockedAfter = -1f;
+    /// <summary>스토어 사진 — 짜잔에서 이 초에 멈춰 둔다 (-1 이면 그대로 흐름 · 한 장 찍는 사이 0.5초가 지나 카드가 덮던 것)</summary>
+    public static float EditorHoldOpen = -1f;
     private static float editorShownAt;
     public static string EditorPhase => instance != null ? instance.phase.ToString() : "";
     public static void EditorSkip() { if (instance != null) instance.Skip(); }

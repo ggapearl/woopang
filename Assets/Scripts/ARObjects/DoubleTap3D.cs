@@ -94,6 +94,9 @@ public class DoubleTap3D : MonoBehaviour
     private bool isCooldown = false; // 더블탭 쿨다운
     private bool canClose = true; // 닫기 방지 쿨다운
     private bool isFadingOut = false; // FadeOut 코루틴 중복 실행 방지
+    private Coroutine imageFade;      // 늦게 도착한 사진을 서서히 띄우는 중
+    private const float PhotoWait = 0.35f;   // 첫 장 사진이 곧 오면 이만큼 기다렸다 창과 함께 띄운다
+    private const float MaxFadeStep = 1f / 30f;   // 무거운 프레임 하나가 페이드를 통째로 먹지 않게 한 프레임에 세는 시간 상한
 
     [Header("Comment Preview")]
     public GameObject commentPreviewPanel;
@@ -552,7 +555,7 @@ public class DoubleTap3D : MonoBehaviour
         if (isFullscreen && !isSliding && !isDragging && fullscreenImage != null && !fullscreenImage.enabled
             && imageIndex >= 0 && imageIndex < imageSprites.Count && imageSprites[imageIndex] != null)
         {
-            ShowImage(imageIndex);
+            ShowImage(imageIndex, fullscreenCanvasGroup != null && fullscreenCanvasGroup.alpha > 0.5f);   // 창이 이미 떠 있으면 사진만 서서히 (11-05 '띡' 하고 뜨던 것)
         }
 
         // 댓글 패널이 열려있으면 모든 터치 입력 무시 (댓글 패널이 최상위 UI)
@@ -1022,8 +1025,9 @@ public class DoubleTap3D : MonoBehaviour
         }
     }
 
-    private void ShowImage(int index)
+    private void ShowImage(int index, bool fade = false)
     {
+        if (imageFade != null) { StopCoroutine(imageFade); imageFade = null; }
         if (index == -1)
         {
             fullscreenImage.enabled = false;
@@ -1040,7 +1044,8 @@ public class DoubleTap3D : MonoBehaviour
             {
                 fullscreenImage.enabled = true;
                 fullscreenImage.sprite = sprite;
-                fullscreenImage.color = Color.white;
+                fullscreenImage.color = fade ? new Color(1f, 1f, 1f, 0f) : Color.white;
+                if (fade && isActiveAndEnabled) imageFade = StartCoroutine(FadeImageIn(fadeDuration));
 
                 // fullscreenImage가 guidePanel(FullScreenGuide) 뒤에 위치하도록 설정
                 fullscreenImage.transform.SetAsFirstSibling();
@@ -1249,7 +1254,7 @@ public class DoubleTap3D : MonoBehaviour
         instagramButton.gameObject.SetActive(!string.IsNullOrEmpty(instagramId));
 
         nameText.gameObject.SetActive(!string.IsNullOrEmpty(placeName) && isFullscreen);
-        if (!string.IsNullOrEmpty(placeName)) nameText.text = placeName;
+        if (!string.IsNullOrEmpty(placeName)) R0926EmojiText.Set(nameText, placeName);   // 이름 속 이모지는 우팡 이모지 그림으로
 
         // Created by (username) 표시
         if (createdByText != null)
@@ -1378,22 +1383,40 @@ public class DoubleTap3D : MonoBehaviour
         StartCoroutine(FadeOutCanvas(fadeDuration));
     }
 
+    // 11-05 대표님 — 더블탭하면 가끔 페이드 없이 '띡' 하고 뜬다.
+    // 여는 프레임은 무겁다(창 켜기·사진 받기 시작·진동·소리) → 다음 프레임의 deltaTime 이 0.3초를 넘으면 페이드가 한 번에 끝났다.
+    // 한 프레임 쉬고 시작 · 한 프레임에 1/30초까지만 센다 · 첫 장 사진이 곧 오면 살짝(0.35초까지) 기다렸다 함께 띄운다
     IEnumerator FadeInCanvas(float duration)
     {
         // FadeOut이 진행 중이었다면 취소 상태로 간주하고 isFadingOut 리셋
         isFadingOut = false;
-
-        float elapsed = 0f;
         fullscreenCanvasGroup.alpha = 0f;
+        yield return null;
 
-        while (elapsed < duration)
+        for (float w = 0f; w < PhotoWait && photosLoading && imageIndex >= 0 && fullscreenImage != null && !fullscreenImage.enabled; w += Mathf.Min(Time.unscaledDeltaTime, MaxFadeStep))
+            yield return null;
+
+        for (float t = 0f; t < duration; t += Mathf.Min(Time.unscaledDeltaTime, MaxFadeStep))
         {
-            elapsed += Time.deltaTime;
-            fullscreenCanvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsed / duration);
+            float k = Mathf.Clamp01(t / duration);
+            fullscreenCanvasGroup.alpha = k * k * (3f - 2f * k);
             yield return null;
         }
 
         fullscreenCanvasGroup.alpha = 1f;
+    }
+
+    // 창이 뜬 뒤에 도착한 사진 — 갑자기 나타나지 않게 서서히
+    IEnumerator FadeImageIn(float duration)
+    {
+        for (float t = 0f; t < duration; t += Mathf.Min(Time.unscaledDeltaTime, MaxFadeStep))
+        {
+            float k = Mathf.Clamp01(t / duration);
+            fullscreenImage.color = new Color(1f, 1f, 1f, k * k * (3f - 2f * k));
+            yield return null;
+        }
+        fullscreenImage.color = Color.white;
+        imageFade = null;
     }
 
     IEnumerator FadeOutCanvas(float duration)

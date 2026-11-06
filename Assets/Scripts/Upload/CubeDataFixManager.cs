@@ -1033,8 +1033,8 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        string description = descriptionInput.text?.Trim() ?? "";
-        string name = nameInput.text?.Trim() ?? "";
+        string description = R0926Emoji.ToReal(descriptionInput.text?.Trim() ?? "");   // 우팡 이모지 글자 → 진짜 이모지
+        string name = R0926Emoji.ToReal(nameInput.text?.Trim() ?? "");
 
         if (!ownerMode && string.IsNullOrEmpty(description))   // 내 장소는 바로 고치므로 '수정할 내용'이 없다
         {
@@ -1237,7 +1237,7 @@ public class CubeDataFixManager : MonoBehaviour
         if (local == null)
         {
             // 우팡 장소가 아닌 것(공공데이터·교통 등) — 이름만 (예전엔 빈 칸)
-            if (nameInput != null && doubleTap != null) nameInput.text = doubleTap.GetName() ?? "";
+            if (nameInput != null && doubleTap != null) nameInput.text = R0926Emoji.ToInput(doubleTap.GetName() ?? "");
             return;
         }
         editId = local.id;
@@ -1347,7 +1347,7 @@ public class CubeDataFixManager : MonoBehaviour
 
     private void Fill(PlaceData p)
     {
-        if (nameInput != null) nameInput.text = p.name ?? "";
+        if (nameInput != null) nameInput.text = R0926Emoji.ToInput(p.name ?? "");   // 진짜 이모지 → 우팡 이모지 글자 (칸 안에 그림으로)
         if (petFriendlyToggle != null) petFriendlyToggle.isOn = p.pet_friendly;
         if (separateRestroomToggle != null) separateRestroomToggle.isOn = p.separate_restroom;
         string insta = (p.instagram_id ?? "").Trim();

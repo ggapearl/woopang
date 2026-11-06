@@ -886,9 +886,18 @@ public class OffScreenIndicator : MonoBehaviour
     private void NotifyFallbackEntered(string reason)
     {
         if (!emitFallbackToast) return;
+        // 앱을 켜고 장소를 받은 직후의 화살표 모드는 복구가 아니다 — 'N곳을 찾았어요' 바로 밑에 'AR 세션 복구 중' 이 겹쳐 떴다 (11-05 대표님)
+        if (reason != null && reason.StartsWith("DataLoaded")) return;
         if (Time.realtimeSinceStartup - lastFallbackToastTime < fallbackToastCooldown) return;
         lastFallbackToastTime = Time.realtimeSinceStartup;
+        if (isActiveAndEnabled) StartCoroutine(FallbackToastUnlessPill());
+    }
 
+    // 노치 아래 알약이 이미 같은 말('AR 세션 복구 중…')을 하고 있으면 그 밑 토스트로 또 하지 않는다 — 로딩 패널은 이 호출 바로 뒤에 켜지므로 한 프레임 뒤에 본다
+    private IEnumerator FallbackToastUnlessPill()
+    {
+        yield return null;
+        if (R0926StatusPill.AnyShowing) yield break;
         if (ToastManager.Instance != null)
         {
             ToastManager.Instance.ShowWarning(R0926LocalizedText.Say("AR 세션 복구 중...", "Recovering AR session...", "ARセッションを復旧中...", "正在恢复 AR 会话...", "Recuperando la sesión de AR..."));

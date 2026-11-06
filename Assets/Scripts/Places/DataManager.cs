@@ -1009,9 +1009,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         // publicData 키가 없으면 기본값 true
         bool showPublicData = !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
 
-        // Object3D 토글 OFF: 원본이 custom인 오브젝트만 숨김 (GLB 실패로 cube 전환된 것도 포함)
+        // Object3D 토글 OFF: 3D 오브젝트(anim · 원본 custom — GLB 실패로 cube 전환된 것도 포함) 숨김
         string origType = place.original_model_type ?? place.model_type;
-        if (!showObject3D && origType == "custom")
+        if (!showObject3D && FilterManager.Is3D(place.category, origType))
         {
             return false;
         }

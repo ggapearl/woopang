@@ -20,6 +20,17 @@ public class R0926EmojiText : MonoBehaviour
 
     private void Awake() => text = GetComponent<Text>();
 
+    /// <summary>
+    /// 서버에서 진짜 이모지로 오는 글(장소 이름 등 · 11-05)을 우팡 이모지로 — 처음이면 이 부품을 붙이고, 바꾼 글을 넣는다.
+    /// 글을 넣자마자 폭을 재는 곳도 바로 맞게 넣을 때 바꾼다
+    /// </summary>
+    public static void Set(Text t, string s)
+    {
+        if (t == null) return;
+        if (t.GetComponent<R0926EmojiText>() == null) t.gameObject.AddComponent<R0926EmojiText>();
+        t.text = R0926Emoji.ToDisplay(s);
+    }
+
     private void OnEnable()
     {
         text.RegisterDirtyVerticesCallback(OnTextDirty);
