@@ -16,6 +16,8 @@ namespace Redesign0926
     /// 트리거 파일(.redesign0926_trigger) 한 줄에 명령 하나:
     ///   apply                       → 시안 레이아웃 적용 (없으면 0529 를 복사해 씬부터 만든다)
     ///   capture:&lt;dir&gt;:main,list,...  → 상태별 UI 캡처 (끝나면 원상복구)
+    ///   version:1.2.66              → 출시 버전을 정한다 (빌드의 하루 한 번 +1 은 손으로 정한 값을 그대로 쓴다)
+    ///   buildandroid                → 검증 뒤 Play 용 .aab
     /// 결과 로그는 .redesign0926_result 에 남는다.
     ///
     /// 사용 중인 0529 씬은 건드리지 않는다: 0926 을 Additive 로 열어 작업하고 저장 후 닫는다.
@@ -245,6 +247,19 @@ namespace Redesign0926
                     else if (cmd == "buildandroid")
                     {
                         BuildAndroidRelease(log);
+                    }
+                    else if (cmd.StartsWith("version:"))
+                    {
+                        // 대표님이 출시 번호를 정했을 때 (예: 11-05 「1.2.66 으로 안드로이드, iOS 모두」)
+                        string v = cmd.Substring(8).Trim();
+                        if (!System.Text.RegularExpressions.Regex.IsMatch(v, @"^\d+\.\d+\.\d+$"))
+                            log.Add("version: 형식이 아님 — " + v);
+                        else
+                        {
+                            PlayerSettings.bundleVersion = v;
+                            AssetDatabase.SaveAssets();
+                            log.Add("bundleVersion → " + PlayerSettings.bundleVersion + " · 다음 빌드 " + global::Editor.BuildNumberAutoIncrement.PredictBundleVersion());
+                        }
                     }
                     else if (cmd.StartsWith("dump:"))
                     {

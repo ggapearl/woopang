@@ -40,6 +40,10 @@
     "1.2.60": {
       "ko": "• 나를 3D로 — 프로필 편집에서 3D 모델(GLB)을 올리면 AR 속 내 자리와 프로필 카드에 3D로 떠요.\n• 근처 사람은 늘 나를 보는 사진 원으로 — 분홍 테두리, 사진이 없으면 기본 얼굴.\n• 이모지 — 보내기 옆 단추로 큰 이모지를 골라 대화와 댓글에 넣어요.\n• 웹 로그인과 계정 관리가 앱을 떠나지 않고 앱 안에서 열려요.\n• 보물 모양 '하트'가 반짝이는 보석 하트로.\n• 입력칸 다듬기 — 맨 아래 칸도 입력줄 위로 올라오고, 칸 위에서 끌어도 목록이 부드럽게 굴러가요.\n• 하늘 '근처 핫플' 정리와 안정성 개선.",
       "en": "• Go 3D — upload a 3D model (GLB) in Edit profile to appear in 3D in AR and on your profile card.\n• People nearby now show as photo circles that always face you.\n• Emoji — tap the button next to Send to add big emoji to chats and comments.\n• Sign in and manage your account without leaving the app.\n• The heart treasure is now a sparkling gem heart.\n• Smoother text fields, a tidier sky hot-spots page and better stability."
+    },
+    "1.2.66": {
+      "ko": "• 나침반 모드 — 어둡거나 하늘을 비춰 위치를 못 잡을 때도 오브젝트가 떨리지 않고 제 방향에 떠요.\n• 보물찾기 상품에 사진 — 할인쿠폰·QR코드 사진을 올리면 보물을 찾은 사람이 바로 봐요.\n• 친구 지도 — 한자리에 모인 친구는 +N, 얼굴을 누르면 프로필, 두 번 누르면 확대, 아래엔 내 보물찾기.\n• 하늘 창은 위로 밀면 위에, 아래로 밀면 아래에 고정돼요.\n• 장소 추가·수정에서도 이모지를 쓰고, 채팅 사진은 한 번에 10장까지 보내요.\n• 3D를 끄면 3D 오브젝트가 모두 숨고, 두 번 눌러 여는 창과 상단 안내가 부드럽게 떠요.\n• 시작 화면에 한반도가 보이는 지구.",
+      "en": "• Compass mode — objects hold steady in the dark or when you point at the sky.\n• Add a photo, like a coupon or QR code, to a treasure-hunt prize.\n• Friends map — +N for friends in one spot, tap a face for the profile, double-tap to zoom.\n• Swipe the sky panel up or down to pin it there.\n• Emoji when adding places, and up to 10 photos at once in chats.\n• Turning 3D off hides all 3D objects; windows and notices fade in smoothly.\n• A new Earth on the opening screen."
     }
   }
 }
