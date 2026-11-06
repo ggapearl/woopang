@@ -52,9 +52,11 @@ public class R0926MapTiles : MonoBehaviour
 #endif
 
     private static Info info;          // 앱이 켜져 있는 동안 한 번 받는다 (못 받으면 10분 뒤 다시)
+    private static string infoLang;    // info 를 받을 때 보낸 기기 언어 — 타일도 이 언어로 받는다 (해외 지명이 언어마다 달라 서버가 layer 를 언어마다 따로 준다)
     private static float infoRetryAt;
     private static bool diskCleaned;   // 기기 캐시 정리는 앱이 켜질 때마다 한 번
     private UnityWebRequest infoReq;
+    private string infoReqLang;
 
     private readonly Dictionary<long, Texture2D> cache = new Dictionary<long, Texture2D>();
     private readonly Dictionary<long, int> lastUsed = new Dictionary<long, int>();
@@ -111,9 +113,13 @@ public class R0926MapTiles : MonoBehaviour
 
     private void OnEnable()
     {
-        if (!Available && infoReq == null && Time.realtimeSinceStartup >= infoRetryAt)
+        // 해외 지도 지명은 기기 언어로 (2026-11-06 — 한국은 브이월드라 한국어 그대로). 앱 언어를 바꿨으면 지도를 다시 열 때 그 언어로 다시 받는다
+        string lang = AppLanguage.Code;
+        bool want = Available ? infoLang != lang : Time.realtimeSinceStartup >= infoRetryAt;
+        if (want && infoReq == null)
         {
-            infoReq = UnityWebRequest.Get(InfoUrl);
+            infoReqLang = lang;
+            infoReq = UnityWebRequest.Get(InfoUrl + "?lang=" + lang);
             infoReq.timeout = 8;
             infoReq.SendWebRequest();
         }
@@ -319,12 +325,13 @@ public class R0926MapTiles : MonoBehaviour
                 try { got = JsonUtility.FromJson<Info>(infoReq.downloadHandler.text); } catch (Exception) { }
             infoReq.Dispose();
             infoReq = null;
-            if (got != null) { info = got; diskDir = null; }
+            if (got != null) { info = got; infoLang = infoReqLang; diskDir = null; }
             if (!Available) infoRetryAt = Time.realtimeSinceStartup + 600f;   // 서버가 아직 타일을 안 준다(없음·꺼짐) — 10분 뒤 다시
             PrepareDisk();
             if (Available && hasView) UpdateView(lastOx, lastOy, lastMapW, lastMapH, lastView, lastScale);
         }
         if (!Available) return;
+        if (infoReq != null && infoReqLang != infoLang) return;   // 바꾼 언어로 info 를 다시 받는 중 — 예전 언어 타일을 새로 받아 섞지 않는다
 
         float now = Time.realtimeSinceStartup;
         bool changed = false;
@@ -383,7 +390,7 @@ public class R0926MapTiles : MonoBehaviour
                 notOnDisk.Add(k);
             }
             if (net >= maxRequests || !netOk) continue;
-            string url = TileUrl.Replace("{z}", KZ(k).ToString()).Replace("{x}", KX(k).ToString()).Replace("{y}", KY(k).ToString());
+            string url = TileUrl.Replace("{z}", KZ(k).ToString()).Replace("{x}", KX(k).ToString()).Replace("{y}", KY(k).ToString()) + "?lang=" + infoLang;
             var req = UnityWebRequestTexture.GetTexture(url, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
             req.timeout = 15;
             LoginManager.ApplyAuth(req);
