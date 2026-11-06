@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-05a';
+  const WEB_VERSION = '2026-11-06a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2535,9 +2535,12 @@
     opts = opts || {};
     const page = h('div', { class: 'screen page' },
       h('div', { class: 'bar sub' },
-        h('button', { class: 'icon', 'aria-label': opts.close ? '닫기' : '뒤로', onclick: () => popPage(), html: opts.close ? ICON.close : ICON.back }),
-        h('div', { class: 'who' }, h('b', { text: title })),
-        h('span', { class: 'spacer' })),
+        ...(() => {
+          const btn = h('button', { class: 'icon', 'aria-label': opts.close ? '닫기' : '뒤로', onclick: () => popPage(), html: opts.close ? ICON.close : ICON.back });
+          const who = h('div', { class: 'who' }, h('b', { text: title }));
+          const gap = h('span', { class: 'spacer' });
+          return opts.close ? [gap, who, btn] : [btn, who, gap];   // 문서함·승인함은 X 가 오른쪽 끝 (2026-11-06 대표님)
+        })()),
       content);
     page.onClose = onClose;
     pages.push(page);
