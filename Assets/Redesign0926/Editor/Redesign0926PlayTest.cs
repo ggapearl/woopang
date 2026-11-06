@@ -92,6 +92,7 @@ namespace Redesign0926
             else if (mode == "caret") PlanCaret();
             else if (mode == "store3") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStore3(); }
             else if (mode == "sky") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSky(); }
+            else if (mode == "credits") { storeSrc = ""; PlanCredits(); }
             else if (mode == "skypages")
             {
                 // 하늘 옆 장 · 고정 — 날씨 좌표(광화문)로 옮겨 시험 서버의 축제 · 핫플 · 친구(서울)가 근처에 들게
@@ -15750,6 +15751,135 @@ namespace Redesign0926
             Do(() => AimCamera(-52f, 0f));
             Sleep(2.0f);
             Shot("sky52c");
+        }
+
+        // 출처 (11-07) — 하늘 날씨판 '자료: 기상청 · Open-Meteo.com' (예보 칸 밑 · 장 표시 점 위) · 지도 출처 글 뒤 어두운 알약.
+        // 지도는 운영 서버 타일로 본다 (시험 타일 서버 5098 은 지금 없다 — 받기만 한다)
+        private static void PlanCredits()
+        {
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            R0926SkyWeather sky = null;
+            RectTransform frame = null, fc = null, dots = null, glass = null;
+            Text credit = null;
+            float glassH = 0f;
+            // 틀 안 좌표 (위가 +) — 점 · 유리는 틀 바로 아래, 출처 · 예보는 날씨 장 안 (장은 틀에 꽉 차 같은 자리)
+            Func<RectTransform, Rect> inFrame = rt =>
+            {
+                var c = new Vector3[4];
+                rt.GetWorldCorners(c);
+                Vector3 a = frame.InverseTransformPoint(c[0]), b = frame.InverseTransformPoint(c[2]);
+                return Rect.MinMaxRect(a.x, a.y, b.x, b.y);
+            };
+            Func<bool, string, string> say = (kma, lang) =>
+            {
+                typeof(R0926SkyWeather).GetMethod("ShowCredit", F).Invoke(sky, new object[] { kma, lang });
+                return credit.text;
+            };
+
+            Do(() => { Backdrop("bg_sky.png"); DeviceFov(); R0926SkyWeather.EditorRegionOverride = StoreRegion; });   // 판의 지역 이름도 날씨 좌표(광화문)로
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(1.0f);
+            Do(() =>
+            {
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude)) t.gameObject.SetActive(false);
+                HideAddressLine();
+                sky = UnityEngine.Object.FindAnyObjectByType<R0926SkyWeather>(FindObjectsInactive.Include);
+                if (sky == null) return;
+                typeof(R0926SkyWeather).GetField("collapsed", F)?.SetValue(sky, false);
+                frame = typeof(R0926SkyWeather).GetField("frame", F)?.GetValue(sky) as RectTransform;
+                fc = (typeof(R0926SkyWeather).GetField("forecast", F)?.GetValue(sky) as GameObject)?.transform as RectTransform;
+                dots = frame != null ? frame.Find("Dots0926") as RectTransform : null;
+                glass = (typeof(R0926SkyWeather).GetField("glass", F)?.GetValue(sky) as Image)?.rectTransform;
+                glassH = glass != null ? glass.rect.height : 0f;
+                InjectWeather();
+                credit = typeof(R0926SkyWeather).GetField("credit", F)?.GetValue(sky) as Text;
+                AimCamera(-45f, 0f);
+            });
+            Sleep(4.5f);
+            Check(() => credit != null && fc != null && credit.transform.parent == fc.parent && credit.text.Contains("Open-Meteo.com"), "날씨 장에 출처 한 줄 — Open-Meteo.com");
+            Do(() => log.Add("  출처: " + credit?.text + " · 유리 높이 " + glassH.ToString("0") + " → " + (glass != null ? glass.rect.height.ToString("0") : "-")));
+            Check(() =>
+            {
+                Rect c = inFrame(credit.rectTransform), f = inFrame(fc), d = inFrame(dots), g = inFrame(glass);
+                log.Add($"  예보 아래 {f.yMin:0} · 출처 {c.yMax:0}~{c.yMin:0} · 점 {d.yMax:0}~{d.yMin:0} · 유리 아래 {g.yMin:0}");
+                return c.yMax <= f.yMin - 4f && c.yMin >= d.yMax + 10f && g.yMin <= d.yMin - 20f && credit.preferredWidth < g.width - 80f;
+            }, "출처 줄: 예보 칸 밑 · 장 표시 점 위 · 유리 안 (점 아래 여백 그대로)");
+            Shot("credit_sky");
+            // 앱이 켜질 때 받아 둔 날씨로 이미 한 번 그려 — 넣기 전에도 출처 줄이 있다. 유리는 만든 크기(910)에서 한 번만 늘어난다
+            Check(() => Mathf.Abs(glass.rect.height - (910f + 26f)) < 0.5f && say(true, "ko") != null && Mathf.Abs(glass.rect.height - (910f + 26f)) < 0.5f,
+                "다시 그려도 유리는 한 번만 늘어난다 (910 → 936)");
+            Check(() => say(false, "en") == "Data: Open-Meteo.com", "기상청 실황이 없으면 Open-Meteo 만 (영어)");
+            Check(() => say(true, "ko") == "자료: 기상청 · Open-Meteo.com", "기상청 실황이 있으면 둘 다 (한국어)");
+            Do(() => sky.SetPinned(true));
+            Sleep(1.5f);
+            Check(() =>
+            {
+                var c = SkyScreenRect(credit.rectTransform);
+                var g = SkyScreenRect(glass);
+                return c != null && g != null && g.Value.yMin < c.Value.yMin - 10f && g.Value.yMax > c.Value.yMax;
+            }, "고정하면 출처 줄도 어두운 유리 안");
+            Shot("credit_pinned");
+            Do(() => sky.SetPinned(false));
+            Sleep(1.0f);
+
+            R0926FriendsMap map = null;
+            R0926MapTiles tiles = null;
+            Text attr = null;
+            Func<string, int> count = name => (typeof(R0926MapTiles).GetField(name, F)?.GetValue(tiles) as System.Collections.ICollection)?.Count ?? -1;
+            Func<Image> bg = () => typeof(R0926MapTiles).GetField("attributionBg", F)?.GetValue(tiles) as Image;
+            Func<double, float> zoomAt = lv =>
+            {
+                double max = Convert.ToDouble(typeof(R0926FriendsMap).GetProperty("MaxZoom", F).GetValue(map));
+                double top = Convert.ToDouble(typeof(R0926FriendsMap).GetProperty("TopLevel", F).GetValue(map));
+                return (float)(max / Math.Pow(2, top - lv));
+            };
+            Func<bool> chipFits = () =>
+            {
+                var b = bg();
+                if (attr == null || b == null || !attr.enabled || !b.enabled) return false;
+                var tr = attr.rectTransform;
+                var br = b.rectTransform;
+                var glyph = new Rect(tr.anchoredPosition - Vector2.Scale(tr.pivot, tr.rect.size), new Vector2(attr.preferredWidth, attr.preferredHeight));   // 글은 왼쪽 아래 맞춤
+                var chip = new Rect(br.anchoredPosition, br.sizeDelta);
+                log.Add($"  출처 '{attr.text}' · 글 {glyph} · 알약 {chip}");
+                return b.transform.parent == attr.transform.parent && b.transform.GetSiblingIndex() + 1 == attr.transform.GetSiblingIndex()
+                    && chip.xMin < glyph.xMin && chip.xMax > glyph.xMax && chip.yMin < glyph.yMin && chip.yMax > glyph.yMax && b.color.a > 0.4f && attr.color.a >= 0.85f;
+            };
+            Do(() =>
+            {
+                R0926MapTiles.EditorBase = null;   // 운영 서버
+                typeof(R0926MapTiles).GetField("info", SF)?.SetValue(null, null);
+                typeof(R0926MapTiles).GetField("infoRetryAt", SF)?.SetValue(null, 0f);
+                Click("Dock0926/List_Button");
+            });
+            Sleep(1.2f);
+            Do(() => Modes()?.Show(1));
+            Sleep(1.0f);
+            Do(() =>
+            {
+                map = UnityEngine.Object.FindAnyObjectByType<R0926FriendsMap>(FindObjectsInactive.Include);
+                tiles = map != null ? typeof(R0926FriendsMap).GetField("tiles", F)?.GetValue(map) as R0926MapTiles : null;
+                attr = tiles != null ? typeof(R0926MapTiles).GetField("attribution", F)?.GetValue(tiles) as Text : null;
+            });
+            Wait(() => tiles != null && tiles.Available, 15f, "서버 타일 켜짐 (운영 서버)");
+            foreach (var st in new (float lv, float lat, float lon, string name)[] { (15f, 37.5665f, 126.978f, "seoul_z15"), (12f, 35.6812f, 139.7671f, "tokyo_z12") })
+            {
+                Do(() => map.EditorPreview(true, zoomAt(st.lv), st.lat, st.lon));
+                Sleep(0.6f);
+                Wait(() => count("inflight") == 0, 20f, st.name + " 타일 받기 끝");
+                Sleep(0.8f);
+                Check(chipFits, st.name + ": 출처 글 뒤에 어두운 알약 — 글을 감싸고 글 바로 뒤에");
+                Shot("credit_map_" + st.name);
+            }
+            Do(() => map.EditorPreview(true, 1f, 37.5f, 127f));
+            Sleep(1.0f);
+            Check(() => attr != null && !attr.enabled && bg() != null && !bg().enabled, "세계 보기 (타일 없음) — 출처 글 · 알약 함께 숨김");
         }
 
         // ── P2 (10-23 · 10-25 대표님) — 하늘 옆 장 · 고정 ──

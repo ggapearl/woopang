@@ -126,6 +126,7 @@ public class R0926SkyWeather : MonoBehaviour
     }
 
     private string serverRegion;      // 있으면 기기 주소(LocationManager.ShortRegion — OSM, 시골에선 면이 빠진다)보다 먼저
+    private Text credit;              // 날씨 자료 출처 한 줄 (ShowCredit)
 
     private bool collapsed;          // 사용자가 '접기' — 앱을 켜는 동안 유지 (처음 상태는 설정)
     private bool lying, lyingOverride;
@@ -744,6 +745,7 @@ public class R0926SkyWeather : MonoBehaviour
                 if (fcIcons[2] != null) fcIcons[2].Set(w.tomorrow_code >= 0 ? w.tomorrow_code : code, true);
             }
         }
+        ShowCredit(w.pty >= 0, lang);
         weatherChip = cond + " " + t + "°";
         lastChip = null;   // 다음 프레임에 칩 글자 갱신
     }
@@ -759,6 +761,52 @@ public class R0926SkyWeather : MonoBehaviour
         detailText.text = line;
         float w = detailText.rectTransform.rect.width;
         while (w > 0f && size > detailMinFont && detailText.preferredWidth > w) detailText.fontSize = --size;
+    }
+
+    // 출처 한 줄 — 예보 칸 밑 · 장 표시 점 위 (11-07). '지금'은 기상청 실황(서버가 pty 를 줄 때만), 예보 · 일출 · 미세먼지는 Open-Meteo
+    // (Open-Meteo 자료는 CC BY 4.0 — 보여 주는 곳에 출처를 적는다). 처음 만들 때 한 번 점과 유리를 이 줄만큼 아래로 늘린다 —
+    // 고정 자리는 유리 아랫선으로 정하므로 저절로 맞는다
+    private const float CreditGap = 10f, CreditRoom = 26f;
+    private void ShowCredit(bool kma, string lang)
+    {
+        if (credit == null)
+        {
+            if (forecast == null || detailText == null) return;
+            var fc = (RectTransform)forecast.transform;
+            var go = new GameObject("Credit0926", typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(fc.parent, false);
+            rt.SetSiblingIndex(fc.GetSiblingIndex() + 1);
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = new Vector2(0f, fc.anchoredPosition.y - fc.rect.height * fc.localScale.y * fc.pivot.y - CreditGap);
+            rt.sizeDelta = new Vector2(900f, 30f);
+            credit = go.AddComponent<Text>();
+            credit.font = detailText.font;
+            credit.material = detailText.material;
+            credit.fontSize = 26;
+            credit.color = new Color(1f, 1f, 1f, 0.55f);
+            credit.alignment = TextAnchor.MiddleCenter;
+            credit.horizontalOverflow = HorizontalWrapMode.Overflow;
+            credit.verticalOverflow = VerticalWrapMode.Overflow;
+            credit.raycastTarget = false;
+            var sh = detailText.GetComponent<Shadow>();
+            if (sh != null)
+            {
+                var s = go.AddComponent<Shadow>();
+                s.effectColor = sh.effectColor;
+                s.effectDistance = sh.effectDistance * 0.6f;
+            }
+            if (frame != null && frame.Find("Dots0926") is RectTransform dots) dots.anchoredPosition -= new Vector2(0f, CreditRoom);
+            if (glass != null)
+            {
+                var g = glass.rectTransform;
+                g.sizeDelta += new Vector2(0f, CreditRoom);
+                g.anchoredPosition -= new Vector2(0f, CreditRoom / 2f);
+            }
+        }
+        credit.text = kma
+            ? L(lang, "자료: 기상청 · Open-Meteo.com", "Data: KMA · Open-Meteo.com", "データ: 韓国気象庁 · Open-Meteo.com", "数据：韩国气象厅 · Open-Meteo.com", "Datos: KMA · Open-Meteo.com")
+            : L(lang, "자료: Open-Meteo.com", "Data: Open-Meteo.com", "データ: Open-Meteo.com", "数据：Open-Meteo.com", "Datos: Open-Meteo.com");
     }
 
     private static string Clock(string iso)

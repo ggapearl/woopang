@@ -75,6 +75,9 @@ public class R0926MapTiles : MonoBehaviour
     private int holes;                 // 마지막 화면에서 아무것도 못 그린 칸 수 (아래 세계 그림이 비친다)
     private string diskDir;
 
+    private Image attributionBg;       // 출처 글 뒤 반투명 어두운 알약 — 밝은 지도 위에서도 읽히게 (ShowAttribution)
+    private string attributionSrc, attributionLang;
+
     private bool hasView;
     private double lastOx, lastOy, lastMapW, lastMapH;
     private Vector2 lastView;
@@ -138,7 +141,7 @@ public class R0926MapTiles : MonoBehaviour
         fading = false;
         notOnDisk.Clear();
         foreach (var img in pool) if (img != null) { img.texture = null; img.enabled = false; }
-        if (attribution != null) attribution.enabled = false;
+        ShowAttribution(false);
         wanted.Clear();
         inUse.Clear();
         hasView = false;
@@ -222,12 +225,52 @@ public class R0926MapTiles : MonoBehaviour
             }
         }
         for (int i = shown; i < pool.Count; i++) if (pool[i].enabled) { pool[i].enabled = false; pool[i].texture = null; }
-        if (attribution != null)
+        ShowAttribution(shown > 0 && !string.IsNullOrEmpty(info.attribution));
+    }
+
+    // 출처 한 줄 — 타일이 보일 때만. 뒤에 반투명 어두운 알약을 깔아 밝은 지도(낮 · 바다 · 눈 덮인 산) 위에서도 읽힌다 (11-06 대표님)
+    private void ShowAttribution(bool on)
+    {
+        if (attribution == null) return;
+        if (on)
         {
-            bool on = shown > 0 && !string.IsNullOrEmpty(info.attribution);
-            attribution.enabled = on;
-            if (on) attribution.text = info.attribution.Replace("국토교통부", R0926LocalizedText.Say("국토교통부", "MOLIT Korea", "韓国 国土交通部", "韩国国土交通部", "MOLIT de Corea"));   // 글은 서버 설정 — 기관 이름만 기기 언어로
+            string lang = R0926LocalizedText.Lang();
+            if (attributionSrc != info.attribution || attributionLang != lang)
+            {
+                attributionSrc = info.attribution;
+                attributionLang = lang;
+                attribution.text = info.attribution.Replace("국토교통부", R0926LocalizedText.Say("국토교통부", "MOLIT Korea", "韓国 国土交通部", "韩国国土交通部", "MOLIT de Corea"));   // 글은 서버 설정 — 기관 이름만 기기 언어로
+                FitAttributionBg();
+            }
         }
+        attribution.enabled = on;
+        if (attributionBg != null) attributionBg.enabled = on;
+    }
+
+    private void FitAttributionBg()
+    {
+        var t = attribution.rectTransform;
+        if (attributionBg == null)
+        {
+            var go = new GameObject("AttributionBg0926", typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(t.parent, false);
+            rt.SetSiblingIndex(t.GetSiblingIndex());   // 글 바로 앞 — 글보다 먼저 그려져 뒤에 깔린다
+            rt.anchorMin = rt.anchorMax = t.anchorMin;
+            rt.pivot = Vector2.zero;
+            attributionBg = go.AddComponent<Image>();
+            attributionBg.raycastTarget = false;
+            attributionBg.color = new Color(0.055f, 0.067f, 0.078f, 0.62f);   // 공유 수 칩과 같은 색 · 더 옅게
+            var view = GetComponent<Image>();   // 지도 창 바탕과 같은 둥근 그림 (r0926_pill)
+            if (view != null && view.sprite != null && view.sprite.name == "r0926_pill") { attributionBg.sprite = view.sprite; attributionBg.type = Image.Type.Sliced; }
+            var c = attribution.color;
+            if (c.a < 0.85f) { c.a = 0.85f; attribution.color = c; }
+        }
+        const float padX = 14f, padY = 5f;
+        var bg = attributionBg.rectTransform;
+        bg.anchoredPosition = t.anchoredPosition - Vector2.Scale(t.pivot, t.rect.size) - new Vector2(padX, padY);   // 글은 왼쪽 아래 맞춤
+        bg.sizeDelta = new Vector2(attribution.preferredWidth + padX * 2f, attribution.preferredHeight + padY * 2f);
+        if (attributionBg.sprite != null) attributionBg.pixelsPerUnitMultiplier = 128f / Mathf.Max(1f, bg.sizeDelta.y);
     }
 
     private void Want(long k, float x, float y, double w, double h, Vector2 center, bool ahead)
