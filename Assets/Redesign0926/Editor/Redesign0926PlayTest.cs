@@ -148,6 +148,7 @@ namespace Redesign0926
             else if (mode == "crop") PlanCrop();
             else if (mode == "fixclose") PlanFixClose();
             else if (mode == "petglow") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPetGlow(); }
+            else if (mode == "dockswitch") PlanDockSwitch();
             else if (mode == "stickers") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStickers(); }
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
@@ -10511,6 +10512,122 @@ namespace Redesign0926
                 DataManager.Instance.ApplyEditedPlace(petOrig, false);
             });
             Check(() => Mathf.Approximately(glow(plainGo), plainOrig.pet_friendly ? 1f : 0f) && Mathf.Approximately(glow(petGo), petOrig.pet_friendly ? 1f : 0f), "원래 값으로 되돌리면 → 빛도 원래대로");
+        }
+
+        // ── 도크 칸 바꾸기 — 대표님 11-08 「추가창이 열린 상태에서 -> 목록버튼 터치 … 기존창이 사라지고 해당 창이 발생」
+        //    + 14:25 「아예 슬라이드로 내려갔다 올라오려면 시간도 길어지고 좀 과해서 … 동시에 디졸브로 내려가면서 다른 창이 페이드인으로 올라오는 식」
+        //    열린 창은 옅어지며 조금 내려가 닫히고(0.2초), 새 창은 조금(56) 아래에서 옅게 올라온다(0.24초) — 동시에.
+        //    X 로 닫기 · 아무 창도 없을 때 열기는 예전 그대로 · 로그인 안내로 안 열리면 열린 창도 그대로
+        private static void PlanDockSwitch()
+        {
+            const string List = "ListPanel", ListSheet = "ListPanel/Clip0926/Sheet0926";
+            const string Up = "UploadPage", UpSheet = "UploadPage/Clip0926/UploadSheet0926";
+            Func<string, float> alpha = p => { var g = Find(p)?.GetComponent<CanvasGroup>(); return g != null ? g.alpha : -1f; };
+            Func<string, R0926SlideIn> slide = p => Find(p)?.GetComponent<R0926SlideIn>();
+            Func<string, bool> sliding = p => slide(p) != null && (bool)typeof(R0926SlideIn).GetField("running", NPI).GetValue(slide(p));
+            Func<string, float> runDist = p => slide(p) != null ? (float)typeof(R0926SlideIn).GetField("runDistance", NPI).GetValue(slide(p)) : -1f;
+            Func<bool> loggedIn = () => LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn;
+            Action<Func<bool>, Func<string>> checkLive = (ok, what) => Do(() => log.Add((ok() ? "PASS " : "FAIL ") + what()));
+
+            // 열린 창(from) 위에서 도크의 다른 칸(button)을 눌러 to 로 바꾸고 — 프레임마다 두 창을 본다
+            Action<string, string, string, string, string, string> change = (button, from, fromSheet, to, toSheet, name) =>
+            {
+                double tap = 0, settled = -1, gone = -1;
+                bool both = false;
+                Vector2 fromPos = default;
+                Do(() =>
+                {
+                    fromPos = ((RectTransform)Find(fromSheet)).anchoredPosition;
+                    settled = gone = -1; both = false;
+                    tap = Time.realtimeSinceStartupAsDouble;
+                    Click(button);
+                });
+                steps.Enqueue(() =>
+                {
+                    double now = Time.realtimeSinceStartupAsDouble - tap;
+                    float fa = alpha(fromSheet), ta = alpha(toSheet);
+                    if (Active(from) && fa > 0.02f && fa < 0.98f && Active(to) && ta > 0.02f && ta < 0.98f) both = true;
+                    if (gone < 0 && !Active(from)) gone = now;
+                    if (gone >= 0 && Active(to) && !sliding(toSheet) && ta >= 0.999f) { settled = now; return true; }
+                    return now > 2.0;
+                });
+                checkLive(() => !Active(from) && Active(to), () => $"{name} — 열려 있던 창은 닫히고 누른 창만 남는다");
+                checkLive(() => both, () => $"{name} — 동시에: 옛 창이 옅어지는 동안 새 창이 옅게 올라온다");
+                checkLive(() => settled > 0 && settled <= 0.45, () => $"{name} — 짧게 끝난다 (옛 창 {gone:0.00}초에 닫힘 · 새 창 {settled:0.00}초에 제자리)");
+                checkLive(() => Mathf.Approximately(runDist(toSheet), 56f), () => $"{name} — 새 창은 조금만 올라온다 ({runDist(toSheet):0} · 통째로는 시트 높이+60)");
+                checkLive(() =>
+                {
+                    var g = Find(fromSheet)?.GetComponent<CanvasGroup>();
+                    var rt = (RectTransform)Find(fromSheet);
+                    return g != null && g.alpha == 1f && g.blocksRaycasts && Vector2.Distance(rt.anchoredPosition, fromPos) < 0.5f;
+                }, () => $"{name} — 닫힌 창은 제자리·다 보이게·누를 수 있게 되돌려 둔다 (다음에 열 때 그대로)");
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(1.5f);
+            Do(() => log.Add($"  로그인 {loggedIn()} · 열린 창 {OpenPanels()}"));
+
+            // 1) 아무 창도 없을 때 추가 — 예전처럼 통째로 올라온다
+            Do(() => Click("Dock0926/PlusButton"));
+            Sleep(0.1f);
+            checkLive(() => Active(Up) && runDist(UpSheet) > 300f, () => $"아무 창도 없을 때 추가를 열면 — 예전처럼 통째로 올라온다 ({runDist(UpSheet):0})");
+            Sleep(0.8f);
+
+            // 2) 추가 → 목록 (목록이 형제 순서로 위 — 위에서 옅게 올라온다)
+            change("Dock0926/List_Button", Up, UpSheet, List, ListSheet, "추가 → 목록");
+            Check(() => Active("Dock0926/PlusButton") && !Active("Dock0926/List_Button") && Active("ListPanel/DockMirror0926/XButton_List") && !Active("UploadPage/DockMirror0926/XButton_Upload"),
+                "도크 — 추가 칸은 다시 '추가', 목록 칸은 'X 닫기'");
+            Sleep(0.4f);
+
+            // 3) 목록 → 추가 (추가가 형제 순서로 아래 — 위의 목록이 옅어지며 드러난다) · 중간 모습 찍기
+            change("Dock0926/PlusButton", List, ListSheet, Up, UpSheet, "목록 → 추가");
+            Sleep(0.4f);
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(0.07f);
+            Shot("dockswitch_mid");
+            Sleep(0.6f);
+            Shot("dockswitch_after");
+            Check(() => Active(List) && !Active(Up), "한 번 더 (추가 → 목록) — 찍은 뒤 목록만");
+
+            // 4) X 로 닫기는 예전 그대로 — 옅어지지 않고 아래로 미끄러진다
+            double xTap = 0;
+            Vector2 listPos = default;
+            Do(() =>
+            {
+                listPos = ((RectTransform)Find(ListSheet)).anchoredPosition;
+                xTap = Time.realtimeSinceStartupAsDouble;
+                Find("ListPanel/DockMirror0926/XButton_List/ClosePx0926")?.GetComponent<R0926CloseProxy>()?.Run();
+            });
+            Sleep(0.08f);
+            checkLive(() => !Active(List) || (alpha(ListSheet) >= 0.999f && ((RectTransform)Find(ListSheet)).anchoredPosition.y < listPos.y - 5f),
+                () => "X 로 닫으면 — 예전처럼 아래로 미끄러진다 (옅어지지 않음)");
+            Wait(() => !Active(List), 2f, "X 로 목록 닫힘");
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(0.1f);
+            checkLive(() => Active(List) && runDist(ListSheet) > 300f && alpha(ListSheet) >= 0.999f,
+                () => $"바꿔 닫힌 뒤 다시 열어도 — 통째로 올라오고 다 보인다 ({runDist(ListSheet):0})");
+            Sleep(0.8f);
+
+            // 5) 메시지 — 로그인 전이면 로그인 안내만 (열린 목록은 그대로) · 로그인했으면 바꾼다
+            Do(() => Click("Dock0926/Message_Button"));
+            Sleep(0.6f);
+            Do(() => log.Add($"  메시지 누른 뒤 열린 창 {OpenPanels()}"));
+            Sleep(2.0f);
+            checkLive(() => loggedIn() ? (Active("MessagePanel") && !Active(List)) : Active(List),
+                () => loggedIn() ? "로그인 — 목록 → 메시지 로 바뀐다" : "로그인 전 메시지 → 로그인 안내만, 열린 목록은 그대로");
+            Check(() =>
+            {
+                var dock = UnityEngine.Object.FindAnyObjectByType<R0926DockSlotSwap>(FindObjectsInactive.Include);
+                return dock != null && typeof(R0926DockSlotSwap).GetField("switchTo", NPI).GetValue(dock) == null;
+            }, "바꿀 창이 안 열리면 2초 뒤 기다림을 버린다 (나중에 다른 창이 열려도 엉뚱하게 닫지 않는다)");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Sleep(0.5f);
         }
 
         // ── v53 앱 안 '프로필 편집' — 대표님 10-27 「안드로이드는 '사진설정'을 하려 해도 '사진첩'·'갤러리'가 아니라 '내 파일'로 안내」

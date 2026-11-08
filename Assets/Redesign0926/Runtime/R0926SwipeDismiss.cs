@@ -58,6 +58,13 @@ public class R0926SwipeDismiss : R0926Closer
     private bool confirming;
     private float backdropAlpha = -1f;
 
+    // 옅어지며 닫기 (도크에서 다른 창으로 바꿀 때 — R0926Closer.DissolveFrame)
+    private const float DissolveDrop = 48f, DissolveTime = 0.2f;
+    private float dissolve = -1f;       // 진행 0 → 1 (-1 = 아님)
+    private float dissolveFrom;         // 시작할 때 내려가 있던 만큼
+    private bool dissolveBlocks;        // 시작 전 누름 받기 — 끝나면 되돌린다
+    private CanvasGroup fadeGroup;
+
     /// <summary>닫기 전에 물을 곳 (정보 수정 — 고친 게 있으면 '수정을 취소할까요?', 11-09). true 면 닫지 않고 제자리로 돌아오고,
     /// 물은 쪽이 ConfirmClose() 를 부르면 그때 내려가며 닫힌다. X · 뒤로가기 · 바깥 누르기(AnimateClose)와 끌어내리기(Release) 모두 여기를 지난다</summary>
     public System.Func<bool> holdClose;
@@ -90,6 +97,16 @@ public class R0926SwipeDismiss : R0926Closer
         if (guardUntil == int.MaxValue) guardUntil = Time.frameCount + 2;   // 끄는 도중 닫혔다
         phase = Phase.Idle;
         closing = true;
+        if (Dissolving)
+        {
+            animating = false;
+            dissolve = 0f;
+            dissolveFrom = applied;
+            Fade(1f);
+            dissolveBlocks = fadeGroup.blocksRaycasts;
+            fadeGroup.blocksRaycasts = false;   // 사라지는 창은 누름을 받지 않는다 — 새 창으로
+            return;
+        }
         target = CloseDistance();
         animating = true;
     }
@@ -114,6 +131,7 @@ public class R0926SwipeDismiss : R0926Closer
     private void OnDisable()
     {
         held = null;
+        EndDissolve();
         Set(0f);
         Unguard();
         Unfreeze();
@@ -125,6 +143,19 @@ public class R0926SwipeDismiss : R0926Closer
     {
         if (frozen != null && Time.frameCount >= unfreezeFrame && phase != Phase.Dragging) Unfreeze();
         if (guardUntil >= 0 && Time.frameCount >= guardUntil) Unguard();
+
+        if (dissolve >= 0f)
+        {
+            dissolve = Mathf.Min(1f, dissolve + Time.unscaledDeltaTime / DissolveTime);
+            Set(dissolveFrom + DissolveDrop * dissolve * dissolve);
+            Fade(1f - dissolve);
+            if (dissolve >= 1f)
+            {
+                Close();          // 원래 닫기 버튼 — 창이 꺼지면 OnDisable 이 되돌린다
+                EndDissolve();    // 버튼이 창을 끄지 않았으면 다시 보이게
+            }
+            return;
+        }
 
         if (animating)
         {
@@ -313,6 +344,41 @@ public class R0926SwipeDismiss : R0926Closer
         var view = sr.viewport != null ? sr.viewport : (RectTransform)sr.transform;
         if (content.rect.height <= view.rect.height + 1f) return true;   // 스크롤할 게 없다
         return sr.verticalNormalizedPosition >= 0.995f;
+    }
+
+    // 시트·함께 움직이는 형제·뒤 그늘을 같이 옅게
+    private void Fade(float a)
+    {
+        if (fadeGroup == null)
+        {
+            fadeGroup = GetComponent<CanvasGroup>();
+            if (fadeGroup == null) fadeGroup = gameObject.AddComponent<CanvasGroup>();
+        }
+        fadeGroup.alpha = a;
+        if (followers != null)
+            foreach (var f in followers)
+            {
+                if (f == null) continue;
+                var g = f.GetComponent<CanvasGroup>();
+                if (g == null) g = f.gameObject.AddComponent<CanvasGroup>();
+                g.alpha = a;
+            }
+        if (backdrop != null && backdropAlpha >= 0f)
+        {
+            var c = backdrop.color;
+            c.a = backdropAlpha * a;
+            backdrop.color = c;
+        }
+    }
+
+    private void EndDissolve()
+    {
+        if (dissolve < 0f) return;
+        dissolve = -1f;
+        closing = false;
+        Fade(1f);
+        fadeGroup.blocksRaycasts = dissolveBlocks;
+        if (isActiveAndEnabled) Set(0f);
     }
 
     private void Set(float offset)
