@@ -24,6 +24,8 @@ public class RemoveRequest : MonoBehaviour
 
     /// <summary>올린 사람이 장소를 지웠다 — 고치기 창이 그 장소를 열고 있었으면 닫는다</summary>
     public static event Action<int> PlaceDeleted;
+    /// <summary>묻는 창 — 정보 수정의 '수정을 취소할까요?' 가 같은 모양을 복제해 쓴다 (CubeDataFixManager, 11-09)</summary>
+    public GameObject Panel => removeRequestPanel;
     private int ownId;        // 지금 묻는 장소가 내 장소면 그 번호 (0 = 남의 장소 — 예전처럼 삭제 요청)
     private bool deleting;
     private string[] menuReq, dialogReq, yesReq;   // 장면에 적힌 원래 문구 (남의 장소일 때)

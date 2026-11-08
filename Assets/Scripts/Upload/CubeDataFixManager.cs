@@ -58,7 +58,7 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private ContinueCaptureDialog continueCaptureDialog;
 
     [Header("Upload Settings")]
-    private string serverUrl => ApiConfig.FIX_UPLOAD;
+    private string serverUrl => string.IsNullOrEmpty(EditorBase) ? ApiConfig.FIX_UPLOAD : EditorBase + "/fix_upload";   // 플레이 시험은 운영 서버로 보내지 않는다
     [Tooltip("요청을 보낸 순간부터 잰다. 넘으면 요청을 끊고 '시간 초과'")]
     [SerializeField] private float uploadTimeoutSeconds = 60f;
 
@@ -94,6 +94,15 @@ public class CubeDataFixManager : MonoBehaviour
     private float nextNoteAt;
     private Color noteColor = Color.gray;
     private R0926LocalizedText submitLabel;
+
+    // 닫을 때 묻기 (11-09 대표님 「수정 내용이 있는 경우 아래로 스와이프하면 '수정을 취소할까요?'」) — 채운 직후 모습과 지금을 견준다
+    private string cleanForm;          // 글 · 토글 · 분류 (불러온 값으로 채운 직후)
+    private string cleanPhotos;        // 사진 (다 불러온 뒤 — 불러오는 중이면 null 이라 사진은 견주지 않는다)
+    private R0926SwipeDismiss sheet;   // 카드 — X · 뒤로가기 · 바깥 누르기 · 끌어내리기가 모두 여기를 지난다
+    private GameObject discardPanel;   // '수정을 취소할까요?' — 삭제 묻는 창을 복제해 글만 바꾼 것
+    // '수정할 내용' 칸을 없앤 자리 (11-09) — 수정 요청(남의 장소)에선 그 아래 칸들을 올린다. 내 장소는 그 자리에 '위치' 줄이 들어간다
+    private readonly List<KeyValuePair<RectTransform, float>> belowDescription = new List<KeyValuePair<RectTransform, float>>();
+    private float descriptionGap = -1f;
 
     /// <summary>플레이 시험 — 고치기·지우기와 그 사진을 내 PC 시험 서버로 (운영 서버의 장소를 시험으로 바꾸지 않게)</summary>
     public static string EditorBase;
@@ -185,6 +194,8 @@ public class CubeDataFixManager : MonoBehaviour
     private void InitializeComponents()
     {
         AutoConnectFields();
+        sheet = fixUIPanel != null ? fixUIPanel.GetComponentInChildren<R0926SwipeDismiss>(true) : null;
+        if (sheet != null) sheet.holdClose = AskDiscard;
 
         if (instagramToggle != null)
         {
@@ -1017,14 +1028,6 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        if (descriptionInput == null)
-        {
-            ShowWarning(GetLocalizedText("enter_description"));
-            Debug.LogError("[CubeDataFixManager] DescriptionInput이 null입니다!");
-            isProcessing = false;
-            yield break;
-        }
-
         if (nameInput == null)
         {
             ShowWarning(GetLocalizedText("enter_place_name"));
@@ -1033,19 +1036,22 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        string description = R0926Emoji.ToReal(descriptionInput.text?.Trim() ?? "");   // 우팡 이모지 글자 → 진짜 이모지
+        // '수정할 내용' 칸은 없앴다 (11-09 대표님) — 고친 값 자체가 요청이다. 서버는 빈 사유를 그대로 받는다(None)
+        string description = descriptionInput != null ? R0926Emoji.ToReal(descriptionInput.text?.Trim() ?? "") : "";
         string name = R0926Emoji.ToReal(nameInput.text?.Trim() ?? "");
-
-        if (!ownerMode && string.IsNullOrEmpty(description))   // 내 장소는 바로 고치므로 '수정할 내용'이 없다
-        {
-            ShowWarning(GetLocalizedText("enter_description"));
-            isProcessing = false;
-            yield break;
-        }
 
         if (string.IsNullOrEmpty(name))
         {
             ShowWarning(GetLocalizedText("enter_place_name"));
+            isProcessing = false;
+            yield break;
+        }
+
+        // 수정 요청은 고친 값이 곧 요청이다 — 아무것도 안 바꿨으면 보내지 않는다 (빈 요청이 관리자 목록에 쌓이지 않게)
+        if (!ownerMode && cleanForm != null && !Dirty())
+        {
+            ShowWarning(R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾼 뒤 보내 주세요", "Nothing has changed — edit something first",
+                "変更がありません — 直したい所を変えてから送ってください", "没有任何修改 — 请先修改再提交", "No hay cambios — modifica algo primero"));
             isProcessing = false;
             yield break;
         }
@@ -1238,6 +1244,7 @@ public class CubeDataFixManager : MonoBehaviour
         {
             // 우팡 장소가 아닌 것(공공데이터·교통 등) — 이름만 (예전엔 빈 칸)
             if (nameInput != null && doubleTap != null) nameInput.text = R0926Emoji.ToInput(doubleTap.GetName() ?? "");
+            MarkClean(true);
             return;
         }
         editId = local.id;
@@ -1248,6 +1255,7 @@ public class CubeDataFixManager : MonoBehaviour
     {
         isProcessing = true;   // 다 불러오기 전엔 저장·사진 고르기를 막는다
         Fill(local);
+        MarkClean(false);
         MainLoading(true);
 
         PlaceData place = local;
@@ -1268,6 +1276,7 @@ public class CubeDataFixManager : MonoBehaviour
         // 내 장소인지는 서버가 정한다 — 묻지 못했으면 수정 요청으로 (요청은 옛 서버에서도 된다)
         SetOwnerMode(mine);
         Fill(place);
+        MarkClean(false);
 
         List<string> subs = new List<string>();
         foreach (string p in DataManager.FlattenSubPhotos(place))
@@ -1308,6 +1317,7 @@ public class CubeDataFixManager : MonoBehaviour
             ShowWarning(ownerMode
                 ? R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요 — 그대로 두면 지워지지 않아요", "Couldn't load " + failed + " photo(s) — they stay unless you remove them", "写真" + failed + "枚を読み込めませんでした — そのままなら消えません", failed + " 张照片未能加载 — 不删除就会保留", "No se cargaron " + failed + " foto(s) — se conservan si no las quitas")
                 : R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요", "Couldn't load " + failed + " photo(s)", "写真" + failed + "枚を読み込めませんでした", failed + " 张照片未能加载", "No se cargaron " + failed + " foto(s)"));
+        cleanPhotos = PhotoState();
         isProcessing = false;
     }
 
@@ -1383,8 +1393,10 @@ public class CubeDataFixManager : MonoBehaviour
     {
         ownerMode = mine;
         if (localizer != null) localizer.SetOwnerMode(mine);
-        if (descriptionInput != null) descriptionInput.gameObject.SetActive(!mine);
-        SetUIActive(descriptionLabel, !mine);
+        // '수정할 내용' 칸은 없앴다 (11-09 대표님) — 수정 요청에선 그 자리만큼 아래 칸들을 올리고, 내 장소는 그 자리에 '위치' 줄
+        if (descriptionInput != null) descriptionInput.gameObject.SetActive(false);
+        SetUIActive(descriptionLabel, false);
+        LiftBelowDescription(!mine);
         SetUIActive(locationLabel, mine);
         SetUIActive(locationRow, mine);
         if (moveHereToggle != null) moveHereToggle.isOn = false;
@@ -1394,6 +1406,97 @@ public class CubeDataFixManager : MonoBehaviour
             else submitLabel.Set("수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud");
         }
         RefreshLocation(true);
+    }
+
+    // 수정 요청이면 '수정할 내용' 자리(제목 윗선 ~ 다음 칸 윗선)만큼 그 아래 칸들을 올린다 — 처음 부를 때 장면에 놓인 자리를 기억해 둔다
+    private void LiftBelowDescription(bool lift)
+    {
+        if (descriptionGap < 0f)
+        {
+            descriptionGap = 0f;
+            var label = descriptionLabel != null ? descriptionLabel.transform as RectTransform : null;
+            var input = descriptionInput != null ? descriptionInput.transform as RectTransform : null;
+            if (label == null || input == null || label.parent != input.parent) return;
+            float inputBottom = Top(input) - input.rect.height;
+            float next = float.NegativeInfinity;
+            foreach (Transform t in label.parent)
+                if (t is RectTransform c && TopAnchored(c) && Top(c) < inputBottom - 0.5f) next = Mathf.Max(next, Top(c));
+            if (float.IsNegativeInfinity(next)) return;
+            descriptionGap = Top(label) - next;
+            foreach (Transform t in label.parent)
+                if (t is RectTransform c && TopAnchored(c) && Top(c) <= next + 0.5f)
+                    belowDescription.Add(new KeyValuePair<RectTransform, float>(c, c.anchoredPosition.y));
+        }
+        foreach (var kv in belowDescription)
+            if (kv.Key != null) kv.Key.anchoredPosition = new Vector2(kv.Key.anchoredPosition.x, kv.Value + (lift ? descriptionGap : 0f));
+    }
+
+    private static bool TopAnchored(RectTransform rt) => Mathf.Approximately(rt.anchorMin.y, 1f) && Mathf.Approximately(rt.anchorMax.y, 1f);
+    private static float Top(RectTransform rt) => rt.anchoredPosition.y + (1f - rt.pivot.y) * rt.rect.height;
+
+    // ── 닫을 때 묻기 (11-09) ──
+    private string FormState()
+    {
+        return (nameInput != null ? nameInput.text : "") + "\u0001"
+             + (petFriendlyToggle != null && petFriendlyToggle.isOn) + "|" + (separateRestroomToggle != null && separateRestroomToggle.isOn) + "\u0001"
+             + (showInstagram ? instagramIDInput?.text ?? "" : "-") + "\u0001" + selectedCategory + "\u0001"
+             + (moveHereToggle != null && moveHereToggle.isOn);
+    }
+
+    // 사진은 텍스처 번호로 — 새로 고르거나 빼거나 순서를 바꾸면 달라진다
+    private string PhotoState()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(mainPhoto != null ? mainPhoto.GetInstanceID() : 0);
+        foreach (var t in subPhotos) sb.Append(',').Append(t != null ? t.GetInstanceID() : 0);
+        return sb.ToString();
+    }
+
+    private void MarkClean(bool withPhotos)
+    {
+        cleanForm = FormState();
+        if (withPhotos) cleanPhotos = PhotoState();
+    }
+
+    private bool Dirty() => cleanForm != null && (FormState() != cleanForm || (cleanPhotos != null && PhotoState() != cleanPhotos));
+
+    /// <summary>창을 닫기 전에 (R0926SwipeDismiss.holdClose) — 고친 게 있으면 '수정을 취소할까요?' 를 띄우고 닫지 않는다</summary>
+    private bool AskDiscard()
+    {
+        if (discardPanel != null && discardPanel.activeSelf) return true;
+        if (!Dirty()) return false;
+        if (discardPanel == null) discardPanel = BuildDiscard();
+        if (discardPanel == null) return false;   // 묻는 창을 못 만들면 예전처럼 닫는다
+        discardPanel.transform.SetAsLastSibling();
+        discardPanel.SetActive(true);
+        return true;
+    }
+
+    // '삭제 요청' 묻는 창(RemoveRequestPanel)과 같은 모양 — 복제해 글과 단추만 바꾼다 (장면은 건드리지 않는다).
+    // 왼쪽 '계속 수정'(뒤로가기도 이것) · 오른쪽 빨간 '수정 취소'
+    private GameObject BuildDiscard()
+    {
+        var src = removeRequest != null ? removeRequest.Panel : null;
+        if (src == null || fixUIPanel == null) return null;
+        var go = Instantiate(src, fixUIPanel.transform, false);
+        go.SetActive(false);
+        go.name = "DiscardEdit0926";
+        var box = go.transform.Find("Box0926");
+        var yes = box != null ? box.Find("Buttons0926/Remove_YES")?.GetComponent<Button>() : null;
+        var no = box != null ? box.Find("Buttons0926/Remove_NO")?.GetComponent<Button>() : null;
+        var ask = box != null ? box.Find("Text")?.GetComponent<R0926LocalizedText>() : null;
+        if (yes == null || no == null || ask == null) { Destroy(go); return null; }
+        yes.name = "Discard_YES";
+        no.name = "Discard_NO";
+        yes.onClick = new Button.ButtonClickedEvent();   // 복제된 '삭제 요청' 연결을 버린다
+        no.onClick = new Button.ButtonClickedEvent();
+        yes.onClick.AddListener(() => { go.SetActive(false); if (sheet != null) sheet.ConfirmClose(); });
+        no.onClick.AddListener(() => go.SetActive(false));
+        ask.Set("수정을 취소할까요?\n고친 내용은 저장되지 않아요", "Discard your changes?\nThey won't be saved", "修正を取り消しますか？\n変更内容は保存されません",
+            "要放弃修改吗？\n修改的内容不会保存", "¿Descartar los cambios?\nNo se guardarán");
+        foreach (var t in yes.GetComponentsInChildren<R0926LocalizedText>(true)) t.Set("수정 취소", "Discard", "取り消す", "放弃修改", "Descartar");
+        foreach (var t in no.GetComponentsInChildren<R0926LocalizedText>(true)) t.Set("계속 수정", "Keep editing", "編集を続ける", "继续编辑", "Seguir editando");
+        return go;
     }
 
     private void AddSub(Texture2D tex, string keepPath)
@@ -1971,6 +2074,9 @@ public class CubeDataFixManager : MonoBehaviour
     #region State Management
     private void ResetToInitialState()
     {
+        cleanForm = cleanPhotos = null;   // 다시 채울 때까지 묻지 않는다
+        if (discardPanel != null) discardPanel.SetActive(false);
+
         // 사진 관련 초기화
         if (mainPhoto != null)
         {

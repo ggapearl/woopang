@@ -1981,9 +1981,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c7e2faa58cd3d546baa167999dbf7d9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  texts:
-  - {fileID: 0}
-  - {fileID: 0}
+  texts: []
 --- !u!114 &114327519071772764
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -146,6 +146,7 @@ namespace Redesign0926
             else if (mode == "pickers") PlanPickers();
             else if (mode == "photoload") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPhotoLoad(); }
             else if (mode == "crop") PlanCrop();
+            else if (mode == "fixclose") PlanFixClose();
             else if (mode == "stickers") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStickers(); }
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
@@ -10115,8 +10116,8 @@ namespace Redesign0926
             Shot("placeedit_other");
             Check(() => title() == modeTitle(1) && ((InputField)fv("nameInput")).text == NameB && (int)fv("currentCategoryIndex") == 2
                         && submit() == R0926LocalizedText.Say("수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud")
-                        && shown("descriptionInput") && !shown("locationRow"),
-                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 수정할 내용 칸 · 위치 줄 없음 · '수정 요청'");
+                        && !shown("descriptionInput") && !shown("descriptionLabel") && !shown("locationRow"),
+                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 수정할 내용 칸 없음 (11-09) · 위치 줄 없음 · '수정 요청'");
             Do(() => Click(Page + "XButton_FixUpload"));
             Sleep(0.4f);
             Check(() => !Active("Fixpage"), "닫기 — 남의 장소는 보내 보지 않는다 (수정 요청은 운영 서버로 간다)");
@@ -10153,6 +10154,214 @@ namespace Redesign0926
                 CubeDataFixManager.EditorBase = null;
                 SfLogin(false);
                 PlayerPrefs.DeleteKey(LoginManager.AUTH_TOKEN_KEY);
+            });
+        }
+
+        // ── 정보 수정 닫기 (11-09 대표님 「'수정 요청 사항' 칸은 없애고, 수정 내용이 있으면 닫을 때 '수정을 취소할까요?'」)
+        //    운영 서버엔 아무것도 보내지 않는다 — 둘레 장소 값은 읽기만, '수정 요청'은 누르지 않는다.
+        //    빈 창: 칸 자리(수정 요청 · 내 장소) → 그대로 X / 실제 장소: 다 불러온 뒤 그대로 X → 이름 고친 뒤 X · 계속 수정 · 뒤로가기 둘
+        //    · 끌어내리기 · 수정 취소 → 다시 열면 처음 값 → 사진만 더해도 묻기 / 자르기 화면 프리팹(1.2.54 iOS 충돌)
+        private static void PlanFixClose()
+        {
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            const string Sheet = "Fixpage/FixUploadPage", Form = Sheet + "/Panel/", X = Sheet + "/XButton_FixUpload/ClosePx0926";
+            const string Edited = " 고침";
+            CubeDataFixManager fix = null;
+            R0926SwipeDismiss sheet = null;
+            DoubleTap3D place = null;
+            float logo0 = float.NaN, pet0 = float.NaN, name0 = float.NaN;
+            GameObject crop = null;
+            var errors = new List<string>();
+            Application.LogCallback onLog = (msg, stack, type) => { if (type == LogType.Exception) errors.Add(msg); };
+            Func<string, object> fv = n => typeof(CubeDataFixManager).GetField(n, F).GetValue(fix);
+            Func<string, object[], object> call = (n, a) => typeof(CubeDataFixManager).GetMethod(n, F).Invoke(fix, a);
+            Func<string, bool> shown = n =>
+            {
+                var o = fv(n);
+                var go = o is Component c && c != null ? c.gameObject : o as GameObject;
+                return go != null && go.activeInHierarchy;
+            };
+            Func<GameObject> ask = () => fv("discardPanel") as GameObject;
+            Func<bool> asking = () => ask() != null && ask().activeInHierarchy;
+            Func<string, Button> askBtn = n => ask() != null ? ask().transform.Find("Box0926/Buttons0926/" + n)?.GetComponent<Button>() : null;
+            Func<string, string> askText = n =>
+            {
+                var t = ask() != null ? ask().transform.Find("Box0926/" + n) : null;
+                var tx = t != null ? t.GetComponentInChildren<Text>(true) : null;
+                return tx != null ? tx.text : null;
+            };
+            Func<float> applied = () => (float)typeof(R0926SwipeDismiss).GetField("applied", F).GetValue(sheet);
+            Func<string, float> y = n => Find(Form + n) is RectTransform rt ? rt.anchoredPosition.y : float.NaN;
+            Func<InputField> name = () => fv("nameInput") as InputField;
+            Func<bool> dirty = () => (bool)call("Dirty", null);
+            Func<bool> loaded = () => !(bool)fv("isProcessing") && fv("cleanPhotos") != null;
+            Action<DoubleTap3D> open = d =>   // '···' 의 '정보 수정' 과 같은 순서 — 창을 켠 뒤 BeginEdit
+            {
+                typeof(CubeDataFixManager).GetField("doubleTap", F).SetValue(fix, d);
+                ((GameObject)fv("fixUIPanel")).SetActive(true);
+                call("BeginEdit", null);
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
+                sheet = Find(Sheet)?.GetComponent<R0926SwipeDismiss>();
+                logo0 = y("Add_Logo"); pet0 = y("PetFriendlyToggle"); name0 = y("NameInput");   // 장면에 놓인 자리 — 아직 한 번도 안 열었다
+                Application.logMessageReceived += onLog;
+            });
+            Sleep(0.4f);
+            Check(() => fix != null && sheet != null && sheet.holdClose != null && Find(X) != null && !float.IsNaN(logo0) && !float.IsNaN(pet0),
+                  "준비: 정보 수정 창 · 끌어 닫기에 '닫기 전에 묻기' 연결 · X 덮개");
+
+            // 1) 수정 요청 — '수정할 내용' 칸이 없고 그 자리(250)만큼 사진·분류·스위치가 올라온다
+            Do(() => open(null));
+            Sleep(0.6f);
+            Shot("fixclose_request");
+            Check(() => Active("Fixpage") && !(bool)fv("ownerMode") && !shown("descriptionInput") && !shown("descriptionLabel") && !shown("locationRow")
+                        && Mathf.Abs((float)fv("descriptionGap") - 250f) < 1f && Mathf.Abs(y("Add_Logo") - (logo0 + 250f)) < 0.5f
+                        && Mathf.Abs(y("PetFriendlyToggle") - (pet0 + 250f)) < 0.5f && Mathf.Abs(y("NameInput") - name0) < 0.5f,
+                  "수정 요청 — '수정할 내용' 칸 없음 · 아래 칸(사진·분류·스위치)이 그 자리(250)만큼 올라옴 · 이름 칸은 그대로");
+            Do(() => log.Add("  자리: 사진 제목 " + logo0 + " → " + y("Add_Logo") + " · 애견 동반 " + pet0 + " → " + y("PetFriendlyToggle")));
+
+            // 2) 내 장소 — 그 자리에 위치 줄 · 아래 칸은 원래 자리 / 다시 수정 요청이면 다시 올라온다 (두 번 불러도 같은 자리)
+            Do(() => call("SetOwnerMode", new object[] { true }));
+            Sleep(0.4f);
+            Shot("fixclose_owner");
+            Check(() => shown("locationRow") && !shown("descriptionInput") && !shown("descriptionLabel")
+                        && Mathf.Abs(y("Add_Logo") - logo0) < 0.5f && Mathf.Abs(y("PetFriendlyToggle") - pet0) < 0.5f,
+                  "내 장소 — 그 자리에 위치 줄 · 아래 칸은 원래 자리");
+            Do(() => { call("SetOwnerMode", new object[] { false }); call("SetOwnerMode", new object[] { false }); });
+            Check(() => !shown("locationRow") && Mathf.Abs(y("Add_Logo") - (logo0 + 250f)) < 0.5f && Mathf.Abs(y("PetFriendlyToggle") - (pet0 + 250f)) < 0.5f,
+                  "다시 수정 요청 — 다시 250 올라옴 (두 번 불러도 더 올라가지 않는다)");
+
+            // 3) 고친 것 없이 X — 묻지 않고 내려가며 닫힌다
+            Do(() => Click(X));
+            Wait(() => !Active("Fixpage"), 3f, "빈 창 X → 닫힘");
+            Check(() => !Active("Fixpage") && !asking(), "고친 게 없으면 묻지 않고 닫는다");
+
+            // 4) 둘레의 우팡 장소 — 값·사진을 다 불러온 뒤 그대로 닫으면 묻지 않는다 (불러온 값은 고친 것이 아니다)
+            Wait(() =>
+            {
+                if (DataManager.Instance == null) return false;
+                var map = DataManager.Instance.GetPlaceDataMap();
+                DoubleTap3D any = null, withPhoto = null;
+                foreach (var kv in DataManager.Instance.GetSpawnedObjects())
+                {
+                    if (kv.Value == null || !map.TryGetValue(kv.Key, out var pd)) continue;
+                    if (pd.name != null && (pd.name.Trim() == "집" || pd.name.Contains("우팡이네") || pd.name.Contains("엄빠") || pd.name.Contains("똥"))) continue;
+                    var d = kv.Value.GetComponentInChildren<DoubleTap3D>(true);
+                    if (d == null) continue;
+                    if (any == null) any = d;
+                    if (withPhoto == null && !string.IsNullOrEmpty(pd.main_photo)) withPhoto = d;
+                }
+                place = withPhoto != null ? withPhoto : any;
+                return place != null;
+            }, 40f, "둘레의 우팡 장소 하나 (값은 읽기만)");
+            Do(() => open(place));
+            Wait(loaded, 30f, "장소 값·사진을 다 불러옴");
+            Sleep(0.6f);
+            Shot("fixclose_loaded");
+            Do(() => log.Add("  장소: " + ((bool)fv("ownerMode") ? "내 장소" : "수정 요청") + " · 추가 사진 " + ((List<Texture2D>)fv("subPhotos")).Count + "장"));
+            Check(() => loaded() && !string.IsNullOrEmpty(name().text) && !dirty(), "다 불러온 그대로 — 고친 것 없음");
+            Do(() => Click(X));
+            Wait(() => !Active("Fixpage"), 3f, "그대로 X → 닫힘");
+            Check(() => !Active("Fixpage") && !asking(), "다 불러온 뒤 그대로 닫으면 묻지 않는다");
+
+            // 5) 이름을 고친 뒤 X → '수정을 취소할까요?' — 창은 제자리 · '계속 수정' / '수정 취소'
+            Do(() => open(place));
+            Wait(loaded, 30f, "다시 열어 다 불러옴");
+            Do(() => name().text += Edited);
+            Do(() => Click(X));
+            Sleep(0.6f);
+            Shot("fixclose_ask");
+            Check(() => Active("Fixpage") && asking() && Mathf.Abs(applied()) < 1f
+                        && askText("Text") == R0926LocalizedText.Say("수정을 취소할까요?\n고친 내용은 저장되지 않아요", "Discard your changes?\nThey won't be saved", "修正を取り消しますか？\n変更内容は保存されません", "要放弃修改吗？\n修改的内容不会保存", "¿Descartar los cambios?\nNo se guardarán")
+                        && askText("Buttons0926/Discard_YES") == R0926LocalizedText.Say("수정 취소", "Discard", "取り消す", "放弃修改", "Descartar")
+                        && askText("Buttons0926/Discard_NO") == R0926LocalizedText.Say("계속 수정", "Keep editing", "編集を続ける", "继续编辑", "Seguir editando"),
+                  "이름을 고친 뒤 X → '수정을 취소할까요?' · 창은 제자리 · 단추 '계속 수정' / '수정 취소'");
+            Do(() => askBtn("Discard_NO").onClick.Invoke());
+            Sleep(0.3f);
+            Check(() => Active("Fixpage") && !asking() && name().text.EndsWith(Edited), "'계속 수정' → 묻는 창만 닫힘 · 고친 이름 그대로");
+
+            Back();
+            Sleep(0.5f);
+            Check(() => Active("Fixpage") && asking() && Mathf.Abs(applied()) < 1f, "뒤로가기 → '수정을 취소할까요?' (바로 닫지 않는다)");
+            Back();
+            Sleep(0.5f);
+            Check(() => Active("Fixpage") && !asking() && name().text.EndsWith(Edited), "묻는 중 뒤로가기 → '계속 수정'과 같음 (묻는 창만 닫힘)");
+
+            Drag(Sheet, 0.5f, "fixclose_drag");
+            Sleep(0.8f);
+            Shot("fixclose_drag_ask");
+            Check(() => Active("Fixpage") && asking() && Mathf.Abs(applied()) < 1f, "반쯤 끌어내리면 → '수정을 취소할까요?' · 카드는 제자리로 올라옴");
+            Do(() => askBtn("Discard_YES").onClick.Invoke());
+            Wait(() => !Active("Fixpage"), 3f, "'수정 취소' → 내려가며 닫힘");
+            Check(() => !Active("Fixpage") && !asking(), "'수정 취소' → 고친 것을 버리고 닫힘");
+
+            // 6) 다시 열면 처음 값 — 사진만 더해도 묻는다
+            Do(() => open(place));
+            Wait(loaded, 30f, "다시 열어 다 불러옴");
+            Check(() => !name().text.EndsWith(Edited) && !asking() && !dirty(), "다시 열면 처음 값 · 묻는 창 없음");
+            Do(() =>
+            {
+                if ((bool)fv("ownerMode")) { log.Add("  (내 장소로 열려 '바꾼 내용 없음' 막기는 건너뜀 — 수정 요청에만 있다)"); return; }
+                CubeDataFixManager.EditorBase = "http://127.0.0.1:9";   // 막기가 빠졌어도 운영 서버로 가지 않게
+                ((Button)fv("submitButton")).onClick.Invoke();
+            });
+            Sleep(0.4f);
+            Check(() =>
+            {
+                if ((bool)fv("ownerMode")) return true;
+                var w = fv("warningObj") as GameObject;
+                var wt = w != null ? w.GetComponentInChildren<Text>(true) : null;
+                return Active("Fixpage") && !(bool)fv("isProcessing") && w != null && w.activeInHierarchy && wt != null
+                       && wt.text == R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾼 뒤 보내 주세요", "Nothing has changed — edit something first",
+                              "変更がありません — 直したい所を変えてから送ってください", "没有任何修改 — 请先修改再提交", "No hay cambios — modifica algo primero");
+            }, "수정 요청 — 아무것도 안 바꾸고 '수정 요청' → '바꾼 내용이 없어요' (보내지 않는다 · 창은 그대로)");
+            Do(() => CubeDataFixManager.EditorBase = null);
+            Do(() => call("AddSub", new object[] { new Texture2D(8, 8), null }));
+            Do(() => Click(X));
+            Sleep(0.5f);
+            Check(() => Active("Fixpage") && asking(), "사진만 더해도 X → '수정을 취소할까요?'");
+            Do(() => askBtn("Discard_YES").onClick.Invoke());
+            Wait(() => !Active("Fixpage"), 3f, "'수정 취소' → 닫힘");
+            Check(() =>
+            {
+                if (errors.Count > 0) log.Add("  예외: " + errors[0]);
+                return errors.Count == 0;
+            }, "정보 수정을 열고 닫는 동안 예외 없음");
+
+            // 7) 자르기 화면 프리팹 — 1.2.54 iOS 충돌(글자 맞춤의 빈 칸 참조 → Awake 에서 NullReference)이 다시 안 나는지
+            Do(() =>
+            {
+                errors.Clear();
+                var pf = Resources.Load<GameObject>("ImageCropper");
+                if (pf != null) crop = UnityEngine.Object.Instantiate(pf);
+            });
+            Sleep(0.5f);
+            Check(() =>
+            {
+                if (crop == null) return false;
+                int syncs = 0, nulls = 0;
+                foreach (var c in crop.GetComponentsInChildren<MonoBehaviour>(true))
+                {
+                    if (c == null || c.GetType().Name != "FontSizeSynchronizer") continue;
+                    syncs++;
+                    if (c.GetType().GetField("texts", F)?.GetValue(c) is Text[] texts)
+                        foreach (var t in texts) if (t == null) nulls++;
+                }
+                log.Add("  자르기 화면: 글자 맞춤 " + syncs + "개 · 빈 칸 " + nulls + " · 예외 " + errors.Count + (errors.Count > 0 ? " — " + errors[0] : ""));
+                return nulls == 0 && errors.Count == 0;
+            }, "자르기 화면(ImageCropper) 프리팹 — 켜도 예외 없음 · 빈 글자 칸 없음");
+            Do(() =>
+            {
+                if (crop != null) UnityEngine.Object.Destroy(crop);
+                Application.logMessageReceived -= onLog;
             });
         }
 

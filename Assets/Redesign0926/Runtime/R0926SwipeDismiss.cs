@@ -54,7 +54,13 @@ public class R0926SwipeDismiss : R0926Closer
     private float target;
     private bool animating, closing;
     private Button pending;             // 다 내려간 뒤 누를 버튼
+    private Button held;                // 묻느라 멈춘 닫기 — ConfirmClose 가 누른다
+    private bool confirming;
     private float backdropAlpha = -1f;
+
+    /// <summary>닫기 전에 물을 곳 (정보 수정 — 고친 게 있으면 '수정을 취소할까요?', 11-09). true 면 닫지 않고 제자리로 돌아오고,
+    /// 물은 쪽이 ConfirmClose() 를 부르면 그때 내려가며 닫힌다. X · 뒤로가기 · 바깥 누르기(AnimateClose)와 끌어내리기(Release) 모두 여기를 지난다</summary>
+    public System.Func<bool> holdClose;
     private CanvasGroup clickGuard;     // cancelClicks — 끄는 동안 누름을 받지 않게
     private bool guardBlocks;           // 막기 전 blocksRaycasts
     private int guardUntil = -1;        // 이 프레임부터 되돌린다 (-1 = 막지 않음, MaxValue = 손을 뗄 때까지)
@@ -78,6 +84,7 @@ public class R0926SwipeDismiss : R0926Closer
     {
         if (!isActiveAndEnabled) { if (then != null) then.onClick.Invoke(); return; }
         if (closing) return;
+        if (Hold(then != null ? then : closeButton)) return;   // 묻는 중 — 시트는 그 자리
         pending = then != null ? then : closeButton;
         Unfreeze();
         if (guardUntil == int.MaxValue) guardUntil = Time.frameCount + 2;   // 끄는 도중 닫혔다
@@ -87,8 +94,26 @@ public class R0926SwipeDismiss : R0926Closer
         animating = true;
     }
 
+    /// <summary>물어본 뒤 '닫기'로 정했을 때 — 다시 묻지 않고 내려가며 닫는다</summary>
+    public void ConfirmClose()
+    {
+        var b = held != null ? held : closeButton;
+        held = null;
+        confirming = true;
+        try { AnimateClose(b); }
+        finally { confirming = false; }
+    }
+
+    private bool Hold(Button b)
+    {
+        if (confirming || holdClose == null || !holdClose()) return false;
+        held = b;
+        return true;
+    }
+
     private void OnDisable()
     {
+        held = null;
         Set(0f);
         Unguard();
         Unfreeze();
@@ -225,6 +250,7 @@ public class R0926SwipeDismiss : R0926Closer
         if (guardUntil == int.MaxValue) guardUntil = Time.frameCount + 2;   // UI 가 손 뗌을 처리한 뒤에 (Update 순서는 정해져 있지 않다)
         float h = rt.rect.height;
         bool dismiss = applied > Mathf.Max(minDismiss, h * dismissFraction) || (velocity > flickSpeed && applied > 40f);
+        if (dismiss && closeButton != null && Hold(closeButton)) dismiss = false;   // 묻는 동안 시트는 제자리로 올라온다
         closing = dismiss && closeButton != null;
         pending = closeButton;
         target = closing ? CloseDistance() : 0f;
