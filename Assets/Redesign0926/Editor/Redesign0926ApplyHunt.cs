@@ -199,7 +199,6 @@ namespace Redesign0926
             S("detail", detView); S("detailScroll", detSr);
             // 10-29 대표님: 상세에서 돌아가는 버튼은 '‹ 보물찾기' 가 아니라 주최 수칙과 같은 '‹ 돌아가기' — 위쪽 가운데에
             var detBack = HBack(det, "‹  돌아가기", "‹  Back");
-            detBack.transform.parent.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
             S("detailBack", detBack);
             S("dTitle", HLabel(det, "Title", 0, "", null, 58, Ink, FontStyle.Bold));
             S("dStatus", HLabel(det, "Status", 0, "", null, 44, Muted, FontStyle.Bold));
@@ -481,10 +480,12 @@ namespace Redesign0926
             return t;
         }
 
-        // 돌아가기 — 왼쪽 위 알약 (10-14 대표님: '‹ 보물찾기' 접기 버튼이 작아 누르기 어렵다). 예전 'Back'(꽉 찬 투명 줄)은 이 줄 안으로 옮긴다
+        // 돌아가기 — 위쪽 가운데 알약 (10-14 대표님: '‹ 보물찾기' 접기 버튼이 작아 누르기 어렵다). 예전 'Back'(꽉 찬 투명 줄)은 이 줄 안으로 옮긴다.
+        // 11-08 대표님 「'상단 중앙' 으로 통일」 — 양식 · 주최 수칙 · 상세 모두 가운데 (주최 수칙·양식만 왼쪽에 있었다)
         private static Button HBack(Transform parent, string ko, string en)
         {
             var row = HRow(parent, "BackRow", 112);
+            row.GetComponent<HorizontalLayoutGroup>().childAlignment = TextAnchor.MiddleCenter;
             var old = parent.Find("Back");
             if (old != null) { row.SetSiblingIndex(old.GetSiblingIndex()); old.SetParent(row, false); }
             var b = HButton(row, "Back", 112, new Color(1, 1, 1, 0.08f), ko, en, 44, Ink, FontStyle.Bold, out _);

@@ -12771,6 +12771,17 @@ namespace Redesign0926
             Check(() => Find(F + "CoordChips") == null && Find(F + "LCoord") == null, "'위치 공개' 칸 없음 (늘 정확히)");
             Check(() =>
             {
+                foreach (var n in new[] { "Form", "Rules", "Detail" })
+                {
+                    var hl = Find(HuntCardPath + n + "/Viewport/Content/BackRow")?.GetComponent<HorizontalLayoutGroup>();
+                    if (hl == null || hl.childAlignment != TextAnchor.MiddleCenter) return false;
+                }
+                var b = Find(F + "BackRow/Back") as RectTransform;
+                var r = Find(F + "BackRow") as RectTransform;
+                return b != null && r != null && Mathf.Abs(b.TransformPoint(b.rect.center).x - r.TransformPoint(r.rect.center).x) < 2f;
+            }, "'‹ 돌아가기'는 양식 · 주최 수칙 · 상세 모두 위쪽 가운데 (11-08)");
+            Check(() =>
+            {
                 int t = Find(F + "TitleInput").GetSiblingIndex();
                 return Find(F + "LPrize").GetSiblingIndex() == t + 1 && Find(F + "PrizeInput").GetSiblingIndex() == t + 2
                        && Find(F + "PrizePhotoRow").GetSiblingIndex() == t + 3 && Find(F + "PrizePhotoNote").GetSiblingIndex() == t + 4 && Find(F + "LHint").GetSiblingIndex() == t + 5;
