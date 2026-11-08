@@ -12772,15 +12772,28 @@ namespace Redesign0926
             Check(() =>
             {
                 int t = Find(F + "TitleInput").GetSiblingIndex();
-                return Find(F + "LPrize").GetSiblingIndex() == t + 1 && Find(F + "PrizeInput").GetSiblingIndex() == t + 2 && Find(F + "LHint").GetSiblingIndex() == t + 3;
-            }, "상품 칸은 제목과 힌트 사이");
-            Check(() => TextOf(F + "AudienceNote").StartsWith("참가 범위 안의 우팡 사용자라면 누구나"), "'모두' — 안내 줄");
+                return Find(F + "LPrize").GetSiblingIndex() == t + 1 && Find(F + "PrizeInput").GetSiblingIndex() == t + 2
+                       && Find(F + "PrizePhotoRow").GetSiblingIndex() == t + 3 && Find(F + "PrizePhotoNote").GetSiblingIndex() == t + 4 && Find(F + "LHint").GetSiblingIndex() == t + 5;
+            }, "상품 칸·상품 사진은 제목과 힌트 사이");
+            Check(() => TextOf(F + "AudienceNote").StartsWith("참가 범위 안의 우팡 사용자라면 누구나") && !TextOf(F + "AudienceNote").Contains("코드"), "'모두' — 안내 줄");
+            // 참가 코드는 모두·맞팔·팔로워 모두와 같이 고른다 (11-08 대표님 「'참가코드'의 경우에는 중복선택이 되도록」)
             Do(() => Click(F + "AudienceChips/Chip_code"));
-            Check(() => TextOf(F + "AudienceNote").Contains("참가 코드가 만들어지고") && TextOf(F + "AudienceNote").Contains("어디서든"),
-                "'참가 코드' — 목록·알림에 안 나오고 코드·공유 링크를 받은 사람만 어디서든 참가한다고 안내");
-            Do(() => Click(F + "AudienceChips/Chip_follower"));
-            Check(() => TextOf(F + "AudienceNote").StartsWith("나를 팔로우하는 사람만"), "'팔로워 모두' — 안내 줄");
+            Check(() => HuntChipsOn(F + "AudienceChips") == "all+code" && TextOf(F + "AudienceNote").StartsWith("참가 범위 안의 우팡 사용자라면 누구나 보고 참가하고, 참가 코드나 공유 링크를 받은 사람은 어디서든"),
+                "'모두'에 '참가 코드'를 더한다 — 둘 다 켜짐 · 범위 안은 누구나, 코드를 받은 사람은 어디서든");
             Do(() => Click(F + "AudienceChips/Chip_all"));
+            Check(() => HuntChipsOn(F + "AudienceChips") == "code" && TextOf(F + "AudienceNote").StartsWith("목록·알림에 나오지 않아요") && TextOf(F + "AudienceNote").Contains("참가 코드가 만들어지고"),
+                "켜진 '모두'를 다시 누르면 '참가 코드'만 — 목록·알림에 안 나오고 코드·공유 링크를 받은 사람만 어디서든");
+            Do(() => Click(F + "AudienceChips/Chip_code"));
+            Check(() => HuntChipsOn(F + "AudienceChips") == "code", "'참가 코드'만일 땐 코드 칩을 눌러도 꺼지지 않는다 (하나는 골라야)");
+            Do(() => Click(F + "AudienceChips/Chip_follower"));
+            Check(() => HuntChipsOn(F + "AudienceChips") == "follower+code" && TextOf(F + "AudienceNote").StartsWith("나를 팔로우하는 사람이 보고 참가하고(맞팔 포함), 참가 코드나"),
+                "코드만에서 '팔로워 모두'를 누르면 둘 다 — 팔로워 + 코드 안내");
+            Do(() => Click(F + "AudienceChips/Chip_code"));
+            Check(() => HuntChipsOn(F + "AudienceChips") == "follower" && TextOf(F + "AudienceNote").StartsWith("나를 팔로우하는 사람만"), "'참가 코드'를 다시 누르면 꺼진다 — '팔로워 모두' 안내 줄");
+            Do(() => Click(F + "AudienceChips/Chip_follower"));
+            Check(() => HuntChipsOn(F + "AudienceChips") == "follower", "코드가 꺼져 있으면 켜진 칩을 다시 눌러도 그대로");
+            Do(() => Click(F + "AudienceChips/Chip_all"));
+            Check(() => HuntChipsOn(F + "AudienceChips") == "all", "다시 '모두'만");
             // 시험은 1시간 · 보이는 거리 50m (연장 · 다가가기 시험이 이 값으로 잰다)
             Do(() => { Click(F + "DurationChips/Chip_60"); Click(F + "VisibleChips/Chip_50"); });
             Do(() =>
@@ -14051,6 +14064,15 @@ namespace Redesign0926
                 }
             return on ?? "";
         }
+        private static string HuntChipsOn(string box)
+        {
+            var t = Find(box);
+            var on = new List<string>();
+            if (t != null)
+                foreach (Transform c in t)
+                    if (c.gameObject.activeSelf && c.name.StartsWith("Chip_") && c.Find("Label")?.GetComponent<Text>()?.fontStyle == FontStyle.Bold) on.Add(c.name.Substring(5));
+            return string.Join("+", on);
+        }
         private static string HuntChipValues(string box)
         {
             var t = Find(box);
@@ -14109,8 +14131,8 @@ namespace Redesign0926
         // ④ '팔로워 모두' — 팔로워·맞팔만 목록·참가 · 아닌 사람이 링크로 열면 주최자 프로필로 · 공유 페이지(/hunt/번호)
         // ⑤ 비밀번호 힌트 없이도 숨겨짐 (서버)
         private const string ShHost = "hunt_test_shost";
-        private static int shCodeHunt, shFollowHunt;
-        private static string shCode;
+        private static int shCodeHunt, shFollowHunt, shAllHunt;
+        private static string shCode, shAllCode;
         private static void PlanHuntShare()
         {
             const string H = HuntCardPath, F = HfForm, RV = HuntReview;
@@ -14142,6 +14164,7 @@ namespace Redesign0926
             Do(() =>
             {
                 Click(F + "AudienceChips/Chip_code");
+                Click(F + "AudienceChips/Chip_all");   // 코드만 — 11-08 부터 '참가 코드'는 같이 고르는 칩이라 '모두'를 끈다
                 Click(F + "DurationChips/Chip_60");
                 Find(F + "TitleInput").GetComponent<InputField>().text = "코드 시험 보물 (플레이 시험)";
                 Find(F + "PrizeInput").GetComponent<InputField>().text = "";
@@ -14198,12 +14221,65 @@ namespace Redesign0926
                 "틀린 코드 링크 → 처음 화면 코드 칸에 그 코드 · 안내 · 참가 안 됨");
             CloseUpload();
 
+            // ③-2 '모두 + 참가 코드' (11-08 대표님 「'모두' 라고 체크해도 '참가코드' 를 통해서 멀리있는 사람이나 코드만 있으면 누구나 참여할 수 있도록」)
+            Do(() => { R0926HuntApi.EditorTestUser = ShHost; });
+            HfOpenForm();
+            Do(() =>
+            {
+                Click(F + "AudienceChips/Chip_all");   // 앞 게임의 '코드만'에서 '모두'를 누르면 모두 + 코드
+                Click(F + "DurationChips/Chip_60");
+                Find(F + "TitleInput").GetComponent<InputField>().text = "모두+코드 시험 보물 (플레이 시험)";
+                Find(F + "PrizeInput").GetComponent<InputField>().text = "";
+                Find(F + "HintInput").GetComponent<InputField>().text = "";
+            });
+            Check(() => HuntChipsOn(F + "AudienceChips") == "all+code", "코드만에서 '모두'를 누르면 모두 + 참가 코드 (둘 다 켜짐)");
+            Do(() => Click(F + "Submit"));
+            Sleep(0.6f);
+            Shot("share_allcode_review");
+            Check(() => Active(RV) && ReviewRow("누구에게") == "모두 + 참가 코드" && ReviewRow("참가 범위") == "10km · 코드를 받은 사람은 어디서든"
+                        && TextOf(RV + "/Sheet0926/Note").StartsWith("참가 범위 안의 우팡 사용자라면 누구나 보고 참가하고, 참가 코드나"),
+                "모두 + 코드 확인 카드 — 누구에게 '모두 + 참가 코드' · 참가 범위 '10km · 코드를 받은 사람은 어디서든'");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Go"));
+            Wait(() => TextOf(RV + "/Sheet0926/Head") == "보물을 숨겼어요!", 10f, "숨김 → 카드 '보물을 숨겼어요!'");
+            Sleep(0.6f);
+            Shot("share_allcode_done");
+            Do(() => { shAllHunt = HuntPostedId(); shAllCode = TextOf(RV + "/Sheet0926/CodeBox/Code"); log.Add("  모두+코드 게임 " + shAllHunt + " · 코드 " + shAllCode); });
+            Check(() => shAllHunt > 0 && Active(RV + "/Sheet0926/CodeBox") && System.Text.RegularExpressions.Regex.IsMatch(shAllCode ?? "", "^[A-Z0-9]{6}$") && shAllCode != shCode
+                        && TextOf(RV + "/Sheet0926/Note").StartsWith("참가 범위 안의 사람들이 목록에서 보고 참가하고, 이 코드나 공유 링크를 받은 사람은 어디서든"),
+                "숨긴 카드에 참가 코드 6자 · '범위 안은 목록에서, 코드를 받은 사람은 어디서든' 안내");
+            Check(() => NearbyHas("hunt_test_s1", shAllHunt), "모두 + 코드 게임은 근처 목록에 나온다 (코드만 게임과 다르게)");
+            const string FarAway = "{\"lat\":35.1796,\"lon\":129.0756";   // 부산 — 참가 범위 10km 밖
+            Check(() => Has(DevSend("hunt_test_s2", "/api/hunts/" + shAllHunt + "/join", FarAway + "}"), "\"error\":\"out_of_range\""),
+                "멀리 있는 사람(부산)은 코드 없이 참가 안 됨 — out_of_range");
+            Check(() => Has(DevSend("hunt_test_s2", "/api/hunts/" + shAllHunt + "/join", FarAway + ",\"code\":\"" + shAllCode.ToLowerInvariant() + "\"}"), "\"ok\":true"),
+                "멀리 있어도 코드가 맞으면 참가 (소문자로 넣어도)");
+            Check(() => Has(DevSend("hunt_test_s3", "/api/hunts/join_code", "{\"code\":\"" + shAllCode + "\"}"), "\"ok\":true"),
+                "처음 화면 '코드로 참가'도 모두 + 코드 게임에 들어간다 (예전엔 코드만 게임만)");
+            Check(() =>
+            {
+                string full = DevSend(null, "/hunt/" + shAllHunt + "?c=" + shAllCode), plain = DevSend(null, "/hunt/" + shAllHunt);
+                return full.Contains("모두+코드 시험 보물") && full.Contains(shAllCode) && full.Contains("코드로 어디서든") && full.Contains("woopang://hunt?id=" + shAllHunt + "&amp;c=" + shAllCode)
+                       && plain.Contains("모두+코드 시험 보물") && !plain.Contains(shAllCode) && plain.Contains("10km");
+            }, "공유 페이지 — ?c=코드면 코드 칸 · '코드로 어디서든' · 앱 열기 링크에 코드 / 코드 없는 링크는 내용만(모두) · 10km");
+            Do(() => Click(RV + "/Sheet0926/Buttons/Done"));
+            Wait(() => Active(H + "Detail"), 8f, "확인 → 상세");
+            Sleep(0.6f);
+            Check(() => TextOf(H + "Detail/Viewport/Content/Info").Contains("참가 코드  " + shAllCode) && Active(H + "Detail/Viewport/Content/Share"),
+                "주최자 상세 — 참가 코드 줄 · 공유하기 (모두 + 코드 게임도)");
+            Do(() => { R0926Share.EditorLast = null; Click(H + "Detail/Viewport/Content/Share"); });
+            Check(() => (R0926Share.EditorLast ?? "").EndsWith("/hunt/" + shAllHunt + "?c=" + shAllCode) && R0926Share.EditorLast.Contains("참가 코드: " + shAllCode),
+                "주최자 상세의 공유하기 — 코드 줄 · 코드가 든 링크");
+            CloseUpload();
+            Check(() => Has(DevSend(ShHost, "/api/hunts/" + shAllHunt + "/end", "{}"), "\"ok\":true"),
+                "모두 + 코드 게임을 마친다 (주최자는 동시에 2개까지 — 다음 팔로워 게임 자리)");
+
             // ④ '팔로워 모두' — 시험 서버 팔로우: s2 맞팔 · s3 나를 팔로우 · s1 관계 없음
             Do(() => { R0926HuntApi.EditorTestUser = ShHost; DevSend(ShHost, "/api/dev/search_reset", "{}"); });
             HfOpenForm();
             Do(() =>
             {
                 Click(F + "AudienceChips/Chip_follower");
+                Click(F + "AudienceChips/Chip_code");   // 앞 게임(모두 + 코드)의 참가 코드를 끈다 — 팔로워만
                 Click(F + "DurationChips/Chip_60");
                 Find(F + "TitleInput").GetComponent<InputField>().text = "팔로워 시험 보물 (플레이 시험)";
                 Find(F + "PrizeInput").GetComponent<InputField>().text = "아메리카노 (시험)";

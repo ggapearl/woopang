@@ -155,6 +155,9 @@ public class R0926HuntCard : MonoBehaviour
     // 확인 카드 — 숨긴 뒤(postedId > 0)엔 그 게임의 참가 코드 · 공유하기
     private int postedId;
     private string postedCode, postedTitle, postedPrize, postedAudience;
+    // '참가 코드' 칩은 모두·맞팔·팔로워 모두 위에 더한다 (11-08 대표님 「'참가코드'의 경우에는 중복선택이 되도록」).
+    // 코드만 고르면 picked["audience"] == "code" — 목록·알림에 안 나오는 예전 참가 코드 게임
+    private bool withCode;
 
     /// <summary>숨기기 확인 카드가 떠 있다 — 추가 창 옆으로 넘기기·아래로 밀어 닫기를 막는다 (SwipePanelController · R0926SwipeDismiss). 거짓이면 카드가 스스로 닫힌다 (R0926HuntReview)</summary>
     public static bool Reviewing { get; private set; }
@@ -530,6 +533,7 @@ public class R0926HuntCard : MonoBehaviour
             string v = d.v;
             Wire(c.GetComponent<Button>(), () =>
             {
+                if (key == "audience") { PickAudience(v); return; }
                 picked[key] = v; PaintChips(box, key);
                 if (key == "mode") PaintCodeBox();
                 else if (key == "shape") { pickNote = null; PaintShape(); }
@@ -544,7 +548,7 @@ public class R0926HuntCard : MonoBehaviour
         foreach (Transform c in box)
         {
             if (!c.gameObject.activeSelf || !c.name.StartsWith("Chip_")) continue;
-            bool on = c.name == "Chip_" + picked[key];
+            bool on = c.name == "Chip_" + picked[key] || (key == "audience" && withCode && c.name == "Chip_code");
             var img = c.GetComponent<Image>();
             if (img != null) img.color = on ? ChipOn : ChipOff;
             var l = c.Find("Label")?.GetComponent<Text>();
@@ -578,9 +582,40 @@ public class R0926HuntCard : MonoBehaviour
         if (reviewEdit != null) reviewEdit.interactable = !busy;
     }
 
+    // 누구에게 — 모두·맞팔·팔로워 모두는 하나만, '참가 코드'는 그 위에 켜고 끈다. 하나도 안 고른 채로는 둘 수 없다:
+    // 켜진 모두·맞팔·팔로워를 다시 누르면 코드가 켜져 있을 때만 꺼져 '코드만'이 되고, 코드만일 땐 코드 칩이 꺼지지 않는다
+    private void PickAudience(string v)
+    {
+        string a = picked["audience"];
+        if (v == "code")
+        {
+            if (a == "code") return;
+            withCode = !withCode;
+        }
+        else if (v == a)
+        {
+            if (!withCode) return;
+            picked["audience"] = "code";
+        }
+        else picked["audience"] = v;
+        if (picked["audience"] == "code") withCode = true;
+        if (audienceChips != null) PaintChips(audienceChips, "audience");
+        PaintAudience();
+    }
+
+    /// <summary>누구에게 — all · friends · follower · code(코드만). 코드를 같이 고르면 all+code 처럼</summary>
+    private string AudienceKey
+    {
+        get
+        {
+            string a = picked.TryGetValue("audience", out var x) ? x : "all";
+            return a != "code" && withCode ? a + "+code" : a;
+        }
+    }
+
     private void PaintAudience()
     {
-        if (audienceNote != null) audienceNote.text = AudienceText(picked.TryGetValue("audience", out var a) ? a : "all");
+        if (audienceNote != null) audienceNote.text = AudienceText(AudienceKey);
     }
 
     private static string AudienceText(string a) => a switch
@@ -592,6 +627,21 @@ public class R0926HuntCard : MonoBehaviour
                     "一覧・通知には出ません — 隠すと参加コードが作られ、コードか共有リンクを受け取った人だけがどこからでも参加できます",
                     "不会出现在列表和通知中 — 藏好后会生成参加代码，只有收到代码或分享链接的人才能在任何地方参加",
                     "No aparece en listas ni avisos: al esconderlo se crea un código y solo quien tenga el código o el enlace puede unirse, desde cualquier lugar"),
+        "all+code" => T("참가 범위 안의 우팡 사용자라면 누구나 보고 참가하고, 참가 코드나 공유 링크를 받은 사람은 어디서든 참가할 수 있어요",
+                        "Anyone on WOOPANG within the join area can see and join — people with the join code or link can join from anywhere",
+                        "参加範囲内のWOOPANGユーザーなら誰でも見て参加でき、参加コードか共有リンクを受け取った人はどこからでも参加できます",
+                        "参加范围内的任何 WOOPANG 用户都可以看到并参加，收到参加代码或分享链接的人可在任何地方参加",
+                        "Cualquier usuario de WOOPANG dentro del área puede verlo y unirse, y quien tenga el código o el enlace puede unirse desde cualquier lugar"),
+        "friends+code" => T("나와 서로 팔로우하는 사람이 보고 참가하고, 참가 코드나 공유 링크를 받은 사람은 누구나 어디서든 참가할 수 있어요",
+                            "Mutuals can see and join — anyone with the join code or link can join from anywhere",
+                            "相互フォローの人が見て参加でき、参加コードか共有リンクを受け取った人は誰でもどこからでも参加できます",
+                            "互关好友可以看到并参加，收到参加代码或分享链接的任何人都可在任何地方参加",
+                            "Tus mutuos pueden verlo y unirse, y cualquiera con el código o el enlace puede unirse desde cualquier lugar"),
+        "follower+code" => T("나를 팔로우하는 사람이 보고 참가하고(맞팔 포함), 참가 코드나 공유 링크를 받은 사람은 누구나 어디서든 참가할 수 있어요",
+                             "Your followers can see and join (mutuals included) — anyone with the join code or link can join from anywhere",
+                             "あなたのフォロワーが見て参加でき（相互フォローを含む）、参加コードか共有リンクを受け取った人は誰でもどこからでも参加できます",
+                             "关注你的人可以看到并参加（含互关），收到参加代码或分享链接的任何人都可在任何地方参加",
+                             "Tus seguidores pueden verlo y unirse (mutuos incluidos), y cualquiera con el código o el enlace puede unirse desde cualquier lugar"),
         _ => T("참가 범위 안의 우팡 사용자라면 누구나 보고 참가할 수 있어요", "Anyone on WOOPANG within the join area can see and join", "参加範囲内のWOOPANGユーザーなら誰でも見て参加できます", "参加范围内的任何 WOOPANG 用户都可以看到并参加", "Cualquier usuario de WOOPANG dentro del área puede verlo y unirse"),
     };
 
@@ -975,7 +1025,7 @@ public class R0926HuntCard : MonoBehaviour
         TryLocation(out _, out _, out float acc);
         string none = T("없음", "None", "なし", "无", "Ninguno");
         string prize = Field(prizeInput), hint = Field(hintInput), question = Field(questionInput);
-        bool locked = picked["mode"] == "code", code = picked["audience"] == "code";
+        bool locked = picked["mode"] == "code", code = picked["audience"] == "code", plusCode = !code && withCode;
         var rows = new List<(string, string)>
         {
             (T("제목", "Title", "タイトル", "标题", "Título"), Field(titleInput)),
@@ -985,14 +1035,15 @@ public class R0926HuntCard : MonoBehaviour
             (T("찾는 방식", "How", "見つけ方", "寻宝方式", "Cómo"), locked ? T("비밀번호 ", "Password ", "パスワード ", "密码 ", "Contraseña ") + Field(codeInput) + (question.Length > 0 ? "\n" + T("힌트 ", "Hint ", "ヒント ", "提示 ", "Pista ") + Cut(question, 40) : "") : Pick(Modes, "touch")),
             (T("당첨 · 참가", "Winners · players", "当選 · 参加", "中奖 · 参加", "Ganadores · jugadores"), Pick(Winners, picked["winners"]) + " · " + T("최대 ", "up to ", "最大 ", "最多 ", "hasta ") + Pick(Players, picked["players"])),
             (T("보이는 거리", "Visible within", "見える距離", "可见距离", "Visible a"), Pick(Visibles, picked["visible"])),
-            (T("참가 범위", "Join area", "参加範囲", "参加范围", "Área"), code ? T("코드를 받은 사람은 어디서든", "Anywhere, with the code", "コードを受け取った人はどこからでも", "收到代码的人可在任何地方参加", "Desde cualquier lugar, con el código") : Pick(Radii, picked["radius"])),
-            (T("누구에게", "Who can join", "参加できる人", "谁可以参加", "Quién puede unirse"), Pick(Audiences, picked["audience"])),
+            (T("참가 범위", "Join area", "参加範囲", "参加范围", "Área"), code ? T("코드를 받은 사람은 어디서든", "Anywhere, with the code", "コードを受け取った人はどこからでも", "收到代码的人可在任何地方参加", "Desde cualquier lugar, con el código")
+                : Pick(Radii, picked["radius"]) + (plusCode ? T(" · 코드를 받은 사람은 어디서든", " · anywhere with the code", " · コードがあればどこからでも", " · 凭代码可在任何地方参加", " · con el código, desde cualquier lugar") : "")),
+            (T("누구에게", "Who can join", "参加できる人", "谁可以参加", "Quién puede unirse"), Pick(Audiences, picked["audience"]) + (plusCode ? " + " + Pick(Audiences, "code") : "")),
             (T("시작 · 진행", "Start · length", "開始 · 期間", "开始 · 时长", "Inicio · duración"), Pick(Starts, picked["start"]) + " · " + Pick(Durations, picked["duration"])),
             (T("숨길 자리", "Spot", "隠す場所", "藏宝位置", "Lugar"), T("지금 서 있는 자리", "Where you stand now", "今立っている場所", "你现在站的位置", "Donde estás ahora") + (acc > 0f ? T(" · 정확도 ", " · accuracy ", " · 精度 ", " · 精度 ", " · precisión ") + Mathf.RoundToInt(acc) + "m" : "")),
         };
         if (reviewHead != null) reviewHead.text = T("이대로 숨길까요?", "Hide it like this?", "この内容で隠しますか？", "就这样藏起来吗？", "¿Lo escondemos así?");
         if (reviewSub != null) reviewSub.text = T("숨긴 뒤에는 내용을 고칠 수 없어요 — 한 번 더 확인해 주세요", "You can't edit it after hiding — please check once more", "隠した後は内容を修正できません — もう一度確認してください", "藏好后无法修改内容 — 请再确认一次", "No podrás editarlo después — revísalo una vez más");
-        if (reviewNote != null) reviewNote.text = AudienceText(picked["audience"]);
+        if (reviewNote != null) reviewNote.text = AudienceText(AudienceKey);
         if (reviewWarn != null)
         {
             reviewWarn.text = T("낚시성·도박·유해한 게임은 내려가고, 계정이 정지되거나 삭제될 수 있어요",
@@ -1054,6 +1105,21 @@ public class R0926HuntCard : MonoBehaviour
                     "このコードか共有リンクを受け取った人だけがどこからでも参加できます — 一覧に出ないので共有してください",
                     "只有收到此代码或分享链接的人才能在任何地方参加 — 不会出现在列表中，请分享出去",
                     "Solo quien tenga este código o el enlace puede unirse, desde cualquier lugar — no aparece en listas, así que compártelo"),
+        "all+code" => T("참가 범위 안의 사람들이 목록에서 보고 참가하고, 이 코드나 공유 링크를 받은 사람은 어디서든 참가할 수 있어요",
+                        "People in the join area will find it in their list — anyone with this code or the shared link can join from anywhere",
+                        "参加範囲内の人が一覧で見つけて参加し、このコードか共有リンクを受け取った人はどこからでも参加できます",
+                        "参加范围内的人会在列表中看到并参加，收到此代码或分享链接的人可在任何地方参加",
+                        "La gente dentro del área lo verá en su lista, y quien tenga este código o el enlace puede unirse desde cualquier lugar"),
+        "friends+code" => T("맞팔 친구에게 보이고, 이 코드나 공유 링크를 받은 사람은 누구나 어디서든 참가할 수 있어요",
+                            "Mutuals can see it — anyone with this code or the shared link can join from anywhere",
+                            "相互フォローの友だちに表示され、このコードか共有リンクを受け取った人は誰でもどこからでも参加できます",
+                            "互关好友可见，收到此代码或分享链接的任何人都可在任何地方参加",
+                            "Lo ven tus mutuos, y cualquiera con este código o el enlace puede unirse desde cualquier lugar"),
+        "follower+code" => T("나를 팔로우하는 사람에게 보이고, 이 코드나 공유 링크를 받은 사람은 누구나 어디서든 참가할 수 있어요",
+                             "Your followers can see it — anyone with this code or the shared link can join from anywhere",
+                             "あなたのフォロワーに表示され、このコードか共有リンクを受け取った人は誰でもどこからでも参加できます",
+                             "关注你的人可见，收到此代码或分享链接的任何人都可在任何地方参加",
+                             "Lo ven tus seguidores, y cualquiera con este código o el enlace puede unirse desde cualquier lugar"),
         "friends" => T("맞팔 친구에게만 보여요 — 링크를 받아도 맞팔이 아니면 참가할 수 없어요", "Only mutuals can see it — people without a mutual follow can't join, even with the link", "相互フォローの友だちにだけ表示されます — リンクを受け取っても相互フォローでなければ参加できません", "仅互关好友可见 — 即使收到链接，非互关也无法参加", "Solo lo ven tus mutuos — sin seguimiento mutuo no pueden unirse, aunque tengan el enlace"),
         "follower" => T("나를 팔로우하는 사람에게만 보여요 — 링크를 받은 사람도 팔로우하면 참가할 수 있어요", "Only your followers can see it — people with the link can join once they follow you", "あなたのフォロワーにだけ表示されます — リンクを受け取った人もフォローすれば参加できます", "仅关注你的人可见 — 收到链接的人关注你后即可参加", "Solo lo ven tus seguidores — quien tenga el enlace puede unirse si te sigue"),
         _ => T("참가 범위 안의 사람들이 목록에서 보고 참가해요 — 공유하면 더 많은 사람이 찾아와요", "People in the join area will find it in their list — share it to bring more", "参加範囲内の人が一覧で見つけて参加します — 共有するともっと多くの人が来ます", "参加范围内的人会在列表中看到并参加 — 分享出去会有更多人来", "La gente dentro del área lo verá en su lista — compártelo para atraer a más"),
@@ -1063,7 +1129,7 @@ public class R0926HuntCard : MonoBehaviour
     {
         if (busy || postedId > 0) yield break;
         if (!Validate(out double lat, out double lon, out float acc)) yield break;   // 카드를 보는 사이 위치·고른 파일이 바뀌었을 수 있다
-        string title = Field(titleInput), prize = Field(prizeInput), audience = picked["audience"];
+        string title = Field(titleInput), prize = Field(prizeInput), audience = picked["audience"], audienceKey = AudienceKey;
         string shape = Shape;
         bool file = shape == "photo" || shape == "model";
         var b = new JSONObject();
@@ -1082,6 +1148,7 @@ public class R0926HuntCard : MonoBehaviour
         b["radius_km"] = float.Parse(picked["radius"], CultureInfo.InvariantCulture);
         b["coord_mode"] = "exact";   // 위치 공개 칩은 없앴다 — 늘 정확히 (10-26 대표님)
         b["audience"] = audience;
+        if (audience != "code" && withCode) b["with_code"] = true;   // 코드도 같이 — 받은 사람은 누구나 어디서든 (11-08)
         b["start_in_min"] = int.Parse(picked["start"]);
         b["duration_min"] = int.Parse(picked["duration"]);
         b["lat"] = lat; b["lon"] = lon; b["acc"] = acc; b["mock"] = false;
@@ -1150,7 +1217,7 @@ public class R0926HuntCard : MonoBehaviour
             R0926HuntList.Stale();
             postedId = j["hunt"]["id"].AsInt;
             postedCode = j["join_code"];
-            postedTitle = title; postedPrize = prize; postedAudience = audience;
+            postedTitle = title; postedPrize = prize; postedAudience = string.IsNullOrEmpty(postedCode) ? audience : audienceKey;   // 코드를 못 받았으면 코드 안내를 하지 않는다
             if (review != null && review.activeSelf) PaintDone();
             else CloseDone();
             yield break;
