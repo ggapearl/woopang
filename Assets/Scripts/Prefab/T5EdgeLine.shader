@@ -32,6 +32,11 @@ Shader "Universal Render Pipeline/T5EdgeLine"
 
         [Header(Fade Control)]
         _GlobalAlpha ("Global Alpha", Range(0, 1)) = 1.0
+
+        [Header(Pet Friendly)]
+        _PetGlow ("Pet Friendly Glow (0 = off)", Range(0, 1)) = 0
+        _PetColor ("Pet Glow Color", Color) = (1, 0.91, 0.58, 1)
+        _PetCorner ("Pet Corner Glow Size", Range(0.05, 0.7)) = 0.32
     }
 
     SubShader
@@ -111,6 +116,9 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half _Roundness;
                 half _BackFaceAlpha;
                 half _GlobalAlpha;
+                half4 _PetColor;
+                half _PetGlow;
+                half _PetCorner;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -146,6 +154,22 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 float distY1 = length(absPos.xz - float2(0.5, 0.5));
                 float distZ1 = length(absPos.xy - float2(0.5, 0.5));
                 return min(distX1, min(distY1, distZ1));
+            }
+
+            // 애견 동반 (_PetGlow 1) — 기본 선과 같은 모양·세기의 빛을 노란 파스텔로 물들이고,
+            // 꼭짓점 8곳은 빛이 더 번지며 저마다 다른 때에 반짝인다 (짠)
+            // 1-exp 로 차오르게 — 세게 겹쳐도 하얗게 타지 않고 파스텔 노랑에서 멈춘다. 선 한가운데만 크림빛 심 (빛처럼 보이게)
+            half3 PetLight(float3 pos, half strength, out half amount)
+            {
+                half corner = 1.0 - saturate(length(abs(pos) - 0.5) / _PetCorner);   // 꼭짓점 1 → 둘레로 0
+                corner *= corner;
+                half3 side = step(0.0, pos);
+                half twinkle = 0.6 + 0.4 * sin(_Time.y * 2.4 + dot(side, half3(2.3, 4.1, 5.9)));
+                amount = strength * (1.0 + corner * twinkle) + corner * twinkle * 0.75;
+                half e = amount * _EdgeIntensity;
+                half3 col = _PetColor.rgb * (1.0 - exp(-e * 1.6));
+                col += half3(1.0, 0.97, 0.82) * (0.35 * (1.0 - exp(-max(e - 2.5, 0.0) * 0.6)));
+                return col + corner * corner * corner * twinkle * 0.8;   // 꼭짓점 한가운데 — 하얗게 반짝
             }
 
             half4 fragBack(Varyings input) : SV_Target
@@ -189,12 +213,15 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half glowStrength = (edgeMask + tubeGlow * 0.5 + centerBright) * pulse;
                 half3 edgeGlow = _EdgeColor.rgb * glowStrength * _EdgeIntensity;
 
+                half petAmount;
+                half3 petGlow = PetLight(input.positionOS, glowStrength, petAmount);
+
                 // 뒷면 색상: 흐리게 처리
-                half3 finalColor = (baseColor + edgeGlow) * _BackFaceTint.rgb;
+                half3 finalColor = (baseColor + lerp(edgeGlow, petGlow, _PetGlow)) * _BackFaceTint.rgb;
                 finalColor = MixFog(finalColor, input.fogFactor);
 
                 // 뒷면 알파값 적용 (GlobalAlpha로 전체 투명도 제어)
-                half finalAlpha = max(baseAlpha, glowStrength * 0.5) * _BackFaceAlpha * _GlobalAlpha;
+                half finalAlpha = max(baseAlpha, lerp(glowStrength, petAmount, _PetGlow) * 0.5) * _BackFaceAlpha * _GlobalAlpha;
 
                 return half4(finalColor, finalAlpha);
             }
@@ -262,6 +289,9 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 half _Roundness;
                 half _BackFaceAlpha;
                 half _GlobalAlpha;
+                half4 _PetColor;
+                half _PetGlow;
+                half _PetCorner;
             CBUFFER_END
 
             Varyings vert(Attributes input)
@@ -313,6 +343,22 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 float minDist = min(distX1, min(distY1, distZ1));
 
                 return minDist;
+            }
+
+            // 애견 동반 (_PetGlow 1) — 기본 선과 같은 모양·세기의 빛을 노란 파스텔로 물들이고,
+            // 꼭짓점 8곳은 빛이 더 번지며 저마다 다른 때에 반짝인다 (짠)
+            // 1-exp 로 차오르게 — 세게 겹쳐도 하얗게 타지 않고 파스텔 노랑에서 멈춘다. 선 한가운데만 크림빛 심 (빛처럼 보이게)
+            half3 PetLight(float3 pos, half strength, out half amount)
+            {
+                half corner = 1.0 - saturate(length(abs(pos) - 0.5) / _PetCorner);   // 꼭짓점 1 → 둘레로 0
+                corner *= corner;
+                half3 side = step(0.0, pos);
+                half twinkle = 0.6 + 0.4 * sin(_Time.y * 2.4 + dot(side, half3(2.3, 4.1, 5.9)));
+                amount = strength * (1.0 + corner * twinkle) + corner * twinkle * 0.75;
+                half e = amount * _EdgeIntensity;
+                half3 col = _PetColor.rgb * (1.0 - exp(-e * 1.6));
+                col += half3(1.0, 0.97, 0.82) * (0.35 * (1.0 - exp(-max(e - 2.5, 0.0) * 0.6)));
+                return col + corner * corner * corner * twinkle * 0.8;   // 꼭짓점 한가운데 — 하얗게 반짝
             }
 
             half4 frag(Varyings input) : SV_Target
@@ -381,17 +427,18 @@ Shader "Universal Render Pipeline/T5EdgeLine"
                 // T5 조명 색상
                 half3 edgeGlow = _EdgeColor.rgb * glowStrength * _EdgeIntensity;
 
-                // 최종 색상: 베이스 + T5 모서리 라인
-                half3 finalColor = baseColor + edgeGlow;
+                // 애견 동반이면 선이 노란 파스텔 빛으로 (_PetGlow 0 이면 아래 기본 선 그대로)
+                half petAmount;
+                half3 petGlow = PetLight(input.positionOS, glowStrength, petAmount);
 
-                // HDR 발광 (Bloom 효과)
-                finalColor += edgeGlow * edgeMask * 0.5;
+                // 최종 색상: 베이스 + T5 모서리 라인 (+ HDR 발광 edgeGlow * edgeMask * 0.5)
+                half3 finalColor = baseColor + lerp(edgeGlow + edgeGlow * edgeMask * 0.5, petGlow, _PetGlow);
 
                 // Apply fog
                 finalColor = MixFog(finalColor, input.fogFactor);
 
                 // 최종 알파값: 텍스처 알파 + 엣지 글로우 영역은 항상 보이도록 (GlobalAlpha로 전체 투명도 제어)
-                half finalAlpha = max(baseAlpha, glowStrength * 0.5) * _GlobalAlpha;
+                half finalAlpha = max(baseAlpha, lerp(glowStrength, petAmount, _PetGlow) * 0.5) * _GlobalAlpha;
 
                 return half4(finalColor, finalAlpha);
             }

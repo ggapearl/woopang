@@ -67,6 +67,8 @@ public class DoubleTap3D : MonoBehaviour
     private Sprite infoSprite1;
     private Sprite infoSprite2;
     private bool petFriendly;
+    private static readonly int PetGlowId = Shader.PropertyToID("_PetGlow");
+    private Renderer petGlowRenderer;
     private bool separateRestroom;
     private string descriptionText;
     [SerializeField] private string placeName; // 인스펙터에서 설정 가능 (씬 배치 Cube용)
@@ -1226,6 +1228,7 @@ public class DoubleTap3D : MonoBehaviour
         infoSprite1 = sprite1;
         infoSprite2 = sprite2;
         this.petFriendly = petFriendly;
+        ApplyPetGlow(petFriendly);
         this.separateRestroom = separateRestroom;
         this.descriptionText = description;
         this.placeName = name;
@@ -1453,6 +1456,20 @@ public class DoubleTap3D : MonoBehaviour
     public string GetUsername() => username;
     public string GetName() => placeName;
 
+    /// <summary>
+    /// 애견 동반 장소 — 큐브(T5EdgeLine) 모서리를 노란 파스텔 빛으로 (2026-11-09).
+    /// 재질 사본은 켤 때만 만든다 — 끌 때 원본 재질이면 그대로 둔다. GLB 처럼 _PetGlow 가 없는 재질은 건너뛴다.
+    /// </summary>
+    private void ApplyPetGlow(bool on)
+    {
+        if (petGlowRenderer == null) petGlowRenderer = GetComponent<Renderer>();
+        Material shared = petGlowRenderer != null ? petGlowRenderer.sharedMaterial : null;
+        if (shared == null || !shared.HasProperty(PetGlowId)) return;
+        float want = on ? 1f : 0f;
+        if (Mathf.Approximately(shared.GetFloat(PetGlowId), want)) return;
+        petGlowRenderer.material.SetFloat(PetGlowId, want);
+    }
+
     public void ResetData()
     {
         // 진행 중인 이미지 로딩 코루틴 중단 (이전 장소 사진이 새 오브젝트에 표시되는 것 방지)
@@ -1470,6 +1487,7 @@ public class DoubleTap3D : MonoBehaviour
         infoSprite1 = null;
         infoSprite2 = null;
         petFriendly = false;
+        ApplyPetGlow(false);
         separateRestroom = false;
         descriptionText = null;
         placeName = null;

@@ -147,6 +147,7 @@ namespace Redesign0926
             else if (mode == "photoload") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPhotoLoad(); }
             else if (mode == "crop") PlanCrop();
             else if (mode == "fixclose") PlanFixClose();
+            else if (mode == "petglow") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPetGlow(); }
             else if (mode == "stickers") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStickers(); }
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
@@ -10363,6 +10364,153 @@ namespace Redesign0926
                 if (crop != null) UnityEngine.Object.Destroy(crop);
                 Application.logMessageReceived -= onLog;
             });
+        }
+
+        // ── 애견 동반 큐브 — 대표님 11-07 「'애견동반' 의 오브젝트 … 기본 프리팹 오브젝트 외곽선보다 좀 더 '짠한 느낌의 노란색 파스텔톤' 의 빛이 '모서리' 에」
+        //    T5EdgeLine 의 _PetGlow 를 DoubleTap3D.SetInfoImages 가 장소의 애견 동반 값으로 켠다 (우팡 장소 · 관광공사 반려동물 여행 자료 · 정보 수정 · 풀 재사용).
+        //    우팡 장소 둘을 카메라 앞에 나란히 — 왼쪽 그대로 · 오른쪽은 '애견 동반'으로 고친 것(ApplyEditedPlace, 기기 안에서만 · 끝나면 되돌림).
+        //    셋째 줄에 배경 폴더를 주면 낮 거리 사진 위에서도 찍는다.
+        private static void PlanPetGlow()
+        {
+            GameObject plainGo = null, petGo = null;
+            PlaceData plainOrig = null, petOrig = null;
+            Texture petFace = null;
+            var privateNames = new HashSet<string> { "집", "우팡이네집", "엄빠집", "우팡이똥샷", "우팡이똥꼬샷" };
+            Func<GameObject, Renderer> rend = go => go != null ? go.GetComponentInChildren<DoubleTap3D>(true)?.GetComponent<Renderer>() : null;
+            Func<GameObject, float> glow = go =>
+            {
+                var r = rend(go);
+                return r != null && r.sharedMaterial != null && r.sharedMaterial.HasProperty("_PetGlow") ? r.sharedMaterial.GetFloat("_PetGlow") : -1f;
+            };
+            Func<PlaceData, bool> pick = pd => pd != null && pd.model_type != "custom" && !privateNames.Contains(pd.name?.Trim() ?? "");
+            Func<PlaceData, PlaceData> copy = pd => (PlaceData)typeof(object).GetMethod("MemberwiseClone", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(pd, null);
+            // 카메라 앞 — side -1 왼쪽 · +1 오른쪽 · 0 가운데. 세 면이 보이게 비껴 세운다 (꼭짓점이 보이도록)
+            Action<GameObject, float, float> put = (go, side, near) =>
+            {
+                var cam = Camera.main; var r = rend(go);
+                if (cam == null || r == null) return;
+                float s = r.transform.lossyScale.x;
+                float hHalf = Mathf.Atan(Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad) * cam.aspect);
+                float d = 1.7f * s / Mathf.Tan(hHalf) * near;
+                go.transform.rotation = Quaternion.LookRotation(-cam.transform.forward, cam.transform.up) * Quaternion.Euler(-20f, 35f, 0f);
+                Vector3 at = cam.transform.position + cam.transform.forward * d + cam.transform.right * (side * 0.85f * s);
+                go.transform.position += at - r.bounds.center;
+            };
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Wait(() =>
+            {
+                var dm = DataManager.Instance;
+                if (dm?.GetSpawnedObjects() == null) return false;
+                int n = 0;
+                foreach (var kv in dm.GetSpawnedObjects())
+                    if (kv.Value != null && kv.Value.activeInHierarchy && glow(kv.Value) >= 0f && dm.GetPlaceDataMap().TryGetValue(kv.Key, out var pd) && pick(pd)) n++;
+                return n >= 2;
+            }, 40f, "우팡 장소 큐브 둘 이상");
+            Sleep(3f);   // 사진이 면에 붙을 때까지
+
+            // 1) 뜰 때 — 장소 값 그대로 (애견 동반만 1)
+            Check(() =>
+            {
+                var dm = DataManager.Instance;
+                int all = 0, pets = 0, wrong = 0;
+                foreach (var kv in dm.GetSpawnedObjects())
+                {
+                    if (kv.Value == null || glow(kv.Value) < 0f || !dm.GetPlaceDataMap().TryGetValue(kv.Key, out var pd) || pd.model_type == "custom") continue;
+                    all++; if (pd.pet_friendly) pets++;
+                    if (!Mathf.Approximately(glow(kv.Value), pd.pet_friendly ? 1f : 0f)) { wrong++; log.Add($"  어긋남: {kv.Key} 애견 {pd.pet_friendly} · 빛 {glow(kv.Value)}"); }
+                }
+                log.Add($"  우팡 장소 큐브 {all}곳 · 애견 동반 {pets}곳 · 어긋남 {wrong}");
+                return all > 0 && wrong == 0;
+            }, "뜰 때 — 애견 동반 장소만 모서리 빛 켜짐 (나머지는 그대로)");
+            Do(() =>
+            {
+                int all = 0, on = 0;
+                if (TourAPIManager.Instance?.GetSpawnedObjects() != null)
+                    foreach (var go in TourAPIManager.Instance.GetSpawnedObjects().Values)
+                        if (go != null && glow(go) >= 0f) { all++; if (Mathf.Approximately(glow(go), 1f)) on++; }
+                log.Add(all == 0 ? "  관광공사 큐브 없음 (둘레에 없음) — 건너뜀" : $"  관광공사 반려동물 여행 큐브 {all}곳 · 빛 켜짐 {on}");
+                if (all > 0 && on != all) log.Add("FAIL 관광공사 반려동물 여행 큐브는 전부 애견 동반 — 빛이 다 켜져야 한다");
+            });
+
+            // 2) 둘 고르기 — 왼쪽은 애견 동반 아님 · 오른쪽은 애견 동반으로 (정보 수정이 바로 반영하는 길 ApplyEditedPlace — 둘 다 끝나면 되돌린다)
+            Do(() =>
+            {
+                var dm = DataManager.Instance;
+                var cands = new List<KeyValuePair<int, GameObject>>();
+                foreach (var kv in dm.GetSpawnedObjects())
+                    if (kv.Value != null && kv.Value.activeInHierarchy && glow(kv.Value) >= 0f && dm.GetPlaceDataMap().TryGetValue(kv.Key, out var pd) && pick(pd)) cands.Add(kv);
+                // 왼쪽은 원래 애견 동반이 아닌 곳이 있으면 그곳, 오른쪽은 원래 애견 동반이 아닌 곳을 켜 보는 게 좋다 — 없으면 있는 대로
+                cands.Sort((a, b) => dm.GetPlaceDataMap()[a.Key].pet_friendly.CompareTo(dm.GetPlaceDataMap()[b.Key].pet_friendly));
+                plainGo = cands[0].Value; petGo = cands[1].Value;
+                plainOrig = dm.GetPlaceDataMap()[cands[0].Key];
+                petOrig = dm.GetPlaceDataMap()[cands[1].Key];
+                petFace = rend(petGo).sharedMaterial.GetTexture("_BaseMap");
+                var p0 = copy(plainOrig); p0.pet_friendly = false; dm.ApplyEditedPlace(p0, false);
+                var p1 = copy(petOrig); p1.pet_friendly = true; dm.ApplyEditedPlace(p1, false);
+                log.Add($"  왼쪽 {cands[0].Key} (원래 애견 {plainOrig.pet_friendly} → 끔) · 오른쪽 {cands[1].Key} (원래 애견 {petOrig.pet_friendly} → 켬) · 큐브 크기 {rend(petGo).transform.lossyScale.x:0.00}");
+                HidePrivatePlaces();
+            });
+            Check(() => Mathf.Approximately(glow(petGo), 1f) && Mathf.Approximately(glow(plainGo), 0f), "정보 수정으로 애견 동반을 켜고 끄면 → 켠 큐브만 모서리 빛");
+            Check(() => rend(petGo).sharedMaterial.GetTexture("_BaseMap") == petFace && petFace != null, "빛을 켜도 면 사진은 그대로");
+            Check(() =>
+            {
+                var a = AssetDatabase.LoadAssetAtPath<Material>("Assets/sou/Materials/0000_Cube.mat");
+                var b = AssetDatabase.LoadAssetAtPath<Material>("Assets/sou/Materials/0002_관광공사.mat");
+                return a != null && b != null && a.GetFloat("_PetGlow") == 0f && b.GetFloat("_PetGlow") == 0f
+                       && rend(petGo).sharedMaterial != a;
+            }, "원본 재질(0000_Cube · 0002_관광공사)은 그대로 0 — 큐브마다 제 사본에만 켠다");
+
+            // 3) 찍기 — 어두운 바탕 두 번(반짝이는 때가 다르게) · 가까이 · (배경 폴더가 있으면) 낮 거리
+            Do(() => { DeviceFov(); put(plainGo, -1f, 1f); put(petGo, 1f, 1f); });
+            Sleep(0.5f);
+            Shot("petglow_pair_a");
+            Sleep(0.9f);
+            Do(() => { put(plainGo, -1f, 1f); put(petGo, 1f, 1f); });
+            Shot("petglow_pair_b");
+            // 같은 큐브를 빛 끔 → 켬 으로 — 노란 기가 사진 것인지 빛 것인지 가른다
+            Do(() => { plainGo.SetActive(false); put(petGo, 0f, 0.55f); rend(petGo).sharedMaterial.SetFloat("_PetGlow", 0f); });
+            Sleep(0.4f);
+            Shot("petglow_close_off");
+            Do(() => rend(petGo).sharedMaterial.SetFloat("_PetGlow", 1f));
+            Sleep(0.2f);
+            Shot("petglow_close");
+            // 그 장소 사진이 노란 종이일 수 있어 — 다른 사진(왼쪽 큐브)에서도 끔 → 켬 (재질 사본에만 · 끝에 원래 값으로 되돌린다)
+            Do(() => { petGo.SetActive(false); plainGo.SetActive(true); put(plainGo, 0f, 0.55f); });
+            Sleep(0.4f);
+            Shot("petglow_plain_off");
+            Do(() => rend(plainGo).material.SetFloat("_PetGlow", 1f));
+            Sleep(0.2f);
+            Shot("petglow_plain_on");
+            Do(() =>
+            {
+                rend(plainGo).material.SetFloat("_PetGlow", 0f);
+                petGo.SetActive(true);
+                if (!string.IsNullOrEmpty(storeSrc)) Backdrop("bg_city.png");
+                put(plainGo, -1f, 1f); put(petGo, 1f, 1f);
+            });
+            Sleep(0.5f);
+            Do(() => { if (string.IsNullOrEmpty(storeSrc)) log.Add("  배경 폴더 없음 — 낮 거리 컷 건너뜀"); });
+            Shot("petglow_city");
+
+            // 4) 끄기 — 애견 동반을 끄면 꺼짐 · 풀로 돌아갈 때(ResetData)도 꺼짐 · 끝나면 두 장소 원래 값으로
+            Do(() => { var e = copy(petOrig); e.pet_friendly = false; DataManager.Instance.ApplyEditedPlace(e, false); });
+            Check(() => Mathf.Approximately(glow(petGo), 0f), "애견 동반을 끄면 → 모서리 빛도 꺼짐");
+            Do(() => { var e = copy(petOrig); e.pet_friendly = true; DataManager.Instance.ApplyEditedPlace(e, false); });
+            Do(() => petGo.GetComponentInChildren<DoubleTap3D>(true).ResetData());
+            Check(() => Mathf.Approximately(glow(petGo), 0f), "풀로 돌아갈 때(ResetData) → 빛 꺼짐 (다른 장소로 다시 쓰여도 남지 않는다)");
+            Do(() =>
+            {
+                DataManager.Instance.ApplyEditedPlace(plainOrig, false);
+                DataManager.Instance.ApplyEditedPlace(petOrig, false);
+            });
+            Check(() => Mathf.Approximately(glow(plainGo), plainOrig.pet_friendly ? 1f : 0f) && Mathf.Approximately(glow(petGo), petOrig.pet_friendly ? 1f : 0f), "원래 값으로 되돌리면 → 빛도 원래대로");
         }
 
         // ── v53 앱 안 '프로필 편집' — 대표님 10-27 「안드로이드는 '사진설정'을 하려 해도 '사진첩'·'갤러리'가 아니라 '내 파일'로 안내」
