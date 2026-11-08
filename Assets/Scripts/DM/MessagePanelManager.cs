@@ -3122,9 +3122,11 @@ public class MessagePanelManager : MonoBehaviour
     {
         SetLayerRecursively(item, 5);
         string huntTitle = SplitHuntHeader(msg.content, out string huntBody);
-        R0926ChatPhoto.Ref photoRef = huntTitle == null ? R0926ChatPhoto.TryParse(msg.content) : null;
+        R0926ChatPhoto.Ref[] album = huntTitle == null ? R0926ChatPhoto.TryParseAlbum(msg.content) : null;   // 사진 한 장 · 묶음(11-09)
+        R0926ChatPhoto.Ref photoRef = album != null && album.Length == 1 ? album[0] : null;
+        if (photoRef != null) album = null;
         string shown = R0926Emoji.ToDisplay(msg.content);   // 진짜 이모지 → 우팡 이모지 글자 (말풍선 폭을 재기 전에)
-        var links = huntTitle == null && photoRef == null ? R0926ChatLinks.Find(shown) : null;
+        var links = huntTitle == null && photoRef == null && album == null ? R0926ChatLinks.Find(shown) : null;
 
         // BubbleContainer 또는 Bubble 찾기
         Transform bubbleContainerTr = item.transform.Find("BubbleContainer");
@@ -3309,8 +3311,11 @@ public class MessagePanelManager : MonoBehaviour
 
         // 사진 메시지 — 글 대신 사진을 넣는다 (크기는 주소에 적힌 가로·세로로 바로 정해진다)
         R0926ChatPhotoBubble photoBubble = null;
+        R0926ChatAlbumBubble albumBubble = null;
         if (photoRef != null && contentText != null && bubbleContainerTr != null)
             photoBubble = R0926ChatPhotoBubble.Attach(item, bubbleContainerTr as RectTransform, contentText, photoRef, photoView);
+        else if (album != null && contentText != null && bubbleContainerTr != null)
+            albumBubble = R0926ChatAlbumBubble.Attach(item, bubbleContainerTr as RectTransform, contentText, album, photoView);
 
         // 레이아웃 리빌드
         if (bubbleContainerTr != null)
@@ -3364,6 +3369,7 @@ public class MessagePanelManager : MonoBehaviour
         likeHandler.SetSingleTap(
             huntTitle != null ? () => StartCoroutine(OpenHuntFromChat(huntTitle))
             : photoBubble != null ? photoBubble.Tap
+            : albumBubble != null ? albumBubble.Tap
             : links != null && links.Count > 0 ? () => OpenLinkAt(contentText, shown, links, likeHandler)
             : (Action)null);
 
@@ -3702,13 +3708,45 @@ public class MessagePanelManager : MonoBehaviour
         if (ui == null) return;
         if (!renderedMessageIds.Add(messageId)) { Destroy(ui.gameObject); return; }
         ui.Sent(sent);
+        PendingSent(ui, messageId, ui.Tap);
+    }
+
+    /// <summary>사진 여러 장(11-09 묶음) — 칸 N개짜리 내 말풍선을 바로 그린다. 칸은 R0926ChatPhoto 가 사진을 읽는 대로 채운다</summary>
+    public R0926ChatAlbumBubble AddPendingAlbumBubble(int count)
+    {
+        GameObject item = AddOptimisticMyBubble(" ");
+        Transform bubble = item != null ? item.transform.Find("BubbleContainer") ?? item.transform.Find("Bubble") : null;
+        Text text = bubble != null ? bubble.Find("ContentText")?.GetComponent<Text>() : null;
+        if (text == null)
+        {
+            if (item != null) Destroy(item);
+            return null;
+        }
+        var ui = R0926ChatAlbumBubble.AttachPending(item, bubble as RectTransform, text, count, photoView);
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(bubble as RectTransform);
+        ScrollToBottom();
+        return ui;
+    }
+
+    /// <summary>묶음 올리기 끝 — FinishPendingPhoto 와 같다</summary>
+    public void FinishPendingAlbum(R0926ChatAlbumBubble ui, int messageId, R0926ChatPhoto.Ref[] sent)
+    {
+        if (ui == null) return;
+        if (!renderedMessageIds.Add(messageId)) { Destroy(ui.gameObject); return; }
+        ui.Sent(sent);
+        PendingSent(ui, messageId, ui.Tap);
+    }
+
+    private void PendingSent(Component ui, int messageId, Action tap)
+    {
         Text readText = ui.transform.Find("ReadText")?.GetComponent<Text>();
         if (readText != null) readText.text = "✓";
         var likeHandler = ui.GetComponent<DoubleTouchLikeHandler>();
         if (likeHandler != null)
         {
             likeHandler.Initialize(messageId, ui.transform as RectTransform, (id, rect) => LikeMessage(id, rect));
-            likeHandler.SetSingleTap(ui.Tap);
+            likeHandler.SetSingleTap(tap);
         }
     }
 

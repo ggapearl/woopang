@@ -10,8 +10,9 @@ using UnityEngine.Networking;
 /// <summary>
 /// 대화방 사진 — 입력줄 앞 + 버튼 · 사진 고르기 · 올리기 · 사진 받아 두기.
 /// 10-30 대표님 「메세지창 앞부분에 +버튼 하나 만들어서 사진 공유할 수 있도록」 · 11-05 「사진 첨부할 경우 10장까지 선택해서 보낼 수 있도록」.
-/// 여러 장은 고른 차례대로 한 장씩 올린다(한 장 = 메시지 하나) — 말풍선은 한 장씩 바로 뜨고 각자 올라가는 정도를 그린다.
-/// 사진은 메시지 내용에 주소로 들어간다(서버 /api/dm/image) — 말풍선은 주소를 알아보고 사진으로 그린다(R0926ChatPhotoBubble).
+/// 여러 장은 묶음 메시지 하나로 보낸다(11-09 대표님 「사진 여러개 보냈을 때 하나씩 가는데 묶어서 보내지고」) — 말풍선 하나에 칸 N개(R0926ChatAlbumBubble),
+/// 서버 /api/dm/album 이 한 번에 받아 주소를 줄마다 하나씩 담은 메시지 하나로 둔다(받는 사람 알림도 한 번 「📷 사진 N장」).
+/// 사진은 메시지 내용에 주소로 들어간다(한 장은 서버 /api/dm/image) — 말풍선은 주소를 알아보고 사진으로 그린다(R0926ChatPhotoBubble).
 /// 파일 이름 끝의 가로x세로 덕분에 사진을 받기 전에 말풍선 크기가 정해져, 사진이 뒤늦게 와도 대화가 밀리지 않는다.
 /// 올리는 동안은 대화방을 나가도 끊기지 않게 코루틴을 MessagePanelManager 에서 돌린다
 /// </summary>
@@ -23,10 +24,12 @@ public class R0926ChatPhoto : MonoBehaviour
 
     private const float InputLeftPlus = 196f, InputLeftAlone = 40f;   // Redesign0926ApplyChatPhoto 와 같은 값
     public const int MaxPhotos = 10;   // 한 번에 고를 수 있는 사진 (iOS 는 고르기 창이 막고, 안드로이드는 앞의 10장만)
-    private const int MultiMaxSize = 1600;   // 여러 장일 때 한 장의 긴 변 — 말풍선마다 사진을 들고 있어 10장이면 메모리가 크다
+    private const int MultiMaxSize = 1600;   // 여러 장일 때 한 장의 긴 변 — 10장을 한 번에 올리므로 작게
+    public const int TileSize = 512;         // 묶음 칸에 그리는 작은 사진의 긴 변 (서버 /thumb/512 와 같은 크기)
     private const long CacheMaxBytes = 200L * 1024 * 1024, CacheKeepBytes = 150L * 1024 * 1024;
     private static readonly Regex FileName = new Regex(@"^[0-9a-f]{32}_(\d{1,5})x(\d{1,5})\.jpg\z");
-    private const string PushPreview = "📷 사진";   // 서버가 넣는 미리보기(언어를 모른다) — 앱에선 기기 언어로
+    private static readonly Regex PushAlbum = new Regex(@"^📷 사진 (\d{1,2})장\z");
+    private const string PushPreview = "📷 사진";   // 서버가 넣는 미리보기(언어를 모른다 — 묶음은 「📷 사진 N장」) — 앱에선 기기 언어로
 
     private static bool cacheTrimmed;
     private readonly R0926PickerWait pick = new R0926PickerWait();
@@ -35,7 +38,8 @@ public class R0926ChatPhoto : MonoBehaviour
     {
         public string url, file;
         public int w, h;
-        public string Thumb => MessagePanelManager.SearchBase + "/thumb/768/uploads/dm/" + file;
+        public string Thumb => ThumbOf(768);
+        public string ThumbOf(int size) => MessagePanelManager.SearchBase + "/thumb/" + size + "/uploads/dm/" + file;
         public string Key(string kind) => kind + "_" + file;
     }
 
@@ -46,6 +50,7 @@ public class R0926ChatPhoto : MonoBehaviour
     private static string SendFail => R0926LocalizedText.Say("사진을 보내지 못했어요. 다시 보내 주세요", "Photo not sent. Please try again", "写真を送れませんでした。もう一度送ってください", "照片未发送，请重试", "No se envió la foto. Inténtalo de nuevo");
     private static string TenOnly => R0926LocalizedText.Say("사진은 한 번에 10장까지 보낼 수 있어요. 앞의 10장만 보냅니다", "You can send up to 10 photos at a time. Sending the first 10", "写真は一度に10枚まで送れます。最初の10枚だけ送ります", "一次最多发送10张照片，只发送前10张", "Puedes enviar hasta 10 fotos a la vez. Se envían las 10 primeras");
     private static string TooMany => R0926LocalizedText.Say("사진을 너무 많이 보냈어요. 잠시 뒤에 다시 보내 주세요", "Too many photos. Please try again later", "写真を送りすぎです。しばらくしてからもう一度送ってください", "发送的照片过多，请稍后再试", "Demasiadas fotos. Inténtalo más tarde");
+    private static string SomeBad => R0926LocalizedText.Say("읽을 수 없는 사진은 빼고 보냈어요", "Photos that couldn't be read were left out", "読み込めない写真は除いて送りました", "无法读取的照片已略过", "Se omitieron las fotos que no se pudieron leer");
 
     /// <summary>이 메시지가 사진이면 그 정보 — 우리 서버의 사진 주소 모양일 때만 (아무 주소나 받아 오지 않는다)</summary>
     public static Ref TryParse(string content)
@@ -60,12 +65,36 @@ public class R0926ChatPhoto : MonoBehaviour
         return w > 0 && h > 0 ? new Ref { url = t, file = file, w = w, h = h } : null;
     }
 
-    /// <summary>대화 목록 미리보기 — 사진이면 주소 대신 「사진」</summary>
+    /// <summary>사진 묶음(11-09) — 주소가 줄마다 하나씩(1~10줄)이고 모두 우리 서버의 사진 주소일 때만. 한 장이면 길이 1. 아니면 null</summary>
+    public static Ref[] TryParseAlbum(string content)
+    {
+        string t = content != null ? content.Trim() : "";
+        if (t.Length == 0) return null;
+        if (t.IndexOf('\n') < 0)
+        {
+            var one = TryParse(t);
+            return one != null ? new[] { one } : null;
+        }
+        string[] lines = t.Split('\n');
+        if (lines.Length > MaxPhotos) return null;
+        var refs = new Ref[lines.Length];
+        for (int i = 0; i < lines.Length; i++)
+            if ((refs[i] = TryParse(lines[i])) == null) return null;
+        return refs;
+    }
+
+    /// <summary>대화 목록 미리보기 — 사진이면 주소 대신 「사진」, 묶음이면 「사진 N장」</summary>
     public static string Preview(string text)
     {
-        return text == PushPreview || TryParse(text) != null
+        int n = 0;
+        var m = text != null ? PushAlbum.Match(text) : null;
+        if (m != null && m.Success) n = int.Parse(m.Groups[1].Value);
+        else if (text == PushPreview) n = 1;
+        else n = TryParseAlbum(text)?.Length ?? 0;
+        if (n <= 0) return text;
+        return n == 1
             ? R0926LocalizedText.Say("사진", "Photo", "写真", "照片", "Foto")
-            : text;
+            : R0926LocalizedText.Say($"사진 {n}장", $"{n} photos", $"写真{n}枚", $"{n}张照片", $"{n} fotos");
     }
 
     // ── 받아 두기 ───────────────────────────────────────
@@ -128,6 +157,25 @@ public class R0926ChatPhoto : MonoBehaviour
         return tex;
     }
 
+    /// <summary>긴 변을 maxSide 로 줄인 사본 — GPU 로 줄여(밉맵이 있으면 곱게) GPU 에만 둔다. 묶음 칸 · 원본밖에 없을 때의 칸</summary>
+    public static Texture2D Shrink(Texture src, int maxSide)
+    {
+        if (src == null) return null;
+        float k = Mathf.Min(1f, maxSide / (float)Mathf.Max(src.width, src.height));
+        int w = Mathf.Max(1, Mathf.RoundToInt(src.width * k)), h = Mathf.Max(1, Mathf.RoundToInt(src.height * k));
+        var prev = RenderTexture.active;
+        var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
+        Graphics.Blit(src, rt);
+        RenderTexture.active = rt;
+        var t = new Texture2D(w, h, TextureFormat.RGB24, false);
+        t.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
+        t.Apply(false, true);
+        RenderTexture.active = prev;
+        RenderTexture.ReleaseTemporary(rt);
+        t.wrapMode = TextureWrapMode.Clamp;
+        return t;
+    }
+
     // ── + 버튼 ──────────────────────────────────────────
     private void OnApplicationFocus(bool hasFocus) => R0926PickerWait.NoteFocus(hasFocus);
 
@@ -180,23 +228,111 @@ public class R0926ChatPhoto : MonoBehaviour
         yield return SendPaths(peer, paths);
     }
 
-    // 고른 차례대로 한 장씩 — 앞 사진이 다 올라간 뒤 다음 사진을 읽는다 (메시지 차례가 고른 차례와 같고, 메모리에 한꺼번에 들지 않게)
+    // 한 장은 예전 그대로(/api/dm/image) · 여러 장은 묶음 하나(/api/dm/album)
     private IEnumerator SendPaths(string peer, IList<string> paths)
     {
         var list = new List<string>();
         foreach (var p in paths) if (!string.IsNullOrEmpty(p)) list.Add(p);
         if (list.Count == 0) yield break;
         if (list.Count > MaxPhotos) { Warn(TenOnly); list.RemoveRange(MaxPhotos, list.Count - MaxPhotos); }
-        int maxSize = list.Count > 1 ? MultiMaxSize : 2048;
-        for (int i = 0; i < list.Count; i++)
+        if (list.Count > 1) { yield return SendAlbum(peer, list); yield break; }
+
+        yield return null;   // 고르기 창이 닫힌 화면이 먼저 그려지게 — 사진 읽기는 그동안 화면을 멈춘다
+        Texture2D tex = null;
+        try { tex = NativeGallery.LoadImageAtPath(list[0], maxSize: 2048, markTextureNonReadable: false); }
+        catch (Exception) { tex = null; }
+        yield return Upload(peer, tex);
+    }
+
+    // 묶음 — 말풍선(칸 N개)을 먼저 그리고 고른 차례대로 읽어 JPEG 를 만든다. 칸에는 작게 줄인 사본만 남기고 큰 사진은 바로 버린다(10장이 메모리에 같이 들지 않게).
+    // 읽을 수 없는 사진은 칸을 빼고 나머지만 보낸다. 다 만들면 한 번에 올린다 — 메시지 하나 · 받는 사람 알림도 한 번
+    private IEnumerator SendAlbum(string peer, List<string> list)
+    {
+        R0926ChatAlbumBubble bubble = chat.AddPendingAlbumBubble(list.Count);
+        if (bubble == null) yield break;
+        var jpgs = new List<byte[]>();
+        int bad = 0;
+        foreach (string path in list)
         {
-            yield return null;   // 고르기 창이 닫힌 화면(· 앞 말풍선)이 먼저 그려지게 — 사진 읽기는 그동안 화면을 멈춘다
-            Texture2D tex = null;
-            try { tex = NativeGallery.LoadImageAtPath(list[i], maxSize: maxSize, markTextureNonReadable: false); }
-            catch (Exception) { tex = null; }
-            bool ok = false;
-            yield return Send(peer, tex, r => ok = r);
-            if (!ok && i + 1 < list.Count && stopAll) yield break;   // 보낼 수 없는 방·한도 — 나머지도 안 된다
+            yield return null;   // 칸이 하나씩 차는 게 보이게 — 사진 읽기 · JPEG 만들기는 그동안 화면을 멈춘다
+            if (bubble == null) yield break;   // 대화방을 비웠다
+            Texture2D tex = null, small = null;
+            byte[] jpg = null;
+            try
+            {
+                tex = NativeGallery.LoadImageAtPath(path, maxSize: MultiMaxSize, markTextureNonReadable: false);
+                if (tex != null && tex.width >= 8 && tex.height >= 8)
+                {
+                    jpg = tex.EncodeToJPG(88);
+                    small = Shrink(tex, TileSize);
+                }
+            }
+            catch (Exception e) { Debug.LogException(e); }
+            if (tex != null) Destroy(tex);
+            if (jpg == null || jpg.Length == 0 || small == null)
+            {
+                if (small != null) Destroy(small);
+                bubble.RemoveSlot(jpgs.Count);
+                bad++;
+                continue;
+            }
+            bubble.PutLocal(jpgs.Count, small);
+            jpgs.Add(jpg);
+        }
+        if (jpgs.Count == 0) { Fail(bubble, BadPhoto); yield break; }
+        if (bad > 0) Warn(SomeBad);
+
+        string me = LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null ? LoginManager.Instance.CurrentUser.id : null;
+        if (string.IsNullOrEmpty(me)) { Fail(bubble, SendFail); yield break; }
+
+        var parts = new List<IMultipartFormSection>
+        {
+            new MultipartFormDataSection("sender_id", me),
+            new MultipartFormDataSection("recipient_id", peer),
+        };
+        long total = 0;
+        foreach (var j in jpgs) total += j.Length;
+        var splits = new float[jpgs.Count];   // 이 사진까지 다 올라간 몫 — 칸마다 그늘을 걷는다
+        long upTo = 0;
+        for (int i = 0; i < jpgs.Count; i++)
+        {
+            parts.Add(new MultipartFormFileSection("photo", jpgs[i], "photo" + (i + 1) + ".jpg", "image/jpeg"));
+            upTo += jpgs[i].Length;
+            splits[i] = upTo / (float)total;
+        }
+        bubble.Splits(splits);
+
+        using (var req = UnityWebRequest.Post(MessagePanelManager.SearchBase + "/api/dm/album", parts))
+        {
+            req.timeout = 300;   // 10장이면 크다 — 느린 망에서도 끊지 않게
+            LoginManager.ApplyAuth(req);
+            var op = req.SendWebRequest();
+            while (!op.isDone)
+            {
+                if (bubble != null) bubble.Progress(Mathf.Min(req.uploadProgress, 0.99f));
+                yield return null;
+            }
+            LoginManager.CheckUnauthorized(req);
+
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                long code = req.responseCode;
+                Fail(bubble, code == 401 || code == 403 ? MessagePanelManager.SendFailReason(req)
+                    : code == 429 ? TooMany
+                    : code == 400 || code == 413 ? BadPhoto
+                    : SendFail);
+                yield break;
+            }
+
+            var res = JSON.Parse(req.downloadHandler.text);
+            var urls = res != null ? res["urls"].AsArray : null;
+            if (urls == null || urls.Count != jpgs.Count) { Fail(bubble, SendFail); yield break; }
+            var sent = new Ref[urls.Count];
+            for (int i = 0; i < sent.Length; i++)
+                if ((sent[i] = TryParse(urls[i].Value)) == null) { Fail(bubble, SendFail); yield break; }
+            // 올린 그대로가 서버의 원본이다 — 크게 볼 때 다시 받지 않게 기기에 둔다
+            for (int i = 0; i < sent.Length; i++) Store(Path.Combine(CacheDir, sent[i].Key("f")), jpgs[i]);
+            chat.FinishPendingAlbum(bubble, res["message_id"].AsInt, sent);
         }
     }
 
@@ -226,7 +362,7 @@ public class R0926ChatPhoto : MonoBehaviour
         Texture2D tex = null;
         try { tex = NativeCamera.LoadImageAtPath(path, maxSize: 2048, markTextureNonReadable: false); }
         catch (Exception) { tex = null; }
-        yield return Send(peer, tex, null);
+        yield return Upload(peer, tex);
     }
 
 #if UNITY_EDITOR
@@ -237,7 +373,7 @@ public class R0926ChatPhoto : MonoBehaviour
         if (peer == null) return;
         var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
         if (!tex.LoadImage(bytes)) { Destroy(tex); tex = null; }
-        chat.StartCoroutine(Send(peer, tex, null));
+        chat.StartCoroutine(Upload(peer, tex));
     }
 
     /// <summary>플레이 시험 — 사진첩에서 여러 장을 고른 것처럼 (파일 경로)</summary>
@@ -250,17 +386,7 @@ public class R0926ChatPhoto : MonoBehaviour
 #endif
 
     // ── 올리기 ──────────────────────────────────────────
-    private bool stopAll;   // 마지막 실패가 나머지 사진도 막는 것 (보낼 수 없는 방 · 하루 한도 · 로그인)
-
-    private IEnumerator Send(string peer, Texture2D tex, Action<bool> done)
-    {
-        stopAll = false;
-        bool ok = false;
-        yield return Upload(peer, tex, () => ok = true);
-        done?.Invoke(ok);
-    }
-
-    private IEnumerator Upload(string peer, Texture2D tex, Action sentOk)
+    private IEnumerator Upload(string peer, Texture2D tex)
     {
         if (tex == null || tex.width < 8 || tex.height < 8)
         {
@@ -283,7 +409,7 @@ public class R0926ChatPhoto : MonoBehaviour
         if (jpg == null || jpg.Length == 0) { Fail(bubble, BadPhoto); yield break; }
 
         string me = LoginManager.Instance != null && LoginManager.Instance.CurrentUser != null ? LoginManager.Instance.CurrentUser.id : null;
-        if (string.IsNullOrEmpty(me)) { stopAll = true; Fail(bubble, SendFail); yield break; }
+        if (string.IsNullOrEmpty(me)) { Fail(bubble, SendFail); yield break; }
 
         var parts = new List<IMultipartFormSection>
         {
@@ -306,7 +432,6 @@ public class R0926ChatPhoto : MonoBehaviour
             if (req.result != UnityWebRequest.Result.Success)
             {
                 long code = req.responseCode;
-                stopAll = code == 401 || code == 403 || code == 429;
                 Fail(bubble, code == 401 || code == 403 ? MessagePanelManager.SendFailReason(req)
                     : code == 429 ? TooMany
                     : code == 400 || code == 413 ? BadPhoto
@@ -318,11 +443,10 @@ public class R0926ChatPhoto : MonoBehaviour
             var sent = j != null ? TryParse(j["url"].Value) : null;
             if (sent == null) { Fail(bubble, SendFail); yield break; }
             chat.FinishPendingPhoto(bubble, j["message_id"].AsInt, sent);
-            sentOk?.Invoke();
         }
     }
 
-    private static void Fail(R0926ChatPhotoBubble bubble, string why)
+    private static void Fail(Component bubble, string why)
     {
         if (bubble != null) Destroy(bubble.gameObject);
         Warn(why);

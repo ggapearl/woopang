@@ -10,7 +10,7 @@ namespace Redesign0926
     /// v64: 10-30 대표님 「메세지창 앞부분에 +버튼 하나 만들어서 사진 공유 · 사진 클릭해서 볼 수 있도록 · 본 앱 레이아웃에 어울리는 다운로드, 공유버튼 ·
     /// 공유하는 창은 '팔로잉' 하고 있는 친구에게」.
     ///  · 입력줄 왼쪽 + 버튼(PlusButton0926) — 보내기 버튼과 같은 크기의 둥근 칸. 사진 고르기 시트(촬영 · 앨범 · 취소)를 그대로 쓴다
-    ///  · 크게 보기(ChatPhotoView0926) — 어두운 바탕 + 아래 한 줄 큰 세 칸 '닫기 / 다운로드 / 공유' (자르기 화면과 같은 카드 · 칸 · 물방울 소리)
+    ///  · 크게 보기(ChatPhotoView0926) — 어두운 바탕 + 왼쪽 위 ✕ · 아래 작은 알약 '다운로드 / 모두 다운로드 / 공유' (v75 — 11-09 「버튼이 너무 크다」 · 묶음은 좌우로 넘김)
     ///  · 공유 시트(ShareSheet0926) — 신고 시트와 같은 모양, 내용은 팔로잉 목록 + 줄마다 '보내기'
     /// Apply8(끌어 닫기 · 뒤로가기)보다 뒤에 돌므로 그 단계의 일을 여기서 직접 부른다
     /// </summary>
@@ -87,6 +87,9 @@ namespace Redesign0926
         }
 
         // ── 크게 보기 ─────────────────────────────────────────
+        // v75: 11-09 대표님 「'닫기 / 다운로드 / 공유' 버튼이 불필요하게 너무 큰데 적절한 사이즈로」 · 「여러 장이면 좌우 스와이프」 · 「다운로드도 묶어서」 —
+        // 아래 큰 세 칸 카드(Bar0926/Row0926) → 왼쪽 위 둥근 ✕ · 가운데 위 「2 / 5」 · 아래 가운데 작은 알약 [다운로드] [모두 다운로드] [공유].
+        // 자리와 폭은 R0926PhotoView.Layout 이 화면 · 언어대로 잡는다 (여기 값은 처음 자리)
         private static R0926PhotoView BuildPhotoView(Transform root, GameObject room, List<string> log)
         {
             var go = FindOrCreate(root, "ChatPhotoView0926");
@@ -99,57 +102,152 @@ namespace Redesign0926
             cvso.ApplyModifiedPropertiesWithoutUndo();
             Ensure<GraphicRaycaster>(go);
 
-            // 바탕이 손가락을 받는다 → 위의 R0926PhotoView 가 끌기·두 번 톡·휠을 처리
+            // 바탕이 손가락을 받는다 → 위의 R0926PhotoView 가 끌기 · 넘기기 · 두 번 톡 · 휠을 처리
             var bg = FindOrCreate(go.transform, "Bg0926");
+            bg.transform.SetSiblingIndex(0);
             Stretch(RT(bg));
             var backdrop = Img(bg, null, CropBg, Image.Type.Simple);
             backdrop.raycastTarget = true;
 
             var center = new Vector2(0.5f, 0.5f);
             var frame = FindOrCreate(go.transform, "Stage0926");
+            frame.transform.SetSiblingIndex(1);
             SetRect(RT(frame), Vector2.zero, Vector2.zero, center, new Vector2(720, 1800), new Vector2(1440, 2700));
-            var ph = FindOrCreate(frame.transform, "Photo0926");
-            var photo = Ensure<RawImage>(ph);
-            photo.color = Color.white;
-            photo.raycastTarget = false;
-            EditorUtility.SetDirty(photo);
-            SetRect(RT(ph), center, center, center, Vector2.zero, new Vector2(1000, 1000));
+            var photo = StageImage(frame.transform, "Photo0926");
+            var peek = StageImage(frame.transform, "Peek0926");   // 옆으로 넘기는 동안 따라 들어오는 앞 · 뒤 사진
+            peek.enabled = false;
             var spin = PillPart(frame.transform, "Spin0926", "r0926_arc", Pink2, 120, Image.Type.Simple);
-
-            // 아래 — 한 줄 큰 세 칸 (자르기 화면과 같은 카드 · 칸)
-            var bar = FindOrCreate(go.transform, "Bar0926");
-            Img(bar, Spr("r0926_pill"), Card, Image.Type.Sliced, 64f / 56f).raycastTarget = true;
-            SetRect(RT(bar), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(-CardSide * 2, PhotoTileH + 48));
-            var row = FindOrCreate(bar.transform, "Row0926");
-            var rrt = RT(row);
-            rrt.anchorMin = Vector2.zero; rrt.anchorMax = Vector2.one; rrt.pivot = center;
-            rrt.offsetMin = new Vector2(24, 24); rrt.offsetMax = new Vector2(-24, -24);
-            EditorUtility.SetDirty(rrt);
+            spin.transform.SetAsLastSibling();
 
             var view = Ensure<R0926PhotoView>(go);
             var dockList = Find(root, "Dock0926")?.transform.Find("List_Button");
             var dockFw = dockList != null ? dockList.GetComponent<UITouchForwarder>() : null;
             var dockClip = dockFw != null ? new SerializedObject(dockFw).FindProperty("customSound").objectReferenceValue : null;
             if (dockClip == null) log.Add("사진 보기: 도크 버튼 소리 못 찾음 — 기본 소리");
+            var glass = new Color(Card.r, Card.g, Card.b, 0.9f);   // 키운 사진 위에서 살짝 비치게
 
-            var quiet = Color.Lerp(Card, Color.white, 0.035f);
-            var plain = Color.Lerp(Card, Color.white, 0.08f);
-            var close = CropTile(row.transform, "Close0926", 0, "r0926_i_close", quiet, Muted, CloseTileWords, dockClip, view.Close);
-            var down = CropTile(row.transform, "Download0926", 1, "r0926_i_download", plain, Ink, new[] { "다운로드", "Download", "保存", "下载", "Descargar" }, dockClip, view.Download);
-            var share = CropTile(row.transform, "Share0926", 2, "r0926_i_share", Pink, Dark, new[] { "공유", "Share", "共有", "分享", "Compartir" }, dockClip, view.Share);
-            Ensure<ClickButtonOnBack>(close.gameObject);   // 뒤로가기 = 닫기
+            // 왼쪽 위 ✕ — 둥근 칸 하나 (뒤로가기 = 닫기)
+            var topLeft = new Vector2(0, 1);
+            var close = FindOrCreate(go.transform, "Close0926");
+            close.transform.SetAsLastSibling();
+            SetRect(RT(close), topLeft, topLeft, topLeft, new Vector2(32, -24), new Vector2(132, 132));
+            var closeImg = Img(close, Spr("r0926_circle"), glass, Image.Type.Simple);
+            closeImg.raycastTarget = true;
+            closeImg.preserveAspect = true;
+            ViewPress(close, closeImg, false, dockClip, view.Close);
+            var closeIcon = FindOrCreate(close.transform, "Icon0926");
+            Img(closeIcon, Spr("r0926_i_close"), Ink, Image.Type.Simple).raycastTarget = false;
+            SetRect(RT(closeIcon), center, center, center, Vector2.zero, new Vector2(56, 56));
+            Ensure<ClickButtonOnBack>(close);
+
+            // 가운데 위 「2 / 5」 — 묶음만 (손가락은 그대로 사진으로)
+            var topMid = new Vector2(0.5f, 1);
+            var count = FindOrCreate(go.transform, "Count0926");
+            count.transform.SetAsLastSibling();
+            SetRect(RT(count), topMid, topMid, center, new Vector2(0, -90), new Vector2(170, 88));
+            Img(count, Spr("r0926_pill"), glass, Image.Type.Sliced, 63f / 44f).raycastTarget = false;
+            var countLabel = FindOrCreate(count.transform, "Label0926");
+            var countText = Txt(countLabel, "1 / 2", 40, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            countText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            Stretch(RT(countLabel));
+            count.SetActive(false);
+
+            // 아래 가운데 작은 알약
+            var bar = FindOrCreate(go.transform, "Bar0926");
+            bar.transform.SetAsLastSibling();
+            var oldRow = bar.transform.Find("Row0926");   // v74 까지의 큰 세 칸
+            if (oldRow != null) Object.DestroyImmediate(oldRow.gameObject);
+            Img(bar, Spr("r0926_pill"), glass, Image.Type.Sliced, 63f / 70f).raycastTarget = true;
+            var bottomMid = new Vector2(0.5f, 0);
+            SetRect(RT(bar), bottomMid, bottomMid, bottomMid, new Vector2(0, 40), new Vector2(760, 140));
+            var down = ViewBarButton(bar.transform, "Download0926", 0, "r0926_i_download", false, new[] { "다운로드", "Download", "保存", "下载", "Descargar" }, dockClip, view.Download);
+            var all = ViewBarButton(bar.transform, "DownloadAll0926", 1, "r0926_i_download_all", false, new[] { "모두 다운로드", "Download all", "すべて保存", "全部下载", "Descargar todas" }, dockClip, view.DownloadAll);
+            var share = ViewBarButton(bar.transform, "Share0926", 2, "r0926_i_share", true, new[] { "공유", "Share", "共有", "分享", "Compartir" }, dockClip, view.Share);
 
             var so = new SerializedObject(view);
             so.FindProperty("frame").objectReferenceValue = RT(frame);
             so.FindProperty("photo").objectReferenceValue = photo;
+            so.FindProperty("peek").objectReferenceValue = peek;
             so.FindProperty("backdrop").objectReferenceValue = backdrop;
+            so.FindProperty("closeButton").objectReferenceValue = RT(close);
+            so.FindProperty("counter").objectReferenceValue = RT(count);
+            so.FindProperty("counterText").objectReferenceValue = countText;
             so.FindProperty("bar").objectReferenceValue = RT(bar);
-            SetArray(so.FindProperty("tiles"), new Object[] { close, down, share });
-            so.FindProperty("shareTile").objectReferenceValue = share;   // 상품 사진은 공유 칸 없이
+            SetArray(so.FindProperty("buttons"), down, all, share);
+            so.FindProperty("allButton").objectReferenceValue = all;
+            so.FindProperty("shareButton").objectReferenceValue = share;   // 상품 사진은 공유 칸 없이
             so.FindProperty("spin").objectReferenceValue = RT(spin.gameObject);
             so.FindProperty("chatRoom").objectReferenceValue = room;
             so.ApplyModifiedPropertiesWithoutUndo();
             return view;
+        }
+
+        private static RawImage StageImage(Transform frame, string name)
+        {
+            var go = FindOrCreate(frame, name);
+            var img = Ensure<RawImage>(go);
+            img.color = Color.white;
+            img.raycastTarget = false;
+            EditorUtility.SetDirty(img);
+            var c = new Vector2(0.5f, 0.5f);
+            SetRect(RT(go), c, c, c, Vector2.zero, new Vector2(1000, 1000));
+            return img;
+        }
+
+        // 알약 안 한 칸 — 그림 + 글자 (폭은 R0926PhotoView.Layout 이 글자대로). primary 는 분홍 칸, 나머지는 알약 바탕 그대로(누를 때만 옅게 밝아짐)
+        private static RectTransform ViewBarButton(Transform bar, string name, int index, string icon, bool primary, string[] words, Object clip, UnityEngine.Events.UnityAction action)
+        {
+            var go = FindOrCreate(bar, name);
+            go.transform.SetSiblingIndex(index);
+            var left = new Vector2(0, 0.5f);
+            SetRect(RT(go), left, left, left, new Vector2(10 + index * 250, 0), new Vector2(250, 120));
+            var img = Img(go, Spr("r0926_pill"), primary ? Pink : new Color(1f, 1f, 1f, 0.1f), Image.Type.Sliced, 63f / 60f);
+            img.raycastTarget = true;
+            ViewPress(go, img, !primary, clip, action);
+            var fg = primary ? Dark : Ink;
+            var ic = FindOrCreate(go.transform, "Icon0926");
+            Img(ic, Spr(icon), fg, Image.Type.Simple).raycastTarget = false;
+            SetRect(RT(ic), left, left, left, new Vector2(34, 0), new Vector2(52, 52));
+            var lb = FindOrCreate(go.transform, "Label0926");
+            var t = Txt(lb, words[0], 40, fg, TextAnchor.MiddleLeft, FontStyle.Bold);
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            SetRect(RT(lb), new Vector2(0, 0), new Vector2(0, 1), left, new Vector2(98, 0), new Vector2(200, 0));
+            Loc(lb, words[0], words[1], words[2], words[3], words[4]);
+            return RT(go);
+        }
+
+        // 누르면 살짝 — 투명 칸(clear)은 누를 때만 칸 색(흰 10%)이 비치고, 색 칸은 살짝 어두워진다. 물방울 소리
+        private static void ViewPress(GameObject go, Image img, bool clear, Object clip, UnityEngine.Events.UnityAction action)
+        {
+            var b = Ensure<Button>(go);
+            b.transition = Selectable.Transition.ColorTint;
+            b.targetGraphic = img;
+            var cb = ColorBlock.defaultColorBlock;
+            if (clear)
+            {
+                var none = new Color(1f, 1f, 1f, 0f);
+                cb.normalColor = none; cb.highlightedColor = none; cb.selectedColor = none;
+                cb.pressedColor = Color.white;
+            }
+            else
+            {
+                cb.highlightedColor = Color.white; cb.selectedColor = Color.white;
+                cb.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f);
+            }
+            cb.fadeDuration = 0.06f;
+            b.colors = cb;
+            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            ResetListeners(b);
+            UnityEventTools.AddPersistentListener(b.onClick, action);
+            EditorUtility.SetDirty(b);
+            var fw = Ensure<UITouchForwarder>(go);
+            if (clip != null)
+            {
+                var fso = new SerializedObject(fw);
+                fso.FindProperty("customSound").objectReferenceValue = clip;
+                fso.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         // ── 공유 시트 (팔로잉 목록) ──────────────────────────────

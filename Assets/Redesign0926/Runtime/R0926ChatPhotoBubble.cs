@@ -11,10 +11,10 @@ public class R0926ChatPhotoBubble : MonoBehaviour
 {
     private const float MaxW = 760f, MaxH = 900f, MinAspect = 0.5f, MaxAspect = 2f, CheckEvery = 0.2f;
     private const float LoadWithin = 0.5f, DropBeyond = 3f;   // 화면 높이의 몇 배 — 스크롤 앞쪽을 미리 받고, 멀어진 건 내려놓는다
-    private const int MaxLoads = 3;
+    internal const int MaxLoads = 3;   // 대화방 전체에서 한 번에 받는 사진 — 묶음 말풍선(R0926ChatAlbumBubble)도 같이 센다
     private static readonly Color Placeholder = new Color(1f, 1f, 1f, 0.08f);
     private static readonly Vector3[] Mine = new Vector3[4], View = new Vector3[4];
-    private static int loadingNow;
+    internal static int LoadingNow;
 
     private RectTransform bubble;
     private RawImage photo;
@@ -49,11 +49,22 @@ public class R0926ChatPhotoBubble : MonoBehaviour
         return ui;
     }
 
+    /// <summary>글 말풍선의 BubbleAutoSizer 는 숨긴 주소 글자의 높이를 말풍선 높이로 걸어 둔다 — 사진 칸만으로 크기를 정하게 끈다
+    /// (11-09: 주소 세 줄인 묶음이 칸보다 300 넘게 길어졌다)</summary>
+    internal static void StopTextSizing(RectTransform bubble)
+    {
+        var sizer = bubble.GetComponent<BubbleAutoSizer>();
+        if (sizer != null) sizer.enabled = false;
+        var le = bubble.GetComponent<LayoutElement>();
+        if (le != null) le.preferredHeight = -1f;
+    }
+
     private void Build(RectTransform rt, Text content, int w, int h)
     {
         bubble = rt;
         scroll = GetComponentInParent<ScrollRect>(true);
         content.gameObject.SetActive(false);
+        StopTextSizing(rt);
 
         var vlg = rt.GetComponent<VerticalLayoutGroup>();
         vlg.padding = new RectOffset();
@@ -143,7 +154,7 @@ public class R0926ChatPhotoBubble : MonoBehaviour
         nextCheck = Time.unscaledTime + CheckEvery;
         if (tex == null || local)
         {
-            if (!loading && !failed && loadingNow < MaxLoads && Near(LoadWithin)) StartCoroutine(Load());
+            if (!loading && !failed && LoadingNow < MaxLoads && Near(LoadWithin)) StartCoroutine(Load());
         }
         else if (!Near(DropBeyond)) Drop();
     }
@@ -161,7 +172,7 @@ public class R0926ChatPhotoBubble : MonoBehaviour
     private IEnumerator Load()
     {
         loading = true;
-        loadingNow++;
+        LoadingNow++;
         byte[] bytes = null;
         yield return R0926ChatPhoto.Fetch(reference.Thumb, reference.Key("t"), b => bytes = b);
         Texture2D got = R0926ChatPhoto.Decode(bytes);
@@ -171,7 +182,7 @@ public class R0926ChatPhotoBubble : MonoBehaviour
             got = R0926ChatPhoto.Decode(bytes);
         }
         loading = false;
-        loadingNow--;
+        LoadingNow--;
 
         if (got != null) { local = false; Put(got); }
         else if (local) local = false;   // 내가 고른 사진이 보이고 있다 — 그대로 둔다
@@ -207,7 +218,7 @@ public class R0926ChatPhotoBubble : MonoBehaviour
     {
         if (!loading) return;
         loading = false;
-        loadingNow--;
+        LoadingNow--;
     }
 
     private void OnDestroy()

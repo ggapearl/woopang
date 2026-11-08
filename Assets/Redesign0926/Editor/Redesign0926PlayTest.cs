@@ -3599,6 +3599,40 @@ namespace Redesign0926
         private static object BubbleField(R0926ChatPhotoBubble b, string name) => typeof(R0926ChatPhotoBubble).GetField(name, NPI).GetValue(b);
         private static bool PhotoReady(R0926ChatPhotoBubble b) => b != null && BubbleField(b, "reference") != null && !(bool)BubbleField(b, "local") && (BubbleField(b, "tex") as Texture2D) != null;
         private static R0926ChatPhotoBubble LastPhoto() { var a = PhotoBubbles(); return a.Length > 0 ? a[a.Length - 1] : null; }
+        // 사진 묶음 말풍선 (11-09)
+        private static R0926ChatAlbumBubble[] AlbumBubbles() => Mpm().chatMessageContent.GetComponentsInChildren<R0926ChatAlbumBubble>(false);
+        private static R0926ChatAlbumBubble LastAlbum() { var a = AlbumBubbles(); return a.Length > 0 ? a[a.Length - 1] : null; }
+        private static object AlbumField(R0926ChatAlbumBubble b, string name) => typeof(R0926ChatAlbumBubble).GetField(name, NPI).GetValue(b);
+        private static object TileField(R0926ChatAlbumBubble b, int i, string name) { var t = ((System.Collections.IList)AlbumField(b, "tiles"))[i]; return t.GetType().GetField(name).GetValue(t); }
+        private static RectTransform AlbumTile(R0926ChatAlbumBubble b, int i) => (RectTransform)TileField(b, i, "rt");
+        private static int AlbumFilled(R0926ChatAlbumBubble b) { int n = 0; for (int i = 0; i < b.Count; i++) if ((TileField(b, i, "tex") as Texture2D) != null) n++; return n; }
+        private static bool AlbumReady(R0926ChatAlbumBubble b) => b != null && AlbumField(b, "refs") != null && AlbumFilled(b) == b.Count;
+        // 크게 보기에서 옆으로 밀기 — 처음 민 쪽(누른 자리 → 지금 자리)으로 넘기기가 정해진다. end=false 면 손을 떼지 않은 채로
+        private static void PageDrag(R0926PhotoView v, float dx, bool end = true)
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            Vector2 at = ScreenOf(Find("ChatPhotoView0926/Stage0926") as RectTransform);
+            var e = new UnityEngine.EventSystems.PointerEventData(es)
+            {
+                pointerId = 0,
+                position = at,
+                pressPosition = at - new Vector2(Mathf.Sign(dx) * 24f, 0f),
+                pointerPressRaycast = new UnityEngine.EventSystems.RaycastResult { gameObject = Find("ChatPhotoView0926/Bg0926").gameObject },
+            };
+            v.OnBeginDrag(e);
+            e.delta = new Vector2(dx, 0f);
+            v.OnDrag(e);
+            if (end) { e.delta = Vector2.zero; v.OnEndDrag(e); }
+        }
+        private static void PageDragEnd(R0926PhotoView v) => v.OnEndDrag(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current) { pointerId = 0 });
+        private static float LabelW(string button) => Mathf.Ceil(Find(button + "/Label0926").GetComponent<Text>().preferredWidth);
+        private static int JpegWidth(byte[] b)
+        {
+            var t = new Texture2D(2, 2);
+            int w = b != null && t.LoadImage(b) ? t.width : 0;
+            UnityEngine.Object.DestroyImmediate(t);
+            return w;
+        }
         private static Vector2 ScreenOf(RectTransform rt) => RectTransformUtility.WorldToScreenPoint(null, rt.TransformPoint(rt.rect.center));
         private static void TapAt(GameObject go, Vector2 screen)
         {
@@ -3646,8 +3680,8 @@ namespace Redesign0926
         {
             const string Dev = "http://127.0.0.1:5099", Me = MpMe, Peer = "hunt_test_cp1", Name = "연남동이웃";
             const string Area = "ChatRoomPanel/Clip0926/Background/InputArea", Plus = Area + "/PlusButton0926";
-            const string View = "ChatPhotoView0926", Tiles = View + "/Bar0926/Row0926", Sheet = View + "/ShareSheet0926", Rows = Sheet + "/Card0926/List0926/Content0926";
-            const string Status = Sheet + "/Card0926/List0926/Status0926";
+            const string View = "ChatPhotoView0926", Tiles = View + "/Bar0926", CloseB = View + "/Close0926", Count = View + "/Count0926/Label0926";
+            const string Sheet = View + "/ShareSheet0926", Rows = Sheet + "/Card0926/List0926/Content0926", Status = Sheet + "/Card0926/List0926/Status0926";
             Func<string, string, Dictionary<string, string>> dm = (id, n) => new Dictionary<string, string> { { "msg_type", "dm" }, { "type", "dm" }, { "sender", n }, { "sender_username", n }, { "sender_id", id }, { "message_id", "7" }, { "conversation_id", "7" } };
             var notice = new Dictionary<string, string> { { "type", "admin_broadcast" }, { "sender_id", MessagePanelManager.WoopangId }, { "sender_username", "WOOPANG" } };
             Func<string, bool> room = id => Mpm() != null && Mpm().IsChatRoomOpenForUser(id);
@@ -3731,6 +3765,14 @@ namespace Redesign0926
                 log.Add((R0926ChatPhoto.TryParse(good + "?x=1") == null && R0926ChatPhoto.TryParse(Dev + "/uploads/dm/../secret.jpg") == null ? "PASS " : "FAIL ") + "모양이 다른 주소는 글");
                 log.Add((R0926ChatPhoto.TryParse(Dev + "/uploads/dm/0123456789abcdef0123456789abcdef_0x480.jpg") == null ? "PASS " : "FAIL ") + "크기 0 은 사진 아님");
                 log.Add((R0926ChatPhoto.Preview(good) == "사진" && R0926ChatPhoto.Preview("📷 사진") == "사진" && R0926ChatPhoto.Preview("안녕") == "안녕" ? "PASS " : "FAIL ") + "대화 목록 미리보기 — 주소 대신 '사진'");
+                // 사진 묶음 (11-09) — 한 줄에 사진 주소 하나씩, 2~10줄
+                string two = good + "\n" + Dev + "/uploads/dm/fedcba9876543210fedcba9876543210_480x640.jpg";
+                var eleven = new string[11];
+                for (int i = 0; i < eleven.Length; i++) eleven[i] = good;
+                log.Add((R0926ChatPhoto.TryParseAlbum(two)?.Length == 2 && R0926ChatPhoto.TryParseAlbum(two)[1].h == 640 && R0926ChatPhoto.Preview(two) == "사진 2장" && R0926ChatPhoto.Preview("📷 사진 4장") == "사진 4장" ? "PASS " : "FAIL ")
+                        + "사진 묶음 주소 알아봄 · 대화 목록 '사진 2장' · 알림 문구 '📷 사진 4장' → '사진 4장'");
+                log.Add((R0926ChatPhoto.TryParseAlbum(good + "\n안녕") == null && R0926ChatPhoto.TryParseAlbum(string.Join("\n", eleven)) == null && R0926ChatPhoto.TryParseAlbum(good)?.Length == 1 ? "PASS " : "FAIL ")
+                        + "한 줄이라도 사진 주소가 아니면 글 · 11장은 글 · 한 장은 한 장");
             });
             Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
             Do(() =>
@@ -3816,11 +3858,24 @@ namespace Redesign0926
             Check(() =>
             {
                 var c = new Vector3[4]; big().rectTransform.GetWorldCorners(c);
-                var d = new Vector3[4]; (Find(View + "/Bar0926") as RectTransform).GetWorldCorners(d);
-                log.Add($"  사진 {big().rectTransform.rect.size} 바닥 {c[0].y} · 카드 꼭대기 {d[1].y}");
-                return c[0].y >= d[1].y - 1 && c[0].x >= -1 && c[2].x <= Screen.width + 1;
-            }, "사진이 화면 안 · 카드와 겹치지 않음");
-            Check(() => TopHit(Tiles + "/Close0926").Contains("그 칸") && TopHit(Tiles + "/Download0926").Contains("그 칸") && TopHit(Tiles + "/Share0926").Contains("그 칸"), "닫기 · 다운로드 · 공유 세 칸 누를 수 있다");
+                var d = new Vector3[4]; (Find(Tiles) as RectTransform).GetWorldCorners(d);
+                var x = new Vector3[4]; (Find(CloseB) as RectTransform).GetWorldCorners(x);
+                log.Add($"  사진 {big().rectTransform.rect.size} 바닥 {c[0].y} 꼭대기 {c[1].y} · 알약 꼭대기 {d[1].y} · ✕ 바닥 {x[0].y}");
+                return c[0].y >= d[1].y - 1 && c[1].y <= x[0].y + 1 && c[0].x >= -1 && c[2].x <= Screen.width + 1;
+            }, "사진이 화면 안 · 위의 ✕ · 아래 알약과 겹치지 않음");
+            Check(() => TopHit(CloseB).Contains("그 칸") && TopHit(Tiles + "/Download0926").Contains("그 칸") && TopHit(Tiles + "/Share0926").Contains("그 칸"), "닫기 · 다운로드 · 공유 누를 수 있다");
+            // 11-09 대표님 「'닫기 / 다운로드 / 공유' 버튼이 불필요하게 너무 큰데 적절한 사이즈로」
+            Check(() =>
+            {
+                var bar = Find(Tiles) as RectTransform;
+                var x = Find(CloseB) as RectTransform;
+                float sw = (Find(View) as RectTransform).rect.width;
+                var c = new Vector3[4]; bar.GetWorldCorners(c);
+                float centre = (c[0].x + c[2].x) * 0.5f;
+                log.Add($"  ✕ {x.rect.size} · 알약 {bar.rect.size} (화면 폭 {sw}) · 알약 가운데 {centre} / {Screen.width * 0.5f}");
+                return Mathf.Abs(x.rect.width - 132) < 1 && Mathf.Abs(bar.rect.height - 140) < 1 && bar.rect.width < sw * 0.62f && Mathf.Abs(centre - Screen.width * 0.5f) < 2
+                    && Active(Tiles + "/Download0926/Label0926") && !Active(Tiles + "/DownloadAll0926") && !Active(View + "/Count0926");
+            }, "작게 — ✕ 132 · 알약 높이 140 · 화면 가운데 · 한 장이면 '모두 다운로드' · 「1 / N」 없음");
 
             // 키우기 · 옮기기 · 맞춤
             float f0 = 0f;
@@ -3906,7 +3961,7 @@ namespace Redesign0926
                 log.Add($"  목록 {list.rect.height} · 내용 {body.rect.height}");
                 return list.rect.height >= body.rect.height - 1;
             }, "세 줄이 잘리지 않고 다 보인다");
-            Check(() => !Active(View + "/Bar0926"), "시트가 열리면 뒤의 세 칸은 숨긴다");
+            Check(() => !Active(View + "/Bar0926"), "시트가 열리면 뒤의 알약은 숨긴다");
             Check(() => Find(Rows + "/Row_ft1/Name0926").GetComponent<Text>().text == "yeonnam_cafe", "이름");
             Check(() => TopHit(Rows + "/Row_ft1/Send0926").Contains("그 칸"), "보내기를 누를 수 있다");
             Do(() => Click(Rows + "/Row_ft1/Send0926"));
@@ -3926,7 +3981,7 @@ namespace Redesign0926
             Back();
             Sleep(0.6f);
             Check(() => !Active(Sheet) && Active(View), "뒤로가기 1번 — 공유 시트만 닫힘");
-            Check(() => Active(Tiles + "/Close0926"), "공유 시트를 닫으면 세 칸이 돌아온다");
+            Check(() => Active(Tiles) && Active(CloseB), "공유 시트를 닫으면 알약이 돌아온다");
             Back();
             Sleep(0.6f);
             Check(() => !Active(View) && room(Peer) && Active("ChatRoomPanel"), "뒤로가기 2번 — 크게 보기 닫힘 · 대화방 그대로");
@@ -4134,7 +4189,7 @@ namespace Redesign0926
             Do(() => { var f = ChatInputField(); if (f != null) f.text = ""; });
             Sleep(0.3f);
 
-            // 15) 가로 화면 — 카드는 오른쪽 · 공유 시트도 화면 안
+            // 15) 가로 화면 — ✕ · 알약은 세로와 같은 자리 · 사진은 그 사이 · 공유 시트도 화면 안
             Do(() => Rotate(true));
             Wait(() => Turned(true), 8f, "가로로 돌림");
             Sleep(1.2f);
@@ -4147,10 +4202,11 @@ namespace Redesign0926
             Check(() =>
             {
                 var c = new Vector3[4]; big().rectTransform.GetWorldCorners(c);
-                var d = new Vector3[4]; (Find(View + "/Bar0926") as RectTransform).GetWorldCorners(d);
-                log.Add($"  가로 사진 오른쪽 {c[2].x} · 카드 왼쪽 {d[0].x} · 화면 {Screen.width}x{Screen.height}");
-                return c[2].x <= d[0].x + 1 && c[0].y >= -1 && c[2].y <= Screen.height + 1;
-            }, "가로 — 사진 · 카드가 겹치지 않음");
+                var d = new Vector3[4]; (Find(Tiles) as RectTransform).GetWorldCorners(d);
+                var x = new Vector3[4]; (Find(CloseB) as RectTransform).GetWorldCorners(x);
+                log.Add($"  가로 사진 {c[0].x}~{c[2].x} × {c[0].y}~{c[1].y} · 알약 꼭대기 {d[1].y} · ✕ 바닥 {x[0].y} · 화면 {Screen.width}x{Screen.height}");
+                return c[0].y >= d[1].y - 1 && c[1].y <= x[0].y + 1 && c[0].x >= -1 && c[2].x <= Screen.width + 1;
+            }, "가로 — 사진이 ✕ · 알약과 겹치지 않음");
             Do(() => { DevGet(Me, "/api/dev/dm_mode?following=many"); Click(Tiles + "/Share0926"); });   // 카드가 가장 높을 때
             Wait(() => Find(Rows + "/Row_fm0") != null, 5f, "가로 공유 시트");
             Sleep(0.6f);
@@ -4171,9 +4227,96 @@ namespace Redesign0926
                 var c = new Vector3[4]; big().rectTransform.GetWorldCorners(c);
                 var d = new Vector3[4]; (Find(View + "/Bar0926") as RectTransform).GetWorldCorners(d);
                 return pv().IsOpen && c[0].y >= d[1].y - 1;
-            }, "세로로 돌아와도 사진이 카드 위에");
+            }, "세로로 돌아와도 사진이 알약 위에");
             Back();
             Sleep(0.5f);
+
+            // 15-1) 받은 사진 묶음 (11-09) — 말풍선 하나에 칸 · 누른 사진부터 크게 · 옆으로 넘김 · 끝에서 뻑뻑 · 모두 다운로드
+            int albums = 0;
+            Do(() =>
+            {
+                var got = new List<string>();
+                foreach (var m in DmStore())
+                    if (m.content.StartsWith(Dev + "/uploads/dm/") && !m.content.Contains("\n") && !m.content.Contains("/0000000000") && !got.Contains(m.content)) got.Add(m.content);
+                if (got.Count > 3) got.RemoveRange(3, got.Count - 3);
+                log.Add("  묶음으로 받을 사진 " + string.Join(" , ", got.ConvertAll(u => u.Substring(u.LastIndexOf('_') + 1))));
+                albums = AlbumBubbles().Length;
+                DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"" + Peer + "\",\"recipient_id\":\"" + Me + "\",\"content\":\"" + string.Join("\\n", got) + "\"}");
+            });
+            Wait(() => AlbumBubbles().Length == albums + 1 && AlbumReady(LastAlbum()), 10f, "받은 묶음");
+            Sleep(0.5f);
+            Shot("chatphoto_album_in");
+            Check(() =>
+            {
+                var a = LastAlbum();
+                var b = (RectTransform)AlbumField(a, "bubble");
+                log.Add($"  묶음 말풍선 {b.rect.size} · 칸 {a.Count}");
+                return a.Count == 3 && Mathf.Abs(b.rect.width - 760) < 2 && Mathf.Abs(b.rect.height - (760 - 12) / 3f) < 2;
+            }, "받은 묶음 — 말풍선 하나에 세 칸 한 줄 (760 × 249)");
+            Check(() => TopHitAt((RectTransform)AlbumField(LastAlbum(), "bubble")).Contains("그 칸"), "묶음 말풍선을 누를 수 있다");
+            Do(() => TapAt(LastAlbum().gameObject, ScreenOf(AlbumTile(LastAlbum(), 1))));
+            Wait(() => pv().IsOpen, 3f, "묶음 크게 보기");
+            Wait(() => big().texture != null && big().texture.width == 700, 8f, "누른 사진(세로)의 원본");
+            Sleep(0.4f);
+            Shot("chatphoto_album_view");
+            Check(() => pv().Index == 1 && pv().Count == 3 && TextOf(Count) == "2 / 3" && Active(View + "/Count0926"), "누른 칸의 사진부터 — 위에 「2 / 3」");
+            Check(() => Active(Tiles + "/DownloadAll0926") && Active(Tiles + "/Share0926") && TopHit(Tiles + "/DownloadAll0926").Contains("그 칸"), "묶음이면 '모두 다운로드' 칸 (누를 수 있다)");
+            Check(() =>
+            {
+                var c = new Vector3[4]; (Find(Tiles) as RectTransform).GetWorldCorners(c);
+                var k = new Vector3[4]; (Find(View + "/Count0926") as RectTransform).GetWorldCorners(k);
+                var x = new Vector3[4]; (Find(CloseB) as RectTransform).GetWorldCorners(x);
+                log.Add($"  알약 {c[0].x}~{c[2].x} · 「2 / 3」 가운데 {(k[0].x + k[2].x) / 2} 높이 {(k[0].y + k[1].y) / 2} · ✕ 높이 {(x[0].y + x[1].y) / 2}");
+                return c[0].x >= -1 && c[2].x <= Screen.width + 1 && Mathf.Abs((k[0].x + k[2].x) / 2 - Screen.width / 2f) < 2 && Mathf.Abs((x[0].y + x[1].y) / 2 - (k[0].y + k[1].y) / 2) < 2;
+            }, "알약은 화면 안 · 「2 / 3」은 가운데 · ✕ 와 같은 높이");
+            Do(() => PageDrag(pv(), -Screen.width * 0.45f));
+            Sleep(0.5f);
+            Check(() => pv().Index == 2 && TextOf(Count) == "3 / 3" && Mathf.Abs((float)pvf("pager")) < 0.5f, "왼쪽으로 밀면 다음 사진 「3 / 3」");
+            Wait(() => big().texture != null && big().texture.width == 1600, 8f, "다음 사진 원본");
+            Do(() => PageDrag(pv(), -Screen.width * 0.45f));
+            Sleep(0.5f);
+            Check(() => pv().Index == 2 && Mathf.Abs((float)pvf("pager")) < 0.5f, "끝 사진에서 더 밀어도 제자리");
+            Do(() => PageDrag(pv(), Screen.width * 0.3f, false));
+            Sleep(0.05f);
+            Shot("chatphoto_album_peek");
+            Check(() =>
+            {
+                var pk = Find(View + "/Stage0926/Peek0926").GetComponent<RawImage>();
+                var c = new Vector3[4]; pk.rectTransform.GetWorldCorners(c);
+                log.Add($"  옆 사진 {(pk.texture != null ? pk.texture.width : 0)} · 오른쪽 끝 {c[2].x} · 밀린 만큼 {(float)pvf("pager")}");
+                return pk.enabled && pk.texture != null && c[2].x > 0 && c[2].x < Screen.width;
+            }, "미는 동안 앞 사진이 옆에서 따라 들어온다");
+            Do(() => PageDragEnd(pv()));
+            Sleep(0.5f);
+            Check(() => pv().Index == 1 && TextOf(Count) == "2 / 3" && !Find(View + "/Stage0926/Peek0926").GetComponent<RawImage>().enabled, "오른쪽으로 밀면 앞 사진 「2 / 3」");
+            Do(() => PageDrag(pv(), Screen.width * 0.03f));
+            Sleep(0.5f);
+            Check(() => pv().Index == 1 && Mathf.Abs((float)pvf("pager")) < 0.5f, "조금만 밀면 제자리");
+            Do(() => PageDrag(pv(), Screen.width * 0.45f));
+            Sleep(0.5f);
+            Do(() => PageDrag(pv(), Screen.width * 0.45f));
+            Sleep(0.5f);
+            Check(() => pv().Index == 0 && TextOf(Count) == "1 / 3" && Mathf.Abs((float)pvf("pager")) < 0.5f, "첫 사진에서 더 밀어도 제자리 「1 / 3」");
+            Do(dbl);
+            Sleep(0.4f);
+            Do(() => PageDrag(pv(), -Screen.width * 0.3f));
+            Sleep(0.4f);
+            Check(() => pv().Index == 0 && scale() > fit() * 1.5f, "키운 사진은 옆으로 끌어도 넘어가지 않고 옮겨진다");
+            Do(dbl);
+            Sleep(0.4f);
+            Do(() => { R0926PhotoView.EditorSavedAll.Clear(); Click(Tiles + "/DownloadAll0926"); });
+            Wait(() => ToastHas("사진 3장을 사진첩에 저장"), 8f, "모두 저장 알림");
+            Sleep(0.3f);
+            Shot("chatphoto_album_saved");
+            Check(() =>
+            {
+                var w = R0926PhotoView.EditorSavedAll.ConvertAll(JpegWidth);
+                log.Add("  사진첩에 넣은 차례 " + string.Join(", ", w));
+                return w.Count == 3 && w[0] == 1200 && w[1] == 700 && w[2] == 1600;
+            }, "모두 다운로드 — 세 장 원본을 차례대로 (알림은 한 번)");
+            Back();
+            Sleep(0.5f);
+            Check(() => !pv().IsOpen && room(Peer), "뒤로가기 — 묶음 크게 보기 닫힘 · 대화방 그대로");
 
             // 16) 공지 방 — + 없음 · 입력칸 왼쪽으로 · 공지 속 주소 (공지는 제목이 굵은 글씨로 앞에 붙는다)
             const string NoticeText = "<b>이번 주 공지입니다 꼭 읽어 주세요 제목이 긴 공지입니다</b>\n공지 https://woopang.com/event 에서 확인해 주세요";
@@ -4212,7 +4355,7 @@ namespace Redesign0926
             Sleep(0.6f);
             Check(() => Active(Plus) && Mathf.Abs(input().offsetMin.x - 196) < 1, "1:1 방으로 돌아오면 + 다시");
 
-            // 17) 언어 — 세 칸 · 공유 시트 글
+            // 17) 언어 — 알약 글자 · 공유 시트 글
             Action relabel = () =>
             {
                 foreach (var t in Find(View).GetComponentsInChildren<R0926LocalizedText>(true)) t.Set(t.ko, t.en, t.ja, t.zh, t.es);
@@ -4235,7 +4378,13 @@ namespace Redesign0926
             Do(() => Click(Sheet + "/Cancel0926"));
             Sleep(0.5f);
             Shot("chatphoto_es_view");
-            Check(() => label(Tiles + "/Close0926") == "Cerrar" && label(Tiles + "/Download0926") == "Descargar" && label(Tiles + "/Share0926") == "Compartir", "세 칸이 기기 언어로");
+            Check(() =>
+            {
+                var bar = Find(Tiles) as RectTransform;
+                log.Add($"  에스파냐어 알약 {bar.rect.width:0} / 화면 {(Find(View) as RectTransform).rect.width:0}");
+                return label(Tiles + "/Download0926") == "Descargar" && label(Tiles + "/Share0926") == "Compartir" && Active(Tiles + "/Download0926/Label0926")
+                    && bar.rect.width < (Find(View) as RectTransform).rect.width - 64 && Mathf.Abs(bar.rect.width - (20 + 2 * 132 + LabelW(Tiles + "/Download0926") + LabelW(Tiles + "/Share0926"))) < 2;
+            }, "알약 글자가 기기 언어로 · 알약 폭이 글자대로 (화면 안)");
             Do(() =>
             {
                 AppLanguage.EditorOverride = null;
@@ -5323,24 +5472,78 @@ namespace Redesign0926
             Sleep(0.25f);
             Do(() => { if (toastHas("10장")) sawToast++; });
             Check(() => sawToast > 0, "12장을 고르면 '한 번에 10장까지 · 앞의 10장만' 안내");
-            Wait(() => PhotoBubbles().Length >= 10 && Array.TrueForAll(PhotoBubbles(), PhotoReady), 40f, "10장 다 올라감");
+            // 11-09 대표님 「사진 여러개 보냈을 때 하나씩 가는데 묶어서 보내지고」 — 말풍선 하나 · 올리기 한 번 · 받는 사람 알림도 한 번
+            Wait(() => LastAlbum() != null && AlbumField(LastAlbum(), "refs") == null && AlbumFilled(LastAlbum()) == 10 && ((Text)AlbumField(LastAlbum(), "label")).gameObject.activeSelf, 8f, "묶음 말풍선 (올리는 중)");
+            Shot("chatmulti_uploading");
+            Check(() =>
+            {
+                var a = LastAlbum();
+                string t = ((Text)AlbumField(a, "label")).text;
+                int shaded = 0;
+                for (int i = 0; i < a.Count; i++) if (((Image)TileField(a, i, "shade")).gameObject.activeSelf) shaded++;
+                log.Add($"  올리는 중 '{t}' · 칸 {a.Count} · 그늘 {shaded} · 한 장 말풍선 {PhotoBubbles().Length}");
+                return a.Count == 10 && t.EndsWith("%") && shaded > 0 && PhotoBubbles().Length == 0;
+            }, "올리는 동안 — 말풍선 하나에 고른 열 장 · 그늘 + 몇 %");
+            Wait(() => AlbumBubbles().Length == 1 && AlbumField(LastAlbum(), "refs") != null, 40f, "10장 다 올라감");
             Sleep(0.6f);
             Shot("chatmulti_sent");
             Check(() =>
             {
                 string s = stats();
-                log.Add("  가짜 서버 " + s + " · 말풍선 " + PhotoBubbles().Length);
-                return s.Contains("\"count\": 10") && s.Contains("\"maxConc\": 1") && s.Contains("[610, 620, 630, 640, 650, 660, 670, 680, 690, 700]");
-            }, "서버에 10장 — 한 장씩 차례로 (고른 차례 그대로 · 11·12번째는 안 감)");
-            Check(() => PhotoBubbles().Length == 10, "대화방에 사진 말풍선 10개");
+                log.Add("  가짜 서버 " + s + " · 묶음 말풍선 " + AlbumBubbles().Length + " · 한 장 말풍선 " + PhotoBubbles().Length);
+                return s.Contains("\"albums\": 1") && s.Contains("\"albumSizes\": [10]") && s.Contains("\"count\": 10") && s.Contains("[610, 620, 630, 640, 650, 660, 670, 680, 690, 700]");
+            }, "서버에 한 번 — 열 장 묶음 (고른 차례 그대로 · 11·12번째는 안 감)");
+            Check(() => AlbumBubbles().Length == 1 && PhotoBubbles().Length == 0 && LastAlbum().Count == 10, "대화방에 말풍선 하나 · 열 칸");
+            Check(() =>
+            {
+                var a = LastAlbum();
+                var b = (RectTransform)AlbumField(a, "bubble");
+                float tw = (760 - 12) / 3f, want = 300 + 6 + 300 + 6 + tw + 6 + tw;
+                log.Add($"  묶음 말풍선 {b.rect.size} (바람 760×{want:0.#}) · 첫 칸 {AlbumTile(a, 0).rect.size} · 다섯째 칸 {AlbumTile(a, 4).rect.size}");
+                return Mathf.Abs(b.rect.width - 760) < 2 && Mathf.Abs(b.rect.height - want) < 2 && Mathf.Abs(AlbumTile(a, 0).rect.width - 377) < 1 && Mathf.Abs(AlbumTile(a, 4).rect.width - tw) < 1;
+            }, "열 칸 — 2 · 2 · 3 · 3 줄 (두 칸 줄은 납작하게)");
             Do(() => { var sr = Mpm().chatMessageContent.GetComponentInParent<ScrollRect>(); if (sr != null) sr.verticalNormalizedPosition = 0f; });
             Sleep(0.4f);
             Shot("chatmulti_bottom");
+            Check(() => TopHitAt((RectTransform)AlbumField(LastAlbum(), "bubble")).Contains("그 칸"), "묶음 말풍선을 누를 수 있다");
+
+            // 누른 칸부터 크게 · 옆으로 넘김 · 모두 다운로드 (11-09 「다운로드할 때도 묶어서」)
+            Do(() => TapAt(LastAlbum().gameObject, ScreenOf(AlbumTile(LastAlbum(), 5))));
+            Wait(() => Mpm().photoView.IsOpen, 3f, "묶음 크게 보기");
+            Sleep(0.6f);
+            Shot("chatmulti_view");
+            Check(() => Mpm().photoView.Index == 5 && TextOf("ChatPhotoView0926/Count0926/Label0926") == "6 / 10", "누른 여섯째 칸부터 — 「6 / 10」");
+            Do(() => PageDrag(Mpm().photoView, -Screen.width * 0.45f));
+            Sleep(0.5f);
+            Check(() => Mpm().photoView.Index == 6 && TextOf("ChatPhotoView0926/Count0926/Label0926") == "7 / 10", "밀면 다음 「7 / 10」");
+            Shot("chatmulti_view_next");
+            Do(() => { R0926PhotoView.EditorSavedAll.Clear(); Click("ChatPhotoView0926/Bar0926/DownloadAll0926"); });
+            Wait(() => toastHas("사진 10장을 사진첩에 저장"), 10f, "열 장 저장 알림");
+            Check(() =>
+            {
+                var w = R0926PhotoView.EditorSavedAll.ConvertAll(JpegWidth);
+                log.Add("  사진첩에 넣은 차례 " + string.Join(", ", w));
+                return string.Join(",", w) == "610,620,630,640,650,660,670,680,690,700";
+            }, "모두 다운로드 — 열 장을 고른 차례대로 사진첩에 (알림은 한 번)");
+            Back();
+            Sleep(0.5f);
+            Check(() => !Mpm().photoView.IsOpen && Mpm().IsChatRoomOpenForUser("pt_multi_peer"), "뒤로가기 — 크게 보기 닫힘 · 대화방 그대로");
 
             // 한 장 — 예전 그대로
             Do(() => Mpm().chatPhoto.EditorPickPaths(new[] { paths[11] }));
-            Wait(() => PhotoBubbles().Length >= 11 && PhotoReady(LastPhoto()), 15f, "한 장 더");
-            Check(() => stats().Contains("\"count\": 11") && stats().Contains("720]"), "한 장 고르면 한 장 (예전 그대로)");
+            Wait(() => PhotoBubbles().Length >= 1 && PhotoReady(LastPhoto()), 15f, "한 장 더");
+            Check(() => stats().Contains("\"count\": 11") && stats().Contains("720]") && stats().Contains("\"albums\": 1") && AlbumBubbles().Length == 1, "한 장 고르면 한 장 (예전 그대로 · 묶음 아님)");
+
+            // 묶음을 못 보내면 — 그 말풍선은 없어지고 알림
+            Do(() =>
+            {
+                new System.Net.WebClient().DownloadString(Stub + "/stub/reset?albumfail=500");
+                Mpm().chatPhoto.EditorPickPaths(new[] { paths[0], paths[1], paths[2] });
+            });
+            Wait(() => AlbumBubbles().Length == 2, 5f, "두 번째 묶음 (올리는 중)");
+            Wait(() => toastHas("사진을 보내지 못했어요"), 8f, "못 보냄 알림");
+            Sleep(0.3f);
+            Check(() => AlbumBubbles().Length == 1, "묶음을 못 보내면 그 말풍선은 없어진다 · 알림");
 
             Do(() =>
             {
@@ -8688,7 +8891,7 @@ namespace Redesign0926
             const string H = HuntCardPath, F = HfForm, RV = HuntReview;
             const string D = H + "Detail/Viewport/Content/";
             const string CF = "HuntCelebrate0926/Panel/Content/Card/Front/";
-            const string View = "ChatPhotoView0926", Tiles = View + "/Bar0926/Row0926";
+            const string View = "ChatPhotoView0926", Tiles = View + "/Bar0926";
             Func<string, string> stub = q =>
             {
                 using (var wc = new System.Net.WebClient())
@@ -8801,15 +9004,15 @@ namespace Redesign0926
             Do(() => Click(D + "PrizePhoto"));
             Sleep(0.8f);
             Shot("hp_view_host");
-            Check(() => Active(View) && tileOn("Close0926") && tileOn("Download0926") && !tileOn("Share0926"), "누르면 크게 — 닫기 · 다운로드 (공유 칸 없음 · 대화방이 닫혀 있어도 그대로)");
+            Check(() => Active(View) && Active(View + "/Close0926") && tileOn("Download0926") && !tileOn("Share0926") && !tileOn("DownloadAll0926") && !Active(View + "/Count0926"),
+                "누르면 크게 — ✕ · 다운로드 (공유 · 모두 다운로드 · 「1 / N」 없음 · 대화방이 닫혀 있어도 그대로)");
             Check(() =>
             {
-                var a = Find(Tiles + "/Close0926") as RectTransform;
-                var b = Find(Tiles + "/Download0926") as RectTransform;
-                var row = Find(Tiles) as RectTransform;
-                log.Add($"  칸 {a.rect.width:0} · {b.rect.width:0} / 줄 {row.rect.width:0}");
-                return Mathf.Abs(a.rect.width - b.rect.width) < 2f && a.rect.width > row.rect.width * 0.4f;
-            }, "두 칸이 줄을 반씩 (세 칸 자리를 비워 두지 않음)");
+                var bar = Find(Tiles) as RectTransform;
+                var c = new Vector3[4]; bar.GetWorldCorners(c);
+                log.Add($"  알약 {bar.rect.size} · 가운데 {(c[0].x + c[2].x) / 2} / {Screen.width / 2f}");
+                return bar.rect.width < (Find(View) as RectTransform).rect.width * 0.5f && Mathf.Abs(bar.rect.height - 140) < 1 && Mathf.Abs((c[0].x + c[2].x) / 2 - Screen.width / 2f) < 2;
+            }, "알약에 '다운로드' 하나만 — 가운데 · 작게");
             Back();
             Sleep(0.6f);
             Check(() => !Active(View) && Active(H + "Detail"), "뒤로가기 → 크게 보기만 닫힘 (상세 그대로)");
