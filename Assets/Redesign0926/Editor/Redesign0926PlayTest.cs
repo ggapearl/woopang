@@ -15753,7 +15753,7 @@ namespace Redesign0926
             Shot("sky52c");
         }
 
-        // 출처 (11-07) — 하늘 날씨판 '자료: 기상청 · Open-Meteo.com' (예보 칸 밑 · 장 표시 점 위) · 지도 출처 글 뒤 어두운 알약.
+        // 출처 (11-07 · 11-08) — 하늘 날씨판 '자료: 기상청 · 에어코리아'(해외 'MET Norway' — 서버가 주는 src 대로, 예보 칸 밑 · 장 표시 점 위) · 지도 출처 글 뒤 어두운 알약.
         // 지도는 운영 서버 타일로 본다 (시험 타일 서버 5098 은 지금 없다 — 받기만 한다)
         private static void PlanCredits()
         {
@@ -15771,9 +15771,9 @@ namespace Redesign0926
                 Vector3 a = frame.InverseTransformPoint(c[0]), b = frame.InverseTransformPoint(c[2]);
                 return Rect.MinMaxRect(a.x, a.y, b.x, b.y);
             };
-            Func<bool, string, string> say = (kma, lang) =>
+            Func<string, bool, string, string> say = (src, kmaNow, lang) =>
             {
-                typeof(R0926SkyWeather).GetMethod("ShowCredit", F).Invoke(sky, new object[] { kma, lang });
+                typeof(R0926SkyWeather).GetMethod("ShowCredit", F).Invoke(sky, new object[] { src, kmaNow, lang });
                 return credit.text;
             };
 
@@ -15802,7 +15802,9 @@ namespace Redesign0926
                 AimCamera(-45f, 0f);
             });
             Sleep(4.5f);
-            Check(() => credit != null && fc != null && credit.transform.parent == fc.parent && credit.text.Contains("Open-Meteo.com"), "날씨 장에 출처 한 줄 — Open-Meteo.com");
+            // 광화문 날씨는 운영 서버에서 — 11-08 부터 기상청 단기예보(+ 에어코리아 미세먼지, 활용신청 뒤)
+            Check(() => credit != null && fc != null && credit.transform.parent == fc.parent && credit.text.StartsWith("자료: 기상청") && !credit.text.Contains("Open-Meteo"),
+                "날씨 장에 출처 한 줄 — 서버가 준 자료처대로 (기상청, Open-Meteo 없음)");
             Do(() => log.Add("  출처: " + credit?.text + " · 유리 높이 " + glassH.ToString("0") + " → " + (glass != null ? glass.rect.height.ToString("0") : "-")));
             Check(() =>
             {
@@ -15812,11 +15814,13 @@ namespace Redesign0926
             }, "출처 줄: 예보 칸 밑 · 장 표시 점 위 · 유리 안 (점 아래 여백 그대로)");
             Shot("credit_sky");
             // 앱이 켜질 때 받아 둔 날씨로 이미 한 번 그려 — 넣기 전에도 출처 줄이 있다. 유리는 만든 크기(910)에서 한 번만 늘어난다
-            Check(() => Mathf.Abs(glass.rect.height - (910f + 26f)) < 0.5f && say(true, "ko") != null && Mathf.Abs(glass.rect.height - (910f + 26f)) < 0.5f,
+            Check(() => Mathf.Abs(glass.rect.height - (910f + 26f)) < 0.5f && say("kma", true, "ko") != null && Mathf.Abs(glass.rect.height - (910f + 26f)) < 0.5f,
                 "다시 그려도 유리는 한 번만 늘어난다 (910 → 936)");
-            Check(() => say(false, "en") == "Data: Open-Meteo.com", "기상청 실황이 없으면 Open-Meteo 만 (영어)");
-            Check(() => say(true, "ko") == "자료: 기상청 · Open-Meteo.com", "기상청 실황이 있으면 둘 다 (한국어)");
-            Do(() => sky.SetPinned(true));
+            Check(() => say("kma,airkorea", true, "ko") == "자료: 기상청 · 에어코리아", "한국: 기상청 · 에어코리아 (한국어)");
+            Check(() => say("metno", false, "en") == "Data: MET Norway", "해외: MET Norway (영어)");
+            Check(() => say("kma,metno", true, "ja") == "データ: 韓国気象庁 · MET Norway", "한국인데 예보만 MET Norway 로 받았을 때 (일본어)");
+            Check(() => say(null, true, "ko") == "자료: 기상청" && say(null, false, "zh") == "", "저장해 둔 예전 응답(src 없음) — 실황 있으면 기상청 · 없으면 빈 줄");
+            Do(() => { say("kma,airkorea", true, "ko"); sky.SetPinned(true); });
             Sleep(1.5f);
             Check(() =>
             {

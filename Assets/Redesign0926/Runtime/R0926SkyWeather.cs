@@ -123,6 +123,7 @@ public class R0926SkyWeather : MonoBehaviour
         public float rn1 = -1;    // 1시간 강수량 (mm)
         public float humidity = -1;   // 상대습도 % — 서버가 아직 안 주면 -1 (줄에서 뺀다)
         public string region;         // 판 위 지역 이름 — 서버가 카카오 행정구역으로 ('예산군 대흥면'). 한국 밖·예전 서버면 비어 있다
+        public string src;            // 자료처 쉼표 목록 — kma · airkorea · metno (출처 한 줄, 11-08~)
     }
 
     private string serverRegion;      // 있으면 기기 주소(LocationManager.ShortRegion — OSM, 시골에선 면이 빠진다)보다 먼저
@@ -655,7 +656,9 @@ public class R0926SkyWeather : MonoBehaviour
 
         // 소수점은 문화권과 무관하게 '.' — 스페인어 기기에선 '37,5759' 로 찍혀 주소가 깨졌다
         var inv = System.Globalization.CultureInfo.InvariantCulture;
-        string url = ApiConfig.MAIN_SERVER + "/api/weather?lat=" + lat.ToString("F4", inv) + "&lon=" + lon.ToString("F4", inv);
+        // tz — 기기 시간대(분). 해외에선 서버가 이걸로 일출·일몰 시각과 '내일' 날짜를 정한다 (한국은 서버가 늘 KST)
+        int tz = Mathf.RoundToInt((float)System.TimeZoneInfo.Local.GetUtcOffset(System.DateTime.Now).TotalMinutes);
+        string url = ApiConfig.MAIN_SERVER + "/api/weather?lat=" + lat.ToString("F4", inv) + "&lon=" + lon.ToString("F4", inv) + "&tz=" + tz.ToString(inv);
         using (var req = UnityWebRequest.Get(url))
         {
             req.timeout = 10;
@@ -745,7 +748,7 @@ public class R0926SkyWeather : MonoBehaviour
                 if (fcIcons[2] != null) fcIcons[2].Set(w.tomorrow_code >= 0 ? w.tomorrow_code : code, true);
             }
         }
-        ShowCredit(w.pty >= 0, lang);
+        ShowCredit(w.src, w.pty >= 0, lang);
         weatherChip = cond + " " + t + "°";
         lastChip = null;   // 다음 프레임에 칩 글자 갱신
     }
@@ -763,11 +766,11 @@ public class R0926SkyWeather : MonoBehaviour
         while (w > 0f && size > detailMinFont && detailText.preferredWidth > w) detailText.fontSize = --size;
     }
 
-    // 출처 한 줄 — 예보 칸 밑 · 장 표시 점 위 (11-07). '지금'은 기상청 실황(서버가 pty 를 줄 때만), 예보 · 일출 · 미세먼지는 Open-Meteo
-    // (Open-Meteo 자료는 CC BY 4.0 — 보여 주는 곳에 출처를 적는다). 처음 만들 때 한 번 점과 유리를 이 줄만큼 아래로 늘린다 —
-    // 고정 자리는 유리 아랫선으로 정하므로 저절로 맞는다
+    // 출처 한 줄 — 예보 칸 밑 · 장 표시 점 위 (11-07). 서버가 받은 자료처(src)대로: 한국은 기상청(+에어코리아 미세먼지),
+    // 해외는 MET Norway (11-08 Open-Meteo 를 뺐다 — 셋 다 출처를 적으면 상업 이용 가능). 처음 만들 때 한 번 점과 유리를 이 줄만큼
+    // 아래로 늘린다 — 고정 자리는 유리 아랫선으로 정하므로 저절로 맞는다
     private const float CreditGap = 10f, CreditRoom = 26f;
-    private void ShowCredit(bool kma, string lang)
+    private void ShowCredit(string src, bool kmaNow, string lang)
     {
         if (credit == null)
         {
@@ -804,9 +807,21 @@ public class R0926SkyWeather : MonoBehaviour
                 g.anchoredPosition -= new Vector2(0f, CreditRoom / 2f);
             }
         }
-        credit.text = kma
-            ? L(lang, "자료: 기상청 · Open-Meteo.com", "Data: KMA · Open-Meteo.com", "データ: 韓国気象庁 · Open-Meteo.com", "数据：韩国气象厅 · Open-Meteo.com", "Datos: KMA · Open-Meteo.com")
-            : L(lang, "자료: Open-Meteo.com", "Data: Open-Meteo.com", "データ: Open-Meteo.com", "数据：Open-Meteo.com", "Datos: Open-Meteo.com");
+        credit.text = CreditText(src, kmaNow, lang);
+    }
+
+    // 저장해 둔 예전 응답(src 없음)은 기상청 실황이 있을 때만 '기상청' — 그 밖엔 다음 응답까지 비워 둔다
+    private static string CreditText(string src, bool kmaNow, string lang)
+    {
+        var names = new List<string>();
+        foreach (var s in (string.IsNullOrEmpty(src) ? (kmaNow ? "kma" : "") : src).Split(','))
+        {
+            string n = s.Trim() == "kma" ? L(lang, "기상청", "KMA", "韓国気象庁", "韩国气象厅", "KMA")
+                     : s.Trim() == "airkorea" ? L(lang, "에어코리아", "AirKorea", "エアコリア", "AirKorea", "AirKorea")
+                     : s.Trim() == "metno" ? "MET Norway" : null;
+            if (n != null && !names.Contains(n)) names.Add(n);
+        }
+        return names.Count == 0 ? "" : L(lang, "자료: ", "Data: ", "データ: ", "数据：", "Datos: ") + string.Join(" · ", names);
     }
 
     private static string Clock(string iso)
