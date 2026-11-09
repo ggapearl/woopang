@@ -157,6 +157,7 @@ namespace Redesign0926
             else if (mode == "follownotif") PlanFollowNotif();
             else if (mode == "chatnotif") PlanChatNotif();
             else if (mode == "chatphoto") PlanChatPhoto();
+            else if (mode == "huntnote") PlanHuntNote();
             else if (mode == "person") PlanPerson();
             else if (mode == "personmodel") PlanPersonModel();
             else if (mode == "profilemodel") PlanProfileModel();
@@ -3592,7 +3593,7 @@ namespace Redesign0926
             UnityEngine.Object.DestroyImmediate(t);
             return b;
         }
-        [Serializable] private class DmRow { public string sender_id, recipient_id, content; }
+        [Serializable] private class DmRow { public string sender_id, recipient_id, content; public bool is_read; }
         [Serializable] private class DmRows { public DmRow[] messages; }
         private static DmRow[] DmStore() => JsonUtility.FromJson<DmRows>(DevGet(MpMe, "/api/dev/dm_store")).messages ?? new DmRow[0];
         private static R0926ChatPhotoBubble[] PhotoBubbles() => Mpm().chatMessageContent.GetComponentsInChildren<R0926ChatPhotoBubble>(false);
@@ -4549,6 +4550,164 @@ namespace Redesign0926
                 FollowManager.EditorBase = null;
                 P2PManager.EditorBase = null;
                 FirebaseNotification.EditorBase = null;
+            });
+        }
+
+        // 보물찾기 시작 안내 — WOOPANG 대화로 (11-08 대표님 「주최했을 때 근처에 있는 사람들에게는 'ㅇㅇ가 주최한 보물찾기가 시작되었습니다' 등의 안내가 관리자 메세지를 통해서」).
+        // 운영 _notify_new 가 알린 사람마다 남기는 글을 시험 서버(5099)가 운영 함수(_new_texts)로 똑같이 만들어 WOOPANG(3) 대화에 넣는다
+        // → 목록 WOOPANG 한 줄(미리보기 · 안 읽음) · 대화방 금색 머리(주소 줄은 숨김) · 누르면 그 게임 상세. 신고 안내처럼 안 읽음으로 온 글은 대화방을 열면 서버에도 읽음
+        [Serializable] private class HnNoteReply { public DmRow message; public string push_title, push_body; }
+        private const string HnHost = "hunt_test_nhost", HnHostName = "시험주최자", HnTitle = "안내 시험 보물", HnUnread = "안내 시험 — 안 읽음으로 온 WOOPANG 글";
+        private static void PlanHuntNote()
+        {
+            const string Dev = "http://127.0.0.1:5099", Me = MpMe, H = HuntCardPath;
+            int hid = 0;
+            HnNoteReply reply = null;
+            Func<string, bool> room = id => Mpm() != null && Mpm().IsChatRoomOpenForUser(id);
+            Func<string, Button> bubbleWith = part =>
+            {
+                var m = Mpm();
+                if (m == null || m.chatMessageContent == null) return null;
+                foreach (Transform b in m.chatMessageContent)
+                {
+                    var box = b.gameObject.activeSelf ? b.Find("BubbleContainer") : null;
+                    if (box == null) continue;
+                    foreach (var t in box.GetComponentsInChildren<Text>(false))
+                        if (t.text.Contains(part)) return box.GetComponent<Button>() ?? box.gameObject.AddComponent<Button>();
+                }
+                return null;
+            };
+            Func<string, bool> logged = kind => DevGet(Me, "/api/dev/dm_log").Contains("\"kind\":\"" + kind + "\",\"me\":\"" + Me + "\",\"other\":\"3\"");
+
+            Do(() =>
+            {
+                SessionState.SetBool(LoginReadyKey, true);
+                savedClipboard = EditorGUIUtility.systemCopyBuffer;
+                StashWoopangPrefs();   // 읽은 시각을 바꾼다 — 끝나면(끊겨도) 되돌린다
+                LoginManager.EditorAuthBase = Dev;
+                R0926HuntApi.EditorBase = Dev;
+                R0926HuntApi.EditorTestUser = Me;
+                MessagePanelManager.EditorBase = Dev;
+                ProfileManager.EditorBase = Dev;
+                FollowManager.EditorBase = Dev;
+                P2PManager.EditorBase = Dev;
+                FirebaseNotification.EditorBase = Dev;
+                DevGet(Me, "/api/dev/dm_store?clear=1");
+                DevGet(Me, "/api/dev/dm_log?reset=1");
+                PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.AddHours(-1).ToString("yyyy-MM-dd HH:mm:ss"));
+                PlayerPrefs.Save();
+            });
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Do(() =>
+            {
+                LoginManager.EditorBeforeWebLogin?.Invoke();
+                LoginManager.Instance.CloseLoginPrompt();
+            });
+            Sleep(0.3f);
+            Do(() => CopyLink("mpme"));
+            Wait(() => LoginManager.Instance.IsLoggedIn, 10f, "시험 로그인");
+            Do(() => { EditorGUIUtility.systemCopyBuffer = savedClipboard ?? ""; savedClipboard = null; });
+            Sleep(1.5f);
+
+            // 1) 근처에서 게임이 열림 — 서버가 남기는 글 (운영 함수 그대로)
+            Do(() =>
+            {
+                hid = DevCreateHuntAt(HnHost, HnTitle, VirtualLocation.Instance.Latitude + 0.0004f, VirtualLocation.Instance.Longitude, null, null);
+                string r = hid > 0 ? DevPost(Me, "/api/dev/hunt_note", "{\"hunt_id\":" + hid + ",\"to\":\"" + Me + "\",\"host_name\":\"" + HnHostName + "\"}") : "";
+                reply = string.IsNullOrEmpty(r) ? null : JsonUtility.FromJson<HnNoteReply>(r);
+                log.Add("  게임 " + hid + " · 알림 '" + reply?.push_title + "' / '" + reply?.push_body + "' · 글: " + (reply?.message?.content ?? "").Replace("\n", " / "));
+            });
+            Check(() => hid > 0 && reply != null && reply.push_title == "보물찾기가 시작되었어요" && reply.push_body == HnHostName + "님이 주최한 「" + HnTitle + "」 · 지금 참가할 수 있어요",
+                "알림: '보물찾기가 시작되었어요' · '시험주최자님이 주최한 「제목」 · 지금 참가할 수 있어요'");
+            Check(() =>
+            {
+                var lines = (reply?.message?.content ?? "").Split('\n');
+                return lines.Length == 4 && lines[0] == "[보물찾기 · " + HnTitle + "]" && lines[1] == HnHostName + "님이 주최한 보물찾기가 시작되었습니다."
+                       && lines[3] == "https://woopang.com/hunt/" + hid && reply.message.sender_id == "3" && reply.message.is_read;
+            }, "WOOPANG 글: 첫 줄 '[보물찾기 · 제목]' · 'ㅇㅇ님이 주최한 보물찾기가 시작되었습니다.' · 끝 줄 게임 주소 · 보낸이 3 · 읽은 것으로");
+
+            // 2) 메세지 목록 — WOOPANG 한 줄에 그 소식 · 안 읽음 1 (주소 줄은 안 보임)
+            Do(() => Mpm().OpenMessagePanel());
+            Wait(() => WoopangPreview().Contains(HnTitle), 12f, "목록에 WOOPANG 안내");
+            Sleep(0.5f);
+            Shot("huntnote_list");
+            Do(() => log.Add("  WOOPANG 줄 " + WoopangRowCount() + "개 · 미리보기 '" + WoopangPreview().Replace("\n", " / ") + "' · 배지 '" + WoopangBadge() + "'"));
+            Check(() => WoopangRowCount() == 1 && WoopangPreview().Contains("보물찾기 · " + HnTitle) && WoopangPreview().Contains(HnHostName + "님이 주최한")
+                        && !WoopangPreview().Contains("woopang.com"), "목록: WOOPANG 한 줄 · 미리보기 '보물찾기 · 제목' + 주최자 (주소 없음)");
+            Check(() => WoopangBadge() == "1", "목록: 안 읽음 1 (읽은 것으로 저장된 글도 WOOPANG 을 연 뒤에 왔으면 새 소식)");
+
+            // 3) WOOPANG 대화방 — 금색 머리 말풍선 · 주소 줄 숨김
+            Do(TapWoopangRow);
+            Wait(() => room(MessagePanelManager.WoopangId) && bubbleWith(HnTitle) != null && !(bool)MpmField("chatLoading"), 12f, "WOOPANG 대화에 안내 말풍선");
+            Sleep(0.5f);
+            Shot("huntnote_room");
+            Do(() => { var b = ChatBubbleTexts(); log.Add("  말풍선 " + b.Count + "개 · 끝: " + (b.Count > 0 ? b[b.Count - 1].Replace("\n", " / ") : "-")); });
+            Check(() =>
+            {
+                var b = ChatBubbleTexts();
+                string t = b.Find(x => x.Contains(HnTitle)) ?? "";
+                return t.Contains("#FFCF5C") && t.Contains("보물찾기 · " + HnTitle + "  ›") && t.Contains(HnHostName + "님이 주최한 보물찾기가 시작되었습니다.")
+                       && t.Contains("이 메세지를 누르면 열려요") && !t.Contains("woopang.com");
+            }, "대화방: 금색 '보물찾기 · 제목 ›' 머리 + 'ㅇㅇ님이 주최한 보물찾기가 시작되었습니다.' · 주소 줄은 숨김");
+            Check(() => logged("conversation") && !logged("read_all"), "WOOPANG(3) 대화를 받아 옴 · 이미 읽은 글이라 읽음 요청은 안 보냄");
+
+            // 4) 말풍선을 누르면 — 알림을 누른 것과 같은 길로 그 게임 상세 (메세지·대화 창은 닫힘)
+            Do(() => { var b = bubbleWith(HnTitle); if (b != null) b.onClick.Invoke(); else log.Add("  안내 말풍선 못 찾음"); });
+            Wait(() => Active(H + "Detail") && DetailTitle().Contains(HnTitle), 15f, "말풍선 → 게임 상세");
+            Sleep(0.6f);
+            Shot("huntnote_detail");
+            Check(() => Active(H + "Detail") && DetailTitle().Contains(HnTitle) && !Active("MessagePanel") && !Active("ChatRoomPanel"),
+                "안내 말풍선 → 그 게임 상세 (참가할 수 있는 곳) · 메세지·대화 창 닫힘");
+
+            // 5) 다시 목록 — 읽었으니 배지 없음
+            CloseUpload();
+            Do(() => Mpm().OpenMessagePanel());
+            Wait(() => WoopangPreview().Contains(HnTitle) && !(Mpm().conversationListContent == null), 12f, "다시 목록");
+            Sleep(1.2f);
+            Do(() => log.Add("  다시 목록 — 배지 '" + WoopangBadge() + "'"));
+            Check(() => WoopangRowCount() == 1 && WoopangBadge() == "", "대화방을 본 뒤엔 WOOPANG 안 읽음 없음");
+
+            // 6) 안 읽음으로 온 WOOPANG 글(신고 안내 같은 것) — 목록 숫자 · 대화방에 보이고 서버에도 읽음
+            Do(() =>
+            {
+                DevPost(Me, "/api/dev/dm_store", "{\"sender_id\":\"3\",\"recipient_id\":\"" + Me + "\",\"content\":\"" + HnUnread + "\"}");
+                DevGet(Me, "/api/dev/dm_log?reset=1");
+                Mpm().RefreshConversations();
+            });
+            Wait(() => WoopangPreview().Contains(HnUnread), 12f, "목록에 안 읽은 WOOPANG 글");
+            Sleep(0.5f);
+            Do(() => log.Add("  안 읽은 글 — 미리보기 '" + WoopangPreview() + "' · 배지 '" + WoopangBadge() + "'"));
+            Check(() => WoopangRowCount() == 1 && WoopangBadge() == "1", "안 읽음으로 온 WOOPANG 글은 서버 숫자로 1");
+            Do(TapWoopangRow);
+            Wait(() => room(MessagePanelManager.WoopangId) && bubbleWith(HnUnread) != null && logged("read_all"), 12f, "대화방에 보이고 읽음 요청");
+            Sleep(0.5f);
+            Check(() => bubbleWith(HnUnread) != null && bubbleWith(HnTitle) != null, "대화방에 두 글 모두 (보물찾기 안내 · 안 읽음으로 온 글)");
+            Check(() => Array.TrueForAll(DmStore(), m => m.sender_id != "3" || m.is_read), "열어 본 뒤 서버에서도 읽음");
+            Do(() => Mpm().CloseAway());
+            Sleep(0.6f);
+            Do(() => Mpm().OpenMessagePanel());
+            Wait(() => WoopangPreview().Contains(HnUnread), 12f, "다시 목록");
+            Sleep(1.2f);
+            Check(() => WoopangBadge() == "", "다시 목록 — 안 읽음 없음");
+
+            Do(() =>
+            {
+                Mpm().CloseAway();
+                DevGet(Me, "/api/dev/dm_store?clear=1");
+                LoginManager.EditorAuthBase = null;
+                R0926HuntApi.EditorBase = null;
+                R0926HuntApi.EditorTestUser = null;
+                MessagePanelManager.EditorBase = null;
+                ProfileManager.EditorBase = null;
+                FollowManager.EditorBase = null;
+                P2PManager.EditorBase = null;
+                FirebaseNotification.EditorBase = null;
+                RestoreWoopangPrefs();
             });
         }
 
@@ -18774,6 +18933,7 @@ namespace Redesign0926
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     if (pl.Length > 1 && pl[1].Trim() == "chatnotif") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "chatphoto") StashLogin();
+                    if (pl.Length > 1 && pl[1].Trim() == "huntnote") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "tapfeedback") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "fmap1105") StashLogin();
                     if (pl.Length > 1 && pl[1].Trim().StartsWith("lang_")) { AppLanguage.EditorOverride = pl[1].Trim().Substring(5); StashLogin(); }   // 기기 언어를 바꿔 켠다

@@ -223,6 +223,11 @@ public class MessagePanelManager : MonoBehaviour
     private List<ConversationSummary> conversations = new List<ConversationSummary>();
     private List<AdminBroadcast> adminBroadcasts = new List<AdminBroadcast>();
 
+    // WOOPANG(3) 이 서버에 남긴 안내 — 보물찾기 시작 소식(읽은 것으로 저장됨 · WOOPANG 을 연 시각으로 센다)·신고 안내(안 읽음으로 저장)
+    private List<DMMessage> woopangNotes = new List<DMMessage>();
+    private DMConversationItem woopangConv;   // 서버 대화 목록의 WOOPANG 줄 — 없으면 안내 글을 받으러 가지 않는다
+    private int woopangServerUnread;          // 서버가 안 읽음으로 센 안내 — 전체 안 읽음(totalUnreadCount)에 이미 들어 있어 목록 줄에만 더한다
+
     // 스와이프 추적
     private Dictionary<GameObject, Vector2> swipeStartPositions = new Dictionary<GameObject, Vector2>();
     private Dictionary<GameObject, bool> isSwipingItem = new Dictionary<GameObject, bool>();
@@ -1205,6 +1210,12 @@ public class MessagePanelManager : MonoBehaviour
             if (isAdmin)
             {
                 MarkDeviceNoticesRead();   // 이 기기 알림도 같은 WOOPANG 대화에 있다
+                if (woopangServerUnread > 0)   // 서버가 안 읽음으로 센 WOOPANG 안내 — 대화방이 받아 와 서버에도 읽음 처리한다. 숫자는 지금 내린다
+                {
+                    totalUnreadCount = Mathf.Max(0, totalUnreadCount - woopangServerUnread);
+                    woopangServerUnread = 0;
+                    UpdateUnreadUI();
+                }
 
                 // 관리자 채팅방 읽음 시간 저장 (unread 카운트 계산용)
                 PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -1497,6 +1508,8 @@ public class MessagePanelManager : MonoBehaviour
         {
             string userId = LoginManager.Instance.CurrentUser.id;
             string url = Api($"{ApiConfig.DM_CONVERSATIONS}?user_id={userId}");
+            bool listOk = false;
+            DMConversationItem woopangRow = null;
 
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
@@ -1523,6 +1536,13 @@ public class MessagePanelManager : MonoBehaviour
                     {
                         foreach (var conv in response.conversations)
                         {
+                            if (conv.partner_id == WoopangId)
+                            {
+                                // WOOPANG(3) 이 남긴 안내는 WOOPANG 한 줄로 모은다 (아래 FoldWoopangNotes) — 예전엔 공지가 있으면 버려지고, 없으면 글만 보이고 열어도 없었다
+                                woopangRow = conv;
+                                if (!recentlyMarkedReadUserIds.Contains(WoopangId)) adjustedTotalUnread += conv.unread_count;
+                                continue;
+                            }
                             if (conversations.Exists(c => c.userId == conv.partner_id)) continue;
                             int unread = conv.unread_count;
 
@@ -1547,8 +1567,26 @@ public class MessagePanelManager : MonoBehaviour
                     totalUnreadCount = recentlyMarkedReadUserIds.Count > 0 ? adjustedTotalUnread : response.total_unread;
                     UpdateUnreadUI();
                     conversationsLoadedOnce = true;
+                    listOk = true;
                 }
             }
+
+            // WOOPANG 안내 — 서버 목록에 WOOPANG 줄이 있을 때만 글을 받으러 간다. 목록을 못 받았으면 지난번 것을 그대로 모은다
+            if (listOk)
+            {
+                woopangConv = woopangRow;
+                if (woopangRow == null) woopangNotes.Clear();
+                else
+                {
+                    List<DMMessage> fresh = null;
+                    yield return StartCoroutine(FetchWoopangNotes(n => fresh = n));
+                    if (myVersion != convLoadVersion) yield break;
+                    if (fresh != null) woopangNotes = fresh;
+                }
+                woopangServerUnread = woopangRow == null || recentlyMarkedReadUserIds.Contains(WoopangId) ? 0 : woopangRow.unread_count;
+            }
+            FoldWoopangNotes();
+            UpdateUnreadUI();
         }
 
         EndListSkeleton();
@@ -1572,7 +1610,7 @@ public class MessagePanelManager : MonoBehaviour
     // 이제 목록엔 한 줄(가장 최근 것 · 안 읽음 합계)만, 누르면 둘을 시간순으로 모은 WOOPANG 대화방이 옆으로 열린다
     public const string WoopangId = "3";
 
-    private struct WoopangLine { public DateTime at; public int seq; public string time, text, followFrom; }
+    private struct WoopangLine { public DateTime at; public int seq; public string time, text, followFrom; public int huntId; }
 
     /// <summary>이 기기에 온 알림(업로드·위치·팔로우) — 서버 공지 요약 줄은 아니다</summary>
     private static bool IsDeviceNotice(ConversationSummary c) => c.isSystemMessage && !c.isAdminBroadcast && c.userId != WoopangId;
@@ -1620,7 +1658,7 @@ public class MessagePanelManager : MonoBehaviour
                 avatarUrl = "",
                 lastMessage = noticeNewer ? NoticeText(latestNotice) : admin.lastMessage,
                 lastMessageTime = noticeNewer ? latestNotice.lastMessageTime : admin.lastMessageTime,
-                unreadCount = (admin != null ? admin.unreadCount : 0) + noticeUnread,
+                unreadCount = (admin != null ? admin.unreadCount : 0) + noticeUnread + woopangServerUnread,
                 isAdminBroadcast = true,
                 isSystemMessage = true
             });
@@ -1643,6 +1681,105 @@ public class MessagePanelManager : MonoBehaviour
         if (!changed) return;
         SaveSystemNotifications();
         UpdateUnreadUI();
+    }
+
+    // ── WOOPANG(3) 이 서버에 남긴 안내 (11-09 대표님: 근처에 보물찾기가 열리면 'ㅇㅇ가 주최한 보물찾기가 시작되었습니다' 가 WOOPANG 으로 와서 참가할 수 있게) ──
+    // 서버(hunts_server._notify_new)가 알림을 받은 사람마다 남긴다 — 첫 줄 '[보물찾기 · 제목]', 끝 줄 게임 주소. 앱은 주소를 숨기고 누르면 그 게임으로
+    private const string HuntUrlHead = "https://woopang.com/hunt/";
+
+    /// <summary>WOOPANG 과의 서버 대화 중 WOOPANG 이 보낸 것 — 못 받으면 null (지난번 것을 그대로 쓴다)</summary>
+    private IEnumerator FetchWoopangNotes(Action<List<DMMessage>> done)
+    {
+        string me = LoginManager.Instance.CurrentUser.id;
+        using (UnityWebRequest req = UnityWebRequest.Get(Api($"{ApiConfig.DM_CONVERSATION}?user_id={me}&other_id={WoopangId}&limit=30")))
+        {
+            LoginManager.ApplyAuth(req);
+            req.timeout = 10;
+            yield return req.SendWebRequest();
+            List<DMMessage> notes = null;
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                try
+                {
+                    var r = JsonUtility.FromJson<DMConversationResponse>(req.downloadHandler.text);
+                    notes = r?.messages == null ? new List<DMMessage>() : r.messages.FindAll(m => m.sender_id == WoopangId);
+                }
+                catch (Exception e) { Debug.LogWarning("[MessagePanel] WOOPANG 안내 읽기 실패: " + e.Message); }
+            }
+            done(notes);
+        }
+    }
+
+    /// <summary>안내를 WOOPANG 한 줄에 모은다 — 가장 최근 글 · WOOPANG 을 마지막으로 연 뒤 온 안내 수</summary>
+    private void FoldWoopangNotes()
+    {
+        if (woopangConv == null) return;
+        string lastText = woopangConv.last_message, lastTime = woopangConv.last_message_time;
+        int unread = 0;
+        if (woopangNotes.Count > 0)
+        {
+            var last = woopangNotes[woopangNotes.Count - 1];   // 서버는 오래된 것부터 준다
+            lastText = last.content;
+            lastTime = last.created_at;
+            if (IsChatRoomOpenForUser(WoopangId))
+            {
+                PlayerPrefs.SetString("AdminBroadcastLastReadTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));   // 보고 있는 중에 온 것도 읽은 것
+                PlayerPrefs.Save();
+            }
+            else
+            {
+                DateTime readAt = ParseTime(PlayerPrefs.GetString("AdminBroadcastLastReadTime", ""));
+                foreach (var m in woopangNotes)
+                    if (m.is_read && ParseTime(m.created_at) > readAt) unread++;   // 안 읽음으로 온 것은 서버 숫자(woopangServerUnread)로 센다
+            }
+        }
+        var w = conversations.Find(c => c.isAdminBroadcast && c.userId == WoopangId);
+        if (w == null)
+        {
+            w = new ConversationSummary { userId = WoopangId, username = "WOOPANG", avatarUrl = "", isAdminBroadcast = true, isSystemMessage = true };
+            conversations.Add(w);
+        }
+        w.unreadCount += unread;
+        if (string.IsNullOrEmpty(w.lastMessageTime) || ParseTime(lastTime) >= ParseTime(w.lastMessageTime))
+        {
+            w.lastMessage = NotePreview(lastText);
+            w.lastMessageTime = lastTime;
+        }
+    }
+
+    /// <summary>목록 미리보기 — 보물찾기 안내는 '보물찾기 · 제목' 을 굵게, 주소 줄은 뺀다</summary>
+    private static string NotePreview(string content)
+    {
+        string title = SplitHuntHeader(content, out string body);
+        if (title == null) return content;
+        return "<b>" + R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro") + " · " + title.Replace("<", "＜") + "</b>\n"
+             + StripHuntUrl(body, out _);
+    }
+
+    /// <summary>끝 줄이 게임 주소면 떼고 그 번호를 준다 (아니면 글 그대로 · 0)</summary>
+    private static string StripHuntUrl(string body, out int huntId)
+    {
+        huntId = 0;
+        if (string.IsNullOrEmpty(body)) return body;
+        int nl = body.LastIndexOf('\n');
+        string last = (nl < 0 ? body : body.Substring(nl + 1)).Trim();
+        if (!last.StartsWith(HuntUrlHead)) return body;
+        string num = last.Substring(HuntUrlHead.Length);
+        int cut = num.IndexOfAny(new[] { '?', '#', '/' });
+        if (cut >= 0) num = num.Substring(0, cut);
+        if (!int.TryParse(num, out huntId) || huntId <= 0) { huntId = 0; return body; }
+        return nl < 0 ? "" : body.Substring(0, nl);
+    }
+
+    /// <summary>WOOPANG 대화방의 안내 한 줄 — 보물찾기 안내는 금색 머리, 누르면 그 게임</summary>
+    private static WoopangLine NoteLine(DMMessage m, int seq)
+    {
+        string text = m.content;
+        int huntId = 0;
+        string title = SplitHuntHeader(m.content, out string body);
+        if (title != null)
+            text = HuntBubbleText(title, StripHuntUrl(body, out huntId).Replace("<", "＜"), false);
+        return new WoopangLine { at = ParseTime(m.created_at), seq = seq, time = m.created_at, text = text, huntId = huntId };
     }
 
     // 새로 깐 앱은 읽음 시각이 비어 있어 지난 공지 전부(서버가 주는 최대 50개)가 안 읽음으로 잡혔다 (2026-10-17).
@@ -2642,7 +2779,20 @@ public class MessagePanelManager : MonoBehaviour
     /// <summary>새 팔로워 알림 말풍선 — 누르면 내 팔로워 탭 (그 사람을 맨 위에). 예전 목록의 알림 줄을 누르던 것과 같은 길</summary>
     private static void WireFollowTap(GameObject bubble, string followFrom)
     {
-        if (bubble == null || string.IsNullOrEmpty(followFrom)) return;
+        if (string.IsNullOrEmpty(followFrom)) return;
+        WireBubbleTap(bubble, () => R0926HuntPush.OpenFollowers(followFrom, true));
+    }
+
+    /// <summary>보물찾기 시작 안내 말풍선 — 누르면 알림을 누른 것과 같은 길로 그 게임 상세</summary>
+    private static void WireHuntTap(GameObject bubble, int huntId)
+    {
+        if (huntId <= 0) return;
+        WireBubbleTap(bubble, () => R0926HuntPush.OpenHunt(huntId));
+    }
+
+    private static void WireBubbleTap(GameObject bubble, UnityEngine.Events.UnityAction onTap)
+    {
+        if (bubble == null) return;
         Transform target = bubble.transform.Find("BubbleContainer");
         if (target == null) target = bubble.transform;
         var img = target.GetComponent<Image>();
@@ -2651,7 +2801,7 @@ public class MessagePanelManager : MonoBehaviour
         if (btn == null) btn = target.gameObject.AddComponent<Button>();
         btn.transition = Selectable.Transition.None;
         btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(() => R0926HuntPush.OpenFollowers(followFrom, true));
+        btn.onClick.AddListener(onTap);
     }
 
     private GameObject CreateSystemMessageBubble(string senderName, string content, string time)
@@ -2851,6 +3001,12 @@ public class MessagePanelManager : MonoBehaviour
             var lines = new List<WoopangLine>();
             int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
 
+            // WOOPANG 이 남긴 안내(보물찾기 시작 소식 등)도 같이 — 공지와 나란히 받는다 (로그인했을 때만)
+            bool withNotes = LoginManager.Instance != null && LoginManager.Instance.IsLoggedIn;
+            bool notesDone = !withNotes;
+            List<DMMessage> freshNotes = null;
+            if (withNotes) StartCoroutine(FetchWoopangNotes(n => { freshNotes = n; notesDone = true; }));
+
             using (UnityWebRequest adminRequest = UnityWebRequest.Get(adminUrl))
             {
                 adminRequest.timeout = 10;
@@ -2919,12 +3075,33 @@ public class MessagePanelManager : MonoBehaviour
                     lines.Add(new WoopangLine { at = ParseTime(c.lastMessageTime), seq = lines.Count, time = c.lastMessageTime, text = NoticeText(c), followFrom = c.followFrom });
             }
 
+            if (withNotes)
+            {
+                float until = Time.realtimeSinceStartup + 12f;
+                while (!notesDone && Time.realtimeSinceStartup < until) yield return null;
+                if (ver != chatLoadVersion) yield break;
+                if (freshNotes != null) woopangNotes = freshNotes;
+                bool unreadOnServer = false;
+                foreach (var m in woopangNotes)
+                {
+                    lines.Add(NoteLine(m, lines.Count));
+                    if (!m.is_read) { m.is_read = true; unreadOnServer = true; }
+                }
+                if (unreadOnServer)   // 신고 안내처럼 안 읽음으로 온 것 — 보여 줬으니 서버에도 읽음
+                {
+                    recentlyMarkedReadUserIds.Add(WoopangId);
+                    StartCoroutine(MarkMessagesAsRead(WoopangId));
+                }
+            }
+
             lines.Sort((x, y) => x.at != y.at ? x.at.CompareTo(y.at) : x.seq.CompareTo(y.seq));   // 최신이 하단
             foreach (var line in lines)
             {
                 if (useDateSeparator)
                     CheckAndCreateDateSeparator(line.time);
-                WireFollowTap(CreateSystemMessageBubble("WOOPANG", line.text, line.time), line.followFrom);
+                var bubble = CreateSystemMessageBubble("WOOPANG", line.text, line.time);
+                if (line.huntId > 0) WireHuntTap(bubble, line.huntId);
+                else WireFollowTap(bubble, line.followFrom);
             }
 
             // 관리자 채팅방도 최신이 하단이므로 스크롤을 맨 아래로
@@ -4686,6 +4863,9 @@ public class MessagePanelManager : MonoBehaviour
     {
         conversations.Clear();
         adminBroadcasts.Clear();
+        woopangNotes.Clear();
+        woopangConv = null;
+        woopangServerUnread = 0;
 
         if (conversationListContent != null)
             ClearContent(conversationListContent);
