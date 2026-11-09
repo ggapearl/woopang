@@ -1418,6 +1418,8 @@ public class R0926HuntCard : MonoBehaviour
     private void PaintDetail()
     {
         var h = current;
+        // 근접 확인을 이 상세가 맡는다는 걸 지켜보기보다 먼저 — 참가 직후 같은 프레임에 AR 보물도 따로 물어 둘 중 하나가 429(slow_down)를 받았다
+        NearHuntId = detail != null && detail.activeInHierarchy && NearMode(h) ? h["id"].AsInt : 0;
         R0926HuntTreasure.Track(h);   // 참가 중·아직 못 찾음이면 AR 보물을 지켜보고, 찾음·끝남이면 치운다
         var me = h["me"];
         bool host = h["is_host"].AsBool, joined = me["joined"].AsBool, found = me["rank"].AsInt > 0;
