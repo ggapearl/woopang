@@ -149,6 +149,7 @@ namespace Redesign0926
             else if (mode == "fixclose") PlanFixClose();
             else if (mode == "petglow") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanPetGlow(); }
             else if (mode == "dockswitch") PlanDockSwitch();
+            else if (mode == "dockicons") PlanDockIcons();
             else if (mode == "stickers") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanStickers(); }
             else if (mode == "addcenter") PlanAddCenter();
             else if (mode == "overlap") PlanOverlap();
@@ -10992,6 +10993,104 @@ namespace Redesign0926
             Sleep(0.5f);
         }
 
+        // ── 하단 메뉴는 아이콘만 — 대표님 11-09 「하단메뉴 버튼에 있어서 따로 해당 이름 (목록 / 추가 etc.) 사용하지 말고 그냥 아이콘만 발생하도록」
+        //    도크 네 칸과, 창이 열렸을 때 그 자리에 뜨는 닫기 X — 이름은 꺼져 있고 아이콘(프로필은 사진)이 도크 가운데 높이에
+        private static void PlanDockIcons()
+        {
+            Func<Transform, Vector2> mid = t => { var c = new Vector3[4]; ((RectTransform)t).GetWorldCorners(c); return (c[0] + c[2]) / 2f; };
+            Func<Transform, Transform> iconOf = s => s.Find("Icon0926") ?? s.Find("AvatarMask");
+            // 도크 칸 · 열린 창의 도크 자리에 보이는 글자 (안 읽음 숫자는 빼고)
+            Func<string> shownTexts = () =>
+            {
+                var c = CanvasRoot();
+                var seen = new List<string>();
+                if (c == null) return "(캔버스 없음)";
+                foreach (var t in c.GetComponentsInChildren<Text>(false))
+                {
+                    if (!t.enabled || string.IsNullOrWhiteSpace(t.text) || t.color.a < 0.01f || GroupAlpha(t.transform) < 0.01f) continue;
+                    bool inDock = false;
+                    for (var p = t.transform; p != null; p = p.parent)
+                    {
+                        if (p.name == "UnreadMessageButtonImage") { inDock = false; break; }
+                        if (p.name == "Dock0926" || p.name == "DockMirror0926") inDock = true;
+                    }
+                    if (inDock) seen.Add(t.name + " '" + t.text + "'");
+                }
+                return string.Join(", ", seen);
+            };
+            var names = new Dictionary<string, string> { { "List_Button", "목록" }, { "PlusButton", "추가" }, { "Message_Button", "메세지" }, { "MiniProfile", "프로필" } };
+            Vector2 listIcon = default;
+
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() => { if (Active("LoginPromptPanel")) BackNow(); });
+            Do(() =>
+            {
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+            });
+            Sleep(1.0f);
+
+            foreach (var kv in names)
+            {
+                string slot = "Dock0926/" + kv.Key, ko = kv.Value;
+                Check(() =>
+                {
+                    var s = Find(slot);
+                    var lb = s != null ? s.Find("Label0926") : null;
+                    var ic = s != null ? iconOf(s) : null;
+                    if (s == null || ic == null) return false;
+                    float dy = mid(ic).y - mid(Find("Dock0926")).y;
+                    log.Add($"  {ko}: 이름 {(lb == null ? "없음" : lb.gameObject.activeSelf ? "켜짐" : "꺼짐")} · 아이콘 높이 차 {dy:0.0}");
+                    return (lb == null || !lb.gameObject.activeSelf) && Mathf.Abs(dy) < 2f;
+                }, $"도크 '{ko}' 칸 — 이름 없이 아이콘만, 아이콘이 도크 가운데 높이");
+            }
+            Check(() =>
+            {
+                var u = Find("Dock0926/Message_Button/UnreadMessageButtonImage") as RectTransform;
+                return u != null && Vector2.Distance(u.anchoredPosition, new Vector2(58, 42)) < 0.5f;
+            }, "안 읽음 표시는 메세지 아이콘 오른쪽 위 그대로 (아이콘을 따라 내려옴)");
+            Check(() =>
+            {
+                var c = CanvasRoot();
+                var bad = new List<string>();
+                int n = 0;
+                foreach (var m in c.GetComponentsInChildren<Transform>(true))
+                {
+                    if (m.name != "DockMirror0926") continue;
+                    foreach (Transform b in m)
+                    {
+                        if (b.GetComponent<Button>() == null) continue;
+                        n++;
+                        var lb = b.Find("Label0926");
+                        var ic = b.Find("Icon0926") as RectTransform;
+                        if ((lb != null && lb.gameObject.activeSelf) || ic == null || Mathf.Abs(ic.anchoredPosition.y) > 0.5f) bad.Add(m.parent.name + "/" + b.name);
+                    }
+                }
+                log.Add($"  창의 도크 자리 닫기 {n}개 · 어긋남 {(bad.Count == 0 ? "-" : string.Join(", ", bad))}");
+                return n >= 6 && bad.Count == 0;
+            }, "창이 열렸을 때 도크 자리의 닫기 X (목록 · 추가 · 메세지 · 대화방 · 팔로우 · 프로필) — 이름 없이 X 만, 가운데");
+            Check(() => shownTexts() == "", "도크에 보이는 글자 없음");
+            Shot("dockicons_home");
+
+            // 목록을 열면 그 칸의 X 가 아이콘이 있던 바로 그 자리에 — 이름 없이
+            Do(() => { listIcon = mid(iconOf(Find("Dock0926/List_Button"))); Click("Dock0926/List_Button"); });
+            Wait(() => Active("ListPanel") && Active("ListPanel/DockMirror0926/XButton_List"), 3f, "목록 열림");
+            Sleep(0.6f);
+            Check(() =>
+            {
+                var x = Find("ListPanel/DockMirror0926/XButton_List/Icon0926");
+                float d = x != null ? Vector2.Distance(mid(x), listIcon) : -1f;
+                log.Add($"  목록 X ↔ 목록 아이콘 거리 {d:0.0}");
+                return x != null && d >= 0f && d < 2f;
+            }, "목록을 열면 X 가 목록 아이콘이 있던 바로 그 자리에");
+            Check(() => shownTexts() == "", "목록이 열린 채 — 도크에 보이는 글자 없음 (닫기 X 도 이름 없이)");
+            Do(() => { var s = shownTexts(); if (s != "") log.Add("  보이는 글자: " + s); });
+            Shot("dockicons_list");
+            Do(() => Find("ListPanel/DockMirror0926/XButton_List/ClosePx0926")?.GetComponent<R0926CloseProxy>()?.Run());
+            Wait(() => !Active("ListPanel"), 2f, "목록 닫힘");
+            Sleep(0.4f);
+        }
+
         // ── v53 앱 안 '프로필 편집' — 대표님 10-27 「안드로이드는 '사진설정'을 하려 해도 '사진첩'·'갤러리'가 아니라 '내 파일'로 안내」
         //    「아예 웹으로 이동하지 않고 앱 내에서 수정할 수 있으면 더 좋을 것 같긴 해」.
         //    시험 서버(127.0.0.1:5099)의 프로필 흉내(dev_profile_shim — 운영 app_improved 의 프로필·사진 코드 그대로, DB 는 버리는 55442):
@@ -15940,7 +16039,8 @@ namespace Redesign0926
             Image Mini() => ProfileManager.Instance != null ? ProfileManager.Instance.miniAvatarImage : null;
             int MiniW() { var s = Mini() != null ? Mini().sprite : null; return s != null && s.texture != null ? s.texture.width : -1; }
             string MiniName() => ProfileManager.Instance != null && ProfileManager.Instance.miniUsernameText != null ? ProfileManager.Instance.miniUsernameText.text : "";
-            string DockLabel() { var l = UnityEngine.Object.FindAnyObjectByType<R0926ProfileLabel>(); return l != null ? l.GetComponent<Text>().text : ""; }
+            // 11-09 부터 도크는 아이콘만 — 프로필 칸 이름(로그인 · 닉네임)은 꺼져 있다
+            bool DockLabelShown() { var l = UnityEngine.Object.FindAnyObjectByType<R0926ProfileLabel>(FindObjectsInactive.Include); return l != null && l.gameObject.activeInHierarchy; }
             bool Logged(string ev) => P2PLog().Contains(ev);
             void Diag(string at) => log.Add("  [" + at + "] 근처 '" + Near() + "' · 모드 " + P2PManager.Instance?.GetUserFilterMode()
                                             + " · 자료 " + (P2PManager.Instance?.GetNearbyUsers().Count ?? -1) + " · 팔로잉 ft1 " + Following("ft1"));
@@ -16016,7 +16116,7 @@ namespace Redesign0926
             Check(() => Logged("unregister:hunt_test_p2pa:hunt_test_p2pa"), "로그아웃 → 근처 사람 서버에서 p2pa 를 내림 (그 사람 토큰으로)");
             Check(() => Logged("fcm_unregister::hunt_test_p2pa") || FirebaseNotification.GetInstance() == null, "로그아웃 → 푸시 토큰에서 p2pa 떼기");
             Check(() => Mini() != null && Mini().sprite == ProfileManager.Instance.defaultAvatarSprite, "로그아웃 → 작은 프로필 사진이 기본 그림으로");
-            Check(() => DockLabel() == "로그인" || DockLabel() == "Sign in", "로그아웃 → 도크 이름 '로그인'");
+            Check(() => !DockLabelShown(), "로그아웃 → 도크 프로필 칸은 기본 사진만 (이름 칸 없음 · 11-09 아이콘만)");
 
             // 다른 아이디 — 사진 없는 p2pb
             Do(() => { LoginManager.EditorBeforeWebLogin?.Invoke(); CopyLink("p2pb"); });
@@ -16028,7 +16128,7 @@ namespace Redesign0926
             Sleep(1.0f);
             Shot("loginswitch_b");
             Check(() => MiniName() == "시험_p2pb" && MiniW() != 97, "작은 프로필 = p2pb (앞 사람 p2pa 사진이 남지 않음)");
-            Check(() => DockLabel() == "시험_p2pb", "도크 이름 = 시험_p2pb");
+            Check(() => !DockLabelShown(), "도크 프로필 칸은 p2pb 사진만 (이름 칸 없음 · 11-09 아이콘만)");
             Wait(() => Following("ft1"), 8f, "p2pb 의 팔로잉 목록");
             Check(() => Following("ft1"), "p2pb 로 팔로잉 목록 다시 받음");
             Check(() => NothingOldAfterLogout(), "로그아웃 뒤 p2pa 로 보낸 것은 해제뿐");

@@ -68,6 +68,7 @@ namespace Redesign0926
             Txt(lb, "닫기", DockLabel, Soft, TextAnchor.MiddleCenter, FontStyle.Bold);
             SetRect(RT(lb), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, DockLabelY), new Vector2(280, DockLabelBox));
             Loc(lb, "닫기", "Close", "閉じる", "关闭", "Cerrar");
+            lb.SetActive(DockLabels);   // 도크 칸은 아이콘만 (11-09)
             var b = btn.GetComponent<Button>();
             if (b != null) { b.targetGraphic = icImg; EditorUtility.SetDirty(b); }
         }
