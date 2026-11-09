@@ -45,6 +45,8 @@
    - 이 문서 "embed된 패키지" 표에 행 추가
 5. **빌드 재시도 후 통과 시 git 커밋·푸시** (사용자 명시적 승인 필요)
 6. **공식 fix 모니터링**: PATCH_NOTES에 복원 절차 명시했으니 추후 패키지 제작자가 해당 Unity 버전 호환 패치 내면 embed 폴더 삭제 + manifest 원복
+7. **유니티 속을 리플렉션으로 쓰는 곳 점검** — 이름이 바뀌면 조용히 예전 동작으로 돌아간다(앱은 안 죽는다):
+   - 안드로이드 키보드 미끄러지듯 내리기 `Assets/Plugins/Android/src/main/com/que/woopang/KeyboardSlide.java` (2026-11-09): `UnityPlayerActivity.mUnityPlayer` · `UnityPlayerForActivityOrService.mSoftInput`(인터페이스 형) · `raiseFocusListener(boolean)` · `reportSoftInputArea(Rect)` · `reportSoftInputIsVisible(boolean)` · 소프트 입력의 `hide()` · `invokeOnClose()` · 그 안의 `Dialog` 필드. 새 버전의 `classes.jar` 를 `javap -p` 로 열어 이름이 그대로인지 보고, 안드로이드 11+ 기기에서 뒤로·완료·바깥 누르기로 키보드를 내려 미끄러지는지·화면이 멈추지 않는지 본다. 진입점을 GameActivity 로 바꾸면 이 파일은 손대지 않는다(대화상자 키보드가 아니다).
 
 ---
 
