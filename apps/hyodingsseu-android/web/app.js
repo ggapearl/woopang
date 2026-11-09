@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-06a';
+  const WEB_VERSION = '2026-11-09a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -419,6 +419,7 @@
     setTimeout(() => { api.token = null; }, 400);
     S.paired = false;
     S.items = [];
+    replyTo = null;
     boot = '';
     seq = 0;
     historyState = 'idle';
@@ -1379,6 +1380,7 @@
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>',
     inbox: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5l1.8-6.2A1.5 1.5 0 0 1 6.2 4.2h7.6a1.5 1.5 0 0 1 1.4 1.1L17 11.5V15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15z"/><path d="M3 11.5h4l1 2h4l1-2h4"/><path d="M7.8 7.7l1.6 1.6 2.9-2.9"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
+    reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
   };
   const svg = name => { const t = document.createElement('template'); t.innerHTML = ICON[name]; return t.content.firstChild; };
@@ -1540,9 +1542,11 @@
   function userBubble(it) {
     // 이 폰(앱)에서 보낸 건 표시하지 않고, 다른 곳에서 온 것만 어디서인지 붙인다
     const via = { typed: ['PC 에서', 'pc'], voice: ['PC 에서 말로', 'micSm'], phone: ['텔레그램', 'phone'] }[it.origin];
+    const rp = splitReply(it.text);
     return h('div', { class: 'u-row' },
       h('div', { class: 'u-bubble' }, via ? h('div', { class: 'via' }, svg(via[1]), via[0]) : null,
-        isLong(it) ? h('div', { class: foldCls(it), text: it.text }) : document.createTextNode(it.text), foldBtn(it), attachments(it), stamp(it)));
+        rp.quote ? h('div', { class: 'rquote', text: rp.quote }) : null,
+        isLong(it) ? h('div', { class: foldCls(it), text: rp.body }) : document.createTextNode(rp.body), foldBtn(it), attachments(it), stamp(it)));
   }
 
   /** 받은 시각 — 텔레그램처럼 작게. 읽기(소리)에는 들어가지 않는다(본문 it.text 만 읽음). PC 가 사건에 붙여 준 시각(ts). */
@@ -2043,6 +2047,42 @@
     if (pressHeld || Date.now() < swallowUntil) { ev.preventDefault(); ev.stopPropagation(); }
   }, true);
 
+  // ── 답장하기 (2026-11-09 대표님 「꾹 누르면 복사 옆에 답장하기 — 그 말에 답장으로 칠 수 있게」) ──
+  // 고른 말을 입력칸 위에 띠로 걸어 두고, 보낼 때 「↩ 답장 「그 말」」 한 줄을 앞에 붙여 보낸다.
+  // 글자만으로 되어 있어 PC 효딩쓰·지난 대화에서도 같은 모양(인용 막대)으로 보이고, 효딩쓰도 어느 말에 답하는지 안다.
+  const REPLY_RE = /^↩ 답장 「([^\n」]*)」\n?/;
+  const REPLY_MAX = 140;
+  let replyTo = null;
+
+  const splitReply = text => {
+    const m = REPLY_RE.exec(text || '');
+    return m ? { quote: m[1], body: text.slice(m[0].length) } : { quote: '', body: text || '' };
+  };
+  const replyPrefix = () => replyTo ? '↩ 답장 「' + replyTo.quote + '」\n' : '';
+
+  function startReply(it) {
+    const q = plainText(it).replace(/\s+/g, ' ').replace(/」/g, '』').trim()
+      || ((it.images || []).length ? '사진' : (it.files || []).length ? '파일' : '');
+    if (!q) return;
+    replyTo = { quote: q.length > REPLY_MAX ? q.slice(0, REPLY_MAX) + '…' : q, who: it.kind === 'user' ? '내 말' : '효딩쓰의 말' };
+    renderReply();
+    const ta = $('#main textarea');
+    if (ta) ta.focus();
+  }
+
+  function clearReply() { replyTo = null; renderReply(); }
+
+  function renderReply() {
+    const strip = $('#main .reply-strip');
+    if (!strip) return;
+    strip.hidden = !replyTo;
+    strip.textContent = '';
+    if (!replyTo) return;
+    strip.append(svg('reply'),
+      h('div', { class: 'rq' }, h('b', { text: '답장 · ' + replyTo.who }), h('span', { text: replyTo.quote })),
+      h('button', { class: 'x', 'aria-label': '답장 취소', html: ICON.close, onclick: () => { sfx.play('tap'); clearReply(); } }));
+  }
+
   function itemOf(el) {
     const it = el && find(Number(el.dataset.iid));
     return it && MSG_KINDS[it.kind] && !it.streaming ? it : null;
@@ -2050,7 +2090,7 @@
 
   /** 복사할 글 — [제목](주소)는 「제목 주소」로, 굵게·코드 표시는 뺀다 */
   function plainText(it) {
-    return (it.text || '')
+    return splitReply(it.text).body
       .replace(/\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]\((https?:\/\/[^\s)]+)\)/g, '$1 $2')
       .replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/`([^`\n]+)`/g, '$1').replace(/^#{1,6}\s+/gm, '');
   }
@@ -2067,9 +2107,9 @@
     const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (ev.target === scrim) close(); } },
       h('div', { class: 'sheet msg-menu', role: 'dialog', 'aria-modal': 'true', 'aria-label': '메시지 메뉴' },
         peek ? h('p', { class: 'peek', text: peek.length > 90 ? peek.slice(0, 90) + '…' : peek }) : null,
+        row('reply', '답장하기', () => startReply(it)),
         row('copy', '복사', () => copyMsg(it)),
         row('trash', '이 메시지 삭제', () => deleteMsg(it)),
-        row('trash', '대화 전체 삭제', confirmWipe, 'danger'),
         h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() })));
     const close = layer(() => { scrim.remove(); el.classList.remove('pressed'); });
     $('#app').append(scrim);
@@ -2340,12 +2380,14 @@
         if (voice.pending && !S.uploadingVoice) { uploadVoice(voice.pending); return; }   // 끊겼던 녹음을 다시 보낸다
         if (pending.length) {
           const t = ta.value;
-          sendAttached(t).then(ok => { if (ok) { if (ta.value === t) ta.value = ''; grow(ta); renderSend(); sfx.play('send'); } });
+          sendAttached(replyPrefix() + t).then(ok => { if (ok) { clearReply(); if (ta.value === t) ta.value = ''; grow(ta); renderSend(); sfx.play('send'); } });
           return;
         }
         if (busy() && !ta.value.trim()) { stop(); return; }
-        if (ta.value.trim()) sfx.play('send');
-        send(ta.value);
+        const typed = ta.value.trim();
+        if (typed) sfx.play('send');
+        send(typed ? replyPrefix() + ta.value : ta.value);
+        if (typed) clearReply();
         ta.value = '';
         grow(ta);
         renderSend();
@@ -2387,6 +2429,7 @@
       h('div', { class: 'banner', hidden: true }, h('i', { class: 'spinner' }), h('span')),
       h('div', { class: 'chat-wrap' }, chatEl, jumpEl),
       h('div', { class: 'composer' },
+        h('div', { class: 'reply-strip', hidden: true }),
         h('div', { class: 'att-strip', hidden: true }),
         h('div', { class: 'row' }, plusBtn, h('div', { class: 'rec-strip', hidden: true, role: 'status', 'aria-live': 'polite' }), ta, mic, sendBtn))),
       h('div', { class: 'toast', id: 'toast', role: 'status', 'aria-live': 'polite' }));
@@ -2395,6 +2438,7 @@
     renderStatus();
     renderApprBadge();
     renderAttach();
+    renderReply();
     renderDocsBadge();
     scrollToBottom(false);
     loadPendingVoice();

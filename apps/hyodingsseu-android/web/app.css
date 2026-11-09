@@ -529,6 +529,17 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 /* 사진·파일 첨부 (2026-10-29) */
 .round.plus{background:var(--surface-2);color:var(--navy)}
 .round.plus:active{background:var(--navy-soft)}
+/* 답장하기 (2026-11-09) */
+.reply-strip{display:flex;align-items:center;gap:10px;margin:0 12px 8px;padding:7px 8px 7px 12px;border-radius:12px;background:var(--surface-2);border-left:3px solid var(--navy)}
+.reply-strip[hidden]{display:none}
+.reply-strip>svg{width:18px;height:18px;flex:none;color:var(--navy)}
+.reply-strip .rq{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;font-size:12.5px;line-height:1.35}
+.reply-strip .rq b{color:var(--navy);font-weight:700}
+.reply-strip .rq span{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reply-strip .x{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3)}
+.reply-strip .x svg{width:12px;height:12px}
+.u-bubble .rquote{margin:0 0 6px;padding:1px 0 1px 9px;border-left:3px solid rgba(255,255,255,.55);font-size:13px;line-height:1.4;opacity:.82;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .att-strip{display:flex;align-items:center;gap:8px;padding:0 12px 8px;overflow-x:auto;scrollbar-width:none}
 .att-strip[hidden]{display:none}
 .att-strip::-webkit-scrollbar{display:none}
