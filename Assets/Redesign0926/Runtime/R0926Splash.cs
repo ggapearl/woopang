@@ -34,8 +34,9 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [SerializeField] private bool perLanguage = false;
     [SerializeField] private float endAt = 3.7f;
     [SerializeField] private float fadeOut = 0.45f;
-    [Tooltip("마지막 장면에서 화면이 고르게 돌 때까지 기다리는 최대 시간 — 로딩 멈칫 중에 사라지면 뚝 끊겨 보였다")]
-    [SerializeField] private float maxWait = 4f;
+    // 예전 이름 maxWait(4초) — 이름을 바꿔 장면에 저장된 4 대신 1.5 가 쓰인다 (11-14 「앱 시작하는 속도가 좀 느린 것 같은데」)
+    [Tooltip("마지막 장면에서 화면이 고르게 돌 때까지 기다리는 최대 시간 — 로딩 멈칫 중에 사라지면 뚝 끊겨 보였다. 4초는 로고 화면이 멈춘 듯 길어 1.5초로")]
+    [SerializeField] private float endWait = 1.5f;
     [SerializeField] private Image nebula;            // 숨쉬듯 밝아졌다 어두워지는 성운 (별은 R0926StarField 가 스스로)
     [Tooltip("렌즈 밖 그늘 진하기 — 선형 색공간이라 0.9 가 눈에는 약 1/3 밝기 (10-18 대표님 「원 밖은 많이 더 어둡게」)")]
     [SerializeField, Range(0f, 1f)] private float outsideShade = 0.9f;
@@ -111,16 +112,18 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         if (!started)
         {
             // 앱이 막 켜진 몇 프레임은 초기화(파이어베이스·장소 캐시 읽기)로 무겁다 — 그동안은 우주 배경과 별만 두고,
-            // 화면이 고르게 돌기 시작하면(또는 0.9초가 지나면) 렌즈를 움직인다.
+            // 화면이 고르게 돌기 시작하면(또는 0.4초가 지나면) 렌즈를 움직인다.
+            // 0.9초까지 기다리던 것을 0.4초로 — 프레임이 고르지 않은 기기에선 어두운 화면이 1초 넘게 멈춰 보였다 (11-14 「아예 멈췄다가 켜지는」)
+            // 뒤의 0.3초 어둠(시간표)이 그다음 무거운 프레임을 한 번 더 받아 준다
             // 예전엔 0.034초로 재서 30fps(0.033초) 기기는 조금만 흔들려도 다시 세느라 늘 1.2초를 다 기다렸다 (10-21 「처음에 살짝 딜레이」)
             // 한 프레임은 0.1초까지만 센다 — 첫 프레임 dt 에는 앱 로딩 시간이 통째로 들어 있어 기다리지 않고 바로 출발해 버렸다
-            // (그래도 아주 느린 기기에서 한없이 기다리지 않게 실제 시각 2초면 출발)
+            // (그래도 아주 느린 기기에서 오래 기다리지 않게 실제 시각 1초면 출발)
             // 첫 화면을 그리는 멈춤(셰이더·그림 올리기)은 세지 않는다 — 두 번째 프레임부터 잰다
             float now = Time.realtimeSinceStartup;
             if (++holdFrames <= 2) { holdFrom = now; Pose(0f); return; }
             waitedStart += Mathf.Min(dt, 0.1f);
             calmFrames = dt < 1.6f / 60f ? calmFrames + 1 : 0;
-            if (calmFrames < 6 && waitedStart < 0.9f && now - holdFrom < 2f) { Pose(0f); return; }
+            if (calmFrames < 6 && waitedStart < 0.4f && now - holdFrom < 1f) { Pose(0f); return; }
             heldFor = now - holdFrom;
             started = true;
         }
@@ -133,7 +136,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
                 // 마지막 장면에서 프레임이 고르게(0.045초 안쪽) 12번 이어질 때 사라지기 시작한다
                 smoothFrames = dt < 0.045f ? smoothFrames + 1 : 0;
                 waited += dt;
-                if (smoothFrames >= 12 || waited >= maxWait) fadeStart = t;
+                if (smoothFrames >= 12 || waited >= endWait) fadeStart = t;
             }
         }
         Pose(t);

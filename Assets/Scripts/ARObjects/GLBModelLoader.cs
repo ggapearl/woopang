@@ -1762,6 +1762,7 @@ public class GLBModelLoader : MonoBehaviour
             glbContainer.localRotation = Quaternion.identity;
         }
 
+        bool hadModel = loadedModel != null;
         if (loadedModel != null)
         {
             
@@ -1777,8 +1778,8 @@ public class GLBModelLoader : MonoBehaviour
         
         isModelLoaded = false;
         
-        // 강제 가비지 컬렉션 (GLB 로딩 후)
-        ForceGarbageCollection();
+        // 메모리 전체 정리는 모아서 잠잠해진 뒤 한 번 (11-14 · 예전엔 여기서 매번 UnloadUnusedAssets + 강제 GC 두 번 — 모델이 없어도)
+        if (hadModel) GlbMemoryJanitor.Request();
         
     }
 
@@ -1918,19 +1919,6 @@ public class GLBModelLoader : MonoBehaviour
         
     }
 
-    private void ForceGarbageCollection()
-    {
-        
-        // 사용하지 않는 에셋 해제
-        Resources.UnloadUnusedAssets();
-        
-        // 강제 GC 실행
-        System.GC.Collect();
-        System.GC.WaitForPendingFinalizers();
-        System.GC.Collect();
-        
-    }
-
     private void MemoryOptimizationAfterLoading()
     {
         
@@ -1949,8 +1937,8 @@ public class GLBModelLoader : MonoBehaviour
             
         }
         
-        // 사용하지 않는 리소스 해제
-        Resources.UnloadUnusedAssets();
+        // 사용하지 않는 리소스 해제 — 모아서 한 번 (GlbMemoryJanitor · 11-14)
+        GlbMemoryJanitor.Request();
         
     }
 

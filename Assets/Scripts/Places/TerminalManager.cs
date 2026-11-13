@@ -358,8 +358,8 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLo
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
         // 카테고리 토글 OFF면 거리와 무관하게 전부 숨김
-        bool show = (currentFilters == null || !currentFilters.ContainsKey("terminal") || currentFilters["terminal"])
-                    && !(currentFilters != null && currentFilters.TryGetValue("petFriendlyOnly", out bool petOnly) && petOnly);   // 애견동반을 켜도 숨긴다 (11-13 · FilterManager.PetAllowed)
+        bool show = currentFilters == null || !currentFilters.ContainsKey("terminal") || currentFilters["terminal"];
+        bool petOnly = currentFilters != null && currentFilters.TryGetValue("petFriendlyOnly", out bool po) && po;
 
         foreach (var kvp in spawnedObjects)
         {
@@ -367,7 +367,7 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLo
             GameObject obj = kvp.Value;
             if (obj == null) continue;
 
-            if (!show)
+            if (!show || petOnly && !PetKeeps(id))
             {
                 if (obj.activeSelf) obj.SetActive(false);
                 continue;
@@ -387,13 +387,17 @@ public class TerminalManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLo
     {
         if (filters == null) return;
         currentFilters = new Dictionary<string, bool>(filters);
-        bool show = (!filters.ContainsKey("terminal") || filters["terminal"])
-                    && !(filters.TryGetValue("petFriendlyOnly", out bool petOnly) && petOnly);   // 애견동반을 켜면 교통은 숨긴다 (11-13)
+        bool show = !filters.ContainsKey("terminal") || filters["terminal"];
+        bool petOnly = filters.TryGetValue("petFriendlyOnly", out bool po) && po;
         foreach (var kvp in spawnedObjects)
         {
-            if (kvp.Value != null) kvp.Value.SetActive(show);
+            if (kvp.Value != null) kvp.Value.SetActive(show && (!petOnly || PetKeeps(kvp.Key)));
         }
     }
+
+    // 애견동반을 켜면 공항만 남긴다 (11-14 대표님 「애견동반은 공항터미널 남겨」 · 11-13 엔 터미널을 다 숨겼다 · FilterManager.PetAllowed)
+    // 오브젝트 키는 '이름_위도_경도'
+    private bool PetKeeps(string id) => FilterManager.IsAirportName(placeDataMap.TryGetValue(id, out var d) && d != null ? d.name : id);
 
     public void SetAllObjectsVisible(bool visible)
     {

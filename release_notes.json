@@ -44,6 +44,10 @@
     "1.2.66": {
       "ko": "• 나침반 모드 — 어둡거나 하늘을 비춰 위치를 못 잡을 때도 오브젝트가 떨리지 않고 제 방향에 떠요.\n• 보물찾기 상품에 사진 — 할인쿠폰·QR코드 사진을 올리면 보물을 찾은 사람이 바로 봐요.\n• 친구 지도 — 한자리에 모인 친구는 +N, 얼굴을 누르면 프로필, 두 번 누르면 확대, 아래엔 내 보물찾기.\n• 하늘 창은 위로 밀면 위에, 아래로 밀면 아래에 고정돼요.\n• 장소 추가·수정에서도 이모지를 쓰고, 채팅 사진은 한 번에 10장까지 보내요.\n• 3D를 끄면 3D 오브젝트가 모두 숨고, 두 번 눌러 여는 창과 상단 안내가 부드럽게 떠요.\n• 시작 화면에 한반도가 보이는 지구.",
       "en": "• Compass mode — objects hold steady in the dark or when you point at the sky.\n• Add a photo, like a coupon or QR code, to a treasure-hunt prize.\n• Friends map — +N for friends in one spot, tap a face for the profile, double-tap to zoom.\n• Swipe the sky panel up or down to pin it there.\n• Emoji when adding places, and up to 10 photos at once in chats.\n• Turning 3D off hides all 3D objects; windows and notices fade in smoothly.\n• A new Earth on the opening screen."
+    },
+    "1.2.67": {
+      "ko": "• AI 작업 — 장소를 올릴 때 사진을 투명 배경·만화·색연필로, 또는 요청사항대로 귀여운 3D 캐릭터로 바꿔요.\n• 보물찾기 — 보물로 숨길 3D 캐릭터를 직접 만들고, 근처에서 보물찾기가 열리면 메세지로 알려 드려요.\n• 애견동반을 켜면 카메라 화면에도 함께 갈 수 있는 곳만 떠요.\n• 근처 목록에 장소 사진이 붙고, 누르면 바로 정보가 열려요.\n• 채팅 사진 여러 장은 한 말풍선으로 — 넘겨 보고 한 번에 저장해요.\n• 처음 쓰는 분을 위한 안내 카드와 물방울 메뉴(설정)가 생겼어요.\n• 앱이 더 빨리 켜지고, 3D가 많은 곳에서도 덜 멈칫해요.",
+      "en": "• AI touch-ups — make a place photo a cutout, cartoon, pencil sketch or cute 3D character.\n• Treasure hunts — create your own 3D character to hide, and get a message when a hunt opens nearby.\n• Pet-friendly mode now filters the camera view too.\n• Nearby list shows place photos; tap one for details.\n• Several chat photos share one bubble — swipe through and save them all.\n• Welcome cards for new users and a Bubble menu in Settings.\n• Faster start-up and fewer stutters around 3D objects."
     }
   }
 }

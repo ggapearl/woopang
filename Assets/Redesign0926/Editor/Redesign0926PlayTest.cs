@@ -80,6 +80,8 @@ namespace Redesign0926
             });
             if (mode == "splashprof") PlanSplashProf();
             else if (mode == "splashzoom") PlanSplashZoom();
+            else if (mode == "splashfast") PlanSplashFast();
+            else if (mode == "perflog") PlanPerfLog();
             else if (mode == "chatnav") PlanChatNav();
             else if (mode == "woopang1") PlanWoopangOne();
             else if (mode == "land") PlanLand();
@@ -200,6 +202,7 @@ namespace Redesign0926
             else if (mode == "fmap1105") PlanFmap1105();
             else if (mode == "filters") PlanFilters();
             else if (mode == "petalloc") { VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f); PlanPetAlloc(); }
+            else if (mode == "petairport") { VirtualLocation.Instance.SetCoordinates(37.5620f, 126.8010f); PlanPetAirport(); }   // 김포공항 국내선 앞
             else if (mode == "modelsnap") PlanModelSnap();
             else if (mode == "aiwork") PlanAiWork();
             else if (mode == "huntchar") PlanHuntChar();
@@ -18343,6 +18346,124 @@ namespace Redesign0926
             Check(() => fpsDuring == 60 && Application.targetFrameRate == R0926FrameRate.Fps, "시작화면 동안만 60fps, 끝나면 설정값으로");
         }
 
+        // 11-14 대표님 「우팡앱 처음 켜질 때 아예 멈췄다가 켜지는 등 앱 시작하는 속도가 좀 느린 것 같은데 … 0.5초 정도 더 빠르게」
+        // 프레임이 고르지 않은 기기 흉내 — 플레이를 켜기 전부터 프레임마다 멈춤을 넣고(렌즈 출발 전 35ms · 마지막 장면 55ms)
+        // 렌즈가 출발하기까지, 마지막 장면에서 사라지기 시작하기까지 기다린 시간을 잰다 (예전 0.9초 · 4초 → 0.4초 · 1.5초)
+        private static R0926Splash sfSplash;
+        private static bool sfSeenPlay;
+        private static double sfArmedAt;
+        private static float sfEndAt = -1f, sfFadeAt = -1f;
+        private static int sfJankHold, sfJankEnd;
+
+        private static void ArmSplashJank()
+        {
+            sfSplash = null; sfSeenPlay = false; sfEndAt = sfFadeAt = -1f; sfJankHold = sfJankEnd = 0;
+            sfArmedAt = EditorApplication.timeSinceStartup;
+            EditorApplication.update -= SplashJank;
+            EditorApplication.update += SplashJank;
+        }
+
+        private static void SplashJank()
+        {
+            if (!EditorApplication.isPlaying)
+            {
+                // 플레이가 끝났거나 끝내 켜지지 않았으면 떼어 낸다 — 다음 플레이(대표님이 누른 것)에 남지 않게
+                if (sfSeenPlay || EditorApplication.timeSinceStartup - sfArmedAt > 60.0) EditorApplication.update -= SplashJank;
+                return;
+            }
+            sfSeenPlay = true;
+            if (sfSplash == null) sfSplash = UnityEngine.Object.FindAnyObjectByType<R0926Splash>(FindObjectsInactive.Include);
+            if (sfSplash == null || !sfSplash.isActiveAndEnabled) return;
+            const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var type = typeof(R0926Splash);
+            bool started = (bool)type.GetField("started", F).GetValue(sfSplash);
+            float t = (float)type.GetField("t", F).GetValue(sfSplash);
+            float endAt = (float)type.GetField("endAt", F).GetValue(sfSplash);
+            float fadeStart = (float)type.GetField("fadeStart", F).GetValue(sfSplash);
+            float now = Time.realtimeSinceStartup;
+            if (started && t >= endAt && sfEndAt < 0f) sfEndAt = now;
+            if (fadeStart >= 0f && sfFadeAt < 0f) sfFadeAt = now;
+            if (!started) { System.Threading.Thread.Sleep(35); sfJankHold++; }                          // 고른 프레임 기준(0.027초)을 넘게
+            else if (t >= endAt && fadeStart < 0f) { System.Threading.Thread.Sleep(55); sfJankEnd++; }  // 마지막 장면 기준(0.045초)을 넘게
+        }
+
+        private static void PlanSplashFast()
+        {
+            float held = -1f;
+            Wait(() => !BootOverlay.Showing, 30f, "시작화면 끝");
+            Do(() =>
+            {
+                EditorApplication.update -= SplashJank;
+                var s = UnityEngine.Object.FindAnyObjectByType<R0926Splash>(FindObjectsInactive.Include);
+                var f = typeof(R0926Splash).GetField("heldFor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (s != null && f != null) held = (float)f.GetValue(s);
+                log.Add("  무거운 기기 흉내 — 렌즈 출발 전 멈춘 프레임 " + sfJankHold + " · 마지막 장면 " + sfJankEnd
+                    + " / 렌즈 출발까지 " + held.ToString("0.00") + "초 · 마지막 장면에서 사라지기 시작까지 "
+                    + (sfEndAt >= 0f && sfFadeAt >= 0f ? (sfFadeAt - sfEndAt).ToString("0.00") : "?") + "초");
+            });
+            Check(() => sfJankHold >= 5 && held >= 0.3f && held <= 0.75f, "프레임이 고르지 않아도 렌즈는 0.4초 안팎에 출발 (예전엔 0.9초까지 기다렸다)");
+            Check(() => sfJankEnd >= 5 && sfEndAt >= 0f && sfFadeAt >= 0f && sfFadeAt - sfEndAt >= 1.2f && sfFadeAt - sfEndAt <= 2.0f, "마지막 장면이 고르지 않아도 1.5초 안팎에 사라지기 시작 (예전엔 4초까지)");
+        }
+
+        // 11-14 대표님 「3.번은 정리해줘」 — 성능 기록(10초마다 한 줄 · 기기 안 파일)과 GLB 메모리 정리 모으기 (11-06 FPS 검토 때 제안)
+        private static void PlanPerfLog()
+        {
+            const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            float LastRun() => (float)(typeof(GlbMemoryJanitor).GetField("lastRun", SF)?.GetValue(null) ?? 0f);
+            bool Pending() => (bool)(typeof(GlbMemoryJanitor).GetField("pending", SF)?.GetValue(null) ?? true);
+            string Field(string line, string key)
+            {
+                if (line == null) return null;
+                foreach (var part in line.Split(' ')) if (part.StartsWith(key + "=")) return part.Substring(key.Length + 1);
+                return null;
+            }
+            int r0 = 0, n0 = 0, n1 = 0;
+            Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
+            Wait(() => PerfLog.LastLine != null, 15f, "성능 기록 첫 줄 (10초)");
+            Do(() => log.Add("  성능 기록: " + PerfLog.LastLine));
+            Check(() =>
+            {
+                string l = PerfLog.LastLine;
+                float.TryParse(Field(l, "fps")?.Replace(",", "."), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float fps);
+                long.TryParse((Field(l, "sysmem") ?? "").Replace("MB", ""), out long mem);
+                foreach (var k in new[] { "t", "fps", "target", "worst", "hitch", "batt", "charge", "thermal", "lowpower", "sysmem", "gcmem", "glbclean" })
+                    if (Field(l, k) == null) { log.Add("  빠진 칸: " + k); return false; }
+                return fps > 1f && mem > 0;
+            }, "10초마다 한 줄 — fps · 가장 긴 프레임 · 멈칫 수 · 배터리 · 충전 · 발열 · 저전력 · 메모리 · 목표 FPS · GLB 정리");
+            Check(() =>
+            {
+                string p = PerfLog.FilePath;
+                if (p == null || !System.IO.File.Exists(p)) return false;
+                string all = System.IO.File.ReadAllText(p);
+                return all.Contains("=== start") && all.Contains(PerfLog.LastLine);
+            }, "기기 안 파일(앱 문서 폴더 perf_log.txt)에 시작 줄과 함께 남는다");
+
+            // 정리 모으기 — 지난 정리에서 10초가 지나고 남은 요청이 없을 때 시작
+            Wait(() => Time.realtimeSinceStartup - LastRun() > 10.5f && !Pending(), 40f, "GLB 정리 대기 없음");
+            Do(() =>
+            {
+                n0 = GlbMemoryJanitor.Runs; r0 = GlbMemoryJanitor.Requests;
+                log.Add($"  여기까지 정리 요청 {r0}번 → 실제 정리 {n0}번 (예전엔 요청마다 + 모델이 없어도 로드마다 UnloadUnusedAssets · 강제 GC 두 번)");
+                for (int i = 0; i < 12; i++) GlbMemoryJanitor.Request();
+            });
+            Sleep(0.5f);
+            Check(() => GlbMemoryJanitor.Runs == n0, "모델 12개를 한꺼번에 지우고 띄우는 순간엔 정리하지 않는다 (잠잠해질 때까지)");
+            Wait(() => GlbMemoryJanitor.Runs > n0, 6f, "잠잠해진 뒤 정리");
+            Check(() => GlbMemoryJanitor.Runs == n0 + 1 && GlbMemoryJanitor.Requests >= r0 + 12, "12번 요청을 한 번에 정리 (예전엔 12번)");
+            Do(() => { n1 = GlbMemoryJanitor.Runs; GlbMemoryJanitor.Request(); });
+            Sleep(3f);
+            Check(() => GlbMemoryJanitor.Runs == n1, "바로 또 요청이 와도 10초 안엔 다시 정리하지 않는다");
+            Wait(() => GlbMemoryJanitor.Runs > n1, 12f, "10초 뒤 남은 요청 정리");
+            Check(() => GlbMemoryJanitor.Runs == n1 + 1, "10초가 지나면 남은 요청을 정리");
+            Do(() =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                System.GC.Collect(); System.GC.WaitForPendingFinalizers(); System.GC.Collect();
+                sw.Stop();
+                log.Add($"  (참고) 예전 방식의 강제 GC 두 번 — 에디터에서 한 번 {sw.Elapsed.TotalMilliseconds:0.0} ms (여기에 UnloadUnusedAssets 가 더해졌다)");
+            });
+        }
+
         // 스토어용 하늘 날씨 — 날씨판만 또렷하게 (인디케이터·주소줄은 숨김: 주소줄엔 에디터 위치의 정확한 좌표가 찍힌다)
         private static void PlanSky()
         {
@@ -20107,6 +20228,103 @@ namespace Redesign0926
         // 11-13 대표님 「애견동반을 체크해서 활성화된 경우 애견동반 되지 않는 곳은 결국 목록에서 보이지 않으니까 AR화면에서도 보이지 않도록」 ·
         // 「인디케이터만 발생하고 오브젝트 발생, 충돌해서 앱이 꺼지거나 하는 건 너무 치명적 … 잘 확인해서 테스트하고 수정, 개선해줘」
         // 광화문 운영 장소 그대로 — 배분(3D · 화살표)과 실제로 뜬 오브젝트가 목록과 같은 필터를 따르는지, 늦은 상세 응답 · 연타에도 고아가 없는지
+        // 11-14 대표님 「애견동반은 공항터미널 남겨」 — 김포공항 옆에서 애견동반을 켜도 터미널 칩의 공항은 3D · 화살표 · 목록(노랑 이름)에 남고,
+        // 같은 이름의 지하철역(김포공항역) · 다른 교통은 빠진다. 끄면 다 돌아온다
+        private static void PlanPetAirport()
+        {
+            const System.Reflection.BindingFlags PF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            FilterManager Fm() => UnityEngine.Object.FindAnyObjectByType<FilterManager>();
+            HashSet<string> Alloc(string field) => typeof(FilterManager).GetField(field, PF)?.GetValue(Fm()) as HashSet<string> ?? new HashSet<string>();
+            List<string> AllA() { var l = new List<string>(Alloc("currentFullAllocations")); l.AddRange(Alloc("currentIndicatorAllocations")); return l; }
+            List<IPlaceCacheProvider> Providers() => typeof(FilterManager).GetField("cacheProviders", PF)?.GetValue(Fm()) as List<IPlaceCacheProvider> ?? new List<IPlaceCacheProvider>();
+            Dictionary<string, CachedPlaceData> Cached()
+            {
+                var d = new Dictionary<string, CachedPlaceData>();
+                foreach (var p in Providers()) if (p.IsCacheReady) foreach (var c in p.GetCachedPlaces()) if (c != null && c.uniqueId != null) d[c.uniqueId] = c;
+                return d;
+            }
+            bool PetOn() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
+            bool Airport(CachedPlaceData c) => c.filterKey == "terminal" && FilterManager.IsAirportName(c.displayName);
+            bool OtherTransit(CachedPlaceData c) => (c.filterKey == "subway" || c.filterKey == "train" || c.filterKey == "terminal") && !Airport(c);
+            List<string> AllocOther() { var c = Cached(); return AllA().FindAll(id => c.TryGetValue(id, out var p) && OtherTransit(p)); }
+            bool On(Dictionary<string, GameObject> m, string key) => m != null && key != null && m.TryGetValue(key, out var g) && g != null && g.activeInHierarchy;
+            List<string> VisibleOther()
+            {
+                var bad = new List<string>();
+                void Scan(Dictionary<string, GameObject> m, string tag, bool keepAirport) { if (m != null) foreach (var kv in m) if (kv.Value != null && kv.Value.activeInHierarchy && !(keepAirport && FilterManager.IsAirportName(kv.Key))) bad.Add(tag + kv.Key); }
+                if (SubwayManager.Instance != null) { Scan(SubwayManager.Instance.GetSpawnedObjects(), "subway:", false); Scan(SubwayManager.Instance.GetIndicatorOnlyObjects(), "subway-ind:", false); }
+                if (TrainStationManager.Instance != null) { Scan(TrainStationManager.Instance.GetSpawnedObjects(), "train:", false); Scan(TrainStationManager.Instance.GetIndicatorOnlyObjects(), "train-ind:", false); }
+                if (TerminalManager.Instance != null) { Scan(TerminalManager.Instance.GetSpawnedObjects(), "terminal:", true); Scan(TerminalManager.Instance.GetIndicatorOnlyObjects(), "terminal-ind:", true); }
+                return bad;
+            }
+            string Brief(List<string> l) => l.Count == 0 ? "없음" : l.Count + "곳 (" + string.Join(", ", l.GetRange(0, Math.Min(5, l.Count))) + (l.Count > 5 ? " …" : "") + ")";
+            CachedPlaceData ap = null;
+            var errors = new List<string>();
+            Application.LogCallback onLog = (msg, st, type) => { if (type == LogType.Exception || type == LogType.Error || type == LogType.Assert) errors.Add(msg.Length > 160 ? msg.Substring(0, 160) : msg); };
+
+            Wait(() => !BootOverlay.Showing, 40f, "시작화면 끝");
+            Do(() => { Application.logMessageReceived -= onLog; Application.logMessageReceived += onLog; });
+            Wait(() => Fm() != null && Providers().Count >= 5 && TerminalManager.Instance != null && TerminalManager.Instance.IsCacheReady, 40f, "터미널 목록 받음");
+            Do(() => { if (PetOn()) { ClickToggle("PetFriendlyToggle"); log.Add("  (애견동반이 켜진 채 남아 있어 끄고 시작)"); } });
+            Do(() =>
+            {
+                double lat = VirtualLocation.Instance.Latitude, lon = VirtualLocation.Instance.Longitude, best = double.MaxValue;
+                foreach (var p in Cached().Values)
+                    if (Airport(p) && !HiddenPlaces.IsHidden(p.uniqueId)) { double d = GeoHere.Meters(lat, lon, p.latitude, p.longitude); if (d < best) { best = d; ap = p; } }
+                if (ap == null) { log.Add("  받은 터미널 가운데 공항 없음"); return; }
+                VirtualLocation.Instance.SetCoordinates((float)(ap.latitude + 0.0003), (float)ap.longitude);
+                log.Add($"  공항 터미널 「{ap.displayName}」 옆(약 30 m)으로 옮김 — 처음 자리에서 {best:0} m");
+                Fm().TriggerReallocation();
+            });
+            Wait(() => ap != null && AllA().Contains(ap.uniqueId), 30f, "꺼진 채로 공항이 3D · 화살표로 뜸");
+            Sleep(3f);
+            Do(() => log.Add("  애견동반 꺼짐 — 다른 교통 배분 " + Brief(AllocOther())));
+            Check(() => ap != null && !PetOn() && AllA().Contains(ap.uniqueId), "꺼져 있을 때 공항 터미널이 뜬다 (시험 전제)");
+            Check(() => AllocOther().Count > 0, "꺼져 있을 때 근처 다른 교통(김포공항역 등)도 뜬다 (시험 전제)");
+
+            Do(() => ClickToggle("PetFriendlyToggle"));
+            Sleep(3f);
+            Shot("petairport_on_ar");
+            Do(() => log.Add("  애견동반 켜짐 — 공항 배분 " + (ap != null && AllA().Contains(ap.uniqueId)) + " · 다른 교통 배분 " + Brief(AllocOther()) + " · 켜진 다른 교통 " + Brief(VisibleOther())));
+            Check(() => PetOn(), "애견동반 켜짐");
+            Check(() => ap != null && AllA().Contains(ap.uniqueId)
+                && (On(TerminalManager.Instance.GetSpawnedObjects(), ap.rawId) || On(TerminalManager.Instance.GetIndicatorOnlyObjects(), ap.rawId)),
+                "애견동반을 켜도 공항 터미널은 3D · 화살표로 남는다 (11-14 「애견동반은 공항터미널 남겨」)");
+            Check(() => AllocOther().Count == 0 && VisibleOther().Count == 0, "같은 자리의 지하철역 · 기차 · 다른 터미널은 빠진다 (11-13 그대로)");
+
+            Do(() => Click("Dock0926/List_Button"));
+            Sleep(1.5f);
+            Shot("petairport_on_list");
+            Check(() =>
+            {
+                var pl = Plm();
+                var rows = ListRows();
+                if (pl == null || rows.Count == 0) { log.Add("  목록 줄 없음"); return false; }
+                int air = 0, yellow = 0, other = 0;
+                for (int i = 0; i < pl.ShownEntries.Count && i < rows.Count; i++)
+                {
+                    var e = pl.ShownEntries[i];
+                    if (e.kind != PlaceListManager.EntryKind.Place) continue;
+                    if (e.icon == "subway" || e.icon == "train" || e.icon == "bus") other++;
+                    if (e.icon != "airport") continue;
+                    air++;
+                    var t = rows[i].Find("Name")?.GetComponent<Text>();
+                    if (e.pet && t != null && t.color == R0926PlaceRows.PetName) yellow++;
+                }
+                log.Add($"  목록(켜짐) 공항 줄 {air} (노랑 {yellow}) · 다른 교통 줄 {other}");
+                return air > 0 && yellow == air && other == 0;
+            }, "목록에도 공항 줄만 남고 이름은 다른 애견동반 줄처럼 노랑 · 지하철·기차·버스 줄은 없음");
+            Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
+            Sleep(1f);
+
+            Do(() => ClickToggle("PetFriendlyToggle"));
+            Sleep(3f);
+            Do(() => log.Add("  다시 꺼짐 — 다른 교통 배분 " + Brief(AllocOther())));
+            Check(() => !PetOn() && ap != null && AllA().Contains(ap.uniqueId) && AllocOther().Count > 0, "끄면 공항과 다른 교통이 함께 뜬다");
+            Do(() => { Application.logMessageReceived -= onLog; log.Add("  오류 로그 " + (errors.Count == 0 ? "없음" : errors.Count + "건: " + errors[0])); });
+            Check(() => errors.Count == 0, "시험 동안 오류 · 예외 로그 없음");
+        }
+
         private static void PlanPetAlloc()
         {
             const System.Reflection.BindingFlags PF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -20122,14 +20340,16 @@ namespace Redesign0926
                 foreach (var p in Providers()) if (p.IsCacheReady) foreach (var c in p.GetCachedPlaces()) if (c != null && c.uniqueId != null) d[c.uniqueId] = c;
                 return d;
             }
-            bool Transit(CachedPlaceData c) => c.filterKey == "subway" || c.filterKey == "train" || c.filterKey == "terminal";
+            // 터미널 칩의 'OO공항'은 애견동반을 켜도 남는다 (11-14 「애견동반은 공항터미널 남겨」) — 빠져야 하는 교통에서 뺀다
+            bool Airport(CachedPlaceData c) => c.filterKey == "terminal" && FilterManager.IsAirportName(c.displayName);
+            bool Transit(CachedPlaceData c) => (c.filterKey == "subway" || c.filterKey == "train" || c.filterKey == "terminal") && !Airport(c);
             // 기관이 올린 공공시설 — 애견동반을 켜면 DB 표시와 상관없이 빠진다 (11-13 「공공데이터의 경우 정부기관이니까 … 숨겨지도록」 · 공원은 표시대로)
             var govCats = new HashSet<string> { "gov", "edu", "utility", "medical", "welfare", "culture", "sport", "toilet" };
             bool Gov(CachedPlaceData c) => c.filterKey == "publicData" && govCats.Contains(c.category ?? "");
             bool PetOn() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
             // 애견동반을 켜면 빠져야 하는 곳 — 동반 안 되는 곳 · 지하철·기차·터미널 (11-13 부터 — 예전엔 남겼다) · 기관 공공시설
-            bool NonPetPlace(Dictionary<string, CachedPlaceData> c, string id) => c.TryGetValue(id, out var p) && (!p.petFriendly || Transit(p) || Gov(p));
-            bool TransitIcon(string icon) => icon == "subway" || icon == "train" || icon == "bus" || icon == "airport";
+            bool NonPetPlace(Dictionary<string, CachedPlaceData> c, string id) => c.TryGetValue(id, out var p) && !Airport(p) && (!p.petFriendly || Transit(p) || Gov(p));
+            bool TransitIcon(string icon) => icon == "subway" || icon == "train" || icon == "bus";   // 공항(비행기 그림)은 남는다 (11-14)
             // 목록 장소 줄 가운데 교통 줄 · 애견동반 안 되는 줄
             List<string> ListTransit() { var l = new List<string>(); var pl = Plm(); if (pl != null) foreach (var e in pl.ShownEntries) if (e.kind == PlaceListManager.EntryKind.Place && TransitIcon(e.icon)) l.Add(e.name); return l; }
             List<string> ListNonPet() { var l = new List<string>(); var pl = Plm(); if (pl != null) foreach (var e in pl.ShownEntries) if (e.kind == PlaceListManager.EntryKind.Place && (!e.pet || TransitIcon(e.icon))) l.Add(e.name); return l; }
@@ -20137,10 +20357,11 @@ namespace Redesign0926
             List<string> VisibleTransit()
             {
                 var bad = new List<string>();
-                void Scan(Dictionary<string, GameObject> m, string tag) { if (m != null) foreach (var kv in m) if (kv.Value != null && kv.Value.activeInHierarchy) bad.Add(tag + kv.Key); }
+                // 터미널 오브젝트 키는 '이름_위도_경도' — 공항은 남는다 (11-14)
+                void Scan(Dictionary<string, GameObject> m, string tag, bool keepAirport = false) { if (m != null) foreach (var kv in m) if (kv.Value != null && kv.Value.activeInHierarchy && !(keepAirport && FilterManager.IsAirportName(kv.Key))) bad.Add(tag + kv.Key); }
                 if (SubwayManager.Instance != null) { Scan(SubwayManager.Instance.GetSpawnedObjects(), "subway:"); Scan(SubwayManager.Instance.GetIndicatorOnlyObjects(), "subway-ind:"); }
                 if (TrainStationManager.Instance != null) { Scan(TrainStationManager.Instance.GetSpawnedObjects(), "train:"); Scan(TrainStationManager.Instance.GetIndicatorOnlyObjects(), "train-ind:"); }
-                if (TerminalManager.Instance != null) { Scan(TerminalManager.Instance.GetSpawnedObjects(), "terminal:"); Scan(TerminalManager.Instance.GetIndicatorOnlyObjects(), "terminal-ind:"); }
+                if (TerminalManager.Instance != null) { Scan(TerminalManager.Instance.GetSpawnedObjects(), "terminal:", true); Scan(TerminalManager.Instance.GetIndicatorOnlyObjects(), "terminal-ind:", true); }
                 return bad;
             }
             // 배분된 곳 가운데 애견동반을 켜면 빠져야 하는 곳
@@ -20233,8 +20454,10 @@ namespace Redesign0926
                 && !FilterManager.PetAllowed("publicData", true, "gov", true) && !FilterManager.PetAllowed("publicData", true, "toilet", true)
                 && FilterManager.PetAllowed("publicData", true, "park", true) && !FilterManager.PetAllowed("publicData", true, "park", false)
                 && FilterManager.PetAllowed("publicData", true, "tour", true) && FilterManager.PetAllowed("", false, "sport", true)
-                && !FilterManager.PetAllowed("", false, "cafe", false),
-                "규칙 — 교통(공항 이름 터미널 포함) · 기관 공공시설은 표시와 상관없이 빼고, 공원 · 관광공사 반려동물 여행지 · 사람이 올린 곳(스포츠 포함)은 애견동반 표시대로");
+                && !FilterManager.PetAllowed("", false, "cafe", false)
+                && FilterManager.PetAllowed("terminal", false, "terminal", false, "김포공항") && FilterManager.PetAllowed("terminal", false, "terminal", false, "Incheon Airport T1")
+                && !FilterManager.PetAllowed("terminal", false, "terminal", true, "동서울종합터미널") && !FilterManager.PetAllowed("subway", false, "subway", true, "김포공항"),
+                "규칙 — 교통 · 기관 공공시설은 표시와 상관없이 빼되 터미널 칩의 'OO공항'은 남기고 (11-14 「애견동반은 공항터미널 남겨」 · 같은 이름 지하철역은 빠짐), 공원 · 관광공사 반려동물 여행지 · 사람이 올린 곳(스포츠 포함)은 애견동반 표시대로");
             Do(() => log.Add("  고아: " + Brief(SpawnLeak()) + " · 화살표만: " + Brief(Stuck())));
             Check(() => SpawnLeak().Count == 0, "떠 있는 오브젝트 = 배분 (고아 없음)");
             Check(() => Stuck().Count == 0, "3D 배분을 받은 곳은 모두 오브젝트가 있다 (화살표만 남은 곳 없음)");
@@ -20667,7 +20890,7 @@ namespace Redesign0926
                 var t = rows[i].Find("Name")?.GetComponent<Text>();
                 if (t == null) return false;
                 bool yellow = t.color == R0926PlaceRows.PetName;
-                bool transit = e.icon == "subway" || e.icon == "train" || e.icon == "bus" || e.icon == "airport";   // 애견동반만이면 교통 줄도 없다 (11-13 「꺼지도록 하는 게 맞지」)
+                bool transit = e.icon == "subway" || e.icon == "train" || e.icon == "bus";   // 애견동반만이면 교통 줄도 없다 (11-13 「꺼지도록 하는 게 맞지」) — 공항은 남는다 (11-14)
                 if (yellow != e.pet || onlyPet && (!e.pet || transit)) { log.Add("  이름 색 다름 " + e.name + " 애견동반 " + e.pet + " " + ColorUtility.ToHtmlStringRGB(t.color)); return false; }
                 if (e.pet) pets++; else others++;
             }
@@ -21004,12 +21227,12 @@ namespace Redesign0926
                     if (dimg == null || nm == null || dist == null) { ok = false; continue; }
                     bool icon = dimg.sprite != null && dimg.sprite.name != "r0926_circle";
                     float right = dot.anchoredPosition.x + dot.rect.width * 0.5f, nameLeft = nm.rectTransform.offsetMin.x;
-                    bool good = nm.fontSize >= 60 && dist.fontSize >= 48 && right <= nameLeft
+                    bool good = nm.fontSize >= 66 && dist.fontSize >= 48 && right <= nameLeft
                         && dist.preferredWidth <= dist.rectTransform.rect.width + 1f;   // 거리 글이 제 칸 안 — 넘치면 이름을 덮는다
                     if (icon)
                     {
                         icons++;
-                        good &= dot.rect.height >= 72f && dot.rect.height <= 92f;   // v85 120 의 70% 안팎 (11-13 「이모지 너무 키웠어」)
+                        good &= dot.rect.height >= 60f && dot.rect.height <= 76f;   // 72 안팎 (11-14 「이모지 조금 더 줄여」 · 11-13 84)
                         if (first.Length == 0)
                             first = $"그림 {dot.rect.width:F0} (가운데 x {dot.anchoredPosition.x:F0}) · 이름 {nm.fontSize} (왼쪽 {nameLeft:F0} · 폭 {nm.rectTransform.rect.width:F0}) · 거리 {dist.fontSize} 「{dist.text}」 {dist.preferredWidth:F0}/{dist.rectTransform.rect.width:F0}";
                     }
@@ -21018,8 +21241,8 @@ namespace Redesign0926
                 }
                 log.Add("  줄 앞 그림 · 글자: " + first + " · 그림 줄 " + icons + bad);
                 return ok && icons > 0;
-            }, "줄 앞 그림 72~92 (예전 120 의 70%) · 이름 60 이상 · 거리 48 이상 — 그림이 이름 앞, 거리 글은 제 칸 안");
-            // 긴 이름 (11-13 줄 높이 192→144) — 62 두 줄이 안 들어가면 글자를 줄여 줄 안에. 짧은 이름은 62 한 줄 그대로
+            }, "줄 앞 그림 60~76 (11-14 84→72) · 이름 66 이상 (62→68) · 거리 48 이상 — 그림이 이름 앞, 거리 글은 제 칸 안");
+            // 긴 이름 (11-13 줄 높이 192→144) — 68 두 줄이 안 들어가면 글자를 줄여 줄 안에. 짧은 이름은 68 한 줄 그대로 (11-14 62→68)
             Check(() =>
             {
                 var rows = ListRows();
@@ -21044,11 +21267,11 @@ namespace Redesign0926
                 Canvas.ForceUpdateCanvases();
                 log.Add("  긴 이름: " + string.Join(" / ", res) + $" · 이름 칸 높이 {nm.rectTransform.rect.height:F0} · 줄 높이 {((RectTransform)rows[0]).rect.height:F0} · UI 배율 {ppu:F2}");
                 int minPx = Mathf.FloorToInt(nm.resizeTextMinSize * ppu);
-                return nm.resizeTextForBestFit && used[0] / ppu > 60f && used[1] == used[0] && lines[1] == 1
+                return nm.resizeTextForBestFit && used[0] / ppu > 66f && used[1] == used[0] && lines[1] == 1
                     && used[2] < used[0] && used[2] >= minPx && lines[2] <= 2
                     && used[3] <= used[2] && used[3] >= minPx && lines[3] <= 2
                     && nm.rectTransform.rect.height <= ((RectTransform)rows[0]).rect.height;
-            }, "긴 이름은 글자를 줄여 두 줄까지 줄 안에 (짧은 이름은 62 한 줄 그대로)");
+            }, "긴 이름은 글자를 줄여 두 줄까지 줄 안에 (짧은 이름은 68 한 줄 그대로)");
 
             // 1) AR 에 떠 있는 장소 — 그 오브젝트의 창이 그대로 (두 번 누른 것과 같은 창)
             Do(() =>
@@ -21971,6 +22194,7 @@ namespace Redesign0926
                     // 시작화면 측정은 첫 프레임부터 — 플레이를 켜기 전에 프로파일러를 켠다
                     var pl = File.ReadAllLines(PlanPath);
                     if (pl.Length > 1 && pl[1].Trim() == "splashprof") Redesign0926SplashProf.StartRecording();
+                    if (pl.Length > 1 && pl[1].Trim() == "splashfast") ArmSplashJank();   // 무거운 기기 흉내도 첫 프레임부터
                     if (pl.Length > 1 && (pl[1].Trim() == "login" || pl[1].Trim() == "loginswitch" || pl[1].Trim() == "searchfollow" || pl[1].Trim() == "mapprofile" || pl[1].Trim() == "mapnear" || pl[1].Trim() == "skypages" || pl[1].Trim() == "authexpire" || pl[1].Trim() == "placeedit" || pl[1].Trim() == "comments" || pl[1].Trim() == "nocat" || pl[1].Trim() == "profileedit" || pl[1].Trim() == "inputscroll")) StashLogin();
                     if (pl.Length > 1 && pl[1].Trim() == "authexpire") ArmExpiredLogin();   // 만료된 로그인을 둔 채 켠다
                     if (pl.Length > 1 && pl[1].Trim() == "chatnotif") StashLogin();

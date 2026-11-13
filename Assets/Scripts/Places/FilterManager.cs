@@ -1664,7 +1664,7 @@ public class FilterManager : MonoBehaviour
         if (!Passes3D(place, filters)) return false;
 
         bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
-        if (petFriendlyOnly && !PetAllowed(place.filterKey, place.filterKey == "publicData", place.category, place.petFriendly)) return false;
+        if (petFriendlyOnly && !PetAllowed(place.filterKey, place.filterKey == "publicData", place.category, place.petFriendly, place.displayName)) return false;
 
         return true;
     }
@@ -1673,20 +1673,25 @@ public class FilterManager : MonoBehaviour
     /// 애견동반을 켰을 때 남는 곳인지 — 목록(PlaceListManager) · AR 배분(IsPassingFilter) · DataManager 가 같은 규칙을 쓴다.
     /// 11-13 대표님 「'애견동반' 을 켰을 때는 실제로 모두 애견동반이 가능한 공간만 보이도록 … 공원 같은 곳은 괜찮을테니까 남겨두는데
     /// 기본적으로 공공데이터의 경우 정부기관이니까 … (공항 정도?) 확인해보고 숨겨지도록」
-    /// ① 지하철·기차·터미널은 숨긴다 — 터미널 칩의 'OO공항'도 (공항도 지하철·KTX·고속버스처럼 이동장에 넣어야만 들어간다.
-    ///    공항 자체(public_facilities type airport)는 앱이 받지 않는다)
+    /// ① 지하철·기차·터미널은 숨긴다 — 단 터미널 칩의 'OO공항'은 남긴다 (11-14 대표님 「애견동반은 공항터미널 남겨」.
+    ///    11-13 엔 공항도 이동장에 넣어야만 들어가서 같이 숨겼다. 공항 자체(public_facilities type airport)는 앱이 받지 않는다)
     /// ② 기관이 올린 공공시설(시청·경찰서·학교·도서관·병원·우체국·복지관·박물관·체육관·공중화장실)은 DB 표시와 상관없이 숨긴다 —
     ///    넣을 때 규칙도 '공공기관은 false' 지만 표시 하나가 잘못 들어가도 새지 않게. 사람이 '스포츠'·'화장실'로 올린 곳은 표시대로 (애견 운동장 등)
     /// ③ 나머지(공원 · 명소 · 관광공사 반려동물 여행지 · 사람이 올린 곳)는 애견동반 표시대로 — 반려견 금지 공원은 표시가 꺼져 있다
     /// </summary>
-    public static bool PetAllowed(string filterKey, bool publicSource, string category, bool petFriendly)
+    public static bool PetAllowed(string filterKey, bool publicSource, string category, bool petFriendly, string name = null)
     {
+        if (filterKey == "terminal" && IsAirportName(name)) return true;
         if (IsTransitKey(filterKey)) return false;
         if (publicSource && PetBarredPublicCategories.Contains(category ?? "")) return false;
         return petFriendly;
     }
 
     public static bool IsTransitKey(string filterKey) => filterKey == "subway" || filterKey == "train" || filterKey == "terminal";
+
+    /// <summary>터미널 칩의 공항인지 — 이름에 '공항' · airport (목록의 비행기 그림과 같은 기준)</summary>
+    public static bool IsAirportName(string name) =>
+        !string.IsNullOrEmpty(name) && (name.Contains("공항") || name.IndexOf("airport", System.StringComparison.OrdinalIgnoreCase) >= 0);
 
     private static readonly HashSet<string> PetBarredPublicCategories = new HashSet<string>
     {

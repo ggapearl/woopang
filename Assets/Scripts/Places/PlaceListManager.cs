@@ -399,7 +399,8 @@ public class PlaceListManager : MonoBehaviour
         }
 
         // 3. New Public Transport Managers — 애견동반을 켜면 교통은 뺀다 (11-13 대표님 「애견동반이 가능한 공간만」 · FilterManager.PetAllowed)
-        AddTransportData(terminalManager, showTerminal && !petFriendlyOnly, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus");
+        //    단 터미널 칩의 'OO공항'은 남긴다 (11-14 「애견동반은 공항터미널 남겨」)
+        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus", airportOnly: petFriendlyOnly);
         AddTransportData(trainManager, showTrain && !petFriendlyOnly, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_", "train");
         AddTransportData(subwayManager, showSubway && !petFriendlyOnly, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_", "subway");
 
@@ -830,7 +831,7 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
-    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null, string icon = null) where T : MonoBehaviour
+    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null, string icon = null, bool airportOnly = false) where T : MonoBehaviour
     {
         if (!filter || manager == null) return;
 
@@ -851,6 +852,7 @@ public class PlaceListManager : MonoBehaviour
             object rawLat = latProp.GetValue(val);
             object rawLon = lonProp.GetValue(val);
             string pName = (string)nameProp.GetValue(val);
+            if (airportOnly && !FilterManager.IsAirportName(pName)) continue;
             if (hiddenPrefix != null && HiddenPlaces.IsHidden(hiddenPrefix + pName + "_" + rawLat + "_" + rawLon)) continue;
             float pLat = Convert.ToSingle(rawLat);
             float pLon = Convert.ToSingle(rawLon);
@@ -862,8 +864,9 @@ public class PlaceListManager : MonoBehaviour
                 count++;
                 combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", colorHex));
                 // 터미널 칩에는 버스터미널과 공항이 함께 있다 — 공항은 비행기 그림
-                string pIcon = icon == "bus" && pName != null && (pName.Contains("공항") || pName.IndexOf("airport", StringComparison.OrdinalIgnoreCase) >= 0) ? "airport" : icon;
-                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon, data = val });
+                string pIcon = icon == "bus" && FilterManager.IsAirportName(pName) ? "airport" : icon;
+                // 애견동반만 볼 때 남은 공항은 다른 줄처럼 애견동반 이름 색으로
+                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon, pet = airportOnly, data = val });
             }
         }
     }
