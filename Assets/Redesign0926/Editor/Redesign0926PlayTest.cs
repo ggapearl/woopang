@@ -11331,7 +11331,7 @@ namespace Redesign0926
             }, "추가 사진 네 장 — 두 줄로 위에서 아래 (1 3 / 2 4) · '+' 는 5번 칸 · '초기화'·'Loading images..' 없음 (10-27)");
             Check(() => title() == modeTitle(0) && submit() == R0926LocalizedText.Say("수정하기", "Save changes", "保存する", "保存修改", "Guardar cambios")
                         && shown("locationLabel") && shown("locationRow") && Find(Page + "DeletePlace0926") == null && !shown("descriptionInput") && !shown("descriptionLabel"),
-                  "내 장소 — 제목 '" + "내 장소 수정" + "' · 위치 줄 · 오른쪽 위 '삭제' 없음 (10-27 — '···' 에 있다) · 수정할 내용 칸 없음 · 단추 '수정하기'");
+                  "내 장소 — 제목 '" + "내 장소 수정" + "' · 위치 줄 · 오른쪽 위 '삭제' 없음 (10-27 — '···' 에 있다) · 요청사항 칸 없음 · 단추 '수정하기'");
             Check(() =>
             {
                 string coords = ((Text)fv("locationCoords")).text, note = ((Text)fv("locationNote")).text;
@@ -11537,8 +11537,8 @@ namespace Redesign0926
             Shot("placeedit_other");
             Check(() => title() == modeTitle(1) && ((InputField)fv("nameInput")).text == NameB && (int)fv("currentCategoryIndex") == 2
                         && submit() == R0926LocalizedText.Say("수정 요청", "Send request", "修正を依頼", "提交申请", "Enviar solicitud")
-                        && !shown("descriptionInput") && !shown("descriptionLabel") && !shown("locationRow"),
-                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 수정할 내용 칸 없음 (11-09) · 위치 줄 없음 · '수정 요청'");
+                        && shown("descriptionInput") && shown("descriptionLabel") && !shown("locationRow"),
+                  "남의 장소 — '장소 수정 요청' · 지금 값으로 채움(사진 포함) · 요청사항 칸 있음 (비워도 된다 · 11-13) · 위치 줄 없음 · '수정 요청'");
             Do(() => Click(Page + "XButton_FixUpload"));
             Sleep(0.4f);
             Check(() => !Active("Fixpage"), "닫기 — 남의 장소는 보내 보지 않는다 (수정 요청은 운영 서버로 간다)");
@@ -11586,7 +11586,7 @@ namespace Redesign0926
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
             const string Sheet = "Fixpage/FixUploadPage", Form = Sheet + "/Panel/", X = Sheet + "/XButton_FixUpload/ClosePx0926";
-            const string Edited = " 고침";
+            const string Edited = " 고침", Request = "높이를 조금 올려 주세요";
             CubeDataFixManager fix = null;
             R0926SwipeDismiss sheet = null;
             DoubleTap3D place = null;
@@ -11639,26 +11639,33 @@ namespace Redesign0926
             Check(() => fix != null && sheet != null && sheet.holdClose != null && Find(X) != null && !float.IsNaN(logo0) && !float.IsNaN(pet0),
                   "준비: 정보 수정 창 · 끌어 닫기에 '닫기 전에 묻기' 연결 · X 덮개");
 
-            // 1) 수정 요청 — '수정할 내용' 칸이 없고 그 자리(250)만큼 사진·분류·스위치가 올라온다
+            // 1) 수정 요청 — 요청사항 칸이 다시 있다 (11-13 「기입하지 않아도 되니까 요청사항 칸은 다시 복구」) · 아래 칸은 장면 자리 그대로
             Do(() => open(null));
             Sleep(0.6f);
             Shot("fixclose_request");
-            Check(() => Active("Fixpage") && !(bool)fv("ownerMode") && !shown("descriptionInput") && !shown("descriptionLabel") && !shown("locationRow")
-                        && Mathf.Abs((float)fv("descriptionGap") - 250f) < 1f && Mathf.Abs(y("Add_Logo") - (logo0 + 250f)) < 0.5f
-                        && Mathf.Abs(y("PetFriendlyToggle") - (pet0 + 250f)) < 0.5f && Mathf.Abs(y("NameInput") - name0) < 0.5f,
-                  "수정 요청 — '수정할 내용' 칸 없음 · 아래 칸(사진·분류·스위치)이 그 자리(250)만큼 올라옴 · 이름 칸은 그대로");
-            Do(() => log.Add("  자리: 사진 제목 " + logo0 + " → " + y("Add_Logo") + " · 애견 동반 " + pet0 + " → " + y("PetFriendlyToggle")));
+            Check(() => Active("Fixpage") && !(bool)fv("ownerMode") && shown("descriptionInput") && shown("descriptionLabel") && !shown("locationRow")
+                        && Mathf.Abs(y("Add_Logo") - logo0) < 0.5f && Mathf.Abs(y("PetFriendlyToggle") - pet0) < 0.5f && Mathf.Abs(y("NameInput") - name0) < 0.5f,
+                  "수정 요청 — 요청사항 칸 있음 (11-13 다시 넣음) · 아래 칸(사진·분류·스위치)은 장면 자리 그대로 · 이름 칸 그대로");
+            Check(() =>
+            {
+                var lt = (fv("descriptionLabel") as GameObject)?.GetComponent<Text>();
+                var ph = (fv("descriptionInput") as InputField)?.placeholder as Text;
+                log.Add("  요청사항 칸: 제목 '" + lt?.text + "' · 안내 '" + ph?.text + "' · 글 '" + (fv("descriptionInput") as InputField)?.text + "'");
+                return lt != null && lt.text == R0926LocalizedText.Say("요청사항 (선택)", "Request (optional)", "リクエスト（任意）", "修改要求（选填）", "Solicitud (opcional)")
+                       && ph != null && ph.text == R0926LocalizedText.Say("예) 조금 더 높게 · 입구 쪽으로 조금", "e.g. a bit higher · nearer the entrance", "例）もう少し高く・入口の方へ少し", "例：再高一点 · 往入口挪一点", "p. ej. más alto · más cerca de la entrada") && (fv("descriptionInput") as InputField).text == "";
+            }, "요청사항 칸 — 제목 '요청사항 (선택)' · 안내 '예) 조금 더 높게 · 입구 쪽으로 조금' (높이 · 조금 옮기기 같은 내용) · 빈 칸으로 시작");
 
-            // 2) 내 장소 — 그 자리에 위치 줄 · 아래 칸은 원래 자리 / 다시 수정 요청이면 다시 올라온다 (두 번 불러도 같은 자리)
+            // 2) 내 장소 — 그 자리에 위치 줄 (요청사항 칸 없음 — 바로 고친다) · 아래 칸 그대로 / 다시 수정 요청이면 요청사항 칸이 다시
             Do(() => call("SetOwnerMode", new object[] { true }));
             Sleep(0.4f);
             Shot("fixclose_owner");
             Check(() => shown("locationRow") && !shown("descriptionInput") && !shown("descriptionLabel")
                         && Mathf.Abs(y("Add_Logo") - logo0) < 0.5f && Mathf.Abs(y("PetFriendlyToggle") - pet0) < 0.5f,
-                  "내 장소 — 그 자리에 위치 줄 · 아래 칸은 원래 자리");
+                  "내 장소 — 그 자리에 위치 줄 (요청사항 칸 없음) · 아래 칸은 원래 자리");
             Do(() => { call("SetOwnerMode", new object[] { false }); call("SetOwnerMode", new object[] { false }); });
-            Check(() => !shown("locationRow") && Mathf.Abs(y("Add_Logo") - (logo0 + 250f)) < 0.5f && Mathf.Abs(y("PetFriendlyToggle") - (pet0 + 250f)) < 0.5f,
-                  "다시 수정 요청 — 다시 250 올라옴 (두 번 불러도 더 올라가지 않는다)");
+            Check(() => !shown("locationRow") && shown("descriptionInput") && shown("descriptionLabel")
+                        && Mathf.Abs(y("Add_Logo") - logo0) < 0.5f && Mathf.Abs(y("PetFriendlyToggle") - pet0) < 0.5f,
+                  "다시 수정 요청 — 요청사항 칸이 다시 · 아래 칸은 그대로 (두 번 불러도 움직이지 않는다)");
 
             // 3) 고친 것 없이 X — 묻지 않고 내려가며 닫힌다
             Do(() => Click(X));
@@ -11741,9 +11748,9 @@ namespace Redesign0926
                 var w = fv("warningObj") as GameObject;
                 var wt = w != null ? w.GetComponentInChildren<Text>(true) : null;
                 return Active("Fixpage") && !(bool)fv("isProcessing") && w != null && w.activeInHierarchy && wt != null
-                       && wt.text == R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾼 뒤 보내 주세요", "Nothing has changed — edit something first",
-                              "変更がありません — 直したい所を変えてから送ってください", "没有任何修改 — 请先修改再提交", "No hay cambios — modifica algo primero");
-            }, "수정 요청 — 아무것도 안 바꾸고 '수정 요청' → '바꾼 내용이 없어요' (보내지 않는다 · 창은 그대로)");
+                       && wt.text == R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾸거나 요청사항을 적어 주세요", "Nothing has changed — edit something or write a request",
+                              "変更がありません — 直したい所を変えるかリクエストを書いてください", "没有任何修改 — 请先修改或填写修改要求", "No hay cambios — modifica algo o escribe una solicitud");
+            }, "수정 요청 — 아무것도 안 바꾸고 요청사항도 비운 채 '수정 요청' → '바꾼 내용이 없어요' (보내지 않는다 · 창은 그대로)");
             Do(() => CubeDataFixManager.EditorBase = null);
             Do(() => call("AddSub", new object[] { new Texture2D(8, 8), null }));
             Do(() => Click(X));
@@ -11751,6 +11758,37 @@ namespace Redesign0926
             Check(() => Active("Fixpage") && asking(), "사진만 더해도 X → '수정을 취소할까요?'");
             Do(() => askBtn("Discard_YES").onClick.Invoke());
             Wait(() => !Active("Fixpage"), 3f, "'수정 취소' → 닫힘");
+
+            // 6-1) 요청사항만 적어도 고친 것 (11-13 「높이라든가 조금 이동한다든가 하는 내용기입」) — X 면 묻고, '수정 요청' 은 보낸다.
+            //      보내는 곳은 내 PC 의 시험 서버(메모리 · DB 없음) — 운영 서버로 가지 않는다
+            Do(() => open(place));
+            Wait(loaded, 30f, "다시 열어 다 불러옴 (요청사항)");
+            Do(() => { if (!(bool)fv("ownerMode")) ((InputField)fv("descriptionInput")).text = Request; });
+            Do(() => Click(X));
+            Sleep(0.5f);
+            Check(() => (bool)fv("ownerMode") || Active("Fixpage") && asking() && dirty(), "요청사항만 적어도 X → '수정을 취소할까요?' (적은 글을 그냥 버리지 않는다)");
+            Do(() => { if (asking()) askBtn("Discard_NO").onClick.Invoke(); });
+            Sleep(0.3f);
+            Do(() =>
+            {
+                if ((bool)fv("ownerMode")) { log.Add("  (내 장소로 열려 요청사항 보내기는 건너뜀 — 수정 요청에만 있다)"); return; }
+                DevGet("", "/api/dev/fix_reset");
+                CubeDataFixManager.EditorBase = "http://127.0.0.1:5099";
+                ((Button)fv("submitButton")).onClick.Invoke();
+            });
+            Wait(() => (bool)fv("ownerMode") || !Active("Fixpage"), 25f, "요청사항만 적고 '수정 요청' → 보내고 닫힘");
+            Check(() =>
+            {
+                if ((bool)fv("ownerMode")) return true;
+                string got = DevGet("", "/api/dev/fix_last");
+                var w = fv("warningObj") as GameObject;
+                var wt = w != null && w.activeInHierarchy ? w.GetComponentInChildren<Text>(true) : null;
+                log.Add("  보낸 수정 요청: " + got + (wt != null ? " · 알림 '" + wt.text + "'" : ""));
+                return !Active("Fixpage") && got.Contains("\"count\": 1") && got.Contains("\"description\": \"" + Request + "\"");
+            }, "요청사항만 적고 '수정 요청' → 보낸다 (요청사항 = 적은 글 그대로) · 창이 닫힌다");
+            Do(() => CubeDataFixManager.EditorBase = null);
+            Check(() => (bool)fv("ownerMode") || ((InputField)fv("descriptionInput")).text == "", "보낸 뒤 요청사항 칸은 비운다 (다음에 열면 빈 칸)");
+
             Check(() =>
             {
                 if (errors.Count > 0) log.Add("  예외: " + errors[0]);
@@ -19299,6 +19337,43 @@ namespace Redesign0926
         // 3D 모델 정지 사진 (11-13 대표님 「3D모델로 하더라도 그 모델의 단순한 스틸 모습을 반영해서 가지고 있어야 하는게 그래야 목록 리스트 우측에 발생하도록」)
         // 3D 올리기가 대표 사진으로 보내는 그림 — 시바견(운영과 같은 파일)을 찍어 512 PNG · 바탕 투명 · 모델이 가운데 · 무대와 카메라가 남지 않는지.
         // 깨진 파일은 사진 없이(null), 찍는 동안 무대의 렌더러는 꺼져 있다(그 카메라가 찍을 때만 켠다 — AR 화면에 섞이지 않게)
+        // 앞(+Z)만 빨간 상자 GLB — 면마다 단색 그림 (언릿 · 양면). glTF 좌표 그대로 쓴다 (R0926GlbWriter)
+        private static byte[] FrontRedBox()
+        {
+            var w = new R0926GlbWriter();
+            int root = w.AddNode("Root", Vector3.zero, Quaternion.identity, Vector3.one);
+            Func<Color32, int> mat = c =>
+            {
+                var t = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                var px = new Color32[16];
+                for (int i = 0; i < px.Length; i++) px[i] = c;
+                t.SetPixels32(px);
+                t.Apply();
+                byte[] png = t.EncodeToPNG();
+                UnityEngine.Object.DestroyImmediate(t);
+                return w.AddMaterial("Box" + c.r + "_" + c.g + "_" + c.b, w.AddTexture(png, "image/png"), false, true);
+            };
+            int red = mat(new Color32(230, 30, 30, 255)), blue = mat(new Color32(30, 60, 230, 255)), gray = mat(new Color32(150, 150, 150, 255));
+            var faces = new[]
+            {
+                (n: Vector3.forward, u: Vector3.right, v: Vector3.up, m: red),
+                (n: Vector3.back, u: Vector3.left, v: Vector3.up, m: blue),
+                (n: Vector3.right, u: Vector3.back, v: Vector3.up, m: gray),
+                (n: Vector3.left, u: Vector3.forward, v: Vector3.up, m: gray),
+                (n: Vector3.up, u: Vector3.right, v: Vector3.back, m: gray),
+                (n: Vector3.down, u: Vector3.right, v: Vector3.forward, m: gray),
+            };
+            foreach (var f in faces)
+            {
+                Vector3 c = f.n * 0.5f, du = f.u * 0.5f, dv = f.v * 0.5f;
+                var pos = new[] { c - du - dv, c + du - dv, c + du + dv, c - du + dv };
+                var nrm = new[] { f.n, f.n, f.n, f.n };
+                var uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+                int mesh = w.AddMesh("Face", pos, nrm, uv, new ushort[] { 0, 1, 2, 0, 2, 3 }, f.m);
+                w.AddNode("Face", Vector3.zero, Quaternion.identity, Vector3.one, mesh, root);
+            }
+            return w.Build(root, "none");
+        }
         private static void PlanModelSnap()
         {
             byte[] png = null, broken = new byte[] { 1, 2, 3 };
@@ -19324,7 +19399,8 @@ namespace Redesign0926
             Do(() =>
             {
                 log.Add("  찍은 결과: " + (png != null ? (png.Length / 1024) + "KB" : "없음 — " + R0926ModelSnapshot.LastFail)
-                    + $" · 회색 판 값 {R0926ModelSnapshot.EditorProbe} ({(R0926ModelSnapshot.EditorProbe < 92 ? "선형으로 남는 길 → 감마로 바꿈" : "감마 그대로")})");
+                    + $" · 회색 판 값 {R0926ModelSnapshot.EditorProbe} ({(R0926ModelSnapshot.EditorProbe < 92 ? "선형으로 남는 길 → 감마로 바꿈" : "감마 그대로")})"
+                    + $" · 카메라 거리 {R0926ModelSnapshot.EditorDistance:F2}");
                 if (R0926ModelSnapshot.EditorLastRaw != null) File.WriteAllBytes(Path.Combine(dir, "test_modelsnap_black.png"), R0926ModelSnapshot.EditorLastRaw);
             });
             Check(() => png != null && png.Length > 2000, "PNG 를 돌려준다");
@@ -19398,6 +19474,46 @@ namespace Redesign0926
                 foreach (var k in cache.Keys) if (k.StartsWith("local://model-snapshot/")) return false;
                 return true;
             }, "찍은 모델을 캐시에 남기지 않는다");
+
+            // AR 색 (11-13 「AR색 어둡게 보이는 건 … 밝게」) — 시바견 'Main' baseColorFactor (0.255, 0.129, 0.036) 은 선형 값이라
+            // 화면엔 감마 (138, 101, 54) 로 나와야 한다. 예전엔 선형 값을 그대로 넘겨 (65, 33, 9) — 어둡게 보였다
+            Check(() =>
+            {
+                var mats = R0926ModelSnapshot.EditorBaseColors;
+                bool bright = mats.Exists(c => Mathf.Abs(c.r - 138) <= 3 && Mathf.Abs(c.g - 101) <= 3 && Mathf.Abs(c.b - 54) <= 3);
+                bool dark = mats.Exists(c => Mathf.Abs(c.r - 65) <= 3 && Mathf.Abs(c.g - 33) <= 3 && Mathf.Abs(c.b - 9) <= 3);
+                log.Add($"  시바견 몸 색: 감마 (138,101,54) {bright} · 예전 어두운 (65,33,9) {dark}");
+                return bright && !dark;
+            }, "AR 재질 색 = glTF 색을 감마로 바꾼 값 (예전처럼 어둡지 않다)");
+
+            // 앞모습 (11-13 「목록에서 … 뒷모습이 아닌 앞모습이 나오도록」) — glTF 는 앞이 +Z, glTFast 도 +Z 그대로.
+            // 앞(+Z)만 빨갛고 뒤(-Z)는 파란 상자를 찍으면 빨강이 크게 · 파랑은 안 보이고 · 옆과 위(회색)가 살짝 — 살짝 돌려 내려다본 앞모습
+            byte[] boxPng = null;
+            bool boxDone = false;
+            Do(() => host.StartCoroutine(R0926ModelSnapshot.Capture(FrontRedBox(), 256, b => { boxPng = b; boxDone = true; })));
+            Wait(() => boxDone, 30f, "앞만 빨간 상자");
+            Check(() =>
+            {
+                var tex = new Texture2D(2, 2);
+                if (boxPng == null || !tex.LoadImage(boxPng)) { UnityEngine.Object.Destroy(tex); log.Add("  상자 사진 없음 — " + R0926ModelSnapshot.LastFail); return false; }
+                int red = 0, blue = 0, gray = 0, solid = 0, edge = 0, tw = tex.width, th = tex.height;
+                var all = tex.GetPixels32();
+                for (int i = 0; i < all.Length; i++)
+                {
+                    var p = all[i];
+                    if (p.a < 200) continue;
+                    solid++;
+                    int x = i % tw, y = i / tw;
+                    if (x < 2 || y < 2 || x >= tw - 2 || y >= th - 2) edge++;
+                    if (p.r > 150 && p.g < 90 && p.b < 90) red++;
+                    else if (p.b > 150 && p.r < 90) blue++;
+                    else if (Mathf.Abs(p.r - p.g) < 24 && Mathf.Abs(p.g - p.b) < 24) gray++;
+                }
+                File.WriteAllBytes(Path.Combine(dir, "test_modelsnap_front.png"), boxPng);
+                UnityEngine.Object.Destroy(tex);
+                log.Add($"  앞만 빨간 상자: 빨강(앞) {red} · 파랑(뒤) {blue} · 회색(옆·위) {gray} / {solid} · 가장자리에 닿은 픽셀 {edge} · 카메라 거리 {R0926ModelSnapshot.EditorDistance:F2}");
+                return solid > 0 && red > solid * 0.45f && blue == 0 && gray > solid * 0.05f && red > gray && edge == 0;
+            }, "정지 사진은 앞모습 — 앞(+Z)이 크게 · 뒤는 안 보이고 · 옆·위가 살짝 (비스듬히 내려다본 앞모습) · 앞뒤로 두꺼운 상자도 가장자리에 안 잘린다");
 
             // 깨진 파일 — 사진 없이 올린다
             Do(() => host.StartCoroutine(R0926ModelSnapshot.Capture(broken, 512, b => { broken = b; brokenDone = true; })));
@@ -19626,7 +19742,7 @@ namespace Redesign0926
                   "색연필 → 만화톤 꺼짐 (02~04 는 하나만) · 투명하게는 그대로");
             Shot("aiwork_pencil");
 
-            // 5) 3D 캐릭터 — 요청사항 칸이 열리고 · 큐브 자리에 서서 같이 돈다 · 대표 사진은 캐릭터 정지 사진
+            // 5) 3D 캐릭터 — 요청사항 칸이 열리고 · 투명하게는 꺼지고(캐릭터는 투명이 필요 없다 — 11-13) · 큐브 자리에 서서 같이 돈다 · 대표 사진은 캐릭터 정지 사진
             Do(() => Click(Op + "Tiles/Chip4"));
             Check(() =>
             {
@@ -19635,8 +19751,8 @@ namespace Redesign0926
                 if (op == null || card == null) return false;
                 Rect ro = ScreenRect(op), rc = ScreenRect(card);
                 log.Add($"  캐릭터: 요청사항 칸 {Active(Op + "Ask")} · 판 높이 {op.rect.height:F0} · 판 {ro.yMin:F0}~{ro.yMax:F0} (카드 아래 {rc.yMin:F0} · 안전선 {Screen.safeArea.yMin:F0})");
-                return Active(Op + "Ask") && !chipOn(3) && chipOn(4) && op.rect.height > 400f && ro.yMax <= rc.yMin && ro.yMin >= Screen.safeArea.yMin;
-            }, "3D 캐릭터 → 요청사항 칸이 열린다 (판이 아래로 자라도 화면 안) · 색연필 꺼짐");
+                return Active(Op + "Ask") && !chipOn(3) && chipOn(4) && !chipOn(1) && !panel.Clear && op.rect.height > 400f && ro.yMax <= rc.yMin && ro.yMin >= Screen.safeArea.yMin;
+            }, "3D 캐릭터 → 요청사항 칸이 열린다 (판이 아래로 자라도 화면 안) · 색연필 꺼짐 · 투명하게도 꺼짐 (01 은 02·03 과만)");
             waitWork("3D 캐릭터", 40f);
             Do(() =>
             {
@@ -19697,11 +19813,26 @@ namespace Redesign0926
             Check(() => held()?.Glb != null && glbA != null && !System.Linq.Enumerable.SequenceEqual(glbA, held().Glb) && status().Contains("고양이"),
                   "'만들기'를 다시 누르면 같은 요청의 다른 모습");
 
-            // 7) 다 끄기 — 캐릭터를 끄면 큐브가 돌아오고 · 투명하게까지 끄면 원래 사진
+            // 7) 캐릭터를 끄면 — 투명하게도 이미 꺼져 있으니 바로 원래 사진 · 캐릭터가 켜진 채 01 을 고르면 캐릭터를 내린다
             Do(() => Click(Op + "Tiles/Chip4"));
-            waitWork("캐릭터 끄기 (투명하게만)", 20f);
-            Check(() => panel.Model == null && !cubeHidden() && !Active(Op + "Ask") && held()?.Tex == shown() && held().Glb == null,
-                  "캐릭터를 끄면 — 캐릭터 치우고 큐브 다시 · 요청사항 칸 닫힘 · 투명하게만 남은 사진");
+            waitWork("캐릭터 끄기", 20f);
+            Sleep(0.3f);
+            Check(() => panel.Model == null && !cubeHidden() && !Active(Op + "Ask") && held() == null && shown() == prev.Photo
+                        && !chipOn(1) && !chipOn(2) && !chipOn(3) && !chipOn(4) && status() == "원래 사진으로 돌렸어요",
+                  "캐릭터를 끄면 — 캐릭터 치우고 큐브 다시 · 요청사항 칸 닫힘 · 원래 사진 · '원래 사진으로 돌렸어요'");
+            Do(() => Click(Op + "Tiles/Chip4"));
+            waitWork("캐릭터 다시", 40f);
+            Check(() => panel.Model != null && chipOn(4) && !chipOn(1), "캐릭터 다시 켬");
+            Do(() => Click(Op + "Tiles/Chip1"));
+            Check(() => !chipOn(4) && chipOn(1) && panel.Style == R0926AiWork.Style.None && !Active(Op + "Ask"), "캐릭터가 켜진 채 투명하게 → 캐릭터는 바로 꺼진다 (둘은 함께 못 고른다)");
+            waitWork("캐릭터 → 투명하게", 20f);
+            Check(() =>
+            {
+                var h = held();
+                log.Add($"  캐릭터 → 투명하게: 캐릭터 {(panel.Model != null ? "남음" : "치움")} · 큐브 숨김 {cubeHidden()} · 방식 {h?.Clear} · 3D {(h?.Glb != null ? "있음" : "없음")} · 안내 '{status()}'");
+                return panel.Model == null && !cubeHidden() && h != null && h.Glb == null && h.Clear == R0926AiImage.ClearMode.Logo && h.Alpha && shown() == h.Tex
+                       && status() == "로고 모양대로 투명하게";
+            }, "→ 캐릭터 치우고 큐브 다시 · 투명하게 한 사진 (3D 없음)");
             Do(() => Click(Op + "Tiles/Chip1"));
             Sleep(0.3f);
             Check(() => held() == null && shown() == prev.Photo && !chipOn(1) && !chipOn(2) && !chipOn(3) && !chipOn(4) && status() == "원래 사진으로 돌렸어요",
@@ -19719,7 +19850,7 @@ namespace Redesign0926
                 return mp != null && mp.name == "AiWork" && !(bool)uv("mainPhotoAlpha") && uv("aiGlb") == null && !Active("ARPreviewPanel") && held() == null && Active("UploadPage");
             }, "추가하기 → 대표 사진 = 만화톤 결과 (투명 아님 · 3D 아님) · 미리보기 닫힘");
 
-            // 9) 보통 사진 — 투명하게는 동그랗게 · 3D 캐릭터로 '추가하기' → 3D 파일과 정지 사진 (3D 올리기 길)
+            // 9) 보통 사진 — 투명하게는 동그랗게 · 이어서 3D 캐릭터(투명하게는 꺼진다)로 '추가하기' → 3D 파일과 정지 사진 (3D 올리기 길)
             Do(() => open(false));
             Wait(ready, 15f, "두 번째 큐브");
             Sleep(0.3f);
@@ -19731,7 +19862,9 @@ namespace Redesign0926
                   "보통 사진은 동그랗게 잘라 바깥을 투명하게 (우팡이네집 대표 사진처럼)");
             Shot("aiwork_photo_clear");
             Do(() => Click(Op + "Tiles/Chip4"));
-            waitWork("동그란 사진을 든 캐릭터", 40f);
+            waitWork("사진을 든 캐릭터", 40f);
+            Check(() => panel.Model != null && chipOn(4) && !chipOn(1) && !panel.Clear && held()?.Glb != null && held().Clear == R0926AiImage.ClearMode.None,
+                  "투명하게 다음 캐릭터 → 투명하게는 꺼지고 캐릭터만 (사진은 자르지 않은 채 팻말에)");
             Do(() => Click(Bc + "ConfirmButton"));
             Sleep(0.6f);
             Check(() =>
@@ -19990,9 +20123,27 @@ namespace Redesign0926
                 return d;
             }
             bool Transit(CachedPlaceData c) => c.filterKey == "subway" || c.filterKey == "train" || c.filterKey == "terminal";
+            // 기관이 올린 공공시설 — 애견동반을 켜면 DB 표시와 상관없이 빠진다 (11-13 「공공데이터의 경우 정부기관이니까 … 숨겨지도록」 · 공원은 표시대로)
+            var govCats = new HashSet<string> { "gov", "edu", "utility", "medical", "welfare", "culture", "sport", "toilet" };
+            bool Gov(CachedPlaceData c) => c.filterKey == "publicData" && govCats.Contains(c.category ?? "");
             bool PetOn() => Fm().PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
-            bool NonPetPlace(Dictionary<string, CachedPlaceData> c, string id) => c.TryGetValue(id, out var p) && !p.petFriendly && !Transit(p);
-            // 배분된 곳 가운데 애견동반 안 되는 곳 (지하철·기차·터미널은 목록처럼 제외)
+            // 애견동반을 켜면 빠져야 하는 곳 — 동반 안 되는 곳 · 지하철·기차·터미널 (11-13 부터 — 예전엔 남겼다) · 기관 공공시설
+            bool NonPetPlace(Dictionary<string, CachedPlaceData> c, string id) => c.TryGetValue(id, out var p) && (!p.petFriendly || Transit(p) || Gov(p));
+            bool TransitIcon(string icon) => icon == "subway" || icon == "train" || icon == "bus" || icon == "airport";
+            // 목록 장소 줄 가운데 교통 줄 · 애견동반 안 되는 줄
+            List<string> ListTransit() { var l = new List<string>(); var pl = Plm(); if (pl != null) foreach (var e in pl.ShownEntries) if (e.kind == PlaceListManager.EntryKind.Place && TransitIcon(e.icon)) l.Add(e.name); return l; }
+            List<string> ListNonPet() { var l = new List<string>(); var pl = Plm(); if (pl != null) foreach (var e in pl.ShownEntries) if (e.kind == PlaceListManager.EntryKind.Place && (!e.pet || TransitIcon(e.icon))) l.Add(e.name); return l; }
+            // 화면에 켜진 지하철·기차·터미널 오브젝트 (3D · 화살표)
+            List<string> VisibleTransit()
+            {
+                var bad = new List<string>();
+                void Scan(Dictionary<string, GameObject> m, string tag) { if (m != null) foreach (var kv in m) if (kv.Value != null && kv.Value.activeInHierarchy) bad.Add(tag + kv.Key); }
+                if (SubwayManager.Instance != null) { Scan(SubwayManager.Instance.GetSpawnedObjects(), "subway:"); Scan(SubwayManager.Instance.GetIndicatorOnlyObjects(), "subway-ind:"); }
+                if (TrainStationManager.Instance != null) { Scan(TrainStationManager.Instance.GetSpawnedObjects(), "train:"); Scan(TrainStationManager.Instance.GetIndicatorOnlyObjects(), "train-ind:"); }
+                if (TerminalManager.Instance != null) { Scan(TerminalManager.Instance.GetSpawnedObjects(), "terminal:"); Scan(TerminalManager.Instance.GetIndicatorOnlyObjects(), "terminal-ind:"); }
+                return bad;
+            }
+            // 배분된 곳 가운데 애견동반을 켜면 빠져야 하는 곳
             List<string> PetLeak() { var c = Cached(); return AllA().FindAll(id => NonPetPlace(c, id)); }
             // 실제로 떠 있는데 배분에 없는 것 (FilterManager 가 모르는 고아) — 임시 화살표는 3D 배분 몫
             List<string> SpawnLeak()
@@ -20023,7 +20174,7 @@ namespace Redesign0926
                 {
                     if (!(typeof(DataManager).GetField(field, PF)?.GetValue(DataManager.Instance) is Dictionary<int, GameObject> m)) return;
                     foreach (var kv in m)
-                        if (kv.Value != null && kv.Value.activeInHierarchy && c.TryGetValue("dm_" + kv.Key, out var p) && !p.petFriendly) bad.Add(tag + kv.Key);
+                        if (kv.Value != null && kv.Value.activeInHierarchy && NonPetPlace(c, "dm_" + kv.Key)) bad.Add(tag + kv.Key);
                 }
                 Scan("spawnedObjects", "full:dm_"); Scan("indicatorOnlyObjects", "ind:dm_");
                 return bad;
@@ -20034,9 +20185,9 @@ namespace Redesign0926
                 var c = Cached();
                 string Part(HashSet<string> ids)
                 {
-                    int pet = 0, tr = 0;
-                    foreach (var id in ids) if (c.TryGetValue(id, out var p)) { if (p.petFriendly) pet++; if (Transit(p)) tr++; }
-                    return $"{ids.Count} (동반 {pet} · 교통 {tr})";
+                    int pet = 0, tr = 0, gv = 0;
+                    foreach (var id in ids) if (c.TryGetValue(id, out var p)) { if (p.petFriendly) pet++; if (Transit(p)) tr++; if (Gov(p)) gv++; }
+                    return $"{ids.Count} (동반 {pet} · 교통 {tr} · 기관 {gv})";
                 }
                 return "3D " + Part(FullA()) + " · 화살표 " + Part(IndA());
             }
@@ -20076,6 +20227,14 @@ namespace Redesign0926
             Check(() => !PetOn(), "애견동반 꺼진 채 시작");
             Check(() => { foreach (var p in Cached().Values) if (p.sourceManager == "DataManager" && !p.petFriendly) return true; return false; }, "근처에 애견동반 안 되는 우팡 장소가 있다 (시험 전제)");
             Check(() => { var c = Cached(); return AllA().Exists(id => NonPetPlace(c, id)); }, "꺼져 있으면 동반 안 되는 곳도 3D · 화살표로 뜬다");
+            Check(() => { var c = Cached(); return AllA().Exists(id => c.TryGetValue(id, out var p) && Transit(p)); }, "꺼져 있으면 지하철·기차·터미널도 3D · 화살표로 뜬다 (시험 전제)");
+            Check(() =>
+                !FilterManager.PetAllowed("subway", false, "subway", true) && !FilterManager.PetAllowed("terminal", false, "terminal", true)
+                && !FilterManager.PetAllowed("publicData", true, "gov", true) && !FilterManager.PetAllowed("publicData", true, "toilet", true)
+                && FilterManager.PetAllowed("publicData", true, "park", true) && !FilterManager.PetAllowed("publicData", true, "park", false)
+                && FilterManager.PetAllowed("publicData", true, "tour", true) && FilterManager.PetAllowed("", false, "sport", true)
+                && !FilterManager.PetAllowed("", false, "cafe", false),
+                "규칙 — 교통(공항 이름 터미널 포함) · 기관 공공시설은 표시와 상관없이 빼고, 공원 · 관광공사 반려동물 여행지 · 사람이 올린 곳(스포츠 포함)은 애견동반 표시대로");
             Do(() => log.Add("  고아: " + Brief(SpawnLeak()) + " · 화살표만: " + Brief(Stuck())));
             Check(() => SpawnLeak().Count == 0, "떠 있는 오브젝트 = 배분 (고아 없음)");
             Check(() => Stuck().Count == 0, "3D 배분을 받은 곳은 모두 오브젝트가 있다 (화살표만 남은 곳 없음)");
@@ -20083,9 +20242,46 @@ namespace Redesign0926
             // 1) 애견동반 켜기 — 목록처럼 동반 안 되는 곳은 3D 도 화살표도 없다
             Do(() => Click("Dock0926/List_Button"));
             Sleep(1.2f);
+            Do(() => log.Add("  목록(꺼짐) 교통 줄: " + Brief(ListTransit())));
+            Check(() => ListTransit().Count > 0, "꺼져 있으면 목록에 교통 줄이 있다 (시험 전제)");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(1.5f);
             Shot("petalloc_on_list");
+            Do(() => log.Add("  목록(켜짐) 줄 " + (Plm() != null ? Plm().ShownEntries.Count : 0) + " · 교통 " + Brief(ListTransit()) + " · 동반 안 됨 " + Brief(ListNonPet())));
+            Check(() => Plm() != null && Plm().ShownEntries.Count > 0 && ListTransit().Count == 0 && ListNonPet().Count == 0,
+                  "목록도 애견동반 되는 곳만 — 지하철·기차·터미널 줄 없음 (11-13 「꺼지도록 하는 게 맞지」)");
+            // 기관 공공시설은 DB 표시가 잘못 '동반 됨'이어도 빠진다 — 반경 안 가까운 기관 장소 하나의 표시를 잠깐 켜 본다 (기기 메모리만 · 서버는 그대로)
+            CachedPlaceData govP = null;
+            bool govWas = false;
+            Do(() =>
+            {
+                double lat = VirtualLocation.Instance.Latitude, lon = VirtualLocation.Instance.Longitude;
+                float r = (float)(typeof(FilterManager).GetField("indicatorObjectRadius", PF)?.GetValue(Fm()) ?? 500f);
+                double best = double.MaxValue;
+                foreach (var p in Cached().Values)
+                {
+                    if (!Gov(p) || HiddenPlaces.IsHidden(p.uniqueId)) continue;
+                    double d = GeoHere.Meters(lat, lon, p.latitude, p.longitude);
+                    if (d <= r && d < best) { best = d; govP = p; }
+                }
+                if (govP == null) { log.Add("  반경 안에 기관 공공시설 없음 — 규칙 시험으로 대신"); return; }
+                govWas = govP.petFriendly;
+                govP.petFriendly = true;
+                Fm().TriggerReallocation();
+                Plm()?.UpdateUI();
+                log.Add($"  기관 장소 {govP.uniqueId} ({govP.category} · {best:0} m) 의 표시를 잠깐 '동반 됨'으로");
+            });
+            Sleep(1.5f);
+            Check(() =>
+            {
+                if (govP == null) return true;
+                bool inList = false;
+                if (Plm() != null) foreach (var e in Plm().ShownEntries) if (e.kind == PlaceListManager.EntryKind.Place && e.id == govP.rawId) inList = true;
+                log.Add($"  표시가 '동반 됨'인 기관 장소: 배분 {AllA().Contains(govP.uniqueId)} · 목록 {inList}");
+                return !AllA().Contains(govP.uniqueId) && !inList;
+            }, "표시가 잘못 '동반 됨'인 기관 공공시설도 3D · 화살표 · 목록에 없다 (11-13 「공공데이터의 경우 정부기관이니까 … 숨겨지도록」)");
+            Do(() => { if (govP != null) { govP.petFriendly = govWas; Fm().TriggerReallocation(); Plm()?.UpdateUI(); } });
+            Sleep(0.5f);
             Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
             Sleep(3f);
             Shot("petalloc_on_ar");
@@ -20098,18 +20294,18 @@ namespace Redesign0926
             Check(() =>
             {
                 var c = Cached();
-                float r = (float)(typeof(FilterManager).GetField("indicatorObjectRadius", PF)?.GetValue(Fm()) ?? 500f);
-                double lat = VirtualLocation.Instance.Latitude, lon = VirtualLocation.Instance.Longitude;
-                bool anyNear = false;
-                foreach (var p in c.Values) if (Transit(p) && GeoHere.Meters(lat, lon, p.latitude, p.longitude) <= r) { anyNear = true; break; }
-                return !anyNear || AllA().Exists(id => c.TryGetValue(id, out var p) && Transit(p));
-            }, "지하철·기차·터미널은 목록처럼 애견동반을 켜도 남는다 (반경 안에 있을 때)");
+                var tr = AllA().FindAll(id => c.TryGetValue(id, out var p) && Transit(p));
+                var vis = VisibleTransit();
+                if (tr.Count > 0 || vis.Count > 0) log.Add("  남은 교통: 배분 " + Brief(tr) + " · 켜진 오브젝트 " + Brief(vis));
+                return tr.Count == 0 && vis.Count == 0;
+            }, "애견동반을 켜면 지하철·기차·터미널도 3D · 화살표에서 빠진다 (11-13 「꺼지도록 하는 게 맞지」 — 예전엔 남겼다)");
 
             // 2) 끄기 — 다시 돌아온다
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(3f);
             Do(() => log.Add("  다시 꺼짐: " + Census()));
             Check(() => { var c = Cached(); return !PetOn() && AllA().Exists(id => NonPetPlace(c, id)); }, "끄면 동반 안 되는 곳이 다시 뜬다");
+            Check(() => { var c = Cached(); return AllA().Exists(id => c.TryGetValue(id, out var p) && Transit(p)); }, "끄면 지하철·기차·터미널도 다시 뜬다");
             Check(() => SpawnLeak().Count == 0 && Stuck().Count == 0, "끈 뒤에도 고아 · 화살표만 남은 곳 없음");
 
             // 3) 상세를 받는 사이 애견동반을 켰다 — 늦게 온 응답이 오브젝트를 만들지 않는다 (예전엔 숨은 고아가 남아 끄면 반경 밖에서도 나타났다)
@@ -20159,7 +20355,7 @@ namespace Redesign0926
             }
             Sleep(4f);
             Do(() => log.Add("  연타 7번 뒤: " + Census()));
-            Check(() => PetOn() && PetLeak().Count == 0 && SpawnLeak().Count == 0 && VisibleNonPet().Count == 0 && Stuck().Count == 0, "홀수 번 연타 뒤 — 켜짐 · 새는 곳 · 고아 없음");
+            Check(() => PetOn() && PetLeak().Count == 0 && SpawnLeak().Count == 0 && VisibleNonPet().Count == 0 && VisibleTransit().Count == 0 && Stuck().Count == 0, "홀수 번 연타 뒤 — 켜짐 · 새는 곳(교통 포함) · 고아 없음");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(1f);
             Do(() => { Application.logMessageReceived -= onLog; log.Add("  에러 로그: " + (errors.Count == 0 ? "없음" : errors.Count + "건 — " + string.Join(" | ", errors.GetRange(0, Math.Min(4, errors.Count))))); });
@@ -20310,7 +20506,7 @@ namespace Redesign0926
                   "목록을 닫았다 열어도 다른 곳");
             Check(() => RowIcons(1).TrueForAll(s => s == "r0926_f_shelter"), "보호소 줄 앞은 강아지 그림");
             Check(() => ShownLinks(PlaceListManager.EntryKind.Shelter).TrueForAll(l => l.StartsWith("https://place.map.kakao.com/")), "보호소를 누르면 카카오맵 장소 쪽 (전화·길찾기)");
-            Check(() => PetRowNames(true), "애견동반만 — 장소 줄 이름이 모두 노랑 (관광공사 반려동물 여행 자료 포함 · 따로 켜 둔 교통 줄만 흰색) (10-27 「목록에서 글자색이 흰색으로 발생하지 않고 노란색으로」)");
+            Check(() => PetRowNames(true), "애견동반만 — 장소 줄 이름이 모두 노랑 (관광공사 반려동물 여행 자료 포함 · 교통 줄은 없다 — 11-13) (10-27 「목록에서 글자색이 흰색으로 발생하지 않고 노란색으로」)");
             Do(() => ClickToggle("PetFriendlyToggle"));
             Sleep(0.3f);
             Check(() => Fm().PetState == FilterManager.PetFriendlyFilterState.All, "애견동반 다시 → 꺼짐(전부) ('애견동반 안 됨' 없음)");
@@ -20471,8 +20667,8 @@ namespace Redesign0926
                 var t = rows[i].Find("Name")?.GetComponent<Text>();
                 if (t == null) return false;
                 bool yellow = t.color == R0926PlaceRows.PetName;
-                bool transit = e.icon == "subway" || e.icon == "train" || e.icon == "bus" || e.icon == "airport";   // 교통 칩은 애견동반과 따로 — 애견동반만이어도 남는다
-                if (yellow != e.pet || onlyPet && !e.pet && !transit) { log.Add("  이름 색 다름 " + e.name + " 애견동반 " + e.pet + " " + ColorUtility.ToHtmlStringRGB(t.color)); return false; }
+                bool transit = e.icon == "subway" || e.icon == "train" || e.icon == "bus" || e.icon == "airport";   // 애견동반만이면 교통 줄도 없다 (11-13 「꺼지도록 하는 게 맞지」)
+                if (yellow != e.pet || onlyPet && (!e.pet || transit)) { log.Add("  이름 색 다름 " + e.name + " 애견동반 " + e.pet + " " + ColorUtility.ToHtmlStringRGB(t.color)); return false; }
                 if (e.pet) pets++; else others++;
             }
             log.Add($"  애견동반 줄 {pets} · 나머지 {others}");

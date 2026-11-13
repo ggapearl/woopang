@@ -36,7 +36,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "Fix Place",
             changedNameLabel = "New name",
-            descriptionLabel = "Description",
+            descriptionLabel = "Request (optional)",
             addPlaceLogoLabel = "Add place logo",
             addPlaceImgsLabel = "Add place photos",
             petFriendlyLabel = "Pet Friendly",
@@ -48,7 +48,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "장소 수정",
             changedNameLabel = "수정할 이름",
-            descriptionLabel = "수정할 내용",
+            descriptionLabel = "요청사항 (선택)",
             addPlaceLogoLabel = "장소 로고 추가",
             addPlaceImgsLabel = "장소 이미지 추가",
             petFriendlyLabel = "반려동물 동반 가능",
@@ -60,7 +60,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "場所を修正",
             changedNameLabel = "修正する名前",
-            descriptionLabel = "修正する内容",
+            descriptionLabel = "リクエスト（任意）",
             addPlaceLogoLabel = "場所のロゴを追加",
             addPlaceImgsLabel = "場所の画像を追加",
             petFriendlyLabel = "ペット可",
@@ -72,7 +72,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "修改地点",
             changedNameLabel = "修改名称",
-            descriptionLabel = "修改内容",
+            descriptionLabel = "修改要求（选填）",
             addPlaceLogoLabel = "添加地点标志",
             addPlaceImgsLabel = "添加地点图片",
             petFriendlyLabel = "宠物友好",
@@ -84,7 +84,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "Editar Lugar",
             changedNameLabel = "Cambiar Nombre",
-            descriptionLabel = "Cambiar Descripción",
+            descriptionLabel = "Solicitud (opcional)",
             addPlaceLogoLabel = "Agregar Logo",
             addPlaceImgsLabel = "Agregar Fotos",
             petFriendlyLabel = "Acepta Mascotas",

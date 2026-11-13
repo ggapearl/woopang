@@ -1032,8 +1032,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
         if (shouldShow)
         {
-            // 애견동반 필터 적용
-            if (petFriendlyOnly && !place.pet_friendly)
+            // 애견동반 필터 적용 — 목록 · 배분과 같은 규칙 (기관 공공시설은 표시와 상관없이 숨김 · 11-13)
+            if (petFriendlyOnly && !FilterManager.PetAllowed(null, FilterManager.IsPublicSource(place.is_public, place.category), place.category, place.pet_friendly))
             {
                 shouldShow = false;
             }

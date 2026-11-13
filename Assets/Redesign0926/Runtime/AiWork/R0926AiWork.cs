@@ -5,7 +5,7 @@ using UnityEngine;
 
 /// <summary>
 /// 장소 추가 ▸ 「이곳에 오브젝트를 추가하시겠습니까?」 ▸ AI 작업 — 대표 사진을 고른 옵션대로 손본다.
-/// 11-12 대표님 「01 투명하게(겹쳐 고를 수 있다) · 02 만화톤 · 03 색연필 · 04 3D 캐릭터('요청사항')」 — 02~04 는 하나만.
+/// 11-12 대표님 「01 투명하게 · 02 만화톤 · 03 색연필 · 04 3D 캐릭터('요청사항')」 — 02~04 는 하나만. 01 은 02·03 과만 겹친다 (11-13 — 캐릭터는 투명하게가 필요 없다).
 /// 지금은 폰 안에서 무료로: 사진은 영상처리(R0926AiImage), 캐릭터는 도형을 이어 짓는다(R0926AiCharacter · 받침 사진을 든 모습).
 /// 외부 3D 제작 AI 를 붙일 땐 Provider 를 바꿔 끼운다 (같은 Job 을 받아 같은 Out 을 돌려주면 된다).
 /// 사진 읽기 · 텍스처 만들기만 메인 스레드, 나머지는 배경 스레드.
@@ -105,7 +105,7 @@ public static class R0926AiWork
                 : j.Style == Style.Pencil ? R0926AiImage.Pencil(orig)
                 : orig;
         var mode = R0926AiImage.ClearMode.None;
-        if (j.Clear) img = R0926AiImage.Clear(orig, img, out mode);
+        if (j.Clear && j.Style != Style.Character) img = R0926AiImage.Clear(orig, img, out mode);   // 캐릭터는 사진 그대로 팻말에 든다
         var o = new Out { Px = R0926AiImage.ToColors(img), Alpha = R0926AiImage.HasAlpha(img), Clear = mode };
         if (j.Style == Style.Character)
         {

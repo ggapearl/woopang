@@ -358,7 +358,8 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
         // 카테고리 토글 OFF면 거리와 무관하게 전부 숨김
-        bool show = currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"];
+        bool show = (currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"])
+                    && !(currentFilters != null && currentFilters.TryGetValue("petFriendlyOnly", out bool petOnly) && petOnly);   // 애견동반을 켜도 숨긴다 (11-13 · FilterManager.PetAllowed)
 
         foreach (var kvp in spawnedObjects)
         {
@@ -386,7 +387,8 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
     {
         if (filters == null) return;
         currentFilters = new Dictionary<string, bool>(filters);
-        bool show = !filters.ContainsKey("subway") || filters["subway"];
+        bool show = (!filters.ContainsKey("subway") || filters["subway"])
+                    && !(filters.TryGetValue("petFriendlyOnly", out bool petOnly) && petOnly);   // 애견동반을 켜면 교통은 숨긴다 (11-13)
         foreach (var kvp in spawnedObjects)
         {
             if (kvp.Value != null) kvp.Value.SetActive(show);

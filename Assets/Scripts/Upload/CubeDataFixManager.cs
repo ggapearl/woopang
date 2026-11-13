@@ -39,7 +39,7 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Button mainPhotoRemove;         // 대표 사진 오른쪽 위 x
     [SerializeField] private Button subPhotoRemoveTemplate;  // 추가 사진 칸마다 복제해 넣는 x (꺼 둔 본)
     [SerializeField] private R0926PhotoReorder subReorder;   // 추가 사진을 꾹 눌러 끌면 보이는 순서가 바뀐다 (10-26)
-    [SerializeField] private GameObject descriptionLabel;    // 수정 요청의 '수정할 내용' — 내 장소에선 숨긴다
+    [SerializeField] private GameObject descriptionLabel;    // 수정 요청의 '요청사항' (비워도 된다) — 내 장소에선 숨긴다
     [SerializeField] private GameObject locationLabel;       // 내 장소에서만 — '위치'
     [SerializeField] private GameObject locationRow;
     [SerializeField] private Text locationCoords;
@@ -100,9 +100,6 @@ public class CubeDataFixManager : MonoBehaviour
     private string cleanPhotos;        // 사진 (다 불러온 뒤 — 불러오는 중이면 null 이라 사진은 견주지 않는다)
     private R0926SwipeDismiss sheet;   // 카드 — X · 뒤로가기 · 바깥 누르기 · 끌어내리기가 모두 여기를 지난다
     private GameObject discardPanel;   // '수정을 취소할까요?' — 삭제 묻는 창을 복제해 글만 바꾼 것
-    // '수정할 내용' 칸을 없앤 자리 (11-09) — 수정 요청(남의 장소)에선 그 아래 칸들을 올린다. 내 장소는 그 자리에 '위치' 줄이 들어간다
-    private readonly List<KeyValuePair<RectTransform, float>> belowDescription = new List<KeyValuePair<RectTransform, float>>();
-    private float descriptionGap = -1f;
 
     /// <summary>플레이 시험 — 고치기·지우기와 그 사진을 내 PC 시험 서버로 (운영 서버의 장소를 시험으로 바꾸지 않게)</summary>
     public static string EditorBase;
@@ -1036,7 +1033,7 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        // '수정할 내용' 칸은 없앴다 (11-09 대표님) — 고친 값 자체가 요청이다. 서버는 빈 사유를 그대로 받는다(None)
+        // 요청사항은 비워도 된다 (11-13 대표님 「기입하지 않아도 되니까」) — 서버는 빈 사유를 그대로 받는다(None)
         string description = descriptionInput != null ? R0926Emoji.ToReal(descriptionInput.text?.Trim() ?? "") : "";
         string name = R0926Emoji.ToReal(nameInput.text?.Trim() ?? "");
 
@@ -1047,11 +1044,11 @@ public class CubeDataFixManager : MonoBehaviour
             yield break;
         }
 
-        // 수정 요청은 고친 값이 곧 요청이다 — 아무것도 안 바꿨으면 보내지 않는다 (빈 요청이 관리자 목록에 쌓이지 않게)
+        // 수정 요청은 고친 값이나 요청사항이 있어야 보낸다 — 둘 다 없으면 보내지 않는다 (빈 요청이 관리자 목록에 쌓이지 않게)
         if (!ownerMode && cleanForm != null && !Dirty())
         {
-            ShowWarning(R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾼 뒤 보내 주세요", "Nothing has changed — edit something first",
-                "変更がありません — 直したい所を変えてから送ってください", "没有任何修改 — 请先修改再提交", "No hay cambios — modifica algo primero"));
+            ShowWarning(R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾸거나 요청사항을 적어 주세요", "Nothing has changed — edit something or write a request",
+                "変更がありません — 直したい所を変えるかリクエストを書いてください", "没有任何修改 — 请先修改或填写修改要求", "No hay cambios — modifica algo o escribe una solicitud"));
             isProcessing = false;
             yield break;
         }
@@ -1387,16 +1384,15 @@ public class CubeDataFixManager : MonoBehaviour
         UpdateCategoryToggleUI();
     }
 
-    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄) — 아니면 '장소 수정 요청'(수정할 내용 칸).
+    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄) — 아니면 '장소 수정 요청'(요청사항 칸 — 비워도 된다).
     /// 지우기는 장소 '···' 의 '삭제' 하나로 (10-27 대표님 — 카드 오른쪽 위 '삭제'는 없앴다)</summary>
     private void SetOwnerMode(bool mine)
     {
         ownerMode = mine;
         if (localizer != null) localizer.SetOwnerMode(mine);
-        // '수정할 내용' 칸은 없앴다 (11-09 대표님) — 수정 요청에선 그 자리만큼 아래 칸들을 올리고, 내 장소는 그 자리에 '위치' 줄
-        if (descriptionInput != null) descriptionInput.gameObject.SetActive(false);
-        SetUIActive(descriptionLabel, false);
-        LiftBelowDescription(!mine);
+        // 요청사항 칸은 수정 요청에서만 — 비워도 된다 (11-13 대표님 「높이라든가 조금 이동한다든가 하는 내용기입」). 내 장소는 그 자리에 '위치' 줄
+        if (descriptionInput != null) descriptionInput.gameObject.SetActive(!mine);
+        SetUIActive(descriptionLabel, !mine);
         SetUIActive(locationLabel, mine);
         SetUIActive(locationRow, mine);
         if (moveHereToggle != null) moveHereToggle.isOn = false;
@@ -1408,39 +1404,14 @@ public class CubeDataFixManager : MonoBehaviour
         RefreshLocation(true);
     }
 
-    // 수정 요청이면 '수정할 내용' 자리(제목 윗선 ~ 다음 칸 윗선)만큼 그 아래 칸들을 올린다 — 처음 부를 때 장면에 놓인 자리를 기억해 둔다
-    private void LiftBelowDescription(bool lift)
-    {
-        if (descriptionGap < 0f)
-        {
-            descriptionGap = 0f;
-            var label = descriptionLabel != null ? descriptionLabel.transform as RectTransform : null;
-            var input = descriptionInput != null ? descriptionInput.transform as RectTransform : null;
-            if (label == null || input == null || label.parent != input.parent) return;
-            float inputBottom = Top(input) - input.rect.height;
-            float next = float.NegativeInfinity;
-            foreach (Transform t in label.parent)
-                if (t is RectTransform c && TopAnchored(c) && Top(c) < inputBottom - 0.5f) next = Mathf.Max(next, Top(c));
-            if (float.IsNegativeInfinity(next)) return;
-            descriptionGap = Top(label) - next;
-            foreach (Transform t in label.parent)
-                if (t is RectTransform c && TopAnchored(c) && Top(c) <= next + 0.5f)
-                    belowDescription.Add(new KeyValuePair<RectTransform, float>(c, c.anchoredPosition.y));
-        }
-        foreach (var kv in belowDescription)
-            if (kv.Key != null) kv.Key.anchoredPosition = new Vector2(kv.Key.anchoredPosition.x, kv.Value + (lift ? descriptionGap : 0f));
-    }
-
-    private static bool TopAnchored(RectTransform rt) => Mathf.Approximately(rt.anchorMin.y, 1f) && Mathf.Approximately(rt.anchorMax.y, 1f);
-    private static float Top(RectTransform rt) => rt.anchoredPosition.y + (1f - rt.pivot.y) * rt.rect.height;
-
     // ── 닫을 때 묻기 (11-09) ──
     private string FormState()
     {
         return (nameInput != null ? nameInput.text : "") + "\u0001"
              + (petFriendlyToggle != null && petFriendlyToggle.isOn) + "|" + (separateRestroomToggle != null && separateRestroomToggle.isOn) + "\u0001"
              + (showInstagram ? instagramIDInput?.text ?? "" : "-") + "\u0001" + selectedCategory + "\u0001"
-             + (moveHereToggle != null && moveHereToggle.isOn);
+             + (moveHereToggle != null && moveHereToggle.isOn) + "\u0001"
+             + (descriptionInput != null ? descriptionInput.text?.Trim() ?? "" : "");   // 요청사항만 적어도 고친 것 (11-13)
     }
 
     // 사진은 텍스처 번호로 — 새로 고르거나 빼거나 순서를 바꾸면 달라진다

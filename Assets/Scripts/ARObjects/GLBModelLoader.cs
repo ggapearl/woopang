@@ -544,12 +544,12 @@ public class GLBModelLoader : MonoBehaviour
                 {
                     string[] parts = colorMatch.Groups[1].Value.Split(',');
                     if (parts.Length >= 3 &&
-                        float.TryParse(parts[0].Trim(), out float r) &&
-                        float.TryParse(parts[1].Trim(), out float g) &&
-                        float.TryParse(parts[2].Trim(), out float b))
+                        float.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float r) &&
+                        float.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float g) &&
+                        float.TryParse(parts[2].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float b))
                     {
                         float a = 1f;
-                        if (parts.Length > 3) float.TryParse(parts[3].Trim(), out a);
+                        if (parts.Length > 3) float.TryParse(parts[3].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out a);   // JSON 은 늘 '.' — 기기 언어(스페인어 등)로 읽으면 0.255 가 255 가 된다
                         color = new Color(r, g, b, a);
                     }
                 }
@@ -678,14 +678,14 @@ public class GLBModelLoader : MonoBehaviour
                 // 바탕 그림은 그대로 옮긴다 — 셰이더만 바꾸면 glTF 텍스처가 떨어져 그림 입힌 모델이 흰 덩어리가 된다 (10-24)
                 Texture baseTex = BaseColorTexture(mats[i]);
                 mats[i].shader = targetShader;
-                mats[i].SetColor("_BaseColor", color);
+                mats[i].SetColor("_BaseColor", color.gamma);   // glTF 색은 선형 — SetColor 는 감마로 받으므로 감마로 넘긴다 (선형 그대로면 AR 에서 어둡게 보였다 · 11-13)
                 if (baseTex != null) mats[i].SetTexture("_BaseMap", baseTex);
                 if (!mats[i].IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT")) mats[i].SetFloat("_Surface", 0); // Opaque — 반투명(BLEND) 재질은 생성기가 맞춰 둔 그대로
                 if (useEmission)
                 {
-                    // URP/Lit + Emission HDR 증폭: 어두운 색은 1배로는 라이트 없을 때 거의 안 보임
-                    // → 3배 boost로 baseColor 그대로 보이게 함.
-                    Color emColor = color * 3f;
+                    // URP/Lit 폴백 — 라이트 없는 AR 이라 발광을 기본색과 같게 (감마로 넘기면 그 색 그대로 보인다.
+                    // 예전 3배는 선형 값을 감마처럼 넘겨 어두워진 것을 메우던 것)
+                    Color emColor = color.gamma;
                     emColor.a = 1f;
                     mats[i].SetColor("_EmissionColor", emColor);
                     mats[i].EnableKeyword("_EMISSION");
@@ -707,7 +707,7 @@ public class GLBModelLoader : MonoBehaviour
                 DbgLog($"[dbg-GLB-mat] r='{goName}' slot={i} matID={finalMats[i].GetInstanceID()} name='{finalMats[i].name}' shader='{finalMats[i].shader.name}' base={finalMats[i].GetColor("_BaseColor")} em={finalMats[i].GetColor("_EmissionColor")} hasEmKw={hasEmKw}");
             }
         }
-        DbgLog($"[dbg-GLB] {(useEmission ? "URP/Lit+Em3x" : "URP/Unlit")} 적용: 재질이름매칭={byMatName} GO이름매칭={byGoName} 위치폴백={byPosition}");
+        DbgLog($"[dbg-GLB] {(useEmission ? "URP/Lit+Em" : "URP/Unlit")} 적용: 재질이름매칭={byMatName} GO이름매칭={byGoName} 위치폴백={byPosition}");
     }
 
     private static Texture BaseColorTexture(Material m)

@@ -12,13 +12,14 @@ using UnityEngine;
 ///  · 검은 바탕 · 흰 바탕으로 두 번 찍어 그 차이로 투명도를 구한다 — 렌더 파이프라인이 알파를 지키는지와 상관없이 가장자리까지 깨끗하게
 ///  · 카메라가 그림에 남기는 값이 감마인지 선형인지 먼저 잰다 — 모델과 같은 재질로 감마 0.5 회색 판을 찍어 본다.
 ///    에디터(D3D11)는 선형으로 남겨 색이 어둡게 나왔다(바탕색은 따로 바뀌어 바탕만으로는 못 잰다). 기기마다 달라 매번 잰다
-///  · 살짝 내려다보는 비스듬한 앞모습 — 가장 긴 변이 칸에 들어오게 맞춘다
+///  · 살짝 내려다보는 비스듬한 앞모습 — 모델 상자의 꼭짓점이 모두 칸에 들어오게 거리를 잡는다 (앞뒤로 두꺼운 모델도 잘리지 않게)
 ///  · 못 열거나 늦으면 null — 사진 없이 올린다. 찍던 쪽이 도중에 꺼져도 무대는 스스로 치운다
 /// </summary>
 public class R0926ModelSnapshot : MonoBehaviour
 {
     private const float FieldOfView = 30f;
-    private const float Distance = 2.3f;     // 가장 긴 변이 1 인 모델이 칸에 꽉 차지 않게 들어오는 거리 (화각 30도)
+    private const float Distance = 2.3f;     // 가장 가까운 거리 — 가늘고 긴 모델(가장 긴 변 1)은 이 거리 그대로 (화각 30도)
+    private const float Margin = 0.96f;      // 꼭짓점이 칸 가장자리에서 이만큼 안쪽 (1 = 가장자리에 딱)
     private const float Tilt = 12f;          // 위에서 내려다보는 각
     private const float Turn = 20f;          // 앞에서 살짝 돌린 각 — 입체로 보이게
     private const float LoadTimeout = 15f;
@@ -41,6 +42,8 @@ public class R0926ModelSnapshot : MonoBehaviour
     public static int EditorProbe;
     /// <summary>플레이 시험 — 찍은 모델의 재질 색(_BaseColor) — 색만 입힌 재질은 AR 화면에 이 값 그대로 나온다</summary>
     public static readonly List<Color32> EditorBaseColors = new List<Color32>();
+    /// <summary>플레이 시험 — 마지막에 잡은 카메라 거리 (가늘고 긴 모델은 2.3 그대로)</summary>
+    public static float EditorDistance;
 #endif
 
     /// <summary>GLB 바이트를 찍어 PNG(가로세로 side, 바탕 투명)로 돌려준다 — 못 찍으면 null</summary>
@@ -104,17 +107,21 @@ public class R0926ModelSnapshot : MonoBehaviour
                 }
 #endif
 
+        var look = Quaternion.Euler(Tilt, 0f, 0f);
+        float dist = FitDistance(look);
+#if UNITY_EDITOR
+        EditorDistance = dist;
+#endif
         var cg = new GameObject("Camera");
         cg.transform.SetParent(transform, false);
-        var look = Quaternion.Euler(Tilt, 0f, 0f);
         cg.transform.localRotation = look;
-        cg.transform.localPosition = look * new Vector3(0f, 0f, -Distance);
+        cg.transform.localPosition = look * new Vector3(0f, 0f, -dist);
         cam = cg.AddComponent<Camera>();
         cam.enabled = false;   // 매 프레임 찍지 않는다 — 아래에서 두 번만 직접 돌린다
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.fieldOfView = FieldOfView;
         cam.nearClipPlane = 0.05f;
-        cam.farClipPlane = Distance + 2f;
+        cam.farClipPlane = dist + 2f;
         cam.allowHDR = false;
         cam.allowMSAA = false;
         cam.useOcclusionCulling = false;
@@ -162,6 +169,28 @@ public class R0926ModelSnapshot : MonoBehaviour
             go.AddComponent<MeshRenderer>().sharedMaterials = smr.sharedMaterials;
             smr.enabled = false;
         }
+    }
+
+    // 모델 상자(렌더러마다 여덟 꼭짓점)가 모두 칸 안에 들어오는 카메라 거리. 카메라는 무대 가운데(모델 가운데)를 본다.
+    // 꼭짓점 q (카메라 방향 좌표) 는 거리 d 에서 |q.x|, |q.y| <= (d + q.z) · tan(화각/2) 이어야 칸 안 — 앞뒤로 두꺼운 모델은 앞 꼭짓점이 가까워 더 뺀다
+    private float FitDistance(Quaternion look)
+    {
+        float t = Mathf.Tan(FieldOfView * 0.5f * Mathf.Deg2Rad) * Margin;
+        var toView = Matrix4x4.Rotate(Quaternion.Inverse(look)) * transform.worldToLocalMatrix;
+        float need = Distance;
+        foreach (var r in renderers)
+        {
+            if (r == null) continue;
+            var lb = r.localBounds;
+            if (lb.extents == Vector3.zero) continue;
+            var m = toView * r.transform.localToWorldMatrix;
+            for (int i = 0; i < 8; i++)
+            {
+                var q = m.MultiplyPoint3x4(lb.center + Vector3.Scale(lb.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f)));
+                need = Mathf.Max(need, Mathf.Max(Mathf.Abs(q.x), Mathf.Abs(q.y)) / t - q.z);
+            }
+        }
+        return Mathf.Min(need, Distance * 3f);
     }
 
     // 모델과 같은 재질(GLBFallbackUnlit · SetColor)로 감마 0.5 회색 판을 화면 가득 찍어 — 128 근처면 감마로 남는 길, 55 근처(선형 0.214)면 선형으로 남는 길.

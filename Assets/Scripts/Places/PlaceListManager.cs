@@ -322,7 +322,7 @@ public class PlaceListManager : MonoBehaviour
                 string modelType = cached.modelType ?? "cube";
 
                 if (!showObject3D && FilterManager.Is3D(cat, modelType)) continue;
-                if (petFriendlyOnly && !cached.petFriendly) continue;
+                if (petFriendlyOnly && !FilterManager.PetAllowed(cached.filterKey, cached.filterKey == "publicData", cat, cached.petFriendly)) continue;   // 기관 공공시설은 표시와 상관없이 뺀다 (11-13)
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {
                     if (cat != activeCategoryFilter) continue;
@@ -359,7 +359,7 @@ public class PlaceListManager : MonoBehaviour
                 if (HiddenPlaces.IsHidden("dm_" + p.id)) continue;
                 string origType = p.original_model_type ?? p.model_type;
                 if (!showObject3D && FilterManager.Is3D(p.category, origType)) continue;
-                if (petFriendlyOnly && !p.pet_friendly) continue;
+                if (petFriendlyOnly && !FilterManager.PetAllowed(null, FilterManager.IsPublicSource(p.is_public, p.category), p.category, p.pet_friendly)) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter))
                 {
                     if ((p.category ?? "") != activeCategoryFilter) continue;
@@ -398,10 +398,10 @@ public class PlaceListManager : MonoBehaviour
             }
         }
 
-        // 3. New Public Transport Managers
-        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus");
-        AddTransportData(trainManager, showTrain, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_", "train");
-        AddTransportData(subwayManager, showSubway, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_", "subway");
+        // 3. New Public Transport Managers — 애견동반을 켜면 교통은 뺀다 (11-13 대표님 「애견동반이 가능한 공간만」 · FilterManager.PetAllowed)
+        AddTransportData(terminalManager, showTerminal && !petFriendlyOnly, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus");
+        AddTransportData(trainManager, showTrain && !petFriendlyOnly, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_", "train");
+        AddTransportData(subwayManager, showSubway && !petFriendlyOnly, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_", "subway");
 
         // 4. P2P Users (근처 사용자)
         bool showP2PUsers = activeFilters.GetValueOrDefault("p2pUsers", true);

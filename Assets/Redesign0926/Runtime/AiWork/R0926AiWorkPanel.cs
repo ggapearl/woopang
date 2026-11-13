@@ -5,7 +5,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 장소 추가 ▸ 「이곳에 오브젝트를 추가하시겠습니까?」 ▸ 가운데 「AI 작업」 (11-12 대표님).
-/// 누르면 카드 아래에 옵션 네 칸 — 01 투명하게(겹쳐 고를 수 있다) · 02 만화톤 · 03 색연필 · 04 3D 캐릭터(요청사항) — 02~04 는 하나만.
+/// 누르면 카드 아래에 옵션 네 칸 — 01 투명하게 · 02 만화톤 · 03 색연필 · 04 3D 캐릭터(요청사항) — 02~04 는 하나만.
+/// 01 은 02·03 과만 겹친다 — 3D 캐릭터는 네모난 사진이 아니라 투명하게가 필요 없다 (11-13 대표님). 04 를 고르면 01 이 꺼지고, 04 가 켜진 채 01 을 고르면 04 가 꺼진다.
 /// 고르는 즉시 「작업 중..」 → 돌고 있는 미리보기 큐브에 바로 입힌다. 캐릭터는 큐브 자리에 서서 큐브와 같이 돈다(큐브는 숨긴다).
 /// 「추가하기」를 누르면 지금 보이는 그대로 CubeUploadManager 가 가져간다(Take) — 투명하면 PNG, 캐릭터면 3D 모델 길로. 취소면 버린다(Discard).
 /// 무료 · 폰 안에서 (R0926AiWork — 나중에 외부 AI 는 Provider 만 바꾼다). ARPreviewPanel 에 붙는다 — Redesign0926ApplyAiWork 가 만들고 연결.
@@ -183,13 +184,18 @@ public class R0926AiWorkPanel : MonoBehaviour
     private void Pick(int i)
     {
         if (preview == null || !preview.CubeReady) return;
-        if (i == 0) clear = !clear;
+        if (i == 0)
+        {
+            clear = !clear;
+            if (clear && style == R0926AiWork.Style.Character) style = R0926AiWork.Style.None;   // 01 을 고르면 캐릭터는 내린다
+        }
         else
         {
             var s = (R0926AiWork.Style)i;   // 1 만화톤 · 2 색연필 · 3 3D 캐릭터 — 하나만
             style = style == s ? R0926AiWork.Style.None : s;
-            if (style == R0926AiWork.Style.Character && s == R0926AiWork.Style.Character)
+            if (style == R0926AiWork.Style.Character)
             {
+                clear = false;   // 캐릭터는 투명하게가 필요 없다 — 01 은 02·03 과만
                 lastRequest = RequestText();
                 variant = 0;
             }

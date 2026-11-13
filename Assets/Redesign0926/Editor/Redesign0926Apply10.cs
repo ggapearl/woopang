@@ -258,12 +258,12 @@ namespace Redesign0926
                 BackCloses(x.transform, "장소 수정 X", log);
             }
 
-            // 이름 · 설명
+            // 이름 · 요청사항 (요청사항은 수정 요청에서만 — 비워도 된다 · 11-13 다시 넣음)
             float y = -170f;
             foreach (var (label, input, ph) in new[]
             {
                 ("Changed Name", "NameInput", new[] { "장소 이름", "Place name", "場所の名前", "地点名称", "Nombre del lugar" }),
-                ("Description", "DescriptionInput", new[] { "장소 설명", "Description", "説明", "地点说明", "Descripción" }),
+                ("Description", "DescriptionInput", new[] { "예) 조금 더 높게 · 입구 쪽으로 조금", "e.g. a bit higher · nearer the entrance", "例）もう少し高く・入口の方へ少し", "例：再高一点 · 往入口挪一点", "p. ej. más alto · más cerca de la entrada" }),
             })
             {
                 SectionLabel(P(label), UP, y, 800);
@@ -376,13 +376,13 @@ namespace Redesign0926
         // ── 내가 올린 장소 고치기 (2026-10-26) ───────────────────────────
         // 대표님 (10-25): 「'정보 수정' 버튼을 눌러서 수정할 때는 기존에 있던 것들을 그대로 불러와서 각 사진 우측 위에 (메인사진포함)
         // x버튼을 적당히 작게」 · 「본인이 올린 것에 한해서는 직접 삭제」 · 「위치가 좀 바뀌었다면 … 수정한 사람이 수정하는 경우 바로 적용」
-        // 위치 줄·삭제는 내 장소일 때만 CubeDataFixManager 가 켠다 (남의 장소는 예전처럼 '수정할 내용' 칸)
+        // 위치 줄·삭제는 내 장소일 때만 CubeDataFixManager 가 켠다 (남의 장소는 '요청사항' 칸 — 비워도 된다)
         private static void FixPageOwner(Transform root, Transform card, Transform panel, List<string> log)
         {
             var mgr = FindInScene<CubeDataFixManager>(card.gameObject);
             if (mgr == null) { log.Add("내 장소 고치기 — 매니저 없음"); return; }
 
-            // 위치 — '수정할 내용' 자리에 (둘 중 하나만 보인다)
+            // 위치 — '요청사항' 자리에 (둘 중 하나만 보인다)
             var locLabel = FindOrCreate(panel, "LocLabel0926");
             SectionLabelNew(locLabel, UP, -420, new[] { "위치", "Location", "位置", "位置", "Ubicación" });
             locLabel.SetActive(false);
