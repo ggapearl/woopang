@@ -22,6 +22,8 @@ using UnityEngine.XR.ARFoundation;
 ///    (10-25 대표님 「조금만 움직여도 해당 내용이 사라질 수 있으니 … 고정」). 한 번 뜬 판은 설정 각도보다 조금 더 내려야 사라진다
 ///  · 판을 위로 밀면 화면 위쪽(노치 아래 칩 밑)에 고정 — 아래로 밀거나 📌 를 누르면 하늘로 (11-05 대표님 「위로 스와이프하면 위쪽으로 고정 …
 ///    아랫쪽 로직도 그대로 두고」)
+///  · 노치가 있는 아이폰(R0926Notch)은 접은 동안 날씨를 칩 대신 노치 옆에 — 휴대폰을 내려도 보인다. 노치를 누르면 판을 화면 위쪽에 고정해 펴고
+///    (위를 안 봐도 보이게), 아래로 밀면 사라진 뒤 하늘을 비추면 평소대로 (11-09 대표님 「노치를 터치해서는 … 화면 상단에 고정해둬」)
 /// 데이터: 우팡 서버 /api/weather (10분 캐시). 스폰 시스템과 따로 돌아 기존 오브젝트 로직을 건드리지 않는다.
 /// </summary>
 public class R0926SkyWeather : MonoBehaviour
@@ -149,6 +151,10 @@ public class R0926SkyWeather : MonoBehaviour
     private readonly Vector3[] corners = new Vector3[4];
     private string lastChip;
     private float pillSince = -1f;
+    private int notchCode = -1, notchTemp;   // 노치에 보일 지금 날씨 (Show)
+    private bool notchDay = true;
+    private bool homeRequest;                // 노치에서 폈다 — 옆 장(R0926SkyPages)이 날씨 장부터
+    private const string NotchHintKey = "SkyNotchUnfoldHint";
     private const float PillWaitMax = 30f;   // 알약이 이보다 오래 안 걷히면(최종 개수가 안 온 경우 등) 칩이 더 기다리지 않는다
 
     private void Start()
@@ -269,10 +275,7 @@ public class R0926SkyWeather : MonoBehaviour
             pinTop = top;
             if (!ScreenRect(frame, out fromPos, out fromScale)) PinnedRect(out fromPos, out fromScale);
             fromAlpha = skyGroup != null ? skyGroup.alpha : 1f;
-            frame.SetParent(pinLayer, false);
-            frame.anchorMin = frame.anchorMax = new Vector2(0.5f, 0f);   // 하늘에선 판에 꽉 차게 늘어나 있다 — 크기를 직접
-            frame.sizeDelta = frameSize;
-            frame.localRotation = Quaternion.identity;
+            AttachToPin();
             collapsed = false;
         }
         else
@@ -282,6 +285,51 @@ public class R0926SkyWeather : MonoBehaviour
             fromAlpha = frameGroup.alpha;
         }
         UpdatePin();
+    }
+
+    // 틀을 화면 UI 의 고정 자리로 옮겨 붙인다 — 하늘에선 판에 꽉 차게 늘어나 있다, 크기를 직접
+    private void AttachToPin()
+    {
+        frame.SetParent(pinLayer, false);
+        frame.anchorMin = frame.anchorMax = new Vector2(0.5f, 0f);
+        frame.sizeDelta = frameSize;
+        frame.localRotation = Quaternion.identity;
+    }
+
+    /// <summary>
+    /// 노치의 날씨를 누르면 (R0926Notch) — 하늘을 안 봐도 보이게 판을 화면 위쪽에 고정해 편다. 노치 자리(화면 픽셀)에서 작게 나와 내려온다.
+    /// 아래로 밀면 사라지고(R0926SkyPages → SetPinned(false)), 그 뒤 하늘을 비추면 평소대로 하늘에 뜬다
+    /// </summary>
+    public void UnfoldFromNotch(Vector2 screen)
+    {
+        if (frame == null || frameGroup == null || pinLayer == null || glass == null || frameSize.x <= 0f) return;
+        collapsed = false;
+        if (lying) lyingOverride = true;
+        homeRequest = true;
+        if (pinned) { SetPinned(true, true); return; }
+        pinned = true;
+        pinTop = true;
+        pinT = 0f;
+        AttachToPin();
+        PinnedRect(out _, out float toScale);
+        var area = pinLayer.rect;
+        fromPos = RectTransformUtility.ScreenPointToLocalPointInRectangle(pinLayer, screen, null, out var lp)
+            ? lp - new Vector2(area.center.x, area.yMin) : new Vector2(0f, area.height);
+        fromScale = toScale * 0.18f;
+        fromAlpha = 0f;
+        UpdatePin();
+        if (PlayerPrefs.GetInt(NotchHintKey, 0) != 0 || ToastManager.Instance == null) return;
+        PlayerPrefs.SetInt(NotchHintKey, 1);   // 처음 한 번만 — 치우는 법
+        ToastManager.Instance.ShowInfo(L(R0926LocalizedText.Lang(), "위쪽에 고정했어요 · 아래로 밀면 사라져요", "Pinned to the top · Swipe down to put it away",
+            "上に固定しました · 下にスワイプで閉じます", "已固定在顶部 · 向下滑动即可收起", "Fijado arriba · Desliza hacia abajo para quitarlo"));
+    }
+
+    /// <summary>노치에서 폈는지 — 한 번 읽으면 지운다 (R0926SkyPages 가 날씨 장부터 보이게)</summary>
+    public bool ConsumeHome()
+    {
+        bool h = homeRequest;
+        homeRequest = false;
+        return h;
     }
 
     /// <summary>판을 만지는 중 — 잠깐 기울어져도 사라지지 않게 (미는 손에 휴대폰이 같이 기운다)</summary>
@@ -353,6 +401,10 @@ public class R0926SkyWeather : MonoBehaviour
         bool covered = false;
         if (chipWaitFor != null) foreach (var g in chipWaitFor) if (g != null && g.activeInHierarchy) { covered = true; break; }
         bool showChip = ready && settled && !covered && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
+        // 노치가 있는 아이폰 — 접은 동안 날씨는 칩 대신 노치 옆에 (휴대폰을 내려도 보인다 · 누르면 위쪽에 고정해 편다 — UnfoldFromNotch)
+        bool inNotch = collapsed && !pinned && WeatherReady && notchCode >= 0 && R0926Notch.Available;
+        R0926Notch.SetWeather(inNotch, notchCode, notchDay, notchTemp);
+        if (inNotch) showChip = false;
         boardShowing = skyShow || pinned;
         UpdateChip(boardShowing);
 
@@ -530,7 +582,7 @@ public class R0926SkyWeather : MonoBehaviour
         lastChip = text;
         chipText.text = text;
         if (chipArrow != null) chipArrow.localEulerAngles = new Vector3(0f, 0f, boardUp ? 180f : 0f);   // 위 화살표 = 접기, 아래 = 펼치기
-        if (chipRect != null) chipRect.sizeDelta = new Vector2(76f + chipText.preferredWidth + 18f + 58f, chipRect.sizeDelta.y);
+        if (chipRect != null) chipRect.sizeDelta = new Vector2(84f + chipText.preferredWidth + 20f + 64f, chipRect.sizeDelta.y);   // 글 왼쪽 84 · 화살표 쪽 84 (11-09 칩을 조금 키움)
     }
 
     private string weatherChip = "";
@@ -750,6 +802,7 @@ public class R0926SkyWeather : MonoBehaviour
         }
         ShowCredit(w.src, w.pty >= 0, lang);
         weatherChip = cond + " " + t + "°";
+        notchCode = code; notchDay = w.is_day; notchTemp = t;
         lastChip = null;   // 다음 프레임에 칩 글자 갱신
     }
 

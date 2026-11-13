@@ -50,16 +50,17 @@ namespace Redesign0926
             // ── 오브젝트 우선일 때 위쪽 작은 칩 (UI 캔버스) ──
             var chip = FindOrCreate(root, "SkyChip0926");
             chip.transform.SetSiblingIndex(Find(root, "Dock0926") != null ? Find(root, "Dock0926").transform.GetSiblingIndex() : chip.transform.GetSiblingIndex());
-            Img(chip, Spr("r0926_pill"), Glass, Image.Type.Sliced, 64f / 40f).raycastTarget = false;
-            SetRect(RT(chip), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -40), new Vector2(360, 84));
+            // 11-09 대표님 「'하늘접기' 버튼이 너무 작은데 아주 조금만 더 크게」 — 높이 84 → 94 · 글 34 → 38 · 점 26 → 30 (화살표는 ApplySkyChipToggle)
+            Img(chip, Spr("r0926_pill"), Glass, Image.Type.Sliced, 63f / 47f).raycastTarget = false;
+            SetRect(RT(chip), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -40), new Vector2(360, 94));
             Ensure<R0926SafeInset>(chip);
             var ccg = Ensure<CanvasGroup>(chip); ccg.alpha = 0f; ccg.blocksRaycasts = false;
             var dot = FindOrCreate(chip.transform, "Dot0926");
             Img(dot, Spr("r0926_circle"), new Color(1f, 0.82f, 0.48f, 1f), Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(46, 0), new Vector2(26, 26));
+            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(50, 0), new Vector2(30, 30));
             var chipT = FindOrCreate(chip.transform, "Label0926");
-            var cht = Txt(chipT, "맑음 19°", 34, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
-            var crt = RT(chipT); crt.anchorMin = Vector2.zero; crt.anchorMax = Vector2.one; crt.offsetMin = new Vector2(76, 0); crt.offsetMax = new Vector2(-24, 0);
+            var cht = Txt(chipT, "맑음 19°", 38, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var crt = RT(chipT); crt.anchorMin = Vector2.zero; crt.anchorMax = Vector2.one; crt.offsetMin = new Vector2(84, 0); crt.offsetMax = new Vector2(-24, 0);
 
             var marker = Find(root, "Redesign0926Marker");
             var sky = Ensure<R0926SkyWeather>(marker != null ? marker : root.gameObject);

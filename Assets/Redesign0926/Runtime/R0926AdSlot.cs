@@ -93,7 +93,7 @@ public class R0926AdSlot : MonoBehaviour
 
     private IEnumerator LoadImage(string url)
     {
-        using (var req = UnityWebRequestTexture.GetTexture(url))
+        using (var req = UnityWebRequestTexture.GetTexture(ApiConfig.Secure(url)))
         {
             req.timeout = 10;
             yield return req.SendWebRequest();

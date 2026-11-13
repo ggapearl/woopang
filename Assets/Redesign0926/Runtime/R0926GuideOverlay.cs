@@ -109,6 +109,7 @@ public class R0926GuideOverlay : MonoBehaviour, ICanvasRaycastFilter
     private void LateUpdate()
     {
         if (container == null || panel == null) return;
+        if (!container.gameObject.activeInHierarchy) return;   // 카드 안내(R0926GuideCards)가 대신 떠 있다
         if (root == null) { var c = GetComponentInParent<Canvas>(); root = c != null ? c.rootCanvas : null; }
         if (root == null) return;
 

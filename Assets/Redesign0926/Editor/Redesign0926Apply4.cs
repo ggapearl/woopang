@@ -13,7 +13,7 @@ namespace Redesign0926
     public static partial class Redesign0926Apply
     {
         private const float RailW = DockHeight;   // 가로 도크 막대 폭
-        private const float RailH = 920f;
+        private const float RailH = 1040f;   // 다섯 칸 (11-09 보물찾기 칸 · 예전 네 칸 920)
         private const float RailMargin = 40f;
         private const float LandCardW = 1500f;
         private const float LandSheetW = 1400f;
@@ -71,7 +71,7 @@ namespace Redesign0926
             }
 
             R0926Orientation.Snap Rail() => S(new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-RailMargin, 0), new Vector2(RailW, RailH));
-            R0926Orientation.Snap RailSlot(float px) => S(new Vector2(0.5f, LandSlotY(px)), new Vector2(0.5f, LandSlotY(px)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RailW, 220));
+            R0926Orientation.Snap RailSlot(float px) => S(new Vector2(0.5f, LandSlotY(px)), new Vector2(0.5f, LandSlotY(px)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(RailW, RailH / 5f));
             R0926Orientation.Snap LeftCard() => S(new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(60, 0), new Vector2(LandCardW, -80));
             R0926Orientation.Snap BottomSheet(float h, float y) => S(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, y), new Vector2(LandSheetW, h));
 
@@ -79,6 +79,7 @@ namespace Redesign0926
             Add(Find(root, "Dock0926"), Rail(), 0, R0926SafeInset.Edge.Bottom, R0926SafeInset.Edge.Right);
             Add(Find(root, "List_Button"), RailSlot(SlotList));
             Add(Find(root, "PlusButton"), RailSlot(SlotAdd));
+            Add(Find(root, "Hunt_Button0926"), RailSlot(SlotHunt));
             Add(Find(root, "Message_Button"), RailSlot(SlotMsg));
             Add(Find(root, "MiniProfile"), RailSlot(SlotProfile));
 

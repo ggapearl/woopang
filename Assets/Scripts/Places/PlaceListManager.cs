@@ -62,6 +62,7 @@ public class PlaceListManager : MonoBehaviour
         public bool promo;           // 관리자가 띄운 협력 업체(광고) 줄 — '광고'를 밝히고 노출·클릭을 센다
         public string adId, emojiUrl;
         public bool pet;             // 애견동반 되는 장소 — 목록 이름이 노랑 (R0926PlaceRows)
+        public object data;          // 원본 자료 — 줄 오른쪽 사진·사진을 누르면 여는 정보 창 (PlaceData · CachedPlaceData · TourPlaceData · FacilityData · NearbyUserData · 축제)
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
 
@@ -86,6 +87,7 @@ public class PlaceListManager : MonoBehaviour
         public bool promo;           // 광고 줄 (축제 칩 맨 위) — 거리 칸 '광고 · 거리' · 줄 앞은 고른 이모지 그림
         public string adId, emojiUrl;
         public bool pet;             // 애견동반 되는 장소 — 이름을 노랑으로
+        public object data;          // 원본 자료 — 줄 오른쪽 사진 · 사진을 누르면 여는 정보 창 (R0926PlaceRows · R0926PlaceInfo)
     }
     private readonly List<ListEntry> shownEntries = new List<ListEntry>();
     /// <summary>listText 의 장소 줄과 같은 순서의 장소 정보. 글자는 예전 그대로다 (다른 코드가 글자를 읽는다)</summary>
@@ -94,7 +96,7 @@ public class PlaceListManager : MonoBehaviour
     private (float d, int idx)[] orderedBuffer = new (float, int)[64];
     private float[] distBuffer = new float[64];
     private const float PinnedFirst = 1e7f;   // 맨 위 줄은 정렬 열쇠에서 pin 마다 이만큼 빼 앞으로
-    private const int MaxShelters = 3, MaxFestivals = 3, MaxNearHunts = 3;
+    private const int ShelterPool = 3, MaxFestivals = 3, MaxNearHunts = 3;   // 보호소는 가까운 세 곳 중 한 곳만 띄운다 (AddShelterData)
     private float lastGpsLat;
     private float lastGpsLon;
     private bool hasLiveSnapshot = false;
@@ -112,6 +114,8 @@ public class PlaceListManager : MonoBehaviour
     private int huntCount;
     private int festivalCount;
     private int shelterCount;
+    private string shelterPick;            // 지금 맨 위에 띄운 보호소 id — 목록을 열 때 · 애견동반을 켤 때만 다시 고른다
+    private bool shelterReroll = true;
     private P2PManager filterSource;   // 사람 칩(팔로잉·전체·제외)이 바뀌면 바로 다시 그린다
 
     // P2P 사용자 색상 (핑크)
@@ -343,7 +347,8 @@ public class PlaceListManager : MonoBehaviour
                     string rawColor = placeDataMap.ContainsKey(id) ? placeDataMap[id].color : null;
                     string colorHex = DataManager.ResolvePlaceColorHex(rawColor, cat, displayName);
                     combinedPlaces.Add((cached, d, id.ToString(), $"{displayName} - {Mathf.FloorToInt(d)}m", colorHex));
-                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude, icon = PlaceIcon(cat, modelType == "custom"), pet = cached.petFriendly });
+                    liveEntries.Add(new LiveEntry { id = id.ToString(), baseLabel = displayName, colorHex = colorHex, baseLat = cached.latitude, baseLon = cached.longitude, icon = PlaceIcon(cat, modelType == "custom"), pet = cached.petFriendly,
+                                                    data = placeDataMap.TryGetValue(id, out PlaceData full) ? (object)full : cached });
                     addedIds.Add(id);
                 }
             }
@@ -374,7 +379,7 @@ public class PlaceListManager : MonoBehaviour
                     }
                     string pColor = DataManager.ResolvePlaceColorHex(p.color, p.category, p.name);
                     combinedPlaces.Add((p, d, p.id.ToString(), $"{p.name} - {Mathf.FloorToInt(d)}m", pColor));
-                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude, icon = PlaceIcon(p.category, origType == "custom"), pet = p.pet_friendly });
+                    liveEntries.Add(new LiveEntry { id = p.id.ToString(), baseLabel = p.name, colorHex = pColor, baseLat = p.latitude, baseLon = p.longitude, icon = PlaceIcon(p.category, origType == "custom"), pet = p.pet_friendly, data = p });
                 }
             }
         }
@@ -388,7 +393,7 @@ public class PlaceListManager : MonoBehaviour
                     tourAPICount++;
                     combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
                     // 관광공사 반려동물 여행 자료 — 모두 애견동반 (TourAPIManager 캐시도 petFriendly = true)
-                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = "tour", pet = true });
+                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = "tour", pet = true, data = p });
                 }
             }
         }
@@ -540,6 +545,7 @@ public class PlaceListManager : MonoBehaviour
         if (nowActive && !wasListPanelActive)
         {
             wasListPanelActive = true;
+            shelterReroll = true;   // 목록을 열 때마다 보호소를 새로 고른다
             UpdateUI();
             return;
         }
@@ -631,7 +637,7 @@ public class PlaceListManager : MonoBehaviour
     private static ListEntry ToListEntry(LiveEntry e, float distance)
     {
         var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = (float)e.baseLat, lon = (float)e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link,
-                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl, pet = e.pet };
+                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl, pet = e.pet, data = e.data };
         if (e.kind == EntryKind.Hunt)
         {
             le.distanceText = e.huntFound ? R0926HuntList.FoundText : R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);
@@ -699,7 +705,7 @@ public class PlaceListManager : MonoBehaviour
                 p2pUserCount++;
                 string displayText = $"@{user.username} - {Mathf.FloorToInt(user.distance)}m";   // 이모지는 앱 글꼴에 없어 □로 보였다
                 combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
-                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude, kind = EntryKind.Person });
+                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude, kind = EntryKind.Person, data = user });
             }
         }
     }
@@ -750,7 +756,7 @@ public class PlaceListManager : MonoBehaviour
                 id = "fest:" + f.id, baseLabel = title, colorHex = R0926Nearby.FestivalHex, baseLat = (float)f.lat, baseLon = (float)f.lon,
                 kind = EntryKind.Festival, icon = f.icon, start = f.start, end = f.end, anyDistance = true,
                 link = f.promo ? R0926Nearby.PromoLink(f.link, title, f.lat, f.lon) : R0926Nearby.FestivalLink(title),
-                pin = (byte)(f.promo ? 3 : 2), promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url
+                pin = (byte)(f.promo ? 3 : 2), promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url, data = f
             };
             float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
             if (!f.promo) festivalCount++;
@@ -759,24 +765,35 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
-    /// <summary>반려견만 — 가까운 유기동물 보호소 세 곳을 목록 맨 위에 (거리 슬라이더와 상관없이). 누르면 카카오맵 장소 쪽 (전화·길찾기)</summary>
+    /// <summary>
+    /// 애견동반 — 가까운 유기동물 보호소 세 곳 중 한 곳을 골라 목록 맨 위에 (거리 슬라이더와 상관없이). 누르면 카카오맵 장소 쪽 (전화·길찾기).
+    /// 11-12 대표님 「보호소 리스트 3개는 너무 많거든? … 가까운 3군데 리스트 중에서 랜덤으로 1개씩 상단에」 —
+    /// 목록을 열 때 · 애견동반을 켤 때 앞과 다른 곳으로 고르고, 그 사이 몇 초마다 다시 그릴 때는 같은 곳 (매번 고르면 맨 윗줄이 깜빡인다).
+    /// 고른 곳이 가까운 세 곳에서 빠지면(멀리 옮김) 그때도 다시 고른다
+    /// </summary>
     private void AddShelterData(float lat, float lon)
     {
-        foreach (var s in R0926Nearby.Shelters)
+        var near = R0926Nearby.Shelters.Where(x => x != null && !string.IsNullOrEmpty(x.name))
+            .OrderBy(x => CalculateDistance(lat, lon, (float)x.lat, (float)x.lon)).Take(ShelterPool).ToList();
+        if (near.Count == 0) return;
+        var s = near.Find(x => x.id == shelterPick);
+        if (s == null || shelterReroll)
         {
-            if (shelterCount >= MaxShelters) break;
-            if (s == null || string.IsNullOrEmpty(s.name)) continue;
-            string name = s.name.Replace('\r', ' ').Replace('\n', ' ').Trim();
-            var e = new LiveEntry
-            {
-                id = "shelter:" + s.id, baseLabel = name, colorHex = R0926Nearby.ShelterHex, baseLat = (float)s.lat, baseLon = (float)s.lon,
-                kind = EntryKind.Shelter, icon = "shelter", link = s.url, pin = 1, anyDistance = true
-            };
-            float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
-            shelterCount++;
-            combinedPlaces.Add((s, d, e.id, $"{name} - {Mathf.FloorToInt(d)}m", e.colorHex));
-            liveEntries.Add(e);
+            var others = near.FindAll(x => x.id != shelterPick);   // 앞과 다른 곳 (한 곳뿐이면 그곳)
+            s = others.Count > 0 ? others[UnityEngine.Random.Range(0, others.Count)] : near[0];
+            shelterPick = s.id;
+            shelterReroll = false;
         }
+        string name = s.name.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        var e = new LiveEntry
+        {
+            id = "shelter:" + s.id, baseLabel = name, colorHex = R0926Nearby.ShelterHex, baseLat = (float)s.lat, baseLon = (float)s.lon,
+            kind = EntryKind.Shelter, icon = "shelter", link = s.url, pin = 1, anyDistance = true
+        };
+        float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
+        shelterCount = 1;
+        combinedPlaces.Add((s, d, e.id, $"{name} - {Mathf.FloorToInt(d)}m", e.colorHex));
+        liveEntries.Add(e);
     }
 
     /// <summary>
@@ -846,7 +863,7 @@ public class PlaceListManager : MonoBehaviour
                 combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", colorHex));
                 // 터미널 칩에는 버스터미널과 공항이 함께 있다 — 공항은 비행기 그림
                 string pIcon = icon == "bus" && pName != null && (pName.Contains("공항") || pName.IndexOf("airport", StringComparison.OrdinalIgnoreCase) >= 0) ? "airport" : icon;
-                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon });
+                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon, data = val });
             }
         }
     }
@@ -862,7 +879,9 @@ public class PlaceListManager : MonoBehaviour
     }
 
     public void ApplyFilters(Dictionary<string, bool> filters) {
+        bool petWas = activeFilters != null && activeFilters.GetValueOrDefault("petFriendlyOnly", false);
         activeFilters = filters;
+        if (!petWas && filters != null && filters.GetValueOrDefault("petFriendlyOnly", false)) shelterReroll = true;   // 애견동반을 켤 때마다 보호소를 새로 고른다
         UpdateUI();
     }
 

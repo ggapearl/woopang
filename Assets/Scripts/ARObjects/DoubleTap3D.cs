@@ -97,6 +97,11 @@ public class DoubleTap3D : MonoBehaviour
     private bool canClose = true; // 닫기 방지 쿨다운
     private bool isFadingOut = false; // FadeOut 코루틴 중복 실행 방지
     private Coroutine imageFade;      // 늦게 도착한 사진을 서서히 띄우는 중
+    // 정보 창(FullScreenPanel)은 모든 장소가 함께 쓴다 — 목록 사진(R0926PlaceInfo)으로 다른 장소를 열면 그 장소가 넘겨받는다
+    private static DoubleTap3D shown;
+    private Coroutine fadeRoutine;    // 창 페이드 — 넘겨줄 때 멈춘다 (앞 장소의 페이드아웃이 새 창을 닫지 않게)
+    /// <summary>Start 를 마쳐 정보 창을 열 수 있다 (목록 사진 — R0926PlaceInfo)</summary>
+    public bool IsReady { get; private set; }
     private const float PhotoWait = 0.35f;   // 첫 장 사진이 곧 오면 이만큼 기다렸다 창과 함께 띄운다
     private const float MaxFadeStep = 1f / 30f;   // 무거운 프레임 하나가 페이드를 통째로 먹지 않게 한 프레임에 세는 시간 상한
 
@@ -400,6 +405,7 @@ public class DoubleTap3D : MonoBehaviour
 #endif
 
         StartCoroutine(IgnoreInitialTouch(2f));
+        IsReady = true;
 
 #if UNITY_IOS
         if (savedFullscreenState && savedObjectId == this.id && this.id != -1)
@@ -434,6 +440,8 @@ public class DoubleTap3D : MonoBehaviour
     {
         yield return new WaitForSeconds(0.5f);
 
+        if (shown != null && shown != this) shown.YieldFullscreen();
+        shown = this;
         isFullscreen = true;
         EnsurePhotos();   // 그사이 놓아줬으면 다시 받는다
         imageIndex = savedImageIndex;
@@ -888,59 +896,7 @@ public class DoubleTap3D : MonoBehaviour
                 haptic.PlayDoubleTapFeedback();
             }
 
-            isFullscreen = true;
-
-            // 열릴 때 닫기 방지 쿨다운 시작
-            canClose = false;
-            StartCoroutine(EnableCloseAfterDelay());
-
-            currentIndex = 0;
-            isPlaceInfoPage = placeInfoTextPanel != null;
-            imageIndex = placeInfoTextPanel != null ? -1 : 0;
-
-            ShowImage(imageIndex);
-            UpdateInfoImages();
-
-            // 진행 중이던 FadeOut 코루틴 중단 후 열기
-            if (isFadingOut)
-            {
-                StopAllCoroutines();
-                isFadingOut = false;
-                if (photosLoading) ReleasePhotos();   // 받던 사진도 같이 멈췄다 — 처음부터 다시
-            }
-            EnsurePhotos();
-
-            fullscreenCanvasGroup.gameObject.SetActive(true);
-            guidePanel.SetActive(true);
-
-            instagramButton.onClick.RemoveAllListeners();
-            instagramButton.onClick.AddListener(OnInstagramButtonClick);
-
-            nextButton.onClick.RemoveAllListeners();
-            nextButton.onClick.AddListener(ShowNextImage);
-            previousButton.onClick.RemoveAllListeners();
-            previousButton.onClick.AddListener(ShowPreviousImage);
-            closeButton.onClick.RemoveAllListeners();
-            closeButton.onClick.AddListener(CloseFullscreen);
-
-            StartCoroutine(FadeInCanvas(fadeDuration));
-
-            // ⭐ 코멘트 프리뷰 업데이트 + 버튼 리스너 재등록 (공유 UI — 현재 fullscreen 인스턴스로)
-            if (CommentManager.Instance != null)
-            {
-                if (commentPreviewPanel != null)
-                {
-                    commentPreviewPanel.SetActive(true);
-                    Button panelBtn = commentPreviewPanel.GetComponent<Button>();
-                    if (panelBtn != null)
-                    {
-                        panelBtn.onClick.RemoveAllListeners();
-                        panelBtn.onClick.AddListener(OnCommentPreviewClicked);
-                    }
-                }
-                
-                RefreshCommentPreview();
-            }
+            OpenFullscreen();
         }
         else
         {
@@ -950,6 +906,138 @@ public class DoubleTap3D : MonoBehaviour
                 return;
             }
             CloseFullscreen();
+        }
+    }
+
+    /// <summary>
+    /// 목록 줄의 사진을 눌렀을 때 (R0926PlaceInfo) — 이 장소를 두 번 누른 것과 같은 정보 창을 연다.
+    /// 춤 모델도 다운로드 창이 아니라 정보 창으로. 다른 장소가 창을 쓰고 있으면 넘겨받는다
+    /// </summary>
+    public bool OpenInfo()
+    {
+        if (!IsReady || !isActiveAndEnabled || fullscreenCanvasGroup == null) return false;
+        if (shown == this && isFullscreen && !isFadingOut && fullscreenCanvasGroup.gameObject.activeSelf) return true;   // 이미 이 장소가 떠 있다
+        OnDoubleTapEvent?.Invoke(this);
+        OpenFullscreen();
+        return true;
+    }
+
+    // 다른 장소가 창을 넘겨받았다 — 창은 그대로 두고 이 장소만 손을 뗀다 (페이드도 멈춘다)
+    private void YieldFullscreen()
+    {
+        if (fadeRoutine != null) { StopCoroutine(fadeRoutine); fadeRoutine = null; }
+        if (imageFade != null) { StopCoroutine(imageFade); imageFade = null; }
+        isFullscreen = false;
+        isFadingOut = false;
+    }
+
+    /// <summary>
+    /// AR 에 아직 없는 장소의 정보 창 (목록 사진 — R0926PlaceInfo) — 장면에서 정보 창 연결을 가진 것에서 연결을 그대로 받는다.
+    /// 화면 밖 빈 오브젝트라 두 번 누를 수는 없고, 창을 열고 넘기는 일만 한다. 연결을 가진 것이 없으면 null
+    /// </summary>
+    public static DoubleTap3D CreateInfoHost(string name)
+    {
+        DoubleTap3D src = null;
+        foreach (var d in Resources.FindObjectsOfTypeAll<DoubleTap3D>())
+        {
+            if (d == null || !d.gameObject.scene.IsValid()) continue;   // 프리팹 에셋 제외
+            if (d.fullscreenCanvasGroup != null && d.guidePanel != null && d.fullscreenImage != null && d.closeButton != null
+                && d.infoImage1 != null && d.infoImage2 != null && d.instagramButton != null && d.previousButton != null
+                && d.nextButton != null && d.nameText != null) { src = d; break; }
+        }
+        if (src == null) return null;
+        var go = new GameObject(name);
+        go.SetActive(false);   // 연결을 다 넣은 뒤에 켠다 (Start 가 그 연결로 준비)
+        var dt = go.AddComponent<DoubleTap3D>();
+        dt.fullscreenCanvasGroup = src.fullscreenCanvasGroup;
+        dt.guidePanel = src.guidePanel;
+        dt.fullscreenImage = src.fullscreenImage;
+        dt.nextFullscreenImage = src.nextFullscreenImage;
+        dt.infoImage1 = src.infoImage1;
+        dt.infoImage2 = src.infoImage2;
+        dt.instagramButton = src.instagramButton;
+        dt.previousButton = src.previousButton;
+        dt.nextButton = src.nextButton;
+        dt.closeButton = src.closeButton;
+        dt.nameText = src.nameText;
+        dt.descriptionTextUI = src.descriptionTextUI;
+        dt.createdByText = src.createdByText;
+        dt.placeInfoTextPanel = src.placeInfoTextPanel;
+        dt.commentPreviewPanel = src.commentPreviewPanel;
+        dt.previewText = src.previewText;
+        dt.previewLikeCount = src.previewLikeCount;
+        dt.previewLikeIcon = src.previewLikeIcon;
+        dt.likedSprite = src.likedSprite;
+        dt.likeIcon = src.likeIcon;
+        dt.tapSpeed = src.tapSpeed;
+        dt.swipeThreshold = src.swipeThreshold;
+        dt.fadeDuration = src.fadeDuration;
+        dt.swipeSpeed = src.swipeSpeed;
+        dt.slideDuration = src.slideDuration;
+        dt.slideImageGap = src.slideImageGap;
+        dt.slideFadeDuration = src.slideFadeDuration;
+        dt.touchBlockDuration = src.touchBlockDuration;
+        go.SetActive(true);
+        return dt;
+    }
+
+    // 정보 창 열기 — 두 번 누르기(OnDoubleTapCube)와 목록 사진(OpenInfo)이 함께 쓴다
+    private void OpenFullscreen()
+    {
+        if (shown != null && shown != this) shown.YieldFullscreen();
+        shown = this;
+        isFullscreen = true;
+
+        // 열릴 때 닫기 방지 쿨다운 시작
+        canClose = false;
+        StartCoroutine(EnableCloseAfterDelay());
+
+        currentIndex = 0;
+        isPlaceInfoPage = placeInfoTextPanel != null;
+        imageIndex = placeInfoTextPanel != null ? -1 : 0;
+
+        ShowImage(imageIndex);
+        UpdateInfoImages();
+
+        // 진행 중이던 FadeOut 코루틴 중단 후 열기
+        if (isFadingOut)
+        {
+            StopAllCoroutines();
+            isFadingOut = false;
+            if (photosLoading) ReleasePhotos();   // 받던 사진도 같이 멈췄다 — 처음부터 다시
+        }
+        EnsurePhotos();
+
+        fullscreenCanvasGroup.gameObject.SetActive(true);
+        guidePanel.SetActive(true);
+
+        instagramButton.onClick.RemoveAllListeners();
+        instagramButton.onClick.AddListener(OnInstagramButtonClick);
+
+        nextButton.onClick.RemoveAllListeners();
+        nextButton.onClick.AddListener(ShowNextImage);
+        previousButton.onClick.RemoveAllListeners();
+        previousButton.onClick.AddListener(ShowPreviousImage);
+        closeButton.onClick.RemoveAllListeners();
+        closeButton.onClick.AddListener(CloseFullscreen);
+
+        fadeRoutine = StartCoroutine(FadeInCanvas(fadeDuration));
+
+        // ⭐ 코멘트 프리뷰 업데이트 + 버튼 리스너 재등록 (공유 UI — 현재 fullscreen 인스턴스로)
+        if (CommentManager.Instance != null)
+        {
+            if (commentPreviewPanel != null)
+            {
+                commentPreviewPanel.SetActive(true);
+                Button panelBtn = commentPreviewPanel.GetComponent<Button>();
+                if (panelBtn != null)
+                {
+                    panelBtn.onClick.RemoveAllListeners();
+                    panelBtn.onClick.AddListener(OnCommentPreviewClicked);
+                }
+            }
+            
+            RefreshCommentPreview();
         }
     }
 
@@ -1363,6 +1451,7 @@ public class DoubleTap3D : MonoBehaviour
     void OnDestroy()
     {
         ReleasePhotos();
+        if (shown == this) shown = null;
     }
 
     private void CloseFullscreen()
@@ -1383,7 +1472,7 @@ public class DoubleTap3D : MonoBehaviour
         }
 #endif
         isFadingOut = true;
-        StartCoroutine(FadeOutCanvas(fadeDuration));
+        fadeRoutine = StartCoroutine(FadeOutCanvas(fadeDuration));
     }
 
     // 11-05 대표님 — 더블탭하면 가끔 페이드 없이 '띡' 하고 뜬다.
@@ -1446,7 +1535,8 @@ public class DoubleTap3D : MonoBehaviour
         }
         isFullscreen = false;
         isFadingOut = false;
-
+        fadeRoutine = null;
+        if (shown == this) shown = null;
     }
 
     public int GetId()
@@ -1475,6 +1565,8 @@ public class DoubleTap3D : MonoBehaviour
         // 진행 중인 이미지 로딩 코루틴 중단 (이전 장소 사진이 새 오브젝트에 표시되는 것 방지)
         StopAllCoroutines();
 
+        fadeRoutine = null;
+        imageFade = null;
         // fullscreen 열려있으면 닫기
         if (isFullscreen)
         {
@@ -1483,6 +1575,7 @@ public class DoubleTap3D : MonoBehaviour
             if (fullscreenCanvasGroup != null)
                 fullscreenCanvasGroup.gameObject.SetActive(false);
         }
+        if (shown == this) shown = null;
 
         infoSprite1 = null;
         infoSprite2 = null;
@@ -1665,17 +1758,26 @@ public class DoubleTap3D : MonoBehaviour
 
         foreach (string photoUrl in new List<string>(photoUrls))
         {
-            string fullUrl = photoUrl.StartsWith("http") ? photoUrl : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
+            string fullUrl = photoUrl.StartsWith("http") ? ApiConfig.Secure(photoUrl) : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
 
-            using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
+            UnityWebRequest request = null;
+            UnityWebRequestAsyncOperation op = null;
+            try   // 깨진 주소 등으로 예외가 나도 이 사진만 건너뛴다 — 코루틴이 죽으면 photosLoading 이 켜진 채 남아 다시 열어도 받지 않는다
             {
+                request = UnityWebRequestTexture.GetTexture(fullUrl, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
                 request.timeout = 15;
-                yield return request.SendWebRequest();
+                op = request.SendWebRequest();
+            }
+            catch (Exception e) { Debug.LogError($"[DoubleTap3D] 사진 요청 실패: {e.Message} ({fullUrl})"); }
+
+            using (request)
+            {
+                if (op != null) yield return op;
 
                 // 그사이 놓아줬거나(다른 장소를 엶) 다른 장소가 됐다(풀 재활용) — 앞서 받은 것은 ReleasePhotos 가 지웠다
                 if (gen != photoGeneration) yield break;
 
-                if (request.result == UnityWebRequest.Result.Success)
+                if (op != null && request.result == UnityWebRequest.Result.Success)
                 {
                     Texture2D texture = DownloadHandlerTexture.GetContent(request);
                     if (texture != null)

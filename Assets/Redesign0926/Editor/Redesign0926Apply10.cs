@@ -514,12 +514,16 @@ namespace Redesign0926
         {
             var dock = Find(root, "Dock0926");
             if (dock == null) { log.Add("도크 없음"); return; }
-            var defs = new (string button, string[] panels)[]
+            // 추가 · 보물찾기 칸은 추가 창 하나를 나눠 쓴다 — 지금 보이는 카드(장소 · 3D모델 / 보물찾기 한 장)로 어느 칸이 열렸는지 가른다 (11-09)
+            var upPage = Find(root, "UploadPage");
+            var upSwipe = upPage != null ? FindInScene<SwipePanelController>(upPage) : null;
+            var defs = new (string button, string[] panels, bool shared, bool alone)[]
             {
-                ("Message_Button", new[] { "MessagePanel", "ChatRoomPanel" }),
-                ("List_Button", new[] { "ListPanel" }),
-                ("PlusButton", new[] { "UploadPage" }),
-                ("MiniProfile", new[] { "FullProfilePanel", "FollowPanel" }),   // v19: 프로필 칸도 열리면 X '닫기' 만 (B7: 팔로우 창도)
+                ("Message_Button", new[] { "MessagePanel", "ChatRoomPanel" }, false, false),
+                ("List_Button", new[] { "ListPanel" }, false, false),
+                ("PlusButton", new[] { "UploadPage" }, true, false),
+                ("Hunt_Button0926", new[] { "UploadPage" }, true, true),
+                ("MiniProfile", new[] { "FullProfilePanel", "FollowPanel" }, false, false),   // v19: 프로필 칸도 열리면 X '닫기' 만 (B7: 팔로우 창도)
             };
             var swap = Ensure<R0926DockSlotSwap>(dock);
             var so = new SerializedObject(swap);
@@ -532,7 +536,15 @@ namespace Redesign0926
                 e.FindPropertyRelative("button").objectReferenceValue = b != null ? Ensure<CanvasGroup>(b) : null;
                 var ps = e.FindPropertyRelative("panels");
                 ps.arraySize = defs[i].panels.Length;
-                for (int k = 0; k < defs[i].panels.Length; k++) ps.GetArrayElementAtIndex(k).objectReferenceValue = Find(root, defs[i].panels[k]);
+                for (int k = 0; k < defs[i].panels.Length; k++)
+                {
+                    var panel = Find(root, defs[i].panels[k]);
+                    ps.GetArrayElementAtIndex(k).objectReferenceValue = panel;
+                    // 창의 어두운 바탕은 도크 위에 덮인다 — 보이는 도크 칸 자리만 손가락을 통과시킨다 (v80 · 칸 바꾸기가 실제 터치로)
+                    if (panel != null) Ensure<R0926DockPassThrough>(panel);
+                }
+                e.FindPropertyRelative("swipe").objectReferenceValue = defs[i].shared ? upSwipe : null;
+                e.FindPropertyRelative("alone").boolValue = defs[i].alone;
             }
             so.ApplyModifiedPropertiesWithoutUndo();
 

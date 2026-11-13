@@ -29,24 +29,27 @@ namespace Redesign0926
             Img(card, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 1f), Image.Type.Sliced, 64f / CardRadius).raycastTarget = true;
             var crt = RT(card);
             crt.anchorMin = Vector2.zero; crt.anchorMax = Vector2.one; crt.pivot = new Vector2(0.5f, 0.5f);
-            crt.anchoredPosition = Vector2.zero; crt.sizeDelta = new Vector2(-194f, 0);
+            crt.anchoredPosition = Vector2.zero; crt.sizeDelta = new Vector2(-Side * 2, 0);   // 한 장으로 열린다 — 도크 알약과 같은 좌우 여백 (11-09 · 예전엔 옆 카드가 보이게 -194)
 
             var title = FindOrCreate(card.transform, "TITLE");
             Txt(title, "보물찾기", 56, Ink, TextAnchor.MiddleLeft, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             Loc(title, "보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro");
             Row(title, -44, 84);
-            UploadSeg(card, swipe, 2);
+            // 11-09 — 도크 '보물찾기' 칸이 이 카드 한 장으로 연다(R0926HuntDock). 장소 · 3D모델 탭 줄은 이 카드엔 없다
+            var oldSeg = card.transform.Find("Seg0926");
+            if (oldSeg != null) Object.DestroyImmediate(oldSeg.gameObject);
             Grab(card);
             if (swipe != null)
             {
                 var sso = new SerializedObject(swipe);
                 sso.FindProperty("panel3").objectReferenceValue = crt;
+                sso.FindProperty("panel3Alone").boolValue = true;
                 sso.ApplyModifiedPropertiesWithoutUndo();
             }
 
             var body = FindOrCreate(card.transform, "Body0926");
             Stretch(RT(body));
-            RT(body).offsetMin = new Vector2(0, 24); RT(body).offsetMax = new Vector2(0, -264);
+            RT(body).offsetMin = new Vector2(0, 24); RT(body).offsetMax = new Vector2(0, -160);   // 탭 줄이 빠진 만큼 위로 (예전 -264)
 
             var hc = Ensure<R0926HuntCard>(card);
             var so = new SerializedObject(hc);
@@ -102,14 +105,48 @@ namespace Redesign0926
             var lShape = HLabel(form, "LShape", 72, "보물 모양", "Treasure look", 44, Muted, FontStyle.Bold);
             var shapeChips = HChips(form, "ShapeChips"); S("shapeChips", shapeChips);
             var shapePreview = HuntShapePreview(form, log); S("shapePreview", shapePreview);
-            var pickButton = HButton(form, "PickButton", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "앨범에서 사진 고르기", null, 44, HuntGold, FontStyle.Bold, out var pickLabel);
+            // 3D 캐릭터를 만드는 동안 — 미리보기 칸 아래쪽에 '작업 중..' (견본·고른 모델은 그대로 돈다)
+            var busyBox = FindOrCreate(shapePreview.transform, "CharBusy0926");
+            busyBox.transform.SetAsLastSibling();
+            SetRect(RT(busyBox), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, 28), new Vector2(400, 96));
+            Img(busyBox, Spr("r0926_pill"), new Color(0f, 0f, 0f, 0.55f), Image.Type.Sliced, 64f / 48f).raycastTarget = false;
+            var busyLabel = FindOrCreate(busyBox.transform, "Label");
+            Stretch(RT(busyLabel));
+            var busyText = Txt(busyLabel, "작업 중..", 40, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            busyText.supportRichText = true; busyText.raycastTarget = false;
+            Loc(busyLabel, "작업 중..", "Working..", "作業中..", "处理中..", "Trabajando..");
+            busyBox.SetActive(false);
+            S("charBusyBox", busyBox); S("charBusy", busyText);
+            // 고르기 · 3D 캐릭터 생성 — 한 줄에 반씩 (11-12 대표님 「3D모델(GLB) 고르기 버튼 우측에 '3D 캐릭터 생성'」). 예전 양식의 고르기 버튼은 이 줄 안으로
+            var pickRow = HRow(form, "PickRow0926", 124);
+            var oldPick = form.Find("PickButton");
+            if (oldPick != null) oldPick.SetParent(pickRow, false);
+            var pickButton = HButton(pickRow, "PickButton", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "앨범에서 사진 고르기", null, 44, HuntGold, FontStyle.Bold, out var pickLabel);
             S("pickButton", pickButton); S("pickLabel", pickLabel);
+            var charButton = HButton(pickRow, "CharButton0926", 124, new Color(HuntGold.r, HuntGold.g, HuntGold.b, 0.16f), "3D 캐릭터 생성", "Make a 3D character", 44, HuntGold, FontStyle.Bold, out _);
+            pickButton.transform.SetSiblingIndex(0);
+            charButton.transform.SetSiblingIndex(1);
+            foreach (var b in new[] { pickButton, charButton })
+            {
+                var le = Ensure<LayoutElement>(b.gameObject);
+                le.minWidth = 0; le.preferredWidth = 0; le.flexibleWidth = 1;   // 사진 모양이면 고르기만 — 줄을 다 쓴다
+            }
+            S("pickRow", pickRow.gameObject); S("charButton", charButton);
+            // 요청사항 + 만들기 — 키보드 위 입력줄의 보내기도 만들기
+            var charAsk = HRow(form, "CharAsk0926", 132);
+            var crIn = HInput(charAsk, "CharRequest", 132, "요청사항 — 예) 노란 고양이, 빨간 모자", "Your request — e.g. yellow cat, red hat", false, 60);
+            Ensure<LayoutElement>(crIn.gameObject).flexibleWidth = 1;
+            ((Text)crIn.placeholder).fontSize = 38;
+            var crMake = HButton(charAsk, "CharMake", 132, HuntGold, "만들기", "Make", 46, HuntDark, FontStyle.Bold, out _);
+            var cmle = Ensure<LayoutElement>(crMake.gameObject); cmle.preferredWidth = 220; cmle.flexibleWidth = 0;
+            S("charAsk", charAsk.gameObject); S("charRequest", crIn); S("charMake", crMake);
             var pickCaption = HLabel(form, "PickCaption", 0, "", null, 38, Muted, FontStyle.Normal); S("pickCaption", pickCaption);
-            pickButton.gameObject.SetActive(false);
+            pickRow.gameObject.SetActive(false);
+            charAsk.gameObject.SetActive(false);
             pickCaption.gameObject.SetActive(false);
-            // 이미 있던 양식엔 맨 끝에 붙으므로 힌트 바로 아래로
+            // 이미 있던 양식엔 맨 끝에 붙으므로 힌트 바로 아래로 — 미리보기 · 고르기 줄 · 요청사항 줄 · 안내
             int si = form.Find("HintInput").GetSiblingIndex();
-            foreach (var t in new Transform[] { lShape.transform, shapeChips, shapePreview.transform, pickButton.transform, pickCaption.transform }) t.SetSiblingIndex(++si);
+            foreach (var t in new Transform[] { lShape.transform, shapeChips, shapePreview.transform, pickRow, charAsk, pickCaption.transform }) t.SetSiblingIndex(++si);
             HLabel(form, "LMode", 72, "찾는 방식", "How to win", 44, Muted, FontStyle.Bold);
             S("modeChips", HChips(form, "ModeChips"));
             var codeBox = HList(form, "CodeBox");
@@ -308,7 +345,7 @@ namespace Redesign0926
                 var src = mso.FindProperty("sourceInputs");
                 var have = new HashSet<Object>();
                 for (int i = 0; i < src.arraySize; i++) have.Add(src.GetArrayElementAtIndex(i).objectReferenceValue);
-                foreach (var f in new[] { tIn, hIn, cIn, qIn, pIn, jci, ccIn, mIn })
+                foreach (var f in new[] { tIn, hIn, cIn, qIn, pIn, jci, ccIn, mIn, crIn })
                 {
                     if (have.Contains(f)) continue;
                     src.arraySize++;
@@ -328,6 +365,31 @@ namespace Redesign0926
             pso.FindProperty("swipe").objectReferenceValue = swipe;
             pso.FindProperty("card").objectReferenceValue = hc;
             pso.ApplyModifiedPropertiesWithoutUndo();
+
+            // 도크 '보물찾기' 칸 (11-09) — 누르면 추가 창을 이 카드 한 장으로 · 왼쪽 위 NEW 7일
+            var huntBtn = Find(root, "Hunt_Button0926");
+            var huntB = huntBtn != null ? huntBtn.GetComponent<Button>() : null;
+            if (huntB != null)
+            {
+                var hd = Ensure<R0926HuntDock>(huntBtn);
+                var hso = new SerializedObject(hd);
+                var xUp = Find(page.transform, "XButton_Upload");
+                var fresh = huntBtn.transform.Find("New0926");
+                hso.FindProperty("plusButton").objectReferenceValue = plus != null ? plus.GetComponent<Button>() : null;
+                hso.FindProperty("uploadPage").objectReferenceValue = page;
+                hso.FindProperty("swipe").objectReferenceValue = swipe;
+                hso.FindProperty("closeX").objectReferenceValue = xUp != null ? RT(xUp) : null;
+                hso.FindProperty("sheet").objectReferenceValue = wrapGo.GetComponent<R0926SlideIn>();
+                hso.FindProperty("newBadge").objectReferenceValue = fresh != null ? fresh.gameObject : null;
+                hso.FindProperty("addSlot").floatValue = SlotAdd;
+                hso.FindProperty("huntSlot").floatValue = SlotHunt;
+                hso.ApplyModifiedPropertiesWithoutUndo();
+                ResetListeners(huntB);
+                UnityEditor.Events.UnityEventTools.AddPersistentListener(huntB.onClick, hd.Open);
+                EditorUtility.SetDirty(huntB);
+                if (xUp == null || fresh == null) log.Add("보물찾기 칸: 닫기 X 또는 NEW 배지 없음");
+            }
+            else log.Add("보물찾기 칸: 도크 버튼 없음");
             log.Add("hunt card ok");
         }
 
@@ -413,6 +475,10 @@ namespace Redesign0926
             ["Share"] = new[] { "共有する", "分享", "Compartir" },
             ["Join code"] = new[] { "参加コード", "参加代码", "Código para unirse" },
             ["Share this hunt"] = new[] { "この宝探しを共有", "分享这个寻宝", "Compartir esta búsqueda" },
+            // 3D 캐릭터 생성 (11-13)
+            ["Make a 3D character"] = new[] { "3Dキャラを作る", "生成 3D 角色", "Crear personaje 3D" },
+            ["Your request — e.g. yellow cat, red hat"] = new[] { "リクエスト — 例）黄色い猫、赤い帽子", "要求 — 例：黄色的猫、红帽子", "Tu petición — p. ej. gato amarillo, gorro rojo" },
+            ["Make"] = new[] { "作る", "生成", "Crear" },
             // 상품 사진 (11-06)
             ["Remove"] = new[] { "外す", "移除", "Quitar" },
             ["Coupon or QR code screenshot — only finders and you can see it"] = new[] { "クーポンやQRコードのキャプチャなど — 見つけた人とあなただけが見られます", "优惠券或二维码截图等 — 仅找到的人和你可见", "Captura de cupón o código QR — solo tú y quien lo encuentre pueden verla" },

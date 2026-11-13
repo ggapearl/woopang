@@ -597,7 +597,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         if (avatarCache.ContainsKey(url)) yield break;
         avatarCache[url] = null;   // 중복 요청 방지
-        using (var req = UnityWebRequestTexture.GetTexture(url))
+        using (var req = UnityWebRequestTexture.GetTexture(ApiConfig.Secure(url)))
         {
             req.timeout = 10;
             yield return req.SendWebRequest();

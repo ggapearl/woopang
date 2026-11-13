@@ -299,7 +299,8 @@ public class R0926HuntPush : MonoBehaviour
         }
         else if (card != null && int.TryParse(hunt, out int id))
         {
-            if (uploadPage != null && !uploadPage.activeInHierarchy && plusButton != null) plusButton.onClick.Invoke();
+            if (R0926HuntDock.Instance != null) R0926HuntDock.Instance.Open();   // 도크 '보물찾기' 칸을 누른 것처럼 — 보물찾기 카드 한 장으로 (11-09)
+            else if (uploadPage != null && !uploadPage.activeInHierarchy && plusButton != null) plusButton.onClick.Invoke();
             yield return null;
             yield return null;   // 추가 창이 켜지며 첫 장으로 돌아간 뒤에 넘긴다
             if (swipe != null) swipe.SwitchToPanel(2);

@@ -305,10 +305,10 @@ namespace Redesign0926
             chip.GetComponent<Image>().raycastTarget = true;
             var b = Ensure<Button>(chip); b.transition = Selectable.Transition.None;
             var arrow = FindOrCreate(chip.transform, "Arrow0926");
-            SetRect(RT(arrow), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-46, 0), new Vector2(34, 34));
+            SetRect(RT(arrow), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-50, 0), new Vector2(38, 38));   // 11-09 칩을 조금 키움 (34 → 38)
             Img(arrow, Spr("r0926_i_arrowdown"), Soft, Image.Type.Simple).raycastTarget = false;
             var label = Find(chip.transform, "Label0926");
-            if (label != null) RT(label).offsetMax = new Vector2(-70, 0);
+            if (label != null) RT(label).offsetMax = new Vector2(-78, 0);
             var so = new SerializedObject(sky);
             so.FindProperty("chipArrow").objectReferenceValue = RT(arrow);
             so.FindProperty("chipRect").objectReferenceValue = RT(chip);
@@ -483,13 +483,19 @@ namespace Redesign0926
             huntNote.raycastTarget = false;
             huntNoteGo.SetActive(false);   // 로그인 전·못 불러왔을 때만 (R0926SettingsPanel.RefreshHunt)
 
-            // 화면 — 30 / 60 FPS (2026-10-06 대표님: 기본 30)
+            // 화면 — 30 / 60 FPS (2026-10-06 대표님: 기본 30) · 그 바로 위에 메뉴 모양 '기본메뉴 / 물방울메뉴' (11-08 대표님)
             SectionLabel(content.transform, "SecDisplay", new[] { "화면", "Display", "画面", "显示", "Pantalla" });
             var g5 = Group(content.transform, "GroupDisplay");
-            SegRow(g5.transform, "RowFps", new[] { "화면 프레임", "Frame rate", "フレームレート", "帧率", "Fotogramas" },
+            var fpsRow = SegRow(g5.transform, "RowFps", new[] { "화면 프레임", "Frame rate", "フレームレート", "帧率", "Fotogramas" },
                 new[] { "60 은 더 부드럽고, 30 은 배터리·발열이 덜해요", "60 is smoother, 30 saves battery and heat", "60はなめらか、30は電池と発熱を抑えます", "60 更流畅，30 更省电、发热更少", "60 es más fluido, 30 ahorra batería" },
                 new[] { new[] { "30 FPS", "30 FPS", "30 FPS", "30 FPS", "30 FPS" }, new[] { "60 FPS", "60 FPS", "60 FPS", "60 FPS", "60 FPS" } },
                 0, out var fpsTabs, out var fpsLabels);
+            var menuRow = SegRow(g5.transform, "RowMenuStyle", new[] { "메뉴 모양", "Menu style", "メニューの形", "菜单样式", "Estilo del menú" },
+                new[] { "물방울은 AR 화면이 유리처럼 비쳐요", "Droplet lets the AR view show through like glass", "しずくはAR画面がガラスのように透けます", "水滴样式像玻璃一样透出 AR 画面", "Gota deja ver la vista AR como un cristal" },
+                new[] { new[] { "기본메뉴", "Basic", "ベーシック", "基本", "Básico" }, new[] { "물방울메뉴", "Droplet", "しずく", "水滴", "Gota" } },
+                0, out var menuTabs, out var menuLabels);
+            menuRow.transform.SetAsLastSibling();   // 메뉴 모양 → 화면 프레임 순서 (자리 번호로 옮기면 적용할 때마다 위아래가 뒤바뀐다)
+            fpsRow.transform.SetAsLastSibling();
 
             // 앱 정보 —목록 맨 아래 '버전'을 펼치면 나오던 문의·개인정보처리방침·데이터 출처를 여기로 (2026-10-06)
             SectionLabel(content.transform, "SecInfo", new[] { "앱 정보", "About", "アプリ情報", "应用信息", "Acerca de" });
@@ -547,6 +553,8 @@ namespace Redesign0926
             SetArray(so.FindProperty("angleLabels"), angleLabels);
             SetArray(so.FindProperty("fpsTabs"), fpsTabs);
             SetArray(so.FindProperty("fpsLabels"), fpsLabels);
+            SetArray(so.FindProperty("menuTabs"), menuTabs);
+            SetArray(so.FindProperty("menuLabels"), menuLabels);
             so.FindProperty("hiddenText").objectReferenceValue = ht;
             so.FindProperty("showAllRow").objectReferenceValue = showAll;
             so.FindProperty("removeSwitch").objectReferenceValue = removeX;
@@ -584,6 +592,13 @@ namespace Redesign0926
                 var b = fpsTabs[i].GetComponent<Button>();
                 ResetListeners(b);
                 UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetFps, i);
+                EditorUtility.SetDirty(b);
+            }
+            for (int i = 0; i < menuTabs.Length; i++)
+            {
+                var b = menuTabs[i].GetComponent<Button>();
+                ResetListeners(b);
+                UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetMenuStyle, i);
                 EditorUtility.SetDirty(b);
             }
             for (int i = 0; i < fadeTabs.Length; i++)

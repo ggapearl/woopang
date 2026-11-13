@@ -524,15 +524,9 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         }
     }
 
-    private bool SetupObjectComponents(GameObject obj, TourPlaceData place)
+    /// <summary>정보 창(DoubleTap3D) 글 — 오브젝트를 띄울 때와 목록 사진으로 열 때(AR 에 아직 없는 장소 — R0926PlaceInfo) 같은 값</summary>
+    public void ConfigureInfo(DoubleTap3D doubleTap, TourPlaceData place)
     {
-        LogDebug($"[TourAPIManager] SetupObjectComponents 시작 - ID: {place.contentid}, Title: {place.title ?? "null"}");
-        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>();
-        if (doubleTap == null)
-        {
-            LogDebug($"[TourAPIManager] ID {place.contentid} 오브젝트에 DoubleTap3D 없음. 컴포넌트 설정 실패");
-            return false;
-        }
         Sprite petFriendlySprite = Resources.Load<Sprite>("Sprites/pet_friendly_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
         Sprite restroomSprite = Resources.Load<Sprite>("Sprites/separate_restroom_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
         if (petFriendlySprite == null) LogDebug("[TourAPIManager] pet_friendly_icon 로드 실패!");
@@ -575,6 +569,18 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             petInfo: petInfo
         );
         LogDebug($"[TourAPIManager] DoubleTap3D 컴포넌트 설정 완료: ID={place.contentid}, Title={place.title}");
+    }
+
+    private bool SetupObjectComponents(GameObject obj, TourPlaceData place)
+    {
+        LogDebug($"[TourAPIManager] SetupObjectComponents 시작 - ID: {place.contentid}, Title: {place.title ?? "null"}");
+        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>();
+        if (doubleTap == null)
+        {
+            LogDebug($"[TourAPIManager] ID {place.contentid} 오브젝트에 DoubleTap3D 없음. 컴포넌트 설정 실패");
+            return false;
+        }
+        ConfigureInfo(doubleTap, place);
 
         // 사진이 없어도 넘긴다 — 빈 목록이면 상세에서 우팡 서버(/locations/번호)를 찾지 않는다 (관광공사 번호는 우팡 장소 번호가 아니다)
         TourAPIImageController tourImageController = obj.GetComponentInChildren<TourAPIImageController>();
@@ -1187,6 +1193,7 @@ public class TourPlaceData
     public double mapx { get; set; }   // 경도 — double (AR 앵커 자리, 10-26)
     public double mapy { get; set; }   // 위도
     public string firstimage { get; set; }
+    public string firstimage2 { get; set; }   // 관광공사 작은 대표 사진 — 목록 줄 사진 (R0926PlaceRows)
     public string description { get; set; }
     public string color { get; set; }
     public List<string> imageUrls { get; set; }

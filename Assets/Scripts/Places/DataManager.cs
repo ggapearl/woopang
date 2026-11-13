@@ -604,9 +604,15 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                         var places = JsonConvert.DeserializeObject<List<PlaceData>>(request.downloadHandler.text);
                         if (places != null)
                         {
+                            // 응답을 기다리는 사이 배분에서 빠진 장소(애견동반을 켰다 · 멀어졌다 · 화살표로 내려갔다)는 띄우지 않는다 —
+                            // 띄우면 FilterManager 가 모르는 오브젝트라 다시 거두지 못하고, 필터를 끄면 반경 밖에서도 나타났다.
+                            // 상세는 담아 둔다 (다음 배분에서 바로 띄운다)
+                            FilterManager fm = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
                             foreach (var place in places)
                             {
+                                if (place == null) continue;
                                 placeDataMap[place.id] = place;
+                                if (fm != null && fm.isActiveAndEnabled && !fm.WantsFull("dm_" + place.id)) continue;
                                 if (!spawnedObjects.ContainsKey(place.id))
                                 {
                                     // Full 스폰 전에 임시 IndicatorOnly가 있으면 제거
@@ -1170,6 +1176,13 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         return null;
     }
 
+    /// <summary>
+    /// 큐브 앞면이 사진 대신 앱 내장 그림인 장소면 그 Resources 경로 (기관이 등록한 공공데이터의 심볼 분류), 아니면 null —
+    /// SetupCubeObject 와 같은 판단 (목록 줄 사진 — R0926PlaceRows)
+    /// </summary>
+    public static string FaceIconPath(string category, bool isPublicSource)
+        => isPublicSource ? GetInAppIconPath(category) : null;
+
     private bool SetupCubeObject(GameObject obj, PlaceData place)
     {
         ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
@@ -1224,6 +1237,20 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         return true;
     }
 
+    // 목록 사진으로 연 정보 창 (AR 에 아직 없는 장소 — R0926PlaceInfo) — 그 창에서도 고치기·지우기 요청이 되게 PlaceOf 가 알아본다
+    private DoubleTap3D infoHost;
+    private PlaceData infoHostPlace;
+
+    /// <summary>AR 에 아직 없는 장소의 정보 창을 그 장소로 채운다 (목록 사진 — R0926PlaceInfo). 두 번 누른 것과 같은 정보·상세 사진. place 가 null 이면 비운다 (다른 매니저의 장소를 띄울 때)</summary>
+    public void ConfigureInfo(DoubleTap3D host, PlaceData place)
+    {
+        infoHost = place != null ? host : null;
+        infoHostPlace = place;
+        if (host == null || place == null) return;
+        SetupDoubleTapInfo(host, place);
+        host.SetImageUrls(FlattenSubPhotos(place));
+    }
+
     private void SetupDoubleTapInfo(DoubleTap3D doubleTap, PlaceData place)
     {
         Sprite petFriendlySprite = Resources.Load<Sprite>("Sprites/pet_friendly_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
@@ -1267,8 +1294,12 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             }
         }
         
+        // 받는 동안 이 장소가 디스폰돼 오브젝트가 풀로 돌아갔거나 다른 장소가 꺼내 쓰는 중이면 손대지 않는다 —
+        // 예전엔 실패 시 남의 오브젝트를 풀로 돌려보내고(그 장소는 화살표도 오브젝트도 없이 사라짐) 다시 띄운 이 장소의 새 오브젝트는 고아로 남았다
+        if (!spawnedObjects.TryGetValue(placeId, out var current) || current != glbObj) yield break;
+
         currentlyLoadingGLB.Remove(placeId);
-        
+
         if (loadCompleted && loadSuccess)
         {
             DoubleTap3D doubleTap = glbObj.GetComponentInChildren<DoubleTap3D>();
@@ -1279,7 +1310,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         }
         else
         {
-            if (fallbackToCube && spawnedObjects.ContainsKey(placeId))
+            if (fallbackToCube)
             {
                 ReturnToPool(glbObj, "custom");
                 spawnedObjects.Remove(placeId);
@@ -2210,6 +2241,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     {
         if (tapped == null) return null;
         int id = tapped.GetId();
+        if (tapped == infoHost && infoHostPlace != null && infoHostPlace.id == id && infoHostPlace.name == tapped.GetName())
+            return placeDataMap.TryGetValue(id, out PlaceData cur) ? cur : infoHostPlace;   // 목록 사진으로 연 정보 창 — 그사이 고쳤으면 고친 것
         if (!spawnedObjects.TryGetValue(id, out GameObject obj) || obj == null || !tapped.transform.IsChildOf(obj.transform)) return null;
         return placeDataMap.TryGetValue(id, out PlaceData p) ? p : null;
     }

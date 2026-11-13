@@ -65,6 +65,14 @@ public class R0926HuntCard : MonoBehaviour
     [SerializeField] private Button pickButton;
     [SerializeField] private Text pickLabel;
     [SerializeField] private Text pickCaption;
+    [Tooltip("3D 캐릭터 생성 (11-12 대표님 「3D모델(GLB) 고르기 버튼 우측에 '3D 캐릭터 생성' … '요청사항' … '작업 중..' 이라고 하면서 샘플이 먼저 발생하고 이 창에서 기다렸다가라도 바로 볼 수 있도록」)")]
+    [SerializeField] private Button charButton;
+    [SerializeField] private GameObject pickRow;          // 고르기 · 3D 캐릭터 생성 한 줄
+    [SerializeField] private GameObject charAsk;          // 요청사항 칸 + 만들기 (키보드 위 입력줄의 보내기 = 만들기)
+    [SerializeField] private InputField charRequest;
+    [SerializeField] private Button charMake;
+    [SerializeField] private GameObject charBusyBox;      // 미리보기 칸 아래쪽 '작업 중..' — 그동안 견본·고른 모델은 그대로 돈다
+    [SerializeField] private Text charBusy;
 
     [Header("상품 사진 (11-06 — 쿠폰·QR 캡처 · 주최자와 찾은 사람만 본다)")]
     [SerializeField] private Button prizePhotoButton;     // 양식 — 사진 고르기 · 바꾸기
@@ -167,6 +175,12 @@ public class R0926HuntCard : MonoBehaviour
     private string objKind, objUrl;
     private Texture2D objTex;                 // 고른 사진 (미리보기 액자)
     private string pickNote;                  // 고르기 칸 아래 알림 (못 연 파일 등)
+    private string objAi;                     // 3D 캐릭터로 만든 모델 — 그 요약 ("노란 고양이 · 모자")
+    private bool charOpen, charWorking;
+    private int charGen, charVariant;
+    private string charLast;
+    private float charStart;
+    private const float CharTimeout = 40f;
     private bool uploading, previewLoading;
     private readonly R0926PickerWait pick = new R0926PickerWait();
     private const int ModelMax = 10 * 1024 * 1024;   // 서버 OBJECT_MAX['model'] 과 같다
@@ -215,6 +229,8 @@ public class R0926HuntCard : MonoBehaviour
         Wire(reviewDim, OnReviewBack);
         Wire(shareButton, ShareCurrent);
         Wire(pickButton, OnPick);
+        Wire(charButton, ToggleChar);
+        Wire(charMake, MakeChar);
         Wire(prizePhotoButton, OnPickPrize);
         Wire(prizePhotoRemove, () => { if (busy) return; ClearPrize(); PaintPrize(); });
         Wire(dPrizePhoto, OpenPrizePhoto);
@@ -239,6 +255,7 @@ public class R0926HuntCard : MonoBehaviour
             // 입력줄의 보내기(또는 키패드 엔터)를 누르면 글이 칸에 들어간 뒤 바로 보낸다 — 대화창과 같이 (10-14 대표님)
             inputMirror.SetSubmitAction(msgInput, () => StartCoroutine(SendMessage()));
             inputMirror.SetSubmitAction(claimCodeInput, () => StartCoroutine(Claim()));
+            inputMirror.SetSubmitAction(charRequest, MakeChar);   // 요청사항 — 보내기가 곧 만들기
         }
     }
 
@@ -266,6 +283,7 @@ public class R0926HuntCard : MonoBehaviour
         NearHuntId = 0;
         busy = false;   // 보내는 중에 창이 닫히면 코루틴이 멈춘 채 남아 — 다시 열었을 때 버튼이 다 먹통이었다
         uploading = false;
+        charWorking = false; charGen++;
         Reviewing = false;   // 확인 카드는 다음 LateUpdate 에 스스로 닫힌다 (꺼지는 중엔 다른 오브젝트를 끄지 않는다)
         postedId = 0;
     }
@@ -296,6 +314,13 @@ public class R0926HuntCard : MonoBehaviour
                 PaintShape();
             }
             if (shapePreview.Loading != previewLoading) { previewLoading = shapePreview.Loading; PaintPick(); }
+            if (charWorking && Time.unscaledTime - charStart > CharTimeout)
+            {
+                Debug.LogError("[R0926HuntCard] 3D 캐릭터 시간 초과");
+                charGen++; charWorking = false;
+                PickFailed(T("이번엔 만들지 못했어요 — 다시 눌러 주세요", "Couldn't make it this time — try again", "今回は作れませんでした — もう一度押してください", "这次没能生成 — 请再试一次", "No se pudo crear esta vez — inténtalo de nuevo"));
+            }
+            else if (charWorking) PaintCharBusy();
         }
         if (detail != null && detail.activeInHierarchy && current != null && Time.unscaledTime >= nextNear && !busy)
         {
@@ -536,7 +561,7 @@ public class R0926HuntCard : MonoBehaviour
                 if (key == "audience") { PickAudience(v); return; }
                 picked[key] = v; PaintChips(box, key);
                 if (key == "mode") PaintCodeBox();
-                else if (key == "shape") { pickNote = null; PaintShape(); }
+                else if (key == "shape") { pickNote = null; if (v != "model") StopChar(); PaintShape(); }
                 else if (key == "audience") PaintAudience();
             });
         }
@@ -665,19 +690,24 @@ public class R0926HuntCard : MonoBehaviour
     {
         string k = Shape;
         bool file = k == "photo" || k == "model";
+        if (pickRow != null) pickRow.SetActive(file);
         if (pickButton != null) pickButton.gameObject.SetActive(file);
+        if (charButton != null) charButton.gameObject.SetActive(k == "model");
+        if (charAsk != null) charAsk.SetActive(k == "model" && charOpen);
         if (pickCaption != null) pickCaption.gameObject.SetActive(file);
+        PaintCharBusy();
         if (!file) return;
         bool have = objData != null && objKind == k;
         if (pickLabel != null)
             pickLabel.text = k == "photo" ? (have ? T("다른 사진 고르기", "Choose another photo", "別の写真を選ぶ", "选择其他照片", "Elegir otra foto") : T("앨범에서 사진 고르기", "Choose a photo", "アルバムから写真を選ぶ", "从相册选择照片", "Elegir una foto"))
                                           : (have ? T("다른 3D 모델 고르기", "Choose another 3D model", "別の3Dモデルを選ぶ", "选择其他 3D 模型", "Elegir otro modelo 3D") : T("3D 모델(GLB) 고르기", "Choose a 3D model (GLB)", "3Dモデル（GLB）を選ぶ", "选择 3D 模型（GLB）", "Elegir un modelo 3D (GLB)"));
-        if (pickCaption == null) return;
+        if (pickCaption == null || (charWorking && k == "model")) return;   // 만드는 중엔 PaintCharBusy 가 '작업 중..'
         bool warn = !string.IsNullOrEmpty(pickNote);
         pickCaption.color = warn ? Amber : Muted;
         if (warn) pickCaption.text = pickNote;
         else if (have && k == "photo") pickCaption.text = T("사진", "Photo", "写真", "照片", "Foto") + (objTex != null ? " " + objTex.width + "×" + objTex.height : "") + " · " + Size(objData.Length);
-        else if (have) pickCaption.text = T("3D 모델", "3D model", "3Dモデル", "3D 模型", "Modelo 3D") + " · " + Size(objData.Length)
+        else if (have) pickCaption.text = (objAi != null ? T("3D 캐릭터", "3D character", "3Dキャラ", "3D 角色", "Personaje 3D") + (objAi.Length > 0 ? " · " + objAi : "")
+                                                         : T("3D 모델", "3D model", "3Dモデル", "3D 模型", "Modelo 3D")) + " · " + Size(objData.Length)
                                           + (shapePreview != null && shapePreview.Loading ? T(" · 불러오는 중…", " · loading…", " · 読み込み中…", " · 正在加载…", " · cargando…") : "");
         else pickCaption.text = k == "photo" ? T("고른 사진을 액자에 끼워 숨겨요", "Your photo goes in a frame as the treasure", "選んだ写真を額に入れて隠します", "所选照片会装进相框藏起来", "Tu foto se esconde en un marco")
                                              : T("GLB 한 파일 · 10MB 까지 — 고르면 여기서 먼저 보여 줘요", "One GLB file, up to 10MB — previewed here first", "GLB 1ファイル・10MBまで — 選ぶとここで先に確認できます", "单个 GLB 文件，最大 10MB — 选好后先在这里预览", "Un solo archivo GLB, hasta 10 MB — se previsualiza aquí");
@@ -904,6 +934,82 @@ public class R0926HuntCard : MonoBehaviour
         PaintShape();
     }
 
+    // ── 3D 캐릭터 생성 (11-12 대표님) — 요청사항 → '작업 중..'(견본·고른 모델은 그대로 돈다) → 이 칸에서 바로 · 숨기면 고른 GLB 처럼 올린다 ──
+    private void ToggleChar()
+    {
+        if (busy) return;
+        charOpen = !charOpen;
+        PaintPick();
+    }
+
+    private void MakeChar()
+    {
+        if (busy || Shape != "model") return;
+        string req = charRequest != null ? charRequest.text.Trim() : "";
+        charVariant = req == charLast && objAi != null ? charVariant + 1 : 0;   // 같은 요청을 다시 → 다른 모습
+        charLast = req;
+        pickNote = null;
+        StartCoroutine(CharWork(++charGen, req, charVariant));
+    }
+
+    private IEnumerator CharWork(int g, string req, int v)
+    {
+        charWorking = true;
+        charStart = Time.unscaledTime;
+        PaintPick();
+        RevealPreview();
+        R0926AiWork.Result r = null;
+        yield return R0926AiWork.Character(req, v, x => r = x);
+        if (g != charGen) yield break;   // 다시 눌렀거나 · 모양을 바꿨거나 · 시간 초과
+        charWorking = false;
+        if (r == null || r.Glb == null) { PickFailed(T("이번엔 만들지 못했어요 — 다시 눌러 주세요", "Couldn't make it this time — try again", "今回は作れませんでした — もう一度押してください", "这次没能生成 — 请再试一次", "No se pudo crear esta vez — inténtalo de nuevo")); yield break; }
+        TakeObject("model", r.Glb, null);
+        objAi = r.Label ?? "";
+        PaintPick();
+        RevealPreview();
+    }
+
+    private void StopChar()
+    {
+        if (!charWorking) return;
+        charGen++;
+        charWorking = false;
+    }
+
+    // 미리보기 칸 아래쪽과 고르기 칸 아래 — '작업 중' 뒤 점이 하나씩 (자리는 그대로)
+    private void PaintCharBusy()
+    {
+        bool on = charWorking && Shape == "model";
+        if (charBusyBox != null && charBusyBox.activeSelf != on) charBusyBox.SetActive(on);
+        if (!on) return;
+        int n = 1 + (int)(Time.unscaledTime * 3f) % 3;
+        string s = T("작업 중", "Working", "作業中", "处理中", "Trabajando") + new string('.', n) + "<color=#00000000>" + new string('.', 3 - n) + "</color>";
+        if (charBusy != null) charBusy.text = s;
+        if (pickCaption != null)
+        {
+            pickCaption.text = T("3D 캐릭터 ", "3D character · ", "3Dキャラ ", "3D 角色 ", "Personaje 3D · ") + s;
+            pickCaption.color = Muted;
+        }
+    }
+
+    // 미리보기 칸의 윗부분이 화면 위로 밀려 있으면 양식을 내려 칸이 다 보이게 — 만든 캐릭터를 이 창에서 바로 본다
+    private void RevealPreview()
+    {
+        if (formScroll == null || formScroll.content == null || shapePreview == null) return;
+        var view = formScroll.viewport != null ? formScroll.viewport : (RectTransform)formScroll.transform;
+        var c = new Vector3[4];
+        ((RectTransform)shapePreview.transform).GetWorldCorners(c);
+        float top = c[1].y;
+        view.GetWorldCorners(c);
+        float over = top - c[1].y;
+        if (over <= 0f) return;
+        float scale = Mathf.Max(0.0001f, formScroll.content.lossyScale.y);
+        var p = formScroll.content.anchoredPosition;
+        p.y = Mathf.Max(0f, p.y - over / scale - 24f);
+        formScroll.StopMovement();
+        formScroll.content.anchoredPosition = p;
+    }
+
     // 고르다 못 연 파일 — 앞서 고른 것은 그대로 두고 칸 아래에 알린다
     private void PickFailed(string note)
     {
@@ -914,7 +1020,7 @@ public class R0926HuntCard : MonoBehaviour
     private void ClearObject()
     {
         if (objTex != null) Destroy(objTex);
-        objTex = null; objData = null; objKind = null; objUrl = null;
+        objTex = null; objData = null; objKind = null; objUrl = null; objAi = null;
     }
 
 #if UNITY_EDITOR
@@ -963,10 +1069,11 @@ public class R0926HuntCard : MonoBehaviour
         if (!TryLocation(out lat, out lon, out acc)) { Warn(T("위치를 아직 못 받았어요", "Location not available yet", "まだ位置情報を取得できていません", "尚未获取到位置", "Aún no hay ubicación")); return false; }
         if (Field(titleInput).Length == 0) { Warn(R0926HuntApi.ErrorText("title", Lang)); return false; }
         string shape = Shape;
+        if (shape == "model" && charWorking) { Warn(T("3D 캐릭터를 만드는 중이에요 — 잠시만요", "Still making the 3D character — one moment", "3Dキャラを作成中です — 少々お待ちください", "正在生成 3D 角色 — 请稍候", "Creando el personaje 3D — un momento")); return false; }
         if ((shape == "photo" || shape == "model") && (objData == null || objKind != shape))
         {
             Warn(shape == "photo" ? T("보물로 쓸 사진을 골라 주세요", "Choose a photo for the treasure", "宝にする写真を選んでください", "请选择用作宝藏的照片", "Elige una foto para el tesoro")
-                                  : T("보물로 쓸 3D 모델(GLB)을 골라 주세요", "Choose a 3D model (GLB) for the treasure", "宝にする3Dモデル（GLB）を選んでください", "请选择用作宝藏的 3D 模型（GLB）", "Elige un modelo 3D (GLB) para el tesoro"));
+                                  : T("보물로 쓸 3D 모델(GLB)을 고르거나 3D 캐릭터를 만들어 주세요", "Choose a 3D model (GLB) or make a 3D character for the treasure", "宝にする3Dモデル（GLB）を選ぶか、3Dキャラを作ってください", "请选择用作宝藏的 3D 模型（GLB）或生成 3D 角色", "Elige un modelo 3D (GLB) o crea un personaje 3D para el tesoro"));
             return false;
         }
         if (shape == "model" && shapePreview != null && shapePreview.Loading) { Warn(T("3D 모델을 불러오는 중이에요 — 잠시만요", "Still loading the 3D model — one moment", "3Dモデルを読み込み中です — 少々お待ちください", "正在加载 3D 模型 — 请稍候", "Cargando el modelo 3D — un momento")); return false; }
@@ -1210,6 +1317,8 @@ public class R0926HuntCard : MonoBehaviour
                 // 고른 파일은 이 보물 것 — 다음 보물은 새로 고른다 (내 3D 모델은 AR 에서 다시 받지 않게 캐시에)
                 if (shape == "model" && objData != null) GLBModelLoader.PreloadCache(R0926HuntApi.Url(objUrl), objData);
                 ClearObject();
+                charOpen = false; charLast = null;
+                if (charRequest != null) charRequest.text = "";
                 picked["shape"] = "chest";
                 if (shapeChips != null) PaintChips(shapeChips, "shape");
                 PaintShape();
@@ -1652,7 +1761,7 @@ public class R0926HuntCard : MonoBehaviour
     private IEnumerator LoadFace(string url)
     {
         faces[url] = null;   // 받는 동안 같은 사진을 또 받지 않게 — 못 받으면 첫 글자로 두고 다음에 그릴 때 다시
-        using (var req = UnityWebRequestTexture.GetTexture(url))
+        using (var req = UnityWebRequestTexture.GetTexture(ApiConfig.Secure(url)))
         {
             req.timeout = 10;
             yield return req.SendWebRequest();

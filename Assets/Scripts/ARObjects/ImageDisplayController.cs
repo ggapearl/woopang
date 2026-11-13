@@ -118,7 +118,7 @@ public class ImageDisplayController : MonoBehaviour
     private IEnumerator LoadBaseMapTexture(string imageUrl, int attempt)
     {
         int myGeneration = loadGeneration;
-        string fullUrl = imageUrl.StartsWith("http") ? imageUrl : ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
+        string fullUrl = imageUrl.StartsWith("http") ? ApiConfig.Secure(imageUrl) : ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
 
         // 큐브는 화면에서 작게 보이므로 우팡 서버 사진은 512px 썸네일로 받는다 (원본 최대 2048px → 약 1/20 크기).
         // 썸네일이 실패하면 원본으로 한 번 더 받는다. 외부 사진(관광공사 등 http)은 원본 그대로.
@@ -126,12 +126,12 @@ public class ImageDisplayController : MonoBehaviour
         {
             string thumbUrl = ApiConfig.MAIN_SERVER + "/thumb/512/" + imageUrl.Replace("\\", "/").TrimStart('/');
             bool thumbOk = false;
-            using (UnityWebRequest tr = UnityWebRequestTexture.GetTexture(thumbUrl, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
+            using (UnityWebRequest tr = NewTextureRequest(thumbUrl))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
             {
-                tr.timeout = 20;
-                yield return tr.SendWebRequest();
+                var top = SendSafe(tr, 20);
+                if (top != null) yield return top;
                 if (myGeneration != loadGeneration) yield break;
-                if (tr.result == UnityWebRequest.Result.Success)
+                if (top != null && tr.result == UnityWebRequest.Result.Success)
                 {
                     Texture2D t = ((DownloadHandlerTexture)tr.downloadHandler).texture;
                     if (t != null)
@@ -148,30 +148,30 @@ public class ImageDisplayController : MonoBehaviour
             }
         }
 
-        using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl, true))
+        using (UnityWebRequest request = NewTextureRequest(fullUrl))
         {
-            request.timeout = 20;
-
-            yield return request.SendWebRequest();
+            var op = SendSafe(request, 20);
+            if (op != null) yield return op;
 
             // 세대 체크: 풀 재활용으로 이미 다른 장소가 되었으면 무시
             if (myGeneration != loadGeneration) yield break;
 
-            if (request.result == UnityWebRequest.Result.Success)
+            if (op != null && request.result == UnityWebRequest.Result.Success)
             {
                 Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
                 if (newTexture != null) ApplyBaseMap(newTexture, imageUrl);
+                else if (cubeRenderer != null) cubeRenderer.enabled = true;
             }
             else
             {
-                Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
+                if (op != null) Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
 
                 // 로딩 실패 시에도 큐브 표시 (눌러서 열 수 있게) — 사진은 뒤에서 다시 받아 바꿔 끼운다
                 if (cubeRenderer != null)
                 {
                     cubeRenderer.enabled = true;
                 }
-                if (attempt < 3)
+                if (op != null && attempt < 3)   // 보내지도 못한 주소는 다시 해도 같다
                 {
                     yield return new WaitForSeconds(4f * (attempt + 1));
                     if (myGeneration != loadGeneration) yield break;
@@ -181,6 +181,20 @@ public class ImageDisplayController : MonoBehaviour
             }
         }
         currentBaseMapCoroutine = null;
+    }
+
+    // 깨진 주소 · http 처럼 만들거나 보낼 때 예외가 나면 null — 코루틴이 예외로 죽으면 로딩 중이라 꺼 둔 큐브가 영영 안 나온다
+    private static UnityWebRequest NewTextureRequest(string url)
+    {
+        try { return UnityWebRequestTexture.GetTexture(url, true); }
+        catch (System.Exception e) { Debug.LogError($"[ImageDisplayController] 주소 오류: {e.Message} ({url})"); return null; }
+    }
+
+    private static UnityWebRequestAsyncOperation SendSafe(UnityWebRequest req, int timeout)
+    {
+        if (req == null) return null;
+        try { req.timeout = timeout; return req.SendWebRequest(); }
+        catch (System.Exception e) { Debug.LogError($"[ImageDisplayController] 보내기 실패: {e.Message} ({req.url})"); return null; }
     }
 
     private void ApplyBaseMap(Texture2D newTexture, string imageUrl)

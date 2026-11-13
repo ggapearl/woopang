@@ -55,6 +55,10 @@ public class OffScreenIndicator : MonoBehaviour
 
     public static Action<Target, bool> TargetStateChanged;
 
+    /// <summary>필터·배분이 오브젝트를 끄는 동안 true (FilterManager) — 화살표 모드여도 그 화살표를 남기지 않는다.
+    /// 화살표 모드는 AR 이 복구되는 동안 꺼진 오브젝트의 화살표를 붙들어 두는데, 필터로 뺀 곳·배분에서 빠진 곳까지 붙들면 오브젝트 없는 화살표가 남았다</summary>
+    public static bool DropDisabledArrows;
+
     // ============================================================
     // Fallback Mode - AR 세션 미작동 시 화살표 분산 배치 + 펄스
     // ============================================================
@@ -1323,7 +1327,7 @@ public class OffScreenIndicator : MonoBehaviour
             if (target == focusTarget) focusTarget = null;
 
             // fallback 모드 중(전환 아닌 상태): disabledFallbackTargets에 보관하여 화살표 유지
-            if (isFallbackMode && !isTransitioning && fallbackDataMap.ContainsKey(target))
+            if (isFallbackMode && !isTransitioning && !DropDisabledArrows && fallbackDataMap.ContainsKey(target))
             {
                 targets.Remove(target);
                 disabledFallbackTargets.Add(target);

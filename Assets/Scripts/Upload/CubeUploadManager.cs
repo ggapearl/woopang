@@ -67,8 +67,11 @@ public class CubeUploadManager : MonoBehaviour
     /// <summary>플레이 시험 — 올리기를 내 PC 시험 서버로 (운영에 시험 장소를 올리지 않게 · 올린 뒤 알림도 보내지 않는다)</summary>
     public static string EditorBase;
     private string serverUrl => string.IsNullOrEmpty(EditorBase) ? ApiConfig.UPLOAD : EditorBase + "/upload";
+    private string modelServerUrl => string.IsNullOrEmpty(EditorBase) ? ApiConfig.CREATE_LOCATION_WITH_MODEL : EditorBase + "/create-location-with-model";
 
     private Texture2D mainPhoto;
+    private bool mainPhotoAlpha;   // 대표 사진 바깥이 투명하다 (AI 작업 '투명하게' · 3D 캐릭터 정지 사진) — PNG 로 올린다
+    private byte[] aiGlb;          // AI 작업 '3D 캐릭터' — 있으면 3D 모델 길(/create-location-with-model)로 올린다
     private Sprite mainSprite;   // 이 코드가 만든 대표 사진 스프라이트 — 장면에 놓인 기본 그림은 지우면 안 된다
     private List<Texture2D> subPhotos = new List<Texture2D>();
     private List<Image> subPhotoDisplays = new List<Image>();
@@ -443,6 +446,7 @@ public class CubeUploadManager : MonoBehaviour
                 {
                     if (mainPhoto != null) Destroy(mainPhoto);
                     mainPhoto = cropped;
+                    ClearAi();
                     SetMainSprite(mainPhoto);
                     SetMainPhotoUIState(true);
 
@@ -503,13 +507,16 @@ public class CubeUploadManager : MonoBehaviour
             mainPhotoTexture,
             onConfirmCallback: () =>
             {
-                // 확인 버튼 클릭 → UploadPage 복귀하여 서브 사진 추가 진행
+                // 확인 버튼 클릭 → UploadPage 복귀하여 서브 사진 추가 진행 (AI 작업으로 손봤으면 그 결과가 대표 사진)
+                TakeAiResult();
                 if (uploadPage != null)
                     uploadPage.SetActive(true);
             },
             onCancelCallback: () =>
             {
                 // 취소 버튼 클릭 → 메인 사진 초기화 후 UploadPage 복귀
+                R0926AiWorkPanel.Discard();
+                ClearAi();
                 if (mainPhoto != null)
                 {
                     Destroy(mainPhoto);
@@ -1328,6 +1335,7 @@ public class CubeUploadManager : MonoBehaviour
             Destroy(mainPhoto);
             mainPhoto = null;
         }
+        ClearAi();
         SetMainSprite(null);
         SetMainPhotoUIState(false);
     }
@@ -1347,6 +1355,25 @@ public class CubeUploadManager : MonoBehaviour
             if (tex != null && img.sprite == null) img.sprite = ThumbSprite(tex);
             img.gameObject.SetActive(tex != null);
         }
+    }
+
+    // 미리보기 「AI 작업」(R0926AiWorkPanel)으로 손본 대표 사진 · 3D 캐릭터 — 추가하기를 누를 때 넘겨받는다 (손보지 않았으면 그대로)
+    private void TakeAiResult()
+    {
+        var ai = R0926AiWorkPanel.Take();
+        if (ai == null || ai.Tex == null) return;
+        if (mainPhoto != null && mainPhoto != ai.Tex) Destroy(mainPhoto);
+        mainPhoto = ai.Tex;
+        mainPhotoAlpha = ai.Alpha;
+        aiGlb = ai.Glb;
+        SetMainSprite(mainPhoto);
+        SetMainPhotoUIState(true);
+    }
+
+    private void ClearAi()
+    {
+        mainPhotoAlpha = false;
+        aiGlb = null;
     }
 
     private void SetMainSprite(Texture2D tex)
@@ -1545,29 +1572,46 @@ public class CubeUploadManager : MonoBehaviour
         Texture2D mainPhoto = GetMainPhoto();
         if (mainPhoto != null)
         {
-            Texture2D resizedMainPhoto = ResizeTextureWithRenderTexture(mainPhoto, 444, 444);
-            byte[] mainPhotoBytes = resizedMainPhoto.EncodeToJPG(50);
+            Texture2D resizedMainPhoto = ResizeTextureWithRenderTexture(mainPhoto, 444, 444, mainPhotoAlpha);
+            // 바깥이 투명한 대표 사진(AI 작업)은 PNG — JPG 는 투명한 곳을 검게 메운다. 서버 /thumb 이 투명을 알아보고 PNG 로 내준다
+            byte[] mainPhotoBytes = mainPhotoAlpha ? resizedMainPhoto.EncodeToPNG() : resizedMainPhoto.EncodeToJPG(50);
             if (mainPhotoBytes.Length == 0)
             {
                 ShowWarning(LocalizationManager.Instance.GetText("main_photo_upload_failed"));
                 HideBusy();
                 yield break;
             }
-            string mainPath = "main.jpg";
-            formData.AddBinaryData("main_photo", mainPhotoBytes, mainPath, "image/jpeg");
+            string mainPath = mainPhotoAlpha ? "main.png" : "main.jpg";
+            formData.AddBinaryData("main_photo", mainPhotoBytes, mainPath, mainPhotoAlpha ? "image/png" : "image/jpeg");
             Destroy(resizedMainPhoto);
 
             // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다.
             // 이름·분류·대표 사진 등이 바뀌면(다른 장소) 새 키 (위치는 다시 잡을 때마다 조금씩 달라 넣지 않는다)
             ulong content = UploadKey.Mix(UploadKey.Seed, string.Join("|", placeName, selectedCategory, petFriendly, separateRestroom,
                 showInstagram ? instagramID : "", GetSubPhotos().Count));
-            formData.AddField("upload_id", uploadKey.For(UploadKey.Mix(content, mainPhotoBytes)));
+            ulong key = UploadKey.Mix(content, mainPhotoBytes);
+            if (aiGlb != null) key = UploadKey.Mix(key, aiGlb);
+            formData.AddField("upload_id", uploadKey.For(key));
         }
         else
         {
             ShowWarning(LocalizationManager.Instance.GetText("upload_logo_photo"));
             HideBusy();
             yield break;
+        }
+
+        // AI 작업 '3D 캐릭터' — 3D 모델 올리기(ModelUploadManager)와 같은 길 · 같은 값. 앱은 model_type 'custom' 만 모델로 띄운다
+        if (aiGlb != null)
+        {
+            formData.AddField("model_type", "custom");
+            formData.AddField("model_scale", "1.0");
+            formData.AddField("model_rotation_x", "0.0");
+            formData.AddField("model_rotation_y", "0.0");
+            formData.AddField("model_rotation_z", "0.0");
+            formData.AddField("animation_speed", "1.0");
+            formData.AddField("animation_loop", "true");
+            formData.AddField("animation_auto_play", "true");
+            formData.AddBinaryData("model_file", aiGlb, "character.glb", "model/gltf-binary");
         }
 
         List<Texture2D> subPhotos = GetSubPhotos();
@@ -1588,7 +1632,7 @@ public class CubeUploadManager : MonoBehaviour
             Destroy(resizedSubPhoto);
         }
 
-        using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
+        using (UnityWebRequest www = UnityWebRequest.Post(aiGlb != null ? modelServerUrl : serverUrl, formData))
         {
             LoginManager.ApplyAuth(www);
             bool timedOut = false;
@@ -1789,6 +1833,7 @@ public class CubeUploadManager : MonoBehaviour
             Destroy(photo);
         }
         subPhotos.Clear();
+        ClearAi();
 
         ResetToInitialState();
 
@@ -1864,12 +1909,12 @@ public class CubeUploadManager : MonoBehaviour
         uploadKey.Reset();
     }
 
-    private Texture2D ResizeTextureWithRenderTexture(Texture2D source, int targetWidth, int targetHeight)
+    private Texture2D ResizeTextureWithRenderTexture(Texture2D source, int targetWidth, int targetHeight, bool alpha = false)
     {
         RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight);
         RenderTexture.active = rt;
         Graphics.Blit(source, rt);
-        Texture2D result = new Texture2D(targetWidth, targetHeight, TextureFormat.RGB24, false);
+        Texture2D result = new Texture2D(targetWidth, targetHeight, alpha ? TextureFormat.RGBA32 : TextureFormat.RGB24, false);
         result.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
         result.Apply();
         RenderTexture.active = null;

@@ -5137,7 +5137,7 @@ public class MessagePanelManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(url) || targetImage == null) yield break;
 
-        string fullUrl = url.StartsWith("http") ? url : ApiConfig.MAIN_SERVER + "/" + url;
+        string fullUrl = url.StartsWith("http") ? ApiConfig.Secure(url) : ApiConfig.MAIN_SERVER + "/" + url;
 
         using (UnityWebRequest request = UnityWebRequestTexture.GetTexture(fullUrl))
         {

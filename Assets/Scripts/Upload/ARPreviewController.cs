@@ -29,8 +29,7 @@ public class ARPreviewController : MonoBehaviour
     [SerializeField] private GameObject loadingSpinnerPrefab;
     [SerializeField] private float spinnerScale = 1.5f;
     [SerializeField] private float spinnerRotationSpeed = 30f;
-    [SerializeField] private float spinnerMinDuration = 3f;
-    [SerializeField] private float spinnerFadeDuration = 1.5f;
+    [SerializeField] private float spinnerMinDuration = 3f;   // 스피너가 없을 때만 — 있으면 아래 짜잔 순서(SpawnWithLoadingSpinner)
     [SerializeField] private float cubeFadeInDuration = 1.5f;
 
     [Header("Spawn Emphasis Effect")]
@@ -136,6 +135,8 @@ public class ARPreviewController : MonoBehaviour
     private float dragVelocityY = 0f;
     private float lastTouchTime = 0f;
     private bool isCubeReady = false;
+    private Texture2D currentPhoto;        // 미리보기에 띄운 대표 사진 (CubeUploadManager 것 — 지우지 않는다)
+    private MeshRenderer[] cubeRenderers;  // 사진을 입힌 큐브 렌더러 — AI 작업이 그림을 바꿔 끼우고, 캐릭터를 세울 땐 숨긴다
 
     // Background dim
     private Image dimOverlayImage;
@@ -409,6 +410,7 @@ public class ARPreviewController : MonoBehaviour
     {
         onConfirm = onConfirmCallback;
         onCancel = onCancelCallback;
+        currentPhoto = mainPhotoTexture;
         isLoadingComplete = false;
         isCubeReady = false;
         isDragging = false;
@@ -491,52 +493,45 @@ public class ARPreviewController : MonoBehaviour
     // ============================================================
     // Spawn Sequence
     // ============================================================
+    // 11-09 대표님 「보물찾기에서 보물 찾았을 때 나오는 것처럼 … 천천히 짜잔~ 하는 느낌으로 … 지금 로딩스피너는 너무 천천히 돌아가는데 재미가 없거든」
+    // → 보물 '찾았다'(R0926HuntCelebrate)와 같은 결: 스피너가 톡 나타나 → 두근두근(쿵-쿵 · 점점 빨리 돌고 세게 떨다 · 끝에 몰아치듯)
+    //   → 펑 흩어지며 큐브가 한 바퀴 돌아 톡 튀어나온다(살짝 넘쳤다 돌아옴 · 테두리 번쩍 · 별빛 · 진동). 그다음은 2초마다 심장 박동(R0926Heartbeat).
+    // 예전엔 스피너가 0.5초 나타나 초당 45° 로 2초 돌고, 큐브가 2초 동안 서서히 나타나며 스피너가 4초에 걸쳐 사라졌다.
+    private const float PopIn = 0.4f, Suspense = 2.6f, Crescendo = 2.2f, Dub = 0.16f, Reveal = 0.8f;
+    private static readonly float[] Beats = { 0.05f, 0.8f, 1.35f, 1.8f, 2.12f };   // 쿵 (뒤따르는 쿵은 Dub 뒤) — 점점 빨라진다
+
     private IEnumerator SpawnWithLoadingSpinner(Vector3 position, Quaternion rotation, Texture2D mainPhotoTexture)
     {
+        R0926Heartbeat heart;
         if (loadingSpinnerPrefab != null)
         {
             spawnedSpinner = Instantiate(loadingSpinnerPrefab, position, rotation);
             spawnedSpinner.SetActive(true);
-            spawnedSpinner.transform.localScale = Vector3.one * spinnerScale;
             PrepareForAlphaFade(spawnedSpinner);
             SetObjectAlpha(spawnedSpinner, 0f);
 
-            yield return StartCoroutine(FadeObject(spawnedSpinner, 0f, 1f, 0.5f));
+            yield return StartCoroutine(SpinnerSuspense(rotation));
 
-            // 스피너 회전 + 반짝이
-            float spinTime = 0f;
-            while (spinTime < spinnerMinDuration)
-            {
-                if (spawnedSpinner != null)
-                {
-                    spawnedSpinner.transform.Rotate(Vector3.up, spinnerRotationSpeed * Time.deltaTime);
-                    float sinVal = (Mathf.Sin(spinTime * sparkleSpeed * Mathf.PI * 2f) + 1f) * 0.5f;
-                    float sparkle = Mathf.Lerp(sparkleMinAlpha, sparkleMaxAlpha, sinVal);
-                    SetObjectAlpha(spawnedSpinner, sparkle);
-                }
-                spinTime += Time.deltaTime;
-                yield return null;
-            }
-
-            // 큐브 생성 (투명)
+            // 짜잔 — 스피너는 펑 흩어지고 큐브가 튀어나온다
             spawnedCube = Instantiate(cubePrefab, position, rotation);
             spawnedCube.SetActive(true);
             ShowCubeIndicator(false);
             ApplyTextureToCube(mainPhotoTexture);
             SetObjectAlpha(spawnedCube, 0f);
+            heart = spawnedCube.AddComponent<R0926Heartbeat>();
+            heart.Flash(Reveal + 0.4f);
 
-            // 스피너 페이드아웃 + 큐브 페이드인 동시 시작
             isSpinnerFading = true;
-            spinnerFadeCoroutine = StartCoroutine(FadeObjectAndCleanup(spawnedSpinner, 1f, 0f, spinnerFadeDuration));
-            StartCoroutine(ContinueSpinnerRotation(spinnerFadeDuration));
+            spinnerFadeCoroutine = StartCoroutine(BurstSpinner());
+            if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HandleTouchFeedbackDirect(1f);
 
-            // 파티클 버스트 — 큐브 등장 + 스피너 사라지는 시점에 동시 발생
+            // 파티클 버스트 — 큐브가 튀어나오는 순간
             try { PlayParticleBurst(position); }
             catch (Exception e) { Debug.LogWarning($"[ARPreviewController] ParticleBurst: {e.Message}"); }
 
-            yield return StartCoroutine(FadeObject(spawnedCube, 0f, 1f, cubeFadeInDuration));
+            yield return StartCoroutine(PopCube(rotation));
 
-            // 큐브 fadein 완료 후, 스피너 fadeout이 아직 진행 중이면 완료까지 대기
+            // 다 튀어나온 뒤에도 스피너가 흩어지는 중이면 끝까지 기다린다
             if (isSpinnerFading && spinnerFadeCoroutine != null)
             {
                 yield return spinnerFadeCoroutine;
@@ -551,6 +546,7 @@ public class ARPreviewController : MonoBehaviour
             ShowCubeIndicator(false);
             ApplyTextureToCube(mainPhotoTexture);
             SetObjectAlpha(spawnedCube, 0f);
+            heart = spawnedCube.AddComponent<R0926Heartbeat>();
 
             yield return StartCoroutine(FadeObject(spawnedCube, 0f, 1f, cubeFadeInDuration));
         }
@@ -567,6 +563,7 @@ public class ARPreviewController : MonoBehaviour
         // 큐브 준비 완료 → 터치 회전 + 자동 회전 즉시 활성화
         isCubeReady = true;
         lastTouchTime = Time.time - autoRotationResumeDelay;
+        heart.Beat(1f);   // 1초 뒤부터 2초마다 쿵-쿵
 
         // 스포트라이트
         try { CreateSpotlight(position); }
@@ -594,15 +591,116 @@ public class ARPreviewController : MonoBehaviour
         t.NeedArrowIndicator = show && look.NeedArrowIndicator;
     }
 
-    private IEnumerator ContinueSpinnerRotation(float duration)
+    // 1) 톡 — 작은 점에서 튀어나오듯  2) 두근두근 — 쿵-쿵에 맞춰 커지고 · 점점 빨리 돌고 · 점점 세게 떨다 · 끝에 몰아치듯 (쿵마다 살짝 진동)
+    private IEnumerator SpinnerSuspense(Quaternion rotation)
     {
-        float elapsed = 0f;
-        while (elapsed < duration && spawnedSpinner != null)
+        GameObject sp = spawnedSpinner;
+        Transform t = sp.transform;
+        Vector3 size = Vector3.one * spinnerScale;
+        var rotator = sp.GetComponent<SpinnerRotator>();
+        float spin0 = 2f * (spinnerRotationSpeed + (rotator != null ? rotator.speed : 0f));   // 예전 빠르기의 두 배에서 시작해 초당 세 바퀴까지
+        if (rotator != null) rotator.enabled = false;   // 도는 건 여기서
+        float yaw = 0f;
+        for (float s = 0f; s < PopIn; s += Time.deltaTime)
         {
-            spawnedSpinner.transform.Rotate(Vector3.up, spinnerRotationSpeed * Time.deltaTime);
-            elapsed += Time.deltaTime;
+            if (sp == null || sp != spawnedSpinner) yield break;
+            float k = s / PopIn;
+            yaw += spin0 * Time.deltaTime;
+            t.rotation = Quaternion.AngleAxis(yaw, Vector3.up) * rotation;
+            t.localScale = size * Mathf.Max(0f, BackOut(k));
+            SetObjectAlpha(sp, Mathf.Clamp01(k * 2f));
             yield return null;
         }
+        int lub = 0;
+        float tick = Crescendo;
+        for (float s = 0f; s < Suspense; s += Time.deltaTime)
+        {
+            if (sp == null || sp != spawnedSpinner) yield break;
+            while (lub < Beats.Length && s >= Beats[lub]) { Buzz(); lub++; }
+            if (s >= Crescendo && s >= tick) { Buzz(); tick += 0.085f; }
+
+            float beat = 0f;
+            foreach (float b in Beats) beat = Mathf.Max(beat, Bump(s - b, 0.15f) + 0.5f * Bump(s - b - Dub, 0.13f));
+            float grow = s < Crescendo ? 0f : Mathf.SmoothStep(0f, 1f, (s - Crescendo) / (Suspense - Crescendo));
+            float amp = s < Crescendo ? Mathf.Lerp(0.6f, 3f, Mathf.Pow(s / Crescendo, 1.5f)) : Mathf.Lerp(3f, 10f, grow);
+            float tt = Time.time;
+            Transform cam = arCamera != null ? arCamera.transform : null;
+            Quaternion shake = Quaternion.AngleAxis(amp * (0.6f * Mathf.Sin(tt * 33f) + 0.4f * Mathf.Sin(tt * 51f + 1.3f)), cam != null ? cam.forward : Vector3.forward)
+                             * Quaternion.AngleAxis(amp * 0.5f * Mathf.Sin(tt * 27f + 0.7f), cam != null ? cam.right : Vector3.right);
+            yaw += Mathf.Lerp(spin0, 1080f, Mathf.Pow(s / Suspense, 2f)) * Time.deltaTime;
+            t.rotation = shake * Quaternion.AngleAxis(yaw, Vector3.up) * rotation;
+            t.localScale = size * (1f + 0.1f * beat + 0.12f * grow);
+            float shimmer = 0.5f + 0.5f * Mathf.Sin(s * sparkleSpeed * Mathf.PI * 2f);
+            SetObjectAlpha(sp, Mathf.Lerp(sparkleMinAlpha, sparkleMaxAlpha, Mathf.Max(Mathf.Max(shimmer, beat), grow)));
+            yield return null;
+        }
+    }
+
+    // 펑 — 스피너가 확 커지며 흩어진다
+    private IEnumerator BurstSpinner()
+    {
+        const float Secs = 0.35f;
+        GameObject sp = spawnedSpinner;
+        if (sp != null)
+        {
+            Transform t = sp.transform;
+            Vector3 from = t.localScale;
+            for (float s = 0f; s < Secs && sp != null; s += Time.deltaTime)
+            {
+                float e = 1f - Mathf.Pow(1f - s / Secs, 3f);
+                t.localScale = from * (1f + 0.8f * e);
+                t.Rotate(Vector3.up, 1080f * (1f - e) * Time.deltaTime, Space.World);
+                SetObjectAlpha(sp, 1f - e);
+                yield return null;
+            }
+        }
+        isSpinnerFading = false;
+        spinnerFadeCoroutine = null;
+        CleanupSpinner();
+    }
+
+    // 큐브 — 작게 시작해 한 바퀴 돌며 톡 튀어올라 살짝 넘쳤다 돌아온다 (처음 0.12초는 펑 — 잠깐 납작)
+    private IEnumerator PopCube(Quaternion rotation)
+    {
+        GameObject cube = spawnedCube;
+        Transform t = cube.transform;
+        Vector3 size = t.localScale, at = t.position;
+        for (float s = 0f; s < Reveal; s += Time.deltaTime)
+        {
+            if (cube == null) yield break;
+            float sc = Mathf.LerpUnclamped(0.15f, 1f, BackOut(Mathf.Clamp01(s / 0.55f)));
+            float sq = s < 0.12f ? Mathf.Sin(s / 0.12f * Mathf.PI) : 0f;
+            t.localScale = Vector3.Scale(size, new Vector3(sc + 0.06f * sq, sc - 0.12f * sq, sc + 0.06f * sq));
+            t.rotation = Quaternion.AngleAxis(-360f * Mathf.Pow(1f - Mathf.Clamp01(s / 0.7f), 3f), Vector3.up) * rotation;
+            t.position = at + Vector3.up * (0.12f * size.y * Mathf.Sin(Mathf.Clamp01(s / 0.6f) * Mathf.PI));
+            SetObjectAlpha(cube, Mathf.Clamp01(s / 0.3f));
+            yield return null;
+        }
+        if (cube == null) yield break;
+        t.localScale = size;
+        t.rotation = rotation;
+        t.position = at;
+        SetObjectAlpha(cube, 1f);
+    }
+
+    private static void Buzz()
+    {
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.TriggerLightHaptic();
+    }
+
+    // 0 → 1 → 0 (w 초 동안 — 앞이 빠르게 솟는다) · 보물 축하 화면과 같은 곡선
+    private static float Bump(float x, float w)
+    {
+        if (x <= 0f || x >= w) return 0f;
+        return Mathf.Sin(Mathf.Sqrt(x / w) * Mathf.PI);
+    }
+
+    // 살짝 넘쳤다 돌아온다 (0 → 1.1 → 1)
+    private static float BackOut(float k)
+    {
+        const float c1 = 1.70158f, c3 = c1 + 1f;
+        float x = k - 1f;
+        return 1f + c3 * x * x * x + c1 * x * x;
     }
 
     // ============================================================
@@ -901,14 +999,6 @@ public class ARPreviewController : MonoBehaviour
         }
     }
 
-    private IEnumerator FadeObjectAndCleanup(GameObject obj, float fromAlpha, float toAlpha, float duration)
-    {
-        yield return StartCoroutine(FadeObject(obj, fromAlpha, toAlpha, duration));
-        isSpinnerFading = false;
-        spinnerFadeCoroutine = null;
-        CleanupSpinner();
-    }
-
     private IEnumerator FadeObject(GameObject obj, float fromAlpha, float toAlpha, float duration)
     {
         if (obj == null) yield break;
@@ -936,6 +1026,7 @@ public class ARPreviewController : MonoBehaviour
         if (spawnedCube == null || mainPhotoTexture == null) return;
 
         MeshRenderer[] renderers = spawnedCube.GetComponentsInChildren<MeshRenderer>();
+        cubeRenderers = renderers;
         foreach (var renderer in renderers)
         {
             if (renderer != null && renderer.material != null)
@@ -950,6 +1041,28 @@ public class ARPreviewController : MonoBehaviour
 
                 renderer.material = newMat;
             }
+        }
+    }
+
+    // ============================================================
+    // AI 작업 (R0926AiWorkPanel — 11-12 대표님 「작업된 오브젝트가 반영된 상태에서 … 3D오브젝트는 기존 발생하던 것처럼 돌고 있는 상황」)
+    // ============================================================
+    public Texture2D Photo => currentPhoto;
+    public bool CubeReady => isCubeReady && spawnedCube != null;
+    /// <summary>다 튀어나와 돌고 있는 미리보기 큐브 (아직이면 null)</summary>
+    public GameObject PreviewCube => CubeReady ? spawnedCube : null;
+    public MeshRenderer[] CubeRenderers => CubeReady ? cubeRenderers : null;
+
+    /// <summary>손본 사진을 돌고 있는 큐브에 바로 입힌다 — 큐브 재질 복사본(ApplyTextureToCube)의 그림만 바꿔 끼운다</summary>
+    public void SetPreviewTexture(Texture2D tex)
+    {
+        if (cubeRenderers == null || tex == null) return;
+        foreach (var r in cubeRenderers)
+        {
+            var m = r != null ? r.material : null;
+            if (m == null) continue;
+            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
+            if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
         }
     }
 
@@ -984,6 +1097,8 @@ public class ARPreviewController : MonoBehaviour
     private void CleanupAll()
     {
         isCubeReady = false;
+        currentPhoto = null;
+        cubeRenderers = null;
         StopSpawn();
         if (loadingTextCoroutine != null)
         {

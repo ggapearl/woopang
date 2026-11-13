@@ -13,7 +13,7 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 77;  // v77: 11-09 대표님 「하단메뉴 버튼에 있어서 따로 해당 이름 (목록 / 추가 etc.) 사용하지 말고 그냥 아이콘만」 — 도크 칸(목록 · 추가 · 메세지 · 프로필 · 창이 열렸을 때의 닫기 X)의 이름을 끄고 아이콘(안 읽음 표시 · 프로필 사진 테두리 포함)을 칸 가운데로 (DockLabels). v76: 11-08 대표님 「'< 돌아가기' 버튼이 … '상단 중앙' 으로 통일」 — 보물찾기 양식 · 주최 수칙 · 상세의 '‹ 돌아가기'를 모두 위쪽 가운데로. v75: 11-09 대표님 「사진 여러개 보냈을 때 … 묶어서」 · 「'닫기 / 다운로드 / 공유' 버튼이 불필요하게 너무 큰데」 — 사진 크게 보기를 왼쪽 위 둥근 ✕ · 위 「2 / 5」 · 아래 작은 알약(다운로드 · 모두 다운로드 · 공유)으로, 묶음은 좌우로 넘김. v74: 11-06 대표님 「'나침반 모드' 로 해서 어두운환경에서는 자연스럽게 이 모드로」 — LoadingManager 에 R0926CompassMode (카메라 · TrackedPoseDriver · AR 세션 · 지구 추적 연결). v73: 11-06 대표님 「보물찾기 상품 '사진' — 할인쿠폰·QR 코드 캡처」 — 양식 상품 칸 아래 사진 고르기 · 상세 상품 사진 칸(찾기 전 자물쇠) · 축하 카드 상품 칸에 사진(누르면 크게 · 저장) · 사진 크게 보기 공유 칸을 대화 사진만. v72: 11-05 대표님 「'AR세션 확인중..' 과 '주변에서 ○○을 찾았습니다' 가 겹쳐서」 — 노치 아래 두 알약(주변 장소 · AR/GPS 안내)이 한 자리를 엇갈려 쓴다(찾았어요가 잠깐 앞, 불러오는 중은 AR 안내 뒤). v71: 11-05 대표님 — 보물찾기 '3D 모델' 칸 견본을 갈색 티베탄 마스티프로 (고르기 전 미리보기). v70: 11-05 대표님 — 필터 '축제 / 보물' → '축제' · 친구 지도: 겹친 친구는 최근 접속한 사람 핀 + 오른쪽 위 '+N' 배지(묶음 숫자 대신) · 아래 목록 얼굴을 누르면 프로필(나머지는 지도 이동) · 내 방향 표시를 작은 ▲ 로 · 장소 추가·수정 입력줄 이모지 단추
+        public const int Version = 88;  // v88: 11-12 대표님 「3D모델(GLB) 고르기 버튼 우측에 '3D 캐릭터 생성' … '요청사항' … '작업 중..' 이라고 하면서 샘플이 먼저 발생하고 이 창에서 기다렸다가라도 바로 볼 수 있도록」 — 보물찾기 양식 고르기 줄(PickRow0926: 고르기 | 3D 캐릭터 생성 · 반씩) · 요청사항 줄(CharAsk0926 · 키보드 위 입력줄의 보내기 = 만들기) · 미리보기 칸 아래쪽 '작업 중..'(CharBusy0926 — 그동안 견본·고른 모델은 그대로 돈다) → 만든 캐릭터가 그 칸에 바로. v87: 11-12 대표님 「'이곳에 오브젝트를 추가하시겠습니까?' … '취소 / 추가하기' 버튼 외에 가운데에 'AI 작업' … 옵션을 선택함과 동시에 바로 작업이 되도록」 — 미리보기 카드 가운데 'AI 작업'(세 버튼 같은 폭 · 큐브가 다 생겨야 눌림), 카드 아래 옵션 판(AiOptions0926 · R0926AiWorkPanel · 아래가 모자라면 카드 위): 01 투명하게(겹쳐 고름) · 02 만화톤 · 03 색연필 · 04 3D 캐릭터(요청사항 + 만들기 · 키보드 위 입력줄) — 고르자마자 '작업 중..' → 돌고 있는 큐브에 바로, 캐릭터는 큐브 자리에 서서 같이 돈다. 추가하기 → 그 결과가 대표 사진(투명하면 PNG · 캐릭터면 3D 올리기 길). v86: 11-13 대표님 「목록에 있는 이모지 너무 키웠어. 사이즈 한 70% 정도로 … 썸네일 사진을 줄이는 한이 있더라도 위아래 각 목록 사이의 빈공간이 너무 큰데」 — 줄 앞 분류 그림 120→84(사람 78 · 보물상자 76, 가운데 x 72→54) · 줄 높이 192→144 · 오른쪽 사진 160→120(사진 없을 때 옅은 그림 84→64) · 이름 칸 164→140 — 두 줄에도 안 들어가는 긴 이름은 글자를 46까지 줄여 칸 안에. v85: 11-13 대표님 「각 목록 좌측에 붙는 이모지랑 글자 사이즈 너무 작은데 많이 키워줘. 현재 위아래 높이를 벗어나지 않는 선에서 위아래 여백이 너무 많지않도록 사이즈를 키워야 … 방향이랑 거리 나오는 값도 사이즈 조금 키워줘」 — 목록 줄(높이 192 그대로) 앞 분류 그림 50→120(사람 112 · 보물상자 108, 가운데 x 26→72) · 분류 없는 점 26→36 · 이름 48→62(왼쪽 60→152, 두 줄 칸 120→164) · 거리 41→50 · 방향 33→40 (거리 칸 226→240 · 방향 자리 160→170). v84: 11-12 대표님 「기존에 잇던 하단메뉴 버튼의 텍스트는 유지해달라고 했거든? … 다시 원래대로 해주고, '보물찾기' 라고 새로 만든 건 띄어쓰지말고 … 레이아웃에 맞게 · '보물찾기' 버튼의 경우 선물박스 느낌으로 '살짝 핑크색 파스텔톤' … 기존에 '보물찾기' 로직에 있어서 '선물상자' 만든 거 있으니까 색감을 조금만 보태서 간략히」 — 도크 칸 이름(목록 · 추가 · 보물찾기 · 메세지 · 프로필 · 닫기)을 아이콘 아래에 되살림(DockLabels · 아이콘만은 보류), 보물찾기 칸 아이콘을 옅은 분홍 선물상자(r0926_i_gift · 보물찾기 선물상자를 간략히)로, 이름도 옅은 분홍. v83: 11-12 대표님 「각 리스트의 높이를 지금의 2배 사이즈로 만들어서 현재의 2칸 사이즈에 하나가 나오도록 하고, 우측 끝에는 각 오브젝트의 '메인사진' 이 발생하도록 … 그걸 터치하면 방향이 나오는게 아니라 해당 더블터치했을 때의 정보값이 발생하도록(Doubletap3d 작동하도록)」 — 목록 줄 높이 96→192, 줄 오른쪽 끝에 그 장소의 대표 사진(RowTemplate0926/Photo · 둥근 160 칸, 오브젝트 앞면과 같은 사진 · 사진이 없으면 옅은 분류 그림), 사진을 누르면 그 장소를 두 번 누른 것과 같은 정보 창(AR 에 아직 없는 장소도 · R0926PlaceInfo) — 창이 떠 있는 동안 목록은 숨고 닫으면 돌아온다 (사람은 프로필). 이름은 두 줄까지. v82: 11-10 대표님 「firtimeguide 의 경우 지금 뭔가 좀 허접하거든? 카드뉴스 작업한 것들 … 베이스로 옆으로 스와이프해서 넘겨보면서 안내 … 화살표 안내와 함께 … 가볍게 모달로」 — 첫 사용 안내를 카드뉴스 9장(주변 · 누르면 정보 · 목록 · 지도 · 장소 추가 · 짜잔 · 보물 숨기기 · 보물 찾음 · 근처 사람)을 옆으로 넘기는 창으로(FirstTimeGuidePanel/Cards0926 · R0926GuideCards): 카드마다 그 기능의 하단 버튼을 비추고 화살표, 하단 버튼은 그대로 눌림, 5개 언어(한국어 화면 · 그 밖은 영어 화면), 가로 화면은 글 왼쪽 · 휴대폰 오른쪽. v81: 11-09 대표님 「iOS환경에서 '하늘접기' 버튼을 눌럿을 때 … '노치' 에 반영 … '날씨 이모지' 와 '온도' 정도만」 · 「노치를 터치해서는 … 화면 상단에 고정해둬. 그리고 아래로 스와이프하면 이제 사라지도록」 · 「리스트에서 선택을 하면 아이폰의 경우 '노치' 화면에 화살표로 방향과 거리를」 · 「'하늘접기' 버튼이 너무 작은데 아주 조금만 더 크게」 — 노치가 있는 아이폰 세로 화면에서만 노치 양옆으로 검은 판(Notch0926 · R0926Notch): 하늘을 접으면 날씨 그림 + 기온(누르면 하늘 판을 위쪽에 고정해 편다), 목록 줄을 누르면 화살표 + 거리(처음 3초 이름 · 15m 도착). 안드로이드 · 노치 없는 아이폰은 그대로. 하늘 칩 높이 84→94 · 글 34→38. v80: 11-09 — 창이 열린 동안에도 보이는 도크 칸에 손가락이 닿게 (창의 어두운 바탕이 그 자리만 통과 · R0926DockPassThrough) — 11-08 칸 바꾸기 · 보물찾기 ↔ '추가'가 실제 터치로 된다 (시험은 버튼을 직접 불러 몰랐다) · v79 때 상자 그림을 아직 못 읽어 흰 네모로 들어간 보물찾기 아이콘 다시. v79: 11-09 대표님 「'보물찾기' 기능을 하단 '추가' 버튼과 '메세지' 버튼 사이에 … 근처에 있는 '보물' 리스트가 적당히 보이도록 하고, '보물숨기기' 기능도 '추가' 창 말고 여기에」 · 「new 배지를 달아뒀다가 일주일 후에 안보이도록」 · 「각 이모지를 아주 조금만 키워서 적절히 잘 배치」 — 도크 다섯 칸(목록 · 추가 · 보물찾기 · 메세지 · 프로필), 보물찾기 칸(상자 아이콘 + 왼쪽 위 NEW 7일)은 추가 창을 보물찾기 카드 한 장으로 열고(R0926HuntDock) 추가 창은 장소 · 3D모델 두 장만, 아이콘 106→116 · 프로필 사진 92→100. v78: 11-08 대표님 「하단버튼 메뉴 배경 … '물방울' 모양의 (iOS 앱 로직) 식으로」 · 「다른 반투명 배경으로 들어가는 바 … 다 적용, 설정에서 '기본메뉴 / 물방울메뉴'(30·60 FPS 바로 위)」 — AR 화면 위 반투명 알약 7곳(도크 · 위치 칩 · 하늘 칩 · 주변 장소 · 불러오는 중 · 보물 알림 · 토스트)에 R0926Glass, 설정 화면에 '메뉴 모양' 줄 (기본은 기본메뉴). v77: 11-09 대표님 「하단메뉴 버튼에 있어서 따로 해당 이름 (목록 / 추가 etc.) 사용하지 말고 그냥 아이콘만」 — 도크 칸(목록 · 추가 · 메세지 · 프로필 · 창이 열렸을 때의 닫기 X)의 이름을 끄고 아이콘(안 읽음 표시 · 프로필 사진 테두리 포함)을 칸 가운데로 (DockLabels). v76: 11-08 대표님 「'< 돌아가기' 버튼이 … '상단 중앙' 으로 통일」 — 보물찾기 양식 · 주최 수칙 · 상세의 '‹ 돌아가기'를 모두 위쪽 가운데로. v75: 11-09 대표님 「사진 여러개 보냈을 때 … 묶어서」 · 「'닫기 / 다운로드 / 공유' 버튼이 불필요하게 너무 큰데」 — 사진 크게 보기를 왼쪽 위 둥근 ✕ · 위 「2 / 5」 · 아래 작은 알약(다운로드 · 모두 다운로드 · 공유)으로, 묶음은 좌우로 넘김. v74: 11-06 대표님 「'나침반 모드' 로 해서 어두운환경에서는 자연스럽게 이 모드로」 — LoadingManager 에 R0926CompassMode (카메라 · TrackedPoseDriver · AR 세션 · 지구 추적 연결). v73: 11-06 대표님 「보물찾기 상품 '사진' — 할인쿠폰·QR 코드 캡처」 — 양식 상품 칸 아래 사진 고르기 · 상세 상품 사진 칸(찾기 전 자물쇠) · 축하 카드 상품 칸에 사진(누르면 크게 · 저장) · 사진 크게 보기 공유 칸을 대화 사진만. v72: 11-05 대표님 「'AR세션 확인중..' 과 '주변에서 ○○을 찾았습니다' 가 겹쳐서」 — 노치 아래 두 알약(주변 장소 · AR/GPS 안내)이 한 자리를 엇갈려 쓴다(찾았어요가 잠깐 앞, 불러오는 중은 AR 안내 뒤). v71: 11-05 대표님 — 보물찾기 '3D 모델' 칸 견본을 갈색 티베탄 마스티프로 (고르기 전 미리보기). v70: 11-05 대표님 — 필터 '축제 / 보물' → '축제' · 친구 지도: 겹친 친구는 최근 접속한 사람 핀 + 오른쪽 위 '+N' 배지(묶음 숫자 대신) · 아래 목록 얼굴을 누르면 프로필(나머지는 지도 이동) · 내 방향 표시를 작은 ▲ 로 · 장소 추가·수정 입력줄 이모지 단추
         // v69: 11-02 대표님 N-AF 「하트모양은 … 살짝 각진 보석모양의 하트로 보물을 설정할 수 있도록」 — 보물 모양 '하트'를 쿠션+금 장식에서 면이 갈린 보석 하트로 (거들 20점 · 앞뒤 크라운·테이블)
         // v68: 11-02 대표님 N-U 「'전송버튼' 좌측에 '이모지' 버튼 … 누르면 키패드가 사라지고 이모지만 잔뜩 … 키패드 전체를 채우는 식으로」 「키패드 각 버튼이 입력창 글자보다 큰 것마냥 · 아래로 스크롤 · 최상단에서 아래로 스와이프하면 창이 내려가도록」 — 이모지 창(EmojiPanel0926) · 대화·댓글 입력칸 이모지 단추 · 말풍선·미리보기·댓글 글 속 이모지 그림 · 댓글 빠른 반응 줄 지움(10-25 「채팅창 위에 이모지 … 삭제」) · 설정 '오픈소스 라이선스'
         // v67: 11-02 대표님 「유니티에서 시뮬레이터 돌렸을 때 발생하는 경고 … 개선할 수 있는 건 개선」 — 상단 그늘(Panel_Top)의 누름 소리 부품을 뗌(로고를 누르던 시절 것 · 이제 터치를 받지 않아 'requires a Button' 경고만 남겼다) · v66: 10-25 대표님 「프로필 편집에서 glb 를 업로드하고 어떻게 보이도록 할 건지 선택」 「프로필에서는 해당 glb 파일이 보이고」 — 편집 시트 3D 모델 칸 · 사진/3D 고르기 · 프로필 화면 둥근 사진 위 3D 칸
@@ -42,6 +42,7 @@ namespace Redesign0926
         private static readonly Color Muted = new Color(0.549f, 0.584f, 0.616f, 1f);
         private static readonly Color Line = new Color(1f, 1f, 1f, 0.07f);
         private static readonly Color Pink = new Color(0.914f, 0.325f, 0.514f, 1f);
+        private static readonly Color HuntPastel = new Color(0.976f, 0.792f, 0.859f, 1f);   // 도크 '보물찾기' 이름 — 선물상자 아이콘과 같은 옅은 분홍 (11-12)
         private static readonly Color Dark = new Color(0.082f, 0.094f, 0.106f, 1f);
 
         // ── 크기 (캔버스 단위) ─────────────────────────────
@@ -51,11 +52,11 @@ namespace Redesign0926
         private const float DockHeight = 224f;   // 60pt — 2026-09-30 위아래 여백을 줄여 달라 하셔서 (아이콘 크기는 그대로)
         private const float DockBottom = 30f;    // 홈 인디케이터 위 8pt
         private const float PlusSize = 196f;     // 52pt
-        private const float DockIcon = 106f;     // 29pt (예전 25pt)
+        private const float DockIcon = 116f;     // 31pt — 11-09 대표님 「각 이모지를 아주 조금만 키워서」 (예전 106 · 29pt)
         private const float DockLabel = 44f;     // 12pt (예전 10pt)
         // 11-09 대표님 「하단메뉴 버튼에 있어서 따로 해당 이름 (목록 / 추가 etc.) 사용하지 말고 그냥 아이콘만」 — 칸 이름(닫기 포함)을 끄고 아이콘을 칸 가운데로.
-        // 이름 칸(Label0926)은 지우지 않고 꺼 둔다 — 다시 보이려면 이 값만 true
-        private const bool DockLabels = false;
+        // → 11-12 대표님 「기존에 잇던 하단메뉴 버튼의 텍스트는 유지 … 다시 원래대로」 — 아이콘만은 보류, 이름을 아이콘 아래에 되살린다 (다시 끄려면 이 값만 false)
+        private const bool DockLabels = true;
         private const float DockIconY = DockLabels ? 26f : 0f, DockLabelY = -58f, DockLabelBox = 60f, AddGlyph = 76f;
 
         private static Font font;
@@ -107,9 +108,13 @@ namespace Redesign0926
             ApplyPerson(scene, log);            // 사람 오브젝트 — 씬 맨 바깥에 있어 캔버스와 무관
             ApplyCompass(scene, log);           // 나침반 모드 — 어두워 위치 추적이 멈추면 저절로 (캔버스와 무관)
             ApplyChatPhoto(root, log);          // 대화방 + 버튼 · 사진 크게 보기 · 팔로잉 공유 시트
+            ApplyAiWork(root, log);             // 미리보기 카드 'AI 작업' — 카드 모양(ApplyStatusScreens)이 정해진 뒤 · 입력줄 모으기(ApplyReadable)보다 먼저
             ApplyEmoji(root, log);              // 이모지 창 · 입력칸 이모지 단추 — 입력칸 글 자리(Apply10 · CommentBar)가 정해진 뒤에
             ApplyReadable(root, log);           // 토스트 · 앱 전체 최소 글자 · 입력칸 커서 — 다른 단계가 글자 크기를 다 정한 뒤에
             ApplySkyPages(root, log);           // 하늘 날씨판 옆 장 — 날씨판이 다 자리잡은 뒤에
+            ApplyGlass(root, log);              // 물방울메뉴 — 알약들의 색 · 모양이 다 정해진 뒤에
+            ApplyNotch(root, log);              // 노치 날씨 · 안내 (노치가 있는 아이폰만) — 하늘 판 · 덮는 창 목록이 다 있은 뒤에
+            ApplyGuideCards(root, log);         // 첫 사용 안내 카드뉴스 — 예전 안내 막(GuideOverlay)과 도크가 다 있은 뒤에
             CloseStartPanels(root, log);
 
             var marker = root.GetComponentInChildren<R0926Marker>(true);
@@ -181,9 +186,11 @@ namespace Redesign0926
         // 하단 도크 — 목록 · 올리기 · 메시지를 한 줄로 (버튼 오브젝트는 그대로 옮긴다)
         // ============================================================
         // 도크 칸 위치 (도크 너비 기준 0~1)
-        private const float SlotList = 0.125f, SlotAdd = 0.375f, SlotMsg = 0.625f, SlotProfile = 0.875f;
+        // 11-09 대표님 「'보물찾기' 기능을 하단 '추가' 버튼과 '메세지' 버튼 사이에」 — 다섯 칸 (예전 네 칸 0.125 · 0.375 · 0.625 · 0.875)
+        private const float SlotList = 0.1f, SlotAdd = 0.3f, SlotHunt = 0.5f, SlotMsg = 0.7f, SlotProfile = 0.9f;
+        private const float DockSlotW = 250f;   // 칸 누름 영역 폭 — 다섯 칸이 서로 겹치지 않게 (좁은 기기의 칸 간격 약 250 · 예전 300)
         private const float AddTile = 106f;
-        private const float MiniAvatar = 92f;   // 도크 프로필 사진 — 테두리까지 다른 아이콘과 비슷한 크기
+        private const float MiniAvatar = 100f;   // 도크 프로필 사진 — 테두리까지 다른 아이콘과 비슷한 크기 (아이콘을 키우며 92→100)
 
         private static void ApplyDock(Transform root, List<string> log)
         {
@@ -221,7 +228,7 @@ namespace Redesign0926
                 u.color = Pink;
                 u.raycastTarget = false;
                 SetRect(RT(unread), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(58, DockIconY + 42), new Vector2(60, 60));   // 아이콘 오른쪽 위 모서리
+                    new Vector2(62, DockIconY + 46), new Vector2(60, 60));   // 아이콘 오른쪽 위 모서리 (아이콘을 키우며 같이 바깥으로)
                 // 검은 테두리 없이 (예전 버튼에서 따라온 Outline·Shadow)
                 foreach (var fx in unread.GetComponentsInChildren<Shadow>(true)) Object.DestroyImmediate(fx);
                 unread.transform.SetAsLastSibling();
@@ -234,6 +241,31 @@ namespace Redesign0926
             // 추가 — 다른 칸과 같은 크기, 아이콘만 흰 사각 타일로 강조 + 아래 '추가'
             AddButtonStyle(plusBtn, dock.transform, SlotAdd, "r0926_i_plus", new[] { "추가", "Add", "追加", "添加", "Añadir" });
 
+            // 보물찾기 — 추가와 메세지 사이 (11-09 대표님). 누르면 추가 창을 보물찾기 카드 한 장으로 연다
+            // (R0926HuntDock — 보물찾기 카드를 만든 뒤 ApplyHunt 에서 잇는다)
+            var hunt = Find(root, "Hunt_Button0926");
+            if (hunt == null) hunt = NewUI("Hunt_Button0926", dock.transform);
+            Ensure<Image>(hunt);
+            Ensure<Button>(hunt);
+            // 11-12 대표님 「선물박스 느낌으로 '살짝 핑크색 파스텔톤' … 기존 '선물상자' 에 색감을 조금만 보태서 간략히」 — 옅은 분홍 선물상자(제 색 그대로) + 옅은 분홍 이름
+            DockButton(hunt, dock.transform, SlotHunt, "r0926_i_gift", "보물찾기", "Treasure", "宝探し", "寻宝", "Tesoro");
+            hunt.transform.Find("Icon0926").GetComponent<Image>().color = Color.white;
+            hunt.transform.Find("Label0926").GetComponent<Text>().color = HuntPastel;
+            hunt.transform.SetSiblingIndex(plusBtn.transform.GetSiblingIndex() + 1);
+            var plusFw = plusBtn.GetComponent<UITouchForwarder>();
+            var huntFw = Ensure<UITouchForwarder>(hunt);   // 누름 소리 — 추가 칸과 같게
+            if (plusFw != null) EditorUtility.CopySerialized(plusFw, huntFw);
+            // NEW — 아이콘 왼쪽 위 · 처음 본 날부터 7일 (R0926HuntDock 이 켜고 끈다)
+            var fresh = FindOrCreate(hunt.transform, "New0926");
+            fresh.transform.SetAsLastSibling();
+            Img(fresh, Spr("r0926_pill"), Pink, Image.Type.Sliced, 64f / 19f).raycastTarget = false;
+            SetRect(RT(fresh), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-58, DockIconY + 52), new Vector2(84, 38));   // 선물상자 리본을 가리지 않게 살짝 바깥
+            var freshText = FindOrCreate(fresh.transform, "Text");
+            var frt = RT(freshText); frt.anchorMin = Vector2.zero; frt.anchorMax = Vector2.one; frt.offsetMin = Vector2.zero; frt.offsetMax = Vector2.zero;
+            var ft = Txt(freshText, "NEW", 24, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
+            ft.horizontalOverflow = HorizontalWrapMode.Overflow;
+            ft.raycastTarget = false;
+
             // 프로필 — 오른쪽 끝 칸. 로그인 전엔 '로그인'
             if (mini != null)
             {
@@ -241,7 +273,7 @@ namespace Redesign0926
                 NoInset(mini);
                 var mrt = RT(mini);
                 mrt.localScale = Vector3.one;
-                SetRect(mrt, new Vector2(SlotProfile, 0.5f), new Vector2(SlotProfile, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
+                SetRect(mrt, new Vector2(SlotProfile, 0.5f), new Vector2(SlotProfile, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(DockSlotW, DockHeight));
                 var mImg = mini.GetComponent<Image>();
                 if (mImg != null) { mImg.color = new Color(0, 0, 0, 0); mImg.raycastTarget = true; }
                 var mask = Find(mini.transform, "AvatarMask");
@@ -288,7 +320,7 @@ namespace Redesign0926
             btn.transform.SetParent(parent, false);
             var rt = RT(btn);
             rt.localScale = Vector3.one;
-            SetRect(rt, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
+            SetRect(rt, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(DockSlotW, DockHeight));
             var img = btn.GetComponent<Image>();
             img.sprite = null; img.color = new Color(1, 1, 1, 0); img.raycastTarget = true; img.preserveAspect = false;
             foreach (var t in btn.GetComponentsInChildren<Text>(true))
@@ -320,7 +352,7 @@ namespace Redesign0926
             btn.transform.SetParent(dock, false);
             var rt = RT(btn);
             rt.localScale = Vector3.one;
-            SetRect(rt, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
+            SetRect(rt, new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(DockSlotW, DockHeight));
 
             // 버튼 자체는 투명한 누름 영역 — 모양은 아이콘·글자가 맡는다
             var img = btn.GetComponent<Image>();
@@ -428,7 +460,15 @@ namespace Redesign0926
         private const float SummaryY = ChipsY - (ChipH * 2 + ChipGap) - 22f;   // -392
         private const float ListTop = SummaryY - 50f;                          // -442
         private const float ListBottom = 24f;   // 목록은 시트 아래 끝까지 (2026-10-23 대표님 — 저작권 그림은 설정 › 앱 정보로 옮겼다)
-        private const float RowH = 96f;    // 1006: 글자가 작다(대표님) — 이름 38→48 · 거리 33→41 (0930 엔 66 으로 촘촘하게, 예전 84)
+        private const float RowH = 144f;   // 11-13 대표님 「위아래 각 목록 사이의 빈공간이 너무 큰데 좀 더 썸네일 사이즈를 줄여서라도」 192→144. 11-12 「각 리스트의 높이를 지금의 2배」 — 오른쪽 끝 사진 칸. 1006: 글자가 작다(대표님) — 이름 38→48 · 거리 33→41 (0930 엔 66 으로 촘촘하게, 예전 84)
+        private const float PhotoS = 120f, PhotoRight = 8f, PhotoGap = 16f;   // 줄 오른쪽 사진 칸 · 오른쪽 여백 · 거리 칸과의 간격
+        private const float NameH = RowH - 4f;  // 이름은 두 줄까지 — 62 글자 두 줄(162)이 안 들어가는 이름은 글자를 NameMinFont 까지 줄인다
+        // v85: 11-13 대표님 「각 목록 좌측에 붙는 이모지랑 글자 사이즈 너무 작은데 많이 키워줘. 현재 위아래 높이를 벗어나지 않는 선에서
+        // 위아래 여백이 너무 많지않도록 … 방향이랑 거리 나오는 값도 사이즈 조금 키워줘」 — 줄 높이 192 는 그대로 두고 그 안을 채운다
+        private const float IconX = 54f, IconS = 84f;             // 줄 앞 분류 그림 — 가운데 x · 크기 (v85 72 · 120 의 70% — 11-13 「이모지 너무 키웠어」)
+        private const float NameLeft = IconX + IconS * 0.5f + 20f; // 이름 칸 왼쪽 — 그림 오른쪽에서 20 (예전 60)
+        private const int NameFont = 62, NameMinFont = 46, DistFont = 50, DirFont = 40;   // 이름 · 거리 · 방향 글자 (예전 48 · 41 · 33)
+        private const float DistW = 240f, DirW = 170f;            // 거리 칸 · 방향 글자 자리 (예전 226 · 160)
         private const float CloseSize = 72f;
 
         private static void ApplyListSheet(Transform root, List<string> log)
@@ -598,8 +638,12 @@ namespace Redesign0926
                     so.FindProperty("summaryText").objectReferenceValue = sumT;
                     so.FindProperty("barSprite").objectReferenceValue = Spr("r0926_pill");
                     so.FindProperty("rowHeight").floatValue = RowH;
-                    so.FindProperty("directionWidth").floatValue = 160f;   // 방향 글자('북동')도 거리와 함께 키움
-                    so.FindProperty("directionFontSize").intValue = 33;
+                    so.FindProperty("directionWidth").floatValue = DirW;   // 방향 글자('오른쪽')도 거리와 함께 키움
+                    so.FindProperty("directionFontSize").intValue = DirFont;
+                    so.FindProperty("kindIconSize").floatValue = IconS;
+                    so.FindProperty("personIconSize").floatValue = IconS - 6f;   // 사람 모양은 테두리까지 그려져 조금 작게
+                    so.FindProperty("huntIconSize").floatValue = IconS - 8f;    // 보물상자는 반짝이 별이 모서리에 붙는다
+                    so.FindProperty("iconCenterX").floatValue = IconX;
                     so.ApplyModifiedPropertiesWithoutUndo();
                 }
                 if (listText != null)
@@ -756,19 +800,50 @@ namespace Redesign0926
 
             var dot = FindOrCreate(tpl.transform, "Dot");
             Img(dot, Spr("r0926_circle"), Color.white, Image.Type.Simple).raycastTarget = false;
-            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(22, 0), new Vector2(26, 26));
+            SetRect(RT(dot), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(IconX, 0), new Vector2(36, 36));   // 분류 없는 장소 — 그림 자리 가운데에 점
 
+            const float distRight = PhotoRight + PhotoS + PhotoGap;   // 거리 칸 오른쪽 끝 — 사진 칸 왼쪽
             var name = FindOrCreate(tpl.transform, "Name");
-            var nt = Txt(name, "장소", 48, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
+            var nt = Txt(name, "장소", NameFont, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
             nt.horizontalOverflow = HorizontalWrapMode.Wrap;
             nt.verticalOverflow = VerticalWrapMode.Truncate;
+            nt.resizeTextForBestFit = true;   // 두 줄에도 안 들어가는 긴 이름은 글자를 줄여 칸 안에 (짧은 이름은 NameFont 그대로)
+            nt.resizeTextMinSize = NameMinFont;
+            nt.resizeTextMaxSize = NameFont;
             var nrt = RT(name);
             nrt.anchorMin = new Vector2(0, 0); nrt.anchorMax = new Vector2(1, 1); nrt.pivot = new Vector2(0.5f, 0.5f);
-            nrt.offsetMin = new Vector2(60, 0); nrt.offsetMax = new Vector2(-236, 0);
+            nrt.offsetMin = new Vector2(NameLeft, (RowH - NameH) * 0.5f); nrt.offsetMax = new Vector2(-(distRight + DistW + 4), -(RowH - NameH) * 0.5f);
 
             var dist = FindOrCreate(tpl.transform, "Dist");
-            Txt(dist, "0m", 41, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
-            SetRect(RT(dist), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-6, 0), new Vector2(226, RowH));
+            Txt(dist, "0m", DistFont, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
+            SetRect(RT(dist), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-distRight, 0), new Vector2(DistW, RowH));
+
+            // 줄 오른쪽 끝 — 그 장소의 대표 사진 (누르면 그 장소의 정보 창 · R0926PlaceRows). 칸 바탕이 사진 모서리를 둥글게 자르는 마스크
+            var photo = FindOrCreate(tpl.transform, "Photo");
+            Img(photo, Spr("r0926_pill"), new Color(1f, 1f, 1f, 0.07f), Image.Type.Sliced, 63f / 28f).raycastTarget = true;   // 모서리 반지름 28
+            Ensure<Mask>(photo).showMaskGraphic = true;
+            SetRect(RT(photo), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-PhotoRight, 0), new Vector2(PhotoS, PhotoS));
+
+            var icon = FindOrCreate(photo.transform, "Icon");   // 사진이 없거나 받는 동안 — 줄 앞 분류 그림을 옅게
+            var iimg = Img(icon, null, new Color(1f, 1f, 1f, 0.5f), Image.Type.Simple);
+            iimg.raycastTarget = false;
+            iimg.preserveAspect = true;
+            iimg.enabled = false;
+            SetRect(RT(icon), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 64));
+
+            var pic = FindOrCreate(photo.transform, "Pic");
+            var raw = Ensure<RawImage>(pic);
+            raw.color = Color.white;
+            raw.raycastTarget = false;
+            raw.enabled = false;
+            EditorUtility.SetDirty(raw);
+            var prt = RT(pic);
+            prt.anchorMin = Vector2.zero; prt.anchorMax = Vector2.one; prt.offsetMin = Vector2.zero; prt.offsetMax = Vector2.zero;
+
+            var press = FindOrCreate(photo.transform, "Press");  // 누르는 동안 사진이 살짝 어둡게 (버튼 색 — R0926PlaceRows)
+            Img(press, null, new Color(0f, 0f, 0f, 0.28f), Image.Type.Simple).raycastTarget = false;
+            var qrt = RT(press);
+            qrt.anchorMin = Vector2.zero; qrt.anchorMax = Vector2.one; qrt.offsetMin = Vector2.zero; qrt.offsetMax = Vector2.zero;
             return tpl;
         }
 
@@ -786,6 +861,7 @@ namespace Redesign0926
                 Vector4 border = file == "r0926_pill" || file == "r0926_pill_ring" ? new Vector4(63, 63, 63, 63)
                                : file == "r0926_sheet" ? new Vector4(63, 1, 63, 63)
                                : file == "r0926_card" ? new Vector4(150, 150, 150, 150)
+                               : file == "r0926_notch" ? new Vector4(64, 40, 64, 24)   // 노치 — 어깨 24 + 아래 모서리 40
                                : Vector4.zero;
                 bool dirty = ti.textureType != TextureImporterType.Sprite || ti.mipmapEnabled
                              || ti.spriteBorder != border || ti.textureCompression != TextureImporterCompression.Uncompressed

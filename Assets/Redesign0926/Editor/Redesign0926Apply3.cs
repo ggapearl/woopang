@@ -50,7 +50,7 @@ namespace Redesign0926
         {
             new[] { "장소", "Place", "場所", "地点", "Lugar" },
             new[] { "3D모델", "3D model", "3Dモデル", "3D模型", "Modelo 3D" },
-            new[] { "보물찾기", "Treasure", "宝探し", "寻宝", "Tesoro" },
+            // '보물찾기'는 11-09 부터 도크 칸 — 그 카드는 한 장으로 따로 연다 (R0926HuntDock · SwipePanelController.panel3Alone)
         };
 
         /// <summary>추가 창 카드 위쪽 탭 — 세 카드가 같은 탭 줄을 갖고, 지금 카드(index)만 밝다. 누르면 그 카드로 넘긴다</summary>
@@ -80,6 +80,8 @@ namespace Redesign0926
                 if (swipe != null) UnityEventTools.AddIntPersistentListener(b.onClick, swipe.SwitchToPanel, i);
                 Ensure<UITouchForwarder>(tab);   // 누름 소리 (10-21 대표님 「'3D모델 추가' 등을 눌러도 효과음이 안 난다」)
             }
+            for (var stale = seg.transform.Find("Tab" + n); stale != null; stale = seg.transform.Find("Tab" + n))
+                Object.DestroyImmediate(stale.gameObject);   // 예전 세 번째 탭(보물찾기)
             var segState = Ensure<R0926SegmentState>(seg);
             var sso = new SerializedObject(segState);
             sso.FindProperty("swipe").objectReferenceValue = swipe;

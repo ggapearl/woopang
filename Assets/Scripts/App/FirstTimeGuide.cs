@@ -21,6 +21,9 @@ public class FirstTimeGuide : MonoBehaviour
     [SerializeField] private Button previousButton;     // 기존 left — 비활성 처리
     [SerializeField] private Button confirmButton;      // 기존 check — 마지막 페이지에서만
 
+    [Header("카드 안내 (11-10) — 있으면 예전 쪽 그림 대신 카드뉴스 창을 띄운다")]
+    [SerializeField] private R0926GuideCards cards;
+
     [Header("배경 이미지 (모든 페이지 공통)")]
     [Tooltip("guidePanel 전체에 깔리는 백그라운드 (예: back.png) — 가이드 진입 시 자동 페이드인")]
     [SerializeField] private Image backgroundImage;
@@ -114,10 +117,10 @@ public class FirstTimeGuide : MonoBehaviour
     private float delayBeforeGuide = 6f;
 
     // 지금 보이는 쪽 · 쪽 수 (R0926GuideOverlay 가 마지막 쪽 판정에 쓴다)
-    public int CurrentPage => currentPage;
+    public int CurrentPage => cards != null ? cards.Index : currentPage;
     /// <summary>첫 안내가 화면에 떠 있다 (알림 권한 창 등을 겹쳐 띄우지 않게)</summary>
     public bool Showing => guidePanel != null && guidePanel.activeInHierarchy;
-    public int PageCount => pageCount;
+    public int PageCount => cards != null ? cards.Count : pageCount;
 
     // 전환 상태
     private bool isTransitioning = false;
@@ -198,6 +201,22 @@ public class FirstTimeGuide : MonoBehaviour
 
     void Start()
     {
+        if (cards != null && guidePanel != null)
+        {
+            // 카드 안내 — 쪽 그림 · 점 · 스와이프 판은 만들지 않는다. 확인 버튼은 하단 버튼(R0926GuideOverlay)이 눌러 닫는 길로만 남긴다
+            if (nextButton != null) nextButton.gameObject.SetActive(false);
+            if (previousButton != null) previousButton.gameObject.SetActive(false);
+            if (confirmButton != null)
+            {
+                confirmButton.onClick.RemoveAllListeners();
+                confirmButton.onClick.AddListener(OnConfirmButtonClicked);
+                confirmButton.gameObject.SetActive(false);
+            }
+            pageCount = cards.Count;
+            StartCoroutine(StartGuideSequence());
+            return;
+        }
+
         if (guidePanel == null || guidePages == null || guidePages.Length == 0 || guideText == null)
         {
             Debug.LogError("[FirstTimeGuide] UI 요소가 연결되지 않았습니다!");
@@ -325,6 +344,7 @@ public class FirstTimeGuide : MonoBehaviour
     /// </summary>
     public void OnDragging(float deltaX)
     {
+        if (cards != null) return;
         if (isTransitioning) return;
         if (pageCanvasGroups == null || pageCanvasGroups.Length == 0) return;
         if (pageBasePositions == null) return;
@@ -349,6 +369,7 @@ public class FirstTimeGuide : MonoBehaviour
     /// </summary>
     public void OnSwipe(float deltaX)
     {
+        if (cards != null) { cards.Step(deltaX < 0 ? 1 : -1); return; }
         if (isTransitioning)
         {
             ResetCurrentPagePosition();
@@ -604,6 +625,7 @@ public class FirstTimeGuide : MonoBehaviour
     {
         guidePanel.SetActive(true);
         currentPage = 0;
+        if (cards != null) { cards.Open(this); return; }
 
         // 모든 페이지 활성화하되 alpha=0
         for (int i = 0; i < pageCount; i++)
@@ -1016,7 +1038,14 @@ public class FirstTimeGuide : MonoBehaviour
 
     private void OnConfirmButtonClicked()
     {
+        if (cards != null) { cards.Close(); return; }
         StartCoroutine(CloseGuide());
+    }
+
+    /// <summary>카드 안내가 다 사라졌다 — 틀을 끈다</summary>
+    public void CardsClosed()
+    {
+        if (guidePanel != null) guidePanel.SetActive(false);
     }
 
     private IEnumerator CloseGuide()
@@ -1102,6 +1131,14 @@ public class FirstTimeGuide : MonoBehaviour
     public void ForceShowGuide()
     {
         if (!Application.isPlaying) return;
+        if (cards != null && guidePanel != null)
+        {
+            PlayerPrefs.DeleteKey(FIRST_TIME_KEY);
+            PlayerPrefs.Save();
+            StopAllCoroutines();
+            ShowGuide();
+            return;
+        }
         if (guidePanel == null || guidePages == null || guidePages.Length == 0 || guideText == null) return;
 
         // Start가 아직 실행 안 됐으면 기본 세팅 수행

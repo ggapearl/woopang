@@ -1,8 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 /// <summary>
@@ -15,6 +18,8 @@ using UnityEngine.UI;
 /// 줄 앞 표시: 장소는 색 점 · 근처 사람은 사람 모양(핑크) · 보물찾기는 금빛 상자 — 보물찾기 줄을 누르면 그 게임 상세가 열린다.
 /// 보물찾기 줄은 은은한 금빛 바탕 · 가는 금빛 테두리에 가끔 반짝인다 (상자 옆 별 · 지나가는 빛 띠).
 /// 축제는 축제 분위기 그림(불꽃·등불·꽃…), 보호소는 강아지 — 누르면 그 축제를 찾은 쪽 · 카카오맵 장소 쪽이 열린다.
+/// 줄 오른쪽 끝은 그 장소의 대표 사진(오브젝트 앞면과 같은 것) — 사진을 누르면 그 장소를 두 번 누른 것과 같은 정보 창이 열린다
+/// (AR 에 아직 없는 장소도 · R0926PlaceInfo). 창이 떠 있는 동안 목록은 숨었다가 창을 닫으면 돌아온다. 사람은 프로필.
 /// </summary>
 public class R0926PlaceRows : MonoBehaviour
 {
@@ -78,6 +83,33 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private Sprite[] catIcons;
     [Tooltip("그림 가운데 — 줄 왼쪽 끝에서")]
     [SerializeField] private float iconCenterX = 26f;
+
+    [Header("줄 오른쪽 사진 — 그 장소의 대표 사진, 누르면 두 번 누른 것과 같은 정보 창 (11-12 대표님 「우측 끝에는 각 오브젝트의 '메인사진'」)")]
+    [Tooltip("한 번에 받는 사진 수")]
+    [SerializeField] private int photoParallel = 3;
+    [Tooltip("받아 둔 사진을 이만큼까지 둔다 — 넘으면 오래 안 본 것부터 놓는다. 보이는 줄과 위아래 한 화면만 받는다 (10-23 아이폰 메모리)")]
+    [SerializeField] private int photoCacheSize = 40;
+    [Tooltip("받지 못한 사진·정보는 이만큼(초) 뒤에 다시")]
+    [SerializeField] private float photoRetry = 30f;
+    [Tooltip("AR 에 아직 없는 우팡 장소 — 사진을 누른 뒤 정보를 받는 동안 기다리는 최대 시간 (초)")]
+    [SerializeField] private float infoWait = 8f;
+    private const float PhotoInterval = 0.2f, PhotoFadeIn = 0.2f;
+    private const int PhotoThumb = 256;   // 우팡 서버 사진은 작은 사본 (/thumb) — 칸 160 은 기기에서 약 140px
+    private class Pic { public Texture2D tex; public bool owned; public float used; }
+    private readonly Dictionary<string, Pic> pics = new Dictionary<string, Pic>();
+    private readonly Dictionary<string, float> picFailed = new Dictionary<string, float>();
+    private readonly HashSet<string> picLoading = new HashSet<string>();
+    private readonly List<UnityWebRequest> picRequests = new List<UnityWebRequest>();
+    private int picGen;            // 목록을 닫으면 올린다 — 그 뒤에 도착한 사진은 버린다
+    private float nextPhotoAt;
+    private ScrollRect scroll;
+    private readonly Vector3[] corners = new Vector3[4];
+    // AR 에 아직 없는 우팡 장소 — 가벼운 목록에는 사진 주소가 없어 보이는 줄만 상세를 받는다 (/locations_detail, 한 번에 50곳까지)
+    private readonly Dictionary<int, PlaceData> details = new Dictionary<int, PlaceData>();
+    private readonly HashSet<int> detailWant = new HashSet<int>();
+    private readonly Dictionary<int, float> detailFailed = new Dictionary<int, float>();
+    private UnityWebRequest detailRequest;
+    private Coroutine infoRoutine;
 
     [Header("보물찾기 줄 — 은은한 금빛 바탕 · 테두리 · 가끔 반짝 (10-27 대표님 「'보물찾기' 리스트의 경우 살짝 하이라이트, 반짝임 등이 있어서 좀 구분되서 보이도록」)")]
     [Tooltip("금빛 테두리 (r0926_pill_ring — barSprite 와 같은 9-slice)")]
@@ -147,6 +179,12 @@ public class R0926PlaceRows : MonoBehaviour
         public Image huntGlow;     // 보물찾기 줄 금빛 바탕 — 빛 띠를 그 안에서만 보이게 담는다
         public Image huntShine, huntTwinkle;
         public int huntOrder = -1; // 보물찾기 줄 중 몇 번째 (차례로 반짝) · 보물찾기가 아니면 -1
+        public RectTransform photoBox;   // 줄 오른쪽 사진 칸 (템플릿 Photo) — 옛 템플릿이면 null
+        public RawImage photo;
+        public Image photoIcon;          // 사진이 없거나 받는 동안 — 줄 앞 그림을 옅게
+        public string photoKey;          // 이 줄 장소의 사진: 주소 · "res:" 앱 그림 · "" 없음 · null 아직 모름 (상세를 받는 중)
+        public string photoShown;        // 칸에 올라가 있는 사진
+        public int near;                 // 0 화면 안 · 1 위아래 한 화면 안 (미리 받는다) · 2 그 밖
     }
 
     private void Awake()
@@ -201,10 +239,14 @@ public class R0926PlaceRows : MonoBehaviour
         // 목록이 열려 있는 동안만 나침반을 쓴다 (우리가 켠 경우에만 끈다)
         if (compassOwned) { Input.compass.enabled = false; compassOwned = false; }
         closeAt = -1f;
+        EndCover();
+        infoRoutine = null;   // 코루틴은 꺼지며 멈췄다
+        ReleasePhotos();
     }
 
     private void LateUpdate()
     {
+        UpdateCover();
         if (source == null) return;
         string t = source.text;
         if (t != last || nearVer != R0926Nearby.Version)
@@ -214,6 +256,7 @@ public class R0926PlaceRows : MonoBehaviour
             Rebuild(t);
         }
         else if (Time.unscaledTime >= nextDirAt) RefreshDirections();
+        if (Time.unscaledTime >= nextPhotoAt) UpdatePhotos();
         if (flashEnd > 0f)
         {
             UpdateFlashes();
@@ -255,16 +298,30 @@ public class R0926PlaceRows : MonoBehaviour
         skeleton.transform.SetParent(rowContainer, false);
         skeleton.GetComponent<LayoutElement>().preferredHeight = skeletonRows * rowHeight;
         float[] widths = { 0.46f, 0.62f, 0.38f, 0.55f, 0.7f, 0.42f, 0.5f, 0.6f };
+        // 줄 오른쪽 사진 칸 — 템플릿(Photo)과 같은 자리 · 크기
+        var ph = rowTemplate != null ? rowTemplate.transform.Find("Photo") as RectTransform : null;
+        float photoW = ph != null ? ph.sizeDelta.x : 0f, photoRight = ph != null ? -ph.anchoredPosition.x : 0f;
+        float distRight = ph != null ? photoRight + photoW + 24f : 24f;
+        // 그림 · 이름 자리 — 템플릿과 같게 (11-13 줄 앞 그림 · 글자를 키웠다)
+        var dt = rowTemplate != null ? rowTemplate.transform.Find("Dot") as RectTransform : null;
+        var nt = rowTemplate != null ? rowTemplate.transform.Find("Name") as RectTransform : null;
+        float iconX = dt != null ? Mathf.Max(dt.anchoredPosition.x, iconCenterX) : 35f;
+        float iconS = Mathf.Max(22f, Mathf.Min(kindIconSize, rowHeight - 24f) * 0.8f);
+        float nameLeft = nt != null ? nt.offsetMin.x : 64f;
+        var nameText = nt != null ? nt.GetComponent<Text>() : null;
+        float nameBarH = nameText != null ? Mathf.Round(nameText.fontSize * 0.55f) : 26f;
         for (int i = 0; i < skeletonRows; i++)
         {
             float y = -(i + 0.5f) * rowHeight;
-            Bar(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f + 11f, y), new Vector2(22f, 22f));                 // 색 점 자리
-            Bar(new Vector2(0f, 1f), new Vector2(widths[i % widths.Length], 1f), new Vector2(0f, y), new Vector2(0f, 26f), 64f); // 이름
-            Bar(new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-24f - 50f, y), new Vector2(100f, 22f));                 // 거리
+            Bar(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(iconX, y), new Vector2(iconS, iconS), 0f, iconS * 0.5f);   // 그림 자리
+            Bar(new Vector2(0f, 1f), new Vector2(widths[i % widths.Length], 1f), new Vector2(0f, y), new Vector2(0f, nameBarH), nameLeft); // 이름
+            Bar(new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-distRight - 50f, y), new Vector2(100f, 22f));           // 거리
+            if (ph != null)
+                Bar(new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-photoRight - photoW * 0.5f, y), new Vector2(photoW, photoW), 0f, 28f);   // 사진
         }
     }
 
-    private void Bar(Vector2 aMin, Vector2 aMax, Vector2 pos, Vector2 size, float leftInset = 0f)
+    private void Bar(Vector2 aMin, Vector2 aMax, Vector2 pos, Vector2 size, float leftInset = 0f, float radius = 11f)
     {
         var go = new GameObject("Bar", typeof(RectTransform), typeof(Image));
         go.layer = gameObject.layer;
@@ -281,7 +338,7 @@ public class R0926PlaceRows : MonoBehaviour
         var img = go.GetComponent<Image>();
         img.sprite = barSprite;
         img.type = barSprite != null ? Image.Type.Sliced : Image.Type.Simple;
-        img.pixelsPerUnitMultiplier = 64f / 11f;
+        img.pixelsPerUnitMultiplier = 64f / radius;
         img.color = new Color(1f, 1f, 1f, 0.06f);
         img.raycastTarget = false;
         skeletonBars.Add(img);
@@ -313,6 +370,7 @@ public class R0926PlaceRows : MonoBehaviour
                 var kind = known ? e.kind : key.StartsWith("@") ? PlaceListManager.EntryKind.Person : PlaceListManager.EntryKind.Place;
                 SetIcon(r, kind, ParseHex(m.Groups[1].Value), known ? e.icon : null, known ? e.emojiUrl : null);
                 SetHuntGlow(r, kind == PlaceListManager.EntryKind.Hunt ? huntRows++ : -1);
+                SetPhoto(r, known, e);
                 if (known && e.promo) R0926Nearby.AdView(this, e.adId, "festival");   // 광고 줄은 축제 칩에만 온다
                 string label = key;
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움) — 'Seoul (Station) (서울역)' 처럼 영어 이름이 이미 있으면 그대로
@@ -390,6 +448,16 @@ public class R0926PlaceRows : MonoBehaviour
             nr.dotPos = nr.dot.rectTransform.anchoredPosition;
             nr.dotSize = nr.dot.rectTransform.sizeDelta;
             nr.nameColor = nr.name.color;
+            var pb = go.transform.Find("Photo") as RectTransform;
+            if (pb != null)
+            {
+                nr.photoBox = pb;
+                var pic = pb.Find("Pic");
+                var ic = pb.Find("Icon");
+                nr.photo = pic != null ? pic.GetComponent<RawImage>() : null;
+                nr.photoIcon = ic != null ? ic.GetComponent<Image>() : null;
+                if (nr.photo == null) nr.photoBox = null;
+            }
             SetupRow(nr);
             rows.Add(nr);
         }
@@ -471,7 +539,7 @@ public class R0926PlaceRows : MonoBehaviour
             row.huntShine = Decor("Shine", hrt, shineSprite, ShineColor);
             var srt = row.huntShine.rectTransform;
             srt.anchorMin = srt.anchorMax = new Vector2(0f, 0.5f);
-            srt.sizeDelta = new Vector2(64f, 124f);
+            srt.sizeDelta = new Vector2(64f, 124f * Mathf.Max(1f, rowHeight / 96f));   // 줄이 높아지면 띠도 길게 (11-12 두 배 높이)
             srt.localRotation = Quaternion.Euler(0f, 0f, -18f);
             row.huntShine.gameObject.SetActive(false);
         }
@@ -483,7 +551,8 @@ public class R0926PlaceRows : MonoBehaviour
             var trt = row.huntTwinkle.rectTransform;
             trt.anchorMin = trt.anchorMax = Vector2.one;
             trt.anchoredPosition = new Vector2(-2f, -4f);
-            trt.sizeDelta = new Vector2(28f, 28f);
+            float tw = Mathf.Max(28f, Mathf.Round(huntIconSize * 0.4f));   // 상자 그림이 커지면 별도 같이 (11-13)
+            trt.sizeDelta = new Vector2(tw, tw);
             row.huntTwinkle.preserveAspect = true;
             row.huntTwinkle.gameObject.SetActive(false);
         }
@@ -494,6 +563,30 @@ public class R0926PlaceRows : MonoBehaviour
             row.dist.rectTransform.sizeDelta += new Vector2(directionWidth, 0f);
             row.name.rectTransform.offsetMax -= new Vector2(directionWidth, 0f);
             row.dist.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+
+        if (row.photoBox != null)
+        {
+            // 사진을 누르면 그 장소의 정보 창 (줄을 누르면 AR 에서 찾기 — 그대로). 누르는 동안 사진이 살짝 어두워진다 (Press)
+            var press = row.photoBox.Find("Press");
+            var pg = press != null ? press.GetComponent<Graphic>() : null;
+            var pbtn = row.photoBox.GetComponent<Button>();
+            if (pbtn == null) pbtn = row.photoBox.gameObject.AddComponent<Button>();
+            pbtn.targetGraphic = pg != null ? pg : row.photoBox.GetComponent<Graphic>();
+            pbtn.transition = pg != null ? Selectable.Transition.ColorTint : Selectable.Transition.None;
+            var pcb = ColorBlock.defaultColorBlock;
+            pcb.normalColor = clear;
+            pcb.highlightedColor = clear;
+            pcb.selectedColor = clear;
+            pcb.disabledColor = clear;
+            pcb.pressedColor = Color.white;
+            pcb.colorMultiplier = 1f;
+            pcb.fadeDuration = 0.08f;
+            pbtn.colors = pcb;
+            pbtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            pbtn.onClick.AddListener(() => OnPhotoTap(row));
+            if (pg != null) pg.canvasRenderer.SetAlpha(0f);
+            row.photo.enabled = false;
         }
     }
 
@@ -570,9 +663,18 @@ public class R0926PlaceRows : MonoBehaviour
             return;
         }
         Target t = places.FindTarget(e);
+        // 노치가 있는 아이폰 — 노치에 화살표 · 거리로 그 장소까지 안내 (멀어서 AR 에 없어도 · 11-09 대표님 「노치 화면에 화살표로 방향과 거리를」)
+        bool guide = !e.noDirection && R0926Notch.Guide(e.lat, e.lon, t, e.name);
         if (t != null && indicators != null && indicators.Focus(t, tapFlashDuration + 0.1f))
         {
             // AR 에 떠 있다 — 그 줄을 잠깐 밝혔다가 목록을 내리고, 내려가는 동안 AR 의 그 박스·화살표 글자 뒤에 분홍 스티커
+            Flash(r, tapFlashDuration);
+            closeAt = Time.unscaledTime + tapFlashDuration;
+            return;
+        }
+        if (guide)
+        {
+            // 아직 AR 에 없어도 — 줄을 잠깐 밝히고 목록을 내린다. 안내는 노치가 이어 간다 (처음 3초는 이름)
             Flash(r, tapFlashDuration);
             closeAt = Time.unscaledTime + tapFlashDuration;
             return;
@@ -582,9 +684,445 @@ public class R0926PlaceRows : MonoBehaviour
         Flash(r, notInArNoteDuration);
         r.noteUntil = Time.unscaledTime + notInArNoteDuration;
         r.dir = -2;   // 안내가 끝나면 방향·거리를 다시 그린다
-        r.dist.text = "<size=" + directionFontSize + "><color=#FFFFFF>"
+        r.dist.text = "<size=" + NoteFontSize + "><color=#FFFFFF>"
                     + L("아직 AR화면 내에 없음", "Not in AR view yet", "まだAR画面にありません", "尚未出现在AR画面中", "Aún no está en la vista AR")
                     + "</color></size>";
+    }
+
+    // ── 줄 오른쪽 사진 ─────────────────────────────────────
+
+    // 장소가 바뀐 줄은 받은 사진을 내리고 (받는 동안 옅은 분류 그림) 다음 사진 차례에 새로 올린다
+    private void SetPhoto(Row r, bool known, PlaceListManager.ListEntry e)
+    {
+        if (r.photoBox == null) return;
+        string key = known ? PhotoKey(e) : "";
+        if (key != r.photoKey)
+        {
+            r.photoKey = key;
+            if (r.photoShown != null && r.photoShown != key) ClearPhoto(r);
+            nextPhotoAt = 0f;
+        }
+        if (r.photoIcon != null)
+        {
+            Sprite s = r.dot.sprite != r.dotSprite ? r.dot.sprite : null;
+            if (r.photoIcon.sprite != s) r.photoIcon.sprite = s;
+            bool on = s != null && r.photoShown == null;
+            if (r.photoIcon.enabled != on) r.photoIcon.enabled = on;
+        }
+    }
+
+    // 그 장소의 사진 — 오브젝트 앞면과 같은 것. "" 없음 · null 아직 모름 (AR 에 없는 우팡 장소 — 상세를 받아야 안다)
+    private string PhotoKey(PlaceListManager.ListEntry e)
+    {
+        switch (e.data)
+        {
+            case PlaceData p: return PlacePhoto(p);
+            case CachedPlaceData c:
+                if (!int.TryParse(e.id, out int id)) return "";
+                if (FullPlace(id, out PlaceData full)) return PlacePhoto(full);
+                string icon = DataManager.FaceIconPath(c.category, c.filterKey == "publicData");
+                if (icon != null) return "res:" + icon;
+                return detailFailed.TryGetValue(id, out float at) && Time.unscaledTime - at < photoRetry ? "" : null;
+            case TourPlaceData tp: return PhotoUrl(!string.IsNullOrEmpty(tp.firstimage2) ? tp.firstimage2 : tp.firstimage);   // 관광공사 작은 대표 사진 (300x200)
+            case FacilityData fd: return PhotoUrl(fd.main_photo);
+            case NearbyUserData u: return PhotoUrl(u.avatar_url);
+            case R0926Nearby.Festival fe: return PhotoUrl(fe.image);
+        }
+        return "";
+    }
+
+    // 기관이 등록한 공공데이터는 앱 그림 (큐브 앞면과 같은 판단 — DataManager.SetupCubeObject), 그 밖은 대표 사진
+    private static string PlacePhoto(PlaceData p)
+    {
+        string icon = DataManager.FaceIconPath(p.category, FilterManager.IsPublicSource(p.is_public, p.category));
+        return icon != null ? "res:" + icon : PhotoUrl(p.main_photo);
+    }
+
+    // 받을 주소 — http 는 https 로 (앱은 http 를 받지 않는다 · 관광공사 사진도 https 로 열린다), 우팡 서버 사진은 작은 사본으로
+    private static string PhotoUrl(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        path = path.Trim().Replace('\\', '/');
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) path = "https://" + path.Substring(7);
+        if (path.StartsWith(ApiConfig.MAIN_SERVER + "/uploads/", StringComparison.OrdinalIgnoreCase)) path = path.Substring(ApiConfig.MAIN_SERVER.Length + 1);
+        if (path.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return path;
+        if (path.Contains("://")) return "";
+        return ApiConfig.MAIN_SERVER + "/thumb/" + PhotoThumb + "/" + path.TrimStart('/');
+    }
+
+    private bool FullPlace(int id, out PlaceData p)
+    {
+        var dm = DataManager.Instance;
+        var map = dm != null ? dm.GetPlaceDataMap() : null;
+        if (map != null && map.TryGetValue(id, out p)) return true;
+        return details.TryGetValue(id, out p);
+    }
+
+    // 보이는 줄의 사진을 올리고, 아직 없는 것은 받는다 — 보이는 줄 먼저, 그다음 위아래 한 화면. 멀리 지나간 줄은 사진을 놓는다
+    private void UpdatePhotos()
+    {
+        nextPhotoAt = Time.unscaledTime + PhotoInterval;
+        bool view = ViewRange(out float lo, out float hi);
+        foreach (var r in rows)
+        {
+            if (r.photoBox == null || !r.go.activeSelf) continue;
+            r.near = view ? Nearness(r, lo, hi) : 0;
+            if (r.near == 2) { if (r.photoShown != null) ClearPhoto(r); continue; }
+            if (r.photoKey == null && TryGetEntry(r, out var e))
+            {
+                r.photoKey = PhotoKey(e);   // 상세가 막 왔을 수 있다
+                if (r.photoKey == null && int.TryParse(e.id, out int id)) WantDetail(id);
+            }
+            if (string.IsNullOrEmpty(r.photoKey)) { if (r.photoShown != null) ClearPhoto(r); continue; }
+            if (pics.TryGetValue(r.photoKey, out var p)) ShowPhoto(r, r.photoKey, p);
+        }
+        for (int pass = 0; pass < 2; pass++)
+            foreach (var r in rows)
+            {
+                if (picLoading.Count >= photoParallel) break;
+                if (r.photoBox == null || !r.go.activeSelf || r.near != pass || string.IsNullOrEmpty(r.photoKey) || r.photoShown == r.photoKey) continue;
+                string key = r.photoKey;
+                if (pics.ContainsKey(key) || picLoading.Contains(key)) continue;
+                if (picFailed.TryGetValue(key, out float at) && Time.unscaledTime - at < photoRetry) continue;
+                RequestPic(key);
+                if (pics.TryGetValue(key, out var rp)) ShowPhoto(r, key, rp);   // 앱 그림은 바로
+            }
+        PumpDetails();
+    }
+
+    private bool ViewRange(out float lo, out float hi)
+    {
+        lo = hi = 0f;
+        if (scroll == null && rowContainer != null) scroll = rowContainer.GetComponentInParent<ScrollRect>(true);
+        if (scroll == null) return false;
+        var view = scroll.viewport != null ? scroll.viewport : (RectTransform)scroll.transform;
+        view.GetWorldCorners(corners);
+        lo = corners[0].y;
+        hi = corners[1].y;
+        return hi > lo;
+    }
+
+    private int Nearness(Row r, float lo, float hi)
+    {
+        ((RectTransform)r.go.transform).GetWorldCorners(corners);
+        float a = corners[0].y, b = corners[1].y;
+        if (b >= lo && a <= hi) return 0;
+        float h = hi - lo;
+        return b >= lo - h && a <= hi + h ? 1 : 2;
+    }
+
+    private void ShowPhoto(Row r, string key, Pic p)
+    {
+        p.used = Time.unscaledTime;
+        if (r.photoShown == key) return;
+        var tex = p.tex;
+        r.photoShown = key;
+        r.photo.texture = tex;
+        float w = Mathf.Max(1, tex.width), h = Mathf.Max(1, tex.height);
+        r.photo.uvRect = w > h ? new Rect((1f - h / w) * 0.5f, 0f, h / w, 1f) : new Rect(0f, (1f - w / h) * 0.5f, 1f, w / h);   // 가운데를 정사각형으로
+        r.photo.enabled = true;
+        r.photo.canvasRenderer.SetAlpha(0f);
+        r.photo.CrossFadeAlpha(1f, PhotoFadeIn, true);
+        if (r.photoIcon != null) r.photoIcon.enabled = false;
+    }
+
+    private void ClearPhoto(Row r)
+    {
+        r.photoShown = null;
+        if (r.photo != null) { r.photo.texture = null; r.photo.enabled = false; }
+        if (r.photoIcon != null) r.photoIcon.enabled = r.photoIcon.sprite != null;
+    }
+
+    private void RequestPic(string key)
+    {
+        if (key.StartsWith("res:"))
+        {
+            // 앱 그림 (공공데이터 분류) — 함께 쓰는 에셋이라 지우지 않는다
+            var t = Resources.Load<Texture2D>(key.Substring(4));
+            if (t != null) pics[key] = new Pic { tex = t, owned = false, used = Time.unscaledTime };
+            else picFailed[key] = float.MaxValue;
+            return;
+        }
+        UnityWebRequest req = null;
+        try
+        {
+            req = UnityWebRequestTexture.GetTexture(key, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
+            req.timeout = 15;
+            picLoading.Add(key);
+            picRequests.Add(req);
+            int gen = picGen;
+            var q = req;
+            req.SendWebRequest().completed += _ => PicDone(key, q, gen);
+        }
+        catch (Exception)
+        {
+            // 주소가 이상하다 — 그 사진만 건너뛴다
+            picLoading.Remove(key);
+            if (req != null) { picRequests.Remove(req); req.Dispose(); }
+            picFailed[key] = Time.unscaledTime;
+        }
+    }
+
+    private void PicDone(string key, UnityWebRequest req, int gen)
+    {
+        picRequests.Remove(req);
+        Texture2D tex = null;
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            try { tex = DownloadHandlerTexture.GetContent(req); }
+            catch (Exception) { tex = null; }
+        }
+        req.Dispose();
+        if (this == null || gen != picGen) { if (tex != null) Destroy(tex); return; }   // 목록을 닫았다
+        picLoading.Remove(key);
+        if (tex == null) { picFailed[key] = Time.unscaledTime; return; }
+        tex.wrapMode = TextureWrapMode.Clamp;
+        if (pics.TryGetValue(key, out var old) && old.owned && old.tex != null && old.tex != tex) Destroy(old.tex);
+        pics[key] = new Pic { tex = tex, owned = true, used = Time.unscaledTime };
+        nextPhotoAt = 0f;
+        TrimPics();
+    }
+
+    // 받아 둔 사진이 많으면 오래 안 본 것부터 놓는다 (칸에 올라가 있는 것은 그대로)
+    private void TrimPics()
+    {
+        if (pics.Count <= photoCacheSize) return;
+        var keep = new HashSet<string>();
+        foreach (var r in rows) if (r.photoShown != null) keep.Add(r.photoShown);
+        var order = new List<KeyValuePair<string, Pic>>(pics);
+        order.Sort((a, b) => a.Value.used.CompareTo(b.Value.used));
+        foreach (var kv in order)
+        {
+            if (pics.Count <= photoCacheSize) break;
+            if (keep.Contains(kv.Key)) continue;
+            pics.Remove(kv.Key);
+            if (kv.Value.owned && kv.Value.tex != null) Destroy(kv.Value.tex);
+        }
+    }
+
+    // 목록을 닫으면 받은 사진을 모두 놓는다 — 다시 열면 보이는 줄만 새로 받는다
+    private void ReleasePhotos()
+    {
+        picGen++;
+        var reqs = picRequests.ToArray();
+        picRequests.Clear();
+        foreach (var q in reqs) q.Abort();
+        picLoading.Clear();
+        if (detailRequest != null) { var d = detailRequest; detailRequest = null; d.Abort(); }
+        foreach (var r in rows) if (r.photoBox != null) ClearPhoto(r);
+        foreach (var p in pics.Values) if (p.owned && p.tex != null) Destroy(p.tex);
+        pics.Clear();
+    }
+
+    private void WantDetail(int id)
+    {
+        if (details.ContainsKey(id)) return;
+        if (detailFailed.TryGetValue(id, out float at) && Time.unscaledTime - at < photoRetry) return;
+        detailWant.Add(id);
+    }
+
+    private void PumpDetails()
+    {
+        if (detailRequest != null || detailWant.Count == 0) return;
+        var ids = new List<int>(Mathf.Min(detailWant.Count, 50));
+        foreach (int id in detailWant) { ids.Add(id); if (ids.Count >= 50) break; }   // 서버는 한 번에 50곳까지
+        foreach (int id in ids) detailWant.Remove(id);
+        UnityWebRequest req = null;
+        try
+        {
+            req = UnityWebRequest.Get(ApiConfig.LOCATIONS_DETAIL + "?ids=" + string.Join(",", ids));
+            req.timeout = 15;
+            detailRequest = req;
+            int gen = picGen;
+            var q = req;
+            req.SendWebRequest().completed += _ => DetailDone(q, ids, gen);
+        }
+        catch (Exception)
+        {
+            if (req != null) req.Dispose();
+            detailRequest = null;
+            foreach (int id in ids) detailFailed[id] = Time.unscaledTime;
+        }
+    }
+
+    private void DetailDone(UnityWebRequest req, List<int> ids, int gen)
+    {
+        List<PlaceData> got = null;
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            try { got = JsonConvert.DeserializeObject<List<PlaceData>>(req.downloadHandler.text); }
+            catch (Exception) { got = null; }
+        }
+        req.Dispose();
+        if (this == null) return;
+        if (detailRequest == req) detailRequest = null;
+        if (got != null)
+        {
+            if (details.Count > 400) details.Clear();
+            foreach (var p in got) if (p != null) details[p.id] = p;
+        }
+        if (gen != picGen) return;   // 목록을 닫으며 그만둔 것 — 받지 못한 것으로 치지 않는다
+        float now = Time.unscaledTime;
+        foreach (int id in ids) if (!details.ContainsKey(id)) detailFailed[id] = now;   // 지워졌거나 받지 못했다
+        nextPhotoAt = 0f;
+    }
+
+    // ── 사진 누르기 — 그 장소의 정보 창 (두 번 누른 것과 같은 DoubleTap3D 창) ─────────────
+
+    private void OnPhotoTap(Row r)
+    {
+        if (places == null || !TryGetEntry(r, out var e)) return;
+        if (e.kind == PlaceListManager.EntryKind.Person)
+        {
+            // 근처 사람 — 그 사람 프로필 (뜬 뒤에 목록을 숨기고, 프로필을 닫으면 목록으로)
+            var pm = ProfileManager.Instance;
+            if (pm == null || string.IsNullOrEmpty(e.id)) { OnRowTap(r); return; }
+            Flash(r, tapFlashDuration);
+            pm.ShowProfile(e.id, shown => { if (shown && this != null && isActiveAndEnabled) BeginCover(); });
+            return;
+        }
+        if (e.kind != PlaceListManager.EntryKind.Place || e.data == null) { OnRowTap(r); return; }   // 보물찾기 상세 · 축제·보호소 쪽 — 줄을 누른 것과 같게
+        if (infoRoutine != null) return;   // 여는 중
+        infoRoutine = StartCoroutine(OpenPlaceInfo(r, e));
+    }
+
+    // AR 에 떠 있으면 그 오브젝트의 창 · 아직 없으면 대리 오브젝트에 그 장소를 채워 연다 (우팡 장소는 상세를 받아서)
+    private IEnumerator OpenPlaceInfo(Row r, PlaceListManager.ListEntry e)
+    {
+        Flash(r, infoWait);   // 여는 동안 그 줄이 밝다
+        DoubleTap3D dt = R0926PlaceInfo.Spawned(places, e);
+        bool ok = dt != null && dt.OpenInfo();
+        if (!ok)
+        {
+            object data = e.data;
+            if (data is CachedPlaceData && int.TryParse(e.id, out int id))
+            {
+                float tapped = Time.unscaledTime;
+                detailFailed.Remove(id);
+                PlaceData full;
+                while (!FullPlace(id, out full) && Time.unscaledTime - tapped < infoWait)
+                {
+                    WantDetail(id);
+                    PumpDetails();
+                    if (detailFailed.TryGetValue(id, out float at) && at >= tapped) break;   // 받지 못했다
+                    yield return null;
+                }
+                data = full;
+                dt = R0926PlaceInfo.Spawned(places, e);   // 기다리는 사이 AR 에 떴을 수 있다
+                ok = dt != null && dt.OpenInfo();
+            }
+            if (!ok && data != null)
+            {
+                dt = R0926PlaceInfo.Host();
+                float until = Time.unscaledTime + 2f;
+                while (dt != null && !dt.IsReady && Time.unscaledTime < until) yield return null;   // 처음 만든 대리 오브젝트는 한 프레임 뒤에 준비된다
+                ok = dt != null && dt.IsReady && R0926PlaceInfo.Fill(dt, data) && dt.OpenInfo();
+            }
+        }
+        infoRoutine = null;
+        if (!ok) { InfoFailed(r); yield break; }
+        r.flashUntil = Mathf.Min(r.flashUntil, Time.unscaledTime);   // 목록이 돌아올 때 분홍이 남지 않게
+        BeginCover();
+    }
+
+    private void InfoFailed(Row r)
+    {
+        Flash(r, notInArNoteDuration);
+        r.noteUntil = Time.unscaledTime + notInArNoteDuration;
+        r.dir = -2;
+        r.dist.text = "<size=" + NoteFontSize + "><color=#FFFFFF>"
+                    + L("정보를 불러오지 못했어요", "Couldn't load the info", "情報を読み込めませんでした", "无法加载信息", "No se pudo cargar la información")
+                    + "</color></size>";
+    }
+
+    // ── 사진으로 연 창이 떠 있는 동안 목록을 숨긴다 ─────────────────────
+    // 목록(ListPanel)은 정보 창 · 프로필 · 고치기 화면보다 위에 그려진다 — 그 창들이 떠 있는 동안 목록을 투명하게 · 누름 없이 두었다가
+    // 모두 닫히면 다시 보인다 (목록에서 연 창을 닫으면 목록으로 돌아온다). 창에서 이어 연 고치기 · 사진 자르기 · 프로필도 함께 본다
+    private static readonly string[] CoverPanels = { "FullScreenPanel", "FullProfilePanel", "UploadPage", "Fixpage", "PhotoCrop0926" };
+    private const float CoverFade = 0.18f, CoverGrace = 0.3f, CoverOpenWait = 2f;
+    private CanvasGroup coverGroup;
+    private readonly List<GameObject> coverWatch = new List<GameObject>();
+    private int coverState;   // 0 없음 · 1 숨김 · 2 다시 보이는 중
+    private bool coverSeen, coverSavedBlocks, coverSavedInteract;
+    private float coverAlpha = 1f, coverSavedAlpha = 1f, coverSince, coverClearAt;
+
+    private void BeginCover()
+    {
+        Transform panel = CoverRoot();
+        if (panel == null) return;
+        if (coverState == 0)
+        {
+            coverGroup = panel.GetComponent<CanvasGroup>();
+            if (coverGroup == null) coverGroup = panel.gameObject.AddComponent<CanvasGroup>();
+            coverSavedAlpha = coverGroup.alpha;
+            coverSavedBlocks = coverGroup.blocksRaycasts;
+            coverSavedInteract = coverGroup.interactable;
+            coverAlpha = 1f;
+        }
+        coverState = 1;
+        coverGroup.blocksRaycasts = false;
+        coverGroup.interactable = false;
+        coverSeen = false;
+        coverSince = Time.unscaledTime;
+        coverClearAt = -1f;
+        coverWatch.Clear();
+        foreach (var n in CoverPanels)
+        {
+            var t = panel.parent.Find(n);
+            if (t != null) coverWatch.Add(t.gameObject);
+        }
+    }
+
+    // 목록이 든 맨 위 패널 (뿌리 캔버스 바로 아래)
+    private Transform CoverRoot()
+    {
+        var canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return null;
+        Transform root = canvas.rootCanvas.transform;
+        for (Transform t = transform; t != null; t = t.parent)
+            if (t.parent == root) return t;
+        return null;
+    }
+
+    private void UpdateCover()
+    {
+        if (coverState == 0) return;
+        float now = Time.unscaledTime;
+        if (coverState == 1)
+        {
+            bool open = false;
+            foreach (var g in coverWatch)
+                if (g != null && g.activeInHierarchy) { open = true; break; }
+            if (open) { coverSeen = true; coverClearAt = -1f; }
+            else if (coverSeen || now - coverSince > CoverOpenWait)
+            {
+                if (coverClearAt < 0f) coverClearAt = now;
+                if (!coverSeen || now - coverClearAt >= CoverGrace) Uncover();   // 창이 모두 닫혔다 (넘어가는 틈은 기다린다)
+            }
+        }
+        coverAlpha = Mathf.MoveTowards(coverAlpha, coverState == 1 ? 0f : 1f, Time.unscaledDeltaTime / CoverFade);
+        if (coverGroup != null) coverGroup.alpha = coverSavedAlpha * coverAlpha;
+        if (coverState == 2 && coverAlpha >= 1f) EndCover();
+    }
+
+    // 누름은 바로 돌려주고 목록은 서서히 보인다
+    private void Uncover()
+    {
+        coverState = 2;
+        if (coverGroup == null) return;
+        coverGroup.blocksRaycasts = coverSavedBlocks;
+        coverGroup.interactable = coverSavedInteract;
+    }
+
+    private void EndCover()
+    {
+        if (coverState == 0) return;
+        coverState = 0;
+        coverWatch.Clear();
+        if (coverGroup == null) return;
+        coverGroup.alpha = coverSavedAlpha;
+        coverGroup.blocksRaycasts = coverSavedBlocks;
+        coverGroup.interactable = coverSavedInteract;
     }
 
     private Image Decor(string name, Transform parent, Sprite sprite, Color color)
@@ -705,6 +1243,9 @@ public class R0926PlaceRows : MonoBehaviour
             ShowDistance(r, dir);
         }
     }
+
+    // 줄에 잠깐 띄우는 안내('아직 AR화면 내에 없음' 등)는 방향 글자보다 작게 — 방향 글자를 키워도(11-13) 긴 안내가 이름을 덮지 않게
+    private int NoteFontSize => Mathf.Min(directionFontSize, 34);
 
     private void ShowDistance(Row r, int dir)
     {

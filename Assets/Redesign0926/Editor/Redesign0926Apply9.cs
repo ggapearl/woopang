@@ -168,7 +168,7 @@ namespace Redesign0926
                 // 창이 옅어지는 동안에도 칸은 그대로 — 사진 칸이 꺼지는 순간 X 가 바로 그 자리에 있게 (다른 칸들처럼)
                 Ensure<CanvasGroup>(mirror).ignoreParentGroups = true;
                 var tog = FindOrCreate(mirror.transform, "ProfileToggle0926");
-                SetRect(RT(tog), new Vector2(SlotProfile, 0.5f), new Vector2(SlotProfile, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
+                SetRect(RT(tog), new Vector2(SlotProfile, 0.5f), new Vector2(SlotProfile, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(DockSlotW, DockHeight));
                 Img(tog, null, new Color(1, 1, 1, 0), Image.Type.Simple).raycastTarget = true;
                 var gb = Ensure<Button>(tog);
                 gb.transition = Selectable.Transition.None;

@@ -166,6 +166,7 @@ public class R0926SkyPages : MonoBehaviour
         }
         if (!wasVisible) Shown();
         wasVisible = true;
+        if (sky.ConsumeHome()) { target = 0; pos = 0f; vel = 0f; current = Kind.Weather; }   // 노치의 날씨를 눌러 폈다 — 날씨 장부터
 
         bool changed = huntVer != R0926HuntList.NearbyVersion || nearVer != R0926Nearby.Version || friendVer != friendsVersion;
         if (changed || Time.unscaledTime >= nextCollect)
@@ -561,7 +562,7 @@ public class R0926SkyPages : MonoBehaviour
     private IEnumerator LoadAvatar(string url)
     {
         avatars[url] = null;   // 같은 사진을 두 번 받지 않게
-        using (var req = UnityWebRequestTexture.GetTexture(url))
+        using (var req = UnityWebRequestTexture.GetTexture(ApiConfig.Secure(url)))
         {
             req.timeout = 10;
             yield return req.SendWebRequest();

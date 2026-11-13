@@ -1326,7 +1326,7 @@ public class CubeDataFixManager : MonoBehaviour
     {
         Texture2D got = null;
         string clean = path.Replace("\\", "/").TrimStart('/');
-        string[] urls = path.StartsWith("http") ? new[] { path } : new[] { Base + "/thumb/512/" + clean, Base + "/" + clean };
+        string[] urls = path.StartsWith("http") ? new[] { ApiConfig.Secure(path) } : new[] { Base + "/thumb/512/" + clean, Base + "/" + clean };
         foreach (string url in urls)
         {
             using (UnityWebRequest r = UnityWebRequestTexture.GetTexture(url, true))   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다

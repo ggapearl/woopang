@@ -1062,8 +1062,9 @@ public class ModelUploadManager : MonoBehaviour
         formData.AddField("model_rotation_y", "0.0");
         formData.AddField("model_rotation_z", "0.0");
         formData.AddField("animation_speed", "1.0");
-        formData.AddField("animation_loop", "on");
-        formData.AddField("animation_auto_play", "on");
+        // 서버는 'true' 만 참으로 읽는다 (예전 "on" 은 DB 에 반복 끔 · 자동재생 끔으로 들어갔다 — 앱은 이 값을 읽지 않고 늘 반복 재생해 겉보기엔 같았다)
+        formData.AddField("animation_loop", "true");
+        formData.AddField("animation_auto_play", "true");
 
         // 중복 방지 키 — 서버는 같은 upload_id 를 다시 받으면 새로 만들지 않고 성공으로 답해야 한다.
         // 이름·분류·모델 파일 등이 바뀌면(다른 장소) 새 키 (위치는 다시 잡을 때마다 조금씩 달라 넣지 않는다)
@@ -1077,6 +1078,16 @@ public class ModelUploadManager : MonoBehaviour
         string fileName = Path.GetFileName(selectedFilePath);
         string mimeType = GetMimeType(fileName);
         formData.AddBinaryData("model_file", selectedFileData, fileName, mimeType);
+
+        // 대표 사진 = 모델을 찍은 정지 사진 (11-13 대표님 「3D모델로 하더라도 그 모델의 단순한 스틸 모습을 반영해서 가지고 있어야 … 목록 리스트 우측에」).
+        // 바탕이 투명한 PNG — 목록 오른쪽 사진 · 모델을 못 불러 큐브로 뜰 때의 앞면. 앱이 여는 GLB · glTF 만 찍고, 못 찍으면 사진 없이 올린다
+        string modelExt = Path.GetExtension(fileName).ToLowerInvariant();
+        if (modelExt == ".glb" || modelExt == ".gltf")
+        {
+            byte[] still = null;
+            yield return R0926ModelSnapshot.Capture(selectedFileData, 512, png => still = png);
+            if (still != null) formData.AddBinaryData("main_photo", still, "main.png", "image/png");
+        }
 
         for (int i = 1; i <= subPhotos.Count; i++)
         {
@@ -1098,6 +1109,8 @@ public class ModelUploadManager : MonoBehaviour
 
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
+            // 서버는 이 길도 로그인 토큰으로만 받는다 (WOOPANG_ENFORCE_AUTH — 토큰 없이는 401). 큐브 올리기와 같게
+            LoginManager.ApplyAuth(www);
             bool timedOut = false;
             yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
 

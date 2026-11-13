@@ -49,7 +49,7 @@ namespace Redesign0926
 
             btn.transform.SetParent(mirror.transform, false);
             btn.transform.localScale = Vector3.one;
-            SetRect(RT(btn), new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(300, DockHeight));
+            SetRect(RT(btn), new Vector2(x, 0.5f), new Vector2(x, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(DockSlotW, DockHeight));
             var img = btn.GetComponent<Image>();
             img.sprite = null; img.color = new Color(1, 1, 1, 0); img.raycastTarget = true;
             foreach (var t in btn.GetComponentsInChildren<Text>(true))

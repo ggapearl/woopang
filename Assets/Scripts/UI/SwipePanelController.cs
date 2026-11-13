@@ -13,6 +13,18 @@ public class SwipePanelController : MonoBehaviour
 
     private int PanelCount => panel3 != null ? 3 : 2;
 
+    [Tooltip("세 번째 카드는 따로 — 도크 '보물찾기' 칸이 이 카드 한 장으로 연다. 추가 창은 두 장만 넘긴다 (2026-11-09)")]
+    public bool panel3Alone;
+
+    /// <summary>세 번째 카드 한 장으로 열려 있다 (도크 '보물찾기')</summary>
+    public bool AloneShowing => panel3Alone && panel3 != null && currentPanel == 2;
+
+    /// <summary>창이 켜질 때 돌아갈 카드 — 보물찾기 칸으로 열면 2. 창이 닫히면 0 으로 (R0926HuntDock — 이 컴포넌트는 늘 켜진 SwipePanel 에 있다)</summary>
+    [System.NonSerialized] public int HomePanel;
+
+    private int LastSwipePanel => panel3Alone ? 1 : PanelCount - 1;
+    private const float Away = 100000f;   // 따로 쓰는 카드를 치워 두는 자리 (화면 밖 · 틀이 잘라 낸다)
+
     private Vector2 startPos;
     private float dragStartPosX;
     private bool isDragging = false;
@@ -45,24 +57,27 @@ public class SwipePanelController : MonoBehaviour
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
+        HomePanel = 0;
     }
 
     private IEnumerator ResetToFirstPanelDelayed()
     {
-        currentPanel = 0;
-        currentAnchoredX = 0;
-        if (panel1 != null) panel1.anchoredPosition = new Vector2(baseOffsetX, 0);
+        currentPanel = Home;
+        CalculateDimensions();
+        currentAnchoredX = TargetX(currentPanel);
+        UpdatePanelPositions();
 
         yield return null;
         ResetToFirstPanel();
     }
 
+    private int Home => panel3Alone && panel3 != null && HomePanel == 2 ? 2 : 0;
+
     public void ResetToFirstPanel()
     {
-        currentPanel = 0;
+        currentPanel = Home;
         CalculateDimensions();
-        currentAnchoredX = 0;
-        if (panel1 != null) panel1.anchoredPosition = new Vector2(baseOffsetX, 0);
+        currentAnchoredX = TargetX(currentPanel);
         UpdatePanelPositions();
     }
 
@@ -97,7 +112,7 @@ public class SwipePanelController : MonoBehaviour
     void Update()
     {
         // 업로드 화면이 닫혀 있을 땐 다른 화면의 가로 끌기(지도·분류 칩 등)를 받지 않는다
-        if (panel1 == null || !panel1.gameObject.activeInHierarchy || locked) { isDragging = false; return; }
+        if (panel1 == null || !panel1.gameObject.activeInHierarchy || locked || AloneShowing) { isDragging = false; return; }
 
         // 입력 처리는 Update에서 수행
         if (Touch.activeTouches.Count > 0)
@@ -133,7 +148,7 @@ public class SwipePanelController : MonoBehaviour
 
                 if (Mathf.Abs(swipeDistance) > swipeThreshold)
                 {
-                    if (swipeDistance < 0 && currentPanel < PanelCount - 1) SwitchToPanel(currentPanel + 1);
+                    if (swipeDistance < 0 && currentPanel < LastSwipePanel) SwitchToPanel(currentPanel + 1);
                     else if (swipeDistance > 0 && currentPanel > 0) SwitchToPanel(currentPanel - 1);
                 }
             }
@@ -164,20 +179,32 @@ public class SwipePanelController : MonoBehaviour
     {
         if (panel1 != null)
         {
-            panel1.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX, 0);
-            
+            // 세 번째 카드를 따로 쓰면 — 그 카드가 보일 땐 앞 두 장을, 앞 두 장이 보일 땐 그 카드를 화면 밖으로 (옆에 살짝 보이지 않게)
+            bool alone = AloneShowing;
+            bool aside = panel3Alone && !alone;
+            panel1.anchoredPosition = new Vector2(alone ? -Away : currentAnchoredX + baseOffsetX, 0);
+
             if (panel2 != null)
             {
                 // panel2는 항상 panel1 기준의 상대 위치를 유지 (동기화)
-                panel2.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX + panelDistance, 0);
+                panel2.anchoredPosition = new Vector2(alone ? -Away : currentAnchoredX + baseOffsetX + panelDistance, 0);
             }
-            if (panel3 != null) panel3.anchoredPosition = new Vector2(currentAnchoredX + baseOffsetX + panelDistance * 2f, 0);
+            if (panel3 != null) panel3.anchoredPosition = new Vector2(aside ? Away : currentAnchoredX + baseOffsetX + panelDistance * 2f, 0);
         }
     }
 
     public void SwitchToPanel(int panelIndex)
     {
-        currentPanel = Mathf.Clamp(panelIndex, 0, PanelCount - 1);
+        int to = Mathf.Clamp(panelIndex, 0, PanelCount - 1);
+        bool jump = panel3Alone && panel3 != null && (to == 2) != (currentPanel == 2);
+        currentPanel = to;
+        if (panel3Alone) HomePanel = to == 2 ? 2 : 0;   // 열린 동안 첫 장으로 되돌리는 곳이 있어도 지금 쓰는 쪽(추가 / 보물찾기)에 머문다
+        if (!jump) return;
+        // 추가 두 장 ↔ 보물찾기 한 장은 옆으로 밀지 않고 바로 바꾼다
+        isDragging = false;
+        CalculateDimensions();
+        currentAnchoredX = TargetX(currentPanel);
+        UpdatePanelPositions();
     }
 
     public int GetCurrentPanel()

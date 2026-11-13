@@ -160,7 +160,8 @@ public class GLBModelLoader : MonoBehaviour
 
     private IEnumerator AttemptGLBLoad(string url, float scale, System.Action<bool> onComplete)
     {
-        var gltf = new GltfImport();
+        // 재질은 Resources 의 URP/Unlit 으로 직접 만든다 — 기본 셰이더 그래프가 빌드에 없어 모델이 흰색으로 뜨던 것 (11-12)
+        var gltf = new GltfImport(materialGenerator: GlbUnlitMaterialGenerator.Instance);
         bool loadStarted = false;
         bool loadSuccess = false;
         
@@ -679,7 +680,7 @@ public class GLBModelLoader : MonoBehaviour
                 mats[i].shader = targetShader;
                 mats[i].SetColor("_BaseColor", color);
                 if (baseTex != null) mats[i].SetTexture("_BaseMap", baseTex);
-                mats[i].SetFloat("_Surface", 0); // Opaque
+                if (!mats[i].IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT")) mats[i].SetFloat("_Surface", 0); // Opaque — 반투명(BLEND) 재질은 생성기가 맞춰 둔 그대로
                 if (useEmission)
                 {
                     // URP/Lit + Emission HDR 증폭: 어두운 색은 1배로는 라이트 없을 때 거의 안 보임

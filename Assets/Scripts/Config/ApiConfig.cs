@@ -100,4 +100,11 @@ public static class ApiConfig
 
     // SpeechBubble 서버 - nginx 리버스 프록시를 통해 HTTPS 사용
     public const string SPEECH_BUBBLE_SERVER = MAIN_SERVER;
+
+    /// <summary>
+    /// http 주소를 https 로. 앱은 http 를 막아 두어(Allow downloads over HTTP = Not allowed) http 로 보내면 예외가 나 받는 코루틴째 멈춘다.
+    /// 바깥 사진(관광공사 tong.visitkorea.or.kr · 프로필 사진 등)은 https 로도 열린다
+    /// </summary>
+    public static string Secure(string url)
+        => url != null && url.StartsWith("http://", System.StringComparison.OrdinalIgnoreCase) ? "https://" + url.Substring(7) : url;
 }

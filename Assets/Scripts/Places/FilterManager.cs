@@ -967,17 +967,23 @@ public class FilterManager : MonoBehaviour
     {
         Dictionary<string, bool> filters = GetActiveFilters();
 
-        if (placeListManager != null) placeListManager.ApplyFilters(filters);
-        if (dataManager != null) dataManager.ApplyFilters(filters);
-        if (tourAPIManager != null) tourAPIManager.ApplyFilters(filters);
-        if (terminalManager != null) terminalManager.ApplyFilters(filters);
-        if (trainStationManager != null) trainStationManager.ApplyFilters(filters);
-        if (subwayManager != null) subwayManager.ApplyFilters(filters);
+        // 필터로 끄는 오브젝트는 화살표 모드여도 화살표를 남기지 않는다
+        OffScreenIndicator.DropDisabledArrows = true;
+        try
+        {
+            if (placeListManager != null) placeListManager.ApplyFilters(filters);
+            if (dataManager != null) dataManager.ApplyFilters(filters);
+            if (tourAPIManager != null) tourAPIManager.ApplyFilters(filters);
+            if (terminalManager != null) terminalManager.ApplyFilters(filters);
+            if (trainStationManager != null) trainStationManager.ApplyFilters(filters);
+            if (subwayManager != null) subwayManager.ApplyFilters(filters);
 
-        // P2P 필터는 P2PUserFilterPanel이 전담 처리
+            // P2P 필터는 P2PUserFilterPanel이 전담 처리
 
-        // 중앙 배분 즉시 재실행 (필터 변경 반영)
-        TriggerReallocation();
+            // 중앙 배분 즉시 재실행 (필터 변경 반영)
+            TriggerReallocation();
+        }
+        finally { OffScreenIndicator.DropDisabledArrows = false; }
     }
 
     public Dictionary<string, bool> GetActiveFilters()
@@ -1353,10 +1359,18 @@ public class FilterManager : MonoBehaviour
     /// 핵심 배분 로직
     /// 1) 모든 매니저 캐시에서 데이터 수집
     /// 2) Full 후보: 필터 통과 + fullObjectRadius 이내 + 거리순 → 최대 maxFullObjects
-    /// 3) IndicatorOnly 후보: 필터 무시 + Full 아닌 것 + 거리순 → 최대 maxIndicatorObjects
-    /// 4) 이전 배분과 비교하여 스폰/디스폰
+    /// 3) IndicatorOnly 후보: Full 과 같은 필터 + Full 아닌 것 + 거리순 → 최대 maxIndicatorObjects
+    /// 4) 이전 배분과 비교하여 스폰/디스폰 — 디스폰한 오브젝트는 화살표 모드여도 화살표를 남기지 않는다
     /// </summary>
     private void AllocateObjects(float lat, float lon)
+    {
+        bool prevDrop = OffScreenIndicator.DropDisabledArrows;
+        OffScreenIndicator.DropDisabledArrows = true;
+        try { AllocateObjectsCore(lat, lon); }
+        finally { OffScreenIndicator.DropDisabledArrows = prevDrop; }
+    }
+
+    private void AllocateObjectsCore(float lat, float lon)
     {
         // 1) 전체 캐시 수집 + 거리 계산
         List<(CachedPlaceData data, IPlaceCacheProvider provider, float distance)> allPlaces
@@ -1453,10 +1467,10 @@ public class FilterManager : MonoBehaviour
                 continue;
             }
 
-            // 3) IndicatorOnly — Full 못 받은 것 (공공/비공공 공통, 매니저 토글만 적용)
+            // 3) IndicatorOnly — Full 못 받은 것 (공공/비공공 공통). 필터는 Full 과 같다 — 목록에 없는 곳은 화살표·박스로도 띄우지 않는다
             if (!mainBudgetFull
                 && newIndicatorSet.Count < maxIndicatorObjects
-                && IsPassingManagerToggle(item.data, filters))
+                && IsPassingFilter(item.data, filters))
             {
                 if (newIndicatorSet.Add(item.data.uniqueId) && isToilet) toiletShown++;
                 indicatorProviderMap[item.data.uniqueId] = item.provider;
@@ -1636,8 +1650,10 @@ public class FilterManager : MonoBehaviour
     }
 
     /// <summary>
-    /// CachedPlaceData가 현재 필터를 통과하는지 판단
-    /// IndicatorOnly는 이 검사를 거치지 않음 (항상 표시)
+    /// CachedPlaceData가 현재 필터를 통과하는지 — Full 과 IndicatorOnly(화살표·박스) 모두 이 검사 하나로, 목록(PlaceListManager.UpdateUI)과 같은 규칙.
+    /// 11-13 대표님 「애견동반을 체크해서 활성화된 경우 애견동반 되지 않는 곳은 결국 목록에서 보이지 않으니까 AR화면에서도 보이지 않도록」 —
+    /// 예전 IndicatorOnly 는 애견동반을 보지 않아, 켜 두면 동반 안 되는 곳이 화살표·박스로만 떴다 (오브젝트 없이 인디케이터만).
+    /// 지하철·기차·터미널은 목록처럼 제 칩만 본다 (애견동반을 켜도 목록에 남는다 — 예전 AR 은 화살표로만 남겼다)
     /// </summary>
     private bool IsPassingFilter(CachedPlaceData place, Dictionary<string, bool> filters)
     {
@@ -1647,24 +1663,17 @@ public class FilterManager : MonoBehaviour
 
         if (!Passes3D(place, filters)) return false;
 
-        // 애견동반 필터
         bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
-        if (petFriendlyOnly && !place.petFriendly) return false;
+        if (petFriendlyOnly && !place.petFriendly && !IsTransit(place)) return false;
 
         return true;
     }
 
-    /// <summary>
-    /// IndicatorOnly용 필터 체크
-    /// 매니저 토글(publicData, subway, train, terminal) + 카테고리 필터 + 3D 끄기 적용
-    /// 애견동반은 적용하지 않음 (동반 안 되는 곳도 화살표로는 보인다)
-    /// </summary>
-    private bool IsPassingManagerToggle(CachedPlaceData place, Dictionary<string, bool> filters)
-    {
-        if (filters == null) return true;
+    private static bool IsTransit(CachedPlaceData place)
+        => place.filterKey == "subway" || place.filterKey == "train" || place.filterKey == "terminal";
 
-        return PassesSourceOrCategory(place, filters) && Passes3D(place, filters);
-    }
+    /// <summary>지금 배분이 이 장소를 3D(Full)로 두는지 — 상세 응답이 늦게 와서 그새 빠진 장소를 띄우지 않게 (DataManager)</summary>
+    public bool WantsFull(string uniqueId) => currentFullAllocations.Contains(uniqueId);
 
     /// <summary>
     /// 3D 오브젝트 — 올린 3D 모델(분류 anim · 큐브로 떠 있다 더블탭하면 GLB) 또는 model_type custom.

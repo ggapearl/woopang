@@ -9,6 +9,7 @@ using UnityEngine.UI;
 ///  · 보이는 각도(조금만 들어도 / 보통 / 똑바로 위) · 누워서 쓸 땐 숨기기 · 처음엔 접어 두기
 ///  · 숨긴 장소 수 (인디케이터 X — 앱을 다시 켜면 다시 보인다) · 숨긴 게 있으면 '모두 다시 보이기'
 ///  · 보물찾기 참여 · 새 게임 알림 · 가까워지면 진동 — 계정 설정이라 서버(/api/hunts/prefs)에 있다. 로그인 전엔 흐리게
+///  · 메뉴 모양 기본메뉴 / 물방울메뉴 (기본 기본메뉴 — AR 화면 위 반투명 알약을 물방울 유리로, R0926Glass)
 ///  · 화면 프레임 30 / 60 (기본 30)
 ///  · 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 강하게 (기본 약하게)
 /// 이벤트는 아직 보낼 내용이 없어 '곧' 표시 — 켜고 끄는 값은 지금부터 저장된다.
@@ -33,7 +34,9 @@ public class R0926SettingsPanel : MonoBehaviour
     [SerializeField] private Text[] angleLabels;
     [SerializeField] private Image[] fpsTabs;             // 30 FPS / 60 FPS
     [SerializeField] private Text[] fpsLabels;
-    [SerializeField] private Image removeSwitch;          // 오브젝트 삭제 기능 (장소 박스 X)
+    [SerializeField] private Image[] menuTabs;            // 기본메뉴 / 물방울메뉴
+    [SerializeField] private Text[] menuLabels;
+    [SerializeField] private Image removeSwitch;         // 오브젝트 삭제 기능 (장소 박스 X)
     [SerializeField] private Image[] fadeTabs;            // 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 강하게
     [SerializeField] private Text[] fadeLabels;
     [SerializeField] private Text hiddenText;
@@ -69,6 +72,7 @@ public class R0926SettingsPanel : MonoBehaviour
     public void ToggleCollapsed() { R0926SkySettings.StartCollapsed = !R0926SkySettings.StartCollapsed; Refresh(); }
     public void SetAngle(int step) { R0926SkySettings.Angle = step; Refresh(); }
     public void SetFps(int step) { R0926FrameRate.Fps = step == 1 ? 60 : 30; Refresh(); }
+    public void SetMenuStyle(int step) { R0926MenuStyle.Droplet = step == 1; Refresh(); }
     public void ToggleRemove() { R0926PlaceSettings.RemoveButton = !R0926PlaceSettings.RemoveButton; Refresh(); }
     public void SetFarFade(int step) { R0926PlaceSettings.FarFade = step; Refresh(); }
     public void ShowAllHidden() { HiddenPlaces.ShowAll(); Refresh(); }
@@ -156,6 +160,7 @@ public class R0926SettingsPanel : MonoBehaviour
             channelGroup.blocksRaycasts = R0926SkySettings.Enabled;
         }
         Seg(angleTabs, angleLabels, R0926SkySettings.Angle);
+        Seg(menuTabs, menuLabels, R0926MenuStyle.Droplet ? 1 : 0);
         Seg(fpsTabs, fpsLabels, R0926FrameRate.Fps == 60 ? 1 : 0);
         Seg(fadeTabs, fadeLabels, R0926PlaceSettings.FarFade);
         if (hiddenText != null)

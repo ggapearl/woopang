@@ -17,6 +17,7 @@ using UnityEngine.Networking;
 public class CrashReporter : MonoBehaviour
 {
     private const int MaxPerSession = 15;
+    // LiveKey 는 아이폰 WoopangAppController.mm 도 지운다 (백그라운드에서 끝날 때 엔진 정리를 건너뛰어 OnApplicationQuit 가 안 온다) — 이름을 바꾸면 거기도
     private const string LiveKey = "Crash_Live", LaunchKey = "Crash_Launches";
     private const float RunningAfter = 30f;
     private static readonly ConcurrentQueue<string[]> queue = new ConcurrentQueue<string[]>();
