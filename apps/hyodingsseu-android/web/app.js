@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-09a';
+  const WEB_VERSION = '2026-11-15a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1913,7 +1913,7 @@
     });
   }
 
-  /** 안 읽은 수를 「↓」 단추에 — 누르면 화면 아래쪽의 다음 안 읽은 글로, 없으면 맨 아래로. 화면 위로 지나간 남겨 둔 글은 세지 않는다(↓ 로 못 간다) */
+  /** 안 읽은 수를 「↓」 단추에 — 누르면 맨 아래로. 화면 위로 지나간 남겨 둔 글은 세지 않는다(↓ 로 못 간다) */
   function renderJump() {
     if (!jumpEl) return;
     const top = holes.size && chatEl ? chatEl.getBoundingClientRect().top + 24 : -Infinity;
@@ -1921,18 +1921,13 @@
     jumpEl.classList.toggle('has-n', n > 0);
     const jn = jumpEl.querySelector('.jn');
     if (jn) jn.textContent = n > 99 ? '99+' : n ? String(n) : '';
-    jumpEl.setAttribute('aria-label', n ? '안 읽은 글 ' + n + '개 — 다음 안 읽은 곳으로' : '맨 아래로');
+    jumpEl.setAttribute('aria-label', n ? '안 읽은 글 ' + n + '개 — 맨 아래로' : '맨 아래로');
     if (n > 0 && !nearBottom()) jumpEl.hidden = false;
   }
 
+  /** 「↓」 단추 — 누르면 언제나 맨 아래로 (2026-11-15 대표님: 「내려가는 버튼 누르면 가장 아래로」). 예전엔 안 읽은 다음 글로 앉았다. */
   function jumpNext() {
-    if (!chatEl) return;
-    const v = chatEl.getBoundingClientRect();
-    const inView = new Set(visibleUnread().map(it => it.id));       // 이미 눈앞에 있어 곧 읽힐 글은 건너뛴다
-    const next = S.items.find(it => it.unread && !inView.has(it.id) && it.el && it.el.isConnected && it.el.getBoundingClientRect().bottom > v.top + 24);
-    if (!next) { scrollToBottom(true); return; }
-    const top = next.el.getBoundingClientRect().top - v.top + chatEl.scrollTop - 12;
-    chatEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    scrollToBottom(true);
   }
 
   // ── 누른 알림의 그 말로 (2026-10-19) ───────────────────────────
