@@ -14,6 +14,9 @@
 ├── /preview/        → 127.0.0.1:5555  (Preview 영상분석 서버)
 ├── /nongmin         → 127.0.0.1:6688  (농민.com 농산물 직거래)
 ├── /api/p2p/        → 127.0.0.1:4395  (P2P 실시간 위치 서버)
+├── /woogy/          → 127.0.0.1:6690  (우기 시험 서버 — C:\woogy-app, DB 는 우기 전용 5655. 2026-11-15 추가.
+│                      출시 전이라 입장 코드(.env WOOGY_TEST_GATE)를 먼저 묻고 noindex. 아이폰 포장지 apps/woogy-ios 가 연다.
+│                      옛 주소 /woogi, /woogi/… 는 같은 자리의 /woogy/… 로 301 — 같은 날 영문 이름을 woogy 로 바꿈)
 ├── /live            → 127.0.0.1:7000  (라이브커머스 웹앱 - FastAPI)
 ├── /live/rtc        → 127.0.0.1:7880  (LiveKit 시그널링 WebSocket)
 └── SSL 인증서: C:/woopang/server/woopang.com-fullchain.pem
