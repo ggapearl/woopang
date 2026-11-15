@@ -49,3 +49,12 @@ Windows 에서 만들고 시험했다(흐름 시험 297/0 · 화면 시험 197/0
    - 「기부 취소」 · 「사연 내리기」 같은 확인 창이 **취소/확인 버튼과 함께** 뜨는지(안 뜨면 1번의 이름표 문제)
    - 약관 · 가맹점 가입 안내 → 아래에서 올라오는 창 · 「닫기」
    - 앱을 완전히 껐다 켜도 로그인이 남아 있는지
+
+**결과 (2026-11-15, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 1 · 업로드 2026-11-15 22:51 KST · App Store Connect 앱 ID `6835099990` (앱 이름 `우기 : 우리동네 기부천사`)
+- 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0(AppIntents 메타데이터 안내 1줄뿐) · 코드 고친 곳 없음 · `PrivacyInfo.xcprivacy` 가 .app 안에 있음
+- 번들 ID `com.que.woogy` 등록 + Push Notifications 켬 → 대표님이 앱 기록 생성 → archive(자동 서명) → export `EXPORT SUCCEEDED`(업로드까지)
+- 알림 서명: 업로드용 export 는 `DistributionSummary.plist` 를 남기지 않는다 → `xcdistributionlogs` 의 재서명 entitlements 에서 `aps-environment = production` 확인(archive 는 development)
+- 그룹 `대표님`(내부 · 모든 빌드 자동 배포 · 공개 링크 끔) + 테스터 대표님 Apple ID(기존 betaTester 가 409 → 이 그룹에 새로 생성)
+- 3-3 `https://woopang.com/woogy/gate` → **404** (Windows 가 서버 주소를 `/woogy` 로 옮기기 전 — 옮긴 뒤 200 이어야 한다. 참고: `/woogi/gate` 는 502)
+- 앞선 요청(`com.que.woogi`)으로 한 일: 번들 ID `com.que.woogi`(+Push) 등록만 — 앱 기록·빌드·업로드 없음. 번들 ID 는 지우지 않고 그대로 둠
