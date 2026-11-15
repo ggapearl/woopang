@@ -4,14 +4,18 @@
 
 ## 1.0.0 (1) — 2026-11-15 · **첫 업로드** (올리는 법: `TESTFLIGHT.md` — 1절 처음 한 번 포함)
 
-우기 아이폰 앱. 화면은 웹(`https://woopang.com/woogi/`), 앱은 「포장지」(README).
-서버 쪽(우기 서버 6690 · nginx `/woogi/` · 입장 코드 · 휴대폰 가입 · 동네 · 사연 · 가게 · 모의 결제 · 기기 토큰 저장 `/api/device-token`)은
+> **영문 이름 woogi → woogy (2026-11-15 대표님 「영어 이름으로 사용할 걸 woogi 가 아닌 woogy 로」)** — 폴더 `apps/woogy-ios` · 타깃 `Woogy` ·
+> 번들 ID **`com.que.woogy`** · SKU `woogy` · 주소 `https://woopang.com/woogy/` · 복귀 주소 `com.que.woogy://` · 웹 다리 `window.WoogyApp`(메시지 이름 `woogy`).
+> 앞선 요청(커밋 `66b9026`, 번들 ID `com.que.woogi`)은 **취소** — 그 이름으로 이미 만든 것(번들 ID · 앱 기록 · 업로드)이 있으면 보고에 적는다.
+
+우기 아이폰 앱. 화면은 웹(`https://woopang.com/woogy/`), 앱은 「포장지」(README).
+서버 쪽(우기 서버 6690 · nginx `/woogy/` · 입장 코드 · 휴대폰 가입 · 동네 · 사연 · 가게 · 모의 결제 · 기기 토큰 저장 `/api/device-token`)은
 Windows 에서 만들고 시험했다(흐름 시험 297/0 · 화면 시험 197/0 · 실제 주소 시험 5/0). 결제는 지금 **모의 결제**(`sim` — 돈이 오가지 않는다).
 
-**알림(서버 쪽, 2026-11-15 확인)**: 우기 서버가 팀 키로 애플에 직접 보낸다(`wg_push.py`, topic `com.que.woogi` — 효딩쓰와 같은 방식).
+**알림(서버 쪽, 2026-11-15 확인)**: 우기 서버가 팀 키로 애플에 직접 보낸다(`wg_push.py`, topic `com.que.woogy` — 효딩쓰와 같은 방식).
 없는 기기 토큰으로 두 환경에 보내 봐서 **키 인증 통과**(운영 · 개발 키가 따로 — 서버가 환경마다 맞는 키를 골라 씀, 둘 다 `BadDeviceToken` 으로 답함)와
 살아 있는 6690 의 발송 스레드(5초마다 → 애플 → 없는 기기라 토큰을 지움)를 확인했다. 번들 ID 가 아직 등록 전이라 `TopicDisallowed` 는
-진짜 토큰이 생긴 뒤에야 알 수 있다 — 1절에서 `com.que.woogi` 를 등록하면 된다. 웹은 로그인하면 `pushRegister` 를 한 번 부르고
+진짜 토큰이 생긴 뒤에야 알 수 있다 — 1절에서 `com.que.woogy` 를 등록하면 된다. 웹은 로그인하면 `pushRegister` 를 한 번 부르고
 토큰을 `platform: 'ios'` 로 올리며, 로그아웃 때 이 폰 토큰을 함께 보내 서버가 그 사람 것만 지운다(흐름 · 화면 시험에 넣음).
 
 **이번에 확인할 것**:
@@ -23,8 +27,8 @@ Windows 에서 만들고 시험했다(흐름 시험 297/0 · 화면 시험 197/0
      · `decidePolicyFor` 안의 `Task { @MainActor in Router.shared.open(to) }` · `cfg.applicationNameForUserAgent` · `wv.isInspectable`(iOS 16.4+, 배포 17)
    - `Auth.swift`: `ASWebAuthenticationSession(url:callbackURLScheme:completionHandler:)`(17.4 에서 새 이름이 생겼지만 배포 17.0 이라 경고 없음) ·
      `withCheckedContinuation` · `ASWebAuthenticationSessionError.canceledLogin` · `Anchor: ASWebAuthenticationPresentationContextProviding`(nonisolated)
-   - `WoogiNative.swift`: async `userContentController(_:didReceive:) -> (Any?, String?)` · `frameInfo.securityOrigin` · `frameInfo.request.url`
-   - `WoogiApp.swift`: `.onOpenURL` · nonisolated `didReceive` 에서 `userInfo["link"] as? String`
+   - `WoogyNative.swift`: async `userContentController(_:didReceive:) -> (Any?, String?)` · `frameInfo.securityOrigin` · `frameInfo.request.url`
+   - `WoogyApp.swift`: `.onOpenURL` · nonisolated `didReceive` 에서 `userInfo["link"] as? String`
    - **경고 0 인지** — 특히 `nearly matches optional requirement` 가 하나라도 있으면 그 함수는 불리지 않는다.
      바이너리에 셀렉터가 들어갔는지 확인: `webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:` ·
      `webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:` · `webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:` ·
@@ -32,9 +36,9 @@ Windows 에서 만들고 시험했다(흐름 시험 297/0 · 화면 시험 197/0
      `userContentController:didReceiveScriptMessage:replyHandler:` · `userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:` ·
      `application:didRegisterForRemoteNotificationsWithDeviceToken:` · `presentationAnchorForWebAuthenticationSession:`
 2. **archive Info.plist**: `CFBundleDisplayName = 우기` · `UIUserInterfaceStyle = Light` · 세로만 · `ITSAppUsesNonExemptEncryption = NO` ·
-   위치 · 카메라 · 사진 문구 3개 · **`CFBundleURLTypes` 에 `com.que.woogi`**(`Woogi/Info.plist` 가 합쳐졌는지) · `PrivacyInfo.xcprivacy` 가 .app 안에
-3. 첫 업로드라 `TESTFLIGHT.md` 1절 — 번들 ID `com.que.woogi` 등록 + **Push Notifications** → **대표님께 앱 기록 만들기 부탁**(이름 `우기` · SKU `woogi`) → 그룹 `대표님` · 자동 배포
-4. `TESTFLIGHT.md` 3-2 — export 의 `aps-environment = production` · 3-3 — `https://woopang.com/woogi/gate` 가 200 인지
+   위치 · 카메라 · 사진 문구 3개 · **`CFBundleURLTypes` 에 `com.que.woogy`**(`Woogy/Info.plist` 가 합쳐졌는지) · `PrivacyInfo.xcprivacy` 가 .app 안에
+3. 첫 업로드라 `TESTFLIGHT.md` 1절 — 번들 ID `com.que.woogy` 등록 + **Push Notifications** → **대표님께 앱 기록 만들기 부탁**(이름 `우기` · SKU `woogy`) → 그룹 `대표님` · 자동 배포
+4. `TESTFLIGHT.md` 3-2 — export 의 `aps-environment = production` · 3-3 — `https://woopang.com/woogy/gate` 가 200 인지
 5. 대표님이 설치한 뒤(대표님 확인):
    - 아이콘이 겨자색 바탕 초록 날개 하트 · 켜면 크림색 → **입장 코드** 한 번(그 뒤 180일은 안 묻는다) → 우기 화면
    - 휴대폰 번호 가입(번호가 `010-1234-5678` 모양으로 저절로 나뉘는지) · 내 동네 정하기 → 위치 허락이 뜨는지(아이폰 허락 + 「woopang.com 이 위치를…」 한 번 더 뜰 수 있다)

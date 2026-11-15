@@ -1,16 +1,16 @@
 import UIKit
 import WebKit
 
-/// 우기 화면(웹)이 부르는 폰 기능. **우기 주소(https://woopang.com/woogi…)의 맨 위 화면**에서 부를 때만 준다 —
-/// 결제창 같은 바깥 화면에서는 부를 수 없다. 웹 쪽 이름은 `window.WoogiApp` (ShellPages.bridgeJS).
+/// 우기 화면(웹)이 부르는 폰 기능. **우기 주소(https://woopang.com/woogy…)의 맨 위 화면**에서 부를 때만 준다 —
+/// 결제창 같은 바깥 화면에서는 부를 수 없다. 웹 쪽 이름은 `window.WoogyApp` (ShellPages.bridgeJS).
 ///
-///   WoogiApp.call('pushRegister')         → {granted, token?, platform: 'ios', error?}   알림 허락 · 기기 토큰(처음 한 번만 묻는다)
-///   WoogiApp.call('auth', {url})          → {ok: true} | {ok: false, canceled: true}     간편로그인 — 시스템 브라우저 창으로 열고, 끝나면 화면이 로그인된다
-///   WoogiApp.call('openExternal', {url})  → {ok}                                         사파리 · 전화 · 문자로
+///   WoogyApp.call('pushRegister')         → {granted, token?, platform: 'ios', error?}   알림 허락 · 기기 토큰(처음 한 번만 묻는다)
+///   WoogyApp.call('auth', {url})          → {ok: true} | {ok: false, canceled: true}     간편로그인 — 시스템 브라우저 창으로 열고, 끝나면 화면이 로그인된다
+///   WoogyApp.call('openExternal', {url})  → {ok}                                         사파리 · 전화 · 문자로
 ///
 /// 폰 기능을 더하려면 여기에 같은 모양으로 넣는다(앱 다시 빌드).
 @MainActor
-final class WoogiNative: NSObject, WKScriptMessageHandlerWithReply {
+final class WoogyNative: NSObject, WKScriptMessageHandlerWithReply {
     weak var webView: WKWebView?
 
     func userContentController(_ userContentController: WKUserContentController,

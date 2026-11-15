@@ -1,7 +1,7 @@
-# 우기(Woogi) iOS — 「우리동네 기부천사」 우기 웹앱을 아이폰에서 쓰는 앱. XcodeGen 설정: Mac 에서 `xcodegen generate` 로 Woogi.xcodeproj 를 만든다.
+# 우기(Woogy) iOS — 「우리동네 기부천사」 우기 웹앱을 아이폰에서 쓰는 앱. XcodeGen 설정: Mac 에서 `xcodegen generate` 로 Woogy.xcodeproj 를 만든다.
 # .xcodeproj 는 커밋하지 않는다(이 파일이 정본). TestFlight 올리는 법: TESTFLIGHT.md
-# 「포장지」 앱 — 화면은 https://woopang.com/woogi/ (웹). 화면을 고쳐도 다시 빌드하지 않는다(README 참고).
-name: Woogi
+# 「포장지」 앱 — 화면은 https://woopang.com/woogy/ (웹). 화면을 고쳐도 다시 빌드하지 않는다(README 참고).
+name: Woogy
 options:
   bundleIdPrefix: com.que
   deploymentTarget:
@@ -16,31 +16,31 @@ settings:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  Woogi:
+  Woogy:
     type: application
     platform: iOS
     sources:
-      - path: Woogi
+      - path: Woogy
         excludes:
           - "PrivacyInfo.xcprivacy"
       # 개인정보 매니페스트 — 없으면 App Store Connect 가 업로드를 거절할 수 있다
-      - path: Woogi/PrivacyInfo.xcprivacy
+      - path: Woogy/PrivacyInfo.xcprivacy
         buildPhase: resources
     # 알림(APNs) — 효딩쓰 2.0.1 과 같은 방식. xcodegen 이 이 내용으로 파일을 쓰고 CODE_SIGN_ENTITLEMENTS 를 건다.
     # development 로 두면 TestFlight 로 내보낼 때(ExportOptions 의 app-store-connect) Xcode 가 production 으로 바꿔 서명한다.
-    # App ID com.que.woogi 에 Push Notifications capability 가 있어야 서명된다(TESTFLIGHT.md 1절).
+    # App ID com.que.woogy 에 Push Notifications capability 가 있어야 서명된다(TESTFLIGHT.md 1절).
     entitlements:
-      path: Woogi/Woogi.entitlements
+      path: Woogy/Woogy.entitlements
       properties:
         aps-environment: development
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.que.woogi
-        PRODUCT_NAME: Woogi
+        PRODUCT_BUNDLE_IDENTIFIER: com.que.woogy
+        PRODUCT_NAME: Woogy
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
-        # INFOPLIST_KEY_ 로 만들 수 없는 키(간편로그인 복귀 주소 com.que.woogi://)만 담은 파일 — Xcode 가 빌드 때 자동 생성분과 합친다
-        INFOPLIST_FILE: Woogi/Info.plist
+        # INFOPLIST_KEY_ 로 만들 수 없는 키(간편로그인 복귀 주소 com.que.woogy://)만 담은 파일 — Xcode 가 빌드 때 자동 생성분과 합친다
+        INFOPLIST_FILE: Woogy/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: 우기
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         # 화면이 밝은 노랑 한 가지라 늘 밝은 모양 — 상태 표시줄 글자는 검정(노란 머리 막대 위)

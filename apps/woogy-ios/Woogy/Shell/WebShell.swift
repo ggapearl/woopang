@@ -4,9 +4,9 @@ import WebKit
 
 enum Shell {
     /// 앱이 여는 첫 화면 — 처음 한 번 입장 코드를 넣으면(180일) 그 뒤로는 바로 우기 화면
-    static let startURL = URL(string: "https://woopang.com/woogi/")!
+    static let startURL = URL(string: "https://woopang.com/woogy/")!
     /// 간편로그인을 마치고 앱으로 돌아오는 주소의 scheme — Info.plist 의 CFBundleURLSchemes 와 같아야 한다
-    static let scheme = "com.que.woogi"
+    static let scheme = "com.que.woogy"
     /// 우기 바탕 크림색 #FFFBEA — 불러오는 동안 · 새 창 바탕
     static let bgUIColor = UIColor(red: 0xFF / 255.0, green: 0xFB / 255.0, blue: 0xEA / 255.0, alpha: 1)
     static let bgColor = Color(uiColor: bgUIColor)
@@ -15,21 +15,21 @@ enum Shell {
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
 
-    /// 앱 안에서 그대로 보여 줄 우기 주소 — https://woopang.com/woogi…
+    /// 앱 안에서 그대로 보여 줄 우기 주소 — https://woopang.com/woogy…
     static func isOwn(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(),
               host == "woopang.com" || host == "www.woopang.com" else { return false }
-        return url.path == "/woogi" || url.path.hasPrefix("/woogi/")
+        return url.path == "/woogy" || url.path.hasPrefix("/woogy/")
     }
 
-    /// com.que.woogi://auth?t=<1회용 토큰> → https://woopang.com/woogi/auth/app?t=<토큰> (서버가 토큰을 로그인으로 바꾼다 — 5분 · 한 번만)
+    /// com.que.woogy://auth?t=<1회용 토큰> → https://woopang.com/woogy/auth/app?t=<토큰> (서버가 토큰을 로그인으로 바꾼다 — 5분 · 한 번만)
     static func authExchange(_ url: URL) -> URL? {
         guard url.scheme?.lowercased() == scheme, url.host?.lowercased() == "auth",
               let t = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "t" })?.value,
               (16...200).contains(t.count),
               t.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else { return nil }
-        var c = URLComponents(string: "https://woopang.com/woogi/auth/app")!
+        var c = URLComponents(string: "https://woopang.com/woogy/auth/app")!
         c.queryItems = [URLQueryItem(name: "t", value: t)]
         return c.url
     }
@@ -68,7 +68,7 @@ final class Router {
     }
 }
 
-/// 우기 웹을 꽉 채워 보여 주는 WKWebView. 폰 기능은 `WoogiNative`, 그 밖의 결정(주소 · 새 창 · 알림창 · 오프라인)은 여기서.
+/// 우기 웹을 꽉 채워 보여 주는 WKWebView. 폰 기능은 `WoogyNative`, 그 밖의 결정(주소 · 새 창 · 알림창 · 오프라인)은 여기서.
 struct WebShell: UIViewRepresentable {
     let start: URL
 
@@ -79,10 +79,10 @@ struct WebShell: UIViewRepresentable {
         cfg.websiteDataStore = .default()                           // 입장 코드(180일) · 로그인(90일) 쿠키가 앱을 껐다 켜도 남게
         cfg.allowsInlineMediaPlayback = true
         // 기본값 "Mobile/15E148" 은 그대로 두고(결제창이 모바일로 알아보게) 뒤에 앱 표시만 붙인다 — 서버가 앱인지 알 수 있게
-        cfg.applicationNameForUserAgent = "Mobile/15E148 WoogiApp/\(Shell.version)"
+        cfg.applicationNameForUserAgent = "Mobile/15E148 WoogyApp/\(Shell.version)"
         let ucc = cfg.userContentController
         ucc.addUserScript(WKUserScript(source: ShellPages.bridgeJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        ucc.addScriptMessageHandler(context.coordinator.native, contentWorld: .page, name: "woogi")
+        ucc.addScriptMessageHandler(context.coordinator.native, contentWorld: .page, name: "woogy")
 
         let wv = WKWebView(frame: .zero, configuration: cfg)
         wv.navigationDelegate = context.coordinator
@@ -104,7 +104,7 @@ struct WebShell: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let start: URL
-        let native = WoogiNative()
+        let native = WoogyNative()
         private weak var webView: WKWebView?
 
         init(start: URL) {

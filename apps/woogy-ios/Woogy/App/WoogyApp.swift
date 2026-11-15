@@ -3,11 +3,11 @@ import UserNotifications
 
 /// 우기 iOS — 「포장지」 앱 (1.0.0, 2026-11-15).
 ///
-/// 화면은 웹이다: https://woopang.com/woogi/ (우기 서버 — nginx /woogi/ → 127.0.0.1:6690).
+/// 화면은 웹이다: https://woopang.com/woogy/ (우기 서버 — nginx /woogy/ → 127.0.0.1:6690).
 /// 화면·기능을 고치면 서버에서 바로 바뀌므로 **앱을 다시 빌드하지 않는다**. 다시 빌드하는 건 폰 기능
-/// (`WoogiNative` — 알림 · 간편로그인 · 바깥 앱 열기)을 바꿀 때와 TestFlight 90일 만료 전뿐.
+/// (`WoogyNative` — 알림 · 간편로그인 · 바깥 앱 열기)을 바꿀 때와 TestFlight 90일 만료 전뿐.
 @main
-struct WoogiApp: App {
+struct WoogyApp: App {
     // 알림(APNs) 기기 토큰·알림 처리 — Push.swift
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
@@ -19,7 +19,7 @@ struct WoogiApp: App {
                 .ignoresSafeArea(.container)
                 .background(Shell.bgColor.ignoresSafeArea())        // 불러오는 동안 — 우기 바탕 크림색
                 .preferredColorScheme(.light)
-                // 간편로그인을 사파리 쪽에서 마치고 돌아옴: com.que.woogi://auth?t=<1회용 토큰>
+                // 간편로그인을 사파리 쪽에서 마치고 돌아옴: com.que.woogy://auth?t=<1회용 토큰>
                 .onOpenURL { url in
                     guard let to = Shell.authExchange(url) else { return }
                     if !Auth.shared.finish(with: url) { Router.shared.open(to) }
@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound, .list])
     }
 
-    // 알림을 눌러 들어옴 — 서버가 실은 link(우기 화면 주소, 예: https://woopang.com/woogi/#…)로 간다
+    // 알림을 눌러 들어옴 — 서버가 실은 link(우기 화면 주소, 예: https://woopang.com/woogy/#…)로 간다
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let link = response.notification.request.content.userInfo["link"] as? String

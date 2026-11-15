@@ -3,9 +3,9 @@ import UserNotifications
 
 /// 아이폰 알림(APNs) — Firebase 없이 Apple 에 직접. 효딩쓰 iOS 2.0.1 의 Push.swift 와 같은 방식(검증됨).
 ///
-/// 웹이 `WoogiApp.call('pushRegister')` 를 부르면: 알림 허락을 묻고(처음 한 번만 — 그 뒤엔 묻지 않고 지금 상태만 돌려준다)
+/// 웹이 `WoogyApp.call('pushRegister')` 를 부르면: 알림 허락을 묻고(처음 한 번만 — 그 뒤엔 묻지 않고 지금 상태만 돌려준다)
 /// → 허락했으면 기기 토큰을 받아 돌려준다. 웹은 그 토큰을 우기 서버 `/api/device-token` 으로 보내고,
-/// 서버가 팀 키(.p8)로 APNs 에 직접 보낸다(topic `com.que.woogi`, wg_push.py).
+/// 서버가 팀 키(.p8)로 APNs 에 직접 보낸다(topic `com.que.woogy`, wg_push.py).
 /// 토큰은 `AppDelegate` 가 받아 `didRegister`/`didFail` 로 넘겨 준다.
 @MainActor
 final class Push {

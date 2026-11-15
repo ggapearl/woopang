@@ -3,8 +3,8 @@ import UIKit
 
 /// 간편로그인(카카오 · 구글 · 네이버 · 애플)을 앱 안 웹 화면이 아니라 **시스템 브라우저 창**(ASWebAuthenticationSession)으로 연다.
 /// 구글은 앱 안 웹 화면(WKWebView)의 로그인을 막는다(disallowed_useragent). 그래서 농민닷컴 앱과 같은 길로 간다:
-///   시스템 브라우저 창 → 우기 서버 → (1회용 토큰, 5분 · 한 번만) → com.que.woogi://auth?t=… → 창이 닫히고
-///   → 앱이 웹 화면에서 https://woopang.com/woogi/auth/app?t=… 를 연다 → 서버가 토큰을 로그인으로 바꾼다
+///   시스템 브라우저 창 → 우기 서버 → (1회용 토큰, 5분 · 한 번만) → com.que.woogy://auth?t=… → 창이 닫히고
+///   → 앱이 웹 화면에서 https://woopang.com/woogy/auth/app?t=… 를 연다 → 서버가 토큰을 로그인으로 바꾼다
 /// 사파리와 쿠키를 같이 써서(ephemeral 끔) 사파리에 이미 로그인해 둔 카카오 · 구글 계정은 누르기만 하면 된다.
 @MainActor
 final class Auth {
@@ -49,8 +49,8 @@ final class Auth {
         }
     }
 
-    /// 사파리 쪽에서 로그인을 마치고 com.que.woogi://auth 로 앱이 열렸을 때(WoogiApp.onOpenURL).
-    /// 기다리던 창이 있으면 그 결과로 끝내고 true — 화면을 여는 건 창을 연 쪽(WoogiNative)이 한다.
+    /// 사파리 쪽에서 로그인을 마치고 com.que.woogy://auth 로 앱이 열렸을 때(WoogyApp.onOpenURL).
+    /// 기다리던 창이 있으면 그 결과로 끝내고 true — 화면을 여는 건 창을 연 쪽(WoogyNative)이 한다.
     func finish(with url: URL) -> Bool {
         guard waiting != nil else { return false }
         end(.done(url))
