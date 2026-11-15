@@ -20,3 +20,12 @@
 4. `TESTFLIGHT.md` 3-2 — `https://woopang.com/admin/m/` 가 200 인지(404 면 Windows 서버 재시작 전 — 보고에 적기)
 5. 대표님이 설치한 뒤: 아이콘이 검정 바탕 흰 강아지 · 켜면 오프닝 없이 바로 연결 화면 → 4자리 코드 → 효딩쓰 링크 [허용] → 3초 안에 관리자 화면 · 껐다 켜면 바로 관리자 화면
    · 알림 보내기 화면의 「사진 넣기」 → 사진 보관함·카메라 고르기가 뜨는지 (WKWebView 기본 `<input type=file>` — 앱 코드 없음, 카메라 문구는 Info.plist 에 있음)
+
+**결과 (2026-11-15, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 1 · 업로드 2026-11-15 22:23 KST · App Store Connect 앱 ID `6835093584`
+- 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0 (async alert/confirm/prompt 이름표 수정 없음) · 코드 고친 곳 없음
+- archive Info.plist: `CFBundleDisplayName = woopangM` · `UIUserInterfaceStyle = Dark` · `ITSAppUsesNonExemptEncryption = NO` · `PrivacyInfo.xcprivacy` 가 .app 안에 있음
+- 번들 ID `com.que.woopangm` 등록 → 대표님이 앱 기록 생성 → 첫 export 는 `Error Downloading App Information`(Apple 약관 만료 403 이 겹쳤다 — 약관 동의 후 해결) → 재시도로 `EXPORT SUCCEEDED`
+- 그룹 `대표님`(내부 · 모든 빌드 자동 배포 · 공개 링크 끔) + 테스터 대표님 Apple ID. 기존 betaTester 레코드는 앱마다 따로라 새 앱 그룹에 붙지 않는다(409 `Tester(s) cannot be assigned`) → `POST /v1/betaTesters` 로 이 그룹에 새로 만들어 해결
+- 3-2 `https://woopang.com/admin/m/` → 200
+- 90일 만료 기록(Windows): 우팡M 1.0.0 (1) · 2026-11-15
