@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  project.yml 의 INFOPLIST_KEY_* 로 만들 수 없는 키만 둔다. 나머지는 GENERATE_INFOPLIST_FILE 이 만들고
+  빌드 때 Xcode 가 이 파일과 합친다 (효딩쓰 iOS 와 같은 방식).
+  CFBundleURLTypes — 간편로그인을 사파리 쪽에서 마쳤을 때(카카오톡 앱에 다녀온 경우 등) 서버가 보내는
+  com.que.woogi://auth?t=<1회용 토큰> 으로 이 앱이 열리게 한다 (WoogiApp.swift 의 onOpenURL).
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.que.woogi</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.que.woogi</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
