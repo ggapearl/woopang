@@ -13,7 +13,9 @@
 - **앱이 하는 일**: 화면을 꽉 채운 WKWebView + 웹의 알림창(alert · confirm · prompt) + 새 창(아래에서 올라오는 창) +
   바깥 링크는 사파리 · 전화 · 카드 앱으로 + **알림(APNs)** + **간편로그인 다리**(시스템 브라우저 창) + 인터넷이 안 될 때 안내 화면.
 - **다시 빌드할 때**: ① 폰 기능(`Woogy/Shell/`)을 바꿀 때 ② TestFlight 90일 만료 전(빌드 번호만 올려서 — Windows 의 `ios_expiry.py` 가 알린다).
-- 실행 화면은 우기 크림색(#FFFBEA) 빈 화면(자동 생성) → 바로 우기 화면. 아이콘은 겨자색 바탕 · 초록 날개 하트(`woogy_icon_square.png`, RGB 1024).
+- 실행 화면은 우기 크림색(#FFFBEA) 빈 화면(자동 생성) → 바로 우기 화면.
+- **아이콘은 원본 로고(광택)** — 노란 광택 바탕 · 초록 날개 하트. `design/logo_gloss_original.png`(원본)를 `design/make_icon.py` 가
+  테두리 안쪽만 잘라 `icon-1024.png`(RGB 1024 · 투명 없음)로 만든다. 2026-11-16 대표님 지시 — **평면 아이콘(`woogy_icon_square.png`)으로 되돌리지 말 것.**
 
 ```
 우기 (포장지) ── WKWebView ──▶ https://woopang.com/woogy/          입장 코드(시험 기간, 쿠키 180일) → 우기 화면(로그인 90일)
@@ -74,4 +76,5 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 | `Woogy/Shell/ShellPages.swift` | `window.WoogyApp` 다리 JS · 인터넷이 안 될 때 안내 화면 |
 | `Woogy/Info.plist` | `INFOPLIST_KEY_` 로 못 만드는 키만 — 간편로그인 복귀 주소 `com.que.woogy://` |
 | `project.yml` | XcodeGen 설정(정본) — `.xcodeproj` 는 커밋하지 않는다 |
+| `design/logo_gloss_original.png` · `design/make_icon.py` | 앱 아이콘 원본(광택 로고)과 `icon-1024.png` 를 만드는 스크립트 — 타깃(`Woogy/`) 밖이라 앱에 들어가지 않는다 |
 | `ExportOptions.plist` | TestFlight 업로드 |
