@@ -23,6 +23,7 @@
      │    pushRegister  → 알림 허락 · 기기 토큰 → 웹이 POST /woogy/api/device-token {token, platform:'ios'}
      │    auth {url}    → 시스템 브라우저 창 → … → com.que.woogy://auth?t=<1회용> → 웹 화면 /woogy/auth/app?t=…
      │    openExternal  → 사파리 · 전화 · 문자
+     │    location      → 지금 위치 한 번(CoreLocation — 아이폰 허락 창만 한 번)
      └─ 알림을 누르면 → 서버가 실은 link(https://woopang.com/woogy/#…)로
 nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 보낸다(팀 키 .p8 · topic com.que.woogy)
 ```
@@ -36,6 +37,7 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 | `WoogyApp.call('pushRegister')` | `{granted, token?, platform:'ios', error?}` | 알림 허락을 **처음 한 번만** 묻고 기기 토큰을 준다. 그 뒤엔 묻지 않고 지금 상태만 |
 | `WoogyApp.call('auth', {url})` | `{ok:true}` · `{ok:false, canceled:true}` | `url`(우기 주소)을 시스템 브라우저 창으로 연다. 서버가 `com.que.woogy://auth?t=…` 로 보내면 창이 닫히고 웹 화면이 `/woogy/auth/app?t=…` 로 가 로그인된다 |
 | `WoogyApp.call('openExternal', {url})` | `{ok}` | https · tel · sms · mailto 만 |
+| `WoogyApp.call('location')` | `{ok:true, lat, lon, acc}` · `{ok:false, code}` | 지금 위치 한 번 — 앱이 직접 묻는다(`Locator.swift`). 웹 위치(`navigator.geolocation`)를 쓰면 아이폰 허락 뒤에 「woopang.com 이(가) 현재 위치를…」 창이 한 번 더 뜨고, 앱을 켤 때마다 또 묻는다. `code` 는 웹 표준과 같다(1 허락 안 함 · 2 못 찾음 · 3 15초 넘김). 1.0.0 (1)에는 없어서, 웹은 「모르는 기능」 답을 받으면 웹 위치로 돌아간다 |
 
 `WoogyApp.platform`(`'ios'`) · `WoogyApp.version` · `WoogyApp.build` 도 있다. 사용자 에이전트 끝에 `WoogyApp/<버전>` 이 붙는다(서버가 앱인지 알 수 있게).
 
@@ -52,6 +54,14 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 
 밀어서 뒤로 가기는 껐다 — 둘러보기 카드(좌우로 넘기기)와 겹친다. 뒤로는 화면 안의 버튼으로.
 
+## 허락 창 언어 — 6개 (우팡과 같은 ko · en · ja · zh-Hans · zh-Hant · es)
+
+- 앱 기본 언어는 **한국어**(`project.yml` 의 `developmentLanguage: ko`). 이게 없으면 영어 앱으로 잡혀 한국어 아이폰에서도
+  위치 · 카메라 · 사진 허락 창의 제목 · 버튼이 영어로 뜬다(2026-11-16 대표님 지적).
+- 언어별 문구: `Woogy/<언어>.lproj/InfoPlist.strings`(위치 · 카메라 · 사진 3줄). 한국어는 `project.yml` 의 `INFOPLIST_KEY_*` 와 `ko.lproj` 가 같은 내용 —
+  **문구를 바꾸면 `project.yml` 과 6개 파일을 같이** 바꾼다.
+- 앱 이름(「우기」)은 언어마다 바꾸지 않는다.
+
 ## 지키는 것 (보안)
 
 - 폰 기능은 **https://woopang.com 의 `/woogy…` 맨 위 화면**에서만 준다(`WoogyNative` 가 frame · origin · 경로를 본다). 결제창 · 다른 사이트 · 틀(iframe)은 못 부른다.
@@ -59,6 +69,8 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 - 앱에는 **비밀(키 · 입장 코드 · 비밀번호)이 하나도 없다** — 이 저장소는 공개다. 알림 키(.p8)는 Windows PC 에만 있다.
 
 ## 앱스토어 출시 전에 할 일
+
+우기 전체의 할 일 · 대표님 결정 · 폰 확인은 **우기 DOC**(https://woopang.com/plan/woogy_doc)에 모은다. 앱 쪽은:
 
 - `WebShell.swift` 의 `isInspectable = true` 끄기(시험 기간에만 Mac 사파리로 들여다보려고 켜 둠)
 - App Store Connect 「앱 개인정보」: 웹이 받는 정보(휴대폰 번호 · 대략 위치 · 사진 · 결제 기록) 적기
@@ -70,7 +82,9 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 |---|---|
 | `Woogy/App/WoogyApp.swift` | 앱 시작 · 간편로그인 복귀(`onOpenURL`) · `AppDelegate`(알림 토큰 · 앱을 보고 있을 때도 알림 띄움 · 알림을 누르면 그 화면으로) |
 | `Woogy/Shell/WebShell.swift` | `Shell`(첫 주소 · 우기 주소 판별 · 복귀 주소 바꾸기) · `Router`(알림 · 로그인 복귀가 화면을 움직이는 한 길) · WKWebView · 주소 결정 · 새 창 · 알림창 · 오프라인 · 웹 프로세스 죽으면 다시 |
-| `Woogy/Shell/WoogyNative.swift` | 웹 → 폰 기능 다리(`pushRegister` · `auth` · `openExternal`) |
+| `Woogy/Shell/WoogyNative.swift` | 웹 → 폰 기능 다리(`pushRegister` · `auth` · `openExternal` · `location`) |
+| `Woogy/Shell/Locator.swift` | 지금 위치 한 번(CoreLocation) — 찾는 중에 또 불러도 같은 답 · 15초 넘기면 `code 3` |
+| `Woogy/<언어>.lproj/InfoPlist.strings` | 허락 창 문구 6개 언어(위치 · 카메라 · 사진) |
 | `Woogy/Shell/Auth.swift` | 간편로그인 시스템 브라우저 창(`ASWebAuthenticationSession`, scheme `com.que.woogy`) |
 | `Woogy/Shell/Push.swift` | 알림 허락 · 기기 토큰(효딩쓰 2.0.1 과 같은 코드) · 알림을 눌러 들어옴 |
 | `Woogy/Shell/ShellPages.swift` | `window.WoogyApp` 다리 JS · 인터넷이 안 될 때 안내 화면 |

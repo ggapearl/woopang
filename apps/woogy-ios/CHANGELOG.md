@@ -2,14 +2,32 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
-## 다음 빌드 — 아직 요청 전 (2026-11-16 미리 적어 둠 · 다음 빌드 요청 때 이 제목을 그 빌드 번호로 바꾼다)
+## 1.0.0 (2) — 2026-11-16 · 광택 아이콘 · 허락 창 6개 언어 · 위치를 앱이 직접 묻기 (빌드 번호는 `project.yml` 에 2 로 올려 두었다 — 더 올리지 않는다)
 
 **앱 아이콘을 원본 로고(광택)로** — 2026-11-16 대표님 「향후 빌드할 때 로고를 지금로고 사용하지 말고 원본로고(광택) 을 사용해서 빌드하도록」.
 `Woogy/Assets.xcassets/AppIcon.appiconset/icon-1024.png` 를 `design/logo_gloss_original.png`(원본)로 다시 만들었다(`design/make_icon.py` —
 테두리 안쪽만 잘라 1024 · RGB · 투명 없음). 평면 아이콘(1.0.0 (1)의 겨자색 바탕 · 평면 하트)으로 되돌리지 말 것. 코드 · 설정은 그대로.
 
-**이번에 확인할 것**: archive 의 앱 아이콘이 광택 로고인지 · 업로드가 아이콘(알파 채널) 때문에 거절되지 않는지 ·
-대표님 홈 화면 아이콘이 광택 로고로 바뀌었는지(대표님 확인)
+**허락 창을 폰 언어로 (6개)** — 2026-11-16 대표님 「위치관리 동의할 때 영어로 발생하던데 각 나라 언어에 맞게 … 우팡앱이 이런 건 잘 정리되어 있거든」.
+원인: `project.yml` 에 기본 언어가 없어 앱이 영어(en) 앱으로 잡혔다 → 한국어 아이폰에서도 허락 창의 제목 · 버튼이 영어.
+고침: `developmentLanguage: ko` + `Woogy/<언어>.lproj/InfoPlist.strings`(우팡과 같은 ko · en · ja · zh-Hans · zh-Hant · es — 위치 · 카메라 · 사진 3줄).
+위치 문구도 지금 쓰임새(동네 인증 · 근처 사연)에 맞게 고쳤다.
+
+**위치를 앱이 직접 묻는다** — `WoogyApp.call('location')` → `Woogy/Shell/Locator.swift`(CoreLocation, 새 파일) · `WoogyNative.swift` 에 `case "location"`.
+웹 위치(`navigator.geolocation`)를 쓰면 아이폰 허락 뒤에 「woopang.com 이(가) 현재 위치를…」 창이 한 번 더 뜨고, 앱을 켤 때마다 또 묻는다.
+웹(서버 쪽, 이미 반영)은 다리가 있으면 이걸 쓰고, `ok:false` + `code`(1 허락 안 함 · 2 못 찾음 · 3 15초)면 그 안내를, 「모르는 기능」(1.0.0 (1))이면 웹 위치로 돌아간다.
+
+**이번에 확인할 것**:
+1. **컴파일 · 경고 0** — 새로 쓴 곳: `Locator.swift`(`@MainActor` 싱글턴 · `CheckedContinuation` 모아 두었다가 한 번에 답 · `Task.sleep(for: .seconds(15))` ·
+   `CLLocationManagerDelegate` 는 `Relay`(NSObject)가 받아 숫자만 메인으로 넘김 · `locationManagerDidChangeAuthorization`) · `WoogyNative.swift` 의 `case "location"`.
+   Windows 에서 컴파일하지 못했다 — 오류가 나면 동작은 그대로 두고 형만 맞춘다.
+2. **archive**: 앱 아이콘이 광택 로고인지 · 업로드가 아이콘(알파 채널) 때문에 거절되지 않는지 · `.app` 안에 `ko.lproj` 등 6개 `InfoPlist.strings` ·
+   Info.plist 의 `CFBundleDevelopmentRegion = ko`
+3. 대표님이 설치한 뒤(대표님 확인):
+   - 홈 화면 아이콘이 광택 로고로 바뀌었는지
+   - 내 동네 정하기 › 「지금 위치 찾기」 → **아이폰 허락 창이 한국어로(제목 · 버튼 · 문구)** 한 번만 뜨는지 · 「woopang.com 이…」 창이 더 뜨지 않는지 ·
+     앱을 껐다 켜고 다시 찾아도 묻지 않는지
+   - (되면) 폰 언어를 English · 日本語 로 바꿨을 때 그 언어로 뜨는지
 
 ## 1.0.0 (1) — 2026-11-15 · **첫 업로드** (올리는 법: `TESTFLIGHT.md` — 1절 처음 한 번 포함)
 

@@ -1,0 +1,4 @@
+/* 우기 — 아이폰 허락 창 문구(한국어). project.yml 의 INFOPLIST_KEY_* 와 같은 내용. 문구를 바꾸면 다른 언어 파일도 같이 바꾼다. */
+"NSLocationWhenInUseUsageDescription" = "우리 동네를 인증하거나 지금 있는 곳 근처 사연을 볼 때 위치를 씁니다. 이웃에게는 동네 이름만 보이고, 집 위치는 약 100m 단위로만 저장합니다.";
+"NSCameraUsageDescription" = "사연 · 영수증 · 전달 인증 · 프로필 사진을 찍어 올리려면 카메라가 필요합니다.";
+"NSPhotoLibraryUsageDescription" = "사연 · 영수증 · 전달 인증 · 프로필 사진을 사진첩에서 골라 올리려면 필요합니다.";

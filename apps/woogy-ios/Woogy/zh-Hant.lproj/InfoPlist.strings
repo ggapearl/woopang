@@ -1,0 +1,4 @@
+/* Woogy — iPhone 權限提示(繁體中文) */
+"NSLocationWhenInUseUsageDescription" = "在認證你所在的社區或查看附近的故事時使用位置資訊。鄰居只會看到社區名稱，住家位置僅以約100公尺的精度儲存。";
+"NSCameraUsageDescription" = "拍攝並上傳故事、收據、送達證明和大頭貼照片時需要使用相機。";
+"NSPhotoLibraryUsageDescription" = "從照片圖庫選擇並上傳故事、收據、送達證明和大頭貼照片時需要取用照片。";

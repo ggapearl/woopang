@@ -1,0 +1,4 @@
+/* Woogy — iPhone permission prompts (English). */
+"NSLocationWhenInUseUsageDescription" = "Woogy uses your location to verify your neighborhood or to show stories near you. Neighbors only see your neighborhood name, and your home location is saved only to about 100 m.";
+"NSCameraUsageDescription" = "The camera is used to take photos for stories, receipts, delivery proof and your profile picture.";
+"NSPhotoLibraryUsageDescription" = "Photo access is used to choose photos for stories, receipts, delivery proof and your profile picture.";

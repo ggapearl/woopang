@@ -7,6 +7,7 @@ import WebKit
 ///   WoogyApp.call('pushRegister')         → {granted, token?, platform: 'ios', error?}   알림 허락 · 기기 토큰(처음 한 번만 묻는다)
 ///   WoogyApp.call('auth', {url})          → {ok: true} | {ok: false, canceled: true}     간편로그인 — 시스템 브라우저 창으로 열고, 끝나면 화면이 로그인된다
 ///   WoogyApp.call('openExternal', {url})  → {ok}                                         사파리 · 전화 · 문자로
+///   WoogyApp.call('location')             → {ok: true, lat, lon, acc} | {ok: false, code} 지금 위치 한 번(Locator — 허락 창이 한 번만 뜬다)
 ///
 /// 폰 기능을 더하려면 여기에 같은 모양으로 넣는다(앱 다시 빌드).
 @MainActor
@@ -50,6 +51,10 @@ final class WoogyNative: NSObject, WKScriptMessageHandlerWithReply {
             }
             let ok = await UIApplication.shared.open(url)
             return (["ok": ok], nil)
+
+        case "location":
+            let reply = await Locator.shared.once()
+            return (reply, nil)
 
         default:
             return (nil, "모르는 기능: \(method)")
