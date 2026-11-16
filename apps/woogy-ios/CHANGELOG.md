@@ -29,6 +29,13 @@
      앱을 껐다 켜고 다시 찾아도 묻지 않는지
    - (되면) 폰 언어를 English · 日本語 로 바꿨을 때 그 언어로 뜨는지
 
+**결과 (2026-11-16, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 2 · 업로드 2026-11-16 19:09 KST · 앱 ID `6835099990` · 커밋 `5343140`
+- 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0(AppIntents 안내 1줄뿐) · 코드 고친 곳 없음
+- archive: 아이콘 `AppIcon` · 알파 채널 없음 · `ko`/`en`/`ja`/`zh-Hans`/`zh-Hant`/`es` `.lproj` 6개 · `CFBundleDevelopmentRegion = ko` · `PrivacyInfo.xcprivacy` 있음 · `ITSAppUsesNonExemptEncryption = NO`
+- 그룹 `대표님`(내부 · 자동 배포) 에 들어감 · 3-3 `https://woopang.com/woogy/gate` → 200
+- TestFlight 에서 앱이 보이지 않는 문제(1.0.0 (1) 때부터 우기 · 우팡M 둘 다)가 있어, 대표님 아이폰(pdnom)에 같은 빌드를 Ad Hoc 서명으로 케이블 설치도 했다(푸시는 production)
+
 ## 1.0.0 (1) — 2026-11-15 · **첫 업로드** (올리는 법: `TESTFLIGHT.md` — 1절 처음 한 번 포함)
 
 > **영문 이름 woogi → woogy (2026-11-15 대표님 「영어 이름으로 사용할 걸 woogi 가 아닌 woogy 로」)** — 폴더 `apps/woogy-ios` · 타깃 `Woogy` ·
