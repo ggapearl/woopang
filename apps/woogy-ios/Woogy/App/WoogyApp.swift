@@ -19,10 +19,16 @@ struct WoogyApp: App {
                 .ignoresSafeArea(.container)
                 .background(Shell.bgColor.ignoresSafeArea())        // 불러오는 동안 — 우기 바탕 크림색
                 .preferredColorScheme(.light)
-                // 간편로그인을 사파리 쪽에서 마치고 돌아옴: com.que.woogy://auth?t=<1회용 토큰>
+                // ① 공유 카드 링크(유니버설 링크, 1.0.0 (3)): https://woopang.com/woogy/c/<번호> → 그 기부카드를 맨 앞에
+                // ② 간편로그인을 사파리 쪽에서 마치고 돌아옴: com.que.woogy://auth?t=<1회용 토큰>
+                // ③ 그 밖의 우기 주소는 그대로 앱 안에서
                 .onOpenURL { url in
-                    guard let to = Shell.authExchange(url) else { return }
-                    if !Auth.shared.finish(with: url) { Router.shared.open(to) }
+                    if let to = Shell.shareLink(url) { Router.shared.open(to); return }
+                    if let to = Shell.authExchange(url) {
+                        if !Auth.shared.finish(with: url) { Router.shared.open(to) }
+                        return
+                    }
+                    if Shell.isOwn(url) { Router.shared.open(url) }
                 }
         }
     }

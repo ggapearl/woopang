@@ -2,6 +2,30 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
+## 1.0.0 (3) — 2026-11-17 · 공유 카드 링크를 앱으로 바로 열기 (빌드 번호는 `project.yml` 에 3 으로 올려 두었다 — 더 올리지 않는다)
+
+**카톡 등에서 받은 기부카드 링크를 누르면, 앱이 깔려 있으면 앱이 바로 연다** — 2026-11-17 대표님 승인 「그렇게해」.
+링크 `https://woopang.com/woogy/c/<번호>`(번호 = `S` + 16진 10자리) → 앱 화면 `https://woopang.com/woogy/#share=<번호>` → 받은 기부카드가 맨 앞
+(웹 쪽 `#share=` 처리는 서버에 이미 반영 — 멀어도 · 패스했어도 맨 앞, 「공유받은 사연」 표시).
+- 서버: `https://woopang.com/.well-known/apple-app-site-association` (Windows 가 2026-11-17 nginx 에 걸었다 — `application/json`, 넘김 없음,
+  `appIDs: DDX8R79VU2.com.que.woogy` · `components: /woogy/c/*`)
+- 앱: entitlements 에 `com.apple.developer.associated-domains = [applinks:woopang.com]`(`project.yml` · `Woogy.entitlements` 둘 다) ·
+  `Shell.shareLink(_:)`(`WebShell.swift`, 새 함수) · `WoogyApp.swift` 의 `.onOpenURL` 이 ① 공유 링크 ② 간편로그인 복귀 ③ 그 밖의 우기 주소 순으로 처리
+- 그 밖은 그대로(아이콘 · 허락 창 6개 언어 · 위치는 1.0.0 (2) 와 같다)
+
+**이번에 확인할 것**:
+1. **번들 ID `com.que.woogy` 에 Associated Domains** — `TESTFLIGHT.md` 1절 새 줄. 없으면 서명이 `associated-domains` 로 실패한다.
+2. **컴파일 · 경고 0** — 새로 쓴 곳: `Shell.shareLink`(`("0"..."9").contains(_:)` · `("A"..."F").contains(_:)` 는 `ClosedRange<Character>`) · `.onOpenURL` 분기.
+   Windows 에서 컴파일하지 못했다 — 오류가 나면 동작은 그대로 두고 형만 맞춘다.
+3. **export entitlements** 에 `com.apple.developer.associated-domains` = `applinks:woopang.com` 이 남아 있는지(`aps-environment = production` 과 함께)
+4. 서버 확인: `curl -sI https://woopang.com/.well-known/apple-app-site-association` → `200` · `Content-Type: application/json`
+5. 대표님이 설치한 뒤(대표님 확인):
+   - 메모 앱이나 문자에 공유 링크를 붙여 누르면 **사파리가 아니라 우기 앱**이 열리고 그 기부카드가 맨 앞에 뜨는지 (가장 확실한 확인.
+     앱을 새로 깐 직후엔 애플이 확인 파일을 받아 가는 데 몇 분 걸릴 수 있다)
+   - 카카오톡: 카톡은 링크를 **카톡 안 브라우저**로 여는 게 기본이라 거기서는 앱이 바로 안 열릴 수 있다 —
+     그때 카톡 브라우저 메뉴의 「다른 브라우저로 열기」를 누르면 우기 앱이 열리는지
+   - 앱이 꺼진 상태 · 켜진 상태 두 번 다
+
 ## 1.0.0 (2) — 2026-11-16 · 광택 아이콘 · 허락 창 6개 언어 · 위치를 앱이 직접 묻기 (빌드 번호는 `project.yml` 에 2 로 올려 두었다 — 더 올리지 않는다)
 
 **앱 아이콘을 원본 로고(광택)로** — 2026-11-16 대표님 「향후 빌드할 때 로고를 지금로고 사용하지 말고 원본로고(광택) 을 사용해서 빌드하도록」.

@@ -26,6 +26,7 @@
 |---|---|---|
 | 번들 ID 등록 | `com.que.woogy` (이름 `Woogy`, 플랫폼 iOS) | 빌드 세션 — App Store Connect API `POST /v1/bundleIds`. 이미 있으면 건너뜀 |
 | 알림 켜기 | 그 번들 ID 에 **Push Notifications** | 빌드 세션 — `POST /v1/bundleIdCapabilities` (`capabilityType: PUSH_NOTIFICATIONS`). 자동 서명 + `-allowProvisioningUpdates` 가 켜 주기도 한다(효딩쓰 2.0.1). **APNs 인증서(.p12)는 만들지 않는다** — PC 서버가 팀 키(.p8)로 보낸다 |
+| 링크로 앱 열기 켜기 (1.0.0 (3)부터) | 그 번들 ID 에 **Associated Domains** | 빌드 세션 — `POST /v1/bundleIdCapabilities` (`capabilityType: ASSOCIATED_DOMAINS`). 자동 서명 + `-allowProvisioningUpdates` 가 켜 주기도 한다. 서버 쪽 확인 파일 `https://woopang.com/.well-known/apple-app-site-association` 은 Windows 가 이미 걸었다 |
 | 앱 기록 만들기 | 플랫폼 iOS · 이름 `우기`(이미 있으면 `우기 - 우리동네 기부천사`, 그것도 있으면 `우기 QUE`) · 기본 언어 한국어 · 번들 ID `com.que.woogy` · SKU `woogy` · 사용자 액세스 전체 | **대표님(브라우저)** — API 로 만들 수 없다. 번들 ID 를 등록한 뒤 대표님께 이 줄을 그대로 보여 드리고 기다린다. 앱 기록 없이 2-4 를 돌리면 `missingApp` 으로 실패. 홈 화면 이름은 앱 기록 이름과 상관없이 `우기` |
 | 내부 테스트 그룹 | 이름 `대표님` · 테스터 대표님 Apple ID · 자동 배포 켬 · 공개 링크 끔 | 빌드 세션(API) |
 
@@ -72,6 +73,7 @@ xcodebuild -exportArchive -archivePath build/Woogy.xcarchive \
 |---|---|
 | `No profiles for 'com.que.woogy'` · 서명 오류 | 팀 `DDX8R79VU2` · 2-3 에 `-allowProvisioningUpdates` · 1절 번들 ID 등록 |
 | `aps-environment` · `doesn't include the Push Notifications capability` | 1절 「알림 켜기」 뒤 2-3 부터 다시 |
+| `associated-domains` · `doesn't include the Associated Domains capability` | 1절 「링크로 앱 열기 켜기」 뒤 2-3 부터 다시 |
 | `Error Downloading App Information` (`missingApp`) | 1절 앱 기록(대표님 브라우저)이 아직 없다 |
 | `No Accounts` (2-4) | API 키 옵션 3개를 붙였는지 |
 | `The bundle version must be higher …` | `CURRENT_PROJECT_VERSION` 을 올리고 `xcodegen generate` 부터. 올린 번호는 커밋 |
