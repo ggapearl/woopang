@@ -23,6 +23,7 @@ enum ShellPages {
           setBars: function (a) { return call('setBars', a); },
           pushRegister: function () { return call('pushRegister'); },
           pushOpened: function () { return call('pushOpened'); },
+          saveToPhotos: function (a) { return call('saveToPhotos', a); },
           addListener: function (ev, cb) {
             (listeners[ev] = listeners[ev] || []).push(cb);
             return Promise.resolve({ remove: function () {

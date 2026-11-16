@@ -1,4 +1,5 @@
 import AVFoundation
+import Photos
 import UIKit
 import WebKit
 
@@ -8,6 +9,7 @@ import WebKit
 ///   haptic({kind: 'tap'|'alert'}) · openExternal({url}) · deviceName() → {name} · speak({text, rate}) · stop() · setBars()
 ///   pushRegister() → {granted, token?, platform: 'ios', error?} (아이폰만 — 알림 허락 + APNs 기기 토큰, `Push.swift`)
 ///   pushOpened() → {at, body, n} | {} (아이폰만 — 1분 안에 누른 알림. 2.1)
+///   saveToPhotos({url, name}) — 사진·영상을 받아 사진첩에 바로 저장 (2.3, `savePhoto`). url 은 https://woopang.com/AI/doc/ 만
 ///   다 읽으면 'speechDone' 사건 · 알림을 누르면 'pushOpen' 사건 (addListener)
 /// 폰 기능을 더하려면 여기와 bridgeJS 에 같은 이름으로 넣고(앱 빌드 필요), 안드로이드 DeskNativePlugin.java 에도 같은 것을.
 @MainActor
@@ -51,8 +53,35 @@ final class DeskNative: NSObject, WKScriptMessageHandlerWithReply, AVSpeechSynth
             return (await Push.shared.register(), nil)
         case "pushOpened":                     // 누른 알림 — 화면이 그 말로 간다 (2.1)
             return (Push.shared.lastOpened(), nil)
+        case "saveToPhotos":                   // 사진·영상 → 사진첩 (2.3)
+            guard let s = a["url"] as? String, let url = URL(string: s), url.scheme == "https",
+                  url.host == "woopang.com", url.path.contains("/AI/doc/") else { return (nil, "저장할 수 없는 주소예요") }
+            return await savePhoto(url: url, name: a["name"] as? String ?? url.lastPathComponent)
         default:
             return (nil, "모르는 기능: \(method)")
+        }
+    }
+
+    /// 받아서 사진첩에 추가 — 파일 앱이 아니라 「사진」에 들어간다. 사진 추가 권한(addOnly)만 묻는다.
+    private func savePhoto(url: URL, name: String) async -> (Any?, String?) {
+        let ext = (name as NSString).pathExtension.lowercased()
+        let isVideo = ["mp4", "mov", "m4v"].contains(ext)
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + "." + (ext.isEmpty ? "jpg" : ext))
+        defer { try? FileManager.default.removeItem(at: dest) }
+        do {
+            let (tmp, resp) = try await URLSession.shared.download(from: url)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return (nil, "파일을 받지 못했어요") }
+            try FileManager.default.moveItem(at: tmp, to: dest)
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard status == .authorized || status == .limited else { return (nil, "설정 → 효딩쓰에서 사진 추가를 허락해 주세요") }
+            try await PHPhotoLibrary.shared().performChanges {
+                if isVideo { _ = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: dest) }
+                else { _ = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: dest) }
+            }
+            return ([String: Any](), nil)
+        } catch {
+            return (nil, "사진첩에 저장하지 못했어요")
         }
     }
 

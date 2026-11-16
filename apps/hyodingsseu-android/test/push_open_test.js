@@ -234,6 +234,18 @@ async function main() {
     check('맨 아래(카드)로 갔다', i7.nearBottom === true, i7);
     check('카드가 비친다', (await hit()).includes('서버 재시작'));
 
+    console.log('--- 7b. 문서함이 열린 채 알림을 눌러 들어옴 → 문서함이 닫히고 그 말로 (11-16)');
+    await openApp(READ, LAST_READ);
+    await ev(`document.querySelector('#main .bar .docs').click(); 0`);
+    await sleep(700);
+    check('(먼저) 문서함이 열려 있다', await ev(`document.querySelectorAll('.page.on').length > 0`), {});
+    await hide();
+    await ctl('emit', { events: [E.inc(T0 + 4300, longText('D1 알림')), E.inc(T0 + 4310, longText('D2 알림'))] });
+    await tap(T0 + 4310.3, pushBody(longText('D2 알림')), true);
+    await show(4000);
+    check('문서함이 닫혔다', await ev(`document.querySelectorAll('.page').length === 0`), {});
+    check('눌린 알림이 비친다', (await hit()).includes('D2'), { hit: await hit() });
+
     console.log('--- 8. 화면에 없는 예전 알림 → 지난 대화를 더 받아 와서 그 말로');
     const RECENT = Array.from({ length: 12 }, (_, i) => E.inc(T0 + 9000 + i * 10, 'N' + (i + 1) + ' 최근 알림'));
     const HIST = Array.from({ length: 8 }, (_, i) => ({ ts: T0 + 100 + i * 10, type: 'incoming', kind: 'phone_out', from: '서버 감시', text: longText('H' + (i + 1) + ' 지난밤 알림'), mid: mid() }));

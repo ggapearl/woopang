@@ -2,8 +2,12 @@ package com.que.hyodingsseu;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
@@ -19,6 +23,10 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -139,6 +147,54 @@ public class DeskNativePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("열 앱이 없어요");
         }
+    }
+
+    /** 사진·영상을 받아 갤러리(Pictures/효딩쓰)에 저장 — { url, name }. woopang.com/AI/doc/ 주소만 (Android 10+ 는 권한 없이 MediaStore) */
+    @PluginMethod
+    public void saveToPhotos(PluginCall call) {
+        final String url = call.getString("url", "");
+        final String name = call.getString("name", "file");
+        if (url == null || !url.startsWith("https://woopang.com/") || !url.contains("/AI/doc/")) {
+            call.reject("저장할 수 없는 주소예요");
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            call.reject("이 안드로이드는 갤러리 저장을 지원하지 않아요");
+            return;
+        }
+        new Thread(() -> {
+            Uri item = null;
+            try {
+                String lower = name.toLowerCase(Locale.ROOT);
+                String ext = lower.contains(".") ? lower.substring(lower.lastIndexOf('.') + 1) : "";
+                boolean video = ext.equals("mp4") || ext.equals("mov") || ext.equals("m4v");
+                String mime = video ? "video/mp4" : ext.equals("png") ? "image/png" : ext.equals("gif") ? "image/gif"
+                        : ext.equals("webp") ? "image/webp" : ext.startsWith("hei") ? "image/heic" : "image/jpeg";
+                ContentResolver cr = getContext().getContentResolver();
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+                v.put(MediaStore.MediaColumns.RELATIVE_PATH, (video ? Environment.DIRECTORY_MOVIES : Environment.DIRECTORY_PICTURES) + "/효딩쓰");
+                Uri table = video ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                item = cr.insert(table, v);
+                if (item == null) throw new Exception("insert");
+                HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(60000);
+                if (c.getResponseCode() != 200) throw new Exception("http");
+                try (InputStream in = c.getInputStream(); OutputStream out = cr.openOutputStream(item)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                call.resolve();
+            } catch (Exception e) {
+                if (item != null) {
+                    try { getContext().getContentResolver().delete(item, null, null); } catch (Exception ignored) { }
+                }
+                call.reject("갤러리에 저장하지 못했어요");
+            }
+        }).start();
     }
 
     /** 짝 지을 때 PC 에 보여 줄 이름 — 폰 설정의 기기 이름(없으면 모델명) */

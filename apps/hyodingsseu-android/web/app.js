@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-15a';
+  const WEB_VERSION = '2026-11-16a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -215,9 +215,30 @@
 
   /** 내려받기 (2026-10-26) — 서버가 Content-Disposition: attachment 로 주는 주소(?dl=1)를 기기 브라우저가 받는다.
    *  앱 안(웹뷰)은 파일 저장을 못 해서 기본 브라우저로 넘기고, 브라우저는 <a download> 로 바로 받는다. 효딩쓰 문서 주소(/AI/doc/)만. */
+  const MEDIA_EXT = /\.(jpe?g|png|gif|webp|heic|heif|mp4|mov|m4v)$/i;
+  const isMediaFile = (url, name) => MEDIA_EXT.test(String(name || nameFromUrl(url)).split(/[?#]/)[0]);
+
+  /** 사진·영상 저장 (2026-11-16 대표님: 「파일함으로 가지 않고 다운로드 누르면 핸드폰 갤러리에」) — 앱의 폰 기능(saveToPhotos)이 사진첩에 바로 넣는다.
+   *  앱이 그 기능을 아직 모르는 옛 빌드면 공유 창(파일만)으로 넘겨 「이미지 저장」을 누르게 한다. 사진·영상이 아니면 false(아래 내려받기로). */
+  async function saveToGallery(url, name) {
+    if (!Native || !/\/AI\/doc\//.test(url) || !isMediaFile(url, name)) return false;
+    if (typeof Native.saveToPhotos === 'function') {
+      toast('사진첩에 저장하는 중이에요');
+      try {
+        await Native.saveToPhotos({ url: new URL(url, location.href).href, name: name || nameFromUrl(url) });
+        toast('사진첩에 저장했어요');
+      } catch (e) { toast((e && e.message) || '사진첩에 저장하지 못했어요'); }
+      return true;
+    }
+    toast('공유 창에서 「이미지 저장」을 눌러 주세요');
+    shareFiles([{ url, name }]);
+    return true;
+  }
+
   function downloadFile(url, name) {
     if (!url) return;
     if (!/\/AI\/doc\//.test(url)) { openLink(url); return; }
+    if (Native && isMediaFile(url, name)) { saveToGallery(url, name); return; }
     const u = url + (url.includes('?') ? '&' : '?') + 'dl=1';
     toast('내려받는 중이에요');
     if (Native) { Native.openExternal({ url: u }).catch(e => toast(e.message || '받을 수 없어요')); return; }
@@ -241,11 +262,12 @@
           const b = await res.blob();
           files.push(new File([b], f.name || nameFromUrl(f.url), { type: b.type || 'application/octet-stream' }));
         }
-        if (navigator.canShare({ files })) { await navigator.share({ files, title: title || '효딩쓰' }); return; }
+        // 제목·글을 같이 넘기면 받는 앱에 사진과 글이 함께 간다(2026-11-16 대표님) — 파일만 넘긴다
+        if (navigator.canShare({ files })) { await navigator.share({ files }); return; }
       } catch (err) { if (err && err.name === 'AbortError') return; }
     }
     if (navigator.share) {
-      try { await navigator.share({ url: list[0].url, title: title || list[0].name || '효딩쓰' }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+      try { await navigator.share({ url: new URL(list[0].url, location.href).href }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
     }
     openLink(list[0].url);
   }
@@ -1951,6 +1973,11 @@
     try { p = await Native.pushOpened(); } catch (e) { return; }
     if (!p || typeof p.at !== 'number' || p.n === pushTook) return;       // 같은 알림은 한 번만 — 화면이 새로 고쳐지면 새 화면이 다시 가져간다
     pushTook = p.n;
+    // 문서함·승인함·서랍 같은 창이 열린 채 알림으로 들어오면 창을 걷어 내고 그 말로 간다 (2026-11-16 대표님)
+    try {
+      document.querySelectorAll('.viewer .vw-top .vw-btn[aria-label="닫기"]').forEach(b => b.click());
+      closeAllLayers();
+    } catch (e) { /* 창이 없으면 그대로 */ }
     pushTarget = { at: p.at, body: pushPlain(p.body), until: Date.now() + PUSH_WAIT_MS, older: 0 };
     // 대화를 받기 전·이어 받기 전이면 글 머리가 같은 말만 — 2분 안의 엉뚱한 말에 먼저 앉지 않게. 나머지는 받아 온 뒤 pollLoop·ingestState 가
     if (pushLand(!!boot && !awayBatch && !hiddenAt)) scanSeen();
@@ -2819,7 +2846,18 @@
     function downloadRow(files) {
       const fs = files.filter(f => f && f.url);
       if (fs.length === 1) { downloadFile(fs[0].url, fs[0].name); return; }
-      if (Native) { toast('여러 장은 열어서 한 장씩 저장해 주세요'); rowTap({ files: fs, title: '' }); return; }
+      if (Native) {
+        if (typeof Native.saveToPhotos === 'function' && fs.every(f => isMediaFile(f.url, f.name))) {
+          toast('사진첩에 저장하는 중이에요');
+          (async () => {
+            let ok = 0;
+            for (const f of fs) { try { await Native.saveToPhotos({ url: new URL(f.url, location.href).href, name: f.name || nameFromUrl(f.url) }); ok++; } catch (e) { /* 한 장 실패해도 나머지는 */ } }
+            toast(ok === fs.length ? ok + '장을 사진첩에 저장했어요' : fs.length + '장 중 ' + ok + '장만 저장했어요');
+          })();
+          return;
+        }
+        toast('여러 장은 열어서 한 장씩 저장해 주세요'); rowTap({ files: fs, title: '' }); return;
+      }
       fs.forEach((f, i) => setTimeout(() => downloadFile(f.url, f.name), i * 700));
     }
 

@@ -2,6 +2,14 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
+## 2.3.0 (9) — 2026-11-16 · 사진·영상을 사진첩에 바로 저장
+
+대표님: 「파일함으로 가지 않고 그냥 다운로드 버튼 누르면 핸드폰 갤러리에 저장」. 화면(웹 2026-11-16a)은 이미 배포됨 — 옛 앱에서는 공유 창(파일만)으로 넘어가 「이미지 저장」을 누르게 한다.
+- `DeskNative.swift`: `saveToPhotos({url, name})` 추가 — https://woopang.com/AI/doc/ 주소만 받아 임시 파일로 내려받고 `PHPhotoLibrary`(addOnly)로 사진첩에 넣는다. `import Photos`.
+- `ShellPages.swift`(bridgeJS): `saveToPhotos` 한 줄. `project.yml`: `NSPhotoLibraryAddUsageDescription`, 버전 2.3.0 (9).
+- Windows 에서 쓰고 **컴파일은 아직 못 해 봤다** — Mac 에서 xcodegen generate → 빌드 오류 나면 고쳐 주세요(`performChanges` async 판 · @MainActor 경고 가능성).
+- 이번에 확인할 것: 사진 열어서 「저장」· 문서함 줄의 내려받기 → 사진 앱에 들어가는지(처음 한 번 사진 추가 허락 창) · 여러 장 줄에서 내려받기 · 동영상 · 사진이 아닌 파일(pdf 등)은 예전처럼 브라우저로 가는지.
+
 ## 2.2.0 (8) — 2026-10-31 · 아이패드에서 화면 가득
 
 대표님: 「아이패드에서 발생할 때 적절히 사이즈 조절해서 잘 발생할 수 있도록」. 지금은 앱이 아이폰 전용(`TARGETED_DEVICE_FAMILY: "1"`)이라
