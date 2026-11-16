@@ -1610,7 +1610,7 @@ public class MessagePanelManager : MonoBehaviour
     // 이제 목록엔 한 줄(가장 최근 것 · 안 읽음 합계)만, 누르면 둘을 시간순으로 모은 WOOPANG 대화방이 옆으로 열린다
     public const string WoopangId = "3";
 
-    private struct WoopangLine { public DateTime at; public int seq; public string time, text, followFrom; public int huntId; }
+    private struct WoopangLine { public DateTime at; public int seq; public string time, text, followFrom; public int huntId; public R0926ChatPhoto.Ref photo; }
 
     /// <summary>이 기기에 온 알림(업로드·위치·팔로우) — 서버 공지 요약 줄은 아니다</summary>
     private static bool IsDeviceNotice(ConversationSummary c) => c.isSystemMessage && !c.isAdminBroadcast && c.userId != WoopangId;
@@ -2263,7 +2263,8 @@ public class MessagePanelManager : MonoBehaviour
 
     private IEnumerator LoadAdminBroadcasts()
     {
-        string url = Api($"{ApiConfig.MAIN_SERVER}/api/broadcast/list?limit=5");
+        string spot = RoughSpot();
+        string url = Api($"{ApiConfig.MAIN_SERVER}/api/broadcast/list?limit=5" + (spot != null ? "&" + spot : ""));
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))
         {
@@ -2783,6 +2784,17 @@ public class MessagePanelManager : MonoBehaviour
         WireBubbleTap(bubble, () => R0926HuntPush.OpenFollowers(followFrom, true));
     }
 
+    /// <summary>관리자 알림 사진 — 대화방 사진과 같은 말풍선 (크기는 이름의 가로x세로 · 화면 가까이 오면 받는다 · 누르면 크게)</summary>
+    private void AttachWoopangPhoto(GameObject bubble, R0926ChatPhoto.Ref photo)
+    {
+        var box = bubble != null ? bubble.transform.Find("BubbleContainer") as RectTransform : null;
+        var text = box != null ? box.Find("ContentText")?.GetComponent<Text>() : null;
+        if (text == null || box.GetComponent<Image>() == null || box.GetComponent<VerticalLayoutGroup>() == null) return;
+        var ui = R0926ChatPhotoBubble.Attach(bubble, box, text, photo, photoView);
+        WireBubbleTap(bubble, ui.Tap);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(bubble.transform as RectTransform);
+    }
+
     /// <summary>보물찾기 시작 안내 말풍선 — 누르면 알림을 누른 것과 같은 길로 그 게임 상세</summary>
     private static void WireHuntTap(GameObject bubble, int huntId)
     {
@@ -2997,7 +3009,8 @@ public class MessagePanelManager : MonoBehaviour
         if (isAdmin)
         {
             // 서버 DB에서 관리자 메시지 조회 (admin_broadcasts 테이블)
-            string adminUrl = Api($"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50");
+            string spot = RoughSpot();   // 지역 알림은 반경 안일 때만 (위치를 못 쓰면 전부)
+            string adminUrl = Api($"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent?limit=50" + (spot != null ? "&" + spot : ""));
             var lines = new List<WoopangLine>();
             int hiddenMaxId = PlayerPrefs.GetInt("HiddenAdminBroadcastMaxId", 0);
 
@@ -3052,6 +3065,10 @@ public class MessagePanelManager : MonoBehaviour
                             string displayContent = !string.IsNullOrEmpty(titleWithDistance)
                                 ? $"<b>{titleWithDistance}</b>\n{msg.body}"
                                 : msg.body;
+                            // 사진이 있으면 사진 말풍선을 글 위에 먼저 (같은 시각 — 차례로 정렬된다)
+                            var photo = R0926ChatPhoto.FromAdmin(msg.image_url);
+                            if (photo != null)
+                                lines.Add(new WoopangLine { at = ParseTime(msg.created_at), seq = lines.Count, time = msg.created_at, photo = photo });
                             lines.Add(new WoopangLine { at = ParseTime(msg.created_at), seq = lines.Count, time = msg.created_at, text = displayContent });
                         }
                     }
@@ -3099,8 +3116,9 @@ public class MessagePanelManager : MonoBehaviour
             {
                 if (useDateSeparator)
                     CheckAndCreateDateSeparator(line.time);
-                var bubble = CreateSystemMessageBubble("WOOPANG", line.text, line.time);
-                if (line.huntId > 0) WireHuntTap(bubble, line.huntId);
+                var bubble = CreateSystemMessageBubble("WOOPANG", line.photo != null ? "" : line.text, line.time);
+                if (line.photo != null) AttachWoopangPhoto(bubble, line.photo);
+                else if (line.huntId > 0) WireHuntTap(bubble, line.huntId);
                 else WireFollowTap(bubble, line.followFrom);
             }
 
@@ -4098,6 +4116,20 @@ public class MessagePanelManager : MonoBehaviour
     public static string SearchBase => ApiConfig.MAIN_SERVER;
     private static string Api(string url) => url;
 #endif
+
+    /// <summary>지역 알림을 반경 안 기기에만 보이게 서버에 알려 줄 위치 — 소수 셋째 자리(약 100m)로 뭉갠다. 위치를 못 쓰면 null (서버가 전부 준다)</summary>
+    public static string RoughSpot()
+    {
+        if (Input.location.status != LocationServiceStatus.Running) return null;
+        var d = Input.location.lastData;
+        return d.latitude == 0f && d.longitude == 0f ? null : RoughSpot(d.latitude, d.longitude);
+    }
+
+    public static string RoughSpot(double lat, double lon)
+    {
+        var ci = System.Globalization.CultureInfo.InvariantCulture;   // 기기 언어가 소수점을 쉼표로 써도 점으로
+        return "lat=" + lat.ToString("0.000", ci) + "&lon=" + lon.ToString("0.000", ci);
+    }
 
     private bool isSearchMode = false;
     private bool isServerSearchActive = false; // 서버 검색 결과 표시 중

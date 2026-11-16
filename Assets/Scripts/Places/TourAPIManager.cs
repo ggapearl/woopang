@@ -415,10 +415,12 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             }
             else if (distance <= objectSpawnRadius)
             {
-                // objectSpawnRadius 이내는 이동 속도와 무관하게 3D 오브젝트 생성 (다른 매니저와 동일 조건)
-                GameObject newObj = CreateObjectFromData(place);
+                // objectSpawnRadius 이내는 이동 속도와 무관하게 3D 오브젝트 생성 (다른 매니저와 동일 조건) — 한 프레임에 하나씩 (SpawnPace)
+                while (!SpawnPace.Ready) yield return null;
+                GameObject newObj = spawnedObjects.ContainsKey(place.contentid) ? null : CreateObjectFromData(place);   // 기다리는 사이 배분이 띄웠으면 그대로
                 if (newObj != null)
                 {
+                    SpawnPace.Took();
                     ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
                     if (display != null && !string.IsNullOrEmpty(place.firstimage))
                     {
@@ -502,6 +504,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 Target targetComp = newObj.GetComponentInChildren<Target>(true);
                 if (targetComp != null) targetComp.enabled = true;
             }
+            ARObjectZoomController.Fit(newObj);   // 핀치 줌 중에 뜨거나 풀에서 다시 꺼내도 지금 배율로
             spawnedObjects[place.contentid] = newObj;
             placeDataMap[place.contentid] = place;
             return newObj;

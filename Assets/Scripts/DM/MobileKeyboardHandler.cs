@@ -791,7 +791,7 @@ public class MobileKeyboardHandler : MonoBehaviour, IR0926KeyboardHost
         if (!expandPanelOnKeyboard) return;
 
         float canvasHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
-        float bottomAnchor = ParentAnchorY(kbH + keyboardTopPadding);
+        float bottomAnchor = ParentAnchorY(kbH + keyboardTopPadding + UploadInputMirror.KeyboardLift);   // 키보드 위로 2pt 더 (11-14)
         // 가로에서 왼쪽 열에 놓인 창(대화창) — 열 그대로 두고 아래 끝만 키보드 위로. 세로처럼 양옆 끝까지·위 350 으로 펴면
         // 오른쪽 도크 막대 밑까지 넓어지고 창은 280 남짓으로 납작해져 말풍선이 제목줄·입력칸을 덮었다 (화면 폭 전체인 댓글 창은 예전대로)
         bool column = Screen.width > Screen.height && origBgAnchorMax.x - origBgAnchorMin.x < 0.99f;

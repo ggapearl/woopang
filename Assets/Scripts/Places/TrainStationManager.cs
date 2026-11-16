@@ -91,21 +91,24 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
         currentFilters = new Dictionary<string, bool>();
         currentFilters["train"] = PlayerPrefs.GetInt("Filter_Train_V2", 1) == 1;
 
-        InitializeObjectPool();
+        StartCoroutine(InitializeObjectPool());   // 오프닝이 걷힌 뒤 한가한 프레임에 하나씩 (11-15 ④ — 예전엔 첫 화면 전에 교통 3종 40개를 한꺼번에)
         StartCoroutine(StartLocationServiceAndFetchData());
 
         FilterManager filterMgr = Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
         if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
-    private void InitializeObjectPool()
+    private IEnumerator InitializeObjectPool()
     {
-        if (samplePrefab == null) return;
-        for (int i = 0; i < poolSize; i++)
+        if (samplePrefab == null) yield break;
+        while (objectPool.Count + spawnedObjects.Count < poolSize)   // 그 사이 역이 떠서 만든 것도 센다 — 예전과 같은 수만큼만
         {
+            yield return null;
+            if (!SpawnPace.Idle) continue;
             GameObject obj = Instantiate(samplePrefab, Vector3.zero, Quaternion.identity);
             obj.SetActive(false);
             objectPool.Enqueue(obj);
+            SpawnPace.Took();
         }
     }
 
@@ -218,6 +221,9 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
         foreach (var f in facilities)
         {
             string uid = "train_" + f.name + "_" + f.latitude + "_" + f.longitude;
+            // 역 정보는 목록 준비를 알리기 전에 다 담는다 — 배분이 바로 3D 로 띄울 수 있게.
+            // 예전엔 아래 생성 루프가 0.1초에 하나씩 담아, 그 전에 배분된 역은 임시 화살표로 15초를 기다렸다
+            placeDataMap[f.name + "_" + f.latitude + "_" + f.longitude] = f;
             lightCache.Add(new CachedPlaceData
             {
                 uniqueId = uid,
@@ -241,17 +247,22 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
             string uniqueId = data.name + "_" + data.latitude + "_" + data.longitude;
 
             placeDataMap[uniqueId] = data;
+            // 애견동반을 켜면 만들지도 다시 켜지도 않는다 (11-14 대표님 「애견동반에서는 지하철, 기차, 터미널 모두 그냥 발생하지 않으면」 · 11-15 공항도).
+            // 예전엔 여기 생성 · 다시 켜기가 애견동반을 보지 않아, 켜 둔 채 움직여 목록을 다시 받으면 역이 떴다 (배분이 모르는 오브젝트라 그대로 남았다)
+            bool petHidden = FilterManager.PetOnlyNow;
 
             float dist = CalculateDistance(latitude, longitude, (float)data.latitude, (float)data.longitude);
 
-            if (!spawnedObjects.ContainsKey(uniqueId) && !HiddenPlaces.IsHidden("train_" + uniqueId))
+            if (!spawnedObjects.ContainsKey(uniqueId) && !petHidden && !HiddenPlaces.IsHidden("train_" + uniqueId))
             {
                 // objectSpawnRadius 이내만 3D 오브젝트 생성
                 if (dist <= objectSpawnRadius)
                 {
-                    GameObject newObj = GetFromPool();
+                    while (!SpawnPace.Ready) yield return null;   // 한 프레임에 하나씩 (SpawnPace · FilterManager 배분과 같은 문)
+                    GameObject newObj = spawnedObjects.ContainsKey(uniqueId) ? null : GetFromPool();   // 기다리는 사이 배분이 띄웠으면 그대로
                     if (newObj != null)
                     {
+                        SpawnPace.Took();
                         bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("train") || currentFilters["train"];
 
                         // Target 플래시 방지: 비활성 상태에서 Target 끄기
@@ -263,14 +274,14 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
 
                         if (!shouldShow && targetComp != null) targetComp.enabled = true;
 
+                        ARObjectZoomController.Fit(newObj);   // 핀치 줌 중에 뜨거나 풀에서 다시 꺼내도 지금 배율로
                         spawnedObjects[uniqueId] = newObj;
                     }
                 }
             }
-            else
+            else if (spawnedObjects.TryGetValue(uniqueId, out GameObject existing))   // 숨긴 곳(X)은 떠 있지 않다 — 예전엔 여기서 KeyNotFound 로 나머지 목록 처리가 멈췄다
             {
-                GameObject existing = spawnedObjects[uniqueId];
-                bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("train") || currentFilters["train"];
+                bool shouldShow = !petHidden && (currentFilters == null || !currentFilters.ContainsKey("train") || currentFilters["train"]);
                 if (shouldShow)
                 {
                     float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
@@ -492,6 +503,7 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
         FacilityData data = placeDataMap[rawId];
         SetupObject(newObj, data);
         newObj.SetActive(true);
+        ARObjectZoomController.Fit(newObj);
         spawnedObjects[rawId] = newObj;
         return true;
     }

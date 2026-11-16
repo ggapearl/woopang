@@ -134,11 +134,11 @@ namespace Redesign0926
                     var splash = key.StartsWith("splash") ? canvas.GetComponentInChildren<R0926Splash>(true) : null;
                     if (splash != null)
                     {
-                        bool mid = key.StartsWith("splash_mid");   // 렌즈가 훑는 중 (0.95초)
+                        bool mid = key.StartsWith("splash_mid");   // 렌즈가 훑는 중 (시간표 0.55초 — 11-16 새 시간표)
                         int cut = mid ? 11 : 7;
                         string lang = key.Length > cut ? key.Substring(cut) : "ko";
                         Canvas.ForceUpdateCanvases();
-                        splash.EditorPreview(lang, splashAt >= 0f ? splashAt : mid ? 0.95f : 3.3f);
+                        splash.EditorPreview(lang, splashAt >= 0f ? splashAt : mid ? 0.55f : 2.45f);
                         Canvas.ForceUpdateCanvases();
                     }
                     var modes = key.StartsWith("fmap") || key == "fset" ? canvas.GetComponentInChildren<R0926SheetModes>(true) : null;

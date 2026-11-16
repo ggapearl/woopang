@@ -10,6 +10,8 @@ using UnityEngine;
 public static class R0926PlaceInfo
 {
     private static DoubleTap3D host;
+    private static float hostLat, hostLon;
+    private static string hostName;
 
     /// <summary>AR 에 떠 있는 그 장소의 창 — 준비를 마친 것만 (없으면 null)</summary>
     public static DoubleTap3D Spawned(PlaceListManager places, PlaceListManager.ListEntry e)
@@ -25,6 +27,22 @@ public static class R0926PlaceInfo
     {
         if (host == null) host = DoubleTap3D.CreateInfoHost("PlaceInfo0926");
         return host;
+    }
+
+    /// <summary>대리 오브젝트에 채울 장소의 자리 · 이름 (목록 줄 그대로) — 상세 위 「길안내」(R0926DetailGuide)가 쓴다. AR 에 없는 장소라 오브젝트에서 읽을 수 없다</summary>
+    public static void Mark(float lat, float lon, string name)
+    {
+        hostLat = lat; hostLon = lon; hostName = name;
+    }
+
+    /// <summary>dt 가 대리 오브젝트인지 (AR 에 없는 장소의 창)</summary>
+    public static bool IsHost(DoubleTap3D dt) => dt != null && dt == host;
+
+    /// <summary>대리 오브젝트에 채운 장소의 자리 · 이름 — 자리를 모르면 false</summary>
+    public static bool HostPlace(out float lat, out float lon, out string name)
+    {
+        lat = hostLat; lon = hostLon; name = hostName;
+        return lat != 0f || lon != 0f;
     }
 
     /// <summary>대리 오브젝트를 그 장소로 채운다 — 매니저가 오브젝트를 띄울 때와 같은 값. 모르는 자료면 false</summary>

@@ -335,6 +335,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             mutual = r.mutual;
             friends.Clear();
             if (r.friends != null) friends.AddRange(r.friends);
+            Publish(r.friends);   // 목록의 근처 친구 줄도 같은 자료로 (UseNearby 가 고치기 전 서버 값)
             foreach (var f in friends) f.exact = f.precise;   // 11-05 대표님 「정확한 위치를 반영해서 최종적으로 사용한 위치에」 — 서버가 1km 칸 대신 마지막 자리를 준다
             UseNearby();
             loaded = true;
@@ -362,6 +363,84 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             changed = true;
         }
         return changed;
+    }
+
+    // ── 목록의 근처 친구 줄 (11-14) ──────────────────────────
+    // 앱을 꺼 둔 친구는 근처 사람(P2P)에서 10분 뒤 빠지지만 지도에는 마지막 자리가 일주일 남는다 — 지도에는 보이는 친구가 목록에는 없었다
+    // (11-14 대표님 「지도에는 보이는데 … 해당 프로필이 안보이거든」). 지도와 같은 자료(맞팔 · 둘 다 지도 공유)를 목록도 쓴다.
+    // 지도가 열려 있으면 지도가 받은 것을, 아니면 목록이 열려 있는 동안 1분마다 받는다
+    public sealed class SharedFriend { public string id, name, avatar; public double lat, lon, seenAt; }   // seenAt — 그 자리를 보낸 때 (유닉스 초)
+    private static readonly List<SharedFriend> shared = new List<SharedFriend>();
+    private static float sharedAt = float.NegativeInfinity;
+    private static bool sharedBusy;
+    private static string sharedUser;
+    private const float SharedEvery = 60f;
+    public static IReadOnlyList<SharedFriend> Shared => shared;
+    /// <summary>목록이 다시 그린다</summary>
+    public static event Action SharedChanged;
+
+    // 에디터에서 도메인 리로드 없이 플레이를 다시 시작해도 '앱을 새로 켠 것'과 같게
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetShared()
+    {
+        shared.Clear();
+        sharedAt = float.NegativeInfinity;
+        sharedBusy = false;
+        sharedUser = null;
+        SharedChanged = null;
+    }
+
+    internal static double NowUnix() => (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+
+    private static string CurrentUserId()
+    {
+        var lm = LoginManager.Instance;
+        return lm != null && lm.CurrentUser != null && !string.IsNullOrEmpty(lm.CurrentUser.id) ? lm.CurrentUser.id : null;
+    }
+
+    private static void Publish(Friend[] list)
+    {
+        sharedAt = Time.realtimeSinceStartup;
+        sharedUser = CurrentUserId();
+        double now = NowUnix();
+        shared.Clear();
+        if (list != null)
+            foreach (var f in list)
+                if (f != null && !string.IsNullOrEmpty(f.user_id))
+                    shared.Add(new SharedFriend { id = f.user_id, name = f.username, avatar = f.avatar_url, lat = f.lat, lon = f.lon, seenAt = now - f.ago });
+        SharedChanged?.Invoke();
+    }
+
+    /// <summary>목록이 열려 있는 동안 — 1분이 지났으면 친구 자리를 다시 받는다 (받으면 SharedChanged). 받을 때가 아니면 null</summary>
+    public static IEnumerator SharedIfDue()
+    {
+        string uid = CurrentUserId();
+        if (uid != sharedUser)
+        {
+            // 로그아웃 · 다른 아이디 — 앞 사람의 친구를 남기지 않는다
+            sharedUser = uid;
+            sharedAt = float.NegativeInfinity;
+            if (shared.Count > 0) { shared.Clear(); SharedChanged?.Invoke(); }
+        }
+        if (uid == null || sharedBusy || Time.realtimeSinceStartup - sharedAt < SharedEvery) return null;
+        return FetchShared();
+    }
+
+    private static IEnumerator FetchShared()
+    {
+        sharedBusy = true;
+        sharedAt = Time.realtimeSinceStartup;   // 받지 못해도 1분 뒤에 다시
+        using (var req = UnityWebRequest.Get(Api(ApiConfig.P2P_SERVER + "/api/p2p/friends_map")))
+        {
+            LoginManager.ApplyAuth(req);
+            req.timeout = 10;
+            yield return req.SendWebRequest();
+            sharedBusy = false;
+            if (req.result != UnityWebRequest.Result.Success) { LoginManager.CheckUnauthorized(req); yield break; }
+            Resp r = null;
+            try { r = JsonUtility.FromJson<Resp>(req.downloadHandler.text); } catch (Exception) { }
+            if (r != null) Publish(r.friends);
+        }
     }
 
     /// <summary>공유 스위치 (동의 카드·아래 줄 공통)</summary>
@@ -1172,6 +1251,28 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         dropSeq++;
         SetDropName(null);
         if (dropPin != null) dropPin.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 꽂은 핀으로 길안내 — 노치 · AR 화면 아래 3D 화살표 (찍은 좌표 그대로 · 유료 길찾기 없이 곧은 방향). 시작하면 지도(목록 시트)를 내린다 — 안내는 AR 화면에서.
+    /// 11-16 대표님 「지도에서 좌표찍은 핀을 길게 누르면 여기서도 길안내버튼이 발생해서 누르면 길안내 하도록」. 이름은 말풍선 위 줄(장소 이름 · 그 자리 주소), 없으면 「지도 핀」
+    /// </summary>
+    public void GuideDropPin()
+    {
+        if (!hasDrop) return;
+        string name = dropName != null && dropName.gameObject.activeSelf && !string.IsNullOrEmpty(dropName.text)
+            ? dropName.text : L("지도 핀", "Map pin", "地図のピン", "地图标记", "Pin del mapa");
+        float lat = (float)dropLat, lon = (float)dropLon;
+        bool guide = R0926Notch.Guide(lat, lon, null, name);
+        if (R0926GuideArrow.Guide(lat, lon, null, name)) guide = true;
+        if (!guide)
+        {
+            if (ToastManager.Instance != null) ToastManager.Instance.ShowError(L("길안내를 시작하지 못했어요", "Couldn't start directions", "案内を開始できませんでした", "无法开始导航", "No se pudo iniciar la guía"));
+            return;
+        }
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.TriggerLightHaptic();
+        var sheet = GetComponentInParent<R0926Closer>(true);
+        if (sheet != null) sheet.AnimateClose(null);   // X 와 같은 길: 시트가 내려간 뒤 닫기 버튼
     }
 
     /// <summary>꽂은 핀의 좌표를 복사 — "37.566500, 126.978000" (구글 지도 검색칸에 그대로 들어간다)</summary>

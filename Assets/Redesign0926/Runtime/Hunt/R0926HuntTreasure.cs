@@ -69,7 +69,6 @@ public class R0926HuntTreasure : MonoBehaviour
     private static bool loaded, hidden;
     private static string saved;
     private static R0926HuntTreasure instance;
-    private static ARObjectZoomController zoom;
 #if !UNITY_EDITOR
     private static AREarthManager earth;
 #endif
@@ -202,7 +201,6 @@ public class R0926HuntTreasure : MonoBehaviour
         loaded = hidden = false;
         saved = null;
         instance = null;
-        zoom = null;
         tapId = 0;
 #if !UNITY_EDITOR
         earth = null;
@@ -298,7 +296,8 @@ public class R0926HuntTreasure : MonoBehaviour
         if (treasurePrefab == null || !Altitude(out double alt)) return;   // 지구 추적 전엔 높이를 모른다 — 다음 프레임에
         var go = Instantiate(treasurePrefab);
         go.name = "HuntTreasure_" + t.id;
-        go.transform.localScale = Vector3.one * Zoom();
+        go.transform.localScale = Vector3.one;
+        ARObjectZoomController.Fit(go);   // 본 크기 1 × 지금 배율 — 다섯 매니저와 같은 길 (줌이 처음 크기를 기준으로 곱한다)
         var target = go.GetComponentInChildren<Target>(true);
         if (target != null)
         {
@@ -368,12 +367,6 @@ public class R0926HuntTreasure : MonoBehaviour
         alt = earth.CameraGeospatialPose.Altitude - BelowEye;
         return true;
 #endif
-    }
-
-    private static float Zoom()
-    {
-        if (zoom == null) zoom = FindFirstObjectByType<ARObjectZoomController>();
-        return zoom != null ? zoom.GetZoomLevel() : 1f;
     }
 
     // open = 찾음 — 상자가 이쪽을 보고 열린 뒤 스스로 사라진다 (그 사이 축하 화면이 뜬다)
@@ -494,6 +487,21 @@ public class R0926HuntTreasure : MonoBehaviour
         }
         tapId = id;
         tapAt = now;
+    }
+
+    /// <summary>가까이 모달(R0926NearModal)에서 이 보물을 눌렀다 — AR 에서 누른 것과 똑같이 (두 번 톡톡이면 연다 · 내 보물은 현황 카드)</summary>
+    public static void TapFromModal(GameObject obj)
+    {
+        foreach (var t in hunts)
+            if (t.obj != null && t.obj == obj) { Tap(t.id); return; }
+    }
+
+    /// <summary>내가 연 게임의 보물인지 — 가까이 모달의 안내 글이 다르다 (한 번 누르면 현황 카드)</summary>
+    public static bool IsHostTreasure(GameObject obj)
+    {
+        foreach (var t in hunts)
+            if (t.obj != null && t.obj == obj) return t.host;
+        return false;
     }
 
     private static R0926HuntChest Chest(Hunt t)

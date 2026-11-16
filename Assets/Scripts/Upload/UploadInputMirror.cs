@@ -37,6 +37,9 @@ public class UploadInputMirror : MonoBehaviour, IR0926KeyboardHost
     [Header("동작 설정")]
     [Tooltip("미러를 키보드 top에 부착할 때 추가 여백 (canvas px)")]
     [SerializeField] private float keyboardTopPadding = 0f;
+    /// <summary>모든 입력줄을 키보드 위로 조금 더 — 11-14 대표님 「키패드 높이를 2px 정도만 키워줘」 (화면 2pt = 캔버스 6, 캔버스 1284 = 아이폰 428pt 의 3배)</summary>
+    public const float KeyboardLift = 6f;
+    private readonly Vector3[] parentCorners = new Vector3[4];
 
     [Tooltip("위치 보정 애니메이션 속도")]
     [SerializeField] private float lerpSpeed = 14f;
@@ -477,7 +480,7 @@ public class UploadInputMirror : MonoBehaviour, IR0926KeyboardHost
         if (!accessoryActive) return;
         accessoryHeight = h;
         if (!snap || mirrorRect == null || canvasRect == null || canvasRect.rect.height <= 0f) return;
-        float a = Mathf.Clamp01((h + keyboardTopPadding) / canvasRect.rect.height);   // 끌어내리는 손가락을 바로 따라간다
+        float a = ParentAnchorY(h + keyboardTopPadding + KeyboardLift);   // 끌어내리는 손가락을 바로 따라간다
         mirrorRect.anchorMin = new Vector2(0f, a);
         mirrorRect.anchorMax = new Vector2(1f, a);
     }
@@ -843,8 +846,7 @@ public class UploadInputMirror : MonoBehaviour, IR0926KeyboardHost
         else if (AccessoryHolding) kbCanvas = Mathf.Max(kbCanvas, accessoryHeight);        // 키보드가 다 올라올 때까지 그 높이
         if (kbCanvas <= 0f) return;
 
-        float canvasH = canvasRect.rect.height;
-        float anchor = Mathf.Clamp01((kbCanvas + keyboardTopPadding) / canvasH);
+        float anchor = ParentAnchorY(kbCanvas + keyboardTopPadding + KeyboardLift);
 
         Vector2 targetMin = new Vector2(0f, anchor);
         Vector2 targetMax = new Vector2(1f, anchor);
@@ -860,6 +862,18 @@ public class UploadInputMirror : MonoBehaviour, IR0926KeyboardHost
         float t = Time.unscaledDeltaTime * lerpSpeed;
         mirrorRect.anchorMin = Vector2.Lerp(mirrorRect.anchorMin, targetMin, t);
         mirrorRect.anchorMax = Vector2.Lerp(mirrorRect.anchorMax, targetMax, t);
+    }
+
+    // 캔버스 아래에서 잰 높이(캔버스 단위) → 입력줄 부모 기준 앵커 — 부모가 캔버스와 크기·자리가 달라도 키보드 바로 위에.
+    // 11-14 미리보기 창(AI 요청사항 줄의 부모)은 위로 800 더 길어, 캔버스 비율을 그대로 쓰면 줄이 키보드보다 30% 가까이 높이 떴다 (MobileKeyboardHandler 와 같은 셈)
+    private float ParentAnchorY(float canvasY)
+    {
+        var parent = mirrorRect.parent as RectTransform;
+        if (parent == null) return Mathf.Clamp01(canvasY / Mathf.Max(1f, canvasRect.rect.height));
+        parent.GetWorldCorners(parentCorners);
+        float bottom = canvasRect.InverseTransformPoint(parentCorners[0]).y - canvasRect.rect.yMin;
+        float top = canvasRect.InverseTransformPoint(parentCorners[1]).y - canvasRect.rect.yMin;
+        return Mathf.Clamp01((canvasY - bottom) / Mathf.Max(1f, top - bottom));
     }
 
     private float GetKeyboardHeightCanvas()

@@ -63,8 +63,10 @@ public class PlaceListManager : MonoBehaviour
         public string adId, emojiUrl;
         public bool pet;             // 애견동반 되는 장소 — 목록 이름이 노랑 (R0926PlaceRows)
         public object data;          // 원본 자료 — 줄 오른쪽 사진·사진을 누르면 여는 정보 창 (PlaceData · CachedPlaceData · TourPlaceData · FacilityData · NearbyUserData · 축제)
+        public double seenAt;        // 지도에서 온 친구 — 그 자리를 보낸 때 (유닉스 초, 거리 칸에 '12분 전 · 8m'). 0 이면 지금 앱을 켠 근처 사람
     }
     private List<LiveEntry> liveEntries = new List<LiveEntry>();
+    private readonly HashSet<string> livePeople = new HashSet<string>();   // 이번에 근처 사람(P2P)으로 온 아이디 — 지도 친구와 겹치지 않게
 
     /// <summary>목록 줄 앞의 그림 — 장소는 분류 그림(분류가 없으면 색 점), 사람은 분홍 사람, 보물찾기는 금빛 상자, 축제는 축제 분위기 그림, 보호소는 강아지</summary>
     public enum EntryKind : byte { Place, Person, Hunt, Festival, Shelter }
@@ -190,6 +192,7 @@ public class PlaceListManager : MonoBehaviour
         HiddenPlaces.Hidden += OnPlaceHidden;
         R0926HuntList.Changed += OnSourceChanged;
         R0926Nearby.Changed += OnSourceChanged;
+        R0926FriendsMap.SharedChanged += OnSourceChanged;
         filterSource = p2pManager != null ? p2pManager : P2PManager.Instance;
         if (filterSource != null) filterSource.UserFilterChanged += OnSourceChanged;
         // 슬라이더 유무와 무관하게 기본값 보장 — 슬라이더 없으면 maxDisplayDistance=0이 되어 모든 POI 걸리는 버그 방지
@@ -260,6 +263,7 @@ public class PlaceListManager : MonoBehaviour
         HiddenPlaces.Hidden -= OnPlaceHidden;
         R0926HuntList.Changed -= OnSourceChanged;
         R0926Nearby.Changed -= OnSourceChanged;
+        R0926FriendsMap.SharedChanged -= OnSourceChanged;
         if (filterSource != null) filterSource.UserFilterChanged -= OnSourceChanged;
         if (updatePeriodicCoroutine != null) StopCoroutine(updatePeriodicCoroutine);
         if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
@@ -398,9 +402,8 @@ public class PlaceListManager : MonoBehaviour
             }
         }
 
-        // 3. New Public Transport Managers — 애견동반을 켜면 교통은 뺀다 (11-13 대표님 「애견동반이 가능한 공간만」 · FilterManager.PetAllowed)
-        //    단 터미널 칩의 'OO공항'은 남긴다 (11-14 「애견동반은 공항터미널 남겨」)
-        AddTransportData(terminalManager, showTerminal, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus", airportOnly: petFriendlyOnly);
+        // 3. New Public Transport Managers — 애견동반을 켜면 교통은 공항까지 뺀다 (11-13 대표님 「애견동반이 가능한 공간만」 · 11-15 「그냥 공항도」 · FilterManager.PetAllowed)
+        AddTransportData(terminalManager, showTerminal && !petFriendlyOnly, ref publicTransportCount, lat, lon, TERMINAL_COLOR, "terminal_", "bus");
         AddTransportData(trainManager, showTrain && !petFriendlyOnly, ref publicTransportCount, lat, lon, TRAIN_COLOR, "train_", "train");
         AddTransportData(subwayManager, showSubway && !petFriendlyOnly, ref publicTransportCount, lat, lon, SUBWAY_COLOR, "subway_", "subway");
 
@@ -422,6 +425,9 @@ public class PlaceListManager : MonoBehaviour
             if (festFetch != null) StartCoroutine(festFetch);
             var shelterFetch = petFriendlyOnly ? R0926Nearby.SheltersIfDue(lat, lon) : null;
             if (shelterFetch != null) StartCoroutine(shelterFetch);
+            // 지도의 친구 자리 — 1분에 한 번 (받으면 SharedChanged). 사람을 숨겼으면 묻지 않는다
+            var friendFetch = showP2PUsers && p2pManager != null && p2pManager.GetUserFilterMode() != UserFilterMode.None ? R0926FriendsMap.SharedIfDue() : null;
+            if (friendFetch != null) StartCoroutine(friendFetch);
         }
 
         // 6. 맨 위 줄 (거리 슬라이더와 상관없이) — 축제 / 보물: 광고 줄 · 가까운 축제 · 참가할 수 있는 근처 보물찾기 / 애견동반: 가까운 보호소
@@ -589,8 +595,13 @@ public class PlaceListManager : MonoBehaviour
             var e = liveEntries[i];
             float d;
             if (e.fixedDistance >= 0f) d = e.fixedDistance;   // 비공개 보물찾기 — 굵은 거리 그대로
-            // 1순위: 스폰된 Target transform이 살아있으면 카메라 거리 (1cm 단위로 매끄럽게 갱신)
-            else if (hasCam && e.targetTf != null) d = Vector3.Distance(camPos, e.targetTf.position);
+            // 1순위: 스폰된 Target transform이 살아있으면 카메라 거리 (1cm 단위로 매끄럽게 갱신) — 땅 위 거리만, 높이는 보지 않는다 (11-16 대표님 「평면거리로만」)
+            else if (hasCam && e.targetTf != null)
+            {
+                Vector3 tp = e.targetTf.position;
+                float fx = tp.x - camPos.x, fz = tp.z - camPos.z;
+                d = Mathf.Sqrt(fx * fx + fz * fz);
+            }
             else
             {
                 // 2순위: GPS 거리 fallback — 평면 근사 (한국 위도/5km 이내 오차 0.5% 미만, 매 프레임 trig 회피)
@@ -650,6 +661,12 @@ public class PlaceListManager : MonoBehaviour
             le.distanceText = e.promo ? R0926Nearby.AdLabel + " · " + R0926Nearby.Km(distance) : R0926Nearby.FestivalLabel(e.start, e.end, distance);
             le.noDirection = true;
         }
+        else if (e.kind == EntryKind.Person && e.seenAt > 0)
+        {
+            // 지도에서 온 친구 — 언제 자리인지 ('12분 전 · 8m'). 방향은 그 자리 쪽으로
+            int ago = Mathf.Max(0, (int)(R0926FriendsMap.NowUnix() - e.seenAt));
+            le.distanceText = R0926FriendsMap.Ago(ago) + " · " + (distance >= 1000f ? (distance / 1000f).ToString("0.0") + "km" : Mathf.FloorToInt(distance) + "m");
+        }
         return le;
     }
 
@@ -693,21 +710,47 @@ public class PlaceListManager : MonoBehaviour
     /// </summary>
     private void AddP2PUserData(float lat, float lon)
     {
+        livePeople.Clear();
         if (p2pManager == null) return;
 
         // 필터링된 사용자 목록 가져오기 (None이면 빈 리스트 반환)
         var nearbyUsers = p2pManager.GetFilteredNearbyUsers();
-        if (nearbyUsers == null || nearbyUsers.Count == 0) return;
-
-        foreach (var user in nearbyUsers)
+        if (nearbyUsers != null)
         {
-            if (user.distance <= maxDisplayDistance)
+            foreach (var user in nearbyUsers)
             {
-                p2pUserCount++;
-                string displayText = $"@{user.username} - {Mathf.FloorToInt(user.distance)}m";   // 이모지는 앱 글꼴에 없어 □로 보였다
-                combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
-                liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude, kind = EntryKind.Person, data = user });
+                if (!string.IsNullOrEmpty(user.user_id)) livePeople.Add(user.user_id);
+                if (user.distance <= maxDisplayDistance)
+                {
+                    p2pUserCount++;
+                    string displayText = $"@{user.username} - {Mathf.FloorToInt(user.distance)}m";   // 이모지는 앱 글꼴에 없어 □로 보였다
+                    combinedPlaces.Add((user, user.distance, user.user_id, displayText, P2P_USER_COLOR));
+                    liveEntries.Add(new LiveEntry { id = user.user_id, baseLabel = $"@{user.username}", colorHex = P2P_USER_COLOR, baseLat = (float)user.latitude, baseLon = (float)user.longitude, kind = EntryKind.Person, data = user });
+                }
             }
+        }
+        AddMapFriends(lat, lon);
+    }
+
+    /// <summary>
+    /// 지도에 보이는 친구 (맞팔 · 둘 다 지도 공유 — R0926FriendsMap) — 앱을 꺼 둬 근처 사람(P2P)에서 빠진 친구도 마지막 자리로.
+    /// 근처 사람은 지금 앱을 켠 사람만 오고 10분 넘게 소식이 없으면 서버가 뺀다 — 지도에는 보이는 친구가 목록에는 없었다 (11-14).
+    /// 지금 앱을 켠 친구는 근처 사람 줄(지금 자리)이 있으니 넣지 않는다. 애견동반과 상관없이 · 사람 칩 '숨기기'면 빼고 · 거리 슬라이더 안만
+    /// </summary>
+    private void AddMapFriends(float lat, float lon)
+    {
+        var list = R0926FriendsMap.Shared;
+        if (list.Count == 0 || p2pManager.GetUserFilterMode() == UserFilterMode.None) return;
+        foreach (var f in list)
+        {
+            if (string.IsNullOrEmpty(f.name) || livePeople.Contains(f.id)) continue;
+            float d = CalculateDistance(lat, lon, f.lat, f.lon);
+            if (d > maxDisplayDistance) continue;
+            livePeople.Add(f.id);
+            p2pUserCount++;
+            var user = new NearbyUserData { user_id = f.id, username = f.name, latitude = f.lat, longitude = f.lon, avatar_url = f.avatar ?? "", distance = d };
+            combinedPlaces.Add((user, d, f.id, $"@{f.name} - {Mathf.FloorToInt(d)}m", P2P_USER_COLOR));
+            liveEntries.Add(new LiveEntry { id = f.id, baseLabel = "@" + f.name, colorHex = P2P_USER_COLOR, baseLat = f.lat, baseLon = f.lon, kind = EntryKind.Person, data = user, seenAt = f.seenAt });
         }
     }
 
@@ -831,7 +874,7 @@ public class PlaceListManager : MonoBehaviour
         }
     }
 
-    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null, string icon = null, bool airportOnly = false) where T : MonoBehaviour
+    private void AddTransportData<T>(T manager, bool filter, ref int count, float lat, float lon, string colorHex = "00FF00", string hiddenPrefix = null, string icon = null) where T : MonoBehaviour
     {
         if (!filter || manager == null) return;
 
@@ -852,7 +895,6 @@ public class PlaceListManager : MonoBehaviour
             object rawLat = latProp.GetValue(val);
             object rawLon = lonProp.GetValue(val);
             string pName = (string)nameProp.GetValue(val);
-            if (airportOnly && !FilterManager.IsAirportName(pName)) continue;
             if (hiddenPrefix != null && HiddenPlaces.IsHidden(hiddenPrefix + pName + "_" + rawLat + "_" + rawLon)) continue;
             float pLat = Convert.ToSingle(rawLat);
             float pLon = Convert.ToSingle(rawLon);
@@ -865,8 +907,7 @@ public class PlaceListManager : MonoBehaviour
                 combinedPlaces.Add((val, d, pId, $"{pName} - {Mathf.FloorToInt(d)}m", colorHex));
                 // 터미널 칩에는 버스터미널과 공항이 함께 있다 — 공항은 비행기 그림
                 string pIcon = icon == "bus" && FilterManager.IsAirportName(pName) ? "airport" : icon;
-                // 애견동반만 볼 때 남은 공항은 다른 줄처럼 애견동반 이름 색으로
-                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon, pet = airportOnly, data = val });
+                liveEntries.Add(new LiveEntry { id = pId, baseLabel = pName, colorHex = colorHex, baseLat = pLat, baseLon = pLon, icon = pIcon, data = val });
             }
         }
     }

@@ -32,6 +32,7 @@ public class ARObjectZoomController : MonoBehaviour
     [SerializeField] private TrainStationManager trainStationManager; // 기차역
 
     private float currentZoom = 1f;
+    private static ARObjectZoomController current;   // Fit — 새로 뜨는 오브젝트도 지금 배율로
     private float previousTouchDistance = 0f;
     private bool isPinching = false;
     private float rawZoom = 1f;   // 손가락이 실제로 간 만큼 — 1.0x 에 붙는 칸까지 포함
@@ -47,6 +48,7 @@ public class ARObjectZoomController : MonoBehaviour
     void OnEnable()
     {
         EnhancedTouchSupport.Enable(); // EnhancedTouch 활성화
+        current = this;
     }
 
     void OnDisable()
@@ -199,45 +201,13 @@ public class ARObjectZoomController : MonoBehaviour
     }
 
     /// <summary>
-    /// AR 오브젝트들의 스케일을 조절하여 줌 효과 적용
+    /// AR 오브젝트들의 스케일을 조절하여 줌 효과 적용 — 맨 위 크기 = 본 크기 × 배율
+    /// (11-15: 예전엔 1 × 배율로 덮어, 본 크기가 2 인 사진 상자가 핀치를 조금만 해도 절반이 됐다)
     /// </summary>
     private void ApplyZoomToARObjects()
     {
-        // 우팡 데이터 오브젝트들 스케일 조절
-        if (dataManager != null)
-        {
-            var spawnedObjects = dataManager.GetSpawnedObjects();
-            if (spawnedObjects != null)
-            {
-                foreach (var kvp in spawnedObjects)
-                {
-                    GameObject obj = kvp.Value;
-                    if (obj != null && obj.activeSelf)
-                    {
-                        // 기본 스케일에 줌 배율 곱하기
-                        obj.transform.localScale = Vector3.one * currentZoom;
-                    }
-                }
-            }
-        }
-
-        // 공공데이터 오브젝트들 스케일 조절
-        if (tourAPIManager != null)
-        {
-            // ⭐ GetSpawnedObjects() 사용으로 최적화 (GameObject.Find 제거)
-            var tourSpawnedObjects = tourAPIManager.GetSpawnedObjects();
-            if (tourSpawnedObjects != null)
-            {
-                foreach (var kvp in tourSpawnedObjects)
-                {
-                    GameObject obj = kvp.Value;
-                    if (obj != null && obj.activeSelf)
-                    {
-                        obj.transform.localScale = Vector3.one * currentZoom;
-                    }
-                }
-            }
-        }
+        if (dataManager != null) ApplyZoomToManager(dataManager.GetSpawnedObjects());   // 우팡 데이터
+        if (tourAPIManager != null) ApplyZoomToManager(tourAPIManager.GetSpawnedObjects());   // 공공데이터
 
         // 공공교통 (지하철·기차역·터미널) — 이전엔 빠져있어 zoom 안 됐음
         ApplyZoomToManager(subwayManager?.GetSpawnedObjects());
@@ -247,17 +217,28 @@ public class ARObjectZoomController : MonoBehaviour
         if (P2PManager.Instance != null) P2PManager.Instance.ApplyZoom(currentZoom);   // 사람(P2P) — 예전엔 빠져 있어 확대·축소가 안 됐다
     }
 
-    private void ApplyZoomToManager(Dictionary<string, GameObject> spawned)
+    // 꺼 둔 오브젝트(필터·거리·백그라운드)도 맞춰 둔다 — 다시 켜질 때 지난 배율로 나오지 않게
+    private void ApplyZoomToManager<TKey>(Dictionary<TKey, GameObject> spawned)
     {
         if (spawned == null) return;
-        foreach (var kvp in spawned)
-        {
-            GameObject obj = kvp.Value;
-            if (obj != null && obj.activeSelf)
-            {
-                obj.transform.localScale = Vector3.one * currentZoom;
-            }
-        }
+        foreach (var kvp in spawned) Fit(kvp.Value, currentZoom);
+    }
+
+    /// <summary>
+    /// 맨 위 크기를 본 크기(처음 크기 — 프리팹 맨 위가 2 면 2) × 지금 배율로. 새로 띄우거나 풀에서 다시 꺼낸 오브젝트에 매니저가 부른다
+    /// (사람(P2P)은 P2PManager 가 본 크기 × 배율로 따로 맞춘다)
+    /// </summary>
+    public static void Fit(GameObject obj)
+    {
+        if (current == null) current = FindFirstObjectByType<ARObjectZoomController>();
+        Fit(obj, current != null ? current.currentZoom : 1f);
+    }
+
+    private static void Fit(GameObject obj, float zoom)
+    {
+        if (obj == null) return;
+        if (!obj.TryGetComponent(out ARZoomBase b)) b = obj.AddComponent<ARZoomBase>();
+        obj.transform.localScale = b.Scale * zoom;
     }
 
     /// <summary>

@@ -252,7 +252,7 @@ public class OffScreenIndicator : MonoBehaviour
         return true;
     }
 
-    private bool IsFocused(Target t) => focusTarget != null && t == focusTarget && Time.unscaledTime < focusUntil;
+    private bool IsFocused(Target t) => t != null && (t.Pinned || (focusTarget != null && t == focusTarget && Time.unscaledTime < focusUntil));
 
     // 화면 가운데 — 예전엔 Awake 에서 한 번만 재서, 가로로 돌리면 세로 기준 가운데·경계로 화살표를 놓아 대부분 화면 밖에 놓였다
     private void RefreshScreenCentre()
@@ -406,6 +406,17 @@ public class OffScreenIndicator : MonoBehaviour
                 if (target.indicator != null)
                 {
                     target.indicator.ResetForPool();
+                    target.indicator.Activate(false);
+                    target.indicator = null;
+                }
+                continue;
+            }
+
+            // 가까이 모달(R0926NearModal)이 카드에 담은 물체 — AR 화면에 없으니 화살표 · 박스도 없다
+            if (R0926NearHold.Held.Count > 0 && R0926NearHold.Held.Contains(target))
+            {
+                if (target.indicator != null)
+                {
                     target.indicator.Activate(false);
                     target.indicator = null;
                 }
@@ -594,7 +605,7 @@ public class OffScreenIndicator : MonoBehaviour
             {
                 indicator.SetImageColor(target.TargetColor);
                 bool focused = IsFocused(target);
-                indicator.SetFocus(focused && Time.unscaledTime >= focusFrom);
+                indicator.SetFocus(focused && (target.Pinned || Time.unscaledTime >= focusFrom));
 
                 // 거리가 멀수록 인디케이터를 흐리게. 화살표(화면 밖)는 항상 적용,
                 // 박스(화면 안)는 fadeBoxToo 가 켜져 있을 때만 적용. 목록에서 고른 장소는 또렷하게, 다른 인디케이터 위에.

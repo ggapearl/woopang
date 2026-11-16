@@ -36,11 +36,28 @@ public class R0926ChatPhoto : MonoBehaviour
 
     public sealed class Ref
     {
-        public string url, file;
+        public string url, file, dir = "dm";   // uploads/ 아래 폴더 — 관리자 알림 사진은 admin_broadcasts
         public int w, h;
         public string Thumb => ThumbOf(768);
-        public string ThumbOf(int size) => MessagePanelManager.SearchBase + "/thumb/" + size + "/uploads/dm/" + file;
+        public string ThumbOf(int size) => MessagePanelManager.SearchBase + "/thumb/" + size + "/uploads/" + dir + "/" + file;
         public string Key(string kind) => kind + "_" + file;
+    }
+
+    // 관리자 알림 사진(11-15) — 서버가 지은 이름: 시각_16진8자_가로x세로.jpg (가로x세로가 없는 이름은 그 전에 보낸 것)
+    private const string AdminDir = "uploads/admin_broadcasts/";
+    private static readonly Regex AdminName = new Regex(@"^\d{8}_\d{6}_[0-9a-f]{8}(?:_(\d{1,5})x(\d{1,5}))?\.jpg\z");
+
+    /// <summary>관리자 알림의 image_url → 사진 정보. 우리 서버의 알림 사진 모양이 아니면 null</summary>
+    public static Ref FromAdmin(string rel)
+    {
+        if (string.IsNullOrEmpty(rel) || !rel.StartsWith(AdminDir, StringComparison.Ordinal)) return null;
+        string file = rel.Substring(AdminDir.Length);
+        var m = AdminName.Match(file);
+        if (!m.Success) return null;
+        int w = 4, h = 3;   // 크기를 모르면 4:3 칸 — 사진은 가운데를 보여 준다
+        if (m.Groups[1].Success) { w = int.Parse(m.Groups[1].Value); h = int.Parse(m.Groups[2].Value); }
+        if (w <= 0 || h <= 0) return null;
+        return new Ref { url = MessagePanelManager.SearchBase + "/" + rel, file = file, w = w, h = h, dir = "admin_broadcasts" };
     }
 
     private static string Prefix => MessagePanelManager.SearchBase + "/uploads/dm/";

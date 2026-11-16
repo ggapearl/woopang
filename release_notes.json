@@ -48,6 +48,10 @@
     "1.2.67": {
       "ko": "• AI 작업 — 장소를 올릴 때 사진을 투명 배경·만화·색연필로, 또는 요청사항대로 귀여운 3D 캐릭터로 바꿔요.\n• 보물찾기 — 보물로 숨길 3D 캐릭터를 직접 만들고, 근처에서 보물찾기가 열리면 메세지로 알려 드려요.\n• 애견동반을 켜면 카메라 화면에도 함께 갈 수 있는 곳만 떠요.\n• 근처 목록에 장소 사진이 붙고, 누르면 바로 정보가 열려요.\n• 채팅 사진 여러 장은 한 말풍선으로 — 넘겨 보고 한 번에 저장해요.\n• 처음 쓰는 분을 위한 안내 카드와 물방울 메뉴(설정)가 생겼어요.\n• 앱이 더 빨리 켜지고, 3D가 많은 곳에서도 덜 멈칫해요.",
       "en": "• AI touch-ups — make a place photo a cutout, cartoon, pencil sketch or cute 3D character.\n• Treasure hunts — create your own 3D character to hide, and get a message when a hunt opens nearby.\n• Pet-friendly mode now filters the camera view too.\n• Nearby list shows place photos; tap one for details.\n• Several chat photos share one bubble — swipe through and save them all.\n• Welcome cards for new users and a Bubble menu in Settings.\n• Faster start-up and fewer stutters around 3D objects."
+    },
+    "1.2.68": {
+      "ko": "• 길안내 — 근처 목록의 장소, 장소 정보 창, 지도에 꽂은 핀에서 「길안내」를 누르면 화면 아래 화살표가 방향과 거리를 알려 줘요.\n• 장소에 2m 안으로 다가가면 그 장소 카드가 떠요.\n• 지도에 보이는 친구가 근처 목록에도 나와요.\n• 시작 화면이 더 짧아졌어요.\n• 거리는 높이와 상관없이 땅 위 거리로 보여 드려요.\n• 안정성 개선.",
+      "en": "• Directions — tap Directions on a nearby place, a place's info screen or a pin you dropped on the map, and an arrow at the bottom of the screen shows the way and the distance.\n• Walk within 2 m of a place to see its card.\n• Friends shown on the map now appear in the nearby list too.\n• Shorter start-up screen.\n• Distances are measured along the ground, regardless of height.\n• Stability improvements."
     }
   }
 }

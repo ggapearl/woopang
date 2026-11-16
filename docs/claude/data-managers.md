@@ -24,11 +24,12 @@
 | 2 | `FilterManager.RegisterCacheProvider(this)` 호출 | `Start()` 또는 적절한 초기화 시점 | 중앙 배분 시스템 무시 → 오브젝트 스폰 안 됨 |
 | 3 | `MarkCacheReady()` 헬퍼 + `CacheBecameReady` 이벤트 발행 | 캐시 채워질 때 `isCacheReady=true` 대신 `MarkCacheReady()` 호출 | 캐시 늦게 도착 시 다음 AllocationLoop tick까지 무시 → 리스트 빈 표시 |
 | 4 | `PlaceListManager` Inspector 필드 + `AddTransportData` 또는 별도 추가 흐름 | PlaceListManager에 필드 추가 + `UpdateUIWithFadeIn`에 데이터 수집 분기 | 주변 리스트에서 이 매니저 항목 누락 |
-| 5 | `ARObjectZoomController` Inspector 필드 + `ApplyZoomToARObjects` 호출 | Singleton fallback + `ApplyZoomToManager(thisManager.GetSpawnedObjects())` 호출 | 핀치 zoom 시 이 매니저 오브젝트만 스케일 안 변경 |
+| 5 | `ARObjectZoomController` Inspector 필드 + `ApplyZoomToARObjects` 호출 + 스폰 때 `ARObjectZoomController.Fit(newObj)` | Singleton fallback + `ApplyZoomToManager(thisManager.GetSpawnedObjects())` 호출 · `spawnedObjects[id] = newObj` 바로 앞(모든 스폰 경로)에 `Fit` — 줌은 **처음 크기(프리팹 맨 위) × 배율** (11-15: 예전 `Vector3.one × 배율` 이 맨 위 2·4 인 상자를 절반·4분의 1로 줄였다). 맨 위 크기를 직접 쓰지 말 것 | 핀치 zoom 시 이 매니저 오브젝트만 스케일 안 변경 · 줌 중에 새로 뜬/풀에서 다시 꺼낸 것만 크기가 다름 |
 | 6 | `LoadingManager`의 visibility 토글 (예: `SetAllObjectsVisible`, `SetAllRenderersVisible`) | 해당 함수 안에서 `thisManager.Instance.SetAllObjectsVisible(...)` 호출 | AR 세션 fallback 등에서 이 매니저 오브젝트만 안 숨겨짐 |
 | 7 | `Target` 컴포넌트 세팅 (`PlaceName`, `placeId`, `gpsLatitude`, `gpsLongitude`, `TargetColor`) | Full/IndicatorOnly 스폰 시점에 자식 Target 컴포넌트에 세팅 | OffScreenIndicator/PlaceListManager 매칭 실패 (인디케이터 표시 누락 또는 이름 매칭 부정확) |
 | 8 | `GetSpawnedObjects()` / `GetSpawnedFullIds()` / `GetSpawnedIndicatorIds()` public 메서드 제공 | 외부에서 접근 가능한 Dictionary 반환 | zoom·visibility 등 외부 시스템 연결 불가 |
 | 9 | `Singleton.Instance` 패턴 (`public static X Instance`) | 다른 매니저들과 동일 패턴 | 다른 시스템에서 Singleton fallback 못 함 → Inspector 누락 시 NullReference |
+| 10 | 가까이 카드 `R0926NearModal` (2026-11-15) | `FindManagers()` 에 `FindAnyObjectByType<X>()` + `Tick()` 에 `Gather(x.GetSpawnedObjects(), Kind.Place, me)` 한 줄씩 | 2m 안에 들어와도 이 매니저 오브젝트만 화면 가운데 카드에 안 뜬다 (시험: PlayTest `nearkinds`·`nearpublic`) |
 
 ### 새 매니저 추가 워크플로우
 
@@ -39,8 +40,9 @@
 5. **Inspector에서 prefab 연결** — IndicatorOnly prefab + Full prefab
 6. **외부 시스템들에 추가** (체크리스트 4·5·6번):
    - `PlaceListManager` 필드 + 데이터 수집 흐름
-   - `ARObjectZoomController` 필드 + `ApplyZoomToManager` 호출
+   - `ARObjectZoomController` 필드 + `ApplyZoomToManager` 호출 + 스폰 경로마다 `ARObjectZoomController.Fit(newObj)` (시험: PlayTest `zoombase`)
    - `LoadingManager`의 visibility 토글 함수들
+   - 가까이 카드 `R0926NearModal` 의 `FindManagers()` · `Tick()` (체크리스트 10번)
 7. **`Target` 컴포넌트 세팅 누락 점검** (`placeId` 포함)
 8. **빌드 + 실기기 테스트** — 핀치 zoom, list panel, fallback 모드 모두 검증
 
@@ -57,9 +59,10 @@
 
 | 시스템 | 보물 쪽 호출 |
 |--------|-------------|
-| 줌 (`ARObjectZoomController.ApplyZoomToARObjects`) | `R0926HuntTreasure.SpawnedObjects` 도 같은 배율 |
+| 줌 (`ARObjectZoomController.ApplyZoomToARObjects`) | `R0926HuntTreasure.SpawnedObjects` 도 같은 배율 — 띄울 때 맨 위 1 로 두고 `ARObjectZoomController.Fit(go)` |
 | 백그라운드 복귀·fallback (`LoadingManager`) | `SetObjectsActive` · `SetRenderersVisible` · `RetryFailedAnchors` — 복귀 순서는 ar-object-spawn.md 그대로 |
 | 하늘 날씨 '가까운 오브젝트' (`R0926SkyWeather`) | `SpawnedObjects` 를 함께 센다 |
+| 가까이 카드 (`R0926NearModal`) | `SpawnedObjects` 를 `Kind.Hunt` 로 함께 모은다 — 카드에서 두 번 탭 = `TapFromModal` |
 | `Target` | `PlaceName`(게임 제목) · `placeId = hunt_<id>` · 금색 · `OnIndicatorTapped` = 판정 |
 
 **일부러 안 넣은 것**: 1~4번(`IPlaceCacheProvider` · `FilterManager` · `PlaceListManager`) — 목록·지도에 뜨면 보물 위치가 드러난다. `HiddenPlaces`(X 숨기기)·`R0926DistanceFade` 도 연결하지 않는다. 상세는 [plans/treasure-hunt.md](plans/treasure-hunt.md) 5절.

@@ -246,6 +246,8 @@ public class R0926SkyWeather : MonoBehaviour
     public bool Pinned => pinned;
     /// <summary>위쪽에 고정했는지 (위로 밀어서)</summary>
     public bool PinnedTop => pinned && pinTop;
+    /// <summary>하늘에 걸린 판이 보이는지 (고정하지 않고 휴대폰을 들어 올렸을 때) — 가까이 모달이 그동안 비켜 준다</summary>
+    public bool SkyShowing => skyShow && !pinned;
 
     /// <summary>
     /// 고정 · 풀기 (판의 📌 · 판을 위아래로 밀기 — R0926SkyPages). 떠 있는 판만 고정한다.

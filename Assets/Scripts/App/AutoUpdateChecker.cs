@@ -339,11 +339,25 @@ public class AutoUpdateChecker : MonoBehaviour
         if (updateButton != null) updateButton.gameObject.SetActive(true);
         if (cancelButton != null) cancelButton.gameObject.SetActive(true);
         if (card != null) card.ShowNormal(currentVersion, latestVersion);
-        
+
         if (updatePanel != null)
         {
             updatePanel.SetActive(true);
+            BringToFront();
         }
+    }
+
+    // 열린 창(목록·메세지·프로필·추가·채팅 …)보다 위에 — 같은 캔버스에선 그 창들보다 앞 순서라 뒤에 깔렸다 (11-14).
+    // 키보드 거울(32001)·사진 자르기(30000)보다 위, 시작 화면(32767)보다 아래.
+    private const int TopSortingOrder = 32600;
+
+    void BringToFront()
+    {
+        var c = updatePanel.GetComponent<Canvas>();
+        if (c == null) c = updatePanel.AddComponent<Canvas>();
+        c.overrideSorting = true;
+        c.sortingOrder = TopSortingOrder;
+        if (updatePanel.GetComponent<GraphicRaycaster>() == null) updatePanel.AddComponent<GraphicRaycaster>();
     }
 
     IEnumerator ShowForceUpdateAndRedirect()
@@ -359,6 +373,7 @@ public class AutoUpdateChecker : MonoBehaviour
         if (updatePanel != null)
         {
             updatePanel.SetActive(true);
+            BringToFront();
         }
         
         // 버튼들 숨김

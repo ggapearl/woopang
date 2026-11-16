@@ -5,11 +5,16 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 장소 추가 ▸ 「이곳에 오브젝트를 추가하시겠습니까?」 ▸ 가운데 「AI 작업」 (11-12 대표님).
-/// 누르면 카드 아래에 옵션 네 칸 — 01 투명하게 · 02 만화톤 · 03 색연필 · 04 3D 캐릭터(요청사항) — 02~04 는 하나만.
-/// 01 은 02·03 과만 겹친다 — 3D 캐릭터는 네모난 사진이 아니라 투명하게가 필요 없다 (11-13 대표님). 04 를 고르면 01 이 꺼지고, 04 가 켜진 채 01 을 고르면 04 가 꺼진다.
+/// 11-14 대표님 「'AI 작업' 을 누르면 여기 창 내에서 작업을 하도록 … 뒤로가기 누르면 다시 '취소 / AI작업 / 추가하기' 창이 발생 … 이 버튼 하단에도 확인취소」 —
+/// 누르면 그 카드가 그 자리에서 AI 화면이 된다: ‹ 뒤로 · 안내 한 줄 · 네 칸 · (04) 요청사항 + 만들기 · 맨 아래 취소 | 확인.
+/// 카드는 윗선을 그대로 두고 아래로 자란다(올려다본 큐브를 가리지 않게) — 도크 윗선 위까지만 (예전엔 카드 아래에 판이 따로 붙어 도크 아이콘을 덮었다).
+/// ‹ · 안드로이드 뒤로 · 확인 = 만든 것을 두고 세 버튼으로 (AI 작업 버튼이 분홍으로 남는다) · 취소 = 원래 사진으로 돌리고 세 버튼으로.
+/// 네 칸 — 01 투명하게 · 02 만화톤 · 03 색연필 · 04 3D 캐릭터. 02~04 는 하나만, 01 은 02·03 과만 겹친다 (11-13).
 /// 고르는 즉시 「작업 중..」 → 돌고 있는 미리보기 큐브에 바로 입힌다. 캐릭터는 큐브 자리에 서서 큐브와 같이 돈다(큐브는 숨긴다).
-/// 「추가하기」를 누르면 지금 보이는 그대로 CubeUploadManager 가 가져간다(Take) — 투명하면 PNG, 캐릭터면 3D 모델 길로. 취소면 버린다(Discard).
-/// 무료 · 폰 안에서 (R0926AiWork — 나중에 외부 AI 는 Provider 만 바꾼다). ARPreviewPanel 에 붙는다 — Redesign0926ApplyAiWork 가 만들고 연결.
+/// 04 — 요청사항을 비우면 정말 무작위 캐릭터(R0926AiCharacter.RandomRequest). 3초 안에 옆으로 두 바퀴 넘게 빠르게 돌리면 다른 캐릭터로,
+/// 천천히 돌리는 건 구경이라 그대로 (ARPreviewController.FastSpin · 11-14).
+/// 「추가하기」를 누르면 지금 보이는 그대로 CubeUploadManager 가 가져간다(Take) — 투명하면 PNG, 캐릭터면 3D 모델 길로. 미리보기 취소면 버린다(Discard).
+/// 무료 · 폰 안에서 (R0926AiWork — 외부 AI 는 Provider 만 바꾼다). ARPreviewPanel 에 붙는다 — Redesign0926ApplyAiWork 가 만들고 연결.
 /// </summary>
 public class R0926AiWorkPanel : MonoBehaviour
 {
@@ -19,8 +24,18 @@ public class R0926AiWorkPanel : MonoBehaviour
     [SerializeField] private Image aiButtonIcon;
     [SerializeField] private Text aiButtonLabel;
     [SerializeField] private Button confirmButton;
-    [Tooltip("옵션 판 (AiOptions0926) — 카드 아래 빈 곳에 붙어 아래로 자란다 (아래가 모자라면 카드 위)")]
+    [Tooltip("미리보기 카드 (MessageContainer) — AI 화면이 이 안에서 열린다")]
+    [SerializeField] private RectTransform card;
+    [Tooltip("카드의 원래 글 · 세 버튼 줄 — AI 화면 동안 숨긴다")]
+    [SerializeField] private GameObject cardText;
+    [SerializeField] private GameObject cardButtons;
+    [Tooltip("AI 화면 (AiOptions0926) — 카드를 꽉 채운다")]
     [SerializeField] private RectTransform options;
+    [Tooltip("‹ — 안드로이드 뒤로가기도 이것")]
+    [SerializeField] private Button back;
+    [Tooltip("맨 아래 취소 | 확인")]
+    [SerializeField] private Button viewCancel;
+    [SerializeField] private Button viewConfirm;
     [SerializeField] private Text status;
     [Tooltip("01 투명하게 · 02 만화톤 · 03 색연필 · 04 3D 캐릭터")]
     [SerializeField] private Button[] chips = new Button[4];
@@ -29,12 +44,18 @@ public class R0926AiWorkPanel : MonoBehaviour
     [SerializeField] private Text[] chipLabels = new Text[4];
     [Tooltip("04 를 고르면 — 요청사항 칸 + 만들기")]
     [SerializeField] private GameObject ask;
+    [Tooltip("04 를 고르면 — '빠르게 두 바퀴 돌리면 다른 캐릭터' 한 줄")]
+    [SerializeField] private GameObject hint;
     [SerializeField] private InputField request;
     [SerializeField] private Button make;
     [Tooltip("요청사항은 키보드 위 입력줄로 쓴다 — 키보드 '보내기' 도 만들기")]
     [SerializeField] private UploadInputMirror mirror;
-    [SerializeField] private float optionsHeight = 352f;
-    [SerializeField] private float askHeight = 134f;
+    [Tooltip("AI 화면일 때 카드 높이 (04 를 고르지 않았을 때)")]
+    [SerializeField] private float optionsHeight = 566f;
+    [Tooltip("04 를 고르면 늘어나는 높이 — 요청사항 줄 + 안내 한 줄")]
+    [SerializeField] private float askHeight = 210f;
+    [Tooltip("카드 아래 끝과 도크 윗선 사이 (캔버스 단위)")]
+    [SerializeField] private float dockGap = 24f;
     [Tooltip("캐릭터 키 = 큐브 한 변 x 이 배")]
     [SerializeField] private float modelScale = 1.1f;
     [Tooltip("작업이 이보다 오래 걸리면 접고 원래 사진으로 (초)")]
@@ -44,9 +65,8 @@ public class R0926AiWorkPanel : MonoBehaviour
     private static readonly Color Ink = new Color(0.953f, 0.961f, 0.965f, 1f);
     private static readonly Color ChipOff = new Color(1f, 1f, 1f, 0.08f);
     private static readonly Color AiOff = new Color(0.914f, 0.325f, 0.514f, 0.2f);
-    private const float Gap = 24f;   // 카드와 옵션 판 사이
 
-    private bool open, clear, working, below = true, placed;
+    private bool open, clear, working;
     private R0926AiWork.Style style;
     private int gen, variant;
     private string lastRequest = "";
@@ -55,6 +75,14 @@ public class R0926AiWorkPanel : MonoBehaviour
     private Transform modelPivot;     // 캐릭터 — 큐브의 자식이라 큐브와 같이 돌고 같이 사라진다
     private string modelUrl;
     private MeshRenderer[] hiddenCube;
+
+    // 카드 원래 자리 — AI 화면을 닫으면 그대로 되돌린다
+    private bool cardSaved;
+    private Vector2 cardMin, cardMax, cardPivot, cardPos, cardSize;
+    private Canvas rootCanvas;
+    private RectTransform dock;
+    private float nextDockLook;
+    private readonly Vector3[] corners = new Vector3[4];
 
     // 지금 미리보기에 입힌 결과 — 패널이 꺼진 뒤 '추가하기' 콜백에서 가져가므로 패널 밖(정적)에 둔다
     private static R0926AiWork.Result held;
@@ -83,7 +111,10 @@ public class R0926AiWorkPanel : MonoBehaviour
 
     private void Awake()
     {
-        if (aiButton != null) aiButton.onClick.AddListener(ToggleOptions);
+        if (aiButton != null) aiButton.onClick.AddListener(OpenView);
+        if (back != null) back.onClick.AddListener(() => CloseView(true));
+        if (viewConfirm != null) viewConfirm.onClick.AddListener(() => CloseView(true));
+        if (viewCancel != null) viewCancel.onClick.AddListener(() => CloseView(false));
         for (int i = 0; i < chips.Length; i++)
         {
             int k = i;
@@ -97,11 +128,13 @@ public class R0926AiWorkPanel : MonoBehaviour
         Discard();   // 지난 미리보기에서 남은 것
         ResetState();
         if (mirror != null && request != null) mirror.SetSubmitAction(request, Make);
+        if (preview != null) preview.FastSpin += OnFastSpin;
     }
 
     private void OnDisable()
     {
-        // 취소 · 추가하기 — 큐브는 컨트롤러가 이미 치웠다. 결과(held)는 남겨 둔다 (추가하기 콜백이 이 뒤에 가져간다)
+        if (preview != null) preview.FastSpin -= OnFastSpin;
+        // 취소 · 추가하기 — 큐브는 컨트롤러가 이미 치웠다. 결과(held)는 남겨 둔다 (추가하기 콜백이 이 뒤에 가져간다). 카드는 원래 모양으로
         ResetState();
     }
 
@@ -112,7 +145,8 @@ public class R0926AiWorkPanel : MonoBehaviour
         work = null;
         working = false;
         RemoveModel();
-        open = clear = false;
+        ShowView(false);
+        clear = false;
         style = R0926AiWork.Style.None;
         variant = 0;
         lastRequest = "";
@@ -144,41 +178,113 @@ public class R0926AiWorkPanel : MonoBehaviour
     // 캐릭터를 세운 동안 — 큐브가 거리에 따라 렌더러를 다시 켜도(DistanceBasedVisibility) 큐브는 숨긴 채로
     private void LateUpdate()
     {
-        if (open) Place();
+        if (open) Layout();
         if (modelPivot == null || hiddenCube == null) return;
         foreach (var r in hiddenCube) if (r != null && r.enabled) r.enabled = false;
     }
 
-    // 옵션 판 자리 — 카드 아래 빈 곳 (위에 두면 올려다본 큐브의 아랫부분을 가린다). 가로 화면처럼 아래가 모자랄 때만 카드 위
-    private void Place()
+    // 'AI 작업' — 카드가 그 자리에서 AI 화면으로
+    private void OpenView()
     {
-        var card = options != null ? options.parent as RectTransform : null;
-        var canvas = card != null ? card.GetComponentInParent<Canvas>() : null;
-        if (canvas == null) return;
-        var root = (RectTransform)canvas.rootCanvas.transform;
-        var c = new Vector3[4];
-        card.GetWorldCorners(c);
-        float cardBottom = root.InverseTransformPoint(c[0]).y;
-        root.GetWorldCorners(c);
-        float floor = root.InverseTransformPoint(c[0]).y + Screen.safeArea.yMin / Mathf.Max(0.01f, canvas.rootCanvas.scaleFactor);
-        bool fits = cardBottom - floor >= options.sizeDelta.y + Gap * 2f;
-        if (placed && fits == below) return;
-        placed = true;
-        below = fits;
-        options.anchorMin = new Vector2(0f, below ? 0f : 1f);
-        options.anchorMax = new Vector2(1f, below ? 0f : 1f);
-        options.pivot = new Vector2(0.5f, below ? 1f : 0f);
-        options.anchoredPosition = new Vector2(0f, below ? -Gap : Gap);
-    }
-
-    private void ToggleOptions()
-    {
-        if (!open && (preview == null || !preview.CubeReady)) return;
-        open = !open;
-        if (open && !working && held == null && status != null)
+        if (open || preview == null || !preview.CubeReady) return;
+        ShowView(true);
+        if (!working && held == null && status != null)
             status.text = R0926LocalizedText.Say("원하는 효과를 고르세요 — 고르면 바로 바뀌어요", "Pick an effect — it changes right away",
                 "効果を選んでください — すぐに変わります", "选择效果 — 立即生效", "Elige un efecto — cambia al instante");
         Paint();
+    }
+
+    // ‹ · 뒤로 · 확인 = 만든 것을 두고 · 취소 = 원래 사진으로 — 둘 다 세 버튼으로 돌아간다 (만드는 중에 확인이면 다 만든 뒤 큐브에 입혀진다)
+    private void CloseView(bool keep)
+    {
+        if (!open) return;
+        if (!keep)
+        {
+            gen++;
+            if (work != null) StopCoroutine(work);
+            work = null;
+            working = false;
+            Restore();
+            clear = false;
+            style = R0926AiWork.Style.None;
+            variant = 0;
+            lastRequest = "";
+            if (request != null) request.text = "";
+            if (status != null) status.text = "";
+        }
+        if (request != null && request.isFocused) request.DeactivateInputField();
+        ShowView(false);
+        Paint();
+    }
+
+    private void ShowView(bool on)
+    {
+        open = on;
+        if (on && card != null && !cardSaved)
+        {
+            cardSaved = true;
+            cardMin = card.anchorMin; cardMax = card.anchorMax; cardPivot = card.pivot;
+            cardPos = card.anchoredPosition; cardSize = card.sizeDelta;
+        }
+        if (cardText != null && cardText.activeSelf == on) cardText.SetActive(!on);
+        if (cardButtons != null && cardButtons.activeSelf == on) cardButtons.SetActive(!on);
+        if (options != null && options.gameObject.activeSelf != on) options.gameObject.SetActive(on);
+        if (on) Layout();
+        else if (cardSaved)
+        {
+            cardSaved = false;
+            if (card != null)
+            {
+                card.anchorMin = cardMin; card.anchorMax = cardMax; card.pivot = cardPivot;
+                card.sizeDelta = cardSize; card.anchoredPosition = cardPos;
+            }
+        }
+    }
+
+    // 카드 — 윗선은 원래 카드 그대로 두고 높이만큼 아래로 (큐브를 가리지 않게). 아래 끝이 도크에 닿으면 그만큼 위로
+    private void Layout()
+    {
+        if (card == null || !cardSaved) return;
+        float h = optionsHeight + (style == R0926AiWork.Style.Character ? askHeight : 0f);
+        float top = cardPos.y + cardSize.y * (1f - cardPivot.y);   // 원래 카드 윗선 — anchorMax.y 줄에서
+        var min = new Vector2(cardMin.x, cardMax.y);
+        var piv = new Vector2(cardPivot.x, 1f);
+        var size = new Vector2(cardSize.x, h);
+        if (card.anchorMin != min) card.anchorMin = min;
+        if (card.anchorMax != cardMax) card.anchorMax = cardMax;
+        if (card.pivot != piv) card.pivot = piv;
+        if (card.sizeDelta != size) card.sizeDelta = size;
+        var pos = new Vector2(cardPos.x, top + Lift(top, h));
+        if ((card.anchoredPosition - pos).sqrMagnitude > 0.01f) card.anchoredPosition = pos;
+    }
+
+    // 도크 윗선(가로 화면 · 도크가 없으면 화면 아래 안전선) + 간격보다 카드 아래 끝이 낮으면 — 모자란 만큼 (부모 좌표)
+    private float Lift(float top, float h)
+    {
+        var parent = card.parent as RectTransform;
+        if (rootCanvas == null) { var c = card.GetComponentInParent<Canvas>(); rootCanvas = c != null ? c.rootCanvas : null; }
+        if (parent == null || rootCanvas == null) return 0f;
+        var root = (RectTransform)rootCanvas.transform;
+        if (dock == null && Time.unscaledTime >= nextDockLook)
+        {
+            nextDockLook = Time.unscaledTime + 1f;
+            var d = GameObject.Find("Dock0926");
+            if (d != null) dock = d.transform as RectTransform;
+        }
+        Rect pr = parent.rect;
+        float bottomLocal = pr.yMin + pr.height * cardMax.y + top - h;
+        float bottom = root.InverseTransformPoint(parent.TransformPoint(new Vector3(0f, bottomLocal, 0f))).y;
+        root.GetWorldCorners(corners);
+        float floor = root.InverseTransformPoint(corners[0]).y + Screen.safeArea.yMin / Mathf.Max(0.01f, rootCanvas.scaleFactor);
+        if (dock != null && dock.gameObject.activeInHierarchy)
+        {
+            dock.GetWorldCorners(corners);
+            Vector3 a = root.InverseTransformPoint(corners[0]), b = root.InverseTransformPoint(corners[2]);
+            if (Mathf.Abs(b.x - a.x) >= Mathf.Abs(b.y - a.y)) floor = Mathf.Max(floor, Mathf.Max(a.y, b.y));   // 세로 — 아래 막대의 윗선 (가로는 오른쪽 막대라 상관없다)
+        }
+        float need = floor + dockGap - bottom;
+        if (need <= 0f) return 0f;
+        return parent.lossyScale.y > 1e-6f ? need * root.lossyScale.y / parent.lossyScale.y : need;
     }
 
     private void Pick(int i)
@@ -204,7 +310,7 @@ public class R0926AiWorkPanel : MonoBehaviour
         Run();
     }
 
-    /// <summary>요청사항으로 다시 만든다 — 같은 요청이면 다른 모습으로</summary>
+    /// <summary>요청사항으로 다시 만든다 — 같은 요청이면 다른 모습 · 비었으면 새 무작위 캐릭터</summary>
     private void Make()
     {
         if (style != R0926AiWork.Style.Character || preview == null || !preview.CubeReady) return;
@@ -212,6 +318,15 @@ public class R0926AiWorkPanel : MonoBehaviour
         variant = req == lastRequest ? variant + 1 : 0;
         lastRequest = req;
         Run();
+    }
+
+    // 11-14 대표님 「몇초 이내에 2바퀴이상 옆으로 돌리면 (스와이프를 많이 하면) 해당 사항은 다른 캐릭터로 바꿔달라는 요청으로 이해하고 바꾸도록 … 천천히 돌리는 건 그냥 관찰하기 위한거니까 그냥 두고」
+    private void OnFastSpin()
+    {
+        if (!open || style != R0926AiWork.Style.Character || working || preview == null || !preview.CubeReady) return;
+        preview.Settle();   // 알아들었다 — 돌던 것을 멈추고 새 캐릭터를 세운다
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HandleTouchFeedbackDirect(0.6f);
+        Make();
     }
 
     private string RequestText() => request != null ? request.text.Trim() : "";
@@ -239,6 +354,9 @@ public class R0926AiWorkPanel : MonoBehaviour
         working = true;
         workStart = Time.realtimeSinceStartup;
         Paint();
+
+        // 요청사항이 비었으면 정말 무작위 — 사진 · 차례로 정하던 때는 매번 같은 차례로 나왔다 (11-14)
+        if (s == R0926AiWork.Style.Character && string.IsNullOrWhiteSpace(req)) req = R0926AiCharacter.RandomRequest();
 
         R0926AiWork.Result r = null;
         yield return R0926AiWork.Run(preview.Photo, c, s, req, v, x => r = x);
@@ -407,15 +525,11 @@ public class R0926AiWorkPanel : MonoBehaviour
     private void Paint()
     {
         bool askOn = open && style == R0926AiWork.Style.Character;
-        if (options != null)
-        {
-            if (options.gameObject.activeSelf != open) options.gameObject.SetActive(open);
-            options.sizeDelta = new Vector2(options.sizeDelta.x, optionsHeight + (askOn ? askHeight : 0f));
-            if (open) Place();
-        }
         if (ask != null && ask.activeSelf != askOn) ask.SetActive(askOn);
-        if (aiButtonBg != null) aiButtonBg.color = open ? Pink : AiOff;
-        if (aiButtonIcon != null) aiButtonIcon.color = open ? Ink : Pink;
+        if (hint != null && hint.activeSelf != askOn) hint.SetActive(askOn);
+        bool lit = held != null || working;   // 만든 것이 있다 — 세 버튼 줄로 돌아와도 AI 작업이 켜져 있는 게 보이게
+        if (aiButtonBg != null) aiButtonBg.color = lit ? Pink : AiOff;
+        if (aiButtonIcon != null) aiButtonIcon.color = lit ? Ink : Pink;
         if (aiButtonLabel != null) aiButtonLabel.color = Ink;
         for (int i = 0; i < 4; i++)
         {
@@ -426,5 +540,6 @@ public class R0926AiWorkPanel : MonoBehaviour
         }
         if (confirmButton != null) confirmButton.interactable = !working;
         if (make != null) make.interactable = !working || style == R0926AiWork.Style.Character;
+        if (open) Layout();
     }
 }

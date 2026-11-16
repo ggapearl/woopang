@@ -9,7 +9,8 @@ namespace Redesign0926
     /// <summary>
     /// 지도의 좌표 (2026-10-15 대표님: "지도의 어딘가를 꾸욱 누르고 있으면 핀 발생하면서 위도랑 경도 발생해서 복사할 수 있도록 ·
     /// 지도에서 '검색' 기능이 있어서 '좌표'를 입력하면 해당 위치에 핀이 박히면서 적절한 사이즈로 지도가 확대").
-    ///  · 꽂는 핀 — 분홍 물방울 + 위에 좌표 말풍선(복사 · 지우기)
+    ///  · 꽂는 핀 — 분홍 물방울 + 위에 좌표 말풍선(길안내 · 복사 · 지우기). 길안내(11-16 대표님 「지도에서 좌표찍은 핀을 길게 누르면 여기서도
+    ///    길안내버튼이 발생해서 누르면 길안내 하도록」)가 주 버튼이라 분홍, 복사는 검색 줄 '붙여넣기'와 같은 옅은 알약
     ///  · 오른쪽 위 돋보기 → 위쪽 검색 줄(좌표 칸 · 붙여넣기 · 닫기). 동의 카드가 지도를 덮을 땐 같이 덮인다
     /// 보던 자리 기억(같은 날 "다른창을 다녀오면 기존에 보던 곳이 리셋")은 R0926FriendsMap 이 한다 — 화면 없음.
     /// </summary>
@@ -27,7 +28,7 @@ namespace Redesign0926
             var dim = Find(view, "Dim0926");
             if (pins == null || dim == null) { log.Add("지도 핀 자리·덮개(Dim0926) 없음"); return; }
 
-            var pin = BuildDropPin(pins, out var bubble, out var text, out var name, out var copy, out var clear);
+            var pin = BuildDropPin(pins, out var bubble, out var text, out var name, out var guide, out var copy, out var clear);
 
             var sbtn = CtrlButton(view, "Search0926", null, "r0926_i_search");
             SetRect(RT(sbtn), new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-30, -30), new Vector2(CtrlSize, CtrlSize));
@@ -52,6 +53,7 @@ namespace Redesign0926
             so.FindProperty("longPressSeconds").floatValue = 0.5f;
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            Wire(guide, map.GuideDropPin);
             Wire(copy, map.CopyDropPin);
             Wire(clear, map.ClearDropPin);
             Wire(sbtn.GetComponent<Button>(), map.OpenSearch);
@@ -77,7 +79,7 @@ namespace Redesign0926
         }
 
         // 분홍 물방울 핀 (128×168 그림 · 끝이 아래 4px) — 피벗이 핀 끝. 말풍선 자리는 실행 때 (R0926FriendsMap.PlaceDrop)
-        private static GameObject BuildDropPin(Transform pins, out RectTransform bubble, out Text text, out Text name, out Button copy, out Button clear)
+        private static GameObject BuildDropPin(Transform pins, out RectTransform bubble, out Text text, out Text name, out Button guide, out Button copy, out Button clear)
         {
             var c = new Vector2(0.5f, 0.5f);
             var tip = new Vector2(0.5f, 4f / 168f);
@@ -123,18 +125,41 @@ namespace Redesign0926
             text = Txt(tx, "37.566500, 126.978000", 40, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
             text.horizontalOverflow = HorizontalWrapMode.Overflow;
 
+            // 길안내 — 찍은 자리로 노치 · AR 화면 아래 화살표 (R0926FriendsMap.GuideDropPin). 화살표 그림은 상세 위 「길안내」와 같게 오른쪽 위로
+            var gd = FindOrCreate(bub.transform, "Guide");
+            gd.transform.SetSiblingIndex(1);
+            Img(gd, Spr("r0926_pill"), Pink, Image.Type.Sliced, 64f / 38f).raycastTarget = true;
+            guide = Ensure<Button>(gd); guide.transition = Selectable.Transition.None;
+            var gh = Ensure<HorizontalLayoutGroup>(gd);
+            gh.padding = new RectOffset(22, 30, 0, 0); gh.spacing = 6; gh.childAlignment = TextAnchor.MiddleCenter;
+            gh.childControlWidth = true; gh.childControlHeight = true; gh.childForceExpandWidth = false; gh.childForceExpandHeight = false;
+            var gle = Ensure<LayoutElement>(gd); gle.minHeight = 76; gle.preferredHeight = 76;
+            var gi = FindOrCreate(gd.transform, "Icon");
+            gi.transform.SetSiblingIndex(0);
+            var gii = Img(gi, Spr("r0926_i_navarrow"), Dark, Image.Type.Simple);
+            gii.raycastTarget = false;
+            gii.preserveAspect = true;
+            var gie = Ensure<LayoutElement>(gi); gie.minWidth = 40; gie.preferredWidth = 40; gie.minHeight = 40; gie.preferredHeight = 40;
+            RT(gi).localEulerAngles = new Vector3(0f, 0f, -45f);
+            var gt = FindOrCreate(gd.transform, "Text");
+            gt.transform.SetSiblingIndex(1);
+            Txt(gt, "길안내", 38, Dark, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Loc(gt, "길안내", "Directions", "ルート案内", "导航", "Cómo llegar");
+
             var cp = FindOrCreate(bub.transform, "Copy");
-            Img(cp, Spr("r0926_pill"), Pink, Image.Type.Sliced, 64f / 38f).raycastTarget = true;
+            cp.transform.SetSiblingIndex(2);
+            Img(cp, Spr("r0926_pill"), new Color(1, 1, 1, 0.1f), Image.Type.Sliced, 64f / 38f).raycastTarget = true;
             copy = Ensure<Button>(cp); copy.transition = Selectable.Transition.None;
             var ch = Ensure<HorizontalLayoutGroup>(cp);
             ch.padding = new RectOffset(30, 30, 0, 0); ch.childAlignment = TextAnchor.MiddleCenter;
             ch.childControlWidth = true; ch.childControlHeight = true; ch.childForceExpandWidth = false; ch.childForceExpandHeight = true;
             var cle = Ensure<LayoutElement>(cp); cle.minHeight = 76; cle.preferredHeight = 76;
             var cpt = FindOrCreate(cp.transform, "Text");
-            Txt(cpt, "복사", 38, Dark, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
+            Txt(cpt, "복사", 38, Soft, TextAnchor.MiddleCenter, FontStyle.Bold).horizontalOverflow = HorizontalWrapMode.Overflow;
             Loc(cpt, "복사", "Copy", "コピー", "复制", "Copiar");
 
             var cl = FindOrCreate(bub.transform, "Clear");
+            cl.transform.SetSiblingIndex(3);
             Img(cl, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
             clear = Ensure<Button>(cl); clear.transition = Selectable.Transition.None;
             var lle = Ensure<LayoutElement>(cl); lle.minWidth = 76; lle.preferredWidth = 76; lle.minHeight = 76; lle.preferredHeight = 76;

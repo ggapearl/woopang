@@ -124,6 +124,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         CacheBecameReady?.Invoke();
     }
     private HashSet<int> pendingDetailFetchIds = new HashSet<int>();
+    private readonly HashSet<int> detailInFlight = new HashSet<int>();   // 지금 묻는 중인 상세 — 같은 곳을 또 묻지 않는다
     private Coroutine batchDetailCoroutine;
 
     [Header("주변 장소 목록 요청")]
@@ -132,6 +133,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     private float lightCacheBusyUntil;   // 이 시각 전까지는 목록 요청이 진행 중 (RefreshCache 중복 요청 방지)
     private Vector2 lightCacheBusyPos;   // 진행 중인 요청의 위치
     private int lightCacheRequestSeq;
+    private int lightCacheAppliedSeq;    // 캐시에 담은 마지막 요청 — 늦게 해석이 끝난 옛 요청이 새 목록을 덮지 않게
 
     [Header("위치 권한 안내")]
     [Tooltip("안드로이드: 시작 후 이 시간(초)이 지나고, 권한 창이 닫힌 채로 위치 권한이 없으면 바로 안내 패널을 띄운다")]
@@ -538,36 +540,20 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             ServerHealth.Report(request);
             if (request.result == UnityWebRequest.Result.Success)
             {
-                try
+                // 목록 해석(최대 500곳)은 일꾼 스레드에서 — 메인 스레드에서 하면 그 프레임이 통째로 멈췄다 (11-13 제안 3 · 에디터 0.12~0.17초)
+                byte[] body = request.downloadHandler.data;
+                var parse = System.Threading.Tasks.Task.Run(() => BuildLightCache(body));
+                while (!parse.IsCompleted) yield return null;
+                if (parse.IsFaulted)
                 {
-                    var items = JsonConvert.DeserializeObject<List<LightPlaceData>>(request.downloadHandler.text);
-                    if (items != null)
-                    {
-                        lightCache.Clear();
-                        foreach (var item in items)
-                        {
-                            string cat = item.category ?? "";
-                            lightCache.Add(new CachedPlaceData
-                            {
-                                uniqueId = "dm_" + item.id,
-                                rawId = item.id.ToString(),
-                                displayName = item.name ?? "",
-                                latitude = item.latitude,
-                                longitude = item.longitude,
-                                altitude = item.altitude,
-                                category = cat,
-                                sourceManager = "DataManager",
-                                modelType = item.model_type ?? "cube",
-                                petFriendly = item.pet_friendly,
-                                filterKey = FilterManager.IsPublicSource(item.is_public, cat) ? "publicData" : ""
-                            });
-                        }
-                        MarkCacheReady();
-                    }
+                    Debug.LogError($"[DataManager] FetchLightCache 파싱 실패: {parse.Exception?.GetBaseException().Message}");
                 }
-                catch (System.Exception e)
+                else if (parse.Result != null && seq > lightCacheAppliedSeq)
                 {
-                    Debug.LogError($"[DataManager] FetchLightCache 파싱 실패: {e.Message}");
+                    lightCacheAppliedSeq = seq;
+                    lightCache.Clear();
+                    lightCache.AddRange(parse.Result);
+                    MarkCacheReady();
                 }
             }
             else
@@ -575,6 +561,34 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                 Debug.LogError($"[DataManager] FetchLightCache 서버 요청 실패: {request.error}");
             }
         }
+    }
+
+    /// <summary>받은 장소 목록 → 캐시 줄 (일꾼 스레드 — 유니티 API 를 쓰지 않는다)</summary>
+    private static List<CachedPlaceData> BuildLightCache(byte[] body)
+    {
+        var items = JsonConvert.DeserializeObject<List<LightPlaceData>>(System.Text.Encoding.UTF8.GetString(body));
+        if (items == null) return null;
+        var list = new List<CachedPlaceData>(items.Count);
+        foreach (var item in items)
+        {
+            if (item == null) continue;
+            string cat = item.category ?? "";
+            list.Add(new CachedPlaceData
+            {
+                uniqueId = "dm_" + item.id,
+                rawId = item.id.ToString(),
+                displayName = item.name ?? "",
+                latitude = item.latitude,
+                longitude = item.longitude,
+                altitude = item.altitude,
+                category = cat,
+                sourceManager = "DataManager",
+                modelType = item.model_type ?? "cube",
+                petFriendly = item.pet_friendly,
+                filterKey = FilterManager.IsPublicSource(item.is_public, cat) ? "publicData" : ""
+            });
+        }
+        return list;
     }
 
     /// <summary>
@@ -590,13 +604,16 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         {
             List<int> ids = new List<int>(pendingDetailFetchIds);
             pendingDetailFetchIds.Clear();
+            detailInFlight.UnionWith(ids);
 
             string idsParam = string.Join(",", ids);
             string url = string.Format("{0}?ids={1}", ApiConfig.LOCATIONS_DETAIL, idsParam);
 
+            List<PlaceData> arrived = null;
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
                 yield return request.SendWebRequest();
+                detailInFlight.ExceptWith(ids);
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     try
@@ -604,30 +621,13 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                         var places = JsonConvert.DeserializeObject<List<PlaceData>>(request.downloadHandler.text);
                         if (places != null)
                         {
-                            // 응답을 기다리는 사이 배분에서 빠진 장소(애견동반을 켰다 · 멀어졌다 · 화살표로 내려갔다)는 띄우지 않는다 —
-                            // 띄우면 FilterManager 가 모르는 오브젝트라 다시 거두지 못하고, 필터를 끄면 반경 밖에서도 나타났다.
-                            // 상세는 담아 둔다 (다음 배분에서 바로 띄운다)
-                            FilterManager fm = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+                            // 받은 상세는 다 담아 둔다 (다음 배분에서 바로 띄운다)
+                            arrived = new List<PlaceData>(places.Count);
                             foreach (var place in places)
                             {
                                 if (place == null) continue;
                                 placeDataMap[place.id] = place;
-                                if (fm != null && fm.isActiveAndEnabled && !fm.WantsFull("dm_" + place.id)) continue;
-                                if (!spawnedObjects.ContainsKey(place.id))
-                                {
-                                    // Full 스폰 전에 임시 IndicatorOnly가 있으면 제거
-                                    string rawId = place.id.ToString();
-                                    if (indicatorOnlyObjects.ContainsKey(place.id))
-                                    {
-                                        DespawnIndicatorOnly(rawId);
-                                    }
-
-                                    try { CreateObjectFromData(place); }
-                                    catch (System.Exception ex)
-                                    {
-                                        Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={place.id}: {ex.Message}");
-                                    }
-                                }
+                                arrived.Add(place);
                             }
                         }
                     }
@@ -640,6 +640,39 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                 {
                     Debug.LogError($"[DataManager] BatchFetchDetail 서버 요청 실패: {request.error}");
                 }
+            }
+
+            if (arrived == null || arrived.Count == 0) continue;
+
+            // 가까운 것부터 한 프레임에 하나씩 (SpawnPace — FilterManager 배분과 같은 문 · 예전엔 받은 것을 한 프레임에 다 만들었다)
+            FilterManager fm = FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
+            if (fm != null)
+            {
+                Vector2 here = fm.Here;
+                if (here != Vector2.zero)
+                    arrived.Sort((a, b) => GeoHere.Meters(here.x, here.y, a.latitude, a.longitude)
+                        .CompareTo(GeoHere.Meters(here.x, here.y, b.latitude, b.longitude)));
+            }
+            foreach (var place in arrived)
+            {
+                while (!SpawnPace.Ready) yield return null;
+                // 응답을 기다리는(만들 차례를 기다리는) 사이 배분에서 빠진 장소(애견동반을 켰다 · 멀어졌다 · 화살표로 내려갔다)는 띄우지 않는다 —
+                // 띄우면 FilterManager 가 모르는 오브젝트라 다시 거두지 못하고, 필터를 끄면 반경 밖에서도 나타났다
+                if (fm != null && fm.isActiveAndEnabled && !fm.WantsFull("dm_" + place.id)) continue;
+                if (spawnedObjects.ContainsKey(place.id) || HiddenPlaces.IsHidden("dm_" + place.id)) continue;
+
+                // Full 스폰 전에 임시 IndicatorOnly가 있으면 제거
+                if (indicatorOnlyObjects.ContainsKey(place.id))
+                {
+                    DespawnIndicatorOnly(place.id.ToString());
+                }
+
+                try { CreateObjectFromData(place); }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={place.id}: {ex.Message}");
+                }
+                SpawnPace.Took();
             }
         }
 
@@ -1114,6 +1147,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                 if (targetComp != null) targetComp.enabled = true;
             }
 
+            ARObjectZoomController.Fit(newObj);   // 핀치 줌 중에 뜨거나 풀에서 다시 꺼내도 지금 배율로
             spawnedObjects[place.id] = newObj;
             placeDataMap[place.id] = place;
         }
@@ -1199,12 +1233,26 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
         if (doubleTap == null) return false;
         SetupDoubleTapInfo(doubleTap, place);
+        ApplyBoxScale(obj, doubleTap.transform, place.model_scale);
 
         Target target = obj.GetComponentInChildren<Target>(true);
         if (target == null) return false;
         SetupTargetInfo(target, place);
 
         return true;
+    }
+
+    /// <summary>
+    /// 관리자 사이즈(model_scale)를 사진 상자에도 — 3D(GLB)는 GLBModelLoader 가 모델에 건다.
+    /// 맨 위(앵커)는 핀치 줌이 덮어쓰므로 상자 칸에만 건다. 풀에서 다시 꺼낸 상자도 매번 그 장소 값으로 (없으면 1)
+    /// </summary>
+    private static void ApplyBoxScale(GameObject root, Transform box, float modelScale)
+    {
+        if (box == root.transform || box.GetComponent<GLBModelLoader>() != null) return;
+        Vector3 scale = Vector3.one * (modelScale > 0 ? modelScale : 1f);
+        Object3DTouchHaptic haptic = box.GetComponent<Object3DTouchHaptic>();
+        if (haptic != null) haptic.SetRestScale(scale);
+        else box.localScale = scale;
     }
 
     private bool SetupGLBObject(GameObject obj, PlaceData place)
@@ -2060,12 +2108,25 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             }
         }
 
-        pendingDetailFetchIds.Add(id);
-        if (batchDetailCoroutine == null)
+        if (!detailInFlight.Contains(id)) pendingDetailFetchIds.Add(id);   // 이미 묻는 중이면 또 묻지 않는다 (PrefetchDetail)
+        if (batchDetailCoroutine == null && pendingDetailFetchIds.Count > 0)
         {
             batchDetailCoroutine = StartCoroutine(BatchFetchDetailAndSpawn());
         }
         return false;
+    }
+
+    /// <summary>
+    /// 3D 로 띄울 장소의 상세를 미리 묻는다 — FilterManager 가 배분할 때 이번 배분의 것을 한 번에 (만들기는 한 프레임에 하나씩 차례로).
+    /// 상세가 이미 있거나 · 떠 있거나 · 묻는 중이면 아무것도 안 한다
+    /// </summary>
+    public void PrefetchDetail(string rawId)
+    {
+        if (!int.TryParse(rawId, out int id)) return;
+        if (placeDataMap.ContainsKey(id) || spawnedObjects.ContainsKey(id) || detailInFlight.Contains(id)) return;
+        if (HiddenPlaces.IsHidden("dm_" + rawId)) return;
+        pendingDetailFetchIds.Add(id);
+        if (batchDetailCoroutine == null) batchDetailCoroutine = StartCoroutine(BatchFetchDetailAndSpawn());
     }
 
     public bool SpawnIndicatorOnly(string rawId)

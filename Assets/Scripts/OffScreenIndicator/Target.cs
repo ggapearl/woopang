@@ -13,6 +13,9 @@ public class Target : MonoBehaviour
     /// <summary>인디케이터 둘레에 별빛이 반짝인다 (보물찾기 보물)</summary>
     [HideInInspector] public bool Sparkle;
 
+    /// <summary>늘 강조 — 이름 뒤 분홍 스티커 · 다른 인디케이터 위 · 거리/개수 제한 없음 (장소 추가 미리보기 '생성 중...' · '신규 오브젝트', 11-14)</summary>
+    [HideInInspector] public bool Pinned;
+
     [Tooltip("This color will be set by the server data")]
     [SerializeField] private Color targetColor = Color.white;
 
@@ -161,10 +164,12 @@ public class Target : MonoBehaviour
         }
     }
 
+    /// <summary>카메라에서 이 오브젝트까지 땅 위 거리 — 높이는 보지 않는다 (11-16 대표님 「이동거리는 평면거리로만」. 화살표 글 · 범위 · 정렬 모두)</summary>
     public float GetDistanceFromCamera(Vector3 cameraPosition)
     {
-        float distanceFromCamera = Vector3.Distance(cameraPosition, transform.position);
-        return distanceFromCamera;
+        Vector3 p = transform.position;
+        float dx = p.x - cameraPosition.x, dz = p.z - cameraPosition.z;
+        return Mathf.Sqrt(dx * dx + dz * dz);
     }
 
     /// <summary>

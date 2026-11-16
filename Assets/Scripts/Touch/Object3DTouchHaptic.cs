@@ -184,6 +184,9 @@ public class Object3DTouchHaptic : MonoBehaviour
         }
     }
 
+    /// <summary>가까이 모달(R0926NearModal)에서 눌렀을 때 — AR 에서 누른 것처럼 살짝 커지고 소리 · 진동</summary>
+    public void Tap() => TriggerFeedback();
+
     /// <summary>
     /// DoubleTap3D에서 더블탭 확정 시 호출 — 2nd 터치 사운드 + 햅틱
     /// </summary>
@@ -201,6 +204,13 @@ public class Object3DTouchHaptic : MonoBehaviour
             if (clip != null && audioSource != null)
                 audioSource.PlayOneShot(clip, soundVolume);
         }
+    }
+
+    /// <summary>쉬는 크기를 바꾼다 (관리자 사이즈 — DataManager) — 누르는 중이면 그 연출이 이 크기를 기준으로 끝난다</summary>
+    public void SetRestScale(Vector3 scale)
+    {
+        restScale = scale;
+        if (nudging == null) transform.localScale = scale;
     }
 
     private void Nudge()

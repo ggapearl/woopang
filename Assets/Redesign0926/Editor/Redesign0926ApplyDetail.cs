@@ -44,7 +44,7 @@ namespace Redesign0926
                 EditorUtility.SetDirty(RT(go));
             }
 
-            Top("TopUIPanel", new Vector2(-100, -100 + DetailLift));
+            Top("TopUIPanel", new Vector2(DetailRowX, -100 + DetailLift));   // 줄 가운데 — 「길안내」가 들어 한 칸 길어졌다 (ApplyDetailGuide · 예전 -100)
             Top("PlaceName", new Vector2(0, -600 + DetailLift));
             Top("Roman0926", new Vector2(0, -680 + DetailLift));
             Top("CreatedByText", new Vector2(0, -750 + DetailLift));

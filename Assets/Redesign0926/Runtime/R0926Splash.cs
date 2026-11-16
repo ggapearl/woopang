@@ -4,9 +4,9 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 시작화면 — "SEE THE UNSEEN". 어두운 화면을 렌즈가 훑고 지나가면 그 나라의 숨은 문양이 드러나고,
-/// 강아지 엠블럼 · WOOPANG · SEE THE UNSEEN · 그 나라 말 한 줄이 차례로 뜬다 (약 3.7초).
+/// 강아지 엠블럼 · WOOPANG · SEE THE UNSEEN · 그 나라 말 한 줄이 차례로 뜬다 (엠블럼은 렌즈 빛이 가운데로 들어오는 약 0.6초에, 다 사라지는 건 약 3초에 — 11-16 대표님).
 /// 그동안 뒤에서는 원래대로 AR·데이터가 준비된다. 끝나면 사라지고, 아직 준비 중이면 원래 로딩 화면이 이어진다.
-/// 뒷배경(문양·성운·별)은 처음에 살짝 확대돼 있다가 3.8초에 걸쳐 줌아웃한다 — 배경이 멀어지는 느낌, 로고는 그대로 (10-23 대표님).
+/// 뒷배경(문양·성운·별)은 처음에 살짝 확대돼 있다가 마지막 장면 무렵까지 줌아웃한다 — 배경이 멀어지는 느낌, 로고는 그대로 (10-23 대표님).
 /// 앱을 새로 켤 때 한 번만 뜬다 (R0926SplashBoot 가 켠다). 0.8초 뒤부터는 눌러서 건너뛸 수 있다.
 /// 문양은 기기 언어에 맞는 한 장만 Resources 에서 불러오고, 끝나면 메모리에서 내린다.
 /// </summary>
@@ -32,11 +32,17 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     // 켤 땐 Splash0926_other 의 motif_kr/jp/cn/es.jpg 를 Resources/Splash0926 로 다시 옮길 것.
     [Tooltip("켜면 기기 언어별 문양·문구, 끄면 모두 영어(우주) 한 가지")]
     [SerializeField] private bool perLanguage = false;
-    [SerializeField] private float endAt = 3.7f;
+    // 예전 이름 endAt(3.7) · zoomEnd(3.8) — 이름을 바꿔 장면에 저장된 예전 값 대신 아래 값이 쓰인다
+    // (11-16 대표님 「강아지 로고 처음 발생하는게 1.5초 즈음 … 1초부터 … 사라짐 시간이 0.5초 당겨서 … 약 3초」)
+    [Tooltip("마지막 장면(시간표 초) — 여기 닿고 화면이 고르게 돌면 사라지기 시작한다")]
+    [SerializeField] private float lastSceneAt = 2.56f;
     [SerializeField] private float fadeOut = 0.45f;
     // 예전 이름 maxWait(4초) — 이름을 바꿔 장면에 저장된 4 대신 1.5 가 쓰인다 (11-14 「앱 시작하는 속도가 좀 느린 것 같은데」)
     [Tooltip("마지막 장면에서 화면이 고르게 돌 때까지 기다리는 최대 시간 — 로딩 멈칫 중에 사라지면 뚝 끊겨 보였다. 4초는 로고 화면이 멈춘 듯 길어 1.5초로")]
     [SerializeField] private float endWait = 1.5f;
+    // 11-14 대표님 「0.5초 더 빨리 오프닝이 사라지면」 — 시간표 숫자는 그대로 두고 통째로 빨리 돌렸다 (11-16 엔 시간표 자체를 줄였다 — 배속은 그대로)
+    [Tooltip("시간표 배속 — 11-14 에 3.7초 시간표 + 0.45초 사라짐(4.15초)을 3.65초에 돌리려고 정한 1.137배. 기다리는 시간(렌즈 출발 전 · 마지막 장면 고른 프레임)은 실제 초 그대로")]
+    [SerializeField] private float pace = 4.15f / 3.65f;
     [SerializeField] private Image nebula;            // 숨쉬듯 밝아졌다 어두워지는 성운 (별은 R0926StarField 가 스스로)
     [Tooltip("렌즈 밖 그늘 진하기 — 선형 색공간이라 0.9 가 눈에는 약 1/3 밝기 (10-18 대표님 「원 밖은 많이 더 어둡게」)")]
     [SerializeField, Range(0f, 1f)] private float outsideShade = 0.9f;
@@ -45,8 +51,8 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
     [SerializeField] private R0926StarField stars;
     [Tooltip("뒷배경(문양·성운·별)이 처음에 확대돼 있는 정도 — 여기서 1 로 줌아웃한다 (10-23 대표님 「뒷배경이 멀어지는 느낌」)")]
     [SerializeField] private float zoomFrom = 1.15f;
-    [Tooltip("줌아웃이 끝나는 시각(초) — 렌즈가 퍼지며 배경이 다 드러나는 2초 무렵에 가장 빠르고, 사라지기 전에 멈춘다")]
-    [SerializeField] private float zoomEnd = 3.8f;
+    [Tooltip("줌아웃이 끝나는 시각(시간표 초) — 렌즈가 퍼지며 배경이 다 드러나는 1.3초 무렵에 가장 빠르고, 사라지기 전에 멈춘다")]
+    [SerializeField] private float zoomUntil = 2.63f;
 
     private struct Variant { public string key, accent, bg, text; public float dim, faint; }
 
@@ -114,7 +120,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             // 앱이 막 켜진 몇 프레임은 초기화(파이어베이스·장소 캐시 읽기)로 무겁다 — 그동안은 우주 배경과 별만 두고,
             // 화면이 고르게 돌기 시작하면(또는 0.4초가 지나면) 렌즈를 움직인다.
             // 0.9초까지 기다리던 것을 0.4초로 — 프레임이 고르지 않은 기기에선 어두운 화면이 1초 넘게 멈춰 보였다 (11-14 「아예 멈췄다가 켜지는」)
-            // 뒤의 0.3초 어둠(시간표)이 그다음 무거운 프레임을 한 번 더 받아 준다
+            // (예전엔 시간표 앞 0.3초 어둠이 그다음 무거운 프레임을 한 번 더 받아 줬다 — 11-16 부터 0.05초. 렌즈는 화면 밖에서 들어온다)
             // 예전엔 0.034초로 재서 30fps(0.033초) 기기는 조금만 흔들려도 다시 세느라 늘 1.2초를 다 기다렸다 (10-21 「처음에 살짝 딜레이」)
             // 한 프레임은 0.1초까지만 센다 — 첫 프레임 dt 에는 앱 로딩 시간이 통째로 들어 있어 기다리지 않고 바로 출발해 버렸다
             // (그래도 아주 느린 기기에서 오래 기다리지 않게 실제 시각 1초면 출발)
@@ -127,11 +133,11 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             heldFor = now - holdFrom;
             started = true;
         }
-        t += Mathf.Min(dt, 0.05f);   // 첫 프레임 로딩 멈춤이 애니메이션을 건너뛰지 않게
+        t += Mathf.Min(dt, 0.05f) * pace;   // 첫 프레임 로딩 멈춤이 애니메이션을 건너뛰지 않게
         if (fadeStart < 0f)
         {
             if (skipping) fadeStart = t;
-            else if (t >= endAt)
+            else if (t >= lastSceneAt)
             {
                 // 마지막 장면에서 프레임이 고르게(0.045초 안쪽) 12번 이어질 때 사라지기 시작한다
                 smoothFrames = dt < 0.045f ? smoothFrames + 1 : 0;
@@ -181,22 +187,26 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         gameObject.SetActive(false);
     }
 
-    // ── 시간표 ──────────────────────────────────────────────
-    // 0.0 어둠 · 0.3~1.4 렌즈가 왼→오른쪽으로 훑음
-    // 1.4~1.95 렌즈가 화면 밖으로 퍼짐 (바깥 그늘이 걷히고, 안쪽 확대가 풀린다)
-    // 1.5 엠블럼 · 1.9 WOOPANG · 2.3 SEE THE UNSEEN · 2.9 나라 말 한 줄 · 3.7 사라짐
-    // 그동안 뒷배경은 확대(1.15)에서 3.8초에 1 로 줌아웃 — 어두운 처음엔 천천히, 배경이 다 드러나는 2초 무렵에 가장 빠르게, 끝은 멈추듯
+    // ── 시간표 (실제 초 ≈ 렌즈 출발 전 기다림 약 0.15 + 시간표 ÷ pace 1.137) ──
+    // 0.0 어둠 · 0.05~0.89 렌즈가 왼→오른쪽으로 훑음
+    // 0.89~1.32 렌즈가 화면 밖으로 퍼짐 (바깥 그늘이 걷히고, 안쪽 확대가 풀린다)
+    // 0.515 엠블럼(실제 약 0.6초 — 렌즈 빛이 가운데로 들어오는 때) · 0.805 WOOPANG · 1.095 SEE THE UNSEEN · 1.525 나라 말 한 줄 · 2.56 사라짐 시작(실제 약 2.6초 → 약 3초에 다 사라짐)
+    // 바탕을 어둡게 하는 막은 WOOPANG 과 같이 (0.805~1.345) — 엠블럼이 뜰 때는 아직 렌즈 빛이 그대로 보이게
+    // 11-16 대표님 둘째 「로고 발생을 … 0.4초 정도 앞으로 · 화면에 빛이 나가 있는 상태에서부터 · 강아지 엠블럼부터 순서대로 · 뒷부분 짧은 건 상관없어」
+    //   (첫째: 「강아지 로고 … 1초부터 · 사라짐 0.5초 당겨서 … 약 3초」 — 렌즈는 같은 모양으로 조금 빨리 훑고, 엠블럼 뒤 글자 간격은 0.72배로 · 엠블럼 0.97)
+    //   (예전: 렌즈 0.3~1.4 · 퍼짐 ~1.95 · 1.5 엠블럼 · 1.9 WOOPANG · 2.3 SEE THE UNSEEN · 2.9 한 줄 · 3.7 사라짐 — 엠블럼 약 1.5초, 다 사라짐 약 4초)
+    // 그동안 뒷배경은 확대(1.15)에서 2.63초에 1 로 줌아웃 — 어두운 처음엔 천천히, 배경이 다 드러나는 1.3초 무렵에 가장 빠르게, 끝은 멈추듯
     private void Pose(float time)
     {
         var rt = (RectTransform)transform;
         Vector2 size = rt.rect.size;
         float w = size.x, h = size.y;
-        float zoom = Mathf.SmoothStep(zoomFrom, 1f, time / zoomEnd);
+        float zoom = Mathf.SmoothStep(zoomFrom, 1f, time / zoomUntil);
 
         // 렌즈 — 지름은 화면 폭의 0.9. 훑는 동안 살짝 위아래로 흔들리며 지나간다
         float d0 = w * 0.9f;
-        float sweep = Ease(Mathf.InverseLerp(0.3f, 1.4f, time));
-        float grow = Ease(Mathf.InverseLerp(1.4f, 1.95f, time));
+        float sweep = Ease(Mathf.InverseLerp(0.05f, 0.89f, time));
+        float grow = Ease(Mathf.InverseLerp(0.89f, 1.32f, time));
         Vector2 sweepPos = new Vector2(Mathf.Lerp(-w * 0.5f - d0 * 0.5f, w * 0.18f, sweep),
                                        h * 0.06f + Mathf.Sin(sweep * Mathf.PI) * h * 0.035f);
         Vector2 pos = Vector2.Lerp(sweepPos, Vector2.zero, grow);
@@ -216,7 +226,7 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
         }
 
         // 문양은 화면에 붙어 있고(렌즈가 움직여도 제자리) 아주 천천히 떠다니며 줌아웃한다.
-        // 1.07 은 떠다녀도 가장자리가 드러나지 않을 여유. 예전의 숨쉬는 확대(sin)는 3.7초 동안 커지기만 해 줌아웃과 거꾸로라 뺐다
+        // 1.07 은 떠다녀도 가장자리가 드러나지 않을 여유. 예전의 숨쉬는 확대(sin)는 시작화면 내내 커지기만 해 줌아웃과 거꾸로라 뺐다
         float coverH = Mathf.Max(h, w / motifAspect);
         float ks = 1.07f * zoom;
         var coverSize = new Vector2(coverH * motifAspect, coverH) * ks;
@@ -248,28 +258,28 @@ public class R0926Splash : MonoBehaviour, IPointerClickHandler
             motifFaint.rectTransform.sizeDelta = coverSize;
             motifFaint.rectTransform.position = rt.position + drift;
             var fc = motifFaint.color;
-            fc.a = v.faint * Ease(Mathf.InverseLerp(0.05f, 0.5f, time));
+            fc.a = v.faint * Ease(Mathf.InverseLerp(0.02f, 0.3f, time));
             motifFaint.color = fc;
         }
 
         if (dimmer != null)
         {
             var c = dimmer.color;
-            c.a = v.dim * Ease(Mathf.InverseLerp(1.5f, 2.2f, time));
+            c.a = v.dim * Ease(Mathf.InverseLerp(0.805f, 1.345f, time));
             dimmer.color = c;
         }
 
-        Appear(emblem, time, 1.5f, 0.5f, 0.9f);
-        Appear(wordmark, time, 1.9f, 0.45f, 0.96f);
-        Appear(copy, time, 2.3f, 0.5f, 1f);
+        Appear(emblem, time, 0.515f, 0.45f, 0.9f);
+        Appear(wordmark, time, 0.805f, 0.4f, 0.96f);
+        Appear(copy, time, 1.095f, 0.45f, 1f);
         if (copy != null)
         {
             // 자간이 벌어지며 들어오는 느낌 — 가로로만 살짝 벌어진다
-            float k = Ease(Mathf.InverseLerp(2.3f, 2.9f, time));
+            float k = Ease(Mathf.InverseLerp(1.095f, 1.525f, time));
             copy.transform.localScale = new Vector3(Mathf.Lerp(0.86f, 1f, k), 1f, 1f);
         }
-        if (bar != null) bar.localScale = new Vector3(Ease(Mathf.InverseLerp(2.5f, 2.95f, time)), 1f, 1f);
-        Appear(line, time, 2.9f, 0.45f, 1f);
+        if (bar != null) bar.localScale = new Vector3(Ease(Mathf.InverseLerp(1.235f, 1.565f, time)), 1f, 1f);
+        Appear(line, time, 1.525f, 0.4f, 1f);
 
         if (root != null)
         {

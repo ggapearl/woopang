@@ -133,8 +133,9 @@ public static class R0926AiImage
 
     // ── 투명하게 ───────────────────────────────────────────
     /// <summary>
-    /// 로고처럼 바탕이 한 가지 색이면 바탕을 걷어 내고 모양 둘레에 흰 테두리(스티커) — 가운데로 키워 맞춘다.
-    /// 이미 투명한 사진은 그 모양 그대로 스티커로. 그 밖(보통 사진)은 동그랗게 잘라 흰 테·민트 테를 두른 배지(우팡이네집 대표 사진처럼).
+    /// 로고처럼 바탕이 한 가지 색이면 바탕을 걷어 내고 모양대로 — 가운데로 키워 맞춘다.
+    /// 이미 투명한 사진은 그 모양 그대로. 그 밖(보통 사진)은 사진만 동그랗게.
+    /// 테두리는 두르지 않는다 (11-14 대표님 「온전히 동그랗게 나오지 않고 흰색,녹색 외곽선이 발생하거든? 해당 테두리는 필요없으니 없애줘」 — 예전엔 흰 테·민트 테).
     /// orig 로 모양을 찾고 styled(만화톤·색연필을 거친 것 또는 원본)를 그 모양에 담는다.
     /// </summary>
     public static Img Clear(Img orig, Img styled, out ClearMode mode)
@@ -168,61 +169,140 @@ public static class R0926AiImage
                 }
             }
         }
-        return mode == ClearMode.Photo ? Badge(styled) : Sticker(styled, fg);
+        return mode == ClearMode.Photo ? Round(styled) : Shape(styled, fg, mode == ClearMode.Logo);
     }
 
-    private static readonly Color Accent = new Color(0.18f, 0.66f, 0.66f, 1f);
-
-    private static Img Badge(Img styled)
+    // 보통 사진 — 가운데 정사각형을 꽉 채운 원. 가장자리 1px 만 부드럽게, 테 없음.
+    // 원 밖 화소의 색도 사진 색 그대로 둔다 — 화면이 가장자리를 섞을 때(쌍선형 · 밉맵) 다른 색이 번져 테처럼 보이지 않게
+    private static Img Round(Img styled)
     {
         int w = styled.W, h = styled.H;
         int S = Mathf.Min(w, h);
         var o = new Img(S, S);
-        float c = (S - 1) * 0.5f;
-        float R = S * 0.5f - 1.5f, ringW = S * 0.045f, accW = S * 0.03f;
-        float Rp = R - ringW - accW;
+        float c = (S - 1) * 0.5f, R = S * 0.5f - 1f;
         int ox = (w - S) / 2, oy = (h - S) / 2;
         for (int y = 0; y < S; y++)
             for (int x = 0; x < S; x++)
             {
                 float r = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
-                float pa = Mathf.Clamp01(Rp - r + 0.5f), wa = Mathf.Clamp01(Rp + ringW - r + 0.5f), aa = Mathf.Clamp01(R - r + 0.5f);
                 int j = (y + oy) * w + (x + ox), i = y * S + x;
-                float cr = Accent.r * (1f - wa) + wa, cg = Accent.g * (1f - wa) + wa, cb = Accent.b * (1f - wa) + wa;
-                o.R[i] = cr * (1f - pa) + styled.R[j] * pa;
-                o.G[i] = cg * (1f - pa) + styled.G[j] * pa;
-                o.B[i] = cb * (1f - pa) + styled.B[j] * pa;
-                o.A[i] = aa;
+                o.R[i] = styled.R[j]; o.G[i] = styled.G[j]; o.B[i] = styled.B[j];
+                o.A[i] = Mathf.Clamp01(R - r + 0.5f) * styled.A[j];
             }
         return o;
     }
 
-    private static Img Sticker(Img styled, bool[] fg)
+    // 로고 · 이미 투명한 사진 — 모양대로 (테 없음). 이미 투명한 사진은 제 알파 그대로.
+    // 로고는 가장자리 2px 의 바탕색이 섞인 화소를 풀어 낸다 — 그대로 두면 옅은 바탕색 테가 남고, 깎아 내면 가는 글씨가 사라진다.
+    // 그 화소 = a·안쪽 색 + (1−a)·바탕색 으로 보고 a 와 본래 색을 되찾는다. 모양을 가운데로 키워 맞춘 뒤 투명한 곳의 색을 모양 색으로 채운다
+    private static Img Shape(Img styled, bool[] fg, bool keyed)
     {
         int w = styled.W, h = styled.H, n = styled.N;
         int S = Mathf.Min(w, h);
-        var dist = Edt(fg, w, h);
-        float border = S * 0.028f;
         var t = new Img(w, h);
+        for (int i = 0; i < n; i++)
+        {
+            t.R[i] = styled.R[i]; t.G[i] = styled.G[i]; t.B[i] = styled.B[i];
+            t.A[i] = keyed ? (fg[i] ? 1f : 0f) : styled.A[i];   // 이미 투명한 사진은 부드러운 가장자리까지 제 알파 그대로
+        }
+        if (keyed) Unmix(styled, fg, t);
         int x0 = w, y0 = h, x1 = -1, y1 = -1;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
-            {
-                int i = y * w + x;
-                float d = dist[i];
-                float a = Mathf.Clamp01(border - d + 0.5f);
-                float soft = Mathf.Clamp01(1f - d);   // 모양 경계 1px 부드럽게 — 그 밖은 흰 테두리
-                t.R[i] = (1f - soft) + styled.R[i] * soft;
-                t.G[i] = (1f - soft) + styled.G[i] * soft;
-                t.B[i] = (1f - soft) + styled.B[i] * soft;
-                t.A[i] = a;
-                if (a > 0f) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-            }
+                if (t.A[y * w + x] > 0.1f) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
         if (x1 < 0) return t;   // 모양이 없다 — 그대로
         float bw = x1 - x0 + 1, bh = y1 - y0 + 1;
         float side = Mathf.Max(bw, bh) / 0.94f;
         float cx = (x0 + x1 + 1) * 0.5f, cy = (y0 + y1 + 1) * 0.5f;
-        return Resample(t, cx - side * 0.5f, cy - side * 0.5f, side, S);
+        var o = Resample(t, cx - side * 0.5f, cy - side * 0.5f, side, S);
+        Bleed(o, 6);
+        return o;
+    }
+
+    // 로고 가장자리(바탕에서 2px 안) — 둘레 3px 안의 안쪽 화소 평균을 '안쪽 색' F 로, 그 화소 C 를 바탕 B 와 F 사이에 놓고 a = (C−B)·(F−B)/|F−B|².
+    // 색은 C 에서 바탕을 빼 되찾는다: (C − (1−a)·B) / a. 안쪽이 없는 가는 획(글씨)은 둘레에서 바탕과 가장 먼 화소(획 한가운데)를 F 로.
+    // 셋 다 만화톤·색연필을 거친 그림에서 잰다 — 효과가 가장자리를 흐려 바탕색을 더 섞어도 F 보다 옅어지지 않게
+    private static void Unmix(Img styled, bool[] fg, Img t)
+    {
+        int w = styled.W, h = styled.H, n = styled.N;
+        var bgMask = new bool[n];
+        double sr = 0, sg = 0, sb = 0;
+        int nb = 0;
+        for (int i = 0; i < n; i++)
+        {
+            bgMask[i] = !fg[i];
+            if (bgMask[i]) { sr += styled.R[i]; sg += styled.G[i]; sb += styled.B[i]; nb++; }
+        }
+        if (nb == 0) return;
+        float br = (float)(sr / nb), bgg = (float)(sg / nb), bb = (float)(sb / nb);
+        var inside = Edt(bgMask, w, h);   // 모양 안 화소에서 가장 가까운 바탕까지
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (!fg[i] || inside[i] > 2.5f) continue;
+                float fr = 0, fgr = 0, fb = 0, far = -1f;
+                int c = 0, pure = -1;
+                for (int dy = -3; dy <= 3; dy++)
+                    for (int dx = -3; dx <= 3; dx++)
+                    {
+                        int xx = x + dx, yy = y + dy;
+                        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                        int j = yy * w + xx;
+                        if (!fg[j]) continue;
+                        if (inside[j] > 2.5f) { fr += styled.R[j]; fgr += styled.G[j]; fb += styled.B[j]; c++; continue; }
+                        float er = styled.R[j] - br, eg = styled.G[j] - bgg, eb = styled.B[j] - bb;
+                        float d = er * er + eg * eg + eb * eb;
+                        if (d > far) { far = d; pure = j; }
+                    }
+                if (c > 0) { fr /= c; fgr /= c; fb /= c; }
+                else if (pure >= 0) { fr = styled.R[pure]; fgr = styled.G[pure]; fb = styled.B[pure]; }
+                else continue;
+                float vr = fr - br, vg = fgr - bgg, vb = fb - bb;
+                float len2 = vr * vr + vg * vg + vb * vb;
+                if (len2 < 1e-3f) continue;
+                float a = Mathf.Clamp01(((styled.R[i] - br) * vr + (styled.G[i] - bgg) * vg + (styled.B[i] - bb) * vb) / len2);
+                t.A[i] = a;
+                if (a < 0.02f) continue;
+                t.R[i] = Mathf.Clamp01((styled.R[i] - (1f - a) * br) / a);
+                t.G[i] = Mathf.Clamp01((styled.G[i] - (1f - a) * bgg) / a);
+                t.B[i] = Mathf.Clamp01((styled.B[i] - (1f - a) * bb) / a);
+            }
+    }
+
+    // 투명한 화소의 색을 이웃한 모양 색으로 (몇 겹) — 화면이 가장자리를 섞을 때 흰색이 번져 테두리처럼 보이지 않게
+    private static void Bleed(Img o, int passes)
+    {
+        int w = o.W, h = o.H, n = o.N;
+        var has = new bool[n];
+        for (int i = 0; i < n; i++) has[i] = o.A[i] > 0.004f;
+        var grown = new System.Collections.Generic.List<int>();
+        for (int p = 0; p < passes; p++)
+        {
+            grown.Clear();
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (has[i]) continue;
+                    float r = 0, g = 0, b = 0;
+                    int c = 0;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int xx = x + dx, yy = y + dy;
+                            if ((dx == 0 && dy == 0) || xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                            int j = yy * w + xx;
+                            if (!has[j]) continue;
+                            r += o.R[j]; g += o.G[j]; b += o.B[j]; c++;
+                        }
+                    if (c == 0) continue;
+                    o.R[i] = r / c; o.G[i] = g / c; o.B[i] = b / c;
+                    grown.Add(i);
+                }
+            if (grown.Count == 0) break;
+            foreach (int i in grown) has[i] = true;
+        }
     }
 
     /// <summary>(sx, sy) 에서 한 변 side 인 정사각형을 S×S 로 — 바깥은 투명, 미리 곱한 알파로 섞어 가장자리가 검게 번지지 않게</summary>

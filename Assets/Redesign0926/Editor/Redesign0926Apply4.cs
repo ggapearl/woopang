@@ -171,7 +171,7 @@ namespace Redesign0926
                 Add(Find(full.transform, "PlaceInfoTextPanel"), photoSnap);
                 Add(Find(full.transform, "Button_Previous"), S(new Vector2(0.3f, 0.5f), new Vector2(0.3f, 0.5f), new Vector2(1, 0.5f), new Vector2(-510, 0), new Vector2(150, 150)));
                 Add(Find(full.transform, "Button_Next"), S(new Vector2(0.3f, 0.5f), new Vector2(0.3f, 0.5f), new Vector2(0, 0.5f), new Vector2(510, 0), new Vector2(150, 150)));
-                Add(Find(full.transform, "TopUIPanel"), S(new Vector2(colX, 1), new Vector2(colX, 1), new Vector2(0.5f, 1), new Vector2(-100, 230), new Vector2(1400, 1000)));
+                Add(Find(full.transform, "TopUIPanel"), S(new Vector2(colX, 1), new Vector2(colX, 1), new Vector2(0.5f, 1), new Vector2(DetailRowX, 230), new Vector2(1400, 1000)));   // 「길안내」가 든 줄 가운데 (ApplyDetailGuide)
                 Add(Find(full.transform, "PlaceName"), S(new Vector2(colX, 1), new Vector2(colX, 1), new Vector2(0.5f, 1), new Vector2(0, -300), new Vector2(1000, 200)));
                 Add(Find(full.transform, "Roman0926"), S(new Vector2(colX, 1), new Vector2(colX, 1), new Vector2(0.5f, 1), new Vector2(0, -480), new Vector2(1000, 60)));
                 var byText = S(new Vector2(colX, 1), new Vector2(colX, 1), new Vector2(0.5f, 1), new Vector2(0, -540), new Vector2(1000, 100));

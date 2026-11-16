@@ -130,6 +130,8 @@ public class P2PManager : MonoBehaviour
 
     // Statistics
     public int NearbyUsersCount => activeUserAvatars.Count;
+    /// <summary>띄운 사람 오브젝트 (키 user_id) — 가까이 모달(R0926NearModal)이 다섯 매니저의 것과 같이 본다</summary>
+    public Dictionary<string, GameObject> GetActiveAvatars() => activeUserAvatars;
     public bool IsActive => isRegistered;
 
     void Awake()
@@ -549,6 +551,8 @@ public class P2PManager : MonoBehaviour
                     distance = (float)(userObj["distance"] ?? 0)
                 };
                 inResponse.Add(userData.user_id);
+                // 목록 자료는 늘 남긴다 — 아바타를 띄우지 못해도(풀 · 최대 인원) 목록에는 보이게 (11-14)
+                nearbyUsersData[userData.user_id] = userData;
 
                 // 거리 및 필터 조건 확인
                 if (userData.distance <= maxTrackingDistance && ShouldShowUser(userData.user_id))
@@ -565,11 +569,6 @@ public class P2PManager : MonoBehaviour
                         // Create new avatar
                         CreateUserAvatar(userData);
                     }
-                }
-                else
-                {
-                    // 데이터는 저장 (나중에 필터 변경 시 사용)
-                    nearbyUsersData[userData.user_id] = userData;
                 }
             }
 

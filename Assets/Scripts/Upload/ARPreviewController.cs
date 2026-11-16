@@ -5,6 +5,7 @@ using UnityEngine.InputSystem.EnhancedTouch;
 using UnityEngine.Rendering.Universal;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 /// <summary>
@@ -135,6 +136,16 @@ public class ARPreviewController : MonoBehaviour
     private float dragVelocityY = 0f;
     private float lastTouchTime = 0f;
     private bool isCubeReady = false;
+
+    // 11-14 대표님 「몇초 이내에 2바퀴이상 옆으로 돌리면 (스와이프를 많이 하면) … 다른 캐릭터로 바꿔달라는 요청 … 천천히 돌리는 건 그냥 관찰하기 위한거니까 그냥 두고」
+    // 3초 안에 옆으로 720° 넘게(손가락 + 손을 뗀 뒤 관성 — 자동 회전은 빼고) · 손가락 두 번 이상(새로 대거나 방향을 바꿔) → FastSpin
+    /// <summary>빠르게 두 바퀴 넘게 돌렸다 — AI 작업 3D 캐릭터가 다른 캐릭터로 바꾼다 (R0926AiWorkPanel)</summary>
+    public event Action FastSpin;
+    private const float FastSpinDegrees = 720f, FastSpinWindow = 3f;
+    private readonly Queue<Vector2> spinLog = new Queue<Vector2>();   // (시각, 돈 각도)
+    private readonly Queue<float> spinStrokes = new Queue<float>();
+    private float spinSum;
+    private int spinSign;
     private Texture2D currentPhoto;        // 미리보기에 띄운 대표 사진 (CubeUploadManager 것 — 지우지 않는다)
     private MeshRenderer[] cubeRenderers;  // 사진을 입힌 큐브 렌더러 — AI 작업이 그림을 바꿔 끼우고, 캐릭터를 세울 땐 숨긴다
 
@@ -187,6 +198,7 @@ public class ARPreviewController : MonoBehaviour
                 lastDragPosition = mouse.position.ReadValue();
                 dragVelocityX = 0f;
                 dragVelocityY = 0f;
+                spinSign = 0;
             }
             else if (mouse.leftButton.isPressed && isDragging)
             {
@@ -203,6 +215,7 @@ public class ARPreviewController : MonoBehaviour
                 dragVelocityY = rotY;
                 lastDragPosition = currentPos;
                 lastTouchTime = Time.time;
+                LogSpin(rotY, true);
             }
             else if (mouse.leftButton.wasReleasedThisFrame)
             {
@@ -223,6 +236,7 @@ public class ARPreviewController : MonoBehaviour
                 lastDragPosition = touch.screenPosition;
                 dragVelocityX = 0f;
                 dragVelocityY = 0f;
+                spinSign = 0;
             }
             else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Moved && isDragging)
             {
@@ -238,6 +252,7 @@ public class ARPreviewController : MonoBehaviour
                 dragVelocityY = rotY;
                 lastDragPosition = touch.screenPosition;
                 lastTouchTime = Time.time;
+                LogSpin(rotY, true);
             }
             else if (touch.phase == UnityEngine.InputSystem.TouchPhase.Ended ||
                      touch.phase == UnityEngine.InputSystem.TouchPhase.Canceled)
@@ -256,10 +271,46 @@ public class ARPreviewController : MonoBehaviour
         {
             spawnedCube.transform.Rotate(Vector3.up, dragVelocityY, Space.World);
             spawnedCube.transform.Rotate(Vector3.right, dragVelocityX, Space.World);
+            LogSpin(dragVelocityY, false);
 
             dragVelocityX *= dragInertiaDecay;
             dragVelocityY *= dragInertiaDecay;
         }
+    }
+
+    private void LogSpin(float deg, bool finger)
+    {
+        if (FastSpin == null) return;
+        float now = Time.unscaledTime;
+        if (finger)
+        {
+            int sign = deg > 0.05f ? 1 : deg < -0.05f ? -1 : 0;
+            if (sign != 0 && sign != spinSign) { spinStrokes.Enqueue(now); spinSign = sign; }
+        }
+        float a = Mathf.Abs(deg);
+        if (a > 0f) { spinLog.Enqueue(new Vector2(now, a)); spinSum += a; }
+        while (spinLog.Count > 0 && now - spinLog.Peek().x > FastSpinWindow) spinSum -= spinLog.Dequeue().y;
+        if (spinLog.Count == 0) spinSum = 0f;
+        while (spinStrokes.Count > 0 && now - spinStrokes.Peek() > FastSpinWindow) spinStrokes.Dequeue();
+        if (spinSum < FastSpinDegrees || spinStrokes.Count < 2) return;
+        ResetSpin();
+        FastSpin.Invoke();
+    }
+
+    private void ResetSpin()
+    {
+        spinLog.Clear();
+        spinStrokes.Clear();
+        spinSum = 0f;
+        spinSign = 0;
+    }
+
+    /// <summary>손을 뗀 뒤 도는 관성을 멈춘다 — 다른 캐릭터로 바꿀 때 (자동 회전은 잠시 뒤 다시)</summary>
+    public void Settle()
+    {
+        dragVelocityX = 0f;
+        dragVelocityY = 0f;
+        lastTouchTime = Time.time;
     }
 
     private void HandleAutoRotation()
@@ -416,6 +467,7 @@ public class ARPreviewController : MonoBehaviour
         isDragging = false;
         dragVelocityX = 0f;
         dragVelocityY = 0f;
+        ResetSpin();
 
         if (loadingTextCoroutine != null)
             StopCoroutine(loadingTextCoroutine);
@@ -487,6 +539,8 @@ public class ARPreviewController : MonoBehaviour
         if (look != null) t.CopyLook(look);
         t.PlaceName = GetLocalizedText("spawn_guide_creating");
         t.Sparkle = true;
+        t.Pinned = true;          // 11-14 — 분홍 스티커 · 다른 인디케이터 위 · 늘 보인다
+        t.TargetColor = GuidePink;
         spawnGuide.SetActive(true);
     }
 
@@ -498,6 +552,15 @@ public class ARPreviewController : MonoBehaviour
     //   → 펑 흩어지며 큐브가 한 바퀴 돌아 톡 튀어나온다(살짝 넘쳤다 돌아옴 · 테두리 번쩍 · 별빛 · 진동). 그다음은 2초마다 심장 박동(R0926Heartbeat).
     // 예전엔 스피너가 0.5초 나타나 초당 45° 로 2초 돌고, 큐브가 2초 동안 서서히 나타나며 스피너가 4초에 걸쳐 사라졌다.
     private const float PopIn = 0.4f, Suspense = 2.6f, Crescendo = 2.2f, Dub = 0.16f, Reveal = 0.8f;
+    private static readonly Color GuidePink = new Color(0.914f, 0.325f, 0.514f, 1f);   // 생길 자리 안내 — 장소 분류 색과 섞이지 않게 (11-14)
+
+    // 11-14 대표님 「장소추가 할 때 발생한 샘플 … indicator … 지금 아예 안생기고 있거든?」 — 미리보기 큐브는 장소 큐브 프리팹(0000_Cube)이라
+    // GPS 앵커 부품이 딸려 오는데 좌표를 받지 않아 앵커가 늘 '준비 전'이다 → 기기에서 OffScreenIndicator 가 인디케이터를 건너뛰었다
+    // (에디터는 앵커 검사를 하지 않아 보였다). 미리보기는 카메라 앞 자리라 앵커가 필요 없다 — 떼어 낸다
+    private static void Unanchor(GameObject go)
+    {
+        foreach (var a in go.GetComponentsInChildren<CustomARGeospatialCreatorAnchor>(true)) DestroyImmediate(a);
+    }
     private static readonly float[] Beats = { 0.05f, 0.8f, 1.35f, 1.8f, 2.12f };   // 쿵 (뒤따르는 쿵은 Dub 뒤) — 점점 빨라진다
 
     private IEnumerator SpawnWithLoadingSpinner(Vector3 position, Quaternion rotation, Texture2D mainPhotoTexture)
@@ -514,6 +577,7 @@ public class ARPreviewController : MonoBehaviour
 
             // 짜잔 — 스피너는 펑 흩어지고 큐브가 튀어나온다
             spawnedCube = Instantiate(cubePrefab, position, rotation);
+            Unanchor(spawnedCube);
             spawnedCube.SetActive(true);
             ShowCubeIndicator(false);
             ApplyTextureToCube(mainPhotoTexture);
@@ -542,6 +606,7 @@ public class ARPreviewController : MonoBehaviour
             yield return new WaitForSeconds(spinnerMinDuration);
 
             spawnedCube = Instantiate(cubePrefab, position, rotation);
+            Unanchor(spawnedCube);
             spawnedCube.SetActive(true);
             ShowCubeIndicator(false);
             ApplyTextureToCube(mainPhotoTexture);
@@ -556,6 +621,8 @@ public class ARPreviewController : MonoBehaviour
         if (cubeTarget != null)
         {
             cubeTarget.PlaceName = GetLocalizedText("new_object");
+            cubeTarget.Pinned = true;
+            cubeTarget.TargetColor = GuidePink;
         }
         CleanupSpawnGuide();
         ShowCubeIndicator(true);
@@ -563,6 +630,7 @@ public class ARPreviewController : MonoBehaviour
         // 큐브 준비 완료 → 터치 회전 + 자동 회전 즉시 활성화
         isCubeReady = true;
         lastTouchTime = Time.time - autoRotationResumeDelay;
+        ResetSpin();
         heart.Beat(1f);   // 1초 뒤부터 2초마다 쿵-쿵
 
         // 스포트라이트

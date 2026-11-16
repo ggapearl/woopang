@@ -92,21 +92,24 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
         currentFilters = new Dictionary<string, bool>();
         currentFilters["subway"] = PlayerPrefs.GetInt("Filter_Subway_V2", 1) == 1;
 
-        InitializeObjectPool();
+        StartCoroutine(InitializeObjectPool());   // 오프닝이 걷힌 뒤 한가한 프레임에 하나씩 (11-15 ④ — 예전엔 첫 화면 전에 교통 3종 40개를 한꺼번에)
         StartCoroutine(StartLocationServiceAndFetchData());
 
         FilterManager filterMgr = Object.FindFirstObjectByType<FilterManager>(FindObjectsInactive.Include);
         if (filterMgr != null) filterMgr.RegisterCacheProvider(this);
     }
 
-    private void InitializeObjectPool()
+    private IEnumerator InitializeObjectPool()
     {
-        if (samplePrefab == null) return;
-        for (int i = 0; i < poolSize; i++)
+        if (samplePrefab == null) yield break;
+        while (objectPool.Count + spawnedObjects.Count < poolSize)   // 그 사이 역이 떠서 만든 것도 센다 — 예전과 같은 수만큼만
         {
+            yield return null;
+            if (!SpawnPace.Idle) continue;
             GameObject obj = Instantiate(samplePrefab, Vector3.zero, Quaternion.identity);
             obj.SetActive(false);
             objectPool.Enqueue(obj);
+            SpawnPace.Took();
         }
     }
 
@@ -213,6 +216,9 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
         foreach (var f in facilities)
         {
             string uid = "subway_" + f.name + "_" + f.latitude + "_" + f.longitude;
+            // 역 정보는 목록 준비를 알리기 전에 다 담는다 — 배분이 바로 3D 로 띄울 수 있게.
+            // 예전엔 아래 생성 루프가 0.1초에 하나씩 담아, 그 전에 배분된 역은 임시 화살표로 15초를 기다렸다
+            placeDataMap[f.name + "_" + f.latitude + "_" + f.longitude] = f;
             lightCache.Add(new CachedPlaceData
             {
                 uniqueId = uid,
@@ -239,12 +245,15 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
 
             // 모든 데이터는 placeDataMap에 저장 (좌표/메타데이터)
             placeDataMap[uniqueId] = data;
+            // 애견동반을 켜면 만들지도 다시 켜지도 않는다 (11-14 대표님 「애견동반에서는 지하철, 기차, 터미널 모두 그냥 발생하지 않으면」 · 11-15 공항도).
+            // 예전엔 여기 생성 · 다시 켜기가 애견동반을 보지 않아, 켜 둔 채 움직여 목록을 다시 받으면 역이 떴다 (배분이 모르는 오브젝트라 그대로 남았다)
+            bool petHidden = FilterManager.PetOnlyNow;
 
             if (spawnedObjects.ContainsKey(uniqueId))
             {
                 // 기존 오브젝트: 필터/거리에 따라 활성화 토글
                 GameObject existing = spawnedObjects[uniqueId];
-                bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"];
+                bool shouldShow = !petHidden && (currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"]);
                 if (shouldShow)
                 {
                     float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
@@ -253,12 +262,14 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
                 if (shouldShow && !existing.activeSelf) existing.SetActive(true);
                 else if (!shouldShow && existing.activeSelf) existing.SetActive(false);
             }
-            else if (dist <= objectSpawnRadius && !HiddenPlaces.IsHidden("subway_" + uniqueId))
+            else if (dist <= objectSpawnRadius && !petHidden && !HiddenPlaces.IsHidden("subway_" + uniqueId))
             {
-                // objectSpawnRadius 이내만 3D 오브젝트 생성
-                GameObject newObj = GetFromPool();
+                // objectSpawnRadius 이내만 3D 오브젝트 생성 — 한 프레임에 하나씩 (SpawnPace · FilterManager 배분과 같은 문)
+                while (!SpawnPace.Ready) yield return null;
+                GameObject newObj = spawnedObjects.ContainsKey(uniqueId) ? null : GetFromPool();   // 기다리는 사이 배분이 띄웠으면 그대로
                 if (newObj != null)
                 {
+                    SpawnPace.Took();
                     bool shouldShow = currentFilters == null || !currentFilters.ContainsKey("subway") || currentFilters["subway"];
                     if (shouldShow)
                     {
@@ -274,6 +285,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
 
                     if (!shouldShow && targetComp != null) targetComp.enabled = true;
 
+                    ARObjectZoomController.Fit(newObj);   // 핀치 줌 중에 뜨거나 풀에서 다시 꺼내도 지금 배율로
                     spawnedObjects[uniqueId] = newObj;
                 }
             }
@@ -496,6 +508,7 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
         FacilityData data = placeDataMap[rawId];
         SetupObject(newObj, data);
         newObj.SetActive(true);
+        ARObjectZoomController.Fit(newObj);
         spawnedObjects[rawId] = newObj;
         return true;
     }

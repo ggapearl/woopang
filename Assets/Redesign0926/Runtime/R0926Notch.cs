@@ -526,7 +526,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         if (shown == Mode.Guide && guiding)
         {
             // 이름이 보이면(처음 · 도착 · 눌러서 펼친 동안) 끝, 작으면 이름부터
-            if (arrivedAt >= 0f || now < expandUntil) { EndGuide(); return; }
+            if (arrivedAt >= 0f || now < expandUntil) { EndGuide(); R0926GuideArrow.Stop(); return; }   // 한 안내 — 아래 화살표도 같이 끝
             titleWord = gName;
             hintWord = HintEnd();
             expandUntil = now + ExpandTime;
@@ -542,9 +542,9 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
 
     // ── 글 ───────────────────────────────────────────────────
 
-    private static string HintEnd() => L("누르면 안내를 끝내요", "Tap to end guidance", "タップで案内を終了", "点按结束导航", "Toca para terminar la guía");
+    internal static string HintEnd() => L("누르면 안내를 끝내요", "Tap to end guidance", "タップで案内を終了", "点按结束导航", "Toca para terminar la guía");
 
-    private static string Dist(float m)
+    internal static string Dist(float m)
     {
         var inv = CultureInfo.InvariantCulture;
         if (m < 100f) return Mathf.RoundToInt(m).ToString(inv) + "m";
@@ -554,7 +554,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
     }
 
     // 목록 줄 이름 — 글자 꾸밈(<color> 등)은 빼고, 길면 18자에서 자른다
-    private static string Clean(string s)
+    internal static string Clean(string s)
     {
         if (string.IsNullOrEmpty(s)) return "";
         var sb = new System.Text.StringBuilder(s.Length);

@@ -102,6 +102,14 @@ public class DoubleTap3D : MonoBehaviour
     private Coroutine fadeRoutine;    // 창 페이드 — 넘겨줄 때 멈춘다 (앞 장소의 페이드아웃이 새 창을 닫지 않게)
     /// <summary>Start 를 마쳐 정보 창을 열 수 있다 (목록 사진 — R0926PlaceInfo)</summary>
     public bool IsReady { get; private set; }
+    /// <summary>지금 정보 창을 쓰고 있는 장소 (닫혀 있으면 null) — 상세 위 「길안내」(R0926DetailGuide)가 그 장소로 안내한다</summary>
+    public static DoubleTap3D Shown => shown != null && shown.isFullscreen ? shown : null;
+    /// <summary>떠 있는 정보 창을 X 와 같이 닫는다 (상세 위 「길안내」를 누른 뒤)</summary>
+    public static void CloseShown()
+    {
+        var s = Shown;
+        if (s != null) s.CloseFullscreen();
+    }
     private const float PhotoWait = 0.35f;   // 첫 장 사진이 곧 오면 이만큼 기다렸다 창과 함께 띄운다
     private const float MaxFadeStep = 1f / 30f;   // 무거운 프레임 하나가 페이드를 통째로 먹지 않게 한 프레임에 세는 시간 상한
 
@@ -356,19 +364,26 @@ public class DoubleTap3D : MonoBehaviour
             TryParseIdFromHierarchy();
         }
 
+        // 정보 창은 모든 장소가 함께 쓴다 — 다른 장소가 띄워 둔 창이면 닫지도, 그 버튼에 손대지도 않는다
+        // (11-15: 장소가 한 프레임에 하나씩 생기면서, 창을 연 사이에 새로 생긴 큐브가 창을 페이드 없이 닫았다)
+        bool windowInUse = shown != null && shown != this && fullscreenCanvasGroup.gameObject.activeSelf;
+
         if (placeInfoTextPanel != null)
         {
             placeInfoText = placeInfoTextPanel.GetComponentInChildren<Text>();
-            placeInfoTextPanel.SetActive(false);
+            if (!windowInUse) placeInfoTextPanel.SetActive(false);
         }
 
-        fullscreenCanvasGroup.gameObject.SetActive(false);
-        guidePanel.SetActive(false);
-        fullscreenCanvasGroup.alpha = 0f;
-
-        if (descriptionTextUI != null)
+        if (!windowInUse)
         {
-            descriptionTextUI.gameObject.SetActive(false);
+            fullscreenCanvasGroup.gameObject.SetActive(false);
+            guidePanel.SetActive(false);
+            fullscreenCanvasGroup.alpha = 0f;
+
+            if (descriptionTextUI != null)
+            {
+                descriptionTextUI.gameObject.SetActive(false);
+            }
         }
 
         // Created by (username) 텍스트 UI 연결
@@ -382,15 +397,18 @@ public class DoubleTap3D : MonoBehaviour
                 createdByText = existingCreatedBy.GetComponent<Text>();
             }
         }
-        if (createdByText != null)
+        if (createdByText != null && !windowInUse)
         {
             createdByText.gameObject.SetActive(false);
         }
 
-        instagramButton.onClick.AddListener(OnInstagramButtonClick);
-        nextButton.onClick.AddListener(ShowNextImage);
-        previousButton.onClick.AddListener(ShowPreviousImage);
-        closeButton.onClick.AddListener(CloseFullscreen);
+        if (!windowInUse)   // 창을 여는 쪽(OpenFullscreen · iOS 복귀)이 버튼을 자기 것으로 다시 건다
+        {
+            instagramButton.onClick.AddListener(OnInstagramButtonClick);
+            nextButton.onClick.AddListener(ShowNextImage);
+            previousButton.onClick.AddListener(ShowPreviousImage);
+            closeButton.onClick.AddListener(CloseFullscreen);
+        }
 
 #if UNITY_IOS
         if (fullscreenCanvasGroup != null)
@@ -908,6 +926,9 @@ public class DoubleTap3D : MonoBehaviour
             CloseFullscreen();
         }
     }
+
+    /// <summary>가까이 모달(R0926NearModal)에서 두 번 톡톡 눌렀을 때 — AR 에서 두 번 누른 것과 똑같이 (춤 모델 다운로드 창 포함)</summary>
+    public void DoubleTapFromModal() => OnDoubleTapCube();
 
     /// <summary>
     /// 목록 줄의 사진을 눌렀을 때 (R0926PlaceInfo) — 이 장소를 두 번 누른 것과 같은 정보 창을 연다.

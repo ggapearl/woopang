@@ -83,6 +83,8 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private Sprite[] catIcons;
     [Tooltip("그림 가운데 — 줄 왼쪽 끝에서")]
     [SerializeField] private float iconCenterX = 26f;
+    [Tooltip("그림 · 점을 줄 가운데보다 이만큼 아래에 — 이름 글자(한글)는 칸 가운데보다 조금 아래에 그려져 그 가운데에 맞춘다 (11-14 대표님 「장소이름 좌측에 있는 이모지 살짝 아래로 … 가운데가 아닌 위에 위치하고 있는 느낌」)")]
+    [SerializeField] private float iconDropY = 5f;
 
     [Header("줄 오른쪽 사진 — 그 장소의 대표 사진, 누르면 두 번 누른 것과 같은 정보 창 (11-12 대표님 「우측 끝에는 각 오브젝트의 '메인사진'」)")]
     [Tooltip("한 번에 받는 사진 수")]
@@ -312,10 +314,10 @@ public class R0926PlaceRows : MonoBehaviour
         float nameBarH = nameText != null ? Mathf.Round(nameText.fontSize * 0.55f) : 26f;
         for (int i = 0; i < skeletonRows; i++)
         {
-            float y = -(i + 0.5f) * rowHeight;
-            Bar(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(iconX, y), new Vector2(iconS, iconS), 0f, iconS * 0.5f);   // 그림 자리
-            Bar(new Vector2(0f, 1f), new Vector2(widths[i % widths.Length], 1f), new Vector2(0f, y), new Vector2(0f, nameBarH), nameLeft); // 이름
-            Bar(new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-distRight - 50f, y), new Vector2(100f, 22f));           // 거리
+            float y = -(i + 0.5f) * rowHeight, ty = y - iconDropY;   // 글자 · 그림은 글자 잉크 가운데(조금 아래) · 사진은 줄 가운데
+            Bar(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(iconX, ty), new Vector2(iconS, iconS), 0f, iconS * 0.5f);   // 그림 자리
+            Bar(new Vector2(0f, 1f), new Vector2(widths[i % widths.Length], 1f), new Vector2(0f, ty), new Vector2(0f, nameBarH), nameLeft); // 이름
+            Bar(new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-distRight - 50f, ty), new Vector2(100f, 22f));           // 거리
             if (ph != null)
                 Bar(new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-photoRight - photoW * 0.5f, y), new Vector2(photoW, photoW), 0f, 28f);   // 사진
         }
@@ -445,7 +447,8 @@ public class R0926PlaceRows : MonoBehaviour
                 dist = go.transform.Find("Dist").GetComponent<Text>(),
             };
             nr.dotSprite = nr.dot.sprite;
-            nr.dotPos = nr.dot.rectTransform.anchoredPosition;
+            nr.dotPos = nr.dot.rectTransform.anchoredPosition + new Vector2(0f, -iconDropY);
+            nr.dot.rectTransform.anchoredPosition = nr.dotPos;
             nr.dotSize = nr.dot.rectTransform.sizeDelta;
             nr.nameColor = nr.name.color;
             var pb = go.transform.Find("Photo") as RectTransform;
@@ -663,8 +666,13 @@ public class R0926PlaceRows : MonoBehaviour
             return;
         }
         Target t = places.FindTarget(e);
+        // 사람에게는 길안내를 하지 않는다 — 그 사람을 따라가게 되지 않게 (11-16 대표님 「개인 프로필의 경우 따라가기 하지말자(스토킹 위험 방지)」).
+        // AR 에 떠 있으면 그 자리만 잠깐 밝힌다 (아래 Focus — 지금 화면에 보이는 것만, 따라가지 않는다)
+        bool canGuide = !e.noDirection && e.kind != PlaceListManager.EntryKind.Person;
         // 노치가 있는 아이폰 — 노치에 화살표 · 거리로 그 장소까지 안내 (멀어서 AR 에 없어도 · 11-09 대표님 「노치 화면에 화살표로 방향과 거리를」)
-        bool guide = !e.noDirection && R0926Notch.Guide(e.lat, e.lon, t, e.name);
+        bool guide = canGuide && R0926Notch.Guide(e.lat, e.lon, t, e.name);
+        // 모든 휴대폰 — AR 화면 아래쪽 3D 화살표 · 「이름 거리 · 방향」 (11-15 대표님 「노치에서만 길안내를 하더라도 … 하단 쪽으로 해서 안내하는 3D모델이」)
+        if (canGuide && R0926GuideArrow.Guide(e.lat, e.lon, t, e.name)) guide = true;
         if (t != null && indicators != null && indicators.Focus(t, tapFlashDuration + 0.1f))
         {
             // AR 에 떠 있다 — 그 줄을 잠깐 밝혔다가 목록을 내리고, 내려가는 동안 AR 의 그 박스·화살표 글자 뒤에 분홍 스티커
@@ -674,7 +682,7 @@ public class R0926PlaceRows : MonoBehaviour
         }
         if (guide)
         {
-            // 아직 AR 에 없어도 — 줄을 잠깐 밝히고 목록을 내린다. 안내는 노치가 이어 간다 (처음 3초는 이름)
+            // 아직 AR 에 없어도 — 줄을 잠깐 밝히고 목록을 내린다. 안내는 아래 화살표(+ 노치)가 이어 간다 (처음 3초는 이름)
             Flash(r, tapFlashDuration);
             closeAt = Time.unscaledTime + tapFlashDuration;
             return;
@@ -1013,6 +1021,7 @@ public class R0926PlaceRows : MonoBehaviour
             }
             if (!ok && data != null)
             {
+                R0926PlaceInfo.Mark(e.noDirection ? 0f : e.lat, e.noDirection ? 0f : e.lon, e.name);   // 상세 위 「길안내」가 이 자리로
                 dt = R0926PlaceInfo.Host();
                 float until = Time.unscaledTime + 2f;
                 while (dt != null && !dt.IsReady && Time.unscaledTime < until) yield return null;   // 처음 만든 대리 오브젝트는 한 프레임 뒤에 준비된다
@@ -1043,6 +1052,7 @@ public class R0926PlaceRows : MonoBehaviour
     private CanvasGroup coverGroup;
     private readonly List<GameObject> coverWatch = new List<GameObject>();
     private int coverState;   // 0 없음 · 1 숨김 · 2 다시 보이는 중
+    private bool coverHold;   // 상세 「길안내」로 목록을 내리는 중 — 창이 닫혀도 다시 비치지 않는다
     private bool coverSeen, coverSavedBlocks, coverSavedInteract;
     private float coverAlpha = 1f, coverSavedAlpha = 1f, coverSince, coverClearAt;
 
@@ -1094,6 +1104,7 @@ public class R0926PlaceRows : MonoBehaviour
             foreach (var g in coverWatch)
                 if (g != null && g.activeInHierarchy) { open = true; break; }
             if (open) { coverSeen = true; coverClearAt = -1f; }
+            else if (coverHold) { }
             else if (coverSeen || now - coverSince > CoverOpenWait)
             {
                 if (coverClearAt < 0f) coverClearAt = now;
@@ -1114,8 +1125,22 @@ public class R0926PlaceRows : MonoBehaviour
         coverGroup.interactable = coverSavedInteract;
     }
 
+    /// <summary>
+    /// 목록에서 연 상세의 「길안내」를 눌렀다 (R0926DetailGuide) — 목록을 다시 보이지 않고 내린다. 줄을 눌러 안내할 때처럼 AR 화면으로.
+    /// 가려 둔 목록이라 짧게 (도크에서 창을 바꿀 때와 같은 옅어지며 닫기)
+    /// </summary>
+    public void CloseForGuide()
+    {
+        if (!isActiveAndEnabled || sheet == null) return;
+        closeAt = -1f;
+        if (coverState == 1) coverHold = true;
+        R0926Closer.DissolveFrame = Time.frameCount;
+        sheet.AnimateClose(null);
+    }
+
     private void EndCover()
     {
+        coverHold = false;
         if (coverState == 0) return;
         coverState = 0;
         coverWatch.Clear();

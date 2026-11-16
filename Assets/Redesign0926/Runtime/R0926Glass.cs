@@ -55,15 +55,34 @@ public class R0926Glass : BaseMeshEffect
         if (Application.isPlaying && isActiveAndEnabled) Restyle();
     }
 
+    // 하늘 카드를 고정하면 틀째 하늘(월드 캔버스)에서 화면 UI 로 옮겨 간다 — 틀이 제 캔버스를 품고 있으면 캔버스 바뀜 소식이 안 오므로 옮김에도 다시 본다
+    protected override void OnTransformParentChanged()
+    {
+        base.OnTransformParentChanged();
+        if (Application.isPlaying && isActiveAndEnabled) Restyle();
+    }
+
     private void LateUpdate()
     {
         if (on) SetSeeThrough(!Covered());
     }
 
+    private static readonly List<Canvas> canvases = new List<Canvas>();
+
+    // img.canvas 는 옮기기 전 캔버스가 남아 있을 수 있다 — 지금 위의 켜진 캔버스를 직접 찾는다 (Graphic 이 찾는 것과 같게)
+    private Canvas CurrentCanvas()
+    {
+        Canvas c = null;
+        GetComponentsInParent(false, canvases);
+        foreach (var cv in canvases) if (cv.isActiveAndEnabled) { c = cv; break; }
+        canvases.Clear();
+        return c;
+    }
+
     private void Restyle()
     {
         if (img == null) return;
-        var c = img.canvas;
+        var c = CurrentCanvas();
         bool overlay = c != null && c.rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay;
         SetOn(R0926MenuStyle.Droplet && glass != null && overlay);
     }
@@ -84,7 +103,7 @@ public class R0926Glass : BaseMeshEffect
         {
             before = img.material == img.defaultMaterial ? null : img.material;
             // uv1 · uv2 를 셰이더로 보내려면 캔버스가 그 채널을 실어야 한다 — 안쪽 캔버스(따로 정렬하는 토스트)부터 맨 위까지
-            for (var cv = img.canvas; cv != null; cv = cv.transform.parent != null ? cv.transform.parent.GetComponentInParent<Canvas>() : null)
+            for (var cv = CurrentCanvas(); cv != null; cv = cv.transform.parent != null ? cv.transform.parent.GetComponentInParent<Canvas>() : null)
                 cv.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
             img.material = glass;
             SetSeeThrough(!Covered());

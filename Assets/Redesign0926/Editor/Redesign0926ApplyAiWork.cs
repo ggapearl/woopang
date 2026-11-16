@@ -9,11 +9,15 @@ namespace Redesign0926
     {
         // ============================================================
         // 장소 추가 ▸ 「이곳에 오브젝트를 추가하시겠습니까?」 ▸ 가운데 「AI 작업」 (11-12 대표님)
-        // 취소 · AI 작업 · 추가하기 한 줄. 누르면 카드 아래로 옵션 판 — 맨 위 한 줄 안내(작업 중..) · 네 칸 · (3D 캐릭터면) 요청사항 + 만들기.
+        // 취소 · AI 작업 · 추가하기 한 줄. 11-14 대표님 「'AI 작업' 을 누르면 여기 창 내에서 작업 … 뒤로가기 누르면 다시 '취소 / AI작업 / 추가하기' …
+        // 이 버튼 하단에도 확인취소」 — 누르면 그 카드가 AI 화면이 된다 (예전엔 카드 아래에 판이 따로 붙어 키보드를 닫으면 도크 아이콘을 덮었다):
+        // ‹ 뒤로 + 안내(작업 중..) · 네 칸 · (3D 캐릭터면) 요청사항 + 만들기 · '빠르게 두 바퀴' 한 줄 · 맨 아래 취소 | 확인.
+        // 카드 높이 · 자리는 R0926AiWorkPanel 이 연다 (윗선 그대로 아래로 · 도크 위까지).
         // 요청사항은 키보드 위 입력줄(UploadInputMirror — 보물찾기 리뷰 칸과 같은 줄)로 쓴다 — 칸이 화면 가운데라 키보드에 가린다
         // ============================================================
-        private const float AiPad = 24f, AiStatusH = 64f, AiGap = 14f, AiTileH = 240f, AiAskH = 130f, AiMakeW = 230f;
-        private static float AiBaseH => AiPad + AiStatusH + AiGap + AiTileH + AiPad;
+        private const float AiPad = 24f, AiHeadH = 100f, AiGap = 14f, AiTileH = 240f, AiAskH = 130f, AiMakeW = 230f, AiHintH = 52f, AiFootH = 150f, AiBackW = 88f;
+        private static float AiBaseH => AiPad + AiHeadH + AiGap + AiTileH + AiGap + AiFootH + AiPad;
+        private static float AiCharH => AiAskH + AiGap + AiHintH + AiGap;
 
         private static void ApplyAiWork(Transform root, List<string> log)
         {
@@ -68,20 +72,36 @@ namespace Redesign0926
             aiLabel.horizontalOverflow = HorizontalWrapMode.Wrap; aiLabel.verticalOverflow = VerticalWrapMode.Overflow;
             Loc(aiLabelGo, "AI 작업", "AI edit", "AI加工", "AI 处理", "Editar con IA");
 
-            // ── 옵션 판 — 카드 아래 빈 곳에 붙어 아래로 자란다 (카드와 같이 올라온다 · 위에 두면 올려다본 큐브를 가린다).
-            //    가로 화면처럼 아래가 모자라면 R0926AiWorkPanel 이 카드 위로 옮긴다 ──
+            // ── AI 화면 — 카드를 꽉 채운다 (카드 배경 그대로 · 판 배경은 없앤다) ──
             var opt = FindOrCreate(mc.transform, "AiOptions0926");
-            SetRect(RT(opt), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 1), new Vector2(0, -24), new Vector2(0, AiBaseH));
-            Img(opt, Spr("r0926_pill"), new Color(Sheet.r, Sheet.g, Sheet.b, 0.98f), Image.Type.Sliced, 64f / 56f).raycastTarget = true;
+            Stretch(RT(opt));
+            var optImg = opt.GetComponent<Image>();
+            if (optImg != null) Object.DestroyImmediate(optImg);
+
+            // ‹ — 세 버튼 줄로 (만든 것은 둔다) · 안드로이드 뒤로가기도 이것
+            var back = FindOrCreate(opt.transform, "Back0926");
+            back.transform.SetSiblingIndex(0);
+            SetRect(RT(back), new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(AiPad, -AiPad), new Vector2(AiBackW, AiHeadH));
+            Img(back, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+            var backBtn = Ensure<Button>(back);
+            backBtn.transition = Selectable.Transition.None;
+            EditorUtility.SetDirty(backBtn);
+            Ensure<ClickButtonOnBack>(back);
+            Ensure<UITouchForwarder>(back);
+            var backIc = FindOrCreate(back.transform, "Icon0926");
+            SetRect(RT(backIc), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 64));
+            Img(backIc, Spr("r0926_i_back"), Ink, Image.Type.Simple).raycastTarget = false;
 
             var st = FindOrCreate(opt.transform, "Status");
-            SetRect(RT(st), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -AiPad), new Vector2(-AiPad * 2 - 24, AiStatusH));
+            SetRect(RT(st), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -AiPad), new Vector2(-(AiPad * 2 + (AiBackW + 12) * 2), AiHeadH));
             var status = Txt(st, "", 40, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
             status.supportRichText = true;   // 작업 중. → .. → ... 를 투명 점으로 자리 지키기
             status.horizontalOverflow = HorizontalWrapMode.Wrap; status.verticalOverflow = VerticalWrapMode.Truncate;
+            // 3D 캐릭터 안내('노란 고양이 · 빨간 모자 · 손 인사 · 아직 모르는 말: …')가 길면 두 줄로 줄여 칸 안에 다 보이게
+            status.resizeTextForBestFit = true; status.resizeTextMinSize = 24; status.resizeTextMaxSize = 40;
 
             var tiles = FindOrCreate(opt.transform, "Tiles");
-            SetRect(RT(tiles), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -(AiPad + AiStatusH + AiGap)), new Vector2(-AiPad * 2, AiTileH));
+            SetRect(RT(tiles), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -(AiPad + AiHeadH + AiGap)), new Vector2(-AiPad * 2, AiTileH));
             var hl = Ensure<HorizontalLayoutGroup>(tiles);
             hl.spacing = 16; hl.padding = new RectOffset(0, 0, 0, 0);
             hl.childControlWidth = true; hl.childControlHeight = true;
@@ -124,9 +144,10 @@ namespace Redesign0926
                 chips[i] = b; chipBgs[i] = bg; chipIcons[i] = icImg; chipLabels[i] = lt;
             }
 
-            // ── 04 3D 캐릭터 — 요청사항 + 만들기 (판 아래쪽, 판이 위로 자란다) ──
+            // ── 04 3D 캐릭터 — 네 칸 아래 요청사항 + 만들기 (카드가 그만큼 아래로 길어진다) ──
+            float askTop = AiPad + AiHeadH + AiGap + AiTileH + AiGap;
             var ask = FindOrCreate(opt.transform, "Ask");
-            SetRect(RT(ask), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, AiPad), new Vector2(-AiPad * 2, AiAskH));
+            SetRect(RT(ask), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -askTop), new Vector2(-AiPad * 2, AiAskH));
             var req = FindOrCreate(ask.transform, "Request");
             var rrt = RT(req);
             rrt.anchorMin = Vector2.zero; rrt.anchorMax = Vector2.one; rrt.pivot = new Vector2(0.5f, 0.5f);
@@ -142,10 +163,10 @@ namespace Redesign0926
             tx.horizontalOverflow = HorizontalWrapMode.Overflow; tx.verticalOverflow = VerticalWrapMode.Truncate;
             var pg = FindOrCreate(req.transform, "Placeholder");
             Stretch(RT(pg)); RT(pg).offsetMin = new Vector2(36, 8); RT(pg).offsetMax = new Vector2(-36, -8);
-            var ph = Txt(pg, "요청사항 — 예) 노란 고양이, 빨간 모자, 손 흔들기", 38, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            var ph = Txt(pg, "요청사항 (비우면 무작위) — 예) 노란 고양이, 빨간 모자", 38, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
             ph.horizontalOverflow = HorizontalWrapMode.Wrap; ph.verticalOverflow = VerticalWrapMode.Truncate; ph.lineSpacing = 0.95f;
-            Loc(pg, "요청사항 — 예) 노란 고양이, 빨간 모자, 손 흔들기", "Request — e.g. yellow cat, red hat, waving",
-                "リクエスト — 例）黄色いネコ、赤い帽子、手を振る", "要求 — 例：黄色小猫、红帽子、挥手", "Petición — p. ej. gato amarillo, gorro rojo, saludando");
+            Loc(pg, "요청사항 (비우면 무작위) — 예) 노란 고양이, 빨간 모자", "Request (blank = random) — e.g. yellow cat, red hat",
+                "リクエスト（空欄でランダム）— 例）黄色いネコ、赤い帽子", "要求（留空=随机）— 例：黄色小猫、红帽子", "Petición (vacía = al azar) — p. ej. gato amarillo, gorro rojo");
             field.textComponent = tx; field.placeholder = ph;
             field.lineType = InputField.LineType.SingleLine;
             field.characterLimit = 60;
@@ -166,6 +187,40 @@ namespace Redesign0926
             Txt(mkl, "만들기", 42, Ink, TextAnchor.MiddleCenter, FontStyle.Bold);
             Loc(mkl, "만들기", "Make", "作る", "生成", "Crear");
             ask.SetActive(false);
+
+            // '빠르게 두 바퀴 돌리면 다른 캐릭터' — 04 를 고르면 요청사항 아래 한 줄 (ARPreviewController.FastSpin)
+            var hint = FindOrCreate(opt.transform, "Hint");
+            SetRect(RT(hint), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -(askTop + AiAskH + AiGap)), new Vector2(-AiPad * 2, AiHintH));
+            var ht = Txt(hint, "옆으로 빠르게 두 바퀴 돌리면 다른 캐릭터", 38, Muted, TextAnchor.MiddleCenter, FontStyle.Normal);
+            ht.horizontalOverflow = HorizontalWrapMode.Wrap; ht.verticalOverflow = VerticalWrapMode.Overflow;
+            Loc(hint, "옆으로 빠르게 두 바퀴 돌리면 다른 캐릭터", "Spin it fast twice for a new character",
+                "横に速く2回転で別のキャラに", "横向快速转两圈换角色", "Gíralo rápido dos veces: otro personaje");
+            hint.SetActive(false);
+
+            // ── 맨 아래 취소 | 확인 — 세 버튼 줄과 같은 알약 (취소 = 원래 사진으로 · 확인 = 만든 것을 두고) ──
+            var foot = FindOrCreate(opt.transform, "Foot");
+            SetRect(RT(foot), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, AiPad), new Vector2(-AiPad * 2, AiFootH));
+            var fl = Ensure<HorizontalLayoutGroup>(foot);
+            fl.spacing = 24; fl.padding = new RectOffset(0, 0, 0, 0);
+            fl.childAlignment = TextAnchor.MiddleCenter;
+            fl.childControlWidth = true; fl.childControlHeight = true;
+            fl.childForceExpandWidth = true; fl.childForceExpandHeight = true;
+            EditorUtility.SetDirty(fl);
+            Button FootButton(string name, int index, bool primary, string[] label)
+            {
+                var g = FindOrCreate(foot.transform, name);
+                g.transform.SetSiblingIndex(index);
+                PillButton(g, primary);
+                ButtonLabel(g, label, primary ? Dark : Ink);
+                var b = Ensure<Button>(g);
+                b.transition = Selectable.Transition.ColorTint;
+                b.targetGraphic = g.GetComponent<Image>();
+                EditorUtility.SetDirty(b);
+                Ensure<UITouchForwarder>(g);
+                return b;
+            }
+            var viewCancel = FootButton("Cancel", 0, false, CancelWords);
+            var viewConfirm = FootButton("Confirm", 1, true, new[] { "확인", "OK", "確認", "确认", "Aceptar" });
             opt.SetActive(false);
 
             // ── 키보드 위 입력줄 — 요청사항 (보물찾기 리뷰 칸과 같은 줄) ──
@@ -227,7 +282,14 @@ namespace Redesign0926
             so.FindProperty("aiButtonIcon").objectReferenceValue = aiIconImg;
             so.FindProperty("aiButtonLabel").objectReferenceValue = aiLabel;
             so.FindProperty("confirmButton").objectReferenceValue = confirm.GetComponent<Button>();
+            so.FindProperty("card").objectReferenceValue = RT(mc);
+            so.FindProperty("cardText").objectReferenceValue = Find(mc.transform, "MessageText");
+            so.FindProperty("cardButtons").objectReferenceValue = bc;
             so.FindProperty("options").objectReferenceValue = RT(opt);
+            so.FindProperty("back").objectReferenceValue = backBtn;
+            so.FindProperty("viewCancel").objectReferenceValue = viewCancel;
+            so.FindProperty("viewConfirm").objectReferenceValue = viewConfirm;
+            so.FindProperty("hint").objectReferenceValue = hint;
             so.FindProperty("status").objectReferenceValue = status;
             SetArray(so.FindProperty("chips"), chips);
             SetArray(so.FindProperty("chipBgs"), chipBgs);
@@ -238,9 +300,11 @@ namespace Redesign0926
             so.FindProperty("make").objectReferenceValue = mkBtn;
             so.FindProperty("mirror").objectReferenceValue = mirror;
             so.FindProperty("optionsHeight").floatValue = AiBaseH;
-            so.FindProperty("askHeight").floatValue = AiAskH + AiGap;
+            so.FindProperty("askHeight").floatValue = AiCharH;
+            so.FindProperty("dockGap").floatValue = 24f;
             so.ApplyModifiedPropertiesWithoutUndo();
-            log.Add("AI 작업 ok — 버튼 · 옵션 4칸 · 요청사항" + (mirror != null ? " (키보드 위 입력줄)" : ""));
+            if (Find(mc.transform, "MessageText") == null) log.Add("AI 작업: 카드 글(MessageText) 없음");
+            log.Add("AI 작업 ok — 카드 안 화면 · ‹ · 4칸 · 요청사항 · 취소/확인" + (mirror != null ? " (키보드 위 입력줄)" : ""));
         }
     }
 }

@@ -64,6 +64,7 @@ public class AdminMessageItem
     public float latitude;
     public float longitude;
     public float radius;
+    public string image_url;   // 알림 사진 (uploads/admin_broadcasts/…) — 없으면 빈칸
 }
 
 [System.Serializable]
@@ -1449,10 +1450,10 @@ public class FirebaseNotification : MonoBehaviour
             }
         }
         string url = $"{ApiConfig.MAIN_SERVER}/api/admin-messages/recent";
-        if (!string.IsNullOrEmpty(lastAdminMsgTime))
-        {
-            url += $"?since={UnityWebRequest.EscapeURL(lastAdminMsgTime)}";
-        }
+        string query = string.IsNullOrEmpty(lastAdminMsgTime) ? "" : "since=" + UnityWebRequest.EscapeURL(lastAdminMsgTime);
+        string spot = MessagePanelManager.RoughSpot();   // 지역 알림은 반경 안 기기에서만 되살린다
+        if (spot != null) query = query.Length > 0 ? query + "&" + spot : spot;
+        if (query.Length > 0) url += "?" + query;
 
 
         using (UnityWebRequest request = UnityWebRequest.Get(url))

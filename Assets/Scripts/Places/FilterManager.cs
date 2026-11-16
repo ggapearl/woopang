@@ -85,6 +85,15 @@ public class FilterManager : MonoBehaviour
 
     private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
     public PetFriendlyFilterState PetState => petFriendlyState;
+
+    private static FilterManager live;
+    /// <summary>
+    /// 애견동반만 보기가 켜져 있는지 — 교통 매니저가 목록을 다시 받아 스스로 만들 때도 이 값을 본다
+    /// (11-14 대표님 「애견동반에서는 지하철, 기차, 터미널 모두 그냥 발생하지 않으면」). 켜지기 전이면 저장된 값
+    /// </summary>
+    public static bool PetOnlyNow => live != null
+        ? live.petFriendlyState == PetFriendlyFilterState.OnlyPetFriendly
+        : PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 0) == 1;
     /// <summary>
     /// 사람 칩의 지금 상태 — 칩을 누르는 건 P2PUserFilterPanel 이 맡으니 그쪽 값을 읽는다.
     /// 예전엔 여기 따로 둔 값(누를 때 바뀌지 않음)을 읽어 칩이 늘 '팔로잉'으로 보였고, 분류를 풀 때도 그 값으로 되돌렸다
@@ -279,6 +288,7 @@ public class FilterManager : MonoBehaviour
         if (trainStationManager == null) trainStationManager = Object.FindFirstObjectByType<TrainStationManager>();
         if (subwayManager == null) subwayManager = Object.FindFirstObjectByType<SubwayManager>();
 
+        live = this;
         LoadFilterSettings();
         UpdateLanguage();
 
@@ -1106,6 +1116,8 @@ public class FilterManager : MonoBehaviour
     /// </summary>
     private void OnProviderCacheReady()
     {
+        // 시작화면 동안은 배분하지 않는다 — 걷히면 AllocationLoop 가 바로 이어서 한다 (예전엔 목록이 오자마자 여기로 새어 시작화면 뒤에서 만들었다)
+        if (BootOverlay.Showing) return;
         Vector2 gps = GetCurrentGPS();
         if (gps.x != 0f || gps.y != 0f)
         {
@@ -1519,10 +1531,11 @@ public class FilterManager : MonoBehaviour
             }
         }
 
-        // IndicatorOnly 디스폰
+        // IndicatorOnly 디스폰 — 3D 로 올라가는 곳의 화살표는 3D 가 뜰 때 치운다 (SpawnDrip · 상세 응답).
+        // 만들 차례를 기다리는 동안 그 자리가 비지 않게. 차례 전에 배분에서 빠지면 다음 배분의 Full 디스폰이 이 화살표를 거둔다
         foreach (string id in currentIndicatorAllocations)
         {
-            if (!newIndicatorSet.Contains(id))
+            if (!newIndicatorSet.Contains(id) && !newFullSet.Contains(id))
             {
                 foreach (var provider in cacheProviders)
                 {
@@ -1553,100 +1566,107 @@ public class FilterManager : MonoBehaviour
         }
         foreach (string rid in pendingToRemove) detailPendingIds.Remove(rid);
 
-        HashSet<string> pendingFullIds = new HashSet<string>();
-        foreach (string id in newFullSet)
+        // 5) 만들기 — 가까운 것부터 한 프레임에 하나씩 (SpawnDrip · 11-13 제안 · 11-14 대표님 「제안한대로 작업해줘」).
+        //    무엇을 둘지(배분) · 치우기 · 임시 화살표 정리 · 상세 요청은 지금 하고, 만들기만 차례로 미룬다.
+        //    예전엔 여기서 3D 수십 개(공공 20 + 우팡 16)와 화살표를 한 프레임에 만들어 화면이 멈칫했다.
+        //    배분(currentFull/IndicatorAllocations)은 지금 바꾼다 — 상세 응답(WantsFull) · 다음 배분이 새 배분을 보게.
+        //    아직 차례가 안 온 곳은 다음 배분에서 '떠 있어야 하는데 없는 곳'으로 다시 계획된다 (예전 복구 갈래와 같다)
+        dripOps.Clear();
+        dripNext = 0;
+        foreach (var item in allPlaces)   // 거리순 (히스테리시스 포함)
         {
-            if (!currentFullAllocations.Contains(id))
+            string id = item.data.uniqueId;
+            if (newFullSet.Contains(id))
             {
-                if (fullProviderMap.TryGetValue(id, out var provider))
+                if (!fullProviderMap.TryGetValue(id, out var provider)) continue;
+                if (FullIds(provider).Contains(id))
                 {
-                    // IndicatorOnly에서 승격 또는 임시 IndicatorOnly가 남아있는 경우 먼저 디스폰
-                    if (currentIndicatorAllocations.Contains(id) || IndIds(provider).Contains(id))
+                    // 이미 떠 있다 — 상세를 기다리며 띄운 임시 화살표 · 화살표에서 올라온 곳의 화살표만 치운다
+                    if (IndIds(provider).Contains(id))
                     {
                         provider.DespawnIndicatorOnly(ExtractRawId(id));
                         Touched(provider);
                     }
-                    bool spawned = provider.SpawnFullObject(ExtractRawId(id));
-                    Touched(provider);
-                    if (!spawned)
-                    {
-                        // Detail API 대기 중 → 임시 IndicatorOnly 표시 (최초 1회만)
-                        pendingFullIds.Add(id);
-                        detailPendingIds[id] = nowTime;
-                        provider.SpawnIndicatorOnly(ExtractRawId(id));
-                        Touched(provider);
-                    }
+                    detailPendingIds.Remove(id);
+                    continue;
                 }
+                // 상세를 기다리는 중 — 응답이 오면 DataManager 가 3D 로 띄운다 (타임아웃이 지나면 다시 시도)
+                if (currentFullAllocations.Contains(id) && detailPendingIds.ContainsKey(id)) continue;
+                // 상세가 없으면 이번 배분의 것을 한 번에 미리 묻는다 — 만들 차례를 기다리지 않고
+                if (provider is DataManager dm) dm.PrefetchDetail(ExtractRawId(id));
+                dripOps.Add(new DripOp { id = id, provider = provider, full = true });
             }
-            else
+            else if (newIndicatorSet.Contains(id))
             {
-                if (fullProviderMap.TryGetValue(id, out var provider))
-                {
-                    bool hasFullSpawn = FullIds(provider).Contains(id);
-                    bool hasIndicator = IndIds(provider).Contains(id);
-
-                    if (hasFullSpawn && hasIndicator)
-                    {
-                        // Full 스폰 완료 후 임시 IndicatorOnly가 남아있으면 제거
-                        provider.DespawnIndicatorOnly(ExtractRawId(id));
-                        Touched(provider);
-                        detailPendingIds.Remove(id);
-                    }
-                    else if (!hasFullSpawn && !hasIndicator && !detailPendingIds.ContainsKey(id))
-                    {
-                        // Detail API 대기 중이 아닌데 Full도 Indicator도 없으면 복구 시도
-                        bool spawned = provider.SpawnFullObject(ExtractRawId(id));
-                        Touched(provider);
-                        if (!spawned)
-                        {
-                            pendingFullIds.Add(id);
-                            detailPendingIds[id] = nowTime;
-                            provider.SpawnIndicatorOnly(ExtractRawId(id));
-                            Touched(provider);
-                        }
-                    }
-                    // ★ Detail 타임아웃 후 IndicatorOnly만 남아 고착된 상태 — Full 재승격 시도
-                    //   백그라운드 복귀 / API 일시 실패 후 영구 고착 방지 (이슈 A)
-                    else if (!hasFullSpawn && hasIndicator && !detailPendingIds.ContainsKey(id))
-                    {
-                        bool spawned = provider.SpawnFullObject(ExtractRawId(id));
-                        Touched(provider);
-                        if (spawned)
-                        {
-                            provider.DespawnIndicatorOnly(ExtractRawId(id));
-                            Touched(provider);
-                        }
-                        else
-                        {
-                            // Detail API 응답 다시 대기 — 다음 타임아웃 후 또 시도하여 무한 진동 방지
-                            detailPendingIds[id] = nowTime;
-                        }
-                    }
-                    // detailPendingIds에 있으면 → Detail API 응답 대기 중이므로 아무것도 안 함
-                }
-            }
-        }
-
-        // IndicatorOnly 스폰
-        // - 새로 추가된 것 (currentIndicatorAllocations에 없음) → 스폰
-        // - 또는 set엔 있지만 실제 indicatorOnlyObjects엔 없는 고아 상태 → 재스폰
-        //   (백그라운드 복귀 시 GameObject가 풀로 반환됐는데 set은 stale한 케이스 방지)
-        foreach (string id in newIndicatorSet)
-        {
-            if (!indicatorProviderMap.TryGetValue(id, out var provider)) continue;
-
-            bool inAllocSet = currentIndicatorAllocations.Contains(id);
-            bool actuallySpawned = IndIds(provider).Contains(id);
-
-            if (!inAllocSet || !actuallySpawned)
-            {
-                provider.SpawnIndicatorOnly(ExtractRawId(id));
-                Touched(provider);
+                // 새로 받은 화살표 · 배분엔 있는데 실제로는 없는 고아 (백그라운드 복귀로 풀에 돌아간 것) — 차례로 띄운다
+                if (!indicatorProviderMap.TryGetValue(id, out var provider)) continue;
+                if (IndIds(provider).Contains(id)) continue;
+                dripOps.Add(new DripOp { id = id, provider = provider, full = false });
             }
         }
 
         currentFullAllocations = newFullSet;
         currentIndicatorAllocations = newIndicatorSet;
+        if (dripOps.Count > 0 && dripCoroutine == null && isActiveAndEnabled) dripCoroutine = StartCoroutine(SpawnDrip());
+    }
+
+    // ── 한 프레임에 하나씩 만들기 (SpawnPace — DataManager 상세 응답 · 교통/관광 직접 생성과 같은 문) ──
+    private struct DripOp { public string id; public IPlaceCacheProvider provider; public bool full; }
+    private readonly List<DripOp> dripOps = new List<DripOp>();
+    private int dripNext;
+    private Coroutine dripCoroutine;
+
+    /// <summary>배분한 것을 아직 차례로 만드는 중인지</summary>
+    public bool Dripping => dripCoroutine != null;
+
+    private IEnumerator SpawnDrip()
+    {
+        while (dripNext < dripOps.Count)
+        {
+            if (!SpawnPace.Ready) { yield return null; continue; }
+            DripOp op = dripOps[dripNext++];
+            if (RunDripOp(op)) SpawnPace.Took();
+        }
+        dripOps.Clear();
+        dripNext = 0;
+        dripCoroutine = null;
+    }
+
+    /// <summary>차례가 온 것 하나 — 그새 배분에서 빠졌으면 건너뛴다. 만들었으면 true (예전 AllocateObjectsCore 의 스폰과 같은 규칙)</summary>
+    private bool RunDripOp(DripOp op)
+    {
+        if (op.provider == null || (op.provider is UnityEngine.Object uo && uo == null)) return false;
+        string raw = ExtractRawId(op.id);
+        bool prevDrop = OffScreenIndicator.DropDisabledArrows;
+        OffScreenIndicator.DropDisabledArrows = true;   // 치우는 화살표는 화살표 모드여도 남기지 않는다 (AllocateObjects 와 같다)
+        try
+        {
+            if (!op.full)
+                return currentIndicatorAllocations.Contains(op.id) && op.provider.SpawnIndicatorOnly(raw);
+
+            if (!currentFullAllocations.Contains(op.id)) return false;
+            if (op.provider.SpawnFullObject(raw))
+            {
+                op.provider.DespawnIndicatorOnly(raw);   // 화살표에서 올라온 곳 · 상세를 기다리며 띄운 임시 화살표
+                detailPendingIds.Remove(op.id);
+            }
+            else
+            {
+                // 상세 대기 중 → 임시 화살표 (응답이 오면 DataManager 가 3D 로 바꾼다 · 타임아웃 뒤 다시 시도)
+                detailPendingIds[op.id] = Time.realtimeSinceStartup;
+                op.provider.SpawnIndicatorOnly(raw);
+            }
+            return true;
+        }
+        finally { OffScreenIndicator.DropDisabledArrows = prevDrop; }
+    }
+
+    private void OnDisable()
+    {
+        // 꺼지면 코루틴이 멈춘다 — 다시 켜졌을 때 다음 배분이 새로 시작하게
+        dripCoroutine = null;
+        dripOps.Clear();
+        dripNext = 0;
     }
 
     /// <summary>
@@ -1664,7 +1684,7 @@ public class FilterManager : MonoBehaviour
         if (!Passes3D(place, filters)) return false;
 
         bool petFriendlyOnly = filters.ContainsKey("petFriendlyOnly") && filters["petFriendlyOnly"];
-        if (petFriendlyOnly && !PetAllowed(place.filterKey, place.filterKey == "publicData", place.category, place.petFriendly, place.displayName)) return false;
+        if (petFriendlyOnly && !PetAllowed(place.filterKey, place.filterKey == "publicData", place.category, place.petFriendly)) return false;
 
         return true;
     }
@@ -1673,15 +1693,13 @@ public class FilterManager : MonoBehaviour
     /// 애견동반을 켰을 때 남는 곳인지 — 목록(PlaceListManager) · AR 배분(IsPassingFilter) · DataManager 가 같은 규칙을 쓴다.
     /// 11-13 대표님 「'애견동반' 을 켰을 때는 실제로 모두 애견동반이 가능한 공간만 보이도록 … 공원 같은 곳은 괜찮을테니까 남겨두는데
     /// 기본적으로 공공데이터의 경우 정부기관이니까 … (공항 정도?) 확인해보고 숨겨지도록」
-    /// ① 지하철·기차·터미널은 숨긴다 — 단 터미널 칩의 'OO공항'은 남긴다 (11-14 대표님 「애견동반은 공항터미널 남겨」.
-    ///    11-13 엔 공항도 이동장에 넣어야만 들어가서 같이 숨겼다. 공항 자체(public_facilities type airport)는 앱이 받지 않는다)
+    /// ① 지하철·기차·터미널은 공항까지 모두 숨긴다 (11-15 대표님 「그냥 공항도 애견동반하면 안보이도록 해도돼」 — 11-14 엔 터미널 칩의 'OO공항'을 남겼다)
     /// ② 기관이 올린 공공시설(시청·경찰서·학교·도서관·병원·우체국·복지관·박물관·체육관·공중화장실)은 DB 표시와 상관없이 숨긴다 —
     ///    넣을 때 규칙도 '공공기관은 false' 지만 표시 하나가 잘못 들어가도 새지 않게. 사람이 '스포츠'·'화장실'로 올린 곳은 표시대로 (애견 운동장 등)
     /// ③ 나머지(공원 · 명소 · 관광공사 반려동물 여행지 · 사람이 올린 곳)는 애견동반 표시대로 — 반려견 금지 공원은 표시가 꺼져 있다
     /// </summary>
-    public static bool PetAllowed(string filterKey, bool publicSource, string category, bool petFriendly, string name = null)
+    public static bool PetAllowed(string filterKey, bool publicSource, string category, bool petFriendly)
     {
-        if (filterKey == "terminal" && IsAirportName(name)) return true;
         if (IsTransitKey(filterKey)) return false;
         if (publicSource && PetBarredPublicCategories.Contains(category ?? "")) return false;
         return petFriendly;
@@ -1689,7 +1707,7 @@ public class FilterManager : MonoBehaviour
 
     public static bool IsTransitKey(string filterKey) => filterKey == "subway" || filterKey == "train" || filterKey == "terminal";
 
-    /// <summary>터미널 칩의 공항인지 — 이름에 '공항' · airport (목록의 비행기 그림과 같은 기준)</summary>
+    /// <summary>터미널 칩의 공항인지 — 이름에 '공항' · airport (목록의 비행기 그림)</summary>
     public static bool IsAirportName(string name) =>
         !string.IsNullOrEmpty(name) && (name.Contains("공항") || name.IndexOf("airport", System.StringComparison.OrdinalIgnoreCase) >= 0);
 
@@ -1700,6 +1718,9 @@ public class FilterManager : MonoBehaviour
 
     /// <summary>지금 배분이 이 장소를 3D(Full)로 두는지 — 상세 응답이 늦게 와서 그새 빠진 장소를 띄우지 않게 (DataManager)</summary>
     public bool WantsFull(string uniqueId) => currentFullAllocations.Contains(uniqueId);
+
+    /// <summary>배분이 쓰는 지금 위치 (위도, 경도) — DataManager 가 상세 응답을 가까운 것부터 띄울 때</summary>
+    public Vector2 Here => GetCurrentGPS();
 
     /// <summary>
     /// 3D 오브젝트 — 올린 3D 모델(분류 anim · 큐브로 떠 있다 더블탭하면 GLB) 또는 model_type custom.
