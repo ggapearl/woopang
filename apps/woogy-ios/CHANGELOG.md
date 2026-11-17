@@ -21,6 +21,14 @@
    (앱을 껐다 켜도 · 다른 탭에 갔다 와도). 설정에서 카메라를 끄면 안내 문구가 뜨고 「번호로 확인」이 되는지.
 3. 이 빌드에는 (3) 의 공유 카드 링크(유니버설 링크)도 그대로 들어 있다 — (3) 확인 항목도 같이.
 
+**결과 (2026-11-17, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 4 · 업로드 2026-11-17 21:55 KST · 앱 ID `6835099990` · 커밋 `b18a321`
+- `xcodegen generate` 다시 → 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0(AppIntents 안내 1줄뿐) · `requestMediaCapturePermissionFor` · `cameraEnsure` · `openSettings` 포함 코드 고친 곳 없음
+- archive Info.plist: `NSCameraUsageDescription` 에 「가게에서 받는 분 QR 코드를 읽으려면」 들어감
+- export entitlements: `applinks:woopang.com`(Associated Domains) · `aps-environment = production` 둘 다 확인
+- 그룹 `대표님` 에 들어감 · 수출 규정 질문 없음
+- TestFlight 앱에 우기가 안 보이는 문제(테스터 `INVITED`)가 그대로라 같은 빌드를 Ad Hoc 서명으로 대표님 아이폰(pdnom)에 케이블 설치
+
 ## 1.0.0 (3) — 2026-11-17 · 공유 카드 링크를 앱으로 바로 열기 (빌드 번호는 `project.yml` 에 3 으로 올려 두었다 — 더 올리지 않는다)
 
 **카톡 등에서 받은 기부카드 링크를 누르면, 앱이 깔려 있으면 앱이 바로 연다** — 2026-11-17 대표님 승인 「그렇게해」.
