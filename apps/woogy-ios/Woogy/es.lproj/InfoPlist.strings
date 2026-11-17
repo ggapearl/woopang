@@ -1,4 +1,4 @@
 /* Woogy — avisos de permisos del iPhone (español) */
 "NSLocationWhenInUseUsageDescription" = "Woogy usa tu ubicación para verificar tu barrio o mostrarte historias cercanas. Tus vecinos solo ven el nombre del barrio y la ubicación de tu casa se guarda con una precisión de unos 100 m.";
-"NSCameraUsageDescription" = "La cámara se usa para tomar fotos de historias, recibos, comprobantes de entrega y tu foto de perfil.";
+"NSCameraUsageDescription" = "La cámara se usa para tomar fotos de historias, recibos, comprobantes de entrega y tu foto de perfil, y para leer el código QR del beneficiario en una tienda.";
 "NSPhotoLibraryUsageDescription" = "El acceso a fotos se usa para elegir fotos de historias, recibos, comprobantes de entrega y tu foto de perfil.";

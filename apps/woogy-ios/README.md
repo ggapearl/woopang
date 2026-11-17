@@ -13,6 +13,10 @@
 - **앱이 하는 일**: 화면을 꽉 채운 WKWebView + 웹의 알림창(alert · confirm · prompt) + 새 창(아래에서 올라오는 창) +
   바깥 링크는 사파리 · 전화 · 카드 앱으로 + **알림(APNs)** + **간편로그인 다리**(시스템 브라우저 창) + 인터넷이 안 될 때 안내 화면.
 - **다시 빌드할 때**: ① 폰 기능(`Woogy/Shell/`)을 바꿀 때 ② TestFlight 90일 만료 전(빌드 번호만 올려서 — Windows 의 `ios_expiry.py` 가 알린다).
+  - **빌드가 필요한 것**: Swift · 새 `WoogyApp.call` · 권한 문구(`InfoPlist.strings` 6개 언어) · `project.yml` · entitlements · 아이콘.
+  - **빌드가 필요 없는 것(웹/서버만)**: 화면 · 글 · 색 · 여백 · 가맹점 모드 · 가게 현황 · 메뉴 · 헤더 · 키보드 스크롤 · 왼쪽 끝 밀어 뒤로(웹 JS) · 서버 규칙.
+  - 웹이 새 폰 기능을 부를 때는 옛 빌드에서도 안 깨지게(`.catch`) — 옛 앱과 새 웹이 같이 돈다.
+  - 다른 웹뷰 앱을 새로 빌드할 때의 점검 목록(카메라 권한 · 키보드 · 안전 영역 · 뒤로 · 유니버설 링크): 로컬 `server/voice/desk/APP_RELEASE.md` 「우기(Woogy) iOS — 빌드가 필요한 변경…」.
 - 실행 화면은 우기 크림색(#FFFBEA) 빈 화면(자동 생성) → 바로 우기 화면.
 - **아이콘은 원본 로고(광택)** — 노란 광택 바탕 · 초록 날개 하트. `design/logo_gloss_original.png`(원본)를 `design/make_icon.py` 가
   테두리 안쪽만 잘라 `icon-1024.png`(RGB 1024 · 투명 없음)로 만든다. 2026-11-16 대표님 지시 — **평면 아이콘(`woogy_icon_square.png`)으로 되돌리지 말 것.**
@@ -70,7 +74,9 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 
 ## 앱스토어 출시 전에 할 일
 
-우기 전체의 할 일 · 대표님 결정 · 폰 확인은 **우기 DOC**(https://woopang.com/plan/woogy_doc)에 모은다. 앱 쪽은:
+우기 전체의 할 일 · 대표님 결정 · 폰 확인은 **우기 DOC**(https://woopang.com/plan/woogy_doc)에 모은다.
+빌드 → 시험 → 커밋 → TestFlight → 스토어 공개까지의 순서(안드로이드 포함 — 우기 안드로이드 앱은 2026-11-17 현재 아직 없다)는
+로컬 `server/voice/desk/APP_RELEASE.md` 「우기(Woogy) 출시 로직」. 앱 쪽은:
 
 - `WebShell.swift` 의 `isInspectable = true` 끄기(시험 기간에만 Mac 사파리로 들여다보려고 켜 둠)
 - App Store Connect 「앱 개인정보」: 웹이 받는 정보(휴대폰 번호 · 대략 위치 · 사진 · 결제 기록) 적기

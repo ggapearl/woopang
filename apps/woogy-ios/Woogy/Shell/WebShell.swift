@@ -197,6 +197,17 @@ struct WebShell: UIViewRepresentable {
             }
         }
 
+        // 웹 화면의 카메라(기부 스캐너 · 사진 찍기) 요청 — 받아 주지 않으면 WKWebView 는 열 때마다 「카메라를 쓰려 합니다」를 새로 묻는다
+        // (기기 허락은 이미 한 번 했는데도). 우기 화면의 카메라만 바로 허락 — 기기 허락 자체는 iOS 가 그대로 지킨다(설정에서 끄면 막힘).
+        // 마이크는 쓰지 않으니 묻는다(.prompt). Objective-C 이름표를 붙여 이름이 어긋나면 빌드 때 드러나게 한다.
+        @objc(webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:)
+        func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                     initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                     decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            let own = origin.protocol == "https" && (origin.host == "woopang.com" || origin.host == "www.woopang.com")
+            decisionHandler(own && type == .camera ? .grant : .prompt)
+        }
+
         // 웹의 alert · confirm · prompt (기부 취소 · 사연 내리기 · 탈퇴 확인, 복사 안 될 때) — 받아 주지 않으면
         // WKWebView 는 아무것도 띄우지 않는다(confirm 은 늘 '아니오'). 콜백 판 + Objective-C 이름표를 붙여 둔다:
         // 이름이 어긋나면 WebKit 이 조용히 안 부르는데(효딩쓰 1.0.3 마이크), 이름표가 있으면 빌드 때 바로 드러난다.
