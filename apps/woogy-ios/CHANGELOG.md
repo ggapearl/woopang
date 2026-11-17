@@ -45,6 +45,15 @@
      그때 카톡 브라우저 메뉴의 「다른 브라우저로 열기」를 누르면 우기 앱이 열리는지
    - 앱이 꺼진 상태 · 켜진 상태 두 번 다
 
+**결과 (2026-11-17, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 3 · 업로드 2026-11-17 01:20 KST · 앱 ID `6835099990` · 커밋 `b818f2c`
+- 번들 ID `com.que.woogy` 에 **Associated Domains** 켬(`ASSOCIATED_DOMAINS` 201) — 지금 켜진 것: 인앱결제 · Push · Associated Domains
+- `xcodegen generate` 다시 → 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0(AppIntents 안내 1줄뿐) · `Shell.shareLink` · `.onOpenURL` 포함 코드 고친 곳 없음
+- export entitlements: `com.apple.developer.associated-domains = applinks:woopang.com` · `aps-environment = production` (둘 다 확인)
+- 서버: `/.well-known/apple-app-site-association` → 200 · `application/json` · `woopang.com/woogy/gate` → 200
+- 그룹 `대표님` 에 들어감 · 수출 규정 질문 없음
+- TestFlight 앱에 우기·우팡M 이 안 보이는 문제가 그대로(테스터 상태 `INVITED`, 효딩쓰·우팡은 `INSTALLED`) → 같은 빌드를 Ad Hoc 서명으로 대표님 아이폰(pdnom)에 케이블 설치
+
 ## 1.0.0 (2) — 2026-11-16 · 광택 아이콘 · 허락 창 6개 언어 · 위치를 앱이 직접 묻기 (빌드 번호는 `project.yml` 에 2 로 올려 두었다 — 더 올리지 않는다)
 
 **앱 아이콘을 원본 로고(광택)로** — 2026-11-16 대표님 「향후 빌드할 때 로고를 지금로고 사용하지 말고 원본로고(광택) 을 사용해서 빌드하도록」.
