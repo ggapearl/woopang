@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-16a';
+  const WEB_VERSION = '2026-11-18a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3183,8 +3183,14 @@
     }
     // 문서 — 처음 볼 때 주소를 넣는다(넘기지 않은 문서는 받지 않음)
     // sandbox — 같은 woopang.com 이라도 문서 속 스크립트가 앱의 기기 토큰(localStorage)에 못 닿게 allow-same-origin 은 뺀다(10/4)
-    return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-doc' }, h('iframe', { 'data-src': e.url, title: e.name || '문서', referrerpolicy: 'no-referrer',
-      sandbox: 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads' })));
+    // 불러오는 동안은 흰 칸 대신 스피너(2026-11-18 대표님) — 문서가 다 그려진 뒤(load)에야 보인다
+    const frame = h('iframe', { 'data-src': e.url, title: e.name || '문서', referrerpolicy: 'no-referrer',
+      sandbox: 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-downloads' });
+    const doc = h('div', { class: 'vw-doc loading' }, frame, h('div', { class: 'vw-load', 'aria-label': '불러오는 중' }, h('i', { class: 'spinner' })));
+    // 빈 iframe 이 넣어질 때 나는 load 는 무시 — 주소·내용을 실제로 넣은 뒤(dataset.go)의 load 만 진짜
+    frame.addEventListener('load', () => { if (frame.dataset.go) doc.classList.remove('loading'); });
+    frame.docFail = () => { doc.classList.remove('loading'); doc.replaceChildren(h('div', { class: 'vw-msg', text: '문서를 불러오지 못했어요' })); };
+    return h('div', { class: 'vw-slide' }, doc);
   }
 
   /** 문서 한 장을 그린다. woopang.com 은 X-Frame-Options DENY 라 iframe 에 주소를 넣으면 앱 안에서는 빈 화면이었다
@@ -3214,13 +3220,16 @@
         if (r.ok && type.includes('text/html')) {
           const page = await r.text();
           const head = '<base href="' + esc(abs.href) + '">' + DOC_LINK;
+          f.dataset.go = '1';
           f.srcdoc = /<head[^>]*>/i.test(page) ? page.replace(/<head[^>]*>/i, m => m + head) : head + page;
           return;
         }
-        if (r.ok && /^text\/(markdown|x-markdown)/.test(type)) { f.srcdoc = DOC_PAGE(markdown(await r.text()) + DOC_LINK); return; }
-        if (r.ok && /^text\/|json/.test(type)) { f.srcdoc = DOC_PAGE('<pre class="txt">' + esc(await r.text()) + '</pre>' + DOC_LINK); return; }
+        if (r.ok && /^text\/(markdown|x-markdown)/.test(type)) { f.dataset.go = '1'; f.srcdoc = DOC_PAGE(markdown(await r.text()) + DOC_LINK); return; }
+        if (r.ok && /^text\/|json/.test(type)) { f.dataset.go = '1'; f.srcdoc = DOC_PAGE('<pre class="txt">' + esc(await r.text()) + '</pre>' + DOC_LINK); return; }
+        if (!r.ok && f.docFail) { f.docFail(); return; }    // 기한 지남·없는 문서 — 스피너를 계속 돌리지 않는다
       } catch (e) { /* 아래 주소로 */ }
     }
+    f.dataset.go = '1';
     f.src = url;                                            // PDF·다른 사이트 — 예전처럼 주소로
   }
 
@@ -3266,7 +3275,7 @@
       Array.from(track.children).forEach((s, i) => {
         if (i !== idx) s.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
         const f = s.querySelector('iframe[data-src]');
-        if (f && i === idx) loadDoc(f);
+        if (f && Math.abs(i - idx) <= 1) loadDoc(f);        // 보는 장과 이웃 장을 미리 — 넘길 때 기다리지 않게
       });
     }
 

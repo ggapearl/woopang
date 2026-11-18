@@ -469,8 +469,13 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .vw-audio{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;padding:0 20px}
 .vw-audio audio{width:100%;max-width:400px}
 .vw-msg{font-size:15px;color:rgba(255,255,255,.8);text-align:center;padding:0 20px;overflow-wrap:anywhere}
-.vw-doc{width:100%;height:100%;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff}
+.vw-doc{position:relative;width:100%;height:100%;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff}
 .vw-doc iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.vw-doc.loading{background:#000}
+.vw-doc.loading iframe{visibility:hidden}
+.vw-load{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;color:#fff;pointer-events:none}
+.vw-load .spinner{width:34px;height:34px;border-width:3px}
+.vw-doc:not(.loading) .vw-load{display:none}
 .vw-arrow{position:absolute;top:50%;width:38px;height:38px;margin-top:-19px;border-radius:50%;display:grid;place-items:center;
   color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);z-index:1}
 .vw-arrow svg{width:18px;height:18px}
