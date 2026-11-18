@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-18a';
+  const WEB_VERSION = '2026-11-18b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -235,41 +235,74 @@
     return true;
   }
 
+  /** 글 문서(html·md·txt·csv)는 저장·공유할 때 PDF 로 (2026-11-18 대표님: 「문서는 PDF, 사진은 사진으로 — 브라우저로 html 공유하지 말 것」).
+   *  서버가 ?pdf=1 로 PDF 를 만들어 준다(크롬 인쇄 — 처음엔 몇 초 걸리고 그 뒤엔 저장본). 사진·영상·음성·pdf 는 그대로. */
+  const TEXT_DOC = /\.(html?|md|markdown|txt|csv)$/i;
+  function docAsPdf(f) {
+    const nm = f.name || nameFromUrl(f.url);
+    if (!/\/AI\/doc\//.test(f.url) || !TEXT_DOC.test(String(nm).split(/[?#]/)[0])) return f;
+    return { url: f.url + (f.url.includes('?') ? '&' : '?') + 'pdf=1', name: nm.replace(TEXT_DOC, '') + '.pdf' };
+  }
+
+  /** 파일을 받아 둔다 — 같은 파일은 한 번만(PDF 는 만드는 데 몇 초 걸려서, 열어 볼 때 미리 받아 두면 공유 단추가 바로 먹는다) */
+  const filePromises = new Map();
+  function prepFile(f) {
+    const key = f.url;
+    if (!filePromises.has(key)) {
+      const p = (async () => {
+        const res = await fetch(f.url);
+        if (!res.ok || Number(res.headers.get('content-length') || 0) > 80 * 1024 * 1024) { if (res.body) res.body.cancel(); throw new Error('size'); }
+        const b = await res.blob();
+        return new File([b], f.name || nameFromUrl(f.url), { type: b.type || 'application/octet-stream' });
+      })();
+      p.catch(() => filePromises.delete(key));
+      filePromises.set(key, p);
+    }
+    return filePromises.get(key);
+  }
+  const warmDoc = f => { const p = docAsPdf(f); if (p !== f) prepFile(p).catch(() => {}); };
+
   function downloadFile(url, name) {
     if (!url) return;
     if (!/\/AI\/doc\//.test(url)) { openLink(url); return; }
     if (Native && isMediaFile(url, name)) { saveToGallery(url, name); return; }
-    const u = url + (url.includes('?') ? '&' : '?') + 'dl=1';
+    if (Native || (navigator.canShare && /Android|iPhone|iPad/i.test(navigator.userAgent))) {                  // 폰 — 브라우저로 넘기지 않고 파일만 공유 창으로(「파일에 저장」·카톡·메일)
+      toast('공유 창에서 「파일에 저장」을 눌러 주세요');
+      shareFiles([{ url, name }]);
+      return;
+    }
+    const f = docAsPdf({ url, name });
+    const u = f.url + (f.url.includes('?') ? '&' : '?') + 'dl=1';
     toast('내려받는 중이에요');
-    if (Native) { Native.openExternal({ url: u }).catch(e => toast(e.message || '받을 수 없어요')); return; }
-    const a = h('a', { href: u, download: name || '', rel: 'noopener', style: 'display:none' });
+    const a = h('a', { href: u, download: f.name || '', rel: 'noopener', style: 'display:none' });
     document.body.append(a);
     a.click();
     a.remove();
   }
 
-  /** 공유 (2026-10-29) — 사진·영상 파일 자체를 기기의 공유 창으로(카톡·인스타·메일 등). 파일로 못 보내는 기기는 링크로. */
+  /** 공유 (2026-10-29) — 사진·영상·PDF 파일 자체를 기기의 공유 창으로(카톡·인스타·메일 등). 링크나 브라우저로는 보내지 않는다(2026-11-18). */
   async function shareFiles(list, title) {
-    list = (list || []).filter(f => f && f.url).slice(0, 10);
+    list = (list || []).filter(f => f && f.url).slice(0, 10).map(docAsPdf);
     if (!list.length) return;
-    if (navigator.share && navigator.canShare) {
-      try {
-        toast('공유 준비하는 중이에요');
-        const files = [];
-        for (const f of list) {
-          const res = await fetch(f.url);
-          if (!res.ok || Number(res.headers.get('content-length') || 0) > 80 * 1024 * 1024) { if (res.body) res.body.cancel(); throw new Error('size'); }
-          const b = await res.blob();
-          files.push(new File([b], f.name || nameFromUrl(f.url), { type: b.type || 'application/octet-stream' }));
-        }
-        // 제목·글을 같이 넘기면 받는 앱에 사진과 글이 함께 간다(2026-11-16 대표님) — 파일만 넘긴다
-        if (navigator.canShare({ files })) { await navigator.share({ files }); return; }
-      } catch (err) { if (err && err.name === 'AbortError') return; }
+    const files = [];
+    try {
+      toast(list.some(f => /\.pdf$/i.test(f.name || '')) ? 'PDF 만드는 중이에요 — 잠시만요' : '공유 준비하는 중이에요');
+      for (const f of list) files.push(await prepFile(f));
+    } catch (err) { toast('파일을 준비하지 못했어요'); return; }
+    // 제목·글을 같이 넘기면 받는 앱에 사진과 글이 함께 간다(2026-11-16 대표님) — 파일만 넘긴다
+    if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
+      try { await navigator.share({ files }); }
+      catch (err) {
+        if (err && err.name === 'AbortError') return;
+        toast(err && err.name === 'NotAllowedError' ? '준비됐어요 — 한 번 더 눌러 주세요' : '공유하지 못했어요');   // 만드는 동안 누른 시간이 지났다 — 다시 누르면 바로
+      }
+      return;
     }
-    if (navigator.share) {
-      try { await navigator.share({ url: new URL(list[0].url, location.href).href }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
-    }
-    openLink(list[0].url);
+    if (Native) { toast('이 기기에서는 파일을 공유할 수 없어요'); return; }
+    files.forEach((file, i) => setTimeout(() => {         // PC 브라우저 — 파일로 받는다
+      const a = h('a', { href: URL.createObjectURL(file), download: file.name, style: 'display:none' });
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }, i * 600));
   }
 
   const nameFromUrl = u => { try { return decodeURIComponent(String(u).split(/[?#]/)[0].split('/').pop()) || 'file'; } catch (e) { return 'file'; } };
@@ -3276,6 +3309,7 @@
         if (i !== idx) s.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
         const f = s.querySelector('iframe[data-src]');
         if (f && Math.abs(i - idx) <= 1) loadDoc(f);        // 보는 장과 이웃 장을 미리 — 넘길 때 기다리지 않게
+        if (i === idx && s.querySelector('.vw-doc')) warmDoc(list[i]);   // 저장·공유할 PDF 도 보는 동안 미리(같은 파일은 한 번만)
       });
     }
 
