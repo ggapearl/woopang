@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-18b';
+  const WEB_VERSION = '2026-11-19a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3297,14 +3297,25 @@
         h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
         h('div', { class: 'vw-acts' },
-          h('button', { class: 'vw-btn text', text: '저장', onclick: () => downloadFile(list[idx].url, list[idx].name) }),
-          h('button', { class: 'vw-btn text', text: '공유', onclick: share }))),
-      h('div', { class: 'vw-stage' }, track, prev, next));
+          h('button', { class: 'vw-btn emo', 'aria-label': '저장', text: '💾', onclick: () => downloadFile(list[idx].url, list[idx].name) }),
+          h('button', { class: 'vw-btn emo', 'aria-label': '공유', text: '📤', onclick: share }))),
+      h('div', { class: 'vw-stage' }, track),
+      many ? h('div', { class: 'vw-bot' }, prev, next) : null);
+
+    /** 글 문서가 보이는 동안은 트랙의 가로 스크롤을 잠근다. 넘기는 중(스크롤 중)에 잠그면 중간에 멈추니 멈춘 뒤에 */
+    let lockTimer = 0;
+    function applyLock() {
+      const cur = track.children[idx];
+      track.classList.toggle('lock', !!(cur && cur.querySelector('.vw-doc')));
+    }
+    function lockSoon() { clearTimeout(lockTimer); lockTimer = setTimeout(applyLock, 160); }
 
     function sync() {
       counter.textContent = many ? (idx + 1) + ' / ' + list.length : '';
       if (prev) prev.hidden = idx === 0;
       if (next) next.hidden = idx === list.length - 1;
+      track.classList.remove('lock');                      // 넘기는 동안은 풀어 두고 — 멈춘 뒤 문서면 다시 잠근다
+      lockSoon();
       Array.from(track.children).forEach((s, i) => {
         if (i !== idx) s.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } });
         const f = s.querySelector('iframe[data-src]');
@@ -3323,6 +3334,7 @@
     }
 
     track.addEventListener('scroll', () => {
+      if (!track.classList.contains('lock')) lockSoon();   // 스크롤이 멈추고 160ms 뒤에 잠근다(넘기는 도중엔 안 잠긴다)
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const w = track.clientWidth || 1;

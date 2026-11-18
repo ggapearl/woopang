@@ -476,12 +476,16 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .vw-load{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;color:#fff;pointer-events:none}
 .vw-load .spinner{width:34px;height:34px;border-width:3px}
 .vw-doc:not(.loading) .vw-load{display:none}
-.vw-arrow{position:absolute;top:50%;width:38px;height:38px;margin-top:-19px;border-radius:50%;display:grid;place-items:center;
-  color:#fff;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.25);z-index:1}
+/* 앞·뒤 장 단추는 보는 칸 아래 줄로 (2026-11-19 대표님: 가운데 옆에 있으면 문서를 가린다) */
+.vw-bot{flex:none;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.vw-arrow{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
+  color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25)}
+.vw-arrow[hidden]{display:grid;visibility:hidden}
 .vw-arrow svg{width:18px;height:18px}
-.vw-arrow.prev{left:8px}
-.vw-arrow.next{right:8px}
 .vw-arrow.next svg{transform:scaleX(-1)}
+.vw-btn.emo{font-size:22px;line-height:1}
+/* 글 문서를 보는 동안은 가로 스와이프로 장을 넘기지 않는다 — 대각선으로 쓸어도 위아래 스크롤이 먹게(장 이동은 아래 단추) */
+.vw-track.lock{overflow-x:hidden;touch-action:pan-y}
 .vw-foot{flex:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px 6px}
 .vw-name{flex:1;min-width:0;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vw-open{flex:none;font-size:12px;color:rgba(255,255,255,.85);text-decoration:underline;text-underline-offset:2px;padding:6px 0}
