@@ -1,0 +1,12 @@
+{
+  "name": "woogy-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "우기(Woogy) 안드로이드 — woopang.com/woogy 를 띄우는 Capacitor 껍데기 + 알림(FCM) · 간편로그인 · 위치 · 카메라",
+  "dependencies": {
+    "@capacitor/android": "6.2.1",
+    "@capacitor/app": "6.0.3",
+    "@capacitor/cli": "6.2.1",
+    "@capacitor/core": "6.2.1"
+  }
+}

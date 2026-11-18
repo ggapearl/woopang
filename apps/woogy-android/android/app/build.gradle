@@ -1,0 +1,126 @@
+apply plugin: 'com.android.application'
+
+// ── 버전 ───────────────────────────────────────────────────────────
+// 화면은 woopang.com/woogy/ 에서 받아 오므로, 화면만 고쳤을 땐 앱을 다시 올릴 필요가 없다.
+// 권한·아이콘·플러그인·targetSdk 처럼 네이티브가 바뀔 때만 appVersion 을 올린다. versionCode 는 1.0.0 → 10000.
+def appVersion = "1.0.0"
+def appVersionCode = appVersion.tokenize('.').collect { it as int }.with { it[0] * 10000 + it[1] * 100 + it[2] }
+
+// ── 서명 (업로드 키) ────────────────────────────────────────────────
+// 키는 저장소 밖에 둔다. 처음 한 번 tools\make-upload-key.ps1 을 대표님이 직접 돌려 만든다(비밀번호는 대표님이 입력).
+//   기본: %USERPROFILE%\.android-signing\woogy\signing.properties
+//   (storeFile / storePassword / keyAlias / keyPassword — storeFile 은 절대경로)
+// 다른 곳에 두면 환경 변수 WOOGY_SIGNING 에 그 properties 파일 경로를 넣는다.
+def signingPropsFile = new File(System.getenv('WOOGY_SIGNING') ?:
+        "${System.getProperty('user.home')}/.android-signing/woogy/signing.properties")
+def signingProps = new Properties()
+if (signingPropsFile.exists()) {
+    signingPropsFile.withInputStream { signingProps.load(it) }
+}
+
+android {
+    namespace "com.que.woogy"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.que.woogy"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildFeatures {
+        buildConfig true    // WoogyNativePlugin 이 앱 버전을 읽는다 (AGP 8 은 기본으로 꺼져 있다)
+    }
+    signingConfigs {
+        release {
+            if (signingPropsFile.exists()) {
+                storeFile file(signingProps['storeFile'])
+                storePassword signingProps['storePassword']
+                keyAlias signingProps['keyAlias']
+                keyPassword signingProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            // 웹뷰 껍데기 — 줄이기(R8)를 켜면 Capacitor 플러그인 이름 찾기가 깨질 수 있어 끈다(농민닷컴 · 강아지 앱과 같음)
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (signingPropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    // 알림(FCM) · 간편로그인 창(Custom Tabs) · 위치(Fused) — WoogyMessagingService / WoogyNativePlugin
+    implementation 'com.google.firebase:firebase-messaging:24.1.0'
+    implementation 'androidx.browser:browser:1.8.0'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+}
+
+apply from: 'capacitor.build.gradle'
+
+// google-services.json (Firebase 프로젝트 woogy-a4c36 — 비공개라 저장소에 올리지 않는다. C:\woogy-app\secrets 에 정본)
+// 이 파일이 있어야 알림(FCM)이 켜진다. 없으면 플러그인을 걸지 않고 빌드는 되지만 알림은 오지 않는다.
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.warn("google-services.json 이 없어 알림(FCM)이 꺼진 채로 빌드합니다")
+}
+
+// ── 결과물을 바탕화면\woopang_build 로 ─────────────────────────────
+//   assembleDebug  → woogy-1.0.0-debug.apk   (폰·에뮬레이터 시험용, 서명 키 필요 없음)
+//   bundleRelease  → woogy-1.0.0.aab         (Play 업로드용, 업로드 키 필요)
+tasks.whenTaskAdded { task ->
+    if (task.name == "bundleRelease" || task.name == "assembleRelease") {
+        task.doFirst {
+            if (!signingPropsFile.exists()) {
+                throw new GradleException("업로드 키가 없습니다: ${signingPropsFile} — tools\\make-upload-key.ps1 을 먼저 돌려 주세요 (README 「서명 키」)")
+            }
+            if (!file('google-services.json').exists()) {
+                throw new GradleException("google-services.json 이 없습니다 — 알림이 안 오는 앱이 됩니다. C:\\woogy-app\\secrets 의 파일을 android\\app 에 복사해 주세요")
+            }
+        }
+    }
+    def outs = [assembleDebug: ["apk/debug/app-debug.apk", "woogy-${appVersion}-debug.apk"],
+                bundleRelease: ["bundle/release/app-release.aab", "woogy-${appVersion}.aab"]]
+    if (outs.containsKey(task.name)) {
+        task.doLast {
+            def (rel, name) = outs[task.name]
+            def src = file("$buildDir/outputs/$rel")
+            if (src.exists()) {
+                def destDir = new File("${System.getProperty('user.home')}/Desktop/woopang_build")
+                destDir.mkdirs()
+                def dest = new File(destDir, name)
+                dest.bytes = src.bytes
+                println ">> ${dest.absolutePath}"
+            }
+        }
+    }
+}

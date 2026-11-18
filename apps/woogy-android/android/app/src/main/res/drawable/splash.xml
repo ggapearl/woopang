@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱이 뜨는 동안 (안드로이드 11 이하) — 노란 바탕에 날개 하트 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/wg_splash" />
+    <item
+        android:width="120dp"
+        android:height="120dp"
+        android:drawable="@drawable/splash_logo"
+        android:gravity="center" />
+</layer-list>

@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">우기</string>
+    <string name="title_activity_main">우기</string>
+    <string name="package_name">com.que.woogy</string>
+    <string name="custom_url_scheme">com.que.woogy</string>
+    <string name="notif_channel_name">우기 알림</string>
+    <string name="notif_channel_desc">사연 · 결제 · 전달 인증 · 온도 소식을 알려 드려요</string>
+</resources>

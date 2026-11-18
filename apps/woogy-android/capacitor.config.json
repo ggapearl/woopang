@@ -1,0 +1,14 @@
+{
+  "appId": "com.que.woogy",
+  "appName": "우기",
+  "webDir": "www",
+  "server": {
+    "url": "https://woopang.com/woogy/",
+    "errorPath": "offline.html",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#F2C84B"
+  }
+}

@@ -1,0 +1,18 @@
+ext {
+    // 농민닷컴 앱(C:\nongmin-app)과 같은 값 — Play 에 실제로 올라간 조합.
+    // minSdk 24: Play 「자동 보호」가 24 미만 번들을 거절한다. target 36: 2026-08-31 부터 Play 요구치.
+    minSdkVersion = 24
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+    androidxActivityVersion = '1.8.0'
+    androidxAppCompatVersion = '1.6.1'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.12.0'
+    androidxFragmentVersion = '1.6.2'
+    coreSplashScreenVersion = '1.0.1'
+    androidxWebkitVersion = '1.9.0'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.1.5'
+    androidxEspressoCoreVersion = '3.5.1'
+    cordovaAndroidVersion = '10.1.1'
+}

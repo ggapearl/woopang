@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 웹 화면(static/app.css)과 같은 색 — 머리 막대 노랑(#FFE98A) · 초록 글자 · 아이콘 바탕 노랑 -->
+<resources>
+    <color name="wg_ground">#FFE98A</color>
+    <color name="wg_splash">#F4D557</color>
+    <color name="colorPrimary">#2A6B42</color>
+    <color name="colorPrimaryDark">#1B5E39</color>
+    <color name="colorAccent">#2F9A5C</color>
+    <color name="ic_launcher_background">#F4D557</color>
+</resources>
