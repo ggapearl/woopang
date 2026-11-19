@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-19b';
+  const WEB_VERSION = '2026-11-19c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3241,7 +3241,9 @@
     + 'var g=function(n){var c=getComputedStyle(n).backgroundColor,m=c.match(/[\\d.]+/g);return m&&(m.length<4||+m[3]>0.05)?m:0},'
     + 'th=function(){var m=g(document.body)||g(document.documentElement)||[255,255,255],L=.299*m[0]+.587*m[1]+.114*m[2];'
     + 'parent.postMessage({hyoDocTheme:{bg:"rgb("+(+m[0])+","+(+m[1])+","+(+m[2])+")",fg:L>150?"#1b1f2a":"#fff"}},"*")};'
-    + 'addEventListener("DOMContentLoaded",function(){var s=document.createElement("div");s.style.cssText="height:76px;flex:none";document.body.appendChild(s);th()});addEventListener("load",th);<\/script>';
+    + 'addEventListener("DOMContentLoaded",function(){var s=document.createElement("div");s.style.cssText="height:76px;flex:none";document.body.appendChild(s);th()});addEventListener("load",th);'
+    + 'var rh=function(){var b=document.body;parent.postMessage({hyoDocH:Math.max(document.documentElement.scrollHeight,b?b.scrollHeight:0)},"*")};'
+    + 'addEventListener("DOMContentLoaded",function(){rh();if(window.ResizeObserver)new ResizeObserver(rh).observe(document.documentElement)});addEventListener("load",rh);<\/script>';
   const DOC_PAGE = body => '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<style>body{margin:0;padding:18px 16px 48px;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;color:#1b1f2a;background:#fff;'
     + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}pre.txt{font:inherit}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
@@ -3278,6 +3280,17 @@
     if (mine && ev.data && ev.data.hyoDocSwipe) {           // 글 문서 안에서 좌우로 쓸어 — 앞·뒤 장으로
       const vw = mine.closest('.viewer');
       if (vw && vw.stepViewer) vw.stepViewer(ev.data.hyoDocSwipe > 0 ? 1 : -1);
+      return;
+    }
+    if (mine && ev.data && ev.data.hyoDocH) {               // 글 문서는 내용 높이만큼 늘려, 스크롤을 문서 칸(.vw-doc) 하나가 맡게 한다 — 칸 속 칸(iframe 안 스크롤)은 아이폰에서 안 내려가는 일이 있었다
+      const h = Math.ceil(+ev.data.hyoDocH) || 0, prev = mine._h || 0;
+      if (mine._off || h <= 0 || Math.abs(h - prev) <= 2) return;
+      if (prev && h > prev) mine._g = (mine._g || 0) + 1;
+      if (mine._g > 4 || h >= 30000) {                                      // 늘려 줄수록 또 늘어나는 문서(vh 단위를 쓰는 것) — 예전처럼 문서 안 스크롤로 돌린다
+        mine._off = true; mine.style.height = ''; return;
+      }
+      mine._h = h;
+      mine.style.height = Math.max(h, mine.parentNode.clientHeight) + 'px';
       return;
     }
     if (mine && ev.data && ev.data.hyoDocTheme) {           // 문서 바탕색 — 위 줄·바탕을 같은 색으로

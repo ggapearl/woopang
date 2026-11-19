@@ -469,11 +469,11 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .vw-audio{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;padding:0 20px}
 .vw-audio audio{width:100%;max-width:400px}
 .vw-msg{font-size:15px;color:rgba(255,255,255,.8);text-align:center;padding:0 20px;overflow-wrap:anywhere}
-.vw-doc{position:relative;width:100%;height:100%;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff}
+.vw-doc{position:relative;width:100%;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:#fff}
 .vw-doc iframe{display:block;width:100%;height:100%;border:0;background:#fff}
-.vw-doc.loading{background:#000}
+.vw-doc.loading{background:transparent}
 .vw-doc.loading iframe{visibility:hidden}
-.vw-load{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;color:#fff;pointer-events:none}
+.vw-load{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;color:var(--ink-2);pointer-events:none}
 .vw-load .spinner{width:34px;height:34px;border-width:3px}
 .vw-doc:not(.loading) .vw-load{display:none}
 /* 앞·뒤 장 단추 — 사진·영상은 보는 칸 아래 줄(영상 조절줄을 안 가리게) */
@@ -487,10 +487,9 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .vw-arrow.prev{margin-right:auto}
 /* 글 문서를 보는 동안 (2026-11-19 대표님) — 위 줄·바탕은 문서 바탕색, 문서가 맨 아래까지 차고 단추는 문서 위(왼쪽 아래 ◀ · 오른쪽 아래 ▶).
    가로 스와이프는 문서 안에서 받아 넘기고(트랙은 잠금), 아래로 쓸어 닫기는 없다 — 닫기는 왼쪽 위 ✕ */
-.viewer.docmode{background:var(--vw-bg,#000);color:var(--vw-fg,#fff);padding-bottom:0}
-.viewer.docmode .vw-btn{color:var(--vw-fg,#fff)}
+.viewer.docmode{background:var(--vw-bg,var(--ground));color:var(--vw-fg,var(--ink));padding-bottom:0}
+.viewer.docmode .vw-btn{color:var(--vw-fg,var(--ink))}
 .viewer.docmode .vw-btn:active{background:rgba(128,128,128,.25)}
-.viewer.docmode .vw-doc.loading{background:var(--vw-bg,#000)}
 .viewer.docmode .vw-bot{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 14px);height:auto;padding:0 16px;pointer-events:none}
 .viewer.docmode .vw-arrow{pointer-events:auto;background:rgba(14,18,32,.72);border-color:rgba(255,255,255,.3);color:#fff;
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 10px rgba(0,0,0,.3)}
@@ -569,3 +568,4 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .att-chip .x svg{width:11px;height:11px}
 .att-spin{width:20px;height:20px;flex:none}
 .menu.att-menu button i{width:22px}
+.viewer.docmode .vw-msg{color:var(--ink-2)}
