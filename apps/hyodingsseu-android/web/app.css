@@ -476,15 +476,24 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .vw-load{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;color:#fff;pointer-events:none}
 .vw-load .spinner{width:34px;height:34px;border-width:3px}
 .vw-doc:not(.loading) .vw-load{display:none}
-/* 앞·뒤 장 단추는 보는 칸 아래 줄로 (2026-11-19 대표님: 가운데 옆에 있으면 문서를 가린다) */
+/* 앞·뒤 장 단추 — 사진·영상은 보는 칸 아래 줄(영상 조절줄을 안 가리게) */
 .vw-bot{flex:none;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
 .vw-arrow{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
   color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25)}
 .vw-arrow[hidden]{display:grid;visibility:hidden}
 .vw-arrow svg{width:18px;height:18px}
 .vw-arrow.next svg{transform:scaleX(-1)}
-.vw-btn.emo{font-size:22px;line-height:1}
-/* 글 문서를 보는 동안은 가로 스와이프로 장을 넘기지 않는다 — 대각선으로 쓸어도 위아래 스크롤이 먹게(장 이동은 아래 단추) */
+.vw-arrow.next{margin-left:auto}      /* 앞 장 단추가 숨겨져도(첫 장) 다음 단추는 늘 오른쪽 끝 */
+.vw-arrow.prev{margin-right:auto}
+/* 글 문서를 보는 동안 (2026-11-19 대표님) — 위 줄·바탕은 문서 바탕색, 문서가 맨 아래까지 차고 단추는 문서 위(왼쪽 아래 ◀ · 오른쪽 아래 ▶).
+   가로 스와이프는 문서 안에서 받아 넘기고(트랙은 잠금), 아래로 쓸어 닫기는 없다 — 닫기는 왼쪽 위 ✕ */
+.viewer.docmode{background:var(--vw-bg,#000);color:var(--vw-fg,#fff);padding-bottom:0}
+.viewer.docmode .vw-btn{color:var(--vw-fg,#fff)}
+.viewer.docmode .vw-btn:active{background:rgba(128,128,128,.25)}
+.viewer.docmode .vw-doc.loading{background:var(--vw-bg,#000)}
+.viewer.docmode .vw-bot{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 14px);height:auto;padding:0 16px;pointer-events:none}
+.viewer.docmode .vw-arrow{pointer-events:auto;background:rgba(14,18,32,.72);border-color:rgba(255,255,255,.3);color:#fff;
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .vw-track.lock{overflow-x:hidden;touch-action:pan-y}
 .vw-foot{flex:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px 6px}
 .vw-name{flex:1;min-width:0;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

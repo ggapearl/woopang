@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-19a';
+  const WEB_VERSION = '2026-11-19b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1416,6 +1416,8 @@
   const ICON = {
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M6 12.5V19h12v-6.5"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
     down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
@@ -3232,10 +3234,14 @@
   const DOC_LINK = '<script>document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a[href]");if(!a)return;'
     + 'var raw=a.getAttribute("href")||"";if(raw.charAt(0)==="#"){var id=decodeURIComponent(raw.slice(1)),t=document.getElementById(id)||document.getElementsByName(id)[0];'
     + 'e.preventDefault();if(t)t.scrollIntoView();return;}if(!/^https?:/i.test(a.href))return;e.preventDefault();parent.postMessage({hyoDocOpen:a.href},"*");},true);'
-    + 'var y0=0,x0=0,t0=0,on=0,atTop=function(){return(document.scrollingElement||document.documentElement).scrollTop<=0};'
-    + 'addEventListener("touchstart",function(e){on=e.touches.length===1&&atTop();x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now()},{passive:true});'
-    + 'addEventListener("touchend",function(e){if(!on)return;on=0;var c=e.changedTouches[0],dy=c.clientY-y0,dx=c.clientX-x0;'
-    + 'if(dy>110&&dy>Math.abs(dx)*1.5&&Date.now()-t0<900)parent.postMessage({hyoDocClose:1},"*")},{passive:true});<\/script>';
+    + 'var X0=0,Y0=0,sw=0,hs=function(n){while(n&&n.nodeType===1){var cs=getComputedStyle(n);if(/(auto|scroll)/.test(cs.overflowX)&&n.scrollWidth>n.clientWidth+2)return 1;n=n.parentNode}return 0};'
+    + 'addEventListener("touchstart",function(e){sw=e.touches.length===1&&!hs(e.target)?1:0;X0=e.touches[0].clientX;Y0=e.touches[0].clientY},{passive:true});'
+    + 'var fire=function(c){if(!sw)return;var dx=c.clientX-X0,dy=c.clientY-Y0;if(Math.abs(dx)>64&&Math.abs(dx)>Math.abs(dy)*1.8){sw=0;parent.postMessage({hyoDocSwipe:dx<0?1:-1},"*")}};'
+    + 'addEventListener("touchmove",function(e){fire(e.touches[0])},{passive:true});addEventListener("touchend",function(e){fire(e.changedTouches[0]);sw=0},{passive:true});'
+    + 'var g=function(n){var c=getComputedStyle(n).backgroundColor,m=c.match(/[\\d.]+/g);return m&&(m.length<4||+m[3]>0.05)?m:0},'
+    + 'th=function(){var m=g(document.body)||g(document.documentElement)||[255,255,255],L=.299*m[0]+.587*m[1]+.114*m[2];'
+    + 'parent.postMessage({hyoDocTheme:{bg:"rgb("+(+m[0])+","+(+m[1])+","+(+m[2])+")",fg:L>150?"#1b1f2a":"#fff"}},"*")};'
+    + 'addEventListener("DOMContentLoaded",function(){var s=document.createElement("div");s.style.cssText="height:76px;flex:none";document.body.appendChild(s);th()});addEventListener("load",th);<\/script>';
   const DOC_PAGE = body => '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     + '<style>body{margin:0;padding:18px 16px 48px;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif;color:#1b1f2a;background:#fff;'
     + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}pre.txt{font:inherit}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
@@ -3268,10 +3274,19 @@
 
   let docOpenAt = 0;
   window.addEventListener('message', ev => {
-    if (ev.data && ev.data.hyoDocClose) {                   // 글 문서 맨 위에서 아래로 쓸어내림 — 보기 화면을 닫는다
-      const fr = Array.from(document.querySelectorAll('.vw-doc iframe')).find(x => x.contentWindow === ev.source);
-      const vw = fr && fr.closest('.viewer');
-      if (vw && vw.closeViewer) { haptic('tap'); sfx.play('tap'); vw.closeViewer(); }
+    const mine = Array.from(document.querySelectorAll('.vw-doc iframe')).find(x => x.contentWindow === ev.source);
+    if (mine && ev.data && ev.data.hyoDocSwipe) {           // 글 문서 안에서 좌우로 쓸어 — 앞·뒤 장으로
+      const vw = mine.closest('.viewer');
+      if (vw && vw.stepViewer) vw.stepViewer(ev.data.hyoDocSwipe > 0 ? 1 : -1);
+      return;
+    }
+    if (mine && ev.data && ev.data.hyoDocTheme) {           // 문서 바탕색 — 위 줄·바탕을 같은 색으로
+      const t = ev.data.hyoDocTheme;
+      if (/^rgb\(\d+,\d+,\d+\)$/.test(t.bg) && /^#[0-9a-f]{3,6}$/i.test(t.fg)) {
+        mine.dataset.bg = t.bg; mine.dataset.fg = t.fg;
+        const vw = mine.closest('.viewer');
+        if (vw && vw.paintViewer) vw.paintViewer();
+      }
       return;
     }
     const u = ev.data && ev.data.hyoDocOpen;
@@ -3297,8 +3312,8 @@
         h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
         h('div', { class: 'vw-acts' },
-          h('button', { class: 'vw-btn emo', 'aria-label': '저장', text: '💾', onclick: () => downloadFile(list[idx].url, list[idx].name) }),
-          h('button', { class: 'vw-btn emo', 'aria-label': '공유', text: '📤', onclick: share }))),
+          h('button', { class: 'vw-btn', 'aria-label': '저장', html: ICON.save, onclick: () => downloadFile(list[idx].url, list[idx].name) }),
+          h('button', { class: 'vw-btn', 'aria-label': '공유', html: ICON.share, onclick: share }))),
       h('div', { class: 'vw-stage' }, track),
       many ? h('div', { class: 'vw-bot' }, prev, next) : null);
 
@@ -3310,7 +3325,17 @@
     }
     function lockSoon() { clearTimeout(lockTimer); lockTimer = setTimeout(applyLock, 160); }
 
+    /** 글 문서를 보는 동안: 위 줄·바탕을 문서 바탕색으로, 앞·뒤 장 단추는 문서 위에 떠 있게 */
+    function paintViewer() {
+      const cur = track.children[idx], fr = cur && cur.querySelector('.vw-doc iframe');
+      el.classList.toggle('docmode', !!fr);
+      if (fr && fr.dataset.bg) { el.style.setProperty('--vw-bg', fr.dataset.bg); el.style.setProperty('--vw-fg', fr.dataset.fg || '#fff'); }
+      else { el.style.removeProperty('--vw-bg'); el.style.removeProperty('--vw-fg'); }
+    }
+    el.paintViewer = paintViewer;
+
     function sync() {
+      paintViewer();
       counter.textContent = many ? (idx + 1) + ' / ' + list.length : '';
       if (prev) prev.hidden = idx === 0;
       if (next) next.hidden = idx === list.length - 1;
@@ -3326,6 +3351,7 @@
 
     function go(i) {
       i = Math.max(0, Math.min(i, list.length - 1));
+      track.classList.remove('lock');
       track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
     }
 
@@ -3351,7 +3377,7 @@
     /** 아래로 쓸어내리면 닫힌다 (2026-11-02 대표님) — 사진·영상·상단·하단에서. 가로로 넘기기·확대·글 문서(안쪽이 따로 스크롤)는 건드리지 않는다. */
     let sy = 0, sx = 0, st = 0, drag = false;
     el.addEventListener('touchstart', ev => {
-      drag = ev.touches.length === 1 && !(window.visualViewport && window.visualViewport.scale > 1.05)
+      drag = ev.touches.length === 1 && !el.classList.contains('docmode') && !(window.visualViewport && window.visualViewport.scale > 1.05)
         && !ev.target.closest('iframe,.vw-btn,.vw-open,.vw-arrow,video,audio');
       if (!drag) return;
       sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; st = Date.now();
@@ -3392,6 +3418,7 @@
       el.remove();
     });
     el.closeViewer = close;
+    el.stepViewer = d => go(idx + d);
     document.addEventListener('keydown', onKey);
     addEventListener('resize', jump);                      // 가로·세로 돌려도 보던 장 그대로
     $('#app').append(el);
