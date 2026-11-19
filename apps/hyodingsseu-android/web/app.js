@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-19c';
+  const WEB_VERSION = '2026-11-19d';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -192,7 +192,7 @@
 
   /** PC 문서 경로 → PC 효딩쓰가 서명한 링크(30일)를 받아 앱 밖(브라우저)에서 연다 */
   // 글·그림·소리처럼 간단한 파일은 앱 안 보기로 연다 (2026-11-02 대표님: 앱 밖 브라우저로 나가지 말고 앱 안에서). 폴더·PDF 같은 건 예전처럼 밖으로.
-  const INAPP_DOC = /\.(txt|md|markdown|csv|json|log|html?|png|jpe?g|gif|webp|mp4|m4v|mov|mp3|m4a|wav)$/i;
+  const INAPP_DOC = /\.(txt|md|markdown|csv|json|log|html?|pdf|docx|xlsx|pptx|hwpx?|hml|png|jpe?g|gif|webp|mp4|m4v|mov|mp3|m4a|wav)$/i;
   const baseName = p => String(p || '').split(/[?#]/)[0].split(/[\\/]/).pop();
 
   async function openDoc(path) {
@@ -237,7 +237,7 @@
 
   /** 글 문서(html·md·txt·csv)는 저장·공유할 때 PDF 로 (2026-11-18 대표님: 「문서는 PDF, 사진은 사진으로 — 브라우저로 html 공유하지 말 것」).
    *  서버가 ?pdf=1 로 PDF 를 만들어 준다(크롬 인쇄 — 처음엔 몇 초 걸리고 그 뒤엔 저장본). 사진·영상·음성·pdf 는 그대로. */
-  const TEXT_DOC = /\.(html?|md|markdown|txt|csv)$/i;
+  const TEXT_DOC = /\.(html?|md|markdown|txt|csv|docx|xlsx|pptx|hwpx?|hml)$/i;
   function docAsPdf(f) {
     const nm = f.name || nameFromUrl(f.url);
     if (!/\/AI\/doc\//.test(f.url) || !TEXT_DOC.test(String(nm).split(/[?#]/)[0])) return f;
@@ -3191,7 +3191,7 @@
 
   // ── 사진·영상 보기 (앱 안에서 — 2026-10-04) ──
   const EXT_KIND = [['image', /\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)$/i], ['video', /\.(mp4|m4v|mov|webm|mkv)$/i],
-    ['audio', /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i], ['doc', /\.(html?|md|markdown|pdf|txt|csv|json)$/i]];
+    ['audio', /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i], ['doc', /\.(html?|md|markdown|pdf|txt|csv|json|docx|xlsx|pptx|hwpx?|hml)$/i]];
 
   /** 파일 이름(없으면 주소)의 확장자로 종류를 고른다 — 모르면 문서함 항목의 종류 */
   function fileKind(name, url, fallback) {
@@ -3249,6 +3249,27 @@
     + 'overflow-wrap:anywhere;word-break:keep-all}pre{white-space:pre-wrap}pre.txt{font:inherit}table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px solid #ddd;padding:4px 8px}'
     + 'img{max-width:100%}@media (prefers-color-scheme:dark){body{background:#14161c;color:#e8eaf0}td,th{border-color:#333}}</style></head><body>' + body + '</body></html>';
 
+  /** PDF 는 앱 안에서 pdf.js 로 한 장씩 그려 바로 읽는다(2026-11-19 대표님). 아이폰 앱 속 iframe 의 PDF 는 첫 쪽만 보이고 안 내려가서 —
+      PDF 파일을 받아 문서 칸(sandbox) 안으로 넘기고, 그 안에서 쪽마다 캔버스로 그린다. 쪽 크기를 먼저 정해 두어 높이가 흔들리지 않는다. */
+  const PDF_JS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const PDF_RUN = '(function(){var u8=Uint8Array.from(atob(document.getElementById("pdfb").textContent),function(c){return c.charCodeAt(0)}),host=document.getElementById("p");'
+    + 'var fail=function(m){host.innerHTML="<div class=msg>"+m+"</div>"};'
+    + 'if(!window.pdfjsLib){fail("PDF 를 여는 도구를 불러오지 못했어요 — 저장해서 보세요");return}'
+    + 'fetch("' + PDF_WORKER + '").then(function(r){return r.text()}).then(function(t){'
+    + 'pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([t],{type:"text/javascript"}));return pdfjsLib.getDocument({data:u8}).promise}).then(function(pdf){'
+    + 'var W=document.documentElement.clientWidth,n=Math.min(pdf.numPages,300),dpr=Math.min(window.devicePixelRatio||1,2),jobs=[];for(var i=1;i<=n;i++)jobs.push(pdf.getPage(i));'
+    + 'return Promise.all(jobs).then(function(ps){host.textContent="";var items=ps.map(function(pg){var s=W/pg.getViewport({scale:1}).width,v=pg.getViewport({scale:s}),c=document.createElement("canvas");'
+    + 'c.className="pg";c.style.width=v.width+"px";c.style.height=v.height+"px";host.appendChild(c);return[pg,c,s]});'
+    + 'return items.reduce(function(ch,x){return ch.then(function(){var vp=x[0].getViewport({scale:x[2]*dpr});x[1].width=vp.width;x[1].height=vp.height;return x[0].render({canvasContext:x[1].getContext("2d"),viewport:vp}).promise})},Promise.resolve())})'
+    + '}).catch(function(){fail("PDF 를 열지 못했어요 — 저장해서 보세요")})})();';
+  const PDF_PAGE = b64 => '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<style>html,body{margin:0;background:#e4e6ec}#p{padding:8px 0 96px}.pg{display:block;margin:0 auto 8px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18)}'
+    + '.msg{padding:28px 20px;font:15px/1.6 -apple-system,"Apple SD Gothic Neo",sans-serif;color:#444;text-align:center}</style></head>'
+    + '<body><div id="p"><div class="msg">PDF 여는 중…</div></div><script id="pdfb" type="text/plain">' + b64 + '<\/script>'
+    + '<script src="' + PDF_JS + '"><\/script><script>' + PDF_RUN + '<\/script>' + DOC_LINK + '</body></html>';
+  const toB64 = buf => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
+
   async function loadDoc(f) {
     const url = f.dataset.src;
     f.removeAttribute('data-src');
@@ -3267,6 +3288,10 @@
         }
         if (r.ok && /^text\/(markdown|x-markdown)/.test(type)) { f.dataset.go = '1'; f.srcdoc = DOC_PAGE(markdown(await r.text()) + DOC_LINK); return; }
         if (r.ok && /^text\/|json/.test(type)) { f.dataset.go = '1'; f.srcdoc = DOC_PAGE('<pre class="txt">' + esc(await r.text()) + '</pre>' + DOC_LINK); return; }
+        if (r.ok && /pdf/.test(type)) {
+          const buf = await r.arrayBuffer();
+          if (buf.byteLength <= 14 * 1024 * 1024) { f.dataset.go = '1'; f.srcdoc = PDF_PAGE(toB64(buf)); return; }
+        }
         if (!r.ok && f.docFail) { f.docFail(); return; }    // 기한 지남·없는 문서 — 스피너를 계속 돌리지 않는다
       } catch (e) { /* 아래 주소로 */ }
     }
