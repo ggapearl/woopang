@@ -74,6 +74,8 @@ svg{display:block}
 .bar .icon{width:44px;height:44px;display:grid;place-items:center;color:var(--bar-ink);border-radius:12px;flex:none}
 .bar .icon:active{background:rgba(255,255,255,.12)}
 .bar .icon svg{width:22px;height:22px}
+/* 위 줄 단추가 넷(메뉴·사진·문서함·승인함)이 된 뒤(2026-11-20) — 360~400px 에서도 「효딩쓰」와 모델 알약이 안 잘리게 좁은 폭에서만 단추를 조금 좁힌다 */
+@media (max-width:400px){#main .bar{gap:2px;padding-right:8px}#main .bar .icon{width:40px}}
 .who{min-width:0;flex:1}
 .who b{display:block;font-size:17px;font-weight:600;line-height:1.25;letter-spacing:-.01em}
 .who small{display:block;font-size:12px;line-height:1.35;color:var(--bar-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -409,6 +411,73 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .doc-more{align-self:center;margin:14px 0;font-size:13px;color:var(--navy);padding:8px 16px;border-radius:999px;background:var(--navy-soft)}
 .doc-more:disabled{opacity:.6}
 .doc-empty{font-size:13px;color:var(--ink-3);text-align:center;padding:40px 24px;line-height:1.6}
+
+/* 사진 (2026-11-20 대표님) — 구글 포토에서 옮긴 사진·영상. 날짜별 격자 · 장소 · 사진첩 · 폴더 · 고르기(담기·공유·저장) */
+.ph-search{display:flex;gap:8px;align-items:stretch}
+.ph-search input[type=search]{flex:1;min-width:0}
+.ph-pick{flex:none;min-width:58px;padding:0 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--navy);font-size:14px;font-weight:600}
+.ph-pick:active{border-color:var(--navy)}
+.ph-pick.on{background:var(--navy);border-color:var(--navy);color:var(--on-navy)}
+.ph-filt{padding:0 16px 8px}
+.ph-filt .dchip{gap:6px}
+.ph-filt .x svg{width:12px;height:12px}
+.ph-body{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
+.ph-content.selecting .ph-body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+.ph-day{position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:8px;padding:12px 14px 6px;background:var(--ground)}
+.ph-day b{font-size:14px;font-weight:700;color:var(--ink)}
+.ph-day small{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;padding:0 2px}
+@media (min-width:700px){.ph-grid{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.ph-tile{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:var(--surface-2);-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+.ph-tile img{display:block;width:100%;height:100%;object-fit:cover;-webkit-touch-callout:none;transition:transform .12s}
+.ph-tile.bad img{visibility:hidden}
+.ph-dur{position:absolute;right:4px;bottom:4px;display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px 0 4px;border-radius:9px;background:rgba(0,0,0,.58);color:#fff;font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.ph-dur svg{width:9px;height:9px}
+.ph-chk{position:absolute;left:5px;top:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.28);display:none;place-items:center;box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+.ph-content.selecting .ph-chk{display:grid}
+.ph-tile.sel img{transform:scale(.86)}
+.ph-tile.sel{background:var(--navy-soft)}
+.ph-tile.sel .ph-chk{background:var(--navy);border-color:var(--navy)}
+.ph-tile.sel .ph-chk::after{content:'';width:5px;height:10px;margin-top:-2px;border:solid var(--on-navy);border-width:0 2.4px 2.4px 0;transform:rotate(45deg)}
+.ph-tail{display:flex;justify-content:center;padding:16px 0}
+.ph-tail .spinner{width:22px;height:22px;color:var(--ink-3)}
+.ph-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:4px 16px}
+.ph-card{position:relative;display:block;aspect-ratio:4/3;overflow:hidden;border-radius:14px;background:var(--surface-2);text-align:left}
+.ph-card img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block}
+.ph-card-ph{position:absolute;top:0;left:0;right:0;bottom:0;display:grid;place-items:center;color:var(--ink-3)}
+.ph-card-ph svg{width:30px;height:30px}
+.ph-card .cap{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;padding:26px 11px 9px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.62))}
+.ph-card .cap b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-card .cap small{font-size:11.5px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-folders{padding:0 8px}
+.ph-folders .drow2{width:100%;text-align:left}
+.ph-fic svg{width:22px;height:22px;color:var(--navy)}
+.ph-selbar{position:absolute;left:0;right:0;bottom:0;z-index:6;display:flex;align-items:center;gap:2px;padding:6px 8px calc(6px + env(safe-area-inset-bottom)) 4px;
+  background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -8px 22px -12px rgba(27,42,107,.35)}
+.ph-selbar .cnt{flex:1;min-width:0;padding:0 4px;font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-x{flex:none;width:42px;height:46px;display:grid;place-items:center;border-radius:12px;color:var(--ink-2)}
+.ph-x svg{width:20px;height:20px}
+.ph-x:active,.ph-act:active{background:var(--navy-soft)}
+.ph-act{flex:none;width:56px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:12px;color:var(--navy);font-size:11px;font-weight:600}
+.ph-act svg{width:22px;height:22px}
+.ph-act:disabled{opacity:.38}
+.sheet-scrim.over{z-index:45}
+.ph-sheet{max-height:80%;gap:8px}
+.ph-sheet p{font-size:12.5px}
+.ph-pickrows{display:flex;flex-direction:column;overflow-y:auto;min-height:0;max-height:38vh;margin:0 -6px;-webkit-overflow-scrolling:touch}
+.ph-row{display:flex;align-items:center;gap:12px;width:100%;padding:7px 8px;border-radius:12px;text-align:left}
+.ph-row:active{background:var(--surface-2)}
+.ph-row.new b{color:var(--navy)}
+.ph-rthumb{flex:none;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-3)}
+.ph-rthumb svg{width:20px;height:20px}
+.ph-row.new .ph-rthumb{background:var(--navy-soft);color:var(--navy)}
+.ph-new{display:flex;gap:8px;align-items:stretch}
+.ph-new input{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink);padding:9px 12px;font-size:15px;outline:none}
+.ph-new input:focus{border-color:var(--navy)}
+.ph-new .btn{flex:none;padding:9px 14px;font-size:14px}
+.vw-cap{flex:none;display:flex;flex-direction:column;gap:1px;padding:6px 16px 8px;min-width:0}
+.vw-cap b{font-size:14px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vw-cap small{font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* 승인함 (2026-10-12) — 문서함 틀에 펼쳐 읽기 · 그 자리에서 승인·보류·거절 */
 .bar .appr,.bar .docs{position:relative}

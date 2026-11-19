@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-19d';
+  const WEB_VERSION = '2026-11-20a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -216,12 +216,13 @@
   /** 내려받기 (2026-10-26) — 서버가 Content-Disposition: attachment 로 주는 주소(?dl=1)를 기기 브라우저가 받는다.
    *  앱 안(웹뷰)은 파일 저장을 못 해서 기본 브라우저로 넘기고, 브라우저는 <a download> 로 바로 받는다. 효딩쓰 문서 주소(/AI/doc/)만. */
   const MEDIA_EXT = /\.(jpe?g|png|gif|webp|heic|heif|mp4|mov|m4v)$/i;
+  const PHOTO_OR_DOC = /\/AI\/(doc|photo)\//, PHOTO_URL = /\/AI\/photo\//;                  // 사진첩 주소(/AI/photo/)도 문서 주소처럼 저장·공유한다 (2026-11-20)
   const isMediaFile = (url, name) => MEDIA_EXT.test(String(name || nameFromUrl(url)).split(/[?#]/)[0]);
 
   /** 사진·영상 저장 (2026-11-16 대표님: 「파일함으로 가지 않고 다운로드 누르면 핸드폰 갤러리에」) — 앱의 폰 기능(saveToPhotos)이 사진첩에 바로 넣는다.
    *  앱이 그 기능을 아직 모르는 옛 빌드면 공유 창(파일만)으로 넘겨 「이미지 저장」을 누르게 한다. 사진·영상이 아니면 false(아래 내려받기로). */
   async function saveToGallery(url, name) {
-    if (!Native || !/\/AI\/doc\//.test(url) || !isMediaFile(url, name)) return false;
+    if (!Native || !PHOTO_OR_DOC.test(url) || !isMediaFile(url, name)) return false;
     if (typeof Native.saveToPhotos === 'function') {
       toast('사진첩에 저장하는 중이에요');
       try {
@@ -264,15 +265,15 @@
 
   function downloadFile(url, name) {
     if (!url) return;
-    if (!/\/AI\/doc\//.test(url)) { openLink(url); return; }
+    if (!PHOTO_OR_DOC.test(url)) { openLink(url); return; }
     if (Native && isMediaFile(url, name)) { saveToGallery(url, name); return; }
-    if (Native || (navigator.canShare && /Android|iPhone|iPad/i.test(navigator.userAgent))) {                  // 폰 — 브라우저로 넘기지 않고 파일만 공유 창으로(「파일에 저장」·카톡·메일)
+    if (Native || (!PHOTO_URL.test(url) && navigator.canShare && /Android|iPhone|iPad/i.test(navigator.userAgent))) {                  // 폰 — 브라우저로 넘기지 않고 파일만 공유 창으로(「파일에 저장」·카톡·메일)
       toast('공유 창에서 「파일에 저장」을 눌러 주세요');
       shareFiles([{ url, name }]);
       return;
     }
     const f = docAsPdf({ url, name });
-    const u = f.url + (f.url.includes('?') ? '&' : '?') + 'dl=1';
+    const u = f.url + (f.url.includes('?') ? '&' : '?') + 'dl=1' + (PHOTO_URL.test(f.url) && f.name ? '&n=' + encodeURIComponent(f.name) : '');
     toast('내려받는 중이에요');
     const a = h('a', { href: u, download: f.name || '', rel: 'noopener', style: 'display:none' });
     document.body.append(a);
@@ -288,7 +289,7 @@
     try {
       toast(list.some(f => /\.pdf$/i.test(f.name || '')) ? 'PDF 만드는 중이에요 — 잠시만요' : '공유 준비하는 중이에요');
       for (const f of list) files.push(await prepFile(f));
-    } catch (err) { toast('파일을 준비하지 못했어요'); return; }
+    } catch (err) { toast(err && err.message === 'size' ? '파일이 커서(80MB 넘음) 바로 공유하지 못해요 — 저장을 눌러 주세요' : '파일을 준비하지 못했어요'); return; }
     // 제목·글을 같이 넘기면 받는 앱에 사진과 글이 함께 간다(2026-11-16 대표님) — 파일만 넘긴다
     if (navigator.share && navigator.canShare && navigator.canShare({ files })) {
       try { await navigator.share({ files }); }
@@ -1439,6 +1440,10 @@
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>',
     reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
+    photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17l4.6-4.4a1.6 1.6 0 0 1 2.2 0L15 16.5l1.8-1.7a1.6 1.6 0 0 1 2.2 0l1.5 1.5"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.5-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5z"/></svg>',
+    albumAdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="13" height="13" rx="2.5"/><path d="M7.5 7.5V6a2 2 0 0 1 2-2H18a2.5 2.5 0 0 1 2.5 2.5V15a2 2 0 0 1-2 2h-1.5"/><path d="M10 11.5v6M7 14.5h6"/></svg>',
+    minusCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12h7"/></svg>',
   };
   const svg = name => { const t = document.createElement('template'); t.innerHTML = ICON[name]; return t.content.firstChild; };
 
@@ -2476,6 +2481,7 @@
       h('button', { class: 'icon', 'aria-label': '메뉴 — 대화 상대 고르기', onclick: openDrawer, html: ICON.menu }),
       orb(orbState(), 26),
       h('div', { class: 'who' }, h('div', { class: 'wname' }, h('b'), h('button', { class: 'pill', 'aria-label': '생각의 깊이', onclick: ev => modelMenu(ev.currentTarget) })), h('small')),
+      h('button', { class: 'icon photos', 'aria-label': '사진', onclick: () => { sfx.play('tap'); openPhotos(); }, html: ICON.photo }),
       h('button', { class: 'icon docs', 'aria-label': '문서함', onclick: () => { sfx.play('tap'); openDocs(); } },
         svg('folder'), h('span', { class: 'nbadge', hidden: true })),
       h('button', { class: 'icon appr', 'aria-label': '승인함', onclick: () => { sfx.play('tap'); openAppr(); } },
@@ -2589,6 +2595,7 @@
     const scroll = h('div', { class: 'scroll' },
       drawerRow('승인함', apprSub(), false, h('span', { class: 'badge-ic appr' }, svg('inbox')), () => { close(); openAppr(); }),
       drawerRow('문서함', '영상 · 사진 · 문서 · 음성', false, h('span', { class: 'badge-ic' }, svg('folder')), () => { close(); openDocs(); }),
+      drawerRow('사진', '구글 포토에서 옮긴 사진 · 영상', false, h('span', { class: 'badge-ic' }, svg('photo')), () => { close(); openPhotos(); }),
       drawerRow('설정', '목소리 · 말 빠르기 · 화면 · 연결', false, h('span', { class: 'badge-ic' }, svg('gear')), () => { close(); openSettings(); }),
       h('div', { class: 'dsep' }),
       drawerRow(S.name, '비서실장 · 지금 이 대화', true, orb('idle', 26), close),
@@ -2959,6 +2966,379 @@
     load();
   }
 
+  // ── 사진 (PhotosView — 2026-11-20 대표님) ──
+  // 구글 포토에서 내려받은 사진·영상을 PC 의 Immich 가 그 자리에서 읽고(복사 없음), 이 앱의 📷 화면으로만 보여 준다. 밖에 공개하지 않는다.
+  // 목록·앨범 담기는 기기 열쇠(photos…), 사진·영상 내용은 서명 링크(/AI/photo/…)로 — 얼굴 인식은 쓰지 않는다.
+  const PH_TABS = [['all', '전체'], ['image', '사진'], ['video', '영상'], ['place', '장소'], ['album', '사진첩'], ['folder', '폴더']];
+  const PH_LIST = { place: 'places', album: 'albums', folder: 'folders' };
+  const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+  const DAY_RE = /^(\d{4})-(\d\d)-(\d\d)$/;
+
+  function phDay(day, withYear) {
+    const m = DAY_RE.exec(day || '');
+    if (!m) return '날짜 없음';
+    const d = new Date(+m[1], +m[2] - 1, +m[3]);
+    return (withYear || d.getFullYear() !== new Date().getFullYear() ? m[1] + '년 ' : '') + (+m[2]) + '월 ' + (+m[3]) + '일 ' + WEEKDAY[d.getDay()] + '요일';
+  }
+
+  function phDur(sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    const hr = Math.floor(sec / 3600), mn = Math.floor(sec % 3600 / 60), s = String(sec % 60).padStart(2, '0');
+    return hr ? hr + ':' + String(mn).padStart(2, '0') + ':' + s : mn + ':' + s;
+  }
+
+  const phCap = it => [phDay(it.day, true) + (it.time ? ' ' + it.time : '') + (it.city ? ' · ' + it.city : ''), it.name];
+  const phEntry = it => ({ url: it.view, name: it.name, kind: it.kind, dl: it.orig, poster: it.kind === 'video' ? it.thumb : '', id: it.id, cap: phCap(it) });
+
+  function openPhotos() {
+    let tab = 'all', q = '', filt = null, items = [], page = 0, more = false, loading = false, failed = '', alive = true, searchTimer = 0, gen = 0, listBusy = false, listFail = '';
+    let stats = null, sel = null, endSelLayer = null, albums = null, lastDay = null, lastGrid = null, lastCity = null, sentinel = null;
+    const lists = {};
+    const tiles = new Map();
+
+    const statEl = h('div', { class: 'doc-total' });
+    const searchEl = h('input', {
+      type: 'search', placeholder: '날짜(2023, 2023-5)나 파일 이름으로 찾기', 'aria-label': '사진 검색', inputmode: 'search',
+      oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { q = searchEl.value.trim(); if (isList()) draw(); else reload(); }, 400); },
+    });
+    const pickBtn = h('button', { class: 'ph-pick', text: '선택', onclick: () => { if (sel) endSel(); else startSel(); } });
+    const chipsEl = h('div', { class: 'doc-chips' });
+    const filtEl = h('div', { class: 'ph-filt', hidden: true });
+    const bodyEl = h('div', { class: 'ph-body' });
+    const content = h('div', { class: 'content doc-content ph-content' },
+      h('div', { class: 'doc-head' }, h('div', { class: 'ph-search' }, searchEl, pickBtn), statEl), chipsEl, filtEl, bodyEl);
+    const selBar = h('div', { class: 'ph-selbar', hidden: true });
+
+    const isList = () => !filt && !!PH_LIST[tab];
+
+    function drawChips() {
+      chipsEl.textContent = '';
+      PH_TABS.forEach(([k, label]) => chipsEl.append(h('button', {
+        class: 'dchip' + (tab === k ? ' on' : ''), text: label,
+        onclick: () => { if (tab === k && !filt) return; tab = k; filt = null; endSel(); gen++; loading = false; drawChips(); if (isList()) openList(); else reload(); },
+      })));
+    }
+
+    function drawFilt() {
+      filtEl.hidden = !filt;
+      filtEl.textContent = '';
+      if (filt) filtEl.append(h('button', { class: 'dchip on', 'aria-label': filt.label + ' 풀기', onclick: () => { filt = null; endSel(); draw(); if (!isList()) reload(); } },
+        filt.label, h('span', { class: 'x', html: ICON.close })));
+    }
+
+    function drawStat() {
+      if (isList()) statEl.textContent = '';
+      else if (!filt && !q && tab === 'all' && stats) statEl.textContent = '사진 ' + stats.photos.toLocaleString('ko-KR') + ' · 영상 ' + stats.videos.toLocaleString('ko-KR');
+      else statEl.textContent = '꾹 누르거나 「선택」을 누르면 여러 장을 골라 사진첩에 담을 수 있어요';
+    }
+
+    function note(text, retry) {
+      bodyEl.append(h('div', { class: 'doc-empty' }, text, retry ? h('div', null, h('button', { class: 'doc-more', text: '다시 시도', onclick: retry })) : null));
+    }
+
+    // ── 장소 · 사진첩 · 폴더 목록 ──
+    async function openList() {
+      draw();
+      const kind = tab;
+      if (lists[kind]) return;
+      listBusy = true; listFail = ''; draw();
+      try { lists[kind] = (await api.get('photos/' + PH_LIST[kind])).items || []; }
+      catch (e) { listFail = (e && e.message) || '불러오지 못했어요'; if (e && e.status === 401) show(e); }
+      listBusy = false;
+      if (alive && kind === tab && isList()) draw();
+    }
+
+    function drawList() {
+      if (listBusy && !lists[tab]) { bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
+      if (listFail && !lists[tab]) { note(listFail, () => { listFail = ''; openList(); }); return; }
+      const key = q.toLowerCase();
+      const rows = (lists[tab] || []).filter(r => !key || [r.name, r.city, r.country, r.path].join(' ').toLowerCase().includes(key));
+      if (!rows.length) {
+        note(key ? '찾는 이름이 없어요' : tab === 'album' ? '아직 사진첩이 없어요 — 사진을 꾹 눌러 고른 뒤 「사진첩에 담기」로 만들어 보세요'
+          : tab === 'place' ? '아직 장소 정보가 있는 사진이 없어요' : '폴더가 없어요');
+        return;
+      }
+      if (tab === 'folder') {
+        bodyEl.append(h('div', { class: 'ph-folders' }, rows.map(r => h('button', {
+          class: 'drow2', style: 'padding-left:' + (10 + Math.min(r.depth, 4) * 14) + 'px',
+          onclick: () => enter({ label: r.name, query: { path: r.path } }),
+        }, h('span', { class: 'dthumb ic ph-fic', html: ICON.folder }),
+          h('div', { class: 'dtx' }, h('b', { text: r.name }), r.depth ? h('small', { text: r.path }) : null), svg('chev')))));
+        return;
+      }
+      bodyEl.append(h('div', { class: 'ph-cards' }, rows.map(r => {
+        const place = tab === 'place';
+        return h('button', {
+          class: 'ph-card',
+          onclick: () => enter(place ? { label: r.city, query: { city: r.city, country: r.country } } : { label: r.name, query: { album: r.id } }),
+        }, r.thumb ? h('img', { src: r.thumb, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' }) : h('span', { class: 'ph-card-ph', html: ICON.photo }),
+          h('span', { class: 'cap' }, h('b', { text: place ? r.city : r.name }),
+            h('small', { text: place ? r.country : r.count + '장' + (r.start ? ' · ' + r.start.slice(0, 7).replace('-', '.') : '') })));
+      })));
+    }
+
+    function enter(f) {
+      filt = f; q = ''; searchEl.value = '';
+      drawChips(); reload();
+    }
+
+    // ── 날짜별 사진 ──
+    function resetGrid() {
+      bodyEl.textContent = '';
+      tiles.clear();
+      lastDay = lastGrid = lastCity = sentinel = null;
+    }
+
+    function draw() {
+      drawChips(); drawFilt(); drawStat();
+      resetGrid();
+      if (isList()) { drawList(); return; }
+      if (failed && !items.length) { note(failed, () => reload()); return; }
+      if (loading && !items.length) { bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
+      if (!items.length) { note(q || filt || tab !== 'all' ? '조건에 맞는 사진이 없어요' : '아직 사진이 없어요 — PC 가 사진을 읽는 중일 수 있어요'); return; }
+      addItems(items);
+      drawTail();
+    }
+
+    function addItems(list) {
+      list.forEach(it => {
+        if (it.day !== lastDay) {
+          lastDay = it.day; lastCity = h('small', { text: it.city || '' });
+          bodyEl.append(h('div', { class: 'ph-day' }, h('b', { text: phDay(it.day) }), lastCity));
+          lastGrid = h('div', { class: 'ph-grid' });
+          bodyEl.append(lastGrid);
+        } else if (it.city && lastCity && !lastCity.textContent) lastCity.textContent = it.city;
+        const t = tile(it);
+        tiles.set(it.id, t);
+        lastGrid.append(t);
+      });
+    }
+
+    function drawTail() {
+      if (sentinel) sentinel.remove();
+      sentinel = more || loading ? h('div', { class: 'ph-tail' }, loading ? h('i', { class: 'spinner', style: 'display:inline-block' })
+        : h('button', { class: 'doc-more', text: '더 보기', onclick: () => load() })) : null;
+      if (sentinel) bodyEl.append(sentinel);
+    }
+
+    function tile(it) {
+      const img = h('img', { src: it.thumb, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' });
+      const t = h('button', { class: 'ph-tile' + (it.kind === 'video' ? ' vid' : '') + (sel && sel.has(it.id) ? ' sel' : ''),
+        'aria-label': (it.kind === 'video' ? '영상 ' : '사진 ') + phDay(it.day, true) + (it.time ? ' ' + it.time : ''), onclick: () => tapTile(it) },
+        img,
+        it.kind === 'video' ? h('span', { class: 'ph-dur' }, svg('play'), it.dur ? phDur(it.dur) : null) : null,
+        h('span', { class: 'ph-chk', 'aria-hidden': 'true' }));
+      img.addEventListener('error', () => t.classList.add('bad'));
+      bindHold(t, it);
+      return t;
+    }
+
+    /** 꾹 누르기(0.5초) = 고르기 시작 — 손가락을 뗄 때 생기는 클릭이 열기로 새지 않게 막는다(문서함 고정과 같은 방식) */
+    function bindHold(t, it) {
+      let timer = 0, x0 = 0, y0 = 0;
+      const cancel = () => { clearTimeout(timer); timer = 0; };
+      t.addEventListener('pointerdown', ev => {
+        if (ev.button > 0) return;
+        x0 = ev.clientX; y0 = ev.clientY; cancel();
+        timer = setTimeout(() => {
+          timer = 0;
+          pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 4000);
+          haptic('tap'); sfx.play('tap');
+          if (!sel) startSel();
+          toggle(it);
+        }, PRESS_MS);
+      });
+      t.addEventListener('pointermove', ev => { if (timer && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancel(); });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => t.addEventListener(n, cancel));
+      t.addEventListener('contextmenu', ev => ev.preventDefault());
+    }
+
+    function tapTile(it) {
+      if (sel) { toggle(it); return; }
+      const i = items.indexOf(it), from = Math.max(0, i - 40);
+      openViewer(items.slice(from, i + 80).map(phEntry), i - from, '사진', { album: e => pickAlbum([e.id], '이 사진') });
+    }
+
+    // ── 여러 장 고르기 ──
+    function startSel() {
+      if (sel) return;
+      sel = new Set();
+      endSelLayer = layer(() => { sel = null; endSelLayer = null; paintSel(); });
+      paintSel();
+    }
+
+    function endSel() { if (endSelLayer) endSelLayer(); }
+
+    function toggle(it) {
+      if (!sel) return;
+      if (sel.has(it.id)) sel.delete(it.id); else sel.add(it.id);
+      const t = tiles.get(it.id);
+      if (t) t.classList.toggle('sel', sel.has(it.id));
+      paintSel();
+    }
+
+    function chosen() { return items.filter(it => sel && sel.has(it.id)); }
+
+    function paintSel() {
+      content.classList.toggle('selecting', !!sel);
+      pickBtn.textContent = sel ? '완료' : '선택';
+      pickBtn.classList.toggle('on', !!sel);
+      selBar.hidden = !sel;
+      if (!sel) { tiles.forEach(t => t.classList.remove('sel')); return; }
+      const n = sel.size, inAlbum = filt && filt.query.album;
+      selBar.textContent = '';
+      [h('button', { class: 'ph-x', 'aria-label': '고르기 끝내기', html: ICON.close, onclick: endSel }),
+        h('div', { class: 'cnt', text: n ? n + '장 선택' : '사진을 눌러 고르세요' }),
+        act('albumAdd', '담기', n, () => pickAlbum(chosen().map(it => it.id), n + '장')),
+        act('share', '공유', n, shareSel),
+        act('save', '저장', n, saveSel),
+        inAlbum ? act('minusCircle', '빼기', n, removeSel) : null].forEach(x => { if (x) selBar.append(x); });
+    }
+
+    function act(icon, label, n, fn) {
+      return h('button', { class: 'ph-act', disabled: !n, 'aria-label': label, onclick: fn }, svg(icon), h('span', { text: label }));
+    }
+
+    function shareSel() {
+      const list = chosen();
+      if (list.length > 10) { toast('공유는 한 번에 10장까지예요 — 나눠서 보내 주세요'); return; }
+      shareFiles(list.map(it => ({ url: it.orig, name: it.name })), '사진');
+    }
+
+    /** 저장 — 앱 안은 폰 사진첩에 한 장씩 바로, 브라우저는 파일로 차례로 받는다 */
+    async function saveSel() {
+      const list = chosen();
+      if (list.length > 30) { toast('저장은 한 번에 30장까지예요 — 나눠서 받아 주세요'); return; }
+      if (Native && typeof Native.saveToPhotos === 'function') {
+        toast('사진첩에 저장하는 중이에요 (' + list.length + '장)');
+        let ok = 0;
+        for (const it of list) {
+          try { await Native.saveToPhotos({ url: new URL(it.orig, location.href).href, name: it.name }); ok++; } catch (e) { /* 한 장 실패해도 나머지는 */ }
+        }
+        toast(ok === list.length ? ok + '장을 폰 사진첩에 저장했어요' : list.length + '장 중 ' + ok + '장만 저장했어요');
+        return;
+      }
+      if (list.length === 1) { downloadFile(list[0].orig, list[0].name); return; }
+      toast('내려받는 중이에요 (' + list.length + '장)');
+      list.forEach((it, i) => setTimeout(() => downloadFile(it.orig, it.name), i * 700));
+    }
+
+    async function removeSel() {
+      const ids = chosen().map(it => it.id), album = filt && filt.query.album;
+      if (!ids.length || !album) return;
+      try {
+        await api.post('photos/album', { op: 'remove', album, ids });
+        const gone = new Set(ids);
+        items = items.filter(it => !gone.has(it.id));
+        delete lists.album;
+        toast(ids.length + '장을 이 사진첩에서 뺐어요 (사진 파일은 그대로예요)');
+        endSel(); draw();
+      } catch (e) { show(e); }
+    }
+
+    // ── 사진첩에 담기 (이름표만 붙인다 — 파일은 옮기지 않고, 한 장이 여러 사진첩에 들어갈 수 있다) ──
+    async function pickAlbum(ids, label) {
+      if (!ids.length) return;
+      const listEl3 = h('div', { class: 'ph-pickrows' });
+      const nameEl = h('input', { type: 'text', maxlength: '60', placeholder: '새 사진첩 이름', 'aria-label': '새 사진첩 이름',
+        onkeydown: ev => { if (ev.key === 'Enter') make(); } });
+      const makeBtn = h('button', { class: 'btn', text: '만들고 담기', onclick: make });
+      const newBox = h('div', { class: 'ph-new', hidden: true }, nameEl, makeBtn);
+      const sheet = h('div', { class: 'sheet ph-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '사진첩에 담기' },
+        h('h3', { text: '사진첩에 담기' }),
+        h('p', { text: label + ' · 파일은 그대로 두고 사진첩에 이름표만 붙여요' }),
+        h('button', { class: 'ph-row new', onclick: () => { newBox.hidden = false; nameEl.focus(); } },
+          h('span', { class: 'ph-rthumb', html: ICON.plus }), h('div', { class: 'dtx' }, h('b', { text: '새 사진첩 만들기' }))),
+        newBox, listEl3,
+        h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() }));
+      const scrim = h('div', { class: 'sheet-scrim over', onclick: ev => { if (ev.target === scrim) close(); } }, sheet);
+      const close = layer(() => scrim.remove());
+      $('#app').append(scrim);
+      let busyAdd = false;
+
+      async function done(r, name) {
+        delete lists.album; albums = null;
+        close();
+        if (r.done === 0 && r.count) toast('이미 「' + name + '」에 들어 있어요');
+        else toast('「' + name + '」에 ' + (r.done != null ? r.done : r.count) + '장을 담았어요');
+        endSel();
+        if (filt && filt.query.album) reload();
+      }
+
+      async function make() {
+        const name = nameEl.value.trim();
+        if (!name) { nameEl.focus(); return; }
+        if (busyAdd) return;
+        busyAdd = true; makeBtn.disabled = true;
+        try { done(await api.post('photos/album', { op: 'create', name, ids }), name); }
+        catch (e) { busyAdd = false; makeBtn.disabled = false; show(e); }
+      }
+
+      async function add(a) {
+        if (busyAdd) return;
+        busyAdd = true;
+        try { done(await api.post('photos/album', { op: 'add', album: a.id, ids }), a.name); }
+        catch (e) { busyAdd = false; show(e); }
+      }
+
+      try {
+        if (!albums) albums = (await api.get('photos/albums')).items || [];
+        listEl3.append(albums.map(a => h('button', { class: 'ph-row', onclick: () => add(a) },
+          a.thumb ? h('img', { class: 'ph-rthumb', src: a.thumb, alt: '', loading: 'lazy' }) : h('span', { class: 'ph-rthumb', html: ICON.photo }),
+          h('div', { class: 'dtx' }, h('b', { text: a.name }), h('small', { text: a.count + '장' })))));
+      } catch (e) { listEl3.append(h('div', { class: 'doc-empty', text: (e && e.message) || '사진첩 목록을 불러오지 못했어요' })); }
+    }
+
+    // ── 불러오기 ──
+    async function load() {
+      if (loading || !more && page) return;
+      const my = gen;
+      loading = true; failed = '';
+      if (!page) draw(); else drawTail();
+      try {
+        const o = { page: page + 1, n: 60 };
+        if (tab === 'image' || tab === 'video') o.type = tab;
+        if (q) o.q = q;
+        if (filt) Object.assign(o, filt.query);
+        const r = await api.get('photos', o);
+        if (!alive || my !== gen) return;
+        const got = r.items || [];
+        if (r.stats) stats = r.stats;
+        const first = !page;
+        page++;
+        items = items.concat(got);
+        more = !!r.more;
+        loading = false;
+        if (first) draw(); else { addItems(got); drawTail(); }
+      } catch (e) {
+        if (!alive || my !== gen) return;
+        failed = (e && e.message) || '불러오지 못했어요';
+        loading = false;
+        if (e && e.status === 401) show(e);
+        if (!page) draw(); else { drawTail(); toast(failed); }
+      }
+      if (alive && my === gen) requestAnimationFrame(fill);
+    }
+
+    function reload() {
+      gen++;
+      items = []; page = 0; more = false; loading = false; failed = '';
+      load();
+    }
+
+    /** 아래로 내려 끝이 가까우면 다음 쪽 — 화면이 덜 찼을 때도 */
+    function fill() {
+      if (!alive || loading || !more || isList()) return;
+      if (content.scrollHeight - content.scrollTop - content.clientHeight < 900) load();
+    }
+    content.addEventListener('scroll', fill, { passive: true });
+
+    const pg = pushPage('사진', content, () => { alive = false; endSel(); }, { close: true });
+    pg.append(selBar);
+    drawChips(); drawStat();
+    load();
+  }
+
   // ── 승인함 (ApprView — 2026-10-12, PC 창 승인함과 같은 틀. 제안을 펼쳐 읽고 그 자리에서 결정) ──
   // 「의견」 칩은 의견 반영 중인 건이 있을 때만 보인다 (2026-10-22 — 의견은 승인도 보류도 거절도 아니라 따로 둔다)
   const APPR_ST = [['pending', '대기'], ['revising', '의견'], ['hold', '보류'], ['approved', '승인'], ['rejected', '거절'], ['all', '전체']];
@@ -3208,10 +3588,14 @@
     const kind = e.kind || fileKind(e.name, e.url, '');
     if (kind === 'image') {
       const img = h('img', { src: e.url, alt: e.name || '', loading: 'lazy', draggable: 'false' });
-      img.addEventListener('error', () => img.replaceWith(h('div', { class: 'vw-msg', text: '사진을 불러오지 못했어요' })));
+      img.addEventListener('error', () => {
+        if (e.dl && !img.dataset.fb) { img.dataset.fb = '1'; img.src = e.dl; return; }          // 사진첩 — 큰 그림이 아직 안 만들어졌으면 원본으로 한 번 더
+        img.replaceWith(h('div', { class: 'vw-msg', text: '사진을 불러오지 못했어요' }));
+      });
       return h('div', { class: 'vw-slide' }, img);
     }
-    if (kind === 'video') return h('div', { class: 'vw-slide' }, h('video', { src: e.url, controls: true, playsinline: true, 'webkit-playsinline': true, preload: 'metadata' }));
+    // 사진첩 영상은 겉그림(poster)만 두고 누를 때 받는다 — 한 번에 수십 개를 미리 받지 않게
+    if (kind === 'video') return h('div', { class: 'vw-slide' }, h('video', { src: e.url, controls: true, playsinline: true, 'webkit-playsinline': true, poster: e.poster, preload: e.poster ? 'none' : 'metadata' }));
     if (kind === 'audio') {
       return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-audio' },
         h('div', { class: 'vw-msg', text: '🔊 ' + (e.name || '음성') }), h('audio', { src: e.url, controls: true, preload: 'metadata' })));
@@ -3334,14 +3718,18 @@
     openLink(u);
   });
 
-  /** 전체 화면 보기 — entries: [{url, name, kind}], start: 처음 보일 장 */
-  function openViewer(entries, start, title) {
+  /** 전체 화면 보기 — entries: [{url, name, kind}], start: 처음 보일 장.
+   *  사진첩(2026-11-20)은 entries 에 dl(저장·공유할 원본 주소) · poster(영상 겉그림) · cap([윗줄, 아랫줄] 설명) · id 를 더 넣고,
+   *  opts.album(entry) 을 주면 위 줄에 「사진첩에 담기」 단추가 생긴다. */
+  function openViewer(entries, start, title, opts) {
     const list = (entries || []).filter(e => e && e.url);
     if (!list.length) return;
+    opts = opts || {};
     let idx = Math.max(0, Math.min(start || 0, list.length - 1)), raf = 0;
     const many = list.length > 1;
 
     const counter = h('div', { class: 'vw-count', 'aria-live': 'polite' });
+    const capEl = h('div', { class: 'vw-cap', hidden: true });
     const track = h('div', { class: 'vw-track' }, list.map(viewerSlide));
     const prev = many ? h('button', { class: 'vw-arrow prev', 'aria-label': '앞 장', html: ICON.back, onclick: () => go(idx - 1) }) : null;
     const next = many ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
@@ -3350,9 +3738,11 @@
         h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
         h('div', { class: 'vw-acts' },
-          h('button', { class: 'vw-btn', 'aria-label': '저장', html: ICON.save, onclick: () => downloadFile(list[idx].url, list[idx].name) }),
+          opts.album ? h('button', { class: 'vw-btn', 'aria-label': '사진첩에 담기', html: ICON.albumAdd, onclick: () => opts.album(list[idx]) }) : null,
+          h('button', { class: 'vw-btn', 'aria-label': '저장', html: ICON.save, onclick: () => downloadFile(list[idx].dl || list[idx].url, list[idx].name) }),
           h('button', { class: 'vw-btn', 'aria-label': '공유', html: ICON.share, onclick: share }))),
       h('div', { class: 'vw-stage' }, track),
+      capEl,
       many ? h('div', { class: 'vw-bot' }, prev, next) : null);
 
     /** 글 문서가 보이는 동안은 트랙의 가로 스크롤을 잠근다. 넘기는 중(스크롤 중)에 잠그면 중간에 멈추니 멈춘 뒤에 */
@@ -3375,6 +3765,9 @@
     function sync() {
       paintViewer();
       counter.textContent = many ? (idx + 1) + ' / ' + list.length : '';
+      const cap = list[idx].cap;
+      capEl.hidden = !cap;
+      if (cap) capEl.replaceChildren(h('b', { text: cap[0] }), cap[1] ? h('small', { text: cap[1] }) : null);
       if (prev) prev.hidden = idx === 0;
       if (next) next.hidden = idx === list.length - 1;
       track.classList.remove('lock');                      // 넘기는 동안은 풀어 두고 — 멈춘 뒤 문서면 다시 잠근다
@@ -3409,7 +3802,7 @@
 
     function share() {
       const e = list[idx];
-      return shareFiles([e], e.name || title || '효딩쓰');
+      return shareFiles([e.dl ? { url: e.dl, name: e.name } : e], e.name || title || '효딩쓰');
     }
 
     /** 아래로 쓸어내리면 닫힌다 (2026-11-02 대표님) — 사진·영상·상단·하단에서. 가로로 넘기기·확대·글 문서(안쪽이 따로 스크롤)는 건드리지 않는다. */
