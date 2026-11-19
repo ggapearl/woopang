@@ -34,6 +34,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="com.que.woogy" android:host="auth" />
             </intent-filter>
+
+            <!-- 공유 화면의 「앱 열기」 — 웹이 intent://c/S… 로 부르면 com.que.woogy://c/S… 가 와서 그 기부카드를 맨 앞에 연다 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.que.woogy" android:host="c" />
+            </intent-filter>
         </activity>
 
         <!-- 알림(FCM) — 서버 wg_push.py 가 notification + data.link 로 보낸다. 앱이 켜져 있을 때만 이 서비스가 직접 띄운다 -->

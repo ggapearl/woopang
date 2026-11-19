@@ -36,14 +36,26 @@ enum Shell {
 
     /// 공유 카드 링크(카톡 등에서 누름) https://woopang.com/woogy/c/S<16진 10자리> → 앱 화면 https://woopang.com/woogy/#share=<번호>
     /// — 받은 기부카드가 맨 앞에 뜬다. 서버의 https://woopang.com/.well-known/apple-app-site-association 이 /woogy/c/* 를 이 앱에 맡긴다(1.0.0 (3)).
+    /// 공유 화면의 「앱 열기」(com.que.woogy://c/S<…>, 1.0.0 (5)) 도 같은 곳으로 — 웹 주소는 사파리에서 같은 도메인을 누르면 앱이 안 열려서 쓴다
+    /// 「도와주기」 는 com.que.woogy://c/S<…>?help=1 — 웹 앱이 그 카드를 오른쪽으로 민 것처럼 바로 결제 창을 연다(1.0.0 (5))
     static func shareLink(_ url: URL) -> URL? {
-        guard isOwn(url) else { return nil }
-        let parts = url.path.split(separator: "/")                  // ["woogy", "c", "S…"]
-        guard parts.count == 3, parts[1] == "c" else { return nil }
-        let no = String(parts[2])
+        let no: String
+        var help = false
+        if url.scheme?.lowercased() == scheme {
+            let parts = url.path.split(separator: "/")              // com.que.woogy://c/S… → host "c", path ["S…"]
+            guard url.host?.lowercased() == "c", parts.count == 1 else { return nil }
+            no = String(parts[0])
+            help = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .contains(where: { $0.name == "help" && $0.value == "1" }) ?? false
+        } else {
+            guard isOwn(url) else { return nil }
+            let parts = url.path.split(separator: "/")              // ["woogy", "c", "S…"]
+            guard parts.count == 3, parts[1] == "c" else { return nil }
+            no = String(parts[2])
+        }
         guard no.count == 11, no.first == "S",
               no.dropFirst().allSatisfy({ ("0"..."9").contains($0) || ("A"..."F").contains($0) }) else { return nil }
-        return URL(string: "https://woopang.com/woogy/#share=" + no)
+        return URL(string: "https://woopang.com/woogy/#share=" + no + (help ? "&help=1" : ""))
     }
 
     /// 앱스토어 링크(결제 · 카드 앱 설치 안내) — 사파리를 거치지 않고 앱스토어로

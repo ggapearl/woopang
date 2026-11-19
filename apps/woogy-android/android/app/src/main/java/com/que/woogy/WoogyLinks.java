@@ -31,12 +31,23 @@ final class WoogyLinks {
 
     /** 공유 카드 링크 https://woopang.com/woogy/c/S<16진 10자리> → https://woopang.com/woogy/#share=<번호> */
     static Uri shareLink(Uri u) {
-        if (!isOwn(u)) return null;
-        String[] p = u.getPath().split("/");                // ["", "woogy", "c", "S…"]
-        if (p.length != 4 || !p[2].equals("c")) return null;
-        String no = p[3];
+        String no;
+        boolean help = false;
+        if (u != null && SCHEME.equalsIgnoreCase(u.getScheme())) {
+            // 공유 화면의 「앱 열기」 — com.que.woogy://c/S<…> (웹의 intent:// 주소가 이 모양으로 앱을 부른다)
+            // 「도와주기」 는 뒤에 ?help=1 — 웹 앱이 그 카드를 오른쪽으로 민 것처럼 바로 결제 창을 연다
+            String[] p = u.getPath() == null ? new String[0] : u.getPath().split("/");      // ["", "S…"]
+            if (!"c".equalsIgnoreCase(u.getHost()) || p.length != 2) return null;
+            no = p[1];
+            help = "1".equals(u.getQueryParameter("help"));
+        } else {
+            if (!isOwn(u)) return null;
+            String[] p = u.getPath().split("/");            // ["", "woogy", "c", "S…"]
+            if (p.length != 4 || !p[2].equals("c")) return null;
+            no = p[3];
+        }
         if (!no.matches("S[0-9A-F]{10}")) return null;
-        return Uri.parse("https://woopang.com/woogy/#share=" + no);
+        return Uri.parse("https://woopang.com/woogy/#share=" + no + (help ? "&help=1" : ""));
     }
 
     /** 앱이 받은 Intent(로그인 복귀 · 공유 링크 · 알림 누름)가 열어야 할 우기 화면 — 없으면 null */

@@ -27,6 +27,7 @@
      │    pushRegister  → 알림 허락 · 기기 토큰 → 웹이 POST /woogy/api/device-token {token, platform:'ios'}
      │    auth {url}    → 시스템 브라우저 창 → … → com.que.woogy://auth?t=<1회용> → 웹 화면 /woogy/auth/app?t=…
      │    openExternal  → 사파리 · 전화 · 문자
+     │    share {url}   → 아이폰 공유 창(카톡 · 문자 …) — 1.0.0 (5)부터
      │    location      → 지금 위치 한 번(CoreLocation — 아이폰 허락 창만 한 번)
      └─ 알림을 누르면 → 서버가 실은 link(https://woopang.com/woogy/#…)로
 nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 보낸다(팀 키 .p8 · topic com.que.woogy)
@@ -42,6 +43,7 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 | `WoogyApp.call('auth', {url})` | `{ok:true}` · `{ok:false, canceled:true}` | `url`(우기 주소)을 시스템 브라우저 창으로 연다. 서버가 `com.que.woogy://auth?t=…` 로 보내면 창이 닫히고 웹 화면이 `/woogy/auth/app?t=…` 로 가 로그인된다 |
 | `WoogyApp.call('openExternal', {url})` | `{ok}` | https · tel · sms · mailto 만 |
 | `WoogyApp.call('location')` | `{ok:true, lat, lon, acc}` · `{ok:false, code}` | 지금 위치 한 번 — 앱이 직접 묻는다(`Locator.swift`). 웹 위치(`navigator.geolocation`)를 쓰면 아이폰 허락 뒤에 「woopang.com 이(가) 현재 위치를…」 창이 한 번 더 뜨고, 앱을 켤 때마다 또 묻는다. `code` 는 웹 표준과 같다(1 허락 안 함 · 2 못 찾음 · 3 15초 넘김). 1.0.0 (1)에는 없어서, 웹은 「모르는 기능」 답을 받으면 웹 위치로 돌아간다 |
+| `WoogyApp.call('share', {url, text?})` | `{ok}` | 아이폰 공유 창(카톡 · 문자 …)을 앱이 직접 연다 — 웹의 `navigator.share` 는 카드를 밀었다 놓은 동작을 아이폰이 손 동작으로 안 쳐서 막힌다. `ok` 는 끝까지 보냈는지. `{probe: true}` 는 창 없이 「된다」만 답한다. 1.0.0 (5)부터 — 옛 빌드는 「모르는 기능」 답을 받아 웹 방식으로 돌아간다 |
 
 `WoogyApp.platform`(`'ios'`) · `WoogyApp.version` · `WoogyApp.build` 도 있다. 사용자 에이전트 끝에 `WoogyApp/<버전>` 이 붙는다(서버가 앱인지 알 수 있게).
 
@@ -55,6 +57,7 @@ nginx(443) → 우기 서버(127.0.0.1:6690) → wg_push.py 가 APNs 로 직접 
 | `target=_blank` · `window.open` (약관 · 가게 영수증 · 결제 팝업) | 아래에서 올라오는 창(같은 로그인). 아래로 밀거나 「닫기」 |
 | `tel:` · `sms:` · 카드/결제 앱(`ispmobile://` 등) · 앱스토어 | 그 앱으로 |
 | `com.que.woogy://auth?t=…` | 웹 화면에서 `/woogy/auth/app?t=…` 를 연다(토큰 16~200자 · 영문 숫자 `-` `_` 만) |
+| `com.que.woogy://c/S…` (1.0.0 (5)~) | 공유 화면의 「앱 열기」 — 웹 화면에서 `/woogy/#share=S…` 를 열어 그 기부카드를 맨 앞에(번호 `S`+16진 10자리만) |
 
 밀어서 뒤로 가기는 껐다 — 둘러보기 카드(좌우로 넘기기)와 겹친다. 뒤로는 화면 안의 버튼으로.
 
