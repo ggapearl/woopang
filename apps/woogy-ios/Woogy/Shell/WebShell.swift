@@ -37,7 +37,7 @@ enum Shell {
     /// 공유 카드 링크(카톡 등에서 누름) https://woopang.com/woogy/c/S<16진 10자리> → 앱 화면 https://woopang.com/woogy/#share=<번호>
     /// — 받은 기부카드가 맨 앞에 뜬다. 서버의 https://woopang.com/.well-known/apple-app-site-association 이 /woogy/c/* 를 이 앱에 맡긴다(1.0.0 (3)).
     /// 공유 화면의 「앱 열기」(com.que.woogy://c/S<…>, 1.0.0 (5)) 도 같은 곳으로 — 웹 주소는 사파리에서 같은 도메인을 누르면 앱이 안 열려서 쓴다
-    /// 「도와주기」 는 com.que.woogy://c/S<…>?help=1 — 웹 앱이 그 카드를 오른쪽으로 민 것처럼 바로 결제 창을 연다(1.0.0 (5))
+    /// 「도와주기」 는 com.que.woogy://c/S<…>?help=1 — 웹 앱이 그 사연의 자세히 화면을 연다(1.0.0 (5) · 2026-11-19 대표님: 결제 창이 아니라 상세로)
     static func shareLink(_ url: URL) -> URL? {
         let no: String
         var help = false
