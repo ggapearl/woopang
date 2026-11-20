@@ -6,10 +6,15 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-20b';
+  const WEB_VERSION = '2026-11-20c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
+
+  // 핀치로 확대·축소되지 않게 (2026-11-20 대표님) — index.html 뷰포트(user-scalable=no) · app.css touch-action 에 더해,
+  // 아이폰 웹뷰가 뷰포트 설정을 무시해도 제스처 사건·두 손가락 터치를 여기서 막는다.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, ev => ev.preventDefault(), { passive: false }));
+  document.addEventListener('touchmove', ev => { if (ev.touches && ev.touches.length > 1) ev.preventDefault(); }, { passive: false });
 
   // ── 저장 (이 폰의 웹뷰 안에만 — 앱은 백업·기기 옮기기에서 빠진다) ──
   const local = {
@@ -76,7 +81,7 @@
     get base() { return local.get('base', DEFAULT_BASE); },
     set base(v) { local.set('base', String(v || '').trim() || DEFAULT_BASE); },
     get token() { return local.get('desk-token', null); },
-    set token(v) { if (v) local.set('desk-token', v); else local.del('desk-token'); },
+    set token(v) { if (v) local.set('desk-token', v); else local.del('desk-token'); setTimeout(syncBackupAuth, 0); },
 
     async request(path, o) {
       o = o || {};
@@ -1442,6 +1447,8 @@
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
     photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17l4.6-4.4a1.6 1.6 0 0 1 2.2 0L15 16.5l1.8-1.7a1.6 1.6 0 0 1 2.2 0l1.5 1.5"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.5-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5z"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18.5a4.2 4.2 0 0 1-.7-8.34A5.6 5.6 0 0 1 17.4 9a4.8 4.8 0 0 1-.4 9.5z"/><path d="M12 16v-5M9.8 12.9L12 10.7l2.2 2.2"/></svg>',
     albumAdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="13" height="13" rx="2.5"/><path d="M7.5 7.5V6a2 2 0 0 1 2-2H18a2.5 2.5 0 0 1 2.5 2.5V15a2 2 0 0 1-2 2h-1.5"/><path d="M10 11.5v6M7 14.5h6"/></svg>',
     minusCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12h7"/></svg>',
   };
@@ -2969,8 +2976,14 @@
   // ── 사진 (PhotosView — 2026-11-20 대표님) ──
   // 구글 포토에서 내려받은 사진·영상을 PC 의 Immich 가 그 자리에서 읽고(복사 없음), 이 앱의 📷 화면으로만 보여 준다. 밖에 공개하지 않는다.
   // 목록·앨범 담기는 기기 열쇠(photos…), 사진·영상 내용은 서명 링크(/AI/photo/…)로 — 얼굴 인식은 쓰지 않는다.
-  const PH_TABS = [['all', '전체'], ['image', '사진'], ['video', '영상'], ['place', '장소'], ['album', '사진첩'], ['folder', '폴더']];
+  // 사진첩(앨범) 칩·「담기」는 숨겼다 (2026-11-20 대표님 「상단의 사진첩은 없어도 될 것 같아」) — 코드는 그대로, true 로 바꾸면 돌아온다.
+  const PH_ALBUMS = false;
+  const PH_TABS = [['all', '전체'], ['image', '사진'], ['video', '영상'], ['place', '장소'], ['album', '사진첩'], ['folder', '폴더']].filter(t => PH_ALBUMS || t[0] !== 'album');
   const PH_LIST = { place: 'places', album: 'albums', folder: 'folders' };
+  const phYM = day => { const m = DAY_RE.exec(day || ''); return m ? m[1] + '년 ' + (+m[2]) + '월' : ''; };
+  const phMonthLabel = m => phYM(m + '-01');
+  /** 달 m('2019-03')의 다음 달 1일 — 「이 날 전」(before)으로 쓰면 그 달이 맨 위에 온다 */
+  const phNextMonth = m => { const y = +m.slice(0, 4), mo = +m.slice(5, 7); return mo === 12 ? (y + 1) + '-01-01' : y + '-' + String(mo + 1).padStart(2, '0') + '-01'; };
   const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
   const DAY_RE = /^(\d{4})-(\d\d)-(\d\d)$/;
 
@@ -2993,43 +3006,52 @@
   function openPhotos() {
     let tab = 'all', q = '', filt = null, items = [], page = 0, more = false, loading = false, failed = '', alive = true, searchTimer = 0, gen = 0, listBusy = false, listFail = '';
     let stats = null, sel = null, endSelLayer = null, albums = null, lastDay = null, lastGrid = null, lastCity = null, sentinel = null;
+    let before = '', months = null, monthPos = null, monthsTotal = 0, dayGrids = [], whenTimer = 0, scrubDrag = false, whenRaf = 0, shownMonth = '';
     const lists = {};
     const tiles = new Map();
 
     const statEl = h('div', { class: 'doc-total' });
     const searchEl = h('input', {
       type: 'search', placeholder: '날짜(2023, 2023-5)나 파일 이름으로 찾기', 'aria-label': '사진 검색', inputmode: 'search',
-      oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { q = searchEl.value.trim(); if (isList()) draw(); else reload(); }, 400); },
+      oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { q = searchEl.value.trim(); clearBefore(); if (isList()) draw(); else reload(); }, 400); },
     });
     const pickBtn = h('button', { class: 'ph-pick', text: '선택', onclick: () => { if (sel) endSel(); else startSel(); } });
+    const cloudBtn = Native && typeof Native.backupStatus === 'function'
+      ? h('button', { class: 'ph-pick ph-cloud', 'aria-label': '폰 사진 자동 백업', html: ICON.cloud, onclick: () => openPhoneBackup() }) : null;
     const chipsEl = h('div', { class: 'doc-chips' });
     const filtEl = h('div', { class: 'ph-filt', hidden: true });
     const bodyEl = h('div', { class: 'ph-body' });
     const content = h('div', { class: 'content doc-content ph-content' },
-      h('div', { class: 'doc-head' }, h('div', { class: 'ph-search' }, searchEl, pickBtn), statEl), chipsEl, filtEl, bodyEl);
+      h('div', { class: 'doc-head' }, h('div', { class: 'ph-search' }, searchEl, cloudBtn, pickBtn), statEl), chipsEl, filtEl, bodyEl);
     const selBar = h('div', { class: 'ph-selbar', hidden: true });
+    // 스크롤하는 동안 보이는 연월 · 오른쪽 가장자리의 빠른 스크롤 막대 · 「최신으로」
+    const whenEl = h('div', { class: 'ph-when', hidden: true, 'aria-hidden': 'true' });
+    const knobEl = h('div', { class: 'ph-knob' });
+    const trackEl = h('div', { class: 'ph-scrub', hidden: true }, knobEl);
+    const latestEl = h('button', { class: 'ph-latest', hidden: true, onclick: () => { clearBefore(); endSel(); reload(); content.scrollTop = 0; } }, svg('up'), '최신으로');
 
     const isList = () => !filt && !!PH_LIST[tab];
+    const scrubOK = () => !isList() && !filt && !q && !!months && monthsTotal > 150;   // 막대는 전체 시간표를 볼 때만 — 작은 묶음(검색·폴더)은 연월 표시만
 
     function drawChips() {
       chipsEl.textContent = '';
       PH_TABS.forEach(([k, label]) => chipsEl.append(h('button', {
         class: 'dchip' + (tab === k ? ' on' : ''), text: label,
-        onclick: () => { if (tab === k && !filt) return; tab = k; filt = null; endSel(); gen++; loading = false; drawChips(); if (isList()) openList(); else reload(); },
+        onclick: () => { if (tab === k && !filt) return; tab = k; filt = null; clearBefore(); endSel(); gen++; loading = false; drawChips(); if (isList()) openList(); else reload(); },
       })));
     }
 
     function drawFilt() {
       filtEl.hidden = !filt;
       filtEl.textContent = '';
-      if (filt) filtEl.append(h('button', { class: 'dchip on', 'aria-label': filt.label + ' 풀기', onclick: () => { filt = null; endSel(); draw(); if (!isList()) reload(); } },
+      if (filt) filtEl.append(h('button', { class: 'dchip on', 'aria-label': filt.label + ' 풀기', onclick: () => { filt = null; clearBefore(); endSel(); draw(); if (!isList()) reload(); } },
         filt.label, h('span', { class: 'x', html: ICON.close })));
     }
 
     function drawStat() {
       if (isList()) statEl.textContent = '';
       else if (!filt && !q && tab === 'all' && stats) statEl.textContent = '사진 ' + stats.photos.toLocaleString('ko-KR') + ' · 영상 ' + stats.videos.toLocaleString('ko-KR');
-      else statEl.textContent = '꾹 누르거나 「선택」을 누르면 여러 장을 골라 사진첩에 담을 수 있어요';
+      else statEl.textContent = PH_ALBUMS ? '꾹 누르거나 「선택」을 누르면 여러 장을 골라 사진첩에 담을 수 있어요' : '꾹 누르거나 「선택」을 누르면 여러 장을 골라 공유·저장할 수 있어요';
     }
 
     function note(text, retry) {
@@ -3078,7 +3100,7 @@
     }
 
     function enter(f) {
-      filt = f; q = ''; searchEl.value = '';
+      filt = f; q = ''; searchEl.value = ''; clearBefore();
       drawChips(); reload();
     }
 
@@ -3086,6 +3108,7 @@
     function resetGrid() {
       bodyEl.textContent = '';
       tiles.clear();
+      dayGrids = [];
       lastDay = lastGrid = lastCity = sentinel = null;
     }
 
@@ -3107,6 +3130,7 @@
           bodyEl.append(h('div', { class: 'ph-day' }, h('b', { text: phDay(it.day) }), lastCity));
           lastGrid = h('div', { class: 'ph-grid' });
           bodyEl.append(lastGrid);
+          dayGrids.push({ el: lastGrid, day: it.day });
         } else if (it.city && lastCity && !lastCity.textContent) lastCity.textContent = it.city;
         const t = tile(it);
         tiles.set(it.id, t);
@@ -3127,6 +3151,7 @@
         'aria-label': (it.kind === 'video' ? '영상 ' : '사진 ') + phDay(it.day, true) + (it.time ? ' ' + it.time : ''), onclick: () => tapTile(it) },
         img,
         it.kind === 'video' ? h('span', { class: 'ph-dur' }, svg('play'), it.dur ? phDur(it.dur) : null) : null,
+        it.up ? h('span', { class: 'ph-up', title: '이 폰에서 올린 사진', html: ICON.check }) : null,
         h('span', { class: 'ph-chk', 'aria-hidden': 'true' }));
       img.addEventListener('error', () => t.classList.add('bad'));
       bindHold(t, it);
@@ -3156,7 +3181,7 @@
     function tapTile(it) {
       if (sel) { toggle(it); return; }
       const i = items.indexOf(it), from = Math.max(0, i - 40);
-      openViewer(items.slice(from, i + 80).map(phEntry), i - from, '사진', { album: e => pickAlbum([e.id], '이 사진') });
+      openViewer(items.slice(from, i + 80).map(phEntry), i - from, '사진', PH_ALBUMS ? { album: e => pickAlbum([e.id], '이 사진') } : {});
     }
 
     // ── 여러 장 고르기 ──
@@ -3189,7 +3214,7 @@
       selBar.textContent = '';
       [h('button', { class: 'ph-x', 'aria-label': '고르기 끝내기', html: ICON.close, onclick: endSel }),
         h('div', { class: 'cnt', text: n ? n + '장 선택' : '사진을 눌러 고르세요' }),
-        act('albumAdd', '담기', n, () => pickAlbum(chosen().map(it => it.id), n + '장')),
+        PH_ALBUMS ? act('albumAdd', '담기', n, () => pickAlbum(chosen().map(it => it.id), n + '장')) : null,
         act('share', '공유', n, shareSel),
         act('save', '저장', n, saveSel),
         inAlbum ? act('minusCircle', '빼기', n, removeSel) : null].forEach(x => { if (x) selBar.append(x); });
@@ -3300,6 +3325,7 @@
         if (tab === 'image' || tab === 'video') o.type = tab;
         if (q) o.q = q;
         if (filt) Object.assign(o, filt.query);
+        if (before && !q && !filt) o.before = before;
         const r = await api.get('photos', o);
         if (!alive || my !== gen) return;
         const got = r.items || [];
@@ -3331,12 +3357,334 @@
       if (!alive || loading || !more || isList()) return;
       if (content.scrollHeight - content.scrollTop - content.clientHeight < 900) load();
     }
-    content.addEventListener('scroll', fill, { passive: true });
+    // ── 스크롤 연월 표시 + 빠른 스크롤 막대 (2026-11-20 대표님 「스크롤할 때 연월이 보여서 어느 연도 몇 월인지 찾을 수 있게」) ──
+    // 스크롤하는 동안 지금 보이는 날의 「2019년 3월」이 오른쪽에 뜨고, 막대(손잡이)를 잡아 끌면 그 달로 건너뛴다.
+    // 달별 장수는 서버 photos/timeline (Immich 시간표) — 그 장수로 손잡이 위치와 건너뛸 달을 정한다.
+    function clearBefore() {
+      if (!before) return;
+      before = '';
+      latestEl.hidden = true;
+    }
 
-    const pg = pushPage('사진', content, () => { alive = false; endSel(); }, { close: true });
-    pg.append(selBar);
+    async function loadMonths() {
+      try {
+        const r = await api.get('photos/timeline');
+        if (!alive) return;
+        months = (r.months || []).filter(m => /^\d{4}-\d\d$/.test(m.m));
+        monthsTotal = months.reduce((s, m) => s + m.n, 0);
+        monthPos = {};
+        let cum = 0;
+        months.forEach(m => { monthPos[m.m] = { cum, n: m.n }; cum += m.n; });
+      } catch (e) { months = monthPos = null; }
+    }
+
+    /** 지금 날짜 머리글 밑에 보이는 날 — 격자(sticky 가 아님)의 위치를 이진 탐색 */
+    function topDay() {
+      if (!dayGrids.length) return '';
+      const edge = content.getBoundingClientRect().top + 44;
+      let lo = 0, hi = dayGrids.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (dayGrids[mid].el.getBoundingClientRect().top <= edge) lo = mid; else hi = mid - 1;
+      }
+      return dayGrids[lo].day;
+    }
+
+    /** 달 안의 위치까지 따져 0~1 (맨 위 = 0) */
+    function fracOf(day) {
+      const m = (day || '').slice(0, 7), p = monthPos && monthPos[m];
+      if (!p || !monthsTotal) return null;
+      const d = +day.slice(8, 10) || 1;
+      return Math.min(1, (p.cum + p.n * (31 - d) / 31) / monthsTotal);
+    }
+
+    function monthAt(frac) {
+      const target = Math.min(monthsTotal - 1, Math.max(0, frac * monthsTotal));
+      return months.find(m => target < monthPos[m.m].cum + m.n) || months[months.length - 1];
+    }
+
+    function trackBox() {
+      const c = content.getBoundingClientRect(), p = pg.getBoundingClientRect();
+      trackEl.style.top = (c.top - p.top + 8) + 'px';
+      trackEl.style.height = Math.max(80, c.height - 16) + 'px';
+      return trackEl.getBoundingClientRect();
+    }
+
+    function placeKnob(frac) {
+      const box = trackEl.getBoundingClientRect(), room = Math.max(1, box.height - 44);
+      const y = Math.min(room, Math.max(0, frac * room));
+      knobEl.style.transform = 'translateY(' + y + 'px)';
+      whenEl.style.top = (box.top - pg.getBoundingClientRect().top + y + 4) + 'px';
+    }
+
+    function showWhen(text) {
+      whenEl.textContent = text;
+      whenEl.hidden = !text;
+    }
+
+    function keepWhen() {
+      clearTimeout(whenTimer);
+      whenTimer = setTimeout(() => { if (scrubDrag) return; whenEl.hidden = true; trackEl.classList.remove('on'); }, 1400);
+    }
+
+    function updateWhen() {
+      whenRaf = 0;
+      if (!alive || isList() || !dayGrids.length || content.scrollTop < 4 && !before) { if (!scrubDrag) { whenEl.hidden = true; trackEl.classList.remove('on'); } return; }
+      const day = topDay();
+      showWhen(phYM(day));
+      if (scrubOK()) {
+        trackEl.hidden = false;
+        trackBox();
+        trackEl.classList.add('on');
+        const f = fracOf(day);
+        if (f != null && !scrubDrag) placeKnob(f);
+      } else { whenEl.style.top = ''; trackEl.hidden = true; }
+      keepWhen();
+    }
+
+    function onScroll() {
+      fill();
+      if (!whenRaf) whenRaf = requestAnimationFrame(updateWhen);
+    }
+    content.addEventListener('scroll', onScroll, { passive: true });
+
+    // 손잡이 끌기 — 손을 떼면 그 달로 건너뛴다(그 달이 맨 위에 오고, 더 아래는 이어서 불러온다)
+    function dragTo(ev) {
+      if (!months) return;
+      const box = trackEl.getBoundingClientRect(), room = Math.max(1, box.height - 44);
+      const frac = Math.min(1, Math.max(0, (ev.clientY - box.top - 22) / room));
+      const m = monthAt(frac);
+      if (m.m !== shownMonth) { shownMonth = m.m; haptic('tap'); }
+      placeKnob(frac);
+      showWhen(phMonthLabel(m.m));
+      return m;
+    }
+
+    let dragMonth = null;
+    trackEl.addEventListener('pointerdown', ev => {
+      if (!months || ev.button > 0) return;
+      scrubDrag = true; shownMonth = ''; clearTimeout(whenTimer);
+      trackEl.classList.add('drag');
+      try { trackEl.setPointerCapture(ev.pointerId); } catch (e) { /* 캡처 못 해도 끌린다 */ }
+      dragMonth = dragTo(ev);
+      ev.preventDefault();
+    });
+    trackEl.addEventListener('pointermove', ev => { if (scrubDrag) dragMonth = dragTo(ev); });
+    const endDragScrub = () => {
+      if (!scrubDrag) return;
+      scrubDrag = false;
+      trackEl.classList.remove('drag');
+      const m = dragMonth; dragMonth = null;
+      if (m) jumpMonth(m.m);
+      keepWhen();
+    };
+    ['pointerup', 'pointercancel'].forEach(n => trackEl.addEventListener(n, endDragScrub));
+
+    function jumpMonth(m) {
+      endSel();
+      if (months && months[0] && m === months[0].m) before = '';
+      else before = phNextMonth(m);
+      latestEl.hidden = !before;
+      reload();
+      content.scrollTop = 0;
+    }
+
+    const pg = pushPage('사진', content, () => { alive = false; endSel(); clearTimeout(whenTimer); }, { close: true });
+    pg.append(selBar, whenEl, trackEl, latestEl);
     drawChips(); drawStat();
+    loadMonths();
     load();
+  }
+
+  // ── 폰 사진 자동 백업 (2026-11-20 대표님 「핸드폰 사진첩에 접속해서 백업되지 않은 사진·영상은 여기에 백업, 구글처럼」) ──
+  // 켠 뒤에 이 폰에 새로 생긴 사진·영상만 PC 로 올린다 — 지금 폰에 있는 옛 사진은 건드리지 않는다. 올라간 것은 오른쪽 아래에 ✓.
+  // 폰 사진첩을 읽고 올리는 일은 앱(DeskNative)이 한다 — apps/hyodingsseu-ios/PHOTO_BACKUP.md 에 약속(이름·모양)이 있다:
+  //   backupStatus() → {enabled, since, auth:'granted'|'limited'|'denied'|'undetermined', done, pending, uploading:{lid,name,sent,total}|null, wifiOnly, error}
+  //   backupEnable({base, token, wifiOnly}) · backupDisable() · backupRun() · backupConfigure({base, token, wifiOnly}) → 모두 위 상태를 돌려준다
+  //   backupList({before, limit}) → {items:[{lid, kind:'image'|'video', ts(초), dur(초), name, up}], more}  (새것부터, before = 이 시각(초) 전)
+  //   backupThumb({lid, size}) → {data:'data:image/jpeg;base64,…'}
+  //   사건 'backup' (addListener) — 데이터는 backupStatus() 와 같은 모양
+  const BK_ON = !!(Native && typeof Native.backupStatus === 'function');
+
+  /** 서버 주소·열쇠를 앱에 알려 준다 — 앱이 직접 올리기 때문. 짝을 맺거나 끊을 때, 화면이 켜질 때마다. */
+  function syncBackupAuth() {
+    if (!BK_ON || typeof Native.backupConfigure !== 'function') return;
+    Native.backupConfigure({ base: api.base, token: api.token || '', wifiOnly: local.get('backupWifi', '1') === '1' }).catch(() => {});
+  }
+
+  function openPhoneBackup() {
+    let st = null, items = [], more = false, loading = false, alive = true, failed = '', refresh = 0, lastSig = '';
+    const thumbs = new Map();                          // 사진 번호 → 작은 그림(data 주소) — 다시 그려도 앱에 또 묻지 않게
+    let thumbBusy = 0;
+    const thumbQueue = [];
+    const cardEl = h('div', { class: 'bk-card' });
+    const bodyEl = h('div', { class: 'ph-body' });
+    const content = h('div', { class: 'content doc-content ph-content bk-content' }, cardEl, bodyEl);
+    const seen = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
+      if (e.isIntersecting) { seen.unobserve(e.target); wantThumb(e.target); }
+    }), { root: content, rootMargin: '400px' }) : null;
+
+    function wantThumb(img) {
+      const lid = img.dataset.lid;
+      if (thumbs.has(lid)) { img.src = thumbs.get(lid); return; }
+      thumbQueue.push(img);
+      pumpThumbs();
+    }
+
+    function pumpThumbs() {
+      while (thumbBusy < 4 && thumbQueue.length) {
+        const img = thumbQueue.shift(), lid = img.dataset.lid;
+        if (!img.isConnected) continue;
+        thumbBusy++;
+        Native.backupThumb({ lid, size: 240 }).then(r => { if (r && r.data) { thumbs.set(lid, r.data); img.src = r.data; } })
+          .catch(() => img.classList.add('bad')).finally(() => { thumbBusy--; pumpThumbs(); });
+      }
+    }
+
+    const pct = u => (u && u.total ? Math.min(100, Math.round(u.sent / u.total * 100)) : 0);
+
+    function drawCard() {
+      cardEl.textContent = '';
+      if (!st) { cardEl.append(h('div', { class: 'bk-note' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
+      const on = !!st.enabled;
+      const since = st.since ? new Date(st.since * 1000) : null;
+      const sinceText = since ? (since.getMonth() + 1) + '월 ' + since.getDate() + '일 ' + String(since.getHours()).padStart(2, '0') + ':' + String(since.getMinutes()).padStart(2, '0') : '';
+      cardEl.append(h('div', { class: 'bk-head' },
+        h('span', { class: 'bk-ic' + (on ? ' on' : ''), html: ICON.cloud }),
+        h('div', { class: 'bk-tx' }, h('b', { text: on ? '자동 백업 켜짐' : '자동 백업 꺼짐' }),
+          h('small', { text: on ? sinceText + ' 이후의 새 사진·영상을 PC 로 올려요' : '켜면 이 폰에 새로 생기는 사진·영상이 PC 로 올라가요' })),
+        h('button', { class: 'bk-sw' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on ? 'true' : 'false', 'aria-label': '자동 백업', onclick: toggleBackup }, h('i'))));
+      if (!on) {
+        cardEl.append(h('p', { class: 'bk-help', text: '켠 다음부터 찍거나 받은 사진·영상만 올려요. 지금 폰에 들어 있는 옛 사진은 올리지 않아요.' }));
+      } else {
+        cardEl.append(h('div', { class: 'bk-stat' },
+          h('span', { text: '올림 ' + (st.done || 0).toLocaleString('ko-KR') + '장' }),
+          h('span', { class: st.pending ? 'wait' : '', text: st.pending ? '기다리는 중 ' + st.pending.toLocaleString('ko-KR') + '장' : '모두 올렸어요' })));
+        if (st.uploading) {
+          cardEl.append(h('div', { class: 'bk-prog' }, h('div', { class: 'bar' }, h('i', { style: 'width:' + pct(st.uploading) + '%' })),
+            h('small', { text: '올리는 중 · ' + (st.uploading.name || '') + ' ' + pct(st.uploading) + '%' })));
+        }
+        cardEl.append(h('div', { class: 'bk-row' },
+          h('span', { class: 'k', text: 'Wi-Fi 에서만 올리기' }),
+          h('button', { class: 'bk-sw' + (st.wifiOnly ? ' on' : ''), role: 'switch', 'aria-checked': st.wifiOnly ? 'true' : 'false', 'aria-label': 'Wi-Fi 에서만',
+            onclick: () => setWifi(!st.wifiOnly) }, h('i'))));
+        if (st.pending && !st.uploading) cardEl.append(h('button', { class: 'btn wide bk-run', text: '지금 올리기', onclick: runNow }));
+      }
+      if (st.auth === 'denied') cardEl.append(h('p', { class: 'bk-err', text: '사진 접근이 막혀 있어요 — 폰 설정 › 효딩쓰 › 사진 에서 「모든 사진」으로 바꿔 주세요.' }));
+      else if (on && st.auth === 'limited') cardEl.append(h('p', { class: 'bk-err', text: '일부 사진만 허용돼 있어요 — 새 사진이 빠질 수 있어요. 설정 › 효딩쓰 › 사진 에서 「모든 사진」으로 바꿔 주세요.' }));
+      if (st.error) cardEl.append(h('p', { class: 'bk-err', text: st.error }));
+    }
+
+    const sigOf = s => (s.done || 0) + '/' + (s.pending || 0) + '/' + (s.enabled ? 1 : 0) + '/' + (s.uploading ? s.uploading.lid : '');
+
+    function setState(s, first) {
+      if (!alive || !s) return;
+      st = s;
+      drawCard();
+      const sig = sigOf(s);
+      if (sig === lastSig) return;
+      lastSig = sig;
+      if (!first) { clearTimeout(refresh); refresh = setTimeout(() => load(true), 800); }   // 올림·대기가 바뀌면 격자의 ✓ 를 새로 (처음 한 번은 아래에서 바로 불러온다)
+    }
+
+    async function toggleBackup() {
+      if (!st) return;
+      try {
+        if (st.enabled) { confirmOff(); return; }
+        setState(await Native.backupEnable({ base: api.base, token: api.token || '', wifiOnly: local.get('backupWifi', '1') === '1' }));
+        toast('켠 뒤에 생기는 사진·영상부터 올려요');
+      } catch (e) { toast((e && e.message) || '켜지 못했어요'); }
+    }
+
+    function confirmOff() {
+      const scrim = h('div', { class: 'sheet-scrim over', onclick: ev => { if (ev.target === scrim) close(); } },
+        h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' },
+          h('h3', { text: '자동 백업을 끌까요?' }),
+          h('p', { text: '끄면 새 사진·영상을 더는 올리지 않아요. 이미 올린 사진은 그대로 남아요.' }),
+          h('button', { class: 'btn danger wide', text: '끄기', onclick: async () => { close(); try { setState(await Native.backupDisable()); } catch (e) { toast('끄지 못했어요'); } } }),
+          h('button', { class: 'btn ghost wide', text: '그대로 두기', onclick: () => close() })));
+      const close = layer(() => scrim.remove());
+      $('#app').append(scrim);
+    }
+
+    async function setWifi(v) {
+      local.set('backupWifi', v ? '1' : '0');
+      try { setState(await Native.backupConfigure({ base: api.base, token: api.token || '', wifiOnly: v })); } catch (e) { toast('바꾸지 못했어요'); }
+    }
+
+    async function runNow() {
+      try { setState(await Native.backupRun()); } catch (e) { toast((e && e.message) || '지금은 올릴 수 없어요'); }
+    }
+
+    // ── 폰 사진 격자 (새것부터, 올라간 것엔 ✓) ──
+    const dayOf = ts => { const d = new Date(ts * 1000); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+    function tile(it) {
+      const sending = !!(st && st.uploading && st.uploading.lid === it.lid);
+      const img = h('img', { alt: '', draggable: 'false', decoding: 'async', 'data-lid': it.lid });
+      const t = h('button', { class: 'ph-tile bk-tile' + (it.kind === 'video' ? ' vid' : '') + (sending ? ' sending' : ''),
+        'aria-label': (it.kind === 'video' ? '영상' : '사진') + (it.up ? ' · 올림' : ' · 아직 안 올림'),
+        onclick: () => toast(it.up ? '이미 PC 에 올라간 ' + (it.kind === 'video' ? '영상' : '사진') + '이에요' : st && st.enabled ? '곧 올라가요 — 기다리는 중이에요' : '자동 백업이 꺼져 있어요') },
+        img,
+        it.kind === 'video' ? h('span', { class: 'ph-dur' }, svg('play'), it.dur ? phDur(it.dur) : null) : null,
+        it.up ? h('span', { class: 'ph-up', html: ICON.check }) : sending ? h('span', { class: 'ph-up wait' }, h('i', { class: 'spinner' })) : null);
+      if (thumbs.has(it.lid)) img.src = thumbs.get(it.lid);
+      else if (seen) seen.observe(img); else wantThumb(img);
+      return t;
+    }
+
+    function draw() {
+      const top = content.scrollTop;
+      bodyEl.textContent = '';
+      if (failed && !items.length) { bodyEl.append(h('div', { class: 'doc-empty' }, failed, h('div', null, h('button', { class: 'doc-more', text: '다시 시도', onclick: () => load() })))); return; }
+      if (!items.length) {
+        bodyEl.append(h('div', { class: 'doc-empty', text: loading ? '' : st && st.enabled ? '켠 뒤에 찍은 사진·영상이 여기에 나타나요' : '자동 백업을 켜면, 켠 뒤에 생기는 사진·영상이 여기에 나타나요' }));
+        if (loading) bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' })));
+        return;
+      }
+      let day = null, grid = null;
+      items.forEach(it => {
+        const d = dayOf(it.ts);
+        if (d !== day) { day = d; bodyEl.append(h('div', { class: 'ph-day' }, h('b', { text: phDay(d) }))); grid = h('div', { class: 'ph-grid' }); bodyEl.append(grid); }
+        grid.append(tile(it));
+      });
+      if (more) bodyEl.append(h('div', { class: 'ph-tail' }, h('button', { class: 'doc-more', text: '더 보기', onclick: () => loadMore() })));
+      content.scrollTop = top;
+    }
+
+    async function load(soft) {
+      if (loading) return;
+      loading = true; failed = '';
+      try {
+        const r = await Native.backupList({ before: 0, limit: soft ? Math.max(60, items.length) : 60 });
+        if (!alive) return;
+        items = r.items || []; more = !!r.more;
+      } catch (e) { failed = (e && e.message) || '폰 사진을 읽지 못했어요'; }
+      loading = false;
+      draw();
+    }
+
+    async function loadMore() {
+      if (loading || !more || !items.length) return;
+      loading = true;
+      try {
+        const r = await Native.backupList({ before: items[items.length - 1].ts, limit: 60 });
+        if (!alive) return;
+        items = items.concat(r.items || []); more = !!r.more;
+      } catch (e) { toast((e && e.message) || '더 불러오지 못했어요'); }
+      loading = false;
+      draw();
+    }
+
+    content.addEventListener('scroll', () => {
+      if (more && !loading && content.scrollHeight - content.scrollTop - content.clientHeight < 900) loadMore();
+    }, { passive: true });
+
+    let sub = null;
+    Native.addListener('backup', setState).then(h2 => { sub = h2; if (!alive && h2) h2.remove(); }).catch(() => {});
+    pushPage('폰 사진 백업', content, () => { alive = false; clearTimeout(refresh); if (sub) sub.remove(); }, { close: true });
+    drawCard();
+    Native.backupStatus().then(s => { setState(s, true); load(); }).catch(() => { st = { enabled: false }; drawCard(); load(); });
   }
 
   // ── 승인함 (ApprView — 2026-10-12, PC 창 승인함과 같은 틀. 제안을 펼쳐 읽고 그 자리에서 결정) ──
@@ -3973,6 +4321,7 @@
   }
 
   if (Native) Native.addListener('pushOpen', takePushOpen);        // 떠 있는 화면에서 알림을 눌렀다 (아이폰 2.1+)
+  syncBackupAuth();                                                // 폰 사진 자동 백업: 서버 주소·열쇠를 앱에 (앱이 직접 올린다)
   applyTheme();
   S.paired = !!api.token;
   if (S.paired) { showMain(); startPolling(); takePushOpen(); } else { showPair(); }
