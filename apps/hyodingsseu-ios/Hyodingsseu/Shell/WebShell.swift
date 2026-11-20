@@ -37,6 +37,7 @@ struct WebShell: UIViewRepresentable {
         wv.isOpaque = false
         wv.backgroundColor = .clear
         if #available(iOS 16.4, *) { wv.isInspectable = true }      // Mac 사파리 › 개발 메뉴로 들여다보기 (개인용)
+        wv.hideKeyboardAccessoryBar()
         context.coordinator.attach(wv)
         wv.load(URLRequest(url: start))
         return wv
@@ -93,6 +94,11 @@ struct WebShell: UIViewRepresentable {
             origin.host == "woopang.com" || origin.host == "www.woopang.com" ? .grant : .deny
         }
 
+        // 화면을 새로 불러온 뒤에도 키패드 위 막대는 계속 없앤다(웹 화면 프로세스가 다시 뜨면 입력 뷰가 새로 만들어진다)
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.hideKeyboardAccessoryBar()
+        }
+
         // 인터넷이 안 되면 — 안내 화면 + 다시 시도
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             showOffline(webView, error)
@@ -112,5 +118,32 @@ struct WebShell: UIViewRepresentable {
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             webView.load(URLRequest(url: start))
         }
+    }
+}
+
+// MARK: - 키패드 위 막대(∧ ∨ ✓) 없애기
+
+/// `WKWebView` 의 입력 뷰(`WKContentView`)가 키패드 위에 붙이는 「이전 · 다음 · 완료」 막대를 끈다.
+/// 효딩쓰는 입력칸이 채팅 한 줄뿐이라 이 막대가 쓸모없이 매번 뜬다(2026-11-20 대표님).
+/// 공개된 API 가 없어서, 입력 뷰의 클래스를 `inputAccessoryView == nil` 인 하위 클래스로 바꿔 끼우는 방식(널리 쓰이는 방법)을 쓴다.
+@objc private final class NoAccessoryProvider: NSObject {
+    @objc var inputAccessoryView: AnyObject? { nil }
+}
+
+extension WKWebView {
+    func hideKeyboardAccessoryBar() {
+        guard let content = scrollView.subviews.first(where: { String(describing: type(of: $0)).hasPrefix("WKContent") }),
+              let base = object_getClass(content) else { return }
+        let name = "\(base)_NoAccessoryBar"
+        if NSStringFromClass(base) == name { return }                       // 이미 바꿨다
+        var cls: AnyClass? = NSClassFromString(name)
+        if cls == nil {
+            cls = objc_allocateClassPair(base, name, 0)
+            guard let made = cls,
+                  let m = class_getInstanceMethod(NoAccessoryProvider.self, #selector(getter: NoAccessoryProvider.inputAccessoryView)) else { return }
+            class_addMethod(made, #selector(getter: UIResponder.inputAccessoryView), method_getImplementation(m), method_getTypeEncoding(m))
+            objc_registerClassPair(made)
+        }
+        if let cls { object_setClass(content, cls) }
     }
 }
