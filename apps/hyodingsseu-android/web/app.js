@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-20a';
+  const WEB_VERSION = '2026-11-20b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3636,12 +3636,13 @@
   /** PDF 는 앱 안에서 pdf.js 로 한 장씩 그려 바로 읽는다(2026-11-19 대표님). 아이폰 앱 속 iframe 의 PDF 는 첫 쪽만 보이고 안 내려가서 —
       PDF 파일을 받아 문서 칸(sandbox) 안으로 넘기고, 그 안에서 쪽마다 캔버스로 그린다. 쪽 크기를 먼저 정해 두어 높이가 흔들리지 않는다. */
   const PDF_JS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const PDF_JS_SRI = 'sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ==';
   const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const PDF_RUN = '(function(){var u8=Uint8Array.from(atob(document.getElementById("pdfb").textContent),function(c){return c.charCodeAt(0)}),host=document.getElementById("p");'
     + 'var fail=function(m){host.innerHTML="<div class=msg>"+m+"</div>"};'
     + 'if(!window.pdfjsLib){fail("PDF 를 여는 도구를 불러오지 못했어요 — 저장해서 보세요");return}'
     + 'fetch("' + PDF_WORKER + '").then(function(r){return r.text()}).then(function(t){'
-    + 'pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([t],{type:"text/javascript"}));return pdfjsLib.getDocument({data:u8}).promise}).then(function(pdf){'
+    + 'pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([t],{type:"text/javascript"}));return pdfjsLib.getDocument({data:u8,isEvalSupported:false}).promise}).then(function(pdf){'
     + 'var W=document.documentElement.clientWidth,n=Math.min(pdf.numPages,300),dpr=Math.min(window.devicePixelRatio||1,2),jobs=[];for(var i=1;i<=n;i++)jobs.push(pdf.getPage(i));'
     + 'return Promise.all(jobs).then(function(ps){host.textContent="";var items=ps.map(function(pg){var s=W/pg.getViewport({scale:1}).width,v=pg.getViewport({scale:s}),c=document.createElement("canvas");'
     + 'c.className="pg";c.style.width=v.width+"px";c.style.height=v.height+"px";host.appendChild(c);return[pg,c,s]});'
@@ -3651,7 +3652,7 @@
     + '<style>html,body{margin:0;background:#e4e6ec}#p{padding:8px 0 96px}.pg{display:block;margin:0 auto 8px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18)}'
     + '.msg{padding:28px 20px;font:15px/1.6 -apple-system,"Apple SD Gothic Neo",sans-serif;color:#444;text-align:center}</style></head>'
     + '<body><div id="p"><div class="msg">PDF 여는 중…</div></div><script id="pdfb" type="text/plain">' + b64 + '<\/script>'
-    + '<script src="' + PDF_JS + '"><\/script><script>' + PDF_RUN + '<\/script>' + DOC_LINK + '</body></html>';
+    + '<script src="' + PDF_JS + '" integrity="' + PDF_JS_SRI + '" crossorigin="anonymous"><\/script><script>' + PDF_RUN + '<\/script>' + DOC_LINK + '</body></html>';
   const toB64 = buf => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
 
   async function loadDoc(f) {
