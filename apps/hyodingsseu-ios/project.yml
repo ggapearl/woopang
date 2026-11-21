@@ -14,7 +14,7 @@ settings:
     SWIFT_VERSION: "5.0"
     # TestFlight 에 올릴 때마다 CURRENT_PROJECT_VERSION 을 1 씩 올린다 (같은 번호는 App Store Connect 가 거절)
     MARKETING_VERSION: "2.3.1"
-    CURRENT_PROJECT_VERSION: "10"
+    CURRENT_PROJECT_VERSION: "11"
 targets:
   Hyodingsseu:
     type: application
