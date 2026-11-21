@@ -58,6 +58,7 @@ woopang.com 에 **새 페이지/서비스를 만들고 라우팅**할 때는 사
 | 서버 포트/Nginx/배포 | [docs/claude/server-infra.md](docs/claude/server-infra.md) |
 | 하늘 날씨 서버 `/api/weather` — 기상청 초단기실황 연동 | [docs/claude/weather_kma.py](docs/claude/weather_kma.py) (파일 머리 주석에 붙이는 법) |
 | **웹앱 전체 기능 테스트 ("전부 테스트해줘"/"잘 작동하는지 검토") — E2E·실브라우저** | **[docs/claude/web-testing.md](docs/claude/web-testing.md)** |
+| **사진 📷 (구글 포토 Takeout → Immich → 효딩쓰 앱) — 압축 풀기(`extract_all.py`, 2026-11-21 허락됨 · zip 은 대표님 허락 없이 지우지 않는다) · 날짜·위치 맞추기 · 서명 링크 · 폰 자동 백업·정리** | **[docs/claude/photos-immich.md](docs/claude/photos-immich.md)** |
 | MCP Unity (Claude ↔ Unity Editor) | [docs/claude/mcp-unity.md](docs/claude/mcp-unity.md) |
 | Claude Code 개선점 제보 (GitHub 이슈 자동화 — "제보해줘"/"이슈 올려줘") | [docs/claude/github-issue.md](docs/claude/github-issue.md) |
 
