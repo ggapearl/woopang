@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-21c';
+  const WEB_VERSION = '2026-11-22a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3061,6 +3061,11 @@
     return hr ? hr + ':' + String(mn).padStart(2, '0') + ':' + s : mn + ':' + s;
   }
 
+  /** 사진 가로세로 비율 — 줄 맞춤(구글 포토처럼 사진 비율 그대로)에 쓴다. 너무 길쭉한 것은 잘라 보이게 0.56~2 로 */
+  const phAr = it => (it.w > 0 && it.h > 0) ? Math.round(Math.min(2, Math.max(0.56, it.w / it.h)) * 1000) / 1000 : 1;
+  /** 검색창에 「동영상」「사진」을 치면 이름이 아니라 종류로 찾는다 (구글 포토와 같게) */
+  const PH_TYPEWORD = { '동영상': 'video', '영상': 'video', '비디오': 'video', 'video': 'video', 'videos': 'video', '사진': 'image', '이미지': 'image', 'photo': 'image', 'photos': 'image' };
+
   const phCap = it => [phDay(it.day, true) + (it.time ? ' ' + it.time : '') + (it.city ? ' · ' + it.city : ''), it.name];
   const phEntry = it => ({ url: it.view, name: it.name, kind: it.kind, dl: it.orig, poster: it.kind === 'video' ? it.thumb : '', id: it.id, cap: phCap(it) });
 
@@ -3068,12 +3073,14 @@
     let tab = 'all', q = '', filt = null, items = [], page = 0, more = false, loading = false, failed = '', alive = true, searchTimer = 0, gen = 0, listBusy = false, listFail = '';
     let stats = null, sel = null, endSelLayer = null, albums = null, lastDay = null, lastGrid = null, lastCity = null, sentinel = null;
     let before = '', months = null, monthPos = null, monthsTotal = 0, dayGrids = [], whenTimer = 0, scrubDrag = false, whenRaf = 0, shownMonth = '';
+    let anchor = -1, drag = null;                 // 고르기 — 마지막으로 누른 자리(범위 고르기 기준) · 꾹 누른 채 끄는 중
+    const dayIds = new Map(), dayHdr = new Map(), pos = new Map();   // 날짜 → 그날 사진 번호들 · 날짜 머리글의 동그라미 · 사진 번호 → 목록 자리
     const lists = {};
     const tiles = new Map();
 
     const statEl = h('div', { class: 'doc-total' });
     const searchEl = h('input', {
-      type: 'search', placeholder: '날짜(2023, 2023-5)나 파일 이름으로 찾기', 'aria-label': '사진 검색', inputmode: 'search',
+      type: 'search', placeholder: '날짜(2023-5) · 이름 · 「동영상」으로 찾기', 'aria-label': '사진 검색', inputmode: 'search',
       oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { q = searchEl.value.trim(); clearBefore(); if (isList()) draw(); else reload(); }, 400); },
     });
     const pickBtn = h('button', { class: 'ph-pick', text: '선택', onclick: () => { if (sel) endSel(); else startSel(); } });
@@ -3116,7 +3123,7 @@
     function drawStat() {
       if (isList()) statEl.textContent = '';
       else if (!filt && !q && tab === 'all' && stats) statEl.textContent = '사진 ' + stats.photos.toLocaleString('ko-KR') + ' · 영상 ' + stats.videos.toLocaleString('ko-KR');
-      else statEl.textContent = PH_ALBUMS ? '꾹 누르거나 「선택」을 누르면 여러 장을 골라 사진첩에 담을 수 있어요' : '꾹 누르거나 「선택」을 누르면 여러 장을 골라 공유·저장할 수 있어요';
+      else statEl.textContent = PH_ALBUMS ? '꾹 눌러 끌면 여러 장 · 날짜 옆 동그라미는 그날 전부 — 골라서 담기·공유·저장해요' : '꾹 눌러 끌면 여러 장 · 날짜 옆 동그라미는 그날 전부 — 골라서 공유·저장해요';
     }
 
     function note(text, retry) {
@@ -3174,6 +3181,7 @@
       bodyEl.textContent = '';
       tiles.clear();
       dayGrids = [];
+      dayIds.clear(); dayHdr.clear(); pos.clear(); anchor = -1;
       lastDay = lastGrid = lastCity = sentinel = null;
     }
 
@@ -3190,17 +3198,29 @@
 
     function addItems(list) {
       list.forEach(it => {
+        pos.set(it.id, pos.size);
         if (it.day !== lastDay) {
           lastDay = it.day; lastCity = h('small', { text: it.city || '' });
-          bodyEl.append(h('div', { class: 'ph-day' }, h('b', { text: phDay(it.day) }), lastCity));
-          lastGrid = h('div', { class: 'ph-grid' });
+          const dc = dayCheck(it.day);
+          dayHdr.set(it.day, dc);
+          if (!dayIds.has(it.day)) dayIds.set(it.day, []);
+          bodyEl.append(h('div', { class: 'ph-day' }, dc, h('b', { text: phDay(it.day) }), lastCity));
+          lastGrid = h('div', { class: 'ph-grid jr' });
           bodyEl.append(lastGrid);
           dayGrids.push({ el: lastGrid, day: it.day });
         } else if (it.city && lastCity && !lastCity.textContent) lastCity.textContent = it.city;
+        dayIds.get(it.day).push(it.id);
         const t = tile(it);
         tiles.set(it.id, t);
         lastGrid.append(t);
+        if (sel && sel.has(it.id)) t.setAttribute('aria-pressed', 'true');
       });
+      if (sel) dayHdr.forEach((_, d) => paintDay(d));      // 고르는 중에 더 불러왔을 때 그 날의 동그라미 상태를 다시
+    }
+
+    /** 날짜 머리글 왼쪽 동그라미 — 누르면 그날 사진·영상을 전부 고르고(다시 누르면 전부 풀고), 일부만 골랐으면 반쯤 찬 모양 */
+    function dayCheck(day) {
+      return h('button', { class: 'ph-dchk', 'aria-label': phDay(day, true) + ' 전부 고르기', onclick: ev => { ev.stopPropagation(); toggleDay(day); } });
     }
 
     function drawTail() {
@@ -3213,12 +3233,14 @@
     function tile(it) {
       const img = h('img', { src: it.thumb, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' });
       const t = h('button', { class: 'ph-tile' + (it.kind === 'video' ? ' vid' : '') + (sel && sel.has(it.id) ? ' sel' : ''),
-        'aria-label': (it.kind === 'video' ? '영상 ' : '사진 ') + phDay(it.day, true) + (it.time ? ' ' + it.time : ''), onclick: () => tapTile(it) },
+        'aria-label': (it.kind === 'video' ? '영상 ' : '사진 ') + phDay(it.day, true) + (it.time ? ' ' + it.time : ''), onclick: ev => tapTile(it, ev) },
         img,
-        it.kind === 'video' ? h('span', { class: 'ph-dur' }, svg('play'), it.dur ? phDur(it.dur) : null) : null,
+        it.kind === 'video' ? h('span', { class: 'ph-dur' }, it.dur ? phDur(it.dur) : null, svg('play')) : null,
         it.up ? h('span', { class: 'ph-up', title: '이 폰에서 올린 사진', html: ICON.check }) : null,
         h('span', { class: 'ph-chk', 'aria-hidden': 'true' }));
       img.addEventListener('error', () => t.classList.add('bad'));
+      t._it = it;
+      t.style.setProperty('--ar', phAr(it));
       bindHold(t, it);
       return t;
     }
@@ -3235,7 +3257,13 @@
           pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 4000);
           haptic('tap'); sfx.play('tap');
           if (!sel) startSel();
-          toggle(it);
+          // 꾹 누른 그 사진을 고르고(이미 골라져 있으면 풀고), 손가락을 뗄 때까지 끌고 가는 사진들을 같은 방식으로 — 구글 포토의 끌어서 고르기
+          const i = pos.get(it.id);
+          const mode = sel.has(it.id) ? 'remove' : 'add';
+          drag = { a: i, cur: i, mode, base: new Set(sel), lo: i, hi: i, x: x0, y: y0, v: 0, raf: 0 };
+          anchor = i;
+          setSel(it, mode === 'add');
+          paintDay(it.day); paintSel();
         }, PRESS_MS);
       });
       t.addEventListener('pointermove', ev => { if (timer && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancel(); });
@@ -3243,8 +3271,8 @@
       t.addEventListener('contextmenu', ev => ev.preventDefault());
     }
 
-    function tapTile(it) {
-      if (sel) { toggle(it); return; }
+    function tapTile(it, ev) {
+      if (sel) { toggle(it, ev); return; }
       const i = items.indexOf(it), from = Math.max(0, i - 40);
       openViewer(items.slice(from, i + 80).map(phEntry), i - from, '사진', PH_ALBUMS ? { album: e => pickAlbum([e.id], '이 사진') } : {});
     }
@@ -3253,18 +3281,112 @@
     function startSel() {
       if (sel) return;
       sel = new Set();
-      endSelLayer = layer(() => { sel = null; endSelLayer = null; paintSel(); });
+      endSelLayer = layer(() => { sel = null; endSelLayer = null; drag = null; anchor = -1; paintSel(); });
       paintSel();
     }
 
     function endSel() { if (endSelLayer) endSelLayer(); }
 
-    function toggle(it) {
-      if (!sel) return;
-      if (sel.has(it.id)) sel.delete(it.id); else sel.add(it.id);
+    function setSel(it, on) {
+      if (on) sel.add(it.id); else sel.delete(it.id);
       const t = tiles.get(it.id);
-      if (t) t.classList.toggle('sel', sel.has(it.id));
+      if (t) { t.classList.toggle('sel', on); t.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    }
+
+    /** 누르면 한 장 고르기/풀기 · (마우스) Shift 를 누른 채 누르면 마지막으로 누른 사진부터 여기까지 한꺼번에 */
+    function toggle(it, ev) {
+      if (!sel) return;
+      const i = pos.get(it.id);
+      if (ev && ev.shiftKey && anchor >= 0 && i != null && items[anchor]) {
+        applyRange(anchor, i, sel.has(items[anchor].id) ? 'add' : 'remove', new Set(sel), anchor, anchor);
+        paintSel();
+        return;
+      }
+      setSel(it, !sel.has(it.id));
+      if (i != null) anchor = i;
+      paintDay(it.day);
       paintSel();
+    }
+
+    /** 목록 자리 a~b 를 mode('add'|'remove') 로 — 그 밖은 base(범위를 적용하기 전 상태) 그대로. prevLo~prevHi 는 지난번 범위(줄어든 쪽을 되돌리려고) */
+    function applyRange(a, b, mode, base, prevLo, prevHi) {
+      const lo = Math.min(a, b), hi = Math.max(a, b), days = new Set();
+      for (let k = Math.min(lo, prevLo); k <= Math.max(hi, prevHi); k++) {
+        const it = items[k];
+        if (!it) continue;
+        const want = k >= lo && k <= hi ? mode === 'add' : base.has(it.id);
+        if (sel.has(it.id) !== want) { setSel(it, want); days.add(it.day); }
+      }
+      days.forEach(paintDay);
+      return [lo, hi];
+    }
+
+    function paintDay(day) {
+      const b = dayHdr.get(day);
+      if (!b) return;
+      const ids = dayIds.get(day) || [];
+      let n = 0;
+      if (sel) for (const id of ids) if (sel.has(id)) n++;
+      const all = n > 0 && n === ids.length;
+      b.classList.toggle('on', all);
+      b.classList.toggle('part', n > 0 && !all);
+      if (sel) b.setAttribute('aria-pressed', all ? 'true' : n ? 'mixed' : 'false'); else b.removeAttribute('aria-pressed');
+    }
+
+    /** 그날 전부 고르기/풀기. 그날이 목록 맨 끝이고 더 불러올 게 남았으면 그날이 끝날 때까지 이어서 불러온 뒤에 고른다 */
+    async function toggleDay(day) {
+      haptic('tap');
+      if (!sel) startSel();
+      const last = items[items.length - 1];
+      if (more && last && last.day === day) {
+        toast('그날 사진을 모두 불러오는 중이에요');
+        for (let g = 0; g < 40 && alive && more && items.length && items[items.length - 1].day === day; g++) {
+          if (loading) await new Promise(r => setTimeout(r, 250)); else await load();
+        }
+        if (!alive || !sel) return;
+      }
+      const list = items.filter(it => it.day === day);
+      const all = list.length > 0 && list.every(it => sel.has(it.id));
+      list.forEach(it => setSel(it, !all));
+      const i = pos.get((list[0] || {}).id);
+      if (i != null) anchor = i;
+      paintDay(day);
+      paintSel();
+    }
+
+    // ── 꾹 누른 채 끌어서 고르기 ──
+    function dragMove(x, y) {
+      if (!drag) return;
+      drag.x = x; drag.y = y;
+      const el = document.elementFromPoint(x, y), t = el && el.closest ? el.closest('.ph-tile') : null, it = t && t._it;
+      const i = it ? pos.get(it.id) : null;
+      if (i != null && i !== drag.cur) {
+        drag.cur = i;
+        const r = applyRange(drag.a, i, drag.mode, drag.base, drag.lo, drag.hi);
+        drag.lo = r[0]; drag.hi = r[1];
+        paintSel();
+      }
+      // 위·아래 가장자리 가까이 가면 화면이 알아서 넘어간다 (아래는 고르기 막대 높이만큼 더 일찍)
+      const box = content.getBoundingClientRect(), up = 84, down = 128;
+      const v = y < box.top + up ? -(1 - Math.max(0, y - box.top) / up) : y > box.bottom - down ? (1 - Math.max(0, box.bottom - y) / down) : 0;
+      drag.v = v ? Math.sign(v) * (3 + Math.min(1, Math.abs(v)) * 15) : 0;
+      if (drag.v && !drag.raf) drag.raf = requestAnimationFrame(autoScroll);
+    }
+
+    function autoScroll() {
+      if (!drag) return;
+      drag.raf = 0;
+      if (!drag.v) return;
+      content.scrollTop += drag.v;
+      dragMove(drag.x, drag.y);
+      if (drag && drag.v && !drag.raf) drag.raf = requestAnimationFrame(autoScroll);
+    }
+
+    function endDrag() {
+      if (!drag) return;
+      cancelAnimationFrame(drag.raf);
+      drag = null;
+      swallowUntil = Date.now() + 450;               // 손가락을 뗄 때 생기는 클릭이 방금 고른 사진을 다시 뒤집지 않게
     }
 
     function chosen() { return items.filter(it => sel && sel.has(it.id)); }
@@ -3274,11 +3396,15 @@
       pickBtn.textContent = sel ? '완료' : '선택';
       pickBtn.classList.toggle('on', !!sel);
       selBar.hidden = !sel;
-      if (!sel) { tiles.forEach(t => t.classList.remove('sel')); return; }
+      if (!sel) {
+        tiles.forEach(t => { t.classList.remove('sel'); t.removeAttribute('aria-pressed'); });
+        dayHdr.forEach(b => { b.classList.remove('on', 'part'); b.removeAttribute('aria-pressed'); });
+        return;
+      }
       const n = sel.size, inAlbum = filt && filt.query.album;
       selBar.textContent = '';
       [h('button', { class: 'ph-x', 'aria-label': '고르기 끝내기', html: ICON.close, onclick: endSel }),
-        h('div', { class: 'cnt', text: n ? n + '장 선택' : '사진을 눌러 고르세요' }),
+        h('div', { class: 'cnt', text: n ? n + '개 선택됨' : '사진을 눌러 고르세요' }),
         PH_ALBUMS ? act('albumAdd', '담기', n, () => pickAlbum(chosen().map(it => it.id), n + '장')) : null,
         act('share', '공유', n, shareSel),
         act('save', '저장', n, saveSel),
@@ -3388,7 +3514,9 @@
       try {
         const o = { page: page + 1, n: 60 };
         if (tab === 'image' || tab === 'video') o.type = tab;
-        if (q) o.q = q;
+        const tw = PH_TYPEWORD[q.toLowerCase()];
+        if (tw) o.type = tw;                       // 「동영상」을 치면 동영상만 (구글 포토처럼)
+        else if (q) o.q = q;
         if (filt) Object.assign(o, filt.query);
         if (before && !q && !filt) o.before = before;
         const r = await api.get('photos', o);
@@ -3512,6 +3640,10 @@
       if (!whenRaf) whenRaf = requestAnimationFrame(updateWhen);
     }
     content.addEventListener('scroll', onScroll, { passive: true });
+    // 꾹 누른 채 끌 때는 화면이 같이 밀리지 않게 막고, 손가락 밑의 사진까지 범위로 고른다
+    content.addEventListener('touchmove', ev => { if (drag && ev.cancelable) ev.preventDefault(); }, { passive: false });
+    content.addEventListener('pointermove', ev => { if (drag) dragMove(ev.clientX, ev.clientY); });
+    ['pointerup', 'pointercancel'].forEach(n => { content.addEventListener(n, endDrag); window.addEventListener(n, endDrag); });
 
     // 손잡이 끌기 — 손을 떼면 그 달로 건너뛴다(그 달이 맨 위에 오고, 더 아래는 이어서 불러온다)
     function dragTo(ev) {
@@ -3554,7 +3686,7 @@
       content.scrollTop = 0;
     }
 
-    const pg = pushPage('사진', content, () => { alive = false; endSel(); clearTimeout(whenTimer); }, { close: true });
+    const pg = pushPage('사진', content, () => { alive = false; endSel(); clearTimeout(whenTimer); ['pointerup', 'pointercancel'].forEach(n => window.removeEventListener(n, endDrag)); }, { close: true });
     pg.append(selBar, whenEl, trackEl, latestEl);
     drawChips(); drawStat();
     loadMonths();
