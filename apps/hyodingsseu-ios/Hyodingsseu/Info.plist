@@ -11,5 +11,14 @@
 <dict>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<!-- 폰 사진 자동 백업 — 시스템이 주는 백그라운드 시간에 올리기(BGProcessingTask). PhotoBackup.bgTaskId 와 같아야 한다 -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.que.hyodingsseu.photobackup</string>
+	</array>
 </dict>
 </plist>

@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        PhotoBackup.registerBackgroundTask()                   // 시스템이 주는 백그라운드 시간에 폰 사진 올리기 — 앱 시작이 끝나기 전에 등록
         return true
     }
 

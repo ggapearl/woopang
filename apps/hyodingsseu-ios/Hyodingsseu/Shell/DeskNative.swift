@@ -10,7 +10,9 @@ import WebKit
 ///   pushRegister() → {granted, token?, platform: 'ios', error?} (아이폰만 — 알림 허락 + APNs 기기 토큰, `Push.swift`)
 ///   pushOpened() → {at, body, n} | {} (아이폰만 — 1분 안에 누른 알림. 2.1)
 ///   saveToPhotos({url, name}) — 사진·영상을 받아 사진첩에 바로 저장 (2.3, `savePhoto`). url 은 https://woopang.com/AI/doc/ 만
-///   다 읽으면 'speechDone' 사건 · 알림을 누르면 'pushOpen' 사건 (addListener)
+///   backupStatus() · backupEnable({base, token}) · backupDisable() · backupRun() · backupConfigure({base, token})
+///   backupList({before, limit}) · backupThumb({lid, size}) · backupCleanupPlan() · backupCleanup({scope}) — 폰 사진 자동 백업·정리 (2.4, `PhotoBackup.swift`)
+///   다 읽으면 'speechDone' 사건 · 알림을 누르면 'pushOpen' 사건 · 백업 상태가 바뀌면 'backup' 사건(데이터 = backupStatus()) (addListener)
 /// 폰 기능을 더하려면 여기와 bridgeJS 에 같은 이름으로 넣고(앱 빌드 필요), 안드로이드 DeskNativePlugin.java 에도 같은 것을.
 @MainActor
 final class DeskNative: NSObject, WKScriptMessageHandlerWithReply, AVSpeechSynthesizerDelegate {
@@ -21,6 +23,8 @@ final class DeskNative: NSObject, WKScriptMessageHandlerWithReply, AVSpeechSynth
         super.init()
         synth.delegate = self
         Push.shared.onOpen = { [weak self] in self?.emit("pushOpen") }
+        PhotoBackup.shared.onChange = { [weak self] st in self?.emitData("backup", st) }
+        PhotoBackup.shared.start()
     }
 
     func userContentController(_ userContentController: WKUserContentController,
@@ -57,6 +61,36 @@ final class DeskNative: NSObject, WKScriptMessageHandlerWithReply, AVSpeechSynth
             guard let s = a["url"] as? String, let url = URL(string: s), url.scheme == "https",
                   url.host == "woopang.com", url.path.contains("/AI/doc/") else { return (nil, "저장할 수 없는 주소예요") }
             return await savePhoto(url: url, name: a["name"] as? String ?? url.lastPathComponent)
+        case "backupStatus":                   // 폰 사진 자동 백업 (2.4) — PhotoBackup.swift
+            return (PhotoBackup.shared.status(), nil)
+        case "backupConfigure":
+            PhotoBackup.shared.configure(base: a["base"] as? String, token: a["token"] as? String)
+            return (PhotoBackup.shared.status(), nil)
+        case "backupEnable":
+            PhotoBackup.shared.configure(base: a["base"] as? String, token: a["token"] as? String)
+            return (await PhotoBackup.shared.enable(), nil)
+        case "backupDisable":
+            return (PhotoBackup.shared.disable(), nil)
+        case "backupRun":
+            PhotoBackup.shared.run(manual: true)
+            return (PhotoBackup.shared.status(), nil)
+        case "backupList":
+            return (PhotoBackup.shared.list(before: (a["before"] as? NSNumber)?.doubleValue ?? 0,
+                                            limit: (a["limit"] as? NSNumber)?.intValue ?? 60), nil)
+        case "backupThumb":
+            do {
+                return (try await PhotoBackup.shared.thumb(lid: a["lid"] as? String ?? "", size: (a["size"] as? NSNumber)?.intValue ?? 240), nil)
+            } catch {
+                return (nil, PhotoBackup.message(error))
+            }
+        case "backupCleanupPlan":
+            return (PhotoBackup.shared.cleanupPlan(), nil)
+        case "backupCleanup":
+            do {
+                return (try await PhotoBackup.shared.cleanup(scope: a["scope"] as? String ?? "video"), nil)
+            } catch {
+                return (nil, PhotoBackup.message(error))
+            }
         default:
             return (nil, "모르는 기능: \(method)")
         }
@@ -108,5 +142,14 @@ final class DeskNative: NSObject, WKScriptMessageHandlerWithReply, AVSpeechSynth
 
     private func emit(_ event: String) {
         webView?.evaluateJavaScript("window.__deskNativeEmit && window.__deskNativeEmit('\(event)', {})", completionHandler: nil)
+    }
+
+    /// 데이터를 실어 보내는 사건 — JSON 을 그대로 JS 값으로 넘긴다
+    private func emitData(_ event: String, _ data: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(data),
+              let d = try? JSONSerialization.data(withJSONObject: data),
+              let s = String(data: d, encoding: .utf8) else { return }
+        let safe = s.replacingOccurrences(of: "\u{2028}", with: "\\u2028").replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+        webView?.evaluateJavaScript("window.__deskNativeEmit && window.__deskNativeEmit('\(event)', \(safe))", completionHandler: nil)
     }
 }

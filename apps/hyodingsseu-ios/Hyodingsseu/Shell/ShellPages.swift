@@ -7,7 +7,12 @@ enum ShellPages {
     (function () {
       if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeskNative) return;
       var listeners = {};
-      function call(m, a) { return window.webkit.messageHandlers.deskNative.postMessage({ m: m, a: a || {} }); }
+      // 앱이 돌려준 오류 글(문자열)을 Error 로 — 화면은 e.message 를 읽는다
+      function call(m, a) {
+        return window.webkit.messageHandlers.deskNative.postMessage({ m: m, a: a || {} }).catch(function (e) {
+          throw (e instanceof Error ? e : new Error(String((e && e.message) || e)));
+        });
+      }
       window.__deskNativeEmit = function (ev, data) {
         (listeners[ev] || []).slice().forEach(function (f) { try { f(data || {}); } catch (e) {} });
       };
@@ -24,6 +29,15 @@ enum ShellPages {
           pushRegister: function () { return call('pushRegister'); },
           pushOpened: function () { return call('pushOpened'); },
           saveToPhotos: function (a) { return call('saveToPhotos', a); },
+          backupStatus: function () { return call('backupStatus'); },
+          backupConfigure: function (a) { return call('backupConfigure', a); },
+          backupEnable: function (a) { return call('backupEnable', a); },
+          backupDisable: function () { return call('backupDisable'); },
+          backupRun: function () { return call('backupRun'); },
+          backupList: function (a) { return call('backupList', a); },
+          backupThumb: function (a) { return call('backupThumb', a); },
+          backupCleanupPlan: function () { return call('backupCleanupPlan'); },
+          backupCleanup: function (a) { return call('backupCleanup', a); },
           addListener: function (ev, cb) {
             (listeners[ev] = listeners[ev] || []).push(cb);
             return Promise.resolve({ remove: function () {

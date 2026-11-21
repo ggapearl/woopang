@@ -13,8 +13,8 @@ settings:
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     # TestFlight 에 올릴 때마다 CURRENT_PROJECT_VERSION 을 1 씩 올린다 (같은 번호는 App Store Connect 가 거절)
-    MARKETING_VERSION: "2.3.1"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "2.4.0"
+    CURRENT_PROJECT_VERSION: "11"
 targets:
   Hyodingsseu:
     type: application
@@ -43,7 +43,9 @@ targets:
         INFOPLIST_FILE: Hyodingsseu/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: 효딩쓰
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 효딩쓰에게 말로 시키려면 마이크가 필요합니다. 녹음은 대표님 PC 로만 보내 받아적고, 저장하지 않습니다.
-        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: 효딩쓰에서 받은 사진·영상을 사진첩에 저장하려면 필요합니다. 사진첩을 읽지는 않습니다.
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: 효딩쓰에서 받은 사진·영상을 사진첩에 저장하려면 필요합니다.
+        # 폰 사진 자동 백업(켠 뒤에 생긴 사진·영상을 대표님 PC 로만 올림) · 백업된 것을 사진첩에서 정리(지우기)
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: 자동 백업을 켜면 새로 찍은 사진·영상을 대표님 PC 로만 올립니다. 「정리」를 누르면 PC 에 잘 올라간 것만 폰 사진첩에서 지웁니다.
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait

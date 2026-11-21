@@ -38,6 +38,7 @@ struct WebShell: UIViewRepresentable {
         wv.backgroundColor = .clear
         if #available(iOS 16.4, *) { wv.isInspectable = true }      // Mac 사파리 › 개발 메뉴로 들여다보기 (개인용)
         wv.hideKeyboardAccessoryBar()
+        wv.scrollView.pinchGestureRecognizer?.isEnabled = false     // 두 손가락으로 화면이 커지고 작아지지 않게 (2026-11-21 대표님)
         context.coordinator.attach(wv)
         wv.load(URLRequest(url: start))
         return wv
@@ -66,6 +67,7 @@ struct WebShell: UIViewRepresentable {
         /// 앱으로 돌아오면 아이콘의 알림 숫자를 지우고, 안내 화면(오프라인)이 떠 있으면 다시 불러온다
         @objc private func becameActive() {
             Push.shared.clearBadge()
+            PhotoBackup.shared.appBecameActive()               // 폰 사진 자동 백업 — 못 올린 것 다시
             guard let wv = webView else { return }
             if wv.url == nil || wv.url?.scheme == "about" { wv.load(URLRequest(url: start)) }
         }
