@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-21b';
+  const WEB_VERSION = '2026-11-21c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3712,8 +3712,10 @@
       if (!st) return;
       try {
         if (st.enabled) { confirmOff(); return; }
-        setState(await Native.backupEnable({ base: api.base, token: api.token || '', wifiOnly: false }));
-        toast('켠 뒤에 생기는 사진·영상부터 올려요');
+        const ns = await Native.backupEnable({ base: api.base, token: api.token || '', wifiOnly: false });
+        setState(ns);
+        if (ns && ns.enabled) toast('켠 뒤에 생기는 사진·영상부터 올려요');
+        else if (ns && ns.error) toast(ns.error);
       } catch (e) { toast((e && e.message) || '켜지 못했어요'); }
     }
 
