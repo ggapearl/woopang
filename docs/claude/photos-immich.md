@@ -42,6 +42,8 @@ Takeout 은 날짜·위치를 사진 옆 `*.supplemental-metadata.json` 에 둔�
 
 ## 폰 사진 자동 백업 · 정리 (2026-11-21, 구글 포토처럼)
 화면(웹 `2026-11-21a`)·서버(`server/voice/desk/photo_backup.py`, 비공개 저장소)는 끝났고 시험도 했다. **아이폰 안(PhotoKit)은 앱 업데이트가 필요하다** — `apps/hyodingsseu-ios/PHOTO_BACKUP.md` 참고.
+- **iOS 앱 2.4.0 (11)**: 코드는 완성(브랜치 `ios/photo-backup` · 커밋 `87eb569`, 컴파일은 Mac 빌드 세션에서 처음 해 본다). 맥 빌드 요청은 `C:
+ongmin-app\IOS_BUILD_HANDOFF.md` 맨 위에 「⏸ 대기」로 적어 뒀다 — 대표님이 올리라고 하시면 「🔔 지금 요청」으로 바꾼다. 웹은 `2026-11-21c`.
 - **올리는 쪽은 네이티브 앱**이다(웹뷰는 폰 사진첩을 못 읽는다). 웹은 `backupConfigure({base, token})` 로 주소·열쇠만 넘기고, 화면(백업 카드·✓·정리)만 그린다. 네이티브 계약은 `app.js` 의 「Native.backup…」 주석에 있다(`backupStatus/Enable/Disable/Run/Configure/List/Thumb`, `backupCleanupPlan/backupCleanup`, 이벤트 `'backup'`).
 - 서버: `POST photos/up?lid&off&total&name&ts&mod&kind` — 6MB 조각 이어 올리기(어긋나면 409 `{have}`) → `E:\immich\incoming` 에 모아 끝나면 Immich 업로드(`/data/upload`, libraryId 없음) · `photos/up/check`(이미 올린 것) · `photos/up/state`(올린 장수) · `photos/up/verify`(정리 전 재확인). 기록 `E:\immich\phone_backup.db`(sqlite).
 - **켠 시각(`since`) 이후의 새 사진·영상만** 올린다(대표님 「기존 사진은 무시」). LTE·Wi-Fi 구분 없음(Wi-Fi 전용 스위치 삭제 — 요금제 무제한).
