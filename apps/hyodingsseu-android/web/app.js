@@ -2832,35 +2832,58 @@
 
     const isPinned = it => pinned.some(p => p.id === it.id);
 
-    /** 꾹 누르기(0.5초) 또는 오른쪽→왼쪽으로 밀기 = 상단 고정/해제 (2026-11-02 대표님 — 기록해 둘 문서) */
-    function bindPin(row, it) {
-      let timer = 0, x0 = 0, y0 = 0, t0 = 0, live = false;
+    /** 카드 한 장 — 오른쪽→왼쪽으로 밀면 「고정 · 삭제」 단추가 나온다 (2026-11-21 대표님).
+        꾹 누르기(0.5초): 이미 고정된 카드면 「고정 해제」 메뉴, 아니면 예전처럼 바로 고정 (2026-11-02). */
+    const ACT_W = 144;
+    let openWrap = null;
+    const closeSwipe = except => { if (openWrap && openWrap !== except) { openWrap.classList.remove('open'); openWrap = null; } };
+    content.addEventListener('touchstart', ev => { if (openWrap && !openWrap.contains(ev.target)) closeSwipe(); }, { passive: true });
+
+    function bindPin(wrap, row, it) {
+      let timer = 0, x0 = 0, y0 = 0, base = 0, live = false, drag = false, dxNow = 0;
       const cancel = () => { clearTimeout(timer); timer = 0; };
+      const clampX = v => Math.max(-ACT_W, Math.min(0, v));
       row.addEventListener('touchstart', ev => {
         live = ev.touches.length === 1 && !ev.target.closest('.dl-btn');
         if (!live) return;
-        x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY; t0 = Date.now();
+        x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY; drag = false; dxNow = 0;
+        base = wrap.classList.contains('open') ? -ACT_W : 0;
+        closeSwipe(wrap);
         cancel();
+        if (base) return;                                            // 열려 있는 카드는 꾹 누르기 없음(닫기만)
         timer = setTimeout(() => {                                   // 꾹 누르기 — 손가락을 뗄 때 생기는 클릭은 열기로 새지 않게 막는다
           timer = 0; live = false;
           pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 4000);
-          togglePin(it);
+          if (isPinned(it)) openPinMenu(it); else togglePin(it);
         }, PRESS_MS);
       }, { passive: true });
       row.addEventListener('touchmove', ev => {
-        if (timer && Math.hypot(ev.touches[0].clientX - x0, ev.touches[0].clientY - y0) > 10) cancel();
-      }, { passive: true });
-      row.addEventListener('touchend', ev => {
-        cancel();
         if (!live) return;
-        live = false;
-        const t = ev.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
-        if (dx < -70 && Math.abs(dy) < Math.abs(dx) * 0.5 && Date.now() - t0 < 800) {   // 오른쪽→왼쪽으로 밀기
-          swallowUntil = Date.now() + 450;
-          togglePin(it);
+        const dx = ev.touches[0].clientX - x0, dy = ev.touches[0].clientY - y0;
+        if (!drag) {
+          if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) {      // 옆으로 미는 중 — 카드를 따라 움직인다
+            drag = true; cancel();
+            wrap.classList.add('drag');
+          } else if (Math.hypot(dx, dy) > 10) { cancel(); return; }
         }
+        if (drag) { dxNow = dx; row.style.transform = 'translateX(' + clampX(base + dx) + 'px)'; }
       }, { passive: true });
-      row.addEventListener('touchcancel', () => { cancel(); live = false; }, { passive: true });
+      row.addEventListener('touchend', () => {
+        cancel();
+        if (!drag) { live = false; return; }
+        live = false; drag = false;
+        const open = clampX(base + dxNow) < -ACT_W / 2;
+        wrap.classList.remove('drag');
+        row.style.transform = '';
+        wrap.classList.toggle('open', open);
+        openWrap = open ? wrap : (openWrap === wrap ? null : openWrap);
+        swallowUntil = Date.now() + 450;
+        if (open && !base) haptic('tap');
+      }, { passive: true });
+      row.addEventListener('touchcancel', () => {
+        cancel(); live = false;
+        if (drag) { drag = false; wrap.classList.remove('drag'); row.style.transform = ''; }
+      }, { passive: true });
       row.addEventListener('contextmenu', ev => { ev.preventDefault(); });   // 안드로이드 꾹 누르기 메뉴는 위 타이머가 대신한다
     }
 
@@ -2869,16 +2892,47 @@
       pinned = on ? [it].concat(pinned.filter(p => p.id !== it.id)) : pinned.filter(p => p.id !== it.id);
       haptic('tap'); sfx.play('tap');
       toast(on ? '맨 위에 고정했어요' : '고정을 풀었어요');
+      closeSwipe();
       draw();
       api.post('docs/pin', { id: it.id, on }).catch(e => { pinned = before; if (alive) { draw(); show(e); } });
     }
 
+    /** 목록에서만 뺀다 — 파일은 PC 에 남고, 뺀 기록은 docs/deleted.jsonl 에 있다 */
+    function deleteDoc(it) {
+      const b = { items: items.slice(), pinned: pinned.slice(), total };
+      items = items.filter(x => x.id !== it.id);
+      pinned = pinned.filter(x => x.id !== it.id);
+      total = Math.max(0, total - 1);
+      haptic('tap'); sfx.play('del');
+      toast('지웠어요');
+      closeSwipe();
+      draw();
+      api.post('docs/delete', { id: it.id }).catch(e => { items = b.items; pinned = b.pinned; total = b.total; if (alive) { draw(); show(e); } });
+    }
+
+    /** 고정된 카드를 꾹 누르면 — 「고정 해제」 (삭제도 같이) */
+    function openPinMenu(it) {
+      if (document.querySelector('.msg-menu')) return;
+      haptic('tap'); sfx.play('menu');
+      const mrow = (icon, label, fn, cls) => h('button', { class: 'mrow' + (cls ? ' ' + cls : ''), onclick: () => { close(); fn(); } }, icon, label);
+      const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (ev.target === scrim) close(); } },
+        h('div', { class: 'sheet msg-menu', role: 'dialog', 'aria-modal': 'true', 'aria-label': '고정 메뉴' },
+          h('p', { class: 'peek', text: it.title || '(제목 없음)' }),
+          mrow(h('span', { class: 'pin-ic', text: '📌' }), '고정 해제', () => togglePin(it)),
+          mrow(svg('trash'), '이 자료 삭제', () => deleteDoc(it), 'danger'),
+          h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() })));
+      const close = layer(() => scrim.remove());
+      $('#app').append(scrim);
+    }
+
     function docRow(it) {
       const files = it.files || [];
-      const row = h('div', { class: 'drow2' + (isPinned(it) ? ' pinned' : ''), onclick: () => rowTap(it) },
+      const pin = isPinned(it);
+      const wrap = h('div', { class: 'drow-wrap' });
+      const row = h('div', { class: 'drow2' + (pin ? ' pinned' : ''), onclick: () => { if (openWrap === wrap) { closeSwipe(); return; } rowTap(it); } },
         it.thumb ? h('img', { class: 'dthumb', src: it.thumb, alt: '', loading: 'lazy' }) : h('div', { class: 'dthumb ic', text: DOC_ICON[it.kind] || '📄' }),
         h('div', { class: 'dtx' },
-          h('b', { text: (isPinned(it) ? '📌 ' : '') + (it.title || '(제목 없음)') }),
+          h('b', { text: (pin ? '📌 ' : '') + (it.title || '(제목 없음)') }),
           h('small', { text: timeOnly(it.ts) + (countLabel(it) ? ' · ' + countLabel(it) : '') })),
         files.some(f => f.url)
           ? h('button', { class: 'dl-btn', 'aria-label': '내려받기', html: ICON.download,
@@ -2888,8 +2942,14 @@
           ? h('button', { class: 'dl-btn', 'aria-label': '공유', html: ICON.share,
               onclick: ev => { ev.stopPropagation(); sfx.play('tap'); shareFiles(files, it.title || ''); } })
           : null);
-      if (it.id) bindPin(row, it);
-      return row;
+      if (!it.id) { wrap.append(row); return wrap; }
+      wrap.append(
+        h('div', { class: 'drow-act' },
+          h('button', { class: 'da pin', onclick: () => togglePin(it) }, h('span', { class: 'da-ic', text: '📌' }), pin ? '고정 해제' : '고정'),
+          h('button', { class: 'da del', onclick: () => deleteDoc(it) }, svg('trash'), '삭제')),
+        row);
+      bindPin(wrap, row, it);
+      return wrap;
     }
 
     /** 내려받기 — 한 파일이면 바로, 여러 장은 브라우저에서 차례로(앱 안에서는 열어서 한 장씩) */
@@ -2919,7 +2979,7 @@
     }
 
     function draw() {
-      totalEl.textContent = loadedOnce ? '전체 ' + total + '개 · 꾹 누르거나 왼쪽으로 밀면 맨 위에 고정' : '';
+      totalEl.textContent = loadedOnce ? '전체 ' + total + '개 · 왼쪽으로 밀면 고정·삭제' : '';
       listEl2.textContent = '';
       if (loading && !items.length) { listEl2.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
       if (!items.length && !pinned.length) { listEl2.append(h('div', { class: 'doc-empty', text: '아직 자료가 없어요 — 효딩쓰가 만든 영상·카드뉴스·캡처가 여기 모입니다' })); return; }

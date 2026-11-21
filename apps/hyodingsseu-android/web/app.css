@@ -399,6 +399,22 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .drow2:active{background:var(--surface-2)}
 .drow2.pinned{background:var(--pink-soft)}
 .doc-day.pin{color:var(--pink-deep)}
+/* 문서함 카드 밀기 — 오른쪽→왼쪽으로 밀면 고정·삭제 단추 (2026-11-21 대표님) */
+.drow-wrap{position:relative;overflow:hidden;border-radius:12px}
+.drow-wrap .drow2{position:relative;touch-action:pan-y;transition:transform .2s ease-out;-webkit-user-select:none;user-select:none}
+.drow-wrap.drag .drow2{transition:none}
+.drow-wrap.open .drow2{transform:translateX(-144px)}
+.drow-wrap.drag .drow2,.drow-wrap.open .drow2{background:var(--ground)}
+.drow-wrap.drag .drow2.pinned,.drow-wrap.open .drow2.pinned{background:var(--pink-soft)}
+.drow-act{position:absolute;top:0;right:0;bottom:0;width:144px;display:flex;visibility:hidden}
+.drow-wrap.drag .drow-act,.drow-wrap.open .drow-act{visibility:visible}
+.da{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:#fff}
+.da svg{width:20px;height:20px}
+.da-ic{font-size:18px;line-height:20px}
+.da.pin{background:var(--pink)}
+.da.del{background:#D32F2F}
+.da:active{filter:brightness(.92)}
+.mrow .pin-ic{width:20px;text-align:center;flex:none;font-size:17px}
 .dthumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:var(--surface-2)}
 .dthumb.ic{display:grid;place-items:center;font-size:20px}
 .dtx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}

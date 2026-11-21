@@ -25,6 +25,11 @@ MD = ('서버 상태 확인했습니다.\n\n## 요약\n- **8080** 메인 · 정�
       '```\nGet-NetTCPConnection -State Listen\n```\n자세한 건 [대시보드](https://woopang.com/bookmark) 참고.')
 
 
+DOCS = [{'id': 'd%d' % i, 'ts': 1795260000 - i * 4000, 'title': '문서 시안 %d' % i, 'kind': 'doc', 'src': 'desk',
+         'files': [{'name': 'a%d.pdf' % i, 'kind': 'doc', 'url': '/x/a%d.pdf' % i}], 'thumb': None} for i in range(6)]
+PINS = []
+
+
 class Mock:
     def __init__(self):
         self.lock = threading.Lock()
@@ -144,6 +149,19 @@ class H(BaseHTTPRequestHandler):
             if sub == 'office/history':
                 return self.js(200, {'messages': [{'sender': 'ceo', 'sender_name': '대표', 'content': '오늘 보고 부탁해', 'timestamp': '09:01'},
                                                   {'sender': 'hyo_ding', 'sender_name': '김효딩', 'content': '**오늘 보고**\n- 승인 대기 2건', 'timestamp': '09:02'}]})
+            if sub == 'docs':
+                return self.js(200, {'items': [d for d in DOCS if d['id'] not in PINS], 'more': False, 'total': len(DOCS),
+                                     'pinned': [d for i in PINS for d in DOCS if d['id'] == i]})
+            if sub == 'docs/pin':
+                if data.get('on', True):
+                    PINS.insert(0, data.get('id'))
+                elif data.get('id') in PINS:
+                    PINS.remove(data.get('id'))
+                return self.js(200, {'ok': True, 'pinned': bool(data.get('on', True))})
+            if sub == 'docs/delete':
+                LOG.append(('docs/delete', data.get('id')))
+                DOCS[:] = [d for d in DOCS if d['id'] != data.get('id')]
+                return self.js(200, {'ok': True, 'deleted': True})
             if sub == 'tts':
                 return self.js(503, {'error': '목소리를 만들지 못했습니다'})
             if sub == 'voice':
