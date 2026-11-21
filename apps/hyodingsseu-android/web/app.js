@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-20c';
+  const WEB_VERSION = '2026-11-21a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1448,6 +1448,7 @@
     photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 17l4.6-4.4a1.6 1.6 0 0 1 2.2 0L15 16.5l1.8-1.7a1.6 1.6 0 0 1 2.2 0l1.5 1.5"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.9l10.5-6.5a1 1 0 0 0 0-1.8L9.5 4.6A1 1 0 0 0 8 5.5z"/></svg>',
     up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+    broom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5l-3.2 6.4M9.2 10.2l5.6 2.8c.9.5 1.3 1.6.8 2.5l-1.6 3.4c-.2.4-.7.6-1.1.4L5.5 16.2c-.4-.2-.6-.7-.4-1.1l1.4-3c.5-1 1.6-1.4 2.7-.9z"/><path d="M9.6 14.4l-1 2.1M12.5 15.7l-1 2.1"/></svg>',
     cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18.5a4.2 4.2 0 0 1-.7-8.34A5.6 5.6 0 0 1 17.4 9a4.8 4.8 0 0 1-.4 9.5z"/><path d="M12 16v-5M9.8 12.9L12 10.7l2.2 2.2"/></svg>',
     albumAdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="13" height="13" rx="2.5"/><path d="M7.5 7.5V6a2 2 0 0 1 2-2H18a2.5 2.5 0 0 1 2.5 2.5V15a2 2 0 0 1-2 2h-1.5"/><path d="M10 11.5v6M7 14.5h6"/></svg>',
     minusCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12h7"/></svg>',
@@ -3039,6 +3040,10 @@
         class: 'dchip' + (tab === k ? ' on' : ''), text: label,
         onclick: () => { if (tab === k && !filt) return; tab = k; filt = null; clearBefore(); endSel(); gen++; loading = false; drawChips(); if (isList()) openList(); else reload(); },
       })));
+      // 폰 앱에서만 — 백업이 끝난 사진·영상을 아이폰 사진첩에서 치운다 (분류 칩이 아니라 동작이라 모양을 다르게)
+      if (BK_ON && typeof Native.backupCleanupPlan === 'function') {
+        chipsEl.append(h('button', { class: 'dchip act', 'aria-label': '폰 사진첩 정리', onclick: () => openCleanup() }, h('span', { class: 'ic', html: ICON.broom }), '정리'));
+      }
     }
 
     function drawFilt() {
@@ -3499,17 +3504,77 @@
   // ── 폰 사진 자동 백업 (2026-11-20 대표님 「핸드폰 사진첩에 접속해서 백업되지 않은 사진·영상은 여기에 백업, 구글처럼」) ──
   // 켠 뒤에 이 폰에 새로 생긴 사진·영상만 PC 로 올린다 — 지금 폰에 있는 옛 사진은 건드리지 않는다. 올라간 것은 오른쪽 아래에 ✓.
   // 폰 사진첩을 읽고 올리는 일은 앱(DeskNative)이 한다 — apps/hyodingsseu-ios/PHOTO_BACKUP.md 에 약속(이름·모양)이 있다:
-  //   backupStatus() → {enabled, since, auth:'granted'|'limited'|'denied'|'undetermined', done, pending, uploading:{lid,name,sent,total}|null, wifiOnly, error}
-  //   backupEnable({base, token, wifiOnly}) · backupDisable() · backupRun() · backupConfigure({base, token, wifiOnly}) → 모두 위 상태를 돌려준다
+  //   backupStatus() → {enabled, since, auth:'granted'|'limited'|'denied'|'undetermined', done, pending, uploading:{lid,name,sent,total}|null, wifiOnly:false, error}
+  //   backupEnable({base, token}) · backupDisable() · backupRun() · backupConfigure({base, token}) → 모두 위 상태를 돌려준다
+  //   LTE·Wi-Fi 를 가리지 않고 올린다(2026-11-21 대표님 「요금제 무제한이라 상관없이 다 백업」) — wifiOnly 는 늘 false.
   //   backupList({before, limit}) → {items:[{lid, kind:'image'|'video', ts(초), dur(초), name, up}], more}  (새것부터, before = 이 시각(초) 전)
   //   backupThumb({lid, size}) → {data:'data:image/jpeg;base64,…'}
+  //   정리 (2026-11-21 대표님 「동영상 정리 / 전체 정리 → 백업된 것은 아이폰 사진첩에서 삭제」):
+  //   backupCleanupPlan() → {video:{n, bytes}, image:{n, bytes}}   백업이 끝났고 폰 사진첩에 아직 남아 있는 것(앱이 기억하는 기준)
+  //   backupCleanup({scope:'video'|'all'}) → {video, image, pending, skipped, cancelled}   지운 동영상·사진 수 / 서버 확인이 덜 끝나 남긴 수 / 서버에 없어 남긴 수 / 사용자가 iOS 확인 창에서 취소
+  //     앱은 지우기 직전에 서버(photos/up/verify)에 다시 묻고 「서버에 있다」고 한 것만 지운다. 지운 것은 iOS 「최근 삭제된 항목」에 30일 남는다.
   //   사건 'backup' (addListener) — 데이터는 backupStatus() 와 같은 모양
   const BK_ON = !!(Native && typeof Native.backupStatus === 'function');
 
   /** 서버 주소·열쇠를 앱에 알려 준다 — 앱이 직접 올리기 때문. 짝을 맺거나 끊을 때, 화면이 켜질 때마다. */
   function syncBackupAuth() {
     if (!BK_ON || typeof Native.backupConfigure !== 'function') return;
-    Native.backupConfigure({ base: api.base, token: api.token || '', wifiOnly: local.get('backupWifi', '1') === '1' }).catch(() => {});
+    Native.backupConfigure({ base: api.base, token: api.token || '', wifiOnly: false }).catch(() => {});
+  }
+
+  /** 폰 사진첩 정리 — 백업이 끝난 것만 아이폰 사진첩에서 지운다. 지우기 직전에 앱이 서버에 다시 확인하고, iOS 가 확인 창을 한 번 더 띄운다. */
+  function openCleanup() {
+    let plan = null, busy = false, failed = '';
+    const bodyEl = h('div', { class: 'cl-body' });
+    const scrim = h('div', { class: 'sheet-scrim over', onclick: ev => { if (ev.target === scrim && !busy) close(); } },
+      h('div', { class: 'sheet cl-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '폰 사진첩 정리' }, bodyEl));
+    const close = layer(() => scrim.remove());
+    $('#app').append(scrim);
+
+    const size = b => (b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(1) + 'GB' : Math.max(1, Math.round((b || 0) / 1024 ** 2)) + 'MB');
+    const part = (kind, p, unit) => (kind + ' ' + (p.n || 0).toLocaleString('ko-KR') + unit + (p.n ? ' (' + size(p.bytes) + ')' : ''));
+
+    function draw() {
+      bodyEl.textContent = '';
+      bodyEl.append(h('h3', { text: '폰 사진첩 정리' }),
+        h('p', { text: 'PC 로 백업이 끝난 사진·영상만 아이폰 사진첩에서 지워요. 지우기 전에 PC 에 잘 있는지 한 번 더 확인해요. 지운 것은 아이폰 「최근 삭제된 항목」에 30일 동안 남아요.' }));
+      if (failed) { bodyEl.append(h('p', { class: 'bk-err', text: failed })); }
+      else if (!plan) { bodyEl.append(h('div', { class: 'bk-note' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); }
+      else {
+        const v = plan.video || { n: 0 }, im = plan.image || { n: 0 }, all = (v.n || 0) + (im.n || 0);
+        bodyEl.append(h('p', { class: 'cl-count', text: '백업 끝난 것 · ' + part('동영상', v, '개') + ' · ' + part('사진', im, '장') }));
+        bodyEl.append(h('button', { class: 'btn wide cl-video', disabled: busy || !v.n, text: busy ? '정리하는 중…' : '동영상 정리' + (v.n ? ' (' + v.n.toLocaleString('ko-KR') + '개)' : ''), onclick: () => run('video') }));
+        bodyEl.append(h('button', { class: 'btn danger wide cl-all', disabled: busy || !all, text: '전체 정리' + (all ? ' (사진 ' + (im.n || 0).toLocaleString('ko-KR') + '장 · 동영상 ' + (v.n || 0).toLocaleString('ko-KR') + '개)' : ''), onclick: () => run('all') }));
+        if (!all) bodyEl.append(h('p', { class: 'note-hint', text: '아직 백업이 끝난 사진·영상이 없어요 — 자동 백업을 켜고 올라가면 여기서 정리할 수 있어요' }));
+      }
+      bodyEl.append(h('button', { class: 'btn ghost wide cl-close', disabled: busy, text: '닫기', onclick: () => close() }));
+    }
+
+    function doneText(r, scope) {
+      const v = (r && r.video) || 0, im = (r && r.image) || 0, pend = (r && r.pending) || 0;
+      const what = scope === 'video' ? '동영상 ' + v + '개' : '사진 ' + im + '장 · 동영상 ' + v + '개';
+      const left = pend ? ' — 서버 확인이 덜 끝난 ' + pend + '개는 남겨 뒀어요' : '';
+      if (v + im) return what + '를 폰 사진첩에서 지웠어요' + left;
+      if (r && r.cancelled) return '취소했어요 — 아무것도 지우지 않았어요';
+      if (pend) return '서버 확인이 아직 끝나지 않아 남겨 뒀어요 — 조금 뒤에 다시 눌러 주세요';
+      return '지울 것이 없어요';
+    }
+
+    async function run(scope) {
+      busy = true; draw();
+      try {
+        const r = await Native.backupCleanup({ scope });
+        close();
+        toast(doneText(r, scope));
+      } catch (e) {
+        busy = false; draw();
+        toast((e && e.message) || '정리하지 못했어요');
+      }
+    }
+
+    draw();
+    Native.backupCleanupPlan().then(p => { plan = p || { video: { n: 0 }, image: { n: 0 } }; draw(); })
+      .catch(e => { failed = (e && e.message) || '백업 현황을 읽지 못했어요'; draw(); });
   }
 
   function openPhoneBackup() {
@@ -3552,10 +3617,10 @@
       cardEl.append(h('div', { class: 'bk-head' },
         h('span', { class: 'bk-ic' + (on ? ' on' : ''), html: ICON.cloud }),
         h('div', { class: 'bk-tx' }, h('b', { text: on ? '자동 백업 켜짐' : '자동 백업 꺼짐' }),
-          h('small', { text: on ? sinceText + ' 이후의 새 사진·영상을 PC 로 올려요' : '켜면 이 폰에 새로 생기는 사진·영상이 PC 로 올라가요' })),
+          h('small', { text: on ? sinceText + ' 이후의 새 사진·영상을 LTE·Wi-Fi 구분 없이 PC 로 올려요' : '켜면 이 폰에 새로 생기는 사진·영상이 PC 로 올라가요' })),
         h('button', { class: 'bk-sw' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on ? 'true' : 'false', 'aria-label': '자동 백업', onclick: toggleBackup }, h('i'))));
       if (!on) {
-        cardEl.append(h('p', { class: 'bk-help', text: '켠 다음부터 찍거나 받은 사진·영상만 올려요. 지금 폰에 들어 있는 옛 사진은 올리지 않아요.' }));
+        cardEl.append(h('p', { class: 'bk-help', text: '켠 다음부터 찍거나 받은 사진·영상만 올려요(LTE·Wi-Fi 모두). 지금 폰에 들어 있는 옛 사진은 올리지 않아요.' }));
       } else {
         cardEl.append(h('div', { class: 'bk-stat' },
           h('span', { text: '올림 ' + (st.done || 0).toLocaleString('ko-KR') + '장' }),
@@ -3564,10 +3629,6 @@
           cardEl.append(h('div', { class: 'bk-prog' }, h('div', { class: 'bar' }, h('i', { style: 'width:' + pct(st.uploading) + '%' })),
             h('small', { text: '올리는 중 · ' + (st.uploading.name || '') + ' ' + pct(st.uploading) + '%' })));
         }
-        cardEl.append(h('div', { class: 'bk-row' },
-          h('span', { class: 'k', text: 'Wi-Fi 에서만 올리기' }),
-          h('button', { class: 'bk-sw' + (st.wifiOnly ? ' on' : ''), role: 'switch', 'aria-checked': st.wifiOnly ? 'true' : 'false', 'aria-label': 'Wi-Fi 에서만',
-            onclick: () => setWifi(!st.wifiOnly) }, h('i'))));
         if (st.pending && !st.uploading) cardEl.append(h('button', { class: 'btn wide bk-run', text: '지금 올리기', onclick: runNow }));
       }
       if (st.auth === 'denied') cardEl.append(h('p', { class: 'bk-err', text: '사진 접근이 막혀 있어요 — 폰 설정 › 효딩쓰 › 사진 에서 「모든 사진」으로 바꿔 주세요.' }));
@@ -3591,7 +3652,7 @@
       if (!st) return;
       try {
         if (st.enabled) { confirmOff(); return; }
-        setState(await Native.backupEnable({ base: api.base, token: api.token || '', wifiOnly: local.get('backupWifi', '1') === '1' }));
+        setState(await Native.backupEnable({ base: api.base, token: api.token || '', wifiOnly: false }));
         toast('켠 뒤에 생기는 사진·영상부터 올려요');
       } catch (e) { toast((e && e.message) || '켜지 못했어요'); }
     }
@@ -3605,11 +3666,6 @@
           h('button', { class: 'btn ghost wide', text: '그대로 두기', onclick: () => close() })));
       const close = layer(() => scrim.remove());
       $('#app').append(scrim);
-    }
-
-    async function setWifi(v) {
-      local.set('backupWifi', v ? '1' : '0');
-      try { setState(await Native.backupConfigure({ base: api.base, token: api.token || '', wifiOnly: v })); } catch (e) { toast('바꾸지 못했어요'); }
     }
 
     async function runNow() {

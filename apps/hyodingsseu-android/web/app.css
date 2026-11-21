@@ -511,7 +511,12 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .bk-prog .bar{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
 .bk-prog .bar i{display:block;height:100%;background:var(--navy);transition:width .3s}
 .bk-prog small{display:block;margin-top:4px;font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bk-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:var(--ink)}
+.dchip.act{gap:5px;padding:0 12px;color:var(--navy);font-weight:600}
+.dchip.act .ic{display:inline-flex;width:16px;height:16px}
+.dchip.act .ic svg{width:16px;height:16px}
+.cl-sheet{gap:12px}
+.cl-sheet p{line-height:1.55}
+.cl-sheet .cl-count{font-weight:600;color:var(--ink);font-size:13.5px}
 .bk-err{margin:0;font-size:12.5px;color:var(--pink-deep);line-height:1.5}
 .bk-note{display:grid;place-items:center;padding:12px}
 .bk-tile.sending img{opacity:.7}
