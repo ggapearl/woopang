@@ -11,6 +11,14 @@
 - **서버·Apple 쪽은 이미 끝남**: Apple 로그인 Services ID(`com.que.woogy.web`)에 woogy.app 도메인 · 리턴 URL 등록, 카카오 우기 앱 Redirect URI 등록, 서버가 접속한 도메인을 따라 로그인 주소를 만든다 — 옛 빌드(woopang.com)도 그대로 돈다.
 - **확인할 것**: 컴파일(Windows 에서 컴파일하지 못했다 — 오류가 나면 동작은 그대로 두고 형만 맞춘다) · 새 빌드 첫 실행이 woogy.app 로 뜨는지(입장·로그인은 도메인이 바뀌어 한 번 다시 해야 한다 — 쿠키가 도메인별) · 카카오/Apple 로그인 · 카톡에서 받은 옛 링크(woopang.com/woogy/c/…)와 새 링크(woogy.app/woogy/c/…)가 둘 다 앱을 여는지.
 
+**1.0.0 (6) 결과 (2026-11-22, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 6 · 업로드 2026-11-22 20:49 KST · 앱 ID `6835099990` · 커밋 `8ac7c5a`
+- `xcodegen generate` 다시 → 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0(AppIntents 안내 1줄뿐) · 고친 곳 없음
+- export entitlements: `applinks:woogy.app` · `applinks:woopang.com` · `aps-environment = production` 셋 다 확인 · 그룹 `대표님` 에 들어감 · 수출 규정 질문 없음
+- 서버: `woogy.app/.well-known/apple-app-site-association` → 200 · `application/json` · `woogy.app/woogy/` → 200
+- 대표님 아이폰(pdnom)에 같은 빌드를 Ad Hoc 서명으로 케이블 설치(TestFlight 초대 메일을 못 받는 상태) — 기기에서 1.0.0 (6) 확인
+- 심사 제출 · 외부 테스터 · 공개 링크 없음
+
 ## 1.0.0 (5) — 2026-11-19 · 카드를 아래로 밀면 바로 아이폰 공유 창 + 공유 화면의 「앱 열기」 (빌드 번호는 `project.yml` 에 5 로 올려 두었다 — 더 올리지 않는다) · **아직 빌드 전(코드만 준비)**
 
 **공유 화면(웹)의 「앱 열기」를 눌러도 사파리에서 열리던 것** — 2026-11-19 대표님 「앱이 이미 설치된 경우에는 바로 앱으로 연결되어야 하는데 …」.
