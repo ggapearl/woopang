@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 // ── 버전 ───────────────────────────────────────────────────────────
-// 화면은 woopang.com/woogy/ 에서 받아 오므로, 화면만 고쳤을 땐 앱을 다시 올릴 필요가 없다.
+// 화면은 woogy.app/woogy/ 에서 받아 오므로, 화면만 고쳤을 땐 앱을 다시 올릴 필요가 없다.
 // 권한·아이콘·플러그인·targetSdk 처럼 네이티브가 바뀔 때만 appVersion 을 올린다. versionCode 는 1.0.0 → 10000.
 def appVersion = "1.0.0"
 def appVersionCode = appVersion.tokenize('.').collect { it as int }.with { it[0] * 10000 + it[1] * 100 + it[2] }

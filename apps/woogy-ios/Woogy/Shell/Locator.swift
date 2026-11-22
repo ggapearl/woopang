@@ -1,7 +1,7 @@
 import CoreLocation
 
 /// 지금 위치 한 번 — 웹의 `navigator.geolocation` 대신 쓴다. 그걸 쓰면 아이폰 허락 다음에
-/// 「woopang.com 이(가) 현재 위치를 사용하려고 합니다」 창이 한 번 더 뜨고, 앱을 켤 때마다 또 묻는다.
+/// 「woogy.app 이(가) 현재 위치를 사용하려고 합니다」 창이 한 번 더 뜨고, 앱을 켤 때마다 또 묻는다.
 /// 허락 창 문구: Info.plist 의 `NSLocationWhenInUseUsageDescription` (언어별 — `*.lproj/InfoPlist.strings`).
 ///
 ///   WoogyApp.call('location') → {ok: true, lat, lon, acc} | {ok: false, code}

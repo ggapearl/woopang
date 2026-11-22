@@ -1,6 +1,6 @@
 # 우기(Woogy) iOS — 「우리동네 기부천사」 우기 웹앱을 아이폰에서 쓰는 앱. XcodeGen 설정: Mac 에서 `xcodegen generate` 로 Woogy.xcodeproj 를 만든다.
 # .xcodeproj 는 커밋하지 않는다(이 파일이 정본). TestFlight 올리는 법: TESTFLIGHT.md
-# 「포장지」 앱 — 화면은 https://woopang.com/woogy/ (웹). 화면을 고쳐도 다시 빌드하지 않는다(README 참고).
+# 「포장지」 앱 — 화면은 https://woogy.app/woogy/ (웹). 화면을 고쳐도 다시 빌드하지 않는다(README 참고).
 name: Woogy
 options:
   bundleIdPrefix: com.que
@@ -32,14 +32,15 @@ targets:
     # 알림(APNs) — 효딩쓰 2.0.1 과 같은 방식. xcodegen 이 이 내용으로 파일을 쓰고 CODE_SIGN_ENTITLEMENTS 를 건다.
     # development 로 두면 TestFlight 로 내보낼 때(ExportOptions 의 app-store-connect) Xcode 가 production 으로 바꿔 서명한다.
     # App ID com.que.woogy 에 Push Notifications capability 가 있어야 서명된다(TESTFLIGHT.md 1절).
-    # 링크로 앱 바로 열기(유니버설 링크, 1.0.0 (3)) — https://woopang.com/woogy/c/<번호> 를 이 앱이 연다.
-    # 서버 쪽 확인 파일: https://woopang.com/.well-known/apple-app-site-association (C:\nginx\conf\nginx.conf 한 곳).
+    # 링크로 앱 바로 열기(유니버설 링크, 1.0.0 (3)) — https://woogy.app/woogy/c/<번호> (옛 woopang.com 도) 를 이 앱이 연다.
+    # 서버 쪽 확인 파일: https://woogy.app/.well-known/apple-app-site-association · woopang.com 쪽 같은 파일 (C:\nginx\conf\nginx.conf 한 곳).
     # App ID com.que.woogy 에 Associated Domains capability 가 있어야 서명된다(TESTFLIGHT.md 1절).
     entitlements:
       path: Woogy/Woogy.entitlements
       properties:
         aps-environment: development
         com.apple.developer.associated-domains:
+          - applinks:woogy.app
           - applinks:woopang.com
     settings:
       base:

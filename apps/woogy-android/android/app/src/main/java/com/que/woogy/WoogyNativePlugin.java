@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
  *   cameraEnsure()          → {granted, status: authorized|denied|restricted}  카메라 허락 — 안 물었으면 한 번 묻고, 정했으면 묻지 않는다
  *   openSettings()          → {ok}                                             휴대폰 설정 › 앱 › 우기 (권한을 껐을 때 안내용)
  *   info()                  → {version, build, sdk}
- * 우기 화면(https://woopang.com/woogy…)의 맨 위 화면에서 부를 때만 준다.
+ * 우기 화면(https://woogy.app/woogy…)의 맨 위 화면에서 부를 때만 준다.
  */
 @CapacitorPlugin(
     name = "WoogyNative",

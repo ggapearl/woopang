@@ -3,13 +3,13 @@ import Foundation
 /// 웹 화면에 넣는 짧은 JS 와, 인터넷이 안 될 때 보여 줄 안내 화면.
 enum ShellPages {
     /// 우기 화면이 「앱 안에서 열렸는지」 알고 폰 기능을 부르게 하는 다리 — `window.WoogyApp` (WoogyNative.swift 참고).
-    /// 우기 주소(https://woopang.com/woogy…)에서만 만든다 — 결제창 같은 바깥 화면에는 없다(앱 쪽도 한 번 더 막는다).
+    /// 우기 주소(https://woogy.app/woogy… · 옛 woopang.com 도)에서만 만든다 — 결제창 같은 바깥 화면에는 없다(앱 쪽도 한 번 더 막는다).
     static var bridgeJS: String {
         """
         (function () {
           if (window.WoogyApp) return;
           var h = location.hostname;
-          if (location.protocol !== 'https:' || (h !== 'woopang.com' && h !== 'www.woopang.com') ||
+          if (location.protocol !== 'https:' || (h !== 'woogy.app' && h !== 'www.woogy.app' && h !== 'woopang.com' && h !== 'www.woopang.com') ||
               !/^\\/woogy(\\/|$)/.test(location.pathname)) return;
           var mh = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.woogy;
           if (!mh) return;

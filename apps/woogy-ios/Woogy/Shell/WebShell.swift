@@ -3,8 +3,11 @@ import UIKit
 import WebKit
 
 enum Shell {
+    /// 우기 전용 도메인(2026-11-22 ~) — 화면은 https://woogy.app/woogy/. 옛 주소 woopang.com 은 이미 퍼진 공유 링크가 열리도록 같이 받는다.
+    static let host = "woogy.app"
+    static let hosts: Set<String> = ["woogy.app", "www.woogy.app", "woopang.com", "www.woopang.com"]
     /// 앱이 여는 첫 화면 — 처음 한 번 입장 코드를 넣으면(180일) 그 뒤로는 바로 우기 화면
-    static let startURL = URL(string: "https://woopang.com/woogy/")!
+    static let startURL = URL(string: "https://\(host)/woogy/")!
     /// 간편로그인을 마치고 앱으로 돌아오는 주소의 scheme — Info.plist 의 CFBundleURLSchemes 와 같아야 한다
     static let scheme = "com.que.woogy"
     /// 우기 바탕 크림색 #FFFBEA — 불러오는 동안 · 새 창 바탕
@@ -15,27 +18,26 @@ enum Shell {
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
 
-    /// 앱 안에서 그대로 보여 줄 우기 주소 — https://woopang.com/woogy…
+    /// 앱 안에서 그대로 보여 줄 우기 주소 — https://woogy.app/woogy… (옛 woopang.com/woogy… 도)
     static func isOwn(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(),
-              host == "woopang.com" || host == "www.woopang.com" else { return false }
+        guard url.scheme?.lowercased() == "https", let h = url.host?.lowercased(), hosts.contains(h) else { return false }
         return url.path == "/woogy" || url.path.hasPrefix("/woogy/")
     }
 
-    /// com.que.woogy://auth?t=<1회용 토큰> → https://woopang.com/woogy/auth/app?t=<토큰> (서버가 토큰을 로그인으로 바꾼다 — 5분 · 한 번만)
+    /// com.que.woogy://auth?t=<1회용 토큰> → https://woogy.app/woogy/auth/app?t=<토큰> (서버가 토큰을 로그인으로 바꾼다 — 5분 · 한 번만)
     static func authExchange(_ url: URL) -> URL? {
         guard url.scheme?.lowercased() == scheme, url.host?.lowercased() == "auth",
               let t = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "t" })?.value,
               (16...200).contains(t.count),
               t.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else { return nil }
-        var c = URLComponents(string: "https://woopang.com/woogy/auth/app")!
+        var c = URLComponents(string: "https://\(host)/woogy/auth/app")!
         c.queryItems = [URLQueryItem(name: "t", value: t)]
         return c.url
     }
 
-    /// 공유 카드 링크(카톡 등에서 누름) https://woopang.com/woogy/c/S<16진 10자리> → 앱 화면 https://woopang.com/woogy/#share=<번호>
-    /// — 받은 기부카드가 맨 앞에 뜬다. 서버의 https://woopang.com/.well-known/apple-app-site-association 이 /woogy/c/* 를 이 앱에 맡긴다(1.0.0 (3)).
+    /// 공유 카드 링크(카톡 등에서 누름) https://woogy.app/woogy/c/S<16진 10자리> (옛 woopang.com 도) → 앱 화면 https://woogy.app/woogy/#share=<번호>
+    /// — 받은 기부카드가 맨 앞에 뜬다. 서버의 https://woogy.app/.well-known/apple-app-site-association 이 /woogy/c/* 를 이 앱에 맡긴다(1.0.0 (3)).
     /// 공유 화면의 「앱 열기」(com.que.woogy://c/S<…>, 1.0.0 (5)) 도 같은 곳으로 — 웹 주소는 사파리에서 같은 도메인을 누르면 앱이 안 열려서 쓴다
     /// 「도와주기」 는 com.que.woogy://c/S<…>?help=1 — 웹 앱이 그 사연의 자세히 화면을 연다(1.0.0 (5) · 2026-11-19 대표님: 결제 창이 아니라 상세로)
     static func shareLink(_ url: URL) -> URL? {
@@ -55,7 +57,7 @@ enum Shell {
         }
         guard no.count == 11, no.first == "S",
               no.dropFirst().allSatisfy({ ("0"..."9").contains($0) || ("A"..."F").contains($0) }) else { return nil }
-        return URL(string: "https://woopang.com/woogy/#share=" + no + (help ? "&help=1" : ""))
+        return URL(string: "https://\(host)/woogy/#share=" + no + (help ? "&help=1" : ""))
     }
 
     /// 앱스토어 링크(결제 · 카드 앱 설치 안내) — 사파리를 거치지 않고 앱스토어로
@@ -216,7 +218,7 @@ struct WebShell: UIViewRepresentable {
         func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                      initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
                      decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-            let own = origin.protocol == "https" && (origin.host == "woopang.com" || origin.host == "www.woopang.com")
+            let own = origin.protocol == "https" && Shell.hosts.contains(origin.host)
             decisionHandler(own && type == .camera ? .grant : .prompt)
         }
 

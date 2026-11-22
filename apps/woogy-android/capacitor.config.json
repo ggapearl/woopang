@@ -3,7 +3,7 @@
   "appName": "우기",
   "webDir": "www",
   "server": {
-    "url": "https://woopang.com/woogy/",
+    "url": "https://woogy.app/woogy/",
     "errorPath": "offline.html",
     "cleartext": false
   },

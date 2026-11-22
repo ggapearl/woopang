@@ -2,7 +2,7 @@ import AVFoundation
 import UIKit
 import WebKit
 
-/// 우기 화면(웹)이 부르는 폰 기능. **우기 주소(https://woopang.com/woogy…)의 맨 위 화면**에서 부를 때만 준다 —
+/// 우기 화면(웹)이 부르는 폰 기능. **우기 주소(https://woogy.app/woogy… · 옛 woopang.com 도)의 맨 위 화면**에서 부를 때만 준다 —
 /// 결제창 같은 바깥 화면에서는 부를 수 없다. 웹 쪽 이름은 `window.WoogyApp` (ShellPages.bridgeJS).
 ///
 ///   WoogyApp.call('pushRegister')         → {granted, token?, platform: 'ios', error?}   알림 허락 · 기기 토큰(처음 한 번만 묻는다)
@@ -24,7 +24,7 @@ final class WoogyNative: NSObject, WKScriptMessageHandlerWithReply {
         let args = body["a"] as? [String: Any] ?? [:]
         let origin = message.frameInfo.securityOrigin
         guard message.frameInfo.isMainFrame, origin.protocol == "https",
-              origin.host == "woopang.com" || origin.host == "www.woopang.com",
+              Shell.hosts.contains(origin.host),
               let here = message.frameInfo.request.url, Shell.isOwn(here) else {
             return (nil, "이 화면에서는 쓸 수 없어요")
         }

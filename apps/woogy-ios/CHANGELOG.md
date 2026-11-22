@@ -2,6 +2,15 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
+## 다음 빌드 — 2026-11-22 · 우기 전용 주소 woogy.app 로 옮김 · **아직 빌드 전(코드만 준비)**
+
+대표님이 도메인 woogy.app 을 사서 우기를 이 주소로 서빙한다(2026-11-22). 앱이 여는 화면은 `https://woogy.app/woogy/` 가 된다.
+- `WebShell.swift` — `Shell.host`(woogy.app) · `Shell.hosts`(woogy.app · www.woogy.app + **옛 woopang.com · www.woopang.com**). 시작 화면 · 로그인 토큰 교환(`/woogy/auth/app`) · 공유 카드(`#share=`) 주소는 woogy.app, 「우기 주소인가」(`isOwn`)와 카메라 허락은 두 도메인 모두. 옛 도메인을 같이 받는 건 **이미 카톡 등으로 퍼진 `woopang.com/woogy/c/…` 링크**가 앱에서 열리게 하려는 것.
+- `ShellPages.swift`(폰 기능 주입 조건) · `WoogyNative.swift`(원점 확인) 도 같은 두 도메인.
+- `Woogy.entitlements` · `project.yml` — Associated Domains 에 `applinks:woogy.app` 추가(기존 `applinks:woopang.com` 유지). 서버의 `https://woogy.app/.well-known/apple-app-site-association` 이 `/woogy/c/*` 를 이 앱에 맡긴다(nginx 확인 완료). ⚠ App ID `com.que.woogy` 의 Associated Domains 는 도메인 목록이 아니라 capability 라 Apple 쪽 변경은 필요 없다.
+- **서버·Apple 쪽은 이미 끝남**: Apple 로그인 Services ID(`com.que.woogy.web`)에 woogy.app 도메인 · 리턴 URL 등록, 카카오 우기 앱 Redirect URI 등록, 서버가 접속한 도메인을 따라 로그인 주소를 만든다 — 옛 빌드(woopang.com)도 그대로 돈다.
+- **확인할 것**: 컴파일(Windows 에서 컴파일하지 못했다 — 오류가 나면 동작은 그대로 두고 형만 맞춘다) · 새 빌드 첫 실행이 woogy.app 로 뜨는지(입장·로그인은 도메인이 바뀌어 한 번 다시 해야 한다 — 쿠키가 도메인별) · 카카오/Apple 로그인 · 카톡에서 받은 옛 링크(woopang.com/woogy/c/…)와 새 링크(woogy.app/woogy/c/…)가 둘 다 앱을 여는지.
+
 ## 1.0.0 (5) — 2026-11-19 · 카드를 아래로 밀면 바로 아이폰 공유 창 + 공유 화면의 「앱 열기」 (빌드 번호는 `project.yml` 에 5 로 올려 두었다 — 더 올리지 않는다) · **아직 빌드 전(코드만 준비)**
 
 **공유 화면(웹)의 「앱 열기」를 눌러도 사파리에서 열리던 것** — 2026-11-19 대표님 「앱이 이미 설치된 경우에는 바로 앱으로 연결되어야 하는데 …」.

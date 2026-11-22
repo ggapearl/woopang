@@ -23,7 +23,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 /**
- * 우기 — 화면은 https://woopang.com/woogy/ (capacitor.config.json 의 server.url).
+ * 우기 — 화면은 https://woogy.app/woogy/ (capacitor.config.json 의 server.url).
  * 알림 · 간편로그인 · 위치 · 카메라 허락은 WoogyNativePlugin(웹의 window.WoogyApp, static/native.js) 이 맡는다.
  * WebViewClient 를 바꾸지 말 것 — 원격 화면에 Capacitor 브리지를 넣고 tel:·바깥 링크를 폰 앱으로 넘기는 게 BridgeWebViewClient 다.
  */

@@ -9,27 +9,29 @@ import android.net.Uri;
  */
 final class WoogyLinks {
     static final String SCHEME = "com.que.woogy";
+    /** 우기 전용 도메인(2026-11-22 ~). 옛 주소 woopang.com 은 이미 퍼진 공유 링크가 열리도록 같이 받는다. */
+    static final String HOST = "woogy.app";
 
     private WoogyLinks() {}
 
-    /** https://woopang.com/woogy… 만 우기 화면이다 */
+    /** https://woogy.app/woogy… (옛 woopang.com/woogy… 도)만 우기 화면이다 */
     static boolean isOwn(Uri u) {
         if (u == null || !"https".equalsIgnoreCase(u.getScheme())) return false;
         String h = u.getHost() == null ? "" : u.getHost().toLowerCase();
-        if (!h.equals("woopang.com") && !h.equals("www.woopang.com")) return false;
+        if (!h.equals(HOST) && !h.equals("www." + HOST) && !h.equals("woopang.com") && !h.equals("www.woopang.com")) return false;
         String p = u.getPath() == null ? "" : u.getPath();
         return p.equals("/woogy") || p.startsWith("/woogy/");
     }
 
-    /** com.que.woogy://auth?t=<1회용 토큰> → https://woopang.com/woogy/auth/app?t=<토큰> (서버가 토큰을 로그인으로 바꾼다 — 5분 · 한 번만) */
+    /** com.que.woogy://auth?t=<1회용 토큰> → https://woogy.app/woogy/auth/app?t=<토큰> (서버가 토큰을 로그인으로 바꾼다 — 5분 · 한 번만) */
     static Uri authExchange(Uri u) {
         if (u == null || !SCHEME.equalsIgnoreCase(u.getScheme()) || !"auth".equalsIgnoreCase(u.getHost())) return null;
         String t = u.getQueryParameter("t");
         if (t == null || t.length() < 16 || t.length() > 200 || !t.matches("[A-Za-z0-9_-]+")) return null;
-        return Uri.parse("https://woopang.com/woogy/auth/app").buildUpon().appendQueryParameter("t", t).build();
+        return Uri.parse("https://" + HOST + "/woogy/auth/app").buildUpon().appendQueryParameter("t", t).build();
     }
 
-    /** 공유 카드 링크 https://woopang.com/woogy/c/S<16진 10자리> → https://woopang.com/woogy/#share=<번호> */
+    /** 공유 카드 링크 https://woogy.app/woogy/c/S<16진 10자리> (옛 woopang.com 도) → https://woogy.app/woogy/#share=<번호> */
     static Uri shareLink(Uri u) {
         String no;
         boolean help = false;
@@ -47,7 +49,7 @@ final class WoogyLinks {
             no = p[3];
         }
         if (!no.matches("S[0-9A-F]{10}")) return null;
-        return Uri.parse("https://woopang.com/woogy/#share=" + no + (help ? "&help=1" : ""));
+        return Uri.parse("https://" + HOST + "/woogy/#share=" + no + (help ? "&help=1" : ""));
     }
 
     /** 앱이 받은 Intent(로그인 복귀 · 공유 링크 · 알림 누름)가 열어야 할 우기 화면 — 없으면 null */

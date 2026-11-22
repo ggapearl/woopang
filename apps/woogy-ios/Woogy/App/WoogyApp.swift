@@ -3,7 +3,7 @@ import UserNotifications
 
 /// 우기 iOS — 「포장지」 앱 (1.0.0, 2026-11-15).
 ///
-/// 화면은 웹이다: https://woopang.com/woogy/ (우기 서버 — nginx /woogy/ → 127.0.0.1:6690).
+/// 화면은 웹이다: https://woogy.app/woogy/ (우기 서버 — nginx /woogy/ → 127.0.0.1:6690).
 /// 화면·기능을 고치면 서버에서 바로 바뀌므로 **앱을 다시 빌드하지 않는다**. 다시 빌드하는 건 폰 기능
 /// (`WoogyNative` — 알림 · 간편로그인 · 바깥 앱 열기)을 바꿀 때와 TestFlight 90일 만료 전뿐.
 @main
@@ -19,7 +19,7 @@ struct WoogyApp: App {
                 .ignoresSafeArea(.container)
                 .background(Shell.bgColor.ignoresSafeArea())        // 불러오는 동안 — 우기 바탕 크림색
                 .preferredColorScheme(.light)
-                // ① 공유 카드 링크(유니버설 링크, 1.0.0 (3)): https://woopang.com/woogy/c/<번호> → 그 기부카드를 맨 앞에
+                // ① 공유 카드 링크(유니버설 링크, 1.0.0 (3)): https://woogy.app/woogy/c/<번호> → 그 기부카드를 맨 앞에
                 // ② 간편로그인을 사파리 쪽에서 마치고 돌아옴: com.que.woogy://auth?t=<1회용 토큰>
                 // ③ 그 밖의 우기 주소는 그대로 앱 안에서
                 .onOpenURL { url in
@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         completionHandler([.banner, .sound, .list])
     }
 
-    // 알림을 눌러 들어옴 — 서버가 실은 link(우기 화면 주소, 예: https://woopang.com/woogy/#…)로 간다
+    // 알림을 눌러 들어옴 — 서버가 실은 link(우기 화면 주소, 예: https://woogy.app/woogy/#…)로 간다
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let link = response.notification.request.content.userInfo["link"] as? String
