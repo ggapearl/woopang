@@ -12,7 +12,7 @@
 | `App/HyodingsseuApp.swift` | `didFinishLaunching` 에서 `PhotoBackup.registerBackgroundTask()` (시작이 끝나기 전에 등록해야 한다) |
 | `Shell/WebShell.swift` | 앱이 앞으로 나올 때 `appBecameActive()` · 두 손가락 확대 끔(`pinchGestureRecognizer`) |
 | `Hyodingsseu/Info.plist` | `UIBackgroundModes = processing` · `BGTaskSchedulerPermittedIdentifiers = com.que.hyodingsseu.photobackup` |
-| `project.yml` | 2.4.0 (11) · `NSPhotoLibraryUsageDescription`(새로 읽기 허락 문구) · 쓰기 문구에서 「읽지는 않습니다」 삭제 |
+| `project.yml` | 2.4.0 (12) · `NSPhotoLibraryUsageDescription`(새로 읽기 허락 문구) · 쓰기 문구에서 「읽지는 않습니다」 삭제 |
 
 ## 웹 ↔ 앱 약속 (`app.js` 「Native.backup…」 주석과 같다)
 - `backupStatus()` → `{enabled, since, auth: 'granted'|'limited'|'denied'|'undetermined', done, pending, uploading: {lid,name,sent,total}|null, wifiOnly: false, error}`
@@ -38,7 +38,7 @@
 - 앱을 강제 종료(위로 밀어 닫기)하면 iOS 가 백그라운드 작업을 막는다.
 - 큰 영상은 조각 이어 올리기라 중간에 끊겨도 이어진다. 폰 저장 공간이 부족하고 iCloud 에만 있는 영상은 받아 오는 데 오래 걸릴 수 있다.
 
-## 실기기에서 확인할 것 (TestFlight 2.4.0 (11))
+## 실기기에서 확인할 것 (TestFlight 2.4.0 (12))
 1. 사진첩(📷) 칩 줄에 백업 카드가 뜨고 「켜기」 → iOS 사진 읽기 허락 창 → 「모든 사진」 허용.
 2. 켠 뒤 사진 한 장 찍고 앱 열기 → 몇 초 안에 「올라감」 · 사진첩 격자 오른쪽 아래 ✓.
 3. 영상(30초 이상) 한 개 찍고 올라가는지 · 올리는 중 앱을 홈으로 보냈다 다시 열어 이어지는지.

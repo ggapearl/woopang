@@ -2,12 +2,14 @@
 
 빌드 요청마다 맨 위에 한 덩어리씩 적는다. 빌드 세션은 여기서 「이번에 확인할 것」을 본다.
 
-## 2.4.0 (11) — 2026-11-21 · 폰 사진·영상 자동 백업 + 사진첩 정리 + 두 손가락 확대 끄기
+## 2.4.0 (12) — 2026-11-21 · 폰 사진·영상 자동 백업 + 사진첩 정리 + 두 손가락 확대 끄기
+
+**빌드 번호 12 인 이유** — 2.3.1 (11)(앱 목록 로고용, 11-21 22:51 업로드)이 11 을 먼저 썼다. 요청 때 적힌 「다음 빌드 번호는 12 이상」 대로 11 → 12 로 올렸다(코드는 같다). 이 빌드부터 다시 내부 전용(`ExportOptions.plist` 그대로).
 
 대표님: 「구글 포토처럼 폰 사진·영상을 백업(LTE·Wi-Fi 상관없이), 올라간 건 ✓, 백업된 동영상·사진은 폰 사진첩에서 정리」. 화면(웹 2026-11-21a)·PC 서버(`photo_backup.py`)는 이미 배포·시험 끝. 이 빌드가 폰 사진첩을 읽고 올리는 쪽(PhotoKit)이다. 설명·약속·실기기 확인표는 **`PHOTO_BACKUP.md`**.
 - `Shell/PhotoBackup.swift`(새 파일): 켠 시각 이후 사진·영상만 6MB 조각으로 이어 올리기(`photos/up`) · 사진첩 변경 감시 · 앱 열 때·백그라운드 시간(`BGProcessingTask`)에 올리기 · 정리(서버 `photos/up/verify` 재확인 → `PHAssetChangeRequest.deleteAssets`).
 - `Shell/DeskNative.swift`: `backupStatus/Configure/Enable/Disable/Run/List/Thumb/CleanupPlan/Cleanup` 9개 + 사건 `'backup'`(`emitData`). `Shell/ShellPages.swift`(bridgeJS): 같은 9개 + 오류 글을 `Error` 로 감싸기. `Shell/WebShell.swift`: 앱이 앞으로 나올 때 `appBecameActive()` · `pinchGestureRecognizer` 끔. `App/HyodingsseuApp.swift`: `registerBackgroundTask()`.
-- `Hyodingsseu/Info.plist`: `UIBackgroundModes = processing` · `BGTaskSchedulerPermittedIdentifiers`. `project.yml`: 2.4.0 (11) · `NSPhotoLibraryUsageDescription` 추가 · 쓰기 문구에서 「읽지는 않습니다」 삭제(이제 읽는다).
+- `Hyodingsseu/Info.plist`: `UIBackgroundModes = processing` · `BGTaskSchedulerPermittedIdentifiers`. `project.yml`: 2.4.0 (12) · `NSPhotoLibraryUsageDescription` 추가 · 쓰기 문구에서 「읽지는 않습니다」 삭제(이제 읽는다).
 - Windows 에서 쓰고 **컴파일은 못 해 봤다** — Mac 에서 `xcodegen generate` → 빌드. 오류가 나면 `PhotoBackup.swift`(동시성 경고·`Sendable` 가능성)부터 고쳐 주세요. 새 파일은 `project.yml` 의 소스 폴더 안이라 xcodegen 이 자동으로 넣는다.
 - **이번에 확인할 것**: 업로드 성공 · export 에서 `aps-environment = production` · archive Info.plist 에 `UIBackgroundModes`·`BGTaskSchedulerPermittedIdentifiers` 가 그대로 들어갔는지 · 실행하자마자 죽지 않는지(`BGTaskScheduler.register` 는 `didFinishLaunching` 안에서만). 사진 읽기·올리기·정리 동작 확인(실기기)은 대표님이 `PHOTO_BACKUP.md` 7개 항목으로 하신다 — Mac 세션은 기능 테스트를 하지 않는다.
 
