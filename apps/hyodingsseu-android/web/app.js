@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-22b';
+  const WEB_VERSION = '2026-11-22c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -226,14 +226,17 @@
 
   /** 사진·영상 저장 (2026-11-16 대표님: 「파일함으로 가지 않고 다운로드 누르면 핸드폰 갤러리에」) — 앱의 폰 기능(saveToPhotos)이 사진첩에 바로 넣는다.
    *  앱이 그 기능을 아직 모르는 옛 빌드면 공유 창(파일만)으로 넘겨 「이미지 저장」을 누르게 한다. 사진·영상이 아니면 false(아래 내려받기로). */
+  /** 앱의 폰 기능(saveToPhotos)은 /AI/doc/ 가 든 주소만 받는다 — 사진첩 주소(/AI/photo/)는 같은 내용을 주는 /AI/doc/photo/ 로 바꿔 넘긴다.
+   *  (그대로 넘기면 「허용되지 않는 주소」로 조용히 거절돼 저장이 안 됐다 — 2026-11-22) */
+  const nativeSaveUrl = url => new URL(url, location.href).href.replace('/AI/photo/', '/AI/doc/photo/');
+
   async function saveToGallery(url, name) {
     if (!Native || !PHOTO_OR_DOC.test(url) || !isMediaFile(url, name)) return false;
     if (typeof Native.saveToPhotos === 'function') {
-      toast('사진첩에 저장하는 중이에요');
       try {
-        await Native.saveToPhotos({ url: new URL(url, location.href).href, name: name || nameFromUrl(url) });
-        toast('사진첩에 저장했어요');
-      } catch (e) { toast((e && e.message) || '사진첩에 저장하지 못했어요'); }
+        await Native.saveToPhotos({ url: nativeSaveUrl(url), name: name || nameFromUrl(url) });
+        toast('폰에 저장했어요');
+      } catch (e) { toast((e && e.message) || '저장하지 못했어요'); }
       return true;
     }
     toast('공유 창에서 「이미지 저장」을 눌러 주세요');
@@ -263,6 +266,7 @@
       })();
       p.catch(() => filePromises.delete(key));
       filePromises.set(key, p);
+      while (filePromises.size > 6) filePromises.delete(filePromises.keys().next().value);      // 사진을 넘겨 볼 때마다 쌓이지 않게 — 최근 몇 개만
     }
     return filePromises.get(key);
   }
@@ -292,7 +296,7 @@
     if (!list.length) return;
     const files = [];
     try {
-      toast(list.some(f => /\.pdf$/i.test(f.name || '')) ? 'PDF 만드는 중이에요 — 잠시만요' : '공유 준비하는 중이에요');
+      if (list.some(f => /\.pdf$/i.test(f.name || ''))) toast('PDF 만드는 중이에요 — 잠시만요');      // 사진·영상은 안내 없이 바로 공유 창 (2026-11-22 대표님)
       for (const f of list) files.push(await prepFile(f));
     } catch (err) { toast(err && err.message === 'size' ? '파일이 커서(80MB 넘음) 바로 공유하지 못해요 — 저장을 눌러 주세요' : '파일을 준비하지 못했어요'); return; }
     // 제목·글을 같이 넘기면 받는 앱에 사진과 글이 함께 간다(2026-11-16 대표님) — 파일만 넘긴다
@@ -1076,12 +1080,17 @@
 
   // ── 알림 ───────────────────────────────
   let toastTimer = 0;
-  function toast(text) {
+  /** action = { label, run } 이면 글 옆에 누를 수 있는 단추(예: 「되돌리기」)가 붙고, 그동안은 화면 아래쪽에 떠서 사진을 가리지 않는다 */
+  function toast(text, action) {
     const el = $('#toast');
-    el.textContent = text;
+    el.textContent = '';
+    el.classList.toggle('act', !!action);
+    if (action) {
+      el.append(h('span', { text }), h('button', { class: 'toast-act', text: action.label, onclick: () => { el.classList.remove('on'); clearTimeout(toastTimer); action.run(); } }));
+    } else el.textContent = text;
     el.classList.add('on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('on'), 3200);
+    toastTimer = setTimeout(() => el.classList.remove('on'), action ? 6500 : 3200);
   }
 
   function show(e) {
@@ -3068,7 +3077,7 @@
   const PH_TYPEWORD = { '동영상': 'video', '영상': 'video', '비디오': 'video', 'video': 'video', 'videos': 'video', '사진': 'image', '이미지': 'image', 'photo': 'image', 'photos': 'image' };
 
   const phCap = it => [phDay(it.day, true) + (it.time ? ' ' + it.time : '') + (it.city ? ' · ' + it.city : ''), it.name];
-  const phEntry = it => ({ url: it.view, name: it.name, kind: it.kind, dl: it.orig, poster: it.kind === 'video' ? it.thumb : '', id: it.id, cap: phCap(it) });
+  const phEntry = it => ({ url: it.view, name: it.name, kind: it.kind, dl: it.orig, thumb: it.thumb, poster: it.kind === 'video' ? it.thumb : '', id: it.id, cap: phCap(it) });
 
   function openPhotos() {
     let tab = 'all', q = '', filt = null, items = [], page = 0, more = false, loading = false, failed = '', alive = true, searchTimer = 0, gen = 0, listBusy = false, listFail = '';
@@ -3081,6 +3090,7 @@
     const dayHdr = new Map(), pos = new Map();   // 날짜 머리글의 동그라미 · 사진 번호 → 순서값(_o)
     const lists = {};
     const tiles = new Map();
+    const deleted = new Set();                    // 이 화면에서 지우거나 옮긴 사진 번호 — 되돌리면 뺀다
     g0 = mkGroup(0, '', 0, null);
 
     const statEl = h('div', { class: 'doc-total' });
@@ -3207,17 +3217,20 @@
     // ── 묶음(group) — 연월 하나(시간표 방식) 또는 목록 전체(검색·분류·종류별) ──
     //  _o(순서값) = 묶음 번호 × OM + 묶음 안 번호. 이 값의 크기로 「어디부터 어디까지」를 따진다(범위 고르기).
     function mkGroup(i, m, n, el) {
-      return { i, m, n, el, items: [], days: new Map(), st: 'idle', page: 0, more: true, dom: false, full: false, p: null, rendered: 0, h: 0, failAt: 0, lastDay: null, lastGrid: null, lastCity: null };
+      return { i, m, n, el, items: [], days: new Map(), st: 'idle', page: 0, more: true, dom: false, full: false, p: null, rendered: 0, h: 0, failAt: 0, lastDay: null, lastGrid: null, lastCity: null, dirty: false };
     }
 
     /** 받아 온 사진을 묶음의 자료로 — 순서값을 매기고 날짜별 번호를 모은다(그림 그리기와 별개) */
     function pushData(g, list) {
+      if (deleted.size) list = list.filter(it => !deleted.has(it.id));          // 방금 지운·옮긴 사진이 오는 길에 끼어 있었어도 다시 나타나지 않게
+      if (g.dirty && g.items.length) { const have = new Set(g.items.map(x => x.id)); list = list.filter(it => !have.has(it.id)); }   // 지운 뒤 이어 받으면 겹치는 쪽이 생길 수 있다
       list.forEach(it => {
         it._o = g.i * OM + g.items.length;
         g.items.push(it);
         const a = g.days.get(it.day);
         if (a) a.push(it.id); else g.days.set(it.day, [it.id]);
       });
+      return list;
     }
 
     function reindex(g) {
@@ -3314,7 +3327,13 @@
     function tapTile(it, ev) {
       if (sel) { toggle(it, ev); return; }
       const run = around(it), from = Math.max(0, run.i - 40);
-      openViewer(run.list.slice(from, run.i + 80).map(phEntry), run.i - from, '사진', PH_ALBUMS ? { album: e => pickAlbum([e.id], '이 사진') } : {});
+      // 지우기·이동은 확인 없이 — 보던 사진이 바로 사라지고 다음 사진이 보인다(viewer 가 처리). 서버 일은 뒤에서
+      openViewer(run.list.slice(from, run.i + 80).map(phEntry), run.i - from, '사진', {
+        photo: true,
+        album: PH_ALBUMS ? e => pickAlbum([e.id], '이 사진') : null,
+        del: e => trashIds([e.id]),
+        move: e => moveIds([e.id]),
+      });
     }
 
     /** 사진 보기에서 넘겨 볼 앞뒤 사진들 — 끝까지 불러온 앞·뒤 달까지 이어서 */
@@ -3483,14 +3502,245 @@
         dayHdr.forEach(b => { b.classList.remove('on', 'part'); b.removeAttribute('aria-pressed'); });
         return;
       }
-      const n = sel.size, inAlbum = filt && filt.query.album;
+      const n = sel.size, inAlbum = PH_ALBUMS && filt && filt.query.album;
       selBar.textContent = '';
       [h('button', { class: 'ph-x', 'aria-label': '고르기 끝내기', html: ICON.close, onclick: endSel }),
         h('div', { class: 'cnt', text: n ? n + '개 선택됨' : '사진을 눌러 고르세요' }),
         PH_ALBUMS ? act('albumAdd', '담기', n, () => pickAlbum(chosen().map(it => it.id), n + '장')) : null,
         act('share', '공유', n, shareSel),
         act('save', '저장', n, saveSel),
-        inAlbum ? act('minusCircle', '빼기', n, removeSel) : null].forEach(x => { if (x) selBar.append(x); });
+        act('folder', '이동', n, moveSel),
+        inAlbum ? act('minusCircle', '빼기', n, removeSel) : null,
+        act('trash', '삭제', n, trashSel)].forEach(x => { if (x) selBar.append(x); });
+    }
+
+    // ── 지우기 · 옮기기 (2026-11-22 대표님) ──
+    // 지우면 확인 없이 바로 그 폴더 옆 「휴지통」으로 — 30일 뒤 완전히 지워진다. 화면에서는 먼저 치우고(빠르게) PC 가 파일을 옮긴다.
+    function trashSel() {
+      const ids = chosen().map(it => it.id);
+      if (!ids.length) return;
+      endSel();
+      trashIds(ids);
+    }
+
+    function moveSel() {
+      const ids = chosen().map(it => it.id);
+      if (!ids.length) return;
+      moveIds(ids).then(ok => { if (ok) endSel(); });
+    }
+
+    /** 번호들에 해당하는 사진 — 지금까지 불러온 것 중에서 */
+    function findItems(idset) {
+      const out = [];
+      (tl ? groups : [g0]).forEach(g => g.items.forEach(it => { if (idset.has(it.id)) out.push(it); }));
+      return out;
+    }
+
+    const monthsOf = its => [...new Set(its.map(it => (it.day || '').slice(0, 7)).filter(Boolean))];
+
+    /** 달별 장수(막대·칸 높이)를 서버 값으로 다시 맞춘다 */
+    function recount() {
+      monthsTotal = months ? months.reduce((s, m) => s + m.n, 0) : 0;
+      monthPos = {};
+      let cum = 0;
+      (months || []).forEach(m => { monthPos[m.m] = { cum, n: m.n }; cum += m.n; });
+    }
+
+    /** 지운·옮긴 사진을 지금 화면에서 뺀다 — 시간표는 해당 달 칸만 다시 그리고(보던 자리 그대로), 검색·분류 목록은 그대로 다시 그린다 */
+    function dropLocal(its) {
+      if (!its.length) return;
+      const gone = new Set(its.map(it => it.id));
+      gone.forEach(id => deleted.add(id));
+      if (sel) gone.forEach(id => sel.delete(id));
+      if (stats) { its.forEach(it => { if (it.kind === 'video') stats.videos = Math.max(0, stats.videos - 1); else stats.photos = Math.max(0, stats.photos - 1); }); drawStat(); }
+      if (!tl) {
+        const top = content.scrollTop;
+        g0.items = g0.items.filter(it => !gone.has(it.id));
+        reindex(g0);
+        items = g0.items;
+        g0.dirty = true;
+        page = Math.floor(items.length / 60);
+        draw();
+        content.scrollTop = top;
+        return;
+      }
+      groups.forEach(g => {
+        if (!g.items.some(it => gone.has(it.id))) return;
+        const old = g.items, left = old.filter(it => !gone.has(it.id));
+        old.forEach(it => { tiles.delete(it.id); pos.delete(it.id); });
+        g.days.forEach((_ids, day) => dayHdr.delete(day));
+        const was = g.dom;
+        if (g.dom) domTiles -= g.rendered;
+        g.items = []; g.days.clear();
+        pushData(g, left);
+        g.n = Math.max(0, g.n - (old.length - left.length));
+        g.dirty = true;
+        g.page = Math.floor(left.length / 100);
+        g.dom = false; g.rendered = 0; g.lastDay = g.lastGrid = g.lastCity = null;
+        const mm = months && months.find(x => x.m === g.m);
+        if (mm) mm.n = g.n;
+        if (was && (left.length || g.st === 'ready')) paintGroup(g); else { g.h = 0; waitBox(g); }
+      });
+      recount();
+    }
+
+    /** 되돌리기·옮기기 뒤 — 서버(Immich 가 훑고 나면)의 그 달 목록과 맞춘다. 달라진 게 없으면 화면은 그대로 둔다. 달라졌으면 true */
+    async function syncMonth(m) {
+      const g = gByM.get(m);
+      if (!g || !alive || !tl || g.p || (g.st === 'idle' && !g.items.length)) return false;
+      const got = [];
+      for (let p = 1; p <= 80; p++) {
+        const r = await api.get('photos', { q: m, page: p, n: 100 });
+        const it = r.items || [];
+        got.push(...it);
+        if (!r.more || !it.length) break;
+      }
+      if (!alive || !tl || g.p || gByM.get(m) !== g) return false;
+      const fresh = got.filter(it => !deleted.has(it.id));
+      if (g.st === 'ready' && g.items.length === fresh.length && g.items.every((it, i) => it.id === fresh[i].id)) return false;
+      g.items.forEach(it => { tiles.delete(it.id); pos.delete(it.id); });
+      g.days.forEach((_ids, day) => dayHdr.delete(day));
+      const was = g.dom;
+      if (g.dom) domTiles -= g.rendered;
+      g.items = []; g.days.clear();
+      pushData(g, fresh);
+      g.n = fresh.length; g.page = Math.ceil(fresh.length / 100); g.more = false; g.st = 'ready'; g.dirty = false;
+      g.dom = false; g.rendered = 0; g.lastDay = g.lastGrid = g.lastCity = null;
+      if (was) paintGroup(g); else { g.h = 0; waitBox(g); }
+      const mm = months && months.find(x => x.m === m);
+      if (mm) { mm.n = g.n; recount(); }
+      return true;
+    }
+
+    /** 달들을 몇 번에 나눠 맞춘다 — PC 가 폴더를 훑는 데 걸리는 시간만큼 간격을 두고, 맞춰졌으면 그만 */
+    function syncMonths(ms, delays) {
+      if (!tl || !ms.length) return;
+      let k = 0;
+      const step = async () => {
+        if (!alive || !tl) return;
+        let changed = false;
+        for (const m of ms) { try { if (await syncMonth(m)) changed = true; } catch (e) { /* 다음 차례에 */ } }
+        if (!changed && ++k < delays.length) setTimeout(step, delays[k]);
+      };
+      setTimeout(step, delays[0]);
+    }
+
+    /** 사진·영상 지우기(휴지통으로). 확인 창 없이 바로 — 되돌리기는 알림의 「되돌리기」. 화면은 먼저 치워 두고 서버 결과로 맞춘다. */
+    async function trashIds(ids) {
+      const its = findItems(new Set(ids));
+      if (!its.length) return false;
+      ids = its.map(it => it.id);
+      const ms = monthsOf(its);
+      dropLocal(its);
+      if (ids.length > 30) toast('휴지통으로 옮기는 중이에요 (' + ids.length + '장)');
+      const runs = [];
+      let lastErr = null, ok = new Set();
+      for (let i = 0; i < ids.length; i += 100) {
+        const part = ids.slice(i, i + 100);
+        try {
+          const r = await api.post('photos/trash', { ids: part }, { timeout: 60000 });
+          const done = Array.isArray(r.ids) ? r.ids : (r.failed ? [] : part);
+          done.forEach(id => ok.add(id));
+          if (done.length) runs.push({ batch: r.batch, ids: done });
+        } catch (e) { lastErr = e; }
+      }
+      const bad = its.filter(it => !ok.has(it.id));
+      if (bad.length) {                                      // 못 지운 것은 다시 보이게
+        bad.forEach(it => deleted.delete(it.id));
+        syncMonths(monthsOf(bad), [300, 3000]);
+      }
+      if (!ok.size) { if (lastErr) show(lastErr); else toast('지우지 못했어요'); return false; }
+      const msg = ok.size + '장을 휴지통으로 옮겼어요' + (bad.length ? ' (' + bad.length + '장은 못 지웠어요)' : '');
+      toast(msg, {
+        label: '되돌리기',
+        run: async () => {
+          try {
+            for (const r of runs) await api.post('photos/restore', { batch: r.batch, ids: r.ids }, { timeout: 60000 });
+            ok.forEach(id => deleted.delete(id));
+            toast('되돌렸어요 — 사진첩에 곧 다시 나타나요');
+            syncMonths(ms, [4000, 15000, 40000]);
+          } catch (e) { show(e); }
+        },
+      });
+      return true;
+    }
+
+    /** 폴더로 옮기기 — 폴더 고르는 창을 띄우고, 옮기면 true 를 돌려준다 */
+    function moveIds(ids) {
+      const its = findItems(new Set(ids));
+      if (!its.length) return Promise.resolve(false);
+      return new Promise(resolve => pickFolder(its, resolve));
+    }
+
+    async function pickFolder(its, done) {
+      let finished = false;
+      const rowsEl = h('div', { class: 'ph-pickrows' });
+      const findEl = h('input', { type: 'search', class: 'ph-find', placeholder: '폴더 이름으로 찾기', 'aria-label': '폴더 찾기', oninput: () => drawRows() });
+      const nameEl = h('input', { type: 'text', maxlength: '80', placeholder: '새 폴더 이름', 'aria-label': '새 폴더 이름', onkeydown: ev => { if (ev.key === 'Enter') make(); } });
+      const newBox = h('div', { class: 'ph-new', hidden: true }, nameEl, h('button', { class: 'btn', text: '만들고 옮기기', onclick: make }));
+      const sheet = h('div', { class: 'sheet ph-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '폴더로 이동' },
+        h('h3', { text: '폴더로 이동' }),
+        h('p', { text: its.length + '장을 옮길 폴더를 골라 주세요' }),
+        findEl,
+        h('button', { class: 'ph-row new', onclick: () => { newBox.hidden = false; nameEl.focus(); } },
+          h('span', { class: 'ph-rthumb', html: ICON.plus }), h('div', { class: 'dtx' }, h('b', { text: '새 폴더 만들기' }))),
+        newBox, rowsEl,
+        h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() }));
+      const scrim = h('div', { class: 'sheet-scrim over', onclick: ev => { if (ev.target === scrim) close(); } }, sheet);
+      const close = layer(() => { scrim.remove(); if (!finished) done(false); });
+      $('#app').append(scrim);
+
+      function drawRows() {
+        const key = findEl.value.trim().toLowerCase(), all = lists.folder || [];
+        const rows = all.filter(r => !key || (r.name + ' ' + r.path).toLowerCase().includes(key)).slice(0, 300);
+        rowsEl.textContent = '';
+        if (!lists.folder) { rowsEl.append(h('div', { class: 'doc-empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
+        if (!rows.length) { rowsEl.append(h('div', { class: 'doc-empty', text: key ? '찾는 폴더가 없어요 — 위에서 새로 만들 수 있어요' : '폴더가 없어요 — 위에서 새로 만들어 보세요' })); return; }
+        rows.forEach(r => rowsEl.append(h('button', { class: 'ph-row', style: key ? '' : 'padding-left:' + (8 + Math.min(r.depth, 4) * 14) + 'px', onclick: () => go(r.path, r.name) },
+          h('span', { class: 'ph-rthumb', html: ICON.folder }), h('div', { class: 'dtx' }, h('b', { text: r.name }), r.depth || key ? h('small', { text: r.path }) : null))));
+      }
+
+      function make() {
+        const name = nameEl.value.trim().replace(/[\\/]+/g, ' ');
+        if (!name) { nameEl.focus(); return; }
+        go(name, name);
+      }
+
+      /** 고른 폴더로 — 창은 바로 닫고 화면에서 먼저 치운다. 서버가 못 옮긴 것(폰에서 올린 사진 등)은 다시 보인다 */
+      async function go(path, name) {
+        if (finished) return;
+        finished = true;
+        close();
+        done(true);
+        const ids = its.map(it => it.id), ms = monthsOf(its);
+        dropLocal(its);
+        if (ids.length > 30) toast('옮기는 중이에요 (' + ids.length + '장)');
+        const ok = new Set();
+        let skipped = 0, lastErr = null;
+        for (let i = 0; i < ids.length; i += 100) {
+          const part = ids.slice(i, i + 100);
+          try {
+            const r = await api.post('photos/move', { ids: part, to: path }, { timeout: 90000 });
+            (Array.isArray(r.ids) ? r.ids : (r.done === part.length ? part : [])).forEach(id => ok.add(id));
+            skipped += r.skipped || 0;
+          } catch (e) { lastErr = e; }
+        }
+        const bad = its.filter(it => !ok.has(it.id));
+        if (bad.length) { bad.forEach(it => deleted.delete(it.id)); syncMonths(monthsOf(bad), [300, 3000]); }
+        if (ok.size) {
+          delete lists.folder;
+          toast('「' + name + '」로 ' + ok.size + '장을 옮겼어요' + (skipped ? ' (' + skipped + '장은 옮길 수 없는 사진이에요)' : ''));
+          syncMonths(ms, [6000, 20000, 50000, 120000, 300000]);     // 새 칸은 Immich 가 훑고 정보(메타데이터)를 읽은 뒤에야 보인다 — 대기열이 밀려 있으면 오래 걸린다
+        } else if (lastErr) show(lastErr);
+        else toast(skipped ? '옮길 수 없는 사진이에요 (이미 그 폴더에 있거나 폰에서 올린 사진)' : '옮기지 못했어요');
+      }
+
+      drawRows();
+      if (!lists.folder) {
+        try { lists.folder = (await api.get('photos/folders')).items || []; }
+        catch (e) { rowsEl.textContent = ''; rowsEl.append(h('div', { class: 'doc-empty', text: (e && e.message) || '폴더 목록을 불러오지 못했어요' })); return; }
+        drawRows();
+      }
     }
 
     function act(icon, label, n, fn) {
@@ -3508,12 +3758,12 @@
       const list = chosen();
       if (list.length > 30) { toast('저장은 한 번에 30장까지예요 — 나눠서 받아 주세요'); return; }
       if (Native && typeof Native.saveToPhotos === 'function') {
-        toast('사진첩에 저장하는 중이에요 (' + list.length + '장)');
+        if (list.length > 3) toast('폰에 저장하는 중이에요 (' + list.length + '장)');
         let ok = 0;
         for (const it of list) {
-          try { await Native.saveToPhotos({ url: new URL(it.orig, location.href).href, name: it.name }); ok++; } catch (e) { /* 한 장 실패해도 나머지는 */ }
+          try { await Native.saveToPhotos({ url: nativeSaveUrl(it.orig), name: it.name }); ok++; } catch (e) { /* 한 장 실패해도 나머지는 */ }
         }
-        toast(ok === list.length ? ok + '장을 폰 사진첩에 저장했어요' : list.length + '장 중 ' + ok + '장만 저장했어요');
+        toast(ok === list.length ? (ok > 1 ? ok + '장을 ' : '') + '폰에 저장했어요' : list.length + '장 중 ' + ok + '장만 저장했어요');
         return;
       }
       if (list.length === 1) { downloadFile(list[0].orig, list[0].name); return; }
@@ -3605,11 +3855,10 @@
         if (before && !q && !filt) o.before = before;
         const r = await api.get('photos', o);
         if (!alive || my !== gen) return;
-        const got = r.items || [];
         if (r.stats) stats = r.stats;
         const first = !page;
         page++;
-        pushData(g0, got);
+        const got = pushData(g0, r.items || []);
         more = !!r.more;
         loading = false;
         if (first) draw(); else { addItems(got, g0); drawTail(); }
@@ -4482,8 +4731,34 @@
     return fallback || 'doc';
   }
 
+  /** 사진첩 사진 한 장 — 가까운 장만 받는다(viewer 의 sync 가 _near/_wake 를 부른다). 열자마자 격자에서 이미 받아 둔 작은 그림이 바로 보이고,
+   *  큰 그림이 다 받아지면 갈아 끼운다(2026-11-22 대표님 「파일 하나 열고 닫을 때도 로딩이 너무 길다」 — 120장을 한꺼번에 받던 것을 현재 ±1장만으로). */
+  function photoSlide(e) {
+    const img = h('img', { alt: e.name || '', draggable: 'false', decoding: 'async' });
+    const slide = h('div', { class: 'vw-slide' }, img);
+    let stage = 0;                                             // 0 아직 · 1 작은 그림 · 2 큰 그림 받기 시작
+    slide._near = () => { if (stage < 1) { stage = 1; img.classList.add('lo'); img.src = e.thumb; } };
+    slide._wake = () => {
+      slide._near();
+      if (stage >= 2) return;
+      stage = 2;
+      const fetchBig = (url, last) => {
+        const big = new Image();
+        big.onload = () => { img.src = url; img.classList.remove('lo'); };
+        big.onerror = () => {
+          if (!last && e.dl && e.dl !== url) { fetchBig(e.dl, true); return; }     // 큰 그림이 아직 안 만들어졌으면 원본으로 한 번 더
+          if (!img.naturalWidth) img.replaceWith(h('div', { class: 'vw-msg', text: '사진을 불러오지 못했어요' }));
+        };
+        big.src = url;
+      };
+      fetchBig(e.url, false);
+    };
+    return slide;
+  }
+
   function viewerSlide(e) {
     const kind = e.kind || fileKind(e.name, e.url, '');
+    if (kind === 'image' && e.id && e.thumb) return photoSlide(e);
     if (kind === 'image') {
       const img = h('img', { src: e.url, alt: e.name || '', loading: 'lazy', draggable: 'false' });
       img.addEventListener('error', () => {
@@ -4493,7 +4768,12 @@
       return h('div', { class: 'vw-slide' }, img);
     }
     // 사진첩 영상은 겉그림(poster)만 두고 누를 때 받는다 — 한 번에 수십 개를 미리 받지 않게
-    if (kind === 'video') return h('div', { class: 'vw-slide' }, h('video', { src: e.url, controls: true, playsinline: true, 'webkit-playsinline': true, poster: e.poster, preload: e.poster ? 'none' : 'metadata' }));
+    if (kind === 'video') {
+      const v = h('video', { src: e.url, controls: true, playsinline: true, 'webkit-playsinline': true, preload: e.poster ? 'none' : 'metadata' });
+      const slide = h('div', { class: 'vw-slide' }, v);
+      if (e.poster) slide._near = () => { if (!v.poster) v.poster = e.poster; };       // 겉그림도 가까운 장만
+      return slide;
+    }
     if (kind === 'audio') {
       return h('div', { class: 'vw-slide' }, h('div', { class: 'vw-audio' },
         h('div', { class: 'vw-msg', text: '🔊 ' + (e.name || '음성') }), h('audio', { src: e.url, controls: true, preload: 'metadata' })));
@@ -4624,15 +4904,19 @@
     const list = (entries || []).filter(e => e && e.url);
     if (!list.length) return;
     opts = opts || {};
-    let idx = Math.max(0, Math.min(start || 0, list.length - 1)), raf = 0;
-    const many = list.length > 1;
+    let idx = Math.max(0, Math.min(start || 0, list.length - 1)), raf = 0, many = list.length > 1;
+    const pv = !!(opts.photo && opts.del);                     // 사진첩 사진·영상 보기 — 앱 바탕색 · 앞뒤 단추 없음 · 아래 줄에 설명(왼쪽)과 이동·삭제(오른쪽)
 
     const counter = h('div', { class: 'vw-count', 'aria-live': 'polite' });
     const capEl = h('div', { class: 'vw-cap', hidden: true });
     const track = h('div', { class: 'vw-track' }, list.map(viewerSlide));
-    const prev = many ? h('button', { class: 'vw-arrow prev', 'aria-label': '앞 장', html: ICON.back, onclick: () => go(idx - 1) }) : null;
-    const next = many ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
-    const el = h('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '보기' },
+    const prev = many && !pv ? h('button', { class: 'vw-arrow prev', 'aria-label': '앞 장', html: ICON.back, onclick: () => go(idx - 1) }) : null;
+    const next = many && !pv ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
+    const pbar = pv ? h('div', { class: 'vw-pbar' }, capEl,
+      h('div', { class: 'vw-pacts' },
+        opts.move ? h('button', { class: 'vw-move', 'aria-label': '폴더로 이동', onclick: () => moveCur() }, h('span', { html: ICON.folder }), '이동') : null,
+        h('button', { class: 'vw-btn', 'aria-label': '삭제', html: ICON.trash, onclick: () => trashCur() }))) : null;
+    const el = h('div', { class: 'viewer' + (pv ? ' pv' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '보기' },
       h('div', { class: 'vw-top' },
         h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
@@ -4641,8 +4925,35 @@
           h('button', { class: 'vw-btn', 'aria-label': '저장', html: ICON.save, onclick: () => downloadFile(list[idx].dl || list[idx].url, list[idx].name) }),
           h('button', { class: 'vw-btn', 'aria-label': '공유', html: ICON.share, onclick: share }))),
       h('div', { class: 'vw-stage' }, track),
-      capEl,
-      many ? h('div', { class: 'vw-bot' }, prev, next) : null);
+      pbar || capEl,
+      many && !pv ? h('div', { class: 'vw-bot' }, prev, next) : null);
+
+    /** 보던 장을 목록에서 빼고 이웃 장(없으면 앞 장)을 보여 준다 — 다 비면 닫는다 */
+    function dropSlide(i) {
+      const slide = track.children[i];
+      if (slide) { slide.querySelectorAll('video,audio').forEach(m => { try { m.pause(); } catch (e) { /* 이미 멈춤 */ } }); slide.remove(); }
+      list.splice(i, 1);
+      if (!list.length) { close(); return; }
+      many = list.length > 1;
+      idx = Math.min(i, list.length - 1);
+      sync();
+      jump();
+    }
+
+    function trashCur() {
+      const i = idx, e = list[i];
+      if (!e || !opts.del) return;
+      haptic('tap');
+      opts.del(e);
+      dropSlide(i);
+    }
+
+    function moveCur() {
+      const e = list[idx];
+      if (!e || !opts.move) return;
+      const p = opts.move(e);
+      if (p && p.then) p.then(ok => { if (ok) { const i = list.indexOf(e); if (i >= 0) dropSlide(i); } });
+    }
 
     /** 글 문서가 보이는 동안은 트랙의 가로 스크롤을 잠근다. 넘기는 중(스크롤 중)에 잠그면 중간에 멈추니 멈춘 뒤에 */
     let lockTimer = 0;
@@ -4677,6 +4988,15 @@
         if (f && Math.abs(i - idx) <= 1) loadDoc(f);        // 보는 장과 이웃 장을 미리 — 넘길 때 기다리지 않게
         if (i === idx && s.querySelector('.vw-doc')) warmDoc(list[i]);   // 저장·공유할 PDF 도 보는 동안 미리(같은 파일은 한 번만)
       });
+      // 사진첩 사진 — 보는 장의 큰 그림을 제일 먼저, 이웃 장은 큰 그림(±1)·작은 그림(±3)까지만
+      const curS = track.children[idx];
+      if (curS && curS._wake) curS._wake(); else if (curS && curS._near) curS._near();
+      for (let d = 1; d <= 3; d++) [idx - d, idx + d].forEach(i => {
+        const s = track.children[i];
+        if (!s) return;
+        if (s._near) s._near();
+        if (d === 1 && s._wake) s._wake();
+      });
     }
 
     function go(i) {
@@ -4706,9 +5026,14 @@
 
     /** 아래로 쓸어내리면 닫힌다 (2026-11-02 대표님) — 사진·영상·상단·하단에서. 가로로 넘기기·확대·글 문서(안쪽이 따로 스크롤)는 건드리지 않는다. */
     let sy = 0, sx = 0, st = 0, drag = false;
+    // 영상은 맨 아래 조절줄(재생·시간 막대)만 빼고 어디서나 쓸어내려 닫는다(2026-11-22 대표님 「영상은 아래로 스와이프해도 닫히지 않는다」)
+    const onVideoBar = ev => {
+      const v = ev.target.closest && ev.target.closest('video');
+      return !!v && ev.touches[0].clientY > v.getBoundingClientRect().bottom - 96;
+    };
     el.addEventListener('touchstart', ev => {
       drag = ev.touches.length === 1 && !el.classList.contains('docmode') && !(window.visualViewport && window.visualViewport.scale > 1.05)
-        && !ev.target.closest('iframe,.vw-btn,.vw-open,.vw-arrow,video,audio');
+        && !ev.target.closest('iframe,.vw-btn,.vw-move,.vw-open,.vw-arrow,audio') && !onVideoBar(ev);
       if (!drag) return;
       sx = ev.touches[0].clientX; sy = ev.touches[0].clientY; st = Date.now();
     }, { passive: true });

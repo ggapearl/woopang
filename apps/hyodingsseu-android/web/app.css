@@ -331,6 +331,11 @@ input[type=range]{width:100%;accent-color:var(--pink)}
   padding:12px 18px;border-radius:18px;border:1px solid var(--pink-line);box-shadow:0 6px 28px rgba(0,0,0,.16);
   transition:opacity .25s,transform .25s;pointer-events:none;text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+/* 누를 단추(「되돌리기」)가 붙은 알림 — 사진을 가리지 않게 아래쪽에 뜬다 (2026-11-22) */
+.toast.act{top:auto;bottom:calc(96px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:12px;padding:8px 8px 8px 18px;text-align:left;transform:translate(-50%,10px) scale(.96)}
+.toast.act.on{transform:translate(-50%,0) scale(1);pointer-events:auto}
+.toast-act{flex:none;height:36px;padding:0 16px;border-radius:999px;background:var(--pink-soft);color:var(--pink-deep);font-size:14px;font-weight:700}
+.toast-act:active{opacity:.7}
 .menu{position:absolute;z-index:31;min-width:160px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:4px}
 .menu h4{margin:0;padding:8px 12px 4px;font-size:11px;font-weight:700;color:var(--ink-3)}
 .menu button{display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;border-radius:8px;font-size:15px;text-align:left;color:var(--ink)}
@@ -492,7 +497,7 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .ph-x{flex:none;width:42px;height:46px;display:grid;place-items:center;border-radius:12px;color:var(--ink-2)}
 .ph-x svg{width:20px;height:20px}
 .ph-x:active,.ph-act:active{background:var(--navy-soft)}
-.ph-act{flex:none;width:56px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:12px;color:var(--navy);font-size:11px;font-weight:600}
+.ph-act{flex:none;width:52px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:12px;color:var(--navy);font-size:11px;font-weight:600}
 .ph-act svg{width:22px;height:22px}
 .ph-act:disabled{opacity:.38}
 .sheet-scrim.over{z-index:45}
@@ -505,6 +510,8 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .ph-rthumb{flex:none;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-3)}
 .ph-rthumb svg{width:20px;height:20px}
 .ph-row.new .ph-rthumb{background:var(--navy-soft);color:var(--navy)}
+.ph-find{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink);padding:9px 12px;font-size:15px;outline:none}
+.ph-find:focus{border-color:var(--navy)}
 .ph-new{display:flex;gap:8px;align-items:stretch}
 .ph-new input{flex:1;min-width:0;border:1.5px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink);padding:9px 12px;font-size:15px;outline:none}
 .ph-new input:focus{border-color:var(--navy)}
@@ -641,6 +648,20 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .viewer.docmode .vw-bot{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 14px);height:auto;padding:0 16px;pointer-events:none}
 .viewer.docmode .vw-arrow{pointer-events:auto;background:rgba(14,18,32,.72);border-color:rgba(255,255,255,.3);color:#fff;
   -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 2px 10px rgba(0,0,0,.3)}
+/* 사진첩 사진·영상 보기 (2026-11-22 대표님) — 바탕은 앱 바탕색(확대해도), 앞뒤 단추 없음, 아래 줄: 왼쪽에 설명(아래로 내려앉게) · 오른쪽 끝에 이동·삭제 */
+.viewer.pv{background:var(--ground);color:var(--ink)}
+.viewer.pv .vw-btn{color:var(--ink)}
+.viewer.pv .vw-btn:active{background:var(--surface-2)}
+.viewer.pv .vw-slide img,.viewer.pv .vw-slide video{background:transparent}
+.viewer.pv .vw-msg{color:var(--ink-2)}
+.vw-pbar{flex:none;display:flex;align-items:flex-end;gap:8px;min-height:84px;padding:18px 8px 8px 16px}
+.vw-pbar .vw-cap{flex:1;min-width:0;padding:0 0 8px}
+.viewer.pv .vw-cap b{color:var(--ink)}
+.viewer.pv .vw-cap small{color:var(--ink-3)}
+.vw-pacts{flex:none;display:flex;align-items:center;gap:2px}
+.vw-move{height:44px;padding:0 12px 0 10px;border-radius:12px;display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-size:15px;font-weight:600}
+.vw-move svg{width:21px;height:21px}
+.vw-move:active{background:var(--surface-2)}
 .vw-track.lock{overflow-x:hidden;touch-action:pan-y}
 .vw-foot{flex:none;display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 14px 6px}
 .vw-name{flex:1;min-width:0;font-size:12px;color:rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
