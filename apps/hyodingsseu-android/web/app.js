@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-22a';
+  const WEB_VERSION = '2026-11-22b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -3041,6 +3041,7 @@
   const PH_ALBUMS = false;
   const PH_TABS = [['all', '전체'], ['image', '사진'], ['video', '영상'], ['place', '장소'], ['album', '사진첩'], ['folder', '폴더']].filter(t => PH_ALBUMS || t[0] !== 'album');
   const PH_LIST = { place: 'places', album: 'albums', folder: 'folders' };
+  const OM = 1e6;                                   // 순서값(_o) = 묶음 번호 × OM + 묶음 안 번호 — 한 묶음(한 달)에 100만 장 미만
   const phYM = day => { const m = DAY_RE.exec(day || ''); return m ? m[1] + '년 ' + (+m[2]) + '월' : ''; };
   const phMonthLabel = m => phYM(m + '-01');
   /** 달 m('2019-03')의 다음 달 1일 — 「이 날 전」(before)으로 쓰면 그 달이 맨 위에 온다 */
@@ -3071,26 +3072,30 @@
 
   function openPhotos() {
     let tab = 'all', q = '', filt = null, items = [], page = 0, more = false, loading = false, failed = '', alive = true, searchTimer = 0, gen = 0, listBusy = false, listFail = '';
-    let stats = null, sel = null, endSelLayer = null, albums = null, lastDay = null, lastGrid = null, lastCity = null, sentinel = null;
+    let stats = null, sel = null, endSelLayer = null, albums = null, sentinel = null;
     let before = '', months = null, monthPos = null, monthsTotal = 0, dayGrids = [], whenTimer = 0, scrubDrag = false, whenRaf = 0, shownMonth = '';
     let anchor = -1, drag = null;                 // 고르기 — 마지막으로 누른 자리(범위 고르기 기준) · 꾹 누른 채 끄는 중
-    const dayIds = new Map(), dayHdr = new Map(), pos = new Map();   // 날짜 → 그날 사진 번호들 · 날짜 머리글의 동그라미 · 사진 번호 → 목록 자리
+    // 시간표 방식(전체 탭 · 검색·분류 없음): 연월마다 칸(groups)을 먼저 깔아 두고 가까운 달부터 채운다 — 건너뛰어도 이미 불러온 달은 그대로 남는다
+    let tl = false, groups = [], g0 = null, io = null, inflight = 0, domTiles = 0, perItem = 0, scrollAt = 0, touching = false, idleTimer = 0, bgTimer = 0;
+    const store = new Map(), gByM = new Map(), want = new Set(), later = [];   // 달 → 불러온 묶음 · 화면 가까이 온 묶음 · 위쪽이라 스크롤이 멎은 뒤에 반영할 일들
+    const dayHdr = new Map(), pos = new Map();   // 날짜 머리글의 동그라미 · 사진 번호 → 순서값(_o)
     const lists = {};
     const tiles = new Map();
+    g0 = mkGroup(0, '', 0, null);
 
     const statEl = h('div', { class: 'doc-total' });
     const searchEl = h('input', {
       type: 'search', placeholder: '날짜(2023-5) · 이름 · 「동영상」으로 찾기', 'aria-label': '사진 검색', inputmode: 'search',
       oninput: () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { q = searchEl.value.trim(); clearBefore(); if (isList()) draw(); else reload(); }, 400); },
     });
-    const pickBtn = h('button', { class: 'ph-pick', text: '선택', onclick: () => { if (sel) endSel(); else startSel(); } });
     const cloudBtn = Native && typeof Native.backupStatus === 'function'
       ? h('button', { class: 'ph-pick ph-cloud', 'aria-label': '폰 사진 자동 백업', html: ICON.cloud, onclick: () => openPhoneBackup() }) : null;
     const chipsEl = h('div', { class: 'doc-chips' });
     const filtEl = h('div', { class: 'ph-filt', hidden: true });
     const bodyEl = h('div', { class: 'ph-body' });
     const content = h('div', { class: 'content doc-content ph-content' },
-      h('div', { class: 'doc-head' }, h('div', { class: 'ph-search' }, searchEl, cloudBtn, pickBtn), statEl), chipsEl, filtEl, bodyEl);
+      h('div', { class: 'doc-head' }, h('div', { class: 'ph-search' }, searchEl, cloudBtn), statEl), chipsEl, filtEl, bodyEl);
+    g0.el = bodyEl;
     const selBar = h('div', { class: 'ph-selbar', hidden: true });
     // 스크롤하는 동안 보이는 연월 · 오른쪽 가장자리의 빠른 스크롤 막대 · 「최신으로」
     const whenEl = h('div', { class: 'ph-when', hidden: true, 'aria-hidden': 'true' });
@@ -3100,6 +3105,7 @@
 
     const isList = () => !filt && !!PH_LIST[tab];
     const scrubOK = () => !isList() && !filt && !q && !!months && monthsTotal > 150;   // 막대는 전체 시간표를 볼 때만 — 작은 묶음(검색·폴더)은 연월 표시만
+    const hasMon = () => !isList() && tab === 'all' && !filt && !q && !!months && months.length > 0;   // 시간표 방식으로 보일 수 있는 화면
 
     function drawChips() {
       chipsEl.textContent = '';
@@ -3122,7 +3128,7 @@
 
     function drawStat() {
       if (isList()) statEl.textContent = '';
-      else if (!filt && !q && tab === 'all' && stats) statEl.textContent = '사진 ' + stats.photos.toLocaleString('ko-KR') + ' · 영상 ' + stats.videos.toLocaleString('ko-KR');
+      else if (!filt && !q && tab === 'all' && stats) statEl.textContent = '사진 ' + stats.photos.toLocaleString('ko-KR') + ' · 영상 ' + stats.videos.toLocaleString('ko-KR') + ' · 꾹 눌러 고르기';
       else statEl.textContent = PH_ALBUMS ? '꾹 눌러 끌면 여러 장 · 날짜 옆 동그라미는 그날 전부 — 골라서 담기·공유·저장해요' : '꾹 눌러 끌면 여러 장 · 날짜 옆 동그라미는 그날 전부 — 골라서 공유·저장해요';
     }
 
@@ -3178,11 +3184,13 @@
 
     // ── 날짜별 사진 ──
     function resetGrid() {
+      tlOff();
       bodyEl.textContent = '';
       tiles.clear();
       dayGrids = [];
-      dayIds.clear(); dayHdr.clear(); pos.clear(); anchor = -1;
-      lastDay = lastGrid = lastCity = sentinel = null;
+      dayHdr.clear(); pos.clear(); anchor = -1;
+      g0.lastDay = g0.lastGrid = g0.lastCity = null;
+      sentinel = null;
     }
 
     function draw() {
@@ -3192,30 +3200,62 @@
       if (failed && !items.length) { note(failed, () => reload()); return; }
       if (loading && !items.length) { bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
       if (!items.length) { note(q || filt || tab !== 'all' ? '조건에 맞는 사진이 없어요' : '아직 사진이 없어요 — PC 가 사진을 읽는 중일 수 있어요'); return; }
-      addItems(items);
+      addItems(items, g0);
       drawTail();
     }
 
-    function addItems(list) {
+    // ── 묶음(group) — 연월 하나(시간표 방식) 또는 목록 전체(검색·분류·종류별) ──
+    //  _o(순서값) = 묶음 번호 × OM + 묶음 안 번호. 이 값의 크기로 「어디부터 어디까지」를 따진다(범위 고르기).
+    function mkGroup(i, m, n, el) {
+      return { i, m, n, el, items: [], days: new Map(), st: 'idle', page: 0, more: true, dom: false, full: false, p: null, rendered: 0, h: 0, failAt: 0, lastDay: null, lastGrid: null, lastCity: null };
+    }
+
+    /** 받아 온 사진을 묶음의 자료로 — 순서값을 매기고 날짜별 번호를 모은다(그림 그리기와 별개) */
+    function pushData(g, list) {
       list.forEach(it => {
-        pos.set(it.id, pos.size);
-        if (it.day !== lastDay) {
-          lastDay = it.day; lastCity = h('small', { text: it.city || '' });
+        it._o = g.i * OM + g.items.length;
+        g.items.push(it);
+        const a = g.days.get(it.day);
+        if (a) a.push(it.id); else g.days.set(it.day, [it.id]);
+      });
+    }
+
+    function reindex(g) {
+      g.days.clear();
+      const list = g.items; g.items = [];
+      pushData(g, list);
+    }
+
+    const itemAt = o => { const g = tl ? groups[Math.floor(o / OM)] : g0; return g ? g.items[o % OM] : null; };
+    const allItems = () => tl ? groups.reduce((a, g) => a.concat(g.items), []) : items;
+    const gOf = day => tl ? gByM.get((day || '').slice(0, 7)) : g0;
+
+    /** 그날 사진 번호들 */
+    function idsOf(day) {
+      const g = gOf(day);
+      return (g && g.days.get(day)) || [];
+    }
+
+    function addItems(list, g) {
+      const days = new Set();
+      list.forEach(it => {
+        pos.set(it.id, it._o);
+        if (it.day !== g.lastDay) {
+          g.lastDay = it.day; g.lastCity = h('small', { text: it.city || '' });
           const dc = dayCheck(it.day);
           dayHdr.set(it.day, dc);
-          if (!dayIds.has(it.day)) dayIds.set(it.day, []);
-          bodyEl.append(h('div', { class: 'ph-day' }, dc, h('b', { text: phDay(it.day) }), lastCity));
-          lastGrid = h('div', { class: 'ph-grid jr' });
-          bodyEl.append(lastGrid);
-          dayGrids.push({ el: lastGrid, day: it.day });
-        } else if (it.city && lastCity && !lastCity.textContent) lastCity.textContent = it.city;
-        dayIds.get(it.day).push(it.id);
+          g.el.append(h('div', { class: 'ph-day' }, dc, h('b', { text: phDay(it.day) }), g.lastCity));
+          g.lastGrid = h('div', { class: 'ph-grid jr' });
+          g.el.append(g.lastGrid);
+          if (!tl) dayGrids.push({ el: g.lastGrid, day: it.day });
+        } else if (it.city && g.lastCity && !g.lastCity.textContent) g.lastCity.textContent = it.city;
+        days.add(it.day);
         const t = tile(it);
         tiles.set(it.id, t);
-        lastGrid.append(t);
+        g.lastGrid.append(t);
         if (sel && sel.has(it.id)) t.setAttribute('aria-pressed', 'true');
       });
-      if (sel) dayHdr.forEach((_, d) => paintDay(d));      // 고르는 중에 더 불러왔을 때 그 날의 동그라미 상태를 다시
+      if (sel) days.forEach(paintDay);      // 고르는 중에 더 불러왔을 때 그 날의 동그라미 상태를 다시
     }
 
     /** 날짜 머리글 왼쪽 동그라미 — 누르면 그날 사진·영상을 전부 고르고(다시 누르면 전부 풀고), 일부만 골랐으면 반쯤 찬 모양 */
@@ -3273,8 +3313,19 @@
 
     function tapTile(it, ev) {
       if (sel) { toggle(it, ev); return; }
-      const i = items.indexOf(it), from = Math.max(0, i - 40);
-      openViewer(items.slice(from, i + 80).map(phEntry), i - from, '사진', PH_ALBUMS ? { album: e => pickAlbum([e.id], '이 사진') } : {});
+      const run = around(it), from = Math.max(0, run.i - 40);
+      openViewer(run.list.slice(from, run.i + 80).map(phEntry), run.i - from, '사진', PH_ALBUMS ? { album: e => pickAlbum([e.id], '이 사진') } : {});
+    }
+
+    /** 사진 보기에서 넘겨 볼 앞뒤 사진들 — 끝까지 불러온 앞·뒤 달까지 이어서 */
+    function around(it) {
+      if (!tl) return { list: items, i: items.indexOf(it) };
+      const gi = Math.floor(it._o / OM), g = groups[gi], prev = groups[gi - 1], next = groups[gi + 1];
+      let list = [], off = 0;
+      if (prev && prev.st === 'ready') { list = prev.items; off = list.length; }
+      list = list.concat(g.items);
+      if (next && next.st === 'ready') list = list.concat(next.items);
+      return { list, i: off + (it._o % OM) };
     }
 
     // ── 여러 장 고르기 ──
@@ -3296,10 +3347,12 @@
     /** 누르면 한 장 고르기/풀기 · (마우스) Shift 를 누른 채 누르면 마지막으로 누른 사진부터 여기까지 한꺼번에 */
     function toggle(it, ev) {
       if (!sel) return;
-      const i = pos.get(it.id);
-      if (ev && ev.shiftKey && anchor >= 0 && i != null && items[anchor]) {
-        applyRange(anchor, i, sel.has(items[anchor].id) ? 'add' : 'remove', new Set(sel), anchor, anchor);
+      const i = pos.get(it.id), a = anchor, from = a >= 0 ? itemAt(a) : null;
+      if (ev && ev.shiftKey && from && i != null) {
+        const mode = sel.has(from.id) ? 'add' : 'remove', base = new Set(sel);
+        applyRange(a, i, mode, base, a, a);
         paintSel();
+        if (tl && Math.floor(a / OM) !== Math.floor(i / OM)) settle(a, i, mode, base);     // 달을 건너뛰면 사이의 달도 불러와서
         return;
       }
       setSel(it, !sel.has(it.id));
@@ -3311,23 +3364,43 @@
     /** 목록 자리 a~b 를 mode('add'|'remove') 로 — 그 밖은 base(범위를 적용하기 전 상태) 그대로. prevLo~prevHi 는 지난번 범위(줄어든 쪽을 되돌리려고) */
     function applyRange(a, b, mode, base, prevLo, prevHi) {
       const lo = Math.min(a, b), hi = Math.max(a, b), days = new Set();
-      for (let k = Math.min(lo, prevLo); k <= Math.max(hi, prevHi); k++) {
-        const it = items[k];
-        if (!it) continue;
-        const want = k >= lo && k <= hi ? mode === 'add' : base.has(it.id);
-        if (sel.has(it.id) !== want) { setSel(it, want); days.add(it.day); }
+      const from = Math.min(lo, prevLo), to = Math.max(hi, prevHi), g1 = Math.floor(from / OM), g2 = Math.floor(to / OM);
+      for (let gi = g1; gi <= g2; gi++) {
+        const g = tl ? groups[gi] : g0;
+        if (!g) continue;
+        const k1 = gi === g1 ? from % OM : 0, k2 = gi === g2 ? Math.min(to % OM, g.items.length - 1) : g.items.length - 1;
+        for (let k = k1; k <= k2; k++) {
+          const it = g.items[k];
+          if (!it) continue;
+          const o = gi * OM + k, want = o >= lo && o <= hi ? mode === 'add' : base.has(it.id);
+          if (sel.has(it.id) !== want) { setSel(it, want); days.add(it.day); }
+        }
       }
       days.forEach(paintDay);
       return [lo, hi];
     }
 
+    /** 범위가 여러 달에 걸치면 사이의 달을 끝까지 불러온 뒤 다시 한 번 적용 — 아직 안 불러온 달의 사진도 빠짐없이 */
+    async function settle(a, b, mode, base) {
+      const lo = Math.min(a, b), hi = Math.max(a, b), g1 = Math.floor(lo / OM), g2 = Math.floor(hi / OM);
+      const need = [];
+      for (let gi = g1; gi <= g2; gi++) if (groups[gi] && groups[gi].st !== 'ready') need.push(groups[gi]);
+      if (!need.length) return;
+      toast('사이의 사진을 불러오는 중이에요');
+      for (const g of need) { if (!alive || !sel || !tl) return; await loadAll(g); }
+      if (!alive || !sel) return;
+      applyRange(a, b, mode, base, lo, hi);
+      paintSel();
+    }
+
     function paintDay(day) {
       const b = dayHdr.get(day);
       if (!b) return;
-      const ids = dayIds.get(day) || [];
+      const ids = idsOf(day), g = gOf(day);
       let n = 0;
       if (sel) for (const id of ids) if (sel.has(id)) n++;
-      const all = n > 0 && n === ids.length;
+      const last = g && g.items.length ? g.items[g.items.length - 1].day : '', partial = tl ? !!g && g.st !== 'ready' : more;
+      const all = n > 0 && n === ids.length && !(partial && day === last);   // 아직 덜 불러온 쪽의 마지막 날은 「전부」가 아닐 수 있다
       b.classList.toggle('on', all);
       b.classList.toggle('part', n > 0 && !all);
       if (sel) b.setAttribute('aria-pressed', all ? 'true' : n ? 'mixed' : 'false'); else b.removeAttribute('aria-pressed');
@@ -3337,15 +3410,24 @@
     async function toggleDay(day) {
       haptic('tap');
       if (!sel) startSel();
-      const last = items[items.length - 1];
-      if (more && last && last.day === day) {
-        toast('그날 사진을 모두 불러오는 중이에요');
-        for (let g = 0; g < 40 && alive && more && items.length && items[items.length - 1].day === day; g++) {
-          if (loading) await new Promise(r => setTimeout(r, 250)); else await load();
+      if (tl) {
+        const g = gOf(day);
+        if (g && g.st !== 'ready') {                    // 그 달을 끝까지 불러와야 그날 전부를 알 수 있다
+          toast('그날 사진을 모두 불러오는 중이에요');
+          await loadAll(g);
+          if (!alive || !sel) return;
         }
-        if (!alive || !sel) return;
+      } else {
+        const last = items[items.length - 1];
+        if (more && last && last.day === day) {
+          toast('그날 사진을 모두 불러오는 중이에요');
+          for (let g = 0; g < 40 && alive && more && items.length && items[items.length - 1].day === day; g++) {
+            if (loading) await new Promise(r => setTimeout(r, 250)); else await load();
+          }
+          if (!alive || !sel) return;
+        }
       }
-      const list = items.filter(it => it.day === day);
+      const list = (tl ? (gOf(day) || { items: [] }).items : items).filter(it => it.day === day);
       const all = list.length > 0 && list.every(it => sel.has(it.id));
       list.forEach(it => setSel(it, !all));
       const i = pos.get((list[0] || {}).id);
@@ -3384,17 +3466,17 @@
 
     function endDrag() {
       if (!drag) return;
-      cancelAnimationFrame(drag.raf);
+      const d = drag;
+      cancelAnimationFrame(d.raf);
       drag = null;
       swallowUntil = Date.now() + 450;               // 손가락을 뗄 때 생기는 클릭이 방금 고른 사진을 다시 뒤집지 않게
+      if (tl && Math.floor(d.a / OM) !== Math.floor(d.cur / OM)) settle(d.a, d.cur, d.mode, d.base);   // 빠르게 지나친 달까지 빠짐없이
     }
 
-    function chosen() { return items.filter(it => sel && sel.has(it.id)); }
+    function chosen() { return allItems().filter(it => sel && sel.has(it.id)); }
 
     function paintSel() {
       content.classList.toggle('selecting', !!sel);
-      pickBtn.textContent = sel ? '완료' : '선택';
-      pickBtn.classList.toggle('on', !!sel);
       selBar.hidden = !sel;
       if (!sel) {
         tiles.forEach(t => { t.classList.remove('sel'); t.removeAttribute('aria-pressed'); });
@@ -3445,7 +3527,9 @@
       try {
         await api.post('photos/album', { op: 'remove', album, ids });
         const gone = new Set(ids);
-        items = items.filter(it => !gone.has(it.id));
+        g0.items = items.filter(it => !gone.has(it.id));
+        reindex(g0);
+        items = g0.items;
         delete lists.album;
         toast(ids.length + '장을 이 사진첩에서 뺐어요 (사진 파일은 그대로예요)');
         endSel(); draw();
@@ -3525,10 +3609,10 @@
         if (r.stats) stats = r.stats;
         const first = !page;
         page++;
-        items = items.concat(got);
+        pushData(g0, got);
         more = !!r.more;
         loading = false;
-        if (first) draw(); else { addItems(got); drawTail(); }
+        if (first) draw(); else { addItems(got, g0); drawTail(); }
       } catch (e) {
         if (!alive || my !== gen) return;
         failed = (e && e.message) || '불러오지 못했어요';
@@ -3541,14 +3625,204 @@
 
     function reload() {
       gen++;
-      items = []; page = 0; more = false; loading = false; failed = '';
+      page = 0; more = false; loading = false; failed = '';
+      g0 = mkGroup(0, '', 0, bodyEl); items = g0.items;
+      if (hasMon()) { buildTL(); return; }
+      tlOff();
       load();
     }
 
-    /** 아래로 내려 끝이 가까우면 다음 쪽 — 화면이 덜 찼을 때도 */
+    /** 아래로 내려 끝이 가까우면 다음 쪽 — 화면이 덜 찼을 때도 (시간표 방식은 달마다 따로 채우므로 해당 없음) */
     function fill() {
-      if (!alive || loading || !more || isList()) return;
+      if (!alive || tl || loading || !more || isList()) return;
       if (content.scrollHeight - content.scrollTop - content.clientHeight < 900) load();
+    }
+
+    // ── 시간표 방식 ──
+    // 전체 탭(검색·분류 없음)은 연월마다 「칸」을 먼저 모두 깔고(높이는 장수로 어림), 화면에 가까운 달부터 채운다.
+    // 막대로 멀리 건너뛰어도 지금까지 불러온 달은 그대로 남고, 위로도 아래로도 이어서 스크롤된다. 한가하면 가까운 달부터 미리 불러 둔다.
+    // 채우면서 높이가 어림과 달라져도 보던 자리가 밀리지 않게, 화면 위쪽 칸이 바뀔 땐 스크롤 위치를 같이 보정한다(손가락이 닿았거나 스크롤 중이면 멎은 뒤에).
+    const DOM_CAP = 6000, PRE_CAP = 3500;
+
+    function tlOff() {
+      if (io) { io.disconnect(); io = null; }
+      want.clear(); later.length = 0;
+      clearTimeout(bgTimer); bgTimer = 0; clearTimeout(idleTimer); idleTimer = 0;
+      tl = false; groups = []; gByM.clear(); domTiles = 0;
+    }
+
+    function buildTL() {
+      tlOff();
+      bodyEl.textContent = '';
+      tiles.clear(); dayHdr.clear(); pos.clear(); dayGrids = []; anchor = -1; sentinel = null;
+      tl = true;
+      drawChips(); drawFilt(); drawStat();
+      if (!perItem) perItem = 16638 / Math.max(280, content.clientWidth || 422) + 5;
+      io = new IntersectionObserver(es => {
+        es.forEach(e => { const g = e.target._g; if (!g) return; if (e.isIntersecting) want.add(g); else want.delete(g); });
+        pump();
+      }, { root: content, rootMargin: '1400px 0px 1400px 0px' });
+      months.forEach((mm, i) => {
+        let g = store.get(mm.m);
+        if (!g) { g = mkGroup(i, mm.m, mm.n, null); store.set(mm.m, g); }
+        g.n = mm.n; g.dom = false; g.rendered = 0; g.lastDay = g.lastGrid = g.lastCity = null;
+        g.el = h('section', { class: 'ph-mon' });
+        g.el._g = g;
+        waitBox(g);
+        groups.push(g); gByM.set(g.m, g);
+        bodyEl.append(g.el);
+        io.observe(g.el);
+      });
+      content.scrollTop = 0;
+      if (!stats) api.get('photos', { page: 1, n: 1 }).then(r => { if (alive && r.stats) { stats = r.stats; drawStat(); } }).catch(() => {});
+    }
+
+    /** 아직 안 채운 달의 칸 — 연월 이름과 장수, 높이는 어림(한 번 그려 본 달은 그때 높이 그대로) */
+    function waitBox(g) {
+      g.el.textContent = '';
+      g.el.classList.add('wait');
+      g.el.style.height = (g.h || Math.round(30 + g.n * perItem)) + 'px';
+      g.el.append(h('div', { class: 'ph-mon-lab' }, h('b', { text: phMonthLabel(g.m) }), h('small', { text: g.n.toLocaleString('ko-KR') + '장' })));
+    }
+
+    /** 칸 y(화면 좌표) 에 걸친 칸의 번호 */
+    function groupAt(y) {
+      let lo = 0, hi = groups.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (groups[mid].el.getBoundingClientRect().top <= y) lo = mid; else hi = mid - 1;
+      }
+      return lo;
+    }
+
+    const focusIdx = () => groups.length ? groupAt(content.getBoundingClientRect().top + content.clientHeight * 0.4) : 0;
+    const busyScroll = () => Date.now() - scrollAt < (touching ? 2500 : 160);     // 손가락이 닿은 채 오래 가만히 있으면(또는 터치 끝 신호를 놓쳤으면) 멎은 것으로 본다
+    const needs = g => (g.st === 'idle' || g.st === 'partial') ? Date.now() - g.failAt > 4000 : g.st === 'ready' && !g.dom;
+
+    /** 해야 할 일을 가까운 달부터 — 화면 근처(want) 먼저, 그 뒤 한가할 때 미리 */
+    function pump() {
+      if (!tl || !alive) return;
+      const f = focusIdx();
+      const near = [...want].filter(needs).sort((a, b) => Math.abs(a.i - f) - Math.abs(b.i - f) || b.i - a.i);
+      for (const g of near) {
+        if (g.st === 'ready') { paintGroup(g); continue; }            // 자료는 있고 그림만 지워졌던 달 — 바로 다시 그린다
+        if (inflight >= 3) break;
+        run(g);
+      }
+      if (!bgTimer && inflight < 2) bgTimer = setTimeout(() => { bgTimer = 0; prefetch(); }, 220);
+    }
+
+    function prefetch() {
+      if (!tl || !alive || inflight >= 2 || domTiles > PRE_CAP) return;
+      const f = focusIdx();
+      let best = null, bd = 1e9;
+      for (const g of groups) {
+        if (!needs(g) || g.st === 'ready') continue;
+        const d = Math.abs(g.i - f) - (g.i > f ? 0.5 : 0);
+        if (d < bd) { bd = d; best = g; }
+      }
+      if (best && bd <= 36) run(best);
+    }
+
+    function run(g) {
+      if (g.p) return g.p;
+      g.st = 'loading'; inflight++;
+      const my = gen;
+      g.p = (async () => {
+        try {
+          for (;;) {
+            const r = await api.get('photos', { q: g.m, page: g.page + 1, n: 100 });
+            if (!alive || my !== gen) { g.st = g.page ? 'partial' : 'idle'; return; }
+            const got = r.items || [];
+            g.page++;
+            pushData(g, got);
+            g.more = !!r.more && got.length > 0;
+            paintGroup(g);
+            if (!g.more) { g.st = 'ready'; break; }
+            if (!g.full && !want.has(g) && Math.abs(g.i - focusIdx()) > 1) { g.st = 'partial'; break; }   // 멀어졌으면 잠깐 멈추고(다음에 이어서)
+          }
+          paintGroup(g);
+        } catch (e) {
+          g.st = g.page ? 'partial' : 'idle'; g.failAt = Date.now();
+          if (e && e.status === 401) show(e);
+        } finally {
+          g.p = null; inflight--;
+          if (alive) pump();
+        }
+      })();
+      return g.p;
+    }
+
+    /** 달 하나를 끝까지(고르기·범위용) — 이미 진행 중이면 그 끝을 기다린다 */
+    async function loadAll(g) {
+      g.full = true;
+      for (let k = 0; k < 400 && alive && tl && g.st !== 'ready'; k++) {
+        if (g.p) await g.p; else await run(g);
+        if (g.st !== 'ready' && g.failAt && Date.now() - g.failAt < 4000) await new Promise(r => setTimeout(r, 600));
+      }
+    }
+
+    function paintGroup(g) { resize(g, () => syncDom(g)); }
+
+    /** 자료와 그림을 맞춘다 — 아직 안 그린 사진만 덧붙이고, 칸 높이를 어림에서 진짜로 */
+    function syncDom(g) {
+      if (!tl || !g.el || !g.el.isConnected) return;
+      if (!g.dom) {
+        if (!g.items.length && g.st !== 'ready') return;
+        g.el.textContent = ''; g.el.classList.remove('wait'); g.el.style.height = '';
+        g.dom = true; g.rendered = 0; g.lastDay = g.lastGrid = g.lastCity = null;
+      }
+      const part = g.items.slice(g.rendered);
+      if (part.length) { g.rendered = g.items.length; domTiles += part.length; addItems(part, g); }
+      if (g.st === 'ready' && !g.items.length) g.el.style.height = '0px';
+      if (drag) applyRange(drag.a, drag.cur, drag.mode, drag.base, drag.lo, drag.hi);   // 끌어서 고르는 중에 새로 그려진 달까지 범위에
+      if (g.st === 'ready' && g.dom && g.items.length >= 12) learn(g);
+      if (domTiles > DOM_CAP) evict();
+    }
+
+    /** 칸의 진짜 높이로 장수당 높이를 다시 어림 — 아직 안 채운 아래쪽 칸들에만 반영(위쪽은 보정 없이는 못 바꾼다) */
+    function learn(g) {
+      const hh = g.el.getBoundingClientRect().height;
+      if (!(hh > 0) || g.learned) return;
+      g.learned = true;
+      perItem = Math.min(90, Math.max(18, perItem * 0.6 + (hh / g.items.length) * 0.4));
+      const f = focusIdx();
+      groups.forEach(x => { if (x.i > f && !x.dom && !x.h && x.st !== 'loading') x.el.style.height = Math.round(30 + x.n * perItem) + 'px'; });
+    }
+
+    /** 칸이 바뀌어 높이가 달라질 때 — 화면 위쪽 칸이면 보던 자리가 밀리지 않게 스크롤을 같은 만큼 옮긴다.
+     *  스크롤 중(관성 포함)에 스크롤 위치를 건드리면 멈춰 버리므로, 위쪽 칸의 변경은 멎은 뒤로 미룬다. */
+    function resize(g, fn) {
+      const top = content.getBoundingClientRect().top, r0 = g.el.getBoundingClientRect(), above = r0.bottom <= top + 1;
+      if (above && busyScroll()) {
+        later.push([g, fn]);
+        if (!idleTimer) idleTimer = setTimeout(flushLater, 180);
+        return;
+      }
+      fn();
+      if (above) { const d = g.el.getBoundingClientRect().height - r0.height; if (d) content.scrollTop += d; }
+    }
+
+    function flushLater() {
+      idleTimer = 0;
+      if (!tl) { later.length = 0; return; }
+      if (busyScroll()) { idleTimer = setTimeout(flushLater, 140); return; }
+      later.splice(0).forEach(([g, fn]) => resize(g, fn));
+    }
+
+    /** 그려 둔 사진이 너무 많으면 화면에서 먼 달부터 그림만 걷어낸다(자료는 남아서 다시 오면 바로 그려진다) — 높이는 그대로 붙잡아 둔다 */
+    function evict() {
+      const f = focusIdx();
+      const far = groups.filter(g => g.dom && Math.abs(g.i - f) > 3).sort((a, b) => Math.abs(b.i - f) - Math.abs(a.i - f));
+      for (const g of far) {
+        if (domTiles <= DOM_CAP * 0.75) break;
+        g.h = g.el.getBoundingClientRect().height;
+        g.items.forEach(it => tiles.delete(it.id));
+        g.days.forEach((_ids, day) => dayHdr.delete(day));
+        domTiles -= g.rendered; g.rendered = 0; g.dom = false;
+        g.lastDay = g.lastGrid = g.lastCity = null;
+        waitBox(g);
+      }
     }
     // ── 스크롤 연월 표시 + 빠른 스크롤 막대 (2026-11-20 대표님 「스크롤할 때 연월이 보여서 어느 연도 몇 월인지 찾을 수 있게」) ──
     // 스크롤하는 동안 지금 보이는 날의 「2019년 3월」이 오른쪽에 뜨고, 막대(손잡이)를 잡아 끌면 그 달로 건너뛴다.
@@ -3620,32 +3894,50 @@
       whenTimer = setTimeout(() => { if (scrubDrag) return; whenEl.hidden = true; trackEl.classList.remove('on'); }, 1400);
     }
 
+    /** 지금 화면 맨 위에 걸린 때 — 보여 줄 연월과 손잡이 위치(0~1). 시간표 방식은 칸(달)과 그 안에서 얼마나 내려왔는지로 */
+    function whereNow() {
+      const edge = content.getBoundingClientRect().top + 44;
+      if (tl) {
+        const g = groups[groupAt(edge)];
+        if (!g) return null;
+        const r = g.el.getBoundingClientRect(), p = monthPos && monthPos[g.m];
+        const prog = r.height > 0 ? Math.min(1, Math.max(0, (edge - r.top) / r.height)) : 0;
+        return { label: phMonthLabel(g.m), frac: p && monthsTotal ? Math.min(1, (p.cum + p.n * prog) / monthsTotal) : null };
+      }
+      const day = topDay();
+      return { label: phYM(day), frac: fracOf(day) };
+    }
+
     function updateWhen() {
       whenRaf = 0;
-      if (!alive || isList() || !dayGrids.length || content.scrollTop < 4 && !before) { if (!scrubDrag) { whenEl.hidden = true; trackEl.classList.remove('on'); } return; }
-      const day = topDay();
-      showWhen(phYM(day));
+      if (!alive || isList() || (tl ? !groups.length : !dayGrids.length) || content.scrollTop < 4 && !before) { if (!scrubDrag) { whenEl.hidden = true; trackEl.classList.remove('on'); } return; }
+      const w = whereNow();
+      if (!w) return;
+      showWhen(w.label);
       if (scrubOK()) {
         trackEl.hidden = false;
         trackBox();
         trackEl.classList.add('on');
-        const f = fracOf(day);
-        if (f != null && !scrubDrag) placeKnob(f);
+        if (w.frac != null && !scrubDrag) placeKnob(w.frac);
       } else { whenEl.style.top = ''; trackEl.hidden = true; }
       keepWhen();
     }
 
     function onScroll() {
+      scrollAt = Date.now();
       fill();
       if (!whenRaf) whenRaf = requestAnimationFrame(updateWhen);
     }
     content.addEventListener('scroll', onScroll, { passive: true });
+    // 손가락이 닿은 동안·스크롤 관성 중에는 스크롤 위치를 보정하지 않는다(멈춰 버리므로) — 멎은 뒤에 한꺼번에
+    content.addEventListener('touchstart', () => { touching = true; scrollAt = Date.now(); }, { passive: true });
+    ['touchend', 'touchcancel'].forEach(n => content.addEventListener(n, () => { touching = false; scrollAt = Date.now(); }, { passive: true }));
     // 꾹 누른 채 끌 때는 화면이 같이 밀리지 않게 막고, 손가락 밑의 사진까지 범위로 고른다
     content.addEventListener('touchmove', ev => { if (drag && ev.cancelable) ev.preventDefault(); }, { passive: false });
     content.addEventListener('pointermove', ev => { if (drag) dragMove(ev.clientX, ev.clientY); });
     ['pointerup', 'pointercancel'].forEach(n => { content.addEventListener(n, endDrag); window.addEventListener(n, endDrag); });
 
-    // 손잡이 끌기 — 손을 떼면 그 달로 건너뛴다(그 달이 맨 위에 오고, 더 아래는 이어서 불러온다)
+    // 손잡이 끌기 — 손을 떼면 그 달로 건너뛴다(시간표 방식은 그 달 칸이 맨 위에 오고, 지금까지 불러온 달은 그대로 남아 위아래로 이어서 스크롤된다)
     function dragTo(ev) {
       if (!months) return;
       const box = trackEl.getBoundingClientRect(), room = Math.max(1, box.height - 44);
@@ -3678,6 +3970,14 @@
     ['pointerup', 'pointercancel'].forEach(n => trackEl.addEventListener(n, endDragScrub));
 
     function jumpMonth(m) {
+      if (tl) {
+        const g = gByM.get(m);
+        if (!g) return;
+        if (g.i === 0) content.scrollTop = 0;
+        else content.scrollTop += g.el.getBoundingClientRect().top - content.getBoundingClientRect().top;
+        pump();
+        return;
+      }
       endSel();
       if (months && months[0] && m === months[0].m) before = '';
       else before = phNextMonth(m);
@@ -3689,8 +3989,8 @@
     const pg = pushPage('사진', content, () => { alive = false; endSel(); clearTimeout(whenTimer); ['pointerup', 'pointercancel'].forEach(n => window.removeEventListener(n, endDrag)); }, { close: true });
     pg.append(selBar, whenEl, trackEl, latestEl);
     drawChips(); drawStat();
-    loadMonths();
-    load();
+    bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' })));
+    loadMonths().then(() => { if (alive) reload(); });      // 달별 장수를 먼저 받아 칸을 깔고(실패하면 예전처럼 목록으로)
   }
 
   // ── 폰 사진 자동 백업 (2026-11-20 대표님 「핸드폰 사진첩에 접속해서 백업되지 않은 사진·영상은 여기에 백업, 구글처럼」) ──
