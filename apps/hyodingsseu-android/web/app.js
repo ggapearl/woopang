@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-22c';
+  const WEB_VERSION = '2026-11-22d';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -1459,6 +1459,8 @@
     up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
     broom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5l-3.2 6.4M9.2 10.2l5.6 2.8c.9.5 1.3 1.6.8 2.5l-1.6 3.4c-.2.4-.7.6-1.1.4L5.5 16.2c-.4-.2-.6-.7-.4-1.1l1.4-3c.5-1 1.6-1.4 2.7-.9z"/><path d="M9.6 14.4l-1 2.1M12.5 15.7l-1 2.1"/></svg>',
     cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18.5a4.2 4.2 0 0 1-.7-8.34A5.6 5.6 0 0 1 17.4 9a4.8 4.8 0 0 1-.4 9.5z"/><path d="M12 16v-5M9.8 12.9L12 10.7l2.2 2.2"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.4S3.6 15.3 3.6 9.3A4.7 4.7 0 0 1 12 6.7a4.7 4.7 0 0 1 8.4 2.6c0 6-8.4 11.1-8.4 11.1z"/></svg>',
+    docfile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4.5 4.5V20a.8.8 0 0 1-.8.8H7a.8.8 0 0 1-.8-.8V4.3A.8.8 0 0 1 7 3.5z"/><path d="M14 3.7V8h4.3M9 12.5h6M9 16h6"/></svg>',
     albumAdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="13" height="13" rx="2.5"/><path d="M7.5 7.5V6a2 2 0 0 1 2-2H18a2.5 2.5 0 0 1 2.5 2.5V15a2 2 0 0 1-2 2h-1.5"/><path d="M10 11.5v6M7 14.5h6"/></svg>',
     minusCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12h7"/></svg>',
   };
@@ -3048,8 +3050,14 @@
   // 목록·앨범 담기는 기기 열쇠(photos…), 사진·영상 내용은 서명 링크(/AI/photo/…)로 — 얼굴 인식은 쓰지 않는다.
   // 사진첩(앨범) 칩·「담기」는 숨겼다 (2026-11-20 대표님 「상단의 사진첩은 없어도 될 것 같아」) — 코드는 그대로, true 로 바꾸면 돌아온다.
   const PH_ALBUMS = false;
-  const PH_TABS = [['all', '전체'], ['image', '사진'], ['video', '영상'], ['place', '장소'], ['album', '사진첩'], ['folder', '폴더']].filter(t => PH_ALBUMS || t[0] !== 'album');
+  // 구글 포토처럼 위쪽 칸에서 고른다 (2026-11-22 대표님 「폴더를 앨범으로 · 즐겨찾기 / 문서 / 장소 / 동영상 / 최근 추가」). 폴더 = 앨범 (구글 포토에서 받은 폴더).
+  //   즐겨찾기 = 사진을 열어 ♡ · 문서 = 사진을 열어 직접 표시(AI 로 알아보면 PC 가 느려져서) · 스크린샷 = 파일 이름으로 · 최근 추가 = 사진첩에 들어온 지 3일 이내
+  const PH_TABS = [['all', '전체'], ...(PH_ALBUMS ? [['album', '사진첩']] : []), ['folder', '앨범'], ['fav', '즐겨찾기'], ['doc', '문서'], ['place', '장소'], ['video', '동영상'], ['image', '사진'], ['shot', '스크린샷'], ['recent', '최근 추가']];
   const PH_LIST = { place: 'places', album: 'albums', folder: 'folders' };
+  const PH_FLAT = { fav: 'fav', doc: 'doc', shot: 'shot', recent: 'recent' };          // 목록 방식 대신 사진을 쭉 보여 주는 칸 — 서버에 이 이름을 1 로 보낸다
+  const PH_EMPTY = { fav: '아직 즐겨찾기가 없어요 — 사진을 열어 ♡ 를 눌러 보세요', doc: '아직 문서로 표시한 사진이 없어요 — 사진을 열어 문서 단추를 눌러 보세요',
+    shot: '스크린샷이 없어요', recent: '최근 3일 안에 사진첩에 들어온 사진이 없어요' };
+  const PH_NOTE = { doc: '직접 표시한 문서 사진 · 열어서 위쪽 문서 단추로 더하고 빼요', shot: '스크린샷·화면 녹화 · 파일 이름으로 찾아요', recent: '사진첩에 들어온 지 3일 안 된 사진·영상 · 찍은 날 순서' };
   const OM = 1e6;                                   // 순서값(_o) = 묶음 번호 × OM + 묶음 안 번호 — 한 묶음(한 달)에 100만 장 미만
   const phYM = day => { const m = DAY_RE.exec(day || ''); return m ? m[1] + '년 ' + (+m[2]) + '월' : ''; };
   const phMonthLabel = m => phYM(m + '-01');
@@ -3076,8 +3084,10 @@
   /** 검색창에 「동영상」「사진」을 치면 이름이 아니라 종류로 찾는다 (구글 포토와 같게) */
   const PH_TYPEWORD = { '동영상': 'video', '영상': 'video', '비디오': 'video', 'video': 'video', 'videos': 'video', '사진': 'image', '이미지': 'image', 'photo': 'image', 'photos': 'image' };
 
+  /** 표지 그림이 안 열리면(영상이 아직 처리 안 됨 등) 깨진 그림 대신 빈 자리 그림 */
+  const coverGone = ev => { const img = ev.target; img.replaceWith(h('span', { class: 'ph-card-ph', html: ICON.photo })); };
   const phCap = it => [phDay(it.day, true) + (it.time ? ' ' + it.time : '') + (it.city ? ' · ' + it.city : ''), it.name];
-  const phEntry = it => ({ url: it.view, name: it.name, kind: it.kind, dl: it.orig, thumb: it.thumb, poster: it.kind === 'video' ? it.thumb : '', id: it.id, cap: phCap(it) });
+  const phEntry = it => ({ url: it.view, name: it.name, kind: it.kind, dl: it.orig, thumb: it.thumb, poster: it.kind === 'video' ? it.thumb : '', id: it.id, cap: phCap(it), fav: !!it.fav, doc: !!it.doc, it });
 
   function openPhotos() {
     let tab = 'all', q = '', filt = null, items = [], page = 0, more = false, loading = false, failed = '', alive = true, searchTimer = 0, gen = 0, listBusy = false, listFail = '';
@@ -3089,6 +3099,7 @@
     const store = new Map(), gByM = new Map(), want = new Set(), later = [];   // 달 → 불러온 묶음 · 화면 가까이 온 묶음 · 위쪽이라 스크롤이 멎은 뒤에 반영할 일들
     const dayHdr = new Map(), pos = new Map();   // 날짜 머리글의 동그라미 · 사진 번호 → 순서값(_o)
     const lists = {};
+    let albBase = '';                             // 새 앨범을 만들 때 붙이는 윗 폴더 (구글 포토에서 받은 폴더 이름)
     const tiles = new Map();
     const deleted = new Set();                    // 이 화면에서 지우거나 옮긴 사진 번호 — 되돌리면 뺀다
     g0 = mkGroup(0, '', 0, null);
@@ -3138,6 +3149,7 @@
 
     function drawStat() {
       if (isList()) statEl.textContent = '';
+      else if (!filt && PH_NOTE[tab]) statEl.textContent = PH_NOTE[tab];
       else if (!filt && !q && tab === 'all' && stats) statEl.textContent = '사진 ' + stats.photos.toLocaleString('ko-KR') + ' · 영상 ' + stats.videos.toLocaleString('ko-KR') + ' · 꾹 눌러 고르기';
       else statEl.textContent = PH_ALBUMS ? '꾹 눌러 끌면 여러 장 · 날짜 옆 동그라미는 그날 전부 — 골라서 담기·공유·저장해요' : '꾹 눌러 끌면 여러 장 · 날짜 옆 동그라미는 그날 전부 — 골라서 공유·저장해요';
     }
@@ -3152,7 +3164,7 @@
       const kind = tab;
       if (lists[kind]) return;
       listBusy = true; listFail = ''; draw();
-      try { lists[kind] = (await api.get('photos/' + PH_LIST[kind])).items || []; }
+      try { const r = await api.get('photos/' + PH_LIST[kind]); lists[kind] = r.items || []; if (kind === 'folder') albBase = r.base || ''; }
       catch (e) { listFail = (e && e.message) || '불러오지 못했어요'; if (e && e.status === 401) show(e); }
       listBusy = false;
       if (alive && kind === tab && isList()) draw();
@@ -3165,15 +3177,14 @@
       const rows = (lists[tab] || []).filter(r => !key || [r.name, r.city, r.country, r.path].join(' ').toLowerCase().includes(key));
       if (!rows.length) {
         note(key ? '찾는 이름이 없어요' : tab === 'album' ? '아직 사진첩이 없어요 — 사진을 꾹 눌러 고른 뒤 「사진첩에 담기」로 만들어 보세요'
-          : tab === 'place' ? '아직 장소 정보가 있는 사진이 없어요' : '폴더가 없어요');
+          : tab === 'place' ? '아직 장소 정보가 있는 사진이 없어요' : '앨범이 없어요');
         return;
       }
-      if (tab === 'folder') {
-        bodyEl.append(h('div', { class: 'ph-folders' }, rows.map(r => h('button', {
-          class: 'drow2', style: 'padding-left:' + (10 + Math.min(r.depth, 4) * 14) + 'px',
-          onclick: () => enter({ label: r.name, query: { path: r.path } }),
-        }, h('span', { class: 'dthumb ic ph-fic', html: ICON.folder }),
-          h('div', { class: 'dtx' }, h('b', { text: r.name }), r.depth ? h('small', { text: r.path }) : null), svg('chev')))));
+      if (tab === 'folder') {                      // 앨범 — 표지 사진 · 이름 · 항목 수 (구글 포토 앨범 화면처럼 두 줄 카드)
+        bodyEl.append(h('div', { class: 'ph-albums' }, rows.map(r => h('button', {
+          class: 'ph-alb', onclick: () => enter({ label: r.name, query: { path: r.path } }),
+        }, h('span', { class: 'cv' }, r.thumb ? h('img', { src: r.thumb, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false', onerror: coverGone }) : h('span', { class: 'ph-card-ph', html: ICON.photo })),
+          h('b', { text: r.name }), h('small', { text: '항목 ' + (r.count || 0).toLocaleString('ko-KR') + '개' })))));
         return;
       }
       bodyEl.append(h('div', { class: 'ph-cards' }, rows.map(r => {
@@ -3209,7 +3220,7 @@
       if (isList()) { drawList(); return; }
       if (failed && !items.length) { note(failed, () => reload()); return; }
       if (loading && !items.length) { bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
-      if (!items.length) { note(q || filt || tab !== 'all' ? '조건에 맞는 사진이 없어요' : '아직 사진이 없어요 — PC 가 사진을 읽는 중일 수 있어요'); return; }
+      if (!items.length) { note(!q && !filt && PH_EMPTY[tab] ? PH_EMPTY[tab] : q || filt || tab !== 'all' ? '조건에 맞는 사진이 없어요' : '아직 사진이 없어요 — PC 가 사진을 읽는 중일 수 있어요'); return; }
       addItems(items, g0);
       drawTail();
     }
@@ -3324,6 +3335,20 @@
       t.addEventListener('contextmenu', ev => ev.preventDefault());
     }
 
+    /** 즐겨찾기(fav)·문서(doc) 표시를 켜고 끈다 — 화면은 먼저 바꾸고, 서버가 못 하면 되돌린다. 보던 자리의 사진 자료(it)에도 적어 다시 열어도 맞게 */
+    async function markOne(e, key, on) {
+      if (e.it) e.it[key] = on;
+      try {
+        await api.post('photos/mark', { ids: [e.id], [key]: on });
+        toast(key === 'fav' ? (on ? '즐겨찾기에 넣었어요' : '즐겨찾기에서 뺐어요') : (on ? '문서로 표시했어요' : '문서 표시를 풀었어요'));
+        return true;
+      } catch (er) {
+        if (e.it) e.it[key] = !on;
+        if (er && er.status === 401) show(er); else toast((er && er.message) || '표시하지 못했어요');
+        return false;
+      }
+    }
+
     function tapTile(it, ev) {
       if (sel) { toggle(it, ev); return; }
       const run = around(it), from = Math.max(0, run.i - 40);
@@ -3333,6 +3358,7 @@
         album: PH_ALBUMS ? e => pickAlbum([e.id], '이 사진') : null,
         del: e => trashIds([e.id]),
         move: e => moveIds([e.id]),
+        mark: markOne,
       });
     }
 
@@ -3515,7 +3541,7 @@
     }
 
     // ── 지우기 · 옮기기 (2026-11-22 대표님) ──
-    // 지우면 확인 없이 바로 그 폴더 옆 「휴지통」으로 — 30일 뒤 완전히 지워진다. 화면에서는 먼저 치우고(빠르게) PC 가 파일을 옮긴다.
+    // 지우면 확인 없이 바로 사진 폴더 옆 「휴지통」으로 — 30일 뒤 완전히 지워진다. 화면에서는 먼저 치우고(빠르게) PC 가 파일을 옮긴다.
     function trashSel() {
       const ids = chosen().map(it => it.id);
       if (!ids.length) return;
@@ -3665,7 +3691,7 @@
       return true;
     }
 
-    /** 폴더로 옮기기 — 폴더 고르는 창을 띄우고, 옮기면 true 를 돌려준다 */
+    /** 앨범으로 옮기기 — 앨범 고르는 창을 띄우고, 옮기면 true 를 돌려준다 */
     function moveIds(ids) {
       const its = findItems(new Set(ids));
       if (!its.length) return Promise.resolve(false);
@@ -3675,15 +3701,15 @@
     async function pickFolder(its, done) {
       let finished = false;
       const rowsEl = h('div', { class: 'ph-pickrows' });
-      const findEl = h('input', { type: 'search', class: 'ph-find', placeholder: '폴더 이름으로 찾기', 'aria-label': '폴더 찾기', oninput: () => drawRows() });
-      const nameEl = h('input', { type: 'text', maxlength: '80', placeholder: '새 폴더 이름', 'aria-label': '새 폴더 이름', onkeydown: ev => { if (ev.key === 'Enter') make(); } });
+      const findEl = h('input', { type: 'search', class: 'ph-find', placeholder: '앨범 이름으로 찾기', 'aria-label': '앨범 찾기', oninput: () => drawRows() });
+      const nameEl = h('input', { type: 'text', maxlength: '80', placeholder: '새 앨범 이름', 'aria-label': '새 앨범 이름', onkeydown: ev => { if (ev.key === 'Enter') make(); } });
       const newBox = h('div', { class: 'ph-new', hidden: true }, nameEl, h('button', { class: 'btn', text: '만들고 옮기기', onclick: make }));
-      const sheet = h('div', { class: 'sheet ph-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '폴더로 이동' },
-        h('h3', { text: '폴더로 이동' }),
-        h('p', { text: its.length + '장을 옮길 폴더를 골라 주세요' }),
+      const sheet = h('div', { class: 'sheet ph-sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': '앨범으로 이동' },
+        h('h3', { text: '앨범으로 이동' }),
+        h('p', { text: its.length + '장을 옮길 앨범을 골라 주세요' }),
         findEl,
         h('button', { class: 'ph-row new', onclick: () => { newBox.hidden = false; nameEl.focus(); } },
-          h('span', { class: 'ph-rthumb', html: ICON.plus }), h('div', { class: 'dtx' }, h('b', { text: '새 폴더 만들기' }))),
+          h('span', { class: 'ph-rthumb', html: ICON.plus }), h('div', { class: 'dtx' }, h('b', { text: '새 앨범 만들기' }))),
         newBox, rowsEl,
         h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() }));
       const scrim = h('div', { class: 'sheet-scrim over', onclick: ev => { if (ev.target === scrim) close(); } }, sheet);
@@ -3695,18 +3721,19 @@
         const rows = all.filter(r => !key || (r.name + ' ' + r.path).toLowerCase().includes(key)).slice(0, 300);
         rowsEl.textContent = '';
         if (!lists.folder) { rowsEl.append(h('div', { class: 'doc-empty' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
-        if (!rows.length) { rowsEl.append(h('div', { class: 'doc-empty', text: key ? '찾는 폴더가 없어요 — 위에서 새로 만들 수 있어요' : '폴더가 없어요 — 위에서 새로 만들어 보세요' })); return; }
-        rows.forEach(r => rowsEl.append(h('button', { class: 'ph-row', style: key ? '' : 'padding-left:' + (8 + Math.min(r.depth, 4) * 14) + 'px', onclick: () => go(r.path, r.name) },
-          h('span', { class: 'ph-rthumb', html: ICON.folder }), h('div', { class: 'dtx' }, h('b', { text: r.name }), r.depth || key ? h('small', { text: r.path }) : null))));
+        if (!rows.length) { rowsEl.append(h('div', { class: 'doc-empty', text: key ? '찾는 앨범이 없어요 — 위에서 새로 만들 수 있어요' : '앨범이 없어요 — 위에서 새로 만들어 보세요' })); return; }
+        rows.forEach(r => rowsEl.append(h('button', { class: 'ph-row', onclick: () => go(r.path, r.name) },
+          h('span', { class: 'ph-rthumb' }, r.thumb ? h('img', { src: r.thumb, alt: '', loading: 'lazy', decoding: 'async', draggable: 'false', onerror: coverGone }) : h('span', { html: ICON.folder })),
+          h('div', { class: 'dtx' }, h('b', { text: r.name }), h('small', { text: '항목 ' + (r.count || 0).toLocaleString('ko-KR') + '개' })))));
       }
 
       function make() {
         const name = nameEl.value.trim().replace(/[\\/]+/g, ' ');
         if (!name) { nameEl.focus(); return; }
-        go(name, name);
+        go((albBase ? albBase + '/' : '') + name, name);   // 새 앨범도 구글 포토에서 받은 폴더들과 같은 윗 폴더 밑에
       }
 
-      /** 고른 폴더로 — 창은 바로 닫고 화면에서 먼저 치운다. 서버가 못 옮긴 것(폰에서 올린 사진 등)은 다시 보인다 */
+      /** 고른 앨범으로 — 창은 바로 닫고 화면에서 먼저 치운다. 서버가 못 옮긴 것(폰에서 올린 사진 등)은 다시 보인다 */
       async function go(path, name) {
         if (finished) return;
         finished = true;
@@ -3729,16 +3756,16 @@
         if (bad.length) { bad.forEach(it => deleted.delete(it.id)); syncMonths(monthsOf(bad), [300, 3000]); }
         if (ok.size) {
           delete lists.folder;
-          toast('「' + name + '」로 ' + ok.size + '장을 옮겼어요' + (skipped ? ' (' + skipped + '장은 옮길 수 없는 사진이에요)' : ''));
+          toast('「' + name + '」 앨범으로 ' + ok.size + '장을 옮겼어요' + (skipped ? ' (' + skipped + '장은 옮길 수 없는 사진이에요)' : ''));
           syncMonths(ms, [6000, 20000, 50000, 120000, 300000]);     // 새 칸은 Immich 가 훑고 정보(메타데이터)를 읽은 뒤에야 보인다 — 대기열이 밀려 있으면 오래 걸린다
         } else if (lastErr) show(lastErr);
-        else toast(skipped ? '옮길 수 없는 사진이에요 (이미 그 폴더에 있거나 폰에서 올린 사진)' : '옮기지 못했어요');
+        else toast(skipped ? '옮길 수 없는 사진이에요 (이미 그 앨범에 있거나 폰에서 올린 사진)' : '옮기지 못했어요');
       }
 
       drawRows();
       if (!lists.folder) {
-        try { lists.folder = (await api.get('photos/folders')).items || []; }
-        catch (e) { rowsEl.textContent = ''; rowsEl.append(h('div', { class: 'doc-empty', text: (e && e.message) || '폴더 목록을 불러오지 못했어요' })); return; }
+        try { const r = await api.get('photos/folders'); lists.folder = r.items || []; albBase = r.base || ''; }
+        catch (e) { rowsEl.textContent = ''; rowsEl.append(h('div', { class: 'doc-empty', text: (e && e.message) || '앨범 목록을 불러오지 못했어요' })); return; }
         drawRows();
       }
     }
@@ -3848,6 +3875,7 @@
       try {
         const o = { page: page + 1, n: 60 };
         if (tab === 'image' || tab === 'video') o.type = tab;
+        if (PH_FLAT[tab] && !filt) o[PH_FLAT[tab]] = 1;
         const tw = PH_TYPEWORD[q.toLowerCase()];
         if (tw) o.type = tw;                       // 「동영상」을 치면 동영상만 (구글 포토처럼)
         else if (q) o.q = q;
@@ -4914,13 +4942,16 @@
     const next = many && !pv ? h('button', { class: 'vw-arrow next', 'aria-label': '다음 장', html: ICON.back, onclick: () => go(idx + 1) }) : null;
     const pbar = pv ? h('div', { class: 'vw-pbar' }, capEl,
       h('div', { class: 'vw-pacts' },
-        opts.move ? h('button', { class: 'vw-move', 'aria-label': '폴더로 이동', onclick: () => moveCur() }, h('span', { html: ICON.folder }), '이동') : null,
+        opts.move ? h('button', { class: 'vw-move', 'aria-label': '앨범으로 이동', onclick: () => moveCur() }, h('span', { html: ICON.folder }), '이동') : null,
         h('button', { class: 'vw-btn', 'aria-label': '삭제', html: ICON.trash, onclick: () => trashCur() }))) : null;
+    const markBtn = (key, label, icon) => pv && opts.mark ? h('button', { class: 'vw-btn vw-mk ' + key, 'aria-label': label, 'aria-pressed': 'false', html: icon, onclick: () => markCur(key) }) : null;
+    const favBtn = markBtn('fav', '즐겨찾기', ICON.heart), docBtn = markBtn('doc', '문서로 표시', ICON.docfile);
     const el = h('div', { class: 'viewer' + (pv ? ' pv' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '보기' },
       h('div', { class: 'vw-top' },
         h('button', { class: 'vw-btn', 'aria-label': '닫기', html: ICON.close, onclick: () => close() }),
         counter,
         h('div', { class: 'vw-acts' },
+          favBtn, docBtn,
           opts.album ? h('button', { class: 'vw-btn', 'aria-label': '사진첩에 담기', html: ICON.albumAdd, onclick: () => opts.album(list[idx]) }) : null,
           h('button', { class: 'vw-btn', 'aria-label': '저장', html: ICON.save, onclick: () => downloadFile(list[idx].dl || list[idx].url, list[idx].name) }),
           h('button', { class: 'vw-btn', 'aria-label': '공유', html: ICON.share, onclick: share }))),
@@ -4946,6 +4977,22 @@
       haptic('tap');
       opts.del(e);
       dropSlide(i);
+    }
+
+    function paintMarks() {
+      const e = list[idx];
+      [[favBtn, 'fav'], [docBtn, 'doc']].forEach(([b, k]) => { if (b && e) { b.classList.toggle('on', !!e[k]); b.setAttribute('aria-pressed', e[k] ? 'true' : 'false'); } });
+    }
+
+    /** ♡ · 문서 — 눌러 켜고 끈다. 서버가 못 하면 원래대로 */
+    function markCur(key) {
+      const e = list[idx];
+      if (!e || !opts.mark) return;
+      haptic('tap');
+      const on = !e[key];
+      e[key] = on;
+      paintMarks();
+      Promise.resolve(opts.mark(e, key, on)).then(ok => { if (ok === false) { e[key] = !on; paintMarks(); } });
     }
 
     function moveCur() {
@@ -4978,6 +5025,7 @@
       const cap = list[idx].cap;
       capEl.hidden = !cap;
       if (cap) capEl.replaceChildren(h('b', { text: cap[0] }), cap[1] ? h('small', { text: cap[1] }) : null);
+      paintMarks();
       if (prev) prev.hidden = idx === 0;
       if (next) next.hidden = idx === list.length - 1;
       track.classList.remove('lock');                      // 넘기는 동안은 풀어 두고 — 멈춘 뒤 문서면 다시 잠근다
