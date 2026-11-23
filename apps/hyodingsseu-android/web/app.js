@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-23b';
+  const WEB_VERSION = '2026-11-23c';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2905,8 +2905,8 @@
         if (base) return;                                            // 열려 있는 카드는 꾹 누르기 없음(닫기만)
         timer = setTimeout(() => {                                   // 꾹 누르기 — 손가락을 뗄 때 생기는 클릭은 열기로 새지 않게 막는다
           timer = 0; live = false;
-          pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 4000);
           lastFire = Date.now();
+          if (!isPinned(it)) { pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 2000); }   // 바로 고정 — 뗄 때의 클릭이 문서를 열지 않게
           act();
         }, PRESS_MS);
       }, { passive: true });
@@ -2923,6 +2923,7 @@
       }, { passive: true });
       row.addEventListener('touchend', () => {
         cancel();
+        releasePress();
         if (!drag) { live = false; return; }
         live = false; drag = false;
         const open = clampX(base + dxNow) < -ACT_W / 2;
@@ -4932,7 +4933,7 @@
       drawChips();
       draw();
       sfx.play('send');
-      toast('보내기 요청하였습니다');
+      toast('처리중..');
       const done = () => { sending.delete(it.id); if (alive) load(true); };
       api.post('proposals/decide', { id: it.id, dec: 'ok', kind: 'mail' }, { timeout: 90000 }).then(r => {
         if (r && r.counts && typeof r.counts.pending === 'number') takeAppr(Math.max(0, r.counts.pending - (sending.size - 1)));
