@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-23a';
+  const WEB_VERSION = '2026-11-23b';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -2891,7 +2891,8 @@
     content.addEventListener('touchstart', ev => { if (openWrap && !openWrap.contains(ev.target)) closeSwipe(); }, { passive: true });
 
     function bindPin(wrap, row, it) {
-      let timer = 0, x0 = 0, y0 = 0, base = 0, live = false, drag = false, dxNow = 0;
+      let timer = 0, x0 = 0, y0 = 0, base = 0, live = false, drag = false, dxNow = 0, lastFire = 0;
+      const act = () => { if (isPinned(it)) openPinMenu(it); else togglePin(it); };
       const cancel = () => { clearTimeout(timer); timer = 0; };
       const clampX = v => Math.max(-ACT_W, Math.min(0, v));
       row.addEventListener('touchstart', ev => {
@@ -2905,7 +2906,8 @@
         timer = setTimeout(() => {                                   // 꾹 누르기 — 손가락을 뗄 때 생기는 클릭은 열기로 새지 않게 막는다
           timer = 0; live = false;
           pressHeld = true; clearTimeout(heldTimer); heldTimer = setTimeout(() => { pressHeld = false; }, 4000);
-          if (isPinned(it)) openPinMenu(it); else togglePin(it);
+          lastFire = Date.now();
+          act();
         }, PRESS_MS);
       }, { passive: true });
       row.addEventListener('touchmove', ev => {
@@ -2935,7 +2937,8 @@
         cancel(); live = false;
         if (drag) { drag = false; wrap.classList.remove('drag'); row.style.transform = ''; }
       }, { passive: true });
-      row.addEventListener('contextmenu', ev => { ev.preventDefault(); });   // 안드로이드 꾹 누르기 메뉴는 위 타이머가 대신한다
+      // 손가락은 위 타이머가 처리한다(안드로이드 꾹 누르기 메뉴가 같이 떠도 한 번만). 마우스 오른쪽 단추·PC 는 여기서 연다
+      row.addEventListener('contextmenu', ev => { ev.preventDefault(); if (!timer && Date.now() - lastFire > 1500) act(); });
     }
 
     function togglePin(it) {
@@ -2965,14 +2968,21 @@
     function openPinMenu(it) {
       if (document.querySelector('.msg-menu')) return;
       haptic('tap'); sfx.play('menu');
-      const mrow = (icon, label, fn, cls) => h('button', { class: 'mrow' + (cls ? ' ' + cls : ''), onclick: () => { close(); fn(); } }, icon, label);
-      const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (ev.target === scrim) close(); } },
+      // 꾹 누른 손가락을 뗄 때 생기는 클릭이 방금 뜬 메뉴를 바로 닫거나 줄을 눌러 버리지 않게 — 손가락을 뗀 뒤 0.5초 지나야 받는다
+      // (뗀 소식을 못 받아도 굳지 않게 2.5초 뒤엔 무조건 받는다). 아이폰에서 고정 해제 메뉴가 떴다 사라지던 것 대비 (2026-11-23)
+      let armed = false, armT = setTimeout(() => { armed = true; }, 2500);
+      const lifted = () => { clearTimeout(armT); armT = setTimeout(() => { armed = true; }, 500); };
+      const upEvents = ['touchend', 'touchcancel', 'pointerup', 'pointercancel'];
+      const onUp = () => { upEvents.forEach(n => document.removeEventListener(n, onUp, true)); lifted(); };
+      upEvents.forEach(n => document.addEventListener(n, onUp, true));
+      const mrow = (icon, label, fn, cls) => h('button', { class: 'mrow' + (cls ? ' ' + cls : ''), onclick: () => { if (!armed) return; close(); fn(); } }, icon, label);
+      const scrim = h('div', { class: 'sheet-scrim', onclick: ev => { if (armed && ev.target === scrim) close(); } },
         h('div', { class: 'sheet msg-menu', role: 'dialog', 'aria-modal': 'true', 'aria-label': '고정 메뉴' },
           h('p', { class: 'peek', text: it.title || '(제목 없음)' }),
           mrow(h('span', { class: 'pin-ic', text: '📌' }), '고정 해제', () => togglePin(it)),
           mrow(svg('trash'), '이 자료 삭제', () => deleteDoc(it), 'danger'),
           h('button', { class: 'btn ghost wide', text: '닫기', onclick: () => close() })));
-      const close = layer(() => scrim.remove());
+      const close = layer(() => { upEvents.forEach(n => document.removeEventListener(n, onUp, true)); clearTimeout(armT); scrim.remove(); });
       $('#app').append(scrim);
     }
 
