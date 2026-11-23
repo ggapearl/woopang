@@ -26,7 +26,7 @@
   <small id="auto">20초마다 자동으로 다시 시도해요</small>
 </div>
 <script>
-  var HOME = 'https://woopang.com/woogy/';
+  var HOME = 'https://woogy.app/woogy/';
   function go() { location.href = HOME; }
   document.getElementById('retry').onclick = go;
   setInterval(function () { if (navigator.onLine) go(); }, 20000);
