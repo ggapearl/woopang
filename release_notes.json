@@ -52,6 +52,10 @@
     "1.2.68": {
       "ko": "• 길안내 — 근처 목록의 장소, 장소 정보 창, 지도에 꽂은 핀에서 「길안내」를 누르면 화면 아래 화살표가 방향과 거리를 알려 줘요.\n• 장소에 2m 안으로 다가가면 그 장소 카드가 떠요.\n• 지도에 보이는 친구가 근처 목록에도 나와요.\n• 시작 화면이 더 짧아졌어요.\n• 거리는 높이와 상관없이 땅 위 거리로 보여 드려요.\n• 안정성 개선.",
       "en": "• Directions — tap Directions on a nearby place, a place's info screen or a pin you dropped on the map, and an arrow at the bottom of the screen shows the way and the distance.\n• Walk within 2 m of a place to see its card.\n• Friends shown on the map now appear in the nearby list too.\n• Shorter start-up screen.\n• Distances are measured along the ground, regardless of height.\n• Stability improvements."
+    },
+    "1.2.69": {
+      "ko": "• 디스플레이 선택 — 설정 › 화면에서 물방울 모드와 네온 모드를 골라 쓸 수 있어요. 창 배경 진하기도 정할 수 있어요.\n• 근처 가게가 목록과 화면에 보여요.\n• 목록에 「펜션 / 호텔」 분류가 생겼고, 장소 올리기 · 정보 수정에서도 「숙소」를 고를 수 있어요.\n• 근처 장소 카드에 근처 보물찾기도 함께 보여요.\n• 장소를 숨기면 바로 되돌릴 수 있어요.\n• 친구 지도에서 좌우로 넘기며 친구를 볼 수 있어요.\n• 장소 사진을 다 받은 뒤에 띄워서 화면이 더 깔끔해요.\n• 안정성 개선.",
+      "en": "• 디스플레이 선택 — 설정 › 화면에서 물방울 모드와 네온 모드를 골라 쓸 수 있어요. 창 배경 진하기도 정할 수 있어요.\n• 근처 가게가 목록과 화면에 보여요.\n• 목록에 「펜션 / 호텔」 분류가 생겼고, 장소 올리기 · 정보 수정에서도 「숙소」를 고를 수 있어요.\n• 근처 장소 카드에 근처 보물찾기도 함께 보여요.\n• 장소를 숨기면 바로 되돌릴 수 있어요.\n• 친구 지도에서 좌우로 넘기며 친구를 볼 수 있어요.\n• 장소 사진을 다 받은 뒤에 띄워서 화면이 더 깔끔해요.\n• 안정성 개선."
     }
   }
 }
