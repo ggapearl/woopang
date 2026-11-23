@@ -213,6 +213,105 @@ public class GLBSpawnEffect : MonoBehaviour
         }
     }
 
+    // ── 장소 3D (11-19 P1) ────────────────────────────────────
+    // 대표님 「발생하는 오브젝트는 0.2초 페이드인으로 발생해서 자연스럽게」 — 장소 3D 는 스피너 없이 모델을 다 받은 뒤에 나타난다.
+    // 실제로 보이기 시작하는 순간(앵커가 렌더러를 켤 때)부터 0.2초 (큐브는 R0926DistanceFade 가 같은 0.2초).
+    // 크기는 건드리지 않는다 — 장소 사이즈는 매니저가 건다 (DataManager.ScaleAfterReveal)
+
+    /// <summary>장소 3D 가 나타나는 시간</summary>
+    public const float PlaceFadeSeconds = 0.2f;
+    private const float MaxPlaceStep = 0.05f;
+
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private Coroutine placeRoutine;
+    private readonly List<Material> placeMats = new List<Material>();
+    private readonly List<int> placeProps = new List<int>();
+    private readonly List<Color> placeCols = new List<Color>();
+    private readonly List<bool> placeWasClear = new List<bool>();
+
+    /// <summary>나타나는 중인가 (시험용)</summary>
+    public bool PlaceRevealing => placeMats.Count > 0;
+
+    /// <summary>장소 3D — 투명하게 감춰 두고, 렌더러가 켜지면(앵커가 보이게 하면) 0.2초 동안 드러낸다</summary>
+    public void RevealWhenShown(GameObject model)
+    {
+        StopSpinner();
+        FinishPlaceReveal();
+        if (model == null || !enableEffect || !isActiveAndEnabled) return;
+        var renderers = model.GetComponentsInChildren<Renderer>(true);
+        foreach (var r in renderers)
+        {
+            if (r == null) continue;
+            foreach (var m in r.materials)
+            {
+                if (m == null) continue;
+                int prop = m.HasProperty(BaseColorId) ? BaseColorId : m.HasProperty(ColorId) ? ColorId : 0;
+                if (prop == 0) continue;   // 색이 없는 재질은 그대로 둔다
+                placeMats.Add(m);
+                placeProps.Add(prop);
+                placeCols.Add(m.GetColor(prop));
+                placeWasClear.Add(m.renderQueue >= (int)UnityEngine.Rendering.RenderQueue.Transparent);
+            }
+        }
+        if (placeMats.Count == 0) return;
+        for (int i = 0; i < placeMats.Count; i++)
+            if (!placeWasClear[i]) SetTransparent(placeMats[i], true);
+        SetPlaceAlpha(0f);
+        placeRoutine = StartCoroutine(PlaceRevealRoutine(renderers));
+    }
+
+    private IEnumerator PlaceRevealRoutine(Renderer[] renderers)
+    {
+        while (true)   // 앵커가 보이게 할 때까지 투명한 채로
+        {
+            bool any = false, on = false;
+            foreach (var r in renderers)
+            {
+                if (r == null) continue;
+                any = true;
+                if (r.enabled && r.gameObject.activeInHierarchy) { on = true; break; }
+            }
+            if (on || !any) break;   // 보이기 시작했다 · 모델이 지워졌다
+            yield return null;
+        }
+        // 보이기 시작한 프레임은 투명한 채로 두고 다음 프레임부터 잰다. 모델을 만든 프레임은 무거워서 그 시간을 첫 걸음에 그대로 더하면
+        // 처음 보이는 화면부터 반쯤 드러났다 (11-20 시험: 첫 프레임 0.37). 한 걸음은 1/20초까지만 — 무거운 프레임 하나에 확 드러나지 않게
+        yield return null;
+        float t = 0f;
+        while (t < PlaceFadeSeconds)
+        {
+            t += Mathf.Min(Time.unscaledDeltaTime, MaxPlaceStep);
+            float k = Mathf.Clamp01(t / PlaceFadeSeconds);
+            SetPlaceAlpha(k * k * (3f - 2f * k));
+            yield return null;
+        }
+        placeRoutine = null;
+        FinishPlaceReveal();
+    }
+
+    private void SetPlaceAlpha(float a)
+    {
+        for (int i = 0; i < placeMats.Count; i++)
+        {
+            if (placeMats[i] == null) continue;
+            Color c = placeCols[i];
+            c.a *= a;
+            placeMats[i].SetColor(placeProps[i], c);
+        }
+    }
+
+    // 다 드러낸다 — 끝났을 때 · 도중에 꺼지거나(풀로 돌아감) 다른 모델을 받을 때 (원래 색 · 원래 불투명으로)
+    private void FinishPlaceReveal()
+    {
+        if (placeRoutine != null) { StopCoroutine(placeRoutine); placeRoutine = null; }
+        if (placeMats.Count == 0) return;
+        SetPlaceAlpha(1f);
+        for (int i = 0; i < placeMats.Count; i++)
+            if (!placeWasClear[i]) SetTransparent(placeMats[i], false);
+        placeMats.Clear(); placeProps.Clear(); placeCols.Clear(); placeWasClear.Clear();
+    }
+
     private IEnumerator FadeOutSpinner(GameObject spinner, float duration)
     {
         var rs = spinner.GetComponentsInChildren<Renderer>(true);
@@ -236,6 +335,6 @@ public class GLBSpawnEffect : MonoBehaviour
         }
     }
 
-    void OnDisable() => StopSpinner();
-    void OnDestroy() => StopSpinner();
+    void OnDisable() { StopSpinner(); FinishPlaceReveal(); }
+    void OnDestroy() { StopSpinner(); FinishPlaceReveal(); }
 }

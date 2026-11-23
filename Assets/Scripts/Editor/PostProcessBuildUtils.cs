@@ -107,6 +107,7 @@ namespace Editor
             AddRemotePackage(path, ARCoreSwiftPackageName, ARCoreSwiftPackageURL, ARCoreSwiftPackageVersion);
             SetupXcodeProject(path);
             SetupPushNotificationEntitlements(path);
+            IOSPermissionLocalization.Apply(path);   // 허락 창 문구 6개 언어 (11-17)
 
             // 2. 파일 복사/수정 작업
             if (AUTO_COPY_INFO_PLIST || AUTO_COPY_UNITY_APP_CONTROLLER)
@@ -470,6 +471,12 @@ namespace Editor
                 "Photos used for AR object placement and capturing photos for upload.");
             rootDict.SetString("NSPhotoLibraryAddUsageDescription",
                 "Saves photos from chats and photos you take to your photo library.");
+            // 카메라 — Unity Player Settings 의 「For AR」 이 그대로 나가던 것 (11-17)
+            rootDict.SetString("NSCameraUsageDescription", IOSPermissionLocalization.EnglishCamera);
+
+            // --- 아이폰 창(허락 · 사진 고르기)은 기기 언어로 (11-17 대표님) — 6개 언어 문구는 lproj(IOSPermissionLocalization),
+            //     그 밖의 언어 아이폰도 시스템 글자(창 제목 · 버튼)는 기기 언어로. 개발 지역은 Unity 기본 en 그대로(모르는 언어는 영어 문구) ---
+            rootDict.SetBoolean("CFBundleAllowMixedLocalizations", true);
 
             // --- 마이크 권한 (Unity 기본 영문 대신 기존 문구 유지) ---
             rootDict.SetString("NSMicrophoneUsageDescription",

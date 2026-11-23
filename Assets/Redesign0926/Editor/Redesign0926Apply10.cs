@@ -308,7 +308,7 @@ namespace Redesign0926
                 var tcg = Ensure<CanvasGroup>(catToggle.gameObject);
                 tcg.alpha = 0f; tcg.blocksRaycasts = false; tcg.interactable = false;
                 BuildChips(panel, catToggle.GetComponent<Toggle>(), FindInScene<CubeDataFixManager>(card.gameObject),
-                    new[] { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" }, catY - 66);
+                    new[] { "", "shop", "food", "cafe", "stay", "park", "sport", "landmark", "toilet" }, catY - 66);   // 11-19 L5 장소 추가와 같게 ('기타' 대신 '숙소')
             }
 
             // 스위치 줄 — 이름표(따로 놓여 있던 글)를 각 토글 안으로 옮겨 같은 줄에 세운다
@@ -404,32 +404,73 @@ namespace Redesign0926
             nrt.offsetMin = new Vector2(36, 8); nrt.offsetMax = new Vector2(-420, 0);
 
             // '여기로 옮기기' — 켜고 저장하면 지금 내 위치로 (기본 꺼짐 · 글자를 눌러도 켜진다)
-            var mv = FindOrCreate(row.transform, "MoveHere0926");
-            mv.transform.localScale = Vector3.one;
-            var mrt = RT(mv);
-            mrt.anchorMin = new Vector2(1, 0); mrt.anchorMax = new Vector2(1, 1); mrt.pivot = new Vector2(1, 0.5f);
-            mrt.anchoredPosition = new Vector2(-28, 0); mrt.sizeDelta = new Vector2(380, 0);
-            Img(mv, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
-            var sw = FindOrCreate(mv.transform, "Background");
-            var swImg = Img(sw, Spr("r0926_sw_off"), Color.white, Image.Type.Simple);
-            swImg.raycastTarget = false;
-            SetRect(RT(sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(132, 80));
-            var ck = FindOrCreate(sw.transform, "Checkmark");
-            var ckImg = Img(ck, Spr("r0926_sw_on"), Color.white, Image.Type.Simple);
-            ckImg.raycastTarget = false;
-            var ckrt = RT(ck); ckrt.anchorMin = Vector2.zero; ckrt.anchorMax = Vector2.one; ckrt.offsetMin = Vector2.zero; ckrt.offsetMax = Vector2.zero;
-            var mvl = FindOrCreate(mv.transform, "Label0926");
-            var mt = Txt(mvl, "여기로 옮기기", 34, Soft, TextAnchor.MiddleRight, FontStyle.Bold);
-            mt.resizeTextForBestFit = true; mt.resizeTextMinSize = 24; mt.resizeTextMaxSize = 34;
-            var mlr = RT(mvl); mlr.anchorMin = Vector2.zero; mlr.anchorMax = Vector2.one; mlr.offsetMin = Vector2.zero; mlr.offsetMax = new Vector2(-152, 0);
-            Loc(mvl, "여기로 옮기기", "Move here", "ここに移動", "移到这里", "Mover aquí");
-            var tg = Ensure<Toggle>(mv);
-            tg.targetGraphic = swImg; tg.graphic = ckImg;
-            tg.transition = Selectable.Transition.None;
-            tg.toggleTransition = Toggle.ToggleTransition.Fade;
-            tg.isOn = false;
-            EditorUtility.SetDirty(tg);
+            Toggle MoveSwitch(Transform parent)
+            {
+                var s_mv = FindOrCreate(parent, "MoveHere0926");
+                s_mv.transform.localScale = Vector3.one;
+                var s_mrt = RT(s_mv);
+                s_mrt.anchorMin = new Vector2(1, 0); s_mrt.anchorMax = new Vector2(1, 1); s_mrt.pivot = new Vector2(1, 0.5f);
+                s_mrt.anchoredPosition = new Vector2(-28, 0); s_mrt.sizeDelta = new Vector2(380, 0);
+                Img(s_mv, null, new Color(0, 0, 0, 0), Image.Type.Simple).raycastTarget = true;
+                var s_sw = FindOrCreate(s_mv.transform, "Background");
+                var s_swImg = Img(s_sw, Spr("r0926_sw_off"), Color.white, Image.Type.Simple);
+                s_swImg.raycastTarget = false;
+                SetRect(RT(s_sw), new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(132, 80));
+                var s_ck = FindOrCreate(s_sw.transform, "Checkmark");
+                var s_ckImg = Img(s_ck, Spr("r0926_sw_on"), Color.white, Image.Type.Simple);
+                s_ckImg.raycastTarget = false;
+                var s_ckrt = RT(s_ck); s_ckrt.anchorMin = Vector2.zero; s_ckrt.anchorMax = Vector2.one; s_ckrt.offsetMin = Vector2.zero; s_ckrt.offsetMax = Vector2.zero;
+                var s_mvl = FindOrCreate(s_mv.transform, "Label0926");
+                var s_mt = Txt(s_mvl, "여기로 옮기기", 34, Soft, TextAnchor.MiddleRight, FontStyle.Bold);
+                s_mt.resizeTextForBestFit = true; s_mt.resizeTextMinSize = 24; s_mt.resizeTextMaxSize = 34;
+                var s_mlr = RT(s_mvl); s_mlr.anchorMin = Vector2.zero; s_mlr.anchorMax = Vector2.one; s_mlr.offsetMin = Vector2.zero; s_mlr.offsetMax = new Vector2(-152, 0);
+                Loc(s_mvl, "여기로 옮기기", "Move here", "ここに移動", "移到这里", "Mover aquí");
+                var s_tg = Ensure<Toggle>(s_mv);
+                s_tg.targetGraphic = s_swImg; s_tg.graphic = s_ckImg;
+                s_tg.transition = Selectable.Transition.None;
+                s_tg.toggleTransition = Toggle.ToggleTransition.Fade;
+                s_tg.isOn = false;
+                EditorUtility.SetDirty(s_tg);
+                return s_tg;
+            }
+            var tg = MoveSwitch(row.transform);
             row.SetActive(false);
+
+            // 남의 장소 '여기로 옮기기' (11-17 — 11-16 대표님 「내가 직접 올린 게 아니어도 '위치' 가 발생해서 … '여기로 옮기기' 버튼」)
+            // 카드에 줄을 더할 높이가 없다(아이폰 15 Pro Max 에서 아래 여유 ~130 · 줄 하나 250) — '수정할 내용' 알약 오른쪽 끝에 위치 줄과 같은 스위치,
+            // 거리 안내는 그 이름표 줄 오른쪽. CubeDataFixManager 가 번호 있는 남의 장소에서만 켠다
+            const float ReqW = 420f;
+            var descIn = panel.Find("DescriptionInput");
+            var req = FindOrCreate(panel, "ReqMove0926");
+            req.transform.localScale = Vector3.one;
+            var qrt = RT(req);
+            qrt.anchorMin = new Vector2(1, 1); qrt.anchorMax = new Vector2(1, 1); qrt.pivot = new Vector2(1, 1);
+            qrt.anchoredPosition = new Vector2(-UP, -486); qrt.sizeDelta = new Vector2(ReqW, 140);
+            EditorUtility.SetDirty(qrt);
+            if (descIn != null) req.transform.SetSiblingIndex(descIn.GetSiblingIndex() + 1);
+            var qtg = MoveSwitch(req.transform);
+            req.SetActive(false);
+            if (descIn != null)   // 적은 글 · 안내 글이 스위치 밑으로 들어가지 않게 (장소 번호 없는 곳은 스위치 없이 글만 짧아진다)
+            {
+                var dField = descIn.GetComponent<InputField>();
+                foreach (var t in descIn.GetComponentsInChildren<Text>(true))
+                {
+                    t.rectTransform.offsetMax = new Vector2(-36 - ReqW, 0);
+                    if (dField != null && dField.placeholder == t) { t.resizeTextForBestFit = true; t.resizeTextMinSize = 28; t.resizeTextMaxSize = 44; }
+                    EditorUtility.SetDirty(t);
+                }
+            }
+            var qn = FindOrCreate(panel, "ReqMoveNote0926");
+            qn.transform.localScale = Vector3.one;
+            var qnt = Txt(qn, "", 34, Muted, TextAnchor.MiddleRight, FontStyle.Normal);
+            qnt.horizontalOverflow = HorizontalWrapMode.Wrap; qnt.verticalOverflow = VerticalWrapMode.Truncate;
+            qnt.resizeTextForBestFit = true; qnt.resizeTextMinSize = 24; qnt.resizeTextMaxSize = 34;
+            qnt.raycastTarget = false;
+            var qnr = RT(qn);
+            qnr.anchorMin = new Vector2(1, 1); qnr.anchorMax = new Vector2(1, 1); qnr.pivot = new Vector2(1, 1);
+            qnr.anchoredPosition = new Vector2(-UP, -420); qnr.sizeDelta = new Vector2(640, 60);
+            EditorUtility.SetDirty(qnr);
+            qn.SetActive(false);
 
             // 사진 x — 대표 사진은 사진 위, 추가 사진은 칸마다 복제해 넣는 본 (CubeDataFixManager 가 풀을 만들 때)
             var display = panel.Find("MainPhotoDisplay");
@@ -462,6 +503,9 @@ namespace Redesign0926
             Wire(so, "locationCoords", ct);
             Wire(so, "locationNote", nt);
             Wire(so, "moveHereToggle", tg);
+            Wire(so, "requestMove", req);
+            Wire(so, "requestMoveToggle", qtg);
+            Wire(so, "requestMoveNote", qnt);
             Wire(so, "localizer", card.GetComponentInChildren<FixPlaceLocalizer>(true));
             Wire(so, "removeRequest", rr);
             so.ApplyModifiedPropertiesWithoutUndo();

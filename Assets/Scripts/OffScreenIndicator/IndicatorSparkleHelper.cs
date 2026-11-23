@@ -99,6 +99,7 @@ public class IndicatorSparkleHelper : MonoBehaviour
         sparkleObj.transform.SetParent(canvas.transform, false);
 
         Image sparkleImage = sparkleObj.AddComponent<Image>();
+        sparkleImage.raycastTarget = false;   // 장식 — 그 자리 오브젝트를 누르는 손가락을 가리지 않는다
 
         // Sprite 설정 (우선순위: 1. instance.sparkleSprite, 2. 매개변수 sprite, 3. Resources 로드)
         if (instance.sparkleSprite != null)

@@ -14,6 +14,7 @@ public class PlaceListManager : MonoBehaviour
     public TerminalManager terminalManager;
     public TrainStationManager trainManager;
     public SubwayManager subwayManager;
+    public StoreManager storeManager;   // 근처 가게 — 소상공인 상가정보 (「공공데이터」 칩 · 11-20 N8a)
 
     [Header("P2P User Manager")]
     public P2PManager p2pManager;
@@ -57,7 +58,7 @@ public class PlaceListManager : MonoBehaviour
         public string icon;          // 장소 — 분류 그림(r0926_c_<이름>, PlaceIcon) · 축제·보호소 — 줄 앞 그림 · 보물찾기는 "lock" = 비밀번호를 건 보물 (R0926PlaceRows)
         public string start, end;    // 축제 날짜 (YYYYMMDD)
         public string link;          // 축제·보호소 — 누르면 여는 쪽
-        public byte pin;             // 목록 맨 위에 — 클수록 위: 3 광고 줄 · 2 축제 / 보물 칩의 축제·보물찾기 · 1 애견동반의 보호소 (0 은 거리순)
+        public byte pin;             // 목록 맨 위에 — 클수록 위: 4 광고 줄 · 3 축제 칩의 맨 위 축제 하나 · 2 근처 보물찾기 · 1 애견동반의 보호소 (0 은 거리순 — 나머지 축제도)
         public bool anyDistance;     // 거리 슬라이더와 상관없이 (축제·보호소·맨 위 보물찾기)
         public bool promo;           // 관리자가 띄운 협력 업체(광고) 줄 — '광고'를 밝히고 노출·클릭을 센다
         public string adId, emojiUrl;
@@ -89,6 +90,8 @@ public class PlaceListManager : MonoBehaviour
         public bool promo;           // 광고 줄 (축제 칩 맨 위) — 거리 칸 '광고 · 거리' · 줄 앞은 고른 이모지 그림
         public string adId, emojiUrl;
         public bool pet;             // 애견동반 되는 장소 — 이름을 노랑으로
+        public bool top;             // 축제 칩의 맨 위 축제 하나 (무작위) — 줄에 축제 색 바탕 · 흰 글자 (11-17 K1)
+        public bool mutual;          // 서로 아는 사람 (지도에서 온 친구) — 네온 모드에서 분홍 네온 줄 (11-23 S8)
         public object data;          // 원본 자료 — 줄 오른쪽 사진 · 사진을 누르면 여는 정보 창 (R0926PlaceRows · R0926PlaceInfo)
     }
     private readonly List<ListEntry> shownEntries = new List<ListEntry>();
@@ -98,7 +101,7 @@ public class PlaceListManager : MonoBehaviour
     private (float d, int idx)[] orderedBuffer = new (float, int)[64];
     private float[] distBuffer = new float[64];
     private const float PinnedFirst = 1e7f;   // 맨 위 줄은 정렬 열쇠에서 pin 마다 이만큼 빼 앞으로
-    private const int ShelterPool = 3, MaxFestivals = 3, MaxNearHunts = 3;   // 보호소는 가까운 세 곳 중 한 곳만 띄운다 (AddShelterData)
+    private const int ShelterPool = 3, FestivalPool = 3, MaxNearHunts = 3;   // 보호소 · 맨 위 축제는 가까운 세 곳 중 한 곳만 띄운다 (AddShelterData · AddFestivalData)
     private float lastGpsLat;
     private float lastGpsLon;
     private bool hasLiveSnapshot = false;
@@ -111,6 +114,7 @@ public class PlaceListManager : MonoBehaviour
     // Stats
     private int woopangCount;
     private int tourAPICount;
+    private int storeCount;
     private int publicTransportCount;
     private int p2pUserCount;
     private int huntCount;
@@ -118,6 +122,8 @@ public class PlaceListManager : MonoBehaviour
     private int shelterCount;
     private string shelterPick;            // 지금 맨 위에 띄운 보호소 id — 목록을 열 때 · 애견동반을 켤 때만 다시 고른다
     private bool shelterReroll = true;
+    private string festivalPick;           // 지금 맨 위에 띄운 축제 id — 목록을 열 때 · 축제 칩을 켤 때만 다시 고른다
+    private bool festivalReroll = true;
     private P2PManager filterSource;   // 사람 칩(팔로잉·전체·제외)이 바뀌면 바로 다시 그린다
 
     // P2P 사용자 색상 (핑크)
@@ -147,7 +153,7 @@ public class PlaceListManager : MonoBehaviour
     {
         { "en", new Dictionary<string, string> {
             { "petFriendly", "[PetFriendly]" }, { "noImage", "[No Image]" },
-            { "woopangData", "WOOPANG" }, { "tourApiData", "Public" },
+            { "woopangData", "WOOPANG" }, { "tourApiData", "Public orgs" }, { "storeData", "Public data" },
             { "transportData", "Transit" }, { "p2pUserData", "People" }, { "huntData", "Hunts" }, { "festivalData", "Festivals" }, { "shelterData", "Shelters" },
             { "noNearbyData", "No nearby data found.\nTry adjusting the distance slider or moving to a different area." },
             { "noInternet", "No internet connection.\nNearby places will load automatically once you're back online." },
@@ -155,7 +161,7 @@ public class PlaceListManager : MonoBehaviour
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendly", "[애견동반]" }, { "noImage", "[이미지없음]" },
-            { "woopangData", "우팡 데이터" }, { "tourApiData", "공공데이터" },
+            { "woopangData", "우팡 데이터" }, { "tourApiData", "공공기관" }, { "storeData", "공공데이터" },
             { "transportData", "대중교통 데이터" }, { "p2pUserData", "근처 사용자" }, { "huntData", "보물찾기" }, { "festivalData", "축제" }, { "shelterData", "보호소" },
             { "noNearbyData", "주변에 데이터가 없습니다.\n거리 슬라이더를 조정하거나 다른 위치로 이동해보세요." },
             { "noInternet", "인터넷 연결이 없어요.\n연결되면 주변 장소를 저절로 불러와요." },
@@ -163,7 +169,7 @@ public class PlaceListManager : MonoBehaviour
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendly", "[ペット同伴]" }, { "noImage", "[画像なし]" },
-            { "woopangData", "WOOPANG" }, { "tourApiData", "公共" },
+            { "woopangData", "WOOPANG" }, { "tourApiData", "公共機関" }, { "storeData", "公共データ" },
             { "transportData", "交通" }, { "p2pUserData", "近くの人" }, { "huntData", "宝探し" }, { "festivalData", "お祭り" }, { "shelterData", "保護施設" },
             { "noNearbyData", "近くにデータがありません。\n距離スライダーを調整するか、別の場所に移動してみてください。" },
             { "noInternet", "インターネットに接続されていません。\n接続すると周辺の場所を自動で読み込みます。" },
@@ -171,7 +177,7 @@ public class PlaceListManager : MonoBehaviour
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendly", "[宠物友好]" }, { "noImage", "[无图片]" },
-            { "woopangData", "WOOPANG数据" }, { "tourApiData", "公共数据" },
+            { "woopangData", "WOOPANG数据" }, { "tourApiData", "公共机构" }, { "storeData", "公共数据" },
             { "transportData", "交通数据" }, { "p2pUserData", "附近用户" }, { "huntData", "寻宝" }, { "festivalData", "节庆" }, { "shelterData", "收容所" },
             { "noNearbyData", "附近没有数据。\n请调整距离滑块或换个地方试试。" },
             { "noInternet", "没有网络连接。\n连接后会自动加载附近地点。" },
@@ -179,7 +185,7 @@ public class PlaceListManager : MonoBehaviour
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendly", "[Mascotas]" }, { "noImage", "[Sin imagen]" },
-            { "woopangData", "WOOPANG" }, { "tourApiData", "Público" },
+            { "woopangData", "WOOPANG" }, { "tourApiData", "Organismos" }, { "storeData", "Datos públicos" },
             { "transportData", "Transporte" }, { "p2pUserData", "Personas" }, { "huntData", "Tesoros" }, { "festivalData", "Festivales" }, { "shelterData", "Refugios" },
             { "noNearbyData", "No hay datos cerca.\nAjusta el control de distancia o muévete a otra zona." },
             { "noInternet", "Sin conexión a internet.\nLos lugares cercanos se cargarán automáticamente al reconectar." },
@@ -193,6 +199,7 @@ public class PlaceListManager : MonoBehaviour
         R0926HuntList.Changed += OnSourceChanged;
         R0926Nearby.Changed += OnSourceChanged;
         R0926FriendsMap.SharedChanged += OnSourceChanged;
+        R0926PeopleSettings.Changed += OnSourceChanged;
         filterSource = p2pManager != null ? p2pManager : P2PManager.Instance;
         if (filterSource != null) filterSource.UserFilterChanged += OnSourceChanged;
         // 슬라이더 유무와 무관하게 기본값 보장 — 슬라이더 없으면 maxDisplayDistance=0이 되어 모든 POI 걸리는 버그 방지
@@ -264,6 +271,7 @@ public class PlaceListManager : MonoBehaviour
         R0926HuntList.Changed -= OnSourceChanged;
         R0926Nearby.Changed -= OnSourceChanged;
         R0926FriendsMap.SharedChanged -= OnSourceChanged;
+        R0926PeopleSettings.Changed -= OnSourceChanged;
         if (filterSource != null) filterSource.UserFilterChanged -= OnSourceChanged;
         if (updatePeriodicCoroutine != null) StopCoroutine(updatePeriodicCoroutine);
         if (updateUICoroutine != null) StopCoroutine(updateUICoroutine);
@@ -294,7 +302,7 @@ public class PlaceListManager : MonoBehaviour
         combinedPlaces.Clear();
         liveEntries.Clear();
         lastGpsLat = lat; lastGpsLon = lon;
-        woopangCount = 0; tourAPICount = 0; publicTransportCount = 0; p2pUserCount = 0; huntCount = 0; festivalCount = 0; shelterCount = 0;
+        woopangCount = 0; tourAPICount = 0; storeCount = 0; publicTransportCount = 0; p2pUserCount = 0; huntCount = 0; festivalCount = 0; shelterCount = 0;
 
         // 축제 / 보물 칩 — 다른 칩은 그대로 두고 지금 목록 맨 위에 가까운 축제 · 보물찾기를 더한다 (10-27 대표님, 예전엔 목록이 축제만)
         bool festivalMode = activeFilters.GetValueOrDefault("festival", false);
@@ -388,17 +396,36 @@ public class PlaceListManager : MonoBehaviour
             }
         }
 
-        // 2. TourAPI
-        if (showPublic && tourAPIManager != null) {
+        // 2. TourAPI — '전체'면 공공데이터 칩대로, 분류를 고르면 그 분류만 (숙박은 '숙소' — 11-19 L1. 예전엔 분류를 고르면 통째로 빠졌다)
+        if ((showPublic || categoryFilterActive) && tourAPIManager != null) {
             foreach(var p in tourAPIManager.GetPlaceDataMap().Values) {
                 if (HiddenPlaces.IsHidden("tour_" + p.contentid)) continue;
+                string tcat = TourAPIManager.CategoryOf(p);
+                if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter) && tcat != activeCategoryFilter) continue;
+                if (petFriendlyOnly && !p.petFriendly) continue;   // 국문 관광정보에서만 온 숙박은 애견동반 자료가 아니다 — 배분(PetAllowed)과 같은 규칙 (11-19 L3)
                 float d = CalculateDistance(lat, lon, p.mapy, p.mapx);
                 if (d <= maxDisplayDistance) {
                     tourAPICount++;
                     combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
-                    // 관광공사 반려동물 여행 자료 — 모두 애견동반 (TourAPIManager 캐시도 petFriendly = true)
-                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = "tour", pet = true, data = p });
+                    // 반려동물 여행 자료는 애견동반(이름 노랑) · 국문 관광정보에서만 온 숙박은 아니다 (11-19 L3 — TourAPIManager 캐시도 같은 값)
+                    liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = tcat, pet = p.petFriendly, data = p });
                 }
+            }
+        }
+
+        // 2b. 근처 가게 (소상공인 상가정보 · 「공공데이터」 칩 — 11-20 N8a) — '전체'면 칩대로, 분류를 고르면 그 분류 가게만.
+        //     애견동반을 켜면 뺀다 (가게 자료엔 애견동반이 없다 — 배분 FilterManager.PetAllowed 와 같은 규칙)
+        if ((activeFilters.GetValueOrDefault("stores", true) || categoryFilterActive) && !petFriendlyOnly && storeManager != null) {
+            foreach (var s in storeManager.GetPlaceDataMap().Values) {
+                if (HiddenPlaces.IsHidden(StoreManager.Prefix + s.id)) continue;
+                if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter) && s.category != activeCategoryFilter) continue;
+                float d = CalculateDistance(lat, lon, s.lat, s.lon);
+                if (d > maxDisplayDistance) continue;
+                storeCount++;
+                string sName = s.name ?? "";
+                string sColor = DataManager.ResolvePlaceColorHex(null, s.category, sName);
+                combinedPlaces.Add((s, d, s.id, $"{sName} - {Mathf.FloorToInt(d)}m", sColor));
+                liveEntries.Add(new LiveEntry { id = s.id, baseLabel = sName, colorHex = sColor, baseLat = s.lat, baseLon = s.lon, icon = s.category, data = s });
             }
         }
 
@@ -461,6 +488,7 @@ public class PlaceListManager : MonoBehaviour
         }
 
         cachedFooter = $"\n{GetLocalizedText("woopangData")}: {woopangCount}\n{GetLocalizedText("tourApiData")}: {tourAPICount}\n{GetLocalizedText("transportData")}: {publicTransportCount}\n{GetLocalizedText("p2pUserData")}: {p2pUserCount}";
+        if (storeCount > 0) cachedFooter += $"\n{GetLocalizedText("storeData")}: {storeCount}";
         if (huntCount > 0) cachedFooter += $"\n{GetLocalizedText("huntData")}: {huntCount}";
         // 축제 수 (광고 줄은 빼고) — 없으면 까닭 한 줄 (아직 받는 중 · 공공데이터 신청 전 · 근처에 없음)
         if (festivalMode) cachedFooter += festivalCount > 0 ? $"\n{GetLocalizedText("festivalData")}: {festivalCount}" : "\n" + R0926Nearby.EmptyMessage();
@@ -486,7 +514,8 @@ public class PlaceListManager : MonoBehaviour
                 if (listText != null)
                 {
                     bool nothingCached = (dataManager == null || dataManager.GetLightCache().Count == 0)
-                                         && (tourAPIManager == null || tourAPIManager.GetPlaceDataMap().Count == 0);
+                                         && (tourAPIManager == null || tourAPIManager.GetPlaceDataMap().Count == 0)
+                                         && (storeManager == null || storeManager.GetPlaceDataMap().Count == 0);
                     string emptyMsg = GetLocalizedText(!nothingCached ? "noNearbyData"
                         : noInternet ? "noInternet"
                         : ServerHealth.Down || dataManager == null || !dataManager.IsCacheReady ? "listNotLoaded"
@@ -553,6 +582,7 @@ public class PlaceListManager : MonoBehaviour
         {
             wasListPanelActive = true;
             shelterReroll = true;   // 목록을 열 때마다 보호소를 새로 고른다
+            festivalReroll = true;  // 맨 위 축제도
             UpdateUI();
             return;
         }
@@ -649,7 +679,9 @@ public class PlaceListManager : MonoBehaviour
     private static ListEntry ToListEntry(LiveEntry e, float distance)
     {
         var le = new ListEntry { id = e.id, name = e.baseLabel, distance = distance, lat = (float)e.baseLat, lon = (float)e.baseLon, target = e.target, kind = e.kind, huntId = e.huntId, icon = e.icon, link = e.link,
-                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl, pet = e.pet, data = e.data };
+                                 promo = e.promo, adId = e.adId, emojiUrl = e.emojiUrl, pet = e.pet, data = e.data,
+                                 top = e.kind == EntryKind.Festival && !e.promo && e.pin > 0,
+                                 mutual = e.kind == EntryKind.Person && e.seenAt > 0 };
         if (e.kind == EntryKind.Hunt)
         {
             le.distanceText = e.huntFound ? R0926HuntList.FoundText : R0926HuntList.Label(e.huntCoord, distance, e.approxM, e.fixedDistance);
@@ -735,20 +767,23 @@ public class PlaceListManager : MonoBehaviour
     /// <summary>
     /// 지도에 보이는 친구 (맞팔 · 둘 다 지도 공유 — R0926FriendsMap) — 앱을 꺼 둬 근처 사람(P2P)에서 빠진 친구도 마지막 자리로.
     /// 근처 사람은 지금 앱을 켠 사람만 오고 10분 넘게 소식이 없으면 서버가 뺀다 — 지도에는 보이는 친구가 목록에는 없었다 (11-14).
-    /// 지금 앱을 켠 친구는 근처 사람 줄(지금 자리)이 있으니 넣지 않는다. 애견동반과 상관없이 · 사람 칩 '숨기기'면 빼고 · 거리 슬라이더 안만
+    /// 지금 앱을 켠 친구는 근처 사람 줄(지금 자리)이 있으니 넣지 않는다. 애견동반과 상관없이 · 사람 칩 '숨기기'면 빼고 · 거리 슬라이더 안만 ·
+    /// 마지막 접속이 '사용자 오브젝트 유효시간'(설정 › 사람) 안만 (11-17 D1 — AR 도 같은 조건으로 띄운다: P2PManager.SyncMapFriends)
     /// </summary>
     private void AddMapFriends(float lat, float lon)
     {
         var list = R0926FriendsMap.Shared;
         if (list.Count == 0 || p2pManager.GetUserFilterMode() == UserFilterMode.None) return;
+        double now = R0926FriendsMap.NowUnix();
         foreach (var f in list)
         {
             if (string.IsNullOrEmpty(f.name) || livePeople.Contains(f.id)) continue;
+            if (!R0926PeopleSettings.Fresh(f.seenAt, now)) continue;
             float d = CalculateDistance(lat, lon, f.lat, f.lon);
             if (d > maxDisplayDistance) continue;
             livePeople.Add(f.id);
             p2pUserCount++;
-            var user = new NearbyUserData { user_id = f.id, username = f.name, latitude = f.lat, longitude = f.lon, avatar_url = f.avatar ?? "", distance = d };
+            var user = new NearbyUserData { user_id = f.id, username = f.name, latitude = f.lat, longitude = f.lon, avatar_url = f.avatar ?? "", distance = d, visibility_mode = f.vis };
             combinedPlaces.Add((user, d, f.id, $"@{f.name} - {Mathf.FloorToInt(d)}m", P2P_USER_COLOR));
             liveEntries.Add(new LiveEntry { id = f.id, baseLabel = "@" + f.name, colorHex = P2P_USER_COLOR, baseLat = f.lat, baseLon = f.lon, kind = EntryKind.Person, data = user, seenAt = f.seenAt });
         }
@@ -784,23 +819,38 @@ public class PlaceListManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 축제 / 보물 칩 — 받아 둔 근처 축제 중 앞의 세 곳(서버가 가깝고 곧 하는 순으로 준다)을 목록 맨 위에, 그 안에서는 가까운 순 (거리 슬라이더와 상관없이).
+    /// 축제 칩 — 받아 둔 근처 축제 중 가깝고 곧 하는 세 곳(서버가 그 순으로 준다)에서 한 곳만 골라 목록 맨 위에 (축제 색 바탕 · 흰 글자 — R0926PlaceRows),
+    /// 나머지 축제는 모두 장소와 섞여 거리순으로 아래에 — 거리 슬라이더와 상관없이 (10km 넘게 먼 축제는 장소들 아래 맨 끝 쪽).
+    /// 11-17 대표님 K1 「'축제' 체크했을 경우 … 랜덤으로 하나만 상단에」 · 「나머지는 그냥 거리에 따라 하단에 … 10km 외에 있어도 하단에 발생하도록」.
+    /// 고르는 때는 보호소와 같다 — 목록을 열 때 · 축제 칩을 켤 때 앞과 다른 곳, 그 사이 몇 초마다 다시 그릴 때는 같은 곳 (고른 곳이 세 곳에서 빠지면 그때도 다시).
     /// 줄 앞은 축제 분위기 그림, 거리 칸은 '며칠부터 · 거리'. 누르면 축제 이름으로 찾은 쪽 (R0926PlaceRows).
     /// 관리자가 띄운 광고 줄은 그보다 위에 '광고 · 거리' — 누르면 업체 링크, 축제 수에는 넣지 않는다
     /// </summary>
     private void AddFestivalData(float lat, float lon)
     {
+        var pool = R0926Nearby.Festivals.Where(x => x != null && !x.promo && !string.IsNullOrEmpty(x.title)).Take(FestivalPool).ToList();
+        R0926Nearby.Festival top = null;
+        if (pool.Count > 0)
+        {
+            top = pool.Find(x => FestKey(x) == festivalPick);
+            if (top == null || festivalReroll)
+            {
+                var others = pool.FindAll(x => FestKey(x) != festivalPick);   // 앞과 다른 곳 (한 곳뿐이면 그곳)
+                top = others.Count > 0 ? others[UnityEngine.Random.Range(0, others.Count)] : pool[0];
+                festivalPick = FestKey(top);
+                festivalReroll = false;
+            }
+        }
         foreach (var f in R0926Nearby.Festivals)
         {
             if (f == null || string.IsNullOrEmpty(f.title)) continue;
-            if (!f.promo && festivalCount >= MaxFestivals) continue;
             string title = f.title.Replace('\r', ' ').Replace('\n', ' ').Trim();
             var e = new LiveEntry
             {
                 id = "fest:" + f.id, baseLabel = title, colorHex = R0926Nearby.FestivalHex, baseLat = (float)f.lat, baseLon = (float)f.lon,
                 kind = EntryKind.Festival, icon = f.icon, start = f.start, end = f.end, anyDistance = true,
                 link = f.promo ? R0926Nearby.PromoLink(f.link, title, f.lat, f.lon) : R0926Nearby.FestivalLink(title),
-                pin = (byte)(f.promo ? 3 : 2), promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url, data = f
+                pin = (byte)(f.promo ? 4 : f == top ? 3 : 0), promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url, data = f
             };
             float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
             if (!f.promo) festivalCount++;
@@ -808,6 +858,8 @@ public class PlaceListManager : MonoBehaviour
             liveEntries.Add(e);
         }
     }
+
+    private static string FestKey(R0926Nearby.Festival f) => string.IsNullOrEmpty(f.id) ? f.title : f.id;
 
     /// <summary>
     /// 애견동반 — 가까운 유기동물 보호소 세 곳 중 한 곳을 골라 목록 맨 위에 (거리 슬라이더와 상관없이). 누르면 카카오맵 장소 쪽 (전화·길찾기).
@@ -924,8 +976,10 @@ public class PlaceListManager : MonoBehaviour
 
     public void ApplyFilters(Dictionary<string, bool> filters) {
         bool petWas = activeFilters != null && activeFilters.GetValueOrDefault("petFriendlyOnly", false);
+        bool festWas = activeFilters != null && activeFilters.GetValueOrDefault("festival", false);
         activeFilters = filters;
         if (!petWas && filters != null && filters.GetValueOrDefault("petFriendlyOnly", false)) shelterReroll = true;   // 애견동반을 켤 때마다 보호소를 새로 고른다
+        if (!festWas && filters != null && filters.GetValueOrDefault("festival", false)) festivalReroll = true;      // 축제를 켤 때마다 맨 위 축제를 새로 고른다
         UpdateUI();
     }
 
@@ -955,6 +1009,7 @@ public class PlaceListManager : MonoBehaviour
         if (terminalManager != null) terminalManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (trainManager != null) trainManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (subwayManager != null) subwayManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
+        if (storeManager != null) storeManager.UpdateDistanceFilter(maxDisplayDistance, lat, lon);
         if (p2pManager != null) p2pManager.SetMaxTrackingDistance(maxDisplayDistance);
 
         // OffScreenIndicator 거리 필터 동기화

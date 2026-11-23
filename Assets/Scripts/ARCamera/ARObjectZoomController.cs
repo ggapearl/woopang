@@ -30,6 +30,7 @@ public class ARObjectZoomController : MonoBehaviour
     [SerializeField] private SubwayManager subwayManager; // 지하철
     [SerializeField] private TerminalManager terminalManager; // 버스 터미널
     [SerializeField] private TrainStationManager trainStationManager; // 기차역
+    [SerializeField] private StoreManager storeManager; // 소상공인 가게 (공공데이터 칩)
 
     private float currentZoom = 1f;
     private static ARObjectZoomController current;   // Fit — 새로 뜨는 오브젝트도 지금 배율로
@@ -40,6 +41,8 @@ public class ARObjectZoomController : MonoBehaviour
 
     private const float SnapZoom = 1f;
     private const float SnapNear = 0.05f;   // 이보다 가까우면 표시가 '1.0x'
+    // 손을 떼고 이만큼 지나면 배율 표시가 다 사라진다 (11-18 대표님 H1 「핀치 줌인아웃 끝나고 2초 후에 사라지도록」 — 예전 5초)
+    private const float IndicatorGoneAfter = 2f;
 
 #if UNITY_EDITOR
     public static int EditorSnaps;   // 플레이 시험이 센다 (에디터엔 진동이 없다)
@@ -82,6 +85,7 @@ public class ARObjectZoomController : MonoBehaviour
         if (subwayManager == null) subwayManager = SubwayManager.Instance;
         if (terminalManager == null) terminalManager = TerminalManager.Instance;
         if (trainStationManager == null) trainStationManager = TrainStationManager.Instance;
+        if (storeManager == null) storeManager = StoreManager.Instance;
 
         // ZoomIndicator 연결 로직 개선
         if (zoomIndicatorObject != null)
@@ -137,22 +141,16 @@ public class ARObjectZoomController : MonoBehaviour
             }
         }
         // 핀치 종료
-        else
-        {
-            if (isPinching)
-            {
-                isPinching = false;
-                previousTouchDistance = 0f;
-                EndPinch();
+        else if (isPinching) PinchEnded();
+    }
 
-                // 줌 인디케이터 숨김 (5초 딜레이)
-                if (zoomIndicator != null)
-                {
-                    zoomIndicator.HideAfterDelay(5f);
-                }
-            }
-        }
-
+    // 손을 뗐다 — 1.0x 근처면 1.0x 로 붙이고, 배율 표시는 2초에 다 사라지게
+    private void PinchEnded()
+    {
+        isPinching = false;
+        previousTouchDistance = 0f;
+        EndPinch();
+        if (zoomIndicator != null) zoomIndicator.HideAt(IndicatorGoneAfter);
     }
 
     // 손가락 사이가 distanceDelta(px)만큼 벌어지면(+) 확대, 좁혀지면(-) 축소 — 1.0x 근처에선 1.0x 에 붙는다
@@ -213,6 +211,7 @@ public class ARObjectZoomController : MonoBehaviour
         ApplyZoomToManager(subwayManager?.GetSpawnedObjects());
         ApplyZoomToManager(trainStationManager?.GetSpawnedObjects());
         ApplyZoomToManager(terminalManager?.GetSpawnedObjects());
+        ApplyZoomToManager(storeManager?.GetSpawnedObjects());   // 소상공인 가게
         ApplyZoomToManager(R0926HuntTreasure.SpawnedObjects);   // 보물찾기 AR 보물
         if (P2PManager.Instance != null) P2PManager.Instance.ApplyZoom(currentZoom);   // 사람(P2P) — 예전엔 빠져 있어 확대·축소가 안 됐다
     }

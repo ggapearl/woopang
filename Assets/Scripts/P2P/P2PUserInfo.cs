@@ -6,7 +6,6 @@
  */
 
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
@@ -504,8 +503,8 @@ public class P2PUserInfo : MonoBehaviour
 
         Vector2 touchPosition = touch.screenPosition;
 
-        // UI 터치 무시
-        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        // 덮은 UI 밑이면 무시 (WorldTouch — 3D 오브젝트 누름 판단 한 곳)
+        if (!WorldTouch.Free(touchPosition))
             return;
 
         if (mainCamera == null) mainCamera = Camera.main;

@@ -43,8 +43,47 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
     /// <summary>AR 이 이미 잡아 둔 자리가 있다 — 나침반 모드는 이건 그 자리에 두고 카메라만 돌린다</summary>
     public bool HoldsARPose => _anchorCreated && _hasBeenTracking && !_compassPlaced;
 
+    /// <summary>
+    /// 지금 월드 위치가 진짜 자리다 — AR 앵커가 잡았거나 나침반 모드가 GPS 로 놓았다.
+    /// 화면 밖 화살표 · 박스(Target.IsAnchorReady)가 이것을 본다 — 나침반 자리에 보이는 오브젝트도 인디케이터가 뜬다 (11-18 H3)
+    /// </summary>
+    public bool HasWorldPose => _anchorCreated || _compassPlaced;
+
+    /// <summary>새 좌표를 받을 때마다 1씩 — 풀에서 다른 장소로 다시 나온 오브젝트를 처음 나타나는 것으로 알아보게 (R0926DistanceFade 0.2초 페이드 · 11-19 P1)</summary>
+    public int Generation { get; private set; }
+
+    /// <summary>
+    /// 렌더러를 켜도 되는 때 — 앵커가 추적돼 보이게 했거나 나침반이 놓았다 (fallback 가리기 중이 아닐 때).
+    /// 거리로 켜고 끄는 DistanceBasedVisibility 가 이게 아닐 때 켜지 않는다 — 앵커가 아직 없는 오브젝트가 원점(0,0,0)에
+    /// 인디케이터 없이 뜨지 않게 (11-18 H3)
+    /// </summary>
+    public bool MayShow
+    {
+        get
+        {
+            if (_forceHideRenderers) return false;
+            if (_compassPlaced) return true;
+#if UNITY_EDITOR
+            if (!EditorDeviceRule) return true;   // 에디터는 좌표를 받자마자 그 자리에 놓는다
+#endif
+            return _anchorCreated && _hasBeenTracking;
+        }
+    }
+
+#if UNITY_EDITOR
+    /// <summary>시험용 (Redesign0926PlayTest h3ind) — 켜면 에디터도 기기 규칙(앵커나 나침반 자리가 있어야 자리가 있다)으로 판단한다</summary>
+    public static bool EditorDeviceRule;
+#endif
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetStatics() { All.Clear(); CompassHold = false; }
+    private static void ResetStatics()
+    {
+        All.Clear();
+        CompassHold = false;
+#if UNITY_EDITOR
+        EditorDeviceRule = false;
+#endif
+    }
 
     private void OnEnable()
     {
@@ -55,6 +94,7 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
 
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {
+        Generation++;
         _lat = latitude;
         _lon = longitude;
         _alt = altitude;

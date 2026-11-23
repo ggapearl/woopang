@@ -51,6 +51,7 @@ public class NearbyUserData
     public string avatar_glb_url;   // 프로필에서 3D 로 보이게 한 사람만 — 비면 사진 원
     public string bio;
     public float distance;
+    public string visibility_mode;  // 그 사람의 공개 범위 "public" · "followingonly" — 목록 사진 테두리 색 (11-17 D2). 서버가 안 보내면 비어 있다 → 전체공개 색
 }
 
 [Serializable]
@@ -156,6 +157,11 @@ public class P2PManager : MonoBehaviour
     void Start()
     {
         earthManager = FindFirstObjectByType<AREarthManager>();
+
+        // 지도 친구 (11-17 D1) — 목록처럼 AR 에도. 친구 자리가 새로 오거나 유효시간을 바꾸면 바로 다시 맞춘다
+        R0926FriendsMap.SharedChanged += RefreshMapFriends;
+        R0926PeopleSettings.Changed += RefreshMapFriends;
+        StartCoroutine(MapFriendsLoop());
 
         if (autoConnect)
         {
@@ -548,16 +554,18 @@ public class P2PManager : MonoBehaviour
                     avatar_url = userObj["avatar_url"]?.ToString() ?? "",
                     avatar_glb_url = userObj["avatar_glb_url"]?.ToString() ?? "",
                     bio = userObj["bio"]?.ToString() ?? "",
-                    distance = (float)(userObj["distance"] ?? 0)
+                    distance = (float)(userObj["distance"] ?? 0),
+                    visibility_mode = userObj["visibility_mode"]?.ToString() ?? ""
                 };
                 inResponse.Add(userData.user_id);
                 // 목록 자료는 늘 남긴다 — 아바타를 띄우지 못해도(풀 · 최대 인원) 목록에는 보이게 (11-14)
                 nearbyUsersData[userData.user_id] = userData;
 
-                // 거리 및 필터 조건 확인
-                if (userData.distance <= maxTrackingDistance && ShouldShowUser(userData.user_id))
+                // 거리 및 필터 조건 확인 — 거리는 목록 거리 슬라이더와 같게 (11-17 D1)
+                if (userData.distance <= PeopleRange && ShouldShowUser(userData.user_id))
                 {
                     currentNearbyUserIds.Add(userData.user_id);
+                    staleIds.Remove(userData.user_id);   // 지도 친구(마지막 자리)로 띄워 둔 사람이 앱을 켰다 — 이제 지금 자리
 
                     if (activeUserAvatars.ContainsKey(userData.user_id))
                     {
@@ -572,9 +580,13 @@ public class P2PManager : MonoBehaviour
                 }
             }
 
+            // 지도 친구 — 지금 근처 사람에 없는 친구는 마지막 자리로 (목록과 같은 조건 · 11-17 D1). 내 자리를 모르면 띄워 둔 그대로
+            var keep = new HashSet<string>(currentNearbyUserIds);
+            if (!SyncMapFriends(keep)) keep.UnionWith(staleIds);
+
             // Remove avatars that are no longer nearby
             var usersToRemove = activeUserAvatars.Keys
-                .Where(id => !currentNearbyUserIds.Contains(id))
+                .Where(id => !keep.Contains(id))
                 .ToList();
 
             foreach (string userId in usersToRemove)
@@ -638,9 +650,12 @@ public class P2PManager : MonoBehaviour
 #endif
 
         avatarObj.transform.localScale = AvatarScale(CurrentZoom());   // 핀치 줌 그대로 (풀에서 다시 꺼낸 것도)
+        // 사람 칩 '숨기기' 동안 숨긴 채 풀로 돌아간 것도 다시 보이게 — 예전엔 '숨기기' → '전체'로 바꾼 뒤 그 오브젝트를 다시 쓰면 안 보였다
+        if (userFilterMode != UserFilterMode.None) SetAvatarCompletelyHidden(avatarObj, false);
         avatarObj.SetActive(true);
+        Placer(avatarObj).Place(userData.latitude, userData.longitude, MyAltitude());   // 기기 — 그 사람 자리에 앵커 (켠 뒤에 — 앵커 재시도가 코루틴)
         activeUserAvatars[userData.user_id] = avatarObj;
-        nearbyUsersData[userData.user_id] = userData;
+        // 근처 사람 자료(nearbyUsersData)는 부른 쪽이 이미 넣었다 — 지도 친구(SyncMapFriends)는 넣지 않는다 (목록 · 친구 지도가 '지금 켠 사람'으로 쓰는 자료)
 
         Log($"Created avatar for user: {userData.username} ({userData.distance:F1}m away)");
     }
@@ -675,7 +690,7 @@ public class P2PManager : MonoBehaviour
             userInfo.SetAvatarModel(userData.avatar_glb_url);
         }
 
-        nearbyUsersData[userData.user_id] = userData;
+        Placer(avatarObj).Place(userData.latitude, userData.longitude, MyAltitude());   // 기기 — 걸어 움직인 만큼 원을 옮긴다
     }
 
 #if UNITY_EDITOR
@@ -735,7 +750,10 @@ public class P2PManager : MonoBehaviour
     {
         if (!activeUserAvatars.TryGetValue(userId, out GameObject avatarObj))
             return;
+        staleIds.Remove(userId);
+        if (avatarObj == null) { activeUserAvatars.Remove(userId); return; }   // 기기에선 앵커 밑(씬)에 있어 매니저보다 먼저 지워질 수 있다
 
+        Placer(avatarObj).Release(transform);   // 앵커를 지우고 매니저 밑으로 (앵커가 따로 남지 않게)
         avatarObj.SetActive(false);
         avatarPool.Enqueue(avatarObj);
 
@@ -756,6 +774,15 @@ public class P2PManager : MonoBehaviour
             if (avatarObj != null) avatarObj.transform.localScale = AvatarScale(zoom);
         }
     }
+
+    private static P2PAvatarPlacer Placer(GameObject avatarObj)
+    {
+        if (!avatarObj.TryGetComponent(out P2PAvatarPlacer p)) p = avatarObj.AddComponent<P2PAvatarPlacer>();
+        return p;
+    }
+
+    // 지금 내 높이 — 사람 오브젝트를 내 눈높이에 둔다 (P2PAvatarPlacer)
+    private static double MyAltitude() => GeoHere.TryGet(out _, out _, out double alt) ? alt : double.NaN;
 
     // 본(템플릿) 크기가 2배라 1배로 덮지 않고 그 크기에 곱한다
     private Vector3 AvatarScale(float zoom) => (userAvatarPrefab != null ? userAvatarPrefab.transform.localScale : Vector3.one) * zoom;
@@ -977,6 +1004,7 @@ public class P2PManager : MonoBehaviour
             {
                 if (avatarObj != null) SetAvatarCompletelyHidden(avatarObj, true);
             }
+            RefreshMapFriends();   // 지도 친구는 바로 내린다 (근처 사람은 다음 위치 갱신 때)
             Log("P2P filter set to None - all avatars hidden completely");
             return;
         }
@@ -987,9 +1015,9 @@ public class P2PManager : MonoBehaviour
             if (avatarObj != null) SetAvatarCompletelyHidden(avatarObj, false);
         }
 
-        // 필터에 맞지 않는 아바타 제거
+        // 필터에 맞지 않는 아바타 제거 (지도 친구는 목록처럼 '숨기기'만 본다 — 아래 RefreshMapFriends)
         var usersToRemove = activeUserAvatars.Keys
-            .Where(id => !ShouldShowUser(id))
+            .Where(id => !staleIds.Contains(id) && !ShouldShowUser(id))
             .ToList();
 
         foreach (string userId in usersToRemove)
@@ -1010,7 +1038,7 @@ public class P2PManager : MonoBehaviour
                 // 200m 이상은 3D 오브젝트 숨김, 거리 설정 밖도 숨김
                 // (오프스크린 인디케이터는 계속 표시)
                 bool shouldShowMesh = userData.distance <= 200f &&
-                                      userData.distance <= maxTrackingDistance;
+                                      userData.distance <= PeopleRange;
 
                 SetAvatarVisible(avatarObj, shouldShowMesh);
             }
@@ -1024,12 +1052,13 @@ public class P2PManager : MonoBehaviour
 
             if (!activeUserAvatars.ContainsKey(userId) &&
                 ShouldShowUser(userId) &&
-                userData.distance <= maxTrackingDistance &&
+                userData.distance <= PeopleRange &&
                 activeUserAvatars.Count < maxVisibleUsers)
             {
                 CreateUserAvatar(userData);
             }
         }
+        RefreshMapFriends();
 
         Log($"P2P avatars updated - filter: {userFilterMode}, active: {activeUserAvatars.Count}");
     }
@@ -1097,6 +1126,72 @@ public class P2PManager : MonoBehaviour
             .Where(user => ShouldShowUser(user.user_id))
             .ToList();
     }
+
+    #region 지도 친구 (11-17 D1)
+
+    // 앱을 꺼 둬 근처 사람(P2P)에서 빠진 친구(맞팔 · 둘 다 지도 공유 — R0926FriendsMap.Shared)도 목록처럼 AR 에 마지막 자리로.
+    // 11-16 대표님 「목록에서 보이는 건 'AR화면' 내에서도 보이도록 … 해당 값에 따라 AR화면, 목록리스트가 동일하게 발생하도록 (필터링에 부합하는 데로)」 —
+    // 목록(PlaceListManager.AddMapFriends)과 같은 조건: 사람 칩 '숨기기'가 아니고 · 거리 슬라이더 안 · 마지막 접속이 '사용자 오브젝트 유효시간' 안
+    private readonly HashSet<string> staleIds = new HashSet<string>();
+    private const float MapFriendsEvery = 15f;   // 유효시간을 넘긴 친구를 빼고 거리를 다시 (시간이 흐르면 '50분 전'이 1시간을 넘는다)
+    private const float SharedEveryAR = 180f;    // 목록 · 지도가 닫혀 있을 때 친구 자리를 다시 받는 간격 (열려 있으면 그쪽이 1분마다)
+
+    // 사람을 띄우는 거리 — 목록 거리 슬라이더와 같은 값 (예전엔 1km 고정이라 목록의 1km 밖 사람이 AR 엔 없었다)
+    private static float PeopleRange => PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
+
+    /// <summary>앱을 꺼 둔 지도 친구를 마지막 자리에 띄운 것 — 가까이 모달은 지금 여기 있는 사람만 띄운다</summary>
+    public bool IsStale(string userId) => userId != null && staleIds.Contains(userId);
+
+    /// <summary>목록에 보일 지도 친구를 띄우고 keep 에 넣는다 (keep 에 이미 있는 사람 = 지금 자리로 띄운 근처 사람은 건너뛴다). 내 자리를 모르면 false</summary>
+    private bool SyncMapFriends(HashSet<string> keep)
+    {
+        var list = R0926FriendsMap.Shared;
+        if (userFilterMode == UserFilterMode.None || list.Count == 0 || string.IsNullOrEmpty(currentUserId) || R0926FriendsMap.SharedOwner != currentUserId) return true;
+        if (!GeoHere.TryGet(out double myLat, out double myLon, out _)) return false;
+        double now = R0926FriendsMap.NowUnix();
+        float range = PeopleRange;
+        foreach (var f in list)
+        {
+            if (f == null || string.IsNullOrEmpty(f.id) || string.IsNullOrEmpty(f.name) || f.id == currentUserId || keep.Contains(f.id)) continue;
+            if (!R0926PeopleSettings.Fresh(f.seenAt, now)) continue;
+            float d = (float)GeoHere.Meters(myLat, myLon, f.lat, f.lon);
+            if (d > range) continue;
+            var data = new NearbyUserData { user_id = f.id, username = f.name, latitude = f.lat, longitude = f.lon, avatar_url = f.avatar ?? "", avatar_glb_url = "", bio = "", distance = d, visibility_mode = f.vis };
+            if (activeUserAvatars.ContainsKey(f.id)) UpdateUserAvatar(data);
+            else if (activeUserAvatars.Count < maxVisibleUsers) CreateUserAvatar(data);
+            else continue;
+            keep.Add(f.id);
+            staleIds.Add(f.id);
+        }
+        return true;
+    }
+
+    /// <summary>지도 친구만 다시 맞춘다 — 친구 자리가 새로 왔을 때 · 유효시간을 바꿨을 때 · 사람 칩을 바꿨을 때 · 15초마다</summary>
+    private void RefreshMapFriends()
+    {
+        var keep = new HashSet<string>();
+        foreach (var id in activeUserAvatars.Keys) if (!staleIds.Contains(id)) keep.Add(id);
+        if (!SyncMapFriends(keep)) return;
+        foreach (var id in staleIds.ToList()) if (!keep.Contains(id)) RemoveUserAvatar(id);
+    }
+
+    private IEnumerator MapFriendsLoop()
+    {
+        var wait = new WaitForSeconds(MapFriendsEvery);
+        while (true)
+        {
+            yield return wait;
+            if (isInBackground) continue;
+            if (userFilterMode != UserFilterMode.None)
+            {
+                var fetch = R0926FriendsMap.SharedIfDue(SharedEveryAR);
+                if (fetch != null) StartCoroutine(fetch);
+            }
+            RefreshMapFriends();
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// 특정 사용자에게 카메라 포커스 (P2PUserListPanel에서 호출)
@@ -1317,6 +1412,8 @@ public class P2PManager : MonoBehaviour
             LoginManager.Instance.OnLoginStateChanged -= OnLoginStateChanged;
             LoginManager.Instance.OnLoggingOut -= OnLoggingOut;
         }
+        R0926FriendsMap.SharedChanged -= RefreshMapFriends;
+        R0926PeopleSettings.Changed -= RefreshMapFriends;
         StopTracking();
     }
 

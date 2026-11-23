@@ -141,6 +141,12 @@ public class ProfileManager : MonoBehaviour
     private static readonly Color FOLLOWING_ONLY_OUTLINE_COLOR = new Color(1f, 0.843f, 0f, 1f);      // #FFD700 금색/노란색
     private static readonly Color PRIVATE_OUTLINE_COLOR = new Color(0.5f, 0.5f, 0.5f, 1f);           // #808080 회색
 
+    /// <summary>다른 사람의 공개 범위(서버 visibility_mode) 테두리 색 — 도크 프로필 사진과 같은 색 (11-17 목록의 사람 사진). 모르면 전체공개(분홍)</summary>
+    public static Color OutlineColor(string visibilityMode) =>
+        visibilityMode == "followingonly" ? FOLLOWING_ONLY_OUTLINE_COLOR
+      : visibilityMode == "private" ? PRIVATE_OUTLINE_COLOR
+      : PUBLIC_OUTLINE_COLOR;
+
     [Header("Settings")]
     public Sprite defaultAvatarSprite;
 

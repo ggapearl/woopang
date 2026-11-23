@@ -12,16 +12,19 @@ using UnityEngine.UI;
 /// 하늘 옆 장 (2026-10-23 대표님 「'날씨' 를 옆으로 스와이프해서 … 근처 보물찾기 · 근처핫플 · 근처축제 … '언론사' 라이브」).
 /// 하늘 날씨판을 좌우로만 밀면 날씨 → 근처 보물찾기 → 근처 축제 → 근처 핫플 → 근처 친구 → 언론사 라이브.
 ///  · 내용이 있는 장만 넣는다 (라이브는 늘). 설정의 '동네 소식 · 라이브'를 끄면 날씨 한 장
-///  · 보물찾기: 내 범위 안 진행 중 · 곧 시작 게임 — 새 게임 알림을 못 받은 사람도 눌러서 참가 (R0926HuntList.Nearby)
-///  · 축제: 50km 안 진행 중 · 2주 안에 시작 (R0926Nearby) — 누르면 축제 이름으로 찾은 쪽
+///  · 보물찾기: 목록에 나오는 것 그대로 — 내가 연 게임(「내가 숨긴 보물」) · 참가 중인 게임 · 내 범위 안 진행 중 · 곧 시작하는 남의 게임 (R0926HuntList.Board).
+///    새 게임 알림을 못 받은 사람도 눌러서 참가 (11-18 K2 — 예전엔 내가 연 게임이 빠졌다)
+///  · 축제: 목록의 축제 그대로 — 서버가 준 '가깝고 곧 하는 순' (R0926Nearby) · 누르면 축제 이름으로 찾은 쪽 (11-18 K2 — 예전엔 50km · 2주로 잘라 철 지나면 장이 빠졌다)
 ///  · 핫플: 3km 안 요즘 좋아요 · 댓글이 많은 곳 (서버 /api/nearby/hot) — 누르면 AR 의 그 박스를 짚어 준다
 ///  · 축제 · 핫플 맨 위의 광고 줄(관리자가 띄운 협력 업체): '광고 · …' · 고른 이모지 그림 — 누르면 업체 링크(없으면 카카오맵의 그 자리). 보이면 노출 · 누르면 클릭을 센다
 ///  · 친구: 위치를 서로 공유하는 맞팔 친구 중 20km 안 (친구 지도와 같은 길) — 누르면 프로필
 ///  · 라이브: 언론사 유튜브 생방송
 /// 데이터는 휴대폰을 하늘 쪽으로 들 때만 묻는다 (설정한 각도보다 조금 아래부터 — 판이 뜰 때 이미 와 있게).
 /// 판(SkyWeather0926)은 보일 때만 켜져 있어 이 스크립트는 늘 켜진 표식에 두고, 손가락은 판 틀의 R0926SkyBoardInput 이 넘겨준다.
-/// 판을 아래로 끌거나 📌 를 누르면 화면 아래쪽에 고정, 고정한 판을 위로 밀거나 📌 를 다시 누르면 하늘로 (R0926SkyWeather.SetPinned)
-/// 판을 위로 밀면 화면 위쪽에 고정, 위쪽 판을 아래로 밀거나 📌 를 누르면 하늘로 (11-05)
+/// 판을 위로 밀거나 📌 를 누르면 화면 위쪽에 고정, 위쪽 판을 아래로 밀거나 📌 를 다시 누르면 하늘로 (11-05 · R0926SkyWeather.SetPinned)
+/// 아래쪽에는 고정하지 않는다 — 아래는 길안내 · 근처 장소 · 발견한 장소 카드 자리 (11-21 대표님 「하단으로는 하지말고 상단으로만」)
+/// 노치가 있는 아이폰은 위쪽 판을 위로 밀면 노치로 접힌다 — 노치 아래 줄에 장마다 첫 줄(그림 + 거리 — NotchItems)을 좌우로 넘겨 본다
+/// (11-17 대표님 「위로 스와이프하면 노치로 … 좌우로 스와이프해서 각각의 친구나 보물찾기 정보등을 노치 내에서」)
 /// </summary>
 public class R0926SkyPages : MonoBehaviour
 {
@@ -70,7 +73,7 @@ public class R0926SkyPages : MonoBehaviour
     [SerializeField] private float flipDistance = 170f;
     [SerializeField] private float flipSpeed = 1400f;
 
-    [Header("고정 — 📌 · 아래로 끌기 / 위로 밀기")]
+    [Header("고정 — 📌 · 위로 밀기 (위쪽에만)")]
     [SerializeField] private RectTransform pinButton;
     [SerializeField] private Image pinIcon;
     [Tooltip("이만큼 끌면 놓았을 때 고정 · 풀기 (판 단위)")]
@@ -114,8 +117,12 @@ public class R0926SkyPages : MonoBehaviour
     private Kind current = Kind.Weather;
     private bool wasVisible;
     private float hiddenAt = -999f;
-    private float nextCollect, nextPrefetch;
+    private float nextCollect, lastPrefetch = -999f;
     private int huntVer = -1, nearVer = -1, friendVer = -1;
+    private bool wasNotch;
+    private float nextNotch;
+    private readonly List<NotchItem> notchNext = new List<NotchItem>();
+    private const float NotchPrefetchEvery = 120f;   // 노치로만 볼 때는 2분에 한 번만 묻는다 (휴대폰을 내리고 다니는 동안 — 하늘을 볼 때는 2초)
 
     private readonly List<R0926Nearby.Festival> fests = new List<R0926Nearby.Festival>();
     private readonly List<Mate> mates = new List<Mate>();
@@ -153,7 +160,10 @@ public class R0926SkyPages : MonoBehaviour
         if (sky == null || board == null || pages == null || pages.Length == 0) return;
         bool eventsOn = R0926SkySettings.Enabled && R0926SkySettings.Events;
         bool visible = board.gameObject.activeInHierarchy;
-        if (eventsOn && (visible || sky.Pitch > R0926SkySettings.MinPitch - 12f)) Prefetch();
+        bool notch = sky.FoldedToNotch;
+        if (notch != wasNotch) { wasNotch = notch; nextNotch = 0f; }
+        bool near = visible || sky.Pitch > R0926SkySettings.MinPitch - 12f;
+        if (eventsOn && (near || notch)) Prefetch(near ? 2f : NotchPrefetchEvery);
         if (!visible)
         {
             if (wasVisible)
@@ -162,11 +172,27 @@ public class R0926SkyPages : MonoBehaviour
                 pulling = armed = pressing = false; pull = pullVel = 0f; pinHintAt = -1f;
                 sky.SetPull(0f);
             }
+            // 노치로 접어 둔 동안 — 장마다 첫 줄을 노치에 (걸으면 거리가 바뀐다)
+            if (notch && Time.unscaledTime >= nextNotch)
+            {
+                nextNotch = Time.unscaledTime + 1f;
+                Collect();
+                BuildNotch(eventsOn);
+            }
             return;
         }
         if (!wasVisible) Shown();
         wasVisible = true;
-        if (sky.ConsumeHome()) { target = 0; pos = 0f; vel = 0f; current = Kind.Weather; }   // 노치의 날씨를 눌러 폈다 — 날씨 장부터
+        if (sky.ConsumeHome())
+        {
+            // 노치를 눌러 폈다 — 노치에서 보던 장부터 (그 장이 없으면 첫 장)
+            Collect();
+            Rebuild(eventsOn);
+            target = Mathf.Max(0, shown.FindIndex(x => pages[x].kind == sky.HomeKind));
+            pos = target; vel = 0f;
+            current = shown.Count > 0 ? pages[shown[target]].kind : Kind.Weather;
+            nextCollect = 0f;
+        }
 
         bool changed = huntVer != R0926HuntList.NearbyVersion || nearVer != R0926Nearby.Version || friendVer != friendsVersion;
         if (changed || Time.unscaledTime >= nextCollect)
@@ -176,12 +202,14 @@ public class R0926SkyPages : MonoBehaviour
             Collect();
             Rebuild(eventsOn);
             Bind();
+            BuildNotch(eventsOn);   // 노치로 접으면 바로 보이게
         }
         // 손가락이 판에 닿아 있는 동안은 휴대폰이 기울어도 판을 붙잡는다 (손을 뗐는데 신호가 안 온 경우는 화면에 닿은 손가락이 없으면 푼다)
         if (pressing) { if (Touches() > 0) sky.Hold(); else pressing = false; }
         Animate();
         Layout();
         sky.SetPull(pull);
+        BoardKind = current;
     }
 
     // 판이 다시 뜰 때 — 오래(2분) 안 봤으면 첫 장부터, 아직 한 번도 안 밀어 봤으면 옆 장이 있다고 살짝 밀어 보인다.
@@ -195,10 +223,10 @@ public class R0926SkyPages : MonoBehaviour
     }
 
     // ── 받기 ─────────────────────────────────────────────────
-    private void Prefetch()
+    private void Prefetch(float every)
     {
-        if (Time.unscaledTime < nextPrefetch) return;
-        nextPrefetch = Time.unscaledTime + 2f;
+        if (Time.unscaledTime - lastPrefetch < every) return;
+        lastPrefetch = Time.unscaledTime;
         var h = R0926HuntList.RefreshIfDue();
         if (h != null) StartCoroutine(h);
         if (!friendsBusy && Time.unscaledTime >= nextFriends) StartCoroutine(FetchFriends());
@@ -219,7 +247,7 @@ public class R0926SkyPages : MonoBehaviour
             yield break;
         }
         friendsBusy = true;
-        nextFriends = Time.unscaledTime + 60f;
+        nextFriends = Time.unscaledTime + (board.gameObject.activeInHierarchy ? 60f : 180f);   // 노치로만 볼 때는 3분에 한 번
         using (var req = UnityWebRequest.Get(FriendsUrl()))
         {
             LoginManager.ApplyAuth(req);
@@ -246,30 +274,20 @@ public class R0926SkyPages : MonoBehaviour
         return url;
     }
 
-    // 축제는 가까운 · 곧 하는 것만, 친구는 20km 안 — 1초마다 (걸으면 바뀐다)
+    // 축제는 목록과 같은 것 (끝난 것만 뺀다 — 서버가 준 '가깝고 곧 하는 순'), 친구는 20km 안 — 1초마다 (걸으면 바뀐다)
     private void Collect()
     {
         bool hasMe = R0926HuntCard.TryLocation(out double myLat, out double myLon, out _);
         DateTime today = DateTime.Now.Date;
         fests.Clear();
+        foreach (var f in R0926Nearby.Festivals)   // 광고 줄 맨 위 (서버가 앞에 준다), 나머지는 서버 순서 그대로
+            if (f != null && f.promo && !string.IsNullOrEmpty(f.title)) fests.Add(f);
         foreach (var f in R0926Nearby.Festivals)
         {
-            if (f == null || string.IsNullOrEmpty(f.title)) continue;
-            if (!f.promo)   // 광고 줄은 관리자가 정한 반경 · 기간을 서버가 이미 맞췄다
-            {
-                if (f.dist > festivalKm * 1000f) continue;
-                if (R0926Nearby.TryDate(f.end, out var e) && e < today) continue;
-                if (R0926Nearby.TryDate(f.start, out var s) && s > today.AddDays(festivalSoonDays)) continue;
-            }
+            if (f == null || f.promo || string.IsNullOrEmpty(f.title)) continue;
+            if (R0926Nearby.TryDate(f.end, out var e) && e < today) continue;
             fests.Add(f);
         }
-        // 광고 줄 맨 위, 그다음 하는 중인 것, 그다음 가까운 순
-        fests.Sort((a, b) =>
-        {
-            if (a.promo != b.promo) return a.promo ? -1 : 1;
-            bool na = !R0926Nearby.TryDate(a.start, out var sa) || sa <= today, nb = !R0926Nearby.TryDate(b.start, out var sb) || sb <= today;
-            return na != nb ? (na ? -1 : 1) : a.dist.CompareTo(b.dist);
-        });
 
         mates.Clear();
         if (hasMe)
@@ -298,7 +316,13 @@ public class R0926SkyPages : MonoBehaviour
         hotPicks.Clear();
         var hot = R0926Nearby.HotPlaces;
         for (int i = 0; i < hot.Count; i++) if (hot[i].promo) hotPicks.Add(new Pick(Kind.Hot, i));
-        for (int i = 0; i < fests.Count; i++) if (!fests[i].promo) hotPicks.Add(new Pick(Kind.Festival, i));   // 축제 광고는 축제 장에서만
+        DateTime soon = DateTime.Now.Date.AddDays(festivalSoonDays);
+        for (int i = 0; i < fests.Count; i++)   // 축제 광고는 축제 장에서만 · '근처' 핫플이라 50km 안 · 2주 안에 하는 축제만
+        {
+            var f = fests[i];
+            if (f.promo || f.dist > festivalKm * 1000f || (R0926Nearby.TryDate(f.start, out var s) && s > soon)) continue;
+            hotPicks.Add(new Pick(Kind.Festival, i));
+        }
         int firstHot = hotPicks.Count, seat = HotSeats() - 1;
         for (int i = 0; i < hot.Count; i++) if (!hot[i].promo) hotPicks.Add(new Pick(Kind.Hot, i));
         if (seat >= 0 && firstHot > seat && firstHot < hotPicks.Count)
@@ -319,7 +343,7 @@ public class R0926SkyPages : MonoBehaviour
     {
         switch (k)
         {
-            case Kind.Hunt: return R0926HuntList.Nearby.Count;
+            case Kind.Hunt: return R0926HuntList.Board.Count;
             case Kind.Festival: return fests.Count;
             case Kind.Hot: return hotPicks.Count;
             case Kind.Friends: return mates.Count;
@@ -407,12 +431,12 @@ public class R0926SkyPages : MonoBehaviour
         {
             case Kind.Hunt:
             {
-                var n = R0926HuntList.Nearby[r];
+                var n = R0926HuntList.Board[r];
                 if (n.locked) SetIcon(row, "r0926_i_treasure_lock", "r0926_i_treasure");   // 비밀번호를 건 보물 — 자물쇠 배지
                 else SetIcon(row, "r0926_i_treasure");
                 title = n.title;
                 sub = HuntSub(n);
-                right = n.meters >= 0f ? R0926Nearby.Km(n.meters) : n.bandM > 0f ? R0926HuntList.Label(R0926HuntList.Coord.Hidden, 0f, 0f, n.bandM) : "";
+                right = HuntRight(n);
                 break;
             }
             case Kind.Festival:
@@ -432,8 +456,7 @@ public class R0926SkyPages : MonoBehaviour
                 else SetIcon(row, "r0926_c_" + h.category, "r0926_s_hot");
                 title = h.name;
                 sub = HotSub(h);
-                double m = R0926HuntCard.TryLocation(out double la, out double lo, out _) ? R0926Nearby.Meters(la, lo, h.lat, h.lon) : h.dist;
-                right = R0926Nearby.Km((float)m);
+                right = R0926Nearby.Km(HotMeters(h));
                 break;
             }
             case Kind.Friends:
@@ -464,10 +487,18 @@ public class R0926SkyPages : MonoBehaviour
         Put(row.sub, sub);
     }
 
+    private static string HuntRight(R0926HuntList.Near n) =>
+        n.meters >= 0f ? R0926Nearby.Km(n.meters) : n.bandM > 0f ? R0926HuntList.Label(R0926HuntList.Coord.Hidden, 0f, 0f, n.bandM) : "";
+
+    // 핫플까지 — 내 자리를 알면 지금 거리, 아니면 서버가 잰 거리
+    private static float HotMeters(R0926Nearby.Hot h) =>
+        R0926HuntCard.TryLocation(out double la, out double lo, out _) ? (float)R0926Nearby.Meters(la, lo, h.lat, h.lon) : h.dist;
+
     private string HuntSub(R0926HuntList.Near n)
     {
         if (n.found) return L("찾은 보물입니다", "Treasure found", "見つけた宝です", "已找到的宝藏", "Tesoro encontrado");   // 게임은 아직 진행 중 — 못 찾은 게임 뒤에 남는다
-        string state = n.joined ? L("참가 중", "Joined", "参加中", "已参加", "Participando")
+        string state = n.host ? L("내가 숨긴 보물", "My treasure", "自分が隠した宝", "我藏的宝藏", "Mi tesoro") + " · " + (n.live ? L("진행 중", "On now", "開催中", "进行中", "En curso") : Starts(n.startsAt))
+                     : n.joined ? L("참가 중", "Joined", "参加中", "已参加", "Participando")
                      : n.live ? L("진행 중", "On now", "開催中", "进行中", "En curso")
                      : Starts(n.startsAt);
         string more = n.prize.Length > 0 ? L("선물 ", "Prize: ", "景品 ", "奖品 ", "Premio: ") + n.prize
@@ -550,13 +581,129 @@ public class R0926SkyPages : MonoBehaviour
 
     private void Face(Row row, Friend f)
     {
-        if (row.face != null) row.face.color = Palette[((f.username ?? "").GetHashCode() & 0x7fffffff) % Palette.Length];
-        if (row.initial != null) row.initial.text = string.IsNullOrEmpty(f.username) ? "?" : f.username.Substring(0, 1).ToUpperInvariant();
+        if (row.face != null) row.face.color = FaceColor(f);
+        if (row.initial != null) row.initial.text = Initial(f);
         if (row.photo == null) return;
-        Texture2D tex = null;
-        if (!string.IsNullOrEmpty(f.avatar_url) && !avatars.TryGetValue(f.avatar_url, out tex)) StartCoroutine(LoadAvatar(f.avatar_url));
+        var tex = Avatar(f);
         row.photo.texture = tex;
         row.photo.enabled = tex != null;
+    }
+
+    private static Color FaceColor(Friend f) => Palette[((f.username ?? "").GetHashCode() & 0x7fffffff) % Palette.Length];
+    private static string Initial(Friend f) => string.IsNullOrEmpty(f.username) ? "?" : f.username.Substring(0, 1).ToUpperInvariant();
+
+    // 받아 둔 사진 — 아직이면 받기 시작하고 null
+    private Texture2D Avatar(Friend f)
+    {
+        Texture2D tex = null;
+        if (!string.IsNullOrEmpty(f.avatar_url) && !avatars.TryGetValue(f.avatar_url, out tex)) StartCoroutine(LoadAvatar(f.avatar_url));
+        return tex;
+    }
+
+    // ── 노치 (R0926Notch — 하늘을 노치로 접은 동안 노치 아래 한 줄) ──────────
+    /// <summary>노치에 보일 옆 장 하나 — 그 장 첫 줄의 그림(친구는 얼굴) + 거리</summary>
+    public struct NotchItem
+    {
+        public Kind kind;
+        public Sprite icon;
+        public Texture photo;
+        public string initial;
+        public Color faceColor;
+        public string text;
+    }
+    /// <summary>노치로 접은 동안 좌우로 넘겨 볼 옆 장 — 판 순서대로 (날씨는 노치가 직접 · 라이브와 광고 줄은 뺀다). NotchVersion 이 바뀌면 다시 읽는다</summary>
+    public static readonly List<NotchItem> NotchItems = new List<NotchItem>();
+    public static int NotchVersion { get; private set; }
+    /// <summary>판이 지금 보는 장 — 노치로 접으면 노치가 이 장부터 보인다</summary>
+    public static Kind BoardKind { get; private set; } = Kind.Weather;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetNotch()
+    {
+        NotchItems.Clear();
+        NotchVersion = 0;
+        BoardKind = Kind.Weather;
+    }
+
+    private void BuildNotch(bool eventsOn)
+    {
+        notchNext.Clear();
+        if (eventsOn)
+            foreach (var p in pages)
+            {
+                var it = new NotchItem { kind = p.kind };
+                if (NotchRow(ref it)) notchNext.Add(it);
+            }
+        if (SameNotch(notchNext, NotchItems)) return;
+        NotchItems.Clear();
+        NotchItems.AddRange(notchNext);
+        NotchVersion++;
+    }
+
+    // 그 장의 첫 줄 (광고 줄은 건너뛴다) — 없으면 false
+    private bool NotchRow(ref NotchItem it)
+    {
+        switch (it.kind)
+        {
+            case Kind.Hunt:
+            {
+                if (R0926HuntList.Board.Count == 0) return false;
+                var n = R0926HuntList.Board[0];
+                it.icon = n.locked ? FirstIcon("r0926_i_treasure_lock", "r0926_i_treasure") : FirstIcon("r0926_i_treasure");
+                it.text = HuntRight(n);
+                return true;
+            }
+            case Kind.Festival:
+                foreach (var f in fests)
+                {
+                    if (f.promo) continue;
+                    it.icon = FirstIcon("r0926_f_" + f.icon, "r0926_f_party");
+                    it.text = R0926Nearby.Km(f.dist);
+                    return true;
+                }
+                return false;
+            case Kind.Hot:
+                foreach (var h in R0926Nearby.HotPlaces)
+                {
+                    if (h.promo) continue;
+                    it.icon = FirstIcon("r0926_c_" + h.category, "r0926_s_hot");
+                    it.text = R0926Nearby.Km(HotMeters(h));
+                    return true;
+                }
+                return false;
+            case Kind.Friends:
+            {
+                if (mates.Count == 0) return false;
+                var m = mates[0];
+                it.faceColor = FaceColor(m.f);
+                it.initial = Initial(m.f);
+                it.photo = Avatar(m.f);
+                it.text = R0926FriendsMap.Dist(m.km, m.exact);
+                return true;
+            }
+            default: return false;
+        }
+    }
+
+    private Sprite FirstIcon(params string[] names)
+    {
+        foreach (var n in names)
+        {
+            var s = Icon(n);
+            if (s != null) return s;
+        }
+        return null;
+    }
+
+    private static bool SameNotch(List<NotchItem> a, List<NotchItem> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+        {
+            NotchItem x = a[i], y = b[i];
+            if (x.kind != y.kind || x.icon != y.icon || x.photo != y.photo || x.initial != y.initial || x.faceColor != y.faceColor || x.text != y.text) return false;
+        }
+        return true;
     }
 
     private IEnumerator LoadAvatar(string url)
@@ -709,7 +856,7 @@ public class R0926SkyPages : MonoBehaviour
         Vector2 d = e.position - e.pressPosition;   // 첫 걸음(delta)만 보면 손떨림에 갈린다 — 누른 데서부터
         if (Mathf.Abs(d.y) > Mathf.Abs(d.x))
         {
-            // 위아래 — 하늘 판은 아래로 끌면 아래쪽 · 위로 밀면 위쪽에 고정, 고정한 판은 반대로 밀어 하늘로
+            // 위아래 — 하늘 판은 위로 밀면 위쪽에 고정 (아래로 끌어도 고정하지 않는다), 고정한 판은 아래로 밀어 하늘로
             pulling = true;
             armed = false;
             dragPointer = e.pointerId;
@@ -769,9 +916,9 @@ public class R0926SkyPages : MonoBehaviour
 
     private static float Rubber(float v, float k, float max) => Mathf.Sign(v) * max * (1f - Mathf.Exp(-Mathf.Abs(v) * k / max));
 
-    // 놓았을 때 고정 · 풀기가 되는 쪽으로 간 만큼 (+) — 하늘 판은 위아래 어느 쪽이든(아래 = 아래쪽 고정 · 위 = 위쪽 고정),
-    // 아래쪽 고정은 위로, 위쪽 고정은 아래로
-    private float PullWay(float v) => !sky.Pinned ? Mathf.Abs(v) : sky.PinnedTop ? -v : v;
+    // 놓았을 때 고정 · 풀기가 되는 쪽으로 간 만큼 (+) — 하늘 판은 위로만(위쪽 고정 · 11-21 S3 아래쪽 고정 없앰 — 아래로는 고무줄만),
+    // 위쪽 고정은 아래로 (노치가 있으면 위로도 — 노치로 접힌다)
+    private float PullWay(float v) => !sky.Pinned ? v : sky.PinnedTop ? (sky.CanFoldToNotch ? Mathf.Abs(v) : -v) : v;
 
     public void EndDrag(PointerEventData e)
     {
@@ -782,10 +929,18 @@ public class R0926SkyPages : MonoBehaviour
             if (Time.unscaledTime - lastT > 0.12f) flingV = 0f;
             bool toPin = !sky.Pinned;
             bool up = pullRaw > 0f;
-            float way = PullWay(pullRaw), fling = toPin ? (up ? flingV : -flingV) : sky.PinnedTop ? -flingV : flingV;
+            if (sky.PinnedTop && up && sky.CanFoldToNotch)
+            {
+                // 위쪽에 고정한 판을 위로 — 노치로 접는다 (11-17 대표님 「상단에 고정됏을 때 … 위로 스와이프하면 노치로 가도록」)
+                bool fold = armed || flingV > flipSpeed && pullRaw > 40f;
+                armed = false;
+                if (fold) { sky.FoldToNotch(); Haptic(); }
+                return;
+            }
+            float way = PullWay(pullRaw), fling = toPin ? flingV : sky.PinnedTop ? -flingV : flingV;
             bool go = armed || fling > flipSpeed && way > 40f;   // 끝까지 안 끌어도 휙 튕기면
             armed = false;
-            if (go) SetPin(toPin, toPin && up);
+            if (go) SetPin(toPin);
             return;
         }
         if (!dragging) return;
@@ -846,7 +1001,7 @@ public class R0926SkyPages : MonoBehaviour
         switch (k)
         {
             case Kind.Hunt:
-                if (r < R0926HuntList.Nearby.Count) R0926HuntPush.OpenHunt(R0926HuntList.Nearby[r].id);   // 그 게임 상세 — 참가하기
+                if (r < R0926HuntList.Board.Count) R0926HuntPush.OpenHunt(R0926HuntList.Board[r].id);   // 그 게임 상세 — 참가하기 (내가 연 게임은 현황)
                 break;
             case Kind.Festival:
                 if (r >= fests.Count) break;
@@ -906,21 +1061,23 @@ public class R0926SkyPages : MonoBehaviour
         return idOnly;
     }
 
-    private void SetPin(bool on, bool top = false)
+    // 고정은 늘 위쪽 — 📌 도 (11-21 대표님 S3)
+    private void SetPin(bool on)
     {
-        sky.SetPinned(on, top);
+        sky.SetPinned(on, true);
         if (sky.Pinned != on) return;   // 판이 안 떠 있다
         Haptic();
         pinHintAt = -1f;
         if (!on || PlayerPrefs.GetInt(PinKey, 0) != 0) return;
         PlayerPrefs.SetInt(PinKey, 1);   // 처음 고정했을 때만 — 푸는 법
         if (ToastManager.Instance == null) return;
-        if (top)
+        if (sky.CanFoldToNotch)
+            ToastManager.Instance.ShowInfo(L("고정했어요 · 위로 밀면 노치로, 아래로 밀면 하늘로 돌아가요", "Pinned · Swipe up to tuck it into the notch, down to send it back to the sky",
+                                             "固定しました · 上にスワイプでノッチへ、下にスワイプで空に戻ります", "已固定 · 向上滑动收进刘海，向下滑动放回天空",
+                                             "Fijado · Desliza hacia arriba para guardarlo en la muesca, hacia abajo para devolverlo al cielo"));
+        else
             ToastManager.Instance.ShowInfo(L("고정했어요 · 아래로 밀면 하늘로 돌아가요", "Pinned · Swipe down to send it back to the sky", "固定しました · 下にスワイプすると空に戻ります",
                                              "已固定 · 向下滑动即可放回天空", "Fijado · Desliza hacia abajo para devolverlo al cielo"));
-        else
-            ToastManager.Instance.ShowInfo(L("고정했어요 · 위로 밀면 하늘로 돌아가요", "Pinned · Swipe up to send it back to the sky", "固定しました · 上にスワイプすると空に戻ります",
-                                             "已固定 · 向上滑动即可放回天空", "Fijado · Desliza hacia arriba para devolverlo al cielo"));
     }
 
     // 손가락 자리 → 판 단위. 틀의 부모 좌표로 재 틀 배율로 나눈다 — 끄는 동안 틀이 손가락을 따라 움직여도 기준이 흔들리지 않게.

@@ -5,7 +5,7 @@ using UnityEditor.SceneManagement;
 
 /// <summary>
 /// 모든 매니저의 indicatorOnlyPrefab 필드를 자동으로 연결
-/// DataManager, TourAPIManager, SubwayManager, TrainStationManager, TerminalManager
+/// DataManager, TourAPIManager, SubwayManager, TrainStationManager, TerminalManager, StoreManager
 /// Assets/Prefab/IndicatorOnly.prefab을 찾아 연결
 /// </summary>
 [InitializeOnLoad]
@@ -63,6 +63,13 @@ public class IndicatorOnlyPrefabSetup
         if (tm != null)
         {
             ConnectPrefab(tm, prefab);
+        }
+
+        // StoreManager (근처 가게 · 소상공인 상가정보)
+        StoreManager stm = Object.FindAnyObjectByType<StoreManager>(FindObjectsInactive.Include);
+        if (stm != null)
+        {
+            ConnectPrefab(stm, prefab);
         }
     }
 

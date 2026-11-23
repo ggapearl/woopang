@@ -13,6 +13,9 @@ using UnityEngine.UI;
 /// - 활성 스폰은 거리 100m / 시간 3분 초과 시 자동 정리해 누적 부담 방지.
 ///
 /// Panel UI는 [DanceAnimPanelSetup] 에디터 스크립트가 씬에 자동 생성 + Inspector 필드 연결.
+///
+/// 11-19 대표님 L6 「다운로드 단계 없이 기본으로 바로 보이게」 — 춤 모델은 이제 처음부터 3D 로 떠(DataManager.Adopt) 이 창은 열리지 않는다.
+/// 지우기는 대표님께 여쭌 뒤 (창 · DanceAnimPanelSetup · DataManager.PromoteCubeToGLB/DemoteAnimToCube/IsAnimCategory 같이)
 /// </summary>
 public class DanceAnimController : MonoBehaviour
 {

@@ -143,7 +143,7 @@ public class OffScreenIndicator : MonoBehaviour
     [SerializeField] private float strongFarAlpha = 0.12f;
 
     [Header("=== 일반 모드 인디케이터 개수 제한 ===")]
-    [Tooltip("일반 모드에서 화살표 최대 표시 개수 (0이면 제한 없음, 가까운 순)")]
+    [Tooltip("일반 모드에서 인디케이터 최대 표시 개수 (0이면 제한 없음) — 화면 안 박스를 먼저 남기고 화살표는 가까운 순")]
     [SerializeField] private int maxNormalIndicatorCount = 12;
 
     [Header("=== 화살표 위치 스무딩 ===")]
@@ -511,7 +511,9 @@ public class OffScreenIndicator : MonoBehaviour
         // ── Pass 1.4: 일반 모드 개수 제한 (가까운 순으로 maxNormalIndicatorCount개만 유지) ──
         if (maxNormalIndicatorCount > 0 && arrowInfos.Count > maxNormalIndicatorCount)
         {
-            // GPS 거리 기준 정렬 (가까운 순), skipThisFrame은 뒤로, 목록에서 고른 장소는 맨 앞 (잘리지 않게)
+            // 가까운 순, skipThisFrame은 뒤로, 목록에서 고른 장소는 맨 앞 (잘리지 않게).
+            // 화면 안 박스(지금 보고 있는 것)는 화면 밖 화살표보다 먼저 남긴다 — 화살표가 많으면 눈앞에 보이는 3D 의 박스가
+            // 더 가까운 화살표들에 밀려 잘려 '3D 만 떠 있던' 것 (11-18 H3)
             arrowInfos.Sort((a, b) =>
             {
                 if (a.skipThisFrame != b.skipThisFrame)
@@ -519,6 +521,8 @@ public class OffScreenIndicator : MonoBehaviour
                 bool fa = IsFocused(a.target), fb = IsFocused(b.target);
                 if (fa != fb)
                     return fa ? -1 : 1;
+                if (a.isArrow != b.isArrow)
+                    return a.isArrow ? 1 : -1;
                 return a.distanceFromCamera.CompareTo(b.distanceFromCamera);
             });
 

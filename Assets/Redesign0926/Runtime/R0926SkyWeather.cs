@@ -22,8 +22,10 @@ using UnityEngine.XR.ARFoundation;
 ///    (10-25 대표님 「조금만 움직여도 해당 내용이 사라질 수 있으니 … 고정」). 한 번 뜬 판은 설정 각도보다 조금 더 내려야 사라진다
 ///  · 판을 위로 밀면 화면 위쪽(노치 아래 칩 밑)에 고정 — 아래로 밀거나 📌 를 누르면 하늘로 (11-05 대표님 「위로 스와이프하면 위쪽으로 고정 …
 ///    아랫쪽 로직도 그대로 두고」)
-///  · 노치가 있는 아이폰(R0926Notch)은 접은 동안 날씨를 칩 대신 노치 옆에 — 휴대폰을 내려도 보인다. 노치를 누르면 판을 화면 위쪽에 고정해 펴고
-///    (위를 안 봐도 보이게), 아래로 밀면 사라진 뒤 하늘을 비추면 평소대로 (11-09 대표님 「노치를 터치해서는 … 화면 상단에 고정해둬」)
+///  · 노치가 있는 아이폰(R0926Notch)은 접으면('하늘 접기' · 위쪽에 고정한 판을 위로 밀기) 판이 노치로 날아 들어가 노치 아래 한 줄에 남는다 —
+///    날씨 그림 + 기온, 좌우로 밀면 옆 장의 첫 줄. 노치를 누르면 그 장으로 판을 화면 위쪽에 고정해 펴고(위를 안 봐도 보이게),
+///    아래로 밀면 사라진 뒤 하늘을 비추면 평소대로 (11-09 대표님 「노치를 터치해서는 … 화면 상단에 고정해둬」 · 11-17 「상단에 고정됏을 때 …
+///    위로 스와이프하면 노치로」)
 /// 데이터: 우팡 서버 /api/weather (10분 캐시). 스폰 시스템과 따로 돌아 기존 오브젝트 로직을 건드리지 않는다.
 /// </summary>
 public class R0926SkyWeather : MonoBehaviour
@@ -153,8 +155,10 @@ public class R0926SkyWeather : MonoBehaviour
     private float pillSince = -1f;
     private int notchCode = -1, notchTemp;   // 노치에 보일 지금 날씨 (Show)
     private bool notchDay = true;
-    private bool homeRequest;                // 노치에서 폈다 — 옆 장(R0926SkyPages)이 날씨 장부터
-    private const string NotchHintKey = "SkyNotchUnfoldHint";
+    private bool homeRequest;                // 노치에서 폈다 — 옆 장(R0926SkyPages)이 노치에서 보던 장부터
+    private bool toNotch;                    // 노치로 접히며 날아 들어가는 중 (FoldToNotch)
+    private float glassK, fromGlass;         // 유리 바탕의 지금 짙기 · 옮기기 시작할 때 짙기
+    private const string NotchHintKey = "SkyNotchUnfoldHint2";   // 11-17 — 위로 밀면 노치로 접힌다는 말이 더해져 한 번 더 알린다
     private const float PillWaitMax = 30f;   // 알약이 이보다 오래 안 걷히면(최종 개수가 안 온 경우 등) 칩이 더 기다리지 않는다
 
     private void Start()
@@ -248,6 +252,56 @@ public class R0926SkyWeather : MonoBehaviour
     public bool PinnedTop => pinned && pinTop;
     /// <summary>하늘에 걸린 판이 보이는지 (고정하지 않고 휴대폰을 들어 올렸을 때) — 가까이 모달이 그동안 비켜 준다</summary>
     public bool SkyShowing => skyShow && !pinned;
+    /// <summary>판을 노치로 접어 둔 동안 (노치가 있는 아이폰 · 하늘을 켰을 때) — 노치 아래 줄에 날씨 · 옆 장의 첫 줄이 보인다</summary>
+    public bool FoldedToNotch => collapsed && !pinned && R0926SkySettings.Enabled && R0926Notch.Available;
+    /// <summary>판을 노치로 접을 수 있는지 — 노치가 없으면 예전처럼 칩으로 접는다</summary>
+    public bool CanFoldToNotch => R0926SkySettings.Enabled && frame != null && frameGroup != null && pinLayer != null && glass != null
+                                  && frameSize.x > 0f && R0926Notch.Available;
+    /// <summary>노치를 눌러 폈을 때 보일 장 (ConsumeHome 과 같이 읽는다)</summary>
+    public R0926SkyPages.Kind HomeKind { get; private set; } = R0926SkyPages.Kind.Weather;
+
+    /// <summary>
+    /// 판을 노치로 접는다 ('하늘 접기' · 위쪽에 고정한 판을 위로 밀기 — R0926SkyPages). 지금 보이는 자리에서 노치 아래 줄로 작아지며 날아 들어가고,
+    /// 노치에는 판이 보던 장부터 · 잠깐 '터치하면 돌아가요' (11-17 대표님 「'하늘 접기' 버튼을 눌러서 해당 정보가 노치로 이동했을 때 잠시 '터치하면 돌아가요'」)
+    /// </summary>
+    public void FoldToNotch()
+    {
+        if (!CanFoldToNotch) { collapsed = true; SetPinned(false); return; }
+        collapsed = true;
+        bool fly;
+        if (pinned)
+        {
+            pinned = false;
+            fromPos = frame.anchoredPosition;
+            fromScale = frame.localScale.x;
+            fromAlpha = frameGroup.alpha;
+            fly = true;
+        }
+        else if (frame.parent == pinLayer && pinT < 1f)
+        {
+            // 하늘로 돌아가는 중 — 그 자리에서 노치로
+            fromPos = frame.anchoredPosition;
+            fromScale = frame.localScale.x;
+            fromAlpha = frameGroup.alpha;
+            fly = true;
+        }
+        else if (skyShow && cam != null && ScreenRect(frame, out fromPos, out fromScale))
+        {
+            fromAlpha = skyGroup != null ? skyGroup.alpha : 1f;
+            AttachToPin();
+            if (skyGroup != null) skyGroup.alpha = 0f;   // 하늘의 빈 판은 바로 걷는다 — 틀은 화면 UI 로 옮겨 날아간다 (끝나고 하늘로 돌려놓을 때 다시 보이지 않게)
+            fly = true;
+        }
+        else fly = false;   // 보이는 판이 없다 — 접기만
+        if (fly)
+        {
+            toNotch = true;
+            fromGlass = glassK;
+            pinT = 0f;
+            UpdatePin();
+        }
+        R0926Notch.Folded(R0926SkyPages.BoardKind);
+    }
 
     /// <summary>
     /// 고정 · 풀기 (판의 📌 · 판을 위아래로 밀기 — R0926SkyPages). 떠 있는 판만 고정한다.
@@ -258,6 +312,8 @@ public class R0926SkyWeather : MonoBehaviour
         if (frame == null || frameGroup == null || pinLayer == null || glass == null || cam == null) return;
         if (on == pinned && (!on || top == pinTop)) return;
         if (on && !pinned && !skyShow) return;
+        toNotch = false;
+        fromGlass = glassK;
         if (on && pinned)
         {
             // 위 <-> 아래 — 지금 자리에서 그쪽 고정 자리로
@@ -299,16 +355,19 @@ public class R0926SkyWeather : MonoBehaviour
     }
 
     /// <summary>
-    /// 노치의 날씨를 누르면 (R0926Notch) — 하늘을 안 봐도 보이게 판을 화면 위쪽에 고정해 편다. 노치 자리(화면 픽셀)에서 작게 나와 내려온다.
-    /// 아래로 밀면 사라지고(R0926SkyPages → SetPinned(false)), 그 뒤 하늘을 비추면 평소대로 하늘에 뜬다
+    /// 노치를 누르면 (R0926Notch) — 하늘을 안 봐도 보이게 판을 화면 위쪽에 고정해 편다 (노치에서 보던 장 page 로). 노치 자리(화면 픽셀)에서 작게 나와 내려온다.
+    /// 위로 밀면 다시 노치로(R0926SkyPages → FoldToNotch), 아래로 밀면 사라지고(SetPinned(false)), 그 뒤 하늘을 비추면 평소대로 하늘에 뜬다
     /// </summary>
-    public void UnfoldFromNotch(Vector2 screen)
+    public void UnfoldFromNotch(Vector2 screen, R0926SkyPages.Kind page = R0926SkyPages.Kind.Weather)
     {
         if (frame == null || frameGroup == null || pinLayer == null || glass == null || frameSize.x <= 0f) return;
         collapsed = false;
         if (lying) lyingOverride = true;
         homeRequest = true;
+        HomeKind = page;
         if (pinned) { SetPinned(true, true); return; }
+        toNotch = false;
+        fromGlass = glassK;
         pinned = true;
         pinTop = true;
         pinT = 0f;
@@ -322,8 +381,10 @@ public class R0926SkyWeather : MonoBehaviour
         UpdatePin();
         if (PlayerPrefs.GetInt(NotchHintKey, 0) != 0 || ToastManager.Instance == null) return;
         PlayerPrefs.SetInt(NotchHintKey, 1);   // 처음 한 번만 — 치우는 법
-        ToastManager.Instance.ShowInfo(L(R0926LocalizedText.Lang(), "위쪽에 고정했어요 · 아래로 밀면 사라져요", "Pinned to the top · Swipe down to put it away",
-            "上に固定しました · 下にスワイプで閉じます", "已固定在顶部 · 向下滑动即可收起", "Fijado arriba · Desliza hacia abajo para quitarlo"));
+        ToastManager.Instance.ShowInfo(L(R0926LocalizedText.Lang(), "위쪽에 고정했어요 · 위로 밀면 노치로, 아래로 밀면 사라져요",
+            "Pinned to the top · Swipe up to tuck it into the notch, down to put it away",
+            "上に固定しました · 上にスワイプでノッチへ、下にスワイプで閉じます", "已固定在顶部 · 向上滑动收进刘海，向下滑动收起",
+            "Fijado arriba · Desliza hacia arriba para guardarlo en la muesca, hacia abajo para quitarlo"));
     }
 
     /// <summary>노치에서 폈는지 — 한 번 읽으면 지운다 (R0926SkyPages 가 날씨 장부터 보이게)</summary>
@@ -340,10 +401,14 @@ public class R0926SkyWeather : MonoBehaviour
     /// <summary>위아래로 끄는 동안 판이 손가락을 따라 내려오거나 올라간 만큼 (틀 단위)</summary>
     public void SetPull(float y) => pull = y;
 
-    /// <summary>위쪽 칩을 누르면 — 판이 떠 있으면 접고, 접혀 있으면 편다</summary>
+    /// <summary>위쪽 칩을 누르면 — 판이 떠 있으면 접고(노치가 있으면 노치로), 접혀 있으면 편다</summary>
     public void ToggleCollapse()
     {
-        if (boardShowing) { collapsed = true; SetPinned(false); }
+        if (boardShowing)
+        {
+            if (CanFoldToNotch) FoldToNotch();
+            else { collapsed = true; SetPinned(false); }
+        }
         else
         {
             collapsed = false;
@@ -403,10 +468,10 @@ public class R0926SkyWeather : MonoBehaviour
         bool covered = false;
         if (chipWaitFor != null) foreach (var g in chipWaitFor) if (g != null && g.activeInHierarchy) { covered = true; break; }
         bool showChip = ready && settled && !covered && !(pill && Time.unscaledTime - pillSince < PillWaitMax);
-        // 노치가 있는 아이폰 — 접은 동안 날씨는 칩 대신 노치 옆에 (휴대폰을 내려도 보인다 · 누르면 위쪽에 고정해 편다 — UnfoldFromNotch)
-        bool inNotch = collapsed && !pinned && WeatherReady && notchCode >= 0 && R0926Notch.Available;
-        R0926Notch.SetWeather(inNotch, notchCode, notchDay, notchTemp);
-        if (inNotch) showChip = false;
+        // 노치가 있는 아이폰 — 접은 동안 날씨 · 옆 장의 첫 줄은 칩 대신 노치 아래 줄에 (휴대폰을 내려도 보인다 · 누르면 위쪽에 고정해 편다 — UnfoldFromNotch)
+        bool folded = FoldedToNotch, weatherNotch = WeatherReady && notchCode >= 0;
+        R0926Notch.SetSky(folded, weatherNotch, notchCode, notchDay, notchTemp);
+        if (folded && (weatherNotch || R0926SkyPages.NotchItems.Count > 0)) showChip = false;
         boardShowing = skyShow || pinned;
         UpdateChip(boardShowing);
 
@@ -475,17 +540,31 @@ public class R0926SkyWeather : MonoBehaviour
         Vector2 toPos;
         float toScale, toAlpha = 1f;
         if (pinned) { PinnedRect(out toPos, out toScale); toPos.y += pull * toScale; }
+        else if (toNotch && NotchRect(out toPos, out toScale)) toAlpha = 0f;   // 노치 아래 줄로 작아지며 들어간다
         else if (skyShow && ScreenRect(skyBoard, out toPos, out toScale)) toAlpha = skyGroup != null ? skyGroup.alpha : 1f;
         else { toPos = fromPos + new Vector2(0f, flyDir * pinLayer.rect.height * 0.35f); toScale = fromScale * 0.9f; toAlpha = 0f; }   // 하늘을 안 보고 있으면 민 쪽으로 날아가며 사라진다
         frame.anchoredPosition = Vector2.LerpUnclamped(fromPos, toPos, e);
         float s = Mathf.LerpUnclamped(fromScale, toScale, e);
         frame.localScale = new Vector3(s, s, 1f);
         frameGroup.alpha = Mathf.Lerp(fromAlpha, toAlpha, e);
-        SetGlass(pinned ? e : 1f - e);
+        SetGlass(Mathf.Lerp(fromGlass, pinned ? 1f : 0f, e));
         bool touch = pinned && pinT > 0.6f;
         frameGroup.blocksRaycasts = touch;
         frameGroup.interactable = touch;
-        if (!pinned && pinT >= 1f) BackToSky();
+        if (!pinned && pinT >= 1f) { toNotch = false; BackToSky(); }
+    }
+
+    // 노치 아래 줄 — 판 가운데가 그리로, 아주 작게 (R0926Notch.RowCenter · 고정 자리와 같은 좌표)
+    private bool NotchRect(out Vector2 pos, out float scale)
+    {
+        pos = Vector2.zero;
+        scale = fromScale * 0.12f;
+        if (!R0926Notch.RowCenter(out var screen)) return false;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(pinLayer, screen, null, out var lp)) return false;
+        var area = pinLayer.rect;
+        var g = glass.rectTransform;
+        pos = lp - new Vector2(area.center.x, area.yMin) - new Vector2(0f, (g.localPosition.y + g.rect.center.y) * scale);
+        return true;
     }
 
     private void BackToSky()
@@ -522,7 +601,7 @@ public class R0926SkyWeather : MonoBehaviour
         }
         var sa = Screen.safeArea;
         float k = area.height / Mathf.Max(1f, Screen.height);
-        return area.height - (Screen.height - sa.yMax) * k;
+        return area.height - (Screen.height - sa.yMax + R0926Notch.DropPx) * k;
     }
 
     // 주소줄 · 도크 중 가장 높은 윗변 — pinLayer 아래 변에서 위로
@@ -558,8 +637,9 @@ public class R0926SkyWeather : MonoBehaviour
     private void SetGlass(float k)
     {
         if (glass == null) return;
+        glassK = Mathf.Clamp01(k);
         var c = glassColor;
-        c.a *= Mathf.Clamp01(k);
+        c.a *= glassK;
         glass.color = c;
     }
 
@@ -662,6 +742,7 @@ public class R0926SkyWeather : MonoBehaviour
         if (Check(SubwayManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
         if (Check(TrainStationManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
         if (Check(TerminalManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
+        if (Check(StoreManager.Instance?.GetSpawnedObjects()?.Values, eye)) return true;
         if (Check(R0926HuntTreasure.SpawnedObjects.Values, eye)) return true;
         return false;
     }

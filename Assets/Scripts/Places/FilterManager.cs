@@ -20,6 +20,8 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Toggle categoryToggle;
     [Tooltip("축제 칩 — 켜면 목록이 근처 축제만 (AR 은 그대로). 앱을 켤 때마다 꺼진 채 시작")]
     [SerializeField] private Toggle festivalToggle;
+    [Tooltip("「공공데이터」 칩 — 근처 가게 (소상공인 상가정보 · StoreManager, 11-20 N8a). 관광공사 · 기관 자료는 「공공기관」 칩(publicDataToggle)")]
+    [SerializeField] private Toggle storesToggle;
 
 
     [Header("References")]
@@ -29,6 +31,7 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private TerminalManager terminalManager;
     [SerializeField] private TrainStationManager trainStationManager;
     [SerializeField] private SubwayManager subwayManager;
+    [SerializeField] private StoreManager storeManager;
 
     [Header("Long Press Settings")]
     [SerializeField] private float longPressDuration = 0.8f;
@@ -59,10 +62,11 @@ public class FilterManager : MonoBehaviour
         Park = 4,
         Toilet = 5,  // 공중화장실 — 색은 모두 DataManager.GetCategoryColor
         Sport = 6,
-        Landmark = 7
+        Landmark = 7,
+        Stay = 8     // 숙소 (11-19 L1) — 저장값이 이 번호라 맨 뒤에 붙인다 (보여 주는 순서는 R0926FilterChip.CatOrder)
     }
 
-    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark" };
+    private static readonly string[] categoryStateValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "stay" };
 
     // 공공데이터가 주로 쓰는 카테고리 — 판별은 IsPublicSource 로 (서버가 is_public 을 안 주는 옛 서버일 때만 이 목록으로 짐작)
     public static readonly HashSet<string> PublicDataCategories = new HashSet<string>
@@ -87,6 +91,8 @@ public class FilterManager : MonoBehaviour
     public PetFriendlyFilterState PetState => petFriendlyState;
 
     private static FilterManager live;
+    /// <summary>3D(Full) 로 띄우는 반경 (m) — 거리로 3D · 인디케이터를 끄는 스크립트가 이 안에서는 끄지 않는다 (11-18 H3). 켜지기 전이면 0</summary>
+    public static float FullRadiusNow => live != null ? live.fullObjectRadius : 0f;
     /// <summary>
     /// 애견동반만 보기가 켜져 있는지 — 교통 매니저가 목록을 다시 받아 스스로 만들 때도 이 값을 본다
     /// (11-14 대표님 「애견동반에서는 지하철, 기차, 터미널 모두 그냥 발생하지 않으면」). 켜지기 전이면 저장된 값
@@ -94,6 +100,18 @@ public class FilterManager : MonoBehaviour
     public static bool PetOnlyNow => live != null
         ? live.petFriendlyState == PetFriendlyFilterState.OnlyPetFriendly
         : PlayerPrefs.GetInt(PREF_PET_FRIENDLY, 0) == 1;
+    /// <summary>
+    /// 지금 고른 분류 값 ("" = 전체) — 관광공사 자료(TourAPIManager)가 숙박만 '숙소'로 보이고 나머지는 숨길 때 (11-19 L1). 켜지기 전이면 저장된 값
+    /// </summary>
+    public static string ActiveCategoryNow
+    {
+        get
+        {
+            if (live != null) return live.GetActiveCategoryFilter();
+            int saved = PlayerPrefs.GetInt(PREF_CATEGORY, 0);
+            return saved >= 0 && saved < categoryStateValues.Length ? categoryStateValues[saved] : "";
+        }
+    }
     /// <summary>
     /// 사람 칩의 지금 상태 — 칩을 누르는 건 P2PUserFilterPanel 이 맡으니 그쪽 값을 읽는다.
     /// 예전엔 여기 따로 둔 값(누를 때 바뀌지 않음)을 읽어 칩이 늘 '팔로잉'으로 보였고, 분류를 풀 때도 그 값으로 되돌렸다
@@ -123,11 +141,13 @@ public class FilterManager : MonoBehaviour
     private bool filterTerminal = true;
     private bool filterObject3D = true;
     private bool filterFestival;   // 축제 / 보물 — 목록 맨 위에 근처 축제 · 보물찾기 (기본 꺼짐)
+    private bool filterStores = true;   // 근처 가게 (「공공데이터」 칩)
 
     private bool isUpdatingToggles = false;
 
     // 카테고리 선택 시 비활성화할 토글들의 원래 상태 저장
     private bool savedPublicData;
+    private bool savedStores;
     private bool savedSubway;
     private bool savedTrain;
     private bool savedTerminal;
@@ -147,6 +167,7 @@ public class FilterManager : MonoBehaviour
     private const string PREF_OBJECT3D = "Filter_Object3D_V2";
     private const string PREF_CATEGORY = "Filter_Category_V1";
     private const string PREF_FESTIVAL = "Filter_Festival_V1";
+    private const string PREF_STORES = "Filter_Stores_V1";
 
     // 다국어 데이터
     private Dictionary<string, Dictionary<string, string>> localizedFilterNames = new Dictionary<string, Dictionary<string, string>>
@@ -157,7 +178,8 @@ public class FilterManager : MonoBehaviour
             { "p2pAll", "P2P (All)" },
             { "p2pFollowing", "P2P (Following)" },
             { "p2pNone", "P2P (Exclude)" },
-            { "publicData", "Public Data" },
+            { "publicData", "Public Orgs" },
+            { "stores", "Public Data" },
             { "subway", "Metro" },
             { "alcohol", "Alcohol" },
             { "train", "Train" },
@@ -171,7 +193,8 @@ public class FilterManager : MonoBehaviour
             { "categoryPark", "Park" },
             { "categoryToilet", "Public Restroom" },
             { "categorySport", "Sports" },
-            { "categoryLandmark", "Landmark" }
+            { "categoryLandmark", "Landmark" },
+            { "categoryStay", "Stays" }
         }},
         { "ko", new Dictionary<string, string> {
             { "petFriendlyInclude", "애견동반(포함)" },
@@ -179,7 +202,8 @@ public class FilterManager : MonoBehaviour
             { "p2pAll", "P2P(전체)" },
             { "p2pFollowing", "P2P(팔로잉)" },
             { "p2pNone", "P2P(제외)" },
-            { "publicData", "공공데이터" },
+            { "publicData", "공공기관" },   // 관광공사 · 기관이 올린 공공시설 (11-18 대표님 — 예전 「공공데이터」)
+            { "stores", "공공데이터" },      // 근처 가게 — 소상공인 상가정보 (StoreManager)
             { "subway", "지하철" },
             { "alcohol", "주류판매" },
             { "train", "기차역" },
@@ -193,7 +217,8 @@ public class FilterManager : MonoBehaviour
             { "categoryPark", "공원" },
             { "categoryToilet", "공중화장실" },
             { "categorySport", "스포츠" },
-            { "categoryLandmark", "랜드마크" }
+            { "categoryLandmark", "랜드마크" },
+            { "categoryStay", "숙소" }
         }},
         { "ja", new Dictionary<string, string> {
             { "petFriendlyInclude", "ペット同伴(含む)" },
@@ -201,7 +226,8 @@ public class FilterManager : MonoBehaviour
             { "p2pAll", "P2P(全員)" },
             { "p2pFollowing", "P2P(フォロー中)" },
             { "p2pNone", "P2P(除外)" },
-            { "publicData", "公共データ" },
+            { "publicData", "公共機関" },
+            { "stores", "公共データ" },
             { "subway", "地下鉄" },
             { "alcohol", "アルコール" },
             { "train", "鉄道駅" },
@@ -215,7 +241,8 @@ public class FilterManager : MonoBehaviour
             { "categoryPark", "公園" },
             { "categoryToilet", "公衆トイレ" },
             { "categorySport", "スポーツ" },
-            { "categoryLandmark", "ランドマーク" }
+            { "categoryLandmark", "ランドマーク" },
+            { "categoryStay", "宿泊" }
         }},
         { "zh", new Dictionary<string, string> {
             { "petFriendlyInclude", "宠物友好(包含)" },
@@ -223,7 +250,8 @@ public class FilterManager : MonoBehaviour
             { "p2pAll", "P2P(全部)" },
             { "p2pFollowing", "P2P(关注)" },
             { "p2pNone", "P2P(排除)" },
-            { "publicData", "公共数据" },
+            { "publicData", "公共机构" },
+            { "stores", "公共数据" },
             { "subway", "地铁" },
             { "alcohol", "酒类销售" },
             { "train", "火车站" },
@@ -237,7 +265,8 @@ public class FilterManager : MonoBehaviour
             { "categoryPark", "公园" },
             { "categoryToilet", "公共卫生间" },
             { "categorySport", "运动" },
-            { "categoryLandmark", "地标" }
+            { "categoryLandmark", "地标" },
+            { "categoryStay", "住宿" }
         }},
         { "es", new Dictionary<string, string> {
             { "petFriendlyInclude", "Mascotas (Incluir)" },
@@ -245,7 +274,8 @@ public class FilterManager : MonoBehaviour
             { "p2pAll", "P2P (Todos)" },
             { "p2pFollowing", "P2P (Siguiendo)" },
             { "p2pNone", "P2P (Excluir)" },
-            { "publicData", "Datos Públicos" },
+            { "publicData", "Organismos Públicos" },
+            { "stores", "Datos Públicos" },
             { "subway", "Metro" },
             { "alcohol", "Alcohol" },
             { "train", "Estación de Tren" },
@@ -259,7 +289,8 @@ public class FilterManager : MonoBehaviour
             { "categoryPark", "Parque" },
             { "categoryToilet", "Baño Público" },
             { "categorySport", "Deportes" },
-            { "categoryLandmark", "Punto de Interés" }
+            { "categoryLandmark", "Punto de Interés" },
+            { "categoryStay", "Alojamiento" }
         }}
     };
 
@@ -287,6 +318,7 @@ public class FilterManager : MonoBehaviour
         if (terminalManager == null) terminalManager = Object.FindFirstObjectByType<TerminalManager>();
         if (trainStationManager == null) trainStationManager = Object.FindFirstObjectByType<TrainStationManager>();
         if (subwayManager == null) subwayManager = Object.FindFirstObjectByType<SubwayManager>();
+        if (storeManager == null) storeManager = Object.FindAnyObjectByType<StoreManager>(FindObjectsInactive.Include);
 
         live = this;
         LoadFilterSettings();
@@ -306,6 +338,7 @@ public class FilterManager : MonoBehaviour
         SetupToggle(terminalToggle, filterTerminal, OnTerminalToggleChanged, "terminal");
         SetupToggle(object3DToggle, filterObject3D, OnObject3DToggleChanged, "object3D");
         SetupToggle(festivalToggle, filterFestival, OnFestivalToggleChanged, "festival");
+        SetupToggle(storesToggle, filterStores, OnStoresToggleChanged, "stores");
 
         // Category는 PetFriendly처럼 multi-state이므로 별도 처리
         if (categoryToggle != null)
@@ -351,6 +384,8 @@ public class FilterManager : MonoBehaviour
             RegisterCacheProvider(trainProvider);
         if (terminalManager != null && terminalManager is IPlaceCacheProvider terminalProvider && !cacheProviders.Contains(terminalProvider))
             RegisterCacheProvider(terminalProvider);
+        if (storeManager != null && !cacheProviders.Contains(storeManager))
+            RegisterCacheProvider(storeManager);
 
         // 프로바이더가 있으면 AllocationLoop 시작 보장
         EnsureAllocationLoopStarted();
@@ -371,6 +406,7 @@ public class FilterManager : MonoBehaviour
         SetToggleLabel(terminalToggle, texts["terminal"]);
         SetToggleLabel(object3DToggle, texts["object3D"]);
         SetToggleLabel(festivalToggle, texts["festival"]);
+        SetToggleLabel(storesToggle, texts["stores"]);
     }
 
     private void SetToggleLabel(Toggle toggle, string text)
@@ -578,11 +614,12 @@ public class FilterManager : MonoBehaviour
         // P2P도 마찬가지
         p2pFilterState = (filterName == "p2p") ? P2PFilterState.All : P2PFilterState.None;
         filterPublicData = (filterName == "publicData");
+        filterStores = (filterName == "stores");
         filterSubway = (filterName == "subway");
         filterAlcohol = (filterName == "alcohol");
         filterTrain = filterTerminal = (filterName == "train" || filterName == "terminal");   // 터미널 / 기차는 한 칩
-        filterObject3D = (filterName == "object3D");
-        categoryState = (filterName == "category") ? CategoryFilterState.All : CategoryFilterState.All;
+        filterObject3D = object3DToggle == null || filterName == "object3D";   // 3D 칩이 없으면 3D 는 늘 보인다 (11-18)
+        categoryState =(filterName == "category") ? CategoryFilterState.All : CategoryFilterState.All;
 
         UpdateAllToggleUI();
         SaveFilterSettings();
@@ -602,8 +639,12 @@ public class FilterManager : MonoBehaviour
         filterAlcohol = alcoholToggle == null || PlayerPrefs.GetInt(PREF_ALCOHOL, 1) == 1;
         // 터미널 / 기차는 한 칩 (10-18) — 따로 저장돼 있던 값은 하나라도 켜져 있으면 둘 다 켠다
         filterTrain = filterTerminal = PlayerPrefs.GetInt(PREF_TRAIN, 1) == 1 || PlayerPrefs.GetInt(PREF_TERMINAL, 1) == 1;
-        filterObject3D = PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
-        categoryState = (CategoryFilterState)PlayerPrefs.GetInt(PREF_CATEGORY, 0);
+        // 3D 칩은 없앴다 (11-18 대표님 — 3D 는 늘 보이게 · 그 자리는 「공공기관」 칩). 칩이 없으면 예전에 꺼 둔 값이 남아 있어도 늘 보인다
+        filterObject3D = object3DToggle == null || PlayerPrefs.GetInt(PREF_OBJECT3D, 1) == 1;
+        if (object3DToggle == null && PlayerPrefs.GetInt(PREF_OBJECT3D, 1) != 1) PlayerPrefs.SetInt(PREF_OBJECT3D, 1);   // 저장값을 처음 읽는 DataManager 도 숨기지 않게
+        filterStores = PlayerPrefs.GetInt(PREF_STORES, 1) == 1;
+        int savedCategory = PlayerPrefs.GetInt(PREF_CATEGORY, 0);
+        categoryState = savedCategory >= 0 && savedCategory < categoryStateValues.Length ? (CategoryFilterState)savedCategory : CategoryFilterState.All;   // 모르는 번호는 전체로
         filterFestival = PlayerPrefs.GetInt(PREF_FESTIVAL, 0) == 1;
     }
 
@@ -619,6 +660,7 @@ public class FilterManager : MonoBehaviour
         PlayerPrefs.SetInt(PREF_OBJECT3D, filterObject3D ? 1 : 0);
         PlayerPrefs.SetInt(PREF_CATEGORY, (int)categoryState);
         PlayerPrefs.SetInt(PREF_FESTIVAL, filterFestival ? 1 : 0);
+        PlayerPrefs.SetInt(PREF_STORES, filterStores ? 1 : 0);
         PlayerPrefs.Save();
     }
 
@@ -627,6 +669,7 @@ public class FilterManager : MonoBehaviour
         UpdatePetFriendlyToggleUI();
         // P2P 토글은 P2PUserFilterPanel이 전담 처리
         if (publicDataToggle != null) publicDataToggle.isOn = filterPublicData;
+        if (storesToggle != null) storesToggle.isOn = filterStores;
         if (subwayToggle != null) subwayToggle.isOn = filterSubway;
         if (alcoholToggle != null) alcoholToggle.isOn = filterAlcohol;
         if (trainToggle != null) trainToggle.isOn = filterTrain;
@@ -676,6 +719,14 @@ public class FilterManager : MonoBehaviour
     {
         if (isUpdatingToggles) return;
         filterPublicData = isOn;
+        SaveFilterSettings();
+        ApplyAllFilters();
+    }
+
+    private void OnStoresToggleChanged(bool isOn)
+    {
+        if (isUpdatingToggles) return;
+        filterStores = isOn;
         SaveFilterSettings();
         ApplyAllFilters();
     }
@@ -747,7 +798,7 @@ public class FilterManager : MonoBehaviour
             return;
         }
 
-        // 순환 (보여 주는 순서): 전체 → 음식점 → 카페 → 샵 → 공원 → 스포츠 → 화장실 → 랜드마크 → 전체
+        // 순환 (보여 주는 순서): 전체 → 음식점 → 카페 → 샵 → 숙소 → 공원 → 스포츠 → 화장실 → 랜드마크 → 전체
         var order = R0926FilterChip.CatOrder;
         int at = System.Array.IndexOf(order, (int)categoryState);
         SetCategory((CategoryFilterState)order[(at + 1) % order.Length]);
@@ -770,6 +821,7 @@ public class FilterManager : MonoBehaviour
     /// <summary>
     /// 카테고리가 선택되면 공공데이터/P2P/주류 토글을 회색으로 비활성화
     /// 카테고리=All로 돌아오면 원래 상태 복원
+    /// (분류를 고르면 「공공기관」 · 「공공데이터」 칩과 상관없이 그 분류 전부 — 11-22 대표님 「원래대로 '전체'보다 많을 수 있도록 … '공공데이터' 를 키지 않아도 해당 분류를 눌렀을 때 관련한 내용이 모두 발생하도록」 · 11-21 S7 에 칩대로 바꿨다가 되돌림)
     /// </summary>
     private void ApplyCategoryOverride()
     {
@@ -780,6 +832,7 @@ public class FilterManager : MonoBehaviour
             // 카테고리 선택됨 → 현재 상태 저장 후 비활성화
             isCategoryOverrideActive = true;
             savedPublicData = filterPublicData;
+            savedStores = filterStores;
             savedSubway = filterSubway;
             savedTrain = filterTrain;
             savedTerminal = filterTerminal;
@@ -791,6 +844,7 @@ public class FilterManager : MonoBehaviour
             // 카테고리=All로 복귀 → 원래 상태 복원
             isCategoryOverrideActive = false;
             filterPublicData = savedPublicData;
+            filterStores = savedStores;
             filterSubway = savedSubway;
             filterTrain = savedTrain;
             filterTerminal = savedTerminal;
@@ -804,6 +858,7 @@ public class FilterManager : MonoBehaviour
         {
             // 체크된 채로 회색 박스 표시 (비활성화 상태)
             SetToggleDisabledVisual(publicDataToggle);
+            SetToggleDisabledVisual(storesToggle);
             SetToggleDisabledVisual(subwayToggle);
             SetToggleDisabledVisual(trainToggle);
             SetToggleDisabledVisual(terminalToggle);
@@ -811,6 +866,7 @@ public class FilterManager : MonoBehaviour
 
             // 토글 터치 불가
             SetToggleInteractable(publicDataToggle, false);
+            SetToggleInteractable(storesToggle, false);
             SetToggleInteractable(subwayToggle, false);
             SetToggleInteractable(trainToggle, false);
             SetToggleInteractable(terminalToggle, false);
@@ -828,6 +884,7 @@ public class FilterManager : MonoBehaviour
         {
             // 원래 상태로 복원 (SetIsOnWithoutNotify로 이벤트 발생 방지)
             if (publicDataToggle != null) publicDataToggle.SetIsOnWithoutNotify(filterPublicData);
+            if (storesToggle != null) storesToggle.SetIsOnWithoutNotify(filterStores);
             if (subwayToggle != null) subwayToggle.SetIsOnWithoutNotify(filterSubway);
             if (trainToggle != null) trainToggle.SetIsOnWithoutNotify(filterTrain);
             if (terminalToggle != null) terminalToggle.SetIsOnWithoutNotify(filterTerminal);
@@ -835,6 +892,7 @@ public class FilterManager : MonoBehaviour
 
             // 토글 터치 가능으로 복원
             SetToggleInteractable(publicDataToggle, true);
+            SetToggleInteractable(storesToggle, true);
             SetToggleInteractable(subwayToggle, true);
             SetToggleInteractable(trainToggle, true);
             SetToggleInteractable(terminalToggle, true);
@@ -850,6 +908,7 @@ public class FilterManager : MonoBehaviour
 
             // 비활성화 비주얼 해제 → 원래 on/off 색상 복원
             RestoreToggleVisual(publicDataToggle, filterPublicData);
+            RestoreToggleVisual(storesToggle, filterStores);
             RestoreToggleVisual(subwayToggle, filterSubway);
             RestoreToggleVisual(trainToggle, filterTrain);
             RestoreToggleVisual(terminalToggle, filterTerminal);
@@ -871,6 +930,7 @@ public class FilterManager : MonoBehaviour
     {
         yield return null;
         RestoreToggleVisual(publicDataToggle, filterPublicData);
+        RestoreToggleVisual(storesToggle, filterStores);
         RestoreToggleVisual(subwayToggle, filterSubway);
         RestoreToggleVisual(trainToggle, filterTrain);
         RestoreToggleVisual(terminalToggle, filterTerminal);
@@ -956,6 +1016,10 @@ public class FilterManager : MonoBehaviour
                 bgColor = DataManager.GetCategoryColor("landmark");
                 labelText = texts["categoryLandmark"];
                 break;
+            case CategoryFilterState.Stay:
+                bgColor = DataManager.GetCategoryColor("stay");
+                labelText = texts["categoryStay"];
+                break;
         }
 
         SetToggleBackgroundAndCheckmark(categoryToggle, bgColor);
@@ -987,6 +1051,7 @@ public class FilterManager : MonoBehaviour
             if (terminalManager != null) terminalManager.ApplyFilters(filters);
             if (trainStationManager != null) trainStationManager.ApplyFilters(filters);
             if (subwayManager != null) subwayManager.ApplyFilters(filters);
+            if (storeManager != null) storeManager.ApplyFilters(filters);
 
             // P2P 필터는 P2PUserFilterPanel이 전담 처리
 
@@ -1005,6 +1070,7 @@ public class FilterManager : MonoBehaviour
             { "petFriendlyOnly", petFriendlyState == PetFriendlyFilterState.OnlyPetFriendly },
             { "petFriendlyAll", petFriendlyState == PetFriendlyFilterState.All },
             { "publicData", categoryActive ? false : filterPublicData },
+            { "stores", categoryActive ? false : filterStores },   // 분류를 고른 동안은 그 분류의 가게만 (StoreManager · PassesSourceOrCategory)
             { "subway", categoryActive ? false : filterSubway },
             { "alcohol", filterAlcohol },   // 분류를 골라도 술 파는 곳을 숨기지 않는다 (예전 false — '음식점'을 고르면 술 파는 식당이 빠졌다)
             { "train", categoryActive ? false : filterTrain },
@@ -1029,6 +1095,10 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private int maxPublicFullObjects = 20;
     [Tooltip("공중화장실은 가까운 이 수만큼만 (3D·화살표 합쳐) — 화장실이 공공데이터의 대부분이라 도심에선 화장실로만 찰 수 있다. 넘는 화장실은 예산을 쓰지 않고 건너뛴다 ('화장실' 분류 칩을 고른 동안은 넘는 것도 화살표로)")]
     [SerializeField] private int maxToiletFullObjects = 3;
+    [Tooltip("관광공사 숙박(호텔 · 펜션 · 게스트하우스 · 한옥 …)도 '전체'일 땐 가까운 이 수만큼만 (3D·화살표 합쳐) — 도심엔 숙소가 수십 곳이라 사람이 올린 곳이 밀려난다. '숙소'를 고른 동안은 한도 없음 (11-19 L3)")]
+    [SerializeField] private int maxStayObjects = 4;
+    [Tooltip("근처 가게(소상공인 상가정보 · 「공공데이터」 칩)도 '전체'일 땐 가까운 이 수만큼만 (3D·화살표 합쳐) — 상가엔 50m 안에도 가게가 수십 곳이라 사람이 올린 곳이 밀려난다. 분류를 고르거나 「공공데이터」 칩만 볼 때(길게 누르기)는 한도 없음 (11-20 N8a)")]
+    [SerializeField] private int maxStoreObjects = 6;
     [Tooltip("IndicatorOnly 경량 오브젝트 최대 수 — maxTotalObjects 한도 안에서 추가 제한")]
     [SerializeField] private int maxIndicatorObjects = 16;
     [Tooltip("Full 오브젝트 생성 반경 (m) — 이 안에서만 Full 스폰")]
@@ -1435,14 +1505,19 @@ public class FilterManager : MonoBehaviour
         // '화장실' 분류 칩을 고른 동안은 화장실을 찾는 중이라 넘는 화장실도 예전처럼 화살표로 둔다
         bool toiletFocus = GetActiveCategoryFilter() == "toilet";
         int toiletShown = 0;
+        // 관광공사 숙박도 같은 식 — '전체'에선 가까운 maxStayObjects 곳까지만, '숙소'를 고르면 한도 없음 (11-19 L3 — 국문 관광정보 숙박을 받는다)
+        bool stayFocus = GetActiveCategoryFilter() == "stay";
+        int stayShown = 0;
+        // 근처 가게도 같은 식 — 분류를 고르면(그 분류 가게만 남는다) · 「공공데이터」 칩만 켜 두면 한도 없음
+        bool storeFocus = GetActiveCategoryFilter() != "" || (filterStores && !filterPublicData && !filterSubway && !filterTrain && !filterTerminal);
+        int storeShown = 0;
         foreach (var item in allPlaces)
         {
             // 표시 반경 밖은 제외 (PlaceListManager.distanceSlider 동기화)
             if (item.distance > indicatorObjectRadius) continue;
 
-            // dance_anim(category="anim")은 큐브로 정상 스폰 — main_photo(thumb.jpg)를 베이스맵으로
-            // 사용자가 큐브를 더블탭하면 DanceAnimController가 다운로드 패널을 띄움 → GLB로 교체.
-            // 따라서 특수 케이스 없이 일반 큐브 흐름을 그대로 탐.
+            // 춤 모델(category="anim")도 특수 케이스 없이 일반 흐름 — 11-19 L6 부터 처음부터 3D(GLB)로 뜬다
+            // (DataManager.Adopt · 예전엔 큐브로 떴다가 두 번 누르면 받기 창)
 
             // 공공 예산은 앱 내장 그림을 쓰는 우팡 DB 의 기관 자료만 (관광공사 자료는 서버 사진이라 메인 예산)
             bool isPublic = item.data.filterKey == "publicData" && item.data.sourceManager == "DataManager";
@@ -1452,6 +1527,10 @@ public class FilterManager : MonoBehaviour
 
             bool isToilet = item.data.category == "toilet";
             if (isToilet && !toiletFocus && toiletShown >= maxToiletFullObjects) continue;
+            bool isTourStay = item.data.sourceManager == "TourAPI" && item.data.category == "stay";
+            if (isTourStay && !stayFocus && stayShown >= maxStayObjects) continue;
+            bool isStore = item.data.sourceManager == "Store";
+            if (isStore && !storeFocus && storeShown >= maxStoreObjects) continue;
 
             // 1) 공공데이터 Full — 별도 예산(가산), 메인 total 한도와 무관
             //    화장실 Full 은 maxToiletFullObjects 까지만
@@ -1474,7 +1553,7 @@ public class FilterManager : MonoBehaviour
                 && nonPublicFull < maxFullObjects
                 && IsPassingFilter(item.data, filters))
             {
-                newFullSet.Add(item.data.uniqueId);
+                if (newFullSet.Add(item.data.uniqueId)) { if (isTourStay) stayShown++; if (isStore) storeShown++; }
                 fullProviderMap[item.data.uniqueId] = item.provider;
                 continue;
             }
@@ -1484,7 +1563,7 @@ public class FilterManager : MonoBehaviour
                 && newIndicatorSet.Count < maxIndicatorObjects
                 && IsPassingFilter(item.data, filters))
             {
-                if (newIndicatorSet.Add(item.data.uniqueId) && isToilet) toiletShown++;
+                if (newIndicatorSet.Add(item.data.uniqueId)) { if (isToilet) toiletShown++; if (isTourStay) stayShown++; if (isStore) storeShown++; }
                 indicatorProviderMap[item.data.uniqueId] = item.provider;
             }
         }
@@ -1723,7 +1802,7 @@ public class FilterManager : MonoBehaviour
     public Vector2 Here => GetCurrentGPS();
 
     /// <summary>
-    /// 3D 오브젝트 — 올린 3D 모델(분류 anim · 큐브로 떠 있다 더블탭하면 GLB) 또는 model_type custom.
+    /// 3D 오브젝트 — 올린 3D 모델(분류 anim · 11-19 L6 부터 처음부터 GLB) 또는 model_type custom.
     /// 11-05 대표님 「3D 체크를 해제하더라도 '시바견'이 계속 보이는데」 — 서버의 장소는 전부 model_type cube 라
     /// custom 만 보던 3D 끄기가 아무것도 숨기지 못했고, 큰 예산에서 빠진 것은 화살표로 다시 떴다
     /// </summary>
@@ -1739,6 +1818,7 @@ public class FilterManager : MonoBehaviour
     /// 분류(카테고리)를 고른 동안은 그 분류만 — 출처 칩(공공데이터·지하철·터미널/기차)은 보지 않는다.
     /// 분류가 '전체'면 출처 칩만 본다. 공공데이터인지는 filterKey (등록자 기준 — 카테고리 아님).
     /// 예전엔 분류를 골라도 공공 칩(그때는 늘 꺼짐)에 걸려 공공 장소가 화살표로만 떴다.
+    /// 그래서 칩을 꺼 둔 채면 분류 쪽이 '전체'보다 많을 수 있다 — 그게 맞다 (11-22 대표님 「원래대로 '전체'보다 많을 수 있도록 … '공공데이터' 를 키지 않아도 해당 분류를 눌렀을 때 관련한 내용이 모두 발생하도록」 · 11-21 S7 에 칩대로 바꿨다가 되돌림)
     /// </summary>
     private bool PassesSourceOrCategory(CachedPlaceData place, Dictionary<string, bool> filters)
     {

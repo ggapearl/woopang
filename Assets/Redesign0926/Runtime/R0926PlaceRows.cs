@@ -33,6 +33,7 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private Text summaryText;
     [Tooltip("한 번에 그리는 최대 줄 수 — 넘치면 가까운 순으로 자른다")]
     [SerializeField] private int maxRows = 150;
+    private const int ExtraFestivalRows = 100;   // 줄 칸이 차도 더 그리는 축제 줄 (서버가 축제를 80곳까지 준다)
 
     [Header("불러오는 동안 (스켈레톤)")]
     [SerializeField] private Sprite barSprite;
@@ -75,6 +76,18 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private Sprite huntLockSprite;
     [Tooltip("그림 크기 — 그림마다 둘레 여백이 달라 따로 둔다 (보이는 크기를 이름 글자에 맞춘다)")]
     [SerializeField] private float personIconSize = 48f;
+    [Tooltip("사람 줄 오른쪽 사진 — 원으로 자르는 그림 (r0926_circle)")]
+    [SerializeField] private Sprite circleSprite;
+    [Tooltip("사람 사진 테두리 — 도크 프로필 사진과 같은 고리 (r0926_ring_mini). 색은 그 사람의 공개 범위")]
+    [SerializeField] private Sprite personRingSprite;
+    [Tooltip("사람 사진 지름 — 테두리까지 사진 칸(120) 안에 들게")]
+    [SerializeField] private float personPhotoSize = 96f;
+    [Tooltip("목록 칸 X '닫기' 틀 (ListPanel/DockMirror0926) — 사진으로 연 정보 창이 맨 위인 동안엔 목록을 숨겨도 이 틀은 보인다 (11-17 D3)")]
+    [SerializeField] private RectTransform coverDock;
+    [Tooltip("그때 X 위에 덮는 누름 칸 (XButton_List/CoverBack0926) — 정보 창만 닫고 목록으로. 원래 X 는 목록을 닫는다")]
+    [SerializeField] private Button coverBack;
+    [Tooltip("장소 줄을 누르면 먼저 묻는 창 (GuideAsk0926) — 「○○으로 안내할까요?」 확인일 때만 안내 (11-17 D4). 비어 있으면 예전처럼 바로 안내")]
+    [SerializeField] private R0926GuideAsk guideAsk;
     [SerializeField] private float huntIconSize = 44f;
     [Tooltip("축제·보호소 그림 (r0926_f_<이름> — 서버가 축제마다 고른 이름, 보호소는 shelter)")]
     [SerializeField] private Sprite[] kindIcons;
@@ -125,6 +138,14 @@ public class R0926PlaceRows : MonoBehaviour
     private static readonly Color HuntTint = new Color(0.910f, 0.749f, 0.310f, 0.05f);   // 지도 보물 핀 테두리와 같은 금빛 (선형 색 공간이라 낮은 값도 꽤 진하다)
     private static readonly Color HuntRing = new Color(0.910f, 0.749f, 0.310f, 0.32f);
     private static readonly Color ShineColor = new Color(1f, 0.93f, 0.75f, 0.24f);
+
+    [Header("네온 모드 강조 줄 (11-23 S8) — 보물찾기 · 축제 · 대피소 · 서로 아는 사람 줄을 그 색 네온으로")]
+    [Tooltip("R0926WindowSkin.mat — 비어 있으면 네온 줄 없이 예전 그대로")]
+    [SerializeField] private Material neonSkin;
+    private static readonly Color NeonHunt = new Color32(232, 191, 79, 255);
+    private static readonly Color NeonFestival = new Color32(255, 107, 87, 255);
+    private static readonly Color NeonShelter = new Color32(255, 193, 7, 255);
+    private static readonly Color NeonPerson = new Color32(233, 83, 131, 255);
     private const float ShineStart = 0.15f, ShineTime = 0.9f, TwinkleTime = 0.5f, HuntStagger = 0.22f, ShineEdge = 72f;
     private int huntRows;
 
@@ -148,6 +169,15 @@ public class R0926PlaceRows : MonoBehaviour
     private Dictionary<string, Sprite> catIconMap;
     /// <summary>애견동반 되는 장소의 이름 — 애견동반 칩과 같은 노랑 (10-27 대표님 「'애견동반' 의 경우 목록에서 글자색이 흰색으로 발생하지 않고 노란색으로」)</summary>
     public static readonly Color PetName = new Color32(0xFF, 0xC1, 0x07, 0xFF);
+    /// <summary>애견동반을 켜면 맨 위 보호소 줄 바탕 — 켜진 애견동반 칩과 같은 진한 노랑 (칩 꽉 참 0.94). 글자는 칩 글자색 (11-16 대표님 D5)</summary>
+    private static readonly Color ShelterBand = new Color(PetName.r, PetName.g, PetName.b, 0.94f);
+    /// <summary>바탕 있는 줄의 방향 · 거리 — 노랑 위에서 적당히 보이는 회색 (D5 「적당히 보일 정도로 회색으로」)</summary>
+    private static readonly Color BandGray = new Color32(0x55, 0x55, 0x55, 0xFF);
+    /// <summary>축제 칩을 켜면 맨 위 축제 줄 바탕 — 축제 색(칩 · 축제 줄 색 R0926Nearby.FestivalHex FF6B57)을 보호소 줄처럼 꽉 차게(0.94). 글자는 흰색 (11-17 대표님 K1)</summary>
+    private static readonly Color FestivalBand = new Color32(0xFF, 0x6B, 0x57, 0xF0);
+    /// <summary>축제 바탕 줄의 날짜 · 거리 — 이름(흰색)보다 살짝 옅은 흰색</summary>
+    private static readonly Color BandWhiteSoft = new Color(1f, 1f, 1f, 0.9f);
+    private enum Band { None, Shelter, Festival }
     private const string CatIconPrefix = "r0926_c_";
 
     public struct Entry { public string name; public string distance; }
@@ -178,8 +208,12 @@ public class R0926PlaceRows : MonoBehaviour
         public Sprite dotSprite;   // 템플릿의 색 점 — 장소로 돌아올 때
         public Vector2 dotPos, dotSize;
         public Color nameColor;    // 템플릿의 이름 색 — 애견동반이 아닌 줄
+        public Color distColor;    // 템플릿의 거리 글자 색 — 바탕 없는 줄
+        public Image band;         // 맨 위 고정 줄 바탕 (애견동반의 보호소 — 11-17 D5) · 그 줄일 때만 켠다
         public Image huntGlow;     // 보물찾기 줄 금빛 바탕 — 빛 띠를 그 안에서만 보이게 담는다
         public Image huntShine, huntTwinkle;
+        public Image huntRing;     // 보물찾기 줄 금빛 테두리 — 네온 모드면 네온 줄이 대신 (겹치지 않게 숨긴다)
+        public R0926WindowSkin neon;   // 네온 모드 강조 줄 (보물찾기 · 축제 · 대피소 · 서로 아는 사람) — 금빛 바탕과 같은 자리 · 맨 뒤
         public int huntOrder = -1; // 보물찾기 줄 중 몇 번째 (차례로 반짝) · 보물찾기가 아니면 -1
         public RectTransform photoBox;   // 줄 오른쪽 사진 칸 (템플릿 Photo) — 옛 템플릿이면 null
         public RawImage photo;
@@ -187,6 +221,13 @@ public class R0926PlaceRows : MonoBehaviour
         public string photoKey;          // 이 줄 장소의 사진: 주소 · "res:" 앱 그림 · "" 없음 · null 아직 모름 (상세를 받는 중)
         public string photoShown;        // 칸에 올라가 있는 사진
         public int near;                 // 0 화면 안 · 1 위아래 한 화면 안 (미리 받는다) · 2 그 밖
+        public Image photoBg;            // 사진 칸 바탕 = 사진을 자르는 마스크 (장소 둥근 네모 · 사람 원)
+        public Sprite photoBgSprite;     // 템플릿 모양 — 장소 줄로 돌아올 때
+        public Image.Type photoBgType;
+        public float photoBgPpu;
+        public Vector2 photoSize, photoPos;
+        public Image personRing;         // 사람 사진 테두리 — 그 사람의 공개 범위 색 (11-17 D2)
+        public bool round;               // 지금 사람 모양(원)
     }
 
     private void Awake()
@@ -224,6 +265,7 @@ public class R0926PlaceRows : MonoBehaviour
 
     private void OnEnable()
     {
+        R0926MenuStyle.Changed += OnMenuStyle;
         openedAt = Time.unscaledTime;
         last = null;   // 다시 열면 한 번 새로 그린다 (스켈레톤 판정 포함)
         nextDirAt = 0f;
@@ -238,10 +280,12 @@ public class R0926PlaceRows : MonoBehaviour
 
     private void OnDisable()
     {
+        R0926MenuStyle.Changed -= OnMenuStyle;
         // 목록이 열려 있는 동안만 나침반을 쓴다 (우리가 켠 경우에만 끈다)
         if (compassOwned) { Input.compass.enabled = false; compassOwned = false; }
         closeAt = -1f;
         EndCover();
+        if (guideAsk != null && guideAsk.Showing) guideAsk.No();   // 묻던 창도 같이 (목록이 닫히면 안내할 것도 없다)
         infoRoutine = null;   // 코루틴은 꺼지며 멈췄다
         ReleasePhotos();
     }
@@ -348,7 +392,7 @@ public class R0926PlaceRows : MonoBehaviour
 
     private void Rebuild(string text)
     {
-        int used = 0;
+        int used = 0, at = 0;   // used = 쓴 줄 칸 · at = ShownEntries 순서 (건너뛴 줄도 센다)
         huntRows = 0;
         sb.Length = 0;
         entries.Clear();
@@ -362,23 +406,32 @@ public class R0926PlaceRows : MonoBehaviour
             var m = RowRx.Match(line);
             if (m.Success)
             {
-                if (used >= maxRows) continue;
-                int index = used++;
-                Row r = GetRow(index);
-                r.index = index;
+                int shown = at++;
+                // 줄 칸은 maxRows 까지 — 넘으면 축제 줄만 더. 거리 슬라이더(최대 10km) 밖 먼 축제는 목록 맨 끝이라 장소가 많은 곳에선 잘렸다
+                // (11-17 대표님 K1 「10km 외에 있어도 하단에 발생하도록」)
+                if (used >= maxRows && (used >= maxRows + ExtraFestivalRows || places == null || shown >= places.ShownEntries.Count
+                                        || places.ShownEntries[shown].kind != PlaceListManager.EntryKind.Festival)) continue;
+                Row r = GetRow(used++);
+                r.index = shown;
                 string key = m.Groups[2].Value;
-                bool known = FindEntry(index, key, out var e);
+                bool known = FindEntry(shown, key, out var e);
                 // 근처 사람은 이름이 @아이디 — 장소 정보와 아직 못 맞춘 프레임에도 사람 모양으로
                 var kind = known ? e.kind : key.StartsWith("@") ? PlaceListManager.EntryKind.Person : PlaceListManager.EntryKind.Place;
                 SetIcon(r, kind, ParseHex(m.Groups[1].Value), known ? e.icon : null, known ? e.emojiUrl : null);
                 SetHuntGlow(r, kind == PlaceListManager.EntryKind.Hunt ? huntRows++ : -1);
                 SetPhoto(r, known, e);
+                SetPhotoShape(r, kind, known ? e.data as NearbyUserData : null);
                 if (known && e.promo) R0926Nearby.AdView(this, e.adId, "festival");   // 광고 줄은 축제 칩에만 온다
                 string label = key;
                 // 한국어가 아닌 기기: 한글 이름 옆에 로마자 읽는 법을 옅게 (번역이 아니라 읽기 도움) — 'Seoul (Station) (서울역)' 처럼 영어 이름이 이미 있으면 그대로
+                var band = !known ? Band.None : e.kind == PlaceListManager.EntryKind.Shelter ? Band.Shelter : e.top ? Band.Festival : Band.None;
                 string roman = korean || EnglishNamed.IsMatch(label) ? null : R0926Romanizer.Romanize(label);
-                R0926EmojiText.Set(r.name, roman == null ? label : label + "  <color=#6F7880>" + roman + "</color>");   // 이름 속 이모지는 우팡 이모지 그림으로
+                // 로마자 읽기는 옅게 — 바탕 줄에선 그 바탕의 둘째 글자색 (노랑 위 회색 · 축제 색 위 옅은 흰색)
+                string romanHex = band == Band.Shelter ? "555555" : band == Band.Festival ? "FFFFFFD9" : "6F7880";
+                R0926EmojiText.Set(r.name, roman == null ? label : label + "  <color=#" + romanHex + ">" + roman + "</color>");   // 이름 속 이모지는 우팡 이모지 그림으로
                 r.name.color = known && e.pet ? PetName : r.nameColor;
+                SetBand(r, band);
+                SetNeon(r, kind, band, known && e.mutual);
                 if (r.key != key) { r.key = key; r.dir = -2; r.noteUntil = 0f; r.flashUntil = 0f; }   // 다른 장소가 이 줄로 왔다 — 방향을 새로
                 // 보물찾기는 게임의 공개 설정대로 ('약 300m' · '범위 안' · '1km 이내')
                 r.distLabel = known && e.distanceText != null ? e.distanceText : FormatDistance(int.Parse(m.Groups[3].Value));
@@ -451,6 +504,7 @@ public class R0926PlaceRows : MonoBehaviour
             nr.dot.rectTransform.anchoredPosition = nr.dotPos;
             nr.dotSize = nr.dot.rectTransform.sizeDelta;
             nr.nameColor = nr.name.color;
+            nr.distColor = nr.dist.color;
             var pb = go.transform.Find("Photo") as RectTransform;
             if (pb != null)
             {
@@ -460,6 +514,13 @@ public class R0926PlaceRows : MonoBehaviour
                 nr.photo = pic != null ? pic.GetComponent<RawImage>() : null;
                 nr.photoIcon = ic != null ? ic.GetComponent<Image>() : null;
                 if (nr.photo == null) nr.photoBox = null;
+                if (nr.photoBox != null)
+                {
+                    nr.photoBg = pb.GetComponent<Image>();
+                    if (nr.photoBg != null) { nr.photoBgSprite = nr.photoBg.sprite; nr.photoBgType = nr.photoBg.type; nr.photoBgPpu = nr.photoBg.pixelsPerUnitMultiplier; }
+                    nr.photoSize = pb.sizeDelta;
+                    nr.photoPos = pb.anchoredPosition;
+                }
             }
             SetupRow(nr);
             rows.Add(nr);
@@ -530,6 +591,7 @@ public class R0926PlaceRows : MonoBehaviour
         if (huntRingSprite != null)
         {
             var ring = Decor("Ring", hrt, huntRingSprite, HuntRing);
+            row.huntRing = ring;
             var rrt = ring.rectTransform;
             rrt.anchorMin = Vector2.zero; rrt.anchorMax = Vector2.one;
             rrt.offsetMin = rrt.offsetMax = Vector2.zero;
@@ -547,6 +609,43 @@ public class R0926PlaceRows : MonoBehaviour
             row.huntShine.gameObject.SetActive(false);
         }
         hg.SetActive(false);
+
+        // 맨 위 고정 줄 바탕 (애견동반을 켜면 맨 위 보호소 줄 — 11-17 D5) — 금빛 바탕과 같은 자리 · 모양으로 맨 뒤. 그 줄일 때만 켠다
+        var bd = new GameObject("Band", typeof(RectTransform), typeof(Image));
+        bd.layer = go.layer;
+        var brt = (RectTransform)bd.transform;
+        brt.SetParent(go.transform, false);
+        brt.SetAsFirstSibling();
+        brt.anchorMin = Vector2.zero; brt.anchorMax = Vector2.one;
+        brt.offsetMin = hrt.offsetMin; brt.offsetMax = hrt.offsetMax;
+        row.band = bd.GetComponent<Image>();
+        row.band.sprite = barSprite;
+        row.band.type = row.flash.type;
+        row.band.pixelsPerUnitMultiplier = row.flash.pixelsPerUnitMultiplier;
+        row.band.color = ShelterBand;
+        row.band.raycastTarget = false;
+        bd.SetActive(false);
+
+        // 네온 모드 강조 줄 — 바탕 .12 · 흰 고리 1px · 그 색 빛 (시안 .neon .row.hl). 맨 뒤 · 그 줄일 때만 켠다
+        if (neonSkin != null)
+        {
+            var nn = new GameObject("Neon", typeof(RectTransform), typeof(Image));
+            nn.layer = go.layer;
+            var nrt = (RectTransform)nn.transform;
+            nrt.SetParent(go.transform, false);
+            nrt.SetAsFirstSibling();
+            nrt.anchorMin = Vector2.zero; nrt.anchorMax = Vector2.one;
+            nrt.offsetMin = hrt.offsetMin; nrt.offsetMax = hrt.offsetMax;
+            var ni = nn.GetComponent<Image>();
+            ni.sprite = barSprite;
+            ni.type = row.flash.type;
+            ni.pixelsPerUnitMultiplier = row.flash.pixelsPerUnitMultiplier;
+            ni.color = Color.white;
+            ni.raycastTarget = false;
+            row.neon = nn.AddComponent<R0926WindowSkin>();
+            row.neon.Setup(R0926WindowSkin.Kind.Row, neonSkin);
+            nn.SetActive(false);
+        }
         if (twinkleSprite != null)
         {
             // 상자 오른쪽 위 작은 별 — 줄 앞 그림을 따라간다
@@ -590,6 +689,27 @@ public class R0926PlaceRows : MonoBehaviour
             pbtn.onClick.AddListener(() => OnPhotoTap(row));
             if (pg != null) pg.canvasRenderer.SetAlpha(0f);
             row.photo.enabled = false;
+
+            // 사람 사진 테두리 — 도크 프로필 사진과 같은 고리 (안쪽 가장자리가 사진 가장자리를 3 만큼 덮어 계단을 가린다).
+            // 사진 칸은 마스크라 그 안에 두면 고리 바깥쪽이 잘린다 — 칸 바로 뒤 형제로
+            if (personRingSprite != null && circleSprite != null && row.photoBg != null)
+            {
+                var pr = new GameObject("PersonRing", typeof(RectTransform), typeof(Image));
+                pr.layer = go.layer;
+                var prt = (RectTransform)pr.transform;
+                prt.SetParent(go.transform, false);
+                prt.SetSiblingIndex(row.photoBox.GetSiblingIndex() + 1);
+                prt.anchorMin = row.photoBox.anchorMin; prt.anchorMax = row.photoBox.anchorMax;
+                prt.pivot = new Vector2(0.5f, 0.5f);
+                prt.anchoredPosition = PhotoCenter(row);
+                float rs = (personPhotoSize * 0.5f - 3f) / 0.68f * 2f;   // r0926_ring_mini 안쪽 가장자리 0.68 — 도크 프로필과 같은 셈 (Redesign0926Apply)
+                prt.sizeDelta = new Vector2(rs, rs);
+                row.personRing = pr.GetComponent<Image>();
+                row.personRing.sprite = personRingSprite;
+                row.personRing.preserveAspect = true;
+                row.personRing.raycastTarget = false;
+                pr.SetActive(false);
+            }
         }
     }
 
@@ -665,10 +785,52 @@ public class R0926PlaceRows : MonoBehaviour
             else R0926Nearby.Open(e.link);
             return;
         }
-        Target t = places.FindTarget(e);
         // 사람에게는 길안내를 하지 않는다 — 그 사람을 따라가게 되지 않게 (11-16 대표님 「개인 프로필의 경우 따라가기 하지말자(스토킹 위험 방지)」).
         // AR 에 떠 있으면 그 자리만 잠깐 밝힌다 (아래 Focus — 지금 화면에 보이는 것만, 따라가지 않는다)
         bool canGuide = !e.noDirection && e.kind != PlaceListManager.EntryKind.Person;
+        if (canGuide && guideAsk != null)
+        {
+            // 바로 안내하지 않고 먼저 묻는다 (11-16 대표님 D4 「스와이프하다가 잘못누르거나 창이 작아서 잘못 누른 경우에도 바로 안내하니까 좀 불편해」).
+            // 취소 · 뒤로가기 · 바깥 누르기는 아무 일 없이 (목록 그대로). 안내하지 않는 줄(사람 · 방향 없는 줄)은 묻지 않는다
+            var asked = e;
+            int at = r.index;
+            guideAsk.Show(e.name, () => GuideConfirmed(asked, at));
+            return;
+        }
+        Go(r, e, canGuide);
+    }
+
+    // 묻는 창에서 확인 — 묻는 사이 목록이 다시 늘어섰을 수 있어 같은 장소를 지금 목록에서 다시 찾는다 (없으면 누른 때의 정보로 · 줄 밝히기만 빠진다)
+    private void GuideConfirmed(PlaceListManager.ListEntry asked, int at)
+    {
+        if (this == null || !isActiveAndEnabled || places == null) return;
+        var e = asked;
+        Row row = null;
+        var list = places.ShownEntries;
+        int found = -1;
+        if (at >= 0 && at < list.Count && SamePlace(list[at], asked)) found = at;
+        for (int i = 0; found < 0 && i < list.Count; i++)
+            if (SamePlace(list[i], asked)) found = i;
+        if (found >= 0)
+        {
+            e = list[found];
+            foreach (var x in rows)
+                if (x.go.activeSelf && x.index == found && x.key == e.name) { row = x; break; }
+        }
+        Go(row, e, true);
+    }
+
+    private static bool SamePlace(PlaceListManager.ListEntry a, PlaceListManager.ListEntry b)
+    {
+        if (a.kind != b.kind || a.name != b.name) return false;
+        if (!string.IsNullOrEmpty(a.id) || !string.IsNullOrEmpty(b.id)) return a.id == b.id;
+        return Mathf.Abs(a.lat - b.lat) < 1e-4f && Mathf.Abs(a.lon - b.lon) < 1e-4f;
+    }
+
+    // 안내 시작 (예전 줄 누르기 그대로) — 줄이 지금 목록에 없으면(r == null) 줄 밝히기 · 줄 안내 글만 빠진다
+    private void Go(Row r, PlaceListManager.ListEntry e, bool canGuide)
+    {
+        Target t = places.FindTarget(e);
         // 노치가 있는 아이폰 — 노치에 화살표 · 거리로 그 장소까지 안내 (멀어서 AR 에 없어도 · 11-09 대표님 「노치 화면에 화살표로 방향과 거리를」)
         bool guide = canGuide && R0926Notch.Guide(e.lat, e.lon, t, e.name);
         // 모든 휴대폰 — AR 화면 아래쪽 3D 화살표 · 「이름 거리 · 방향」 (11-15 대표님 「노치에서만 길안내를 하더라도 … 하단 쪽으로 해서 안내하는 3D모델이」)
@@ -676,17 +838,18 @@ public class R0926PlaceRows : MonoBehaviour
         if (t != null && indicators != null && indicators.Focus(t, tapFlashDuration + 0.1f))
         {
             // AR 에 떠 있다 — 그 줄을 잠깐 밝혔다가 목록을 내리고, 내려가는 동안 AR 의 그 박스·화살표 글자 뒤에 분홍 스티커
-            Flash(r, tapFlashDuration);
+            if (r != null) Flash(r, tapFlashDuration);
             closeAt = Time.unscaledTime + tapFlashDuration;
             return;
         }
         if (guide)
         {
             // 아직 AR 에 없어도 — 줄을 잠깐 밝히고 목록을 내린다. 안내는 아래 화살표(+ 노치)가 이어 간다 (처음 3초는 이름)
-            Flash(r, tapFlashDuration);
+            if (r != null) Flash(r, tapFlashDuration);
             closeAt = Time.unscaledTime + tapFlashDuration;
             return;
         }
+        if (r == null) return;
         // 아직 AR 에 없다 (멀거나 불러오는 중) — 목록은 그대로, 그 줄을 밝히고 거리 칸에 알려 준다 (방향·거리는 줄에 이미 보인다).
         // 토스트가 아니라 그 줄에 — 어느 장소 얘기인지 바로 보인다
         Flash(r, notInArNoteDuration);
@@ -719,6 +882,41 @@ public class R0926PlaceRows : MonoBehaviour
         }
     }
 
+    // 사람 줄은 사진을 원으로 + 그 사람의 공개 범위 색 테두리 (11-16 대표님 D2 「'사람' 의 경우 목록에서 우측에 발생하는 사진의 경우 동그라미에
+    // 기존 프로필 테두리 색(각 사용자 본인이 설정한 테두리 색에 따라) 이 반영되어서」 — 전체공개 분홍 · 팔로잉 공개 금색, 도크 프로필 사진과 같은 고리).
+    // 줄은 다시 쓰이므로 장소 줄이 오면 템플릿 모양(둥근 네모)으로 되돌린다
+    private void SetPhotoShape(Row r, PlaceListManager.EntryKind kind, NearbyUserData user)
+    {
+        if (r.photoBg == null || r.personRing == null) return;
+        bool person = kind == PlaceListManager.EntryKind.Person;
+        if (person != r.round)
+        {
+            r.round = person;
+            if (person)
+            {
+                var d = new Vector2(personPhotoSize, personPhotoSize);
+                Vector2 c = PhotoCenter(r);
+                r.photoBg.sprite = circleSprite;
+                r.photoBg.type = Image.Type.Simple;
+                r.photoBox.sizeDelta = d;
+                r.photoBox.anchoredPosition = c - Vector2.Scale(new Vector2(0.5f, 0.5f) - r.photoBox.pivot, d);   // 가운데는 그대로
+            }
+            else
+            {
+                r.photoBg.sprite = r.photoBgSprite;
+                r.photoBg.type = r.photoBgType;
+                r.photoBg.pixelsPerUnitMultiplier = r.photoBgPpu;
+                r.photoBox.sizeDelta = r.photoSize;
+                r.photoBox.anchoredPosition = r.photoPos;
+            }
+            r.personRing.gameObject.SetActive(person);
+        }
+        if (person) r.personRing.color = ProfileManager.OutlineColor(user?.visibility_mode);
+    }
+
+    // 사진 칸 가운데 (칸 기준점에서) — 사람 원으로 줄여도 가운데는 그대로
+    private static Vector2 PhotoCenter(Row r) => r.photoPos + Vector2.Scale(new Vector2(0.5f, 0.5f) - r.photoBox.pivot, r.photoSize);
+
     // 그 장소의 사진 — 오브젝트 앞면과 같은 것. "" 없음 · null 아직 모름 (AR 에 없는 우팡 장소 — 상세를 받아야 안다)
     private string PhotoKey(PlaceListManager.ListEntry e)
     {
@@ -734,20 +932,27 @@ public class R0926PlaceRows : MonoBehaviour
             case TourPlaceData tp: return PhotoUrl(!string.IsNullOrEmpty(tp.firstimage2) ? tp.firstimage2 : tp.firstimage);   // 관광공사 작은 대표 사진 (300x200)
             case FacilityData fd: return PhotoUrl(fd.main_photo);
             case NearbyUserData u: return PhotoUrl(u.avatar_url);
+            case StoreData sd: return string.IsNullOrEmpty(sd.photo) ? "res:" + StoreManager.StickerPath(sd.category) : PhotoUrl(sd.photo);   // 가게 — 사진이 없으면 분류 스티커 (큐브 앞면과 같다)
             case R0926Nearby.Festival fe: return PhotoUrl(fe.image);
         }
         return "";
     }
 
     // 기관이 등록한 공공데이터는 앱 그림 (큐브 앞면과 같은 판단 — DataManager.SetupCubeObject), 그 밖은 대표 사진
-    private static string PlacePhoto(PlaceData p)
+    private static string PlacePhoto(PlaceData p) => PlacePhoto(p, PhotoThumb);
+
+    /// <summary>장소 사진 열쇠 — 크기만 달리 (근처 장소 카드 R0926NearModal 은 512)</summary>
+    internal static string PlacePhoto(PlaceData p, int size)
     {
         string icon = DataManager.FaceIconPath(p.category, FilterManager.IsPublicSource(p.is_public, p.category));
-        return icon != null ? "res:" + icon : PhotoUrl(p.main_photo);
+        return icon != null ? "res:" + icon : PhotoUrl(p.main_photo, size);
     }
 
     // 받을 주소 — http 는 https 로 (앱은 http 를 받지 않는다 · 관광공사 사진도 https 로 열린다), 우팡 서버 사진은 작은 사본으로
-    private static string PhotoUrl(string path)
+    private static string PhotoUrl(string path) => PhotoUrl(path, PhotoThumb);
+
+    /// <summary>받을 주소 — 우팡 서버 사진은 이 크기의 사본 (/thumb/크기)</summary>
+    internal static string PhotoUrl(string path, int size)
     {
         if (string.IsNullOrEmpty(path)) return "";
         path = path.Trim().Replace('\\', '/');
@@ -755,7 +960,7 @@ public class R0926PlaceRows : MonoBehaviour
         if (path.StartsWith(ApiConfig.MAIN_SERVER + "/uploads/", StringComparison.OrdinalIgnoreCase)) path = path.Substring(ApiConfig.MAIN_SERVER.Length + 1);
         if (path.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return path;
         if (path.Contains("://")) return "";
-        return ApiConfig.MAIN_SERVER + "/thumb/" + PhotoThumb + "/" + path.TrimStart('/');
+        return ApiConfig.MAIN_SERVER + "/thumb/" + size + "/" + path.TrimStart('/');
     }
 
     private bool FullPlace(int id, out PlaceData p)
@@ -1055,6 +1260,10 @@ public class R0926PlaceRows : MonoBehaviour
     private bool coverHold;   // 상세 「길안내」로 목록을 내리는 중 — 창이 닫혀도 다시 비치지 않는다
     private bool coverSeen, coverSavedBlocks, coverSavedInteract;
     private float coverAlpha = 1f, coverSavedAlpha = 1f, coverSince, coverClearAt;
+    private GameObject coverInfo;   // 정보 창 (FullScreenPanel) — 이것만 떠 있으면 목록 칸 X 가 남는다
+    private CanvasGroup dockGroup;
+    private bool dockSavedIgnore, dockSavedBlocks, dockSavedInteract;
+    private float dockSavedAlpha = 1f, dockKeep;
 
     private void BeginCover()
     {
@@ -1080,6 +1289,18 @@ public class R0926PlaceRows : MonoBehaviour
         {
             var t = panel.parent.Find(n);
             if (t != null) coverWatch.Add(t.gameObject);
+        }
+        coverInfo = coverWatch.Count > 0 && coverWatch[0].name == CoverPanels[0] ? coverWatch[0] : null;
+        if (dockGroup == null && coverDock != null)
+        {
+            dockGroup = coverDock.GetComponent<CanvasGroup>();
+            if (dockGroup == null) dockGroup = coverDock.gameObject.AddComponent<CanvasGroup>();
+            dockSavedIgnore = dockGroup.ignoreParentGroups;
+            dockSavedAlpha = dockGroup.alpha;
+            dockSavedBlocks = dockGroup.blocksRaycasts;
+            dockSavedInteract = dockGroup.interactable;
+            dockKeep = coverGroup.alpha;   // 지금 보이는 만큼에서 (처음 = 다 보임)
+            dockGroup.ignoreParentGroups = true;
         }
     }
 
@@ -1113,7 +1334,46 @@ public class R0926PlaceRows : MonoBehaviour
         }
         coverAlpha = Mathf.MoveTowards(coverAlpha, coverState == 1 ? 0f : 1f, Time.unscaledDeltaTime / CoverFade);
         if (coverGroup != null) coverGroup.alpha = coverSavedAlpha * coverAlpha;
+        UpdateDock();
         if (coverState == 2 && coverAlpha >= 1f) EndCover();
+    }
+
+    // 목록 칸 X '닫기' (11-16 대표님 D3 「목록에서 우측 끝에 있는 사진을 눌러서 해당 장소 서브사진을 볼 때 좌측하단 '목록' 위치의 버튼이 아예 사라지거든?
+    // (원래대로 있어야할 '닫기' 버튼)」) — 목록을 숨기면 그 안의 X 도 같이 사라졌다 (도크의 목록 칸은 목록이 열려 있어 숨어 있다).
+    // 정보 창만 떠 있는 동안은 X 가 그 자리에 그대로 · 누르면 정보 창만 닫고 목록으로. 정보 창에서 이어 연 창(고치기 · 프로필 등 — 목록보다 아래 층)이
+    // 뜨면 그 위로 비치지 않게 목록과 함께 숨는다. 상세 「길안내」로 목록을 내릴 때도
+    private void UpdateDock()
+    {
+        if (dockGroup == null) return;
+        bool other = coverHold;
+        if (!other)
+            foreach (var g in coverWatch)
+                if (g != null && g != coverInfo && g.activeInHierarchy) { other = true; break; }
+        dockKeep = Mathf.MoveTowards(dockKeep, other ? 0f : 1f, Time.unscaledDeltaTime / CoverFade);
+        bool listOn = coverGroup != null && coverGroup.blocksRaycasts;
+        dockGroup.alpha = dockSavedAlpha * Mathf.Max(coverGroup != null ? coverGroup.alpha : 1f, dockKeep);
+        dockGroup.blocksRaycasts = dockSavedBlocks && (!other || listOn);
+        dockGroup.interactable = dockSavedInteract && (!other || listOn);
+        bool back = coverState == 1 && !other && DoubleTap3D.Shown != null;
+        if (coverBack != null && coverBack.gameObject.activeSelf != back) coverBack.gameObject.SetActive(back);
+    }
+
+    private void RestoreDock()
+    {
+        if (coverBack != null && coverBack.gameObject.activeSelf) coverBack.gameObject.SetActive(false);
+        if (dockGroup == null) return;
+        dockGroup.ignoreParentGroups = dockSavedIgnore;
+        dockGroup.alpha = dockSavedAlpha;
+        dockGroup.blocksRaycasts = dockSavedBlocks;
+        dockGroup.interactable = dockSavedInteract;
+        dockGroup = null;
+    }
+
+    /// <summary>목록에서 연 정보 창 위 목록 칸 X (11-17 D3) — 정보 창만 닫고 목록으로. 그 창의 닫기(사진 아래 X · 뒤로가기)와 같다</summary>
+    public void CoverBack()
+    {
+        var dt = DoubleTap3D.Shown;
+        if (dt != null && dt.closeButton != null) dt.closeButton.onClick.Invoke();
     }
 
     // 누름은 바로 돌려주고 목록은 서서히 보인다
@@ -1134,8 +1394,7 @@ public class R0926PlaceRows : MonoBehaviour
         if (!isActiveAndEnabled || sheet == null) return;
         closeAt = -1f;
         if (coverState == 1) coverHold = true;
-        R0926Closer.DissolveFrame = Time.frameCount;
-        sheet.AnimateClose(null);
+        sheet.DissolveClose(null, true, R0926Closer.Dim.Fade);
     }
 
     private void EndCover()
@@ -1144,6 +1403,8 @@ public class R0926PlaceRows : MonoBehaviour
         if (coverState == 0) return;
         coverState = 0;
         coverWatch.Clear();
+        coverInfo = null;
+        RestoreDock();
         if (coverGroup == null) return;
         coverGroup.alpha = coverSavedAlpha;
         coverGroup.blocksRaycasts = coverSavedBlocks;
@@ -1163,6 +1424,48 @@ public class R0926PlaceRows : MonoBehaviour
     }
 
     // 보물찾기 줄만 금빛 바탕 · 반짝임 (order = 보물찾기 줄 중 몇 번째, 아니면 -1)
+    // 맨 위에 하나 고정하는 줄의 바탕 — 애견동반을 켜면 맨 위 보호소 줄 (11-16 대표님 D5 「'애견동반' 을 눌렀을 때 발생하는 상단의 '애견 보호소' 등에
+    // 하나 발생하는 건 '애견동반' 필터링 레이아웃처럼 '노란색 배경에 검정 글자로' … 우측에 있는 방향과 거리는 적당히 보일 정도로 회색으로」),
+    // 축제를 켜면 맨 위 축제 줄 (11-17 K1 「'보호소' 배경색 넣은 것처럼 해당 '축제' 색 작업한 걸로 배경이 반영되어서 (흰색글자)」).
+    // 줄은 다시 쓰이므로 다른 줄이 오면 템플릿 색으로 되돌린다 (이름 색은 부르는 쪽이 먼저 정한다)
+    private void SetBand(Row r, Band band)
+    {
+        bool on = band != Band.None && r.band != null;
+        if (r.band != null && r.band.gameObject.activeSelf != on) r.band.gameObject.SetActive(on);
+        if (!on)
+        {
+            if (r.dist.color != r.distColor) r.dist.color = r.distColor;
+            return;
+        }
+        bool fest = band == Band.Festival;
+        r.band.color = fest ? FestivalBand : ShelterBand;
+        r.name.color = fest ? Color.white : R0926FilterChip.InkOnWhite;
+        r.dist.color = fest ? BandWhiteSoft : BandGray;
+    }
+
+    // 네온 모드 강조 줄 (11-23 S8) — 보물찾기 금빛 · 축제 · 대피소(바탕 줄이 아닌 것) · 서로 아는 사람 분홍. 보물찾기 금빛 테두리는 네온과 겹치지 않게 숨긴다
+    private void SetNeon(Row r, PlaceListManager.EntryKind kind, Band band, bool mutual)
+    {
+        bool neon = R0926MenuStyle.Neon;
+        if (r.huntRing != null && r.huntRing.gameObject.activeSelf == neon) r.huntRing.gameObject.SetActive(!neon);
+        if (r.neon == null) return;
+        Color c = default;
+        bool on = neon && band == Band.None;
+        if (on)
+            switch (kind)
+            {
+                case PlaceListManager.EntryKind.Hunt: c = NeonHunt; break;
+                case PlaceListManager.EntryKind.Festival: c = NeonFestival; break;
+                case PlaceListManager.EntryKind.Shelter: c = NeonShelter; break;
+                case PlaceListManager.EntryKind.Person: on = mutual; c = NeonPerson; break;
+                default: on = false; break;
+            }
+        if (r.neon.gameObject.activeSelf != on) r.neon.gameObject.SetActive(on);
+        if (on) r.neon.Glow = c;
+    }
+
+    private void OnMenuStyle() => last = null;   // 네온을 켜고 끄면 줄을 다시 그린다
+
     private void SetHuntGlow(Row r, int order)
     {
         r.huntOrder = order;

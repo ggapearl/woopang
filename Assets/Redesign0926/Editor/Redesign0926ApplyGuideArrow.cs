@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace Redesign0926
 {
     /// <summary>
-    /// AR 화면 아래쪽 3D 길안내 (11-15 대표님 (B) · 시안 B1 「화살표」) — 땅에 누운 분홍 화살표(R0926GuideArrowMesh) · 위 알약 「이름 거리 · 방향」 · 알약 오른쪽 끝 × (11-16) · 알약 위 작은 안내 줄.
+    /// AR 화면 아래쪽 3D 길안내 (11-15 대표님 (B) · 시안 B1 「화살표」) — 땅에 누운 분홍 화살표(R0926GuideArrowMesh) · 위 알약 「이름 거리」(방향은 화살표 — H5) · 알약 오른쪽 끝 × (11-16) · 알약 위 작은 안내 줄 · 화살표 둘레 끌기 자리(아래로 밀면 끝 — J4).
     /// 부품만 만든다 — 방향 · 거리 · 숨기기 · 끝내기는 R0926GuideArrow. 알약은 물방울메뉴면 물방울 유리, 기본메뉴면 다른 알약과 같은 진한 반투명.
     /// 자리는 가까이 모달(NearModal0926) 바로 앞 — 가까이 카드가 위에 그려진다 (카드가 떠 있는 동안 화살표는 숨는다).
     /// </summary>
@@ -42,7 +42,17 @@ namespace Redesign0926
             mesh.raycastTarget = false;
             EditorUtility.SetDirty(mesh);
 
-            // 알약 — 「<b>우팡이네집</b>  290m · 오른쪽 앞」 (폭은 글에 맞춘다)
+            // 아래로 밀어 끝내기 자리 (11-18 대표님 J4 「방향안내 하단 화살표 부분을 아래로 스와이프 → 안내 종료」) — 고리 · 화살표 둘레만, 그리지 않고 끌기만 받는다.
+            // 화살표 그림은 제 캔버스라 누름을 받지 않는다. 알약 · × 와 겹치지 않고 아래는 바닥(주소줄) 위 12 까지 — 꺾쇠 끝 · 그 밖은 AR 오브젝트 몫
+            var swipeGo = FindOrCreate(group.transform, "Swipe");
+            swipeGo.transform.SetSiblingIndex(arrowGo.transform.GetSiblingIndex() + 1);
+            SetRect(RT(swipeGo), c, c, c, new Vector2(0, -24), new Vector2(740, 532));
+            var swipe = Ensure<R0926DragZone>(swipeGo);
+            swipe.color = Color.clear;
+            swipe.raycastTarget = true;
+            EditorUtility.SetDirty(swipe);
+
+            // 알약 — 「<b>우팡이네집</b>  290m」 (폭은 글에 맞춘다 · 방향 말 없음 — H5)
             var pillGo = FindOrCreate(group.transform, "Pill");
             SetRect(RT(pillGo), c, c, c, new Vector2(0, 442), new Vector2(760, 112));
             var pillImg = Img(pillGo, Spr("r0926_pill"), Glass, Image.Type.Sliced, 63f / 56f);
@@ -54,7 +64,7 @@ namespace Redesign0926
             EditorUtility.SetDirty(btn);
             var labelGo = FindOrCreate(pillGo.transform, "Label");
             Stretch(RT(labelGo));
-            var label = Txt(labelGo, "<b>우팡이네집</b>  <size=42><color=#FFFFFFCC>290m · 오른쪽 앞</color></size>", 50, Color.white, TextAnchor.MiddleCenter, FontStyle.Normal);
+            var label = Txt(labelGo, "<b>우팡이네집</b>  <size=42><color=#FFFFFFCC>290m</color></size>", 50, Color.white, TextAnchor.MiddleCenter, FontStyle.Normal);
             label.supportRichText = true;
             label.horizontalOverflow = HorizontalWrapMode.Overflow;
             label.verticalOverflow = VerticalWrapMode.Overflow;
@@ -108,6 +118,7 @@ namespace Redesign0926
             so.FindProperty("pill").objectReferenceValue = btn;
             so.FindProperty("pillRect").objectReferenceValue = RT(pillGo);
             so.FindProperty("close").objectReferenceValue = closeBtn;
+            so.FindProperty("swipeZone").objectReferenceValue = swipe;
             so.FindProperty("label").objectReferenceValue = label;
             so.FindProperty("hintGroup").objectReferenceValue = hintCg;
             so.FindProperty("hint").objectReferenceValue = hint;

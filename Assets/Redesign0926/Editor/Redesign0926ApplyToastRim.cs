@@ -24,6 +24,7 @@ namespace Redesign0926
                 ("업로드 안내", root.Find("WarningText")),   // 장소 추가 · 정보 수정 · 삭제 요청 매니저 넷이 함께 쓴다
                 ("보물 알림", root.Find("HuntToast0926/Pill")),
                 ("보물찾기 카드 알림", hunt != null ? hunt.transform.Find("Toast0926") : null),
+                ("숨김 알림", root.Find("Undo0926")),   // 오브젝트 X 로 숨긴 뒤 '이 장소를 숨겼어요 · 되돌리기' — 업로드 안내와 같은 자리 · 모양 (11-19 L2)
             };
             int n = 0;
             foreach (var (what, t) in pills)

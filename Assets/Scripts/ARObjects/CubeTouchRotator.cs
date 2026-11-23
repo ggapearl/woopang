@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
-using UnityEngine.EventSystems;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
@@ -73,8 +72,8 @@ public class CubeTouchRotator : MonoBehaviour
         {
             Vector2 mousePos = mouse.position.ReadValue();
 
-            // UI 위 클릭이면 무시
-            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            // 덮은 UI 밑이면 무시 (WorldTouch — 3D 오브젝트 누름 판단 한 곳)
+            if (!WorldTouch.Free(mousePos))
                 return;
 
             // Raycast로 이 오브젝트에 히트하는지 확인
@@ -132,9 +131,8 @@ public class CubeTouchRotator : MonoBehaviour
 
         if (touch.phase == TouchPhase.Began)
         {
-            // UI 위 터치이면 무시
-            if (EventSystem.current != null &&
-                EventSystem.current.IsPointerOverGameObject(touch.touchId))
+            // 덮은 UI 밑이면 무시 (WorldTouch — 3D 오브젝트 누름 판단 한 곳)
+            if (!WorldTouch.Free(touch.screenPosition))
                 return;
 
             Ray ray = mainCamera.ScreenPointToRay(touch.screenPosition);

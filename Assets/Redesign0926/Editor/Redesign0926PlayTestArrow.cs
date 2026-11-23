@@ -10,12 +10,14 @@ namespace Redesign0926
 {
     /// <summary>
     /// 11-15 (B) 아래 길안내 화살표 시험 — R0926GuideArrow (시안 B1 「화살표」).
-    ///  · guidearrow : 알약 「이름 거리 · 방향」 · 방향 말 · 화살표 그림이 가리키는 쪽 · 처음 3초 안내 줄 · 알약 누르기 · 20m · 도착 · 20분 ·
+    ///  · guidearrow : 알약 「이름 거리」(방향 말 없음 — H5) · 돌아도 알약 글은 그대로 · 화살표 그림이 가리키는 쪽 · 처음 3초 안내 줄 · 알약 누르기 · 20m · 도착 · 20분 ·
     ///                창 · 하늘 · 가까이 카드에 숨기 · 가까이 카드가 이어 받기 · 아래 고정 하늘 카드 위로 · 뒤를 가리켜도 주소줄 위 ·
     ///                물방울 / 기본 메뉴 · 목록 줄 누르기 (노치 없는 기기 · 노치 아이폰 — 노치와 같이 끝) ·
     ///                알약 오른쪽 × (11-16 — 한 번에 끝 · 노치도 같이 · 긴 이름도 × 와 겹치지 않게) ·
-    ///                좌표로만 안내하면 10m 도착 · 정보 창 위 「길안내」(두 번 누른 창 · 목록 사진 창) · 지도 핀 「길안내」 ·
-    ///                땅 위 거리(높이 무시) · 사람 줄은 안내하지 않음 (11-16)
+    ///                도착은 10m — 좌표 · AR 오브젝트 모두 (11-16 둘째) · 노치 아이폰 — 도착은 한 번(노치 · 화살표 같은 순간 · 같은 거리) · 끝도 같이 ·
+    ///                가까이 카드가 이어 받으면 노치도 끝 · 정보 창 위 「길안내」(두 번 누른 창 · 목록 사진 창) · 지도 핀 「길안내」 ·
+    ///                땅 위 거리(높이 무시) · 사람 줄은 안내하지 않음 (11-16) ·
+    ///                화살표 둘레를 아래로 밀어 끝내기 (11-18 J4 — 덜 내리면 제자리 · 옆 · 위로 민 것은 그대로 · 노치 아이폰이면 노치도 같이 · 도착하면 그 자리는 AR 몫)
     /// 운영 서버에 쓰지 않는다 — 하늘 옆 장 · 근처 사람 · 보물은 닿지 않는 주소로.
     /// </summary>
     public static partial class Redesign0926PlayTest
@@ -32,6 +34,7 @@ namespace Redesign0926
             object pickedRow = null;
             string pickedName = "";
             var low = new float[1];
+            var again = new bool[1];
             var errors = new List<string>();
             const System.Reflection.BindingFlags SF = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
             R0926DetailGuide dg = null;
@@ -52,6 +55,15 @@ namespace Redesign0926
                 double lat = v.Latitude + north / 111320.0;
                 double lon = v.Longitude + east / (111320.0 * Math.Cos(v.Latitude * Math.PI / 180.0));
                 R0926GuideArrow.Guide((float)lat, (float)lon, t, name);
+            };
+            // 목록 줄 · 정보 창 · 지도 핀처럼 노치와 화살표를 같이 (노치가 먼저 — R0926PlaceRows 와 같은 순서)
+            Action<double, double, string, Target> goBoth = (north, east, name, t) =>
+            {
+                var v = VirtualLocation.Instance;
+                float lat = (float)(v.Latitude + north / 111320.0);
+                float lon = (float)(v.Longitude + east / (111320.0 * Math.Cos(v.Latitude * Math.PI / 180.0)));
+                R0926Notch.Guide(lat, lon, t, name);
+                R0926GuideArrow.Guide(lat, lon, t, name);
             };
             Func<string> text = () => GaPlain(ga != null ? ga.EditorLabel : null);
             Func<string> hintText = () => ga != null && ga.EditorGroup != null ? ga.EditorGroup.Find("Hint")?.GetComponent<Text>()?.text ?? "" : "";
@@ -107,6 +119,9 @@ namespace Redesign0926
                 pickedName = rt.GetField("key").GetValue(pickedRow) as string;
                 log.Add("  누른 줄: " + pickedName + " [" + rt.GetField("distLabel").GetValue(pickedRow) + "]");
                 (rt.GetField("go").GetValue(pickedRow) as GameObject).GetComponent<Button>().onClick.Invoke();
+                // 11-17 D4 — 줄을 누르면 먼저 「…으로 안내할까요?」. 확인을 눌러 안내한다 (묻는 창 자체는 guideask 시험)
+                if (Active("GuideAsk0926")) { log.Add("  묻는 창 → 확인"); Click("GuideAsk0926/Box0926/Buttons0926/Guide_YES"); }
+                else log.Add("  묻는 창이 뜨지 않음");
             };
             // 그 장소가 AR 에 떠 있지 않은 길 (멀어서 아직 안 뜬 장소) — 떠 있는 AR 오브젝트를 끈다
             Action hideTargets = () => { foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude)) t.gameObject.SetActive(false); };
@@ -186,24 +201,24 @@ namespace Redesign0926
                 "준비: 길안내 화살표 (GuideArrow0926 · R0926GuideArrow) · 노치 · 하늘 카드");
             Check(() => ga.EditorHidden && !ga.EditorGuiding, "처음엔 화살표 없음 (안내 전)");
 
-            // 1) 북쪽 200m — 북쪽을 보면 알약 「시험 북쪽 200m  200m · 앞」, 화살표는 앞, 처음 3초는 알약 위 「누르면 안내를 끝내요」
+            // 1) 북쪽 200m — 북쪽을 보면 알약 「시험 북쪽 200m  200m」, 화살표는 앞, 처음 3초는 알약 위 「누르면 안내를 끝내요」
             Do(() => go(200, 0, "시험 북쪽 200m", null));
             Wait(() => ga.EditorShowing, 3f, "안내 시작 — 화살표 뜸");
             Sleep(0.5f);
             Do(() => log.Add("  " + state()));
-            Check(() => ga.EditorGuiding && text() == "시험 북쪽 200m  200m · 앞", "알약 — 「시험 북쪽 200m  200m · 앞」 (이름 · 거리 · 방향 말)");
+            Check(() => ga.EditorGuiding && text() == "시험 북쪽 200m  200m", "알약 — 「시험 북쪽 200m  200m」 (이름 · 거리만 — 방향 말은 빼고 방향은 화살표로, H5)");
             Check(() => ga.EditorKnown && Mathf.Abs(Mathf.DeltaAngle(ga.EditorYaw, 0f)) < 3f && pointsAt(0f), "북쪽을 보면 화살표가 앞(화면 위)을 가리킨다");
             Check(() => ga.EditorHint && hintText() == "누르면 안내를 끝내요", "처음 3초 — 알약 위 「누르면 안내를 끝내요」");
             Shot("ga_start");
 
-            // 2) 방향 말 — 시안 그대로 (15° 안 앞 · 70° 안 옆 앞 · 110° 안 옆 · 150° 넘으면 뒤)
+            // 2) 돌아도 알약 글은 그대로 (H5 「위의 방향 멘트가 계속 바뀌어 산만」) — 방향은 화살표만
             foreach (var (heading, word, yaw) in new[] { (315f, "오른쪽 앞", 45f), (270f, "오른쪽", 90f), (240f, "오른쪽 뒤", 120f), (180f, "뒤", 180f), (90f, "왼쪽", -90f), (30f, "왼쪽 앞", -30f) })
             {
                 Do(() => R0926Notch.EditorHeading = heading);
                 Sleep(1.2f);
                 Do(() => log.Add($"  방위 {heading:0}°: " + state()));
-                Check(() => text() == "시험 북쪽 200m  200m · " + word && Mathf.Abs(Mathf.DeltaAngle(ga.EditorYaw, yaw)) < 3f && pointsAt(yaw),
-                    $"방위 {heading:0}° 를 보면 북쪽 장소는 「{word}」 — 화살표도 그쪽 ({yaw:0}°)");
+                Check(() => text() == "시험 북쪽 200m  200m" && Mathf.Abs(Mathf.DeltaAngle(ga.EditorYaw, yaw)) < 3f && pointsAt(yaw),
+                    $"방위 {heading:0}° 를 보면 화살표가 {word}({yaw:0}°)를 가리키고 · 알약 글은 그대로 「시험 북쪽 200m  200m」");
                 if (heading == 315f) Shot("ga_right_ahead");
                 if (heading == 180f)
                 {
@@ -215,7 +230,7 @@ namespace Redesign0926
             }
             Do(() => { R0926Notch.EditorHeading = 0f; go(2500, 0, "시험 북쪽 2.5km", null); });
             Sleep(0.8f);
-            Check(() => text() == "시험 북쪽 2.5km  2.5km · 앞", "1km 넘으면 「2.5km」");
+            Check(() => text() == "시험 북쪽 2.5km  2.5km", "1km 넘으면 「2.5km」");
 
             // 3) 알약 누르기 — 3초 뒤 안내 줄이 사라지고, 누르면 그 말이 다시 3초, 그 말이 보일 때 누르면 끝
             Sleep(3.4f);
@@ -235,7 +250,7 @@ namespace Redesign0926
             Sleep(3.4f);
             Do(() => log.Add($"  × {SkyScreenRect(ga.EditorClose != null ? (RectTransform)ga.EditorClose.transform : null)} · 알약 {SkyScreenRect(ga.EditorPill)} · 글 왼쪽 여백 {GaTextLeftPad(ga):0} · 글과 × 사이 {GaCloseGap(ga):0} (알약 단위)"));
             Check(() => ga.EditorGuiding && !ga.EditorHint && ga.EditorClose != null && ga.EditorClose.gameObject.activeInHierarchy && GaCloseInside(ga)
-                     && GaCloseGap(ga) >= 8f && GaTextLeftPad(ga) >= 8f && text() == "시험 북쪽 200m  200m · 앞",
+                     && GaCloseGap(ga) >= 8f && GaTextLeftPad(ga) >= 8f && text() == "시험 북쪽 200m  200m",
                 "알약 오른쪽 끝에 × — 알약 안 · 글과 겹치지 않는다 (안내 줄이 사라진 뒤에도 늘 보임)");
             Shot("ga_close");
             Press(closeAt, 0.08f, null);
@@ -256,19 +271,89 @@ namespace Redesign0926
             Do(() => { R0926GuideArrow.Stop(); R0926Notch.EditorHeading = 0f; });
             Wait(() => ga.EditorHidden, 1.5f, "안내 끝");
 
-            // 4) 20m 안 — 「거의 다 왔어요」, 2m 안에 1초 — 「도착했어요」 · 화살표는 사라지고 알약만 → 2.5초 뒤 끝
+            // 3c) 아래로 밀어 끝내기 (11-18 대표님 J4 「방향안내 하단 화살표 부분을 아래로 스와이프 → 안내 종료」)
+            //     화살표 둘레를 잡고 내리면 따라 내려가며 옅어지고 — 200 넘게 내리면 끝 · 덜 내리면 제자리 · 옆으로 · 위로 민 것은 그대로
+            GameObject zone = null;
+            float gy0 = 0f;
+            var pk = new float[2];   // 끄는 동안 가장 많이 내린 만큼 · 가장 옅은 알파
+            var legShort = new Vector2[2];
+            var legSide = new Vector2[1];
+            var legUp = new Vector2[1];
+            var legLong = new Vector2[1];
+            Func<Vector2?> zoneAt = () => zone != null ? SkyScreenRect((RectTransform)zone.transform)?.center : null;
+            Func<float> unitPx = () => ga != null ? ga.transform.lossyScale.y : 1f;   // 캔버스 단위 → 화면 px (오버레이 캔버스)
+            Action watchPull = () =>
+            {
+                if (ga == null) return;
+                pk[0] = Mathf.Max(pk[0], ga.EditorPull);
+                pk[1] = Mathf.Min(pk[1], ga.EditorGroup.GetComponent<CanvasGroup>().alpha);
+            };
+            Do(() => { R0926Notch.EditorHeading = 0f; go(200, 0, "시험 북쪽 200m", null); });
+            Wait(() => ga.EditorShowing, 3f, "밀기 시험 안내");
+            Sleep(0.5f);
+            Do(() =>
+            {
+                zone = ga.EditorSwipeZone != null ? ga.EditorSwipeZone.gameObject : null;
+                gy0 = ga.EditorGroup.anchoredPosition.y;
+                float u = unitPx();
+                legShort[0] = new Vector2(0f, -140f * u); legShort[1] = Vector2.zero;
+                legSide[0] = new Vector2(300f * u, 0f);
+                legUp[0] = new Vector2(0f, 300f * u);
+                legLong[0] = new Vector2(0f, -360f * u);
+                var z = zoneAt();
+                log.Add($"  끌기 자리 {(zone == null ? "없음" : SkyScreenRect((RectTransform)zone.transform).ToString())} · 알약 {SkyScreenRect(ga.EditorPill)} · 바닥 y {floorTop():0} · 맨 위 UI {(z.HasValue ? WorldTouch.TopUI(z.Value)?.name ?? "없음" : "-")} · 1단위 {u:0.000}px");
+            });
+            Check(() =>
+            {
+                var z = zoneAt();
+                var r = zone != null ? SkyScreenRect((RectTransform)zone.transform) : null;
+                var p = SkyScreenRect(ga.EditorPill);
+                return zone != null && zone.activeInHierarchy && ga.EditorSwipeZone.raycastTarget && z.HasValue && WorldTouch.TopUI(z.Value) == zone
+                    && r.HasValue && p.HasValue && r.Value.yMax < p.Value.yMin && r.Value.yMin >= floorTop() - 1f;
+            }, "화살표 둘레는 끌기 자리 — 손가락 밑 맨 위 UI (그 밑 AR 오브젝트는 받지 않는다) · 알약과 겹치지 않고 주소줄 · 도크 위");
+            Check(() =>
+            {
+                var r = zone != null ? SkyScreenRect((RectTransform)zone.transform) : null;
+                if (!r.HasValue) return false;
+                var outside = new Vector2(r.Value.xMin * 0.5f, r.Value.center.y);
+                return WorldTouch.TopUI(outside) != zone;
+            }, "그 둘레 밖(같은 높이 왼쪽)은 끌기 자리가 아니다 — AR 오브젝트를 누를 수 있다");
+            Do(() => { pk[0] = 0f; pk[1] = 1f; });
+            Finger(zoneAt, legShort, 30, watchPull, null);   // 140 내리고 멈췄다 놓기
+            Sleep(0.8f);
+            Do(() => log.Add($"  덜 내림: 가장 많이 {pk[0]:0} · 가장 옅을 때 {pk[1]:0.00} · 놓은 뒤 {ga.EditorPull:0.0} · 판 y {ga.EditorGroup.anchoredPosition.y - gy0:+0.0;-0.0}"));
+            Check(() => pk[0] > 60f && pk[0] < 200f && pk[1] < 0.99f, "끄는 동안 화살표 · 알약이 손가락을 따라 내려가며 옅어진다");
+            Check(() => ga.EditorGuiding && ga.EditorShowing && ga.EditorPull < 0.5f && Mathf.Abs(ga.EditorGroup.anchoredPosition.y - gy0) < 1f,
+                "덜 내리고 놓으면 제자리로 · 안내는 이어짐");
+            Finger(zoneAt, legSide, 10, null, null);
+            Sleep(0.4f);
+            Check(() => ga.EditorGuiding && ga.EditorPull < 0.5f, "옆으로 민 것은 받지 않는다 — 안내 · 자리 그대로");
+            Finger(zoneAt, legUp, 10, null, null);
+            Sleep(0.4f);
+            Check(() => ga.EditorGuiding && ga.EditorPull < 0.5f, "위로 민 것도 받지 않는다 — 안내 · 자리 그대로");
+            Do(() => { pk[0] = 0f; pk[1] = 1f; });
+            Finger(zoneAt, legLong, 18, watchPull, "ga_pull");   // 360 내려 놓기
+            Sleep(0.4f);
+            Do(() => log.Add($"  다 내림: 가장 많이 {pk[0]:0} · 가장 옅을 때 {pk[1]:0.00} · {state()}"));
+            Check(() => pk[0] > 200f && !ga.EditorGuiding, "200 넘게 끌어내리고 놓으면 안내 끝 (× 와 같이)");
+            Wait(() => ga.EditorHidden, 1.5f, "내려가며 사라짐");
+            Check(() => ga.EditorHidden && ga.EditorPull == 0f, "끝내면 마저 내려가며 사라지고 · 다음 안내는 제자리에서");
+
+            // 4) 20m 안 — 「거의 다 왔어요」, 10m 안에 1초 — 「도착했어요」 · 화살표는 사라지고 알약만 → 2.5초 뒤 끝
             Do(() => go(12, 0, "시험 바로 앞", null));
             Wait(() => ga.EditorShowing, 3f, "12m 안내");
             Sleep(0.5f);
             Do(() => log.Add("  12m: " + state()));
-            Check(() => text() == "거의 다 왔어요  12m · 앞", "20m 안 — 「거의 다 왔어요  12m · 앞」");
+            Check(() => text() == "거의 다 왔어요  12m", "20m 안 — 「거의 다 왔어요  12m」");
             Shot("ga_almost");
             Do(() => go(1, 0, "시험 바로 앞", null));
-            Wait(() => ga.EditorArrived, 3f, "2m 안에 1초 — 도착");
+            Wait(() => ga.EditorArrived, 3f, "10m 안에 1초 — 도착");
             Sleep(0.5f);
             Do(() => log.Add("  도착: " + state()));
             Check(() => ga.EditorArrived && text() == "도착했어요  시험 바로 앞" && !ga.EditorHint, "도착 — 「도착했어요  시험 바로 앞」 (안내 줄 없음)");
             Check(() => ga.EditorMesh.color.a < 0.05f && ga.EditorShowing, "도착하면 화살표는 사라지고 알약만");
+            Check(() => { var z = zoneAt(); return ga.EditorSwipeZone != null && !ga.EditorSwipeZone.raycastTarget && z.HasValue && WorldTouch.TopUI(z.Value) != zone; },
+                "도착해 화살표가 사라지면 그 자리는 끌기 자리가 아니다 (다시 AR 오브젝트 몫)");
             Shot("ga_arrived");
             Wait(() => !ga.EditorGuiding, 4f, "도착 2.5초 뒤 끝");
             Check(() => !ga.EditorGuiding, "도착 2.5초 뒤 안내 끝");
@@ -295,7 +380,7 @@ namespace Redesign0926
             Back();
             Wait(() => !Active("ListPanel"), 4f, "목록 닫힘");
             Wait(() => ga.EditorShowing, 3f, "창을 닫으면 화살표가 다시");
-            Check(() => ga.EditorShowing && text() == "시험 북쪽 200m  200m · 앞", "창을 닫으면 화살표 · 알약이 다시");
+            Check(() => ga.EditorShowing && text() == "시험 북쪽 200m  200m", "창을 닫으면 화살표 · 알약이 다시");
 
             // 7) 하늘을 올려다보면 숨는다 → 아래에 고정한 하늘 카드가 있으면 그 위로
             Do(() => AimCamera(-45f, 0f));
@@ -361,8 +446,8 @@ namespace Redesign0926
             {
                 if (R0926Notch.EditorHeading != null) return;
                 log.Add("  AR 거리: " + state());
-                bool ok = text().EndsWith("6m · 오른쪽 앞") && Mathf.Abs(Mathf.DeltaAngle(ga.EditorYaw, 40f)) < 4f;
-                log.Add((ok ? "PASS " : "FAIL ") + "AR 에 떠 있으면 카메라와 그 오브젝트 사이 — 「6m · 오른쪽 앞」 (40°)");
+                bool ok = text().EndsWith("  6m") && Mathf.Abs(Mathf.DeltaAngle(ga.EditorYaw, 40f)) < 4f;
+                log.Add((ok ? "PASS " : "FAIL ") + "AR 에 떠 있으면 카메라와 그 오브젝트 사이 — 「6m」 · 화살표 40°");
                 R0926GuideArrow.Stop();
                 NmPut(cube, 12f);
                 R0926Notch.EditorHeading = 0f;
@@ -394,13 +479,22 @@ namespace Redesign0926
             Do(() => R0926GuideArrow.Stop());
             Wait(() => ga.EditorHidden, 1.5f, "안내 끝");
 
-            // 11a) AR 오브젝트 없이 좌표로만 안내할 때 (지도 핀 · AR 에 아직 없는 장소) — 위치(GPS)는 2m 를 가리지 못하니 10m 안에 1초면 도착
+            // 11a) 도착은 10m — 좌표로만 안내할 때(지도 핀 · AR 에 아직 없는 장소)도 AR 에 뜬 오브젝트도 같은 잣대
+            //      (11-16 둘째 대표님 「노치 위 표시에서도 10m 거리까지 도착하면 완성 … 두번 도착했다고 나오지 않도록」)
             Do(() => go(8, 0, "시험 8m 앞", null));
             Wait(() => ga.EditorArrived, 3f, "좌표 안내 — 10m 안에 1초면 도착");
             Do(() => log.Add("  좌표 안내 8m: " + state()));
-            Check(() => ga.EditorArrived && text() == "도착했어요  시험 8m 앞", "좌표로만 안내하면 10m 안에서 도착 — 「도착했어요  시험 8m 앞」 (AR 오브젝트는 그대로 2m)");
+            Check(() => ga.EditorArrived && text() == "도착했어요  시험 8m 앞", "좌표로만 안내하면 10m 안에서 도착 — 「도착했어요  시험 8m 앞」");
             Do(() => R0926GuideArrow.Stop());
             Wait(() => ga.EditorHidden, 1.5f, "안내 끝");
+            Do(() => { NmPut(cube, 9f, 30f); go(8, 0, NmName(cube), cubeT); });
+            Wait(() => ga.EditorArrived, 3f, "AR 오브젝트 안내 — 10m 안에 1초면 도착");
+            Do(() => log.Add("  AR 오브젝트 8m: " + state()));
+            Check(() => ga.EditorArrived && text().StartsWith("도착했어요") && !nmModal.EditorCardOn,
+                "AR 에 뜬 오브젝트도 10m 안에서 「도착했어요」 (예전 2m) — 가까이 카드(2m)를 기다리지 않는다");
+            Do(() => R0926GuideArrow.Stop());
+            Wait(() => ga.EditorHidden, 1.5f, "안내 끝");
+            Do(() => NmPut(cube, 12f));
 
             // 11b) 정보 창 위 「길안내」 — 두 번 누른 창의 버튼 줄(번역과 「···」 사이 분홍 동그라미)을 누르면 그 장소로 안내하고 창은 닫힌다
             //      (11-16 대표님 「더블탭하고 나서 발생하는 화면에 메뉴가 여러개 있잖아? 그때 거기에 화살표 버튼을 만들어서 안내하도록」)
@@ -439,6 +533,43 @@ namespace Redesign0926
                 log.Add($"  버튼 줄 화면 x {lo:0} ~ {hi:0} (폭 {Screen.width})");
                 return lo >= 0f && hi <= Screen.width;
             }, "한 칸 늘어난 버튼 줄도 모두 화면 안 (줄을 왼쪽으로 옮김)");
+            // F1 (11-17 대표님 「핑크색이 진하면 안되고 투명도 40정도로 … 동그라미 중앙이 안맞거든?」)
+            Check(() =>
+            {
+                var gi = dg.GetComponent<Image>();
+                var fi = dg.transform.parent.Find("FixButton")?.GetComponent<Image>();
+                var icon = dg.transform.Find("Icon0926") as RectTransform;
+                var ii = icon != null ? icon.GetComponent<Image>() : null;
+                if (gi == null || fi == null || ii == null || ii.sprite == null) return false;
+                // 45° 돌린 화살표 모양(그림의 보이는 픽셀)의 테두리 가운데 · 무게 가운데가 동그라미 가운데에서 얼마나 비켜 있나
+                // (스프라이트 외곽 메시는 모양보다 넉넉해 2 가량 더 비켜 보인다 — 그림 파일을 직접 읽어 잰다)
+                var tex = new Texture2D(2, 2);
+                tex.LoadImage(System.IO.File.ReadAllBytes(AssetDatabase.GetAssetPath(ii.sprite.texture)));
+                var px = tex.GetPixels32();
+                int tw = tex.width, th = tex.height;
+                UnityEngine.Object.DestroyImmediate(tex);
+                float z = icon.localEulerAngles.z * Mathf.Deg2Rad, cs = Mathf.Cos(z), sn = Mathf.Sin(z);
+                float sx = icon.rect.width / tw, sy = icon.rect.height / th;
+                Vector2 lo = new Vector2(float.MaxValue, float.MaxValue), hi = new Vector2(float.MinValue, float.MinValue), sum = Vector2.zero;
+                int n = 0;
+                for (int y = 0; y < th; y++)
+                    for (int x = 0; x < tw; x++)
+                    {
+                        if (px[y * tw + x].a < 128) continue;
+                        float lx = (x + 0.5f - tw * 0.5f) * sx, ly = (y + 0.5f - th * 0.5f) * sy;
+                        var p = new Vector2(lx * cs - ly * sn, lx * sn + ly * cs);
+                        lo = Vector2.Min(lo, p);
+                        hi = Vector2.Max(hi, p);
+                        sum += p;
+                        n++;
+                    }
+                if (n == 0) return false;
+                Vector2 box = icon.anchoredPosition + (lo + hi) * 0.5f, mass = icon.anchoredPosition + sum / n;
+                log.Add($"  길안내 동그라미 {gi.color} · 「···」 {fi.color} · 화살표 테두리 가운데 {box.x:0.0}, {box.y:0.0} · 무게 가운데 {mass.x:0.0}, {mass.y:0.0} (동그라미 {((RectTransform)dg.transform).rect.size} · 「···」 {((RectTransform)fi.transform).rect.size})");
+                return Mathf.Abs(gi.color.a - 0.4f) < 0.02f && gi.color.r > 0.85f && gi.sprite == fi.sprite
+                    && Mathf.Abs(box.x) < 3.5f && Mathf.Abs(box.y) < 3.5f && Mathf.Abs(mass.x) < 3.5f && Mathf.Abs(mass.y) < 3.5f
+                    && ((box + mass) * 0.5f).magnitude < 1f;   // 눈에 보이는 가운데 — 테두리 가운데와 무게 가운데의 중간
+            }, "「길안내」 동그라미는 「···」처럼 비친다 — 분홍 40% · 같은 동그라미 그림 · 화살표 모양은 동그라미 가운데 (F1)");
             Shot("ga_detail_btn");
             Press(() => topRect("GuideButton0926")?.center, 0.08f, null);
             Sleep(0.3f);
@@ -724,6 +855,64 @@ namespace Redesign0926
             Press(closeAt, 0.08f, null);
             Sleep(0.4f);
             Check(() => !ga.EditorGuiding && !notch.EditorGuiding, "노치 아이폰 — × 를 한 번 누르면 화살표 · 노치 안내가 같이 끝");
+            // 아래로 밀어 끝내도 노치 안내까지 같이 (J4)
+            Do(() => goBoth(200, 0, "시험 북쪽 200m", null));
+            Wait(() => ga.EditorShowing && notchUp() && notch.EditorMode == "Guide", 5f, "노치 · 화살표 (밀기)");
+            Sleep(0.4f);
+            Do(() => legLong[0] = new Vector2(0f, -360f * unitPx()));
+            Finger(zoneAt, legLong, 18, null, null);
+            Sleep(0.4f);
+            Check(() => !ga.EditorGuiding && !notch.EditorGuiding, "노치 아이폰 — 화살표를 아래로 밀어 끝내면 노치 안내도 같이 끝 (J4)");
+
+            // 14) 노치 아이폰 — 도착은 한 번: 노치도 10m (예전 15m) · 화살표와 같은 순간 · 같은 거리 · 끝도 같이
+            //     (11-16 둘째 대표님 「노치 위 표시에서도 10m 거리까지 도착하면 완성 … 두번 도착했다고 나오지 않도록」)
+            Do(() => goBoth(12, 0, "시험 12m 앞", null));
+            Wait(() => ga.EditorShowing && notchUp() && notch.EditorMode == "Guide", 5f, "12m — 노치 · 화살표");
+            Sleep(2.2f);   // 노치가 스스로 정하던 때는 15m 안에 1.5초면 도착이었다
+            Do(() => log.Add($"  12m: {state()} · 노치 '{notch.EditorTitle}' {notch.EditorRight} · 도착 {notch.EditorArrived}"));
+            Check(() => !notch.EditorArrived && !ga.EditorArrived && notch.EditorGuiding && notch.EditorRight == "12m" && text().StartsWith("거의 다 왔어요  12m"),
+                "12m — 노치도 화살표도 아직 도착 아님 (노치는 예전엔 15m 에서 따로 도착) · 노치와 알약이 같은 거리");
+            Do(() => goBoth(8, 0, "시험 8m 앞", null));
+            Wait(() => ga.EditorArrived || notch.EditorArrived, 3f, "8m — 도착");
+            Check(() => ga.EditorArrived && notch.EditorArrived, "8m — 노치와 화살표가 같은 순간에 도착 (한 번)");
+            Sleep(0.6f);
+            Do(() => log.Add($"  도착: {state()} · 노치 '{notch.EditorTitle}' / '{notch.EditorHint}' · ✓ {notch.EditorCheck}"));
+            Check(() => notch.EditorTitle == "도착했어요" && notch.EditorHint == "시험 8m 앞" && notch.EditorCheck && text() == "도착했어요  시험 8m 앞",
+                "노치 「도착했어요 · 시험 8m 앞」 ✓ · 알약 「도착했어요  시험 8m 앞」");
+            Shot("ga_notch_arrived");
+            Wait(() => !ga.EditorGuiding, 4f, "도착 2.5초 뒤 끝");
+            Check(() => !ga.EditorGuiding && !notch.EditorGuiding, "화살표 안내가 끝나는 순간 노치도 같이 끝");
+            // 끝난 뒤 2초 동안 매 프레임 — 노치가 다시 안내 · 도착으로 열리지 않는다 (화살표 알약은 「도착했어요」를 든 채 사라지는 게 맞다)
+            float lastOpen = 2f;   // 닫히는 동안은 줄기만 한다 — 다시 커지면(0.1 위로) 다시 열린 것
+            GaWatch(2f, () =>
+            {
+                float o = notch.EditorOpen;
+                bool reopened = o > lastOpen + 0.02f && o > 0.1f;
+                lastOpen = o;
+                return notch.EditorGuiding || notch.EditorArrived || ga.EditorGuiding || reopened;
+            }, again);
+            Do(() => log.Add($"  끝 2초 뒤: {state()} · 노치 {notch.EditorMode} 열림 {notch.EditorOpen:0.00} · 도착 {notch.EditorArrived}"));
+            Check(() => !again[0] && ga.EditorHidden && !notch.EditorGuiding,
+                "끝난 뒤 노치에 「도착했어요」가 다시 나오지 않는다 (2초 동안 매 프레임 — 노치 · 화살표 모두 내려감)");
+            // 가까이 카드가 이어 받아 화살표가 끝나면 노치도 같이 끝 (예전엔 노치만 남아 따로 「도착했어요」)
+            //   12) 에서 「AR 에 없는 장소」를 흉내 내려고 끈 큐브를 다시 켠다 — 꺼져 있으면 가까이 카드가 담지 않는다
+            Do(() => { if (cubeT != null) cubeT.gameObject.SetActive(true); NmPut(cube, 9f, 30f); goBoth(300, 0, NmName(cube), cubeT); });
+            Wait(() => NmVisible(cube), 3f, "큐브 다시 보임");
+            Wait(() => ga.EditorShowing && notch.EditorGuiding, 5f, "그 큐브로 노치 · 화살표");
+            Do(() => NmPut(cube, 1.5f));
+            Wait(() => !ga.EditorGuiding, 3f, "2m 안 — 가까이 카드가 이어 받음");
+            Do(() =>
+            {
+                var cam = Camera.main;
+                Vector3 dv = cube != null && cam != null ? cube.transform.position - cam.transform.position : Vector3.zero;
+                var dm = UnityEngine.Object.FindAnyObjectByType<DataManager>();
+                bool listed = dm != null && dm.GetSpawnedObjects() != null && dm.GetSpawnedObjects().ContainsValue(cube);
+                log.Add($"  이어 받기: {state()} · 노치 안내 {notch.EditorGuiding} · 카드 {nmModal.EditorCardOn}/{nmModal.EditorShowing} {nmModal.EditorCount}개 · 카드 켜짐 {nmModal.isActiveAndEnabled} · 담김 {(cubeT != null && R0926NearHold.Held.Contains(cubeT))} · 치운 것 {nmModal.EditorDismissed(cube)} · 큐브 {(cube != null && cube.activeInHierarchy)} · 보임 {NmVisible(cube)} · 땅 위 {new Vector2(dv.x, dv.z).magnitude:0.0}m 높이 {dv.y:0.0} · 매니저 목록 {listed}");
+            });
+            Check(() => !ga.EditorGuiding && !notch.EditorGuiding && cubeT != null && R0926NearHold.Held.Contains(cubeT),
+                "가까이 카드가 이어 받아 화살표가 끝나면 노치 안내도 같이 끝");
+            Do(() => NmPut(cube, 12f));
+            Wait(() => !nmModal.EditorCardOn, 3f, "카드 치움");
             CloseAll();
 
             Check(() => errors.Count == 0, "오류 없음");
@@ -829,6 +1018,20 @@ namespace Redesign0926
             {
                 if (until < 0) { until = EditorApplication.timeSinceStartup + seconds; max[0] = float.MinValue; }
                 max[0] = Mathf.Max(max[0], value());
+                if (EditorApplication.timeSinceStartup < until) return false;
+                until = -1;
+                return true;
+            });
+        }
+
+        // seconds 동안 매 프레임 bad() 를 본다 — 한 번이라도 참이면 hit[0]
+        private static void GaWatch(float seconds, Func<bool> bad, bool[] hit)
+        {
+            double until = -1;
+            steps.Enqueue(() =>
+            {
+                if (until < 0) { until = EditorApplication.timeSinceStartup + seconds; hit[0] = false; }
+                if (bad()) hit[0] = true;
                 if (EditorApplication.timeSinceStartup < until) return false;
                 until = -1;
                 return true;

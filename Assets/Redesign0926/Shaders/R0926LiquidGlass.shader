@@ -75,7 +75,7 @@ Shader "Hidden/R0926/LiquidGlass"
             float4 _ClipRect;
             sampler2D _R0926GlassTex;
             float _R0926GlassReady;
-            float4 _R0926GlassScreen;   // 화면 픽셀 크기 — 오버레이 캔버스의 월드 좌표가 곧 화면 픽셀
+            float4 _R0926GlassScreen;   // 화면 픽셀 크기 — 모양 단위 거리를 화면 좌표로 옮길 때
 
             v2f vert (appdata_t v)
             {
@@ -88,7 +88,11 @@ Shader "Hidden/R0926/LiquidGlass"
                 o.color = v.color * _Color;
                 o.shape = v.shape;
                 o.size = v.size;
-                o.screenUV = mul(unity_ObjectToWorld, v.vertex).xy / max(_R0926GlassScreen.xy, 1.0);
+                // 화면 위치는 클립 좌표에서 — 오버레이 캔버스의 월드 좌표는 화면 픽셀이 아니라 캔버스 안 좌표라 예전 식은 왼쪽 아래 다른 곳을 끌어왔다 (11-19)
+                // 위아래 뒤집힘은 지금 그리는 행렬로 판단: 캔버스 위쪽(+y)이 클립에서 아래로 가면 뒤집어 그리는 중
+                float flipY = mul(UNITY_MATRIX_VP, mul(unity_ObjectToWorld, float4(0, 1, 0, 0))).y >= 0.0 ? 1.0 : -1.0;
+                float2 ndc = o.vertex.xy / max(o.vertex.w, 1e-5);
+                o.screenUV = float2(ndc.x, ndc.y * flipY) * 0.5 + 0.5;
                 return o;
             }
 
@@ -123,7 +127,7 @@ Shader "Hidden/R0926/LiquidGlass"
                 // 뒤 화면 — 가장자리에서 안쪽을 끌어와 볼록 렌즈처럼 · 빨강과 파랑은 조금씩 어긋나게 (색수차)
                 float2 uvPerUnit = 1.0 / (max(_R0926GlassScreen.xy, 1.0) * upp);
                 float2 off = -n * lens * (0.35 * bez) * uvPerUnit;
-                float2 uv = i.screenUV;
+                float2 uv = i.screenUV - p * uvPerUnit * 0.08;   // 바로 뒤를 가운데 기준으로 8% 확대 (iOS 처럼 살짝)
                 half3 bg;
                 bg.r = tex2D(_R0926GlassTex, uv + off * 1.08).r;
                 bg.g = tex2D(_R0926GlassTex, uv + off).g;

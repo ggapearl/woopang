@@ -75,7 +75,7 @@ namespace Redesign0926
             "<color=#E854A1>시실리 - 1240m</color>\n" +
             "<color=#D9A621>연트럴파크 - 1480m</color>\n" +
             "<color=#FBC15D>토쿠이 - 2210m</color>\n" +
-            "\n우팡 데이터: 12\n공공데이터: 9\n대중교통 데이터: 2\n근처 사용자: 1";
+            "\n우팡 데이터: 12\n공공기관: 9\n대중교통 데이터: 2\n근처 사용자: 1";
 
         public static void CaptureStates(Scene scene, string dir, string[] states, List<string> log)
         {

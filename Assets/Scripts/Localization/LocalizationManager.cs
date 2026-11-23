@@ -791,6 +791,14 @@ public class LocalizationManager : MonoBehaviour
                 ["ja"] = "ランドマーク",
                 ["es"] = "Monumento"
             },
+            ["category_stay"] = new Dictionary<string, string>()
+            {
+                ["en"] = "Stays",
+                ["ko"] = "숙소",
+                ["zh"] = "住宿",
+                ["ja"] = "宿泊",
+                ["es"] = "Alojamiento"
+            },
             ["category_etc"] = new Dictionary<string, string>()
             {
                 ["en"] = "Others",

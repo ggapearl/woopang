@@ -49,7 +49,14 @@ namespace Redesign0926
 
             // ── 오브젝트 우선일 때 위쪽 작은 칩 (UI 캔버스) ──
             var chip = FindOrCreate(root, "SkyChip0926");
-            chip.transform.SetSiblingIndex(Find(root, "Dock0926") != null ? Find(root, "Dock0926").transform.GetSiblingIndex() : chip.transform.GetSiblingIndex());
+            // 도크 아래 — 예전엔 '도크 자리로' 옮겨 적용할 때마다 도크 앞뒤를 오갔다. 도크 뒤로 가면 도크 아래 그늘(DockDim0926)보다 위라
+            // 탭 창이 열려도 이 칩만 어두워지지 않는다 (11-20 S5 v115). 뒤 단계들(하늘 고정판 · 그늘 · 가까이 모달 · 길안내)이 이 칩과 도크 사이로 들어간다
+            var dockGo = Find(root, "Dock0926");
+            if (dockGo != null && dockGo.transform.parent == chip.transform.parent)
+            {
+                int di = dockGo.transform.GetSiblingIndex(), ci = chip.transform.GetSiblingIndex();
+                chip.transform.SetSiblingIndex(ci < di ? di - 1 : di);
+            }
             // 11-09 대표님 「'하늘접기' 버튼이 너무 작은데 아주 조금만 더 크게」 — 높이 84 → 94 · 글 34 → 38 · 점 26 → 30 (화살표는 ApplySkyChipToggle)
             Img(chip, Spr("r0926_pill"), Glass, Image.Type.Sliced, 63f / 47f).raycastTarget = false;
             SetRect(RT(chip), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -40), new Vector2(360, 94));

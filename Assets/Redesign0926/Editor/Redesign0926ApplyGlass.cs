@@ -24,19 +24,29 @@ namespace Redesign0926
             "PhotoCrop0926", "AskAISheet0926", "HuntReview0926", "HuntCelebrate0926/Panel", "ChatPhotoView0926", "Splash0926",
         };
 
+        // 하단 탭(도크)으로 여는 창 — 도크 위에서 끝나 도크 뒤는 그대로 AR 화면이다
+        // (추가 · 보물찾기는 UploadPage 를 나눠 쓴다 · 대화방은 메시지 칸 · 팔로우 목록은 프로필 칸이 X '닫기').
+        // 11-20 대표님 S5 「탭을 열었을 때와 닫았을 때 하단 버튼 배경 물방울 효과가 다르다 → 똑같이 · X(닫기)만 다르게」 —
+        // 도크만 이 창들로는 가려지지 않고(v114), 이 창들 뒤 어두운 바탕도 도크 바로 아래 한 장(DockDim0926)이 대신 그린다(v115)
+        private static readonly string[] DockTabPanels = { "ListPanel", "UploadPage", "MessagePanel", "ChatRoomPanel", "FullProfilePanel", "FollowPanel" };
+
         private static void ApplyGlass(Transform root, List<string> log)
         {
+            DockDim(root, log);   // 기본메뉴에서도 — 탭 창이 열려도 도크가 어두워지지 않는다
             var mat = GlassMaterial(log);
             var blur = AssetDatabase.LoadAssetAtPath<Shader>(GlassBlurPath);
             if (mat == null || blur == null) { log.Add("물방울 유리: 재질/흐림 셰이더 없음"); return; }
 
             var covers = new List<GameObject>();
+            var dockCovers = new List<GameObject>();
             foreach (var path in GlassCovers)
             {
                 int cut = path.IndexOf('/');
                 var top = Find(root, cut < 0 ? path : path.Substring(0, cut));
                 var c = top != null && cut >= 0 ? top.transform.Find(path.Substring(cut + 1))?.gameObject : top;
-                if (c != null) covers.Add(c); else log.Add("물방울 유리: 덮는 창 없음 " + path);
+                if (c == null) { log.Add("물방울 유리: 덮는 창 없음 " + path); continue; }
+                covers.Add(c);
+                if (System.Array.IndexOf(DockTabPanels, path) < 0) dockCovers.Add(c);
             }
 
             var oc = FindInScene<ObjectCountUI>(root.gameObject);
@@ -61,14 +71,51 @@ namespace Redesign0926
                 so.FindProperty("glass").objectReferenceValue = mat;
                 so.FindProperty("blur").objectReferenceValue = blur;
                 so.FindProperty("tint").floatValue = Mathf.Max(img.color.a, 0.05f);
+                var mine = what == "도크" ? dockCovers : covers;
                 var cv = so.FindProperty("covers");
-                cv.arraySize = covers.Count;
-                for (int i = 0; i < covers.Count; i++) cv.GetArrayElementAtIndex(i).objectReferenceValue = covers[i];
+                cv.arraySize = mine.Count;
+                for (int i = 0; i < mine.Count; i++) cv.GetArrayElementAtIndex(i).objectReferenceValue = mine[i];
                 so.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(img);
                 n++;
             }
             log.Add("물방울 유리 " + n + "곳");
+        }
+
+        /// <summary>
+        /// 탭 창 뒤 어두운 바탕을 도크 바로 아래 한 장으로 (R0926DockDim) — 예전엔 창 뿌리의 바탕(검정 0.35)이 도크 위에 덮여
+        /// 창이 열리면 도크(유리 · 아이콘 · 글자)가 통째로 어두워졌다. 창 쪽 바탕은 그대로 손가락을 받고(R0926DockPassThrough) 그리지만 않는다(R0926DimSource).
+        /// </summary>
+        private static void DockDim(Transform root, List<string> log)
+        {
+            var dock = Find(root, "Dock0926");
+            if (dock == null || dock.transform.parent != root) { log.Add("도크 그늘: 도크 없음"); return; }
+            var go = FindOrCreate(root, "DockDim0926");
+            int d = dock.transform.GetSiblingIndex(), m = go.transform.GetSiblingIndex();
+            if (m != d - 1) go.transform.SetSiblingIndex(m < d ? d - 1 : d);
+            Stretch(RT(go));
+            var img = Img(go, null, new Color(0, 0, 0, 0), Image.Type.Simple);
+            img.raycastTarget = false;
+            img.enabled = false;   // 창이 열렸을 때만 켠다
+
+            var sources = new List<Graphic>();
+            foreach (var name in DockTabPanels)
+            {
+                var p = Find(root, name);
+                var g = p != null ? p.GetComponent<Image>() : null;
+                if (g == null) { log.Add("도크 그늘: 창 바탕 없음 " + name); continue; }
+                Ensure<R0926DimSource>(p);
+                sources.Add(g);
+            }
+            var dd = Ensure<R0926DockDim>(go);
+            var so = new SerializedObject(dd);
+            so.FindProperty("dock").objectReferenceValue = RT(dock);
+            var arr = so.FindProperty("sources");
+            arr.arraySize = sources.Count;
+            for (int i = 0; i < sources.Count; i++) arr.GetArrayElementAtIndex(i).objectReferenceValue = sources[i];
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(go);
+            log.Add("도크 그늘: 창 바탕 " + sources.Count + "개를 도크 아래 한 장으로");
         }
 
         private static Material GlassMaterial(List<string> log)

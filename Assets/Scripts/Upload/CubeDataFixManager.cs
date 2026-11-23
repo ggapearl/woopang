@@ -45,6 +45,9 @@ public class CubeDataFixManager : MonoBehaviour
     [SerializeField] private Text locationCoords;
     [SerializeField] private Text locationNote;
     [SerializeField] private Toggle moveHereToggle;          // 켜고 저장하면 지금 내 위치로 옮긴다 (기본 꺼짐)
+    [SerializeField] private GameObject requestMove;         // 남의 장소 — '수정할 내용' 칸 오른쪽 끝 '여기로 옮기기' (켜고 보내면 지금 위치로 옮겨 달라고 · 반영은 우팡M)
+    [SerializeField] private Toggle requestMoveToggle;
+    [SerializeField] private Text requestMoveNote;           // '수정할 내용' 이름표 줄 오른쪽 — 거리 · 옮겨 달라는 안내
     [SerializeField] private FixPlaceLocalizer localizer;
     [SerializeField] private RemoveRequest removeRequest;
     [SerializeField] private AREarthManager earthManager;
@@ -76,8 +79,17 @@ public class CubeDataFixManager : MonoBehaviour
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
 
-    // 카테고리 순환 (none → shop → food → cafe → park → toilet → sport → landmark → etc → none)
-    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
+    // 로고 칸 「AI 작업」(R0926FixAiPanel · 11-18 I1) — 넣기 전 사진은 지켜 두었다가 다 끄면 되돌린다
+    private bool aiOn;             // 로고 칸에 AI 결과가 들어 있다
+    private Texture2D aiBase;      // 넣기 전 대표 사진 (없었으면 null — 사진 없이 만든 3D 캐릭터)
+    private string aiBaseKeep;     // 그때의 mainKeepPath — 되돌리면 다시 '서버에 있던 그대로'
+    private bool aiAlpha;          // 바깥이 투명하다 — PNG 로 올린다 (JPG 는 투명한 곳을 검게 메운다)
+    private byte[] aiGlb;          // 3D 캐릭터 — 내 장소는 /model 로 먼저, 수정 요청은 model_file 로 같이
+
+    // 카테고리 순환 (none → shop → food → cafe → stay → park → sport → landmark → toilet → none)
+    // 11-19 L5 — 장소 추가와 같게 '기타' 빼고 '숙소' (칩 두 줄: 샵 음식점 카페 숙소 / 공원 스포츠 랜드마크 화장실 · Redesign0926Apply10 의 값과 같은 순서).
+    // 예전에 '기타'로 올라간 장소는 SetCategory 가 칩을 비워 두고 값은 그대로 보낸다 (저장해도 '기타' 그대로)
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "stay", "park", "sport", "landmark", "toilet" };
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
 
@@ -130,7 +142,7 @@ public class CubeDataFixManager : MonoBehaviour
     private void Update()
     {
         // 위치 줄 — 걸으며 보면 거리가 바뀐다 (1초에 한 번)
-        if (ownerMode && fixUIPanel != null && fixUIPanel.activeInHierarchy) RefreshLocation(false);
+        if (fixUIPanel != null && fixUIPanel.activeInHierarchy) RefreshLocation(false);   // 남의 장소도 (거리 안내)
     }
 
     void OnDestroy()
@@ -221,6 +233,11 @@ public class CubeDataFixManager : MonoBehaviour
         {
             moveHereToggle.isOn = false;
             moveHereToggle.onValueChanged.AddListener(_ => RefreshLocation(true));
+        }
+        if (requestMoveToggle != null)
+        {
+            requestMoveToggle.isOn = false;
+            requestMoveToggle.onValueChanged.AddListener(_ => RefreshLocation(true));
         }
         if (locationNote != null) noteColor = locationNote.color;
 
@@ -602,6 +619,7 @@ public class CubeDataFixManager : MonoBehaviour
 
                 if (cropped != null)
                 {
+                    DropAi();
                     if (mainPhoto != null) Destroy(mainPhoto);
                     mainPhoto = cropped;
                     mainKeepPath = null;   // 새로 고른 대표 사진 — 저장할 때 올린다
@@ -648,6 +666,8 @@ public class CubeDataFixManager : MonoBehaviour
     private IEnumerator SelectSubPhotos()
     {
         if (isProcessing) yield break;
+        // 11-17 B7 — 10장이 다 찼으면 촬영/갤러리 창을 열지 않고 바로 알린다 (11-16 대표님 「10장이 초과되는 사진은 안내와 함께 선택이 되지 않도록」)
+        if (subPhotos.Count >= MAX_SUB_PHOTOS) { ShowWarning(CubeUploadManager.MaxSubText); yield break; }
 
         if (photoSourceDialog != null)
         {
@@ -681,7 +701,7 @@ public class CubeDataFixManager : MonoBehaviour
         int remainingSlots = MAX_SUB_PHOTOS - subPhotos.Count;
         if (remainingSlots <= 0)
         {
-            ShowWarning(GetLocalizedText("max_sub_photos_exceeded"));
+            ShowWarning(CubeUploadManager.MaxSubText);
             yield break;
         }
 
@@ -753,12 +773,14 @@ public class CubeDataFixManager : MonoBehaviour
     private IEnumerator SelectSubPhotosFromGallery()
     {
         if (isProcessing) yield break;
+        int room = MAX_SUB_PHOTOS - subPhotos.Count;
+        if (room <= 0) { ShowWarning(CubeUploadManager.MaxSubText); yield break; }
         isProcessing = true;
 
         SubLoading(1);   // 고르는 동안 한 칸 — 몇 장인지는 고른 뒤에 안다
         bool isLoading = true;
 
-        NativeGallery.GetImagesFromGallery((paths) =>
+        NativeGallery.MediaPickMultipleCallback picked = (paths) =>
         {
             if (paths != null && paths.Length > 0)
             {
@@ -772,7 +794,13 @@ public class CubeDataFixManager : MonoBehaviour
                 // 고르지 않고 닫았다 — 실패 안내는 띄우지 않는다
                 isLoading = false;
             }
-        }, "image/*");
+        };
+        // 11-17 B7 — 아이폰 고르기 창은 남은 칸까지만 고르게 한다(한 칸 남으면 한 장 고르기 창). 안드로이드 창은 장수 제한을 받지 않는다 — 넘친 건 LoadSubPhotosWithFallback 가 빼고 알린다
+        // (에디터의 한 장 고르기는 파일 창(모달)을 띄워 플레이 시험이 멈춘다 — 에디터는 예전대로)
+        if (room == 1 && !Application.isEditor)
+            NativeGallery.GetImageFromGallery(p => picked(string.IsNullOrEmpty(p) ? null : new[] { p }), "", "image/*");
+        else
+            NativeGallery.GetImagesFromGallery(picked, "", "image/*", room);
 
         yield return new WaitUntil(() => !isLoading);
         SubLoading(0);
@@ -788,6 +816,7 @@ public class CubeDataFixManager : MonoBehaviour
 
         int processedCount = 0;
         int totalPaths = paths.Length;
+        bool capped = paths.Length >= MAX_SUB_PHOTOS - subPhotos.Count;   // 남은 칸을 다 채우거나 넘치게 골랐다
 
         // 들어갈 장수만큼 빈 칸을 먼저 깔고 한 프레임 — 사진 읽기(LoadImageAtPath)는 그동안 화면을 멈춘다
         int left = Mathf.Min(paths.Length, MAX_SUB_PHOTOS - subPhotos.Count);
@@ -798,7 +827,7 @@ public class CubeDataFixManager : MonoBehaviour
         {
             if (subPhotos.Count >= MAX_SUB_PHOTOS)
             {
-                ShowWarning(GetLocalizedText("max_sub_photos_exceeded"));
+                ShowWarning(CubeUploadManager.MaxSubText);
                 break;
             }
 
@@ -840,6 +869,8 @@ public class CubeDataFixManager : MonoBehaviour
         }
 
         SubLoading(0);
+        // 11-17 B7 — 10장이 다 찼다: 아이폰은 고르기 창이 거기서 막았고 안드로이드는 넘친 걸 뺐다 — 왜 더 못 넣는지 알린다
+        if (capped && subPhotos.Count >= MAX_SUB_PHOTOS) ShowWarning(CubeUploadManager.MaxSubText);
         onComplete?.Invoke();
     }
 
@@ -1047,8 +1078,8 @@ public class CubeDataFixManager : MonoBehaviour
         // 수정 요청은 고친 값이나 요청사항이 있어야 보낸다 — 둘 다 없으면 보내지 않는다 (빈 요청이 관리자 목록에 쌓이지 않게)
         if (!ownerMode && cleanForm != null && !Dirty())
         {
-            ShowWarning(R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾸거나 요청사항을 적어 주세요", "Nothing has changed — edit something or write a request",
-                "変更がありません — 直したい所を変えるかリクエストを書いてください", "没有任何修改 — 请先修改或填写修改要求", "No hay cambios — modifica algo o escribe una solicitud"));
+            ShowWarning(R0926LocalizedText.Say("바꾼 내용이 없어요 — 고칠 곳을 바꾸거나 수정할 내용을 적어 주세요", "Nothing has changed — edit something or write what to change",
+                "変更がありません — 直したい所を変えるか修正内容を書いてください", "没有任何修改 — 请先修改或填写修改内容", "No hay cambios — modifica algo o escribe qué cambiar"));
             isProcessing = false;
             yield break;
         }
@@ -1114,6 +1145,16 @@ public class CubeDataFixManager : MonoBehaviour
         string instagramID, bool showInstagram, string description, string name,
         string category)
     {
+        // '여기로 옮기기'를 켰으면 지금 위치를 같이 — 못 읽으면 보내지 않는다 (엉뚱한 곳으로 옮겨 달라고 하지 않게 · 11-17)
+        bool move = MoveOn;
+        double lat = 0, lon = 0, alt = 0;
+        if (move && !TryGetHere(out lat, out lon, out alt))
+        {
+            ShowWarning(R0926LocalizedText.Say("지금 위치를 아직 못 찾았어요", "Can't find your location yet", "現在地がまだ見つかりません", "还没找到你的位置", "Aún no encontramos tu ubicación"));
+            isProcessing = true;
+            yield break;
+        }
+
         ShowUploadProgress(0);
         yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
 
@@ -1133,48 +1174,29 @@ public class CubeDataFixManager : MonoBehaviour
         string folder = $"fix_{DateTime.Now:yyyyMMdd_HHmmss}";
         formData.AddField("folder", folder);
         formData.AddField("username", "");
-
-        Texture2D mainPhoto = form.GetMainPhoto();
-        if (mainPhoto != null)
+        if (move)
         {
-            Texture2D resizedMainPhoto = ResizeTextureWithRenderTexture(mainPhoto, 444, 444);
-            byte[] mainPhotoBytes = resizedMainPhoto.EncodeToJPG(50);
-            if (mainPhotoBytes.Length == 0)
-            {
-                Debug.LogError("[CubeDataFixManager] 메인 사진 데이터가 비어 있습니다!");
-                ShowWarning(GetLocalizedText("main_photo_upload_failed"));
-                HideBusy();
-                yield break;
-            }
-            string mainPath = "main.jpg";
-            formData.AddBinaryData("main_photo", mainPhotoBytes, mainPath, "image/jpeg");
-            Destroy(resizedMainPhoto);
+            formData.AddField("latitude", lat.ToString("F6", CultureInfo.InvariantCulture));
+            formData.AddField("longitude", lon.ToString("F6", CultureInfo.InvariantCulture));
+            formData.AddField("altitude", alt.ToString("F2", CultureInfo.InvariantCulture));
         }
-        else
+
+        if (mainPhoto == null)
         {
             ShowWarning(GetLocalizedText("upload_main_photo"));
             HideBusy();
             yield break;
         }
-
-        List<Texture2D> subPhotos = form.GetSubPhotos();
-        for (int i = 1; i <= subPhotos.Count; i++)
+        // 사진은 고쳤을 때만 (11-16) — 그대로면 보내지 않는다. 고쳤어도 있던 사진은 경로로 보내 서버가 그 장소의 파일을 그대로 가리킨다
+        // (예전엔 고치지 않은 사진까지 썸네일을 다시 압축해 보내 우팡M 에 늘 「요청한 사진으로 바꾸기」가 떴고, 반영하면 화질이 떨어졌다)
+        if ((cleanPhotos == null || PhotoState() != cleanPhotos) && !AppendPhotos(formData))
         {
-            if (i > MAX_SUB_PHOTOS) break;
-            Texture2D subPhoto = subPhotos[i - 1];
-            Texture2D resizedSubPhoto = ResizeTextureKeepAspectWithRenderTexture(subPhoto, 800, 800);
-            byte[] subPhotoBytes = resizedSubPhoto.EncodeToJPG(50);
-            if (subPhotoBytes.Length == 0)
-            {
-                Debug.LogError($"[CubeDataFixManager] 서브 사진 #{i} 데이터가 비어 있습니다!");
-                ShowWarning(GetLocalizedText("sub_photo_upload_failed"));
-                Destroy(resizedSubPhoto);
-                continue;
-            }
-            string subPath = $"sub_{i}.jpg";
-            formData.AddBinaryData("sub_photos", subPhotoBytes, subPath, "image/jpeg");
-            Destroy(resizedSubPhoto);
+            ShowWarning(GetLocalizedText("main_photo_upload_failed"));
+            HideBusy();
+            yield break;
         }
+        // AI 작업 '3D 캐릭터' — 요청 폴더에 같이 (우팡M 이 반영할 때 「요청한 3D 캐릭터로 바꾸기」 · 11-18 I1)
+        if (aiOn && aiGlb != null) formData.AddBinaryData("model_file", aiGlb, "character.glb", "model/gltf-binary");
 
         using (UnityWebRequest www = UnityWebRequest.Post(serverUrl, formData))
         {
@@ -1234,8 +1256,8 @@ public class CubeDataFixManager : MonoBehaviour
     {
         loadGen++;
         ResetToInitialState();
-        editId = 0;
         PlaceData local = DataManager.Instance != null ? DataManager.Instance.PlaceOf(doubleTap) : null;
+        editId = local != null ? local.id : 0;   // 먼저 — 번호 있는 우리 장소여야 남의 장소에도 '여기로 옮기기' (SetOwnerMode)
         SetOwnerMode(RemoveRequest.LooksMine(local));
         if (local == null)
         {
@@ -1244,7 +1266,6 @@ public class CubeDataFixManager : MonoBehaviour
             MarkClean(true);
             return;
         }
-        editId = local.id;
         StartCoroutine(LoadPlace(local, loadGen));
     }
 
@@ -1287,7 +1308,7 @@ public class CubeDataFixManager : MonoBehaviour
             Texture2D tex = null;
             yield return StartCoroutine(DownloadPhoto(place.main_photo, gen, t => tex = t));
             if (gen != loadGen) { if (tex != null) Destroy(tex); yield break; }
-            if (tex == null) { failed++; if (ownerMode) tex = Placeholder(); }
+            if (tex == null) { failed++; tex = Placeholder(); }   // 못 불러온 사진도 자리는 지킨다 — 수정 요청도 경로로 보내 빼지 않으면 그대로 (11-16)
             if (tex != null)
             {
                 mainPhoto = tex;
@@ -1304,16 +1325,14 @@ public class CubeDataFixManager : MonoBehaviour
             Texture2D tex = null;
             yield return StartCoroutine(DownloadPhoto(p, gen, t => tex = t));
             if (gen != loadGen) { if (tex != null) Destroy(tex); yield break; }
-            if (tex == null) { failed++; if (ownerMode) tex = Placeholder(); }
+            if (tex == null) { failed++; tex = Placeholder(); }
             if (tex != null) AddSub(tex, p);
             SubLoading(--left);
             UpdateSubPhotoGrid();
         }
         SubLoading(0);
         if (failed > 0)
-            ShowWarning(ownerMode
-                ? R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요 — 그대로 두면 지워지지 않아요", "Couldn't load " + failed + " photo(s) — they stay unless you remove them", "写真" + failed + "枚を読み込めませんでした — そのままなら消えません", failed + " 张照片未能加载 — 不删除就会保留", "No se cargaron " + failed + " foto(s) — se conservan si no las quitas")
-                : R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요", "Couldn't load " + failed + " photo(s)", "写真" + failed + "枚を読み込めませんでした", failed + " 张照片未能加载", "No se cargaron " + failed + " foto(s)"));
+            ShowWarning(R0926LocalizedText.Say("사진 " + failed + "장을 불러오지 못했어요 — 그대로 두면 지워지지 않아요", "Couldn't load " + failed + " photo(s) — they stay unless you remove them", "写真" + failed + "枚を読み込めませんでした — そのままなら消えません", failed + " 张照片未能加载 — 不删除就会保留", "No se cargaron " + failed + " foto(s) — se conservan si no las quitas"));
         cleanPhotos = PhotoState();
         isProcessing = false;
     }
@@ -1384,7 +1403,7 @@ public class CubeDataFixManager : MonoBehaviour
         UpdateCategoryToggleUI();
     }
 
-    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄) — 아니면 '장소 수정 요청'(요청사항 칸 — 비워도 된다).
+    /// <summary>내 장소면 '내 장소 수정'(바로 고침 · 위치 줄) — 아니면 '장소수정 요청'(수정할 내용 칸 — 비워도 된다).
     /// 지우기는 장소 '···' 의 '삭제' 하나로 (10-27 대표님 — 카드 오른쪽 위 '삭제'는 없앴다)</summary>
     private void SetOwnerMode(bool mine)
     {
@@ -1395,7 +1414,13 @@ public class CubeDataFixManager : MonoBehaviour
         SetUIActive(descriptionLabel, !mine);
         SetUIActive(locationLabel, mine);
         SetUIActive(locationRow, mine);
+        // 남의 장소도 '여기로 옮기기' — 켜고 보내면 지금 위치로 옮겨 달라는 요청 (11-16 대표님 「내가 직접 올린 게 아니어도 '위치' 가 발생해서
+        // … '여기로 옮기기' 버튼이 있으면」). 카드에 줄을 더할 높이가 없어 '수정할 내용' 칸 오른쪽 끝에 · 거리는 그 이름표 줄 오른쪽
+        bool ask = !mine && editId > 0;
+        SetUIActive(requestMove, ask);
+        if (requestMoveNote != null) requestMoveNote.gameObject.SetActive(ask);
         if (moveHereToggle != null) moveHereToggle.isOn = false;
+        if (requestMoveToggle != null) requestMoveToggle.isOn = false;
         if (submitLabel != null)
         {
             if (mine) submitLabel.Set("수정하기", "Save changes", "保存する", "保存修改", "Guardar cambios");
@@ -1410,7 +1435,7 @@ public class CubeDataFixManager : MonoBehaviour
         return (nameInput != null ? nameInput.text : "") + "\u0001"
              + (petFriendlyToggle != null && petFriendlyToggle.isOn) + "|" + (separateRestroomToggle != null && separateRestroomToggle.isOn) + "\u0001"
              + (showInstagram ? instagramIDInput?.text ?? "" : "-") + "\u0001" + selectedCategory + "\u0001"
-             + (moveHereToggle != null && moveHereToggle.isOn) + "\u0001"
+             + MoveOn + "\u0001"
              + (descriptionInput != null ? descriptionInput.text?.Trim() ?? "" : "");   // 요청사항만 적어도 고친 것 (11-13)
     }
 
@@ -1512,6 +1537,7 @@ public class CubeDataFixManager : MonoBehaviour
     private void RemoveMain()
     {
         if (isProcessing) return;
+        DropAi();
         if (mainPhoto != null) Destroy(mainPhoto);
         mainPhoto = null;
         mainKeepPath = null;
@@ -1529,40 +1555,52 @@ public class CubeDataFixManager : MonoBehaviour
     }
 
     // 위치 줄 — 장소 좌표 · 지금 내 위치에서 얼마나 떨어졌나 (스위치를 켜면 저장할 때 지금 위치로 옮긴다)
+    // 남의 장소는 '수정할 내용' 이름표 줄 오른쪽에 거리 · 켜면 「여기로 옮겨 달라고 요청해요」 (11-17)
     private void RefreshLocation(bool force)
     {
-        if (!ownerMode || locationRow == null) return;
+        if (ownerMode ? locationRow == null : (editId <= 0 || requestMoveNote == null)) return;
         if (!force && Time.unscaledTime < nextNoteAt) return;
         nextNoteAt = Time.unscaledTime + 1f;
-        if (locationCoords != null)
+        if (ownerMode && locationCoords != null)
             locationCoords.text = hasPlaceCoords
                 ? placeLat.ToString("F4", CultureInfo.InvariantCulture) + ", " + placeLon.ToString("F4", CultureInfo.InvariantCulture)
                 : "—";
-        if (locationNote == null) return;
-        locationNote.color = noteColor;
-        bool move = moveHereToggle != null && moveHereToggle.isOn;
+        Text note = ownerMode ? locationNote : requestMoveNote;
+        if (note == null) return;
+        note.color = noteColor;
+        bool move = MoveOn;
         if (!TryGetHere(out double lat, out double lon, out _))
         {
-            locationNote.text = R0926LocalizedText.Say("지금 위치를 찾는 중…", "Finding your location…", "現在地を取得中…", "正在获取你的位置…", "Buscando tu ubicación…");
+            note.text = R0926LocalizedText.Say("지금 위치를 찾는 중…", "Finding your location…", "現在地を取得中…", "正在获取你的位置…", "Buscando tu ubicación…");
             return;
         }
         if (!hasPlaceCoords)
         {
-            locationNote.text = move ? R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요", "Saving moves it to where you are", "保存すると現在地に移動します", "保存后移到你现在的位置", "Al guardar se moverá a tu ubicación") : "";
+            note.text = !move ? ""
+                : ownerMode ? R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요", "Saving moves it to where you are", "保存すると現在地に移動します", "保存后移到你现在的位置", "Al guardar se moverá a tu ubicación")
+                : R0926LocalizedText.Say("여기로 옮겨 달라고 요청해요", "Request a move here", "ここへの移動を依頼", "申请移到这里", "Pedir moverlo aquí");
             return;
         }
         double m = Meters(placeLat, placeLon, lat, lon);
         string d = m < 1000 ? Mathf.RoundToInt((float)m) + "m" : (m / 1000).ToString("0.#", CultureInfo.InvariantCulture) + "km";
         if (!move)
-            locationNote.text = R0926LocalizedText.Say("지금 내 위치에서 " + d, d + " from you", "現在地から" + d, "距你 " + d, "A " + d + " de ti");
+            note.text = R0926LocalizedText.Say("지금 내 위치에서 " + d, d + " from you", "現在地から" + d, "距你 " + d, "A " + d + " de ti");
         else if (m > 1000)
         {
-            locationNote.text = R0926LocalizedText.Say(d + " 떨어진 지금 위치로 옮겨져요", "It will move " + d + " to where you are", d + "離れた現在地に移動します", "将移到 " + d + " 外你现在的位置", "Se moverá " + d + " hasta tu ubicación");
-            locationNote.color = new Color(1f, 0.42f, 0.42f, 1f);   // 멀리 옮기는 건 실수일 수 있다
+            note.text = ownerMode
+                ? R0926LocalizedText.Say(d + " 떨어진 지금 위치로 옮겨져요", "It will move " + d + " to where you are", d + "離れた現在地に移動します", "将移到 " + d + " 外你现在的位置", "Se moverá " + d + " hasta tu ubicación")
+                : R0926LocalizedText.Say("여기로 옮겨 달라고 요청 · " + d, "Request a move here · " + d, "ここへの移動を依頼 · " + d, "申请移到这里 · " + d, "Pedir moverlo aquí · " + d);   // 최소 글자 38 에서도 한 줄 (11-17)
+            note.color = new Color(1f, 0.42f, 0.42f, 1f);   // 멀리 옮기는 건 실수일 수 있다
         }
         else
-            locationNote.text = R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요 · " + d, "Saving moves it to where you are · " + d, "保存すると現在地に移動します · " + d, "保存后移到你现在的位置 · " + d, "Al guardar se moverá a tu ubicación · " + d);
+            note.text = ownerMode
+                ? R0926LocalizedText.Say("저장하면 지금 위치로 옮겨요 · " + d, "Saving moves it to where you are · " + d, "保存すると現在地に移動します · " + d, "保存后移到你现在的位置 · " + d, "Al guardar se moverá a tu ubicación · " + d)
+                : R0926LocalizedText.Say("여기로 옮겨 달라고 요청해요 · " + d, "Request a move here · " + d, "ここへの移動を依頼 · " + d, "申请移到这里 · " + d, "Pedir moverlo aquí · " + d);
     }
+
+    // '여기로 옮기기' — 내 장소는 위치 줄 스위치, 남의 장소(번호 있는 곳)는 '수정할 내용' 칸 옆 스위치
+    private bool MoveOn => ownerMode ? moveHereToggle != null && moveHereToggle.isOn
+                                     : editId > 0 && requestMoveToggle != null && requestMoveToggle.isOn;
 
     // 지금 내 위치 — 장소 추가와 같은 차례 (Geospatial → 휴대폰 위치 + 고도 보정 · 에디터는 가상 위치)
     private bool TryGetHere(out double lat, out double lon, out double alt) => GeoHere.TryGet(out lat, out lon, out alt, earthManager);
@@ -1575,38 +1613,20 @@ public class CubeDataFixManager : MonoBehaviour
         return 2 * R * Math.Asin(Math.Min(1.0, Math.Sqrt(a)));
     }
 
-    private IEnumerator SubmitOwnerEdit(string name, bool petFriendly, bool separateRestroom, string instagramID)
+    /// <summary>사진 — 서버에 있던 사진은 경로로(main=keep · subs 에 경로), 새로 고른 것만 줄여 올린다 ("new:n" = n 번째 sub_photos 파일).
+    /// 내 장소 고치기와 수정 요청이 같이 쓴다 (11-16 — 수정 요청은 고치지 않은 사진까지 썸네일을 다시 압축해 보내 화질이 떨어졌다). 대표 사진을 못 만들면 false</summary>
+    private bool AppendPhotos(WWWForm form)
     {
-        // 옮기기를 켰으면 지금 위치 — 못 읽으면 보내지 않는다 (엉뚱한 곳으로 옮기지 않게)
-        bool move = moveHereToggle != null && moveHereToggle.isOn;
-        double lat = 0, lon = 0, alt = 0;
-        if (move && !TryGetHere(out lat, out lon, out alt))
-        {
-            ShowWarning(R0926LocalizedText.Say("지금 위치를 아직 못 찾았어요", "Can't find your location yet", "現在地がまだ見つかりません", "还没找到你的位置", "Aún no encontramos tu ubicación"));
-            isProcessing = true;
-            yield break;
-        }
-
-        ShowUploadProgress(0);
-        yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
-
-        WWWForm form = new WWWForm();
-        form.AddField("name", name);
-        form.AddField("category", selectedCategory);
-        if (selectedCategory != loadedCategory && Array.IndexOf(categoryValues, selectedCategory) > 0)
-            form.AddField("color", ColorUtility.ToHtmlStringRGB(GetCategoryColor(selectedCategory)));   // 분류를 바꿨을 때만 — 그대로면 원래 색 · 비우면 서버가 NULL(흰색)
-        form.AddField("pet_friendly", petFriendly ? "true" : "false");
-        form.AddField("separate_restroom", separateRestroom ? "true" : "false");
-        form.AddField("instagram_id", instagramID);
-
         if (mainKeepPath != null) form.AddField("main", "keep");
-        else
+        else if (mainPhoto != null)
         {
-            Texture2D resized = ResizeTextureWithRenderTexture(mainPhoto, 444, 444);
-            byte[] bytes = resized.EncodeToJPG(50);
+            bool png = aiOn && aiAlpha;   // AI 작업으로 바깥을 투명하게 한 로고 · 캐릭터 정지 사진 (장소 추가와 같게 — 서버 /thumb 이 투명을 알아본다)
+            Texture2D resized = ResizeTextureWithRenderTexture(mainPhoto, 444, 444, png);
+            byte[] bytes = png ? resized.EncodeToPNG() : resized.EncodeToJPG(50);
             Destroy(resized);
+            if (bytes.Length == 0) return false;
             form.AddField("main", "new");
-            form.AddBinaryData("main_photo", bytes, "main.jpg", "image/jpeg");
+            form.AddBinaryData("main_photo", bytes, png ? "main.png" : "main.jpg", png ? "image/png" : "image/jpeg");
         }
 
         // 추가 사진 — 보이는 순서대로, 서버에 있던 것은 경로 · 새로 고른 것은 "new:n" (n 번째 sub_photos 파일)
@@ -1629,6 +1649,49 @@ public class CubeDataFixManager : MonoBehaviour
             fresh++;
         }
         form.AddField("subs", JsonConvert.SerializeObject(plan));
+        return true;
+    }
+
+    private IEnumerator SubmitOwnerEdit(string name, bool petFriendly, bool separateRestroom, string instagramID)
+    {
+        // 옮기기를 켰으면 지금 위치 — 못 읽으면 보내지 않는다 (엉뚱한 곳으로 옮기지 않게)
+        bool move = moveHereToggle != null && moveHereToggle.isOn;
+        double lat = 0, lon = 0, alt = 0;
+        if (move && !TryGetHere(out lat, out lon, out alt))
+        {
+            ShowWarning(R0926LocalizedText.Say("지금 위치를 아직 못 찾았어요", "Can't find your location yet", "現在地がまだ見つかりません", "还没找到你的位置", "Aún no encontramos tu ubicación"));
+            isProcessing = true;
+            yield break;
+        }
+
+        ShowUploadProgress(0);
+        yield return null;   // 카드가 먼저 그려지게 — 사진 줄이기·인코딩은 그동안 화면을 멈춘다
+
+        // AI 작업 '3D 캐릭터' — 모델부터 올린다 (11-18 I1). 못 올리면 사진도 그대로 — 로고만 캐릭터로 바뀌고 모델은 예전 것이 되지 않게
+        Action<int> progress = ShowUploadProgress;
+        if (aiOn && aiGlb != null)
+        {
+            bool modelOk = false;
+            yield return StartCoroutine(SubmitModel(ok => modelOk = ok));
+            if (!modelOk) yield break;
+            progress = p => ShowUploadProgress(30 + p * 7 / 10);
+        }
+
+        WWWForm form = new WWWForm();
+        form.AddField("name", name);
+        form.AddField("category", selectedCategory);
+        if (selectedCategory != loadedCategory && Array.IndexOf(categoryValues, selectedCategory) > 0)
+            form.AddField("color", ColorUtility.ToHtmlStringRGB(GetCategoryColor(selectedCategory)));   // 분류를 바꿨을 때만 — 그대로면 원래 색 · 비우면 서버가 NULL(흰색)
+        form.AddField("pet_friendly", petFriendly ? "true" : "false");
+        form.AddField("separate_restroom", separateRestroom ? "true" : "false");
+        form.AddField("instagram_id", instagramID);
+
+        if (!AppendPhotos(form))
+        {
+            ShowWarning(GetLocalizedText("main_photo_upload_failed"));
+            HideBusy();
+            yield break;
+        }
 
         if (move)
         {
@@ -1641,7 +1704,7 @@ public class CubeDataFixManager : MonoBehaviour
         {
             LoginManager.ApplyAuth(www);
             bool timedOut = false;
-            yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, ShowUploadProgress, t => timedOut = t));
+            yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, progress, t => timedOut = t));
             HideBusy();
 
             if (timedOut)
@@ -1671,10 +1734,43 @@ public class CubeDataFixManager : MonoBehaviour
         }
     }
 
+    // 내 장소의 3D 모델을 AI 캐릭터로 (POST /api/place/<id>/model) — 되면 AR 에 바로 새 모델 (이어서 보내는 /edit 가 안 돼도 서버와 같게)
+    private IEnumerator SubmitModel(Action<bool> done)
+    {
+        WWWForm form = new WWWForm();
+        form.AddBinaryData("model_file", aiGlb, "character.glb", "model/gltf-binary");
+        using (UnityWebRequest www = UnityWebRequest.Post(PlaceUrl(editId, "/model"), form))
+        {
+            LoginManager.ApplyAuth(www);
+            bool timedOut = false;
+            yield return StartCoroutine(CubeUploadManager.SendRequestWithTimeout(www, uploadTimeoutSeconds, p => ShowUploadProgress(p * 3 / 10), t => timedOut = t));
+            PlaceEditResponse res = timedOut ? null : PlaceEditResponse.Parse(www.downloadHandler != null ? www.downloadHandler.text : null);
+            if (!timedOut && www.result == UnityWebRequest.Result.Success && res != null && res.ok && res.place != null)
+            {
+                if (DataManager.Instance != null) DataManager.Instance.ApplyEditedPlace(res.place, false);
+                done(true);
+                yield break;
+            }
+            HideBusy();
+            LoginManager.CheckUnauthorized(www);
+            string err = res != null ? res.error ?? "" : "";
+            Debug.LogWarning($"[CubeDataFixManager] 3D 캐릭터 올리기 실패 id={editId}: {www.responseCode} {err} {www.error}");
+            if (err == "not_owner") SetOwnerMode(false);
+            isProcessing = true;   // 입력은 그대로 — 다시 누를 수 있다
+            ShowWarning(timedOut ? GetLocalizedText("request_timeout")
+                : err == "login_required" || err == "not_owner" || err == "not_found" || err == "bad_model" ? EditError(err)
+                : R0926LocalizedText.Say("3D 캐릭터를 올리지 못했어요 — 잠시 뒤 다시 해 주세요", "Couldn't upload the 3D character — try again later",
+                    "3Dキャラをアップロードできませんでした — 後でもう一度", "未能上传3D角色 — 请稍后再试", "No se pudo subir el personaje 3D — inténtalo más tarde"));
+            done(false);
+        }
+    }
+
     private string EditError(string code)
     {
         switch (code)
         {
+            case "bad_model": return R0926LocalizedText.Say("3D 캐릭터 파일을 읽지 못했어요 — AI 작업에서 다시 만들어 주세요", "Couldn't read the 3D character — make it again in AI",
+                "3Dキャラのファイルを読めませんでした — AI作業で作り直してください", "无法读取3D角色 — 请在AI中重新生成", "No se pudo leer el personaje 3D — créalo de nuevo con IA");
             case "login_required": return R0926LocalizedText.Say("로그인이 필요해요", "Please log in", "ログインが必要です", "请先登录", "Inicia sesión");
             case "not_owner": return R0926LocalizedText.Say("내가 올린 장소가 아니에요 — 수정 요청으로 보내 주세요", "Not your place — send it as a request", "自分の場所ではありません — 修正依頼として送ってください", "不是你上传的地点 — 请提交修改申请", "No es tu lugar — envíalo como solicitud");
             case "not_found": return R0926LocalizedText.Say("이미 지워진 장소예요", "This place was deleted", "この場所は削除されています", "该地点已被删除", "Este lugar fue eliminado");
@@ -1727,12 +1823,12 @@ public class CubeDataFixManager : MonoBehaviour
         }
     }
 
-    private Texture2D ResizeTextureWithRenderTexture(Texture2D source, int targetWidth, int targetHeight)
+    private Texture2D ResizeTextureWithRenderTexture(Texture2D source, int targetWidth, int targetHeight, bool alpha = false)
     {
         RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight);
         RenderTexture.active = rt;
         Graphics.Blit(source, rt);
-        Texture2D result = new Texture2D(targetWidth, targetHeight, TextureFormat.RGB24, false);
+        Texture2D result = new Texture2D(targetWidth, targetHeight, alpha ? TextureFormat.RGBA32 : TextureFormat.RGB24, false);
         result.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
         result.Apply();
         RenderTexture.active = null;
@@ -1777,6 +1873,72 @@ public class CubeDataFixManager : MonoBehaviour
     public List<Texture2D> GetSubPhotos()
     {
         return subPhotos;
+    }
+    #endregion
+
+    #region AI 작업 (11-18 I1 — R0926FixAiPanel)
+    /// <summary>AI 가 손볼 사진 — AI 를 넣었으면 넣기 전 사진 (다시 골라도 처음 사진에서 다시 만든다 · 없으면 null)</summary>
+    public Texture2D AiSource => aiOn ? aiBase : mainPhoto;
+    /// <summary>로고 칸에 AI 결과가 들어 있다</summary>
+    public bool AiOn => aiOn;
+    /// <summary>넣어 둔 3D 캐릭터 (없으면 null)</summary>
+    public byte[] AiGlb => aiOn ? aiGlb : null;
+    public Texture2D MainPhoto => mainPhoto;
+    /// <summary>불러오는 중 · 보내는 중 — AI 작업을 열지 않는다</summary>
+    public bool Busy => isProcessing;
+    /// <summary>로고 칸의 AI 가 바뀌었다 (넣기 · 되돌리기 · 새 사진 · 비우기)</summary>
+    public event Action AiChanged;
+
+    /// <summary>AI 결과를 로고 칸에 — 받으면 tex 는 이 매니저 것 (true). 불러오는 중 · 보내는 중이면 받지 않는다 (false — 부른 쪽이 지운다)</summary>
+    public bool ApplyAi(Texture2D tex, bool alpha, byte[] glb)
+    {
+        if (tex == null || isProcessing) return false;
+        if (!aiOn)
+        {
+            aiOn = true;
+            aiBase = mainPhoto;   // 넣기 전 사진 — 다 끄면 되돌린다
+            aiBaseKeep = mainKeepPath;
+        }
+        else if (mainPhoto != null && mainPhoto != aiBase) Destroy(mainPhoto);   // 앞서 넣은 AI 사진
+        mainPhoto = tex;
+        mainKeepPath = null;   // 새 대표 사진 — 저장할 때 올린다
+        aiAlpha = alpha;
+        aiGlb = glb;
+        SetMainSprite(mainPhoto);
+        if (mainPhotoDisplay != null) mainPhotoDisplay.gameObject.SetActive(true);
+        AiChanged?.Invoke();
+        return true;
+    }
+
+    /// <summary>AI 를 다 껐다 — 넣기 전 사진으로 (서버에 있던 사진이었으면 다시 경로로 · 올리지 않는다)</summary>
+    public void ClearAi()
+    {
+        if (!aiOn || isProcessing) return;
+        if (mainPhoto != null && mainPhoto != aiBase) Destroy(mainPhoto);
+        mainPhoto = aiBase;
+        mainKeepPath = aiBaseKeep;
+        ForgetAi();
+        SetMainSprite(mainPhoto);
+        if (mainPhotoDisplay != null) mainPhotoDisplay.gameObject.SetActive(mainPhoto != null);
+        AiChanged?.Invoke();
+    }
+
+    // 대표 사진을 새로 고르거나 빼거나 창을 비울 때 — 넣기 전 사진도 버린다 (AI 결과는 mainPhoto 라 부른 쪽이 지운다)
+    private void DropAi()
+    {
+        if (!aiOn) return;
+        if (aiBase != null && aiBase != mainPhoto) Destroy(aiBase);
+        ForgetAi();
+        AiChanged?.Invoke();
+    }
+
+    private void ForgetAi()
+    {
+        aiOn = false;
+        aiBase = null;
+        aiBaseKeep = null;
+        aiAlpha = false;
+        aiGlb = null;
     }
     #endregion
 
@@ -2049,6 +2211,7 @@ public class CubeDataFixManager : MonoBehaviour
         if (discardPanel != null) discardPanel.SetActive(false);
 
         // 사진 관련 초기화
+        DropAi();
         if (mainPhoto != null)
         {
             Destroy(mainPhoto);
@@ -2116,6 +2279,7 @@ public class CubeDataFixManager : MonoBehaviour
         loadedCategory = "";
         hasPlaceCoords = false;
         if (moveHereToggle != null) moveHereToggle.isOn = false;
+        if (requestMoveToggle != null) requestMoveToggle.isOn = false;
         isProcessing = false;
     }
     #endregion

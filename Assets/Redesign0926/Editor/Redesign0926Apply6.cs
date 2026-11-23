@@ -286,8 +286,10 @@ namespace Redesign0926
 
         private const float SegTabW = 240f;   // 10-18 대표님 '필터 버튼 정도의 사이즈로' — 높이 112·글자 44 = 필터 칩 (10-05 176·40 · 예전 132·30)
         private const float ShowAllRowH = 148f, ShowAllBtnH = 108f;   // 설정 '모두 다시 보이기' 줄 · 알약
-        private const float UndoBarH = 132f, UndoBtnH = 104f;        // 숨긴 뒤 '되돌리기' 알림 · 버튼 (≈ 36pt · 28pt)
-        private const float UndoBarY = DockBottom + DockHeight + 24f + 84f + 24f;   // 위치 칩(84) 바로 위
+        // 숨긴 뒤 '되돌리기' 알림 · 버튼 — 알림은 기본 알림 팝업(캔버스의 WarningText)과 같은 자리 · 크기 (11-19 L2 · 예전엔 위치 칩 바로 위 132).
+        // 적용할 때 WarningText 에서 읽고, 없을 때만 이 값
+        private const float UndoBarH = 150f, UndoBarW = 960f, UndoBtnH = 104f;
+        private static readonly Vector2 UndoBarPos = new Vector2(0, 100);
 
         private static void SetArray(SerializedProperty arr, params Object[] items)
         {
@@ -323,26 +325,41 @@ namespace Redesign0926
             "DanceAnimPanel", "AskAISheet0926",
         };
 
-        // ── 인디케이터 X 로 숨긴 뒤 '이 장소를 숨겼어요 · 되돌리기' — 위치 칩 위에 몇 초 (R0926IndicatorClose) ──
+        // ── 인디케이터 X 로 숨긴 뒤 '이 장소를 숨겼어요 · 되돌리기' — 화면 가운데 기본 알림 팝업 자리에 몇 초 (R0926IndicatorClose) ──
+        // 11-19 L2 대표님 「오브젝트 X 로 숨겼을 때 '이 장소를 숨겼어요' — 지금 하단에 뜸 → 기본 알림 팝업과 같은 로직 · 같은 위치(화면 가운데)」
+        //  → 장소 추가 · 정보 수정 · 삭제 요청이 함께 쓰는 WarningText('업로드 성공!')와 같은 자리 · 폭 · 높이 · 알약 색 · 모서리 · 글자 크기,
+        //    밝은 테두리 · 훑는 빛도 같다(ApplyToastRims). '되돌리기'는 그대로 오른쪽에 — 누를 시간이 있게 4초 (기본 팝업은 글만이라 2초)
         private static void ApplyHiddenUndo(Transform root, List<string> log)
         {
             var marker = Find(root, "Redesign0926Marker");
             if (marker == null) { log.Add("되돌리기 알림: 마커 없음"); return; }
             var bar = FindOrCreate(root, "Undo0926");
             bar.transform.SetAsLastSibling();
-            SetRect(RT(bar), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, UndoBarY), new Vector2(0, UndoBarH));
-            Ensure<R0926SafeInset>(bar).SetEdge(R0926SafeInset.Edge.Bottom);
-            Img(bar, Spr("r0926_pill"), new Color(Card.r, Card.g, Card.b, 0.97f), Image.Type.Sliced, 64f / (UndoBarH / 2f)).raycastTarget = true;
+            var warn = root.Find("WarningText") as RectTransform;   // 캔버스 바로 아래 것
+            var warnImg = warn != null ? warn.GetComponent<Image>() : null;
+            if (warn == null) log.Add("되돌리기 알림: 기본 알림 팝업(WarningText) 없음 — 기본값 자리");
+            Vector2 pos = warn != null ? warn.anchoredPosition : UndoBarPos;
+            float barW = warn != null ? warn.sizeDelta.x : UndoBarW, barH = warn != null ? warn.sizeDelta.y : UndoBarH;
+            SetRect(RT(bar), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), pos, new Vector2(barW, barH));
+            var inset = bar.GetComponent<R0926SafeInset>();
+            if (inset != null) Object.DestroyImmediate(inset);   // 아래(홈 막대 위)에 있던 때의 안전 여백 — 가운데라 필요 없다
+            Img(bar, Spr("r0926_pill"), warnImg != null ? warnImg.color : new Color(Card.r, Card.g, Card.b, 0.96f), Image.Type.Sliced,
+                warnImg != null ? warnImg.pixelsPerUnitMultiplier : 64f / 60f).raycastTarget = true;
             OnTop(bar);
             var cg = Ensure<CanvasGroup>(bar);
             cg.alpha = 0f; cg.blocksRaycasts = false; cg.interactable = false;
             var h = Ensure<HorizontalLayoutGroup>(bar);
-            h.padding = new RectOffset(48, 14, 14, 14); h.spacing = 24; h.childAlignment = TextAnchor.MiddleLeft;
+            int padV = Mathf.RoundToInt((barH - UndoBtnH) / 2f);
+            h.padding = new RectOffset(48, padV, padV, padV); h.spacing = 28; h.childAlignment = TextAnchor.MiddleCenter;
             h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = false; h.childForceExpandHeight = false;
             Ensure<ContentSizeFitter>(bar).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var barLe = Ensure<LayoutElement>(bar);
+            barLe.minWidth = barW;   // 글이 짧아도 기본 팝업과 같은 폭 — 길면(외국어) 늘어난다
+            EditorUtility.SetDirty(barLe);
 
             var msg = FindOrCreate(bar.transform, "Text0926");
-            var mt = Txt(msg, "이 장소를 숨겼어요", 34, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
+            var warnTxt = warn != null ? warn.GetComponentInChildren<Text>(true) : null;
+            var mt = Txt(msg, "이 장소를 숨겼어요", warnTxt != null ? warnTxt.fontSize : 38, Ink, TextAnchor.MiddleLeft, FontStyle.Normal);
             mt.horizontalOverflow = HorizontalWrapMode.Overflow;
 
             var btn = FindOrCreate(bar.transform, "UndoButton0926");
@@ -353,7 +370,7 @@ namespace Redesign0926
             bh.childControlWidth = true; bh.childControlHeight = true; bh.childForceExpandWidth = false; bh.childForceExpandHeight = true;
             var ble = Ensure<LayoutElement>(btn); ble.minHeight = UndoBtnH; ble.preferredHeight = UndoBtnH;
             var lab = FindOrCreate(btn.transform, "Label");
-            var lt = Txt(lab, "되돌리기", 34, Pink, TextAnchor.MiddleCenter, FontStyle.Bold);
+            var lt = Txt(lab, "되돌리기", 36, Pink, TextAnchor.MiddleCenter, FontStyle.Bold);
             lt.horizontalOverflow = HorizontalWrapMode.Overflow;
             bar.SetActive(false);   // 숨길 때만 R0926IndicatorClose 가 켠다
 
@@ -443,6 +460,10 @@ namespace Redesign0926
                 },
                 1, out var fadeTabs, out var fadeLabels);
             fadeRow.transform.SetSiblingIndex(1);
+            // 앱 시작 시 근처 장소 보기 — 기본 켜짐 (11-18 대표님 J/M1 「이게 앱 처음 시작할 때마다 보여지도록 하는 걸 '설정' 에서 옵션으로」). 꺼도 AR 화면을 위로 밀면 뜬다
+            var nearStart = SettingRow(g3.transform, "RowNearStart", new[] { "앱 시작 시 근처 장소 보기", "Show nearby at launch", "起動時に近くの場所を表示", "启动时显示附近地点", "Lugares cercanos al abrir" },
+                new[] { "가까운 10곳 — 꺼도 AR 화면을 위로 밀면 떠요", "10 closest — or swipe up on the AR view", "近い10か所 — 上にスワイプでいつでも", "最近的10处 — 关闭后上滑 AR 画面也能看", "Los 10 más cercanos — o desliza hacia arriba" }, false);
+            nearStart.transform.parent.SetSiblingIndex(2);
             var hidden = FindOrCreate(g3.transform, "HiddenText");
             Ensure<LayoutElement>(hidden).preferredHeight = 132;
             var ht = Txt(hidden, "숨긴 장소 없음", 38, Soft, TextAnchor.MiddleLeft, FontStyle.Normal);
@@ -464,6 +485,22 @@ namespace Redesign0926
             Loc(showLabel, "모두 다시 보이기", "Show all again", "すべて再表示", "全部重新显示", "Mostrar todos");
             showAll.SetActive(false);   // 앱을 켠 직후엔 숨긴 장소가 없다
 
+            // 사람 — 사용자 오브젝트 유효시간 (11-16 대표님 「'설정' 에서 '사용자 오브젝트 유효시간' 이라는 옵션을 걸어서 '1시간 / 6시간 / 24시간 / 일주일' 로 …
+            // (기본값 일주일) 해당 값에 따라 AR화면, 목록리스트가 동일하게 발생하도록」 — R0926PeopleSettings 를 목록 · AR 이 같이 쓴다)
+            SectionLabel(content.transform, "SecPeople", new[] { "사람", "People", "ユーザー", "用户", "Personas" });
+            var gp = Group(content.transform, "GroupPeople");
+            SegRow(gp.transform, "RowPeopleWindow",
+                new[] { "사용자 오브젝트 유효시간", "Show people active within", "ユーザー表示の有効時間", "用户对象有效时间", "Mostrar personas activas en" },
+                new[] { "이 시간 안에 접속한 사람만 보여요", "Only people online in this time appear", "この時間内に接続した人だけ表示", "仅显示此时间内上线的人", "Solo quien se conectó en este tiempo" },
+                new[]
+                {
+                    new[] { "1시간", "1 hour", "1時間", "1小时", "1 hora" },
+                    new[] { "6시간", "6 hours", "6時間", "6小时", "6 horas" },
+                    new[] { "24시간", "24 hours", "24時間", "24小时", "24 horas" },
+                    new[] { "일주일", "1 week", "1週間", "1周", "1 semana" },
+                },
+                R0926PeopleSettings.Default, out var peopleTabs, out var peopleLabels);
+
             // 보물찾기 — 계정 설정이라 서버에 있다(R0926SettingsPanel · /api/hunts/prefs). 참여를 끄면 알림 칸이 흐려진다 (2026-10-12)
             SectionLabel(content.transform, "SecHunt", new[] { "보물찾기", "Treasure hunts", "宝探し", "寻宝", "Búsqueda del tesoro" });
             var gh = Group(content.transform, "GroupHunt");
@@ -483,18 +520,23 @@ namespace Redesign0926
             huntNote.raycastTarget = false;
             huntNoteGo.SetActive(false);   // 로그인 전·못 불러왔을 때만 (R0926SettingsPanel.RefreshHunt)
 
-            // 화면 — 30 / 60 FPS (2026-10-06 대표님: 기본 30) · 그 바로 위에 메뉴 모양 '기본메뉴 / 물방울메뉴' (11-08 대표님)
+            // 화면 — 디스플레이 선택 '물방울 모드 · 네온 모드' (11-23 대표님 S8 — 예전 '기본메뉴 / 물방울메뉴' 자리, 둘 다 고를 수 있다) ·
+            // 창 배경 진하기 '약하게 / 중간 / 진하게' = 70 / 80 / 90 % (기본 70) · 30 / 60 FPS (2026-10-06 대표님: 기본 30). 새 글은 한국어만 (2.0.7)
             SectionLabel(content.transform, "SecDisplay", new[] { "화면", "Display", "画面", "显示", "Pantalla" });
             var g5 = Group(content.transform, "GroupDisplay");
+            var oldMenu = g5.transform.Find("RowMenuStyle");
+            if (oldMenu != null) Object.DestroyImmediate(oldMenu.gameObject);
             var fpsRow = SegRow(g5.transform, "RowFps", new[] { "화면 프레임", "Frame rate", "フレームレート", "帧率", "Fotogramas" },
                 new[] { "60 은 더 부드럽고, 30 은 배터리·발열이 덜해요", "60 is smoother, 30 saves battery and heat", "60はなめらか、30は電池と発熱を抑えます", "60 更流畅，30 更省电、发热更少", "60 es más fluido, 30 ahorra batería" },
                 new[] { new[] { "30 FPS", "30 FPS", "30 FPS", "30 FPS", "30 FPS" }, new[] { "60 FPS", "60 FPS", "60 FPS", "60 FPS", "60 FPS" } },
                 0, out var fpsTabs, out var fpsLabels);
-            var menuRow = SegRow(g5.transform, "RowMenuStyle", new[] { "메뉴 모양", "Menu style", "メニューの形", "菜单样式", "Estilo del menú" },
-                new[] { "물방울은 AR 화면이 유리처럼 비쳐요", "Droplet lets the AR view show through like glass", "しずくはAR画面がガラスのように透けます", "水滴样式像玻璃一样透出 AR 画面", "Gota deja ver la vista AR como un cristal" },
-                new[] { new[] { "기본메뉴", "Basic", "ベーシック", "基本", "Básico" }, new[] { "물방울메뉴", "Droplet", "しずく", "水滴", "Gota" } },
-                0, out var menuTabs, out var menuLabels);
-            menuRow.transform.SetAsLastSibling();   // 메뉴 모양 → 화면 프레임 순서 (자리 번호로 옮기면 적용할 때마다 위아래가 뒤바뀐다)
+            var displayRow = DisplayRow(g5.transform, out var displayButtons);
+            var densityRow = SegRow(g5.transform, "RowDensity", Ko("창 배경 진하기"), Ko("진할수록 뒤 화면이 덜 비쳐요"),
+                new[] { Ko("약하게"), Ko("중간"), Ko("진하게") }, 0, out var densityTabs, out var densityLabels);
+            var densityCg = Ensure<CanvasGroup>(densityRow);   // 둘 다 끄면(기본 모양) 흐리게
+            // 디스플레이 선택 → 창 배경 진하기 → 화면 프레임 순서 (자리 번호로 옮기면 적용할 때마다 위아래가 뒤바뀐다)
+            displayRow.transform.SetAsLastSibling();
+            densityRow.transform.SetAsLastSibling();
             fpsRow.transform.SetAsLastSibling();
 
             // 앱 정보 —목록 맨 아래 '버전'을 펼치면 나오던 문의·개인정보처리방침·데이터 출처를 여기로 (2026-10-06)
@@ -524,6 +566,7 @@ namespace Redesign0926
             var copyImg = Img(copyFoot, Spr("r0926_copyright"), new Color(1, 1, 1, 0.82f), Image.Type.Simple);
             copyImg.preserveAspect = true;
             copyImg.raycastTarget = false;
+            Ensure<R0926PixelSnap>(copyFoot);   // 밀 때 떨림 없이 — 글자처럼 1px 씩 통째로 (11-20 대표님 S6 v116)
             var aso = new SerializedObject(appInfo);
             aso.FindProperty("versionText").objectReferenceValue = verText;
             aso.FindProperty("privacyPage").objectReferenceValue = BuildPrivacyPage(sp);
@@ -535,7 +578,7 @@ namespace Redesign0926
             Wire(rLicense.GetComponent<Button>(), appInfo.OpenLicenses);
 
             // 새로 만든 칸은 맨 뒤에 붙으므로 순서를 매번 맞춘다
-            foreach (var n in new[] { "SecSky", "GroupMaster", "GroupChannels", "SecPlaces", "GroupHidden", "SecHunt", "GroupHunt", "GroupHuntAlerts", "HuntNote", "SecDisplay", "GroupDisplay", "SecInfo", "GroupInfo", "VersionFooter", "CopyrightFooter" })
+            foreach (var n in new[] { "SecSky", "GroupMaster", "GroupChannels", "SecPlaces", "GroupHidden", "SecPeople", "GroupPeople", "SecHunt", "GroupHunt", "GroupHuntAlerts", "HuntNote", "SecDisplay", "GroupDisplay", "SecInfo", "GroupInfo", "VersionFooter", "CopyrightFooter" })
             {
                 var c = content.transform.Find(n);
                 if (c != null) c.SetAsLastSibling();
@@ -553,13 +596,18 @@ namespace Redesign0926
             SetArray(so.FindProperty("angleLabels"), angleLabels);
             SetArray(so.FindProperty("fpsTabs"), fpsTabs);
             SetArray(so.FindProperty("fpsLabels"), fpsLabels);
-            SetArray(so.FindProperty("menuTabs"), menuTabs);
-            SetArray(so.FindProperty("menuLabels"), menuLabels);
+            SetArray(so.FindProperty("displayButtons"), displayButtons);
+            SetArray(so.FindProperty("densityTabs"), densityTabs);
+            SetArray(so.FindProperty("densityLabels"), densityLabels);
+            so.FindProperty("densityGroup").objectReferenceValue = densityCg;
             so.FindProperty("hiddenText").objectReferenceValue = ht;
             so.FindProperty("showAllRow").objectReferenceValue = showAll;
             so.FindProperty("removeSwitch").objectReferenceValue = removeX;
+            so.FindProperty("nearStartSwitch").objectReferenceValue = nearStart;
             SetArray(so.FindProperty("fadeTabs"), fadeTabs);
             SetArray(so.FindProperty("fadeLabels"), fadeLabels);
+            SetArray(so.FindProperty("peopleTabs"), peopleTabs);
+            SetArray(so.FindProperty("peopleLabels"), peopleLabels);
             so.FindProperty("huntSwitch").objectReferenceValue = hunt;
             so.FindProperty("huntNewSwitch").objectReferenceValue = huntNew;
             so.FindProperty("huntNearSwitch").objectReferenceValue = huntNear;
@@ -576,6 +624,7 @@ namespace Redesign0926
             Wire(lying.transform.parent.GetComponent<Button>(), panel.ToggleLying);
             Wire(collapsed.transform.parent.GetComponent<Button>(), panel.ToggleCollapsed);
             Wire(removeX.transform.parent.GetComponent<Button>(), panel.ToggleRemove);
+            Wire(nearStart.transform.parent.GetComponent<Button>(), panel.ToggleNearStart);
             Wire(hunt.transform.parent.GetComponent<Button>(), panel.ToggleHunt);
             Wire(huntNew.transform.parent.GetComponent<Button>(), panel.ToggleHuntNew);
             Wire(huntNear.transform.parent.GetComponent<Button>(), panel.ToggleHuntNear);
@@ -594,11 +643,13 @@ namespace Redesign0926
                 UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetFps, i);
                 EditorUtility.SetDirty(b);
             }
-            for (int i = 0; i < menuTabs.Length; i++)
+            Wire(displayButtons[0].GetComponent<Button>(), panel.ToggleDroplet);
+            Wire(displayButtons[1].GetComponent<Button>(), panel.ToggleNeon);
+            for (int i = 0; i < densityTabs.Length; i++)
             {
-                var b = menuTabs[i].GetComponent<Button>();
+                var b = densityTabs[i].GetComponent<Button>();
                 ResetListeners(b);
-                UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetMenuStyle, i);
+                UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetDensity, i);
                 EditorUtility.SetDirty(b);
             }
             for (int i = 0; i < fadeTabs.Length; i++)
@@ -606,6 +657,13 @@ namespace Redesign0926
                 var b = fadeTabs[i].GetComponent<Button>();
                 ResetListeners(b);
                 UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetFarFade, i);
+                EditorUtility.SetDirty(b);
+            }
+            for (int i = 0; i < peopleTabs.Length; i++)
+            {
+                var b = peopleTabs[i].GetComponent<Button>();
+                ResetListeners(b);
+                UnityEventTools.AddIntPersistentListener(b.onClick, panel.SetPeopleWindow, i);
                 EditorUtility.SetDirty(b);
             }
             return sp;
@@ -777,6 +835,69 @@ namespace Redesign0926
                 Txt(c, "›", 48, Muted, TextAnchor.MiddleRight, FontStyle.Normal).raycastTarget = false;
             }
             else if (chev != null) Object.DestroyImmediate(chev.gameObject);
+            return row;
+        }
+
+        // 새 글은 한국어만 (2.0.7 — 번역은 대표님이 「번역해줘」 하신 것만). 다른 언어에서도 한국어로 보인다
+        private static string[] Ko(string s) => new[] { s, s, s, s, s };
+
+        private static readonly Color DisplayBlue = new Color(125f / 255f, 185f / 255f, 1f, 1f);   // 시안 --blue #7DB9FF
+        private static readonly Color DisplayCheckInk = new Color(6f / 255f, 16f / 255f, 31f / 255f, 1f);
+
+        /// <summary>
+        /// 디스플레이 선택 — 제목 + 설명 + 아래 두 칸(물방울 모드 · 네온 모드). 칸마다 따로 켜고 끈다 (둘 다 · 하나만 · 둘 다 끔 = 기본 모양).
+        /// 칸 = 옅은 바탕 + 테두리 + 체크 동그라미 · 이름. 켜진 칸의 색은 R0926SettingsPanel.Refresh 가 칠한다 (시안 .dsel)
+        /// </summary>
+        private static GameObject DisplayRow(Transform parent, out Image[] buttons)
+        {
+            var row = FindOrCreate(parent, "RowDisplayMode");
+            Ensure<LayoutElement>(row).preferredHeight = 270;
+            var t = FindOrCreate(row.transform, "Title");
+            SetRect(RT(t), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -26), new Vector2(0, 60));
+            Txt(t, "디스플레이 선택", 44, Ink, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var s = FindOrCreate(row.transform, "Sub");
+            SetRect(RT(s), new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1), new Vector2(0, -88), new Vector2(0, 50));
+            Txt(s, "둘 다 고를 수 있어요 · 둘 다 끄면 기본 모양", 34, Muted, TextAnchor.MiddleLeft, FontStyle.Normal);
+            var grid = FindOrCreate(row.transform, "Buttons");
+            SetRect(RT(grid), new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 26), new Vector2(0, 92));
+            var h = Ensure<HorizontalLayoutGroup>(grid);
+            h.padding = new RectOffset(0, 0, 0, 0); h.spacing = 26;
+            h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+            string[] words = { "물방울 모드", "네온 모드" };
+            buttons = new Image[words.Length];
+            for (int i = 0; i < words.Length; i++)
+            {
+                var b = FindOrCreate(grid.transform, "Mode" + i);
+                buttons[i] = Img(b, Spr("r0926_pill"), new Color(1, 1, 1, 0.07f), Image.Type.Sliced, 63f / 40f);
+                buttons[i].raycastTarget = true;
+                Ensure<Button>(b).transition = Selectable.Transition.None;
+                var ring = FindOrCreate(b.transform, "Ring");
+                Stretch(RT(ring));
+                Img(ring, Spr("r0926_pill_ring"), new Color(1, 1, 1, 0.14f), Image.Type.Sliced, 63f / 40f).raycastTarget = false;
+                // 체크 동그라미 + 이름 — 한 묶음으로 칸 가운데
+                var inner = FindOrCreate(b.transform, "Inner");
+                SetRect(RT(inner), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0, 92));
+                var ih = Ensure<HorizontalLayoutGroup>(inner);
+                ih.padding = new RectOffset(0, 0, 0, 0); ih.spacing = 22; ih.childAlignment = TextAnchor.MiddleCenter;
+                ih.childControlWidth = true; ih.childControlHeight = true; ih.childForceExpandWidth = false; ih.childForceExpandHeight = false;
+                Ensure<ContentSizeFitter>(inner).horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                var box = FindOrCreate(inner.transform, "Box");
+                var ble = Ensure<LayoutElement>(box);
+                ble.preferredWidth = 52; ble.preferredHeight = 52;
+                Img(box, Spr("r0926_ring_mini"), new Color(1, 1, 1, 0.4f), Image.Type.Simple).raycastTarget = false;
+                Ensure<R0926SkinIgnore>(box);   // 체크는 물방울 모드에서도 꽉 찬 파랑 그대로
+                var fill = FindOrCreate(box.transform, "Fill");
+                Stretch(RT(fill));
+                Img(fill, Spr("r0926_circle"), DisplayBlue, Image.Type.Simple).raycastTarget = false;
+                var chk = FindOrCreate(box.transform, "Check");
+                SetRect(RT(chk), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34));
+                Img(chk, Spr("r0926_i_check"), DisplayCheckInk, Image.Type.Simple).raycastTarget = false;
+                var lt = FindOrCreate(inner.transform, "Text");
+                Ensure<LayoutElement>(lt).preferredHeight = 92;
+                var tx = Txt(lt, words[i], 38, Muted, TextAnchor.MiddleCenter, FontStyle.Bold);
+                tx.horizontalOverflow = HorizontalWrapMode.Overflow;
+                tx.raycastTarget = false;
+            }
             return row;
         }
 

@@ -69,6 +69,11 @@ public static class R0926PlaceInfo
                 dt.SetInfoImages(null, null, false, false, null, f.name, -1, "WOOPANG", null, null, f.address, f.extra_info, null);
                 dt.SetImageUrls(new List<string>(), false);
                 return true;
+            case StoreData s:
+                // 근처 가게 (소상공인 상가정보) — 가게 번호는 우팡 장소 번호가 아니다 · 출처 줄은 ConfigureInfo 가 넣는다
+                StoreManager.ConfigureInfo(dt, s);
+                dt.SetImageUrls(StoreManager.Photos(s), false);
+                return true;
         }
         return false;
     }

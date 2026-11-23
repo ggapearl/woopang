@@ -63,8 +63,9 @@ public class Target : MonoBehaviour
     private bool _geoAnchorSearched = false;
 
     /// <summary>
-    /// 이 타겟이 Geospatial 앵커를 사용하는 경우, 앵커가 실제로 생성되었는지 반환.
+    /// 이 타겟이 Geospatial 앵커를 사용하는 경우, 앵커가 실제로 생성되었거나 나침반 모드가 GPS 자리에 놓았는지 반환.
     /// 앵커 컴포넌트가 없으면(P2P 등) true 반환 (필터링 안 함).
+    /// 11-18 H3 — 예전엔 앵커만 보아, 어두워 나침반 자리에 보이는 오브젝트가 인디케이터 없이 3D 만 떴다.
     /// </summary>
     public bool IsAnchorReady
     {
@@ -76,11 +77,10 @@ public class Target : MonoBehaviour
                 _geoAnchorSearched = true;
             }
 #if UNITY_EDITOR
-            // 에디터에서는 AR 앵커가 생성되지 않으므로 항상 ready로 처리
-            return true;
-#else
-            return _cachedGeoAnchor == null || _cachedGeoAnchor.IsAnchorCreated;
+            // 에디터에서는 AR 앵커가 생성되지 않으므로 항상 ready로 처리 (시험이 기기 규칙을 켜면 기기처럼)
+            if (!CustomARGeospatialCreatorAnchor.EditorDeviceRule) return true;
 #endif
+            return _cachedGeoAnchor == null || _cachedGeoAnchor.HasWorldPose;
         }
     }
 

@@ -26,6 +26,9 @@ public class ImageDisplayController : MonoBehaviour
     // 세대 번호: 풀 재활용 시 증가 → 이전 코루틴이 yield 후 자신의 세대와 다르면 즉시 종료
     private int loadGeneration = 0;
 
+    private CustomARGeospatialCreatorAnchor anchor;   // 면을 켜도 되는지 묻는 곳 (없으면 언제나 켠다 — 미리보기 등)
+    private bool anchorLooked;
+
     void Awake()
     {
         if (cubeRenderer == null || cubeRenderer.sharedMaterial == null) return;
@@ -79,6 +82,45 @@ public class ImageDisplayController : MonoBehaviour
     }
 
     /// <summary>
+    /// 미리 받아 둔 메인 사진을 바로 붙인다 — 11-19 P1 사진을 다 받은 뒤에 오브젝트를 띄울 때 (PlaceSpawnGate).
+    /// tex 는 이제 이 면이 갖는다 (바꾸거나 풀로 돌아갈 때 지운다)
+    /// </summary>
+    public void SetBaseMapTexture(Texture2D tex, string imageUrl)
+    {
+        if (tex == null) return;
+        if (!enabled) { Destroy(tex); return; }
+        if (currentBaseMapCoroutine != null)
+        {
+            StopCoroutine(currentBaseMapCoroutine);
+            currentBaseMapCoroutine = null;
+        }
+        loadGeneration++;
+        wantedUrl = imageUrl;
+        ApplyBaseMap(tex, imageUrl);
+    }
+
+    /// <summary>메인 사진 주소 — LoadBaseMapTexture 와 같다: 우팡 서버 사진은 512px 썸네일 먼저(안 되면 원본) · 외부(http) 사진은 그대로(https 로)</summary>
+    public static void MainPhotoUrls(string imageUrl, out string primary, out string fallback)
+    {
+        if (imageUrl.StartsWith("http")) { primary = ApiConfig.Secure(imageUrl); fallback = null; return; }
+        primary = ApiConfig.MAIN_SERVER + "/thumb/512/" + imageUrl.Replace("\\", "/").TrimStart('/');
+        fallback = ApiConfig.MAIN_SERVER + "/" + imageUrl.Replace("\\", "/");
+    }
+
+    // 면을 켠다 — 단, 앵커가 아직 보이게 하지 않았으면(추적 전 · 숨김 중) 켜지 않는다. 보일 때가 되면 앵커가 모든 렌더러를 켠다.
+    // 예전엔 사진이 오면 무조건 켜서, 앵커가 잡히기 전 원점에 면만 뜨거나 fallback 이 숨긴 동안 면만 보였다 (11-19 P1)
+    private void ShowFace()
+    {
+        if (cubeRenderer == null) return;
+        if (!anchorLooked)
+        {
+            anchor = GetComponentInParent<CustomARGeospatialCreatorAnchor>(true);
+            anchorLooked = true;
+        }
+        cubeRenderer.enabled = anchor == null || anchor.MayShow;
+    }
+
+    /// <summary>
     /// 앱 내장 이미지(Resources)로 베이스맵 즉시 설정 — 서버 다운로드 없음.
     /// 공공데이터 심볼처럼 종류가 한정된 이미지에 사용. 경로에 텍스처가 없으면 false 반환
     /// (호출측이 서버 main_photo로 폴백할 수 있게).
@@ -110,7 +152,7 @@ public class ImageDisplayController : MonoBehaviour
             if (cubeRenderer.material.HasProperty("_BaseMap")) cubeRenderer.material.SetTexture("_BaseMap", tex);
             else if (cubeRenderer.material.HasProperty("_MainTex")) cubeRenderer.material.SetTexture("_MainTex", tex);
             ApplyPaddingSettings();
-            cubeRenderer.enabled = true;
+            ShowFace();
         }
         return true;
     }
@@ -160,17 +202,14 @@ public class ImageDisplayController : MonoBehaviour
             {
                 Texture2D newTexture = ((DownloadHandlerTexture)request.downloadHandler).texture;
                 if (newTexture != null) ApplyBaseMap(newTexture, imageUrl);
-                else if (cubeRenderer != null) cubeRenderer.enabled = true;
+                else ShowFace();
             }
             else
             {
                 if (op != null) Debug.LogError($"[ImageDisplayController] 로딩 실패: {request.error} ({fullUrl})");
 
                 // 로딩 실패 시에도 큐브 표시 (눌러서 열 수 있게) — 사진은 뒤에서 다시 받아 바꿔 끼운다
-                if (cubeRenderer != null)
-                {
-                    cubeRenderer.enabled = true;
-                }
+                ShowFace();
                 if (op != null && attempt < 3)   // 보내지도 못한 주소는 다시 해도 같다
                 {
                     yield return new WaitForSeconds(4f * (attempt + 1));
@@ -210,8 +249,8 @@ public class ImageDisplayController : MonoBehaviour
         // 패딩 설정 적용
         ApplyPaddingSettings();
 
-        // 큐브 표시
-        cubeRenderer.enabled = true;
+        // 큐브 표시 (앵커가 보이게 했을 때만)
+        ShowFace();
     }
 
     // 서브 사진 설정

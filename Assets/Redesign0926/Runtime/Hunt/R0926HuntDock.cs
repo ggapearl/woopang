@@ -14,13 +14,11 @@ public class R0926HuntDock : MonoBehaviour
     [SerializeField] private GameObject uploadPage;
     [SerializeField] private SwipePanelController swipe;
     [SerializeField] private RectTransform closeX;          // 추가 창 도크 거울의 X — 보물찾기로 열면 이 칸 자리로
-    [SerializeField] private R0926SlideIn sheet;            // 추가 ↔ 보물찾기를 바꿀 때 카드 틀이 살짝 올라온다
     [SerializeField] private GameObject newBadge;
     [SerializeField] private float addSlot = 0.3f, huntSlot = 0.5f;
 
     private const string FirstSeenKey = "r0926_hunt_dock_seen";
     private const double NewDays = 7;
-    private const float RiseDistance = 56f, RiseTime = 0.24f;
 
     public static R0926HuntDock Instance { get; private set; }
 
@@ -39,7 +37,8 @@ public class R0926HuntDock : MonoBehaviour
 
     private void OnEnable() => RefreshBadge();
 
-    /// <summary>도크 '보물찾기' 칸을 누름 (버튼의 OnClick) — 닫혀 있으면 보물찾기 한 장으로 열고, 추가 두 장이 열려 있으면 보물찾기로 바꾼다</summary>
+    /// <summary>도크 '보물찾기' 칸을 누름 (버튼의 OnClick) — 닫혀 있으면 보물찾기 한 장으로 열고, 추가 두 장이 열려 있으면 보물찾기로 바꾼다.
+    /// 바꿀 때 틀은 그대로, 카드만 제자리에서 디졸브 (SwipePanelController — 11-18 대표님 H2 「슬라이드 없이」, 예전엔 틀이 56 아래에서 올라왔다)</summary>
     public void Open()
     {
         if (swipe == null || uploadPage == null || plusButton == null) return;
@@ -48,7 +47,6 @@ public class R0926HuntDock : MonoBehaviour
             if (swipe.AloneShowing) return;
             swipe.HomePanel = 2;
             swipe.SwitchToPanel(2);
-            Rise();
             return;
         }
         swipe.HomePanel = 2;   // 창이 켜지며 첫 장으로 되돌리는 곳들(UploadPageResetHelper · 카드 넘기기)이 이 장으로 간다
@@ -62,13 +60,7 @@ public class R0926HuntDock : MonoBehaviour
     {
         if (opening || swipe == null || uploadPage == null || !uploadPage.activeInHierarchy || !swipe.AloneShowing) return;
         swipe.HomePanel = 0;
-        swipe.ResetToFirstPanel();
-        Rise();
-    }
-
-    private void Rise()
-    {
-        if (sheet != null && sheet.isActiveAndEnabled) sheet.Rise(RiseDistance, RiseTime);
+        swipe.SwitchToPanel(0);
     }
 
     private void LateUpdate()

@@ -78,6 +78,9 @@ public static class ApiConfig
     // 시설 정보
     public const string NEARBY_FACILITIES = MAIN_SERVER + "/api/nearby-facilities";
 
+    // 근처 가게 (소상공인시장진흥공단 상가(상권)정보 — 서버가 분기마다 받아 둔 것 · 앱은 가까운 몇 개만)
+    public const string STORES_NEAR = MAIN_SERVER + "/api/stores/near";
+
     // 친구 지도 깊은 확대용 지도 타일 — 서버가 지도 회사 키를 붙이고 캐시한다 (앱은 우팡 서버만 부른다)
     public const string MAP_TILES_INFO = MAIN_SERVER + "/api/map/tiles/info";
     public const string MAP_TILES = MAIN_SERVER + "/api/map/tiles/{z}/{x}/{y}.png";

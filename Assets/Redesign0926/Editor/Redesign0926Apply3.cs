@@ -237,7 +237,8 @@ namespace Redesign0926
             SectionLabelNew(catLabel, UP, catY, new[] { "분류", "Category", "分類", "分类", "Categoría" });
             var catToggle = P("CategoryToggle");
             // 3D 모델도 장소와 같은 여덟 가지 (10-21) — 매니저의 categoryValues 와 순서·개수가 같아야 칩이 맞는 분류를 누른다
-            string[] values = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
+            // 11-19 L4: '기타' 빼고 '숙소' — 숙소는 공원 자리 · 공원은 화장실 자리 · 화장실은 기타 자리 (샵 음식점 카페 숙소 / 공원 스포츠 랜드마크 화장실)
+            string[] values = { "", "shop", "food", "cafe", "stay", "park", "sport", "landmark", "toilet" };
             if (catToggle != null)
             {
                 // 원래 순환 토글은 숨기고(동작은 칩이 대신 누른다) 칩으로 바로 고른다
@@ -308,11 +309,11 @@ namespace Redesign0926
                 { "shop", new[] { "샵", "Shop", "ショップ", "商店", "Tienda" } },
                 { "food", new[] { "음식점", "Food", "飲食店", "餐厅", "Comida" } },
                 { "cafe", new[] { "카페", "Cafe", "カフェ", "咖啡", "Café" } },
+                { "stay", new[] { "숙소", "Stays", "宿泊", "住宿", "Alojamiento" } },   // 11-19 L4 (말은 LocalizationManager category_stay 와 같게)
                 { "park", new[] { "공원", "Park", "公園", "公园", "Parque" } },
                 { "toilet", new[] { "화장실", "Restroom", "トイレ", "卫生间", "Baño" } },
                 { "sport", new[] { "스포츠", "Sports", "スポーツ", "运动", "Deporte" } },
                 { "landmark", new[] { "랜드마크", "Landmark", "名所", "地标", "Lugar" } },
-                { "etc", new[] { "기타", "Other", "その他", "其他", "Otro" } },
             };
             // 이전 실행에서 남은 칩 정리
             for (int i = box.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(box.transform.GetChild(i).gameObject);

@@ -4,7 +4,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using System;
 using UnityEngine.Networking;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
@@ -93,6 +92,23 @@ public class DoubleTap3D : MonoBehaviour
     private int photoGeneration;
     private int expectedPhotos;   // 받는 중인 사진 수 — 아직 안 온 칸으로도 넘길 수 있게 (도착하면 뜬다)
     private int PhotoSlots => photosLoading ? Mathf.Max(imageSprites.Count, expectedPhotos) : imageSprites.Count;
+    // 11-17 B9 — 사진은 디스크 캐시(SubPhotoCache)로: 가까운 것의 첫 장을 미리 받아 두고(메모리에는 풀지 않는다) 열 때 디스크에서 바로 푼다
+    private static readonly HashSet<DoubleTap3D> live = new HashSet<DoubleTap3D>();
+    private bool infoHost;   // 목록 사진용 빈 오브젝트 (CreateInfoHost) — AR 에 없으니 미리 받지 않는다
+    /// <summary>켜져 있는 오브젝트들 — 가까운 것의 첫 장을 미리 받는다 (SubPhotoCache)</summary>
+    internal static IReadOnlyCollection<DoubleTap3D> Live => live;
+    /// <summary>미리 받을 첫 장 — 정보 창용 빈 오브젝트 · 이미 받아 둔 것 · 사진 없는 것은 null (춤 모델도 이제 두 번 누르면 정보 창이라 같이 받는다 — 11-19 L6)</summary>
+    internal string PrefetchSrc
+    {
+        get
+        {
+            if (infoHost || photosLoading || photosLoaded || imageUrls.Count == 0) return null;
+            return imageUrls[0];
+        }
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetLive() => live.Clear();
     private bool isCooldown = false; // 더블탭 쿨다운
     private bool canClose = true; // 닫기 방지 쿨다운
     private bool isFadingOut = false; // FadeOut 코루틴 중복 실행 방지
@@ -547,12 +563,14 @@ public class DoubleTap3D : MonoBehaviour
     {
         EnhancedTouchSupport.Enable();
         CommentManager.CommentsChanged += OnCommentsChanged;
+        live.Add(this);
     }
 
     void OnDisable()
     {
         EnhancedTouchSupport.Disable();
         CommentManager.CommentsChanged -= OnCommentsChanged;
+        live.Remove(this);
         if (photosLoading) ReleasePhotos();
 
         // 버튼 리스너 개별 제거 (다른 컴포넌트의 리스너 보호)
@@ -601,7 +619,7 @@ public class DoubleTap3D : MonoBehaviour
             Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
 
             if (isFullscreen) { /* 풀스크린 모드는 스와이프로만 닫기 — 더블탭 닫기 방지 */ }
-            else
+            else if (WorldTouch.Free(mousePos))   // 덮은 UI(메뉴 · 시트 · 다른 창) 밑이면 받지 않는다
             {
                 Ray ray = Camera.main.ScreenPointToRay(mousePos);
                 RaycastHit hit;
@@ -611,6 +629,10 @@ public class DoubleTap3D : MonoBehaviour
                     if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
                     {
                         OnDoubleTapCube();
+                    }
+                    else
+                    {
+                        OnSingleTap();   // 두 번 누르기의 첫 번째일 수 있다 — 사진을 먼저 받기 시작 · 3D 모델이면 움직임 (L7)
                     }
                     lastTapTime = Time.time;
                 }
@@ -626,23 +648,18 @@ public class DoubleTap3D : MonoBehaviour
             if (touch.phase == TouchPhase.Began)
             {
                 touchStartPos = touch.screenPosition;
-                isSwiping = true;
 
-                // 비풀스크린: UI 위 터치이면 3D 오브젝트 터치 무시
-                // 풀스크린: 전체 화면이 UI이므로 가드 스킵 (스와이프/버튼 모두 필요)
-                bool isOverUI = !isFullscreen && EventSystem.current != null &&
-                    EventSystem.current.IsPointerOverGameObject(touch.touchId);
-
-                if (isOverUI)
-                {
-                    return;
-                }
-
-                // 풀스크린 상태에서는 3D 더블탭으로 닫기 방지 (스와이프로만 닫기)
+                // 풀스크린: 이 창 위에서 시작한 손가락만 넘기기 · 올려 댓글 · 내려 닫기로 받는다 — 창 위에 뜬 시트 · 다른 창이나
+                // 도크에서 시작한 건 그쪽 몫 (11-18 N2: 설정 시트에서 위로 밀었더니 뒤의 정보 창이 댓글을 열었다). 3D 더블탭으로 닫지는 않는다
                 if (isFullscreen)
                 {
+                    isSwiping = OwnsTouch(touch.screenPosition);
                     return;
                 }
+
+                // 비풀스크린: 덮은 UI 밑이면 3D 오브젝트 터치 무시
+                isSwiping = WorldTouch.Free(touch.screenPosition);
+                if (!isSwiping) return;
 
                 Ray ray = Camera.main.ScreenPointToRay(touch.screenPosition);
                 RaycastHit hit;
@@ -653,6 +670,10 @@ public class DoubleTap3D : MonoBehaviour
                     if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
                     {
                         OnDoubleTapCube();
+                    }
+                    else
+                    {
+                        OnSingleTap();   // 두 번 누르기의 첫 번째일 수 있다 — 사진을 먼저 받기 시작 · 3D 모델이면 움직임 (L7)
                     }
                     lastTapTime = Time.time;
                 }
@@ -780,6 +801,15 @@ public class DoubleTap3D : MonoBehaviour
         }
     }
 
+    // 손가락이 닿은 자리 맨 위 UI 가 이 창(또는 안내 판) 안이거나 UI 가 없으면 이 창의 손가락
+    private bool OwnsTouch(Vector2 pos)
+    {
+        var top = WorldTouch.TopUI(pos);
+        if (top == null) return true;
+        var t = top.transform;
+        return (fullscreenCanvasGroup != null && t.IsChildOf(fullscreenCanvasGroup.transform)) || (guidePanel != null && t.IsChildOf(guidePanel.transform));
+    }
+
     // CreateCreatedByUI() 제거됨 - FullScreenGuide 자식으로 미리 배치
     // 에디터에서 WOOPANG > Setup > Add CreatedByText to FullScreenGuide 실행
 
@@ -864,30 +894,8 @@ public class DoubleTap3D : MonoBehaviour
             return;
         }
 
-        // dance_anim 카테고리는 일반 정보 패널 대신 DanceAnimController(다운로드 패널) 라우팅.
-        // 큐브 = 플레이스홀더, 더블탭 = "다운로드" 버튼 띄우기.
-        if (id > 0 && DataManager.Instance != null && DataManager.Instance.IsAnimCategory(id))
-        {
-            DbgLog($"[dbg-DoubleTap] anim 카테고리 감지 id={id} → DanceAnimController로 라우팅");
-            var ctrl = DanceAnimController.Instance ?? DanceAnimController.EnsureInstance();
-            if (ctrl != null)
-            {
-                string displayName = !string.IsNullOrEmpty(placeName) ? placeName : R0926LocalizedText.Say("3D 콘텐츠", "3D content", "3Dコンテンツ", "3D 内容", "Contenido 3D");
-                bool handled = ctrl.OnAnimCubeDoubleTapped(id, displayName);
-                if (handled)
-                {
-                    DbgLog("[dbg-DoubleTap] DanceAnim 다운로드 패널 처리됨 — 일반 정보 패널 스킵");
-                    return;
-                }
-                // handled=false → GLB 이미 떠 있음. fall-through으로 일반 정보 패널 표시.
-                DbgLog("[dbg-DoubleTap] GLB 이미 스폰됨 → 일반 정보 패널 표시 흐름으로 fall-through");
-            }
-            else
-            {
-                Debug.LogError($"[DoubleTap3D] DanceAnimController 못 찾음 — anim인데 컨트롤러 없음, 정지");
-                return;
-            }
-        }
+        // 춤 모델(분류 anim)도 다른 장소처럼 정보 창 — 11-19 L6 「다운로드 단계 없이」 처음부터 3D 로 뜬다
+        // (예전엔 큐브를 두 번 누르면 받기 창 DanceAnimController → GLB)
 
         // ★ 상태 일관성 검증: isFullscreen과 실제 GameObject 상태가 다른 경우 수정
         bool actualState = fullscreenCanvasGroup != null && fullscreenCanvasGroup.gameObject.activeSelf;
@@ -927,7 +935,7 @@ public class DoubleTap3D : MonoBehaviour
         }
     }
 
-    /// <summary>가까이 모달(R0926NearModal)에서 두 번 톡톡 눌렀을 때 — AR 에서 두 번 누른 것과 똑같이 (춤 모델 다운로드 창 포함)</summary>
+    /// <summary>가까이 모달(R0926NearModal)에서 두 번 톡톡 눌렀을 때 — AR 에서 두 번 누른 것과 똑같이</summary>
     public void DoubleTapFromModal() => OnDoubleTapCube();
 
     /// <summary>
@@ -998,6 +1006,7 @@ public class DoubleTap3D : MonoBehaviour
         dt.slideImageGap = src.slideImageGap;
         dt.slideFadeDuration = src.slideFadeDuration;
         dt.touchBlockDuration = src.touchBlockDuration;
+        dt.infoHost = true;
         go.SetActive(true);
         return dt;
     }
@@ -1446,7 +1455,7 @@ public class DoubleTap3D : MonoBehaviour
         if (photosLoading || photosLoaded) return;
         if (imageSprites.Count > 0) { photosLoaded = true; return; }   // 인스펙터에 넣어 둔 사진 (씬에 놓은 큐브)
 
-        if (imageUrls.Count > 0) { photosLoading = true; StartCoroutine(LoadSubPhotosDirectly(imageUrls)); }
+        if (imageUrls.Count > 0) { photosLoading = true; LoadSubPhotos(imageUrls); }
         else if (serverPhotoFallback && id > 0) { photosLoading = true; StartCoroutine(FetchSubPhotosFromServer(id)); }
     }
 
@@ -1713,7 +1722,7 @@ public class DoubleTap3D : MonoBehaviour
         }
 
         if (allSubPhotos != null && allSubPhotos.Count > 0)
-            yield return StartCoroutine(LoadSubPhotosDirectly(allSubPhotos));
+            LoadSubPhotos(allSubPhotos);
         else
             photosLoading = false;   // 없거나 못 받았다 — 다음에 열 때 다시 본다
     }
@@ -1772,47 +1781,68 @@ public class DoubleTap3D : MonoBehaviour
         return photos;
     }
 
-    private IEnumerator LoadSubPhotosDirectly(List<string> photoUrls)
+    // 한 번 받기 — 칸마다 따로 도착하지만 붙이기는 차례대로 (못 받은 칸은 건너뛴다)
+    private sealed class PhotoBatch
     {
-        int gen = photoGeneration;
-        expectedPhotos = photoUrls.Count;
+        public int gen, next;
+        public Texture2D[] got;
+        public bool[] arrived;
+    }
 
-        foreach (string photoUrl in new List<string>(photoUrls))
+    // 디스크 캐시(SubPhotoCache)에서 — 첫 장이 혼자 먼저, 나머지는 함께. 도착은 캐시 쪽이 알려 준다
+    // (이 오브젝트의 코루틴이 아니라서, 꺼지거나 풀로 돌아간 뒤에 늦게 온 사진도 놓치지 않고 지운다)
+    private void LoadSubPhotos(List<string> photoUrls)
+    {
+        var urls = new List<string>(photoUrls);
+        expectedPhotos = urls.Count;
+        if (urls.Count == 0) { photosLoading = false; return; }
+        var b = new PhotoBatch { gen = photoGeneration, got = new Texture2D[urls.Count], arrived = new bool[urls.Count] };
+        for (int i = 0; i < urls.Count; i++)
         {
-            string fullUrl = photoUrl.StartsWith("http") ? ApiConfig.Secure(photoUrl) : ApiConfig.MAIN_SERVER + "/" + photoUrl.Replace("\\", "/");
-
-            UnityWebRequest request = null;
-            UnityWebRequestAsyncOperation op = null;
-            try   // 깨진 주소 등으로 예외가 나도 이 사진만 건너뛴다 — 코루틴이 죽으면 photosLoading 이 켜진 채 남아 다시 열어도 받지 않는다
-            {
-                request = UnityWebRequestTexture.GetTexture(fullUrl, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
-                request.timeout = 15;
-                op = request.SendWebRequest();
-            }
-            catch (Exception e) { Debug.LogError($"[DoubleTap3D] 사진 요청 실패: {e.Message} ({fullUrl})"); }
-
-            using (request)
-            {
-                if (op != null) yield return op;
-
-                // 그사이 놓아줬거나(다른 장소를 엶) 다른 장소가 됐다(풀 재활용) — 앞서 받은 것은 ReleasePhotos 가 지웠다
-                if (gen != photoGeneration) yield break;
-
-                if (op != null && request.result == UnityWebRequest.Result.Success)
-                {
-                    Texture2D texture = DownloadHandlerTexture.GetContent(request);
-                    if (texture != null)
-                    {
-                        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-                        ownedPhotos.Add(sprite);
-                        imageSprites.Add(sprite);   // 보고 있는 칸이면 Update 가 바로 띄운다
-                    }
-                }
-            }
+            int k = i;
+            SubPhotoCache.Load(urls[k], k == 0 ? SubPhotoCache.Prio.First : SubPhotoCache.Prio.Normal, tex => OnPhotoArrived(b, k, tex));
         }
+    }
 
+    private void OnPhotoArrived(PhotoBatch b, int k, Texture2D tex)
+    {
+        b.got[k] = tex;
+        b.arrived[k] = true;
+        if (b.gen != photoGeneration)   // 그사이 놓아줬거나(다른 장소를 엶) 다른 장소가 됐다(풀 재활용) — 아직 안 붙인 것은 지운다
+        {
+            for (int i = b.next; i < b.got.Length; i++)
+                if (b.got[i] != null) { Destroy(b.got[i]); b.got[i] = null; }
+            return;
+        }
+        for (; b.next < b.got.Length && b.arrived[b.next]; b.next++)
+        {
+            Texture2D texture = b.got[b.next];
+            b.got[b.next] = null;
+            if (texture == null) continue;
+            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
+            ownedPhotos.Add(sprite);
+            imageSprites.Add(sprite);   // 보고 있는 칸이면 Update 가 바로 띄운다
+        }
+        if (b.next < b.got.Length) return;
         photosLoading = false;
         photosLoaded = imageSprites.Count > 0;   // 하나도 못 받았으면 다음에 열 때 다시
+    }
+
+    // 두 번 누르기의 첫 번째일 수 있다 — 앞 사진 세 장을 디스크로 먼저 받기 시작 (한 번만 누르고 말면 1시간 뒤 지워진다)
+    private void PrefetchOnTap()
+    {
+        if (infoHost || photosLoading || photosLoaded) return;
+        for (int i = 0; i < imageUrls.Count && i < 3; i++)
+            SubPhotoCache.Prefetch(imageUrls[i], i == 0 ? SubPhotoCache.Prio.First : SubPhotoCache.Prio.Normal);
+    }
+
+    // 한 번 누르기 (두 번 누르기의 첫 번째일 수도) — 사진을 먼저 받기 시작 · 올린 3D 모델이면 그 모델의 움직임 10초 정도
+    // (11-19 대표님 L7 「기본은 움직임 없이(멈춤) · 누르면 그 모델이 가진 움직임을 10초 정도 하고 멈춤」 — 두 번 누르기는 기다리지 않고 그대로 바로 연다)
+    private void OnSingleTap()
+    {
+        PrefetchOnTap();
+        // 3D 프리팹은 이 칸(GLBContainer)에도 쉬는 로더가 하나 있고 받기는 DataManager 가 루트에 붙인 로더가 한다 — 위로 있는 로더 모두에게 (켜 둔 것만 움직인다)
+        foreach (GLBModelLoader glb in GetComponentsInParent<GLBModelLoader>()) glb.PlayMotion();
     }
 
 }

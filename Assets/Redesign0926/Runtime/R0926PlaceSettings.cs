@@ -14,6 +14,16 @@ public static class R0926PlaceSettings
     }
 
     /// <summary>
+    /// 앱 시작 시 근처 장소 보기 — 앱을 껐다 켤 때 시작 2초 뒤 「근처 장소」(목록 가까운 순 10곳) 카드를 한 번 띄운다. 기본 켜짐.
+    /// 꺼도 AR 화면을 아래→위로 밀면 언제든 뜬다 (R0926NearModal · 11-18 대표님 J/M1)
+    /// </summary>
+    public static bool NearOnStart
+    {
+        get { try { return PlayerPrefs.GetInt("Place_NearOnStart", 1) == 1; } catch (Exception) { return true; } }
+        set { try { PlayerPrefs.SetInt("Place_NearOnStart", value ? 1 : 0); PlayerPrefs.Save(); } catch (Exception) { } }
+    }
+
+    /// <summary>
     /// 멀리 있는 오브젝트 흐리게 — 0 끄기 · 1 약하게(기본) · 2 강하게.
     /// 큐브·3D 모델·안개는 R0926DistanceFade 가 0.2초마다, 장소 박스·화살표는 OffScreenIndicator 가 매 프레임 본다.
     /// 10-20 대표님 「오브젝트 설정에서 투명도 — 멀리 있는 거 흐리게 보이도록 하는 거 설정할 수 있도록」 ·

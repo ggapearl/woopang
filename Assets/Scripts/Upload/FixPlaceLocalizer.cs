@@ -23,7 +23,7 @@ public class FixPlaceLocalizer : MonoBehaviour
     {
         // { 내 장소, 남의 장소, 내 장소 이름 칸 }
         ["en"] = new[] { "Edit my place", "Suggest an edit", "Place name" },
-        ["ko"] = new[] { "내 장소 수정", "장소 수정 요청", "장소 이름" },
+        ["ko"] = new[] { "내 장소 수정", "장소수정 요청", "장소 이름" },   // 11-16 대표님 「'장소수정 요청' 이라고」
         ["ja"] = new[] { "自分の場所を編集", "修正をリクエスト", "場所の名前" },
         ["zh"] = new[] { "编辑我的地点", "申请修改地点", "地点名称" },
         ["es"] = new[] { "Editar mi lugar", "Sugerir cambios", "Nombre del lugar" },
@@ -36,7 +36,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "Fix Place",
             changedNameLabel = "New name",
-            descriptionLabel = "Request (optional)",
+            descriptionLabel = "What to change (optional)",
             addPlaceLogoLabel = "Add place logo",
             addPlaceImgsLabel = "Add place photos",
             petFriendlyLabel = "Pet Friendly",
@@ -48,7 +48,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "장소 수정",
             changedNameLabel = "수정할 이름",
-            descriptionLabel = "요청사항 (선택)",
+            descriptionLabel = "수정할 내용 (선택사항)",   // 11-16 대표님 「'수정할 내용' 옆에 '(선택사항)'」 — 비워도 보낸다
             addPlaceLogoLabel = "장소 로고 추가",
             addPlaceImgsLabel = "장소 이미지 추가",
             petFriendlyLabel = "반려동물 동반 가능",
@@ -60,7 +60,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "場所を修正",
             changedNameLabel = "修正する名前",
-            descriptionLabel = "リクエスト（任意）",
+            descriptionLabel = "修正内容（任意）",
             addPlaceLogoLabel = "場所のロゴを追加",
             addPlaceImgsLabel = "場所の画像を追加",
             petFriendlyLabel = "ペット可",
@@ -72,7 +72,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "修改地点",
             changedNameLabel = "修改名称",
-            descriptionLabel = "修改要求（选填）",
+            descriptionLabel = "修改内容（选填）",
             addPlaceLogoLabel = "添加地点标志",
             addPlaceImgsLabel = "添加地点图片",
             petFriendlyLabel = "宠物友好",
@@ -84,7 +84,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         {
             fixPlaceTitle = "Editar Lugar",
             changedNameLabel = "Cambiar Nombre",
-            descriptionLabel = "Solicitud (opcional)",
+            descriptionLabel = "Qué cambiar (opcional)",
             addPlaceLogoLabel = "Agregar Logo",
             addPlaceImgsLabel = "Agregar Fotos",
             petFriendlyLabel = "Acepta Mascotas",
@@ -116,7 +116,7 @@ public class FixPlaceLocalizer : MonoBehaviour
         currentLanguage = AppLanguage.Code;
     }
 
-    /// <summary>내 장소면 '내 장소 수정'(바로 고친다) · 남의 장소면 '장소 수정 요청' — CubeDataFixManager 가 연 장소를 보고 부른다</summary>
+    /// <summary>내 장소면 '내 장소 수정'(바로 고친다) · 남의 장소면 '장소수정 요청' — CubeDataFixManager 가 연 장소를 보고 부른다</summary>
     public void SetOwnerMode(bool owner)
     {
         ownerMode = owner;

@@ -31,6 +31,19 @@ public class LocationManager : MonoBehaviour
     private string lastText;
     private float lastLat, lastLon;
 
+    // 11-19 대표님 M2 「하단 메뉴 바로 위 '장소 표시' 칩 — 기본은 항상 지역명(이모지 그대로) · 누르면 좌표로 자연스럽게 바뀜」
+    // 도크 위 칩(singleLine)만 — 기본은 지역 이름 · 누르면(칩의 Button → ToggleChipCoords) 좌표, 몇 초 뒤 다시 지역 이름. 초록 핀(statusImage)은 그대로
+    private const float ChipCoordsSeconds = 5f;
+    private const float ChipFadeOut = 0.1f, ChipResize = 0.2f, ChipFadeIn = 0.15f;
+    private string chipRegion, lastRegion;   // 주소 끝 두 단계 ('세종로 태평로1가') — 못 찾았으면 null (그땐 좌표뿐)
+    private string chipCoords;               // '37.5665, 126.9780'
+    private bool chipLive;                   // 칩에 지역·좌표가 떠 있다 (안내 문구가 아니라)
+    private bool chipShowCoords;
+    private float chipBackAt;
+    private string chipTarget;               // 바뀌는 중이면 끝에 보일 글자
+    private Coroutine chipMorph;
+    private LayoutElement chipWidth;         // 바뀌는 동안만 글자 칸 폭을 잡는다 (칩이 툭 늘거나 줄지 않게)
+
     void Awake()
     {
         waitRefreshInterval = new WaitForSeconds(refreshInterval);
@@ -64,7 +77,7 @@ public class LocationManager : MonoBehaviour
             "es" => "Inicializando el servicio de ubicación",
             _ => "Initializing location service"
         };
-        infoText.text = message;
+        PlainText(message);
     }
 
     IEnumerator CheckLocationService()
@@ -134,7 +147,7 @@ public class LocationManager : MonoBehaviour
             "es" => "El servicio de ubicación no está activado.",
             _ => "Location service is not enabled."
         };
-        infoText.text = message;
+        PlainText(message);
     }
 
     IEnumerator GetAddressFromCoordinates(float latitude, float longitude)
@@ -144,7 +157,8 @@ public class LocationManager : MonoBehaviour
 
         if (lastText != null && Meters(latitude, longitude, lastLat, lastLon) < SameSpotMeters)
         {
-            infoText.text = lastText;
+            if (singleLine) ShowChip(lastRegion, latitude, longitude);
+            else infoText.text = lastText;
             yield break;
         }
 
@@ -157,12 +171,7 @@ public class LocationManager : MonoBehaviour
             {
                 SetShortRegion(a.region);
                 textBuilder.Clear();
-                if (singleLine)
-                {
-                    // 도크 바로 위 한 줄: "대흥면 지곡리 · 36.6361, 126.8280"
-                    if (!string.IsNullOrEmpty(a.line)) textBuilder.Append(a.line).Append("  ·  ");
-                    AppendCoords(latitude, longitude);
-                }
+                if (singleLine) chipRegion = a.line;   // 도크 위 칩: 기본 '대흥면 지곡리' · 누르면 좌표 (M2)
                 else
                 {
                     AppendCoords(latitude, longitude);
@@ -197,12 +206,10 @@ public class LocationManager : MonoBehaviour
 
                     if (singleLine)
                     {
-                        // 도크 바로 위 한 줄: "지곡리, 예산군 · 36.6361, 126.8280"
+                        // 도크 위 칩: 기본 '지곡리, 예산군' · 누르면 좌표 (M2)
                         textBuilder.Clear();
                         string[] parts = (data["display_name"].Value ?? "").Split(',');
-                        if (parts.Length >= 2) textBuilder.Append(parts[0].Trim()).Append(", ").Append(parts[1].Trim()).Append("  ·  ");
-                        else if (parts.Length == 1 && parts[0].Trim().Length > 0) textBuilder.Append(parts[0].Trim()).Append("  ·  ");
-                        AppendCoords(latitude, longitude);
+                        chipRegion = parts.Length >= 2 ? parts[0].Trim() + ", " + parts[1].Trim() : parts[0].Trim();
                         Remember(latitude, longitude);
                         yield break;
                     }
@@ -237,9 +244,7 @@ public class LocationManager : MonoBehaviour
                 catch (System.Exception e)
                 {
                     Debug.LogError($"[LocationManager] JSON 파싱 에러: {e.Message}");
-                    textBuilder.Clear();
-                    AppendCoords(latitude, longitude);
-                    infoText.text = textBuilder.ToString();
+                    ShowCoordsOnly(latitude, longitude);
                 }
             }
             else
@@ -247,9 +252,7 @@ public class LocationManager : MonoBehaviour
                 // API 요청 실패 시 조용히 처리 (에디터에서 타임아웃 발생 정상)
 
                 // 좌표만이라도 표시
-                textBuilder.Clear();
-                AppendCoords(latitude, longitude);
-                infoText.text = textBuilder.ToString();
+                ShowCoordsOnly(latitude, longitude);
             }
         }
     }
@@ -260,7 +263,8 @@ public class LocationManager : MonoBehaviour
         lastText = textBuilder.ToString();
         lastLat = latitude;
         lastLon = longitude;
-        infoText.text = lastText;
+        if (singleLine) { lastRegion = chipRegion; ShowChip(chipRegion, latitude, longitude); }
+        else infoText.text = lastText;
     }
 
     private static float Meters(float lat1, float lon1, float lat2, float lon2)
@@ -339,8 +343,111 @@ public class LocationManager : MonoBehaviour
 
     private void AppendCoords(double latitude, double longitude)
     {
-        if (singleLine) textBuilder.Append("<color=#8C959D>").Append(latitude.ToString("F4")).Append(", ").Append(longitude.ToString("F4")).Append("</color>");
-        else textBuilder.Append("Lat: ").Append(latitude.ToString("F4")).Append(", Lon: ").Append(longitude.ToString("F4"));
+        textBuilder.Append("Lat: ").Append(latitude.ToString("F4")).Append(", Lon: ").Append(longitude.ToString("F4"));
+    }
+
+    // ── 도크 위 칩 (M2) ──────────────────────────────
+
+    // 안내 문구 (초기화 중 · 위치 꺼짐) — 칩이 바뀌던 중이면 멈추고 그대로 찍는다. 앱으로 돌아오면 다시 지역 이름부터
+    private void PlainText(string message)
+    {
+        StopChipMorph();
+        chipLive = false;
+        chipShowCoords = false;
+        infoText.text = message;
+    }
+
+    // 주소를 못 찾았다 — 좌표만
+    private void ShowCoordsOnly(float latitude, float longitude)
+    {
+        if (singleLine) { ShowChip(null, latitude, longitude); return; }
+        textBuilder.Clear();
+        AppendCoords(latitude, longitude);
+        infoText.text = textBuilder.ToString();
+    }
+
+    private void ShowChip(string region, float latitude, float longitude)
+    {
+        bool wasLive = chipLive;
+        chipRegion = string.IsNullOrEmpty(region) ? null : region;
+        chipCoords = latitude.ToString("F4", CultureInfo.InvariantCulture) + ", " + longitude.ToString("F4", CultureInfo.InvariantCulture);
+        if (chipRegion == null) chipShowCoords = false;
+        chipLive = true;
+        RenderChip(wasLive);   // 안내 문구에서 처음 뜰 땐 바로 · 떠 있던 지역이 바뀔 땐 부드럽게
+    }
+
+    private string ChipText => chipShowCoords || chipRegion == null ? chipCoords : chipRegion;
+
+    /// <summary>도크 위 칩을 누름 (M2) — 지역 이름 ↔ 좌표. 좌표는 몇 초 뒤 지역 이름으로 돌아온다 (주소를 못 찾아 좌표뿐이면 그대로)</summary>
+    public void ToggleChipCoords()
+    {
+        if (!singleLine || !chipLive || chipRegion == null) return;
+        chipShowCoords = !chipShowCoords;
+        chipBackAt = Time.unscaledTime + ChipCoordsSeconds;
+        RenderChip(true);
+    }
+
+    void Update()
+    {
+        if (chipShowCoords && Time.unscaledTime >= chipBackAt)
+        {
+            chipShowCoords = false;
+            RenderChip(true);
+        }
+    }
+
+    private void RenderChip(bool smooth)
+    {
+        string next = ChipText;
+        if (chipMorph != null ? next == chipTarget : next == infoText.text) return;
+        if (!smooth || !isActiveAndEnabled || !infoText.isActiveAndEnabled)
+        {
+            StopChipMorph();
+            infoText.text = next;
+            return;
+        }
+        if (chipMorph != null) StopCoroutine(chipMorph);
+        chipTarget = next;
+        chipMorph = StartCoroutine(MorphChip(next));
+    }
+
+    // 글자를 흐리게 → 칩 폭을 새 글자에 맞게 → 새 글자를 또렷하게 (차례로 — 넓어지든 좁아지든 글자가 칩 밖으로 삐져나오지 않게)
+    // 바뀌는 중에 또 누르면 지금 투명도 · 폭에서 이어 간다
+    private IEnumerator MorphChip(string next)
+    {
+        if (chipWidth == null && !infoText.TryGetComponent(out chipWidth)) chipWidth = infoText.gameObject.AddComponent<LayoutElement>();
+        CanvasRenderer cr = infoText.canvasRenderer;
+        float from = chipWidth.preferredWidth >= 0f ? chipWidth.preferredWidth : infoText.preferredWidth;
+        chipWidth.preferredWidth = from;
+        for (float a = cr.GetAlpha(); a > 0f;)
+        {
+            yield return null;
+            a = Mathf.Max(0f, a - Time.unscaledDeltaTime / ChipFadeOut);
+            cr.SetAlpha(a);
+        }
+        infoText.text = next;
+        float to = infoText.preferredWidth;
+        for (float t = 0f; t < 1f;)
+        {
+            yield return null;
+            t = Mathf.Min(1f, t + Time.unscaledDeltaTime / ChipResize);
+            chipWidth.preferredWidth = Mathf.Lerp(from, to, Mathf.SmoothStep(0f, 1f, t));
+        }
+        chipWidth.preferredWidth = -1f;   // 다시 글자가 폭을 정한다
+        for (float a = 0f; a < 1f;)
+        {
+            yield return null;
+            a = Mathf.Min(1f, a + Time.unscaledDeltaTime / ChipFadeIn);
+            cr.SetAlpha(a);
+        }
+        chipMorph = null;
+    }
+
+    private void StopChipMorph()
+    {
+        if (chipMorph != null) { StopCoroutine(chipMorph); chipMorph = null; }
+        if (chipWidth != null) chipWidth.preferredWidth = -1f;
+        if (infoText != null) infoText.canvasRenderer.SetAlpha(1f);
     }
 
     IEnumerator RefreshLocationPeriodically()
@@ -380,5 +487,11 @@ public class LocationManager : MonoBehaviour
     {
         isRefreshing = false;
         Input.location.Stop();
+        // 칩이 바뀌던 중에 꺼지면 흐린 채로 남지 않게 (M2)
+        if (chipMorph != null)
+        {
+            StopChipMorph();
+            if (chipLive) infoText.text = ChipText;
+        }
     }
 }

@@ -66,6 +66,31 @@ public class GLBModelLoader : MonoBehaviour
     /// </summary>
     [HideInInspector] public bool displayOnly;
 
+    /// <summary>
+    /// 11-19 대표님 L7 「3D 모델 — 기본은 움직임 없이(멈춤) · 누르면 그 모델이 가진 움직임을 10초 정도 하고 멈춤」.
+    /// 켜 두면(장소 3D — DataManager.SetupGLBObject 가 받을 때마다 켠다) 받은 뒤 움직임의 첫 장면으로 멈춰 두고, 누를 때(DoubleTap3D → PlayMotion)만 움직인다.
+    /// 끈 채로 쓰는 곳(사람 아바타 · AI 미리보기 · 보물 · 캐릭터)은 예전처럼 받자마자 늘 움직인다
+    /// </summary>
+    [HideInInspector] public bool motionOnTap;
+
+    /// <summary>
+    /// 11-19 P1 장소 3D (DataManager.SetupGLBObject 가 켠다) — 받는 동안 스피너를 띄우지 않고 모델을 다 받은 뒤에 나타난다.
+    /// 앵커가 아직 보이게 하지 않았으면 모델을 숨겨 두었다가(원점에 먼저 보이지 않게) 보일 때 0.2초 동안 드러낸다 (GLBSpawnEffect.RevealWhenShown)
+    /// </summary>
+    [HideInInspector] public bool placeReveal;
+
+    /// <summary>누르면 움직이는 시간 (L7 「10초 정도」) — 한 바퀴가 끝나는 자리에서 멈추게 이 값에 가장 가까운 바퀴 수만큼 돈다</summary>
+    public const float MotionSeconds = 10f;
+
+    private readonly List<string> motionClips = new List<string>();   // 누르면 움직일 클립 — 받을 때 고른 것 그대로 (파츠 분할형은 전부 · 스켈레톤형은 하나)
+    private Coroutine motionRoutine;
+    private bool poseOnEnable;
+
+    /// <summary>누른 움직임이 도는 중 (시험용)</summary>
+    public bool IsMoving => motionRoutine != null;
+    /// <summary>누르면 움직일 클립 수 — 0 이면 움직임이 없는 모델 (시험용)</summary>
+    public int MotionClipCount => motionClips.Count;
+
     void Start()
     {
         
@@ -109,7 +134,7 @@ public class GLBModelLoader : MonoBehaviour
         {
             if (spawnEffect == null)
                 spawnEffect = GetComponent<GLBSpawnEffect>() ?? gameObject.AddComponent<GLBSpawnEffect>();
-            if (!displayOnly) spawnEffect.BeginLoading(glbContainer != null ? glbContainer : transform);
+            if (!displayOnly && !placeReveal) spawnEffect.BeginLoading(glbContainer != null ? glbContainer : transform);
         }
 
         if (string.IsNullOrEmpty(url))
@@ -384,12 +409,17 @@ public class GLBModelLoader : MonoBehaviour
         
         // 씬 인스턴스화 — 로딩 고리(GLBSpawnEffect)가 먼저 이 칸에 들어 있으므로 새로 붙는 쪽이 모델이다
         int childrenBefore = glbContainer.childCount;
+        // 장소 3D (11-19 P1) — 인스턴스화가 여러 프레임에 걸치는 동안(휴대폰) 덜 만든 모델이 0.2초 드러내기 전에 먼저 보이지 않게 칸을 꺼 둔다.
+        // 다 만든 프레임에 다시 켜고, 같은 프레임 안에서 아래 RevealWhenShown 이 투명하게(앵커 전이면 숨겨) 받는다. 끊겨도 ClearModel 이 다시 켠다
+        bool hideWhileBuilding = placeReveal && glbContainer.gameObject.activeSelf;
+        if (hideWhileBuilding) glbContainer.gameObject.SetActive(false);
         var instantiateTask = gltf.InstantiateMainSceneAsync(glbContainer);
         
         while (!instantiateTask.IsCompleted)
         {
             yield return null;
         }
+        if (hideWhileBuilding && glbContainer != null) glbContainer.gameObject.SetActive(true);
         
         bool instantiateSuccess = false;
         try
@@ -457,8 +487,17 @@ public class GLBModelLoader : MonoBehaviour
             // 로딩 후 메모리 정리
             MemoryOptimizationAfterLoading();
 
+            if (placeReveal)
+            {
+                // 장소 3D — 앵커가 아직 보이게 하지 않았으면 숨겨 둔다 (보일 때가 되면 앵커가 켠다)
+                var anchor = GetComponentInParent<CustomARGeospatialCreatorAnchor>(true);
+                if (anchor == null) anchor = GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
+                if (anchor != null && !anchor.MayShow)
+                    foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+                if (enableSpawnEffect && spawnEffect != null) spawnEffect.RevealWhenShown(loadedModel);
+            }
             // 스피너를 걷어내며 모델을 서서히 드러낸다 (머터리얼 확정 후 실행)
-            if (enableSpawnEffect && spawnEffect != null)
+            else if (enableSpawnEffect && spawnEffect != null)
                 spawnEffect.RevealModel(loadedModel);
             
             onComplete?.Invoke(true);
@@ -723,6 +762,7 @@ public class GLBModelLoader : MonoBehaviour
     /// </summary>
     private void AttachAnimationClips(GltfImport gltf)
     {
+        motionClips.Clear();
         if (loadedModel == null || gltf == null) return;
 
         // 진단: glTFast가 wrap 했는지, loadedModel이 실제 어떤 노드인지 확인
@@ -801,7 +841,8 @@ public class GLBModelLoader : MonoBehaviour
                     state.wrapMode = WrapMode.Loop;
                     state.enabled = true;
                 }
-                anim.Play(clip.name, PlayMode.StopSameLayer);
+                motionClips.Add(clip.name);
+                if (!motionOnTap) anim.Play(clip.name, PlayMode.StopSameLayer);
                 layer++;
             }
             DbgLog($"[dbg-GLB] 파츠분할형 감지 — {attachedCount}개 클립 attach + {layer}개 layer로 동시 재생");
@@ -833,10 +874,14 @@ public class GLBModelLoader : MonoBehaviour
             {
                 var state = anim[chosen.name];
                 if (state != null) { state.layer = 0; state.weight = 1f; state.wrapMode = WrapMode.Loop; state.enabled = true; }
-                anim.Play(chosen.name, PlayMode.StopAll);
+                motionClips.Add(chosen.name);
+                if (!motionOnTap) anim.Play(chosen.name, PlayMode.StopAll);
             }
             DbgLog($"[dbg-GLB] 완제스켈레톤형 감지 — {attachedCount}개 클립 중 '{chosen?.name}' 1개만 선택 재생");
         }
+
+        // 11-19 L7 누르면 움직이는 모델(장소 3D) — 받자마자 돌리지 않고 움직임 첫 장면으로 멈춰 둔다 (위에서 켠 클립도 같이 끈다)
+        if (motionOnTap) PoseStill(anim);
     }
 
     /// <summary>
@@ -851,6 +896,7 @@ public class GLBModelLoader : MonoBehaviour
             DbgLog($"[dbg-GLB] TryPlayAnimation skip — enabled={enableAnimation} loaded={loadedModel != null}");
             return;
         }
+        if (motionOnTap) return;   // 11-19 L7 장소 3D 는 누를 때만 움직인다 (PlayMotion) — 첫 장면으로 멈춰 둔 것을 여기서 다시 돌리지 않게
 
         // 1차: Legacy Animation 컴포넌트 — AttachAnimationClips가 glbContainer에 부착했으므로 거기부터 확인
         Animation anim = glbContainer.GetComponent<Animation>();
@@ -921,6 +967,96 @@ public class GLBModelLoader : MonoBehaviour
         }
 
         Debug.LogWarning($"[GLBModelLoader] Animation/Animator/Clip 어느 것도 못 찾음 — 정적 GLB로 표시됨");
+    }
+
+    /// <summary>
+    /// 누르면 그 모델이 가진 움직임을 10초 정도 (11-19 L7 · DoubleTap3D 한 번 누르기) — 받을 때 고른 클립 그대로, 한 바퀴가 끝나는 자리에서 첫 장면으로 멈춘다.
+    /// 짧은 동작(걷기 1초쯤)은 10초에 가장 가까운 바퀴 수 · 10초보다 긴 동작은 한 바퀴. 움직이는 중에 또 누르면 그 자리부터 다시 센다
+    /// </summary>
+    public void PlayMotion()
+    {
+        if (!motionOnTap || !enableAnimation || !isModelLoaded || motionClips.Count == 0 || glbContainer == null || !isActiveAndEnabled) return;
+        Animation anim = glbContainer.GetComponent<Animation>();
+        if (anim == null) return;
+        if (motionRoutine != null) StopCoroutine(motionRoutine);
+        motionRoutine = StartCoroutine(MotionFor(anim));
+    }
+
+    private IEnumerator MotionFor(Animation anim)
+    {
+        AnimationState lead = null;   // 가장 긴 클립 — 바퀴는 이걸로 센다
+        foreach (var n in motionClips)
+        {
+            AnimationState st = anim[n];
+            if (st == null) continue;
+            st.wrapMode = WrapMode.Loop;
+            st.weight = 1f;
+            if (!st.enabled) { st.time = 0f; st.enabled = true; }   // 멈춰 있던 것은 첫 장면부터 · 도는 중이면 그대로 잇는다
+            if (st.length > 0f && (lead == null || st.length > lead.length)) lead = st;
+        }
+        if (lead != null)
+        {
+            // 지금 바퀴 안의 자리부터 10초에 가장 가까운 바퀴 끝까지(한 바퀴 이상) — 마지막 바퀴의 한가운데까지 기다렸다가 끝을 맺는다
+            // (바퀴 경계에서 남은 시간을 재면 프레임 한 장 차이로 한 바퀴가 통째로 빠진다 — 11-19 시험에서 10.42초가 9.37초로 멈춘 것)
+            float cycle = lead.length;
+            float pos = Mathf.Repeat(lead.time, cycle);
+            float laps = Mathf.Max(1f, Mathf.Round((pos + MotionSeconds) / cycle));
+            float wait = (laps - 0.5f) * cycle - pos;
+            if (wait > 0f) yield return new WaitForSeconds(wait);
+            // 마지막 바퀴 — 클립마다 제 끝까지 가서 서 있다가(ClampForever) 다 같이 첫 장면으로 (중간에 뚝 끊겨 튀지 않게)
+            float left = 0f;
+            foreach (var n in motionClips)
+            {
+                AnimationState st = anim[n];
+                if (st == null || st.length <= 0f) continue;
+                st.time = Mathf.Repeat(st.time, st.length);
+                st.wrapMode = WrapMode.ClampForever;
+                left = Mathf.Max(left, st.length - st.time);
+            }
+            yield return new WaitForSeconds(left);
+        }
+        motionRoutine = null;
+        PoseStill(anim);
+    }
+
+    /// <summary>움직임 첫 장면으로 멈춰 둔다 (L7 — 받은 직후 · 누른 움직임이 끝난 뒤) — 모든 클립을 끄고 고른 클립의 0초를 한 번만 찍는다</summary>
+    private void PoseStill(Animation anim)
+    {
+        if (anim == null) return;
+        anim.Stop();
+        if (motionClips.Count == 0) return;
+        foreach (var n in motionClips)
+        {
+            AnimationState st = anim[n];
+            if (st == null) continue;
+            st.wrapMode = WrapMode.Loop;
+            st.weight = 1f;
+            st.time = 0f;
+            st.enabled = true;
+        }
+        anim.Sample();
+        foreach (var n in motionClips)
+        {
+            AnimationState st = anim[n];
+            if (st != null) st.enabled = false;
+        }
+    }
+
+    // 누른 움직임 중에 꺼지면(숨김 · 반납) 코루틴만 죽고 클립은 켜진 채라 다시 켜질 때 끝없이 돈다 — 꺼질 때 멈추고, 다시 켜질 때 첫 장면으로
+    void OnDisable()
+    {
+        if (motionRoutine == null) return;
+        motionRoutine = null;
+        poseOnEnable = true;
+        Animation anim = glbContainer != null ? glbContainer.GetComponent<Animation>() : null;
+        if (anim != null) anim.Stop();
+    }
+
+    void OnEnable()
+    {
+        if (!poseOnEnable) return;
+        poseOnEnable = false;
+        if (motionOnTap && isModelLoaded && glbContainer != null) PoseStill(glbContainer.GetComponent<Animation>());
     }
 
     /// <summary>0.5초 후 Animation 컴포넌트가 실제로 재생 중이고 transform이 변하는지 sample 1회 확인.</summary>
@@ -1760,6 +1896,21 @@ public class GLBModelLoader : MonoBehaviour
         if (glbContainer != null)
         {
             glbContainer.localRotation = Quaternion.identity;
+            if (!glbContainer.gameObject.activeSelf) glbContainer.gameObject.SetActive(true);   // 장소 3D 를 만드는 도중 끊겨 꺼진 채 남은 칸 (11-19 P1)
+        }
+
+        // 누른 움직임을 멈추고 앞 모델의 움직임 클립도 뗀다 (11-19 L7) — 남겨 두면 풀에서 다른 장소로 다시 쓸 때 이름이 같은 클립(Walk · Root/HeadMesh 등)은
+        // 새 모델 것으로 바뀌지 않아(AttachAnimationClips 는 같은 이름이 있으면 붙이지 않는다) 앞 모델 움직임이 나오고, 움직임 없는 모델에서도 앞 클립이 돈다
+        if (motionRoutine != null) { StopCoroutine(motionRoutine); motionRoutine = null; }
+        poseOnEnable = false;
+        motionClips.Clear();
+        Animation oldAnim = glbContainer != null ? glbContainer.GetComponent<Animation>() : null;
+        if (oldAnim != null)
+        {
+            oldAnim.Stop();
+            var oldClips = new List<string>();
+            foreach (AnimationState s in oldAnim) oldClips.Add(s.name);
+            foreach (var n in oldClips) oldAnim.RemoveClip(n);
         }
 
         bool hadModel = loadedModel != null;
@@ -2035,6 +2186,24 @@ public class GLBModelLoader : MonoBehaviour
         {
         }
         
+    }
+
+    /// <summary>
+    /// 관리자 사이즈만 바뀌었을 때 (11-16 우팡M — DataManager.ApplyFreshPlaces) — 다시 받지 않고 지금 모델 크기만.
+    /// 떠 있지 않아도 된다(다시 받기는 꺼진 오브젝트에서 실패해 큐브로 바뀐다). 누르는 칸도 같은 배율 — 모델은 칸 가운데를 축으로 커진다
+    /// </summary>
+    public void SetModelScale(float scale)
+    {
+        if (loadedModel == null || scale <= 0f) return;
+        float was = loadedModel.transform.localScale.x;
+        loadedModel.transform.localScale = Vector3.one * scale;
+        BoxCollider box = glbContainer != null ? glbContainer.GetComponent<BoxCollider>() : null;
+        if (box != null && was > 0f)
+        {
+            float r = scale / was;
+            box.center *= r;
+            box.size *= r;
+        }
     }
 
     public bool HasLoadedModel()

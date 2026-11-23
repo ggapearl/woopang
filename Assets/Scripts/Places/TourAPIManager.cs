@@ -50,6 +50,14 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     private readonly string detailCommonUrlTemplate = "{0}/detailCommon?contentId={1}&defaultYN=Y&addrinfoYN=Y&overviewYN=Y&MobileOS=ETC&MobileApp=AppTest&_type=json&lang=KO";
     private readonly string detailPetTourUrlTemplate = "{0}/detailPetTour?contentId={1}&MobileOS=ETC&MobileApp=AppTest&_type=json";
 
+    // 숙박(호텔 · 펜션 · 모텔 · 민박 · 게스트하우스 · 한옥 …)은 국문 관광정보(KorService2)에서 함께 받는다 — 반려동물 여행 자료엔 애견동반 숙소만 있다 (11-19 L3).
+    // 서버 /proxy/stay 가 숙박(32)만 · 같은 키로 부른다. 서버에 그 길이 아직 없으면(404) 예전처럼 반려동물 자료만
+    public static string EditorStayBase;   // 플레이 시험 — 숙박 목록 · 상세 주소를 바꾼다 (끝나면 null)
+    private string STAY_BASE_URL => string.IsNullOrEmpty(EditorStayBase) ? ApiConfig.TOUR_API_PROXY + "/stay" : EditorStayBase;
+    private readonly string stayListUrlTemplate = "{0}/locationBasedList?pageNo=1&numOfRows=100&mapX={1}&mapY={2}&radius={3}&arrange=E&MobileOS=ETC&MobileApp=AppTest&_type=json";
+    private string BaseFor(TourPlaceData place) => place != null && place.stayOnly ? STAY_BASE_URL : BASE_URL;
+    private readonly HashSet<string> stayDetailTried = new HashSet<string>();   // 숙박 상세 사진은 장소마다 한 번만 묻는다
+
     public GameObject samplePrefab;
 
     private Text debugText;
@@ -79,6 +87,14 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     // IndicatorOnly 오브젝트 (FilterManager.AllocationLoop이 배분)
     private Dictionary<string, GameObject> indicatorOnlyObjects = new Dictionary<string, GameObject>();
+
+    // 사진을 다 받은 뒤에 띄운다 (11-19 P1 · PlaceSpawnGate) — 준비를 마친 곳을 한 프레임에 하나씩 만든다
+    private readonly Queue<string> photoReadyQueue = new Queue<string>();
+    private Coroutine photoReadyLoop;
+    private readonly Dictionary<string, float> directWanted = new Dictionary<string, float>();   // 반경 안이라 바로 띄우려던 곳(ProcessTourData · 배분과 별개) — 부른 때
+    private readonly HashSet<string> photoPrep = new HashSet<string>();   // 숙박 — 사진 주소를 묻는 중
+    private FilterManager fmRef;
+    private const float DirectWantedFor = 30f;
 
     private bool isDataLoaded = false;
     private Coroutine fetchCoroutine;
@@ -130,6 +146,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         currentFilters["petFriendlyAll"] = (petState != 1);   // 옛 2(애견동반 안 됨)는 없앰 → 전부
         currentFilters["petFriendlyOnly"] = (petState == 1);
         currentFilters["publicData"] = PlayerPrefs.GetInt("Filter_PublicData_V2", 1) == 1;
+        currentFilters["categoryFilter"] = PlayerPrefs.GetInt("Filter_Category_V1", 0) != 0;   // 분류를 골라 둔 채 켜면 그 분류만 (FilterManager 가 곧 다시 넣는다)
 
         InitializeObjectPool();
         StartCoroutine(StartLocationServiceAndFetchData());
@@ -229,7 +246,13 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         {
             LogDebug($"[TourAPIManager] {radius}m 반경 데이터 로딩 중...");
             string tourApiUrl = string.Format(tourApiUrlTemplate, BASE_URL, longitude, latitude, radius);
-            yield return StartCoroutine(FetchDataFromTourAPI(tourApiUrl, latitude, longitude));
+            string stayUrl = string.Format(System.Globalization.CultureInfo.InvariantCulture, stayListUrlTemplate, STAY_BASE_URL, longitude, latitude, radius);
+            string petJson = null, stayJson = null;
+            Coroutine stayFetch = StartCoroutine(FetchText(stayUrl, 2, s => stayJson = s, giveUpOn4xx: true));   // 숙박은 함께 받는다 (11-19 L3)
+            yield return StartCoroutine(FetchText(tourApiUrl, 3, s => petJson = s));
+            yield return stayFetch;
+            // 반려동물 목록을 못 받으면 예전처럼 이번 반경은 건너뛴다(가진 것을 지우지 않는다) — 숙박만 못 받으면 반려동물 자료만으로
+            if (petJson != null) yield return StartCoroutine(ProcessTourData(petJson, stayJson, latitude, longitude));
             if (tierDelay > 0) yield return new WaitForSeconds(tierDelay);
         }
 
@@ -263,10 +286,13 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         }
     }
 
-    private IEnumerator FetchDataFromTourAPI(string url, float latitude, float longitude)
+    /// <summary>
+    /// 목록 글을 받는다 — 실패하면 5초 뒤 다시(retryCount 번). 끝내 못 받으면 done(null).
+    /// giveUpOn4xx: 서버에 그 길이 없거나(404) 거절하면 다시 묻지 않는다 — 숙박 길이 아직 없는 서버에서 반려동물 자료가 늦어지지 않게 (11-19 L3)
+    /// </summary>
+    private IEnumerator FetchText(string url, int retryCount, System.Action<string> done, bool giveUpOn4xx = false)
     {
         LogDebug($"[TourAPIManager] 요청: {url}");
-        int retryCount = 3;
         for (int i = 0; i < retryCount; i++)
         {
             using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -279,23 +305,47 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 {
                     string json = request.downloadHandler.text;
                     LogDebug($"[TourAPIManager] 응답 수신 성공: {json.Length} 바이트, 상태 코드: {request.responseCode}, 응답 본문: {json.Substring(0, Mathf.Min(json.Length, 500))}...");
-                    yield return StartCoroutine(ProcessTourData(json, latitude, longitude));
-                    break;
+                    done(json);
+                    yield break;
                 }
-                else
+                LogDebug($"[TourAPIManager] 요청 실패 (시도 {i + 1}/{retryCount}): {request.error}, 응답 코드: {request.responseCode}");
+                if (giveUpOn4xx && request.responseCode >= 400 && request.responseCode < 500) break;
+                if (i < retryCount - 1)
                 {
-                    LogDebug($"[TourAPIManager] 요청 실패 (시도 {i + 1}/{retryCount}): {request.error}, 응답 코드: {request.responseCode}");
-                    if (i < retryCount - 1)
-                    {
-                        LogDebug("[TourAPIManager] 5초 후 재시도...");
-                        yield return waitFiveSeconds;
-                    }
+                    LogDebug("[TourAPIManager] 5초 후 재시도...");
+                    yield return waitFiveSeconds;
                 }
             }
         }
+        done(null);
     }
 
-    private IEnumerator ProcessTourData(string json, float latitude, float longitude)
+    /// <summary>
+    /// 국문 관광정보에서 받은 숙박을 반려동물 여행 자료에 더한다 (11-19 L3 대표님 「숙박업(펜션·호텔·모텔·민박) 정부 공개 API … '펜션·호텔' 분류로」).
+    /// 같은 번호가 반려동물 자료에도 있으면 그쪽(애견동반 · 애견 정보)을 쓴다. 나머지는 애견동반 아님 · 상세는 숙박 길(/proxy/stay)로.
+    /// 숙박 목록을 못 받았거나 읽지 못하면 반려동물 자료만 (예전과 같다)
+    /// </summary>
+    private List<TourPlaceData> MergeStays(List<TourPlaceData> places, string stayJson)
+    {
+        if (string.IsNullOrEmpty(stayJson)) return places;
+        List<TourPlaceData> stays;
+        try { stays = JsonConvert.DeserializeObject<TourAPIResponse>(stayJson)?.response?.body?.items?.item; }
+        catch (JsonException ex) { LogDebug($"[TourAPIManager] 숙박 JSON 파싱 실패: {ex.Message}"); return places; }
+        if (stays == null || stays.Count == 0) return places;
+        places = places ?? new List<TourPlaceData>(stays.Count);
+        var known = new HashSet<string>();
+        foreach (var p in places) if (p != null && !string.IsNullOrEmpty(p.contentid)) known.Add(p.contentid);
+        foreach (var s in stays)
+        {
+            if (s == null || string.IsNullOrEmpty(s.contentid) || s.contenttypeid != "32" || !known.Add(s.contentid)) continue;
+            s.petFriendly = false;
+            s.stayOnly = true;
+            places.Add(s);
+        }
+        return places;
+    }
+
+    private IEnumerator ProcessTourData(string json, string stayJson, float latitude, float longitude)
     {
         LogDebug("[TourAPIManager] ProcessTourData 시작");
         List<TourPlaceData> places = null;
@@ -311,6 +361,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             LogDebug($"[TourAPIManager] JSON 파싱 실패: {ex.Message}\nJSON: {json}");
             yield break;
         }
+        places = MergeStays(places, stayJson);
+        places?.RemoveAll(p => p == null);
 
         if (places == null || places.Count == 0)
         {
@@ -319,6 +371,12 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             MarkCacheReady();
             yield break;
         }
+
+        // 가까운 순 — 숙박을 더해 상한(MaxCacheSize)을 넘으면 먼 곳부터 뺀다 (예전엔 받은 순서(이름순)대로 잘렸다 · 11-19 L3)
+        var distOf = new Dictionary<TourPlaceData, float>(places.Count);
+        foreach (var p in places) distOf[p] = CalculateDistance(latitude, longitude, p.mapy, p.mapx);
+        places.Sort((a, b) => distOf[a].CompareTo(distOf[b]));
+        if (places.Count > MaxCacheSize) places.RemoveRange(MaxCacheSize, places.Count - MaxCacheSize);
 
         // Light 캐시 갱신
         lightCache.Clear();
@@ -332,43 +390,15 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 latitude = p.mapy,
                 longitude = p.mapx,
                 altitude = 0f,
-                category = "tour",
+                category = CategoryOf(p),   // 숙박(32)은 '숙소' — 분류를 고르면 배분이 이 값으로 고른다 (11-19 L1)
                 sourceManager = "TourAPI",
                 modelType = "cube",
-                petFriendly = true,   // 관광공사 반려동물 여행 자료는 모두 애견동반 (false 라 '반려견 되는 곳만'에서 배분이 빠졌다)
+                petFriendly = p.petFriendly,   // 반려동물 여행 자료는 애견동반 (false 라 '반려견 되는 곳만'에서 배분이 빠졌다) · 국문 관광정보에서만 온 숙박은 아님 (11-19 L3)
                 // 관광공사 자료 = 공공데이터 칩. 빈 값이면 칩이 꺼져도 배분을 받아 (보이지 않으면서) 사람이 올린 곳의 자리를 차지했다
                 filterKey = "publicData"
             });
         }
-        if (lightCache.Count > MaxCacheSize) lightCache.RemoveRange(MaxCacheSize, lightCache.Count - MaxCacheSize);
         MarkCacheReady();
-
-        // Sort places by distance without LINQ
-        for (int i = 0; i < places.Count - 1; i++)
-        {
-            for (int j = i + 1; j < places.Count; j++)
-            {
-                float distA = CalculateDistance(latitude, longitude, places[i].mapy, places[i].mapx);
-                float distB = CalculateDistance(latitude, longitude, places[j].mapy, places[j].mapx);
-                if (distA > distB)
-                {
-                    var temp = places[i];
-                    places[i] = places[j];
-                    places[j] = temp;
-                }
-            }
-        }
-        LogDebug("[TourAPIManager] 장소 데이터를 거리순으로 정렬 완료");
-
-        // Limit places to poolSize * 2 without LINQ
-        if (places.Count > poolSize * 2)
-        {
-            LogDebug($"[TourAPIManager] 장소 데이터가 풀 크기({poolSize * 2})를 초과: {places.Count}. 상위 {poolSize * 2}개만 처리");
-            while (places.Count > poolSize * 2)
-            {
-                places.RemoveAt(places.Count - 1);
-            }
-        }
 
         // 상세 정보 요청은 objectSpawnRadius 이내 장소만 수행 (API 호출 절약)
         const int CHUNK_SIZE = 10;
@@ -379,10 +409,15 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             {
                 var place = places[j];
                 float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
-                place.color = "FBC15D";
+                place.color = ColorHexOf(CategoryOf(place));
 
+                // 숙박(국문 관광정보에서만 온 곳)은 여기서 묻지 않는다 — 배분이 띄울 때 사진만 (SpawnFullObject · 하루 호출 한도). 받아 둔 사진은 이어 쓴다
+                if (place.stayOnly)
+                {
+                    if (cachedPlaceDetails.TryGetValue(place.contentid, out TourPlaceData known) && known.imageUrls != null) place.imageUrls = known.imageUrls;
+                }
                 // objectSpawnRadius 이내만 상세 API 요청 (이미지, 공통정보, 펫투어)
-                if (distance <= objectSpawnRadius)
+                else if (distance <= objectSpawnRadius)
                 {
                     yield return StartCoroutine(FetchDetailImages(place));
                     yield return StartCoroutine(FetchDetailCommon(place));
@@ -413,19 +448,18 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                     UpdateExistingObject(place, existingObj);
                 }
             }
-            else if (distance <= objectSpawnRadius)
+            else if (distance <= objectSpawnRadius && !place.stayOnly)   // 숙박(국문 관광정보)은 배분이 고른 곳만 — '전체'에선 가까운 몇 곳 (FilterManager.maxStayObjects)
             {
                 // objectSpawnRadius 이내는 이동 속도와 무관하게 3D 오브젝트 생성 (다른 매니저와 동일 조건) — 한 프레임에 하나씩 (SpawnPace)
+                // 사진을 다 받은 뒤에 (11-19 P1) — 받는 중이면 다 받은 뒤 SpawnPhotoReady 가 띄운다. 메인 사진은 CreateObjectFromData 가 붙인다
+                directWanted[place.contentid] = Time.realtimeSinceStartup;
+                if (!PhotosReady(place)) continue;
                 while (!SpawnPace.Ready) yield return null;
                 GameObject newObj = spawnedObjects.ContainsKey(place.contentid) ? null : CreateObjectFromData(place);   // 기다리는 사이 배분이 띄웠으면 그대로
                 if (newObj != null)
                 {
                     SpawnPace.Took();
-                    ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
-                    if (display != null && !string.IsNullOrEmpty(place.firstimage))
-                    {
-                        display.SetBaseMap(place.firstimage);
-                    }
+                    directWanted.Remove(place.contentid);
                     if (objectSpawnDelay > 0) yield return new WaitForSeconds(objectSpawnDelay);
                 }
             }
@@ -453,7 +487,29 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         LogDebug($"[TourAPIManager] ProcessTourData 완료, placeDataMap 크기: {placeDataMap.Count}, spawnedObjects 크기: {spawnedObjects.Count}");
     }
 
+    // 만들면서 메인 사진을 바로 붙인다 (11-19 P1 — 기본 면이 먼저 보이지 않게). 받아 둔 사진이 있으면 그것, 없으면 예전처럼 받아서.
+    // 꺼진 채(필터 · 거리) 만든 곳도 붙인다 — 예전엔 만든 뒤 켜진 것만 찾아 붙여 꺼진 채 만든 곳은 켜도 기본 면이었다
     private GameObject CreateObjectFromData(TourPlaceData place)
+    {
+        Texture2D tex = PlaceSpawnGate.Take(GateKey(place.contentid), out string src);
+        try
+        {
+            GameObject obj = BuildObject(place);
+            if (obj != null && !string.IsNullOrEmpty(place.firstimage))
+            {
+                ImageDisplayController display = obj.GetComponentInChildren<ImageDisplayController>(true);
+                if (display != null)
+                {
+                    if (tex != null && src == place.firstimage) { display.SetBaseMapTexture(tex, place.firstimage); tex = null; }
+                    else display.SetBaseMap(place.firstimage);
+                }
+            }
+            return obj;
+        }
+        finally { if (tex != null) Destroy(tex); }
+    }
+
+    private GameObject BuildObject(TourPlaceData place)
     {
         if (HiddenPlaces.IsHidden("tour_" + place.contentid)) return null;   // 이 기기에서 X 로 숨긴 장소
         if (samplePrefab == null)
@@ -472,7 +528,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             LogDebug($"[TourAPIManager] 풀에서 오브젝트 가져옴: {newObj.name}");
         }
         // 필터 + 거리 체크
-        bool shouldShow = ShouldShowByFilter();
+        bool shouldShow = ShouldShow(CategoryOf(place), place.petFriendly);
         if (shouldShow)
         {
             float maxDist = PlayerPrefs.GetFloat("MaxDisplayDistance", 5000f);
@@ -559,7 +615,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         doubleTap.SetInfoImages(
             sprite1: petFriendlySprite, 
             sprite2: restroomSprite, 
-            petFriendly: true, 
+            petFriendly: place.petFriendly,   // 숙박(국문 관광정보에서만 온 곳)은 애견동반 아님 (11-19 L3) 
             separateRestroom: true, 
             description: null, // 상단 텍스트 제거
             name: place.title, 
@@ -688,7 +744,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             yield break;
         }
 
-        string url = string.Format(detailImageUrlTemplate, BASE_URL, place.contentid);
+        string url = string.Format(detailImageUrlTemplate, BaseFor(place), place.contentid);
         LogDebug($"[TourAPIManager] detailImage 요청: {url}");
         int retryCount = 3;
         for (int i = 0; i < retryCount; i++)
@@ -748,7 +804,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             yield break;
         }
 
-        string url = string.Format(detailCommonUrlTemplate, BASE_URL, place.contentid);
+        string url = string.Format(detailCommonUrlTemplate, BaseFor(place), place.contentid);
         LogDebug($"[TourAPIManager] detailCommon 요청 (국문): {url}");
         int retryCount = 3;
         UnityWebRequest request = null;
@@ -950,26 +1006,63 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     }
 
     /// <summary>
-    /// 현재 필터 상태에 따라 오브젝트를 표시할지 결정
+    /// 관광공사 자료의 분류 — 숙박(관광 타입 32: 펜션 · 호텔 · 캠핑 …)은 '숙소', 나머지는 관광 (11-19 L1 대표님 「목록 카테고리에 '펜션 / 호텔' 추가」 · 같은 날 이름은 「'숙소' 라고」).
+    /// 목록 줄 그림 · AR 배분 · 오브젝트 보이기가 이 값 하나를 본다
     /// </summary>
-    private bool ShouldShowByFilter()
+    public static string CategoryOf(TourPlaceData p) => p != null && p.contenttypeid == "32" ? "stay" : "tour";
+
+    /// <summary>오브젝트 · 인디케이터 색 — 숙박은 '숙소' 색(DataManager.GetCategoryColor 하나), 나머지는 예전 관광 노랑</summary>
+    public static string ColorHexOf(string category) => category == "stay" ? ColorUtility.ToHtmlStringRGB(DataManager.GetCategoryColor("stay")) : "FBC15D";
+
+    private string CategoryOfId(string rawId)
+    {
+        if (rawId != null && placeDataMap.TryGetValue(rawId, out TourPlaceData p)) return CategoryOf(p);
+        var c = rawId != null ? lightCache.Find(x => x.rawId == rawId) : null;
+        return c != null ? c.category : "tour";
+    }
+
+    /// <summary>
+    /// 현재 필터 상태에 따라 오브젝트를 표시할지 결정 — 분류를 고른 동안은 그 분류만 (공공데이터 칩은 보지 않는다 — 배분 · 목록과 같은 규칙),
+    /// '전체'면 공공데이터 칩. 애견동반은 ShouldShow 가 먼저 본다 (반려동물 여행 자료는 모두 애견동반 · 국문 관광정보 숙박은 아님 — 11-19 L3).
+    /// 예전엔 분류를 고르면 공공데이터가 꺼진 값으로 와서 관광공사 자료가 통째로 숨었다 (11-19 L1 — 숙박은 '숙소'로 떠야 한다)
+    /// </summary>
+    private bool ShouldShowByFilter(string category)
     {
         if (currentFilters == null) return true;
 
-        bool showPublicData = !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
         bool showPetFriendly = currentFilters.ContainsKey("petFriendlyAll") && currentFilters["petFriendlyAll"] ||
                                currentFilters.ContainsKey("petFriendlyOnly") && currentFilters["petFriendlyOnly"];
         if (!currentFilters.ContainsKey("petFriendlyAll") && !currentFilters.ContainsKey("petFriendlyOnly"))
         {
             showPetFriendly = !currentFilters.ContainsKey("petFriendly") || currentFilters["petFriendly"];
         }
+        if (!showPetFriendly) return false;
 
-        return showPublicData && showPetFriendly;
+        if (currentFilters.TryGetValue("categoryFilter", out bool categoryActive) && categoryActive)
+        {
+            string want = FilterManager.ActiveCategoryNow;
+            return string.IsNullOrEmpty(want) || want == category;
+        }
+        return !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
+    }
+
+    /// <summary>애견동반을 켰을 때 국문 관광정보에서만 온 숙박(애견동반 아님)은 숨긴다 — 목록 · 배분(PetAllowed)과 같은 규칙 (11-19 L3). 나머지는 ShouldShowByFilter</summary>
+    private bool ShouldShow(string category, bool pet)
+    {
+        if (!pet && currentFilters != null && currentFilters.TryGetValue("petFriendlyOnly", out bool petOnly) && petOnly) return false;
+        return ShouldShowByFilter(category);
+    }
+
+    private bool PetOfId(string rawId)
+    {
+        if (rawId != null && placeDataMap.TryGetValue(rawId, out TourPlaceData p)) return p.petFriendly;
+        var c = rawId != null ? lightCache.Find(x => x.rawId == rawId) : null;
+        return c == null || c.petFriendly;
     }
 
     /// <summary>
     /// 필터 적용 - 스폰된 AR 오브젝트의 표시/숨김 제어
-    /// TourAPI 데이터는 모두 애견동반이므로 publicData 필터에 따라 전체 표시/숨김
+    /// 반려동물 여행 자료는 모두 애견동반 · 국문 관광정보 숙박은 아니다(ShouldShow) — '전체'면 publicData 칩대로, 분류를 고르면 그 분류(숙박은 '숙소')만
     /// </summary>
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
@@ -978,21 +1071,22 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         // 필터 상태 저장 (오브젝트 생성 시 참조)
         currentFilters = new Dictionary<string, bool>(filters);
 
-        bool shouldShow = ShouldShowByFilter();
-
+        int shown = 0;
         foreach (var kvp in spawnedObjects)
         {
-            GameObject obj = kvp.Value;
-            obj.SetActive(shouldShow);
+            if (kvp.Value == null) continue;
+            bool show = ShouldShow(CategoryOfId(kvp.Key), PetOfId(kvp.Key));
+            kvp.Value.SetActive(show);
+            if (show) shown++;
         }
 
         // 경량 인디케이터 오브젝트에도 필터 적용
         foreach (var kvp in indicatorOnlyObjects)
         {
-            if (kvp.Value != null) kvp.Value.SetActive(shouldShow);
+            if (kvp.Value != null) kvp.Value.SetActive(ShouldShow(CategoryOfId(kvp.Key), PetOfId(kvp.Key)));
         }
 
-        LogDebug($"[TourAPIManager] 필터 적용: 오브젝트 표시={shouldShow}");
+        LogDebug($"[TourAPIManager] 필터 적용: 보이는 오브젝트 {shown}/{spawnedObjects.Count}");
     }
 
     /// <summary>
@@ -1011,16 +1105,14 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     public void UpdateDistanceFilter(float maxDistance, float currentLat, float currentLon)
     {
-        // 카테고리 토글 OFF면 거리와 무관하게 전부 숨김
-        bool showByFilter = ShouldShowByFilter();
-
+        // 필터로 숨는 곳(공공데이터 칩 꺼짐 · 다른 분류를 고름)은 거리와 무관하게 숨김
         foreach (var kvp in spawnedObjects)
         {
             string id = kvp.Key;
             GameObject obj = kvp.Value;
             if (obj == null) continue;
 
-            if (!showByFilter)
+            if (!ShouldShow(CategoryOfId(id), PetOfId(id)))
             {
                 if (obj.activeSelf) obj.SetActive(false);
                 continue;
@@ -1091,7 +1183,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     // ============================================================
 
     public string FilterKey => "publicData";
-    public int MaxCacheSize => 100;
+    public int MaxCacheSize => 200;   // 반려동물 여행 자료(한 번에 100) + 국문 관광정보 숙박(100) — 11-19 L3
     public bool IsCacheReady => isCacheReady;
     public float LastLoadedAt { get; private set; } = -1f;
 
@@ -1104,16 +1196,89 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         if (!placeDataMap.ContainsKey(rawId)) return false;
 
         TourPlaceData place = placeDataMap[rawId];
-        GameObject newObj = CreateObjectFromData(place);
-        if (newObj != null)
-        {
-            ImageDisplayController display = newObj.GetComponentInChildren<ImageDisplayController>();
-            if (display != null && !string.IsNullOrEmpty(place.firstimage))
-                display.SetBaseMap(place.firstimage);
+        if (!PhotosReady(place)) return false;   // 사진을 받는 중 — FilterManager 가 임시 화살표를 둔다 · 다 받으면 SpawnPhotoReady 가 (11-19 P1)
+        return CreateObjectFromData(place) != null;
+    }
 
-            return true;
+    // ── 사진을 다 받은 뒤에 띄우기 (11-19 대표님 P1 · PlaceSpawnGate) ──
+    // 「메인사진, 서브사진까지 모두 불러오고나서 … 완료가 되면 오브젝트를 생성」 — 큐브 앞면(firstimage)은 메모리로 · 정보 창 사진(imageUrls)은 디스크로.
+    // 숙박(국문 관광정보)은 사진 주소부터 묻는다 — 배분이 띄울 곳만 · 처음 한 번 (관광공사 하루 호출 한도 · 11-19 L3)
+
+    private static string GateKey(string contentId) => "tour_" + contentId;
+
+    /// <summary>사진을 다 받았으면(받을 것이 없으면) true. 아니면 준비를 시작하고 false — 다 받으면 SpawnPhotoReady 가 띄운다</summary>
+    private bool PhotosReady(TourPlaceData place)
+    {
+        if (place == null || string.IsNullOrEmpty(place.contentid)) return false;
+        string id = place.contentid;
+        string key = GateKey(id);
+        if (PlaceSpawnGate.Ready(key)) return true;
+        if (PlaceSpawnGate.Busy(key) || photoPrep.Contains(id)) return false;
+        if (place.stayOnly && !stayDetailTried.Contains(id))
+        {
+            photoPrep.Add(id);
+            StartCoroutine(PrepareStay(place));
+            return false;
         }
-        return false;
+        string main = string.IsNullOrEmpty(place.firstimage) ? null : place.firstimage;
+        if (main == null && (place.imageUrls == null || place.imageUrls.Count == 0)) return true;
+        PlaceSpawnGate.Prepare(key, main, place.imageUrls, () => WantsSpawn(id), OnPhotosReady);
+        return PlaceSpawnGate.Ready(key);   // 받을 것이 이미 다 디스크에 있으면 바로 끝난다
+    }
+
+    /// <summary>숙박 — 상세 사진 주소를 물은 뒤 그 사진까지 받는다 (예전엔 띄운 뒤에 물어 정보 창에만 넣었다)</summary>
+    private IEnumerator PrepareStay(TourPlaceData place)
+    {
+        string id = place.contentid;
+        stayDetailTried.Add(id);
+        yield return StartCoroutine(FetchDetailImages(place));
+        photoPrep.Remove(id);
+        if (WantsSpawn(id) && PhotosReady(place)) OnPhotosReady(GateKey(id));
+    }
+
+    /// <summary>아직 띄울 곳인가 — 반경 안이라 바로 띄우려던 곳이거나 배분이 3D 로 고른 곳. 숨겼거나 · 이미 떴으면 false</summary>
+    private bool WantsSpawn(string id)
+    {
+        if (this == null || id == null || spawnedObjects.ContainsKey(id) || !placeDataMap.ContainsKey(id) || HiddenPlaces.IsHidden(GateKey(id))) return false;
+        if (directWanted.TryGetValue(id, out float at) && Time.realtimeSinceStartup - at < DirectWantedFor) return true;
+        if (fmRef == null) fmRef = FindAnyObjectByType<FilterManager>(FindObjectsInactive.Include);
+        return fmRef == null || !fmRef.isActiveAndEnabled || fmRef.WantsFull(GateKey(id));
+    }
+
+    private void OnPhotosReady(string key)
+    {
+        if (this == null || key == null || key.Length <= 5) return;
+        photoReadyQueue.Enqueue(key.Substring(5));
+        if (photoReadyLoop == null && isActiveAndEnabled) photoReadyLoop = StartCoroutine(SpawnPhotoReady());
+    }
+
+    // 사진을 다 받은 곳을 한 프레임에 하나씩 (SpawnPace — 배분 · 반경 안 바로 띄우기와 같은 문)
+    private IEnumerator SpawnPhotoReady()
+    {
+        yield return null;   // 부른 자리(배분 중)에서 바로 만들지 않는다
+        while (photoReadyQueue.Count > 0)
+        {
+            while (!SpawnPace.Ready) yield return null;
+            string id = photoReadyQueue.Dequeue();
+            string key = GateKey(id);
+            if (!WantsSpawn(id)) { PlaceSpawnGate.Drop(key); directWanted.Remove(id); continue; }
+            if (!PlaceSpawnGate.Ready(key)) continue;   // 그새 다른 길로 가져갔다 · 새로 준비하는 중
+            if (indicatorOnlyObjects.ContainsKey(id)) DespawnIndicatorOnly(id);   // 받는 동안 둔 임시 화살표
+            GameObject obj = null;
+            try { obj = CreateObjectFromData(placeDataMap[id]); }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[TourAPIManager] CreateObjectFromData 예외: id={id}: {ex.Message}");
+            }
+            if (obj != null) { SpawnPace.Took(); directWanted.Remove(id); }
+        }
+        photoReadyLoop = null;
+    }
+
+    void OnDisable()
+    {
+        photoReadyLoop = null;   // 꺼지면 코루틴이 멈춘다 — 다음 준비 완료 때 다시 시작하게
+        photoPrep.Clear();       // 숙박 사진 주소 묻기도 멈췄다
     }
 
     public bool SpawnIndicatorOnly(string rawId)
@@ -1137,8 +1302,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             target.gpsLatitude = cached.latitude;
             target.gpsLongitude = cached.longitude;
             Color tourColor;
-            if (ColorUtility.TryParseHtmlString("#FBC15D", out tourColor))
-                target.TargetColor = tourColor;
+            if (ColorUtility.TryParseHtmlString("#" + ColorHexOf(cached.category), out tourColor))
+                target.TargetColor = tourColor;   // 숙박은 '숙소' 색
         }
 
         var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
@@ -1192,6 +1357,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 public class TourPlaceData
 {
     public string contentid { get; set; }
+    public string contenttypeid { get; set; }   // 관광공사 관광 타입 — 32 숙박(펜션 · 호텔 · 캠핑 …) → '숙소' 분류 (11-19 L1)
     public string title { get; set; }
     public double mapx { get; set; }   // 경도 — double (AR 앵커 자리, 10-26)
     public double mapy { get; set; }   // 위도
@@ -1205,6 +1371,8 @@ public class TourPlaceData
     public string addr2 { get; set; }
     public string overview { get; set; }
     public string petInfo { get; set; }
+    [JsonIgnore] public bool petFriendly { get; set; } = true;   // 반려동물 여행 자료 = 애견동반 · 국문 관광정보에서만 온 숙박은 false (11-19 L3)
+    [JsonIgnore] public bool stayOnly { get; set; }               // 국문 관광정보(숙박)에서만 온 곳 — 상세는 숙박 길(/proxy/stay) · 배분이 고른 곳만 띄운다
 
     public TourPlaceData()
     {

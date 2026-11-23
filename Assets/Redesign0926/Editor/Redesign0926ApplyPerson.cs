@@ -73,11 +73,16 @@ namespace Redesign0926
             so.FindProperty("reverse").boolValue = true;   // Quad 앞면은 -Z — 사진이 뒤집혀 보이지 않게
             so.ApplyModifiedPropertiesWithoutUndo();
 
+            // 기기에서 그 사람 자리에 — 지오스페이셜 앵커 + 자리 맞춤 (11-17 D1 · 예전엔 앵커가 없어 기기에서 모두 AR 을 시작한 자리(원점)에 놓였다)
+            Ensure<CustomARGeospatialCreatorAnchor>(avatar);
+            Ensure<P2PAvatarPlacer>(avatar);
+            EditorUtility.SetDirty(avatar);
+
             EditorUtility.SetDirty(cube.gameObject);
             EditorUtility.SetDirty(mr);
             EditorUtility.SetDirty(filter);
             AssetDatabase.SaveAssets();
-            log.Add("사람 오브젝트: 사진 원 + 분홍 테두리");
+            log.Add("사람 오브젝트: 사진 원 + 분홍 테두리 · 기기 자리 앵커");
         }
     }
 }

@@ -33,15 +33,17 @@ public class R0926DistanceFade : MonoBehaviour
     [Tooltip("카메라 최대 렌더 거리 = 스폰 반경 + 이 여유 (GPS 오차·배분 히스테리시스)")]
     [SerializeField] private float farClipMargin = 150f;
 
-    [Tooltip("큐브가 처음 보일 때 서서히 나타나는 시간 (초) — 툭 튀어나오지 않게")]
-    [SerializeField] private float fadeInSeconds = 0.45f;
+    // 처음 보일 때 서서히 나타나는 시간 — 11-19 대표님 P1 「발생하는 오브젝트는 0.2초 페이드인으로 발생해서 자연스럽게」
+    // (예전 0.45초 인스펙터 값 — 씬에 남은 값은 쓰지 않는다. 장소 3D 는 GLBSpawnEffect.PlaceFadeSeconds 로 같은 0.2초)
+    private const float FadeInSeconds = 0.2f;
 
     [Tooltip("갱신 주기 (초) — 매 프레임 할 필요 없음 (나타나는 중일 때만 매 프레임)")]
     [SerializeField] private float interval = 0.2f;
 
     private readonly Dictionary<int, float> shownAt = new Dictionary<int, float>();
     private readonly Dictionary<int, float> lastShown = new Dictionary<int, float>();
-    private bool anyAppearing;
+    private readonly Dictionary<int, int> gens = new Dictionary<int, int>();   // 앵커가 받은 좌표 차례 — 바뀌면 풀에서 다시 나온 것
+    private bool anyAppearing, caught;
 
     private float farClip = -1f;   // matchSpawnRadius 일 때 카메라에 넣을 값
 
@@ -74,6 +76,8 @@ public class R0926DistanceFade : MonoBehaviour
     private class Entry
     {
         public Renderer[] renderers;
+        public CustomARGeospatialCreatorAnchor anchor;
+        public GLBSpawnEffect glb;   // 장소 3D — 드러나는 동안 재질 투명도가 바뀐다
         public float refreshAt;
     }
 
@@ -135,9 +139,11 @@ public class R0926DistanceFade : MonoBehaviour
             brightness = Mathf.Lerp(brightness, Mathf.Clamp01(args.lightEstimation.averageBrightness.Value * 1.6f), 0.05f);
     }
 
-    private void Update()
+    // 그리기 직전(LateUpdate) — 앵커가 렌더러를 켜거나 새로 띄운 것을 그 프레임에 0 에서 시작한다.
+    // 예전엔 0.2초마다만 봐서, 그 사이에 켜진 것은 한두 프레임 그대로 보였다가 흐려진 뒤 다시 나타났다 (11-19 P1)
+    private void LateUpdate()
     {
-        if (Time.unscaledTime < next) return;
+        if (Time.unscaledTime < next) { CatchNew(); return; }
         anyAppearing = false;
         if (cam == null) cam = Camera.main;
         if (cam == null) return;
@@ -152,6 +158,7 @@ public class R0926DistanceFade : MonoBehaviour
         if (SubwayManager.Instance != null) Visit(SubwayManager.Instance.GetSpawnedObjects()?.Values);
         if (TrainStationManager.Instance != null) Visit(TrainStationManager.Instance.GetSpawnedObjects()?.Values);
         if (TerminalManager.Instance != null) Visit(TerminalManager.Instance.GetSpawnedObjects()?.Values);
+        if (StoreManager.Instance != null) Visit(StoreManager.Instance.GetSpawnedObjects()?.Values);
 
         // 사라진 오브젝트 캐시 정리
         if (cache.Count > seen.Count + 32)
@@ -159,9 +166,74 @@ public class R0926DistanceFade : MonoBehaviour
             var keep = new HashSet<int>(seen);
             var drop = new List<int>();
             foreach (var k in cache.Keys) if (!keep.Contains(k)) drop.Add(k);
-            foreach (var k in drop) { cache.Remove(k); shownAt.Remove(k); lastShown.Remove(k); }
+            foreach (var k in drop) { cache.Remove(k); shownAt.Remove(k); lastShown.Remove(k); gens.Remove(k); }
         }
         next = Time.unscaledTime + (anyAppearing ? 0f : interval);   // 나타나는 동안만 매 프레임
+    }
+
+    // 갱신 사이 프레임 — 이번 프레임에 새로 보이기 시작한 것만 바로 (보이던 것은 다음 갱신 때)
+    private void CatchNew()
+    {
+        if (cam == null) return;
+        caught = false;
+        if (DataManager.Instance != null) Catch(DataManager.Instance.GetSpawnedObjects()?.Values);
+        if (TourAPIManager.Instance != null) Catch(TourAPIManager.Instance.GetSpawnedObjects()?.Values);
+        if (SubwayManager.Instance != null) Catch(SubwayManager.Instance.GetSpawnedObjects()?.Values);
+        if (TrainStationManager.Instance != null) Catch(TrainStationManager.Instance.GetSpawnedObjects()?.Values);
+        if (TerminalManager.Instance != null) Catch(TerminalManager.Instance.GetSpawnedObjects()?.Values);
+        if (StoreManager.Instance != null) Catch(StoreManager.Instance.GetSpawnedObjects()?.Values);
+        if (caught) next = Time.unscaledTime;   // 나타나는 동안은 다음 프레임부터 매 프레임 전체 갱신
+    }
+
+    private void Catch(IEnumerable<GameObject> objects)
+    {
+        if (objects == null) return;
+        foreach (var go in objects)
+        {
+            if (go == null || !go.activeInHierarchy) continue;
+            int id = go.GetInstanceID();
+            Entry e = EntryOf(go, id);
+            if (lastShown.ContainsKey(id) && !Reborn(id, e)) continue;
+            if (!AnyOn(e.renderers)) continue;
+            VisitOne(go, id, e);
+            caught = true;
+        }
+    }
+
+    private Entry EntryOf(GameObject go, int id)
+    {
+        if (!cache.TryGetValue(id, out var e) || Time.unscaledTime >= e.refreshAt)
+        {
+            // GLB 는 늦게 붙으므로 가끔 다시 모은다
+            e = new Entry
+            {
+                renderers = go.GetComponentsInChildren<Renderer>(true),
+                anchor = go.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true),
+                glb = go.GetComponentInChildren<GLBSpawnEffect>(true),
+                refreshAt = Time.unscaledTime + 2f,
+            };
+            cache[id] = e;
+        }
+        return e;
+    }
+
+    // 풀에서 다른 장소로 다시 나온 오브젝트 (앵커가 새 좌표를 받았다) — 처음 나타나는 것으로 다시 센다.
+    // 예전엔 치운 지 0.6초 안에 다시 쓰이면 서서히 없이 툭 나타났다
+    private bool Reborn(int id, Entry e)
+    {
+        if (e.anchor == null) return false;
+        int g = e.anchor.Generation;
+        if (gens.TryGetValue(id, out int was) && was == g) return false;
+        gens[id] = g;
+        if (!lastShown.Remove(id)) return false;
+        shownAt.Remove(id);
+        return true;
+    }
+
+    private static bool AnyOn(Renderer[] renderers)
+    {
+        foreach (var r in renderers) if (r != null && r.enabled) return true;
+        return false;
     }
 
     // 렌더러가 실제로 켜진 순간부터 잰다 (앵커가 잡히기 전엔 꺼져 있다). 0.6초 넘게 안 보였다면 다시 나타나는 것.
@@ -173,7 +245,7 @@ public class R0926DistanceFade : MonoBehaviour
         float now = Time.unscaledTime;
         if (!lastShown.TryGetValue(id, out float ls) || now - ls > 0.6f) shownAt[id] = now;
         lastShown[id] = now;
-        float t = fadeInSeconds > 0f ? Mathf.Clamp01((now - shownAt[id]) / fadeInSeconds) : 1f;
+        float t = Mathf.Clamp01((now - shownAt[id]) / FadeInSeconds);
         if (t < 1f) anyAppearing = true;
         return t * t * (3f - 2f * t);
     }
@@ -181,29 +253,28 @@ public class R0926DistanceFade : MonoBehaviour
     private void Visit(IEnumerable<GameObject> objects)
     {
         if (objects == null) return;
-        Vector3 eye = cam.transform.position;
         foreach (var go in objects)
         {
             if (go == null || !go.activeInHierarchy) continue;
             int id = go.GetInstanceID();
             seen.Add(id);
-
-            if (!cache.TryGetValue(id, out var e) || Time.unscaledTime >= e.refreshAt)
-            {
-                // GLB 는 늦게 붙으므로 가끔 다시 모은다
-                e = new Entry { renderers = go.GetComponentsInChildren<Renderer>(true), refreshAt = Time.unscaledTime + 2f };
-                cache[id] = e;
-            }
-
-            float u = level > 0 ? Mathf.InverseLerp(cur.near, cur.far, Vector3.Distance(eye, go.transform.position)) : 0f;
-            float t = 1f - (1f - u) * (1f - u);                   // ease-out — near 를 넘자마자 옅어지기 시작
-            float appear = Appear(id, e.renderers);               // 처음 보일 때 0→1 (큐브만 — 불투명 GLB 는 투명으로 못 바꾼다)
-            float alpha = Mathf.Lerp(1f, cur.alpha, t) * appear;
-            float tint = Mathf.Lerp(NearTint, cur.tint, t);
-            float edge = Mathf.Lerp(nearEdgeBoost, cur.edge, t) * appear;
-            foreach (var r in e.renderers)
-                if (r != null) Apply(r, alpha, tint, edge);
+            VisitOne(go, id, EntryOf(go, id));
         }
+    }
+
+    private void VisitOne(GameObject go, int id, Entry e)
+    {
+        Reborn(id, e);
+        float u = level > 0 ? Mathf.InverseLerp(cur.near, cur.far, Vector3.Distance(cam.transform.position, go.transform.position)) : 0f;
+        float t = 1f - (1f - u) * (1f - u);                   // ease-out — near 를 넘자마자 옅어지기 시작
+        float appear = Appear(id, e.renderers);               // 처음 보일 때 0→1 (큐브만 — 장소 3D 는 GLBSpawnEffect 가 같은 0.2초로)
+        // 장소 3D 가 드러나는 동안은 매 프레임 — 아래 색 덮어쓰기(MPB)가 그때의 재질 투명도를 다음 갱신(0.2초)까지 붙잡아 멈췄다 튀지 않게 (11-20)
+        if (e.glb != null && e.glb.PlaceRevealing && AnyOn(e.renderers)) anyAppearing = true;
+        float alpha = Mathf.Lerp(1f, cur.alpha, t) * appear;
+        float tint = Mathf.Lerp(NearTint, cur.tint, t);
+        float edge = Mathf.Lerp(nearEdgeBoost, cur.edge, t) * appear;
+        foreach (var r in e.renderers)
+            if (r != null) Apply(r, alpha, tint, edge);
     }
 
     private void Apply(Renderer r, float alpha, float tint, float edge)

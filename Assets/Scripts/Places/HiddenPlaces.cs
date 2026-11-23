@@ -79,6 +79,8 @@ public static class HiddenPlaces
         if (train != null && ((id = Find(train.GetSpawnedObjects(), "train_", t)) != null || (id = Find(train.GetIndicatorOnlyObjects(), "train_", t)) != null)) return id;
         var terminal = TerminalManager.Instance;
         if (terminal != null && ((id = Find(terminal.GetSpawnedObjects(), "terminal_", t)) != null || (id = Find(terminal.GetIndicatorOnlyObjects(), "terminal_", t)) != null)) return id;
+        var store = StoreManager.Instance;
+        if (store != null && ((id = Find(store.GetSpawnedObjects(), StoreManager.Prefix, t)) != null || (id = Find(store.GetIndicatorOnlyObjects(), StoreManager.Prefix, t)) != null)) return id;
         return null;
     }
 

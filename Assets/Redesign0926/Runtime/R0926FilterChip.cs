@@ -41,6 +41,12 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
 
     private FilterManager fm;
     private R0926CategoryMenu menu;
+
+    /// <summary>목록 창 네온 빛이 고른 칩 색을 따른다 (R0926ListGlow · S8)</summary>
+    public Kind ChipKind => kind;
+    public bool IsOn => toggle != null && toggle.isOn;
+    public Color ChipColor => color;
+    public bool ModeChip => modeChip;
     private string placedFor;
     private float placedW = -1f;
     private int baseFont;
@@ -49,8 +55,9 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
     private Sprite dotSprite;
     private Vector2 dotSize;
 
-    /// <summary>분류를 보여 주는 순서 (10-23 대표님) — 전체 · 음식점 · 카페 · 샵 · 공원 · 스포츠 · 화장실 · 랜드마크. 값은 CategoryFilterState</summary>
-    public static readonly int[] CatOrder = { 0, 2, 3, 1, 4, 6, 5, 7 };
+    /// <summary>분류를 보여 주는 순서 (10-23 대표님) — 전체 · 음식점 · 카페 · 샵 · 숙소 · 공원 · 스포츠 · 화장실 · 랜드마크. 값은 CategoryFilterState
+    /// (숙소는 11-19 L1 — 가게들 다음 · 공원 앞, 올리기 분류에서 들어갈 자리와 같다)</summary>
+    public static readonly int[] CatOrder = { 0, 2, 3, 1, 8, 4, 6, 5, 7 };
 
     // CategoryFilterState 순서 (보여 주는 순서는 CatOrder)
     public static readonly string[][] CatNames =
@@ -63,12 +70,14 @@ public class R0926FilterChip : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         new[] { "화장실", "Toilet", "トイレ", "厕所", "Baño" },
         new[] { "스포츠", "Sports", "スポーツ", "运动", "Deporte" },
         new[] { "랜드마크", "Landmark", "名所", "地标", "Lugar" },
+        new[] { "숙소", "Stays", "宿泊", "住宿", "Hotel" },   // 11-19 대표님 「'숙소' 라고」 (처음엔 '펜션 / 호텔')
     };
     // 분류 색은 DataManager.GetCategoryColor 하나 — AR 인디케이터·목록·올리기 칩과 같다 (10-25). 카페 모카 · 스포츠 빨강 (10-23). 전체는 옅은 흰색
     public static readonly Color[] CatColors =
     {
         new Color(0.91f, 0.93f, 0.945f), DataManager.GetCategoryColor("shop"), DataManager.GetCategoryColor("food"), DataManager.GetCategoryColor("cafe"),
         DataManager.GetCategoryColor("park"), DataManager.GetCategoryColor("toilet"), DataManager.GetCategoryColor("sport"), DataManager.GetCategoryColor("landmark"),
+        DataManager.GetCategoryColor("stay"),
     };
     // 10-21 대표님 — '사람'은 '모든 사람', '팔로잉'은 '팔로잉만'(살짝 분홍) · 10-23 꺼지면 '주변 사람'
     private static readonly string[] P2PAll = { "모든 사람", "Everyone", "すべての人", "所有人", "Todos" };

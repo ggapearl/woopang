@@ -83,7 +83,9 @@ public class CubeUploadManager : MonoBehaviour
     private bool HasGps => !(gpsLat == 0 && gpsLon == 0);
 
     // 카테고리 순환 (none → shop → food → cafe → park → toilet → sport → landmark → etc → none)
-    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "etc" };
+    // 11-19 대표님 L4 「'기타' 삭제 · 숙소 추가 — 숙소 = 지금 공원 자리 · 공원 = 지금 화장실 자리 · 화장실 = 지금 기타 자리」
+    // 칩 두 줄: 샵 음식점 카페 숙소 / 공원 스포츠 랜드마크 화장실 — Redesign0926Apply3 의 values 와 순서가 같아야 칩이 맞는 분류를 누른다
+    private static readonly string[] categoryValues = { "", "shop", "food", "cafe", "stay", "park", "sport", "landmark", "toilet" };
     private int currentCategoryIndex = 0;
     private string selectedCategory = "";
     private string locationText;
@@ -538,6 +540,8 @@ public class CubeUploadManager : MonoBehaviour
     private IEnumerator SelectSubPhotos()
     {
         if (!PickerFree()) yield break;
+        // 11-17 B7 — 10장이 다 찼으면 촬영/갤러리 창을 열지 않고 바로 알린다 (11-16 대표님 「10장이 초과되는 사진은 안내와 함께 선택이 되지 않도록」)
+        if (subPhotos.Count >= MAX_SUB_PHOTOS) { ShowWarning(MaxSubText); yield break; }
 
         // PhotoSourceDialog 표시
         if (photoSourceDialog != null)
@@ -578,7 +582,7 @@ public class CubeUploadManager : MonoBehaviour
         if (remainingSlots <= 0)
         {
             // 최대 개수 도달 → 촬영 종료
-            ShowWarning(R0926LocalizedText.Say($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.", $"You can add up to {MAX_SUB_PHOTOS} photos.", $"最大{MAX_SUB_PHOTOS}枚まで追加できます。", $"最多可添加 {MAX_SUB_PHOTOS} 张照片。", $"Puedes añadir hasta {MAX_SUB_PHOTOS} fotos."));
+            ShowWarning(MaxSubText);
             yield break;
         }
         if (isProcessing) yield break;
@@ -690,6 +694,9 @@ public class CubeUploadManager : MonoBehaviour
         }
     }
 
+    // 추가 사진 10장 — 촬영 · 갤러리 · + 칸 모두 같은 말로 (11-17 B7 · 장소 수정 · 3D 모델 올리기도 이 말)
+    internal static string MaxSubText => R0926LocalizedText.Say($"최대 {MAX_SUB_PHOTOS}장까지만 추가할 수 있습니다.", $"You can add up to {MAX_SUB_PHOTOS} photos.", $"最大{MAX_SUB_PHOTOS}枚まで追加できます。", $"最多可添加 {MAX_SUB_PHOTOS} 张照片。", $"Puedes añadir hasta {MAX_SUB_PHOTOS} fotos.");
+
     private string SubPhotosTakenText()
     {
         int total = subPhotos.Count;
@@ -729,6 +736,8 @@ public class CubeUploadManager : MonoBehaviour
     private IEnumerator SelectSubPhotosFromGallery()
     {
         if (isProcessing) yield break;
+        int room = MAX_SUB_PHOTOS - subPhotos.Count;
+        if (room <= 0) { ShowWarning(MaxSubText); yield break; }
         if (!R0926PickerWait.PluginFree(R0926PickerWait.Source.Gallery)) { ShowWarning(R0926PickerWait.BusyText); yield break; }
         isProcessing = true;
 
@@ -739,7 +748,7 @@ public class CubeUploadManager : MonoBehaviour
 
         try
         {
-            NativeGallery.GetImagesFromGallery((paths) =>
+            NativeGallery.MediaPickMultipleCallback picked = (paths) =>
             {
                 if (!pick.End(t)) return;   // 버린 표에 늦게 온 답
                 answered = true;
@@ -754,7 +763,14 @@ public class CubeUploadManager : MonoBehaviour
                     // 고르지 않고 닫았다 — 실패 안내는 띄우지 않는다
                     isLoading = false;
                 }
-            }, LocalizationManager.Instance.GetText("select_sub_photos"), "image/*");
+            };
+            string title = LocalizationManager.Instance.GetText("select_sub_photos");
+            // 11-17 B7 — 아이폰 고르기 창은 남은 칸까지만 고르게 한다(한 칸 남으면 한 장 고르기 창). 안드로이드 창은 장수 제한을 받지 않는다 — 넘친 건 LoadMultipleImagesWithFallback 가 빼고 알린다
+            // (에디터의 한 장 고르기는 파일 창(모달)을 띄워 플레이 시험이 멈춘다 — 에디터는 예전대로)
+            if (room == 1 && !Application.isEditor)
+                NativeGallery.GetImageFromGallery(p => picked(string.IsNullOrEmpty(p) ? null : new[] { p }), title, "image/*");
+            else
+                NativeGallery.GetImagesFromGallery(picked, title, "image/*", room);
         }
         catch (System.Exception)
         {
@@ -782,6 +798,7 @@ public class CubeUploadManager : MonoBehaviour
         SortPathsByFileIndex(paths);
 
         // 들어갈 장수만큼 빈 칸을 먼저 깔고 한 프레임 — 사진 읽기(LoadImageAtPath)는 그동안 화면을 멈춘다
+        bool capped = paths.Length >= MAX_SUB_PHOTOS - subPhotos.Count;   // 남은 칸을 다 채우거나 넘치게 골랐다
         int left = Mathf.Min(paths.Length, MAX_SUB_PHOTOS - subPhotos.Count);
         SubLoading(left);
         yield return null;
@@ -790,7 +807,7 @@ public class CubeUploadManager : MonoBehaviour
         {
             if (subPhotos.Count >= MAX_SUB_PHOTOS)
             {
-                ShowWarning(LocalizationManager.Instance.GetText("max_sub_photos_exceeded"));
+                ShowWarning(MaxSubText);
                 break;
             }
 
@@ -837,6 +854,8 @@ public class CubeUploadManager : MonoBehaviour
 
         SubLoading(0);
         UpdateSubPhotoGrid();
+        // 11-17 B7 — 10장이 다 찼다: 아이폰은 고르기 창이 거기서 막았고 안드로이드는 넘친 걸 뺐다 — 왜 더 못 넣는지 알린다 (연속 촬영은 끝에 '추가 완료 (10/10)' 이 덮는다)
+        if (capped && subPhotos.Count >= MAX_SUB_PHOTOS) ShowWarning(MaxSubText);
         onComplete?.Invoke();
     }
 
@@ -1207,7 +1226,7 @@ public class CubeUploadManager : MonoBehaviour
     }
 
     // ============================================================
-    // 카테고리 토글 — 누를 때마다 순환 (none → shop → food → cafe → park → none)
+    // 카테고리 토글 — 누를 때마다 순환 (none → shop → food → cafe → stay → park → sport → landmark → toilet → none)
     // ============================================================
 
     private void OnCategoryToggleChanged(bool value)

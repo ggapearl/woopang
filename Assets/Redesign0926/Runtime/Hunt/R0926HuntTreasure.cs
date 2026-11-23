@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Text;
 using SimpleJSON;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 #if !UNITY_EDITOR
@@ -414,7 +413,7 @@ public class R0926HuntTreasure : MonoBehaviour
 #if UNITY_EDITOR
         var m = Mouse.current;
         if (m == null) return;
-        if (m.leftButton.wasPressedThisFrame) Press(m.position.ReadValue(), OverUI(-1));
+        if (m.leftButton.wasPressedThisFrame) { var mp = m.position.ReadValue(); Press(mp, !WorldTouch.Free(mp)); }
         else if (m.leftButton.wasReleasedThisFrame) Release(m.position.ReadValue());
 #else
         var ts = Touchscreen.current;
@@ -423,7 +422,7 @@ public class R0926HuntTreasure : MonoBehaviour
         foreach (var tc in ts.touches) if (tc.isInProgress) down++;
         if (down > 1) { pressed = 0; return; }   // 두 손가락(줌) — 누름이 아니다
         var p = ts.primaryTouch;
-        if (p.press.wasPressedThisFrame) Press(p.position.ReadValue(), OverUI(p.touchId.ReadValue()));
+        if (p.press.wasPressedThisFrame) { var pp = p.position.ReadValue(); Press(pp, !WorldTouch.Free(pp)); }
         else if (p.press.wasReleasedThisFrame) Release(p.position.ReadValue());
 #endif
     }
@@ -433,18 +432,9 @@ public class R0926HuntTreasure : MonoBehaviour
     public void EditorFeed(bool down, Vector2 pos)
     {
         if (!down) { Release(pos); return; }
-        var es = EventSystem.current;
-        var hits = new List<RaycastResult>();
-        if (es != null) es.RaycastAll(new PointerEventData(es) { position = pos }, hits);
-        Press(pos, hits.Count > 0);
+        Press(pos, !WorldTouch.Free(pos));
     }
 #endif
-
-    private static bool OverUI(int pointerId)
-    {
-        var es = EventSystem.current;
-        return es != null && (pointerId < 0 ? es.IsPointerOverGameObject() : es.IsPointerOverGameObject(pointerId));
-    }
 
     private void Press(Vector2 pos, bool overUI)
     {

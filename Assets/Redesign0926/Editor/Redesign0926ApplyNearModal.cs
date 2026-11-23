@@ -6,8 +6,9 @@ using UnityEngine.UI;
 namespace Redesign0926
 {
     /// <summary>
-    /// 가까이 모달 (11-15 대표님 (C) — 2m 안에 들어온 오브젝트를 화면 가운데 투명 카드에 「○○○ / 바로 근처에 있습니다」 두 줄 · × · 여러 개면 옆으로 넘긴다).
-    /// 부품만 만든다 — 고르기 · 찍기 · 넘기기 · 누르기는 R0926NearModal.
+    /// 가까이 모달 — 화면 가운데 투명 카드 하나에 두 가지 (11-18 대표님 J/M1):
+    /// 「발견한 장소」 걸어서 4m 안에 들어온 한 곳 · 「근처 장소」 앱 시작 · AR 화면 아래→위 밀기로 목록 가까운 순 10곳(옆으로 넘긴다 · 먼 곳은 사진 칸).
+    /// 부품만 만든다 — 고르기 · 찍기 · 넘기기 · 누르기 · 닫기는 R0926NearModal.
     /// 물방울메뉴면 카드 바탕과 고정한 하늘 카드(판 유리 · 📌 · 지역 · 예보 · 옆 장의 머리 · 줄 · 방송사 칸)도 물방울 유리 (시안 C4). 하늘에 걸린 판(월드 캔버스)은 그대로
     /// </summary>
     public static partial class Redesign0926Apply
@@ -84,6 +85,7 @@ namespace Redesign0926
             viewsGo.transform.SetSiblingIndex(1);
             var premul = PremulMaterial(log);
             var views = new RawImage[3];
+            var photos = new R0926NearPhoto[3];
             for (int i = 0; i < views.Length; i++)
             {
                 var v = FindOrCreate(viewsGo.transform, "View" + i);
@@ -96,6 +98,7 @@ namespace Redesign0926
                 raw.enabled = false;
                 EditorUtility.SetDirty(raw);
                 views[i] = raw;
+                photos[i] = NearPhotoSlot(v.transform);
             }
             var prev = NearButton(stage.transform, "Prev", new Vector2(0, 0.5f), new Vector2(104, 0), 114f, 0.18f, 0.35f, "r0926_i_back", 54f, 0f);
             var next = NearButton(stage.transform, "Next", new Vector2(1, 0.5f), new Vector2(-104, 0), 114f, 0.18f, 0.35f, "r0926_i_back", 54f, 180f);
@@ -104,14 +107,14 @@ namespace Redesign0926
             prev.gameObject.SetActive(false);
             next.gameObject.SetActive(false);
 
-            // 점 — 여러 개일 때만 (보는 칸은 길쭉하게 — R0926NearModal.Dots)
+            // 점 — 여러 개일 때만 · 「근처 장소」 10곳까지 (보는 칸은 길쭉하게 — R0926NearModal.Dots)
             var dots = FindOrCreate(card.transform, "Dots");
             SetRect(RT(dots), top, top, c, new Vector2(0, -1269.5f), new Vector2(600, 24));
-            var dotImgs = new Image[6];
+            var dotImgs = new Image[10];
             for (int i = 0; i < dotImgs.Length; i++)
             {
                 var d = FindOrCreate(dots.transform, "Dot" + i);
-                SetRect(RT(d), c, c, c, new Vector2(-120f + i * 48f, 0), new Vector2(24, 24));
+                SetRect(RT(d), c, c, c, new Vector2(-216f + i * 48f, 0), new Vector2(24, 24));
                 dotImgs[i] = Img(d, Spr("r0926_pill"), new Color(1, 1, 1, 0.45f), Image.Type.Sliced, 63f / 12f);
                 dotImgs[i].raycastTarget = false;
             }
@@ -171,6 +174,7 @@ namespace Redesign0926
             so.FindProperty("title").objectReferenceValue = titleText;
             so.FindProperty("stage").objectReferenceValue = RT(stage);
             SetArray(so.FindProperty("views"), views);
+            SetArray(so.FindProperty("photos"), photos);
             so.FindProperty("shadow").objectReferenceValue = shadowImg;
             so.FindProperty("prevButton").objectReferenceValue = prev;
             so.FindProperty("nextButton").objectReferenceValue = next;
@@ -183,6 +187,9 @@ namespace Redesign0926
             so.FindProperty("sky").objectReferenceValue = sky;
             so.FindProperty("skyCard").objectReferenceValue = skyCard;
             SetArray(so.FindProperty("floor"), floor.ToArray());
+            var places = FindInScene<PlaceListManager>(root.gameObject);
+            if (places == null) log.Add("가까이 모달: 목록(PlaceListManager) 없음 — 「근처 장소」가 안 뜬다");
+            so.FindProperty("places").objectReferenceValue = places;
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // 물방울 유리 — 카드 바탕 + 고정한 하늘 카드 (하늘에 걸린 동안은 월드 캔버스라 R0926Glass 가 스스로 쉰다)
@@ -208,7 +215,7 @@ namespace Redesign0926
                 }
             }
 
-            card.SetActive(false);   // 2m 안에 들어오면 R0926NearModal 이 켠다
+            card.SetActive(false);   // 발견한 장소(4m) · 근처 장소(시작 · 위로 밀기)가 생기면 R0926NearModal 이 켠다
             log.Add("near modal ok (덮는 창 " + covers.Count + " · 바닥 " + floor.Count + " · 물방울 " + glassN + ")");
         }
 
@@ -255,6 +262,68 @@ namespace Redesign0926
             SetRect(RT(go), c, c, c, Vector2.zero, new Vector2(size, size));
             Img(go, Spr(sprite), new Color(1, 1, 1, alpha), Image.Type.Simple).raycastTarget = false;
             go.transform.SetSiblingIndex(index);
+        }
+
+        // 사진 칸 — 「근처 장소」에서 AR 에 없거나 먼(25m 밖) 곳. 칸(View)의 아이라 옆으로 밀리고 작아질 때 같이 간다.
+        // 장소 = 둥근 네모 · 사람 = 원 + 공개 범위 색 테두리 (모양 바꾸기 · 그림 · 사진은 R0926NearPhoto)
+        private static R0926NearPhoto NearPhotoSlot(Transform view)
+        {
+            var c = new Vector2(0.5f, 0.5f);
+            var go = FindOrCreate(view, "Photo");
+            SetRect(RT(go), c, c, c, Vector2.zero, new Vector2(520, 520));
+            var group = Ensure<CanvasGroup>(go);
+            group.blocksRaycasts = true;   // 옆 칸 사진을 누르면 그쪽으로 (칸의 아이라 R0926NearModal 이 받는다)
+
+            var maskGo = FindOrCreate(go.transform, "Mask");
+            Stretch(RT(maskGo));
+            var mask = Img(maskGo, Spr("r0926_pill"), Color.white, Image.Type.Sliced, 0.9f);
+            mask.raycastTarget = true;
+            Ensure<Mask>(maskGo).showMaskGraphic = false;
+            maskGo.transform.SetSiblingIndex(0);
+
+            var fill = FindOrCreate(maskGo.transform, "Fill");
+            Stretch(RT(fill));
+            Img(fill, null, new Color(1, 1, 1, 0.12f), Image.Type.Simple).raycastTarget = false;
+            fill.transform.SetSiblingIndex(0);
+
+            var picGo = FindOrCreate(maskGo.transform, "Pic");
+            Stretch(RT(picGo));
+            var pic = Ensure<RawImage>(picGo);
+            pic.texture = null;
+            pic.color = Color.white;
+            pic.raycastTarget = false;
+            pic.enabled = false;
+            EditorUtility.SetDirty(pic);
+            picGo.transform.SetSiblingIndex(1);
+
+            var iconGo = FindOrCreate(maskGo.transform, "Icon");
+            SetRect(RT(iconGo), c, c, c, Vector2.zero, new Vector2(180, 180));
+            var icon = Img(iconGo, Spr("r0926_i_pin"), new Color(1, 1, 1, 0.7f), Image.Type.Simple);
+            icon.raycastTarget = false; icon.preserveAspect = true;
+            iconGo.transform.SetSiblingIndex(2);
+
+            var rimGo = FindOrCreate(go.transform, "Rim");
+            Stretch(RT(rimGo));
+            Img(rimGo, Spr("r0926_pill_ring"), new Color(1, 1, 1, 0.35f), Image.Type.Sliced, 0.9f).raycastTarget = false;
+            rimGo.transform.SetAsLastSibling();
+
+            var np = Ensure<R0926NearPhoto>(go);
+            var so = new SerializedObject(np);
+            so.FindProperty("group").objectReferenceValue = group;
+            so.FindProperty("mask").objectReferenceValue = mask;
+            so.FindProperty("pic").objectReferenceValue = pic;
+            so.FindProperty("icon").objectReferenceValue = icon;
+            so.FindProperty("rim").objectReferenceValue = rimGo.GetComponent<Image>();
+            so.FindProperty("roundShape").objectReferenceValue = Spr("r0926_pill");
+            so.FindProperty("circleShape").objectReferenceValue = Spr("r0926_circle");
+            so.FindProperty("roundRim").objectReferenceValue = Spr("r0926_pill_ring");
+            so.FindProperty("circleRim").objectReferenceValue = Spr("r0926_ring");
+            so.FindProperty("placeIcon").objectReferenceValue = Spr("r0926_i_pin");
+            so.FindProperty("personIcon").objectReferenceValue = Spr("r0926_i_user");
+            so.FindProperty("huntIcon").objectReferenceValue = Spr("r0926_i_treasure");   // 「근처 장소」의 보물찾기 (11-20 H6)
+            so.ApplyModifiedPropertiesWithoutUndo();
+            go.SetActive(false);   // 사진으로 보일 때만 R0926NearPhoto.Show 가 켠다
+            return np;
         }
 
         // 물방울 유리와 같은 덮는 창 목록 ('틀/안' 은 늘 켜진 틀 안의 켜졌다 꺼지는 것)

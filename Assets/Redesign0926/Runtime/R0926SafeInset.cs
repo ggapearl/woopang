@@ -5,6 +5,7 @@ using UnityEngine;
 /// Move: 위치를 민다. Stretch: 늘어나는 영역(카드 등)의 해당 가장자리만 안으로 당긴다.
 /// 값은 "지난번에 더한 만큼 빼고 새로 더하는" 증분 방식 — 슬라이드 애니메이션(R0926SlideIn)과 겹쳐도 어긋나지 않는다.
 /// 에디터 배치값은 안전영역 0 기준 — 실제 기기에서만 인셋이 더해진다.
+/// 위쪽은 노치 판이 노치 아래로 늘어난 만큼(R0926Notch.DropPx — 하늘을 노치로 접었을 때 · 노치 안내) 더 민다 — 칩 · 상태 알약 · 알림이 그 줄과 겹치지 않게.
 /// </summary>
 public class R0926SafeInset : MonoBehaviour
 {
@@ -20,7 +21,7 @@ public class R0926SafeInset : MonoBehaviour
     private Canvas root;
     private float applied;
     private Rect lastSafe;
-    private float lastScale = -1f;
+    private float lastScale = -1f, lastDrop;
     private readonly Vector3[] corners = new Vector3[4];
 
     public void SetEdge(Edge e, Mode m = Mode.Move)
@@ -51,7 +52,8 @@ public class R0926SafeInset : MonoBehaviour
 
     private void Update()
     {
-        if (root == null || Screen.safeArea != lastSafe || !Mathf.Approximately(root.scaleFactor, lastScale)) Apply();
+        if (root == null || Screen.safeArea != lastSafe || !Mathf.Approximately(root.scaleFactor, lastScale)
+            || edge == Edge.Top && !Mathf.Approximately(R0926Notch.DropPx, lastDrop)) Apply();
     }
 
     private void Apply()
@@ -64,6 +66,7 @@ public class R0926SafeInset : MonoBehaviour
         }
         lastSafe = Screen.safeArea;
         lastScale = root.scaleFactor;
+        lastDrop = R0926Notch.DropPx;
         float scale = lastScale > 0f ? lastScale : 1f;
 
         // 오버레이 캔버스의 월드 좌표 = 화면 픽셀 → 캔버스가 실제로 덮는 영역과 안전영역의 차이가 인셋
@@ -71,7 +74,7 @@ public class R0926SafeInset : MonoBehaviour
         float inset;
         switch (edge)
         {
-            case Edge.Top: inset = Mathf.Max(0f, corners[1].y - lastSafe.yMax); break;
+            case Edge.Top: inset = Mathf.Max(0f, corners[1].y - lastSafe.yMax) + lastDrop; break;
             case Edge.Bottom: inset = Mathf.Max(0f, lastSafe.yMin - corners[0].y); break;
             case Edge.Left: inset = Mathf.Max(0f, lastSafe.xMin - corners[0].x); break;
             default: inset = Mathf.Max(0f, corners[2].x - lastSafe.xMax); break;

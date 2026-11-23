@@ -127,6 +127,13 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     private readonly HashSet<int> detailInFlight = new HashSet<int>();   // 지금 묻는 중인 상세 — 같은 곳을 또 묻지 않는다
     private Coroutine batchDetailCoroutine;
 
+    // 사진을 다 받은 뒤에 띄운다 (11-19 P1 · PlaceSpawnGate) — 준비를 마친 곳을 한 프레임에 하나씩 만든다
+    private readonly Queue<int> photoReadyQueue = new Queue<int>();
+    private Coroutine photoReadyLoop;
+    private Texture2D gateTex;      // 지금 만드는 곳의 받아 둔 메인 사진 (CreateObjectFromData 안에서만)
+    private string gateSrc;
+    private FilterManager fmRef;
+
     [Header("주변 장소 목록 요청")]
     [Tooltip("장소 목록 요청 제한 시간 (초) — 응답이 없으면 실패로 끝내야 FilterManager 가 다시 요청한다")]
     [SerializeField] private int lightCacheTimeout = 15;
@@ -167,6 +174,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     void OnDisable()
     {
         ARSession.stateChanged -= OnARSessionStateChanged;
+        photoReadyLoop = null;   // 꺼지면 코루틴이 멈춘다 — 다음 준비 완료 때 다시 시작하게
     }
 
     /// <summary>
@@ -626,7 +634,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                             foreach (var place in places)
                             {
                                 if (place == null) continue;
-                                placeDataMap[place.id] = place;
+                                placeDataMap[place.id] = Adopt(place);
                                 arrived.Add(place);
                             }
                         }
@@ -660,6 +668,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                 // 띄우면 FilterManager 가 모르는 오브젝트라 다시 거두지 못하고, 필터를 끄면 반경 밖에서도 나타났다
                 if (fm != null && fm.isActiveAndEnabled && !fm.WantsFull("dm_" + place.id)) continue;
                 if (spawnedObjects.ContainsKey(place.id) || HiddenPlaces.IsHidden("dm_" + place.id)) continue;
+                if (!PhotosReady(place)) continue;   // 사진을 받는 중 — 다 받으면 SpawnPhotoReady 가 띄운다 (임시 화살표도 그때 치운다)
 
                 // Full 스폰 전에 임시 IndicatorOnly가 있으면 제거
                 if (indicatorOnlyObjects.ContainsKey(place.id))
@@ -768,7 +777,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             // (DataManager는 데이터 보관소 역할만, 직접 스폰 안 함)
             foreach (PlaceData place in newPlaces)
             {
-                placeDataMap[place.id] = place;
+                placeDataMap[place.id] = Adopt(place);
                 loadedIds.Add(place.id);
             }
             if (tierIndex == loadRadii.Length - 1 && objectCountUI != null)
@@ -954,7 +963,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             var chunk = places.Skip(i).Take(CHUNK_SIZE).ToList();
             foreach (PlaceData place in chunk)
             {
-                placeDataMap[place.id] = place;
+                placeDataMap[place.id] = Adopt(place);
 
                 if (spawnedObjects.ContainsKey(place.id))
                 {
@@ -1028,6 +1037,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         if (SubwayManager.Instance != null) total += SubwayManager.Instance.GetVisibleObjectCount();
         if (TerminalManager.Instance != null) total += TerminalManager.Instance.GetVisibleObjectCount();
         if (TrainStationManager.Instance != null) total += TrainStationManager.Instance.GetVisibleObjectCount();
+        if (StoreManager.Instance != null) total += StoreManager.Instance.GetVisibleObjectCount();
         return total;
     }
 
@@ -1088,7 +1098,20 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         return shouldShow;
     }
 
+    // 사진을 받아 둔 곳이면 그 메인 사진을 넘겨받아 만들면서 바로 붙인다 (11-19 P1 — 기본 면이 먼저 보이지 않게). 안 쓴 사진은 지운다
     private void CreateObjectFromData(PlaceData place)
+    {
+        Texture2D outerTex = gateTex; string outerSrc = gateSrc;
+        gateTex = PlaceSpawnGate.Take(GateKey(place.id), out gateSrc);
+        try { BuildObject(place); }
+        finally
+        {
+            if (gateTex != null) Destroy(gateTex);
+            gateTex = outerTex; gateSrc = outerSrc;
+        }
+    }
+
+    private void BuildObject(PlaceData place)
     {
         if (HiddenPlaces.IsHidden("dm_" + place.id)) return;   // 이 기기에서 X 로 숨긴 장소
 
@@ -1227,7 +1250,12 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             bool usedInApp = false;
             string iconPath = FilterManager.IsPublicSource(place.is_public, place.category) ? GetInAppIconPath(place.category) : null;
             if (iconPath != null) usedInApp = display.SetBaseMapFromResources(iconPath);
-            if (!usedInApp && !string.IsNullOrEmpty(place.main_photo)) display.SetBaseMap(place.main_photo);
+            if (!usedInApp && !string.IsNullOrEmpty(place.main_photo))
+            {
+                // 받아 둔 메인 사진이 있으면 바로 붙인다 (11-19 P1) — 없으면 예전처럼 받아서 (못 받음 · 10초 넘김 · 수정 반영)
+                if (gateTex != null && gateSrc == place.main_photo) { display.SetBaseMapTexture(gateTex, place.main_photo); gateTex = null; }
+                else display.SetBaseMap(place.main_photo);
+            }
         }
 
         DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>(true);
@@ -1244,15 +1272,31 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
     /// <summary>
     /// 관리자 사이즈(model_scale)를 사진 상자에도 — 3D(GLB)는 GLBModelLoader 가 모델에 건다.
-    /// 맨 위(앵커)는 핀치 줌이 덮어쓰므로 상자 칸에만 건다. 풀에서 다시 꺼낸 상자도 매번 그 장소 값으로 (없으면 1)
+    /// 맨 위(앵커)는 핀치 줌이 덮어쓰므로 상자 칸에만 건다. 풀에서 다시 꺼낸 상자도 매번 그 장소 값으로 (없으면 1).
+    /// 밑면 높이는 사이즈 1 그대로 두고 위로 커진다 (11-20 우팡M 상한 100) — 가운데를 축으로 키우면 사이즈 100 에서
+    /// 상자 아래 절반(약 100m)이 땅 밑으로 그려졌다 (앱에 가림 기능이 없어 땅 위에 겹쳐 보인다). 3D 캐릭터는 발밑이 축이라 원래 위로 커진다
     /// </summary>
+    private static readonly Dictionary<int, Vector3> boxRestPos = new Dictionary<int, Vector3>();
     private static void ApplyBoxScale(GameObject root, Transform box, float modelScale)
     {
         if (box == root.transform || box.GetComponent<GLBModelLoader>() != null) return;
-        Vector3 scale = Vector3.one * (modelScale > 0 ? modelScale : 1f);
+        float s = modelScale > 0 ? modelScale : 1f;
+        int key = box.GetInstanceID();
+        if (!boxRestPos.TryGetValue(key, out Vector3 rest)) boxRestPos[key] = rest = box.localPosition;
+        box.localPosition = rest + box.localRotation * Vector3.up * ((s - 1f) * BoxBottomDepth(box));
+        Vector3 scale = Vector3.one * s;
         Object3DTouchHaptic haptic = box.GetComponent<Object3DTouchHaptic>();
         if (haptic != null) haptic.SetRestScale(scale);
         else box.localScale = scale;
+    }
+
+    // 사이즈 1 일 때 상자 밑면이 축에서 얼마나 아래인지 (상자 칸 단위) — 모양(메시) → 누르는 칸 → 단위 상자 0.5
+    private static float BoxBottomDepth(Transform box)
+    {
+        MeshFilter mf = box.GetComponent<MeshFilter>();
+        if (mf != null && mf.sharedMesh != null) return -mf.sharedMesh.bounds.min.y;
+        BoxCollider col = box.GetComponent<BoxCollider>();
+        return col != null ? col.size.y * 0.5f - col.center.y : 0.5f;
     }
 
     private bool SetupGLBObject(GameObject obj, PlaceData place)
@@ -1271,6 +1315,8 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         if (glbLoader == null) glbLoader = obj.AddComponent<GLBModelLoader>();
 
         glbLoader.ClearModel();
+        glbLoader.placeReveal = true;   // 11-19 P1 스피너 없이 · 다 받은 뒤 보이기 시작할 때 0.2초 페이드인
+        glbLoader.motionOnTap = true;   // 11-19 L7 장소 3D 는 기본 멈춤 · 누르면 그 모델의 움직임 10초 정도 (아바타 · AI 미리보기 · 보물은 예전처럼 늘 움직임)
 
         // model_url이 이미 풀 URL(http/https)이면 그대로 사용, 상대 경로면 MAIN_SERVER 붙임.
         // 이전 버그: 무조건 prepend → "https://...woopang.com/https://..." 형식의 잘못된 URL → 404
@@ -1350,6 +1396,11 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
 
         if (loadCompleted && loadSuccess)
         {
+            // 받는 사이 다시 받은 값(이름 · 사이즈 — ApplyFreshPlaces)이 왔으면 그것으로
+            if (placeDataMap.TryGetValue(placeId, out PlaceData latest) && latest != null) place = latest;
+            float want = place.model_scale > 0 ? place.model_scale : 1f;
+            if (!Mathf.Approximately(want, scale)) StartCoroutine(ScaleAfterReveal(loader, glbObj, placeId, want));
+
             DoubleTap3D doubleTap = glbObj.GetComponentInChildren<DoubleTap3D>();
             if (doubleTap != null) SetupDoubleTapInfo(doubleTap, place);
 
@@ -1363,10 +1414,18 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
                 ReturnToPool(glbObj, "custom");
                 spawnedObjects.Remove(placeId);
                 place.model_type = "cube";
-                CreateObjectFromData(place);
+                placeDataMap[placeId] = place;
+                if (PhotosReady(place)) CreateObjectFromData(place);   // 큐브도 사진을 다 받은 뒤에 (11-19 P1) — 받는 중이면 SpawnPhotoReady 가
             }
             else glbObj.SetActive(false);
         }
+    }
+
+    // 나타나는 연출(GLBSpawnEffect)이 받을 때의 크기로 끝나므로 그 뒤에 건다
+    private IEnumerator ScaleAfterReveal(GLBModelLoader loader, GameObject glbObj, int placeId, float scale)
+    {
+        yield return new WaitForSeconds(2f);
+        if (loader != null && spawnedObjects.TryGetValue(placeId, out GameObject cur) && cur == glbObj) loader.SetModelScale(scale);
     }
 
     private IEnumerator LoadGLBCoroutine(GLBModelLoader loader, string url, float scale, System.Action<bool> onComplete)
@@ -1456,7 +1515,18 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     public int GetSpawnedObjectsCount() => spawnedObjects.Count;
     public Dictionary<int, PlaceData> GetPlaceDataMap() => placeDataMap;
 
-    /// <summary>주어진 id가 dance_anim(category="anim") 항목인지 확인 — DoubleTap3D 라우팅용.</summary>
+    /// <summary>
+    /// 11-19 대표님 L6 「3D 모델 — 다운로드 단계 없이 기본으로 바로 보이게 ('시바견' 등)」 — 서버는 춤 모델(분류 anim)을 model_type cube 로 보낸다
+    /// (예전엔 큐브 사진 상자로 띄우고 두 번 누르면 받기 창 → GLB). 받은 자료가 들어오는 곳마다 3D(custom)로 바꿔 둔다 —
+    /// 어느 길로 들어온 자료든 같은 값이라 떠 있는 3D 가 큐브 풀로 돌아가지 않는다. 받다 실패해 큐브로 내린 것(LoadGLBAsync)은 ApplyEditedPlace 가 그대로 잇는다
+    /// </summary>
+    private static PlaceData Adopt(PlaceData p)
+    {
+        if (p != null && p.category == "anim" && p.model_type == "cube" && !string.IsNullOrEmpty(p.model_url)) p.model_type = "custom";
+        return p;
+    }
+
+    /// <summary>주어진 id가 dance_anim(category="anim") 항목인지 확인 — 받기 창(DanceAnimController)용. 11-19 L6 부터 부르는 곳 없음 (받기 창과 같이 지울지 여쭌 뒤)</summary>
     public bool IsAnimCategory(int id)
     {
         if (placeDataMap.TryGetValue(id, out var p) && p.category == "anim") return true;
@@ -2046,6 +2116,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         _lastResumeFetchTime = now;
 
         StopAllFetching();
+        FreshenSpawned();
 
         float lat = lastPosition.x;
         float lon = lastPosition.y;
@@ -2087,15 +2158,83 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         return lightCache;
     }
 
+    // ── 사진을 다 받은 뒤에 띄우기 (11-19 대표님 P1 · PlaceSpawnGate) ──
+    // 「메인사진, 서브사진까지 모두 불러오고나서 … 완료가 되면 오브젝트를 생성」 — 기본 면으로 떴다가 사진으로 바뀌지 않게.
+    // 받는 동안은 FilterManager 가 임시 화살표를 둔다 (상세를 기다릴 때와 같다). 나타날 때는 0.2초 페이드인 (R0926DistanceFade · GLBSpawnEffect)
+
+    private static string GateKey(int id) => "dm_" + id;
+
+    /// <summary>큐브 앞면에 붙일 메인 사진 — 앱 내장 그림을 쓰는 공공 분류면 받지 않는다 (SetupCubeObject 와 같은 판단)</summary>
+    private static string GateMainPhoto(PlaceData place)
+    {
+        if (FilterManager.IsPublicSource(place.is_public, place.category) && GetInAppIconPath(place.category) != null) return null;
+        return string.IsNullOrEmpty(place.main_photo) ? null : place.main_photo;
+    }
+
+    /// <summary>사진을 다 받았으면(받을 것이 없으면) true. 아니면 준비를 시작하고 false — 다 받으면 SpawnPhotoReady 가 띄운다</summary>
+    private bool PhotosReady(PlaceData place)
+    {
+        if (place == null) return false;
+        string key = GateKey(place.id);
+        if (PlaceSpawnGate.Ready(key)) return true;
+        if (PlaceSpawnGate.Busy(key)) return false;
+        string main = GateMainPhoto(place);
+        List<string> subs = FlattenSubPhotos(place);
+        if (main == null && subs.Count == 0) return true;
+        int id = place.id;
+        PlaceSpawnGate.Prepare(key, main, subs, () => WantsSpawn(id), OnPhotosReady);
+        return PlaceSpawnGate.Ready(key);   // 받을 것이 이미 다 디스크에 있으면 바로 끝난다
+    }
+
+    /// <summary>아직 띄울 곳인가 — 사진을 받는 사이 멀어졌거나(배분에서 빠짐) · 숨겼거나 · 다른 길로 이미 떴으면 false</summary>
+    private bool WantsSpawn(int id)
+    {
+        if (this == null || spawnedObjects.ContainsKey(id) || HiddenPlaces.IsHidden(GateKey(id))) return false;
+        if (fmRef == null) fmRef = FindAnyObjectByType<FilterManager>(FindObjectsInactive.Include);
+        return fmRef == null || !fmRef.isActiveAndEnabled || fmRef.WantsFull(GateKey(id));
+    }
+
+    private void OnPhotosReady(string key)
+    {
+        if (this == null || key == null || key.Length <= 3 || !int.TryParse(key.Substring(3), out int id)) return;
+        photoReadyQueue.Enqueue(id);
+        if (photoReadyLoop == null && isActiveAndEnabled) photoReadyLoop = StartCoroutine(SpawnPhotoReady());
+    }
+
+    // 사진을 다 받은 곳을 한 프레임에 하나씩 (SpawnPace — 배분 · 상세 응답과 같은 문)
+    private IEnumerator SpawnPhotoReady()
+    {
+        yield return null;   // 부른 자리(배분 중)에서 바로 만들지 않는다
+        while (photoReadyQueue.Count > 0)
+        {
+            while (!SpawnPace.Ready) yield return null;
+            int id = photoReadyQueue.Dequeue();
+            string key = GateKey(id);
+            if (!placeDataMap.TryGetValue(id, out PlaceData place) || place == null || !WantsSpawn(id)) { PlaceSpawnGate.Drop(key); continue; }
+            if (!PlaceSpawnGate.Ready(key)) continue;   // 그새 다른 길로 가져갔다 · 새로 준비하는 중
+            if (indicatorOnlyObjects.ContainsKey(id)) DespawnIndicatorOnly(id.ToString());   // 받는 동안 둔 임시 화살표
+            try { CreateObjectFromData(place); }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[DataManager] CreateObjectFromData 예외: id={id}: {ex.Message}");
+            }
+            SpawnPace.Took();
+        }
+        photoReadyLoop = null;
+        if (objectCountUI != null)
+            objectCountUI.UpdateObjectCount(GetAllVisibleObjectCount(), true);
+    }
+
     public bool SpawnFullObject(string rawId)
     {
         if (!int.TryParse(rawId, out int id)) return false;
         if (HiddenPlaces.IsHidden("dm_" + rawId)) return false;   // 이 기기에서 X 로 숨긴 장소
         if (spawnedObjects.ContainsKey(id)) return true; // 이미 스폰됨
 
-        // placeDataMap에 상세 데이터가 있으면 즉시 스폰
+        // placeDataMap에 상세 데이터가 있으면 사진을 다 받은 뒤 스폰 (11-19 P1 — 받는 동안은 false: FilterManager 가 임시 화살표를 둔다)
         if (placeDataMap.ContainsKey(id))
         {
+            if (!PhotosReady(placeDataMap[id])) return false;
             try
             {
                 CreateObjectFromData(placeDataMap[id]);
@@ -2157,7 +2296,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             // full 스폰·목록과 같은 값. 흰색이어도 꼭 넣는다 — 풀에서 꺼낸 인디케이터는 앞서 쓴 장소의 색을 들고 있다
             target.TargetColor = ResolvePlaceColor(placeDataMap.TryGetValue(id, out PlaceData known) ? known.color : null, cached.category, cached.displayName);
 
-            // dance_anim은 큐브로 정상 스폰되어 더블탭으로 라우팅됨 — 인디케이터 훅 불필요
+            // 춤 모델(anim)도 다른 장소와 같다 — 인디케이터에 따로 할 일 없음 (11-19 L6 부터 처음부터 3D)
         }
 
         var anchor = obj.GetComponentInChildren<CustomARGeospatialCreatorAnchor>(true);
@@ -2228,15 +2367,28 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     /// <summary>
     /// 올린 사람이 고친 장소를 바로 반영 (2026-10-26 '정보 수정') — 서버가 돌려준 값으로 바꾸고,
     /// 자리를 옮겼을 때만 앵커를 다시 세운다(매번 새로 세우면 고치지 않은 장소도 한 번 사라졌다 뜬다).
-    /// 3D(GLB) 장소는 모델을 다시 받지 않고 이름·사진 정보만 바꾼다.
+    /// 3D(GLB) 장소는 모델을 다시 받지 않고 이름·사진 정보만 바꾼다 — 모델 자체가 바뀌었을 때만 내리고 새 모델로 다시 띄운다.
     /// </summary>
     public void ApplyEditedPlace(PlaceData edited, bool moved)
     {
         if (edited == null) return;
+        Adopt(edited);   // 춤 모델은 3D 로 (11-19 L6) — 아래에서 떠 있던 종류(큐브로 내린 것 포함)를 그대로 잇는다
+        // 3D 모델이 바뀌었다 (11-18 I1 — 정보 수정 ▸ AI 작업 '3D 캐릭터' · 우팡M 이 요청한 캐릭터로 반영) — 떠 있던 큐브·모델을 내리고 새 모델로
+        bool remodel = false, respawn = false;
         if (placeDataMap.TryGetValue(edited.id, out PlaceData old) && old != null)
         {
-            edited.original_model_type = string.IsNullOrEmpty(old.original_model_type) ? old.model_type : old.original_model_type;
-            edited.model_type = old.model_type;   // GLB 대신 큐브로 떠 있던 것은 그대로
+            remodel = edited.model_type == "custom" && !string.IsNullOrEmpty(edited.model_url) && old.model_url != edited.model_url;
+            if (remodel)
+            {
+                edited.original_model_type = edited.model_type;
+                respawn = spawnedObjects.ContainsKey(edited.id);
+                DespawnFullObject(edited.id.ToString());   // 떠 있던 종류(placeDataMap 의 옛 값)의 풀로 — 바꾸기 전에
+            }
+            else
+            {
+                edited.original_model_type = string.IsNullOrEmpty(old.original_model_type) ? old.model_type : old.original_model_type;
+                edited.model_type = old.model_type;   // GLB 대신 큐브로 떠 있던 것은 그대로
+            }
         }
         else edited.original_model_type = edited.model_type;
         placeDataMap[edited.id] = edited;
@@ -2291,8 +2443,72 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             ind.name = $"Indicator_{edited.id}_{edited.name}";
         }
 
+        if (respawn) SpawnFullObject(raw);   // 새 모델 (동시에 받는 3D 가 많으면 CreateObjectFromData 가 큐브로)
         AfterPlaceChanged();
     }
+
+    // 앱으로 돌아오면 떠 있는 장소를 다시 묻는다 (11-16) — 실행 중엔 한 번 받은 장소를 다시 묻지 않아
+    // 우팡M 에서 사이즈·사진·이름을 고치거나 정보 수정 요청을 승인해도 앱을 껐다 켜야 보였다
+    private const float FreshenGap = 20f;
+    private float lastFreshenAt = -FreshenGap;
+
+    private void FreshenSpawned()
+    {
+        if (Time.realtimeSinceStartup - lastFreshenAt < FreshenGap) return;
+        var ids = new List<int>();
+        foreach (var kv in spawnedObjects)
+            if (kv.Value != null && placeDataMap.ContainsKey(kv.Key)) ids.Add(kv.Key);
+        if (ids.Count == 0) return;
+        lastFreshenAt = Time.realtimeSinceStartup;
+        StartCoroutine(FreshenRoutine(ids));
+    }
+
+    private IEnumerator FreshenRoutine(List<int> ids)
+    {
+        for (int i = 0; i < ids.Count; i += 50)
+        {
+            string url = string.Format("{0}?ids={1}", ApiConfig.LOCATIONS_DETAIL, string.Join(",", ids.GetRange(i, Mathf.Min(50, ids.Count - i))));
+            List<PlaceData> fresh = null;
+            using (UnityWebRequest request = UnityWebRequest.Get(url))
+            {
+                request.timeout = 15;
+                yield return request.SendWebRequest();
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    try { fresh = JsonConvert.DeserializeObject<List<PlaceData>>(request.downloadHandler.text); }
+                    catch (System.Exception e) { Debug.LogWarning($"[DataManager] 다시 받은 장소 파싱 실패: {e.Message}"); }
+                }
+            }
+            if (fresh != null) ApplyFreshPlaces(fresh);
+        }
+    }
+
+    /// <summary>다시 받은 상세 중 바뀐 것만 고친다 (같은 것은 건드리지 않는다). 고친 개수</summary>
+    public int ApplyFreshPlaces(List<PlaceData> fresh)
+    {
+        int changed = 0;
+        foreach (PlaceData p in fresh)
+        {
+            if (p == null || !placeDataMap.TryGetValue(p.id, out PlaceData old) || old == null || SameShown(old, p)) continue;
+            bool moved = old.latitude != p.latitude || old.longitude != p.longitude || old.altitude != p.altitude;
+            bool resized = !Mathf.Approximately(old.model_scale, p.model_scale);
+            ApplyEditedPlace(p, moved);   // 이름·사진·분류·자리 — 사진 상자는 사이즈까지
+            if (resized && p.model_type == "custom" && spawnedObjects.TryGetValue(p.id, out GameObject obj) && obj != null)
+            {
+                GLBModelLoader glb = obj.GetComponent<GLBModelLoader>();   // 3D 는 다시 받지 않고 그 자리에서 (받는 중이면 다 받은 뒤 LoadGLBAsync 가 건다)
+                if (glb != null) glb.SetModelScale(p.model_scale > 0 ? p.model_scale : 1f);
+            }
+            changed++;
+        }
+        return changed;
+    }
+
+    private static bool SameShown(PlaceData a, PlaceData b) =>
+        a.name == b.name && a.main_photo == b.main_photo && a.model_url == b.model_url && Mathf.Approximately(a.model_scale, b.model_scale)
+        && a.latitude == b.latitude && a.longitude == b.longitude && a.altitude == b.altitude
+        && a.category == b.category && a.color == b.color && a.username == b.username && a.instagram_id == b.instagram_id
+        && a.pet_friendly == b.pet_friendly && a.separate_restroom == b.separate_restroom
+        && JsonConvert.SerializeObject(a.sub_photos) == JsonConvert.SerializeObject(b.sub_photos);
 
     /// <summary>
     /// 두 번 누른 오브젝트가 이 매니저가 띄운 우팡 장소면 그 장소 — 아니면 null.
@@ -2362,6 +2578,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             case "toilet":   return new Color(0.61f, 0.48f, 1f);       // 보라 #9C7AFF
             case "sport":    return new Color(0.94f, 0.28f, 0.28f);    // 빨강 #F04747 (10-23)
             case "landmark": return new Color(0.96f, 0.77f, 0.26f);    // 금색 #F5C442
+            case "stay":     return new Color(0.122f, 0.78f, 0.831f);  // 하늘빛 청록 #1FC7D4 — 숙소 (11-19 L1 · 의료 #3DA49E 보다 밝고 푸르다)
 
             // --- 공공데이터(기관/시설, publicData 토글) — 푸르스름/녹색, 흰색 금지 ---
             case "gov":      return new Color(0.533f, 0.6f, 0.667f);   // 회청 #8899AA (경찰서·소방서 포함)
@@ -2379,7 +2596,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     /// <summary>목록 필터에 칩이 있는 분류 — 이 분류는 서버에 남은 색보다 칩 색이 먼저</summary>
     public static bool IsChipCategory(string category)
         => category == "shop" || category == "food" || category == "cafe" || category == "park"
-           || category == "toilet" || category == "sport" || category == "landmark";
+           || category == "toilet" || category == "sport" || category == "landmark" || category == "stay";
 
     /// <summary>
     /// 칩이 있는 분류는 늘 칩 색 — 예전 앱이 올린 색(스포츠 주황 · 랜드마크 하늘 …)이나 서버가 이름을 바꾼 색

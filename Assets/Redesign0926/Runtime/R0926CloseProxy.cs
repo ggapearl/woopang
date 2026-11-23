@@ -17,4 +17,15 @@ public class R0926CloseProxy : MonoBehaviour
         if (sheet != null && sheet.isActiveAndEnabled) sheet.AnimateClose(real);
         else real.onClick.Invoke();
     }
+
+    /// <summary>도크에서 다른 창으로 바꿀 때 (R0926DockSlotSwap) — 제자리에서 옅어지며 닫힌다</summary>
+    public void Dissolve(bool top, R0926Closer.Dim dim)
+    {
+        if (real == null) return;
+        if (sheet != null && sheet.isActiveAndEnabled) sheet.DissolveClose(real, top, dim);
+        else real.onClick.Invoke();
+    }
+
+    /// <summary>이 X 가 닫는 시트 · 창 — 새로 연 창을 옅게 → 진하게 할 때 (R0926DockSlotSwap)</summary>
+    public R0926Closer Sheet => sheet;
 }

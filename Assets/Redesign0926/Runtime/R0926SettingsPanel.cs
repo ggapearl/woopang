@@ -9,7 +9,8 @@ using UnityEngine.UI;
 ///  · 보이는 각도(조금만 들어도 / 보통 / 똑바로 위) · 누워서 쓸 땐 숨기기 · 처음엔 접어 두기
 ///  · 숨긴 장소 수 (인디케이터 X — 앱을 다시 켜면 다시 보인다) · 숨긴 게 있으면 '모두 다시 보이기'
 ///  · 보물찾기 참여 · 새 게임 알림 · 가까워지면 진동 — 계정 설정이라 서버(/api/hunts/prefs)에 있다. 로그인 전엔 흐리게
-///  · 메뉴 모양 기본메뉴 / 물방울메뉴 (기본 물방울메뉴 — AR 화면 위 반투명 알약을 물방울 유리로, R0926Glass)
+///  · 디스플레이 선택 — 물방울 모드 · 네온 모드 (둘 다 고를 수 있다 · 처음엔 둘 다 켬 · 둘 다 끄면 예전 기본 모양 — 11-23 대표님 S8, R0926MenuStyle)
+///  · 창 배경 진하기 — 약하게 / 중간 / 진하게 = 70 / 80 / 90 % (기본 70 · 기본 모양이면 흐리게)
 ///  · 화면 프레임 30 / 60 (기본 30)
 ///  · 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 강하게 (기본 약하게)
 /// 이벤트는 아직 보낼 내용이 없어 '곧' 표시 — 켜고 끄는 값은 지금부터 저장된다.
@@ -34,11 +35,16 @@ public class R0926SettingsPanel : MonoBehaviour
     [SerializeField] private Text[] angleLabels;
     [SerializeField] private Image[] fpsTabs;             // 30 FPS / 60 FPS
     [SerializeField] private Text[] fpsLabels;
-    [SerializeField] private Image[] menuTabs;            // 기본메뉴 / 물방울메뉴
-    [SerializeField] private Text[] menuLabels;
+    [SerializeField] private Image[] displayButtons;      // 디스플레이 선택 — 물방울 모드 / 네온 모드 (칸마다 따로 켜고 끈다)
+    [SerializeField] private Image[] densityTabs;         // 창 배경 진하기 — 약하게 / 중간 / 진하게 (70 / 80 / 90 %)
+    [SerializeField] private Text[] densityLabels;
+    [SerializeField] private CanvasGroup densityGroup;    // 둘 다 끄면(기본 모양) 흐리게
     [SerializeField] private Image removeSwitch;         // 오브젝트 삭제 기능 (장소 박스 X)
+    [SerializeField] private Image nearStartSwitch;      // 앱 시작 시 근처 장소 보기 (11-18 J/M1)
     [SerializeField] private Image[] fadeTabs;            // 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 강하게
     [SerializeField] private Text[] fadeLabels;
+    [SerializeField] private Image[] peopleTabs;          // 사용자 오브젝트 유효시간 — 1시간 / 6시간 / 24시간 / 일주일 (11-17 D1)
+    [SerializeField] private Text[] peopleLabels;
     [SerializeField] private Text hiddenText;
     [SerializeField] private GameObject showAllRow;       // 모두 다시 보이기 (숨긴 장소가 있을 때만)
     [SerializeField] private Sprite switchOn;
@@ -72,9 +78,13 @@ public class R0926SettingsPanel : MonoBehaviour
     public void ToggleCollapsed() { R0926SkySettings.StartCollapsed = !R0926SkySettings.StartCollapsed; Refresh(); }
     public void SetAngle(int step) { R0926SkySettings.Angle = step; Refresh(); }
     public void SetFps(int step) { R0926FrameRate.Fps = step == 1 ? 60 : 30; Refresh(); }
-    public void SetMenuStyle(int step) { R0926MenuStyle.Droplet = step == 1; Refresh(); }
+    public void ToggleDroplet() { R0926MenuStyle.Droplet = !R0926MenuStyle.Droplet; Refresh(); }
+    public void ToggleNeon() { R0926MenuStyle.Neon = !R0926MenuStyle.Neon; Refresh(); }
+    public void SetDensity(int step) { R0926MenuStyle.Density = R0926MenuStyle.Densities[Mathf.Clamp(step, 0, R0926MenuStyle.Densities.Length - 1)]; Refresh(); }
     public void ToggleRemove() { R0926PlaceSettings.RemoveButton = !R0926PlaceSettings.RemoveButton; Refresh(); }
+    public void ToggleNearStart() { R0926PlaceSettings.NearOnStart = !R0926PlaceSettings.NearOnStart; Refresh(); }
     public void SetFarFade(int step) { R0926PlaceSettings.FarFade = step; Refresh(); }
+    public void SetPeopleWindow(int step) { R0926PeopleSettings.Window = step; Refresh(); }
     public void ShowAllHidden() { HiddenPlaces.ShowAll(); Refresh(); }
     public void ToggleHunt() => ToggleHuntPref("enabled");
     public void ToggleHuntNew() => ToggleHuntPref("notify_new");
@@ -153,6 +163,7 @@ public class R0926SettingsPanel : MonoBehaviour
         Sw(lyingSwitch, R0926SkySettings.HideWhenLying);
         Sw(collapsedSwitch, R0926SkySettings.StartCollapsed);
         Sw(removeSwitch, R0926PlaceSettings.RemoveButton);
+        Sw(nearStartSwitch, R0926PlaceSettings.NearOnStart);
         if (channelGroup != null)
         {
             channelGroup.alpha = R0926SkySettings.Enabled ? 1f : 0.4f;
@@ -160,9 +171,19 @@ public class R0926SettingsPanel : MonoBehaviour
             channelGroup.blocksRaycasts = R0926SkySettings.Enabled;
         }
         Seg(angleTabs, angleLabels, R0926SkySettings.Angle);
-        Seg(menuTabs, menuLabels, R0926MenuStyle.Droplet ? 1 : 0);
+        Check(0, R0926MenuStyle.Droplet);
+        Check(1, R0926MenuStyle.Neon);
+        Seg(densityTabs, densityLabels, System.Array.IndexOf(R0926MenuStyle.Densities, R0926MenuStyle.Density));
+        if (densityGroup != null)
+        {
+            bool live = !R0926MenuStyle.Classic;
+            densityGroup.alpha = live ? 1f : 0.4f;
+            densityGroup.interactable = live;
+            densityGroup.blocksRaycasts = live;
+        }
         Seg(fpsTabs, fpsLabels, R0926FrameRate.Fps == 60 ? 1 : 0);
         Seg(fadeTabs, fadeLabels, R0926PlaceSettings.FarFade);
+        Seg(peopleTabs, peopleLabels, R0926PeopleSettings.Window);
         if (hiddenText != null)
         {
             int n = HiddenPlaces.Count;
@@ -173,6 +194,38 @@ public class R0926SettingsPanel : MonoBehaviour
                     "非表示 {0}か所 · アプリを再起動すると戻ります", "已隐藏 {0} 个 · 重启应用后恢复", "{0} ocultos · vuelven al reiniciar"), n);
         }
         if (showAllRow != null) showAllRow.SetActive(HiddenPlaces.Count > 0);
+    }
+
+    private static readonly Color CheckBlue = new Color(125f / 255f, 185f / 255f, 1f, 1f);   // 시안 .dsel — 켜진 칸 파란 테두리 · 체크
+    private static readonly Color LabelOn = new Color(0.953f, 0.961f, 0.965f), LabelOff = new Color(0.549f, 0.584f, 0.616f);
+
+    // 디스플레이 선택 한 칸 — 켜짐: 파란 바탕 .16 · 파란 테두리 · 꽉 찬 체크 · 밝은 이름 / 꺼짐: 옅은 바탕 · 흰 테두리 · 빈 동그라미 · 흐린 이름
+    private void Check(int i, bool on)
+    {
+        if (displayButtons == null || i >= displayButtons.Length || displayButtons[i] == null) return;
+        var b = displayButtons[i];
+        b.color = on ? new Color(CheckBlue.r, CheckBlue.g, CheckBlue.b, 0.16f) : new Color(1f, 1f, 1f, 0.07f);
+        var t = b.transform;
+        Tint(t.Find("Ring"), on ? new Color(CheckBlue.r, CheckBlue.g, CheckBlue.b, 0.9f) : new Color(1f, 1f, 1f, 0.14f));
+        var box = t.Find("Inner/Box");
+        Tint(box, on ? CheckBlue : new Color(1f, 1f, 1f, 0.4f));
+        if (box != null)
+        {
+            Show(box.Find("Fill"), on);
+            Show(box.Find("Check"), on);
+        }
+        var label = t.Find("Inner/Text");
+        if (label != null && label.TryGetComponent<Text>(out var tx)) tx.color = on ? LabelOn : LabelOff;
+    }
+
+    private static void Tint(Transform t, Color c)
+    {
+        if (t != null && t.TryGetComponent<Image>(out var img)) img.color = c;
+    }
+
+    private static void Show(Transform t, bool on)
+    {
+        if (t != null && t.TryGetComponent<Image>(out var img)) img.enabled = on;
     }
 
     private void Sw(Image img, bool on)

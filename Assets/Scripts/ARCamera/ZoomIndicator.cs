@@ -108,6 +108,11 @@ public class ZoomIndicator : MonoBehaviour
     }
 
     /// <summary>
+    /// 지금부터 goneAfter 초에 다 사라지게 — 옅어지는 시간까지 그 안에 넣는다 (H1 — 핀치를 끝내고 2초)
+    /// </summary>
+    public void HideAt(float goneAfter) => HideAfterDelay(Mathf.Max(0f, goneAfter - fadeOutDuration));
+
+    /// <summary>
     /// 지정된 시간 후 인디케이터 숨김
     /// </summary>
     public void HideAfterDelay(float delay)

@@ -7,7 +7,8 @@ namespace Redesign0926
 {
     /// <summary>
     /// 노치 (11-09 대표님 「iOS환경에서 '하늘접기' 버튼을 눌럿을 때 … '노치' 에 반영」 · 「리스트에서 선택을 하면 아이폰의 경우 '노치' 화면에 화살표로 방향과 거리를」).
-    /// 캔버스 맨 위에 화면을 덮는 빈 판(Notch0926 · 손가락은 검은 판만 받는다)과 그 안의 검은 판 · 날씨 그림 · 화살표 · 거리 글을 만든다.
+    /// 캔버스 맨 위에 화면을 덮는 빈 판(Notch0926 · 손가락은 검은 판만 받는다)과 그 안의 검은 판 · 노치 아래 한 줄(날씨 · 장 그림 · 친구 얼굴 · 화살표 + 기온 · 거리)
+    /// · 접은 뒤 잠깐 뜨는 '터치하면 돌아가요' 줄을 만든다 (11-17 대표님 E — 판 폭은 노치 그대로, 그림과 글은 노치 아래 한 줄에 붙여).
     /// 크기와 자리는 기기마다 달라 R0926Notch 가 켜질 때 노치를 재서 정한다 — 여기선 모양과 연결만.
     /// </summary>
     public static partial class Redesign0926Apply
@@ -33,9 +34,14 @@ namespace Redesign0926
             var shapeImg = Img(shape, Spr("r0926_notch"), Color.black, Image.Type.Sliced);
             shapeImg.raycastTarget = true;
 
-            // 노치 양옆 칸 — 왼쪽 그림(날씨 · 화살표 · 도착 ✓), 오른쪽 글(기온 · 거리)
+            // 노치 아래 한 줄 — 그림(날씨 · 장 그림 · 친구 얼굴 · 화살표 · 도착 ✓) 바로 오른쪽에 글(기온 · 거리).
+            // 판에 꽉 차게 늘여 두고 판 밖은 자른다 — 좌우로 밀어 옆 장으로 넘길 때 그림 · 글이 판 가장자리에서 사라진다
             var content = FindOrCreate(shape.transform, "Content0926");
-            SetRect(RT(content), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), Vector2.zero, Vector2.zero);
+            var crt = RT(content);
+            crt.anchorMin = Vector2.zero; crt.anchorMax = Vector2.one; crt.pivot = new Vector2(0.5f, 1f);
+            crt.offsetMin = crt.offsetMax = Vector2.zero;
+            EditorUtility.SetDirty(crt);
+            EditorUtility.SetDirty(Ensure<RectMask2D>(content));
             var ccg = Ensure<CanvasGroup>(content); ccg.alpha = 0f; ccg.blocksRaycasts = false; ccg.interactable = false;
             var left = FindOrCreate(content.transform, "Left0926");
             SetRect(RT(left), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(-200, -60), new Vector2(80, 80));
@@ -51,6 +57,28 @@ namespace Redesign0926
             Img(check, Spr("r0926_i_check"), new Color(0.40f, 0.86f, 0.55f, 1f), Image.Type.Simple).raycastTarget = false;
             check.GetComponent<Image>().preserveAspect = true;
             check.SetActive(false);
+            // 보물찾기 · 축제 · 핫플 장 — 그 장 첫 줄의 그림
+            var page = FindOrCreate(left.transform, "PageIcon0926");
+            SetRect(RT(page), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 64));
+            var pageImg = Img(page, null, Color.white, Image.Type.Simple);
+            pageImg.raycastTarget = false; pageImg.preserveAspect = true;
+            page.SetActive(false);
+            // 친구 장 — 둥근 바탕에 첫 글자, 사진이 오면 덮는다 (하늘 판 친구 줄과 같은 꼴)
+            var face = FindOrCreate(left.transform, "Face0926");
+            SetRect(RT(face), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(64, 64));
+            var faceImg = Img(face, Spr("r0926_circle"), new Color(0.97f, 0.78f, 0.45f), Image.Type.Simple);
+            faceImg.raycastTarget = false;
+            Ensure<Mask>(face).showMaskGraphic = true;
+            var ini = FindOrCreate(face.transform, "Initial0926");
+            Stretch(RT(ini));
+            var iniT = Txt(ini, "?", 33, Dark, TextAnchor.MiddleCenter, FontStyle.Bold);
+            iniT.horizontalOverflow = HorizontalWrapMode.Overflow; iniT.verticalOverflow = VerticalWrapMode.Overflow;
+            ini.transform.SetAsFirstSibling();
+            var ph = FindOrCreate(face.transform, "Photo0926");
+            Stretch(RT(ph));
+            var phImg = Ensure<RawImage>(ph); phImg.raycastTarget = false; phImg.enabled = false;
+            EditorUtility.SetDirty(phImg);
+            face.SetActive(false);
             var right = FindOrCreate(content.transform, "Right0926");
             SetRect(RT(right), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(200, -60), new Vector2(160, 120));
             var rt = Txt(right, "19°", 58, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold);
@@ -69,6 +97,11 @@ namespace Redesign0926
             SetRect(RT(hint), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -220), new Vector2(900, 58));
             var ht = Txt(hint, "", 41, new Color(1f, 1f, 1f, 0.62f), TextAnchor.MiddleCenter, FontStyle.Normal);
             ht.horizontalOverflow = HorizontalWrapMode.Overflow;
+            // 접은 뒤 잠깐 — '터치하면 돌아가요' (판이 줄 아래로 조금 늘어난다 · 글 알파는 R0926Notch)
+            var note = FindOrCreate(shape.transform, "Note0926");
+            SetRect(RT(note), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -150), new Vector2(380, 48));
+            var nt = Txt(note, "", 34, new Color(1f, 1f, 1f, 0f), TextAnchor.MiddleCenter, FontStyle.Normal);
+            nt.horizontalOverflow = HorizontalWrapMode.Overflow; nt.verticalOverflow = VerticalWrapMode.Overflow;
             shape.SetActive(false);
 
             // 덮는 창 — 물방울메뉴와 같은 목록 (보물 축하 화면은 틀이 늘 켜져 있고 Panel 이 켜진다)
@@ -93,7 +126,12 @@ namespace Redesign0926
             so.FindProperty("weatherIcon").objectReferenceValue = icon;
             so.FindProperty("arrow").objectReferenceValue = RT(arrow);
             so.FindProperty("check").objectReferenceValue = RT(check);
+            so.FindProperty("pageIcon").objectReferenceValue = pageImg;
+            so.FindProperty("face").objectReferenceValue = faceImg;
+            so.FindProperty("faceInitial").objectReferenceValue = iniT;
+            so.FindProperty("facePhoto").objectReferenceValue = phImg;
             so.FindProperty("rightText").objectReferenceValue = rt;
+            so.FindProperty("noteText").objectReferenceValue = nt;
             so.FindProperty("wide").objectReferenceValue = wcg;
             so.FindProperty("titleText").objectReferenceValue = tt;
             so.FindProperty("hintText").objectReferenceValue = ht;

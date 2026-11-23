@@ -20,23 +20,21 @@ public class R0926SlideIn : MonoBehaviour
     private float t;
     private bool running;
     private bool skipNext;
-    private float runDistance, runTime;   // 이번 올라오기 — 보통은 distance·duration, 도크에서 바꿀 땐 짧게 (Rise)
-    private bool fade;                    // 이번엔 투명 → 불투명도 같이
+    private float runDistance, runTime;   // 이번 올라오기 (통째로면 자기 높이 + 60)
+    private bool fade;                    // 이번엔 투명 → 불투명도 같이 (통째로 올라올 땐 투명도를 건드리지 않는다)
 
     /// <summary>다음에 켜질 때 한 번은 올라오지 않고 제자리에 바로 선다 — 메시지 목록 ↔ 대화방은 옆으로 넘어가서</summary>
     public void SkipNext() => skipNext = true;
     public void ClearSkip() => skipNext = false;
 
-    /// <summary>도크에서 다른 창으로 바꿀 때 (R0926DockSlotSwap) — 통째로 올라오는 대신 조금 아래에서 옅게 시작해 올라온다.
-    /// 막 켜져 올라오기 시작한 때만 바꾼다</summary>
-    public bool Rise(float dist, float time)
+    /// <summary>도크에서 다른 창으로 바꿀 때 (R0926DockSlotSwap) — 올라오지 않고 제자리에 바로 선다. 옅게 → 진하게는 창 쪽(R0926Closer.DissolveIn).
+    /// 11-18 대표님 H2 「슬라이드 없이」 — 예전엔 56 아래에서 옅게 올라왔다. 막 켜져 올라오기 시작한 때만</summary>
+    public bool Stand()
     {
         if (!running || t > 0.1f) return false;
-        runDistance = dist;
-        runTime = time;
-        fade = true;
-        t = 0f;
-        Step();
+        running = false;
+        Set(0f);
+        if (group != null) group.alpha = 1f;
         return true;
     }
 
@@ -60,6 +58,7 @@ public class R0926SlideIn : MonoBehaviour
         runDistance = fullHeight && rt != null ? rt.rect.height + 60f : distance;
         runTime = duration;
         fade = !fullHeight;
+        if (!fade && group != null) group.alpha = 1f;
         t = 0f;
         running = true;
         Step();
@@ -85,7 +84,7 @@ public class R0926SlideIn : MonoBehaviour
         float p = runTime > 0f ? Mathf.Clamp01(t / runTime) : 1f;
         float e = 1f - Mathf.Pow(1f - p, fade ? 3f : 4f);   // ease-out
         Set(-runDistance * (1f - e));
-        if (group != null) group.alpha = fade ? Mathf.Clamp01(p * 1.6f) : 1f;
+        if (fade && group != null) group.alpha = Mathf.Clamp01(p * 1.6f);   // 통째로 올라오는 동안 디졸브로 닫히면 투명도는 그쪽 몫
         if (p >= 1f) running = false;
     }
 

@@ -379,7 +379,6 @@ namespace Redesign0926
                 hso.FindProperty("uploadPage").objectReferenceValue = page;
                 hso.FindProperty("swipe").objectReferenceValue = swipe;
                 hso.FindProperty("closeX").objectReferenceValue = xUp != null ? RT(xUp) : null;
-                hso.FindProperty("sheet").objectReferenceValue = wrapGo.GetComponent<R0926SlideIn>();
                 hso.FindProperty("newBadge").objectReferenceValue = fresh != null ? fresh.gameObject : null;
                 hso.FindProperty("addSlot").floatValue = SlotAdd;
                 hso.FindProperty("huntSlot").floatValue = SlotHunt;

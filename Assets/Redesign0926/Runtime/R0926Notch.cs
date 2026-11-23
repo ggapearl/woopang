@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 #if UNITY_IOS && !UNITY_EDITOR
 using System.Runtime.InteropServices;
@@ -10,19 +11,25 @@ using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
 /// <summary>
-/// 아이폰 노치(또는 다이내믹 아일랜드) 양옆으로 검은 판을 늘려 작은 정보를 띄운다 — 노치가 있는 아이폰의 세로 화면에서만.
+/// 아이폰 노치(또는 다이내믹 아일랜드)를 아래로 한 줄 늘려 작은 정보를 띄운다 — 노치가 있는 아이폰의 세로 화면에서만.
 /// 안드로이드 · 노치 없는 아이폰 · 가로 화면에선 아무것도 하지 않는다 (예전 그대로).
-///  · 하늘을 접으면(R0926SkyWeather) 날씨 그림 + 기온 — 휴대폰을 내려도 보인다. 누르면 하늘 판을 화면 위쪽에 고정해 편다 (11-09 대표님
-///    「'하늘접기' 버튼을 눌럿을 때 … '노치' 에 반영 … '날씨 이모지' 와 '온도' 정도만」 · 「노치를 터치해서는 … 화면 상단에 고정해둬」)
+/// 판의 폭은 그 기기의 노치 그대로 — 양옆의 시계 · 배터리 · LTE 는 가리지 않고, 그림과 글은 노치 아래 한 줄에 붙여 쓴다
+/// (11-17 대표님 「노치만 덮는게 아니라 해당 줄 전체를 덮어서 시간, 배터리, LTE 여부 등 다 안보이도록 … 각 기계에 맞게 노치사이즈를 맞춰서
+///  해당 부분에만」 · 「날씨 로고랑 온도는 바로 옆에 붙도록」). 예전엔 노치 양옆으로 늘리고 그동안 상태 막대를 숨겼다
+///  · 하늘을 접으면(R0926SkyWeather) 하늘 판의 장 — 날씨 그림 + 기온. 좌우로 밀면 근처 보물찾기 · 축제 · 핫플 · 친구의 첫 줄(그림 + 거리)
+///    (11-17 「좌우로 스와이프해서 각각의 친구나 보물찾기 정보등을 노치 내에서」 — R0926SkyPages.NotchItems). 누르면 하늘 판을 화면 위쪽에
+///    고정해 그 장으로 편다 (「노치를 터치하면 바로 상단에 고정된 채로」). 접을 때마다 잠깐 '터치하면 돌아가요'
 ///  · 목록에서 장소를 고르면 화살표 + 거리 '↑ 45m' — 멀어서 AR 에 없어도 어느 쪽으로 얼마나 가면 되는지 (11-09 대표님 「노치 화면에 화살표로
-///    방향과 거리를 추적해서」). 처음 3초는 아래로 늘어나 장소 이름과 '누르면 안내를 끝내요'. 작을 때 누르면 다시 이름, 이름이 보일 때 누르면 끝.
-///    15m 안에 1.5초 머물면 '도착했어요' 뒤 끝, 20분이 지나도 끝
+///    방향과 거리를 추적해서」). 처음 3초는 넓게 펴져 장소 이름과 '누르면 안내를 끝내요' — 그동안만 상태 막대를 숨긴다(판이 노치 양옆까지 덮는다).
+///    작을 때 누르면 다시 이름, 이름이 보일 때 누르면 끝.
+///    아래 화살표(R0926GuideArrow)가 같은 곳을 안내하는 동안은 거리 · 도착을 화살표가 정하고 노치는 같은 순간 '도착했어요', 끝도 같이 — 10m · 한 번만
+///    (11-16 둘째 대표님 「노치 위 표시에서도 10m 거리까지 도착하면 완성 … 두번 도착했다고 나오지 않도록」). 화살표가 없을 때만 스스로 10m 안에 1.5초. 20분이 지나도 끝
 ///  · 창(목록 · 메세지 · 프로필 …)이 화면을 덮으면 숨는다 — 안내는 이어지고 창을 닫으면 다시 보인다
+///  · 노치 아래로 내려온 만큼(DropPx) 위쪽 칩 · 상태 알약 · 확대 표시(R0926SafeInset 위쪽)가 비켜 내려간다
 /// 노치 자리: Screen.cutouts(맞아 보일 때만) → 기기 이름 · 위쪽 안전영역으로 고른 표. Unity 의 아이폰 노치 표는 새 기기에서 비어 있거나 틀린다(UUM-56430).
 /// 판은 진짜 노치보다 조금 작은 크기에서 열리고 닫힌 뒤엔 꺼 둔다 — 표가 몇 pt 틀려도 노치 밖으로 삐져나오지 않게.
-/// 판이 떠 있는 동안 상태 막대(시계 · 배터리)는 숨긴다 — 우팡은 상태 막대를 보이게 두는데 그 자리가 바로 노치 양옆이다
 /// </summary>
-public class R0926Notch : MonoBehaviour, IPointerClickHandler
+public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     [SerializeField] private RectTransform shape;
     [SerializeField] private Image shapeImage;
@@ -30,35 +37,49 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
     [SerializeField] private Sprite notchSprite;
     [Tooltip("다이내믹 아일랜드 — 알약 (r0926_pill)")]
     [SerializeField] private Sprite pillSprite;
+    [Tooltip("노치 아래 한 줄 — 판에 꽉 차게 늘어나 있고, 좌우로 밀려난 그림 · 글은 판 밖에서 잘린다 (RectMask2D)")]
     [SerializeField] private CanvasGroup content;
+    [Tooltip("그림 칸 — 날씨 · 장 그림 · 친구 얼굴 · 화살표 · 도착 ✓")]
     [SerializeField] private RectTransform leftSlot;
+    [Tooltip("글 칸 — 기온 · 거리 (그림 바로 오른쪽)")]
     [SerializeField] private RectTransform rightSlot;
     [SerializeField] private R0926WeatherIcon weatherIcon;
+    [Tooltip("보물찾기 · 축제 · 핫플 장의 그림")]
+    [SerializeField] private Image pageIcon;
+    [Tooltip("친구 장 — 둥근 바탕(첫 글자) · 사진")]
+    [SerializeField] private Image face;
+    [SerializeField] private Text faceInitial;
+    [SerializeField] private RawImage facePhoto;
     [SerializeField] private RectTransform arrow;
     [SerializeField] private RectTransform check;
     [SerializeField] private Text rightText;
-    [Tooltip("아래로 늘어났을 때 — 장소 이름 · 작은 안내 줄")]
+    [Tooltip("접은 뒤 잠깐 — '터치하면 돌아가요' (그동안 판이 줄 아래로 조금 늘어난다)")]
+    [SerializeField] private Text noteText;
+    [Tooltip("넓게 펴졌을 때 — 장소 이름 · 작은 안내 줄")]
     [SerializeField] private CanvasGroup wide;
     [SerializeField] private Text titleText;
     [SerializeField] private Text hintText;
     [Tooltip("이 창들이 떠 있는 동안 숨는다 (물방울메뉴의 GlassCovers 와 같은 목록)")]
     [SerializeField] private GameObject[] covers;
     [SerializeField] private R0926SkyWeather sky;
-    [SerializeField] private float arriveMeters = 15f;
 
-    private enum Mode { None, Weather, Guide }
+    private enum Mode { None, Sky, Guide }
 
     // 크기 (pt — 기기 배율로 캔버스 단위로 바꾼다)
-    private const float NotchExtra = 4f;     // 노치 아이폰은 판을 노치보다 이만큼 길게 — 그림이 너무 작지 않게
-    private const float Ear = 46f;           // 노치 옆 한 칸의 폭 (최소)
-    private const float EarPad = 9f;
-    private const float IconPt = 24f, ArrowPt = 19f, TextPt = 17f, TitlePt = 15.5f, HintPt = 12f;
-    private const float ExpandGap = 6f, TitleLine = 22f, HintLine = 17f, ExpandBottom = 9f, ExpandMinW = 290f;
-    private const float ExpandTime = 3f, ArriveHold = 1.5f, ArriveShow = 4f, MaxGuideSeconds = 20f * 60f;
+    private const float NotchExtra = 4f;     // 노치 아이폰 판의 둥근 모서리 기준 높이 = 노치 + 이만큼 (아일랜드는 + 2)
+    private const float RowPt = 27f;         // 노치 아래 한 줄
+    private const float RowPad = 7f, RowGap = 4f;
+    private const float NoteLine = 16f, NoteBottom = 4f, NoteAlpha = 0.72f;
+    private const float IconPt = 21f, ArrowPt = 17f, TextPt = 16f, MinTextPt = 11f, NotePt = 11.5f, TitlePt = 15.5f, HintPt = 12f;
+    private const float ExpandGap = 2f, TitleLine = 22f, HintLine = 17f, ExpandBottom = 9f, ExpandMinW = 290f;
+    private const float DropGap = 6f;        // 노치 아래 줄과 그 밑 칩 · 알약 사이
+    private const float FlingPt = 260f;      // 이보다 빨리 튕기면 조금만 밀어도 옆 장 (pt/초)
+    private const float ExpandTime = 3f, NoteTime = 2.6f, FoldWait = 2f;
+    private const float SoloArriveMeters = 10f, ArriveHold = 1.5f, ArriveShow = 4f, MaxGuideSeconds = 20f * 60f;
 
     public static R0926Notch Instance { get; private set; }
 
-    /// <summary>노치가 있는 아이폰의 세로 화면 — 하늘 칩 대신 노치에 날씨, 목록 줄은 노치 안내</summary>
+    /// <summary>노치가 있는 아이폰의 세로 화면 — 하늘 칩 대신 노치에 하늘 장, 목록 줄은 노치 안내</summary>
     public static bool Available
     {
         get
@@ -70,10 +91,36 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         }
     }
 
-    /// <summary>하늘을 접은 동안 노치에 날씨 — 하늘 판이 매 프레임 알린다 (바뀐 것만 다시 그린다)</summary>
-    public static void SetWeather(bool on, int code, bool day, int temp)
+    /// <summary>노치 판이 위쪽 안전영역 밑으로 내려온 만큼 (화면 px · 그 밑 칩까지의 틈 포함) — 위쪽 안전영역만큼 미는 것(R0926SafeInset)이 그만큼 더 내려간다</summary>
+    public static float DropPx { get; private set; }
+
+    /// <summary>하늘을 노치로 접은 동안 — 하늘 판이 매 프레임 알린다. weather 면 첫 장이 날씨, 나머지 장은 R0926SkyPages.NotchItems (바뀐 것만 다시 그린다)</summary>
+    public static void SetSky(bool on, bool weather, int code, bool day, int temp)
     {
-        if (Instance != null) Instance.Weather(on, code, day, temp);
+        if (Instance != null) Instance.Sky(on, weather, code, day, temp);
+    }
+
+    /// <summary>하늘 판을 노치로 접었다 ('하늘 접기' · 위쪽에 고정한 판을 위로 밀기) — 판이 보던 장부터, 노치가 뜨면 잠깐 '터치하면 돌아가요'</summary>
+    public static void Folded(R0926SkyPages.Kind page)
+    {
+        var n = Instance;
+        if (n == null) return;
+        n.pageKind = page;
+        n.page = 0;       // 그 장이 노치에 없으면(라이브 등) 첫 장
+        n.itemVer = -1;   // 다음 프레임에 그 장을 찾는다
+        n.foldAt = Time.unscaledTime;
+    }
+
+    /// <summary>노치 아래 줄의 가운데 (화면 px) — 하늘 판이 접힐 때 이리로 들어간다. 노치가 없으면 false</summary>
+    public static bool RowCenter(out Vector2 screen)
+    {
+        screen = Vector2.zero;
+        var n = Instance;
+        if (n == null || !n.isActiveAndEnabled) return false;
+        n.Measure();
+        if (!n.hasCut) return false;
+        screen = new Vector2(UnityEngine.Device.Screen.width * 0.5f, UnityEngine.Device.Screen.height - (n.RowTopPt + RowPt * 0.5f) * n.ppt);
+        return true;
     }
 
     /// <summary>목록에서 고른 장소로 노치 안내 — 노치가 없으면 false (예전처럼 줄에 알린다)</summary>
@@ -85,23 +132,45 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         if (Instance != null) Instance.EndGuide();
     }
 
+    /// <summary>아래 화살표가 같은 곳의 도착을 정했다 — 노치도 같은 순간 '도착했어요' (도착은 한 번 · 떨림은 화살표 쪽 한 번)</summary>
+    public static void GuideArrived(float lat, float lon)
+    {
+        var n = Instance;
+        if (n != null && n.guiding && n.arrivedAt < 0f && n.gLat == lat && n.gLon == lon) n.Arrive(Time.unscaledTime, false);
+    }
+
+    /// <summary>아래 화살표의 안내가 끝났다 (도착 뒤 · × · 20분 · 가까이 카드가 이어 받음) — 같은 곳을 안내하던 노치도 같이 끝</summary>
+    public static void GuideEnded(float lat, float lon)
+    {
+        var n = Instance;
+        if (n != null && n.guiding && n.gLat == lat && n.gLon == lon) n.EndGuide();
+    }
+
     // 노치 자리 (pt) — 화면이 바뀔 때만 다시 잰다
     private bool measured, hasCut, island;
     private int mW, mH;
     private Rect mSafe;
-    private float cutWpt, cutHpt, cutTopPt, ppt = 3f;
+    private float cutWpt, cutHpt, cutTopPt, insetPt, ppt = 3f;
     private float upt, sizedUpt = -1f;       // 캔버스 단위 / pt
 
     // 보이는 것
     private Mode shown = Mode.None;
     private bool dirty;
-    private float open, openVel, expand, expandVel, fade;
-    private float expandUntil, pendingExpand;
+    private float open, openVel, expand, expandVel, note, noteVel, fade;
+    private float expandUntil, pendingExpand, noteUntil, foldAt = -1f;
     private string titleWord = "", hintWord = "";
 
-    // 날씨
-    private bool weatherOn, wDay = true;
+    // 하늘 장 — [날씨] + 판의 다른 장 첫 줄. 보던 장(pageKind)이 그대로 있으면 그 장을 지킨다
+    private bool skyOn, weatherOn, itemsWeather, wDay = true;
     private int wCode = -1, wTemp = int.MinValue;
+    private readonly List<R0926SkyPages.NotchItem> items = new List<R0926SkyPages.NotchItem>();
+    private int itemVer = -1, page;
+    private R0926SkyPages.Kind pageKind = R0926SkyPages.Kind.Weather;
+
+    // 좌우로 밀기 (캔버스 단위) — 줄은 판의 몸통 폭에서 잘린다 (노치 어깨 밖으로 비치지 않게)
+    private RectMask2D clip;
+    private bool sliding;
+    private float slide, slideVel, dragX, lastX, lastT, flingV;
 
     // 안내
     private bool guiding, hasAngle;
@@ -119,9 +188,14 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
     {
         Instance = this;
         if (shape != null) shape.gameObject.SetActive(false);
+        clip = content != null ? content.GetComponent<RectMask2D>() : null;
     }
 
-    private void OnDisable() => StatusBar(false);
+    private void OnDisable()
+    {
+        StatusBar(false);
+        DropPx = 0f;
+    }
 
     private void OnDestroy()
     {
@@ -133,7 +207,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
 #endif
     private bool barHidden;
 
-    // 노치 옆 판이 떠 있는 동안 상태 막대를 숨기고, 판이 거의 닫히면 다시 보인다 (StatusBarStylePlugin.mm)
+    // 판이 넓게 펴진 동안(안내 시작 · 도착 — 노치 양옆까지 덮는다)만 상태 막대를 숨기고 접히면 다시 보인다 (StatusBarStylePlugin.mm)
     private void StatusBar(bool hide)
     {
         if (hide == barHidden) return;
@@ -152,6 +226,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         if (measured && w == mW && h == mH && safe == mSafe) return;
         measured = true; mW = w; mH = h; mSafe = safe;
         hasCut = Cutout(w, h, safe, out island, out cutWpt, out cutHpt, out cutTopPt, out ppt);
+        insetPt = (h - safe.yMax) / Mathf.Max(0.01f, ppt);
         sizedUpt = -1f;   // 가로로 돌리면 숨기만 한다 — 안내는 이어지고 세로로 돌아오면 다시 보인다
     }
 
@@ -183,26 +258,26 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
             float cw = c.width / scale, ch = c.height / scale;
             if (Mathf.Abs(c.center.x - w * 0.5f) > w * 0.08f || h - c.yMax > 2f * scale) continue;
             if (cw < 120f || cw > 260f || ch < 24f || ch > 42f) continue;
-            wPt = cw + 4f; hPt = ch; topPt = 0f;
+            wPt = cw + 2f; hPt = ch; topPt = 0f;
             return true;
         }
         NotchTable(major, minor, inset, out wPt, out hPt);
         return true;
     }
 
-    // 실제 노치보다 몇 pt 넓게 잡는다 — 좁게 잡으면 옆 칸의 그림·글이 진짜 노치 밑으로 숨는다
+    // 실제 노치보다 2pt 넓게 (양쪽 1pt) — 아래로 늘인 판이 노치와 한 몸으로 이어 보이게. 양옆의 시계 · 배터리 자리는 건드리지 않는다
     private static void NotchTable(int major, int minor, float inset, out float wPt, out float hPt)
     {
-        if (major == 14 && minor == 4) { wPt = 182f; hPt = 36f; return; }                            // 13 mini
-        if (major == 14 || major == 17 && minor == 5) { wPt = 170f; hPt = 34f; return; }             // 13 · 13 Pro · 13 Pro Max · 14 · 14 Plus · 16e
-        if (major == 13 && minor == 1) { wPt = 232f; hPt = 36f; return; }                            // 12 mini
-        if (major == 13) { wPt = 216f; hPt = 33f; return; }                                          // 12 · 12 Pro · 12 Pro Max
-        if (major == 11 && minor == 8 || major == 12 && minor == 1) { wPt = 236f; hPt = 34f; return; }   // XR · 11
-        if (major >= 10 && major <= 12) { wPt = 214f; hPt = 31f; return; }                           // X · XS · XS Max · 11 Pro · 11 Pro Max
-        // 모르는 기기 — 위쪽 안전영역으로 (넓은 쪽으로)
-        if (inset < 46f) { wPt = 214f; hPt = 31f; }
-        else if (inset < 49f) { wPt = 236f; hPt = 34f; }
-        else { wPt = 232f; hPt = 36f; }
+        if (major == 14 && minor == 4) { wPt = 177f; hPt = 36f; return; }                            // 13 mini
+        if (major == 14 || major == 17 && minor == 5) { wPt = 164f; hPt = 34f; return; }             // 13 · 13 Pro · 13 Pro Max · 14 · 14 Plus · 16e
+        if (major == 13 && minor == 1) { wPt = 228f; hPt = 36f; return; }                            // 12 mini
+        if (major == 13) { wPt = 212f; hPt = 33f; return; }                                          // 12 · 12 Pro · 12 Pro Max
+        if (major == 11 && minor == 8 || major == 12 && minor == 1) { wPt = 232f; hPt = 34f; return; }   // XR · 11
+        if (major >= 10 && major <= 12) { wPt = 211f; hPt = 31f; return; }                           // X · XS · XS Max · 11 Pro · 11 Pro Max
+        // 모르는 기기 — 위쪽 안전영역으로 (좁은 쪽으로 — 넓게 잡으면 시계 · 배터리를 가린다)
+        if (inset < 46f) { wPt = 211f; hPt = 31f; }
+        else if (inset < 49f) { wPt = 164f; hPt = 34f; }
+        else { wPt = 177f; hPt = 36f; }
     }
 
     private static bool IslandModel(int major, int minor)
@@ -232,15 +307,34 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         return bestD < 20f ? w / best : (w >= 950 ? 3f : 2f);
     }
 
-    // ── 날씨 · 안내 ───────────────────────────────────────────
+    // 화면 위에서 노치(아일랜드) 아래 변까지 (pt) — 그 밑이 그림 · 글 줄
+    private float RowTopPt => island ? cutTopPt + cutHpt : cutHpt;
 
-    private void Weather(bool on, int code, bool day, int temp)
+    // ── 하늘 장 · 안내 ────────────────────────────────────────
+
+    private void Sky(bool on, bool weather, int code, bool day, int temp)
     {
-        weatherOn = on && hasCut;
-        if (!on) return;
+        skyOn = on && hasCut;
+        bool w = weather && code >= 0;
+        if (w != weatherOn) { weatherOn = w; itemVer = -1; }
+        if (!w) return;
         if (code == wCode && day == wDay && temp == wTemp) return;
         wCode = code; wDay = day; wTemp = temp;
-        if (shown == Mode.Weather) dirty = true;
+        if (shown == Mode.Sky) dirty = true;
+    }
+
+    private void SyncItems()
+    {
+        int ver = R0926SkyPages.NotchVersion;
+        if (ver == itemVer && weatherOn == itemsWeather) return;
+        itemVer = ver;
+        itemsWeather = weatherOn;
+        items.Clear();
+        if (weatherOn) items.Add(new R0926SkyPages.NotchItem { kind = R0926SkyPages.Kind.Weather });
+        items.AddRange(R0926SkyPages.NotchItems);
+        int at = items.FindIndex(x => x.kind == pageKind);
+        page = at >= 0 ? at : Mathf.Clamp(page, 0, Mathf.Max(0, items.Count - 1));
+        if (shown == Mode.Sky) dirty = true;
     }
 
     private bool StartGuide(float lat, float lon, Target target, string name)
@@ -279,13 +373,19 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
             return;
         }
         bool haveLoc = GeoHere.TryGet(out double lat, out double lon, out _);
-        if (haveLoc)
+        // 아래 화살표가 같은 곳을 안내하면 거리 · 도착은 화살표 것 — 둘이 다른 거리를 보이거나 '도착했어요'가 두 번 나오지 않게 (11-16 둘째)
+        if (R0926GuideArrow.Leads(gLat, gLon, out float led))
+        {
+            nearSince = -1f;
+            if (led >= 0f) meters = led;
+        }
+        else if (haveLoc)
         {
             meters = (float)GeoHere.Meters(lat, lon, gLat, gLon);
-            if (meters <= arriveMeters)
+            if (meters <= SoloArriveMeters)
             {
                 if (nearSince < 0f) nearSince = now;
-                if (now - nearSince >= ArriveHold) { Arrive(now); return; }
+                if (now - nearSince >= ArriveHold) { Arrive(now, true); return; }
             }
             else nearSince = -1f;
         }
@@ -305,7 +405,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         }
     }
 
-    private void Arrive(float now)
+    private void Arrive(float now, bool haptic)
     {
         arrivedAt = now;
         titleWord = L("도착했어요", "You've arrived", "到着しました", "已到达", "Has llegado");
@@ -313,7 +413,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         expandUntil = now + ArriveShow;
         pendingExpand = 0f;
         if (shown == Mode.Guide) dirty = true;
-        Haptic();
+        if (haptic) Haptic();   // 화살표가 정한 도착이면 떨림은 화살표 쪽 한 번
     }
 
     // 기기가 향한 쪽 기준 그 장소의 방향 (도, 오른쪽 +) — AR 에 떠 있으면 카메라와 오브젝트 사이(목록 줄 방향과 같은 셈), 아니면 방위와 기기 방향
@@ -399,8 +499,9 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         int sh = UnityEngine.Device.Screen.height;
         upt = hasCut && sh > 0 ? ((RectTransform)transform).rect.height / sh * ppt : 0f;
         UpdateGuide(now, dt);
+        if (skyOn) SyncItems();
 
-        Mode want = !hasCut ? Mode.None : guiding ? Mode.Guide : weatherOn ? Mode.Weather : Mode.None;
+        Mode want = !hasCut ? Mode.None : guiding ? Mode.Guide : skyOn && items.Count > 0 ? Mode.Sky : Mode.None;
         bool show = want != Mode.None && upt > 0f && !Covered();
 
         // 내용이 바뀌면 글·그림이 사라진 뒤에 갈아 끼운다 (닫히는 중엔 그대로 두고 판과 같이 사라진다)
@@ -408,25 +509,41 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         if (target != shown)
         {
             fade = Mathf.MoveTowards(fade, 0f, dt * 10f);
-            if (fade <= 0f || open < 0.05f) { shown = target; dirty = true; }
+            if (fade <= 0f || open < 0.05f) { shown = target; dirty = true; sliding = false; slide = slideVel = 0f; }
         }
         else fade = Mathf.MoveTowards(fade, 1f, dt * 6f);
         if (upt > 0f && Mathf.Abs(upt - sizedUpt) > sizedUpt * 0.005f) Size();
         if (dirty) Refresh();
 
         if (pendingExpand > 0f && show && shown == Mode.Guide && open > 0.85f) { expandUntil = now + pendingExpand; pendingExpand = 0f; }
+        if (foldAt >= 0f)
+        {
+            // 접은 뒤 노치가 펴지면 잠깐 '터치하면 돌아가요' — 그사이 안내가 노치를 쓰면 건너뛴다
+            if (show && shown == Mode.Sky && open > 0.85f) { noteUntil = now + NoteTime; foldAt = -1f; }
+            else if (now - foldAt > FoldWait) foldAt = -1f;
+        }
         bool wantExpand = show && shown == Mode.Guide && now < expandUntil;
+        bool wantNote = show && shown == Mode.Sky && now < noteUntil;
         Spring(ref open, ref openVel, show ? 1f : 0f, dt);
         Spring(ref expand, ref expandVel, wantExpand ? 1f : 0f, dt);
-        if (!show && open < 0.01f && Mathf.Abs(openVel) < 0.05f) open = openVel = expand = expandVel = 0f;
+        Spring(ref note, ref noteVel, wantNote ? 1f : 0f, dt);
+        if (!show && open < 0.01f && Mathf.Abs(openVel) < 0.05f) open = openVel = expand = expandVel = note = noteVel = 0f;
 
         bool on = show || open > 0f;
-        StatusBar(show || open > 0.3f);
+        StatusBar(on && expand > 0.3f);
         if (shape.gameObject.activeSelf != on) shape.gameObject.SetActive(on);
-        if (!on) return;
+        if (!on) { DropPx = 0f; return; }
+        if (!sliding) slide = Mathf.Abs(slide) < 0.5f ? 0f : Mathf.SmoothDamp(slide, 0f, ref slideVel, 0.13f, Mathf.Infinity, dt);
         Layout();
-        if (content != null) content.alpha = fade * Mathf.Clamp01((open - 0.55f) / 0.4f);
+        float rowW = Mathf.Max(1f, cutWpt * upt);
+        if (content != null) content.alpha = fade * Mathf.Clamp01((open - 0.55f) / 0.4f) * (1f - Mathf.Clamp01(Mathf.Abs(slide) / rowW * 1.3f));
         if (wide != null) wide.alpha = fade * Mathf.Clamp01((expand - 0.5f) / 0.4f);
+        if (noteText != null)
+        {
+            var c = noteText.color;
+            float a = NoteAlpha * fade * Mathf.Clamp01((note - 0.45f) / 0.45f);
+            if (!Mathf.Approximately(c.a, a)) { c.a = a; noteText.color = c; }
+        }
         shapeImage.raycastTarget = show && open > 0.5f;
     }
 
@@ -445,82 +562,145 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
         x += v * dt;
     }
 
-    private float CompactH => cutHpt * upt + (island ? 2f : NotchExtra) * upt;
     private float Shoulder => island ? 0f : 24f / Mathf.Max(0.01f, shapeImage.pixelsPerUnitMultiplier);
 
     // 기기 배율이 바뀌면 (처음 · 해상도 바뀜) 그림 · 글 크기와 판 모양
     private void Size()
     {
         sizedUpt = upt;
-        float ch = CompactH;
+        float ch = (cutHpt + (island ? 2f : NotchExtra)) * upt;
         shapeImage.sprite = island ? pillSprite : notchSprite;
         shapeImage.type = Image.Type.Sliced;
-        // 알약은 높이의 반이 둥근 끝, 노치는 아래 모서리 반지름이 높이의 0.4 (그림의 반지름 40px)
+        // 둥근 모서리는 노치 높이로 정한다 — 알약은 아일랜드와 같은 둥글기, 노치는 아래 모서리 반지름이 그 높이의 0.4 (그림의 반지름 40px). 아래로 늘어나도 그대로
         shapeImage.pixelsPerUnitMultiplier = island ? 126f / ch : 100f / ch;
-        if (weatherIcon != null) ((RectTransform)weatherIcon.transform).sizeDelta = Vector2.one * IconPt * upt;
+        Vector2 icon = Vector2.one * IconPt * upt;
+        if (weatherIcon != null) ((RectTransform)weatherIcon.transform).sizeDelta = icon;
+        if (pageIcon != null) pageIcon.rectTransform.sizeDelta = icon;
+        if (face != null) face.rectTransform.sizeDelta = icon;
+        if (faceInitial != null) faceInitial.fontSize = Mathf.RoundToInt(IconPt * 0.52f * upt);
         if (arrow != null) arrow.sizeDelta = Vector2.one * ArrowPt * upt;
         if (check != null) check.sizeDelta = Vector2.one * ArrowPt * upt;
-        if (rightText != null) rightText.fontSize = Mathf.RoundToInt(TextPt * upt);
         if (titleText != null) titleText.fontSize = Mathf.RoundToInt(TitlePt * upt);
         if (hintText != null) hintText.fontSize = Mathf.RoundToInt(HintPt * upt);
-        dirty = true;   // 날씨 그림은 크기에 맞춰 다시 짠다
+        if (clip != null)
+        {
+            float side = Shoulder + 2f * upt;
+            clip.padding = new Vector4(side, 0f, side, 0f);
+            clip.softness = new Vector2Int(Mathf.RoundToInt(6f * upt), 0);
+        }
+        dirty = true;   // 날씨 그림 · 글 크기는 Refresh 에서
     }
 
     private void Refresh()
     {
         dirty = false;
-        bool weather = shown == Mode.Weather, guide = shown == Mode.Guide, arrived = guide && arrivedAt >= 0f;
-        if (weatherIcon != null && weatherIcon.gameObject.activeSelf != weather) weatherIcon.gameObject.SetActive(weather);
-        if (arrow != null && arrow.gameObject.activeSelf != (guide && !arrived)) arrow.gameObject.SetActive(guide && !arrived);
-        if (check != null && check.gameObject.activeSelf != arrived) check.gameObject.SetActive(arrived);
+        bool skyMode = shown == Mode.Sky, guide = shown == Mode.Guide, arrived = guide && arrivedAt >= 0f;
+        var it = skyMode && page >= 0 && page < items.Count ? items[page] : default;
+        bool weather = skyMode && it.kind == R0926SkyPages.Kind.Weather;
+        bool friend = skyMode && it.kind == R0926SkyPages.Kind.Friends;
+        bool pic = skyMode && !weather && !friend;
+        Show(weatherIcon != null ? weatherIcon.gameObject : null, weather);
+        Show(pageIcon != null ? pageIcon.gameObject : null, pic);
+        Show(face != null ? face.gameObject : null, friend);
+        Show(arrow != null ? arrow.gameObject : null, guide && !arrived);
+        Show(check != null ? check.gameObject : null, arrived);
         if (weather && weatherIcon != null && wCode >= 0) weatherIcon.Set(wCode, wDay);
-        if (rightText != null) rightText.text = weather ? (wTemp == int.MinValue ? "" : wTemp + "°") : guide ? distWord : "";
+        if (pic && pageIcon != null)
+        {
+            pageIcon.sprite = it.icon;
+            pageIcon.enabled = it.icon != null;
+        }
+        if (friend && face != null)
+        {
+            face.color = it.faceColor;
+            if (faceInitial != null) faceInitial.text = it.initial ?? "";
+            if (facePhoto != null) { facePhoto.texture = it.photo; facePhoto.enabled = it.photo != null; }
+        }
+        if (rightText != null)
+        {
+            rightText.text = weather ? (wTemp == int.MinValue ? "" : wTemp + "°") : skyMode ? it.text ?? "" : guide ? distWord : "";
+            Fit(rightText, TextPt, (cutWpt - 2f * RowPad - IconPt - RowGap) * upt);
+        }
+        if (noteText != null)
+        {
+            noteText.text = L("터치하면 돌아가요", "Tap to bring it back", "タップで戻ります", "点按即可还原", "Toca para volver");
+            Fit(noteText, NotePt, (cutWpt - 12f) * upt);
+        }
         if (titleText != null) titleText.text = titleWord;
         if (hintText != null) hintText.text = hintWord;
     }
 
+    private static void Show(GameObject g, bool on)
+    {
+        if (g != null && g.activeSelf != on) g.SetActive(on);
+    }
+
+    // 판 폭에 안 들어가면 글자를 줄인다 (긴 거리 말 — 'a menos de 3km' · 영어 안내 줄 등)
+    private void Fit(Text t, float pt, float room)
+    {
+        if (upt <= 0f) return;
+        int size = Mathf.RoundToInt(pt * upt), min = Mathf.RoundToInt(MinTextPt * upt);
+        t.fontSize = size;
+        while (size > min && t.preferredWidth > room) t.fontSize = --size;
+    }
+
     private void Layout()
     {
-        float pad = EarPad * upt;
-        float ear = Mathf.Max(Ear * upt, (rightText != null ? rightText.preferredWidth : 0f) + 2f * pad);
-        float cutW = cutWpt * upt, cutH = cutHpt * upt, ch = CompactH, shoulder = Shoulder;
+        float cutW = cutWpt * upt, cutH = cutHpt * upt, shoulder = Shoulder, row = RowPt * upt;
         float rootW = ((RectTransform)transform).rect.width;
-        float bodyOpen = cutW + 2f * ear;
-        float bodyExp = Mathf.Min(Mathf.Max(bodyOpen, ExpandMinW * upt), rootW - 24f * upt - 2f * shoulder);
-        float hExp = ch + (ExpandGap + TitleLine + HintLine + ExpandBottom) * upt;
+        float topOpen = island ? (cutTopPt - 1f) * upt : 0f;
+        float rowTop = RowTopPt * upt - topOpen;   // 판 위 변에서 줄 위 변까지
+        float hOpen = rowTop + row + note * (NoteLine + NoteBottom) * upt;
+        float bodyExp = Mathf.Min(Mathf.Max(cutW, ExpandMinW * upt), rootW - 24f * upt - 2f * shoulder);
+        float hExp = rowTop + row + (ExpandGap + TitleLine + HintLine + ExpandBottom) * upt;
         float bodyClosed = cutW * 0.92f, hClosed = cutH * 0.92f;   // 진짜 노치 뒤에 숨는 크기에서 열린다
-        float w = Mathf.LerpUnclamped(Mathf.LerpUnclamped(bodyClosed, bodyOpen, open), bodyExp, expand);
-        float h = Mathf.LerpUnclamped(Mathf.LerpUnclamped(hClosed, ch, open), hExp, expand);
+        float w = Mathf.LerpUnclamped(Mathf.LerpUnclamped(bodyClosed, cutW, open), bodyExp, expand);
+        float h = Mathf.LerpUnclamped(Mathf.LerpUnclamped(hClosed, hOpen, open), hExp, expand);
         float topClosed = island ? cutTopPt * upt + (cutH - hClosed) * 0.5f : 0f;
-        float topOpen = island ? cutTopPt * upt - upt : 0f;
         shape.anchoredPosition = new Vector2(0f, -Mathf.LerpUnclamped(topClosed, topOpen, Mathf.Clamp01(open)));
         shape.sizeDelta = new Vector2(Mathf.Max(0f, w + 2f * shoulder), Mathf.Max(0f, h));
 
-        if (leftSlot != null) leftSlot.anchoredPosition = new Vector2(-(cutW + ear) * 0.5f, -ch * 0.5f);
+        // 줄 — 그림과 글을 한 묶음으로 가운데 (기온은 날씨 그림 바로 옆). 미는 동안은 손가락을 따라 옆으로
+        float mid = -(rowTop + row * 0.5f);
+        float iconW = (shown == Mode.Guide ? ArrowPt : IconPt) * upt;
+        float textW = rightText != null && rightText.text.Length > 0 ? rightText.preferredWidth : 0f;
+        float gap = textW > 0f ? RowGap * upt : 0f;
+        float x = -(iconW + gap + textW) * 0.5f + slide;
+        if (leftSlot != null) leftSlot.anchoredPosition = new Vector2(x + iconW * 0.5f, mid);
         if (rightSlot != null)
         {
-            rightSlot.anchoredPosition = new Vector2((cutW + ear) * 0.5f, -ch * 0.5f);
-            rightSlot.sizeDelta = new Vector2(ear, ch);
+            rightSlot.anchoredPosition = new Vector2(x + iconW + gap + textW * 0.5f, mid);
+            rightSlot.sizeDelta = new Vector2(textW + 2f * upt, row);
+        }
+        if (noteText != null)
+        {
+            var t = noteText.rectTransform;
+            t.anchoredPosition = new Vector2(0f, -(rowTop + row + NoteLine * 0.5f * upt));
+            t.sizeDelta = new Vector2(cutW, NoteLine * upt);
         }
         if (titleText != null)
         {
             var t = titleText.rectTransform;
-            t.anchoredPosition = new Vector2(0f, -(ch + (ExpandGap + TitleLine * 0.5f) * upt));
+            t.anchoredPosition = new Vector2(0f, -(rowTop + row + (ExpandGap + TitleLine * 0.5f) * upt));
             t.sizeDelta = new Vector2(bodyExp - 28f * upt, TitleLine * upt);
         }
         if (hintText != null)
         {
             var t = hintText.rectTransform;
-            t.anchoredPosition = new Vector2(0f, -(ch + (ExpandGap + TitleLine + HintLine * 0.5f) * upt));
+            t.anchoredPosition = new Vector2(0f, -(rowTop + row + (ExpandGap + TitleLine + HintLine * 0.5f) * upt));
             t.sizeDelta = new Vector2(bodyExp - 28f * upt, HintLine * upt);
         }
+
+        // 칩 · 알약이 비켜 설 만큼 — 넓게 펴진 판은 잠깐이라 넣지 않는다 (그동안은 판이 위를 덮는다)
+        float bottomPt = RowTopPt + RowPt + note * (NoteLine + NoteBottom);
+        DropPx = Mathf.Max(0f, bottomPt + DropGap - insetPt) * ppt * Mathf.Clamp01(open);
     }
 
-    // ── 누르기 ───────────────────────────────────────────────
+    // ── 누르기 · 밀기 ────────────────────────────────────────
 
     public void OnPointerClick(PointerEventData e)
     {
-        if (open < 0.5f) return;
+        if (open < 0.5f || sliding || e.dragging) return;   // 민 손가락을 뗀 것 — 누른 게 아니다
         float now = Time.unscaledTime;
         Haptic();
         if (shown == Mode.Guide && guiding)
@@ -533,12 +713,66 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
             dirty = true;
             return;
         }
-        if (shown == Mode.Weather && sky != null)
+        if (shown == Mode.Sky && sky != null)
         {
             Vector3 c = shape.TransformPoint(shape.rect.center);   // 오버레이 캔버스 — 월드 좌표가 곧 화면 픽셀
-            sky.UnfoldFromNotch(new Vector2(c.x, c.y));
+            var kind = page >= 0 && page < items.Count ? items[page].kind : R0926SkyPages.Kind.Weather;
+            sky.UnfoldFromNotch(new Vector2(c.x, c.y), kind);   // 지금 보던 장으로 편다
         }
     }
+
+    // 좌우로 밀면 옆 장 — 끝에서 처음으로 돈다. 위아래는 받지 않는다 (화면 위 끝에서 아래로 끄는 건 아이폰 알림 센터)
+    public void OnBeginDrag(PointerEventData e)
+    {
+        Vector2 d = e.position - e.pressPosition;
+        if (shown != Mode.Sky || items.Count <= 1 || open < 0.85f || Mathf.Abs(d.x) < Mathf.Abs(d.y)) return;
+        sliding = true;
+        dragX = e.pressPosition.x;
+        lastX = e.position.x;
+        lastT = Time.unscaledTime;
+        flingV = slideVel = 0f;
+        Drag(e.position.x);
+    }
+
+    public void OnDrag(PointerEventData e)
+    {
+        if (sliding) Drag(e.position.x);
+    }
+
+    private void Drag(float px)
+    {
+        float k = UnitsPerPx;
+        slide = (px - dragX) * k;
+        float dt = Time.unscaledTime - lastT;
+        if (dt > 0.0001f) flingV = Mathf.Lerp(flingV, (px - lastX) * k / dt, 0.5f);
+        lastX = px;
+        lastT = Time.unscaledTime;
+    }
+
+    public void OnEndDrag(PointerEventData e)
+    {
+        if (!sliding) return;
+        sliding = false;
+        if (Time.unscaledTime - lastT > 0.12f) flingV = 0f;   // 멈췄다 뗐으면 튕긴 게 아니다
+        float rowW = cutWpt * upt, fling = FlingPt * upt;
+        if (slide < -rowW * 0.22f || flingV < -fling) Flip(1);
+        else if (slide > rowW * 0.22f || flingV > fling) Flip(-1);
+        // 덜 밀었으면 제자리로 (Update)
+    }
+
+    // 옆 장으로 — 새 장은 손가락 반대쪽에서 들어온다
+    private void Flip(int dir)
+    {
+        if (items.Count <= 1) return;
+        page = ((page + dir) % items.Count + items.Count) % items.Count;
+        pageKind = items[page].kind;
+        slide = dir * cutWpt * upt * 0.6f;
+        slideVel = 0f;
+        dirty = true;
+        Haptic();
+    }
+
+    private float UnitsPerPx => ((RectTransform)transform).rect.height / Mathf.Max(1, UnityEngine.Device.Screen.height);
 
     // ── 글 ───────────────────────────────────────────────────
 
@@ -582,23 +816,34 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler
     public static bool EditorForceNoNotch, EditorIsland;
     public static float? EditorHeading;
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetEditorStatics() { EditorForceNoNotch = false; EditorIsland = false; EditorHeading = null; }
+    private static void ResetEditorStatics() { EditorForceNoNotch = false; EditorIsland = false; EditorHeading = null; DropPx = 0f; }
     public void EditorRemeasure() => measured = false;
     public RectTransform EditorShape => shape;
     public bool EditorIslandShape => island;
     public float EditorOpen => open;
     public float EditorExpand => expand;
+    public float EditorNote => note;
     public bool EditorGuiding => guiding;
     public string EditorMode => shown.ToString();
     public string EditorRight => rightText != null ? rightText.text : null;
     public string EditorTitle => titleText != null ? titleText.text : null;
+    public string EditorNoteText => noteText != null ? noteText.text : null;
     public float EditorArrow => arrow != null && arrow.gameObject.activeSelf ? Mathf.DeltaAngle(0f, -arrow.localEulerAngles.z) : float.NaN;
     public bool EditorArrived => arrivedAt >= 0f;
     public Vector2 EditorCutPt => new Vector2(cutWpt, cutHpt);
     public float EditorCutTopPt => cutTopPt;
+    public float EditorRowTopPt => RowTopPt;
+    public float EditorInsetPt => insetPt;
     public float EditorPpt => ppt;
     public bool EditorBarHidden => barHidden;
     public string EditorHint => hintText != null ? hintText.text : null;
     public bool EditorCheck => check != null && check.gameObject.activeSelf;
+    public R0926SkyPages.Kind EditorPage => page >= 0 && page < items.Count ? items[page].kind : R0926SkyPages.Kind.Weather;
+    public int EditorPageCount => items.Count;
+    public RectTransform EditorLeftSlot => leftSlot;
+    public RectTransform EditorRightSlot => rightSlot;
+    public bool EditorFaceShown => face != null && face.gameObject.activeInHierarchy;
+    public bool EditorIconShown => pageIcon != null && pageIcon.gameObject.activeInHierarchy && pageIcon.sprite != null;
+    public bool EditorWeatherShown => weatherIcon != null && weatherIcon.gameObject.activeInHierarchy;
 #endif
 }

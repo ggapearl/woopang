@@ -25,6 +25,13 @@ public class SwipePanelController : MonoBehaviour
     private int LastSwipePanel => panel3Alone ? 1 : PanelCount - 1;
     private const float Away = 100000f;   // 따로 쓰는 카드를 치워 두는 자리 (화면 밖 · 틀이 잘라 낸다)
 
+    // 추가 두 장 ↔ 보물찾기 한 장 — 옆으로 밀지 않고 제자리 디졸브 (11-18 대표님 H2 「페이드인아웃(디졸브) 로 … 슬라이드 없이」).
+    // 사라지는 쪽은 있던 자리에서 옅어지고 나타나는 쪽은 제 자리에서 진해진다 (곡선은 R0926Closer — 위에 그려지는 카드만 내내)
+    private float jumpAt = -1f;   // 시작한 때 (-1 = 아님)
+    private float jumpFromX;      // 사라지는 쪽 카드들이 있던 자리
+    private CanvasGroup[] jumpGroups;
+    private bool[] jumpBlocks;
+
     private Vector2 startPos;
     private float dragStartPosX;
     private bool isDragging = false;
@@ -58,6 +65,7 @@ public class SwipePanelController : MonoBehaviour
     {
         EnhancedTouchSupport.Disable();
         HomePanel = 0;
+        EndJump();
     }
 
     private IEnumerator ResetToFirstPanelDelayed()
@@ -157,7 +165,8 @@ public class SwipePanelController : MonoBehaviour
 
     void LateUpdate()
     {
-        if (panel1 == null || !panel1.gameObject.activeInHierarchy) return;   // 닫혀 있는 동안은 계산하지 않는다
+        if (panel1 == null || !panel1.gameObject.activeInHierarchy) { EndJump(); return; }   // 닫혀 있는 동안은 계산하지 않는다
+        StepJump();
 
         // 실시간 거리 갱신 (화면 회전이나 크기 변경 대응)
         CalculateDimensions();
@@ -179,17 +188,22 @@ public class SwipePanelController : MonoBehaviour
     {
         if (panel1 != null)
         {
-            // 세 번째 카드를 따로 쓰면 — 그 카드가 보일 땐 앞 두 장을, 앞 두 장이 보일 땐 그 카드를 화면 밖으로 (옆에 살짝 보이지 않게)
+            // 세 번째 카드를 따로 쓰면 — 그 카드가 보일 땐 앞 두 장을, 앞 두 장이 보일 땐 그 카드를 화면 밖으로 (옆에 살짝 보이지 않게).
+            // 바꾸는 디졸브 동안은 사라지는 쪽을 있던 자리에 둔다
             bool alone = AloneShowing;
-            bool aside = panel3Alone && !alone;
-            panel1.anchoredPosition = new Vector2(alone ? -Away : currentAnchoredX + baseOffsetX, 0);
+            bool fading = jumpAt >= 0f;
+            bool away12 = alone && !fading;
+            bool aside = panel3Alone && !alone && !fading;
+            float x12 = alone && fading ? jumpFromX : currentAnchoredX;
+            float x3 = !alone && fading ? jumpFromX : currentAnchoredX;
+            panel1.anchoredPosition = new Vector2(away12 ? -Away : x12 + baseOffsetX, 0);
 
             if (panel2 != null)
             {
                 // panel2는 항상 panel1 기준의 상대 위치를 유지 (동기화)
-                panel2.anchoredPosition = new Vector2(alone ? -Away : currentAnchoredX + baseOffsetX + panelDistance, 0);
+                panel2.anchoredPosition = new Vector2(away12 ? -Away : x12 + baseOffsetX + panelDistance, 0);
             }
-            if (panel3 != null) panel3.anchoredPosition = new Vector2(aside ? Away : currentAnchoredX + baseOffsetX + panelDistance * 2f, 0);
+            if (panel3 != null) panel3.anchoredPosition = new Vector2(aside ? Away : x3 + baseOffsetX + panelDistance * 2f, 0);
         }
     }
 
@@ -200,10 +214,64 @@ public class SwipePanelController : MonoBehaviour
         currentPanel = to;
         if (panel3Alone) HomePanel = to == 2 ? 2 : 0;   // 열린 동안 첫 장으로 되돌리는 곳이 있어도 지금 쓰는 쪽(추가 / 보물찾기)에 머문다
         if (!jump) return;
-        // 추가 두 장 ↔ 보물찾기 한 장은 옆으로 밀지 않고 바로 바꾼다
+        // 추가 두 장 ↔ 보물찾기 한 장은 옆으로 밀지 않고 제자리에서 디졸브
+        EndJump();
+        float fromX = currentAnchoredX;
         isDragging = false;
         CalculateDimensions();
         currentAnchoredX = TargetX(currentPanel);
+        if (panel1 != null && panel1.gameObject.activeInHierarchy) BeginJump(fromX);
+        UpdatePanelPositions();
+    }
+
+    private void BeginJump(float fromX)
+    {
+        var cards = new[] { panel1, panel2, panel3 };
+        if (jumpGroups == null) { jumpGroups = new CanvasGroup[3]; jumpBlocks = new bool[3]; }
+        for (int i = 0; i < 3; i++)
+        {
+            if (cards[i] == null) { jumpGroups[i] = null; continue; }
+            var g = cards[i].GetComponent<CanvasGroup>();
+            if (g == null) g = cards[i].gameObject.AddComponent<CanvasGroup>();
+            jumpGroups[i] = g;
+            jumpBlocks[i] = g.blocksRaycasts;
+        }
+        jumpFromX = fromX;
+        jumpAt = Time.unscaledTime;
+        StepJump();
+    }
+
+    private void StepJump()
+    {
+        if (jumpAt < 0f || jumpGroups == null) return;
+        float p = Mathf.Clamp01((Time.unscaledTime - jumpAt) / R0926Closer.DissolveTime);
+        bool alone = AloneShowing;
+        bool threeTop = R0926Closer.DrawsAbove(panel3, panel1);
+        float a12 = alone ? R0926Closer.OutAlpha(p, !threeTop) : R0926Closer.InAlpha(p, !threeTop);
+        float a3 = alone ? R0926Closer.InAlpha(p, threeTop) : R0926Closer.OutAlpha(p, threeTop);
+        for (int i = 0; i < 3; i++)
+        {
+            var g = jumpGroups[i];
+            if (g == null) continue;
+            bool leaving = (i == 2) != alone;
+            g.alpha = i == 2 ? a3 : a12;
+            g.blocksRaycasts = !leaving && jumpBlocks[i];   // 사라지는 카드는 누름을 받지 않는다
+        }
+        if (p >= 1f) EndJump();
+    }
+
+    private void EndJump()
+    {
+        if (jumpAt < 0f) return;
+        jumpAt = -1f;
+        if (jumpGroups != null)
+            for (int i = 0; i < 3; i++)
+            {
+                var g = jumpGroups[i];
+                if (g == null) continue;
+                g.alpha = 1f;
+                g.blocksRaycasts = jumpBlocks[i];
+            }
         UpdatePanelPositions();
     }
 

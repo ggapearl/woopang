@@ -10,6 +10,7 @@ public class DistanceBasedVisibility : MonoBehaviour
     private float lastCheckTime;
     private MeshRenderer[] meshRenderers; // 모든 MeshRenderer 배열
     private Collider[] colliders; // 모든 Collider 배열
+    private CustomARGeospatialCreatorAnchor anchor;
 
     private void Start()
     {
@@ -31,10 +32,10 @@ public class DistanceBasedVisibility : MonoBehaviour
 
         // 모든 MeshRenderer와 Collider 찾기
         UpdateComponentReferences();
+        anchor = GetComponentInParent<CustomARGeospatialCreatorAnchor>();
 
         // 초기 거리 체크
-        float initialDistance = Vector3.Distance(player.position, transform.position);
-        isVisible = initialDistance >= minDistance && initialDistance <= hideDistance;
+        isVisible = InRange();
         SetVisibility(isVisible);
     }
 
@@ -52,8 +53,7 @@ public class DistanceBasedVisibility : MonoBehaviour
             return;
         }
 
-        float distance = Vector3.Distance(player.position, transform.position);
-        bool shouldBeVisible = distance >= minDistance && distance <= hideDistance;
+        bool shouldBeVisible = InRange();
 
         if (shouldBeVisible && !isVisible)
         {
@@ -63,6 +63,18 @@ public class DistanceBasedVisibility : MonoBehaviour
         {
             SetVisibility(false);
         }
+    }
+
+    /// <summary>
+    /// 너무 가깝지도(카메라가 물체 안) 멀지도 않다. 먼 쪽은 땅 위 거리로 재고, 3D 로 띄우는 반경(FilterManager) 안에서는 숨기지 않는다 —
+    /// 높이를 올린 '우팡산' 이 직선거리로 400 m 를 넘어 숨김 · 인디케이터 끔이 엇갈리던 것 (11-18 H3)
+    /// </summary>
+    private bool InRange()
+    {
+        Vector3 d = transform.position - player.position;
+        if (d.magnitude < minDistance) return false;
+        d.y = 0f;
+        return d.magnitude <= Mathf.Max(hideDistance, FilterManager.FullRadiusNow);
     }
 
     public void UpdateComponentReferences()
@@ -77,12 +89,14 @@ public class DistanceBasedVisibility : MonoBehaviour
         UpdateComponentReferences();
 
         isVisible = visible;
+        // 앵커가 아직 자리를 못 잡았으면(원점에 있다) 거리 안이어도 켜지 않는다 — 앵커가 자리를 잡으면 스스로 켠다 (11-18 H3)
+        bool show = visible && (anchor == null || anchor.MayShow);
         // 모든 MeshRenderer 비활성화/활성화
         foreach (var renderer in meshRenderers)
         {
             if (renderer != null)
             {
-                renderer.enabled = visible;
+                renderer.enabled = show;
             }
         }
         // 모든 Collider 비활성화/활성화

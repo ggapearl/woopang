@@ -66,11 +66,20 @@ public static class R0926HuntList
         public float bandM;           // 비공개 게임의 굵은 거리 끝 (1km · 5km · 20km) — 모르면 0
         public int players, maxPlayers;   // maxPlayers 0 = 제한 없음
         public DateTime startsAt;     // 곧 시작 — 이 기기 시각 (모르면 MinValue)
+        public bool host;             // 내가 연 게임 (Board 에만 — 「내가 숨긴 보물」)
     }
     public static readonly List<Near> Nearby = new List<Near>();
     /// <summary>Nearby 가 바뀔 때마다 1씩 — 하늘 옆 장이 다시 그릴지 본다</summary>
     public static int NearbyVersion { get; private set; }
     private static string nearSig = "";
+
+    /// <summary>
+    /// 하늘 옆 장 '근처 보물찾기' · 노치 — 목록에 나오는 보물찾기 그대로: 내가 연 게임 · 참가 중인 게임(진행 중 · 곧 시작)에 근처의 남의 게임을 더한 것.
+    /// 11-18 대표님 K2 「내가 숨긴 보물이라서 주최자는 안보이도록 해둔건가? … 메뉴에서 필터링 해서 있는 것들은 상단에서도 반영되도록」 —
+    /// 서버의 근처 목록(hunts)은 내가 연 게임을 빼고 준다. 못 찾은 것 먼저(내 게임 → 근처 게임은 서버 순서), 이미 찾은 게임은 뒤. 바뀌면 NearbyVersion 도 오른다
+    /// </summary>
+    public static readonly List<Near> Board = new List<Near>();
+    private static string boardSig = "";
 
     private const float RefreshEvery = 60f;
     private static float fetchedAt = -999f, fetchStartedAt = -999f;
@@ -91,6 +100,8 @@ public static class R0926HuntList
         sig = "";
         Nearby.Clear();
         nearSig = "";
+        Board.Clear();
+        boardSig = "";
     }
 
     /// <summary>목록을 그릴 때 PlaceListManager 가 부른다 — 1분이 지났으면 다시 물을 코루틴, 아니면 null</summary>
@@ -130,9 +141,14 @@ public static class R0926HuntList
         if (p.HasKey("enabled") && !p["enabled"].AsBool) { Set(null); return; }   // 보물찾기 참여를 꺼 두었다
         var list = new List<Spot>();
         var seen = new HashSet<int>();
+        var mine = new List<Near>();
         foreach (var key in new[] { "hosted", "joined" })
             foreach (JSONNode h in j[key].AsArray)
-                if (seen.Add(h["id"].AsInt) && Playing(h) && TryMake(h, out var s)) list.Add(s);
+                if (seen.Add(h["id"].AsInt) && Playing(h) && TryMake(h, out var s))
+                {
+                    list.Add(s);
+                    if (TryNear(h, out var mn, true)) mine.Add(mn);
+                }
         var near = new List<Near>();
         foreach (JSONNode h in j["hunts"].AsArray)
             if (TryNear(h, out var n)) near.Add(n);
@@ -141,6 +157,13 @@ public static class R0926HuntList
         foreach (var n in near) if (!n.found) ordered.Add(n);
         foreach (var n in near) if (n.found) ordered.Add(n);
         SetNearby(ordered);
+        // 하늘 옆 장 — 내 게임(못 찾은 것) → 근처 게임 → 찾은 게임. 내가 참가한 근처 게임은 내 게임 쪽 하나만
+        var board = new List<Near>(mine.Count + ordered.Count);
+        foreach (var n in mine) if (!n.found) board.Add(n);
+        foreach (var n in ordered) if (!n.found && !seen.Contains(n.id)) board.Add(n);
+        foreach (var n in mine) if (n.found) board.Add(n);
+        foreach (var n in ordered) if (n.found && !seen.Contains(n.id)) board.Add(n);
+        SetBoard(board);
         // 목록도 같은 순서 — 못 찾은 게임 먼저
         var spots = new List<Spot>(list.Count);
         foreach (var s in list) if (!s.found) spots.Add(s);
@@ -155,15 +178,17 @@ public static class R0926HuntList
         Set(spots, SetMap(map));
     }
 
-    private static bool TryNear(JSONNode h, out Near n)
+    // mine: 내가 연 · 참가한 게임 (hosted · joined) — 내가 연 것도 받는다
+    private static bool TryNear(JSONNode h, out Near n, bool mine = false)
     {
         n = default;
         string st = h["status"];
-        if ((st != "live" && st != "scheduled") || h["is_host"].AsBool) return false;
+        if ((st != "live" && st != "scheduled") || (!mine && h["is_host"].AsBool)) return false;
         var me = h["me"];
         bool joined = me["joined"].AsBool;
         if (me["gave_up"].AsBool || (!joined && h["full"].AsBool)) return false;
         n.found = joined && me["rank"].AsInt > 0;   // 찾았어도 게임이 진행 중이면 남는다 — 못 찾은 게임 뒤에 '찾은 보물입니다'
+        n.host = h["is_host"].AsBool;
         string title = OneLine(h["title"]);
         n.id = h["id"].AsInt;
         n.title = title.Length > 0 ? title : R0926LocalizedText.Say("보물찾기", "Treasure hunt", "宝探し", "寻宝", "Búsqueda del tesoro");
@@ -201,18 +226,33 @@ public static class R0926HuntList
 
     private static void SetNearby(List<Near> list)
     {
-        sb.Length = 0;
-        if (list != null)
-            foreach (var n in list)
-                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined).Append(n.locked).Append(n.found)
-                  .Append('|').Append(Mathf.RoundToInt(n.meters / 10f)).Append('|').Append(n.bandM).Append('|').Append(n.players).Append('/').Append(n.maxPlayers)
-                  .Append('|').Append(n.startsAt.Ticks).Append(';');
-        string now = sb.ToString();
+        string now = NearSig(list);
         if (now == nearSig) return;
         nearSig = now;
         Nearby.Clear();
         if (list != null) Nearby.AddRange(list);
         NearbyVersion++;
+    }
+
+    private static void SetBoard(List<Near> list)
+    {
+        string now = NearSig(list);
+        if (now == boardSig) return;
+        boardSig = now;
+        Board.Clear();
+        if (list != null) Board.AddRange(list);
+        NearbyVersion++;
+    }
+
+    private static string NearSig(List<Near> list)
+    {
+        sb.Length = 0;
+        if (list != null)
+            foreach (var n in list)
+                sb.Append(n.id).Append('|').Append(n.title).Append('|').Append(n.prize).Append('|').Append(n.live).Append(n.joined).Append(n.locked).Append(n.found)
+                  .Append('|').Append(Mathf.RoundToInt(n.meters / 10f)).Append('|').Append(n.bandM).Append('|').Append(n.players).Append('/').Append(n.maxPlayers)
+                  .Append('|').Append(n.startsAt.Ticks).Append(n.host).Append(';');
+        return sb.ToString();
     }
 
     // 시작 전·진행 중이고, 내가 열었거나 참가해서 포기 안 함. 이미 찾은 게임도 진행 중이면 남긴다 (found — 목록·지도에선 뒤쪽)
@@ -285,6 +325,7 @@ public static class R0926HuntList
         if (list == null)   // 로그아웃 · 참여 끔 — 하늘 옆 장도, 지도의 자리도 비운다
         {
             SetNearby(null);
+            SetBoard(null);
             mapChanged |= SetMap(null);
         }
         string now = Sig(list);

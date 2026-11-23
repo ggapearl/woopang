@@ -1578,6 +1578,7 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.SetAllObjectsVisible(false);
         if (TerminalManager.Instance != null) TerminalManager.Instance.SetAllObjectsVisible(false);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.SetAllObjectsVisible(false);
+        if (StoreManager.Instance != null) StoreManager.Instance.SetAllObjectsVisible(false);
         R0926HuntTreasure.SetObjectsActive(false);   // 보물찾기 AR 보물 (매니저는 아니지만 같은 앵커·같은 복구)
     }
 
@@ -1588,6 +1589,7 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.SetAllRenderersVisible(visible);
         if (TerminalManager.Instance != null) TerminalManager.Instance.SetAllRenderersVisible(visible);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.SetAllRenderersVisible(visible);
+        if (StoreManager.Instance != null) StoreManager.Instance.SetAllRenderersVisible(visible);
         R0926HuntTreasure.SetRenderersVisible(visible);
     }
 
@@ -1612,6 +1614,7 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (TerminalManager.Instance != null) TerminalManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
+        if (StoreManager.Instance != null) StoreManager.Instance.UpdateDistanceFilter(maxDist, lat, lon);
         R0926HuntTreasure.SetObjectsActive(true);   // 보이는 거리 안일 때만 띄워 두므로 거리 필터 없이 다시 켠다
     }
 
@@ -1627,6 +1630,7 @@ public class LoadingManager : MonoBehaviour
         if (SubwayManager.Instance != null) SubwayManager.Instance.RetryFailedAnchors();
         if (TerminalManager.Instance != null) TerminalManager.Instance.RetryFailedAnchors();
         if (TrainStationManager.Instance != null) TrainStationManager.Instance.RetryFailedAnchors();
+        if (StoreManager.Instance != null) StoreManager.Instance.RetryFailedAnchors();
         R0926HuntTreasure.RetryFailedAnchors();
     }
 

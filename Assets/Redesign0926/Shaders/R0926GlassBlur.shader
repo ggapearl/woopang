@@ -1,4 +1,5 @@
 // 물방울메뉴의 뒤 화면 — 카메라 화면을 1/4 로 줄이고(0) 카와세 흐림 세 번(1~3). R0926GlassBlur 가 부른다.
+// 창 바탕(R0926WindowSkin)이 쓰면 그것을 1/8 로 한 번 더 줄여 1~4 로 넓게 흐린다 (11-23 S8)
 Shader "Hidden/R0926/GlassBlur"
 {
     SubShader
@@ -24,6 +25,7 @@ Shader "Hidden/R0926/GlassBlur"
         half4 FragK1(Varyings i) : SV_Target { return Four(i.texcoord, _R0926BlurTexel.xy * 0.5); }
         half4 FragK2(Varyings i) : SV_Target { return Four(i.texcoord, _R0926BlurTexel.xy * 1.5); }
         half4 FragK3(Varyings i) : SV_Target { return Four(i.texcoord, _R0926BlurTexel.xy * 2.5); }
+        half4 FragK4(Varyings i) : SV_Target { return Four(i.texcoord, _R0926BlurTexel.xy * 3.5); }
         ENDHLSL
 
         Pass { Name "Down" HLSLPROGRAM
@@ -41,6 +43,10 @@ Shader "Hidden/R0926/GlassBlur"
         Pass { Name "Kawase3" HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment FragK3
+            ENDHLSL }
+        Pass { Name "Kawase4" HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragK4
             ENDHLSL }
     }
 }

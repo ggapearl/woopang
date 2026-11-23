@@ -15,6 +15,46 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
+        // 목록에서 사진으로 연 정보 창 위에도 목록 칸 X '닫기' (11-16 대표님 D3 「목록에서 우측 끝에 있는 사진을 눌러서 해당 장소 서브사진을 볼 때
+        // 좌측하단 '목록' 위치의 버튼이 아예 사라지거든?(원래대로 있어야할 '닫기' 버튼)」) — 목록을 숨기는 동안 그 칸 틀만 따로 보이게(R0926PlaceRows)
+        // 틀에 CanvasGroup 을 두고(평소엔 아무 일 없음), X 위에 덮는 누름 칸(CoverBack0926)은 정보 창만 닫는다. 원래 X(ClosePx0926)는 목록을 닫는다.
+        // 닫기 덮개(ApplySheetClosing)가 ClosePx0926 을 맨 뒤로 보낸 다음이라 그 위에 놓인다
+        private static void ListCoverClose(Transform root, R0926PlaceRows rows, List<string> log)
+        {
+            var mirror = root.Find("ListPanel/DockMirror0926");
+            var x = mirror != null ? mirror.Find("XButton_List") : null;
+            var px = x != null ? x.Find("ClosePx0926") : null;
+            var pxb = px != null ? px.GetComponent<Button>() : null;
+            if (pxb == null) { log.Add("목록 X 덮개(ClosePx0926) 없음 — 정보 창 위 닫기 못 둠"); return; }
+            Ensure<CanvasGroup>(mirror.gameObject);
+            var go = FindOrCreate(x, "CoverBack0926");
+            go.transform.SetAsLastSibling();
+            var rt = RT(go);
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero; rt.localScale = Vector3.one;
+            var img = Ensure<Image>(go);
+            img.sprite = null; img.color = new Color(1f, 1f, 1f, 0f); img.raycastTarget = true;
+            var b = Ensure<Button>(go);
+            b.transition = pxb.transition; b.colors = pxb.colors; b.targetGraphic = pxb.targetGraphic;   // 누르면 X 가 눌린 모양 (원래 덮개와 같게)
+            ResetListeners(b);
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(b.onClick, rows.CoverBack);
+            var fw = Ensure<UITouchForwarder>(go);   // X 와 같은 소리
+            var pfw = px.GetComponent<UITouchForwarder>();
+            if (pfw != null)
+            {
+                var fso = new SerializedObject(fw);
+                fso.FindProperty("customSound").objectReferenceValue = new SerializedObject(pfw).FindProperty("customSound").objectReferenceValue;
+                fso.ApplyModifiedPropertiesWithoutUndo();
+            }
+            go.SetActive(false);   // 정보 창이 맨 위인 동안만 켜진다
+            EditorUtility.SetDirty(go);
+            var so = new SerializedObject(rows);
+            so.FindProperty("coverDock").objectReferenceValue = mirror;
+            so.FindProperty("coverBack").objectReferenceValue = b;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            log.Add("목록 사진 창 위 닫기 (CoverBack0926)");
+        }
+
         private static void ApplyListKinds(Transform root, List<string> log)
         {
             var scene = root.gameObject.scene;
@@ -48,6 +88,9 @@ namespace Redesign0926
             {
                 var rso = new SerializedObject(rows);
                 rso.FindProperty("personSprite").objectReferenceValue = Spr("r0926_i_user");
+                // 사람 줄 오른쪽 사진 — 원 + 공개 범위 색 고리 (11-16 대표님 D2 · 도크 프로필 사진과 같은 고리)
+                rso.FindProperty("circleSprite").objectReferenceValue = Spr("r0926_circle");
+                rso.FindProperty("personRingSprite").objectReferenceValue = Spr("r0926_ring_mini");
                 rso.FindProperty("huntSprite").objectReferenceValue = Spr("r0926_i_treasure");
                 rso.FindProperty("huntLockSprite").objectReferenceValue = Spr("r0926_i_treasure_lock");
                 // 보물찾기 줄 — 금빛 테두리 · 지나가는 빛 띠 · 상자 옆 별 (10-27 대표님 「살짝 하이라이트, 반짝임」)
@@ -73,6 +116,7 @@ namespace Redesign0926
                 rso.ApplyModifiedPropertiesWithoutUndo();
                 if (kinds.Count == 0) log.Add("축제 그림(r0926_f_*) 없음");
                 if (cats.Count == 0) log.Add("분류 그림(r0926_c_*) 없음");
+                ListCoverClose(root, rows, log);
             }
             else log.Add("목록 줄(R0926PlaceRows) 없음");
 

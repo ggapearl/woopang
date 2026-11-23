@@ -18,14 +18,19 @@ namespace Redesign0926
     ///  · 10-23 대표님: "3D를 '사람' 좌측에 … '터미널/기차' 는 '지하철' 우측에 … '공공데이터' 우측에 (현재 3D 자리) '축제'"
     ///    → 위 [전체 ∨][애견동반][공공데이터][축제] · 아래 [지하철][터미널 / 기차][3D][사람] — 4칸씩, 두 칸 쓰는 칩 없음
     ///    축제 칩은 공공데이터 칩을 본떠 만들고 FilterManager.festivalToggle 에 잇는다
-    ///  · 분류 목록은 전체 · 음식점 · 카페 · 샵 · 공원 · 스포츠 · 화장실 · 랜드마크 순, 줄 앞은 분류 그림 (r0926_c_*)
+    ///  · 11-18 대표님 N8a 「지금 '공공데이터'(관광공사) → 이름 '공공기관' · 자리는 지금 '3D' 칩 자리 (3D 칩은 없앰) ·
+    ///    새 가게 DB(소상공인 상가정보) → 이름 '공공데이터' · 자리는 지금 '공공데이터' 칩 자리 (3번째)」
+    ///    → 위 [전체 ∨][애견동반][공공데이터][축제] · 아래 [지하철][터미널 / 기차][공공기관][사람]
+    ///    새 칩(StoresToggle)은 공공데이터 칩을 본떠 만들고 FilterManager.storesToggle 에 · 3D 칩은 지우고 3D 는 늘 보인다 (FilterManager)
+    ///  · 분류 목록은 전체 · 음식점 · 카페 · 샵 · 숙소 · 공원 · 스포츠 · 화장실 · 랜드마크 순, 줄 앞은 분류 그림 (r0926_c_*)
+    ///    (11-19 L1 '숙소' — 침대 그림 r0926_c_stay)
     /// </summary>
     public static partial class Redesign0926Apply
     {
         // 칸 순서 — 위 4칸 · 아래 4칸
-        private static readonly string[] ChipOrder = { "CategoryToggle", "PetFriendlyToggle", "PublicDataToggle", "FestivalToggle", "MetroToggle", "TerminalToggle", "3DObjectToggle", "P2PUserToggle" };
+        private static readonly string[] ChipOrder = { "CategoryToggle", "PetFriendlyToggle", "StoresToggle", "FestivalToggle", "MetroToggle", "TerminalToggle", "PublicDataToggle", "P2PUserToggle" };
         // 분류 그림 r0926_c_<이름> — FilterManager.CategoryFilterState 순서
-        private static readonly string[] CatIconKeys = { "all", "shop", "food", "cafe", "park", "toilet", "sport", "landmark" };
+        private static readonly string[] CatIconKeys = { "all", "shop", "food", "cafe", "park", "toilet", "sport", "landmark", "stay" };
         private const float MenuRowH = 112f, MenuPad = 12f, MenuW = 560f;
         private static readonly Color MenuCard = new Color(0.125f, 0.141f, 0.161f, 0.985f);
 
@@ -54,6 +59,8 @@ namespace Redesign0926
                 }
                 Object.DestroyImmediate(train.gameObject);
             }
+            Remove3DChip(filters);
+            StoresChip(filters);
             FestivalChip(filters);
             for (int i = 0; i < ChipOrder.Length; i++)
             {
@@ -68,6 +75,46 @@ namespace Redesign0926
             cso.FindProperty("rowHeight").floatValue = ChipH;
             cso.FindProperty("wide").arraySize = 0;   // 예전엔 터미널 / 기차가 두 칸
             cso.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // 3D 칩 — 11-18 대표님 「3D 칩은 없앰」. 3D 는 늘 보인다 (FilterManager — object3DToggle 이 비면 켠 채로)
+        private static void Remove3DChip(GameObject filters)
+        {
+            var chip = filters.transform.Find("3DObjectToggle");
+            if (chip == null) return;
+            var gone = chip.GetComponent<Toggle>();
+            var fm = FindInScene<FilterManager>(filters);
+            if (fm != null)
+            {
+                var so = new SerializedObject(fm);
+                var prop = so.FindProperty("object3DToggle");
+                if (prop != null && prop.objectReferenceValue == gone) prop.objectReferenceValue = null;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+            Object.DestroyImmediate(chip.gameObject);
+        }
+
+        // 「공공데이터」 칩 — 근처 가게 (소상공인 상가정보 · StoreManager). 공공데이터(이제 「공공기관」) 칩을 본떠 만들고 FilterManager.storesToggle 에 잇는다
+        private static void StoresChip(GameObject filters)
+        {
+            var stores = filters.transform.Find("StoresToggle");
+            if (stores == null)
+            {
+                var src = filters.transform.Find("PublicDataToggle");
+                if (src == null) return;
+                stores = Object.Instantiate(src.gameObject, filters.transform, false).transform;
+                stores.name = "StoresToggle";
+                var t = stores.GetComponent<Toggle>();
+                for (int k = t.onValueChanged.GetPersistentEventCount() - 1; k >= 0; k--)
+                    UnityEventTools.RemovePersistentListener(t.onValueChanged, k);
+                t.group = null;
+                t.SetIsOnWithoutNotify(true);   // 처음엔 켠 채 (FilterManager 저장값 기본 1)
+            }
+            var fm = FindInScene<FilterManager>(filters);
+            if (fm == null) return;
+            var so = new SerializedObject(fm);
+            so.FindProperty("storesToggle").objectReferenceValue = stores.GetComponent<Toggle>();
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // 축제 칩 — 공공데이터 칩을 본떠 (모양·누름 소리 그대로) 만들고 FilterManager 에 잇는다. 이미 있으면 잇기만

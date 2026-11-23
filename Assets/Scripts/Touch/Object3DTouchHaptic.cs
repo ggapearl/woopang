@@ -72,7 +72,7 @@ public class Object3DTouchHaptic : MonoBehaviour
             inputDetected = true;
             inputPosition = Touch.activeTouches[0].screenPosition;
 
-            if (IsOverUIOrIndicator(inputPosition))
+            if (!WorldTouch.Free(inputPosition))   // 덮은 UI 밑이면 — DoubleTap3D 와 같은 판단 (WorldTouch)
             {
                 return;
             }
@@ -83,7 +83,7 @@ public class Object3DTouchHaptic : MonoBehaviour
             inputDetected = true;
             inputPosition = Mouse.current.position.ReadValue();
 
-            if (IsOverUIOrIndicator(inputPosition))
+            if (!WorldTouch.Free(inputPosition))
             {
                 return;
             }
@@ -109,58 +109,6 @@ public class Object3DTouchHaptic : MonoBehaviour
         {
             isProcessingTouch = false;
         }
-    }
-
-    private bool IsOverUIOrIndicator(Vector2 screenPosition)
-    {
-        if (UnityEngine.EventSystems.EventSystem.current == null)
-            return false;
-
-        UnityEngine.EventSystems.PointerEventData pointerData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
-        pointerData.position = screenPosition;
-
-        var results = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
-        UnityEngine.EventSystems.EventSystem.current.RaycastAll(pointerData, results);
-
-        foreach (var result in results)
-        {
-            GameObject hitObject = result.gameObject;
-
-            if (IsIndicatorRelated(hitObject))
-            {
-                continue;
-            }
-
-            if (hitObject.layer == 5)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool IsIndicatorRelated(GameObject obj)
-    {
-        Transform current = obj.transform;
-        while (current != null)
-        {
-            string name = current.name;
-
-            if ((name.Contains("Indicator") && !name.Contains("Button")) ||
-                (name.Contains("Arrow") && !name.Contains("Button")) ||
-                (name.Contains("Box") && !name.Contains("Button")) ||
-                name.Contains("OffScreen") ||
-                (name == "Text" && (current.parent?.name.Contains("Indicator") == true)) ||
-                current.GetComponent<Indicator>() != null)
-            {
-                return true;
-            }
-
-            current = current.parent;
-        }
-
-        return false;
     }
 
     void OnMouseDown()

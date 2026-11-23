@@ -33,7 +33,13 @@ public class OffscreenVisibility : MonoBehaviour
         if (!updateThrottle.ShouldUpdate())
             return;
 
-        float distanceToCamera = Vector3.Distance(transform.position, Camera.main.transform.position);
+        // 11-18 H3 — 땅 위 거리로 잰다 (11-16 「이동거리는 평면거리로만」). 높이를 올린 '우팡산' 이 직선거리로 400 m 를 넘어
+        // Target 만 꺼져, 3D 는 떠 있는데 화살표 · 박스가 없었다. 3D 로 띄우는 반경 안에서는 끄지 않는다
+        Vector3 camPos = Camera.main.transform.position;
+        float distanceToCamera = targetScript != null
+            ? targetScript.GetDistanceFromCamera(camPos)
+            : Vector3.Distance(transform.position, camPos);
+        float limit = Mathf.Max(distanceThreshold, FilterManager.FullRadiusNow);
 
         // �α� �޽��� �߰� (�� ������ ���)
         logMessages.Add($"[OffscreenVisibility] Distance to Camera: {distanceToCamera:F2}m, Threshold: {distanceThreshold}m, GameObject: {gameObject.name}");
@@ -55,7 +61,7 @@ public class OffscreenVisibility : MonoBehaviour
         }
 
         // Target ��ũ��Ʈ Ȱ��ȭ/��Ȱ��ȭ ����
-        if (distanceToCamera <= distanceThreshold)
+        if (distanceToCamera <= limit)
         {
             if (targetScript != null && !targetScript.enabled)
             {

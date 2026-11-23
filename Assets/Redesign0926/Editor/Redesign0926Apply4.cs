@@ -152,9 +152,7 @@ namespace Redesign0926
                 var cc = d != null ? Find(d.transform, "ContentCard") : null;
                 if (cc != null) Add(cc, BottomSheet(RT(cc).sizeDelta.y, 40));
             }
-            // 숨긴 뒤 '되돌리기' 알림 — 가로: 위치 칩(왼쪽 아래)과 같은 높이 가운데 (세로 자리는 도크 위라 가로에선 허공에 떴다)
-            var undo = Find(root, "Undo0926");
-            if (undo != null) Add(undo, S(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 90), new Vector2(0, UndoBarH)));
+            // 숨긴 뒤 '되돌리기' 알림은 가로도 세로와 같은 화면 가운데 — 기본 알림 팝업(WarningText)처럼 옮기지 않는다 (11-19 L2 · 예전엔 아래쪽이라 가로 자리가 따로 있었다)
             var net = Find(root, "NetBanner0926");
             if (net != null) Add(net, S(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -24), new Vector2(LandSheetW, 220)), 0,
                 R0926SafeInset.Edge.Top, R0926SafeInset.Edge.Top);

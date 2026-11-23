@@ -123,12 +123,12 @@ public class R0926Glass : BaseMeshEffect
         if (v)
         {
             Live.Add(this);
-            R0926GlassBlur.Need(blur);
+            R0926GlassBlur.Need(this, blur);
         }
         else
         {
             Live.Remove(this);
-            if (Live.Count == 0) R0926GlassBlur.Rest();
+            R0926GlassBlur.Release(this);
         }
         img.SetVerticesDirty();
     }

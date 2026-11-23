@@ -239,7 +239,21 @@ public class Indicator : MonoBehaviour
 
     public void SetImageColor(Color color)
     {
-        indicatorImage.color = color;
+        indicatorImage.color = Tone(color, ref imageToneIn, ref imageToneOut);
+    }
+
+    // AR 인디케이터 색 — 짙은 분류 색(카페 모카 등)은 같은 색조의 밝은 톤으로, 흰색·초록·금색·주황은 그대로 (R0926IndicatorTone · 11-18 H4).
+    //   어두운 그림자 위에서 짙은 글자가 묻혔다. Target.TargetColor 는 그대로(목록·칩·3D 와 같은 값) — 그릴 때만 바꾼다.
+    //   매 프레임 불리므로 색이 바뀔 때만 다시 계산한다
+    private Color imageToneIn = Color.clear, imageToneOut = Color.clear, textToneIn = Color.clear, textToneOut = Color.clear;
+    private static Color Tone(Color c, ref Color lastIn, ref Color lastOut)
+    {
+        if (c != lastIn)
+        {
+            lastIn = c;
+            lastOut = R0926IndicatorTone.Lift(c);
+        }
+        return lastOut;
     }
 
     // 이름 속 이모지는 우팡 이모지 그림으로 (11-05) — 매 프레임 불리므로 이름이 바뀔 때만 바꾼다
@@ -257,6 +271,7 @@ public class Indicator : MonoBehaviour
     {
         bool hasValidDistance = value >= 0;
         string distanceStr = hasValidDistance ? $"{Mathf.Floor(value)}m" : "";
+        textColor = Tone(textColor, ref textToneIn, ref textToneOut);
 
         if (indicatorType == IndicatorType.BOX && nameText != null)
         {

@@ -110,7 +110,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private static string Api(string url) => url;
 #endif
 
-    [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public float lat; public float lon; public int ago; public bool precise; [NonSerialized] public bool exact; }
+    [Serializable] private class Friend { public string user_id; public string username; public string avatar_url; public string visibility_mode; public float lat; public float lon; public int ago; public bool precise; [NonSerialized] public bool exact; }
     [Serializable] private class Resp { public string status; public bool sharing; public int mutual; public Friend[] friends; }
 
     private struct D2
@@ -369,13 +369,15 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     // 앱을 꺼 둔 친구는 근처 사람(P2P)에서 10분 뒤 빠지지만 지도에는 마지막 자리가 일주일 남는다 — 지도에는 보이는 친구가 목록에는 없었다
     // (11-14 대표님 「지도에는 보이는데 … 해당 프로필이 안보이거든」). 지도와 같은 자료(맞팔 · 둘 다 지도 공유)를 목록도 쓴다.
     // 지도가 열려 있으면 지도가 받은 것을, 아니면 목록이 열려 있는 동안 1분마다 받는다
-    public sealed class SharedFriend { public string id, name, avatar; public double lat, lon, seenAt; }   // seenAt — 그 자리를 보낸 때 (유닉스 초)
+    public sealed class SharedFriend { public string id, name, avatar, vis; public double lat, lon, seenAt; }   // seenAt — 그 자리를 보낸 때 (유닉스 초) · vis — 공개 범위 (서버가 보낼 때만 · 11-17 D2)
     private static readonly List<SharedFriend> shared = new List<SharedFriend>();
     private static float sharedAt = float.NegativeInfinity;
     private static bool sharedBusy;
     private static string sharedUser;
     private const float SharedEvery = 60f;
     public static IReadOnlyList<SharedFriend> Shared => shared;
+    /// <summary>위 친구 자리가 누구 것인지 (로그인 아이디) — AR(P2PManager)이 다른 아이디의 친구를 띄우지 않게</summary>
+    public static string SharedOwner => sharedUser;
     /// <summary>목록이 다시 그린다</summary>
     public static event Action SharedChanged;
 
@@ -407,12 +409,13 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         if (list != null)
             foreach (var f in list)
                 if (f != null && !string.IsNullOrEmpty(f.user_id))
-                    shared.Add(new SharedFriend { id = f.user_id, name = f.username, avatar = f.avatar_url, lat = f.lat, lon = f.lon, seenAt = now - f.ago });
+                    shared.Add(new SharedFriend { id = f.user_id, name = f.username, avatar = f.avatar_url, vis = f.visibility_mode, lat = f.lat, lon = f.lon, seenAt = now - f.ago });
         SharedChanged?.Invoke();
     }
 
-    /// <summary>목록이 열려 있는 동안 — 1분이 지났으면 친구 자리를 다시 받는다 (받으면 SharedChanged). 받을 때가 아니면 null</summary>
-    public static IEnumerator SharedIfDue()
+    /// <summary>목록이 열려 있는 동안 — 1분이 지났으면 친구 자리를 다시 받는다 (받으면 SharedChanged). 받을 때가 아니면 null.
+    /// AR(P2PManager)은 목록 · 지도가 닫혀 있어도 every(3분)마다 — 앱을 꺼 둔 친구도 AR 에 (11-17 D1)</summary>
+    public static IEnumerator SharedIfDue(float every = SharedEvery)
     {
         string uid = CurrentUserId();
         if (uid != sharedUser)
@@ -422,7 +425,7 @@ public class R0926FriendsMap : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             sharedAt = float.NegativeInfinity;
             if (shared.Count > 0) { shared.Clear(); SharedChanged?.Invoke(); }
         }
-        if (uid == null || sharedBusy || Time.realtimeSinceStartup - sharedAt < SharedEvery) return null;
+        if (uid == null || sharedBusy || Time.realtimeSinceStartup - sharedAt < every) return null;
         return FetchShared();
     }
 

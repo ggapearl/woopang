@@ -14,6 +14,7 @@ using UnityEngine.UI;
 ///   · 지도·슬라이더·입력창처럼 스스로 끄는 것 위에서 시작 → 건드리지 않는다
 ///   · 키보드가 떠 있을 때 입력줄에서 시작 → 키보드만 내린다 (R0926KeyboardSwipe)
 /// 닫기 버튼·뒤로가기·바깥 누르기로 닫을 때도 R0926CloseProxy 가 AnimateClose 를 불러 아래로 미끄러져 사라진다.
+/// 도크에서 다른 창으로 바꿀 때는 움직이지 않고 제자리에서 옅어지거나(DissolveClose) 진해진다(DissolveIn) — 11-18 H2.
 /// 위치는 증분으로만 더하고 빼서 R0926SlideIn·R0926SafeInset 과 겹쳐도 자리가 틀어지지 않는다.
 /// 방향은 14px 움직였을 때 정한다 — 옆으로 넘기기(R0926SheetModes·SwipePanelController)도 같은 순간 같은 기준이라 둘이 함께 움직이지 않는다.
 /// </summary>
@@ -58,11 +59,13 @@ public class R0926SwipeDismiss : R0926Closer
     private bool confirming;
     private float backdropAlpha = -1f;
 
-    // 옅어지며 닫기 (도크에서 다른 창으로 바꿀 때 — R0926Closer.DissolveFrame)
-    private const float DissolveDrop = 48f, DissolveTime = 0.2f;
-    private float dissolve = -1f;       // 진행 0 → 1 (-1 = 아님)
-    private float dissolveFrom;         // 시작할 때 내려가 있던 만큼
-    private bool dissolveBlocks;        // 시작 전 누름 받기 — 끝나면 되돌린다
+    // 제자리 디졸브 — 도크에서 다른 창으로 바꿀 때 닫히는 창 · 열리는 창 (R0926DockSlotSwap, 11-18 H2 「슬라이드 없이」)
+    private float dissolveAt = -1f;     // 시작한 때 (-1 = 아님)
+    private bool dissolveOut;           // true 닫는 중 · false 여는 중
+    private bool dissolveTop;           // 상대 창보다 위에 그려진다
+    private Dim dissolveDim;
+    private float dissolveFrom = 1f;    // 닫기 시작할 때 보이던 만큼 (옅게 열리던 도중에 닫히면 거기서부터)
+    private bool dissolveBlocks;        // 닫기 전 누름 받기 — 끝나면 되돌린다
     private CanvasGroup fadeGroup;
 
     /// <summary>닫기 전에 물을 곳 (정보 수정 — 고친 게 있으면 '수정을 취소할까요?', 11-09). true 면 닫지 않고 제자리로 돌아오고,
@@ -87,7 +90,26 @@ public class R0926SwipeDismiss : R0926Closer
     }
 
     /// <summary>시트를 아래로 내려 보낸 뒤 then(없으면 closeButton)을 누른다. 이미 닫는 중이면 무시.</summary>
-    public override void AnimateClose(Button then)
+    public override void AnimateClose(Button then) => BeginClose(then, false, true, Dim.Fade);
+
+    /// <summary>제자리에서 옅어진 뒤 then(없으면 closeButton)을 누른다 — 도크에서 다른 창으로 바꿀 때 (R0926DockSlotSwap) · 목록 상세 「길안내」(R0926PlaceRows)</summary>
+    public override void DissolveClose(Button then, bool top, Dim dim) => BeginClose(then, true, top, dim);
+
+    /// <summary>방금 연 시트가 제자리에서 옅게 → 진하게 (R0926DockSlotSwap) — 누름은 처음부터 받는다</summary>
+    public override void DissolveIn(bool top, Dim dim)
+    {
+        if (!isActiveAndEnabled || closing) return;
+        dissolveAt = Time.unscaledTime;
+        dissolveOut = false;
+        dissolveTop = top;
+        dissolveDim = dim;
+        Dissolve(0f);
+    }
+
+    /// <summary>디졸브(열기 · 닫기) 중</summary>
+    public bool Dissolving => dissolveAt >= 0f;
+
+    private void BeginClose(Button then, bool dissolve, bool top, Dim dim)
     {
         if (!isActiveAndEnabled) { if (then != null) then.onClick.Invoke(); return; }
         if (closing) return;
@@ -97,16 +119,21 @@ public class R0926SwipeDismiss : R0926Closer
         if (guardUntil == int.MaxValue) guardUntil = Time.frameCount + 2;   // 끄는 도중 닫혔다
         phase = Phase.Idle;
         closing = true;
-        if (Dissolving)
+        if (dissolve)
         {
             animating = false;
-            dissolve = 0f;
-            dissolveFrom = applied;
-            Fade(1f);
-            dissolveBlocks = fadeGroup.blocksRaycasts;
-            fadeGroup.blocksRaycasts = false;   // 사라지는 창은 누름을 받지 않는다 — 새 창으로
+            var g = Group();
+            dissolveFrom = g.alpha;
+            dissolveBlocks = guardUntil >= 0 ? guardBlocks : g.blocksRaycasts;
+            g.blocksRaycasts = false;   // 사라지는 창은 누름을 받지 않는다 — 새 창으로
+            dissolveAt = Time.unscaledTime;
+            dissolveOut = true;
+            dissolveTop = top;
+            dissolveDim = dim;
+            Dissolve(0f);
             return;
         }
+        EndDissolve();   // 옅게 열리던 도중 X 로 닫으면 — 다 보이게 한 뒤 아래로
         target = CloseDistance();
         animating = true;
     }
@@ -144,17 +171,17 @@ public class R0926SwipeDismiss : R0926Closer
         if (frozen != null && Time.frameCount >= unfreezeFrame && phase != Phase.Dragging) Unfreeze();
         if (guardUntil >= 0 && Time.frameCount >= guardUntil) Unguard();
 
-        if (dissolve >= 0f)
+        if (dissolveAt >= 0f)
         {
-            dissolve = Mathf.Min(1f, dissolve + Time.unscaledDeltaTime / DissolveTime);
-            Set(dissolveFrom + DissolveDrop * dissolve * dissolve);
-            Fade(1f - dissolve);
-            if (dissolve >= 1f)
+            float p = Mathf.Clamp01((Time.unscaledTime - dissolveAt) / DissolveTime);
+            Dissolve(p);
+            bool leaving = dissolveOut;
+            if (p >= 1f)
             {
-                Close();          // 원래 닫기 버튼 — 창이 꺼지면 OnDisable 이 되돌린다
-                EndDissolve();    // 버튼이 창을 끄지 않았으면 다시 보이게
+                if (leaving) Close();   // 원래 닫기 버튼 — 창이 꺼지면 OnDisable 이 되돌린다
+                EndDissolve();          // 다 보이게 (버튼이 창을 끄지 않았을 때도)
             }
-            return;
+            if (leaving) return;        // 사라지는 동안은 끌기를 받지 않는다
         }
 
         if (animating)
@@ -327,7 +354,7 @@ public class R0926SwipeDismiss : R0926Closer
     {
         if (guardUntil < 0) return;
         guardUntil = -1;
-        if (clickGuard != null) clickGuard.blocksRaycasts = guardBlocks;
+        if (clickGuard != null && !(dissolveAt >= 0f && dissolveOut)) clickGuard.blocksRaycasts = guardBlocks;   // 옅어지며 닫히는 중이면 끝날 때 EndDissolve 가 되돌린다
     }
 
     private void Unfreeze()
@@ -346,15 +373,20 @@ public class R0926SwipeDismiss : R0926Closer
         return sr.verticalNormalizedPosition >= 0.995f;
     }
 
-    // 시트·함께 움직이는 형제·뒤 그늘을 같이 옅게
-    private void Fade(float a)
+    private CanvasGroup Group()
     {
         if (fadeGroup == null)
         {
             fadeGroup = GetComponent<CanvasGroup>();
             if (fadeGroup == null) fadeGroup = gameObject.AddComponent<CanvasGroup>();
         }
-        fadeGroup.alpha = a;
+        return fadeGroup;
+    }
+
+    // 시트 · 함께 움직이는 형제를 같이 옅게
+    private void Show(float a)
+    {
+        Group().alpha = a;
         if (followers != null)
             foreach (var f in followers)
             {
@@ -363,22 +395,40 @@ public class R0926SwipeDismiss : R0926Closer
                 if (g == null) g = f.gameObject.AddComponent<CanvasGroup>();
                 g.alpha = a;
             }
-        if (backdrop != null && backdropAlpha >= 0f)
+    }
+
+    // 디졸브 한 걸음 — 움직이지 않고 투명도만 (곡선은 R0926Closer — 위 창만 내내, 아래 창은 위 창이 거의 덮은 동안)
+    private void Dissolve(float p)
+    {
+        Show(dissolveOut ? dissolveFrom * OutAlpha(p, dissolveTop) : InAlpha(p, dissolveTop));
+        ApplyDim();
+    }
+
+    // 창 뒤 그늘 — 끌어 내린 만큼 옅게. 디졸브 동안은 Dim 대로 (같이 옅게 · 걷기 · 그대로)
+    private void ApplyDim()
+    {
+        if (backdrop == null || backdropAlpha < 0f || rt == null) return;
+        float k = 1f - Mathf.Clamp01(applied / Mathf.Max(1f, rt.rect.height * 0.9f));
+        if (dissolveAt >= 0f)
         {
-            var c = backdrop.color;
-            c.a = backdropAlpha * a;
-            backdrop.color = c;
+            if (dissolveDim == Dim.Hide) k = 0f;
+            else if (dissolveDim == Dim.Fade) k *= Group().alpha;
         }
+        var c = backdrop.color;
+        c.a = backdropAlpha * k;
+        backdrop.color = c;
     }
 
     private void EndDissolve()
     {
-        if (dissolve < 0f) return;
-        dissolve = -1f;
+        if (dissolveAt < 0f) return;
+        bool leaving = dissolveOut;
+        dissolveAt = -1f;
+        Show(1f);
+        ApplyDim();
+        if (!leaving) return;
         closing = false;
-        Fade(1f);
-        fadeGroup.blocksRaycasts = dissolveBlocks;
-        if (isActiveAndEnabled) Set(0f);
+        Group().blocksRaycasts = dissolveBlocks;
     }
 
     private void Set(float offset)
@@ -391,11 +441,6 @@ public class R0926SwipeDismiss : R0926Closer
             foreach (var f in followers)
                 if (f != null) f.anchoredPosition -= new Vector2(0f, delta);
         applied = offset;
-        if (backdrop != null && backdropAlpha >= 0f)
-        {
-            var c = backdrop.color;
-            c.a = backdropAlpha * (1f - Mathf.Clamp01(offset / Mathf.Max(1f, rt.rect.height * 0.9f)));
-            backdrop.color = c;
-        }
+        ApplyDim();
     }
 }
