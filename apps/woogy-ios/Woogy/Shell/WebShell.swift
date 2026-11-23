@@ -119,7 +119,9 @@ struct WebShell: UIViewRepresentable {
         wv.isOpaque = false
         wv.backgroundColor = Shell.bgUIColor
         wv.scrollView.backgroundColor = Shell.bgUIColor
-        wv.isInspectable = true                                     // Mac 사파리 › 개발 메뉴로 들여다보기 (시험 기간 — 앱스토어 출시 전 끈다)
+        #if DEBUG
+        wv.isInspectable = true                                     // Mac 사파리 › 개발 메뉴로 들여다보기 — 디버그 빌드에서만(TestFlight · 앱스토어 빌드는 꺼짐)
+        #endif
         context.coordinator.attach(wv)
         wv.load(URLRequest(url: Router.shared.attach(wv) ?? start))
         return wv
@@ -193,7 +195,9 @@ struct WebShell: UIViewRepresentable {
             popup.isOpaque = false
             popup.backgroundColor = Shell.bgUIColor
             popup.scrollView.backgroundColor = Shell.bgUIColor
+            #if DEBUG
             popup.isInspectable = true
+            #endif
             top.present(PopupController(web: popup), animated: true)
             return popup
         }
