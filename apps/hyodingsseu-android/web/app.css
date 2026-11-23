@@ -61,6 +61,11 @@ svg{display:block}
   body{background:var(--bar)}
   #app{left:50%;right:auto;width:min(100%,780px);transform:translateX(-50%);box-shadow:0 0 0 1px rgba(255,255,255,.07),0 0 70px rgba(0,0,0,.4)}
 }
+/* PC 효딩쓰 창 안의 사진첩(iframe) — 창 폭 그대로 쓴다. 가운데 780px 칸·양옆 어두운 바는 없다 (2026-11-23) */
+@media (min-width:700px){
+  html.embed body{background:var(--ground)}
+  html.embed #app{left:0;right:0;width:auto;transform:none;box-shadow:none}
+}
 .screen{position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;background:var(--ground);
   padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
 
@@ -439,14 +444,17 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .ph-pick{flex:none;min-width:58px;padding:0 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--navy);font-size:14px;font-weight:600}
 .ph-pick:active{border-color:var(--navy)}
 .ph-pick.on{background:var(--navy);border-color:var(--navy);color:var(--on-navy)}
-.ph-filt{padding:0 16px 8px}
+.ph-filt{padding:2px 16px 8px}
 .ph-filt .dchip{gap:6px}
 .ph-filt .x svg{width:12px;height:12px}
 .ph-body{padding-bottom:calc(28px + env(safe-area-inset-bottom))}
 .ph-content.selecting .ph-body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 .ph-content{overflow-anchor:none}   /* 칸이 바뀔 때 보던 자리는 앱이 직접 보정한다(웹킷엔 없는 기능이라 어디서나 같게) */
 .ph-mon{position:relative}
-.ph-mon.wait{overflow:hidden;background:linear-gradient(var(--surface),var(--surface)) 2px 46px/calc(100% - 4px) calc(100% - 50px) no-repeat}
+.ph-mon.wait{overflow:hidden}
+.ph-mon.wait::after{content:'';position:absolute;left:2px;right:2px;top:46px;bottom:4px;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 2px),var(--ground) calc(25% - 2px) 25%),repeating-linear-gradient(180deg,transparent 0 114px,var(--ground) 114px 116px),var(--surface-2)}
+.ph-mon.wait.load::after{animation:phpulse 1.15s ease-in-out infinite}
+@keyframes phpulse{0%,100%{opacity:1}50%{opacity:.5}}
 .ph-mon-lab{display:flex;align-items:baseline;gap:8px;padding:14px 16px 8px;color:var(--ink-3)}
 .ph-mon-lab b{font-size:14px;font-weight:700;color:var(--ink-2)}
 .ph-mon-lab small{font-size:12px}
@@ -461,7 +469,8 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .ph-grid.jr::after{content:'';flex-grow:1000000;flex-shrink:1;flex-basis:0}
 .ph-grid.jr .ph-tile{aspect-ratio:var(--ar,1);flex-grow:calc(var(--ar,1) * 100);flex-shrink:1;flex-basis:calc(var(--ar,1) * var(--rh))}
 .ph-tile{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:var(--surface-2);-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
-.ph-tile img{display:block;width:100%;height:100%;object-fit:cover;-webkit-touch-callout:none;transition:transform .12s}
+.ph-tile img{display:block;width:100%;height:100%;object-fit:cover;-webkit-touch-callout:none;opacity:0;transition:opacity .2s,transform .12s}
+.ph-tile img.ld{opacity:1}
 .ph-tile.bad img{visibility:hidden}
 .ph-dur{position:absolute;right:4px;top:5px;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 5px 0 7px;border-radius:9px;background:rgba(0,0,0,.58);color:#fff;font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums}
 .ph-dur svg{width:9px;height:9px}
@@ -510,7 +519,7 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .ph-x{flex:none;width:42px;height:46px;display:grid;place-items:center;border-radius:12px;color:var(--ink-2)}
 .ph-x svg{width:20px;height:20px}
 .ph-x:active,.ph-act:active{background:var(--navy-soft)}
-.ph-act{flex:none;width:52px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:12px;color:var(--navy);font-size:11px;font-weight:600}
+.ph-act{flex:none;width:48px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:12px;color:var(--navy);font-size:11px;font-weight:600}
 .ph-act svg{width:22px;height:22px}
 .ph-act:disabled{opacity:.38}
 .sheet-scrim.over{z-index:45}
@@ -751,3 +760,24 @@ input[type=range]{width:100%;accent-color:var(--pink)}
 .att-spin{width:20px;height:20px;flex:none}
 .menu.att-menu button i{width:22px}
 .viewer.docmode .vw-msg{color:var(--ink-2)}
+/* 사진첩 ☰ 메뉴 · 불러오는 중 뼈대 · 휴지통 · 보관함 (2026-11-22) */
+.ph-menu .scroll{padding-top:6px}
+.ph-menu .drow{padding:6px 10px}
+.ph-menu .badge-ic svg{width:17px;height:17px}
+.ph-menu .drow.cur .badge-ic{background:var(--navy);color:var(--on-navy)}
+.ph-skel{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;padding:6px 2px}
+@media (min-width:700px){.ph-skel{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.ph-skel i{display:block;aspect-ratio:1/1;background:var(--surface-2);animation:phpulse 1.15s ease-in-out infinite}
+.ph-skel i:nth-child(3n){animation-delay:.15s}
+.ph-skel i:nth-child(3n+1){animation-delay:.3s}
+.ph-skel.big{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 12px;padding:6px 16px}
+.ph-skel.big i{border-radius:14px}
+.ph-tail .ph-skel{width:100%;padding:2px}
+.ph-nothumb{position:absolute;top:0;left:0;right:0;bottom:0;display:grid;place-items:center;color:var(--ink-3)}
+.ph-nothumb svg{width:26px;height:26px}
+.ph-left{position:absolute;left:4px;bottom:4px;height:17px;padding:0 6px;border-radius:9px;background:rgba(0,0,0,.58);color:#fff;font-size:10.5px;font-weight:600;line-height:17px}
+.ph-trashbar{display:flex;align-items:center;gap:10px;margin:4px 12px 8px;padding:10px 12px;border-radius:12px;background:var(--surface);font-size:12.5px;color:var(--ink-3);line-height:1.4}
+.ph-trashbar span{flex:1;min-width:0}
+.ph-tbtn{flex:none;height:32px;padding:0 14px;border-radius:999px;border:1.5px solid var(--pink-line);color:var(--pink-deep);font-size:13px;font-weight:600;background:transparent}
+.ph-content.selecting .ph-tile{touch-action:pan-y}
+.ph-act span{white-space:nowrap}
