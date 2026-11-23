@@ -225,6 +225,7 @@ namespace Redesign0926
             else if (mode == "stay") PlanStay();   // 11-19 L1 목록 분류 「숙소」 — 분류 9줄 · 침대 그림 · 관광공사 숙박 · 사람이 올린 숙소 · 애견동반을 켜도
             else if (mode == "glassmap") PlanGlassMap();   // 11-19 K3 물방울 유리가 바로 뒤를 비추는지 — 자리마다 색이 다른 배경으로 어긋남(px) 재기
             else if (mode == "windowskin") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanWindowSkin(); }   // 11-23 S8 디스플레이 선택 — 물방울 · 네온 · 둘 다 · 둘 다 끔 × 창 배경 진하기
+            else if (mode == "guidestore") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f); PlanGuideStore(); }   // 11-23 S1 스토어 「길안내」 한 장 — 스토어 촬영 자리(광화문)의 공공 장소로
             else if (mode == "nearkinds") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanNearKinds(); }   // 사람 · 보물 · 공공데이터 · 공공교통
             else if (mode == "nearhunt") PlanNearHunt();   // 11-20 H6 「근처 장소」의 보물찾기 — 뜨지만 멀리서 두 번 눌러도 안 열림(「직접 찾아가서」 안내) · 상자 앞 2m 면 보물찾기로 (운영 서버에 묻지 않음)
             else if (mode == "guidearrow") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanGuideArrow(); }   // 11-15 (B) 아래 길안내 화살표 (배경 폴더가 있으면 도시 배경)
@@ -24951,7 +24952,7 @@ namespace Redesign0926
                     RestoreSkyPrefs();
                     NmFinish();
                     StoresFinish();
-                    if (pl.Length > 1 && (pl[1].Trim() == "petalloc" || pl[1].Trim() == "petairport" || pl[1].Trim() == "notch" || pl[1].Trim() == "nearpublic" || pl[1].Trim() == "filters")) StashTransitFilters();   // 교통 칩을 켠 채로 시작 (편집기 저장값은 끝나고 되돌린다) — 노치도 목록의 교통 · 공공데이터 줄을 누른다 · 필터 시험도 교통 칩이 켜진 채 시작한다고 본다 (11-16: 3D 만 남은 저장값으로 시작해 터미널 / 기차 시험이 뒤집혔다)
+                    if (pl.Length > 1 && (pl[1].Trim() == "petalloc" || pl[1].Trim() == "petairport" || pl[1].Trim() == "notch" || pl[1].Trim() == "nearpublic" || pl[1].Trim() == "guidestore" || pl[1].Trim() == "filters")) StashTransitFilters();   // 교통 칩을 켠 채로 시작 (편집기 저장값은 끝나고 되돌린다) — 노치도 목록의 교통 · 공공데이터 줄을 누른다 · 필터 시험도 교통 칩이 켜진 채 시작한다고 본다 (11-16: 3D 만 남은 저장값으로 시작해 터미널 / 기차 시험이 뒤집혔다)
                     MainViewToSimulator();
                     EditorApplication.isPlaying = true;
                 }

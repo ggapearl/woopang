@@ -932,6 +932,115 @@ namespace Redesign0926
             Do(NmFinish);
         }
 
+        // 11-23 S1 스토어 「길안내」 한 장 (대표님 「길안내 캡처하고 스토어에 같이 올려」) — 스토어 촬영 자리(광화문)에서 AR 에 떠 있는 공공 장소 하나로 길안내한다.
+        // 이름 · 거리는 그 장소 그대로. 그 장소가 화면 가운데에서 조금 오른쪽에 오게 카메라를 돌려, 아래 화살표가 그쪽을 가리키게 한다. 시험이 아니라 사진만 찍는다
+        private static void PlanGuideStore()
+        {
+            Target pick = null;
+            bool noNotchWas = R0926Notch.EditorForceNoNotch;
+            Wait(() => !BootOverlay.Showing, 25f, "시작화면 끝");
+            Do(() =>
+            {
+                if (Active("LoginPromptPanel")) BackNow();
+                var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+                if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
+                var vt = UnityEngine.Object.FindAnyObjectByType<P2PVirtualUserTester>();
+                if (vt != null) { vt.StopSimulation(); vt.StopAllCoroutines(); }
+                if (P2PManager.Instance != null) P2PManager.Instance.RemoveTestUserAvatar("3");
+                Backdrop("bg_city.png");
+                DeviceFov();
+                HideAddressLine();
+                AimCamera(0f, 0f);
+                R0926Notch.EditorForceNoNotch = true;   // 노치 없는 기기 — 아래 화살표만
+                R0926Notch.Instance?.EditorRemeasure();
+            });
+            Wait(() => (pick = GsPick()) != null, 40f, "AR 에 떠 있는 공공 장소 (관광 정보 · 한글 이름 · 60m~2km)");
+            Sleep(3f);   // 늦게 뜨는 것까지 다 뜬 뒤 다시 고른다
+            Do(() =>
+            {
+                pick = GsPick() ?? pick;
+                if (pick == null) return;
+                // 사진이 어지럽지 않게 — 길안내 대상과 이름난 공공 장소 세 곳만 남기고 나머지 AR 오브젝트는 이 장면에서만 끈다 (플레이가 끝나면 원래대로)
+                var keep = new HashSet<Target> { pick };
+                foreach (var t in GsCandidates()) { if (keep.Count >= 4) break; if (GsLandmark(t.PlaceName)) keep.Add(t); }
+                int off = 0;
+                foreach (var t in UnityEngine.Object.FindObjectsByType<Target>(FindObjectsInactive.Exclude))
+                    if (!keep.Contains(t)) { t.gameObject.SetActive(false); off++; }
+                log.Add($"  남긴 오브젝트 {keep.Count} · 끈 오브젝트 {off}");
+            });
+            Do(() =>
+            {
+                if (pick == null) return;
+                var cam = Camera.main;
+                Vector3 v = pick.transform.position - cam.transform.position;
+                float yaw = Mathf.Atan2(v.x, v.z) * Mathf.Rad2Deg - 9f;   // 그 장소가 가운데에서 9° 오른쪽
+                AimCamera(0f, yaw);
+                var vl = VirtualLocation.Instance;
+                log.Add($"  길안내 대상 1곳 · 땅 위 거리 {pick.GetGPSDistance(vl.Latitude, vl.Longitude):0}m · 안내 {(R0926GuideArrow.Guide((float)pick.gpsLatitude, (float)pick.gpsLongitude, pick, pick.PlaceName) ? "시작" : "안 됨")}");
+            });
+            Sleep(4f);   // 처음 3초 「누르면 안내를 끝내요」 · 「주변에서 ○곳을 찾았어요」가 사라진 뒤
+            Check(() => R0926GuideArrow.Instance != null && R0926GuideArrow.Instance.EditorGuiding && R0926GuideArrow.Instance.EditorShowing, "길안내 화살표 · 알약이 떠 있다");
+            Shot("gs_guide");
+            Do(() => { var cam = Camera.main; AimCamera(0f, cam.transform.eulerAngles.y - 6f); });   // 화살표가 조금 더 오른쪽을 가리키는 한 장 더 (방위는 에디터가 카메라에서 — 월드 +z = 북쪽)
+            Sleep(1.2f);
+            Shot("gs_guide_b");
+            Do(() =>
+            {
+                R0926GuideArrow.Stop();
+                R0926Notch.StopGuide();
+                R0926Notch.EditorHeading = null;
+                R0926Notch.EditorForceNoNotch = noNotchWas;
+                R0926Notch.Instance?.EditorRemeasure();
+            });
+        }
+
+        // AR 에 떠 있는 관광 정보(TourAPI · 칩 이름 「공공기관」) 장소 중 한글 이름 · 60m~2km — 이름난 곳(궁 · 광장 · 박물관 · 한옥 …)이 먼저, 그다음 400m 에 가까운 순
+        private static List<Target> GsCandidates()
+        {
+            var list = new List<(int rank, float gap, Target t)>();
+            var tm = UnityEngine.Object.FindAnyObjectByType<TourAPIManager>();
+            var vl = VirtualLocation.Instance;
+            if (Camera.main == null || tm == null || vl == null) return new List<Target>();
+            // AR 오브젝트로 뜬 것 + 멀어서 화살표로만 뜬 것(표시 전용 — GPS 좌표가 있다) 둘 다
+            var all = new List<GameObject>();
+            if (tm.GetSpawnedObjects() != null) all.AddRange(tm.GetSpawnedObjects().Values);
+            if (tm.GetIndicatorOnlyObjects() != null) all.AddRange(tm.GetIndicatorOnlyObjects().Values);
+            foreach (var go in all)
+            {
+                if (go == null || !go.activeInHierarchy) continue;
+                var t = go.GetComponentInChildren<Target>(true);
+                string nm = t != null ? t.PlaceName?.Trim() : null;
+                if (string.IsNullOrEmpty(nm) || NmPrivate.Contains(nm) || R0926Emoji.ToDisplay(nm) != nm || !GsHangul(nm)) continue;
+                float d = t.GetGPSDistance(vl.Latitude, vl.Longitude);
+                if (d < 60f || d > 2000f) continue;
+                list.Add((GsLandmark(nm) ? 0 : 1, Mathf.Abs(d - 400f), t));
+            }
+            list.Sort((a, b) => a.rank != b.rank ? a.rank.CompareTo(b.rank) : a.gap.CompareTo(b.gap));
+            var r = new List<Target>();
+            foreach (var x in list) r.Add(x.t);
+            return r;
+        }
+
+        private static Target GsPick()
+        {
+            var c = GsCandidates();
+            return c.Count > 0 ? c[0] : null;
+        }
+
+        private static bool GsHangul(string s)
+        {
+            foreach (char ch in s) if (ch >= '\uAC00' && ch <= '\uD7A3') return true;
+            return false;
+        }
+
+        private static readonly string[] GsLandmarkWords = { "궁", "광장", "박물관", "미술관", "기념관", "한옥", "공원", "거리", "시장", "문화" };
+        private static bool GsLandmark(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            foreach (var w in GsLandmarkWords) if (s.Contains(w)) return true;
+            return false;
+        }
+
         private static string GaPlain(string s) => Regex.Replace(s ?? "", "<[^>]+>", "");
 
         // 알약 단위 — 글 오른쪽 끝에서 × 동그라미 왼쪽 끝까지 (음수면 겹침)
