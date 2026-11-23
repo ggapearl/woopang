@@ -9,6 +9,14 @@
 - **확인할 것**: 컴파일 · 경고 0(Windows 에서 컴파일하지 못했다 — `#if DEBUG` 두 곳뿐이라 오류가 나면 이 두 곳만 본다) · archive 가 Release 구성인지(Debug 로 archive 하면 검사가 그대로 켜진다).
 - **업로드까지만** — 이 빌드의 **심사 제출은 Windows 세션이 App Store Connect 에서 한다**(대표님 「심사제출까지 하라고 해」). 맥은 올리고 「처리 완료」 뒤 Version · Build · 업로드 시각만 알려 준다.
 
+**1.0.0 (7) 결과 (2026-11-24, Mac 빌드 세션)** — 업로드 성공, TestFlight 내부 테스트 `IN_BETA_TESTING`
+- 버전 1.0.0 · 빌드 7 · 업로드 2026-11-24 02:10 KST · 앱 ID `6835099990` · 커밋 `e2aee31`
+- `xcodegen generate` 다시 → 컴파일(서명 없이) `BUILD SUCCEEDED` · 경고 0(AppIntents 안내 1줄뿐) · `#if DEBUG` 두 곳 그대로 · Release 구성으로 archive
+- export entitlements: `applinks:woogy.app` · `applinks:woopang.com` · `aps-environment = production` · 수출 규정 질문 없음
+- App Store 1.0 버전 페이지(`3b0c37fc…`, 대표님 지시 11-24 「심사제출 해줘」)의 빌드를 5 → **7** 로 바꿨다.
+- **심사 제출은 막혔다(409)**: ① 앱의 「콘텐츠 권리(contentRightsDeclaration)」 미답변 ② 「앱 개인정보 보호(App Privacy)」 답변 미게시. 둘 다 대표님이 App Store Connect 에서 직접 답해야 한다(맥은 API 로 못 한다 · 임의로 답하지 않는다). 그 뒤 맥에 「제출」 한마디.
+- 아이폰은 케이블이 안 꽂혀 있어 이 빌드를 Ad Hoc 으로 깔지 못했다(기기에는 1.0.0 (6)).
+
 ## 1.0.0 (6) — 2026-11-22 · 우기 전용 주소 woogy.app 로 옮김 (빌드 번호는 `project.yml` 에 6 으로 올려 두었다 — 더 올리지 않는다 · 1.0.0 (5) 는 11-19 에 이미 올라갔다) · **아직 빌드 전(코드만 준비)**
 
 대표님이 도메인 woogy.app 을 사서 우기를 이 주소로 서빙한다(2026-11-22). 앱이 여는 화면은 `https://woogy.app/woogy/` 가 된다.
