@@ -39,7 +39,7 @@ public class R0926WindowSkin : BaseMeshEffect
 
     private Image img;
     private Material before;
-    private bool on, see, covered, overlay;
+    private bool on, see, covered, overlay, stacked;
     private float shadeA, nextScan;
     private readonly List<Graphic> shades = new List<Graphic>();   // 창 뒤에 깔린 어두운 막 (뿌리 쪽 · 앞 형제)
     private readonly HashSet<int> seen = new HashSet<int>();
@@ -51,6 +51,8 @@ public class R0926WindowSkin : BaseMeshEffect
     public bool Showing => on;
     public bool SeeThrough => on && see;
     public bool Covered => on && covered;
+    /// <summary>밑에 꼭 같은 자리 · 크기의 창이 있다 — 그 창을 통째로 덮는 안쪽 화면 (정보 수정 AI 화면)</summary>
+    public bool Stacked => on && stacked;
     public float ShadeAlpha => shadeA;
     public int FillCount => fills.Count;
     public static IReadOnlyList<R0926WindowSkin> Windows => windows;
@@ -151,7 +153,7 @@ public class R0926WindowSkin : BaseMeshEffect
         else
         {
             SetSee(false);
-            covered = false;
+            covered = stacked = false;
             windows.Remove(this);
             img.material = before;
         }
@@ -173,9 +175,13 @@ public class R0926WindowSkin : BaseMeshEffect
     {
         if (!on || kind != Kind.Window) return;
         bool vis = Visible;
-        bool cov = vis && (CoverOn() || OverWindow());
-        if (cov != covered) { covered = cov; img.SetVerticesDirty(); }
-        SetSee(vis && !covered && overlay && R0926MenuStyle.Droplet);
+        // 밑 창을 통째로 덮는 안쪽 화면 — 밑 창 모양을 그대로 이어 그린다 (밑 창이 비치면 같은 흐린 AR 화면). 어느 쪽이든 불투명 —
+        // 가림(불투명 남색)을 늘 같이 켜 두어 흐린 화면이 아직 없을 때도 밑 창의 칸들이 비치지 않게. 바깥 빛은 밑 창 것만 (두 번 그리면 진해진다)
+        var twin = vis ? Twin() : null;
+        bool st = twin != null;
+        bool cov = st || vis && (CoverOn() || OverWindow());
+        if (cov != covered || st != stacked) { covered = cov; stacked = st; img.SetVerticesDirty(); }
+        SetSee(vis && overlay && R0926MenuStyle.Droplet && (st ? twin.SeeThrough : !covered));
         float sa = ReadShade();
         if (Mathf.Abs(sa - shadeA) > 0.003f) { shadeA = sa; img.SetVerticesDirty(); }
         if (fillContent && Time.unscaledTime >= nextScan) Scan();
@@ -199,6 +205,22 @@ public class R0926WindowSkin : BaseMeshEffect
             if (DrawnBefore(w.transform, transform)) return true;
         }
         return false;
+    }
+
+    // 밑에 깔린 창 중 꼭 같은 자리 · 크기인 것 (2 캔버스 단위 안)
+    private R0926WindowSkin Twin()
+    {
+        Rect me = WorldRect(Rt);
+        float tol = 2f * Mathf.Max(1e-4f, Mathf.Abs(Rt.lossyScale.y));
+        foreach (var w in windows)
+        {
+            if (w == null || w == this || !w.Visible) continue;
+            Rect o = WorldRect(w.Rt);
+            if (Mathf.Abs(o.xMin - me.xMin) > tol || Mathf.Abs(o.xMax - me.xMax) > tol
+                || Mathf.Abs(o.yMin - me.yMin) > tol || Mathf.Abs(o.yMax - me.yMax) > tol) continue;
+            if (DrawnBefore(w.transform, transform)) return w;
+        }
+        return null;
     }
 
     private static Rect WorldRect(RectTransform rt)
@@ -339,7 +361,7 @@ public class R0926WindowSkin : BaseMeshEffect
         Vector2 mid = r.center;
         bool neon = R0926MenuStyle.Neon;
         float rad = Radius(kind == Kind.Rim && shapeFrom != null ? shapeFrom : img, hw, hh);
-        float pad = (kind == Kind.Window ? (neon ? 36f : 1.5f) : kind == Kind.Rim ? 30f : 16f) * Px;
+        float pad = (kind == Kind.Window ? (stacked ? 0f : neon ? 36f : 1.5f) : kind == Kind.Rim ? 30f : 16f) * Px;   // 밑 창과 같은 자리면 바깥 빛은 밑 창 것만
         float flags = kind == Kind.Row ? 16f : kind == Kind.Rim ? 32f
             : (see ? 1f : 0f) + (R0926MenuStyle.Droplet ? 2f : 0f) + (neon ? 4f : 0f) + (covered ? 8f : 0f);
         var size = new Vector4(hw, hh, rad, tint > 0f ? tint : Mathf.Max(img.color.a, 0.01f));

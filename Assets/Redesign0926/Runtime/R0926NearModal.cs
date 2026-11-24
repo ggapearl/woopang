@@ -16,6 +16,7 @@ using UnityEngine.UI;
 ///  ② 「근처 장소」 — 목록(필터 · 분류 반영) 가까운 순 10곳, 한 번 뜨면 그 10곳 고정. 앱을 껐다 켤 때 2초 뒤 한 번
 ///     (설정 「앱 시작 시 근처 장소 보기」 · 백그라운드에서 돌아올 땐 안 뜸), 그리고 AR 화면을 아래→위로 밀면 언제든
 ///     (하늘 오브젝트가 떠 있을 때 · 오브젝트를 만지며 민 손가락 · 창 위에서 민 것은 빼고).
+///     반대로 위→아래로 밀면 하늘 판을 화면 위쪽에 고정해 편다 — 휴대폰을 하늘로 들지 않아도 (11-24 대표님 「상단에서 아래로 스와이프하면 바로 하늘보기 발생하도록」 · R0926SkyWeather.ShowAtTop).
 ///     목록의 보물찾기도 들지만 여기서 두 번 눌러도 열지 않는다 — 「직접 찾아가서」 안내만 (11-20 대표님 H6 · 열기는 「발견한 장소」에서 · 상자 앞 4m 면 연다).
 /// 오브젝트는 전용 카메라가 투명 배경으로 찍어 RawImage 에 (핀치 줌 · 관리자 크기와 상관없이 늘 같은 크기), 그동안 AR 화면에선 빠진다(빈 레이어 28~31).
 /// 「근처 장소」에서 AR 에 없거나 25m 밖인 곳은 3D 대신 대표 사진(R0926NearPhoto) — 멀리 흐리게(R0926DistanceFade)가 25m 부터 흐려 3D 가 옅게 찍힌다.
@@ -51,7 +52,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     private const float FoundAfter = 10f, ResumeGrace = 10f, StartAfter = 2f, StartGiveUp = 20f, RemapEvery = 1f;
     private const int NearbyCount = 10, ParkLayer = 28;
     private const float Solid3D = 25f, Solid3DKeep = 28f;            // 「근처 장소」를 3D 로 찍는 거리 (한 번 3D 면 28m 까지)
-    private const float SwipeUpMin = 0.12f, SwipeUpTime = 1f;        // 위로 밀기 — 화면 높이의 12% 를 1초 안에
+    private const float SwipeUpMin = 0.12f, SwipeUpTime = 1f;        // 위로 · 아래로 밀기 — 화면 높이의 12% 를 1초 안에
     private const float PullClose = 220f, PullFling = 1600f, PullFlingMin = 40f, PullSlide = 1800f;   // 아래로 밀어 닫기 (캔버스 단위)
     private const float PhotoFade = 0.25f, InfoWait = 8f, PhotoRetry = 30f;
     private const int PhotoSize = 512, PhotoParallel = 3;
@@ -151,11 +152,11 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     private float liveAt, resumeAt = -1f, nextStartTry;
     private bool live, away;              // live: AR 화면이 떴다 (liveAt 이 정해짐)
 
-    // 위로 밀기 (AR 화면)
+    // 위로 · 아래로 밀기 (AR 화면)
     private Pointer upPointer;
     private Vector2 upFrom;
     private float upAt;
-    private bool upLive;
+    private bool upLive, downLive;
 
     // 「근처 장소」 — 목록 줄과 AR 오브젝트 짝짓기
     private readonly Dictionary<Target, GameObject> rootOf = new Dictionary<Target, GameObject>();
@@ -244,7 +245,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         if (!Quiet)
         {
             StartNearby(now);
-            SwipeUp(now);
+            Swipe(now);
         }
         if (now >= nextTick) { nextTick = now + TickEvery; Tick(now); }
         bool want = items.Count > 0 && !closing && !Covered();
@@ -293,8 +294,8 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         else if (now - liveAt > StartAfter + StartGiveUp) startShown = true;   // 목록이 끝내 비었다 — 이번 실행은 건너뛴다
     }
 
-    // AR 화면을 아래→위로 — 누른 손가락 하나를 끝까지 따라간다 (R0926KeyboardSwipe 와 같다)
-    private void SwipeUp(float now)
+    // AR 화면을 아래→위로 밀면 「근처 장소」, 위→아래로 밀면 하늘 판 (11-24) — 누른 손가락 하나를 끝까지 따라간다 (R0926KeyboardSwipe 와 같다)
+    private void Swipe(float now)
     {
         if (upPointer == null || !upPointer.added)
         {
@@ -304,26 +305,63 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
             if (upPointer == null) return;
             upFrom = upPointer.position.ReadValue();
             upAt = now;
-            upLive = Touches() <= 1 && CanSwipeUp(upFrom);
+            bool free = Touches() <= 1 && CanSwipe(upFrom);
+            upLive = free && !NearbyUp;
+            downLive = free && sky != null;
             return;
         }
         if (!upPointer.press.isPressed) { upPointer = null; return; }
-        if (!upLive) return;
-        if (Touches() >= 2 || now - upAt > SwipeUpTime) { upLive = false; return; }   // 두 손가락(확대) · 천천히 민 것
-        if (!SwipeOk(upPointer.position.ReadValue() - upFrom)) return;
-        upLive = false;
-        if (!OpenNearby(now, true)) NothingNear();
+        if (!upLive && !downLive) return;
+        if (Touches() >= 2 || now - upAt > SwipeUpTime) { upLive = downLive = false; return; }   // 두 손가락(확대) · 천천히 민 것
+        Vector2 moved = upPointer.position.ReadValue() - upFrom;
+        if (upLive && SwipeOk(moved))
+        {
+            upLive = downLive = false;
+            if (!OpenNearby(now, true)) NothingNear();
+        }
+        else if (downLive && SwipeDownOk(moved))
+        {
+            upLive = downLive = false;
+            OpenSky();
+        }
     }
 
     private static bool SwipeOk(Vector2 d) => d.y >= Screen.height * SwipeUpMin && d.y > 2f * Mathf.Abs(d.x);
+    private static bool SwipeDownOk(Vector2 d) => SwipeOk(-d);
 
-    // 누른 자리가 맨 AR 화면이어야 — 시작 화면 · 덮는 창 · 하늘 오브젝트 · UI · 오브젝트(만지며 민 것)는 빼고. 「근처 장소」가 이미 떠 있어도 빼고
+    // 「근처 장소」가 이미 떠 있다 — 위로 밀기만 뺀다 (아래로 밀면 하늘 판이 위쪽에 서고 카드는 그 아래로 비켜 선다 — Layout)
+    private bool NearbyUp => cardOn && mode == Mode.Nearby && !closing;
+
+    private bool CanSwipeUp(Vector2 at) => !NearbyUp && CanSwipe(at);
+
+    // 위→아래로 민 것 — 하늘 판을 화면 위쪽에 고정해 편다. 하늘을 껐거나 아직 보일 것이 없으면 알려 주고, 이미 위쪽에 있으면 그대로
+    private bool OpenSky()
+    {
+        var tm = ToastManager.Instance;
+        if (!R0926SkySettings.Enabled)
+        {
+            const string off = "하늘 화면이 꺼져 있어요 · 목록 ▸ 설정에서 켤 수 있어요";
+            if (tm != null) tm.Show(L(off, off, off, off, off));
+            return false;
+        }
+        if (sky.PinnedTop) return false;
+        if (!sky.Ready)
+        {
+            const string wait = "하늘 정보를 불러오는 중이에요 · 잠시 뒤 다시 밀어 보세요";
+            if (tm != null) tm.Show(L(wait, wait, wait, wait, wait));
+            return false;
+        }
+        if (!sky.ShowAtTop()) return false;
+        Light();
+        return true;
+    }
+
+    // 누른 자리가 맨 AR 화면이어야 — 시작 화면 · 덮는 창 · 하늘 오브젝트 · UI · 오브젝트(만지며 민 것)는 빼고
     private static readonly RaycastHit[] upHits = new RaycastHit[16];
 
-    private bool CanSwipeUp(Vector2 at)
+    private bool CanSwipe(Vector2 at)
     {
         if (BootOverlay.Showing || Covered()) return false;
-        if (cardOn && mode == Mode.Nearby && !closing) return false;
         if (!WorldTouch.Free(at)) return false;
         var main = Camera.main;
         if (main == null) return false;
@@ -1829,6 +1867,9 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     public bool EditorCanSwipeUp(Vector2 at) => CanSwipeUp(at);
     /// <summary>AR 화면을 from → to 로 민 것 — 위로 밀기와 같은 판단 (1초 안에 민 것으로 친다)</summary>
     public bool EditorSwipeUp(Vector2 from, Vector2 to) => CanSwipeUp(from) && SwipeOk(to - from) && OpenNearby(Time.unscaledTime, true);
+    public bool EditorCanSwipeDown(Vector2 at) => sky != null && CanSwipe(at);
+    /// <summary>AR 화면을 위→아래로 from → to 민 것 — 아래로 밀기와 같은 판단 (1초 안에 민 것으로 친다)</summary>
+    public bool EditorSwipeDown(Vector2 from, Vector2 to) => sky != null && CanSwipe(from) && SwipeDownOk(to - from) && OpenSky();
     public void EditorLive(float ago) { live = true; liveAt = Time.unscaledTime - ago; resumeAt = -1f; }
     public float EditorLiveAt => liveAt;
     public bool EditorStartShown { get => startShown; set => startShown = value; }

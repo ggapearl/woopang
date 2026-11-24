@@ -70,7 +70,7 @@ public class CubeUploadManager : MonoBehaviour
     private string modelServerUrl => string.IsNullOrEmpty(EditorBase) ? ApiConfig.CREATE_LOCATION_WITH_MODEL : EditorBase + "/create-location-with-model";
 
     private Texture2D mainPhoto;
-    private bool mainPhotoAlpha;   // 대표 사진 바깥이 투명하다 (AI 작업 '투명하게' · 3D 캐릭터 정지 사진) — PNG 로 올린다
+    private bool mainPhotoAlpha;   // 대표 사진 바깥이 투명하다 (투명한 PNG · AI 작업 '투명하게' · 3D 캐릭터 정지 사진) — PNG 로 올린다
     private byte[] aiGlb;          // AI 작업 '3D 캐릭터' — 있으면 3D 모델 길(/create-location-with-model)로 올린다
     private Sprite mainSprite;   // 이 코드가 만든 대표 사진 스프라이트 — 장면에 놓인 기본 그림은 지우면 안 된다
     private List<Texture2D> subPhotos = new List<Texture2D>();
@@ -449,6 +449,7 @@ public class CubeUploadManager : MonoBehaviour
                     if (mainPhoto != null) Destroy(mainPhoto);
                     mainPhoto = cropped;
                     ClearAi();
+                    mainPhotoAlpha = R0926PhotoAlpha.Has(cropped);   // 투명한 PNG(로고 등)는 PNG 로 올린다 (11-24 — 예전엔 JPG 로 투명한 곳이 검게)
                     SetMainSprite(mainPhoto);
                     SetMainPhotoUIState(true);
 
@@ -1639,15 +1640,16 @@ public class CubeUploadManager : MonoBehaviour
             if (i > MAX_SUB_PHOTOS) break;
             Texture2D subPhoto = subPhotos[i - 1];
             Texture2D resizedSubPhoto = ResizeTextureKeepAspectWithRenderTexture(subPhoto, 800, 800);
-            byte[] subPhotoBytes = resizedSubPhoto.EncodeToJPG(50);
+            bool subPng = R0926PhotoAlpha.Has(resizedSubPhoto);   // 투명한 PNG 는 PNG 로 (11-24)
+            byte[] subPhotoBytes = R0926PhotoAlpha.Encode(resizedSubPhoto, 50);
             if (subPhotoBytes.Length == 0)
             {
                 ShowWarning(LocalizationManager.Instance.GetText("sub_photo_upload_failed"));
                 Destroy(resizedSubPhoto);
                 continue;
             }
-            string subPath = $"sub_{i}.jpg";
-            formData.AddBinaryData("sub_photos", subPhotoBytes, subPath, "image/jpeg");
+            string subPath = subPng ? $"sub_{i}.png" : $"sub_{i}.jpg";
+            formData.AddBinaryData("sub_photos", subPhotoBytes, subPath, subPng ? "image/png" : "image/jpeg");
             Destroy(resizedSubPhoto);
         }
 
@@ -1962,8 +1964,7 @@ public class CubeUploadManager : MonoBehaviour
         RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight);
         RenderTexture.active = rt;
         Graphics.Blit(source, rt);
-        Texture2D result = new Texture2D(newWidth, newHeight, TextureFormat.RGB24, false);
-        result.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
+        Texture2D result = R0926PhotoAlpha.Read(newWidth, newHeight, R0926PhotoAlpha.CanHave(source));   // 투명한 곳이 있으면 RGBA32 (11-24)
         result.Apply();
         RenderTexture.active = null;
         RenderTexture.ReleaseTemporary(rt);

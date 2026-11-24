@@ -49,7 +49,8 @@ public class R0926WindowFill : BaseMeshEffect
             if (n.EndsWith("_ring")) return null;
             if (n.StartsWith("r0926_i_") || n.StartsWith("r0926_c_")) m = Mode.Ink;   // 아이콘 — 어둡게 칠한 것만 글자처럼
             else if (sp == null || im.type == Image.Type.Sliced || im.type == Image.Type.Tiled || System.Array.IndexOf(BoxSprites, n) >= 0)
-                m = IsPage(im, windowColor, windowRect) ? Mode.Page : Mode.Box;
+                // 마스크 그림은 쪽으로 보지 않는다 — 안 그리면 마스크가 비어 안의 사진 · 캐릭터까지 다 가려진다 (정보 수정 AI 미리보기 · 11-24)
+                m = IsPage(im, windowColor, windowRect) && im.GetComponent<Mask>() == null ? Mode.Page : Mode.Box;
             else return null;
         }
         else return null;   // RawImage(사진 · 지도) 등

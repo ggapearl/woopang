@@ -87,6 +87,8 @@ public class ProfileManager : MonoBehaviour
     public Button xButton;
     [Tooltip("Facebook 아이콘 버튼")]
     public Button facebookButton;
+    [Tooltip("LinkedIn 아이콘 버튼")]
+    public Button linkedinButton;
     [Tooltip("SNS 아이콘 부모 오브젝트 (내 프로필에서 팔로우 버튼 대신 표시)")]
     public GameObject snsIconsContainer;
     [Tooltip("SNS 아이콘 크기 (가로, 세로)")]
@@ -254,6 +256,8 @@ public class ProfileManager : MonoBehaviour
             xButton.onClick.AddListener(OnXClicked);
         if (facebookButton != null)
             facebookButton.onClick.AddListener(OnFacebookClicked);
+        if (linkedinButton != null)
+            linkedinButton.onClick.AddListener(OnLinkedInClicked);
 
         // 인스타그램 스타일 Follow List 버튼 리스너
         // 탭 순서: 팔로잉(왼쪽/페이지0), 팔로워(오른쪽/페이지1)
@@ -480,6 +484,11 @@ public class ProfileManager : MonoBehaviour
             {
                 facebookButton = CreateSnsIconButton("Facebook", new Color(0.23f, 0.35f, 0.60f), 2);
                 if (facebookButton != null) facebookButton.gameObject.SetActive(false);
+            }
+            if (linkedinButton == null)
+            {
+                linkedinButton = CreateSnsIconButton("LinkedIn", new Color(0.04f, 0.40f, 0.76f), 3);
+                if (linkedinButton != null) linkedinButton.gameObject.SetActive(false);
             }
 
             // 컨테이너 숨김 (프로필 열 때 표시)
@@ -2389,12 +2398,14 @@ public class ProfileManager : MonoBehaviour
         string instagramId = profile.instagram_id;
         string xId = profile.x_id;
         string facebookId = profile.facebook_id;
+        string linkedinId = profile.linkedin_id;
 
         bool hasInstagram = !string.IsNullOrEmpty(instagramId);
         bool hasX = !string.IsNullOrEmpty(xId);
         bool hasFacebook = !string.IsNullOrEmpty(facebookId);
+        bool hasLinkedIn = !string.IsNullOrEmpty(linkedinId);
 
-        bool hasAnySns = hasInstagram || hasX || hasFacebook;
+        bool hasAnySns = hasInstagram || hasX || hasFacebook || hasLinkedIn;
 
         if (!hasAnySns)
         {
@@ -2476,6 +2487,16 @@ public class ProfileManager : MonoBehaviour
             else if (hasFacebook)
             {
                 facebookButton = CreateSnsIconButton("Facebook", new Color(0.23f, 0.35f, 0.60f), 2);
+            }
+
+            // LinkedIn 버튼
+            if (linkedinButton != null)
+            {
+                linkedinButton.gameObject.SetActive(hasLinkedIn);
+            }
+            else if (hasLinkedIn)
+            {
+                linkedinButton = CreateSnsIconButton("LinkedIn", new Color(0.04f, 0.40f, 0.76f), 3);
             }
         }
     }
@@ -2607,6 +2628,9 @@ public class ProfileManager : MonoBehaviour
             case "Facebook":
                 newBtn.onClick.AddListener(OnFacebookClicked);
                 break;
+            case "LinkedIn":
+                newBtn.onClick.AddListener(OnLinkedInClicked);
+                break;
         }
 
         return newBtn;
@@ -2627,7 +2651,7 @@ public class ProfileManager : MonoBehaviour
         textRect.offsetMax = Vector2.zero;
 
         Text label = textObj.AddComponent<Text>();
-        label.text = snsName == "Instagram" ? "IG" : snsName == "X" ? "X" : "FB";
+        label.text = snsName == "Instagram" ? "IG" : snsName == "X" ? "X" : snsName == "LinkedIn" ? "in" : "FB";
         label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         label.fontSize = 18;
         label.fontStyle = FontStyle.Bold;
@@ -2662,6 +2686,27 @@ public class ProfileManager : MonoBehaviour
         string facebookUrl = $"https://www.facebook.com/{currentProfile.facebook_id}";
         Application.OpenURL(facebookUrl);
     }
+
+    private void OnLinkedInClicked()
+    {
+        string handle = currentProfile != null ? LinkedInHandle(currentProfile.linkedin_id) : "";
+        if (handle.Length == 0) return;
+        Application.OpenURL(LinkedInUrl(handle));
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex LinkedInPath =
+        new System.Text.RegularExpressions.Regex(@"linkedin\.com/(?:in|pub)/([^/?#]*)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>링크드인 칸 — 프로필 주소를 통째로 붙여 넣어도 linkedin.com/in/ 뒤의 아이디만 (서버 _linkedin_handle 과 같은 셈)</summary>
+    public static string LinkedInHandle(string value)
+    {
+        string v = (value ?? "").Trim().TrimStart('@');
+        var m = LinkedInPath.Match(v);
+        if (m.Success) v = m.Groups[1].Value;
+        return Uri.UnescapeDataString(v).Trim().Trim('/');
+    }
+
+    public static string LinkedInUrl(string handle) => "https://www.linkedin.com/in/" + Uri.EscapeDataString(handle);
 
     #endregion
 
@@ -3255,6 +3300,7 @@ public class ProfileData
     public string instagram_id;
     public string facebook_id;
     public string x_id;
+    public string linkedin_id;
     public int followers_count;
     public int following_count;
     public string created_at;

@@ -8,15 +8,18 @@ namespace Redesign0926
 {
     /// <summary>
     /// 첫 사용 안내 카드뉴스 (11-10 대표님 「카드뉴스 작업한 것들 … 베이스로 옆으로 스와이프해서 넘겨보면서 안내 … 화살표 안내와 함께 … 가볍게 모달로」).
-    /// FirstTimeGuidePanel 맨 위에 자기 캔버스(9450)를 가진 Cards0926 — 카드 9장 · 쪽 점 · 다음/시작하기 · 건너뛰기 · ‹ › · 어둡게 + 구멍 + 화살표.
+    /// FirstTimeGuidePanel 맨 위에 자기 캔버스(9450)를 가진 Cards0926 — 카드 10장 · 쪽 점 · 다음/시작하기 · 건너뛰기 · ‹ › · 어둡게 + 구멍 + 화살표.
     /// 자리와 크기는 R0926GuideCards 가 화면마다 정한다 — 여기선 모양과 연결만. 휴대폰 화면은 Guide0926 폴더의 JPG(.bytes).
     /// </summary>
     public static partial class Redesign0926Apply
     {
         private const string GuideCardDir = "Assets/Redesign0926/Guide0926/";
-        private const int GuideCardCount = 9;
-        // 카드마다 비출 하단 버튼 (없으면 null) — 주변 · 누르면 · 목록 · 지도 · 추가 · 짜잔 · 보물 숨기기 · 보물 찾음 · 사람
-        private static readonly string[] GuideCardTargets = { null, null, "List_Button", "List_Button", "PlusButton", "PlusButton", "Hunt_Button0926", "Hunt_Button0926", null };
+        private const int GuideCardCount = 10;
+        // 카드마다 비출 하단 버튼 (없으면 null) — 주변 · 누르면 · 위아래로 밀기 · 목록 · 지도 · 추가 · 짜잔 · 보물 숨기기 · 보물 찾음 · 사람
+        private static readonly string[] GuideCardTargets = { null, null, null, "List_Button", "List_Button", "PlusButton", "PlusButton", "Hunt_Button0926", "Hunt_Button0926", null };
+        // 카드마다 휴대폰 화면 그림 이름 (gc_<이름>[_ko|_en].bytes) — 3번째 「위로 밀면 근처 장소 · 아래로 밀면 하늘」(11-24 대표님 「처음 설명가이드 발생할 때 둘다 해당 내용이 설명으로」)
+        private static readonly string[] GuideCardShots = { "01", "02", "swipe", "03", "04", "05", "06", "07", "08", "09" };
+        private static bool GuideShotShared(int i) => i < 3;   // 앞 세 장은 언어와 상관없이 한 장 (글자 없는 화면)
 
         private static void ApplyGuideCards(Transform root, List<string> log)
         {
@@ -225,7 +228,7 @@ namespace Redesign0926
             so.FindProperty("skip").objectReferenceValue = RT(skip);
             so.FindProperty("skipLabel").objectReferenceValue = slt;
 
-            // 휴대폰 화면 — 한국어는 _ko, 나머지 언어는 _en (1 · 2번은 스토어 사진 그대로 하나)
+            // 휴대폰 화면 — 한국어는 _ko, 나머지 언어는 _en (1 · 2번은 스토어 사진 그대로 하나 · 3번 위아래로 밀기는 글자 없는 그림 하나)
             var bgAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(GuideCardDir + "gc_bg.bytes");
             if (bgAsset == null) log.Add("카드 안내: 바탕 그림 없음");
             so.FindProperty("background").objectReferenceValue = bgAsset;
@@ -235,8 +238,8 @@ namespace Redesign0926
             int missing = 0;
             for (int i = 0; i < GuideCardCount; i++)
             {
-                string n = (i + 1).ToString("00");
-                bool shared = i < 2;
+                string n = GuideCardShots[i];
+                bool shared = GuideShotShared(i);
                 var a = AssetDatabase.LoadAssetAtPath<TextAsset>(GuideCardDir + "gc_" + n + (shared ? "" : "_ko") + ".bytes");
                 var b = AssetDatabase.LoadAssetAtPath<TextAsset>(GuideCardDir + "gc_" + n + (shared ? "" : "_en") + ".bytes");
                 if (a == null) missing++;

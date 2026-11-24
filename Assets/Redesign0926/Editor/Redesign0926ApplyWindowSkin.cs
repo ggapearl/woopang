@@ -23,6 +23,8 @@ namespace Redesign0926
         // 창으로 보지 않는 곳 — 시작화면 · 첫 안내 · 사진 크게 보기 · 사진 자르기 (제 모양이 따로 있다)
         private static readonly string[] WindowSkip = { "Splash0926", "FirstTimeGuidePanel", "GuideCards0926", "ChatPhotoView0926", "PhotoCrop0926" };
         private static readonly string[] WindowBoxSprites = { "square", "Square_Sero_white", "UISprite", "Background" };
+        // 창 안에서 그 창을 통째로 덮는 화면 — 제 창 모양을 따로 단다. 밑 창이 맞추면 '창과 같은 바탕'으로 보고 안 그려서 밑 창의 칸들이 비쳤다 (11-24 · 정보 수정 AI 화면)
+        private static readonly string[] WindowOverlays = { "FixAi0926" };
 
         private static void ApplyWindowSkin(Transform root, List<string> log)
         {
@@ -47,7 +49,12 @@ namespace Redesign0926
             {
                 Image host = null;
                 foreach (var o in picks) if (o != im && im.transform.IsChildOf(o.transform)) { host = o; break; }
-                if (host != null) audit.AppendLine("  안쪽 창 " + SkinPath(im.transform, root) + " — " + host.name + " 이 맞춘다");
+                if (host != null && System.Array.IndexOf(WindowOverlays, im.name) >= 0)
+                {
+                    audit.AppendLine("  덮는 화면 " + SkinPath(im.transform, root) + " — " + host.name + " 위에 제 창 모양 (밑 창 모양을 이어 그린다)");
+                    outer.Add(im);
+                }
+                else if (host != null) audit.AppendLine("  안쪽 창 " + SkinPath(im.transform, root) + " — " + host.name + " 이 맞춘다");
                 else outer.Add(im);
             }
 
@@ -120,6 +127,26 @@ namespace Redesign0926
                 keep.Add(AddNeonRim(img, mat, blur));
                 nRim++;
                 audit.AppendLine("  테 " + what + " " + SkinPath(t, root) + (img.GetComponent<Mask>() != null ? " · ⚠마스크(빛이 잘림)" : "") + ClipAbove(t, root));
+            }
+
+            // 위쪽에 고정한 하늘 판 — 판 유리(Glass0926)에 네온 테 (11-24 대표님 「하늘 위쪽으로 고정햇을 때 네온모드」).
+            // 판은 화면 UI 밖(하늘의 월드 캔버스)에 있다가 고정하면 틀째 SkyPin0926 으로 옮겨 온다 — 테는 유리와 같이 나타나고 사라진다 (R0926SkyWeather.SetGlass)
+            GameObject skyBoard = null;
+            foreach (var r in root.gameObject.scene.GetRootGameObjects()) if (r.name == "SkyWeather0926") skyBoard = r;
+            var skyGlass = skyBoard != null ? skyBoard.transform.Find("Frame0926/Glass0926")?.GetComponent<Image>() : null;
+            var skyMarker = Find(root, "Redesign0926Marker");
+            var skyW = skyMarker != null ? skyMarker.GetComponent<R0926SkyWeather>() : null;
+            if (skyGlass == null || skyW == null) { log.Add("창 모양: 고정한 하늘 판 유리 없음"); audit.AppendLine("  없음 고정한 하늘 판"); }
+            else
+            {
+                var skyRim = AddNeonRim(skyGlass, mat, blur).GetComponent<Image>();
+                skyRim.color = new Color(1f, 1f, 1f, 0f);   // 하늘에선 투명 — 고정하면 유리와 같이 짙어진다
+                EditorUtility.SetDirty(skyRim);
+                var sso = new SerializedObject(skyW);
+                sso.FindProperty("glassRim").objectReferenceValue = skyRim;
+                sso.ApplyModifiedPropertiesWithoutUndo();
+                nRim++;
+                audit.AppendLine("  테 고정한 하늘 판 SkyWeather0926/Frame0926/Glass0926 — 유리와 같이 나타남 (위쪽에 고정했을 때만)");
             }
 
             int removed = 0;

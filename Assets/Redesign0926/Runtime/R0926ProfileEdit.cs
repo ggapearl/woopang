@@ -32,6 +32,7 @@ public class R0926ProfileEdit : MonoBehaviour
     [SerializeField] private InputField instagramInput;
     [SerializeField] private InputField facebookInput;
     [SerializeField] private InputField xInput;
+    [SerializeField] private InputField linkedinInput;
     [SerializeField] private Text message;              // 저장 버튼 위 한 줄 — 잘못 쓴 칸·서버 답
     [SerializeField] private Button saveButton;
     [SerializeField] private Text saveLabel;
@@ -49,7 +50,7 @@ public class R0926ProfileEdit : MonoBehaviour
     private enum State { Loading, Failed, Ready, Saving }
 
     private static readonly string[] CropTitle = { "프로필 사진", "Profile photo", "プロフィール写真", "头像", "Foto de perfil" };
-    private static readonly string[] Keys = { "username", "bio", "phone", "instagram_id", "facebook_id", "x_id" };
+    private static readonly string[] Keys = { "username", "bio", "phone", "instagram_id", "facebook_id", "x_id", "linkedin_id" };
     private static readonly Regex UserRe = new Regex(@"^[a-z0-9._]{1,20}$");
     private static readonly Regex DigitsDots = new Regex(@"^[0-9]+(\.[0-9]+)+$");   // 서버가 기관(공공데이터) 아이디 모양으로 막는다
     private static readonly Regex PhoneRe = new Regex(@"^[0-9+\-() ]*$");
@@ -69,10 +70,10 @@ public class R0926ProfileEdit : MonoBehaviour
     private string modelUrl = "";
     private string display = ShowPhoto, shownDisplay = ShowPhoto;   // 고른 것 · 서버에 있는 것 — 다르면 '저장하기'로 보낸다
     private Coroutine removeArm;
-    private readonly string[] shown = new string[6];   // 불러와 칸에 넣은 글 — 손대지 않은 칸은 보내지 않는다
+    private readonly string[] shown = new string[7];   // 불러와 칸에 넣은 글 — 손대지 않은 칸은 보내지 않는다
     private readonly R0926PickerWait pick = new R0926PickerWait();
 
-    private InputField[] Fields => new[] { usernameInput, bioInput, phoneInput, instagramInput, facebookInput, xInput };
+    private InputField[] Fields => new[] { usernameInput, bioInput, phoneInput, instagramInput, facebookInput, xInput, linkedinInput };
     private MonoBehaviour Host => ProfileManager.Instance != null ? ProfileManager.Instance : (MonoBehaviour)this;
 
     private static string Base
@@ -98,13 +99,13 @@ public class R0926ProfileEdit : MonoBehaviour
         if (scroll != null) scroll.verticalNormalizedPosition = 1f;
         if (profile != null && profile.id == me)
         {
-            Fill(profile.username, profile.bio, "", profile.instagram_id, profile.facebook_id, profile.x_id);
+            Fill(profile.username, profile.bio, "", profile.instagram_id, profile.facebook_id, profile.x_id, profile.linkedin_id);
             ProfileManager.LoadAvatarAsync(me, profile.avatar_url, avatar, profile.username);
             SetModel(profile.avatar_glb_url, profile.avatar_display);
         }
         else
         {
-            Fill(user.username, "", "", "", "", "");
+            Fill(user.username, "", "", "", "", "", "");
             ProfileManager.LoadAvatarAsync(me, null, avatar, user.username);
             SetModel("", ShowPhoto);
         }
@@ -140,7 +141,7 @@ public class R0926ProfileEdit : MonoBehaviour
         // 본인으로 알아봤을 때만 남은 날이 온다 — 없으면 토큰이 죽었거나 다른 사람 것
         if (code == 200 && j["id"].Value == me && j.HasKey("username_wait_days"))
         {
-            Fill(j["username"].Value, j["bio"].Value, j["phone"].Value, j["instagram_id"].Value, j["facebook_id"].Value, j["x_id"].Value);
+            Fill(j["username"].Value, j["bio"].Value, j["phone"].Value, j["instagram_id"].Value, j["facebook_id"].Value, j["x_id"].Value, j["linkedin_id"].Value);
             waitDays = j["username_wait_days"].AsInt;
             ApplyLock();
             ProfileManager.LoadAvatarAsync(me, j["avatar_url"].Value, avatar, j["username"].Value);
@@ -236,6 +237,7 @@ public class R0926ProfileEdit : MonoBehaviour
                 newName = v;
             }
             else if (i == 2 && !PhoneRe.IsMatch(v)) { Say(PhoneText); return; }
+            else if (Keys[i] == "linkedin_id") v = ProfileManager.LinkedInHandle(v);   // 주소를 붙여 넣어도 아이디만
             body[Keys[i]] = v;
         }
         if (display != shownDisplay) body["avatar_display"] = display;

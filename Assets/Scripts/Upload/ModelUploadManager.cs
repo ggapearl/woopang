@@ -1108,7 +1108,8 @@ public class ModelUploadManager : MonoBehaviour
             if (i > MAX_SUB_PHOTOS) break;
             Texture2D subPhoto = subPhotos[i - 1];
             Texture2D resizedSubPhoto = ResizeTextureKeepAspectWithRenderTexture(subPhoto, 800, 800);
-            byte[] subPhotoBytes = resizedSubPhoto.EncodeToJPG(50);
+            bool subPng = R0926PhotoAlpha.Has(resizedSubPhoto);   // 투명한 PNG 는 PNG 로 (11-24)
+            byte[] subPhotoBytes = R0926PhotoAlpha.Encode(resizedSubPhoto, 50);
             if (subPhotoBytes.Length == 0)
             {
                 Debug.LogError($"[ModelUploadManager] 서브 사진 #{i} 데이터가 비어 있습니다!");
@@ -1116,8 +1117,8 @@ public class ModelUploadManager : MonoBehaviour
                 Destroy(resizedSubPhoto);
                 continue;
             }
-            string subPath = $"sub_{i}.jpg";
-            formData.AddBinaryData("sub_photos", subPhotoBytes, subPath, "image/jpeg");
+            string subPath = subPng ? $"sub_{i}.png" : $"sub_{i}.jpg";
+            formData.AddBinaryData("sub_photos", subPhotoBytes, subPath, subPng ? "image/png" : "image/jpeg");
             Destroy(resizedSubPhoto);
         }
 
@@ -1198,8 +1199,7 @@ public class ModelUploadManager : MonoBehaviour
         RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight);
         RenderTexture.active = rt;
         Graphics.Blit(source, rt);
-        Texture2D result = new Texture2D(newWidth, newHeight, TextureFormat.RGB24, false);
-        result.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
+        Texture2D result = R0926PhotoAlpha.Read(newWidth, newHeight, R0926PhotoAlpha.CanHave(source));   // 투명한 곳이 있으면 RGBA32 (11-24)
         result.Apply();
         RenderTexture.active = null;
         RenderTexture.ReleaseTemporary(rt);

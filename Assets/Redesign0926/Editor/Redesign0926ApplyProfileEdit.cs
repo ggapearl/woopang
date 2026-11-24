@@ -104,6 +104,10 @@ namespace Redesign0926
             var xIn = PeInput(PeGroup(content, "F_x", new[] { "X", "X", "X", "X", "X" }), "Input", 140,
                 new[] { "X 아이디", "X username", "Xのユーザー名", "X 用户名", "Usuario de X" },
                 false, 50, InputField.ContentType.Custom, TouchScreenKeyboardType.EmailAddress);
+            // 링크드인 (11-23 대표님) — 한글만 (번역은 대표님이 하라실 때만 · 빈 칸은 en 으로 보인다). 프로필 주소를 붙여 넣으면 저장할 때 아이디만 남긴다
+            var lIn = PeInput(PeGroup(content, "F_linkedin", new[] { "링크드인", "링크드인", "", "", "" }), "Input", 140,
+                new[] { "아이디 또는 프로필 주소", "아이디 또는 프로필 주소", "", "", "" },
+                false, 200, InputField.ContentType.Custom, TouchScreenKeyboardType.URL);
 
             modelRow.SetSiblingIndex(1);       // 칸 묶음은 차례로 맨 뒤에 붙는다 — 사진 칸 바로 아래로
             displayGroup.transform.SetSiblingIndex(2);
@@ -169,6 +173,7 @@ namespace Redesign0926
             S("instagramInput", iIn);
             S("facebookInput", fIn);
             S("xInput", xIn);
+            S("linkedinInput", lIn);
             S("message", msgText);
             S("saveButton", saveBtn);
             S("saveLabel", saveLabel);
@@ -193,7 +198,7 @@ namespace Redesign0926
                 var src = mso.FindProperty("sourceInputs");
                 var have = new HashSet<Object>();
                 for (int i = 0; i < src.arraySize; i++) have.Add(src.GetArrayElementAtIndex(i).objectReferenceValue);
-                foreach (var f in new[] { uIn, bIn, pIn, iIn, fIn, xIn })
+                foreach (var f in new[] { uIn, bIn, pIn, iIn, fIn, xIn, lIn })
                 {
                     if (have.Contains(f)) continue;
                     src.arraySize++;

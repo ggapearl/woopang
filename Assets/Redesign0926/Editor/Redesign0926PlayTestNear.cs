@@ -565,7 +565,8 @@ namespace Redesign0926
             {
                 // AR 에서 맞지 않는 콜라이더는 막을 수 없다 — 렌더러와 같은 오브젝트(3D 모델)는 담을 때 같이 카드 레이어(28~31)로 가고,
                 // 크게 키운 모델(배율 10 · 상자 10m)은 3m 앞이면 카메라가 상자 안이라 레이가 안 맞는다 (11-21 운영 장소 하나가 그렇게 커짐).
-                // 큐브처럼 콜라이더만 남는 것은 바로 앞(3m)이면 카드 뒤에 통째로 가려질 수 있다 — 4m 안에서 조금씩 올려 카드 밖으로 나온 자리에서 민다
+                // 큐브처럼 콜라이더만 남는 것은 바로 앞(3m)이면 카드 뒤에 통째로 가려질 수 있다 — 4m 안에서 조금씩 올리거나 옆으로 돌려 카드 밖으로 나온 자리에서 민다
+                // (11-24 — 휴대폰 화각이 넓어 3m 앞 1~2m 상자도 화면 가운데 작은 네모라, 1.4m 올려도 카드 뒤 · 옆으로 40~70° 돌리면 카드 옆 맨 AR 에 걸린다)
                 int open = 0, moved = 0, inside = 0;
                 var eye = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
                 foreach (var c in x.GetComponentsInChildren<Collider>(false))
@@ -581,17 +582,23 @@ namespace Redesign0926
                     return moved + inside > 0 && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x;
                 }
                 var p = new Vector2(-1f, -1f);
-                float up = -0.6f;
-                foreach (float u in new[] { -0.6f, 0.4f, 0.9f, 1.4f })
+                float up = -0.6f, turn = 0f;
+                foreach (float deg in new[] { 0f, 40f, -40f, 50f, -50f, 60f, -60f, 70f, -70f })
                 {
-                    up = u;
-                    NmPut(x, 3f, 0f, u);
-                    Physics.SyncTransforms();
-                    p = NmOnHeld(x);
+                    foreach (float u in new[] { -0.6f, 0.4f, 0.9f, 1.4f })
+                    {
+                        up = u;
+                        turn = deg;
+                        NmPut(x, 3f, deg, u);
+                        Physics.SyncTransforms();
+                        p = NmOnHeld(x);
+                        if (p.x >= 0f) break;
+                    }
                     if (p.x >= 0f) break;
                 }
                 bool can = p.x >= 0f && nmModal.EditorCanSwipeUp(p) && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x;
-                log.Add($"  카드에 담긴 것의 콜라이더 자리: {(p.x >= 0f ? $"찾음 (높이 {up:+0.0;-0.0}m)" : "없음")} · AR 에 남은 콜라이더 {open}개 · 위로 밀기 받음 {can}");
+                log.Add($"  카드에 담긴 것의 콜라이더 자리: {(p.x >= 0f ? $"찾음 (높이 {up:+0.0;-0.0}m · 옆 {turn:+0;-0;0}° · 화면 {p.x / Screen.width:0.00}, {p.y / Screen.height:0.00})" : "없음")} · AR 에 남은 콜라이더 {open}개 · 위로 밀기 받음 {can}");
+                if (p.x < 0f) log.Add(NmHeldWhy(x));
                 return can;
             }, "카드에 담겨 AR 화면에서 빠진 것(콜라이더만 남음) 위에서 밀어도 받는다 — 안 보이는 것에 막히지 않게");
             Do(() => ok = NmSwipeUp());
@@ -1382,6 +1389,37 @@ namespace Redesign0926
                     if (on(p)) return p;
                 }
             return new Vector2(-1f, -1f);
+        }
+
+        // NmOnHeld 가 자리를 못 찾았을 때 — 콜라이더마다 크기 · 화면 범위 · 가운데에서 덮은 UI · 레이가 먼저 맞은 것 (장소 이름은 적지 않는다)
+        private static string NmHeldWhy(GameObject go)
+        {
+            var cam = Camera.main;
+            if (cam == null || go == null) return "    (카메라 없음)";
+            var sb = new System.Text.StringBuilder();
+            foreach (var c in go.GetComponentsInChildren<Collider>(false))
+            {
+                if (!c.enabled || ((1 << c.gameObject.layer) & NmMask) != 0) continue;
+                var bb = c.bounds;
+                Vector2 lo = new Vector2(float.MaxValue, float.MaxValue), hi = new Vector2(float.MinValue, float.MinValue);
+                for (int i = 0; i < 8; i++)
+                {
+                    var sp = cam.WorldToScreenPoint(bb.center + Vector3.Scale(bb.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f)));
+                    if (sp.z <= 0f) continue;
+                    lo = Vector2.Min(lo, sp);
+                    hi = Vector2.Max(hi, sp);
+                }
+                Vector2 mid = cam.WorldToScreenPoint(bb.center);
+                var ui = WorldTouch.TopUI(mid);
+                string hit = "없음";
+                if (Physics.Raycast(cam.ScreenPointToRay(mid), out var h, 2000f, Physics.DefaultRaycastLayers & ~NmMask, QueryTriggerInteraction.Collide))
+                    hit = h.collider.transform.IsChildOf(go.transform) ? (h.collider == c ? "이것" : "같은 장소의 다른 콜라이더")
+                        : $"다른 것 (층 {h.collider.gameObject.layer} · {h.collider.GetType().Name}{(h.collider.isTrigger ? " 트리거" : "")} · {(h.distance < Vector3.Distance(cam.transform.position, bb.center) ? "이것보다 앞" : "이것보다 뒤")})";
+                sb.Append($"    {c.GetType().Name}{(c.isTrigger ? " 트리거" : "")} 층 {c.gameObject.layer} · 크기 {bb.size.x:0.00}×{bb.size.y:0.00}×{bb.size.z:0.00}m"
+                    + $" · 화면 x {lo.x / Screen.width:0.00}~{hi.x / Screen.width:0.00} y {lo.y / Screen.height:0.00}~{hi.y / Screen.height:0.00}"
+                    + $" · 가운데 UI {(ui != null ? ui.name : "-")} · 레이 {hit}\n");
+            }
+            return sb.Length > 0 ? sb.ToString().TrimEnd('\n') : "    (AR 층 콜라이더 없음)";
         }
 
         // UI 도 오브젝트도 없는 자리 (카드가 받을지와 상관없이) — 하늘 · 덮는 창 때문에만 막히는지 볼 때. 없으면 (-1, -1)

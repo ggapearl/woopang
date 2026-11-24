@@ -778,10 +778,33 @@ namespace Redesign0926
                     if (font != null) tx.font = font;
                     EditorUtility.SetDirty(tx);
                 }
+            Transform linkedin = null;
             if (sns != null)
             {
                 var hl = sns.GetComponent<HorizontalLayoutGroup>();
                 if (hl != null) { hl.spacing = 44; hl.childAlignment = TextAnchor.MiddleCenter; EditorUtility.SetDirty(hl); }
+                // 링크드인 (11-23 대표님) — 페이스북 칸을 본떠 (모양·누름 소리 그대로) 맨 끝에 · 켜고 끄기는 ProfileManager 가 아이디 있을 때만
+                linkedin = sns.Find("LinkedInButton");
+                var fbIcon = sns.Find("FacebookButton");
+                if (linkedin == null && fbIcon != null)
+                {
+                    linkedin = Object.Instantiate(fbIcon.gameObject, sns, false).transform;
+                    linkedin.name = "LinkedInButton";
+                }
+                if (linkedin != null)
+                {
+                    linkedin.SetAsLastSibling();
+                    var liImg = linkedin.GetComponent<Image>();
+                    const string liPath = "Assets/Resources/SNS/linkedin_icon.png";
+                    var liSpr = AssetDatabase.LoadAssetAtPath<Sprite>(liPath);
+                    if (liSpr == null)   // 막 받은 그림이 아직 안 읽혔을 때
+                    {
+                        AssetDatabase.ImportAsset(liPath, ImportAssetOptions.ForceSynchronousImport);
+                        liSpr = AssetDatabase.LoadAssetAtPath<Sprite>(liPath);
+                    }
+                    if (liImg != null && liSpr != null) { liImg.sprite = liSpr; EditorUtility.SetDirty(liImg); }
+                    else Debug.LogWarning("[0926] 링크드인 아이콘을 못 넣음");
+                }
                 foreach (Transform icon in sns)
                 {
                     RT(icon.gameObject).sizeDelta = new Vector2(163, 163);
@@ -834,6 +857,7 @@ namespace Redesign0926
             {
                 var pso = new SerializedObject(pm);
                 pso.FindProperty("messageButton").objectReferenceValue = message != null ? message.GetComponent<Button>() : null;
+                if (linkedin != null) pso.FindProperty("linkedinButton").objectReferenceValue = linkedin.GetComponent<Button>();
                 pso.FindProperty("listSheetClose").objectReferenceValue = Find(root, "XButton_List")?.GetComponent<Button>();
                 pso.FindProperty("listSheetOpen").objectReferenceValue = Find(root, "List_Button")?.GetComponent<Button>();
                 pso.ApplyModifiedPropertiesWithoutUndo();

@@ -83,6 +83,10 @@ public class R0926AiWorkPanel : MonoBehaviour
     private RectTransform dock;
     private float nextDockLook;
     private readonly Vector3[] corners = new Vector3[4];
+    // 요청사항을 키보드 위 입력줄로 쓰는 동안 카드를 올린 양 (부모 좌표) — 입력줄이 닫히면 부드럽게 0 으로
+    private float kbLift;
+    private int kbFrame = -1;
+    private const float KbGap = 28f, KbSpeed = 12f;
 
     // 지금 미리보기에 입힌 결과 — 패널이 꺼진 뒤 '추가하기' 콜백에서 가져가므로 패널 밖(정적)에 둔다
     private static R0926AiWork.Result held;
@@ -233,6 +237,7 @@ public class R0926AiWorkPanel : MonoBehaviour
         else if (cardSaved)
         {
             cardSaved = false;
+            kbLift = 0f;
             if (card != null)
             {
                 card.anchorMin = cardMin; card.anchorMax = cardMax; card.pivot = cardPivot;
@@ -255,8 +260,41 @@ public class R0926AiWorkPanel : MonoBehaviour
         if (card.pivot != piv) card.pivot = piv;
         if (card.sizeDelta != size) card.sizeDelta = size;
         var pos = new Vector2(cardPos.x, top + Lift(top, h));
+        if (kbFrame != Time.frameCount)
+        {
+            kbFrame = Time.frameCount;
+            float want = KeyboardLift(pos.y, h);
+            kbLift = Mathf.Abs(want - kbLift) < 1f ? want : Mathf.Lerp(kbLift, want, Mathf.Clamp01(Time.unscaledDeltaTime * KbSpeed));
+        }
+        pos.y += kbLift;
         if ((card.anchoredPosition - pos).sqrMagnitude > 0.01f) card.anchoredPosition = pos;
     }
+
+    // 11-24 대표님 「키패드가 올라와서 타이핑이 어떻게 입력되는 지 안보이거든 … 그 창 자체를 좀 올려서」 —
+    // 요청사항을 키보드 위 입력줄로 쓰는 동안 카드째 입력줄 위로. 다 들어가지 않으면 화면 위 안전선 아래까지만 올리되
+    // 요청사항 칸만은 꼭 입력줄 위로 (부모 좌표 · 올릴 것이 없으면 0)
+    private float KeyboardLift(float baseY, float h)
+    {
+        var bar = mirror != null && request != null && mirror.ActiveSource == request ? mirror.PlacedBar : null;
+        var parent = card.parent as RectTransform;
+        if (bar == null || parent == null || rootCanvas == null || parent.lossyScale.y <= 1e-6f) return 0f;
+        var root = (RectTransform)rootCanvas.transform;
+        float line = parent.rect.yMin + parent.rect.height * cardMax.y;   // anchoredPosition.y 의 0 줄
+        float top = RootY(root, parent.TransformPoint(new Vector3(0f, line + baseY, 0f)));         // 올리기 전 카드 윗선
+        float bottom = RootY(root, parent.TransformPoint(new Vector3(0f, line + baseY - h, 0f)));   // · 아래 끝
+        card.GetWorldCorners(corners);
+        float nowTop = RootY(root, corners[1]);
+        ((RectTransform)request.transform).GetWorldCorners(corners);
+        float field = top - (nowTop - RootY(root, corners[0]));            // 올리기 전 요청사항 칸 아래 끝
+        bar.GetWorldCorners(corners);
+        float floor = RootY(root, corners[1]) + KbGap;                     // 입력줄 윗선 + 간격
+        root.GetWorldCorners(corners);
+        float ceil = RootY(root, corners[1]) - (Screen.height - Screen.safeArea.yMax) / Mathf.Max(0.01f, rootCanvas.scaleFactor) - KbGap;
+        float need = Mathf.Max(Mathf.Min(floor - bottom, ceil - top), floor - field);
+        return need > 0f ? need * root.lossyScale.y / parent.lossyScale.y : 0f;
+    }
+
+    private static float RootY(RectTransform root, Vector3 world) => root.InverseTransformPoint(world).y;
 
     // 도크 윗선(가로 화면 · 도크가 없으면 화면 아래 안전선) + 간격보다 카드 아래 끝이 낮으면 — 모자란 만큼 (부모 좌표)
     private float Lift(float top, float h)

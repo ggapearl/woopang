@@ -77,6 +77,8 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private RectTransform pinLayer;
     [Tooltip("판 전체에서 손가락을 받는 판 — 고정했을 때만 유리로 보인다 (카메라 화면 위에서도 글이 읽히게)")]
     [SerializeField] private Image glass;
+    [Tooltip("유리 둘레의 네온 테 (Glass0926/NeonRim0926 — 네온 모드에서만 그린다) — 유리와 같이 나타나고 사라진다 (위쪽에 고정했을 때만 보임)")]
+    [SerializeField] private Image glassRim;
     [Tooltip("고정한 판은 이것들 위에 놓는다 (주소줄 · 도크)")]
     [SerializeField] private RectTransform[] pinFloor;
     [Tooltip("고정한 판의 유리 폭 — 화면 폭의 이만큼")]
@@ -243,6 +245,8 @@ public class R0926SkyWeather : MonoBehaviour
 
     /// <summary>날씨를 받아 판에 그릴 수 있다 (설정에서 날씨를 껐으면 false) — 하늘 옆 장이 날씨 장을 넣을지 본다</summary>
     public bool WeatherReady => R0926SkySettings.Enabled && R0926SkySettings.Weather && hasData;
+    /// <summary>판에 보일 것이 있는지 — 하늘을 켰고, 날씨를 켰으면 날씨가 왔다 (아니면 옆 장만 켰다). 아니면 고정해도 다음 프레임에 풀린다 (Update)</summary>
+    public bool Ready => R0926SkySettings.Enabled && (R0926SkySettings.Weather ? hasData : R0926SkySettings.Events);
     /// <summary>휴대폰이 수평보다 몇 도 위를 보는지 (마지막 프레임) — 하늘 옆 장이 미리 받아 둘 때를 본다</summary>
     public float Pitch { get; private set; }
 
@@ -379,12 +383,36 @@ public class R0926SkyWeather : MonoBehaviour
         fromScale = toScale * 0.18f;
         fromAlpha = 0f;
         UpdatePin();
+        TopHint();
+    }
+
+    /// <summary>
+    /// 카메라 화면을 위에서 아래로 쓸면 (R0926NearModal — 11-24 대표님 「상단에서 아래로 스와이프하면 바로 하늘보기 발생하도록」) — 휴대폰을 하늘로 들지 않아도
+    /// 판을 화면 위쪽에 고정해 편다. 노치를 눌렀을 때처럼 화면 위 가운데에서 작게 나와 내려오고, 아래쪽에 고정해 둔 판은 위쪽으로 옮긴다.
+    /// 펼 수 없으면 false — 하늘을 껐다 · 아직 보일 것이 없다(Ready) · 이미 위쪽에 고정했다
+    /// </summary>
+    public bool ShowAtTop()
+    {
+        if (frame == null || frameGroup == null || pinLayer == null || glass == null || frameSize.x <= 0f) return false;
+        if (!Ready || (pinned && pinTop)) return false;
+        UnfoldFromNotch(new Vector2(Screen.width * 0.5f, Screen.safeArea.yMax));
+        return pinned && pinTop;
+    }
+
+    // 위쪽에 고정했을 때 처음 한 번만 — 치우는 법 (노치가 없으면 위로 밀면 칩으로 접힌다 — FoldToNotch)
+    private void TopHint()
+    {
         if (PlayerPrefs.GetInt(NotchHintKey, 0) != 0 || ToastManager.Instance == null) return;
-        PlayerPrefs.SetInt(NotchHintKey, 1);   // 처음 한 번만 — 치우는 법
-        ToastManager.Instance.ShowInfo(L(R0926LocalizedText.Lang(), "위쪽에 고정했어요 · 위로 밀면 노치로, 아래로 밀면 사라져요",
-            "Pinned to the top · Swipe up to tuck it into the notch, down to put it away",
-            "上に固定しました · 上にスワイプでノッチへ、下にスワイプで閉じます", "已固定在顶部 · 向上滑动收进刘海，向下滑动收起",
-            "Fijado arriba · Desliza hacia arriba para guardarlo en la muesca, hacia abajo para quitarlo"));
+        PlayerPrefs.SetInt(NotchHintKey, 1);
+        string lang = R0926LocalizedText.Lang();
+        ToastManager.Instance.ShowInfo(R0926Notch.Available
+            ? L(lang, "위쪽에 고정했어요 · 위로 밀면 노치로, 아래로 밀면 사라져요",
+                "Pinned to the top · Swipe up to tuck it into the notch, down to put it away",
+                "上に固定しました · 上にスワイプでノッチへ、下にスワイプで閉じます", "已固定在顶部 · 向上滑动收进刘海，向下滑动收起",
+                "Fijado arriba · Desliza hacia arriba para guardarlo en la muesca, hacia abajo para quitarlo")
+            : L(lang, "위쪽에 고정했어요 · 위로 밀면 접히고, 아래로 밀면 사라져요", "위쪽에 고정했어요 · 위로 밀면 접히고, 아래로 밀면 사라져요",
+                "위쪽에 고정했어요 · 위로 밀면 접히고, 아래로 밀면 사라져요", "위쪽에 고정했어요 · 위로 밀면 접히고, 아래로 밀면 사라져요",
+                "위쪽에 고정했어요 · 위로 밀면 접히고, 아래로 밀면 사라져요"));
     }
 
     /// <summary>노치에서 폈는지 — 한 번 읽으면 지운다 (R0926SkyPages 가 날씨 장부터 보이게)</summary>
@@ -641,6 +669,7 @@ public class R0926SkyWeather : MonoBehaviour
         var c = glassColor;
         c.a *= glassK;
         glass.color = c;
+        if (glassRim != null) { var r = glassRim.color; r.a = glassK; glassRim.color = r; }   // 하늘에 걸린 동안(0)은 테도 안 보인다
     }
 
     // 누워서 위로 들고 쓰는 경우(천장) — 크게 기울인 채 거의 움직이지 않으면

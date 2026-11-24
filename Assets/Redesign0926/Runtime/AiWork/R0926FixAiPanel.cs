@@ -78,6 +78,12 @@ public class R0926FixAiPanel : MonoBehaviour
     private static int seq;
     private Texture2D checkerTex;
 
+    // 요청사항을 키보드 위 입력줄로 쓰는 동안 — 요청사항 · 네 칸을 올린 높이 (보기 아래 끝부터 · 보기 좌표). 입력줄이 닫히면 부드럽게 0 으로
+    private float kbCover, kbWant;
+    private int kbFrame = -1;
+    private readonly Vector3[] corners = new Vector3[4];
+    private const float KbGap = 28f, KbSpeed = 12f, MinStage = 200f;
+
     public bool Open => open;
     public bool Working => working;
     public bool Clear => clear;
@@ -243,26 +249,52 @@ public class R0926FixAiPanel : MonoBehaviour
         }
         else
         {
+            kbCover = kbWant = 0f;
             if (model != null) model.Show("");
             ForgetModel();
         }
     }
 
-    // 맨 아래부터 취소|확인 · (04) 요청사항 · 네 칸 — 남은 위쪽을 미리보기가 채운다
+    private void LateUpdate()
+    {
+        if (open) Layout();
+    }
+
+    // 맨 아래부터 취소|확인 · (04) 요청사항 · 네 칸 — 남은 위쪽을 미리보기가 채운다.
+    // 11-24 대표님 「키패드가 올라와서 타이핑이 어떻게 입력되는 지 안보이거든」 — 요청사항을 키보드 위 입력줄로 쓰는 동안은
+    // 요청사항 · 네 칸을 입력줄 위로 올린다 (취소|확인은 키보드 뒤에 둔다 · 미리보기가 그만큼 줄어든다)
     private void Layout()
     {
         if (!open) return;
-        float y = pad;
-        y = Stack(foot, y);
-        if (ask != null && ask.gameObject.activeSelf) y = Stack(ask, y);
-        y = Stack(tiles, y);
-        if (stage != null)
+        if (kbFrame != Time.frameCount)
         {
-            var min = new Vector2(stage.offsetMin.x, y);
-            var max = new Vector2(stage.offsetMax.x, -(pad + headH + gap * 0.5f));
+            kbFrame = Time.frameCount;
+            kbWant = KeyboardCover();
+            kbCover = Mathf.Abs(kbWant - kbCover) < 1f ? kbWant : Mathf.Lerp(kbCover, kbWant, Mathf.Clamp01(Time.unscaledDeltaTime * KbSpeed));
+        }
+        float y0 = Stack(foot, pad);
+        bool askOn = ask != null && ask.gameObject.activeSelf;
+        float y = askOn ? Stack(ask, Mathf.Max(y0, kbCover)) : y0;
+        Stack(tiles, y);
+        if (stage != null && view != null)
+        {
+            // 미리보기는 다 올라갔을 때의 크기로 한 번에 — 움직이는 동안 캐릭터 그림을 매번 다시 만들지 않게. 아주 작은 화면에서도 칸은 남긴다
+            float cut = pad + headH + gap * 0.5f;
+            float end = Next(tiles, askOn ? Next(ask, Mathf.Max(y0, kbWant)) : y0);
+            var min = new Vector2(stage.offsetMin.x, Mathf.Min(end, Mathf.Max(y0, view.rect.height - cut - MinStage)));
+            var max = new Vector2(stage.offsetMax.x, -cut);
             if (stage.offsetMin != min) stage.offsetMin = min;
             if (stage.offsetMax != max) stage.offsetMax = max;
         }
+    }
+
+    // 요청사항을 키보드 위 입력줄로 쓰는 동안 — 입력줄 윗선 + 간격 (보기 아래 끝부터 · 보기 좌표). 아니면 0
+    private float KeyboardCover()
+    {
+        var bar = mirror != null && request != null && mirror.ActiveSource == request ? mirror.PlacedBar : null;
+        if (bar == null || view == null) return 0f;
+        bar.GetWorldCorners(corners);
+        return Mathf.Max(0f, view.InverseTransformPoint(corners[1]).y - view.rect.yMin + KbGap);
     }
 
     private float Stack(RectTransform rt, float y)
@@ -270,8 +302,10 @@ public class R0926FixAiPanel : MonoBehaviour
         if (rt == null) return y;
         var p = new Vector2(rt.anchoredPosition.x, y);
         if (rt.anchoredPosition != p) rt.anchoredPosition = p;
-        return y + rt.sizeDelta.y + gap;
+        return Next(rt, y);
     }
+
+    private float Next(RectTransform rt, float y) => rt == null ? y : y + rt.sizeDelta.y + gap;
 
     private void Pick(int i)
     {

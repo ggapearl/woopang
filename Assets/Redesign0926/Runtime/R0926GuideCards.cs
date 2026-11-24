@@ -3,7 +3,8 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// 첫 사용 안내 — 카드뉴스 9장을 옆으로 넘겨 보는 가벼운 창 (11-09 대표님 「카드뉴스 작업한 것들 … 베이스로 옆으로 스와이프해서 넘겨보면서 안내 … 화살표 안내와 함께」).
+/// 첫 사용 안내 — 카드뉴스 10장을 옆으로 넘겨 보는 가벼운 창 (11-09 대표님 「카드뉴스 작업한 것들 … 베이스로 옆으로 스와이프해서 넘겨보면서 안내 … 화살표 안내와 함께」).
+/// 3번째는 카메라 화면 위아래로 밀기 — 위로 「근처 장소」 · 아래로 하늘 판 (11-24 대표님 「처음 설명가이드 발생할 때 둘다 해당 내용이 설명으로」 · R0926NearModal).
 /// 카드는 스토어 사진 꼴 — 흐린 우주 바탕 · W O O P A N G · 두 줄 제목(분홍 강조) · 한 줄 설명 · 아래로 넘치는 휴대폰 화면.
 /// 휴대폰 화면은 JPG(.bytes) 로 들고 다니다 보이는 카드와 양옆만 풀고, 닫으면 버린다. 한국어는 한국어 화면 · 나머지 언어는 영어 화면.
 /// 카드마다 그 기능의 하단 버튼(목록 · 추가 · 보물찾기)을 동그랗게 비추고 화살표가 까딱인다 (비출 버튼이 없는 카드는 구멍이 닫힌다).
@@ -61,6 +62,7 @@ public class R0926GuideCards : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         new[] { "카메라를 비추면\n*주변 장소*가 보여요", "Point your camera,\n*find what’s near*", "カメラを向けると\n*周りのスポット*が見える", "打开相机，\n*周边地点*一目了然", "Apunta la cámara y\n*descubre lo cercano*" },
         new[] { "떠 있는 장소를 누르면\n*정보*가 바로 펼쳐져요", "Tap a floating place\nto *see its details*", "浮かんだスポットをタップ\n*情報*がすぐ開きます", "点一下浮动的地点\n*详细信息*立刻展开", "Toca un lugar flotante\ny *mira su información*" },
+        new[] { "위로 밀면 *근처 장소*\n아래로 밀면 *하늘 화면*", "위로 밀면 *근처 장소*\n아래로 밀면 *하늘 화면*", "위로 밀면 *근처 장소*\n아래로 밀면 *하늘 화면*", "위로 밀면 *근처 장소*\n아래로 밀면 *하늘 화면*", "위로 밀면 *근처 장소*\n아래로 밀면 *하늘 화면*" },   // 11-24 — 새 문구는 한국어만 (번역은 대표님이 요청하실 때)
         new[] { "‘목록’에서 근처 장소를\n*한눈에*", "See nearby places\n*at a glance* in ‘List’", "「リスト」で近くのスポットを\n*ひと目で*", "在“列表”中\n*一眼看遍*附近地点", "Lugares cercanos\n*de un vistazo* en ‘Lista’" },
         new[] { "‘지도’를 켜면\n*친구 위치*까지 한눈에", "Switch to ‘Map’\nto *find your friends*", "「地図」にすると\n*友だちの居場所*も", "切换到“地图”\n*好友在哪*一看便知", "Cambia a ‘Mapa’\ny *encuentra a tus amigos*" },
         new[] { "이 자리에\n*장소를 남기세요*", "*Pin a place*\nright where you are", "この場所に\n*スポットを残そう*", "在这里\n*留下你的地点*", "*Deja un lugar*\njusto donde estás" },
@@ -74,6 +76,7 @@ public class R0926GuideCards : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         new[] { "거리와 방향을 따라 바로 찾아가세요", "Follow distance and direction right to the spot", "距離と方向をたどって、そのまま向かえます", "跟着距离和方向直接找过去", "Sigue la distancia y la dirección hasta el lugar" },
         new[] { "메뉴 · 가격 · 반려견 동반 · 화장실까지 밖에서 미리", "Menus, prices, pet-friendly & restroom info from outside", "メニュー・価格・ペット同伴・トイレまで外から確認", "菜单、价格、可否带宠物、洗手间，在门外就能看到", "Menús, precios, mascotas y baños, desde fuera" },
+        new[] { "쓸어 올리면 가까운 10곳 · 쓸어 내리면 날씨와 동네 소식", "쓸어 올리면 가까운 10곳 · 쓸어 내리면 날씨와 동네 소식", "쓸어 올리면 가까운 10곳 · 쓸어 내리면 날씨와 동네 소식", "쓸어 올리면 가까운 10곳 · 쓸어 내리면 날씨와 동네 소식", "쓸어 올리면 가까운 10곳 · 쓸어 내리면 날씨와 동네 소식" },
         new[] { "보물찾기 · 축제 · 근처 친구까지 한 목록에", "Treasure hunts, festivals and friends in one list", "宝探し・お祭り・近くの友だちまでひとつのリストに", "寻宝、庆典、附近好友，都在一个列表里", "Búsquedas del tesoro, festivales y amigos en una lista" },
         new[] { "위치를 공유한 친구와 근처 보물찾기를 지도에서 확인해요", "See friends sharing their location and hunts nearby", "位置を共有した友だちや近くの宝探しを地図で確認", "在地图上查看共享位置的好友和附近的寻宝", "Amigos que comparten ubicación y búsquedas cercanas" },
         new[] { "사진 · 이름 · 분류만 넣으면 끝, 3D 모델도 올려요", "Just a photo, a name and a category — 3D models too", "写真・名前・分類を入れるだけ、3Dモデルも投稿できます", "只需照片、名称和分类，还能上传3D模型", "Solo foto, nombre y categoría — también modelos 3D" },

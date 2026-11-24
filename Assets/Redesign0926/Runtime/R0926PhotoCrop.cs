@@ -47,7 +47,7 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
     public bool IsOpen => gameObject.activeSelf;
 
-    /// <param name="done">자른 사진 (실패하면 null)</param>
+    /// <param name="done">자른 사진 (실패하면 null) — 투명한 곳이 있으면 RGBA32 (R0926PhotoAlpha.Has · 올릴 땐 PNG)</param>
     /// <param name="cancel">취소 — 고른 사진은 넣지 않는다</param>
     public void Open(Texture2D texture, Action<Texture2D> done, Action cancel) => Open(texture, done, cancel, null);
 
@@ -150,8 +150,7 @@ public class R0926PhotoCrop : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         {
             Graphics.Blit(tex, rt, new Vector2(r.width / tex.width, r.height / tex.height), new Vector2(r.x / tex.width, r.y / tex.height));
             RenderTexture.active = rt;
-            result = new Texture2D(n, n, TextureFormat.RGB24, false);
-            result.ReadPixels(new Rect(0, 0, n, n), 0, 0, false);
+            result = R0926PhotoAlpha.Read(n, n, R0926PhotoAlpha.CanHave(tex));   // 투명한 곳이 있으면 RGBA32 (11-24 — 예전엔 늘 RGB24 라 투명한 PNG 둘레가 검게 굳었다)
         }
         finally
         {

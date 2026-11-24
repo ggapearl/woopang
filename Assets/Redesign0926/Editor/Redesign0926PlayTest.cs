@@ -226,6 +226,11 @@ namespace Redesign0926
             else if (mode == "glassmap") PlanGlassMap();   // 11-19 K3 물방울 유리가 바로 뒤를 비추는지 — 자리마다 색이 다른 배경으로 어긋남(px) 재기
             else if (mode == "windowskin") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanWindowSkin(); }   // 11-23 S8 디스플레이 선택 — 물방울 · 네온 · 둘 다 · 둘 다 끔 × 창 배경 진하기
             else if (mode == "guidestore") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f); PlanGuideStore(); }   // 11-23 S1 스토어 「길안내」 한 장 — 스토어 촬영 자리(광화문)의 공공 장소로
+            else if (mode == "skyneon") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSkyNeon(); }   // 11-24 하늘 위쪽 고정 네온 — 고정한 판 유리 둘레 네온 테 (배경 폴더 필요)
+            else if (mode == "photoalpha") PlanPhotoAlpha();   // 11-24 N1 투명한 PNG — 자르기 · 줄이기 · 올리기 · 받기에서 둘레가 검게 굳지 않고 투명한 그대로
+            else if (mode == "skyswipe") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSkySwipe(); }   // 11-24 N4 AR 화면을 위→아래로 밀면 하늘 판이 위쪽에 고정돼 펼쳐짐 (가상 손가락 · 배경 폴더의 견본 날씨)
+            else if (mode == "aikb") PlanAiKeyboard();   // 11-24 N2 AI 작업 요청사항 — 키보드 위 입력줄이 뜨면 칸이 입력줄 위로 (장소 추가 · 정보 수정) · 정보 수정 AI 화면이 수정 카드를 가린다
+            else if (mode == "linkedin") PlanLinkedIn();   // 11-24 L1 링크드인 — 프로필 SNS 줄 네 번째 칸 · 편집 칸 · 주소를 붙여 넣어도 아이디만 (가짜 프로필 서버 5796)
             else if (mode == "nearkinds") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanNearKinds(); }   // 사람 · 보물 · 공공데이터 · 공공교통
             else if (mode == "nearhunt") PlanNearHunt();   // 11-20 H6 「근처 장소」의 보물찾기 — 뜨지만 멀리서 두 번 눌러도 안 열림(「직접 찾아가서」 안내) · 상자 앞 2m 면 보물찾기로 (운영 서버에 묻지 않음)
             else if (mode == "guidearrow") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanGuideArrow(); }   // 11-15 (B) 아래 길안내 화살표 (배경 폴더가 있으면 도시 배경)
@@ -1879,11 +1884,15 @@ namespace Redesign0926
             return (list != null && list.Exists(c => c.notificationId == id)) || PlayerPrefs.GetString("SystemNotifications", "").Contains(id);
         }
 
-        // 11-10 대표님 「firtimeguide 의 경우 … 카드뉴스 작업한 것들 … 베이스로 옆으로 스와이프해서 넘겨보면서 안내 … 화살표 안내와 함께 … 각 언어로 잘 정리해서」 — 첫 안내 카드 9장 (R0926GuideCards · v82)
+        // 11-10 대표님 「firtimeguide 의 경우 … 카드뉴스 작업한 것들 … 베이스로 옆으로 스와이프해서 넘겨보면서 안내 … 화살표 안내와 함께 … 각 언어로 잘 정리해서」 — 첫 안내 카드 (R0926GuideCards · v82 · 9장 → 11-24 10장)
         // G3: 끌어서 넘기기(30% → 옆 카드 · 8% → 제자리 · 첫 카드에서 오른쪽은 고무줄 · 끄는 동안 손가락을 따라감) · ‹ › · '다음' · 마지막 '시작하기' · 건너뛰기 · 뒤로가기 ·
         //     예전 안내 막의 Next/Skip(스토어 캡처 등 다른 계획이 부름) · 켠 채로 돌리기 — 그림은 보이는 카드와 양옆만, 닫으면 모두 버림.
         //     5개 언어 세로 9장 · 한국어/영어 가로 9장: 제목 두 줄 · 설명 두 줄 이하가 카드 안, 휴대폰은 설명 아래(가로는 오른쪽 칸) · 한국어는 _ko 화면 그 밖은 _en,
         //     비출 버튼이 있는 카드는 구멍이 그 버튼에 · 화살표가 그 버튼 위(가로는 왼쪽) · '다음'과 안 겹침, 없는 카드는 구멍이 닫힘
+        // 첫 안내 카드 수 · 카드마다 휴대폰 화면 그림 이름 (Redesign0926Apply.GuideCardShots 와 같다 — 11-24 3번째에 위아래로 밀기 · 앞 세 장은 언어 공용)
+        private const int GcCount = 10;
+        private static readonly string[] GcShots = { "01", "02", "swipe", "03", "04", "05", "06", "07", "08", "09" };
+
         private static void PlanGuide()
         {
             const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
@@ -1964,7 +1973,7 @@ namespace Redesign0926
                 var target = targets != null && i < targets.Length ? targets[i] : null;
                 Rect tg = target != null ? box(target) : new Rect();
                 bool last = i == cards.Length - 1;
-                string want = "gc_" + (i + 1).ToString("00") + (i < 2 ? "" : lang == "ko" ? "_ko" : "_en");
+                string want = "gc_" + GcShots[i] + (i < 3 ? "" : lang == "ko" ? "_ko" : "_en");
                 var shot = c.shot.texture;
                 int hl = c.head.cachedTextGenerator.lineCount, sl = c.sub.cachedTextGenerator.lineCount;
                 float left = card.xMin, colR = land ? card.xMin + card.width * 0.54f : card.xMax;
@@ -1997,18 +2006,18 @@ namespace Redesign0926
                     + $" · '{label}' {prim.yMin:0}~{prim.yMax:0} · 점 {dr.yMin:0}~{dr.yMax:0} · 건너뛰기 {skip.xMin:0}~{skip.xMax:0} × {skip.yMin:0}~{skip.yMax:0}"
                     + (text ? "" : " ✗글") + (phone ? "" : " ✗휴대폰") + (layout ? "" : " ✗자리") + (spot ? "" : " ✗구멍·화살표") + (ctrl ? "" : " ✗버튼"));
                 return text && phone && layout && spot && ctrl;
-            }, $"첫 안내 카드 {lang} {(land ? "가로" : "세로")} {i + 1}/9: 글이 카드 안 · 휴대폰 화면 · 자리 · 비춘 버튼과 화살표 · 버튼 글");
+            }, $"첫 안내 카드 {lang} {(land ? "가로" : "세로")} {i + 1}/{GcCount}: 글이 카드 안 · 휴대폰 화면 · 자리 · 비춘 버튼과 화살표 · 버튼 글");
 
             Action<string, bool> all = (lang, land) =>
             {
                 Do(() => AppLanguage.EditorOverride = lang);
                 open();
-                for (int i = 0; i < 9; i++)
+                for (int i = 0; i < GcCount; i++)
                 {
                     int k = i;
                     look(lang, k, land);
                     Shot((land ? "gcl_" : "gc_") + lang + "_" + (k + 1));
-                    if (k < 8) { Do(() => Click(C + (k % 2 == 0 ? "Next0926" : "Primary0926"))); Sleep(0.75f); }
+                    if (k < GcCount - 1) { Do(() => Click(C + (k % 2 == 0 ? "Next0926" : "Primary0926"))); Sleep(0.75f); }
                 }
                 Do(() => Click(C + "Primary0926"));
                 Sleep(0.9f);
@@ -2032,6 +2041,7 @@ namespace Redesign0926
             Check(() => gc != null && gc.IsOpen && gc.Index == 0 && Active("FirstTimeGuidePanel") && R0926GuideOverlay.BlocksWorld
                 && !on("Prev0926") && on("Next0926") && on("Skip0926") && !Active("FirstTimeGuidePanel/Guide0926") && !Active("FirstTimeGuidePanel/check"),
                 "카드 안내 열림: 첫 카드 · ‹ 숨김 · › · 건너뛰기 · 예전 안내 막 숨김 · AR 오브젝트 터치 막음");
+            Check(() => { log.Add($"  카드 {gc.Count}장"); return gc.Count == GcCount; }, $"카드 {GcCount}장 (3번째 「위로 밀면 근처 장소 · 아래로 밀면 하늘 화면」 — 11-24)");
             Check(() => { var g = get("group") as CanvasGroup; log.Add($"  투명도 {(g != null ? g.alpha : -1f):0.00} · 풀어 둔 그림 {loaded()}장"); return g != null && g.alpha > 0.99f && g.blocksRaycasts && loaded() == 2; },
                 "다 떠오름 · 그림은 첫 카드와 다음 카드 두 장만");
             Do(() => swipe(-0.3f));
@@ -2065,10 +2075,10 @@ namespace Redesign0926
             Do(() => UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Next());
             Sleep(0.7f);
             Check(() => gc.Index == 2, "예전 안내 막의 '다음'(스토어 캡처 계획이 부름) → 다음 카드");
-            for (int i = 0; i < 6; i++) { Do(() => Click(C + "Primary0926")); Sleep(0.45f); }
+            for (int i = 0; i < GcCount - 3; i++) { Do(() => Click(C + "Primary0926")); Sleep(0.45f); }
             Sleep(0.4f);
-            Check(() => gc.Index == 8 && !on("Next0926") && !on("Skip0926") && on("Prev0926") && (get("primaryLabel") as Text)?.text == "시작하기" && loaded() == 2,
-                "'다음' 여섯 번 → 마지막 카드: '시작하기' · › · 건너뛰기 숨김 · 그림 두 장");
+            Check(() => gc.Index == GcCount - 1 && !on("Next0926") && !on("Skip0926") && on("Prev0926") && (get("primaryLabel") as Text)?.text == "시작하기" && loaded() == 2,
+                $"'다음' {GcCount - 3}번 → 마지막 카드: '시작하기' · › · 건너뛰기 숨김 · 그림 두 장");
             Do(() => Click(C + "Primary0926"));
             Sleep(0.9f);
             Check(() =>
@@ -2090,16 +2100,18 @@ namespace Redesign0926
             Sleep(0.9f);
             Check(() => !Active("FirstTimeGuidePanel"), "예전 안내 막의 건너뛰기(다른 계획들이 부름) → 닫힘");
 
-            // 5개 언어 세로 · 한국어/영어 가로 — 9장씩
+            // 5개 언어 세로 · 한국어/영어 가로 — 카드 GcCount 장씩
             foreach (var l in langs) all(l, false);
             Do(() => Rotate(true));
             Wait(() => Turned(true), 8f, "가로로 돌림");
             Sleep(1.0f);
             all("ko", true);
             all("en", true);
-            // 켠 채로 돌리기 — 세 번째 카드(목록)에서 세로로 → 자리를 다시 잡고 구멍이 '목록' 칸을 따라간다
+            // 켠 채로 돌리기 — 네 번째 카드(목록)에서 세로로 → 자리를 다시 잡고 구멍이 '목록' 칸을 따라간다
             Do(() => AppLanguage.EditorOverride = "ko");
             open();
+            Do(() => Click(C + "Next0926"));
+            Sleep(0.5f);
             Do(() => Click(C + "Next0926"));
             Sleep(0.5f);
             Do(() => Click(C + "Next0926"));
@@ -2107,7 +2119,7 @@ namespace Redesign0926
             Do(() => Rotate(false));
             Wait(() => Turned(false), 8f, "세로로 되돌림");
             Sleep(1.2f);
-            look("ko", 2, false);
+            look("ko", 3, false);
             Shot("gc_rotated");
             Do(() => Click(C + "Skip0926"));
             Sleep(0.9f);
@@ -24981,6 +24993,10 @@ namespace Redesign0926
             if (skyPagesRun) SkyPagesCleanup();   // 하늘 옆 장 시험이 오류로 끊긴 경우 — 시험 서버 주소 · 시험 아이디 · 하늘 설정
             NmFinish();   // 가까이 모달 시험이 오류로 끊긴 경우도
             StoresFinish();   // 가게 시험도 — 가짜 가게 서버 주소 · 칩 저장값
+            LiFinish();   // 링크드인 시험도 — 가짜 프로필 서버 주소 · 로그인 흉내
+            SnFinish();   // 하늘 고정 네온 시험도 — 디스플레이 · 하늘 설정 · 하늘 옆 장 서버 주소
+            AkFinish();   // AI 작업 키보드 시험도 — 디스플레이 설정 · 고치기 창 서버 주소
+            SwFinish();   // 아래로 밀어 하늘 시험도 — 하늘 설정 · 안내 키 · 하늘 옆 장 서버 주소 · 입력 설정
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
             AppLanguage.EditorOverride = null;

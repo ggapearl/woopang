@@ -1620,7 +1620,8 @@ public class CubeDataFixManager : MonoBehaviour
         if (mainKeepPath != null) form.AddField("main", "keep");
         else if (mainPhoto != null)
         {
-            bool png = aiOn && aiAlpha;   // AI 작업으로 바깥을 투명하게 한 로고 · 캐릭터 정지 사진 (장소 추가와 같게 — 서버 /thumb 이 투명을 알아본다)
+            // AI 작업으로 바깥을 투명하게 한 로고 · 캐릭터 정지 사진, 아니면 새로 고른 투명한 PNG (자르기가 RGBA32 로 남긴 것 — 11-24) — 장소 추가와 같게 · 서버 /thumb 이 투명을 알아본다
+            bool png = aiOn ? aiAlpha : R0926PhotoAlpha.Has(mainPhoto);
             Texture2D resized = ResizeTextureWithRenderTexture(mainPhoto, 444, 444, png);
             byte[] bytes = png ? resized.EncodeToPNG() : resized.EncodeToJPG(50);
             Destroy(resized);
@@ -1641,11 +1642,12 @@ public class CubeDataFixManager : MonoBehaviour
                 continue;
             }
             Texture2D resized = ResizeTextureKeepAspectWithRenderTexture(subPhotos[i], 800, 800);
-            byte[] bytes = resized.EncodeToJPG(50);
+            bool subPng = R0926PhotoAlpha.Has(resized);   // 투명한 PNG 는 PNG 로 (11-24)
+            byte[] bytes = R0926PhotoAlpha.Encode(resized, 50);
             Destroy(resized);
             if (bytes.Length == 0) continue;
             plan.Add("new:" + fresh);
-            form.AddBinaryData("sub_photos", bytes, "sub_" + (fresh + 1) + ".jpg", "image/jpeg");
+            form.AddBinaryData("sub_photos", bytes, "sub_" + (fresh + 1) + (subPng ? ".png" : ".jpg"), subPng ? "image/png" : "image/jpeg");
             fresh++;
         }
         form.AddField("subs", JsonConvert.SerializeObject(plan));
@@ -1857,8 +1859,7 @@ public class CubeDataFixManager : MonoBehaviour
         RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight);
         RenderTexture.active = rt;
         Graphics.Blit(source, rt);
-        Texture2D result = new Texture2D(newWidth, newHeight, TextureFormat.RGB24, false);
-        result.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
+        Texture2D result = R0926PhotoAlpha.Read(newWidth, newHeight, R0926PhotoAlpha.CanHave(source));   // 투명한 곳이 있으면 RGBA32 (11-24)
         result.Apply();
         RenderTexture.active = null;
         RenderTexture.ReleaseTemporary(rt);
