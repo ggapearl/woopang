@@ -1,5 +1,6 @@
 # MCP Unity 연결 (Claude ↔ Unity Editor)
 
+> 최종 갱신: 2026-06-13
 > Unity Editor와 Claude를 연결해 씬/프리팹/컴포넌트를 직접 조작할 때 참조
 
 ---

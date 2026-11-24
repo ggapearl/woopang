@@ -1,5 +1,6 @@
 # 3D 콘텐츠(GLB) 생성·자동화 작업 가이드
 
+> 최종 갱신: 2026-11-05
 > AR 댄스 콘텐츠(category="anim") 또는 일반 GLB 자산 만들 때 참조.
 > 작성: 2026-06-01 PoC 작업 중 정리.
 
@@ -16,6 +17,10 @@
 | 5 | 실사 멤버 | MetaHuman·스캔 | 수주 | 고비용 |
 
 → **현재 사장님 케이스**: Tier 3까지 PoC, Tier 4부터 외주.
+
+> ⚠️ **Tier 3(Hunyuan3D)는 대한민국에서 쓸 수 없는 라이선스다 (2026-10-18 LICENSE 원문 확인).** `Tencent-Hunyuan/Hunyuan3D-2`·`-2.1` 의 LICENSE 는 「EU·영국·**대한민국에는 적용되지 않는다**」(Territory 정의에서 제외)이고, 2.1 의 5조(RULES OF USE) c항은 **산출물(Output)을 Territory 밖에서 쓰거나 보여 주는 것까지 금지**한다.
+> → 우팡 앱·제휴 시연·마케팅에 Hunyuan3D 산출물을 쓰지 말 것(PoC 로 눈으로 보는 것까지만). 앱 `Assets` 에는 아직 Hunyuan 산출물이 없다 — 지금이 바꾸기 가장 싼 때다.
+> → 대체 후보(MIT/Apache): TripoSR(VRAM 약 6GB — 이 PC 8GB 가능), TRELLIS·TRELLIS.2(16GB↑ GPU 필요), InstantMesh. 유료 서비스는 약관 확인 후. 법률 해석은 아니므로 확정 전 확인할 것.
 
 ---
 
@@ -115,6 +120,8 @@ INSERT INTO locations (
 ---
 
 ## 5. Tier 3 — Hunyuan3D 2.1 로컬 (사실적 — 우리 본 게임)
+
+> ⚠️ **한국에서는 라이선스상 사용 불가** — 맨 위(0. 큰 그림)의 경고를 먼저 읽을 것. 이 절은 기술 기록으로만 남긴다. 산출물을 앱·서버에 올리지 말 것.
 
 ### 설치 위치
 - 코드: `c:\hunyuan3d\Hunyuan3D-2.1\`

@@ -1,6 +1,8 @@
 # 기획안 / 제안서 (HTML 페이퍼) 작업 가이드
 
+> 최종 갱신: 2026-11-22
 > 기획안, 제안서, HTML 페이퍼 작성 시 참조
+> **정부지원 PSST 사업계획서 · IR · 발표 PPT 는 [IR_PSST.md](IR_PSST.md)** (우기 한 벌을 기준으로 한 별도 가이드)
 
 ---
 
@@ -117,7 +119,7 @@
 [ A ] "기획안 대잔치" = /plan 인덱스 페이지
 ────────────────────────────────────────────────────
 - 라우트: @app.route('/plan') → documents/plan_index.html
-- 이 페이지가 모든 기획안을 카드로 모아놓은 곳 (<title>기획안 대잔치 — QUE. ENT</title>)
+- 이 페이지가 모든 기획안을 카드로 모아놓은 곳 (<title>기획안 대잔치 — 주식회사 쾌</title>)
 - 새 기획안을 만들면 여기에 카드를 추가해야 /plan 목록에 노출됨
 
 ────────────────────────────────────────────────────
@@ -171,6 +173,10 @@ plan_index.html 카드 추가 위치:
 - /plan/angrylawyer      → angrylawyer_proposal.html (성난 변호사)
 - /plan/nongmin          → nongmin_proposal.html (농민닷컴 — 농어민 1% 직거래·라이브커머스)
 - /plan/nongmin_pitch    → nongmin_pitch_proposal.html (농민닷컴 IR 피치덱 — Seed 라운드 10페이지)
+- /plan/nongmin_marketing → nongmin_marketing_proposal.html (농민닷컴 마케팅·섭외·협력 로드맵 — 유튜브 · 인플루언서 · 매헌·다산·손암 협회 · 컨택 매트릭스)
+- /plan/nongmin_calendar → nongmin_calendar_proposal.html (농민닷컴 액션 캘린더 — 시점별 실행 액션 · D-Day · 상시 반복)
+
+**농민닷컴 문서 5종 통일 네비게이션**: 위 5개 파일 모두 body 최상단에 `<div class="doc-nav-wrap">` 스티키 네비게이션이 있음. 새 농민닷컴 문서 추가 시 5개 파일 모두 네비게이션 링크 목록에 새 항목 추가할 것. CSS/HTML 블록은 각 파일에 인라인으로 동일하게 삽입돼 있음(중복 감수하고 파일 독립성 우선).
 - /polar_marathon        → polar_marathon_proposal.html  (출연자 섭외용 — 명시 라우트)
 - /north_marathon        → north_marathon_proposal.html  (후원사 섭외용 — 명시 라우트)
 ```
@@ -246,6 +252,10 @@ plan_index.html 카드 추가 위치:
 ```
 ⚠️ 모든 기획안/제안서 HTML — 모바일(특히 핸드폰)에서
    좌우로 드래그·스와이프해도 절대 가로 스크롤이 발생하지 않도록 작성
+
+★ 모바일 기준 폭: 422px (대표님 실기기 아이폰 실측 뷰포트, 2026-07 확인)
+   — 모바일 레이아웃은 422px에서 우선 확인·디자인하고,
+     390px(아이폰 15)·375px·360px까지 가로 넘침 0을 유지할 것
 
 전역 가드 (style 최상단):
 html { overflow-x: hidden; max-width: 100%; }
@@ -644,12 +654,12 @@ align-items:
 ```
 ⚠️ 모든 기획안에 동일하게 적용:
 
-© 2019. 쾌엔터테인먼트. All rights reserved. CONFIDENTIAL.
+© 2019. 주식회사 쾌. All rights reserved. CONFIDENTIAL.
 기획자 : 김영훈 | 연락처 : +82 10.4444.4395
 
 다국어 번역 시에도 기획자명/연락처 포함:
-- EN: Producer : Young-Hoon Kim | Contact : +82 10.4444.4395
+- EN: Producer : YOUNGHOON KIM | Contact : +82 10.4444.4395
 - JA: 企画者 : キム・ヨンフン | 連絡先 : +82 10.4444.4395
 - ZH: 策划人 : 金英勋 | 联系方式 : +82 10.4444.4395
-- ES: Productor : Young-Hoon Kim | Contacto : +82 10.4444.4395
+- ES: Productor : YOUNGHOON KIM | Contacto : +82 10.4444.4395
 ```

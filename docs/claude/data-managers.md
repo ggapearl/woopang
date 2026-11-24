@@ -1,11 +1,12 @@
 # 데이터 매니저 추가·수정 시 연결 체크리스트 (필독)
 
-> 5개 데이터 매니저(스폰 시스템) 추가·수정 작업 시 참조.
-> (CLAUDE.md 5번 섹션에서 분리 — 5개 매니저 표·공공데이터≠공공교통 경고는 CLAUDE.md에 유지)
+> 최종 갱신: 2026-11-21
+> 6개 데이터 매니저(스폰 시스템) 추가·수정 작업 시 참조.
+> (CLAUDE.md 5번 섹션에서 분리 — 매니저 표·공공데이터≠공공교통 경고는 CLAUDE.md에 유지)
 
-우팡 앱은 **5개 데이터 매니저**가 AR 오브젝트를 스폰. 새 매니저 추가 또는 기존 매니저 수정 시 **아래 시스템들 모두에 연결돼 있는지 반드시 점검**. 한 곳이라도 빠지면 그 매니저 데이터만 기능 누락 (이전에 공공교통 3개 매니저가 zoom에서 빠져있던 사례).
+우팡 앱은 **6개 데이터 매니저**가 AR 오브젝트를 스폰. 새 매니저 추가 또는 기존 매니저 수정 시 **아래 시스템들 모두에 연결돼 있는지 반드시 점검**. 한 곳이라도 빠지면 그 매니저 데이터만 기능 누락 (이전에 공공교통 3개 매니저가 zoom에서 빠져있던 사례).
 
-### 5개 매니저
+### 6개 매니저
 | 매니저 | 데이터 카테고리 | 위치 |
 |--------|----------------|------|
 | `DataManager` | 우팡 자체 DB (사용자 업로드 AR 오브젝트) | [Assets/Scripts/Places/DataManager.cs](../../Assets/Scripts/Places/DataManager.cs) |
@@ -13,8 +14,13 @@
 | `SubwayManager` | 공공교통 (지하철역) | [Assets/Scripts/Places/SubwayManager.cs](../../Assets/Scripts/Places/SubwayManager.cs) |
 | `TrainStationManager` | 공공교통 (기차역) | [Assets/Scripts/Places/TrainStationManager.cs](../../Assets/Scripts/Places/TrainStationManager.cs) |
 | `TerminalManager` | 공공교통 (버스 터미널) | [Assets/Scripts/Places/TerminalManager.cs](../../Assets/Scripts/Places/TerminalManager.cs) |
+| `StoreManager` | 근처 가게 (소상공인 상가정보 — 서버 `/api/stores/near` 가 가까운 몇 곳만 준다, 2026-11-20 N8a) | [Assets/Scripts/Places/StoreManager.cs](../../Assets/Scripts/Places/StoreManager.cs) |
 
 ⚠️ "공공데이터(TourAPI)" ≠ "공공교통(Subway/Train/Terminal)" — 별도 카테고리. 한국어로 둘 다 "공공"이라 헷갈리기 쉬우니 작업 시 명확히 구분할 것.
+
+⚠️ **칩 이름 주의 (2026-11-20 N8a)**: 화면의 「공공데이터」 칩 = 가게(`StoresToggle` · 필터 키 `stores` · 저장값 `Filter_Stores_V1`), 「공공기관」 칩 = 관광공사(`PublicDataToggle` · 필터 키 `publicData`). 코드 이름(`PublicData`)과 화면 이름이 엇갈리니 칩을 만질 땐 키로 확인할 것.
+- `StoreManager` 의 오브젝트 본은 관광공사 큐브(`0002_Cube_TourAPI`)를 같이 쓴다. 이 본에는 앞면 그림 부품(`ImageDisplayController`)이 없어서 **만들 때 붙인다**(`StoreManager.NewObject`) — 빼면 가게 큐브에 분류 스티커 대신 관광공사 면이 뜬다.
+- 시험: PlayTest `stores` (내 PC 가짜 가게 서버 127.0.0.1:5795 필요 — 운영 서버 · 상가정보 API 에 묻지 않는다).
 
 ### 매니저 추가·수정 시 점검할 연결 지점
 
