@@ -6,7 +6,9 @@ import UIKit
 /// 폰 사진 자동 백업 + 폰 사진첩 정리 (2.4, 2026-11-21 대표님 「구글 포토처럼 · 요금제 무제한이라 LTE·Wi-Fi 상관없이 · 백업된 건 폰에서 정리」).
 ///
 /// 화면(웹 app.js)은 `DeskNative` 로 이 클래스를 부른다 — 이름·모양은 app.js 의 「폰 사진 자동 백업」 주석 / `PHOTO_BACKUP.md` 와 같다.
-///  - **켠 시각 이후**에 이 폰에 생긴 사진·영상만 올린다(`since`). 이미 있던 옛 사진은 건드리지 않는다.
+///  - **기준 시각(`since`) 이후**에 이 폰에 생긴 사진·영상만 올리고, 그 뒤에 찍는 것도 계속 올린다. 처음 켤 때 기준은 **2026-11-27 0시**
+///    (대표님 11-27 「오늘 0시부터 · 내일 사진도 계속」 — 켠 시각이 아니다). 그 전의 옛 사진은 건드리지 않는다.
+///    껐다가 다시 켜면 기준이 그때 시각으로 새로 찍힌다(꺼 둔 동안 찍은 건 올리지 않는다).
 ///  - 올리는 곳은 PC 효딩쓰 창구 `photos/up` — 6MB 이하 조각으로, 끊기면 서버가 가진 길이(`have`)부터 이어 올린다.
 ///    LTE·Wi-Fi 구분 없음(`allowsCellularAccess` 등 모두 true).
 ///  - 앱이 열려 있을 때·사진첩이 바뀔 때·앱을 떠난 직후 얼마 동안·시스템이 주는 백그라운드 시간(`BGProcessingTask`)에 올린다.
@@ -19,6 +21,15 @@ final class PhotoBackup: NSObject, PHPhotoLibraryChangeObserver {
     static let bgTaskId = "com.que.hyodingsseu.photobackup"      // Info.plist BGTaskSchedulerPermittedIdentifiers 와 같아야 한다
     private static let chunkSize = 5 * 1024 * 1024                // 서버 조각 한도(6MB) 아래
 
+    /// 처음 켤 때의 기준 시각 — 2026-11-27 0시(폰의 현재 시간대). 켠 시각이 아니라 이 날 0시라서, 이 날 찍은 사진부터 올라간다.
+    private static var firstSince: Double {
+        var c = DateComponents()
+        c.year = 2026
+        c.month = 11
+        c.day = 27
+        return (Calendar.current.date(from: c) ?? Date()).timeIntervalSince1970
+    }
+
     /// 상태가 바뀌면 화면에 알린다 — DeskNative 가 'backup' 사건으로 넘긴다
     var onChange: (([String: Any]) -> Void)?
 
@@ -26,7 +37,7 @@ final class PhotoBackup: NSObject, PHPhotoLibraryChangeObserver {
 
     private struct Store: Codable {
         var enabled = false
-        var since: Double = 0                 // 켠 시각(초)
+        var since: Double = 0                 // 기준 시각(초) — 처음 켜면 2026-11-27 0시, 다시 켜면 그때
         var base = ""                         // 예: https://woopang.com/AI/api/desk
         var token = ""                        // 기기 열쇠
         var done: [String: Int64] = [:]       // 올린 사진 번호(localIdentifier) → 올린 크기(바이트)
@@ -233,7 +244,8 @@ final class PhotoBackup: NSObject, PHPhotoLibraryChangeObserver {
             return status()
         }
         store.enabled = true
-        store.since = Date().timeIntervalSince1970          // 켠 시각 — 이후에 생긴 것만 올린다
+        // 처음 켜면 2026-11-27 0시부터(오늘·내일 사진 모두), 껐다 다시 켜면 그때부터 — 이후에 생긴 것을 계속 올린다
+        store.since = store.since > 0 ? Date().timeIntervalSince1970 : Self.firstSince
         failed.removeAll()
         lastError = ""
         save()

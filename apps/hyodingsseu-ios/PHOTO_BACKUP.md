@@ -12,12 +12,12 @@
 | `App/HyodingsseuApp.swift` | `didFinishLaunching` 에서 `PhotoBackup.registerBackgroundTask()` (시작이 끝나기 전에 등록해야 한다) |
 | `Shell/WebShell.swift` | 앱이 앞으로 나올 때 `appBecameActive()` · 두 손가락 확대 끔(`pinchGestureRecognizer`) |
 | `Hyodingsseu/Info.plist` | `UIBackgroundModes = processing` · `BGTaskSchedulerPermittedIdentifiers = com.que.hyodingsseu.photobackup` |
-| `project.yml` | 2.4.0 (12) · `NSPhotoLibraryUsageDescription`(새로 읽기 허락 문구) · 쓰기 문구에서 「읽지는 않습니다」 삭제 |
+| `project.yml` | 2.4.0 (13) · `NSPhotoLibraryUsageDescription`(새로 읽기 허락 문구) · 쓰기 문구에서 「읽지는 않습니다」 삭제 |
 
 ## 웹 ↔ 앱 약속 (`app.js` 「Native.backup…」 주석과 같다)
 - `backupStatus()` → `{enabled, since, auth: 'granted'|'limited'|'denied'|'undetermined', done, pending, uploading: {lid,name,sent,total}|null, wifiOnly: false, error}`
 - `backupConfigure({base, token})` — 서버 주소와 기기 열쇠를 앱이 기억한다(웹이 열 때마다 넘긴다). 주소·열쇠·켠 시각·올린 사진 번호 기록은 앱 지원 폴더의 `PhotoBackup/state.json` 하나에 둔다(앱 샌드박스 안 — 백그라운드에서 깨어나도 같은 값).
-- `backupEnable({base, token})` → 사진첩 읽기 허락을 묻고, 허락되면 **켠 시각(`since`)** 을 찍는다. 그 뒤에 만들어진(`creationDate >= since`) 사진·영상만 올린다. 이미 폰에 있던 옛 사진은 올리지 않는다(대표님 「기존 사진은 무시」). 다시 켜면 `since` 가 새로 찍힌다.
+- `backupEnable({base, token})` → 사진첩 읽기 허락을 묻고, 허락되면 **기준 시각(`since`)** 을 찍는다 — **처음 켜면 2026-11-27 0시**(대표님 11-27 「오늘 0시부터, 내일 사진도 계속」 — 켠 시각이 아니다), 껐다 다시 켜면 그때 시각. 그 뒤에 만들어진(`creationDate > since`) 사진·영상을 올리고, 이후 찍는 것도 계속 올린다. 11-27 0시 전의 옛 사진은 올리지 않는다(11-21 「기존 사진은 무시」는 이 날짜로 바뀌었다).
 - `backupDisable()` · `backupRun()`(지금 올리기) · `backupList({before, limit})`(올릴 대상·올린 것 목록) · `backupThumb({lid, size})`(작은 그림, base64) · `backupCleanupPlan()`(지울 수 있는 장수) · `backupCleanup({scope: 'video'|'all'})`.
 - 사건 `'backup'` — 데이터는 `backupStatus()` 와 같다(올리는 중 · 장수 변화 · 오류).
 - `wifiOnly` 는 없다 — 늘 LTE·Wi-Fi 구분 없이 올린다(요금제 무제한).
@@ -38,12 +38,12 @@
 - 앱을 강제 종료(위로 밀어 닫기)하면 iOS 가 백그라운드 작업을 막는다.
 - 큰 영상은 조각 이어 올리기라 중간에 끊겨도 이어진다. 폰 저장 공간이 부족하고 iCloud 에만 있는 영상은 받아 오는 데 오래 걸릴 수 있다.
 
-## 실기기에서 확인할 것 (TestFlight 2.4.0 (12))
+## 실기기에서 확인할 것 (TestFlight 2.4.0 (13))
 1. 사진첩(📷) 칩 줄에 백업 카드가 뜨고 「켜기」 → iOS 사진 읽기 허락 창 → 「모든 사진」 허용.
-2. 켠 뒤 사진 한 장 찍고 앱 열기 → 몇 초 안에 「올라감」 · 사진첩 격자 오른쪽 아래 ✓.
+2. 켜면 **11-27 0시 이후에 찍은 사진·영상이 같이 올라가기 시작**하는지(백업 카드의 「올리는 중 · 이름 N%」) · 켠 뒤 사진 한 장 더 찍고 앱 열기 → 몇 초 안에 「올라감」 · 사진첩 격자 오른쪽 아래 ✓.
 3. 영상(30초 이상) 한 개 찍고 올라가는지 · 올리는 중 앱을 홈으로 보냈다 다시 열어 이어지는지.
 4. LTE(와이파이 끄고)에서도 올라가는지.
-5. 「정리」 → 「동영상 정리」: 올라간 영상만 후보에 나오는지 · iOS 확인 창 · 사진 앱 「최근 삭제된 항목」에 들어가는지. 켜기 전에 있던 옛 사진·영상은 후보에 **없어야** 한다.
+5. 「정리」 → 「동영상 정리」: 올라간 영상만 후보에 나오는지 · iOS 확인 창 · 사진 앱 「최근 삭제된 항목」에 들어가는지. 11-27 0시 전의 옛 사진·영상은 후보에 **없어야** 한다(그 뒤 것은 올라간 뒤라면 후보에 나온다).
 6. 사진첩 화면에서 두 손가락으로 벌려도 화면이 커지지 않는지(사진 보기 화면의 확대도 같이 막힌다 — 필요하면 거기만 따로 만든다).
 7. 껐다 켜기 · 설정에서 사진 권한을 「없음」으로 바꿨을 때 안내 문구가 뜨는지.
 
