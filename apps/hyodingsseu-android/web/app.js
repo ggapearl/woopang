@@ -6,7 +6,7 @@
  */
 'use strict';
 (function () {
-  const WEB_VERSION = '2026-11-23c';
+  const WEB_VERSION = '2026-11-27a';
   const Cap = window.Capacitor;
   const Native = (Cap && Cap.Plugins && Cap.Plugins.DeskNative) || null;
   const AppPlugin = (Cap && Cap.Plugins && Cap.Plugins.App) || null;
@@ -4554,7 +4554,8 @@
   }
 
   // ── 폰 사진 자동 백업 (2026-11-20 대표님 「핸드폰 사진첩에 접속해서 백업되지 않은 사진·영상은 여기에 백업, 구글처럼」) ──
-  // 켠 뒤에 이 폰에 새로 생긴 사진·영상만 PC 로 올린다 — 지금 폰에 있는 옛 사진은 건드리지 않는다. 올라간 것은 오른쪽 아래에 ✓.
+  // 기준 시각(처음 켜면 2026-11-27 0시 — 대표님 11-27 「오늘 0시부터, 내일 사진도 계속」 · 껐다 다시 켜면 그때) 이후에 이 폰에 생긴 사진·영상을 PC 로 올리고
+  // 그 뒤에 찍는 것도 계속 올린다 — 기준 전의 옛 사진은 건드리지 않는다. 올라간 것은 오른쪽 아래에 ✓.
   // 폰 사진첩을 읽고 올리는 일은 앱(DeskNative)이 한다 — apps/hyodingsseu-ios/PHOTO_BACKUP.md 에 약속(이름·모양)이 있다:
   //   backupStatus() → {enabled, since, auth:'granted'|'limited'|'denied'|'undetermined', done, pending, uploading:{lid,name,sent,total}|null, wifiOnly:false, error}
   //   backupEnable({base, token}) · backupDisable() · backupRun() · backupConfigure({base, token}) → 모두 위 상태를 돌려준다
@@ -4567,6 +4568,13 @@
   //     앱은 지우기 직전에 서버(photos/up/verify)에 다시 묻고 「서버에 있다」고 한 것만 지운다. 지운 것은 iOS 「최근 삭제된 항목」에 30일 남는다.
   //   사건 'backup' (addListener) — 데이터는 backupStatus() 와 같은 모양
   const BK_ON = !!(Native && typeof Native.backupStatus === 'function');
+
+  /** 백업 기준 시각(초) → 「11월 27일 00:00」 */
+  function bkSinceText(sec) {
+    if (!sec) return '';
+    const d = new Date(sec * 1000);
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
 
   /** 서버 주소·열쇠를 앱에 알려 준다 — 앱이 직접 올리기 때문. 짝을 맺거나 끊을 때, 화면이 켜질 때마다. */
   function syncBackupAuth() {
@@ -4664,15 +4672,14 @@
       cardEl.textContent = '';
       if (!st) { cardEl.append(h('div', { class: 'bk-note' }, h('i', { class: 'spinner', style: 'display:inline-block' }))); return; }
       const on = !!st.enabled;
-      const since = st.since ? new Date(st.since * 1000) : null;
-      const sinceText = since ? (since.getMonth() + 1) + '월 ' + since.getDate() + '일 ' + String(since.getHours()).padStart(2, '0') + ':' + String(since.getMinutes()).padStart(2, '0') : '';
+      const sinceText = bkSinceText(st.since);
       cardEl.append(h('div', { class: 'bk-head' },
         h('span', { class: 'bk-ic' + (on ? ' on' : ''), html: ICON.cloud }),
         h('div', { class: 'bk-tx' }, h('b', { text: on ? '자동 백업 켜짐' : '자동 백업 꺼짐' }),
-          h('small', { text: on ? sinceText + ' 이후의 새 사진·영상을 LTE·Wi-Fi 구분 없이 PC 로 올려요' : '켜면 이 폰에 새로 생기는 사진·영상이 PC 로 올라가요' })),
+          h('small', { text: on ? sinceText + ' 이후의 사진·영상을 LTE·Wi-Fi 구분 없이 PC 로 올려요' : st.since ? '켜면 켠 시각부터 새로 생기는 사진·영상이 PC 로 올라가요' : '켜면 11월 27일 0시 이후의 사진·영상이 PC 로 올라가요' })),
         h('button', { class: 'bk-sw' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on ? 'true' : 'false', 'aria-label': '자동 백업', onclick: toggleBackup }, h('i'))));
       if (!on) {
-        cardEl.append(h('p', { class: 'bk-help', text: '켠 다음부터 찍거나 받은 사진·영상만 올려요(LTE·Wi-Fi 모두). 지금 폰에 들어 있는 옛 사진은 올리지 않아요.' }));
+        cardEl.append(h('p', { class: 'bk-help', text: st.since ? '켠 다음부터 찍거나 받은 사진·영상을 계속 올려요(LTE·Wi-Fi 모두). 꺼 둔 동안 생긴 것은 올리지 않아요.' : '11월 27일 0시 이후 찍거나 받은 사진·영상을 올리고, 그 뒤에 생기는 것도 계속 올려요(LTE·Wi-Fi 모두). 그 전의 옛 사진은 올리지 않아요.' }));
       } else {
         cardEl.append(h('div', { class: 'bk-stat' },
           h('span', { text: '올림 ' + (st.done || 0).toLocaleString('ko-KR') + '장' }),
@@ -4706,7 +4713,7 @@
         if (st.enabled) { confirmOff(); return; }
         const ns = await Native.backupEnable({ base: api.base, token: api.token || '', wifiOnly: false });
         setState(ns);
-        if (ns && ns.enabled) toast('켠 뒤에 생기는 사진·영상부터 올려요');
+        if (ns && ns.enabled) toast(ns.since ? bkSinceText(ns.since) + ' 이후의 사진·영상부터 올려요' : '기준 시각 이후의 사진·영상부터 올려요');
         else if (ns && ns.error) toast(ns.error);
       } catch (e) { toast((e && e.message) || '켜지 못했어요'); }
     }
@@ -4748,7 +4755,7 @@
       bodyEl.textContent = '';
       if (failed && !items.length) { bodyEl.append(h('div', { class: 'doc-empty' }, failed, h('div', null, h('button', { class: 'doc-more', text: '다시 시도', onclick: () => load() })))); return; }
       if (!items.length) {
-        bodyEl.append(h('div', { class: 'doc-empty', text: loading ? '' : st && st.enabled ? '켠 뒤에 찍은 사진·영상이 여기에 나타나요' : '자동 백업을 켜면, 켠 뒤에 생기는 사진·영상이 여기에 나타나요' }));
+        bodyEl.append(h('div', { class: 'doc-empty', text: loading ? '' : st && st.enabled ? '기준 시각 이후에 찍은 사진·영상이 여기에 나타나요' : '자동 백업을 켜면, 새 사진·영상이 여기에 나타나요' }));
         if (loading) bodyEl.append(h('div', { class: 'empty' }, h('i', { class: 'spinner', style: 'display:inline-block' })));
         return;
       }
