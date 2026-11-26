@@ -12,8 +12,8 @@ namespace Redesign0926
     /// <summary>
     /// 11-17 K1 — 축제 칩을 켜면 목록 맨 위에는 가깝고 곧 하는 세 곳 중 무작위 한 곳만 (축제 색 바탕 · 흰 글자 — 애견동반의 보호소 줄처럼),
     /// 나머지 축제는 장소와 섞여 거리순으로 아래 (거리 슬라이더 최대 10km 밖도 맨 끝 쪽에).
-    ///  · festband : 광고 줄 하나 · 축제 여섯(1 · 3 · 2 · 6 · 25 · 120km — 서버 순서 그대로)을 앱 안에 바로 넣고(서버는 닫힌 포트 — 운영 서버에 묻지 않음) 축제 칩을 켠다 →
-    ///    맨 위 광고 → 그다음 고른 축제 하나(앞의 세 곳 중 · 축제 색 바탕 · 흰 글자) → 나머지 다섯은 바탕 없이 거리순 아래 (25 · 120km 도 장소들 뒤에) /
+    ///  · festband : 광고 줄 하나 · 축제 여섯(1 · 3 · 2 · 6 · 25 · 90km — 서버 순서 그대로) + 120km 축제 하나를 앱 안에 바로 넣고(서버는 닫힌 포트 — 운영 서버에 묻지 않음) 축제 칩을 켠다 →
+    ///    맨 위 광고 → 그다음 고른 축제 하나(앞의 세 곳 중 · 축제 색 바탕 · 흰 글자) → 나머지 다섯은 바탕 없이 거리순 아래 (25 · 90km 도 장소들 뒤에) · 120km 는 없음 (11-26 「100km 이내까지만」) /
     ///    다시 그려도 같은 곳 · 목록을 다시 열거나 칩을 다시 켜면 다른 곳 / 줄 칸이 차도 먼 축제 줄은 그린다 / 누르면 묻는 창 없이 축제 이름 검색 /
     ///    칩을 끄면 축제 줄이 빠지고 그 줄을 다시 쓰는 줄은 원래 색
     /// </summary>
@@ -24,7 +24,8 @@ namespace Redesign0926
             const string DockList = "Dock0926/List_Button";
             const string ListX = "ListPanel/DockMirror0926/XButton_List";
             string[] titles = { "시험 축제 하나", "시험 축제 둘", "시험 축제 셋", "시험 축제 넷", "시험 축제 다섯", "시험 축제 여섯" };
-            double[] km = { 1.0, 3.0, 2.0, 6.0, 25.0, 120.0 };
+            double[] km = { 1.0, 3.0, 2.0, 6.0, 25.0, 90.0 };
+            const string farTitle = "시험 축제 백이십";   // 120km — 100km 밖이라 목록에 없어야 한다
             string[] icons = { "fireworks", "maple", "crab", "party", "fireworks", "maple" };
             var pool = new HashSet<string> { titles[0], titles[1], titles[2] };
             var picks = new List<string>();
@@ -115,6 +116,10 @@ namespace Redesign0926
                     {
                         id = "kt_" + i, title = titles[i], lat = la + km[i] / 111.32, lon = lo, start = today, end = later, icon = icons[i], dist = (int)(km[i] * 1000),
                     });
+                R0926Nearby.Festivals.Add(new R0926Nearby.Festival
+                {
+                    id = "kt_far", title = farTitle, lat = la + 120.0 / 111.32, lon = lo, start = today, end = later, icon = icons[0], dist = 120000,
+                });
                 if (!festWas) ClickToggle("FestivalToggle");
             });
             Sleep(0.4f);
@@ -178,7 +183,7 @@ namespace Redesign0926
                 return placeDist.HasValue && festDist.HasValue && same(placeDist.Value, festDist.Value, 0.01f);
             }, "나머지 축제 줄은 바탕 없이 원래 글자색 (장소 줄과 같게)");
 
-            // 나머지 다섯은 맨 위 묶음(광고 · 맨 위 축제 · 근처 보물찾기) 아래 장소와 섞여 거리순 — 25 · 120km 축제는 장소들 뒤 (슬라이더 최대 10km 밖도)
+            // 나머지 다섯은 맨 위 묶음(광고 · 맨 위 축제 · 근처 보물찾기) 아래 장소와 섞여 거리순 — 25 · 90km 축제는 장소들 뒤 (슬라이더 최대 10km 밖도)
             Check(() =>
             {
                 var p = Plm();
@@ -201,9 +206,16 @@ namespace Redesign0926
                 var rest = titles.Where(x => x != topName()).ToList();
                 bool all = rest.All(at.ContainsKey);
                 int far1 = all ? at[titles[4]] : -1, far2 = all ? at[titles[5]] : -1;
-                log.Add($"  아래 묶음 {s.Count - start}줄 · 축제 {at.Count} (순서 {string.Join(",", at.OrderBy(x => x.Value).Select(x => Array.IndexOf(titles, x.Key) + 1))}) · 마지막 장소 줄 {lastPlace + 1} · 25km {far1 + 1} · 120km {far2 + 1}");
+                log.Add($"  아래 묶음 {s.Count - start}줄 · 축제 {at.Count} (순서 {string.Join(",", at.OrderBy(x => x.Value).Select(x => Array.IndexOf(titles, x.Key) + 1))}) · 마지막 장소 줄 {lastPlace + 1} · 25km {far1 + 1} · 90km {far2 + 1}");
                 return all && at.Count == titles.Length - 1 && lastPlace >= 0 && far1 > lastPlace && far2 > far1;
-            }, "나머지 축제 다섯은 바탕 없이 장소와 섞여 거리순 — 10km 넘는 축제(25 · 120km)도 장소들 뒤 맨 끝 쪽 (11-17 「10km 외에 있어도 하단에」)");
+            }, "나머지 축제 다섯은 바탕 없이 장소와 섞여 거리순 — 10km 넘는 축제(25 · 90km)도 장소들 뒤 맨 끝 쪽 (11-17 「10km 외에 있어도 하단에」)");
+            Check(() =>
+            {
+                var p = Plm();
+                bool inList = p != null && p.ShownEntries.Any(e => e.name == farTitle);
+                bool drawn = ListRows().Any(r => (r.Find("Name")?.GetComponent<Text>()?.text ?? "").StartsWith(farTitle));
+                return p != null && !inList && !drawn;
+            }, "100km 넘는 축제(120km)는 목록에 없다 (11-26 대표님 「100km 이내까지만」)");
             Check(() =>
             {
                 var names = ListRows().Select(r => r.Find("Name")?.GetComponent<Text>()?.text ?? "").ToList();

@@ -521,7 +521,7 @@ namespace Redesign0926
             huntNoteGo.SetActive(false);   // 로그인 전·못 불러왔을 때만 (R0926SettingsPanel.RefreshHunt)
 
             // 화면 — 디스플레이 선택 '물방울 모드 · 네온 모드' (11-23 대표님 S8 — 예전 '기본메뉴 / 물방울메뉴' 자리, 둘 다 고를 수 있다) ·
-            // 창 배경 진하기 '약하게 / 중간 / 진하게' = 70 / 80 / 90 % (기본 70) · 30 / 60 FPS (2026-10-06 대표님: 기본 30). 새 글은 한국어만 (2.0.7)
+            // 창 배경 진하기 '50% / 75% / 90%' (11-26 대표님 「'50 / 75 / 90'」 · 기본 75) · 30 / 60 FPS (11-26 대표님: 기본 60 — 10-06 엔 30). 새 글은 한국어만 (2.0.7)
             SectionLabel(content.transform, "SecDisplay", new[] { "화면", "Display", "画面", "显示", "Pantalla" });
             var g5 = Group(content.transform, "GroupDisplay");
             var oldMenu = g5.transform.Find("RowMenuStyle");
@@ -532,7 +532,7 @@ namespace Redesign0926
                 0, out var fpsTabs, out var fpsLabels);
             var displayRow = DisplayRow(g5.transform, out var displayButtons);
             var densityRow = SegRow(g5.transform, "RowDensity", Ko("창 배경 진하기"), Ko("진할수록 뒤 화면이 덜 비쳐요"),
-                new[] { Ko("약하게"), Ko("중간"), Ko("진하게") }, 0, out var densityTabs, out var densityLabels);
+                new[] { Ko("50%"), Ko("75%"), Ko("90%") }, 1, out var densityTabs, out var densityLabels);
             var densityCg = Ensure<CanvasGroup>(densityRow);   // 둘 다 끄면(기본 모양) 흐리게
             // 디스플레이 선택 → 창 배경 진하기 → 화면 프레임 순서 (자리 번호로 옮기면 적용할 때마다 위아래가 뒤바뀐다)
             displayRow.transform.SetAsLastSibling();
@@ -543,6 +543,9 @@ namespace Redesign0926
             SectionLabel(content.transform, "SecInfo", new[] { "앱 정보", "About", "アプリ情報", "应用信息", "Acerca de" });
             var g4 = Group(content.transform, "GroupInfo");
             var appInfo = Ensure<R0926AppInfo>(g4);
+            // 사용가이드 다시 보기 — 맨 위 · 문의 위 (11-26 대표님 26번). 새 글은 한국어만 (2.0.7) · 새 줄은 맨 뒤에 붙으므로 맨 앞으로
+            var rGuide = InfoRow(g4.transform, "RowGuide", Ko("사용가이드"), new[] { "" }, true);
+            rGuide.transform.SetAsFirstSibling();
             var rMail = InfoRow(g4.transform, "RowContact", new[] { "문의", "Contact", "お問い合わせ", "联系我们", "Contacto" },
                 new[] { R0926AppInfo.ContactMail }, true);
             var rInsta = InfoRow(g4.transform, "RowInstagram", new[] { "인스타그램", "Instagram", "Instagram", "Instagram", "Instagram" },
@@ -572,6 +575,7 @@ namespace Redesign0926
             aso.FindProperty("privacyPage").objectReferenceValue = BuildPrivacyPage(sp);
             aso.FindProperty("licensePage").objectReferenceValue = BuildLicensePage(sp);
             aso.ApplyModifiedPropertiesWithoutUndo();
+            Wire(rGuide.GetComponent<Button>(), appInfo.OpenGuide);
             Wire(rMail.GetComponent<Button>(), appInfo.OpenMail);
             Wire(rInsta.GetComponent<Button>(), appInfo.OpenInstagram);
             Wire(rPriv.GetComponent<Button>(), appInfo.OpenPrivacy);

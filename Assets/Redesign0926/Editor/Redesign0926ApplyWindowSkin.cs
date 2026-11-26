@@ -25,6 +25,10 @@ namespace Redesign0926
         private static readonly string[] WindowBoxSprites = { "square", "Square_Sero_white", "UISprite", "Background" };
         // 창 안에서 그 창을 통째로 덮는 화면 — 제 창 모양을 따로 단다. 밑 창이 맞추면 '창과 같은 바탕'으로 보고 안 그려서 밑 창의 칸들이 비쳤다 (11-24 · 정보 수정 AI 화면)
         private static readonly string[] WindowOverlays = { "FixAi0926" };
+        // 창 바탕만 비치고 안의 칸 · 버튼 · 사진은 불투명하게 (R0926KeepSolid) — 11-26 대표님 「'정보수정' 들어갔을 때 발생하는 각 사진들도 투명하게 나오면 안되거든?
+        // 배경만 투명하게 하고 각 버튼 및 추가로 발생하는 것들은 투명하게 발생하지 않도록」 — 같은 모양의 추가 쪽(장소 · 3D · 보물찾기)도 같게. AI 화면(FixAi0926)은 정보수정 창 안이라 같이 따른다
+        // 분류 고르기 창 카드(CategoryCard0926)도 — 11-26 대표님 37번 큰 칸 창. 목록 위라 바탕은 늘 불투명 남색 (5번 「배경은 투명하면 안될 것 같아」)
+        private static readonly string[] WindowSolid = { "FixUploadPage", "CubeUploadPage", "ModelUploadPage", "HuntUploadPage", CategoryCardName };
 
         private static void ApplyWindowSkin(Transform root, List<string> log)
         {
@@ -82,6 +86,10 @@ namespace Redesign0926
                     continue;
                 }
                 var sk = Ensure<R0926WindowSkin>(im.gameObject);
+                bool solid = System.Array.IndexOf(WindowSolid, im.name) >= 0;
+                var ks = im.GetComponent<R0926KeepSolid>();
+                if (solid) Ensure<R0926KeepSolid>(im.gameObject);
+                else if (ks != null) Object.DestroyImmediate(ks);
                 var mine = new List<GameObject>();
                 foreach (var c in coverObjs)
                 {
@@ -105,7 +113,7 @@ namespace Redesign0926
                 keep.Add(sk);
                 nWin++;
                 audit.AppendLine("  창 " + SkinPath(im.transform, root) + " — " + Describe(im, root) + " · 덮는 창 " + mine.Count
-                                 + (im.GetComponent<Mask>() != null ? " · ⚠마스크" : "") + OtherEffects(im));
+                                 + (im.GetComponent<Mask>() != null ? " · ⚠마스크" : "") + (solid ? " · 칸 불투명" : "") + OtherEffects(im));
             }
 
             // 3) 하단 탭 · 알림 알약 — 네온 테 (네온 모드에서만 그린다)

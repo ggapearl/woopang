@@ -38,6 +38,40 @@ public static class WorldTouch
         return memoTop;
     }
 
+    private static readonly RaycastHit[] rayHits = new RaycastHit[32];
+    private static int hitFrame = -1;
+    private static Vector2 hitPos;
+    private static Camera hitCam;
+    private static Collider hitTop;
+
+    /// <summary>
+    /// 손가락 아래 맨 앞의 3D 콜라이더 — 장소 누름(DoubleTap3D) · 큐브 돌리기 · 누름 진동이 같은 답을 본다 (한 프레임 한 번만 쏜다).
+    /// 앵커가 아직 보이게 하지 않은(자리를 못 잡았거나 가려 둔) 장소는 건너뛴다 — 보이지 않는 오브젝트의 상자가 앞에 걸려
+    /// 뒤의 보이는 오브젝트가 안 눌리던 것 (11-26 대표님 「다른 오브젝트 … 가 터치를 가로채면서 생기는 문제」)
+    /// </summary>
+    public static Collider FirstHit(Vector2 pos, Camera cam = null)
+    {
+        if (cam == null) cam = Camera.main;
+        if (hitFrame == Time.frameCount && hitPos == pos && hitCam == cam) return hitTop;
+        hitFrame = Time.frameCount;
+        hitPos = pos;
+        hitCam = cam;
+        hitTop = null;
+        if (cam == null) return null;
+        int n = Physics.RaycastNonAlloc(cam.ScreenPointToRay(pos), rayHits);
+        float best = float.MaxValue;
+        for (int i = 0; i < n; i++)
+        {
+            Collider c = rayHits[i].collider;
+            if (c == null || rayHits[i].distance >= best) continue;
+            var anchor = c.GetComponentInParent<CustomARGeospatialCreatorAnchor>();
+            if (anchor != null && !anchor.MayShow) continue;
+            best = rayHits[i].distance;
+            hitTop = c;
+        }
+        return hitTop;
+    }
+
     /// <summary>3D 오브젝트가 이 손가락을 받아도 되나 — 덮은 UI 가 없고 · 첫 사용 안내 중이 아니고 · 댓글 창이 닫혀 있다.</summary>
     public static bool Free(Vector2 pos)
     {

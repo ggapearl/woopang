@@ -252,6 +252,16 @@ namespace Redesign0926
             else if (mode == "personring") PlanPersonRing();   // 11-17 D2 목록 사람 줄 사진 — 원 + 그 사람의 공개 범위 색 고리 (분홍 · 금색) · 장소 줄은 둥근 네모 · 줄 다시 쓰기
             else if (mode == "peoplewin") PlanPeopleWin();   // 11-17 D1 설정 › 사람 › 사용자 오브젝트 유효시간 (1시간 / 6시간 / 24시간 / 일주일) — 목록 줄 = AR 오브젝트 · 숨기기 · 가까이 카드는 지금 켠 사람만 · 설정 줄 5개 언어 (친구 자리는 넣은 자료로만)
             else if (mode == "docklock") PlanDockLock();   // 11-16 B3 더블탭 정보 창이 떠 있는 동안 하단 도크 칸이 눌리지 않는다 (실제 터치 · 닫으면 다시)
+            else if (mode == "skyclip") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanSkyClip(); }   // 11-26 16번 고정한 하늘 판 — 옆 장을 넘겨도 유리(네온 배경) 좌우 안에서만 (배경 폴더 필요)
+            else if (mode == "guide26") PlanGuide26();       // 11-26 26번 사용가이드 넘김 진동(소리 없이) · 설정 › 앱 정보 「사용가이드」 · 첫 설치 안내 뒤 1초 근처 장소
+            else if (mode == "logout31") PlanLogout31();     // 11-26 31번 로그아웃 확인창 — 화면 전체 덮개 · 어두운 카드 · 취소/로그아웃 알약 · 뒤로가기 = 취소
+            else if (mode == "guidehold") PlanGuideHold();   // 11-26 25번 길안내 중 인디케이터 강조 — 안내가 끝날 때까지 (목록 · 정보 창 · 좌표만)
+            else if (mode == "liveguide") PlanLiveGuide();   // 11-26 10번 ② 홈으로 나가도 이어지는 길안내 — 시작 · 끝 · 다른 곳 · 도착 · 20분에 실시간 현황(아이폰) · 진행 중 알림(안드로이드)을 부르는 순서
+            else if (mode == "aijobs") PlanAiJobs();   // 11-26 4번 AI 작업 보관함 — 맡기기 · 앱 껐다 켜기 · 완성 GLB 받아 둠 · 같은 번호 한 번 · 실패 · 그만두기 · 다시 깔기 복구 · 지우기 · 계정 (가짜 서버 5799)
+            else if (mode == "translate21") PlanTranslate21();   // 11-26 21번 번역 버튼 — 화면 대신 보고 있는 사진 파일(원본 → 받아 둔 것 → 띄운 그림) · 정보 글 쪽은 화면 (시험 서버 5798)
+            else if (mode == "photo15") PlanPhoto15();   // 11-26 15번 사람 사진 — 근처 카드 원판 크기 · 프로필 창 사진 재질 · 목록 줄 사진 밉맵 · 계산 고리 (시험 서버 5797)
+            else if (mode == "infohost") PlanInfoHost();   // 11-27 35번 대리 정보 창 — 우팡 장소는 위 글 칸 꺼짐 · 「Created by」 한 줄 · 첫 장은 첫 상세 사진 · 정보 글이 있는 곳은 예전대로
+            else if (mode == "catmodal") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanCatModal(); }   // 11-26 37번 분류 고르기 창 — 칩 숨 쉬는 테 · 가운데 3×3 큰 칸 · 위아래 밀기 · 바깥 · 뒤로가기로 닫힘 · 네온 줄 (배경 폴더 있으면 도시 배경)
             else if (mode == "worldtouch") PlanWorldTouch();   // 11-18 N2 덮은 UI 밑의 3D 오브젝트는 손가락을 받지 않는다 · 정보 창 위에 뜬 창 · 도크에서 민 것은 정보 창이 받지 않는다
             else if (mode == "nearpublic") { VirtualLocation.Instance.SetCoordinates(37.5759f, 126.9768f); PlanNearPublic(); }   // 공공데이터 · 공공교통 — 광화문 (교통 칩 켬)
             else if (mode == "notch")
@@ -455,10 +465,35 @@ namespace Redesign0926
             Shot("list_rising");
             Sleep(1.0f);
             Shot("list");
-            Do(() => ClickToggle("PetFriendlyToggle"));
+            // 애견동반은 두 가지(전부 ↔ 되는 곳만) — 켜진 채로 시작하면 눌러서 꺼 버렸다 (11-27) · 상태를 보고 켜고 끝나면 처음 상태로
+            bool petAtLook = false;
+            Do(() =>
+            {
+                var fm = UnityEngine.Object.FindAnyObjectByType<FilterManager>();
+                petAtLook = fm != null && fm.PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
+                if (!petAtLook) ClickToggle("PetFriendlyToggle");
+            });
             Sleep(0.5f);
             Shot("list_pet_required");
-            Do(() => ClickToggle("PetFriendlyToggle"));   // 애견동반은 두 가지 — 다시 누르면 꺼짐(전부)
+            Check(() =>
+            {
+                R0926FilterChip chip = null;
+                foreach (var x in UnityEngine.Object.FindObjectsByType<R0926FilterChip>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (x.name == "PetFriendlyToggle" && x.transform.parent != null && x.transform.parent.name == "FilterButtonPanel") chip = x;   // 장소 추가 카드에도 같은 이름이 있다
+                var fm = UnityEngine.Object.FindAnyObjectByType<FilterManager>();
+                bool on = fm != null && fm.PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
+                var img = chip != null ? chip.GetComponent<Image>() : null;
+                int fills = chip != null ? chip.GetComponentsInChildren<R0926WindowFill>(true).Length : -1;
+                log.Add($"  애견동반 {(on ? "켜짐" : "꺼짐")} (처음 {(petAtLook ? "켜짐" : "꺼짐")}) — 바탕 {(img != null ? "#" + ColorUtility.ToHtmlStringRGBA(img.color) : "없음")} · 물방울 {R0926MenuStyle.Droplet} · 창 바탕 맞춤 {fills}");
+                return on && img != null && img.color.a >= 0.9f && img.color.r > 0.9f && img.color.g > 0.6f && img.color.b < 0.3f
+                    && chip.GetComponent<R0926SkinIgnore>() != null && fills == 0;
+            }, "애견동반을 켜면 물방울 모드에서도 꽉 찬 진한 노랑 — 창 바탕 맞춤(버튼 바탕 .4)에서 빠짐 (11-26 대표님 「짠한 노란색으로」)");
+            Do(() =>
+            {
+                var fm = UnityEngine.Object.FindAnyObjectByType<FilterManager>();
+                bool on = fm != null && fm.PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly;
+                if (on != petAtLook) ClickToggle("PetFriendlyToggle");   // 처음 상태로
+            });
             Do(() => ClickToggle("CategoryToggle"));      // 분류 고르기 목록이 펼쳐진다
             Sleep(0.4f);
             Shot("list_category_menu");
@@ -9047,11 +9082,11 @@ namespace Redesign0926
             Sleep(1.0f);
             Do(() =>
             {
-                // 예전 네 칸 저장값(Place_FarFade) 옮기기 — 0 끄기 · 1 약하게 · 2 보통 → 약하게 · 3 강하게 → 강하게 · 저장값 없음 → 약하게
+                // 예전 네 칸 저장값(Place_FarFade) 옮기기 — 0 끄기 · 1 약하게 · 2 보통 → 약하게 · 3 강하게 → 강하게 · 저장값 없음 → 끄기 (11-26 대표님 「끄기로 시작」)
                 var cache = typeof(R0926PlaceSettings).GetField("farFade", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
                 bool hadNew = PlayerPrefs.HasKey("Place_FarFade3"), hadOld = PlayerPrefs.HasKey("Place_FarFade");
                 int savedNew = PlayerPrefs.GetInt("Place_FarFade3", 1), savedOld = PlayerPrefs.GetInt("Place_FarFade", 2);
-                int[] want = { 0, 1, 1, 2, 1 };
+                int[] want = { 0, 1, 1, 2, 0 };
                 var got = new List<int>();
                 for (int old = 0; old < want.Length; old++)
                 {
@@ -9065,7 +9100,7 @@ namespace Redesign0926
                 cache.SetValue(null, -1);
                 bool ok = true;
                 for (int k = 0; k < want.Length; k++) if (got[k] != want[k]) ok = false;
-                log.Add((ok ? "PASS " : "FAIL ") + "예전 네 칸 값 옮김 — 끄기·약하게·보통·강하게·없음 → " + string.Join("·", got) + " (바라는 값 0·1·1·2·1)");
+                log.Add((ok ? "PASS " : "FAIL ") + "예전 네 칸 값 옮김 — 끄기·약하게·보통·강하게·없음 → " + string.Join("·", got) + " (바라는 값 0·1·1·2·0 — 고른 적 없으면 끄기로 시작 · 11-26 대표님)");
 
                 var g = UnityEngine.Object.FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
                 if (g != null && g.Showing) UnityEngine.Object.FindAnyObjectByType<R0926GuideOverlay>(FindObjectsInactive.Include)?.Skip();
@@ -10527,19 +10562,85 @@ namespace Redesign0926
             Do(() => R0926Notch.StopGuide());
             Wait(() => notchUp() && notch.EditorMode == "Sky", 3f, "안내 끝 — 날씨");
 
-            // 12) 다이내믹 아일랜드 아이폰 흉내 — 알약 모양 · 아일랜드 자리 (위에서 조금 떨어져)
+            // 12) 다이내믹 아일랜드 아이폰 흉내 — 11-26 10번 대표님 「위에 노치관련 수정안 확인했어. 1,2번 둘다 진행해」 ① 바꾸는 안 (우팡_노치_시안_1124):
+            //     아일랜드 높이 그대로 옆으로만 — 왼쪽(시계 쪽 40pt)에 기온 · 거리, 오른쪽(신호 쪽 26pt)에 날씨 그림 · 화살표. 아래로 붙는 검은 줄이 없어 칩 · 알약이 제자리
+            //     '터치하면 돌아가요' · 길안내 3초 이름 판은 지금처럼 잠깐 아래로 펴졌다 돌아온다
+            Func<float> pp = () => notch.EditorPpt;
+            Func<float> islandMidY = () => Screen.height - (notch.EditorCutTopPt + notch.EditorCutPt.y * 0.5f) * pp();
+            // 칩 · 알약이 비켜 설 만큼 — 아일랜드 아래 변(+1pt) + '터치하면 돌아가요' 줄 + 틈 6pt 가 위쪽 안전영역을 넘는 만큼 (실기기 위 59 · 62pt 면 0)
+            Func<float, float> dropFor = noteLines => Mathf.Max(0f, notch.EditorCutTopPt + notch.EditorCutPt.y + 1f + noteLines * 20f + 6f - notch.EditorInsetPt) * pp();
+            Func<string, RectTransform> slotChild = n => notch.EditorLeftSlot != null ? notch.EditorLeftSlot.Find(n) as RectTransform : null;
+            // 왼쪽 글 · 오른쪽 그림이 아일랜드 양옆 칸 안 · 아일랜드 높이 가운데에 있나
+            Func<string, string, bool> sides = (what, iconName) =>
+            {
+                var t = SkyScreenRect(notch.EditorRightSlot);
+                var i = SkyScreenRect(slotChild(iconName));
+                if (!t.HasValue || !i.HasValue) { log.Add($"  {what}: 글 {(t.HasValue ? "있음" : "없음")} · 그림 {(i.HasValue ? "있음" : "없음")}"); return false; }
+                float p = pp(), cx = Screen.width * 0.5f, half = notch.EditorCutPt.x * 0.5f * p;
+                log.Add($"  {what}: 왼쪽 글 '{notch.EditorRight}' {(t.Value.xMin - cx + half) / p:0.0}~{(t.Value.xMax - cx + half) / p:0.0}pt(아일랜드 왼쪽 변 기준) · 오른쪽 그림 {(i.Value.xMin - cx - half) / p:0.0}~{(i.Value.xMax - cx - half) / p:0.0}pt(오른쪽 변 기준) · 높이 차 {(t.Value.center.y - islandMidY()) / p:0.0} / {(i.Value.center.y - islandMidY()) / p:0.0}pt");
+                return t.Value.xMax <= cx - half + 0.5f * p && t.Value.xMin >= cx - half - 40f * p - 0.5f * p
+                    && i.Value.xMin >= cx + half - 0.5f * p && i.Value.xMax <= cx + half + 26f * p + 0.5f * p
+                    && Mathf.Abs(t.Value.center.y - islandMidY()) < 1f * p && Mathf.Abs(i.Value.center.y - islandMidY()) < 1f * p;
+            };
+            Func<float, float, bool> pillIs = (wPt, centerPt) =>
+            {
+                var r = shapeRect();
+                if (!r.HasValue) return false;
+                float p = pp(), cx = Screen.width * 0.5f;
+                log.Add($"  알약 폭 {r.Value.width / p:0.0}pt · 높이 {r.Value.height / p:0.0}pt · 가운데 {(r.Value.center.x - cx) / p:0.0}pt · 위 {(Screen.height - r.Value.yMax) / p:0.0}pt (아일랜드 위 {notch.EditorCutTopPt:0.0} · 높이 {notch.EditorCutPt.y:0.0}pt)");
+                return Mathf.Abs(r.Value.width - wPt * p) < 2f * p && Mathf.Abs(r.Value.center.x - (cx + centerPt * p)) < 1f * p
+                    && Mathf.Abs(Screen.height - r.Value.yMax - (notch.EditorCutTopPt - 1f) * p) < 1f * p;
+            };
             Do(() => { R0926Notch.EditorIsland = true; notch.EditorRemeasure(); });
             Sleep(1.2f);
             Do(() => log.Add("  아일랜드: " + state()));
             Check(() => notch.EditorIslandShape && notchUp() && notch.EditorMode == "Sky" && notch.EditorWeatherShown, "다이내믹 아일랜드 아이폰 — 알약 모양으로 날씨");
+            Check(() => pillIs(192f, -7f) && Mathf.Abs((shapeRect()?.height ?? 0f) - (notch.EditorCutPt.y + 2f) * pp()) < 1.5f * pp(),
+                "알약은 아일랜드 높이 그대로(위아래 1pt) 옆으로만 — 폭 192pt(아일랜드 126 + 왼쪽 40 + 오른쪽 26) · 가운데는 7pt 왼쪽 · 아래로 붙는 줄 없음");
+            Check(() => sides("날씨", "Weather0926") && notch.EditorRight.EndsWith("°"), "왼쪽(시계 쪽)에 기온 · 오른쪽(신호 쪽)에 날씨 그림 — 아일랜드 높이 가운데 · 아일랜드에 걸치지 않음");
+            Check(() =>
+            {
+                log.Add($"  칩 · 알약 비켜 서기 {R0926Notch.DropPx / pp():0.0}pt (이 화면 위쪽 안전영역 {notch.EditorInsetPt:0.0}pt · 실기기 아일랜드 아이폰 위 59pt 면 {Mathf.Max(0f, 11.33f + 37.33f + 1f + 6f - 59f):0.0}pt)");
+                return Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 0.5f && insetsFollow();
+            }, "아래로 붙는 줄이 없어 칩 · 상태 알약이 노치 줄만큼 내려가지 않는다 (아일랜드 아래 변까지만 · 실기기는 제자리)");
+            Check(() => !notch.EditorBarHidden, "아일랜드 아이폰도 상태 막대(시계 · 배터리 · LTE) 그대로 (E2)");
+            Shot("notch_island");
+
+            // 하늘을 접은 뒤 — '터치하면 돌아가요' 는 아일랜드 밑으로 잠깐 펴졌다 돌아온다
+            Do(() => R0926Notch.Folded(R0926SkyPages.Kind.Weather));
+            Wait(() => notch.EditorNote > 0.95f, 2f, "아일랜드 — '터치하면 돌아가요'");
+            Sleep(0.4f);
             Check(() =>
             {
                 var r = shapeRect();
-                return r.HasValue && Mathf.Abs(r.Value.center.x - Screen.width * 0.5f) < 2f && r.Value.yMax < Screen.height - 2f * notch.EditorPpt && r.Value.yMax > Screen.height - 20f * notch.EditorPpt
-                    && Mathf.Abs(r.Value.width - 126f * notch.EditorPpt) < 2f * notch.EditorPpt;
-            }, "알약은 화면 위에서 조금 떨어진 아일랜드 자리 · 폭은 아일랜드만큼(126pt) — 양옆으로 길어지지 않음");
-            Check(() => !notch.EditorBarHidden, "아일랜드 아이폰도 상태 막대(시계 · 배터리 · LTE) 그대로 (E2)");
-            Shot("notch_island");
+                var n = SkyScreenRect(notch.EditorShape.Find("Note0926") as RectTransform);
+                float p = pp(), islandBottom = Screen.height - (notch.EditorCutTopPt + notch.EditorCutPt.y) * p;
+                log.Add($"  돌아가요 줄: 알약 높이 {(r.HasValue ? r.Value.height / p : 0f):0.0}pt · 글 가운데 {(n.HasValue ? (islandBottom - n.Value.center.y) / p : -1f):0.0}pt 아래 · 비켜 서기 {R0926Notch.DropPx / p:0.0}pt");
+                return r.HasValue && n.HasValue && Mathf.Abs(r.Value.height - (notch.EditorCutPt.y + 2f + 20f) * p) < 1.5f * p
+                    && n.Value.center.y < islandBottom && Mathf.Abs(n.Value.center.x - Screen.width * 0.5f) < 1f * p
+                    && notch.EditorNoteText == "터치하면 돌아가요" && Mathf.Abs(R0926Notch.DropPx - dropFor(1f)) < 1f * pp() && insetsFollow();
+            }, "'터치하면 돌아가요' — 아일랜드 바로 밑 가운데에 잠깐 (알약이 20pt 아래로 · 칩도 그만큼만 잠깐 비킴)");
+            Shot("notch_island_note");
+            Wait(() => notch.EditorNote < 0.02f, 5f, "아일랜드 — 돌아가요 줄 들어감");
+            Sleep(0.3f);
+            Check(() => Mathf.Abs((shapeRect()?.height ?? 0f) - (notch.EditorCutPt.y + 2f) * pp()) < 1.5f * pp() && Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 0.5f,
+                "'터치하면 돌아가요' 가 들어가면 다시 아일랜드 높이 · 칩도 제자리");
+
+            // 길안내 — 3초 동안 이름 판이 넓게 펴졌다가, 왼쪽 거리 · 오른쪽 화살표 (아이폰의 다른 길안내 앱과 같은 모양)
+            Do(() => { var p = offset(200, 0); R0926Notch.Guide(p.x, p.y, null, "시험 북쪽 200m"); });
+            Wait(() => notchUp() && notch.EditorMode == "Guide" && notch.EditorExpand > 0.95f, 3f, "아일랜드 — 길안내 이름 판");
+            Sleep(0.5f);
+            Check(() => pillIs(290f, 0f) && notch.EditorTitle == "시험 북쪽 200m" && notch.EditorBarHidden,
+                "길안내 시작 — 이름 판은 지금처럼 넓게(290pt · 화면 가운데) 잠깐 아래로 · 그동안 상태 막대 숨김");
+            Shot("notch_island_expand");
+            Wait(() => notch.EditorExpand < 0.02f, 6f, "아일랜드 — 이름 판 접힘");
+            Sleep(0.4f);
+            Check(() => pillIs(192f, -7f) && sides("길안내", "Arrow0926") && notch.EditorRight == "200m" && !float.IsNaN(notch.EditorArrow) && !notch.EditorBarHidden
+                    && Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 0.5f,
+                "이름 판이 접히면 아일랜드 양옆 — 왼쪽 거리 '200m' · 오른쪽 화살표 · 상태 막대 다시 보임");
+            Shot("notch_island_guide");
+            Do(() => R0926Notch.StopGuide());
+            Wait(() => notchUp() && notch.EditorMode == "Sky", 3f, "아일랜드 — 안내 끝 · 날씨");
             Do(() => { R0926Notch.EditorIsland = false; notch.EditorRemeasure(); });
 
             // 13) 노치 없는 아이폰 · 안드로이드 — 예전 그대로: 접은 동안 하늘을 보면 칩에 날씨, 목록 줄은 '아직 AR화면 내에 없음'
@@ -13048,7 +13149,7 @@ namespace Redesign0926
             });
             Sleep(1.5f);
             Check(() => defaultDroplet, "디스플레이를 고른 적이 없으면 물방울 모드가 켜져 있음 (11-15 대표님 — 예전 물방울메뉴 기본 그대로)");
-            Check(() => defaultNeon && defaultDensity == 70, "고른 적이 없으면 네온 모드도 켜져 있고 창 배경 진하기는 70 (11-23 대표님 S8 「기본 70」)");
+            Check(() => defaultNeon && defaultDensity == 75, "고른 적이 없으면 네온 모드도 켜져 있고 창 배경 진하기는 75 (11-26 대표님 「'50 / 75 / 90'」 — 예전 기본 70 과 가장 가까운 값)");
             Check(() =>
             {
                 var gs = all();
@@ -13133,9 +13234,9 @@ namespace Redesign0926
                 return row != null && den != null && fps != null && old == null && di == ri + 1 && fi == di + 1
                     && l0 != null && l0.text == "물방울 모드" && l1 != null && l1.text == "네온 모드"
                     && f0 != null && !f0.enabled && f1 != null && !f1.enabled
-                    && d0 != null && d0.text == "약하게" && d2 != null && d2.text == "진하게"
+                    && d0 != null && d0.text == "50%" && d2 != null && d2.text == "90%"
                     && cg != null && cg.alpha < 0.5f && !cg.interactable;
-            }, "설정 ▸ 화면: '디스플레이 선택'(물방울 모드 · 네온 모드) → '창 배경 진하기'(약하게 … 진하게) → '화면 프레임' · 예전 '메뉴 모양' 줄은 없음 · 둘 다 끄면 두 칸 빈 동그라미 · 진하기 흐림");
+            }, "설정 ▸ 화면: '디스플레이 선택'(물방울 모드 · 네온 모드) → '창 배경 진하기'(50% … 90%) → '화면 프레임' · 예전 '메뉴 모양' 줄은 없음 · 둘 다 끄면 두 칸 빈 동그라미 · 진하기 흐림");
             Do(() => Click(R + "Mode0"));
             Sleep(0.6f);
             Check(() =>
@@ -15037,13 +15138,22 @@ namespace Redesign0926
                 log.Add("  처음 fps " + Application.targetFrameRate + " (저장 " + R0926FrameRate.Fps + ")");
             });
             Check(() => FooterOrder("세로"), "설정 맨 아래: 버전이 위 · 저작권 그림이 아래");
-            Do(() => UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include)?.SetFps(1));
+            bool fpsHad = false; int fpsSaved = 60;
+            Do(() =>
+            {
+                fpsHad = PlayerPrefs.HasKey("r0926_fps"); fpsSaved = PlayerPrefs.GetInt("r0926_fps", 60);
+                UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include)?.SetFps(1);
+            });
             Sleep(0.3f);
             Shot("v24_settings_60");
             Check(() => Application.targetFrameRate == 60 && R0926FrameRate.Fps == 60, "설정: 60fps 를 고르면 60");
             Do(() => UnityEngine.Object.FindAnyObjectByType<R0926SettingsPanel>(FindObjectsInactive.Include)?.SetFps(0));
             Sleep(0.2f);
-            Check(() => Application.targetFrameRate == 30 && R0926FrameRate.Fps == 30, "설정: 30fps 로 되돌림 (기본)");
+            Check(() => Application.targetFrameRate == 30 && R0926FrameRate.Fps == 30, "설정: 30fps 를 고르면 30");
+            Do(() => { PlayerPrefs.DeleteKey("r0926_fps"); R0926FrameRate.Apply(); });
+            Sleep(0.2f);
+            Check(() => Application.targetFrameRate == 60 && R0926FrameRate.Fps == 60, "설정: 고른 적이 없으면 60fps (11-26 대표님 「기본 60fps」 — 1.2.70 까지는 30)");
+            Do(() => { if (fpsHad) R0926FrameRate.Fps = fpsSaved; else R0926FrameRate.Apply(); });
             Do(() => Modes()?.Show(0));
             Sleep(0.6f);
             Do(() => Click("ListPanel/DockMirror0926/XButton_List/ClosePx0926"));
@@ -18200,11 +18310,82 @@ namespace Redesign0926
                 var box = glbObj.transform.Find("GLBContainer")?.GetComponent<BoxCollider>();
                 var mat = mr != null ? mr.sharedMaterial : null;
                 bool tex = mat != null && mat.HasProperty("_BaseMap") && mat.GetTexture("_BaseMap") != null;
+                var cont = glbObj.transform.Find("GLBContainer");
+                var rot = cont != null ? cont.GetComponent<CubeTouchRotator>() : null;
+                int parts = m != null ? m.GetComponentsInChildren<Collider>(true).Length : -1;
                 log.Add("  배율 " + (m != null ? m.transform.localScale.x.ToString("0.00") : "-") + " · 셰이더 " + (mat != null ? mat.shader.name : "-") + " · 그림 " + tex
-                        + " · 모델 콜라이더 " + (mr != null && mr.GetComponent<MeshCollider>() != null) + " · 누르는 상자가 모델을 감쌈 " + (box != null && mr != null && box.bounds.Contains(mr.bounds.center)));
+                        + " · 모델 안 콜라이더 " + parts + "개 · 끌어 돌리기 " + (rot != null && rot.enabled) + " · 누르는 상자가 모델을 감쌈 " + (box != null && mr != null && box.bounds.Contains(mr.bounds.center)));
                 return ld.HasLoadedModel() && Mathf.Abs(m.transform.localScale.x - 1.5f) < 0.01f && mat != null && mat.shader.name.Contains("Universal Render Pipeline") && tex
-                       && mr.GetComponent<MeshCollider>() != null && box != null && box.bounds.Contains(mr.bounds.center);
-            }, "모델에 배율 1.5 · URP 셰이더로 바꿔도 바탕 그림 유지 · 모델 콜라이더 · 누르는 상자가 모델을 감쌈 · 연출 뒤에도 모델을 쥐고 있음");
+                       && parts == 0 && (rot == null || !rot.enabled) && box != null && box.bounds.Contains(mr.bounds.center);
+            }, "모델에 배율 1.5 · URP 셰이더로 바꿔도 바탕 그림 유지 · 모델 안엔 콜라이더 없음(누르는 상자 하나만) · 끌어 돌리기 없음 · 누르는 상자가 모델을 감쌈 · 연출 뒤에도 모델을 쥐고 있음 (11-26 대표님 12 · 19번)");
+
+            // 12 · 19번 — 누르는 상자 = 모델 × 1.1 (그림 상자 1.2×0.7×0.5 · 배율 1.5 → 1.98×1.155×0.825)
+            Vector3 fit1 = Vector3.zero;
+            float[] Sorted(Vector3 v) { var a = new[] { v.x, v.y, v.z }; Array.Sort(a); Array.Reverse(a); return a; }
+            bool Near(Vector3 a, Vector3 want, float tol)
+            {
+                float[] x = Sorted(a), y = Sorted(want);
+                for (int i = 0; i < 3; i++) if (Mathf.Abs(x[i] - y[i]) > y[i] * tol) return false;
+                return true;
+            }
+            BoxCollider TapBox() => glbObj.transform.Find("GLBContainer")?.GetComponent<BoxCollider>();
+            Check(() =>
+            {
+                var box = TapBox();
+                fit1 = box != null ? box.size : Vector3.zero;
+                log.Add($"  누르는 상자 {fit1.x:0.000}×{fit1.y:0.000}×{fit1.z:0.000} (바라는 것 1.980×1.155×0.825 — 축 순서 무관)");
+                return box != null && Near(fit1, new Vector3(1.98f, 1.155f, 0.825f), 0.03f);
+            }, "누르는 상자 = 모델 크기 × 1.1 (예전엔 월드 경계 × 1.2)");
+
+            // 손가락 판단 (WorldTouch.FirstHit) — 상자 가운데는 이 장소 · 상자 그림자 밖은 아님 · 앞을 가린 숨긴 장소는 건너뜀
+            GameObject blocker = null;
+            Vector2 mid = Vector2.zero, outside = Vector2.zero;
+            Collider hitMid = null, hitOut = null, hitShown = null, hitHidden = null;
+            Do(() =>
+            {
+                var box = TapBox();
+                var cam = Camera.main;
+                mid = cam.WorldToScreenPoint(box.bounds.center);
+                float right = float.MinValue, lo = float.MaxValue, hi = float.MinValue;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 q = box.transform.TransformPoint(box.center + Vector3.Scale(box.size * 0.5f, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f)));
+                    Vector3 sp = cam.WorldToScreenPoint(q);
+                    right = Mathf.Max(right, sp.x); lo = Mathf.Min(lo, sp.y); hi = Mathf.Max(hi, sp.y);
+                }
+                outside = new Vector2(right + 12f, (lo + hi) * 0.5f);
+                hitMid = WorldTouch.FirstHit(mid);
+                hitOut = WorldTouch.FirstHit(outside);
+            });
+            Check(() =>
+            {
+                var box = TapBox();
+                log.Add($"  손가락 — 상자 가운데 {(hitMid == box ? "이 장소" : hitMid != null ? hitMid.name : "없음")} · 상자 오른쪽 밖 {(hitOut == box ? "이 장소" : hitOut != null ? hitOut.name : "없음")}");
+                return box != null && hitMid == box && hitOut != box;
+            }, "손가락 판단 — 상자 가운데를 누르면 이 장소 · 상자 밖(그림자 오른쪽 12px)은 이 장소가 아님");
+            Do(() =>
+            {
+                var cam = Camera.main;
+                blocker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                blocker.name = "TapBlockerTest";
+                blocker.transform.position = cam.ScreenPointToRay(mid).GetPoint(1.6f);
+                blocker.transform.localScale = Vector3.one * 0.3f;
+                blocker.AddComponent<CustomARGeospatialCreatorAnchor>();
+            });
+            Sleep(0.1f);
+            Do(() => hitShown = WorldTouch.FirstHit(mid));
+            Do(() => blocker.GetComponent<CustomARGeospatialCreatorAnchor>().SetForceHideRenderers(true));   // 자리를 못 잡아 가려 둔 장소처럼
+            Sleep(0.1f);
+            Do(() => hitHidden = WorldTouch.FirstHit(mid));
+            Check(() =>
+            {
+                var box = TapBox();
+                var bc = blocker != null ? blocker.GetComponent<Collider>() : null;
+                log.Add($"  앞을 가린 장소 — 보일 때 {(hitShown == bc ? "가린 장소" : hitShown == box ? "이 장소" : "다른 것")} · 숨겼을 때 {(hitHidden == bc ? "가린 장소" : hitHidden == box ? "이 장소" : "다른 것")}");
+                return bc != null && hitShown == bc && hitHidden == box;
+            }, "앞을 가린 장소 — 보이면 그 장소가 받고, 숨겨 두면(앵커가 아직 안 보이게 함) 건너뛰어 뒤의 이 장소가 받음 (11-26 대표님 「다른 오브젝트 … 가 터치를 가로채면서」)");
+            Do(() => { if (blocker != null) UnityEngine.Object.Destroy(blocker); });
+
             Do(() => glbObj.GetComponent<GLBModelLoader>().ClearModel());
             Sleep(0.1f);
             Check(() =>
@@ -18212,9 +18393,43 @@ namespace Redesign0926
                 var c = glbObj.transform.Find("GLBContainer");
                 int left = 0;
                 foreach (Transform t in c) if (t.name == "CheckerBox") left++;
-                return left == 0;
-            }, "다시 쓸 때(ClearModel) 앞 모델이 지워짐");
-            Do(() => UnityEngine.Object.Destroy(glbObj));
+                var box = TapBox();
+                log.Add($"  지운 뒤 누르는 상자 {(box != null ? box.size.ToString("0.000") : "없음")}");
+                return left == 0 && box != null && (box.size - Vector3.one).sqrMagnitude < 1e-6f && box.center.sqrMagnitude < 1e-6f;
+            }, "다시 쓸 때(ClearModel) 앞 모델이 지워짐 · 누르는 상자도 프리팹 크기(1×1×1)로 — 다음 장소가 앞 모델 크기를 물려받지 않음");
+
+            // 앵커가 45° 돌고 핀치로 2배 키운 칸에서 불러도 상자는 같다 (예전엔 월드 경계라 √2 · 2배로 부풀었다)
+            Do(() =>
+            {
+                glbObj.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+                glbObj.transform.localScale = Vector3.one * 2f;
+                glbDone = glbOk = false;
+                GLBModelLoader.PreloadCache(ShapeGlb, File.ReadAllBytes(ShapeGlbFile));
+                var ld = glbObj.GetComponent<GLBModelLoader>();
+                ld.StartCoroutine(ld.LoadGLBModelCoroutine(ShapeGlb, 1.5f, r => { glbOk = r; glbDone = true; }));
+            });
+            Wait(() => glbDone, 20f, "돌리고 키운 칸에서 다시 불러오기 끝");
+            Sleep(0.5f);
+            Check(() =>
+            {
+                var box = TapBox();
+                Vector3 sz = box != null ? box.size : Vector3.zero;
+                log.Add($"  45° · 2배 칸 — 누르는 상자 {sz.x:0.000}×{sz.y:0.000}×{sz.z:0.000} (처음 {fit1.x:0.000}×{fit1.y:0.000}×{fit1.z:0.000})");
+                return glbOk && box != null && Near(sz, fit1, 0.02f);
+            }, "앵커가 돌고(45°) 핀치로 키운(2배) 칸에서 불러도 누르는 상자는 그대로 모델 × 1.1");
+            Do(() => glbObj.GetComponent<GLBModelLoader>().SetModelScale(3f));
+            Check(() =>
+            {
+                var box = TapBox();
+                Vector3 sz = box != null ? box.size : Vector3.zero;
+                log.Add($"  관리자 사이즈 3 — 누르는 상자 {sz.x:0.000}×{sz.y:0.000}×{sz.z:0.000}");
+                return box != null && Near(sz, fit1 * 2f, 0.02f);
+            }, "관리자 사이즈를 1.5 → 3 으로 바꾸면 누르는 상자도 2배");
+            Do(() =>
+            {
+                glbObj.GetComponent<GLBModelLoader>().ClearModel();
+                UnityEngine.Object.Destroy(glbObj);
+            });
         }
 
         private static float hcLockSwing;
@@ -24997,6 +25212,13 @@ namespace Redesign0926
             SnFinish();   // 하늘 고정 네온 시험도 — 디스플레이 · 하늘 설정 · 하늘 옆 장 서버 주소
             AkFinish();   // AI 작업 키보드 시험도 — 디스플레이 설정 · 고치기 창 서버 주소
             SwFinish();   // 아래로 밀어 하늘 시험도 — 하늘 설정 · 안내 키 · 하늘 옆 장 서버 주소 · 입력 설정
+            T21Finish();   // 번역 버튼 시험도 — 사진 서버 주소 · 저장 · 열기 훅
+            GhFinish();    // 길안내 강조 시험도 — 안내 끝 · 옮긴 좌표 되돌림
+            G26Finish();   // 사용가이드 시험도 — 열린 안내 닫기 · 첫 실행 기록 되돌림
+            L31Finish();   // 로그아웃 확인 시험도 — 열린 확인창 취소 · 로그인 흉내 · 서버 주소 되돌림
+            LgFinish();    // 실시간 길안내 시험도 — 안내 끝 · 호출 기록 끔
+            AjFinish();    // AI 작업 보관함 시험도 — 서버 주소 · 임시 보관함 · 로그인 흉내 되돌림
+            CmFinish();    // 분류 고르기 창 시험도 — 디스플레이 · 분류 저장값 · 가상 손가락 되돌림
             RestoreGameViewSize();
             R0926SkyWeather.EditorRegionOverride = null;
             AppLanguage.EditorOverride = null;

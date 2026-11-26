@@ -23,7 +23,8 @@ namespace Redesign0926
             const BindingFlags SF = BindingFlags.NonPublic | BindingFlags.Static;
             const BindingFlags IF = BindingFlags.NonPublic | BindingFlags.Instance;
             const float Disc = 96f;
-            float ringSize = (Disc * 0.5f - 3f) / 0.68f * 2f;
+            float ringSize = (Disc * 0.5f - 3f) / 0.68f * 2f;   // 그림 고리 — 계산 고리 재질이 있으면 그 안쪽 비율로 다시 셈 (11-26 15번)
+            Material ringMat = null;
             var fm = typeof(R0926FriendsMap);
             var filterWas = UserFilterMode.All;
             string idWas = null, nameWas = null;
@@ -109,7 +110,11 @@ namespace Redesign0926
                 if (ri == null || !ring.gameObject.activeSelf) bad.Add("고리 없음");
                 else
                 {
-                    if (ri.sprite == null || ri.sprite.name != "r0926_ring_mini") bad.Add("고리 그림 " + (ri.sprite != null ? ri.sprite.name : "없음"));
+                    if (ringMat != null)
+                    {
+                        if (ri.sprite != null || ri.material != ringMat) bad.Add("계산 고리 아님 " + (ri.sprite != null ? ri.sprite.name : "그림 없음") + "/" + (ri.material != null ? ri.material.name : "재질 없음"));
+                    }
+                    else if (ri.sprite == null || ri.sprite.name != "r0926_ring_mini") bad.Add("고리 그림 " + (ri.sprite != null ? ri.sprite.name : "없음"));
                     if (Mathf.Abs(ring.sizeDelta.x - ringSize) > 0.5f) bad.Add($"고리 크기 {ring.sizeDelta.x:0.0}");
                     if (Vector2.Distance(centerOf(ring), c) > 0.5f) bad.Add($"고리 가운데 {centerOf(ring)}");
                     if (!same(ri.color, want[id])) bad.Add($"고리 색 {hex(ri.color)} ≠ {hex(want[id])}");
@@ -153,6 +158,8 @@ namespace Redesign0926
                 var tpl = pr != null ? new SerializedObject(pr).FindProperty("rowTemplate").objectReferenceValue as GameObject : null;
                 tplPhoto = tpl != null ? tpl.transform.Find("Photo") as RectTransform : null;
                 if (tplPhoto == null) throw new Exception("목록 줄 템플릿 Photo 없음");
+                ringMat = pr != null ? new SerializedObject(pr).FindProperty("ringMaterial").objectReferenceValue as Material : null;
+                if (ringMat != null && ringMat.HasProperty("_Inner")) ringSize = (Disc * 0.5f - 3f) / ringMat.GetFloat("_Inner") * 2f;
                 idWas = typeof(P2PManager).GetField("currentUserId", IF).GetValue(pm) as string;
                 nameWas = typeof(P2PManager).GetField("currentUsername", IF).GetValue(pm) as string;
                 SfLogin(true, "pr_me");   // 지도 친구는 로그인한 사람만 — 시험 아이디만 (로그인 이벤트 · 토큰 없이)
@@ -168,9 +175,11 @@ namespace Redesign0926
                 var so = new SerializedObject(UnityEngine.Object.FindAnyObjectByType<R0926PlaceRows>(FindObjectsInactive.Include));
                 var c = so.FindProperty("circleSprite").objectReferenceValue as Sprite;
                 var r = so.FindProperty("personRingSprite").objectReferenceValue as Sprite;
-                log.Add($"  원 {(c != null ? c.name : "없음")} · 고리 {(r != null ? r.name : "없음")} · 사람 사진 {so.FindProperty("personPhotoSize").floatValue:0}");
-                return c != null && c.name == "r0926_circle" && r != null && r.name == "r0926_ring_mini";
-            }, "적용 — 목록 줄에 원 그림(r0926_circle) · 고리 그림(r0926_ring_mini) 연결");
+                var rm = so.FindProperty("ringMaterial").objectReferenceValue as Material;
+                var pmat = so.FindProperty("photoMaterial").objectReferenceValue as Material;
+                log.Add($"  원 {(c != null ? c.name : "없음")} · 고리 {(r != null ? r.name : "없음")} · 계산 고리 {(rm != null ? rm.name : "없음")} · 사진 재질 {(pmat != null ? pmat.name : "없음")} · 사람 사진 {so.FindProperty("personPhotoSize").floatValue:0}");
+                return c != null && c.name == "r0926_circle" && r != null && r.name == "r0926_ring_mini" && rm != null && pmat != null;
+            }, "적용 — 목록 줄에 원 그림(r0926_circle) · 계산 고리 재질(R0926RingUI · 없으면 그림 고리 r0926_ring_mini) · 사진 재질 연결");
             Check(() =>
             {
                 var data = (System.Collections.IDictionary)typeof(P2PManager).GetField("nearbyUsersData", IF).GetValue(pm);

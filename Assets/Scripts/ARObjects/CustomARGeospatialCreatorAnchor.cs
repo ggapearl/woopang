@@ -90,7 +90,22 @@ public class CustomARGeospatialCreatorAnchor : MonoBehaviour
         All.Add(this);
         if (_compassPlaced && !CompassHold) CompassRelease();   // 나침반 모드 동안 꺼져 있다가 끝난 뒤 다시 켜진 것 — 나침반 자리를 버린다
     }
-    private void OnDisable() { All.Remove(this); }
+    private void OnDisable()
+    {
+        All.Remove(this);
+        // 꺼지면 유니티가 코루틴을 멈추지만 참조는 남는다 — 남으면 IsRetrying 이 늘 참이라 RecreateAnchor 를 부르는 곳(매니저들)이 전부 건너뛰어
+        // 다시 켜져도 앵커가 영영 안 생겼다(인디케이터 없음 · 11-26 대표님 18 · 33번). 비워 두면 2초마다 도는 RetryFailedAnchors 가 다시 잡는다
+        retryCoroutine = null;
+        if (reattachLerpCoroutine != null)
+        {
+            reattachLerpCoroutine = null;
+            if (currentAnchor != null && transform.parent == currentAnchor.transform)
+            {
+                transform.localPosition = Vector3.zero;   // 재부착 보정 도중 꺼짐 — 끝자리로
+                transform.localRotation = Quaternion.identity;
+            }
+        }
+    }
 
     public void SetCoordinatesAndCreateAnchor(double latitude, double longitude, double altitude)
     {

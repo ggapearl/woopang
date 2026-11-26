@@ -79,6 +79,8 @@ public class R0926SkyWeather : MonoBehaviour
     [SerializeField] private Image glass;
     [Tooltip("유리 둘레의 네온 테 (Glass0926/NeonRim0926 — 네온 모드에서만 그린다) — 유리와 같이 나타나고 사라진다 (위쪽에 고정했을 때만 보임)")]
     [SerializeField] private Image glassRim;
+    [Tooltip("옆 장을 유리 안으로 자른다 (틀 Frame0926 의 R0926PageClip) — 유리가 보일 때(고정)만 켠다 (11-26 대표님 16번)")]
+    [SerializeField] private R0926PageClip pageClip;
     [Tooltip("고정한 판은 이것들 위에 놓는다 (주소줄 · 도크)")]
     [SerializeField] private RectTransform[] pinFloor;
     [Tooltip("고정한 판의 유리 폭 — 화면 폭의 이만큼")]
@@ -670,6 +672,8 @@ public class R0926SkyWeather : MonoBehaviour
         c.a *= glassK;
         glass.color = c;
         if (glassRim != null) { var r = glassRim.color; r.a = glassK; glassRim.color = r; }   // 하늘에 걸린 동안(0)은 테도 안 보인다
+        bool clip = glassK > 0.001f;   // 유리가 보이면 옆 장이 유리 밖으로 나가지 않게
+        if (pageClip != null && pageClip.enabled != clip) pageClip.enabled = clip;
     }
 
     // 누워서 위로 들고 쓰는 경우(천장) — 크게 기울인 채 거의 움직이지 않으면

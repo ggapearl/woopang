@@ -63,7 +63,7 @@ public class UIFeedbackManager : MonoBehaviour
     public bool FedBackThisFrame => lastFeedbackFrame == Time.frameCount;
     public static bool IsBackdrop(string objectName) => Backdrops.Contains(objectName);
 #if UNITY_EDITOR
-    public static int EditorFeedbacks;
+    public static int EditorFeedbacks, EditorHaptics;   // 소리+진동 · 진동만 (HapticOnly)
 #endif
 
     public enum HapticIntensity
@@ -185,6 +185,15 @@ public class UIFeedbackManager : MonoBehaviour
     public void TriggerLightHaptic() => TriggerHaptic(0.25f);
     public void TriggerMediumHaptic() => TriggerHaptic(0.5f);
     public void TriggerHeavyHaptic() => TriggerHaptic(1.0f);
+
+    /// <summary>진동만, 소리 없이 — 세기는 버튼 누름과 같은 값으로 (사용가이드 카드를 손가락으로 넘길 때 · 11-26 대표님 26번 「버튼 눌렀을 때처럼 햅틱효과 … (소리는 제외)」)</summary>
+    public void HapticOnly(float intensity)
+    {
+#if UNITY_EDITOR
+        EditorHaptics++;
+#endif
+        TriggerHaptic(intensity);
+    }
 
     public void SetHapticIntensity(float intensity) => hapticIntensity = Mathf.Clamp01(intensity);
     public float GetCurrentHapticIntensity() => hapticIntensity;

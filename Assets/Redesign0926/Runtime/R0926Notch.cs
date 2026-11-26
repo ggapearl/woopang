@@ -26,6 +26,9 @@ using UnityEngine.XR.ARSubsystems;
 ///    (11-16 둘째 대표님 「노치 위 표시에서도 10m 거리까지 도착하면 완성 … 두번 도착했다고 나오지 않도록」). 화살표가 없을 때만 스스로 10m 안에 1.5초. 20분이 지나도 끝
 ///  · 창(목록 · 메세지 · 프로필 …)이 화면을 덮으면 숨는다 — 안내는 이어지고 창을 닫으면 다시 보인다
 ///  · 노치 아래로 내려온 만큼(DropPx) 위쪽 칩 · 상태 알약 · 확대 표시(R0926SafeInset 위쪽)가 비켜 내려간다
+///  · 다이내믹 아일랜드 아이폰은 아래 줄 없이 아일랜드 높이 그대로 양옆으로만 — 왼쪽(시계 쪽 40pt) 기온 · 거리, 오른쪽(신호 쪽 26pt) 날씨 그림 · 화살표
+///    (11-24 시안 「바꾸는 안」 · 11-26 대표님 「위에 노치관련 수정안 확인했어. 1,2번 둘다 진행해」). 아래로 내려오지 않아 칩 · 알약도 비켜 서지 않는다.
+///    3초 이름 판 · '터치하면 돌아가요'는 예전처럼 잠깐만 아래로 펴진다. 노치 아이폰(X ~ 14 · 16e)은 양옆이 시계 · 배터리로 차 있어 아래 한 줄 그대로
 /// 노치 자리: Screen.cutouts(맞아 보일 때만) → 기기 이름 · 위쪽 안전영역으로 고른 표. Unity 의 아이폰 노치 표는 새 기기에서 비어 있거나 틀린다(UUM-56430).
 /// 판은 진짜 노치보다 조금 작은 크기에서 열리고 닫힌 뒤엔 꺼 둔다 — 표가 몇 pt 틀려도 노치 밖으로 삐져나오지 않게.
 /// </summary>
@@ -76,6 +79,10 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
     private const float FlingPt = 260f;      // 이보다 빨리 튕기면 조금만 밀어도 옆 장 (pt/초)
     private const float ExpandTime = 3f, NoteTime = 2.6f, FoldWait = 2f;
     private const float SoloArriveMeters = 10f, ArriveHold = 1.5f, ArriveShow = 4f, MaxGuideSeconds = 20f * 60f;
+    // 다이내믹 아일랜드 양옆 (아이폰 15 실측 시안) — 늘리는 폭 · 글 가운데 / 그림 가운데가 아일랜드 끝에서 떨어진 거리 · 글 칸 폭
+    private const float SideLeftPt = 40f, SideRightPt = 26f, SideTextAtPt = 17.5f, SideIconAtPt = 12f, SideTextRoomPt = 30f;
+    private const float SideIconPt = 19f, SideArrowPt = 15f, SideTextPt = 15f, SideDistPt = 13.5f;
+    private const float SideEdgePt = 2f, SideMinPt = 9f;   // 긴 말(12.3km · 3km 이내)은 왼쪽 칸 양끝 2pt 까지 · 9pt 까지 줄인다
 
     public static R0926Notch Instance { get; private set; }
 
@@ -111,7 +118,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         n.foldAt = Time.unscaledTime;
     }
 
-    /// <summary>노치 아래 줄의 가운데 (화면 px) — 하늘 판이 접힐 때 이리로 들어간다. 노치가 없으면 false</summary>
+    /// <summary>노치 아래 줄의 가운데 (화면 px · 아일랜드면 양옆으로 늘어난 판의 가운데) — 하늘 판이 접힐 때 이리로 들어간다. 노치가 없으면 false</summary>
     public static bool RowCenter(out Vector2 screen)
     {
         screen = Vector2.zero;
@@ -119,7 +126,9 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         if (n == null || !n.isActiveAndEnabled) return false;
         n.Measure();
         if (!n.hasCut) return false;
-        screen = new Vector2(UnityEngine.Device.Screen.width * 0.5f, UnityEngine.Device.Screen.height - (n.RowTopPt + RowPt * 0.5f) * n.ppt);
+        float x = n.island ? (SideRightPt - SideLeftPt) * 0.5f * n.ppt : 0f;
+        float midPt = n.island ? n.cutTopPt + n.cutHpt * 0.5f : n.RowTopPt + RowPt * 0.5f;
+        screen = new Vector2(UnityEngine.Device.Screen.width * 0.5f + x, UnityEngine.Device.Screen.height - midPt * n.ppt);
         return true;
     }
 
@@ -396,7 +405,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
             hasAngle = true;
         }
         string d = meters >= 0f ? Dist(meters) : "…";
-        if (d != distWord) { distWord = d; if (shown == Mode.Guide && rightText != null) rightText.text = d; }
+        if (d != distWord) { distWord = d; if (shown == Mode.Guide && rightText != null) { rightText.text = d; FitRight(false); } }
         if (shown == Mode.Guide && arrow != null)
         {
             arrow.localEulerAngles = new Vector3(0f, 0f, -angle);
@@ -573,20 +582,23 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         shapeImage.type = Image.Type.Sliced;
         // 둥근 모서리는 노치 높이로 정한다 — 알약은 아일랜드와 같은 둥글기, 노치는 아래 모서리 반지름이 그 높이의 0.4 (그림의 반지름 40px). 아래로 늘어나도 그대로
         shapeImage.pixelsPerUnitMultiplier = island ? 126f / ch : 100f / ch;
-        Vector2 icon = Vector2.one * IconPt * upt;
+        // 아일랜드 양옆은 오른쪽 칸이 26pt 라 그림을 조금 작게 (시안 날씨 19pt · 화살표 15pt)
+        float iconPt = island ? SideIconPt : IconPt, arrowPt = island ? SideArrowPt : ArrowPt;
+        Vector2 icon = Vector2.one * iconPt * upt;
         if (weatherIcon != null) ((RectTransform)weatherIcon.transform).sizeDelta = icon;
         if (pageIcon != null) pageIcon.rectTransform.sizeDelta = icon;
         if (face != null) face.rectTransform.sizeDelta = icon;
-        if (faceInitial != null) faceInitial.fontSize = Mathf.RoundToInt(IconPt * 0.52f * upt);
-        if (arrow != null) arrow.sizeDelta = Vector2.one * ArrowPt * upt;
-        if (check != null) check.sizeDelta = Vector2.one * ArrowPt * upt;
+        if (faceInitial != null) faceInitial.fontSize = Mathf.RoundToInt(iconPt * 0.52f * upt);
+        if (arrow != null) arrow.sizeDelta = Vector2.one * arrowPt * upt;
+        if (check != null) check.sizeDelta = Vector2.one * arrowPt * upt;
         if (titleText != null) titleText.fontSize = Mathf.RoundToInt(TitlePt * upt);
         if (hintText != null) hintText.fontSize = Mathf.RoundToInt(HintPt * upt);
         if (clip != null)
         {
-            float side = Shoulder + 2f * upt;
+            // 양옆 배치는 글 · 그림이 판 끝 가까이 있어 흐리게 자르는 폭을 좁힌다
+            float side = Shoulder + (island ? 1f : 2f) * upt;
             clip.padding = new Vector4(side, 0f, side, 0f);
-            clip.softness = new Vector2Int(Mathf.RoundToInt(6f * upt), 0);
+            clip.softness = new Vector2Int(Mathf.RoundToInt((island ? 2f : 6f) * upt), 0);
         }
         dirty = true;   // 날씨 그림 · 글 크기는 Refresh 에서
     }
@@ -619,7 +631,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         if (rightText != null)
         {
             rightText.text = weather ? (wTemp == int.MinValue ? "" : wTemp + "°") : skyMode ? it.text ?? "" : guide ? distWord : "";
-            Fit(rightText, TextPt, (cutWpt - 2f * RowPad - IconPt - RowGap) * upt);
+            FitRight(weather);
         }
         if (noteText != null)
         {
@@ -636,12 +648,22 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
     }
 
     // 판 폭에 안 들어가면 글자를 줄인다 (긴 거리 말 — 'a menos de 3km' · 영어 안내 줄 등)
-    private void Fit(Text t, float pt, float room)
+    private void Fit(Text t, float pt, float room, float minPt = MinTextPt)
     {
         if (upt <= 0f) return;
-        int size = Mathf.RoundToInt(pt * upt), min = Mathf.RoundToInt(MinTextPt * upt);
+        int size = Mathf.RoundToInt(pt * upt), min = Mathf.RoundToInt(minPt * upt);
         t.fontSize = size;
         while (size > min && t.preferredWidth > room) t.fontSize = --size;
+    }
+
+    // 줄 글(기온 · 거리) 크기 — 아일랜드 왼쪽 칸은 시안대로 30pt 안에, 그래도 길면 칸 양끝(2pt)까지 쓰며 9pt 까지
+    private void FitRight(bool weatherText)
+    {
+        if (rightText == null || upt <= 0f) return;
+        if (!island) { Fit(rightText, TextPt, (cutWpt - 2f * RowPad - IconPt - RowGap) * upt); return; }
+        Fit(rightText, weatherText ? SideTextPt : SideDistPt, SideTextRoomPt * upt);
+        float room = (SideLeftPt - 2f * SideEdgePt) * upt;
+        if (rightText.preferredWidth > room) Fit(rightText, rightText.fontSize / upt, room, SideMinPt);
     }
 
     private void Layout()
@@ -649,50 +671,72 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         float cutW = cutWpt * upt, cutH = cutHpt * upt, shoulder = Shoulder, row = RowPt * upt;
         float rootW = ((RectTransform)transform).rect.width;
         float topOpen = island ? (cutTopPt - 1f) * upt : 0f;
-        float rowTop = RowTopPt * upt - topOpen;   // 판 위 변에서 줄 위 변까지
-        float hOpen = rowTop + row + note * (NoteLine + NoteBottom) * upt;
-        float bodyExp = Mathf.Min(Mathf.Max(cutW, ExpandMinW * upt), rootW - 24f * upt - 2f * shoulder);
-        float hExp = rowTop + row + (ExpandGap + TitleLine + HintLine + ExpandBottom) * upt;
+        // 판 위 변에서 줄 위 · 아래 변까지 — 아일랜드는 아래 줄 없이 아일랜드 자체가 줄 (위아래 1pt 씩 크게). 그 밑에 '터치하면 돌아가요' · 이름 판
+        float rowTop = island ? 1f * upt : RowTopPt * upt - topOpen;
+        float band = island ? rowTop + cutH + 1f * upt : rowTop + row;
+        float hOpen = band + note * (NoteLine + NoteBottom) * upt;
+        float wOpen = island ? cutW + (SideLeftPt + SideRightPt) * upt : cutW;
+        float bodyExp = Mathf.Min(Mathf.Max(wOpen, ExpandMinW * upt), rootW - 24f * upt - 2f * shoulder);
+        float hExp = band + (ExpandGap + TitleLine + HintLine + ExpandBottom) * upt;
         float bodyClosed = cutW * 0.92f, hClosed = cutH * 0.92f;   // 진짜 노치 뒤에 숨는 크기에서 열린다
-        float w = Mathf.LerpUnclamped(Mathf.LerpUnclamped(bodyClosed, cutW, open), bodyExp, expand);
+        float w = Mathf.LerpUnclamped(Mathf.LerpUnclamped(bodyClosed, wOpen, open), bodyExp, expand);
         float h = Mathf.LerpUnclamped(Mathf.LerpUnclamped(hClosed, hOpen, open), hExp, expand);
         float topClosed = island ? cutTopPt * upt + (cutH - hClosed) * 0.5f : 0f;
-        shape.anchoredPosition = new Vector2(0f, -Mathf.LerpUnclamped(topClosed, topOpen, Mathf.Clamp01(open)));
+        // 아일랜드 양옆은 시계 쪽이 더 넓어 판 가운데가 아일랜드보다 왼쪽 — 넓게 펴지면 다시 화면 가운데
+        float shift = island ? (SideRightPt - SideLeftPt) * 0.5f * upt * Mathf.Clamp01(open) * (1f - Mathf.Clamp01(expand)) : 0f;
+        shape.anchoredPosition = new Vector2(shift, -Mathf.LerpUnclamped(topClosed, topOpen, Mathf.Clamp01(open)));
         shape.sizeDelta = new Vector2(Mathf.Max(0f, w + 2f * shoulder), Mathf.Max(0f, h));
 
-        // 줄 — 그림과 글을 한 묶음으로 가운데 (기온은 날씨 그림 바로 옆). 미는 동안은 손가락을 따라 옆으로
-        float mid = -(rowTop + row * 0.5f);
-        float iconW = (shown == Mode.Guide ? ArrowPt : IconPt) * upt;
         float textW = rightText != null && rightText.text.Length > 0 ? rightText.preferredWidth : 0f;
-        float gap = textW > 0f ? RowGap * upt : 0f;
-        float x = -(iconW + gap + textW) * 0.5f + slide;
-        if (leftSlot != null) leftSlot.anchoredPosition = new Vector2(x + iconW * 0.5f, mid);
-        if (rightSlot != null)
+        if (island)
         {
-            rightSlot.anchoredPosition = new Vector2(x + iconW + gap + textW * 0.5f, mid);
-            rightSlot.sizeDelta = new Vector2(textW + 2f * upt, row);
+            // 아일랜드 양옆 — 왼쪽(시계 쪽)에 글, 오른쪽(신호 쪽)에 그림. 자리는 아일랜드 기준(판이 치우친 만큼 되돌림) · 미는 동안은 손가락을 따라 옆으로
+            float midY = -(rowTop + cutH * 0.5f), cx = slide - shift;
+            // 글 가운데는 아일랜드에서 17.5pt — 긴 말은 칸(40pt) 양끝 2pt 안으로 밀어 넣는다
+            float edge = SideEdgePt * upt, leftW = SideLeftPt * upt;
+            float at = textW > leftW - 2f * edge ? leftW * 0.5f : Mathf.Clamp(SideTextAtPt * upt, edge + textW * 0.5f, leftW - edge - textW * 0.5f);
+            if (leftSlot != null) leftSlot.anchoredPosition = new Vector2(cx + cutW * 0.5f + SideIconAtPt * upt, midY);
+            if (rightSlot != null)
+            {
+                rightSlot.anchoredPosition = new Vector2(cx - cutW * 0.5f - at, midY);
+                rightSlot.sizeDelta = new Vector2(textW + 2f * upt, cutH);
+            }
+        }
+        else
+        {
+            // 줄 — 그림과 글을 한 묶음으로 가운데 (기온은 날씨 그림 바로 옆). 미는 동안은 손가락을 따라 옆으로
+            float mid = -(rowTop + row * 0.5f);
+            float iconW = (shown == Mode.Guide ? ArrowPt : IconPt) * upt;
+            float gap = textW > 0f ? RowGap * upt : 0f;
+            float x = -(iconW + gap + textW) * 0.5f + slide;
+            if (leftSlot != null) leftSlot.anchoredPosition = new Vector2(x + iconW * 0.5f, mid);
+            if (rightSlot != null)
+            {
+                rightSlot.anchoredPosition = new Vector2(x + iconW + gap + textW * 0.5f, mid);
+                rightSlot.sizeDelta = new Vector2(textW + 2f * upt, row);
+            }
         }
         if (noteText != null)
         {
             var t = noteText.rectTransform;
-            t.anchoredPosition = new Vector2(0f, -(rowTop + row + NoteLine * 0.5f * upt));
+            t.anchoredPosition = new Vector2(-shift, -(band + NoteLine * 0.5f * upt));   // 아일랜드 바로 밑 가운데
             t.sizeDelta = new Vector2(cutW, NoteLine * upt);
         }
         if (titleText != null)
         {
             var t = titleText.rectTransform;
-            t.anchoredPosition = new Vector2(0f, -(rowTop + row + (ExpandGap + TitleLine * 0.5f) * upt));
+            t.anchoredPosition = new Vector2(0f, -(band + (ExpandGap + TitleLine * 0.5f) * upt));
             t.sizeDelta = new Vector2(bodyExp - 28f * upt, TitleLine * upt);
         }
         if (hintText != null)
         {
             var t = hintText.rectTransform;
-            t.anchoredPosition = new Vector2(0f, -(rowTop + row + (ExpandGap + TitleLine + HintLine * 0.5f) * upt));
+            t.anchoredPosition = new Vector2(0f, -(band + (ExpandGap + TitleLine + HintLine * 0.5f) * upt));
             t.sizeDelta = new Vector2(bodyExp - 28f * upt, HintLine * upt);
         }
 
-        // 칩 · 알약이 비켜 설 만큼 — 넓게 펴진 판은 잠깐이라 넣지 않는다 (그동안은 판이 위를 덮는다)
-        float bottomPt = RowTopPt + RowPt + note * (NoteLine + NoteBottom);
+        // 칩 · 알약이 비켜 설 만큼 — 넓게 펴진 판은 잠깐이라 넣지 않는다 (그동안은 판이 위를 덮는다). 아일랜드 양옆은 위쪽 안전영역 안이라 '터치하면 돌아가요' 동안만
+        float bottomPt = (island ? cutTopPt + cutHpt + 1f : RowTopPt + RowPt) + note * (NoteLine + NoteBottom);
         DropPx = Mathf.Max(0f, bottomPt + DropGap - insetPt) * ppt * Mathf.Clamp01(open);
     }
 

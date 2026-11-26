@@ -32,6 +32,48 @@ public static class R0926PhotoAlpha
         return t;
     }
 
+    /// <summary>
+    /// 정사각형이 아닌 사진을 찌그러뜨리지 않고 정사각형으로 (11-26 대표님 13번 「'우팡이네집' … 좌우로 찌그러진 채로 사진을 불러오거든?」 —
+    /// 앱 밖에서 올린 옛 로고는 4:3 투명 캔버스 가운데 동그라미라, 정사각형 칸 · AI(512×512) · 저장(444×444) · AR 큐브 면이 늘려 넣으며 눌렀다).
+    /// 알파 칸이 있는 사진(투명 로고)은 다 보이게 — 긴 변을 맞추고 남는 곳은 투명. 아니면 가운데를 잘라 채운다(근처 목록 칸과 같다).
+    /// 한 변은 maxSide 를 넘지 않는다. 읽기 전용(readable=false)이면 CPU 쪽 사본을 남기지 않는다. 받은 쪽이 지운다.
+    /// </summary>
+    public static Texture2D Square(Texture src, bool readable = false, int maxSide = 512)
+    {
+        int w = src.width, h = src.height;
+        bool fit = CanHave(src);
+        int side = Mathf.Max(1, Mathf.Min(maxSide, fit ? Mathf.Max(w, h) : Mathf.Min(w, h)));
+        bool mips = src.mipmapCount > 1;
+        var prev = RenderTexture.active;
+        Texture2D dst;
+        RenderTexture rt;
+        if (fit)
+        {
+            float k = side / (float)Mathf.Max(w, h);
+            int cw = Mathf.Clamp(Mathf.RoundToInt(w * k), 1, side), ch = Mathf.Clamp(Mathf.RoundToInt(h * k), 1, side);
+            rt = RenderTexture.GetTemporary(cw, ch);
+            Graphics.Blit(src, rt);
+            RenderTexture.active = rt;
+            dst = new Texture2D(side, side, TextureFormat.RGBA32, mips);
+            dst.SetPixels32(new Color32[side * side]);   // 남는 곳은 투명
+            dst.ReadPixels(new Rect(0, 0, cw, ch), (side - cw) / 2, (side - ch) / 2, false);
+        }
+        else
+        {
+            Vector2 scale = w >= h ? new Vector2(h / (float)w, 1f) : new Vector2(1f, w / (float)h);
+            rt = RenderTexture.GetTemporary(side, side);
+            Graphics.Blit(src, rt, scale, (Vector2.one - scale) * 0.5f);
+            RenderTexture.active = rt;
+            dst = new Texture2D(side, side, TextureFormat.RGB24, mips);
+            dst.ReadPixels(new Rect(0, 0, side, side), 0, 0, false);
+        }
+        RenderTexture.active = prev;
+        RenderTexture.ReleaseTemporary(rt);
+        dst.wrapMode = TextureWrapMode.Clamp;
+        dst.Apply(mips, !readable);
+        return dst;
+    }
+
     /// <summary>올릴 바이트 — 투명한 사진은 PNG, 아니면 JPG</summary>
     public static byte[] Encode(Texture2D t, int jpgQuality) => Has(t) ? t.EncodeToPNG() : t.EncodeToJPG(jpgQuality);
 

@@ -1055,8 +1055,6 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         bool showWoopangData = !currentFilters.ContainsKey("woopangData") || currentFilters["woopangData"];
         // object3D 키가 없으면 기본값 true
         bool showObject3D = !currentFilters.ContainsKey("object3D") || currentFilters["object3D"];
-        // publicData 키가 없으면 기본값 true
-        bool showPublicData = !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
 
         // Object3D 토글 OFF: 3D 오브젝트(anim · 원본 custom — GLB 실패로 cube 전환된 것도 포함) 숨김
         string origType = place.original_model_type ?? place.model_type;
@@ -1065,11 +1063,15 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
             return false;
         }
 
-        // 공공데이터 칩: 기관이 등록한 장소만 숨긴다 (사람이 '공원'으로 올린 곳은 우팡 데이터).
-        // 분류(카테고리)를 고른 동안은 분류가 정한다 — 그때 publicData 는 늘 false 로 온다
+        // 공공 칩: 기관이 등록한 장소만 숨긴다 (사람이 '공원'으로 올린 곳은 우팡 데이터).
+        // 기관 랜드마크 · 공원 · 스포츠 · 화장실은 「공공데이터」(stores) 칩, 그 밖은 「공공기관」(publicData) 칩 — FilterManager.ChipKey (11-26 대표님 9번)
+        // 분류(카테고리)를 고른 동안은 분류가 정한다 — 그때 두 칩은 늘 false 로 온다
         bool categoryMode = currentFilters.ContainsKey("categoryFilter") && currentFilters["categoryFilter"];
-        if (!categoryMode && !showPublicData && FilterManager.IsPublicSource(place.is_public, place.category))
-            return false;
+        if (!categoryMode && FilterManager.IsPublicSource(place.is_public, place.category))
+        {
+            string chip = FilterManager.ChipKey("publicData", place.category);
+            if (currentFilters.ContainsKey(chip) && !currentFilters[chip]) return false;
+        }
 
         bool shouldShow = showWoopangData;
 
@@ -1349,7 +1351,9 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
     {
         Sprite petFriendlySprite = Resources.Load<Sprite>("Sprites/pet_friendly_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
         Sprite restroomSprite = Resources.Load<Sprite>("Sprites/separate_restroom_icon") ?? Resources.Load<Sprite>("Sprites/default_icon");
-        doubleTap.SetInfoImages(petFriendlySprite, restroomSprite, place.pet_friendly, place.separate_restroom, place.instagram_id, place.name, place.id, place.username, place.instagram_id);
+        // 위 글(설명) 자리는 비운다 — 다른 매니저처럼 (상단 텍스트 제거). 예전엔 이 자리에 인스타 아이디가 들어가, 대리 정보 창(PlaceInfo0926)이 관광공사 큐브의
+        // 위 글 칸을 받아 온 경우 「Created by …」 줄과 같은 자리에 겹쳐 찍혔다 (11-27 대표님 35번 「만든사람 부분에 중복으로 뭔가 글자가 발생」)
+        doubleTap.SetInfoImages(petFriendlySprite, restroomSprite, place.pet_friendly, place.separate_restroom, null, place.name, place.id, place.username, place.instagram_id);
     }
 
     private void SetupTargetInfo(Target target, PlaceData place)

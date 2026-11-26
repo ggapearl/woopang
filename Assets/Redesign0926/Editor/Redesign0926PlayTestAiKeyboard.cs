@@ -109,7 +109,7 @@ namespace Redesign0926
             {
                 akStyle = SnRead(SnStyleKey); akNeon = SnRead(SnNeonKey); akDensity = SnRead(SnDensityKey);
                 akRun = true;
-                R0926MenuStyle.Droplet = true; R0926MenuStyle.Neon = true; R0926MenuStyle.Density = 70;   // 처음 켠 앱 그대로 (물방울 · 네온)
+                R0926MenuStyle.Droplet = true; R0926MenuStyle.Neon = true; R0926MenuStyle.Density = R0926MenuStyle.DefaultDensity;   // 처음 켠 앱 그대로 (물방울 · 네온)
                 Application.logMessageReceived += onLog;
                 R0926AiWork.Provider = null;
                 cum = UnityEngine.Object.FindAnyObjectByType<CubeUploadManager>(FindObjectsInactive.Include);

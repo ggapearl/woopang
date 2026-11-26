@@ -117,6 +117,42 @@ namespace Redesign0926
                 if (text != null) Loc(text, "이 장소의 삭제를 요청할까요?", "Request removal of this place?", "この場所の削除をリクエストしますか？", "要申请删除这个地点吗？", "¿Solicitar la eliminación de este lugar?");
             }
 
+            // 로그아웃 확인 — 11-26 31번 대표님 「그리고 '로그아웃' 할 경우에 발생하는 모달도 우리 레이아웃이랑 안어울리는데 확인하고 수정해줘」
+            // 흰 네모(800x400) 위 흰 글씨 + 빨간·회색 동그라미 아이콘 버튼이던 것을 로그인 안내·삭제 요청과 같은 어두운 카드 + 글자 알약으로 (취소 왼쪽 · 로그아웃 오른쪽 빨간 글자)
+            // 프로필 Content/BottomPanel 안에 있어 어둡게 깔리는 막이 프로필 틀 안에만 들어가고 도크 X 가 그대로 눌렸다 → 캔버스 바로 밑, 로그인 안내 창 바로 위로 옮겨 화면 전체를 덮는다
+            // 버튼 글자는 R0926LocalizedText 가 처음 켜질 때 쓴다 (ProfileManager 의 확인·취소 글자는 창이 꺼진 채 불려 닿지 않는다) · 뒤로가기 = 취소 (Apply8 목록)
+            var logout = Find(root, "LogoutConfirmDialog");
+            if (logout != null)
+            {
+                if (login != null)
+                {
+                    if (logout.transform.parent != login.transform.parent) logout.transform.SetParent(login.transform.parent, false);
+                    logout.transform.SetSiblingIndex(login.transform.GetSiblingIndex() + 1);
+                }
+                var lrt = RT(logout);
+                lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one; lrt.pivot = new Vector2(0.5f, 0.5f);
+                lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero; lrt.localScale = Vector3.one;
+                var dim = Ensure<Image>(logout);
+                dim.color = new Color(0, 0, 0, 0.5f);
+                dim.raycastTarget = true;
+                EditorUtility.SetDirty(dim);
+                var box = Find(logout.transform, "Panel");
+                if (box != null)
+                {
+                    var msg = Find(logout.transform, "MessageText");
+                    var yes = Find(logout.transform, "ConfirmButton");
+                    var no = Find(logout.transform, "CancelButton");
+                    var buttons = FindOrCreate(box.transform, "Buttons0926");
+                    if (msg != null) msg.transform.SetParent(box.transform, false);
+                    if (yes != null) yes.transform.SetParent(buttons.transform, false);
+                    if (no != null) no.transform.SetParent(buttons.transform, false);
+                    StyleDialog(box, msg, buttons, yes, no,
+                        new[] { "로그아웃", "Logout", "ログアウト", "退出登录", "Cerrar sesión" }, CancelWords, true);
+                }
+                else log.Add("로그아웃 확인: Panel 없음");
+            }
+            else log.Add("로그아웃 확인 창 없음");
+
             // 3D 받기 — 카드 모양만 맞추고 버튼 글자는 코드가 쓰는 그대로 둔다
             var dance = Find(root, "DanceAnimPanel");
             if (dance != null)
@@ -230,13 +266,18 @@ namespace Redesign0926
             var panel = full != null ? Find(full.transform, "FixButtonPanel") : null;
             if (fixBtn == null || fixOpp == null || panel == null) { log.Add("장소 메뉴 없음"); return; }
 
+            // 「···」 — 동그라미 · 바탕 없이 흰 점만, 투명도 없이 (11-26 대표님 「'...' 의 경우에도 흰색으로만 그냥 있도록 해줘.(여기는 동그라미, 배경없이)」)
+            // 바탕 그림은 안 보이게(알파 0)만 두고 누르는 칸(130)은 그대로 · 바탕이 없어진 만큼 점을 조금 크게(80 → 96) · 눌림 표시는 점에
             foreach (var b in new[] { fixBtn, fixOpp })
             {
-                Img(b, Spr("r0926_circle"), Glass, Image.Type.Simple).raycastTarget = true;
+                Img(b, Spr("r0926_circle"), new Color(1f, 1f, 1f, 0f), Image.Type.Simple).raycastTarget = true;
                 RT(b).sizeDelta = new Vector2(130, 130);
                 var ic = FindOrCreate(b.transform, "Icon0926");
-                Img(ic, Spr("r0926_i_more"), Ink, Image.Type.Simple).raycastTarget = false;
-                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(80, 80));
+                var ici = Img(ic, Spr("r0926_i_more"), Color.white, Image.Type.Simple);
+                ici.raycastTarget = false;
+                SetRect(RT(ic), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96, 96));
+                var bb = b.GetComponent<Button>();
+                if (bb != null) { bb.targetGraphic = ici; EditorUtility.SetDirty(bb); }
             }
             RT(fixOpp).anchoredPosition = RT(fixBtn).anchoredPosition;
 

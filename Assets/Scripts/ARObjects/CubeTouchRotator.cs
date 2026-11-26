@@ -76,10 +76,8 @@ public class CubeTouchRotator : MonoBehaviour
             if (!WorldTouch.Free(mousePos))
                 return;
 
-            // Raycast로 이 오브젝트에 히트하는지 확인
-            Ray ray = mainCamera.ScreenPointToRay(mousePos);
-            RaycastHit hit;
-            if (Physics.Raycast(ray, out hit) && hit.collider == myCollider)
+            // 손가락 아래 맨 앞이 이 오브젝트인지 (숨긴 장소는 건너뜀 — WorldTouch.FirstHit, 장소 누름과 같은 답)
+            if (myCollider != null && WorldTouch.FirstHit(mousePos, mainCamera) == myCollider)
             {
                 isTouching = true;
                 isDragging = false;
@@ -135,9 +133,7 @@ public class CubeTouchRotator : MonoBehaviour
             if (!WorldTouch.Free(touch.screenPosition))
                 return;
 
-            Ray ray = mainCamera.ScreenPointToRay(touch.screenPosition);
-            RaycastHit hit;
-            if (Physics.Raycast(ray, out hit) && hit.collider == myCollider)
+            if (myCollider != null && WorldTouch.FirstHit(touch.screenPosition, mainCamera) == myCollider)
             {
                 isTouching = true;
                 isDragging = false;

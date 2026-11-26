@@ -8,6 +8,8 @@ using UnityEngine.UI;
 /// 글자 · 한 색 아이콘: 물방울 모드에서 투명해진 바탕 위 어두운 것만 흰색으로 — 알파는 그대로라 글자는 투명해지지 않는다.
 /// 쪽: 창과 같은 색으로 창을 거의 다 덮는 바탕(지도 · 설정 쪽) — 기본 모양이 아니면 그리지 않는다 (창 바탕이 대신 보인다).
 /// 지도 · 사진(RawImage) · 그림 아이콘 · 스위치 · 거리 막대는 건드리지 않는다.
+/// 칸 불투명(R0926KeepSolid) 아래 상자는 물방울 모드에서도 제 알파 그대로 — 창 바탕만 비친다 (정보수정 · 추가 쪽 · 펼친 분류 목록 · 11-26 대표님).
+/// 빈 칸(그림 없음)이라 상자로 붙었다가 사진이 들어온 칸은 사진이라 건드리지 않는다 (정보수정 사진이 옅게 비치던 것 · 11-26 대표님 6번).
 /// </summary>
 [DisallowMultipleComponent]
 public class R0926WindowFill : BaseMeshEffect
@@ -23,6 +25,7 @@ public class R0926WindowFill : BaseMeshEffect
     [System.NonSerialized] private Mode mode;
     [System.NonSerialized] private R0926WindowSkin owner;
     [System.NonSerialized] private Graphic g;
+    [System.NonSerialized] private bool solid;
 
     public Mode FillMode => mode;
     public R0926WindowSkin Owner => owner;
@@ -58,6 +61,7 @@ public class R0926WindowFill : BaseMeshEffect
         f.mode = m;
         f.owner = owner;
         f.g = g;
+        f.solid = g.GetComponentInParent<R0926KeepSolid>(true) != null;
         f.Touch();
         return f;
     }
@@ -103,10 +107,11 @@ public class R0926WindowFill : BaseMeshEffect
 
     private void Box(VertexHelper vh, bool drop)
     {
+        if (IsPhoto(g as Image)) return;
         Color c = g.color;
         float mx = Mathf.Max(c.r, Mathf.Max(c.g, c.b)), mn = Mathf.Min(c.r, Mathf.Min(c.g, c.b));
         bool darkGray = mx - mn <= 0.06f && mx <= 0.45f;
-        bool clear = drop && c.a >= 0.5f;
+        bool clear = drop && c.a >= 0.5f && !solid;   // 칸 불투명(R0926KeepSolid) 아래는 제 알파 그대로
         bool white = clear && mn >= 0.82f;
         if (!darkGray && !clear) return;
         Color tc = c;
@@ -215,6 +220,10 @@ public class R0926WindowFill : BaseMeshEffect
 
     private static bool IsClearBox(Image im)
     {
-        return im.TryGetComponent<R0926WindowFill>(out var f) && f.mode == Mode.Box && im.color.a >= 0.5f;
+        return im.TryGetComponent<R0926WindowFill>(out var f) && f.mode == Mode.Box && !f.solid && !IsPhoto(im) && im.color.a >= 0.5f;
     }
+
+    // 빈 칸(그림 없음)이라 상자로 붙었는데 나중에 사진이 들어온 것 — 훑을 때라면 붙이지 않았을 그림(늘리지 않는 · 상자 그림 아닌 것)이면 사진으로 본다
+    private static bool IsPhoto(Image im) => im != null && im.sprite != null && im.type != Image.Type.Sliced && im.type != Image.Type.Tiled
+                                             && System.Array.IndexOf(BoxSprites, im.sprite.name) < 0;
 }

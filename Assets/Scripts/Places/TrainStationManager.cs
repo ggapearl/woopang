@@ -337,6 +337,8 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
         if (target != null)
         {
             target.PlaceName = data.name;
+            target.gpsLatitude = data.latitude;   // 거리 · fallback 화살표 목록 (Target.GetGPSDistance) — 앵커가 아직 없어도 (11-26 18 · 33번 · data-managers 7번)
+            target.gpsLongitude = data.longitude;
             target.TargetColor = Color.green;
         }
     }

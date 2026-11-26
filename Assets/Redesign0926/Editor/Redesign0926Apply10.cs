@@ -667,6 +667,7 @@ namespace Redesign0926
                 // 작은 원을 늘려 자르면 가장자리가 계단처럼 깨지고, 여백만큼 사진이 작게 잘려 분홍 테두리와 틈이 보였다
                 var mImg = mask.GetComponent<Image>();
                 if (mImg != null) { mImg.sprite = Spr("r0926_circle"); mImg.type = Image.Type.Simple; mImg.preserveAspect = false; EditorUtility.SetDirty(mImg); }
+                ProfilePhotoSharp(mask, log);   // 사진이 흐리게 보였다 — 밉맵 한 단계 앞당김 (11-26 대표님 15번 · Redesign0926ApplySharpPhoto)
             }
             // 테두리 안쪽 가장자리(그림의 0.82)가 사진 가장자리를 6 덮게 — 자른 자리의 계단을 테두리가 가린다
             float ringSize = (333f / 2f - 6f) / 0.82f * 2f;

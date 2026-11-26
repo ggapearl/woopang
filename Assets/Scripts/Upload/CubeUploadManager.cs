@@ -1592,7 +1592,9 @@ public class CubeUploadManager : MonoBehaviour
         Texture2D mainPhoto = GetMainPhoto();
         if (mainPhoto != null)
         {
-            Texture2D resizedMainPhoto = ResizeTextureWithRenderTexture(mainPhoto, 444, 444, mainPhotoAlpha);
+            Texture2D squareMain = mainPhoto.width == mainPhoto.height ? mainPhoto : R0926PhotoAlpha.Square(mainPhoto, false, 1024);   // 늘려 넣어 찌그러지지 않게 (11-26 13번)
+            Texture2D resizedMainPhoto = ResizeTextureWithRenderTexture(squareMain, 444, 444, mainPhotoAlpha);
+            if (squareMain != mainPhoto) Destroy(squareMain);
             // 바깥이 투명한 대표 사진(AI 작업)은 PNG — JPG 는 투명한 곳을 검게 메운다. 서버 /thumb 이 투명을 알아보고 PNG 로 내준다
             byte[] mainPhotoBytes = mainPhotoAlpha ? resizedMainPhoto.EncodeToPNG() : resizedMainPhoto.EncodeToJPG(50);
             if (mainPhotoBytes.Length == 0)

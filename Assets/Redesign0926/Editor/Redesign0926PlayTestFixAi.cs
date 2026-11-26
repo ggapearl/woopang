@@ -71,6 +71,9 @@ namespace Redesign0926
             int remodelId = 0;
             PlaceData remodelOrig = null;
             GameObject remodelOld = null;
+            const string DropKey = "r0926_menu_style";
+            bool hadDrop = false;
+            int sDrop = 1;
 
             Func<string, JObject> getJ = path =>
             {
@@ -170,6 +173,8 @@ namespace Redesign0926
                 fix = UnityEngine.Object.FindAnyObjectByType<CubeDataFixManager>(FindObjectsInactive.Include);
                 ai = UnityEngine.Object.FindAnyObjectByType<R0926FixAiPanel>(FindObjectsInactive.Include);
                 lang0 = AppLanguage.EditorOverride;
+                hadDrop = PlayerPrefs.HasKey(DropKey); sDrop = PlayerPrefs.GetInt(DropKey, 1);
+                R0926MenuStyle.Droplet = true;   // 물방울 모드에서 칸 · 사진 · AI 화면이 비치지 않는지 본다 (11-26 대표님 6 · 7번) — 끝나면 되돌린다
                 log.Add($"  외부 AI 없음(폰 안에서) {R0926AiWork.Provider == null}");
             });
             Check(() => fix != null && ai != null && panel() != null && btn("aiButton") != null && part("view") != null && lastFix() != null,
@@ -189,6 +194,82 @@ namespace Redesign0926
                 orig = fix.MainPhoto;
             });
             Sleep(0.3f);
+            // 13번 (11-26 대표님 「'우팡이네집' 의 경우 정보수정을 하려고 햇는데 … 좌우로 찌그러진 채로 사진을 불러오거든? (장소로고추가)」)
+            // 시험 서버 대표 사진은 320×240 JPG (가로가 긴 사진) — 로고 칸 · AI · 저장이 늘려 넣지 않게 정사각형으로
+            Check(() =>
+            {
+                var t = fix.MainPhoto;
+                var im = (Image)fv("mainPhotoDisplay");
+                var r = im != null && im.sprite != null ? im.sprite.rect : default(Rect);
+                log.Add($"  대표 사진 {t?.width}×{t?.height} (서버 320×240) · 칸 그림 {r.width}×{r.height} · 투명 {R0926PhotoAlpha.Has(t)} · 경로 그대로 {(string)fv("mainKeepPath") == Main3}");
+                return t != null && t.width == t.height && (t.width == 240 || t.width == 320) && im != null && im.sprite != null
+                       && Mathf.Abs(r.width - r.height) < 0.5f && (string)fv("mainKeepPath") == Main3;
+            }, "정사각형이 아닌 서버 대표 사진(320×240)은 찌그러뜨리지 않고 정사각형으로 · 서버 경로는 그대로 (11-26 대표님 13번)");
+            Check(() =>
+            {
+                // 우팡이네집처럼 — 가로 4:3 투명 캔버스 가운데 동그라미 로고
+                var src = new Texture2D(400, 300, TextureFormat.RGBA32, false);
+                var px = new Color32[400 * 300];
+                for (int y = 0; y < 300; y++)
+                    for (int x = 0; x < 400; x++)
+                        px[y * 400 + x] = (x - 200) * (x - 200) + (y - 150) * (y - 150) <= 120 * 120 ? new Color32(220, 120, 60, 255) : new Color32(0, 0, 0, 0);
+                src.SetPixels32(px);
+                src.Apply(false, false);
+                var sq = R0926PhotoAlpha.Square(src, true);
+                var o = sq.GetPixels32();
+                int x0 = 9999, x1 = -1, y0 = 9999, y1 = -1;
+                for (int y = 0; y < sq.height; y++)
+                    for (int x = 0; x < sq.width; x++)
+                        if (o[y * sq.width + x].a > 128) { x0 = Mathf.Min(x0, x); x1 = Mathf.Max(x1, x); y0 = Mathf.Min(y0, y); y1 = Mathf.Max(y1, y); }
+                log.Add($"  투명 로고 400×300 → {sq.width}×{sq.height} · 동그라미 가로 {x1 - x0 + 1} 세로 {y1 - y0 + 1} · 가운데 ({(x0 + x1) * 0.5f:0.0}, {(y0 + y1) * 0.5f:0.0}) · 모서리 알파 {o[0].a}/{o[o.Length - 1].a}");
+                bool ok = sq.width == 400 && sq.height == 400 && R0926PhotoAlpha.Has(sq) && o[0].a == 0 && o[o.Length - 1].a == 0
+                          && Mathf.Abs((x1 - x0) - (y1 - y0)) <= 2 && Mathf.Abs((x0 + x1) * 0.5f - 200f) <= 1.5f && Mathf.Abs((y0 + y1) * 0.5f - 200f) <= 1.5f;
+                UnityEngine.Object.Destroy(src);
+                UnityEngine.Object.Destroy(sq);
+                return ok;
+            }, "투명 로고(가로가 긴 캔버스)는 다 보이게 투명 여백 — 동그라미가 그대로 둥글다 (13번)");
+            // AR 큐브 면 — 받은 사진을 그대로 늘려 붙이지 않는다 (투명 로고는 여백 · 보통 사진은 가운데 잘라) · 받은 것은 지운다 (지우기는 프레임 끝)
+            GameObject cube13 = null;
+            MeshRenderer mr13 = null;
+            Material mat13 = null;
+            Texture2D logo13 = null, pic13 = null;
+            string face1 = "", face2 = "";
+            Do(() =>
+            {
+                cube13 = new GameObject("FixAi13Cube");
+                cube13.SetActive(false);
+                mr13 = cube13.AddComponent<MeshRenderer>();
+                mat13 = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                mr13.sharedMaterial = mat13;
+                var idc = cube13.AddComponent<ImageDisplayController>();
+                idc.cubeRenderer = mr13;
+                var apply = typeof(ImageDisplayController).GetMethod("ApplyBaseMap", F);
+                logo13 = new Texture2D(400, 300, TextureFormat.RGBA32, false);
+                logo13.SetPixels32(new Color32[400 * 300]);
+                logo13.Apply(false, true);
+                apply.Invoke(idc, new object[] { logo13, "fixai13/logo.png" });
+                var t1 = mr13.material.GetTexture("_BaseMap");
+                face1 = t1 != null ? $"{t1.width}x{t1.height}" : "-";
+                pic13 = new Texture2D(300, 450, TextureFormat.RGB24, false);
+                pic13.Apply(false, true);
+                apply.Invoke(idc, new object[] { pic13, "fixai13/pic.jpg" });
+                var t2 = mr13.material.GetTexture("_BaseMap");
+                face2 = t2 != null ? $"{t2.width}x{t2.height}" : "-";
+            });
+            Sleep(0.1f);
+            Check(() =>
+            {
+                log.Add($"  AR 큐브 면: 투명 400×300 → {face1} · 보통 300×450 → {face2} · 받은 것 지움 {logo13 == null}/{pic13 == null}");
+                return face1 == "400x400" && face2 == "300x300" && logo13 == null && pic13 == null;
+            }, "AR 큐브 면: 정사각형이 아닌 사진은 정사각형으로 바꿔 붙인다 (투명 로고 = 여백 · 보통 사진 = 가운데) · 받은 것은 지운다 (13번)");
+            Do(() =>
+            {
+                var t = mr13 != null ? mr13.material.GetTexture("_BaseMap") : null;
+                if (t != null) UnityEngine.Object.Destroy(t);
+                if (mr13 != null) UnityEngine.Object.Destroy(mr13.material);
+                if (mat13 != null) UnityEngine.Object.Destroy(mat13);
+                if (cube13 != null) UnityEngine.Object.Destroy(cube13);
+            });
             Check(() =>
             {
                 var b = btn("aiButton");
@@ -203,6 +284,23 @@ namespace Redesign0926
                 return a.xMin >= t.xMin - 1 && a.xMax <= t.xMax + 1 && a.yMin >= t.yMin - 1 && a.yMax <= t.center.y;
             }, "「AI 작업」은 로고 칸 안 아래쪽");
             Shot("fixai_button");
+            // 6번 (11-26 대표님 「'정보수정' 들어갔을 때 발생하는 각 사진들도 투명하게 나오면 안되거든? 배경만 투명하게 하고 각 버튼 및 추가로 발생하는 것들은 투명하게 발생하지 않도록」)
+            Check(() =>
+            {
+                var pg = Find("Fixpage/FixUploadPage");
+                var sk = pg != null ? pg.GetComponent<R0926WindowSkin>() : null;
+                var mp = (Image)fv("mainPhotoDisplay");
+                var mf = mp != null ? mp.GetComponent<R0926WindowFill>() : null;
+                var names = new List<string>();
+                int nb = 0;
+                int fd = pg != null ? WsFaded(pg, names, out nb) : -1;
+                float pa = mp != null ? WsDrawnAlpha(mp) : -1f;
+                bool keep = pg != null && pg.GetComponent<R0926KeepSolid>() != null;
+                log.Add($"  정보수정 창 — 물방울 {R0926MenuStyle.Droplet} · 창 켜짐 {sk?.Showing} · 비침 {sk?.SeeThrough} · 칸 불투명 {keep}"
+                        + $" · 상자 {nb}개 중 옅어진 것 {fd}{(names.Count > 0 ? " (" + string.Join(", ", names) + ")" : "")}"
+                        + $" · 로고 사진 알파 {pa:0.00} (원래 {(mp != null ? mp.color.a : 0f):0.00} · 맞춤 {(mf != null ? mf.FillMode.ToString() : "없음")} · 그림 {(mp != null && mp.sprite != null)})");
+                return R0926MenuStyle.Droplet && sk != null && sk.Showing && keep && nb > 0 && fd == 0 && mp != null && mp.sprite != null && pa >= 0.99f * mp.color.a;
+            }, "물방울 모드 정보수정 — 창 바탕만 비치고 칸 · 버튼 · 로고 사진은 투명하지 않게 (11-26 대표님 6번)");
 
             // 2) 누르면 수정 카드가 그 자리에서 AI 화면 — ‹ · 안내 · 큰 미리보기(지금 로고) · 네 칸 · 취소|확인
             Do(() => btn("aiButton").onClick.Invoke());
@@ -224,6 +322,18 @@ namespace Redesign0926
                        && Mathf.Abs(v.xMin - card.xMin) < 2 && Mathf.Abs(v.xMax - card.xMax) < 2 && Mathf.Abs(v.yMin - card.yMin) < 2 && Mathf.Abs(v.yMax - card.yMax) < 2;
             }, "칸 차례: 취소|확인 < 네 칸 < 미리보기 < 안내 — 겹침 없음 · AI 화면이 수정 카드를 꽉 채움");
             Shot("fixai_open");
+            // 7번 (11-26 대표님 「오브젝트 메인사진의 'AI작업' 버튼을 눌렀을 때도 발생하는 레이아웃이 투명해서 겹쳐서 발생하면 안되거든?」)
+            Check(() =>
+            {
+                var v = part("view");
+                var sk = v != null ? v.GetComponent<R0926WindowSkin>() : null;
+                var names = new List<string>();
+                int nb = 0;
+                int fd = v != null ? WsFaded(v, names, out nb) : -1;
+                log.Add($"  AI 화면 — 켜짐 {sk?.Showing} · 수정 카드와 겹침 {sk?.Stacked} · 불투명 가림 {sk?.Covered} · 비침 {sk?.SeeThrough}"
+                        + $" · 상자 {nb}개 중 옅어진 것 {fd}{(names.Count > 0 ? " (" + string.Join(", ", names) + ")" : "")}");
+                return R0926MenuStyle.Droplet && sk != null && sk.Showing && sk.Covered && fd == 0;
+            }, "물방울 모드 AI 작업 화면 — 바탕이 수정 카드를 불투명하게 가린다(밑 칸이 비치지 않음) · 네 칸 · 버튼도 투명하지 않게 (11-26 대표님 7번)");
 
             // 3) 01 투명하게 — 고르는 즉시 작업 → 미리보기에 투명한 결과(바둑판 위) · 로고 칸은 아직 그대로
             bool sawWorking = false;
@@ -319,6 +429,43 @@ namespace Redesign0926
                 foreach (var b in bad) log.Add("  끌기: " + b);
                 return bad.Count == 0;
             }, "AI 화면 어디를 짚고 끌어도 그 끌기는 AI 화면 몫 (수정 카드 아래로 닫기 아님)");
+            Do(() => btn("viewCancel").onClick.Invoke());
+
+            // 11번 (11-26 대표님 「3D오브젝트의 경우 AI수정에 있어서 '투명 / 만화 / 색연필' 이런게 없이 그냥 '3D캐릭터' 수정만」)
+            string type11 = null;
+            Do(() =>
+            {
+                type11 = (string)fv("editModelType");
+                fs("editModelType", "custom");
+                btn("aiButton").onClick.Invoke();
+            });
+            Sleep(0.3f);
+            Shot("fixai_model3d");
+            Check(() =>
+            {
+                Rect tl = world(part("tiles")), c3 = world((RectTransform)chip(3).transform);
+                string s = status().text;
+                log.Add($"  3D 모델 장소: 01~03 보임 {chip(0).gameObject.activeSelf}/{chip(1).gameObject.activeSelf}/{chip(2).gameObject.activeSelf}"
+                        + $" · 3D 캐릭터 폭 {c3.width / tl.width:0.00} (줄 대비) · 안내 「{s}」 (처음 종류 {type11})");
+                return fix.IsModelPlace && !chip(0).gameObject.activeSelf && !chip(1).gameObject.activeSelf && !chip(2).gameObject.activeSelf
+                       && chip(3).gameObject.activeInHierarchy && c3.width > tl.width * 0.97f && !ai.Clear && ai.Style == R0926AiWork.Style.None
+                       && s.StartsWith("3D 캐릭터");
+            }, "3D 모델 장소: AI 작업은 「3D 캐릭터」 한 칸만 — 투명하게 · 만화톤 · 색연필 없음 · 한 줄을 다 채움 (11-26 대표님 11번)");
+            Do(() => chip(0).onClick.Invoke());
+            Check(() => !ai.Clear && !ai.Working && ai.Made == null, "3D 모델 장소: 숨긴 01 을 (코드로) 눌러도 아무 일 없음");
+            Do(() =>
+            {
+                btn("viewCancel").onClick.Invoke();
+                fs("editModelType", type11 ?? "");
+                btn("aiButton").onClick.Invoke();
+            });
+            Sleep(0.3f);
+            Check(() =>
+            {
+                Rect tl = world(part("tiles")), c3 = world((RectTransform)chip(3).transform);
+                return !fix.IsModelPlace && chip(0).gameObject.activeSelf && chip(1).gameObject.activeSelf && chip(2).gameObject.activeSelf && c3.width < tl.width * 0.3f
+                       && (AppLanguage.Code != "ko" || status().text.StartsWith("원하는 효과를 고르세요"));
+            }, "사진 장소로 돌아오면 다시 네 칸 · 안내도 원래대로");
             Do(() => btn("viewCancel").onClick.Invoke());
 
             // 7) 04 3D 캐릭터 — 요청사항 칸 · 미리보기에서 도는 캐릭터 · 요청사항으로 다시 만들기 → 확인 → 요청에 model.glb + 정지 사진 PNG
@@ -562,6 +709,9 @@ namespace Redesign0926
                 if (panel() != null && panel().activeSelf) { panel().SetActive(false); call("ResetToInitialState", null); }
                 CubeDataFixManager.EditorBase = null;
                 AppLanguage.EditorOverride = lang0;
+                if (hadDrop) PlayerPrefs.SetInt(DropKey, sDrop); else PlayerPrefs.DeleteKey(DropKey);
+                PlayerPrefs.Save();
+                R0926MenuStyle.Reload();
                 DataManager.Instance?.GetPlaceDataMap().Remove(OwnerPlace);
                 if (ownerOk) FixHttp("/__owner/teardown", "{}");
                 Application.logMessageReceived -= onLog;

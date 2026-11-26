@@ -91,6 +91,9 @@ namespace Redesign0926
                 // 사람 줄 오른쪽 사진 — 원 + 공개 범위 색 고리 (11-16 대표님 D2 · 도크 프로필 사진과 같은 고리)
                 rso.FindProperty("circleSprite").objectReferenceValue = Spr("r0926_circle");
                 rso.FindProperty("personRingSprite").objectReferenceValue = Spr("r0926_ring_mini");
+                // 사람 사진은 또렷하게 · 고리는 계산으로 (11-26 대표님 15번 「사진이 명확하게 발생하지 않고 테두리 질감이 지저분하게」 — Redesign0926ApplySharpPhoto)
+                rso.FindProperty("photoMaterial").objectReferenceValue = SharpPhotoMat(log);
+                rso.FindProperty("ringMaterial").objectReferenceValue = RingUiMat(log);
                 rso.FindProperty("huntSprite").objectReferenceValue = Spr("r0926_i_treasure");
                 rso.FindProperty("huntLockSprite").objectReferenceValue = Spr("r0926_i_treasure_lock");
                 // 보물찾기 줄 — 금빛 테두리 · 지나가는 빛 띠 · 상자 옆 별 (10-27 대표님 「살짝 하이라이트, 반짝임」)

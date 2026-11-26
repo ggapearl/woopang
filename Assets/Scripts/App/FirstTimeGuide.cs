@@ -115,6 +115,7 @@ public class FirstTimeGuide : MonoBehaviour
     private int currentPage = 0;
     private int pageCount;
     private float delayBeforeGuide = 6f;
+    private bool firstRun;   // 첫 설치의 안내 — 끝나면 1초 뒤 「근처 장소」 (11-26 대표님 26번 · 설정에서 다시 본 것은 아님)
 
     // 지금 보이는 쪽 · 쪽 수 (R0926GuideOverlay 가 마지막 쪽 판정에 쓴다)
     public int CurrentPage => cards != null ? cards.Index : currentPage;
@@ -610,8 +611,10 @@ public class FirstTimeGuide : MonoBehaviour
     {
         yield return new WaitForSeconds(delayBeforeGuide);
 
+        if (Showing) { if (IsFirstTime()) SetFirstTimeFlag(); yield break; }   // 그새 설정 › 앱 정보 「사용가이드」로 열었다 — 그 안내를 끄거나 처음부터 다시 띄우지 않는다
         if (IsFirstTime())
         {
+            firstRun = true;
             ShowGuide();
             SetFirstTimeFlag();
         }
@@ -619,6 +622,35 @@ public class FirstTimeGuide : MonoBehaviour
         {
             guidePanel.SetActive(false);
         }
+    }
+
+    /// <summary>
+    /// 설정 › 앱 정보 「사용가이드」 — 첫 실행 때와 같은 안내를 다시 (11-26 대표님 26번 「사용가이드를 설정탭 '앱정보' 맨 위에 (문의 위쪽) 버튼을 하나 만들어서 누르면 사용가이드 나오도록」).
+    /// waitFor(설정이 든 목록 시트)가 닫힌 뒤에 — 안내가 비추는 하단 버튼 · AR 화면이 보이게 (1.5초 넘게 안 닫히면 그대로).
+    /// 첫 실행 기록은 건드리지 않는다 (ForceShowGuide 는 지워서 다음 실행에 또 뜬다). 끝나도 「근처 장소」는 띄우지 않는다 — 첫 설치만
+    /// </summary>
+    public void Replay(Behaviour waitFor)
+    {
+        if (!Application.isPlaying || guidePanel == null || Showing || !isActiveAndEnabled) return;
+        StartCoroutine(ReplayAfter(waitFor));
+    }
+
+    private IEnumerator ReplayAfter(Behaviour waitFor)
+    {
+        float until = Time.unscaledTime + 1.5f;
+        while (waitFor != null && waitFor.isActiveAndEnabled && Time.unscaledTime < until) yield return null;
+        if (Showing) yield break;
+        firstRun = false;
+        ShowGuide();
+    }
+
+    // 안내가 다 닫혔다 — 첫 설치의 안내였으면 1초 뒤 「근처 장소」
+    // (11-26 대표님 26번 「처음 앱 설치한 사람도 사용가이드 끝나면 '근처 장소' 1초 후에 바로 보이도록」 — 첫 실행엔 권한 창이 앱을 잠깐 멈춰 「앱 시작 시 근처 장소」가 건너뛰어졌다)
+    private void AfterClose()
+    {
+        if (!firstRun) return;
+        firstRun = false;
+        R0926NearModal.ShowAfterGuide(1f);
     }
 
     private void ShowGuide()
@@ -1046,6 +1078,7 @@ public class FirstTimeGuide : MonoBehaviour
     public void CardsClosed()
     {
         if (guidePanel != null) guidePanel.SetActive(false);
+        AfterClose();
     }
 
     private IEnumerator CloseGuide()
@@ -1083,6 +1116,7 @@ public class FirstTimeGuide : MonoBehaviour
         guidePanel.SetActive(false);
         panelCG.alpha = 1f;
         panelRT.localScale = startScale;
+        AfterClose();
     }
 
     // ============================================================
@@ -1166,6 +1200,17 @@ public class FirstTimeGuide : MonoBehaviour
         PlayerPrefs.DeleteKey(FIRST_TIME_KEY);
         PlayerPrefs.Save();
     }
+
+#if UNITY_EDITOR
+    /// <summary>시험용 — 첫 설치 안내처럼 띄운다 (첫 실행 기록은 건드리지 않는다)</summary>
+    public void EditorFirstRun()
+    {
+        if (Showing) return;
+        firstRun = true;
+        ShowGuide();
+    }
+    public bool EditorFirstRunPending => firstRun;
+#endif
 }
 
 /// <summary>

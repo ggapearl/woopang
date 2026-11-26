@@ -92,6 +92,11 @@ public class DoubleTap3D : MonoBehaviour
     private int photoGeneration;
     private int expectedPhotos;   // 받는 중인 사진 수 — 아직 안 온 칸으로도 넘길 수 있게 (도착하면 뜬다)
     private int PhotoSlots => photosLoading ? Mathf.Max(imageSprites.Count, expectedPhotos) : imageSprites.Count;
+
+    // 정보 글 쪽(전화 · 주소 · 개요 · 반려견) — 칸이 있고 보여 줄 글이 있을 때만 한 장으로 친다. 글 없는 장소(우팡 장소를 대리 창으로 열 때)는
+    // 첫 장이 빈 회색 칸이었다 (11-27 대표님 35번 「첫 사진(sub사진) 이 공백으로 발생하는 경우」)
+    private bool HasInfoPage => placeInfoTextPanel != null
+        && (!string.IsNullOrEmpty(tel) || !string.IsNullOrEmpty(address) || !string.IsNullOrEmpty(overview) || !string.IsNullOrEmpty(petInfo));
     // 11-17 B9 — 사진은 디스크 캐시(SubPhotoCache)로: 가까운 것의 첫 장을 미리 받아 두고(메모리에는 풀지 않는다) 열 때 디스크에서 바로 푼다
     private static readonly HashSet<DoubleTap3D> live = new HashSet<DoubleTap3D>();
     private bool infoHost;   // 목록 사진용 빈 오브젝트 (CreateInfoHost) — AR 에 없으니 미리 받지 않는다
@@ -621,9 +626,8 @@ public class DoubleTap3D : MonoBehaviour
             if (isFullscreen) { /* 풀스크린 모드는 스와이프로만 닫기 — 더블탭 닫기 방지 */ }
             else if (WorldTouch.Free(mousePos))   // 덮은 UI(메뉴 · 시트 · 다른 창) 밑이면 받지 않는다
             {
-                Ray ray = Camera.main.ScreenPointToRay(mousePos);
-                RaycastHit hit;
-                if (Physics.Raycast(ray, out hit) && hit.collider.gameObject == gameObject)
+                Collider top = WorldTouch.FirstHit(mousePos);   // 맨 앞 (숨긴 장소는 건너뜀 · 11-26)
+                if (top != null && top.gameObject == gameObject)
                 {
                     float timeSinceLastTap = Time.time - lastTapTime;
                     if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
@@ -661,10 +665,9 @@ public class DoubleTap3D : MonoBehaviour
                 isSwiping = WorldTouch.Free(touch.screenPosition);
                 if (!isSwiping) return;
 
-                Ray ray = Camera.main.ScreenPointToRay(touch.screenPosition);
-                RaycastHit hit;
-
-                if (Physics.Raycast(ray, out hit) && hit.collider.gameObject == gameObject)
+                // 손가락 아래 맨 앞이 이 오브젝트일 때만 — 숨긴(자리 못 잡은) 장소의 상자는 가로채지 않는다 (WorldTouch.FirstHit · 11-26 대표님 12 · 19번)
+                Collider top = WorldTouch.FirstHit(touch.screenPosition);
+                if (top != null && top.gameObject == gameObject)
                 {
                     float timeSinceLastTap = Time.time - lastTapTime;
                     if (timeSinceLastTap < tapSpeed && timeSinceLastTap > 0.1f)
@@ -691,7 +694,7 @@ public class DoubleTap3D : MonoBehaviour
                         float dragX = swipeDelta.x;
 
                         // 경계 체크
-                        bool isAtStart = (placeInfoTextPanel == null || !isPlaceInfoPage) && imageIndex == 0;
+                        bool isAtStart = (!HasInfoPage || !isPlaceInfoPage) && imageIndex == 0;
                         bool isAtEnd = imageIndex >= PhotoSlots - 1 && !isPlaceInfoPage;
 
                         if (isAtStart && dragX > 0)
@@ -1006,6 +1009,13 @@ public class DoubleTap3D : MonoBehaviour
         dt.slideImageGap = src.slideImageGap;
         dt.slideFadeDuration = src.slideFadeDuration;
         dt.touchBlockDuration = src.touchBlockDuration;
+        // 정보 글 칸은 고른 원본과 상관없이 — 원본이 우팡 큐브면 비어 있어 관광공사 장소의 주소 · 개요가 빠지고, 관광공사 큐브면 있었다
+        // (장면에서 어느 쪽이 먼저 잡히느냐에 따라 달랐다). 글이 없는 장소는 HasInfoPage 가 이 칸을 건너뛴다 (11-27 35번)
+        if (dt.placeInfoTextPanel == null && src.fullscreenCanvasGroup != null)
+        {
+            Transform pt = FindChildRecursive(src.fullscreenCanvasGroup.transform, "PlaceInfoTextPanel");
+            if (pt != null) dt.placeInfoTextPanel = pt.gameObject;
+        }
         dt.infoHost = true;
         go.SetActive(true);
         return dt;
@@ -1023,8 +1033,8 @@ public class DoubleTap3D : MonoBehaviour
         StartCoroutine(EnableCloseAfterDelay());
 
         currentIndex = 0;
-        isPlaceInfoPage = placeInfoTextPanel != null;
-        imageIndex = placeInfoTextPanel != null ? -1 : 0;
+        isPlaceInfoPage = HasInfoPage;   // 보여 줄 정보 글이 없으면 첫 장은 첫 상세 사진 (35번)
+        imageIndex = isPlaceInfoPage ? -1 : 0;
 
         ShowImage(imageIndex);
         UpdateInfoImages();
@@ -1114,7 +1124,7 @@ public class DoubleTap3D : MonoBehaviour
     {
         if (PhotoSlots == 0 || isSliding) return;
 
-        if (placeInfoTextPanel != null && !isPlaceInfoPage && imageIndex == 0)
+        if (HasInfoPage && !isPlaceInfoPage && imageIndex == 0)
         {
             isPlaceInfoPage = true;
             imageIndex = -1;
@@ -1196,7 +1206,7 @@ public class DoubleTap3D : MonoBehaviour
         }
         else if (direction == 1) // 오른쪽 드래그 → 이전 이미지
         {
-            if (!isPlaceInfoPage && imageIndex == 0 && placeInfoTextPanel != null)
+            if (!isPlaceInfoPage && imageIndex == 0 && HasInfoPage)
                 targetIndex = -1; // PlaceInfo 페이지
             else if (imageIndex > 0)
                 targetIndex = imageIndex - 1;

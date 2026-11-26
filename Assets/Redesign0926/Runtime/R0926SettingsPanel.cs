@@ -10,9 +10,9 @@ using UnityEngine.UI;
 ///  · 숨긴 장소 수 (인디케이터 X — 앱을 다시 켜면 다시 보인다) · 숨긴 게 있으면 '모두 다시 보이기'
 ///  · 보물찾기 참여 · 새 게임 알림 · 가까워지면 진동 — 계정 설정이라 서버(/api/hunts/prefs)에 있다. 로그인 전엔 흐리게
 ///  · 디스플레이 선택 — 물방울 모드 · 네온 모드 (둘 다 고를 수 있다 · 처음엔 둘 다 켬 · 둘 다 끄면 예전 기본 모양 — 11-23 대표님 S8, R0926MenuStyle)
-///  · 창 배경 진하기 — 약하게 / 중간 / 진하게 = 70 / 80 / 90 % (기본 70 · 기본 모양이면 흐리게)
-///  · 화면 프레임 30 / 60 (기본 30)
-///  · 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 강하게 (기본 약하게)
+///  · 창 배경 진하기 — 50 / 75 / 90 % (기본 75 · 11-26 대표님 · 기본 모양이면 흐리게)
+///  · 화면 프레임 30 / 60 (기본 60 — 11-26 대표님)
+///  · 멀리 있는 오브젝트 흐리게 — 끄기 / 약하게 / 강하게 (기본 끄기 — 11-26 대표님)
 /// 이벤트는 아직 보낼 내용이 없어 '곧' 표시 — 켜고 끄는 값은 지금부터 저장된다.
 /// </summary>
 public class R0926SettingsPanel : MonoBehaviour
@@ -36,7 +36,7 @@ public class R0926SettingsPanel : MonoBehaviour
     [SerializeField] private Image[] fpsTabs;             // 30 FPS / 60 FPS
     [SerializeField] private Text[] fpsLabels;
     [SerializeField] private Image[] displayButtons;      // 디스플레이 선택 — 물방울 모드 / 네온 모드 (칸마다 따로 켜고 끈다)
-    [SerializeField] private Image[] densityTabs;         // 창 배경 진하기 — 약하게 / 중간 / 진하게 (70 / 80 / 90 %)
+    [SerializeField] private Image[] densityTabs;         // 창 배경 진하기 — 50% / 75% / 90%
     [SerializeField] private Text[] densityLabels;
     [SerializeField] private CanvasGroup densityGroup;    // 둘 다 끄면(기본 모양) 흐리게
     [SerializeField] private Image removeSwitch;         // 오브젝트 삭제 기능 (장소 박스 X)

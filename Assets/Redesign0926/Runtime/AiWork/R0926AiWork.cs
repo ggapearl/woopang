@@ -119,9 +119,11 @@ public static class R0926AiWork
     // 자른 대표 사진을 Side x Side 로 — 읽기 꺼진 텍스처도 되게 GPU 로 옮겨 읽는다 (사진 칸과 같은 sRGB)
     private static Color32[] Capture(Texture2D src, int side)
     {
+        Texture2D sq = src.width == src.height ? null : R0926PhotoAlpha.Square(src, false, side);   // 정사각형이 아니면 늘려 넣지 않는다 (11-26 13번)
         var rt = RenderTexture.GetTemporary(side, side, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
         var prev = RenderTexture.active;
-        Graphics.Blit(src, rt);
+        Graphics.Blit(sq != null ? sq : src, rt);
+        if (sq != null) UnityEngine.Object.Destroy(sq);
         RenderTexture.active = rt;
         var tmp = new Texture2D(side, side, TextureFormat.RGBA32, false);
         tmp.ReadPixels(new Rect(0, 0, side, side), 0, 0, false);

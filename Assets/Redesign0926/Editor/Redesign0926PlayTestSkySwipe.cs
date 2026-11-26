@@ -52,7 +52,7 @@ namespace Redesign0926
             return new Vector2(-1f, -1f);
         }
 
-        // UI 가 없고 AR 오브젝트(카드에 담기지 않은 것)에 닿는 화면 자리. 없으면 (-1, -1)
+        // UI 가 없고 AR 오브젝트에 닿는 화면 자리 (카드에 띄운 것도 AR 화면에 그대로 — 11-26). 없으면 (-1, -1)
         private static Vector2 SwOnObject()
         {
             var cam = Camera.main;
@@ -63,9 +63,7 @@ namespace Redesign0926
                 {
                     var p = new Vector2(Screen.width * fx, Screen.height * fy);
                     if (WorldTouch.TopUI(p) != null) continue;
-                    if (!Physics.Raycast(cam.ScreenPointToRay(p), out var h, 2000f, Physics.DefaultRaycastLayers & ~NmMask, QueryTriggerInteraction.Collide)) continue;
-                    var hold = h.collider.GetComponentInParent<R0926NearHold>();
-                    if (hold == null || hold.Layer < 0) return p;
+                    if (Physics.Raycast(cam.ScreenPointToRay(p), 2000f, Physics.DefaultRaycastLayers & ~NmMask, QueryTriggerInteraction.Collide)) return p;
                 }
             return new Vector2(-1f, -1f);
         }

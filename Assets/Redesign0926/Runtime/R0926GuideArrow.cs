@@ -22,6 +22,8 @@ using UnityEngine.XR.ARSubsystems;
 ///    200 넘게 내렸거나 빠르게 튕겼으면 끝(노치도 같이 — × 와 같다) · 덜 내렸으면 제자리로. 옆 · 위로 민 것은 그대로.
 ///    받는 자리는 고리 · 화살표 둘레(R0926DragZone)뿐 — 알약 · × 누름은 그대로, 그 밖은 AR 오브젝트 몫
 ///  · 창 · 하늘 · 가까이 카드가 떠 있는 동안은 숨고 안내는 이어진다
+///  · 안내하는 곳의 인디케이터 강조(글자 뒤 분홍 스티커)는 안내가 끝날 때까지 (11-26 대표님 25번) — 목록에서 고른 것은 목록이 내려간 뒤부터,
+///    좌표로만 안내하는 곳은 그 자리에 장소가 뜨면 그때부터 (OffScreenIndicator.Held)
 /// </summary>
 public class R0926GuideArrow : MonoBehaviour
 {
@@ -77,7 +79,12 @@ public class R0926GuideArrow : MonoBehaviour
     private bool guiding;
     private float gLat, gLon;
     private Target gTarget;
-    private string gName = "";
+    private string gName = "", gRaw = "";
+    // 안내하는 곳의 인디케이터 강조 — 안내가 끝날 때까지 (11-26 대표님 25번). 좌표로만 안내하는 곳은 그 자리에 뜬 장소를 찾아 붙든다
+    private const float HoldMeters = 3f, HoldLookEvery = 1f;
+    private OffScreenIndicator indicators;
+    private Target held;
+    private float heldLookAt;
     private float gStart, nearSince = -1f, arrivedAt = -1f;
     private float meters = -1f, angle, angleVel;
     private bool hasAngle;
@@ -116,7 +123,10 @@ public class R0926GuideArrow : MonoBehaviour
     {
         if (lat == 0f && lon == 0f) return false;
         guiding = true;
-        gLat = lat; gLon = lon; gTarget = target; gName = R0926Notch.Clean(name);
+        gLat = lat; gLon = lon; gTarget = target; gName = R0926Notch.Clean(name); gRaw = name ?? "";
+        held = null; heldLookAt = 0f;
+        if (indicators == null) indicators = FindAnyObjectByType<OffScreenIndicator>();
+        HoldHighlight(Time.unscaledTime);
         gStart = Time.unscaledTime;
         nearSince = arrivedAt = -1f;
         meters = -1f; hasAngle = false; angleVel = 0f;
@@ -125,6 +135,7 @@ public class R0926GuideArrow : MonoBehaviour
         shownLabel = null;
         arrowVis = 1f;
         pull = 0f; pulling = pullAway = false;   // 밀어 끝낸 판이 사라지는 중에 다시 안내해도 제자리에서
+        R0926LiveGuide.Begin(gName, lat, lon, ArriveMeters, MaxGuideSeconds);   // 홈으로 나가도 아일랜드 · 잠금 화면에 (11-26 대표님 10번 ②)
         return true;
     }
 
@@ -133,8 +144,25 @@ public class R0926GuideArrow : MonoBehaviour
         bool was = guiding;
         guiding = false;
         gTarget = null;
+        held = null;
         hintPending = false;
+        if (was && indicators != null) indicators.Held = null;   // 강조도 안내와 같이 끝
         if (was) R0926Notch.GuideEnded(gLat, gLon);   // 한 안내 — 같은 곳을 안내하던 노치도 같이 끝 (도착 뒤 · 20분 · 가까이 카드가 이어 받을 때도)
+        if (was) R0926LiveGuide.End(false);   // 도착한 뒤면 이미 「도착했어요」로 닫는 중 — 두 번 끄지 않는다
+    }
+
+    // 안내하는 곳의 인디케이터 강조를 안내가 끝날 때까지 이어 간다 (11-26 대표님 25번 「방향안내할 때 강조해서 인디케이터 보이는 건 방향안내가 끝날 때까지 유지하도록 해줘」 —
+    // 예전엔 목록에서 고를 때 4초만). 고를 때 AR 에 없던 곳(좌표로만 안내 · 지도 핀)은 그 자리에 장소가 뜨면 그때부터 — 안내 셈(거리 · 방향 · 도착)은 그대로 좌표로
+    private void HoldHighlight(float now)
+    {
+        if (indicators == null) return;
+        if (gTarget == null && (held == null || !held.isActiveAndEnabled) && now >= heldLookAt)
+        {
+            heldLookAt = now + HoldLookEvery;
+            held = indicators.FindAt(gLat, gLon, HoldMeters, gRaw);
+        }
+        Target want = gTarget != null ? gTarget : held;
+        if (indicators.Held != want) indicators.Held = want;
     }
 
     private void OnPill()
@@ -165,6 +193,7 @@ public class R0926GuideArrow : MonoBehaviour
         if (group == null || groupAlpha == null) return;
         float now = Time.unscaledTime, dt = Mathf.Min(Time.unscaledDeltaTime, 1f / 30f);
         if (guiding) Track(now, dt);
+        if (guiding) HoldHighlight(now);
         bool want = guiding && !Covered();
         vis = Mathf.MoveTowards(vis, want ? 1f : 0f, dt / FadeTime);
         bool on = vis > 0f;
@@ -192,7 +221,7 @@ public class R0926GuideArrow : MonoBehaviour
             if (now - arrivedAt > ArriveShow) EndGuide();
             return;
         }
-        if (gTarget != null && (near != null ? near.TookOver(gTarget) : R0926NearHold.Held.Contains(gTarget))) { EndGuide(); return; }   // 「발견한 장소」 카드가 이어 받았다 (「근처 장소」 10곳에 든 것은 안내를 이어 간다)
+        if (gTarget != null && (near != null ? near.TookOver(gTarget) : R0926NearModal.FoundHas(gTarget))) { EndGuide(); return; }   // 「발견한 장소」 카드가 이어 받았다 (「근처 장소」 10곳에 든 것은 안내를 이어 간다)
 
         bool haveLoc = GeoHere.TryGet(out double lat, out double lon, out _);
         float? rel = null;
@@ -236,6 +265,7 @@ public class R0926GuideArrow : MonoBehaviour
         arrivedAt = now;
         if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.TriggerLightHaptic();
         R0926Notch.GuideArrived(gLat, gLon);   // 같은 곳을 안내하는 노치도 같은 순간 — 「도착했어요」는 한 번
+        R0926LiveGuide.End(true);   // 잠금 화면 · 아일랜드도 「도착했어요」 뒤 닫힌다
     }
 
     private bool Covered()

@@ -50,7 +50,7 @@ namespace Redesign0926
             var layers0 = new Dictionary<Renderer, int>();
             var snap1 = new Dictionary<Renderer, float>();
             Func<bool> infoOpen = () => dt != null && dt.fullscreenCanvasGroup != null && dt.fullscreenCanvasGroup.gameObject.activeSelf;
-            Func<bool> restored = () => NmSameLayers(layers0) && (target == null || !R0926NearHold.Held.Contains(target));
+            Func<bool> restored = () => NmSameLayers(layers0);   // AR 화면의 물체는 늘 원래 레이어 — 카드 칸 카메라가 찍는 순간만 빌린다 (11-26 대표님 34번)
             Func<bool> gone = () => nmModal.EditorCount == 0 && !nmModal.EditorCardOn;
             Func<bool> found = () =>   // 처음 뜬 때를 적는다
             {
@@ -85,9 +85,10 @@ namespace Redesign0926
             steps.Enqueue(found);
             Check(() => { log.Add($"  AR 화면이 뜨고 {tFound - t0:0.00}초에 뜸"); return tFound >= 0f && tFound - t0 >= 9.95f && tFound - t0 <= 10.8f; }, "AR 화면이 뜨고 10초가 지나면 「발견한 장소」");
 
-            // 1) 3m — 화면 가운데 카드 · 제목 · 꼬리표 · 안내 · AR 화면에선 빠짐
+            // 1) 3m — 화면 가운데 카드 · 제목 · 꼬리표 · 안내 · AR 화면의 물체 · 화살표 · 박스는 그대로 (11-26 대표님 34번 「복사만 해오도록」)
             Wait(() => nmModal.EditorShowing, 3f, "3m — 카드 뜸");
             Sleep(0.8f);
+            Do(() => NmSpy(a, 0));   // 여기서부터 찍는 순간을 엿본다 (카드에 한 곳 — 0번 칸)
             Shot("near_single");
             Check(() => nmModal.EditorShowing && nmModal.EditorMode == "Found" && nmModal.EditorCount == 1 && nmModal.EditorCurrent == a, "4m 안(3m)에 들어오면 화면 가운데 「발견한 장소」 카드에 그 오브젝트 하나");
             Check(() =>
@@ -98,14 +99,16 @@ namespace Redesign0926
             }, "제목 「○○○ / 바로 근처에 있습니다」");
             Check(() => nmModal.EditorDistance == "발견한 장소 · 3.0m", "위 꼬리표 「발견한 장소 · 3.0m」");
             Check(() => nmModal.EditorHint == "두 번 톡톡 누르면 자세히 볼 수 있어요", "안내 「두 번 톡톡 누르면 자세히 볼 수 있어요」");
+            Sleep(0.2f);
             Check(() =>
             {
                 var cam = Camera.main;
                 var nc = nmModal.EditorCam(0);
-                log.Add($"  레이어 {NmLayerList(a)} · AR 카메라에 28~31 {((cam.cullingMask & NmMask) != 0 ? "있음" : "없음")} · 카드 카메라 {(nc != null ? nc.cullingMask : 0)}");
-                return NmLayers(a, l => l == 29) && (cam.cullingMask & NmMask) == 0 && nc != null && nc.cullingMask == 1 << 29
-                       && (target == null || R0926NearHold.Held.Contains(target));
-            }, "카드에 담긴 동안 AR 화면에선 빠진다 (렌더러 → 29 · AR 카메라는 28~31 을 안 찍음 · 카드 카메라는 29 만)");
+                log.Add($"  레이어 {NmLayerList(a)} · 찍는 순간 {NmSeenText()} · AR 카메라에 28~31 {((cam.cullingMask & NmMask) != 0 ? "있음" : "없음")} · 카드 카메라 {(nc != null ? nc.cullingMask : 0)}");
+                return restored() && (cam.cullingMask & NmMask) == 0 && nc != null && nc.cullingMask == 1 << 29
+                       && NmSaw(true, l => l == 29) && NmSaw(false, l => l < 28) && NmSawNear();
+            }, "카드에 떠도 AR 화면엔 그대로 — 카드 칸 카메라가 찍는 순간만 29 로 빌리고(가까이에서 보는 값) · AR 카메라가 찍을 땐 원래 레이어");
+            Wait(() => NmPulseQuiet(a), 3.5f, "Pulse 껍질이 꺼진 때에 잰다");
             Check(() =>
             {
                 var rt = nmModal.EditorTexture(0);
@@ -119,7 +122,7 @@ namespace Redesign0926
                 log.Add($"  카드 자리 x {r.xMin:0}~{r.xMax:0} · y {r.yMin:0}~{r.yMax:0} · 배율 {nmModal.EditorCardScale:0.00} · 화면 {Screen.width}x{Screen.height}");
                 log.Add("  화면 밖 표시(OffScreenIndicator): " + NmIndicator(target));
             });
-            Check(() => target == null || target.indicator == null || !target.indicator.Active, "카드에 담긴 물체엔 AR 화면의 화살표 · 박스가 없다");
+            Check(() => target == null || target.indicator != null && target.indicator.Active, "카드에 뜬 물체도 AR 화면의 화살표 · 박스는 그대로 (11-26 대표님 34번 — 1.2.70 까지는 꺼졌다)");
             Check(() =>
             {
                 var r = NmRect(nmModal.EditorCard);
@@ -127,25 +130,29 @@ namespace Redesign0926
             }, "카드는 화면 가로 가운데 · 화면 안");
 
             // 2) 핀치 줌 — AR 오브젝트는 커지고 작아져도 카드 안 크기는 그대로 (11-15 대표님 확인)
-            Do(() => { scale1 = a.transform.localScale.x; fit1 = NmFitSize(a); snap1 = NmScaleSnap(a); NmZoom(1.5f); });
+            Do(() => { scale1 = a.transform.localScale.x; fit1 = NmFitSize(a); snap1 = NmScaleSnap(a); log.Add("  핀치 전" + NmAimInfo(a) + NmRendInfo(a)); NmZoom(1.5f); });
             Sleep(0.7f);
+            Wait(() => NmPulseQuiet(a), 3.5f, "Pulse 껍질이 꺼진 때에 잰다");
             Shot("near_zoom15");
             Check(() =>
             {
                 var c = NmCoverage(nmModal.EditorTexture(0));
                 float ks = a.transform.localScale.x / Mathf.Max(1e-5f, scale1);
-                log.Add($"  핀치 1.5배: 오브젝트 ×{ks:0.00} · 카드 안 {cov1.x:0.000}×{cov1.y:0.000} → {c.x:0.000}×{c.y:0.000} · 맞춤 크기 {fit1:0.000} → {NmFitSize(a):0.000}{NmOddScale(a, snap1)}");
+                log.Add($"  핀치 1.5배: 오브젝트 ×{ks:0.00} · 카드 안 {cov1.x:0.000}×{cov1.y:0.000} → {c.x:0.000}×{c.y:0.000} · 맞춤 크기 {fit1:0.000} → {NmFitSize(a):0.000}{NmOddScale(a, snap1)}{NmAimInfo(a)}");
                 return Mathf.Abs(ks - 1.5f) < 0.02f && NmSame(cov1, c, 0.05f);
             }, "핀치 줌 1.5배 — AR 오브젝트는 1.5배여도 카드 안 크기는 그대로 (±5%)");
             Sleep(1.2f);   // 크기가 0.6초 넘게 달라지면 카드가 다시 맞춘다 — 그 뒤(자리 잡은 뒤)에도 같은지
+            Wait(() => NmPulseQuiet(a), 3.5f, "Pulse 껍질이 꺼진 때에 잰다");
             Check(() =>
             {
                 var c = NmCoverage(nmModal.EditorTexture(0));
-                log.Add($"  1.9초 뒤: 카드 안 {c.x:0.000}×{c.y:0.000} · 맞춤 크기 {NmFitSize(a):0.000}{NmOddScale(a, snap1)}");
+                log.Add($"  1.9초 뒤: 카드 안 {c.x:0.000}×{c.y:0.000} · 맞춤 크기 {NmFitSize(a):0.000}{NmOddScale(a, snap1)}{NmAimInfo(a)}{NmRendInfo(a)}");
                 return NmSame(cov1, c, 0.05f);
             }, "핀치 줌 1.5배 — 자리 잡은 뒤(1.9초)에도 카드 안 크기 그대로");
+            Shot("near_zoom15_settled");
             Do(() => NmZoom(0.6f));
             Sleep(0.7f);
+            Wait(() => NmPulseQuiet(a), 3.5f, "Pulse 껍질이 꺼진 때에 잰다");
             Check(() =>
             {
                 var c = NmCoverage(nmModal.EditorTexture(0));
@@ -165,8 +172,8 @@ namespace Redesign0926
             Wait(gone, 1.5f, "카드 사라짐");
             Check(gone, "4.6m 를 넘으면 카드가 사라진다");
             Check(() => !nmModal.EditorClosedFound(a) && !nmModal.EditorDismissed(a), "걸어서 멀어진 것은 닫은 것이 아니다 (다시 오면 뜬다)");
-            Check(restored, "카드에서 빠지면 레이어가 원래대로 (AR 화면에 다시 보인다)");
-            Check(() => { log.Add("  빠진 뒤 화면 표시: " + NmIndicator(target)); return target == null || target.indicator != null && target.indicator.Active; }, "카드에서 빠지면 AR 화면의 표시(박스)도 다시");
+            Check(restored, "카드에서 빠진 뒤에도 레이어 그대로 (AR 화면에 내내 보인다)");
+            Check(() => { log.Add("  빠진 뒤 화면 표시: " + NmIndicator(target)); return target == null || target.indicator != null && target.indicator.Active; }, "카드에서 빠진 뒤에도 AR 화면의 표시(박스) 그대로");
             Do(() => NmPut(a, 4.4f));
             Sleep(0.8f);
             Check(() => nmModal.EditorCount == 0, "4m 밖(4.4m)에선 새로 뜨지 않는다");
@@ -284,10 +291,10 @@ namespace Redesign0926
             // 10) 목록 창이 열리면 숨고 · 닫으면 다시 (담긴 것은 그대로)
             Do(() => Click("Dock0926/List_Button"));
             Wait(() => Active("ListPanel") && !nmModal.EditorCardOn, 3f, "목록 — 카드 숨음");
-            Check(() => !nmModal.EditorCardOn && nmModal.EditorCount == 1 && restored(), "목록 창이 열리면 카드는 숨고(담긴 것은 그대로) 오브젝트는 AR 화면으로");
+            Check(() => !nmModal.EditorCardOn && nmModal.EditorCount == 1 && restored(), "목록 창이 열리면 카드는 숨는다 (담긴 것 · AR 화면의 물체는 그대로)");
             Back();
             Wait(() => !Active("ListPanel") && nmModal.EditorShowing, 3f, "목록 닫음 — 카드 다시");
-            Check(() => nmModal.EditorShowing && NmLayers(a, l => l == 29), "목록을 닫으면 카드가 다시 (다시 AR 화면에서 빠짐)");
+            Check(() => nmModal.EditorShowing && restored(), "목록을 닫으면 카드가 다시 (AR 화면의 물체는 그대로)");
 
             // 11) 백그라운드에서 돌아오면 — 10초 동안 「발견한 장소」를 쉰다 (AR 이 자리를 다시 잡는 동안) · 시작 「근처 장소」도 안 뜬다
             Do(() => NmPut(a, 12f));
@@ -318,7 +325,7 @@ namespace Redesign0926
             GameObject x = null, y = null;   // x: 카드에 든 AR 장소 (3m ↔ 40m) · y: 6m 앞 (오브젝트 위에서 민 것)
             int kx = -1, kp = -1, n = 0;
             bool ok = false, closingNow = false;
-            float pulled = 0f;
+            float pulled = 0f, bright3 = 0f;
             Vector2 freeP = new Vector2(-1f, -1f), yP = new Vector2(-1f, -1f);
             var ids = new List<string>();
             DoubleTap3D dtx = null;
@@ -425,8 +432,21 @@ namespace Redesign0926
             Check(() => n < 2 || !NmButton("prevButton").gameObject.activeSelf && NmButton("nextButton").gameObject.activeSelf, "처음엔 ‹ 없음 · › 있음");
             Check(() => n < 2 || nmModal.EditorHint == "옆으로 밀면 다음 · 가까운 순서", "처음 3초는 「옆으로 밀면 다음 · 가까운 순서」");
             Check(() => !nmModal.EditorCanSwipeUp(freeP), "「근처 장소」가 떠 있는 동안엔 위로 밀기를 다시 받지 않는다");
+            Check(() =>
+            {
+                int solid = 0, photo = 0, odd = 0;
+                for (int k = 0; k < n; k++)
+                {
+                    bool pic = nmModal.EditorPhoto(k);
+                    if (pic) photo++;
+                    else solid++;
+                    if (NmInAR(nmModal.EditorItem(k)) == pic) odd++;
+                }
+                log.Add($"  3D {solid}곳 · 사진 {photo}곳 · 어긋난 것 {odd}곳");
+                return odd == 0;
+            }, "AR 에 떠 있는 곳은 거리와 상관없이 모두 3D · 사진은 AR 에 없는 곳만 (11-26 대표님 3번 — 섞여 보이지 않게)");
 
-            // 3) AR 에 떠 있고 25m 안이면 3D · 멀면 사진 (0.25초 동안 바꿔 낀다)
+            // 3) 가까워도 멀어도 AR 에 떠 있으면 3D — 카드 칸 카메라가 찍는 순간만 빌린다(AR 화면의 물체 · 레이어는 그대로) · AR 에서 꺼지면 사진 (0.25초 동안 바꿔 낀다)
             Do(() =>
             {
                 for (int k = 0; k < n && x == null; k++)
@@ -441,12 +461,33 @@ namespace Redesign0926
                 log.Add($"  {kx + 1}번째 '{NmName(x)}' 를 3m 로");
             });
             Sleep(0.9f);
-            Check(() => x != null && nmModal.EditorTarget == kx && !nmModal.EditorPhoto(kx) && NmLayersOn(x, l => l == 29 + kx % 3), "AR 에 떠 있고 25m 안(3m)이면 3D 로 — 카드 칸 레이어 (AR 화면엔 없다)");
-            Do(() => NmPut(x, 40f));
-            Wait(() => x == null || nmModal.EditorPhoto(kx) && NmLayers(x, l => l < 28), 3f, "40m — 사진으로");
+            Do(() => NmSpy(x, kx % 3));   // 카드가 그 칸으로 다 넘어간 뒤부터 엿본다
+            Sleep(0.3f);
+            Check(() =>
+            {
+                bright3 = NmBright(nmModal.EditorTexture(kx % 3));
+                log.Add($"  3m: 찍는 순간 {NmSeenText()} · 카드 판 밝기 {bright3:0.0}");
+                return x != null && nmModal.EditorTarget == kx && !nmModal.EditorPhoto(kx) && NmLayers(x, l => l < 28)
+                       && NmSaw(true, l => l == 29 + kx % 3) && NmSaw(false, l => l < 28) && NmSawNear();
+            }, "3m — 3D (카드 칸 카메라가 찍는 순간만 그 칸 레이어 · AR 카메라가 찍을 땐 원래 레이어)");
+            Do(() => { if (x != null) { NmPut(x, 40f); NmSpy(x, kx % 3); } });
+            Sleep(0.9f);
+            Shot("near_far3d");
+            Check(() =>
+            {
+                var rt = nmModal.EditorTexture(kx % 3);
+                var c = NmCoverage(rt);
+                float b = NmBright(rt);
+                log.Add($"  40m: 찍는 순간 {NmSeenText()} · 카드 판 {c.x:0.000}×{c.y:0.000} · 밝기 {b:0.0} (3m {bright3:0.0})");
+                return x != null && nmModal.EditorTarget == kx && !nmModal.EditorPhoto(kx) && NmLayers(x, l => l < 28)
+                       && NmSaw(true, l => l == 29 + kx % 3) && NmSaw(false, l => l < 28) && NmSawNear()
+                       && Mathf.Max(c.x, c.y) > 0.3f && b >= bright3 * 0.85f;
+            }, "25m 밖(40m)이어도 AR 에 떠 있으면 3D (1.2.70 까지는 사진) — 카드 사본은 멀리 흐리게 없이 · AR 화면의 물체는 그대로");
+            Do(() => { NmSpy(null, 0); if (x != null) x.SetActive(false); });   // AR 에서 꺼짐 (풀로 돌아감 · 필터) — AR 에 없는 곳
+            Wait(() => x == null || nmModal.EditorPhoto(kx) && nmModal.EditorPhotoShown(kx % 3), 3f, "AR 에서 꺼짐 — 사진으로");
             Sleep(0.4f);
             Shot("near_photo");
-            Check(() => x != null && nmModal.EditorPhoto(kx) && NmLayers(x, l => l < 28) && nmModal.EditorPhotoShown(kx % 3), "25m 밖(40m)이면 사진으로 — 오브젝트는 AR 화면으로 돌려보낸다");
+            Check(() => x != null && nmModal.EditorPhoto(kx) && nmModal.EditorPhotoShown(kx % 3), "AR 에서 꺼진 곳(AR 에 없는 곳)은 대표 사진으로");
 
             // 4) 사진 — 10곳 모두 미리 받는다 (목록 줄 사진과 같은 것 · 큰 사본 512)
             Wait(() => NmPhotoCount(n) > 0, 20f, "사진 받기");
@@ -481,6 +522,7 @@ namespace Redesign0926
             Sleep(0.7f);
             Do(() => { if (x != null) { nmModal.EditorTap(); nmModal.EditorTap(); } });
             Wait(infoOpen, 5f, "사진 두 번 톡톡 — 정보 창");
+            Do(() => log.Add("  정보 창: " + (DoubleTap3D.Shown == null ? "없음" : R0926PlaceInfo.IsHost(DoubleTap3D.Shown) ? "대리 창 (AR 에 없는 곳)" : "AR 장소의 창")));
             Check(infoOpen, "사진 칸을 두 번 톡톡 누르면 정보 창 (목록 사진을 누른 것과 같다)");
             Wait(() => !nmModal.EditorCardOn, 2f, "정보 창 — 카드 숨음");
             Check(() => !nmModal.EditorCardOn && nmModal.EditorMode == "Nearby" && nmModal.EditorCount == n, "정보 창이 열린 동안 카드는 숨고 10곳은 그대로");
@@ -490,6 +532,9 @@ namespace Redesign0926
             Do(() => { if (infoOpen()) dtx.closeButton.onClick.Invoke(); });
             Wait(() => !infoOpen() && nmModal.EditorShowing, 4f, "창을 닫으면 카드가 다시");
             Check(() => nmModal.EditorShowing && nmModal.EditorTarget == kx && nmModal.EditorCount == n, "정보 창을 닫으면 카드가 다시 (보던 것 그대로)");
+            Do(() => { if (x != null) { x.SetActive(true); NmPut(x, 3f); } });   // 다시 AR 에 — 카드는 1초마다 다시 짝짓는다
+            Wait(() => x == null || nmModal.EditorItem(kx) == x && !nmModal.EditorPhoto(kx), 3f, "다시 AR 에 뜸 — 3D 로");
+            Check(() => x != null && nmModal.EditorItem(kx) == x && !nmModal.EditorPhoto(kx) && NmLayers(x, l => l < 28), "다시 AR 에 뜨면 3D 로 돌아온다");
 
             // 6) 10곳은 고정 — 목록이 새로 그려져도 그대로 (다시 밀어야 새로)
             Sleep(2.5f);
@@ -537,7 +582,7 @@ namespace Redesign0926
             Check(() => closingNow, "아래로 끌어내리면 닫힌다");
             Wait(closed, 2.5f, "끌어내림 — 카드 사라짐");
             Check(() => closed() && (x == null || NmLayers(x, l => l < 28) && !nmModal.EditorClosedFound(x) && nmModal.EditorDismissed(x)),
-                "닫으면 모두 AR 화면으로 · 「근처 장소」는 '닫은 장소'로 남지 않는다 · 4m 안의 것은 잠시 쉼");
+                "닫아도 AR 화면의 물체는 그대로 · 「근처 장소」는 '닫은 장소'로 남지 않는다 · 4m 안의 것은 잠시 쉼");
             Sleep(1.5f);
             Check(closed, "닫자마자 4m 안(3m)의 것이 「발견한 장소」로 뜨지 않는다");
 
@@ -563,23 +608,22 @@ namespace Redesign0926
             Check(() => x != null && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x, "(준비) 3m 의 것이 「발견한 장소」로");
             Check(() =>
             {
-                // AR 에서 맞지 않는 콜라이더는 막을 수 없다 — 렌더러와 같은 오브젝트(3D 모델)는 담을 때 같이 카드 레이어(28~31)로 가고,
+                // 카드에 띄운 것도 AR 화면에 그대로 — 그 물체를 만지며 민 것은 맨 AR 화면이 아니다 (돌리기 · 두 번 톡톡과 겹치지 않게 · 11-26 대표님 34번).
                 // 크게 키운 모델(배율 10 · 상자 10m)은 3m 앞이면 카메라가 상자 안이라 레이가 안 맞는다 (11-21 운영 장소 하나가 그렇게 커짐).
-                // 큐브처럼 콜라이더만 남는 것은 바로 앞(3m)이면 카드 뒤에 통째로 가려질 수 있다 — 4m 안에서 조금씩 올리거나 옆으로 돌려 카드 밖으로 나온 자리에서 민다
+                // 바로 앞(3m)이면 카드 뒤에 통째로 가려질 수 있다 — 4m 안에서 조금씩 올리거나 옆으로 돌려 카드 밖으로 나온 자리를 찾는다
                 // (11-24 — 휴대폰 화각이 넓어 3m 앞 1~2m 상자도 화면 가운데 작은 네모라, 1.4m 올려도 카드 뒤 · 옆으로 40~70° 돌리면 카드 옆 맨 AR 에 걸린다)
-                int open = 0, moved = 0, inside = 0;
+                int open = 0, inside = 0;
                 var eye = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
                 foreach (var c in x.GetComponentsInChildren<Collider>(false))
                 {
                     if (!c.enabled) continue;
-                    if (((1 << c.gameObject.layer) & NmMask) != 0) moved++;
-                    else if (c.bounds.Contains(eye)) inside++;
+                    if (c.bounds.Contains(eye)) inside++;
                     else open++;
                 }
                 if (open == 0)
                 {
-                    log.Add($"  카드에 담긴 것의 콜라이더 — 카드 레이어로 간 것 {moved}개 · 카메라가 안에 든 큰 상자 {inside}개 (AR 에서 맞지 않음)");
-                    return moved + inside > 0 && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x;
+                    log.Add($"  카드에 띄운 것의 콜라이더 — 카메라가 안에 든 큰 상자 {inside}개 (AR 에서 맞지 않음)");
+                    return inside > 0 && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x;
                 }
                 var p = new Vector2(-1f, -1f);
                 float up = -0.6f, turn = 0f;
@@ -596,16 +640,56 @@ namespace Redesign0926
                     }
                     if (p.x >= 0f) break;
                 }
-                bool can = p.x >= 0f && nmModal.EditorCanSwipeUp(p) && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x;
-                log.Add($"  카드에 담긴 것의 콜라이더 자리: {(p.x >= 0f ? $"찾음 (높이 {up:+0.0;-0.0}m · 옆 {turn:+0;-0;0}° · 화면 {p.x / Screen.width:0.00}, {p.y / Screen.height:0.00})" : "없음")} · AR 에 남은 콜라이더 {open}개 · 위로 밀기 받음 {can}");
+                bool refused = p.x >= 0f && !nmModal.EditorCanSwipeUp(p) && !nmModal.EditorSwipeUp(p, p + NmUp(0.25f)) && nmModal.EditorMode == "Found" && nmModal.EditorCurrent == x;
+                log.Add($"  카드에 띄운 것의 콜라이더 자리: {(p.x >= 0f ? $"찾음 (높이 {up:+0.0;-0.0}m · 옆 {turn:+0;-0;0}° · 화면 {p.x / Screen.width:0.00}, {p.y / Screen.height:0.00})" : "없음")} · 콜라이더 {open}개 · 위로 밀기 안 받음 {refused}");
                 if (p.x < 0f) log.Add(NmHeldWhy(x));
-                return can;
-            }, "카드에 담겨 AR 화면에서 빠진 것(콜라이더만 남음) 위에서 밀어도 받는다 — 안 보이는 것에 막히지 않게");
+                return refused;
+            }, "카드에 띄운 것도 AR 화면에 그대로 — 그 물체를 만지며 위로 민 것은 안 받는다 (맨 AR 화면에서 민 것만)");
             Do(() => ok = NmSwipeUp());
             Sleep(0.6f);
             Shot("near_found_swap");
             Check(() => ok && nmModal.EditorMode == "Nearby" && nmModal.EditorCount >= 1 && nmModal.EditorTitle.EndsWith(rank(1)) && nmModal.EditorDistance.StartsWith("근처 장소 · "),
                 "「발견한 장소」가 떠 있어도 위로 밀면 「근처 장소」로 바꿔 낀다");
+
+            // 11) 내 장소를 지우면(정보 창 「삭제」) 카드에서도 바로 빠진다 (11-26 대표님 17번) — 지웠다는 소식(RemoveRequest.PlaceDeleted)만 흉내 낸다
+            //     (서버 · 장소 자료는 그대로 — 다시 밀면 돌아온다). 첫 칸이 아닌 우팡 장소를 골라 뒤 칸 번호가 당겨지는지도 본다
+            int delK = -1, delCount = 0;
+            string delId = null, delNext = null;
+            Do(() =>
+            {
+                int c = nmModal.EditorCount;
+                for (int k = c - 1; k >= 1 && delK < 0; k--)
+                {
+                    var data = nmModal.EditorEntryData(k);
+                    if (data is PlaceData || data is CachedPlaceData) delK = k;
+                }
+                if (delK < 0) { log.Add("  카드에 첫 칸 말고 우팡 장소가 없다 — 지우기는 건너뜀"); return; }
+                delId = nmModal.EditorEntryId(delK);
+                delNext = delK + 1 < c ? nmModal.EditorEntryId(delK + 1) : null;
+                delCount = c;
+                nmModal.EditorGo(delK);
+            });
+            Sleep(0.6f);
+            Do(() =>
+            {
+                if (delK < 0 || !int.TryParse(delId, out int did)) return;
+                var ev = typeof(RemoveRequest).GetField("PlaceDeleted", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                (ev?.GetValue(null) as System.Action<int>)?.Invoke(did);
+            });
+            Sleep(0.4f);
+            Check(() =>
+            {
+                if (delK < 0) return true;
+                bool gone = true, ranks = true;
+                for (int k = 0; k < nmModal.EditorCount; k++)
+                {
+                    if (nmModal.EditorEntryId(k) == delId) gone = false;
+                    if (nmModal.EditorRank(k) != k + 1) ranks = false;
+                }
+                string now = nmModal.EditorEntryId(nmModal.EditorTarget);
+                log.Add($"  지운 곳 {delK + 1}번째 → 남은 {nmModal.EditorCount}곳 (전 {delCount}) · 지금 {nmModal.EditorTarget + 1}번째 ({(delNext == null ? "끝 칸이었다" : now == delNext ? "다음 곳" : "다른 곳")}) · 번호 이어짐 {ranks}");
+                return gone && ranks && nmModal.EditorCount == delCount - 1 && nmModal.EditorShowing && (delNext == null || now == delNext);
+            }, "내 장소를 지우면 「근처 장소」 카드에서도 바로 빠진다 — 사진으로 남지 않고 · 뒤 칸 번호가 당겨지고 · 보던 자리엔 다음 곳 (11-26 대표님)");
             Do(() => NmButton("close").onClick.Invoke());
             Wait(closed, 2f, "닫힘");
             Do(() => { NmPut(x, 12f); NmPut(y, 12f); });
@@ -1346,7 +1430,7 @@ namespace Redesign0926
             return new Vector2(-1f, -1f);
         }
 
-        // UI 가 없고 맨 앞에 맞는 물체가 go 인 자리 (카드에 담긴 것의 콜라이더 위). 없으면 (-1, -1)
+        // UI 가 없고 맨 앞에 맞는 물체가 go 인 자리 (카드에 띄운 것의 콜라이더 위). 없으면 (-1, -1)
         private static Vector2 NmOnHeld(GameObject go)
         {
             var cam = Camera.main;
@@ -1660,6 +1744,48 @@ namespace Redesign0926
             return (float)args[2] / Mathf.Max(1e-4f, Mathf.Max(Mathf.Abs(ls.x), Mathf.Max(Mathf.Abs(ls.y), Mathf.Abs(ls.z))));
         }
 
+        // 카드가 이 물체를 맞춘 값 — 맞춤 크기 · 가운데(맨 위 기준) · 벗어난 지 · 보는 쪽 · 회전 · 배율 (11-27 c53 · c54 핀치 뒤 1.9초에 카드 안이 6% 커진 까닭을 보려고)
+        private static string NmAimInfo(GameObject go)
+        {
+            var items = typeof(R0926NearModal).GetField("items", NmF)?.GetValue(nmModal) as System.Collections.IList;
+            if (items == null || go == null) return " · (항목 없음)";
+            foreach (var it in items)
+            {
+                var t = it.GetType();
+                if (!ReferenceEquals(t.GetField("obj").GetValue(it), go)) continue;
+                float size = (float)t.GetField("size").GetValue(it), goal = (float)t.GetField("goalSize").GetValue(it), off = (float)t.GetField("offSince").GetValue(it);
+                var c = (Vector3)t.GetField("center").GetValue(it);
+                var gc = (Vector3)t.GetField("goalCenter").GetValue(it);
+                var d = (Vector3)t.GetField("dir").GetValue(it);
+                var tr = go.transform;
+                return $" · 맞춤 {size:0.000}(목표 {goal:0.000}) · 가운데 {c.x:0.00},{c.y:0.00},{c.z:0.00}(목표 {gc.x:0.00},{gc.y:0.00},{gc.z:0.00})"
+                       + $" · 벗어남 {(off < 0f ? "-" : (Time.unscaledTime - off).ToString("0.0") + "초")} · 보는 쪽 {d.x:0.00},{d.z:0.00} · 회전 {tr.eulerAngles.y:0} · 배율 {tr.localScale.x:0.000}";
+            }
+            return " · (이 물체 항목 없음)";
+        }
+
+        // 카드에 찍히는 켜진 렌더러 — 종류 · 셰이더 · 크기 · 칸 카메라 (11-27 c55 핀치 뒤 1.9초에 큐브 둘레에 검은 테가 생긴 까닭을 보려고)
+        private static string NmRendInfo(GameObject go)
+        {
+            if (go == null) return " · (물체 없음)";
+            var sb = new System.Text.StringBuilder();
+            int n = 0;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(false))
+            {
+                if (!r.enabled) continue;
+                n++;
+                var m = r.sharedMaterial;
+                var b = r.bounds.size;
+                sb.Append($" | {r.name}({r.GetType().Name} · {(m != null ? m.shader.name : "-")} · {b.x:0.00}x{b.y:0.00}x{b.z:0.00})");
+            }
+            string cam = "";
+            const System.Reflection.BindingFlags A = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            if (typeof(R0926NearModal).GetField("shots", NmF)?.GetValue(nmModal) is System.Array shots && shots.Length > 0 && shots.GetValue(0) is object sh
+                && sh.GetType().GetField("cam", A)?.GetValue(sh) is Camera c && c != null)
+                cam = $" · 칸 카메라 {(c.transform.position - go.transform.position).magnitude:0.00} · 앞 {c.nearClipPlane:0.00} 뒤 {c.farClipPlane:0.00} · 비율 {c.aspect:0.000} · 판 {NmRtInfo(c.targetTexture)}";
+            return $" · 켜진 렌더러 {n}{sb}{cam}";
+        }
+
         // 렌더러마다 (제 배율 ÷ 맨 위 배율) — 줌 뒤 달라진 것 = 맨 위 배율을 안 따라가는 부품
         private static Dictionary<Renderer, float> NmScaleSnap(GameObject go)
         {
@@ -1695,6 +1821,142 @@ namespace Redesign0926
             if (items == null || k < 0 || k >= items.Count) return -1f;
             var it = items[k];
             return (float)it.GetType().GetField("since").GetValue(it);
+        }
+
+        // AR 화면에 떠 있다 (카드의 Live · Visible 과 같은 셈 — 켜져 있고 켜진 메시 · 스프라이트 렌더러가 있다)
+        private static bool NmInAR(GameObject go)
+        {
+            if (go == null || !go.activeInHierarchy) return false;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(false))
+                if (r.enabled && (r is MeshRenderer || r is SkinnedMeshRenderer || r is SpriteRenderer)) return true;
+            return false;
+        }
+
+        // 찍는 순간 엿보기 (11-26 34번) — AR 카메라 · 그 물체를 찍는 카드 칸 카메라가 찍기 직전(카드가 빌린 뒤), 그 물체 켜진 렌더러의 레이어 범위와
+        // 멀리 흐리게 값(재질 값 대비 — _GlobalAlpha 또는 색). 카드는 가까이에서 보는 값(1 · 색은 1.04)이어야 하고 AR 은 원래 레이어 · 원래 값
+        private sealed class NmSeen { public int shots, lo = 99, hi = -1; public float look = -1f; }
+        private static readonly Dictionary<bool, NmSeen> nmSeen = new Dictionary<bool, NmSeen>();   // true: 카드 칸 카메라 · false: AR 카메라
+        private static GameObject nmSpyGo;
+        private static int nmSpySlot;
+        private static MaterialPropertyBlock nmSpyBlock;
+        private static readonly int NmAlphaId = Shader.PropertyToID("_GlobalAlpha");
+        private static readonly int[] NmColorIds =   // R0926DistanceFade.ColorIds 와 같은 차례
+        {
+            Shader.PropertyToID("_BaseColor"), Shader.PropertyToID("baseColorFactor"), Shader.PropertyToID("_BaseColorFactor"), Shader.PropertyToID("_Color"),
+        };
+
+        // go 를 slot 칸 카메라 · AR 카메라가 찍을 때마다 적는다 (부를 때마다 처음부터 · null 이면 끈다)
+        private static void NmSpy(GameObject go, int slot)
+        {
+            UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering -= NmSpyShot;
+            nmSeen.Clear();
+            nmSpyGo = go;
+            nmSpySlot = slot;
+            if (go != null) UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering += NmSpyShot;
+        }
+
+        private static void NmSpyShot(UnityEngine.Rendering.ScriptableRenderContext ctx, Camera cam)
+        {
+            if (nmSpyGo == null || cam == null || nmModal == null) return;
+            bool card = cam == nmModal.EditorCam(nmSpySlot);
+            if (!card && cam != Camera.main) return;
+            if (!nmSeen.TryGetValue(card, out var s)) nmSeen[card] = s = new NmSeen();
+            s.shots++;
+            nmSpyBlock ??= new MaterialPropertyBlock();
+            foreach (var r in nmSpyGo.GetComponentsInChildren<Renderer>(false))
+            {
+                if (!r.enabled) continue;
+                int l = r.gameObject.layer;
+                s.lo = Mathf.Min(s.lo, l);
+                s.hi = Mathf.Max(s.hi, l);
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var m = mats[i];
+                    if (m == null) continue;
+                    r.GetPropertyBlock(nmSpyBlock, i);
+                    float v = -1f;
+                    if (m.HasProperty(NmAlphaId))
+                    {
+                        float b = m.GetFloat(NmAlphaId);
+                        if (b > 1e-4f) v = nmSpyBlock.HasFloat(NmAlphaId) ? nmSpyBlock.GetFloat(NmAlphaId) / b : 1f;
+                    }
+                    else
+                        foreach (int id in NmColorIds)
+                        {
+                            if (!m.HasProperty(id)) continue;
+                            float b = m.GetColor(id).maxColorComponent;
+                            if (b > 1e-3f) v = nmSpyBlock.HasColor(id) ? nmSpyBlock.GetColor(id).maxColorComponent / b : 1f;
+                            break;
+                        }
+                    if (v >= 0f && (s.look < 0f || v < s.look)) s.look = v;
+                }
+            }
+        }
+
+        // 그 카메라가 한 번 넘게 찍었고, 찍을 때마다 레이어가 ok
+        private static bool NmSaw(bool card, Func<int, bool> ok) => nmSeen.TryGetValue(card, out var s) && s.shots > 0 && s.hi >= 0 && ok(s.lo) && ok(s.hi);
+
+        // 카드 사본은 가까이에서 보는 값으로 찍혔다 (값을 잴 수 없는 재질이면 넘어간다)
+        private static bool NmSawNear() => nmSeen.TryGetValue(true, out var s) && (s.look < 0f || s.look >= 0.99f);
+
+        private static string NmSeenText()
+        {
+            string one(bool card) => nmSeen.TryGetValue(card, out var s) && s.shots > 0
+                ? $"{s.shots}번 · 레이어 {(s.hi < 0 ? "-" : s.lo == s.hi ? s.lo.ToString() : s.lo + "~" + s.hi)} · 값 {(s.look < 0f ? "-" : s.look.ToString("0.00"))}"
+                : "안 찍음";
+            return $"카드 칸 [{one(true)}] · AR [{one(false)}]";
+        }
+
+        // 카드 판의 밝기 — 물체가 찍힌 픽셀(투명 바탕이 아닌 것)의 max(r,g,b) × 알파 평균 (0~255)
+        private static float NmBright(RenderTexture rt)
+        {
+            if (rt == null) return 0f;
+            double sum = 0;
+            int n = 0;
+            foreach (var p in NmPixels(rt))
+            {
+                if (Mathf.Max(p.a, Mathf.Max(p.r, Mathf.Max(p.g, p.b))) <= 25) continue;
+                sum += Mathf.Max(p.r, Mathf.Max(p.g, p.b)) * (p.a / 255.0);
+                n++;
+            }
+            return n > 0 ? (float)(sum / n) : 0f;
+        }
+
+        // 판을 CPU 로 읽는다 (MSAA 판은 한 번 풀어서)
+        private static Color32[] NmPixels(RenderTexture rt)
+        {
+            int w = rt.width, h = rt.height;
+            var tmp = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
+            Graphics.Blit(rt, tmp);
+            var prev = RenderTexture.active;
+            RenderTexture.active = tmp;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            tex.Apply();
+            RenderTexture.active = prev;
+            RenderTexture.ReleaseTemporary(tmp);
+            var px = tex.GetPixels32();
+            UnityEngine.Object.Destroy(tex);
+            return px;
+        }
+
+        // 큐브의 Pulse 껍질(Custom/UnlitGlowPulse — 큐브보다 5% 크고 3초마다 0.5초 번쩍)이 번쩍이는 동안 재면 카드 안 크기가 5% 크게 잡힌다 — 꺼진 때에 잰다.
+        // (11-27 c53 · c54 · c55 핀치 1.9초 뒤 0.589 × 0.541 = 껍질 2.10 ÷ 큐브 2.00 배 · c57 에서 일부러 번쩍일 때 재 같은 값 확인) — 셰이더 시간 = 장면을 연 뒤 시간
+        private static bool NmPulseQuiet(GameObject go)
+        {
+            if (go == null) return true;
+            float t = Time.timeSinceLevelLoad;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(false))
+            {
+                var m = r.enabled ? r.sharedMaterial : null;
+                if (m == null || m.shader == null || m.shader.name != "Custom/UnlitGlowPulse") continue;
+                float iv = m.GetFloat("_PulseInterval"), w = m.GetFloat("_PulseWidth");
+                if (iv <= w + 0.3f) continue;
+                float ph = Mathf.Repeat(t, iv);
+                if (ph < w + 0.1f || ph > iv - 0.1f) return false;
+            }
+            return true;
         }
 
         private static bool NmLayers(GameObject go, Func<int, bool> ok)
@@ -1774,17 +2036,7 @@ namespace Redesign0926
         {
             if (rt == null) return Vector2.zero;
             int w = rt.width, h = rt.height;
-            var tmp = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
-            Graphics.Blit(rt, tmp);
-            var prev = RenderTexture.active;
-            RenderTexture.active = tmp;
-            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-            tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(tmp);
-            var px = tex.GetPixels32();
-            UnityEngine.Object.Destroy(tex);
+            var px = NmPixels(rt);
             int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1;
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
@@ -1866,6 +2118,7 @@ namespace Redesign0926
         // 시험이 바꾼 것 되돌리기 — 시험 끝 · 오류로 끊긴 뒤 · 플레이를 끈 뒤 · 다음 시험을 켜기 전
         private static void NmFinish()
         {
+            NmSpy(null, 0);   // 찍는 순간 엿보기
             nmKeep = nmKeepWanted = false;
             EditorApplication.update -= NmKeep;
             if (nmRun)
@@ -1882,6 +2135,7 @@ namespace Redesign0926
             }
             NmRestorePref(NmBackupKey, NmStyleKey);
             NmRestorePref(NmStartBackupKey, NmStartKey);
+            R0926PlaceRows.EditorPhotoUrl = null;   // 목록 사진 주소 (photo15)
             R0926MenuStyle.Reload();   // 값을 한 번 읽어 두므로 되돌린 값을 다시 읽게 (11-23 S8)
         }
     }

@@ -59,7 +59,14 @@ public static class SubPhotoCache
 #if UNITY_EDITOR
     /// <summary>시험용 — 네트워크로 받을 때마다 이만큼 늦춘다 (휴대폰 LTE 흉내)</summary>
     public static float SimulatedNetDelay;
+    /// <summary>시험용 — 상대 주소 사진을 받을 서버 (비면 MAIN_SERVER)</summary>
+    public static string EditorBase;
 #endif
+
+    // 풀어 준 사진 → 그 주소 (번역 버튼이 화면 대신 사진 파일을 저장한다 — 11-26 21번). 지워진 사진은 쌓이면 걷어 낸다
+    private static readonly Dictionary<Texture2D, string> sources = new Dictionary<Texture2D, string>();
+    private static readonly List<Texture2D> gone = new List<Texture2D>();
+    private const int SourcesSweepAt = 128;
 
     private static string PreDir => root + "/pre";      // 미리 받고 아직 안 연 것
     private static string SeenDir => root + "/seen";    // 열어 본 것
@@ -67,7 +74,7 @@ public static class SubPhotoCache
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
-        jobs.Clear(); waiting.Clear(); failedAt.Clear(); picks.Clear();
+        jobs.Clear(); waiting.Clear(); failedAt.Clear(); picks.Clear(); sources.Clear(); gone.Clear();
         runFirst = runNormal = runSpawn = runPrefetch = orderSeq = firstDecoding = 0;
         prefetchBytes = 0;
         nextScan = nextSweep = 0f;
@@ -75,6 +82,7 @@ public static class SubPhotoCache
         OpenHits = OpenMisses = Prefetched = 0;
 #if UNITY_EDITOR
         SimulatedNetDelay = 0f;
+        EditorBase = null;
 #endif
     }
 
@@ -149,7 +157,34 @@ public static class SubPhotoCache
             if (tex == null && fallback != null) yield return Decode(fallback, t => tex = t);
         }
         if (first) firstDecoding--;
+        if (tex != null) Remember(tex, norm);
         done(tex);
+    }
+
+    private static void Remember(Texture2D tex, string norm)
+    {
+        if (sources.Count >= SourcesSweepAt)
+        {
+            foreach (var k in sources.Keys) if (k == null) gone.Add(k);   // 정보 창이 놓아준(지운) 사진
+            foreach (var k in gone) sources.Remove(k);
+            gone.Clear();
+        }
+        sources[tex] = norm;
+    }
+
+    /// <summary>
+    /// 이 캐시가 풀어 준 사진의 원본 주소와 디스크에 받아 둔 파일 (번역 버튼 — 화면 대신 사진만 저장, 11-26 21번).
+    /// 우팡 서버 사진은 창에 띄운 줄인 것(/thumb/1080/)이 아니라 원본 주소. 받아 둔 파일이 없으면 cached 는 null. 모르는 그림이면 false
+    /// </summary>
+    public static bool Source(Texture tex, out string original, out string cached)
+    {
+        original = cached = null;
+        var t = tex as Texture2D;
+        if (t == null || !sources.TryGetValue(t, out var norm)) return false;
+        Urls(norm, out var primary, out var fallback);
+        original = fallback ?? primary;
+        cached = Find(Key(norm));
+        return true;
     }
 
     private static IEnumerator Decode(string url, Action<Texture2D> got)
@@ -354,8 +389,12 @@ public static class SubPhotoCache
     private static void Urls(string norm, out string primary, out string fallback)
     {
         if (norm.StartsWith("http", StringComparison.OrdinalIgnoreCase)) { primary = ApiConfig.Secure(norm); fallback = null; return; }
-        primary = ApiConfig.MAIN_SERVER + "/thumb/" + ThumbSize + "/" + norm;
-        fallback = ApiConfig.MAIN_SERVER + "/" + norm;
+        string server = ApiConfig.MAIN_SERVER;
+#if UNITY_EDITOR
+        if (!string.IsNullOrEmpty(EditorBase)) server = EditorBase;
+#endif
+        primary = server + "/thumb/" + ThumbSize + "/" + norm;
+        fallback = server + "/" + norm;
     }
 
     // 주소 → 파일 이름 (FNV-1a 64 + 길이)

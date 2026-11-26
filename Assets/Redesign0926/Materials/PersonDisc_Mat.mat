@@ -31,6 +31,7 @@ Material:
     m_Floats:
     - _Breath: 0.035
     - _GlobalAlpha: 1
+    - _MipBias: -0.5
     - _Period: 4
     - _Radius: 0.36
     - _RingWidth: 0.03

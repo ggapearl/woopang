@@ -13,7 +13,9 @@ namespace Redesign0926
     /// </summary>
     public static partial class Redesign0926Apply
     {
-        public const int Version = 121;  // v121: 11-24 대표님 「상단에서 아래로 스와이프하면 바로 하늘보기 … 처음 설명가이드 발생할 때 둘다 해당 내용이 설명으로」 — 첫 안내 카드 10장 (3번째 「위로 밀면 근처 장소 · 아래로 밀면 하늘 화면」 · 그림 gc_swipe)
+        public const int Version = 126;  // v126: 11-26 대표님 37번 「'전체' 로 있는 버전 내에는 적당히 해당버튼 외곽에서 어울릴만한 색으로 적당히 천천히 펄스효과를 외곽선이 있도록 … '전체버튼' 을 눌렀을 때는 적당히 모달 발생해서 좀 큼직하게 버튼 … 아래나 위로 스와이프 하거나 모달 밖을 터치했을 때는 해당 모달이 닫히면 돼」 — 분류 고르기를 화면 맨 위 층(CategoryMenu0926 · 목록 바로 위)의 가운데 카드(CategoryCard0926 · 불투명 · 물방울/네온에선 남색 창)로 · 3×3 큰 칸(그림 120 · 이름 50) · 바깥 누르기 · 위아래로 밀기(R0926CategorySwipe) · 뒤로가기로 닫힘 · 분류 칩과 고른 칸에 천천히 숨 쉬는 테(R0926ChipPulse — R0926PulseRing · 네온이면 네온 줄) · v125: 11-26 대표님 31번 「그리고 '로그아웃' 할 경우에 발생하는 모달도 우리 레이아웃이랑 안어울리는데 확인하고 수정해줘」 — 로그아웃 확인(LogoutConfirmDialog)을 프로필 안에서 캔버스 밑(로그인 안내 위)으로 옮겨 화면 전체를 어둡게 · 어두운 카드 + 취소/로그아웃 글자 알약(StyleDialog) · 뒤로가기 = 취소 · v124: 11-26 대표님 26번 「사용가이드를 설정탭 '앱정보' 맨 위에 (문의 위쪽) 버튼을 하나 만들어서 누르면 사용가이드 나오도록」 — 설정 › 앱 정보 맨 위 「사용가이드」 줄(RowGuide · R0926AppInfo.OpenGuide → 목록 시트를 내린 뒤 FirstTimeGuide.Replay) · v123: 11-26 대표님 16번 「하늘보기 … (화면고정) 해당 배경탭 내부에 발생한 내용이 좌우스와이프했을 때 해당 네온배경 내에서 … 지금은 이를 벗어나서」 — 하늘 판 틀에 R0926PageClip(유리 좌우로 자름 · 고정했을 때만)
+        // v122: 11-26 대표님 15번 「'근처장소' 탭에서 발생하는 '사용자' 프로필의 경우 사진이 명확하게 발생하지 않고 테두리 질감이 지저분하게 … 더블터치해서 프로필 봤을 때도 사진이 흐리게」 — 목록 사람 줄 사진 재질(R0926SharpPhotoUI) · 계산 고리(R0926RingUI) · 프로필 창 사진 재질(R0926SharpAvatarUI)
+        // v121: 11-24 대표님 「상단에서 아래로 스와이프하면 바로 하늘보기 … 처음 설명가이드 발생할 때 둘다 해당 내용이 설명으로」 — 첫 안내 카드 10장 (3번째 「위로 밀면 근처 장소 · 아래로 밀면 하늘 화면」 · 그림 gc_swipe)
         // v120: 11-24 정보 수정 AI 화면(FixAi0926)에 제 창 모양 — 물방울 · 네온 모드에서 바탕이 안 그려져 뒤 수정 칸들이 비쳤다 (밑 창 모양을 이어 그린다 · 바깥 빛은 밑 창 것만)
         // v119: 11-24 대표님 「하늘 위쪽으로 고정햇을 때 네온모드 작업해줘」 — 고정한 하늘 판 유리(Glass0926)에 네온 테 (NeonRim0926 · 유리와 같이 나타나고 사라짐 · 네온 모드에서만)
         // v118: 11-23 대표님 L1 「프로필 항목에 'linkedin' … 프로필 열었을 때 아이디를 기입한 경우 이것도 역시 발생 … 프로필 수정, 기입할 때도 해당 링크 추가할 수 있도록 칸 하나 더」 — 프로필 SNS 줄 네 번째 칸(LinkedInButton · linkedin_icon) · 편집 칸 F_linkedin (주소를 붙여 넣어도 아이디만) · 서버 users.linkedin_id
@@ -796,6 +798,8 @@ namespace Redesign0926
                 SetRect(RT(c), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40));
             }
             var fc = Ensure<R0926FilterChip>(chip);
+            // 애견동반은 물방울 모드에서도 꽉 찬 진한 노랑 — 창 바탕 맞춤(버튼 바탕 .4)에서 뺀다 (11-26 대표님 「짠한 노란색으로 기존에 발생하던 것처럼」)
+            if (def.kind == R0926FilterChip.Kind.Pet) Ensure<R0926SkinIgnore>(chip);
             var so = new SerializedObject(fc);
             so.FindProperty("kind").enumValueIndex = (int)def.kind;
             ColorUtility.TryParseHtmlString(def.hex, out var col);

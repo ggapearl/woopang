@@ -81,6 +81,16 @@ namespace Redesign0926
             SetRect(RT(glass), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 5), new Vector2(1060, 910));
             glass.transform.SetSiblingIndex(0);
 
+            // 고정한 판 — 옆 장을 유리 안으로 자른다 (11-26 대표님 16번). 하늘에선 꺼 두고 유리가 보이면 켠다 (R0926SkyWeather.SetGlass)
+            var clip = Ensure<R0926PageClip>(frame.gameObject);
+            clip.enabled = false;
+            var cso = new SerializedObject(clip);
+            cso.FindProperty("area").objectReferenceValue = RT(glass);
+            cso.ApplyModifiedPropertiesWithoutUndo();
+            var wso = new SerializedObject(sky);
+            wso.FindProperty("pageClip").objectReferenceValue = clip;
+            wso.ApplyModifiedPropertiesWithoutUndo();
+
             var weather = WeatherPage(board);
             weather.SetSiblingIndex(1);
 

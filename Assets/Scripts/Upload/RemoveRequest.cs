@@ -229,6 +229,13 @@ public class RemoveRequest : MonoBehaviour
             return;
         }
 
+        // 로그인 전엔 서버가 받지 않는다 — 「서버 오류」 대신 바로 안내 (11-26 대표님)
+        if (LoginManager.Instance == null || !LoginManager.Instance.IsLoggedIn)
+        {
+            ShowWarning(LoginNeeded());
+            return;
+        }
+
         StartCoroutine(SendRemoveRequest(id));
     }
 
@@ -286,12 +293,20 @@ public class RemoveRequest : MonoBehaviour
                     ShowWarning(LocalizationManager.Instance.GetText("server_error"));
                 }
             }
+            else if (www.responseCode == 401)
+            {
+                LoginManager.CheckUnauthorized(www);   // 로그인이 풀렸다 (토큰 만료 등)
+                ShowWarning(LoginNeeded());
+            }
             else
             {
                 ShowWarning(LocalizationManager.Instance.GetText("server_error"));
             }
         }
     }
+
+    private static string LoginNeeded() =>
+        R0926LocalizedText.Say("로그인이 필요합니다", "Please log in", "ログインが必要です", "请先登录", "Inicia sesión");
 
     // 내 장소 지우기 — 서버가 올린 사람인지 다시 확인한다 (아니면 403 → 예전처럼 삭제 요청으로)
     private IEnumerator DeleteOwnPlace(int id)
@@ -327,8 +342,8 @@ public class RemoveRequest : MonoBehaviour
 
             LoginManager.CheckUnauthorized(www);
             Debug.LogWarning($"[RemoveRequest] 지우기 실패 id={id}: {www.responseCode} {res?.error} {www.error}");
-            ShowWarning(res != null && res.error == "login_required"
-                ? R0926LocalizedText.Say("로그인이 필요해요", "Please log in", "ログインが必要です", "请先登录", "Inicia sesión")
+            ShowWarning(res != null && res.error == "login_required" || www.responseCode == 401
+                ? LoginNeeded()
                 : LocalizationManager.Instance.GetText("server_error"));
         }
     }

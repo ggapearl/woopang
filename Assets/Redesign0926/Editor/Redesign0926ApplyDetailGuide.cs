@@ -7,7 +7,9 @@ namespace Redesign0926
 {
     /// <summary>
     /// 장소 상세 위 버튼 줄에 「길안내」 (11-16 대표님 「더블탭하고 나서 발생하는 화면에 메뉴가 여러개 있잖아? 그때 거기에 화살표 버튼을 만들어서 안내하도록」).
-    /// 번역과 「···」 사이 — 연한 분홍(40%) 동그라미에 흰 길안내 화살표, 「···」는 한 칸 오른쪽으로.
+    /// 번역과 「···」 사이 — 흰 테두리 원에 흰 길안내 화살표, 「···」는 한 칸 오른쪽으로.
+    /// 11-26 대표님 「길안내 이모지의 경우 동그라미 흰색 원에 해당 지금있는 방향표시가 흰색으로 … 다른 이모지처럼 투명도 없이」
+    /// — 분홍 40% 동그라미 → 애견 동반 그림처럼 흰 테두리 원(r0926_ring_line) · 「···」는 바탕 없이 흰 점만 (ApplyPlaceMenu).
     /// 11-17 대표님 F1 「핑크색이 진하면 안되고 투명도 40정도로 해서 우측에 있는 ... 과 비슷하게 동그라미가 있도록 해줘. (동그라미 사이즈도 동일하게)
     /// 그리고 이거 지금 동그라미 중앙이 안맞거든?」 — 「···」처럼 비치는 동그라미(같은 그림 · 같은 크기) · 화살표 모양을 동그라미 가운데에.
     /// 줄이 한 칸 길어진 만큼 줄 전체(TopUIPanel)를 왼쪽으로 옮겨 다 보일 때 화면 가운데 (DetailRowX — 세로 ApplyDetailLift · 가로 ApplyFadeAndLandscape).
@@ -28,7 +30,7 @@ namespace Redesign0926
 
             var go = FindOrCreate(top.transform, "GuideButton0926");
             SetRect(RT(go), c, c, c, new Vector2(DetailGuideX, DetailBtnY), new Vector2(DetailBtnSize, DetailBtnSize));
-            var img = Img(go, Spr("r0926_circle"), new Color(Pink.r, Pink.g, Pink.b, 0.4f), Image.Type.Simple);   // 「···」(어두운 반투명)처럼 비치게 — 분홍 40%
+            var img = Img(go, Spr("r0926_ring_line"), Color.white, Image.Type.Simple);   // 흰 테두리 원 — 투명도 없이 (11-26 대표님 · 누르는 칸은 칸 전체)
             img.raycastTarget = true;
             var btn = Ensure<Button>(go);
             btn.targetGraphic = img;
@@ -37,12 +39,13 @@ namespace Redesign0926
             EditorUtility.SetDirty(btn);
 
             // 화살표 — 위를 가리키는 그림을 오른쪽 위로 45° (길안내 표시). 돌리면 꼬리 두 끝이 왼쪽 · 아래로 뻗어 모양 가운데가 그림 칸 가운데보다
-            // 왼쪽 아래로 간다(테두리 가운데 약 8.4 · 무게 가운데 약 2.7) — 두 가운데의 중간(5.5)만큼 오른쪽 위로 (전엔 거꾸로 왼쪽 아래로 3 더 내려 어긋나 보였다)
+            // 왼쪽 아래로 간다(테두리 가운데 약 8.4 · 무게 가운데 약 2.7 — 72 기준) — 두 가운데의 중간만큼 오른쪽 위로 (전엔 거꾸로 왼쪽 아래로 3 더 내려 어긋나 보였다)
+            // 테두리 원 안에 여유 있게 72 → 64 (11-26) — 비켜 놓는 값도 같은 비율 (5.5 × 64/72)
             var icon = FindOrCreate(go.transform, "Icon0926");
             var ii = Img(icon, Spr("r0926_i_navarrow"), Color.white, Image.Type.Simple);
             ii.raycastTarget = false;
             ii.preserveAspect = true;
-            SetRect(RT(icon), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(5.5f, 5.5f), new Vector2(72f, 72f));
+            SetRect(RT(icon), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(4.9f, 4.9f), new Vector2(64f, 64f));
             RT(icon).localEulerAngles = new Vector3(0f, 0f, -45f);
             EditorUtility.SetDirty(RT(icon));
 

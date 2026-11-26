@@ -51,7 +51,7 @@ namespace Redesign0926
             Func<float> rimA = () => rimImg != null ? rimImg.color.a : -1f;
             Func<float> glassK = () => glassImg != null && glassFull.a > 0f ? glassImg.color.a / glassFull.a : -1f;
             Func<bool> pinnedTop = () => sky != null && sky.PinnedTop && frame != null && frame.parent == pinLayer;
-            Action<bool, bool> style = (d, n) => { R0926MenuStyle.Droplet = d; R0926MenuStyle.Neon = n; R0926MenuStyle.Density = 70; };
+            Action<bool, bool> style = (d, n) => { R0926MenuStyle.Droplet = d; R0926MenuStyle.Neon = n; R0926MenuStyle.Density = R0926MenuStyle.DefaultDensity; };
             Func<string> state = () =>
             {
                 var c = rim != null ? rim.GetComponentInParent<Canvas>() : null;

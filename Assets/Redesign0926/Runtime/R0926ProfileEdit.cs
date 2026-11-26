@@ -46,6 +46,8 @@ public class R0926ProfileEdit : MonoBehaviour
     [SerializeField] private Image[] displayTabs;       // 0 사진 · 1 3D 모델
     [SerializeField] private Text[] displayLabels;
     [SerializeField] private Text removeLabel;
+    [SerializeField] private R0926EditMark editMark;    // 「수정 → 저장」 — 고친 칸 테두리 · 저장 버튼 핑크 (11-17 대표님 규칙)
+    [SerializeField] private RectTransform displaySeg;  // 사진/3D 고르기 칸 — 고르면 이 칸이 핑크
 
     private enum State { Loading, Failed, Ready, Saving }
 
@@ -74,6 +76,7 @@ public class R0926ProfileEdit : MonoBehaviour
     private readonly R0926PickerWait pick = new R0926PickerWait();
 
     private InputField[] Fields => new[] { usernameInput, bioInput, phoneInput, instagramInput, facebookInput, xInput, linkedinInput };
+    private InputField[] fieldCache;
     private MonoBehaviour Host => ProfileManager.Instance != null ? ProfileManager.Instance : (MonoBehaviour)this;
 
     private static string Base
@@ -112,8 +115,30 @@ public class R0926ProfileEdit : MonoBehaviour
         waitDays = 0;
         ApplyLock();
         Say("");
+        if (editMark != null) editMark.Clear();
         SetState(State.Loading);
         StartCoroutine(Load(session));
+    }
+
+    // 「수정 → 저장」 — 불러온 값과 다른 칸만 핑크, 다시 처음 값으로 돌리면 꺼진다.
+    // 바로 올라가는 사진 · 3D 모델은 저장하기와 상관없어 표시하지 않는다
+    private void LateUpdate()
+    {
+        if (editMark == null) return;
+        bool live = state == State.Ready || state == State.Saving;
+        var fs = fieldCache ??= Fields;
+        for (int i = 0; i < fs.Length; i++)
+            if (fs[i] != null) editMark.Set((RectTransform)fs[i].transform, live && fs[i].text != shown[i]);
+        editMark.Set(displaySeg, live && display != shownDisplay);
+    }
+
+    // 저장됐다 — 지금 칸 글이 서버 값이다 (닫히며 내려가는 동안 핑크가 남지 않게)
+    private void CommitShown()
+    {
+        var fs = Fields;
+        for (int i = 0; i < fs.Length; i++) shown[i] = fs[i] != null ? fs[i].text : "";
+        shownDisplay = display;
+        if (editMark != null) editMark.Clear();
     }
 
     public void Close() => gameObject.SetActive(false);
@@ -280,6 +305,7 @@ public class R0926ProfileEdit : MonoBehaviour
             Toast(true, T("프로필을 저장했어요", "Profile saved", "プロフィールを保存しました", "个人资料已保存", "Perfil guardado"));
             if (here)
             {
+                CommitShown();
                 if (closer != null && closeButton != null) closer.AnimateClose(closeButton);
                 else Close();
             }

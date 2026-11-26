@@ -332,6 +332,8 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
         if (target != null)
         {
             target.PlaceName = data.name;
+            target.gpsLatitude = data.latitude;   // 거리 · fallback 화살표 목록 (Target.GetGPSDistance) — 앵커가 아직 없어도 (11-26 18 · 33번 · data-managers 7번)
+            target.gpsLongitude = data.longitude;
             // 지하철 인디케이터 색상: #3da29c
             Color subwayColor;
             if (ColorUtility.TryParseHtmlString("#3da29c", out subwayColor))

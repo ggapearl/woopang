@@ -35,6 +35,7 @@ namespace Redesign0926
                 "DanceAnimPanel/CancelButton",
                 "ARPreviewPanel/MessageContainer/ButtonContainer/CancelButton",
                 "RemoveRequestPanel/Box0926/Buttons0926/Remove_NO",
+                "LogoutConfirmDialog/Panel/Buttons0926/CancelButton",   // 11-26 31번 — 프로필 안에서 캔버스 밑으로 옮긴 로그아웃 확인 (ApplyDialogs)
                 "UpdateChecker/Box0926/Buttons0926/Update_NO",          // 강제 업데이트 땐 이 버튼이 숨겨져 등록되지 않는다
                 "PhotoSourceDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/CancelButton",
                 "ContinueCaptureDialog/DialogPanel/BottomContainer/ContentCard/ButtonRow/NoButton",   // 바깥을 눌렀을 때와 같은 '아니오'

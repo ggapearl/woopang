@@ -13,6 +13,7 @@ Shader "Universal Render Pipeline/R0926PersonDisc"
         _Breath ("Ring Breath", Range(0, 0.1)) = 0.035
         _Period ("Pulse Seconds", Range(1, 10)) = 4
         _GlobalAlpha ("Global Alpha", Range(0, 1)) = 1
+        _MipBias ("Photo Mip Bias", Range(-2, 0)) = -0.5
     }
 
     SubShader
@@ -70,6 +71,7 @@ Shader "Universal Render Pipeline/R0926PersonDisc"
                 float _Breath;
                 float _Period;
                 half _GlobalAlpha;
+                float _MipBias;
             CBUFFER_END
 
             Varyings vert(Attributes v)
@@ -116,7 +118,9 @@ Shader "Universal Render Pipeline/R0926PersonDisc"
                 float photoR = _Radius - _RingWidth * 0.5;
                 float inPhoto = 1.0 - smoothstep(photoR - aa, photoR + aa, d);
                 float2 uv = p / (photoR * 2.0) + 0.5;
-                half3 photo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uv * _BaseMap_ST.xy + _BaseMap_ST.zw).rgb * _BaseColor.rgb;
+                // 밉맵을 반 단계 앞당겨 — 사진이 화면에서 원본의 절반~0.7 크기일 때 한 단계 작은 밉맵(절반 해상도)을 늘려 그려 흐렸다
+                // (근처 카드 · 가까이 있는 사람 — 11-26 대표님 15번 「사진이 명확하게 발생하지 않고」). 멀리서 작게 보일 땐 그대로 매끄럽다
+                half3 photo = SAMPLE_TEXTURE2D_BIAS(_BaseMap, sampler_BaseMap, uv * _BaseMap_ST.xy + _BaseMap_ST.zw, _MipBias).rgb * _BaseColor.rgb;
                 rgb = lerp(rgb, photo, inPhoto);
                 a = lerp(a, 1.0, inPhoto);
 

@@ -90,9 +90,45 @@ public class R0926DistanceFade : MonoBehaviour
     private ARCameraManager arCam;
     private float brightness = 0.6f;   // 0(밤)~1(낮) — 빛 추정이 없으면 낮 쪽 기본값
 
+    private static float nearEdge = 1.25f;   // nearEdgeBoost — 가까이 모달의 사본(NearLook)도 같은 값
+
     private void Awake()
     {
         mpb = new MaterialPropertyBlock();
+        nearEdge = nearEdgeBoost;
+    }
+
+    /// <summary>
+    /// 가까이 모달(R0926NearModal)의 사본 — 칸 카메라가 찍는 그 순간만 가까이에서 보는 값으로 (멀어서 옅어짐 · 어두워짐 · 처음 나타나는 중 없이).
+    /// 원래 값은 R0926NearHold 가 찍기 전에 받아 두었다가 찍은 뒤 되돌린다. mats = r 의 sharedMaterials
+    /// </summary>
+    public static void NearLook(Renderer r, MaterialPropertyBlock block, List<Material> mats)
+    {
+        for (int i = 0; i < mats.Count; i++)
+        {
+            var m = mats[i];
+            if (m == null) continue;
+            r.GetPropertyBlock(block, i);
+            if (m.HasProperty(GlobalAlpha))
+            {
+                block.SetFloat(GlobalAlpha, m.GetFloat(GlobalAlpha));
+                if (m.HasProperty(EdgeIntensity)) block.SetFloat(EdgeIntensity, m.GetFloat(EdgeIntensity) * nearEdge);
+            }
+            else
+            {
+                bool set = false;
+                foreach (var cid in ColorIds)
+                {
+                    if (!m.HasProperty(cid)) continue;
+                    Color c = m.GetColor(cid);
+                    block.SetColor(cid, new Color(c.r * NearTint, c.g * NearTint, c.b * NearTint, c.a));
+                    set = true;
+                    break;
+                }
+                if (!set) continue;
+            }
+            r.SetPropertyBlock(block, i);
+        }
     }
 
     private void Start()

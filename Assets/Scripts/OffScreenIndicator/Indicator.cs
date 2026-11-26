@@ -160,6 +160,7 @@ public class Indicator : MonoBehaviour
 
     /// <summary>목록에서 고른 장소 강조 켜고 끄기 — OffScreenIndicator 가 매 프레임</summary>
     public void SetFocus(bool on) => focusOn = on;
+    public bool FocusOn => focusOn;
 
     // 장소 이름이 쓰인 글자 — 박스는 이름 글자, 화살표는 이름·거리 글자 (SetDistanceText 와 같은 갈래)
     private Text BadgeLabel() => indicatorType == IndicatorType.BOX && nameText != null ? nameText : distanceText;

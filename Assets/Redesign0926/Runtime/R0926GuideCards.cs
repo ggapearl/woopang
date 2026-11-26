@@ -9,6 +9,7 @@ using UnityEngine.UI;
 /// 휴대폰 화면은 JPG(.bytes) 로 들고 다니다 보이는 카드와 양옆만 풀고, 닫으면 버린다. 한국어는 한국어 화면 · 나머지 언어는 영어 화면.
 /// 카드마다 그 기능의 하단 버튼(목록 · 추가 · 보물찾기)을 동그랗게 비추고 화살표가 까딱인다 (비출 버튼이 없는 카드는 구멍이 닫힌다).
 /// 하단 버튼은 안내 중에도 눌린다 — 누르면 그 버튼 일을 하고 안내는 닫힌다 (10-19 대표님 · R0926GuideOverlay → FirstTimeGuide 확인 버튼 → Close).
+/// 손가락으로 넘기면 버튼처럼 진동만 (소리 없이 — 11-26 대표님 26번). 설정 › 앱 정보 「사용가이드」로 다시 볼 수 있다 (FirstTimeGuide.Replay).
 /// 열기 · 닫기 · 첫 실행 판정은 FirstTimeGuide. FirstTimeGuidePanel 이 틀이라 떠 있는 동안 Showing · BlocksWorld · 노치 숨김이 그대로 선다.
 /// </summary>
 public class R0926GuideCards : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, ICanvasRaycastFilter
@@ -280,7 +281,15 @@ public class R0926GuideCards : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         int to = index;
         if (moved > 0.18f || fling < -0.9f) to = index + 1;
         else if (moved < -0.18f || fling > 0.9f) to = index - 1;
+        if (Mathf.Clamp(to, 0, Count - 1) != index) Buzz();   // 넘어갈 때만 — 덜 밀어 제자리로 · 끝 카드 너머는 조용히
         Go(to);
+    }
+
+    // 손가락으로 넘긴 한 장 — 버튼(다음 · 이전)과 같은 세기의 진동, 소리는 없이
+    // (11-26 대표님 26번 「사용가이드 발생할 때 좌우로 스와이프할 때도 버튼 눌렀을 때처럼 햅틱효과가 있으면 좋을 것 같아(소리는 제외)」)
+    private void Buzz()
+    {
+        if (UIFeedbackManager.Instance != null) UIFeedbackManager.Instance.HapticOnly(tapHaptic);
     }
 
     private static float Rubber(float x) => 0.3f * x / (1f + x);

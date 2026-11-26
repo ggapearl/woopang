@@ -144,6 +144,14 @@ namespace Redesign0926
             Stretch(RT(sl));
             var saveLabel = Txt(sl, "저장하기", 46, Dark, TextAnchor.MiddleCenter, FontStyle.Bold);   // 글은 런타임이 상태마다 바꾼다 (번역 부품을 달지 않는다)
 
+            // 「수정 → 저장」 (11-26 대표님 「프로필 편집 저장로직도 수정해」 — 11-17 규칙) — 고친 칸 테두리 · 저장 버튼 핑크 · 숨 쉬기
+            var mark = Ensure<R0926EditMark>(sheet);
+            var mso2 = new SerializedObject(mark);
+            mso2.FindProperty("ringSprite").objectReferenceValue = Spr("r0926_pill_ring");
+            mso2.FindProperty("saveImage").objectReferenceValue = save.GetComponent<Image>();
+            mso2.FindProperty("saveLabel").objectReferenceValue = saveLabel;
+            mso2.ApplyModifiedPropertiesWithoutUndo();
+
             Grab(card);
 
             // 끌어내리기 · X · 뒤로가기 = 닫기 (바깥 누르기는 고치던 글이 날아가 넣지 않는다)
@@ -187,6 +195,8 @@ namespace Redesign0926
             SetArray(so.FindProperty("displayTabs"), dTabs);
             SetArray(so.FindProperty("displayLabels"), dLabels);
             S("removeLabel", removeLabel);
+            S("editMark", mark);
+            S("displaySeg", displayGroup.transform.Find("Seg0926"));
             so.ApplyModifiedPropertiesWithoutUndo();
             if (FindInScene<R0926PhotoCrop>(root.gameObject) == null) log.Add("프로필 편집: 자르기 화면 없음");
 

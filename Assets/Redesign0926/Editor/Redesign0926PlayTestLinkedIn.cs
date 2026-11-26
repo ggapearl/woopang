@@ -225,6 +225,25 @@ namespace Redesign0926
             openEdit();
             Check(() => inp("linkedin").text == "hong-gildong-a1b2c3" && inp("instagram").text == "insta_me" && inp("x").text == "",
                 "편집 칸에 지금 링크드인 아이디 (다른 SNS 칸도 그대로)");
+
+            // 1번 「수정 → 저장」 (11-26 대표님 「프로필 편집 저장로직도 수정해」 — 11-17 규칙): 고친 칸 테두리 핑크 · 저장 버튼 핑크로 숨 쉬기
+            R0926EditMark em = null;
+            Func<string, Image> edge = k => Find(PfC + "F_" + k + "/Input/EditEdge0926")?.GetComponent<Image>();
+            Func<string, bool> edgeOn = k => { var e = edge(k); return e != null && e.gameObject.activeInHierarchy; };
+            Func<Image> saveImg = () => Find(PfCard + "/Save0926")?.GetComponent<Image>();
+            Func<Text> saveTxt = () => Find(PfCard + "/Save0926/Label0926")?.GetComponent<Text>();
+            Func<Color, Color, bool> near = (a, b) => Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b) + Mathf.Abs(a.a - b.a) < 0.03f;
+            Color pinkBtn = new Color(0.914f, 0.118f, 0.388f, 1f), pinkEdge = new Color(0.941f, 0.396f, 0.584f, 1f);
+            Color saveBase = Color.clear;
+            float maxScale = 0f;
+            Do(() =>
+            {
+                em = typeof(R0926ProfileEdit).GetField("editMark", NPI).GetValue(pe) as R0926EditMark;
+                var si = saveImg();
+                if (si != null) saveBase = si.color;
+            });
+            Check(() => em != null && !em.Any && !edgeOn("linkedin") && !edgeOn("instagram") && saveImg() != null && !near(saveImg().color, pinkBtn),
+                "「수정 → 저장」: 막 열었을 때(고친 칸 없음)는 핑크 표시 없음 · 저장 버튼도 원래 색 (1번)");
             Do(() =>
             {
                 var sr = typeof(R0926ProfileEdit).GetField("scroll", NPI).GetValue(pe) as ScrollRect;
@@ -244,6 +263,32 @@ namespace Redesign0926
             }, "맨 아래로 내리면 링크드인 칸이 다 보인다");
             type("linkedin", "https://www.linkedin.com/in/new-person-77/?trk=abc");
             Check(() => inp("linkedin").text == "https://www.linkedin.com/in/new-person-77/?trk=abc", "키보드 위 입력줄에 쓴 주소가 칸에 들어감");
+            for (int i = 0; i < 7; i++)
+            {
+                Do(() => { var si = saveImg(); if (si != null) maxScale = Mathf.Max(maxScale, si.rectTransform.localScale.x); });
+                Sleep(0.15f);
+            }
+            Shot("pe_mark_on");
+            Check(() =>
+            {
+                var e = edge("linkedin");
+                var h = Find(PfC + "F_linkedin/Input/EditHalo0926")?.GetComponent<Image>();
+                var si = saveImg();
+                var st = saveTxt();
+                log.Add($"  고친 칸 테두리 {(e != null ? "#" + ColorUtility.ToHtmlStringRGBA(e.color) : "없음")} · 바깥 링 {(h != null && h.gameObject.activeInHierarchy ? "켜짐" : "꺼짐")}"
+                        + $" · 인스타 칸 {(edgeOn("instagram") ? "켜짐" : "꺼짐")} · 저장 버튼 {(si != null ? "#" + ColorUtility.ToHtmlStringRGBA(si.color) : "-")} 글 {(st != null ? "#" + ColorUtility.ToHtmlStringRGBA(st.color) : "-")} · 가장 커질 때 {maxScale:0.000}");
+                return em != null && em.Any && edgeOn("linkedin") && near(e.color, pinkEdge) && h != null && h.gameObject.activeInHierarchy
+                       && !edgeOn("instagram") && !edgeOn("username") && si != null && near(si.color, pinkBtn) && st != null && near(st.color, Color.white)
+                       && maxScale > 1.02f && maxScale < 1.07f;
+            }, "「수정 → 저장」: 고친 칸(링크드인)만 핑크 테두리 + 옅은 바깥 링 · 저장 버튼 핑크(흰 글자)로 숨 쉬기 (1 → 1.06) (11-26 대표님 1번)");
+            type("linkedin", "hong-gildong-a1b2c3");
+            Check(() =>
+            {
+                var si = saveImg();
+                return em != null && !em.Any && !edgeOn("linkedin") && si != null && near(si.color, saveBase) && Mathf.Abs(si.rectTransform.localScale.x - 1f) < 0.001f;
+            }, "「수정 → 저장」: 처음 값으로 되돌리면 핑크가 꺼지고 저장 버튼도 원래 색 · 크기");
+            type("linkedin", "https://www.linkedin.com/in/new-person-77/?trk=abc");
+            Check(() => edgeOn("linkedin") && em.Any, "다시 고치면 다시 핑크");
             Do(() => pe.OnSave());
             Wait(() => LiPosts()?.Count >= 1, 10f, "저장 → 가짜 서버가 받음");
             Check(() =>
@@ -253,12 +298,17 @@ namespace Redesign0926
                 return b != null && b.Count == 2 && (string)b["user_id"] == LiMe && (string)b["linkedin_id"] == "new-person-77";
             }, "저장하면 링크드인 아이디만 보낸다 (주소에서 아이디만 · 손대지 않은 칸은 안 보냄)");
             Wait(() => !Active(PfS), 6f, "저장 → 시트가 닫힘");
+            Check(() =>
+            {
+                var si = saveImg();
+                return em != null && !em.Any && si != null && near(si.color, saveBase) && Mathf.Abs(si.rectTransform.localScale.x - 1f) < 0.001f;
+            }, "「수정 → 저장」: 저장되면 핑크 표시가 지워진다 (저장 버튼도 원래 색 · 크기)");
             Wait(() => cur()?.linkedin_id == "new-person-77", 8f, "프로필이 새 아이디로 다시 그려짐");
             Check(() => pm.linkedinButton.gameObject.activeInHierarchy && pm.instagramButton.gameObject.activeInHierarchy, "저장 뒤에도 인스타 · 링크드인 칸");
 
             // 지우면 칸이 사라진다
             openEdit();
-            Check(() => inp("linkedin").text == "new-person-77", "다시 열면 아이디만 남아 있다");
+            Check(() => inp("linkedin").text == "new-person-77" && em != null && !em.Any && !edgeOn("linkedin"), "다시 열면 아이디만 남아 있다 · 핑크 표시 없음");
             type("linkedin", "");
             Do(() => pe.OnSave());
             Wait(() => LiPosts()?.Count >= 2, 10f, "지우고 저장 → 가짜 서버가 받음");

@@ -29,6 +29,7 @@ namespace Redesign0926
             FilterManager fm = null;
             PlaceData seed = null;
             bool was3D = true, movingAfterReturn = true;
+            FilterManager.PetFriendlyFilterState? petWas = null;   // 시험 동안 「모두」로 둔 애견동반 상태 (null = 손대지 않음)
             UnityWebRequest req = null;
             GLBModelLoader gl = null;
             DoubleTap3D dt = null;
@@ -120,6 +121,16 @@ namespace Redesign0926
                 fm = UnityEngine.Object.FindAnyObjectByType<FilterManager>(FindObjectsInactive.Include);
                 was3D = PlayerPrefs.GetInt("Filter_Object3D_V2", 1) == 1;
                 if (!was3D) Set3D(true);
+                // 애견동반만 보기가 켜져 있으면 시험 동안만 「모두」 — 시바견은 애견동반 장소가 아니라 배분에서 빠져 3D 가 뜨지 않았다 (11-27).
+                // 저장값은 건드리지 않는다(값만 바꾸고 저장 안 함) · 끝에서 되돌린다
+                var petF = typeof(FilterManager).GetField("petFriendlyState", NP);
+                if (fm != null && petF != null && fm.PetState == FilterManager.PetFriendlyFilterState.OnlyPetFriendly)
+                {
+                    petWas = fm.PetState;
+                    petF.SetValue(fm, FilterManager.PetFriendlyFilterState.All);
+                    typeof(FilterManager).GetMethod("ApplyAllFilters", NP)?.Invoke(fm, null);   // 매니저들(DataManager 등)의 필터 사본까지 — 저장은 하지 않는다
+                    log.Add("  애견동반만 보기가 켜져 있어 시험 동안 「모두」로 (저장값 그대로 · 끝나면 되돌림)");
+                }
                 ptFocusWas = InputSystem.settings.editorInputBehaviorInPlayMode;
                 InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;   // 에디터 창이 뒤에 있어도
                 ptTouch = InputSystem.AddDevice<Touchscreen>("PlayTestFinger");
@@ -138,12 +149,26 @@ namespace Redesign0926
                 req.Dispose();
                 if (seed == null) { log.Add("  시바견 상세: 못 받음"); return; }
                 VirtualLocation.Instance.SetCoordinates((float)(seed.latitude + 0.0003), (float)seed.longitude);   // 시바견 바로 옆
+                dm?.RefreshData();   // 옮긴 자리 둘레 목록을 바로 다시 받는다 — 1km 이동 갱신(배분 주기)을 기다리지 않게
                 fm?.TriggerReallocation();
             });
             Check(() => seed != null && seed.category == "anim" && !string.IsNullOrEmpty(seed.model_url), "시험 전제 — 시바견은 춤 모델(anim) · 모델 주소 있음");
 
             // 1) 떠 있을 땐 멈춤 — 그 모델이 가진 움직임은 붙어 있되 돌지 않는다
             Wait(() => Loaded(), 60f, "시바견 3D 가 다 떴다");
+            Do(() =>
+            {
+                if (Loaded()) return;
+                // (진단) 다 뜨지 않았을 때 — 받은 자료 · 띄운 것 · GLB 받는 중 칸 (11-27)
+                var pm = Field<Dictionary<int, PlaceData>>("placeDataMap");
+                var io = Field<Dictionary<int, GameObject>>("indicatorOnlyObjects");
+                var loading = dm != null ? typeof(DataManager).GetField("currentlyLoadingGLB", NP)?.GetValue(dm) as HashSet<int> : null;
+                object mx = dm != null ? typeof(DataManager).GetField("maxConcurrentGLBLoads", NP | BindingFlags.Public)?.GetValue(dm) : null;
+                var o = Obj();
+                var l = o != null ? o.GetComponent<GLBModelLoader>() : null;
+                PlaceData pd = pm != null && pm.TryGetValue(Dog, out var x) ? x : null;
+                log.Add($"  (진단) 자료 {(pd != null ? pd.category + "/" + pd.model_type + "/" + pd.original_model_type : "없음")} · 자료 수 {(pm != null ? pm.Count : -1)} · 띄운 것 {(o != null ? o.name + (o.activeInHierarchy ? " 켜짐" : " 꺼짐") : "없음")} · GLB 칸 {(l != null ? (l.IsModelLoaded ? "다 받음" : "아직") : "없음")} · 화살표만 {(io != null && io.ContainsKey(Dog))} · 받는 중 {(loading != null ? loading.Count : -1)}/{mx} (이 장소 {(loading != null && loading.Contains(Dog))})");
+            });
             Do(() =>
             {
                 Grab();
@@ -287,6 +312,11 @@ namespace Redesign0926
                 if (ptTouch != null && ptTouch.added) InputSystem.RemoveDevice(ptTouch);
                 ptTouch = null;
                 InputSystem.settings.editorInputBehaviorInPlayMode = ptFocusWas;
+                if (petWas.HasValue && fm != null)
+                {
+                    typeof(FilterManager).GetField("petFriendlyState", NP)?.SetValue(fm, petWas.Value);   // 3D 칩을 되돌리며 저장하기 전에 — 저장값이 바뀌지 않게
+                    typeof(FilterManager).GetMethod("ApplyAllFilters", NP)?.Invoke(fm, null);
+                }
                 if ((PlayerPrefs.GetInt("Filter_Object3D_V2", 1) == 1) != was3D) Set3D(was3D);
             });
         }

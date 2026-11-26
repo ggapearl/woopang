@@ -264,7 +264,7 @@ namespace Redesign0926
             go.transform.SetSiblingIndex(index);
         }
 
-        // 사진 칸 — 「근처 장소」에서 AR 에 없거나 먼(25m 밖) 곳. 칸(View)의 아이라 옆으로 밀리고 작아질 때 같이 간다.
+        // 사진 칸 — 「근처 장소」에서 AR 에 없는 곳(아직 안 떴거나 · 꺼진 곳 — 11-26 부터 먼 곳도 AR 에 떠 있으면 3D). 칸(View)의 아이라 옆으로 밀리고 작아질 때 같이 간다.
         // 장소 = 둥근 네모 · 사람 = 원 + 공개 범위 색 테두리 (모양 바꾸기 · 그림 · 사진은 R0926NearPhoto)
         private static R0926NearPhoto NearPhotoSlot(Transform view)
         {

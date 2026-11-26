@@ -238,6 +238,14 @@ public class ImageDisplayController : MonoBehaviour
 
     private void ApplyBaseMap(Texture2D newTexture, string imageUrl)
     {
+        if (newTexture.width != newTexture.height)
+        {
+            // 정사각형이 아닌 사진(앱 밖에서 올린 로고 · 관광공사 사진 등)이 면에 늘려 붙어 찌그러지지 않게 (11-26 대표님 13번)
+            // 투명 로고는 다 보이게 투명 여백 · 아니면 가운데를 잘라 (근처 목록 칸과 같다). 받은 것은 이 면 것이라 바꾼 뒤 지운다
+            var sq = R0926PhotoAlpha.Square(newTexture);
+            Destroy(newTexture);
+            newTexture = sq;
+        }
         if (baseMapTexture != null) Destroy(baseMapTexture);
         baseMapTexture = newTexture;
         baseMapUrl = imageUrl;

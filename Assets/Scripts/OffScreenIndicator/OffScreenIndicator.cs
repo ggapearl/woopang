@@ -155,6 +155,7 @@ public class OffScreenIndicator : MonoBehaviour
     [SerializeField] private float focusDuration = 4f;
     private Target focusTarget;
     private float focusFrom = -1f, focusUntil = -1f;
+    private Target holdTarget;   // 길안내 중인 장소 — 안내가 끝날 때까지 강조 (11-26 25번)
 
     // 각 타겟의 이전 프레임 스크린 위치/각도 캐시 (스무딩용)
     private Dictionary<Target, Vector3> previousArrowScreenPositions = new Dictionary<Target, Vector3>();
@@ -252,7 +253,30 @@ public class OffScreenIndicator : MonoBehaviour
         return true;
     }
 
-    private bool IsFocused(Target t) => t != null && (t.Pinned || (focusTarget != null && t == focusTarget && Time.unscaledTime < focusUntil));
+    /// <summary>
+    /// 길안내 중인 장소 — 안내가 끝날 때까지 강조를 이어 간다 (11-26 대표님 25번 「방향안내할 때 강조해서 인디케이터 보이는 건 방향안내가 끝날 때까지 유지하도록 해줘」).
+    /// 목록 강조(Focus)와 같은 모양 · 같은 예외(거리 흐림 · 개수 · 거리 제한 없음 · 다른 인디케이터 위). null 이면 놓는다 — R0926GuideArrow 가 잡고 놓는다
+    /// </summary>
+    public Target Held { get => holdTarget; set => holdTarget = value; }
+
+    /// <summary>이 좌표에서 within m 안의 장소 — 이름이 같은 것 먼저, 그다음 가까운 것 (사람 · 보물 · 미리보기는 뺀다). 없으면 null</summary>
+    public Target FindAt(double lat, double lon, float within, string name)
+    {
+        Target best = null;
+        float bestM = float.MaxValue;
+        bool bestSame = false;
+        foreach (var t in targets)
+        {
+            if (t == null || !t.isActiveAndEnabled || t.Pinned || t.OnIndicatorTapped != null) continue;
+            float m = t.GetGPSDistance(lat, lon);
+            if (m < 0f || m > within) continue;
+            bool same = !string.IsNullOrEmpty(name) && t.PlaceName == name;
+            if (best == null || (same && !bestSame) || (same == bestSame && m < bestM)) { best = t; bestM = m; bestSame = same; }
+        }
+        return best;
+    }
+
+    private bool IsFocused(Target t) => t != null && (t.Pinned || t == holdTarget || (focusTarget != null && t == focusTarget && Time.unscaledTime < focusUntil));
 
     // 화면 가운데 — 예전엔 Awake 에서 한 번만 재서, 가로로 돌리면 세로 기준 가운데·경계로 화살표를 놓아 대부분 화면 밖에 놓였다
     private void RefreshScreenCentre()
@@ -403,23 +427,7 @@ public class OffScreenIndicator : MonoBehaviour
             if (!target.IsAnchorReady)
             {
                 // fallback에서 전환 후 앵커 미생성 타겟의 잔류 인디케이터 정리
-                if (target.indicator != null)
-                {
-                    target.indicator.ResetForPool();
-                    target.indicator.Activate(false);
-                    target.indicator = null;
-                }
-                continue;
-            }
-
-            // 가까이 모달(R0926NearModal)이 카드에 담은 물체 — AR 화면에 없으니 화살표 · 박스도 없다
-            if (R0926NearHold.Held.Count > 0 && R0926NearHold.Held.Contains(target))
-            {
-                if (target.indicator != null)
-                {
-                    target.indicator.Activate(false);
-                    target.indicator = null;
-                }
+                ReleaseIndicator(target);
                 continue;
             }
 
@@ -440,11 +448,7 @@ public class OffScreenIndicator : MonoBehaviour
                 }
                 if (outOfRange)
                 {
-                    if (target.indicator != null)
-                    {
-                        target.indicator.Activate(false);
-                        target.indicator = null;
-                    }
+                    ReleaseIndicator(target, false);
                     continue;
                 }
             }
@@ -455,6 +459,11 @@ public class OffScreenIndicator : MonoBehaviour
             // 전환 중 fade-out 대상 (화살표→box 전환): 기존 화살표를 fade-out
             if (isTransitioning && fadeOutTargets.Contains(target))
             {
+                if (target.indicator != null && target.indicator.ownerTarget != target)
+                {
+                    target.indicator = null;   // 그새 다른 타겟에게 넘어간 칸 — 손대지 않는다 (11-26 18 · 33번)
+                    fadeOutTargets.Remove(target);
+                }
                 if (target.indicator != null)
                 {
                     float fadeT = Mathf.Clamp01((Time.time - transitionStartTime) / fallbackFadeOutDuration);
@@ -463,13 +472,13 @@ public class OffScreenIndicator : MonoBehaviour
                     if (fadeT >= 1f)
                     {
                         target.indicator.SetAlpha(1f);
-                        target.indicator.ResetForPool();
-                        target.indicator.Activate(false);
-                        target.indicator = null;
+                        ReleaseIndicator(target);
                         fadeOutTargets.Remove(target);
                     }
                     else
                     {
+                        // 흐려지는 동안에도 갱신한 것으로 — 10프레임 정리가 이 칸을 꺼 다른 타겟에게 내주지 않게
+                        target.indicator.lastUpdatedFrame = Time.frameCount;
                         arrowInfos.Add(new ArrowInfo { target = target, skipThisFrame = true });
                         continue;
                     }
@@ -528,14 +537,7 @@ public class OffScreenIndicator : MonoBehaviour
 
             // 초과분의 인디케이터 비활성화 후 제거
             for (int i = maxNormalIndicatorCount; i < arrowInfos.Count; i++)
-            {
-                Target t = arrowInfos[i].target;
-                if (t.indicator != null)
-                {
-                    t.indicator.Activate(false);
-                    t.indicator = null;
-                }
-            }
+                ReleaseIndicator(arrowInfos[i].target, false);
             arrowInfos.RemoveRange(maxNormalIndicatorCount, arrowInfos.Count - maxNormalIndicatorCount);
         }
 
@@ -609,7 +611,7 @@ public class OffScreenIndicator : MonoBehaviour
             {
                 indicator.SetImageColor(target.TargetColor);
                 bool focused = IsFocused(target);
-                indicator.SetFocus(focused && (target.Pinned || Time.unscaledTime >= focusFrom));
+                indicator.SetFocus(focused && (target.Pinned || target != focusTarget || Time.unscaledTime >= focusFrom));   // 목록에서 고른 것만 목록이 내려간 뒤에 (길안내로 붙든 것은 바로)
 
                 // 거리가 멀수록 인디케이터를 흐리게. 화살표(화면 밖)는 항상 적용,
                 // 박스(화면 안)는 fadeBoxToo 가 켜져 있을 때만 적용. 목록에서 고른 장소는 또렷하게, 다른 인디케이터 위에.
@@ -972,9 +974,7 @@ public class OffScreenIndicator : MonoBehaviour
         {
             if (target != null && target.indicator != null)
             {
-                target.indicator.ResetForPool();
-                target.indicator.Activate(false);
-                target.indicator = null;
+                ReleaseIndicator(target);
             }
         }
         disabledFallbackTargets.Clear();
@@ -986,9 +986,7 @@ public class OffScreenIndicator : MonoBehaviour
                 // 앵커 미생성 타겟: 정상 모드에서 표시할 위치가 없으므로 즉시 해제
                 if (!target.IsAnchorReady)
                 {
-                    target.indicator.ResetForPool();
-                    target.indicator.Activate(false);
-                    target.indicator = null;
+                    ReleaseIndicator(target);
                     continue;
                 }
 
@@ -1297,9 +1295,7 @@ public class OffScreenIndicator : MonoBehaviour
                 {
                     if (target.indicator != null)
                     {
-                        target.indicator.ResetForPool();
-                        target.indicator.Activate(false);
-                        target.indicator = null;
+                        ReleaseIndicator(target);
                     }
                     toRemove.Add(target);
                 }
@@ -1351,12 +1347,7 @@ public class OffScreenIndicator : MonoBehaviour
             }
 
             // 인디케이터 즉시 해제
-            if (target.indicator != null)
-            {
-                target.indicator.ResetForPool();
-                target.indicator.Activate(false);
-            }
-            target.indicator = null;
+            ReleaseIndicator(target);
             targets.Remove(target);
             disabledFallbackTargets.Remove(target);
             fallbackDataMap.Remove(target);
@@ -1389,9 +1380,39 @@ public class OffScreenIndicator : MonoBehaviour
         return strong ? Mathf.Lerp(strongFadeStartAlpha, strongFarAlpha, t) : Mathf.Lerp(indicatorFadeStartAlpha, indicatorFarAlpha, t);
     }
 
+    /// <summary>
+    /// 타겟이 쥔 인디케이터 칸을 돌려준다 — 칸이 아직 이 타겟 것일 때만 끄고(정리 뒤 다른 타겟에게 넘어간 칸은 그대로), 참조는 늘 비운다.
+    /// 남의 칸을 끄면 그 타겟의 인디케이터(주로 화살표)가 사라졌다 (11-26 대표님 18 · 33번). reset=false 는 예전처럼 끄기만.
+    /// </summary>
+    private static void ReleaseIndicator(Target target, bool reset = true)
+    {
+        Indicator ind = target.indicator;
+        target.indicator = null;
+        if (ind == null || ind.ownerTarget != target) return;
+        if (reset) ind.ResetForPool();
+        ind.Activate(false);
+    }
+
+    /// <summary>오래 갱신 안 된 칸을 돌려줄 때 주인의 참조도 비운다 — 남으면 풀이 이 칸을 다른 타겟에게 내준 뒤 두 타겟이 한 칸을 나눠 썼다 (18 · 33번).</summary>
+    private static void ReleaseStale(Indicator ind)
+    {
+        Target owner = ind.ownerTarget;
+        if (owner != null && owner.indicator == ind) owner.indicator = null;
+        ind.ResetForPool();
+        ind.Activate(false);
+    }
+
     private Indicator GetIndicator(ref Indicator indicator, IndicatorType type, Target target, Vector3 finalScreenPosition)
     {
         bool isNewlyActivated = false;
+
+        // 꺼졌거나(정리로 반납) 다른 타겟에게 넘어간 칸은 내 것이 아니다 — 꺼진 칸을 그대로 쓰면 다시 켜지지 않아 인디케이터가 안 떴고,
+        // 남의 칸을 쓰면 두 타겟이 한 칸을 나눠 써 한쪽(주로 화살표)이 사라졌다. 새 칸을 뽑는다 (11-26 대표님 18 · 33번)
+        if (indicator != null && (!indicator.gameObject.activeSelf || indicator.ownerTarget != target))
+        {
+            if (indicator.ownerTarget == target) indicator.ResetForPool();
+            indicator = null;
+        }
 
         if (indicator != null)
         {
@@ -1432,10 +1453,7 @@ public class OffScreenIndicator : MonoBehaviour
             foreach (var indicator in ArrowObjectPool.current.GetAllActiveIndicators())
             {
                 if (indicator != null && indicator.Active && currentFrame - indicator.lastUpdatedFrame > staleThreshold)
-                {
-                    indicator.ResetForPool();
-                    indicator.Activate(false);
-                }
+                    ReleaseStale(indicator);
             }
         }
 
@@ -1445,10 +1463,7 @@ public class OffScreenIndicator : MonoBehaviour
             foreach (var indicator in BoxObjectPool.current.GetAllActiveIndicators())
             {
                 if (indicator != null && indicator.Active && currentFrame - indicator.lastUpdatedFrame > staleThreshold)
-                {
-                    indicator.ResetForPool();
-                    indicator.Activate(false);
-                }
+                    ReleaseStale(indicator);
             }
         }
     }

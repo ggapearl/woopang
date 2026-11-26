@@ -101,6 +101,7 @@ public class PlaceListManager : MonoBehaviour
     private (float d, int idx)[] orderedBuffer = new (float, int)[64];
     private float[] distBuffer = new float[64];
     private const float PinnedFirst = 1e7f;   // 맨 위 줄은 정렬 열쇠에서 pin 마다 이만큼 빼 앞으로
+    private const float FestivalMaxMeters = 100000f;   // 축제 칩은 100km 안만 (11-26 대표님 · AddFestivalData)
     private const int ShelterPool = 3, FestivalPool = 3, MaxNearHunts = 3;   // 보호소 · 맨 위 축제는 가까운 세 곳 중 한 곳만 띄운다 (AddShelterData · AddFestivalData)
     private float lastGpsLat;
     private float lastGpsLon;
@@ -309,6 +310,7 @@ public class PlaceListManager : MonoBehaviour
         bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
         bool petFriendlyAll = activeFilters.GetValueOrDefault("petFriendlyAll", true);
         bool showPublic = activeFilters.GetValueOrDefault("publicData", true);
+        bool showStores = activeFilters.GetValueOrDefault("stores", true);   // 「공공데이터」 칩 — 근처 가게 + 기관 랜드마크 · 공원 · 스포츠 · 화장실 (11-26 9번)
         bool showSubway = activeFilters.GetValueOrDefault("subway", true);
         bool showTrain = activeFilters.GetValueOrDefault("train", true);
         bool showTerminal = activeFilters.GetValueOrDefault("terminal", true);
@@ -345,9 +347,11 @@ public class PlaceListManager : MonoBehaviour
                     bool isPublicData = cached.filterKey == "publicData";   // 등록자 기준 (카테고리 아님)
                     if (isPublicData)
                     {
-                        // 카테고리 필터 활성 시 publicData 토글 무시 (카테고리 매칭이 이미 필터링)
-                        if (!categoryFilterActive && !showPublic) continue;
-                        tourAPICount++;
+                        // 칩은 FilterManager.ChipKey — 기관 랜드마크 · 공원 · 스포츠 · 화장실은 「공공데이터」, 그 밖은 「공공기관」 (11-26 대표님 9번)
+                        // 카테고리 필터 활성 시 칩 무시 (카테고리 매칭이 이미 필터링)
+                        bool dataChip = FilterManager.ChipKey(cached.filterKey, cat) == "stores";
+                        if (!categoryFilterActive && !(dataChip ? showStores : showPublic)) continue;
+                        if (dataChip) storeCount++; else tourAPICount++;
                     }
                     else
                     {
@@ -382,8 +386,9 @@ public class PlaceListManager : MonoBehaviour
                     bool isPublicData = FilterManager.IsPublicSource(p.is_public, p.category);
                     if (isPublicData)
                     {
-                        if (!categoryFilterActive && !showPublic) continue;
-                        tourAPICount++;
+                        bool dataChip = FilterManager.ChipKey("publicData", p.category) == "stores";
+                        if (!categoryFilterActive && !(dataChip ? showStores : showPublic)) continue;
+                        if (dataChip) storeCount++; else tourAPICount++;
                     }
                     else
                     {
@@ -415,7 +420,7 @@ public class PlaceListManager : MonoBehaviour
 
         // 2b. 근처 가게 (소상공인 상가정보 · 「공공데이터」 칩 — 11-20 N8a) — '전체'면 칩대로, 분류를 고르면 그 분류 가게만.
         //     애견동반을 켜면 뺀다 (가게 자료엔 애견동반이 없다 — 배분 FilterManager.PetAllowed 와 같은 규칙)
-        if ((activeFilters.GetValueOrDefault("stores", true) || categoryFilterActive) && !petFriendlyOnly && storeManager != null) {
+        if ((showStores || categoryFilterActive) && !petFriendlyOnly && storeManager != null) {
             foreach (var s in storeManager.GetPlaceDataMap().Values) {
                 if (HiddenPlaces.IsHidden(StoreManager.Prefix + s.id)) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter) && s.category != activeCategoryFilter) continue;
@@ -821,6 +826,7 @@ public class PlaceListManager : MonoBehaviour
     /// <summary>
     /// 축제 칩 — 받아 둔 근처 축제 중 가깝고 곧 하는 세 곳(서버가 그 순으로 준다)에서 한 곳만 골라 목록 맨 위에 (축제 색 바탕 · 흰 글자 — R0926PlaceRows),
     /// 나머지 축제는 모두 장소와 섞여 거리순으로 아래에 — 거리 슬라이더와 상관없이 (10km 넘게 먼 축제는 장소들 아래 맨 끝 쪽).
+    /// 100km 넘게 먼 축제는 넣지 않는다 (11-26 대표님 「100km 이내까지만 · 가까운 거 상단은 그대로」 — 광고 줄은 관리자가 띄운 것이라 그대로).
     /// 11-17 대표님 K1 「'축제' 체크했을 경우 … 랜덤으로 하나만 상단에」 · 「나머지는 그냥 거리에 따라 하단에 … 10km 외에 있어도 하단에 발생하도록」.
     /// 고르는 때는 보호소와 같다 — 목록을 열 때 · 축제 칩을 켤 때 앞과 다른 곳, 그 사이 몇 초마다 다시 그릴 때는 같은 곳 (고른 곳이 세 곳에서 빠지면 그때도 다시).
     /// 줄 앞은 축제 분위기 그림, 거리 칸은 '며칠부터 · 거리'. 누르면 축제 이름으로 찾은 쪽 (R0926PlaceRows).
@@ -828,7 +834,8 @@ public class PlaceListManager : MonoBehaviour
     /// </summary>
     private void AddFestivalData(float lat, float lon)
     {
-        var pool = R0926Nearby.Festivals.Where(x => x != null && !x.promo && !string.IsNullOrEmpty(x.title)).Take(FestivalPool).ToList();
+        var pool = R0926Nearby.Festivals.Where(x => x != null && !x.promo && !string.IsNullOrEmpty(x.title)
+                                                    && CalculateDistance(lat, lon, (float)x.lat, (float)x.lon) <= FestivalMaxMeters).Take(FestivalPool).ToList();
         R0926Nearby.Festival top = null;
         if (pool.Count > 0)
         {
@@ -853,6 +860,7 @@ public class PlaceListManager : MonoBehaviour
                 pin = (byte)(f.promo ? 4 : f == top ? 3 : 0), promo = f.promo, adId = f.ad_id, emojiUrl = f.emoji_url, data = f
             };
             float d = CalculateDistance(lat, lon, e.baseLat, e.baseLon);
+            if (!f.promo && d > FestivalMaxMeters) continue;
             if (!f.promo) festivalCount++;
             combinedPlaces.Add((f, d, e.id, $"{title} - {Mathf.FloorToInt(d)}m", e.colorHex));
             liveEntries.Add(e);

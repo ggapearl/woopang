@@ -1,0 +1,13 @@
+<!-- 우팡 길안내 위치 포그라운드 서비스 (11-26 대표님 10번 ②) — 켤 때 Assets/Plugins/Android/AndroidManifest.xml 에 옮겨 넣는다 (README.md 순서대로).
+     ⚠ 이 줄들이 들어간 AAB 를 Play 에 올리기 전에 Play Console 「앱 콘텐츠 → 포그라운드 서비스 권한」 신고(위치 · 영상)를 먼저 마쳐야 한다 -->
+
+<!-- <manifest> 바로 아래 -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+<!-- <application> 안 -->
+<service
+    android:name="com.que.woopang.WoopangGuideService"
+    android:exported="false"
+    android:stopWithTask="true"
+    android:foregroundServiceType="location" />

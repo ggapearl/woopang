@@ -691,6 +691,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             LogDebug($"[TourAPIManager] ID {place.contentid} 오브젝트에 장소 이름 설정: {place.title}");
         }
         target.placeId = place.contentid;
+        target.gpsLatitude = place.mapy;   // 거리 · fallback 화살표 목록 (Target.GetGPSDistance) — 앵커가 아직 없어도 (11-26 18 · 33번 · data-managers 7번)
+        target.gpsLongitude = place.mapx;
         LogDebug($"[TourAPIManager] SetupObjectComponents 완료: ID={place.contentid}");
         return true;
     }

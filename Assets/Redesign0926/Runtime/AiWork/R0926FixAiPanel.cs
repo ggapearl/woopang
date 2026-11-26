@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// 장소 정보 수정 · 장소수정 요청 ▸ 로고 칸 「AI 작업」 (11-18 I1 대표님 「정보수정 요청, 장소정보 수정(다른 사람 요청 및 본인 요청, 우팡M 포함)
 /// 다들 각각 투명하게 만드는 거랑 AI 이용한 것들에 대한 옵션이 해당 요청에 있어서도 할 수 있도록」).
 /// 장소 추가의 AI 작업(R0926AiWorkPanel)과 같은 네 칸 — 01 투명하게 · 02 만화톤 · 03 색연필 · 04 3D 캐릭터. 02~04 는 하나만, 01 은 02·03 과만.
+/// 3D 모델 장소는 04 3D 캐릭터 한 칸만 (11-26 대표님 「3D오브젝트의 경우 … '투명 / 만화 / 색연필' 이런게 없이 그냥 '3D캐릭터' 수정만」).
 /// 누르면 수정 카드가 그 자리에서 AI 화면이 된다: ‹ · 안내 한 줄 · 큰 미리보기 · 네 칸 · (04) 요청사항 + 만들기 · 맨 아래 취소 | 확인.
 /// 고르는 즉시 「작업 중..」 → 미리보기에 바로 (투명한 곳은 바둑판). 캐릭터는 미리보기 칸에서 천천히 좌우로 돈다 (R0926ProfileModelView).
 /// ‹ · 뒤로가기 · 확인 = 로고 칸에 넣는다 (CubeDataFixManager.ApplyAi — 투명하면 PNG, 캐릭터면 정지 사진 + 3D 모델로 저장 · 요청). 취소 = 그대로.
@@ -174,6 +175,12 @@ public class R0926FixAiPanel : MonoBehaviour
         style = keptStyle;
         variant = keptVariant;
         lastRequest = keptRequest;
+        bool only3d = manager.IsModelPlace;
+        if (only3d)
+        {
+            clear = false;
+            if (style != R0926AiWork.Style.Character) style = R0926AiWork.Style.None;
+        }
         if (request != null) request.text = keptRequest;
         Drop(ref made);
         madeNone = false;
@@ -181,7 +188,9 @@ public class R0926FixAiPanel : MonoBehaviour
         ShowView(true);
         ShowCurrent();
         if (status != null && !working)
-            status.text = manager.AiSource == null && !manager.AiOn
+            status.text = only3d ? R0926LocalizedText.Say("3D 캐릭터를 누르면 바로 만들어요", "3D 캐릭터를 누르면 바로 만들어요", "3D 캐릭터를 누르면 바로 만들어요",
+                    "3D 캐릭터를 누르면 바로 만들어요", "3D 캐릭터를 누르면 바로 만들어요")
+                : manager.AiSource == null && !manager.AiOn
                 ? R0926LocalizedText.Say("로고 사진이 없어요 — 3D 캐릭터는 사진 없이도 만들어요", "No logo photo — a 3D character needs none",
                     "ロゴ写真がありません — 3Dキャラは写真なしで作れます", "没有标志照片 — 3D角色不需要照片", "Sin foto de logo — el personaje 3D no la necesita")
                 : R0926LocalizedText.Say("원하는 효과를 고르세요 — 고르면 바로 바뀌어요", "Pick an effect — it changes right away",
@@ -310,6 +319,7 @@ public class R0926FixAiPanel : MonoBehaviour
     private void Pick(int i)
     {
         if (!open || manager == null) return;
+        if (i < 3 && manager.IsModelPlace) return;   // 3D 모델 장소는 3D 캐릭터만
         if (i == 0)
         {
             clear = !clear;
@@ -521,6 +531,9 @@ public class R0926FixAiPanel : MonoBehaviour
         if (aiButtonBg != null) aiButtonBg.color = lit ? Pink : AiOff;
         if (aiButtonIcon != null) aiButtonIcon.color = lit ? Ink : Pink;
         bool hasPhoto = manager != null && manager.AiSource != null;
+        bool only3d = manager != null && manager.IsModelPlace;   // 01~03 을 숨기면 가로 줄이 3D 캐릭터 한 칸으로 채운다
+        for (int i = 0; i < 3 && i < chips.Length; i++)
+            if (chips[i] != null && chips[i].gameObject.activeSelf == only3d) chips[i].gameObject.SetActive(!only3d);
         for (int i = 0; i < 4; i++)
         {
             bool on = i == 0 ? clear : (int)style == i;

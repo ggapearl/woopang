@@ -425,8 +425,8 @@ namespace Redesign0926
             Do(() => log.Add("  큐브 안내: " + state()));
             Do(() => NmPut(cube, 1.5f));
             Wait(() => !ga.EditorGuiding, 3f, "2m 안 — 가까이 카드가 이어 받음");
-            Check(() => !ga.EditorGuiding && nmModal.EditorCount >= 1 && nmModal.EditorCurrent == cube && cubeT != null && R0926NearHold.Held.Contains(cubeT),
-                "안내하던 장소가 2m 안에 들어와 가까이 카드에 담기면 화살표 안내는 끝 (카드가 이어 받는다)");
+            Check(() => !ga.EditorGuiding && nmModal.EditorCount >= 1 && nmModal.EditorCurrent == cube && cubeT != null && nmModal.TookOver(cubeT) && NmLayers(cube, l => l < 28),
+                "안내하던 장소가 2m 안에 들어와 「발견한 장소」 카드에 뜨면 화살표 안내는 끝 (카드가 이어 받는다 · AR 화면의 물체는 그대로)");
             Shot("ga_handoff");
             Do(() => NmPut(cube, 12f));
             Wait(() => !nmModal.EditorCardOn, 3f, "카드 치움");
@@ -533,14 +533,16 @@ namespace Redesign0926
                 log.Add($"  버튼 줄 화면 x {lo:0} ~ {hi:0} (폭 {Screen.width})");
                 return lo >= 0f && hi <= Screen.width;
             }, "한 칸 늘어난 버튼 줄도 모두 화면 안 (줄을 왼쪽으로 옮김)");
-            // F1 (11-17 대표님 「핑크색이 진하면 안되고 투명도 40정도로 … 동그라미 중앙이 안맞거든?」)
+            // F1 (11-17 대표님 「… 동그라미 중앙이 안맞거든?」) → 20번 (11-26 대표님 「길안내 … 동그라미 흰색 원에 … 방향표시가 흰색으로 · '...' … 흰색으로만 (동그라미, 배경없이) · 투명도 없이」)
             Check(() =>
             {
                 var gi = dg.GetComponent<Image>();
                 var fi = dg.transform.parent.Find("FixButton")?.GetComponent<Image>();
+                var fii = fi != null ? fi.transform.Find("Icon0926")?.GetComponent<Image>() : null;
                 var icon = dg.transform.Find("Icon0926") as RectTransform;
                 var ii = icon != null ? icon.GetComponent<Image>() : null;
-                if (gi == null || fi == null || ii == null || ii.sprite == null) return false;
+                if (gi == null || fi == null || fii == null || ii == null || ii.sprite == null) return false;
+                Func<Color, bool> solidWhite = c => c.a > 0.99f && c.r > 0.99f && c.g > 0.99f && c.b > 0.99f;
                 // 45° 돌린 화살표 모양(그림의 보이는 픽셀)의 테두리 가운데 · 무게 가운데가 동그라미 가운데에서 얼마나 비켜 있나
                 // (스프라이트 외곽 메시는 모양보다 넉넉해 2 가량 더 비켜 보인다 — 그림 파일을 직접 읽어 잰다)
                 var tex = new Texture2D(2, 2);
@@ -565,11 +567,12 @@ namespace Redesign0926
                     }
                 if (n == 0) return false;
                 Vector2 box = icon.anchoredPosition + (lo + hi) * 0.5f, mass = icon.anchoredPosition + sum / n;
-                log.Add($"  길안내 동그라미 {gi.color} · 「···」 {fi.color} · 화살표 테두리 가운데 {box.x:0.0}, {box.y:0.0} · 무게 가운데 {mass.x:0.0}, {mass.y:0.0} (동그라미 {((RectTransform)dg.transform).rect.size} · 「···」 {((RectTransform)fi.transform).rect.size})");
-                return Mathf.Abs(gi.color.a - 0.4f) < 0.02f && gi.color.r > 0.85f && gi.sprite == fi.sprite
+                log.Add($"  길안내 원 {gi.sprite?.name} {gi.color} · 화살표 {ii.color} · 「···」 바탕 {fi.color} · 점 {fii.sprite?.name} {fii.color} · 화살표 테두리 가운데 {box.x:0.0}, {box.y:0.0} · 무게 가운데 {mass.x:0.0}, {mass.y:0.0} (원 {((RectTransform)dg.transform).rect.size} · 「···」 {((RectTransform)fi.transform).rect.size})");
+                return gi.sprite != null && gi.sprite.name == "r0926_ring_line" && solidWhite(gi.color) && solidWhite(ii.color)
+                    && fi.color.a < 0.01f && fi.raycastTarget && fii.sprite != null && fii.sprite.name == "r0926_i_more" && solidWhite(fii.color)
                     && Mathf.Abs(box.x) < 3.5f && Mathf.Abs(box.y) < 3.5f && Mathf.Abs(mass.x) < 3.5f && Mathf.Abs(mass.y) < 3.5f
                     && ((box + mass) * 0.5f).magnitude < 1f;   // 눈에 보이는 가운데 — 테두리 가운데와 무게 가운데의 중간
-            }, "「길안내」 동그라미는 「···」처럼 비친다 — 분홍 40% · 같은 동그라미 그림 · 화살표 모양은 동그라미 가운데 (F1)");
+            }, "「길안내」는 흰 테두리 원 + 흰 화살표 · 「···」는 바탕 없이 흰 점만 — 둘 다 투명도 없이 · 화살표 모양은 원 가운데 (11-26 대표님 20번)");
             Shot("ga_detail_btn");
             Press(() => topRect("GuideButton0926")?.center, 0.08f, null);
             Sleep(0.3f);
@@ -585,16 +588,42 @@ namespace Redesign0926
             Wait(() => ga.EditorHidden, 1.5f, "안내 끝");
             // 가까이 카드가 그 장소를 담고 있으면(바로 앞) 숨는다 — 안내를 시작해도 카드가 바로 이어 받아 끝난다
             Do(() => NmPut(cube, 1.5f));
-            Wait(() => nmModal.EditorShowing && cubeT != null && R0926NearHold.Held.Contains(cubeT), 3f, "가까이 카드에 그 큐브");
+            Wait(() => nmModal.EditorShowing && cubeT != null && nmModal.TookOver(cubeT), 3f, "가까이 카드에 그 큐브");
             Do(() => cube.GetComponentInChildren<DoubleTap3D>(true)?.OpenInfo());
             Wait(infoOpen, 4f, "정보 창");
             Sleep(0.3f);
-            Do(() => log.Add($"  가까이 카드에 담긴 채 연 정보 창: 담김 {R0926NearHold.Held.Contains(cubeT)} · 「길안내」 {(dgOn() ? "보임" : "숨음")}"));
-            Check(() => R0926NearHold.Held.Contains(cubeT) ? !dgOn() && dg.GetComponent<CanvasGroup>().alpha < 0.01f : dgOn(), "「길안내」는 가까이 카드에 담긴 장소면 숨김 · 정보 창이 카드를 내려 담김이 풀리면 보임");
+            Do(() => log.Add($"  가까이 카드에 뜬 채 연 정보 창: 카드가 띄움 {nmModal.TookOver(cubeT)} · 「길안내」 {(dgOn() ? "보임" : "숨음")}"));
+            Check(() => nmModal.TookOver(cubeT) ? !dgOn() && dg.GetComponent<CanvasGroup>().alpha < 0.01f : dgOn(), "「길안내」는 「발견한 장소」 카드가 띄운 장소면 숨김 · 정보 창이 카드를 내리면 보임");
             Do(() => DoubleTap3D.CloseShown());
             Wait(() => !Active("FullScreenPanel"), 3f, "정보 창 닫힘");
             Do(() => NmPut(cube, 12f));
             Wait(() => !nmModal.EditorCardOn, 3f, "카드 치움");
+
+            // 「근처 장소」(위로 밀기)에서 두 번 톡톡 → 정보 창의 「길안내」 — 안내가 시작되면 카드도 함께 닫힌다 (11-26 대표님 28번)
+            bool nearOpened = false;
+            Do(() => { NmPut(cube, 6f); nearOpened = nmModal.EditorOpenNearby(); });
+            Wait(() => !nearOpened || nmModal.EditorShowing, 3f, "근처 장소 카드");
+            Do(() =>
+            {
+                if (!nearOpened) { log.Add("  「근처 장소」를 못 띄움"); return; }
+                for (int k = 0; k < nmModal.EditorCount; k++) if (nmModal.EditorItem(k) == cube) { nmModal.EditorGo(k); break; }
+            });
+            Sleep(0.7f);
+            Do(() => { if (nearOpened) { nmModal.EditorTap(); nmModal.EditorTap(); } });
+            Wait(infoOpen, 4f, "근처 장소에서 연 정보 창");
+            Sleep(0.3f);
+            Do(() => log.Add($"  근처 장소에서 연 정보 창: {(DoubleTap3D.Shown == null ? "없음" : R0926PlaceInfo.IsHost(DoubleTap3D.Shown) ? "대리 창" : DoubleTap3D.Shown.transform.IsChildOf(cube.transform) ? "그 큐브의 창" : "AR 장소의 창")} · 「길안내」 {(dgOn() ? "보임" : "숨음")} · 카드 {nmModal.EditorMode}"));
+            Press(() => topRect("GuideButton0926")?.center, 0.08f, null);
+            Sleep(0.3f);
+            Check(() => nearOpened && ga.EditorGuiding && (nmModal.EditorClosing || !nmModal.EditorCardOn),
+                "「근처 장소」에서 연 정보 창의 「길안내」 — 안내가 시작되면 카드도 함께 닫힌다 (11-26 대표님)");
+            Wait(() => DoubleTap3D.Shown == null && !nmModal.EditorCardOn, 3f, "정보 창 · 카드 닫힘");
+            Sleep(1.2f);
+            Check(() => DoubleTap3D.Shown == null && !nmModal.EditorCardOn && nmModal.EditorMode == "None" && ga.EditorGuiding,
+                "정보 창이 닫혀도 카드는 다시 안 뜨고 길 안내는 그대로");
+            Do(() => R0926GuideArrow.Stop());
+            Wait(() => ga.EditorHidden, 1.5f, "안내 끝");
+            Do(() => NmPut(cube, 12f));
 
             // 11c) 지도 핀 — 꾹 눌러 꽂은 핀 말풍선의 「길안내」 → 그 좌표로 안내, 시트(목록 · 지도)는 내려간다
             //      (11-16 대표님 「지도에서 좌표찍은 핀을 길게 누르면 여기서도 길안내버튼이 발생해서 누르면 길안내 하도록」)
@@ -907,9 +936,9 @@ namespace Redesign0926
                 Vector3 dv = cube != null && cam != null ? cube.transform.position - cam.transform.position : Vector3.zero;
                 var dm = UnityEngine.Object.FindAnyObjectByType<DataManager>();
                 bool listed = dm != null && dm.GetSpawnedObjects() != null && dm.GetSpawnedObjects().ContainsValue(cube);
-                log.Add($"  이어 받기: {state()} · 노치 안내 {notch.EditorGuiding} · 카드 {nmModal.EditorCardOn}/{nmModal.EditorShowing} {nmModal.EditorCount}개 · 카드 켜짐 {nmModal.isActiveAndEnabled} · 담김 {(cubeT != null && R0926NearHold.Held.Contains(cubeT))} · 치운 것 {nmModal.EditorDismissed(cube)} · 큐브 {(cube != null && cube.activeInHierarchy)} · 보임 {NmVisible(cube)} · 땅 위 {new Vector2(dv.x, dv.z).magnitude:0.0}m 높이 {dv.y:0.0} · 매니저 목록 {listed}");
+                log.Add($"  이어 받기: {state()} · 노치 안내 {notch.EditorGuiding} · 카드 {nmModal.EditorCardOn}/{nmModal.EditorShowing} {nmModal.EditorCount}개 · 카드 켜짐 {nmModal.isActiveAndEnabled} · 카드가 띄움 {(cubeT != null && nmModal.TookOver(cubeT))} · 치운 것 {nmModal.EditorDismissed(cube)} · 큐브 {(cube != null && cube.activeInHierarchy)} · 보임 {NmVisible(cube)} · 땅 위 {new Vector2(dv.x, dv.z).magnitude:0.0}m 높이 {dv.y:0.0} · 매니저 목록 {listed}");
             });
-            Check(() => !ga.EditorGuiding && !notch.EditorGuiding && cubeT != null && R0926NearHold.Held.Contains(cubeT),
+            Check(() => !ga.EditorGuiding && !notch.EditorGuiding && cubeT != null && nmModal.TookOver(cubeT),
                 "가까이 카드가 이어 받아 화살표가 끝나면 노치 안내도 같이 끝");
             Do(() => NmPut(cube, 12f));
             Wait(() => !nmModal.EditorCardOn, 3f, "카드 치움");

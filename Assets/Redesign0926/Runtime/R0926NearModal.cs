@@ -14,12 +14,14 @@ using UnityEngine.UI;
 ///  ① 「발견한 장소」 — 걸어서 4m 안에 들어온 오브젝트 하나만. AR 화면이 뜨고 10초 뒤부터 · 설정 없음(늘 켜짐).
 ///     닫으면(× · 아래로 밀기) 앱을 끌 때까지 그 장소는 다시 안 뜬다. 한 번 뜨면 5초는 4m 밖이어도 머물고, 그 뒤엔 4.6m 안에 있는 동안.
 ///  ② 「근처 장소」 — 목록(필터 · 분류 반영) 가까운 순 10곳, 한 번 뜨면 그 10곳 고정. 앱을 껐다 켤 때 2초 뒤 한 번
-///     (설정 「앱 시작 시 근처 장소 보기」 · 백그라운드에서 돌아올 땐 안 뜸), 그리고 AR 화면을 아래→위로 밀면 언제든
+///     (설정 「앱 시작 시 근처 장소 보기」 · 백그라운드에서 돌아올 땐 안 뜸 · 첫 설치는 사용가이드가 끝나고 1초 뒤 — 11-26 26번 ShowAfterGuide), 그리고 AR 화면을 아래→위로 밀면 언제든
 ///     (하늘 오브젝트가 떠 있을 때 · 오브젝트를 만지며 민 손가락 · 창 위에서 민 것은 빼고).
 ///     반대로 위→아래로 밀면 하늘 판을 화면 위쪽에 고정해 편다 — 휴대폰을 하늘로 들지 않아도 (11-24 대표님 「상단에서 아래로 스와이프하면 바로 하늘보기 발생하도록」 · R0926SkyWeather.ShowAtTop).
 ///     목록의 보물찾기도 들지만 여기서 두 번 눌러도 열지 않는다 — 「직접 찾아가서」 안내만 (11-20 대표님 H6 · 열기는 「발견한 장소」에서 · 상자 앞 4m 면 연다).
-/// 오브젝트는 전용 카메라가 투명 배경으로 찍어 RawImage 에 (핀치 줌 · 관리자 크기와 상관없이 늘 같은 크기), 그동안 AR 화면에선 빠진다(빈 레이어 28~31).
-/// 「근처 장소」에서 AR 에 없거나 25m 밖인 곳은 3D 대신 대표 사진(R0926NearPhoto) — 멀리 흐리게(R0926DistanceFade)가 25m 부터 흐려 3D 가 옅게 찍힌다.
+/// 오브젝트는 전용 카메라가 투명 배경으로 찍어 RawImage 에 (핀치 줌 · 관리자 크기와 상관없이 늘 같은 크기) — 찍는 그 순간만 그 칸 레이어(29~31)로 빌렸다가 바로 되돌린다(R0926NearHold).
+/// 그래서 AR 화면의 물체 · 화면 밖 화살표 · 박스는 그대로 있다 (11-26 대표님 「근처모달에서는 해당 근처 오브젝트를 복사만 해오도록」 — 예전엔 카드에 담는 동안 AR 화면에서 빼서 인디케이터도 꺼졌다).
+/// 「근처 장소」는 AR 에 떠 있으면 거리와 상관없이 3D (11-26 대표님 「어떤 건 3D오브젝트로 보이는데 어떤 것들은 그냥 메인사진만」 — 예전엔 25m 밖이면 사진),
+/// AR 에 없는 곳(아직 안 떴거나 · 꺼졌거나 · 앵커 전)만 대표 사진(R0926NearPhoto). 멀리 흐리게(R0926DistanceFade)로 옅어진 것도 찍는 순간엔 가까이에서 보는 모습으로.
 /// 여러 개면 옆으로 넘긴다 (아래 점 · ‹ ›). 두 번 톡톡 = AR 에서 두 번 누른 것과 같다 (장소 정보 · 프로필 · 보물 열기) · 사진 칸은 목록 사진을 누른 것과 같다.
 /// 바탕은 물방울메뉴면 물방울 유리(R0926Glass), 기본메뉴면 진한 반투명. 창이 열리면 숨는다.
 /// </summary>
@@ -50,8 +52,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
 
     private const float Enter = 4f, Leave = 4.6f, Teleport = 10f, MaxRise = 15f, HoldFor = 5f, RearmAfter = 1f, TickEvery = 0.25f;
     private const float FoundAfter = 10f, ResumeGrace = 10f, StartAfter = 2f, StartGiveUp = 20f, RemapEvery = 1f;
-    private const int NearbyCount = 10, ParkLayer = 28;
-    private const float Solid3D = 25f, Solid3DKeep = 28f;            // 「근처 장소」를 3D 로 찍는 거리 (한 번 3D 면 28m 까지)
+    private const int NearbyCount = 10;
     private const float SwipeUpMin = 0.12f, SwipeUpTime = 1f;        // 위로 · 아래로 밀기 — 화면 높이의 12% 를 1초 안에
     private const float PullClose = 220f, PullFling = 1600f, PullFlingMin = 40f, PullSlide = 1800f;   // 아래로 밀어 닫기 (캔버스 단위)
     private const float PhotoFade = 0.25f, InfoWait = 8f, PhotoRetry = 30f;
@@ -76,7 +77,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         public GameObject obj;               // 「근처 장소」는 AR 에 없으면 null (사진)
         public Kind kind;
         public float dist, since, aimAt;
-        public R0926NearHold hold;
+        public Target target;                // 화면 밖 화살표 · 박스의 대상 — 「발견한 장소」가 길안내를 이어 받았나 (TookOver)
         public DoubleTap3D info;
         public Object3DTouchHaptic haptic;
         public P2PUserInfo person;
@@ -150,6 +151,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     private Mode mode;
     private bool closing;                 // 닫는 중 — 카드가 사라지면 비운다
     private float liveAt, resumeAt = -1f, nextStartTry;
+    private float afterGuideAt = -1f;   // 첫 설치 사용가이드가 닫힌 뒤 「근처 장소」를 띄울 때 (ShowAfterGuide · 11-26 26번)
     private bool live, away;              // live: AR 화면이 떴다 (liveAt 이 정해짐)
 
     // 위로 · 아래로 밀기 (AR 화면)
@@ -203,25 +205,62 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     /// <summary>카드가 떠 있다 (나타나는 중 · 사라지는 중 포함) — 아래 길안내 화살표(R0926GuideArrow)는 그동안 숨는다</summary>
     public bool Showing => cardOn;
 
-    /// <summary>길안내 대상을 「발견한 장소」 카드가 담았다 — 안내는 거기서 끝 (R0926GuideArrow). 「근처 장소」 10곳에 든 것은 안내를 이어 간다</summary>
-    public bool TookOver(Target t) => mode == Mode.Found && t != null && R0926NearHold.Held.Contains(t);
+    /// <summary>길안내 대상을 「발견한 장소」 카드가 띄웠다 — 안내는 거기서 끝 (R0926GuideArrow). 「근처 장소」 10곳에 든 것은 안내를 이어 간다</summary>
+    public bool TookOver(Target t) => mode == Mode.Found && cardOn && t != null && items.Count > 0 && items[0].target == t;
+
+    /// <summary>TookOver — 카드를 들고 있지 않은 곳에서 (장소 상세의 「길안내」 · R0926DetailGuide)</summary>
+    public static bool FoundHas(Target t) => instance != null && instance.TookOver(t);
+
+    /// <summary>
+    /// 정보 창의 「길안내」로 안내를 시작했다 — 카드도 × 처럼 닫는다 (정보 창이 닫혀도 다시 안 뜬다).
+    /// 11-26 대표님 「근처장소에서 더블터치하고 길 안내할 경우에는 … 근처장소 모달도 길 안내와 함께 사라지도록」
+    /// </summary>
+    public static void CloseForGuide()
+    {
+        if (instance != null) instance.Close(false);
+    }
+
+    /// <summary>
+    /// 첫 설치 사용가이드가 끝났다 — delay 초 뒤 「근처 장소」 (11-26 대표님 26번 「처음 앱 설치한 사람도 사용가이드 끝나면 '근처 장소' 1초 후에 바로 보이도록」).
+    /// 첫 실행엔 권한 창(카메라 · 위치)이 앱을 잠깐 멈춰 「앱 시작 시 근처 장소」가 백그라운드에서 돌아온 것으로 건너뛰어졌다. 설정 「앱 시작 시 근처 장소 보기」를 따른다 (FirstTimeGuide)
+    /// </summary>
+    public static void ShowAfterGuide(float delay)
+    {
+        if (instance != null) instance.afterGuideAt = Time.unscaledTime + Mathf.Max(0f, delay);
+    }
+
+    private static R0926NearModal instance;
+    private readonly R0926NearHold lend = new R0926NearHold();   // 칸 카메라가 찍는 동안만 빌린 물체 (BeginShot · EndShot)
 
     private void Awake()
     {
+        instance = this;
         if (close != null) close.onClick.AddListener(() => Close(false));
         if (prevButton != null) prevButton.onClick.AddListener(() => Go(target - 1));
         if (nextButton != null) nextButton.onClick.AddListener(() => Go(target + 1));
         if (card != null) card.gameObject.SetActive(false);
     }
 
+    private void OnEnable()
+    {
+        UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering += BeginShot;
+        UnityEngine.Rendering.RenderPipelineManager.endCameraRendering += EndShot;
+        RemoveRequest.PlaceDeleted += OnPlaceDeleted;
+    }
+
     private void OnDisable()
     {
+        UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering -= BeginShot;
+        UnityEngine.Rendering.RenderPipelineManager.endCameraRendering -= EndShot;
+        RemoveRequest.PlaceDeleted -= OnPlaceDeleted;
+        lend.Return();
         Shut();
         infoRoutine = null;
     }
 
     private void OnDestroy()
     {
+        if (instance == this) instance = null;
         Shut();
         FreePhotos();
         if (camRoot != null) Destroy(camRoot.gameObject);
@@ -245,6 +284,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         if (!Quiet)
         {
             StartNearby(now);
+            AfterGuide(now);
             Swipe(now);
         }
         if (now >= nextTick) { nextTick = now + TickEvery; Tick(now); }
@@ -292,6 +332,16 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         nextStartTry = now + 1f;
         if (OpenNearby(now, false)) startShown = true;
         else if (now - liveAt > StartAfter + StartGiveUp) startShown = true;   // 목록이 끝내 비었다 — 이번 실행은 건너뛴다
+    }
+
+    // 첫 설치 사용가이드 뒤 — 가이드가 닫히고 1초 동안은 카드를 기다리게 하고(Covered — 이미 받아 둔 「근처 장소」도 닫히자마자 튀어나오지 않게) 그 뒤 AR 화면이면 「근처 장소」.
+    // 그새 창을 열었으면(가이드 중 하단 버튼 · 설정 등) 다른 일을 하는 중이라 건너뛴다 · 목록이 비었으면 20초까지 1초마다 다시
+    private void AfterGuide(float now)
+    {
+        if (afterGuideAt < 0f || now < afterGuideAt || now < nextStartTry) return;
+        if (!R0926PlaceSettings.NearOnStart || mode == Mode.Nearby || WindowOpen() || now - afterGuideAt > StartGiveUp) { afterGuideAt = -1f; return; }
+        nextStartTry = now + 1f;
+        if (OpenNearby(now, false)) { afterGuideAt = -1f; startShown = true; }
     }
 
     // AR 화면을 아래→위로 밀면 「근처 장소」, 위→아래로 밀면 하늘 판 (11-24) — 누른 손가락 하나를 끝까지 따라간다 (R0926KeyboardSwipe 와 같다)
@@ -357,22 +407,14 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     }
 
     // 누른 자리가 맨 AR 화면이어야 — 시작 화면 · 덮는 창 · 하늘 오브젝트 · UI · 오브젝트(만지며 민 것)는 빼고
-    private static readonly RaycastHit[] upHits = new RaycastHit[16];
-
     private bool CanSwipe(Vector2 at)
     {
         if (BootOverlay.Showing || Covered()) return false;
         if (!WorldTouch.Free(at)) return false;
         var main = Camera.main;
         if (main == null) return false;
-        // 오브젝트 위에서 민 것은 받지 않는다 (돌리기 · 두 번 톡톡) — 카드에 담겨 AR 화면에 안 보이는 것은 빼고 (콜라이더만 그 자리에 남아 있다)
-        int n = Physics.RaycastNonAlloc(main.ScreenPointToRay(at), upHits, 2000f, Physics.DefaultRaycastLayers & ~NearMask, QueryTriggerInteraction.Collide);
-        for (int i = 0; i < n; i++)
-        {
-            var hold = upHits[i].collider.GetComponentInParent<R0926NearHold>();
-            if (hold == null || hold.Layer < 0) return false;
-        }
-        return true;
+        // 오브젝트 위에서 민 것은 받지 않는다 (돌리기 · 두 번 톡톡) — 카드에 띄운 것도 AR 화면에 그대로 있다 (11-26)
+        return !Physics.Raycast(main.ScreenPointToRay(at), 2000f, Physics.DefaultRaycastLayers & ~NearMask, QueryTriggerInteraction.Collide);
     }
 
     private void NothingNear()
@@ -411,7 +453,6 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         }
         if (picks.Count > NearbyCount) picks.RemoveRange(NearbyCount, picks.Count - NearbyCount);
 
-        foreach (var old in items) Release(old);
         FreePhotos();
         items.Clear();
         FindManagers(now);
@@ -419,8 +460,6 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         closing = sliding = pulling = false;
         pull = pullV = 0f;
         tapItem = null;
-        var main = Camera.main;
-        Vector3 me = main != null ? main.transform.position : Vector3.zero;
         for (int i = 0; i < picks.Count; i++)
         {
             var e = picks[i];
@@ -442,7 +481,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         nextMap = now + RemapEvery;
         foreach (var it in items)
         {
-            it.solid = Solid(it, me);
+            it.solid = Solid(it);
             it.mix = it.solid ? 0f : 1f;
             it.photoKey = PhotoKeyFor(it.entry);
         }
@@ -519,7 +558,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         double la = 0, lo = 0;
         foreach (var it in items)
         {
-            if (!closing) it.solid = Solid(it, me);
+            if (!closing) it.solid = Solid(it);
             if (Live(it) && Anchored(it.obj)) it.dist = Flat(At(it.obj, it.kind), me, out _);
             else
             {
@@ -620,7 +659,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     private Item Make(Near n, float now)
     {
         var go = n.obj;
-        var it = new Item { obj = go, kind = n.kind, dist = n.dist, since = now, key = n.key };
+        var it = new Item { obj = go, kind = n.kind, dist = n.dist, since = now, key = n.key, target = go.GetComponentInChildren<Target>(true) };
         switch (n.kind)
         {
             case Kind.Place:
@@ -731,9 +770,8 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     private void Bind(Item it, GameObject go)
     {
         if (ReferenceEquals(it.obj, go)) return;
-        if (it.hold != null) it.hold.Release();
         it.obj = go;
-        it.hold = null;
+        it.target = go != null ? go.GetComponentInChildren<Target>(true) : null;
         it.info = null;
         it.haptic = null;
         it.person = null;
@@ -750,13 +788,8 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         }
     }
 
-    // 3D 로 찍을까 — AR 에 떠 있고(보이고 · 앵커가 있고) 25m 안 (한 번 3D 면 28m 까지 — 경계에서 깜빡이지 않게)
-    private bool Solid(Item it, Vector3 me)
-    {
-        if (!Live(it) || !Visible(it.obj) || !Anchored(it.obj) || Stale(it)) return false;
-        float d = Flat(At(it.obj, it.kind), me, out float dy);
-        return d <= (it.solid ? Solid3DKeep : Solid3D) && Mathf.Abs(dy) <= MaxRise;
-    }
+    // 3D 로 찍을까 — AR 에 떠 있으면(보이고 · 앵커가 있고) 거리와 상관없이 (11-26 대표님 3번 — 예전엔 25m 안만, 그 밖은 사진이라 섞여 보였다)
+    private bool Solid(Item it) => Live(it) && Visible(it.obj) && Anchored(it.obj) && !Stale(it);
 
     private static bool Live(Item it) => it.obj != null && it.obj.activeInHierarchy;
 
@@ -789,15 +822,17 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
 #endif
     }
 
-    private static void Release(Item it)
-    {
-        if (it != null && it.hold != null) it.hold.Release();
-    }
-
     private bool Covered()
     {
         if (R0926GuideOverlay.BlocksWorld) return true;
         if (sky != null && sky.SkyShowing) return true;   // 하늘을 올려다보는 동안 — 하늘의 판(월드 캔버스)을 화면 카드가 가리지 않게
+        if (WindowOpen()) return true;
+        if (afterGuideAt >= 0f && Time.unscaledTime < afterGuideAt) return true;   // 첫 설치 사용가이드가 닫히고 1초 (26번)
+        return false;
+    }
+
+    private bool WindowOpen()
+    {
         if (covers != null)
             foreach (var c in covers)
                 if (c != null && c.activeInHierarchy) return true;
@@ -1055,7 +1090,6 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     private void Shut()
     {
         if (shots != null) foreach (var sh in shots) Free(sh);
-        foreach (var it in items) Release(it);
         if (card != null && card.gameObject.activeSelf) card.gameObject.SetActive(false);
         cardOn = false;
         current = null;
@@ -1065,10 +1099,9 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         vis = 0f;
     }
 
-    // 카드가 사라졌다 — 담았던 것 · 사진을 놓고 처음으로
+    // 카드가 사라졌다 — 사진을 놓고 처음으로
     private void EndMode()
     {
-        foreach (var it in items) Release(it);
         FreePhotos();
         items.Clear();
         mode = Mode.None;
@@ -1119,7 +1152,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         sh.item = null;
     }
 
-    // 화면에 그리는 카메라(AR 카메라 등)에서 빈 레이어 28~31 을 뺀다 — 카드에 담은 물체가 AR 화면에서 빠진다.
+    // 화면에 그리는 카메라(AR 카메라 등)에서 칸 레이어 28~31 을 뺀다 — 물체는 칸 카메라가 빌려 찍는 동안만 그 레이어에 있다(BeginShot) · 혹시 남아도 AR 화면엔 안 나오게.
     // 판에 찍는 카메라(보물 축하 · 미리보기)는 그대로 — 축하 화면이 데려간 보물은 계속 찍힌다
     private void Strip()
     {
@@ -1135,9 +1168,53 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         System.Array.Clear(camBuf, 0, n);
     }
 
+    // 칸 카메라가 찍기 직전 — 그 칸의 물체를 이 카메라 레이어로 빌리고(멀리 흐리게도 가까이 값으로), 다 찍으면 바로 되돌린다.
+    // AR 카메라 · 다른 카메라가 찍을 땐 원래 레이어 · 원래 값 그대로다 (11-26 대표님 「복사만 해오도록」)
+    private void BeginShot(UnityEngine.Rendering.ScriptableRenderContext ctx, Camera cam)
+    {
+        if (shots == null || cam == null || !cardOn) return;
+        for (int s = 0; s < shots.Length; s++)
+        {
+            var sh = shots[s];
+            if (sh.cam != cam) continue;
+            var it = sh.item;
+            if (it != null && Live(it)) lend.Lend(it.obj, sh.layer, it.kind == Kind.Place);
+            return;
+        }
+    }
+
+    private void EndShot(UnityEngine.Rendering.ScriptableRenderContext ctx, Camera cam) => lend.Return();
+
     private Item At(int k) => k >= 0 && k < items.Count ? items[k] : null;
 
-    // 꺼진 물체(풀로 돌아감) — 「발견한 장소」는 바로 빼고, 「근처 장소」는 사진으로 (걸린 레이어는 R0926NearHold 가 꺼질 때 되돌렸다)
+    // 내 장소를 지웠다(정보 창 「삭제」 — RemoveRequest) — 「근처 장소」 칸에서도 바로 뺀다 (11-26 대표님 — AR 에서 빠진 곳처럼 사진으로 남지 않게).
+    // 뒤 칸 번호는 당겨지고 보던 자리엔 다음 곳 · 다 빠지면 카드가 닫힌다. 「발견한 장소」 칸은 AR 물체가 사라지면 Prune 이 뺀다
+    private void OnPlaceDeleted(int id)
+    {
+        string raw = id.ToString();
+        bool any = false;
+        for (int i = items.Count - 1; i >= 0; i--)
+        {
+            var it = items[i];
+            if (!it.listed || it.entry.kind != PlaceListManager.EntryKind.Place || it.entry.id != raw
+                || !(it.entry.data is PlaceData || it.entry.data is CachedPlaceData)) continue;
+            if (it.photoOwned && it.photo != null) Destroy(it.photo);
+            it.photo = null;
+            it.photoOwned = false;
+            it.photoKey = null;   // 받는 중인 사진은 버린다 (열쇠가 다르면 받은 그림을 지운다)
+            if (tapItem == it) tapItem = null;
+            items.RemoveAt(i);
+            if (i < target) { target--; pos -= 1f; }
+            any = true;
+        }
+        if (!any) return;
+        int last = Mathf.Max(0, items.Count - 1);
+        target = Mathf.Clamp(target, 0, last);
+        pos = Mathf.Clamp(pos, 0f, last);
+        for (int k = 0; k < items.Count; k++) if (items[k].listed) items[k].rank = k + 1;
+    }
+
+    // 꺼진 물체(풀로 돌아감) — 「발견한 장소」는 바로 빼고, 「근처 장소」는 사진으로
     private void Prune()
     {
         for (int i = items.Count - 1; i >= 0; i--)
@@ -1149,7 +1226,6 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
                 if (!ReferenceEquals(it.obj, null)) { Bind(it, null); it.solid = false; }
                 continue;
             }
-            Release(it);
             items.RemoveAt(i);
             if (tapItem == it) tapItem = null;
         }
@@ -1184,21 +1260,11 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
             if (d > -1.5f) slotK[k % shots.Length] = k;
         }
 
-        // 3D 인지 사진인지 (「근처 장소」 — 0.25초 동안 바꿔 낀다). 3D 로 든 것은 보이는 칸이면 그 칸 레이어, 아니면 아무도 안 찍는 레이어 (둘 다 AR 화면엔 없다)
+        // 3D 인지 사진인지 (「근처 장소」 — 0.25초 동안 바꿔 낀다). 3D 는 칸 카메라가 찍는 순간만 빌린다(BeginShot) — AR 화면의 물체는 그대로
         for (int k = 0; k < count; k++)
         {
             var it = items[k];
             if (it.listed) it.mix = Mathf.MoveTowards(it.mix, it.solid ? 0f : 1f, dt / PhotoFade);
-            bool use3D = Live(it) && (!it.listed || it.solid || it.mix < 1f);
-            if (!use3D)
-            {
-                if (it.hold != null && it.hold.Layer >= 0) it.hold.Release();   // AR 로 돌려보낸다
-                continue;
-            }
-            if (it.hold == null && !it.obj.TryGetComponent(out it.hold)) it.hold = it.obj.AddComponent<R0926NearHold>();
-            int layer = slotK[k % shots.Length] == k ? ViewLayers[k % shots.Length] : ParkLayer;
-            if (it.hold.Layer != layer) it.hold.Take(layer);
-            else if (Time.frameCount % 15 == 0) it.hold.Scan();   // 받는 중이던 3D 모델
         }
 
         float best = 9f;
@@ -1223,7 +1289,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
             float sc = Mathf.Lerp(1f, SideScale, Mathf.Clamp01(ad));
             float a = ad <= 1f ? Mathf.Lerp(1f, SideAlpha, ad) : Mathf.Lerp(SideAlpha, 0f, (ad - 1f) / 0.5f);
             float m = it.listed ? it.mix : 0f;
-            bool use3D = Live(it) && it.hold != null && it.hold.Layer >= 0 && m < 1f;
+            bool use3D = Live(it) && m < 1f;
             float bob = (1f - Mathf.Cos(now * Mathf.PI * 2f / BobPeriod)) * 0.5f * BobHeight * (1f - Mathf.Clamp01(ad * 2f)) * (1f - m);
             var vr = sh.view.rectTransform;
             vr.anchoredPosition = new Vector2(d * Spacing, bob);
@@ -1340,6 +1406,22 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         return true;
     }
 
+    private static Shader discShader;
+    private static bool discLooked;
+    private static readonly int DiscRadiusId = Shader.PropertyToID("_Radius"), DiscBreathId = Shader.PropertyToID("_Breath");
+
+    // 사람 원판(R0926PersonDisc)이 그리는 가장 먼 곳 — 판 너비에 대한 비율. 물결 끝 min(1.3R, 0.49) · 숨쉬는 테두리 R(1+B) 중 큰 쪽 (셰이더와 같은 셈)
+    private static bool DiscReach(Material m, out float reach)
+    {
+        reach = 0f;
+        if (m == null) return false;
+        if (!discLooked) { discLooked = true; discShader = Shader.Find("Universal Render Pipeline/R0926PersonDisc"); }
+        if (discShader == null || m.shader != discShader || !m.HasProperty(DiscRadiusId)) return false;
+        float R = m.GetFloat(DiscRadiusId), B = m.HasProperty(DiscBreathId) ? m.GetFloat(DiscBreathId) : 0f;
+        reach = Mathf.Max(Mathf.Min(1.3f * R, 0.49f), R * (1f + B));
+        return reach > 0f;
+    }
+
     private bool Measure(GameObject go, out Vector3 center, out float radius)
     {
         go.GetComponentsInChildren(false, rends);
@@ -1363,6 +1445,10 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
                 var s = t.lossyScale;
                 c = t.TransformPoint(lb.center);
                 rad = new Vector3(lb.extents.x * Mathf.Abs(s.x), lb.extents.y * Mathf.Abs(s.y), lb.extents.z * Mathf.Abs(s.z)).magnitude;
+                // 사람 원판 — 판(Quad) 대각선 대신 보이는 원(숨쉬는 테두리 · 물결 끝까지)으로. 판은 물결 자리까지 넓어 원이 카드의 45% 로 작게 찍혀
+                // 사진이 흐릿했다 (11-26 대표님 15번 「사진이 명확하게 발생하지 않고」) — 이제 약 66%, 물결은 카드 안
+                if (r is MeshRenderer && DiscReach(r.sharedMaterial, out float reach))
+                    rad = Mathf.Min(rad, reach * Mathf.Max(lb.size.x * Mathf.Abs(s.x), lb.size.y * Mathf.Abs(s.y)));
             }
             else continue;   // 반짝이(파티클) · 선은 크기에서 뺀다
             if (!(rad > 0f) || float.IsInfinity(rad)) continue;
@@ -1862,6 +1948,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     }
     // 11-18 J/M1
     public string EditorMode => mode.ToString();
+    public bool EditorAfterGuidePending => afterGuideAt >= 0f;
     public bool EditorClosing => closing;
     public bool EditorOpenNearby() => OpenNearby(Time.unscaledTime, true);
     public bool EditorCanSwipeUp(Vector2 at) => CanSwipeUp(at);
@@ -1878,6 +1965,7 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     public void EditorForget() { closedFound.Clear(); dismissed.Clear(); }
     public int EditorRank(int k) => k >= 0 && k < items.Count ? items[k].rank : 0;
     public string EditorEntryId(int k) => k >= 0 && k < items.Count && items[k].listed ? items[k].entry.id : null;
+    public object EditorEntryData(int k) => k >= 0 && k < items.Count && items[k].listed ? items[k].entry.data : null;
     public bool EditorPhoto(int k) => k >= 0 && k < items.Count && items[k].listed && items[k].mix > 0.5f;
     public string EditorPhotoKey(int k) => k >= 0 && k < items.Count ? items[k].photoKey : null;
     public Texture EditorPhotoTexture(int k) => k >= 0 && k < items.Count ? items[k].photo : null;

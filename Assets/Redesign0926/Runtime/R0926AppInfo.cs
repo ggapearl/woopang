@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 설정 탭 '앱 정보' — 문의 · 인스타그램 · 개인정보처리방침 · 관광 정보 출처 · 오픈소스 라이선스. 버전과 저작권 그림은 설정 탭 맨 아래에 작게.
+/// 설정 탭 '앱 정보' — 사용가이드 · 문의 · 인스타그램 · 개인정보처리방침 · 관광 정보 출처 · 오픈소스 라이선스. 버전과 저작권 그림은 설정 탭 맨 아래에 작게.
 /// 예전엔 목록 맨 아래 '버전'을 펼쳐야 보였다(2026-10-06 대표님).
 /// </summary>
 public class R0926AppInfo : MonoBehaviour
@@ -17,6 +17,18 @@ public class R0926AppInfo : MonoBehaviour
     private void OnEnable()
     {
         if (versionText != null) versionText.text = "Version " + Application.version;
+    }
+
+    // 사용가이드 다시 보기 — 설정이 든 목록 시트를 내린 뒤 첫 실행 때와 같은 카드 안내
+    // (11-26 대표님 26번 「사용가이드를 설정탭 '앱정보' 맨 위에 (문의 위쪽) 버튼을 하나 만들어서 누르면 사용가이드 나오도록」)
+    public void OpenGuide()
+    {
+        Feedback();
+        var guide = FindAnyObjectByType<FirstTimeGuide>(FindObjectsInactive.Include);
+        if (guide == null) return;
+        var sheet = GetComponentInParent<R0926Closer>(true);
+        if (sheet != null && sheet.isActiveAndEnabled) sheet.AnimateClose(null);   // X 와 같은 길 — 내려간 뒤 닫기 버튼
+        guide.Replay(sheet);
     }
 
     public void OpenMail() => Open("mailto:" + ContactMail);

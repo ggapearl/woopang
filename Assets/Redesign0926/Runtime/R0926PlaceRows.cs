@@ -82,6 +82,10 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private Sprite personRingSprite;
     [Tooltip("사람 사진 지름 — 테두리까지 사진 칸(120) 안에 들게")]
     [SerializeField] private float personPhotoSize = 96f;
+    [Tooltip("사람 사진 재질 (R0926SharpPhotoUI.mat) — 밉맵을 반 단계 앞당겨 또렷하게. 비어 있으면 기본 UI 재질 (11-26 대표님 15번)")]
+    [SerializeField] private Material photoMaterial;
+    [Tooltip("사람 사진 테두리 재질 (R0926RingUI.mat) — 고리를 그림 대신 계산으로 매끄럽게. 비어 있으면 예전 그림 고리 (15번)")]
+    [SerializeField] private Material ringMaterial;
     [Tooltip("목록 칸 X '닫기' 틀 (ListPanel/DockMirror0926) — 사진으로 연 정보 창이 맨 위인 동안엔 목록을 숨겨도 이 틀은 보인다 (11-17 D3)")]
     [SerializeField] private RectTransform coverDock;
     [Tooltip("그때 X 위에 덮는 누름 칸 (XButton_List/CoverBack0926) — 정보 창만 닫고 목록으로. 원래 X 는 목록을 닫는다")]
@@ -110,7 +114,11 @@ public class R0926PlaceRows : MonoBehaviour
     [SerializeField] private float infoWait = 8f;
     private const float PhotoInterval = 0.2f, PhotoFadeIn = 0.2f;
     private const int PhotoThumb = 256;   // 우팡 서버 사진은 작은 사본 (/thumb) — 칸 160 은 기기에서 약 140px
+#if UNITY_EDITOR
+    public static Func<string, string> EditorPhotoUrl;   // 플레이 시험 — 사진 받을 주소를 바꾼다(내 PC 시험 서버). 열쇠(캐시)는 그대로
+#endif
     private class Pic { public Texture2D tex; public bool owned; public float used; }
+    private static readonly int RingInnerId = Shader.PropertyToID("_Inner");
     private readonly Dictionary<string, Pic> pics = new Dictionary<string, Pic>();
     private readonly Dictionary<string, float> picFailed = new Dictionary<string, float>();
     private readonly HashSet<string> picLoading = new HashSet<string>();
@@ -692,9 +700,10 @@ public class R0926PlaceRows : MonoBehaviour
 
             // 사람 사진 테두리 — 도크 프로필 사진과 같은 고리 (안쪽 가장자리가 사진 가장자리를 3 만큼 덮어 계단을 가린다).
             // 사진 칸은 마스크라 그 안에 두면 고리 바깥쪽이 잘린다 — 칸 바로 뒤 형제로
-            if (personRingSprite != null && circleSprite != null && row.photoBg != null)
+            if ((ringMaterial != null || personRingSprite != null) && circleSprite != null && row.photoBg != null)
             {
-                var pr = new GameObject("PersonRing", typeof(RectTransform), typeof(Image));
+                // 창 스킨에서 뺀다 — 계산 고리는 그림이 없어 바탕 상자로 붙으면 물방울 모드에서 옅어진다
+                var pr = new GameObject("PersonRing", typeof(RectTransform), typeof(Image), typeof(R0926SkinIgnore));
                 pr.layer = go.layer;
                 var prt = (RectTransform)pr.transform;
                 prt.SetParent(go.transform, false);
@@ -702,12 +711,25 @@ public class R0926PlaceRows : MonoBehaviour
                 prt.anchorMin = row.photoBox.anchorMin; prt.anchorMax = row.photoBox.anchorMax;
                 prt.pivot = new Vector2(0.5f, 0.5f);
                 prt.anchoredPosition = PhotoCenter(row);
-                float rs = (personPhotoSize * 0.5f - 3f) / 0.68f * 2f;   // r0926_ring_mini 안쪽 가장자리 0.68 — 도크 프로필과 같은 셈 (Redesign0926Apply)
-                prt.sizeDelta = new Vector2(rs, rs);
                 row.personRing = pr.GetComponent<Image>();
-                row.personRing.sprite = personRingSprite;
-                row.personRing.preserveAspect = true;
                 row.personRing.raycastTarget = false;
+                if (ringMaterial != null)
+                {
+                    // 계산 고리 (R0926RingUI) — 그림 고리(256px · 밉맵 없음)를 기기에서 반의반으로 줄여 그려 가장자리가 자글거리고 바깥 번짐이 얼룩졌다
+                    // (11-26 대표님 15번 「테두리 질감이 지저분하게」). 안쪽 가장자리 비율은 재질 값 — 크기는 그 비율로 셈한다
+                    float inner = ringMaterial.HasProperty(RingInnerId) ? ringMaterial.GetFloat(RingInnerId) : 0.79f;
+                    float rs = (personPhotoSize * 0.5f - 3f) / Mathf.Max(0.1f, inner) * 2f;
+                    prt.sizeDelta = new Vector2(rs, rs);
+                    row.personRing.sprite = null;
+                    row.personRing.material = ringMaterial;
+                }
+                else
+                {
+                    float rs = (personPhotoSize * 0.5f - 3f) / 0.68f * 2f;   // r0926_ring_mini 안쪽 가장자리 0.68 — 도크 프로필과 같은 셈 (Redesign0926Apply)
+                    prt.sizeDelta = new Vector2(rs, rs);
+                    row.personRing.sprite = personRingSprite;
+                    row.personRing.preserveAspect = true;
+                }
                 pr.SetActive(false);
             }
         }
@@ -900,6 +922,7 @@ public class R0926PlaceRows : MonoBehaviour
                 r.photoBg.type = Image.Type.Simple;
                 r.photoBox.sizeDelta = d;
                 r.photoBox.anchoredPosition = c - Vector2.Scale(new Vector2(0.5f, 0.5f) - r.photoBox.pivot, d);   // 가운데는 그대로
+                if (r.photo != null && photoMaterial != null) r.photo.material = photoMaterial;   // 또렷한 사진 (15번)
             }
             else
             {
@@ -908,6 +931,7 @@ public class R0926PlaceRows : MonoBehaviour
                 r.photoBg.pixelsPerUnitMultiplier = r.photoBgPpu;
                 r.photoBox.sizeDelta = r.photoSize;
                 r.photoBox.anchoredPosition = r.photoPos;
+                if (r.photo != null && photoMaterial != null && r.photo.material == photoMaterial) r.photo.material = null;   // 장소 사진은 예전 그대로 (템플릿은 기본 재질)
             }
             r.personRing.gameObject.SetActive(person);
         }
@@ -997,7 +1021,7 @@ public class R0926PlaceRows : MonoBehaviour
                 string key = r.photoKey;
                 if (pics.ContainsKey(key) || picLoading.Contains(key)) continue;
                 if (picFailed.TryGetValue(key, out float at) && Time.unscaledTime - at < photoRetry) continue;
-                RequestPic(key);
+                RequestPic(key, r.round);
                 if (pics.TryGetValue(key, out var rp)) ShowPhoto(r, key, rp);   // 앱 그림은 바로
             }
         PumpDetails();
@@ -1046,7 +1070,8 @@ public class R0926PlaceRows : MonoBehaviour
         if (r.photoIcon != null) r.photoIcon.enabled = r.photoIcon.sprite != null;
     }
 
-    private void RequestPic(string key)
+    // mip — 사람 사진: 밉맵을 같이 만든다. 256 사본을 기기에서 약 80px 로 줄여 그려(3배 넘게) 밉맵 없이는 자글거리고 흐릿했다 (11-26 대표님 15번)
+    private void RequestPic(string key, bool mip = false)
     {
         if (key.StartsWith("res:"))
         {
@@ -1059,7 +1084,11 @@ public class R0926PlaceRows : MonoBehaviour
         UnityWebRequest req = null;
         try
         {
-            req = UnityWebRequestTexture.GetTexture(key, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
+            string url = key;
+#if UNITY_EDITOR
+            if (EditorPhotoUrl != null) url = EditorPhotoUrl(url);
+#endif
+            req = mip ? ProfileManager.AvatarRequest(url) : UnityWebRequestTexture.GetTexture(url, true);   // 읽기 전용 — CPU 쪽 사본을 남기지 않는다
             req.timeout = 15;
             picLoading.Add(key);
             picRequests.Add(req);
@@ -1090,6 +1119,7 @@ public class R0926PlaceRows : MonoBehaviour
         picLoading.Remove(key);
         if (tex == null) { picFailed[key] = Time.unscaledTime; return; }
         tex.wrapMode = TextureWrapMode.Clamp;
+        if (tex.mipmapCount > 1) tex.filterMode = FilterMode.Trilinear;   // 밉맵 사이도 섞어 — 크기 경계에서 갑자기 흐려지지 않게
         if (pics.TryGetValue(key, out var old) && old.owned && old.tex != null && old.tex != tex) Destroy(old.tex);
         pics[key] = new Pic { tex = tex, owned = true, used = Time.unscaledTime };
         nextPhotoAt = 0f;

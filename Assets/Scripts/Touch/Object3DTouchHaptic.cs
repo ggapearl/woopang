@@ -92,10 +92,8 @@ public class Object3DTouchHaptic : MonoBehaviour
         if (inputDetected)
         {
             isProcessingTouch = true;
-            Ray ray = Camera.main.ScreenPointToRay(inputPosition);
-            RaycastHit hit;
-
-            if (Physics.Raycast(ray, out hit) && hit.collider == objectCollider)
+            Collider top = WorldTouch.FirstHit(inputPosition);   // 장소 누름과 같은 답 (숨긴 장소는 건너뜀 · 11-26)
+            if (top != null && top == objectCollider)
             {
                 TriggerFeedback();
             }

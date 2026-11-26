@@ -78,6 +78,7 @@ public class CubeDataFixManager : MonoBehaviour
     private bool showInstagram;
     private const int MAX_SUB_PHOTOS = 10;
     private bool isProcessing = false;
+    private string editModelType = "";   // 고치는 장소의 모델 종류 (custom = 3D 모델) — AI 작업이 3D 캐릭터만 내놓는다 (11-26 대표님 11번)
 
     // 로고 칸 「AI 작업」(R0926FixAiPanel · 11-18 I1) — 넣기 전 사진은 지켜 두었다가 다 끄면 되돌린다
     private bool aiOn;             // 로고 칸에 AI 결과가 들어 있다
@@ -1309,6 +1310,14 @@ public class CubeDataFixManager : MonoBehaviour
             yield return StartCoroutine(DownloadPhoto(place.main_photo, gen, t => tex = t));
             if (gen != loadGen) { if (tex != null) Destroy(tex); yield break; }
             if (tex == null) { failed++; tex = Placeholder(); }   // 못 불러온 사진도 자리는 지킨다 — 수정 요청도 경로로 보내 빼지 않으면 그대로 (11-16)
+            else if (tex.width != tex.height)
+            {
+                // 정사각형이 아닌 옛 사진(앱 밖에서 올린 로고 등) — 로고 칸 · AI 작업 · 저장이 늘려 넣어 찌그러뜨리지 않게 (11-26 대표님 13번 「우팡이네집」)
+                // 투명 로고는 다 보이게 투명 여백 · 아니면 가운데를 잘라. 서버 원본은 그대로 (바꾸지 않으면 경로로 남는다)
+                var sq = R0926PhotoAlpha.Square(tex);
+                Destroy(tex);
+                tex = sq;
+            }
             if (tex != null)
             {
                 mainPhoto = tex;
@@ -1373,6 +1382,7 @@ public class CubeDataFixManager : MonoBehaviour
 
     private void Fill(PlaceData p)
     {
+        editModelType = string.IsNullOrEmpty(p.original_model_type) ? (p.model_type ?? "") : p.original_model_type;
         if (nameInput != null) nameInput.text = R0926Emoji.ToInput(p.name ?? "");   // 진짜 이모지 → 우팡 이모지 글자 (칸 안에 그림으로)
         if (petFriendlyToggle != null) petFriendlyToggle.isOn = p.pet_friendly;
         if (separateRestroomToggle != null) separateRestroomToggle.isOn = p.separate_restroom;
@@ -1622,7 +1632,9 @@ public class CubeDataFixManager : MonoBehaviour
         {
             // AI 작업으로 바깥을 투명하게 한 로고 · 캐릭터 정지 사진, 아니면 새로 고른 투명한 PNG (자르기가 RGBA32 로 남긴 것 — 11-24) — 장소 추가와 같게 · 서버 /thumb 이 투명을 알아본다
             bool png = aiOn ? aiAlpha : R0926PhotoAlpha.Has(mainPhoto);
-            Texture2D resized = ResizeTextureWithRenderTexture(mainPhoto, 444, 444, png);
+            Texture2D square = mainPhoto.width == mainPhoto.height ? mainPhoto : R0926PhotoAlpha.Square(mainPhoto, false, 1024);   // 444×444 로 늘리기 전에 — 찌그러지지 않게 (13번)
+            Texture2D resized = ResizeTextureWithRenderTexture(square, 444, 444, png);
+            if (square != mainPhoto) Destroy(square);
             byte[] bytes = png ? resized.EncodeToPNG() : resized.EncodeToJPG(50);
             Destroy(resized);
             if (bytes.Length == 0) return false;
@@ -1887,6 +1899,8 @@ public class CubeDataFixManager : MonoBehaviour
     public Texture2D MainPhoto => mainPhoto;
     /// <summary>불러오는 중 · 보내는 중 — AI 작업을 열지 않는다</summary>
     public bool Busy => isProcessing;
+    /// <summary>3D 모델 장소 — AI 작업은 3D 캐릭터만 (투명하게 · 만화톤 · 색연필은 3D 에 뜻이 없다)</summary>
+    public bool IsModelPlace => editModelType == "custom";
     /// <summary>로고 칸의 AI 가 바뀌었다 (넣기 · 되돌리기 · 새 사진 · 비우기)</summary>
     public event Action AiChanged;
 
@@ -2209,6 +2223,7 @@ public class CubeDataFixManager : MonoBehaviour
     private void ResetToInitialState()
     {
         cleanForm = cleanPhotos = null;   // 다시 채울 때까지 묻지 않는다
+        editModelType = "";
         if (discardPanel != null) discardPanel.SetActive(false);
 
         // 사진 관련 초기화

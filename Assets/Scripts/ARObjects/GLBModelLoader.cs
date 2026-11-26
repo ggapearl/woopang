@@ -474,15 +474,17 @@ public class GLBModelLoader : MonoBehaviour
             // 메시 데이터 분석
             MeshFilter[] meshFilters = loadedModel.GetComponentsInChildren<MeshFilter>();
             
-            // 콜라이더 설정 (백그라운드에서)
-            if (!displayOnly) StartCoroutine(SetupModelCollidersAsync());
+            // 모델 조각마다 붙이던 콜라이더(볼록 MeshCollider)와 모델 뿌리의 1×1×1 상자는 붙이지 않는다 (11-26 대표님 12 · 19번) —
+            // 손가락은 칸(GLBContainer)의 누르는 상자 하나만 받아야 하는데, 그것들이 앞에 걸리면 레이캐스트가 거기서 멈춰 아무것도 열리지 않았다
+            // (「3D오브젝트가 터치가 … 간혹가다가 안되는 경우」). 예전 SetupModelCollidersAsync 는 부르지 않는다
             
             // DoubleTap3D 연결 설정
-            if (!displayOnly) SetupDoubleTap3DIntegration();
+            if (!displayOnly) SetupDoubleTap3DIntegration(scale);
 
-            // 큐브와 동일한 스와이프 회전 — 콜라이더가 준비된 뒤에 붙여야 한다
-            // (CubeTouchRotator는 Awake에서 GetComponent<Collider>()로 자기 콜라이더를 잡는다)
-            if (!displayOnly) SetupTouchRotator();
+            // 3D 모델은 끌어서 돌리지 않는다 — 큐브만 (11-26 대표님 「3D모델의 경우 기본오브젝트처럼 움직이는 로직은 없애자. (드래그 해서 오브젝트 움직이는 것)」 —
+            // 모양이 고정돼 있어야 누르는 자리가 정확하고 옆 오브젝트를 가로막지 않는다). 예전 SetupTouchRotator 는 부르지 않는다
+            var rotator = glbContainer.GetComponent<CubeTouchRotator>();
+            if (rotator != null) rotator.enabled = false;
             
             // 로딩 후 메모리 정리
             MemoryOptimizationAfterLoading();
@@ -1926,6 +1928,9 @@ public class GLBModelLoader : MonoBehaviour
         
         // 다운로드된 파일 데이터 해제
         ClearCurrentGLBData();
+
+        // 누르는 상자도 프리팹 크기로 — 풀에서 다른 장소로 다시 쓸 때 앞 모델 크기가 남지 않게 (11-26)
+        ResetTapBox();
         
         isModelLoaded = false;
         
@@ -2093,99 +2098,65 @@ public class GLBModelLoader : MonoBehaviour
         
     }
 
-    private void SetupDoubleTap3DIntegration()
+    private const float TapMargin = 1.1f;     // 누르는 상자 = 모델 크기 × 1.1
+    private const float TapMinRatio = 0.3f;   // 얇은 모델(판 · 막대)도 가장 긴 변의 30% 두께는 남긴다
+    private bool tapBox0Saved;
+    private Vector3 tapBoxCenter0, tapBoxSize0;   // 프리팹의 누르는 상자 (모델을 지우면 이걸로)
+
+    private void SetupDoubleTap3DIntegration(float modelScale)
     {
-        
-        if (loadedModel == null)
+        if (loadedModel == null || glbContainer == null) return;
+        if (glbContainer.GetComponent<DoubleTap3D>() == null) return;   // 누를 데가 없다
+        FitTapBox(modelScale);
+    }
+
+    /// <summary>
+    /// 누르는 상자(GLBContainer 의 BoxCollider)를 모델에 맞게 — 렌더러마다 자기 좌표의 상자 여덟 꼭짓점을 칸 좌표로 옮겨 감싼다 (R0926HuntChest.Fit 과 같은 방식).
+    /// 11-26 대표님 「3D 모델링한 오브젝트의 경우 해당 오브젝트의 터치범위가 명확히 산정이 안되서 엉뚱한 곳을 터치해서 열리다보니」 —
+    /// 예전엔 월드 경계(AABB) 크기를 칸 좌표에 그대로 넣어, 앵커가 돌아 있으면(최대 √2배) · 핀치로 키워 두면(최대 3배) 상자가 모델보다 훨씬 커져
+    /// 옆을 눌러도 열렸고 뒤의 다른 오브젝트를 가로챘다. 줄여 두면(0.5배) 모델보다 작아졌다.
+    /// 모델 배율은 등장 연출 중인 지금 값이 아니라 끝 값(modelScale)으로 잰다
+    /// </summary>
+    private void FitTapBox(float modelScale)
+    {
+        if (glbContainer == null || loadedModel == null) return;
+        BoxCollider box = glbContainer.GetComponent<BoxCollider>();
+        if (box == null) box = glbContainer.gameObject.AddComponent<BoxCollider>();
+        if (!tapBox0Saved)
         {
-            LogError("[GLBModelLoader] 로드된 모델이 없어서 DoubleTap3D 설정 불가");
-            return;
+            tapBoxCenter0 = box.center;
+            tapBoxSize0 = box.size;
+            tapBox0Saved = true;
         }
-        
-        // GLBContainer에서 DoubleTap3D 컴포넌트 찾기
-        DoubleTap3D doubleTap3D = glbContainer.GetComponent<DoubleTap3D>();
-        if (doubleTap3D == null)
+        Transform mt = loadedModel.transform;
+        Matrix4x4 toBox = Matrix4x4.TRS(mt.localPosition, mt.localRotation, Vector3.one * modelScale) * mt.worldToLocalMatrix;
+        bool any = false;
+        var b = new Bounds();
+        foreach (var r in loadedModel.GetComponentsInChildren<Renderer>(true))
         {
-            LogError("[GLBModelLoader] GLBContainer에서 DoubleTap3D 컴포넌트를 찾을 수 없음");
-            return;
-        }
-        
-        
-        // GLBContainer의 BoxCollider 크기를 로드된 모델에 맞게 조정
-        BoxCollider containerCollider = glbContainer.GetComponent<BoxCollider>();
-        if (containerCollider != null)
-        {
-            // 로드된 모델의 바운드 계산
-            Renderer[] renderers = loadedModel.GetComponentsInChildren<Renderer>();
-            if (renderers.Length > 0)
+            Bounds lb = r.localBounds;
+            if (lb.extents == Vector3.zero) continue;
+            var smr = r as SkinnedMeshRenderer;
+            Matrix4x4 m = toBox * (smr != null && smr.rootBone != null ? smr.rootBone : r.transform).localToWorldMatrix;
+            for (int i = 0; i < 8; i++)
             {
-                Bounds totalBounds = renderers[0].bounds;
-                foreach (var renderer in renderers)
-                {
-                    totalBounds.Encapsulate(renderer.bounds);
-                }
-                
-                // GLBContainer 좌표계로 변환
-                Vector3 localCenter = glbContainer.InverseTransformPoint(totalBounds.center);
-                Vector3 localSize = totalBounds.size;
-                
-                // 약간 여유를 두고 BoxCollider 설정
-                containerCollider.center = localCenter;
-                containerCollider.size = localSize * 1.2f; // 20% 여유
-                
-                
-                // BoxCollider를 우선순위로 설정 (isTrigger는 false 유지)
-                containerCollider.enabled = true;
-                
-                // GLB 모델의 MeshCollider들을 터치에서 제외 (물리는 유지)
-                MeshCollider[] modelColliders = loadedModel.GetComponentsInChildren<MeshCollider>();
-                foreach (var collider in modelColliders)
-                {
-                    // 물리 충돌은 유지하되, 레이캐스트 우선순위를 BoxCollider에게 양보
-                    // MeshCollider는 그대로 두고 BoxCollider가 먼저 감지되도록 함
-                }
+                Vector3 c = m.MultiplyPoint3x4(lb.center + Vector3.Scale(lb.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f)));
+                if (any) b.Encapsulate(c); else { b = new Bounds(c, Vector3.zero); any = true; }
             }
         }
-        else
-        {
-            LogError("[GLBModelLoader] GLBContainer에서 BoxCollider를 찾을 수 없음");
-            
-            // BoxCollider가 없으면 새로 생성
-            containerCollider = glbContainer.gameObject.AddComponent<BoxCollider>();
-            
-            // 로드된 모델의 바운드 계산
-            Renderer[] renderers = loadedModel.GetComponentsInChildren<Renderer>();
-            if (renderers.Length > 0)
-            {
-                Bounds totalBounds = renderers[0].bounds;
-                foreach (var renderer in renderers)
-                {
-                    totalBounds.Encapsulate(renderer.bounds);
-                }
-                
-                Vector3 localCenter = glbContainer.InverseTransformPoint(totalBounds.center);
-                Vector3 localSize = totalBounds.size;
-                
-                containerCollider.center = localCenter;
-                containerCollider.size = localSize * 1.2f;
-                
-            }
-        }
-        
-        // DoubleTap3D가 제대로 설정되었는지 확인
-        if (doubleTap3D.enabled)
-        {
-        }
-        else
-        {
-        }
-        
-        // 터치 감지 테스트
-        Collider testCollider = glbContainer.GetComponent<Collider>();
-        if (testCollider != null)
-        {
-        }
-        
+        if (!any) return;
+        Vector3 size = b.size * TapMargin;
+        float floor = Mathf.Max(size.x, Mathf.Max(size.y, size.z)) * TapMinRatio;
+        box.center = b.center;
+        box.size = new Vector3(Mathf.Max(size.x, floor), Mathf.Max(size.y, floor), Mathf.Max(size.z, floor));
+    }
+
+    private void ResetTapBox()
+    {
+        BoxCollider box = glbContainer != null ? glbContainer.GetComponent<BoxCollider>() : null;
+        if (box == null || !tapBox0Saved) return;
+        box.center = tapBoxCenter0;
+        box.size = tapBoxSize0;
     }
 
     /// <summary>
@@ -2195,15 +2166,8 @@ public class GLBModelLoader : MonoBehaviour
     public void SetModelScale(float scale)
     {
         if (loadedModel == null || scale <= 0f) return;
-        float was = loadedModel.transform.localScale.x;
         loadedModel.transform.localScale = Vector3.one * scale;
-        BoxCollider box = glbContainer != null ? glbContainer.GetComponent<BoxCollider>() : null;
-        if (box != null && was > 0f)
-        {
-            float r = scale / was;
-            box.center *= r;
-            box.size *= r;
-        }
+        FitTapBox(scale);
     }
 
     public bool HasLoadedModel()

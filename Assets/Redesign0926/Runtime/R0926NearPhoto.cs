@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 「근처 장소」 카드(R0926NearModal)의 사진 칸 — AR 에 없거나 먼(25m 밖) 곳은 3D 대신 대표 사진.
+/// 「근처 장소」 카드(R0926NearModal)의 사진 칸 — AR 에 없는 곳(아직 안 떴거나 · 꺼졌거나)은 3D 대신 대표 사진 (11-26 부터 먼 곳도 AR 에 떠 있으면 3D).
 /// 장소는 둥근 네모 · 사람은 원 + 그 사람의 공개 범위 색 테두리(목록 · 도크 프로필과 같은 색). 사진이 없거나 받는 중이면 옅은 바탕에 그림(핀 · 사람).
 /// 칸(View)의 아이라 칸이 옆으로 밀리고 작아지면 같이 따라간다.
 /// </summary>
@@ -19,6 +19,8 @@ public sealed class R0926NearPhoto : MonoBehaviour
     [SerializeField] private float roundPpu = 0.9f;
     [Tooltip("장소 사진 테두리 색")]
     [SerializeField] private Color placeRim = new Color(1f, 1f, 1f, 0.35f);
+    [Tooltip("사람(원) 사진을 칸 안쪽으로 줄이는 폭 — 원 고리(r0926_ring) 띠가 칸 반지름의 0.939~0.986 이라, 칸 끝까지 자른 사진 가장자리(계단)가 고리 밖으로 비어져 나왔다 (11-26 대표님 15번)")]
+    [SerializeField] private float circleInset = 10f;
 
     private bool round = true, shaped;
     private Texture shown;
@@ -77,6 +79,11 @@ public sealed class R0926NearPhoto : MonoBehaviour
             mask.sprite = r ? roundShape : circleShape;
             mask.type = r ? Image.Type.Sliced : Image.Type.Simple;
             mask.pixelsPerUnitMultiplier = r ? roundPpu : 1f;
+            // 원은 고리 띠 가운데까지만 — 자른 자리의 계단을 고리가 덮는다 (둥근 네모는 칸 그대로)
+            float inset = r ? 0f : circleInset;
+            var mrt = mask.rectTransform;
+            mrt.offsetMin = new Vector2(inset, inset);
+            mrt.offsetMax = new Vector2(-inset, -inset);
         }
         if (rim != null)
         {
