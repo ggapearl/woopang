@@ -1,6 +1,6 @@
 # 사진 📷 (구글 포토 → Immich → 효딩쓰 앱) — 운영 메모
 
-> 최종 갱신: 2026-11-23
+> 최종 갱신: 2026-11-27
 > 2026-11-20 대표님: 구글 포토 Takeout 사진을 구글 포토처럼 보고 싶다. 밖에 공개하지 않고, **효딩쓰 휴대폰 앱 오른쪽 위 📷 로만**.
 > 얼굴 인식은 하지 않는다(대표님 지시). 사람 등록 대신 사진첩(앨범)으로 묶는다.
 
@@ -44,10 +44,12 @@ Takeout 은 날짜·위치를 사진 옆 `*.supplemental-metadata.json` 에 둔�
 
 ## 폰 사진 자동 백업 · 정리 (2026-11-21, 구글 포토처럼)
 화면(웹 `2026-11-21a`)·서버(`server/voice/desk/photo_backup.py`, 비공개 저장소)는 끝났고 시험도 했다. **아이폰 안(PhotoKit)은 앱 업데이트가 필요하다** — `apps/hyodingsseu-ios/PHOTO_BACKUP.md` 참고.
-- **iOS 앱 2.4.0 (12)**: 코드는 완성(브랜치 `ios/photo-backup` · 커밋 `7f0b3a8` — 2.3.1 (11)이 11 번을 먼저 써서 번호만 12 로 올림, 컴파일은 Mac 빌드 세션에서 처음 해 본다). 2026-11-22 대표님 「빌드까지 해」 승인으로 `C:\nongmin-app\IOS_BUILD_HANDOFF.md` 맨 위를 「🔔 지금 요청」으로 바꿨다 — Mac 은 `C:\` 를 못 읽으므로 같은 요청문을 대표님께 채팅으로 드려 Mac 세션에 붙여넣게 한다. 업로드 성공이 확인되면 `python server\launchers\ios_expiry.py record hyodingsseu "2.4.0 (12)"` 로 90일 만료 기록. 웹은 `2026-11-22d`.
+- **iOS 앱 2.4.0 (13)**: 코드는 완성(브랜치 `ios/photo-backup` · 커밋 `9a4c103` — (12) 는 `7f0b3a8`, 11-27 에 첫 기준 시각을 바꾸며 번호를 13 으로 올림. 컴파일은 Mac 빌드 세션에서 처음 해 본다). 요청서는 `C:\nongmin-app\IOS_BUILD_HANDOFF.md` 의 「🔔 지금 요청 — 효딩쓰 iOS 2.4.0 (13)」(`nongmin-app` 커밋 `57928de` — (12) 요청을 대신한다는 문구 포함). Mac 은 `C:\` 를 못 읽으므로 효딩쓰 `mac_send`(우편함 `C:\que-desk\mac\`)로 「iOS빌드」 세션에 말을 전한다. 업로드 성공이 확인되면 `python -X utf8 -I server\launchers\ios_expiry.py record hyodingsseu "2.4.0 (13)"` 로 90일 만료 기록. 웹은 `2026-11-27a`.
+- **(11-27 확인) 폰에서 서버로 올라온 적이 아직 없다** — `E:\immich\phone_backup.db` 가 없다(첫 업로드 때 만들어진다). `origin/ios/photo-backup` 에 Mac 빌드 결과 커밋도 없다. **원인: Mac 이 요청을 받은 적이 없다** — 효딩쓰가 02:26 에 보낸 (12) 요청은 「맥북 Claude 계정이 사용 한도 중(03:26 에 풀림)」이라 `results.jsonl` 에 `ok:false` 로 끝났다(`mac_send` 는 한도 중이면 다시 보내 주지 않는다 — 풀린 뒤 다시 보내야 한다). 그래서 (13) 요청은 03:28 에 같은 우편함(`desk/macq.py`)으로 다시 보내도록 걸었다. 폰에 2.3.1 이하가 깔려 있으면 오늘 찍은 사진도, 격자 ✓ 도 안 보이는 게 정상이다. 코드 점검: 원본은 임시 파일로 꺼내(`writeData`) 5MB 씩만 읽어 보내고(메모리 5MB 안팎) 보낸 뒤 임시 파일을 지운다 · `allowsCellularAccess = true`(LTE·5G 가능) · 올린 기록은 폰 `PhotoBackup/state.json` + 서버 `phone_backup.db`, 앱을 다시 깔면 `photos/up/check` 로 복구.
+- ⚠ **새로 올린 사진이 목록에 뜨는 시간 = 정보 읽기 대기열 길이**: 목록은 `search/metadata`(`withExif`)라 정보 읽기가 끝나야 나온다. 11-27 02시 대기 약 3.5만 건이 시간당 5천~1만 건씩 줄고 있어(수 시간) 그동안 올린 사진은 늦게 뜬다. 대기열이 비면 몇 초.
 - **올리는 쪽은 네이티브 앱**이다(웹뷰는 폰 사진첩을 못 읽는다). 웹은 `backupConfigure({base, token})` 로 주소·열쇠만 넘기고, 화면(백업 카드·✓·정리)만 그린다. 네이티브 계약은 `app.js` 의 「Native.backup…」 주석에 있다(`backupStatus/Enable/Disable/Run/Configure/List/Thumb`, `backupCleanupPlan/backupCleanup`, 이벤트 `'backup'`).
 - 서버: `POST photos/up?lid&off&total&name&ts&mod&kind` — 6MB 조각 이어 올리기(어긋나면 409 `{have}`) → `E:\immich\incoming` 에 모아 끝나면 Immich 업로드(`/data/upload`, libraryId 없음) · `photos/up/check`(이미 올린 것) · `photos/up/state`(올린 장수) · `photos/up/verify`(정리 전 재확인). 기록 `E:\immich\phone_backup.db`(sqlite).
-- **켠 시각(`since`) 이후의 새 사진·영상만** 올린다(대표님 「기존 사진은 무시」). LTE·Wi-Fi 구분 없음(Wi-Fi 전용 스위치 삭제 — 요금제 무제한).
+- **기준 시각(`since`) 이후의 사진·영상을 올리고, 그 뒤에 찍는 것도 계속 올린다.** 처음 켜면 기준은 **2026-11-27 0시**(대표님 11-27 「오늘 0시부터, 내일 사진도 계속」 — 11-21 「기존 사진은 무시」를 이 날짜로 바꿈), 껐다 다시 켜면 그때 시각(꺼 둔 동안 찍은 건 안 올림). LTE·Wi-Fi 구분 없음(Wi-Fi 전용 스위치 삭제 — 요금제 무제한).
 - ✓(오른쪽 아래)는 **폰에서 올린 것**(Immich 에서 `libraryId` 가 없는 것 — 3.x 는 `deviceId` 를 돌려주지 않는다)에만 붙는다. 구글 포토에서 가져온 옛 사진엔 없다.
 - **정리**: 사진첩 칩 줄 맨 끝 「정리」(폰 앱에서만) → 「동영상 정리」 / 「전체 정리」. 네이티브가 지울 후보를 `photos/up/verify` 로 서버에 다시 묻고(≤150개씩), **서버에 있고(휴지통·오프라인 아님) 크기가 맞는 것만** 폰에서 지운다. 폰 안 삭제는 iOS 가 자기 확인 창을 띄우고, 지워진 것은 「최근 삭제된 항목」에 30일 남는다. iCloud 사진을 쓰면 다른 기기에서도 같이 지워진다.
 - iOS 는 앱이 꺼져 있으면 계속 올릴 수 없다 — 앱을 열었을 때·사진첩이 바뀔 때·시스템이 주는 백그라운드 시간에 올린다.
@@ -124,7 +126,19 @@ Takeout 은 날짜·위치를 사진 옆 `*.supplemental-metadata.json` 에 둔�
 - 되돌리려면: 설정 값을 위 「→」 앞 숫자로, compose 의 `cpus`·`mem_limit` 줄을 지우고 `docker compose up -d`, `.wslconfig` 삭제 후 `wsl --shutdown`.
 - 압축 풀기 현황(11-22 18시): 46개 중 확인 끝 14개 → 13개 삭제(1개 `2-001` 은 예전부터 있던 JSON 25건이 zip 과 달라 일부러 남김), 나머지 32개는 `DELETE_AFTER` 켠 채 이어서(`MAX_ZIPS` 지움) — 풀고 확인되면 바로 지우므로 디스크 여유 ≈ 1.4TB 가 거의 안 줄어든다.
 
+## C: 가 갑자기 찼을 때 — Docker 가상 디스크(vhdx) 줄이기 (2026-11-24 대표님 「도커 꺼졌는데 C드라이브가 갑자기 왜 다 찼지?」)
+- **증상**: Docker Desktop 「Disk full」(`Docker\log\vm\init.log` 쓰기 실패) — 11-24 13:09 에 멈췄고 C: 여유 17.9GB. 사진첩(Immich)도 같이 꺼진다.
+- **원인(실측)**: ① `C:\Users\pdnom\AppData\Local\Docker\wsl\disk\docker_data.vhdx` **115.6GB** — 그런데 VM 안 실제 내용은 **6.5GB**(이미지 3.7 · 컨테이너 1.4 · DB 볼륨 0.4). vhdx 는 늘기만 하고 안 줄어든다. ② Immich DB 는 이름 있는 볼륨 `pgdata` 라 E: 가 아니라 이 vhdx 안(C:). ③ **valkey(immich_redis) 큐**가 폭증했다 — `AssetExtractMetadata` 대기 **423만 건**(DB 사진은 6.5만 개뿐 → 같은 사진 작업이 수십 번 중복, 압축 풀기 중 스캔·새로 고침이 반복 접수된 결과로 추정). 큐가 1.3GB 라 valkey 가 **스냅샷(`dump.rdb`)을 쓸 때마다 vhdx 가 ≈1.07GB 씩 계단식으로 커졌다**(저장 규칙 `60초 1만 건`). 컨테이너 안(`/data`)에 쓰므로 vhdx 안이다.
+- **Docker 와 무관한 C: 점유**: `pagefile.sys` 62GB(11-16 부터, 실제 사용 최대 7.5GB — 시스템 관리라 재부팅 전엔 안 줄어듦) · `hiberfil.sys` 27.5GB · pip/uv/npm 캐시 약 35GB · Riot Games 54GB(TFT·LoL 오늘 자동 업데이트 17GB) · Unity 빌드 산출물(`C:\woopang\Library\Bee`) 8GB.
+- **한 일(11-24)**: pip·uv·npm 캐시 비움(+22GB) → `powercfg -h off`(관리자, 대표님이 실행, +27.5GB) → **vhdx 압축 115.2GB → 8.1GB**(C: 여유 65GB → 173GB) → DB 는 압축 전후 같음(65,109건·275MB). 백업: Immich 자동(`E:\immich\library\backups`, 매일 02:00) + 수동 `E:\immich\backup_manual\immich_before_compact_*.dump`.
+- **vhdx 압축 절차(다음에도 같다, 약 10초)**: ① `docker stop immich_server immich_postgres immich_redis` ② `wsl -d docker-desktop -e sh -c "sync; fstrim -v /mnt/docker-desktop-disk"` ③ `docker desktop stop` → `wsl --shutdown` ④ **관리자 PowerShell** 에서 `diskpart` — `select vdisk file="<위 vhdx>"` · `attach vdisk readonly` · `compact vdisk` · `detach vdisk` ⑤ Docker Desktop 다시 켜기(컨테이너는 `restart: always` 라 저절로). ⚠ `docker` 는 Git Bash PATH 에 없다 — `C:\Program Files\Docker\Docker\resources\bin\docker.exe`. ⚠ 압축 전에 `pg_dump -Fc` 로 DB 를 한 번 더 받아 둘 것. ⚠ vhdx 를 지우거나 새로 만들지 말 것(DB 가 들어 있다).
+- **재발 방지**: 11-24 에 런타임으로 껐던 valkey 스냅샷(`config set save ""`)은 컨테이너가 다시 뜨면 풀린다 — 실제로 풀려서 11-26 에 다시 32GB 가 됐다. **11-26 부터 compose 의 `redis` 에 `command: ["valkey-server", "--save", ""]` 로 고정**했다. 큐는 Redis 안에만 있어 컨테이너를 재생성하면 큐와 일시정지 상태가 비워진다(사진·DB 는 그대로) — 재생성 뒤 복원법은 아래 「알아 둘 것」 첫 항목.
+- **감시**: `docker_data.vhdx` 크기가 20GB 를 넘거나 C: 여유가 50GB 아래면 위 절차로 다시 줄인다.
+- **11-26 후속(대표님 「1,2,3번 수정하고 4번은 정리해도 될 것 같아」)**: ① 큐 정리·compose 고정 → 아래 「알아 둘 것」 첫 항목. ② **vhdx 다시 압축 30.75GB → 6.43GB**(11-24 임시 조치가 컨테이너 재기동으로 풀려 2일 새 9.4 → 32.5GB 로 다시 컸었다). 이번엔 `fstrim` 이 38MB 밖에 안 비웠는데도 압축이 됐다 — 압축은 VM 이 이미 비운 블록을 쓴다. ③ **`pagefile.sys` 16GB 고정**(관리자, `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management` 의 `PagingFiles` = `C:\pagefile.sys 16384 16384`, 자동관리 끔) — **재부팅해야 적용**(그때 59GB → 16GB, 실사용 최대 7.5GB·RAM 64GB). ④ 캐시 정리(+약 62GB): 허깅페이스는 **코드가 안 쓰는 모델 6개만**(m2m100·mbart·opus-mt-ko-en·xlsr-53-japanese·nb-wav2vec2 nynorsk·Qwen3-TTS 1.7B-CustomVoice, 약 17GB) — 쓰는 것(Qwen3-TTS 0.6B·VoiceDesign=효딩쓰 목소리 `tts_server.py`, faster-whisper 계열·ForcedAligner·xlsr-korean·wespeaker=자막 작업 `server/preview`, realisticVision=`server/yougotdog/gen`)은 남겼다 · Android AVD 3개는 데이터·스냅샷만(`userdata-qemu.img*`·`snapshots`, 약 26GB — 설정·SDK 시스템 이미지는 그대로, 에뮬레이터는 처음 켤 때 초기화 상태로 뜬다) · Unity 다운로드 캐시 `AppData\Local\Unity\cache\{npm,packages}`(약 18GB — 열린 에디터가 쓰는 `upm` 은 남김, 다음에 패키지를 열 때 다시 받는다).
+
 ## 알아 둘 것
+- **(11-26 처리됨) Immich 중복 큐 423만 건 → 34,399건**: 대표님 승인(11-26)으로 `docker compose up -d redis` 로 valkey 를 다시 만들어 큐를 비우고(1.3GB → 12MB) 정보 읽기만 「누락분」으로 다시 접수했다(`PUT /api/jobs/metadataExtraction {command:'start'}` — DB 에 읽힌 기록이 없는 34,393장과 일치). compose(`E:\immich\docker-compose.yml`, 백업 `.bak_20261126`)의 `redis` 에 `command: ["valkey-server", "--save", ""]` 를 넣어 **스냅샷 저장을 영구히 껐다** — 컨테이너를 다시 만들어도 유지된다. ⚠ **저장을 껐으므로 valkey 를 다시 만들거나 Docker·PC 를 껐다 켜면 큐와 「일시정지」 상태가 같이 사라진다**(11-26 에 Docker 를 껐다 켜서 실제로 한 번 더 비워졌다). 사진·DB 는 그대로지만 ① 정보가 안 읽힌 사진은 사진첩 목록에 안 나오고 ② 일부러 멈춰 둔 영상 변환·얼굴·스마트검색이 풀린다 → **재기동 뒤엔 `C:\Python312\python.exe -I -X utf8 E:\immich\tools\requeue.py`** 를 한 번 돌린다(3개를 다시 `pause` → 정보 읽기 누락분 접수 → 3개는 「누락분 찾기」 1건씩만 쌓고 멈춘 채 대기). 이 3개는 대표님이 켜실 때 `PUT /api/jobs/<이름> {command:'resume'}` 하면 그때 목록이 만들어진다. (재기동에도 큐를 남기고 싶으면 compose 를 `--save 21600 1` 같은 드문 저장으로 바꾸면 된다 — 큐가 작을 땐 스냅샷이 수십 MB 라 vhdx 가 커지지 않는다. 대표님 결정 사항.)
+- ⚠ **(11-26 확인) 11-24 의 임시 조치(`valkey-cli config set save ""`)는 컨테이너가 다시 뜨면서 풀려 있었다** — 그 사이 vhdx 가 9.4GB → 32.5GB 로 다시 커졌다(2일). 그래서 런타임 설정에 기대지 말고 compose 로 고정한다(위).
 - Immich 작업 대기열: 썸네일·메타데이터는 켜 두고, 영상 변환·얼굴·스마트검색은 일부러 멈춰 있다. 썸네일 대기열이 멈춰 있으면 격자가 빈 칸으로 보인다(`/api/jobs/thumbnailGeneration` `resume`).
 - 장소 이름은 Immich 지명 데이터라 영어(Chūō · Japan)로 나온다.
 - 공유는 파일째(10장·80MB까지), 저장은 폰 사진첩으로(30장까지). 큰 영상은 저장을 쓴다.
