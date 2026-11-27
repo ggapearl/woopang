@@ -78,6 +78,9 @@ public class DoubleTap3D : MonoBehaviour
     private string address;
     private string overview;
     private string petInfo;
+    private string intro;   // 관광공사 소개 — 운영 시간 · 쉬는 날 · 요금 · 주차 · 체크인 … 한 덩어리 (11-27 대표님 36번 · TourAPIManager)
+    /// <summary>이 창에 채운 장소 자료 — 매니저가 ConfigureInfo 에서 넣고 ResetData 가 지운다. 창을 열 때(OnDoubleTapEvent) 그 매니저가 아직 안 받은 상세를 받아 다시 채운다 (11-27)</summary>
+    public object InfoSource { get; set; }
 
     // 이미지 URL 저장
     private List<string> imageUrls = new List<string>();
@@ -93,10 +96,10 @@ public class DoubleTap3D : MonoBehaviour
     private int expectedPhotos;   // 받는 중인 사진 수 — 아직 안 온 칸으로도 넘길 수 있게 (도착하면 뜬다)
     private int PhotoSlots => photosLoading ? Mathf.Max(imageSprites.Count, expectedPhotos) : imageSprites.Count;
 
-    // 정보 글 쪽(전화 · 주소 · 개요 · 반려견) — 칸이 있고 보여 줄 글이 있을 때만 한 장으로 친다. 글 없는 장소(우팡 장소를 대리 창으로 열 때)는
+    // 정보 글 쪽(전화 · 주소 · 소개 · 개요 · 반려견) — 칸이 있고 보여 줄 글이 있을 때만 한 장으로 친다. 글 없는 장소(우팡 장소를 대리 창으로 열 때)는
     // 첫 장이 빈 회색 칸이었다 (11-27 대표님 35번 「첫 사진(sub사진) 이 공백으로 발생하는 경우」)
     private bool HasInfoPage => placeInfoTextPanel != null
-        && (!string.IsNullOrEmpty(tel) || !string.IsNullOrEmpty(address) || !string.IsNullOrEmpty(overview) || !string.IsNullOrEmpty(petInfo));
+        && (!string.IsNullOrEmpty(tel) || !string.IsNullOrEmpty(address) || !string.IsNullOrEmpty(intro) || !string.IsNullOrEmpty(overview) || !string.IsNullOrEmpty(petInfo));
     // 11-17 B9 — 사진은 디스크 캐시(SubPhotoCache)로: 가까운 것의 첫 장을 미리 받아 두고(메모리에는 풀지 않는다) 열 때 디스크에서 바로 푼다
     private static readonly HashSet<DoubleTap3D> live = new HashSet<DoubleTap3D>();
     private bool infoHost;   // 목록 사진용 빈 오브젝트 (CreateInfoHost) — AR 에 없으니 미리 받지 않는다
@@ -120,6 +123,7 @@ public class DoubleTap3D : MonoBehaviour
     private Coroutine imageFade;      // 늦게 도착한 사진을 서서히 띄우는 중
     // 정보 창(FullScreenPanel)은 모든 장소가 함께 쓴다 — 목록 사진(R0926PlaceInfo)으로 다른 장소를 열면 그 장소가 넘겨받는다
     private static DoubleTap3D shown;
+    private Coroutine slideRoutine;   // 사진 넘기는 중 — 창을 닫거나 넘겨주거나 꺼질 때 멈추고 표시를 푼다 (StopSlide · 11-27)
     private Coroutine fadeRoutine;    // 창 페이드 — 넘겨줄 때 멈춘다 (앞 장소의 페이드아웃이 새 창을 닫지 않게)
     /// <summary>Start 를 마쳐 정보 창을 열 수 있다 (목록 사진 — R0926PlaceInfo)</summary>
     public bool IsReady { get; private set; }
@@ -569,6 +573,7 @@ public class DoubleTap3D : MonoBehaviour
         EnhancedTouchSupport.Enable();
         CommentManager.CommentsChanged += OnCommentsChanged;
         live.Add(this);
+        ResumeOpenWindow();
     }
 
     void OnDisable()
@@ -577,6 +582,11 @@ public class DoubleTap3D : MonoBehaviour
         CommentManager.CommentsChanged -= OnCommentsChanged;
         live.Remove(this);
         if (photosLoading) ReleasePhotos();
+        // 꺼지면 코루틴이 다 멈춘다 — 그 코루틴이 풀어 주던 표시를 여기서 푼다 (11-27 · 안 풀면 다시 켜져도 두 번 눌러 안 열리거나 첫 사진이 안 떴다)
+        StopSlide();
+        isCooldown = false;   // ResetCooldown 이 멈췄다
+        canClose = true;      // EnableCloseAfterDelay 가 멈췄다
+        if (isFadingOut) FinishClose();   // 닫히는 중이었다 — 반쯤 투명한 창이 화면을 덮고 남지 않게 마저 닫는다
 
         // 버튼 리스너 개별 제거 (다른 컴포넌트의 리스너 보호)
         if (instagramButton != null)
@@ -587,6 +597,57 @@ public class DoubleTap3D : MonoBehaviour
             previousButton.onClick.RemoveListener(ShowPreviousImage);
         if (closeButton != null)
             closeButton.onClick.RemoveListener(CloseFullscreen);
+    }
+
+    // 창을 연 채로 꺼졌다 다시 켜졌다 (백그라운드 복구 · 거리 · 필터가 오브젝트를 잠깐 끔) — 꺼질 때 뗀 버튼을 다시 잇고, 그사이 놓아준 사진은 다시 받는다.
+    // 예전엔 창은 떠 있는데 닫기 · 넘기기 버튼이 안 먹고, 받던 첫 사진도 다시 안 받아 빈 칸으로 남았다 (11-27 대표님 「더블터치 후 첫 장 사진이 안 뜸」)
+    private void ResumeOpenWindow()
+    {
+        if (!IsReady || !isFullscreen || isFadingOut || shown != this || fullscreenCanvasGroup == null || !fullscreenCanvasGroup.gameObject.activeSelf) return;
+        fadeRoutine = null;
+        fullscreenCanvasGroup.alpha = 1f;   // 켜지는(페이드인) 중에 꺼졌으면 반쯤 투명하게 남았다
+        WireButtons();
+        EnsurePhotos();
+        ShowImage(imageIndex);   // 받아 둔 칸이면 바로, 아니면 도착할 때 Update 가 띄운다
+    }
+
+    private void WireButtons()
+    {
+        if (instagramButton != null) { instagramButton.onClick.RemoveAllListeners(); instagramButton.onClick.AddListener(OnInstagramButtonClick); }
+        if (nextButton != null) { nextButton.onClick.RemoveAllListeners(); nextButton.onClick.AddListener(ShowNextImage); }
+        if (previousButton != null) { previousButton.onClick.RemoveAllListeners(); previousButton.onClick.AddListener(ShowPreviousImage); }
+        if (closeButton != null) { closeButton.onClick.RemoveAllListeners(); closeButton.onClick.AddListener(CloseFullscreen); }
+    }
+
+    // 넘기기 · 끌기 표시를 푼다 — 넘기던 코루틴이 중간에 멈추면(창 닫기 · 다른 장소가 창을 넘겨받음 · 오브젝트 꺼짐 · 풀 재활용) isSliding 이 남아
+    // 다음에 열 때 도착한 첫 사진을 띄우지 않았고(Update) 넘기기도 막혔다 (11-27)
+    private void StopSlide()
+    {
+        if (slideRoutine != null) { StopCoroutine(slideRoutine); slideRoutine = null; }
+        isSliding = false;
+        isDragging = false;
+        isSwiping = false;
+        dragDirection = 0;
+    }
+
+    // 창을 다 닫은 상태로 — FadeOutCanvas 의 끝 · 닫히는 중에 오브젝트가 꺼졌을 때 (코루틴이 멈춰 반쯤 투명한 창이 남았다)
+    private void FinishClose()
+    {
+        if (shown == this || shown == null)
+        {
+            if (fullscreenCanvasGroup != null)
+            {
+                fullscreenCanvasGroup.alpha = 0f;
+                fullscreenCanvasGroup.gameObject.SetActive(false);
+            }
+            if (guidePanel != null) guidePanel.SetActive(false);
+            if (descriptionTextUI != null) descriptionTextUI.gameObject.SetActive(false);
+            if (placeInfoTextPanel != null) placeInfoTextPanel.SetActive(false);
+        }
+        isFullscreen = false;
+        isFadingOut = false;
+        fadeRoutine = null;
+        if (shown == this) shown = null;
     }
 
     void Update()
@@ -775,6 +836,14 @@ public class DoubleTap3D : MonoBehaviour
                 isSwiping = false;
                 dragDirection = 0;
             }
+            else if (touch.phase == TouchPhase.Canceled || touch.phase == TouchPhase.Ended)
+            {
+                // 손가락을 시스템이 가져갔거나(전화 · 제어 센터 · 홈 막대) 그사이 창이 닫혔다 — 끌기 표시를 풀면 아래 제자리 돌리기가 사진을 되돌린다
+                // (예전엔 끌기 표시가 남아 다음에 열 때 도착한 첫 사진을 안 띄웠고 제자리 돌리기도 멈췄다 · 11-27)
+                isDragging = false;
+                isSwiping = false;
+                dragDirection = 0;
+            }
         }
 
         // 드래그 중이 아니고 슬라이드 중이 아닐 때: 위치 스냅백
@@ -959,6 +1028,7 @@ public class DoubleTap3D : MonoBehaviour
     {
         if (fadeRoutine != null) { StopCoroutine(fadeRoutine); fadeRoutine = null; }
         if (imageFade != null) { StopCoroutine(imageFade); imageFade = null; }
+        StopSlide();   // 넘기던 것이 넘겨준 창의 사진을 바꾸지 않게 (11-27)
         isFullscreen = false;
         isFadingOut = false;
     }
@@ -1032,6 +1102,7 @@ public class DoubleTap3D : MonoBehaviour
         canClose = false;
         StartCoroutine(EnableCloseAfterDelay());
 
+        StopSlide();   // 앞서 넘기던 · 끌던 표시가 남아 있으면 도착한 첫 사진을 안 띄운다 (11-27)
         currentIndex = 0;
         isPlaceInfoPage = HasInfoPage;   // 보여 줄 정보 글이 없으면 첫 장은 첫 상세 사진 (35번)
         imageIndex = isPlaceInfoPage ? -1 : 0;
@@ -1039,12 +1110,12 @@ public class DoubleTap3D : MonoBehaviour
         ShowImage(imageIndex);
         UpdateInfoImages();
 
-        // 진행 중이던 FadeOut 코루틴 중단 후 열기
+        // 진행 중이던 FadeOut 코루틴만 멈추고 열기 — 예전엔 코루틴을 다 멈춰 두 번 누르기 쿨다운(ResetCooldown) · 닫기 방지(EnableCloseAfterDelay)가
+        // 안 풀려 그 장소를 다시 두 번 눌러도 안 열렸다 (11-27). 받던 사진은 그대로 받는다
         if (isFadingOut)
         {
-            StopAllCoroutines();
+            if (fadeRoutine != null) { StopCoroutine(fadeRoutine); fadeRoutine = null; }
             isFadingOut = false;
-            if (photosLoading) ReleasePhotos();   // 받던 사진도 같이 멈췄다 — 처음부터 다시
         }
         EnsurePhotos();
 
@@ -1104,7 +1175,7 @@ public class DoubleTap3D : MonoBehaviour
             isPlaceInfoPage = false;
             imageIndex = targetIdx;
             currentIndex++;
-            StartCoroutine(SlideToImage(-1, targetIdx));
+            slideRoutine = StartCoroutine(SlideToImage(-1, targetIdx));
             UpdatePlaceInfoVisibility();
         }
         else if (imageIndex < PhotoSlots - 1)
@@ -1112,7 +1183,7 @@ public class DoubleTap3D : MonoBehaviour
             int targetIdx = imageIndex + 1;
             imageIndex = targetIdx;
             currentIndex++;
-            StartCoroutine(SlideToImage(-1, targetIdx));
+            slideRoutine = StartCoroutine(SlideToImage(-1, targetIdx));
         }
         else
         {
@@ -1130,7 +1201,7 @@ public class DoubleTap3D : MonoBehaviour
             imageIndex = -1;
             currentIndex--;
             if (currentIndex < 0) currentIndex = 0;
-            StartCoroutine(SlideToImage(1, -1));
+            slideRoutine = StartCoroutine(SlideToImage(1, -1));
             UpdatePlaceInfoVisibility();
         }
         else if (imageIndex > 0)
@@ -1139,7 +1210,7 @@ public class DoubleTap3D : MonoBehaviour
             imageIndex = targetIdx;
             currentIndex--;
             if (currentIndex < 0) currentIndex = 0;
-            StartCoroutine(SlideToImage(1, targetIdx));
+            slideRoutine = StartCoroutine(SlideToImage(1, targetIdx));
         }
         else
         {
@@ -1333,6 +1404,7 @@ public class DoubleTap3D : MonoBehaviour
 
         isSliding = false;
         dragDirection = 0;
+        slideRoutine = null;
     }
 
     private void ResetImagePosition()
@@ -1351,7 +1423,7 @@ public class DoubleTap3D : MonoBehaviour
         dragDirection = 0;
     }
 
-    public void SetInfoImages(Sprite sprite1, Sprite sprite2, bool petFriendly, bool separateRestroom, string description, string name, int id = -1, string username = null, string instagramId = null, string tel = null, string address = null, string overview = null, string petInfo = null)
+    public void SetInfoImages(Sprite sprite1, Sprite sprite2, bool petFriendly, bool separateRestroom, string description, string name, int id = -1, string username = null, string instagramId = null, string tel = null, string address = null, string overview = null, string petInfo = null, string intro = null)
     {
         infoSprite1 = sprite1;
         infoSprite2 = sprite2;
@@ -1367,6 +1439,7 @@ public class DoubleTap3D : MonoBehaviour
         this.address = address;
         this.overview = overview;
         this.petInfo = petInfo;
+        this.intro = intro;
 
         if (isFullscreen)
         {
@@ -1414,6 +1487,8 @@ public class DoubleTap3D : MonoBehaviour
                     infoLines.Add(R0926LocalizedText.Say("전화번호", "Phone", "電話番号", "电话", "Teléfono") + ": " + tel);
                 if (!string.IsNullOrEmpty(address))
                     infoLines.Add(R0926LocalizedText.Say("주소", "Address", "住所", "地址", "Dirección") + ": " + address);
+                if (!string.IsNullOrEmpty(intro))
+                    infoLines.Add(intro);   // 「운영 시간: …」 「쉬는 날: …」 줄들 — 만든 쪽(TourAPIManager.IntroText)이 이미 「이름: 값」으로 묶었다
                 if (!string.IsNullOrEmpty(overview))
                     infoLines.Add(R0926LocalizedText.Say("개요", "Overview", "概要", "简介", "Descripción") + ": " + overview);
                 if (!string.IsNullOrEmpty(petInfo))
@@ -1562,21 +1637,7 @@ public class DoubleTap3D : MonoBehaviour
             yield return null;
         }
 
-        fullscreenCanvasGroup.alpha = 0f;
-        fullscreenCanvasGroup.gameObject.SetActive(false);
-        guidePanel.SetActive(false);
-        if (descriptionTextUI != null)
-        {
-            descriptionTextUI.gameObject.SetActive(false);
-        }
-        if (placeInfoTextPanel != null)
-        {
-            placeInfoTextPanel.SetActive(false);
-        }
-        isFullscreen = false;
-        isFadingOut = false;
-        fadeRoutine = null;
-        if (shown == this) shown = null;
+        FinishClose();
     }
 
     public int GetId()
@@ -1604,6 +1665,9 @@ public class DoubleTap3D : MonoBehaviour
     {
         // 진행 중인 이미지 로딩 코루틴 중단 (이전 장소 사진이 새 오브젝트에 표시되는 것 방지)
         StopAllCoroutines();
+        StopSlide();          // 멈춘 코루틴이 풀어 주던 표시 — 풀로 돌려 다른 장소가 쓸 때 남지 않게 (11-27)
+        isCooldown = false;
+        canClose = true;
 
         fadeRoutine = null;
         imageFade = null;
@@ -1631,6 +1695,8 @@ public class DoubleTap3D : MonoBehaviour
         address = null;
         overview = null;
         petInfo = null;
+        intro = null;
+        InfoSource = null;
         ReleasePhotos();
         imageUrls.Clear();
         serverPhotoFallback = true;

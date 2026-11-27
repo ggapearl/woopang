@@ -310,7 +310,7 @@ public class PlaceListManager : MonoBehaviour
         bool petFriendlyOnly = activeFilters.GetValueOrDefault("petFriendlyOnly", false);
         bool petFriendlyAll = activeFilters.GetValueOrDefault("petFriendlyAll", true);
         bool showPublic = activeFilters.GetValueOrDefault("publicData", true);
-        bool showStores = activeFilters.GetValueOrDefault("stores", true);   // 「공공데이터」 칩 — 근처 가게 + 기관 랜드마크 · 공원 · 스포츠 · 화장실 (11-26 9번)
+        bool showStores = activeFilters.GetValueOrDefault("stores", true);   // 「공공데이터」 칩 — 근처 가게 + 관광공사 + 병원 · 박물관 · 화장실 같은 기관 공공시설 (ChipKey · 11-27)
         bool showSubway = activeFilters.GetValueOrDefault("subway", true);
         bool showTrain = activeFilters.GetValueOrDefault("train", true);
         bool showTerminal = activeFilters.GetValueOrDefault("terminal", true);
@@ -347,7 +347,7 @@ public class PlaceListManager : MonoBehaviour
                     bool isPublicData = cached.filterKey == "publicData";   // 등록자 기준 (카테고리 아님)
                     if (isPublicData)
                     {
-                        // 칩은 FilterManager.ChipKey — 기관 랜드마크 · 공원 · 스포츠 · 화장실은 「공공데이터」, 그 밖은 「공공기관」 (11-26 대표님 9번)
+                        // 칩은 FilterManager.ChipKey — 관공서 · 학교 · 우체국/농협만 「공공기관」, 그 밖은 「공공데이터」 (11-27 대표님)
                         // 카테고리 필터 활성 시 칩 무시 (카테고리 매칭이 이미 필터링)
                         bool dataChip = FilterManager.ChipKey(cached.filterKey, cat) == "stores";
                         if (!categoryFilterActive && !(dataChip ? showStores : showPublic)) continue;
@@ -401,16 +401,18 @@ public class PlaceListManager : MonoBehaviour
             }
         }
 
-        // 2. TourAPI — '전체'면 공공데이터 칩대로, 분류를 고르면 그 분류만 (숙박은 '숙소' — 11-19 L1. 예전엔 분류를 고르면 통째로 빠졌다)
-        if ((showPublic || categoryFilterActive) && tourAPIManager != null) {
+        // 2. TourAPI — '전체'면 칩(ChipKey — 「공공데이터」 · 11-27, 예전 「공공기관」)대로, 분류를 고르면 그 분류만 (숙박은 '숙소' — 11-19 L1. 예전엔 분류를 고르면 통째로 빠졌다)
+        if (tourAPIManager != null) {
             foreach(var p in tourAPIManager.GetPlaceDataMap().Values) {
                 if (HiddenPlaces.IsHidden("tour_" + p.contentid)) continue;
                 string tcat = TourAPIManager.CategoryOf(p);
+                bool tourDataChip = FilterManager.ChipKey(tourAPIManager.FilterKey, tcat) == "stores";
+                if (!categoryFilterActive && !(tourDataChip ? showStores : showPublic)) continue;
                 if (categoryFilterActive && !string.IsNullOrEmpty(activeCategoryFilter) && tcat != activeCategoryFilter) continue;
                 if (petFriendlyOnly && !p.petFriendly) continue;   // 국문 관광정보에서만 온 숙박은 애견동반 자료가 아니다 — 배분(PetAllowed)과 같은 규칙 (11-19 L3)
                 float d = CalculateDistance(lat, lon, p.mapy, p.mapx);
                 if (d <= maxDisplayDistance) {
-                    tourAPICount++;
+                    if (tourDataChip) storeCount++; else tourAPICount++;
                     combinedPlaces.Add((p, d, p.contentid, $"{p.title} - {Mathf.FloorToInt(d)}m", p.color));
                     // 반려동물 여행 자료는 애견동반(이름 노랑) · 국문 관광정보에서만 온 숙박은 아니다 (11-19 L3 — TourAPIManager 캐시도 같은 값)
                     liveEntries.Add(new LiveEntry { id = p.contentid, baseLabel = p.title, colorHex = p.color, baseLat = p.mapy, baseLon = p.mapx, icon = tcat, pet = p.petFriendly, data = p });

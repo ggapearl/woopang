@@ -1064,7 +1064,7 @@ public class DataManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTi
         }
 
         // 공공 칩: 기관이 등록한 장소만 숨긴다 (사람이 '공원'으로 올린 곳은 우팡 데이터).
-        // 기관 랜드마크 · 공원 · 스포츠 · 화장실은 「공공데이터」(stores) 칩, 그 밖은 「공공기관」(publicData) 칩 — FilterManager.ChipKey (11-26 대표님 9번)
+        // 관공서 · 학교 · 우체국/농협만 「공공기관」(publicData) 칩, 병원 · 박물관 · 화장실 … 나머지는 「공공데이터」(stores) 칩 — FilterManager.ChipKey (11-27 대표님)
         // 분류(카테고리)를 고른 동안은 분류가 정한다 — 그때 두 칩은 늘 false 로 온다
         bool categoryMode = currentFilters.ContainsKey("categoryFilter") && currentFilters["categoryFilter"];
         if (!categoryMode && FilterManager.IsPublicSource(place.is_public, place.category))

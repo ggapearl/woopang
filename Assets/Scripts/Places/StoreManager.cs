@@ -318,7 +318,7 @@ public class StoreManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadT
             id: -1,
             username: "WOOPANG",
             instagramId: null,
-            tel: null,
+            tel: string.IsNullOrEmpty(s.tel) ? null : s.tel,   // 행정안전부 인허가(영업 중)와 맞춘 가게만 (11-27 · 서버 public_store_status)
             address: s.addr,
             overview: Overview(s),
             petInfo: null);
@@ -347,6 +347,7 @@ public class StoreManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadT
                 ? R0926LocalizedText.Say("한국관광공사", "Korea Tourism Organization", "韓国観光公社", "韩国观光公社", "Organización de Turismo de Corea")
                 : s.photo_credit);
         }
+        if (!string.IsNullOrEmpty(s.tel)) sb.Append("\n전화: 행정안전부 지방행정 인허가 정보");   // 출처 표시 (11-27 · 새 글은 한국어만)
         return sb.ToString();
     }
 
@@ -751,6 +752,7 @@ public class StoreData
     public double lon { get; set; }
     public string photo { get; set; }           // 관광공사 자료와 이어진 가게만
     public string photo_credit { get; set; }
+    public string tel { get; set; }             // 전화 — 인허가(영업 중)와 맞춘 가게만, 아니면 "" (11-27)
     public bool owner { get; set; }             // 가게 주인이 「내 가게」로 고친 곳 (나중에)
     public string source { get; set; }
     public float dist { get; set; }

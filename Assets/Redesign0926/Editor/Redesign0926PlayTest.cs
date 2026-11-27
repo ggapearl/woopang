@@ -222,6 +222,7 @@ namespace Redesign0926
             else if (mode == "spawngate") PlanSpawnGate();   // 11-19 P1 사진을 다 받은 뒤에 띄우기 — 받는 동안 임시 화살표 · 뜨는 순간 사진 면 · 서브사진 다 받음 · 0.2초 페이드인 · 기기 규칙 · 404 · 관광공사 · 장소 3D (운영 공개 GET)
             else if (mode == "locchip") PlanLocChip();   // 11-19 M2 도크 위 '장소 표시' 칩 — 기본은 지역 이름(초록 핀 그대로) · 누르면 좌표로 부드럽게(흐려짐 → 폭 → 또렷) · 5초 뒤 지역 이름 · 또 누르면 바로 · 앱 돌아오면 지역 이름 · 주소 없으면 좌표뿐 (서울시청 · 공개 GET)
             else if (mode == "stayapi") PlanStayApi();   // 11-19 L3 국문 관광정보 숙박 — 합치기 · 가까운 순 · '전체' 4곳 · '숙소' 전부 · 애견동반 · 숙박 길이 없으면(404) 반려동물 자료만
+            else if (mode == "tourintro") PlanTourIntro();   // 11-27 36번 관광공사 소개(운영 시간 · 쉬는 날 · 요금 · 체크인 …) — 정보 창을 열 때 받기 · 다시 열면 바로 · 늦은 답이 다른 창을 덮지 않음 · 가게 전화 (시험 서버 5800 · tour_stub.py)
             else if (mode == "stay") PlanStay();   // 11-19 L1 목록 분류 「숙소」 — 분류 9줄 · 침대 그림 · 관광공사 숙박 · 사람이 올린 숙소 · 애견동반을 켜도
             else if (mode == "glassmap") PlanGlassMap();   // 11-19 K3 물방울 유리가 바로 뒤를 비추는지 — 자리마다 색이 다른 배경으로 어긋남(px) 재기
             else if (mode == "windowskin") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanWindowSkin(); }   // 11-23 S8 디스플레이 선택 — 물방울 · 네온 · 둘 다 · 둘 다 끔 × 창 배경 진하기
@@ -260,6 +261,7 @@ namespace Redesign0926
             else if (mode == "aijobs") PlanAiJobs();   // 11-26 4번 AI 작업 보관함 — 맡기기 · 앱 껐다 켜기 · 완성 GLB 받아 둠 · 같은 번호 한 번 · 실패 · 그만두기 · 다시 깔기 복구 · 지우기 · 계정 (가짜 서버 5799)
             else if (mode == "translate21") PlanTranslate21();   // 11-26 21번 번역 버튼 — 화면 대신 보고 있는 사진 파일(원본 → 받아 둔 것 → 띄운 그림) · 정보 글 쪽은 화면 (시험 서버 5798)
             else if (mode == "photo15") PlanPhoto15();   // 11-26 15번 사람 사진 — 근처 카드 원판 크기 · 프로필 창 사진 재질 · 목록 줄 사진 밉맵 · 계산 고리 (시험 서버 5797)
+            else if (mode == "photostuck") PlanPhotoStuck();   // 11-27 버그 리포트 — 정보 창에서 멈춘 코루틴이 남긴 표시: 넘기는 중 · 사진 받는 중 · 쿨다운 · 닫히는 중에 꺼짐 · 손가락 취소 (시험 서버 5798)
             else if (mode == "infohost") PlanInfoHost();   // 11-27 35번 대리 정보 창 — 우팡 장소는 위 글 칸 꺼짐 · 「Created by」 한 줄 · 첫 장은 첫 상세 사진 · 정보 글이 있는 곳은 예전대로
             else if (mode == "catmodal") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanCatModal(); }   // 11-26 37번 분류 고르기 창 — 칩 숨 쉬는 테 · 가운데 3×3 큰 칸 · 위아래 밀기 · 바깥 · 뒤로가기로 닫힘 · 네온 줄 (배경 폴더 있으면 도시 배경)
             else if (mode == "worldtouch") PlanWorldTouch();   // 11-18 N2 덮은 UI 밑의 3D 오브젝트는 손가락을 받지 않는다 · 정보 창 위에 뜬 창 · 도크에서 민 것은 정보 창이 받지 않는다
@@ -23534,7 +23536,7 @@ namespace Redesign0926
             Check(() => ChipLabel("FestivalToggle") == "축제" || ChipLabel("FestivalToggle") == "Festivals", "'공공데이터' 오른쪽에 '축제' 칩 (11-05 '축제 / 보물' → '축제')");
             Check(() => ChipOn("FestivalToggle") == false, "축제 / 보물 칩은 꺼진 채 시작");
             Check(() => ChipLabel("StoresToggle") == "공공데이터" || ChipLabel("StoresToggle") == "Public data", "3번째 칩 '공공데이터' = 근처 가게 (소상공인 상가정보 · 11-18 N8a)");
-            Check(() => ChipLabel("PublicDataToggle") == "공공기관" || ChipLabel("PublicDataToggle") == "Public orgs", "관광공사 · 기관 칩은 '공공기관' — 예전 3D 자리 (11-18 N8a)");
+            Check(() => ChipLabel("PublicDataToggle") == "공공기관" || ChipLabel("PublicDataToggle") == "Public orgs", "기관 칩(관공서 · 학교)은 '공공기관' — 예전 3D 자리 (11-18 N8a · 11-27 관광공사 · 병원 · 박물관은 「공공데이터」로)");
             Check(() => ChipTextsFit(), "다섯 나라 말 모두 칩 칸 안에 (한 칸이 된 '터미널 / 기차' 포함)");
             Check(() => ChipIconsOk(), "칩마다 이름 앞 그림 — 전체 네 칸 · 애견동반 발 · 공공데이터 가게 · 축제 폭죽 · 지하철 · 버스 · 공공기관 청사 · 사람 (10-27 동그라미 대신 이모지 · 11-18 N8a)");
             Do(() => log.Add("  줄: " + RowsSummary(8)));

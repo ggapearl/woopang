@@ -20,7 +20,7 @@ public class FilterManager : MonoBehaviour
     [SerializeField] private Toggle categoryToggle;
     [Tooltip("축제 칩 — 켜면 목록이 근처 축제만 (AR 은 그대로). 앱을 켤 때마다 꺼진 채 시작")]
     [SerializeField] private Toggle festivalToggle;
-    [Tooltip("「공공데이터」 칩 — 근처 가게 (소상공인 상가정보 · StoreManager, 11-20 N8a) + 기관 자료 중 랜드마크 · 공원 · 스포츠 · 화장실 (11-26 9번 · ChipKey). 나머지 기관 자료 · 관광공사 자료는 「공공기관」 칩(publicDataToggle)")]
+    [Tooltip("「공공데이터」 칩 — 근처 가게 (소상공인 상가정보 · StoreManager, 11-20 N8a) + 관광공사 자료 + 기관 자료 중 학교 · 관공서 · 우체국/농협을 뺀 전부 (병원 · 박물관 · 화장실 … · 11-27 · ChipKey). 학교 · 관공서 · 우체국/농협은 「공공기관」 칩(publicDataToggle)")]
     [SerializeField] private Toggle storesToggle;
 
 
@@ -88,17 +88,18 @@ public class FilterManager : MonoBehaviour
         => serverFlag ?? PublicDataCategories.Contains(category ?? "");
 
     /// <summary>
-    /// 「공공데이터」 칩(stores 키)이 켜고 끄는 기관 자료 분류 — 랜드마크 · 공원 · 스포츠 · 화장실 (분류 고르기에 있는 공공 분류 넷).
-    /// 11-26 대표님 「랜드마크나 공원, 스포츠, 화장실 등이 여기에 포함되도록 … 공공화장실 등도 '공공기관' 이 아닌 '공공데이터'로」 —
-    /// 예전엔 기관 자료가 모두 「공공기관」 칩이라, 「공공데이터」만 켠 '전체'에선 기관이 올린 랜드마크(출렁다리)가 안 뜨고 '랜드마크'를 골라야 떴다.
-    /// 시청 · 학교 · 병원 · 박물관 · 종교 등 나머지 기관 자료와 관광공사 자료는 「공공기관」 칩 그대로.
+    /// 「공공기관」 칩(publicData 키)에 남는 기관 자료 분류 — 관공서(시청 · 주민센터 · 경찰서 · 소방서) · 학교 · 우체국/농협. 나머지는 모두 「공공데이터」 칩(stores 키).
+    /// 11-27 대표님 「'병원 / 화장실 / 박물관' 등은 공공데이터로 … 공공기관(학교 / 소방서 / 경찰서 / 시도 주무관청 / 주민센터 등) 이 아니라」 —
+    /// 그래서 병원 · 박물관 · 복지 · 종교와 관광공사 자료(관광지 · 문화시설 · 숙소 · 음식점 …)도 「공공데이터」로 옮겼다
+    /// (11-26 9번은 랜드마크 · 공원 · 스포츠 · 화장실 넷만 옮겼고, 박물관 · 병원과 관광공사 자료는 「공공기관」에 남아 있었다).
+    /// 기관 칩에 둘 것만 적어 두면 새 공공 분류가 생겨도 「공공데이터」로 간다.
     /// filterKey 는 바꾸지 않는다 — 공공 별도 예산 · 내장 그림 · 애견동반 규칙은 등록자 기준 그대로
     /// </summary>
-    public static readonly HashSet<string> PublicDataChipCategories = new HashSet<string> { "landmark", "park", "sport", "toilet" };
+    public static readonly HashSet<string> PublicOrgChipCategories = new HashSet<string> { "gov", "edu", "utility" };
 
-    /// <summary>이 장소를 켜고 끄는 칩의 키 — 기관 자료(publicData) 중 랜드마크 · 공원 · 스포츠 · 화장실은 「공공데이터」(stores), 그 밖은 filterKey 그대로 (목록 · AR 배분 · DataManager 가 같이 쓴다)</summary>
+    /// <summary>이 장소를 켜고 끄는 칩의 키 — 기관 · 관광공사 자료(publicData)는 관공서 · 학교 · 우체국/농협만 「공공기관」(publicData), 나머지는 「공공데이터」(stores). 그 밖은 filterKey 그대로 (목록 · AR 배분 · DataManager · TourAPIManager 가 같이 쓴다)</summary>
     public static string ChipKey(string filterKey, string category)
-        => filterKey == "publicData" && PublicDataChipCategories.Contains(category ?? "") ? "stores" : filterKey;
+        => filterKey == "publicData" && !PublicOrgChipCategories.Contains(category ?? "") ? "stores" : filterKey;
 
     private PetFriendlyFilterState petFriendlyState = PetFriendlyFilterState.All;  // 기본값: 포함
     public PetFriendlyFilterState PetState => petFriendlyState;
@@ -215,8 +216,8 @@ public class FilterManager : MonoBehaviour
             { "p2pAll", "P2P(전체)" },
             { "p2pFollowing", "P2P(팔로잉)" },
             { "p2pNone", "P2P(제외)" },
-            { "publicData", "공공기관" },   // 관광공사 · 기관이 올린 공공시설 (11-18 대표님 — 예전 「공공데이터」) — 기관 랜드마크 · 공원 · 스포츠 · 화장실은 빼고 (11-26 9번)
-            { "stores", "공공데이터" },      // 근처 가게 — 소상공인 상가정보 (StoreManager) + 기관 랜드마크 · 공원 · 스포츠 · 화장실 (ChipKey · 11-26 9번)
+            { "publicData", "공공기관" },   // 기관이 올린 관공서 · 학교 · 우체국/농협만 (ChipKey · 11-27 — 11-18 엔 관광공사 · 기관 자료 전부였다)
+            { "stores", "공공데이터" },      // 근처 가게 (StoreManager) + 관광공사 자료 + 병원 · 박물관 · 화장실 같은 기관 공공시설 (ChipKey · 11-27)
             { "subway", "지하철" },
             { "alcohol", "주류판매" },
             { "train", "기차역" },
@@ -1830,7 +1831,7 @@ public class FilterManager : MonoBehaviour
     /// <summary>
     /// 분류(카테고리)를 고른 동안은 그 분류만 — 출처 칩(공공데이터·지하철·터미널/기차)은 보지 않는다.
     /// 분류가 '전체'면 출처 칩만 본다. 공공데이터인지는 filterKey (등록자 기준 — 카테고리 아님).
-    /// 기관 자료가 어느 칩인지는 ChipKey — 랜드마크 · 공원 · 스포츠 · 화장실은 「공공데이터」, 그 밖은 「공공기관」 (11-26 대표님 9번).
+    /// 기관 · 관광공사 자료가 어느 칩인지는 ChipKey — 관공서 · 학교 · 우체국/농협만 「공공기관」, 그 밖은 「공공데이터」 (11-27 대표님).
     /// 예전엔 분류를 골라도 공공 칩(그때는 늘 꺼짐)에 걸려 공공 장소가 화살표로만 떴다.
     /// 그래서 칩을 꺼 둔 채면 분류 쪽이 '전체'보다 많을 수 있다 — 그게 맞다 (11-22 대표님 「원래대로 '전체'보다 많을 수 있도록 … '공공데이터' 를 키지 않아도 해당 분류를 눌렀을 때 관련한 내용이 모두 발생하도록」 · 11-21 S7 에 칩대로 바꿨다가 되돌림)
     /// </summary>

@@ -18,7 +18,7 @@ namespace Redesign0926
     ///    ① 두 칩을 끄고 '전체' · 분류 8개 — '전체'는 사람이 올린 둘만, 분류마다 그 분류 자료가 모두 (목록 · AR 배분 자격 · 매니저 보이기) · '랜드마크'는 '전체'보다 기관 자료 셋이 많다
     ///    ② 칩을 켜면 — '전체'에 12곳 모두 · 분류마다 그 분류 자료 그대로 · 분류는 '전체'의 부분
     ///    ③ 분류를 고른 동안 두 칩은 회색 체크로 잠겨 누를 수 없다 (교통 칩도) · '전체'로 돌아오면 고르기 전 값 · 저장값 그대로
-    ///    ④ 칩 하나씩 (11-26 대표님 9번) — 「공공데이터」만: 기관 랜드마크 · 화장실 · 가게 (관광공사 · 시청 없음) · 「공공기관」만: 관광공사 · 시청 (기관 랜드마크 · 화장실 · 가게 없음)
+    ///    ④ 칩 하나씩 (11-26 대표님 9번 · 11-27 다시 나눔) — 「공공데이터」만: 기관 랜드마크 · 화장실 · 관광공사 · 가게 (시청 없음) · 「공공기관」만: 시청 (기관 랜드마크 · 화장실 · 관광공사 · 가게 없음)
     ///    끝나면 넣은 것 · 칩 · 분류 · 저장값을 되돌린다 (로그엔 개수만 — 이름 · 자리는 적지 않는다)
     /// </summary>
     public static partial class Redesign0926PlayTest
@@ -387,15 +387,17 @@ namespace Redesign0926
                        && Ids(snaps["잠금 풂전체"].list) == People && listOff && PlayerPrefs.GetInt(PrefPub, 1) == 0 && PlayerPrefs.GetInt(PrefStores, 1) == 0;
             }, "'전체'로 돌아오면 두 칩은 고르기 전 값(끔) · 다시 누를 수 있음 · 목록엔 사람이 올린 둘만 (기관 자료 · 관광공사 · 가게 없음) · 저장값 0 그대로");
 
-            // ④ 칩 하나씩 — 기관 랜드마크 · 화장실은 「공공데이터」 칩, 관광공사 · 시청은 「공공기관」 칩
-            //    (11-26 대표님 9번 「'공공데이터' 를 켜도 발생하지 않는 경우가 … 공공화장실 등도 '공공기관' 이 아닌 '공공데이터'로 포함되서 이 버튼을 키면 해당 관련한 리스트가 발생해야」)
+            // ④ 칩 하나씩 — 기관 랜드마크 · 화장실 · 관광공사는 「공공데이터」 칩, 시청(관공서 · 학교 · 우체국/농협)만 「공공기관」 칩
+            //    (11-26 대표님 9번 「'공공데이터' 를 켜도 발생하지 않는 경우가 … 공공화장실 등도 '공공기관' 이 아닌 '공공데이터'로 포함되서 이 버튼을 키면 해당 관련한 리스트가 발생해야」
+            //     · 11-27 「'병원 / 화장실 / 박물관' 등은 공공데이터로 들어가는거지? 공공기관(학교 / 소방서 / 경찰서 / 시도 주무관청 / 주민센터 등) 이 아니라?」)
             var govRow = new CachedPlaceData { uniqueId = "dm_990419", rawId = "990419", category = "gov", sourceManager = "DataManager", modelType = "cube", filterKey = "publicData" };
             bool GovPass() => Fm() != null && (bool)passM.Invoke(Fm(), new object[] { govRow, Fm().GetActiveFilters() });
             bool GovShow() => dm != null && (bool)dmShowM.Invoke(dm, new object[] { new PlaceData { id = 990419, category = "gov", is_public = true, model_type = "cube" } });
             int FootN(Snap s, string k) => s.foot.TryGetValue(k, out int n) ? n : 0;
+            int TourElig(Snap s) => (s.elig.Contains("tour_kt_cs_1") ? 1 : 0) + (s.elig.Contains("tour_kt_cs_2") ? 1 : 0);
             string[] orgLand = { "dm_990411", "dm_990412", "dm_990413", "dm_990414" };   // 기관 랜드마크 셋 · 화장실 (AR 자격은 uniqueId)
-            string dataOnly = Ids(new[] { "990411", "990412", "990413", "990414", "990415", "990416", "st_cs1", "st_cs2", "st_cs3", "st_cs4" });
-            string orgOnly = Ids(new[] { "990415", "990416", "kt_cs_1", "kt_cs_2" });
+            string dataOnly = Ids(new[] { "990411", "990412", "990413", "990414", "990415", "990416", "kt_cs_1", "kt_cs_2", "st_cs1", "st_cs2", "st_cs3", "st_cs4" });
+            string orgOnly = Ids(new[] { "990415", "990416" });   // 넣은 곳 가운데 「공공기관」 칩 몫은 없다 — 시청은 govRow 로 따로 본다
             bool govA = true, govShowA = true, govB = false, govShowB = false;
             Do(() => Press("StoresToggle"));
             Sleep(0.5f);
@@ -406,11 +408,11 @@ namespace Redesign0926
             Check(() =>
             {
                 var s = snaps["공공데이터만전체"];
-                bool elig = orgLand.All(s.elig.Contains) && !s.elig.Contains("tour_kt_cs_1") && !s.elig.Contains("tour_kt_cs_2");
-                bool foot = AppLanguage.Code != "ko" || (FootN(s, "공공데이터") >= 8 && FootN(s, "공공기관") == 0);
-                log.Add($"  공공데이터만 — 목록 {Ids(s.list)} · AR 자격 기관 랜드마크 · 화장실 {orgLand.Count(s.elig.Contains)}/4 · 시청(기관) 배분 {govA} · 매니저 {govShowA} · 아래 줄 공공데이터 {FootN(s, "공공데이터")} · 공공기관 {FootN(s, "공공기관")}");
+                bool elig = orgLand.All(s.elig.Contains) && TourElig(s) == 2;
+                bool foot = AppLanguage.Code != "ko" || (FootN(s, "공공데이터") >= 10 && FootN(s, "공공기관") == 0);
+                log.Add($"  공공데이터만 — 목록 {Ids(s.list)} · AR 자격 기관 랜드마크 · 화장실 {orgLand.Count(s.elig.Contains)}/4 · 관광공사 {TourElig(s)}/2 · 시청(기관) 배분 {govA} · 매니저 {govShowA} · 아래 줄 공공데이터 {FootN(s, "공공데이터")} · 공공기관 {FootN(s, "공공기관")}");
                 return !PubOn() && StoresOn() && Ids(s.list) == dataOnly && Ids(s.pass) == dataOnly && Ids(s.show) == dataOnly && elig && foot && !govA && !govShowA;
-            }, "「공공데이터」만 켠 '전체' — 기관 랜드마크 셋 · 화장실 · 사람이 올린 둘 · 가게 넷 (목록 · AR 자격 · 매니저) · 관광공사 · 시청은 없음 · 아래 줄 공공데이터 수에 기관 랜드마크 · 화장실 (11-26 대표님 9번)");
+            }, "「공공데이터」만 켠 '전체' — 기관 랜드마크 셋 · 화장실 · 관광공사 둘 · 사람이 올린 둘 · 가게 넷 (목록 · AR 자격 · 매니저) · 시청은 없음 · 아래 줄 공공데이터 수에 기관 랜드마크 · 화장실 · 관광공사 (11-26 대표님 9번 · 11-27)");
             Do(() => { Press("StoresToggle"); Press("PublicDataToggle"); });
             Sleep(0.5f);
             Do(Refresh);
@@ -419,17 +421,20 @@ namespace Redesign0926
             Check(() =>
             {
                 var s = snaps["공공기관만전체"];
-                bool elig = !orgLand.Any(s.elig.Contains) && s.elig.Contains("tour_kt_cs_1") && s.elig.Contains("tour_kt_cs_2");
-                bool foot = AppLanguage.Code != "ko" || (FootN(s, "공공기관") >= 2 && FootN(s, "공공데이터") == 0);
-                log.Add($"  공공기관만 — 목록 {Ids(s.list)} · AR 자격 기관 랜드마크 · 화장실 {orgLand.Count(s.elig.Contains)}/4 · 시청(기관) 배분 {govB} · 매니저 {govShowB} · 아래 줄 공공기관 {FootN(s, "공공기관")} · 공공데이터 {FootN(s, "공공데이터")}");
+                bool elig = !orgLand.Any(s.elig.Contains) && TourElig(s) == 0;
+                bool foot = AppLanguage.Code != "ko" || (s.foot.ContainsKey("공공기관") && FootN(s, "공공데이터") == 0);
+                log.Add($"  공공기관만 — 목록 {Ids(s.list)} · AR 자격 기관 랜드마크 · 화장실 {orgLand.Count(s.elig.Contains)}/4 · 관광공사 {TourElig(s)}/2 · 시청(기관) 배분 {govB} · 매니저 {govShowB} · 아래 줄 공공기관 {FootN(s, "공공기관")} · 공공데이터 {FootN(s, "공공데이터")}");
                 return PubOn() && !StoresOn() && Ids(s.list) == orgOnly && Ids(s.pass) == orgOnly && Ids(s.show) == orgOnly && elig && foot && govB && govShowB;
-            }, "「공공기관」만 켠 '전체' — 관광공사 둘 · 사람이 올린 둘 · 시청(기관) · 기관 랜드마크 · 화장실 · 가게는 없음 (11-26 대표님 9번)");
+            }, "「공공기관」만 켠 '전체' — 사람이 올린 둘 · 시청(기관) · 기관 랜드마크 · 화장실 · 관광공사 · 가게는 없음 · 아래 줄 공공데이터 없음 (11-26 대표님 9번 · 11-27)");
             Check(() => FilterManager.ChipKey("publicData", "landmark") == "stores" && FilterManager.ChipKey("publicData", "park") == "stores"
                         && FilterManager.ChipKey("publicData", "sport") == "stores" && FilterManager.ChipKey("publicData", "toilet") == "stores"
-                        && FilterManager.ChipKey("publicData", "gov") == "publicData" && FilterManager.ChipKey("publicData", "culture") == "publicData"
-                        && FilterManager.ChipKey("publicData", "tour") == "publicData" && FilterManager.ChipKey("publicData", "stay") == "publicData"
+                        && FilterManager.ChipKey("publicData", "medical") == "stores" && FilterManager.ChipKey("publicData", "culture") == "stores"
+                        && FilterManager.ChipKey("publicData", "welfare") == "stores" && FilterManager.ChipKey("publicData", "religious") == "stores"
+                        && FilterManager.ChipKey("publicData", "tour") == "stores" && FilterManager.ChipKey("publicData", "stay") == "stores"
+                        && FilterManager.ChipKey("publicData", "gov") == "publicData" && FilterManager.ChipKey("publicData", "edu") == "publicData"
+                        && FilterManager.ChipKey("publicData", "utility") == "publicData"
                         && FilterManager.ChipKey("", "park") == "" && FilterManager.ChipKey("stores", "food") == "stores",
-                  "칩 나누기 — 기관 랜드마크 · 공원 · 스포츠 · 화장실 = 공공데이터 · 시청 · 박물관 · 관광공사(관광지 · 숙박) = 공공기관 · 사람이 올린 공원 = 우팡 데이터 · 가게 = 공공데이터");
+                  "칩 나누기 — 기관 랜드마크 · 공원 · 스포츠 · 화장실 · 병원 · 박물관 · 복지 · 사찰 · 관광공사(관광지 · 숙박) = 공공데이터 · 관공서 · 학교 · 우체국/농협 = 공공기관 · 사람이 올린 공원 = 우팡 데이터 · 가게 = 공공데이터 (11-27)");
 
             // 되돌리기 — 넣은 것 · 막아 둔 번호 · 칩 · 분류 · 저장값
             Do(() =>

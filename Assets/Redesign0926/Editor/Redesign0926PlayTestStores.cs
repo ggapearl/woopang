@@ -116,6 +116,11 @@ namespace Redesign0926
             }
             string RowIds() => Ids(Rows().Select(r => r.id));
             string Footer() { var p = Plm(); return p != null ? footerF?.GetValue(p) as string ?? "" : ""; }
+            int FootData()   // 아래 「공공데이터: N」 의 N (줄이 없으면 0) — 11-27 부터 가게 + 관광공사 + 기관 공공시설을 함께 센다
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(Footer(), "\n" + System.Text.RegularExpressions.Regex.Escape(footLabel) + @" (\d+)");
+                return m.Success ? int.Parse(m.Groups[1].Value) : 0;
+            }
             string Ids(IEnumerable<string> s) => string.Join(",", s.OrderBy(x => x, StringComparer.Ordinal).Select(x => x.Replace("st_t", "")));
             void Realloc() { Fm()?.TriggerReallocation(); Plm()?.UpdateUI(); }
             void Cat(FilterManager.CategoryFilterState c) => Fm()?.SetCategory(c);
@@ -150,11 +155,13 @@ namespace Redesign0926
             Do(() => InputSystem.QueueStateEvent(Keyboard.current, new KeyboardState()));
             Wait(() => DataManager.Instance != null && DataManager.Instance.GetSpawnedObjects().Count > 0, 40f, "주변 장소가 AR 에 뜸");
             Wait(() => { stm = StoreManager.Instance; return stm != null && stm.IsCacheReady && !stm.EditorFetching; }, 30f, "가게 매니저 준비됨");
+            // 11-27 부터 관광공사 자료도 「공공데이터」 칩 · 아래 줄에 들어간다 — 받는 중이면 시험 동안 그 수가 바뀌니 다 받은 뒤에 시작한다
+            Wait(() => { var tm = TourAPIManager.Instance; return tm == null || (tm.IsCacheReady && tm.IsDataLoaded() && !TourFetching(tm)); }, 60f, "관광공사 자료 받기 끝남");
             Check(() => stm != null && footerF != null && overviewF != null && nameF != null && storesF != null && fullF != null && indF != null && photoKey != null,
                   "시험에 쓸 안쪽 값 · 함수를 모두 찾음");
             Do(() =>
             {
-                // 운영 서버엔 아직 가게 길이 없다 (서버 패치 · 표 만들기 승인 전) — 빈 목록으로 쉬고 있어야 한다
+                // 운영 서버엔 아직 가게 표가 없다 (표 만들기 승인 전 — 서버는 not_ready) — 빈 목록으로 쉬고 있어야 한다
                 log.Add($"  시작 — 쉬는 중 {stm.EditorDormant} · 가게 빛 캐시 {stm.GetCachedPlaces().Count} · 떠 있는 가게 {Spawned().Count}");
                 var fm = Fm();
                 catWas = fm != null ? fm.CategoryState : FilterManager.CategoryFilterState.All;
@@ -243,11 +250,11 @@ namespace Redesign0926
                     return rk != null && e.data != null ? photoKey.Invoke(rk, new object[] { e }) as string : null;
                 }
                 string k1 = K("st_t1"), k5 = K("st_t5"), k2 = K("st_t2");
-                bool foot = ko ? f.Contains("\n공공데이터: 6") && f.Contains("\n공공기관: ") : f.Contains(": 6");
-                log.Add($"  목록 가게 줄 {rows.Count} ({RowIds()}) · 줄 그림 1={k1} · 5={k5} · 2={(k2 != null && k2.StartsWith("https") ? "사진 주소" : k2)} · 아래 줄 {(foot ? "맞음" : "다름")}");
+                bool foot = FootData() >= 6 && (!ko || f.Contains("\n공공기관: "));   // 가게 몫이 정확히 6 인지는 404 에서 본다 (빠질 때 6 만큼 준다)
+                log.Add($"  목록 가게 줄 {rows.Count} ({RowIds()}) · 줄 그림 1={k1} · 5={k5} · 2={(k2 != null && k2.StartsWith("https") ? "사진 주소" : k2)} · 아래 줄 공공데이터 {FootData()} {(foot ? "맞음" : "다름")}");
                 return rows.Count == 6 && rows.All(r => r.kind == PlaceListManager.EntryKind.Place && !r.pet) && foot
                        && k1 == "res:PublicIcons/food" && k5 == "res:PublicIcons/shop" && k2 != null && k2.StartsWith("https");
-            }, "목록 — 가게 6줄 · 줄 그림은 분류 스티커(사진 가게는 사진) · 아래 「공공데이터: 6」 · 관광공사 줄은 「공공기관」");
+            }, "목록 — 가게 6줄 · 줄 그림은 분류 스티커(사진 가게는 사진) · 아래 「공공데이터」 수에 가게가 들어감 (11-27 부터 관광공사 · 기관 공공시설도 이 줄)");
 
             // 칩 끄고 켜기
             After(() => ClickToggle("StoresToggle"), () => Alloc(false).Count == 0 && Spawned().Count == 0, "공공데이터 칩을 끄면 가게가 AR 에서 빠짐");
@@ -312,7 +319,11 @@ namespace Redesign0926
             Check(() => Hits() == hits + 1 && !stm.EditorDormant && stm.GetCachedPlaces().Count == 6 && Alloc(false).Count == 6,
                   "500(서버 오류) — 받은 목록 · AR 그대로 · 잠시(8초부터 늘려 가며) 다시 묻지 않음");
 
-            // 404 — 서버에 가게 길이 없다 (지금 운영 서버) → 빈 목록으로 30분 쉰다
+            // 404 — 서버에 가게 길이 없다 → 빈 목록으로 30분 쉰다 (아래 「공공데이터」 는 가게 6 만큼만 준다 — 관광공사 · 기관 공공시설 몫은 남는다 · 11-27)
+            int footBefore = -1;
+            Do(() => Plm()?.UpdateUI());
+            Sleep(0.3f);
+            Do(() => footBefore = FootData());
             Do(() => { hits = Hits(); Mode("404"); stm.EditorRefetch(); });
             Wait(() => !stm.EditorFetching, 10f, "404 응답 받음");
             Wait(() => Alloc(false).Count == 0 && Spawned().Count == 0, 10f, "404 — 가게가 AR 에서 빠짐");
@@ -320,9 +331,13 @@ namespace Redesign0926
             Sleep(7.0f);   // 걸으며 다시 묻기(3초마다)가 두 번 돈다 — 쉬는 동안은 묻지 않아야 한다
             Do(() => Plm()?.UpdateUI());
             Sleep(0.3f);
-            Check(() => Hits() == hits + 1 && stm.EditorDormant && stm.IsCacheReady && stm.GetCachedPlaces().Count == 0 && stm.GetPlaceDataMap().Count == 0
-                        && Rows().Count == 0 && !Footer().Contains(footLabel),
-                  "404(서버에 가게 길 없음) — 빈 목록으로 쉼 · AR · 목록 · 아래 줄에서 빠지고 남은 가게 정보도 지움 · 쉬는 동안 다시 묻지 않음");
+            Check(() =>
+            {
+                int after = FootData();
+                log.Add($"  404 — 아래 줄 공공데이터 {footBefore} → {after}");
+                return Hits() == hits + 1 && stm.EditorDormant && stm.IsCacheReady && stm.GetCachedPlaces().Count == 0 && stm.GetPlaceDataMap().Count == 0
+                       && Rows().Count == 0 && footBefore >= 6 && after == footBefore - 6;
+            }, "404(서버에 가게 길 없음) — 빈 목록으로 쉼 · AR · 목록에서 빠지고 아래 「공공데이터」 수가 가게 6 만큼 줆 · 남은 가게 정보도 지움 · 쉬는 동안 다시 묻지 않음");
 
             // not_ready — 서버가 아직 자료를 받기 전 → 404 와 같이 쉰다
             Do(() => { Mode("ok"); stm.EditorRefetch(); });

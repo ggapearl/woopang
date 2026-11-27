@@ -14,7 +14,7 @@ namespace Redesign0926
     /// <summary>
     /// 11-19 L3 — 대표님 「숙박업(펜션·호텔·모텔·민박) 정부 공개 API 있는지 확인 → 있으면 받아와서 '펜션·호텔' 분류로」 (같은 날 이름은 「'숙소' 라고」).
     ///  · stayapi : 국문 관광정보(KorService2) 숙박 목록을 반려동물 여행 자료에 합치는 길 — 가짜 응답으로, 서버 · 관광공사에 묻지 않는다
-    ///    (숙박 주소는 닫힌 자리 127.0.0.1:9 · 가짜 번호 9개는 상세 캐시를 미리 채워 상세를 묻지 않는다 · 404 는 시험 서버 5792) →
+    ///    (숙박 주소는 닫힌 자리 127.0.0.1:9 · 가짜 번호 9개는 상세 캐시와 받은 표시(detailDone · 11-27 종류별)를 미리 채워 상세를 묻지 않는다 · 404 는 시험 서버 5792) →
     ///    같은 번호는 반려동물 자료 쪽(애견동반 · 이름) · 숙박 목록에 섞여 온 다른 타입은 버림 · 숙박 목록에서만 온 곳은 애견동반 아님 · 가까운 순 · 상세는 숙박 길 /
     ///    '전체'에선 AR 숙소 4곳까지(목록은 전부) · '숙소'를 고르면 전부 · 애견동반을 켜면 애견 숙소만 (목록 · AR · 정보 창 애견 표시) /
     ///    3D 로 띄운 숙소만 상세 사진 · 숙박 목록이 없거나 깨져도 반려동물 자료만 · 서버에 숙박 길이 없으면(404) 다시 묻지 않음.
@@ -24,7 +24,7 @@ namespace Redesign0926
     {
         private static void PlanStayApi()
         {
-            const string PrefCat = "Filter_Category_V1", PrefPet = "Filter_PetFriendly_V3", PrefPub = "Filter_PublicData_V2";
+            const string PrefCat = "Filter_Category_V1", PrefPet = "Filter_PetFriendly_V3", PrefPub = "Filter_Stores_V1";   // 관광공사 자료 = 「공공데이터」 칩 (11-27 · 예전 「공공기관」)
             const string DeadBase = "http://127.0.0.1:9", DeadPhoto = "http://127.0.0.1:9/l3_stay.jpg", NoPath = "http://127.0.0.1:5792/l3_no_such_path";
             const BindingFlags NP = BindingFlags.NonPublic | BindingFlags.Instance;
             // 1 관광지(반려동물 자료) · 2 숙박(반려동물 자료에도 숙박 목록에도) · 3~8 숙박 목록에만 · 9 숙박 목록에 섞여 온 관광지(버려야 한다)
@@ -45,10 +45,12 @@ namespace Redesign0926
             var baseFor = typeof(TourAPIManager).GetMethod("BaseFor", NP);
             var detailsF = typeof(TourAPIManager).GetField("cachedPlaceDetails", NP);
             var triedF = typeof(TourAPIManager).GetField("stayDetailTried", NP);
+            var doneF = typeof(TourAPIManager).GetField("detailDone", NP);   // 상세 종류별 받은 표시 — 사진 · 공통 · 반려견 · 소개 (11-27)
+            string[] detailKinds = { "img", "common", "pet", "intro" };
             var fullF = typeof(FilterManager).GetField("currentFullAllocations", NP);
             var indF = typeof(FilterManager).GetField("currentIndicatorAllocations", NP);
             // 공공데이터는 실제 값을 본다 — 칩은 분류를 고른 동안 회색 '체크'로 묶이고, 칩 격자가 닫혀 있으면 찾지 못해 늘 꺼짐으로 읽혔다
-            var pubF = typeof(FilterManager).GetField("filterPublicData", NP);
+            var pubF = typeof(FilterManager).GetField("filterStores", NP);
             var dtPet = typeof(DoubleTap3D).GetField("petFriendly", NP);
             var dtUrls = typeof(DoubleTap3D).GetField("imageUrls", NP);
 
@@ -67,6 +69,7 @@ namespace Redesign0926
             bool PubOn() => Fm() != null && pubF?.GetValue(Fm()) is bool b && b;
             Dictionary<string, TourPlaceData> Details() => tm != null ? detailsF?.GetValue(tm) as Dictionary<string, TourPlaceData> : null;
             HashSet<string> Tried() => tm != null ? triedF?.GetValue(tm) as HashSet<string> : null;
+            HashSet<string> DoneSet() => tm != null ? doneF?.GetValue(tm) as HashSet<string> : null;
             HashSet<string> Allocated()
             {
                 var s = new HashSet<string>();
@@ -111,7 +114,7 @@ namespace Redesign0926
             Wait(() => { tm = UnityEngine.Object.FindAnyObjectByType<TourAPIManager>(); return tm != null && tm.IsCacheReady; }, 30f, "관광공사 자료 받음");
             Wait(() => tm == null || (tm.IsDataLoaded() && !TourFetching(tm)), 45f, "관광공사 반경별 받기 모두 끝남");
             Sleep(1.0f);
-            Check(() => tm != null && process != null && merge != null && fetchText != null && baseFor != null && detailsF != null && triedF != null
+            Check(() => tm != null && process != null && merge != null && fetchText != null && baseFor != null && detailsF != null && triedF != null && doneF != null
                         && fullF != null && indF != null && pubF != null && dtPet != null && dtUrls != null, "시험에 쓸 안쪽 함수 · 값을 모두 찾음");
 
             Do(() =>
@@ -131,12 +134,14 @@ namespace Redesign0926
                 hadPrefPub = PlayerPrefs.HasKey(PrefPub); prefPubWas = PlayerPrefs.GetInt(PrefPub, 1);
                 if (fm != null && catWas != FilterManager.CategoryFilterState.All) fm.SetCategory(FilterManager.CategoryFilterState.All);
                 if (petWas) ClickToggle("PetFriendlyToggle");
-                if (!pubWas) ClickToggle("PublicDataToggle");
+                if (!pubWas) ClickToggle("StoresToggle");
 
                 cacheWas = new List<CachedPlaceData>(tm.GetCachedPlaces());
                 TourAPIManager.EditorStayBase = DeadBase;
                 var det = Details();
                 if (det != null) foreach (var id in ids) det[id] = new TourPlaceData { contentid = id, imageUrls = new List<string>() };   // 가짜 번호는 상세를 묻지 않는다
+                var doneSet = DoneSet();
+                if (doneSet != null) foreach (var id in ids) foreach (var k in detailKinds) doneSet.Add(k + ":" + id);   // 종류별로 받은 것으로 (사진 · 공통 · 반려견 · 소개)
 
                 double la = VirtualLocation.Instance.Latitude, lo = VirtualLocation.Instance.Longitude;
                 object Item(int i, string type, string title) => new
@@ -318,7 +323,7 @@ namespace Redesign0926
                 if (PetOn() != petWas) ClickToggle("PetFriendlyToggle");
                 // 분류부터 '전체'로 — 분류를 풀 때 맡겨 둔 공공데이터 값이 되돌아오므로 그 뒤에 눌러야 남는다
                 Fm()?.SetCategory(FilterManager.CategoryFilterState.All);
-                if (PubOn() != pubWas) ClickToggle("PublicDataToggle");
+                if (PubOn() != pubWas) ClickToggle("StoresToggle");
                 if (catWas != FilterManager.CategoryFilterState.All) Fm()?.SetCategory(catWas);
             });
             Sleep(0.6f);   // 칩이 바뀌며 저장값을 쓴 다음에 저장값을 되돌린다
@@ -328,6 +333,7 @@ namespace Redesign0926
                 {
                     var det = Details();
                     var tr = Tried();
+                    var doneSet = DoneSet();
                     foreach (var id in ids)
                     {
                         tm.DespawnFullObject(id);
@@ -335,6 +341,7 @@ namespace Redesign0926
                         tm.GetPlaceDataMap().Remove(id);
                         det?.Remove(id);
                         tr?.Remove(id);
+                        if (doneSet != null) foreach (var k in detailKinds) doneSet.Remove(k + ":" + id);
                     }
                     if (cacheWas != null)
                     {
@@ -362,8 +369,9 @@ namespace Redesign0926
             }, "분류 · 애견동반 · 공공데이터 · 저장값 처음대로");
             Check(() => TourAPIManager.EditorStayBase == null && tm != null && cacheWas != null && tm.GetCachedPlaces().Count == cacheWas.Count
                         && !ids.Any(id => tm.GetPlaceDataMap().ContainsKey(id) || tm.GetSpawnedObjects().ContainsKey(id) || tm.GetCachedPlaces().Any(c => c.rawId == id))
-                        && (Details() == null || !ids.Any(Details().ContainsKey)) && !Rows().Any(),
-                  "넣은 장소 · 상세 캐시 모두 지움 · 빛 캐시 처음대로 · 숙박 주소 원래대로");
+                        && (Details() == null || !ids.Any(Details().ContainsKey)) && !Rows().Any()
+                        && (DoneSet() == null || !DoneSet().Any(k => k.Contains(":kt_l3_"))),
+                  "넣은 장소 · 상세 캐시 · 받은 표시 모두 지움 · 빛 캐시 처음대로 · 숙박 주소 원래대로");
         }
 
         /// <summary>코루틴이 끝나면 알린다 — 안쪽 코루틴을 반사로 꺼내 돌릴 때</summary>

@@ -146,7 +146,7 @@ namespace Redesign0926
             Do(refresh);
             Sleep(0.4f);
             Do(() => log.Add("  전체 · 시험 줄: " + Names()));
-            Check(() => Has(tNames[0]) == ChipOn("PublicDataToggle") && Has(tNames[1]) == ChipOn("PublicDataToggle") && Has(dNames[0]) && Has(dNames[1]) && Has(dNames[2]),
+            Check(() => Has(tNames[0]) == ChipOn("StoresToggle") && Has(tNames[1]) == ChipOn("StoresToggle") && Has(dNames[0]) && Has(dNames[1]) && Has(dNames[2]),
                   "'전체'에선 넣은 다섯 곳이 다 보임 (관광공사 자료는 공공데이터 칩대로)");
 
             // 분류 고르기 — 9줄 · 다섯째 '숙소' 침대 그림
@@ -221,8 +221,8 @@ namespace Redesign0926
             Sleep(0.4f);
             Do(() => log.Add("  전체 + 애견동반 · 시험 줄: " + Names()));
             Check(() => Fm().CategoryState == FilterManager.CategoryFilterState.All && ChipIcon("CategoryToggle") == "r0926_c_all", "'전체'로 돌아옴 · 네 칸 그림");
-            Check(() => Has(tNames[1]) == ChipOn("PublicDataToggle") && Has(dNames[2]) && !Has(dNames[0]), "'전체'에선 관광지가 다시 (공공데이터 칩대로) · 애견동반은 그대로");
-            Check(() => ShowsCat("tour") == ChipOn("PublicDataToggle") && ShowsCat("stay") == ChipOn("PublicDataToggle"), "AR 관광공사 오브젝트도 다시 공공데이터 칩대로");
+            Check(() => Has(tNames[1]) == ChipOn("StoresToggle") && Has(dNames[2]) && !Has(dNames[0]), "'전체'에선 관광지가 다시 (「공공데이터」 칩대로 · 11-27) · 애견동반은 그대로");
+            Check(() => ShowsCat("tour") == ChipOn("StoresToggle") && ShowsCat("stay") == ChipOn("StoresToggle"), "AR 관광공사 오브젝트도 다시 「공공데이터」 칩대로 (11-27)");
 
             // 되돌리기 — 넣은 것 · 막아 둔 번호 · 칩 · 저장값
             Do(() =>

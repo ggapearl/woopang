@@ -8,6 +8,8 @@ using Google.XR.ARCoreExtensions.GeospatialCreator;
 using UnityEngine.UI;
 using System.Text;
 using System.Linq;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
 using UnityEngine.XR.ARFoundation;
 
 public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoadTime
@@ -49,6 +51,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     private readonly string detailImageUrlTemplate = "{0}/detailImage?contentId={1}&imageYN=Y&numOfRows=10&MobileOS=ETC&MobileApp=AppTest&_type=json";
     private readonly string detailCommonUrlTemplate = "{0}/detailCommon?contentId={1}&defaultYN=Y&addrinfoYN=Y&overviewYN=Y&MobileOS=ETC&MobileApp=AppTest&_type=json&lang=KO";
     private readonly string detailPetTourUrlTemplate = "{0}/detailPetTour?contentId={1}&MobileOS=ETC&MobileApp=AppTest&_type=json";
+    // 소개 정보 — 관광 타입(contentTypeId)마다 칸이 다르다 (관광지 이용 시간 · 음식점 영업시간 · 숙박 체크인 …). 서버 /proxy · /proxy/stay 둘 다 연다 (11-27)
+    private readonly string detailIntroUrlTemplate = "{0}/detailIntro?contentId={1}&contentTypeId={2}&MobileOS=ETC&MobileApp=AppTest&_type=json";
 
     // 숙박(호텔 · 펜션 · 모텔 · 민박 · 게스트하우스 · 한옥 …)은 국문 관광정보(KorService2)에서 함께 받는다 — 반려동물 여행 자료엔 애견동반 숙소만 있다 (11-19 L3).
     // 서버 /proxy/stay 가 숙박(32)만 · 같은 키로 부른다. 서버에 그 길이 아직 없으면(404) 예전처럼 반려동물 자료만
@@ -65,6 +69,10 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     private Dictionary<string, GameObject> spawnedObjects = new Dictionary<string, GameObject>(100);
     private Dictionary<string, TourPlaceData> placeDataMap = new Dictionary<string, TourPlaceData>(100);
     private Dictionary<string, TourPlaceData> cachedPlaceDetails = new Dictionary<string, TourPlaceData>(50);
+    // 받아 둔 상세 종류 — img(사진) · common(전화 · 주소 · 개요 · 홈페이지) · pet(반려견 동반정보) · intro(운영 시간 · 쉬는 날 · 요금 · 주차 · 체크인 …).
+    // 예전엔 셋이 cachedPlaceDetails 하나를 같이 봐서 사진을 받은 곳은 개요 · 반려견 동반정보를 받지 않았다 (11-27 · 36번)
+    private readonly HashSet<string> detailDone = new HashSet<string>();
+    private readonly HashSet<string> detailBusy = new HashSet<string>();   // 정보 창이 상세를 받는 중인 장소
     private Dictionary<string, bool> currentFilters;
     private Queue<GameObject> objectPool = new Queue<GameObject>(20);
     [SerializeField] public int poolSize = 50;
@@ -145,7 +153,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         int petState = PlayerPrefs.GetInt("Filter_PetFriendly_V3", 0);
         currentFilters["petFriendlyAll"] = (petState != 1);   // 옛 2(애견동반 안 됨)는 없앰 → 전부
         currentFilters["petFriendlyOnly"] = (petState == 1);
-        currentFilters["publicData"] = PlayerPrefs.GetInt("Filter_PublicData_V2", 1) == 1;
+        currentFilters["stores"] = PlayerPrefs.GetInt("Filter_Stores_V1", 1) == 1;   // 관광공사 자료 = 「공공데이터」 칩 (FilterManager.ChipKey · 11-27 — 예전 「공공기관」)
         currentFilters["categoryFilter"] = PlayerPrefs.GetInt("Filter_Category_V1", 0) != 0;   // 분류를 골라 둔 채 켜면 그 분류만 (FilterManager 가 곧 다시 넣는다)
 
         InitializeObjectPool();
@@ -394,7 +402,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 sourceManager = "TourAPI",
                 modelType = "cube",
                 petFriendly = p.petFriendly,   // 반려동물 여행 자료는 애견동반 (false 라 '반려견 되는 곳만'에서 배분이 빠졌다) · 국문 관광정보에서만 온 숙박은 아님 (11-19 L3)
-                // 관광공사 자료 = 공공데이터 칩. 빈 값이면 칩이 꺼져도 배분을 받아 (보이지 않으면서) 사람이 올린 곳의 자리를 차지했다
+                // 관광공사 자료 — 칩은 FilterManager.ChipKey(「공공데이터」 · 11-27). 빈 값이면 칩이 꺼져도 배분을 받아 (보이지 않으면서) 사람이 올린 곳의 자리를 차지했다
                 filterKey = "publicData"
             });
         }
@@ -411,18 +419,13 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 float distance = CalculateDistance(latitude, longitude, place.mapy, place.mapx);
                 place.color = ColorHexOf(CategoryOf(place));
 
-                // 숙박(국문 관광정보에서만 온 곳)은 여기서 묻지 않는다 — 배분이 띄울 때 사진만 (SpawnFullObject · 하루 호출 한도). 받아 둔 사진은 이어 쓴다
-                if (place.stayOnly)
-                {
-                    if (cachedPlaceDetails.TryGetValue(place.contentid, out TourPlaceData known) && known.imageUrls != null) place.imageUrls = known.imageUrls;
-                }
-                // objectSpawnRadius 이내만 상세 API 요청 (이미지, 공통정보, 펫투어)
-                else if (distance <= objectSpawnRadius)
-                {
+                // 앞서 받은 상세(사진 · 개요 · 반려견 · 소개)는 새 목록 자료로 옮겨 이어 쓴다
+                CarryDetails(place);
+                // 숙박(국문 관광정보에서만 온 곳)은 여기서 묻지 않는다 — 배분이 띄울 때 사진만 (SpawnFullObject · 하루 호출 한도).
+                // objectSpawnRadius 이내는 사진 주소만 먼저 (사진을 다 받고 뜬다 · 11-19 P1). 개요 · 반려견 동반정보 · 소개(운영 시간 · 요금 …)는
+                // 정보 창을 열 때 받는다 (OnInfoOpen · 11-27) — 띄우기 전에 다 기다리지 않게 · 관광공사 하루 호출 한도
+                if (!place.stayOnly && distance <= objectSpawnRadius)
                     yield return StartCoroutine(FetchDetailImages(place));
-                    yield return StartCoroutine(FetchDetailCommon(place));
-                    yield return StartCoroutine(FetchDetailPetTour(place));
-                }
             }
             yield return null;
         }
@@ -597,6 +600,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
         string address = addressBuilder.ToString();
         string overview = place.overview ?? "";
         string petInfo = place.petInfo ?? "";
+        doubleTap.InfoSource = place;   // 창을 열 때 아직 안 받은 상세를 받는다 (OnInfoOpen)
 
         int placeId;
         if (!int.TryParse(place.contentid, out placeId))
@@ -625,7 +629,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             tel: place.tel, 
             address: address, 
             overview: combinedOverview, // 개요에 제공처 정보 포함
-            petInfo: petInfo
+            petInfo: petInfo,
+            intro: IntroWithHomepage(place)
         );
         LogDebug($"[TourAPIManager] DoubleTap3D 컴포넌트 설정 완료: ID={place.contentid}, Title={place.title}");
     }
@@ -738,11 +743,10 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     private IEnumerator FetchDetailImages(TourPlaceData place)
     {
-        if (cachedPlaceDetails.ContainsKey(place.contentid))
+        CarryDetails(place);
+        if (Done("img", place.contentid))
         {
-            var cached = cachedPlaceDetails[place.contentid];
-            place.imageUrls = cached.imageUrls;
-            LogDebug($"[TourAPIManager] detailImage 캐시 사용: ID={place.contentid}, 이미지 수={place.imageUrls.Count}");
+            LogDebug($"[TourAPIManager] detailImage 캐시 사용: ID={place.contentid}, 이미지 수={place.imageUrls?.Count ?? 0}");
             yield break;
         }
 
@@ -770,7 +774,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                                 if (!string.IsNullOrEmpty(item.originimgurl))
                                     place.imageUrls.Add(item.originimgurl);
                             }
-                            cachedPlaceDetails[place.contentid] = place;
+                            Share("img", place);
                             LogDebug($"[TourAPIManager] detailImage 성공: ID={place.contentid}, 이미지 수={place.imageUrls.Count}");
                         }
                         else
@@ -795,13 +799,9 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     private IEnumerator FetchDetailCommon(TourPlaceData place)
     {
-        if (cachedPlaceDetails.ContainsKey(place.contentid))
+        CarryDetails(place);
+        if (Done("common", place.contentid))
         {
-            var cached = cachedPlaceDetails[place.contentid];
-            place.tel = cached.tel;
-            place.addr1 = cached.addr1;
-            place.addr2 = cached.addr2;
-            place.overview = cached.overview;
             LogDebug($"[TourAPIManager] detailCommon 캐시 사용: ID={place.contentid}");
             yield break;
         }
@@ -837,15 +837,18 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 var item = response?.response?.body?.items?.item?.FirstOrDefault();
                 if (item != null)
                 {
-                    place.tel = item.tel;
-                    place.addr1 = item.addr1;
-                    place.addr2 = item.addr2;
-                    place.overview = item.overview;
-                    cachedPlaceDetails[place.contentid] = place;
-                    LogDebug($"[TourAPIManager] detailCommon 성공 (국문): ID={place.contentid}, Tel={place.tel}, Addr1={place.addr1}, Overview={item.overview}");
+                    // 비어 온 칸은 목록에서 받은 값을 그대로 둔다
+                    if (!string.IsNullOrEmpty(item.tel)) place.tel = item.tel;
+                    if (!string.IsNullOrEmpty(item.addr1)) place.addr1 = item.addr1;
+                    if (!string.IsNullOrEmpty(item.addr2)) place.addr2 = item.addr2;
+                    place.overview = CleanIntro(item.overview) ?? "";
+                    place.homepage = CleanIntro(item.homepage) ?? "";
+                    Share("common", place);
+                    LogDebug($"[TourAPIManager] detailCommon 성공 (국문): ID={place.contentid}");
                 }
                 else
                 {
+                    if (TourOk(request.downloadHandler.text)) Share("common", place);   // 정상 응답인데 비었다 — 다시 묻지 않는다
                     LogDebug($"[TourAPIManager] detailCommon 응답에 데이터 없음 (국문): ID={place.contentid}");
                 }
             }
@@ -858,10 +861,9 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     private IEnumerator FetchDetailPetTour(TourPlaceData place)
     {
-        if (cachedPlaceDetails.ContainsKey(place.contentid))
+        CarryDetails(place);
+        if (Done("pet", place.contentid))
         {
-            var cached = cachedPlaceDetails[place.contentid];
-            place.petInfo = cached.petInfo;
             LogDebug($"[TourAPIManager] detailPetTour 캐시 사용: ID={place.contentid}");
             yield break;
         }
@@ -902,11 +904,12 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                     if (!string.IsNullOrEmpty(item.acmpyNeedMtr)) petInfoBuilder.AppendLine(item.acmpyNeedMtr);
                     if (!string.IsNullOrEmpty(item.etcAcmpyInfo)) petInfoBuilder.AppendLine(item.etcAcmpyInfo);
                     place.petInfo = petInfoBuilder.ToString();
-                    cachedPlaceDetails[place.contentid] = place;
-                    LogDebug($"[TourAPIManager] detailPetTour 성공: ID={place.contentid}, PetInfo={place.petInfo}");
+                    Share("pet", place);
+                    LogDebug($"[TourAPIManager] detailPetTour 성공: ID={place.contentid}");
                 }
                 else
                 {
+                    if (TourOk(request.downloadHandler.text)) Share("pet", place);
                     LogDebug($"[TourAPIManager] detailPetTour 응답에 데이터 없음: ID={place.contentid}");
                 }
             }
@@ -915,6 +918,228 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
                 LogDebug($"[TourAPIManager] detailPetTour JSON 파싱 실패: ID={place.contentid}, 에러: {ex.Message}");
             }
         }
+    }
+
+    // ── 정보 창을 열 때 상세 받기 (11-27 대표님 36번 「각 기관청 API 에 있어서 정보를 다 가져오면」) ──
+    // 두 번 누르기 · 목록 사진(R0926PlaceInfo) 모두 OnDoubleTapEvent 뒤에 창을 연다. 받아 둔 것은 바로 채우고, 없는 것만 묻는다 —
+    // 개요 · 홈페이지(detailCommon) · 반려견 동반정보(detailPetTour · 반려동물 자료만) · 소개(detailIntro: 운영 시간 · 쉬는 날 · 요금 · 주차 · 체크인 …)
+
+    void OnEnable()
+    {
+        DoubleTap3D.OnDoubleTapEvent -= OnInfoOpen;
+        DoubleTap3D.OnDoubleTapEvent += OnInfoOpen;
+    }
+
+    private void OnInfoOpen(DoubleTap3D dt)
+    {
+        if (this == null || dt == null || !(dt.InfoSource is TourPlaceData place) || string.IsNullOrEmpty(place.contentid)) return;
+        CarryDetails(place);
+        if (!NeedsDetails(place))
+        {
+            ConfigureInfo(dt, place);   // 다른 창에서 받아 둔 것까지 바로
+            return;
+        }
+        if (!isActiveAndEnabled || !detailBusy.Add(place.contentid)) return;
+        StartCoroutine(FillDetails(dt, place));
+    }
+
+    private bool NeedsDetails(TourPlaceData p) =>
+        !Done("common", p.contentid) || (!p.stayOnly && !Done("pet", p.contentid)) || !Done("intro", p.contentid);
+
+    private IEnumerator FillDetails(DoubleTap3D dt, TourPlaceData place)
+    {
+        string id = place.contentid;
+        yield return StartCoroutine(FetchDetailIntro(place));     // 운영 시간 · 요금이 먼저 보이게
+        yield return StartCoroutine(FetchDetailCommon(place));
+        if (!place.stayOnly) yield return StartCoroutine(FetchDetailPetTour(place));   // 숙박 길(국문 관광정보)엔 반려견 정보가 없다
+        detailBusy.Remove(id);
+        // 그사이 창이 다른 장소로 바뀌었으면 건드리지 않는다. 목록을 다시 받아 자료가 새것이 됐으면 그것에 옮겨 채운다
+        if (dt != null && dt.InfoSource is TourPlaceData cur && cur.contentid == id)
+        {
+            if (cur != place) CarryDetails(cur);
+            ConfigureInfo(dt, cur);
+        }
+    }
+
+    private bool Done(string kind, string id) => id != null && detailDone.Contains(kind + ":" + id);
+
+    /// <summary>받은 상세 한 종류를 표시하고 그 장소의 다른 자료(캐시 · 지금 목록)에도 나눠 준다</summary>
+    private void Share(string kind, TourPlaceData place)
+    {
+        string id = place.contentid;
+        detailDone.Add(kind + ":" + id);
+        if (cachedPlaceDetails.TryGetValue(id, out TourPlaceData holder) && holder != null && holder != place) CopyKind(kind, place, holder);
+        else cachedPlaceDetails[id] = place;
+        if (placeDataMap.TryGetValue(id, out TourPlaceData cur) && cur != null && cur != place && cur != holder) CopyKind(kind, place, cur);
+    }
+
+    /// <summary>앞서 받은 상세를 이 장소 자료에 옮겨 담고 이것을 그 장소의 캐시로 삼는다 — 목록을 다시 받으면 같은 장소라도 자료가 새것이다</summary>
+    private void CarryDetails(TourPlaceData place)
+    {
+        if (place == null || string.IsNullOrEmpty(place.contentid)) return;
+        string id = place.contentid;
+        if (cachedPlaceDetails.TryGetValue(id, out TourPlaceData old) && old != null && old != place)
+        {
+            foreach (string kind in DetailKinds)
+                if (Done(kind, id)) CopyKind(kind, old, place);
+        }
+        cachedPlaceDetails[id] = place;
+    }
+
+    private static readonly string[] DetailKinds = { "img", "common", "pet", "intro" };
+
+    private static void CopyKind(string kind, TourPlaceData from, TourPlaceData to)
+    {
+        switch (kind)
+        {
+            case "img": to.imageUrls = from.imageUrls; break;
+            case "common":   // 비어 있는 값으로 목록에서 받은 전화 · 주소를 덮지 않는다
+                if (!string.IsNullOrEmpty(from.tel)) to.tel = from.tel;
+                if (!string.IsNullOrEmpty(from.addr1)) to.addr1 = from.addr1;
+                if (!string.IsNullOrEmpty(from.addr2)) to.addr2 = from.addr2;
+                to.overview = from.overview;
+                to.homepage = from.homepage;
+                break;
+            case "pet": to.petInfo = from.petInfo; break;
+            case "intro": to.intro = from.intro; break;
+        }
+    }
+
+    private IEnumerator FetchDetailIntro(TourPlaceData place)
+    {
+        CarryDetails(place);
+        string id = place.contentid;
+        if (Done("intro", id)) yield break;
+        if (string.IsNullOrEmpty(place.contenttypeid)) { Share("intro", place); yield break; }   // 타입을 모르면 물을 수 없다
+        string url = string.Format(detailIntroUrlTemplate, BaseFor(place), id, place.contenttypeid);
+        string json = null;
+        yield return StartCoroutine(FetchText(url, 2, t => json = t, giveUpOn4xx: true));
+        if (json == null) yield break;   // 못 받았다 — 다음에 창을 열 때 다시
+        if (!TourOk(json)) { LogDebug($"[TourAPIManager] detailIntro 오류 응답: ID={id}"); yield break; }
+        place.intro = IntroText(json, place.tel);
+        Share("intro", place);
+        LogDebug($"[TourAPIManager] detailIntro 성공: ID={id}, 줄 {(string.IsNullOrEmpty(place.intro) ? 0 : place.intro.Split('\n').Length)}");
+    }
+
+    /// <summary>관광공사 정상 응답(resultCode 0000)인지 — 한도 초과 · 키 오류도 HTTP 200 으로 온다</summary>
+    private static bool TourOk(string json)
+    {
+        try { return (string)JObject.Parse(json)["response"]?["header"]?["resultCode"] == "0000"; }
+        catch (System.Exception) { return false; }
+    }
+
+    // 소개 정보 칸 — 관광 타입마다 이름이 다르다(12 관광지 · 14 문화시설 · 15 행사 · 25 여행코스 · 28 레포츠 · 32 숙박 · 38 쇼핑 · 39 음식점).
+    // 줄마다 앞에서부터 처음 채워진 칸 하나를 그 이름으로 보인다. 새 글은 한국어만 (CLAUDE.md 2.0.7 — 값도 국문 관광정보라 한국어)
+    private static readonly (string label, string[] keys)[] IntroFields =
+    {
+        ("기간", new[] { "@eventdate" }),
+        ("운영 시간", new[] { "usetime", "usetimeculture", "usetimeleports", "opentime", "opentimefood" }),
+        ("공연 시간", new[] { "playtime" }),
+        ("쉬는 날", new[] { "restdate", "restdateculture", "restdateleports", "restdateshopping", "restdatefood" }),
+        ("장 서는 날", new[] { "fairday" }),
+        ("이용 요금", new[] { "usefee", "usefeeleports", "usetimefestival" }),
+        ("할인", new[] { "discountinfo", "discountinfofestival", "discountinfofood" }),
+        ("개장 기간", new[] { "openperiod" }),
+        ("이용 시기", new[] { "useseason" }),
+        ("관람 소요 시간", new[] { "spendtime", "spendtimefestival" }),
+        ("체크인", new[] { "checkintime" }),
+        ("체크아웃", new[] { "checkouttime" }),
+        ("객실", new[] { "roomtype" }),
+        ("객실 취사", new[] { "chkcooking" }),
+        ("부대시설", new[] { "subfacility" }),
+        ("픽업", new[] { "pickup" }),
+        ("대표 메뉴", new[] { "firstmenu" }),
+        ("취급 메뉴", new[] { "treatmenu" }),
+        ("포장", new[] { "packing" }),
+        ("판매 품목", new[] { "saleitem" }),
+        ("체험 안내", new[] { "expguide" }),
+        ("체험 가능 연령", new[] { "expagerange", "expagerangeleports" }),
+        ("행사 장소", new[] { "eventplace" }),
+        ("관람 연령", new[] { "agelimit" }),
+        ("주최", new[] { "sponsor1" }),
+        ("코스 거리", new[] { "distance" }),
+        ("코스 소요 시간", new[] { "taketime" }),
+        ("주차", new[] { "parking", "parkingculture", "parkingleports", "parkingshopping", "parkingfood", "parkinglodging" }),
+        ("주차 요금", new[] { "parkingfee", "parkingfeeleports" }),
+        ("유모차 대여", new[] { "chkbabycarriage", "chkbabycarriageculture", "chkbabycarriageleports", "chkbabycarriageshopping" }),
+        ("신용카드", new[] { "chkcreditcard", "chkcreditcardculture", "chkcreditcardleports", "chkcreditcardshopping", "chkcreditcardfood" }),
+        ("예약", new[] { "reservationlodging", "reservation", "reservationfood", "bookingplace" }),
+        ("예약 사이트", new[] { "reservationurl" }),
+        ("행사 홈페이지", new[] { "eventhomepage" }),
+        ("문의", new[] { "infocenter", "infocenterculture", "infocenterleports", "infocentershopping", "infocenterfood", "infocenterlodging", "infocentertourcourse", "sponsor1tel" }),
+    };
+
+    /// <summary>detailIntro 응답 → 「운영 시간: …」 줄들 (빈 칸은 빼고 · 전화번호와 같은 「문의」는 뺀다). 없으면 ""</summary>
+    public static string IntroText(string json, string tel = null)
+    {
+        JToken item;
+        try
+        {
+            JToken items = JObject.Parse(json)["response"]?["body"]?["items"];
+            item = items is JObject o ? o["item"] : null;   // 비면 items 가 "" 로 온다
+            if (item is JArray arr) item = arr.Count > 0 ? arr[0] : null;
+        }
+        catch (System.Exception) { return ""; }
+        if (!(item is JObject one)) return "";
+
+        string Val(string key)
+        {
+            if (key == "@eventdate")
+            {
+                string a = DateText((string)one["eventstartdate"]), b = DateText((string)one["eventenddate"]);
+                if (a == null && b == null) return null;
+                return a == b || b == null ? a : a == null ? "~ " + b : a + " ~ " + b;
+            }
+            return CleanIntro((string)one[key]);
+        }
+
+        string telDigits = Regex.Replace(tel ?? "", @"\D", "");
+        var lines = new List<string>();
+        foreach (var (label, keys) in IntroFields)
+        {
+            foreach (string k in keys)
+            {
+                string v = Val(k);
+                if (v == null) continue;
+                if (label == "문의" && telDigits.Length >= 8 && Regex.Replace(v, @"\D", "").Contains(telDigits)) break;   // 위 「전화번호」와 같다
+                lines.Add(label + ": " + v);
+                break;
+            }
+        }
+        return string.Join("\n\n", lines);
+    }
+
+    /// <summary>정보 창 소개 덩어리 — 소개 줄들 + 홈페이지 (공통 정보)</summary>
+    private static string IntroWithHomepage(TourPlaceData p)
+    {
+        string intro = p.intro ?? "";
+        if (string.IsNullOrEmpty(p.homepage)) return intro;
+        string hp = "홈페이지: " + p.homepage;
+        return intro.Length > 0 ? intro + "\n\n" + hp : hp;
+    }
+
+    private static string DateText(string ymd)
+    {
+        if (string.IsNullOrEmpty(ymd)) return null;
+        ymd = ymd.Trim();
+        return ymd.Length == 8 && ymd.All(char.IsDigit) ? ymd.Substring(0, 4) + "." + ymd.Substring(4, 2) + "." + ymd.Substring(6, 2) : ymd;
+    }
+
+    private static readonly Regex BrTag = new Regex(@"<\s*br\s*/?\s*>", RegexOptions.IgnoreCase);
+    private static readonly Regex AnyTag = new Regex(@"<[^>]+>");
+    private static readonly Regex SpaceBeforeBreak = new Regex(@"[ \t]+\n");
+    private static readonly Regex ManyBreaks = new Regex(@"\n{3,}");
+
+    /// <summary>관광공사 글 값 — &lt;br&gt; 은 줄바꿈, 다른 태그(링크 등)는 빼고 글만, 엔티티(&amp;nbsp; …)는 글자로. 비거나 「0」 · 「-」 뿐이면 null</summary>
+    public static string CleanIntro(string v)
+    {
+        if (string.IsNullOrWhiteSpace(v)) return null;
+        v = BrTag.Replace(v, "\n");
+        v = AnyTag.Replace(v, "");
+        v = System.Net.WebUtility.HtmlDecode(v).Replace('\u00A0', ' ').Replace("\r", "");
+        v = SpaceBeforeBreak.Replace(v, "\n");
+        v = ManyBreaks.Replace(v, "\n\n").Trim();
+        return v.Length == 0 || v == "0" || v == "-" ? null : v;
     }
 
     public void SetAllObjectsVisible(bool visible)
@@ -1024,8 +1249,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     }
 
     /// <summary>
-    /// 현재 필터 상태에 따라 오브젝트를 표시할지 결정 — 분류를 고른 동안은 그 분류만 (공공데이터 칩은 보지 않는다 — 배분 · 목록과 같은 규칙),
-    /// '전체'면 공공데이터 칩. 애견동반은 ShouldShow 가 먼저 본다 (반려동물 여행 자료는 모두 애견동반 · 국문 관광정보 숙박은 아님 — 11-19 L3).
+    /// 현재 필터 상태에 따라 오브젝트를 표시할지 결정 — 분류를 고른 동안은 그 분류만 (출처 칩은 보지 않는다 — 배분 · 목록과 같은 규칙),
+    /// '전체'면 「공공데이터」 칩 (FilterManager.ChipKey — 11-27 대표님 「박물관 등은 공공데이터로」 · 예전 「공공기관」). 애견동반은 ShouldShow 가 먼저 본다 (반려동물 여행 자료는 모두 애견동반 · 국문 관광정보 숙박은 아님 — 11-19 L3).
     /// 예전엔 분류를 고르면 공공데이터가 꺼진 값으로 와서 관광공사 자료가 통째로 숨었다 (11-19 L1 — 숙박은 '숙소'로 떠야 한다)
     /// </summary>
     private bool ShouldShowByFilter(string category)
@@ -1045,7 +1270,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
             string want = FilterManager.ActiveCategoryNow;
             return string.IsNullOrEmpty(want) || want == category;
         }
-        return !currentFilters.ContainsKey("publicData") || currentFilters["publicData"];
+        string chip = FilterManager.ChipKey(FilterKey, category);
+        return !currentFilters.ContainsKey(chip) || currentFilters[chip];
     }
 
     /// <summary>애견동반을 켰을 때 국문 관광정보에서만 온 숙박(애견동반 아님)은 숨긴다 — 목록 · 배분(PetAllowed)과 같은 규칙 (11-19 L3). 나머지는 ShouldShowByFilter</summary>
@@ -1064,7 +1290,7 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
 
     /// <summary>
     /// 필터 적용 - 스폰된 AR 오브젝트의 표시/숨김 제어
-    /// 반려동물 여행 자료는 모두 애견동반 · 국문 관광정보 숙박은 아니다(ShouldShow) — '전체'면 publicData 칩대로, 분류를 고르면 그 분류(숙박은 '숙소')만
+    /// 반려동물 여행 자료는 모두 애견동반 · 국문 관광정보 숙박은 아니다(ShouldShow) — '전체'면 「공공데이터」 칩(ChipKey)대로, 분류를 고르면 그 분류(숙박은 '숙소')만
     /// </summary>
     public void ApplyFilters(Dictionary<string, bool> filters)
     {
@@ -1281,6 +1507,8 @@ public class TourAPIManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoa
     {
         photoReadyLoop = null;   // 꺼지면 코루틴이 멈춘다 — 다음 준비 완료 때 다시 시작하게
         photoPrep.Clear();       // 숙박 사진 주소 묻기도 멈췄다
+        DoubleTap3D.OnDoubleTapEvent -= OnInfoOpen;
+        detailBusy.Clear();      // 정보 창 상세 받기도 멈췄다 — 다음에 창을 열 때 다시
     }
 
     public bool SpawnIndicatorOnly(string rawId)
@@ -1373,6 +1601,8 @@ public class TourPlaceData
     public string addr2 { get; set; }
     public string overview { get; set; }
     public string petInfo { get; set; }
+    [JsonIgnore] public string intro { get; set; }      // 소개(detailIntro) — 「운영 시간: …」 줄들 · 정보 창을 열 때 받는다 (11-27)
+    [JsonIgnore] public string homepage { get; set; }   // 홈페이지(detailCommon) — 링크 태그를 뺀 글
     [JsonIgnore] public bool petFriendly { get; set; } = true;   // 반려동물 여행 자료 = 애견동반 · 국문 관광정보에서만 온 숙박은 false (11-19 L3)
     [JsonIgnore] public bool stayOnly { get; set; }               // 국문 관광정보(숙박)에서만 온 곳 — 상세는 숙박 길(/proxy/stay) · 배분이 고른 곳만 띄운다
 
@@ -1497,6 +1727,7 @@ public class DetailCommonItem
     public string addr1 { get; set; }
     public string addr2 { get; set; }
     public string overview { get; set; }
+    public string homepage { get; set; }
 }
 
 [System.Serializable]
