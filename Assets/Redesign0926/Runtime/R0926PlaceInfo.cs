@@ -65,9 +65,8 @@ public static class R0926PlaceInfo
                 dt.SetImageUrls(tp.imageUrls ?? new List<string>(), false);   // 관광공사 번호는 우팡 장소 번호가 아니다 — 우팡 서버에서 찾지 않는다
                 return true;
             case FacilityData f:
-                // 지하철·기차역·터미널 — 매니저가 띄울 때와 같은 글 (상세 사진 없음)
-                dt.SetInfoImages(null, null, false, false, null, f.name, -1, "WOOPANG", null, null, f.address, f.extra_info, null);
-                dt.SetImageUrls(new List<string>(), false);
+                // 지하철·기차역·터미널 — 매니저가 띄울 때와 같은 글 · 지하철역은 노선 · 출구 · 첫차·막차 카드 (11-27 23 · 24번)
+                FacilityInfo.Configure(dt, f);
                 return true;
             case StoreData s:
                 // 근처 가게 (소상공인 상가정보) — 가게 번호는 우팡 장소 번호가 아니다 · 출처 줄은 ConfigureInfo 가 넣는다

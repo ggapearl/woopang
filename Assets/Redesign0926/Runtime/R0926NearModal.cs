@@ -355,9 +355,9 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
             if (upPointer == null) return;
             upFrom = upPointer.position.ReadValue();
             upAt = now;
-            bool free = Touches() <= 1 && CanSwipe(upFrom);
-            upLive = free && !NearbyUp;
-            downLive = free && sky != null;
+            bool free = Touches() <= 1 && SwipeArea(upFrom);
+            upLive = free && !NearbyUp && !OnObject(upFrom);
+            downLive = free && sky != null && !OnRotator(upFrom);
             return;
         }
         if (!upPointer.press.isPressed) { upPointer = null; return; }
@@ -406,16 +406,23 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
         return true;
     }
 
-    // 누른 자리가 맨 AR 화면이어야 — 시작 화면 · 덮는 창 · 하늘 오브젝트 · UI · 오브젝트(만지며 민 것)는 빼고
-    private bool CanSwipe(Vector2 at)
+    // 누른 자리가 맨 AR 화면이어야 — 시작 화면 · 덮는 창 · UI 는 빼고
+    private bool SwipeArea(Vector2 at) => !BootOverlay.Showing && !Covered() && WorldTouch.Free(at) && Camera.main != null;
+
+    // 위로 밀기 — 오브젝트 위에서 민 것은 받지 않는다 (돌리기 · 두 번 톡톡) — 카드에 띄운 것도 AR 화면에 그대로 있다 (11-26)
+    private bool OnObject(Vector2 at)
+        => Physics.Raycast(Camera.main.ScreenPointToRay(at), 2000f, Physics.DefaultRaycastLayers & ~NearMask, QueryTriggerInteraction.Collide);
+
+    // 아래로 밀기 — 손가락 아래 맨 앞이 위아래로 끌면 도는 큐브(CubeTouchRotator)일 때만 뺀다. 이름표 · 숨긴 장소 · 트리거에 걸려
+    // 이름표가 가득한 화면에선 아래로 밀어도 하늘 판이 거의 안 떴다 (11-28 대표님 「위에서 아래로 스와이프해도 날씨내용 자체가 아예 안나와」)
+    private static bool OnRotator(Vector2 at)
     {
-        if (BootOverlay.Showing || Covered()) return false;
-        if (!WorldTouch.Free(at)) return false;
-        var main = Camera.main;
-        if (main == null) return false;
-        // 오브젝트 위에서 민 것은 받지 않는다 (돌리기 · 두 번 톡톡) — 카드에 띄운 것도 AR 화면에 그대로 있다 (11-26)
-        return !Physics.Raycast(main.ScreenPointToRay(at), 2000f, Physics.DefaultRaycastLayers & ~NearMask, QueryTriggerInteraction.Collide);
+        var c = WorldTouch.FirstHit(at);
+        return c != null && c.GetComponentInParent<CubeTouchRotator>() != null;
     }
+
+    private bool CanSwipe(Vector2 at) => SwipeArea(at) && !OnObject(at);
+    private bool CanSwipeDown(Vector2 at) => SwipeArea(at) && !OnRotator(at);
 
     private void NothingNear()
     {
@@ -1954,9 +1961,9 @@ public class R0926NearModal : MonoBehaviour, IPointerDownHandler, IPointerClickH
     public bool EditorCanSwipeUp(Vector2 at) => CanSwipeUp(at);
     /// <summary>AR 화면을 from → to 로 민 것 — 위로 밀기와 같은 판단 (1초 안에 민 것으로 친다)</summary>
     public bool EditorSwipeUp(Vector2 from, Vector2 to) => CanSwipeUp(from) && SwipeOk(to - from) && OpenNearby(Time.unscaledTime, true);
-    public bool EditorCanSwipeDown(Vector2 at) => sky != null && CanSwipe(at);
+    public bool EditorCanSwipeDown(Vector2 at) => sky != null && CanSwipeDown(at);
     /// <summary>AR 화면을 위→아래로 from → to 민 것 — 아래로 밀기와 같은 판단 (1초 안에 민 것으로 친다)</summary>
-    public bool EditorSwipeDown(Vector2 from, Vector2 to) => sky != null && CanSwipe(from) && SwipeDownOk(to - from) && OpenSky();
+    public bool EditorSwipeDown(Vector2 from, Vector2 to) => sky != null && CanSwipeDown(from) && SwipeDownOk(to - from) && OpenSky();
     public void EditorLive(float ago) { live = true; liveAt = Time.unscaledTime - ago; resumeAt = -1f; }
     public float EditorLiveAt => liveAt;
     public bool EditorStartShown { get => startShown; set => startShown = value; }

@@ -262,6 +262,7 @@ namespace Redesign0926
             else if (mode == "translate21") PlanTranslate21();   // 11-26 21번 번역 버튼 — 화면 대신 보고 있는 사진 파일(원본 → 받아 둔 것 → 띄운 그림) · 정보 글 쪽은 화면 (시험 서버 5798)
             else if (mode == "photo15") PlanPhoto15();   // 11-26 15번 사람 사진 — 근처 카드 원판 크기 · 프로필 창 사진 재질 · 목록 줄 사진 밉맵 · 계산 고리 (시험 서버 5797)
             else if (mode == "photostuck") PlanPhotoStuck();   // 11-27 버그 리포트 — 정보 창에서 멈춘 코루틴이 남긴 표시: 넘기는 중 · 사진 받는 중 · 쿨다운 · 닫히는 중에 꺼짐 · 손가락 취소 (시험 서버 5798)
+            else if (mode == "transitinfo") PlanTransitInfo();   // 11-27 23 · 24번 지하철역 노선 · 출구 · 첫차·막차 카드 — 꺼진 풀 오브젝트의 정보 창 · 다시 받은 목록 · 정보 글 다음 카드 두 장 (시험 서버 5794 /transit/)
             else if (mode == "infohost") PlanInfoHost();   // 11-27 35번 대리 정보 창 — 우팡 장소는 위 글 칸 꺼짐 · 「Created by」 한 줄 · 첫 장은 첫 상세 사진 · 정보 글이 있는 곳은 예전대로
             else if (mode == "catmodal") { storeSrc = lines.Length > 2 ? lines[2].Trim() : ""; PlanCatModal(); }   // 11-26 37번 분류 고르기 창 — 칩 숨 쉬는 테 · 가운데 3×3 큰 칸 · 위아래 밀기 · 바깥 · 뒤로가기로 닫힘 · 네온 줄 (배경 폴더 있으면 도시 배경)
             else if (mode == "worldtouch") PlanWorldTouch();   // 11-18 N2 덮은 UI 밑의 3D 오브젝트는 손가락을 받지 않는다 · 정보 창 위에 뜬 창 · 도크에서 민 것은 정보 창이 받지 않는다
@@ -10258,7 +10259,8 @@ namespace Redesign0926
             Func<string> chipWord = () => sky != null && typeof(R0926SkyWeather).GetField("chipText", F).GetValue(sky) is Text t ? t.text : "";
             Func<Vector2?> chipAt = () => SkyScreenRect(chip)?.center;
             Func<Rect?> shapeRect = () => notch != null ? SkyScreenRect(notch.EditorShape) : null;
-            Func<Vector2?> notchAt = () => shapeRect()?.center;
+            // 11-28 실기기 — 위쪽 상태 막대 줄(아이폰 15 기준 위 54pt)과 노치 · 아일랜드 자체는 손가락이 앱에 안 온다. 그래서 판 아래쪽(아래 변에서 6pt 위)을 누른다
+            Func<Vector2?> notchAt = () => { var r = shapeRect(); return r.HasValue ? new Vector2(r.Value.center.x, r.Value.yMin + 6f * notch.EditorPpt) : (Vector2?)null; };
             Func<Vector2?> mid = () => SkyScreenRect(glass)?.center;
             Func<bool> notchUp = () => notch != null && notch.EditorShape.gameObject.activeSelf && notch.EditorOpen > 0.95f;
             Func<bool> notchGone = () => notch != null && !notch.EditorShape.gameObject.activeSelf;
@@ -10564,82 +10566,138 @@ namespace Redesign0926
             Do(() => R0926Notch.StopGuide());
             Wait(() => notchUp() && notch.EditorMode == "Sky", 3f, "안내 끝 — 날씨");
 
-            // 12) 다이내믹 아일랜드 아이폰 흉내 — 11-26 10번 대표님 「위에 노치관련 수정안 확인했어. 1,2번 둘다 진행해」 ① 바꾸는 안 (우팡_노치_시안_1124):
-            //     아일랜드 높이 그대로 옆으로만 — 왼쪽(시계 쪽 40pt)에 기온 · 거리, 오른쪽(신호 쪽 26pt)에 날씨 그림 · 화살표. 아래로 붙는 검은 줄이 없어 칩 · 알약이 제자리
-            //     '터치하면 돌아가요' · 길안내 3초 이름 판은 지금처럼 잠깐 아래로 펴졌다 돌아온다
+            // 12) 다이내믹 아일랜드 아이폰 흉내 — 11-28 대표님 실기기(1.2.72 · 아이폰 15) 「노치 이거 삐져나와있는데? … 노치 터치해도 다시 원래대로 돌아오지도 않아」:
+            //     11-26 의 '아일랜드 양옆' 은 상태 막대 줄 안이라 아이폰이 손가락을 앱에 주지 않고, 신호 쪽 빈칸이 실제로는 22pt 라 날씨 그림이 삐져나왔다 →
+            //     아일랜드 바로 아래 한 줄로 되돌림(노치 아이폰과 같은 모양). 누르는 자리는 판 양옆 8pt · 아래 6pt 더 넓게 · 줄을 아래로 끌어내려도 펼친다
             Func<float> pp = () => notch.EditorPpt;
-            Func<float> islandMidY = () => Screen.height - (notch.EditorCutTopPt + notch.EditorCutPt.y * 0.5f) * pp();
-            // 칩 · 알약이 비켜 설 만큼 — 아일랜드 아래 변(+1pt) + '터치하면 돌아가요' 줄 + 틈 6pt 가 위쪽 안전영역을 넘는 만큼 (실기기 위 59 · 62pt 면 0)
-            Func<float, float> dropFor = noteLines => Mathf.Max(0f, notch.EditorCutTopPt + notch.EditorCutPt.y + 1f + noteLines * 20f + 6f - notch.EditorInsetPt) * pp();
-            Func<string, RectTransform> slotChild = n => notch.EditorLeftSlot != null ? notch.EditorLeftSlot.Find(n) as RectTransform : null;
-            // 왼쪽 글 · 오른쪽 그림이 아일랜드 양옆 칸 안 · 아일랜드 높이 가운데에 있나
-            Func<string, string, bool> sides = (what, iconName) =>
-            {
-                var t = SkyScreenRect(notch.EditorRightSlot);
-                var i = SkyScreenRect(slotChild(iconName));
-                if (!t.HasValue || !i.HasValue) { log.Add($"  {what}: 글 {(t.HasValue ? "있음" : "없음")} · 그림 {(i.HasValue ? "있음" : "없음")}"); return false; }
-                float p = pp(), cx = Screen.width * 0.5f, half = notch.EditorCutPt.x * 0.5f * p;
-                log.Add($"  {what}: 왼쪽 글 '{notch.EditorRight}' {(t.Value.xMin - cx + half) / p:0.0}~{(t.Value.xMax - cx + half) / p:0.0}pt(아일랜드 왼쪽 변 기준) · 오른쪽 그림 {(i.Value.xMin - cx - half) / p:0.0}~{(i.Value.xMax - cx - half) / p:0.0}pt(오른쪽 변 기준) · 높이 차 {(t.Value.center.y - islandMidY()) / p:0.0} / {(i.Value.center.y - islandMidY()) / p:0.0}pt");
-                return t.Value.xMax <= cx - half + 0.5f * p && t.Value.xMin >= cx - half - 40f * p - 0.5f * p
-                    && i.Value.xMin >= cx + half - 0.5f * p && i.Value.xMax <= cx + half + 26f * p + 0.5f * p
-                    && Mathf.Abs(t.Value.center.y - islandMidY()) < 1f * p && Mathf.Abs(i.Value.center.y - islandMidY()) < 1f * p;
-            };
-            Func<float, float, bool> pillIs = (wPt, centerPt) =>
+            // 칩 · 알약이 비켜 설 만큼 — 줄 아래 변 + '터치하면 돌아가요' 줄 + 틈 6pt 가 위쪽 안전영역을 넘는 만큼
+            Func<float, float> dropFor = noteLines => Mathf.Max(0f, notch.EditorRowTopPt + 27f + noteLines * 20f + 6f - notch.EditorInsetPt) * pp();
+            // 알약 — 폭 wPt · 화면 가운데 · 위는 아일랜드 위 변 1pt 위
+            Func<float, bool> pillIs = wPt =>
             {
                 var r = shapeRect();
                 if (!r.HasValue) return false;
                 float p = pp(), cx = Screen.width * 0.5f;
-                log.Add($"  알약 폭 {r.Value.width / p:0.0}pt · 높이 {r.Value.height / p:0.0}pt · 가운데 {(r.Value.center.x - cx) / p:0.0}pt · 위 {(Screen.height - r.Value.yMax) / p:0.0}pt (아일랜드 위 {notch.EditorCutTopPt:0.0} · 높이 {notch.EditorCutPt.y:0.0}pt)");
-                return Mathf.Abs(r.Value.width - wPt * p) < 2f * p && Mathf.Abs(r.Value.center.x - (cx + centerPt * p)) < 1f * p
+                log.Add($"  알약 폭 {r.Value.width / p:0.0}pt · 높이 {r.Value.height / p:0.0}pt · 가운데 {(r.Value.center.x - cx) / p:0.0}pt · 위 {(Screen.height - r.Value.yMax) / p:0.0}pt · 아래 {(Screen.height - r.Value.yMin) / p:0.0}pt (아일랜드 위 {notch.EditorCutTopPt:0.0} · 높이 {notch.EditorCutPt.y:0.0}pt · 줄 위 변 {notch.EditorRowTopPt:0.0}pt)");
+                return Mathf.Abs(r.Value.width - wPt * p) < 2f * p && Mathf.Abs(r.Value.center.x - cx) < 1f * p
                     && Mathf.Abs(Screen.height - r.Value.yMax - (notch.EditorCutTopPt - 1f) * p) < 1f * p;
             };
+            // 그림과 글이 한 묶음으로 가운데 · 아일랜드 아래 줄 안 (아일랜드에 걸치지 않음)
+            Func<string, float, bool> rowIs = (what, iconPt) =>
+            {
+                var l = SkyScreenRect(notch.EditorLeftSlot);
+                var t = SkyScreenRect(notch.EditorRightSlot);
+                if (!l.HasValue || !t.HasValue) { log.Add($"  {what}: 그림 {(l.HasValue ? "있음" : "없음")} · 글 {(t.HasValue ? "있음" : "없음")}"); return false; }
+                float p = pp(), top = Screen.height - notch.EditorRowTopPt * p, bottom = top - 27f * p;
+                float gap = (t.Value.xMin - l.Value.center.x) / p, groupMid = (l.Value.center.x - iconPt * 0.5f * p + t.Value.xMax - 1f * p) * 0.5f;
+                log.Add($"  {what}: '{notch.EditorRight}' · 그림 가운데 → 글 왼쪽 {gap:0.0}pt · 묶음 가운데 어긋남 {(groupMid - Screen.width * 0.5f) / p:0.0}pt · 줄 위 변에서 {(top - l.Value.center.y) / p:0.0} / {(top - t.Value.center.y) / p:0.0}pt (줄 27pt)");
+                return gap >= iconPt * 0.5f && gap <= iconPt * 0.5f + 8f && Mathf.Abs(groupMid - Screen.width * 0.5f) < 3f * p
+                    && l.Value.center.y < top && l.Value.center.y > bottom && t.Value.center.y < top && t.Value.center.y > bottom;
+            };
+            Func<bool> pinned = () => sky.PinnedTop && frame.GetComponent<CanvasGroup>().alpha > 0.99f;
+            Func<bool> backToNotch = () => notchUp() && notch.EditorMode == "Sky" && !sky.Pinned && collapsed();
+            var pullDown = new Vector2[1];
             Do(() => { R0926Notch.EditorIsland = true; notch.EditorRemeasure(); });
             Sleep(1.2f);
             Do(() => log.Add("  아일랜드: " + state()));
             Check(() => notch.EditorIslandShape && notchUp() && notch.EditorMode == "Sky" && notch.EditorWeatherShown, "다이내믹 아일랜드 아이폰 — 알약 모양으로 날씨");
-            Check(() => pillIs(192f, -7f) && Mathf.Abs((shapeRect()?.height ?? 0f) - (notch.EditorCutPt.y + 2f) * pp()) < 1.5f * pp(),
-                "알약은 아일랜드 높이 그대로(위아래 1pt) 옆으로만 — 폭 192pt(아일랜드 126 + 왼쪽 40 + 오른쪽 26) · 가운데는 7pt 왼쪽 · 아래로 붙는 줄 없음");
-            Check(() => sides("날씨", "Weather0926") && notch.EditorRight.EndsWith("°"), "왼쪽(시계 쪽)에 기온 · 오른쪽(신호 쪽)에 날씨 그림 — 아일랜드 높이 가운데 · 아일랜드에 걸치지 않음");
+            Check(() => pillIs(notch.EditorCutPt.x) && Mathf.Abs((shapeRect()?.height ?? 0f) - (notch.EditorCutPt.y + 1f + 27f) * pp()) < 1.5f * pp(),
+                "알약 — 폭은 아일랜드만큼(양옆으로 안 늘어남) · 아일랜드 + 바로 아래 한 줄(27pt) · 화면 가운데");
+            Check(() => rowIs("날씨", 21f) && notch.EditorRight.EndsWith("°"), "날씨 그림 + 기온 — 아일랜드 아래 줄 가운데에 한 묶음 (신호 막대 쪽으로 삐져나오지 않음)");
             Check(() =>
             {
-                log.Add($"  칩 · 알약 비켜 서기 {R0926Notch.DropPx / pp():0.0}pt (이 화면 위쪽 안전영역 {notch.EditorInsetPt:0.0}pt · 실기기 아일랜드 아이폰 위 59pt 면 {Mathf.Max(0f, 11.33f + 37.33f + 1f + 6f - 59f):0.0}pt)");
-                return Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 0.5f && insetsFollow();
-            }, "아래로 붙는 줄이 없어 칩 · 상태 알약이 노치 줄만큼 내려가지 않는다 (아일랜드 아래 변까지만 · 실기기는 제자리)");
+                log.Add($"  칩 · 알약 비켜 서기 {R0926Notch.DropPx / pp():0.0}pt (이 화면 위쪽 안전영역 {notch.EditorInsetPt:0.0}pt · 실기기 아이폰 15(위 59pt)면 {Mathf.Max(0f, 11.33f + 37.33f + 27f + 6f - 59f):0.0}pt)");
+                return Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 1f * pp() && insetsFollow();
+            }, "칩 · 상태 알약이 아일랜드 아래 줄만큼 비켜 섬");
             Check(() => !notch.EditorBarHidden, "아일랜드 아이폰도 상태 막대(시계 · 배터리 · LTE) 그대로 (E2)");
+            Check(() =>
+            {
+                var hp = notch.EditorHitPadding;
+                var r = shapeRect();
+                if (!r.HasValue || hp.x >= 0f) return false;
+                float p = pp(), u = hp.x / -8f;
+                // 아일랜드 아래 변 + 6pt(상태 막대 줄 끝 어림) 아래로 남는 누르는 자리 — 아이폰 15: 아일랜드 아래 48.7pt · 상태 막대 54pt
+                float free = notch.EditorRowTopPt + 27f + 6f - (notch.EditorCutTopPt + notch.EditorCutPt.y + 6f);
+                var below = new Vector2(r.Value.center.x, r.Value.yMin - 3f * p);
+                var side = new Vector2(r.Value.xMax + 4f * p, r.Value.yMin + 6f * p);
+                bool hitBelow = RectTransformUtility.RectangleContainsScreenPoint(notch.EditorShape, below, null, hp);
+                bool hitSide = RectTransformUtility.RectangleContainsScreenPoint(notch.EditorShape, side, null, hp);
+                log.Add($"  누르는 자리 넓힘 (왼 {-hp.x / u:0} · 아래 {-hp.y / u:0} · 오른 {-hp.z / u:0} · 위 {-hp.w / u:0}pt) · 판 밑 3pt {(hitBelow ? "닿음" : "안 닿음")} · 판 옆 4pt {(hitSide ? "닿음" : "안 닿음")} · 상태 막대 아래 누르는 자리 {free:0.0}pt (아이폰 15 면 {75.67f + 6f - 54f:0.0}pt)");
+                return hp.z < 0f && Mathf.Abs(hp.y / hp.x - 6f / 8f) < 0.01f && Mathf.Abs(hp.w) < 0.001f && hitBelow && hitSide && free >= 20f;
+            }, "누르는 자리 — 판 양옆 8pt · 아래 6pt 더 넓게 (위는 상태 막대라 그대로) · 상태 막대 줄 아래로 20pt 넘게 남음");
             Shot("notch_island");
 
-            // 하늘을 접은 뒤 — '터치하면 돌아가요' 는 아일랜드 밑으로 잠깐 펴졌다 돌아온다
-            Do(() => R0926Notch.Folded(R0926SkyPages.Kind.Weather));
+            // 줄 아래쪽을 누르면 펼쳐짐 — 실기기에서 손가락이 오는 자리 (11-28 전엔 판 가운데만 시험해 놓쳤다)
+            Wait(() => notch.EditorNote < 0.02f, 5f, "아일랜드 — 돌아가요 줄 들어감");
+            Sleep(0.3f);
+            Press(notchAt, 0.08f, null);
+            Wait(pinned, 3f, "아일랜드 — 줄 아래쪽을 누르면 위쪽 고정 판");
+            Sleep(0.4f);
+            Check(() => pinned() && !collapsed() && notchGone(), "아일랜드 — 아래 줄 아래쪽을 누르면 하늘 판이 위쪽에 펼쳐짐");
+            Shot("notch_island_tap_open");
+            Do(() => swipe(1f));
+            Finger(mid, move, 12, null, null);
+            Wait(backToNotch, 4f, "아일랜드 — 위로 밀어 다시 노치로");
+            Sleep(0.4f);
+            Check(backToNotch, "위쪽 판을 위로 밀면 다시 아일랜드 줄로");
+
+            // 판 바로 밑(넓힌 자리)을 눌러도 펼쳐짐
+            Wait(() => notch.EditorNote < 0.02f, 5f, "아일랜드 — 돌아가요 줄 들어감");
+            Sleep(0.3f);
+            Press(() => { var r = shapeRect(); return r.HasValue ? new Vector2(r.Value.center.x, r.Value.yMin - 3f * pp()) : (Vector2?)null; }, 0.08f, null);
+            Wait(pinned, 3f, "아일랜드 — 판 밑 3pt 를 눌러도 펼침");
+            Check(() => pinned() && !collapsed(), "판 바로 밑(3pt 아래 · 넓힌 자리)을 눌러도 펼쳐짐 — 손가락이 조금 빗나가도");
+            Do(() => swipe(1f));
+            Finger(mid, move, 12, null, null);
+            Wait(backToNotch, 4f, "아일랜드 — 다시 노치로");
+            Sleep(0.4f);
+
+            // 줄을 아래로 끌어내리면 펼쳐짐 — 「위에서 아래로 스와이프해도 날씨내용 자체가 아예 안나와」
+            Wait(() => notch.EditorNote < 0.02f, 5f, "아일랜드 — 돌아가요 줄 들어감");
+            Sleep(0.3f);
+            Do(() => pullDown[0] = new Vector2(0f, -70f * pp()));
+            Finger(notchAt, pullDown, 10, null, "notch_island_pull");
+            Wait(pinned, 3f, "아일랜드 — 줄을 아래로 끌어내리면 펼침");
+            Sleep(0.3f);
+            Check(() => pinned() && !collapsed() && pg.EditorCurrent == R0926SkyPages.Kind.Weather, "노치 줄을 아래로 끌어내리면 하늘 판이 위쪽에 펼쳐짐 (날씨 장부터)");
+            Shot("notch_island_pull_open");
+            Do(() => swipe(1f));
+            Finger(mid, move, 12, null, null);
+            Wait(backToNotch, 4f, "아일랜드 — 다시 노치로");
+            Sleep(0.4f);
+            Check(backToNotch, "끌어내려 편 판도 위로 밀면 다시 아일랜드 줄로");
+
+            // 하늘을 접은 뒤 — '터치하면 돌아가요' 는 줄 밑으로 잠깐 펴졌다 돌아온다
             Wait(() => notch.EditorNote > 0.95f, 2f, "아일랜드 — '터치하면 돌아가요'");
             Sleep(0.4f);
             Check(() =>
             {
                 var r = shapeRect();
                 var n = SkyScreenRect(notch.EditorShape.Find("Note0926") as RectTransform);
-                float p = pp(), islandBottom = Screen.height - (notch.EditorCutTopPt + notch.EditorCutPt.y) * p;
-                log.Add($"  돌아가요 줄: 알약 높이 {(r.HasValue ? r.Value.height / p : 0f):0.0}pt · 글 가운데 {(n.HasValue ? (islandBottom - n.Value.center.y) / p : -1f):0.0}pt 아래 · 비켜 서기 {R0926Notch.DropPx / p:0.0}pt");
-                return r.HasValue && n.HasValue && Mathf.Abs(r.Value.height - (notch.EditorCutPt.y + 2f + 20f) * p) < 1.5f * p
-                    && n.Value.center.y < islandBottom && Mathf.Abs(n.Value.center.x - Screen.width * 0.5f) < 1f * p
+                float p = pp(), rowBottom = Screen.height - (notch.EditorRowTopPt + 27f) * p;
+                log.Add($"  돌아가요 줄: 알약 높이 {(r.HasValue ? r.Value.height / p : 0f):0.0}pt · 글 가운데 {(n.HasValue ? (rowBottom - n.Value.center.y) / p : -1f):0.0}pt 아래 · 비켜 서기 {R0926Notch.DropPx / p:0.0}pt");
+                return r.HasValue && n.HasValue && Mathf.Abs(r.Value.height - (notch.EditorCutPt.y + 1f + 27f + 20f) * p) < 1.5f * p
+                    && n.Value.center.y < rowBottom && Mathf.Abs(n.Value.center.x - Screen.width * 0.5f) < 1f * p
                     && notch.EditorNoteText == "터치하면 돌아가요" && Mathf.Abs(R0926Notch.DropPx - dropFor(1f)) < 1f * pp() && insetsFollow();
-            }, "'터치하면 돌아가요' — 아일랜드 바로 밑 가운데에 잠깐 (알약이 20pt 아래로 · 칩도 그만큼만 잠깐 비킴)");
+            }, "'터치하면 돌아가요' — 날씨 줄 바로 밑 가운데에 잠깐 (알약이 20pt 아래로 · 칩도 그만큼 잠깐 비킴)");
             Shot("notch_island_note");
             Wait(() => notch.EditorNote < 0.02f, 5f, "아일랜드 — 돌아가요 줄 들어감");
             Sleep(0.3f);
-            Check(() => Mathf.Abs((shapeRect()?.height ?? 0f) - (notch.EditorCutPt.y + 2f) * pp()) < 1.5f * pp() && Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 0.5f,
-                "'터치하면 돌아가요' 가 들어가면 다시 아일랜드 높이 · 칩도 제자리");
+            Check(() => Mathf.Abs((shapeRect()?.height ?? 0f) - (notch.EditorCutPt.y + 1f + 27f) * pp()) < 1.5f * pp() && Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 1f * pp(),
+                "'터치하면 돌아가요' 가 들어가면 다시 아일랜드 + 한 줄 · 칩도 제자리");
 
-            // 길안내 — 3초 동안 이름 판이 넓게 펴졌다가, 왼쪽 거리 · 오른쪽 화살표 (아이폰의 다른 길안내 앱과 같은 모양)
+            // 길안내 — 3초 동안 이름 판이 넓게 펴졌다가, 아래 줄에 화살표 · 거리
             Do(() => { var p = offset(200, 0); R0926Notch.Guide(p.x, p.y, null, "시험 북쪽 200m"); });
             Wait(() => notchUp() && notch.EditorMode == "Guide" && notch.EditorExpand > 0.95f, 3f, "아일랜드 — 길안내 이름 판");
             Sleep(0.5f);
-            Check(() => pillIs(290f, 0f) && notch.EditorTitle == "시험 북쪽 200m" && notch.EditorBarHidden,
-                "길안내 시작 — 이름 판은 지금처럼 넓게(290pt · 화면 가운데) 잠깐 아래로 · 그동안 상태 막대 숨김");
+            Check(() => pillIs(290f) && notch.EditorTitle == "시험 북쪽 200m" && notch.EditorBarHidden,
+                "길안내 시작 — 이름 판은 넓게(290pt · 화면 가운데) 잠깐 아래로 · 그동안 상태 막대 숨김");
             Shot("notch_island_expand");
             Wait(() => notch.EditorExpand < 0.02f, 6f, "아일랜드 — 이름 판 접힘");
             Sleep(0.4f);
-            Check(() => pillIs(192f, -7f) && sides("길안내", "Arrow0926") && notch.EditorRight == "200m" && !float.IsNaN(notch.EditorArrow) && !notch.EditorBarHidden
-                    && Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 0.5f,
-                "이름 판이 접히면 아일랜드 양옆 — 왼쪽 거리 '200m' · 오른쪽 화살표 · 상태 막대 다시 보임");
+            Check(() => pillIs(notch.EditorCutPt.x) && rowIs("길안내", 17f) && notch.EditorRight == "200m" && !float.IsNaN(notch.EditorArrow) && !notch.EditorBarHidden
+                    && Mathf.Abs(R0926Notch.DropPx - dropFor(0f)) < 1f * pp(),
+                "이름 판이 접히면 아일랜드 아래 줄에 화살표 · '200m' · 상태 막대 다시 보임");
             Shot("notch_island_guide");
             Do(() => R0926Notch.StopGuide());
             Wait(() => notchUp() && notch.EditorMode == "Sky", 3f, "아일랜드 — 안내 끝 · 날씨");

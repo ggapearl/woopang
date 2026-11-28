@@ -261,6 +261,8 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
                 }
                 if (shouldShow && !existing.activeSelf) existing.SetActive(true);
                 else if (!shouldShow && existing.activeSelf) existing.SetActive(false);
+                // 서버가 처음 보는 역은 뒤에서 맞춘다 — 다시 받은 목록에 노선 · 출구 · 카드가 붙었으면 띄워 둔 역에도 (사진 주소가 같으면 다시 받지 않는다)
+                FacilityInfo.Configure(existing.GetComponentInChildren<DoubleTap3D>(true), data);
             }
             else if (dist <= objectSpawnRadius && !petHidden && !HiddenPlaces.IsHidden("subway_" + uniqueId))
             {
@@ -307,28 +309,10 @@ public class SubwayManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCacheLoad
             anchor.SetCoordinatesAndCreateAnchor(data.latitude, data.longitude, data.altitude);
         }
 
-        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>();
-        if (doubleTap != null)
-        {
-            // [UI Update] Description 제거, PlaceInfoText로 통합
-            doubleTap.SetInfoImages(
-                sprite1: null, 
-                sprite2: null, 
-                petFriendly: false, 
-                separateRestroom: false, 
-                description: null, // 상단 텍스트 제거
-                name: data.name, 
-                id: -1, 
-                username: "WOOPANG", // Created By WOOPANG
-                instagramId: null, 
-                tel: null, 
-                address: data.address, 
-                overview: data.extra_info, // 개요에 extra_info 표시
-                petInfo: null
-            );
-        }
+        // 풀의 오브젝트는 맨 위가 꺼져 있다 — 자식(Cube)의 DoubleTap3D · Target 은 DataManager · StoreManager 처럼 true 로 찾는다 (11-27)
+        FacilityInfo.Configure(obj.GetComponentInChildren<DoubleTap3D>(true), data);   // 이름 · 주소 · 노선 · 출구 · 첫차·막차 카드 (23 · 24번)
 
-        Target target = obj.GetComponentInChildren<Target>();
+        Target target = obj.GetComponentInChildren<Target>(true);
         if (target != null)
         {
             target.PlaceName = data.name;

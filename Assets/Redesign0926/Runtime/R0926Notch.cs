@@ -29,6 +29,9 @@ using UnityEngine.XR.ARSubsystems;
 ///  · 다이내믹 아일랜드 아이폰은 아래 줄 없이 아일랜드 높이 그대로 양옆으로만 — 왼쪽(시계 쪽 40pt) 기온 · 거리, 오른쪽(신호 쪽 26pt) 날씨 그림 · 화살표
 ///    (11-24 시안 「바꾸는 안」 · 11-26 대표님 「위에 노치관련 수정안 확인했어. 1,2번 둘다 진행해」). 아래로 내려오지 않아 칩 · 알약도 비켜 서지 않는다.
 ///    3초 이름 판 · '터치하면 돌아가요'는 예전처럼 잠깐만 아래로 펴진다. 노치 아이폰(X ~ 14 · 16e)은 양옆이 시계 · 배터리로 차 있어 아래 한 줄 그대로
+///    → 11-28 꺼 둠(IslandSides): 대표님 실기기(1.2.72)에서 눌러도 안 펴지고 날씨 그림이 신호 막대에 닿았다 — 양옆은 상태 막대 줄 안이라 아이폰이
+///      손가락을 앱에 넘기지 않고, 신호 쪽 빈칸도 실제로는 약 22pt 다. 아일랜드도 다시 아래 한 줄 (그 줄의 아래쪽은 상태 막대 밖이라 눌린다)
+///  · 누르는 자리는 판보다 양옆 · 아래로 조금 넓다 (위쪽은 상태 막대가 가져가므로). 하늘 장을 아래로 끌어도 편다 (11-28 「위에서 아래로 스와이프해도 날씨내용 자체가 아예 안나와」)
 /// 노치 자리: Screen.cutouts(맞아 보일 때만) → 기기 이름 · 위쪽 안전영역으로 고른 표. Unity 의 아이폰 노치 표는 새 기기에서 비어 있거나 틀린다(UUM-56430).
 /// 판은 진짜 노치보다 조금 작은 크기에서 열리고 닫힌 뒤엔 꺼 둔다 — 표가 몇 pt 틀려도 노치 밖으로 삐져나오지 않게.
 /// </summary>
@@ -83,6 +86,10 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
     private const float SideLeftPt = 40f, SideRightPt = 26f, SideTextAtPt = 17.5f, SideIconAtPt = 12f, SideTextRoomPt = 30f;
     private const float SideIconPt = 19f, SideArrowPt = 15f, SideTextPt = 15f, SideDistPt = 13.5f;
     private const float SideEdgePt = 2f, SideMinPt = 9f;   // 긴 말(12.3km · 3km 이내)은 왼쪽 칸 양끝 2pt 까지 · 9pt 까지 줄인다
+    // 아일랜드 양옆 배치 — 11-28 꺼 둠 (요약 주석). 홈 화면 실시간 현황(Live Activity)을 만들면 앱 안도 그 모양에 맞출 때 다시 쓴다
+    private static readonly bool IslandSides = false;
+    private const float HitSidePt = 8f, HitBelowPt = 6f;   // 누르는 자리를 판 양옆 · 아래로 넓히는 만큼 (아래는 칩까지의 틈 DropGap 만큼만)
+    private bool Sides => island && IslandSides;
 
     public static R0926Notch Instance { get; private set; }
 
@@ -126,8 +133,8 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         if (n == null || !n.isActiveAndEnabled) return false;
         n.Measure();
         if (!n.hasCut) return false;
-        float x = n.island ? (SideRightPt - SideLeftPt) * 0.5f * n.ppt : 0f;
-        float midPt = n.island ? n.cutTopPt + n.cutHpt * 0.5f : n.RowTopPt + RowPt * 0.5f;
+        float x = n.Sides ? (SideRightPt - SideLeftPt) * 0.5f * n.ppt : 0f;
+        float midPt = n.Sides ? n.cutTopPt + n.cutHpt * 0.5f : n.RowTopPt + RowPt * 0.5f;
         screen = new Vector2(UnityEngine.Device.Screen.width * 0.5f + x, UnityEngine.Device.Screen.height - midPt * n.ppt);
         return true;
     }
@@ -582,8 +589,10 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         shapeImage.type = Image.Type.Sliced;
         // 둥근 모서리는 노치 높이로 정한다 — 알약은 아일랜드와 같은 둥글기, 노치는 아래 모서리 반지름이 그 높이의 0.4 (그림의 반지름 40px). 아래로 늘어나도 그대로
         shapeImage.pixelsPerUnitMultiplier = island ? 126f / ch : 100f / ch;
+        // 누르는 자리 — 판보다 양옆 · 아래로 조금 넓게 (음수 = 넓힘 · x 왼 y 아래 z 오른 w 위)
+        shapeImage.raycastPadding = new Vector4(-HitSidePt, -HitBelowPt, -HitSidePt, 0f) * upt;
         // 아일랜드 양옆은 오른쪽 칸이 26pt 라 그림을 조금 작게 (시안 날씨 19pt · 화살표 15pt)
-        float iconPt = island ? SideIconPt : IconPt, arrowPt = island ? SideArrowPt : ArrowPt;
+        float iconPt = Sides ? SideIconPt : IconPt, arrowPt = Sides ? SideArrowPt : ArrowPt;
         Vector2 icon = Vector2.one * iconPt * upt;
         if (weatherIcon != null) ((RectTransform)weatherIcon.transform).sizeDelta = icon;
         if (pageIcon != null) pageIcon.rectTransform.sizeDelta = icon;
@@ -596,9 +605,9 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         if (clip != null)
         {
             // 양옆 배치는 글 · 그림이 판 끝 가까이 있어 흐리게 자르는 폭을 좁힌다
-            float side = Shoulder + (island ? 1f : 2f) * upt;
+            float side = Shoulder + (Sides ? 1f : 2f) * upt;
             clip.padding = new Vector4(side, 0f, side, 0f);
-            clip.softness = new Vector2Int(Mathf.RoundToInt((island ? 2f : 6f) * upt), 0);
+            clip.softness = new Vector2Int(Mathf.RoundToInt((Sides ? 2f : 6f) * upt), 0);
         }
         dirty = true;   // 날씨 그림 · 글 크기는 Refresh 에서
     }
@@ -660,7 +669,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
     private void FitRight(bool weatherText)
     {
         if (rightText == null || upt <= 0f) return;
-        if (!island) { Fit(rightText, TextPt, (cutWpt - 2f * RowPad - IconPt - RowGap) * upt); return; }
+        if (!Sides) { Fit(rightText, TextPt, (cutWpt - 2f * RowPad - IconPt - RowGap) * upt); return; }
         Fit(rightText, weatherText ? SideTextPt : SideDistPt, SideTextRoomPt * upt);
         float room = (SideLeftPt - 2f * SideEdgePt) * upt;
         if (rightText.preferredWidth > room) Fit(rightText, rightText.fontSize / upt, room, SideMinPt);
@@ -672,10 +681,10 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         float rootW = ((RectTransform)transform).rect.width;
         float topOpen = island ? (cutTopPt - 1f) * upt : 0f;
         // 판 위 변에서 줄 위 · 아래 변까지 — 아일랜드는 아래 줄 없이 아일랜드 자체가 줄 (위아래 1pt 씩 크게). 그 밑에 '터치하면 돌아가요' · 이름 판
-        float rowTop = island ? 1f * upt : RowTopPt * upt - topOpen;
-        float band = island ? rowTop + cutH + 1f * upt : rowTop + row;
+        float rowTop = Sides ? 1f * upt : RowTopPt * upt - topOpen;
+        float band = Sides ? rowTop + cutH + 1f * upt : rowTop + row;
         float hOpen = band + note * (NoteLine + NoteBottom) * upt;
-        float wOpen = island ? cutW + (SideLeftPt + SideRightPt) * upt : cutW;
+        float wOpen = Sides ? cutW + (SideLeftPt + SideRightPt) * upt : cutW;
         float bodyExp = Mathf.Min(Mathf.Max(wOpen, ExpandMinW * upt), rootW - 24f * upt - 2f * shoulder);
         float hExp = band + (ExpandGap + TitleLine + HintLine + ExpandBottom) * upt;
         float bodyClosed = cutW * 0.92f, hClosed = cutH * 0.92f;   // 진짜 노치 뒤에 숨는 크기에서 열린다
@@ -683,12 +692,12 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         float h = Mathf.LerpUnclamped(Mathf.LerpUnclamped(hClosed, hOpen, open), hExp, expand);
         float topClosed = island ? cutTopPt * upt + (cutH - hClosed) * 0.5f : 0f;
         // 아일랜드 양옆은 시계 쪽이 더 넓어 판 가운데가 아일랜드보다 왼쪽 — 넓게 펴지면 다시 화면 가운데
-        float shift = island ? (SideRightPt - SideLeftPt) * 0.5f * upt * Mathf.Clamp01(open) * (1f - Mathf.Clamp01(expand)) : 0f;
+        float shift = Sides ? (SideRightPt - SideLeftPt) * 0.5f * upt * Mathf.Clamp01(open) * (1f - Mathf.Clamp01(expand)) : 0f;
         shape.anchoredPosition = new Vector2(shift, -Mathf.LerpUnclamped(topClosed, topOpen, Mathf.Clamp01(open)));
         shape.sizeDelta = new Vector2(Mathf.Max(0f, w + 2f * shoulder), Mathf.Max(0f, h));
 
         float textW = rightText != null && rightText.text.Length > 0 ? rightText.preferredWidth : 0f;
-        if (island)
+        if (Sides)
         {
             // 아일랜드 양옆 — 왼쪽(시계 쪽)에 글, 오른쪽(신호 쪽)에 그림. 자리는 아일랜드 기준(판이 치우친 만큼 되돌림) · 미는 동안은 손가락을 따라 옆으로
             float midY = -(rowTop + cutH * 0.5f), cx = slide - shift;
@@ -736,7 +745,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
         }
 
         // 칩 · 알약이 비켜 설 만큼 — 넓게 펴진 판은 잠깐이라 넣지 않는다 (그동안은 판이 위를 덮는다). 아일랜드 양옆은 위쪽 안전영역 안이라 '터치하면 돌아가요' 동안만
-        float bottomPt = (island ? cutTopPt + cutHpt + 1f : RowTopPt + RowPt) + note * (NoteLine + NoteBottom);
+        float bottomPt = (Sides ? cutTopPt + cutHpt + 1f : RowTopPt + RowPt) + note * (NoteLine + NoteBottom);
         DropPx = Mathf.Max(0f, bottomPt + DropGap - insetPt) * ppt * Mathf.Clamp01(open);
     }
 
@@ -757,18 +766,28 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
             dirty = true;
             return;
         }
-        if (shown == Mode.Sky && sky != null)
-        {
-            Vector3 c = shape.TransformPoint(shape.rect.center);   // 오버레이 캔버스 — 월드 좌표가 곧 화면 픽셀
-            var kind = page >= 0 && page < items.Count ? items[page].kind : R0926SkyPages.Kind.Weather;
-            sky.UnfoldFromNotch(new Vector2(c.x, c.y), kind);   // 지금 보던 장으로 편다
-        }
+        if (shown == Mode.Sky) UnfoldSky();
     }
 
-    // 좌우로 밀면 옆 장 — 끝에서 처음으로 돈다. 위아래는 받지 않는다 (화면 위 끝에서 아래로 끄는 건 아이폰 알림 센터)
+    // 하늘 판을 화면 위쪽에 고정해 지금 보던 장으로 편다 (누르기 · 아래로 끌기)
+    private void UnfoldSky()
+    {
+        if (sky == null) return;
+        Vector3 c = shape.TransformPoint(shape.rect.center);   // 오버레이 캔버스 — 월드 좌표가 곧 화면 픽셀
+        var kind = page >= 0 && page < items.Count ? items[page].kind : R0926SkyPages.Kind.Weather;
+        sky.UnfoldFromNotch(new Vector2(c.x, c.y), kind);
+    }
+
+    // 좌우로 밀면 옆 장 — 끝에서 처음으로 돈다. 하늘 장을 아래로 끌면 편다 (판의 아래쪽에서 시작한 손가락 — 화면 맨 위 끝에서 끄는 건 아이폰 알림 센터라 앱에 오지 않는다)
     public void OnBeginDrag(PointerEventData e)
     {
         Vector2 d = e.position - e.pressPosition;
+        if (shown == Mode.Sky && open >= 0.85f && -d.y > Mathf.Abs(d.x))
+        {
+            Haptic();
+            UnfoldSky();
+            return;
+        }
         if (shown != Mode.Sky || items.Count <= 1 || open < 0.85f || Mathf.Abs(d.x) < Mathf.Abs(d.y)) return;
         sliding = true;
         dragX = e.pressPosition.x;
@@ -864,6 +883,7 @@ public class R0926Notch : MonoBehaviour, IPointerClickHandler, IBeginDragHandler
     public void EditorRemeasure() => measured = false;
     public RectTransform EditorShape => shape;
     public bool EditorIslandShape => island;
+    public Vector4 EditorHitPadding => shapeImage != null ? shapeImage.raycastPadding : Vector4.zero;
     public float EditorOpen => open;
     public float EditorExpand => expand;
     public float EditorNote => note;

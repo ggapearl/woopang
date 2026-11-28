@@ -53,7 +53,8 @@ namespace Redesign0926
         }
 
         // UI 가 없고 AR 오브젝트에 닿는 화면 자리 (카드에 띄운 것도 AR 화면에 그대로 — 11-26). 없으면 (-1, -1)
-        private static Vector2 SwOnObject()
+        // cube = true 면 돌리는 정육면체(CubeTouchRotator) 위 · false 면 그 밖의 AR 오브젝트(이름표 등) 위
+        private static Vector2 SwOnObject(bool cube)
         {
             var cam = Camera.main;
             if (cam == null) return new Vector2(-1f, -1f);
@@ -63,7 +64,8 @@ namespace Redesign0926
                 {
                     var p = new Vector2(Screen.width * fx, Screen.height * fy);
                     if (WorldTouch.TopUI(p) != null) continue;
-                    if (Physics.Raycast(cam.ScreenPointToRay(p), 2000f, Physics.DefaultRaycastLayers & ~NmMask, QueryTriggerInteraction.Collide)) return p;
+                    var c = WorldTouch.FirstHit(p);
+                    if (c != null && (c.GetComponentInParent<CubeTouchRotator>() != null) == cube) return p;
                 }
             return new Vector2(-1f, -1f);
         }
@@ -144,14 +146,42 @@ namespace Redesign0926
                 var c = dock != null ? NmRect(dock).center : new Vector2(-1f, -1f);
                 return dock != null && !nm.EditorCanSwipeDown(c) && !nm.EditorSwipeDown(c, c - NmUp(0.25f)) && !sky.Pinned;
             }, "도크(UI) 위에서 민 것은 안 받는다");
+            // 11-28 실기기 — 오브젝트가 화면 곳곳에 떠 있어 아래로 밀기가 아예 안 먹었다. 이제 돌리는 정육면체(위아래로 끌면 돈다) 위만 막는다
+            // 이 배경엔 AR 오브젝트가 없어 시험용 둘을 잠깐 띄운다 — 이름표 같은 오브젝트(왼쪽) · 돌리는 정육면체(오른쪽)
+            var probes = new System.Collections.Generic.List<GameObject>();
             Do(() =>
             {
-                var op = SwOnObject();
-                if (op.x < 0f) { log.Add("  화면에 손에 닿는 AR 오브젝트가 없어 '오브젝트 위' 확인은 건너뜀"); return; }
-                log.Add($"  AR 오브젝트 자리 ({op.x / Screen.width:0.00}, {op.y / Screen.height:0.00}) · 받음 {nm.EditorCanSwipeDown(op)}");
-                log.Add((!nm.EditorCanSwipeDown(op) && !nm.EditorSwipeDown(op, op - NmUp(0.25f)) && !sky.Pinned ? "PASS " : "FAIL ")
-                        + "오브젝트를 만지며 민 것은 안 받는다 (돌리기 · 옮기기와 겹치지 않게)");
+                var cam = Camera.main;
+                if (cam == null) return;
+                foreach (var (fx, cube) in new[] { (0.3f, false), (0.7f, true) })
+                {
+                    var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    go.name = cube ? "PT_SwipeCube" : "PT_SwipeLabel";
+                    go.transform.position = cam.ScreenToWorldPoint(new Vector3(Screen.width * fx, Screen.height * 0.42f, 6f));
+                    go.transform.localScale = Vector3.one * 1.6f;
+                    if (cube) go.AddComponent<CubeTouchRotator>();
+                    probes.Add(go);
+                }
+                Physics.SyncTransforms();
             });
+            Sleep(0.3f);
+            Do(() =>
+            {
+                var cp = SwOnObject(true);
+                if (cp.x < 0f) { log.Add("  화면에 손에 닿는 정육면체가 없어 '정육면체 위' 확인은 건너뜀"); return; }
+                log.Add($"  정육면체 자리 ({cp.x / Screen.width:0.00}, {cp.y / Screen.height:0.00}) · 받음 {nm.EditorCanSwipeDown(cp)}");
+                log.Add((!nm.EditorCanSwipeDown(cp) && !nm.EditorSwipeDown(cp, cp - NmUp(0.25f)) && !sky.Pinned ? "PASS " : "FAIL ")
+                        + "돌리는 정육면체 위에서 민 것은 안 받는다 (위아래 돌리기와 겹치지 않게)");
+            });
+            Do(() =>
+            {
+                var op = SwOnObject(false);
+                if (op.x < 0f) { log.Add("  화면에 정육면체 아닌 AR 오브젝트가 없어 '오브젝트 위' 확인은 건너뜀"); return; }
+                log.Add($"  정육면체 아닌 AR 오브젝트 자리 ({op.x / Screen.width:0.00}, {op.y / Screen.height:0.00}) · 받음 {nm.EditorCanSwipeDown(op)}");
+                log.Add((nm.EditorCanSwipeDown(op) ? "PASS " : "FAIL ")
+                        + "정육면체 아닌 오브젝트(이름표 등) 위에서 시작해도 아래로 밀기를 받는다 (오브젝트가 많아도 날씨 판이 뜬다)");
+            });
+            Do(() => { foreach (var go in probes) if (go != null) UnityEngine.Object.Destroy(go); probes.Clear(); });
             Check(() => downP.x >= 0f
                         && !nm.EditorSwipeDown(downP, downP - NmUp(0.05f))
                         && !nm.EditorSwipeDown(downP, downP + new Vector2(Screen.height * 0.3f, -Screen.height * 0.2f))

@@ -63,6 +63,13 @@ namespace Redesign0926
 
         private static string WtTop(Vector2 p) => WtPath(WorldTouch.TopUI(p));
 
+        private static bool WtVisibleChild(GameObject go, Graphic self)
+        {
+            foreach (var c in go.GetComponentsInChildren<Graphic>())
+                if (c != self && c.isActiveAndEnabled && c.color.a * c.canvasRenderer.GetInheritedAlpha() >= 0.02f) return true;
+            return false;
+        }
+
         // 화면을 6 × 11 칸으로 나눠 칸 가운데마다 맨 위 UI — 보이지 않는데 손가락을 받는 것(투명 그림 · 빈 글씨)은 따로
         private static List<string> WtMap(string label)
         {
@@ -79,6 +86,8 @@ namespace Redesign0926
                     count[k] = count.TryGetValue(k, out var c) ? c + 1 : 1;
                     var g = go.GetComponent<Graphic>();
                     bool ghost = g != null && (g.color.a * g.canvasRenderer.GetInheritedAlpha() < 0.02f || (g is Text tx && string.IsNullOrEmpty(tx.text)));
+                    // 투명한 판이라도 보이는 그림을 품은 버튼이면 넉넉한 누름 영역이다 (화면 밖 표시의 X — 보이는 X 둘레 44pt) · 버튼 째 안 보이면 그대로 덮개
+                    if (ghost && go.GetComponent<Selectable>() != null && WtVisibleChild(go, g)) { ghost = false; k += " (보이는 버튼의 누름 영역)"; }
                     if (ghost && !ghosts.Contains(k)) ghosts.Add(k);
                 }
             log.Add($"  {label} — 맨 위 UI 지도 ({total}곳 중 덮개 없음 {free}곳):");

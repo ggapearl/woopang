@@ -308,32 +308,10 @@ public class TrainStationManager : MonoBehaviour, IPlaceCacheProvider, IPlaceCac
             anchor.SetCoordinatesAndCreateAnchor(data.latitude, data.longitude, data.altitude);
         }
 
-        DoubleTap3D doubleTap = obj.GetComponentInChildren<DoubleTap3D>();
-        if (doubleTap != null)
-        {
-            // [UI Update] Description 제거, PlaceInfoText로 통합
-            // desc (인자 5) -> null
-            // username (인자 8) -> "WOOPANG"
-            // overview (인자 12) -> data.extra_info
-            
-            doubleTap.SetInfoImages(
-                sprite1: null, 
-                sprite2: null, 
-                petFriendly: false, 
-                separateRestroom: false, 
-                description: null, // 상단 텍스트 제거
-                name: data.name, 
-                id: -1, 
-                username: "WOOPANG", // Created By WOOPANG
-                instagramId: null, 
-                tel: null, 
-                address: data.address, 
-                overview: data.extra_info, // 개요에 extra_info 표시
-                petInfo: null
-            );
-        }
+        // 풀의 오브젝트는 맨 위가 꺼져 있다 — 자식(Cube)의 DoubleTap3D · Target 은 DataManager · StoreManager 처럼 true 로 찾는다 (11-27)
+        FacilityInfo.Configure(obj.GetComponentInChildren<DoubleTap3D>(true), data);   // 지하철 · 터미널과 같은 정보 창
 
-        Target target = obj.GetComponentInChildren<Target>();
+        Target target = obj.GetComponentInChildren<Target>(true);
         if (target != null)
         {
             target.PlaceName = data.name;

@@ -1,6 +1,6 @@
 # 데이터 매니저 추가·수정 시 연결 체크리스트 (필독)
 
-> 최종 갱신: 2026-11-21
+> 최종 갱신: 2026-11-27
 > 6개 데이터 매니저(스폰 시스템) 추가·수정 작업 시 참조.
 > (CLAUDE.md 5번 섹션에서 분리 — 매니저 표·공공데이터≠공공교통 경고는 CLAUDE.md에 유지)
 
@@ -18,9 +18,17 @@
 
 ⚠️ "공공데이터(TourAPI)" ≠ "공공교통(Subway/Train/Terminal)" — 별도 카테고리. 한국어로 둘 다 "공공"이라 헷갈리기 쉬우니 작업 시 명확히 구분할 것.
 
-⚠️ **칩 이름 주의 (2026-11-20 N8a)**: 화면의 「공공데이터」 칩 = 가게(`StoresToggle` · 필터 키 `stores` · 저장값 `Filter_Stores_V1`), 「공공기관」 칩 = 관광공사(`PublicDataToggle` · 필터 키 `publicData`). 코드 이름(`PublicData`)과 화면 이름이 엇갈리니 칩을 만질 땐 키로 확인할 것.
+⚠️ **칩 이름 주의 (2026-11-20 N8a · 2026-11-27 다시 나눔)**: 화면의 「공공데이터」 칩(`StoresToggle` · 필터 키 `stores` · 저장값 `Filter_Stores_V1`) = 근처 가게 + 관광공사 자료 + 병원·박물관·화장실 같은 기관 공공시설, 「공공기관」 칩(`PublicDataToggle` · 필터 키 `publicData`) = 기관이 올린 관공서·학교·우체국/농협만. 어느 칩인지는 `FilterManager.ChipKey(filterKey, category)` 한 곳에서 정한다(배분·목록·목록 아래 줄 개수가 모두 이것을 쓴다 — 새로 칩을 나눌 땐 여기만 고친다). 코드 이름(`PublicData`)과 화면 이름이 엇갈리니 칩을 만질 땐 키로 확인할 것.
+- `TourAPIManager` 상세는 **창을 열 때** 받는다(2026-11-27): 목록을 받을 땐 가까운 곳 사진(`detailImage`)만, 창을 열면(`DoubleTap3D.OnDoubleTapEvent` → `OnInfoOpen`) 소개(`detailIntro` — 운영 시간·쉬는 날·요금·주차·체크인 …) → 공통(`detailCommon` — 개요·홈페이지) → 반려견(`detailPetTour`, 숙박 길은 뺀다) 순서로 받아 창을 다시 그린다. 받은 것은 종류별 표시(`detailDone` — `img:`/`common:`/`pet:`/`intro:`+번호)로 한 번만 묻고, 늦게 온 답은 창이 아직 같은 장소(`DoubleTap3D.InfoSource`)일 때만 그린다. 목록을 새로 받아 장소 자료가 바뀌면 `CarryDetails` 가 받아 둔 상세를 옮겨 담는다(빈 값으로 목록의 전화·주소를 덮지 않는다). 시험: PlayTest `tourintro` (내 PC 가짜 관광공사 서버 127.0.0.1:5800 필요).
 - `StoreManager` 의 오브젝트 본은 관광공사 큐브(`0002_Cube_TourAPI`)를 같이 쓴다. 이 본에는 앞면 그림 부품(`ImageDisplayController`)이 없어서 **만들 때 붙인다**(`StoreManager.NewObject`) — 빼면 가게 큐브에 분류 스티커 대신 관광공사 면이 뜬다.
 - 시험: PlayTest `stores` (내 PC 가짜 가게 서버 127.0.0.1:5795 필요 — 운영 서버 · 상가정보 API 에 묻지 않는다).
+- 지하철 · 기차역 · 터미널 정보 창은 `FacilityInfo.Configure` 한 곳에서 채운다(2026-11-27): 매니저 `SetupObject`와 목록 사진 창 `R0926PlaceInfo.Fill`이 이것을 쓴다.
+  - 지하철역은 서버(`server/transit_info.py`, 국토교통부 TAGO)가 `/api/nearby-facilities` 응답에 세 칸을 붙여 준다: `lines`(노선), `exits`(출구 한 줄), `photos`(첫차·막차·출구 안내 카드 주소 `/api/transit/subway/<역키>/<카드>.png`).
+  - 처음 보는 역은 서버가 뒤에서 맞춘다. 그래서 `SubwayManager`는 다시 받은 목록으로 이미 띄운 역도 다시 채운다.
+  - 기차역 · 버스터미널도 같은 `photos` 칸 하나로 온다(2026-11-27 — 앱은 고칠 것 없음): 기차역은 주요 도시 행 첫차 · 막차 카드 `/api/transit/train/<키>/times.png`(다음 평일 기준), 터미널은 고속버스 카드 `/api/transit/bus/<키>/times.png`(TAGO 자료가 사흘치뿐이라 내일 기준 · 사흘마다 새로). 서버 미리 맞추기: `server/public_data/transit_train_match.py` · `transit_bus_match.py`.
+- 풀의 오브젝트는 맨 위가 꺼져 있다. 교통 매니저도 DataManager·StoreManager처럼 자식(Cube)의 `DoubleTap3D`·`Target`을 `GetComponentInChildren<T>(true)`로 찾는다(11-27에 맞춤. 그날 시험에선 예전 `()`도 찾았다).
+  - 시험: PlayTest `transitinfo` (내 PC 시험 서버 127.0.0.1:5794 `/transit/` 카드 그림 필요).
+  - 앱은 http 절대 주소를 https로 바꿔 받는다(`ApiConfig.Secure`). 그래서 시험 카드는 상대 주소로 넣고 `SubPhotoCache.EditorBase`를 시험 서버로 둔다.
 
 ### 매니저 추가·수정 시 점검할 연결 지점
 
