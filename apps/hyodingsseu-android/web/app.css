@@ -51,6 +51,12 @@ textarea{word-break:break-all;overflow-wrap:anywhere}
 button{cursor:pointer;border:0;background:none;padding:0}
 button:disabled{cursor:default}
 :focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+/* 글자 선택 (2026-11-28 대표님 「버튼은 글자가 선택될 필요 없다」) — 꾹 눌러 메뉴가 뜬 자리에 손가락이 남으면 버튼 글자가 선택돼
+   「Copy · Look Up · Translate」가 뜨던 것. 화면 껍데기(버튼·메뉴·머리·목록 줄)는 선택되지 않게 한다. 말풍선은 10-05 부터 원래 선택 불가(복사는 메뉴) —
+   아래 예외는 승인함 카드·의견 같은 읽을 글과 입력칸뿐. 입력칸을 꼭 예외로 둔다 — 아이폰은 부모가 선택 불가면 입력칸에 글자가 안 쳐진다. */
+body{-webkit-user-select:none;user-select:none}
+.pbody p,.pcmt,.card .ttl,.card .nt,.card .body,input,textarea{-webkit-user-select:text;user-select:text}
+button,.mrow,.msg-menu,.sheet-scrim{-webkit-touch-callout:none}
 svg{display:block}
 [hidden]{display:none!important}
 
