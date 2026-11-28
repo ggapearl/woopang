@@ -9,6 +9,7 @@
 - **빌드 번호 13 인 이유** — (12) 요청이 이미 Mac 에서 올라갔을 수 있어, 번호 충돌(같은 번호는 App Store Connect 가 거절)을 피하려 새로 올렸다. (12) 를 아직 안 올렸다면 건너뛰고 바로 (13) 으로 올리면 된다(번호가 연속일 필요는 없다).
 - 화면(웹 `2026-11-27a`)의 안내 문구도 같이 바뀐다(「11월 27일 0시 이후 …」).
 - **이번에 확인할 것**: (12) 와 같다 + 컴파일(`firstSince` 는 `DateComponents` → `Calendar.current.date(from:)`).
+- **빌드 결과 (Mac, 2026-11-28 17:29 KST 업로드)** — 올린 것: **(13) 만**(12 는 올린 적 없어 건너뜀). Xcode 26.3. `xcodegen generate` → archive: **오류 0 · 경고 0**(`PhotoBackup.swift` 포함, 고친 곳 없음 — AppIntents 메타데이터 안내 한 줄뿐). 확인: 업로드 성공(IN_BETA_TESTING · 그룹 「대표님」) · `PrivacyInfo.xcprivacy` 앱 안에 있음 · `aps-environment = production`(export 로그) · archive Info.plist 에 `UIBackgroundModes = [processing]` · `BGTaskSchedulerPermittedIdentifiers = [com.que.hyodingsseu.photobackup]` · `NSPhotoLibraryUsageDescription` 있음 · `BGTaskScheduler.register`(`PhotoBackup.registerBackgroundTask()`)는 `didFinishLaunching` 안(`HyodingsseuApp.swift:39`). 기능 테스트는 하지 않음(대표님이 `PHOTO_BACKUP.md` 7항목).
 
 ## 2.4.0 (12) — 2026-11-21 · 폰 사진·영상 자동 백업 + 사진첩 정리 + 두 손가락 확대 끄기
 
